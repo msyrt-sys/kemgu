@@ -1,0 +1,29 @@
+// KEMGU Örnek Program: Hasta Kaydı
+
+yapı Hasta {
+    ad: metin;
+    yaş: tam32;
+    tanı: seçimlik<metin>;
+}
+
+işlev hasta_oluştur(ad: metin, yaş: tam32) -> Hasta {
+    ver Hasta {
+        ad: ad,
+        yaş: yaş,
+        tanı: hiç,
+    };
+}
+
+işlev tanı_ekle(hasta: &değişken Hasta, tanı: metin) {
+    hasta.tanı = değer(tanı);
+}
+
+işlev bilgi_yazdır(hasta: &Hasta) {
+    // Hasta bilgilerini yazdır
+    eğer hasta.yaş >= 18 {
+        /* Yetişkin hasta */
+        değişken durum = "yetişkin";
+    } değilse {
+        değişken durum = "çocuk";
+    }
+}

@@ -1,0 +1,41 @@
+# Derleme ciktilari
+build/
+
+# Nesne ve linker artefaktlari
+*.o
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.a
+
+# Calistirilabilirler (kok veya alt dizinde derlenmisse de yakala)
+*.exe
+kemgu
+test_lexer
+test_arena
+test_ast
+test_parser
+
+# AddressSanitizer / Dr. Memory ciktilari
+*.asan.log
+drmemory_results/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+
+# Isletim sistemi
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Gecici
+*.tmp
+*.bak
+*.orig
