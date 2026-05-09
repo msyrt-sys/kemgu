@@ -20,7 +20,7 @@ Ana hedefler:
 ## Derleme ve Test
 
 ```bash
-# Derleme
+# Derleme (mingw32-make Windows'ta, make Linux'ta)
 make
 
 # Tüm testleri çalıştır
@@ -29,23 +29,24 @@ make test_tumu
 # Sadece lexer testleri
 make calistir_lexer_test
 
-# Sadece arena testleri
+# Sadece arena testleri (YAPILACAK — parser fazında eklenecek)
 make calistir_arena_test
 
-# Sadece AST testleri
+# Sadece AST testleri (YAPILACAK — parser fazında eklenecek)
 make calistir_ast_test
 
-# Sadece parser testleri
+# Sadece parser testleri (YAPILACAK — parser fazında eklenecek)
 make calistir_parser_test
 
-# Bellek kontrolü (Valgrind)
-valgrind --leak-check=full ./test_lexer
-valgrind --leak-check=full ./test_arena
-valgrind --leak-check=full ./test_parser
+# Bellek kontrolü (AddressSanitizer)
+# Test binary'leri ASan ile derlenir, runtime'da otomatik tarar.
+# Manuel komut yok — `make calistir_*_test` çalıştırınca aktif olur.
+# Sızıntı/hata varsa: "ERROR: AddressSanitizer: ..." mesajı stderr'e çıkar.
+# Valgrind YOK (Windows native ortam) — Dr. Memory ikincil seçenek.
 ```
 
-**Derleyici:** `gcc -Wall -Wextra -Wpedantic -std=c11`
-**Hedef platformlar:** x86_64 Linux (birincil), ARM64 Linux (ikincil — DGX Spark, Android NDK)
+**Derleyici:** `gcc -Wall -Wextra -Wpedantic -std=c11` (MinGW-w64 GCC, UCRT64)
+**Hedef platformlar:** Windows x86_64 (birincil — geliştirme), x86_64/ARM64 Linux (ikincil — gelecekte port: DGX Spark, Android NDK)
 
 ---
 
@@ -64,7 +65,7 @@ kemgu/
 ├── src/
 │   ├── lexer.h / lexer.c             — Tokenizer (TAMAMLANDI ✓)
 │   ├── utf8.h / utf8.c               — Türkçe UTF-8 karakter tanıma (TAMAMLANDI ✓)
-│   ├── anahtar_kelime.c              — 31 anahtar kelime tablosu (TAMAMLANDI ✓)
+│   ├── anahtar_kelime.c              — 30 anahtar kelime tablosu (TAMAMLANDI ✓)
 │   ├── hata.h / hata.c               — Hata raporlama (TAMAMLANDI ✓, genişletilecek)
 │   ├── arena.h / arena.c             — Arena allocator (YAPILACAK)
 │   ├── ast.h / ast.c                 — AST düğüm yapıları (YAPILACAK)
@@ -73,7 +74,7 @@ kemgu/
 │   ├── ifade.c                        — Pratt parser: ifadeler (YAPILACAK)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser)
 ├── test/
-│   ├── test_lexer.c                   — 113 birim testi (113/113 ✓)
+│   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (YAPILACAK)
 │   ├── test_ast.c                     — AST testleri (YAPILACAK)
 │   ├── test_parser.c                  — Parser testleri (YAPILACAK)
@@ -143,7 +144,7 @@ Türkçe içerikli literali otomatik denetler.
 ### Bellek Yönetimi
 - Parser ve AST: **Arena allocator** kullan, doğrudan malloc/free YASAK
 - Lexer: Mevcut haliyle malloc kullanıyor (yeniden düzenleme ileride yapılabilir)
-- Testlerde: Arena oluştur → test → arena_serbest(). Valgrind ile doğrula.
+- Testlerde: Arena oluştur → test → arena_serbest(). ASan ile doğrula.
 - `arena_ayir_sifir` tercih et (başlatılmamış bellek hataları önlenir)
 
 ### Test Yazım Kuralları
@@ -240,7 +241,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 ## Mevcut Durum ve Yapılacaklar
 
 ### Tamamlanan ✓
-1. Lexer spesifikasyonu ve C implementasyonu (113/113 test)
+1. Lexer spesifikasyonu ve C implementasyonu (103/103 test)
 2. Bellek modeli formalizasyonu (3 katman taslak)
 3. EBNF grammar tanımı
 4. AST düğüm tasarımı
@@ -278,8 +279,9 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 
 Mevcut lexer API'si:
 ```c
-Lexer lexer_olustur(const char *kaynak, const char *dosya_adi);
+void lexer_baslat(Lexer *lexer, const char *kaynak, const char *dosya_adi);
 Token lexer_sonraki_token(Lexer *lexer);
+const char *token_tipi_adi(TokenTipi tip);
 ```
 
 Parser, lexer'dan token akışı alır. Parser kendi token tamponunu tutar (1-2 token lookahead).
@@ -292,3 +294,32 @@ Lexer dosyadan veya stdin'den UTF-8 metin okur, parser Token yapılarını tüke
 Kod içi yorumlar, değişken isimleri, hata mesajları, test açıklamaları: **Türkçe**.
 Commit mesajları: Türkçe veya İngilizce (geliştirici tercihi).
 Belge dosyaları: Türkçe.
+
+---
+
+## Geliştirme Ortamı (Windows Native)
+
+- **Shell:** Git Bash (MSYS / MinTTY)
+- **Derleyici:** MinGW-w64 GCC 16.1.0 (UCRT64), C11 standardı
+- **Build:** mingw32-make 4.4.1 (Makefile platform-bağımsız hale getirildi: `EXE` değişkeni Windows'ta `.exe`)
+- **PATH:** `/c/msys64/ucrt64/bin` — her Bash tool çağrısında `export PATH=/c/msys64/ucrt64/bin:$PATH` ile eklenmeli (kalıcı PATH'e yazılmadı)
+- **Bellek kontrolü:** AddressSanitizer (birincil), Dr. Memory (ikincil), Valgrind YOK
+- **Test binary'leri:** `.exe` uzantılı (`build/test_lexer.exe`, `build/kemgu.exe`)
+
+---
+
+## Aktif Görev
+
+- **Faz:** Parser implementasyonu
+- **Sıra:** arena.h/c → ast.h/c → ast_yazdir.h/c → parser.h/c (deyimler) → ifade.c (Pratt parser) → test_parser.c → örnek .kem dosyaları
+- **İlk hedef:** arena allocator (.h, .c, test, ASan ile doğrulama)
+
+---
+
+## Bu Oturumun Çalışma Kuralları
+
+- Her dosya yazıldıktan sonra `make` çalıştır, sıfır uyarı hedefi (`-Wall -Wextra -Wpedantic`)
+- Test binary'leri için ASan derleme bayrakları: `-fsanitize=address,undefined -g -fno-omit-frame-pointer`
+- Bellek alan modüller için her test çalıştırmasında ASan aktif olmalı; `ERROR: AddressSanitizer` çıkarsa adım onaylanmaz
+- Her mantıksal birim bitince Türkçe küçük git commit
+- Türkçe UTF-8 hex escape kuralı: ayrıntı için yukarıdaki **"Türkçe UTF-8 Dikkat Noktası"** bölümüne bak (kural: her Türkçe karakter escape'inden sonra 0-9 / a-f / A-F geliyorsa concatenation şart)
