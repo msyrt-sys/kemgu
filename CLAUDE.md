@@ -67,7 +67,7 @@ kemgu/
 │   ├── utf8.h / utf8.c               — Türkçe UTF-8 karakter tanıma (TAMAMLANDI ✓)
 │   ├── anahtar_kelime.c              — 30 anahtar kelime tablosu (TAMAMLANDI ✓)
 │   ├── hata.h / hata.c               — Hata raporlama (TAMAMLANDI ✓, genişletilecek)
-│   ├── arena.h / arena.c             — Arena allocator (YAPILACAK)
+│   ├── arena.h / arena.c             — Arena allocator (TAMAMLANDI ✓)
 │   ├── ast.h / ast.c                 — AST düğüm yapıları (YAPILACAK)
 │   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (YAPILACAK)
 │   ├── parser.h / parser.c           — Recursive descent parser (YAPILACAK)
@@ -75,7 +75,7 @@ kemgu/
 │   └── ana.c                          — Ana giriş noktası (lexer + parser)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
-│   ├── test_arena.c                   — Arena testleri (YAPILACAK)
+│   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (YAPILACAK)
 │   ├── test_parser.c                  — Parser testleri (YAPILACAK)
 │   └── ornekler/
@@ -246,16 +246,16 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 3. EBNF grammar tanımı
 4. AST düğüm tasarımı
 5. Parser tasarım kararları (hibrit, arena, panik modu)
+6. Arena allocator (`arena.h/c`) — 19/19 test, ASan temiz, Clang64 ile doğrulandı
 
 ### Yapım Sırası (devam noktası)
-1. `arena.h / arena.c` — Arena allocator implementasyonu
-2. `ast.h / ast.c` — AST düğüm yapıları ve oluşturma yardımcıları
-3. `ast_yazdir.h / ast_yazdir.c` — AST debug yazdırma
-4. `parser.h / parser.c` — Parser çekirdeği (token tüketme, hata kurtarma, deyimler, tanımlar)
-5. `ifade.c` — Pratt parser (ifade öncelikleri)
-6. `test_parser.c` — Parser birim testleri
-7. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
-8. `ana.c` güncellemesi (lexer + parser entegrasyonu)
+1. `ast.h / ast.c` — AST düğüm yapıları ve oluşturma yardımcıları (sıradaki)
+2. `ast_yazdir.h / ast_yazdir.c` — AST debug yazdırma
+3. `parser.h / parser.c` — Parser çekirdeği (token tüketme, hata kurtarma, deyimler, tanımlar)
+4. `ifade.c` — Pratt parser (ifade öncelikleri)
+5. `test_parser.c` — Parser birim testleri
+6. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
+7. `ana.c` güncellemesi (lexer + parser entegrasyonu)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -297,22 +297,36 @@ Belge dosyaları: Türkçe.
 
 ---
 
-## Geliştirme Ortamı (Windows Native)
+## Geliştirme Ortamı (Windows Native — Dual-Compiler)
 
 - **Shell:** Git Bash (MSYS / MinTTY)
-- **Derleyici:** MinGW-w64 GCC 16.1.0 (UCRT64), C11 standardı
-- **Build:** mingw32-make 4.4.1 (Makefile platform-bağımsız hale getirildi: `EXE` değişkeni Windows'ta `.exe`)
-- **PATH:** `/c/msys64/ucrt64/bin` — her Bash tool çağrısında `export PATH=/c/msys64/ucrt64/bin:$PATH` ile eklenmeli (kalıcı PATH'e yazılmadı)
-- **Bellek kontrolü:** AddressSanitizer (birincil), Dr. Memory (ikincil), Valgrind YOK
-- **Test binary'leri:** `.exe` uzantılı (`build/test_lexer.exe`, `build/kemgu.exe`)
+- **Prod derleyici:** MinGW-w64 GCC 16.1.0 (UCRT64) — `kemgu.exe`, lexer testi
+- **Test + ASan derleyicisi:** Clang 22.1.4 (Clang64) — arena / AST / parser testleri
+  (Win11'de ASan runtime için zorunlu — UCRT64 GCC `libasan` içermez)
+- **Standart:** C11 (her iki derleyici de)
+- **Build:** mingw32-make 4.4.1 (UCRT64'ten)
+- **PATH (her Bash tool çağrısında set edilmeli — kalıcı PATH'e yazılmadı):**
+  ```bash
+  export PATH=/c/msys64/clang64/bin:/c/msys64/ucrt64/bin:$PATH
+  ```
+  Sebep: `clang` Clang64'ten (ASan testleri), `gcc` UCRT64'ten (prod), `mingw32-make` UCRT64'ten.
+- **Bellek kontrolü:** AddressSanitizer + UndefinedBehaviorSanitizer (Clang64 dynamic runtime).
+  `libclang_rt.asan_dynamic-x86_64.dll` Clang64/bin içinde — PATH'teyse otomatik bulunur.
+- **Test binary'leri:** `.exe` uzantılı (`build/test_lexer.exe`, `build/test_arena.exe`, `build/kemgu.exe`)
+
+### Win11 26200 — ASan / Dr. Memory Notu
+
+- **MinGW-w64 UCRT64 GCC**, ASan/UBSan **runtime** kütüphanelerini içermez (sadece compiler header'ları). Bu MinGW-w64'ün bilinen kısıtlaması.
+- **Dr. Memory** Win11 26200'de DynamoRIO uyumsuzluğu nedeniyle çöküyor (GitHub issues [#2456](https://github.com/DynamoRIO/drmemory/issues/2456), [#2489](https://github.com/DynamoRIO/drmemory/issues/2489) — 3+ yıldır açık, fix yok).
+- **Çözüm:** Bellek alan modül testleri için **Clang64 + ASan** kullan. Makefile'da `CC_ASAN = clang` yapısı bunu yapar — prod tarafı GCC kalır, sadece test ASan ile derlenir.
 
 ---
 
 ## Aktif Görev
 
 - **Faz:** Parser implementasyonu
-- **Sıra:** arena.h/c → ast.h/c → ast_yazdir.h/c → parser.h/c (deyimler) → ifade.c (Pratt parser) → test_parser.c → örnek .kem dosyaları
-- **İlk hedef:** arena allocator (.h, .c, test, ASan ile doğrulama)
+- **Sıra:** ~~arena.h/c~~ ✓ → **ast.h/c (sıradaki)** → ast_yazdir.h/c → parser.h/c (deyimler) → ifade.c (Pratt parser) → test_parser.c → örnek .kem dosyaları
+- **Sıradaki hedef:** AST düğüm yapıları (`ast.h/c`) + AST debug yazıcısı + birim testleri
 
 ---
 
