@@ -34,10 +34,10 @@ else
 endif
 
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
-       $(SRCDIR)/lexer.c $(SRCDIR)/arena.c
+       $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test test_tumu
 
 # === Ana hedef ===
 
@@ -60,6 +60,12 @@ $(BUILD)/test_lexer.o: $(TESTDIR)/test_lexer.c | $(BUILD)
 $(BUILD)/test_arena$(EXE): $(SRCDIR)/arena.c $(TESTDIR)/test_arena.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === AST testi (Clang64 + ASan AKTIF — arena + ast + ast_yazdir) ===
+
+$(BUILD)/test_ast$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                         $(SRCDIR)/ast_yazdir.c $(TESTDIR)/test_ast.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -78,7 +84,10 @@ calistir_lexer_test: test
 calistir_arena_test: $(BUILD)/test_arena$(EXE)
 	./$(BUILD)/test_arena$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test
+calistir_ast_test: $(BUILD)/test_ast$(EXE)
+	./$(BUILD)/test_ast$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test
 	@echo "Tum testler gecti!"
 
 clean:

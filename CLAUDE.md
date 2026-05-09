@@ -68,15 +68,15 @@ kemgu/
 │   ├── anahtar_kelime.c              — 30 anahtar kelime tablosu (TAMAMLANDI ✓)
 │   ├── hata.h / hata.c               — Hata raporlama (TAMAMLANDI ✓, genişletilecek)
 │   ├── arena.h / arena.c             — Arena allocator (TAMAMLANDI ✓)
-│   ├── ast.h / ast.c                 — AST düğüm yapıları (YAPILACAK)
-│   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (YAPILACAK)
+│   ├── ast.h / ast.c                 — AST düğüm yapıları (TAMAMLANDI ✓)
+│   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (TAMAMLANDI ✓)
 │   ├── parser.h / parser.c           — Recursive descent parser (YAPILACAK)
 │   ├── ifade.c                        — Pratt parser: ifadeler (YAPILACAK)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
-│   ├── test_ast.c                     — AST testleri (YAPILACAK)
+│   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
 │   ├── test_parser.c                  — Parser testleri (YAPILACAK)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek
@@ -247,15 +247,14 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 4. AST düğüm tasarımı
 5. Parser tasarım kararları (hibrit, arena, panik modu)
 6. Arena allocator (`arena.h/c`) — 19/19 test, ASan temiz, Clang64 ile doğrulandı
+7. AST düğüm yapıları (`ast.h/c`) + AST yazıcısı (`ast_yazdir.h/c`) — 31/31 test, ASan temiz
 
 ### Yapım Sırası (devam noktası)
-1. `ast.h / ast.c` — AST düğüm yapıları ve oluşturma yardımcıları (sıradaki)
-2. `ast_yazdir.h / ast_yazdir.c` — AST debug yazdırma
-3. `parser.h / parser.c` — Parser çekirdeği (token tüketme, hata kurtarma, deyimler, tanımlar)
-4. `ifade.c` — Pratt parser (ifade öncelikleri)
-5. `test_parser.c` — Parser birim testleri
-6. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
-7. `ana.c` güncellemesi (lexer + parser entegrasyonu)
+1. `parser.h / parser.c` — Parser çekirdeği (token tüketme, hata kurtarma, deyimler, tanımlar) — **sıradaki**
+2. `ifade.c` — Pratt parser (ifade öncelikleri)
+3. `test_parser.c` — Parser birim testleri
+4. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
+5. `ana.c` güncellemesi (lexer + parser entegrasyonu)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -325,8 +324,8 @@ Belge dosyaları: Türkçe.
 ## Aktif Görev
 
 - **Faz:** Parser implementasyonu
-- **Sıra:** ~~arena.h/c~~ ✓ → **ast.h/c (sıradaki)** → ast_yazdir.h/c → parser.h/c (deyimler) → ifade.c (Pratt parser) → test_parser.c → örnek .kem dosyaları
-- **Sıradaki hedef:** AST düğüm yapıları (`ast.h/c`) + AST debug yazıcısı + birim testleri
+- **Sıra:** ~~arena.h/c~~ ✓ → ~~ast.h/c~~ ✓ → ~~ast_yazdir.h/c~~ ✓ → **parser.h/c (sıradaki — deyimler/tanımlar)** → ifade.c (Pratt parser) → test_parser.c → örnek .kem dosyaları
+- **Sıradaki hedef:** Parser çekirdeği (`parser.h/c`) — Recursive descent (üst düzey, tanımlar, deyimler) + token akışı yönetimi + panik modu hata kurtarma
 
 ---
 
