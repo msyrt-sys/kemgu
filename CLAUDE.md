@@ -72,12 +72,14 @@ kemgu/
 │   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (TAMAMLANDI ✓)
 │   ├── parser.h / parser.c           — Recursive descent parser (TAMAMLANDI ✓ — çekirdek, kalan deyimler ADIM 10'da)
 │   ├── ifade.c                        — Pratt parser: ifadeler (TAMAMLANDI ✓ — tam öncelik tablosu + sonek + yapı/dizi/lambda)
+│   ├── tip.h / tip.c                 — Tip temsili (TipBilgisi, equality, yazdırma) (TAMAMLANDI ✓)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
-│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 53/53 (29 çekirdek + 24 ifade), ASan temiz)
+│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
+│   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -282,11 +284,22 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 
 ### 🎉 PARSER FAZI TAMAMLANDI (231/231 test)
 
-Sıradaki büyük faz seçenekleri (kullanıcı kararı bekleniyor):
-- **Tip sistemi:** Tip kontrolü + tip çıkarsama (Hindley-Milner benzeri)
-- **Bölge çözümleyici:** Escape analizi, otomatik bölge atama (KEMGU motto)
-- **LLVM backend:** AST → LLVM IR
-- **Bootstrapping:** KEMGU ile KEMGU derleyicisi (uzun vade)
+13. Tip temsili (`tip.h/c`) — 26/26 tip test, ASan temiz
+    - 14 basit tip (tam8-64, dtam8-64, kesirli32-64, mantıksal, karakter, metin, boş)
+    - 7 bileşik tip (referans, pointer, dizi, seçimlik, sonuç, işlev, yapı)
+    - Generic parametre (TIP_GENERIC_PARAM)
+    - **Nominal eşitlik** (recursive, ad + args)
+    - Yazdırma (KEMGU sözdizimine yakın: `Dizi<seçimlik<tam32>>`)
+    - Yardımcılar: `tip_sayisal_mi`, `tip_tamsayi_mi`, `tip_mantiksal_mi`
+
+### TİP SİSTEMİ FAZI (yapım sırası)
+1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
+2. **sembol.h/c (symbol table + scope) — ADIM 11.2 sıradaki**
+3. tip_kontrol.h/c (1) — ifade tip kontrolü
+4. tip_kontrol.c (2) — deyim/tanım tip kontrolü
+5. tip_kontrol.c (3) — tip çıkarsama (bidirectional)
+6. tip_kontrol.c (4) — generic instantiation
+7. ana.c `--check` modu + örnek dosyalar üzerinde tip kontrolü
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -355,13 +368,16 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉 PARSER FAZI TAMAMLANDI** (231/231 test, 12 commit)
-- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler (10.A)~~ ✓ → ~~karmaşık tipler (10.B)~~ ✓ → ~~örnek .kem + ana.c (10.C)~~ ✓
-- **Sıradaki büyük faz** (kullanıcı seçimi bekleniyor):
-  - Tip sistemi (tip kontrolü, tip çıkarsama)
-  - Bölge çözümleyici (escape analizi)
-  - LLVM backend (AST → IR)
-  - Bootstrapping (uzun vade)
+- **Faz:** Tip sistemi (7 alt-adımdan 1.'si tamam)
+- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → **sembol.h/c (11.2 sıradaki)** → tip_kontrol ifadeler (11.3) → deyimler (11.4) → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
+- **Tip sistemi tasarım kararları (kullanıcı onayladı):**
+  - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
+  - Generic: Monomorphization (Rust gibi)
+  - Eşitlik: Nominal (Rust/Java gibi)
+  - Constraint: ŞIMDILIK YOK (ileride)
+  - Sayı literal: Context-dependent, default tam32
+  - Bölge: Önce tip, sonra ADIM 12'de bölge
+- **Sıradaki hedef:** `sembol.h/c` — Symbol table + scope hierarchy (blok/işlev/global), isim çözümleme
 
 ---
 
