@@ -3,6 +3,9 @@
 #include "ast.h"
 #include "ast_yazdir.h"
 #include "arena.h"
+#include "tip.h"
+#include "sembol.h"
+#include "tip_kontrol.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,15 +13,18 @@
 
 /*
  * KEMGU CLI:
- *   kemgu [--token | --parse] [dosya]
+ *   kemgu [--token | --parse | --check] [dosya]
  *
- * Mod yoksa (default): --parse
+ * Mod yoksa (default): --check
  *
  * --token: lexer akisini yazdir
- * --parse: parser calistir + AST'yi yazdir
+ * --parse: parser calistir + AST yazdir
+ * --check: parser + tip kontrol (default)
  *
  * Dosya argumani yoksa stdin'den okur.
  */
+
+typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK } Mod;
 
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
@@ -93,26 +99,66 @@ static int mode_parse(const char *kaynak, const char *dosya_adi) {
     return rc;
 }
 
+static int mode_check(const char *kaynak, const char *dosya_adi) {
+    Arena *a = arena_olustur(0);
+    if (!a) {
+        fprintf(stderr, "Arena olusturulamadi\n");
+        return 1;
+    }
+
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Parser p;
+    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+    Dugum *prog = parser_calistir(&p);
+
+    int parser_hata = p.hata_sayisi;
+    int tk_hata = 0;
+
+    if (parser_hata == 0 && prog) {
+        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        TipKontrol tk;
+        tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
+        tip_kontrol_program(&tk, prog);
+        tk_hata = tk.hata_sayisi;
+    }
+
+    int toplam = parser_hata + tk_hata;
+    if (toplam == 0) {
+        fprintf(stdout, "OK: %s — tip kontrolu basarili.\n", dosya_adi);
+    } else {
+        fprintf(stdout,
+                "HATA: %s — parser %d, tip kontrol %d (toplam %d hata).\n",
+                dosya_adi, parser_hata, tk_hata, toplam);
+    }
+
+    arena_serbest(a);
+    return toplam > 0 ? 1 : 0;
+}
+
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse] [dosya]\n"
+        "Kullanim: %s [--token | --parse | --check] [dosya]\n"
         "  --token   Lexer akisini yazdir\n"
-        "  --parse   Parser calistir + AST yazdir (varsayilan)\n"
+        "  --parse   Parser calistir + AST yazdir\n"
+        "  --check   Parser + tip kontrol (varsayilan)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
 
 int main(int argc, char *argv[]) {
-    int parse_mode = 1;  /* default: parse */
+    Mod mod = MOD_CHECK;  /* default */
     int arg_idx = 1;
 
-    /* Bayrak parse */
     while (arg_idx < argc && argv[arg_idx][0] == '-') {
         if (strcmp(argv[arg_idx], "--token") == 0) {
-            parse_mode = 0;
+            mod = MOD_TOKEN;
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--parse") == 0) {
-            parse_mode = 1;
+            mod = MOD_PARSE;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--check") == 0) {
+            mod = MOD_CHECK;
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
@@ -141,9 +187,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int rc = parse_mode
-        ? mode_parse(kaynak, dosya_adi)
-        : mode_token(kaynak, dosya_adi);
+    int rc;
+    switch (mod) {
+        case MOD_TOKEN: rc = mode_token(kaynak, dosya_adi); break;
+        case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
+        case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
+        default:        rc = 2; break;
+    }
 
     free(kaynak);
     return rc;

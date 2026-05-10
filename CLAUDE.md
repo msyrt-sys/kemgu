@@ -334,14 +334,30 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - Atama, ver, yapı_oluştur context'i yayılır
     - Zincirleme: `f(g(5))` — g param tam8 → 5 tam8 (recursive)
 
-### TİP SİSTEMİ FAZI (yapım sırası)
-1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
-2. ~~sembol.h/c (symbol table + scope)~~ ✓ ADIM 11.2
-3. ~~tip_kontrol.h/c (1) — ifade tip kontrolü~~ ✓ ADIM 11.3
-4. ~~tip_kontrol.c (2) — deyim/tanım tip kontrolü~~ ✓ ADIM 11.4
-5. ~~tip_kontrol.c (3) — bidirectional tip çıkarsama~~ ✓ ADIM 11.5
-6. **tip_kontrol.c (4) — generic instantiation — ADIM 11.6 sıradaki**
-7. ana.c `--check` modu + örnek dosyalar üzerinde tip kontrolü
+18. Generic instantiation (`tip_kontrol.c` 4) — 6 ek test (toplam 90), ASan temiz
+    - `substitusyon` helper: TIP_GENERIC_PARAM → concrete tip (recursive)
+    - Yapı oluşturma + erişimde substitusyon (Kutu<tam32>.eleman → tam32)
+    - İç içe generic destekli (Kutu<Kutu<tam32>>)
+    - Çoklu tip param: Çift<A, B> { ilk: A; ikinci: B; }
+
+19. `ana.c` `--check` modu + örnek dosyalar (ADIM 11.7) — KEMGU CLI tip kontrolü
+    - 3 mod: `--token`, `--parse`, `--check` (default)
+    - `mode_check`: parser çalıştır + tip_kontrol_program → "OK" / "HATA"
+    - **Test sonuçları:** `fibonacci.kem` ✓, `yapilar.kem` ✓ tip kontrolünden geçti
+    - **Bilinen sınırlamalar (gelecek iyileştirmeler):**
+      - `hasta.kem`: `hiç` ve `değer(...)` ifade context'inde tanınmıyor
+        (parse_birincil'de TOK_HIC ve TOK_DEGER için case yok — pattern
+        matching dışında ifade olarak kullanım için ek destek gerekli)
+      - `eslesme.kem`: `eşleş` desen tanımlayıcıları (örn. `değer(s) => s`)
+        kol gövdesi scope'una eklenmiyor — pattern binding desteği eksik
+
+### 🎉 TİP SİSTEMİ FAZI TAMAMLANDI (90 yeni test, toplam 365/365)
+
+Sıradaki büyük faz seçenekleri:
+- **ADIM 12 — Bölge Çözümleyici:** Escape analizi, otomatik bölge atama (KEMGU motto: "GC yok, region-based")
+- **ADIM 13 — LLVM backend:** AST → LLVM IR
+- **ADIM 14 — Bootstrapping:** KEMGU ile KEMGU derleyicisi (uzun vade)
+- **Tip sistemi genişletme:** `hiç`/`değer` ifade desteği, pattern binding, özellik (trait) constraint sistemi
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -410,8 +426,8 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Tip sistemi (7 alt-adımdan 5.'i tamam)
-- **Sıra:** ~~11.1-11.5~~ ✓ → **generic (11.6 sıradaki)** → entegrasyon (11.7) → ADIM 12 (bölge çözümleyici)
+- **Faz:** **🎉 TİP SİSTEMİ FAZI TAMAMLANDI** (7 alt-adımın 7'si tamam, 365/365 test, 16 commit)
+- **Sıra:** ~~11.1-11.7~~ ✓ → **ADIM 12 (bölge çözümleyici — sıradaki büyük faz)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -419,7 +435,7 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** Tip çıkarsama — sayı literal context-dependent (`tam8`/`tam64`), boş dizi `[]` context'ten tip al, `değişken x = ...` annot olmadan değer tipinden çıkarsama (zaten var), bidirectional propagation (`f(arg)` arg tipi parametre tipinden zorlama)
+- **Sıradaki hedef:** ADIM 12 — Bölge Çözümleyici (escape analizi, R-* atama kuralları). KEMGU'nun en kritik özelliği. Bellek modeli formalizasyonu (KEMGU_Bellek_Modeli.md) bu adımın tasarım dokümanı. Tasarım kararları kullanıcı onayı gerektirir.
 
 ---
 
