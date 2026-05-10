@@ -6,6 +6,7 @@
 #include "tip.h"
 #include "sembol.h"
 #include "tip_kontrol.h"
+#include "llvm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,18 +14,19 @@
 
 /*
  * KEMGU CLI:
- *   kemgu [--token | --parse | --check] [dosya]
+ *   kemgu [--token | --parse | --check | --llvm] [dosya]
  *
  * Mod yoksa (default): --check
  *
  * --token: lexer akisini yazdir
  * --parse: parser calistir + AST yazdir
  * --check: parser + tip kontrol (default)
+ * --llvm:  parser + LLVM IR text yazdir
  *
  * Dosya argumani yoksa stdin'den okur.
  */
 
-typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK } Mod;
+typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK, MOD_LLVM } Mod;
 
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
@@ -136,12 +138,35 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
+static int mode_llvm(const char *kaynak, const char *dosya_adi) {
+    Arena *a = arena_olustur(0);
+    if (!a) {
+        fprintf(stderr, "Arena olusturulamadi\n");
+        return 1;
+    }
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Parser p;
+    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+    Dugum *prog = parser_calistir(&p);
+    if (p.hata_sayisi > 0) {
+        fprintf(stderr, "Parser hatalari: %d (LLVM IR uretilmedi)\n",
+                p.hata_sayisi);
+        arena_serbest(a);
+        return 1;
+    }
+    llvm_ir_uret(prog, stdout);
+    arena_serbest(a);
+    return 0;
+}
+
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse | --check] [dosya]\n"
+        "Kullanim: %s [--token | --parse | --check | --llvm] [dosya]\n"
         "  --token   Lexer akisini yazdir\n"
         "  --parse   Parser calistir + AST yazdir\n"
         "  --check   Parser + tip kontrol (varsayilan)\n"
+        "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -159,6 +184,9 @@ int main(int argc, char *argv[]) {
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--check") == 0) {
             mod = MOD_CHECK;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--llvm") == 0) {
+            mod = MOD_LLVM;
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
@@ -192,6 +220,7 @@ int main(int argc, char *argv[]) {
         case MOD_TOKEN: rc = mode_token(kaynak, dosya_adi); break;
         case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
         case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
+        case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi); break;
         default:        rc = 2; break;
     }
 
