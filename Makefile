@@ -36,10 +36,10 @@ endif
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
-       $(SRCDIR)/tip_kontrol.c
+       $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test test_tumu
 
 # === Ana hedef ===
 
@@ -100,6 +100,12 @@ $(BUILD)/test_tip_kontrol$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(TESTDIR)/test_tip_kontrol.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Bolge testi (Clang64 + ASan — arena + bolge) ===
+
+$(BUILD)/test_bolge$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/bolge.c \
+                           $(TESTDIR)/test_bolge.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -133,7 +139,10 @@ calistir_sembol_test: $(BUILD)/test_sembol$(EXE)
 calistir_tip_kontrol_test: $(BUILD)/test_tip_kontrol$(EXE)
 	./$(BUILD)/test_tip_kontrol$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test
+calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
+	./$(BUILD)/test_bolge$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test
 	@echo "Tum testler gecti!"
 
 clean:
