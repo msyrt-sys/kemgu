@@ -232,7 +232,9 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
             hata = 1;
             continue;
         }
-        TipBilgisi *deger_tip = tip_belirle(tk, aa->veri.alan_atama.deger);
+        /* Bidirectional: alan degeri alan tipi context'inde */
+        TipBilgisi *deger_tip = tip_belirle_beklenen(tk,
+            aa->veri.alan_atama.deger, alan->tip);
         if (!tip_esit(alan->tip, deger_tip) &&
             deger_tip->kategori != TIP_HATA) {
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
@@ -390,9 +392,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
-                TipBilgisi *arg_tip = tip_belirle(tk,
-                    d->veri.cagri.argumanlar[i]);
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
+                /* Bidirectional: arg, parametre tipi context'inde cikarsanir */
+                TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[i], param_tip);
                 if (!tip_esit(arg_tip, param_tip) &&
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
@@ -537,6 +540,62 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 }
 
 /* ========================================================================
+ * ADIM 11.5: Bidirectional tip cikarsamasi
+ * ======================================================================== */
+
+TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
+                                  const TipBilgisi *beklenen) {
+    if (!d) return t_hata(tk);
+    if (!beklenen || beklenen->kategori == TIP_HATA) {
+        return tip_belirle(tk, d);
+    }
+
+    switch (d->tip) {
+        case DUGUM_TAM:
+            /* Sayi literali context tamsayi tipine gore */
+            if (tip_tamsayi_mi(beklenen)) {
+                return t_basit(tk, beklenen->kategori);
+            }
+            break;
+
+        case DUGUM_KESIRLI:
+            if (beklenen->kategori == TIP_KESIRLI32 ||
+                beklenen->kategori == TIP_KESIRLI64) {
+                return t_basit(tk, beklenen->kategori);
+            }
+            break;
+
+        case DUGUM_DIZI_OLUSTUR: {
+            if (beklenen->kategori != TIP_DIZI) break;
+            const TipBilgisi *eleman_t = beklenen->veri.dizi.eleman;
+            int n = d->veri.dizi_olustur.sayi;
+            if (n == 0) {
+                /* Bos dizi -> beklenen tip */
+                return tip_olustur_dizi(tk->arena,
+                    t_basit(tk, eleman_t->kategori));  /* shallow */
+            }
+            /* Dolu dizi: her eleman beklenen->dizi.eleman context'inde */
+            for (int i = 0; i < n; i++) {
+                TipBilgisi *e = tip_belirle_beklenen(tk,
+                    d->veri.dizi_olustur.elemanlar[i], eleman_t);
+                if (!tip_esit(e, eleman_t) && e->kategori != TIP_HATA) {
+                    tip_hata(tk, d->veri.dizi_olustur.elemanlar[i],
+                             "T013", "dizi elemani beklenen tip ile uyumsuz");
+                }
+            }
+            return tip_olustur_dizi(tk->arena,
+                                    (TipBilgisi *)eleman_t);
+        }
+
+        default:
+            break;
+    }
+
+    /* Default davranis */
+    return tip_belirle(tk, d);
+}
+
+/* ========================================================================
  * ADIM 11.4: Deyim ve tanim tip kontrolu
  * ======================================================================== */
 
@@ -677,16 +736,21 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
 
     switch (d->tip) {
         case DUGUM_DEGISKEN: {
-            TipBilgisi *deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             TipBilgisi *annot = NULL;
+            TipBilgisi *deger_tip;
             if (d->veri.degisken.tip) {
                 annot = ast_tip_to_bilgi(tk, d->veri.degisken.tip);
+                /* Bidirectional: literal'lar annot context'inde cikarsanir */
+                deger_tip = tip_belirle_beklenen(tk,
+                    d->veri.degisken.deger, annot);
                 if (!tip_esit(annot, deger_tip) &&
                     deger_tip->kategori != TIP_HATA &&
                     annot->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T001",
                              "degisken tip annot ile baslangic uyumsuz");
                 }
+            } else {
+                deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             }
             TipBilgisi *son = annot ? annot : deger_tip;
             Sembol s;
@@ -714,7 +778,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                          "atama hedefi lvalue olmali (tanimlayici/erisim/indeks)");
             }
             TipBilgisi *ht = tip_belirle(tk, hedef);
-            TipBilgisi *dt = tip_belirle(tk, d->veri.atama.deger);
+            /* Bidirectional: deger hedef tip context'inde */
+            TipBilgisi *dt = tip_belirle_beklenen(tk, d->veri.atama.deger, ht);
             if (!tip_esit(ht, dt) &&
                 ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T001", "atama tipi uyumsuz");
@@ -728,7 +793,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 break;
             }
             if (d->veri.ver.deger) {
-                TipBilgisi *deger = tip_belirle(tk, d->veri.ver.deger);
+                /* Bidirectional: deger donus tipi context'inde */
+                TipBilgisi *deger = tip_belirle_beklenen(tk,
+                    d->veri.ver.deger, tk->aktif_donus_tipi);
                 if (!tip_esit(deger, tk->aktif_donus_tipi) &&
                     deger->kategori != TIP_HATA &&
                     tk->aktif_donus_tipi->kategori != TIP_HATA) {
@@ -892,9 +959,11 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_SABIT: {
-            /* Pre-populate'te sembol eklendi. Simdi deger kontrolu */
-            TipBilgisi *deger = tip_belirle(tk, d->veri.sabit.deger);
+            /* Pre-populate'te sembol eklendi. Simdi deger kontrolu.
+             * Bidirectional: literal'lar annot context'inde cikarsanir. */
             TipBilgisi *annot = ast_tip_to_bilgi(tk, d->veri.sabit.tip);
+            TipBilgisi *deger = tip_belirle_beklenen(tk,
+                d->veri.sabit.deger, annot);
             if (!tip_esit(deger, annot) &&
                 deger->kategori != TIP_HATA &&
                 annot->kategori != TIP_HATA) {

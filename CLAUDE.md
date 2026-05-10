@@ -326,13 +326,21 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - Tanım visitor: işlev gövdesi (parametre scope + aktif_donus_tipi context), sabit (annot vs değer), yapı (pre-populate yeterli), modül (üye recursive), dışa (iç tanım recursive)
     - Yeni hata kodları: T020 (ver tipi), T021 (kondisyon mantıksal), T022 (lvalue), T023 (ver dış), T024 (çift tanım), T026 (yapı çakışması), T027 (için dizi)
 
+17. Bidirectional tip çıkarsama (`tip_kontrol.c` 3) — 10 ek test (toplam 84), ASan temiz
+    - Yeni API: `tip_belirle_beklenen(tk, d, beklenen)` — context-aware
+    - Sayı literal context-dependent: `değişken x: tam8 = 1` → 1 tam8'e çıkarsanır
+    - Boş dizi context'ten: `değişken xs: Dizi<tam32> = []` → Dizi<tam32>
+    - Çağrı arg context'ten: `f(5)` (f param tam8) → 5 tam8
+    - Atama, ver, yapı_oluştur context'i yayılır
+    - Zincirleme: `f(g(5))` — g param tam8 → 5 tam8 (recursive)
+
 ### TİP SİSTEMİ FAZI (yapım sırası)
 1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
 2. ~~sembol.h/c (symbol table + scope)~~ ✓ ADIM 11.2
 3. ~~tip_kontrol.h/c (1) — ifade tip kontrolü~~ ✓ ADIM 11.3
 4. ~~tip_kontrol.c (2) — deyim/tanım tip kontrolü~~ ✓ ADIM 11.4
-5. **tip_kontrol.c (3) — tip çıkarsama (bidirectional) — ADIM 11.5 sıradaki**
-6. tip_kontrol.c (4) — generic instantiation
+5. ~~tip_kontrol.c (3) — bidirectional tip çıkarsama~~ ✓ ADIM 11.5
+6. **tip_kontrol.c (4) — generic instantiation — ADIM 11.6 sıradaki**
 7. ana.c `--check` modu + örnek dosyalar üzerinde tip kontrolü
 
 ### İlerideki Fazlar
@@ -402,8 +410,8 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Tip sistemi (7 alt-adımdan 4.'ü tamam)
-- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → ~~tip_kontrol ifadeler (11.3)~~ ✓ → ~~deyimler/tanımlar (11.4)~~ ✓ → **çıkarsama (11.5 sıradaki)** → generic (11.6) → entegrasyon (11.7)
+- **Faz:** Tip sistemi (7 alt-adımdan 5.'i tamam)
+- **Sıra:** ~~11.1-11.5~~ ✓ → **generic (11.6 sıradaki)** → entegrasyon (11.7) → ADIM 12 (bölge çözümleyici)
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

@@ -51,6 +51,15 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
 /* Ifadenin tipini belirle. Hata varsa raporla, TIP_HATA donebilir. */
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *ifade);
 
+/* Bidirectional tip cikarsamasi: 'beklenen' tip parametre olarak verilirse
+ * literal'lar (TAM, KESIRLI, bos dizi) o tipe gore cikarsanir.
+ *   degisken x: tam8 = 1;       // 1 -> tam8 (default tam32 yerine)
+ *   degisken xs: Dizi<T> = [];  // bos dizi -> Dizi<T>
+ *   f(arg)  // arg, parametre tipi context'inde cikarsanir
+ * beklenen NULL ise tip_belirle ile ayni davranir. */
+TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *ifade,
+                                  const TipBilgisi *beklenen);
+
 /* AST tip dugumunu (DUGUM_TIP_*) TipBilgisi'ye cevir.
  * Built-in tipler (tam32 vs) ve kullanici tipleri (sembol arama) icin. */
 TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d);

@@ -930,6 +930,103 @@ static void test_prog_yapi_alan_kullanim(void) {
     arena_serbest(a);
 }
 
+/* === Bidirectional cikarsama testleri (ADIM 11.5) === */
+
+static void test_bd_lit_tam8(void) {
+    Arena *a = arena_olustur(0);
+    /* degisken x: tam8 = 1; — 1 -> tam8 (default tam32 yerine) */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam8 = 1; }", a);
+    test_sonuc("bd: degisken tam8 = 1 -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_lit_tam64(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam64 = 1; }", a);
+    test_sonuc("bd: degisken tam64 = 1 -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_lit_kesirli32(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: kesirli32 = 3.14; }", a);
+    test_sonuc("bd: degisken kesirli32 = 3.14 -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_dizi_bos_context(void) {
+    Arena *a = arena_olustur(0);
+    /* degisken xs: Dizi<tam32> = []; — bos dizi context'ten */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "de\xc4\x9f""i\xc5\x9fken xs: Dizi<tam32> = []; }", a);
+    test_sonuc("bd: bos dizi Dizi<tam32> -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_dizi_dolu_context(void) {
+    Arena *a = arena_olustur(0);
+    /* xs: Dizi<tam8> = [1, 2, 3]; — 1,2,3 -> tam8 */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "de\xc4\x9f""i\xc5\x9fken xs: Dizi<tam8> = [1, 2, 3]; }", a);
+    test_sonuc("bd: dolu dizi Dizi<tam8> = [1,2,3] -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_cagri_arg(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f(n: tam8) {} f(5) — 5 -> tam8 */
+    int h = program_kontrol(
+        "i\xc5\x9flev f(n: tam8) {} "
+        "i\xc5\x9flev g() { f(5); }", a);
+    test_sonuc("bd: cagri arg context'ten -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_atama(void) {
+    Arena *a = arena_olustur(0);
+    /* x tam8, x = 7 — 7 -> tam8 */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "de\xc4\x9f""i\xc5\x9fken x: tam8 = 0; x = 7; }", a);
+    test_sonuc("bd: atama context'ten -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_ver(void) {
+    Arena *a = arena_olustur(0);
+    /* ver 5 donus tam8 -> 0 hata */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam8 { ver 5; }", a);
+    test_sonuc("bd: ver donus tipi context'inden -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_yapi_olustur(void) {
+    Arena *a = arena_olustur(0);
+    /* Hasta { yas: 5 } yas tam8 -> 5 tam8 */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Hasta { yas: tam8; } "
+        "i\xc5\x9flev f() -> Hasta { ver Hasta { yas: 5 }; }", a);
+    test_sonuc("bd: yapi olustur alan context'inden -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bd_zincir(void) {
+    Arena *a = arena_olustur(0);
+    /* f(g(5)) — g param tam8, 5 -> tam8 (zincir) */
+    int h = program_kontrol(
+        "i\xc5\x9flev g(n: tam8) -> tam32 { ver 0; } "
+        "i\xc5\x9flev f(n: tam32) {} "
+        "i\xc5\x9flev h() { f(g(5)); }", a);
+    test_sonuc("bd: zincir f(g(5)) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1048,6 +1145,18 @@ int main(void) {
     printf("\n--- Program: Scope ---\n");
     test_prog_blok_scope();
     test_prog_blok_scope_dis();
+
+    printf("\n--- Bidirectional Cikarsama (11.5) ---\n");
+    test_bd_lit_tam8();
+    test_bd_lit_tam64();
+    test_bd_lit_kesirli32();
+    test_bd_dizi_bos_context();
+    test_bd_dizi_dolu_context();
+    test_bd_cagri_arg();
+    test_bd_atama();
+    test_bd_ver();
+    test_bd_yapi_olustur();
+    test_bd_zincir();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
