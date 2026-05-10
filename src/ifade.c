@@ -292,8 +292,10 @@ static Dugum *parse_birincil(Parser *p) {
             d = dugum_tanimlayici(p->arena, t.baslangic, t.uzunluk,
                                   t.satir, t.sutun);
             parser_ilerle(p);
-            /* Tanimlayici sonrasi '{' -> yapi olusturma (CLAUDE.md karari) */
-            if (parser_eslesir(p, TOK_SOL_SUSLU)) {
+            /* Tanimlayici sonrasi '{' -> yapi olusturma (CLAUDE.md karari).
+             * Kondisyonel ifadelerde (eger/iken/icin/esles) izin yok —
+             * orada '{' blok basidir. */
+            if (p->yapi_olusturma_izni && parser_eslesir(p, TOK_SOL_SUSLU)) {
                 return parse_yapi_olusturma(p, d);
             }
             return d;

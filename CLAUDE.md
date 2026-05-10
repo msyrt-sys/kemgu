@@ -260,13 +260,18 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
    - Yapı oluşturma: `Tip { alan: değer, ... }` (trailing comma destekli)
    - Dizi oluşturma: `[e1, e2, ...]` (boş dizi destekli)
    - Lambda: `|param: tip, ...| ifade` veya `|...| { blok }`
+10. Kalan deyimler + desenler (`parser.c` ekleme) — 63/63 parser test, ASan temiz
+    - `eğer`/`değilse` zinciri (else if), `iken`, `için`
+    - `eşleş` + desenler: literal, tanımlayıcı, joker (`_`), yapıcı
+    - `güvensiz` blok (opsiyonel `[etiket: "açıklama"]` ile)
+    - **Kondisyonel ifadelerde `{` blok başı** (`yapi_olusturma_izni` flag)
+    - `hiç` ve `değer` anahtar kelimeleri pattern matching'de tanımlayıcı/yapıcı
 
-### Yapım Sırası (devam noktası — ADIM 10)
-1. `parser.c`'ye kalan deyimler (eğer, iken, için, eşleş, güvensiz) — **sıradaki**
-2. Karmaşık tipler (`Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `&T`, `*T`, generic)
-3. Desenler (eşleş kolu için)
-4. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
-5. `ana.c` güncellemesi (lexer + parser entegrasyonu)
+### Yapım Sırası (devam noktası — ADIM 10.B + 10.C)
+1. Karmaşık tipler (`Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `&T`, `*T`, generic) — **sıradaki (ADIM 10.B)**
+2. Generic tip parametreli yapı/işlev tanımı (`yapı X<T> { ... }`)
+3. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme) — ADIM 10.C
+4. `ana.c` güncellemesi (lexer + parser entegrasyonu) — ADIM 10.C
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -335,9 +340,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Parser implementasyonu (3 alt-adımdan 2.'si tamam)
-- **Sıra:** ~~arena.h/c~~ ✓ → ~~ast.h/c~~ ✓ → ~~ast_yazdir.h/c~~ ✓ → ~~parser.h/c çekirdek~~ ✓ → ~~ifade.c Pratt~~ ✓ → **kalan deyimler + karmaşık tipler + örnek .kem (ADIM 10 — sıradaki)**
-- **Sıradaki hedef:** `parser.c`'ye kalan deyimler (`eğer`, `iken`, `için`, `eşleş`, `güvensiz`) + `parse_tip` genişletmesi (Dizi, seçimlik, sonuç, &, *, generic) + desenler + örnek `.kem` dosyaları + `ana.c` parser entegrasyonu
+- **Faz:** Parser implementasyonu (10.A tamam, 10.B + 10.C kalıyor)
+- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler + desenler (10.A)~~ ✓ → **karmaşık tipler (10.B sıradaki)** → örnek .kem + ana.c (10.C)
+- **Sıradaki hedef:** `parse_tip` genişletme — `&T`, `&değişken T`, `*T`, `Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `işlev(...) -> T`, generic kullanıcı tipi `Modül::Tip<T1,T2>`. Ardından generic yapı/işlev tanımları (`yapı X<T> { ... }`).
 
 ---
 

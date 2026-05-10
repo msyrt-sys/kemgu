@@ -49,6 +49,7 @@ void parser_baslat(Parser *p, Lexer *l, Arena *a,
     p->hata_sayisi = 0;
     p->dosya_adi = dosya_adi;
     p->kaynak = kaynak;
+    p->yapi_olusturma_izni = 1;
 }
 
 Token parser_simdiki(const Parser *p) {
@@ -148,6 +149,13 @@ static Dugum *parse_sabit_tanimi(Parser *p);
 static Dugum *parse_degisken_deyimi(Parser *p);
 static Dugum *parse_ver_deyimi(Parser *p);
 static Dugum *parse_ifade_veya_atama_deyimi(Parser *p);
+static Dugum *parse_eger_deyimi(Parser *p);
+static Dugum *parse_iken_deyimi(Parser *p);
+static Dugum *parse_icin_deyimi(Parser *p);
+static Dugum *parse_esles_deyimi(Parser *p);
+static Dugum *parse_guvensiz_blogu(Parser *p);
+static Dugum *parse_desen(Parser *p);
+static Dugum *parse_esles_kolu(Parser *p);
 
 /* === Parametre (public — ifade.c lambda icin kullanir) === */
 
@@ -466,7 +474,11 @@ static Dugum *parse_deyim(Parser *p) {
         case TOK_DEGISKEN:    return parse_degisken_deyimi(p);
         case TOK_VER:         return parse_ver_deyimi(p);
         case TOK_SOL_SUSLU:   return parse_blok(p);
-        /* eger, iken, icin, esles, guvensiz: ADIM 10'da */
+        case TOK_EGER:        return parse_eger_deyimi(p);
+        case TOK_IKEN:        return parse_iken_deyimi(p);
+        case TOK_ICIN:        return parse_icin_deyimi(p);
+        case TOK_ESLES:       return parse_esles_deyimi(p);
+        case TOK_GUVENSIZ:    return parse_guvensiz_blogu(p);
         default:
             return parse_ifade_veya_atama_deyimi(p);
     }
@@ -534,6 +546,256 @@ static Dugum *parse_ifade_veya_atama_deyimi(Parser *p) {
     Dugum *d = dugum_olustur(p->arena, DUGUM_IFADE_DEYIMI, satir, sutun);
     if (!d) return NULL;
     d->veri.ifade_deyimi.ifade = ifade;
+    return d;
+}
+
+/* === Kondisyonel ifade yardimcisi ===
+ * eger/iken/icin/esles sonrasi ifade parse ederken, tanimlayici sonrasi
+ * '{' yapi_olusturma yerine blok basi sayilmali. Flag ile yonetilir. */
+
+static Dugum *parse_kosul_ifadesi(Parser *p) {
+    int eski_izin = p->yapi_olusturma_izni;
+    p->yapi_olusturma_izni = 0;
+    Dugum *d = parse_ifade(p);
+    p->yapi_olusturma_izni = eski_izin;
+    return d;
+}
+
+/* === Eger deyimi ===
+ * eger_deyimi = "eger" ifade blok { "degilse" "eger" ifade blok } [ "degilse" blok ] */
+
+static Dugum *parse_eger_deyimi(Parser *p) {
+    Token eger_tok = parser_simdiki(p);
+    parser_ilerle(p);  /* 'eger' */
+
+    Dugum *kosul = parse_kosul_ifadesi(p);
+    Dugum *gozdoldur = parse_blok(p);
+
+    Dugum *yan = NULL;
+    if (parser_tuket(p, TOK_DEGILSE)) {
+        if (parser_eslesir(p, TOK_EGER)) {
+            /* degilse eger -> recursive (else if zinciri) */
+            yan = parse_eger_deyimi(p);
+        } else {
+            yan = parse_blok(p);
+        }
+    }
+
+    return dugum_eger(p->arena, kosul, gozdoldur, yan,
+                      eger_tok.satir, eger_tok.sutun);
+}
+
+/* === Iken deyimi ===
+ * iken_deyimi = "iken" ifade blok */
+
+static Dugum *parse_iken_deyimi(Parser *p) {
+    Token iken_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    Dugum *kosul = parse_kosul_ifadesi(p);
+    Dugum *govde = parse_blok(p);
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_IKEN,
+                             iken_tok.satir, iken_tok.sutun);
+    if (!d) return NULL;
+    d->veri.iken.kosul = kosul;
+    d->veri.iken.govde = govde;
+    return d;
+}
+
+/* === Icin deyimi ===
+ * icin_deyimi = "icin" tanimlayici ":" ifade blok */
+
+static Dugum *parse_icin_deyimi(Parser *p) {
+    Token icin_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    Token deg_tok = parser_bekle(p, TOK_TANIMLAYICI, "P200",
+                                  "degisken adi bekleniyor (icin dongusu)");
+    parser_bekle(p, TOK_IKI_NOKTA, "P201", "':' bekleniyor (icin dongusu)");
+    Dugum *koleksiyon = parse_kosul_ifadesi(p);
+    Dugum *govde = parse_blok(p);
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_ICIN,
+                             icin_tok.satir, icin_tok.sutun);
+    if (!d) return NULL;
+    d->veri.icin.degisken_adi =
+        ast_string_kopyala(p->arena, deg_tok.baslangic, deg_tok.uzunluk);
+    d->veri.icin.degisken_adi_uzunluk = deg_tok.uzunluk;
+    d->veri.icin.koleksiyon = koleksiyon;
+    d->veri.icin.govde = govde;
+    return d;
+}
+
+/* === Desen ve esles kolu === */
+
+static Dugum *parse_desen(Parser *p) {
+    Token t = parser_simdiki(p);
+
+    /* Joker: tanımlayıcı "_" */
+    if (t.tip == TOK_TANIMLAYICI && t.uzunluk == 1 && t.baslangic[0] == '_') {
+        parser_ilerle(p);
+        return dugum_olustur(p->arena, DUGUM_DESEN_JOKER, t.satir, t.sutun);
+    }
+
+    /* Tanımlayıcı veya yapıcı (TipAdi(alt_desenler)).
+     * Anahtar kelime desenleri (hic, deger) da burada — secimlik<T>
+     * pattern matching icin: 'hic' (None) ve 'deger(v)' (Some(v)). */
+    if (t.tip == TOK_TANIMLAYICI || t.tip == TOK_HIC || t.tip == TOK_DEGER) {
+        const char *ad_baslangic = t.baslangic;
+        int ad_uzunluk = t.uzunluk;
+        int satir = t.satir;
+        int sutun = t.sutun;
+        parser_ilerle(p);
+
+        if (parser_eslesir(p, TOK_SOL_PAREN)) {
+            parser_ilerle(p);
+            Liste alt;
+            liste_baslat(&alt);
+            if (!parser_eslesir(p, TOK_SAG_PAREN)) {
+                do {
+                    if (parser_eslesir(p, TOK_SAG_PAREN)) break;
+                    Dugum *alt_d = parse_desen(p);
+                    liste_ekle(&alt, p->arena, alt_d);
+                } while (parser_tuket(p, TOK_VIRGUL));
+            }
+            parser_bekle(p, TOK_SAG_PAREN, "P210",
+                         "yapici deseninde ')' bekleniyor");
+
+            Dugum *d = dugum_olustur(p->arena, DUGUM_DESEN_YAPICI,
+                                     satir, sutun);
+            if (d) {
+                d->veri.desen_yapici.ad =
+                    ast_string_kopyala(p->arena, ad_baslangic, ad_uzunluk);
+                d->veri.desen_yapici.ad_uzunluk = ad_uzunluk;
+                d->veri.desen_yapici.alt_desenler =
+                    liste_array_yap(&alt, p->arena);
+                d->veri.desen_yapici.sayi = alt.sayi;
+            }
+            return d;
+        }
+
+        Dugum *d = dugum_olustur(p->arena, DUGUM_DESEN_TANIMLAYICI,
+                                 satir, sutun);
+        if (d) {
+            d->veri.desen_tanimlayici.ad =
+                ast_string_kopyala(p->arena, ad_baslangic, ad_uzunluk);
+            d->veri.desen_tanimlayici.ad_uzunluk = ad_uzunluk;
+        }
+        return d;
+    }
+
+    /* Literal desenler — parse_ifade safe (operator yok arasinda, => durdurur) */
+    if (t.tip == TOK_TAMSAYI || t.tip == TOK_ONDALIK ||
+        t.tip == TOK_METIN   || t.tip == TOK_KARAKTER ||
+        t.tip == TOK_DOGRU   || t.tip == TOK_YANLIS || t.tip == TOK_BOS) {
+        Dugum *lit = parse_ifade(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_DESEN_LITERAL,
+                                 t.satir, t.sutun);
+        if (d) d->veri.desen_literal.deger = lit;
+        return d;
+    }
+
+    parser_hata(p, t, "P211", "desen bekleniyor", NULL);
+    return dugum_hata(p->arena, t.satir, t.sutun);
+}
+
+static Dugum *parse_esles_kolu(Parser *p) {
+    int satir = p->simdiki.satir;
+    int sutun = p->simdiki.sutun;
+    Dugum *desen = parse_desen(p);
+    parser_bekle(p, TOK_KALIN_OK, "P220",
+                 "esles kolunda '=>' bekleniyor");
+
+    Dugum *govde;
+    if (parser_eslesir(p, TOK_SOL_SUSLU)) {
+        govde = parse_blok(p);
+    } else {
+        govde = parse_ifade(p);
+        parser_bekle(p, TOK_NOKTALI_VIRGUL, "P221",
+                     "esles kolu sonunda ';' bekleniyor");
+    }
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_ESLES_KOLU, satir, sutun);
+    if (!d) return NULL;
+    d->veri.esles_kolu.desen = desen;
+    d->veri.esles_kolu.govde = govde;
+    return d;
+}
+
+/* === Esles deyimi ===
+ * esles_deyimi = "esles" ifade "{" { esles_kolu } "}" */
+
+static Dugum *parse_esles_deyimi(Parser *p) {
+    Token esles_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    Dugum *deger = parse_kosul_ifadesi(p);
+    parser_bekle(p, TOK_SOL_SUSLU, "P230",
+                 "esles govdesi icin '{' bekleniyor");
+
+    Liste kollar;
+    liste_baslat(&kollar);
+    while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
+           !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Dugum *kol = parse_esles_kolu(p);
+        if (kol) liste_ekle(&kollar, p->arena, kol);
+        if (p->hata_sayisi >= PARSER_MAX_HATA) break;
+    }
+    parser_bekle(p, TOK_SAG_SUSLU, "P231",
+                 "esles sonunda '}' bekleniyor");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_ESLES,
+                             esles_tok.satir, esles_tok.sutun);
+    if (!d) return NULL;
+    d->veri.esles.deger = deger;
+    d->veri.esles.kollar = liste_array_yap(&kollar, p->arena);
+    d->veri.esles.kol_sayi = kollar.sayi;
+    return d;
+}
+
+/* === Guvensiz blok ===
+ * guvensiz_blogu = "guvensiz" [ "[" tanimlayici ":" metin_literali "]" ] blok */
+
+static Dugum *parse_guvensiz_blogu(Parser *p) {
+    Token guv_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    const char *aciklama_ad = NULL;
+    int aciklama_ad_uz = 0;
+    const char *aciklama_metin = NULL;
+    int aciklama_metin_uz = 0;
+
+    if (parser_tuket(p, TOK_SOL_KOSELI)) {
+        Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P240",
+                                     "aciklama adi bekleniyor");
+        parser_bekle(p, TOK_IKI_NOKTA, "P241", "':' bekleniyor");
+        Token metin_tok = parser_bekle(p, TOK_METIN, "P242",
+                                        "metin literali bekleniyor");
+        parser_bekle(p, TOK_SAG_KOSELI, "P243",
+                     "guvensiz aciklamasinda ']' bekleniyor");
+
+        aciklama_ad = ast_string_kopyala(p->arena,
+                                          ad_tok.baslangic, ad_tok.uzunluk);
+        aciklama_ad_uz = ad_tok.uzunluk;
+        /* metin tirnaklar dahil — icerigi cikar */
+        int ic_uz = metin_tok.uzunluk - 2;
+        if (ic_uz < 0) ic_uz = 0;
+        aciklama_metin = ast_string_kopyala(p->arena,
+                                             metin_tok.baslangic + 1, ic_uz);
+        aciklama_metin_uz = ic_uz;
+    }
+
+    Dugum *blok = parse_blok(p);
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_GUVENSIZ,
+                             guv_tok.satir, guv_tok.sutun);
+    if (!d) return NULL;
+    d->veri.guvensiz.aciklama_ad = aciklama_ad;
+    d->veri.guvensiz.aciklama_ad_uzunluk = aciklama_ad_uz;
+    d->veri.guvensiz.aciklama_metin = aciklama_metin;
+    d->veri.guvensiz.aciklama_metin_uzunluk = aciklama_metin_uz;
+    d->veri.guvensiz.blok = blok;
     return d;
 }
 

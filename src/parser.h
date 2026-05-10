@@ -30,6 +30,10 @@ typedef struct Parser {
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;
+    /* Tanimlayici sonrasi '{' yapi_olusturma olarak yorumlanir mi?
+     * Default: 1 (evet). Kondisyonel ifadelerde (eger/iken/icin/esles
+     * sonrasi) 0'a cekilir, cunku '{' blok basini gosterir. */
+    int yapi_olusturma_izni;
 } Parser;
 
 /* === Public API === */

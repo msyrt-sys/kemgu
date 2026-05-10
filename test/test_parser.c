@@ -814,6 +814,180 @@ static void test_ifade_lambda(void) {
     arena_serbest(a);
 }
 
+/* === Kalan deyim testleri (ADIM 10.A) === */
+
+/* Yardimci: deyimi 'islev _f() { DEYIM }' icine sar, ilk deyimi cek. */
+static Dugum *deyim_parse(const char *deyim_kaynak, Arena *a, int *hata) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "i\xc5\x9flev _f() { %s }", deyim_kaynak);
+    Dugum *prog = parse_kaynak(buf, a, hata);
+    if (!prog || prog->veri.program.sayi == 0) return NULL;
+    Dugum *islev = prog->veri.program.uyeler[0];
+    if (!islev || islev->tip != DUGUM_ISLEV) return NULL;
+    if (!islev->veri.islev.govde) return NULL;
+    Dugum *blok = islev->veri.islev.govde;
+    if (blok->veri.blok.sayi == 0) return NULL;
+    return blok->veri.blok.deyimler[0];
+}
+
+static void test_deyim_eger_basit(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "eger dogru { ver 1; }" */
+    Dugum *d = deyim_parse(
+        "e\xc4\x9f" "er do\xc4\x9fru { ver 1; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_EGER
+          && d->veri.eger.kosul->tip == DUGUM_MANTIKSAL
+          && d->veri.eger.gozdoldur->tip == DUGUM_BLOK
+          && d->veri.eger.yan == NULL;
+    test_sonuc("eger dogru { ver 1; }", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_eger_degilse(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "eger x { ver 1; } degilse { ver 2; }" */
+    Dugum *d = deyim_parse(
+        "e\xc4\x9f" "er x { ver 1; } de\xc4\x9f" "ilse { ver 2; }",
+        a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_EGER
+          && d->veri.eger.yan != NULL
+          && d->veri.eger.yan->tip == DUGUM_BLOK;
+    test_sonuc("eger { } degilse { }", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_eger_zincir(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "eger x { 1; } degilse eger y { 2; } degilse { 3; }" */
+    Dugum *d = deyim_parse(
+        "e\xc4\x9f" "er x { 1; } "
+        "de\xc4\x9f" "ilse e\xc4\x9f" "er y { 2; } "
+        "de\xc4\x9f" "ilse { 3; }",
+        a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_EGER
+          && d->veri.eger.yan != NULL
+          && d->veri.eger.yan->tip == DUGUM_EGER  /* else if */
+          && d->veri.eger.yan->veri.eger.yan != NULL
+          && d->veri.eger.yan->veri.eger.yan->tip == DUGUM_BLOK;
+    test_sonuc("eger / degilse eger / degilse zincir", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_iken(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "iken x < 10 { x = x + 1; }" */
+    Dugum *d = deyim_parse("iken x < 10 { x = x + 1; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_IKEN
+          && d->veri.iken.kosul->tip == DUGUM_IKILI
+          && d->veri.iken.kosul->veri.ikili.op == OP_KUCUK
+          && d->veri.iken.govde->tip == DUGUM_BLOK
+          && d->veri.iken.govde->veri.blok.sayi == 1;
+    test_sonuc("iken x < 10 { ... }", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_icin(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "icin i: liste { ver i; }" */
+    Dugum *d = deyim_parse("i\xc3\xa7in i: liste { ver i; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ICIN
+          && strcmp(d->veri.icin.degisken_adi, "i") == 0
+          && d->veri.icin.koleksiyon->tip == DUGUM_TANIMLAYICI
+          && d->veri.icin.govde->tip == DUGUM_BLOK;
+    test_sonuc("icin i: liste { ... }", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_literal(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles x { 1 => dogru; _ => yanlis; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f x { "
+        "1 => do\xc4\x9fru; "
+        "_ => yanl\xc4\xb1\xc5\x9f; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->tip == DUGUM_ESLES_KOLU
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_LITERAL
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_JOKER;
+    test_sonuc("esles x { 1 => ...; _ => ...; }", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_yapici(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles x { Deger(v) => v; hic => 0; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f x { "
+        "De\xc4\x9f" "er(v) => v; "
+        "hi\xc3\xa7 => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.sayi == 1
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_TANIMLAYICI;
+    test_sonuc("esles yapici desen + tanimlayici", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_blok_govde(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles x { 1 => { ver 1; } }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f x { 1 => { ver 1; } }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 1
+          && d->veri.esles.kollar[0]->veri.esles_kolu.govde->tip == DUGUM_BLOK;
+    test_sonuc("esles kolu blok govde", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_guvensiz_basit(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "guvensiz { ver 0; }" */
+    Dugum *d = deyim_parse(
+        "g\xc3\xbcvensiz { ver 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_GUVENSIZ
+          && d->veri.guvensiz.aciklama_ad == NULL
+          && d->veri.guvensiz.blok->tip == DUGUM_BLOK;
+    test_sonuc("guvensiz { ... } (aciklama yok)", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_guvensiz_aciklama(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "guvensiz [sebep: \"raw pointer\"] { ver 0; }" */
+    Dugum *d = deyim_parse(
+        "g\xc3\xbcvensiz [sebep: \"ham pointer\"] { ver 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_GUVENSIZ
+          && d->veri.guvensiz.aciklama_ad != NULL
+          && strcmp(d->veri.guvensiz.aciklama_ad, "sebep") == 0
+          && d->veri.guvensiz.aciklama_metin != NULL;
+    test_sonuc("guvensiz [sebep: \"...\"] { ... }", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -916,6 +1090,24 @@ int main(void) {
     test_ifade_dizi_olusturma();
     test_ifade_dizi_bos();
     test_ifade_lambda();
+
+    printf("\n--- Deyim: Eger ---\n");
+    test_deyim_eger_basit();
+    test_deyim_eger_degilse();
+    test_deyim_eger_zincir();
+
+    printf("\n--- Deyim: Iken / Icin ---\n");
+    test_deyim_iken();
+    test_deyim_icin();
+
+    printf("\n--- Deyim: Esles ---\n");
+    test_deyim_esles_literal();
+    test_deyim_esles_yapici();
+    test_deyim_esles_blok_govde();
+
+    printf("\n--- Deyim: Guvensiz ---\n");
+    test_deyim_guvensiz_basit();
+    test_deyim_guvensiz_aciklama();
 
     printf("\n========================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
