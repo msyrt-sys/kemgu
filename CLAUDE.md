@@ -73,6 +73,7 @@ kemgu/
 │   ├── parser.h / parser.c           — Recursive descent parser (TAMAMLANDI ✓ — çekirdek, kalan deyimler ADIM 10'da)
 │   ├── ifade.c                        — Pratt parser: ifadeler (TAMAMLANDI ✓ — tam öncelik tablosu + sonek + yapı/dizi/lambda)
 │   ├── tip.h / tip.c                 — Tip temsili (TipBilgisi, equality, yazdırma) (TAMAMLANDI ✓)
+│   ├── sembol.h / sembol.c           — Symbol table + scope hierarchy (TAMAMLANDI ✓)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
@@ -80,6 +81,7 @@ kemgu/
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
 │   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
 │   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
+│   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -292,10 +294,19 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - Yazdırma (KEMGU sözdizimine yakın: `Dizi<seçimlik<tam32>>`)
     - Yardımcılar: `tip_sayisal_mi`, `tip_tamsayi_mi`, `tip_mantiksal_mi`
 
+14. Symbol table (`sembol.h/c`) — 18/18 sembol test, ASan temiz
+    - 8 sembol kategorisi (DEGISKEN, SABIT, PARAMETRE, ISLEV, YAPI, OZELLIK, MODUL, GENERIC_PARAM)
+    - 5 scope kategorisi (GLOBAL, MODUL, ISLEV, BLOK, YAPI)
+    - Parent pointer'lı linked list — `sembol_bul` parent zincirinde arar
+    - `sembol_bul_yerel` parent'a bakmaz (shadowing için)
+    - `sembol_yapi_alani` yapı sembolünün yapı_scope'unda arar
+    - `sembol_modul_scope` modül üyelerine erişim
+    - Çift tanım algılama (sembol_ekle -1 döner)
+
 ### TİP SİSTEMİ FAZI (yapım sırası)
 1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
-2. **sembol.h/c (symbol table + scope) — ADIM 11.2 sıradaki**
-3. tip_kontrol.h/c (1) — ifade tip kontrolü
+2. ~~sembol.h/c (symbol table + scope)~~ ✓ ADIM 11.2
+3. **tip_kontrol.h/c (1) — ifade tip kontrolü — ADIM 11.3 sıradaki**
 4. tip_kontrol.c (2) — deyim/tanım tip kontrolü
 5. tip_kontrol.c (3) — tip çıkarsama (bidirectional)
 6. tip_kontrol.c (4) — generic instantiation
@@ -368,8 +379,8 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Tip sistemi (7 alt-adımdan 1.'si tamam)
-- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → **sembol.h/c (11.2 sıradaki)** → tip_kontrol ifadeler (11.3) → deyimler (11.4) → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
+- **Faz:** Tip sistemi (7 alt-adımdan 2.'si tamam)
+- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → **tip_kontrol ifadeler (11.3 sıradaki)** → deyimler (11.4) → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -377,7 +388,7 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** `sembol.h/c` — Symbol table + scope hierarchy (blok/işlev/global), isim çözümleme
+- **Sıradaki hedef:** `tip_kontrol.h/c` — İfade tip kontrolü (literaller, ikili/tekli, çağrı, erişim, indeks, yapı oluşturma) — AST visitor pattern
 
 ---
 
