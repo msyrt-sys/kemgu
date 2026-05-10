@@ -34,10 +34,11 @@ else
 endif
 
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
-       $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c
+       $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
+       $(SRCDIR)/parser.c $(SRCDIR)/ifade.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test test_tumu
 
 # === Ana hedef ===
 
@@ -66,6 +67,15 @@ $(BUILD)/test_ast$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
                          $(SRCDIR)/ast_yazdir.c $(TESTDIR)/test_ast.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Parser testi (Clang64 + ASan AKTIF — tum bagimlilliklar) ===
+
+$(BUILD)/test_parser$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(TESTDIR)/test_parser.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -87,7 +97,10 @@ calistir_arena_test: $(BUILD)/test_arena$(EXE)
 calistir_ast_test: $(BUILD)/test_ast$(EXE)
 	./$(BUILD)/test_ast$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test
+calistir_parser_test: $(BUILD)/test_parser$(EXE)
+	./$(BUILD)/test_parser$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test
 	@echo "Tum testler gecti!"
 
 clean:
