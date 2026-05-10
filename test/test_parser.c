@@ -988,6 +988,159 @@ static void test_deyim_guvensiz_aciklama(void) {
     arena_serbest(a);
 }
 
+/* === Karmasik tip testleri (ADIM 10.B) === */
+
+/* Yardimci: tipi 'islev _f(x: TIP) {}' parametresinde parse et, tip cek. */
+static Dugum *tip_parse(const char *tip_kaynak, Arena *a, int *hata) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "i\xc5\x9flev _f(x: %s) {}", tip_kaynak);
+    Dugum *prog = parse_kaynak(buf, a, hata);
+    if (!prog || prog->veri.program.sayi == 0) return NULL;
+    Dugum *islev = prog->veri.program.uyeler[0];
+    if (!islev || islev->veri.islev.param_sayi == 0) return NULL;
+    return islev->veri.islev.parametreler[0]->veri.parametre.tip;
+}
+
+static void test_tip_basit(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *t = tip_parse("tam32", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_BASIT
+          && strcmp(t->veri.tip_basit.ad, "tam32") == 0;
+    test_sonuc("tip basit: tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_referans(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *t = tip_parse("&tam32", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_REFERANS
+          && t->veri.tip_referans.degisken_mi == 0
+          && t->veri.tip_referans.hedef_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip referans: &tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_referans_degisken(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* &degisken tam32 */
+    Dugum *t = tip_parse("&de\xc4\x9f""i\xc5\x9fken tam32", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_REFERANS
+          && t->veri.tip_referans.degisken_mi == 1;
+    test_sonuc("tip referans: &degisken tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_pointer(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *t = tip_parse("*tam32", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_POINTER
+          && t->veri.tip_pointer.hedef_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip pointer: *tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_secimlik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* secimlik<tam32> */
+    Dugum *t = tip_parse("se\xc3\xa7imlik<tam32>", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_SECIMLIK
+          && t->veri.tip_secimlik.ic_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip secimlik: secimlik<tam32>", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_sonuc(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* sonuc<tam32, metin> — 'hata' keyword cakismasi nedeniyle 'metin' kullanildi */
+    Dugum *t = tip_parse("sonu\xc3\xa7<tam32, metin>", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_SONUC
+          && t->veri.tip_sonuc.deger_tip != NULL
+          && t->veri.tip_sonuc.hata_tip != NULL;
+    test_sonuc("tip sonuc: sonuc<tam32, hata>", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_dizi(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *t = tip_parse("Dizi<tam32>", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_DIZI
+          && t->veri.tip_dizi.eleman_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip dizi: Dizi<tam32>", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_islev(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* islev(tam32, tam32) -> tam32 */
+    Dugum *t = tip_parse("i\xc5\x9flev(tam32, tam32) -> tam32", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_ISLEV
+          && t->veri.tip_islev.param_sayi == 2
+          && t->veri.tip_islev.donus_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip islev: islev(tam32, tam32) -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_kullanici_generic(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* Hasta<tam32> */
+    Dugum *t = tip_parse("Hasta<tam32>", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_KULLANICI
+          && t->veri.tip_kullanici.tip_arg_sayi == 1;
+    test_sonuc("tip kullanici generic: Hasta<tam32>", ok);
+    arena_serbest(a);
+}
+
+static void test_tip_ic_ice(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* Dizi<secimlik<tam32>> */
+    Dugum *t = tip_parse("Dizi<se\xc3\xa7imlik<tam32>>", a, &hata);
+    int ok = t && hata == 0
+          && t->tip == DUGUM_TIP_DIZI
+          && t->veri.tip_dizi.eleman_tip->tip == DUGUM_TIP_SECIMLIK
+          && t->veri.tip_dizi.eleman_tip->veri.tip_secimlik.ic_tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("tip ic ice: Dizi<secimlik<tam32>>", ok);
+    arena_serbest(a);
+}
+
+static void test_yapi_generic(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapi Kutu<T> { eleman: T; } — 'deger' keyword cakismasi yerine 'eleman' */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 Kutu<T> { eleman: T; }", a, &hata);
+    int ok = prog && hata == 0 && prog->veri.program.sayi == 1;
+    if (ok) {
+        Dugum *yapi = prog->veri.program.uyeler[0];
+        ok = yapi->tip == DUGUM_YAPI
+          && yapi->veri.yapi.tip_param_sayi == 1
+          && yapi->veri.yapi.tip_paramlar != NULL
+          && strcmp(yapi->veri.yapi.tip_paramlar[0], "T") == 0
+          && yapi->veri.yapi.alan_sayi == 1;
+    }
+    test_sonuc("yapi generic: Kutu<T> { deger: T; }", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1108,6 +1261,21 @@ int main(void) {
     printf("\n--- Deyim: Guvensiz ---\n");
     test_deyim_guvensiz_basit();
     test_deyim_guvensiz_aciklama();
+
+    printf("\n--- Karmasik Tipler ---\n");
+    test_tip_basit();
+    test_tip_referans();
+    test_tip_referans_degisken();
+    test_tip_pointer();
+    test_tip_secimlik();
+    test_tip_sonuc();
+    test_tip_dizi();
+    test_tip_islev();
+    test_tip_kullanici_generic();
+    test_tip_ic_ice();
+
+    printf("\n--- Generic Yapi ---\n");
+    test_yapi_generic();
 
     printf("\n========================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

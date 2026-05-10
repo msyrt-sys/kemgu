@@ -266,12 +266,18 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `güvensiz` blok (opsiyonel `[etiket: "açıklama"]` ile)
     - **Kondisyonel ifadelerde `{` blok başı** (`yapi_olusturma_izni` flag)
     - `hiç` ve `değer` anahtar kelimeleri pattern matching'de tanımlayıcı/yapıcı
+11. Karmaşık tipler + generic yapı (`ifade.c parse_tip` + `parser.c`) — 74/74 parser test
+    - `&T`, `&değişken T` (referans), `*T` (pointer)
+    - `seçimlik<T>`, `sonuç<T,H>`, `Dizi<T>` (özel düğümler)
+    - `işlev(T1, T2) -> T` (işlev tipi)
+    - `Tip<T1, T2>` (kullanıcı generic tipi — `DUGUM_TIP_KULLANICI`)
+    - Generic yapı tanımı: `yapı Kutu<T> { ... }`
+    - **`>>` ayırma (parser_buyuk_ayir):** `Dizi<seçimlik<T>>` için lexer'ın
+      `>>` (TOK_SAGA_KAYDIR) tokenını generic kapanışta iki `>` olarak böl
 
-### Yapım Sırası (devam noktası — ADIM 10.B + 10.C)
-1. Karmaşık tipler (`Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `&T`, `*T`, generic) — **sıradaki (ADIM 10.B)**
-2. Generic tip parametreli yapı/işlev tanımı (`yapı X<T> { ... }`)
-3. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme) — ADIM 10.C
-4. `ana.c` güncellemesi (lexer + parser entegrasyonu) — ADIM 10.C
+### Yapım Sırası (devam noktası — ADIM 10.C)
+1. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme) — **sıradaki**
+2. `ana.c` güncellemesi (lexer + parser entegrasyonu, AST yazdırma)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -341,8 +347,8 @@ Belge dosyaları: Türkçe.
 ## Aktif Görev
 
 - **Faz:** Parser implementasyonu (10.A tamam, 10.B + 10.C kalıyor)
-- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler + desenler (10.A)~~ ✓ → **karmaşık tipler (10.B sıradaki)** → örnek .kem + ana.c (10.C)
-- **Sıradaki hedef:** `parse_tip` genişletme — `&T`, `&değişken T`, `*T`, `Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `işlev(...) -> T`, generic kullanıcı tipi `Modül::Tip<T1,T2>`. Ardından generic yapı/işlev tanımları (`yapı X<T> { ... }`).
+- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler (10.A)~~ ✓ → ~~karmaşık tipler (10.B)~~ ✓ → **örnek .kem + ana.c entegrasyon (10.C sıradaki)**
+- **Sıradaki hedef:** Örnek `.kem` dosyaları (fibonacci, yapilar, eşleş) + `ana.c` güncelleme (lexer → parser → AST yazdırma akışı). Bu noktada parser tamamlanmış olacak.
 
 ---
 

@@ -87,4 +87,8 @@ Dugum **liste_array_yap(const Liste *l, Arena *a);
 Dugum *parse_blok(Parser *p);          /* lambda govdesi icin */
 Dugum *parse_parametre(Parser *p);     /* lambda parametresi icin */
 
+/* Generic kapanisi olarak '>' beklenirken, eger '>>' (TOK_SAGA_KAYDIR)
+ * varsa onu iki ayri '>' tokenina boler. C++'taki klasik <T<U>> sorunu. */
+void parser_buyuk_ayir(Parser *p);
+
 #endif /* KEMGU_PARSER_H */

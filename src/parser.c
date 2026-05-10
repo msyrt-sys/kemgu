@@ -123,6 +123,26 @@ static int sync_token_mu(TokenTipi t) {
     }
 }
 
+void parser_buyuk_ayir(Parser *p) {
+    /* p->simdiki TOK_SAGA_KAYDIR ('>>') ise, onu '>' (TOK_BUYUK) yap
+     * ve sonraki olarak da '>' yerlestir. Generic kapanis icin gerekli. */
+    if (p->simdiki.tip != TOK_SAGA_KAYDIR) return;
+
+    Token sonraki_buyuk = p->simdiki;
+    sonraki_buyuk.baslangic += 1;
+    sonraki_buyuk.uzunluk = 1;
+    sonraki_buyuk.sutun += 1;
+    sonraki_buyuk.tip = TOK_BUYUK;
+
+    p->simdiki.uzunluk = 1;
+    p->simdiki.tip = TOK_BUYUK;
+
+    /* Sonraki'yi (eger varsa) korumak icin fallback. Su an siradakini
+     * uretiyoruz: var olan sonraki'yi siliyoruz cunku farkli olabilir. */
+    p->sonraki = sonraki_buyuk;
+    p->sonraki_var = 1;
+}
+
 void parser_panik_sync(Parser *p) {
     /* Sync token'a kadar yut */
     while (!sync_token_mu(p->simdiki.tip)) {
@@ -228,6 +248,54 @@ static Dugum *parse_islev_tanimi(Parser *p) {
     return d;
 }
 
+/* === Generic tip parametre listesi yardimcisi ===
+ *   < T1, T2, ... >
+ * Eger '<' yoksa NULL doner ve *out_sayi = 0. */
+
+static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
+    *out_sayi = 0;
+    if (!parser_tuket(p, TOK_KUCUK)) return NULL;
+
+    typedef struct PLink {
+        const char *bas;
+        int uz;
+        struct PLink *son;
+    } PLink;
+    PLink *bas = NULL;
+    PLink *son_link = NULL;
+
+    if (!parser_eslesir(p, TOK_BUYUK)) {
+        do {
+            if (parser_eslesir(p, TOK_BUYUK)) break;
+            Token t = parser_bekle(p, TOK_TANIMLAYICI, "P024",
+                                    "tip parametre adi bekleniyor");
+            PLink *link = (PLink *)arena_ayir(p->arena, sizeof(PLink));
+            if (link) {
+                link->bas = t.baslangic;
+                link->uz = t.uzunluk;
+                link->son = NULL;
+                if (son_link) son_link->son = link;
+                else bas = link;
+                son_link = link;
+                (*out_sayi)++;
+            }
+        } while (parser_tuket(p, TOK_VIRGUL));
+    }
+    parser_buyuk_ayir(p);
+    parser_bekle(p, TOK_BUYUK, "P025",
+                 "tip parametre listesinde '>' bekleniyor");
+
+    if (*out_sayi == 0) return NULL;
+    char **arr = (char **)arena_ayir(p->arena,
+                                      sizeof(char *) * (size_t)(*out_sayi));
+    if (!arr) return NULL;
+    int i = 0;
+    for (PLink *l = bas; l; l = l->son) {
+        arr[i++] = ast_string_kopyala(p->arena, l->bas, l->uz);
+    }
+    return arr;
+}
+
 /* === Yapi tanimi === */
 /* alan_tanimi = tanimlayici ":" tip ";" */
 
@@ -263,7 +331,11 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
 
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P021",
                                 "yapi adi bekleniyor");
-    /* Generic tip parametreleri (< T >) ADIM 10'da */
+
+    /* Generic tip parametreleri: <T1, T2, ...> opsiyonel */
+    int tip_param_sayi = 0;
+    char **tip_paramlar = parse_tip_param_listesi(p, &tip_param_sayi);
+
     parser_bekle(p, TOK_SOL_SUSLU, "P022", "'{' bekleniyor");
 
     Liste alanlar;
@@ -281,8 +353,8 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     d->veri.yapi.ad =
         ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
     d->veri.yapi.ad_uzunluk = ad_tok.uzunluk;
-    d->veri.yapi.tip_paramlar = NULL;
-    d->veri.yapi.tip_param_sayi = 0;
+    d->veri.yapi.tip_paramlar = tip_paramlar;
+    d->veri.yapi.tip_param_sayi = tip_param_sayi;
     d->veri.yapi.alanlar = liste_array_yap(&alanlar, p->arena);
     d->veri.yapi.alan_sayi = alanlar.sayi;
     return d;

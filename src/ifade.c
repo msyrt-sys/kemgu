@@ -474,18 +474,178 @@ Dugum *parse_ifade(Parser *p) {
     return parse_oncelik(p, ONC_YOK);
 }
 
-Dugum *parse_tip(Parser *p) {
-    /* ADIM 10'da karmasik tipler. Su an basit (tanimlayici). */
-    Token t = parser_simdiki(p);
-    if (t.tip != TOK_TANIMLAYICI) {
-        parser_hata(p, t, "P011", "tip bekleniyor (tanimlayici)", NULL);
-        return dugum_hata(p->arena, t.satir, t.sutun);
+/* === Tip parser (ADIM 10.B — tam) === */
+
+static Dugum *parse_generic_listesi(Parser *p, const char *kod_ac,
+                                     const char *kod_kapa, int min_say,
+                                     Liste *out_args) {
+    parser_bekle(p, TOK_KUCUK, kod_ac, "'<' bekleniyor (generic)");
+    /* Bos generic? */
+    parser_buyuk_ayir(p);
+    if (parser_eslesir(p, TOK_BUYUK)) {
+        parser_hata(p, parser_simdiki(p), kod_ac,
+                    "generic argumanlari bos olamaz", NULL);
+    } else {
+        do {
+            parser_buyuk_ayir(p);
+            if (parser_eslesir(p, TOK_BUYUK)) break;
+            Dugum *t = parse_tip(p);
+            liste_ekle(out_args, p->arena, t);
+        } while (parser_tuket(p, TOK_VIRGUL));
     }
-    Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_BASIT, t.satir, t.sutun);
-    if (!d) return NULL;
-    d->veri.tip_basit.ad =
-        ast_string_kopyala(p->arena, t.baslangic, t.uzunluk);
-    d->veri.tip_basit.ad_uzunluk = t.uzunluk;
-    parser_ilerle(p);
-    return d;
+    /* Kapanisi: '>>' olabilir, ayir */
+    parser_buyuk_ayir(p);
+    parser_bekle(p, TOK_BUYUK, kod_kapa, "'>' bekleniyor (generic)");
+    (void)min_say;
+    return NULL;
+}
+
+Dugum *parse_tip(Parser *p) {
+    Token t = parser_simdiki(p);
+
+    /* === &T veya &degisken T === */
+    if (t.tip == TOK_VE_BIT) {
+        parser_ilerle(p);
+        int degisken_mi = 0;
+        if (parser_eslesir(p, TOK_DEGISKEN)) {
+            parser_ilerle(p);
+            degisken_mi = 1;
+        }
+        Dugum *hedef = parse_tip(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_REFERANS,
+                                 t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_referans.degisken_mi = degisken_mi;
+            d->veri.tip_referans.hedef_tip = hedef;
+        }
+        return d;
+    }
+
+    /* === *T === */
+    if (t.tip == TOK_YILDIZ) {
+        parser_ilerle(p);
+        Dugum *hedef = parse_tip(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_POINTER,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_pointer.hedef_tip = hedef;
+        return d;
+    }
+
+    /* === secimlik<T> === */
+    if (t.tip == TOK_SECIMLIK) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P310", "secimlik<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P311", "secimlik<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_SECIMLIK,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_secimlik.ic_tip = ic;
+        return d;
+    }
+
+    /* === sonuc<T,H> === */
+    if (t.tip == TOK_SONUC) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P312", "sonuc<...> icin '<' bekleniyor");
+        Dugum *deger = parse_tip(p);
+        parser_bekle(p, TOK_VIRGUL, "P313", "',' bekleniyor (sonuc<T,H>)");
+        Dugum *hata = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P314", "sonuc<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_SONUC, t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_sonuc.deger_tip = deger;
+            d->veri.tip_sonuc.hata_tip = hata;
+        }
+        return d;
+    }
+
+    /* === islev(T1, T2, ...) -> T === */
+    if (t.tip == TOK_ISLEV) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_SOL_PAREN, "P315",
+                     "islev tipinde '(' bekleniyor");
+        Liste params;
+        liste_baslat(&params);
+        if (!parser_eslesir(p, TOK_SAG_PAREN)) {
+            do {
+                if (parser_eslesir(p, TOK_SAG_PAREN)) break;
+                Dugum *pt = parse_tip(p);
+                liste_ekle(&params, p->arena, pt);
+            } while (parser_tuket(p, TOK_VIRGUL));
+        }
+        parser_bekle(p, TOK_SAG_PAREN, "P316",
+                     "islev tipinde ')' bekleniyor");
+        parser_bekle(p, TOK_OK, "P317",
+                     "islev tipinde '->' bekleniyor");
+        Dugum *donus = parse_tip(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_ISLEV,
+                                 t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_islev.parametreler = liste_array_yap(&params, p->arena);
+            d->veri.tip_islev.param_sayi = params.sayi;
+            d->veri.tip_islev.donus_tip = donus;
+        }
+        return d;
+    }
+
+    /* === Tanimlayici: basit veya kullanici tipi ===
+     *   ad                   -> DUGUM_TIP_BASIT (ornegin tam32, metin)
+     *   ad < T1, T2, ... >   -> DUGUM_TIP_KULLANICI (generic)
+     *   "Dizi" + < T >       -> DUGUM_TIP_DIZI (ozel — Dizi standart konteyneri)
+     * Yol (::) destegi su an YOK (gelecekte ADIM 10.C'de eklenir). */
+    if (t.tip == TOK_TANIMLAYICI) {
+        const char *ad = t.baslangic;
+        int ad_uz = t.uzunluk;
+        int satir = t.satir;
+        int sutun = t.sutun;
+        parser_ilerle(p);
+
+        /* Generic argumanlari? */
+        if (parser_eslesir(p, TOK_KUCUK)) {
+            Liste args;
+            liste_baslat(&args);
+            (void)parse_generic_listesi(p, "P318", "P319", 1, &args);
+
+            /* "Dizi" ozel: DUGUM_TIP_DIZI */
+            if (ad_uz == 4 && memcmp(ad, "Dizi", 4) == 0) {
+                if (args.sayi != 1) {
+                    parser_hata(p, t, "P318b",
+                        "Dizi<T> tam olarak bir tip argumani gerektirir",
+                        NULL);
+                }
+                Dugum *eleman = (args.sayi >= 1)
+                    ? args.bas->dugum
+                    : dugum_hata(p->arena, satir, sutun);
+                Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_DIZI,
+                                         satir, sutun);
+                if (d) d->veri.tip_dizi.eleman_tip = eleman;
+                return d;
+            }
+
+            /* Genel: kullanici tipi */
+            Dugum *yol = dugum_tanimlayici(p->arena, ad, ad_uz, satir, sutun);
+            Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_KULLANICI,
+                                     satir, sutun);
+            if (d) {
+                d->veri.tip_kullanici.yol = yol;
+                d->veri.tip_kullanici.tip_arg =
+                    liste_array_yap(&args, p->arena);
+                d->veri.tip_kullanici.tip_arg_sayi = args.sayi;
+            }
+            return d;
+        }
+
+        /* Basit tip (jenerik degil) */
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_BASIT, satir, sutun);
+        if (d) {
+            d->veri.tip_basit.ad = ast_string_kopyala(p->arena, ad, ad_uz);
+            d->veri.tip_basit.ad_uzunluk = ad_uz;
+        }
+        return d;
+    }
+
+    parser_hata(p, t, "P011", "tip bekleniyor", NULL);
+    return dugum_hata(p->arena, t.satir, t.sutun);
 }
