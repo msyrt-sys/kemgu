@@ -72,17 +72,17 @@ kemgu/
 │   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (TAMAMLANDI ✓)
 │   ├── parser.h / parser.c           — Recursive descent parser (TAMAMLANDI ✓ — çekirdek, kalan deyimler ADIM 10'da)
 │   ├── ifade.c                        — Pratt parser: ifadeler (TAMAMLANDI ✓ — tam öncelik tablosu + sonek + yapı/dizi/lambda)
-│   └── ana.c                          — Ana giriş noktası (lexer + parser)
+│   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
 │   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 53/53 (29 çekirdek + 24 ifade), ASan temiz)
 │   └── ornekler/
-│       ├── hasta.kem                  — Mevcut örnek
-│       ├── fibonacci.kem              — (YAPILACAK)
-│       ├── yapilar.kem                — (YAPILACAK)
-│       └── eslesme.kem                — (YAPILACAK)
+│       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
+│       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
+│       ├── yapilar.kem                — Generic yapılar + referans (TAMAMLANDI ✓)
+│       └── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
 ```
 
 ---
@@ -274,10 +274,19 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - Generic yapı tanımı: `yapı Kutu<T> { ... }`
     - **`>>` ayırma (parser_buyuk_ayir):** `Dizi<seçimlik<T>>` için lexer'ın
       `>>` (TOK_SAGA_KAYDIR) tokenını generic kapanışta iki `>` olarak böl
+12. Örnek `.kem` dosyaları + `ana.c` parser entegrasyonu — 78/78 parser test
+    - `fibonacci.kem`, `yapilar.kem`, `eslesme.kem` (yeni) + `hasta.kem` (mevcut)
+    - `ana.c` `--token` / `--parse` (default) bayrakları — Lexer→Parser→AST yazdırma
+    - 4 dosya parse testi (test_parser.c file I/O)
+    - `hiç`/`değer`/`tamam`/`hata` keyword'leri ifade context'inde tanımlayıcı
 
-### Yapım Sırası (devam noktası — ADIM 10.C)
-1. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme) — **sıradaki**
-2. `ana.c` güncellemesi (lexer + parser entegrasyonu, AST yazdırma)
+### 🎉 PARSER FAZI TAMAMLANDI (231/231 test)
+
+Sıradaki büyük faz seçenekleri (kullanıcı kararı bekleniyor):
+- **Tip sistemi:** Tip kontrolü + tip çıkarsama (Hindley-Milner benzeri)
+- **Bölge çözümleyici:** Escape analizi, otomatik bölge atama (KEMGU motto)
+- **LLVM backend:** AST → LLVM IR
+- **Bootstrapping:** KEMGU ile KEMGU derleyicisi (uzun vade)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -346,9 +355,13 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Parser implementasyonu (10.A tamam, 10.B + 10.C kalıyor)
-- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler (10.A)~~ ✓ → ~~karmaşık tipler (10.B)~~ ✓ → **örnek .kem + ana.c entegrasyon (10.C sıradaki)**
-- **Sıradaki hedef:** Örnek `.kem` dosyaları (fibonacci, yapilar, eşleş) + `ana.c` güncelleme (lexer → parser → AST yazdırma akışı). Bu noktada parser tamamlanmış olacak.
+- **Faz:** **🎉 PARSER FAZI TAMAMLANDI** (231/231 test, 12 commit)
+- **Sıra:** ~~arena~~ ✓ → ~~ast~~ ✓ → ~~parser çekirdek~~ ✓ → ~~ifade Pratt~~ ✓ → ~~kalan deyimler (10.A)~~ ✓ → ~~karmaşık tipler (10.B)~~ ✓ → ~~örnek .kem + ana.c (10.C)~~ ✓
+- **Sıradaki büyük faz** (kullanıcı seçimi bekleniyor):
+  - Tip sistemi (tip kontrolü, tip çıkarsama)
+  - Bölge çözümleyici (escape analizi)
+  - LLVM backend (AST → IR)
+  - Bootstrapping (uzun vade)
 
 ---
 

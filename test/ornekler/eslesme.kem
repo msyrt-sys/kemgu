@@ -1,0 +1,37 @@
+// KEMGU Örnek Program: Eşleş (Pattern Matching) ve Eğer Zinciri
+// Desen eşleştirme, seçimlik<T>, eğer/değilse zinciri.
+
+işlev tani_yazdir(t: seçimlik<metin>) -> metin {
+    eşleş t {
+        değer(s) => { ver s; }
+        hiç => { ver "tani yok"; }
+    }
+    ver "ulasilmaz";
+}
+
+işlev sayi_kategorisi(n: tam32) -> metin {
+    eğer n < 0 {
+        ver "negatif";
+    } değilse eğer n == 0 {
+        ver "sifir";
+    } değilse {
+        ver "pozitif";
+    }
+}
+
+işlev faktoriyel(n: tam32) -> tam32 {
+    değişken sonuc = 1;
+    iken n > 1 {
+        sonuc = sonuc * n;
+        n = n - 1;
+    }
+    ver sonuc;
+}
+
+işlev toplam_kareler(liste: Dizi<tam32>) -> tam32 {
+    değişken toplam = 0;
+    için x: liste {
+        toplam = toplam + x * x;
+    }
+    ver toplam;
+}

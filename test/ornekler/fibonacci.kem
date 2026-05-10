@@ -1,0 +1,14 @@
+// KEMGU Örnek Program: Özyinelemeli Fibonacci
+// Recursive descent parser + Pratt ifadeleri test eder.
+
+işlev fibonacci(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+işlev ana() -> tam32 {
+    değişken sonuc = fibonacci(10);
+    ver sonuc;
+}

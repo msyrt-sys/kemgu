@@ -5,6 +5,7 @@
 #include "arena.h"
 
 #include <stdio.h>
+#include <stdlib.h>     /* malloc, free (ornek dosya parse testleri) */
 #include <string.h>
 #include <stdint.h>
 
@@ -1141,6 +1142,59 @@ static void test_yapi_generic(void) {
     arena_serbest(a);
 }
 
+/* === Ornek .kem dosya parse testleri (ADIM 10.C) === */
+
+static char *dosya_oku_test(const char *yol) {
+    FILE *f = fopen(yol, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long boyut = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (boyut < 0) { fclose(f); return NULL; }
+    char *t = (char *)malloc((size_t)boyut + 1);
+    if (!t) { fclose(f); return NULL; }
+    size_t okunan = fread(t, 1, (size_t)boyut, f);
+    t[okunan] = '\0';
+    fclose(f);
+    return t;
+}
+
+static void ornek_dosya_test(const char *ad, const char *yol, int min_uye) {
+    Arena *a = arena_olustur(0);
+    char *kaynak = dosya_oku_test(yol);
+    if (!kaynak) {
+        test_sonuc(ad, 0);
+        arena_serbest(a);
+        return;
+    }
+    int hata = -1;
+    Dugum *prog = parse_kaynak(kaynak, a, &hata);
+    int ok = prog && hata == 0 && prog->veri.program.sayi >= min_uye;
+    test_sonuc(ad, ok);
+    free(kaynak);
+    arena_serbest(a);
+}
+
+static void test_ornek_fibonacci(void) {
+    ornek_dosya_test("ornek: fibonacci.kem (2 islev)",
+                     "test/ornekler/fibonacci.kem", 2);
+}
+
+static void test_ornek_yapilar(void) {
+    ornek_dosya_test("ornek: yapilar.kem (2 yapi + 3 islev)",
+                     "test/ornekler/yapilar.kem", 5);
+}
+
+static void test_ornek_eslesme(void) {
+    ornek_dosya_test("ornek: eslesme.kem (4 islev)",
+                     "test/ornekler/eslesme.kem", 4);
+}
+
+static void test_ornek_hasta(void) {
+    ornek_dosya_test("ornek: hasta.kem (1 yapi + 3 islev)",
+                     "test/ornekler/hasta.kem", 4);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1276,6 +1330,12 @@ int main(void) {
 
     printf("\n--- Generic Yapi ---\n");
     test_yapi_generic();
+
+    printf("\n--- Ornek .kem Dosyalari ---\n");
+    test_ornek_fibonacci();
+    test_ornek_yapilar();
+    test_ornek_eslesme();
+    test_ornek_hasta();
 
     printf("\n========================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

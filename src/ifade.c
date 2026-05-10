@@ -288,7 +288,17 @@ static Dugum *parse_birincil(Parser *p) {
             parser_ilerle(p);
             return d;
 
-        case TOK_TANIMLAYICI: {
+        case TOK_TANIMLAYICI:
+        /* Secimlik<T> ve sonuc<T,H> variant kelimeleri ifade context'inde
+         * tanimlayici/yapici olarak kullanilir:
+         *   hic           -> None benzeri (ifade)
+         *   deger(v)      -> Some(v) yapicisi (cagri)
+         *   tamam(v)      -> Ok(v) yapicisi
+         *   hata(e)       -> Err(e) yapicisi */
+        case TOK_HIC:
+        case TOK_DEGER:
+        case TOK_TAMAM:
+        case TOK_HATA: {
             d = dugum_tanimlayici(p->arena, t.baslangic, t.uzunluk,
                                   t.satir, t.sutun);
             parser_ilerle(p);

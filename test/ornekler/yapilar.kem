@@ -1,0 +1,30 @@
+// KEMGU Örnek Program: Yapılar ve Generic Tipler
+// Yapı tanımı, generic, yapı oluşturma, alan erişimi, referanslar.
+
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+yapı Kutu<T> {
+    icerik: T;
+    bos_mu: mantıksal;
+}
+
+işlev nokta_olustur(x: tam32, y: tam32) -> Nokta {
+    ver Nokta {
+        x: x,
+        y: y,
+    };
+}
+
+işlev kutu_doldur(k: &değişken Kutu<tam32>, eleman: tam32) {
+    k.icerik = eleman;
+    k.bos_mu = yanlış;
+}
+
+işlev mesafe_kare(a: &Nokta, b: &Nokta) -> tam32 {
+    değişken dx = a.x - b.x;
+    değişken dy = a.y - b.y;
+    ver dx * dx + dy * dy;
+}

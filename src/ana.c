@@ -1,18 +1,39 @@
 #include "lexer.h"
+#include "parser.h"
+#include "ast.h"
+#include "ast_yazdir.h"
+#include "arena.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * KEMGU CLI:
+ *   kemgu [--token | --parse] [dosya]
+ *
+ * Mod yoksa (default): --parse
+ *
+ * --token: lexer akisini yazdir
+ * --parse: parser calistir + AST'yi yazdir
+ *
+ * Dosya argumani yoksa stdin'den okur.
+ */
+
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
-    if (!f) { fprintf(stderr, "Dosya acilamadi: %s\n", dosya_adi); return NULL; }
+    if (!f) {
+        fprintf(stderr, "Dosya acilamadi: %s\n", dosya_adi);
+        return NULL;
+    }
     fseek(f, 0, SEEK_END);
     long boyut = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *tampon = (char *)malloc(boyut + 1);
+    if (boyut < 0) { fclose(f); return NULL; }
+    char *tampon = (char *)malloc((size_t)boyut + 1);
     if (!tampon) { fclose(f); return NULL; }
-    fread(tampon, 1, boyut, f);
-    tampon[boyut] = '\0';
+    size_t okunan = fread(tampon, 1, (size_t)boyut, f);
+    tampon[okunan] = '\0';
     fclose(f);
     return tampon;
 }
@@ -36,30 +57,94 @@ static char *stdin_oku(void) {
     return tampon;
 }
 
+static int mode_token(const char *kaynak, const char *dosya_adi) {
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Token t;
+    do {
+        t = lexer_sonraki_token(&l);
+        printf("%-20s \"%.*s\"\t\t%d:%d\n",
+               token_tipi_adi(t.tip), t.uzunluk, t.baslangic,
+               t.satir, t.sutun);
+    } while (t.tip != TOK_DOSYA_SONU);
+    return 0;
+}
+
+static int mode_parse(const char *kaynak, const char *dosya_adi) {
+    Arena *a = arena_olustur(0);
+    if (!a) {
+        fprintf(stderr, "Arena olusturulamadi\n");
+        return 1;
+    }
+
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Parser p;
+    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+
+    Dugum *prog = parser_calistir(&p);
+
+    printf("=== AST ===\n");
+    ast_yazdir(prog, stdout);
+    printf("\n=== Toplam parser hata sayisi: %d ===\n", p.hata_sayisi);
+
+    int rc = (p.hata_sayisi > 0) ? 1 : 0;
+    arena_serbest(a);
+    return rc;
+}
+
+static void kullanim_yazdir(const char *prog_adi) {
+    fprintf(stderr,
+        "Kullanim: %s [--token | --parse] [dosya]\n"
+        "  --token   Lexer akisini yazdir\n"
+        "  --parse   Parser calistir + AST yazdir (varsayilan)\n"
+        "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
+        prog_adi);
+}
+
 int main(int argc, char *argv[]) {
+    int parse_mode = 1;  /* default: parse */
+    int arg_idx = 1;
+
+    /* Bayrak parse */
+    while (arg_idx < argc && argv[arg_idx][0] == '-') {
+        if (strcmp(argv[arg_idx], "--token") == 0) {
+            parse_mode = 0;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--parse") == 0) {
+            parse_mode = 1;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--help") == 0 ||
+                   strcmp(argv[arg_idx], "-h") == 0) {
+            kullanim_yazdir(argv[0]);
+            return 0;
+        } else {
+            fprintf(stderr, "Bilinmeyen bayrak: %s\n", argv[arg_idx]);
+            kullanim_yazdir(argv[0]);
+            return 2;
+        }
+    }
+
     char *kaynak;
     const char *dosya_adi;
 
-    if (argc > 1) {
-        dosya_adi = argv[1];
+    if (arg_idx < argc) {
+        dosya_adi = argv[arg_idx];
         kaynak = dosya_oku(dosya_adi);
     } else {
         dosya_adi = "<stdin>";
         kaynak = stdin_oku();
     }
 
-    if (!kaynak) { fprintf(stderr, "Kaynak okunamadi\n"); return 1; }
+    if (!kaynak) {
+        fprintf(stderr, "Kaynak okunamadi\n");
+        return 1;
+    }
 
-    Lexer l;
-    lexer_baslat(&l, kaynak, dosya_adi);
-
-    Token t;
-    do {
-        t = lexer_sonraki_token(&l);
-        printf("%-20s \"%.*s\"\t\t%d:%d\n",
-               token_tipi_adi(t.tip), t.uzunluk, t.baslangic, t.satir, t.sutun);
-    } while (t.tip != TOK_DOSYA_SONU);
+    int rc = parse_mode
+        ? mode_parse(kaynak, dosya_adi)
+        : mode_token(kaynak, dosya_adi);
 
     free(kaynak);
-    return 0;
+    return rc;
 }
