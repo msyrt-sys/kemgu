@@ -74,6 +74,7 @@ kemgu/
 │   ├── ifade.c                        — Pratt parser: ifadeler (TAMAMLANDI ✓ — tam öncelik tablosu + sonek + yapı/dizi/lambda)
 │   ├── tip.h / tip.c                 — Tip temsili (TipBilgisi, equality, yazdırma) (TAMAMLANDI ✓)
 │   ├── sembol.h / sembol.c           — Symbol table + scope hierarchy (TAMAMLANDI ✓)
+│   ├── tip_kontrol.h / tip_kontrol.c — İfade tip kontrolü (TAMAMLANDI ✓ — ADIM 11.3)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
@@ -82,6 +83,7 @@ kemgu/
 │   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
 │   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
 │   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
+│   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 46/46, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -303,11 +305,25 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `sembol_modul_scope` modül üyelerine erişim
     - Çift tanım algılama (sembol_ekle -1 döner)
 
+15. İfade tip kontrolü (`tip_kontrol.h/c`) — 46/46 test, ASan temiz
+    - AST visitor pattern (her ifade düğümü için tip belirleme)
+    - 17 hata kodu (T001-T017): tip uyumsuzluğu, tanımsız sembol, sayısal/mantıksal/tamsayı bekleniyor, vs.
+    - Literaller (default tipler — context ADIM 11.5'te)
+    - İkili op (sayısal aritmetik, eşitlik, karşılaştırma, mantıksal)
+    - Tekli op (-, değil, &, &değişken, *)
+    - Çağrı (parametre sayısı + tip eşleşmesi)
+    - Erişim (yapı.alan — referans otomatik dereference)
+    - İndeks (Dizi<T>[i] — i tamsayı kontrolü)
+    - Yapı oluşturma (alan tipi + eksik/fazla kontrol)
+    - Dizi oluşturma (homojen kontrolü; boş dizi T014 — ADIM 11.5'te context)
+    - Yol (modul::ad çözümleme)
+    - `ast_tip_to_bilgi`: AST tip düğümü → TipBilgisi (built-in + kullanıcı)
+
 ### TİP SİSTEMİ FAZI (yapım sırası)
 1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
 2. ~~sembol.h/c (symbol table + scope)~~ ✓ ADIM 11.2
-3. **tip_kontrol.h/c (1) — ifade tip kontrolü — ADIM 11.3 sıradaki**
-4. tip_kontrol.c (2) — deyim/tanım tip kontrolü
+3. ~~tip_kontrol.h/c (1) — ifade tip kontrolü~~ ✓ ADIM 11.3
+4. **tip_kontrol.c (2) — deyim/tanım tip kontrolü — ADIM 11.4 sıradaki**
 5. tip_kontrol.c (3) — tip çıkarsama (bidirectional)
 6. tip_kontrol.c (4) — generic instantiation
 7. ana.c `--check` modu + örnek dosyalar üzerinde tip kontrolü
@@ -379,8 +395,8 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Tip sistemi (7 alt-adımdan 2.'si tamam)
-- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → **tip_kontrol ifadeler (11.3 sıradaki)** → deyimler (11.4) → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
+- **Faz:** Tip sistemi (7 alt-adımdan 3.'ü tamam)
+- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → ~~tip_kontrol ifadeler (11.3)~~ ✓ → **deyimler (11.4 sıradaki)** → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -388,7 +404,7 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** `tip_kontrol.h/c` — İfade tip kontrolü (literaller, ikili/tekli, çağrı, erişim, indeks, yapı oluşturma) — AST visitor pattern
+- **Sıradaki hedef:** Deyim ve tanım tip kontrolü — değişken tanımı (tip eşleşmesi), atama (lvalue + tip), ver (işlev dönüş tipi), eğer/iken (kosul mantıksal), işlev gövdesi (parametre + dönüş + sembol kayıt), yapı tanımı (alan tipleri + sembol tablosuna kayıt)
 
 ---
 
