@@ -37,8 +37,9 @@
 
 typedef struct TipKontrol {
     Arena *arena;
-    Scope *scope;             /* mevcut scope */
-    Scope *global_scope;      /* yapi/islev tanimlari icin (ileri referans) */
+    Scope *scope;                  /* mevcut scope */
+    Scope *global_scope;           /* yapi/islev tanimlari icin (ileri referans) */
+    TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;
@@ -53,6 +54,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *ifade);
 /* AST tip dugumunu (DUGUM_TIP_*) TipBilgisi'ye cevir.
  * Built-in tipler (tam32 vs) ve kullanici tipleri (sembol arama) icin. */
 TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d);
+
+/* Tum programi tip kontrol et (iki gecis: pre-populate + govde kontrol). */
+void tip_kontrol_program(TipKontrol *tk, const Dugum *program);
 
 /* Hata raporlama */
 void tip_hata(TipKontrol *tk, const Dugum *d,

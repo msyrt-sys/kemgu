@@ -11,6 +11,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->arena = a;
     tk->scope = global;
     tk->global_scope = global;
+    tk->aktif_donus_tipi = NULL;
     tk->hata_sayisi = 0;
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
@@ -532,5 +533,406 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
         default:
             tip_hata(tk, d, "T001", "ifade beklenirken farkli dugum tipi");
             return t_hata(tk);
+    }
+}
+
+/* ========================================================================
+ * ADIM 11.4: Deyim ve tanim tip kontrolu
+ * ======================================================================== */
+
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d);
+
+/* === 1. Gecis: yapi/islev/sabit sembollerini global'e ekle === */
+
+static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
+    /* Yapi scope yarat */
+    Scope *yapi_s = scope_olustur(tk->arena, SCOPE_YAPI, tk->global_scope);
+
+    /* Generic params -> yapi scope'a ekle */
+    for (int j = 0; j < yapi->veri.yapi.tip_param_sayi; j++) {
+        const char *t_ad = yapi->veri.yapi.tip_paramlar[j];
+        int t_uz = (int)strlen(t_ad);
+        Sembol gp;
+        memset(&gp, 0, sizeof(gp));
+        gp.ad = t_ad;
+        gp.ad_uzunluk = t_uz;
+        gp.kategori = SEMBOL_GENERIC_PARAM;
+        gp.tip = tip_olustur_generic_param(tk->arena, t_ad, t_uz);
+        gp.satir = yapi->satir;
+        gp.sutun = yapi->sutun;
+        sembol_ekle(yapi_s, tk->arena, &gp);
+    }
+
+    /* Alanlar -> yapi scope'a ekle (tip bilgisi yapi_scope context'inde) */
+    Scope *eski = tk->scope;
+    tk->scope = yapi_s;
+    for (int j = 0; j < yapi->veri.yapi.alan_sayi; j++) {
+        const Dugum *alan = yapi->veri.yapi.alanlar[j];
+        TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
+        Sembol s;
+        memset(&s, 0, sizeof(s));
+        s.ad = alan->veri.alan.ad;
+        s.ad_uzunluk = alan->veri.alan.ad_uzunluk;
+        s.kategori = SEMBOL_DEGISKEN;
+        s.tip = alan_tipi;
+        s.satir = alan->satir;
+        s.sutun = alan->sutun;
+        if (sembol_ekle(yapi_s, tk->arena, &s) != 0) {
+            tip_hata(tk, alan, "T024", "yapi alan adi cakismasi");
+        }
+    }
+    tk->scope = eski;
+
+    /* Yapi sembolu global'e */
+    Sembol y;
+    memset(&y, 0, sizeof(y));
+    y.ad = yapi->veri.yapi.ad;
+    y.ad_uzunluk = yapi->veri.yapi.ad_uzunluk;
+    y.kategori = SEMBOL_YAPI;
+    y.yapi_scope = yapi_s;
+    y.ast_dugumu = yapi;
+    y.satir = yapi->satir;
+    y.sutun = yapi->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &y) != 0) {
+        tip_hata(tk, yapi, "T026", "yapi tanimi cakismasi");
+    }
+}
+
+static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+    int n = islev->veri.islev.param_sayi;
+    TipBilgisi **ptipler = NULL;
+    if (n > 0) {
+        ptipler = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) * (size_t)n);
+    }
+    for (int j = 0; j < n; j++) {
+        const Dugum *p = islev->veri.islev.parametreler[j];
+        ptipler[j] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+    }
+    TipBilgisi *donus = islev->veri.islev.donus_tipi
+        ? ast_tip_to_bilgi(tk, islev->veri.islev.donus_tipi)
+        : tip_olustur_basit(tk->arena, TIP_BOS);
+    TipBilgisi *islev_tipi = tip_olustur_islev(tk->arena, ptipler, n, donus);
+
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = islev->veri.islev.ad;
+    s.ad_uzunluk = islev->veri.islev.ad_uzunluk;
+    s.kategori = SEMBOL_ISLEV;
+    s.tip = islev_tipi;
+    s.ast_dugumu = islev;
+    s.satir = islev->satir;
+    s.sutun = islev->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
+        tip_hata(tk, islev, "T024", "islev tanimi cakismasi");
+    }
+}
+
+static void pre_populate_sabit(TipKontrol *tk, const Dugum *sabit) {
+    TipBilgisi *t = ast_tip_to_bilgi(tk, sabit->veri.sabit.tip);
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = sabit->veri.sabit.ad;
+    s.ad_uzunluk = sabit->veri.sabit.ad_uzunluk;
+    s.kategori = SEMBOL_SABIT;
+    s.tip = t;
+    s.ast_dugumu = sabit;
+    s.satir = sabit->satir;
+    s.sutun = sabit->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
+        tip_hata(tk, sabit, "T024", "sabit tanimi cakismasi");
+    }
+}
+
+static void pre_populate(TipKontrol *tk, const Dugum *program) {
+    if (!program || program->tip != DUGUM_PROGRAM) return;
+
+    /* Once yapilari (tipleri) ekle, sonra islevleri (parametre tipleri
+     * yapilara referans verebilir). */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
+        else if (uye->tip == DUGUM_DISA &&
+                 uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_YAPI) {
+            pre_populate_yapi(tk, uye->veri.disa.tanim);
+        }
+    }
+
+    /* Islevler ve sabitler */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
+                              ? uye->veri.disa.tanim : uye;
+        if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
+        else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
+    }
+}
+
+/* === Deyim tip kontrolu === */
+
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+
+    switch (d->tip) {
+        case DUGUM_DEGISKEN: {
+            TipBilgisi *deger_tip = tip_belirle(tk, d->veri.degisken.deger);
+            TipBilgisi *annot = NULL;
+            if (d->veri.degisken.tip) {
+                annot = ast_tip_to_bilgi(tk, d->veri.degisken.tip);
+                if (!tip_esit(annot, deger_tip) &&
+                    deger_tip->kategori != TIP_HATA &&
+                    annot->kategori != TIP_HATA) {
+                    tip_hata(tk, d, "T001",
+                             "degisken tip annot ile baslangic uyumsuz");
+                }
+            }
+            TipBilgisi *son = annot ? annot : deger_tip;
+            Sembol s;
+            memset(&s, 0, sizeof(s));
+            s.ad = d->veri.degisken.ad;
+            s.ad_uzunluk = d->veri.degisken.ad_uzunluk;
+            s.kategori = SEMBOL_DEGISKEN;
+            s.tip = son;
+            s.ast_dugumu = d;
+            s.satir = d->satir;
+            s.sutun = d->sutun;
+            if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
+                tip_hata(tk, d, "T024", "degisken zaten tanimli");
+            }
+            break;
+        }
+
+        case DUGUM_ATAMA: {
+            /* Hedef lvalue mi? (TANIMLAYICI, ERISIM, INDEKS) */
+            const Dugum *hedef = d->veri.atama.hedef;
+            if (hedef->tip != DUGUM_TANIMLAYICI &&
+                hedef->tip != DUGUM_ERISIM &&
+                hedef->tip != DUGUM_INDEKS) {
+                tip_hata(tk, d, "T022",
+                         "atama hedefi lvalue olmali (tanimlayici/erisim/indeks)");
+            }
+            TipBilgisi *ht = tip_belirle(tk, hedef);
+            TipBilgisi *dt = tip_belirle(tk, d->veri.atama.deger);
+            if (!tip_esit(ht, dt) &&
+                ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
+                tip_hata(tk, d, "T001", "atama tipi uyumsuz");
+            }
+            break;
+        }
+
+        case DUGUM_VER: {
+            if (!tk->aktif_donus_tipi) {
+                tip_hata(tk, d, "T023", "ver islev govdesi disinda");
+                break;
+            }
+            if (d->veri.ver.deger) {
+                TipBilgisi *deger = tip_belirle(tk, d->veri.ver.deger);
+                if (!tip_esit(deger, tk->aktif_donus_tipi) &&
+                    deger->kategori != TIP_HATA &&
+                    tk->aktif_donus_tipi->kategori != TIP_HATA) {
+                    tip_hata(tk, d, "T020",
+                             "ver tipi islev donus tipi ile uyumsuz");
+                }
+            } else {
+                /* ver; — donus tipi BOS olmali */
+                if (tk->aktif_donus_tipi->kategori != TIP_BOS) {
+                    tip_hata(tk, d, "T020",
+                             "ver; gerek (donus tipi BOS olmali ya da deger ver)");
+                }
+            }
+            break;
+        }
+
+        case DUGUM_EGER: {
+            TipBilgisi *kosul = tip_belirle(tk, d->veri.eger.kosul);
+            if (!tip_mantiksal_mi(kosul) && kosul->kategori != TIP_HATA) {
+                tip_hata(tk, d, "T021", "eger kosulu mantiksal olmali");
+            }
+            tip_kontrol_deyim(tk, d->veri.eger.gozdoldur);
+            if (d->veri.eger.yan) {
+                tip_kontrol_deyim(tk, d->veri.eger.yan);
+            }
+            break;
+        }
+
+        case DUGUM_IKEN: {
+            TipBilgisi *kosul = tip_belirle(tk, d->veri.iken.kosul);
+            if (!tip_mantiksal_mi(kosul) && kosul->kategori != TIP_HATA) {
+                tip_hata(tk, d, "T021", "iken kosulu mantiksal olmali");
+            }
+            tip_kontrol_deyim(tk, d->veri.iken.govde);
+            break;
+        }
+
+        case DUGUM_ICIN: {
+            TipBilgisi *kol = tip_belirle(tk, d->veri.icin.koleksiyon);
+            TipBilgisi *eleman_tipi;
+            if (kol->kategori == TIP_DIZI) {
+                eleman_tipi = kol->veri.dizi.eleman;
+            } else if (kol->kategori == TIP_HATA) {
+                eleman_tipi = t_hata(tk);
+            } else {
+                tip_hata(tk, d, "T027", "icin koleksiyonu Dizi<T> olmali");
+                eleman_tipi = t_hata(tk);
+            }
+            /* Yeni scope: icin degiskeni eleman_tipi olarak */
+            Scope *eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
+            Sembol s;
+            memset(&s, 0, sizeof(s));
+            s.ad = d->veri.icin.degisken_adi;
+            s.ad_uzunluk = d->veri.icin.degisken_adi_uzunluk;
+            s.kategori = SEMBOL_DEGISKEN;
+            s.tip = eleman_tipi;
+            s.satir = d->satir;
+            s.sutun = d->sutun;
+            sembol_ekle(tk->scope, tk->arena, &s);
+            tip_kontrol_deyim(tk, d->veri.icin.govde);
+            tk->scope = eski;
+            break;
+        }
+
+        case DUGUM_ESLES: {
+            /* deger tipini belirle (kontrol icin gerekli — desen tip kontrol
+             * ileride ADIM 11.6'da generic/secimlik desenleri ile detayli) */
+            TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
+            (void)dt;
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                const Dugum *kol = d->veri.esles.kollar[i];
+                /* Yeni scope kol icin (desen icindeki tanimlayicilar) */
+                Scope *eski = tk->scope;
+                tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
+                /* Govde — blok ya da ifade. Basit: deyim olarak kontrol et */
+                tip_kontrol_deyim(tk, kol->veri.esles_kolu.govde);
+                tk->scope = eski;
+            }
+            break;
+        }
+
+        case DUGUM_GUVENSIZ:
+            /* Aciklama yok-saymi: gerekli olabilir ama tip kontrol
+             * acisindan blok ile ayni */
+            tip_kontrol_deyim(tk, d->veri.guvensiz.blok);
+            break;
+
+        case DUGUM_BLOK: {
+            Scope *eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
+            for (int i = 0; i < d->veri.blok.sayi; i++) {
+                tip_kontrol_deyim(tk, d->veri.blok.deyimler[i]);
+            }
+            tk->scope = eski;
+            break;
+        }
+
+        case DUGUM_IFADE_DEYIMI:
+            tip_belirle(tk, d->veri.ifade_deyimi.ifade);
+            break;
+
+        case DUGUM_HATA:
+            break;
+
+        default:
+            /* Bir ifade gibi davran (defansif) */
+            tip_belirle(tk, d);
+            break;
+    }
+}
+
+/* === Tanim tip kontrolu === */
+
+static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+
+    /* DISA -> ic tanim */
+    if (d->tip == DUGUM_DISA) {
+        if (d->veri.disa.tanim) tip_kontrol_tanim(tk, d->veri.disa.tanim);
+        return;
+    }
+
+    switch (d->tip) {
+        case DUGUM_ISLEV: {
+            const Sembol *islev_sem = sembol_bul_yerel(tk->global_scope,
+                d->veri.islev.ad, d->veri.islev.ad_uzunluk);
+            if (!islev_sem || !islev_sem->tip ||
+                islev_sem->tip->kategori != TIP_ISLEV) return;
+
+            Scope *eski = tk->scope;
+            TipBilgisi *eski_donus = tk->aktif_donus_tipi;
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->global_scope);
+            tk->aktif_donus_tipi = islev_sem->tip->veri.islev.donus;
+
+            /* Parametreleri scope'a ekle */
+            for (int i = 0; i < d->veri.islev.param_sayi; i++) {
+                const Dugum *p = d->veri.islev.parametreler[i];
+                Sembol s;
+                memset(&s, 0, sizeof(s));
+                s.ad = p->veri.parametre.ad;
+                s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                s.kategori = SEMBOL_PARAMETRE;
+                s.tip = islev_sem->tip->veri.islev.parametreler[i];
+                s.ast_dugumu = p;
+                s.satir = p->satir;
+                s.sutun = p->sutun;
+                if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
+                    tip_hata(tk, p, "T024", "parametre adi cakismasi");
+                }
+            }
+
+            /* Govdeyi kontrol et */
+            if (d->veri.islev.govde) {
+                tip_kontrol_deyim(tk, d->veri.islev.govde);
+            }
+
+            tk->aktif_donus_tipi = eski_donus;
+            tk->scope = eski;
+            break;
+        }
+
+        case DUGUM_SABIT: {
+            /* Pre-populate'te sembol eklendi. Simdi deger kontrolu */
+            TipBilgisi *deger = tip_belirle(tk, d->veri.sabit.deger);
+            TipBilgisi *annot = ast_tip_to_bilgi(tk, d->veri.sabit.tip);
+            if (!tip_esit(deger, annot) &&
+                deger->kategori != TIP_HATA &&
+                annot->kategori != TIP_HATA) {
+                tip_hata(tk, d, "T001", "sabit deger tip annot ile uyumsuz");
+            }
+            break;
+        }
+
+        case DUGUM_YAPI:
+            /* Pre-populate yeterli (alan tipleri orada cozumlendi) */
+            break;
+
+        case DUGUM_KULLAN:
+            /* Modul cozumleme ileride (su an no-op) */
+            break;
+
+        case DUGUM_MODUL:
+            /* Modul scope kontrolu basit — recursive */
+            /* Su an: ic uyeleri global scope'a ekle (modul ad alani yok) */
+            for (int i = 0; i < d->veri.modul.sayi; i++) {
+                tip_kontrol_tanim(tk, d->veri.modul.uyeler[i]);
+            }
+            break;
+
+        case DUGUM_HATA:
+            break;
+
+        default:
+            break;
+    }
+}
+
+/* === Ana fonksiyon === */
+
+void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
+    if (!program || program->tip != DUGUM_PROGRAM) return;
+    pre_populate(tk, program);
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }
 }

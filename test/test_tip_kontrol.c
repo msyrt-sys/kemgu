@@ -666,6 +666,270 @@ static void test_karmasik_zincirleme(void) {
     arena_serbest(a);
 }
 
+/* === Program-duzeyi testleri (ADIM 11.4) === */
+
+/* Yardimci: tum programi tip kontrol et, hata sayisini dondur */
+static int program_kontrol(const char *kaynak, Arena *a) {
+    Lexer l;
+    lexer_baslat(&l, kaynak, "test");
+    Parser p;
+    parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    if (!prog) return -1;
+
+    Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+    TipKontrol tk;
+    tip_kontrol_baslat(&tk, a, g, "test", kaynak);
+    tip_kontrol_program(&tk, prog);
+    return tk.hata_sayisi;
+}
+
+static void test_prog_bos(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol("", a);
+    test_sonuc("program: bos -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_bos(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol("i\xc5\x9flev f() {}", a);
+    test_sonuc("program: islev f() {} -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_donus_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() -> tam32 { ver 0; } */
+    int h = program_kontrol("i\xc5\x9flev f() -> tam32 { ver 0; }", a);
+    test_sonuc("program: islev donus uyumlu -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_donus_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() -> tam32 { ver "x"; } */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { ver \"x\"; }", a);
+    test_sonuc("program: islev donus uyumsuz -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_ver_bos(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() { ver; } — donus tipi BOS */
+    int h = program_kontrol("i\xc5\x9flev f() { ver; }", a);
+    test_sonuc("program: ver; (donus BOS) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_donus_var_ver_yok(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() -> tam32 { ver; } — uyumsuz */
+    int h = program_kontrol("i\xc5\x9flev f() -> tam32 { ver; }", a);
+    test_sonuc("program: ver; ama donus tipi var -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_degisken_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() { degisken x: tam32 = 5; } */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam32 = 5; }", a);
+    test_sonuc("program: degisken tip annot uyumlu -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_degisken_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() { degisken x: tam32 = "X"; } */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam32 = \"X\"; }", a);
+    test_sonuc("program: degisken tip uyumsuz -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_atama_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam32 = 5; x = 10; }",
+        a);
+    test_sonuc("program: atama uyumlu -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_atama_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { de\xc4\x9f""i\xc5\x9fken x: tam32 = 5; "
+        "x = \"X\"; }", a);
+    test_sonuc("program: atama tipi uyumsuz -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_atama_lvalue_yok(void) {
+    Arena *a = arena_olustur(0);
+    /* 5 = 10; — lvalue olmayan atama */
+    int h = program_kontrol("i\xc5\x9flev f() { 5 = 10; }", a);
+    test_sonuc("program: atama lvalue olmayan -> T022 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_eger_mantiksal(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() { eger dogru {} } */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { e\xc4\x9f""er do\xc4\x9fru {} }", a);
+    test_sonuc("program: eger dogru {} -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_eger_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f() { eger 5 {} } */
+    int h = program_kontrol("i\xc5\x9flev f() { e\xc4\x9f""er 5 {} }", a);
+    test_sonuc("program: eger 5 {} -> T021 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_iken_mantiksal(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { iken do\xc4\x9fru {} }", a);
+    test_sonuc("program: iken dogru {} -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_iken_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol("i\xc5\x9flev f() { iken 5 {} }", a);
+    test_sonuc("program: iken 5 {} -> T021 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_icin_dizi(void) {
+    Arena *a = arena_olustur(0);
+    /* icin i: xs (xs Dizi<tam32>) */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "de\xc4\x9f""i\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3]; "
+        "i\xc3\xa7in i: xs {} }", a);
+    test_sonuc("program: icin Dizi<tam32> -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_icin_dizi_degil(void) {
+    Arena *a = arena_olustur(0);
+    /* icin i: 5 — dizi degil */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { i\xc3\xa7in i: 5 {} }", a);
+    test_sonuc("program: icin dizi degil -> T027 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_yapi_basit(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { y: tam32; }", a);
+    test_sonuc("program: yapi X { y: tam32; } -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_yapi_bilinmeyen_tip(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { y: yokTipBu; }", a);
+    test_sonuc("program: yapi alan bilinmeyen tip -> T011 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_yapi_islev_kullanim(void) {
+    Arena *a = arena_olustur(0);
+    /* yapi Hasta { yas: tam32; }
+     * islev yarat() -> Hasta { ver Hasta { yas: 30 }; } */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Hasta { yas: tam32; } "
+        "i\xc5\x9flev yarat() -> Hasta { ver Hasta { yas: 30 }; }", a);
+    test_sonuc("program: yapi olusturma + ver -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_cift_islev(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() {} i\xc5\x9flev f() {}", a);
+    test_sonuc("program: cift islev tanimi -> T024 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_cift_yapi(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X {} yap\xc4\xb1 X {}", a);
+    test_sonuc("program: cift yapi tanimi -> T026 hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_sabit_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol("sabit P: tam32 = \"x\";", a);
+    test_sonuc("program: sabit tip uyumsuz -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_islev_recursive(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f(n: tam32) -> tam32 { ver f(n); } — forward ref */
+    int h = program_kontrol(
+        "i\xc5\x9flev f(n: tam32) -> tam32 { ver f(n); }", a);
+    test_sonuc("program: islev recursive -> 0 hata (forward ref)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_blok_scope(void) {
+    Arena *a = arena_olustur(0);
+    /* Blok scope: degisken icinde gorunur, disarda yok */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "{ de\xc4\x9f""i\xc5\x9fken x: tam32 = 5; } "
+        "}", a);
+    test_sonuc("program: blok scope -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_blok_scope_dis(void) {
+    Arena *a = arena_olustur(0);
+    /* Blok scope disinda x kullanim hata */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() { "
+        "{ de\xc4\x9f""i\xc5\x9fken x: tam32 = 5; } "
+        "ver x; }", a);
+    /* x bulunamamali (scope disinda) — T002 hata + ver donus tipi BOS uyumsuz */
+    test_sonuc("program: blok dısı x erisim -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_prog_eger_zincir(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f(n: tam32) -> tam32 { "
+        "e\xc4\x9f""er n < 0 { ver 0; } "
+        "de\xc4\x9f""ilse e\xc4\x9f""er n == 0 { ver 1; } "
+        "de\xc4\x9f""ilse { ver n; } }", a);
+    test_sonuc("program: eger zincir + ver -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_prog_yapi_alan_kullanim(void) {
+    Arena *a = arena_olustur(0);
+    /* islev al(h: Hasta) -> tam32 { ver h.yas; } */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Hasta { yas: tam32; } "
+        "i\xc5\x9flev al(h: Hasta) -> tam32 { ver h.yas; }", a);
+    test_sonuc("program: yapi.alan -> tip dogru -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -744,6 +1008,46 @@ int main(void) {
     printf("\n--- Karmasik ---\n");
     test_karmasik_iki_op();
     test_karmasik_zincirleme();
+
+    printf("\n--- Program: Islev/Donus ---\n");
+    test_prog_bos();
+    test_prog_islev_bos();
+    test_prog_islev_donus_uyumlu();
+    test_prog_islev_donus_uyumsuz();
+    test_prog_islev_ver_bos();
+    test_prog_islev_donus_var_ver_yok();
+    test_prog_islev_recursive();
+
+    printf("\n--- Program: Degisken/Atama ---\n");
+    test_prog_degisken_uyumlu();
+    test_prog_degisken_uyumsuz();
+    test_prog_atama_uyumlu();
+    test_prog_atama_uyumsuz();
+    test_prog_atama_lvalue_yok();
+
+    printf("\n--- Program: Kontrol Akisi ---\n");
+    test_prog_eger_mantiksal();
+    test_prog_eger_uyumsuz();
+    test_prog_iken_mantiksal();
+    test_prog_iken_uyumsuz();
+    test_prog_icin_dizi();
+    test_prog_icin_dizi_degil();
+    test_prog_eger_zincir();
+
+    printf("\n--- Program: Yapi/Sabit ---\n");
+    test_prog_yapi_basit();
+    test_prog_yapi_bilinmeyen_tip();
+    test_prog_yapi_islev_kullanim();
+    test_prog_yapi_alan_kullanim();
+    test_prog_sabit_uyumsuz();
+
+    printf("\n--- Program: Cift Tanim ---\n");
+    test_prog_cift_islev();
+    test_prog_cift_yapi();
+
+    printf("\n--- Program: Scope ---\n");
+    test_prog_blok_scope();
+    test_prog_blok_scope_dis();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

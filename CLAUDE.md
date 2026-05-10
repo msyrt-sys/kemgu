@@ -305,7 +305,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `sembol_modul_scope` modül üyelerine erişim
     - Çift tanım algılama (sembol_ekle -1 döner)
 
-15. İfade tip kontrolü (`tip_kontrol.h/c`) — 46/46 test, ASan temiz
+15. İfade tip kontrolü (`tip_kontrol.h/c` 1) — 46 ifade testi, ASan temiz
     - AST visitor pattern (her ifade düğümü için tip belirleme)
     - 17 hata kodu (T001-T017): tip uyumsuzluğu, tanımsız sembol, sayısal/mantıksal/tamsayı bekleniyor, vs.
     - Literaller (default tipler — context ADIM 11.5'te)
@@ -319,12 +319,19 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - Yol (modul::ad çözümleme)
     - `ast_tip_to_bilgi`: AST tip düğümü → TipBilgisi (built-in + kullanıcı)
 
+16. Deyim/tanım tip kontrolü (`tip_kontrol.c` 2) — 28 program testi (toplam 74), ASan temiz
+    - **İki geçişli `pre_populate`:** önce yapılar (alanlar dahil), sonra işlevler/sabitler — forward references çalışır
+    - Generic params yapı_scope'a eklenir (alan tipleri için resolve)
+    - Deyim visitor: değişken (annot vs değer eşleşmesi), atama (lvalue + tip), ver (aktif_donus_tipi ile uyum), eğer/iken (koşul mantıksal), için (Dizi<T> + eleman tipi), eşleş (kol gövdesi), güvensiz, blok (yeni scope), ifade_deyimi
+    - Tanım visitor: işlev gövdesi (parametre scope + aktif_donus_tipi context), sabit (annot vs değer), yapı (pre-populate yeterli), modül (üye recursive), dışa (iç tanım recursive)
+    - Yeni hata kodları: T020 (ver tipi), T021 (kondisyon mantıksal), T022 (lvalue), T023 (ver dış), T024 (çift tanım), T026 (yapı çakışması), T027 (için dizi)
+
 ### TİP SİSTEMİ FAZI (yapım sırası)
 1. ~~tip.h/c (temsil + equality)~~ ✓ ADIM 11.1
 2. ~~sembol.h/c (symbol table + scope)~~ ✓ ADIM 11.2
 3. ~~tip_kontrol.h/c (1) — ifade tip kontrolü~~ ✓ ADIM 11.3
-4. **tip_kontrol.c (2) — deyim/tanım tip kontrolü — ADIM 11.4 sıradaki**
-5. tip_kontrol.c (3) — tip çıkarsama (bidirectional)
+4. ~~tip_kontrol.c (2) — deyim/tanım tip kontrolü~~ ✓ ADIM 11.4
+5. **tip_kontrol.c (3) — tip çıkarsama (bidirectional) — ADIM 11.5 sıradaki**
 6. tip_kontrol.c (4) — generic instantiation
 7. ana.c `--check` modu + örnek dosyalar üzerinde tip kontrolü
 
@@ -395,8 +402,8 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Tip sistemi (7 alt-adımdan 3.'ü tamam)
-- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → ~~tip_kontrol ifadeler (11.3)~~ ✓ → **deyimler (11.4 sıradaki)** → çıkarsama (11.5) → generic (11.6) → entegrasyon (11.7)
+- **Faz:** Tip sistemi (7 alt-adımdan 4.'ü tamam)
+- **Sıra:** ~~tip.h/c (11.1)~~ ✓ → ~~sembol.h/c (11.2)~~ ✓ → ~~tip_kontrol ifadeler (11.3)~~ ✓ → ~~deyimler/tanımlar (11.4)~~ ✓ → **çıkarsama (11.5 sıradaki)** → generic (11.6) → entegrasyon (11.7)
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -404,7 +411,7 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** Deyim ve tanım tip kontrolü — değişken tanımı (tip eşleşmesi), atama (lvalue + tip), ver (işlev dönüş tipi), eğer/iken (kosul mantıksal), işlev gövdesi (parametre + dönüş + sembol kayıt), yapı tanımı (alan tipleri + sembol tablosuna kayıt)
+- **Sıradaki hedef:** Tip çıkarsama — sayı literal context-dependent (`tam8`/`tam64`), boş dizi `[]` context'ten tip al, `değişken x = ...` annot olmadan değer tipinden çıkarsama (zaten var), bidirectional propagation (`f(arg)` arg tipi parametre tipinden zorlama)
 
 ---
 
