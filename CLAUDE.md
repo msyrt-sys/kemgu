@@ -75,6 +75,9 @@ kemgu/
 │   ├── tip.h / tip.c                 — Tip temsili (TipBilgisi, equality, yazdırma) (TAMAMLANDI ✓)
 │   ├── sembol.h / sembol.c           — Symbol table + scope hierarchy (TAMAMLANDI ✓)
 │   ├── tip_kontrol.h / tip_kontrol.c — İfade tip kontrolü (TAMAMLANDI ✓ — ADIM 11.3)
+│   ├── bolge.h / bolge.c             — Bölge temsili (TAMAMLANDI ✓ — ADIM 12.1)
+│   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları (TAMAMLANDI ✓ — ADIM 12.2)
+│   ├── llvm.h / llvm.c               — LLVM IR text üretici (TAMAMLANDI ✓ — ADIM 13.1)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
@@ -83,7 +86,9 @@ kemgu/
 │   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
 │   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
 │   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
-│   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 46/46, ASan temiz)
+│   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 90/90, ASan temiz)
+│   ├── test_bolge.c                   — Bölge temsili testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
+│   ├── test_bolge_atama.c             — Bölge atama R-* testleri (TAMAMLANDI ✓ — 10/10, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -353,11 +358,37 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 
 ### 🎉 TİP SİSTEMİ FAZI TAMAMLANDI (90 yeni test, toplam 365/365)
 
-Sıradaki büyük faz seçenekleri:
-- **ADIM 12 — Bölge Çözümleyici:** Escape analizi, otomatik bölge atama (KEMGU motto: "GC yok, region-based")
-- **ADIM 13 — LLVM backend:** AST → LLVM IR
-- **ADIM 14 — Bootstrapping:** KEMGU ile KEMGU derleyicisi (uzun vade)
-- **Tip sistemi genişletme:** `hiç`/`değer` ifade desteği, pattern binding, özellik (trait) constraint sistemi
+20. Bölge temsili (`bolge.h/c`) — 17/17 test, ASan temiz (ADIM 12.1)
+    - 9 kategori: LIT, YEREL, CAGIRAN, ITERASYON, GLOBAL, SAHIP, KANAL, BILINMIYOR, HATA
+    - Aksiyom: ITERASYON < YEREL < CAGIRAN < GLOBAL (ömür sırası)
+    - LCA hesabı (R-KOŞUL için daha uzun ömürlü olanı döner)
+
+21. Bölge atama (`bolge_atama.h/c`) — 10/10 test, ASan temiz (ADIM 12.2)
+    - AST visitor: KEMGU_Bellek_Modeli.md Katman 1 R-* aksiyomları
+    - R-LIT, R-YEREL, R-VER, R-İTERASYON, R-KOŞUL uygulanıyor
+    - Context-tracking: ver_baglaminda, dongu_derinligi flag'leri
+
+22. **LLVM IR backend (`llvm.h/c`) — END-TO-END ÇALIŞAN DERLEYİCİ!** (ADIM 13.1)
+    - Text-based IR üretici (libLLVM yok, sadece string output)
+    - Basit işlevler + tam sayı literal + ikili/tekli op + ver
+    - SSA register counter ile recursive ifade
+    - **Pipeline:** KEMGU kaynak → lexer → parser → AST → tip kontrol → LLVM IR → `clang -x ir -` → native `.exe` → çalıştırma
+    - `ana.c` `--llvm` modu eklendi (4. CLI mod: token/parse/check/llvm)
+
+### 🎉🎉 ADIM 12 + 13 TAMAMLANDI — KEMGU END-TO-END DERLEYİCİ ÇALIŞIYOR
+
+```bash
+echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
+./build/kemgu --llvm x.kem | clang -x ir - -o x.exe
+./x.exe; echo $?    # → 42 ✓
+```
+
+### Sıradaki büyük seçenekler:
+- **Tam Katman 1 escape analizi** (DFA tabanlı)
+- **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
+- **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
+- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
+- **Bootstrapping** (uzun vade)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -426,8 +457,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉 TİP SİSTEMİ FAZI TAMAMLANDI** (7 alt-adımın 7'si tamam, 365/365 test, 16 commit)
-- **Sıra:** ~~11.1-11.7~~ ✓ → **ADIM 12 (bölge çözümleyici — sıradaki büyük faz)**
+- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ!)
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR → native exe
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → **(genişletme: tam escape, Katman 2, LLVM cağrı/yapı/kontrol akışı)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -435,7 +467,7 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** ADIM 12 — Bölge Çözümleyici (escape analizi, R-* atama kuralları). KEMGU'nun en kritik özelliği. Bellek modeli formalizasyonu (KEMGU_Bellek_Modeli.md) bu adımın tasarım dokümanı. Tasarım kararları kullanıcı onayı gerektirir.
+- **Sıradaki hedef:** End-to-end pipeline çalışıyor. Genişletme noktaları: tam escape analizi (DFA), Bölge Katman 2 (concurrency), LLVM IR'da çağrı/parametre/kontrol akışı/yapı desteği, `hiç`/`değer` ifade desteği. Kullanıcı önceliklerini belirler.
 
 ---
 
