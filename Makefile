@@ -36,10 +36,10 @@ endif
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
-       $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c
+       $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test test_tumu
 
 # === Ana hedef ===
 
@@ -106,6 +106,17 @@ $(BUILD)/test_bolge$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/bolge.c \
                            $(TESTDIR)/test_bolge.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Bolge atama testi (Clang64 + ASan — tum bagimliliklar) ===
+
+$(BUILD)/test_bolge_atama$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                                  $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                                  $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                                  $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                                  $(SRCDIR)/ifade.c $(SRCDIR)/bolge.c \
+                                  $(SRCDIR)/bolge_atama.c \
+                                  $(TESTDIR)/test_bolge_atama.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -142,7 +153,10 @@ calistir_tip_kontrol_test: $(BUILD)/test_tip_kontrol$(EXE)
 calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 	./$(BUILD)/test_bolge$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test
+calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
+	./$(BUILD)/test_bolge_atama$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test
 	@echo "Tum testler gecti!"
 
 clean:
