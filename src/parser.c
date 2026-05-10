@@ -4,26 +4,16 @@
 #include <string.h>
 #include <stdio.h>
 
-/* === Linked list yardimcilari (parse-zamani cocuk listeleri) === */
+/* === Linked list yardimcilari (parse-zamani cocuk listeleri) ===
+ * parser.h'da declare — ifade.c de kullanir. */
 
-typedef struct DugumLink {
-    Dugum *dugum;
-    struct DugumLink *sonraki;
-} DugumLink;
-
-typedef struct Liste {
-    DugumLink *bas;
-    DugumLink *son;
-    int sayi;
-} Liste;
-
-static void liste_baslat(Liste *l) {
+void liste_baslat(Liste *l) {
     l->bas = NULL;
     l->son = NULL;
     l->sayi = 0;
 }
 
-static void liste_ekle(Liste *l, Arena *a, Dugum *d) {
+void liste_ekle(Liste *l, Arena *a, Dugum *d) {
     DugumLink *link = (DugumLink *)arena_ayir(a, sizeof(DugumLink));
     if (!link) return;
     link->dugum = d;
@@ -37,7 +27,7 @@ static void liste_ekle(Liste *l, Arena *a, Dugum *d) {
     l->sayi++;
 }
 
-static Dugum **liste_array_yap(const Liste *l, Arena *a) {
+Dugum **liste_array_yap(const Liste *l, Arena *a) {
     if (l->sayi == 0) return NULL;
     Dugum **arr = (Dugum **)arena_ayir(a, sizeof(Dugum *) * (size_t)l->sayi);
     if (!arr) return NULL;
@@ -147,7 +137,6 @@ void parser_panik_sync(Parser *p) {
 
 /* === Forward declarations === */
 
-static Dugum *parse_blok(Parser *p);
 static Dugum *parse_deyim(Parser *p);
 static Dugum *parse_ust_oge(Parser *p);
 static Dugum *parse_islev_tanimi(Parser *p);
@@ -160,9 +149,9 @@ static Dugum *parse_degisken_deyimi(Parser *p);
 static Dugum *parse_ver_deyimi(Parser *p);
 static Dugum *parse_ifade_veya_atama_deyimi(Parser *p);
 
-/* === Parametre === */
+/* === Parametre (public — ifade.c lambda icin kullanir) === */
 
-static Dugum *parse_parametre(Parser *p) {
+Dugum *parse_parametre(Parser *p) {
     Token ad_tok = parser_simdiki(p);
     if (ad_tok.tip != TOK_TANIMLAYICI) {
         parser_hata(p, ad_tok, "P012", "parametre adi bekleniyor", NULL);
@@ -442,8 +431,9 @@ static Dugum *parse_ust_oge(Parser *p) {
 }
 
 /* === Blok ve deyimler === */
+/* parse_blok public — ifade.c lambda govdesi icin kullanir */
 
-static Dugum *parse_blok(Parser *p) {
+Dugum *parse_blok(Parser *p) {
     Token sus_tok = parser_simdiki(p);
     parser_bekle(p, TOK_SOL_SUSLU, "P070", "'{' bekleniyor");
 

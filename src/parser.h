@@ -57,7 +57,30 @@ void parser_panik_sync(Parser *p);
 
 /* === Ifade ve tip parser (ifade.c'de implement) === */
 
-Dugum *parse_ifade(Parser *p);    /* Pratt parser - ADIM 8.2'de minimal */
-Dugum *parse_tip(Parser *p);      /* tip context — ADIM 8.2'de basit */
+Dugum *parse_ifade(Parser *p);    /* Pratt parser - ADIM 9'da tam */
+Dugum *parse_tip(Parser *p);      /* tip context — ADIM 10'da karmasik tipler */
+
+/* === Cocuk listesi yardimcisi (parser.c, ifade.c paylasir) ===
+ * Parse-zamani linked list — sonra arena'da array kopyalanir. */
+
+typedef struct DugumLink {
+    Dugum *dugum;
+    struct DugumLink *sonraki;
+} DugumLink;
+
+typedef struct Liste {
+    DugumLink *bas;
+    DugumLink *son;
+    int sayi;
+} Liste;
+
+void   liste_baslat(Liste *l);
+void   liste_ekle(Liste *l, Arena *a, Dugum *d);
+Dugum **liste_array_yap(const Liste *l, Arena *a);
+
+/* === Yardimci parse fonksiyonlari (parser.c'de, ifade.c paylasir) === */
+
+Dugum *parse_blok(Parser *p);          /* lambda govdesi icin */
+Dugum *parse_parametre(Parser *p);     /* lambda parametresi icin */
 
 #endif /* KEMGU_PARSER_H */

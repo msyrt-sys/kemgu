@@ -524,6 +524,296 @@ static void test_stres_50_islev(void) {
     arena_serbest(a);
 }
 
+/* === Ifade testleri (ADIM 9 — Pratt parser) === */
+
+/* Yardimci: ifadeyi 'sabit _X: tam32 = IFADE;' icine sar, AST'den ifadeyi cek. */
+static Dugum *ifade_parse(const char *ifade_kaynak, Arena *a, int *hata) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "sabit _X: tam32 = %s;", ifade_kaynak);
+    Dugum *prog = parse_kaynak(buf, a, hata);
+    if (!prog || prog->veri.program.sayi == 0) return NULL;
+    Dugum *sabit = prog->veri.program.uyeler[0];
+    if (sabit->tip != DUGUM_SABIT) return NULL;
+    return sabit->veri.sabit.deger;
+}
+
+/* Yardimci: hata yok bekleyen test. */
+static int ifade_dogrula(Dugum *d, int hata, DugumTipi beklenen) {
+    return d != NULL && hata == 0 && d->tip == beklenen;
+}
+
+static void test_ifade_tek_literal(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("42", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TAM) && e->veri.tam.deger == 42;
+    test_sonuc("ifade: 42", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_toplama(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("1 + 2", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_ARTI
+          && e->veri.ikili.sol->veri.tam.deger == 1
+          && e->veri.ikili.sag->veri.tam.deger == 2;
+    test_sonuc("ifade: 1 + 2", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_oncelik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* 1 + 2 * 3 -> IKILI(+, 1, IKILI(*, 2, 3)) */
+    Dugum *e = ifade_parse("1 + 2 * 3", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_ARTI
+          && e->veri.ikili.sol->veri.tam.deger == 1
+          && e->veri.ikili.sag->tip == DUGUM_IKILI
+          && e->veri.ikili.sag->veri.ikili.op == OP_CARPI;
+    test_sonuc("ifade oncelik: 1 + 2 * 3", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_sol_birlesme(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* 10 - 3 - 2 -> IKILI(-, IKILI(-, 10, 3), 2) */
+    Dugum *e = ifade_parse("10 - 3 - 2", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_EKSI
+          && e->veri.ikili.sol->tip == DUGUM_IKILI
+          && e->veri.ikili.sol->veri.ikili.op == OP_EKSI
+          && e->veri.ikili.sol->veri.ikili.sol->veri.tam.deger == 10
+          && e->veri.ikili.sol->veri.ikili.sag->veri.tam.deger == 3
+          && e->veri.ikili.sag->veri.tam.deger == 2;
+    test_sonuc("ifade sol birlesme: 10 - 3 - 2", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_parantez(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* (1 + 2) * 3 -> IKILI(*, IKILI(+, 1, 2), 3) */
+    Dugum *e = ifade_parse("(1 + 2) * 3", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_CARPI
+          && e->veri.ikili.sol->tip == DUGUM_IKILI
+          && e->veri.ikili.sol->veri.ikili.op == OP_ARTI
+          && e->veri.ikili.sag->veri.tam.deger == 3;
+    test_sonuc("ifade parantez: (1 + 2) * 3", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_karsilastirma(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("x < 5", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_KUCUK;
+    test_sonuc("ifade karsilastirma: x < 5", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_mantik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* x ve y veya z -> IKILI(veya, IKILI(ve, x, y), z) — veya < ve */
+    /* "ve" -> "v" "e" — UTF-8 sorunsuz */
+    Dugum *e = ifade_parse("x ve y veya z", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_VEYA
+          && e->veri.ikili.sol->tip == DUGUM_IKILI
+          && e->veri.ikili.sol->veri.ikili.op == OP_VE;
+    test_sonuc("ifade mantik: x ve y veya z", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_esitlik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("x == y", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_ESIT;
+    test_sonuc("ifade esitlik: x == y", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_neg(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("-x", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_NEG
+          && e->veri.tekli.operand->tip == DUGUM_TANIMLAYICI;
+    test_sonuc("ifade onek: -x", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_degil(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil x" Turkce */
+    Dugum *e = ifade_parse("de\xc4\x9fil x", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEGIL;
+    test_sonuc("ifade onek: degil x", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_ref(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("&x", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_REF;
+    test_sonuc("ifade onek: &x", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_ref_degisken(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* &degisken x */
+    Dugum *e = ifade_parse("&de\xc4\x9fi\xc5\x9fken x", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_REF_DEGISKEN;
+    test_sonuc("ifade onek: &degisken x", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_deref(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("*x", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEREFERANS;
+    test_sonuc("ifade onek: *x", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_cagri_bos(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("f()", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_CAGRI)
+          && e->veri.cagri.sayi == 0
+          && e->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI;
+    test_sonuc("ifade cagri: f()", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_cagri_args(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("f(1, 2, 3)", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_CAGRI)
+          && e->veri.cagri.sayi == 3
+          && e->veri.cagri.argumanlar[0]->veri.tam.deger == 1
+          && e->veri.cagri.argumanlar[2]->veri.tam.deger == 3;
+    test_sonuc("ifade cagri: f(1, 2, 3)", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_erisim(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("x.y", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_ERISIM)
+          && strcmp(e->veri.erisim.alan, "y") == 0;
+    test_sonuc("ifade erisim: x.y", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_indeks(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("x[5]", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_INDEKS)
+          && e->veri.indeks.indeks->veri.tam.deger == 5;
+    test_sonuc("ifade indeks: x[5]", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_yol(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("std::yaz", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_YOL)
+          && strcmp(e->veri.yol.sag_ad, "yaz") == 0;
+    test_sonuc("ifade yol: std::yaz", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_sonek_zincir(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* x.y.z -> ERISIM(ERISIM(x, "y"), "z") */
+    Dugum *e = ifade_parse("x.y.z", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_ERISIM)
+          && strcmp(e->veri.erisim.alan, "z") == 0
+          && e->veri.erisim.nesne->tip == DUGUM_ERISIM
+          && strcmp(e->veri.erisim.nesne->veri.erisim.alan, "y") == 0;
+    test_sonuc("ifade sonek zincir: x.y.z", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_yapi_olusturma(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("Nokta { x: 1, y: 2 }", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_YAPI_OLUSTUR)
+          && strcmp(e->veri.yapi_olustur.tip_ad, "Nokta") == 0
+          && e->veri.yapi_olustur.alan_sayi == 2;
+    test_sonuc("ifade yapi olusturma", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_yapi_trailing_comma(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("Nokta { x: 1, y: 2, }", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_YAPI_OLUSTUR)
+          && e->veri.yapi_olustur.alan_sayi == 2;
+    test_sonuc("ifade yapi trailing comma", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_dizi_olusturma(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("[1, 2, 3]", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_DIZI_OLUSTUR)
+          && e->veri.dizi_olustur.sayi == 3;
+    test_sonuc("ifade dizi: [1, 2, 3]", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_dizi_bos(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("[]", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_DIZI_OLUSTUR)
+          && e->veri.dizi_olustur.sayi == 0;
+    test_sonuc("ifade dizi bos: []", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_lambda(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* |a: tam32| a + 1 */
+    Dugum *e = ifade_parse("|a: tam32| a + 1", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_LAMBDA)
+          && e->veri.lambda.param_sayi == 1
+          && e->veri.lambda.govde != NULL
+          && e->veri.lambda.govde->tip == DUGUM_IKILI;
+    test_sonuc("ifade lambda: |a: tam32| a + 1", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -592,6 +882,40 @@ int main(void) {
 
     printf("\n--- Stres ---\n");
     test_stres_50_islev();
+
+    printf("\n--- Ifade: Birincil ---\n");
+    test_ifade_tek_literal();
+
+    printf("\n--- Ifade: Ikili Operatorler ---\n");
+    test_ifade_toplama();
+    test_ifade_oncelik();
+    test_ifade_sol_birlesme();
+    test_ifade_parantez();
+    test_ifade_karsilastirma();
+    test_ifade_mantik();
+    test_ifade_esitlik();
+
+    printf("\n--- Ifade: Onek ---\n");
+    test_ifade_onek_neg();
+    test_ifade_onek_degil();
+    test_ifade_onek_ref();
+    test_ifade_onek_ref_degisken();
+    test_ifade_onek_deref();
+
+    printf("\n--- Ifade: Sonek ---\n");
+    test_ifade_cagri_bos();
+    test_ifade_cagri_args();
+    test_ifade_erisim();
+    test_ifade_indeks();
+    test_ifade_yol();
+    test_ifade_sonek_zincir();
+
+    printf("\n--- Ifade: Yapi/Dizi/Lambda ---\n");
+    test_ifade_yapi_olusturma();
+    test_ifade_yapi_trailing_comma();
+    test_ifade_dizi_olusturma();
+    test_ifade_dizi_bos();
+    test_ifade_lambda();
 
     printf("\n========================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

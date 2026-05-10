@@ -71,13 +71,13 @@ kemgu/
 │   ├── ast.h / ast.c                 — AST düğüm yapıları (TAMAMLANDI ✓)
 │   ├── ast_yazdir.h / ast_yazdir.c   — AST debug çıktısı (TAMAMLANDI ✓)
 │   ├── parser.h / parser.c           — Recursive descent parser (TAMAMLANDI ✓ — çekirdek, kalan deyimler ADIM 10'da)
-│   ├── ifade.c                        — Pratt parser: ifadeler (KISMEN — birincil ifadeler tamam, tam Pratt ADIM 9'da)
+│   ├── ifade.c                        — Pratt parser: ifadeler (TAMAMLANDI ✓ — tam öncelik tablosu + sonek + yapı/dizi/lambda)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
-│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 29/29, ASan temiz; ifade testleri ADIM 9'da eklenecek)
+│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 53/53 (29 çekirdek + 24 ifade), ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek
 │       ├── fibonacci.kem              — (YAPILACAK)
@@ -252,16 +252,21 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
    - Token akışı (1+lazy 2 lookahead), panik modu (sync points: `;`, `}`, üst düzey keywords)
    - Üst düzey: işlev, yapı, kullan, dışa, modül, sabit
    - Temel deyimler: değişken, ver, blok, atama, ifade_deyimi
-   - Birincil ifadeler (literaller + tanımlayıcı + parantez)
    - Çocuk listesi: arena'da linked list → array kopyalama (malloc YOK)
+9. Pratt ifade parser (`ifade.c`) — 53/53 parser test (29 çekirdek + 24 ifade), ASan temiz
+   - Tam öncelik tablosu (8 seviye, sol birleşmeli ikili, sağ birleşmeli önek)
+   - Önek: `-`, `değil`, `&`, `&değişken`, `*`
+   - Sonek (zincirleme): `.alan`, `[indeks]`, `(args)`, `::yol`
+   - Yapı oluşturma: `Tip { alan: değer, ... }` (trailing comma destekli)
+   - Dizi oluşturma: `[e1, e2, ...]` (boş dizi destekli)
+   - Lambda: `|param: tip, ...| ifade` veya `|...| { blok }`
 
-### Yapım Sırası (devam noktası)
-1. `ifade.c` tam Pratt parser (öncelik tablosu, prefix/infix, sonek `.[]()::`) — **sıradaki (ADIM 9)**
-2. `parser.c`'ye kalan deyimler (eğer, iken, için, eşleş, güvensiz) — **ADIM 10**
-3. Karmaşık tipler (`Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `&T`, `*T`, generic) — ADIM 10
-4. Desenler (eşleş kolu için) — ADIM 10
-5. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme) — ADIM 10
-6. `ana.c` güncellemesi (lexer + parser entegrasyonu) — ADIM 10
+### Yapım Sırası (devam noktası — ADIM 10)
+1. `parser.c`'ye kalan deyimler (eğer, iken, için, eşleş, güvensiz) — **sıradaki**
+2. Karmaşık tipler (`Dizi<T>`, `seçimlik<T>`, `sonuç<T,H>`, `&T`, `*T`, generic)
+3. Desenler (eşleş kolu için)
+4. Örnek `.kem` dosyaları (fibonacci, yapilar, eslesme)
+5. `ana.c` güncellemesi (lexer + parser entegrasyonu)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -330,9 +335,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** Parser implementasyonu (3 alt-adımdan 1.'si tamam)
-- **Sıra:** ~~arena.h/c~~ ✓ → ~~ast.h/c~~ ✓ → ~~ast_yazdir.h/c~~ ✓ → ~~parser.h/c çekirdek~~ ✓ → **ifade.c Pratt (sıradaki — ADIM 9)** → kalan deyimler (ADIM 10) → örnek .kem
-- **Sıradaki hedef:** `ifade.c` tam Pratt parser implementasyonu — öncelik tablosu (8 seviye), prefix/infix fonksiyon tabloları, sonek operatörler (`.`, `[]`, `()`, `::`), tüm ikili/tekli operatörler
+- **Faz:** Parser implementasyonu (3 alt-adımdan 2.'si tamam)
+- **Sıra:** ~~arena.h/c~~ ✓ → ~~ast.h/c~~ ✓ → ~~ast_yazdir.h/c~~ ✓ → ~~parser.h/c çekirdek~~ ✓ → ~~ifade.c Pratt~~ ✓ → **kalan deyimler + karmaşık tipler + örnek .kem (ADIM 10 — sıradaki)**
+- **Sıradaki hedef:** `parser.c`'ye kalan deyimler (`eğer`, `iken`, `için`, `eşleş`, `güvensiz`) + `parse_tip` genişletmesi (Dizi, seçimlik, sonuç, &, *, generic) + desenler + örnek `.kem` dosyaları + `ana.c` parser entegrasyonu
 
 ---
 
