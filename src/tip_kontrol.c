@@ -31,6 +31,12 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
     return tip_olustur_basit(tk->arena, TIP_HATA);
 }
 
+/* Forward declaration (ADIM 11.6'da tanimli, kontrol_yapi_olustur_ic
+ * tarafindan kullaniliyor — generic substitusyon icin) */
+static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
+                                 const Sembol *yapi_sem,
+                                 const TipBilgisi *yapi_tipi);
+
 static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
 }
@@ -211,8 +217,10 @@ static TipBilgisi *kontrol_ikili_mantiksal(TipKontrol *tk, const Dugum *d,
     return t_basit(tk, TIP_MANTIKSAL);
 }
 
-/* Yardimci: yapi olusturma alan kontrolu */
-static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
+/* Yardimci: yapi olusturma alan kontrolu (beklenen tip varsa generic
+ * substitusyon yapilir — Kutu<tam32> { eleman: 5 } gibi durumlarda) */
+static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
+                                            const TipBilgisi *beklenen) {
     const char *tip_ad = d->veri.yapi_olustur.tip_ad;
     int tip_ad_uz = d->veri.yapi_olustur.tip_ad_uzunluk;
     const Sembol *yapi_sem = sembol_bul(tk->scope, tip_ad, tip_ad_uz);
@@ -220,6 +228,10 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
         tip_hata(tk, d, "T002", "yapi tipi tanimsiz");
         return t_hata(tk);
     }
+    /* Generic substitusyon kaynagi */
+    int generic_var = (beklenen && beklenen->kategori == TIP_YAPI &&
+                       beklenen->veri.yapi.tip_arg_sayi > 0);
+
     /* Her alan_atama icin ad eşlesimi + tip eşlesimi */
     int hata = 0;
     for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
@@ -232,10 +244,14 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
             hata = 1;
             continue;
         }
+        /* Generic substitusyon (beklenen Kutu<tam32> ise alan T -> tam32) */
+        TipBilgisi *alan_tipi = generic_var
+            ? substitusyon(tk, alan->tip, yapi_sem, beklenen)
+            : alan->tip;
         /* Bidirectional: alan degeri alan tipi context'inde */
         TipBilgisi *deger_tip = tip_belirle_beklenen(tk,
-            aa->veri.alan_atama.deger, alan->tip);
-        if (!tip_esit(alan->tip, deger_tip) &&
+            aa->veri.alan_atama.deger, alan_tipi);
+        if (!tip_esit(alan_tipi, deger_tip) &&
             deger_tip->kategori != TIP_HATA) {
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
             hata = 1;
@@ -262,8 +278,19 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
         }
     }
     (void)hata;  /* hata zaten tk->hata_sayisi'na sayildi */
+    /* Beklenen tipte tip_arg varsa concrete instance'i don */
+    if (generic_var) {
+        return tip_olustur_yapi(tk->arena, yapi_sem->ad, yapi_sem->ad_uzunluk,
+                                beklenen->veri.yapi.tip_arg,
+                                beklenen->veri.yapi.tip_arg_sayi);
+    }
     return tip_olustur_yapi(tk->arena, yapi_sem->ad, yapi_sem->ad_uzunluk,
                             NULL, 0);
+}
+
+/* Geriye uyumlu wrapper (mevcut tip_belirle cagrilari icin) */
+static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
+    return kontrol_yapi_olustur_ic(tk, d, NULL);
 }
 
 /* Ana visitor */
@@ -431,6 +458,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T009", "alan bulunamadi");
                 return t_hata(tk);
             }
+            /* Generic instantiation: yapi.tip_arg varsa alan tipinde
+             * substitusyon (T -> tam32 vs) */
+            if (alan->tip && nesne_tip->veri.yapi.tip_arg_sayi > 0) {
+                return substitusyon(tk, alan->tip, yapi_sem, nesne_tip);
+            }
             return alan->tip ? alan->tip : t_hata(tk);
         }
 
@@ -540,6 +572,81 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 }
 
 /* ========================================================================
+ * ADIM 11.6: Generic instantiation (substitusyon)
+ * ======================================================================== */
+
+/* TIP_GENERIC_PARAM'leri concrete arg'larla recursive olarak substitute et.
+ * yapi_sem: generic params'in tanimlandigi yapi sembolu
+ * yapi_tipi: concrete tip (tip_arg ile) — substitusyon kaynagi */
+static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
+                                 const Sembol *yapi_sem,
+                                 const TipBilgisi *yapi_tipi) {
+    if (!t) return NULL;
+    if (!yapi_sem || !yapi_tipi ||
+        yapi_tipi->kategori != TIP_YAPI ||
+        yapi_tipi->veri.yapi.tip_arg_sayi == 0) {
+        return (TipBilgisi *)t;
+    }
+
+    if (t->kategori == TIP_GENERIC_PARAM) {
+        /* Yapi_scope'taki generic params -> tip_arg sirasi ile esle */
+        int idx = 0;
+        for (SembolLink *l = yapi_sem->yapi_scope->bas; l; l = l->sonraki) {
+            if (l->sembol.kategori != SEMBOL_GENERIC_PARAM) continue;
+            if (l->sembol.ad_uzunluk == t->veri.generic_param.ad_uzunluk &&
+                memcmp(l->sembol.ad, t->veri.generic_param.ad,
+                       (size_t)t->veri.generic_param.ad_uzunluk) == 0) {
+                if (idx < yapi_tipi->veri.yapi.tip_arg_sayi) {
+                    return yapi_tipi->veri.yapi.tip_arg[idx];
+                }
+            }
+            idx++;
+        }
+        return (TipBilgisi *)t;
+    }
+
+    /* Recursive substitusyon (referans, pointer, dizi, secimlik, sonuc) */
+    switch (t->kategori) {
+        case TIP_REFERANS: {
+            TipBilgisi *nh = substitusyon(tk, t->veri.referans.hedef,
+                                           yapi_sem, yapi_tipi);
+            if (nh == t->veri.referans.hedef) return (TipBilgisi *)t;
+            return tip_olustur_referans(tk->arena, nh,
+                                         t->veri.referans.degisken_mi);
+        }
+        case TIP_POINTER: {
+            TipBilgisi *nh = substitusyon(tk, t->veri.pointer.hedef,
+                                           yapi_sem, yapi_tipi);
+            if (nh == t->veri.pointer.hedef) return (TipBilgisi *)t;
+            return tip_olustur_pointer(tk->arena, nh);
+        }
+        case TIP_DIZI: {
+            TipBilgisi *ne = substitusyon(tk, t->veri.dizi.eleman,
+                                           yapi_sem, yapi_tipi);
+            if (ne == t->veri.dizi.eleman) return (TipBilgisi *)t;
+            return tip_olustur_dizi(tk->arena, ne);
+        }
+        case TIP_SECIMLIK: {
+            TipBilgisi *ni = substitusyon(tk, t->veri.secimlik.ic,
+                                           yapi_sem, yapi_tipi);
+            if (ni == t->veri.secimlik.ic) return (TipBilgisi *)t;
+            return tip_olustur_secimlik(tk->arena, ni);
+        }
+        case TIP_SONUC: {
+            TipBilgisi *nd = substitusyon(tk, t->veri.sonuc.deger,
+                                           yapi_sem, yapi_tipi);
+            TipBilgisi *nh = substitusyon(tk, t->veri.sonuc.hata,
+                                           yapi_sem, yapi_tipi);
+            if (nd == t->veri.sonuc.deger && nh == t->veri.sonuc.hata)
+                return (TipBilgisi *)t;
+            return tip_olustur_sonuc(tk->arena, nd, nh);
+        }
+        default:
+            return (TipBilgisi *)t;
+    }
+}
+
+/* ========================================================================
  * ADIM 11.5: Bidirectional tip cikarsamasi
  * ======================================================================== */
 
@@ -562,6 +669,12 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             if (beklenen->kategori == TIP_KESIRLI32 ||
                 beklenen->kategori == TIP_KESIRLI64) {
                 return t_basit(tk, beklenen->kategori);
+            }
+            break;
+
+        case DUGUM_YAPI_OLUSTUR:
+            if (beklenen->kategori == TIP_YAPI) {
+                return kontrol_yapi_olustur_ic(tk, d, beklenen);
             }
             break;
 

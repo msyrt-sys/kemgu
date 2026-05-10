@@ -1027,6 +1027,71 @@ static void test_bd_zincir(void) {
     arena_serbest(a);
 }
 
+/* === Generic instantiation testleri (ADIM 11.6) === */
+
+static void test_gn_kutu_basit(void) {
+    Arena *a = arena_olustur(0);
+    /* yapi Kutu<T> { eleman: T; }
+     * islev f() -> Kutu<tam32> { ver Kutu { eleman: 5 }; } */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Kutu<T> { eleman: T; } "
+        "i\xc5\x9flev f() -> Kutu<tam32> { ver Kutu { eleman: 5 }; }", a);
+    test_sonuc("gn: Kutu<tam32> + ver Kutu { eleman: 5 } -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_gn_kutu_alan_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* Kutu<tam32> { eleman: "x" } — eleman tam32 beklenir, metin verildi */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Kutu<T> { eleman: T; } "
+        "i\xc5\x9flev f() -> Kutu<tam32> { ver Kutu { eleman: \"x\" }; }", a);
+    test_sonuc("gn: Kutu<tam32> alan metin -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_gn_kutu_erisim(void) {
+    Arena *a = arena_olustur(0);
+    /* k.eleman -> tam32 (substitusyon) */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Kutu<T> { eleman: T; } "
+        "i\xc5\x9flev al(k: Kutu<tam32>) -> tam32 { ver k.eleman; }", a);
+    test_sonuc("gn: k.eleman (Kutu<tam32>) -> tam32", h == 0);
+    arena_serbest(a);
+}
+
+static void test_gn_iki_param(void) {
+    Arena *a = arena_olustur(0);
+    /* yapi Cift<A,B> { ilk: A; ikinci: B; } */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Cift<A, B> { ilk: A; ikinci: B; } "
+        "i\xc5\x9flev f() -> Cift<tam32, metin> "
+        "{ ver Cift { ilk: 1, ikinci: \"x\" }; }", a);
+    test_sonuc("gn: Cift<tam32, metin> ilk + ikinci -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_gn_iki_param_erisim(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 Cift<A, B> { ilk: A; ikinci: B; } "
+        "i\xc5\x9flev getMetin(c: Cift<tam32, metin>) -> metin "
+        "{ ver c.ikinci; }", a);
+    test_sonuc("gn: c.ikinci (Cift<tam32, metin>) -> metin", h == 0);
+    arena_serbest(a);
+}
+
+static void test_gn_ic_ice(void) {
+    Arena *a = arena_olustur(0);
+    /* Kutu<Kutu<tam32>> ic ice generic */
+    int h = program_kontrol(
+        "yap\xc4\xb1 Kutu<T> { eleman: T; } "
+        "i\xc5\x9flev al(k: Kutu<Kutu<tam32>>) -> Kutu<tam32> "
+        "{ ver k.eleman; }", a);
+    test_sonuc("gn: ic ice Kutu<Kutu<tam32>> -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1157,6 +1222,14 @@ int main(void) {
     test_bd_ver();
     test_bd_yapi_olustur();
     test_bd_zincir();
+
+    printf("\n--- Generic Instantiation (11.6) ---\n");
+    test_gn_kutu_basit();
+    test_gn_kutu_alan_uyumsuz();
+    test_gn_kutu_erisim();
+    test_gn_iki_param();
+    test_gn_iki_param_erisim();
+    test_gn_ic_ice();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
