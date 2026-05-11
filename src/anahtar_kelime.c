@@ -43,6 +43,7 @@ static const AnahtarKelime tablo[] = {
     {"se\xc3\xa7imlik",                  9, TOK_SECIMLIK  },  /* seçimlik    */
     {"sonu\xc3\xa7",                     6, TOK_SONUC     },  /* sonuç       */
     {"tamam",                             5, TOK_TAMAM     },  /* tamam       */
+    {"tip",                               3, TOK_TIP       },  /* tip (alias) */
     {"uygula",                            6, TOK_UYGULA    },  /* uygula      */
     {"ve",                                2, TOK_VE        },  /* ve          */
     {"ver",                               3, TOK_VER       },  /* ver         */

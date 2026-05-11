@@ -35,6 +35,7 @@ typedef enum {
     SEMBOL_OZELLIK,       /* ozellik (trait) tanimi */
     SEMBOL_MODUL,         /* modul (kendi scope'una sahip) */
     SEMBOL_GENERIC_PARAM, /* generic tip parametresi */
+    SEMBOL_TIP_ALIAS,     /* tip alias (B.4): tip Yas = tam32; */
 } SembolKategorisi;
 
 /* === Sembol === */

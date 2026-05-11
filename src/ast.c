@@ -154,6 +154,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_SABIT:             return "SABIT";
         case DUGUM_PARAMETRE:         return "PARAMETRE";
         case DUGUM_ALAN:              return "ALAN";
+        case DUGUM_TIP_ALIAS:         return "TIP_ALIAS";
         case DUGUM_DEGISKEN:          return "DEGISKEN";
         case DUGUM_ATAMA:             return "ATAMA";
         case DUGUM_VER:               return "VER";

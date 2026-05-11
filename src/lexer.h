@@ -33,6 +33,7 @@ typedef enum {
     TOK_DEGER,          /* değer       */
     TOK_HIC,            /* hiç         */
     TOK_GUVENSIZ,       /* güvensiz    */
+    TOK_TIP,            /* tip — type alias (B.4) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */
