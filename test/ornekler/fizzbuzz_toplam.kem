@@ -1,0 +1,31 @@
+// LLVM kombine testi: FizzBuzz benzeri
+// 1..15 toplamina FizzBuzz kurali uygulanir, sonuc 49.
+//
+// 1+2+(-1)+4+(-2)+(-1)+7+8+(-1)+(-2)+11+(-1)+13+14+(-3) = 49
+
+işlev bolunur(a: tam32, b: tam32) -> mantıksal {
+    ver a % b == 0;
+}
+
+işlev fb_deger(n: tam32) -> tam32 {
+    eğer bolunur(n, 15) {
+        ver -3;
+    }
+    eğer bolunur(n, 3) {
+        ver -1;
+    }
+    eğer bolunur(n, 5) {
+        ver -2;
+    }
+    ver n;
+}
+
+işlev main() -> tam32 {
+    değişken i: tam32 = 1;
+    değişken toplam: tam32 = 0;
+    iken i <= 15 {
+        toplam = toplam + fb_deger(i);
+        i = i + 1;
+    }
+    ver toplam;
+}

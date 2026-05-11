@@ -375,19 +375,55 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - **Pipeline:** KEMGU kaynak → lexer → parser → AST → tip kontrol → LLVM IR → `clang -x ir -` → native `.exe` → çalıştırma
     - `ana.c` `--llvm` modu eklendi (4. CLI mod: token/parse/check/llvm)
 
-### 🎉🎉 ADIM 12 + 13 TAMAMLANDI — KEMGU END-TO-END DERLEYİCİ ÇALIŞIYOR
+23. **LLVM Backend Genişletme (ADIM A) — Gerçek programlar derlenebiliyor**
+    - **Codegen context:** sembol/yapı/string/işlev tabloları, blok terminator izleme
+    - **Tip eşleme:** tam8-64 → i8-i64, mantıksal → i1, karakter → i32, metin → ptr,
+      kesirli32/64 → float/double, & T / * T → ptr, kullanıcı yapı → %struct.Ad
+    - **A.1 Parametreli işlevler:** signature uretimi (i32 %p0, %p1, ...),
+      entry blok'ta alloca + store ile lokal sembol haritası
+    - **A.2 Yerel değişkenler + atama:** alloca/store/load; tip annot ya da
+      i32 default; tip uyumsuzluğunda sext/trunc
+    - **A.3 Kontrol akışı:** eğer/değilse (if.then/else/end basic block),
+      iken (while.head/body/end); block_terminated izleme, default ret 0
+    - **A.4 Çağrı + recursive:** islev_kaydet ile forward decl, call <ret> @<ad>;
+      void işlev için ret void
+    - **A.5 Karşılaştırma + mantıksal:** icmp eq/ne/slt/sgt/sle/sge → i1;
+      and/or i1; xor i1, 1 (değil); fcmp oeq/ole/... (float)
+    - **A.6 Yapı:** %struct.Ad = type { ... } üst seviyede emit; YAPI_OLUSTUR
+      alloca + getelementptr + store, sonra load value; ERISIM nesne.alan
+      tanımlayıcı yolundan; ATAMA yapı alanına store
+    - **A.7 Dizi:** DIZI_OLUSTUR alloca [N x T], her elemana store; INDEKS
+      gep + load; ATAMA dizi[i]'ye store
+    - **A.8 Karakter + string:** karakter → i32 code point; metin literali
+      global @.str.N = constant [N x i8] c"...\00"; string sırası işlev
+      çıktısından önce yazılır (tmpfile ile)
+    - **7 LLVM entegrasyon testi** (test/test_llvm.sh): toplama, mutlak,
+      döngü_toplam, fib_recursive, nokta_yapi, dizi_toplam, fizzbuzz_toplam
+      — hepsi geçti
+
+### 🎉🎉🎉 ADIM A TAMAMLANDI — KEMGU'da FizzBuzz, recursive fibonacci, yapı/dizi yazılabiliyor
 
 ```bash
-echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
-./build/kemgu --llvm x.kem | clang -x ir - -o x.exe
-./x.exe; echo $?    # → 42 ✓
+# Recursive fibonacci
+cat > fib.kem << 'EOF'
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 { ver n; }
+    ver fib(n - 1) + fib(n - 2);
+}
+işlev main() -> tam32 { ver fib(10); }
+EOF
+./build/kemgu --llvm fib.kem | clang -x ir - -o fib.exe
+./fib.exe; echo $?    # → 55 ✓
 ```
 
 ### Sıradaki büyük seçenekler:
-- **Tam Katman 1 escape analizi** (DFA tabanlı)
-- **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
-- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
+- **B: stdlib + printf bağlama** (gerçek I/O — şu an cikis kodu ile test)
+- **C: `eşleş` (match)** LLVM kod üretimi (switch/br zinciri)
+- **D: `için` (for-each)** Dizi<T> üzerinde döngü
+- **E: Tam Katman 1 escape analizi** (DFA tabanlı bölge çözümleyici)
+- **F: Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
+- **G: `hiç`/`değer` ifade desteği + pattern binding**
+- **H: Generic monomorphization** LLVM tarafı (Kutu<tam32> → ayrı struct)
 - **Bootstrapping** (uzun vade)
 
 ### İlerideki Fazlar
@@ -457,17 +493,21 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ!)
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR → native exe
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → **(genişletme: tam escape, Katman 2, LLVM cağrı/yapı/kontrol akışı)**
+- **Faz:** **🎉🎉🎉 ADIM A TAMAMLANDI — KEMGU GERÇEK PROGRAMLAR DERLEYEBİLİYOR**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR (genişletilmiş) → native exe
+  - LLVM A.1-A.8: parametreler, lokal değişken, kontrol akışı, çağrı, karşılaştırma,
+    mantıksal, yapı, dizi, karakter/string
+- **7 LLVM entegrasyon testi** (`test/test_llvm.sh` + `mingw32-make calistir_llvm_test`):
+  toplama, mutlak, döngü_toplam, fib_recursive, nokta_yapi, dizi_toplam, fizzbuzz_toplam
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
   - Eşitlik: Nominal (Rust/Java gibi)
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
-  - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** End-to-end pipeline çalışıyor. Genişletme noktaları: tam escape analizi (DFA), Bölge Katman 2 (concurrency), LLVM IR'da çağrı/parametre/kontrol akışı/yapı desteği, `hiç`/`değer` ifade desteği. Kullanıcı önceliklerini belirler.
+- **Sıradaki büyük seçenekler:** B (stdlib + printf), C (`eşleş` IR), D (`için` IR),
+  E (tam escape DFA), F (Katman 2 concurrency), G (`hiç`/`değer` + pattern binding),
+  H (generic monomorphization). Kullanıcı önceliklerini belirler.
 
 ---
 
