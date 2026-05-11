@@ -113,6 +113,29 @@ void uygula_tablosu_ekle(UygulaTablosu *t, Arena *a,
     t->sayi++;
 }
 
+const Dugum *uygula_tablosu_method_bul(const UygulaTablosu *t,
+                                        const char *tip_adi, int tip_uz,
+                                        const char *metot_adi, int metot_uz) {
+    if (!t || !tip_adi || !metot_adi || tip_uz <= 0 || metot_uz <= 0) {
+        return NULL;
+    }
+    for (const UygulaKaydi *k = t->bas; k; k = k->sonraki) {
+        if (k->tip_ad_uz != tip_uz) continue;
+        if (memcmp(k->tip_adi, tip_adi, (size_t)tip_uz) != 0) continue;
+        const Dugum *u = k->ast_dugumu;
+        if (!u || u->tip != DUGUM_UYGULA) continue;
+        for (int i = 0; i < u->veri.uygula.islev_sayi; i++) {
+            const Dugum *m = u->veri.uygula.islevler[i];
+            if (!m || m->tip != DUGUM_ISLEV) continue;
+            if (m->veri.islev.ad_uzunluk != metot_uz) continue;
+            if (memcmp(m->veri.islev.ad, metot_adi, (size_t)metot_uz) == 0) {
+                return m;
+            }
+        }
+    }
+    return NULL;
+}
+
 int uygula_tablosu_implementations_eder(const UygulaTablosu *t,
                                          const char *tip_adi, int tip_uz,
                                          const char *ozellik_adi, int ozellik_uz) {

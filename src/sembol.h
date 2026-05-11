@@ -132,6 +132,13 @@ int uygula_tablosu_implementations_eder(const UygulaTablosu *t,
                                          const char *tip_adi, int tip_uz,
                                          const char *ozellik_adi, int ozellik_uz);
 
+/* Method arama: tip 'tip_adi' icin 'metot_adi' adli islev bulundugunda
+ * AST islev dugumunu doner (DUGUM_ISLEV). Inherent VE trait impl'lere bakar.
+ * Bulunamazsa NULL. */
+const Dugum *uygula_tablosu_method_bul(const UygulaTablosu *t,
+                                        const char *tip_adi, int tip_uz,
+                                        const char *metot_adi, int metot_uz);
+
 /* === Yardimci === */
 
 const char *sembol_kategorisi_adi(SembolKategorisi k);

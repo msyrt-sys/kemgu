@@ -1172,6 +1172,76 @@ static void test_cs_bound_bilinmeyen(void) {
     arena_serbest(a);
 }
 
+/* CS-8: uygula gövdesinde tip hatasi yakalanir */
+static void test_cs_uygula_govde_hata(void) {
+    Arena *a = arena_olustur(0);
+    /* uygula icinde tam32 dondurmesi gerek ama metin veriyor */
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev m() -> tam32 { ver \"hata\"; } }",
+        a);
+    test_sonuc("cs: uygula govde tip hatasi -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-9: uygula gövdesi temiz kod -> hata yok */
+static void test_cs_uygula_govde_temiz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev m() -> tam32 { ver 42; } }",
+        a);
+    test_sonuc("cs: uygula govde temiz -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-10: method dispatch (x.method()) calisir */
+static void test_cs_method_dispatch(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { i\xc5\x9flev say() -> tam32 { ver 42; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.say(); }",
+        a);
+    test_sonuc("cs: method dispatch (k.say()) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-11: method arg sayisi uyumsuzlugu */
+static void test_cs_method_arg_sayi(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { i\xc5\x9flev al(x: tam32) -> tam32 { ver x; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.al(); }",
+        a);
+    /* arg yok, 1 bekleniyor */
+    test_sonuc("cs: method arg sayisi yanlis -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-12: Trait method (impl Trait icin K) bulunur */
+static void test_cs_trait_method(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say { i\xc5\x9flev cevir() -> tam32; } "
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula Say i\xc3\xa7in K { "
+        "i\xc5\x9flev cevir() -> tam32 { ver 42; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.cevir(); }",
+        a);
+    test_sonuc("cs: trait method (k.cevir()) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* CS-7: Inherent impl kayit edilir, sorgu basarili */
 static void test_cs_inherent_kayit(void) {
     Arena *a = arena_olustur(0);
@@ -1331,6 +1401,13 @@ int main(void) {
     test_cs_coklu_bound_eksik();
     test_cs_bound_bilinmeyen();
     test_cs_inherent_kayit();
+
+    printf("\n--- Constraint v2 (19) ---\n");
+    test_cs_uygula_govde_hata();
+    test_cs_uygula_govde_temiz();
+    test_cs_method_dispatch();
+    test_cs_method_arg_sayi();
+    test_cs_trait_method();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
