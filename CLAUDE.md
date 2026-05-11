@@ -481,6 +481,65 @@ yapı Kutu<T: Yazdırılabilir + Klonlanabilir> { deger: T; }
     - **12 LLVM entegrasyon testi** (7 mevcut + 5 yeni: hello, say, stdlib_karisim,
       fib_yazdir, dizi_yazdir) — exit code + **stdout golden file** karşılaştırması.
 
+26. **Eşleş / İçin LLVM IR + Bölge DFA (ADIM C + F + E)**
+    - **C — `eşleş` LLVM IR:** if-else zinciri olarak çevrilir. Desen tipleri:
+      LITERAL (`0 =>`, `1 =>`) → `icmp eq` + koşullu dal; TANIMLAYICI
+      (binding `x =>`) → her zaman match, eşleş değerini değişkene
+      alloca+store; JOKER (`_ =>`) → her zaman match. Yapıcı desenleri
+      (`değer(s)`/`hiç`/`tamam`/`hata`) seçimlik storage layout
+      olmadığı için henüz LLVM'de desteksiz (tip kontrol yine doğru ele
+      alır). Yeni basic block etiketleri: `match.arm.N`, `match.next.N`,
+      `match.end.N`.
+    - **F — `için` LLVM IR:** Dizi<T> üzerinde index'li döngü. Sabit
+      boyutlu `[N x T]` storage'a sahip semboller için: alloca i32 indeks,
+      `for.head.N` (cmp i < N), `for.body.N` (gep+load → x sembolü), `i+1`,
+      `for.end.N`. Çoklu/dinamik kapsayıcılar (Dizi ileride heap alloc) için
+      genişletilir.
+    - **E — Bölge DFA genişletme:**
+      • **Sembol-bölge haritası** (BolgeAtama'da fixed-size dizi 256).
+        Değişken tanımı sırasında storage bölgesi kaydedilir; tanımlayıcı
+        erişiminde haritadan getirilir.
+      • **`bolge_atama_kaynak_ayarla`:** dosya/kaynak referans → ihlaller
+        `hata_raporla` ile konum + kod ile bildirilir.
+      • **B001 ihlal tespiti:** `ver &yerel` — yerel/iterasyon adresinin
+        ver ile sızdırılması yasak (use-after-free benzeri). Operand
+        DUGUM_TEKLI OP_REF/OP_REF_DEGISKEN ise hedef sembolün bölgesi
+        kontrol edilir; YEREL/ITERASYON ise hata.
+      • **Kopya semantik:** scalar değer ataması (`ver x`) ihlal değil —
+        sadece referans sızdırması B001.
+      • **`ana.c mode_check`:** tip kontrol temizse her üst düzey işlev
+        gövdesi için `bolge_belirle` çağrılır. Çıktı: "tip + bölge
+        kontrolu basarili" / hata sayısı.
+    - **17 bolge_atama testi** (önceki 10 + 7 yeni): sembol takibi, VER
+      ihlal (B001), atama dataflow, lookup.
+    - **16 LLVM entegrasyon testi** (+2 yeni: esles_basit, icin_dongu).
+    - **20/20 örnek `.kem`** dosyası `--check`'ten geçer (tip + bölge).
+
+### 🎉🎉🎉🎉🎉🎉 ADIM C + F + E TAMAMLANDI — kontrol akışı + escape analizi
+
+```kemgu
+// C — eşleş
+işlev kategori(n: tam32) -> tam32 {
+    eşleş n {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        x => { ver x * 10; }   // x: tam32 olarak scope'a bağlı
+    }
+    ver -1;
+}
+
+// F — için
+için x: xs {
+    toplam = toplam + x;
+}
+
+// E — B001 ihlal tespit edilir
+işlev kotu() -> &tam32 {
+    değişken x: tam32 = 42;
+    ver &x;                     // B001: yerel adres sızdırma!
+}
+```
+
 ### 🎉🎉🎉🎉 ADIM D TAMAMLANDI — KEMGU artık konsola yazdırabiliyor
 
 ```bash
@@ -497,15 +556,12 @@ clang hello.ll runtime/kdl_runtime.c -o hello.exe
 ```
 
 ### Sıradaki büyük seçenekler:
-- **C: `eşleş` (match)** LLVM kod üretimi (switch/br zinciri)
-- **F: `için` (for-each)** Dizi<T> üzerinde döngü
-- **E: Tam Katman 1 escape analizi** (DFA tabanlı bölge çözümleyici)
 - **B2: Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **G: `hiç`/`değer` ifade desteği + pattern binding**
 - **H: Generic monomorphization** LLVM tarafı (Kutu<tam32> → ayrı struct)
 - **I: Dinamik Dizi** (heap alloc — malloc/realloc bağlama; ekle/çıkar/dilim)
 - **J: metin_birleştir/böl/format** (heap alloc gereksinimi)
-- **K: `sonuç<T,H>` IR kod üretimi** (tagged union)
+- **K: `sonuç<T,H>` IR kod üretimi** (tagged union — eşleş yapıcı deseni de tamam olur)
+- **L: Özellik (trait) sistemi tam** (uygula tanımları, constraint validation)
 - **Bootstrapping** (uzun vade)
 
 ### İlerideki Fazlar
@@ -575,12 +631,15 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉🎉🎉🎉 ADIM A + D + B TAMAMLANDI — Tüm örnek dosyalar geçiyor**
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR + stdlib → native exe
+- **Faz:** **🎉🎉🎉🎉🎉🎉 ADIM A + D + B + C + F + E TAMAMLANDI**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (DFA) → LLVM IR + stdlib → native exe
   - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
   - Stdlib D.1-D.5: IO, metin, sayısal, dizi uzunluk, StandartHata prelude
   - Tip B.1-B.4: hiç/değer context-aware, pattern binding, constraint syntax, tip alias
-- **14 LLVM entegrasyon testi** + 16/16 örnek `.kem` `--check`'ten geçer
+  - C: `eşleş` LLVM IR (literal/binding/joker desenleri)
+  - F: `için` LLVM IR (Dizi<T> sabit-boyut)
+  - E: Bölge DFA — sembol haritası, B001 yerel-referans-sızdırma tespiti, `mode_check`
+- **16 LLVM entegrasyon testi** + 20/20 örnek `.kem` `--check`'ten geçer
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

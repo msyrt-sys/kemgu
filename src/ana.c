@@ -6,6 +6,7 @@
 #include "tip.h"
 #include "sembol.h"
 #include "tip_kontrol.h"
+#include "bolge_atama.h"
 #include "llvm.h"
 
 #include <stdio.h>
@@ -116,6 +117,7 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
 
     int parser_hata = p.hata_sayisi;
     int tk_hata = 0;
+    int bolge_hata = 0;
 
     if (parser_hata == 0 && prog) {
         Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
@@ -123,15 +125,34 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
         tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
         tip_kontrol_program(&tk, prog);
         tk_hata = tk.hata_sayisi;
+
+        /* E: Bolge atama — her ust duzey islev icin escape analizi.
+         * Tip kontrol temizse bolge atamayi calistir. */
+        if (tk_hata == 0) {
+            for (int i = 0; i < prog->veri.program.sayi; i++) {
+                Dugum *uye = prog->veri.program.uyeler[i];
+                Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
+                                ? uye->veri.disa.tanim : uye;
+                if (gercek->tip == DUGUM_ISLEV && gercek->veri.islev.govde) {
+                    BolgeAtama ba;
+                    bolge_atama_baslat(&ba, a,
+                        gercek->veri.islev.ad,
+                        gercek->veri.islev.ad_uzunluk);
+                    bolge_atama_kaynak_ayarla(&ba, dosya_adi, kaynak);
+                    bolge_belirle(&ba, gercek->veri.islev.govde);
+                    bolge_hata += ba.hata_sayisi;
+                }
+            }
+        }
     }
 
-    int toplam = parser_hata + tk_hata;
+    int toplam = parser_hata + tk_hata + bolge_hata;
     if (toplam == 0) {
-        fprintf(stdout, "OK: %s — tip kontrolu basarili.\n", dosya_adi);
+        fprintf(stdout, "OK: %s — tip + bolge kontrolu basarili.\n", dosya_adi);
     } else {
         fprintf(stdout,
-                "HATA: %s — parser %d, tip kontrol %d (toplam %d hata).\n",
-                dosya_adi, parser_hata, tk_hata, toplam);
+                "HATA: %s — parser %d, tip %d, bolge %d (toplam %d hata).\n",
+                dosya_adi, parser_hata, tk_hata, bolge_hata, toplam);
     }
 
     arena_serbest(a);
