@@ -19,24 +19,46 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
 
-    /* Built-in islevler:
-     *   yazdir(metin) -> tam32  (LLVM tarafinda libc puts'a map) */
+    /* Built-in islevler — LLVM'de libc karsiliklarina map edilir */
+    #define EKLE_BUILTIN(_ad, _ad_uz, _params, _n_params, _donus) do { \
+        Sembol _s; memset(&_s, 0, sizeof(_s)); \
+        _s.ad = (_ad); _s.ad_uzunluk = (_ad_uz); \
+        _s.kategori = SEMBOL_ISLEV; \
+        _s.tip = tip_olustur_islev(a, (_params), (_n_params), (_donus)); \
+        sembol_ekle(global, a, &_s); \
+    } while (0)
+
+    /* yazdir(metin) -> tam32  (libc puts) */
     {
-        TipBilgisi **params = (TipBilgisi **)arena_ayir(a,
-            sizeof(TipBilgisi *));
-        if (params) {
-            params[0] = tip_olustur_basit(a, TIP_METIN);
-            TipBilgisi *donus = tip_olustur_basit(a, TIP_TAM32);
-            TipBilgisi *tip = tip_olustur_islev(a, params, 1, donus);
-            Sembol s;
-            memset(&s, 0, sizeof(s));
-            s.ad = "yazdir";
-            s.ad_uzunluk = 6;
-            s.kategori = SEMBOL_ISLEV;
-            s.tip = tip;
-            sembol_ekle(global, a, &s);
-        }
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("yazdir", 6, p, 1, tip_olustur_basit(a, TIP_TAM32));
     }
+
+    /* bellek_al(tam64) -> metin  (libc malloc — metin = ptr) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("bellek_al", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* bellek_serbest(metin) -> bos  (libc free) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("bellek_serbest", 14, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* bellek_kopyala(metin, metin, tam64) -> metin  (libc memcpy) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        p[2] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("bellek_kopyala", 14, p, 3, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
 }

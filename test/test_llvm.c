@@ -372,6 +372,15 @@ static void test_generic_coklu_instan(void) {
     test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
 }
 
+static void test_bellek_al_serbest(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken p: metin = bellek_al(100); "
+        "bellek_serbest(p); "
+        "ver 42; }");
+    test_sonuc("bellek_al(100) + bellek_serbest -> exit 42", rc == 42);
+}
+
 static void test_yazdir_hello(void) {
     /* yazdir("...") -> puts. Exit kodu yalniz "puts" donus degeri (genelde > 0) */
     int rc = derle_ve_calistir(
@@ -495,6 +504,9 @@ int main(void) {
 
     printf("\n--- ADIM 27: Syscall (yazdir) ---\n");
     test_yazdir_hello();
+
+    printf("\n--- ADIM 28: Allocator (bellek_al/serbest) ---\n");
+    test_bellek_al_serbest();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
