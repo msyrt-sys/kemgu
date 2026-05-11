@@ -515,6 +515,71 @@ yapı Kutu<T: Yazdırılabilir + Klonlanabilir> { deger: T; }
     - **16 LLVM entegrasyon testi** (+2 yeni: esles_basit, icin_dongu).
     - **20/20 örnek `.kem`** dosyası `--check`'ten geçer (tip + bölge).
 
+27. **K + I + J + H + L + B2 (Tüm büyük seçenekler — minimum sürüm)**
+    - **K: `seçimlik<T>` / `sonuç<T,H>` LLVM tagged union**
+      • `%opt.<T_ascii> = type { i8, T }` (tag 0=hiç, 1=değer)
+      • `%res.<T>.<H> = type { i8, T, H }` (tag 0=hata, 1=tamam)
+      • `Codegen.beklenen_tip` context-driven: DEGISKEN, VER, ATAMA (TANIMLAYICI+ERISIM), YAPI_OLUSTUR alanı, çağrı argümanı kavşaklarında set edilir
+      • `hiç`/`değer(x)`/`tamam(x)`/`hata(e)` ifadeleri context'ten T çıkarsar
+      • Eşleş yapıcı deseni (`değer(s) => ...`): tag karşılaştır + payload extract + binding
+      • Parser: pattern içinde `tamam`/`hata` token desteği eklendi
+    - **I: Dinamik Dizi (heap alloc)**
+      • Runtime: `KdlDizi { veri, boyut, kapasite, eleman_byte }`
+      • Built-in: `dizi_olustur(eleman_byte)`, `dizi_ekle_tam`, `dizi_al_tam`, `dizi_boyut`, `dizi_serbest`
+      • realloc ile geometrik büyüme (kapasite *2)
+    - **J: Metin işlemleri (heap alloc)**
+      • `metin_kopya`, `metin_birleştir(a,b)`, `metin_to_tam`, `tam_to_metin`, `metin_eşit`
+      • Runtime malloc — şu an leak OK (arena/GC sonra)
+    - **H: Generic monomorphization (boxing fallback)**
+      • `yapi_kaydet` jenerik param adı eşleşen alan tipini `ptr` yapar (boxing)
+      • Tam monomorphization (her `Kutu<X>` ayrı struct) gelecek aşamada
+    - **L: Özellik (trait) + uygula syntax**
+      • `parse_ozellik_tanimi`: `özellik X { işlev y(...) -> T; }` — gövdesiz işlev imzaları desteklenir
+      • `parse_uygula_tanimi`: `uygula Trait için Tip { ... }` veya `uygula Tip { ... }`
+      • `parse_islev_tanimi` gövdesiz imza için `;` ile bitirme desteği
+      • Tip kontrol: SEMBOL_OZELLIK olarak kayıt; uygula içindeki işlevler analiz
+      • Constraint validation (her T:Bound için Bound tanımlı mı) gelecek aşamada
+    - **B2: Concurrency minimal (sequential stub API)**
+      • Runtime: `KdlGorev`, `KdlKanal` (FIFO circular buffer)
+      • Built-in: `gorev_basla_i32`, `gorev_birleştir`, `kanal_olustur`,
+        `kanal_gonder`, `kanal_al`, `kanal_boş_mu`, `kanal_serbest`
+      • API hazır + bölge sistemi R-SAHIP/R-KANAL aksiyomları destekler;
+        gerçek thread spawn (Windows CreateThread / pthread) ileri sürümde
+    - **5 yeni LLVM entegrasyon testi** (16 → 20): secimlik, heap_dizi_metin,
+      ozellik_uygula, kanal_basit (+ esles/icin önceden)
+
+### 🎉🎉🎉🎉🎉🎉🎉🎉 TÜM BÜYÜK SEÇENEKLER TAMAMLANDI (Bootstrapping uzun vadeli)
+
+```kemgu
+// K — seçimlik/sonuç + eşleş
+işlev guvenli_bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifira bolme"); }
+    ver tamam(a / b);
+}
+eşleş r {
+    tamam(v) => { yaz("ok: "); yazdır_tam(v); }
+    hata(m) => { yaz("hata: "); yazdır(m); }
+}
+
+// I — Dinamik Dizi
+değişken d: metin = dizi_olustur(4);
+dizi_ekle_tam(d, 42);
+
+// J — Metin
+değişken s: metin = metin_birleştir("merhaba ", "dünya");
+
+// L — özellik/uygula
+özellik Yazdırılabilir { işlev yazdir_kendini() -> tam32; }
+uygula Yazdırılabilir için Nokta {
+    işlev yazdir_kendini() -> tam32 { ver 42; }
+}
+
+// B2 — Kanal
+değişken k: metin = kanal_olustur(8);
+kanal_gonder(k, 10);
+yazdır_tam(kanal_al(k));
+```
+
 ### 🎉🎉🎉🎉🎉🎉 ADIM C + F + E TAMAMLANDI — kontrol akışı + escape analizi
 
 ```kemgu
@@ -555,14 +620,18 @@ clang hello.ll runtime/kdl_runtime.c -o hello.exe
 ./hello.exe        # → Merhaba, KEMGU!
 ```
 
-### Sıradaki büyük seçenekler:
-- **B2: Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **H: Generic monomorphization** LLVM tarafı (Kutu<tam32> → ayrı struct)
-- **I: Dinamik Dizi** (heap alloc — malloc/realloc bağlama; ekle/çıkar/dilim)
-- **J: metin_birleştir/böl/format** (heap alloc gereksinimi)
-- **K: `sonuç<T,H>` IR kod üretimi** (tagged union — eşleş yapıcı deseni de tamam olur)
-- **L: Özellik (trait) sistemi tam** (uygula tanımları, constraint validation)
-- **Bootstrapping** (uzun vade)
+### Sıradaki büyük seçenekler (kalan):
+- **Tam monomorphization** (her `Kutu<X>` için ayrı %struct emit) — H'in
+  boxing fallback'i yerine
+- **Constraint validation** (T:Bound için Bound trait'inin sağlandığını
+  doğrula; uygula tablosundan arama) — L'in tamamlayıcısı
+- **Gerçek concurrency** (Windows CreateThread / pthread bind, mutex,
+  thread-safe kanal) — B2'nin tamamlayıcısı
+- **Tam Katman 2 bölge analizi** (R-GÖREV / R-BİRLEŞTİR / R-KANAL
+  enforcement, thread-bölge sahiplik kontrolü)
+- **Arena ile GC-yok bellek modeli** (Heap alloc'lar arena'ya bağlansın,
+  scope çıkışında otomatik serbest)
+- **Bootstrapping** (KEMGU'da KEMGU derleyici — uzun vade)
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -631,7 +700,7 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉🎉🎉🎉🎉 ADIM A + D + B + C + F + E TAMAMLANDI**
+- **Faz:** **🎉×8 TÜM BÜYÜK SEÇENEKLER TAMAMLANDI (Bootstrapping uzun vade)**
 - **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (DFA) → LLVM IR + stdlib → native exe
   - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
   - Stdlib D.1-D.5: IO, metin, sayısal, dizi uzunluk, StandartHata prelude
@@ -639,7 +708,13 @@ Belge dosyaları: Türkçe.
   - C: `eşleş` LLVM IR (literal/binding/joker desenleri)
   - F: `için` LLVM IR (Dizi<T> sabit-boyut)
   - E: Bölge DFA — sembol haritası, B001 yerel-referans-sızdırma tespiti, `mode_check`
-- **16 LLVM entegrasyon testi** + 20/20 örnek `.kem` `--check`'ten geçer
+  - K: seçimlik<T>/sonuç<T,H> tagged union + eşleş yapıcı deseni LLVM
+  - I: Dinamik Dizi (heap alloc — dizi_olustur/ekle/al/boyut/serbest)
+  - J: Metin işlemleri (metin_birleştir/kopya/to_tam/tam_to_metin/eşit)
+  - H: Generic monomorphization (boxing fallback — jenerik param → ptr)
+  - L: Özellik (trait) + uygula syntax + sembol kayıt
+  - B2: Concurrency stub API (gorev/kanal sequential — gerçek thread sonra)
+- **20 LLVM entegrasyon testi** + 22/22 örnek `.kem` `--check`'ten geçer
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

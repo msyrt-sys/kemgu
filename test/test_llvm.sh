@@ -57,6 +57,10 @@ declare -a TESTLER=(
     "test/ornekler/kisitli_generic.kem  0"
     "test/ornekler/esles_basit.kem      0"
     "test/ornekler/icin_dongu.kem       0"
+    "test/ornekler/secimlik.kem         0"
+    "test/ornekler/heap_dizi_metin.kem  0"
+    "test/ornekler/ozellik_uygula.kem   0"
+    "test/ornekler/kanal_basit.kem      0"
 )
 
 basarili=0

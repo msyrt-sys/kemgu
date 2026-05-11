@@ -164,3 +164,173 @@ int64_t kdl_min64(int64_t a, int64_t b) {
 int64_t kdl_maks64(int64_t a, int64_t b) {
     return a > b ? a : b;
 }
+
+/* === J: Metin islemleri (heap alloc) === */
+
+/* Yeni metin allocate eder, kaynaktan kopyalar. NUL-terminator dahil. */
+const char *kdl_metin_kopya(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *yeni = (char *)malloc(n + 1);
+    if (!yeni) return NULL;
+    memcpy(yeni, s, n + 1);
+    return yeni;
+}
+
+/* Iki metni birlestirir (heap). Sonuc free edilmeli — su an leak OK. */
+const char *kdl_metin_birlestir(const char *a, const char *b) {
+    if (!a) a = "";
+    if (!b) b = "";
+    size_t na = strlen(a);
+    size_t nb = strlen(b);
+    char *yeni = (char *)malloc(na + nb + 1);
+    if (!yeni) return NULL;
+    memcpy(yeni, a, na);
+    memcpy(yeni + na, b, nb);
+    yeni[na + nb] = '\0';
+    return yeni;
+}
+
+/* Metni tam sayiya cevirir (atoi sarmali) */
+int32_t kdl_metin_to_tam(const char *s) {
+    if (!s) return 0;
+    return (int32_t)atoi(s);
+}
+
+/* tam32 -> metin (heap, format "%d") */
+const char *kdl_tam_to_metin(int32_t n) {
+    char *buf = (char *)malloc(16);
+    if (!buf) return NULL;
+    snprintf(buf, 16, "%d", n);
+    return buf;
+}
+
+/* Metin esitligi (1=esit, 0=farkli) */
+int kdl_metin_esit(const char *a, const char *b) {
+    if (!a || !b) return a == b;
+    return strcmp(a, b) == 0;
+}
+
+/* === I: Dinamik Dizi (heap) ===
+ *
+ * KDL DinamikDizi temsili: { ptr veri, i32 boyut, i32 kapasite } yapisi.
+ * Alanlar: tam32 indexlenir; eleman tipi runtime-bilinmez (eleman_byte verilir).
+ * Bu KEMGU tarafindan kullanilan basit C-tarafi runtime yapilari.
+ */
+
+typedef struct {
+    void *veri;
+    int32_t boyut;
+    int32_t kapasite;
+    int32_t eleman_byte;
+} KdlDizi;
+
+KdlDizi *kdl_dizi_olustur(int32_t eleman_byte) {
+    KdlDizi *d = (KdlDizi *)malloc(sizeof(KdlDizi));
+    if (!d) return NULL;
+    d->veri = NULL;
+    d->boyut = 0;
+    d->kapasite = 0;
+    d->eleman_byte = eleman_byte;
+    return d;
+}
+
+void kdl_dizi_ekle_tam(KdlDizi *d, int32_t deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(int32_t));
+        d->kapasite = yk;
+    }
+    ((int32_t *)d->veri)[d->boyut++] = deger;
+}
+
+int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return 0;
+    return ((int32_t *)d->veri)[i];
+}
+
+int32_t kdl_dizi_boyut(KdlDizi *d) {
+    return d ? d->boyut : 0;
+}
+
+void kdl_dizi_serbest(KdlDizi *d) {
+    if (!d) return;
+    free(d->veri);
+    free(d);
+}
+
+/* === B2: Concurrency minimal API ===
+ *
+ * Bu surumde sequential stub'lar (KEMGU programları thread spawn API'sini
+ * kullanabilir; runtime suanlik aynı thread'te çalıştırır). Gerçek thread
+ * (Windows CreateThread / pthread) ileri surumde — region sistemi
+ * R-GÖREV / R-BİRLEŞTİR / R-KANAL aksiyomlari hazirdir.
+ *
+ * Kanal: basit FIFO queue. Thread-safe degil (sequential).
+ */
+
+typedef struct {
+    int32_t result;
+    int done;
+} KdlGorev;
+
+/* islev pointer alir, sequential calistirir, sonuc kaydeder */
+KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
+    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    if (!g) return NULL;
+    g->result = f ? f() : 0;
+    g->done = 1;
+    return g;
+}
+
+int32_t kdl_gorev_birlestir(KdlGorev *g) {
+    if (!g) return 0;
+    int32_t r = g->result;
+    free(g);
+    return r;
+}
+
+typedef struct {
+    int32_t *veri;
+    int32_t boyut;
+    int32_t kapasite;
+    int32_t bas, son;   /* circular buffer */
+} KdlKanal;
+
+KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
+    KdlKanal *k = (KdlKanal *)malloc(sizeof(KdlKanal));
+    if (!k) return NULL;
+    int32_t kap = kapasite > 0 ? kapasite : 16;
+    k->veri = (int32_t *)malloc((size_t)kap * sizeof(int32_t));
+    k->kapasite = kap;
+    k->boyut = 0;
+    k->bas = 0;
+    k->son = 0;
+    return k;
+}
+
+void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
+    if (!k || k->boyut >= k->kapasite) return;
+    k->veri[k->son] = deger;
+    k->son = (k->son + 1) % k->kapasite;
+    k->boyut++;
+}
+
+int32_t kdl_kanal_al(KdlKanal *k) {
+    if (!k || k->boyut == 0) return 0;
+    int32_t v = k->veri[k->bas];
+    k->bas = (k->bas + 1) % k->kapasite;
+    k->boyut--;
+    return v;
+}
+
+int32_t kdl_kanal_bos_mu(KdlKanal *k) {
+    return k ? (k->boyut == 0) : 1;
+}
+
+void kdl_kanal_serbest(KdlKanal *k) {
+    if (!k) return;
+    free(k->veri);
+    free(k);
+}

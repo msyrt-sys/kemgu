@@ -1,0 +1,25 @@
+// L testi: özellik (trait) tanımı + uygula (impl) syntax
+// Tip kontrol: özellik sembol olarak kayıt, uygula içindeki işlevler analiz
+// Tam constraint validation gelecek aşamada.
+
+özellik Yazdırılabilir {
+    işlev yazdir_kendini() -> tam32;
+}
+
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+uygula Yazdırılabilir için Nokta {
+    işlev yazdir_kendini() -> tam32 {
+        ver 42;
+    }
+}
+
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: 1, y: 2 };
+    yaz("nokta: ");
+    yaz_tam(n.x); yaz(","); yazdır_tam(n.y);
+    ver 0;
+}
