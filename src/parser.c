@@ -162,6 +162,8 @@ static Dugum *parse_deyim(Parser *p);
 static Dugum *parse_ust_oge(Parser *p);
 static Dugum *parse_islev_tanimi(Parser *p);
 static Dugum *parse_yapi_tanimi(Parser *p);
+static Dugum *parse_ozellik_tanimi(Parser *p);
+static Dugum *parse_uygula_tanimi(Parser *p);
 static Dugum *parse_kullan(Parser *p);
 static Dugum *parse_disa(Parser *p);
 static Dugum *parse_modul_tanimi(Parser *p);
@@ -201,9 +203,12 @@ Dugum *parse_parametre(Parser *p) {
 }
 
 /* === Islev tanimi ===
- * islev_tanimi = "islev" tanimlayici "(" [parametreler] ")" ["->" tip] blok */
+ * islev_tanimi = "islev" tanimlayici "(" [parametreler] ")" ["->" tip] blok
+ *
+ * Eger imza_yeterli=1: gövde opsiyonel (";" ile imza, "{" ile tanim).
+ * Özellik gövdesi ve uygula imzalari icin kullanilir. */
 
-static Dugum *parse_islev_tanimi(Parser *p) {
+static Dugum *parse_islev_genel(Parser *p, int imza_yeterli) {
     Token islev_tok = parser_simdiki(p);
     parser_ilerle(p);  /* 'islev' */
 
@@ -230,6 +235,8 @@ static Dugum *parse_islev_tanimi(Parser *p) {
     Dugum *govde = NULL;
     if (parser_eslesir(p, TOK_SOL_SUSLU)) {
         govde = parse_blok(p);
+    } else if (imza_yeterli && parser_tuket(p, TOK_NOKTALI_VIRGUL)) {
+        /* Imza yeterli — govde NULL kalir */
     } else {
         parser_hata(p, parser_simdiki(p), "P017",
                     "islev govdesi icin '{' bekleniyor", NULL);
@@ -248,17 +255,39 @@ static Dugum *parse_islev_tanimi(Parser *p) {
     return d;
 }
 
+static Dugum *parse_islev_tanimi(Parser *p) {
+    return parse_islev_genel(p, 0);
+}
+
 /* === Generic tip parametre listesi yardimcisi ===
  *   < T1, T2, ... >
- * Eger '<' yoksa NULL doner ve *out_sayi = 0. */
+ *   < T1: Bound1 + Bound2, T2: Bound3, T3 >    (bound'lar opsiyonel)
+ *
+ * Eger '<' yoksa NULL doner ve *out_sayi = 0.
+ *
+ * Bound listeleri *out_boundlar (NULL geçilebilir) ve *out_bound_sayilari
+ * (NULL geçilebilir) yoluyla dondurulur. Her ikisi paralel dizilerdir;
+ * bound olmayan parametre icin sayisi 0 olur.
+ */
 
-static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
+static char **parse_tip_param_listesi_genis(Parser *p, int *out_sayi,
+                                            Dugum ****out_boundlar,
+                                            int **out_bound_sayilari) {
     *out_sayi = 0;
+    if (out_boundlar) *out_boundlar = NULL;
+    if (out_bound_sayilari) *out_bound_sayilari = NULL;
     if (!parser_tuket(p, TOK_KUCUK)) return NULL;
 
+    typedef struct BLink {
+        Dugum *bound;
+        struct BLink *son;
+    } BLink;
     typedef struct PLink {
         const char *bas;
         int uz;
+        BLink *bound_bas;
+        BLink *bound_son;
+        int bound_sayi;
         struct PLink *son;
     } PLink;
     PLink *bas = NULL;
@@ -269,16 +298,32 @@ static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
             if (parser_eslesir(p, TOK_BUYUK)) break;
             Token t = parser_bekle(p, TOK_TANIMLAYICI, "P024",
                                     "tip parametre adi bekleniyor");
-            PLink *link = (PLink *)arena_ayir(p->arena, sizeof(PLink));
-            if (link) {
-                link->bas = t.baslangic;
-                link->uz = t.uzunluk;
-                link->son = NULL;
-                if (son_link) son_link->son = link;
-                else bas = link;
-                son_link = link;
-                (*out_sayi)++;
+            PLink *link = (PLink *)arena_ayir_sifir(p->arena, sizeof(PLink));
+            if (!link) continue;
+            link->bas = t.baslangic;
+            link->uz = t.uzunluk;
+            link->bound_sayi = 0;
+
+            /* Opsiyonel bound listesi: ":" bound1 ["+" bound2 ...] */
+            if (parser_tuket(p, TOK_IKI_NOKTA)) {
+                do {
+                    Dugum *bound = parse_tip(p);
+                    BLink *bl = (BLink *)arena_ayir(p->arena, sizeof(BLink));
+                    if (bl) {
+                        bl->bound = bound;
+                        bl->son = NULL;
+                        if (link->bound_son) link->bound_son->son = bl;
+                        else link->bound_bas = bl;
+                        link->bound_son = bl;
+                        link->bound_sayi++;
+                    }
+                } while (parser_tuket(p, TOK_ARTI));
             }
+
+            if (son_link) son_link->son = link;
+            else bas = link;
+            son_link = link;
+            (*out_sayi)++;
         } while (parser_tuket(p, TOK_VIRGUL));
     }
     parser_buyuk_ayir(p);
@@ -289,12 +334,41 @@ static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
     char **arr = (char **)arena_ayir(p->arena,
                                       sizeof(char *) * (size_t)(*out_sayi));
     if (!arr) return NULL;
-    int i = 0;
-    for (PLink *l = bas; l; l = l->son) {
-        arr[i++] = ast_string_kopyala(p->arena, l->bas, l->uz);
+
+    /* Bound dizilerini kur (caller istediyse) */
+    Dugum ***boundlar = NULL;
+    int *bound_sayilari = NULL;
+    if (out_boundlar) {
+        boundlar = (Dugum ***)arena_ayir_sifir(p->arena,
+            sizeof(Dugum **) * (size_t)(*out_sayi));
     }
+    if (out_bound_sayilari) {
+        bound_sayilari = (int *)arena_ayir_sifir(p->arena,
+            sizeof(int) * (size_t)(*out_sayi));
+    }
+
+    int i = 0;
+    for (PLink *l = bas; l; l = l->son, i++) {
+        arr[i] = ast_string_kopyala(p->arena, l->bas, l->uz);
+        if (bound_sayilari) bound_sayilari[i] = l->bound_sayi;
+        if (boundlar && l->bound_sayi > 0) {
+            Dugum **bda = (Dugum **)arena_ayir(p->arena,
+                sizeof(Dugum *) * (size_t)l->bound_sayi);
+            if (bda) {
+                int j = 0;
+                for (BLink *bl = l->bound_bas; bl; bl = bl->son) {
+                    bda[j++] = bl->bound;
+                }
+                boundlar[i] = bda;
+            }
+        }
+    }
+
+    if (out_boundlar) *out_boundlar = boundlar;
+    if (out_bound_sayilari) *out_bound_sayilari = bound_sayilari;
     return arr;
 }
+
 
 /* === Yapi tanimi === */
 /* alan_tanimi = tanimlayici ":" tip ";" */
@@ -332,9 +406,12 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P021",
                                 "yapi adi bekleniyor");
 
-    /* Generic tip parametreleri: <T1, T2, ...> opsiyonel */
+    /* Generic tip parametreleri: <T1, T2, ...> opsiyonel (bound destekli) */
     int tip_param_sayi = 0;
-    char **tip_paramlar = parse_tip_param_listesi(p, &tip_param_sayi);
+    Dugum ***tip_param_boundlari = NULL;
+    int *tip_param_bound_sayilari = NULL;
+    char **tip_paramlar = parse_tip_param_listesi_genis(p, &tip_param_sayi,
+        &tip_param_boundlari, &tip_param_bound_sayilari);
 
     parser_bekle(p, TOK_SOL_SUSLU, "P022", "'{' bekleniyor");
 
@@ -355,8 +432,142 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     d->veri.yapi.ad_uzunluk = ad_tok.uzunluk;
     d->veri.yapi.tip_paramlar = tip_paramlar;
     d->veri.yapi.tip_param_sayi = tip_param_sayi;
+    d->veri.yapi.tip_param_boundlari = tip_param_boundlari;
+    d->veri.yapi.tip_param_bound_sayilari = tip_param_bound_sayilari;
     d->veri.yapi.alanlar = liste_array_yap(&alanlar, p->arena);
     d->veri.yapi.alan_sayi = alanlar.sayi;
+    return d;
+}
+
+/* === Ozellik (trait) tanimi ===
+ * ozellik_tanimi = "ozellik" tanimlayici [tip_param_listesi] "{" uyeler "}"
+ *
+ * Govde icindeki her uye bir islev imzasi veya tam tanimi olabilir:
+ *   islev m() -> tam32;            (imza)
+ *   islev m() -> tam32 { ... }     (default impl)
+ */
+
+static Dugum *parse_ozellik_tanimi(Parser *p) {
+    Token ozellik_tok = parser_simdiki(p);
+    parser_ilerle(p);  /* 'ozellik' */
+
+    Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P200",
+                                "ozellik adi bekleniyor");
+
+    int tip_param_sayi = 0;
+    Dugum ***tip_param_boundlari = NULL;
+    int *tip_param_bound_sayilari = NULL;
+    char **tip_paramlar = parse_tip_param_listesi_genis(p, &tip_param_sayi,
+        &tip_param_boundlari, &tip_param_bound_sayilari);
+
+    parser_bekle(p, TOK_SOL_SUSLU, "P201",
+                 "ozellik govdesi icin '{' bekleniyor");
+
+    Liste uyeler;
+    liste_baslat(&uyeler);
+    while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
+           !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token sm = parser_simdiki(p);
+        if (sm.tip == TOK_ISLEV) {
+            Dugum *m = parse_islev_genel(p, 1);  /* imza yeterli */
+            if (m) liste_ekle(&uyeler, p->arena, m);
+        } else {
+            parser_hata(p, sm, "P202",
+                "ozellik govdesinde 'islev' bekleniyor", NULL);
+            parser_panik_sync(p);
+            break;
+        }
+    }
+    parser_bekle(p, TOK_SAG_SUSLU, "P203",
+                 "ozellik govde sonu '}' bekleniyor");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_OZELLIK,
+                             ozellik_tok.satir, ozellik_tok.sutun);
+    if (!d) return NULL;
+    d->veri.ozellik.ad =
+        ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
+    d->veri.ozellik.ad_uzunluk = ad_tok.uzunluk;
+    d->veri.ozellik.tip_paramlar = tip_paramlar;
+    d->veri.ozellik.tip_param_sayi = tip_param_sayi;
+    d->veri.ozellik.tip_param_boundlari = tip_param_boundlari;
+    d->veri.ozellik.tip_param_bound_sayilari = tip_param_bound_sayilari;
+    d->veri.ozellik.uyeler = liste_array_yap(&uyeler, p->arena);
+    d->veri.ozellik.uye_sayi = uyeler.sayi;
+    return d;
+}
+
+/* === Uygula (impl) ===
+ *
+ * uygula [tip_param_listesi] tip               "{" islevler "}"   (inherent)
+ * uygula [tip_param_listesi] tip "icin" tip2   "{" islevler "}"   (trait impl)
+ *
+ * "icin" anahtar kelimesi ozellik(trait) ile hedef tip arasini ayirir.
+ * Sintaks: ilk olarak parse_tip, eger sonrasi TOK_ICIN ise ikinci parse_tip.
+ *
+ * AST:
+ *   uygula.ozellikler[] — varsa trait yollari (DUGUM_TIP_BASIT/KULLANICI), simdilik 1 tane
+ *   uygula.tip          — hedef tip
+ *   uygula.islevler[]   — gerçeklenen metotlar (govdeli)
+ */
+
+static Dugum *parse_uygula_tanimi(Parser *p) {
+    Token uygula_tok = parser_simdiki(p);
+    parser_ilerle(p);  /* 'uygula' */
+
+    int tip_param_sayi = 0;
+    Dugum ***tip_param_boundlari = NULL;
+    int *tip_param_bound_sayilari = NULL;
+    char **tip_paramlar = parse_tip_param_listesi_genis(p, &tip_param_sayi,
+        &tip_param_boundlari, &tip_param_bound_sayilari);
+
+    Dugum *birinci_tip = parse_tip(p);
+    Dugum *hedef_tip = birinci_tip;
+    Dugum **ozellikler = NULL;
+    int ozellik_sayi = 0;
+
+    if (parser_tuket(p, TOK_ICIN)) {
+        /* trait impl: birinci_tip aslinda ozellik, hedef yeni */
+        hedef_tip = parse_tip(p);
+        ozellikler = (Dugum **)arena_ayir(p->arena, sizeof(Dugum *));
+        if (ozellikler) {
+            ozellikler[0] = birinci_tip;
+            ozellik_sayi = 1;
+        }
+    }
+
+    parser_bekle(p, TOK_SOL_SUSLU, "P210",
+                 "uygula govdesi icin '{' bekleniyor");
+
+    Liste islevler;
+    liste_baslat(&islevler);
+    while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
+           !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token sm = parser_simdiki(p);
+        if (sm.tip == TOK_ISLEV) {
+            Dugum *m = parse_islev_tanimi(p);  /* govde zorunlu */
+            if (m) liste_ekle(&islevler, p->arena, m);
+        } else {
+            parser_hata(p, sm, "P211",
+                "uygula govdesinde 'islev' bekleniyor", NULL);
+            parser_panik_sync(p);
+            break;
+        }
+    }
+    parser_bekle(p, TOK_SAG_SUSLU, "P212",
+                 "uygula govde sonu '}' bekleniyor");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_UYGULA,
+                             uygula_tok.satir, uygula_tok.sutun);
+    if (!d) return NULL;
+    d->veri.uygula.tip_paramlar = tip_paramlar;
+    d->veri.uygula.tip_param_sayi = tip_param_sayi;
+    d->veri.uygula.tip_param_boundlari = tip_param_boundlari;
+    d->veri.uygula.tip_param_bound_sayilari = tip_param_bound_sayilari;
+    d->veri.uygula.tip = hedef_tip;
+    d->veri.uygula.ozellikler = ozellikler;
+    d->veri.uygula.ozellik_sayi = ozellik_sayi;
+    d->veri.uygula.islevler = liste_array_yap(&islevler, p->arena);
+    d->veri.uygula.islev_sayi = islevler.sayi;
     return d;
 }
 
@@ -497,13 +708,15 @@ static Dugum *parse_ust_oge(Parser *p) {
     switch (t.tip) {
         case TOK_ISLEV:   return parse_islev_tanimi(p);
         case TOK_YAPI:    return parse_yapi_tanimi(p);
+        case TOK_OZELLIK: return parse_ozellik_tanimi(p);
+        case TOK_UYGULA:  return parse_uygula_tanimi(p);
         case TOK_KULLAN:  return parse_kullan(p);
         case TOK_DISA:    return parse_disa(p);
         case TOK_MODUL:   return parse_modul_tanimi(p);
         case TOK_SABIT:   return parse_sabit_tanimi(p);
         default:
             parser_hata(p, t, "P001",
-                "ust duzey tanim bekleniyor (islev/yapi/kullan/disa/modul/sabit)",
+                "ust duzey tanim bekleniyor (islev/yapi/ozellik/uygula/kullan/disa/modul/sabit)",
                 NULL);
             parser_panik_sync(p);
             return NULL;

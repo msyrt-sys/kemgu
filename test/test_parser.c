@@ -1195,6 +1195,232 @@ static void test_ornek_hasta(void) {
                      "test/ornekler/hasta.kem", 4);
 }
 
+/* === Ozellik (trait) === */
+
+static void test_ozellik_bos(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *prog = parse_kaynak("\xc3\xb6zellik Sayilabilir {}", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *oz = prog->veri.program.uyeler[0];
+        ok = (oz->tip == DUGUM_OZELLIK)
+          && (oz->veri.ozellik.uye_sayi == 0)
+          && (strcmp(oz->veri.ozellik.ad, "Sayilabilir") == 0);
+    }
+    test_sonuc("ozellik bos", ok);
+    arena_serbest(a);
+}
+
+static void test_ozellik_imza(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* özellik Sayilabilir { işlev say() -> tam32; } */
+    Dugum *prog = parse_kaynak(
+        "\xc3\xb6zellik Sayilabilir { i\xc5\x9flev say() -> tam32; }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *oz = prog->veri.program.uyeler[0];
+        ok = (oz->tip == DUGUM_OZELLIK)
+          && (oz->veri.ozellik.uye_sayi == 1);
+        if (ok) {
+            Dugum *m = oz->veri.ozellik.uyeler[0];
+            /* Imza: govde NULL */
+            ok = (m->tip == DUGUM_ISLEV)
+              && (m->veri.islev.govde == NULL)
+              && (strcmp(m->veri.islev.ad, "say") == 0);
+        }
+    }
+    test_sonuc("ozellik islev imzasi (govdesiz)", ok);
+    arena_serbest(a);
+}
+
+static void test_ozellik_default_impl(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* özellik X { işlev m() -> tam32 { ver 0; } } */
+    Dugum *prog = parse_kaynak(
+        "\xc3\xb6zellik X { i\xc5\x9flev m() -> tam32 { ver 0; } }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *oz = prog->veri.program.uyeler[0];
+        ok = (oz->veri.ozellik.uye_sayi == 1);
+        if (ok) {
+            Dugum *m = oz->veri.ozellik.uyeler[0];
+            ok = (m->veri.islev.govde != NULL);  /* default impl */
+        }
+    }
+    test_sonuc("ozellik default impl (govdeli)", ok);
+    arena_serbest(a);
+}
+
+static void test_ozellik_generic(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* özellik Foo<T> { işlev m() -> T; } */
+    Dugum *prog = parse_kaynak(
+        "\xc3\xb6zellik Foo<T> { i\xc5\x9flev m() -> T; }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *oz = prog->veri.program.uyeler[0];
+        ok = (oz->veri.ozellik.tip_param_sayi == 1)
+          && (strcmp(oz->veri.ozellik.tip_paramlar[0], "T") == 0);
+    }
+    test_sonuc("ozellik generic <T>", ok);
+    arena_serbest(a);
+}
+
+/* === Uygula === */
+
+static void test_uygula_inherent(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapı K { x: tam32; } uygula K { işlev m() -> tam32 { ver 0; } } */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 K { x: tam32; } uygula K { i\xc5\x9flev m() -> tam32 { ver 0; } }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 2 && hata == 0;
+    if (ok) {
+        Dugum *u = prog->veri.program.uyeler[1];
+        ok = (u->tip == DUGUM_UYGULA)
+          && (u->veri.uygula.ozellik_sayi == 0)  /* inherent */
+          && (u->veri.uygula.islev_sayi == 1)
+          && (u->veri.uygula.tip != NULL);
+    }
+    test_sonuc("uygula inherent (ozelliksiz)", ok);
+    arena_serbest(a);
+}
+
+static void test_uygula_trait(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* özellik Say {} yapı K { x: tam32; } uygula Say için K { } */
+    Dugum *prog = parse_kaynak(
+        "\xc3\xb6zellik Say {} yap\xc4\xb1 K { x: tam32; } "
+        "uygula Say i\xc3\xa7in K { }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 3 && hata == 0;
+    if (ok) {
+        Dugum *u = prog->veri.program.uyeler[2];
+        ok = (u->tip == DUGUM_UYGULA)
+          && (u->veri.uygula.ozellik_sayi == 1)  /* trait impl */
+          && (u->veri.uygula.tip != NULL);
+    }
+    test_sonuc("uygula Trait icin Tip (trait impl)", ok);
+    arena_serbest(a);
+}
+
+/* === Bound sozdizimi === */
+
+static void test_bound_tekil(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapı V<T: Sayilabilir> { ic: T; } */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 V<T: Sayilabilir> { ic: T; }", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *y = prog->veri.program.uyeler[0];
+        ok = (y->veri.yapi.tip_param_sayi == 1)
+          && (y->veri.yapi.tip_param_bound_sayilari != NULL)
+          && (y->veri.yapi.tip_param_bound_sayilari[0] == 1)
+          && (y->veri.yapi.tip_param_boundlari[0][0] != NULL);
+    }
+    test_sonuc("bound tekil: <T: Sayilabilir>", ok);
+    arena_serbest(a);
+}
+
+static void test_bound_coklu(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapı V<T: A + B + C> { ic: T; } */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 V<T: A + B + C> { ic: T; }", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *y = prog->veri.program.uyeler[0];
+        ok = (y->veri.yapi.tip_param_sayi == 1)
+          && (y->veri.yapi.tip_param_bound_sayilari[0] == 3);
+    }
+    test_sonuc("bound coklu: <T: A + B + C> (3 bound)", ok);
+    arena_serbest(a);
+}
+
+static void test_bound_karisik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapı W<T: A, U, V: B + C> { x: T; y: U; z: V; } */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 W<T: A, U, V: B + C> { x: T; y: U; z: V; }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *y = prog->veri.program.uyeler[0];
+        ok = (y->veri.yapi.tip_param_sayi == 3)
+          && (y->veri.yapi.tip_param_bound_sayilari[0] == 1)  /* T: A */
+          && (y->veri.yapi.tip_param_bound_sayilari[1] == 0)  /* U bound yok */
+          && (y->veri.yapi.tip_param_bound_sayilari[2] == 2); /* V: B + C */
+    }
+    test_sonuc("bound karisik: <T: A, U, V: B + C>", ok);
+    arena_serbest(a);
+}
+
+static void test_bound_ozellik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* özellik X<T: A> { işlev f() -> T; } */
+    Dugum *prog = parse_kaynak(
+        "\xc3\xb6zellik X<T: A> { i\xc5\x9flev f() -> T; }", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *o = prog->veri.program.uyeler[0];
+        ok = (o->tip == DUGUM_OZELLIK)
+          && (o->veri.ozellik.tip_param_bound_sayilari[0] == 1);
+    }
+    test_sonuc("bound ozellik: ozellik X<T: A>", ok);
+    arena_serbest(a);
+}
+
+static void test_bound_uygula(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* uygula<T: A + B> K<T> { işlev m() -> tam32 { ver 0; } } */
+    Dugum *prog = parse_kaynak(
+        "uygula<T: A + B> K<T> { i\xc5\x9flev m() -> tam32 { ver 0; } }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *u = prog->veri.program.uyeler[0];
+        ok = (u->tip == DUGUM_UYGULA)
+          && (u->veri.uygula.tip_param_bound_sayilari[0] == 2);
+    }
+    test_sonuc("bound uygula: uygula<T: A + B>", ok);
+    arena_serbest(a);
+}
+
+static void test_uygula_generic(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* yapı K<T> { x: T; } uygula<T> K<T> { işlev m() -> T { ver ... } }
+     * Sadece imza dogrulanir, govde basit. */
+    Dugum *prog = parse_kaynak(
+        "yap\xc4\xb1 K<T> { x: T; } "
+        "uygula<T> K<T> { i\xc5\x9flev yeni() -> tam32 { ver 0; } }",
+        a, &hata);
+    int ok = prog && prog->veri.program.sayi == 2 && hata == 0;
+    if (ok) {
+        Dugum *u = prog->veri.program.uyeler[1];
+        ok = (u->tip == DUGUM_UYGULA)
+          && (u->veri.uygula.tip_param_sayi == 1)
+          && (strcmp(u->veri.uygula.tip_paramlar[0], "T") == 0);
+    }
+    test_sonuc("uygula<T> generic", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1216,6 +1442,24 @@ int main(void) {
     printf("\n--- Yapi ---\n");
     test_yapi_bos();
     test_yapi_alanli();
+
+    printf("\n--- Ozellik (trait) ---\n");
+    test_ozellik_bos();
+    test_ozellik_imza();
+    test_ozellik_default_impl();
+    test_ozellik_generic();
+
+    printf("\n--- Uygula (impl) ---\n");
+    test_uygula_inherent();
+    test_uygula_trait();
+    test_uygula_generic();
+
+    printf("\n--- Bound (constraint) ---\n");
+    test_bound_tekil();
+    test_bound_coklu();
+    test_bound_karisik();
+    test_bound_ozellik();
+    test_bound_uygula();
 
     printf("\n--- Sabit ---\n");
     test_sabit();

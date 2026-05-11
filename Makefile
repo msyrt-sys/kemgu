@@ -17,7 +17,8 @@
 CC = gcc          # Prod derleyici (UCRT64 MinGW-w64 GCC)
 CC_ASAN = clang   # ASan test derleyicisi (Clang64)
 
-CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0
+CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP
+DEPFLAGS = -MMD -MP
 
 # AddressSanitizer + UBSan — bellek alan modul testleri icin (Clang64 ile)
 ASAN_FLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer
@@ -135,6 +136,11 @@ $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+# Otomatik basligi degisikligi izleme (-MMD -MP ile uretilen .d dosyalari)
+-include $(OBJS:.o=.d)
+-include $(BUILD)/ana.d
+-include $(BUILD)/test_lexer.d
 
 # === Test calistirma hedefleri ===
 

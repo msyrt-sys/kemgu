@@ -1092,6 +1092,98 @@ static void test_gn_ic_ice(void) {
     arena_serbest(a);
 }
 
+/* === Constraint satisfaction (ADIM 15.5) === */
+
+/* CS-1: Bound karsilanmiyor -> T030 */
+static void test_cs_bound_violation(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say {} "
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "yap\xc4\xb1 Vektor<T: Say> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound karsilanmiyor (uygula yok) -> T030 hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-2: Bound karsilaniyor (uygula var) -> OK */
+static void test_cs_bound_satisfied(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say {} "
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "uygula Say i\xc3\xa7in Tam {} "
+        "yap\xc4\xb1 Vektor<T: Say> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound karsilaniyor (uygula var) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-3: Bound olmadan eski davranis korunur */
+static void test_cs_bound_yok(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "yap\xc4\xb1 Vektor<T> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound yok -> 0 hata (eski davranis)", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-4: Coklu bound, hepsi karsilaniyor */
+static void test_cs_coklu_bound_ok(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "uygula B i\xc3\xa7in X {} "
+        "yap\xc4\xb1 K<T: A + B> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: coklu bound hepsi karsilaniyor -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-5: Coklu bound, bir tanesi karsilanmiyor */
+static void test_cs_coklu_bound_eksik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        /* B icin uygula yok */
+        "yap\xc4\xb1 K<T: A + B> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: B icin uygula yok -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-6: Bilinmeyen ozellik bound olarak -> T031 */
+static void test_cs_bound_bilinmeyen(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { v: tam32; } "
+        "yap\xc4\xb1 K<T: BilinmeyenOzellik> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: bilinmeyen ozellik bound -> T031 hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-7: Inherent impl kayit edilir, sorgu basarili */
+static void test_cs_inherent_kayit(void) {
+    Arena *a = arena_olustur(0);
+    /* uygula X { ... } -> inherent, ozellik yok */
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula X { i\xc5\x9flev yeni() -> X { ver X { v: 0 }; } }", a);
+    /* Inherent impl tek basina hata uretmemeli */
+    test_sonuc("cs: inherent impl -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1230,6 +1322,15 @@ int main(void) {
     test_gn_iki_param();
     test_gn_iki_param_erisim();
     test_gn_ic_ice();
+
+    printf("\n--- Constraint Satisfaction (15.5) ---\n");
+    test_cs_bound_violation();
+    test_cs_bound_satisfied();
+    test_cs_bound_yok();
+    test_cs_coklu_bound_ok();
+    test_cs_coklu_bound_eksik();
+    test_cs_bound_bilinmeyen();
+    test_cs_inherent_kayit();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
