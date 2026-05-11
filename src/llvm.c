@@ -68,9 +68,22 @@ typedef struct {
         const char *ad;
         int ad_uzunluk;
         char tip[ISIM_BUF];
+        const Dugum *ast_tip;   /* alan AST tipi (monomorph icin) */
     } alanlar[MAX_YAPI_ALAN];
     int alan_sayi;
+    const Dugum *template_dugumu;   /* AST yapi düğümü — generic params lookup */
 } YapiKayit;
+
+/* H: Generic instantiation kaydi — her benzersiz Kutu<T> kombi icin */
+typedef struct {
+    const char *template_ad;     /* "Kutu" */
+    int template_uz;
+    char instance_ascii[ISIM_BUF];  /* "Kutu.tam32" — LLVM struct adı */
+    char alan_tipleri[MAX_YAPI_ALAN][ISIM_BUF];  /* concrete LLVM tipler */
+    int alan_sayi;
+} InstantiationKayit;
+
+#define MAX_INSTANTIATION 64
 
 typedef struct {
     const char *metin;
@@ -169,6 +182,14 @@ static const BuiltinTanim BUILTINLER[] = {
     { "kanal_al",                      "kdl_kanal_al",        "i32",  1, {"ptr"} },
     { "kanal_bo\xc5\x9f_mu",          "kdl_kanal_bos_mu",    "i32",  1, {"ptr"} },
     { "kanal_serbest",                 "kdl_kanal_serbest",   "void", 1, {"ptr"} },
+    /* Arena bellek modeli (bolge tabanli, GC-yok) */
+    { "b\xc3\xb6lge_olustur",          "kdl_bolge_olustur",   "ptr",  0, {0} },
+    { "b\xc3\xb6lge_serbest",          "kdl_bolge_serbest",   "void", 1, {"ptr"} },
+    { "b\xc3\xb6lge_ayir",             "kdl_bolge_ayir",      "ptr",  2, {"ptr","i32"} },
+    { "b\xc3\xb6lge_toplam_byte",      "kdl_bolge_toplam_byte","i32", 1, {"ptr"} },
+    { "b\xc3\xb6lge_metin_birle\xc5\x9ftir",
+                                       "kdl_bolge_metin_birlestir",
+                                       "ptr",  3, {"ptr","ptr","ptr"} },
 };
 #define BUILTIN_SAYI (int)(sizeof(BUILTINLER) / sizeof(BUILTINLER[0]))
 
@@ -209,6 +230,9 @@ typedef struct {
 
     SonucKayit sonuclar[MAX_SONUC];
     int sonuc_sayi;
+
+    InstantiationKayit instantiations[MAX_INSTANTIATION];
+    int instantiation_sayi;
 
     int block_terminated;
     char aktif_donus[ISIM_BUF];  /* mevcut islev donus tipi */
@@ -349,11 +373,35 @@ static const YapiKayit *yapi_bul(Codegen *c, const char *ad, int u) {
     return NULL;
 }
 
-/* Sembol tipi "%struct.<ascii_ad>" formatinda — ascii ad ile yapiyi bul. */
+/* Sembol tipi "%struct.<ascii_ad>" formatinda — ascii ad ile yapiyi bul.
+ * Instantiation (ascii_ad.X) ise base template'i (ascii_ad) bul. */
 static const YapiKayit *yapi_bul_ascii(Codegen *c, const char *ascii_ad) {
+    /* Once tam eslesim ara (yapi adlari boyle eslesir) */
     for (int i = 0; i < c->yapi_sayi; i++) {
         if (strcmp(c->yapilar[i].ascii_ad, ascii_ad) == 0) {
             return &c->yapilar[i];
+        }
+    }
+    /* Bulunamadi -> belki instantiation adi: "Kutu.i32" -> "Kutu" template */
+    const char *dot = strchr(ascii_ad, '.');
+    if (dot) {
+        size_t base_len = (size_t)(dot - ascii_ad);
+        for (int i = 0; i < c->yapi_sayi; i++) {
+            if (strlen(c->yapilar[i].ascii_ad) == base_len &&
+                memcmp(c->yapilar[i].ascii_ad, ascii_ad, base_len) == 0) {
+                return &c->yapilar[i];
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Instantiation kaydini ascii ile bul (concrete alan tipleri icin) */
+static const InstantiationKayit *instantiation_bul(Codegen *c,
+                                                    const char *ascii_ad) {
+    for (int i = 0; i < c->instantiation_sayi; i++) {
+        if (strcmp(c->instantiations[i].instance_ascii, ascii_ad) == 0) {
+            return &c->instantiations[i];
         }
     }
     return NULL;
@@ -443,6 +491,66 @@ static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
                 yol->veri.tanimlayici.metin,
                 yol->veri.tanimlayici.uzunluk);
             if (yk) {
+                /* H: Tam monomorphization — tip_arg varsa instantiation adi
+                 * olustur (Kutu<tam32> -> %struct.Kutu.i32). */
+                int n = tip->veri.tip_kullanici.tip_arg_sayi;
+                if (n > 0) {
+                    char ad_buf[ISIM_BUF];
+                    int off = snprintf(ad_buf, ISIM_BUF, "%s", yk->ascii_ad);
+                    char arg_tipler[MAX_YAPI_ALAN][ISIM_BUF];
+                    for (int i = 0; i < n && off < ISIM_BUF; i++) {
+                        char at[ISIM_BUF];
+                        kemgu_tip_to_llvm(c,
+                            tip->veri.tip_kullanici.tip_arg[i], at, ISIM_BUF);
+                        snprintf(arg_tipler[i], ISIM_BUF, "%s", at);
+                        char sanit[64];
+                        tip_ad_sanitize(at, sanit, 64);
+                        off += snprintf(ad_buf + off, ISIM_BUF - off,
+                                        ".%s", sanit);
+                    }
+                    /* Instantiation kaydi (dedup) */
+                    int found = 0;
+                    for (int k = 0; k < c->instantiation_sayi; k++) {
+                        if (strcmp(c->instantiations[k].instance_ascii,
+                                   ad_buf) == 0) { found = 1; break; }
+                    }
+                    if (!found && c->instantiation_sayi < MAX_INSTANTIATION) {
+                        const Dugum *t = yk->template_dugumu;
+                        if (t && t->veri.yapi.tip_param_sayi == n) {
+                            InstantiationKayit *ik =
+                                &c->instantiations[c->instantiation_sayi++];
+                            ik->template_ad = yk->ad;
+                            ik->template_uz = yk->ad_uzunluk;
+                            snprintf(ik->instance_ascii, ISIM_BUF,
+                                     "%s", ad_buf);
+                            ik->alan_sayi = yk->alan_sayi;
+                            for (int i = 0; i < yk->alan_sayi; i++) {
+                                const Dugum *at = yk->alanlar[i].ast_tip;
+                                int matched = 0;
+                                if (at && at->tip == DUGUM_TIP_BASIT) {
+                                    for (int p = 0; p < n; p++) {
+                                        int pu = (int)strlen(
+                                            t->veri.yapi.tip_paramlar[p]);
+                                        if (pu == at->veri.tip_basit.ad_uzunluk &&
+                                            memcmp(t->veri.yapi.tip_paramlar[p],
+                                                   at->veri.tip_basit.ad,
+                                                   (size_t)pu) == 0) {
+                                            snprintf(ik->alan_tipleri[i],
+                                                ISIM_BUF, "%s", arg_tipler[p]);
+                                            matched = 1; break;
+                                        }
+                                    }
+                                }
+                                if (!matched) {
+                                    snprintf(ik->alan_tipleri[i], ISIM_BUF,
+                                             "%s", yk->alanlar[i].tip);
+                                }
+                            }
+                        }
+                    }
+                    snprintf(cikti, cikti_max, "%%struct.%s", ad_buf);
+                    return;
+                }
                 snprintf(cikti, cikti_max, "%%struct.%s", yk->ascii_ad);
                 return;
             }
@@ -1061,6 +1169,135 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
             return hata_sonuc();
         }
         const char *aad = yk->ascii_ad;
+        char instance_ad_buf[ISIM_BUF];
+
+        /* H: Tam monomorphization — template generic ise alan tiplerini
+         * concrete value tiplerinden cikarsa, instantiation struct olustur. */
+        const Dugum *t = yk->template_dugumu;
+        char concrete_alan_tip[MAX_YAPI_ALAN][ISIM_BUF];
+        int monomorphize = 0;
+        if (t && t->veri.yapi.tip_param_sayi > 0) {
+            /* Param ad -> concrete tip eslestirmesi */
+            char param_concrete[MAX_YAPI_ALAN][ISIM_BUF];
+            for (int p = 0; p < t->veri.yapi.tip_param_sayi; p++) {
+                param_concrete[p][0] = 0;
+            }
+            /* Her alanin AST tipinde generic param ad'i ara, deger tipini bul */
+            for (int i = 0; i < yk->alan_sayi; i++) {
+                const Dugum *at = yk->alanlar[i].ast_tip;
+                if (!at || at->tip != DUGUM_TIP_BASIT) continue;
+                for (int p = 0; p < t->veri.yapi.tip_param_sayi; p++) {
+                    int pu = (int)strlen(t->veri.yapi.tip_paramlar[p]);
+                    if (pu == at->veri.tip_basit.ad_uzunluk &&
+                        memcmp(t->veri.yapi.tip_paramlar[p],
+                               at->veri.tip_basit.ad, (size_t)pu) == 0) {
+                        /* Bu alan generic param p. Kullanici alan_atama
+                         * sırasını bilemeyiz; sirayla taramada `i. alan`
+                         * deger tipi: alan_atama listesinde aynı ad ara. */
+                        for (int j = 0; j < d->veri.yapi_olustur.alan_sayi;
+                             j++) {
+                            const Dugum *aa = d->veri.yapi_olustur.alanlar[j];
+                            if (aa->veri.alan_atama.ad_uzunluk ==
+                                    yk->alanlar[i].ad_uzunluk &&
+                                memcmp(aa->veri.alan_atama.ad,
+                                       yk->alanlar[i].ad,
+                                       (size_t)yk->alanlar[i].ad_uzunluk) == 0) {
+                                /* Deger ifadesinin LLVM tipini cikarsa.
+                                 * Basit: literal -> tip, tanimlayici -> sembol */
+                                const Dugum *dv = aa->veri.alan_atama.deger;
+                                if (dv->tip == DUGUM_TAM) {
+                                    snprintf(param_concrete[p], ISIM_BUF, "i32");
+                                } else if (dv->tip == DUGUM_METIN) {
+                                    snprintf(param_concrete[p], ISIM_BUF, "ptr");
+                                } else if (dv->tip == DUGUM_MANTIKSAL) {
+                                    snprintf(param_concrete[p], ISIM_BUF, "i1");
+                                } else if (dv->tip == DUGUM_KESIRLI) {
+                                    snprintf(param_concrete[p], ISIM_BUF, "double");
+                                } else if (dv->tip == DUGUM_TANIMLAYICI) {
+                                    Sembol *vs = sembol_bul(c,
+                                        dv->veri.tanimlayici.metin,
+                                        dv->veri.tanimlayici.uzunluk);
+                                    if (vs) snprintf(param_concrete[p],
+                                                     ISIM_BUF, "%s", vs->tip);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            /* Tum paramlar cozumlendiyse monomorphize */
+            int hepsi_var = 1;
+            for (int p = 0; p < t->veri.yapi.tip_param_sayi; p++) {
+                if (param_concrete[p][0] == 0) { hepsi_var = 0; break; }
+            }
+            if (hepsi_var) {
+                /* Instantiation adi olustur: ascii_ad.<T1>.<T2>... */
+                char ad_buf[ISIM_BUF];
+                int off = snprintf(ad_buf, ISIM_BUF, "%s", aad);
+                for (int p = 0; p < t->veri.yapi.tip_param_sayi; p++) {
+                    char sanit[64];
+                    tip_ad_sanitize(param_concrete[p], sanit, 64);
+                    off += snprintf(ad_buf + off, ISIM_BUF - off,
+                                    ".%s", sanit);
+                    if (off >= ISIM_BUF) break;
+                }
+                snprintf(instance_ad_buf, ISIM_BUF, "%s", ad_buf);
+
+                /* Concrete alan tipleri */
+                for (int i = 0; i < yk->alan_sayi; i++) {
+                    const Dugum *at = yk->alanlar[i].ast_tip;
+                    if (at && at->tip == DUGUM_TIP_BASIT) {
+                        int matched = 0;
+                        for (int p = 0; p < t->veri.yapi.tip_param_sayi; p++) {
+                            int pu = (int)strlen(t->veri.yapi.tip_paramlar[p]);
+                            if (pu == at->veri.tip_basit.ad_uzunluk &&
+                                memcmp(t->veri.yapi.tip_paramlar[p],
+                                       at->veri.tip_basit.ad,
+                                       (size_t)pu) == 0) {
+                                snprintf(concrete_alan_tip[i], ISIM_BUF,
+                                         "%s", param_concrete[p]);
+                                matched = 1;
+                                break;
+                            }
+                        }
+                        if (!matched) {
+                            snprintf(concrete_alan_tip[i], ISIM_BUF,
+                                     "%s", yk->alanlar[i].tip);
+                        }
+                    } else {
+                        snprintf(concrete_alan_tip[i], ISIM_BUF,
+                                 "%s", yk->alanlar[i].tip);
+                    }
+                }
+
+                /* Instantiation kaydı (dedup) */
+                int found = 0;
+                for (int k = 0; k < c->instantiation_sayi; k++) {
+                    if (strcmp(c->instantiations[k].instance_ascii,
+                               instance_ad_buf) == 0) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found && c->instantiation_sayi < MAX_INSTANTIATION) {
+                    InstantiationKayit *ik =
+                        &c->instantiations[c->instantiation_sayi++];
+                    ik->template_ad = yad;
+                    ik->template_uz = yu;
+                    snprintf(ik->instance_ascii, ISIM_BUF,
+                             "%s", instance_ad_buf);
+                    ik->alan_sayi = yk->alan_sayi;
+                    for (int i = 0; i < yk->alan_sayi; i++) {
+                        snprintf(ik->alan_tipleri[i], ISIM_BUF,
+                                 "%s", concrete_alan_tip[i]);
+                    }
+                }
+                aad = instance_ad_buf;   /* concrete struct ad'i kullan */
+                monomorphize = 1;
+            }
+        }
+
         /* alloca + her alana store + yapinin loaded value'sunu don */
         int addr = yeni_reg(c);
         fprintf(c->out, "  %%%d = alloca %%struct.%s\n", addr, aad);
@@ -1077,20 +1314,24 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
                         aa->veri.alan_atama.ad);
                 continue;
             }
-            /* K: alan tipi context — hic/deger cozumlemesi */
+            /* K: alan tipi context — hic/deger cozumlemesi
+             * H: monomorphize edildi ise concrete tip kullan */
+            const char *alan_tipi = monomorphize
+                ? concrete_alan_tip[idx]
+                : yk->alanlar[idx].tip;
             char eski_bt[ISIM_BUF];
             snprintf(eski_bt, ISIM_BUF, "%s", c->beklenen_tip);
-            snprintf(c->beklenen_tip, ISIM_BUF, "%s", yk->alanlar[idx].tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", alan_tipi);
             IfadeSonuc v = ifade_uret(c, aa->veri.alan_atama.deger);
             snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski_bt);
             if (v.reg < 0) continue;
-            int sreg = int_cevir(c, v.reg, v.tip, yk->alanlar[idx].tip);
+            int sreg = int_cevir(c, v.reg, v.tip, alan_tipi);
             int gep = yeni_reg(c);
             fprintf(c->out,
                 "  %%%d = getelementptr inbounds %%struct.%s, ptr %%%d, i32 0, i32 %d\n",
                 gep, aad, addr, idx);
             fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
-                    yk->alanlar[idx].tip, sreg, gep);
+                    alan_tipi, sreg, gep);
         }
         int loaded = yeni_reg(c);
         fprintf(c->out, "  %%%d = load %%struct.%s, ptr %%%d\n",
@@ -1129,16 +1370,20 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
                         alan_u, alan_ad);
                 return hata_sonuc();
             }
+            /* H: Eger instantiation ise concrete alan tipi instantiation'dan */
+            const InstantiationKayit *ik = instantiation_bul(c, s->tip + 8);
+            const char *alan_tipi = ik ? ik->alan_tipleri[idx]
+                                       : yk->alanlar[idx].tip;
             int gep = yeni_reg(c);
             fprintf(c->out,
                 "  %%%d = getelementptr inbounds %s, ptr %s, i32 0, i32 %d\n",
                 gep, s->tip, s->addr, idx);
             int loaded = yeni_reg(c);
             fprintf(c->out, "  %%%d = load %s, ptr %%%d\n",
-                    loaded, yk->alanlar[idx].tip, gep);
+                    loaded, alan_tipi, gep);
             IfadeSonuc out;
             out.reg = loaded;
-            snprintf(out.tip, ISIM_BUF, "%s", yk->alanlar[idx].tip);
+            snprintf(out.tip, ISIM_BUF, "%s", alan_tipi);
             out.is_lvalue = 0;
             out.lvalue_tip[0] = 0;
             return out;
@@ -1328,20 +1573,24 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             int idx = yapi_alan_indeks(yk, hedef->veri.erisim.alan,
                                        hedef->veri.erisim.alan_uzunluk);
             if (idx < 0) return;
+            /* H: instantiation concrete alan tipi */
+            const InstantiationKayit *ik = instantiation_bul(c, s->tip + 8);
+            const char *alan_tipi = ik ? ik->alan_tipleri[idx]
+                                       : yk->alanlar[idx].tip;
             /* K: alan tipi context */
             char eski[ISIM_BUF];
             snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
-            snprintf(c->beklenen_tip, ISIM_BUF, "%s", yk->alanlar[idx].tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", alan_tipi);
             IfadeSonuc v = ifade_uret(c, d->veri.atama.deger);
             snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
             if (v.reg < 0) return;
-            int sreg = int_cevir(c, v.reg, v.tip, yk->alanlar[idx].tip);
+            int sreg = int_cevir(c, v.reg, v.tip, alan_tipi);
             int gep = yeni_reg(c);
             fprintf(c->out,
                 "  %%%d = getelementptr inbounds %s, ptr %s, i32 0, i32 %d\n",
                 gep, s->tip, s->addr, idx);
             fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
-                    yk->alanlar[idx].tip, sreg, gep);
+                    alan_tipi, sreg, gep);
             return;
         }
         if (hedef->tip == DUGUM_INDEKS) {
@@ -1794,10 +2043,12 @@ static void yapi_kaydet(Codegen *c, const Dugum *y) {
     yk->ad_uzunluk = y->veri.yapi.ad_uzunluk;
     ad_ascii_yap(yk->ad, yk->ad_uzunluk, yk->ascii_ad, ISIM_BUF);
     yk->alan_sayi = 0;
+    yk->template_dugumu = y;
     for (int i = 0; i < y->veri.yapi.alan_sayi && i < MAX_YAPI_ALAN; i++) {
         const Dugum *al = y->veri.yapi.alanlar[i];
         yk->alanlar[yk->alan_sayi].ad = al->veri.alan.ad;
         yk->alanlar[yk->alan_sayi].ad_uzunluk = al->veri.alan.ad_uzunluk;
+        yk->alanlar[yk->alan_sayi].ast_tip = al->veri.alan.tip;
         /* H (basit monomorphization): jenerik param ile eslesen alan tipi ->
          * 'ptr' (boxing). Tam monomorphization gelecek surumde — her unique
          * instantiation icin ayri struct emit. */
@@ -2057,6 +2308,18 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
             islev_uret(&c, gercek);
         }
     }
+
+    /* H: Monomorphize edilmis instantiation struct tanimlarini emit et */
+    for (int i = 0; i < c.instantiation_sayi; i++) {
+        InstantiationKayit *ik = &c.instantiations[i];
+        fprintf(out, "%%struct.%s = type { ", ik->instance_ascii);
+        for (int j = 0; j < ik->alan_sayi; j++) {
+            if (j) fputs(", ", out);
+            fputs(ik->alan_tipleri[j], out);
+        }
+        fputs(" }\n", out);
+    }
+    if (c.instantiation_sayi > 0) fputc('\n', out);
 
     /* String literalleri global olarak stdout'a yaz */
     for (int i = 0; i < c.string_sayi; i++) {

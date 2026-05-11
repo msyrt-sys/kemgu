@@ -26,6 +26,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* B2 (genisletilmis): Gercek thread bind — Windows CreateThread.
+ * Posix tarafinda pthread eklenebilir. */
+#ifdef _WIN32
+#include <windows.h>
+#define KDL_THREAD_VAR 1
+#endif
+
 /* === D.1 IO === */
 
 void kdl_yazdir_metin(const char *s) {
@@ -273,19 +280,51 @@ void kdl_dizi_serbest(KdlDizi *d) {
 typedef struct {
     int32_t result;
     int done;
+    int32_t (*f)(void);     /* gorev islevi */
+#ifdef KDL_THREAD_VAR
+    HANDLE handle;
+#endif
 } KdlGorev;
 
-/* islev pointer alir, sequential calistirir, sonuc kaydeder */
+#ifdef KDL_THREAD_VAR
+static DWORD WINAPI kdl_gorev_thread_main(LPVOID param) {
+    KdlGorev *g = (KdlGorev *)param;
+    g->result = g->f ? g->f() : 0;
+    g->done = 1;
+    return 0;
+}
+#endif
+
+/* islev pointer alir, ya gercek thread spawn ya sequential calistirir */
 KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
     KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
     if (!g) return NULL;
+    g->f = f;
+    g->result = 0;
+    g->done = 0;
+#ifdef KDL_THREAD_VAR
+    g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
+    if (!g->handle) {
+        /* Thread olusturulamadi -> sequential fallback */
+        g->result = f ? f() : 0;
+        g->done = 1;
+    }
+#else
+    /* Posix yok ise sequential */
     g->result = f ? f() : 0;
     g->done = 1;
+#endif
     return g;
 }
 
 int32_t kdl_gorev_birlestir(KdlGorev *g) {
     if (!g) return 0;
+#ifdef KDL_THREAD_VAR
+    if (g->handle) {
+        WaitForSingleObject(g->handle, INFINITE);
+        CloseHandle(g->handle);
+    }
+#endif
     int32_t r = g->result;
     free(g);
     return r;
@@ -296,6 +335,10 @@ typedef struct {
     int32_t boyut;
     int32_t kapasite;
     int32_t bas, son;   /* circular buffer */
+#ifdef KDL_THREAD_VAR
+    CRITICAL_SECTION kilit;
+    int kilit_aktif;
+#endif
 } KdlKanal;
 
 KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
@@ -307,21 +350,42 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     k->boyut = 0;
     k->bas = 0;
     k->son = 0;
+#ifdef KDL_THREAD_VAR
+    InitializeCriticalSection(&k->kilit);
+    k->kilit_aktif = 1;
+#endif
     return k;
 }
 
 void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
-    if (!k || k->boyut >= k->kapasite) return;
-    k->veri[k->son] = deger;
-    k->son = (k->son + 1) % k->kapasite;
-    k->boyut++;
+    if (!k) return;
+#ifdef KDL_THREAD_VAR
+    if (k->kilit_aktif) EnterCriticalSection(&k->kilit);
+#endif
+    if (k->boyut < k->kapasite) {
+        k->veri[k->son] = deger;
+        k->son = (k->son + 1) % k->kapasite;
+        k->boyut++;
+    }
+#ifdef KDL_THREAD_VAR
+    if (k->kilit_aktif) LeaveCriticalSection(&k->kilit);
+#endif
 }
 
 int32_t kdl_kanal_al(KdlKanal *k) {
-    if (!k || k->boyut == 0) return 0;
-    int32_t v = k->veri[k->bas];
-    k->bas = (k->bas + 1) % k->kapasite;
-    k->boyut--;
+    if (!k) return 0;
+    int32_t v = 0;
+#ifdef KDL_THREAD_VAR
+    if (k->kilit_aktif) EnterCriticalSection(&k->kilit);
+#endif
+    if (k->boyut > 0) {
+        v = k->veri[k->bas];
+        k->bas = (k->bas + 1) % k->kapasite;
+        k->boyut--;
+    }
+#ifdef KDL_THREAD_VAR
+    if (k->kilit_aktif) LeaveCriticalSection(&k->kilit);
+#endif
     return v;
 }
 
@@ -331,6 +395,106 @@ int32_t kdl_kanal_bos_mu(KdlKanal *k) {
 
 void kdl_kanal_serbest(KdlKanal *k) {
     if (!k) return;
+#ifdef KDL_THREAD_VAR
+    if (k->kilit_aktif) DeleteCriticalSection(&k->kilit);
+#endif
     free(k->veri);
     free(k);
+}
+
+/* === Arena bellek modeli (Bolge-tabanli, GC-yok) ===
+ *
+ * KEMGU'nun temel ozelligi: bolge (region) tabanli bellek. Bir bolgenin
+ * omru biter -> tum tahsisleri tek seferde serbest. KEMGU compiler arena'si
+ * (src/arena.c) compile-time icin; bu runtime arena'si KEMGU programlari
+ * icindir.
+ *
+ * Implementasyon: bump allocator (linked chunks). Chunk dolarsa yeni
+ * chunk ayirilir; arena_serbest tum chunklari free eder.
+ */
+
+typedef struct KdlArenaChunk {
+    char *buf;
+    size_t kullanildi;
+    size_t kapasite;
+    struct KdlArenaChunk *sonraki;
+} KdlArenaChunk;
+
+typedef struct {
+    KdlArenaChunk *bas;
+    KdlArenaChunk *aktif;
+    size_t toplam_tahsis;   /* istatistik: ayrilan toplam byte */
+} KdlArena;
+
+#define KDL_ARENA_CHUNK_VARSAYILAN 4096
+
+static KdlArenaChunk *kdl_chunk_olustur(size_t kapasite) {
+    KdlArenaChunk *ch = (KdlArenaChunk *)malloc(sizeof(KdlArenaChunk));
+    if (!ch) return NULL;
+    ch->buf = (char *)malloc(kapasite);
+    if (!ch->buf) { free(ch); return NULL; }
+    ch->kullanildi = 0;
+    ch->kapasite = kapasite;
+    ch->sonraki = NULL;
+    return ch;
+}
+
+KdlArena *kdl_bolge_olustur(void) {
+    KdlArena *a = (KdlArena *)malloc(sizeof(KdlArena));
+    if (!a) return NULL;
+    a->bas = kdl_chunk_olustur(KDL_ARENA_CHUNK_VARSAYILAN);
+    if (!a->bas) { free(a); return NULL; }
+    a->aktif = a->bas;
+    a->toplam_tahsis = 0;
+    return a;
+}
+
+/* boyut byte ayir, hizalama 8-byte */
+void *kdl_bolge_ayir(KdlArena *a, int32_t boyut) {
+    if (!a || boyut <= 0) return NULL;
+    size_t hizalanmis = (size_t)((boyut + 7) & ~7);
+    /* Aktif chunkta yer var mi? */
+    if (a->aktif->kullanildi + hizalanmis > a->aktif->kapasite) {
+        size_t yeni_kap = hizalanmis > KDL_ARENA_CHUNK_VARSAYILAN
+                          ? hizalanmis * 2 : KDL_ARENA_CHUNK_VARSAYILAN;
+        KdlArenaChunk *yeni = kdl_chunk_olustur(yeni_kap);
+        if (!yeni) return NULL;
+        a->aktif->sonraki = yeni;
+        a->aktif = yeni;
+    }
+    void *p = a->aktif->buf + a->aktif->kullanildi;
+    a->aktif->kullanildi += hizalanmis;
+    a->toplam_tahsis += hizalanmis;
+    return p;
+}
+
+void kdl_bolge_serbest(KdlArena *a) {
+    if (!a) return;
+    KdlArenaChunk *c = a->bas;
+    while (c) {
+        KdlArenaChunk *s = c->sonraki;
+        free(c->buf);
+        free(c);
+        c = s;
+    }
+    free(a);
+}
+
+int32_t kdl_bolge_toplam_byte(KdlArena *a) {
+    return a ? (int32_t)a->toplam_tahsis : 0;
+}
+
+/* Arena-aware metin birlestirme (verilen bolgeye yerlestirir) */
+const char *kdl_bolge_metin_birlestir(KdlArena *a,
+                                       const char *x, const char *y) {
+    if (!x) x = "";
+    if (!y) y = "";
+    size_t nx = strlen(x);
+    size_t ny = strlen(y);
+    char *r = (char *)kdl_bolge_ayir(a, (int32_t)(nx + ny + 1));
+    if (!r) return NULL;
+    memcpy(r, x, nx);
+    memcpy(r + nx, y, ny);
+    r[nx + ny] = '\0';
+    return r;
 }

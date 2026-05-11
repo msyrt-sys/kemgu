@@ -921,7 +921,10 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     /* Yapi scope yarat */
     Scope *yapi_s = scope_olustur(tk->arena, SCOPE_YAPI, tk->global_scope);
 
-    /* Generic params -> yapi scope'a ekle */
+    /* Generic params -> yapi scope'a ekle.
+     * Constraint validation (B.3 tamamlayicisi): T:Bound listesi varsa,
+     * her Bound adının SEMBOL_OZELLIK olarak global'de tanimli oldugunu
+     * dogrula. Tanimli degilse T029 hatasi. */
     for (int j = 0; j < yapi->veri.yapi.tip_param_sayi; j++) {
         const char *t_ad = yapi->veri.yapi.tip_paramlar[j];
         int t_uz = (int)strlen(t_ad);
@@ -934,6 +937,22 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
         gp.satir = yapi->satir;
         gp.sutun = yapi->sutun;
         sembol_ekle(yapi_s, tk->arena, &gp);
+
+        /* Constraint validation: T'nin kisitlari */
+        if (yapi->veri.yapi.tip_param_kisit_sayilari &&
+            yapi->veri.yapi.tip_param_kisitlari) {
+            int ks = yapi->veri.yapi.tip_param_kisit_sayilari[j];
+            char **klar = yapi->veri.yapi.tip_param_kisitlari[j];
+            for (int k = 0; k < ks; k++) {
+                const char *kad = klar[k];
+                int ku = (int)strlen(kad);
+                const Sembol *bound = sembol_bul(tk->global_scope, kad, ku);
+                if (!bound || bound->kategori != SEMBOL_OZELLIK) {
+                    tip_hata(tk, yapi, "T029",
+                        "generic kisitlamada bilinmeyen ozellik (trait)");
+                }
+            }
+        }
     }
 
     /* Alanlar -> yapi scope'a ekle (tip bilgisi yapi_scope context'inde) */
@@ -1038,9 +1057,30 @@ static void pre_populate_tip_alias(TipKontrol *tk, const Dugum *alias) {
 static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
 
-    /* Once yapilari (tipleri) ekle, sonra islevleri (parametre tipleri
-     * yapilara referans verebilir). Tip alias'lari yapilardan sonra
-     * islensin ki yapi tiplerine alias verebilelim. */
+    /* Sira:
+     * 1) Ozellikler (yapilarin generic kisitlari ozellige referans verebilir)
+     * 2) Yapilar (alanlar ozellik adlarini kullanmaz, sadece tipi kullanir)
+     * 3) Tip alias (yapilara referans)
+     * 4) Islev/Sabit */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
+                              ? uye->veri.disa.tanim : uye;
+        if (gercek->tip == DUGUM_OZELLIK) {
+            Sembol s;
+            memset(&s, 0, sizeof(s));
+            s.ad = gercek->veri.ozellik.ad;
+            s.ad_uzunluk = gercek->veri.ozellik.ad_uzunluk;
+            s.kategori = SEMBOL_OZELLIK;
+            s.tip = NULL;
+            s.ast_dugumu = gercek;
+            s.satir = gercek->satir;
+            s.sutun = gercek->sutun;
+            sembol_ekle(tk->global_scope, tk->arena, &s);
+        }
+    }
+
+    /* Yapilari (tipleri) ekle */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
@@ -1058,25 +1098,6 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
                               ? uye->veri.disa.tanim : uye;
         if (gercek->tip == DUGUM_TIP_ALIAS) {
             pre_populate_tip_alias(tk, gercek);
-        }
-    }
-
-    /* L: Ozellik sembolleri */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
-        const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
-                              ? uye->veri.disa.tanim : uye;
-        if (gercek->tip == DUGUM_OZELLIK) {
-            Sembol s;
-            memset(&s, 0, sizeof(s));
-            s.ad = gercek->veri.ozellik.ad;
-            s.ad_uzunluk = gercek->veri.ozellik.ad_uzunluk;
-            s.kategori = SEMBOL_OZELLIK;
-            s.tip = NULL;
-            s.ast_dugumu = gercek;
-            s.satir = gercek->satir;
-            s.sutun = gercek->sutun;
-            sembol_ekle(tk->global_scope, tk->arena, &s);
         }
     }
 
@@ -1430,6 +1451,13 @@ static const BuiltinTipi KDL_BUILTINLER[] = {
     { "kanal_al",                      1, {TIP_METIN},                  TIP_TAM32 },
     { "kanal_bo\xc5\x9f_mu",          1, {TIP_METIN},                   TIP_TAM32 },
     { "kanal_serbest",                 1, {TIP_METIN},                  TIP_BOS },
+    /* Arena bellek modeli */
+    { "b\xc3\xb6lge_olustur",          0, {0},                          TIP_METIN },
+    { "b\xc3\xb6lge_serbest",          1, {TIP_METIN},                  TIP_BOS },
+    { "b\xc3\xb6lge_ayir",             2, {TIP_METIN, TIP_TAM32},       TIP_METIN },
+    { "b\xc3\xb6lge_toplam_byte",      1, {TIP_METIN},                  TIP_TAM32 },
+    { "b\xc3\xb6lge_metin_birle\xc5\x9ftir",
+                                       3, {TIP_METIN, TIP_METIN, TIP_METIN}, TIP_METIN },
 };
 #define KDL_BUILTIN_SAYI \
     (int)(sizeof(KDL_BUILTINLER) / sizeof(KDL_BUILTINLER[0]))

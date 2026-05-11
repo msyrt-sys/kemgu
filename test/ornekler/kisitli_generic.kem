@@ -1,6 +1,8 @@
-// B.3 testi: kisitlamali generic (T: Bound1 + Bound2)
-// Su an parse + sembol kaydina kadar destekli — tam constraint dogrulama
-// "ozellik" sistemi tam oldugunda eklenir (gelecek).
+// B.3 + Constraint validation testi: kisitlamali generic (T: Bound1 + Bound2)
+// Ozellikler global'de tanimli olmali; aksi takdirde T029 hatasi.
+
+özellik Yazdırılabilir { işlev yazdir_kendini() -> tam32; }
+özellik Klonlanabilir  { işlev klonla() -> tam32; }
 
 yapı Kutu<T: Yazdırılabilir> {
     deger: T;
@@ -12,6 +14,6 @@ yapı Cift<T: Yazdırılabilir + Klonlanabilir, U> {
 }
 
 işlev main() -> tam32 {
-    yazdır("kisitlamali generic sentaks kabul edildi");
+    yazdır("kisitlamali generic + constraint validation OK");
     ver 0;
 }
