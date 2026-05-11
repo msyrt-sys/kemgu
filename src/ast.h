@@ -327,6 +327,8 @@ struct Dugum {
         struct {
             const char *tip_ad;
             int tip_ad_uzunluk;
+            Dugum **tip_arg;        /* tam monomorph: Kutu<tam32> { ... } */
+            int tip_arg_sayi;
             Dugum **alanlar;       /* DUGUM_ALAN_ATAMA listesi */
             int alan_sayi;
         } yapi_olustur;

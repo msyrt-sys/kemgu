@@ -286,6 +286,24 @@ static void test_ver_deger_kopya_ok(void) {
 
 /* === E.2: Atama dataflow (basit) === */
 
+/* === Katman 2: SAHIP/KANAL + B003 ihlali === */
+
+static void test_kanal_yerel_ihlal(void) {
+    Arena *a = arena_olustur(0);
+    /* B003: kanal_gonder(&yerel) -> Katman 2 ihlali */
+    const char *src =
+        "i\xc5\x9flev kotu() {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken k: metin = kanal_olustur(8);\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x: tam32 = 42;\n"
+        "    kanal_gonder(k, x);\n"   /* kopya OK */
+        "    kanal_gonder(k, x);\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    test_sonuc("Katman 2: kanal_gonder(k, x) kopya OK",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
 static void test_atama_uyumlu(void) {
     Arena *a = arena_olustur(0);
     /* x atanır, sonra y'ye atanır — sembol haritasi ile takip */
@@ -339,6 +357,9 @@ int main(void) {
 
     printf("\n--- E.2: Atama dataflow ---\n");
     test_atama_uyumlu();
+
+    printf("\n--- Katman 2: SAHIP/KANAL ---\n");
+    test_kanal_yerel_ihlal();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

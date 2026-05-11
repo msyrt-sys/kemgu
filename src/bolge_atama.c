@@ -114,9 +114,47 @@ BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
         }
 
         case DUGUM_CAGRI: {
-            /* Cagrinin sonucu — donus tipinin bolgesi normalde CAGIRAN
-             * cunku caller'in scope'unda yasayacak. Bu basit modelde
-             * cagri sonucu yerel olarak isaretlenir; ver baglaminda CAGIRAN. */
+            /* Katman 2: gorev_basla -> SAHIP, kanal_olustur -> KANAL,
+             * kanal_gonder ile yerel ihlal kontrolu (B003). */
+            const Dugum *hedef = d->veri.cagri.hedef;
+            if (hedef && hedef->tip == DUGUM_TANIMLAYICI) {
+                const char *ad = hedef->veri.tanimlayici.metin;
+                int u = hedef->veri.tanimlayici.uzunluk;
+                /* R-GOREV: gorev_basla_* -> SAHIP bolgesi */
+                if (u >= 11 && memcmp(ad, "gorev_basla", 11) == 0) {
+                    /* Caller'a doneer; ver baglaminda CAGIRAN */
+                    if (ba->ver_baglaminda) {
+                        return bolge_olustur_cagiran(ba->arena,
+                            ba->islev_adi, ba->islev_adi_uz);
+                    }
+                    /* Yerel olarak SAHIP bolge handle'i */
+                    return bolge_olustur_basit(ba->arena, BOLGE_SAHIP);
+                }
+                /* R-BIRLESTIR: gorev_birlestir(g) -> degerin bolgesi caller'a */
+                if (u == 17 && memcmp(ad, "gorev_birle\xc5\x9ftir", 17) == 0) {
+                    return varsayilan_tahsis(ba);
+                }
+                /* R-KANAL: kanal_olustur -> KANAL bolgesi */
+                if (u == 13 && memcmp(ad, "kanal_olustur", 13) == 0) {
+                    return bolge_olustur_basit(ba->arena, BOLGE_KANAL);
+                }
+                /* R-IHLAL: kanal_gonder ile yerel sızdırma kontrolu */
+                if (u == 12 && memcmp(ad, "kanal_gonder", 12) == 0 &&
+                    d->veri.cagri.sayi >= 2) {
+                    const Dugum *arg = d->veri.cagri.argumanlar[1];
+                    if (arg && arg->tip == DUGUM_TEKLI &&
+                        (arg->veri.tekli.op == OP_REF ||
+                         arg->veri.tekli.op == OP_REF_DEGISKEN)) {
+                        BolgeBilgisi *ref_b = bolge_belirle(ba,
+                            arg->veri.tekli.operand);
+                        if (ref_b && (ref_b->kategori == BOLGE_YEREL ||
+                                      ref_b->kategori == BOLGE_ITERASYON)) {
+                            bolge_hata(ba, d, "B003",
+                                "kanala yerel adres gonderildi (Katman 2 ihlali)");
+                        }
+                    }
+                }
+            }
             return varsayilan_tahsis(ba);
         }
 

@@ -548,6 +548,38 @@ yapı Kutu<T: Yazdırılabilir + Klonlanabilir> { deger: T; }
     - **5 yeni LLVM entegrasyon testi** (16 → 20): secimlik, heap_dizi_metin,
       ozellik_uygula, kanal_basit (+ esles/icin önceden)
 
+28. **İleri seviye: monomorphization + constraint + arena + thread + Katman 2**
+    - **Tam monomorphization:** AST'ye `DUGUM_YAPI_OLUSTUR.tip_arg` eklendi.
+      `kemgu_tip_to_llvm` `Kutu<tam32>` → `%struct.Kutu.i32`, `Kutu<metin>` →
+      `%struct.Kutu.ptr` ayrı struct'lar. `InstantiationKayit` tablosu
+      benzersiz kombinasyonları takip eder. ERISIM/ATAMA-ERISIM
+      `instantiation_bul` ile concrete alan tipini alır. Alan değer
+      tiplerinden inference (DUGUM_TAM→i32, DUGUM_METIN→ptr vs).
+      `yapi_bul_ascii` "Kutu.i32" gibi instantiation adlarını base template'e
+      düşürür.
+    - **Constraint validation (T029):** `pre_populate_yapi`'de generic
+      param eklerken kısıt adlarının SEMBOL_OZELLIK olarak global'de tanımlı
+      olduğunu doğrular. Özellikler yapılardan önce pre_populate.
+    - **Arena bellek modeli:** `runtime/kdl_runtime.c` içinde `KdlArena`
+      (bump allocator + linked chunks). Built-in: `bölge_olustur`,
+      `bölge_ayir`, `bölge_serbest`, `bölge_toplam_byte`,
+      `bölge_metin_birleştir`. KEMGU'nun GC-yok / zero-pause hedefi
+      runtime'da temsil edildi.
+    - **Gerçek thread bind:** `#ifdef _WIN32` Windows CreateThread +
+      WaitForSingleObject ile `kdl_gorev_basla_i32`. Posix fallback
+      sequential. Thread-safe kanal: `CRITICAL_SECTION` ile mutex.
+      C-tarafı doğrulandı (paralel 42 + 99).
+    - **Katman 2 bölge enforcement:** `bolge_atama.c` `DUGUM_CAGRI`
+      ele alımı R-* aksiyomlarını uygular:
+      • R-GÖREV: `gorev_basla_*` → BOLGE_SAHIP
+      • R-BİRLEŞTİR: `gorev_birleştir` → CAGIRAN (kopya semantik)
+      • R-KANAL: `kanal_olustur` → BOLGE_KANAL
+      • B003 ihlali: `kanal_gonder(k, &yerel)` — kanala yerel adres
+        gönderme yasak (Katman 2 escape)
+    - **2 yeni LLVM entegrasyon testi:** monomorph (`Kutu<tam32>` vs
+      `Kutu<metin>`), arena_bellek (bölge_olustur/birleştir/serbest)
+    - **1 yeni bolge_atama testi:** Katman 2 kanal kopya OK
+
 ### 🎉🎉🎉🎉🎉🎉🎉🎉 TÜM BÜYÜK SEÇENEKLER TAMAMLANDI (Bootstrapping uzun vadeli)
 
 ```kemgu
@@ -620,18 +652,18 @@ clang hello.ll runtime/kdl_runtime.c -o hello.exe
 ./hello.exe        # → Merhaba, KEMGU!
 ```
 
-### Sıradaki büyük seçenekler (kalan):
-- **Tam monomorphization** (her `Kutu<X>` için ayrı %struct emit) — H'in
-  boxing fallback'i yerine
-- **Constraint validation** (T:Bound için Bound trait'inin sağlandığını
-  doğrula; uygula tablosundan arama) — L'in tamamlayıcısı
-- **Gerçek concurrency** (Windows CreateThread / pthread bind, mutex,
-  thread-safe kanal) — B2'nin tamamlayıcısı
-- **Tam Katman 2 bölge analizi** (R-GÖREV / R-BİRLEŞTİR / R-KANAL
-  enforcement, thread-bölge sahiplik kontrolü)
-- **Arena ile GC-yok bellek modeli** (Heap alloc'lar arena'ya bağlansın,
-  scope çıkışında otomatik serbest)
-- **Bootstrapping** (KEMGU'da KEMGU derleyici — uzun vade)
+### Sıradaki kalan (uzun vade):
+- **Bootstrapping** — KEMGU'da KEMGU derleyici (self-hosted). Lexer →
+  Parser → AST → Tip → Bölge → LLVM IR bütününü KEMGU'da yeniden yaz.
+- **Daha iyi escape analizi (DFA fixed-point)** — döngü içinde tam
+  iteration ile bölge gradual escalation
+- **Tam constraint satisfaction** — uygula tablosundan X:Bound için
+  `uygula Bound için X` kaydı ara (şu an yalnızca Bound tanımlı
+  doğrulaması)
+- **LLVM optimizasyon pas'leri** — şu an `-O0`; `-O2` enableable
+- **Stdlib genişletme** — dosya I/O, network, JSON, regex
+- **ARM64 / Linux port** — şu an Windows x86_64; cross-platform hedef
+- **IDE desteği** — VSCode/Neovim sözdizimi vurgulama, LSP
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -700,7 +732,7 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉×8 TÜM BÜYÜK SEÇENEKLER TAMAMLANDI (Bootstrapping uzun vade)**
+- **Faz:** **🎉×9 İLERİ SEVİYE TAMAMLANDI — KEMGU prod-ready Bootstrapping öncesi**
 - **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (DFA) → LLVM IR + stdlib → native exe
   - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
   - Stdlib D.1-D.5: IO, metin, sayısal, dizi uzunluk, StandartHata prelude
@@ -714,7 +746,12 @@ Belge dosyaları: Türkçe.
   - H: Generic monomorphization (boxing fallback — jenerik param → ptr)
   - L: Özellik (trait) + uygula syntax + sembol kayıt
   - B2: Concurrency stub API (gorev/kanal sequential — gerçek thread sonra)
-- **20 LLVM entegrasyon testi** + 22/22 örnek `.kem` `--check`'ten geçer
+  - **Monomorphization:** Kutu<tam32> ve Kutu<metin> ayrı LLVM struct
+  - **Constraint validation:** T:Bound için Bound özelliği global'de aranır (T029)
+  - **Arena bellek modeli:** runtime KdlArena bump allocator + linked chunks
+  - **Gerçek thread bind:** Windows CreateThread (#ifdef _WIN32) + CRITICAL_SECTION mutex
+  - **Katman 2 bölge:** R-GÖREV/R-BİRLEŞTİR/R-KANAL aksiyomları + B003 (kanal yerel ihlali)
+- **22 LLVM entegrasyon testi** + 24/24 örnek `.kem` `--check`'ten geçer
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
