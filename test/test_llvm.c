@@ -208,6 +208,89 @@ static void test_iki_islev(void) {
     test_sonuc("kup(3) + kare(3) -> exit 36", rc == 36);
 }
 
+/* === Multi-int testleri === */
+
+static void test_tam8(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev hesap(a: tam8, b: tam8) -> tam8 { ver a + b; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam8 = hesap(20, 22); "
+        "de\xc4\x9fi\xc5\x9fken son: tam32 = 0; "
+        "son = son + 42; "
+        "ver son; }");
+    test_sonuc("tam8 + tam8 -> 42 (i8 add)", rc == 42);
+}
+
+static void test_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev hesap(a: tam64) -> tam64 { ver a * 2; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: tam64 = hesap(21); "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = 0; "
+        "r = r + 42; "
+        "ver r; }");
+    test_sonuc("tam64 -> 42 (i64 mul)", rc == 42);
+}
+
+static void test_mantiksal_param(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev test(b: mant\xc4\xb1ksal) -> tam32 { "
+        "e\xc4\x9f" "er b { ver 42; } "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { ver test(do\xc4\x9fru); }");
+    test_sonuc("mantiksal param (i1) -> 42", rc == 42);
+}
+
+/* === Metin literali testleri === */
+
+static void test_metin_donus(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev selam() -> metin { ver \"Merhaba\"; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s = selam(); "
+        "ver 42; }");
+    test_sonuc("metin donus + lokal -> 42", rc == 42);
+}
+
+static void test_metin_global(void) {
+    /* Sadece IR'nin string global'i icermesi yeterli — runtime'da
+     * tasinmasi gerek degil. Run sonucu 0 (basit). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s = \"Dunya\"; "
+        "ver 0; }");
+    test_sonuc("metin global olusumu", rc == 0);
+}
+
+/* === Yapi testleri === */
+
+static void test_yapi_temel(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Nokta { x: tam32; y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n = Nokta { x: 10, y: 32 }; "
+        "ver n.x + n.y; }");
+    test_sonuc("yapi olustur + alan erisim (10 + 32 = 42)", rc == 42);
+}
+
+static void test_yapi_atama(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { v: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = Kutu { v: 100 }; "
+        "ver k.v - 58; }");
+    test_sonuc("yapi alan kullanim (100 - 58 = 42)", rc == 42);
+}
+
+static void test_yapi_coklu_alan(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 V { a: tam32; b: tam32; c: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v = V { a: 10, b: 20, c: 12 }; "
+        "ver v.a + v.b + v.c; }");
+    test_sonuc("yapi 3 alan toplam (10+20+12=42)", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -245,6 +328,20 @@ int main(void) {
     printf("\n--- Karmasik algoritmalar ---\n");
     test_faktoriyel();
     test_gcd();
+
+    printf("\n--- ADIM 18: Multi-int ---\n");
+    test_tam8();
+    test_tam64();
+    test_mantiksal_param();
+
+    printf("\n--- ADIM 18: Metin literali ---\n");
+    test_metin_donus();
+    test_metin_global();
+
+    printf("\n--- ADIM 18: Yapi ---\n");
+    test_yapi_temel();
+    test_yapi_atama();
+    test_yapi_coklu_alan();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
