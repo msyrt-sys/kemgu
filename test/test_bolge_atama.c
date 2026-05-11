@@ -175,6 +175,132 @@ static void test_yol_global(void) {
     arena_serbest(a);
 }
 
+/* === E.1: Sembol-bolge haritasi === */
+
+/* Yardimci: tum islev govdesini parse et + bolge_belirle govde uzerinde */
+static BolgeAtama *islev_govde_calistir(const char *kaynak, Arena *a) {
+    Lexer l;
+    lexer_baslat(&l, kaynak, "test");
+    Parser p;
+    parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    if (!prog || prog->veri.program.sayi == 0) return NULL;
+    Dugum *islev = prog->veri.program.uyeler[0];
+    if (islev->tip != DUGUM_ISLEV || !islev->veri.islev.govde) return NULL;
+
+    BolgeAtama *ba = (BolgeAtama *)arena_ayir_sifir(a, sizeof(BolgeAtama));
+    bolge_atama_baslat(ba, a, islev->veri.islev.ad,
+                       islev->veri.islev.ad_uzunluk);
+    bolge_atama_kaynak_ayarla(ba, "test", kaynak);
+    bolge_belirle(ba, islev->veri.islev.govde);
+    return ba;
+}
+
+static void test_sembol_bolge_takip(void) {
+    Arena *a = arena_olustur(0);
+    /* x: tam32 (LIT), y: metin (YEREL) — değişken kayıtları */
+    const char *src =
+        "i\xc5\x9flev f() {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x = 42;\n"
+        "    de\xc4\x9f" "i\xc5\x9fken y = \"hi\";\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    /* sembol_sayi BLOK cikisinda watermark ile sifirlanir (scope semantigi);
+     * sadece hata olmadigini dogrula */
+    test_sonuc("E.1: degisken kayitlari (hata yok)",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
+static void test_sembol_bolge_lookup(void) {
+    Arena *a = arena_olustur(0);
+    /* y'nin bolgesi = literal x'in bolgesi (LIT) -- tanimlayici lookup */
+    const char *src =
+        "i\xc5\x9flev f() {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x = 42;\n"
+        "    de\xc4\x9f" "i\xc5\x9fken y = x;\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    /* y kaydedildi mi? hata yok mu? */
+    test_sonuc("E.1: tanimlayici lookup (y = x)",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
+/* === E.3: VER ihlali tespiti === */
+
+static void test_ver_lit_hata_yok(void) {
+    Arena *a = arena_olustur(0);
+    /* ver 42 — LIT, hata yok */
+    const char *src =
+        "i\xc5\x9flev f() -> tam32 {\n"
+        "    ver 42;\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    test_sonuc("E.3: 'ver 42' hatasi yok (LIT escape OK)",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
+static void test_ver_yerel_metin(void) {
+    Arena *a = arena_olustur(0);
+    /* ver "merhaba" - LIT olarak gorulur (R-VER: CAGIRAN'a kacar, OK) */
+    const char *src =
+        "i\xc5\x9flev f() -> metin {\n"
+        "    ver \"merhaba\";\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    /* Metin literal ver baglaminda CAGIRAN — hata yok */
+    test_sonuc("E.3: 'ver \"metin\"' hatasi yok",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
+static void test_ver_yerel_referans_ihlal(void) {
+    Arena *a = arena_olustur(0);
+    /* B001: ver &x — x YEREL, & yerel adresini caller'a sızdırıyor */
+    const char *src =
+        "i\xc5\x9flev kotu() -> &tam32 {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x: tam32 = 42;\n"
+        "    ver &x;\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    test_sonuc("E.3: 'ver &yerel' B001 ihlali tespit edildi",
+               ba && ba->hata_sayisi == 1);
+    arena_serbest(a);
+}
+
+static void test_ver_deger_kopya_ok(void) {
+    Arena *a = arena_olustur(0);
+    /* ver x (kopya semantik) — y YEREL ama deger kopyalanir, OK */
+    const char *src =
+        "i\xc5\x9flev iyi() -> tam32 {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x: tam32 = 42;\n"
+        "    ver x;\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    test_sonuc("E.3: 'ver x' (kopya) hatasiz",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
+/* === E.2: Atama dataflow (basit) === */
+
+static void test_atama_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    /* x atanır, sonra y'ye atanır — sembol haritasi ile takip */
+    const char *src =
+        "i\xc5\x9flev f() {\n"
+        "    de\xc4\x9f" "i\xc5\x9fken x = 1;\n"
+        "    de\xc4\x9f" "i\xc5\x9fken y = 2;\n"
+        "    x = y;\n"
+        "}\n";
+    BolgeAtama *ba = islev_govde_calistir(src, a);
+    test_sonuc("E.2: ayni bolge atama hatasiz",
+               ba && ba->hata_sayisi == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -200,6 +326,19 @@ int main(void) {
     printf("\n--- Sonek ---\n");
     test_erisim_yerel();
     test_yol_global();
+
+    printf("\n--- E.1: Sembol-bolge takibi ---\n");
+    test_sembol_bolge_takip();
+    test_sembol_bolge_lookup();
+
+    printf("\n--- E.3: VER ihlal tespiti ---\n");
+    test_ver_lit_hata_yok();
+    test_ver_yerel_metin();
+    test_ver_yerel_referans_ihlal();
+    test_ver_deger_kopya_ok();
+
+    printf("\n--- E.2: Atama dataflow ---\n");
+    test_atama_uyumlu();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

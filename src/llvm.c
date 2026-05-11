@@ -1187,6 +1187,183 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
         return;
     }
 
+    case DUGUM_ESLES: {
+        /* C: eşleş — if-else zinciri olarak çevrilir.
+         * Desen tipleri:
+         *   LITERAL    -> icmp eq + koşullu dal
+         *   TANIMLAYICI -> her zaman eşleşir, değişkene bağla
+         *   JOKER      -> her zaman eşleşir
+         *   YAPICI (deger/hic/tamam/hata) -> uçulmaz (secçimlik storage yok) */
+        IfadeSonuc v = ifade_uret(c, d->veri.esles.deger);
+        if (v.reg < 0) return;
+        int end_id = yeni_blok(c);
+
+        for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+            const Dugum *kol = d->veri.esles.kollar[i];
+            const Dugum *desen = kol->veri.esles_kolu.desen;
+            int last = (i == d->veri.esles.kol_sayi - 1);
+            int arm_id = yeni_blok(c);
+            int next_id = last ? end_id : yeni_blok(c);
+
+            switch (desen->tip) {
+            case DUGUM_DESEN_LITERAL: {
+                /* Literal degerini ifade olarak uret + icmp eq */
+                const Dugum *lit = desen->veri.desen_literal.deger;
+                IfadeSonuc lv = ifade_uret(c, lit);
+                if (lv.reg < 0) {
+                    fprintf(c->out, "  br label %%match.arm.%d\n", arm_id);
+                } else {
+                    int sreg = int_cevir(c, lv.reg, lv.tip, v.tip);
+                    int cmp = yeni_reg(c);
+                    fprintf(c->out, "  %%%d = icmp eq %s %%%d, %%%d\n",
+                            cmp, v.tip, v.reg, sreg);
+                    fprintf(c->out,
+                        "  br i1 %%%d, label %%match.arm.%d, label %%match.next.%d\n",
+                        cmp, arm_id, next_id);
+                }
+                break;
+            }
+            case DUGUM_DESEN_TANIMLAYICI:
+            case DUGUM_DESEN_JOKER:
+                /* Her zaman match — direkt dallan */
+                fprintf(c->out, "  br label %%match.arm.%d\n", arm_id);
+                break;
+            default:
+                /* DESEN_YAPICI vs - henuz desteksiz, atla */
+                fprintf(c->out,
+                    "  ; UYARI: yapici deseni LLVM'de henuz destekli degil\n");
+                fprintf(c->out, "  br label %%match.next.%d\n", next_id);
+                break;
+            }
+
+            /* === Kol gövdesi === */
+            fprintf(c->out, "\nmatch.arm.%d:\n", arm_id);
+            c->block_terminated = 0;
+            int watermark = c->sembol_sayi;
+
+            /* Tanimlayici desen ise, sembol olarak ekle (eslese degerine bagla) */
+            if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+                /* Tanimlayici bir alloca + store al */
+                int addr = yeni_reg(c);
+                fprintf(c->out, "  %%%d = alloca %s\n", addr, v.tip);
+                fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
+                        v.tip, v.reg, addr);
+                char a[ISIM_BUF];
+                snprintf(a, ISIM_BUF, "%%%d", addr);
+                sembol_ekle(c,
+                    desen->veri.desen_tanimlayici.ad,
+                    desen->veri.desen_tanimlayici.ad_uzunluk,
+                    a, v.tip);
+            }
+
+            deyim_uret(c, kol->veri.esles_kolu.govde);
+            if (!c->block_terminated) {
+                fprintf(c->out, "  br label %%match.end.%d\n", end_id);
+            }
+            c->sembol_sayi = watermark;
+
+            if (!last) {
+                fprintf(c->out, "\nmatch.next.%d:\n", next_id);
+                c->block_terminated = 0;
+            }
+        }
+
+        fprintf(c->out, "\nmatch.end.%d:\n", end_id);
+        c->block_terminated = 0;
+        return;
+    }
+
+    case DUGUM_ICIN: {
+        /* F: için x: liste { ... } — Dizi<T> uzerinde index'li dongu.
+         * Sembol liste tipi "[N x T]" (sabit boyut, dizi_olustur'dan) varsayar.
+         * Lokal indeks alloca, baslangic 0, her yinelemede +1, son N. */
+        const Dugum *kol_d = d->veri.icin.koleksiyon;
+        if (kol_d->tip != DUGUM_TANIMLAYICI) {
+            fprintf(c->out, "  ; HATA: 'icin' karmasik koleksiyon desteksiz\n");
+            return;
+        }
+        Sembol *liste = sembol_bul(c, kol_d->veri.tanimlayici.metin,
+                                   kol_d->veri.tanimlayici.uzunluk);
+        if (!liste || liste->tip[0] != '[') {
+            fprintf(c->out, "  ; HATA: 'icin' sabit-boyut dizi gerek\n");
+            return;
+        }
+        int n = atoi(liste->tip + 1);
+        char eleman_tip[ISIM_BUF];
+        const char *xp = strstr(liste->tip, " x ");
+        if (xp) {
+            xp += 3;
+            int len = (int)strlen(xp);
+            if (len > 0 && xp[len-1] == ']') len--;
+            snprintf(eleman_tip, ISIM_BUF, "%.*s", len, xp);
+        } else {
+            snprintf(eleman_tip, ISIM_BUF, "i32");
+        }
+
+        int head_id = yeni_blok(c);
+        int body_id = yeni_blok(c);
+        int end_id  = yeni_blok(c);
+
+        /* indeks alloca */
+        int idx_addr = yeni_reg(c);
+        fprintf(c->out, "  %%%d = alloca i32\n", idx_addr);
+        fprintf(c->out, "  store i32 0, ptr %%%d\n", idx_addr);
+        fprintf(c->out, "  br label %%for.head.%d\n", head_id);
+
+        /* head: cond i < N */
+        fprintf(c->out, "\nfor.head.%d:\n", head_id);
+        c->block_terminated = 0;
+        int idx_val = yeni_reg(c);
+        fprintf(c->out, "  %%%d = load i32, ptr %%%d\n", idx_val, idx_addr);
+        int cmp = yeni_reg(c);
+        fprintf(c->out, "  %%%d = icmp slt i32 %%%d, %d\n", cmp, idx_val, n);
+        fprintf(c->out,
+            "  br i1 %%%d, label %%for.body.%d, label %%for.end.%d\n",
+            cmp, body_id, end_id);
+
+        /* body: x = liste[i] */
+        fprintf(c->out, "\nfor.body.%d:\n", body_id);
+        c->block_terminated = 0;
+        int watermark = c->sembol_sayi;
+        int idx_val2 = yeni_reg(c);
+        fprintf(c->out, "  %%%d = load i32, ptr %%%d\n", idx_val2, idx_addr);
+        int gep = yeni_reg(c);
+        fprintf(c->out,
+            "  %%%d = getelementptr inbounds %s, ptr %s, i32 0, i32 %%%d\n",
+            gep, liste->tip, liste->addr, idx_val2);
+        /* x alloca + store + sembol ekle */
+        int x_addr = yeni_reg(c);
+        fprintf(c->out, "  %%%d = alloca %s\n", x_addr, eleman_tip);
+        int elem = yeni_reg(c);
+        fprintf(c->out, "  %%%d = load %s, ptr %%%d\n",
+                elem, eleman_tip, gep);
+        fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
+                eleman_tip, elem, x_addr);
+        char x_addr_str[ISIM_BUF];
+        snprintf(x_addr_str, ISIM_BUF, "%%%d", x_addr);
+        sembol_ekle(c, d->veri.icin.degisken_adi,
+                    d->veri.icin.degisken_adi_uzunluk,
+                    x_addr_str, eleman_tip);
+
+        deyim_uret(c, d->veri.icin.govde);
+        if (!c->block_terminated) {
+            /* i = i + 1, head'e geri */
+            int idx_now = yeni_reg(c);
+            fprintf(c->out, "  %%%d = load i32, ptr %%%d\n",
+                    idx_now, idx_addr);
+            int idx_next = yeni_reg(c);
+            fprintf(c->out, "  %%%d = add i32 %%%d, 1\n", idx_next, idx_now);
+            fprintf(c->out, "  store i32 %%%d, ptr %%%d\n",
+                    idx_next, idx_addr);
+            fprintf(c->out, "  br label %%for.head.%d\n", head_id);
+        }
+        c->sembol_sayi = watermark;
+
+        fprintf(c->out, "\nfor.end.%d:\n", end_id);
+        c->block_terminated = 0;
+        return;
+    }
+
     case DUGUM_BLOK: {
         int watermark = c->sembol_sayi;
         for (int i = 0; i < d->veri.blok.sayi; i++) {
