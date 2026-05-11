@@ -38,10 +38,10 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
        $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
-       $(SRCDIR)/escape.c $(SRCDIR)/llvm.c
+       $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test test_tumu
 
 # === Ana hedef ===
 
@@ -129,6 +129,24 @@ $(BUILD)/test_escape$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                             $(TESTDIR)/test_escape.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === JSON testi (Clang64 + ASan) ===
+
+$(BUILD)/test_json$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/json.c \
+                          $(TESTDIR)/test_json.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === LSP testi (Clang64 + ASan — tum bagimliliklar + json + lsp) ===
+
+$(BUILD)/test_lsp$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                        $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                        $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                        $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                        $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                        $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                        $(SRCDIR)/json.c $(SRCDIR)/lsp.c \
+                        $(TESTDIR)/test_lsp.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -176,7 +194,13 @@ calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 calistir_escape_test: $(BUILD)/test_escape$(EXE)
 	./$(BUILD)/test_escape$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test
+calistir_json_test: $(BUILD)/test_json$(EXE)
+	./$(BUILD)/test_json$(EXE)
+
+calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
+	./$(BUILD)/test_lsp$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test
 	@echo "Tum testler gecti!"
 
 clean:
