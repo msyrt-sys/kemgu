@@ -79,7 +79,9 @@ kemgu/
 │   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları + escape entegrasyonu (TAMAMLANDI ✓ — ADIM 12.2 + 14.2)
 │   ├── escape.h / escape.c           — DFA fixed-point escape analizi (TAMAMLANDI ✓ — ADIM 14.1)
 │   ├── llvm.h / llvm.c               — LLVM IR text üretici (TAMAMLANDI ✓ — ADIM 13.1)
-│   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
+│   ├── json.h / json.c               — Minimal JSON parser + yazıcı (TAMAMLANDI ✓ — ADIM 16.1)
+│   ├── lsp.h / lsp.c                 — LSP server MVP (TAMAMLANDI ✓ — ADIM 16.2-16.4)
+│   └── ana.c                          — Ana giriş noktası (--token/--parse/--check/--llvm/--lsp) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
@@ -91,6 +93,8 @@ kemgu/
 │   ├── test_bolge.c                   — Bölge temsili testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_bolge_atama.c             — Bölge atama R-* + escape entegrasyon testleri (TAMAMLANDI ✓ — 13/13, ASan temiz)
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
+│   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
+│   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -397,6 +401,32 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
+26. **LSP server MVP (ADIM 16)** (27 yeni test, kemgu --lsp ile çalıştırılır)
+    - **16.1: `json.h/c`** — minimal JSON parser + yazıcı (~370 satır)
+      - null/bool/sayı/metin/dizi/nesne
+      - Escape: `\" \\ \n \r \t \b \f` + `\uXXXX` → UTF-8
+      - Arena-tabanli, recursive descent
+      - 21 test
+    - **16.2: `lsp.h/c`** — LSP server (~310 satır)
+      - JSON-RPC 2.0, Content-Length framing
+      - `initialize` → capabilities response (textDocumentSync=1)
+      - `textDocument/didOpen` + `didChange` + `didClose`
+      - `shutdown` + `exit` (graceful)
+      - `textDocument/publishDiagnostics` (otomatik gönderim)
+      - Tek dosya hafıza (incremental sync henüz yok)
+    - **16.3: Diagnostic toplama** (`hata.c` callback hook)
+      - `hata_callback_ayarla(cb, ctx)` — set edilirse `hata_raporla` stderr yerine cb çağırır
+      - LSP: parser + tip kontrol hataları → diagnostic listesi
+      - 1-tabanli (KEMGU) → 0-tabanli (LSP) konum dönüşümü
+      - 6 LSP test (initialize, shutdown, didOpen valid/parser/tip hata, didChange düzeltir)
+    - **16.4: `ana.c --lsp`** — stdio loop'a geç, dosya okumadan
+    - **Pratik kullanım:** `./build/kemgu --lsp` ile VSCode / Neovim LSP istemcisinden bağlanılabilir
+    - **Sinirlamalar (v1):**
+      - Hover, completion, definition, semanticTokens yok
+      - workspace mesajları yok
+      - Tek dosya hafıza (didChange tüm metni yeniler — incremental yok)
+      - Çoklu workspace dosyası yok
+
 25. **Constraint satisfaction — özellik/uygula sistemi (ADIM 15)** (19 yeni test)
     - **15.1: `parse_ozellik_tanimi`** — `özellik Ad<T> { işlev m() -> tip; ... }`
       - Method imzaları (`işlev m() -> T;`) ve default impl (`işlev m() { ... }`)
@@ -434,7 +464,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
       - Aynı bound iki kez raporlanabilir (annotation + constructor)
       - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
 
-### 🎉🎉 ADIM 12 + 13 + 14 + 15 TAMAMLANDI — ESCAPE + CONSTRAINT HAZIR
+### 🎉🎉 ADIM 12 + 13 + 14 + 15 + 16 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP HAZIR
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -442,7 +472,7 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 431/431 (önceki 412 + 12 parser özellik/uygula/bound + 7 tip kontrol constraint)
+**Test sayısı:** 458/458 (önceki 431 + 21 JSON + 6 LSP)
 
 ### Sıradaki büyük seçenekler:
 - **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
@@ -450,7 +480,7 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
 - **Constraint v2** (method dispatch + trait method type checking, generic islev bound check)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
-- **LSP server** (gerçek IDE entegrasyonu)
+- **LSP v2** (hover, completion, definition, semanticTokens, incremental sync, workspace)
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
@@ -525,9 +555,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM + ESCAPE FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ + DFA ESCAPE!)
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → **(genişletme: Katman 2, LLVM cağrı/yapı/kontrol akışı, constraint, LSP, stdlib, bootstrap)**
+- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM + ESCAPE + CONSTRAINT + LSP FAZLARI TAMAMLANDI**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → ~~15.1-15.5~~ ✓ → ~~16.1-16.5~~ ✓ → **(genişletme: Katman 2, LLVM cağrı/yapı/kontrol akışı, LSP v2, stdlib, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
