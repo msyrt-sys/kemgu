@@ -18,6 +18,25 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     uygula_tablosu_baslat(&tk->uygulamalar);
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
+
+    /* Built-in islevler:
+     *   yazdir(metin) -> tam32  (LLVM tarafinda libc puts'a map) */
+    {
+        TipBilgisi **params = (TipBilgisi **)arena_ayir(a,
+            sizeof(TipBilgisi *));
+        if (params) {
+            params[0] = tip_olustur_basit(a, TIP_METIN);
+            TipBilgisi *donus = tip_olustur_basit(a, TIP_TAM32);
+            TipBilgisi *tip = tip_olustur_islev(a, params, 1, donus);
+            Sembol s;
+            memset(&s, 0, sizeof(s));
+            s.ad = "yazdir";
+            s.ad_uzunluk = 6;
+            s.kategori = SEMBOL_ISLEV;
+            s.tip = tip;
+            sembol_ekle(global, a, &s);
+        }
+    }
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
 }
