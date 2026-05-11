@@ -1,0 +1,23 @@
+// A.7 + D.1: dizi + yazdir + uzunluk
+işlev main() -> tam32 {
+    değişken xs = [42, 17, 99, 3, 256];
+    değişken i: tam32 = 0;
+    değişken n: tam32 = uzunluk(xs);
+    iken i < n {
+        yaz("xs["); yaz_tam(i); yaz("] = "); yazdır_tam(xs[i]);
+        i = i + 1;
+    }
+
+    // min/maks ile dizi taramasi
+    değişken min_d: tam32 = xs[0];
+    değişken maks_d: tam32 = xs[0];
+    i = 1;
+    iken i < n {
+        min_d = min(min_d, xs[i]);
+        maks_d = maks(maks_d, xs[i]);
+        i = i + 1;
+    }
+    yaz("min: "); yazdır_tam(min_d);
+    yaz("maks: "); yazdır_tam(maks_d);
+    ver 0;
+}
