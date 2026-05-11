@@ -6,68 +6,93 @@
 #include <inttypes.h>
 
 /*
- * KEMGU LLVM IR Backend (ADIM 17 — genişletilmiş)
- * ================================================
+ * KEMGU LLVM IR Backend v2 (ADIM 18)
+ * ===================================
  *
- * Desteklenen ozellikler:
- *   - Tam sayilar (i32) — hepsi i32 olarak tek bir tip varsayilir
- *   - Mantiksal (i1)
- *   - Islev tanimi + parametreler (i32)
- *   - Islev cagrisi
- *   - Lokal degisken (alloca + store/load)
- *   - Atama (lvalue: tanimlayici)
- *   - if/else (BR + iki blok + birlesik blok)
- *   - while (header + body + done)
- *   - Karsilastirma ==, !=, <, >, <=, >=
- *   - Mantiksal ve, veya, degil
- *   - Aritmetik +, -, *, /, %, tekli -
- *   - ver
+ * Eklenenler:
+ *   - Coklu int tipleri (tam8/16/32/64, dtam*, mantiksal i1, karakter i32)
+ *   - Metin literali (global string constant + GEP)
+ *   - Yapi tanimi + olusturma + alan erisimi (locals)
+ *   - Tip annotation'larina dayali context-driven tip secimi
  *
- * Mevcut sinirlamalar:
- *   - Yapilar, diziler henuz yok
- *   - Yalniz i32 sayisal (tam8/16/64, dtam*, kesirli* yok)
- *   - Metin literali yok
- *   - Referans/pointer yok
+ * Tasarim:
+ *   - IfadeSonuc { reg, tip_ir } — her ifade hem reg hem LLVM IR tipi doner
+ *   - LlvmIsim: deklare edilen degiskenin tipi de saklanir
+ *   - Pre-pass: tum metin literalleri ve yapi tanimlari toplanir, module
+ *     basinda emit edilir
  *
- * Mimari: LlvmGen state struct'i + visitor.
- *   isimler: lineer (Linked list) — degisken/parametre adi -> alloca reg veya
- *            dogrudan parametre.
- *   reg: SSA register counter (her ifade icin yeni %N).
- *   label: basic block etiket counter.
+ * Sinirlamalar (v2'de hala):
+ *   - kesirli32/64 (float/double) yok — sadece tam sayisal
+ *   - Yapilar by-pointer (struct-by-value parametreler v3'te)
+ *   - Karakter UTF-8 byte sequence yerine i32 code point (KEMGU spec uyumu)
+ *   - mantiksal islevin parametre/donus tipi olarak kullanildigi zaman i1
  */
+
+/* === Yapilar === */
 
 typedef struct LlvmIsim {
     const char *ad;
     int ad_uz;
-    /* 0 = parametre (dogrudan kullan: %<ad>)
-     * 1 = lokal alloca (load gerekir): reg no */
-    int kategori;
-    int reg_no;
+    int kategori;          /* 0 = parametre alloca, 1 = lokal alloca */
+    int reg_no;            /* alloca register */
+    const char *llvm_tip;  /* "i32", "i8", "ptr", "%Hasta" */
     struct LlvmIsim *sonraki;
 } LlvmIsim;
+
+typedef struct StrKayit {
+    const Dugum *d;        /* DUGUM_METIN node */
+    int id;
+    int byte_uz;           /* metin uzunlugu (\00 dahil edilmiyor) */
+    struct StrKayit *sonraki;
+} StrKayit;
+
+typedef struct YapiKayit {
+    const char *ad;
+    int ad_uz;
+    const Dugum *ast;      /* DUGUM_YAPI node */
+    struct YapiKayit *sonraki;
+} YapiKayit;
+
+typedef struct IslevKayit {
+    const char *ad;
+    int ad_uz;
+    const char *donus_tip;
+    struct IslevKayit *sonraki;
+} IslevKayit;
 
 typedef struct LlvmGen {
     FILE *out;
     Arena *arena;
-    int reg;       /* sonraki SSA reg */
-    int label;     /* sonraki etiket */
+    int reg;
+    int label;
     LlvmIsim *isimler;
+    StrKayit *strler;
+    int str_sayaci;
+    YapiKayit *yapilar;
+    IslevKayit *islevler;
 } LlvmGen;
 
+typedef struct IfadeSonuc {
+    int reg;               /* -1 = error */
+    const char *tip;       /* IR tipi */
+} IfadeSonuc;
+
 /* === Forward === */
-static int ifade_uret(LlvmGen *g, const Dugum *d);
-static int blok_uret(LlvmGen *g, const Dugum *blok);  /* son ver yapildi mi? */
+
+static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d, const char *beklenen);
+static int blok_uret(LlvmGen *g, const Dugum *blok);
 
 /* === Isim tablosu === */
 
 static void isim_ekle(LlvmGen *g, const char *ad, int ad_uz,
-                      int kategori, int reg_no) {
+                      int kategori, int reg_no, const char *tip) {
     LlvmIsim *i = (LlvmIsim *)arena_ayir_sifir(g->arena, sizeof(LlvmIsim));
     if (!i) return;
     i->ad = ad;
     i->ad_uz = ad_uz;
     i->kategori = kategori;
     i->reg_no = reg_no;
+    i->llvm_tip = tip;
     i->sonraki = g->isimler;
     g->isimler = i;
 }
@@ -81,7 +106,6 @@ static LlvmIsim *isim_bul(LlvmGen *g, const char *ad, int ad_uz) {
     return NULL;
 }
 
-/* Scope giris/cikis: linked list HEAD ve onceki HEAD'i kaydet. */
 typedef struct ScopeMarker { LlvmIsim *eski_bas; } ScopeMarker;
 
 static ScopeMarker scope_gir(LlvmGen *g) {
@@ -99,39 +123,302 @@ static void scope_cik(LlvmGen *g, ScopeMarker m) {
 static int yeni_reg(LlvmGen *g) { return g->reg++; }
 static int yeni_label(LlvmGen *g) { return g->label++; }
 
-/* Adi yaz (parametre adi vs.) — null-term degilse fwrite */
 static void ad_yaz(FILE *out, const char *ad, int ad_uz) {
     fwrite(ad, 1, (size_t)ad_uz, out);
 }
 
-/* === Ifade IR === */
+/* AST tip dugumunden (DUGUM_TIP_BASIT, DUGUM_TIP_KULLANICI) LLVM IR tipi.
+ * NULL -> NULL doner. Bilinmeyen -> "i32" (varsayilan). */
+static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
+    if (!tip_d) return NULL;
+    if (tip_d->tip == DUGUM_TIP_BASIT) {
+        const char *a = tip_d->veri.tip_basit.ad;
+        int u = tip_d->veri.tip_basit.ad_uzunluk;
+        #define ESLES(s) (u == (int)(sizeof(s) - 1) && memcmp(a, s, sizeof(s) - 1) == 0)
+        if (ESLES("tam8") || ESLES("dtam8")) return "i8";
+        if (ESLES("tam16") || ESLES("dtam16")) return "i16";
+        if (ESLES("tam32") || ESLES("dtam32")) return "i32";
+        if (ESLES("tam64") || ESLES("dtam64")) return "i64";
+        if (ESLES("mant" "\xc4\xb1" "ksal")) return "i1";
+        if (ESLES("karakter")) return "i32";
+        if (ESLES("metin")) return "ptr";
+        if (ESLES("bo" "\xc5\x9f")) return "void";
+        #undef ESLES
+        /* Taninmayan basit tip — kullanici yapisi olabilir, ama TIP_BASIT yapilara ulasmaz */
+        return "i32";
+    }
+    if (tip_d->tip == DUGUM_TIP_KULLANICI && tip_d->veri.tip_kullanici.yol) {
+        const Dugum *y = tip_d->veri.tip_kullanici.yol;
+        if (y->tip == DUGUM_TANIMLAYICI) {
+            /* Yapi tipi — %Ad olarak temsil, ama deger olarak ptr */
+            (void)g;
+            return "ptr";  /* yapi degerleri pointer ile temsil */
+        }
+    }
+    if (tip_d->tip == DUGUM_TIP_REFERANS || tip_d->tip == DUGUM_TIP_POINTER) {
+        return "ptr";
+    }
+    if (tip_d->tip == DUGUM_TIP_DIZI) return "ptr";
+    return "i32";  /* default */
+}
 
-/* Tanimlayici cozumle: parametre veya alloca'dan deger oku. Reg no doner. */
-static int tanimlayici_yukle(LlvmGen *g, const Dugum *d) {
-    LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
-                            d->veri.tanimlayici.uzunluk);
-    if (!i) {
-        int r = yeni_reg(g);
-        fprintf(g->out, "  ; HATA: tanimsiz '%.*s'\n",
-                d->veri.tanimlayici.uzunluk, d->veri.tanimlayici.metin);
-        fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-        return r;
+/* Yapi adi bul (sembol tablosunda yapi mi diye) */
+static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (YapiKayit *y = g->yapilar; y; y = y->sonraki) {
+        if (y->ad_uz == ad_uz && memcmp(y->ad, ad, (size_t)ad_uz) == 0) {
+            return y;
+        }
     }
-    if (i->kategori == 0) {
-        /* Parametre — dogrudan deger; yeni reg'e kopyala (uniform interface) */
-        int r = yeni_reg(g);
-        fprintf(g->out, "  %%%d = add i32 0, %%", r);
-        ad_yaz(g->out, i->ad, i->ad_uz);
-        fputs("\n", g->out);
-        return r;
+    return NULL;
+}
+
+/* Yapinin alaninin index ve tipini bul */
+static int yapi_alan_indeksi(const YapiKayit *y, const char *ad, int ad_uz,
+                             const Dugum **out_tip) {
+    if (!y || !y->ast) return -1;
+    for (int i = 0; i < y->ast->veri.yapi.alan_sayi; i++) {
+        const Dugum *a = y->ast->veri.yapi.alanlar[i];
+        if (a->veri.alan.ad_uzunluk == ad_uz &&
+            memcmp(a->veri.alan.ad, ad, (size_t)ad_uz) == 0) {
+            if (out_tip) *out_tip = a->veri.alan.tip;
+            return i;
+        }
     }
-    /* Alloca'dan yukle */
+    return -1;
+}
+
+/* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
+ * Sadece basit darlatma/genisletme yardimcisi: src->dst int donusumleri. */
+static int tip_genisligi(const char *ir) {
+    if (!ir) return 0;
+    if (strcmp(ir, "i1") == 0) return 1;
+    if (strcmp(ir, "i8") == 0) return 8;
+    if (strcmp(ir, "i16") == 0) return 16;
+    if (strcmp(ir, "i32") == 0) return 32;
+    if (strcmp(ir, "i64") == 0) return 64;
+    return 0;
+}
+
+/* src tipindeki reg'i dst tipine cevir. Sadece int donusumleri.
+ * Ayni tip -> reg ayni doner. */
+static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
+                        const char *dst_tip) {
+    if (!src_tip || !dst_tip || strcmp(src_tip, dst_tip) == 0) return src_reg;
+    int src_w = tip_genisligi(src_tip);
+    int dst_w = tip_genisligi(dst_tip);
+    if (src_w == 0 || dst_w == 0) return src_reg;
     int r = yeni_reg(g);
-    fprintf(g->out, "  %%%d = load i32, ptr %%%d\n", r, i->reg_no);
+    if (src_w < dst_w) {
+        /* Genislet (sext for signed) */
+        fprintf(g->out, "  %%%d = sext %s %%%d to %s\n",
+                r, src_tip, src_reg, dst_tip);
+    } else {
+        /* Daralt */
+        fprintf(g->out, "  %%%d = trunc %s %%%d to %s\n",
+                r, src_tip, src_reg, dst_tip);
+    }
     return r;
 }
 
-/* Karsilastirma op kodu -> LLVM icmp predicate */
+/* === Pre-pass: metin literallerini topla === */
+
+static int dugum_metin_eslesir(const Dugum *a, const Dugum *b) {
+    if (a == b) return 1;
+    if (a->veri.metin_lit.uzunluk != b->veri.metin_lit.uzunluk) return 0;
+    return memcmp(a->veri.metin_lit.metin, b->veri.metin_lit.metin,
+                  (size_t)a->veri.metin_lit.uzunluk) == 0;
+}
+
+static StrKayit *str_bul(LlvmGen *g, const Dugum *d) {
+    for (StrKayit *s = g->strler; s; s = s->sonraki) {
+        if (dugum_metin_eslesir(s->d, d)) return s;
+    }
+    return NULL;
+}
+
+static int str_kayit_et(LlvmGen *g, const Dugum *d) {
+    StrKayit *e = str_bul(g, d);
+    if (e) return e->id;
+    StrKayit *yeni = (StrKayit *)arena_ayir_sifir(g->arena, sizeof(StrKayit));
+    if (!yeni) return -1;
+    yeni->d = d;
+    yeni->id = g->str_sayaci++;
+    yeni->byte_uz = d->veri.metin_lit.uzunluk;
+    yeni->sonraki = g->strler;
+    g->strler = yeni;
+    return yeni->id;
+}
+
+static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d);
+
+static void ast_taransa_metinleri_liste(LlvmGen *g, Dugum **liste, int sayi) {
+    for (int i = 0; i < sayi; i++) ast_taransa_metinleri(g, liste[i]);
+}
+
+static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_METIN) {
+        str_kayit_et(g, d);
+        return;
+    }
+    switch (d->tip) {
+        case DUGUM_PROGRAM:
+            ast_taransa_metinleri_liste(g, d->veri.program.uyeler,
+                                         d->veri.program.sayi); break;
+        case DUGUM_ISLEV:
+            ast_taransa_metinleri(g, d->veri.islev.govde); break;
+        case DUGUM_DISA:
+            ast_taransa_metinleri(g, d->veri.disa.tanim); break;
+        case DUGUM_BLOK:
+            ast_taransa_metinleri_liste(g, d->veri.blok.deyimler,
+                                         d->veri.blok.sayi); break;
+        case DUGUM_DEGISKEN:
+            ast_taransa_metinleri(g, d->veri.degisken.deger); break;
+        case DUGUM_ATAMA:
+            ast_taransa_metinleri(g, d->veri.atama.hedef);
+            ast_taransa_metinleri(g, d->veri.atama.deger); break;
+        case DUGUM_VER:
+            ast_taransa_metinleri(g, d->veri.ver.deger); break;
+        case DUGUM_EGER:
+            ast_taransa_metinleri(g, d->veri.eger.kosul);
+            ast_taransa_metinleri(g, d->veri.eger.gozdoldur);
+            ast_taransa_metinleri(g, d->veri.eger.yan); break;
+        case DUGUM_IKEN:
+            ast_taransa_metinleri(g, d->veri.iken.kosul);
+            ast_taransa_metinleri(g, d->veri.iken.govde); break;
+        case DUGUM_ICIN:
+            ast_taransa_metinleri(g, d->veri.icin.koleksiyon);
+            ast_taransa_metinleri(g, d->veri.icin.govde); break;
+        case DUGUM_IFADE_DEYIMI:
+            ast_taransa_metinleri(g, d->veri.ifade_deyimi.ifade); break;
+        case DUGUM_IKILI:
+            ast_taransa_metinleri(g, d->veri.ikili.sol);
+            ast_taransa_metinleri(g, d->veri.ikili.sag); break;
+        case DUGUM_TEKLI:
+            ast_taransa_metinleri(g, d->veri.tekli.operand); break;
+        case DUGUM_CAGRI:
+            ast_taransa_metinleri(g, d->veri.cagri.hedef);
+            ast_taransa_metinleri_liste(g, d->veri.cagri.argumanlar,
+                                         d->veri.cagri.sayi); break;
+        case DUGUM_ERISIM:
+            ast_taransa_metinleri(g, d->veri.erisim.nesne); break;
+        case DUGUM_INDEKS:
+            ast_taransa_metinleri(g, d->veri.indeks.nesne);
+            ast_taransa_metinleri(g, d->veri.indeks.indeks); break;
+        case DUGUM_DIZI_OLUSTUR:
+            ast_taransa_metinleri_liste(g, d->veri.dizi_olustur.elemanlar,
+                                         d->veri.dizi_olustur.sayi); break;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA) {
+                    ast_taransa_metinleri(g, aa->veri.alan_atama.deger);
+                }
+            }
+            break;
+        case DUGUM_SABIT:
+            ast_taransa_metinleri(g, d->veri.sabit.deger); break;
+        default: break;
+    }
+}
+
+/* Yapi pre-pass */
+
+static void islev_kayit(LlvmGen *g, const Dugum *i) {
+    IslevKayit *r = (IslevKayit *)arena_ayir_sifir(g->arena, sizeof(IslevKayit));
+    if (!r) return;
+    r->ad = i->veri.islev.ad;
+    r->ad_uz = i->veri.islev.ad_uzunluk;
+    const char *dt = i->veri.islev.donus_tipi
+        ? ast_tip_to_ir(g, i->veri.islev.donus_tipi)
+        : "void";
+    r->donus_tip = dt ? dt : "void";
+    r->sonraki = g->islevler;
+    g->islevler = r;
+}
+
+static IslevKayit *islev_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (IslevKayit *i = g->islevler; i; i = i->sonraki) {
+        if (i->ad_uz == ad_uz && memcmp(i->ad, ad, (size_t)ad_uz) == 0) {
+            return i;
+        }
+    }
+    return NULL;
+}
+
+static void yapi_kayit(LlvmGen *g, const Dugum *y) {
+    YapiKayit *r = (YapiKayit *)arena_ayir_sifir(g->arena, sizeof(YapiKayit));
+    if (!r) return;
+    r->ad = y->veri.yapi.ad;
+    r->ad_uz = y->veri.yapi.ad_uzunluk;
+    r->ast = y;
+    r->sonraki = g->yapilar;
+    g->yapilar = r;
+}
+
+/* === Module-basi globaller === */
+
+static void str_globalleri_emit(LlvmGen *g) {
+    /* @.str.N = private unnamed_addr constant [K x i8] c"...\00" */
+    for (StrKayit *s = g->strler; s; s = s->sonraki) {
+        int uz = s->byte_uz;
+        fprintf(g->out,
+            "@.str.%d = private unnamed_addr constant [%d x i8] c\"",
+            s->id, uz + 1);
+        const char *m = s->d->veri.metin_lit.metin;
+        for (int i = 0; i < uz; i++) {
+            unsigned char c = (unsigned char)m[i];
+            if (c == '\\' || c == '"' || c < 0x20 || c >= 0x7F) {
+                fprintf(g->out, "\\%02X", c);
+            } else {
+                fputc(c, g->out);
+            }
+        }
+        fputs("\\00\"\n", g->out);
+    }
+    if (g->strler) fputs("\n", g->out);
+}
+
+static void yapi_tip_tanimlari_emit(LlvmGen *g) {
+    /* %YapiAdi = type { tip1, tip2, ... } */
+    for (YapiKayit *y = g->yapilar; y; y = y->sonraki) {
+        fputs("%", g->out);
+        ad_yaz(g->out, y->ad, y->ad_uz);
+        fputs(" = type { ", g->out);
+        for (int i = 0; i < y->ast->veri.yapi.alan_sayi; i++) {
+            if (i > 0) fputs(", ", g->out);
+            const Dugum *a = y->ast->veri.yapi.alanlar[i];
+            const char *ir = ast_tip_to_ir(g, a->veri.alan.tip);
+            fputs(ir ? ir : "i32", g->out);
+        }
+        fputs(" }\n", g->out);
+    }
+    if (g->yapilar) fputs("\n", g->out);
+}
+
+/* === Ifade IR === */
+
+static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
+    int r = yeni_reg(g);
+    fprintf(g->out, "  ; HATA: %s\n", mesaj);
+    fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+    IfadeSonuc s = { r, "i32" };
+    return s;
+}
+
+/* Tanimlayici cozumle: alloca'dan load. */
+static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d) {
+    LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
+                            d->veri.tanimlayici.uzunluk);
+    if (!i) return hata(g, "tanimsiz tanimlayici");
+    int r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+            r, i->llvm_tip, i->reg_no);
+    IfadeSonuc s = { r, i->llvm_tip };
+    return s;
+}
+
+/* Karsilastirma op kodu -> LLVM icmp predicate (signed) */
 static const char *icmp_pred(Operator op) {
     switch (op) {
         case OP_ESIT:        return "eq";
@@ -144,47 +431,180 @@ static const char *icmp_pred(Operator op) {
     }
 }
 
-static int ifade_uret(LlvmGen *g, const Dugum *d) {
+/* Beklenen tip 'metin' veya 'ptr' ise string literal pointer'a yukselt */
+static IfadeSonuc metin_lit_uret(LlvmGen *g, const Dugum *d) {
+    StrKayit *s = str_bul(g, d);
+    if (!s) return hata(g, "metin literal kayitsiz");
+    int r = yeni_reg(g);
+    fprintf(g->out,
+        "  %%%d = getelementptr [%d x i8], ptr @.str.%d, i32 0, i32 0\n",
+        r, s->byte_uz + 1, s->id);
+    IfadeSonuc res = { r, "ptr" };
+    return res;
+}
+
+/* DUGUM_YAPI_OLUSTUR -> alloca + GEP/store alanlar */
+static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
+    YapiKayit *y = yapi_bul(g, d->veri.yapi_olustur.tip_ad,
+                             d->veri.yapi_olustur.tip_ad_uzunluk);
+    if (!y) return hata(g, "yapi tipi bilinmiyor");
+
+    int alloca_r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %%", alloca_r);
+    ad_yaz(g->out, y->ad, y->ad_uz);
+    fputs("\n", g->out);
+
+    /* Her alan icin: ad ile yapinin alan index'ini bul, GEP+store */
+    for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+        Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+        if (!aa || aa->tip != DUGUM_ALAN_ATAMA) continue;
+        const Dugum *alan_tip_d = NULL;
+        int idx = yapi_alan_indeksi(y, aa->veri.alan_atama.ad,
+                                     aa->veri.alan_atama.ad_uzunluk,
+                                     &alan_tip_d);
+        if (idx < 0) {
+            fprintf(g->out, "  ; HATA: alan bulunamadi\n");
+            continue;
+        }
+        const char *alan_ir = ast_tip_to_ir(g, alan_tip_d);
+        IfadeSonuc deger = ifade_uret(g, aa->veri.alan_atama.deger, alan_ir);
+        int dr = int_donustur(g, deger.reg, deger.tip, alan_ir);
+        int gep_r = yeni_reg(g);
+        fprintf(g->out,
+            "  %%%d = getelementptr %%", gep_r);
+        ad_yaz(g->out, y->ad, y->ad_uz);
+        fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", alloca_r, idx);
+        fprintf(g->out, "  store %s %%%d, ptr %%%d\n", alan_ir, dr, gep_r);
+    }
+
+    IfadeSonuc s = { alloca_r, "ptr" };
+    return s;
+}
+
+/* DUGUM_ERISIM -> GEP + load (yapi pointeri uzerinden alan) */
+static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
+    /* Once nesneyi degerlendir — bir ptr olmali, yapi tipini cikariyoruz */
+    IfadeSonuc nesne = ifade_uret(g, d->veri.erisim.nesne, NULL);
+    if (strcmp(nesne.tip, "ptr") != 0) {
+        return hata(g, "erisim: nesne ptr olmali");
+    }
+
+    /* Hangi yapi? Nesne tanimlayici ise sembolden bak. Aksi halde
+     * konservatif yaklasim: en son yapilar uygun degil — basitlestiriyoruz:
+     * nesne tanimlayici ise isim tablosu uzerinden tip al. */
+    const char *yapi_ir = NULL;
+    if (d->veri.erisim.nesne->tip == DUGUM_TANIMLAYICI) {
+        LlvmIsim *i = isim_bul(g,
+            d->veri.erisim.nesne->veri.tanimlayici.metin,
+            d->veri.erisim.nesne->veri.tanimlayici.uzunluk);
+        if (i) yapi_ir = i->llvm_tip;
+    }
+    /* %Tip seklinde olabilir, ya da "ptr" (yapi degil). */
+    /* Yapi adini cikar (%Tip -> Tip), kayitta ara. */
+    YapiKayit *yk = NULL;
+    if (yapi_ir && yapi_ir[0] == '%') {
+        yk = yapi_bul(g, yapi_ir + 1, (int)strlen(yapi_ir + 1));
+    }
+    if (!yk) {
+        /* Cesitli sahte yapilara karsi yapi listesinde ilk eslesen alani
+         * arayalim. Daha iyi cozum: tip kontrol ile entegre. */
+        for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+            if (yapi_alan_indeksi(y, d->veri.erisim.alan,
+                                   d->veri.erisim.alan_uzunluk, NULL) >= 0) {
+                yk = y;
+            }
+        }
+    }
+    if (!yk) return hata(g, "erisim: yapi tipi cozulemedi");
+
+    const Dugum *alan_tip_d = NULL;
+    int idx = yapi_alan_indeksi(yk, d->veri.erisim.alan,
+                                 d->veri.erisim.alan_uzunluk, &alan_tip_d);
+    if (idx < 0) return hata(g, "alan bulunamadi");
+    const char *alan_ir = ast_tip_to_ir(g, alan_tip_d);
+
+    int gep_r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
+    ad_yaz(g->out, yk->ad, yk->ad_uz);
+    fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", nesne.reg, idx);
+
+    int load_r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+            load_r, alan_ir, gep_r);
+    IfadeSonuc s = { load_r, alan_ir };
+    return s;
+}
+
+static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
+                              const char *beklenen) {
     if (!d) {
-        int r = yeni_reg(g);
-        fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-        return r;
+        IfadeSonuc s = { yeni_reg(g), "i32" };
+        fprintf(g->out, "  %%%d = add i32 0, 0\n", s.reg);
+        return s;
     }
 
     switch (d->tip) {
         case DUGUM_TAM: {
+            const char *tip = beklenen ? beklenen : "i32";
+            int w = tip_genisligi(tip);
+            if (w == 0) tip = "i32";
             int r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = add i32 0, %" PRId64 "\n",
-                    r, d->veri.tam.deger);
-            return r;
+            fprintf(g->out, "  %%%d = add %s 0, %" PRId64 "\n",
+                    r, tip, d->veri.tam.deger);
+            IfadeSonuc s = { r, tip };
+            return s;
         }
 
         case DUGUM_MANTIKSAL: {
-            /* i1 olarak hesapla ama i32'ye genislet (uniform sayisal akis) */
+            const char *tip = "i1";
+            if (beklenen && strcmp(beklenen, "i1") != 0) tip = "i32";
             int r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = add i32 0, %d\n",
-                    r, d->veri.mantiksal.deger ? 1 : 0);
-            return r;
+            if (strcmp(tip, "i1") == 0) {
+                fprintf(g->out, "  %%%d = or i1 %d, 0\n",
+                        r, d->veri.mantiksal.deger ? 1 : 0);
+            } else {
+                fprintf(g->out, "  %%%d = add %s 0, %d\n",
+                        r, tip, d->veri.mantiksal.deger ? 1 : 0);
+            }
+            IfadeSonuc s = { r, tip };
+            return s;
         }
+
+        case DUGUM_KARAKTER: {
+            int r = yeni_reg(g);
+            fprintf(g->out, "  %%%d = add i32 0, %u\n",
+                    r, d->veri.karakter.kod_noktasi);
+            IfadeSonuc s = { r, "i32" };
+            return s;
+        }
+
+        case DUGUM_METIN:
+            return metin_lit_uret(g, d);
 
         case DUGUM_TANIMLAYICI:
             return tanimlayici_yukle(g, d);
 
+        case DUGUM_YAPI_OLUSTUR:
+            return yapi_olustur_uret(g, d);
+
+        case DUGUM_ERISIM:
+            return erisim_uret(g, d);
+
         case DUGUM_IKILI: {
             const char *cmp = icmp_pred(d->veri.ikili.op);
-            int sol_r = ifade_uret(g, d->veri.ikili.sol);
-            int sag_r = ifade_uret(g, d->veri.ikili.sag);
+            /* Karsilastirma: operandlarin tipi natural (beklenen iletilmiyor).
+             * Aritmetik/mantiksal: operandlar beklenen tipte. */
+            const char *op_beklenen = cmp ? NULL : beklenen;
+            IfadeSonuc sol = ifade_uret(g, d->veri.ikili.sol, op_beklenen);
+            IfadeSonuc sag = ifade_uret(g, d->veri.ikili.sag, sol.tip);
+            int sag_r = int_donustur(g, sag.reg, sag.tip, sol.tip);
             if (cmp) {
                 int r_cmp = yeni_reg(g);
-                fprintf(g->out, "  %%%d = icmp %s i32 %%%d, %%%d\n",
-                        r_cmp, cmp, sol_r, sag_r);
-                /* i1 -> i32 genislet (mantiksal uniform) */
-                int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = zext i1 %%%d to i32\n", r, r_cmp);
-                return r;
+                fprintf(g->out, "  %%%d = icmp %s %s %%%d, %%%d\n",
+                        r_cmp, cmp, sol.tip, sol.reg, sag_r);
+                IfadeSonuc s = { r_cmp, "i1" };
+                return s;
             }
-            /* Mantiksal ve/veya: i32 0/1 olarak modelliyoruz (short-circuit
-             * yok — pure arithmetic). */
             const char *op = NULL;
             switch (d->veri.ikili.op) {
                 case OP_ARTI:  op = "add"; break;
@@ -196,161 +616,217 @@ static int ifade_uret(LlvmGen *g, const Dugum *d) {
                 case OP_VEYA:  op = "or"; break;
                 default:
                     fputs("  ; ikili op desteklenmiyor\n", g->out);
-                    return sol_r;
+                    return sol;
             }
             int r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = %s i32 %%%d, %%%d\n",
-                    r, op, sol_r, sag_r);
-            return r;
+            fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
+                    r, op, sol.tip, sol.reg, sag_r);
+            IfadeSonuc s = { r, sol.tip };
+            return s;
         }
 
         case DUGUM_TEKLI: {
-            int op_r = ifade_uret(g, d->veri.tekli.operand);
+            IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
             if (d->veri.tekli.op == OP_NEG) {
                 int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = sub i32 0, %%%d\n", r, op_r);
-                return r;
+                fprintf(g->out, "  %%%d = sub %s 0, %%%d\n",
+                        r, op_s.tip, op_s.reg);
+                IfadeSonuc s = { r, op_s.tip };
+                return s;
             }
             if (d->veri.tekli.op == OP_DEGIL) {
-                /* x == 0 -> 1, x != 0 -> 0 */
-                int r_cmp = yeni_reg(g);
-                fprintf(g->out, "  %%%d = icmp eq i32 %%%d, 0\n", r_cmp, op_r);
-                int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = zext i1 %%%d to i32\n", r, r_cmp);
-                return r;
+                /* op_s i1 ise xor 1; aksi halde icmp eq 0 */
+                int r;
+                if (strcmp(op_s.tip, "i1") == 0) {
+                    r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = xor i1 %%%d, true\n",
+                            r, op_s.reg);
+                    IfadeSonuc s = { r, "i1" };
+                    return s;
+                }
+                r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
+                        r, op_s.tip, op_s.reg);
+                IfadeSonuc s = { r, "i1" };
+                return s;
             }
             fputs("  ; tekli op desteklenmiyor\n", g->out);
-            return op_r;
+            return op_s;
         }
 
         case DUGUM_CAGRI: {
-            /* Hedef: tanimlayici (global islev adi) */
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {
-                int r = yeni_reg(g);
-                fprintf(g->out, "  ; HATA: cagri hedefi tanimlayici degil\n");
-                fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                return r;
+                return hata(g, "cagri hedefi tanimlayici degil");
             }
             int n = d->veri.cagri.sayi;
-            int *arg_reg = NULL;
+            IfadeSonuc *args = NULL;
             if (n > 0) {
-                arg_reg = (int *)arena_ayir(g->arena, sizeof(int) * (size_t)n);
+                args = (IfadeSonuc *)arena_ayir(g->arena,
+                    sizeof(IfadeSonuc) * (size_t)n);
                 for (int i = 0; i < n; i++) {
-                    arg_reg[i] = ifade_uret(g, d->veri.cagri.argumanlar[i]);
+                    args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
                 }
             }
+            /* Cagri donus tipi: islev kayit tablosundan al. Yoksa beklenen,
+             * yoksa i32. */
+            IslevKayit *ik = islev_bul(g,
+                d->veri.cagri.hedef->veri.tanimlayici.metin,
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+            const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
+            if (strcmp(donus, "void") == 0) donus = "i32";  /* placeholder */
             int r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = call i32 @", r);
+            fprintf(g->out, "  %%%d = call %s @", r, donus);
             ad_yaz(g->out,
                    d->veri.cagri.hedef->veri.tanimlayici.metin,
                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
             fputs("(", g->out);
             for (int i = 0; i < n; i++) {
                 if (i > 0) fputs(", ", g->out);
-                fprintf(g->out, "i32 %%%d", arg_reg[i]);
+                fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
-            return r;
+            IfadeSonuc s = { r, donus };
+            return s;
         }
 
         default: {
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
             fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-            return r;
+            IfadeSonuc s = { r, "i32" };
+            return s;
         }
     }
 }
 
+/* Kosul ifadesini i1'e indirge (eger/iken icin) */
+static int kosul_i1(LlvmGen *g, const Dugum *d) {
+    IfadeSonuc s = ifade_uret(g, d, "i1");
+    if (strcmp(s.tip, "i1") == 0) return s.reg;
+    /* int -> i1: kosul != 0 */
+    int r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = icmp ne %s %%%d, 0\n", r, s.tip, s.reg);
+    return r;
+}
+
 /* === Deyim IR === */
 
-/* Donus: bu blok 'ver' (terminator) ile bitti mi? */
-static int deyim_uret_terminated(LlvmGen *g, const Dugum *d) {
+/* Donus: blok 'ver' (terminator) ile bitti mi? */
+static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
+                                  const char *donus_tip) {
     if (!d) return 0;
 
     switch (d->tip) {
         case DUGUM_VER: {
             if (d->veri.ver.deger) {
-                int r = ifade_uret(g, d->veri.ver.deger);
-                fprintf(g->out, "  ret i32 %%%d\n", r);
+                IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
+                int rr = int_donustur(g, s.reg, s.tip, donus_tip);
+                fprintf(g->out, "  ret %s %%%d\n", donus_tip, rr);
             } else {
-                fputs("  ret i32 0\n", g->out);
+                if (donus_tip && strcmp(donus_tip, "void") == 0) {
+                    fputs("  ret void\n", g->out);
+                } else {
+                    fprintf(g->out, "  ret %s 0\n",
+                            donus_tip ? donus_tip : "i32");
+                }
             }
             return 1;
         }
 
         case DUGUM_DEGISKEN: {
-            /* degisken x = ifade;
-             *
-             * alloca + store: ileride load edebilelim diye.
-             * Not: LLVM idiomatic'te alloca'lar entry blogunda olur. Bizimki
-             * dogru yerde (entry) cunku biz su an islev govdesinde top-level
-             * deyim olarak isliyoruz. Ic blok scope'unda da alloca yapacagiz
-             * (mem2reg pass'i kaldirir). */
-            int alloca_reg = yeni_reg(g);
-            fprintf(g->out, "  %%%d = alloca i32\n", alloca_reg);
-            if (d->veri.degisken.deger) {
-                int v = ifade_uret(g, d->veri.degisken.deger);
-                fprintf(g->out, "  store i32 %%%d, ptr %%%d\n", v, alloca_reg);
+            const char *annot = NULL;
+            if (d->veri.degisken.tip) {
+                annot = ast_tip_to_ir(g, d->veri.degisken.tip);
             }
-            isim_ekle(g, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk,
-                      1, alloca_reg);
+            const char *tip = annot;
+
+            /* Eger annot yoksa, deger ifadesini once degerlendirip
+             * tipini cikariyoruz, sonra alloca'yi dogru tipte yapiyoruz.
+             * Bu sira hatasi onler (ozellikle yapi_olustur -> ptr donus). */
+            if (d->veri.degisken.deger) {
+                IfadeSonuc dv;
+                if (annot) {
+                    /* Annot var: dogrudan alloca, sonra store */
+                    int alloca_reg = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
+                    dv = ifade_uret(g, d->veri.degisken.deger, tip);
+                    int rr = int_donustur(g, dv.reg, dv.tip, tip);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            tip, rr, alloca_reg);
+                    isim_ekle(g, d->veri.degisken.ad,
+                              d->veri.degisken.ad_uzunluk,
+                              1, alloca_reg, tip);
+                } else {
+                    /* Annot yok: deger once, sonra alloca */
+                    dv = ifade_uret(g, d->veri.degisken.deger, NULL);
+                    tip = dv.tip;
+                    int alloca_reg = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            tip, dv.reg, alloca_reg);
+                    isim_ekle(g, d->veri.degisken.ad,
+                              d->veri.degisken.ad_uzunluk,
+                              1, alloca_reg, tip);
+                }
+            } else {
+                /* Deger yok, sadece annot ile alloca */
+                if (!tip) tip = "i32";
+                int alloca_reg = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
+                isim_ekle(g, d->veri.degisken.ad,
+                          d->veri.degisken.ad_uzunluk,
+                          1, alloca_reg, tip);
+            }
             return 0;
         }
 
         case DUGUM_ATAMA: {
-            /* Hedef: tanimlayici (basit lvalue) */
             if (d->veri.atama.hedef &&
                 d->veri.atama.hedef->tip == DUGUM_TANIMLAYICI) {
                 LlvmIsim *i = isim_bul(g,
                     d->veri.atama.hedef->veri.tanimlayici.metin,
                     d->veri.atama.hedef->veri.tanimlayici.uzunluk);
-                if (i && i->kategori == 1) {
-                    int v = ifade_uret(g, d->veri.atama.deger);
-                    fprintf(g->out, "  store i32 %%%d, ptr %%%d\n",
-                            v, i->reg_no);
-                } else {
-                    fputs("  ; atama hedefi alloca degil\n", g->out);
+                if (i) {
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                               i->llvm_tip);
+                    int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            i->llvm_tip, rr, i->reg_no);
                 }
-            } else {
-                fputs("  ; atama hedefi tanimlayici degil\n", g->out);
             }
             return 0;
         }
 
         case DUGUM_EGER: {
-            int kosul = ifade_uret(g, d->veri.eger.kosul);
-            /* i32 kosulu i1'e indirge: kosul != 0 */
-            int i1r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = icmp ne i32 %%%d, 0\n", i1r, kosul);
+            int i1r = kosul_i1(g, d->veri.eger.kosul);
             int L_then = yeni_label(g);
             int L_else = yeni_label(g);
             int L_end = yeni_label(g);
             fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                     i1r, L_then, L_else);
-
             fprintf(g->out, "bb%d:\n", L_then);
-            int then_term = blok_uret(g, d->veri.eger.gozdoldur);
+            ScopeMarker m1 = scope_gir(g);
+            int then_term = 0;
+            if (d->veri.eger.gozdoldur) {
+                then_term = blok_uret(g, d->veri.eger.gozdoldur);
+            }
+            scope_cik(g, m1);
             if (!then_term) fprintf(g->out, "  br label %%bb%d\n", L_end);
-
             fprintf(g->out, "bb%d:\n", L_else);
             int else_term = 0;
             if (d->veri.eger.yan) {
                 if (d->veri.eger.yan->tip == DUGUM_BLOK) {
+                    ScopeMarker m2 = scope_gir(g);
                     else_term = blok_uret(g, d->veri.eger.yan);
+                    scope_cik(g, m2);
                 } else if (d->veri.eger.yan->tip == DUGUM_EGER) {
-                    else_term = deyim_uret_terminated(g, d->veri.eger.yan);
+                    else_term = deyim_uret_terminated(g, d->veri.eger.yan,
+                                                       donus_tip);
                 }
             }
             if (!else_term) fprintf(g->out, "  br label %%bb%d\n", L_end);
-
-            /* End-block sadece en az bir dal fall-through ediyorsa gerek.
-             * Iki dal da terminated ise burayi atla — caller bu eger'in
-             * terminated oldugunu gorur ve sonraki deyim islemez. */
-            if (then_term && else_term) {
-                return 1;
-            }
+            if (then_term && else_term) return 1;
             fprintf(g->out, "bb%d:\n", L_end);
             return 0;
         }
@@ -361,13 +837,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d) {
             int L_done = yeni_label(g);
             fprintf(g->out, "  br label %%bb%d\n", L_head);
             fprintf(g->out, "bb%d:\n", L_head);
-            int kosul = ifade_uret(g, d->veri.iken.kosul);
-            int i1r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = icmp ne i32 %%%d, 0\n", i1r, kosul);
+            int i1r = kosul_i1(g, d->veri.iken.kosul);
             fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                     i1r, L_body, L_done);
             fprintf(g->out, "bb%d:\n", L_body);
+            ScopeMarker m = scope_gir(g);
             int body_term = blok_uret(g, d->veri.iken.govde);
+            scope_cik(g, m);
             if (!body_term) fprintf(g->out, "  br label %%bb%d\n", L_head);
             fprintf(g->out, "bb%d:\n", L_done);
             return 0;
@@ -381,7 +857,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d) {
         }
 
         case DUGUM_IFADE_DEYIMI:
-            (void)ifade_uret(g, d->veri.ifade_deyimi.ifade);
+            (void)ifade_uret(g, d->veri.ifade_deyimi.ifade, NULL);
             return 0;
 
         default:
@@ -390,11 +866,15 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d) {
     }
 }
 
+/* Active function's return type — global state for blok_uret */
+static const char *g_donus_tip = "i32";
+
 static int blok_uret(LlvmGen *g, const Dugum *blok) {
     if (!blok || blok->tip != DUGUM_BLOK) return 0;
     ScopeMarker m = scope_gir(g);
     for (int i = 0; i < blok->veri.blok.sayi; i++) {
-        int term = deyim_uret_terminated(g, blok->veri.blok.deyimler[i]);
+        int term = deyim_uret_terminated(g, blok->veri.blok.deyimler[i],
+                                          g_donus_tip);
         if (term) {
             scope_cik(g, m);
             return 1;
@@ -404,19 +884,33 @@ static int blok_uret(LlvmGen *g, const Dugum *blok) {
     return 0;
 }
 
-/* deyim_uret kullanilmadigi icin acik tutmadik — gerektiginde
- * dogrudan deyim_uret_terminated cagrilir. */
-
 /* === Islev IR === */
 
 static void islev_uret(LlvmGen *g, const Dugum *islev) {
-    fputs("define i32 @", g->out);
+    const char *donus = islev->veri.islev.donus_tipi
+        ? ast_tip_to_ir(g, islev->veri.islev.donus_tipi)
+        : "void";
+    if (!donus) donus = "void";
+    g_donus_tip = donus;
+
+    fprintf(g->out, "define %s @", donus);
     ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
-    for (int i = 0; i < islev->veri.islev.param_sayi; i++) {
+
+    /* Parametre listesi */
+    int n = islev->veri.islev.param_sayi;
+    const char **param_tipler = NULL;
+    if (n > 0) {
+        param_tipler = (const char **)arena_ayir(g->arena,
+            sizeof(const char *) * (size_t)n);
+    }
+    for (int i = 0; i < n; i++) {
         const Dugum *p = islev->veri.islev.parametreler[i];
+        const char *tip = ast_tip_to_ir(g, p->veri.parametre.tip);
+        if (!tip) tip = "i32";
+        param_tipler[i] = tip;
         if (i > 0) fputs(", ", g->out);
-        fputs("i32 %", g->out);
+        fprintf(g->out, "%s %%", tip);
         ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
     }
     fputs(") {\nentry:\n", g->out);
@@ -425,27 +919,29 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->label = 0;
     g->isimler = NULL;
 
-    /* Parametreleri alloca + store ile lokal mutable hale getir.
-     * Bu sayede 'b = a + 1;' gibi parametre atamalari calisir.
-     * mem2reg pass'i optimize hale getirir. */
-    for (int i = 0; i < islev->veri.islev.param_sayi; i++) {
+    /* Parametreleri alloca'ya kopyala */
+    for (int i = 0; i < n; i++) {
         const Dugum *p = islev->veri.islev.parametreler[i];
+        const char *tip = param_tipler[i];
         int alloca_reg = yeni_reg(g);
-        fprintf(g->out, "  %%%d = alloca i32\n", alloca_reg);
-        fprintf(g->out, "  store i32 %%");
+        fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
+        fprintf(g->out, "  store %s %%", tip);
         ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
         fprintf(g->out, ", ptr %%%d\n", alloca_reg);
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk,
-                  1, alloca_reg);
+                  0, alloca_reg, tip);
     }
 
-    /* Govdeyi uret */
     int term = 0;
     if (islev->veri.islev.govde) {
         term = blok_uret(g, islev->veri.islev.govde);
     }
     if (!term) {
-        fputs("  ret i32 0\n", g->out);
+        if (strcmp(donus, "void") == 0) {
+            fputs("  ret void\n", g->out);
+        } else {
+            fprintf(g->out, "  ret %s 0\n", donus);
+        }
     }
     fputs("}\n\n", g->out);
 }
@@ -454,7 +950,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
 
 void llvm_ir_uret(const Dugum *program, FILE *out) {
     if (!out) return;
-    fputs("; KEMGU LLVM IR (text uretici, ADIM 17 genisletilmis)\n", out);
+    fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
+          out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
     fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
 
@@ -463,7 +960,6 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
         return;
     }
 
-    /* LlvmGen icin lokal arena */
     Arena *a = arena_olustur(0);
     if (!a) return;
 
@@ -472,6 +968,34 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     g.out = out;
     g.arena = a;
 
+    /* Pre-pass: yapilari kayit et */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_YAPI) yapi_kayit(&g, uye);
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_YAPI) {
+            yapi_kayit(&g, uye->veri.disa.tanim);
+        }
+    }
+
+    /* Pre-pass: islev imzalarini kayit et (cagri donus tipi icin) */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_ISLEV) islev_kayit(&g, uye);
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
+            islev_kayit(&g, uye->veri.disa.tanim);
+        }
+    }
+
+    /* Pre-pass: metinleri topla */
+    ast_taransa_metinleri(&g, program);
+
+    /* Emit module-basi: yapi tip tanimlari + string globalleri */
+    yapi_tip_tanimlari_emit(&g);
+    str_globalleri_emit(&g);
+
+    /* Islevleri emit et */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_ISLEV) {

@@ -95,7 +95,7 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 16/16)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 24/24, multi-int + metin + yapı dahil)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -402,6 +402,39 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
+28. **LLVM v2: yapılar + metin literali + multi-int (ADIM 18)** (8 yeni entegrasyon testi)
+    - **Tip tracking:** her ifade artık `(reg, llvm_tip)` ikilisi döndürür
+    - **Multi-int (annotation-driven):**
+      - tam8/dtam8 → i8, tam16/dtam16 → i16, tam32/dtam32 → i32, tam64/dtam64 → i64
+      - mantıksal → i1 (parametre/dönüş tipi olarak), arithmetic context'inde i32'ye genişler
+      - karakter → i32, boş → void
+      - Operandlar arasında otomatik int_donustur (sext/trunc) gereken yerde
+      - Karşılaştırma operandları natural tipte (beklenen forward edilmez)
+    - **Metin literali:**
+      - Pre-pass: tüm DUGUM_METIN düğümleri toplanır, her benzersiz literal `@.str.N = private constant [K x i8] c"..."`
+      - Reference: `getelementptr ptr @.str.N, i32 0, i32 0` → ptr
+      - `metin` tipi → `ptr` (i8*)
+      - Escape: özel karakterler `\HH` formatında
+    - **Yapı:**
+      - Pre-pass: tüm DUGUM_YAPI tanımları toplanır
+      - Type emission: `%YapiAdi = type { tip1, tip2, ... }`
+      - Yapı oluşturma: `alloca %YapiAdi` + her alan için `getelementptr + store`
+      - Alan erişimi (`x.y`): `getelementptr + load`
+      - Yapı değerleri pointer ile temsil (struct-by-value parametreler v3'te)
+    - **Bonus: işlev imza tablosu** — çağrı dönüş tipi artık doğru
+    - **Test örnekleri:**
+      - tam8 + tam8 → 42 (i8 ops)
+      - tam64 mul → 42 (i64 ops)
+      - mantıksal param → 42 (i1)
+      - `selam() -> metin` returning `"Merhaba"` → global string
+      - `Nokta { x: 10, y: 32 }; ver n.x + n.y` → 42
+      - Yapı 3 alan toplam → 42
+    - **Sınırlamalar (v2'de hala):**
+      - kesirli32/64 (float/double) yok
+      - Yapılar by-pointer (struct-by-value parametre/dönüş yok)
+      - Dizi yok
+      - mantıksal `ve`/`veya` short-circuit yok
+
 27. **LLVM backend genişletme (ADIM 17)** (16 entegrasyon testi — gerçek programlar derlenip çalıştırılıyor)
     - **Yeni desteklenen özellikler:**
       - İşlev parametreleri (i32, alloca + store ile mutable)
@@ -490,7 +523,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
       - Aynı bound iki kez raporlanabilir (annotation + constructor)
       - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
 
-### 🎉🎉 ADIM 12-17 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP + GENİŞLETİLMİŞ LLVM
+### 🎉🎉 ADIM 12-18 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP + LLVM v2 (yapı+metin+multi-int)
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -498,10 +531,10 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 474/474 (önceki 458 + 16 LLVM entegrasyon)
+**Test sayısı:** 482/482 (önceki 474 + 8 LLVM v2 yeni)
 
 ### Sıradaki büyük seçenekler:
-- **LLVM v2** (yapılar/diziler, metin literali, kayan nokta, multi-int tipleri tam8/16/64)
+- **LLVM v3** (kesirli float/double, dizi, struct-by-value, short-circuit ve/veya)
 - **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
 - **Constraint v2** (method dispatch + trait method type checking, generic islev bound check)
