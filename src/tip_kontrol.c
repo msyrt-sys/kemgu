@@ -369,6 +369,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Tanimlayici === */
         case DUGUM_TANIMLAYICI: {
+            /* hiç -> seçimlik<T> none */
+            if (d->veri.tanimlayici.uzunluk == 4 /* hiç = h+i+c+'̧'? UTF-8 = 4 byte */ &&
+                memcmp(d->veri.tanimlayici.metin, "hi\xc3\xa7", 4) == 0) {
+                /* T inference: beklenen tip varsa kullan, yoksa BILINMIYOR */
+                TipBilgisi *ic = tip_olustur_basit(tk->arena, TIP_BILINMIYOR);
+                return tip_olustur_secimlik(tk->arena, ic);
+            }
             const Sembol *s = sembol_bul(tk->scope,
                 d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
             if (!s) {
@@ -463,6 +470,35 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* Yerlesik konstrüktörler: değer(x), tamam(x), hata(x) */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.sayi == 1) {
+                const char *ad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                /* "değer" = de\xc4\x9fer (6 byte) */
+                if (uz == 6 && memcmp(ad, "de\xc4\x9f" "er", 6) == 0) {
+                    TipBilgisi *iç = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    return tip_olustur_secimlik(tk->arena, iç);
+                }
+                /* "tamam" (5 byte) */
+                if (uz == 5 && memcmp(ad, "tamam", 5) == 0) {
+                    TipBilgisi *deg = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *hata = tip_olustur_basit(tk->arena,
+                        TIP_BILINMIYOR);
+                    return tip_olustur_sonuc(tk->arena, deg, hata);
+                }
+                /* "hata" (4 byte) */
+                if (uz == 4 && memcmp(ad, "hata", 4) == 0) {
+                    TipBilgisi *h = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *deg = tip_olustur_basit(tk->arena,
+                        TIP_BILINMIYOR);
+                    return tip_olustur_sonuc(tk->arena, deg, h);
+                }
+            }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
             if (d->veri.cagri.hedef &&
@@ -1190,16 +1226,65 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_ESLES: {
-            /* deger tipini belirle (kontrol icin gerekli — desen tip kontrol
-             * ileride ADIM 11.6'da generic/secimlik desenleri ile detayli) */
+            /* Eşleş'in deger tipini belirle (secimlik<T> veya sonuc<T,H>) */
             TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
-            (void)dt;
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
-                /* Yeni scope kol icin (desen icindeki tanimlayicilar) */
                 Scope *eski = tk->scope;
                 tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
-                /* Govde — blok ya da ifade. Basit: deyim olarak kontrol et */
+
+                /* Desen tanimlayici/yapici icindeki adlari scope'a ekle */
+                const Dugum *desen = kol->veri.esles_kolu.desen;
+                if (desen) {
+                    if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+                        /* x => govde — x'in tipi dt */
+                        Sembol s;
+                        memset(&s, 0, sizeof(s));
+                        s.ad = desen->veri.desen_tanimlayici.ad;
+                        s.ad_uzunluk = desen->veri.desen_tanimlayici.ad_uzunluk;
+                        s.kategori = SEMBOL_DEGISKEN;
+                        s.tip = dt;
+                        s.ast_dugumu = desen;
+                        sembol_ekle(tk->scope, tk->arena, &s);
+                    } else if (desen->tip == DUGUM_DESEN_YAPICI) {
+                        /* değer(s) => govde — s'nin tipi secimlik<T>.iç tipi */
+                        const char *yapici_ad = desen->veri.desen_yapici.ad;
+                        int yapici_uz = desen->veri.desen_yapici.ad_uzunluk;
+                        TipBilgisi *icerik_tipi = NULL;
+                        /* "değer" -> dt secimlik ise iç */
+                        if (yapici_uz == 6 &&
+                            memcmp(yapici_ad, "de\xc4\x9f" "er", 6) == 0 &&
+                            dt && dt->kategori == TIP_SECIMLIK) {
+                            icerik_tipi = dt->veri.secimlik.ic;
+                        } else if (yapici_uz == 5 &&
+                                   memcmp(yapici_ad, "tamam", 5) == 0 &&
+                                   dt && dt->kategori == TIP_SONUC) {
+                            icerik_tipi = dt->veri.sonuc.deger;
+                        } else if (yapici_uz == 4 &&
+                                   memcmp(yapici_ad, "hata", 4) == 0 &&
+                                   dt && dt->kategori == TIP_SONUC) {
+                            icerik_tipi = dt->veri.sonuc.hata;
+                        }
+                        /* alt_desenler[0] tanimlayici ise bind et */
+                        if (icerik_tipi &&
+                            desen->veri.desen_yapici.sayi > 0) {
+                            const Dugum *alt =
+                                desen->veri.desen_yapici.alt_desenler[0];
+                            if (alt && alt->tip == DUGUM_DESEN_TANIMLAYICI) {
+                                Sembol s;
+                                memset(&s, 0, sizeof(s));
+                                s.ad = alt->veri.desen_tanimlayici.ad;
+                                s.ad_uzunluk = alt->veri.desen_tanimlayici.ad_uzunluk;
+                                s.kategori = SEMBOL_DEGISKEN;
+                                s.tip = icerik_tipi;
+                                s.ast_dugumu = alt;
+                                sembol_ekle(tk->scope, tk->arena, &s);
+                            }
+                        }
+                    }
+                    /* DESEN_LITERAL, DESEN_JOKER: binding yok */
+                }
+
                 tip_kontrol_deyim(tk, kol->veri.esles_kolu.govde);
                 tk->scope = eski;
             }

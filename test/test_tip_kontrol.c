@@ -1242,6 +1242,53 @@ static void test_cs_trait_method(void) {
     arena_serbest(a);
 }
 
+/* P-1: hiç ifadesi seçimlik<T> olarak tip alir */
+static void test_hic_secimlik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> se\xc3\xa7" "imlik<tam32> { ver hi\xc3\xa7; }",
+        a);
+    test_sonuc("hiç -> seçimlik<T> tip alir", h == 0);
+    arena_serbest(a);
+}
+
+/* P-2: değer(x) seçimlik<T> konstrüktör */
+static void test_deger_konstrüktör(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> se\xc3\xa7" "imlik<tam32> "
+        "{ ver de\xc4\x9f" "er(42); }",
+        a);
+    test_sonuc("değer(42) -> seçimlik<tam32>", h == 0);
+    arena_serbest(a);
+}
+
+/* P-3: pattern binding eşleş içinde değer(v) ile v bind */
+static void test_pattern_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: se\xc3\xa7" "imlik<tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  de\xc4\x9f" "er(v) => { ver v; } "
+        "  hi\xc3\xa7 => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern binding (değer(v) => v) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4: tamam(v), hata(e) sonuç konstrüktörleri */
+static void test_sonuc_konstrüktörler(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> sonu\xc3\xa7<tam32, metin> "
+        "{ ver tamam(42); }",
+        a);
+    test_sonuc("tamam(42) -> sonuç<tam32, metin>", h == 0);
+    arena_serbest(a);
+}
+
 /* CS-7: Inherent impl kayit edilir, sorgu basarili */
 static void test_cs_inherent_kayit(void) {
     Arena *a = arena_olustur(0);
@@ -1408,6 +1455,12 @@ int main(void) {
     test_cs_method_dispatch();
     test_cs_method_arg_sayi();
     test_cs_trait_method();
+
+    printf("\n--- hiç/değer + Pattern binding (25) ---\n");
+    test_hic_secimlik();
+    test_deger_konstrüktör();
+    test_pattern_binding();
+    test_sonuc_konstrüktörler();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
