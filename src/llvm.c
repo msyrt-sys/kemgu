@@ -57,8 +57,34 @@ typedef struct IslevKayit {
     const char *ad;
     int ad_uz;
     const char *donus_tip;
+    /* Generic islev: AST'yi sakla, instantiation icin gerekli */
+    const Dugum *ast;
+    int generic_mi;  /* tip_param_sayi > 0 */
     struct IslevKayit *sonraki;
 } IslevKayit;
+
+/* Tip substitution context: generic param adi -> ir tipi */
+typedef struct TipSubst {
+    const char *ad;
+    int ad_uz;
+    const char *ir;
+    struct TipSubst *sonraki;
+} TipSubst;
+
+/* Emit edilmis instantiation: ad$T1$T2 -> 1 */
+typedef struct MonoKayit {
+    const char *mangled;  /* arena */
+    struct MonoKayit *sonraki;
+} MonoKayit;
+
+/* Bekleyen specialization (cagri sirasinda olustu, sonradan emit edilecek) */
+typedef struct BekleyenSpec {
+    const Dugum *ast;        /* generic islev AST */
+    const char *mangled;     /* hedef ad */
+    const char **tip_args;   /* substitusyon icin */
+    int tip_arg_sayi;
+    struct BekleyenSpec *sonraki;
+} BekleyenSpec;
 
 typedef struct LlvmGen {
     FILE *out;
@@ -70,6 +96,9 @@ typedef struct LlvmGen {
     int str_sayaci;
     YapiKayit *yapilar;
     IslevKayit *islevler;
+    TipSubst *substler;     /* aktif generic param substitutions */
+    MonoKayit *monolar;     /* emit edilmis instantiation'lar */
+    BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -82,6 +111,9 @@ typedef struct IfadeSonuc {
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d, const char *beklenen);
 static int blok_uret(LlvmGen *g, const Dugum *blok);
 static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
+static int mono_emitlendi(LlvmGen *g, const char *mangled);
+static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
+                              const char **tipler, int tip_sayi);
 
 /* === Isim tablosu === */
 
@@ -130,11 +162,24 @@ static void ad_yaz(FILE *out, const char *ad, int ad_uz) {
 
 /* AST tip dugumunden (DUGUM_TIP_BASIT, DUGUM_TIP_KULLANICI) LLVM IR tipi.
  * NULL -> NULL doner. Bilinmeyen -> "i32" (varsayilan). */
+/* Generic param substitusyon kontrolu */
+static const char *subst_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (TipSubst *s = g->substler; s; s = s->sonraki) {
+        if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
+            return s->ir;
+        }
+    }
+    return NULL;
+}
+
 static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (!tip_d) return NULL;
     if (tip_d->tip == DUGUM_TIP_BASIT) {
         const char *a = tip_d->veri.tip_basit.ad;
         int u = tip_d->veri.tip_basit.ad_uzunluk;
+        /* Generic param substitusyon */
+        const char *sub = subst_bul(g, a, u);
+        if (sub) return sub;
         #define ESLES(s) (u == (int)(sizeof(s) - 1) && memcmp(a, s, sizeof(s) - 1) == 0)
         if (ESLES("tam8") || ESLES("dtam8")) return "i8";
         if (ESLES("tam16") || ESLES("dtam16")) return "i16";
@@ -357,6 +402,8 @@ static void islev_kayit(LlvmGen *g, const Dugum *i) {
     if (!r) return;
     r->ad = i->veri.islev.ad;
     r->ad_uz = i->veri.islev.ad_uzunluk;
+    r->ast = i;
+    r->generic_mi = (i->veri.islev.tip_param_sayi > 0);
     const char *dt = i->veri.islev.donus_tipi
         ? ast_tip_to_ir(g, i->veri.islev.donus_tipi)
         : "void";
@@ -824,18 +871,101 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
                 }
             }
-            /* Cagri donus tipi: islev kayit tablosundan al. Yoksa beklenen,
-             * yoksa i32. */
             IslevKayit *ik = islev_bul(g,
                 d->veri.cagri.hedef->veri.tanimlayici.metin,
                 d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+
+            const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
+            int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
             const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
-            if (strcmp(donus, "void") == 0) donus = "i32";  /* placeholder */
+
+            /* Generic islev: tip args'i arg tipinden cikar, specialize et */
+            if (ik && ik->generic_mi && ik->ast) {
+                const Dugum *gislev = ik->ast;
+                int tps = gislev->veri.islev.tip_param_sayi;
+                const char **tip_args = (const char **)arena_ayir(g->arena,
+                    sizeof(const char *) * (size_t)tps);
+                /* Her generic param icin: parametrelerde T'yi bulan ilk arg
+                 * tipinden çıkar */
+                for (int ti = 0; ti < tps; ti++) {
+                    const char *tp = gislev->veri.islev.tip_paramlar[ti];
+                    int tp_uz = (int)strlen(tp);
+                    const char *inferred = NULL;
+                    for (int pi = 0; pi < gislev->veri.islev.param_sayi &&
+                                       pi < n && !inferred; pi++) {
+                        const Dugum *p = gislev->veri.islev.parametreler[pi];
+                        if (p->veri.parametre.tip &&
+                            p->veri.parametre.tip->tip == DUGUM_TIP_BASIT) {
+                            const char *pad = p->veri.parametre.tip->veri.tip_basit.ad;
+                            int puz = p->veri.parametre.tip->veri.tip_basit.ad_uzunluk;
+                            if (puz == tp_uz && memcmp(pad, tp, (size_t)tp_uz) == 0) {
+                                inferred = args[pi].tip;
+                            }
+                        }
+                    }
+                    tip_args[ti] = inferred ? inferred : "i32";
+                }
+                /* Mangled name */
+                const char *mangled = mangle_et(g,
+                    gislev->veri.islev.ad, gislev->veri.islev.ad_uzunluk,
+                    tip_args, tps);
+
+                /* Specialization bekleyenlere ekle (henuz emit edilmediyse) */
+                if (!mono_emitlendi(g, mangled)) {
+                    int z_bekleyen = 0;
+                    for (BekleyenSpec *b = g->bekleyenler; b; b = b->sonraki) {
+                        if (strcmp(b->mangled, mangled) == 0) {
+                            z_bekleyen = 1; break;
+                        }
+                    }
+                    if (!z_bekleyen) {
+                        BekleyenSpec *bs = (BekleyenSpec *)arena_ayir_sifir(
+                            g->arena, sizeof(BekleyenSpec));
+                        if (bs) {
+                            bs->ast = gislev;
+                            bs->mangled = mangled;
+                            bs->tip_arg_sayi = tps;
+                            const char **kopya = (const char **)arena_ayir(
+                                g->arena, sizeof(const char *) * (size_t)tps);
+                            for (int j = 0; j < tps; j++) kopya[j] = tip_args[j];
+                            bs->tip_args = kopya;
+                            bs->sonraki = g->bekleyenler;
+                            g->bekleyenler = bs;
+                        }
+                    }
+                }
+
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @%s(", r, donus, mangled);
+                for (int i = 0; i < n; i++) {
+                    if (i > 0) fputs(", ", g->out);
+                    fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
+                }
+                fputs(")\n", g->out);
+                /* Generic islev'in donus tipi T olabilir — inferred tipini al */
+                const char *donus_t = donus;
+                if (gislev->veri.islev.donus_tipi &&
+                    gislev->veri.islev.donus_tipi->tip == DUGUM_TIP_BASIT) {
+                    const char *dad = gislev->veri.islev.donus_tipi->veri.tip_basit.ad;
+                    int duz = gislev->veri.islev.donus_tipi->veri.tip_basit.ad_uzunluk;
+                    for (int ti = 0; ti < tps; ti++) {
+                        const char *tp = gislev->veri.islev.tip_paramlar[ti];
+                        int tp_uz = (int)strlen(tp);
+                        if (duz == tp_uz &&
+                            memcmp(dad, tp, (size_t)tp_uz) == 0) {
+                            donus_t = tip_args[ti];
+                            break;
+                        }
+                    }
+                }
+                IfadeSonuc s = { r, donus_t };
+                return s;
+            }
+
+            if (strcmp(donus, "void") == 0) donus = "i32";
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = call %s @", r, donus);
-            ad_yaz(g->out,
-                   d->veri.cagri.hedef->veri.tanimlayici.metin,
-                   d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+            ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
             for (int i = 0; i < n; i++) {
                 if (i > 0) fputs(", ", g->out);
@@ -1042,7 +1172,85 @@ static int blok_uret(LlvmGen *g, const Dugum *blok) {
 
 /* === Islev IR === */
 
+static int mono_emitlendi(LlvmGen *g, const char *mangled) {
+    for (MonoKayit *m = g->monolar; m; m = m->sonraki) {
+        if (strcmp(m->mangled, mangled) == 0) return 1;
+    }
+    return 0;
+}
+
+static void mono_ekle(LlvmGen *g, const char *mangled) {
+    MonoKayit *m = (MonoKayit *)arena_ayir(g->arena, sizeof(MonoKayit));
+    if (!m) return;
+    int uz = (int)strlen(mangled);
+    char *kopya = (char *)arena_ayir(g->arena, (size_t)uz + 1);
+    memcpy(kopya, mangled, (size_t)uz + 1);
+    m->mangled = kopya;
+    m->sonraki = g->monolar;
+    g->monolar = m;
+}
+
+/* Mangled isim: "ad$T1$T2..." — arena'da */
+static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
+                              const char **tipler, int tip_sayi) {
+    int toplam = ad_uz;
+    for (int i = 0; i < tip_sayi; i++) {
+        toplam += 1 + (int)strlen(tipler[i]);
+    }
+    char *buf = (char *)arena_ayir(g->arena, (size_t)toplam + 1);
+    if (!buf) return ad;
+    int o = 0;
+    memcpy(buf, ad, (size_t)ad_uz); o += ad_uz;
+    for (int i = 0; i < tip_sayi; i++) {
+        buf[o++] = '$';
+        int tu = (int)strlen(tipler[i]);
+        memcpy(buf + o, tipler[i], (size_t)tu);
+        o += tu;
+        /* '%' karakteri LLVM IR'da gecersiz olabilir mangling'de — '.'ile degistir */
+        for (int k = o - tu; k < o; k++) {
+            if (buf[k] == '%') buf[k] = '_';
+        }
+    }
+    buf[o] = '\0';
+    return buf;
+}
+
+/* Generic islev'i belirli tip arglariyla specialize et + emit */
+static void islev_uret(LlvmGen *g, const Dugum *islev);
+
+static void specialize_emit(LlvmGen *g, const Dugum *islev,
+                            const char **tip_args, int tip_arg_sayi,
+                            const char *mangled) {
+    if (mono_emitlendi(g, mangled)) return;
+    mono_ekle(g, mangled);
+
+    /* Subst push */
+    TipSubst *eski_substler = g->substler;
+    for (int i = 0; i < islev->veri.islev.tip_param_sayi && i < tip_arg_sayi; i++) {
+        TipSubst *s = (TipSubst *)arena_ayir(g->arena, sizeof(TipSubst));
+        if (!s) continue;
+        s->ad = islev->veri.islev.tip_paramlar[i];
+        s->ad_uz = (int)strlen(s->ad);
+        s->ir = tip_args[i];
+        s->sonraki = g->substler;
+        g->substler = s;
+    }
+
+    /* Geçici olarak islev'in adini mangled ile degistirip emit */
+    Dugum sahte = *islev;
+    sahte.veri.islev.ad = mangled;
+    sahte.veri.islev.ad_uzunluk = (int)strlen(mangled);
+    sahte.veri.islev.tip_param_sayi = 0;  /* artik generic degil */
+    islev_uret(g, &sahte);
+
+    /* Subst pop */
+    g->substler = eski_substler;
+}
+
 static void islev_uret(LlvmGen *g, const Dugum *islev) {
+    /* Generic islev: tek basina emit etme — instantiation'lar cagri sirasinda */
+    if (islev->veri.islev.tip_param_sayi > 0) return;
+
     const char *donus = islev->veri.islev.donus_tipi
         ? ast_tip_to_ir(g, islev->veri.islev.donus_tipi)
         : "void";
@@ -1151,7 +1359,7 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     yapi_tip_tanimlari_emit(&g);
     str_globalleri_emit(&g);
 
-    /* Islevleri emit et */
+    /* Islevleri emit et (generic olanlar atlanir; instantiation'lar sonra) */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_ISLEV) {
@@ -1160,6 +1368,15 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
                    uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
             islev_uret(&g, uye->veri.disa.tanim);
         }
+    }
+
+    /* Bekleyen generic specialization'lari emit et (fixed-point) */
+    int max_iter = 32;
+    while (g.bekleyenler && max_iter-- > 0) {
+        BekleyenSpec *bs = g.bekleyenler;
+        g.bekleyenler = bs->sonraki;
+        specialize_emit(&g, bs->ast, bs->tip_args, bs->tip_arg_sayi,
+                        bs->mangled);
     }
 
     arena_serbest(a);

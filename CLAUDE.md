@@ -402,6 +402,37 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
+33. **Generic işlev + Stdlib seed (ADIM 23)** (4 yeni LLVM testi + 3 stdlib modülü)
+    - **Generic işlev:** `işlev kimlik<T>(x: T) -> T { ver x; }`
+      - AST: `islev` artık tip_paramlar + bound listesi alır
+      - Parser: ad sonrası optional `<T, U: Bound>` (yapı ile aynı sözdizim)
+      - Tip kontrol: pre_populate_islev'de generic params gp_scope'a;
+        tip_kontrol_tanim'da gövde scope'una; tip_esit generic param için ad-bazlı + concrete-deferred
+      - DUGUM_CAGRI: generic param parametresi her arg tipi kabul eder, donus tipi inferred T ile değişir
+    - **LLVM monomorphization:**
+      - Generic işlevler tek başına emit edilmez
+      - Çağrı sırasında arg tipinden T çıkarsanır, mangled name (`kimlik$i32`) üretilir
+      - Bekleyenler listesi + worklist sonrası emit (recursive instantiation desteği)
+      - TipSubst context: generic param adı → IR string (`T` → `i32`)
+      - MonoKayit ile duplicate emission engellenir
+    - **`tip_sayisal_mi`/`tip_tamsayi_mi`/`tip_mantiksal_mi`:** Generic param için "deferred true" (instantiation'a ertelenir)
+    - **`tip_esit`:** İki generic param → ad eşitliği; biri generic → uyumlu
+    - **Stdlib seed (`stdlib/temel/`):**
+      - `matematik.kem` — mutlak, en_kucuk, en_buyuk, kare, kup, sinirla, isaret
+      - `karsilastir.kem` — esit_mi, farkli_mi, karsilastir, en_kucuk_uc, en_buyuk_uc
+      - `sayisal.kem` — ortalama, us, obe (GCD), ekok (LCM)
+      - Hepsi pure KEMGU, runtime/FFI bağımlılığı yok, --check geçer
+      - Makefile `calistir_stdlib_check` hedefi
+    - **Felsefe:**
+      - Java equals/hashCode tuzağına düşme — fonksiyonel API
+      - Go yıllarca generic yoktu — gün 1'den generic
+      - Rust 'a lifetime yükü yok — sıfır annotation
+    - **Sınırlamalar (v1):**
+      - `kendin` (self) henüz parametre olarak parse edilmiyor — method-style API yok
+      - Tip args çıkarsama yalnız param tiplerinden (return-type-driven inference yok)
+      - Bound kontrolü generic işlevde henüz yok (yapıda var)
+      - `kullan stdlib::matematik` import sistemi henüz yok (tek dosya derleme)
+
 29. **Constraint v2 — uygula gövde tip kontrolü + method dispatch (ADIM 19)** (+5 test)
     - DUGUM_OZELLIK ve DUGUM_UYGULA artık gövdeleri tip-kontrol edilir
     - Generic param T uygula scope'una eklenir (`uygula<T> X<T>`)
@@ -574,7 +605,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
       - Aynı bound iki kez raporlanabilir (annotation + constructor)
       - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
 
-### 🎉🎉 ADIM 12-22 TAMAMLANDI — ESCAPE + CONSTRAINT v2 + LSP v2 + LLVM v3 + KATMAN 2
+### 🎉🎉 ADIM 12-23 TAMAMLANDI — GENERIC IŞLEV + STDLIB SEED + LLVM v3
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -582,7 +613,7 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 501/501 (önceki 482 + 5 constraint v2 + 5 katman 2 + 3 LSP v2 + 6 LLVM v3)
+**Test sayısı:** 505/505 (önceki 501 + 4 generic işlev) + 3 stdlib --check geçti
 
 ### Sıradaki büyük seçenekler:
 - **Concurrency lang syntax** (görev/kanal anahtar kelimeleri, R-GÖREV uygulama)

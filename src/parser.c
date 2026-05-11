@@ -164,6 +164,9 @@ static Dugum *parse_islev_tanimi(Parser *p);
 static Dugum *parse_yapi_tanimi(Parser *p);
 static Dugum *parse_ozellik_tanimi(Parser *p);
 static Dugum *parse_uygula_tanimi(Parser *p);
+static char **parse_tip_param_listesi_genis(Parser *p, int *out_sayi,
+                                            Dugum ****out_boundlar,
+                                            int **out_bound_sayilari);
 static Dugum *parse_kullan(Parser *p);
 static Dugum *parse_disa(Parser *p);
 static Dugum *parse_modul_tanimi(Parser *p);
@@ -214,6 +217,14 @@ static Dugum *parse_islev_genel(Parser *p, int imza_yeterli) {
 
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P014",
                                 "islev adi bekleniyor");
+
+    /* Generic tip parametreleri: islev<T, U: Bound>(...) opsiyonel */
+    int tip_param_sayi = 0;
+    Dugum ***tip_param_boundlari = NULL;
+    int *tip_param_bound_sayilari = NULL;
+    char **tip_paramlar = parse_tip_param_listesi_genis(p, &tip_param_sayi,
+        &tip_param_boundlari, &tip_param_bound_sayilari);
+
     parser_bekle(p, TOK_SOL_PAREN, "P015", "'(' bekleniyor");
 
     Liste params;
@@ -248,6 +259,10 @@ static Dugum *parse_islev_genel(Parser *p, int imza_yeterli) {
     d->veri.islev.ad =
         ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
     d->veri.islev.ad_uzunluk = ad_tok.uzunluk;
+    d->veri.islev.tip_paramlar = tip_paramlar;
+    d->veri.islev.tip_param_sayi = tip_param_sayi;
+    d->veri.islev.tip_param_boundlari = tip_param_boundlari;
+    d->veri.islev.tip_param_bound_sayilari = tip_param_bound_sayilari;
     d->veri.islev.parametreler = liste_array_yap(&params, p->arena);
     d->veri.islev.param_sayi = params.sayi;
     d->veri.islev.donus_tipi = donus;

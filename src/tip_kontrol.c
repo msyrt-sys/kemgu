@@ -518,18 +518,36 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
+            /* Generic islev: ilk TIP_GENERIC_PARAM gorulen yere ilk uygun
+             * argumanin tipini bagla (basit inference — tek param T icin
+             * cogu pratik durumda yeterli). */
+            TipBilgisi *inferred_T = NULL;
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
                 /* Bidirectional: arg, parametre tipi context'inde cikarsanir */
+                TipBilgisi *bek = param_tip;
+                if (param_tip->kategori == TIP_GENERIC_PARAM && inferred_T) {
+                    bek = inferred_T;
+                }
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
-                    d->veri.cagri.argumanlar[i], param_tip);
+                    d->veri.cagri.argumanlar[i], bek);
+                if (param_tip->kategori == TIP_GENERIC_PARAM) {
+                    if (!inferred_T) inferred_T = arg_tip;
+                    /* Generic params herhangi bir tipi kabul eder */
+                    continue;
+                }
                 if (!tip_esit(arg_tip, param_tip) &&
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
                 }
             }
-            return hedef_tip->veri.islev.donus;
+            /* Donus tipi generic ise inferred T ile degistir */
+            TipBilgisi *donus = hedef_tip->veri.islev.donus;
+            if (donus && donus->kategori == TIP_GENERIC_PARAM && inferred_T) {
+                return inferred_T;
+            }
+            return donus;
         }
 
         /* === Erisim (x.y) === */
@@ -878,6 +896,24 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
         ptipler = (TipBilgisi **)arena_ayir(tk->arena,
                     sizeof(TipBilgisi *) * (size_t)n);
     }
+    /* Generic params: gecici scope'a ekle (parametre/donus tipi resolve icin) */
+    Scope *gp_scope = NULL;
+    if (islev->veri.islev.tip_param_sayi > 0) {
+        gp_scope = scope_olustur(tk->arena, SCOPE_BLOK, tk->global_scope);
+        for (int j = 0; j < islev->veri.islev.tip_param_sayi; j++) {
+            const char *t_ad = islev->veri.islev.tip_paramlar[j];
+            int t_uz = (int)strlen(t_ad);
+            Sembol gp;
+            memset(&gp, 0, sizeof(gp));
+            gp.ad = t_ad;
+            gp.ad_uzunluk = t_uz;
+            gp.kategori = SEMBOL_GENERIC_PARAM;
+            gp.tip = tip_olustur_generic_param(tk->arena, t_ad, t_uz);
+            sembol_ekle(gp_scope, tk->arena, &gp);
+        }
+    }
+    Scope *eski_scope = tk->scope;
+    if (gp_scope) tk->scope = gp_scope;
     for (int j = 0; j < n; j++) {
         const Dugum *p = islev->veri.islev.parametreler[j];
         ptipler[j] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
@@ -885,6 +921,7 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
     TipBilgisi *donus = islev->veri.islev.donus_tipi
         ? ast_tip_to_bilgi(tk, islev->veri.islev.donus_tipi)
         : tip_olustur_basit(tk->arena, TIP_BOS);
+    tk->scope = eski_scope;
     TipBilgisi *islev_tipi = tip_olustur_islev(tk->arena, ptipler, n, donus);
 
     Sembol s;
@@ -1210,6 +1247,19 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *eski_donus = tk->aktif_donus_tipi;
             tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->global_scope);
             tk->aktif_donus_tipi = islev_sem->tip->veri.islev.donus;
+
+            /* Generic params'i govde scope'una ekle */
+            for (int i = 0; i < d->veri.islev.tip_param_sayi; i++) {
+                const char *t_ad = d->veri.islev.tip_paramlar[i];
+                int t_uz = (int)strlen(t_ad);
+                Sembol gp;
+                memset(&gp, 0, sizeof(gp));
+                gp.ad = t_ad;
+                gp.ad_uzunluk = t_uz;
+                gp.kategori = SEMBOL_GENERIC_PARAM;
+                gp.tip = tip_olustur_generic_param(tk->arena, t_ad, t_uz);
+                sembol_ekle(tk->scope, tk->arena, &gp);
+            }
 
             /* Parametreleri scope'a ekle */
             for (int i = 0; i < d->veri.islev.param_sayi; i++) {

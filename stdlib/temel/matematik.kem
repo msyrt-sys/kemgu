@@ -1,0 +1,50 @@
+// KEMGU Stdlib — Temel Matematik
+// =================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Her işlev generic — derleme sırasında her tip için ayrı instantiation.
+//
+// Tasarım kuralı: her işlev tek bir sorumluluğa sahip, açık adlandırma,
+// yan-etki yok. Diğer dillerin hatalarından kaçınılan noktalar:
+//   - C: int taşması serbest; KEMGU: tipe göre kontrollü
+//   - Python: sayısal tip muğlak; KEMGU: explicit tip
+//   - Go: yıllarca generic yoktu; KEMGU: gün 1'den generic
+
+işlev mutlak<T>(x: T) -> T {
+    eğer x < 0 { ver 0 - x; }
+    ver x;
+}
+
+işlev en_kucuk<T>(a: T, b: T) -> T {
+    eğer a < b { ver a; }
+    ver b;
+}
+
+işlev en_buyuk<T>(a: T, b: T) -> T {
+    eğer a > b { ver a; }
+    ver b;
+}
+
+// Kare: x * x. Generic; her sayısal tip için çalışır.
+işlev kare<T>(x: T) -> T {
+    ver x * x;
+}
+
+// Küp: x * x * x.
+işlev kup<T>(x: T) -> T {
+    ver x * x * x;
+}
+
+// Sınırlandır: x'i [alt, ust] aralığına çek.
+işlev sinirla<T>(x: T, alt: T, ust: T) -> T {
+    eğer x < alt { ver alt; }
+    eğer x > ust { ver ust; }
+    ver x;
+}
+
+// İşaret: -1 negatif, 0 sıfır, +1 pozitif. tam32 döndürür.
+işlev isaret<T>(x: T) -> tam32 {
+    eğer x < 0 { ver 0 - 1; }
+    eğer x > 0 { ver 1; }
+    ver 0;
+}
