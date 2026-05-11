@@ -76,7 +76,8 @@ kemgu/
 │   ├── sembol.h / sembol.c           — Symbol table + scope hierarchy (TAMAMLANDI ✓)
 │   ├── tip_kontrol.h / tip_kontrol.c — İfade tip kontrolü (TAMAMLANDI ✓ — ADIM 11.3)
 │   ├── bolge.h / bolge.c             — Bölge temsili (TAMAMLANDI ✓ — ADIM 12.1)
-│   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları (TAMAMLANDI ✓ — ADIM 12.2)
+│   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları + escape entegrasyonu (TAMAMLANDI ✓ — ADIM 12.2 + 14.2)
+│   ├── escape.h / escape.c           — DFA fixed-point escape analizi (TAMAMLANDI ✓ — ADIM 14.1)
 │   ├── llvm.h / llvm.c               — LLVM IR text üretici (TAMAMLANDI ✓ — ADIM 13.1)
 │   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
 ├── test/
@@ -88,7 +89,8 @@ kemgu/
 │   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
 │   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 90/90, ASan temiz)
 │   ├── test_bolge.c                   — Bölge temsili testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
-│   ├── test_bolge_atama.c             — Bölge atama R-* testleri (TAMAMLANDI ✓ — 10/10, ASan temiz)
+│   ├── test_bolge_atama.c             — Bölge atama R-* + escape entegrasyon testleri (TAMAMLANDI ✓ — 13/13, ASan temiz)
+│   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -375,7 +377,27 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - **Pipeline:** KEMGU kaynak → lexer → parser → AST → tip kontrol → LLVM IR → `clang -x ir -` → native `.exe` → çalıştırma
     - `ana.c` `--llvm` modu eklendi (4. CLI mod: token/parse/check/llvm)
 
-### 🎉🎉 ADIM 12 + 13 TAMAMLANDI — KEMGU END-TO-END DERLEYİCİ ÇALIŞIYOR
+23. **DFA fixed-point escape analizi (`escape.h/c`) — ADIM 14.1** (17/17 test, ASan temiz)
+    - 3 kategori: `ESC_YEREL`, `ESC_ITERASYON`, `ESC_CAGIRAN`
+    - **Per-AST-node escape kategorisi:** linear kayit haritasi
+    - **Değişken bağlama izleme:** scope stack (sondan başa arama, append-only on assign)
+    - **Forward DFA:** `ver e`'de `ifadeyi_yukselt` ile tüm alt-tahsis bölgelerini CAGIRAN'a terfi (tanımlayıcı zincirlerini takip eder)
+    - **Fixed-point iterasyonu:** kategori değişikliği durana kadar tekrar (max 16 iter güvenlik)
+    - **Transitif escape:** `değişken x = "hello"; ver x;` → `"hello"` CAGIRAN (eski sistemde YEREL idi)
+    - **Loop iterasyonu:** döngü içinde tahsis → ESC_ITERASYON otomatik
+    - **Koşullu dallanma:** `eğer { ver a } değilse { ver b }` → her iki tahsis CAGIRAN
+    - **Erişim/indeks konservatif:** alt-nesne escape kabul edilir
+    - **Sinirlamalar (v1):** interprocedural yok (call sonuçları konservatif), closure yakalama henuz yok, MAY-points-to konservatif
+
+24. **Escape-aware bölge atama (`bolge_atama.c` ADIM 14.2)** (3 entegrasyon testi, 13/13 toplam)
+    - Yeni API: `bolge_atama_escape_bagla(ba, &ea)` — opsiyonel DFA modu
+    - **İki çalışma modu:**
+      - Escape NULL: eski syntax tabanlı davranış korunur (geriye uyumlu)
+      - Escape bağlı: AST düğümünden direkt escape kategori sorgusu, daha keskin sonuç
+    - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
+    - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
+
+### 🎉🎉 ADIM 12 + 13 + 14 TAMAMLANDI — TAM ESCAPE ANALİZİ HAZIR
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -383,17 +405,26 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
+**Test sayısı:** 412/412 (önceki 392 + 17 escape + 3 bolge_atama entegrasyon)
+
 ### Sıradaki büyük seçenekler:
-- **Tam Katman 1 escape analizi** (DFA tabanlı)
 - **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
 - **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
-- **Bootstrapping** (uzun vade)
+- **Tam constraint satisfaction** (uygula Bound için X kontrolü)
+- **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
+- **LSP server** (gerçek IDE entegrasyonu)
+- **Stdlib network/JSON/regex** (runtime altyapı sonra)
+- **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
 ### İlerideki Fazlar
-- Tip sistemi (tip çıkarsama, tip kontrolü)
-- Bölge çözümleyici (escape analizi, bölge atama)
-- LLVM backend (IR üretimi)
+- ~~Tip sistemi (tip çıkarsama, tip kontrolü)~~ ✓ ADIM 11
+- ~~Bölge çözümleyici (escape analizi, bölge atama)~~ ✓ ADIM 12 + 14
+- LLVM backend genişletme (parametreler, kontrol akışı, yapılar, dizi, çağrı)
+- Concurrency (R-GÖREV, R-BİRLEŞTİR, R-KANAL — Katman 2)
+- Constraint satisfaction (uygula bound kontrolü)
+- LSP server (IDE entegrasyonu)
+- Stdlib (network/JSON/regex)
 - Bootstrapping (KEMGU ile KEMGU derleyicisi)
 
 ---
@@ -457,9 +488,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ!)
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR → native exe
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → **(genişletme: tam escape, Katman 2, LLVM cağrı/yapı/kontrol akışı)**
+- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM + ESCAPE FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ + DFA ESCAPE!)
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → **(genişletme: Katman 2, LLVM cağrı/yapı/kontrol akışı, constraint, LSP, stdlib, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -467,7 +498,12 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** End-to-end pipeline çalışıyor. Genişletme noktaları: tam escape analizi (DFA), Bölge Katman 2 (concurrency), LLVM IR'da çağrı/parametre/kontrol akışı/yapı desteği, `hiç`/`değer` ifade desteği. Kullanıcı önceliklerini belirler.
+- **Escape analizi tasarım kararları:**
+  - Forward DFA + fixed-point iterasyonu (max 16 pass)
+  - Per-AST-node escape kategorisi (linear arama haritası)
+  - Değişken bağlama: scope stack, append-only on assign (MAY-flow konservatif)
+  - `bolge_atama` ile opsiyonel entegrasyon (NULL → eski syntax modu)
+- **Sıradaki hedef:** Kullanıcı önceliği belirler. En doğal sıralama: (a) LLVM backend genişletme (çağrı/yapı/dizi), (b) constraint satisfaction, (c) `hiç`/`değer` ifade desteği + pattern binding, (d) inter-procedural escape v2, (e) Bölge Katman 2 (concurrency), (f) LSP, (g) stdlib, (h) self-host.
 
 ---
 

@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "bolge.h"
 #include "arena.h"
+#include "escape.h"
 
 /*
  * KEMGU Bolge Atama (Region Inference)
@@ -18,9 +19,13 @@
  * R-ITERASYON: donguden escape etmeyen deger → BOLGE_ITERASYON(d)
  * R-KOSUL:     koşullu dallanma → iki dalin LCA'si
  *
- * NOT: Tam escape analizi (DFA) ileride. Su an basit context-tracking:
- *   - ver_baglaminda: deger ver icinde mi (R-VER aktif)
- *   - dongu_derinligi: dongu icinde miyiz (R-ITERASYON aktif)
+ * Iki mod:
+ *   1) Syntax-tabanli (escape = NULL): ver_baglaminda flag'i ile karar.
+ *      Eski API uyumlu; transitif escape'i yakalamaz.
+ *
+ *   2) Escape-tabanli (escape ayarli): DFA fixed-point analizinden
+ *      escape kategorisi bilgisi alir. Transitif akis dogrulanabilir:
+ *      degisken x = "..."; ver x; senaryosunda "..." CAGIRAN olur.
  */
 
 typedef struct BolgeAtama {
@@ -30,11 +35,15 @@ typedef struct BolgeAtama {
     int dongu_derinligi;          /* 0 = dongu disi */
     int dongu_id_sayaci;          /* tekil id uretici */
     BolgeBilgisi *aktif_iterasyon; /* aktif dongu bolgesi */
-    int ver_baglaminda;           /* 1 = ver icinde (R-VER aktif) */
+    int ver_baglaminda;           /* 1 = ver icinde (R-VER aktif) — fallback */
+    const EscapeAnaliz *escape;   /* opsiyonel: DFA escape analizi sonuclari */
 } BolgeAtama;
 
 void bolge_atama_baslat(BolgeAtama *ba, Arena *a,
                         const char *islev_adi, int uz);
+
+/* Escape analizi sonuclarini bagla (NULL ile syntax moduna geri don). */
+void bolge_atama_escape_bagla(BolgeAtama *ba, const EscapeAnaliz *ea);
 
 /* Ifadenin bolgesini belirle. NULL parametresi guvenli (NULL doner). */
 BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *ifade);
