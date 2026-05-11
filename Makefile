@@ -37,10 +37,10 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
        $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
-       $(SRCDIR)/llvm.c
+       $(SRCDIR)/escape.c $(SRCDIR)/llvm.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test test_tumu
 
 # === Ana hedef ===
 
@@ -114,8 +114,18 @@ $(BUILD)/test_bolge_atama$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
                                   $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                   $(SRCDIR)/ifade.c $(SRCDIR)/bolge.c \
-                                  $(SRCDIR)/bolge_atama.c \
+                                  $(SRCDIR)/bolge_atama.c $(SRCDIR)/escape.c \
                                   $(TESTDIR)/test_bolge_atama.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Escape analiz testi (Clang64 + ASan — parser + escape) ===
+
+$(BUILD)/test_escape$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(SRCDIR)/escape.c \
+                            $(TESTDIR)/test_escape.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
 # === Genel obje kurallari ===
@@ -157,7 +167,10 @@ calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 	./$(BUILD)/test_bolge_atama$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test
+calistir_escape_test: $(BUILD)/test_escape$(EXE)
+	./$(BUILD)/test_escape$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test
 	@echo "Tum testler gecti!"
 
 clean:

@@ -1,5 +1,6 @@
 #include "bolge_atama.h"
 #include "bolge.h"
+#include "escape.h"
 #include "ast.h"
 #include "parser.h"
 #include "lexer.h"
@@ -175,6 +176,127 @@ static void test_yol_global(void) {
     arena_serbest(a);
 }
 
+/* === Escape entegrasyon (DFA tabanli) === */
+
+/* Yardimci: kaynak metnini ayrist ve N. tahsis literalini bul */
+static const Dugum *literali_bul(const Dugum *d, DugumTipi tip, int *sayac) {
+    if (!d) return NULL;
+    if (d->tip == tip) {
+        if (*sayac == 0) return d;
+        (*sayac)--;
+    }
+    /* Yeterli kapsama: program/islev/blok/degisken/ver */
+    switch (d->tip) {
+        case DUGUM_PROGRAM:
+            for (int i = 0; i < d->veri.program.sayi; i++) {
+                const Dugum *r = literali_bul(d->veri.program.uyeler[i], tip, sayac);
+                if (r) return r;
+            }
+            return NULL;
+        case DUGUM_ISLEV:
+            return literali_bul(d->veri.islev.govde, tip, sayac);
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++) {
+                const Dugum *r = literali_bul(d->veri.blok.deyimler[i], tip, sayac);
+                if (r) return r;
+            }
+            return NULL;
+        case DUGUM_DEGISKEN:
+            return literali_bul(d->veri.degisken.deger, tip, sayac);
+        case DUGUM_VER:
+            return literali_bul(d->veri.ver.deger, tip, sayac);
+        case DUGUM_ICIN: {
+            const Dugum *r = literali_bul(d->veri.icin.koleksiyon, tip, sayac);
+            if (r) return r;
+            return literali_bul(d->veri.icin.govde, tip, sayac);
+        }
+        case DUGUM_IFADE_DEYIMI:
+            return literali_bul(d->veri.ifade_deyimi.ifade, tip, sayac);
+        default:
+            return NULL;
+    }
+}
+
+/* Transitive escape — escape analizi olmadan YANLIS (YEREL), escape ile DOGRU (CAGIRAN) */
+static void test_escape_transitif(void) {
+    Arena *a = arena_olustur(0);
+    const char *kaynak =
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"merhaba\"; "
+        "ver x; }";
+    Lexer l; lexer_baslat(&l, kaynak, "test");
+    Parser p; parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    int sayac = 0;
+    const Dugum *metin = literali_bul(prog, DUGUM_METIN, &sayac);
+
+    /* Escape analizi calistir ve bolge atamaya bagla */
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    BolgeAtama ba; bolge_atama_baslat(&ba, a, "f", 1);
+    bolge_atama_escape_bagla(&ba, &ea);
+
+    /* ver_baglaminda flag YOK — escape bilgisi olmadan YEREL gelecekti.
+     * Escape ile CAGIRAN gelmeli (transitif). */
+    BolgeBilgisi *b = bolge_belirle(&ba, metin);
+    int ok = b && b->kategori == BOLGE_CAGIRAN;
+    test_sonuc("entegrasyon: transitif 'ver x' -> METIN CAGIRAN", ok);
+
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
+/* Escape baglanmadan eski davranis korunur (ver_baglaminda olmadan YEREL) */
+static void test_escape_kapali_geriye_uyum(void) {
+    Arena *a = arena_olustur(0);
+    const char *kaynak =
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"merhaba\"; "
+        "ver x; }";
+    Lexer l; lexer_baslat(&l, kaynak, "test");
+    Parser p; parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    int sayac = 0;
+    const Dugum *metin = literali_bul(prog, DUGUM_METIN, &sayac);
+
+    /* Escape baglanmadi — eski syntax davranisi */
+    BolgeAtama ba; bolge_atama_baslat(&ba, a, "f", 1);
+    BolgeBilgisi *b = bolge_belirle(&ba, metin);
+    int ok = b && b->kategori == BOLGE_YEREL;  /* ver_baglaminda yok -> YEREL */
+    test_sonuc("entegrasyon: escape kapali, syntax davranisi korundu (YEREL)", ok);
+
+    arena_serbest(a);
+}
+
+/* Dongu icindeki tahsis: escape ile ITERASYON */
+static void test_escape_dongu_iterasyon(void) {
+    Arena *a = arena_olustur(0);
+    const char *kaynak =
+        "i\xc5\x9f" "lev f() -> tam32 { "
+        "i\xc3\xa7" "in i : [0, 1] { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = [10, 20]; "
+        "} ver 0; }";
+    Lexer l; lexer_baslat(&l, kaynak, "test");
+    Parser p; parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+
+    /* Ilk DIZI_OLUSTUR = [0,1] (dongu disi), ikinci = [10,20] (dongu ici) */
+    int sayac = 1;
+    const Dugum *dizi_ic = literali_bul(prog, DUGUM_DIZI_OLUSTUR, &sayac);
+
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    BolgeAtama ba; bolge_atama_baslat(&ba, a, "f", 1);
+    bolge_atama_escape_bagla(&ba, &ea);
+
+    BolgeBilgisi *b = bolge_belirle(&ba, dizi_ic);
+    int ok = b && b->kategori == BOLGE_ITERASYON;
+    test_sonuc("entegrasyon: dongu ici DIZI -> ITERASYON", ok);
+
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -200,6 +322,11 @@ int main(void) {
     printf("\n--- Sonek ---\n");
     test_erisim_yerel();
     test_yol_global();
+
+    printf("\n--- Escape Analiz Entegrasyonu ---\n");
+    test_escape_transitif();
+    test_escape_kapali_geriye_uyum();
+    test_escape_dongu_iterasyon();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
