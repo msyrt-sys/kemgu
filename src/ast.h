@@ -155,6 +155,11 @@ struct Dugum {
         struct {
             const char *ad;
             int ad_uzunluk;
+            /* Generic tip parametreleri: islev<T, U: Bound>(...) */
+            char **tip_paramlar;
+            int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **parametreler;  /* DUGUM_PARAMETRE listesi */
             int param_sayi;
             Dugum *donus_tipi;     /* NULL = donus yok */

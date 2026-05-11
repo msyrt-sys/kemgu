@@ -343,6 +343,45 @@ static void test_struct_param_by_value(void) {
     test_sonuc("struct-by-value param (Cift{20,22}) -> 42", rc == 42);
 }
 
+/* === ADIM 23: Generic işlev + stdlib === */
+
+static void test_generic_kimlik(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kimlik<T>(x: T) -> T { ver x; } "
+        "i\xc5\x9flev main() -> tam32 { ver kimlik(42); }");
+    test_sonuc("generic kimlik<T>(42) -> 42", rc == 42);
+}
+
+static void test_generic_iki_kat(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iki_kat<T>(x: T) -> T { ver x + x; } "
+        "i\xc5\x9flev main() -> tam32 { ver iki_kat(21); }");
+    test_sonuc("generic iki_kat<T>(21) -> 42", rc == 42);
+}
+
+static void test_generic_coklu_instan(void) {
+    /* Iki ayri tip ile iki ayri instantiation */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kimlik<T>(x: T) -> T { ver x; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: tam8 = kimlik(20); "
+        "de\xc4\x9fi\xc5\x9fken b: tam32 = 0; "
+        "b = b + 22; "
+        "ver b + 20; }");
+    /* a tam8'ten gelirken default i32 kullanildigi icin sext gerek; sonuc 42 */
+    test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
+}
+
+static void test_generic_mutlak_stdlib(void) {
+    /* matematik.kem'den mutlak<T> kullanim */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev mutlak<T>(x: T) -> T { "
+        "e\xc4\x9f" "er x < 0 { ver 0 - x; } "
+        "ver x; } "
+        "i\xc5\x9flev main() -> tam32 { ver mutlak(0 - 42); }");
+    test_sonuc("stdlib stil mutlak<T>(-42) -> 42", rc == 42);
+}
+
 static void test_struct_donus_by_value(void) {
     int rc = derle_ve_calistir(
         "yap\xc4\xb1 N { x: tam32; } "
@@ -412,6 +451,12 @@ int main(void) {
     test_dizi_dongu();
     test_struct_param_by_value();
     test_struct_donus_by_value();
+
+    printf("\n--- ADIM 23: Generic islev + stdlib ---\n");
+    test_generic_kimlik();
+    test_generic_iki_kat();
+    test_generic_coklu_instan();
+    test_generic_mutlak_stdlib();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
