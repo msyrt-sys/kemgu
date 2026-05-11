@@ -37,12 +37,20 @@
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
  */
 
+/* Yüklenmiş modül izleme (cycle + duplicate detection) */
+typedef struct YuklenmisModul {
+    char *yol;             /* "stdlib/temel/matematik.kem" gibi */
+    int yol_uz;
+    struct YuklenmisModul *sonraki;
+} YuklenmisModul;
+
 typedef struct TipKontrol {
     Arena *arena;
     Scope *scope;                  /* mevcut scope */
     Scope *global_scope;           /* yapi/islev tanimlari icin (ileri referans) */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
     UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
+    YuklenmisModul *yuklenmisler;  /* duplicate-load engelleme */
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;

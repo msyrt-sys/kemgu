@@ -1,8 +1,11 @@
 #include "tip_kontrol.h"
 #include "hata.h"
+#include "lexer.h"
+#include "parser.h"
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* === Setup === */
 
@@ -13,6 +16,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
     uygula_tablosu_baslat(&tk->uygulamalar);
+    tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
@@ -1500,9 +1504,79 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_KULLAN:
-            /* Modul cozumleme ileride (su an no-op) */
+        case DUGUM_KULLAN: {
+            /* Yol formati: "x::y::z" -> "x/y/z.kem"
+             * Arama sirasi: cari dizin, "stdlib/" prefix'i. */
+            const char *y = d->veri.kullan.yol;
+            int yu = d->veri.kullan.yol_uzunluk;
+            if (!y || yu <= 0) break;
+
+            /* "::" -> "/" donusumu, sonuna ".kem" ekle */
+            char dosya_yolu[512];
+            int o = 0;
+            for (int i = 0; i < yu && o + 6 < (int)sizeof(dosya_yolu); i++) {
+                if (i + 1 < yu && y[i] == ':' && y[i + 1] == ':') {
+                    dosya_yolu[o++] = '/';
+                    i++;
+                } else {
+                    dosya_yolu[o++] = y[i];
+                }
+            }
+            /* .kem uzantisi */
+            const char *uzanti = ".kem";
+            for (int k = 0; k < 4 && o + 1 < (int)sizeof(dosya_yolu); k++) {
+                dosya_yolu[o++] = uzanti[k];
+            }
+            dosya_yolu[o] = '\0';
+
+            /* Duplicate kontrol */
+            for (YuklenmisModul *m = tk->yuklenmisler; m; m = m->sonraki) {
+                if (m->yol_uz == o && memcmp(m->yol, dosya_yolu, (size_t)o) == 0) {
+                    return;  /* zaten yuklu */
+                }
+            }
+
+            /* Dosyayi yukle */
+            FILE *fp = fopen(dosya_yolu, "rb");
+            if (!fp) {
+                tip_hata(tk, d, "T040",
+                    "kullan: modül dosyası bulunamadı");
+                break;
+            }
+            fseek(fp, 0, SEEK_END);
+            long boyut = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+            if (boyut <= 0) { fclose(fp); break; }
+            char *kaynak = (char *)arena_ayir(tk->arena, (size_t)boyut + 1);
+            if (!kaynak) { fclose(fp); break; }
+            fread(kaynak, 1, (size_t)boyut, fp);
+            kaynak[boyut] = '\0';
+            fclose(fp);
+
+            /* Yüklenmis listesine ekle (duplicate engelleme) */
+            YuklenmisModul *ym = (YuklenmisModul *)arena_ayir_sifir(
+                tk->arena, sizeof(YuklenmisModul));
+            if (ym) {
+                char *yol_kopya = (char *)arena_ayir(tk->arena, (size_t)o + 1);
+                memcpy(yol_kopya, dosya_yolu, (size_t)o + 1);
+                ym->yol = yol_kopya;
+                ym->yol_uz = o;
+                ym->sonraki = tk->yuklenmisler;
+                tk->yuklenmisler = ym;
+            }
+
+            /* Parse + tip-kontrol modulu */
+            Lexer l;
+            lexer_baslat(&l, kaynak, dosya_yolu);
+            Parser p;
+            parser_baslat(&p, &l, tk->arena, dosya_yolu, kaynak);
+            Dugum *mprog = parser_calistir(&p);
+            if (mprog && p.hata_sayisi == 0) {
+                /* Üst düzey üyeleri pre-populate + tanim-kontrol */
+                tip_kontrol_program(tk, mprog);
+            }
             break;
+        }
 
         case DUGUM_MODUL:
             /* Modul scope kontrolu basit — recursive */
