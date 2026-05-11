@@ -119,18 +119,37 @@ static void mesaj_yaz(FILE *cikti, const char *govde, size_t uzunluk) {
     fflush(cikti);
 }
 
-/* === Belge state (tek dosya icin MVP) === */
+/* === Belge state (tek dosya icin MVP) ===
+ *
+ * v2: Hover/definition/completion icin AST cache'i ekledik.
+ * Her didChange'da AST yeniden parse edilir.
+ */
+
+typedef struct BelgeSembol {
+    const char *ad;
+    int ad_uz;
+    int satir;       /* 1-tabanli */
+    int sutun;
+    const char *kategori;  /* "islev", "yapi", "ozellik", "uygula", "sabit" */
+    const char *tip;       /* ozet imza/tip — basit metin */
+    struct BelgeSembol *sonraki;
+} BelgeSembol;
 
 typedef struct Belge {
     char *uri;
     char *icerik;
     int icerik_uz;
+    /* Cache: yeniden parse edilen AST (didChange'da yenilenir) */
+    Arena *arena;
+    Dugum *prog;
+    BelgeSembol *semboller;  /* arena'da; ust duzey tanimlar */
 } Belge;
 
 static void belge_set(Belge *b, const char *uri, int uri_uz,
                       const char *icerik, int icerik_uz) {
     free(b->uri);
     free(b->icerik);
+    if (b->arena) arena_serbest(b->arena);
     b->uri = (char *)malloc((size_t)uri_uz + 1);
     if (b->uri) { memcpy(b->uri, uri, (size_t)uri_uz); b->uri[uri_uz] = '\0'; }
     b->icerik = (char *)malloc((size_t)icerik_uz + 1);
@@ -139,12 +158,183 @@ static void belge_set(Belge *b, const char *uri, int uri_uz,
         b->icerik[icerik_uz] = '\0';
     }
     b->icerik_uz = icerik_uz;
+    b->arena = NULL;
+    b->prog = NULL;
+    b->semboller = NULL;
 }
 
 static void belge_temizle(Belge *b) {
     free(b->uri);
     free(b->icerik);
+    if (b->arena) arena_serbest(b->arena);
     memset(b, 0, sizeof(*b));
+}
+
+/* Ust duzey sembolleri AST'den cikar ve belgeye kayit et. */
+static void sembol_ekle_belge(Belge *b, const char *ad, int ad_uz,
+                              int satir, int sutun,
+                              const char *kat, const char *tip) {
+    BelgeSembol *s = (BelgeSembol *)arena_ayir_sifir(b->arena,
+        sizeof(BelgeSembol));
+    if (!s) return;
+    s->ad = ad;
+    s->ad_uz = ad_uz;
+    s->satir = satir;
+    s->sutun = sutun;
+    s->kategori = kat;
+    s->tip = tip;
+    s->sonraki = b->semboller;
+    b->semboller = s;
+}
+
+static void belge_sembolleri_topla(Belge *b) {
+    if (!b->prog) return;
+    for (int i = 0; i < b->prog->veri.program.sayi; i++) {
+        const Dugum *uye = b->prog->veri.program.uyeler[i];
+        const Dugum *gercek = uye;
+        if (gercek->tip == DUGUM_DISA && gercek->veri.disa.tanim) {
+            gercek = gercek->veri.disa.tanim;
+        }
+        switch (gercek->tip) {
+            case DUGUM_ISLEV:
+                sembol_ekle_belge(b,
+                    gercek->veri.islev.ad,
+                    gercek->veri.islev.ad_uzunluk,
+                    gercek->satir, gercek->sutun,
+                    "islev", "islev");
+                break;
+            case DUGUM_YAPI:
+                sembol_ekle_belge(b,
+                    gercek->veri.yapi.ad,
+                    gercek->veri.yapi.ad_uzunluk,
+                    gercek->satir, gercek->sutun,
+                    "yapi", "yapi");
+                break;
+            case DUGUM_OZELLIK:
+                sembol_ekle_belge(b,
+                    gercek->veri.ozellik.ad,
+                    gercek->veri.ozellik.ad_uzunluk,
+                    gercek->satir, gercek->sutun,
+                    "ozellik", "ozellik (trait)");
+                break;
+            case DUGUM_SABIT:
+                sembol_ekle_belge(b,
+                    gercek->veri.sabit.ad,
+                    gercek->veri.sabit.ad_uzunluk,
+                    gercek->satir, gercek->sutun,
+                    "sabit", "sabit");
+                break;
+            default: break;
+        }
+    }
+}
+
+/* Belirli (line, col) konumundaki tanimlayici dugumu bul.
+ * Position 1-tabanli (LSP'den donusturulmus). */
+static const Dugum *bul_tanimlayici_konum(const Dugum *d,
+                                            int line_1, int col_1);
+
+static const Dugum *bul_tanimlayici_konum_liste(Dugum **liste, int sayi,
+                                                  int line_1, int col_1) {
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *r = bul_tanimlayici_konum(liste[i], line_1, col_1);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+static const Dugum *bul_tanimlayici_konum(const Dugum *d,
+                                            int line_1, int col_1) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        if (d->satir == line_1) {
+            int s = d->sutun;
+            int e = s + d->veri.tanimlayici.uzunluk;
+            if (col_1 >= s && col_1 < e) return d;
+        }
+        return NULL;
+    }
+    switch (d->tip) {
+        case DUGUM_PROGRAM:
+            return bul_tanimlayici_konum_liste(d->veri.program.uyeler,
+                                                d->veri.program.sayi, line_1, col_1);
+        case DUGUM_ISLEV: {
+            const Dugum *r = bul_tanimlayici_konum_liste(
+                d->veri.islev.parametreler, d->veri.islev.param_sayi,
+                line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.islev.govde, line_1, col_1);
+        }
+        case DUGUM_DISA:
+            return bul_tanimlayici_konum(d->veri.disa.tanim, line_1, col_1);
+        case DUGUM_MODUL:
+            return bul_tanimlayici_konum_liste(d->veri.modul.uyeler,
+                                                d->veri.modul.sayi, line_1, col_1);
+        case DUGUM_BLOK:
+            return bul_tanimlayici_konum_liste(d->veri.blok.deyimler,
+                                                d->veri.blok.sayi, line_1, col_1);
+        case DUGUM_DEGISKEN:
+            return bul_tanimlayici_konum(d->veri.degisken.deger, line_1, col_1);
+        case DUGUM_ATAMA: {
+            const Dugum *r = bul_tanimlayici_konum(d->veri.atama.hedef, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.atama.deger, line_1, col_1);
+        }
+        case DUGUM_VER:
+            return bul_tanimlayici_konum(d->veri.ver.deger, line_1, col_1);
+        case DUGUM_EGER: {
+            const Dugum *r = bul_tanimlayici_konum(d->veri.eger.kosul, line_1, col_1);
+            if (r) return r;
+            r = bul_tanimlayici_konum(d->veri.eger.gozdoldur, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.eger.yan, line_1, col_1);
+        }
+        case DUGUM_IKEN:
+            if (bul_tanimlayici_konum(d->veri.iken.kosul, line_1, col_1)) {
+                return bul_tanimlayici_konum(d->veri.iken.kosul, line_1, col_1);
+            }
+            return bul_tanimlayici_konum(d->veri.iken.govde, line_1, col_1);
+        case DUGUM_ICIN: {
+            const Dugum *r = bul_tanimlayici_konum(
+                d->veri.icin.koleksiyon, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.icin.govde, line_1, col_1);
+        }
+        case DUGUM_IFADE_DEYIMI:
+            return bul_tanimlayici_konum(d->veri.ifade_deyimi.ifade, line_1, col_1);
+        case DUGUM_IKILI: {
+            const Dugum *r = bul_tanimlayici_konum(d->veri.ikili.sol, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.ikili.sag, line_1, col_1);
+        }
+        case DUGUM_TEKLI:
+            return bul_tanimlayici_konum(d->veri.tekli.operand, line_1, col_1);
+        case DUGUM_CAGRI: {
+            const Dugum *r = bul_tanimlayici_konum(d->veri.cagri.hedef, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum_liste(d->veri.cagri.argumanlar,
+                                                d->veri.cagri.sayi, line_1, col_1);
+        }
+        case DUGUM_ERISIM:
+            return bul_tanimlayici_konum(d->veri.erisim.nesne, line_1, col_1);
+        case DUGUM_INDEKS: {
+            const Dugum *r = bul_tanimlayici_konum(d->veri.indeks.nesne, line_1, col_1);
+            if (r) return r;
+            return bul_tanimlayici_konum(d->veri.indeks.indeks, line_1, col_1);
+        }
+        case DUGUM_SABIT:
+            return bul_tanimlayici_konum(d->veri.sabit.deger, line_1, col_1);
+        default: return NULL;
+    }
+}
+
+static BelgeSembol *belge_sembol_bul(Belge *b, const char *ad, int ad_uz) {
+    for (BelgeSembol *s = b->semboller; s; s = s->sonraki) {
+        if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
+            return s;
+        }
+    }
+    return NULL;
 }
 
 /* === Diagnostic yayini === */
@@ -183,30 +373,40 @@ static void publish_diagnostics(FILE *cikti, const char *uri, DiagCtx *dc) {
     json_yazici_serbest(&y);
 }
 
-/* === Belgeyi analiz et === */
+/* === Belgeyi analiz et ===
+ *
+ * Eski arena varsa serbest birakir, yenisini olusturur. AST + sembol
+ * tablosu belge'de cache'lenir. */
 
-static void analiz_et(const char *kaynak, DiagCtx *dc) {
-    Arena *a = arena_olustur(0);
-    if (!a) return;
+static void analiz_et(Belge *belge, DiagCtx *dc) {
+    if (!belge || !belge->icerik) return;
+    if (belge->arena) {
+        arena_serbest(belge->arena);
+        belge->arena = NULL;
+        belge->prog = NULL;
+        belge->semboller = NULL;
+    }
+    belge->arena = arena_olustur(0);
+    if (!belge->arena) return;
 
     diag_temizle(dc);
     hata_callback_ayarla(diag_callback, dc);
 
     Lexer l;
-    lexer_baslat(&l, kaynak, "lsp");
+    lexer_baslat(&l, belge->icerik, "lsp");
     Parser p;
-    parser_baslat(&p, &l, a, "lsp", kaynak);
-    Dugum *prog = parser_calistir(&p);
+    parser_baslat(&p, &l, belge->arena, "lsp", belge->icerik);
+    belge->prog = parser_calistir(&p);
 
-    if (prog && p.hata_sayisi == 0) {
-        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+    if (belge->prog && p.hata_sayisi == 0) {
+        Scope *g = scope_olustur(belge->arena, SCOPE_GLOBAL, NULL);
         TipKontrol tk;
-        tip_kontrol_baslat(&tk, a, g, "lsp", kaynak);
-        tip_kontrol_program(&tk, prog);
+        tip_kontrol_baslat(&tk, belge->arena, g, "lsp", belge->icerik);
+        tip_kontrol_program(&tk, belge->prog);
     }
 
     hata_callback_ayarla(NULL, NULL);
-    arena_serbest(a);
+    belge_sembolleri_topla(belge);
 }
 
 /* === Request/Notification yonetimi === */
@@ -225,12 +425,175 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
     } else {
         json_yaz(&y, "null");
     }
-    /* Capabilities: textDocumentSync = 1 (full) */
+    /* Capabilities: textDocumentSync = 1 (full) + hover + completion + definition */
     json_yaz(&y, ",\"result\":{\"capabilities\":{"
                  "\"textDocumentSync\":1,"
+                 "\"hoverProvider\":true,"
+                 "\"definitionProvider\":true,"
+                 "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
                  "\"diagnosticProvider\":{\"interFileDependencies\":false,"
                  "\"workspaceDiagnostics\":false}"
-                 "},\"serverInfo\":{\"name\":\"kemgu-lsp\",\"version\":\"0.1\"}}}");
+                 "},\"serverInfo\":{\"name\":\"kemgu-lsp\",\"version\":\"0.2\"}}}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
+/* === Hover === */
+
+static void hover_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonDeger *params = json_alan(istek, "params");
+    JsonDeger *pos = params ? json_alan(params, "position") : NULL;
+    int line_0 = 0, char_0 = 0;
+    if (pos) {
+        line_0 = (int)json_tamsayi(json_alan(pos, "line"));
+        char_0 = (int)json_tamsayi(json_alan(pos, "character"));
+    }
+
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+
+    const char *icerik_str = NULL;
+    BelgeSembol *sem = NULL;
+    if (belge && belge->prog) {
+        const Dugum *d = bul_tanimlayici_konum(belge->prog,
+                                                line_0 + 1, char_0 + 1);
+        if (d) {
+            sem = belge_sembol_bul(belge,
+                d->veri.tanimlayici.metin,
+                d->veri.tanimlayici.uzunluk);
+        }
+        if (sem) icerik_str = sem->tip;
+    }
+
+    if (icerik_str && sem) {
+        json_yaz(&y, ",\"result\":{\"contents\":{\"kind\":\"markdown\",\"value\":\"**");
+        json_yaz_n(&y, sem->ad, (size_t)sem->ad_uz);
+        json_yaz(&y, "**: ");
+        json_yaz_n(&y, icerik_str, strlen(icerik_str));
+        json_yaz(&y, "\"}}");
+    } else {
+        json_yaz(&y, ",\"result\":null");
+    }
+    json_yaz(&y, "}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
+/* === Definition === */
+
+static void definition_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonDeger *params = json_alan(istek, "params");
+    JsonDeger *pos = params ? json_alan(params, "position") : NULL;
+    int line_0 = 0, char_0 = 0;
+    if (pos) {
+        line_0 = (int)json_tamsayi(json_alan(pos, "line"));
+        char_0 = (int)json_tamsayi(json_alan(pos, "character"));
+    }
+
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+
+    int found = 0;
+    int def_line = 0, def_col = 0, def_uz = 0;
+    if (belge && belge->prog) {
+        const Dugum *d = bul_tanimlayici_konum(belge->prog,
+                                                line_0 + 1, char_0 + 1);
+        if (d) {
+            BelgeSembol *sem = belge_sembol_bul(belge,
+                d->veri.tanimlayici.metin,
+                d->veri.tanimlayici.uzunluk);
+            if (sem) {
+                def_line = sem->satir > 0 ? sem->satir - 1 : 0;
+                def_col = sem->sutun > 0 ? sem->sutun - 1 : 0;
+                def_uz = sem->ad_uz;
+                found = 1;
+            }
+        }
+    }
+
+    if (found && belge && belge->uri) {
+        json_yaz(&y, ",\"result\":{\"uri\":");
+        json_yaz_metin_lit(&y, belge->uri);
+        json_yaz(&y, ",\"range\":{\"start\":{\"line\":");
+        json_yaz_int(&y, def_line);
+        json_yaz(&y, ",\"character\":");
+        json_yaz_int(&y, def_col);
+        json_yaz(&y, "},\"end\":{\"line\":");
+        json_yaz_int(&y, def_line);
+        json_yaz(&y, ",\"character\":");
+        json_yaz_int(&y, def_col + def_uz);
+        json_yaz(&y, "}}}");
+    } else {
+        json_yaz(&y, ",\"result\":null");
+    }
+    json_yaz(&y, "}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
+/* === Completion === */
+
+static const char *KEYWORDS[] = {
+    "e\xc4\x9f" "er", "de\xc4\x9f" "ilse", "i\xc3\xa7" "in", "iken",
+    "e\xc5\x9fle\xc5\x9f", "ver", "i\xc5\x9flev", "yap\xc4\xb1",
+    "\xc3\xb6zellik", "mod\xc3\xbcl", "de\xc4\x9fi\xc5\x9fken", "sabit",
+    "do\xc4\x9fru", "yanl\xc4\xb1\xc5\x9f", "bo\xc5\x9f",
+    "ve", "veya", "de\xc4\x9f" "il", "kullan", "d\xc4\xb1\xc5\x9f" "a",
+    "tamam", "hata", "uygula", "kendin", "se\xc3\xa7imlik", "sonu\xc3\xa7",
+    "de\xc4\x9f" "er", "hi\xc3\xa7", "g\xc3\xbcvensiz",
+    "tam32", "tam64", "tam8", "tam16", "metin", "mant\xc4\xb1ksal",
+    NULL
+};
+
+static void completion_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+
+    json_yaz(&y, ",\"result\":{\"isIncomplete\":false,\"items\":[");
+    int once = 1;
+    /* Anahtar kelimeler */
+    for (int i = 0; KEYWORDS[i]; i++) {
+        if (!once) json_yaz(&y, ",");
+        once = 0;
+        json_yaz(&y, "{\"label\":");
+        json_yaz_metin_lit(&y, KEYWORDS[i]);
+        json_yaz(&y, ",\"kind\":14}");  /* CompletionItemKind.Keyword */
+    }
+    /* Ust duzey semboller */
+    if (belge) {
+        for (BelgeSembol *s = belge->semboller; s; s = s->sonraki) {
+            if (!once) json_yaz(&y, ",");
+            once = 0;
+            json_yaz(&y, "{\"label\":");
+            json_yaz_metin_lit_n(&y, s->ad, (size_t)s->ad_uz);
+            json_yaz(&y, ",\"kind\":");
+            /* CompletionItemKind: islev=3 (Function), yapi=22 (Struct),
+             * ozellik=8 (Interface), sabit=21 (Constant) */
+            int kind = 6; /* Variable default */
+            if (strcmp(s->kategori, "islev") == 0) kind = 3;
+            else if (strcmp(s->kategori, "yapi") == 0) kind = 22;
+            else if (strcmp(s->kategori, "ozellik") == 0) kind = 8;
+            else if (strcmp(s->kategori, "sabit") == 0) kind = 21;
+            json_yaz_int(&y, kind);
+            json_yaz(&y, ",\"detail\":");
+            json_yaz_metin_lit(&y, s->kategori);
+            json_yaz(&y, "}");
+        }
+    }
+    json_yaz(&y, "]}}");
     mesaj_yaz(cikti, y.tampon, y.kullanilan);
     json_yazici_serbest(&y);
 }
@@ -278,7 +641,7 @@ static void open_or_change_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
     if (!icerik) return;
 
     belge_set(belge, uri, uri_uz, icerik, icerik_uz);
-    analiz_et(belge->icerik, dc);
+    analiz_et(belge, dc);
     publish_diagnostics(cikti, belge->uri, dc);
 }
 
@@ -349,6 +712,12 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             open_or_change_isle(cikti, istek, &belge, &dc, 1);
         } else if (strcmp(yontem, "textDocument/didClose") == 0) {
             close_isle(cikti, istek, &belge, &dc);
+        } else if (strcmp(yontem, "textDocument/hover") == 0) {
+            hover_yanitla(cikti, istek, &belge);
+        } else if (strcmp(yontem, "textDocument/definition") == 0) {
+            definition_yanitla(cikti, istek, &belge);
+        } else if (strcmp(yontem, "textDocument/completion") == 0) {
+            completion_yanitla(cikti, istek, &belge);
         }
         /* Bilinmeyen request id'li ise yanitsiz birakiyoruz (LSP kabul edilebilir) */
 
