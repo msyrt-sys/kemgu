@@ -95,6 +95,7 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 16/16)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -401,6 +402,31 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
+27. **LLVM backend genişletme (ADIM 17)** (16 entegrasyon testi — gerçek programlar derlenip çalıştırılıyor)
+    - **Yeni desteklenen özellikler:**
+      - İşlev parametreleri (i32, alloca + store ile mutable)
+      - İşlev çağrısı (DUGUM_CAGRI) — özyinelemeli destek (fibonacci ✓)
+      - Lokal değişken (alloca + store/load)
+      - Atama (lvalue: tanimlayici → alloca'ya store)
+      - if/else + nested if (br i1 + üç bb: then/else/end)
+      - while loop (head + body + done bb'leri)
+      - Karşılaştırma (==, !=, <, >, <=, >= → icmp + zext i1→i32)
+      - Mantıksal ve/veya (and/or i32), değil (icmp eq 0 + zext)
+      - Aritmetik +/-/*/sdiv/srem, tekli neg
+    - **Mimari:** `LlvmGen` state + lineer isim tablosu + scope marker
+    - **Test örnekleri (her biri --llvm | clang | exit code doğrulama):**
+      - fib(10) → 55 ✓ (özyinelemeli + if)
+      - faktöriyel(5) → 120 ✓ (while + lokal + atama)
+      - gcd(48, 36) → 12 ✓ (while + parametre atama + %)
+      - mutlak(-42) → 42 ✓ (if/else, iki dal da `ver`)
+      - kup(3) + kare(3) → 36 ✓ (çoklu işlev)
+    - **Sinirlamalar (v1):**
+      - Sadece i32 (tam8/16/64, dtam*, kesirli* yok)
+      - Yapılar/diziler/metin literali yok
+      - Referans/pointer yok
+      - mantıksal `ve`/`veya` short-circuit YOK (bitwise gibi)
+    - **Test entegrasyonu:** `system()` ile `kemgu --llvm | clang -x ir | run` zinciri, exit code karşılaştırma
+
 26. **LSP server MVP (ADIM 16)** (27 yeni test, kemgu --lsp ile çalıştırılır)
     - **16.1: `json.h/c`** — minimal JSON parser + yazıcı (~370 satır)
       - null/bool/sayı/metin/dizi/nesne
@@ -464,7 +490,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
       - Aynı bound iki kez raporlanabilir (annotation + constructor)
       - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
 
-### 🎉🎉 ADIM 12 + 13 + 14 + 15 + 16 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP HAZIR
+### 🎉🎉 ADIM 12-17 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP + GENİŞLETİLMİŞ LLVM
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -472,11 +498,11 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 458/458 (önceki 431 + 21 JSON + 6 LSP)
+**Test sayısı:** 474/474 (önceki 458 + 16 LLVM entegrasyon)
 
 ### Sıradaki büyük seçenekler:
+- **LLVM v2** (yapılar/diziler, metin literali, kayan nokta, multi-int tipleri tam8/16/64)
 - **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
 - **Constraint v2** (method dispatch + trait method type checking, generic islev bound check)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
