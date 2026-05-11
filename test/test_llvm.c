@@ -372,6 +372,15 @@ static void test_generic_coklu_instan(void) {
     test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
 }
 
+static void test_yazdir_hello(void) {
+    /* yazdir("...") -> puts. Exit kodu yalniz "puts" donus degeri (genelde > 0) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "yazdir(\"hi\"); "
+        "ver 42; }");
+    test_sonuc("yazdir(\"hi\") + ver 42 -> exit 42", rc == 42);
+}
+
 static void test_kendin_method(void) {
     int rc = derle_ve_calistir(
         "yap\xc4\xb1 K { v: tam32; } "
@@ -483,6 +492,9 @@ int main(void) {
     printf("\n--- ADIM 24: kendin (self) ---\n");
     test_kendin_method();
     test_kendin_arg_ile();
+
+    printf("\n--- ADIM 27: Syscall (yazdir) ---\n");
+    test_yazdir_hello();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
