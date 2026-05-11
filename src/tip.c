@@ -95,6 +95,11 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
     if (a->kategori == TIP_GENERIC_PARAM || b->kategori == TIP_GENERIC_PARAM) {
         return 1;
     }
+    /* TIP_BILINMIYOR: konstrüktörler (hiç, tamam, hata) bunu üretir.
+     * Inference için diğer tipler ile uyumlu kabul edilir. */
+    if (a->kategori == TIP_BILINMIYOR || b->kategori == TIP_BILINMIYOR) {
+        return 1;
+    }
     if (a->kategori != b->kategori) return 0;
 
     switch (a->kategori) {
