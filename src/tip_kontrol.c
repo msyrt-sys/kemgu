@@ -463,6 +463,51 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
+             * x'in yapi tipi uzerinde method bul. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_ERISIM) {
+                const Dugum *erisim = d->veri.cagri.hedef;
+                TipBilgisi *nesne_tip = tip_belirle(tk, erisim->veri.erisim.nesne);
+                if (nesne_tip->kategori == TIP_REFERANS) {
+                    nesne_tip = nesne_tip->veri.referans.hedef;
+                }
+                if (nesne_tip->kategori == TIP_YAPI) {
+                    const Dugum *m = uygula_tablosu_method_bul(
+                        &tk->uygulamalar,
+                        nesne_tip->veri.yapi.ad,
+                        nesne_tip->veri.yapi.ad_uzunluk,
+                        erisim->veri.erisim.alan,
+                        erisim->veri.erisim.alan_uzunluk);
+                    if (m) {
+                        /* Method bulundu — parametreleri ve donus tipini kontrol et */
+                        int n = m->veri.islev.param_sayi;
+                        if (d->veri.cagri.sayi != n) {
+                            tip_hata(tk, d, "T010",
+                                "method cagri arguman sayisi uyumsuz");
+                            return t_hata(tk);
+                        }
+                        for (int i = 0; i < n; i++) {
+                            const Dugum *p = m->veri.islev.parametreler[i];
+                            TipBilgisi *pt = ast_tip_to_bilgi(tk,
+                                p->veri.parametre.tip);
+                            TipBilgisi *at = tip_belirle_beklenen(tk,
+                                d->veri.cagri.argumanlar[i], pt);
+                            if (!tip_esit(at, pt) &&
+                                at->kategori != TIP_HATA) {
+                                tip_hata(tk, d->veri.cagri.argumanlar[i],
+                                    "T001", "method arg tipi uyumsuz");
+                            }
+                        }
+                        if (m->veri.islev.donus_tipi) {
+                            return ast_tip_to_bilgi(tk, m->veri.islev.donus_tipi);
+                        }
+                        return tip_olustur_basit(tk->arena, TIP_BOS);
+                    }
+                    /* Method bulunamadi — duser asagi normal alan erisim
+                     * yoluna (DUGUM_ERISIM tip_belirle), oradan hata gelir. */
+                }
+            }
             TipBilgisi *hedef_tip = tip_belirle(tk, d->veri.cagri.hedef);
             if (hedef_tip->kategori == TIP_HATA) return t_hata(tk);
             if (hedef_tip->kategori != TIP_ISLEV) {
@@ -1211,15 +1256,90 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             /* Pre-populate yeterli (alan tipleri orada cozumlendi) */
             break;
 
-        case DUGUM_OZELLIK:
-            /* Pre-populate ozellik sembolunu ekledi.
-             * Method imzalari ve default impl'ler v2'de tip-kontrol edilecek. */
-            break;
+        case DUGUM_OZELLIK: {
+            /* Ozellik gövdesindeki default impl'leri tip kontrol et.
+             * Method imzasi olanlar (govdesiz) atlanir. */
+            for (int i = 0; i < d->veri.ozellik.uye_sayi; i++) {
+                const Dugum *m = d->veri.ozellik.uyeler[i];
+                if (!m || m->tip != DUGUM_ISLEV) continue;
+                if (!m->veri.islev.govde) continue;  /* imza */
 
-        case DUGUM_UYGULA:
-            /* Pre-populate uygula tablosuna kayit etti.
-             * Method govde tip-kontrolu v2'de (generic param resolve dahil). */
+                /* Method gövdesi icin scope kur */
+                Scope *eski = tk->scope;
+                TipBilgisi *eski_donus = tk->aktif_donus_tipi;
+                tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV,
+                                          tk->global_scope);
+                tk->aktif_donus_tipi = m->veri.islev.donus_tipi
+                    ? ast_tip_to_bilgi(tk, m->veri.islev.donus_tipi)
+                    : tip_olustur_basit(tk->arena, TIP_BOS);
+
+                for (int j = 0; j < m->veri.islev.param_sayi; j++) {
+                    const Dugum *p = m->veri.islev.parametreler[j];
+                    Sembol s;
+                    memset(&s, 0, sizeof(s));
+                    s.ad = p->veri.parametre.ad;
+                    s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                    s.kategori = SEMBOL_PARAMETRE;
+                    s.tip = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+                    s.ast_dugumu = p;
+                    sembol_ekle(tk->scope, tk->arena, &s);
+                }
+                tip_kontrol_deyim(tk, m->veri.islev.govde);
+                tk->aktif_donus_tipi = eski_donus;
+                tk->scope = eski;
+            }
             break;
+        }
+
+        case DUGUM_UYGULA: {
+            /* uygula gövdesindeki islev tanimlarini tip-kontrol et.
+             * Generic params (uygula<T> Tip<T>): kendi scope'larina T eklenir. */
+            Scope *eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, tk->global_scope);
+            /* Generic param'lar: T -> TIP_GENERIC_PARAM */
+            for (int i = 0; i < d->veri.uygula.tip_param_sayi; i++) {
+                const char *t_ad = d->veri.uygula.tip_paramlar[i];
+                int t_uz = (int)strlen(t_ad);
+                Sembol gp;
+                memset(&gp, 0, sizeof(gp));
+                gp.ad = t_ad;
+                gp.ad_uzunluk = t_uz;
+                gp.kategori = SEMBOL_GENERIC_PARAM;
+                gp.tip = tip_olustur_generic_param(tk->arena, t_ad, t_uz);
+                sembol_ekle(tk->scope, tk->arena, &gp);
+            }
+
+            /* Her metodu kontrol et */
+            for (int i = 0; i < d->veri.uygula.islev_sayi; i++) {
+                const Dugum *m = d->veri.uygula.islevler[i];
+                if (!m || m->tip != DUGUM_ISLEV) continue;
+                if (!m->veri.islev.govde) continue;
+
+                Scope *eski_m = tk->scope;
+                TipBilgisi *eski_donus = tk->aktif_donus_tipi;
+                tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->scope);
+                tk->aktif_donus_tipi = m->veri.islev.donus_tipi
+                    ? ast_tip_to_bilgi(tk, m->veri.islev.donus_tipi)
+                    : tip_olustur_basit(tk->arena, TIP_BOS);
+
+                for (int j = 0; j < m->veri.islev.param_sayi; j++) {
+                    const Dugum *p = m->veri.islev.parametreler[j];
+                    Sembol s;
+                    memset(&s, 0, sizeof(s));
+                    s.ad = p->veri.parametre.ad;
+                    s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                    s.kategori = SEMBOL_PARAMETRE;
+                    s.tip = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+                    s.ast_dugumu = p;
+                    sembol_ekle(tk->scope, tk->arena, &s);
+                }
+                tip_kontrol_deyim(tk, m->veri.islev.govde);
+                tk->aktif_donus_tipi = eski_donus;
+                tk->scope = eski_m;
+            }
+            tk->scope = eski;
+            break;
+        }
 
         case DUGUM_KULLAN:
             /* Modul cozumleme ileride (su an no-op) */
