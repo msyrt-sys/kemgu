@@ -94,6 +94,22 @@ typedef struct {
     char hedef_llvm[ISIM_BUF];
 } AliasKayit;
 
+/* K: secimlik<T> ve sonuc<T,H> tagged union kayitlari.
+ * Her unique tip kombinasyonu icin LLVM struct emit edilir. */
+typedef struct {
+    char ic_tip[ISIM_BUF];     /* T'nin LLVM tipi */
+    char llvm_ad[ISIM_BUF];    /* %opt.<T_ascii> */
+} SecimlikKayit;
+
+typedef struct {
+    char deger_tip[ISIM_BUF];
+    char hata_tip[ISIM_BUF];
+    char llvm_ad[ISIM_BUF];    /* %res.<T>.<H> */
+} SonucKayit;
+
+#define MAX_SECIMLIK  64
+#define MAX_SONUC     64
+
 /* Built-in (stdlib) islev tanim — KEMGU adi <-> LLVM (C runtime) adi.
  * Bu islevler kullanici tarafindan tanimlanmaz; LLVM modulu basinda
  * declare ile bildirilir ve runtime (kdl_runtime.c) ile link edilir. */
@@ -133,6 +149,26 @@ static const BuiltinTanim BUILTINLER[] = {
     { "mutlak64",                      "kdl_mutlak64",        "i64",  1, {"i64"} },
     { "min64",                         "kdl_min64",           "i64",  2, {"i64","i64"} },
     { "maks64",                        "kdl_maks64",          "i64",  2, {"i64","i64"} },
+    /* J: Metin (heap alloc) */
+    { "metin_kopya",                   "kdl_metin_kopya",     "ptr",  1, {"ptr"} },
+    { "metin_birle\xc5\x9ftir",       "kdl_metin_birlestir", "ptr",  2, {"ptr","ptr"} },
+    { "metin_to_tam",                  "kdl_metin_to_tam",    "i32",  1, {"ptr"} },
+    { "tam_to_metin",                  "kdl_tam_to_metin",    "ptr",  1, {"i32"} },
+    { "metin_e\xc5\x9fit",            "kdl_metin_esit",      "i32",  2, {"ptr","ptr"} },
+    /* I: Dinamik Dizi (KdlDizi opaque ptr) */
+    { "dizi_olustur",                  "kdl_dizi_olustur",    "ptr",  1, {"i32"} },
+    { "dizi_ekle_tam",                 "kdl_dizi_ekle_tam",   "void", 2, {"ptr","i32"} },
+    { "dizi_al_tam",                   "kdl_dizi_al_tam",     "i32",  2, {"ptr","i32"} },
+    { "dizi_boyut",                    "kdl_dizi_boyut",      "i32",  1, {"ptr"} },
+    { "dizi_serbest",                  "kdl_dizi_serbest",    "void", 1, {"ptr"} },
+    /* B2: Concurrency (sequential stub'lar) */
+    { "gorev_basla_i32",               "kdl_gorev_basla_i32", "ptr",  1, {"ptr"} },
+    { "gorev_birle\xc5\x9ftir",       "kdl_gorev_birlestir", "i32",  1, {"ptr"} },
+    { "kanal_olustur",                 "kdl_kanal_olustur",   "ptr",  1, {"i32"} },
+    { "kanal_gonder",                  "kdl_kanal_gonder",    "void", 2, {"ptr","i32"} },
+    { "kanal_al",                      "kdl_kanal_al",        "i32",  1, {"ptr"} },
+    { "kanal_bo\xc5\x9f_mu",          "kdl_kanal_bos_mu",    "i32",  1, {"ptr"} },
+    { "kanal_serbest",                 "kdl_kanal_serbest",   "void", 1, {"ptr"} },
 };
 #define BUILTIN_SAYI (int)(sizeof(BUILTINLER) / sizeof(BUILTINLER[0]))
 
@@ -168,8 +204,16 @@ typedef struct {
     AliasKayit aliases[MAX_ALIAS];
     int alias_sayi;
 
+    SecimlikKayit secimlikler[MAX_SECIMLIK];
+    int secimlik_sayi;
+
+    SonucKayit sonuclar[MAX_SONUC];
+    int sonuc_sayi;
+
     int block_terminated;
     char aktif_donus[ISIM_BUF];  /* mevcut islev donus tipi */
+    /* K: ifade_uret icin kavsak-driven beklenen tip (NULL=hint yok) */
+    char beklenen_tip[ISIM_BUF];
 } Codegen;
 
 typedef struct {
@@ -241,6 +285,60 @@ static void ad_ascii_yap(const char *kaynak, int uzunluk,
 /* KEMGU tipini LLVM tip stringine cevir. yapi adlari basit tip olarak
  * gelir (parser DUGUM_TIP_BASIT'e koyar), kullanici tipi mi diye
  * yapi_kayit listesiyle kontrol ederiz. */
+/* K: LLVM tipini struct-ad icin asciilestir (i32 -> i32, ptr -> ptr,
+ * %struct.Nokta -> Nokta) — '%' ve '.' yerine '_' kullan. */
+static void tip_ad_sanitize(const char *tip, char *cikti, size_t cikti_max) {
+    size_t out = 0;
+    for (size_t i = 0; tip[i] && out + 1 < cikti_max; i++) {
+        char ch = tip[i];
+        if (ch == '%' || ch == '.' || ch == ' ' || ch == '[' || ch == ']') {
+            if (out > 0 && cikti[out - 1] != '_') cikti[out++] = '_';
+        } else if (ch == 'x' && i > 0 && tip[i-1] == ' ') {
+            /* [N x T] icindeki x: atla */
+            continue;
+        } else {
+            cikti[out++] = ch;
+        }
+    }
+    cikti[out] = 0;
+    if (out == 0) snprintf(cikti, cikti_max, "void");
+}
+
+/* secimlik<T> kayit: ic_tip'e gore unique. LLVM ad doner. */
+static const char *secimlik_kaydet(Codegen *c, const char *ic_tip) {
+    for (int i = 0; i < c->secimlik_sayi; i++) {
+        if (strcmp(c->secimlikler[i].ic_tip, ic_tip) == 0) {
+            return c->secimlikler[i].llvm_ad;
+        }
+    }
+    if (c->secimlik_sayi >= MAX_SECIMLIK) return NULL;
+    SecimlikKayit *k = &c->secimlikler[c->secimlik_sayi++];
+    snprintf(k->ic_tip, ISIM_BUF, "%s", ic_tip);
+    char sanit[ISIM_BUF];
+    tip_ad_sanitize(ic_tip, sanit, ISIM_BUF);
+    snprintf(k->llvm_ad, ISIM_BUF, "%%opt.%.96s", sanit);
+    return k->llvm_ad;
+}
+
+static const char *sonuc_kaydet(Codegen *c, const char *deger_tip,
+                                 const char *hata_tip) {
+    for (int i = 0; i < c->sonuc_sayi; i++) {
+        if (strcmp(c->sonuclar[i].deger_tip, deger_tip) == 0 &&
+            strcmp(c->sonuclar[i].hata_tip, hata_tip) == 0) {
+            return c->sonuclar[i].llvm_ad;
+        }
+    }
+    if (c->sonuc_sayi >= MAX_SONUC) return NULL;
+    SonucKayit *k = &c->sonuclar[c->sonuc_sayi++];
+    snprintf(k->deger_tip, ISIM_BUF, "%s", deger_tip);
+    snprintf(k->hata_tip, ISIM_BUF, "%s", hata_tip);
+    char ds[ISIM_BUF], hs[ISIM_BUF];
+    tip_ad_sanitize(deger_tip, ds, ISIM_BUF);
+    tip_ad_sanitize(hata_tip, hs, ISIM_BUF);
+    snprintf(k->llvm_ad, ISIM_BUF, "%%res.%.48s.%.48s", ds, hs);
+    return k->llvm_ad;
+}
+
 static const YapiKayit *yapi_bul(Codegen *c, const char *ad, int u) {
     for (int i = 0; i < c->yapi_sayi; i++) {
         if (c->yapilar[i].ad_uzunluk == u &&
@@ -317,6 +415,25 @@ static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
     }
     if (tip->tip == DUGUM_TIP_DIZI) {
         snprintf(cikti, cikti_max, "ptr");
+        return;
+    }
+    /* K: secimlik<T> -> %opt.<T_ascii> */
+    if (tip->tip == DUGUM_TIP_SECIMLIK) {
+        char ic[ISIM_BUF];
+        kemgu_tip_to_llvm(c, tip->veri.tip_secimlik.ic_tip, ic, ISIM_BUF);
+        const char *llvm_ad = secimlik_kaydet(c, ic);
+        if (llvm_ad) snprintf(cikti, cikti_max, "%s", llvm_ad);
+        else snprintf(cikti, cikti_max, "i32");
+        return;
+    }
+    /* K: sonuc<T,H> -> %res.<T>.<H> */
+    if (tip->tip == DUGUM_TIP_SONUC) {
+        char dt[ISIM_BUF], ht[ISIM_BUF];
+        kemgu_tip_to_llvm(c, tip->veri.tip_sonuc.deger_tip, dt, ISIM_BUF);
+        kemgu_tip_to_llvm(c, tip->veri.tip_sonuc.hata_tip, ht, ISIM_BUF);
+        const char *llvm_ad = sonuc_kaydet(c, dt, ht);
+        if (llvm_ad) snprintf(cikti, cikti_max, "%s", llvm_ad);
+        else snprintf(cikti, cikti_max, "i32");
         return;
     }
     if (tip->tip == DUGUM_TIP_KULLANICI) {
@@ -517,6 +634,34 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
     case DUGUM_TANIMLAYICI: {
         const char *ad = d->veri.tanimlayici.metin;
         int u = d->veri.tanimlayici.uzunluk;
+
+        /* K: 'hic' context-aware. beklenen_tip "%opt.X" ise tag=0 opt
+         * deger uret. Aksi takdirde "hata" mesaji ile devam et. */
+        if (u == 4 && memcmp(ad, "hi\xc3\xa7", 4) == 0) {
+            if (c->beklenen_tip[0] != 0 &&
+                strncmp(c->beklenen_tip, "%opt.", 5) == 0) {
+                int addr = yeni_reg(c);
+                fprintf(c->out, "  %%%d = alloca %s\n",
+                        addr, c->beklenen_tip);
+                int gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 0\n",
+                    gep, c->beklenen_tip, addr);
+                fprintf(c->out, "  store i8 0, ptr %%%d\n", gep);
+                int loaded = yeni_reg(c);
+                fprintf(c->out, "  %%%d = load %s, ptr %%%d\n",
+                        loaded, c->beklenen_tip, addr);
+                IfadeSonuc out;
+                out.reg = loaded;
+                snprintf(out.tip, ISIM_BUF, "%s", c->beklenen_tip);
+                out.is_lvalue = 0;
+                out.lvalue_tip[0] = 0;
+                return out;
+            }
+            fprintf(c->out, "  ; HATA: 'hic' context-tip gerekiyor\n");
+            return hata_sonuc();
+        }
+
         Sembol *s = sembol_bul(c, ad, u);
         if (!s) {
             fprintf(c->out, "  ; HATA: tanimsiz sembol %.*s\n", u, ad);
@@ -695,6 +840,112 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
         const char *fad = hedef->veri.tanimlayici.metin;
         int fu = hedef->veri.tanimlayici.uzunluk;
 
+        /* K: deger(x)/tamam(x)/hata(e) — secimlik<T> / sonuc<T,H> yapici.
+         * beklenen_tip "%opt.X" veya "%res.X.Y" ise tagged union uret. */
+        if (d->veri.cagri.sayi == 1 && c->beklenen_tip[0] != 0) {
+            const Dugum *arg = d->veri.cagri.argumanlar[0];
+            int is_deger = (fu == 6 && memcmp(fad, "de\xc4\x9f" "er", 6) == 0);
+            int is_tamam = (fu == 5 && memcmp(fad, "tamam", 5) == 0);
+            int is_hata  = (fu == 4 && memcmp(fad, "hata",  4) == 0);
+
+            if (is_deger && strncmp(c->beklenen_tip, "%opt.", 5) == 0) {
+                /* secimlik<T>::Some(arg) */
+                char wrap[ISIM_BUF];
+                snprintf(wrap, ISIM_BUF, "%s", c->beklenen_tip);
+                /* Inner tipi tablodan bul */
+                const char *ic_tip = NULL;
+                for (int i = 0; i < c->secimlik_sayi; i++) {
+                    if (strcmp(c->secimlikler[i].llvm_ad, wrap) == 0) {
+                        ic_tip = c->secimlikler[i].ic_tip;
+                        break;
+                    }
+                }
+                if (!ic_tip) { fprintf(c->out, "  ; HATA: opt ic tip yok\n");
+                               return hata_sonuc(); }
+                /* arg'i ic tip context'inde uret */
+                char eski[ISIM_BUF];
+                snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+                snprintf(c->beklenen_tip, ISIM_BUF, "%s", ic_tip);
+                IfadeSonuc av = ifade_uret(c, arg);
+                snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
+                if (av.reg < 0) return hata_sonuc();
+                int sreg = int_cevir(c, av.reg, av.tip, ic_tip);
+                int addr = yeni_reg(c);
+                fprintf(c->out, "  %%%d = alloca %s\n", addr, wrap);
+                int t_gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 0\n",
+                    t_gep, wrap, addr);
+                fprintf(c->out, "  store i8 1, ptr %%%d\n", t_gep);
+                int p_gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 1\n",
+                    p_gep, wrap, addr);
+                fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
+                        ic_tip, sreg, p_gep);
+                int loaded = yeni_reg(c);
+                fprintf(c->out, "  %%%d = load %s, ptr %%%d\n",
+                        loaded, wrap, addr);
+                IfadeSonuc out;
+                out.reg = loaded;
+                snprintf(out.tip, ISIM_BUF, "%s", wrap);
+                out.is_lvalue = 0;
+                out.lvalue_tip[0] = 0;
+                return out;
+            }
+
+            if ((is_tamam || is_hata) &&
+                strncmp(c->beklenen_tip, "%res.", 5) == 0) {
+                /* sonuc<T,H>::Ok(arg) veya Err(arg) */
+                char wrap[ISIM_BUF];
+                snprintf(wrap, ISIM_BUF, "%s", c->beklenen_tip);
+                const char *deger_tip = NULL, *hata_tip = NULL;
+                for (int i = 0; i < c->sonuc_sayi; i++) {
+                    if (strcmp(c->sonuclar[i].llvm_ad, wrap) == 0) {
+                        deger_tip = c->sonuclar[i].deger_tip;
+                        hata_tip = c->sonuclar[i].hata_tip;
+                        break;
+                    }
+                }
+                if (!deger_tip) {
+                    fprintf(c->out, "  ; HATA: res tip yok\n");
+                    return hata_sonuc();
+                }
+                const char *arg_tip = is_tamam ? deger_tip : hata_tip;
+                int field_idx = is_tamam ? 1 : 2;
+                int tag_val = is_tamam ? 1 : 0;
+                char eski[ISIM_BUF];
+                snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+                snprintf(c->beklenen_tip, ISIM_BUF, "%s", arg_tip);
+                IfadeSonuc av = ifade_uret(c, arg);
+                snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
+                if (av.reg < 0) return hata_sonuc();
+                int sreg = int_cevir(c, av.reg, av.tip, arg_tip);
+                int addr = yeni_reg(c);
+                fprintf(c->out, "  %%%d = alloca %s\n", addr, wrap);
+                int t_gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 0\n",
+                    t_gep, wrap, addr);
+                fprintf(c->out, "  store i8 %d, ptr %%%d\n", tag_val, t_gep);
+                int p_gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 %d\n",
+                    p_gep, wrap, addr, field_idx);
+                fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
+                        arg_tip, sreg, p_gep);
+                int loaded = yeni_reg(c);
+                fprintf(c->out, "  %%%d = load %s, ptr %%%d\n",
+                        loaded, wrap, addr);
+                IfadeSonuc out;
+                out.reg = loaded;
+                snprintf(out.tip, ISIM_BUF, "%s", wrap);
+                out.is_lvalue = 0;
+                out.lvalue_tip[0] = 0;
+                return out;
+            }
+        }
+
         /* Ozel intrinsic: uzunluk(dizi) — compile-time sabit boyut */
         if (fu == 7 && memcmp(fad, "uzunluk", 7) == 0 &&
             d->veri.cagri.sayi == 1) {
@@ -758,14 +1009,22 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
             return hata_sonuc();
         }
         for (int i = 0; i < nargs; i++) {
+            const char *beklenen = (i < call_param_sayi) ? call_params[i] : "";
+            /* K: param tipi context — hic/deger cozumlemesi */
+            char eski_bt[ISIM_BUF];
+            snprintf(eski_bt, ISIM_BUF, "%s", c->beklenen_tip);
+            if (beklenen[0]) {
+                snprintf(c->beklenen_tip, ISIM_BUF, "%s", beklenen);
+            }
             IfadeSonuc x = ifade_uret(c, d->veri.cagri.argumanlar[i]);
-            const char *beklenen = (i < call_param_sayi) ? call_params[i] : x.tip;
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski_bt);
+            const char *bekl = beklenen[0] ? beklenen : x.tip;
             if (x.reg >= 0) {
-                argregs[i] = int_cevir(c, x.reg, x.tip, beklenen);
+                argregs[i] = int_cevir(c, x.reg, x.tip, bekl);
             } else {
                 argregs[i] = x.reg;
             }
-            snprintf(argtips[i], ISIM_BUF, "%s", beklenen);
+            snprintf(argtips[i], ISIM_BUF, "%s", bekl);
         }
 
         int isvoid = (strcmp(call_donus, "void") == 0);
@@ -818,14 +1077,20 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
                         aa->veri.alan_atama.ad);
                 continue;
             }
+            /* K: alan tipi context — hic/deger cozumlemesi */
+            char eski_bt[ISIM_BUF];
+            snprintf(eski_bt, ISIM_BUF, "%s", c->beklenen_tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", yk->alanlar[idx].tip);
             IfadeSonuc v = ifade_uret(c, aa->veri.alan_atama.deger);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski_bt);
             if (v.reg < 0) continue;
+            int sreg = int_cevir(c, v.reg, v.tip, yk->alanlar[idx].tip);
             int gep = yeni_reg(c);
             fprintf(c->out,
                 "  %%%d = getelementptr inbounds %%struct.%s, ptr %%%d, i32 0, i32 %d\n",
                 gep, aad, addr, idx);
             fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
-                    yk->alanlar[idx].tip, v.reg, gep);
+                    yk->alanlar[idx].tip, sreg, gep);
         }
         int loaded = yeni_reg(c);
         fprintf(c->out, "  %%%d = load %%struct.%s, ptr %%%d\n",
@@ -1017,7 +1282,12 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
         sembol_ekle(c, ad, u, addr_str, tip);
 
         if (d->veri.degisken.deger) {
+            /* K: beklenen_tip set et — hic/deger/tamam/hata cozumlemesi */
+            char eski[ISIM_BUF];
+            snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", tip);
             IfadeSonuc v = ifade_uret(c, d->veri.degisken.deger);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
             if (v.reg < 0) return;
             int sreg = int_cevir(c, v.reg, v.tip, tip);
             fprintf(c->out, "  store %s %%%d, ptr %s\n", tip, sreg, addr_str);
@@ -1031,10 +1301,16 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             Sembol *s = sembol_bul(c, hedef->veri.tanimlayici.metin,
                                    hedef->veri.tanimlayici.uzunluk);
             if (!s) return;
+            /* K: hedef tipi context — hic/deger cozumlemesi */
+            char eski[ISIM_BUF];
+            snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", s->tip);
             IfadeSonuc v = ifade_uret(c, d->veri.atama.deger);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
             if (v.reg < 0) return;
+            int sreg = int_cevir(c, v.reg, v.tip, s->tip);
             fprintf(c->out, "  store %s %%%d, ptr %s\n",
-                    s->tip, v.reg, s->addr);
+                    s->tip, sreg, s->addr);
             return;
         }
         if (hedef->tip == DUGUM_ERISIM) {
@@ -1052,14 +1328,20 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             int idx = yapi_alan_indeks(yk, hedef->veri.erisim.alan,
                                        hedef->veri.erisim.alan_uzunluk);
             if (idx < 0) return;
+            /* K: alan tipi context */
+            char eski[ISIM_BUF];
+            snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", yk->alanlar[idx].tip);
             IfadeSonuc v = ifade_uret(c, d->veri.atama.deger);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
             if (v.reg < 0) return;
+            int sreg = int_cevir(c, v.reg, v.tip, yk->alanlar[idx].tip);
             int gep = yeni_reg(c);
             fprintf(c->out,
                 "  %%%d = getelementptr inbounds %s, ptr %s, i32 0, i32 %d\n",
                 gep, s->tip, s->addr, idx);
             fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
-                    yk->alanlar[idx].tip, v.reg, gep);
+                    yk->alanlar[idx].tip, sreg, gep);
             return;
         }
         if (hedef->tip == DUGUM_INDEKS) {
@@ -1111,7 +1393,12 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
 
     case DUGUM_VER: {
         if (d->veri.ver.deger) {
+            /* K: beklenen_tip = donus tipi (hic/deger cozumlemesi) */
+            char eski[ISIM_BUF];
+            snprintf(eski, ISIM_BUF, "%s", c->beklenen_tip);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", c->aktif_donus);
             IfadeSonuc v = ifade_uret(c, d->veri.ver.deger);
+            snprintf(c->beklenen_tip, ISIM_BUF, "%s", eski);
             if (v.reg < 0) {
                 fprintf(c->out, "  ret %s 0\n", c->aktif_donus);
             } else {
@@ -1205,6 +1492,9 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             int arm_id = yeni_blok(c);
             int next_id = last ? end_id : yeni_blok(c);
 
+            int yapici_payload_gep = -1;       /* K: deger(s) -> s binding gep */
+            const char *yapici_payload_tip = NULL;
+
             switch (desen->tip) {
             case DUGUM_DESEN_LITERAL: {
                 /* Literal degerini ifade olarak uret + icmp eq */
@@ -1228,11 +1518,96 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
                 /* Her zaman match — direkt dallan */
                 fprintf(c->out, "  br label %%match.arm.%d\n", arm_id);
                 break;
-            default:
-                /* DESEN_YAPICI vs - henuz desteksiz, atla */
+            case DUGUM_DESEN_YAPICI: {
+                /* K: deger(s)/hic/tamam(s)/hata(e) yapici deseni.
+                 * v secimlik/sonuc storage olmali; tag karsilastir. */
+                const char *yad = desen->veri.desen_yapici.ad;
+                int yu = desen->veri.desen_yapici.ad_uzunluk;
+                int is_secimlik = strncmp(v.tip, "%opt.", 5) == 0;
+                int is_sonuc = strncmp(v.tip, "%res.", 5) == 0;
+                if (!is_secimlik && !is_sonuc) {
+                    fprintf(c->out,
+                        "  ; HATA: yapici deseni opt/res tipi gerek\n");
+                    fprintf(c->out, "  br label %%%s.%d\n",
+                        last ? "match.end" : "match.next", next_id);
+                    break;
+                }
+                /* tag bekleniyor: hic=0, deger=1; hata=0, tamam=1 */
+                int beklenen_tag = -1;
+                int payload_idx = -1;
+                if (is_secimlik) {
+                    if (yu == 4 && memcmp(yad, "hi\xc3\xa7", 4) == 0) {
+                        beklenen_tag = 0;
+                    } else if (yu == 6 &&
+                               memcmp(yad, "de\xc4\x9f" "er", 6) == 0) {
+                        beklenen_tag = 1;
+                        payload_idx = 1;
+                    }
+                } else if (is_sonuc) {
+                    if (yu == 4 && memcmp(yad, "hata", 4) == 0) {
+                        beklenen_tag = 0;
+                        payload_idx = 2;
+                    } else if (yu == 5 && memcmp(yad, "tamam", 5) == 0) {
+                        beklenen_tag = 1;
+                        payload_idx = 1;
+                    }
+                }
+                if (beklenen_tag < 0) {
+                    fprintf(c->out, "  ; HATA: bilinmeyen yapici %.*s\n",
+                            yu, yad);
+                    fprintf(c->out, "  br label %%%s.%d\n",
+                        last ? "match.end" : "match.next", next_id);
+                    break;
+                }
+                /* v'yi alloca + store + gep ile tag ve payload'a eris.
+                 * v zaten loaded value, alloca/store geri yap */
+                int v_addr = yeni_reg(c);
+                fprintf(c->out, "  %%%d = alloca %s\n", v_addr, v.tip);
+                fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
+                        v.tip, v.reg, v_addr);
+                int tag_gep = yeni_reg(c);
                 fprintf(c->out,
-                    "  ; UYARI: yapici deseni LLVM'de henuz destekli degil\n");
-                fprintf(c->out, "  br label %%match.next.%d\n", next_id);
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 0\n",
+                    tag_gep, v.tip, v_addr);
+                int tag_val = yeni_reg(c);
+                fprintf(c->out, "  %%%d = load i8, ptr %%%d\n",
+                        tag_val, tag_gep);
+                int cmp = yeni_reg(c);
+                fprintf(c->out, "  %%%d = icmp eq i8 %%%d, %d\n",
+                        cmp, tag_val, beklenen_tag);
+                fprintf(c->out,
+                    "  br i1 %%%d, label %%match.arm.%d, label %%%s.%d\n",
+                    cmp, arm_id, last ? "match.end" : "match.next", next_id);
+                /* payload extract icin gep ve tip — sonra arm bloga */
+                if (payload_idx > 0 && desen->veri.desen_yapici.sayi == 1) {
+                    yapici_payload_gep = v_addr;
+                    /* Inner tip: tablodan */
+                    if (is_secimlik) {
+                        for (int k = 0; k < c->secimlik_sayi; k++) {
+                            if (strcmp(c->secimlikler[k].llvm_ad, v.tip) == 0) {
+                                yapici_payload_tip = c->secimlikler[k].ic_tip;
+                                break;
+                            }
+                        }
+                    } else {
+                        for (int k = 0; k < c->sonuc_sayi; k++) {
+                            if (strcmp(c->sonuclar[k].llvm_ad, v.tip) == 0) {
+                                yapici_payload_tip = (payload_idx == 1)
+                                    ? c->sonuclar[k].deger_tip
+                                    : c->sonuclar[k].hata_tip;
+                                break;
+                            }
+                        }
+                    }
+                }
+                (void)payload_idx;
+                break;
+            }
+            default:
+                fprintf(c->out,
+                    "  ; UYARI: desen tipi LLVM'de desteksiz\n");
+                fprintf(c->out, "  br label %%%s.%d\n",
+                        last ? "match.end" : "match.next", next_id);
                 break;
             }
 
@@ -1254,6 +1629,30 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
                     desen->veri.desen_tanimlayici.ad,
                     desen->veri.desen_tanimlayici.ad_uzunluk,
                     a, v.tip);
+            }
+
+            /* K: Yapici binding — payload'i extract + alt desen ile bagla */
+            if (desen->tip == DUGUM_DESEN_YAPICI &&
+                yapici_payload_gep >= 0 && yapici_payload_tip != NULL &&
+                desen->veri.desen_yapici.sayi == 1) {
+                const Dugum *alt = desen->veri.desen_yapici.alt_desenler[0];
+                int p_idx = strncmp(v.tip, "%opt.", 5) == 0 ? 1 :
+                    ((strlen(desen->veri.desen_yapici.ad) == 5 &&
+                      memcmp(desen->veri.desen_yapici.ad, "tamam", 5) == 0)
+                     ? 1 : 2);
+                int gep = yeni_reg(c);
+                fprintf(c->out,
+                    "  %%%d = getelementptr inbounds %s, ptr %%%d, i32 0, i32 %d\n",
+                    gep, v.tip, yapici_payload_gep, p_idx);
+                int payload_addr = gep;
+                if (alt && alt->tip == DUGUM_DESEN_TANIMLAYICI) {
+                    char pa[ISIM_BUF];
+                    snprintf(pa, ISIM_BUF, "%%%d", payload_addr);
+                    sembol_ekle(c,
+                        alt->veri.desen_tanimlayici.ad,
+                        alt->veri.desen_tanimlayici.ad_uzunluk,
+                        pa, yapici_payload_tip);
+                }
             }
 
             deyim_uret(c, kol->veri.esles_kolu.govde);
@@ -1399,8 +1798,31 @@ static void yapi_kaydet(Codegen *c, const Dugum *y) {
         const Dugum *al = y->veri.yapi.alanlar[i];
         yk->alanlar[yk->alan_sayi].ad = al->veri.alan.ad;
         yk->alanlar[yk->alan_sayi].ad_uzunluk = al->veri.alan.ad_uzunluk;
-        kemgu_tip_to_llvm(c, al->veri.alan.tip,
-                          yk->alanlar[yk->alan_sayi].tip, ISIM_BUF);
+        /* H (basit monomorphization): jenerik param ile eslesen alan tipi ->
+         * 'ptr' (boxing). Tam monomorphization gelecek surumde — her unique
+         * instantiation icin ayri struct emit. */
+        int is_generic = 0;
+        if (al->veri.alan.tip &&
+            al->veri.alan.tip->tip == DUGUM_TIP_BASIT &&
+            y->veri.yapi.tip_param_sayi > 0) {
+            const char *t_ad = al->veri.alan.tip->veri.tip_basit.ad;
+            int t_uz = al->veri.alan.tip->veri.tip_basit.ad_uzunluk;
+            for (int g = 0; g < y->veri.yapi.tip_param_sayi; g++) {
+                int g_uz = (int)strlen(y->veri.yapi.tip_paramlar[g]);
+                if (g_uz == t_uz &&
+                    memcmp(y->veri.yapi.tip_paramlar[g], t_ad,
+                           (size_t)t_uz) == 0) {
+                    is_generic = 1;
+                    break;
+                }
+            }
+        }
+        if (is_generic) {
+            snprintf(yk->alanlar[yk->alan_sayi].tip, ISIM_BUF, "ptr");
+        } else {
+            kemgu_tip_to_llvm(c, al->veri.alan.tip,
+                              yk->alanlar[yk->alan_sayi].tip, ISIM_BUF);
+        }
         yk->alan_sayi++;
     }
 }
@@ -1559,6 +1981,44 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
                               ak->hedef_llvm, ISIM_BUF);
         }
     }
+
+    /* 1c. K: Islev imza/govde tarama ile kullanilan secimlik<T>/sonuc<T,H>
+     * tiplerini onceden topla (islev_kaydet zaten cagrilir, parametre
+     * tiplerini kemgu_tip_to_llvm cozer ve kaydeder).
+     * Burada her tanim icin onceden imzayi cozdurup tabloyu doldur. */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *u = program->veri.program.uyeler[i];
+        const Dugum *gercek = (u->tip == DUGUM_DISA) ? u->veri.disa.tanim : u;
+        if (gercek && gercek->tip == DUGUM_ISLEV) {
+            char buf[ISIM_BUF];
+            kemgu_tip_to_llvm(&c, gercek->veri.islev.donus_tipi, buf, ISIM_BUF);
+            for (int j = 0; j < gercek->veri.islev.param_sayi; j++) {
+                kemgu_tip_to_llvm(&c,
+                    gercek->veri.islev.parametreler[j]->veri.parametre.tip,
+                    buf, ISIM_BUF);
+            }
+        }
+        if (gercek && gercek->tip == DUGUM_YAPI) {
+            for (int j = 0; j < gercek->veri.yapi.alan_sayi; j++) {
+                char buf[ISIM_BUF];
+                kemgu_tip_to_llvm(&c,
+                    gercek->veri.yapi.alanlar[j]->veri.alan.tip,
+                    buf, ISIM_BUF);
+            }
+        }
+    }
+
+    /* 1d. secimlik / sonuc tip tanimlarini emit et */
+    for (int i = 0; i < c.secimlik_sayi; i++) {
+        fprintf(out, "%s = type { i8, %s }\n",
+                c.secimlikler[i].llvm_ad, c.secimlikler[i].ic_tip);
+    }
+    for (int i = 0; i < c.sonuc_sayi; i++) {
+        fprintf(out, "%s = type { i8, %s, %s }\n",
+                c.sonuclar[i].llvm_ad, c.sonuclar[i].deger_tip,
+                c.sonuclar[i].hata_tip);
+    }
+    if (c.secimlik_sayi > 0 || c.sonuc_sayi > 0) fputc('\n', out);
 
     /* 2. Islev imzalarini on-kaydet (forward reference icin) */
     for (int i = 0; i < program->veri.program.sayi; i++) {

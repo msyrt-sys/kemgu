@@ -1061,6 +1061,25 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
         }
     }
 
+    /* L: Ozellik sembolleri */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
+                              ? uye->veri.disa.tanim : uye;
+        if (gercek->tip == DUGUM_OZELLIK) {
+            Sembol s;
+            memset(&s, 0, sizeof(s));
+            s.ad = gercek->veri.ozellik.ad;
+            s.ad_uzunluk = gercek->veri.ozellik.ad_uzunluk;
+            s.kategori = SEMBOL_OZELLIK;
+            s.tip = NULL;
+            s.ast_dugumu = gercek;
+            s.satir = gercek->satir;
+            s.sutun = gercek->sutun;
+            sembol_ekle(tk->global_scope, tk->arena, &s);
+        }
+    }
+
     /* Islevler ve sabitler */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
@@ -1322,6 +1341,19 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             /* B.4: Pre-populate alias sembolunu ekledi, ek kontrol yok */
             break;
 
+        case DUGUM_OZELLIK:
+            /* L: Pre-populate ozellik sembolunu ekledi.
+             * Uye islev imzalari ileride dogrulanir. */
+            break;
+
+        case DUGUM_UYGULA:
+            /* L: uygula icinde her islevin govdesi kontrol edilir.
+             * Tam constraint dogrulama gelecek surumde. */
+            for (int i = 0; i < d->veri.uygula.islev_sayi; i++) {
+                tip_kontrol_tanim(tk, d->veri.uygula.islevler[i]);
+            }
+            break;
+
         case DUGUM_KULLAN:
             /* Modul cozumleme ileride (su an no-op) */
             break;
@@ -1378,6 +1410,26 @@ static const BuiltinTipi KDL_BUILTINLER[] = {
     { "mutlak64",                      1, {TIP_TAM64},                  TIP_TAM64 },
     { "min64",                         2, {TIP_TAM64, TIP_TAM64},       TIP_TAM64 },
     { "maks64",                        2, {TIP_TAM64, TIP_TAM64},       TIP_TAM64 },
+    /* J: Metin (heap alloc) */
+    { "metin_kopya",                   1, {TIP_METIN},                  TIP_METIN },
+    { "metin_birle\xc5\x9ftir",       2, {TIP_METIN, TIP_METIN},        TIP_METIN },
+    { "metin_to_tam",                  1, {TIP_METIN},                  TIP_TAM32 },
+    { "tam_to_metin",                  1, {TIP_TAM32},                  TIP_METIN },
+    { "metin_e\xc5\x9fit",            2, {TIP_METIN, TIP_METIN},        TIP_TAM32 },
+    /* I: Dinamik Dizi (ptr ile) — basit tip kontrol (ptr metin gibi davranır) */
+    { "dizi_olustur",                  1, {TIP_TAM32},                  TIP_METIN },
+    { "dizi_ekle_tam",                 2, {TIP_METIN, TIP_TAM32},       TIP_BOS },
+    { "dizi_al_tam",                   2, {TIP_METIN, TIP_TAM32},       TIP_TAM32 },
+    { "dizi_boyut",                    1, {TIP_METIN},                  TIP_TAM32 },
+    { "dizi_serbest",                  1, {TIP_METIN},                  TIP_BOS },
+    /* B2: Concurrency stubs */
+    { "gorev_basla_i32",               1, {TIP_METIN},                  TIP_METIN },
+    { "gorev_birle\xc5\x9ftir",       1, {TIP_METIN},                   TIP_TAM32 },
+    { "kanal_olustur",                 1, {TIP_TAM32},                  TIP_METIN },
+    { "kanal_gonder",                  2, {TIP_METIN, TIP_TAM32},       TIP_BOS },
+    { "kanal_al",                      1, {TIP_METIN},                  TIP_TAM32 },
+    { "kanal_bo\xc5\x9f_mu",          1, {TIP_METIN},                   TIP_TAM32 },
+    { "kanal_serbest",                 1, {TIP_METIN},                  TIP_BOS },
 };
 #define KDL_BUILTIN_SAYI \
     (int)(sizeof(KDL_BUILTINLER) / sizeof(KDL_BUILTINLER[0]))
