@@ -81,6 +81,7 @@ const char *sembol_kategorisi_adi(SembolKategorisi k) {
         case SEMBOL_OZELLIK:       return "OZELLIK";
         case SEMBOL_MODUL:         return "MODUL";
         case SEMBOL_GENERIC_PARAM: return "GENERIC_PARAM";
+        case SEMBOL_TIP_ALIAS:     return "TIP_ALIAS";
     }
     return "BILINMEYEN";
 }

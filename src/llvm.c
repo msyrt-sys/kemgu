@@ -50,6 +50,7 @@
 #define MAX_YAPI_ALAN  32
 #define MAX_STR        256
 #define MAX_ISLEV      256
+#define MAX_ALIAS      64
 #define ISIM_BUF       128
 
 typedef struct {
@@ -85,6 +86,13 @@ typedef struct {
     char params[MAX_YAPI_ALAN][ISIM_BUF];  /* parametre LLVM tipleri */
     int param_sayi;
 } IslevKayit;
+
+/* B.4: tip alias kaydi — Ad -> cozulmus LLVM tip stringi */
+typedef struct {
+    const char *ad;
+    int ad_uzunluk;
+    char hedef_llvm[ISIM_BUF];
+} AliasKayit;
 
 /* Built-in (stdlib) islev tanim — KEMGU adi <-> LLVM (C runtime) adi.
  * Bu islevler kullanici tarafindan tanimlanmaz; LLVM modulu basinda
@@ -156,6 +164,9 @@ typedef struct {
 
     IslevKayit islevler[MAX_ISLEV];
     int islev_sayi;
+
+    AliasKayit aliases[MAX_ALIAS];
+    int alias_sayi;
 
     int block_terminated;
     char aktif_donus[ISIM_BUF];  /* mevcut islev donus tipi */
@@ -281,11 +292,19 @@ static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
         if (ad_eslesir(ad, u, "kesirli64"))
             { snprintf(cikti, cikti_max, "double"); return; }
 
-        /* Bilinmeyen basit tip — yapi adi olabilir */
+        /* Bilinmeyen basit tip — yapi adi mi? */
         const YapiKayit *yk = yapi_bul(c, ad, u);
         if (yk) {
             snprintf(cikti, cikti_max, "%%struct.%s", yk->ascii_ad);
             return;
+        }
+        /* B.4: tip alias mi? */
+        for (int i = 0; i < c->alias_sayi; i++) {
+            if (c->aliases[i].ad_uzunluk == u &&
+                memcmp(c->aliases[i].ad, ad, (size_t)u) == 0) {
+                snprintf(cikti, cikti_max, "%s", c->aliases[i].hedef_llvm);
+                return;
+            }
         }
         snprintf(cikti, cikti_max, "i32"); /* fallback */
         return;
@@ -1348,6 +1367,21 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
         yapi_emit(&c, &c.yapilar[i]);
     }
     if (c.yapi_sayi > 0) fputc('\n', out);
+
+    /* 1b. Tip alias'lari topla — yapilardan sonra (alias yapi tipine
+     * isaret edebilir). kemgu_tip_to_llvm yapi_kayitlari kullanir. */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *u = program->veri.program.uyeler[i];
+        const Dugum *gercek = (u->tip == DUGUM_DISA) ? u->veri.disa.tanim : u;
+        if (gercek && gercek->tip == DUGUM_TIP_ALIAS &&
+            c.alias_sayi < MAX_ALIAS) {
+            AliasKayit *ak = &c.aliases[c.alias_sayi++];
+            ak->ad = gercek->veri.tip_alias.ad;
+            ak->ad_uzunluk = gercek->veri.tip_alias.ad_uzunluk;
+            kemgu_tip_to_llvm(&c, gercek->veri.tip_alias.hedef,
+                              ak->hedef_llvm, ISIM_BUF);
+        }
+    }
 
     /* 2. Islev imzalarini on-kaydet (forward reference icin) */
     for (int i = 0; i < program->veri.program.sayi; i++) {

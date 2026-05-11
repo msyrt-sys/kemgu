@@ -1,0 +1,17 @@
+// B.3 testi: kisitlamali generic (T: Bound1 + Bound2)
+// Su an parse + sembol kaydina kadar destekli — tam constraint dogrulama
+// "ozellik" sistemi tam oldugunda eklenir (gelecek).
+
+yapı Kutu<T: Yazdırılabilir> {
+    deger: T;
+}
+
+yapı Cift<T: Yazdırılabilir + Klonlanabilir, U> {
+    ilk: T;
+    ikinci: U;
+}
+
+işlev main() -> tam32 {
+    yazdır("kisitlamali generic sentaks kabul edildi");
+    ver 0;
+}

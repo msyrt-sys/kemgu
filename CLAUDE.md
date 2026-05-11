@@ -403,6 +403,60 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 
 ### 🎉🎉🎉 ADIM A TAMAMLANDI — KEMGU'da FizzBuzz, recursive fibonacci, yapı/dizi yazılabiliyor
 
+25. **Tip Sistemi Kullanılabilirlik (ADIM B) — Takılan örnekler açıldı**
+    (numara 24 stdlib, 25 bu — kronoloji: ADIM A, D, B sırasıyla işlendi)
+    - **B.1 `hiç`/`değer` ifade context'inde:** `tip_belirle_beklenen`'e
+      DUGUM_TANIMLAYICI ve DUGUM_CAGRI özel durumları (hiç/değer/tamam/hata)
+      eklendi. `seçimlik<T>` ve `sonuç<T,H>` constructor'ları context'ten
+      tip çıkarsar (hasta.kem `tanı: hiç` ve `değer(tanı)` artık tip kontrol
+      ediliyor). `değer(x)` context-siz: `seçimlik<typeof(x)>` döner.
+    - **B.2 Pattern binding:** `desen_bagla` yardımcısı eşleş kolu için
+      desende tanımlanan tanımlayıcıları (örn. `değer(s) => s`) kol scope'una
+      tip ile birlikte ekler. Yapıcı desenleri: değer(alt) → secimlik içi
+      tipe inilir, tamam/hata → sonuç deger/hata tipine inilir.
+      eslesme.kem artık çalışıyor.
+    - **B.3 Constraint sistemi:** parser `<T: Bound1 + Bound2>` syntax'ını
+      destekler. AST yapı/özellik/uygula'da `tip_param_kisitlari` paralel
+      array. Sembol tablosunda kayıt yapılır; tam doğrulama özellik sistemi
+      tam olduğunda eklenir.
+    - **B.4 Type alias:** Yeni keyword `tip`, syntax `tip Ad = HedefTip;`.
+      Yeni DUGUM_TIP_ALIAS, SEMBOL_TIP_ALIAS. Tip kontrol: pre_populate
+      alias sembolü ekler, ast_tip_to_bilgi alias'ı çözümler. LLVM tarafı
+      kendi alias tablosu tutar (kemgu_tip_to_llvm bilinmeyen ad için
+      kontrol eder).
+    - **Tip kontrol stdlib yükleyici:** `kdl_builtin_yukle` global scope'a
+      19 KDL built-in sembol (yazdır/oku/metin/sayı) yükler — `--check`
+      modunda stdlib çağrıları tanımlı.
+    - **Yardımcılar:** `ad_hic_mi`, `ad_deger_mi`, `ad_tamam_mi`,
+      `ad_hata_mi` — özel keyword tanıma.
+    - **Özel `uzunluk(dizi)` intrinsic:** tip kontrol Dizi<T> arg, tam32
+      döner. LLVM tarafında `[N x T]`'den N literal'i üretir.
+    - **14 LLVM entegrasyon testi** (12 + tip_alias + kisitli_generic).
+    - **mutlak.kem** yeniden adlandırıldı (`mutlak_yerel` — built-in
+      `mutlak` ile çakışmaması için).
+
+### 🎉🎉🎉🎉🎉 ADIM B TAMAMLANDI — Tüm örnek `.kem` dosyaları --check'ten geçiyor (16/16)
+
+```kemgu
+// hasta.kem artık çalışıyor — hiç ve değer() ifade context'inde
+yapı Hasta { tanı: seçimlik<metin>; ... }
+hasta.tanı = değer("kanser");     // seçimlik<metin> context
+diğer.tanı = hiç;                 // seçimlik<metin>::None
+
+// eslesme.kem artık çalışıyor — pattern binding
+eşleş t {
+    değer(s) => { ver s; }        // s scope'a metin olarak bağlanır
+    hiç => { ver "yok"; }
+}
+
+// B.4 type alias
+tip Yas = tam32;
+değişken y: Yas = 30;             // tam32 ile aynı
+
+// B.3 constraint syntax
+yapı Kutu<T: Yazdırılabilir + Klonlanabilir> { deger: T; }
+```
+
 24. **Standart Kütüphane (ADIM D) — Gerçek I/O + temel tipler**
     - **`runtime/kdl_runtime.c`** — C tarafı runtime fonksiyon kütüphanesi
       (`kdl_` prefiks). Clang ile link edilir: `clang prog.ll runtime/kdl_runtime.c`.
@@ -521,13 +575,12 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉🎉🎉 ADIM A + D TAMAMLANDI — KEMGU artık yazdırabilir, IO yapabilir**
+- **Faz:** **🎉🎉🎉🎉🎉 ADIM A + D + B TAMAMLANDI — Tüm örnek dosyalar geçiyor**
 - **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR + stdlib → native exe
   - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
-  - Stdlib D.1-D.5: IO (yazdır/yaz/oku), metin_uzunluk, mutlak/min/maks, dizi uzunluk,
-    StandartHata prelude
-- **12 LLVM entegrasyon testi** (`test/test_llvm.sh` + `mingw32-make calistir_llvm_test`):
-  exit code + stdout golden file karşılaştırması
+  - Stdlib D.1-D.5: IO, metin, sayısal, dizi uzunluk, StandartHata prelude
+  - Tip B.1-B.4: hiç/değer context-aware, pattern binding, constraint syntax, tip alias
+- **14 LLVM entegrasyon testi** + 16/16 örnek `.kem` `--check`'ten geçer
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

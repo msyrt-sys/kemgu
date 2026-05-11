@@ -53,6 +53,8 @@ declare -a TESTLER=(
     "test/ornekler/stdlib_karisim.kem   0"
     "test/ornekler/fib_yazdir.kem       0"
     "test/ornekler/dizi_yazdir.kem      0"
+    "test/ornekler/tip_alias.kem        0"
+    "test/ornekler/kisitli_generic.kem  0"
 )
 
 basarili=0

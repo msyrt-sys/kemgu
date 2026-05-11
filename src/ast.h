@@ -36,6 +36,7 @@ typedef enum {
     DUGUM_SABIT,
     DUGUM_PARAMETRE,
     DUGUM_ALAN,            /* yapi alani: ad: tip; */
+    DUGUM_TIP_ALIAS,       /* tip Ad = Tip; (B.4) */
 
     /* Deyimler */
     DUGUM_DEGISKEN,        /* degisken x = e; */
@@ -166,6 +167,11 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;   /* generic tip parametre adlari (null-term) */
             int tip_param_sayi;
+            /* B.3: her tip parametresinin kisit (bound) adlari.
+             * tip_param_kisitlari[i] -> i'inci param icin kisit dizisi.
+             * tip_param_kisit_sayilari[i] -> kisit sayisi. NULL = kisit yok. */
+            char ***tip_param_kisitlari;
+            int *tip_param_kisit_sayilari;
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
         } yapi;
@@ -175,6 +181,8 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;
             int tip_param_sayi;
+            char ***tip_param_kisitlari;
+            int *tip_param_kisit_sayilari;
             Dugum **uyeler;        /* islev imzalari/tanimlari */
             int uye_sayi;
         } ozellik;
@@ -182,6 +190,8 @@ struct Dugum {
         struct {
             char **tip_paramlar;
             int tip_param_sayi;
+            char ***tip_param_kisitlari;
+            int *tip_param_kisit_sayilari;
             Dugum *tip;            /* uygulanacak tip */
             Dugum **ozellikler;    /* ozellik yollari (DUGUM_TIP_KULLANICI) */
             int ozellik_sayi;
@@ -207,6 +217,12 @@ struct Dugum {
             int ad_uzunluk;
             Dugum *tip;
         } alan;
+
+        struct {
+            const char *ad;
+            int ad_uzunluk;
+            Dugum *hedef;          /* alias hedef tipi (AST tip dugumu) */
+        } tip_alias;
 
         /* === Deyimler === */
 

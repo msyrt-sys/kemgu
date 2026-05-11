@@ -116,6 +116,7 @@ static int sync_token_mu(TokenTipi t) {
         case TOK_DISA:
         case TOK_SABIT:
         case TOK_UYGULA:
+        case TOK_TIP:
         case TOK_DOSYA_SONU:
             return 1;
         default:
@@ -166,6 +167,7 @@ static Dugum *parse_kullan(Parser *p);
 static Dugum *parse_disa(Parser *p);
 static Dugum *parse_modul_tanimi(Parser *p);
 static Dugum *parse_sabit_tanimi(Parser *p);
+static Dugum *parse_tip_alias(Parser *p);
 static Dugum *parse_degisken_deyimi(Parser *p);
 static Dugum *parse_ver_deyimi(Parser *p);
 static Dugum *parse_ifade_veya_atama_deyimi(Parser *p);
@@ -250,15 +252,31 @@ static Dugum *parse_islev_tanimi(Parser *p) {
 
 /* === Generic tip parametre listesi yardimcisi ===
  *   < T1, T2, ... >
- * Eger '<' yoksa NULL doner ve *out_sayi = 0. */
+ *   < T: Bound1 + Bound2, U: Bound3 >  (B.3: kisitlamali)
+ * Eger '<' yoksa NULL doner ve *out_sayi = 0.
+ *
+ * out_kisitlar (NULL olmamali): her param icin kisit ad dizisini doldurur.
+ * out_kisit_sayilari: her param icin kisit sayisini doldurur. */
 
-static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
+static char **parse_tip_param_listesi_kisitli(Parser *p, int *out_sayi,
+                                               char ****out_kisitlar,
+                                               int **out_kisit_sayilari) {
     *out_sayi = 0;
+    *out_kisitlar = NULL;
+    *out_kisit_sayilari = NULL;
     if (!parser_tuket(p, TOK_KUCUK)) return NULL;
+
+    typedef struct KLink {
+        const char *bas;
+        int uz;
+        struct KLink *son;
+    } KLink;
 
     typedef struct PLink {
         const char *bas;
         int uz;
+        KLink *kisit_bas;          /* kisit listesi (linked) */
+        int kisit_sayi;
         struct PLink *son;
     } PLink;
     PLink *bas = NULL;
@@ -270,15 +288,38 @@ static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
             Token t = parser_bekle(p, TOK_TANIMLAYICI, "P024",
                                     "tip parametre adi bekleniyor");
             PLink *link = (PLink *)arena_ayir(p->arena, sizeof(PLink));
-            if (link) {
-                link->bas = t.baslangic;
-                link->uz = t.uzunluk;
-                link->son = NULL;
-                if (son_link) son_link->son = link;
-                else bas = link;
-                son_link = link;
-                (*out_sayi)++;
+            if (!link) continue;
+            link->bas = t.baslangic;
+            link->uz = t.uzunluk;
+            link->kisit_bas = NULL;
+            link->kisit_sayi = 0;
+            link->son = NULL;
+
+            /* B.3: ":" sonrasi kisit listesi (Bound1 + Bound2 + ...) */
+            if (parser_tuket(p, TOK_IKI_NOKTA)) {
+                KLink *kbas = NULL;
+                KLink *kson = NULL;
+                do {
+                    Token kt = parser_bekle(p, TOK_TANIMLAYICI, "P026",
+                        "tip kisiti (ozellik adi) bekleniyor");
+                    KLink *kl = (KLink *)arena_ayir(p->arena, sizeof(KLink));
+                    if (kl) {
+                        kl->bas = kt.baslangic;
+                        kl->uz = kt.uzunluk;
+                        kl->son = NULL;
+                        if (kson) kson->son = kl;
+                        else kbas = kl;
+                        kson = kl;
+                        link->kisit_sayi++;
+                    }
+                } while (parser_tuket(p, TOK_ARTI));
+                link->kisit_bas = kbas;
             }
+
+            if (son_link) son_link->son = link;
+            else bas = link;
+            son_link = link;
+            (*out_sayi)++;
         } while (parser_tuket(p, TOK_VIRGUL));
     }
     parser_buyuk_ayir(p);
@@ -286,15 +327,36 @@ static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
                  "tip parametre listesinde '>' bekleniyor");
 
     if (*out_sayi == 0) return NULL;
-    char **arr = (char **)arena_ayir(p->arena,
-                                      sizeof(char *) * (size_t)(*out_sayi));
-    if (!arr) return NULL;
+    int n = *out_sayi;
+    char **arr = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)n);
+    char ***kisitlar = (char ***)arena_ayir(p->arena,
+                                             sizeof(char **) * (size_t)n);
+    int *kisit_sayilari = (int *)arena_ayir(p->arena,
+                                             sizeof(int) * (size_t)n);
+    if (!arr || !kisitlar || !kisit_sayilari) return NULL;
     int i = 0;
     for (PLink *l = bas; l; l = l->son) {
-        arr[i++] = ast_string_kopyala(p->arena, l->bas, l->uz);
+        arr[i] = ast_string_kopyala(p->arena, l->bas, l->uz);
+        kisit_sayilari[i] = l->kisit_sayi;
+        if (l->kisit_sayi > 0) {
+            kisitlar[i] = (char **)arena_ayir(p->arena,
+                sizeof(char *) * (size_t)l->kisit_sayi);
+            int j = 0;
+            for (KLink *kl = l->kisit_bas; kl; kl = kl->son) {
+                kisitlar[i][j++] = ast_string_kopyala(p->arena,
+                                                     kl->bas, kl->uz);
+            }
+        } else {
+            kisitlar[i] = NULL;
+        }
+        i++;
     }
+    *out_kisitlar = kisitlar;
+    *out_kisit_sayilari = kisit_sayilari;
     return arr;
 }
+
+/* (Geriye-uyumlu kabuk simdilik kullanilmiyor — kaldirildi) */
 
 /* === Yapi tanimi === */
 /* alan_tanimi = tanimlayici ":" tip ";" */
@@ -332,9 +394,13 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P021",
                                 "yapi adi bekleniyor");
 
-    /* Generic tip parametreleri: <T1, T2, ...> opsiyonel */
+    /* Generic tip parametreleri: <T1, T2: Bound1 + Bound2, ...> opsiyonel */
     int tip_param_sayi = 0;
-    char **tip_paramlar = parse_tip_param_listesi(p, &tip_param_sayi);
+    char ***kisitlar = NULL;
+    int *kisit_sayilari = NULL;
+    char **tip_paramlar = parse_tip_param_listesi_kisitli(p, &tip_param_sayi,
+                                                          &kisitlar,
+                                                          &kisit_sayilari);
 
     parser_bekle(p, TOK_SOL_SUSLU, "P022", "'{' bekleniyor");
 
@@ -355,6 +421,8 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     d->veri.yapi.ad_uzunluk = ad_tok.uzunluk;
     d->veri.yapi.tip_paramlar = tip_paramlar;
     d->veri.yapi.tip_param_sayi = tip_param_sayi;
+    d->veri.yapi.tip_param_kisitlari = kisitlar;
+    d->veri.yapi.tip_param_kisit_sayilari = kisit_sayilari;
     d->veri.yapi.alanlar = liste_array_yap(&alanlar, p->arena);
     d->veri.yapi.alan_sayi = alanlar.sayi;
     return d;
@@ -383,6 +451,31 @@ static Dugum *parse_sabit_tanimi(Parser *p) {
     d->veri.sabit.ad_uzunluk = ad_tok.uzunluk;
     d->veri.sabit.tip = tip;
     d->veri.sabit.deger = deger;
+    return d;
+}
+
+/* === Tip alias (B.4) ===
+ * tip_alias = "tip" tanimlayici "=" tip ";"
+ * Ornek: tip Yas = tam32; */
+
+static Dugum *parse_tip_alias(Parser *p) {
+    Token tip_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P035",
+                                "tip alias adi bekleniyor");
+    parser_bekle(p, TOK_ESIT, "P036", "'=' bekleniyor (tip alias)");
+    Dugum *hedef = parse_tip(p);
+    parser_bekle(p, TOK_NOKTALI_VIRGUL, "P037",
+                 "';' bekleniyor (tip alias sonu)");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_ALIAS,
+                             tip_tok.satir, tip_tok.sutun);
+    if (!d) return NULL;
+    d->veri.tip_alias.ad =
+        ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
+    d->veri.tip_alias.ad_uzunluk = ad_tok.uzunluk;
+    d->veri.tip_alias.hedef = hedef;
     return d;
 }
 
@@ -501,9 +594,10 @@ static Dugum *parse_ust_oge(Parser *p) {
         case TOK_DISA:    return parse_disa(p);
         case TOK_MODUL:   return parse_modul_tanimi(p);
         case TOK_SABIT:   return parse_sabit_tanimi(p);
+        case TOK_TIP:     return parse_tip_alias(p);
         default:
             parser_hata(p, t, "P001",
-                "ust duzey tanim bekleniyor (islev/yapi/kullan/disa/modul/sabit)",
+                "ust duzey tanim bekleniyor (islev/yapi/kullan/disa/modul/sabit/tip)",
                 NULL);
             parser_panik_sync(p);
             return NULL;
