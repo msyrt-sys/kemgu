@@ -186,6 +186,55 @@ static Dugum *parse_esles_kolu(Parser *p);
 
 Dugum *parse_parametre(Parser *p) {
     Token ad_tok = parser_simdiki(p);
+
+    /* "kendin" — uygula gövdesi method'unun ilk parametresi olabilir.
+     * Sözdizim: kendin / &kendin / &değişken kendin
+     * Tip kontrol uygula hedef tipini ekler. */
+    int referans_mi = 0;
+    int degisken_mi = 0;
+    if (ad_tok.tip == TOK_VE_BIT) {
+        /* "&" ile baslayabilir: &kendin / &değişken kendin */
+        Token t2 = p->sonraki_var ? p->sonraki : (Token){0};
+        /* Lookahead — yetersizse normal parametre yoluna duser */
+        if (t2.tip == TOK_KENDIN ||
+            (t2.tip == TOK_DEGISKEN /* &değişken */)) {
+            parser_ilerle(p);  /* '&' tuket */
+            referans_mi = 1;
+            if (parser_eslesir(p, TOK_DEGISKEN)) {
+                parser_ilerle(p);
+                degisken_mi = 1;
+            }
+            Token k_tok = parser_simdiki(p);
+            if (k_tok.tip == TOK_KENDIN) {
+                parser_ilerle(p);
+                Dugum *d = dugum_olustur(p->arena, DUGUM_PARAMETRE,
+                                          k_tok.satir, k_tok.sutun);
+                if (!d) return NULL;
+                d->veri.parametre.ad = "kendin";
+                d->veri.parametre.ad_uzunluk = 6;
+                d->veri.parametre.tip = NULL;
+                d->veri.parametre.kendin_mi = 1;
+                d->veri.parametre.referans_mi = referans_mi;
+                d->veri.parametre.degisken_mi = degisken_mi;
+                return d;
+            }
+            parser_hata(p, k_tok, "P012",
+                "& sonrasi 'kendin' veya 'değişken kendin' bekleniyor", NULL);
+            return dugum_hata(p->arena, k_tok.satir, k_tok.sutun);
+        }
+    }
+    if (ad_tok.tip == TOK_KENDIN) {
+        parser_ilerle(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_PARAMETRE,
+                                  ad_tok.satir, ad_tok.sutun);
+        if (!d) return NULL;
+        d->veri.parametre.ad = "kendin";
+        d->veri.parametre.ad_uzunluk = 6;
+        d->veri.parametre.tip = NULL;
+        d->veri.parametre.kendin_mi = 1;
+        return d;
+    }
+
     if (ad_tok.tip != TOK_TANIMLAYICI) {
         parser_hata(p, ad_tok, "P012", "parametre adi bekleniyor", NULL);
         return dugum_hata(p->arena, ad_tok.satir, ad_tok.sutun);

@@ -295,6 +295,7 @@ static Dugum *parse_birincil(Parser *p) {
          *   deger(v)      -> Some(v) yapicisi (cagri)
          *   tamam(v)      -> Ok(v) yapicisi
          *   hata(e)       -> Err(e) yapicisi */
+        case TOK_KENDIN:
         case TOK_HIC:
         case TOK_DEGER:
         case TOK_TAMAM:

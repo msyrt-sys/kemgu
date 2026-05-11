@@ -480,15 +480,20 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         erisim->veri.erisim.alan,
                         erisim->veri.erisim.alan_uzunluk);
                     if (m) {
-                        /* Method bulundu — parametreleri ve donus tipini kontrol et */
+                        /* Method bulundu — kendin parametresi otomatik (receiver)
+                         * Aksi halde normal arg sayisi kontrolu */
                         int n = m->veri.islev.param_sayi;
-                        if (d->veri.cagri.sayi != n) {
+                        int has_kendin = (n > 0 &&
+                            m->veri.islev.parametreler[0]->veri.parametre.kendin_mi);
+                        int beklenen_arg = has_kendin ? n - 1 : n;
+                        if (d->veri.cagri.sayi != beklenen_arg) {
                             tip_hata(tk, d, "T010",
                                 "method cagri arguman sayisi uyumsuz");
                             return t_hata(tk);
                         }
-                        for (int i = 0; i < n; i++) {
-                            const Dugum *p = m->veri.islev.parametreler[i];
+                        int offset = has_kendin ? 1 : 0;
+                        for (int i = 0; i < beklenen_arg; i++) {
+                            const Dugum *p = m->veri.islev.parametreler[i + offset];
                             TipBilgisi *pt = ast_tip_to_bilgi(tk,
                                 p->veri.parametre.tip);
                             TipBilgisi *at = tip_belirle_beklenen(tk,
@@ -916,6 +921,12 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
     if (gp_scope) tk->scope = gp_scope;
     for (int j = 0; j < n; j++) {
         const Dugum *p = islev->veri.islev.parametreler[j];
+        if (p->veri.parametre.kendin_mi) {
+            /* kendin parametre: tipi uygula context'inde belirlenir,
+             * pre-populate'da henuz bilinmiyor — bilinmeyen olarak isaretle */
+            ptipler[j] = tip_olustur_basit(tk->arena, TIP_BILINMIYOR);
+            continue;
+        }
         ptipler[j] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
     }
     TipBilgisi *donus = islev->veri.islev.donus_tipi
@@ -1359,6 +1370,9 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                 sembol_ekle(tk->scope, tk->arena, &gp);
             }
 
+            /* uygula hedef tipi (kendin'in tipi olacak) */
+            TipBilgisi *hedef_t = ast_tip_to_bilgi(tk, d->veri.uygula.tip);
+
             /* Her metodu kontrol et */
             for (int i = 0; i < d->veri.uygula.islev_sayi; i++) {
                 const Dugum *m = d->veri.uygula.islevler[i];
@@ -1379,7 +1393,17 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                     s.ad = p->veri.parametre.ad;
                     s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
                     s.kategori = SEMBOL_PARAMETRE;
-                    s.tip = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+                    if (p->veri.parametre.kendin_mi) {
+                        /* kendin parametresi: tipi uygula.tip (referans olabilir) */
+                        TipBilgisi *t = hedef_t;
+                        if (p->veri.parametre.referans_mi) {
+                            t = tip_olustur_referans(tk->arena, hedef_t,
+                                                     p->veri.parametre.degisken_mi);
+                        }
+                        s.tip = t;
+                    } else {
+                        s.tip = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+                    }
                     s.ast_dugumu = p;
                     sembol_ekle(tk->scope, tk->arena, &s);
                 }
