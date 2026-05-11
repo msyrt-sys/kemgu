@@ -95,7 +95,7 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 24/24, multi-int + metin + yapı dahil)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 30/30, multi-int + metin + yapı + float/dizi/struct-by-value)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -402,6 +402,57 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
+29. **Constraint v2 — uygula gövde tip kontrolü + method dispatch (ADIM 19)** (+5 test)
+    - DUGUM_OZELLIK ve DUGUM_UYGULA artık gövdeleri tip-kontrol edilir
+    - Generic param T uygula scope'una eklenir (`uygula<T> X<T>`)
+    - Method dispatch: `x.method()` çağrısı `uygula_tablosu_method_bul` ile resolve
+    - Inherent + trait impl methodları aynı yoldan
+    - 5 yeni test (uygula gövde hatası, temiz, method dispatch, arg sayısı, trait method)
+
+30. **Bölge Katman 2 — Concurrency aksiyomları (ADIM 20)** (+5 test)
+    - `bolge_olustur_sahip(thread_id)` ve `bolge_olustur_kanal(kanal_id)` API'leri
+    - `bolge_sahiplik_transfer(b, yeni_thread_id)` — R-GÖREV/R-BİRLEŞTİR scaffolding
+    - `bolge_kanal_gonder(b, kanal_id)` — R-KANAL transferi
+    - `bolge_donmus_mu(b)` — R-PAYLAŞ (v1: daima 0)
+    - KEMGU_Bellek_Modeli.md Katman 2 aksiyomları (S1/S2/S3, R-GÖREV/R-BİRLEŞTİR/R-KANAL/R-PAYLAŞ)
+    - Sınır: lang syntax (`görev`/`kanal` keyword'leri) henüz parse edilmiyor
+
+31. **LSP v2 — Hover + Completion + Definition (ADIM 21)** (+3 test)
+    - **Belge state'inde AST cache:** her didChange parse + sembol indeksleme
+    - **textDocument/hover:** tanımlayıcı üzerine → markdown (ad + kategori)
+    - **textDocument/definition:** tanımlayıcı → tanım konumu (uri + range)
+    - **textDocument/completion:** keyword listesi + üst düzey semboller
+    - Position lookup: `bul_tanimlayici_konum(prog, line, col)` — AST traversal
+    - Üst düzey semboller (DUGUM_ISLEV/YAPI/OZELLIK/SABIT) toplama
+    - Capabilities güncellemesi: hoverProvider + definitionProvider + completionProvider
+    - Sınır: lokal değişken hover yok (yalnız üst düzey), incremental sync yok
+
+32. **LLVM v3 — float/double + dizi + struct-by-value (ADIM 22)** (+6 test)
+    - **Float/double:**
+      - kesirli32 → float, kesirli64 → double
+      - fadd/fsub/fmul/fdiv/frem, fcmp (oeq/one/olt/ogt/ole/oge)
+      - KESIRLI literal güvenli format (decimal point garanti)
+      - DUGUM_TAM beklenen kesirli ise fadd ile float literal üretir
+    - **Dizi:**
+      - `[e1, e2, ...]` → alloca [N x T] + GEP+store + return ptr
+      - `arr[i]` → GEP (i64 index) + load T
+      - Eleman tipi ilk elemanın tipinden çıkarsanır
+    - **Struct-by-value:**
+      - DUGUM_TIP_BASIT/DUGUM_TIP_KULLANICI artık yapı kayıtlı ise `%YapiAdi` döner (ptr değil)
+      - `yapı_olustur`: alloca + store fields + LOAD struct value → akış struct-by-value
+      - `erisim x.y`: struct value ise `extractvalue`, ptr ise GEP+load (eski yol)
+      - Function params/returns artık gerçek `%Tip` ile çalışır
+    - **Test örnekleri:**
+      - `hesap(x: kesirli64) -> kesirli64 { ver x * 2.0 }` → çalışır
+      - `[10, 20, 12] xs[0]+xs[1]+xs[2]` → 42
+      - `iken i < 5 { s = s + xs[i]; }` → dizi indeksleme dongusu
+      - `topla(c: Cift) -> tam32 { ver c.a + c.b; }` → struct param by value
+      - `yap() -> N { ver N { x: 42 }; }` → struct dönüş by value
+    - **Sınırlamalar:**
+      - Dizi tipi parametre olarak (function arg) henüz yok
+      - Dizi LENGTH bilgisi taşımıyor (sentinel veya ayrı uzunluk gerek)
+      - Float karşılaştırma her zaman ordered (oeq/olt), unordered yok
+
 28. **LLVM v2: yapılar + metin literali + multi-int (ADIM 18)** (8 yeni entegrasyon testi)
     - **Tip tracking:** her ifade artık `(reg, llvm_tip)` ikilisi döndürür
     - **Multi-int (annotation-driven):**
@@ -523,7 +574,7 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
       - Aynı bound iki kez raporlanabilir (annotation + constructor)
       - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
 
-### 🎉🎉 ADIM 12-18 TAMAMLANDI — ESCAPE + CONSTRAINT + LSP + LLVM v2 (yapı+metin+multi-int)
+### 🎉🎉 ADIM 12-22 TAMAMLANDI — ESCAPE + CONSTRAINT v2 + LSP v2 + LLVM v3 + KATMAN 2
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -531,15 +582,14 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 482/482 (önceki 474 + 8 LLVM v2 yeni)
+**Test sayısı:** 501/501 (önceki 482 + 5 constraint v2 + 5 katman 2 + 3 LSP v2 + 6 LLVM v3)
 
 ### Sıradaki büyük seçenekler:
-- **LLVM v3** (kesirli float/double, dizi, struct-by-value, short-circuit ve/veya)
-- **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
-- **Constraint v2** (method dispatch + trait method type checking, generic islev bound check)
+- **Concurrency lang syntax** (görev/kanal anahtar kelimeleri, R-GÖREV uygulama)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
-- **LSP v2** (hover, completion, definition, semanticTokens, incremental sync, workspace)
+- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
+- **LSP v3** (incremental sync, workspace, semanticTokens, references)
+- **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
