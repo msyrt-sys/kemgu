@@ -96,6 +96,42 @@ const Sembol *sembol_bul_yerel(const Scope *s,
 const Sembol *sembol_yapi_alani(const Sembol *yapi_sem,
                                  const char *ad, int ad_uzunluk);
 
+/* === Uygula (impl) kayit defteri ===
+ *
+ * Her 'uygula Trait icin Tip { ... }' veya 'uygula Tip { ... }' bildirimi
+ * burada kayit edilir. ozellik_adi NULL/0 ise inherent (trait olmadan) impl.
+ *
+ * Sorgu: uygula_implementations_eder(tablo, tip_adi, ozellik_adi) -> 1/0
+ */
+
+typedef struct UygulaKaydi {
+    const char *tip_adi;
+    int tip_ad_uz;
+    const char *ozellik_adi;       /* NULL veya 0 uz = inherent */
+    int ozellik_ad_uz;
+    const Dugum *ast_dugumu;
+    struct UygulaKaydi *sonraki;
+} UygulaKaydi;
+
+typedef struct UygulaTablosu {
+    UygulaKaydi *bas;
+    UygulaKaydi *son;
+    int sayi;
+} UygulaTablosu;
+
+void uygula_tablosu_baslat(UygulaTablosu *t);
+
+/* Kayit ekle. ozellik_adi NULL/0 -> inherent. */
+void uygula_tablosu_ekle(UygulaTablosu *t, Arena *a,
+                         const char *tip_adi, int tip_uz,
+                         const char *ozellik_adi, int ozellik_uz,
+                         const Dugum *ast_dugumu);
+
+/* Sorgu: tip 'tip_adi' ozellik 'ozellik_adi' implement ediyor mu? */
+int uygula_tablosu_implementations_eder(const UygulaTablosu *t,
+                                         const char *tip_adi, int tip_uz,
+                                         const char *ozellik_adi, int ozellik_uz);
+
 /* === Yardimci === */
 
 const char *sembol_kategorisi_adi(SembolKategorisi k);

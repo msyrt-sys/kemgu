@@ -84,10 +84,10 @@ kemgu/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
-│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
+│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 90/90 (+12: özellik/uygula/bound), ASan temiz)
 │   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
 │   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
-│   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 90/90, ASan temiz)
+│   ├── test_tip_kontrol.c             — İfade tip kontrolü + constraint testleri (TAMAMLANDI ✓ — 97/97 (+7 constraint), ASan temiz)
 │   ├── test_bolge.c                   — Bölge temsili testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_bolge_atama.c             — Bölge atama R-* + escape entegrasyon testleri (TAMAMLANDI ✓ — 13/13, ASan temiz)
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
@@ -397,7 +397,44 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
     - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
 
-### 🎉🎉 ADIM 12 + 13 + 14 TAMAMLANDI — TAM ESCAPE ANALİZİ HAZIR
+25. **Constraint satisfaction — özellik/uygula sistemi (ADIM 15)** (19 yeni test)
+    - **15.1: `parse_ozellik_tanimi`** — `özellik Ad<T> { işlev m() -> tip; ... }`
+      - Method imzaları (`işlev m() -> T;`) ve default impl (`işlev m() { ... }`)
+      - Generic params destekli: `özellik X<T> { ... }`
+      - 4 parser testi
+    - **15.2: `parse_uygula_tanimi`** — `uygula Trait için Tip { ... }` veya `uygula Tip { ... }` (inherent)
+      - Generic uygula: `uygula<T> Tip<T> { ... }` (monomorphization sırasında resolve edilir)
+      - 3 parser testi
+    - **15.3: Bound sözdizimi** — `<T: Bound1 + Bound2, U: Bound3, V>`
+      - Yapı/özellik/uygula generic params bound listesi alabilir
+      - AST: `tip_param_boundlari` (Dugum***) + `tip_param_bound_sayilari` (int*) paralel diziler
+      - 5 parser testi
+    - **15.4: Sembol tablosu özellik desteği + uygula registry**
+      - `SEMBOL_OZELLIK` zaten vardı; pre_populate_ozellik global scope'a ekler
+      - Yeni: `UygulaTablosu` — (tip_adi, ozellik_adi) eşlemeleri için linked list
+      - Sorgu: `uygula_tablosu_implementations_eder(tip, ozellik)` → 0/1
+    - **15.5: Bound enforcement (T030, T031)**
+      - `DUGUM_TIP_KULLANICI` resolve sırasında: her tip param için bound'ları kontrol et
+      - T030: argüman tipi bound'u karşılamıyor (uygula bildirimi yok)
+      - T031: bilinmeyen özellik (bound olarak verilen ad çözülemedi)
+      - Generic param argümanları bound check'ten muaf (resolve sırasında enclosing scope'tan gelir)
+      - 7 tip kontrol testi
+    - **Pratik örnek:**
+      ```
+      özellik Sayilabilir {}
+      yapı Tam { x: tam32; }
+      uygula Sayilabilir için Tam {}   // <- gerek
+      yapı Vektor<T: Sayilabilir> { ic: T; }
+      sabit V: Vektor<Tam> = ...;  // OK; uygula olmadan T030 hatası
+      ```
+    - **Sınırlamalar (v1):**
+      - Method tip kontrolü uygula gövdelerinde yok (sadece kayıt)
+      - Default impl gövde tip kontrolü özellik içinde yok
+      - Trait method dispatch yok (sadece bound enforcement)
+      - Aynı bound iki kez raporlanabilir (annotation + constructor)
+      - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
+
+### 🎉🎉 ADIM 12 + 13 + 14 + 15 TAMAMLANDI — ESCAPE + CONSTRAINT HAZIR
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -405,13 +442,13 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 412/412 (önceki 392 + 17 escape + 3 bolge_atama entegrasyon)
+**Test sayısı:** 431/431 (önceki 412 + 12 parser özellik/uygula/bound + 7 tip kontrol constraint)
 
 ### Sıradaki büyük seçenekler:
 - **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
 - **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
-- **Tam constraint satisfaction** (uygula Bound için X kontrolü)
+- **Constraint v2** (method dispatch + trait method type checking, generic islev bound check)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - **LSP server** (gerçek IDE entegrasyonu)
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)

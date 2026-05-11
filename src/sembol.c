@@ -85,6 +85,54 @@ const char *sembol_kategorisi_adi(SembolKategorisi k) {
     return "BILINMEYEN";
 }
 
+/* === Uygula tablosu === */
+
+void uygula_tablosu_baslat(UygulaTablosu *t) {
+    if (!t) return;
+    t->bas = NULL;
+    t->son = NULL;
+    t->sayi = 0;
+}
+
+void uygula_tablosu_ekle(UygulaTablosu *t, Arena *a,
+                         const char *tip_adi, int tip_uz,
+                         const char *ozellik_adi, int ozellik_uz,
+                         const Dugum *ast_dugumu) {
+    if (!t || !a) return;
+    UygulaKaydi *k = (UygulaKaydi *)arena_ayir_sifir(a, sizeof(UygulaKaydi));
+    if (!k) return;
+    k->tip_adi = tip_adi;
+    k->tip_ad_uz = tip_uz;
+    k->ozellik_adi = ozellik_adi;
+    k->ozellik_ad_uz = ozellik_uz;
+    k->ast_dugumu = ast_dugumu;
+    k->sonraki = NULL;
+    if (t->son) t->son->sonraki = k;
+    else t->bas = k;
+    t->son = k;
+    t->sayi++;
+}
+
+int uygula_tablosu_implementations_eder(const UygulaTablosu *t,
+                                         const char *tip_adi, int tip_uz,
+                                         const char *ozellik_adi, int ozellik_uz) {
+    if (!t || !tip_adi || tip_uz <= 0) return 0;
+    for (const UygulaKaydi *k = t->bas; k; k = k->sonraki) {
+        if (k->tip_ad_uz != tip_uz) continue;
+        if (memcmp(k->tip_adi, tip_adi, (size_t)tip_uz) != 0) continue;
+        /* Inherent isteniyor mu? (ozellik_adi NULL veya uz 0) */
+        if (!ozellik_adi || ozellik_uz <= 0) {
+            if (!k->ozellik_adi || k->ozellik_ad_uz <= 0) return 1;
+            continue;
+        }
+        if (!k->ozellik_adi || k->ozellik_ad_uz != ozellik_uz) continue;
+        if (memcmp(k->ozellik_adi, ozellik_adi, (size_t)ozellik_uz) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 const char *scope_kategorisi_adi(ScopeKategorisi k) {
     switch (k) {
         case SCOPE_GLOBAL: return "GLOBAL";

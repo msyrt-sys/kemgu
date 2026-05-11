@@ -30,6 +30,8 @@
  *   T015: lambda parametre tip annot eksik
  *   T016: modul/yol cozumlemesi basarisiz
  *   T017: yapi olusturmada bilinmeyen alan
+ *   T030: generic tip argumani bound'u karsilamiyor (constraint violation)
+ *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
@@ -40,6 +42,7 @@ typedef struct TipKontrol {
     Scope *scope;                  /* mevcut scope */
     Scope *global_scope;           /* yapi/islev tanimlari icin (ileri referans) */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
+    UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;

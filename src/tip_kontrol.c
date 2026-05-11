@@ -12,6 +12,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->scope = global;
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
+    uygula_tablosu_baslat(&tk->uygulamalar);
     tk->hata_sayisi = 0;
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
@@ -36,6 +37,9 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
+
+/* Forward (ADIM 15.5: bound check) */
+static const char *tip_dugumu_kok_adi(const Dugum *t, int *out_uz);
 
 static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
@@ -171,6 +175,57 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                 /* Sembol tablosunda yapi mi diye bak */
                 const Sembol *s = sembol_bul(tk->scope, ad, uz);
                 if (s && s->kategori == SEMBOL_YAPI) {
+                    /* Bound kontrolu: yapi tanimindaki her tip_param icin,
+                     * arg o param'in bound'lari karsiliyor mu? */
+                    const Dugum *yapi_d = s->ast_dugumu;
+                    if (yapi_d && yapi_d->tip == DUGUM_YAPI &&
+                        yapi_d->veri.yapi.tip_param_bound_sayilari) {
+                        int param_n = yapi_d->veri.yapi.tip_param_sayi;
+                        int eslesen = (param_n < n) ? param_n : n;
+                        for (int pi = 0; pi < eslesen; pi++) {
+                            int bs = yapi_d->veri.yapi.tip_param_bound_sayilari[pi];
+                            if (bs == 0 || !args || !args[pi]) continue;
+                            /* args[pi]'nin adini al */
+                            const char *arg_ad = NULL;
+                            int arg_uz = 0;
+                            if (args[pi]->kategori == TIP_YAPI) {
+                                arg_ad = args[pi]->veri.yapi.ad;
+                                arg_uz = args[pi]->veri.yapi.ad_uzunluk;
+                            } else if (args[pi]->kategori == TIP_GENERIC_PARAM) {
+                                arg_ad = args[pi]->veri.generic_param.ad;
+                                arg_uz = args[pi]->veri.generic_param.ad_uzunluk;
+                            }
+                            if (!arg_ad) continue;
+                            /* Her bound icin tablo kontrolu */
+                            for (int bi = 0; bi < bs; bi++) {
+                                const Dugum *bd =
+                                    yapi_d->veri.yapi.tip_param_boundlari[pi][bi];
+                                int bd_uz = 0;
+                                const char *bd_ad = tip_dugumu_kok_adi(bd, &bd_uz);
+                                if (!bd_ad) continue;
+                                /* Ozellik var mi? */
+                                const Sembol *oz_s = sembol_bul(tk->global_scope,
+                                                                bd_ad, bd_uz);
+                                if (!oz_s || oz_s->kategori != SEMBOL_OZELLIK) {
+                                    tip_hata(tk, tip_d, "T031",
+                                        "bilinmeyen ozellik (bound olarak)");
+                                    continue;
+                                }
+                                /* Generic param ise bound'u kendisi sahip oluyor
+                                 * varsayilir (resolve sirasinda enclosing scope) */
+                                if (args[pi]->kategori == TIP_GENERIC_PARAM) {
+                                    continue;
+                                }
+                                if (!uygula_tablosu_implementations_eder(
+                                        &tk->uygulamalar,
+                                        arg_ad, arg_uz, bd_ad, bd_uz)) {
+                                    tip_hata(tk, tip_d, "T030",
+                                        "tip argumani bound karsilamiyor "
+                                        "(uygula bildirimi yok)");
+                                }
+                            }
+                        }
+                    }
                     return tip_olustur_yapi(tk->arena, s->ad, s->ad_uzunluk,
                                             args, n);
                 }
@@ -817,11 +872,72 @@ static void pre_populate_sabit(TipKontrol *tk, const Dugum *sabit) {
     }
 }
 
+static void pre_populate_ozellik(TipKontrol *tk, const Dugum *oz) {
+    /* Ozellik sembolunu global'e ekle (bound olarak referans gerekli) */
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = oz->veri.ozellik.ad;
+    s.ad_uzunluk = oz->veri.ozellik.ad_uzunluk;
+    s.kategori = SEMBOL_OZELLIK;
+    s.ast_dugumu = oz;
+    s.satir = oz->satir;
+    s.sutun = oz->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
+        tip_hata(tk, oz, "T024", "ozellik tanimi cakismasi");
+    }
+}
+
+/* AST tip dugumunden 'kok' adi cikar (basit/kullanici). Bilinmiyorsa NULL. */
+static const char *tip_dugumu_kok_adi(const Dugum *t, int *out_uz) {
+    if (!t) return NULL;
+    if (t->tip == DUGUM_TIP_BASIT) {
+        *out_uz = t->veri.tip_basit.ad_uzunluk;
+        return t->veri.tip_basit.ad;
+    }
+    if (t->tip == DUGUM_TIP_KULLANICI && t->veri.tip_kullanici.yol) {
+        const Dugum *y = t->veri.tip_kullanici.yol;
+        if (y->tip == DUGUM_TANIMLAYICI) {
+            *out_uz = y->veri.tanimlayici.uzunluk;
+            return y->veri.tanimlayici.metin;
+        }
+    }
+    return NULL;
+}
+
+static void pre_populate_uygula(TipKontrol *tk, const Dugum *uy) {
+    /* Hedef tip adi */
+    int tip_uz = 0;
+    const char *tip_ad = tip_dugumu_kok_adi(uy->veri.uygula.tip, &tip_uz);
+    if (!tip_ad) return;
+
+    if (uy->veri.uygula.ozellik_sayi == 0) {
+        /* Inherent impl */
+        uygula_tablosu_ekle(&tk->uygulamalar, tk->arena,
+                            tip_ad, tip_uz, NULL, 0, uy);
+    } else {
+        /* Trait impls */
+        for (int i = 0; i < uy->veri.uygula.ozellik_sayi; i++) {
+            int oz_uz = 0;
+            const char *oz_ad = tip_dugumu_kok_adi(
+                uy->veri.uygula.ozellikler[i], &oz_uz);
+            if (oz_ad) {
+                uygula_tablosu_ekle(&tk->uygulamalar, tk->arena,
+                                    tip_ad, tip_uz, oz_ad, oz_uz, uy);
+            }
+        }
+    }
+}
+
 static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
 
-    /* Once yapilari (tipleri) ekle, sonra islevleri (parametre tipleri
-     * yapilara referans verebilir). */
+    /* 1) Once ozellikleri ekle (bound referansi icin) */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_OZELLIK) pre_populate_ozellik(tk, uye);
+    }
+
+    /* 2) Yapilari (tipleri) ekle */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
@@ -832,7 +948,13 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
         }
     }
 
-    /* Islevler ve sabitler */
+    /* 3) Uygula bildirimlerini kayit et (yapi+ozellik bilindikten sonra) */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_UYGULA) pre_populate_uygula(tk, uye);
+    }
+
+    /* 4) Islevler ve sabitler */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
@@ -1087,6 +1209,16 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
         case DUGUM_YAPI:
             /* Pre-populate yeterli (alan tipleri orada cozumlendi) */
+            break;
+
+        case DUGUM_OZELLIK:
+            /* Pre-populate ozellik sembolunu ekledi.
+             * Method imzalari ve default impl'ler v2'de tip-kontrol edilecek. */
+            break;
+
+        case DUGUM_UYGULA:
+            /* Pre-populate uygula tablosuna kayit etti.
+             * Method govde tip-kontrolu v2'de (generic param resolve dahil). */
             break;
 
         case DUGUM_KULLAN:

@@ -166,6 +166,12 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;   /* generic tip parametre adlari (null-term) */
             int tip_param_sayi;
+            /* Bound listeleri (paralel):
+             *   tip_param_boundlari[i] = Dugum* dizisi (i. parametrenin bound listesi)
+             *   tip_param_bound_sayilari[i] = i. parametre icin bound sayisi
+             * NULL veya 0 = bound yok. */
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
         } yapi;
@@ -175,6 +181,8 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;
             int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **uyeler;        /* islev imzalari/tanimlari */
             int uye_sayi;
         } ozellik;
@@ -182,6 +190,8 @@ struct Dugum {
         struct {
             char **tip_paramlar;
             int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum *tip;            /* uygulanacak tip */
             Dugum **ozellikler;    /* ozellik yollari (DUGUM_TIP_KULLANICI) */
             int ozellik_sayi;
