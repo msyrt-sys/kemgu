@@ -372,6 +372,28 @@ static void test_generic_coklu_instan(void) {
     test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
 }
 
+static void test_kendin_method(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev al(kendin) -> tam32 { ver kendin.v; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 42 }; "
+        "ver k.al(); }");
+    test_sonuc("kendin (self) method dispatch -> 42", rc == 42);
+}
+
+static void test_kendin_arg_ile(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev topla(kendin, x: tam32) -> tam32 { ver kendin.v + x; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 20 }; "
+        "ver k.topla(22); }");
+    test_sonuc("kendin + arg method -> 42", rc == 42);
+}
+
 static void test_generic_mutlak_stdlib(void) {
     /* matematik.kem'den mutlak<T> kullanim */
     int rc = derle_ve_calistir(
@@ -457,6 +479,10 @@ int main(void) {
     test_generic_iki_kat();
     test_generic_coklu_instan();
     test_generic_mutlak_stdlib();
+
+    printf("\n--- ADIM 24: kendin (self) ---\n");
+    test_kendin_method();
+    test_kendin_arg_ile();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

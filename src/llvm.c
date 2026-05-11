@@ -858,6 +858,38 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_CAGRI: {
+            /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
+             * receiver'i ilk arg olarak gec. Method adi alan_adi. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_ERISIM) {
+                const Dugum *erisim = d->veri.cagri.hedef;
+                IfadeSonuc receiver = ifade_uret(g,
+                    erisim->veri.erisim.nesne, NULL);
+                int n = d->veri.cagri.sayi;
+                IfadeSonuc *args = (IfadeSonuc *)arena_ayir(g->arena,
+                    sizeof(IfadeSonuc) * (size_t)(n + 1));
+                args[0] = receiver;
+                for (int i = 0; i < n; i++) {
+                    args[i + 1] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
+                }
+                /* Method adi: erisim.alan */
+                const char *m_ad = erisim->veri.erisim.alan;
+                int m_ad_uz = erisim->veri.erisim.alan_uzunluk;
+                IslevKayit *mik = islev_bul(g, m_ad, m_ad_uz);
+                const char *donus = mik ? mik->donus_tip : "i32";
+                if (strcmp(donus, "void") == 0) donus = "i32";
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @", r, donus);
+                ad_yaz(g->out, m_ad, m_ad_uz);
+                fputs("(", g->out);
+                for (int i = 0; i < n + 1; i++) {
+                    if (i > 0) fputs(", ", g->out);
+                    fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
+                }
+                fputs(")\n", g->out);
+                IfadeSonuc s = { r, donus };
+                return s;
+            }
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {
                 return hata(g, "cagri hedefi tanimlayici degil");
@@ -1367,6 +1399,29 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
         } else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                    uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
             islev_uret(&g, uye->veri.disa.tanim);
+        } else if (uye->tip == DUGUM_UYGULA) {
+            /* uygula gövdesindeki methodlari emit et — kendin parametresi
+             * uygula.tip ile degistirilir */
+            for (int j = 0; j < uye->veri.uygula.islev_sayi; j++) {
+                Dugum *m = uye->veri.uygula.islevler[j];
+                if (!m || m->tip != DUGUM_ISLEV || !m->veri.islev.govde) {
+                    continue;
+                }
+                /* kendin parametre var mi? Tipini hedef tipe ayarla */
+                for (int k = 0; k < m->veri.islev.param_sayi; k++) {
+                    Dugum *p = m->veri.islev.parametreler[k];
+                    if (p->veri.parametre.kendin_mi &&
+                        p->veri.parametre.tip == NULL) {
+                        p->veri.parametre.tip = uye->veri.uygula.tip;
+                    }
+                }
+                /* IslevKayit'ta kayitli mi? Yoksa kayit et */
+                if (!islev_bul(&g, m->veri.islev.ad,
+                               m->veri.islev.ad_uzunluk)) {
+                    islev_kayit(&g, m);
+                }
+                islev_uret(&g, m);
+            }
         }
     }
 

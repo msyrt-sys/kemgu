@@ -215,6 +215,9 @@ struct Dugum {
             const char *ad;
             int ad_uzunluk;
             Dugum *tip;
+            int kendin_mi;       /* 1 = self parametresi (uygula gövdesinde) */
+            int referans_mi;     /* 1 = &kendin */
+            int degisken_mi;     /* 1 = &değişken kendin */
         } parametre;
 
         struct {
