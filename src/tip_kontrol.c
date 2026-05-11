@@ -758,9 +758,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 params[i] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
             }
-            /* Govde tipi — basit: parse_ifade donus tipi.
-             * Tam degerlendirme ADIM 11.4'te (deyimler dahil). */
+            /* Govde tip kontrolu icin parametreler ve cevreleyen scope */
+            Scope *eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, eski);
+            for (int i = 0; i < n; i++) {
+                const Dugum *p = d->veri.lambda.parametreler[i];
+                Sembol s;
+                memset(&s, 0, sizeof(s));
+                s.ad = p->veri.parametre.ad;
+                s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                s.kategori = SEMBOL_PARAMETRE;
+                s.tip = params[i];
+                s.ast_dugumu = p;
+                sembol_ekle(tk->scope, tk->arena, &s);
+            }
             TipBilgisi *donus = tip_belirle(tk, d->veri.lambda.govde);
+            tk->scope = eski;
             return tip_olustur_islev(tk->arena, params, n, donus);
         }
 

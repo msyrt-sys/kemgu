@@ -1289,6 +1289,19 @@ static void test_sonuc_konstrüktörler(void) {
     arena_serbest(a);
 }
 
+/* L-1: Lambda govde scope — parametre referansi */
+static void test_lambda_govde(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = |x: tam32| x * 2; "
+        "ver 0; }",
+        a);
+    /* Lambda govdesinde x kullanim — scope dogruysa tip kontrol gecer */
+    test_sonuc("lambda govde scope (x: tam32 -> x*2)", h == 0);
+    arena_serbest(a);
+}
+
 /* CS-7: Inherent impl kayit edilir, sorgu basarili */
 static void test_cs_inherent_kayit(void) {
     Arena *a = arena_olustur(0);
@@ -1461,6 +1474,9 @@ int main(void) {
     test_deger_konstrüktör();
     test_pattern_binding();
     test_sonuc_konstrüktörler();
+
+    printf("\n--- Lambda govde scope (29) ---\n");
+    test_lambda_govde();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
