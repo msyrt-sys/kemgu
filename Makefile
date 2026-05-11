@@ -40,7 +40,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/llvm.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_llvm_test test_tumu
 
 # === Ana hedef ===
 
@@ -157,7 +157,14 @@ calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 	./$(BUILD)/test_bolge_atama$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test
+# === LLVM end-to-end entegrasyon testi (bash script + clang) ===
+# kemgu.exe ile .kem dosyalarini IR'ye cevirir, clang ile derler,
+# calistirir ve cikis kodunu beklenen ile karsilastirir.
+
+calistir_llvm_test: $(BUILD)/kemgu$(EXE)
+	bash $(TESTDIR)/test_llvm.sh
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_llvm_test
 	@echo "Tum testler gecti!"
 
 clean:
