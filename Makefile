@@ -26,11 +26,29 @@ SRCDIR = src
 TESTDIR = test
 BUILD = build
 
-# Windows'ta GCC/Clang ciktiya otomatik .exe ekler
+# Platform tespiti — Windows / Linux / macOS, x86_64 / ARM64
 ifeq ($(OS),Windows_NT)
     EXE := .exe
+    PLATFORM := windows
 else
     EXE :=
+    UNAME_S := $(shell uname -s)
+    UNAME_M := $(shell uname -m)
+    ifeq ($(UNAME_S),Linux)
+        PLATFORM := linux
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        PLATFORM := macos
+    endif
+    ifeq ($(UNAME_M),aarch64)
+        ARCH := arm64
+    endif
+    ifeq ($(UNAME_M),arm64)
+        ARCH := arm64
+    endif
+    ifeq ($(UNAME_M),x86_64)
+        ARCH := x86_64
+    endif
 endif
 
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \

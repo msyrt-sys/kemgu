@@ -1,0 +1,22 @@
+{
+  "name": "kemgu-language",
+  "displayName": "KEMGU Language Support",
+  "description": "KEMGU sözdizimi vurgulama ve dil desteği",
+  "version": "0.1.0",
+  "publisher": "kemgu",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [{
+      "id": "kemgu",
+      "aliases": ["KEMGU", "kemgu"],
+      "extensions": [".kem"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "kemgu",
+      "scopeName": "source.kemgu",
+      "path": "./syntaxes/kemgu.tmLanguage.json"
+    }]
+  }
+}
