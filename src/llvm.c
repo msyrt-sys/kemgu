@@ -190,6 +190,14 @@ static const BuiltinTanim BUILTINLER[] = {
     { "b\xc3\xb6lge_metin_birle\xc5\x9ftir",
                                        "kdl_bolge_metin_birlestir",
                                        "ptr",  3, {"ptr","ptr","ptr"} },
+    /* Stdlib genisletme: Dosya I/O */
+    { "dosya_ac",                      "kdl_dosya_ac",        "ptr",  2, {"ptr","ptr"} },
+    { "dosya_sat\xc4\xb1r_oku",        "kdl_dosya_satir_oku", "ptr",  1, {"ptr"} },
+    { "dosya_yaz",                     "kdl_dosya_yaz",       "i32",  2, {"ptr","ptr"} },
+    { "dosya_yazd\xc4\xb1r",           "kdl_dosya_yazdir",    "i32",  2, {"ptr","ptr"} },
+    { "dosya_kapat",                   "kdl_dosya_kapat",     "void", 1, {"ptr"} },
+    { "dosya_bitti_mi",                "kdl_dosya_bitti_mi",  "i32",  1, {"ptr"} },
+    { "dosya_tumu_oku",                "kdl_dosya_tumu_oku",  "ptr",  1, {"ptr"} },
 };
 #define BUILTIN_SAYI (int)(sizeof(BUILTINLER) / sizeof(BUILTINLER[0]))
 
@@ -2188,7 +2196,27 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     c.out = out;
 
     fputs("; KEMGU LLVM IR (text uretici, ADIM D — stdlib bagli)\n", out);
-    fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+    /* Tasinabilirlik: target triple platform'a gore. Cross-compile icin
+     * KEMGU_TARGET cevre degiskeni override edebilir. */
+    const char *triple = getenv("KEMGU_TARGET");
+    if (!triple || !*triple) {
+#if defined(_WIN32) && defined(__x86_64__)
+        triple = "x86_64-pc-windows-gnu";
+#elif defined(_WIN32) && defined(__aarch64__)
+        triple = "aarch64-pc-windows-gnu";
+#elif defined(__linux__) && defined(__x86_64__)
+        triple = "x86_64-unknown-linux-gnu";
+#elif defined(__linux__) && defined(__aarch64__)
+        triple = "aarch64-unknown-linux-gnu";
+#elif defined(__APPLE__) && defined(__x86_64__)
+        triple = "x86_64-apple-darwin";
+#elif defined(__APPLE__) && defined(__aarch64__)
+        triple = "arm64-apple-darwin";
+#else
+        triple = "x86_64-pc-windows-gnu";  /* fallback */
+#endif
+    }
+    fprintf(out, "target triple = \"%s\"\n\n", triple);
 
     /* Standart kutuphane (KDL) built-in islev declare'lari.
      * Hepsi runtime/kdl_runtime.c icinde implement edilir; clang ile link

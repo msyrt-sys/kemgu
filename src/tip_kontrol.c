@@ -1458,6 +1458,14 @@ static const BuiltinTipi KDL_BUILTINLER[] = {
     { "b\xc3\xb6lge_toplam_byte",      1, {TIP_METIN},                  TIP_TAM32 },
     { "b\xc3\xb6lge_metin_birle\xc5\x9ftir",
                                        3, {TIP_METIN, TIP_METIN, TIP_METIN}, TIP_METIN },
+    /* Stdlib dosya I/O */
+    { "dosya_ac",                      2, {TIP_METIN, TIP_METIN},       TIP_METIN },
+    { "dosya_sat\xc4\xb1r_oku",        1, {TIP_METIN},                  TIP_METIN },
+    { "dosya_yaz",                     2, {TIP_METIN, TIP_METIN},       TIP_TAM32 },
+    { "dosya_yazd\xc4\xb1r",           2, {TIP_METIN, TIP_METIN},       TIP_TAM32 },
+    { "dosya_kapat",                   1, {TIP_METIN},                  TIP_BOS },
+    { "dosya_bitti_mi",                1, {TIP_METIN},                  TIP_TAM32 },
+    { "dosya_tumu_oku",                1, {TIP_METIN},                  TIP_METIN },
 };
 #define KDL_BUILTIN_SAYI \
     (int)(sizeof(KDL_BUILTINLER) / sizeof(KDL_BUILTINLER[0]))

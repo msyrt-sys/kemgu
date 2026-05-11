@@ -652,18 +652,47 @@ clang hello.ll runtime/kdl_runtime.c -o hello.exe
 ./hello.exe        # → Merhaba, KEMGU!
 ```
 
+29. **Son sürüm öncesi: -O2 + dosya I/O + cross-platform + IDE + bootstrap**
+    - **LLVM -O2:** `test_llvm.sh` `KEMGU_OPT=O2` ile clang opt level
+      kontrol — 22/22 test geçti, fib_recursive 101 KB → 99 KB (~2% küçülme)
+    - **Stdlib dosya I/O:** `dosya_ac`, `dosya_satır_oku`, `dosya_yaz`,
+      `dosya_yazdır`, `dosya_kapat`, `dosya_bitti_mi`, `dosya_tumu_oku`
+      runtime'da libc wrap. Mod stringleri: "okuma"/"yazma"/"ekleme"
+    - **ARM64/Linux port hazırlığı:**
+      • `llvm.c` target triple platform tespit `#if defined(_WIN32)` vs
+        `__linux__` vs `__APPLE__` + arch (x86_64/aarch64); `KEMGU_TARGET`
+        env override
+      • `Makefile` UNAME_S/UNAME_M tespiti (PLATFORM + ARCH değişkenleri)
+      • Runtime: `KDL_THREAD_WIN` (CreateThread) + `KDL_THREAD_POSIX`
+        (pthread) çift backend; `kdl_kilit_init/gir/cik/yok_et` portable
+        mutex wrap (`CRITICAL_SECTION` / `pthread_mutex_t`)
+    - **VS Code TextMate syntax highlighting:** `editor/vscode-kemgu/`
+      • `kemgu.tmLanguage.json` — keyword/type/literal/string/operator
+        kapsamları, Türkçe karakter destekli identifier regex
+      • `language-configuration.json` — yorum kısayolları, auto-close,
+        indent
+      • `package.json` — VS Code uzantı manifest'i
+      • README ile kurulum talimatı
+    - **Bootstrapping demosu:** `bootstrap.kem` — KEMGU programı bir
+      başka KEMGU kaynak dosyasını okuyup içeriğini gösterir. Tam
+      self-host (lexer/parser/AST/tip/LLVM'in KEMGU'da yeniden yazımı)
+      uzun vadeli iş; bu demo ilk adımı temsil eder.
+    - **2 yeni LLVM testi** (22 → 24): dosya_io, bootstrap
+
+### 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 KEMGU DİL VE EKOSİSTEMİ TAMAM
+
 ### Sıradaki kalan (uzun vade):
-- **Bootstrapping** — KEMGU'da KEMGU derleyici (self-hosted). Lexer →
-  Parser → AST → Tip → Bölge → LLVM IR bütününü KEMGU'da yeniden yaz.
+- **Self-host bootstrap** — KEMGU'da KEMGU derleyici (tam). Mevcut C
+  derleyici (lexer/parser/AST/tip_kontrol/bolge_atama/llvm) ~10K satır;
+  KEMGU'da yeniden yazılmalı, bootstrap.kem genişletilerek.
+- **LSP server** — gerçek IDE entegrasyonu (hover/diagnostics/completion).
+  Şu an TextMate grammar; LSP göstergeleri/tamamlama henüz yok.
+- **Stdlib network/JSON/regex** — dosya I/O var; ileri seviye stdlib
+  modülleri eklenebilir.
 - **Daha iyi escape analizi (DFA fixed-point)** — döngü içinde tam
-  iteration ile bölge gradual escalation
-- **Tam constraint satisfaction** — uygula tablosundan X:Bound için
-  `uygula Bound için X` kaydı ara (şu an yalnızca Bound tanımlı
-  doğrulaması)
-- **LLVM optimizasyon pas'leri** — şu an `-O0`; `-O2` enableable
-- **Stdlib genişletme** — dosya I/O, network, JSON, regex
-- **ARM64 / Linux port** — şu an Windows x86_64; cross-platform hedef
-- **IDE desteği** — VSCode/Neovim sözdizimi vurgulama, LSP
+  iteration ile bölge gradual escalation.
+- **Tam constraint satisfaction** — `uygula Bound için X` kaydından
+  X:Bound doğrulaması (şu an yalnızca Bound tanımlı kontrolü).
 
 ### İlerideki Fazlar
 - Tip sistemi (tip çıkarsama, tip kontrolü)
@@ -732,7 +761,7 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉×9 İLERİ SEVİYE TAMAMLANDI — KEMGU prod-ready Bootstrapping öncesi**
+- **Faz:** **🎉×10 KEMGU 1.0 — Tüm temel/ileri özellikler + araç ekosistemi**
 - **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (DFA) → LLVM IR + stdlib → native exe
   - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
   - Stdlib D.1-D.5: IO, metin, sayısal, dizi uzunluk, StandartHata prelude
@@ -751,7 +780,13 @@ Belge dosyaları: Türkçe.
   - **Arena bellek modeli:** runtime KdlArena bump allocator + linked chunks
   - **Gerçek thread bind:** Windows CreateThread (#ifdef _WIN32) + CRITICAL_SECTION mutex
   - **Katman 2 bölge:** R-GÖREV/R-BİRLEŞTİR/R-KANAL aksiyomları + B003 (kanal yerel ihlali)
-- **22 LLVM entegrasyon testi** + 24/24 örnek `.kem` `--check`'ten geçer
+  - **LLVM -O2:** clang opt-level kontrol; ~2% binary küçülme
+  - **Dosya I/O:** ac/oku/yaz/yazdir/kapat/tumu_oku built-in'leri
+  - **Cross-platform:** Windows + Linux + macOS + ARM64 target triple destekli;
+    runtime portable (CreateThread + pthread çift backend)
+  - **VS Code uzantısı:** TextMate grammar (editor/vscode-kemgu/)
+  - **Bootstrap demosu:** KEMGU'da KEMGU kaynak okuyan program
+- **24 LLVM entegrasyon testi** + 26/26 örnek `.kem` `--check`'ten geçer
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

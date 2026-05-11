@@ -1,0 +1,10 @@
+=== KEMGU programi KEMGU kodu okuyor ===
+dosya boyutu: 100 byte
+--- icerik ---
+// D.1 IO testi: temel yazdir
+işlev main() -> tam32 {
+    yazdır("Merhaba, KEMGU!");
+    ver 0;
+}
+
+--- bitti ---

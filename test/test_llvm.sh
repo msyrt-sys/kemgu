@@ -63,6 +63,8 @@ declare -a TESTLER=(
     "test/ornekler/kanal_basit.kem      0"
     "test/ornekler/monomorph.kem        0"
     "test/ornekler/arena_bellek.kem     0"
+    "test/ornekler/dosya_io.kem         0"
+    "test/ornekler/bootstrap.kem        0"
 )
 
 basarili=0
@@ -91,8 +93,12 @@ for satir in "${TESTLER[@]}"; do
         continue
     fi
 
-    # Derle (runtime ile)
-    if ! clang "$ir" "$RUNTIME" -o "$exe" 2>/dev/null; then
+    # Derle (runtime ile). KEMGU_OPT=O2 ise optimize edilmis derleme.
+    OPT_FLAG="${KEMGU_OPT:--O0}"
+    if [[ "$OPT_FLAG" != "-O0" ]]; then
+        OPT_FLAG="-${KEMGU_OPT}"
+    fi
+    if ! clang "$OPT_FLAG" "$ir" "$RUNTIME" -o "$exe" 2>/dev/null; then
         printf "${RED}HATA${RESET} (clang derleme basarisiz)\n"
         basarisiz=$((basarisiz + 1))
         continue

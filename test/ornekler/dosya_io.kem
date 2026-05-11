@@ -1,0 +1,15 @@
+// Stdlib dosya I/O testi: yaz + tum_oku
+
+işlev main() -> tam32 {
+    değişken f: metin = dosya_ac("build/io_test.txt", "yazma");
+    dosya_yazdır(f, "Birinci satir");
+    dosya_yazdır(f, "Ikinci satir");
+    dosya_yazdır(f, "Ucuncu satir");
+    dosya_kapat(f);
+
+    değişken icerik: metin = dosya_tumu_oku("build/io_test.txt");
+    yaz("yazilan icerik:");
+    yazdır_satır();
+    yazdır(icerik);
+    ver 0;
+}

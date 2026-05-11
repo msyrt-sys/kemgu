@@ -26,11 +26,15 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* B2 (genisletilmis): Gercek thread bind — Windows CreateThread.
- * Posix tarafinda pthread eklenebilir. */
+/* B2 (genisletilmis): Gercek thread bind — Windows + POSIX (Linux/macOS/ARM64) */
 #ifdef _WIN32
 #include <windows.h>
 #define KDL_THREAD_VAR 1
+#define KDL_THREAD_WIN 1
+#elif defined(__linux__) || defined(__APPLE__) || defined(__unix__)
+#include <pthread.h>
+#define KDL_THREAD_VAR 1
+#define KDL_THREAD_POSIX 1
 #endif
 
 /* === D.1 IO === */
@@ -281,17 +285,29 @@ typedef struct {
     int32_t result;
     int done;
     int32_t (*f)(void);     /* gorev islevi */
-#ifdef KDL_THREAD_VAR
+#ifdef KDL_THREAD_WIN
     HANDLE handle;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_t thr;
+    int thr_valid;
 #endif
 } KdlGorev;
 
-#ifdef KDL_THREAD_VAR
+#ifdef KDL_THREAD_WIN
 static DWORD WINAPI kdl_gorev_thread_main(LPVOID param) {
     KdlGorev *g = (KdlGorev *)param;
     g->result = g->f ? g->f() : 0;
     g->done = 1;
     return 0;
+}
+#endif
+#ifdef KDL_THREAD_POSIX
+static void *kdl_gorev_thread_posix(void *param) {
+    KdlGorev *g = (KdlGorev *)param;
+    g->result = g->f ? g->f() : 0;
+    g->done = 1;
+    return NULL;
 }
 #endif
 
@@ -302,15 +318,21 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
     g->f = f;
     g->result = 0;
     g->done = 0;
-#ifdef KDL_THREAD_VAR
+#ifdef KDL_THREAD_WIN
     g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
     if (!g->handle) {
-        /* Thread olusturulamadi -> sequential fallback */
+        g->result = f ? f() : 0;
+        g->done = 1;
+    }
+#elif defined(KDL_THREAD_POSIX)
+    g->thr_valid = (pthread_create(&g->thr, NULL,
+                                    kdl_gorev_thread_posix, g) == 0);
+    if (!g->thr_valid) {
         g->result = f ? f() : 0;
         g->done = 1;
     }
 #else
-    /* Posix yok ise sequential */
+    /* Thread yok -> sequential */
     g->result = f ? f() : 0;
     g->done = 1;
 #endif
@@ -319,11 +341,13 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
 
 int32_t kdl_gorev_birlestir(KdlGorev *g) {
     if (!g) return 0;
-#ifdef KDL_THREAD_VAR
+#ifdef KDL_THREAD_WIN
     if (g->handle) {
         WaitForSingleObject(g->handle, INFINITE);
         CloseHandle(g->handle);
     }
+#elif defined(KDL_THREAD_POSIX)
+    if (g->thr_valid) pthread_join(g->thr, NULL);
 #endif
     int32_t r = g->result;
     free(g);
@@ -335,11 +359,55 @@ typedef struct {
     int32_t boyut;
     int32_t kapasite;
     int32_t bas, son;   /* circular buffer */
-#ifdef KDL_THREAD_VAR
+#ifdef KDL_THREAD_WIN
     CRITICAL_SECTION kilit;
     int kilit_aktif;
 #endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t kilit;
+    int kilit_aktif;
+#endif
 } KdlKanal;
+
+/* Portable kilit yardimcilari */
+static void kdl_kilit_init(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&k->kilit);
+    k->kilit_aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_init(&k->kilit, NULL);
+    k->kilit_aktif = 1;
+#else
+    (void)k;
+#endif
+}
+static void kdl_kilit_gir(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    if (k->kilit_aktif) EnterCriticalSection(&k->kilit);
+#elif defined(KDL_THREAD_POSIX)
+    if (k->kilit_aktif) pthread_mutex_lock(&k->kilit);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kilit_cik(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    if (k->kilit_aktif) LeaveCriticalSection(&k->kilit);
+#elif defined(KDL_THREAD_POSIX)
+    if (k->kilit_aktif) pthread_mutex_unlock(&k->kilit);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kilit_yok_et(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    if (k->kilit_aktif) DeleteCriticalSection(&k->kilit);
+#elif defined(KDL_THREAD_POSIX)
+    if (k->kilit_aktif) pthread_mutex_destroy(&k->kilit);
+#else
+    (void)k;
+#endif
+}
 
 KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     KdlKanal *k = (KdlKanal *)malloc(sizeof(KdlKanal));
@@ -350,42 +418,31 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     k->boyut = 0;
     k->bas = 0;
     k->son = 0;
-#ifdef KDL_THREAD_VAR
-    InitializeCriticalSection(&k->kilit);
-    k->kilit_aktif = 1;
-#endif
+    kdl_kilit_init(k);
     return k;
 }
 
 void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
     if (!k) return;
-#ifdef KDL_THREAD_VAR
-    if (k->kilit_aktif) EnterCriticalSection(&k->kilit);
-#endif
+    kdl_kilit_gir(k);
     if (k->boyut < k->kapasite) {
         k->veri[k->son] = deger;
         k->son = (k->son + 1) % k->kapasite;
         k->boyut++;
     }
-#ifdef KDL_THREAD_VAR
-    if (k->kilit_aktif) LeaveCriticalSection(&k->kilit);
-#endif
+    kdl_kilit_cik(k);
 }
 
 int32_t kdl_kanal_al(KdlKanal *k) {
     if (!k) return 0;
     int32_t v = 0;
-#ifdef KDL_THREAD_VAR
-    if (k->kilit_aktif) EnterCriticalSection(&k->kilit);
-#endif
+    kdl_kilit_gir(k);
     if (k->boyut > 0) {
         v = k->veri[k->bas];
         k->bas = (k->bas + 1) % k->kapasite;
         k->boyut--;
     }
-#ifdef KDL_THREAD_VAR
-    if (k->kilit_aktif) LeaveCriticalSection(&k->kilit);
-#endif
+    kdl_kilit_cik(k);
     return v;
 }
 
@@ -395,9 +452,7 @@ int32_t kdl_kanal_bos_mu(KdlKanal *k) {
 
 void kdl_kanal_serbest(KdlKanal *k) {
     if (!k) return;
-#ifdef KDL_THREAD_VAR
-    if (k->kilit_aktif) DeleteCriticalSection(&k->kilit);
-#endif
+    kdl_kilit_yok_et(k);
     free(k->veri);
     free(k);
 }
@@ -482,6 +537,72 @@ void kdl_bolge_serbest(KdlArena *a) {
 
 int32_t kdl_bolge_toplam_byte(KdlArena *a) {
     return a ? (int32_t)a->toplam_tahsis : 0;
+}
+
+/* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) === */
+
+/* Dosya ac: mod stringi "okuma"/"yazma"/"ekleme" (UTF-8 KEMGU) -> "rb"/"wb"/"ab" */
+void *kdl_dosya_ac(const char *yol, const char *mod) {
+    if (!yol || !mod) return NULL;
+    const char *c_mod = "rb";
+    /* "okuma" 5 byte, "yazma" 5 byte, "ekleme" 6 byte */
+    if (strcmp(mod, "yazma") == 0) c_mod = "wb";
+    else if (strcmp(mod, "ekleme") == 0) c_mod = "ab";
+    return (void *)fopen(yol, c_mod);
+}
+
+/* Dosyadan satir oku — heap'te metin doner (null = EOF) */
+const char *kdl_dosya_satir_oku(void *f) {
+    if (!f) return NULL;
+    char *buf = (char *)malloc(4096);
+    if (!buf) return NULL;
+    if (!fgets(buf, 4096, (FILE *)f)) {
+        free(buf);
+        return NULL;
+    }
+    /* Satir sonu '\n' kaldir */
+    size_t n = strlen(buf);
+    if (n > 0 && buf[n-1] == '\n') buf[n-1] = '\0';
+    if (n > 1 && buf[n-2] == '\r') buf[n-2] = '\0';
+    return buf;
+}
+
+/* Dosyaya metin yaz (newline eklenmez) */
+int32_t kdl_dosya_yaz(void *f, const char *s) {
+    if (!f || !s) return 0;
+    return (int32_t)fwrite(s, 1, strlen(s), (FILE *)f);
+}
+
+int32_t kdl_dosya_yazdir(void *f, const char *s) {
+    if (!f || !s) return 0;
+    size_t n = strlen(s);
+    fwrite(s, 1, n, (FILE *)f);
+    fputc('\n', (FILE *)f);
+    return (int32_t)(n + 1);
+}
+
+void kdl_dosya_kapat(void *f) {
+    if (f) fclose((FILE *)f);
+}
+
+int32_t kdl_dosya_bitti_mi(void *f) {
+    return f ? feof((FILE *)f) : 1;
+}
+
+/* Tum dosyayi oku (heap) */
+const char *kdl_dosya_tumu_oku(const char *yol) {
+    FILE *f = fopen(yol, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n < 0) { fclose(f); return NULL; }
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) { fclose(f); return NULL; }
+    size_t r = fread(buf, 1, (size_t)n, f);
+    buf[r] = '\0';
+    fclose(f);
+    return buf;
 }
 
 /* Arena-aware metin birlestirme (verilen bolgeye yerlestirir) */
