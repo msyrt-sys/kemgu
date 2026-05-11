@@ -62,6 +62,7 @@ typedef struct {
 typedef struct {
     const char *ad;
     int ad_uzunluk;
+    char ascii_ad[ISIM_BUF];   /* %struct.<ascii_ad> icin */
     struct {
         const char *ad;
         int ad_uzunluk;
@@ -79,10 +80,64 @@ typedef struct {
 typedef struct {
     const char *ad;
     int ad_uzunluk;
+    char ascii_ad[ISIM_BUF];   /* LLVM tarafi ascii ad */
     char donus[ISIM_BUF];
     char params[MAX_YAPI_ALAN][ISIM_BUF];  /* parametre LLVM tipleri */
     int param_sayi;
 } IslevKayit;
+
+/* Built-in (stdlib) islev tanim — KEMGU adi <-> LLVM (C runtime) adi.
+ * Bu islevler kullanici tarafindan tanimlanmaz; LLVM modulu basinda
+ * declare ile bildirilir ve runtime (kdl_runtime.c) ile link edilir. */
+typedef struct {
+    const char *kemgu_ad;       /* UTF-8 byte dizisi */
+    const char *llvm_ad;        /* C tarafi sembolu */
+    const char *donus;          /* LLVM tip */
+    int param_sayi;
+    const char *params[4];      /* LLVM param tipleri (max 4) */
+} BuiltinTanim;
+
+/* yazd\xc4\xb1r -> "yazdır" — \xb1 sonrasi 'r' hex degil, guvenli.
+ * Diger tum esleskler: \xb1 sonra _ veya k veya r (hex degil). */
+static const BuiltinTanim BUILTINLER[] = {
+    /* D.1 IO — yazdir varyantlari (newline ekler) */
+    { "yazd\xc4\xb1r",                "kdl_yazdir_metin",     "void", 1, {"ptr"} },
+    { "yazd\xc4\xb1r_tam",            "kdl_yazdir_tam",       "void", 1, {"i32"} },
+    { "yazd\xc4\xb1r_tam64",          "kdl_yazdir_tam64",     "void", 1, {"i64"} },
+    { "yazd\xc4\xb1r_kesirli",        "kdl_yazdir_kesirli",   "void", 1, {"double"} },
+    { "yazd\xc4\xb1r_mant\xc4\xb1ksal","kdl_yazdir_mantiksal","void", 1, {"i1"} },
+    { "yazd\xc4\xb1r_karakter",       "kdl_yazdir_karakter",  "void", 1, {"i32"} },
+    { "yazd\xc4\xb1r_sat\xc4\xb1r",   "kdl_yazdir_satir",     "void", 0, {0} },
+    /* yaz_* (newline yok) */
+    { "yaz",                           "kdl_yaz_metin",       "void", 1, {"ptr"} },
+    { "yaz_tam",                       "kdl_yaz_tam",         "void", 1, {"i32"} },
+    { "yaz_karakter",                  "kdl_yaz_karakter",    "void", 1, {"i32"} },
+    /* Hata cikis */
+    { "hata_yazd\xc4\xb1r",           "kdl_hata_yazdir",      "void", 1, {"ptr"} },
+    /* Okuma */
+    { "oku_tam",                       "kdl_oku_tam",         "i32",  0, {0} },
+    /* D.3 Metin */
+    { "metin_uzunluk",                 "kdl_metin_uzunluk",   "i32",  1, {"ptr"} },
+    /* D.4 Sayisal */
+    { "mutlak",                        "kdl_mutlak",          "i32",  1, {"i32"} },
+    { "min",                           "kdl_min",             "i32",  2, {"i32","i32"} },
+    { "maks",                          "kdl_maks",            "i32",  2, {"i32","i32"} },
+    { "mutlak64",                      "kdl_mutlak64",        "i64",  1, {"i64"} },
+    { "min64",                         "kdl_min64",           "i64",  2, {"i64","i64"} },
+    { "maks64",                        "kdl_maks64",          "i64",  2, {"i64","i64"} },
+};
+#define BUILTIN_SAYI (int)(sizeof(BUILTINLER) / sizeof(BUILTINLER[0]))
+
+static const BuiltinTanim *builtin_bul(const char *ad, int u) {
+    for (int i = 0; i < BUILTIN_SAYI; i++) {
+        size_t bl = strlen(BUILTINLER[i].kemgu_ad);
+        if ((size_t)u == bl &&
+            memcmp(ad, BUILTINLER[i].kemgu_ad, bl) == 0) {
+            return &BUILTINLER[i];
+        }
+    }
+    return NULL;
+}
 
 typedef struct {
     FILE *out;
@@ -123,20 +178,76 @@ static int ad_eslesir(const char *a, int au, const char *b) {
 static int yeni_reg(Codegen *c) { return c->reg++; }
 static int yeni_blok(Codegen *c) { return c->blok_id++; }
 
+/* KEMGU adlarini (UTF-8) LLVM identifier'ina (ASCII) cevir.
+ * LLVM identifier kurallari: [a-zA-Z_$.][a-zA-Z0-9_$.]*; UTF-8 byte'i
+ * quoted olmayan adda yasak. Turkce karakterleri ASCII karsiliklarina
+ * transliterate eder. */
+static void ad_ascii_yap(const char *kaynak, int uzunluk,
+                          char *cikti, size_t cikti_max) {
+    size_t out = 0;
+    int i = 0;
+    while (i < uzunluk && out + 1 < cikti_max) {
+        unsigned char c = (unsigned char)kaynak[i];
+        if (c < 0x80) {
+            cikti[out++] = (char)c;
+            i++;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < uzunluk) {
+            unsigned int cp =
+                (((unsigned int)(c & 0x1F)) << 6) |
+                ((unsigned int)((unsigned char)kaynak[i+1]) & 0x3Fu);
+            char r;
+            switch (cp) {
+                case 0x00E7: r = 'c'; break;
+                case 0x00C7: r = 'C'; break;
+                case 0x011F: r = 'g'; break;
+                case 0x011E: r = 'G'; break;
+                case 0x0131: r = 'i'; break;
+                case 0x0130: r = 'I'; break;
+                case 0x00F6: r = 'o'; break;
+                case 0x00D6: r = 'O'; break;
+                case 0x015F: r = 's'; break;
+                case 0x015E: r = 'S'; break;
+                case 0x00FC: r = 'u'; break;
+                case 0x00DC: r = 'U'; break;
+                default:     r = '_'; break;
+            }
+            cikti[out++] = r;
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            cikti[out++] = '_';
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            cikti[out++] = '_';
+            i += 4;
+        } else {
+            cikti[out++] = '_';
+            i++;
+        }
+    }
+    cikti[out] = 0;
+}
+
 /* KEMGU tipini LLVM tip stringine cevir. yapi adlari basit tip olarak
  * gelir (parser DUGUM_TIP_BASIT'e koyar), kullanici tipi mi diye
  * yapi_kayit listesiyle kontrol ederiz. */
-static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
-                              char *cikti, size_t cikti_max);
-
-static int yapi_var_mi(Codegen *c, const char *ad, int u) {
+static const YapiKayit *yapi_bul(Codegen *c, const char *ad, int u) {
     for (int i = 0; i < c->yapi_sayi; i++) {
         if (c->yapilar[i].ad_uzunluk == u &&
             memcmp(c->yapilar[i].ad, ad, (size_t)u) == 0) {
-            return 1;
+            return &c->yapilar[i];
         }
     }
-    return 0;
+    return NULL;
+}
+
+/* Sembol tipi "%struct.<ascii_ad>" formatinda — ascii ad ile yapiyi bul. */
+static const YapiKayit *yapi_bul_ascii(Codegen *c, const char *ascii_ad) {
+    for (int i = 0; i < c->yapi_sayi; i++) {
+        if (strcmp(c->yapilar[i].ascii_ad, ascii_ad) == 0) {
+            return &c->yapilar[i];
+        }
+    }
+    return NULL;
 }
 
 static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
@@ -171,8 +282,9 @@ static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
             { snprintf(cikti, cikti_max, "double"); return; }
 
         /* Bilinmeyen basit tip — yapi adi olabilir */
-        if (yapi_var_mi(c, ad, u)) {
-            snprintf(cikti, cikti_max, "%%struct.%.*s", u, ad);
+        const YapiKayit *yk = yapi_bul(c, ad, u);
+        if (yk) {
+            snprintf(cikti, cikti_max, "%%struct.%s", yk->ascii_ad);
             return;
         }
         snprintf(cikti, cikti_max, "i32"); /* fallback */
@@ -191,10 +303,13 @@ static void kemgu_tip_to_llvm(Codegen *c, const Dugum *tip,
     if (tip->tip == DUGUM_TIP_KULLANICI) {
         const Dugum *yol = tip->veri.tip_kullanici.yol;
         if (yol && yol->tip == DUGUM_TANIMLAYICI) {
-            snprintf(cikti, cikti_max, "%%struct.%.*s",
-                     yol->veri.tanimlayici.uzunluk,
-                     yol->veri.tanimlayici.metin);
-            return;
+            const YapiKayit *yk = yapi_bul(c,
+                yol->veri.tanimlayici.metin,
+                yol->veri.tanimlayici.uzunluk);
+            if (yk) {
+                snprintf(cikti, cikti_max, "%%struct.%s", yk->ascii_ad);
+                return;
+            }
         }
         snprintf(cikti, cikti_max, "ptr");
         return;
@@ -226,17 +341,7 @@ static Sembol *sembol_bul(Codegen *c, const char *ad, int u) {
     return NULL;
 }
 
-/* === Yapi kayitlari === */
-
-static const YapiKayit *yapi_bul(Codegen *c, const char *ad, int u) {
-    for (int i = 0; i < c->yapi_sayi; i++) {
-        if (c->yapilar[i].ad_uzunluk == u &&
-            memcmp(c->yapilar[i].ad, ad, (size_t)u) == 0) {
-            return &c->yapilar[i];
-        }
-    }
-    return NULL;
-}
+/* === Yapi kayitlari (yapi_bul yukarida) === */
 
 static int yapi_alan_indeks(const YapiKayit *yk, const char *ad, int u) {
     for (int i = 0; i < yk->alan_sayi; i++) {
@@ -291,6 +396,34 @@ static int integer_tip_mi(const char *tip) {
 }
 static int float_tip_mi(const char *tip) {
     return strcmp(tip, "float") == 0 || strcmp(tip, "double") == 0;
+}
+
+/* Iki integer tip arasi donusum: i1 -> kapsamli (zext), digerleri sext/trunc.
+ * src_reg ve src tipi ile dst tipini eslestirir; gerekirse yeni reg uretir
+ * ve donurur. Donusum gerekmezse src_reg geri doner. */
+static int int_cevir(Codegen *c, int src_reg,
+                     const char *src, const char *dst) {
+    if (strcmp(src, dst) == 0) return src_reg;
+    if (!integer_tip_mi(src) || !integer_tip_mi(dst)) return src_reg;
+    int sb = atoi(src + 1);
+    int db = atoi(dst + 1);
+    int newr = yeni_reg(c);
+    if (sb < db) {
+        /* i1 -> daha buyuk: zext (mantiksal degeri korur) */
+        if (sb == 1) {
+            fprintf(c->out, "  %%%d = zext %s %%%d to %s\n",
+                    newr, src, src_reg, dst);
+        } else {
+            fprintf(c->out, "  %%%d = sext %s %%%d to %s\n",
+                    newr, src, src_reg, dst);
+        }
+    } else if (sb > db) {
+        fprintf(c->out, "  %%%d = trunc %s %%%d to %s\n",
+                newr, src, src_reg, dst);
+    } else {
+        return src_reg;
+    }
+    return newr;
 }
 
 /* Bos sonuc */
@@ -542,8 +675,55 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
         }
         const char *fad = hedef->veri.tanimlayici.metin;
         int fu = hedef->veri.tanimlayici.uzunluk;
+
+        /* Ozel intrinsic: uzunluk(dizi) — compile-time sabit boyut */
+        if (fu == 7 && memcmp(fad, "uzunluk", 7) == 0 &&
+            d->veri.cagri.sayi == 1) {
+            const Dugum *arg = d->veri.cagri.argumanlar[0];
+            if (arg && arg->tip == DUGUM_TANIMLAYICI) {
+                Sembol *s = sembol_bul(c, arg->veri.tanimlayici.metin,
+                                       arg->veri.tanimlayici.uzunluk);
+                if (s && s->tip[0] == '[') {
+                    int n = atoi(s->tip + 1);
+                    int r = yeni_reg(c);
+                    fprintf(c->out, "  %%%d = add i32 0, %d\n", r, n);
+                    IfadeSonuc out;
+                    out.reg = r;
+                    snprintf(out.tip, ISIM_BUF, "i32");
+                    out.is_lvalue = 0;
+                    out.lvalue_tip[0] = 0;
+                    return out;
+                }
+            }
+            fprintf(c->out, "  ; HATA: uzunluk() dizi tanimlayicisi bekler\n");
+            return hata_sonuc();
+        }
+
+        /* Kullanici tanimi -> sonra built-in */
         const IslevKayit *ik = islev_bul(c, fad, fu);
-        if (!ik) {
+        const BuiltinTanim *bt = NULL;
+        const char *call_donus;
+        const char *call_llvm_ad;
+        char call_llvm_ad_buf[ISIM_BUF];
+        int call_param_sayi;
+        const char *call_params[MAX_YAPI_ALAN];
+
+        if (ik) {
+            call_donus = ik->donus;
+            snprintf(call_llvm_ad_buf, ISIM_BUF, "%s", ik->ascii_ad);
+            call_llvm_ad = call_llvm_ad_buf;
+            call_param_sayi = ik->param_sayi;
+            for (int i = 0; i < ik->param_sayi && i < MAX_YAPI_ALAN; i++) {
+                call_params[i] = ik->params[i];
+            }
+        } else if ((bt = builtin_bul(fad, fu)) != NULL) {
+            call_donus = bt->donus;
+            call_llvm_ad = bt->llvm_ad;
+            call_param_sayi = bt->param_sayi;
+            for (int i = 0; i < bt->param_sayi && i < 4; i++) {
+                call_params[i] = bt->params[i];
+            }
+        } else {
             fprintf(c->out, "  ; HATA: tanimsiz islev %.*s\n", fu, fad);
             return hata_sonuc();
         }
@@ -560,19 +740,23 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
         }
         for (int i = 0; i < nargs; i++) {
             IfadeSonuc x = ifade_uret(c, d->veri.cagri.argumanlar[i]);
-            argregs[i] = x.reg;
-            snprintf(argtips[i], ISIM_BUF, "%s",
-                     (i < ik->param_sayi) ? ik->params[i] : x.tip);
+            const char *beklenen = (i < call_param_sayi) ? call_params[i] : x.tip;
+            if (x.reg >= 0) {
+                argregs[i] = int_cevir(c, x.reg, x.tip, beklenen);
+            } else {
+                argregs[i] = x.reg;
+            }
+            snprintf(argtips[i], ISIM_BUF, "%s", beklenen);
         }
 
-        int isvoid = (strcmp(ik->donus, "void") == 0);
+        int isvoid = (strcmp(call_donus, "void") == 0);
         int rr = isvoid ? 0 : yeni_reg(c);
 
         if (isvoid) {
-            fprintf(c->out, "  call void @%.*s(", fu, fad);
+            fprintf(c->out, "  call void @%s(", call_llvm_ad);
         } else {
-            fprintf(c->out, "  %%%d = call %s @%.*s(",
-                    rr, ik->donus, fu, fad);
+            fprintf(c->out, "  %%%d = call %s @%s(",
+                    rr, call_donus, call_llvm_ad);
         }
         for (int i = 0; i < nargs; i++) {
             if (i) fputs(", ", c->out);
@@ -584,7 +768,7 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
 
         IfadeSonuc out;
         out.reg = isvoid ? 0 : rr;
-        snprintf(out.tip, ISIM_BUF, "%s", ik->donus);
+        snprintf(out.tip, ISIM_BUF, "%s", call_donus);
         out.is_lvalue = 0;
         out.lvalue_tip[0] = 0;
         return out;
@@ -598,13 +782,11 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
             fprintf(c->out, "  ; HATA: bilinmeyen yapi %.*s\n", yu, yad);
             return hata_sonuc();
         }
+        const char *aad = yk->ascii_ad;
         /* alloca + her alana store + yapinin loaded value'sunu don */
         int addr = yeni_reg(c);
-        fprintf(c->out, "  %%%d = alloca %%struct.%.*s\n", addr, yu, yad);
+        fprintf(c->out, "  %%%d = alloca %%struct.%s\n", addr, aad);
 
-        /* Alan atamalarini sirayla isle (KEMGU'da sira free; biz isim bazli
-         * arariz, ama parser sirasi ile struct sirasi ayni degilse de
-         * gep indeksini yapi kayit sirasi ile uretiriz). */
         int na = d->veri.yapi_olustur.alan_sayi;
         for (int i = 0; i < na; i++) {
             const Dugum *aa = d->veri.yapi_olustur.alanlar[i];
@@ -621,18 +803,17 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
             if (v.reg < 0) continue;
             int gep = yeni_reg(c);
             fprintf(c->out,
-                "  %%%d = getelementptr inbounds %%struct.%.*s, ptr %%%d, i32 0, i32 %d\n",
-                gep, yu, yad, addr, idx);
+                "  %%%d = getelementptr inbounds %%struct.%s, ptr %%%d, i32 0, i32 %d\n",
+                gep, aad, addr, idx);
             fprintf(c->out, "  store %s %%%d, ptr %%%d\n",
                     yk->alanlar[idx].tip, v.reg, gep);
         }
-        /* Yapinin loaded value'sunu donelim */
         int loaded = yeni_reg(c);
-        fprintf(c->out, "  %%%d = load %%struct.%.*s, ptr %%%d\n",
-                loaded, yu, yad, addr);
+        fprintf(c->out, "  %%%d = load %%struct.%s, ptr %%%d\n",
+                loaded, aad, addr);
         IfadeSonuc out;
         out.reg = loaded;
-        snprintf(out.tip, ISIM_BUF, "%%struct.%.*s", yu, yad);
+        snprintf(out.tip, ISIM_BUF, "%%struct.%.96s", aad);
         out.is_lvalue = 0;
         out.lvalue_tip[0] = 0;
         return out;
@@ -649,16 +830,14 @@ static IfadeSonuc ifade_uret(Codegen *c, const Dugum *d) {
             Sembol *s = sembol_bul(c, nesne_d->veri.tanimlayici.metin,
                                    nesne_d->veri.tanimlayici.uzunluk);
             if (!s) return hata_sonuc();
-            /* s->tip "%struct.Ad" olmali */
+            /* s->tip "%struct.<ascii_ad>" olmali */
             if (strncmp(s->tip, "%struct.", 8) != 0) {
                 fprintf(c->out, "  ; HATA: %.*s yapi degil\n",
                         nesne_d->veri.tanimlayici.uzunluk,
                         nesne_d->veri.tanimlayici.metin);
                 return hata_sonuc();
             }
-            const char *yad = s->tip + 8;
-            int yu = (int)strlen(yad);
-            const YapiKayit *yk = yapi_bul(c, yad, yu);
+            const YapiKayit *yk = yapi_bul_ascii(c, s->tip + 8);
             if (!yk) return hata_sonuc();
             int idx = yapi_alan_indeks(yk, alan_ad, alan_u);
             if (idx < 0) {
@@ -821,29 +1000,8 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
         if (d->veri.degisken.deger) {
             IfadeSonuc v = ifade_uret(c, d->veri.degisken.deger);
             if (v.reg < 0) return;
-            /* Tip uyumsuzlugu: basit sayisal genisletme/daraltma */
-            /* Bu durum cogunlukla i32 -> i64 vs olur — sext kullan. */
-            const char *src = v.tip;
-            const char *dst = tip;
-            int sreg = v.reg;
-            if (strcmp(src, dst) != 0 &&
-                integer_tip_mi(src) && integer_tip_mi(dst)) {
-                int sb = atoi(src + 1);
-                int db = atoi(dst + 1);
-                int newr = yeni_reg(c);
-                if (sb < db) {
-                    fprintf(c->out, "  %%%d = sext %s %%%d to %s\n",
-                            newr, src, sreg, dst);
-                } else if (sb > db) {
-                    fprintf(c->out, "  %%%d = trunc %s %%%d to %s\n",
-                            newr, src, sreg, dst);
-                } else {
-                    fprintf(c->out, "  %%%d = bitcast %s %%%d to %s\n",
-                            newr, src, sreg, dst);
-                }
-                sreg = newr;
-            }
-            fprintf(c->out, "  store %s %%%d, ptr %s\n", dst, sreg, addr_str);
+            int sreg = int_cevir(c, v.reg, v.tip, tip);
+            fprintf(c->out, "  store %s %%%d, ptr %s\n", tip, sreg, addr_str);
         }
         return;
     }
@@ -869,9 +1027,8 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             Sembol *s = sembol_bul(c, nesne_d->veri.tanimlayici.metin,
                                    nesne_d->veri.tanimlayici.uzunluk);
             if (!s) return;
-            const char *yad = s->tip + 8; /* %struct. atla */
-            int yu = (int)strlen(yad);
-            const YapiKayit *yk = yapi_bul(c, yad, yu);
+            if (strncmp(s->tip, "%struct.", 8) != 0) return;
+            const YapiKayit *yk = yapi_bul_ascii(c, s->tip + 8);
             if (!yk) return;
             int idx = yapi_alan_indeks(yk, hedef->veri.erisim.alan,
                                        hedef->veri.erisim.alan_uzunluk);
@@ -939,25 +1096,8 @@ static void deyim_uret(Codegen *c, const Dugum *d) {
             if (v.reg < 0) {
                 fprintf(c->out, "  ret %s 0\n", c->aktif_donus);
             } else {
-                /* Tip uyumsuzluk: integer genislet/dalt */
-                const char *src = v.tip;
-                const char *dst = c->aktif_donus;
-                int sreg = v.reg;
-                if (strcmp(src, dst) != 0 &&
-                    integer_tip_mi(src) && integer_tip_mi(dst)) {
-                    int sb = atoi(src + 1);
-                    int db = atoi(dst + 1);
-                    int newr = yeni_reg(c);
-                    if (sb < db) {
-                        fprintf(c->out, "  %%%d = sext %s %%%d to %s\n",
-                                newr, src, sreg, dst);
-                    } else if (sb > db) {
-                        fprintf(c->out, "  %%%d = trunc %s %%%d to %s\n",
-                                newr, src, sreg, dst);
-                    }
-                    sreg = newr;
-                }
-                fprintf(c->out, "  ret %s %%%d\n", dst, sreg);
+                int sreg = int_cevir(c, v.reg, v.tip, c->aktif_donus);
+                fprintf(c->out, "  ret %s %%%d\n", c->aktif_donus, sreg);
             }
         } else {
             if (strcmp(c->aktif_donus, "void") == 0) {
@@ -1057,6 +1197,7 @@ static void yapi_kaydet(Codegen *c, const Dugum *y) {
     YapiKayit *yk = &c->yapilar[c->yapi_sayi++];
     yk->ad = y->veri.yapi.ad;
     yk->ad_uzunluk = y->veri.yapi.ad_uzunluk;
+    ad_ascii_yap(yk->ad, yk->ad_uzunluk, yk->ascii_ad, ISIM_BUF);
     yk->alan_sayi = 0;
     for (int i = 0; i < y->veri.yapi.alan_sayi && i < MAX_YAPI_ALAN; i++) {
         const Dugum *al = y->veri.yapi.alanlar[i];
@@ -1069,7 +1210,7 @@ static void yapi_kaydet(Codegen *c, const Dugum *y) {
 }
 
 static void yapi_emit(Codegen *c, const YapiKayit *yk) {
-    fprintf(c->out, "%%struct.%.*s = type { ", yk->ad_uzunluk, yk->ad);
+    fprintf(c->out, "%%struct.%s = type { ", yk->ascii_ad);
     for (int i = 0; i < yk->alan_sayi; i++) {
         if (i) fputs(", ", c->out);
         fputs(yk->alanlar[i].tip, c->out);
@@ -1084,6 +1225,7 @@ static void islev_kaydet(Codegen *c, const Dugum *isl) {
     IslevKayit *ik = &c->islevler[c->islev_sayi++];
     ik->ad = isl->veri.islev.ad;
     ik->ad_uzunluk = isl->veri.islev.ad_uzunluk;
+    ad_ascii_yap(ik->ad, ik->ad_uzunluk, ik->ascii_ad, ISIM_BUF);
     kemgu_tip_to_llvm(c, isl->veri.islev.donus_tipi, ik->donus, ISIM_BUF);
     ik->param_sayi = 0;
     for (int i = 0; i < isl->veri.islev.param_sayi &&
@@ -1110,8 +1252,7 @@ static void islev_uret(Codegen *c, const Dugum *isl) {
     c->sembol_sayi = 0;
     c->block_terminated = 0;
 
-    fprintf(c->out, "define %s @%.*s(", ik->donus,
-            isl->veri.islev.ad_uzunluk, isl->veri.islev.ad);
+    fprintf(c->out, "define %s @%s(", ik->donus, ik->ascii_ad);
     for (int i = 0; i < ik->param_sayi; i++) {
         if (i) fputs(", ", c->out);
         fprintf(c->out, "%s %%p%d", ik->params[i], i);
@@ -1177,8 +1318,23 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     memset(&c, 0, sizeof(c));
     c.out = out;
 
-    fputs("; KEMGU LLVM IR (text uretici, ADIM A genisletilmis)\n", out);
+    fputs("; KEMGU LLVM IR (text uretici, ADIM D — stdlib bagli)\n", out);
     fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+
+    /* Standart kutuphane (KDL) built-in islev declare'lari.
+     * Hepsi runtime/kdl_runtime.c icinde implement edilir; clang ile link
+     * edilirken bagimlilik cozulur. */
+    fputs("; --- KDL standart kutuphane bildirimleri ---\n", out);
+    for (int i = 0; i < BUILTIN_SAYI; i++) {
+        const BuiltinTanim *b = &BUILTINLER[i];
+        fprintf(out, "declare %s @%s(", b->donus, b->llvm_ad);
+        for (int j = 0; j < b->param_sayi; j++) {
+            if (j) fputs(", ", out);
+            fputs(b->params[j], out);
+        }
+        fputs(")\n", out);
+    }
+    fputc('\n', out);
 
     /* 1. Yapi tanimlarini topla + emit et */
     for (int i = 0; i < program->veri.program.sayi; i++) {

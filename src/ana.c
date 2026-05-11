@@ -138,24 +138,67 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
+/* KEMGU Standart Kutuphane Prelude (D.5):
+ *
+ * --llvm modunda kullanici kaynagina otomatik prepend edilir. Standart
+ * hata yapisi ve yardimci islev tanimlarini saglar.
+ *
+ * Turkce UTF-8 hex escape: \xb1 sonra hex-rakam (i) varsa concat ile ayir
+ * (CLAUDE.md "Turkce UTF-8 Dikkat Noktasi" kurali). */
+static const char *PRELUDE_KEMGU =
+    "// === KEMGU Prelude (otomatik) ===\n"
+    "yap\xc4\xb1 StandartHata {\n"
+    "    kod: tam32;\n"
+    "    mesaj: metin;\n"
+    "}\n"
+    "\n"
+    "i\xc5\x9flev hata_olustur(kod: tam32, mesaj: metin) -> StandartHata {\n"
+    "    ver StandartHata { kod: kod, mesaj: mesaj };\n"
+    "}\n"
+    "\n"
+    "i\xc5\x9flev hata_yazd\xc4\xb1r_detayli(h: StandartHata) {\n"
+    "    yaz(\"hata \"); yaz_tam(h.kod); yaz(\": \"); hata_yazd\xc4\xb1r(h.mesaj);\n"
+    "}\n"
+    "// === Prelude sonu ===\n";
+
+static char *prelude_birlestir(const char *kaynak) {
+    size_t pre_len = strlen(PRELUDE_KEMGU);
+    size_t src_len = strlen(kaynak);
+    char *cikti = (char *)malloc(pre_len + src_len + 1);
+    if (!cikti) return NULL;
+    memcpy(cikti, PRELUDE_KEMGU, pre_len);
+    memcpy(cikti + pre_len, kaynak, src_len + 1);
+    return cikti;
+}
+
 static int mode_llvm(const char *kaynak, const char *dosya_adi) {
     Arena *a = arena_olustur(0);
     if (!a) {
         fprintf(stderr, "Arena olusturulamadi\n");
         return 1;
     }
+
+    /* Prelude'u kullanici kaynagina prepend et (StandartHata + yardimcilar) */
+    char *birlesik = prelude_birlestir(kaynak);
+    if (!birlesik) {
+        arena_serbest(a);
+        return 1;
+    }
+
     Lexer l;
-    lexer_baslat(&l, kaynak, dosya_adi);
+    lexer_baslat(&l, birlesik, dosya_adi);
     Parser p;
-    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+    parser_baslat(&p, &l, a, dosya_adi, birlesik);
     Dugum *prog = parser_calistir(&p);
     if (p.hata_sayisi > 0) {
         fprintf(stderr, "Parser hatalari: %d (LLVM IR uretilmedi)\n",
                 p.hata_sayisi);
+        free(birlesik);
         arena_serbest(a);
         return 1;
     }
     llvm_ir_uret(prog, stdout);
+    free(birlesik);
     arena_serbest(a);
     return 0;
 }

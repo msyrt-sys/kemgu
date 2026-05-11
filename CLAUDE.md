@@ -403,27 +403,55 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
 
 ### 🎉🎉🎉 ADIM A TAMAMLANDI — KEMGU'da FizzBuzz, recursive fibonacci, yapı/dizi yazılabiliyor
 
+24. **Standart Kütüphane (ADIM D) — Gerçek I/O + temel tipler**
+    - **`runtime/kdl_runtime.c`** — C tarafı runtime fonksiyon kütüphanesi
+      (`kdl_` prefiks). Clang ile link edilir: `clang prog.ll runtime/kdl_runtime.c`.
+    - **Built-in işlev tablosu** (`BUILTINLER[]` in llvm.c) — KEMGU adı ↔ LLVM (C) adı
+      eşlemesi. LLVM modülü başında `declare` ile otomatik bildirim.
+    - **ASCII transliterasyon** (`ad_ascii_yap`) — KEMGU işlev/yapı adlarındaki
+      Türkçe karakterleri (ı→i, ş→s, ğ→g, ç→c, ö→o, ü→u) LLVM identifier'a uyarlar
+      (LLVM unquoted ad'larda UTF-8 byte yasaktır).
+    - **D.1 IO:** `yazdır`, `yazdır_tam`, `yazdır_tam64`, `yazdır_kesirli`,
+      `yazdır_mantıksal` (i1 ABI için _Bool kullanılır), `yazdır_karakter`,
+      `yazdır_satır`, `yaz`, `yaz_tam`, `yaz_karakter` (newline'sız), `hata_yazdır`
+      (stderr), `oku_tam`
+    - **D.3 Metin:** `metin_uzunluk(s)` — `strlen` wrap
+    - **D.4 Sayısal:** `mutlak`, `min`, `maks` (i32 + i64 varyantlar)
+    - **D.2 Dizi:** `uzunluk(dizi)` — compile-time intrinsic, sabit boyutlu
+      `[N x T]` LLVM tipinden N'i çıkarır (LLVM IR'de literal sabit)
+    - **D.5 Hata:** `StandartHata { kod: tam32; mesaj: metin; }` + `hata_olustur` +
+      `hata_yazdır_detayli` — `ana.c` mode_llvm'de **prelude** olarak kullanıcı
+      kaynağına otomatik prepend edilir.
+    - **`int_cevir` yardımcısı:** i1→i32 zext, diğer integer dönüşümler
+      için sext/trunc (mantıksal değerlerin sext olması bug'ını önler).
+    - **12 LLVM entegrasyon testi** (7 mevcut + 5 yeni: hello, say, stdlib_karisim,
+      fib_yazdir, dizi_yazdir) — exit code + **stdout golden file** karşılaştırması.
+
+### 🎉🎉🎉🎉 ADIM D TAMAMLANDI — KEMGU artık konsola yazdırabiliyor
+
 ```bash
-# Recursive fibonacci
-cat > fib.kem << 'EOF'
-işlev fib(n: tam32) -> tam32 {
-    eğer n < 2 { ver n; }
-    ver fib(n - 1) + fib(n - 2);
+# Hello world
+cat > hello.kem << 'EOF'
+işlev main() -> tam32 {
+    yazdır("Merhaba, KEMGU!");
+    ver 0;
 }
-işlev main() -> tam32 { ver fib(10); }
 EOF
-./build/kemgu --llvm fib.kem | clang -x ir - -o fib.exe
-./fib.exe; echo $?    # → 55 ✓
+./build/kemgu --llvm hello.kem > hello.ll
+clang hello.ll runtime/kdl_runtime.c -o hello.exe
+./hello.exe        # → Merhaba, KEMGU!
 ```
 
 ### Sıradaki büyük seçenekler:
-- **B: stdlib + printf bağlama** (gerçek I/O — şu an cikis kodu ile test)
 - **C: `eşleş` (match)** LLVM kod üretimi (switch/br zinciri)
-- **D: `için` (for-each)** Dizi<T> üzerinde döngü
+- **F: `için` (for-each)** Dizi<T> üzerinde döngü
 - **E: Tam Katman 1 escape analizi** (DFA tabanlı bölge çözümleyici)
-- **F: Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
+- **B2: Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
 - **G: `hiç`/`değer` ifade desteği + pattern binding**
 - **H: Generic monomorphization** LLVM tarafı (Kutu<tam32> → ayrı struct)
+- **I: Dinamik Dizi** (heap alloc — malloc/realloc bağlama; ekle/çıkar/dilim)
+- **J: metin_birleştir/böl/format** (heap alloc gereksinimi)
+- **K: `sonuç<T,H>` IR kod üretimi** (tagged union)
 - **Bootstrapping** (uzun vade)
 
 ### İlerideki Fazlar
@@ -493,21 +521,22 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉🎉 ADIM A TAMAMLANDI — KEMGU GERÇEK PROGRAMLAR DERLEYEBİLİYOR**
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR (genişletilmiş) → native exe
-  - LLVM A.1-A.8: parametreler, lokal değişken, kontrol akışı, çağrı, karşılaştırma,
-    mantıksal, yapı, dizi, karakter/string
-- **7 LLVM entegrasyon testi** (`test/test_llvm.sh` + `mingw32-make calistir_llvm_test`):
-  toplama, mutlak, döngü_toplam, fib_recursive, nokta_yapi, dizi_toplam, fizzbuzz_toplam
+- **Faz:** **🎉🎉🎉🎉 ADIM A + D TAMAMLANDI — KEMGU artık yazdırabilir, IO yapabilir**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR + stdlib → native exe
+  - LLVM A.1-A.8: parametre, lokal, kontrol akışı, çağrı, karşılaştırma, yapı, dizi, char/str
+  - Stdlib D.1-D.5: IO (yazdır/yaz/oku), metin_uzunluk, mutlak/min/maks, dizi uzunluk,
+    StandartHata prelude
+- **12 LLVM entegrasyon testi** (`test/test_llvm.sh` + `mingw32-make calistir_llvm_test`):
+  exit code + stdout golden file karşılaştırması
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
   - Eşitlik: Nominal (Rust/Java gibi)
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
-- **Sıradaki büyük seçenekler:** B (stdlib + printf), C (`eşleş` IR), D (`için` IR),
-  E (tam escape DFA), F (Katman 2 concurrency), G (`hiç`/`değer` + pattern binding),
-  H (generic monomorphization). Kullanıcı önceliklerini belirler.
+- **Sıradaki büyük seçenekler:** C (`eşleş` IR), F (`için` IR), E (tam escape DFA),
+  G (`hiç`/`değer` + pattern binding), H (generic monomorph), I (dinamik dizi),
+  J (metin_birleştir/böl), K (`sonuç<T,H>` IR). Kullanıcı önceliklerini belirler.
 
 ---
 
