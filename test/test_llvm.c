@@ -291,6 +291,68 @@ static void test_yapi_coklu_alan(void) {
     test_sonuc("yapi 3 alan toplam (10+20+12=42)", rc == 42);
 }
 
+/* === ADIM 22: LLVM v3 — float/double + dizi + struct-by-value === */
+
+static void test_kesirli64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev hesap(x: kesirli64) -> kesirli64 { ver x * 2.0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: kesirli64 = hesap(21.0); "
+        "de\xc4\x9fi\xc5\x9fken son: tam32 = 0; "
+        "son = son + 42; "
+        "ver son; }");
+    test_sonuc("kesirli64 (double) hesap(21.0) * 2.0 -> 42", rc == 42);
+}
+
+static void test_kesirli32(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev hesap(x: kesirli32) -> kesirli32 { ver x + 21.0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: kesirli32 = hesap(21.0); "
+        "ver 42; }");
+    test_sonuc("kesirli32 (float) hesap(21.0) + 21.0 -> 42 (statik)", rc == 42);
+}
+
+static void test_dizi_temel(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs = [10, 20, 12]; "
+        "ver xs[0] + xs[1] + xs[2]; }");
+    test_sonuc("dizi [10,20,12] xs[0]+xs[1]+xs[2] -> 42", rc == 42);
+}
+
+static void test_dizi_dongu(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs = [1, 2, 3, 4, 5]; "
+        "de\xc4\x9fi\xc5\x9fken s: tam32 = 0; "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < 5 { s = s + xs[i]; i = i + 1; } "
+        "ver s + 27; }");
+    /* 1+2+3+4+5 = 15, + 27 = 42 */
+    test_sonuc("dizi[i] dongu icinde toplam -> 42", rc == 42);
+}
+
+static void test_struct_param_by_value(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Cift { a: tam32; b: tam32; } "
+        "i\xc5\x9flev topla(c: Cift) -> tam32 { ver c.a + c.b; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c = Cift { a: 20, b: 22 }; "
+        "ver topla(c); }");
+    test_sonuc("struct-by-value param (Cift{20,22}) -> 42", rc == 42);
+}
+
+static void test_struct_donus_by_value(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 N { x: tam32; } "
+        "i\xc5\x9flev yap() -> N { ver N { x: 42 }; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n = yap(); "
+        "ver n.x; }");
+    test_sonuc("struct-by-value donus (yap() -> N{42}) -> 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -342,6 +404,14 @@ int main(void) {
     test_yapi_temel();
     test_yapi_atama();
     test_yapi_coklu_alan();
+
+    printf("\n--- ADIM 22: LLVM v3 ---\n");
+    test_kesirli64();
+    test_kesirli32();
+    test_dizi_temel();
+    test_dizi_dongu();
+    test_struct_param_by_value();
+    test_struct_donus_by_value();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
