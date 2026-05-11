@@ -921,10 +921,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
 
-            /* Built-in yazdir -> puts mapping */
+            /* Built-in libc mapping */
             if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
-                cagri_adi = "puts";
-                cagri_adi_uz = 4;
+                cagri_adi = "puts"; cagri_adi_uz = 4;
+            } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
+                cagri_adi = "malloc"; cagri_adi_uz = 6;
+            } else if (cagri_adi_uz == 14 &&
+                       memcmp(cagri_adi, "bellek_serbest", 14) == 0) {
+                cagri_adi = "free"; cagri_adi_uz = 4;
+            } else if (cagri_adi_uz == 14 &&
+                       memcmp(cagri_adi, "bellek_kopyala", 14) == 0) {
+                cagri_adi = "memcpy"; cagri_adi_uz = 6;
             }
 
             const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
@@ -1369,7 +1376,10 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
     fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
     /* Built-in extern (libc) bildirimleri */
-    fputs("declare i32 @puts(ptr)\n\n", out);
+    fputs("declare i32 @puts(ptr)\n", out);
+    fputs("declare ptr @malloc(i64)\n", out);
+    fputs("declare void @free(ptr)\n", out);
+    fputs("declare ptr @memcpy(ptr, ptr, i64)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
