@@ -1471,6 +1471,65 @@ static void test_dizi_olustur_tam64(void) {
     arena_serbest(a);
 }
 
+/* === Madde E: Tip donusturme (olarak) === */
+
+static void test_olarak_tam_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x olarak tam64; "
+        "ver 0; }",
+        a);
+    test_sonuc("x: tam32 olarak tam64 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_tam_kesirli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = x olarak kesirli64; "
+        "ver 0; }",
+        a);
+    test_sonuc("tam32 olarak kesirli64 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_kesirli_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = 3.14; "
+        "ver f olarak tam32; }",
+        a);
+    test_sonuc("kesirli64 olarak tam32 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_metin_yasak(void) {
+    Arena *a = arena_olustur(0);
+    /* metin -> tam32 yasak (kaynak sayisal degil) */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver \"hi\" olarak tam32; }",
+        a);
+    test_sonuc("metin olarak tam32 -> hata (E002)", h > 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_karakter_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c: karakter = 'A'; "
+        "ver c olarak tam32; }",
+        a);
+    test_sonuc("karakter olarak tam32 — OK", h == 0);
+    arena_serbest(a);
+}
+
 /* L-1: Lambda govde scope — parametre referansi */
 static void test_lambda_govde(void) {
     Arena *a = arena_olustur(0);
@@ -1736,6 +1795,11 @@ int main(void) {
     test_dizi_ekle_tip_uyumsuz();
     test_dizi_al_donus();
     test_dizi_olustur_tam64();
+    test_olarak_tam_tam();
+    test_olarak_tam_kesirli();
+    test_olarak_kesirli_tam();
+    test_olarak_metin_yasak();
+    test_olarak_karakter_tam();
     test_sonuc_konstrüktörler();
 
     printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");

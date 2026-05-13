@@ -670,6 +670,36 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             return t_basit(tk, TIP_BOS);
         }
 
+        /* === Madde E: explicit tip donusturme (x olarak T) === */
+        case DUGUM_TIP_DONUSTUR: {
+            TipBilgisi *kt = tip_belirle(tk, d->veri.tip_donustur.kaynak);
+            if (kt->kategori == TIP_HATA) return t_hata(tk);
+            TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.tip_donustur.hedef_tip);
+            if (!ht || ht->kategori == TIP_HATA) return t_hata(tk);
+            /* v1: sayisal tipler arasi (tam* / dtam* / kesirli*) izin verilir;
+             * mantiksal hedef yasak; lineer hedef yasak. */
+            if (ht->kategori == TIP_TEKKEZ) {
+                tip_hata(tk, d, "E001",
+                    "olarak ile tekkez<T> hedeflenemez (Linear Types kuralı)");
+                return t_hata(tk);
+            }
+            int kaynak_sayisal = tip_sayisal_mi(kt);
+            int hedef_sayisal = tip_sayisal_mi(ht);
+            if (!kaynak_sayisal || !hedef_sayisal) {
+                /* Karakter <-> tam* da izinli */
+                int char_to_int = (kt->kategori == TIP_KARAKTER &&
+                                   tip_tamsayi_mi(ht));
+                int int_to_char = (tip_tamsayi_mi(kt) &&
+                                   ht->kategori == TIP_KARAKTER);
+                if (!char_to_int && !int_to_char) {
+                    tip_hata(tk, d, "E002",
+                        "olarak: kaynak ve hedef sayisal/karakter olmali");
+                    return t_hata(tk);
+                }
+            }
+            return ht;
+        }
+
         /* === Ikili === */
         case DUGUM_IKILI: {
             TipBilgisi *sol = tip_belirle(tk, d->veri.ikili.sol);

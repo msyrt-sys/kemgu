@@ -1202,6 +1202,51 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return s;
         }
 
+        case DUGUM_TIP_DONUSTUR: {
+            /* Madde E: x olarak T — explicit cast */
+            const char *hedef = ast_tip_to_ir(g, d->veri.tip_donustur.hedef_tip);
+            if (!hedef) hedef = "i32";
+            IfadeSonuc kaynak = ifade_uret(g, d->veri.tip_donustur.kaynak,
+                                            hedef);
+            if (strcmp(kaynak.tip, hedef) == 0) {
+                return kaynak;
+            }
+            int k_kesirli = tip_kesirli_mi(kaynak.tip);
+            int h_kesirli = tip_kesirli_mi(hedef);
+            int r = yeni_reg(g);
+            if (!k_kesirli && !h_kesirli) {
+                /* int -> int: sext/trunc (int_donustur kullanir) */
+                int rr = int_donustur(g, kaynak.reg, kaynak.tip, hedef);
+                IfadeSonuc s = { rr, hedef };
+                return s;
+            }
+            if (!k_kesirli && h_kesirli) {
+                /* int -> float/double: sitofp */
+                fprintf(g->out, "  %%%d = sitofp %s %%%d to %s\n",
+                        r, kaynak.tip, kaynak.reg, hedef);
+                IfadeSonuc s = { r, hedef };
+                return s;
+            }
+            if (k_kesirli && !h_kesirli) {
+                /* float/double -> int: fptosi */
+                fprintf(g->out, "  %%%d = fptosi %s %%%d to %s\n",
+                        r, kaynak.tip, kaynak.reg, hedef);
+                IfadeSonuc s = { r, hedef };
+                return s;
+            }
+            /* float <-> double */
+            if (strcmp(kaynak.tip, "float") == 0 &&
+                strcmp(hedef, "double") == 0) {
+                fprintf(g->out, "  %%%d = fpext float %%%d to double\n",
+                        r, kaynak.reg);
+            } else {
+                fprintf(g->out, "  %%%d = fptrunc double %%%d to float\n",
+                        r, kaynak.reg);
+            }
+            IfadeSonuc s = { r, hedef };
+            return s;
+        }
+
         default: {
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
