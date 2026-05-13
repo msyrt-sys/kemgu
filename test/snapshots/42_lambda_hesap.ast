@@ -1,0 +1,46 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "hesapla"  1:1
+    parametreler (2):
+      PARAMETRE "f"  1:16
+        TIP_ISLEV  1:19
+      PARAMETRE "x"  1:43
+        TIP_BASIT "tam32"  1:46
+    donus_tipi:
+      TIP_BASIT "tam32"  1:56
+    govde:
+      BLOK (1 deyim)  1:62
+        VER  2:5
+          CAGRI  2:10
+            hedef:
+              TANIMLAYICI "f"  2:9
+            argumanlar (1):
+              TANIMLAYICI "x"  2:11
+  ISLEV "main"  5:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  5:18
+    govde:
+      BLOK (3 deyim)  5:24
+        DEGISKEN "kare"  6:5
+          deger:
+            LAMBDA  6:23
+        DEGISKEN "iki_kat"  7:5
+          deger:
+            LAMBDA  7:26
+        VER  8:5
+          IKILI +  8:26
+            CAGRI  8:16
+              hedef:
+                TANIMLAYICI "hesapla"  8:9
+              argumanlar (2):
+                TANIMLAYICI "kare"  8:17
+                TAM 6  8:23
+            CAGRI  8:35
+              hedef:
+                TANIMLAYICI "hesapla"  8:28
+              argumanlar (2):
+                TANIMLAYICI "iki_kat"  8:36
+                TAM 3  8:45
+
+=== Toplam parser hata sayisi: 0 ===

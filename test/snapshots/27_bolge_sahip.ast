@@ -1,0 +1,31 @@
+=== AST ===
+PROGRAM (3 uye)  1:1
+  YAPI  1:1
+  ISLEV "sahiplen"  3:1
+    parametreler (1):
+      PARAMETRE "d"  3:17
+        TIP_BASIT "Veri"  3:20
+    donus_tipi:
+      TIP_BASIT "tam32"  3:29
+    govde:
+      BLOK (1 deyim)  3:35
+        VER  4:5
+          ERISIM "v"  4:10
+            TANIMLAYICI "d"  4:9
+  ISLEV "main"  7:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  7:18
+    govde:
+      BLOK (2 deyim)  7:24
+        DEGISKEN "d"  8:5
+          deger:
+            YAPI_OLUSTUR  8:20
+        VER  9:5
+          CAGRI  9:17
+            hedef:
+              TANIMLAYICI "sahiplen"  9:9
+            argumanlar (1):
+              TANIMLAYICI "d"  9:18
+
+=== Toplam parser hata sayisi: 0 ===

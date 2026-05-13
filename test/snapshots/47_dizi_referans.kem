@@ -1,0 +1,8 @@
+işlev ilk_eleman(xs: &Dizi<tam32>) -> tam32 {
+    ver (*xs)[0];
+}
+
+işlev main() -> tam32 {
+    değişken xs = [42, 1, 2, 3];
+    ver ilk_eleman(&xs);
+}

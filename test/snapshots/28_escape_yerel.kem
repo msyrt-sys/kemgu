@@ -1,0 +1,8 @@
+işlev olustur() -> tam32 {
+    değişken yerel: tam32 = 42;
+    ver yerel;
+}
+
+işlev main() -> tam32 {
+    ver olustur();
+}

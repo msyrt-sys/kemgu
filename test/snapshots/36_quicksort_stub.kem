@@ -1,0 +1,19 @@
+// Quicksort algoritma iskeleti (in-place pivot yok, ozyineli)
+işlev partition_pivot(xs: Dizi<tam32>, lo: tam32, hi: tam32) -> tam32 {
+    değişken pivot = xs[hi];
+    değişken i: tam32 = lo;
+    değişken j: tam32 = lo;
+    iken j < hi {
+        eğer xs[j] < pivot {
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+    ver i;
+}
+
+işlev main() -> tam32 {
+    değişken xs = [3, 1, 4, 1, 5, 9, 2, 6];
+    değişken p = partition_pivot(xs, 0, 7);
+    ver p;
+}

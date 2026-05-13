@@ -1,0 +1,14 @@
+işlev topla(xs: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        toplam = toplam + xs[i];
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+işlev main() -> tam32 {
+    değişken xs = [10, 20, 12];
+    ver topla(xs, 3);
+}

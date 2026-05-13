@@ -1,0 +1,13 @@
+işlev faktoriyel(n: tam32) -> tam32 {
+    değişken sonuc: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        sonuc = sonuc * i;
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+işlev main() -> tam32 {
+    ver faktoriyel(5);  // = 120
+}
