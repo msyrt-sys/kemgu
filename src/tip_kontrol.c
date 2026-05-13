@@ -247,6 +247,12 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
                      tip_olustur_basit(a, TIP_TAM32));
     }
 
+    /* === Adim 6: Dizi capacity API === */
+    /* dizi_kapasite(d: Dizi<T>) -> tam32 — generic, T atlanir */
+    /* dizi_kapasite_ayarla(d: Dizi<T>, yeni: tam32) -> bos */
+    /* Bu built-inler intrinsic gibi (tip kontrol DUGUM_CAGRI'de
+     * ozel handler), sadece sembol tablosu lookup icin kayit */
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
@@ -1445,6 +1451,46 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                             "dizi_boyut argumani Dizi<T> olmali");
                     }
                     return tip_olustur_basit(tk->arena, TIP_TAM32);
+                }
+
+                /* Adim 6: dizi_kapasite(d: Dizi<T>) -> tam32 */
+                if (uz_b == 13 && memcmp(ad_b, "dizi_kapasite", 13) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_kapasite bir arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_kapasite argumani Dizi<T> olmali");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_TAM32);
+                }
+
+                /* Adim 6: dizi_kapasite_ayarla(d, yeni: tam32) -> bos */
+                if (uz_b == 20 &&
+                    memcmp(ad_b, "dizi_kapasite_ayarla", 20) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_kapasite_ayarla iki arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *yt = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_kapasite_ayarla ilk arg Dizi<T> olmali");
+                    }
+                    if (!tip_tamsayi_mi(yt) && yt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
+                            "dizi_kapasite_ayarla yeni kapasite tamsayi olmali");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_BOS);
                 }
             }
 

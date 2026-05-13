@@ -493,6 +493,24 @@ int32_t kdl_dizi_boyut(KdlDizi *d) {
     return d ? d->boyut : 0;
 }
 
+/* Adim 6: capacity (allocate edilmis alan) — boyut <= kapasite. */
+int32_t kdl_dizi_kapasite(KdlDizi *d) {
+    return d ? d->kapasite : 0;
+}
+
+/* Adim 6: önceden kapasite ayarla. Yeni kapasite mevcut kapasiteden
+ * kucukse hicbir sey yapma (shrink yok v1). Realloc bir kez yapilir,
+ * sonraki dizi_ekle cagrilari realloc'tan kacar. */
+void kdl_dizi_kapasite_ayarla(KdlDizi *d, int32_t yeni_kapasite) {
+    if (!d || yeni_kapasite <= d->kapasite) return;
+    /* Eleman byte'i bilinmiyor — d->eleman_byte kullan */
+    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 4;
+    void *yeni = realloc(d->veri, (size_t)yeni_kapasite * (size_t)eb);
+    if (!yeni) return;
+    d->veri = yeni;
+    d->kapasite = yeni_kapasite;
+}
+
 void kdl_dizi_serbest(KdlDizi *d) {
     if (!d) return;
     free(d->veri);
