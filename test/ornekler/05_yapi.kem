@@ -1,0 +1,85 @@
+// =====================================================================
+// 05_yapi.kem — KEMGU Tutorial: Yapılar ve generic yapılar
+// ---------------------------------------------------------------------
+// Bu örnek:
+//   - Yapı tanımı + oluşturma + alan erişimi
+//   - Referans + değişebilir referans (&, &değişken)
+//   - Generic yapı (parametrik tipler)
+//   - İç içe generic
+// gösterir.
+// Çalıştır: ./build/kemgu --check 05_yapi.kem
+// =====================================================================
+
+// ----- Temel yapı -----
+//
+// `yapı <Ad> { <alan>: <tip>; ... }`
+// Alan ayraçları noktalı virgül.
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+// ----- Generic yapı -----
+//
+// `yapı <Ad><T, U, ...> { ... }`
+// T, U gibi tip parametreleri yapı içinde her yerde kullanılabilir.
+yapı Kutu<T> {
+    icerik: T;
+    bos_mu: mantıksal;
+}
+
+// ----- İç içe generic -----
+yapı Cift<A, B> {
+    ilk: A;
+    ikinci: B;
+}
+
+// ----- Yapı dönen işlev -----
+//
+// Yapılar değer tipidir (`by value`). Referans istersen `&Nokta`,
+// değişebilir referans için `&değişken Nokta` kullan.
+işlev nokta_olustur(x: tam32, y: tam32) -> Nokta {
+    ver Nokta { x: x, y: y };
+}
+
+// ----- Değişebilir referans alan işlev -----
+//
+// `&değişken T` — okunabilen ve yazılabilen bir referans.
+// Bunu yerel mutable bir Kutu üzerinden çağırıyoruz.
+işlev kutu_doldur(k: &değişken Kutu<tam32>, eleman: tam32) {
+    k.icerik = eleman;
+    k.bos_mu = yanlış;
+}
+
+// ----- Salt-okunur referans alan işlev -----
+//
+// `&T` — varsayılan referans, mutate edilemez.
+işlev mesafe_kare(a: &Nokta, b: &Nokta) -> tam32 {
+    değişken dx = a.x - b.x;
+    değişken dy = a.y - b.y;
+    ver dx * dx + dy * dy;
+}
+
+işlev main() -> tam32 {
+    // Yapı oluşturma — alanlar isim:değer ile verilir
+    değişken n: Nokta = Nokta { x: 17, y: 25 };
+
+    // Alan erişimi — nokta operatörü
+    değişken toplam = n.x + n.y;              // → 42
+
+    // İşlev üzerinden de oluşturulabilir
+    değişken n2 = nokta_olustur(10, 20);
+
+    // mesafe_kare çağırırken & ile referans alıyoruz
+    değişken d2 = mesafe_kare(&n, &n2);
+
+    // Generic Kutu örneği
+    değişken k: Kutu<tam32> = Kutu { icerik: 0, bos_mu: doğru };
+    kutu_doldur(&değişken k, 99);
+
+    // İç içe generic
+    değişken c: Cift<tam32, metin> = Cift { ilk: 1, ikinci: "ad" };
+
+    // 17 + 25 = 42 — exit code
+    ver toplam;
+}
