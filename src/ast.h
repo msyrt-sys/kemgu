@@ -82,6 +82,7 @@ typedef enum {
     DUGUM_TIP_ISLEV,       /* islev(...) -> T */
     DUGUM_TIP_KULLANICI,   /* modul::Tip<T1,T2> */
     DUGUM_TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
+    DUGUM_TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -409,6 +410,10 @@ struct Dugum {
         struct {
             Dugum *ic_tip;
         } tip_tekkez;              /* tekkez<T> — Linear Types Spec V1 */
+
+        struct {
+            Dugum *ic_tip;
+        } tip_sabitsure;           /* sabitsüre<T> — Sabitsüre Spec V1 */
 
         struct {
             Dugum *operand;

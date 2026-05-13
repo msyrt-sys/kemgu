@@ -608,6 +608,19 @@ Dugum *parse_tip(Parser *p) {
         return d;
     }
 
+    /* === sabitsure<T> — Sabitsure Spec V1 (constant-time) === */
+    if (t.tip == TOK_SABITSURE) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P340", "sabitsure<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P341", "sabitsure<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_SABITSURE,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_sabitsure.ic_tip = ic;
+        return d;
+    }
+
     /* === secimlik<T> === */
     if (t.tip == TOK_SECIMLIK) {
         parser_ilerle(p);

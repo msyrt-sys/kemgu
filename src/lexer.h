@@ -35,6 +35,7 @@ typedef enum {
     TOK_GUVENSIZ,       /* güvensiz    */
     TOK_TEKKEZ,         /* tekkez      — Linear Types Spec V1 */
     TOK_IMHA,           /* imha        — Linear Types Spec V1 */
+    TOK_SABITSURE,      /* sabitsüre   — Sabitsüre Spec V1 (constant-time) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */

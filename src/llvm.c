@@ -243,6 +243,14 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
         return "ptr";
     }
     if (tip_d->tip == DUGUM_TIP_DIZI) return "ptr";
+    /* Sabitsüre Spec V1: sabitsüre<T> runtime'da T (zero-overhead) */
+    if (tip_d->tip == DUGUM_TIP_SABITSURE) {
+        return ast_tip_to_ir(g, tip_d->veri.tip_sabitsure.ic_tip);
+    }
+    /* Tekkez de aynı şekilde — runtime overhead yok */
+    if (tip_d->tip == DUGUM_TIP_TEKKEZ) {
+        return ast_tip_to_ir(g, tip_d->veri.tip_tekkez.ic_tip);
+    }
     return "i32";  /* default */
 }
 
@@ -919,6 +927,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {
                 return hata(g, "cagri hedefi tanimlayici degil");
+            }
+            /* Sabitsüre Spec V1 intrinsics: sabitsure_yarat (16 byte) ve
+             * ifsa (5 byte). Argümanı pass-through, sonra speculation
+             * barrier (x86 lfence) emit ederiz. Zero-overhead — IR seviyesi
+             * tipleri T (iç tip) ile aynı. */
+            {
+                const char *_ca = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int _uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                int _is_yarat = (_uz == 16 &&
+                    memcmp(_ca, "sabits\xc3\xbc" "re_yarat", 16) == 0);
+                int _is_ifsa = (_uz == 5 &&
+                    memcmp(_ca, "if\xc5\x9f" "a", 5) == 0);
+                if ((_is_yarat || _is_ifsa) && d->veri.cagri.sayi == 1) {
+                    IfadeSonuc inner = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], beklenen);
+                    /* x86 lfence speculation barrier — Spectre v1 mitigation.
+                     * Modern LLVM intrinsic; declare gerekmez (built-in). */
+                    fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    return inner;
+                }
             }
             int n = d->veri.cagri.sayi;
             IfadeSonuc *args = NULL;

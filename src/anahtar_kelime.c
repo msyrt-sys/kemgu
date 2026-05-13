@@ -41,6 +41,7 @@ static const AnahtarKelime tablo[] = {
     {"kullan",                            6, TOK_KULLAN    },  /* kullan      */
     {"mod\xc3\xbcl",                     6, TOK_MODUL     },  /* modül       */
     {"sabit",                             5, TOK_SABIT     },  /* sabit       */
+    {"sabits\xc3\xbc" "re",             10, TOK_SABITSURE },  /* sabitsüre   */
     {"se\xc3\xa7imlik",                  9, TOK_SECIMLIK  },  /* seçimlik    */
     {"sonu\xc3\xa7",                     6, TOK_SONUC     },  /* sonuç       */
     {"tamam",                             5, TOK_TAMAM     },  /* tamam       */
