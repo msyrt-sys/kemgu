@@ -66,9 +66,11 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     int rc = system(komut);
     if (rc != 0) return -1;
 
-    /* clang -x ir .ll -o .exe */
+    /* clang -x ir .ll runtime/kdl_runtime.c -o .exe
+     * Madde A ve G icin metin/dosya primitifleri runtime'a baglanmali. */
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -o %s 2>%s", LL_PATH, EXE_PATH, DEV_NULL);
+             "clang -x ir %s -x c runtime/kdl_runtime.c -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
     rc = system(komut);
     if (rc != 0) return -1;
 
@@ -390,6 +392,106 @@ static void test_yazdir_hello(void) {
     test_sonuc("yazdir(\"hi\") + ver 42 -> exit 42", rc == 42);
 }
 
+/* === A: Metin runtime primitifleri === */
+
+static void test_metin_uzunluk(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"merhaba\"); }");
+    test_sonuc("metin_uzunluk(\"merhaba\") -> 7", rc == 7);
+}
+
+static void test_metin_uzunluk_bos(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"\"); }");
+    test_sonuc("metin_uzunluk(\"\") -> 0", rc == 0);
+}
+
+static void test_metin_birlestir(void) {
+    /* "ab" + "cdef" -> 6 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_birlestir(\"ab\", \"cdef\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_birlestir(\"ab\",\"cdef\") uzunluk -> 6", rc == 6);
+}
+
+static void test_metin_kes(void) {
+    /* metin_kes("merhaba", 0, 3) = "mer" -> uzunluk 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kes(\"merhaba\", 0, 3); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kes(\"merhaba\",0,3) uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_kucuk_ascii(void) {
+    /* metin_kucuk("ABC") uzunluk 3 (ASCII lowercase) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kucuk(\"ABC\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kucuk(\"ABC\") uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_buyuk_turkce_i(void) {
+    /* 'i' (1 byte) -> "İ" (2 byte U+0130 C4 B0) — uzunluk = 2 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_buyuk(\"i\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_buyuk(\"i\") -> Turkce İ (2 byte)", rc == 2);
+}
+
+static void test_metin_icerir_evet(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_icerir(\"merhaba\", \"haba\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba\",\"haba\") -> 1", rc == 1);
+}
+
+static void test_metin_icerir_hayir(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_icerir(\"merhaba\", \"xyz\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba\",\"xyz\") -> 0", rc == 0);
+}
+
+static void test_metin_baslar(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_baslar(\"merhaba\", \"mer\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_baslar(\"merhaba\",\"mer\") -> 1", rc == 1);
+}
+
+static void test_metin_biter(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_biter(\"merhaba\", \"aba\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_biter(\"merhaba\",\"aba\") -> 1", rc == 1);
+}
+
+static void test_metin_kirp(void) {
+    /* "  abc  " -> "abc" (uzunluk 3) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kirp(\"  abc  \"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kirp(\"  abc  \") uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_yer_degistir(void) {
+    /* "aaa" -> "bbb" (a -> b), uzunluk 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_yer_degistir(\"aaa\", \"a\", \"b\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_yer_degistir(\"aaa\",\"a\",\"b\") uzunluk -> 3", rc == 3);
+}
+
 static void test_kendin_method(void) {
     int rc = derle_ve_calistir(
         "yap\xc4\xb1 K { v: tam32; } "
@@ -597,6 +699,20 @@ int main(void) {
 
     printf("\n--- ADIM 27: Syscall (yazdir) ---\n");
     test_yazdir_hello();
+
+    printf("\n--- A: Metin runtime primitifleri (runtime/kdl_runtime.c) ---\n");
+    test_metin_uzunluk();
+    test_metin_uzunluk_bos();
+    test_metin_birlestir();
+    test_metin_kes();
+    test_metin_kucuk_ascii();
+    test_metin_buyuk_turkce_i();
+    test_metin_icerir_evet();
+    test_metin_icerir_hayir();
+    test_metin_baslar();
+    test_metin_biter();
+    test_metin_kirp();
+    test_metin_yer_degistir();
 
     printf("\n--- ADIM 28: Allocator (bellek_al/serbest) ---\n");
     test_bellek_al_serbest();
