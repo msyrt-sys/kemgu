@@ -40,6 +40,7 @@ static const AnahtarKelime tablo[] = {
     {"kendin",                            6, TOK_KENDIN    },  /* kendin      */
     {"kullan",                            6, TOK_KULLAN    },  /* kullan      */
     {"mod\xc3\xbcl",                     6, TOK_MODUL     },  /* modül       */
+    {"olarak",                            6, TOK_OLARAK    },  /* olarak      */
     {"sabit",                             5, TOK_SABIT     },  /* sabit       */
     {"se\xc3\xa7imlik",                  9, TOK_SECIMLIK  },  /* seçimlik    */
     {"sonu\xc3\xa7",                     6, TOK_SONUC     },  /* sonuç       */

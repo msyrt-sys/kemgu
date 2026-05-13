@@ -755,6 +755,57 @@ static void test_dizi_tam64(void) {
     test_sonuc("dizi<tam64> generic instan -> 2", rc == 2);
 }
 
+/* === Madde E: Tip donusturme (olarak) === */
+
+static void test_olarak_tam32_tam64(void) {
+    /* tam32 -> tam64 -> tam32 round trip */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x olarak tam64; "
+        "ver y olarak tam32; }");
+    test_sonuc("tam32 olarak tam64 olarak tam32 -> 42", rc == 42);
+}
+
+static void test_olarak_tam64_tam32(void) {
+    /* tam64 -> tam32 (trunc) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "ver y olarak tam32; }");
+    test_sonuc("tam64 olarak tam32 (trunc) -> 42", rc == 42);
+}
+
+static void test_olarak_zincir(void) {
+    /* (x olarak tam64) + 1 olarak tam32 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam8 = 40; "
+        "ver (x olarak tam32) + 2; }");
+    test_sonuc("tam8 olarak tam32 + 2 -> 42", rc == 42);
+}
+
+static void test_olarak_aritmetik(void) {
+    /* dizi_boyut sonucu tam32 — onu tam64'e cevirmek */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); "
+        "de\xc4\x9fi\xc5\x9fken n: tam64 = dizi_boyut(d) olarak tam64; "
+        "ver n olarak tam32 * 21; }");
+    test_sonuc("dizi_boyut tam32->tam64->tam32 + carp -> 42", rc == 42);
+}
+
+static void test_olarak_tam_kesirli(void) {
+    /* tam32 -> kesirli64 — sitofp */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 21; "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = x olarak kesirli64; "
+        "ver (f * 2.0) olarak tam32; }");
+    test_sonuc("tam32 -> kesirli64 -> tam32 (sitofp/fptosi) -> 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -873,6 +924,13 @@ int main(void) {
     test_dizi_boyut();
     test_dizi_buyume();
     test_dizi_tam64();
+
+    printf("\n--- Madde E: Tip donusturme (olarak) ---\n");
+    test_olarak_tam32_tam64();
+    test_olarak_tam64_tam32();
+    test_olarak_zincir();
+    test_olarak_aritmetik();
+    test_olarak_tam_kesirli();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
