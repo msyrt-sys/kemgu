@@ -946,6 +946,51 @@ static void test_deyim_esles_yapici(void) {
     arena_serbest(a);
 }
 
+/* === C: sonuc<T,E> deseni — tamam(v), hata(m) === */
+
+/* tamam(v) deseni parse edilir mi. */
+static void test_deyim_esles_tamam_deseni(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles r { tamam(v) => v; hata(m) => 0; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { "
+        "tamam(v) => v; "
+        "hata(m) => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.ad_uzunluk == 5
+          && memcmp(d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.ad,
+                    "tamam", 5) == 0
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->veri.desen_yapici.ad_uzunluk == 4
+          && memcmp(d->veri.esles.kollar[1]->veri.esles_kolu.desen->veri.desen_yapici.ad,
+                    "hata", 4) == 0;
+    test_sonuc("esles tamam(v) + hata(m) desenleri", ok);
+    arena_serbest(a);
+}
+
+/* tamam'a parametresiz desen (bind yok) — tamam joker olarak alt-desen. */
+static void test_deyim_esles_tamam_joker(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles r { tamam(_) => 1; hata(m) => 0; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { "
+        "tamam(_) => 1; "
+        "hata(m) => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.alt_desenler[0]->tip
+              == DUGUM_DESEN_JOKER;
+    test_sonuc("esles tamam(_) joker alt-desen", ok);
+    arena_serbest(a);
+}
+
 static void test_deyim_esles_blok_govde(void) {
     Arena *a = arena_olustur(0);
     int hata = -1;
@@ -1554,6 +1599,8 @@ int main(void) {
     printf("\n--- Deyim: Esles ---\n");
     test_deyim_esles_literal();
     test_deyim_esles_yapici();
+    test_deyim_esles_tamam_deseni();
+    test_deyim_esles_tamam_joker();
     test_deyim_esles_blok_govde();
 
     printf("\n--- Deyim: Guvensiz ---\n");
