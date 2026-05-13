@@ -76,19 +76,26 @@ kemgu/
 │   ├── sembol.h / sembol.c           — Symbol table + scope hierarchy (TAMAMLANDI ✓)
 │   ├── tip_kontrol.h / tip_kontrol.c — İfade tip kontrolü (TAMAMLANDI ✓ — ADIM 11.3)
 │   ├── bolge.h / bolge.c             — Bölge temsili (TAMAMLANDI ✓ — ADIM 12.1)
-│   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları (TAMAMLANDI ✓ — ADIM 12.2)
+│   ├── bolge_atama.h / bolge_atama.c — Bölge atama R-* aksiyomları + escape entegrasyonu (TAMAMLANDI ✓ — ADIM 12.2 + 14.2)
+│   ├── escape.h / escape.c           — DFA fixed-point escape analizi (TAMAMLANDI ✓ — ADIM 14.1)
 │   ├── llvm.h / llvm.c               — LLVM IR text üretici (TAMAMLANDI ✓ — ADIM 13.1)
-│   └── ana.c                          — Ana giriş noktası (lexer + parser, --token/--parse) (TAMAMLANDI ✓)
+│   ├── json.h / json.c               — Minimal JSON parser + yazıcı (TAMAMLANDI ✓ — ADIM 16.1)
+│   ├── lsp.h / lsp.c                 — LSP server MVP (TAMAMLANDI ✓ — ADIM 16.2-16.4)
+│   └── ana.c                          — Ana giriş noktası (--token/--parse/--check/--llvm/--lsp) (TAMAMLANDI ✓)
 ├── test/
 │   ├── test_lexer.c                   — 103 birim testi (103/103 ✓)
 │   ├── test_arena.c                   — Arena testleri (TAMAMLANDI ✓ — 19/19, ASan temiz)
 │   ├── test_ast.c                     — AST testleri (TAMAMLANDI ✓ — 31/31, ASan temiz)
-│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 78/78 (29 çekirdek + 24 ifade + 10 deyim + 11 tip + 4 örnek), ASan temiz)
+│   ├── test_parser.c                  — Parser testleri (TAMAMLANDI ✓ — 90/90 (+12: özellik/uygula/bound), ASan temiz)
 │   ├── test_tip.c                     — Tip sistemi testleri (TAMAMLANDI ✓ — 26/26, ASan temiz)
 │   ├── test_sembol.c                  — Sembol tablosu testleri (TAMAMLANDI ✓ — 18/18, ASan temiz)
-│   ├── test_tip_kontrol.c             — İfade tip kontrolü testleri (TAMAMLANDI ✓ — 90/90, ASan temiz)
+│   ├── test_tip_kontrol.c             — İfade tip kontrolü + constraint testleri (TAMAMLANDI ✓ — 97/97 (+7 constraint), ASan temiz)
 │   ├── test_bolge.c                   — Bölge temsili testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
-│   ├── test_bolge_atama.c             — Bölge atama R-* testleri (TAMAMLANDI ✓ — 10/10, ASan temiz)
+│   ├── test_bolge_atama.c             — Bölge atama R-* + escape entegrasyon testleri (TAMAMLANDI ✓ — 13/13, ASan temiz)
+│   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
+│   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
+│   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 30/30, multi-int + metin + yapı + float/dizi/struct-by-value)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -179,13 +186,15 @@ Sayı ayracı:        1_000_000
 Raw string:         r#"..."#
 ```
 
-### 31 Anahtar Kelime
+### 33 Anahtar Kelime
 ```
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
 tamam, hata, bölge, uygula, kendin, seçimlik, sonuç, değer, hiç,
-güvensiz
+güvensiz, tekkez, imha
 ```
+(`tekkez`, `imha` — Linear Types Spec V1; `kullan` ifade context'inde
+linear consume olarak ikinci anlama sahip — `kullan(t)`.)
 
 ### Tip Sistemi
 ```
@@ -375,7 +384,230 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - **Pipeline:** KEMGU kaynak → lexer → parser → AST → tip kontrol → LLVM IR → `clang -x ir -` → native `.exe` → çalıştırma
     - `ana.c` `--llvm` modu eklendi (4. CLI mod: token/parse/check/llvm)
 
-### 🎉🎉 ADIM 12 + 13 TAMAMLANDI — KEMGU END-TO-END DERLEYİCİ ÇALIŞIYOR
+23. **DFA fixed-point escape analizi (`escape.h/c`) — ADIM 14.1** (17/17 test, ASan temiz)
+    - 3 kategori: `ESC_YEREL`, `ESC_ITERASYON`, `ESC_CAGIRAN`
+    - **Per-AST-node escape kategorisi:** linear kayit haritasi
+    - **Değişken bağlama izleme:** scope stack (sondan başa arama, append-only on assign)
+    - **Forward DFA:** `ver e`'de `ifadeyi_yukselt` ile tüm alt-tahsis bölgelerini CAGIRAN'a terfi (tanımlayıcı zincirlerini takip eder)
+    - **Fixed-point iterasyonu:** kategori değişikliği durana kadar tekrar (max 16 iter güvenlik)
+    - **Transitif escape:** `değişken x = "hello"; ver x;` → `"hello"` CAGIRAN (eski sistemde YEREL idi)
+    - **Loop iterasyonu:** döngü içinde tahsis → ESC_ITERASYON otomatik
+    - **Koşullu dallanma:** `eğer { ver a } değilse { ver b }` → her iki tahsis CAGIRAN
+    - **Erişim/indeks konservatif:** alt-nesne escape kabul edilir
+    - **Sinirlamalar (v1):** interprocedural yok (call sonuçları konservatif), closure yakalama henuz yok, MAY-points-to konservatif
+
+24. **Escape-aware bölge atama (`bolge_atama.c` ADIM 14.2)** (3 entegrasyon testi, 13/13 toplam)
+    - Yeni API: `bolge_atama_escape_bagla(ba, &ea)` — opsiyonel DFA modu
+    - **İki çalışma modu:**
+      - Escape NULL: eski syntax tabanlı davranış korunur (geriye uyumlu)
+      - Escape bağlı: AST düğümünden direkt escape kategori sorgusu, daha keskin sonuç
+    - `ESC_CAGIRAN → BOLGE_CAGIRAN`, `ESC_ITERASYON → BOLGE_ITERASYON`, `ESC_YEREL → BOLGE_YEREL`
+    - Güvenli taraf: escape YEREL diyorsa ama `ver_baglaminda` aktifse, CAGIRAN'a düşer
+
+33. **Generic işlev + Stdlib seed (ADIM 23)** (4 yeni LLVM testi + 3 stdlib modülü)
+    - **Generic işlev:** `işlev kimlik<T>(x: T) -> T { ver x; }`
+      - AST: `islev` artık tip_paramlar + bound listesi alır
+      - Parser: ad sonrası optional `<T, U: Bound>` (yapı ile aynı sözdizim)
+      - Tip kontrol: pre_populate_islev'de generic params gp_scope'a;
+        tip_kontrol_tanim'da gövde scope'una; tip_esit generic param için ad-bazlı + concrete-deferred
+      - DUGUM_CAGRI: generic param parametresi her arg tipi kabul eder, donus tipi inferred T ile değişir
+    - **LLVM monomorphization:**
+      - Generic işlevler tek başına emit edilmez
+      - Çağrı sırasında arg tipinden T çıkarsanır, mangled name (`kimlik$i32`) üretilir
+      - Bekleyenler listesi + worklist sonrası emit (recursive instantiation desteği)
+      - TipSubst context: generic param adı → IR string (`T` → `i32`)
+      - MonoKayit ile duplicate emission engellenir
+    - **`tip_sayisal_mi`/`tip_tamsayi_mi`/`tip_mantiksal_mi`:** Generic param için "deferred true" (instantiation'a ertelenir)
+    - **`tip_esit`:** İki generic param → ad eşitliği; biri generic → uyumlu
+    - **Stdlib seed (`stdlib/temel/`):**
+      - `matematik.kem` — mutlak, en_kucuk, en_buyuk, kare, kup, sinirla, isaret
+      - `karsilastir.kem` — esit_mi, farkli_mi, karsilastir, en_kucuk_uc, en_buyuk_uc
+      - `sayisal.kem` — ortalama, us, obe (GCD), ekok (LCM)
+      - Hepsi pure KEMGU, runtime/FFI bağımlılığı yok, --check geçer
+      - Makefile `calistir_stdlib_check` hedefi
+    - **Felsefe:**
+      - Java equals/hashCode tuzağına düşme — fonksiyonel API
+      - Go yıllarca generic yoktu — gün 1'den generic
+      - Rust 'a lifetime yükü yok — sıfır annotation
+    - **Sınırlamalar (v1):**
+      - `kendin` (self) henüz parametre olarak parse edilmiyor — method-style API yok
+      - Tip args çıkarsama yalnız param tiplerinden (return-type-driven inference yok)
+      - Bound kontrolü generic işlevde henüz yok (yapıda var)
+      - `kullan stdlib::matematik` import sistemi henüz yok (tek dosya derleme)
+
+29. **Constraint v2 — uygula gövde tip kontrolü + method dispatch (ADIM 19)** (+5 test)
+    - DUGUM_OZELLIK ve DUGUM_UYGULA artık gövdeleri tip-kontrol edilir
+    - Generic param T uygula scope'una eklenir (`uygula<T> X<T>`)
+    - Method dispatch: `x.method()` çağrısı `uygula_tablosu_method_bul` ile resolve
+    - Inherent + trait impl methodları aynı yoldan
+    - 5 yeni test (uygula gövde hatası, temiz, method dispatch, arg sayısı, trait method)
+
+30. **Bölge Katman 2 — Concurrency aksiyomları (ADIM 20)** (+5 test)
+    - `bolge_olustur_sahip(thread_id)` ve `bolge_olustur_kanal(kanal_id)` API'leri
+    - `bolge_sahiplik_transfer(b, yeni_thread_id)` — R-GÖREV/R-BİRLEŞTİR scaffolding
+    - `bolge_kanal_gonder(b, kanal_id)` — R-KANAL transferi
+    - `bolge_donmus_mu(b)` — R-PAYLAŞ (v1: daima 0)
+    - KEMGU_Bellek_Modeli.md Katman 2 aksiyomları (S1/S2/S3, R-GÖREV/R-BİRLEŞTİR/R-KANAL/R-PAYLAŞ)
+    - Sınır: lang syntax (`görev`/`kanal` keyword'leri) henüz parse edilmiyor
+
+31. **LSP v2 — Hover + Completion + Definition (ADIM 21)** (+3 test)
+    - **Belge state'inde AST cache:** her didChange parse + sembol indeksleme
+    - **textDocument/hover:** tanımlayıcı üzerine → markdown (ad + kategori)
+    - **textDocument/definition:** tanımlayıcı → tanım konumu (uri + range)
+    - **textDocument/completion:** keyword listesi + üst düzey semboller
+    - Position lookup: `bul_tanimlayici_konum(prog, line, col)` — AST traversal
+    - Üst düzey semboller (DUGUM_ISLEV/YAPI/OZELLIK/SABIT) toplama
+    - Capabilities güncellemesi: hoverProvider + definitionProvider + completionProvider
+    - Sınır: lokal değişken hover yok (yalnız üst düzey), incremental sync yok
+
+32. **LLVM v3 — float/double + dizi + struct-by-value (ADIM 22)** (+6 test)
+    - **Float/double:**
+      - kesirli32 → float, kesirli64 → double
+      - fadd/fsub/fmul/fdiv/frem, fcmp (oeq/one/olt/ogt/ole/oge)
+      - KESIRLI literal güvenli format (decimal point garanti)
+      - DUGUM_TAM beklenen kesirli ise fadd ile float literal üretir
+    - **Dizi:**
+      - `[e1, e2, ...]` → alloca [N x T] + GEP+store + return ptr
+      - `arr[i]` → GEP (i64 index) + load T
+      - Eleman tipi ilk elemanın tipinden çıkarsanır
+    - **Struct-by-value:**
+      - DUGUM_TIP_BASIT/DUGUM_TIP_KULLANICI artık yapı kayıtlı ise `%YapiAdi` döner (ptr değil)
+      - `yapı_olustur`: alloca + store fields + LOAD struct value → akış struct-by-value
+      - `erisim x.y`: struct value ise `extractvalue`, ptr ise GEP+load (eski yol)
+      - Function params/returns artık gerçek `%Tip` ile çalışır
+    - **Test örnekleri:**
+      - `hesap(x: kesirli64) -> kesirli64 { ver x * 2.0 }` → çalışır
+      - `[10, 20, 12] xs[0]+xs[1]+xs[2]` → 42
+      - `iken i < 5 { s = s + xs[i]; }` → dizi indeksleme dongusu
+      - `topla(c: Cift) -> tam32 { ver c.a + c.b; }` → struct param by value
+      - `yap() -> N { ver N { x: 42 }; }` → struct dönüş by value
+    - **Sınırlamalar:**
+      - Dizi tipi parametre olarak (function arg) henüz yok
+      - Dizi LENGTH bilgisi taşımıyor (sentinel veya ayrı uzunluk gerek)
+      - Float karşılaştırma her zaman ordered (oeq/olt), unordered yok
+
+28. **LLVM v2: yapılar + metin literali + multi-int (ADIM 18)** (8 yeni entegrasyon testi)
+    - **Tip tracking:** her ifade artık `(reg, llvm_tip)` ikilisi döndürür
+    - **Multi-int (annotation-driven):**
+      - tam8/dtam8 → i8, tam16/dtam16 → i16, tam32/dtam32 → i32, tam64/dtam64 → i64
+      - mantıksal → i1 (parametre/dönüş tipi olarak), arithmetic context'inde i32'ye genişler
+      - karakter → i32, boş → void
+      - Operandlar arasında otomatik int_donustur (sext/trunc) gereken yerde
+      - Karşılaştırma operandları natural tipte (beklenen forward edilmez)
+    - **Metin literali:**
+      - Pre-pass: tüm DUGUM_METIN düğümleri toplanır, her benzersiz literal `@.str.N = private constant [K x i8] c"..."`
+      - Reference: `getelementptr ptr @.str.N, i32 0, i32 0` → ptr
+      - `metin` tipi → `ptr` (i8*)
+      - Escape: özel karakterler `\HH` formatında
+    - **Yapı:**
+      - Pre-pass: tüm DUGUM_YAPI tanımları toplanır
+      - Type emission: `%YapiAdi = type { tip1, tip2, ... }`
+      - Yapı oluşturma: `alloca %YapiAdi` + her alan için `getelementptr + store`
+      - Alan erişimi (`x.y`): `getelementptr + load`
+      - Yapı değerleri pointer ile temsil (struct-by-value parametreler v3'te)
+    - **Bonus: işlev imza tablosu** — çağrı dönüş tipi artık doğru
+    - **Test örnekleri:**
+      - tam8 + tam8 → 42 (i8 ops)
+      - tam64 mul → 42 (i64 ops)
+      - mantıksal param → 42 (i1)
+      - `selam() -> metin` returning `"Merhaba"` → global string
+      - `Nokta { x: 10, y: 32 }; ver n.x + n.y` → 42
+      - Yapı 3 alan toplam → 42
+    - **Sınırlamalar (v2'de hala):**
+      - kesirli32/64 (float/double) yok
+      - Yapılar by-pointer (struct-by-value parametre/dönüş yok)
+      - Dizi yok
+      - mantıksal `ve`/`veya` short-circuit yok
+
+27. **LLVM backend genişletme (ADIM 17)** (16 entegrasyon testi — gerçek programlar derlenip çalıştırılıyor)
+    - **Yeni desteklenen özellikler:**
+      - İşlev parametreleri (i32, alloca + store ile mutable)
+      - İşlev çağrısı (DUGUM_CAGRI) — özyinelemeli destek (fibonacci ✓)
+      - Lokal değişken (alloca + store/load)
+      - Atama (lvalue: tanimlayici → alloca'ya store)
+      - if/else + nested if (br i1 + üç bb: then/else/end)
+      - while loop (head + body + done bb'leri)
+      - Karşılaştırma (==, !=, <, >, <=, >= → icmp + zext i1→i32)
+      - Mantıksal ve/veya (and/or i32), değil (icmp eq 0 + zext)
+      - Aritmetik +/-/*/sdiv/srem, tekli neg
+    - **Mimari:** `LlvmGen` state + lineer isim tablosu + scope marker
+    - **Test örnekleri (her biri --llvm | clang | exit code doğrulama):**
+      - fib(10) → 55 ✓ (özyinelemeli + if)
+      - faktöriyel(5) → 120 ✓ (while + lokal + atama)
+      - gcd(48, 36) → 12 ✓ (while + parametre atama + %)
+      - mutlak(-42) → 42 ✓ (if/else, iki dal da `ver`)
+      - kup(3) + kare(3) → 36 ✓ (çoklu işlev)
+    - **Sinirlamalar (v1):**
+      - Sadece i32 (tam8/16/64, dtam*, kesirli* yok)
+      - Yapılar/diziler/metin literali yok
+      - Referans/pointer yok
+      - mantıksal `ve`/`veya` short-circuit YOK (bitwise gibi)
+    - **Test entegrasyonu:** `system()` ile `kemgu --llvm | clang -x ir | run` zinciri, exit code karşılaştırma
+
+26. **LSP server MVP (ADIM 16)** (27 yeni test, kemgu --lsp ile çalıştırılır)
+    - **16.1: `json.h/c`** — minimal JSON parser + yazıcı (~370 satır)
+      - null/bool/sayı/metin/dizi/nesne
+      - Escape: `\" \\ \n \r \t \b \f` + `\uXXXX` → UTF-8
+      - Arena-tabanli, recursive descent
+      - 21 test
+    - **16.2: `lsp.h/c`** — LSP server (~310 satır)
+      - JSON-RPC 2.0, Content-Length framing
+      - `initialize` → capabilities response (textDocumentSync=1)
+      - `textDocument/didOpen` + `didChange` + `didClose`
+      - `shutdown` + `exit` (graceful)
+      - `textDocument/publishDiagnostics` (otomatik gönderim)
+      - Tek dosya hafıza (incremental sync henüz yok)
+    - **16.3: Diagnostic toplama** (`hata.c` callback hook)
+      - `hata_callback_ayarla(cb, ctx)` — set edilirse `hata_raporla` stderr yerine cb çağırır
+      - LSP: parser + tip kontrol hataları → diagnostic listesi
+      - 1-tabanli (KEMGU) → 0-tabanli (LSP) konum dönüşümü
+      - 6 LSP test (initialize, shutdown, didOpen valid/parser/tip hata, didChange düzeltir)
+    - **16.4: `ana.c --lsp`** — stdio loop'a geç, dosya okumadan
+    - **Pratik kullanım:** `./build/kemgu --lsp` ile VSCode / Neovim LSP istemcisinden bağlanılabilir
+    - **Sinirlamalar (v1):**
+      - Hover, completion, definition, semanticTokens yok
+      - workspace mesajları yok
+      - Tek dosya hafıza (didChange tüm metni yeniler — incremental yok)
+      - Çoklu workspace dosyası yok
+
+25. **Constraint satisfaction — özellik/uygula sistemi (ADIM 15)** (19 yeni test)
+    - **15.1: `parse_ozellik_tanimi`** — `özellik Ad<T> { işlev m() -> tip; ... }`
+      - Method imzaları (`işlev m() -> T;`) ve default impl (`işlev m() { ... }`)
+      - Generic params destekli: `özellik X<T> { ... }`
+      - 4 parser testi
+    - **15.2: `parse_uygula_tanimi`** — `uygula Trait için Tip { ... }` veya `uygula Tip { ... }` (inherent)
+      - Generic uygula: `uygula<T> Tip<T> { ... }` (monomorphization sırasında resolve edilir)
+      - 3 parser testi
+    - **15.3: Bound sözdizimi** — `<T: Bound1 + Bound2, U: Bound3, V>`
+      - Yapı/özellik/uygula generic params bound listesi alabilir
+      - AST: `tip_param_boundlari` (Dugum***) + `tip_param_bound_sayilari` (int*) paralel diziler
+      - 5 parser testi
+    - **15.4: Sembol tablosu özellik desteği + uygula registry**
+      - `SEMBOL_OZELLIK` zaten vardı; pre_populate_ozellik global scope'a ekler
+      - Yeni: `UygulaTablosu` — (tip_adi, ozellik_adi) eşlemeleri için linked list
+      - Sorgu: `uygula_tablosu_implementations_eder(tip, ozellik)` → 0/1
+    - **15.5: Bound enforcement (T030, T031)**
+      - `DUGUM_TIP_KULLANICI` resolve sırasında: her tip param için bound'ları kontrol et
+      - T030: argüman tipi bound'u karşılamıyor (uygula bildirimi yok)
+      - T031: bilinmeyen özellik (bound olarak verilen ad çözülemedi)
+      - Generic param argümanları bound check'ten muaf (resolve sırasında enclosing scope'tan gelir)
+      - 7 tip kontrol testi
+    - **Pratik örnek:**
+      ```
+      özellik Sayilabilir {}
+      yapı Tam { x: tam32; }
+      uygula Sayilabilir için Tam {}   // <- gerek
+      yapı Vektor<T: Sayilabilir> { ic: T; }
+      sabit V: Vektor<Tam> = ...;  // OK; uygula olmadan T030 hatası
+      ```
+    - **Sınırlamalar (v1):**
+      - Method tip kontrolü uygula gövdelerinde yok (sadece kayıt)
+      - Default impl gövde tip kontrolü özellik içinde yok
+      - Trait method dispatch yok (sadece bound enforcement)
+      - Aynı bound iki kez raporlanabilir (annotation + constructor)
+      - Makefile header dependency: `-MMD -MP` eklendi (artık `.h` değişikliklerinde otomatik rebuild)
+
+### 🎉🎉 ADIM 12-23 TAMAMLANDI — GENERIC IŞLEV + STDLIB SEED + LLVM v3
 
 ```bash
 echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
@@ -383,17 +615,60 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
+**Test sayısı:** 505/505 (önceki 501 + 4 generic işlev) + 3 stdlib --check geçti
+
+### ADIM (Konsolidasyon) — Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)
+Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md`.
+
+- **Linear types altyapısı** — 54/54 yeni test, ASan temiz
+    - **Lexer:** `tekkez`, `imha` keyword (toplam 33).
+    - **AST:** `DUGUM_TIP_TEKKEZ`, `DUGUM_KULLAN_IFADE`, `DUGUM_IMHA_IFADE`.
+    - **Parser:** `tekkez<T>` tip + `kullan(e)` / `imha(e)` ifade. `kullan`
+      context-sensitive (üst düzey = import, ifade = consume).
+    - **Tip sistemi:** `TIP_TEKKEZ` kategori, `tip_olustur_tekkez`,
+      `tip_lineer_mi`, recursive nominal eşitlik, yazdırma.
+    - **Sembol:** `lineer_tuketildi` ve `lineer_scope_seviyesi` flag'leri,
+      `sembol_bul_yazilabilir` (mutable lookup, tüketim işaretleme için).
+    - **Tip kontrol:** L001 (tüketilmedi), L002 (move sonrası), L004
+      (referans yasağı), L007 (consume operandı tekkez değil), L008
+      (`tekkez_yarat` arity), LR002 (yapı/dizi tekkez içeremez).
+    - **Producer intrinsic:** `tekkez_yarat<T>(e: T) -> tekkez<T>` —
+      özel built-in (sembol tablosu yok, CAGRI handler'ında özel-case).
+    - **Tüketim noktaları:** `kullan`, `imha`, çağrı argümanı, `ver`,
+      yapı alan değeri, değişken atama (move), `tekkez_yarat` iç wrap,
+      lineer closure çağrısı (LC-3).
+    - **Closure-itself-linear (LC-2):** Lambda gövdesi içinde lineer
+      bağlama yakalandığında lambda tipi otomatik `tekkez<islev(...)>`.
+    - **Region/Linear:** Bölge (blok/işlev/için/eşleş) kapanışında
+      tüketilmemiş lineer bağlamalar L001 raporlanır.
+    - **Örnek dosyalar:** `lineer_temel.kem` ✓, `lineer_closure.kem` ✓,
+      `lineer_hata.kem` (4 hata sergiler — L001/L002/L004/LR002).
+
+```bash
+./build/kemgu --check test/ornekler/lineer_closure.kem
+# → OK: lineer_closure.kem — tip kontrolu basarili.
+```
+
 ### Sıradaki büyük seçenekler:
-- **Tam Katman 1 escape analizi** (DFA tabanlı)
-- **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
+- **Concurrency lang syntax** (görev/kanal anahtar kelimeleri, R-GÖREV uygulama)
+- **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
-- **Bootstrapping** (uzun vade)
+- **LSP v3** (incremental sync, workspace, semanticTokens, references)
+- **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
+- **Stdlib network/JSON/regex** (runtime altyapı sonra)
+- **Linear V2:** lineer alanlı yapı (`yapı tekkez K { ... }`), L005 (koşullu tüketim tutarlılığı)
+- **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
+- **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
 ### İlerideki Fazlar
-- Tip sistemi (tip çıkarsama, tip kontrolü)
-- Bölge çözümleyici (escape analizi, bölge atama)
-- LLVM backend (IR üretimi)
+- ~~Tip sistemi (tip çıkarsama, tip kontrolü)~~ ✓ ADIM 11
+- ~~Linear types (Spec V1)~~ ✓ (konsolidasyon)
+- ~~Bölge çözümleyici (escape analizi, bölge atama)~~ ✓ ADIM 12 + 14
+- LLVM backend genişletme (parametreler, kontrol akışı, yapılar, dizi, çağrı)
+- Concurrency (R-GÖREV, R-BİRLEŞTİR, R-KANAL — Katman 2)
+- Constraint satisfaction (uygula bound kontrolü)
+- LSP server (IDE entegrasyonu)
+- Stdlib (network/JSON/regex)
 - Bootstrapping (KEMGU ile KEMGU derleyicisi)
 
 ---
@@ -457,9 +732,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ!)
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR → native exe
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → **(genişletme: tam escape, Katman 2, LLVM cağrı/yapı/kontrol akışı)**
+- **Faz:** **🎉🎉 KONSOLIDASYON — TİP + BÖLGE + LLVM + ESCAPE + CONSTRAINT + LSP + LİNEER FAZLARI TAMAMLANDI**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server + **Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)**
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → ~~15.1-15.5~~ ✓ → ~~16.1-16.5~~ ✓ → ~~Linear V1~~ ✓ → **(genişletme: Katman 2, LLVM v4, LSP v3, stdlib, Linear V2, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
@@ -467,7 +742,12 @@ Belge dosyaları: Türkçe.
   - Constraint: ŞIMDILIK YOK (ileride)
   - Sayı literal: Context-dependent, default tam32
   - Bölge: Önce tip, sonra ADIM 12'de bölge
-- **Sıradaki hedef:** End-to-end pipeline çalışıyor. Genişletme noktaları: tam escape analizi (DFA), Bölge Katman 2 (concurrency), LLVM IR'da çağrı/parametre/kontrol akışı/yapı desteği, `hiç`/`değer` ifade desteği. Kullanıcı önceliklerini belirler.
+- **Escape analizi tasarım kararları:**
+  - Forward DFA + fixed-point iterasyonu (max 16 pass)
+  - Per-AST-node escape kategorisi (linear arama haritası)
+  - Değişken bağlama: scope stack, append-only on assign (MAY-flow konservatif)
+  - `bolge_atama` ile opsiyonel entegrasyon (NULL → eski syntax modu)
+- **Sıradaki hedef:** Kullanıcı önceliği belirler. En doğal sıralama: (a) LLVM backend genişletme (çağrı/yapı/dizi), (b) constraint satisfaction, (c) `hiç`/`değer` ifade desteği + pattern binding, (d) inter-procedural escape v2, (e) Bölge Katman 2 (concurrency), (f) LSP, (g) stdlib, (h) self-host.
 
 ---
 

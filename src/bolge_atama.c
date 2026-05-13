@@ -11,22 +11,60 @@ void bolge_atama_baslat(BolgeAtama *ba, Arena *a,
     ba->dongu_id_sayaci = 0;
     ba->aktif_iterasyon = NULL;
     ba->ver_baglaminda = 0;
+    ba->escape = NULL;
 }
 
-/* Yardimci: aktif baglama gore "varsayilan tahsis bolgesi" */
-static BolgeBilgisi *varsayilan_tahsis(BolgeAtama *ba) {
-    /* R-VER: ver icinde -> CAGIRAN (escape ediyor) */
+void bolge_atama_escape_bagla(BolgeAtama *ba, const EscapeAnaliz *ea) {
+    ba->escape = ea;
+}
+
+/* Escape sonucundan bolge kategorisine donusum */
+static BolgeBilgisi *escape_to_bolge(BolgeAtama *ba, EscapeKategorisi ek) {
+    switch (ek) {
+        case ESC_CAGIRAN:
+            return bolge_olustur_cagiran(ba->arena,
+                ba->islev_adi, ba->islev_adi_uz);
+        case ESC_ITERASYON:
+            if (ba->aktif_iterasyon) return ba->aktif_iterasyon;
+            return bolge_olustur_iterasyon(ba->arena, 0);
+        case ESC_YEREL:
+        default:
+            return bolge_olustur_yerel(ba->arena,
+                ba->islev_adi, ba->islev_adi_uz);
+    }
+}
+
+/* Yardimci: tahsis bolgesi belirle.
+ *
+ * Eger escape analizi bagliysa, AST dugumune ait escape kategorisi sorgulanir;
+ * yoksa syntax tabanli ver_baglaminda/dongu_derinligi heuristikine duser. */
+static BolgeBilgisi *varsayilan_tahsis_dugum(BolgeAtama *ba, const Dugum *d) {
+    if (ba->escape && d) {
+        EscapeKategorisi ek = escape_kategori(ba->escape, d);
+        /* Eger escape ESC_YEREL diyorsa ama ver_baglaminda 1'se,
+         * yine de ver baglamini tercih et (escape analizinin gozden kacirdigi
+         * durumlara karsi guvenli taraf). */
+        if (ek == ESC_YEREL && ba->ver_baglaminda) {
+            return bolge_olustur_cagiran(ba->arena,
+                ba->islev_adi, ba->islev_adi_uz);
+        }
+        return escape_to_bolge(ba, ek);
+    }
+    /* Syntax tabanli fallback (eski davranis) */
     if (ba->ver_baglaminda) {
         return bolge_olustur_cagiran(ba->arena,
             ba->islev_adi, ba->islev_adi_uz);
     }
-    /* R-ITERASYON: dongu icinde + escape yok -> ITERASYON */
     if (ba->dongu_derinligi > 0 && ba->aktif_iterasyon) {
         return ba->aktif_iterasyon;
     }
-    /* R-YEREL: default */
     return bolge_olustur_yerel(ba->arena,
         ba->islev_adi, ba->islev_adi_uz);
+}
+
+/* Geriye uyumluluk: dugum bilmeyen versiyon (yapi_olusturma sonek vb. icin) */
+static BolgeBilgisi *varsayilan_tahsis(BolgeAtama *ba) {
+    return varsayilan_tahsis_dugum(ba, NULL);
 }
 
 BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
@@ -41,12 +79,19 @@ BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
         case DUGUM_BOS:
             return bolge_olustur_basit(ba->arena, BOLGE_LIT);
 
-        /* === R-YEREL veya R-VER: bilesik literal === */
+        /* === R-YEREL veya R-VER: bilesik literal ===
+         * Escape analizi varsa dogrudan dugumden okur. */
         case DUGUM_METIN:
         case DUGUM_DIZI_OLUSTUR:
         case DUGUM_YAPI_OLUSTUR:
         case DUGUM_LAMBDA:
-            return varsayilan_tahsis(ba);
+            return varsayilan_tahsis_dugum(ba, d);
+
+        case DUGUM_CAGRI: {
+            /* Cagri sonucu: escape analizinde kayitli (varsa). */
+            BolgeBilgisi *r = varsayilan_tahsis_dugum(ba, d);
+            return r;
+        }
 
         /* === Tanimlayici / cagri / erisim / indeks: bagimli === */
         case DUGUM_TANIMLAYICI:
@@ -54,12 +99,6 @@ BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
              * default yerel) */
             return bolge_olustur_yerel(ba->arena,
                 ba->islev_adi, ba->islev_adi_uz);
-
-        case DUGUM_CAGRI: {
-            /* Cagrinin sonucu: islev donus tipi
-             * Varsayilan: yerel (escape ederse R-VER zaten flag aktif) */
-            return varsayilan_tahsis(ba);
-        }
 
         case DUGUM_IKILI:
         case DUGUM_TEKLI:

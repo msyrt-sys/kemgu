@@ -1,0 +1,7 @@
+// LLVM A.7 testi: dizi literali + indeks
+// 10 + 20 + 12 = 42
+
+işlev main() -> tam32 {
+    değişken a = [10, 20, 12];
+    ver a[0] + a[1] + a[2];
+}

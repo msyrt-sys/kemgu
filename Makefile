@@ -17,7 +17,8 @@
 CC = gcc          # Prod derleyici (UCRT64 MinGW-w64 GCC)
 CC_ASAN = clang   # ASan test derleyicisi (Clang64)
 
-CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0
+CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP
+DEPFLAGS = -MMD -MP
 
 # AddressSanitizer + UBSan — bellek alan modul testleri icin (Clang64 ile)
 ASAN_FLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer
@@ -26,21 +27,41 @@ SRCDIR = src
 TESTDIR = test
 BUILD = build
 
-# Windows'ta GCC/Clang ciktiya otomatik .exe ekler
+# Platform/mimari tespiti — Windows / Linux / macOS, x86_64 / ARM64
+# (DGX Spark + Android NDK ARM64 portu icin altyapi)
 ifeq ($(OS),Windows_NT)
     EXE := .exe
+    PLATFORM := windows
+    ARCH := x86_64
 else
     EXE :=
+    UNAME_S := $(shell uname -s)
+    UNAME_M := $(shell uname -m)
+    ifeq ($(UNAME_S),Linux)
+        PLATFORM := linux
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        PLATFORM := macos
+    endif
+    ifeq ($(UNAME_M),aarch64)
+        ARCH := arm64
+    endif
+    ifeq ($(UNAME_M),arm64)
+        ARCH := arm64
+    endif
+    ifeq ($(UNAME_M),x86_64)
+        ARCH := x86_64
+    endif
 endif
 
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
        $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
-       $(SRCDIR)/llvm.c
+       $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check test_tumu
 
 # === Ana hedef ===
 
@@ -114,9 +135,55 @@ $(BUILD)/test_bolge_atama$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
                                   $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                   $(SRCDIR)/ifade.c $(SRCDIR)/bolge.c \
-                                  $(SRCDIR)/bolge_atama.c \
+                                  $(SRCDIR)/bolge_atama.c $(SRCDIR)/escape.c \
                                   $(TESTDIR)/test_bolge_atama.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Escape analiz testi (Clang64 + ASan — parser + escape) ===
+
+$(BUILD)/test_escape$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(SRCDIR)/escape.c \
+                            $(TESTDIR)/test_escape.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === JSON testi (Clang64 + ASan) ===
+
+$(BUILD)/test_json$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/json.c \
+                          $(TESTDIR)/test_json.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === LSP testi (Clang64 + ASan — tum bagimliliklar + json + lsp) ===
+
+$(BUILD)/test_lsp$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                        $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                        $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                        $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                        $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                        $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                        $(SRCDIR)/json.c $(SRCDIR)/lsp.c \
+                        $(TESTDIR)/test_lsp.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === LLVM backend entegrasyon testi (GCC, ASan'siz — system() ile harici cagri) ===
+# kemgu.exe ve clang'a baglidir.
+
+$(BUILD)/test_llvm$(EXE): $(TESTDIR)/test_llvm.c | $(BUILD)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $<
+
+# === Linear Types Spec V1 testi (Clang64 + ASan — full pipeline) ===
+
+$(BUILD)/test_linear$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                            $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                            $(TESTDIR)/test_linear.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 
 # === Genel obje kurallari ===
 
@@ -125,6 +192,11 @@ $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+# Otomatik basligi degisikligi izleme (-MMD -MP ile uretilen .d dosyalari)
+-include $(OBJS:.o=.d)
+-include $(BUILD)/ana.d
+-include $(BUILD)/test_lexer.d
 
 # === Test calistirma hedefleri ===
 
@@ -157,7 +229,30 @@ calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 	./$(BUILD)/test_bolge_atama$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test
+calistir_escape_test: $(BUILD)/test_escape$(EXE)
+	./$(BUILD)/test_escape$(EXE)
+
+calistir_json_test: $(BUILD)/test_json$(EXE)
+	./$(BUILD)/test_json$(EXE)
+
+calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
+	./$(BUILD)/test_lsp$(EXE)
+
+calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE)
+	./$(BUILD)/test_llvm$(EXE)
+
+calistir_linear_test: $(BUILD)/test_linear$(EXE)
+	./$(BUILD)/test_linear$(EXE)
+
+# Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
+calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
+	@echo "stdlib tip kontrolu..."
+	@for f in stdlib/temel/*.kem; do \
+		./$(BUILD)/kemgu$(EXE) --check $$f || exit 1; \
+	done
+	@echo "Tum stdlib modulleri --check gecti!"
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:

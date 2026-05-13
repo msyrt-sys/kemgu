@@ -77,11 +77,40 @@ TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk) 
     return t;
 }
 
+TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_TEKKEZ);
+    if (!t) return NULL;
+    t->veri.tekkez.ic = ic;
+    return t;
+}
+
+int tip_lineer_mi(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_TEKKEZ;
+}
+
 /* === Esitlik (nominal, recursive) === */
 
 int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
     if (!a || !b) return 0;
     if (a == b) return 1;
+    /* Generic param ozel kural:
+     *   - Iki generic param: ad esit ise esit, degilse degil
+     *   - Bir taraf generic, diger concrete: deferred — esit kabul
+     *   (bu sayede T == 0 (i32) gibi karsilastirmalar generic gov dede gecer) */
+    if (a->kategori == TIP_GENERIC_PARAM &&
+        b->kategori == TIP_GENERIC_PARAM) {
+        return a->veri.generic_param.ad_uzunluk == b->veri.generic_param.ad_uzunluk
+            && memcmp(a->veri.generic_param.ad, b->veri.generic_param.ad,
+                      (size_t)a->veri.generic_param.ad_uzunluk) == 0;
+    }
+    if (a->kategori == TIP_GENERIC_PARAM || b->kategori == TIP_GENERIC_PARAM) {
+        return 1;
+    }
+    /* TIP_BILINMIYOR: konstrüktörler (hiç, tamam, hata) bunu üretir.
+     * Inference için diğer tipler ile uyumlu kabul edilir. */
+    if (a->kategori == TIP_BILINMIYOR || b->kategori == TIP_BILINMIYOR) {
+        return 1;
+    }
     if (a->kategori != b->kategori) return 0;
 
     switch (a->kategori) {
@@ -138,6 +167,9 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
             return memcmp(a->veri.generic_param.ad,
                           b->veri.generic_param.ad,
                           (size_t)a->veri.generic_param.ad_uzunluk) == 0;
+
+        case TIP_TEKKEZ:
+            return tip_esit(a->veri.tekkez.ic, b->veri.tekkez.ic);
     }
     return 0;
 }
@@ -221,6 +253,12 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
                    (size_t)t->veri.generic_param.ad_uzunluk, out);
             return;
 
+        case TIP_TEKKEZ:
+            fputs("tekkez<", out);
+            tip_yazdir(t->veri.tekkez.ic, out);
+            fputc('>', out);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -251,6 +289,7 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_ISLEV:     return "ISLEV";
         case TIP_YAPI:      return "YAPI";
         case TIP_GENERIC_PARAM: return "GENERIC_PARAM";
+        case TIP_TEKKEZ:    return "TEKKEZ";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }
@@ -266,6 +305,11 @@ int tip_sayisal_mi(const TipBilgisi *t) {
         case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
         case TIP_KESIRLI32: case TIP_KESIRLI64:
             return 1;
+        case TIP_GENERIC_PARAM:
+            /* Generic param: gercek kontrol instantiation'da yapilir.
+             * Generic islev govdesinde T'nin sayisal olduğunu kabul ediyoruz —
+             * eger degilse callsite'da hata cikar (monomorphized kodda). */
+            return 1;
         default:
             return 0;
     }
@@ -277,11 +321,16 @@ int tip_tamsayi_mi(const TipBilgisi *t) {
         case TIP_TAM8:    case TIP_TAM16:    case TIP_TAM32:    case TIP_TAM64:
         case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
             return 1;
+        case TIP_GENERIC_PARAM:
+            return 1;  /* deferred */
         default:
             return 0;
     }
 }
 
 int tip_mantiksal_mi(const TipBilgisi *t) {
-    return t && t->kategori == TIP_MANTIKSAL;
+    if (!t) return 0;
+    if (t->kategori == TIP_MANTIKSAL) return 1;
+    if (t->kategori == TIP_GENERIC_PARAM) return 1;  /* deferred */
+    return 0;
 }

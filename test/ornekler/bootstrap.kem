@@ -1,0 +1,14 @@
+// Bootstrapping demosu: KEMGU'da yazılmış bir KEMGU programı KEMGU dosyası
+// okuyor. Self-host derleyiciye doğru atılmış ilk adım — tam bootstrap
+// uzun vadeli iş (lexer/parser/AST/tip/LLVM'in KEMGU'da yeniden yazımı).
+
+işlev main() -> tam32 {
+    değişken kaynak: metin = dosya_tumu_oku("test/ornekler/hello.kem");
+    değişken n: tam32 = metin_uzunluk(kaynak);
+    yazdır("=== KEMGU programi KEMGU kodu okuyor ===");
+    yaz("dosya boyutu: "); yaz_tam(n); yazdır(" byte");
+    yazdır("--- icerik ---");
+    yazdır(kaynak);
+    yazdır("--- bitti ---");
+    ver 0;
+}

@@ -30,19 +30,36 @@
  *   T015: lambda parametre tip annot eksik
  *   T016: modul/yol cozumlemesi basarisiz
  *   T017: yapi olusturmada bilinmeyen alan
+ *   T030: generic tip argumani bound'u karsilamiyor (constraint violation)
+ *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
  */
+
+/* Yüklenmiş modül izleme (cycle + duplicate detection) */
+typedef struct YuklenmisModul {
+    char *yol;             /* "stdlib/temel/matematik.kem" gibi */
+    int yol_uz;
+    struct YuklenmisModul *sonraki;
+} YuklenmisModul;
 
 typedef struct TipKontrol {
     Arena *arena;
     Scope *scope;                  /* mevcut scope */
     Scope *global_scope;           /* yapi/islev tanimlari icin (ileri referans) */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
+    UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
+    YuklenmisModul *yuklenmisler;  /* duplicate-load engelleme */
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;
+    /* === Linear Types Spec V1 takibi === */
+    int scope_seviyesi;            /* mevcut scope derinligi (lineer omur kontrolu) */
+    int lambda_govdesi_icinde;     /* >0 = lambda govdesi visit ediyoruz */
+    int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
+                                      (closure-itself-linear icin) */
+    Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
 } TipKontrol;
 
 void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,

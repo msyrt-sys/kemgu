@@ -1,0 +1,12 @@
+// Arena bellek modeli testi: bölge tabanlı alloc (KEMGU'nun ana özelliği)
+// Tüm alloc'lar tek bir arena'da; arena_serbest ile tek seferde free.
+
+işlev main() -> tam32 {
+    değişken b: metin = bölge_olustur();
+    değişken s1: metin = bölge_metin_birleştir(b, "merhaba ", "arena");
+    değişken s2: metin = bölge_metin_birleştir(b, s1, "!");
+    yazdır(s2);
+    yaz("arena toplam byte: "); yazdır_tam(bölge_toplam_byte(b));
+    bölge_serbest(b);
+    ver 0;
+}

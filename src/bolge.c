@@ -34,6 +34,43 @@ BolgeBilgisi *bolge_olustur_iterasyon(Arena *a, int dongu_id) {
     return b;
 }
 
+BolgeBilgisi *bolge_olustur_sahip(Arena *a, int thread_id) {
+    BolgeBilgisi *b = bolge_olustur_basit(a, BOLGE_SAHIP);
+    if (!b) return NULL;
+    b->veri.sahip.thread_id = thread_id;
+    return b;
+}
+
+BolgeBilgisi *bolge_olustur_kanal(Arena *a, int kanal_id) {
+    BolgeBilgisi *b = bolge_olustur_basit(a, BOLGE_KANAL);
+    if (!b) return NULL;
+    b->veri.kanal.kanal_id = kanal_id;
+    return b;
+}
+
+/* === Katman 2 transferleri === */
+
+BolgeBilgisi *bolge_sahiplik_transfer(Arena *a, const BolgeBilgisi *b,
+                                       int yeni_thread_id) {
+    if (!b) return NULL;
+    /* S3 (Atomik Transfer): yeni bir BOLGE_SAHIP olustur, eski thread sahipligini
+     * implicit olarak iptal et (referans modeli, eski 'b' artik kullanilmamali). */
+    return bolge_olustur_sahip(a, yeni_thread_id);
+}
+
+BolgeBilgisi *bolge_kanal_gonder(Arena *a, const BolgeBilgisi *b,
+                                  int kanal_id) {
+    if (!b) return NULL;
+    /* R-KANAL: deger kanala transfer edilir, kaynak bolgesi serbest. */
+    return bolge_olustur_kanal(a, kanal_id);
+}
+
+int bolge_donmus_mu(const BolgeBilgisi *b) {
+    /* R-PAYLAS henuz uygulanmadi — v1'de daima 0 (degisken). */
+    (void)b;
+    return 0;
+}
+
 /* === Iliskiler === */
 
 int bolge_esit(const BolgeBilgisi *a, const BolgeBilgisi *b) {

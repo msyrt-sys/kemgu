@@ -60,6 +60,8 @@ typedef enum {
     DUGUM_YAPI_OLUSTUR,
     DUGUM_DIZI_OLUSTUR,
     DUGUM_ALAN_ATAMA,      /* yapi_olustur icinde "ad: ifade" */
+    DUGUM_KULLAN_IFADE,    /* kullan(e) — Linear Types Spec V1 (extract) */
+    DUGUM_IMHA_IFADE,      /* imha(e)   — Linear Types Spec V1 (dispose) */
 
     /* Literaller */
     DUGUM_TAM,
@@ -79,6 +81,7 @@ typedef enum {
     DUGUM_TIP_SONUC,       /* sonuc<T,H> */
     DUGUM_TIP_ISLEV,       /* islev(...) -> T */
     DUGUM_TIP_KULLANICI,   /* modul::Tip<T1,T2> */
+    DUGUM_TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -155,6 +158,11 @@ struct Dugum {
         struct {
             const char *ad;
             int ad_uzunluk;
+            /* Generic tip parametreleri: islev<T, U: Bound>(...) */
+            char **tip_paramlar;
+            int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **parametreler;  /* DUGUM_PARAMETRE listesi */
             int param_sayi;
             Dugum *donus_tipi;     /* NULL = donus yok */
@@ -166,6 +174,12 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;   /* generic tip parametre adlari (null-term) */
             int tip_param_sayi;
+            /* Bound listeleri (paralel):
+             *   tip_param_boundlari[i] = Dugum* dizisi (i. parametrenin bound listesi)
+             *   tip_param_bound_sayilari[i] = i. parametre icin bound sayisi
+             * NULL veya 0 = bound yok. */
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
         } yapi;
@@ -175,6 +189,8 @@ struct Dugum {
             int ad_uzunluk;
             char **tip_paramlar;
             int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum **uyeler;        /* islev imzalari/tanimlari */
             int uye_sayi;
         } ozellik;
@@ -182,6 +198,8 @@ struct Dugum {
         struct {
             char **tip_paramlar;
             int tip_param_sayi;
+            Dugum ***tip_param_boundlari;
+            int *tip_param_bound_sayilari;
             Dugum *tip;            /* uygulanacak tip */
             Dugum **ozellikler;    /* ozellik yollari (DUGUM_TIP_KULLANICI) */
             int ozellik_sayi;
@@ -200,6 +218,9 @@ struct Dugum {
             const char *ad;
             int ad_uzunluk;
             Dugum *tip;
+            int kendin_mi;       /* 1 = self parametresi (uygula gövdesinde) */
+            int referans_mi;     /* 1 = &kendin */
+            int degisken_mi;     /* 1 = &değişken kendin */
         } parametre;
 
         struct {
@@ -376,6 +397,18 @@ struct Dugum {
             Dugum **tip_arg;       /* generic argumanlar (tip listesi) */
             int tip_arg_sayi;
         } tip_kullanici;
+
+        struct {
+            Dugum *ic_tip;
+        } tip_tekkez;              /* tekkez<T> — Linear Types Spec V1 */
+
+        struct {
+            Dugum *operand;
+        } kullan_ifade;            /* kullan(e) — extract */
+
+        struct {
+            Dugum *operand;
+        } imha_ifade;              /* imha(e) — dispose */
 
         /* === Desenler === */
 

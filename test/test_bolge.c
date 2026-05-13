@@ -184,6 +184,54 @@ static void test_yazdir(void) {
     arena_serbest(a);
 }
 
+/* === Katman 2: Concurrency === */
+
+static void test_olustur_sahip(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *b = bolge_olustur_sahip(a, 7);
+    int ok = b && b->kategori == BOLGE_SAHIP
+          && b->veri.sahip.thread_id == 7;
+    test_sonuc("bolge_olustur_sahip(7)", ok);
+    arena_serbest(a);
+}
+
+static void test_olustur_kanal(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *b = bolge_olustur_kanal(a, 3);
+    int ok = b && b->kategori == BOLGE_KANAL
+          && b->veri.kanal.kanal_id == 3;
+    test_sonuc("bolge_olustur_kanal(3)", ok);
+    arena_serbest(a);
+}
+
+static void test_sahiplik_transfer(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *eski = bolge_olustur_sahip(a, 1);
+    BolgeBilgisi *yeni = bolge_sahiplik_transfer(a, eski, 2);
+    int ok = yeni && yeni->kategori == BOLGE_SAHIP
+          && yeni->veri.sahip.thread_id == 2;
+    test_sonuc("R-GOREV: sahiplik transfer t1 -> t2", ok);
+    arena_serbest(a);
+}
+
+static void test_kanal_gonder(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *yerel = bolge_olustur_yerel(a, "f", 1);
+    BolgeBilgisi *kanalda = bolge_kanal_gonder(a, yerel, 5);
+    int ok = kanalda && kanalda->kategori == BOLGE_KANAL
+          && kanalda->veri.kanal.kanal_id == 5;
+    test_sonuc("R-KANAL: yerel -> kanal(5)", ok);
+    arena_serbest(a);
+}
+
+static void test_donmus_default(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *b = bolge_olustur_yerel(a, "f", 1);
+    int ok = bolge_donmus_mu(b) == 0;
+    test_sonuc("bolge_donmus_mu default 0 (R-PAYLAS v2'de)", ok);
+    arena_serbest(a);
+}
+
 /* === Stres === */
 
 static void test_stres(void) {
@@ -228,6 +276,13 @@ int main(void) {
     printf("\n--- Yardimcilar ---\n");
     test_kategori_adlari();
     test_yazdir();
+
+    printf("\n--- Katman 2: Concurrency ---\n");
+    test_olustur_sahip();
+    test_olustur_kanal();
+    test_sahiplik_transfer();
+    test_kanal_gonder();
+    test_donmus_default();
 
     printf("\n--- Stres ---\n");
     test_stres();

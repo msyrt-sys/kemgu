@@ -51,6 +51,12 @@ typedef struct Sembol {
     struct Scope *yapi_scope;      /* sadece SEMBOL_YAPI icin, alanlar burada */
     /* Modul sembolu icin: modulun ic scope'u */
     struct Scope *modul_scope;     /* sadece SEMBOL_MODUL icin */
+
+    /* Linear Types Spec V1: lineer baglamalar icin tuketim takibi.
+     * tip TIP_TEKKEZ ise kullanim sayisi takip edilir; > 1 = L002,
+     * scope sonunda 0 = L001. */
+    int lineer_tuketildi;          /* 0 = henuz tuketilmedi; 1+ = tuketim sayisi */
+    int lineer_scope_seviyesi;     /* tanim aninda scope derinligi */
 } Sembol;
 
 /* === Scope === */
@@ -92,9 +98,57 @@ const Sembol *sembol_bul(const Scope *s, const char *ad, int ad_uzunluk);
 const Sembol *sembol_bul_yerel(const Scope *s,
                                 const char *ad, int ad_uzunluk);
 
+/* Linear Types Spec V1: lineer tuketim isaretleme icin mutable Sembol*
+ * alma. sembol_bul ile ayni algoritma fakat const olmayan pointer doner.
+ * Lineer_tuketildi alanini guncellemek icin gerekli. */
+Sembol *sembol_bul_yazilabilir(Scope *s, const char *ad, int ad_uzunluk);
+
 /* Yapi alanini ara (yapi sembolunun yapi_scope'u icinde). */
 const Sembol *sembol_yapi_alani(const Sembol *yapi_sem,
                                  const char *ad, int ad_uzunluk);
+
+/* === Uygula (impl) kayit defteri ===
+ *
+ * Her 'uygula Trait icin Tip { ... }' veya 'uygula Tip { ... }' bildirimi
+ * burada kayit edilir. ozellik_adi NULL/0 ise inherent (trait olmadan) impl.
+ *
+ * Sorgu: uygula_implementations_eder(tablo, tip_adi, ozellik_adi) -> 1/0
+ */
+
+typedef struct UygulaKaydi {
+    const char *tip_adi;
+    int tip_ad_uz;
+    const char *ozellik_adi;       /* NULL veya 0 uz = inherent */
+    int ozellik_ad_uz;
+    const Dugum *ast_dugumu;
+    struct UygulaKaydi *sonraki;
+} UygulaKaydi;
+
+typedef struct UygulaTablosu {
+    UygulaKaydi *bas;
+    UygulaKaydi *son;
+    int sayi;
+} UygulaTablosu;
+
+void uygula_tablosu_baslat(UygulaTablosu *t);
+
+/* Kayit ekle. ozellik_adi NULL/0 -> inherent. */
+void uygula_tablosu_ekle(UygulaTablosu *t, Arena *a,
+                         const char *tip_adi, int tip_uz,
+                         const char *ozellik_adi, int ozellik_uz,
+                         const Dugum *ast_dugumu);
+
+/* Sorgu: tip 'tip_adi' ozellik 'ozellik_adi' implement ediyor mu? */
+int uygula_tablosu_implementations_eder(const UygulaTablosu *t,
+                                         const char *tip_adi, int tip_uz,
+                                         const char *ozellik_adi, int ozellik_uz);
+
+/* Method arama: tip 'tip_adi' icin 'metot_adi' adli islev bulundugunda
+ * AST islev dugumunu doner (DUGUM_ISLEV). Inherent VE trait impl'lere bakar.
+ * Bulunamazsa NULL. */
+const Dugum *uygula_tablosu_method_bul(const UygulaTablosu *t,
+                                        const char *tip_adi, int tip_uz,
+                                        const char *metot_adi, int metot_uz);
 
 /* === Yardimci === */
 

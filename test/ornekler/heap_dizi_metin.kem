@@ -1,0 +1,33 @@
+// I + J testi: dinamik dizi + metin işlemleri (heap alloc)
+// Beklenen stdout (golden):
+//   merhaba dünya
+//   sayi metni: 42
+//   boyut: 3
+//   ilk: 10
+//   son: 30
+//   42 + 7 = 49
+
+işlev main() -> tam32 {
+    // J: metin birleştir
+    değişken s: metin = metin_birleştir("merhaba ", "dünya");
+    yazdır(s);
+
+    değişken n: metin = tam_to_metin(42);
+    yaz("sayi metni: "); yazdır(n);
+
+    // I: dinamik dizi
+    değişken d: metin = dizi_olustur(4);   // 4 byte/i32
+    dizi_ekle_tam(d, 10);
+    dizi_ekle_tam(d, 20);
+    dizi_ekle_tam(d, 30);
+    yaz("boyut: "); yazdır_tam(dizi_boyut(d));
+    yaz("ilk: "); yazdır_tam(dizi_al_tam(d, 0));
+    yaz("son: "); yazdır_tam(dizi_al_tam(d, 2));
+    dizi_serbest(d);
+
+    // J: metin -> tam ve geri
+    değişken k: tam32 = metin_to_tam("42");
+    yaz_tam(k); yaz(" + 7 = "); yazdır_tam(k + 7);
+
+    ver 0;
+}

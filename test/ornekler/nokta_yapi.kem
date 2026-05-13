@@ -1,0 +1,12 @@
+// LLVM A.6 testi: yapi olusturma + alan erisimi
+// n.x + n.y = 17 + 25 = 42
+
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: 17, y: 25 };
+    ver n.x + n.y;
+}
