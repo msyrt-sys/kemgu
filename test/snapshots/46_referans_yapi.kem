@@ -1,0 +1,15 @@
+yapı Sayac { v: tam32; }
+
+işlev arttir(s: &değişken Sayac) {
+    s.v = s.v + 1;
+}
+
+işlev oku(s: &Sayac) -> tam32 {
+    ver s.v;
+}
+
+işlev main() -> tam32 {
+    değişken s = Sayac { v: 41 };
+    arttir(&değişken s);
+    ver oku(&s);
+}

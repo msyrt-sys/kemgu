@@ -1,0 +1,37 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "faktoriyel"  1:1
+    parametreler (1):
+      PARAMETRE "n"  1:19
+        TIP_BASIT "tam32"  1:22
+    donus_tipi:
+      TIP_BASIT "tam32"  1:32
+    govde:
+      BLOK (4 deyim)  1:38
+        DEGISKEN "sonuc"  2:5
+          tip:
+            TIP_BASIT "tam32"  2:23
+          deger:
+            TAM 1  2:31
+        DEGISKEN "i"  3:5
+          tip:
+            TIP_BASIT "tam32"  3:19
+          deger:
+            TAM 1  3:27
+        IKEN  4:5
+        VER  8:5
+          TANIMLAYICI "sonuc"  8:9
+  ISLEV "main"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:18
+    govde:
+      BLOK (1 deyim)  11:24
+        VER  12:5
+          CAGRI  12:19
+            hedef:
+              TANIMLAYICI "faktoriyel"  12:9
+            argumanlar (1):
+              TAM 5  12:20
+
+=== Toplam parser hata sayisi: 0 ===

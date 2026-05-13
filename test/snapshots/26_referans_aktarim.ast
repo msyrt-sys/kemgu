@@ -1,0 +1,56 @@
+=== AST ===
+PROGRAM (3 uye)  1:1
+  ISLEV "iki_kat"  1:1
+    parametreler (1):
+      PARAMETRE "r"  1:16
+        TIP_REFERANS  1:19
+          TIP_BASIT "tam32"  1:20
+    donus_tipi:
+      TIP_BASIT "tam32"  1:30
+    govde:
+      BLOK (1 deyim)  1:36
+        VER  1:38
+          IKILI *  1:47
+            TEKLI deref*  1:43
+              TANIMLAYICI "r"  1:44
+            TAM 2  1:49
+  ISLEV "yaz"  2:1
+    parametreler (1):
+      PARAMETRE "r"  2:12
+        TIP_REFERANS (degisken)  2:15
+          TIP_BASIT "tam32"  2:27
+    govde:
+      BLOK (1 deyim)  2:34
+        ATAMA  3:5
+          hedef:
+            TEKLI deref*  3:5
+              TANIMLAYICI "r"  3:6
+          deger:
+            TAM 21  3:10
+  ISLEV "main"  6:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  6:18
+    govde:
+      BLOK (3 deyim)  6:24
+        DEGISKEN "x"  7:5
+          tip:
+            TIP_BASIT "tam32"  7:19
+          deger:
+            TAM 0  7:27
+        IFADE_DEYIMI  8:5
+          CAGRI  8:8
+            hedef:
+              TANIMLAYICI "yaz"  8:5
+            argumanlar (1):
+              TEKLI &degisken  8:9
+                TANIMLAYICI "x"  8:21
+        VER  9:5
+          CAGRI  9:16
+            hedef:
+              TANIMLAYICI "iki_kat"  9:9
+            argumanlar (1):
+              TEKLI &  9:17
+                TANIMLAYICI "x"  9:18
+
+=== Toplam parser hata sayisi: 0 ===

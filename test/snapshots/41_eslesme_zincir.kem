@@ -1,0 +1,13 @@
+işlev kategori(n: tam32) -> tam32 {
+    eşleş n {
+        0 => { ver 100; }
+        1 => { ver 101; }
+        2 => { ver 102; }
+        _ => { ver n; }
+    }
+    ver 0 - 1;
+}
+
+işlev main() -> tam32 {
+    ver kategori(2);  // = 102
+}

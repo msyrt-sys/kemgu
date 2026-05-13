@@ -1,0 +1,70 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "fizzbuzz"  1:1
+    parametreler (1):
+      PARAMETRE "n"  1:17
+        TIP_BASIT "tam32"  1:20
+    donus_tipi:
+      TIP_BASIT "tam32"  1:30
+    govde:
+      BLOK (1 deyim)  1:36
+        EGER  2:5
+          kosul:
+            IKILI ==  2:18
+              IKILI %  2:13
+                TANIMLAYICI "n"  2:11
+                TAM 15  2:15
+              TAM 0  2:21
+          eger:
+            BLOK (1 deyim)  2:23
+              VER  2:25
+                TAM 15  2:29
+          degilse:
+            EGER  3:14
+              kosul:
+                IKILI ==  3:26
+                  IKILI %  3:22
+                    TANIMLAYICI "n"  3:20
+                    TAM 3  3:24
+                  TAM 0  3:29
+              eger:
+                BLOK (1 deyim)  3:31
+                  VER  3:33
+                    TAM 3  3:37
+              degilse:
+                EGER  4:14
+                  kosul:
+                    IKILI ==  4:26
+                      IKILI %  4:22
+                        TANIMLAYICI "n"  4:20
+                        TAM 5  4:24
+                      TAM 0  4:29
+                  eger:
+                    BLOK (1 deyim)  4:31
+                      VER  4:33
+                        TAM 5  4:37
+                  degilse:
+                    BLOK (1 deyim)  5:14
+                      VER  5:16
+                        TANIMLAYICI "n"  5:20
+  ISLEV "main"  8:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  8:18
+    govde:
+      BLOK (4 deyim)  8:24
+        DEGISKEN "i"  9:5
+          tip:
+            TIP_BASIT "tam32"  9:19
+          deger:
+            TAM 1  9:27
+        DEGISKEN "toplam"  10:5
+          tip:
+            TIP_BASIT "tam32"  10:24
+          deger:
+            TAM 0  10:32
+        IKEN  11:5
+        VER  15:5
+          TANIMLAYICI "toplam"  15:9
+
+=== Toplam parser hata sayisi: 0 ===

@@ -1,0 +1,16 @@
+yapı Nokta { x: tam32; y: tam32; }
+yapı Dikdortgen { sol_alt: Nokta; sag_ust: Nokta; }
+
+işlev alan(d: Dikdortgen) -> tam32 {
+    değişken w: tam32 = d.sag_ust.x - d.sol_alt.x;
+    değişken h: tam32 = d.sag_ust.y - d.sol_alt.y;
+    ver w * h;
+}
+
+işlev main() -> tam32 {
+    değişken d = Dikdortgen {
+        sol_alt: Nokta { x: 0, y: 0 },
+        sag_ust: Nokta { x: 6, y: 7 },
+    };
+    ver alan(d);  // = 42
+}

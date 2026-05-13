@@ -1,0 +1,9 @@
+modül grafik {
+    yapı Nokta { x: tam32; y: tam32; }
+    işlev olustur(x: tam32, y: tam32) -> Nokta { ver Nokta { x: x, y: y }; }
+}
+
+işlev main() -> tam32 {
+    değişken p = grafik::olustur(10, 32);
+    ver p.x + p.y;
+}

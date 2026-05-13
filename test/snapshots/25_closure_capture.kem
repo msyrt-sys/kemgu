@@ -1,0 +1,5 @@
+işlev main() -> tam32 {
+    değişken x: tam32 = 32;
+    değişken arttir = |n: tam32| x + n;
+    ver arttir(10);
+}
