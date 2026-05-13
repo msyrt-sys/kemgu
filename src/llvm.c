@@ -39,6 +39,9 @@ typedef struct LlvmIsim {
     int kategori;          /* 0 = parametre alloca, 1 = lokal alloca */
     int reg_no;            /* alloca register */
     const char *llvm_tip;  /* "i32", "i8", "ptr", "%Hasta" */
+    /* Madde B: Dizi<T> tipli degiskenler icin eleman tipi (i32/i64/ptr).
+     * dizi_ekle / dizi_al icin element-aware kdl_ cagrisi route etmek icin. */
+    const char *eleman_llvm_tip;
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -921,12 +924,43 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 return hata(g, "cagri hedefi tanimlayici degil");
             }
             int n = d->veri.cagri.sayi;
+            /* Madde B: dizi_ekle / dizi_al ic context — eleman tipi
+             * arg[0]'in (dizi degiskeni) eleman_llvm_tip'inden alinir.
+             * Beklenen arg[1] icin set edilir. */
+            const char *dizi_eleman_beklenen = NULL;
+            {
+                const char *adi = d->veri.cagri.hedef
+                    ? d->veri.cagri.hedef->veri.tanimlayici.metin : NULL;
+                int adi_uz = d->veri.cagri.hedef
+                    ? d->veri.cagri.hedef->veri.tanimlayici.uzunluk : 0;
+                int dizi_built_in =
+                    (adi_uz == 9 && memcmp(adi, "dizi_ekle", 9) == 0) ||
+                    (adi_uz == 7 && memcmp(adi, "dizi_al", 7) == 0);
+                if (dizi_built_in && n >= 1) {
+                    const Dugum *arg0 = d->veri.cagri.argumanlar[0];
+                    if (arg0 && arg0->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg0->veri.tanimlayici.metin,
+                            arg0->veri.tanimlayici.uzunluk);
+                        if (vi && vi->eleman_llvm_tip) {
+                            dizi_eleman_beklenen = vi->eleman_llvm_tip;
+                        }
+                    }
+                }
+            }
+
             IfadeSonuc *args = NULL;
             if (n > 0) {
                 args = (IfadeSonuc *)arena_ayir(g->arena,
                     sizeof(IfadeSonuc) * (size_t)n);
                 for (int i = 0; i < n; i++) {
-                    args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
+                    const char *arg_beklenen = NULL;
+                    /* dizi_ekle ikinci arg ic, dizi_al donus tipi */
+                    if (i == 1 && dizi_eleman_beklenen) {
+                        arg_beklenen = dizi_eleman_beklenen;
+                    }
+                    args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i],
+                                          arg_beklenen);
                 }
             }
             IslevKayit *ik = islev_bul(g,
@@ -997,6 +1031,75 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 } else {
                     kdl_donus = "ptr";
                 }
+            }
+            /* Madde B: dinamik dizi intrinsicleri (dizi_olustur/ekle/al/boyut)
+             * — element tipi arg/return inference ile belirlenir. */
+            else if (cagri_adi_uz == 12 &&
+                     memcmp(cagri_adi, "dizi_olustur", 12) == 0) {
+                /* dizi_olustur(N) -> ptr (KdlDizi*). element_byte = arg yok;
+                 * v1 default 4 (tam32). */
+                int rr = yeni_reg(g);
+                int kap = args[0].reg;
+                /* Kapasite tam32'ye trunc, kdl_dizi_olustur(i32) imzasi */
+                int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_dizi_olustur(i32 4)\n", rr);
+                /* Kapasiteyi pre-reserve etme: yok — runtime grow eder */
+                (void)kap_i32;
+                IfadeSonuc s = { rr, "ptr" };
+                return s;
+            }
+            else if (cagri_adi_uz == 9 &&
+                     memcmp(cagri_adi, "dizi_ekle", 9) == 0) {
+                /* dizi_ekle(d, e) -> void. T = dizi_eleman_beklenen ya da
+                 * e'in tipinden tahmin */
+                const char *et = dizi_eleman_beklenen
+                    ? dizi_eleman_beklenen
+                    : (n > 1 ? args[1].tip : "i32");
+                const char *fn;
+                const char *cast_tip = et;
+                if (strcmp(et, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+                else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                else { fn = "kdl_dizi_ekle_tam"; cast_tip = "i32"; }
+                int ev = (n > 1) ? int_donustur(g, args[1].reg,
+                                                 args[1].tip, cast_tip)
+                                 : 0;
+                fprintf(g->out,
+                    "  call void @%s(ptr %%%d, %s %%%d)\n",
+                    fn, args[0].reg, cast_tip, ev);
+                /* void donus — placeholder i32 0 */
+                int rr = yeni_reg(g);
+                fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
+                IfadeSonuc s = { rr, "i32" };
+                return s;
+            }
+            else if (cagri_adi_uz == 7 &&
+                     memcmp(cagri_adi, "dizi_al", 7) == 0) {
+                /* dizi_al(d, i) -> T. T: dizi_eleman_beklenen > beklenen > i32 */
+                const char *et = dizi_eleman_beklenen
+                    ? dizi_eleman_beklenen
+                    : ((beklenen && *beklenen) ? beklenen : "i32");
+                const char *fn;
+                if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
+                else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
+                else { fn = "kdl_dizi_al_tam"; et = "i32"; }
+                int idx_i32 = (n > 1) ? int_donustur(g, args[1].reg,
+                                                      args[1].tip, "i32") : 0;
+                int rr = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                    rr, et, fn, args[0].reg, idx_i32);
+                IfadeSonuc s = { rr, et };
+                return s;
+            }
+            else if (cagri_adi_uz == 10 &&
+                     memcmp(cagri_adi, "dizi_boyut", 10) == 0) {
+                int rr = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
+                    rr, args[0].reg);
+                IfadeSonuc s = { rr, "i32" };
+                return s;
             }
 
             const char *donus = kdl_donus ? kdl_donus
@@ -1145,8 +1248,14 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
 
         case DUGUM_DEGISKEN: {
             const char *annot = NULL;
+            /* Madde B: Dizi<T> annot ise eleman tipini de yakala */
+            const char *eleman_tip = NULL;
             if (d->veri.degisken.tip) {
                 annot = ast_tip_to_ir(g, d->veri.degisken.tip);
+                if (d->veri.degisken.tip->tip == DUGUM_TIP_DIZI) {
+                    eleman_tip = ast_tip_to_ir(g,
+                        d->veri.degisken.tip->veri.tip_dizi.eleman_tip);
+                }
             }
             const char *tip = annot;
 
@@ -1166,6 +1275,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     isim_ekle(g, d->veri.degisken.ad,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
+                    if (eleman_tip) {
+                        g->isimler->eleman_llvm_tip = eleman_tip;
+                    }
                 } else {
                     /* Annot yok: deger once, sonra alloca */
                     dv = ifade_uret(g, d->veri.degisken.deger, NULL);
@@ -1186,6 +1298,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 isim_ekle(g, d->veri.degisken.ad,
                           d->veri.degisken.ad_uzunluk,
                           1, alloca_reg, tip);
+                if (eleman_tip) {
+                    g->isimler->eleman_llvm_tip = eleman_tip;
+                }
             }
             return 0;
         }
@@ -1467,7 +1582,17 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
-    fputs("declare i64 @kdl_dosya_boyut(ptr)\n\n", out);
+    fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
+
+    /* Madde B: Dinamik dizi (KdlDizi*) */
+    fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam64(ptr, i64)\n", out);
+    fputs("declare void @kdl_dizi_ekle_ptr(ptr, ptr)\n", out);
+    fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
+    fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
+    fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

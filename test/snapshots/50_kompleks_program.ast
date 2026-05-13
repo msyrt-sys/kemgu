@@ -1,0 +1,104 @@
+=== AST ===
+PROGRAM (5 uye)  2:1
+  YAPI  2:1
+  ISLEV "olustur_sayfa"  4:1
+    parametreler (1):
+      PARAMETRE "flags"  4:22
+        TIP_BASIT "tam32"  4:29
+    donus_tipi:
+      TIP_BASIT "Sayfa"  4:39
+    govde:
+      BLOK (1 deyim)  4:45
+        VER  5:5
+          YAPI_OLUSTUR  5:9
+  ISLEV "yaz_bit"  8:1
+    parametreler (2):
+      PARAMETRE "s"  8:16
+        TIP_BASIT "Sayfa"  8:19
+      PARAMETRE "pos"  8:26
+        TIP_BASIT "tam32"  8:31
+    donus_tipi:
+      TIP_BASIT "Sayfa"  8:41
+    govde:
+      BLOK (1 deyim)  8:47
+        VER  9:5
+          YAPI_OLUSTUR  9:9
+  ISLEV "test_bit"  12:1
+    parametreler (2):
+      PARAMETRE "s"  12:17
+        TIP_BASIT "Sayfa"  12:20
+      PARAMETRE "pos"  12:27
+        TIP_BASIT "tam32"  12:32
+    donus_tipi:
+      TIP_BASIT "mantıksal"  12:42
+    govde:
+      BLOK (1 deyim)  12:53
+        VER  13:5
+          IKILI &  13:30
+            IKILI >>  13:22
+              ERISIM "bayraklar"  13:11
+                TANIMLAYICI "s"  13:10
+              TANIMLAYICI "pos"  13:25
+            IKILI ==  13:34
+              TAM 1  13:32
+              TAM 1  13:37
+  ISLEV "main"  16:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  16:18
+    govde:
+      BLOK (6 deyim)  16:24
+        DEGISKEN "s"  17:5
+          deger:
+            CAGRI  17:33
+              hedef:
+                TANIMLAYICI "olustur_sayfa"  17:20
+              argumanlar (1):
+                TAM 0  17:34
+        ATAMA  18:5
+          hedef:
+            TANIMLAYICI "s"  18:5
+          deger:
+            CAGRI  18:16
+              hedef:
+                TANIMLAYICI "yaz_bit"  18:9
+              argumanlar (2):
+                TANIMLAYICI "s"  18:17
+                TAM 1  18:20
+        ATAMA  19:5
+          hedef:
+            TANIMLAYICI "s"  19:5
+          deger:
+            CAGRI  19:16
+              hedef:
+                TANIMLAYICI "yaz_bit"  19:9
+              argumanlar (2):
+                TANIMLAYICI "s"  19:17
+                TAM 3  19:20
+        ATAMA  20:5
+          hedef:
+            TANIMLAYICI "s"  20:5
+          deger:
+            CAGRI  20:16
+              hedef:
+                TANIMLAYICI "yaz_bit"  20:9
+              argumanlar (2):
+                TANIMLAYICI "s"  20:17
+                TAM 5  20:20
+        EGER  21:5
+          kosul:
+            CAGRI  21:19
+              hedef:
+                TANIMLAYICI "test_bit"  21:11
+              argumanlar (2):
+                TANIMLAYICI "s"  21:20
+                TAM 5  21:23
+          eger:
+            BLOK (1 deyim)  21:26
+              VER  22:9
+                ERISIM "bayraklar"  22:14
+                  TANIMLAYICI "s"  22:13
+        VER  24:5
+          TAM 0  24:9
+
+=== Toplam parser hata sayisi: 0 ===

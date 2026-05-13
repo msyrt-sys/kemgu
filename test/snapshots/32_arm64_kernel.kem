@@ -1,0 +1,15 @@
+// ARM64 kernel snippet (kernel.kem'in snapshot baseline'i)
+işlev sayfa_giris(adres: tam64, izinler: tam64) -> tam64 {
+    ver (adres << 12) | (izinler & 4095);
+}
+
+işlev sayfa_adresi(giris: tam64) -> tam64 {
+    ver giris >> 12;
+}
+
+işlev main() -> tam32 {
+    değişken sayfa = sayfa_giris(1, 7);
+    değişken kontrol = (1 << 5) | (1 << 3) | 2;
+    eğer kontrol == 42 { ver 42; }
+    ver 1;
+}

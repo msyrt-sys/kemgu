@@ -1,0 +1,17 @@
+işlev karma(n: tam32) -> tam32 {
+    değişken sonuc: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer i % 2 == 0 {
+            sonuc = sonuc + i;
+        } değilse {
+            sonuc = sonuc - 1;
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+işlev main() -> tam32 {
+    ver karma(10);
+}

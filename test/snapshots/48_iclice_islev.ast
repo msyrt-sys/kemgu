@@ -1,0 +1,70 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "kuvvet"  1:1
+    parametreler (2):
+      PARAMETRE "taban"  1:15
+        TIP_BASIT "tam32"  1:22
+      PARAMETRE "us"  1:29
+        TIP_BASIT "tam32"  1:33
+    donus_tipi:
+      TIP_BASIT "tam32"  1:43
+    govde:
+      BLOK (5 deyim)  1:49
+        EGER  2:5
+          kosul:
+            IKILI ==  2:14
+              TANIMLAYICI "us"  2:11
+              TAM 0  2:17
+          eger:
+            BLOK (1 deyim)  2:19
+              VER  2:21
+                TAM 1  2:25
+        DEGISKEN "yarisi"  3:5
+          tip:
+            TIP_BASIT "tam32"  3:24
+          deger:
+            CAGRI  3:38
+              hedef:
+                TANIMLAYICI "kuvvet"  3:32
+              argumanlar (2):
+                TANIMLAYICI "taban"  3:39
+                IKILI /  3:49
+                  TANIMLAYICI "us"  3:46
+                  TAM 2  3:51
+        DEGISKEN "kare"  4:5
+          tip:
+            TIP_BASIT "tam32"  4:22
+          deger:
+            IKILI *  4:37
+              TANIMLAYICI "yarisi"  4:30
+              TANIMLAYICI "yarisi"  4:39
+        EGER  5:5
+          kosul:
+            IKILI ==  5:18
+              IKILI %  5:14
+                TANIMLAYICI "us"  5:11
+                TAM 2  5:16
+              TAM 0  5:21
+          eger:
+            BLOK (1 deyim)  5:23
+              VER  5:25
+                TANIMLAYICI "kare"  5:29
+        VER  6:5
+          IKILI *  6:14
+            TANIMLAYICI "kare"  6:9
+            TANIMLAYICI "taban"  6:16
+  ISLEV "main"  9:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  9:18
+    govde:
+      BLOK (1 deyim)  9:24
+        VER  10:5
+          CAGRI  10:15
+            hedef:
+              TANIMLAYICI "kuvvet"  10:9
+            argumanlar (2):
+              TAM 2  10:16
+              TAM 5  10:19
+
+=== Toplam parser hata sayisi: 0 ===

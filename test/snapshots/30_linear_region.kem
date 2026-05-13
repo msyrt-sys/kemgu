@@ -1,0 +1,7 @@
+işlev main() -> tam32 {
+    {
+        değişken k = tekkez_yarat(42);
+        imha(k);
+    }
+    ver 0;
+}

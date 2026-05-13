@@ -703,6 +703,58 @@ static void test_dosya_sil_yoksa(void) {
     test_sonuc("dosya_sil(yok) -> r!=0 -> 42", rc == 42);
 }
 
+/* === Madde B: Dinamik dizi === */
+
+static void test_dizi_olustur_ekle(void) {
+    /* dizi_olustur + 3 dizi_ekle + dizi_boyut -> 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(8); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_ekle x3 + boyut -> 3", rc == 3);
+}
+
+static void test_dizi_al_topla(void) {
+    /* 10 + 20 + 12 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); dizi_ekle(d, 20); dizi_ekle(d, 12); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_al toplama -> 42", rc == 42);
+}
+
+static void test_dizi_boyut(void) {
+    /* Sadece bos dizi: boyut 0 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("bos dizi boyut -> 0", rc == 0);
+}
+
+static void test_dizi_buyume(void) {
+    /* Kapasite 2 ile basla, 5 eleman ekle (auto-grow) — boyut 5 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(2); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi buyume (5 ekle) -> 5", rc == 5);
+}
+
+static void test_dizi_tam64(void) {
+    /* tam64 dizi — generic instantiation tam64 ile */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); dizi_ekle(d, 200); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi<tam64> generic instan -> 2", rc == 2);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -814,6 +866,13 @@ int main(void) {
     test_dosya_boyut();
     test_dosya_yeniden_adlandir();
     test_dosya_sil_yoksa();
+
+    printf("\n--- Madde B: Dizi dinamik allocator ---\n");
+    test_dizi_olustur_ekle();
+    test_dizi_al_topla();
+    test_dizi_boyut();
+    test_dizi_buyume();
+    test_dizi_tam64();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
