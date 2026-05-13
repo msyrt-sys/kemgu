@@ -572,14 +572,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return kontrol_ikili_mantiksal(tk, d, sol, sag);
 
                 case OP_BIT_VE: case OP_BIT_VEYA: case OP_BIT_OZVEYA: {
-                    /* Bit AND/OR/XOR: her iki operand tamsayi, ayni tip,
-                     * sonuc ayni tip. Page table / kripto kodu icin kritik. */
-                    if (!tip_tamsayi_mi(sol) || !tip_tamsayi_mi(sag)) {
+                    /* Bit AND/OR/XOR: her iki operand tamsayi, ayni tip.
+                     * Bidirectional: sag, sol tipi context'inde yeniden
+                     * cikarsanir — literal'ler sol tipe kayar (page table). */
+                    if (!tip_tamsayi_mi(sol)) {
                         tip_hata(tk, d, "T028",
                                  "bit operatoru (& | ^) tamsayi tipi ister");
                         return t_hata(tk);
                     }
-                    if (!tip_esit(sol, sag)) {
+                    TipBilgisi *sag2 = tip_belirle_beklenen(tk,
+                        d->veri.ikili.sag, sol);
+                    if (!tip_tamsayi_mi(sag2)) {
+                        tip_hata(tk, d, "T028",
+                                 "bit operatoru (& | ^) tamsayi tipi ister");
+                        return t_hata(tk);
+                    }
+                    if (!tip_esit(sol, sag2)) {
                         tip_hata(tk, d, "T001",
                                  "bit operatoru iki tarafi ayni tip olmali");
                         return t_hata(tk);

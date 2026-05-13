@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test test_tumu
 
 # === Ana hedef ===
 
@@ -251,6 +251,22 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
 		./$(BUILD)/kemgu$(EXE) --check $$f || exit 1; \
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
+
+# ARM64 (aarch64) cross-compile dogrulama — DGX Spark / Android NDK altyapisi
+# Mevcut KEMGU --llvm IR ciktisini clang -target ile ARM64 ELF object'e cevirir.
+# Calistirma host degil — sadece derleme + file/objdump dogrulamasi.
+calistir_arm64_test: $(BUILD)/kemgu$(EXE)
+	@echo "ARM64 cross-compile testi..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kernel.kem > $(BUILD)/kernel.ll
+	clang -target aarch64-unknown-none -x ir $(BUILD)/kernel.ll -c \
+		-o $(BUILD)/kernel_aarch64.o 2>&1
+	@echo ""
+	@echo "Uretilen ARM64 ELF object:"
+	@file $(BUILD)/kernel_aarch64.o
+	@echo ""
+	@echo "Section headers:"
+	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
+	@echo "ARM64 ELF dogrulamasi basarili!"
 
 test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
