@@ -1,0 +1,75 @@
+// =====================================================================
+// 03_kontrol.kem — KEMGU Tutorial: Kontrol akışı
+// ---------------------------------------------------------------------
+// `eğer`/`değilse`, `iken` (while), `için` (for) ve `eşleş` (match)
+// yapılarını gösterir.
+// Çalıştır: ./build/kemgu --check 03_kontrol.kem
+// =====================================================================
+
+// ----- `eğer` / `değilse` zinciri -----
+//
+// Klasik if-else if-else. KEMGU `eğer` koşulundan sonra parantez istemez,
+// `{}` zorunludur (tek satırlık if yok — okunabilirlik için).
+işlev kategori(n: tam32) -> tam32 {
+    eğer n < 0 {
+        ver 0 - 1;            // -1 — negatif (tek operand "-" var)
+    } değilse eğer n == 0 {
+        ver 0;
+    } değilse {
+        ver 1;
+    }
+}
+
+// ----- `iken` (while döngüsü) -----
+//
+// Koşul `mantıksal` döndürmeli; sayı koşul olarak kabul edilmez.
+işlev faktoryel(n: tam32) -> tam32 {
+    değişken sonuc: tam32 = 1;
+    iken n > 1 {
+        sonuc = sonuc * n;
+        n = n - 1;
+    }
+    ver sonuc;
+}
+
+// ----- `için` (for-each döngüsü) -----
+//
+// `için <isim>: <dizi>` — dizi elemanları üzerinde gezer.
+// Eleman tipi dizi tipinden çıkarsanır.
+işlev toplam_kareler(xs: Dizi<tam32>) -> tam32 {
+    değişken t: tam32 = 0;
+    için x: xs {
+        t = t + x * x;
+    }
+    ver t;
+}
+
+// ----- `eşleş` (pattern matching) -----
+//
+// `seçimlik<T>` üzerinde pattern matching.
+//   - `değer(s) => ...`  — Var; s'yi bind eder
+//   - `hiç => ...`       — Yok
+//
+// Pattern matching `if-else` zincirinden daha güvenlidir:
+// derleyici eksik dal varsa hata verir (exhaustiveness — v1'de kısmen).
+işlev ad_ver(o: seçimlik<metin>) -> metin {
+    eşleş o {
+        değer(s) => { ver s; }
+        hiç      => { ver "isimsiz"; }
+    }
+    ver "ulasilmaz";              // pattern bind hala olgunlaşmadı (v1)
+}
+
+işlev main() -> tam32 {
+    // 5! = 120
+    değişken f = faktoryel(5);
+
+    // 1² + 2² + 3² + 4² = 30
+    değişken t = toplam_kareler([1, 2, 3, 4]);
+
+    // kategori(-3) = -1; kategori(0) = 0; kategori(7) = 1
+    değişken k = kategori(7);
+
+    // Toplam: 120 + 30 + 1 = 151 → exit code 151 mod 256
+    ver f + t + k;
+}

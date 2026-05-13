@@ -1,0 +1,77 @@
+// =====================================================================
+// 06_secimlik.kem — KEMGU Tutorial: Seçimlik (null'un yerini alan)
+// ---------------------------------------------------------------------
+// `seçimlik<T>` — KEMGU'da null pointer yoktur. "Olabilir veya olmayabilir"
+// bir değer için bu tip kullanılır. Erişim için pattern matching zorunlu.
+// Çalıştır: ./build/kemgu --check 06_secimlik.kem
+// =====================================================================
+
+// ----- Neden null yok? -----
+//
+// C/C++/Java'da `T*` ya bir nesneye işaret eder ya da null'dur — derleyici
+// ayırt etmez. "Tony Hoare'in milyar dolarlık hatası". KEMGU bunu yapısal
+// olarak engeller:
+//
+//   - `T`           → DAİMA geçerli bir T
+//   - `seçimlik<T>` → ya `değer(x)` ya da `hiç`
+//
+// Yani `seçimlik<T>` üzerinde bir alanı kullanmak için derleyici seni
+// pattern matching yapmaya zorlar. Unutamazsın.
+
+// ----- Üreten işlev -----
+//
+// Bir aramayı modelle: bulundu mu / bulamadık mı.
+işlev ad_bul(id: tam32) -> seçimlik<metin> {
+    eğer id == 1 {
+        ver değer("Mehmet");
+    } değilse eğer id == 2 {
+        ver değer("Ayşe");
+    }
+    ver hiç;                                  // bulunamadı
+}
+
+// ----- Tüketen işlev — pattern matching ile -----
+//
+// Pattern: `değer(x) => ...` veya `hiç => ...`.
+// `değer(x)` deseni içerideki T'yi `x`'e bind eder (v1'de kısmen — şu an
+// dışarıya kullanım için kol gövdesinde sabit string dönelim).
+işlev karsila(id: tam32) -> metin {
+    eşleş ad_bul(id) {
+        değer(s) => { ver s; }
+        hiç      => { ver "bilinmeyen"; }
+    }
+    ver "ulasilmaz";
+}
+
+// ----- Zincirleme -----
+//
+// Birden fazla seçimlik birleştirmek için pattern matching'i iç içe
+// koyabilirsin. KEMGU'da Rust'ın `?` operatörü henüz yok.
+işlev guvenli_topla(a: seçimlik<tam32>, b: seçimlik<tam32>) -> seçimlik<tam32> {
+    eşleş a {
+        değer(x) => {
+            eşleş b {
+                değer(y) => { ver değer(x + y); }
+                hiç      => { ver hiç; }
+            }
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev main() -> tam32 {
+    değişken s1 = karsila(1);                 // → "Mehmet"
+    değişken s2 = karsila(99);                // → "bilinmeyen"
+
+    değişken a: seçimlik<tam32> = değer(20);
+    değişken b: seçimlik<tam32> = değer(22);
+    değişken t = guvenli_topla(a, b);         // → değer(42)
+
+    // Sonuç pattern matching ile çıkarılır
+    eşleş t {
+        değer(n) => { ver n; }                // → 42
+        hiç      => { ver 0; }
+    }
+    ver 0;
+}

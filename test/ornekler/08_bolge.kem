@@ -1,0 +1,102 @@
+// =====================================================================
+// 08_bolge.kem — KEMGU Tutorial: Bölge tabanlı bellek
+// ---------------------------------------------------------------------
+// KEMGU GC kullanmaz; bunun yerine compiler her tahsisin hangi bölgeye
+// ait olduğunu otomatik çıkarsar. Programcı annotation yazmaz; ama
+// kuralları bilirsen kodun nasıl çalıştığını anlarsın.
+// Çalıştır: ./build/kemgu --check 08_bolge.kem
+// =====================================================================
+
+// ----- Bölge hiyerarşisi (Katman 1) -----
+//
+//   ρ_iterasyon < ρ_yerel < ρ_çağıran < ρ_global
+//
+//   - ρ_yerel(f)     : f'nin yerel bölgesi; f bittiğinde tüm tahsisler imha
+//   - ρ_çağıran(f)   : f'yi çağıran bölgesinde tahsis (escape eden değerler)
+//   - ρ_iterasyon(d) : döngü d'nin iterasyon bölgesi; tur biterken imha
+//   - ρ_global       : program ömrü
+//
+// Compiler **escape analizi** ile karar verir:
+//   - Bir değer `ver` ile dönüyorsa → ρ_çağıran (çağırana terfi)
+//   - Sadece içeride kullanılıyorsa → ρ_yerel (işlev bitince imha)
+//   - Döngü gövdesinde yaratılıyorsa → ρ_iterasyon (tur sonu imha)
+
+// ----- 1) Escape EDİYOR — ρ_çağıran -----
+//
+// Burada `Kutu` `ver` ile döner; tahsis çağıranın bölgesinde yapılır.
+yapı Kutu {
+    deger: tam32;
+    dolu: mantıksal;
+}
+
+işlev kutu_dondur(x: tam32) -> Kutu {
+    değişken k = Kutu { deger: x, dolu: doğru };
+    ver k;                                    // k → ρ_çağıran (escape)
+}
+
+// ----- 2) Escape ETMİYOR — ρ_yerel -----
+//
+// Burada `Kutu` sadece içeride kullanılıyor; işlev bittiğinde otomatik
+// imha — `free()` çağırmana gerek yok. (LLVM IR seviyesinde `alloca`.)
+işlev sadece_kullan() -> tam32 {
+    değişken k = Kutu { deger: 42, dolu: doğru };
+    ver k.deger;                              // k.deger okundu, k atılır
+}
+
+// ----- 3) Döngü gövdesi — ρ_iterasyon -----
+//
+// Her tur yeni bir Kutu yaratılır; tur sonunda atılır.
+// Compiler bu pattern'i tanıyıp her seferinde free yapmaz; iterasyon
+// bölgesi toplu olarak temizlenir.
+işlev dongu_toplam(n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken k = Kutu { deger: i, dolu: doğru };   // ρ_iterasyon
+        toplam = toplam + k.deger;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// ----- 4) Koşullu dallanma — LCA -----
+//
+// İki dal farklı tahsisler yapıyorsa, sonuç tipinin bölgesi iki dalın
+// LCA'sıdır (en geç ölen bölge). R-KOŞUL aksiyomu.
+//
+// Burada her iki dal da `ver` ile dönüyor → her iki Kutu ρ_çağıran'a terfi.
+işlev kosullu(secim: mantıksal) -> Kutu {
+    eğer secim {
+        ver Kutu { deger: 1, dolu: doğru };
+    }
+    ver Kutu { deger: 2, dolu: yanlış };
+}
+
+// ----- 5) Referans + bölge -----
+//
+// Referansların bölgesi referans verdikleri değerin bölgesinden daha
+// kısa veya eşit ömürlü olmalı. Bunu sağlamak için compiler tip
+// kontrolünde lifetime'ları izler.
+işlev karsi(a: &Kutu) -> tam32 {
+    ver a.deger;
+}
+
+işlev main() -> tam32 {
+    // 1) Escape: k1 çağıran bölgesinde yaratılır
+    değişken k1 = kutu_dondur(40);
+
+    // 2) Escape değil: kullan bölgesi geçici, dönen tam32 (basit tip)
+    değişken s = sadece_kullan();             // → 42
+
+    // 3) Döngü
+    değişken d = dongu_toplam(5);             // 0+1+2+3+4 = 10
+
+    // 4) Koşullu
+    değişken k2 = kosullu(doğru);             // → Kutu { 1, doğru }
+
+    // 5) Referans
+    değişken r = karsi(&k1);                  // → 40
+
+    // Çıkış kodu: s = 42
+    ver s;
+}
