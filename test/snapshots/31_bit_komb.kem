@@ -1,0 +1,20 @@
+işlev set_bit(deger: tam32, pozisyon: tam32) -> tam32 {
+    ver deger | (1 << pozisyon);
+}
+
+işlev temizle_bit(deger: tam32, pozisyon: tam32) -> tam32 {
+    ver deger & ~(1 << pozisyon);
+}
+
+işlev test_bit(deger: tam32, pozisyon: tam32) -> mantıksal {
+    ver (deger >> pozisyon) & 1 == 1;
+}
+
+işlev main() -> tam32 {
+    değişken b: tam32 = 0;
+    b = set_bit(b, 5);
+    b = set_bit(b, 3);
+    b = set_bit(b, 1);
+    // b = 0b101010 = 42
+    ver b;
+}

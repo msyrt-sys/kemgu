@@ -1,0 +1,14 @@
+işlev bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifir bolme"); }
+    ver tamam(a / b);
+}
+
+işlev cifte_bol(a: tam32, b: tam32, c: tam32) -> sonuç<tam32, metin> {
+    değişken r1 = bol(a, b);
+    değişken r2 = bol(a, c);
+    ver tamam(0);
+}
+
+işlev main() -> tam32 {
+    ver 42;
+}

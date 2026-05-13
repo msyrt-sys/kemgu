@@ -1,0 +1,12 @@
+yapı Cift<A, B> { ilk: A; ikinci: B; }
+
+uygula Cift {
+    işlev toplam(kendin) -> tam32 {
+        ver 42;
+    }
+}
+
+işlev main() -> tam32 {
+    değişken c = Cift { ilk: 20, ikinci: 22 };
+    ver c.toplam();
+}

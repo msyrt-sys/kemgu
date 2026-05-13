@@ -1,0 +1,19 @@
+=== AST ===
+PROGRAM (4 uye)  1:1
+  OZELLIK  1:1
+  YAPI  5:1
+  UYGULA  7:1
+  ISLEV "main"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:18
+    govde:
+      BLOK (2 deyim)  11:24
+        DEGISKEN "s"  12:5
+          deger:
+            YAPI_OLUSTUR  12:20
+        VER  13:5
+          ERISIM "v"  13:10
+            TANIMLAYICI "s"  13:9
+
+=== Toplam parser hata sayisi: 0 ===

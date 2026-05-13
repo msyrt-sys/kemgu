@@ -1,0 +1,39 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  MODUL "grafik"  1:1
+    YAPI  2:5
+    ISLEV "olustur"  3:5
+      parametreler (2):
+        PARAMETRE "x"  3:20
+          TIP_BASIT "tam32"  3:23
+        PARAMETRE "y"  3:30
+          TIP_BASIT "tam32"  3:33
+      donus_tipi:
+        TIP_BASIT "Nokta"  3:43
+      govde:
+        BLOK (1 deyim)  3:49
+          VER  3:51
+            YAPI_OLUSTUR  3:55
+  ISLEV "main"  6:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  6:18
+    govde:
+      BLOK (2 deyim)  6:24
+        DEGISKEN "p"  7:5
+          deger:
+            CAGRI  7:35
+              hedef:
+                YOL "olustur"  7:26
+                  TANIMLAYICI "grafik"  7:20
+              argumanlar (2):
+                TAM 10  7:36
+                TAM 32  7:40
+        VER  8:5
+          IKILI +  8:13
+            ERISIM "x"  8:10
+              TANIMLAYICI "p"  8:9
+            ERISIM "y"  8:16
+              TANIMLAYICI "p"  8:15
+
+=== Toplam parser hata sayisi: 0 ===
