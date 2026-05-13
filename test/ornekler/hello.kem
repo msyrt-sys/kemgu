@@ -1,5 +1,5 @@
-// D.1 IO testi: temel yazdir
+// D.1 IO testi: temel yazdir (port: yazdır → yazdir built-in)
 işlev main() -> tam32 {
-    yazdır("Merhaba, KEMGU!");
+    yazdir("Merhaba, KEMGU!");
     ver 0;
 }
