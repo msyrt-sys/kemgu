@@ -1,0 +1,194 @@
+// KEMGU Stdlib Testi — Sonuç
+// =================================
+//
+// Bu dosya `stdlib/sonuc.kem` ile birleştirilerek --check edilir.
+// İkili katman: built-in sonuç wrapper'ları + KSonuc yapı tabanlı API.
+
+// --- Built-in sonuç construction wrapper'ları ---
+işlev test_tamam_yap() -> sonuç<tam32, metin> {
+    ver tamam_yap(42);
+}
+
+işlev test_hata_yap() -> sonuç<tam32, metin> {
+    ver hata_yap("baz hata");
+}
+
+// --- KSonuc yapıcılar ---
+işlev test_k_tamam() -> KSonuc<tam32, metin> {
+    ver k_tamam(42);
+}
+
+işlev test_k_hata() -> KSonuc<tam32, metin> {
+    ver k_hata("hata mesajı");
+}
+
+// --- k_basarili_mi / k_basarisiz_mi ---
+işlev test_basarili_evet() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_tamam(7);
+    ver k_basarili_mi(r);
+}
+
+işlev test_basarili_hayir() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_hata("x");
+    ver k_basarili_mi(r);
+}
+
+işlev test_basarisiz_evet() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_hata("x");
+    ver k_basarisiz_mi(r);
+}
+
+işlev test_basarisiz_hayir() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_tamam(7);
+    ver k_basarisiz_mi(r);
+}
+
+// --- k_ya_da / k_hata_ya_da ---
+işlev test_ya_da_basarili() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(42);
+    ver k_ya_da(r, 0);
+}
+
+işlev test_ya_da_basarisiz() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_hata("x");
+    ver k_ya_da(r, 99);
+}
+
+işlev test_hata_ya_da_var() -> metin {
+    değişken r: KSonuc<tam32, metin> = k_hata("orijinal");
+    ver k_hata_ya_da(r, "varsayilan");
+}
+
+işlev test_hata_ya_da_yok() -> metin {
+    değişken r: KSonuc<tam32, metin> = k_tamam(1);
+    ver k_hata_ya_da(r, "varsayilan");
+}
+
+// --- k_secimlik / k_hata_secimlik ---
+işlev test_secimlik_var() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_tamam(5);
+    değişken s: seçimlik<tam32> = k_secimlik(r);
+    eşleş s {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_secimlik_yok() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_hata("x");
+    değişken s: seçimlik<tam32> = k_secimlik(r);
+    eşleş s {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- k_harita_tam ---
+işlev iki_kat_lokal(x: tam32) -> tam32 { ver x * 2; }
+
+işlev test_harita_basarili() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(21);
+    değişken r2: KSonuc<tam32, metin> = k_harita_tam(r, iki_kat_lokal);
+    ver k_ya_da(r2, 0);
+}
+
+işlev test_harita_basarisiz() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_hata("x");
+    değişken r2: KSonuc<tam32, metin> = k_harita_tam(r, iki_kat_lokal);
+    ver k_ya_da(r2, 999);
+}
+
+// --- k_harita_hata_tam ---
+işlev hata_buyuk_yap(s: metin) -> metin { ver s; }
+
+işlev test_harita_hata_var() -> metin {
+    değişken r: KSonuc<tam32, metin> = k_hata("err");
+    değişken r2: KSonuc<tam32, metin> = k_harita_hata_tam(r, hata_buyuk_yap);
+    ver k_hata_ya_da(r2, "varsayilan");
+}
+
+işlev test_harita_hata_yok() -> mantıksal {
+    değişken r: KSonuc<tam32, metin> = k_tamam(5);
+    değişken r2: KSonuc<tam32, metin> = k_harita_hata_tam(r, hata_buyuk_yap);
+    ver k_basarili_mi(r2);
+}
+
+// --- k_bagla_tam (flatMap) ---
+işlev guvenli_bol_lokal(x: tam32) -> KSonuc<tam32, metin> {
+    eğer x == 0 { ver k_hata("sifira bolme"); }
+    ver k_tamam(100 / x);
+}
+
+işlev test_bagla_basarili() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(10);
+    değişken r2: KSonuc<tam32, metin> = k_bagla_tam(r, guvenli_bol_lokal);
+    ver k_ya_da(r2, 0);
+}
+
+işlev test_bagla_basarisiz_giris() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_hata("ilk hata");
+    değişken r2: KSonuc<tam32, metin> = k_bagla_tam(r, guvenli_bol_lokal);
+    ver k_ya_da(r2, 999);
+}
+
+işlev test_bagla_basarisiz_callback() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(0);
+    değişken r2: KSonuc<tam32, metin> = k_bagla_tam(r, guvenli_bol_lokal);
+    ver k_ya_da(r2, 999);
+}
+
+// --- k_alternatif ---
+işlev test_alternatif_ilki() -> tam32 {
+    değişken a: KSonuc<tam32, metin> = k_tamam(1);
+    değişken b: KSonuc<tam32, metin> = k_tamam(2);
+    değişken r: KSonuc<tam32, metin> = k_alternatif(a, b);
+    ver k_ya_da(r, 0);
+}
+
+işlev test_alternatif_ikincisi() -> tam32 {
+    değişken a: KSonuc<tam32, metin> = k_hata("ilk basarisiz");
+    değişken b: KSonuc<tam32, metin> = k_tamam(2);
+    değişken r: KSonuc<tam32, metin> = k_alternatif(a, b);
+    ver k_ya_da(r, 0);
+}
+
+// --- k_dene_tam ---
+işlev test_dene_zincirleme() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(10);
+    değişken r2: KSonuc<tam32, metin> = k_dene_tam(r, guvenli_bol_lokal);
+    ver k_ya_da(r2, 0);
+}
+
+// --- k_esit_mi ---
+işlev test_esit_iki_tamam() -> mantıksal {
+    değişken a: KSonuc<tam32, metin> = k_tamam(5);
+    değişken b: KSonuc<tam32, metin> = k_tamam(5);
+    ver k_esit_mi(a, b);
+}
+
+işlev test_esit_iki_hata() -> mantıksal {
+    değişken a: KSonuc<tam32, metin> = k_hata("x");
+    değişken b: KSonuc<tam32, metin> = k_hata("x");
+    ver k_esit_mi(a, b);
+}
+
+işlev test_esit_farkli_tip() -> mantıksal {
+    değişken a: KSonuc<tam32, metin> = k_tamam(5);
+    değişken b: KSonuc<tam32, metin> = k_hata("x");
+    ver k_esit_mi(a, b);
+}
+
+// --- Bileşik ---
+işlev test_pipeline() -> tam32 {
+    değişken r: KSonuc<tam32, metin> = k_tamam(10);
+    değişken r1: KSonuc<tam32, metin> = k_harita_tam(r, iki_kat_lokal);
+    değişken r2: KSonuc<tam32, metin> = k_bagla_tam(r1, guvenli_bol_lokal);
+    ver k_ya_da(r2, 0);
+}
+
+işlev main() -> tam32 {
+    eğer test_basarili_evet() { ver 0; }
+    ver 1;
+}
