@@ -936,7 +936,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
 
-            /* Built-in libc/runtime mapping */
+            /* Built-in libc / kdl mapping */
+            const char *kdl_donus = NULL;  /* override (NULL ise auto) */
             if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
             } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
@@ -948,40 +949,29 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "bellek_kopyala", 14) == 0) {
                 cagri_adi = "memcpy"; cagri_adi_uz = 6;
             }
-            /* === A: metin_* primitifleri -> kdl_metin_* (runtime/kdl_runtime.c) === */
-            else if (cagri_adi_uz == 13 &&
-                     memcmp(cagri_adi, "metin_uzunluk", 13) == 0) {
-                cagri_adi = "kdl_metin_uzunluk"; cagri_adi_uz = 17;
-            } else if (cagri_adi_uz == 15 &&
-                       memcmp(cagri_adi, "metin_birlestir", 15) == 0) {
-                cagri_adi = "kdl_metin_birlestir"; cagri_adi_uz = 19;
-            } else if (cagri_adi_uz == 9 &&
-                       memcmp(cagri_adi, "metin_kes", 9) == 0) {
-                cagri_adi = "kdl_metin_kes"; cagri_adi_uz = 13;
-            } else if (cagri_adi_uz == 11 &&
-                       memcmp(cagri_adi, "metin_kucuk", 11) == 0) {
-                cagri_adi = "kdl_metin_kucuk"; cagri_adi_uz = 15;
-            } else if (cagri_adi_uz == 11 &&
-                       memcmp(cagri_adi, "metin_buyuk", 11) == 0) {
-                cagri_adi = "kdl_metin_buyuk"; cagri_adi_uz = 15;
-            } else if (cagri_adi_uz == 12 &&
-                       memcmp(cagri_adi, "metin_icerir", 12) == 0) {
-                cagri_adi = "kdl_metin_icerir"; cagri_adi_uz = 16;
-            } else if (cagri_adi_uz == 12 &&
-                       memcmp(cagri_adi, "metin_baslar", 12) == 0) {
-                cagri_adi = "kdl_metin_baslar"; cagri_adi_uz = 16;
-            } else if (cagri_adi_uz == 11 &&
-                       memcmp(cagri_adi, "metin_biter", 11) == 0) {
-                cagri_adi = "kdl_metin_biter"; cagri_adi_uz = 15;
-            } else if (cagri_adi_uz == 10 &&
-                       memcmp(cagri_adi, "metin_kirp", 10) == 0) {
-                cagri_adi = "kdl_metin_kirp"; cagri_adi_uz = 14;
-            } else if (cagri_adi_uz == 18 &&
-                       memcmp(cagri_adi, "metin_yer_degistir", 18) == 0) {
-                cagri_adi = "kdl_metin_yer_degistir"; cagri_adi_uz = 22;
+            /* Madde A: metin_* built-in -> kdl_metin_* */
+            else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+                static char kdl_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_buf, "kdl_", 4);
+                memcpy(kdl_buf + 4, cagri_adi, (size_t)n);
+                kdl_buf[4 + n] = '\0';
+                cagri_adi = kdl_buf; cagri_adi_uz = 4 + n;
+                /* metin_uzunluk -> i32, *_icerir/baslar/biter -> i1,
+                 * digerleri -> ptr (metin) */
+                if (n == 13 && memcmp(kdl_buf + 4, "metin_uzunluk", 13) == 0) {
+                    kdl_donus = "i32";
+                } else if ((n == 12 && memcmp(kdl_buf + 4, "metin_icerir", 12) == 0) ||
+                           (n == 12 && memcmp(kdl_buf + 4, "metin_baslar", 12) == 0) ||
+                           (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0)) {
+                    kdl_donus = "i1";
+                } else {
+                    kdl_donus = "ptr";
+                }
             }
 
-            const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
+            const char *donus = kdl_donus ? kdl_donus
+                              : (ik ? ik->donus_tip : (beklenen ? beklenen : "i32"));
 
             /* Generic islev: tip args'i arg tipinden cikar, specialize et */
             if (ik && ik->generic_mi && ik->ast) {
@@ -1427,15 +1417,16 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @malloc(i64)\n", out);
     fputs("declare void @free(ptr)\n", out);
     fputs("declare ptr @memcpy(ptr, ptr, i64)\n", out);
-    /* === A: metin_* runtime primitifleri (runtime/kdl_runtime.c) === */
+
+    /* Madde A: Metin runtime primitifleri (kdl_metin_*) */
     fputs("declare i32 @kdl_metin_uzunluk(ptr)\n", out);
     fputs("declare ptr @kdl_metin_birlestir(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kes(ptr, i32, i32)\n", out);
     fputs("declare ptr @kdl_metin_kucuk(ptr)\n", out);
     fputs("declare ptr @kdl_metin_buyuk(ptr)\n", out);
-    fputs("declare i32 @kdl_metin_icerir(ptr, ptr)\n", out);
-    fputs("declare i32 @kdl_metin_baslar(ptr, ptr)\n", out);
-    fputs("declare i32 @kdl_metin_biter(ptr, ptr)\n", out);
+    fputs("declare i1 @kdl_metin_icerir(ptr, ptr)\n", out);
+    fputs("declare i1 @kdl_metin_baslar(ptr, ptr)\n", out);
+    fputs("declare i1 @kdl_metin_biter(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
     fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n\n", out);
 
