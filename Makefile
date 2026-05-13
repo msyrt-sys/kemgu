@@ -216,6 +216,20 @@ $(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
 bench: $(BUILD)/test_bench$(EXE) $(BUILD)/kemgu$(EXE)
 	./$(BUILD)/test_bench$(EXE)
 
+# === Gelismis fuzzer (test altyapi — 4 mod x 5000 iter, ASan) ===
+
+$(BUILD)/test_fuzz_advanced$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                                    $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                                    $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                                    $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                                    $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                                    $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                                    $(TESTDIR)/test_fuzz_advanced.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+calistir_fuzz_advanced: $(BUILD)/test_fuzz_advanced$(EXE)
+	./$(BUILD)/test_fuzz_advanced$(EXE)
+
 # === KDL Runtime (ADIM 33 — compile + link entegrasyonu) ===
 # runtime/kdl_runtime.c bagimsiz olarak derlenir, sonra test_runtime_link.c
 # ile linkletilir. Mevcut LLVM pipeline icin:
