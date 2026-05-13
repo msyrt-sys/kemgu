@@ -1576,6 +1576,63 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         d->veri.cagri.argumanlar[i]);
                 }
             }
+            /* === Adim 5: Bound-aware monomorphization check ===
+             * hedef bir islev tanimlayicisi ise, tip_param_boundlari kontrol
+             * et: her generic T'nin concrete tipi her bound (ozellik) icin
+             * uygula tablosu kanitlamali. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const Sembol *fn_s = sembol_bul(tk->scope,
+                    d->veri.cagri.hedef->veri.tanimlayici.metin,
+                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+                if (fn_s && fn_s->kategori == SEMBOL_ISLEV &&
+                    fn_s->ast_dugumu &&
+                    fn_s->ast_dugumu->tip == DUGUM_ISLEV) {
+                    const Dugum *islev = fn_s->ast_dugumu;
+                    int tps = islev->veri.islev.tip_param_sayi;
+                    if (tps > 0 && islev->veri.islev.tip_param_bound_sayilari) {
+                        for (int pi = 0; pi < tps; pi++) {
+                            int bs = islev->veri.islev.tip_param_bound_sayilari[pi];
+                            if (bs == 0) continue;
+                            const char *tp_ad = islev->veri.islev.tip_paramlar[pi];
+                            int tp_uz = (int)strlen(tp_ad);
+                            const TipBilgisi *concrete = gen_bul(&gb,
+                                tp_ad, tp_uz);
+                            if (!concrete) continue;  /* Inferred degil — abstract */
+                            if (concrete->kategori == TIP_GENERIC_PARAM) continue;
+                            const char *arg_ad = NULL;
+                            int arg_uz = 0;
+                            if (concrete->kategori == TIP_YAPI) {
+                                arg_ad = concrete->veri.yapi.ad;
+                                arg_uz = concrete->veri.yapi.ad_uzunluk;
+                            }
+                            if (!arg_ad) continue;  /* Built-in tip — bound check yok */
+                            for (int bi = 0; bi < bs; bi++) {
+                                const Dugum *bd =
+                                    islev->veri.islev.tip_param_boundlari[pi][bi];
+                                int bd_uz = 0;
+                                const char *bd_ad = tip_dugumu_kok_adi(bd, &bd_uz);
+                                if (!bd_ad) continue;
+                                const Sembol *oz_s = sembol_bul(tk->global_scope,
+                                                                 bd_ad, bd_uz);
+                                if (!oz_s || oz_s->kategori != SEMBOL_OZELLIK) {
+                                    tip_hata(tk, d, "T031",
+                                        "bilinmeyen ozellik (islev generic bound)");
+                                    continue;
+                                }
+                                if (!uygula_tablosu_implementations_eder(
+                                        &tk->uygulamalar,
+                                        arg_ad, arg_uz, bd_ad, bd_uz)) {
+                                    tip_hata(tk, d, "T030",
+                                        "tip argumani islev bound'unu "
+                                        "karsilamiyor (uygula bildirimi yok)");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             /* Donus tipi — generic param compound olabilir, substitue et */
             TipBilgisi *donus = hedef_tip->veri.islev.donus;
             return gen_substitue(tk, donus, &gb);

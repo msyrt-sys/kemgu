@@ -1640,6 +1640,131 @@ static void test_E004_tam64_to_tam32_izinli(void) {
     arena_serbest(a);
 }
 
+/* === Adim 5: Bound-aware monomorphization === */
+
+static void test_bound_islev_pozitif(void) {
+    /* T: Karsilastirilabilir; uygula bildirimi var -> OK */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 Nokta { x: tam32; } "
+        "uygula Karsilastirilabilir i\xc3\xa7in Nokta {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(e: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: Nokta = Nokta { x: 1 }; "
+        "ver en_buyuk(n); }",
+        a);
+    test_sonuc("bound pozitif: Nokta uygula Karsilastirilabilir -> OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_islev_negatif(void) {
+    /* T: Karsilastirilabilir; Cizgi uygula yok -> T030 */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 Cizgi { x: tam32; } "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(e: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c: Cizgi = Cizgi { x: 1 }; "
+        "ver en_buyuk(c); }",
+        a);
+    test_sonuc("bound negatif: Cizgi uygula yok -> T030", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_iki_param_pozitif(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { x: tam32; } "
+        "yap\xc4\xb1 Y { y: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "uygula B i\xc3\xa7in Y {} "
+        "i\xc5\x9flev f<T: A, U: B>(t: T, u: U) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "de\xc4\x9fi\xc5\x9fken y: Y = Y { y: 2 }; "
+        "ver f(x, y); }",
+        a);
+    test_sonuc("bound iki param pozitif (A, B)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_iki_param_negatif(void) {
+    /* Y bound A icin uygula yok */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} "
+        "yap\xc4\xb1 X { x: tam32; } "
+        "yap\xc4\xb1 Y { y: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "i\xc5\x9flev f<T: A>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: Y = Y { y: 1 }; "
+        "ver f(y); }",
+        a);
+    test_sonuc("bound iki param negatif (Y!A) -> T030", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_bilinmeyen_ozellik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { x: tam32; } "
+        "i\xc5\x9flev f<T: BilinmeyenOzellik>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "ver f(x); }",
+        a);
+    test_sonuc("bound bilinmeyen ozellik -> T031", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_yok_bound_check_yok(void) {
+    /* T (bound yok) -> her tip kabul (Adim D inference): hata yok */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { x: tam32; } "
+        "i\xc5\x9flev kimlik<T>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "ver kimlik(x); }",
+        a);
+    test_sonuc("bound yok (T:) -> her tip kabul", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_compound_dizi(void) {
+    /* T: Karsilastirilabilir; param Dizi<T> (compound) */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 N { x: tam32; } "
+        "uygula Karsilastirilabilir i\xc3\xa7in N {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(d: Dizi<T>) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: Dizi<N> = [N { x: 1 }]; "
+        "ver en_buyuk(n); }",
+        a);
+    test_sonuc("bound compound Dizi<N> -> OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_metin_tip_atla(void) {
+    /* T:Karsilastirilabilir; metin (built-in) — bound check'ten kacar (v1).
+     * metin TIP_YAPI degil, dolayisi ile arg_ad NULL -> bound check skip. */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver en_buyuk(\"hi\"); }",
+        a);
+    test_sonuc("bound metin (built-in) — skip (v1)", h == 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback / multi-param inference === */
 
 static void test_generic_callback_govde(void) {
@@ -2084,6 +2209,15 @@ int main(void) {
     test_E004_tam64_to_tam8();
     test_E004_tam64_to_tam16();
     test_E004_tam64_to_tam32_izinli();
+    /* Adim 5: Bound-aware monomorphization */
+    test_bound_islev_pozitif();
+    test_bound_islev_negatif();
+    test_bound_iki_param_pozitif();
+    test_bound_iki_param_negatif();
+    test_bound_bilinmeyen_ozellik();
+    test_bound_yok_bound_check_yok();
+    test_bound_compound_dizi();
+    test_bound_metin_tip_atla();
     test_generic_callback_govde();
     test_generic_callback_concrete_instan();
     test_generic_callback_tip_uyumsuz();
