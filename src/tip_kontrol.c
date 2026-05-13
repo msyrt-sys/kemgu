@@ -282,6 +282,204 @@ static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
 
+/* === Madde D: Generic call inference helpers === */
+
+/* Generic param adi -> concrete tip baglamasi (linked list) */
+typedef struct GenericBaglama {
+    const char *ad;
+    int ad_uzunluk;
+    TipBilgisi *tip;
+    struct GenericBaglama *sonraki;
+} GenericBaglama;
+
+static TipBilgisi *baglama_bul(GenericBaglama *b,
+                                const char *ad, int ad_uz) {
+    for (; b; b = b->sonraki) {
+        if (b->ad_uzunluk == ad_uz &&
+            memcmp(b->ad, ad, (size_t)ad_uz) == 0) {
+            return b->tip;
+        }
+    }
+    return NULL;
+}
+
+static void baglama_ekle(TipKontrol *tk, GenericBaglama **bas,
+                          const char *ad, int ad_uz,
+                          TipBilgisi *tip) {
+    if (!tip || tip->kategori == TIP_GENERIC_PARAM) return;
+    /* Varsa override etme — ilk binding kalir (zaten anchor) */
+    if (baglama_bul(*bas, ad, ad_uz)) return;
+    GenericBaglama *b = (GenericBaglama *)arena_ayir_sifir(tk->arena,
+                                                            sizeof(GenericBaglama));
+    if (!b) return;
+    b->ad = ad;
+    b->ad_uzunluk = ad_uz;
+    b->tip = tip;
+    b->sonraki = *bas;
+    *bas = b;
+}
+
+static int param_tip_generic_iceriyor_mu(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_GENERIC_PARAM) return 1;
+    switch (t->kategori) {
+        case TIP_REFERANS: return param_tip_generic_iceriyor_mu(t->veri.referans.hedef);
+        case TIP_POINTER:  return param_tip_generic_iceriyor_mu(t->veri.pointer.hedef);
+        case TIP_DIZI:     return param_tip_generic_iceriyor_mu(t->veri.dizi.eleman);
+        case TIP_SECIMLIK: return param_tip_generic_iceriyor_mu(t->veri.secimlik.ic);
+        case TIP_SONUC:
+            return param_tip_generic_iceriyor_mu(t->veri.sonuc.deger) ||
+                   param_tip_generic_iceriyor_mu(t->veri.sonuc.hata);
+        case TIP_TEKKEZ:   return param_tip_generic_iceriyor_mu(t->veri.tekkez.ic);
+        case TIP_ISLEV: {
+            for (int i = 0; i < t->veri.islev.param_sayi; i++) {
+                if (param_tip_generic_iceriyor_mu(t->veri.islev.parametreler[i]))
+                    return 1;
+            }
+            return param_tip_generic_iceriyor_mu(t->veri.islev.donus);
+        }
+        case TIP_YAPI:
+            for (int i = 0; i < t->veri.yapi.tip_arg_sayi; i++) {
+                if (param_tip_generic_iceriyor_mu(t->veri.yapi.tip_arg[i]))
+                    return 1;
+            }
+            return 0;
+        default: return 0;
+    }
+}
+
+/* tip_subst_baglamalar: t icindeki GENERIC_PARAM'lari baglamalardan al */
+static TipBilgisi *tip_subst_baglamalar(TipKontrol *tk, TipBilgisi *t,
+                                         GenericBaglama *b) {
+    if (!t || !b) return t;
+    switch (t->kategori) {
+        case TIP_GENERIC_PARAM: {
+            TipBilgisi *bound = baglama_bul(b,
+                t->veri.generic_param.ad,
+                t->veri.generic_param.ad_uzunluk);
+            return bound ? bound : t;
+        }
+        case TIP_REFERANS: {
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.referans.hedef, b);
+            if (nh == t->veri.referans.hedef) return t;
+            return tip_olustur_referans(tk->arena, nh,
+                t->veri.referans.degisken_mi);
+        }
+        case TIP_POINTER: {
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.pointer.hedef, b);
+            if (nh == t->veri.pointer.hedef) return t;
+            return tip_olustur_pointer(tk->arena, nh);
+        }
+        case TIP_DIZI: {
+            TipBilgisi *ne = tip_subst_baglamalar(tk,
+                t->veri.dizi.eleman, b);
+            if (ne == t->veri.dizi.eleman) return t;
+            return tip_olustur_dizi(tk->arena, ne);
+        }
+        case TIP_SECIMLIK: {
+            TipBilgisi *ni = tip_subst_baglamalar(tk,
+                t->veri.secimlik.ic, b);
+            if (ni == t->veri.secimlik.ic) return t;
+            return tip_olustur_secimlik(tk->arena, ni);
+        }
+        case TIP_SONUC: {
+            TipBilgisi *nd = tip_subst_baglamalar(tk,
+                t->veri.sonuc.deger, b);
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.sonuc.hata, b);
+            if (nd == t->veri.sonuc.deger && nh == t->veri.sonuc.hata) return t;
+            return tip_olustur_sonuc(tk->arena, nd, nh);
+        }
+        case TIP_TEKKEZ: {
+            TipBilgisi *ni = tip_subst_baglamalar(tk,
+                t->veri.tekkez.ic, b);
+            if (ni == t->veri.tekkez.ic) return t;
+            return tip_olustur_tekkez(tk->arena, ni);
+        }
+        case TIP_ISLEV: {
+            int n = t->veri.islev.param_sayi;
+            int degisen = 0;
+            TipBilgisi **np = NULL;
+            if (n > 0) {
+                np = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    np[i] = tip_subst_baglamalar(tk,
+                        t->veri.islev.parametreler[i], b);
+                    if (np[i] != t->veri.islev.parametreler[i]) degisen = 1;
+                }
+            }
+            TipBilgisi *nd = tip_subst_baglamalar(tk, t->veri.islev.donus, b);
+            if (!degisen && nd == t->veri.islev.donus) return t;
+            return tip_olustur_islev(tk->arena, np, n, nd);
+        }
+        default: return t;
+    }
+}
+
+/* tip_unify: param ve arg'i paralel walk, generic baglamalari topla */
+static void tip_unify(TipKontrol *tk,
+                       TipBilgisi *param, TipBilgisi *arg,
+                       GenericBaglama **bas) {
+    if (!param || !arg) return;
+    if (param->kategori == TIP_GENERIC_PARAM) {
+        baglama_ekle(tk, bas,
+            param->veri.generic_param.ad,
+            param->veri.generic_param.ad_uzunluk, arg);
+        return;
+    }
+    if (param->kategori != arg->kategori) return;
+    switch (param->kategori) {
+        case TIP_REFERANS:
+            tip_unify(tk, param->veri.referans.hedef,
+                          arg->veri.referans.hedef, bas);
+            break;
+        case TIP_POINTER:
+            tip_unify(tk, param->veri.pointer.hedef,
+                          arg->veri.pointer.hedef, bas);
+            break;
+        case TIP_DIZI:
+            tip_unify(tk, param->veri.dizi.eleman,
+                          arg->veri.dizi.eleman, bas);
+            break;
+        case TIP_SECIMLIK:
+            tip_unify(tk, param->veri.secimlik.ic,
+                          arg->veri.secimlik.ic, bas);
+            break;
+        case TIP_SONUC:
+            tip_unify(tk, param->veri.sonuc.deger,
+                          arg->veri.sonuc.deger, bas);
+            tip_unify(tk, param->veri.sonuc.hata,
+                          arg->veri.sonuc.hata, bas);
+            break;
+        case TIP_TEKKEZ:
+            tip_unify(tk, param->veri.tekkez.ic,
+                          arg->veri.tekkez.ic, bas);
+            break;
+        case TIP_ISLEV: {
+            if (param->veri.islev.param_sayi != arg->veri.islev.param_sayi) break;
+            for (int i = 0; i < param->veri.islev.param_sayi; i++) {
+                tip_unify(tk, param->veri.islev.parametreler[i],
+                              arg->veri.islev.parametreler[i], bas);
+            }
+            tip_unify(tk, param->veri.islev.donus,
+                          arg->veri.islev.donus, bas);
+            break;
+        }
+        case TIP_YAPI: {
+            if (param->veri.yapi.tip_arg_sayi != arg->veri.yapi.tip_arg_sayi) break;
+            for (int i = 0; i < param->veri.yapi.tip_arg_sayi; i++) {
+                tip_unify(tk, param->veri.yapi.tip_arg[i],
+                              arg->veri.yapi.tip_arg[i], bas);
+            }
+            break;
+        }
+        default: break;
+    }
+}
+
 /* Forward (ADIM 15.5: bound check) */
 static const char *tip_dugumu_kok_adi(const Dugum *t, int *out_uz);
 
@@ -1059,39 +1257,51 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
-            /* Generic islev: ilk TIP_GENERIC_PARAM gorulen yere ilk uygun
-             * argumanin tipini bagla (basit inference — tek param T icin
-             * cogu pratik durumda yeterli). */
-            TipBilgisi *inferred_T = NULL;
+            /* Madde D: Coklu generic param inference + cagri tip cikarsama.
+             * Pass 1: param/arg paralel walk -> baglamalari topla.
+             * Pass 2: her arg'i tam substituted param ile karsilastir. */
+            GenericBaglama *baglamalar = NULL;
+            TipBilgisi **arg_tipler = NULL;
+            if (d->veri.cagri.sayi > 0) {
+                arg_tipler = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) *
+                    (size_t)d->veri.cagri.sayi);
+            }
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
-                /* Bidirectional: arg, parametre tipi context'inde cikarsanir */
-                TipBilgisi *bek = param_tip;
-                if (param_tip->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                    bek = inferred_T;
-                }
+                TipBilgisi *bek_subst = tip_subst_baglamalar(tk, param_tip,
+                                                              baglamalar);
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
-                    d->veri.cagri.argumanlar[i], bek);
-                if (param_tip->kategori == TIP_GENERIC_PARAM) {
-                    if (!inferred_T) inferred_T = arg_tip;
-                    /* Generic params herhangi bir tipi kabul eder */
-                    continue;
-                }
-                if (!tip_esit(arg_tip, param_tip) &&
-                    arg_tip->kategori != TIP_HATA) {
-                    tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
-                             "arguman tipi parametre tipi ile uyumsuz");
-                }
-                /* Linear Types Spec V1: param tekkez ise arg consume */
+                    d->veri.cagri.argumanlar[i], bek_subst);
+                arg_tipler[i] = arg_tip;
+                tip_unify(tk, param_tip, arg_tip, &baglamalar);
                 if (param_tip && param_tip->kategori == TIP_TEKKEZ) {
                     lineer_tuket_eger_baglamaysa(tk,
                         d->veri.cagri.argumanlar[i]);
                 }
             }
-            /* Donus tipi generic ise inferred T ile degistir */
+            /* Pass 2: tam substituted param vs arg karsilastir */
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
+                TipBilgisi *full = tip_subst_baglamalar(tk, param_tip,
+                                                         baglamalar);
+                TipBilgisi *arg_tip = arg_tipler[i];
+                if (!arg_tip || arg_tip->kategori == TIP_HATA) continue;
+                if (!full) continue;
+                if (param_tip_generic_iceriyor_mu(full)) {
+                    /* Bound bulunmadi — generic abstract, atla */
+                    continue;
+                }
+                if (!tip_esit(arg_tip, full)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
+                        "arguman tipi parametre tipi ile uyumsuz");
+                }
+            }
+            /* Donus tipi: baglamalari uygula (recursive) */
             TipBilgisi *donus = hedef_tip->veri.islev.donus;
-            if (donus && donus->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                return inferred_T;
+            if (donus) {
+                TipBilgisi *sb = tip_subst_baglamalar(tk, donus, baglamalar);
+                if (sb) return sb;
             }
             return donus;
         }
