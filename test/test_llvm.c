@@ -579,6 +579,79 @@ static void test_heap_dizi_uzun(void) {
     test_sonuc("heap dizi uzun (5 eleman) d[4] -> 42", rc == 42);
 }
 
+/* === Adim 7: Stdlib bağlama end-to-end === */
+
+static void test_stdlib_harita_calistir(void) {
+    /* Inline harita: dizi_olustur + dizi_ekle + f(x) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) "
+        "-> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<U> = dizi_olustur(0); "
+        "i\xc3\xa7in x: xs { dizi_ekle(r, f(x)); } "
+        "ver r; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [10, 11]; "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver dizi_al(ys, 0) + dizi_al(ys, 1); }");
+    /* iki_kat(10)+iki_kat(11) = 20+22 = 42 */
+    test_sonuc("stdlib harita end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_filtre_calistir(void) {
+    /* Inline filtre: pred(x) -> dizi_ekle */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev cift_mi(x: tam32) -> mant\xc4\xb1ksal { ver x % 2 == 0; } "
+        "i\xc5\x9flev filtre<T>(xs: Dizi<T>, p: i\xc5\x9flev(T) -> mant\xc4\xb1ksal) "
+        "-> Dizi<T> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<T> = dizi_olustur(0); "
+        "i\xc3\xa7in x: xs { e\xc4\x9f" "er p(x) { dizi_ekle(r, x); } } "
+        "ver r; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3, 40, 5]; "
+        "de\xc4\x9fi\xc5\x9fken cs: Dizi<tam32> = filtre(xs, cift_mi); "
+        "ver dizi_al(cs, 0) + dizi_al(cs, 1); }");
+    /* cift'ler: 2, 40 -> 42 */
+    test_sonuc("stdlib filtre end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_indirgeme_calistir(void) {
+    /* Inline indirgeme: birikim */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev topla(a: tam32, b: tam32) -> tam32 { ver a + b; } "
+        "i\xc5\x9flev indirgeme<T, U>(xs: Dizi<T>, b: U, "
+        "op: i\xc5\x9flev(U, T) -> U) -> U { "
+        "de\xc4\x9fi\xc5\x9fken s: U = b; "
+        "i\xc3\xa7in x: xs { s = op(s, x); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [10, 12, 20]; "
+        "ver indirgeme(xs, 0, topla); }");
+    /* 0+10+12+20 = 42 */
+    test_sonuc("stdlib indirgeme end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_metin_kucukbuyuk(void) {
+    /* metin_buyuk_tr ile kucukharf upper case round-trip */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = \"abc\"; "
+        "de\xc4\x9fi\xc5\x9fken bs: metin = metin_buyuk(s); "
+        "ver metin_uzunluk(bs); }");
+    /* ABC uzunlugu 3 */
+    test_sonuc("stdlib metin buyuk ASCII end-to-end -> 3", rc == 3);
+}
+
+static void test_stdlib_dizi_uzunluk(void) {
+    /* dizi_boyut heap dizi ile */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 42]; "
+        "ver dizi_boyut(xs); }");
+    /* 8 eleman */
+    test_sonuc("stdlib dizi uzunluk end-to-end -> 8", rc == 8);
+}
+
 static void test_metin_icerir_evet(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
@@ -1073,6 +1146,12 @@ int main(void) {
     test_heap_stack_ayrim();
     test_heap_dizi_indeks_zincir();
     test_heap_dizi_uzun();
+    /* Adim 7: Stdlib gercek bağlama */
+    test_stdlib_harita_calistir();
+    test_stdlib_filtre_calistir();
+    test_stdlib_indirgeme_calistir();
+    test_stdlib_metin_kucukbuyuk();
+    test_stdlib_dizi_uzunluk();
     test_metin_icerir_evet();
     test_metin_icerir_hayir();
     test_metin_baslar();

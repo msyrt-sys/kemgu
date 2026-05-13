@@ -242,3 +242,43 @@ işlev esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
     }
     ver doğru;
 }
+
+// =============================================================================
+// Adim 7: Madde B + Madde D ile gerçek generic functional API
+// =============================================================================
+//
+// Madde B v2: heap dizi literal (Dizi<T> annot + literal => kdl_dizi_*)
+// Madde D v2: generic callback (işlev(T)->U) tip çıkarsama
+// Birleştirerek: harita / filtre / indirgeme artık gerçekten generic.
+
+// Harita — her elemana f uygula, yeni Dizi<U> dön.
+// T ve U, f'in imzasından çıkarsanır.
+işlev harita<T, U>(xs: Dizi<T>, f: işlev(T) -> U) -> Dizi<U> {
+    değişken sonuc: Dizi<U> = dizi_olustur(uzunluk(xs));
+    için x: xs {
+        dizi_ekle(sonuc, f(x));
+    }
+    ver sonuc;
+}
+
+// Filtre — predicate'i karşılayan elemanları yeni Dizi<T>'de topla.
+işlev filtre<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    için x: xs {
+        eğer pred(x) {
+            dizi_ekle(sonuc, x);
+        }
+    }
+    ver sonuc;
+}
+
+// İndirgeme (fold) — birikim. T ve U çıkarsanır.
+// Örnek: indirgeme(xs, 0, |a, b| a + b) -> toplam
+işlev indirgeme<T, U>(xs: Dizi<T>, baslangic: U,
+                      op: işlev(U, T) -> U) -> U {
+    değişken sonuc: U = baslangic;
+    için x: xs {
+        sonuc = op(sonuc, x);
+    }
+    ver sonuc;
+}
