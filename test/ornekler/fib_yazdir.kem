@@ -1,0 +1,16 @@
+// A.4 + D.1: fibonacci + yazdir
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+işlev main() -> tam32 {
+    değişken i: tam32 = 0;
+    iken i <= 10 {
+        yaz("fib("); yaz_tam(i); yaz(") = "); yazdır_tam(fib(i));
+        i = i + 1;
+    }
+    ver 0;
+}

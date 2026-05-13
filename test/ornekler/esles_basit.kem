@@ -1,0 +1,19 @@
+// C testi: eşleş LLVM IR — literal + tanımlayıcı (binding) desenleri
+// 100 (0), 200 (1), 70 (7), 420 (42)
+
+işlev kategori(n: tam32) -> tam32 {
+    eşleş n {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        x => { ver x * 10; }
+    }
+    ver -1;
+}
+
+işlev main() -> tam32 {
+    yazdır_tam(kategori(0));
+    yazdır_tam(kategori(1));
+    yazdır_tam(kategori(7));
+    yazdır_tam(kategori(42));
+    ver 0;
+}

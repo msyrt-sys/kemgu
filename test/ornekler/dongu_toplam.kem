@@ -1,0 +1,12 @@
+// LLVM A.3 testi: iken dongusu + atama
+// 0..9 toplami = 45
+
+işlev main() -> tam32 {
+    değişken i: tam32 = 0;
+    değişken toplam: tam32 = 0;
+    iken i < 10 {
+        toplam = toplam + i;
+        i = i + 1;
+    }
+    ver toplam;
+}

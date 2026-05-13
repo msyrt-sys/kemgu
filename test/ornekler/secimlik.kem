@@ -1,0 +1,35 @@
+// K testi: seçimlik<T> + sonuç<T,H> LLVM tagged union storage
+// Yapıcı desenleri eşleş kollarında çalışır.
+
+işlev tani_yazdir(t: seçimlik<metin>) -> tam32 {
+    eşleş t {
+        değer(s) => { yaz("tani: "); yazdır(s); ver 1; }
+        hiç => { yazdır("tani yok"); ver 0; }
+    }
+    ver -1;
+}
+
+işlev guvenli_bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 {
+        ver hata("sifira bolme");
+    }
+    ver tamam(a / b);
+}
+
+işlev sonuc_yazdir(r: sonuç<tam32, metin>) {
+    eşleş r {
+        tamam(v) => { yaz("ok: "); yazdır_tam(v); }
+        hata(m) => { yaz("hata: "); yazdır(m); }
+    }
+}
+
+işlev main() -> tam32 {
+    değişken a: seçimlik<metin> = değer("kanser");
+    değişken b: seçimlik<metin> = hiç;
+    tani_yazdir(a);
+    tani_yazdir(b);
+
+    sonuc_yazdir(guvenli_bol(10, 2));
+    sonuc_yazdir(guvenli_bol(10, 0));
+    ver 0;
+}

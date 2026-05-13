@@ -1,0 +1,13 @@
+// F testi: için (for-each) Dizi<T> üzerinde döngü
+// Beklenen: 10..50 yazdir + toplam 150
+
+işlev main() -> tam32 {
+    değişken xs = [10, 20, 30, 40, 50];
+    değişken toplam: tam32 = 0;
+    için x: xs {
+        toplam = toplam + x;
+        yaz("eleman: "); yazdır_tam(x);
+    }
+    yaz("toplam: "); yazdır_tam(toplam);
+    ver 0;
+}
