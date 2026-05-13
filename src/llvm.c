@@ -42,6 +42,10 @@ typedef struct LlvmIsim {
     /* Madde B: Dizi<T> tipli degiskenler icin eleman tipi (i32/i64/ptr).
      * dizi_ekle / dizi_al icin element-aware kdl_ cagrisi route etmek icin. */
     const char *eleman_llvm_tip;
+    /* Adim 3 (B v2): heap dizi (KdlDizi*) ise 1; stack [N x T] ise 0.
+     * dizi literal değişken annot ile heap olarak allocate edildiyse,
+     * arr[i] sintaksi kdl_dizi_al ile route edilir. */
+    int dinamik_dizi_mi;
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -773,9 +777,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_INDEKS: {
-            /* arr[i] -> GEP ptr (T*) + load
-             * Eleman tipini bilmiyoruz — varsayilan i32. Ileride tip
-             * kontrolden veri akisi gerek (v3 sinirlamasi). */
+            /* Adim 3 (B v2): heap dizi tanimlayicisi mi? Eger oyle ise
+             * kdl_dizi_al route et. Aksi halde mevcut GEP yolu (stack). */
+            if (d->veri.indeks.nesne &&
+                d->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
+                LlvmIsim *vi = isim_bul(g,
+                    d->veri.indeks.nesne->veri.tanimlayici.metin,
+                    d->veri.indeks.nesne->veri.tanimlayici.uzunluk);
+                if (vi && vi->dinamik_dizi_mi) {
+                    /* Heap dizi: kdl_dizi_al cagrisi */
+                    /* nesne load: %v_load = load ptr, ptr %v_alloca */
+                    int v_load = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
+                            v_load, vi->reg_no);
+                    IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i32");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
+                    const char *et = vi->eleman_llvm_tip
+                        ? vi->eleman_llvm_tip : "i32";
+                    const char *fn = "kdl_dizi_al_tam";
+                    if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
+                    else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
+                    int rr = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        rr, et, fn, v_load, idx_r);
+                    IfadeSonuc s = { rr, et };
+                    return s;
+                }
+            }
+            /* arr[i] -> GEP ptr (T*) + load (stack) */
             IfadeSonuc nesne = ifade_uret(g, d->veri.indeks.nesne, NULL);
             IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i64");
             int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
@@ -1324,6 +1354,53 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 }
             }
             const char *tip = annot;
+
+            /* Adim 3 (B v2): değişken d: Dizi<T> = [e1, ...] heap allocate
+             * Pattern: annot Dizi<T> + deger DIZI_OLUSTUR literal -> heap.
+             * Stack davranisi: annot yok veya &Dizi<T> ise (referans). */
+            if (d->veri.degisken.deger &&
+                d->veri.degisken.tip &&
+                d->veri.degisken.tip->tip == DUGUM_TIP_DIZI &&
+                d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR &&
+                eleman_tip) {
+                const Dugum *lit = d->veri.degisken.deger;
+                int n = lit->veri.dizi_olustur.sayi;
+                /* kdl_dizi_olustur(eleman_byte) */
+                int eb = 4;
+                if (strcmp(eleman_tip, "i8") == 0) eb = 1;
+                else if (strcmp(eleman_tip, "i16") == 0) eb = 2;
+                else if (strcmp(eleman_tip, "i64") == 0) eb = 8;
+                else if (strcmp(eleman_tip, "double") == 0) eb = 8;
+                else if (strcmp(eleman_tip, "ptr") == 0) eb = 8;
+                int kdl_reg = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n",
+                    kdl_reg, eb);
+                (void)n;
+                /* Her elemani ekle */
+                for (int i = 0; i < n; i++) {
+                    IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
+                                              eleman_tip);
+                    int vr = int_donustur(g, v.reg, v.tip, eleman_tip);
+                    const char *fn = "kdl_dizi_ekle_tam";
+                    if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+                    else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    fprintf(g->out,
+                        "  call void @%s(ptr %%%d, %s %%%d)\n",
+                        fn, kdl_reg, eleman_tip, vr);
+                }
+                /* alloca ptr + store kdl_reg */
+                int alloca_reg = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca ptr\n", alloca_reg);
+                fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
+                        kdl_reg, alloca_reg);
+                isim_ekle(g, d->veri.degisken.ad,
+                          d->veri.degisken.ad_uzunluk,
+                          1, alloca_reg, "ptr");
+                g->isimler->eleman_llvm_tip = eleman_tip;
+                g->isimler->dinamik_dizi_mi = 1;
+                return 0;
+            }
 
             /* Eger annot yoksa, deger ifadesini once degerlendirip
              * tipini cikariyoruz, sonra alloca'yi dogru tipte yapiyoruz.

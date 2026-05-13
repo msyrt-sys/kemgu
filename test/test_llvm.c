@@ -502,6 +502,83 @@ static void test_metin_tr_turkce_c(void) {
     test_sonuc("metin_kucuk_tr(\"Cc\") -> 2 byte", rc == 2);
 }
 
+/* === Adim 3: Dizi literal heap allocation === */
+
+static void test_heap_dizi_literal_uzunluk(void) {
+    /* değişken d: Dizi<tam32> = [10,20,12] heap; dizi_boyut -> 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [10, 20, 12]; "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi literal boyut -> 3", rc == 3);
+}
+
+static void test_heap_dizi_literal_indeks(void) {
+    /* d[0]+d[1]+d[2] heap, kdl_dizi_al ile route */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [10, 20, 12]; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("heap dizi literal indeks -> 42", rc == 42);
+}
+
+static void test_heap_dizi_literal_tam64(void) {
+    /* tam64 elemanli heap dizi */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = [100, 200, 300]; "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi tam64 literal boyut -> 3", rc == 3);
+}
+
+static void test_heap_dizi_buyume(void) {
+    /* Heap dizi literal + sonra ekle (auto-grow) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [1, 2, 3]; "
+        "dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi literal + dizi_ekle -> 5", rc == 5);
+}
+
+static void test_stack_dizi_korunur(void) {
+    /* Annot yok -> stack davranisi (alloca [N x T]) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [10, 20, 12]; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("stack dizi (annot yok) -> 42", rc == 42);
+}
+
+static void test_heap_stack_ayrim(void) {
+    /* Iki dizi, biri stack (no annot) biri heap (annot Dizi<tam32>).
+     * Heap dizi_boyut destekli, stack alloca'lı. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: Dizi<tam32> = [1, 2, 3]; "
+        "de\xc4\x9fi\xc5\x9fken s = [10, 20]; "
+        "ver dizi_boyut(h) + s[0]; }");
+    test_sonuc("heap+stack karma: 3 + 10 -> 13", rc == 13);
+}
+
+static void test_heap_dizi_indeks_zincir(void) {
+    /* d[0] * d[1] + d[2] */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [7, 6, 0]; "
+        "ver d[0] * d[1] + d[2]; }");
+    test_sonuc("heap dizi indeks aritmetik -> 42", rc == 42);
+}
+
+static void test_heap_dizi_uzun(void) {
+    /* 5 elemanli heap dizi, sondan oku */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [1, 2, 3, 4, 42]; "
+        "ver d[4]; }");
+    test_sonuc("heap dizi uzun (5 eleman) d[4] -> 42", rc == 42);
+}
+
 static void test_metin_icerir_evet(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
@@ -987,6 +1064,15 @@ int main(void) {
     test_metin_ascii_turkce_korunur();
     test_metin_tr_yuvarlak_yolculuk();
     test_metin_tr_turkce_c();
+    /* Adim 3: Dizi literal heap allocation */
+    test_heap_dizi_literal_uzunluk();
+    test_heap_dizi_literal_indeks();
+    test_heap_dizi_literal_tam64();
+    test_heap_dizi_buyume();
+    test_stack_dizi_korunur();
+    test_heap_stack_ayrim();
+    test_heap_dizi_indeks_zincir();
+    test_heap_dizi_uzun();
     test_metin_icerir_evet();
     test_metin_icerir_hayir();
     test_metin_baslar();
