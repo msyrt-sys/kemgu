@@ -39,3 +39,5 @@ desktop.ini
 *.tmp
 *.bak
 *.orig
+
+.claude/
