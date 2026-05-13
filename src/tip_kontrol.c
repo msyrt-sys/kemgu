@@ -58,6 +58,101 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("bellek_kopyala", 14, p, 3, tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* === Metin runtime primitifleri (Kirmizi A) === */
+
+    /* metin_uzunluk(metin) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_uzunluk", 13, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* metin_birlestir(metin, metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_birlestir", 15, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_kes(metin, tam32, tam32) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        p[2] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("metin_kes", 9, p, 3, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_kucuk(metin) -> metin
+     * Ad: m,e,t,i,n,_,k,ü,ç,ü,k — 'ü'=\xc3\xbc (2), 'ç'=\xc3\xa7 (2)
+     * Toplam: 5 + 1 + 1 + 2 + 2 + 2 + 1 = 14 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_k\xc3\xbc\xc3\xa7\xc3\xbck", 14, p, 1,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_buyuk(metin) -> metin
+     * Ad: m,e,t,i,n,_,b,ü,y,ü,k — 'ü' x2 (each 2 byte)
+     * Toplam: 5 + 1 + 1 + 2 + 1 + 2 + 1 = 13 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_b\xc3\xbcy\xc3\xbck", 13, p, 1,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_icerir(metin, metin) -> mantiksal
+     * 'i,ç,e,r,i,r' — 'ç' (2 byte) -> i+ç+e+r+i+r = 1+2+1+1+1+1 = 7 byte
+     * metin_içerir = 5+1+7 = 13 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_i\xc3\xa7" "erir", 13, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_baslar(metin, metin) -> mantiksal
+     * 'b,a,ş,l,a,r' — 'ş' (2 byte) -> 1+1+2+1+1+1 = 7
+     * metin_başlar = 5+1+7 = 13 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_ba\xc5\x9flar", 13, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_biter(metin, metin) -> mantiksal
+     * metin_biter = 5+1+5 = 11 byte (ASCII) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_biter", 11, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_kirp(metin) -> metin (ASCII whitespace trim)
+     * metin_kırp — 'ı' (2 byte) -> k+ı+r+p = 1+2+1+1 = 5
+     * Toplam: 5+1+5 = 11 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_k\xc4\xb1rp", 11, p, 1,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_yer_degistir(metin, metin, metin) -> metin
+     * yer_degiştir — 'ş' (2 byte): y+e+r+_+d+e+g+i+ş+t+i+r
+     *   = 1+1+1+1+1+1+1+1+2+1+1+1 = 13
+     * metin_yer_değiştir — wait, kelime degil ’değiştir’
+     * Aslında 'değiştir' = d,e,ğ,i,ş,t,i,r — 'ğ' (2), 'ş' (2) -> 1+1+2+1+2+1+1+1 = 10
+     * yer = 3, _ = 1
+     * metin_ = 6, yer = 3, _ = 1, değiştir = 10 -> 6+3+1+10 = 20 byte */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        p[2] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_yer_de\xc4\x9fi\xc5\x9ftir", 20, p, 3,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;

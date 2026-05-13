@@ -66,9 +66,12 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     int rc = system(komut);
     if (rc != 0) return -1;
 
-    /* clang -x ir .ll -o .exe */
+    /* clang -x ir .ll -x c runtime/kdl_runtime.c -o .exe
+     * runtime ile her zaman link et — kdl_* fonksiyonlari kullaniliyor olabilir.
+     * Kullanilmayan symbols zarar vermez. */
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -o %s 2>%s", LL_PATH, EXE_PATH, DEV_NULL);
+             "clang -x ir %s -x c runtime/kdl_runtime.c -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
     rc = system(komut);
     if (rc != 0) return -1;
 
@@ -432,6 +435,65 @@ static void test_struct_donus_by_value(void) {
     test_sonuc("struct-by-value donus (yap() -> N{42}) -> 42", rc == 42);
 }
 
+/* === Metin runtime primitifleri (Kirmizi A) === */
+
+static void test_metin_uzunluk_rt(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"merhaba\"); }");
+    test_sonuc("metin_uzunluk(\"merhaba\") -> 7", rc == 7);
+}
+
+static void test_metin_biter_rt(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_biter(\"merhaba\", \"ba\") { ver 42; } "
+        "ver 0; }");
+    test_sonuc("metin_biter(\"merhaba\", \"ba\") -> 42", rc == 42);
+}
+
+static void test_metin_baslar_rt(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_ba\xc5\x9flar(\"merhaba\", \"mer\") { ver 42; } "
+        "ver 0; }");
+    test_sonuc("metin_baslar(\"merhaba\", \"mer\") -> 42", rc == 42);
+}
+
+static void test_metin_icerir_rt(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_i\xc3\xa7" "erir(\"merhaba\", \"haba\") { ver 42; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba\", \"haba\") -> 42", rc == 42);
+}
+
+static void test_metin_birlestir_uzunluk(void) {
+    /* birlestir + uzunluk: "mer"+"haba" = "merhaba" (7) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_birlestir(\"mer\", \"haba\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_birlestir + uzunluk -> 7", rc == 7);
+}
+
+static void test_metin_kes_uzunluk(void) {
+    /* "merhaba"[1..4] = "erh" (3) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kes(\"merhaba\", 1, 4); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kes(\"merhaba\", 1, 4) uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_kirp_uzunluk(void) {
+    /* "  hi  " -> "hi" (2) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_k\xc4\xb1rp(\"  hi  \"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kirp(\"  hi  \") uzunluk -> 2", rc == 2);
+}
+
 /* === Bit Operatorleri Testleri (ADIM 30) === */
 
 static void test_bit_ve_temel(void) {
@@ -600,6 +662,15 @@ int main(void) {
 
     printf("\n--- ADIM 28: Allocator (bellek_al/serbest) ---\n");
     test_bellek_al_serbest();
+
+    printf("\n--- Kirmizi A: Metin runtime primitifleri ---\n");
+    test_metin_uzunluk_rt();
+    test_metin_biter_rt();
+    test_metin_baslar_rt();
+    test_metin_icerir_rt();
+    test_metin_birlestir_uzunluk();
+    test_metin_kes_uzunluk();
+    test_metin_kirp_uzunluk();
 
     printf("\n--- ADIM 30: Bit operatorleri ---\n");
     test_bit_ve_temel();

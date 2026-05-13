@@ -948,6 +948,38 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "bellek_kopyala", 14) == 0) {
                 cagri_adi = "memcpy"; cagri_adi_uz = 6;
             }
+            /* Metin runtime primitifleri (Kirmizi A) -> kdl_* */
+            else if (cagri_adi_uz == 13 &&
+                     memcmp(cagri_adi, "metin_uzunluk", 13) == 0) {
+                cagri_adi = "kdl_metin_uzunluk"; cagri_adi_uz = 17;
+            } else if (cagri_adi_uz == 15 &&
+                       memcmp(cagri_adi, "metin_birlestir", 15) == 0) {
+                cagri_adi = "kdl_metin_birlestir"; cagri_adi_uz = 19;
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "metin_kes", 9) == 0) {
+                cagri_adi = "kdl_metin_kes"; cagri_adi_uz = 13;
+            } else if (cagri_adi_uz == 14 &&
+                       memcmp(cagri_adi, "metin_k\xc3\xbc\xc3\xa7\xc3\xbck", 14) == 0) {
+                cagri_adi = "kdl_metin_kucuk"; cagri_adi_uz = 15;
+            } else if (cagri_adi_uz == 13 &&
+                       memcmp(cagri_adi, "metin_b\xc3\xbcy\xc3\xbck", 13) == 0) {
+                cagri_adi = "kdl_metin_buyuk"; cagri_adi_uz = 15;
+            } else if (cagri_adi_uz == 13 &&
+                       memcmp(cagri_adi, "metin_i\xc3\xa7" "erir", 13) == 0) {
+                cagri_adi = "kdl_metin_icerir"; cagri_adi_uz = 16;
+            } else if (cagri_adi_uz == 13 &&
+                       memcmp(cagri_adi, "metin_ba\xc5\x9flar", 13) == 0) {
+                cagri_adi = "kdl_metin_baslar"; cagri_adi_uz = 16;
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "metin_biter", 11) == 0) {
+                cagri_adi = "kdl_metin_biter"; cagri_adi_uz = 15;
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "metin_k\xc4\xb1rp", 11) == 0) {
+                cagri_adi = "kdl_metin_kirp"; cagri_adi_uz = 14;
+            } else if (cagri_adi_uz == 20 &&
+                       memcmp(cagri_adi, "metin_yer_de\xc4\x9fi\xc5\x9ftir", 20) == 0) {
+                cagri_adi = "kdl_metin_yer_degistir"; cagri_adi_uz = 22;
+            }
 
             const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
 
@@ -1394,7 +1426,18 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @puts(ptr)\n", out);
     fputs("declare ptr @malloc(i64)\n", out);
     fputs("declare void @free(ptr)\n", out);
-    fputs("declare ptr @memcpy(ptr, ptr, i64)\n\n", out);
+    fputs("declare ptr @memcpy(ptr, ptr, i64)\n", out);
+    /* Metin runtime primitifleri (Kirmizi A) */
+    fputs("declare i32 @kdl_metin_uzunluk(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_birlestir(ptr, ptr)\n", out);
+    fputs("declare ptr @kdl_metin_kes(ptr, i32, i32)\n", out);
+    fputs("declare ptr @kdl_metin_kucuk(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_buyuk(ptr)\n", out);
+    fputs("declare i32 @kdl_metin_icerir(ptr, ptr)\n", out);
+    fputs("declare i32 @kdl_metin_baslar(ptr, ptr)\n", out);
+    fputs("declare i32 @kdl_metin_biter(ptr, ptr)\n", out);
+    fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
