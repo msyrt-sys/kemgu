@@ -1,0 +1,189 @@
+// KEMGU Stdlib Testi — Metin
+// =================================
+//
+// Bu dosya `stdlib/metin.kem` ile birleştirilerek --check edilir.
+// Runtime primitifi olmayan ops için stub davranışı test edilir.
+
+// --- esit_mi / farkli_mi (gerçek davranış) ---
+işlev test_esit_evet() -> mantıksal {
+    ver esit_mi("merhaba", "merhaba");
+}
+
+işlev test_esit_hayir() -> mantıksal {
+    ver esit_mi("a", "b");
+}
+
+işlev test_farkli_evet() -> mantıksal {
+    ver farkli_mi("a", "b");
+}
+
+işlev test_farkli_hayir() -> mantıksal {
+    ver farkli_mi("a", "a");
+}
+
+// --- bos_mu / dolu_mu ---
+işlev test_bos_evet() -> mantıksal {
+    ver bos_mu("");
+}
+
+işlev test_bos_hayir() -> mantıksal {
+    ver bos_mu("merhaba");
+}
+
+işlev test_dolu_evet() -> mantıksal {
+    ver dolu_mu("x");
+}
+
+işlev test_dolu_hayir() -> mantıksal {
+    ver dolu_mu("");
+}
+
+// --- sarmala ---
+işlev test_sarmala_dolu() -> mantıksal {
+    değişken o: seçimlik<metin> = sarmala("dolu");
+    eşleş o {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_sarmala_bos() -> mantıksal {
+    değişken o: seçimlik<metin> = sarmala("");
+    eşleş o {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- uzunluk (stub — şu an her zaman 0) ---
+işlev test_uzunluk_imza() -> tam32 {
+    ver uzunluk("merhaba");   // STUB: 0
+}
+
+işlev test_uzunluk_bos() -> tam32 {
+    ver uzunluk("");           // 0
+}
+
+// --- birlestir (stub) ---
+işlev test_birlestir_imza() -> metin {
+    ver birlestir("merhaba", " dünya");
+}
+
+işlev test_birlestir_bos_solda() -> mantıksal {
+    değişken s: metin = birlestir("", "b");
+    ver esit_mi(s, "b");
+}
+
+işlev test_birlestir_bos_sagda() -> mantıksal {
+    değişken s: metin = birlestir("a", "");
+    ver esit_mi(s, "a");
+}
+
+işlev test_birlestir_uc() -> metin {
+    ver birlestir_uc("a", "b", "c");
+}
+
+// --- kes (stub) ---
+işlev test_kes_imza() -> metin {
+    ver kes("merhaba", 0, 4);
+}
+
+işlev test_kes_bos() -> mantıksal {
+    ver esit_mi(kes("", 0, 5), "");
+}
+
+işlev test_kes_aralik_ters() -> mantıksal {
+    ver esit_mi(kes("merhaba", 5, 2), "");
+}
+
+// --- bol (stub) ---
+işlev test_bol_imza() -> tam32 {
+    değişken parcalar: Dizi<metin> = bol("merhaba", ',');
+    değişken n: tam32 = 0;
+    için p: parcalar { n = n + 1; }
+    ver n;
+}
+
+işlev test_bol_bos() -> tam32 {
+    değişken parcalar: Dizi<metin> = bol("", ',');
+    değişken n: tam32 = 0;
+    için p: parcalar { n = n + 1; }
+    ver n;
+}
+
+// --- kucukharf / buyukharf (stub) ---
+işlev test_kucukharf_imza() -> metin {
+    ver kucukharf("MERHABA");
+}
+
+işlev test_buyukharf_imza() -> metin {
+    ver buyukharf("merhaba");
+}
+
+// --- icerir (stub) ---
+işlev test_icerir_kendisi() -> mantıksal {
+    ver icerir("merhaba", "merhaba");
+}
+
+işlev test_icerir_bos_alt() -> mantıksal {
+    ver icerir("merhaba", "");
+}
+
+// --- baslar_ile / biter_ile (stub) ---
+işlev test_baslar_ile_kendisi() -> mantıksal {
+    ver baslar_ile("merhaba", "merhaba");
+}
+
+işlev test_baslar_ile_bos() -> mantıksal {
+    ver baslar_ile("merhaba", "");
+}
+
+işlev test_biter_ile_kendisi() -> mantıksal {
+    ver biter_ile("merhaba", "merhaba");
+}
+
+işlev test_biter_ile_bos() -> mantıksal {
+    ver biter_ile("merhaba", "");
+}
+
+// --- kirp / tekrarla / yansit / yer_degistir / karakter_sayisi (stub) ---
+işlev test_kirp_imza() -> metin {
+    ver kirp("  merhaba  ");
+}
+
+işlev test_tekrarla_imza() -> metin {
+    ver tekrarla("ab", 3);
+}
+
+işlev test_tekrarla_sifir() -> mantıksal {
+    ver esit_mi(tekrarla("ab", 0), "");
+}
+
+işlev test_yansit_imza() -> metin {
+    ver yansit("merhaba");
+}
+
+işlev test_yer_degistir_imza() -> metin {
+    ver yer_degistir("merhaba dünya", "dünya", "evren");
+}
+
+işlev test_yer_degistir_tam_esit() -> mantıksal {
+    ver esit_mi(yer_degistir("ab", "ab", "cd"), "cd");
+}
+
+işlev test_karakter_sayisi() -> tam32 {
+    ver karakter_sayisi("merhaba");
+}
+
+// --- Bileşik kullanım (stub davranışı boyunca tip akışı doğru) ---
+işlev test_bilesik() -> mantıksal {
+    değişken s: metin = birlestir("mer", "haba");
+    ver dolu_mu(s);
+}
+
+işlev main() -> tam32 {
+    eğer test_esit_evet() { ver 0; }
+    ver 1;
+}
