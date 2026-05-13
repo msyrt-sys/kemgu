@@ -1,0 +1,180 @@
+// KEMGU Stdlib — Opsiyonel<T>
+// =============================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// seçimlik<T> yardımcıları: değer / hiç pattern matching üzerine
+// fonksiyonel API.
+//
+// Tasarım kuralı:
+//   - hiç YOK (null yok), seçimlik<T> ile değer / hiç açık biçim
+//   - Pattern matching ile ayrıştırma (kapsamlı)
+//   - Java equals/Optional.get() tuzağına düşme — fonksiyonel
+//
+// SINIR (geçici, v1):
+//   Generic islev tipi `işlev(T) -> U` parametresi tip kontrolünden
+//   tam olarak geçmiyor — bu yüzden harita/filtre/bağla için tam32,
+//   metin, mantıksal versiyonlar ayrı yazılmış. Constraint sistemi
+//   tamamlandığında tek generic versiyon yeterli olacak.
+
+// --- Sorgular (tam generic) ---
+
+// Değer var mı? (değer(v) ise doğru)
+işlev var_mi<T>(opt: seçimlik<T>) -> mantıksal {
+    eşleş opt {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// Yok mu? (hiç ise doğru)
+işlev yok_mu<T>(opt: seçimlik<T>) -> mantıksal {
+    eşleş opt {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver doğru;
+}
+
+// Boş mu — yok_mu için alias (Türkçe okuma kolaylığı).
+işlev bos_mu<T>(opt: seçimlik<T>) -> mantıksal {
+    ver yok_mu(opt);
+}
+
+// --- Çözüm (tam generic) ---
+
+// Değeri al, yoksa varsayılan döner.
+işlev ya_da_varsayilan<T>(opt: seçimlik<T>, varsayilan: T) -> T {
+    eşleş opt {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// İki opsiyonel arasında ilk değer olanı döner.
+işlev ilk_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
+    eşleş a {
+        değer(v) => { ver a; }
+        hiç => { ver b; }
+    }
+    ver b;
+}
+
+// İki opsiyonel arasından, ikisi de değer ise A'yı, biri eksikse hiç.
+işlev her_iki_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
+    eşleş a {
+        değer(v) => {
+            eşleş b {
+                değer(w) => { ver a; }
+                hiç => { ver hiç; }
+            }
+            ver hiç;
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// --- Eşitlik (her T için) ---
+
+// İki opsiyonel değer-eşitliği. Her iki yan değer ise içerikleri karşılaştırılır.
+işlev esit_mi<T>(a: seçimlik<T>, b: seçimlik<T>) -> mantıksal {
+    eşleş a {
+        değer(v) => {
+            eşleş b {
+                değer(w) => { ver v == w; }
+                hiç => { ver yanlış; }
+            }
+            ver yanlış;
+        }
+        hiç => {
+            eşleş b {
+                değer(w) => { ver yanlış; }
+                hiç => { ver doğru; }
+            }
+            ver yanlış;
+        }
+    }
+    ver yanlış;
+}
+
+// --- Yapıcılar (yardımcı) ---
+
+// Sarmala — değer<T> üret. (Doğrudan `değer(x)` kullanılabilir; bu sarmalayıcı
+// fonksiyonel pipeline'larda kullanışlı.)
+işlev sarmala<T>(x: T) -> seçimlik<T> {
+    ver değer(x);
+}
+
+// Boş — `hiç` üreten yardımcı. Generic context'te tipini açıkça verir.
+// Not: parametrik olarak boş üretmek için `<T>` bilgisi gerekiyor;
+// şu an sadece concrete tipte test edilebilir.
+işlev bos_olustur<T>(rumuz: T) -> seçimlik<T> {
+    // rumuz tipi T'yi taşıyor; gerçekte kullanılmıyor
+    ver hiç;
+}
+
+// --- Harita / Filtre / Bağla (tam32 — concrete) ---
+// Generic callback tip kontrolü tamamlanana kadar tam32 odaklı.
+
+// Harita — değer ise f uygula, hiç ise hiç döner.
+işlev harita_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> tam32) -> seçimlik<tam32> {
+    eşleş opt {
+        değer(v) => { ver değer(f(v)); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Filtre — değer ise pred uygula, doğru ise koru, değilse hiç.
+işlev filtre_tam(opt: seçimlik<tam32>, pred: işlev(tam32) -> mantıksal) -> seçimlik<tam32> {
+    eşleş opt {
+        değer(v) => {
+            eğer pred(v) { ver değer(v); }
+            ver hiç;
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Bağla — değer ise f çağır (yeni seçimlik döner), hiç ise hiç.
+// flatMap karşılığı.
+işlev bagla_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> seçimlik<tam32>) -> seçimlik<tam32> {
+    eşleş opt {
+        değer(v) => { ver f(v); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Ya da çağır — değer ise döner, hiç ise lazy üretici f'i çağırır.
+işlev ya_da_cagir_tam(opt: seçimlik<tam32>, f: işlev() -> tam32) -> tam32 {
+    eşleş opt {
+        değer(v) => { ver v; }
+        hiç => { ver f(); }
+    }
+    ver 0;
+}
+
+// --- Harita / Filtre (metin) ---
+
+işlev harita_metin(opt: seçimlik<metin>, f: işlev(metin) -> metin) -> seçimlik<metin> {
+    eşleş opt {
+        değer(v) => { ver değer(f(v)); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev filtre_metin(opt: seçimlik<metin>, pred: işlev(metin) -> mantıksal) -> seçimlik<metin> {
+    eşleş opt {
+        değer(v) => {
+            eğer pred(v) { ver değer(v); }
+            ver hiç;
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
