@@ -21,6 +21,12 @@
 
 #define PARSER_MAX_HATA 100
 
+/* Ayni pozisyonda ayni hata kodu N+1 kez tekrarlandiginda parser durur.
+ * Random token streams (fuzzer) panik mod sync sonrasi keyword'e
+ * takildiginda parser_panik_sync token tuketmiyor -> sonsuz loop.
+ * Bu sabit, ayni hatanin tekrar esigini belirler. */
+#define PARSER_MAX_AYNI_HATA 3
+
 typedef struct Parser {
     Lexer *lexer;
     Token simdiki;            /* henuz tuketilmemis token */
@@ -34,6 +40,12 @@ typedef struct Parser {
      * Default: 1 (evet). Kondisyonel ifadelerde (eger/iken/icin/esles
      * sonrasi) 0'a cekilir, cunku '{' blok basini gosterir. */
     int yapi_olusturma_izni;
+
+    /* Ayni-pozisyon-ayni-kod tekrar izleme (sonsuz loop koruma) */
+    int son_hata_satir;
+    int son_hata_sutun;
+    const char *son_hata_kod;
+    int son_hata_tekrar;
 } Parser;
 
 /* === Public API === */

@@ -50,6 +50,10 @@ void parser_baslat(Parser *p, Lexer *l, Arena *a,
     p->dosya_adi = dosya_adi;
     p->kaynak = kaynak;
     p->yapi_olusturma_izni = 1;
+    p->son_hata_satir = -1;
+    p->son_hata_sutun = -1;
+    p->son_hata_kod = NULL;
+    p->son_hata_tekrar = 0;
 }
 
 Token parser_simdiki(const Parser *p) {
@@ -98,6 +102,29 @@ Token parser_bekle(Parser *p, TokenTipi t, const char *kod, const char *mesaj) {
 void parser_hata(Parser *p, Token tok,
                  const char *kod, const char *mesaj, const char *ipucu) {
     if (p->hata_sayisi >= PARSER_MAX_HATA) return;
+
+    /* Ayni-pozisyon-ayni-kod tekrar tespiti: random token streams
+     * panik_sync sync-keyword'e takilip ilerlemediginde, ust loop ayni
+     * pozisyonda ayni hatayi sonsuz tekrar etmek istiyor. Esik asilinca
+     * hata_sayisi'ni MAX'a cekip tum loop'lari kis. */
+    int ayni_pozisyon = (tok.satir == p->son_hata_satir &&
+                         tok.sutun == p->son_hata_sutun &&
+                         p->son_hata_kod != NULL &&
+                         kod != NULL &&
+                         strcmp(kod, p->son_hata_kod) == 0);
+    if (ayni_pozisyon) {
+        p->son_hata_tekrar++;
+        if (p->son_hata_tekrar > PARSER_MAX_AYNI_HATA) {
+            p->hata_sayisi = PARSER_MAX_HATA;
+            return;
+        }
+    } else {
+        p->son_hata_satir = tok.satir;
+        p->son_hata_sutun = tok.sutun;
+        p->son_hata_kod = kod;
+        p->son_hata_tekrar = 1;
+    }
+
     p->hata_sayisi++;
     hata_raporla(p->dosya_adi, p->kaynak,
                  tok.satir, tok.sutun, kod, mesaj, ipucu);
@@ -483,8 +510,14 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     liste_baslat(&alanlar);
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token once = parser_simdiki(p);
         Dugum *alan = parse_alan(p);
         if (alan) liste_ekle(&alanlar, p->arena, alan);
+        if (parser_simdiki(p).baslangic == once.baslangic &&
+            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+            parser_ilerle(p);
+        }
+        if (p->hata_sayisi >= PARSER_MAX_HATA) break;
     }
     parser_bekle(p, TOK_SAG_SUSLU, "P023", "'}' bekleniyor");
 
