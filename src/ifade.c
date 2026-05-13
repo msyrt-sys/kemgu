@@ -90,6 +90,7 @@ static int sonek_oncelik(TokenTipi t) {
         case TOK_SOL_KOSELI:
         case TOK_SOL_PAREN:
         case TOK_CIFT_IKI_NOKTA:
+        case TOK_OLARAK:        /* Kirmizi E: explicit cast */
             return ONC_SONEK;
         default:
             return ONC_YOK;
@@ -492,6 +493,19 @@ static Dugum *parse_sonek_op(Parser *p, Dugum *sol) {
                     ast_string_kopyala(p->arena,
                                        sag_tok.baslangic, sag_tok.uzunluk);
                 yeni->veri.yol.sag_ad_uzunluk = sag_tok.uzunluk;
+            }
+            return yeni;
+        }
+
+        case TOK_OLARAK: {
+            /* x olarak Tip — Kirmizi E explicit cast */
+            parser_ilerle(p);
+            Dugum *hedef_tip = parse_tip(p);
+            Dugum *yeni = yapi_dugum_olustur(p, DUGUM_OLARAK,
+                                              t.satir, t.sutun);
+            if (yeni) {
+                yeni->veri.olarak.kaynak = sol;
+                yeni->veri.olarak.hedef_tip = hedef_tip;
             }
             return yeni;
         }

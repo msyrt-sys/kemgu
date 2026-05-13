@@ -543,6 +543,61 @@ static void test_dizi_iki_dizi(void) {
     test_sonuc("iki ayri dizi -> 42 (20+22)", rc == 42);
 }
 
+/* === olarak: explicit cast (Kirmizi E) === */
+
+static void test_olarak_tam64_to_tam32(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam64 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam32 = x olarak tam32; "
+        "ver y; }");
+    test_sonuc("olarak: tam64 -> tam32 (trunc, 42)", rc == 42);
+}
+
+static void test_olarak_tam32_to_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x olarak tam64; "
+        "ver y olarak tam32; }");
+    test_sonuc("olarak: tam32 -> tam64 -> tam32 zincir (42)", rc == 42);
+}
+
+static void test_olarak_tam8_to_tam32(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam8 = 42; "
+        "ver x olarak tam32; }");
+    test_sonuc("olarak: tam8 -> tam32 (sext, 42)", rc == 42);
+}
+
+static void test_olarak_kesirli32_to_tam32(void) {
+    /* 42.5 IEEE-754 single-precision'da tam representable, 42'ye truncates */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: kesirli32 = 42.5; "
+        "ver x olarak tam32; }");
+    test_sonuc("olarak: kesirli32 (42.5) -> tam32 (fptosi 42)", rc == 42);
+}
+
+static void test_olarak_tam32_to_kesirli64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: kesirli64 = x olarak kesirli64; "
+        "ver y olarak tam32; }");
+    test_sonuc("olarak: tam32 -> kesirli64 -> tam32 zincir (42)", rc == 42);
+}
+
+static void test_olarak_kesirli32_to_kesirli64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: kesirli32 = 42.0; "
+        "de\xc4\x9fi\xc5\x9fken y: kesirli64 = x olarak kesirli64; "
+        "ver y olarak tam32; }");
+    test_sonuc("olarak: kesirli32 -> kesirli64 (fpext 42)", rc == 42);
+}
+
 /* === Bit Operatorleri Testleri (ADIM 30) === */
 
 static void test_bit_ve_temel(void) {
@@ -727,6 +782,14 @@ int main(void) {
     test_dizi_kapasite_buyume();
     test_dizi_boyut_bos();
     test_dizi_iki_dizi();
+
+    printf("\n--- Kirmizi E: olarak (explicit cast) ---\n");
+    test_olarak_tam64_to_tam32();
+    test_olarak_tam32_to_tam64();
+    test_olarak_tam8_to_tam32();
+    test_olarak_kesirli32_to_tam32();
+    test_olarak_tam32_to_kesirli64();
+    test_olarak_kesirli32_to_kesirli64();
 
     printf("\n--- ADIM 30: Bit operatorleri ---\n");
     test_bit_ve_temel();
