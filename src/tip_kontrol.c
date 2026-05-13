@@ -58,6 +58,61 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("bellek_kopyala", 14, p, 3, tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* === I/O built-in genisletme (runtime/kdl_runtime.c karsiliklar) ===
+     * yazdir_*  -> stdout + '\n' eklenir
+     * yaz_*     -> stdout, '\n' yok
+     * yazdir_satir -> tek '\n'
+     * Tum donus bos (void) — KEMGU TIP_BOS. */
+
+    /* yazdir_tam(tam32) -> bos  (kdl_yazdir_tam) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("yazdir_tam", 10, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* yazdir_tam64(tam64) -> bos  (kdl_yazdir_tam64) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("yazdir_tam64", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* yazdir_satir() -> bos  (kdl_yazdir_satir — sadece newline) */
+    {
+        EKLE_BUILTIN("yazdir_satir", 12, NULL, 0,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* yaz_tam(tam32) -> bos  (kdl_yaz_tam — newline yok) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("yaz_tam", 7, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* yaz_tam64(tam64) -> bos  (kdl_yaz_tam64 — newline yok) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("yaz_tam64", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* `yaz_metin` BUILT-IN OLARAK REGISTER EDILMEZ:
+     * stdlib/dosya.kem zaten `yaz_metin(yol, icerik) -> sonuc<tam32, metin>`
+     * 2-parametreli dosya yazma islevini tanimlamis. Built-in burada
+     * 1-param olarak (metin -> bos) eklenirse sembol_ekle stdlib tanimini
+     * duplicate sayar ve test/stdlib/test_dosya.kem icindeki 2-arg
+     * cagrilarda T010 (arg sayisi uyumsuz) hatasi olusur. Bu nedenle
+     * mevcut testleri korumak icin built-in olarak yalnizca diger 5
+     * I/O fonksiyonu eklenmistir (yazdir_tam/64, yazdir_satir, yaz_tam/64).
+     * Kullanici string-yazma ihtiyaci icin `yazdir(s)` veya stdlib
+     * uzantilarini kullanabilir.
+     *
+     * Cakismanin temiz cozumu (gelecek): stdlib/dosya icindeki yaz_metin'i
+     * `dosya_yaz_metin` olarak yeniden adlandirip built-in yaz_metin'i
+     * burada ekleyebilmek. Bu KIRMIZI_QUEUE'da spec/stdlib karari. */
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;

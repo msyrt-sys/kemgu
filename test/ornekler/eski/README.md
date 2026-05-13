@@ -12,21 +12,35 @@ determined-cohen ayrı bir dil yolunda ilerlemişti (A-L harfli aşamalar). Aşa
 ### 1. Eksik built-in fonksiyonlar (15 dosya)
 
 determined-cohen'in stdlib seed'i şu adlarda fonksiyonlar tanımlıyor — bizim ana hat
-sadece tek bir `yazdir(metin)` built-in'ini tanıyor (ADIM 27: libc `puts` köprüsü):
+sadece `yazdir(metin)` ve birkaç bellek built-in'ini tanıyordu (ADIM 27: libc `puts`
+köprüsü). **2026-05-13 src-bugfix branch'inde 5 yeni I/O built-in eklendi:**
 
-| Eksik built-in | Hangi dosyalarda |
-|----------------|------------------|
-| `yazdır` (ı'lı) — bizdeki `yazdir` (i) | hello.kem (port edildi → ana dizinde) |
-| `yaz`, `yaz_tam` | dizi_yazdir, fib_yazdir, say |
-| `yazdır_tam`, `yazdır_tam64` | say, dizi_yazdir, fib_yazdir, tip_alias |
-| `uzunluk`, `min`, `maks` | dizi_yazdir |
-| `oku_dosya`, `yaz_dosya` | dosya_io |
-| `bellek_yarat`, `bellek_oku`, `bellek_yaz` | arena_bellek, heap_dizi_metin |
-| `kanal_yarat`, `kanal_gonder`, `kanal_al` | kanal_basit |
+| Built-in | Imza | Eklendi mi |
+|----------|------|------------|
+| `yazdir(metin)` | metin -> tam32 | ✓ (libc puts) |
+| `yazdir_tam(tam32)` | -> bos | ✓ (kdl_yazdir_tam) |
+| `yazdir_tam64(tam64)` | -> bos | ✓ (kdl_yazdir_tam64) |
+| `yazdir_satir()` | -> bos | ✓ (kdl_yazdir_satir) |
+| `yaz_tam(tam32)` | -> bos | ✓ (kdl_yaz_tam) |
+| `yaz_tam64(tam64)` | -> bos | ✓ (declare-only, runtime stub) |
+| `yaz_metin(metin)` | -> bos | ✗ (stdlib/dosya.kem cakismasi) |
+| `yazdır`, `yazdır_tam` (ı'lı) | — | ✗ (eski dosyalarda kullaniliyor) |
+| `yaz` (4-char) | metin -> bos | ✗ (eklenmedi) |
+| `uzunluk`, `min`, `maks` | — | ✗ (stdlib seed gerek) |
+| `oku_dosya`, `yaz_dosya` | — | ✗ (stdlib/dosya cakisma + runtime) |
+| `bellek_yarat`, `bellek_oku`, `bellek_yaz` | — | ✗ (stdlib seed gerek) |
+| `kanal_yarat`, `kanal_gonder`, `kanal_al` | — | partial (runtime var, tip_kontrol yok) |
 
-**Port etmek için:** Stdlib seed (`stdlib/io/yaz.kem`, `stdlib/dizi/uzunluk.kem`, vs.)
-yazmak gerek + LLVM backend'de libc çağrılarını veya runtime fonksiyonlarını köprüleme.
-Yeşil iş ama büyük (~10-15 fonksiyon × test).
+**Eski dosyalardan port durumu (2026-05-13):**
+- 15/16 dosya halen --check'ten gecmiyor. Cogu Turkce I'li `yazdır` veya 4-char
+  `yaz` kullaniyor, eklenmedi.
+- ASCII versiyonlar (`yazdir_tam` vs. `yazdır_tam`) artik global scope'ta tanimli;
+  bir eski dosyayi `sed -i 's/yazdır/yazdir/g'` ile port etmek artik mumkun.
+- Ornek: `say.kem` icin `yazdır -> yazdir; yazdır_tam -> yazdir_tam` cevirimi yeterli.
+
+**Daha fazlasi icin:** Stdlib seed (`stdlib/io/yaz.kem`, `stdlib/dizi/uzunluk.kem`,
+vs.) yazmak gerek + LLVM backend'de libc çağrılarını veya runtime fonksiyonlarını
+köprüleme. Yeşil iş ama büyük (~10-15 fonksiyon × test).
 
 ### 2. Eksik dil özellikleri (2 dosya)
 

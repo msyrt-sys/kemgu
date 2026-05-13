@@ -1387,6 +1387,68 @@ static void test_kaydir_mantiksal_hata(void) {
     arena_serbest(a);
 }
 
+/* === Built-in IO genisletmesi (ADIM bug-fix) ===
+ * tip_kontrol_baslat global scope'a yazdir/bellek_* disinda 5 yeni I/O
+ * built-in'i ekledi: yazdir_tam, yazdir_tam64, yazdir_satir, yaz_tam,
+ * yaz_tam64. Programi tip_kontrol'den gecirip 0 hata bekliyoruz. */
+
+static void test_builtin_yazdir_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { yazdir_tam(42); ver 0; }", a);
+    test_sonuc("built-in: yazdir_tam(tam32) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_builtin_yazdir_tam64(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken n: tam64 = 1;\n"
+        "  yazdir_tam64(n);\n"
+        "  ver 0;\n"
+        "}", a);
+    test_sonuc("built-in: yazdir_tam64(tam64) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_builtin_yazdir_satir(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { yazdir_satir(); ver 0; }", a);
+    test_sonuc("built-in: yazdir_satir() -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_builtin_yaz_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { yaz_tam(7); ver 0; }", a);
+    test_sonuc("built-in: yaz_tam(tam32) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_builtin_yaz_tam64(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken n: tam64 = 7;\n"
+        "  yaz_tam64(n);\n"
+        "  ver 0;\n"
+        "}", a);
+    test_sonuc("built-in: yaz_tam64(tam64) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_builtin_arg_sayi_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* yazdir_tam 1 param bekler, 2 verdik -> T010 */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { yazdir_tam(1, 2); ver 0; }", a);
+    test_sonuc("built-in: yazdir_tam(1,2) -> arg sayi uyumsuz hata", h > 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1559,6 +1621,14 @@ int main(void) {
     test_bit_ve_mantiksal_hata();
     test_bit_degil_mantiksal_hata();
     test_kaydir_mantiksal_hata();
+
+    printf("\n--- Built-in I/O genisletmesi (bug-fix) ---\n");
+    test_builtin_yazdir_tam();
+    test_builtin_yazdir_tam64();
+    test_builtin_yazdir_satir();
+    test_builtin_yaz_tam();
+    test_builtin_yaz_tam64();
+    test_builtin_arg_sayi_uyumsuz();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
