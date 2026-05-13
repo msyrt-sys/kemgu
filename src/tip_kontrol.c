@@ -195,6 +195,115 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
     }
 
+    /* === B: Dizi dinamik allocator built-in'leri ===
+     *
+     * Concrete tam32 / tam64 / metin versiyonlari (generic instantiation
+     * monomorphization v2'de). Heap-tabanli KdlDizi struct'i pointer
+     * uzerinden — Dizi<T> literal arraylerinden ayri ABI:
+     *
+     *   - dizi_olustur_*(kapasite) -> Dizi<T>  : KdlDizi* heap
+     *   - dizi_ekle_*(d, e), dizi_al_*(d, i)   : KdlDizi* uzerinde islem
+     *   - Literal `[1,2,3]` cikistir stack-allocated [N x T] (eskisi gibi);
+     *     dinamik API ile karistirma; KIRMIZI_QUEUE I'da takip ediliyor.
+     */
+
+    /* dizi_olustur_tam(kapasite: tam64) -> Dizi<tam32> */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dizi_olustur_tam", 16, p, 1,
+                     tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32)));
+    }
+
+    /* dizi_olustur_tam64(kapasite: tam64) -> Dizi<tam64> */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dizi_olustur_tam64", 18, p, 1,
+                     tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM64)));
+    }
+
+    /* dizi_olustur_metin(kapasite: tam64) -> Dizi<metin> */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dizi_olustur_metin", 18, p, 1,
+                     tip_olustur_dizi(a, tip_olustur_basit(a, TIP_METIN)));
+    }
+
+    /* dizi_ekle_tam(d: Dizi<tam32>, e: tam32) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32));
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dizi_ekle_tam", 13, p, 2, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* dizi_ekle_tam64(d: Dizi<tam64>, e: tam64) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM64));
+        p[1] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dizi_ekle_tam64", 15, p, 2, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* dizi_ekle_metin(d: Dizi<metin>, e: metin) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_METIN));
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dizi_ekle_metin", 15, p, 2, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* dizi_al_tam(d: Dizi<tam32>, i: tam32) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32));
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dizi_al_tam", 11, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dizi_al_tam64(d: Dizi<tam64>, i: tam32) -> tam64 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM64));
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dizi_al_tam64", 13, p, 2, tip_olustur_basit(a, TIP_TAM64));
+    }
+
+    /* dizi_al_metin(d: Dizi<metin>, i: tam32) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_METIN));
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dizi_al_metin", 13, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* dizi_boyut(d: Dizi<tam32>) -> tam32
+     * Not: Sembol tablosu tek isimle bir tip kabul ediyor; tam32 versiyonu
+     * "default" — diger element tipi versiyonlari da ayni kdl_dizi_boyut
+     * symbol'u kullanir (KEMGU type check buralarda Dizi<*> alanini
+     * differentiate etmiyor, runtime tarafinda elem tipi onemli degil). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32));
+        EKLE_BUILTIN("dizi_boyut_tam", 14, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dizi_kapasite_tam(d: Dizi<tam32>) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32));
+        EKLE_BUILTIN("dizi_kapasite_tam", 17, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dizi_serbest_tam(d: Dizi<tam32>) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_dizi(a, tip_olustur_basit(a, TIP_TAM32));
+        EKLE_BUILTIN("dizi_serbest_tam", 16, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
