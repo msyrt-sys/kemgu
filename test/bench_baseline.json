@@ -1,0 +1,86 @@
+{
+  "format": "kemgu-bench-v1",
+  "timestamp": "2026-05-13T12:25:14Z",
+  "results": {
+    "lexer": {
+      "ns_avg": 11002.60,
+      "iter_per_sec": 90887.61,
+      "iter_count": 1000,
+      "unit": "tokens",
+      "unit_per_iter": 167,
+      "unit_per_sec": 15178230.60
+    },
+    "parser": {
+      "ns_avg": 5278880.30,
+      "iter_per_sec": 189.43,
+      "iter_count": 1000,
+      "unit": "lines",
+      "unit_per_iter": 16,
+      "unit_per_sec": 3030.95
+    },
+    "tip_kontrol": {
+      "ns_avg": 5795393.20,
+      "iter_per_sec": 172.55,
+      "iter_count": 500,
+      "unit": "checks",
+      "unit_per_iter": 1,
+      "unit_per_sec": 172.55
+    },
+    "escape_analiz": {
+      "ns_avg": 12021.00,
+      "iter_per_sec": 83187.75,
+      "iter_count": 500,
+      "unit": "programs",
+      "unit_per_iter": 1,
+      "unit_per_sec": 83187.75
+    },
+    "linear_analiz": {
+      "ns_avg": 9281.80,
+      "iter_per_sec": 107737.72,
+      "iter_count": 500,
+      "unit": "programs",
+      "unit_per_iter": 1,
+      "unit_per_sec": 107737.72
+    },
+    "snapshot_serialize": {
+      "ns_avg": 28320866.80,
+      "iter_per_sec": 35.31,
+      "iter_count": 500,
+      "unit": "ast_lines",
+      "unit_per_iter": 50,
+      "unit_per_sec": 1765.48
+    },
+    "llvm_ir_uretim": {
+      "ns_avg": 28548909.40,
+      "iter_per_sec": 35.03,
+      "iter_count": 500,
+      "unit": "programs",
+      "unit_per_iter": 1,
+      "unit_per_sec": 35.03
+    },
+    "end_to_end_basit": {
+      "ns_avg": 187526442.00,
+      "iter_per_sec": 5.33,
+      "iter_count": 50,
+      "unit": "compilations",
+      "unit_per_iter": 1,
+      "unit_per_sec": 5.33
+    },
+    "end_to_end_arm64": {
+      "ns_avg": 80333772.00,
+      "iter_per_sec": 12.45,
+      "iter_count": 50,
+      "unit": "elf_objects",
+      "unit_per_iter": 1,
+      "unit_per_sec": 12.45
+    },
+    "fuzz_throughput": {
+      "ns_avg": 2325.80,
+      "iter_per_sec": 429959.58,
+      "iter_count": 1000,
+      "unit": "fuzz_iters",
+      "unit_per_iter": 1,
+      "unit_per_sec": 429959.58
+    }
+  }
+}
