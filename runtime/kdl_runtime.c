@@ -844,3 +844,213 @@ const char *kdl_bolge_metin_birlestir(KdlArena *a,
     r[nx + ny] = '\0';
     return r;
 }
+
+/* === CLI args (OTP CLI demo icin) ===
+ *
+ * Windows: GetCommandLineA() parse edilir (basit, quoted token destekli).
+ * POSIX: /proc/self/cmdline okunup NULL-separated arglara bolunur.
+ * Sonuc: kdl_args (char **) ve kdl_arg_sayisi global'leri.
+ *
+ * Lazy init — ilk arg_sayi() veya arg_al() cagrisinda doldurulur. */
+
+static char **kdl_args = NULL;
+static int32_t kdl_arg_sayisi = 0;
+static int kdl_args_baslatildi = 0;
+
+#ifdef _WIN32
+static void kdl_args_init_win(void) {
+    LPSTR cmd = GetCommandLineA();
+    if (!cmd) return;
+    static char buf[4096];
+    size_t cmdlen = strlen(cmd);
+    if (cmdlen >= sizeof(buf)) cmdlen = sizeof(buf) - 1;
+    memcpy(buf, cmd, cmdlen);
+    buf[cmdlen] = '\0';
+
+    static char *parts[128];
+    int32_t n = 0;
+    char *p = buf;
+    while (*p && n < 127) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        if (*p == '"') {
+            /* Quoted: ilerle, " bul */
+            p++;
+            parts[n++] = p;
+            while (*p && *p != '"') p++;
+            if (*p == '"') *p++ = '\0';
+        } else {
+            parts[n++] = p;
+            while (*p && *p != ' ' && *p != '\t') p++;
+            if (*p) *p++ = '\0';
+        }
+    }
+    kdl_args = parts;
+    kdl_arg_sayisi = n;
+}
+#endif
+
+static void kdl_args_baslat(void) {
+    if (kdl_args_baslatildi) return;
+    kdl_args_baslatildi = 1;
+#ifdef _WIN32
+    kdl_args_init_win();
+#else
+    /* POSIX: /proc/self/cmdline okuyalim */
+    FILE *f = fopen("/proc/self/cmdline", "rb");
+    if (!f) return;
+    static char buf[4096];
+    size_t got = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    if (got == 0) return;
+    buf[got] = '\0';
+
+    static char *parts[128];
+    int32_t n = 0;
+    size_t i = 0;
+    while (i < got && n < 127) {
+        parts[n++] = buf + i;
+        while (i < got && buf[i] != '\0') i++;
+        i++;  /* NULL atla */
+    }
+    kdl_args = parts;
+    kdl_arg_sayisi = n;
+#endif
+}
+
+int32_t kdl_arg_sayi(void) {
+    kdl_args_baslat();
+    return kdl_arg_sayisi;
+}
+
+const char *kdl_arg_al(int32_t i) {
+    kdl_args_baslat();
+    if (i < 0 || i >= kdl_arg_sayisi || !kdl_args) return "";
+    return kdl_args[i];
+}
+
+/* === Binary dosya I/O (OTP CLI icin) === */
+
+/* dosya_yaz_byte: ham byte dizisini dosyaya yaz (boyut byte yazilir).
+ * Mod "wb" — uzeryine yazar. byteler ham KdlDizi* (kdl_dizi_*). */
+int32_t kdl_dosya_yaz_byte(const char *yol, const char *byteler, int32_t boyut) {
+    if (!yol || !byteler || boyut < 0) return -1;
+    FILE *f = fopen(yol, "wb");
+    if (!f) return -1;
+    size_t yazildi = fwrite(byteler, 1, (size_t)boyut, f);
+    fclose(f);
+    return (int32_t)yazildi;
+}
+
+/* dosya_oku_byte: tum dosyayi byte dizisi olarak oku (heap-allocated).
+ * boyut_out NULL degilse boyutu yazar. NULL -> dosya yok / hata. */
+const char *kdl_dosya_oku_byte(const char *yol, int32_t *boyut_out) {
+    if (!yol) { if (boyut_out) *boyut_out = -1; return NULL; }
+    FILE *f = fopen(yol, "rb");
+    if (!f) { if (boyut_out) *boyut_out = -1; return NULL; }
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n < 0) { fclose(f); if (boyut_out) *boyut_out = -1; return NULL; }
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) { fclose(f); if (boyut_out) *boyut_out = -1; return NULL; }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    buf[got] = '\0';
+    if (boyut_out) *boyut_out = (int32_t)got;
+    return buf;
+}
+
+/* === OTP yardimcilari (Linear Types Spec V1 ile entegre) === */
+
+/* Basit deterministic PRNG (xorshift64). TRNG sonra. Seed-able. */
+static uint64_t kdl_prng_state = 0x123456789abcdef0ULL;
+
+void kdl_prng_seed(uint64_t s) {
+    if (s == 0) s = 0x123456789abcdef0ULL;
+    kdl_prng_state = s;
+}
+
+uint64_t kdl_prng_next64(void) {
+    uint64_t x = kdl_prng_state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    kdl_prng_state = x;
+    return x;
+}
+
+/* kdl_otp_anahtar_uret: PRNG ile N byte random key uretir, dosyaya yazar.
+ * Donus: yazılan byte sayısı (hata: -1). */
+int32_t kdl_otp_anahtar_uret(const char *yol, int32_t boyut) {
+    if (!yol || boyut <= 0) return -1;
+    char *buf = (char *)malloc((size_t)boyut);
+    if (!buf) return -1;
+    for (int32_t i = 0; i < boyut; i++) {
+        buf[i] = (char)(kdl_prng_next64() & 0xff);
+    }
+    FILE *f = fopen(yol, "wb");
+    if (!f) { free(buf); return -1; }
+    size_t yazildi = fwrite(buf, 1, (size_t)boyut, f);
+    fclose(f);
+    /* Zeroize buf — anahtar artik dosyada, hafizada kalmasin. */
+    memset(buf, 0, (size_t)boyut);
+    free(buf);
+    return (int32_t)yazildi;
+}
+
+/* kdl_otp_xor: msg ile key xor edilir, sonuc dosyaya yazilir.
+ * Donus: yazilan byte (-1 hata). Anahtar metinden kisa ise -2. */
+int32_t kdl_otp_xor_uygula(const char *msg_yol,
+                            const char *anahtar_yol,
+                            const char *cikti_yol) {
+    if (!msg_yol || !anahtar_yol || !cikti_yol) return -1;
+    int32_t msg_n = 0, anahtar_n = 0;
+    const char *msg_buf = kdl_dosya_oku_byte(msg_yol, &msg_n);
+    if (!msg_buf || msg_n < 0) return -1;
+    const char *anahtar_buf = kdl_dosya_oku_byte(anahtar_yol, &anahtar_n);
+    if (!anahtar_buf || anahtar_n < 0) {
+        memset((void *)msg_buf, 0, (size_t)(msg_n < 0 ? 0 : msg_n));
+        free((void *)msg_buf);
+        return -1;
+    }
+    /* OTP guvenligi: anahtar >= mesaj olmali */
+    if (anahtar_n < msg_n) {
+        memset((void *)msg_buf, 0, (size_t)msg_n);
+        memset((void *)anahtar_buf, 0, (size_t)anahtar_n);
+        free((void *)msg_buf);
+        free((void *)anahtar_buf);
+        return -2;
+    }
+    char *cikti = (char *)malloc((size_t)msg_n);
+    if (!cikti) {
+        memset((void *)msg_buf, 0, (size_t)msg_n);
+        memset((void *)anahtar_buf, 0, (size_t)anahtar_n);
+        free((void *)msg_buf);
+        free((void *)anahtar_buf);
+        return -1;
+    }
+    for (int32_t i = 0; i < msg_n; i++) {
+        cikti[i] = (char)(msg_buf[i] ^ anahtar_buf[i]);
+    }
+    FILE *f = fopen(cikti_yol, "wb");
+    if (!f) {
+        memset(cikti, 0, (size_t)msg_n);
+        memset((void *)msg_buf, 0, (size_t)msg_n);
+        memset((void *)anahtar_buf, 0, (size_t)anahtar_n);
+        free(cikti);
+        free((void *)msg_buf);
+        free((void *)anahtar_buf);
+        return -1;
+    }
+    size_t yazildi = fwrite(cikti, 1, (size_t)msg_n, f);
+    fclose(f);
+    /* Zeroize tum bufferlari — Linear Types prensibi */
+    memset(cikti, 0, (size_t)msg_n);
+    memset((void *)msg_buf, 0, (size_t)msg_n);
+    memset((void *)anahtar_buf, 0, (size_t)anahtar_n);
+    free(cikti);
+    free((void *)msg_buf);
+    free((void *)anahtar_buf);
+    return (int32_t)yazildi;
+}

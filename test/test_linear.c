@@ -570,6 +570,50 @@ static void T54_iki_islev_zincir(void) {
     test_sonuc("L54: tuket(al()) zincir = 0 hata", h == 0);
 }
 
+/* === OTP Linear Semantik Kanitlari (Adim 1) === */
+
+static void T55_otp_anahtar_iki_kez_tuketim(void) {
+    /* Bir tekkez<tam32> anahtar iki kez kullanilirsa L002 hata vermeli.
+     * Bu, OTP CLI'nin anahtar yeniden-kullanim engellemesini kanitliyor. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev sifrele(k: tekkez<tam32>) -> tam32 {\n"
+        "    imha(k);\n"
+        "    ver 0;\n"
+        "}\n"
+        "i\xc5\x9flev coz(k: tekkez<tam32>) -> tam32 {\n"
+        "    imha(k);\n"
+        "    ver 0;\n"
+        "}\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    sifrele(k);\n"
+        "    coz(k);\n"   /* L002: k iki kez kullanildi! */
+        "    ver 0;\n"
+        "}\n");
+    test_sonuc("L55: OTP anahtar iki kez tuketim -> L002", h >= 1);
+}
+
+static void T56_otp_anahtar_imha_garantili(void) {
+    /* imha(anahtar) cagrildiginda lineer baglama tuketilir, hata yok */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    imha(k);\n"
+        "    ver 0;\n"
+        "}\n");
+    test_sonuc("L56: OTP anahtar imha -> 0 hata", h == 0);
+}
+
+static void T57_otp_anahtar_tuketilmedi(void) {
+    /* Anahtar uretildi ama hic kullanilmadi -> L001 (scope sonu hatasi) */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    ver 0;\n"   /* k tuketilmedi! */
+        "}\n");
+    test_sonuc("L57: OTP anahtar tuketilmedi -> L001", h >= 1);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -648,6 +692,11 @@ int main(void) {
     T52_lineer_donus_kullan();
     T53_lineer_donus_kullanılmadı();
     T54_iki_islev_zincir();
+
+    printf("\n--- OTP Linear Semantik Kanitlari ---\n");
+    T55_otp_anahtar_iki_kez_tuketim();
+    T56_otp_anahtar_imha_garantili();
+    T57_otp_anahtar_tuketilmedi();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
