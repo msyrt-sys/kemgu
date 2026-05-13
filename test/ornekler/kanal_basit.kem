@@ -1,0 +1,16 @@
+// B2 testi: kanal API (sequential stub) — R-KANAL bölge aksiyomu
+// Gerçek thread spawn (Windows CreateThread / pthread) ileri sürümde;
+// API hazır, region sistemi destekler.
+
+işlev main() -> tam32 {
+    değişken k: metin = kanal_olustur(8);
+    kanal_gonder(k, 10);
+    kanal_gonder(k, 20);
+    kanal_gonder(k, 30);
+    yaz("ilk: "); yazdır_tam(kanal_al(k));
+    yaz("iki: "); yazdır_tam(kanal_al(k));
+    yaz("uc: "); yazdır_tam(kanal_al(k));
+    yaz("bos mu: "); yazdır_tam(kanal_boş_mu(k));
+    kanal_serbest(k);
+    ver 0;
+}

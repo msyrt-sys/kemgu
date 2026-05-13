@@ -1,0 +1,12 @@
+// LLVM A.1+A.2+A.4 testi: parametre, lokal degisken, cagri
+// Beklenen cikis kodu: 42
+
+işlev topla(a: tam32, b: tam32) -> tam32 {
+    ver a + b;
+}
+
+işlev main() -> tam32 {
+    değişken x: tam32 = 17;
+    değişken y: tam32 = 25;
+    ver topla(x, y);
+}

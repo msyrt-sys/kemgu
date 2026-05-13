@@ -1,0 +1,13 @@
+// B.4 testi: tip alias (tip Ad = HedefTip;)
+// Yas tam32 ile, Kimlik tam64 ile eslesir.
+
+tip Yas = tam32;
+tip Kimlik = tam64;
+
+işlev main() -> tam32 {
+    değişken yas: Yas = 30;
+    değişken kimlik: Kimlik = 12345;
+    yaz("yas: "); yazdır_tam(yas);
+    yaz("kimlik: "); yazdır_tam64(kimlik);
+    ver 0;
+}

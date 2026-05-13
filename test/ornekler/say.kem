@@ -1,0 +1,10 @@
+// D.1 + A.3 testi: dongu + yazdir_tam
+işlev main() -> tam32 {
+    değişken i: tam32 = 1;
+    iken i <= 5 {
+        yazdır_tam(i);
+        i = i + 1;
+    }
+    yazdır("bitti");
+    ver 0;
+}

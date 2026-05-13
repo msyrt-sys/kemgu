@@ -1,0 +1,20 @@
+// D.3 + D.4 testi: metin_uzunluk, mutlak, min, maks, yazdir_mantiksal
+işlev main() -> tam32 {
+    değişken s: metin = "merhaba dünya";
+    değişken n: tam32 = metin_uzunluk(s);
+    yazdır(s);
+    yaz("uzunluk: "); yazdır_tam(n);
+
+    değişken xs = [10, 20, 30, 40, 50];
+    yaz("dizi uzunlugu: "); yazdır_tam(uzunluk(xs));
+
+    yaz("mutlak(-7) = "); yazdır_tam(mutlak(-7));
+    yaz("min(3, 8) = "); yazdır_tam(min(3, 8));
+    yaz("maks(3, 8) = "); yazdır_tam(maks(3, 8));
+
+    yazdır_mantıksal(doğru);
+    yazdır_mantıksal(yanlış);
+
+    yazdır_karakter('K');
+    ver 0;
+}
