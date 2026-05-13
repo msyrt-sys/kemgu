@@ -1066,16 +1066,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * — element tipi arg/return inference ile belirlenir. */
             else if (cagri_adi_uz == 12 &&
                      memcmp(cagri_adi, "dizi_olustur", 12) == 0) {
-                /* dizi_olustur(N) -> ptr (KdlDizi*). element_byte = arg yok;
-                 * v1 default 4 (tam32). */
+                /* dizi_olustur(N) -> ptr (KdlDizi*). Adim 6: eleman_byte
+                 * context'ten (beklenen ptr ise default 4; gercek T size
+                 * gelecek surumde annotation'dan). v1 default 4 (tam32). */
                 int rr = yeni_reg(g);
                 int kap = args[0].reg;
-                /* Kapasite tam32'ye trunc, kdl_dizi_olustur(i32) imzasi */
                 int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_dizi_olustur(i32 4)\n", rr);
-                /* Kapasiteyi pre-reserve etme: yok — runtime grow eder */
-                (void)kap_i32;
+                /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
+                fprintf(g->out,
+                    "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
+                    rr, kap_i32);
                 IfadeSonuc s = { rr, "ptr" };
                 return s;
             }
@@ -1128,6 +1130,28 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
                     rr, args[0].reg);
+                IfadeSonuc s = { rr, "i32" };
+                return s;
+            }
+            /* Adim 6: dizi_kapasite + dizi_kapasite_ayarla */
+            else if (cagri_adi_uz == 13 &&
+                     memcmp(cagri_adi, "dizi_kapasite", 13) == 0) {
+                int rr = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i32 @kdl_dizi_kapasite(ptr %%%d)\n",
+                    rr, args[0].reg);
+                IfadeSonuc s = { rr, "i32" };
+                return s;
+            }
+            else if (cagri_adi_uz == 20 &&
+                     memcmp(cagri_adi, "dizi_kapasite_ayarla", 20) == 0) {
+                int yk = (n > 1) ? int_donustur(g, args[1].reg,
+                                                 args[1].tip, "i32") : 0;
+                fprintf(g->out,
+                    "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
+                    args[0].reg, yk);
+                int rr = yeni_reg(g);
+                fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
                 IfadeSonuc s = { rr, "i32" };
                 return s;
             }
@@ -1740,6 +1764,9 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
     fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
     fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+    /* Adim 6: capacity API */
+    fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
+    fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)\n", out);
 
     /* Adim 1: CLI args + OTP */
     fputs("declare i32 @kdl_arg_sayi()\n", out);
