@@ -1278,6 +1278,51 @@ static void test_pattern_binding(void) {
     arena_serbest(a);
 }
 
+/* P-4b: sonuc pattern matching — tamam(v) bind */
+static void test_pattern_sonuc_tamam_bind(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  tamam(v) => { ver v; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern sonuc: tamam(v)/hata(m) bind", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4c: sonuc pattern — hata icinden metin v bind */
+static void test_pattern_sonuc_hata_bind(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  hata(m) => { ver m; } "
+        "  tamam(v) => { ver \"\"; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("pattern sonuc: hata(m) -> m metin bind", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4d: tamam yapici alti tanimlayici desen */
+static void test_pattern_sonuc_jokerli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  tamam(v) => { ver v; } "
+        "  _ => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern sonuc: tamam(v) + _", h == 0);
+    arena_serbest(a);
+}
+
 /* P-4: tamam(v), hata(e) sonuç konstrüktörleri */
 static void test_sonuc_konstrüktörler(void) {
     Arena *a = arena_olustur(0);
@@ -1546,6 +1591,9 @@ int main(void) {
     test_hic_secimlik();
     test_deger_konstrüktör();
     test_pattern_binding();
+    test_pattern_sonuc_tamam_bind();
+    test_pattern_sonuc_hata_bind();
+    test_pattern_sonuc_jokerli();
     test_sonuc_konstrüktörler();
 
     printf("\n--- Lambda govde scope (29) ---\n");

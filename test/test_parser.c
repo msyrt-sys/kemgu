@@ -946,6 +946,42 @@ static void test_deyim_esles_yapici(void) {
     arena_serbest(a);
 }
 
+static void test_deyim_esles_sonuc_desen(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles s { tamam(v) => v; hata(m) => 0; }" — sonuc<T,H> desen */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f s { "
+        "tamam(v) => v; "
+        "hata(m) => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.sayi == 1
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->veri.desen_yapici.sayi == 1;
+    test_sonuc("esles sonuc<T,H>: tamam(v) / hata(m)", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_sonuc_karma(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* tamam ile diger desenler karisik */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f s { "
+        "tamam(v) => v; "
+        "_ => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_JOKER;
+    test_sonuc("esles sonuc karma: tamam(v) + _", ok);
+    arena_serbest(a);
+}
+
 static void test_deyim_esles_blok_govde(void) {
     Arena *a = arena_olustur(0);
     int hata = -1;
@@ -1554,6 +1590,8 @@ int main(void) {
     printf("\n--- Deyim: Esles ---\n");
     test_deyim_esles_literal();
     test_deyim_esles_yapici();
+    test_deyim_esles_sonuc_desen();
+    test_deyim_esles_sonuc_karma();
     test_deyim_esles_blok_govde();
 
     printf("\n--- Deyim: Guvensiz ---\n");
