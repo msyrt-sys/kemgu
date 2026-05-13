@@ -1543,6 +1543,92 @@ static void test_lambda_govde(void) {
     arena_serbest(a);
 }
 
+/* === Madde D: Generic callback tip cikarsamasi === */
+
+/* D-1: Dizi<T> param -> T arg'dan cikarsanir */
+static void test_gen_callback_dizi_param(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev ilki<T>(xs: Dizi<T>) -> T { "
+        "ver dizi_al(xs, 0); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 7); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = ilki(d); "
+        "ver v; }",
+        a);
+    test_sonuc("D: Dizi<T> param -> T inferred (tam32)", h == 0);
+    arena_serbest(a);
+}
+
+/* D-2: harita<T,U>(Dizi<T>, islev(T)->U) -> Dizi<U> — multi-param compound */
+static void test_gen_callback_harita(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<U> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < dizi_boyut(xs) { "
+        "  dizi_ekle(r, f(dizi_al(xs, i))); "
+        "  i = i + 1; "
+        "} "
+        "ver r; } "
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("D: harita<T,U>(Dizi<T>, islev(T)->U) -> Dizi<U>", h == 0);
+    arena_serbest(a);
+}
+
+/* D-3: Callback'in return tipi U farkli, T'den ayri inference */
+static void test_gen_callback_farkli_donus(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev ucur<T, U>(x: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(x); } "
+        "i\xc5\x9flev uzunluk_al(s: metin) -> tam32 { ver metin_uzunluk(s); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = ucur(\"merhaba\", uzunluk_al); "
+        "ver n; }",
+        a);
+    test_sonuc("D: ucur<T,U>(T, islev(T)->U) -> U", h == 0);
+    arena_serbest(a);
+}
+
+/* D-4: secimlik<T> param compound */
+static void test_gen_callback_secimlik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev varsayilan<T>(o: se\xc3\xa7imlik<T>, d: T) -> T { "
+        "e\xc5\x9fle\xc5\x9f o { "
+        "  de\xc4\x9f" "er(v) => { ver v; } "
+        "  hi\xc3\xa7 => { ver d; } "
+        "} "
+        "ver d; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken o: se\xc3\xa7imlik<tam32> = de\xc4\x9f" "er(42); "
+        "ver varsayilan(o, 0); }",
+        a);
+    test_sonuc("D: varsayilan<T>(secimlik<T>, T) -> T", h == 0);
+    arena_serbest(a);
+}
+
+/* D-5: Birden cok generic param bagimsiz callsite */
+static void test_gen_callback_coklu(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev cift<A, B>(a: A, b: B) -> A { ver a; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = cift(42, \"hi\"); "
+        "ver r; }",
+        a);
+    test_sonuc("D: cift<A,B>(A, B) -> A — coklu generic", h == 0);
+    arena_serbest(a);
+}
+
 /* CS-7: Inherent impl kayit edilir, sorgu basarili */
 static void test_cs_inherent_kayit(void) {
     Arena *a = arena_olustur(0);
@@ -1811,6 +1897,13 @@ int main(void) {
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
+
+    printf("\n--- D: Generic callback tip cikarsama (multi-param compound) ---\n");
+    test_gen_callback_dizi_param();
+    test_gen_callback_harita();
+    test_gen_callback_farkli_donus();
+    test_gen_callback_secimlik();
+    test_gen_callback_coklu();
 
     printf("\n--- Bit operatorleri (ADIM 30) ---\n");
     test_bit_ve_tam32();

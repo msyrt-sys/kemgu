@@ -289,6 +289,165 @@ static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
 }
 
+/* === Madde D: Generic callback tip cikarsamasi (multi-param + compound) ===
+ *
+ * Bir cagri site'da `hedef<T,U,V>(...)` icin:
+ *   1. param_tip <-> arg_tip unification ile her generic param T,U,V'yi
+ *      argumanlarin somut tiplerinden cikar (compound tipler dahil:
+ *      Dizi<T>, islev(T)->U, secimlik<T>, sonuc<T,E>, &T, *T)
+ *   2. Donus tipi compound olabilir; her generic param tekrar substitue edilir
+ *
+ * Mevcut tek-T inference yerine name->concrete map kullanir. */
+
+typedef struct GenBaglama {
+    const char *ad;
+    int ad_uz;
+    const TipBilgisi *concrete;
+} GenBaglama;
+
+typedef struct GenBaglamalar {
+    GenBaglama girisler[16];   /* En fazla 16 generic param — pratikte yeterli */
+    int sayi;
+} GenBaglamalar;
+
+static void gen_bagla(GenBaglamalar *gb, const char *ad, int ad_uz,
+                       const TipBilgisi *concrete) {
+    if (!gb || !ad || gb->sayi >= 16) return;
+    /* Var olan binding mi? — ilk gorulen kazanir */
+    for (int i = 0; i < gb->sayi; i++) {
+        if (gb->girisler[i].ad_uz == ad_uz &&
+            memcmp(gb->girisler[i].ad, ad, (size_t)ad_uz) == 0) {
+            return;  /* zaten bagli */
+        }
+    }
+    gb->girisler[gb->sayi].ad = ad;
+    gb->girisler[gb->sayi].ad_uz = ad_uz;
+    gb->girisler[gb->sayi].concrete = concrete;
+    gb->sayi++;
+}
+
+static const TipBilgisi *gen_bul(const GenBaglamalar *gb,
+                                  const char *ad, int ad_uz) {
+    if (!gb) return NULL;
+    for (int i = 0; i < gb->sayi; i++) {
+        if (gb->girisler[i].ad_uz == ad_uz &&
+            memcmp(gb->girisler[i].ad, ad, (size_t)ad_uz) == 0) {
+            return gb->girisler[i].concrete;
+        }
+    }
+    return NULL;
+}
+
+/* param_tip ile arg_tip'i unify et — TIP_GENERIC_PARAM gorulen yerlere
+ * arg_tip'ten karsilik binding ekle. Compound tiplere recursive. */
+static void gen_unify(GenBaglamalar *gb, const TipBilgisi *param,
+                       const TipBilgisi *arg) {
+    if (!param || !arg) return;
+    if (param->kategori == TIP_GENERIC_PARAM) {
+        gen_bagla(gb, param->veri.generic_param.ad,
+                  param->veri.generic_param.ad_uzunluk, arg);
+        return;
+    }
+    /* Arg tarafi da generic param ise (govdede T->T gibi) — skip */
+    if (arg->kategori == TIP_GENERIC_PARAM) return;
+    /* Kategoriler farkliysa unify imkansiz — skip (hata zaten tip_esit'te) */
+    if (param->kategori != arg->kategori) return;
+
+    switch (param->kategori) {
+        case TIP_REFERANS:
+            gen_unify(gb, param->veri.referans.hedef, arg->veri.referans.hedef);
+            break;
+        case TIP_POINTER:
+            gen_unify(gb, param->veri.pointer.hedef, arg->veri.pointer.hedef);
+            break;
+        case TIP_DIZI:
+            gen_unify(gb, param->veri.dizi.eleman, arg->veri.dizi.eleman);
+            break;
+        case TIP_SECIMLIK:
+            gen_unify(gb, param->veri.secimlik.ic, arg->veri.secimlik.ic);
+            break;
+        case TIP_SONUC:
+            gen_unify(gb, param->veri.sonuc.deger, arg->veri.sonuc.deger);
+            gen_unify(gb, param->veri.sonuc.hata,  arg->veri.sonuc.hata);
+            break;
+        case TIP_ISLEV: {
+            int n = param->veri.islev.param_sayi;
+            if (n == arg->veri.islev.param_sayi) {
+                for (int i = 0; i < n; i++) {
+                    gen_unify(gb,
+                        param->veri.islev.parametreler[i],
+                        arg->veri.islev.parametreler[i]);
+                }
+            }
+            gen_unify(gb, param->veri.islev.donus, arg->veri.islev.donus);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+/* Compound tip icinde TIP_GENERIC_PARAM'leri concrete tiplerle degistir.
+ * gb NULL veya generic param eslemiyorsa orjinal tipi doner. */
+static TipBilgisi *gen_substitue(TipKontrol *tk, const TipBilgisi *t,
+                                   const GenBaglamalar *gb) {
+    if (!t || !gb || gb->sayi == 0) return (TipBilgisi *)t;
+    if (t->kategori == TIP_GENERIC_PARAM) {
+        const TipBilgisi *c = gen_bul(gb,
+            t->veri.generic_param.ad, t->veri.generic_param.ad_uzunluk);
+        return c ? (TipBilgisi *)c : (TipBilgisi *)t;
+    }
+    switch (t->kategori) {
+        case TIP_REFERANS: {
+            TipBilgisi *nh = gen_substitue(tk, t->veri.referans.hedef, gb);
+            if (nh == t->veri.referans.hedef) return (TipBilgisi *)t;
+            return tip_olustur_referans(tk->arena, nh,
+                                         t->veri.referans.degisken_mi);
+        }
+        case TIP_POINTER: {
+            TipBilgisi *nh = gen_substitue(tk, t->veri.pointer.hedef, gb);
+            if (nh == t->veri.pointer.hedef) return (TipBilgisi *)t;
+            return tip_olustur_pointer(tk->arena, nh);
+        }
+        case TIP_DIZI: {
+            TipBilgisi *ne = gen_substitue(tk, t->veri.dizi.eleman, gb);
+            if (ne == t->veri.dizi.eleman) return (TipBilgisi *)t;
+            return tip_olustur_dizi(tk->arena, ne);
+        }
+        case TIP_SECIMLIK: {
+            TipBilgisi *ni = gen_substitue(tk, t->veri.secimlik.ic, gb);
+            if (ni == t->veri.secimlik.ic) return (TipBilgisi *)t;
+            return tip_olustur_secimlik(tk->arena, ni);
+        }
+        case TIP_SONUC: {
+            TipBilgisi *nd = gen_substitue(tk, t->veri.sonuc.deger, gb);
+            TipBilgisi *nh = gen_substitue(tk, t->veri.sonuc.hata, gb);
+            if (nd == t->veri.sonuc.deger && nh == t->veri.sonuc.hata)
+                return (TipBilgisi *)t;
+            return tip_olustur_sonuc(tk->arena, nd, nh);
+        }
+        case TIP_ISLEV: {
+            int n = t->veri.islev.param_sayi;
+            TipBilgisi **yeni_p = NULL;
+            int degisti = 0;
+            if (n > 0) {
+                yeni_p = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    yeni_p[i] = gen_substitue(tk,
+                        t->veri.islev.parametreler[i], gb);
+                    if (yeni_p[i] != t->veri.islev.parametreler[i]) degisti = 1;
+                }
+            }
+            TipBilgisi *nd = gen_substitue(tk, t->veri.islev.donus, gb);
+            if (!degisti && nd == t->veri.islev.donus) return (TipBilgisi *)t;
+            return tip_olustur_islev(tk->arena, yeni_p, n, nd);
+        }
+        default:
+            return (TipBilgisi *)t;
+    }
+}
+
 /* === Ad cevirici (built-in tip ad) === */
 
 static int basit_tip_adindan(const char *ad, int uz, TipKategorisi *out) {
@@ -1059,25 +1218,33 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
-            /* Generic islev: ilk TIP_GENERIC_PARAM gorulen yere ilk uygun
-             * argumanin tipini bagla (basit inference — tek param T icin
-             * cogu pratik durumda yeterli). */
-            TipBilgisi *inferred_T = NULL;
+            /* Madde D: Multi-param + compound type generic inference.
+             * GenBaglamalar ile her arg/param ciftinde unify, donus
+             * tipini substitue et. */
+            GenBaglamalar gb;
+            gb.sayi = 0;
+            /* Once unify arg tipleri ile (substitue olmadan) — daha sonra
+             * argumanlar substitue edilmis param tipi context'inde tekrar
+             * cikarsanir. Iki pas: pas 1 inference, pas 2 type check. */
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
-                /* Bidirectional: arg, parametre tipi context'inde cikarsanir */
-                TipBilgisi *bek = param_tip;
-                if (param_tip->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                    bek = inferred_T;
-                }
+                TipBilgisi *arg_tip = tip_belirle(tk,
+                    d->veri.cagri.argumanlar[i]);
+                gen_unify(&gb, param_tip, arg_tip);
+            }
+            /* Pas 2: arg tipini substitue edilmis param tipi context'inde
+             * cikarsama + tip kontrolu */
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
+                TipBilgisi *bek = gen_substitue(tk, param_tip, &gb);
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[i], bek);
                 if (param_tip->kategori == TIP_GENERIC_PARAM) {
-                    if (!inferred_T) inferred_T = arg_tip;
-                    /* Generic params herhangi bir tipi kabul eder */
+                    /* Concrete'i gb'de tutuyoruz; bind onceden yapildi */
                     continue;
                 }
-                if (!tip_esit(arg_tip, param_tip) &&
+                /* bek (substitue edilmis) ile arg_tip karsilastir */
+                if (!tip_esit(arg_tip, bek) &&
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
@@ -1088,12 +1255,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         d->veri.cagri.argumanlar[i]);
                 }
             }
-            /* Donus tipi generic ise inferred T ile degistir */
+            /* Donus tipi — generic param compound olabilir, substitue et */
             TipBilgisi *donus = hedef_tip->veri.islev.donus;
-            if (donus && donus->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                return inferred_T;
-            }
-            return donus;
+            return gen_substitue(tk, donus, &gb);
         }
 
         /* === Erisim (x.y) === */
