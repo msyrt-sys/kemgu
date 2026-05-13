@@ -1,0 +1,177 @@
+// KEMGU Stdlib Testi — Opsiyonel
+// =================================
+//
+// Bu dosya `stdlib/opsiyonel.kem` ile birleştirilerek --check edilir.
+
+// --- var_mi / yok_mu / bos_mu ---
+işlev test_var_deger() -> mantıksal {
+    değişken o: seçimlik<tam32> = değer(42);
+    ver var_mi(o);
+}
+
+işlev test_var_hic() -> mantıksal {
+    değişken o: seçimlik<tam32> = hiç;
+    ver var_mi(o);
+}
+
+işlev test_yok_deger() -> mantıksal {
+    değişken o: seçimlik<tam32> = değer(42);
+    ver yok_mu(o);
+}
+
+işlev test_yok_hic() -> mantıksal {
+    değişken o: seçimlik<tam32> = hiç;
+    ver yok_mu(o);
+}
+
+işlev test_bos_hic() -> mantıksal {
+    değişken o: seçimlik<metin> = hiç;
+    ver bos_mu(o);
+}
+
+// --- ya_da_varsayilan ---
+işlev test_ya_da_var() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(7);
+    ver ya_da_varsayilan(o, 0);
+}
+
+işlev test_ya_da_yok() -> tam32 {
+    değişken o: seçimlik<tam32> = hiç;
+    ver ya_da_varsayilan(o, 99);
+}
+
+işlev test_ya_da_metin() -> metin {
+    değişken o: seçimlik<metin> = hiç;
+    ver ya_da_varsayilan(o, "varsayilan");
+}
+
+// --- ilk_var / her_iki_var ---
+işlev test_ilk_var_a() -> tam32 {
+    değişken a: seçimlik<tam32> = değer(10);
+    değişken b: seçimlik<tam32> = değer(20);
+    değişken s: seçimlik<tam32> = ilk_var(a, b);
+    ver ya_da_varsayilan(s, 0);
+}
+
+işlev test_ilk_var_b() -> tam32 {
+    değişken a: seçimlik<tam32> = hiç;
+    değişken b: seçimlik<tam32> = değer(20);
+    değişken s: seçimlik<tam32> = ilk_var(a, b);
+    ver ya_da_varsayilan(s, 0);
+}
+
+işlev test_her_iki_var() -> mantıksal {
+    değişken a: seçimlik<tam32> = değer(1);
+    değişken b: seçimlik<tam32> = değer(2);
+    değişken c: seçimlik<tam32> = her_iki_var(a, b);
+    ver var_mi(c);
+}
+
+// --- esit_mi ---
+işlev test_esit_iki_deger() -> mantıksal {
+    değişken a: seçimlik<tam32> = değer(5);
+    değişken b: seçimlik<tam32> = değer(5);
+    ver esit_mi(a, b);
+}
+
+işlev test_esit_iki_hic() -> mantıksal {
+    değişken a: seçimlik<tam32> = hiç;
+    değişken b: seçimlik<tam32> = hiç;
+    ver esit_mi(a, b);
+}
+
+işlev test_esit_farkli() -> mantıksal {
+    değişken a: seçimlik<tam32> = değer(5);
+    değişken b: seçimlik<tam32> = hiç;
+    ver esit_mi(a, b);
+}
+
+// --- sarmala / bos_olustur ---
+işlev test_sarmala() -> mantıksal {
+    değişken o: seçimlik<tam32> = sarmala(42);
+    ver var_mi(o);
+}
+
+// --- harita_tam ---
+işlev iki_kat_lokal(x: tam32) -> tam32 { ver x * 2; }
+
+işlev test_harita_deger() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(21);
+    değişken r: seçimlik<tam32> = harita_tam(o, iki_kat_lokal);
+    ver ya_da_varsayilan(r, 0);
+}
+
+işlev test_harita_hic() -> tam32 {
+    değişken o: seçimlik<tam32> = hiç;
+    değişken r: seçimlik<tam32> = harita_tam(o, iki_kat_lokal);
+    ver ya_da_varsayilan(r, 999);
+}
+
+// --- filtre_tam ---
+işlev pozitif_filtre(x: tam32) -> mantıksal { ver x > 0; }
+
+işlev test_filtre_gec() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(5);
+    değişken r: seçimlik<tam32> = filtre_tam(o, pozitif_filtre);
+    ver ya_da_varsayilan(r, 0);
+}
+
+işlev test_filtre_kalmaz() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(0 - 5);
+    değişken r: seçimlik<tam32> = filtre_tam(o, pozitif_filtre);
+    ver ya_da_varsayilan(r, 999);
+}
+
+// --- bagla_tam (flatMap) ---
+işlev guvenli_ters(x: tam32) -> seçimlik<tam32> {
+    eğer x == 0 { ver hiç; }
+    ver değer(1000 / x);
+}
+
+işlev test_bagla_var() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(10);
+    değişken r: seçimlik<tam32> = bagla_tam(o, guvenli_ters);
+    ver ya_da_varsayilan(r, 0);
+}
+
+işlev test_bagla_yok() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(0);
+    değişken r: seçimlik<tam32> = bagla_tam(o, guvenli_ters);
+    ver ya_da_varsayilan(r, 999);
+}
+
+// --- ya_da_cagir_tam ---
+işlev varsayilan_uretici() -> tam32 { ver 42; }
+
+işlev test_ya_da_cagir_var() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(7);
+    ver ya_da_cagir_tam(o, varsayilan_uretici);
+}
+
+işlev test_ya_da_cagir_yok() -> tam32 {
+    değişken o: seçimlik<tam32> = hiç;
+    ver ya_da_cagir_tam(o, varsayilan_uretici);
+}
+
+// --- harita_metin / filtre_metin ---
+işlev kimlik_metin(s: metin) -> metin { ver s; }
+
+işlev test_harita_metin() -> mantıksal {
+    değişken o: seçimlik<metin> = değer("merhaba");
+    değişken r: seçimlik<metin> = harita_metin(o, kimlik_metin);
+    ver var_mi(r);
+}
+
+işlev bos_degil(s: metin) -> mantıksal { ver s != ""; }
+
+işlev test_filtre_metin() -> mantıksal {
+    değişken o: seçimlik<metin> = değer("dolu");
+    değişken r: seçimlik<metin> = filtre_metin(o, bos_degil);
+    ver var_mi(r);
+}
+
+işlev main() -> tam32 {
+    // 25+ test fonksiyonu yukarıda; main yalnız bir tanesi çağırıp
+    // --check için entry sağlar.
+    ver test_ya_da_var();
+}

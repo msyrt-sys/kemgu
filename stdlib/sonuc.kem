@@ -1,0 +1,212 @@
+// KEMGU Stdlib — Sonuç<T,E>
+// ===========================
+//
+// SINIR (KIRMIZI_QUEUE C: "sonuç pattern desteği"):
+//   Mevcut parser `tamam(v) =>` ve `hata(m) =>` desenlerini kabul
+//   etmiyor (TOK_TAMAM, TOK_HATA parse_desen'de yok). Bu nedenle
+//   built-in `sonuç<T,E>` üzerinde harita/ya_da/bağla gibi inspection
+//   gerektiren ops yazılamıyor.
+//
+// İki katmanlı çözüm:
+//   1. Built-in `sonuç<T,E>` için **construction** wrapper'ları
+//      (yalnızca üretim — parser değişikliği olmadan kullanıcı kodu
+//      bu yapıyı kullanabilir, downstream `eşleş` parser fix geldiğinde
+//      tamam(v)/hata(m) ile inspect edilebilir).
+//   2. **KSonuc<T,E>** — yapı tabanlı paralel API. Tam pattern
+//      destekli (seçimlik üzerinden inspection). Geçici çözüm:
+//      parser fix landed olduğunda `sonuç<T,E>` direkt kullanılabilir.
+//
+// Tasarım kuralı: Java exception/Optional.get() tuzağına düşme —
+//   her hata durumu açık, deferred. C++ exception unwinding maliyeti yok.
+
+// =============================================================================
+// 1. Built-in `sonuç<T,E>` construction wrapper'ları
+// =============================================================================
+// Bu fonksiyonlar derleyici tip çıkarsamasını netleştirir; doğrudan
+// `tamam(v)` / `hata(m)` da yazılabilir, ama generic context'te bazen
+// wrapper isabetli olur.
+
+işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
+    ver tamam(d);
+}
+
+işlev hata_yap<T, E>(h: E) -> sonuç<T, E> {
+    ver hata(h);
+}
+
+// =============================================================================
+// 2. KSonuc<T,E> — Geçici yapı tabanlı sonuç (parser fix gelene kadar)
+// =============================================================================
+
+yapı KSonuc<T, E> {
+    deger_d: seçimlik<T>;
+    hata_d: seçimlik<E>;
+}
+
+// --- Yapıcılar ---
+
+işlev k_tamam<T, E>(d: T) -> KSonuc<T, E> {
+    ver KSonuc { deger_d: değer(d), hata_d: hiç };
+}
+
+işlev k_hata<T, E>(h: E) -> KSonuc<T, E> {
+    ver KSonuc { deger_d: hiç, hata_d: değer(h) };
+}
+
+// --- Sorgular (tam generic) ---
+
+işlev k_basarili_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
+    eşleş r.deger_d {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev k_basarisiz_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
+    eşleş r.hata_d {
+        değer(h) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// --- Çözümleme (tam generic) ---
+
+// Değer al — yoksa varsayılan.
+işlev k_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: T) -> T {
+    eşleş r.deger_d {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Hata al — başarılıysa varsayılan.
+işlev k_hata_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: E) -> E {
+    eşleş r.hata_d {
+        değer(h) => { ver h; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Sonuç → seçimlik dönüşümü.
+işlev k_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<T> {
+    ver r.deger_d;
+}
+
+işlev k_hata_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<E> {
+    ver r.hata_d;
+}
+
+// --- Harita (concrete tam32 — generic callback v2'de) ---
+
+// Harita — başarılıysa değere f uygula, başarısız aynen geçer.
+işlev k_harita_tam(r: KSonuc<tam32, metin>,
+                    f: işlev(tam32) -> tam32) -> KSonuc<tam32, metin> {
+    eşleş r.deger_d {
+        değer(v) => {
+            ver k_tamam(f(v));
+        }
+        hiç => {
+            eşleş r.hata_d {
+                değer(h) => { ver k_hata(h); }
+                hiç => { ver r; }
+            }
+            ver r;
+        }
+    }
+    ver r;
+}
+
+// Harita_hata — başarısızsa hataya g uygula, başarılı aynen geçer.
+işlev k_harita_hata_tam(r: KSonuc<tam32, metin>,
+                         g: işlev(metin) -> metin) -> KSonuc<tam32, metin> {
+    eşleş r.hata_d {
+        değer(h) => {
+            ver k_hata(g(h));
+        }
+        hiç => {
+            eşleş r.deger_d {
+                değer(v) => { ver k_tamam(v); }
+                hiç => { ver r; }
+            }
+            ver r;
+        }
+    }
+    ver r;
+}
+
+// Bağla — başarılıysa f çağır (yeni KSonuc döner). flatMap karşılığı.
+işlev k_bagla_tam(r: KSonuc<tam32, metin>,
+                   f: işlev(tam32) -> KSonuc<tam32, metin>) -> KSonuc<tam32, metin> {
+    eşleş r.deger_d {
+        değer(v) => { ver f(v); }
+        hiç => {
+            eşleş r.hata_d {
+                değer(h) => { ver k_hata(h); }
+                hiç => { ver r; }
+            }
+            ver r;
+        }
+    }
+    ver r;
+}
+
+// Ya da (alternatif) — ilk başarılıysa onu, başarısızsa ikinciyi.
+işlev k_alternatif<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> KSonuc<T, E> {
+    eşleş a.deger_d {
+        değer(v) => { ver a; }
+        hiç => { ver b; }
+    }
+    ver b;
+}
+
+// Dene — bir KSonuc döndüren f çağrısı, başarılıysa devam, hatalıysa aynen döner.
+// "Hatayı yay" (? operatörü gibi) pattern.
+işlev k_dene_tam(r: KSonuc<tam32, metin>,
+                  devam: işlev(tam32) -> KSonuc<tam32, metin>) -> KSonuc<tam32, metin> {
+    ver k_bagla_tam(r, devam);
+}
+
+// --- Eşitlik ---
+
+işlev k_esit_mi<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> mantıksal {
+    eşleş a.deger_d {
+        değer(va) => {
+            eşleş b.deger_d {
+                değer(vb) => { ver va == vb; }
+                hiç => { ver yanlış; }
+            }
+            ver yanlış;
+        }
+        hiç => {
+            eşleş a.hata_d {
+                değer(ha) => {
+                    eşleş b.hata_d {
+                        değer(hb) => { ver ha == hb; }
+                        hiç => { ver yanlış; }
+                    }
+                    ver yanlış;
+                }
+                hiç => {
+                    // a tamamen boş — geçersiz durum; b de tamamen boş ise eşit
+                    eşleş b.deger_d {
+                        değer(vb) => { ver yanlış; }
+                        hiç => {
+                            eşleş b.hata_d {
+                                değer(hb) => { ver yanlış; }
+                                hiç => { ver doğru; }
+                            }
+                            ver yanlış;
+                        }
+                    }
+                    ver yanlış;
+                }
+            }
+            ver yanlış;
+        }
+    }
+    ver yanlış;
+}

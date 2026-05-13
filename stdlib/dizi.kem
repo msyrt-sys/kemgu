@@ -1,0 +1,244 @@
+// KEMGU Stdlib — Dizi<T> Yardımcıları
+// =====================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<T> üzerinde generic algoritmalar. Mevcut derleyici dizi
+// için dinamik allocator (dizi_olustur/ekle/serbest) sunmadığı
+// için yeni-array dönen ops (harita, filtre, dilimle, birleştir)
+// henüz **in-place** veya **fold** stilinde verildi.
+//
+// Tasarım kuralı:
+//   - Generic mümkün olduğunca tam (== ve < destekli T tipler için)
+//   - Callback'ler v1'de tam32 odaklı (constraint sistemi sonrası generic)
+//   - Eager evaluation; iterator yok (Rust/C++ STL karmaşası kaçınılır)
+//
+// SINIR (KIRMIZI_QUEUE'da kayıtlı):
+//   - harita<T,U>: yeni Dizi<U> dönmesi gerek, allocator primitifi yok
+//   - filtre<T>: yeni Dizi<T> (alt küme), allocator yok
+//   - dilimle, birleştir: yeni allocate gerek
+//   v1 çözümleri: harita_yerinde_tam (mutasyon), filtre_say_tam (sadece sayı)
+
+// --- Sorgular (tam generic) ---
+
+// Uzunluk — eleman sayısı.
+işlev uzunluk<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Boş mu?
+işlev bos_mu<T>(xs: Dizi<T>) -> mantıksal {
+    ver uzunluk(xs) == 0;
+}
+
+// Dolu mu? (en az bir eleman var)
+işlev dolu_mu<T>(xs: Dizi<T>) -> mantıksal {
+    ver uzunluk(xs) > 0;
+}
+
+// --- Erişim (tam generic) ---
+
+// İlk eleman (boş ise hiç).
+işlev ilk<T>(xs: Dizi<T>) -> seçimlik<T> {
+    eğer bos_mu(xs) { ver hiç; }
+    ver değer(xs[0]);
+}
+
+// Son eleman (boş ise hiç).
+işlev son<T>(xs: Dizi<T>) -> seçimlik<T> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver hiç; }
+    ver değer(xs[n - 1]);
+}
+
+// Güvenli indeks erişimi (sınır dışı için hiç).
+işlev al<T>(xs: Dizi<T>, i: tam32) -> seçimlik<T> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer i < 0 { ver hiç; }
+    eğer i >= n { ver hiç; }
+    ver değer(xs[i]);
+}
+
+// --- Arama (T tipi == destekli olmalı) ---
+
+// İçerir mi (eşit eleman var mı).
+işlev icerir<T>(xs: Dizi<T>, hedef: T) -> mantıksal {
+    için x: xs {
+        eğer x == hedef { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// Eşit ilk elemanı bul, yoksa hiç.
+işlev bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<T> {
+    için x: xs {
+        eğer x == hedef { ver değer(x); }
+    }
+    ver hiç;
+}
+
+// Eşit ilk elemanın indeksi, yoksa hiç.
+işlev indeks_bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer x == hedef { ver değer(i); }
+        i = i + 1;
+    }
+    ver hiç;
+}
+
+// --- Yerinde mutasyon (in-place, generic) ---
+
+// Ters çevir — in-place. Aynı diziyi döner (zincirleme kullanım).
+işlev ters_cevir<T>(xs: Dizi<T>) -> Dizi<T> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n < 2 { ver xs; }
+    değişken i: tam32 = 0;
+    değişken j: tam32 = n - 1;
+    iken i < j {
+        değişken t: T = xs[i];
+        xs[i] = xs[j];
+        xs[j] = t;
+        i = i + 1;
+        j = j - 1;
+    }
+    ver xs;
+}
+
+// Sırala — in-place bubble sort. T tipi < destekli olmalı.
+// Performans: O(n²) — küçük diziler için yeterli. Hızlı sıralama
+// constraint sistemi + recursive helper API ile sonra.
+işlev sirala<T>(xs: Dizi<T>) -> Dizi<T> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n < 2 { ver xs; }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            eğer xs[j] > xs[j + 1] {
+                değişken t: T = xs[j];
+                xs[j] = xs[j + 1];
+                xs[j + 1] = t;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver xs;
+}
+
+// --- Fold / Reduce (concrete tam32) ---
+
+// İndirgeme — sol-fold. baslangic değerinden başla, her elemana op uygula.
+// Örnek: indirgeme_tam([1,2,3], 0, +) = ((0+1)+2)+3 = 6
+işlev indirgeme_tam(xs: Dizi<tam32>, baslangic: tam32,
+                    op: işlev(tam32, tam32) -> tam32) -> tam32 {
+    değişken sonuc: tam32 = baslangic;
+    için x: xs {
+        sonuc = op(sonuc, x);
+    }
+    ver sonuc;
+}
+
+// Toplam — sayısal Dizi<tam32> toplamı.
+işlev toplam_tam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 0;
+    için x: xs {
+        s = s + x;
+    }
+    ver s;
+}
+
+// Çarpım — sayısal Dizi<tam32> çarpımı.
+işlev carpim_tam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 1;
+    için x: xs {
+        s = s * x;
+    }
+    ver s;
+}
+
+// Min — en küçük (boş ise hiç).
+işlev min_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    eğer bos_mu(xs) { ver hiç; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x < m { m = x; }
+    }
+    ver değer(m);
+}
+
+// Maks — en büyük (boş ise hiç).
+işlev maks_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    eğer bos_mu(xs) { ver hiç; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x > m { m = x; }
+    }
+    ver değer(m);
+}
+
+// --- Predicate-based (concrete tam32) ---
+
+// Say — predicate'i karşılayan eleman sayısı.
+işlev say_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        eğer pred(x) { n = n + 1; }
+    }
+    ver n;
+}
+
+// Tümü mü — bütün elemanlar predicate'i karşılar mı.
+işlev tum_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
+    için x: xs {
+        eğer pred(x) {
+            // sürdür
+        } değilse {
+            ver yanlış;
+        }
+    }
+    ver doğru;
+}
+
+// Bir tane mi — en az bir eleman predicate'i karşılar mı.
+işlev bir_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
+    için x: xs {
+        eğer pred(x) { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- Yerinde harita (concrete tam32) ---
+
+// Harita yerinde — her elemanı f(eleman) ile değiştir.
+// Yeni Dizi dönen pure harita için dinamik alloc primitifi gerek
+// (KIRMIZI_QUEUE: stdlib::dizi). Şimdilik mutate kullanımı.
+işlev harita_yerinde_tam(xs: Dizi<tam32>,
+                          f: işlev(tam32) -> tam32) -> Dizi<tam32> {
+    değişken n: tam32 = uzunluk(xs);
+    değişken i: tam32 = 0;
+    iken i < n {
+        xs[i] = f(xs[i]);
+        i = i + 1;
+    }
+    ver xs;
+}
+
+// --- Eşitlik ---
+
+// İki dizi eleman-eşitliği. Tüm konumlar eşitse doğru.
+işlev esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
+    değişken na: tam32 = uzunluk(a);
+    değişken nb: tam32 = uzunluk(b);
+    eğer na != nb { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < na {
+        eğer a[i] != b[i] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
