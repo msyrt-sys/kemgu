@@ -936,6 +936,73 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
 
+            /* === Dizi dinamik allocator (Kirmizi B) ===
+             * dizi_olustur(N) -> kdl_dizi_olustur_genel(eleman_byte, N)
+             * dizi_ekle(d, e) -> kdl_dizi_ekle_<bitlen>(d, e)
+             */
+            if (cagri_adi_uz == 12 &&
+                memcmp(cagri_adi, "dizi_olustur", 12) == 0 && n == 1) {
+                /* Eleman byte: beklenen tipinden cikarilir. ptr (Dizi<T>) yoksa
+                 * 4 (tam32) varsayim. Su an: 4 sabit (v1 limitasyon — beklenen
+                 * eleman tipini parametre adindan cikarmiyoruz; ileride D ile). */
+                int eleman_byte = 4;
+                /* arg[0] tam64 olmali — gerekirse sext (ONCE, sonra yeni_reg) */
+                int n_reg = int_donustur(g, args[0].reg, args[0].tip, "i64");
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_dizi_olustur_genel(i32 %d, i64 %%%d)\n",
+                    r, eleman_byte, n_reg);
+                IfadeSonuc s = { r, "ptr" };
+                return s;
+            }
+            if (cagri_adi_uz == 9 &&
+                memcmp(cagri_adi, "dizi_ekle", 9) == 0 && n == 2) {
+                /* args[1] tipinden bitlen cikarilir */
+                const char *e_tip = args[1].tip;
+                const char *suffix = "32";
+                if (strcmp(e_tip, "i8") == 0) suffix = "8";
+                else if (strcmp(e_tip, "i16") == 0) suffix = "16";
+                else if (strcmp(e_tip, "i32") == 0) suffix = "32";
+                else if (strcmp(e_tip, "i64") == 0) suffix = "64";
+                fprintf(g->out,
+                    "  call void @kdl_dizi_ekle_%s(ptr %%%d, %s %%%d)\n",
+                    suffix, args[0].reg, e_tip, args[1].reg);
+                /* Bos (void) doner — i32 0 dummy ile sarmala */
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+                IfadeSonuc s = { r, "i32" };
+                return s;
+            }
+            if (cagri_adi_uz == 7 &&
+                memcmp(cagri_adi, "dizi_al", 7) == 0 && n == 2) {
+                /* Beklenen donus tipinden (varsa) suffix cikariliyor;
+                 * yoksa i32 varsayim. Kullanim noktasi: degisken/atama hedef. */
+                const char *suffix = "32";
+                const char *donus_tip = "i32";
+                if (beklenen) {
+                    if (strcmp(beklenen, "i8") == 0) { suffix = "8"; donus_tip = "i8"; }
+                    else if (strcmp(beklenen, "i16") == 0) { suffix = "16"; donus_tip = "i16"; }
+                    else if (strcmp(beklenen, "i32") == 0) { suffix = "32"; donus_tip = "i32"; }
+                    else if (strcmp(beklenen, "i64") == 0) { suffix = "64"; donus_tip = "i64"; }
+                }
+                int i_reg = int_donustur(g, args[1].reg, args[1].tip, "i32");
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call %s @kdl_dizi_al_%s(ptr %%%d, i32 %%%d)\n",
+                    r, donus_tip, suffix, args[0].reg, i_reg);
+                IfadeSonuc s = { r, donus_tip };
+                return s;
+            }
+            if (cagri_adi_uz == 10 &&
+                memcmp(cagri_adi, "dizi_boyut", 10) == 0 && n == 1) {
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
+                    r, args[0].reg);
+                IfadeSonuc s = { r, "i32" };
+                return s;
+            }
+
             /* Built-in libc mapping */
             if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
@@ -1437,7 +1504,18 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_metin_baslar(ptr, ptr)\n", out);
     fputs("declare i32 @kdl_metin_biter(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n\n", out);
+    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n", out);
+    /* Dizi dinamik allocator (Kirmizi B) */
+    fputs("declare ptr @kdl_dizi_olustur_genel(i32, i64)\n", out);
+    fputs("declare void @kdl_dizi_ekle_8(ptr, i8)\n", out);
+    fputs("declare void @kdl_dizi_ekle_16(ptr, i16)\n", out);
+    fputs("declare void @kdl_dizi_ekle_32(ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_64(ptr, i64)\n", out);
+    fputs("declare i8 @kdl_dizi_al_8(ptr, i32)\n", out);
+    fputs("declare i16 @kdl_dizi_al_16(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_dizi_al_32(ptr, i32)\n", out);
+    fputs("declare i64 @kdl_dizi_al_64(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
