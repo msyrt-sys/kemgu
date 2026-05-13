@@ -1,0 +1,123 @@
+// KEMGU Stdlib Testi — Dosya
+// =================================
+//
+// Bu dosya `stdlib/dosya.kem` ile birleştirilerek --check edilir.
+// Tüm body'ler stub olduğu için testler tip uyumunu doğrular,
+// gerçek dosya I/O davranışını test etmez (runtime primitif yok).
+
+// --- handle yardımcıları ---
+işlev test_gecersiz_handle() -> mantıksal {
+    değişken h: metin = gecersiz_handle();
+    ver h == "";
+}
+
+işlev test_handle_gecerli_evet() -> mantıksal {
+    ver handle_gecerli_mi("dosya.txt");
+}
+
+işlev test_handle_gecerli_hayir() -> mantıksal {
+    ver handle_gecerli_mi("");
+}
+
+// --- mod sabitleri ---
+işlev test_mod_okuma() -> metin { ver mod_okuma(); }
+işlev test_mod_yazma() -> metin { ver mod_yazma(); }
+işlev test_mod_ekleme() -> metin { ver mod_ekleme(); }
+
+// --- ac / kapat ---
+işlev test_ac_iyi() -> sonuç<metin, metin> {
+    ver ac("dosya.txt", mod_okuma());
+}
+
+işlev test_ac_bos_yol() -> sonuç<metin, metin> {
+    ver ac("", mod_okuma());
+}
+
+işlev test_kapat_iyi() -> sonuç<tam32, metin> {
+    ver kapat("dosya.txt");
+}
+
+işlev test_kapat_bos() -> sonuç<tam32, metin> {
+    ver kapat("");
+}
+
+// --- oku_metin / oku_satirlar ---
+işlev test_oku_metin() -> sonuç<metin, metin> {
+    ver oku_metin("data.txt");
+}
+
+işlev test_oku_metin_bos_yol() -> sonuç<metin, metin> {
+    ver oku_metin("");
+}
+
+işlev test_oku_satirlar() -> sonuç<Dizi<metin>, metin> {
+    ver oku_satirlar("data.txt");
+}
+
+// --- yaz_metin / ekle / ekle_satir ---
+işlev test_yaz_metin() -> sonuç<tam32, metin> {
+    ver yaz_metin("out.txt", "merhaba");
+}
+
+işlev test_yaz_metin_bos_yol() -> sonuç<tam32, metin> {
+    ver yaz_metin("", "merhaba");
+}
+
+işlev test_ekle() -> sonuç<tam32, metin> {
+    ver ekle("log.txt", "yeni satir");
+}
+
+işlev test_ekle_satir() -> sonuç<tam32, metin> {
+    ver ekle_satir("log.txt", "yeni satir");
+}
+
+// --- var_mi / sil / boyut ---
+işlev test_var_mi_bos() -> mantıksal {
+    ver var_mi("");
+}
+
+işlev test_var_mi_dolu() -> mantıksal {
+    ver var_mi("a.txt");
+}
+
+işlev test_sil() -> sonuç<tam32, metin> {
+    ver sil("kopya.txt");
+}
+
+işlev test_sil_bos() -> sonuç<tam32, metin> {
+    ver sil("");
+}
+
+işlev test_boyut() -> sonuç<tam64, metin> {
+    ver boyut("a.txt");
+}
+
+// --- yeniden_adlandir / kopyala ---
+işlev test_yeniden_adlandir() -> sonuç<tam32, metin> {
+    ver yeniden_adlandir("eski.txt", "yeni.txt");
+}
+
+işlev test_yeniden_adlandir_hata() -> sonuç<tam32, metin> {
+    ver yeniden_adlandir("", "yeni.txt");
+}
+
+işlev test_kopyala() -> sonuç<tam32, metin> {
+    ver kopyala("kaynak.txt", "hedef.txt");
+}
+
+işlev test_kopyala_hata() -> sonuç<tam32, metin> {
+    ver kopyala("kaynak.txt", "");
+}
+
+// --- Bileşik kullanım ---
+işlev test_iki_ac_kapat() -> sonuç<tam32, metin> {
+    değişken a: sonuç<metin, metin> = ac("a.txt", mod_okuma());
+    değişken b: sonuç<metin, metin> = ac("b.txt", mod_yazma());
+    // Stub gereği gerçek handle değil; tipler eşleşir.
+    ver kapat("a.txt");
+}
+
+işlev main() -> tam32 {
+    eğer test_handle_gecerli_evet() { ver 0; }
+    ver 1;
+}

@@ -111,6 +111,42 @@ oturumunda toplu karara açık:
   ama benim yeni testlerde `değer(v) => v` çalışıyor (ADIM 19+
   düzeltmesi). Sadece bilgi notu — kuyruk değil.
 
+### G. stdlib::dosya — syscall altyapısı gerek
+
+- **Kategori:** runtime / syscall layer
+- **Bağlam:** stdlib/dosya.kem'in tüm I/O ops'u stub (ac, kapat,
+  oku_metin, oku_satirlar, yaz_metin, ekle, ekle_satir, var_mi,
+  sil, boyut, yeniden_adlandir, kopyala). Sözdizimi --check geçer
+  ama runtime'da hiç bir şey yapmaz.
+- **Gerekli primitifler (POSIX karşılıkları):**
+  1. `dosya_ac(yol: metin, mod: metin) -> tam32`  (open syscall)
+  2. `dosya_kapat(handle: tam32) -> tam32`        (close)
+  3. `dosya_oku(handle, buffer, n) -> tam32`      (read)
+  4. `dosya_yaz(handle, buffer, n) -> tam32`      (write)
+  5. `dosya_var_mi(yol) -> mantıksal`             (stat / access)
+  6. `dosya_sil(yol) -> tam32`                    (unlink)
+  7. `dosya_yeniden_adlandir(eski, yeni) -> tam32` (rename)
+  8. `dosya_boyut(yol) -> tam64`                  (stat.st_size)
+- **Not:** test/ornekler/dosya_io.kem'de zaten `dosya_ac/yaz/kapat/
+  tumu_oku` kullanım örnekleri var — LLVM IR katmanında kısmen
+  mevcut (libc wrappers) ama tip_kontrol built-in tablosunda yok.
+  Build-time → check-time parite gerek.
+- **Önerilen yol:** runtime/dosya.c'de C wrapper'ları + LLVM IR
+  declare'leri + tip_kontrol.c'de EKLE_BUILTIN entries.
+
+### H. Operatör: `!` (mantıksal değil) parse sorunu
+
+- **Kategori:** lexer
+- **Bağlam:** `!x` yazımı L005 hatası veriyor ("KEMGU'da '!' yerine
+  'degil' kullanin"). Doğru — KEMGU `değil` kullanıyor, ama:
+  - `değil X(args)` precedence sorunu yaşıyor: parser bunu
+    `(değil X)(args)` olarak tip-kontrol ediyor (T004 mantıksal ister).
+  - Workaround: `değil (X(args))` parantez ile.
+- **Önerilen seçenek:** parse_tekli'de `değil`'i çağrı/erişimden
+  düşük precedence'a koy (önek operatör seviyesi 7'de, sonek 8).
+  Şu anda muhtemelen 7'de ama çağrı uygulanmadan birinciye yapışıyor.
+- **Engellediği iş:** Yok (workaround basit), ama API'lerde okunurluk.
+
 ---
 
 ## (Önceki kuyruk: boş.)
