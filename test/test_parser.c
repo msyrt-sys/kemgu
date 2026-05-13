@@ -664,6 +664,73 @@ static void test_ifade_onek_degil(void) {
     arena_serbest(a);
 }
 
+static void test_ifade_onek_degil_cagri(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil f(x)" -> degil(f(x)), parantez gerekmez */
+    Dugum *e = ifade_parse("de\xc4\x9fil f(x)", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEGIL
+          && e->veri.tekli.operand->tip == DUGUM_CAGRI;
+    test_sonuc("ifade onek: degil f(x) -> degil(f(x))", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_degil_erisim(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil x.alan" -> degil(x.alan) */
+    Dugum *e = ifade_parse("de\xc4\x9fil x.alan", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEGIL
+          && e->veri.tekli.operand->tip == DUGUM_ERISIM;
+    test_sonuc("ifade onek: degil x.alan -> degil(x.alan)", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_degil_indeks(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil arr[0]" -> degil(arr[0]) */
+    Dugum *e = ifade_parse("de\xc4\x9fil arr[0]", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEGIL
+          && e->veri.tekli.operand->tip == DUGUM_INDEKS;
+    test_sonuc("ifade onek: degil arr[0] -> degil(arr[0])", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_degil_zincir(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil degil f()" -> degil(degil(f())) */
+    Dugum *e = ifade_parse("de\xc4\x9fil de\xc4\x9fil f()", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_TEKLI)
+          && e->veri.tekli.op == OP_DEGIL
+          && e->veri.tekli.operand->tip == DUGUM_TEKLI
+          && e->veri.tekli.operand->veri.tekli.op == OP_DEGIL
+          && e->veri.tekli.operand->veri.tekli.operand->tip == DUGUM_CAGRI;
+    test_sonuc("ifade onek: degil degil f() (zincir)", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_onek_degil_ikili_sonra(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "degil f(x) ve g(y)" -> (degil f(x)) ve (g(y))
+     * Bu test ikili op'larin hala ONEK'ten oncelikli baglandigini gosterir. */
+    Dugum *e = ifade_parse(
+        "de\xc4\x9fil f(x) ve g(y)", a, &hata);
+    int ok = e && hata == 0
+          && e->tip == DUGUM_IKILI
+          && e->veri.ikili.op == OP_VE
+          && e->veri.ikili.sol->tip == DUGUM_TEKLI
+          && e->veri.ikili.sol->veri.tekli.op == OP_DEGIL
+          && e->veri.ikili.sol->veri.tekli.operand->tip == DUGUM_CAGRI;
+    test_sonuc("ifade onek: degil f(x) ve g(y)", ok);
+    arena_serbest(a);
+}
+
 static void test_ifade_onek_ref(void) {
     Arena *a = arena_olustur(0);
     int hata = -1;
@@ -1559,6 +1626,11 @@ int main(void) {
     printf("\n--- Ifade: Onek ---\n");
     test_ifade_onek_neg();
     test_ifade_onek_degil();
+    test_ifade_onek_degil_cagri();
+    test_ifade_onek_degil_erisim();
+    test_ifade_onek_degil_indeks();
+    test_ifade_onek_degil_zincir();
+    test_ifade_onek_degil_ikili_sonra();
     test_ifade_onek_ref();
     test_ifade_onek_ref_degisken();
     test_ifade_onek_deref();

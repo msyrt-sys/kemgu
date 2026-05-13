@@ -393,7 +393,10 @@ static Dugum *parse_onek(Parser *p) {
         }
         case TOK_DEGIL: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            /* Madde H: degil X(args) -> degil (X(args)). Sonek operatorler
+             * onek'ten daha yuksek oncelikte (12 > 11), bu yuzden parse_oncelik
+             * ile ONC_ONEK seviyesinde recurse et — sonek alir, ikili dur. */
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_DEGIL, operand, satir, sutun);
         }
         case TOK_DEGIL_BIT: {
