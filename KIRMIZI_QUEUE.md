@@ -155,3 +155,63 @@ Linear Types Spec V1 onaylı olduğu için tekkez/imha keyword eklemesi,
 TIP_TEKKEZ kategori, L001–LC001 hata kodları, region/linear entegrasyonu
 ve closure-itself-linear **spec içi** sayılır → otomatik onaylı, queue'ya
 eklenmez.
+
+---
+
+## [2026-05-13] — Parser panik modunda sonsuz hata raporu (fuzzer bulgusu)
+
+- **Kategori:** parser bug (yeşil/sarı — internal, spec etkisi yok)
+- **Bağlam:** test/test_fuzz_advanced.c mod a (sözdizimi-aware random
+  fuzzer) parser'ı çok kategorili random token akışı ile besledi:
+
+  ```
+  z T 659 [ yapı , ; + f modül 12
+  ```
+
+  Parser bu girdiyi parse ederken `P018: alan_adi bekleniyor` hatasını
+  **aynı pozisyonda (col 25)** binlerce kez tekrar raporladı.
+  `PARSER_MAX_HATA = 100` limiti devre dışı gibi davrandı, hata mesajları
+  arena'da birikip ASan internal allocator OOM'a düştü (~1 sn içinde
+  16 MB allocation failure).
+
+- **Etki:**
+  - test_fuzz_advanced.c mod a workaround: random token yerine 20 sabit
+    bozuk snippet (mod_a_snippets) kullanılıyor. Parser hâlâ test ediliyor
+    ama "gerçek random fuzzing" yapılmıyor.
+  - Mevcut test_fuzz.c (10000 iter byte-level random) tetiklemiyor.
+
+- **Olası kök neden:**
+  - parser_panik_sync() yapı alanı parse loop'unda token tüketmiyor
+  - PARSER_MAX_HATA kontrolü parser_hata() içinde değil
+
+- **Önerilen seçenekler:**
+  1. parser_hata()'ya `if (p->hata_sayisi >= PARSER_MAX_HATA) return;`
+  2. parser_panik_sync()'i her hata sonrası zorunlu çağır
+  3. Aynı (satır,sütun) tekrar hata raporlanırsa skip et
+
+- **Engellediği iş:** Random fuzzing yeterli coverage'a ulaşamıyor.
+  Çekirdek bug için ayrı görev gerek. src/parser.c'ye dokunulamaz
+  (test altyapı görevinin kapsamı: sadece test/ + tools/ + .github/).
+
+---
+
+## [2026-05-13] — Snapshot sözdizim sınırlamaları (test altyapı)
+
+- **Kategori:** parser kapsam genişletme (yeşil — sözdizimsel)
+- **Bağlam:** 30 yeni snapshot eklenirken 4 dosyada parser sınırlamasına
+  takıldı, basitleştirildi:
+
+  | Snapshot | Çalışmayan sözdizim | Basitleştirme |
+  |----------|--------------------|--------------|
+  | 21_modul_kullan | `değişken p: grafik::Nokta` (modül-nitelikli tip) | Tip annot kaldırıldı |
+  | 23_generic_constraint | `kendin` parametre tipi olarak | `tam32` ile değiştirildi |
+  | 24_nested_generic | `Kutu<T> { ... }` generic yaratım | `olustur<T>(x)` sarıcı |
+  | 49_generic_method | `uygula Cift<tam32, tam32>` specialization | `uygula Cift` |
+
+- **Önerilen seçenekler (gelecek görev):**
+  1. parse_tip içine `::` modül-nitelikli tip referansı
+  2. `kendin` parametre tipi (`baska: kendin`)
+  3. Generic yapı yaratım: `Tip<T> { alan: x }`
+  4. uygula specialization sözdizimi
+
+- **Engellediği iş:** Yok — basitleştirmeler test'in özünü değiştirmedi.
