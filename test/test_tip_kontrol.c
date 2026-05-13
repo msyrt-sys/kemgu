@@ -1289,6 +1289,82 @@ static void test_sonuc_konstrüktörler(void) {
     arena_serbest(a);
 }
 
+/* C-1: sonuc<T,E> uzerinde tamam(v) ve hata(m) pattern matching */
+static void test_sonuc_pattern_matching(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev cozumle(r: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("sonuç pattern (tamam(v)+hata(m)) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* C-2: tamam(v) — v gercekten T tipinde mi (binding gecerli) */
+static void test_sonuc_tamam_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat_basari(r: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v * 2; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("sonuç tamam(v) binding v: tam32", h == 0);
+    arena_serbest(a);
+}
+
+/* C-3: hata(m) — m gercekten E tipinde mi */
+static void test_sonuc_hata_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev mesaj_uzunluk(r: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver \"yok\"; } "
+        "  hata(m) => { ver m; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("sonuç hata(m) binding m: metin", h == 0);
+    arena_serbest(a);
+}
+
+/* C-4: joker (_) alt-desen — tamam(_) kabul edilir */
+static void test_sonuc_pattern_joker(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev basari_mi(r: sonu\xc3\xa7<tam32, metin>) -> mant\xc4\xb1ksal { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(_) => { ver do\xc4\x9fru; } "
+        "  hata(_) => { ver yanl\xc4\xb1\xc5\x9f; } "
+        "} "
+        "ver yanl\xc4\xb1\xc5\x9f; }",
+        a);
+    test_sonuc("sonuç tamam(_) / hata(_) joker alt-desen", h == 0);
+    arena_serbest(a);
+}
+
+/* C-5: yanlis tip binding — tamam(v)'de v'yi yanlis tip operasyonda kullan */
+static void test_sonuc_pattern_yanlis_tip(void) {
+    Arena *a = arena_olustur(0);
+    /* tamam(v) -> v tam32; metin operasyonu T001/T003 verir */
+    int h = program_kontrol(
+        "i\xc5\x9flev kotu(r: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "    /* v tam32, metin bekleniyor — T020 */
+        "  hata(m) => { ver m; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("sonuç tamam(v) yanlis tip (v tam32, dönüş metin) -> hata", h > 0);
+    arena_serbest(a);
+}
+
 /* L-1: Lambda govde scope — parametre referansi */
 static void test_lambda_govde(void) {
     Arena *a = arena_olustur(0);
@@ -1547,6 +1623,13 @@ int main(void) {
     test_deger_konstrüktör();
     test_pattern_binding();
     test_sonuc_konstrüktörler();
+
+    printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");
+    test_sonuc_pattern_matching();
+    test_sonuc_tamam_binding();
+    test_sonuc_hata_binding();
+    test_sonuc_pattern_joker();
+    test_sonuc_pattern_yanlis_tip();
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
