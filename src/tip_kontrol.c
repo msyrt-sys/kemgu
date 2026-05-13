@@ -61,6 +61,68 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
+    tk->scope_seviyesi = 0;
+    tk->lambda_govdesi_icinde = 0;
+    tk->lambda_lineer_yakalama = 0;
+    tk->lambda_baslangic_scope = NULL;
+}
+
+/* === Linear Types Spec V1: yardimci fonksiyonlar === */
+
+/* Eger ifade DUGUM_TANIMLAYICI ise ve sembolu lineer ise -> tuket.
+ * Cift tuketim L002 hatasi. */
+static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
+    if (!d || d->tip != DUGUM_TANIMLAYICI) return;
+    Sembol *s = sembol_bul_yazilabilir(tk->scope,
+        d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+    if (!s || !s->tip || s->tip->kategori != TIP_TEKKEZ) return;
+    if (s->lineer_tuketildi >= 1) {
+        tip_hata(tk, d, "L002",
+            "lineer baglama iki kez tuketildi (move sonrasi erisim)");
+    }
+    s->lineer_tuketildi++;
+}
+
+/* Lambda govdesi icinde: parent scope'taki lineer baglamayi yakala.
+ * Sadece bayrak set eder — tuketim asil consume context'inde
+ * (kullan/imha/cagri arg/ver) gerceklesir. Boylece kullan(k) gibi
+ * ifadeler cift tuketim hatasi (L002) uretmez. */
+static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
+    if (!d || d->tip != DUGUM_TANIMLAYICI) return;
+    if (!tk->lambda_govdesi_icinde) return;
+    if (!tk->lambda_baslangic_scope) return;
+
+    /* Lambda kendi scope'unda mi? Eger oyle ise yakalama degil. */
+    const Sembol *yerel_check = sembol_bul_yerel(tk->scope,
+        d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+    if (yerel_check) return;
+
+    /* Parent scope'ta lineer baglama mi? */
+    const Sembol *parent = sembol_bul(tk->lambda_baslangic_scope,
+        d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+    if (!parent || !parent->tip || parent->tip->kategori != TIP_TEKKEZ) return;
+
+    /* SADECE flag — closure-itself-linear (LC-2) tip isaretlemesi icin */
+    tk->lambda_lineer_yakalama = 1;
+}
+
+/* Scope kapanisi: o scope'taki lineer baglamalar tuketilmis mi check.
+ * Sadece SEMBOL_DEGISKEN/PARAMETRE icin (yapi alan'i degil). */
+static void scope_lineer_kapanis_check(TipKontrol *tk, Scope *s) {
+    if (!s) return;
+    for (SembolLink *l = s->bas; l; l = l->sonraki) {
+        Sembol *sem = &l->sembol;
+        if (sem->kategori != SEMBOL_DEGISKEN &&
+            sem->kategori != SEMBOL_PARAMETRE) continue;
+        if (!sem->tip || sem->tip->kategori != TIP_TEKKEZ) continue;
+        if (sem->lineer_tuketildi == 0) {
+            tk->hata_sayisi++;
+            hata_raporla(tk->dosya_adi, tk->kaynak,
+                         sem->satir, sem->sutun, "L001",
+                         "lineer baglama scope sonunda tuketilmedi",
+                         "kullan(...) veya imha(...) ile tuketin");
+        }
+    }
 }
 
 void tip_hata(TipKontrol *tk, const Dugum *d,
@@ -173,6 +235,13 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             TipBilgisi *ic = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_secimlik.ic_tip);
             return tip_olustur_secimlik(tk->arena, ic);
+        }
+
+        case DUGUM_TIP_TEKKEZ: {
+            TipBilgisi *ic = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_tekkez.ic_tip);
+            /* Linear Types Spec V1: tekkez<tekkez<T>> destekli */
+            return tip_olustur_tekkez(tk->arena, ic);
         }
 
         case DUGUM_TIP_SONUC: {
@@ -356,6 +425,10 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
             hata = 1;
         }
+        /* Linear Types Spec V1: alan tekkez ise deger baglamadan move */
+        if (alan_tipi && alan_tipi->kategori == TIP_TEKKEZ) {
+            lineer_tuket_eger_baglamaysa(tk, aa->veri.alan_atama.deger);
+        }
     }
     /* Eksik alan kontrolu (yapi alanlarinin hepsi var mi?) */
     if (yapi_sem->yapi_scope) {
@@ -427,7 +500,37 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
                 return t_hata(tk);
             }
+            /* Linear Types Spec V1: lambda govdesi icindeki lineer
+             * baglamalar otomatik 'yakalama' sayilir → consume + closure
+             * tipi tekkez<...> olarak isaretlenir (LC-2). */
+            lineer_yakalama_kontrol(tk, d);
             return s->tip ? s->tip : t_hata(tk);
+        }
+
+        /* === Linear Types Spec V1: kullan(e) extract === */
+        case DUGUM_KULLAN_IFADE: {
+            TipBilgisi *t = tip_belirle(tk, d->veri.kullan_ifade.operand);
+            if (t->kategori == TIP_HATA) return t_hata(tk);
+            if (t->kategori != TIP_TEKKEZ) {
+                tip_hata(tk, d, "L007",
+                    "kullan(...) operandi tekkez tipinde olmali");
+                return t_hata(tk);
+            }
+            lineer_tuket_eger_baglamaysa(tk, d->veri.kullan_ifade.operand);
+            return t->veri.tekkez.ic;
+        }
+
+        /* === Linear Types Spec V1: imha(e) dispose === */
+        case DUGUM_IMHA_IFADE: {
+            TipBilgisi *t = tip_belirle(tk, d->veri.imha_ifade.operand);
+            if (t->kategori == TIP_HATA) return t_hata(tk);
+            if (t->kategori != TIP_TEKKEZ) {
+                tip_hata(tk, d, "L007",
+                    "imha(...) operandi tekkez tipinde olmali");
+                return t_hata(tk);
+            }
+            lineer_tuket_eger_baglamaysa(tk, d->veri.imha_ifade.operand);
+            return t_basit(tk, TIP_BOS);
         }
 
         /* === Ikili === */
@@ -494,9 +597,20 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return t_basit(tk, TIP_MANTIKSAL);
 
                 case OP_REF:
+                    /* Linear Types Spec V1 L004: tekkez referans alinamaz */
+                    if (op->kategori == TIP_TEKKEZ) {
+                        tip_hata(tk, d, "L004",
+                            "lineer (tekkez) tipinde referans alinamaz");
+                        return t_hata(tk);
+                    }
                     return tip_olustur_referans(tk->arena, op, 0);
 
                 case OP_REF_DEGISKEN:
+                    if (op->kategori == TIP_TEKKEZ) {
+                        tip_hata(tk, d, "L004",
+                            "lineer (tekkez) tipinde &degisken alinamaz");
+                        return t_hata(tk);
+                    }
                     return tip_olustur_referans(tk->arena, op, 1);
 
                 case OP_DEREFERANS:
@@ -543,6 +657,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         TIP_BILINMIYOR);
                     return tip_olustur_sonuc(tk->arena, deg, h);
                 }
+            }
+            /* Linear Types Spec V1 producer intrinsic: tekkez_yarat(e) */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 12 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "tekkez_yarat", 12) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "L008",
+                        "tekkez_yarat tam olarak bir arguman gerektirir");
+                    return t_hata(tk);
+                }
+                TipBilgisi *ic = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (ic->kategori == TIP_HATA) return t_hata(tk);
+                /* tekkez<tekkez<T>> destekli: ic lineer ise wrap edilmeden
+                 * once tuketmeliyiz (move into outer wrapper). */
+                if (ic->kategori == TIP_TEKKEZ) {
+                    lineer_tuket_eger_baglamaysa(tk,
+                        d->veri.cagri.argumanlar[0]);
+                }
+                return tip_olustur_tekkez(tk->arena, ic);
             }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
@@ -596,6 +731,16 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             }
             TipBilgisi *hedef_tip = tip_belirle(tk, d->veri.cagri.hedef);
             if (hedef_tip->kategori == TIP_HATA) return t_hata(tk);
+
+            /* Linear Types Spec V1 LC-3: tekkez<islev(...)> cagri = consume.
+             * Hedef DUGUM_TANIMLAYICI ise sembolu tuket. */
+            if (hedef_tip->kategori == TIP_TEKKEZ &&
+                hedef_tip->veri.tekkez.ic &&
+                hedef_tip->veri.tekkez.ic->kategori == TIP_ISLEV) {
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.hedef);
+                hedef_tip = hedef_tip->veri.tekkez.ic;
+            }
+
             if (hedef_tip->kategori != TIP_ISLEV) {
                 tip_hata(tk, d, "T006", "cagri icin islev tipi gerek");
                 return t_hata(tk);
@@ -626,6 +771,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
+                }
+                /* Linear Types Spec V1: param tekkez ise arg consume */
+                if (param_tip && param_tip->kategori == TIP_TEKKEZ) {
+                    lineer_tuket_eger_baglamaysa(tk,
+                        d->veri.cagri.argumanlar[i]);
                 }
             }
             /* Donus tipi generic ise inferred T ile degistir */
@@ -737,10 +887,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                              "dizi elemanlari farkli tipte");
                 }
             }
+            /* Linear Types Spec V1 LR-2: dizi tekkez eleman iceremez (V1) */
+            if (ilk && ilk->kategori == TIP_TEKKEZ) {
+                tip_hata(tk, d, "LR002",
+                    "dizi elemani tekkez tipinde olamaz (V1: dizi lineer eleman iceremez)");
+            }
             return tip_olustur_dizi(tk->arena, ilk);
         }
 
-        /* === Lambda === */
+        /* === Lambda — Linear Types Spec V1 LC-2: closure-itself-linear === */
         case DUGUM_LAMBDA: {
             int n = d->veri.lambda.param_sayi;
             TipBilgisi **params = NULL;
@@ -748,6 +903,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 params = (TipBilgisi **)arena_ayir(tk->arena,
                             sizeof(TipBilgisi *) * (size_t)n);
             }
+
+            /* Lambda kendi scope'unu ac */
+            Scope *eski_scope = tk->scope;
+            Scope *lambda_scope = scope_olustur(tk->arena, SCOPE_BLOK,
+                                                 eski_scope);
+            tk->scope = lambda_scope;
+
             for (int i = 0; i < n; i++) {
                 const Dugum *p = d->veri.lambda.parametreler[i];
                 if (!p->veri.parametre.tip) {
@@ -757,10 +919,30 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     continue;
                 }
                 params[i] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
+                /* Parametre sembolu ekle */
+                Sembol ps;
+                memset(&ps, 0, sizeof(ps));
+                ps.ad = p->veri.parametre.ad;
+                ps.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                ps.kategori = SEMBOL_PARAMETRE;
+                ps.tip = params[i];
+                ps.satir = p->satir;
+                ps.sutun = p->sutun;
+                sembol_ekle(lambda_scope, tk->arena, &ps);
             }
-            /* Govde tip kontrolu icin parametreler ve cevreleyen scope */
-            Scope *eski = tk->scope;
-            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, eski);
+            /* Closure-itself-linear takip: lambda govdesi flag'leri */
+            int eski_lambda = tk->lambda_govdesi_icinde;
+            int eski_yakalama = tk->lambda_lineer_yakalama;
+            Scope *eski_baslangic = tk->lambda_baslangic_scope;
+            tk->lambda_govdesi_icinde = 1;
+            tk->lambda_lineer_yakalama = 0;
+            tk->lambda_baslangic_scope = eski_scope;
+
+            /* Govde icin lambda_scope uzerinde yeni gövde scope (ADIM 29:
+             * lambda govde scope v1 — gövde içi degisken bildirimleri
+             * parametre scope'unu kirletmesin). */
+            Scope *gov_eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, gov_eski);
             for (int i = 0; i < n; i++) {
                 const Dugum *p = d->veri.lambda.parametreler[i];
                 Sembol s;
@@ -773,8 +955,26 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 sembol_ekle(tk->scope, tk->arena, &s);
             }
             TipBilgisi *donus = tip_belirle(tk, d->veri.lambda.govde);
-            tk->scope = eski;
-            return tip_olustur_islev(tk->arena, params, n, donus);
+            tk->scope = gov_eski;
+
+            int yakaladi = tk->lambda_lineer_yakalama;
+
+            /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
+            scope_lineer_kapanis_check(tk, lambda_scope);
+
+            tk->lambda_govdesi_icinde = eski_lambda;
+            tk->lambda_lineer_yakalama = eski_yakalama;
+            tk->lambda_baslangic_scope = eski_baslangic;
+            tk->scope = eski_scope;
+
+            TipBilgisi *islev_t =
+                tip_olustur_islev(tk->arena, params, n, donus);
+
+            /* LC-2: lineer yakalama varsa lambda kendisi tekkez */
+            if (yakaladi) {
+                return tip_olustur_tekkez(tk->arena, islev_t);
+            }
+            return islev_t;
         }
 
         /* === Hata dugumu === */
@@ -959,6 +1159,11 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     for (int j = 0; j < yapi->veri.yapi.alan_sayi; j++) {
         const Dugum *alan = yapi->veri.yapi.alanlar[j];
         TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
+        /* Linear Types Spec V1 LR-2: yapi tekkez alan iceremez (V1) */
+        if (alan_tipi && alan_tipi->kategori == TIP_TEKKEZ) {
+            tip_hata(tk, alan, "LR002",
+                "yapi alani tekkez tipinde olamaz (V1: yapi lineer alan iceremez)");
+        }
         Sembol s;
         memset(&s, 0, sizeof(s));
         s.ad = alan->veri.alan.ad;
@@ -1175,6 +1380,10 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             }
             TipBilgisi *son = annot ? annot : deger_tip;
+            /* Linear Types Spec V1: deger lineer baglamadan move ise tuket */
+            if (son && son->kategori == TIP_TEKKEZ) {
+                lineer_tuket_eger_baglamaysa(tk, d->veri.degisken.deger);
+            }
             Sembol s;
             memset(&s, 0, sizeof(s));
             s.ad = d->veri.degisken.ad;
@@ -1184,6 +1393,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.ast_dugumu = d;
             s.satir = d->satir;
             s.sutun = d->sutun;
+            s.lineer_scope_seviyesi = tk->scope_seviyesi;
             if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
                 tip_hata(tk, d, "T024", "degisken zaten tanimli");
             }
@@ -1223,6 +1433,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     tk->aktif_donus_tipi->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T020",
                              "ver tipi islev donus tipi ile uyumsuz");
+                }
+                /* Linear Types Spec V1: lineer baglama ver ile cagirana
+                 * devredildi → tuket */
+                if (deger && deger->kategori == TIP_TEKKEZ) {
+                    lineer_tuket_eger_baglamaysa(tk, d->veri.ver.deger);
                 }
             } else {
                 /* ver; — donus tipi BOS olmali */
@@ -1268,6 +1483,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             }
             /* Yeni scope: icin degiskeni eleman_tipi olarak */
             Scope *eski = tk->scope;
+            tk->scope_seviyesi++;
             tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
             Sembol s;
             memset(&s, 0, sizeof(s));
@@ -1279,7 +1495,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.sutun = d->sutun;
             sembol_ekle(tk->scope, tk->arena, &s);
             tip_kontrol_deyim(tk, d->veri.icin.govde);
+            scope_lineer_kapanis_check(tk, tk->scope);
             tk->scope = eski;
+            tk->scope_seviyesi--;
             break;
         }
 
@@ -1289,6 +1507,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
                 Scope *eski = tk->scope;
+                tk->scope_seviyesi++;
                 tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
 
                 /* Desen tanimlayici/yapici icindeki adlari scope'a ekle */
@@ -1344,7 +1563,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 }
 
                 tip_kontrol_deyim(tk, kol->veri.esles_kolu.govde);
+                scope_lineer_kapanis_check(tk, tk->scope);
                 tk->scope = eski;
+                tk->scope_seviyesi--;
             }
             break;
         }
@@ -1357,11 +1578,16 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
 
         case DUGUM_BLOK: {
             Scope *eski = tk->scope;
+            tk->scope_seviyesi++;
             tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
             for (int i = 0; i < d->veri.blok.sayi; i++) {
                 tip_kontrol_deyim(tk, d->veri.blok.deyimler[i]);
             }
+            /* Linear Types Spec V1 LR-3: bolge (blok scope) kapanirken
+             * tum lineer baglamalar tuketilmis olmali (L001 / LR001). */
+            scope_lineer_kapanis_check(tk, tk->scope);
             tk->scope = eski;
+            tk->scope_seviyesi--;
             break;
         }
 
@@ -1399,6 +1625,7 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
             Scope *eski = tk->scope;
             TipBilgisi *eski_donus = tk->aktif_donus_tipi;
+            tk->scope_seviyesi++;
             tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->global_scope);
             tk->aktif_donus_tipi = islev_sem->tip->veri.islev.donus;
 
@@ -1437,8 +1664,12 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                 tip_kontrol_deyim(tk, d->veri.islev.govde);
             }
 
+            /* Linear Types Spec V1: lineer parametreler govdede tuketilmeli */
+            scope_lineer_kapanis_check(tk, tk->scope);
+
             tk->aktif_donus_tipi = eski_donus;
             tk->scope = eski;
+            tk->scope_seviyesi--;
             break;
         }
 

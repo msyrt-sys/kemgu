@@ -34,6 +34,7 @@ static const AnahtarKelime tablo[] = {
     {"hata",                              4, TOK_HATA      },  /* hata        */
     {"hi\xc3\xa7",                       4, TOK_HIC       },  /* hiç         */
     {"iken",                              4, TOK_IKEN      },  /* iken        */
+    {"imha",                              4, TOK_IMHA      },  /* imha        */
     {"i\xc3\xa7in",                      5, TOK_ICIN      },  /* için        */
     {"i\xc5\x9flev",                     6, TOK_ISLEV     },  /* işlev       */
     {"kendin",                            6, TOK_KENDIN    },  /* kendin      */
@@ -43,6 +44,7 @@ static const AnahtarKelime tablo[] = {
     {"se\xc3\xa7imlik",                  9, TOK_SECIMLIK  },  /* seçimlik    */
     {"sonu\xc3\xa7",                     6, TOK_SONUC     },  /* sonuç       */
     {"tamam",                             5, TOK_TAMAM     },  /* tamam       */
+    {"tekkez",                            6, TOK_TEKKEZ    },  /* tekkez      */
     {"uygula",                            6, TOK_UYGULA    },  /* uygula      */
     {"ve",                                2, TOK_VE        },  /* ve          */
     {"ver",                               3, TOK_VER       },  /* ver         */

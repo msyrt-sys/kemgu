@@ -77,6 +77,17 @@ TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk) 
     return t;
 }
 
+TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_TEKKEZ);
+    if (!t) return NULL;
+    t->veri.tekkez.ic = ic;
+    return t;
+}
+
+int tip_lineer_mi(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_TEKKEZ;
+}
+
 /* === Esitlik (nominal, recursive) === */
 
 int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
@@ -156,6 +167,9 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
             return memcmp(a->veri.generic_param.ad,
                           b->veri.generic_param.ad,
                           (size_t)a->veri.generic_param.ad_uzunluk) == 0;
+
+        case TIP_TEKKEZ:
+            return tip_esit(a->veri.tekkez.ic, b->veri.tekkez.ic);
     }
     return 0;
 }
@@ -239,6 +253,12 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
                    (size_t)t->veri.generic_param.ad_uzunluk, out);
             return;
 
+        case TIP_TEKKEZ:
+            fputs("tekkez<", out);
+            tip_yazdir(t->veri.tekkez.ic, out);
+            fputc('>', out);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -269,6 +289,7 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_ISLEV:     return "ISLEV";
         case TIP_YAPI:      return "YAPI";
         case TIP_GENERIC_PARAM: return "GENERIC_PARAM";
+        case TIP_TEKKEZ:    return "TEKKEZ";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }

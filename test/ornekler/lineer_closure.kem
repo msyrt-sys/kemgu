@@ -1,0 +1,23 @@
+// Linear Types Spec V1 — Closure-itself-linear (LC-2/LC-3) örneği
+// `kemgu --check lineer_closure.kem` → "OK" beklenir.
+//
+// Bir closure lineer bir değer yakaladığında, closure'ın kendisi
+// otomatik tekkez<islev(...) -> T> tipinde olur (LC-2).
+// Bu closure tek kez çağrılabilir; çağrı = tüketim (LC-3).
+
+işlev lineer_closure_ornegi() {
+    değişken anahtar: tekkez<tam32> = tekkez_yarat(123);
+
+    // c yakalama yapar — tipi otomatik: tekkez<islev() -> tam32>
+    değişken c = || kullan(anahtar);
+
+    değişken sonuc = c();   // closure çağrı = tüketim (move)
+    // c() ikinci kez çağrılırsa L002 — derleme hatası
+}
+
+işlev sıradan_closure_ornegi() {
+    // Lineer yakalama yok → sıradan islev tipi (linear değil)
+    değişken topla = |x: tam32| x + 1;
+    değişken n1 = topla(5);
+    değişken n2 = topla(10);    // OK — birden çok çağrı
+}

@@ -186,13 +186,15 @@ Sayı ayracı:        1_000_000
 Raw string:         r#"..."#
 ```
 
-### 31 Anahtar Kelime
+### 33 Anahtar Kelime
 ```
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
 tamam, hata, bölge, uygula, kendin, seçimlik, sonuç, değer, hiç,
-güvensiz
+güvensiz, tekkez, imha
 ```
+(`tekkez`, `imha` — Linear Types Spec V1; `kullan` ifade context'inde
+linear consume olarak ikinci anlama sahip — `kullan(t)`.)
 
 ### Tip Sistemi
 ```
@@ -615,6 +617,38 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 
 **Test sayısı:** 505/505 (önceki 501 + 4 generic işlev) + 3 stdlib --check geçti
 
+### ADIM (Konsolidasyon) — Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)
+Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md`.
+
+- **Linear types altyapısı** — 54/54 yeni test, ASan temiz
+    - **Lexer:** `tekkez`, `imha` keyword (toplam 33).
+    - **AST:** `DUGUM_TIP_TEKKEZ`, `DUGUM_KULLAN_IFADE`, `DUGUM_IMHA_IFADE`.
+    - **Parser:** `tekkez<T>` tip + `kullan(e)` / `imha(e)` ifade. `kullan`
+      context-sensitive (üst düzey = import, ifade = consume).
+    - **Tip sistemi:** `TIP_TEKKEZ` kategori, `tip_olustur_tekkez`,
+      `tip_lineer_mi`, recursive nominal eşitlik, yazdırma.
+    - **Sembol:** `lineer_tuketildi` ve `lineer_scope_seviyesi` flag'leri,
+      `sembol_bul_yazilabilir` (mutable lookup, tüketim işaretleme için).
+    - **Tip kontrol:** L001 (tüketilmedi), L002 (move sonrası), L004
+      (referans yasağı), L007 (consume operandı tekkez değil), L008
+      (`tekkez_yarat` arity), LR002 (yapı/dizi tekkez içeremez).
+    - **Producer intrinsic:** `tekkez_yarat<T>(e: T) -> tekkez<T>` —
+      özel built-in (sembol tablosu yok, CAGRI handler'ında özel-case).
+    - **Tüketim noktaları:** `kullan`, `imha`, çağrı argümanı, `ver`,
+      yapı alan değeri, değişken atama (move), `tekkez_yarat` iç wrap,
+      lineer closure çağrısı (LC-3).
+    - **Closure-itself-linear (LC-2):** Lambda gövdesi içinde lineer
+      bağlama yakalandığında lambda tipi otomatik `tekkez<islev(...)>`.
+    - **Region/Linear:** Bölge (blok/işlev/için/eşleş) kapanışında
+      tüketilmemiş lineer bağlamalar L001 raporlanır.
+    - **Örnek dosyalar:** `lineer_temel.kem` ✓, `lineer_closure.kem` ✓,
+      `lineer_hata.kem` (4 hata sergiler — L001/L002/L004/LR002).
+
+```bash
+./build/kemgu --check test/ornekler/lineer_closure.kem
+# → OK: lineer_closure.kem — tip kontrolu basarili.
+```
+
 ### Sıradaki büyük seçenekler:
 - **Concurrency lang syntax** (görev/kanal anahtar kelimeleri, R-GÖREV uygulama)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
@@ -622,10 +656,13 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
 - **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
+- **Linear V2:** lineer alanlı yapı (`yapı tekkez K { ... }`), L005 (koşullu tüketim tutarlılığı)
+- **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
 ### İlerideki Fazlar
 - ~~Tip sistemi (tip çıkarsama, tip kontrolü)~~ ✓ ADIM 11
+- ~~Linear types (Spec V1)~~ ✓ (konsolidasyon)
 - ~~Bölge çözümleyici (escape analizi, bölge atama)~~ ✓ ADIM 12 + 14
 - LLVM backend genişletme (parametreler, kontrol akışı, yapılar, dizi, çağrı)
 - Concurrency (R-GÖREV, R-BİRLEŞTİR, R-KANAL — Katman 2)
@@ -695,9 +732,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM + ESCAPE + CONSTRAINT + LSP FAZLARI TAMAMLANDI**
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → ~~15.1-15.5~~ ✓ → ~~16.1-16.5~~ ✓ → **(genişletme: Katman 2, LLVM cağrı/yapı/kontrol akışı, LSP v2, stdlib, bootstrap)**
+- **Faz:** **🎉🎉 KONSOLIDASYON — TİP + BÖLGE + LLVM + ESCAPE + CONSTRAINT + LSP + LİNEER FAZLARI TAMAMLANDI**
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server + **Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)**
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → ~~15.1-15.5~~ ✓ → ~~16.1-16.5~~ ✓ → ~~Linear V1~~ ✓ → **(genişletme: Katman 2, LLVM v4, LSP v3, stdlib, Linear V2, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)
