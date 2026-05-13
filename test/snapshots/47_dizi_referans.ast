@@ -1,0 +1,35 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "ilk_eleman"  1:1
+    parametreler (1):
+      PARAMETRE "xs"  1:19
+        TIP_REFERANS  1:23
+          TIP_DIZI  1:24
+            TIP_BASIT "tam32"  1:29
+    donus_tipi:
+      TIP_BASIT "tam32"  1:40
+    govde:
+      BLOK (1 deyim)  1:46
+        VER  2:5
+          INDEKS  2:14
+            TEKLI deref*  2:10
+              TANIMLAYICI "xs"  2:11
+            TAM 0  2:15
+  ISLEV "main"  5:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  5:18
+    govde:
+      BLOK (2 deyim)  5:24
+        DEGISKEN "xs"  6:5
+          deger:
+            DIZI_OLUSTUR  6:21
+        VER  7:5
+          CAGRI  7:19
+            hedef:
+              TANIMLAYICI "ilk_eleman"  7:9
+            argumanlar (1):
+              TEKLI &  7:20
+                TANIMLAYICI "xs"  7:21
+
+=== Toplam parser hata sayisi: 0 ===

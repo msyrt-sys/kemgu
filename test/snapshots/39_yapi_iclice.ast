@@ -1,0 +1,55 @@
+=== AST ===
+PROGRAM (4 uye)  1:1
+  YAPI  1:1
+  YAPI  2:1
+  ISLEV "alan"  4:1
+    parametreler (1):
+      PARAMETRE "d"  4:13
+        TIP_BASIT "Dikdortgen"  4:16
+    donus_tipi:
+      TIP_BASIT "tam32"  4:31
+    govde:
+      BLOK (3 deyim)  4:37
+        DEGISKEN "w"  5:5
+          tip:
+            TIP_BASIT "tam32"  5:19
+          deger:
+            IKILI -  5:39
+              ERISIM "x"  5:36
+                ERISIM "sag_ust"  5:28
+                  TANIMLAYICI "d"  5:27
+              ERISIM "x"  5:50
+                ERISIM "sol_alt"  5:42
+                  TANIMLAYICI "d"  5:41
+        DEGISKEN "h"  6:5
+          tip:
+            TIP_BASIT "tam32"  6:19
+          deger:
+            IKILI -  6:39
+              ERISIM "y"  6:36
+                ERISIM "sag_ust"  6:28
+                  TANIMLAYICI "d"  6:27
+              ERISIM "y"  6:50
+                ERISIM "sol_alt"  6:42
+                  TANIMLAYICI "d"  6:41
+        VER  7:5
+          IKILI *  7:11
+            TANIMLAYICI "w"  7:9
+            TANIMLAYICI "h"  7:13
+  ISLEV "main"  10:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  10:18
+    govde:
+      BLOK (2 deyim)  10:24
+        DEGISKEN "d"  11:5
+          deger:
+            YAPI_OLUSTUR  11:20
+        VER  15:5
+          CAGRI  15:13
+            hedef:
+              TANIMLAYICI "alan"  15:9
+            argumanlar (1):
+              TANIMLAYICI "d"  15:14
+
+=== Toplam parser hata sayisi: 0 ===

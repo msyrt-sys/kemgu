@@ -1,0 +1,10 @@
+işlev iki_kat(r: &tam32) -> tam32 { ver (*r) * 2; }
+işlev yaz(r: &değişken tam32) {
+    *r = 21;
+}
+
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    yaz(&değişken x);
+    ver iki_kat(&x);
+}

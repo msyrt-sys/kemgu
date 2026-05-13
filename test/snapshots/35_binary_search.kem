@@ -1,0 +1,16 @@
+işlev binary_search(xs: Dizi<tam32>, hedef: tam32, n: tam32) -> tam32 {
+    değişken lo: tam32 = 0;
+    değişken hi: tam32 = n - 1;
+    iken lo <= hi {
+        değişken orta: tam32 = (lo + hi) / 2;
+        eğer xs[orta] == hedef { ver orta; }
+        değilse eğer xs[orta] < hedef { lo = orta + 1; }
+        değilse { hi = orta - 1; }
+    }
+    ver 0 - 1;
+}
+
+işlev main() -> tam32 {
+    değişken xs = [1, 3, 5, 7, 9, 11, 13];
+    ver binary_search(xs, 9, 7);
+}

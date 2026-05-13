@@ -412,9 +412,39 @@ void kdl_dizi_ekle_tam(KdlDizi *d, int32_t deger) {
     ((int32_t *)d->veri)[d->boyut++] = deger;
 }
 
+void kdl_dizi_ekle_tam64(KdlDizi *d, int64_t deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(int64_t));
+        d->kapasite = yk;
+    }
+    ((int64_t *)d->veri)[d->boyut++] = deger;
+}
+
+void kdl_dizi_ekle_ptr(KdlDizi *d, void *deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(void *));
+        d->kapasite = yk;
+    }
+    ((void **)d->veri)[d->boyut++] = deger;
+}
+
 int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
     if (!d || i < 0 || i >= d->boyut) return 0;
     return ((int32_t *)d->veri)[i];
+}
+
+int64_t kdl_dizi_al_tam64(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return 0;
+    return ((int64_t *)d->veri)[i];
+}
+
+void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return NULL;
+    return ((void **)d->veri)[i];
 }
 
 int32_t kdl_dizi_boyut(KdlDizi *d) {

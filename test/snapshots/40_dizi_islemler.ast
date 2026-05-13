@@ -1,0 +1,44 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "topla"  1:1
+    parametreler (2):
+      PARAMETRE "xs"  1:14
+        TIP_DIZI  1:18
+          TIP_BASIT "tam32"  1:23
+      PARAMETRE "n"  1:31
+        TIP_BASIT "tam32"  1:34
+    donus_tipi:
+      TIP_BASIT "tam32"  1:44
+    govde:
+      BLOK (4 deyim)  1:50
+        DEGISKEN "toplam"  2:5
+          tip:
+            TIP_BASIT "tam32"  2:24
+          deger:
+            TAM 0  2:32
+        DEGISKEN "i"  3:5
+          tip:
+            TIP_BASIT "tam32"  3:19
+          deger:
+            TAM 0  3:27
+        IKEN  4:5
+        VER  8:5
+          TANIMLAYICI "toplam"  8:9
+  ISLEV "main"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:18
+    govde:
+      BLOK (2 deyim)  11:24
+        DEGISKEN "xs"  12:5
+          deger:
+            DIZI_OLUSTUR  12:21
+        VER  13:5
+          CAGRI  13:14
+            hedef:
+              TANIMLAYICI "topla"  13:9
+            argumanlar (2):
+              TANIMLAYICI "xs"  13:15
+              TAM 3  13:19
+
+=== Toplam parser hata sayisi: 0 ===

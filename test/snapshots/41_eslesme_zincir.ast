@@ -1,0 +1,29 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "kategori"  1:1
+    parametreler (1):
+      PARAMETRE "n"  1:17
+        TIP_BASIT "tam32"  1:20
+    donus_tipi:
+      TIP_BASIT "tam32"  1:30
+    govde:
+      BLOK (2 deyim)  1:36
+        ESLES  2:5
+        VER  8:5
+          IKILI -  8:11
+            TAM 0  8:9
+            TAM 1  8:13
+  ISLEV "main"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:18
+    govde:
+      BLOK (1 deyim)  11:24
+        VER  12:5
+          CAGRI  12:17
+            hedef:
+              TANIMLAYICI "kategori"  12:9
+            argumanlar (1):
+              TAM 2  12:18
+
+=== Toplam parser hata sayisi: 0 ===

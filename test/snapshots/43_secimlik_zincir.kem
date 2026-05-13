@@ -1,0 +1,9 @@
+işlev al(x: tam32) -> seçimlik<tam32> {
+    eğer x > 0 { ver değer(x); }
+    ver hiç;
+}
+
+işlev main() -> tam32 {
+    değişken s = al(42);
+    ver 42;
+}
