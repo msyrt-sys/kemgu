@@ -245,10 +245,25 @@ calistir_linear_test: $(BUILD)/test_linear$(EXE)
 	./$(BUILD)/test_linear$(EXE)
 
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
-calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
-	@echo "stdlib tip kontrolu..."
-	@for f in stdlib/temel/*.kem; do \
-		./$(BUILD)/kemgu$(EXE) --check $$f || exit 1; \
+# Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
+# birlestirilip --check'ten gecirilir (tek dosya derleme, import yok).
+# Test dosyasi yoksa kutuphane tek basina kontrol edilir.
+calistir_stdlib_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
+	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
+	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
+		[ -f "$$f" ] || continue; \
+		mod=$$(basename "$$f" .kem); \
+		test_f="test/stdlib/test_$$mod.kem"; \
+		if [ -f "$$test_f" ]; then \
+			combined="$(BUILD)/_stdlib_$$mod.kem"; \
+			cat "$$f" "$$test_f" > "$$combined"; \
+			./$(BUILD)/kemgu$(EXE) --check "$$combined" || \
+				{ echo "FAIL: $$f + $$test_f"; rm -f "$$combined"; exit 1; }; \
+			rm -f "$$combined"; \
+		else \
+			./$(BUILD)/kemgu$(EXE) --check "$$f" || \
+				{ echo "FAIL: $$f"; exit 1; }; \
+		fi; \
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
 
