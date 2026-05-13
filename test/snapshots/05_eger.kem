@@ -1,0 +1,4 @@
+işlev main() -> tam32 {
+    eğer 1 == 1 { ver 42; }
+    ver 0;
+}

@@ -1,0 +1,28 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "iki_kat"  1:1
+    parametreler (1):
+      PARAMETRE "x"  1:16
+        TIP_BASIT "tam32"  1:19
+    donus_tipi:
+      TIP_BASIT "tam32"  1:29
+    govde:
+      BLOK (1 deyim)  1:35
+        VER  1:37
+          IKILI *  1:43
+            TANIMLAYICI "x"  1:41
+            TAM 2  1:45
+  ISLEV "main"  2:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  2:18
+    govde:
+      BLOK (1 deyim)  2:24
+        VER  2:26
+          CAGRI  2:37
+            hedef:
+              TANIMLAYICI "iki_kat"  2:30
+            argumanlar (1):
+              TAM 21  2:38
+
+=== Toplam parser hata sayisi: 0 ===

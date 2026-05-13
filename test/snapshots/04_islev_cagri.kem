@@ -1,0 +1,2 @@
+işlev iki_kat(x: tam32) -> tam32 { ver x * 2; }
+işlev main() -> tam32 { ver iki_kat(21); }

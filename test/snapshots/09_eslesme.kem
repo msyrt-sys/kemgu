@@ -1,0 +1,9 @@
+işlev main() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x {
+        0 => { ver 100; }
+        1 => { ver 42; }
+        _ => { ver 0; }
+    }
+    ver 99;
+}

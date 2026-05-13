@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test test_tumu
 
 # === Ana hedef ===
 
@@ -184,6 +184,21 @@ $(BUILD)/test_linear$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                             $(TESTDIR)/test_linear.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Snapshot test (ADIM 32 — kemgu --parse cikti baseline'lari) ===
+
+$(BUILD)/test_snapshot$(EXE): $(TESTDIR)/test_snapshot.c | $(BUILD)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $<
+
+# === Parser fuzzer (ADIM 32 — random byte stream, 10000 iter, ASan) ===
+
+$(BUILD)/test_fuzz$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                          $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                          $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                          $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                          $(SRCDIR)/ifade.c \
+                          $(TESTDIR)/test_fuzz.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 
 # === Genel obje kurallari ===
 
@@ -244,6 +259,12 @@ calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE)
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
 	./$(BUILD)/test_linear$(EXE)
 
+calistir_snapshot_test: $(BUILD)/test_snapshot$(EXE) $(BUILD)/kemgu$(EXE)
+	./$(BUILD)/test_snapshot$(EXE)
+
+calistir_fuzz_test: $(BUILD)/test_fuzz$(EXE)
+	./$(BUILD)/test_fuzz$(EXE)
+
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
 	@echo "stdlib tip kontrolu..."
@@ -268,7 +289,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_snapshot_test calistir_fuzz_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:

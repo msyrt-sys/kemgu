@@ -1,0 +1,26 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "kimlik"  1:1
+    parametreler (1):
+      PARAMETRE "x"  1:18
+        TIP_BASIT "T"  1:21
+    donus_tipi:
+      TIP_BASIT "T"  1:27
+    govde:
+      BLOK (1 deyim)  1:29
+        VER  1:31
+          TANIMLAYICI "x"  1:35
+  ISLEV "main"  2:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  2:18
+    govde:
+      BLOK (1 deyim)  2:24
+        VER  2:26
+          CAGRI  2:36
+            hedef:
+              TANIMLAYICI "kimlik"  2:30
+            argumanlar (1):
+              TAM 42  2:37
+
+=== Toplam parser hata sayisi: 0 ===
