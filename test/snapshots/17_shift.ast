@@ -1,0 +1,16 @@
+=== AST ===
+PROGRAM (1 uye)  1:1
+  ISLEV "main"  1:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  1:18
+    govde:
+      BLOK (1 deyim)  1:24
+        VER  2:5
+          IKILI >>  2:19
+            IKILI <<  2:13
+              TAM 21  2:10
+              TAM 1  2:16
+            TAM 0  2:22
+
+=== Toplam parser hata sayisi: 0 ===

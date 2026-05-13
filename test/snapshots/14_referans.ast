@@ -1,0 +1,34 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "oku"  1:1
+    parametreler (1):
+      PARAMETRE "r"  1:12
+        TIP_REFERANS  1:15
+          TIP_BASIT "tam32"  1:16
+    donus_tipi:
+      TIP_BASIT "tam32"  1:26
+    govde:
+      BLOK (1 deyim)  1:32
+        VER  1:34
+          TEKLI deref*  1:38
+            TANIMLAYICI "r"  1:39
+  ISLEV "main"  2:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  2:18
+    govde:
+      BLOK (2 deyim)  2:24
+        DEGISKEN "x"  3:5
+          tip:
+            TIP_BASIT "tam32"  3:19
+          deger:
+            TAM 42  3:27
+        VER  4:5
+          CAGRI  4:12
+            hedef:
+              TANIMLAYICI "oku"  4:9
+            argumanlar (1):
+              TEKLI &  4:13
+                TANIMLAYICI "x"  4:14
+
+=== Toplam parser hata sayisi: 0 ===

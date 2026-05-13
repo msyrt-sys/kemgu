@@ -1,0 +1,8 @@
+yapı Kutu { v: tam32; }
+uygula Kutu {
+    işlev al(kendin) -> tam32 { ver kendin.v; }
+}
+işlev main() -> tam32 {
+    değişken k = Kutu { v: 42 };
+    ver k.al();
+}

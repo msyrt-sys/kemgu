@@ -1,0 +1,5 @@
+işlev oku(r: &tam32) -> tam32 { ver *r; }
+işlev main() -> tam32 {
+    değişken x: tam32 = 42;
+    ver oku(&x);
+}

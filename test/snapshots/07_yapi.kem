@@ -1,0 +1,5 @@
+yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken p = Nokta { x: 10, y: 32 };
+    ver p.x + p.y;
+}

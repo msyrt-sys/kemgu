@@ -1,0 +1,5 @@
+işlev main() -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 10 { i = i + 1; }
+    ver i;
+}

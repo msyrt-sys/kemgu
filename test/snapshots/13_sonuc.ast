@@ -1,0 +1,43 @@
+=== AST ===
+PROGRAM (2 uye)  1:1
+  ISLEV "bol"  1:1
+    parametreler (2):
+      PARAMETRE "a"  1:12
+        TIP_BASIT "tam32"  1:15
+      PARAMETRE "b"  1:22
+        TIP_BASIT "tam32"  1:25
+    donus_tipi:
+      TIP_SONUC  1:35
+    govde:
+      BLOK (2 deyim)  1:56
+        EGER  2:5
+          kosul:
+            IKILI ==  2:13
+              TANIMLAYICI "b"  2:11
+              TAM 0  2:16
+          eger:
+            BLOK (1 deyim)  2:18
+              VER  2:20
+                CAGRI  2:28
+                  hedef:
+                    TANIMLAYICI "hata"  2:24
+                  argumanlar (1):
+                    METIN "sifir"  2:29
+        VER  3:5
+          CAGRI  3:14
+            hedef:
+              TANIMLAYICI "tamam"  3:9
+            argumanlar (1):
+              IKILI /  3:17
+                TANIMLAYICI "a"  3:15
+                TANIMLAYICI "b"  3:19
+  ISLEV "main"  5:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  5:18
+    govde:
+      BLOK (1 deyim)  5:24
+        VER  5:26
+          TAM 42  5:30
+
+=== Toplam parser hata sayisi: 0 ===

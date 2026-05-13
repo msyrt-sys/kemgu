@@ -1,0 +1,2 @@
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev main() -> tam32 { ver kimlik(42); }

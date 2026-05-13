@@ -1,0 +1,4 @@
+işlev main() -> tam32 {
+    değişken f = |x: tam32| x * 2;
+    ver f(21);
+}

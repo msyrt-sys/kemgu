@@ -1,0 +1,5 @@
+işlev bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifir"); }
+    ver tamam(a / b);
+}
+işlev main() -> tam32 { ver 42; }
