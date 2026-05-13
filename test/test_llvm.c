@@ -66,9 +66,18 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     int rc = system(komut);
     if (rc != 0) return -1;
 
-    /* clang -x ir .ll -o .exe */
+    /* clang -x ir .ll -x none .o -o .exe; kdl_runtime.o link edilir
+     * (Madde A/B/G icin). -x ir sadece .ll dosyasina uygulanmali; sonra
+     * -x none ile defaulta done ki .o file format'i otomatik tanin. */
+#ifdef _WIN32
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -o %s 2>%s", LL_PATH, EXE_PATH, DEV_NULL);
+             "clang -x ir %s -x none build\\kdl_runtime.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#else
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build/kdl_runtime.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#endif
     rc = system(komut);
     if (rc != 0) return -1;
 
@@ -525,6 +534,134 @@ static void test_bit_oncelik_shift_or(void) {
     test_sonuc("5 << 3 | 2 -> 42 (oncelik: shift > OR)", rc == 42);
 }
 
+/* === Madde A: Metin runtime primitifleri === */
+
+static void test_metin_uzunluk(void) {
+    /* "Merhaba" uzunlugu 7 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"Merhaba\"); }");
+    test_sonuc("metin_uzunluk(\"Merhaba\") -> 7", rc == 7);
+}
+
+static void test_metin_birlestir_uzunluk(void) {
+    /* "Hi" + "There" = "HiThere" uzunluk 7 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_birlestir(\"Hi\", \"There\")); }");
+    test_sonuc("metin_birlestir + metin_uzunluk -> 7", rc == 7);
+}
+
+static void test_metin_baslar(void) {
+    /* "abcdef" "abc" ile basliyor -> 1 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_baslar(\"abcdef\", \"abc\") { ver 42; } "
+        "ver 0; }");
+    test_sonuc("metin_baslar(\"abcdef\", \"abc\") -> 42", rc == 42);
+}
+
+static void test_metin_biter(void) {
+    /* "merhaba.txt" ".txt" ile bitiyor */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_biter(\"merhaba.txt\", \".txt\") { ver 7; } "
+        "ver 0; }");
+    test_sonuc("metin_biter(\"merhaba.txt\", \".txt\") -> 7", rc == 7);
+}
+
+static void test_metin_icerir(void) {
+    /* "merhaba dunya" "dunya" iceriyor */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_icerir(\"merhaba dunya\", \"dunya\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba dunya\", \"dunya\") -> 1", rc == 1);
+}
+
+static void test_metin_kes_uzunluk(void) {
+    /* metin_kes("abcdef", 1, 3) = "bcd" uzunluk 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kes(\"abcdef\", 1, 3)); }");
+    test_sonuc("metin_kes uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_kucuk_buyuk(void) {
+    /* metin_uzunluk(metin_buyuk(metin_kucuk("ABC"))) == 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_buyuk(metin_kucuk(\"AbC\"))); }");
+    test_sonuc("metin_kucuk + metin_buyuk -> 3", rc == 3);
+}
+
+static void test_metin_kirp(void) {
+    /* metin_kirp("  hi  ") uzunluk 2 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kirp(\"  hi  \")); }");
+    test_sonuc("metin_kirp(\"  hi  \") -> 2", rc == 2);
+}
+
+static void test_metin_yer_degistir(void) {
+    /* "abXcdXef" 'X' -> "YY" => "abYYcdYYef" uzunluk 10 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_yer_degistir(\"abXcdXef\", \"X\", \"YY\")); }");
+    test_sonuc("metin_yer_degistir -> 10", rc == 10);
+}
+
+/* === Madde B: Dinamik dizi === */
+
+static void test_dizi_olustur_ekle(void) {
+    /* dizi_olustur + 3 dizi_ekle + dizi_boyut -> 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(8); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_ekle x3 + boyut -> 3", rc == 3);
+}
+
+static void test_dizi_al_topla(void) {
+    /* 10 + 20 + 12 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); dizi_ekle(d, 20); dizi_ekle(d, 12); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_al toplama -> 42", rc == 42);
+}
+
+static void test_dizi_boyut(void) {
+    /* Sadece bos dizi: boyut 0 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("bos dizi boyut -> 0", rc == 0);
+}
+
+static void test_dizi_buyume(void) {
+    /* Kapasite 2 ile basla, 5 eleman ekle (auto-grow) — boyut 5 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(2); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi buyume (5 ekle) -> 5", rc == 5);
+}
+
+static void test_dizi_tam64(void) {
+    /* tam64 dizi — generic instantiation tam64 ile */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); dizi_ekle(d, 200); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi<tam64> generic instan -> 2", rc == 2);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -615,6 +752,24 @@ int main(void) {
     test_bit_degil_double();
     test_bit_kompozisyon();
     test_bit_oncelik_shift_or();
+
+    printf("\n--- Madde A: Metin runtime primitifleri ---\n");
+    test_metin_uzunluk();
+    test_metin_birlestir_uzunluk();
+    test_metin_baslar();
+    test_metin_biter();
+    test_metin_icerir();
+    test_metin_kes_uzunluk();
+    test_metin_kucuk_buyuk();
+    test_metin_kirp();
+    test_metin_yer_degistir();
+
+    printf("\n--- Madde B: Dizi dinamik allocator ---\n");
+    test_dizi_olustur_ekle();
+    test_dizi_al_topla();
+    test_dizi_boyut();
+    test_dizi_buyume();
+    test_dizi_tam64();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

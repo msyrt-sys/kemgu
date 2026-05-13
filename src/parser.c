@@ -988,9 +988,13 @@ static Dugum *parse_desen(Parser *p) {
     }
 
     /* Tanımlayıcı veya yapıcı (TipAdi(alt_desenler)).
-     * Anahtar kelime desenleri (hic, deger) da burada — secimlik<T>
-     * pattern matching icin: 'hic' (None) ve 'deger(v)' (Some(v)). */
-    if (t.tip == TOK_TANIMLAYICI || t.tip == TOK_HIC || t.tip == TOK_DEGER) {
+     * Anahtar kelime desenleri (hic, deger, tamam, hata) da burada —
+     * secimlik<T> ve sonuc<T,E> pattern matching icin:
+     *   secimlik:  'hic' (None), 'deger(v)' (Some(v))
+     *   sonuc:     'tamam(v)' (Ok), 'hata(m)' (Err)
+     * (Kirmizi C: parser fix — runtime primitifler oturumu) */
+    if (t.tip == TOK_TANIMLAYICI || t.tip == TOK_HIC || t.tip == TOK_DEGER ||
+        t.tip == TOK_TAMAM || t.tip == TOK_HATA) {
         const char *ad_baslangic = t.baslangic;
         int ad_uzunluk = t.uzunluk;
         int satir = t.satir;

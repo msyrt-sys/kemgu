@@ -1,0 +1,16 @@
+işlev fizzbuzz(n: tam32) -> tam32 {
+    eğer n % 15 == 0 { ver 15; }
+    değilse eğer n % 3 == 0 { ver 3; }
+    değilse eğer n % 5 == 0 { ver 5; }
+    değilse { ver n; }
+}
+
+işlev main() -> tam32 {
+    değişken i: tam32 = 1;
+    değişken toplam: tam32 = 0;
+    iken i <= 15 {
+        toplam = toplam + fizzbuzz(i);
+        i = i + 1;
+    }
+    ver toplam;
+}

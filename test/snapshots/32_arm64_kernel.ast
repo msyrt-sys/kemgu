@@ -1,0 +1,70 @@
+=== AST ===
+PROGRAM (3 uye)  2:1
+  ISLEV "sayfa_giris"  2:1
+    parametreler (2):
+      PARAMETRE "adres"  2:20
+        TIP_BASIT "tam64"  2:27
+      PARAMETRE "izinler"  2:34
+        TIP_BASIT "tam64"  2:43
+    donus_tipi:
+      TIP_BASIT "tam64"  2:53
+    govde:
+      BLOK (1 deyim)  2:59
+        VER  3:5
+          IKILI |  3:23
+            IKILI <<  3:16
+              TANIMLAYICI "adres"  3:10
+              TAM 12  3:19
+            IKILI &  3:34
+              TANIMLAYICI "izinler"  3:26
+              TAM 4095  3:36
+  ISLEV "sayfa_adresi"  6:1
+    parametreler (1):
+      PARAMETRE "giris"  6:21
+        TIP_BASIT "tam64"  6:28
+    donus_tipi:
+      TIP_BASIT "tam64"  6:38
+    govde:
+      BLOK (1 deyim)  6:44
+        VER  7:5
+          IKILI >>  7:15
+            TANIMLAYICI "giris"  7:9
+            TAM 12  7:18
+  ISLEV "main"  10:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  10:18
+    govde:
+      BLOK (4 deyim)  10:24
+        DEGISKEN "sayfa"  11:5
+          deger:
+            CAGRI  11:35
+              hedef:
+                TANIMLAYICI "sayfa_giris"  11:24
+              argumanlar (2):
+                TAM 1  11:36
+                TAM 7  11:39
+        DEGISKEN "kontrol"  12:5
+          deger:
+            IKILI |  12:46
+              IKILI |  12:35
+                IKILI <<  12:29
+                  TAM 1  12:27
+                  TAM 5  12:32
+                IKILI <<  12:40
+                  TAM 1  12:38
+                  TAM 3  12:43
+              TAM 2  12:48
+        EGER  13:5
+          kosul:
+            IKILI ==  13:19
+              TANIMLAYICI "kontrol"  13:11
+              TAM 42  13:22
+          eger:
+            BLOK (1 deyim)  13:25
+              VER  13:27
+                TAM 42  13:31
+        VER  14:5
+          TAM 1  14:9
+
+=== Toplam parser hata sayisi: 0 ===

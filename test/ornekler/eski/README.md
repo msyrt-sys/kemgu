@@ -75,10 +75,49 @@ Yeşil iş ama büyük (~10-15 fonksiyon × test).
 - heap_dizi_metin.kem (+ .out)
 - icin_dongu.kem (+ .out)
 - kanal_basit.kem (+ .out)
-- kisitli_generic.kem (+ .out)
+- kisitli_generic.kem (+ .out)  ← **PORT EDILDI** (test/ornekler/'da)
 - monomorph.kem (+ .out)
 - ozellik_uygula.kem (+ .out)
 - say.kem (+ .out)
 - secimlik.kem (+ .out)
 - stdlib_karisim.kem (+ .out)
 - tip_alias.kem (+ .out)
+
+## Port denemesi sonucu (test altyapı genişletme)
+
+16 dosyadan **1**'i port edilebildi (`kisitli_generic.kem`), 15'i için
+çekirdek derleyici değişikliği gerekiyor:
+
+| Dosya | Port durumu | Engel |
+|-------|-------------|-------|
+| **kisitli_generic** | ✓ port edildi | Sadece `yazdır`→`yazdir` (1 karakter) |
+| arena_bellek | ✗ | `yazdır_tam` built-in yok |
+| bootstrap | ✗ | `yaz_tam` + `yazdır` built-in yok |
+| dizi_yazdir | ✗ | `yaz_tam`, `yazdır_tam`, `min`, `maks`, `uzunluk` yok |
+| dosya_io | ✗ | `yazdır_satır`, dosya runtime yok |
+| esles_basit | ✗ | `yazdır_tam` yok |
+| fib_yazdir | ✗ | `yaz_tam`, `yazdır_tam` yok |
+| heap_dizi_metin | ✗ | `yaz_tam`, `yazdır_tam` yok |
+| icin_dongu | ✗ | `yazdır_tam` yok |
+| kanal_basit | ✗ | `yazdır_tam` + concurrency syntax yok |
+| monomorph | ✗ | `yazdır_tam` yok |
+| ozellik_uygula | ✗ | `yaz_tam`, `yazdır_tam` yok |
+| say | ✗ | `yazdir_tam`, `yazdır_tam` yok |
+| secimlik | ✗ | `yazdır_tam` + pattern binding scope yok |
+| stdlib_karisim | ✗ | `yazdır_mantıksal`, `yazdır_karakter` yok |
+| tip_alias | ✗ | `tip Ad = ...` syntax yok + `yazdır_tam` yok |
+
+**Port engeli analizi:**
+- Runtime fonksiyonları **var** (`runtime/kdl_runtime.c`'de `kdl_yazdir_tam`,
+  `kdl_yazdir_tam64`, `kdl_yazdir_kesirli`, `kdl_yazdir_mantiksal`,
+  `kdl_yazdir_karakter`, `kdl_yazdir_satir`).
+- Tip kontrol tarafında **built-in olarak kayıtlı değil** (`src/tip_kontrol.c`
+  `tip_kontrol_baslat`'ta `yazdir`, `bellek_al/serbest/kopyala`,
+  `metin_*` var; `yazdir_tam` vs. yok).
+- Bu dosyaları port etmek için: `src/tip_kontrol.c`'ye 6+ yeni
+  `EKLE_BUILTIN` çağrısı + `src/llvm.c`'ye karşılık gelen `declare`
+  ekleme gerek. **Bu test altyapı görevinin kapsamı dışı** (src/
+  dokunulamaz).
+
+**Port edilebilirlik metriği:** %6 (1/16). Geriye kalan 15 dosya için
+3-5 saatlik çekirdek yazıdır_* built-in genişletme görevi yeterli.

@@ -1,0 +1,56 @@
+=== AST ===
+PROGRAM (4 uye)  1:1
+  YAPI  1:1
+  ISLEV "arttir"  3:1
+    parametreler (1):
+      PARAMETRE "s"  3:15
+        TIP_REFERANS (degisken)  3:18
+          TIP_BASIT "Sayac"  3:30
+    govde:
+      BLOK (1 deyim)  3:37
+        ATAMA  4:5
+          hedef:
+            ERISIM "v"  4:6
+              TANIMLAYICI "s"  4:5
+          deger:
+            IKILI +  4:15
+              ERISIM "v"  4:12
+                TANIMLAYICI "s"  4:11
+              TAM 1  4:17
+  ISLEV "oku"  7:1
+    parametreler (1):
+      PARAMETRE "s"  7:12
+        TIP_REFERANS  7:15
+          TIP_BASIT "Sayac"  7:16
+    donus_tipi:
+      TIP_BASIT "tam32"  7:26
+    govde:
+      BLOK (1 deyim)  7:32
+        VER  8:5
+          ERISIM "v"  8:10
+            TANIMLAYICI "s"  8:9
+  ISLEV "main"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:18
+    govde:
+      BLOK (3 deyim)  11:24
+        DEGISKEN "s"  12:5
+          deger:
+            YAPI_OLUSTUR  12:20
+        IFADE_DEYIMI  13:5
+          CAGRI  13:11
+            hedef:
+              TANIMLAYICI "arttir"  13:5
+            argumanlar (1):
+              TEKLI &degisken  13:12
+                TANIMLAYICI "s"  13:24
+        VER  14:5
+          CAGRI  14:12
+            hedef:
+              TANIMLAYICI "oku"  14:9
+            argumanlar (1):
+              TEKLI &  14:13
+                TANIMLAYICI "s"  14:14
+
+=== Toplam parser hata sayisi: 0 ===

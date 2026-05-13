@@ -1,0 +1,14 @@
+özellik Yazdirilabilir {
+    işlev metne(kendin) -> metin;
+}
+
+yapı Sayi { v: tam32; }
+
+uygula Yazdirilabilir için Sayi {
+    işlev metne(kendin) -> metin { ver "sayi"; }
+}
+
+işlev main() -> tam32 {
+    değişken s = Sayi { v: 42 };
+    ver s.v;
+}

@@ -1,0 +1,98 @@
+=== AST ===
+PROGRAM (4 uye)  1:1
+  ISLEV "set_bit"  1:1
+    parametreler (2):
+      PARAMETRE "deger"  1:16
+        TIP_BASIT "tam32"  1:23
+      PARAMETRE "pozisyon"  1:30
+        TIP_BASIT "tam32"  1:40
+    donus_tipi:
+      TIP_BASIT "tam32"  1:50
+    govde:
+      BLOK (1 deyim)  1:56
+        VER  2:5
+          IKILI |  2:15
+            TANIMLAYICI "deger"  2:9
+            IKILI <<  2:20
+              TAM 1  2:18
+              TANIMLAYICI "pozisyon"  2:23
+  ISLEV "temizle_bit"  5:1
+    parametreler (2):
+      PARAMETRE "deger"  5:20
+        TIP_BASIT "tam32"  5:27
+      PARAMETRE "pozisyon"  5:34
+        TIP_BASIT "tam32"  5:44
+    donus_tipi:
+      TIP_BASIT "tam32"  5:54
+    govde:
+      BLOK (1 deyim)  5:60
+        VER  6:5
+          IKILI &  6:15
+            TANIMLAYICI "deger"  6:9
+            TEKLI ~  6:17
+              IKILI <<  6:21
+                TAM 1  6:19
+                TANIMLAYICI "pozisyon"  6:24
+  ISLEV "test_bit"  9:1
+    parametreler (2):
+      PARAMETRE "deger"  9:17
+        TIP_BASIT "tam32"  9:24
+      PARAMETRE "pozisyon"  9:31
+        TIP_BASIT "tam32"  9:41
+    donus_tipi:
+      TIP_BASIT "mantıksal"  9:51
+    govde:
+      BLOK (1 deyim)  9:62
+        VER  10:5
+          IKILI &  10:29
+            IKILI >>  10:16
+              TANIMLAYICI "deger"  10:10
+              TANIMLAYICI "pozisyon"  10:19
+            IKILI ==  10:33
+              TAM 1  10:31
+              TAM 1  10:36
+  ISLEV "main"  13:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  13:18
+    govde:
+      BLOK (5 deyim)  13:24
+        DEGISKEN "b"  14:5
+          tip:
+            TIP_BASIT "tam32"  14:19
+          deger:
+            TAM 0  14:27
+        ATAMA  15:5
+          hedef:
+            TANIMLAYICI "b"  15:5
+          deger:
+            CAGRI  15:16
+              hedef:
+                TANIMLAYICI "set_bit"  15:9
+              argumanlar (2):
+                TANIMLAYICI "b"  15:17
+                TAM 5  15:20
+        ATAMA  16:5
+          hedef:
+            TANIMLAYICI "b"  16:5
+          deger:
+            CAGRI  16:16
+              hedef:
+                TANIMLAYICI "set_bit"  16:9
+              argumanlar (2):
+                TANIMLAYICI "b"  16:17
+                TAM 3  16:20
+        ATAMA  17:5
+          hedef:
+            TANIMLAYICI "b"  17:5
+          deger:
+            CAGRI  17:16
+              hedef:
+                TANIMLAYICI "set_bit"  17:9
+              argumanlar (2):
+                TANIMLAYICI "b"  17:17
+                TAM 1  17:20
+        VER  19:5
+          TANIMLAYICI "b"  19:9
+
+=== Toplam parser hata sayisi: 0 ===
