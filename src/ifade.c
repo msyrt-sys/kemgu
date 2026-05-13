@@ -381,26 +381,34 @@ static Dugum *parse_birincil(Parser *p) {
 
 /* === Onek operatorler (sag birlesme) === */
 
+/* Forward declare for onek -> oncelik(SONEK_BACAK) cagri (Kirmizi H) */
+static Dugum *parse_oncelik(Parser *p, int min_oncelik);
+
 static Dugum *parse_onek(Parser *p) {
     Token t = parser_simdiki(p);
     int satir = t.satir;
     int sutun = t.sutun;
 
+    /* Kirmizi H: Tekli operator operandları için, sonek operatörleri
+     * (çağrı, indeks, erişim, yol, olarak) operandla birlikte yakalansın.
+     * Yani 'değil X(args)' = 'değil (X(args))', '-arr[i]' = '-(arr[i])'.
+     * parse_oncelik(p, ONC_ONEK) sonek (12) precedence'ı işlerken
+     * ikili operatörleri (~ ONC_ONEK ve altı) işlemez. */
     switch (t.tip) {
         case TOK_EKSI: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_NEG, operand, satir, sutun);
         }
         case TOK_DEGIL: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_DEGIL, operand, satir, sutun);
         }
         case TOK_DEGIL_BIT: {
             /* ~x bitwise NOT */
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_BIT_DEGIL, operand, satir, sutun);
         }
         case TOK_VE_BIT: {
@@ -411,12 +419,12 @@ static Dugum *parse_onek(Parser *p) {
                 parser_ilerle(p);
                 op = OP_REF_DEGISKEN;
             }
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, op, operand, satir, sutun);
         }
         case TOK_YILDIZ: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_DEREFERANS, operand, satir, sutun);
         }
         default:

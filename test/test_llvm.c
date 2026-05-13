@@ -640,7 +640,7 @@ static void test_dosya_oku_yaz_zincir(void) {
 }
 
 static void test_dosya_yeniden_adlandir(void) {
-    /* 'değil X(args)' precedence H'de cozulecek; suanlik !=true ile kacin */
+    /* 'değil X(args)' H fix sonrasi direkt kullanilabilir */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "e\xc4\x9f""er dosya_var_mi(\"build/test_g3.txt\") { "
@@ -653,7 +653,7 @@ static void test_dosya_yeniden_adlandir(void) {
         "dosya_yeniden_adlandir(\"build/test_g3.txt\", \"build/test_g3b.txt\"); "
         "de\xc4\x9fi\xc5\x9fken oldu_mu: mant\xc4\xb1ksal = "
         "dosya_var_mi(\"build/test_g3b.txt\") "
-        "ve dosya_var_mi(\"build/test_g3.txt\") == yanl\xc4\xb1\xc5\x9f; "
+        "ve de\xc4\x9fil dosya_var_mi(\"build/test_g3.txt\"); "
         "dosya_sil(\"build/test_g3b.txt\"); "
         "e\xc4\x9f""er oldu_mu { ver 42; } "
         "ver 0; }");
@@ -669,6 +669,59 @@ static void test_dosya_sil_basarili(void) {
         "de\xc4\x9fi\xc5\x9fken silindi: mant\xc4\xb1ksal = dosya_sil(\"build/test_g4.txt\"); "
         "e\xc4\x9f""er silindi { ver 42; } ver 0; }");
     test_sonuc("dosya_sil basarili -> 42", rc == 42);
+}
+
+/* === 'değil' precedence (Kirmizi H) === */
+
+static void test_h_degil_cagri(void) {
+    /* 'değil X()' parantez gerektirmemeli — H sonrasi */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iyi() -> mant\xc4\xb1ksal { ver yanl\xc4\xb1\xc5\x9f; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er de\xc4\x9fil iyi() { ver 42; } "
+        "ver 0; }");
+    test_sonuc("'değil iyi()' = 'değil (iyi())' -> 42", rc == 42);
+}
+
+static void test_h_negatif_cagri(void) {
+    /* '-X()' parantez gerektirmemeli — H sonrasi */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kirk_iki() -> tam32 { ver 42; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken neg: tam32 = -kirk_iki(); "
+        "ver neg + 84; }");
+    test_sonuc("'-kirk_iki()' = '-(kirk_iki())' = -42+84 -> 42", rc == 42);
+}
+
+static void test_h_degil_kompozit(void) {
+    /* değil X() ve Y() — her iki yan dogru bicimde parse */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iyi() -> mant\xc4\xb1ksal { ver do\xc4\x9fru; } "
+        "i\xc5\x9flev kotu() -> mant\xc4\xb1ksal { ver yanl\xc4\xb1\xc5\x9f; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er de\xc4\x9fil kotu() ve iyi() { ver 42; } "
+        "ver 0; }");
+    test_sonuc("'değil kotu() ve iyi()' = '(değil kotu()) ve iyi()' -> 42", rc == 42);
+}
+
+static void test_h_cifte_degil(void) {
+    /* değil değil X() — double NOT */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iyi() -> mant\xc4\xb1ksal { ver do\xc4\x9fru; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er de\xc4\x9fil de\xc4\x9fil iyi() { ver 42; } "
+        "ver 0; }");
+    test_sonuc("'değil değil iyi()' double NOT -> 42", rc == 42);
+}
+
+static void test_h_eksi_index(void) {
+    /* -arr[i] = -(arr[i]) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [100, 200, 300]; "
+        "de\xc4\x9fi\xc5\x9fken negd: tam32 = -xs[0]; "
+        "ver negd + 142; }");
+    test_sonuc("'-xs[0]' = '-(xs[0])' = -100+142 -> 42", rc == 42);
 }
 
 /* === Bit Operatorleri Testleri (ADIM 30) === */
@@ -870,6 +923,13 @@ int main(void) {
     test_dosya_oku_yaz_zincir();
     test_dosya_yeniden_adlandir();
     test_dosya_sil_basarili();
+
+    printf("\n--- Kirmizi H: 'değil' precedence + tekli operator sonek ---\n");
+    test_h_degil_cagri();
+    test_h_negatif_cagri();
+    test_h_degil_kompozit();
+    test_h_cifte_degil();
+    test_h_eksi_index();
 
     printf("\n--- ADIM 30: Bit operatorleri ---\n");
     test_bit_ve_temel();
