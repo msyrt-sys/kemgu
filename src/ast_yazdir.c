@@ -303,6 +303,24 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             ast_yazdir_indent(d->veri.tip_secimlik.ic_tip, c, derinlik + 1);
             break;
 
+        case DUGUM_TIP_TEKKEZ:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.tip_tekkez.ic_tip, c, derinlik + 1);
+            break;
+
+        case DUGUM_KULLAN_IFADE:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.kullan_ifade.operand, c, derinlik + 1);
+            break;
+
+        case DUGUM_IMHA_IFADE:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.imha_ifade.operand, c, derinlik + 1);
+            break;
+
         /* === Hata === */
 
         case DUGUM_HATA:

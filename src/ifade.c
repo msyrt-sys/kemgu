@@ -324,6 +324,36 @@ static Dugum *parse_birincil(Parser *p) {
         case TOK_VEYA_BIT:
             return parse_lambda(p);
 
+        /* === Linear Types Spec V1: kullan(e) extract === */
+        case TOK_KULLAN: {
+            int satir = t.satir;
+            int sutun = t.sutun;
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P130",
+                         "kullan(...) icin '(' bekleniyor");
+            Dugum *operand = parse_ifade(p);
+            parser_bekle(p, TOK_SAG_PAREN, "P131",
+                         "kullan(...) icin ')' bekleniyor");
+            d = dugum_olustur(p->arena, DUGUM_KULLAN_IFADE, satir, sutun);
+            if (d) d->veri.kullan_ifade.operand = operand;
+            return d;
+        }
+
+        /* === Linear Types Spec V1: imha(e) dispose === */
+        case TOK_IMHA: {
+            int satir = t.satir;
+            int sutun = t.sutun;
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P132",
+                         "imha(...) icin '(' bekleniyor");
+            Dugum *operand = parse_ifade(p);
+            parser_bekle(p, TOK_SAG_PAREN, "P133",
+                         "imha(...) icin ')' bekleniyor");
+            d = dugum_olustur(p->arena, DUGUM_IMHA_IFADE, satir, sutun);
+            if (d) d->veri.imha_ifade.operand = operand;
+            return d;
+        }
+
         default:
             parser_hata(p, t, "P010", "ifade bekleniyor", NULL);
             d = dugum_hata(p->arena, t.satir, t.sutun);
@@ -539,6 +569,19 @@ Dugum *parse_tip(Parser *p) {
         Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_POINTER,
                                  t.satir, t.sutun);
         if (d) d->veri.tip_pointer.hedef_tip = hedef;
+        return d;
+    }
+
+    /* === tekkez<T> — Linear Types Spec V1 === */
+    if (t.tip == TOK_TEKKEZ) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P330", "tekkez<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P331", "tekkez<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_TEKKEZ,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_tekkez.ic_tip = ic;
         return d;
     }
 

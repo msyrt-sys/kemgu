@@ -41,7 +41,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_stdlib_check test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check test_tumu
 
 # === Ana hedef ===
 
@@ -153,6 +153,18 @@ $(BUILD)/test_lsp$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
 $(BUILD)/test_llvm$(EXE): $(TESTDIR)/test_llvm.c | $(BUILD)
 	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $<
 
+# === Linear Types Spec V1 testi (Clang64 + ASan — full pipeline) ===
+
+$(BUILD)/test_linear$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                            $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                            $(TESTDIR)/test_linear.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+
 # === Genel obje kurallari ===
 
 $(BUILD)/%.o: $(SRCDIR)/%.c | $(BUILD)
@@ -209,6 +221,9 @@ calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
 calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE)
 	./$(BUILD)/test_llvm$(EXE)
 
+calistir_linear_test: $(BUILD)/test_linear$(EXE)
+	./$(BUILD)/test_linear$(EXE)
+
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
 	@echo "stdlib tip kontrolu..."
@@ -217,7 +232,7 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:

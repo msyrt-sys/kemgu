@@ -61,6 +61,20 @@ const Sembol *sembol_bul(const Scope *s,
     return NULL;
 }
 
+Sembol *sembol_bul_yazilabilir(Scope *s,
+                                const char *ad, int ad_uzunluk) {
+    while (s) {
+        for (SembolLink *l = s->bas; l; l = l->sonraki) {
+            if (l->sembol.ad_uzunluk == ad_uzunluk &&
+                memcmp(l->sembol.ad, ad, (size_t)ad_uzunluk) == 0) {
+                return &l->sembol;
+            }
+        }
+        s = s->parent;
+    }
+    return NULL;
+}
+
 const Sembol *sembol_yapi_alani(const Sembol *yapi_sem,
                                  const char *ad, int ad_uzunluk) {
     if (!yapi_sem || yapi_sem->kategori != SEMBOL_YAPI) return NULL;

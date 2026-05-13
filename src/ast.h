@@ -60,6 +60,8 @@ typedef enum {
     DUGUM_YAPI_OLUSTUR,
     DUGUM_DIZI_OLUSTUR,
     DUGUM_ALAN_ATAMA,      /* yapi_olustur icinde "ad: ifade" */
+    DUGUM_KULLAN_IFADE,    /* kullan(e) — Linear Types Spec V1 (extract) */
+    DUGUM_IMHA_IFADE,      /* imha(e)   — Linear Types Spec V1 (dispose) */
 
     /* Literaller */
     DUGUM_TAM,
@@ -79,6 +81,7 @@ typedef enum {
     DUGUM_TIP_SONUC,       /* sonuc<T,H> */
     DUGUM_TIP_ISLEV,       /* islev(...) -> T */
     DUGUM_TIP_KULLANICI,   /* modul::Tip<T1,T2> */
+    DUGUM_TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -394,6 +397,18 @@ struct Dugum {
             Dugum **tip_arg;       /* generic argumanlar (tip listesi) */
             int tip_arg_sayi;
         } tip_kullanici;
+
+        struct {
+            Dugum *ic_tip;
+        } tip_tekkez;              /* tekkez<T> — Linear Types Spec V1 */
+
+        struct {
+            Dugum *operand;
+        } kullan_ifade;            /* kullan(e) — extract */
+
+        struct {
+            Dugum *operand;
+        } imha_ifade;              /* imha(e) — dispose */
 
         /* === Desenler === */
 

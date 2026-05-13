@@ -53,6 +53,7 @@ typedef enum {
     TIP_SONUC,       /* sonuc<T,H> */
     TIP_ISLEV,       /* islev(T1, T2) -> T */
     TIP_YAPI,        /* yapi X veya X<T1, T2> */
+    TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
 
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
@@ -109,8 +110,16 @@ struct TipBilgisi {
             const char *ad;
             int ad_uzunluk;
         } generic_param;
+
+        struct {
+            TipBilgisi *ic;
+        } tekkez;                 /* Linear Types Spec V1 */
     } veri;
 };
+
+/* === Linear Types Spec V1: lineer mi? ===
+ * tekkez<T> ve tekkez<...> sarilan herhangi bir tip lineer sayilir. */
+int tip_lineer_mi(const TipBilgisi *t);
 
 /* === Olusturucular === */
 
@@ -125,6 +134,7 @@ TipBilgisi *tip_olustur_islev(Arena *a, TipBilgisi **params, int param_sayi,
 TipBilgisi *tip_olustur_yapi(Arena *a, const char *ad, int ad_uzunluk,
                               TipBilgisi **tip_arg, int tip_arg_sayi);
 TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk);
+TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
 
 /* === Iliskiler === */
 

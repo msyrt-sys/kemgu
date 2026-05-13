@@ -54,6 +54,12 @@ typedef struct TipKontrol {
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;
+    /* === Linear Types Spec V1 takibi === */
+    int scope_seviyesi;            /* mevcut scope derinligi (lineer omur kontrolu) */
+    int lambda_govdesi_icinde;     /* >0 = lambda govdesi visit ediyoruz */
+    int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
+                                      (closure-itself-linear icin) */
+    Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
 } TipKontrol;
 
 void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
