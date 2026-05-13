@@ -960,6 +960,93 @@ static void test_deyim_esles_blok_govde(void) {
     arena_serbest(a);
 }
 
+/* === Sonuc<T,H> pattern testleri (Kirmizi queue C) === */
+
+static void test_deyim_esles_tamam_yapici(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles r { tamam(v) => v; hata(m) => 0; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { "
+        "tamam(v) => v; "
+        "hata(m) => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.ad_uzunluk == 5
+          && memcmp(d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.ad,
+                    "tamam", 5) == 0
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.sayi == 1
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[1]->veri.esles_kolu.desen->veri.desen_yapici.ad_uzunluk == 4
+          && memcmp(d->veri.esles.kollar[1]->veri.esles_kolu.desen->veri.desen_yapici.ad,
+                    "hata", 4) == 0;
+    test_sonuc("esles tamam(v)/hata(m) yapici desen", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_tamam_jokerli(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles r { tamam(_) => 1; _ => 0; }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { "
+        "tamam(_) => 1; "
+        "_ => 0; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->tip == DUGUM_DESEN_YAPICI
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.sayi == 1
+          && d->veri.esles.kollar[0]->veri.esles_kolu.desen->veri.desen_yapici.alt_desenler[0]->tip == DUGUM_DESEN_JOKER;
+    test_sonuc("esles tamam(_) iç desen joker", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_hata_yapici_govde_blok(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "esles r { hata(m) => { ver 1; } tamam(v) => { ver 2; } }" */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { "
+        "hata(m) => { ver 1; } "
+        "tamam(v) => { ver 2; } }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 2
+          && d->veri.esles.kollar[0]->veri.esles_kolu.govde->tip == DUGUM_BLOK
+          && d->veri.esles.kollar[1]->veri.esles_kolu.govde->tip == DUGUM_BLOK;
+    test_sonuc("esles hata(m)/tamam(v) blok govdeli", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_tamam_tek(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* Sadece tamam pattern (hata patterni yok) */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { tamam(x) => x; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 1;
+    test_sonuc("esles sadece tamam(x) kolu", ok);
+    arena_serbest(a);
+}
+
+static void test_deyim_esles_hata_tek(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* Sadece hata pattern */
+    Dugum *d = deyim_parse(
+        "e\xc5\x9fle\xc5\x9f r { hata(m) => m; }", a, &hata);
+    int ok = d && hata == 0
+          && d->tip == DUGUM_ESLES
+          && d->veri.esles.kol_sayi == 1;
+    test_sonuc("esles sadece hata(m) kolu", ok);
+    arena_serbest(a);
+}
+
 static void test_deyim_guvensiz_basit(void) {
     Arena *a = arena_olustur(0);
     int hata = -1;
@@ -1555,6 +1642,13 @@ int main(void) {
     test_deyim_esles_literal();
     test_deyim_esles_yapici();
     test_deyim_esles_blok_govde();
+
+    printf("\n--- Deyim: Esles Sonuc<T,H> (Kirmizi C) ---\n");
+    test_deyim_esles_tamam_yapici();
+    test_deyim_esles_tamam_jokerli();
+    test_deyim_esles_hata_yapici_govde_blok();
+    test_deyim_esles_tamam_tek();
+    test_deyim_esles_hata_tek();
 
     printf("\n--- Deyim: Guvensiz ---\n");
     test_deyim_guvensiz_basit();
