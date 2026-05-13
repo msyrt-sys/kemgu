@@ -1,0 +1,20 @@
+// B.3 + Constraint validation testi: kisitlamali generic (T: Bound1 + Bound2)
+// Ozellikler global'de tanimli olmali; aksi takdirde T029 hatasi.
+// Port: yazdır → yazdir (built-in)
+
+özellik Yazdırılabilir { işlev yazdir_kendini() -> tam32; }
+özellik Klonlanabilir  { işlev klonla() -> tam32; }
+
+yapı Kutu<T: Yazdırılabilir> {
+    deger: T;
+}
+
+yapı Cift<T: Yazdırılabilir + Klonlanabilir, U> {
+    ilk: T;
+    ikinci: U;
+}
+
+işlev main() -> tam32 {
+    yazdir("kisitlamali generic + constraint validation OK");
+    ver 0;
+}

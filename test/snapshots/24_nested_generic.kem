@@ -1,0 +1,15 @@
+yapı Kutu<T> { icerik: T; }
+
+işlev olustur<T>(x: T) -> Kutu<T> {
+    ver Kutu { icerik: x };
+}
+
+işlev al<T>(k: Kutu<T>) -> T {
+    ver k.icerik;
+}
+
+işlev main() -> tam32 {
+    değişken icteki = olustur(42);
+    değişken dis = olustur(icteki);
+    ver al(al(dis));
+}

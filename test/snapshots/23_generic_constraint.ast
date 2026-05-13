@@ -1,0 +1,36 @@
+=== AST ===
+PROGRAM (5 uye)  1:1
+  OZELLIK  1:1
+  YAPI  5:1
+  UYGULA  7:1
+  ISLEV "iki_kat"  13:1
+    parametreler (1):
+      PARAMETRE "x"  13:33
+        TIP_BASIT "T"  13:36
+    donus_tipi:
+      TIP_BASIT "tam32"  13:42
+    govde:
+      BLOK (1 deyim)  13:48
+        VER  14:5
+          CAGRI  14:24
+            hedef:
+              ERISIM "topla_iki_kat"  14:10
+                TANIMLAYICI "x"  14:9
+            argumanlar (0):
+  ISLEV "main"  17:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  17:18
+    govde:
+      BLOK (2 deyim)  17:24
+        DEGISKEN "s"  18:5
+          deger:
+            YAPI_OLUSTUR  18:20
+        VER  19:5
+          CAGRI  19:16
+            hedef:
+              TANIMLAYICI "iki_kat"  19:9
+            argumanlar (1):
+              TANIMLAYICI "s"  19:17
+
+=== Toplam parser hata sayisi: 0 ===

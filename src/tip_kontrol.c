@@ -58,6 +58,81 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("bellek_kopyala", 14, p, 3, tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* === Madde A: Metin runtime primitifleri (kdl_metin_*) === */
+
+    /* metin_uzunluk(metin) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_uzunluk", 13, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* metin_birlestir(metin, metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_birlestir", 15, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_kes(metin, tam32, tam32) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        p[2] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("metin_kes", 9, p, 3, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_kucuk(metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kucuk", 11, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_buyuk(metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_buyuk", 11, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_icerir(metin, metin) -> mantiksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_icerir", 12, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_baslar(metin, metin) -> mantiksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_baslar", 12, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_biter(metin, metin) -> mantiksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_biter", 11, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* metin_kirp(metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kirp", 10, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* metin_yer_degistir(metin, metin, metin) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        p[2] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_yer_degistir", 18, p, 3,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
@@ -707,6 +782,100 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return tip_olustur_sonuc(tk->arena, deg, h);
                 }
             }
+            /* === Madde B: Dinamik dizi intrinsicleri === */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const char *ad_b = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int uz_b = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+
+                /* dizi_olustur<T>(N: tam64) -> Dizi<T>
+                 * T context'ten (beklenen tip Dizi<T> ise) gelir;
+                 * yoksa Dizi<tam32> varsayilir (v1 default). */
+                if (uz_b == 12 && memcmp(ad_b, "dizi_olustur", 12) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_olustur tam olarak bir arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *kap = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[0],
+                        tip_olustur_basit(tk->arena, TIP_TAM64));
+                    if (kap->kategori != TIP_HATA &&
+                        kap->kategori != TIP_TAM64 &&
+                        kap->kategori != TIP_TAM32) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T028",
+                            "dizi_olustur kapasite tamsayi olmali");
+                    }
+                    /* T inferred: beklenen ya Dizi<T> ya da default tam32 */
+                    TipBilgisi *eleman = NULL;
+                    /* Beklenen TipKontrol'un cagiranindan gelmiyor doğrudan;
+                     * beklenen Dizi<T> ise context'ten alinabilir — su an
+                     * default tam32 (v1; v2'de degisken annot ile baglar) */
+                    eleman = tip_olustur_basit(tk->arena, TIP_TAM32);
+                    return tip_olustur_dizi(tk->arena, eleman);
+                }
+
+                /* dizi_ekle<T>(d: Dizi<T>, e: T) -> bos */
+                if (uz_b == 9 && memcmp(ad_b, "dizi_ekle", 9) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_ekle iki arguman gerektirir (d, e)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_ekle ilk argumani Dizi<T> olmali");
+                    }
+                    TipBilgisi *bek = (dt->kategori == TIP_DIZI)
+                        ? dt->veri.dizi.eleman : NULL;
+                    TipBilgisi *et = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1], bek);
+                    if (bek && !tip_esit(et, bek) &&
+                        et->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T001",
+                            "dizi_ekle eleman tipi Dizi'nin eleman tipinden farkli");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_BOS);
+                }
+
+                /* dizi_al<T>(d: Dizi<T>, i: tam32) -> T */
+                if (uz_b == 7 && memcmp(ad_b, "dizi_al", 7) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_al iki arguman gerektirir (d, i)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *idx = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (!tip_tamsayi_mi(idx) && idx->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
+                            "dizi_al indeks tamsayi olmali");
+                    }
+                    if (dt->kategori == TIP_DIZI) return dt->veri.dizi.eleman;
+                    return t_hata(tk);
+                }
+
+                /* dizi_boyut(d: Dizi<T>) -> tam32 */
+                if (uz_b == 10 && memcmp(ad_b, "dizi_boyut", 10) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_boyut bir arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_boyut argumani Dizi<T> olmali");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_TAM32);
+                }
+            }
+
             /* Linear Types Spec V1 producer intrinsic: tekkez_yarat(e) */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
@@ -1164,6 +1333,25 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             }
             return tip_olustur_dizi(tk->arena,
                                     (TipBilgisi *)eleman_t);
+        }
+
+        case DUGUM_CAGRI: {
+            /* Madde B: dizi_olustur<T>(N) beklenen Dizi<T> ise T'yi kullan.
+             * Context-driven instantiation. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 12 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dizi_olustur", 12) == 0 &&
+                beklenen->kategori == TIP_DIZI &&
+                d->veri.cagri.sayi == 1) {
+                /* Kapasiteyi tam64 olarak kontrol et */
+                tip_belirle_beklenen(tk, d->veri.cagri.argumanlar[0],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                return tip_olustur_dizi(tk->arena,
+                    (TipBilgisi *)beklenen->veri.dizi.eleman);
+            }
+            break;
         }
 
         default:

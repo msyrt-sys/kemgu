@@ -1,0 +1,25 @@
+// Kompleks program: yapi + generic + linear + bit op + esles
+yapı Sayfa { bayraklar: tam32; }
+
+işlev olustur_sayfa(flags: tam32) -> Sayfa {
+    ver Sayfa { bayraklar: flags };
+}
+
+işlev yaz_bit(s: Sayfa, pos: tam32) -> Sayfa {
+    ver Sayfa { bayraklar: s.bayraklar | (1 << pos) };
+}
+
+işlev test_bit(s: Sayfa, pos: tam32) -> mantıksal {
+    ver (s.bayraklar >> pos) & 1 == 1;
+}
+
+işlev main() -> tam32 {
+    değişken s = olustur_sayfa(0);
+    s = yaz_bit(s, 1);
+    s = yaz_bit(s, 3);
+    s = yaz_bit(s, 5);
+    eğer test_bit(s, 5) {
+        ver s.bayraklar;  // 42
+    }
+    ver 0;
+}

@@ -1278,6 +1278,51 @@ static void test_pattern_binding(void) {
     arena_serbest(a);
 }
 
+/* P-4b: sonuc pattern matching — tamam(v) bind */
+static void test_pattern_sonuc_tamam_bind(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  tamam(v) => { ver v; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern sonuc: tamam(v)/hata(m) bind", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4c: sonuc pattern — hata icinden metin v bind */
+static void test_pattern_sonuc_hata_bind(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  hata(m) => { ver m; } "
+        "  tamam(v) => { ver \"\"; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("pattern sonuc: hata(m) -> m metin bind", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4d: tamam yapici alti tanimlayici desen */
+static void test_pattern_sonuc_jokerli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  tamam(v) => { ver v; } "
+        "  _ => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern sonuc: tamam(v) + _", h == 0);
+    arena_serbest(a);
+}
+
 /* P-4: tamam(v), hata(e) sonuç konstrüktörleri */
 static void test_sonuc_konstrüktörler(void) {
     Arena *a = arena_olustur(0);
@@ -1286,6 +1331,143 @@ static void test_sonuc_konstrüktörler(void) {
         "{ ver tamam(42); }",
         a);
     test_sonuc("tamam(42) -> sonuç<tam32, metin>", h == 0);
+    arena_serbest(a);
+}
+
+/* C-1: sonuc<T,E> uzerinde tamam(v) ve hata(m) pattern matching */
+static void test_sonuc_pattern_matching(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev cozumle(r: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("sonuç pattern (tamam(v)+hata(m)) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* C-2: tamam(v) — v gercekten T tipinde mi (binding gecerli) */
+static void test_sonuc_tamam_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat_basari(r: sonu\xc3\xa7<tam32, metin>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v * 2; } "
+        "  hata(m) => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("sonuç tamam(v) binding v: tam32", h == 0);
+    arena_serbest(a);
+}
+
+/* C-3: hata(m) — m gercekten E tipinde mi */
+static void test_sonuc_hata_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev mesaj_uzunluk(r: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver \"yok\"; } "
+        "  hata(m) => { ver m; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("sonuç hata(m) binding m: metin", h == 0);
+    arena_serbest(a);
+}
+
+/* C-4: joker (_) alt-desen — tamam(_) kabul edilir */
+static void test_sonuc_pattern_joker(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev basari_mi(r: sonu\xc3\xa7<tam32, metin>) -> mant\xc4\xb1ksal { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(_) => { ver do\xc4\x9fru; } "
+        "  hata(_) => { ver yanl\xc4\xb1\xc5\x9f; } "
+        "} "
+        "ver yanl\xc4\xb1\xc5\x9f; }",
+        a);
+    test_sonuc("sonuç tamam(_) / hata(_) joker alt-desen", h == 0);
+    arena_serbest(a);
+}
+
+/* C-5: yanlis tip binding — tamam(v)'de v'yi yanlis tip operasyonda kullan */
+static void test_sonuc_pattern_yanlis_tip(void) {
+    Arena *a = arena_olustur(0);
+    /* tamam(v) -> v tam32; metin operasyonu T001/T003 verir */
+    int h = program_kontrol(
+        "i\xc5\x9flev kotu(r: sonu\xc3\xa7<tam32, metin>) -> metin { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "    /* v tam32, metin bekleniyor — T020 */
+        "  hata(m) => { ver m; } "
+        "} "
+        "ver \"\"; }",
+        a);
+    test_sonuc("sonuç tamam(v) yanlis tip (v tam32, dönüş metin) -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* Madde B: dizi_olustur / dizi_ekle / dizi_al tip kontrolu */
+static void test_dizi_olustur_temel(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(8); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_olustur(8) -> Dizi<tam32>", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_ekle_tip_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 42); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_ekle(d, 42) tam32 uyumlu", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_ekle_tip_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* metin literal -> Dizi<tam32>.ekle hata vermeli */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, \"hata\"); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_ekle metin -> tam32 dizi: hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_al_donus(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 42); "
+        "ver dizi_al(d, 0); }",
+        a);
+    test_sonuc("dizi_al donus tam32", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_olustur_tam64(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_olustur context Dizi<tam64> instan", h == 0);
     arena_serbest(a);
 }
 
@@ -1546,7 +1728,22 @@ int main(void) {
     test_hic_secimlik();
     test_deger_konstrüktör();
     test_pattern_binding();
+    test_pattern_sonuc_tamam_bind();
+    test_pattern_sonuc_hata_bind();
+    test_pattern_sonuc_jokerli();
+    test_dizi_olustur_temel();
+    test_dizi_ekle_tip_uyumlu();
+    test_dizi_ekle_tip_uyumsuz();
+    test_dizi_al_donus();
+    test_dizi_olustur_tam64();
     test_sonuc_konstrüktörler();
+
+    printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");
+    test_sonuc_pattern_matching();
+    test_sonuc_tamam_binding();
+    test_sonuc_hata_binding();
+    test_sonuc_pattern_joker();
+    test_sonuc_pattern_yanlis_tip();
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
