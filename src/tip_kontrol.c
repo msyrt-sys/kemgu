@@ -195,6 +195,37 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
     }
 
+    /* === Adim 1 (OTP CLI): CLI args + OTP yardimcilari === */
+
+    /* arg_sayi() -> tam32 */
+    EKLE_BUILTIN("arg_sayi", 8, NULL, 0, tip_olustur_basit(a, TIP_TAM32));
+
+    /* arg_al(i: tam32) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("arg_al", 6, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* otp_anahtar_uret(yol: metin, boyut: tam32) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("otp_anahtar_uret", 16, p, 2,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* otp_xor_uygula(msg, anahtar, cikti) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        p[2] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("otp_xor_uygula", 14, p, 3,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;

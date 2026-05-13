@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test test_tumu
 
 # === Ana hedef ===
 
@@ -211,6 +211,15 @@ $(BUILD)/test_runtime_link$(EXE): $(BUILD)/kdl_runtime.o \
                                    $(TESTDIR)/test_runtime_link.c | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $^
 
+# === OTP CLI Integration testi (Adim 1) ===
+# Test_otp_cli.c kemgu.exe + kdl_runtime.o + test/ornekler/otp_cli.kem'i kullanir.
+$(BUILD)/test_otp_cli$(EXE): $(TESTDIR)/test_otp_cli.c | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $<
+
+# === Dizi performans bench (Adim 6) ===
+$(BUILD)/test_dizi_perf$(EXE): $(TESTDIR)/test_dizi_perf.c | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $<
+
 
 # === Genel obje kurallari ===
 
@@ -280,6 +289,12 @@ calistir_fuzz_test: $(BUILD)/test_fuzz$(EXE)
 calistir_runtime_link_test: $(BUILD)/test_runtime_link$(EXE)
 	./$(BUILD)/test_runtime_link$(EXE)
 
+calistir_otp_cli_test: $(BUILD)/test_otp_cli$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	./$(BUILD)/test_otp_cli$(EXE)
+
+calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	./$(BUILD)/test_dizi_perf$(EXE)
+
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
 # Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
 # birlestirilip --check'ten gecirilir (tek dosya derleme, import yok).
@@ -319,7 +334,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test calistir_otp_cli_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:

@@ -1101,6 +1101,27 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { rr, "i32" };
                 return s;
             }
+            /* Adim 1: CLI args + OTP yardimcilari */
+            else if (cagri_adi_uz == 8 &&
+                     memcmp(cagri_adi, "arg_sayi", 8) == 0) {
+                cagri_adi = "kdl_arg_sayi"; cagri_adi_uz = 12;
+                kdl_donus = "i32";
+            }
+            else if (cagri_adi_uz == 6 &&
+                     memcmp(cagri_adi, "arg_al", 6) == 0) {
+                cagri_adi = "kdl_arg_al"; cagri_adi_uz = 10;
+                kdl_donus = "ptr";
+            }
+            else if (cagri_adi_uz == 16 &&
+                     memcmp(cagri_adi, "otp_anahtar_uret", 16) == 0) {
+                cagri_adi = "kdl_otp_anahtar_uret"; cagri_adi_uz = 20;
+                kdl_donus = "i32";
+            }
+            else if (cagri_adi_uz == 14 &&
+                     memcmp(cagri_adi, "otp_xor_uygula", 14) == 0) {
+                cagri_adi = "kdl_otp_xor_uygula"; cagri_adi_uz = 18;
+                kdl_donus = "i32";
+            }
 
             const char *donus = kdl_donus ? kdl_donus
                               : (ik ? ik->donus_tip : (beklenen ? beklenen : "i32"));
@@ -1637,7 +1658,13 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
     fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
     fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_dizi_boyut(ptr)\n\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+
+    /* Adim 1: CLI args + OTP */
+    fputs("declare i32 @kdl_arg_sayi()\n", out);
+    fputs("declare ptr @kdl_arg_al(i32)\n", out);
+    fputs("declare i32 @kdl_otp_anahtar_uret(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_otp_xor_uygula(ptr, ptr, ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
