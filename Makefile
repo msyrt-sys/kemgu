@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test test_tumu
 
 # === Ana hedef ===
 
@@ -199,6 +199,18 @@ $(BUILD)/test_fuzz$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(TESTDIR)/test_fuzz.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === KDL Runtime (ADIM 33 — compile + link entegrasyonu) ===
+# runtime/kdl_runtime.c bagimsiz olarak derlenir, sonra test_runtime_link.c
+# ile linkletilir. Mevcut LLVM pipeline icin:
+#   clang prog.ll $(BUILD)/kdl_runtime.o -o prog.exe
+
+$(BUILD)/kdl_runtime.o: runtime/kdl_runtime.c | $(BUILD)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/test_runtime_link$(EXE): $(BUILD)/kdl_runtime.o \
+                                   $(TESTDIR)/test_runtime_link.c | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $^
+
 
 # === Genel obje kurallari ===
 
@@ -265,6 +277,9 @@ calistir_snapshot_test: $(BUILD)/test_snapshot$(EXE) $(BUILD)/kemgu$(EXE)
 calistir_fuzz_test: $(BUILD)/test_fuzz$(EXE)
 	./$(BUILD)/test_fuzz$(EXE)
 
+calistir_runtime_link_test: $(BUILD)/test_runtime_link$(EXE)
+	./$(BUILD)/test_runtime_link$(EXE)
+
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE)
 	@echo "stdlib tip kontrolu..."
@@ -289,7 +304,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_snapshot_test calistir_fuzz_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:
