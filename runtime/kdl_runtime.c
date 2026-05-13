@@ -222,6 +222,138 @@ int kdl_metin_esit(const char *a, const char *b) {
     return strcmp(a, b) == 0;
 }
 
+/* === J2: Genisletilmis metin primitifleri (Madde A) ===
+ *
+ * UTF-8 farkindali; ASCII subset icin O(n) char-by-char islem.
+ * Tum doner metinler heap'te (su an leak OK, region API ileride). */
+
+/* metin_kes: substring [baslangic, baslangic+uzunluk).
+ * Byte-indeksli (UTF-8 multi-byte sequence kirilabilir; v1 ASCII guvenli). */
+const char *kdl_metin_kes(const char *s, int32_t baslangic, int32_t uzunluk) {
+    if (!s) return NULL;
+    int32_t n = (int32_t)strlen(s);
+    if (baslangic < 0) baslangic = 0;
+    if (baslangic > n) baslangic = n;
+    int32_t kalan = n - baslangic;
+    if (uzunluk < 0 || uzunluk > kalan) uzunluk = kalan;
+    char *r = (char *)malloc((size_t)uzunluk + 1);
+    if (!r) return NULL;
+    memcpy(r, s + baslangic, (size_t)uzunluk);
+    r[uzunluk] = '\0';
+    return r;
+}
+
+/* metin_kucuk: ASCII A-Z -> a-z (Turkce I/i ozel davranisi yok — v2). */
+const char *kdl_metin_kucuk(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        r[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
+/* metin_buyuk: ASCII a-z -> A-Z */
+const char *kdl_metin_buyuk(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        r[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
+/* metin_icerir: haystack icinde needle var mi (substring) */
+_Bool kdl_metin_icerir(const char *haystack, const char *needle) {
+    if (!haystack || !needle) return 0;
+    return strstr(haystack, needle) != NULL;
+}
+
+/* metin_baslar: s prefix ile basliyor mu */
+_Bool kdl_metin_baslar(const char *s, const char *prefix) {
+    if (!s || !prefix) return 0;
+    size_t ns = strlen(s), np = strlen(prefix);
+    if (np > ns) return 0;
+    return memcmp(s, prefix, np) == 0;
+}
+
+/* metin_biter: s suffix ile bitiyor mu */
+_Bool kdl_metin_biter(const char *s, const char *suffix) {
+    if (!s || !suffix) return 0;
+    size_t ns = strlen(s), nb = strlen(suffix);
+    if (nb > ns) return 0;
+    return memcmp(s + (ns - nb), suffix, nb) == 0;
+}
+
+/* metin_kirp: bastaki ve sondaki ASCII whitespace'i temizle (\t \n \r ' ') */
+const char *kdl_metin_kirp(const char *s) {
+    if (!s) return NULL;
+    const char *bas = s;
+    while (*bas == ' ' || *bas == '\t' || *bas == '\n' || *bas == '\r') bas++;
+    const char *son = s + strlen(s);
+    while (son > bas && (son[-1] == ' ' || son[-1] == '\t' ||
+                          son[-1] == '\n' || son[-1] == '\r')) son--;
+    size_t n = (size_t)(son - bas);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    memcpy(r, bas, n);
+    r[n] = '\0';
+    return r;
+}
+
+/* metin_yer_degistir: s icindeki tum eski_p alt-metinlerini yeni_p ile degistir.
+ * eski_p bos string ise s'in kopyasini doner. */
+const char *kdl_metin_yer_degistir(const char *s, const char *eski_p,
+                                    const char *yeni_p) {
+    if (!s) return NULL;
+    if (!eski_p) eski_p = "";
+    if (!yeni_p) yeni_p = "";
+    size_t ns = strlen(s);
+    size_t ne = strlen(eski_p);
+    size_t ny = strlen(yeni_p);
+    if (ne == 0) {
+        char *r = (char *)malloc(ns + 1);
+        if (!r) return NULL;
+        memcpy(r, s, ns + 1);
+        return r;
+    }
+    /* Once eski_p sayisini bul */
+    size_t sayi = 0;
+    const char *p = s;
+    while ((p = strstr(p, eski_p))) { sayi++; p += ne; }
+    /* Yeni boyut: ns + sayi*(ny - ne) (sayisiz, isaretli aritmetik) */
+    size_t nr = (ny >= ne)
+              ? ns + sayi * (ny - ne)
+              : ns - sayi * (ne - ny);
+    char *r = (char *)malloc(nr + 1);
+    if (!r) return NULL;
+    char *dst = r;
+    const char *src = s;
+    while (1) {
+        const char *bul = strstr(src, eski_p);
+        if (!bul) {
+            size_t kalan = strlen(src);
+            memcpy(dst, src, kalan + 1);
+            break;
+        }
+        size_t blen = (size_t)(bul - src);
+        memcpy(dst, src, blen);
+        dst += blen;
+        memcpy(dst, yeni_p, ny);
+        dst += ny;
+        src = bul + ne;
+    }
+    return r;
+}
+
 /* === I: Dinamik Dizi (heap) ===
  *
  * KDL DinamikDizi temsili: { ptr veri, i32 boyut, i32 kapasite } yapisi.
