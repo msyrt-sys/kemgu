@@ -1530,6 +1530,84 @@ static void test_olarak_karakter_tam(void) {
     arena_serbest(a);
 }
 
+/* === Madde D: Generic callback / multi-param inference === */
+
+static void test_generic_callback_govde(void) {
+    Arena *a = arena_olustur(0);
+    /* harita govde icinde f(x) - x: T, f: islev(T)->U, f(x) -> U */
+    int h = program_kontrol(
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; }",
+        a);
+    test_sonuc("harita<T,U> govde tip kontrol — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_concrete_instan(void) {
+    Arena *a = arena_olustur(0);
+    /* harita(intDizi, ikiKat) — T=tam32, U=tam32 */
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("harita concrete instan — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_tip_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* harita(metinDizi, ikiKat:tam32->tam32) — T conflict (metin vs tam32) */
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<metin> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("harita metin vs tam32 — T conflict", h > 0);
+    arena_serbest(a);
+}
+
+static void test_generic_donus_substitusyon(void) {
+    Arena *a = arena_olustur(0);
+    /* f: islev(T) -> U; cagri donus tipi inferred U */
+    int h = program_kontrol(
+        "i\xc5\x9flev tek<T, U>(x: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(x); } "
+        "i\xc5\x9flev ikiyle(x: tam32) -> tam64 { ver 42; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam64 = tek(5, ikiyle); "
+        "ver 0; }",
+        a);
+    test_sonuc("tek<T,U> donus inferred U=tam64", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_iclice_inference(void) {
+    Arena *a = arena_olustur(0);
+    /* T derinden iclie: Dizi<Dizi<T>> */
+    int h = program_kontrol(
+        "i\xc5\x9flev duzlestir<T>(xs: Dizi<Dizi<T>>) -> tam32 { "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { ver 0; }",
+        a);
+    test_sonuc("Dizi<Dizi<T>> param — govde tip kontrol", h == 0);
+    arena_serbest(a);
+}
+
 /* L-1: Lambda govde scope — parametre referansi */
 static void test_lambda_govde(void) {
     Arena *a = arena_olustur(0);
@@ -1886,6 +1964,11 @@ int main(void) {
     test_olarak_kesirli_tam();
     test_olarak_metin_yasak();
     test_olarak_karakter_tam();
+    test_generic_callback_govde();
+    test_generic_callback_concrete_instan();
+    test_generic_callback_tip_uyumsuz();
+    test_generic_donus_substitusyon();
+    test_generic_iclice_inference();
     test_sonuc_konstrüktörler();
 
     printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");
