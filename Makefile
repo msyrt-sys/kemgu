@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test bench test_tumu
 
 # === Ana hedef ===
 
@@ -198,6 +198,23 @@ $(BUILD)/test_fuzz$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(SRCDIR)/ifade.c \
                           $(TESTDIR)/test_fuzz.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Benchmark suite (test altyapi — 10 baseline, JSON cikti) ===
+# GCC, ASan'siz (timing dogrulugu icin). build/bench_results.json uretir.
+
+$(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                           $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                           $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                           $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                           $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                           $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
+                           $(SRCDIR)/escape.c \
+                           $(TESTDIR)/test_bench.c | $(BUILD)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $^
+
+bench: $(BUILD)/test_bench$(EXE) $(BUILD)/kemgu$(EXE)
+	./$(BUILD)/test_bench$(EXE)
 
 # === KDL Runtime (ADIM 33 — compile + link entegrasyonu) ===
 # runtime/kdl_runtime.c bagimsiz olarak derlenir, sonra test_runtime_link.c
