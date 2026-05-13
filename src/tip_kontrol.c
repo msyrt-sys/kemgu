@@ -133,6 +133,41 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
                      tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* === I/O built-in genisletme (src-bugfix — runtime/kdl_runtime.c) === */
+
+    /* yazdir_tam(tam32) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("yazdir_tam", 10, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yazdir_tam64(tam64) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("yazdir_tam64", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yazdir_satir() -> bos */
+    {
+        EKLE_BUILTIN("yazdir_satir", 12, NULL, 0,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yaz_tam(tam32) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("yaz_tam", 7, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yaz_tam64(tam64) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("yaz_tam64", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yaz_metin built-in YOK — stdlib/dosya.kem 2-param yaz_metin
+     * tanimlar; cakisma onlemek icin (KIRMIZI_QUEUE: dosya_yaz_metin
+     * rename gelecek). */
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;

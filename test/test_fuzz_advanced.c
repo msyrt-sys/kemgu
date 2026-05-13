@@ -25,14 +25,13 @@
 #include <string.h>
 #include <time.h>
 
-/* Mod a artik snippet-tabanli (random degil — parser bug KIRMIZI_QUEUE'ya
- * yazildi). Mod b/c/d snippet-tabanli. Snippet sabit oldugu icin
- * ASan stabil — ITER_PER_MODE 2000, MAX_KAYNAK sadece mod_d_kaynak
- * (UTF-8 edge cases) icin kullaniliyor.
+/* Mod a parser panik-loop bug-fix sonrasi GERCEK RANDOM token kullanir
+ * (src-bugfix branch: parser_hata ayni-pozisyon-ayni-kod esigi).
+ * ITER_PER_MODE 5000'e cikarildi (gercek 5000 random iter).
  *
- * Toplam: 4 mod x 2000 = 8000 iter (mevcut test_fuzz.c'nin 10000 byte-
- * level random'i ile birlikte 18000 iter). */
-#define ITER_PER_MODE 2000
+ * Toplam: 4 mod x 5000 = 20000 iter (mevcut test_fuzz.c'nin 10000 byte-
+ * level random'i ile birlikte 30000 iter). */
+#define ITER_PER_MODE 5000
 #define MAX_KAYNAK 64
 
 /* Hata mesajlari bastir mi? Default: evet. KEMGU_FUZZ_DEBUG=1 ile kapat. */
@@ -93,46 +92,20 @@ static void mod_a_kaynak(char *buf, int max) {
     buf[pos] = '\0';
 }
 
-/* Mod a (sozdizimi-aware): parser panic mode'da SONSUZ LOOP bug tetiklenir
- * (cok kategorili random token akisi P018 hatasini ayni pozisyonda tekrar
- * raporluyor; PARSER_MAX_HATA limiti devre disi gibi). ASan OOM 1 iter
- * icinde patlatir. KIRMIZI_QUEUE.md'de bug raporu var.
- *
- * Workaround: hicbir random token, sadece kucuk pre-built bozuk snippet'lar
- * — bunlar parser'a sokulup crash yoksa OK. Boylece parser kararliligini
- * dogrularken parser bug'a girilmez. */
-static const char *mod_a_snippets[] = {
-    "i\xc5\x9flev",
-    "i\xc5\x9flev x",
-    "i\xc5\x9flev x(",
-    "i\xc5\x9flev x() ->",
-    "yap\xc4\xb1 P { x: tam32 }",
-    "de\xc4\x9f" "i\xc5\x9f" "ken x =",
-    "ver",
-    "ver;",
-    "e\xc4\x9f" "er { ver 1; }",
-    "iken < { }",
-    "kullan ::",
-    "mod\xc3\xbcl x {",
-    "i\xc5\x9flev f() -> tam32 { ver",
-    "{ } { } { }",
-    "((((42))))",
-    ";;;;",
-    "0xZZ",
-    "1.2.3",
-    "\"unterminated",
-    "// yorum\n; ;",
-};
-
+/* Mod a (sozdizimi-aware): RANDOM token stream — keyword/operator/
+ * identifier/sayi karistirilir. src-bugfix oncesi parser bug
+ * (P018/P001'in ayni pozisyonda sonsuz tekrar) ASan OOM ediyordu.
+ * Bugfix (parser_hata ayni-pozisyon-ayni-kod esigi + parser_panik_sync
+ * sonrasi token-advance guard) sonsuz loop'u kapatti. */
 static int mod_a_calistir(void) {
     int crash = 0;
-    int n_snip = (int)(sizeof(mod_a_snippets)/sizeof(*mod_a_snippets));
+    char buf[MAX_KAYNAK];
     for (int i = 0; i < ITER_PER_MODE; i++) {
-        const char *kaynak = mod_a_snippets[i % n_snip];
+        mod_a_kaynak(buf, MAX_KAYNAK);
         Arena *a = arena_olustur(0);
         if (!a) { crash++; continue; }
-        Lexer l; lexer_baslat(&l, kaynak, "fuzz_a");
-        Parser p; parser_baslat(&p, &l, a, "fuzz_a", kaynak);
+        Lexer l; lexer_baslat(&l, buf, "fuzz_a");
+        Parser p; parser_baslat(&p, &l, a, "fuzz_a", buf);
         Dugum *prog = parser_calistir(&p);
         (void)prog;
         arena_serbest(a);

@@ -949,20 +949,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
             }
 
-            IfadeSonuc *args = NULL;
-            if (n > 0) {
-                args = (IfadeSonuc *)arena_ayir(g->arena,
-                    sizeof(IfadeSonuc) * (size_t)n);
-                for (int i = 0; i < n; i++) {
-                    const char *arg_beklenen = NULL;
-                    /* dizi_ekle ikinci arg ic, dizi_al donus tipi */
-                    if (i == 1 && dizi_eleman_beklenen) {
-                        arg_beklenen = dizi_eleman_beklenen;
-                    }
-                    args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i],
-                                          arg_beklenen);
-                }
-            }
+            /* args evaluation src-bugfix sonra moved (param_beklenen kullanmak icin) */
             IslevKayit *ik = islev_bul(g,
                 d->veri.cagri.hedef->veri.tanimlayici.metin,
                 d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
@@ -972,6 +959,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
 
             /* Built-in libc / kdl mapping */
             const char *kdl_donus = NULL;  /* override (NULL ise auto) */
+            /* src-bugfix'ten: param_beklenen + builtin_donus (genis tasarim) */
+            const char *param_beklenen[8] = { NULL, NULL, NULL, NULL,
+                                              NULL, NULL, NULL, NULL };
+            const char *builtin_donus = NULL;
+            (void)param_beklenen; (void)builtin_donus;
             if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
             } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
@@ -982,17 +974,67 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             } else if (cagri_adi_uz == 14 &&
                        memcmp(cagri_adi, "bellek_kopyala", 14) == 0) {
                 cagri_adi = "memcpy"; cagri_adi_uz = 6;
+            } else if (cagri_adi_uz == 10 &&
+                       memcmp(cagri_adi, "yazdir_tam", 10) == 0) {
+                cagri_adi = "kdl_yazdir_tam"; cagri_adi_uz = 14;
+                param_beklenen[0] = "i32"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 12 &&
+                       memcmp(cagri_adi, "yazdir_tam64", 12) == 0) {
+                cagri_adi = "kdl_yazdir_tam64"; cagri_adi_uz = 16;
+                param_beklenen[0] = "i64"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 12 &&
+                       memcmp(cagri_adi, "yazdir_satir", 12) == 0) {
+                cagri_adi = "kdl_yazdir_satir"; cagri_adi_uz = 16;
+                builtin_donus = "void";
+            } else if (cagri_adi_uz == 7 &&
+                       memcmp(cagri_adi, "yaz_tam", 7) == 0) {
+                cagri_adi = "kdl_yaz_tam"; cagri_adi_uz = 11;
+                param_beklenen[0] = "i32"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "yaz_tam64", 9) == 0) {
+                cagri_adi = "kdl_yaz_tam64"; cagri_adi_uz = 13;
+                param_beklenen[0] = "i64"; builtin_donus = "void";
             }
-            /* Madde A: metin_* built-in -> kdl_metin_* */
-            else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+            /* Not: `yaz_metin` built-in olarak register edilmiyor — bkz.
+             * tip_kontrol.c'deki cakisma aciklamasi (stdlib/dosya.kem). */
+
+            IfadeSonuc *args = NULL;
+            if (n > 0) {
+                args = (IfadeSonuc *)arena_ayir(g->arena,
+                    sizeof(IfadeSonuc) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    /* HEAD: dizi_ekle/al icin arg[1] dizi_eleman_beklenen.
+                     * src-bugfix: I/O built-in icin param_beklenen[i]. */
+                    const char *bekle = (i < 8) ? param_beklenen[i] : NULL;
+                    if (!bekle && i == 1 && dizi_eleman_beklenen) {
+                        bekle = dizi_eleman_beklenen;
+                    }
+                    args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
+                    if (bekle && strcmp(args[i].tip, bekle) != 0 &&
+                        (strcmp(bekle, "i64") == 0 ||
+                         strcmp(bekle, "i32") == 0 ||
+                         strcmp(bekle, "i16") == 0 ||
+                         strcmp(bekle, "i8") == 0) &&
+                        (strcmp(args[i].tip, "i64") == 0 ||
+                         strcmp(args[i].tip, "i32") == 0 ||
+                         strcmp(args[i].tip, "i16") == 0 ||
+                         strcmp(args[i].tip, "i8") == 0)) {
+                        int nr = int_donustur(g, args[i].reg, args[i].tip, bekle);
+                        args[i].reg = nr;
+                        args[i].tip = bekle;
+                    }
+                }
+            }
+            /* Konsolidasyon: args sonrasi mapping ve intrinsicler.
+             * `if/else if` chain artik bağimsiz, args alloc'tan sonra. */
+            if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+                /* Madde A: metin_* built-in -> kdl_metin_* */
                 static char kdl_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
                 memcpy(kdl_buf, "kdl_", 4);
                 memcpy(kdl_buf + 4, cagri_adi, (size_t)n);
                 kdl_buf[4 + n] = '\0';
                 cagri_adi = kdl_buf; cagri_adi_uz = 4 + n;
-                /* metin_uzunluk -> i32, *_icerir/baslar/biter -> i1,
-                 * digerleri -> ptr (metin) */
                 if (n == 13 && memcmp(kdl_buf + 4, "metin_uzunluk", 13) == 0) {
                     kdl_donus = "i32";
                 } else if ((n == 12 && memcmp(kdl_buf + 4, "metin_icerir", 12) == 0) ||
@@ -1074,7 +1116,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
 
             const char *donus = kdl_donus ? kdl_donus
-                              : (ik ? ik->donus_tip : (beklenen ? beklenen : "i32"));
+                              : builtin_donus ? builtin_donus
+                              : (ik ? ik->donus_tip
+                                    : (beklenen ? beklenen : "i32"));
 
             /* Generic islev: tip args'i arg tipinden cikar, specialize et */
             if (ik && ik->generic_mi && ik->ast) {
@@ -1159,7 +1203,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 return s;
             }
 
-            if (strcmp(donus, "void") == 0) donus = "i32";
+            if (strcmp(donus, "void") == 0) {
+                /* void-returning call: register atama yok */
+                fputs("  call void @", g->out);
+                ad_yaz(g->out, cagri_adi, cagri_adi_uz);
+                fputs("(", g->out);
+                for (int i = 0; i < n; i++) {
+                    if (i > 0) fputs(", ", g->out);
+                    fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
+                }
+                fputs(")\n", g->out);
+                /* Caller bir IfadeSonuc bekliyor — placeholder i32 0 */
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+                IfadeSonuc s = { r, "i32" };
+                return s;
+            }
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             ad_yaz(g->out, cagri_adi, cagri_adi_uz);
@@ -1553,7 +1612,14 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
     fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
     fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_dizi_boyut(ptr)\n\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+
+    /* src-bugfix: KDL I/O genisletme (yazdir_tam, yaz_tam vs.) */
+    fputs("declare void @kdl_yazdir_tam(i32)\n", out);
+    fputs("declare void @kdl_yazdir_tam64(i64)\n", out);
+    fputs("declare void @kdl_yazdir_satir()\n", out);
+    fputs("declare void @kdl_yaz_tam(i32)\n", out);
+    fputs("declare void @kdl_yaz_tam64(i64)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

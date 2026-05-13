@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_runtime_link_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test bench test_tumu
 
 # === Ana hedef ===
 
@@ -199,8 +199,7 @@ $(BUILD)/test_fuzz$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(TESTDIR)/test_fuzz.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
-# === Benchmark suite (test altyapi — 10 baseline, JSON cikti) ===
-# GCC, ASan'siz (timing dogrulugu icin). build/bench_results.json uretir.
+# === Benchmark suite (test-altyapi — 10 baseline, JSON cikti) ===
 
 $(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
@@ -216,7 +215,9 @@ $(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
 bench: $(BUILD)/test_bench$(EXE) $(BUILD)/kemgu$(EXE)
 	./$(BUILD)/test_bench$(EXE)
 
-# === Gelismis fuzzer (test altyapi — 4 mod x 5000 iter, ASan) ===
+# === Gelismis parser fuzzer (4 mod x 5000 iter, ASan + UBSan) — src-bugfix ===
+# Mod a: random keyword/operator karisigi — parser bug-fix dogrulamasi
+# Mod b: AST roundtrip; Mod c: tip kontrol; Mod d: UTF-8 edge cases.
 
 $(BUILD)/test_fuzz_advanced$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                     $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
@@ -224,11 +225,14 @@ $(BUILD)/test_fuzz_advanced$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                     $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                     $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                                     $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                                    $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
+                                    $(SRCDIR)/escape.c \
                                     $(TESTDIR)/test_fuzz_advanced.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
 calistir_fuzz_advanced: $(BUILD)/test_fuzz_advanced$(EXE)
 	./$(BUILD)/test_fuzz_advanced$(EXE)
+
 
 # === KDL Runtime (ADIM 33 — compile + link entegrasyonu) ===
 # runtime/kdl_runtime.c bagimsiz olarak derlenir, sonra test_runtime_link.c
