@@ -410,6 +410,7 @@ const char *token_tipi_adi(TokenTipi tip) {
         case TOK_TEKKEZ: return "TEKKEZ";
         case TOK_IMHA: return "IMHA";
         case TOK_OLARAK: return "OLARAK";
+        case TOK_SABITSURE: return "SABITSURE";
         case TOK_TAMSAYI: return "TAMSAYI";
         case TOK_ONDALIK: return "ONDALIK";
         case TOK_METIN: return "METIN";
