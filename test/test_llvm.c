@@ -598,6 +598,79 @@ static void test_olarak_kesirli32_to_kesirli64(void) {
     test_sonuc("olarak: kesirli32 -> kesirli64 (fpext 42)", rc == 42);
 }
 
+/* === Dosya syscall layer (Kirmizi G) === */
+
+static void test_dosya_yaz_oku_boyut(void) {
+    /* dosya_ac + dosya_yaz + dosya_kapat + dosya_boyut + dosya_sil */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"build/test_g.txt\") { "
+        "dosya_sil(\"build/test_g.txt\"); } "
+        "de\xc4\x9fi\xc5\x9fken f: metin = dosya_ac(\"build/test_g.txt\", \"yazma\"); "
+        "dosya_yaz(f, \"abcdefghijklm\"); "
+        "dosya_kapat(f); "
+        "de\xc4\x9fi\xc5\x9fken boy: tam64 = dosya_boyut(\"build/test_g.txt\"); "
+        "dosya_sil(\"build/test_g.txt\"); "
+        "ver boy olarak tam32; }");
+    test_sonuc("dosya yaz+boyut+sil: 13 byte", rc == 13);
+}
+
+static void test_dosya_var_mi_yok(void) {
+    /* dosya_var_mi("yok.txt") -> 0 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"build/bukesinlikle_yok.dat\") { ver 1; } "
+        "ver 42; }");
+    test_sonuc("dosya_var_mi: olmayan -> 0 (ver 42)", rc == 42);
+}
+
+static void test_dosya_oku_yaz_zincir(void) {
+    /* Yaz, sonra oku — boyut karsilastir */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"build/test_g2.txt\") { "
+        "dosya_sil(\"build/test_g2.txt\"); } "
+        "de\xc4\x9fi\xc5\x9fken f: metin = dosya_ac(\"build/test_g2.txt\", \"yazma\"); "
+        "dosya_yaz(f, \"deneme42\"); "
+        "dosya_kapat(f); "
+        "de\xc4\x9fi\xc5\x9fken icerik: metin = dosya_oku(\"build/test_g2.txt\"); "
+        "dosya_sil(\"build/test_g2.txt\"); "
+        "ver metin_uzunluk(icerik); }");
+    test_sonuc("dosya yaz+oku zincir: 8 byte (deneme42)", rc == 8);
+}
+
+static void test_dosya_yeniden_adlandir(void) {
+    /* 'değil X(args)' precedence H'de cozulecek; suanlik !=true ile kacin */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"build/test_g3.txt\") { "
+        "dosya_sil(\"build/test_g3.txt\"); } "
+        "e\xc4\x9f""er dosya_var_mi(\"build/test_g3b.txt\") { "
+        "dosya_sil(\"build/test_g3b.txt\"); } "
+        "de\xc4\x9fi\xc5\x9fken f: metin = dosya_ac(\"build/test_g3.txt\", \"yazma\"); "
+        "dosya_yaz(f, \"a\"); "
+        "dosya_kapat(f); "
+        "dosya_yeniden_adlandir(\"build/test_g3.txt\", \"build/test_g3b.txt\"); "
+        "de\xc4\x9fi\xc5\x9fken oldu_mu: mant\xc4\xb1ksal = "
+        "dosya_var_mi(\"build/test_g3b.txt\") "
+        "ve dosya_var_mi(\"build/test_g3.txt\") == yanl\xc4\xb1\xc5\x9f; "
+        "dosya_sil(\"build/test_g3b.txt\"); "
+        "e\xc4\x9f""er oldu_mu { ver 42; } "
+        "ver 0; }");
+    test_sonuc("dosya_yeniden_adlandir + var_mi check -> 42", rc == 42);
+}
+
+static void test_dosya_sil_basarili(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: metin = dosya_ac(\"build/test_g4.txt\", \"yazma\"); "
+        "dosya_yaz(f, \"x\"); "
+        "dosya_kapat(f); "
+        "de\xc4\x9fi\xc5\x9fken silindi: mant\xc4\xb1ksal = dosya_sil(\"build/test_g4.txt\"); "
+        "e\xc4\x9f""er silindi { ver 42; } ver 0; }");
+    test_sonuc("dosya_sil basarili -> 42", rc == 42);
+}
+
 /* === Bit Operatorleri Testleri (ADIM 30) === */
 
 static void test_bit_ve_temel(void) {
@@ -790,6 +863,13 @@ int main(void) {
     test_olarak_kesirli32_to_tam32();
     test_olarak_tam32_to_kesirli64();
     test_olarak_kesirli32_to_kesirli64();
+
+    printf("\n--- Kirmizi G: Dosya syscall layer ---\n");
+    test_dosya_yaz_oku_boyut();
+    test_dosya_var_mi_yok();
+    test_dosya_oku_yaz_zincir();
+    test_dosya_yeniden_adlandir();
+    test_dosya_sil_basarili();
 
     printf("\n--- ADIM 30: Bit operatorleri ---\n");
     test_bit_ve_temel();

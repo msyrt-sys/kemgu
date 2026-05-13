@@ -811,6 +811,40 @@ const char *kdl_dosya_tumu_oku(const char *yol) {
     return buf;
 }
 
+/* === Kirmizi G: Dosya syscall layer (8 primitif) === */
+
+/* dosya_var_mi(yol) -> 1 (var) / 0 (yok) */
+int32_t kdl_dosya_var_mi(const char *yol) {
+    if (!yol) return 0;
+    FILE *f = fopen(yol, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* dosya_sil(yol) -> 1 (basarili) / 0 (hata) */
+int32_t kdl_dosya_sil(const char *yol) {
+    if (!yol) return 0;
+    return remove(yol) == 0 ? 1 : 0;
+}
+
+/* dosya_yeniden_adlandir(eski, yeni) -> 1/0 */
+int32_t kdl_dosya_yeniden_adlandir(const char *eski, const char *yeni) {
+    if (!eski || !yeni) return 0;
+    return rename(eski, yeni) == 0 ? 1 : 0;
+}
+
+/* dosya_boyut(yol) -> tam64 (byte sayisi); -1 hata */
+int64_t kdl_dosya_boyut(const char *yol) {
+    if (!yol) return -1;
+    FILE *f = fopen(yol, "rb");
+    if (!f) return -1;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
+    long n = ftell(f);
+    fclose(f);
+    return (int64_t)n;
+}
+
 /* Arena-aware metin birlestirme (verilen bolgeye yerlestirir) */
 const char *kdl_bolge_metin_birlestir(KdlArena *a,
                                        const char *x, const char *y) {

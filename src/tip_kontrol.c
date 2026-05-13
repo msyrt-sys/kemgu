@@ -272,6 +272,61 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
                      tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* === Dosya syscall layer (Kirmizi G) === */
+
+    /* dosya_ac(yol: metin, mod: metin) -> metin   (opaque handle as ptr) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_ac", 8, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* dosya_oku(yol: metin) -> metin   (tum dosyayi oku) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_oku", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    /* dosya_yaz(handle: metin, icerik: metin) -> tam32   (yazilan byte) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_yaz", 9, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* dosya_kapat(handle: metin) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_kapat", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    /* dosya_var_mi(yol: metin) -> mantıksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_var_mi", 12, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* dosya_sil(yol: metin) -> mantıksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_sil", 9, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* dosya_yeniden_adlandir(eski: metin, yeni: metin) -> mantıksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_yeniden_adlandir", 22, p, 2,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* dosya_boyut(yol: metin) -> tam64 (byte sayisi; -1 hata) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
+    }
+
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;

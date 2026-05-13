@@ -1047,6 +1047,32 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "metin_yer_de\xc4\x9fi\xc5\x9ftir", 20) == 0) {
                 cagri_adi = "kdl_metin_yer_degistir"; cagri_adi_uz = 22;
             }
+            /* Dosya syscall layer (Kirmizi G) -> kdl_dosya_* */
+            else if (cagri_adi_uz == 8 &&
+                     memcmp(cagri_adi, "dosya_ac", 8) == 0) {
+                cagri_adi = "kdl_dosya_ac"; cagri_adi_uz = 12;
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "dosya_oku", 9) == 0) {
+                cagri_adi = "kdl_dosya_tumu_oku"; cagri_adi_uz = 18;
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "dosya_yaz", 9) == 0) {
+                cagri_adi = "kdl_dosya_yaz"; cagri_adi_uz = 13;
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "dosya_kapat", 11) == 0) {
+                cagri_adi = "kdl_dosya_kapat"; cagri_adi_uz = 15;
+            } else if (cagri_adi_uz == 12 &&
+                       memcmp(cagri_adi, "dosya_var_mi", 12) == 0) {
+                cagri_adi = "kdl_dosya_var_mi"; cagri_adi_uz = 16;
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "dosya_sil", 9) == 0) {
+                cagri_adi = "kdl_dosya_sil"; cagri_adi_uz = 13;
+            } else if (cagri_adi_uz == 22 &&
+                       memcmp(cagri_adi, "dosya_yeniden_adlandir", 22) == 0) {
+                cagri_adi = "kdl_dosya_yeniden_adlandir"; cagri_adi_uz = 26;
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "dosya_boyut", 11) == 0) {
+                cagri_adi = "kdl_dosya_boyut"; cagri_adi_uz = 15;
+            }
 
             const char *donus = ik ? ik->donus_tip : (beklenen ? beklenen : "i32");
 
@@ -1576,7 +1602,16 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i16 @kdl_dizi_al_16(ptr, i32)\n", out);
     fputs("declare i32 @kdl_dizi_al_32(ptr, i32)\n", out);
     fputs("declare i64 @kdl_dizi_al_64(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_dizi_boyut(ptr)\n\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+    /* Dosya syscall layer (Kirmizi G) */
+    fputs("declare ptr @kdl_dosya_ac(ptr, ptr)\n", out);
+    fputs("declare ptr @kdl_dosya_tumu_oku(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_yaz(ptr, ptr)\n", out);
+    fputs("declare void @kdl_dosya_kapat(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_var_mi(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
+    fputs("declare i64 @kdl_dosya_boyut(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
