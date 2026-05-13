@@ -1,22 +1,20 @@
 // KEMGU Stdlib — Metin (String) Manipülasyon
 // =============================================
 //
-// SINIR (KIRMIZI_QUEUE: "stdlib::metin runtime primitifi gerek"):
-//   Mevcut compiler --check modunda metin için yalnız `yazdir`
-//   (puts wrapper) ve `bellek_al/bellek_serbest` built-in. Gerçek
-//   string ops (uzunluk, birleştir, indeks erişimi, küçük/büyük
-//   harf dönüşümü, vb.) için runtime altyapı gerek:
-//     - metin_uzunluk(s) -> tam32                   (strlen)
-//     - metin_byte_al(s, i) -> dtam8                (s[i])
-//     - metin_birlestir(a, b) -> metin              (heap alloc)
-//     - metin_kes(s, baslangic, son) -> metin       (substring + alloc)
+// Runtime primitif HAZIRLANDI (Madde A — runtime/kdl_runtime.c):
+//   metin_uzunluk, metin_birlestir, metin_kes, metin_kucuk,
+//   metin_buyuk, metin_icerir, metin_baslar, metin_biter,
+//   metin_kirp, metin_yer_degistir
 //
-// Bu modül **API skeleton** + tip imzaları. İmplementasyonlar
-// derleyici --check'ten geçen stub'lar — runtime hazır olduğunda
-// gerçek body'leri eklenecek.
+// Bu modül stdlib wrapper — KEMGU-side fonksiyon adlandirma uyumu
+// (kucukharf/buyukharf/baslar_ile/biter_ile gibi). Runtime
+// fonksiyonlari direkt cagirilabilir; bu modul snake_case Turkce
+// adlarla daha doga API sunar.
 //
-// Tasarım kuralı: API gerçek halini şimdiden sabitle, runtime
-// gelince sadece body değişsin (kullanıcı kodu kırılmasın).
+// Not: UTF-8 byte tabanli — kucukharf/buyukharf Turkce I/i pari
+// destekli (I->ı, İ->i, ı->I, i->İ); icerir/baslar/biter byte
+// karsilastirmasi (UTF-8 prefix-safe); kes byte indeksli
+// (multi-byte sequence kirilabilir — codepoint tabanli kes_kp v2'de).
 
 // =============================================================================
 // Gerçekten çalışan ops (runtime gerekmiyor)
@@ -50,111 +48,95 @@ işlev sarmala(s: metin) -> seçimlik<metin> {
 }
 
 // =============================================================================
-// Runtime primitifi bekleyen ops (stub — şimdilik placeholder döner)
+// Runtime primitif tabanli ops (Madde A — runtime baglandi)
 // =============================================================================
-// Bu fonksiyonlar tip imzaları doğru, derleyici --check'ten geçer.
-// Body'ler runtime primitif eklendiğinde gerçek implementasyona güncellenir.
 
-// Uzunluk — karakter sayısı (UTF-8 byte değil, kod noktası).
-// YAPILACAK: metin_uzunluk runtime primitifi gerek.
+// Uzunluk — byte sayisi (UTF-8 codepoint sayisi degil).
 işlev uzunluk(s: metin) -> tam32 {
-    eğer bos_mu(s) { ver 0; }
-    ver 0;   // STUB: runtime'da gerçek strlen
+    ver metin_uzunluk(s);
 }
 
-// Birleştir — iki metni yan yana koy. Heap alloc'a ihtiyaç var.
-// YAPILACAK: metin_birlestir runtime primitifi gerek.
+// Birlestir — iki metni yan yana koy (heap alloc, leak v1 OK).
 işlev birlestir(a: metin, b: metin) -> metin {
-    eğer bos_mu(a) { ver b; }
-    eğer bos_mu(b) { ver a; }
-    ver a;   // STUB: gerçek concat yerine ilkini döner
+    ver metin_birlestir(a, b);
 }
 
-// Üç metni birleştir.
+// Uc metni birlestir.
 işlev birlestir_uc(a: metin, b: metin, c: metin) -> metin {
     ver birlestir(birlestir(a, b), c);
 }
 
-// Kes (substring) — [baslangic, son) yarı-açık aralık.
-// YAPILACAK: metin_kes runtime primitifi gerek.
-işlev kes(s: metin, baslangic: tam32, son: tam32) -> metin {
-    eğer baslangic >= son { ver ""; }
-    eğer bos_mu(s) { ver ""; }
-    ver s;   // STUB
+// Kes (substring) — [baslangic, baslangic+uzunluk) byte aralik.
+// Multi-byte UTF-8 sequence kirilabilir — kullanici dikkatli olmali.
+işlev kes(s: metin, baslangic: tam32, uzunluk: tam32) -> metin {
+    ver metin_kes(s, baslangic, uzunluk);
 }
 
-// Böl (split) — ayıraç karakterine göre.
-// Dizi<metin> dönmesi gerek; allocator olmadan içeriği üretemeyiz.
-// YAPILACAK: metin_bol runtime primitifi gerek.
+// Bol (split) — ayirac karakterine gore.
+// SINIRLAMA: KEMGU dosya seviyesinde dizi_olustur runtime intrinsic;
+//   gercek bol icin char-by-char tarama + dizi_ekle gerek. v1: tek
+//   elemanli dizi (kendisi) doner — KIRMIZI_QUEUE'da takip edilebilir.
 işlev bol(s: metin, ayirac: karakter) -> Dizi<metin> {
     eğer bos_mu(s) { ver []; }
-    ver [s];   // STUB: kendisini tek elemanlı dizi olarak döner
+    ver [s];   // STUB: bol islemi icin char iteration runtime gerek
 }
 
-// Küçük harfe dönüştür (Türkçe karakterler dahil: I→ı, İ→i).
-// YAPILACAK: utf8 aware metin_kucukharf runtime gerek.
+// Kucuk harfe donustur — Turkce I->ı, İ->i (ASCII + UTF-8 farkindali).
 işlev kucukharf(s: metin) -> metin {
-    ver s;   // STUB
+    ver metin_kucuk(s);
 }
 
-// Büyük harfe dönüştür (Türkçe: i→İ, ı→I).
-// YAPILACAK: utf8 aware metin_buyukharf runtime gerek.
+// Buyuk harfe donustur — Turkce i->İ, ı->I.
 işlev buyukharf(s: metin) -> metin {
-    ver s;   // STUB
+    ver metin_buyuk(s);
 }
 
-// İçerir — alt metni içerir mi.
-// YAPILACAK: substring search (naive O(n*m) veya KMP) runtime.
+// Icerir — alt metni iceriyor mu (byte tabanli, UTF-8 prefix-safe).
 işlev icerir(s: metin, alt: metin) -> mantıksal {
-    eğer bos_mu(alt) { ver doğru; }    // boş herhangi metinde
-    eğer esit_mi(s, alt) { ver doğru; }
-    ver yanlış;   // STUB: yalnız tam eşitlik
+    ver metin_icerir(s, alt);
 }
 
-// İle başlar mı.
-// YAPILACAK: prefix check (ilk N karakter) runtime.
+// Ile baslar mi.
 işlev baslar_ile(s: metin, prefix: metin) -> mantıksal {
-    eğer bos_mu(prefix) { ver doğru; }
-    eğer esit_mi(s, prefix) { ver doğru; }
-    ver yanlış;   // STUB
+    ver metin_baslar(s, prefix);
 }
 
-// İle biter mi.
-// YAPILACAK: suffix check (son N karakter) runtime.
+// Ile biter mi.
 işlev biter_ile(s: metin, sufiks: metin) -> mantıksal {
-    eğer bos_mu(sufiks) { ver doğru; }
-    eğer esit_mi(s, sufiks) { ver doğru; }
-    ver yanlış;   // STUB
+    ver metin_biter(s, sufiks);
 }
 
-// Kırp (trim) — başından ve sonundan boşlukları sil.
-// YAPILACAK: whitespace tarama + yeni alloc gerek.
+// Kirp (trim) — basindan ve sonundan ASCII whitespace sil.
 işlev kirp(s: metin) -> metin {
-    ver s;   // STUB
+    ver metin_kirp(s);
 }
 
-// Yer değiştir — hedef altmetni yeni metinle değiştir.
-// YAPILACAK: search + replace + alloc gerek.
+// Yer degistir — hedef altmetnin TUM eslemelerini yeni ile degistir.
 işlev yer_degistir(s: metin, hedef: metin, yeni: metin) -> metin {
-    eğer bos_mu(hedef) { ver s; }
-    eğer esit_mi(s, hedef) { ver yeni; }
-    ver s;   // STUB: yalnız tam eşitlik durumu
+    ver metin_yer_degistir(s, hedef, yeni);
 }
 
 // Tekrarla — metni n kez yan yana ver.
-// YAPILACAK: alloc + repeat copy gerek.
 işlev tekrarla(s: metin, n: tam32) -> metin {
     eğer n <= 0 { ver ""; }
-    ver s;   // STUB: tek kopya
+    değişken r: metin = s;
+    değişken i: tam32 = 1;
+    iken i < n {
+        r = birlestir(r, s);
+        i = i + 1;
+    }
+    ver r;
 }
 
-// Karakter sayısı (UTF-8 code point) — uzunluk ile aynı; v1'de stub.
+// Karakter sayisi — uzunluk byte sayisi; codepoint sayisi icin
+// UTF-8 leading byte sayma gerek (0xxxxxxx + 11xxxxxx). v1 byte = char.
 işlev karakter_sayisi(s: metin) -> tam32 {
     ver uzunluk(s);
 }
 
-// Yansıtma (reverse) — karakterleri ters çevir.
-// YAPILACAK: alloc + UTF-8 backward iteration gerek.
+// Yansitma (reverse) — byte bazli ters cevirir. UTF-8 multi-byte
+// sequence ters cevrilirse bozulur — codepoint-aware reverse v2.
+// v1: stub.
 işlev yansit(s: metin) -> metin {
-    ver s;   // STUB
+    ver s;   // STUB: codepoint-aware reverse v2'de
 }

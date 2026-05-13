@@ -10,11 +10,10 @@
 //   - Pattern matching ile ayrıştırma (kapsamlı)
 //   - Java equals/Optional.get() tuzağına düşme — fonksiyonel
 //
-// SINIR (geçici, v1):
-//   Generic islev tipi `işlev(T) -> U` parametresi tip kontrolünden
-//   tam olarak geçmiyor — bu yüzden harita/filtre/bağla için tam32,
-//   metin, mantıksal versiyonlar ayrı yazılmış. Constraint sistemi
-//   tamamlandığında tek generic versiyon yeterli olacak.
+// Generic callback HAZIRLANDI (Madde D — tip_kontrol multi-param inference).
+// harita<T,U>, filtre<T>, bagla<T,U>, ya_da_cagir<T> tam generic.
+// Concrete _tam, _metin versiyonlari geri uyumluluk icin korundu;
+// yeni kod generic versiyonu kullanmali.
 
 // --- Sorgular (tam generic) ---
 
@@ -115,10 +114,53 @@ işlev bos_olustur<T>(rumuz: T) -> seçimlik<T> {
     ver hiç;
 }
 
-// --- Harita / Filtre / Bağla (tam32 — concrete) ---
-// Generic callback tip kontrolü tamamlanana kadar tam32 odaklı.
+// --- Harita / Filtre / Bagla (tam generic — Madde D sonrasi) ---
 
-// Harita — değer ise f uygula, hiç ise hiç döner.
+// Harita<T,U> — deger ise f uygula, hic ise hic doner.
+işlev harita<T, U>(opt: seçimlik<T>, f: işlev(T) -> U) -> seçimlik<U> {
+    eşleş opt {
+        değer(v) => { ver değer(f(v)); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Filtre<T> — deger ise pred uygula, dogru ise koru, degilse hic.
+işlev filtre<T>(opt: seçimlik<T>, pred: işlev(T) -> mantıksal) -> seçimlik<T> {
+    eşleş opt {
+        değer(v) => {
+            eğer pred(v) { ver değer(v); }
+            ver hiç;
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Bagla<T,U> — deger ise f cagir (yeni secimlik doner), hic ise hic.
+// flatMap karsiligi.
+işlev bagla<T, U>(opt: seçimlik<T>, f: işlev(T) -> seçimlik<U>) -> seçimlik<U> {
+    eşleş opt {
+        değer(v) => { ver f(v); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Ya da cagir<T> — deger ise doner, hic ise lazy uretici f'i cagirir.
+işlev ya_da_cagir<T>(opt: seçimlik<T>, f: işlev() -> T) -> T {
+    eşleş opt {
+        değer(v) => { ver v; }
+        hiç => { ver f(); }
+    }
+    /* Asla buraya gelinmemeli — kol gövdeleri her ihtimali kapsiyor.
+     * Tip cikarsama icin: f() tipini T cikarsasin. */
+    ver f();
+}
+
+// --- Harita / Filtre / Bagla (tam32 — concrete, geri uyumluluk) ---
+
+// Harita — deger ise f uygula, hic ise hic doner.
 işlev harita_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> tam32) -> seçimlik<tam32> {
     eşleş opt {
         değer(v) => { ver değer(f(v)); }

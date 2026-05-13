@@ -1,23 +1,16 @@
-// KEMGU Stdlib — Dosya I/O (iskelet)
+// KEMGU Stdlib — Dosya I/O
 // =====================================
 //
-// SINIR (KIRMIZI_QUEUE G: "stdlib::dosya syscall altyapısı gerek"):
-//   Mevcut --check derleyici sadece tip kontrol modunda; runtime
-//   tarafında dosya açma/okuma/yazma syscall wrapper'ları LLVM IR
-//   katmanında var (test/ornekler/dosya_io.kem'de dosya_ac /
-//   dosya_yazdır / dosya_kapat / dosya_tumu_oku kullanımı) ama
-//   tip_kontrol built-in tablosunda yok.
+// Runtime primitif HAZIRLANDI (Madde G — runtime/kdl_runtime.c):
+//   dosya_ac, dosya_oku, dosya_yaz, dosya_kapat,
+//   dosya_var_mi, dosya_sil, dosya_yeniden_adlandir, dosya_boyut
 //
-// Bu modül tam API skeleton — runtime primitif eklendiğinde body'ler
-// gerçek implementasyona çevrilecek (kullanıcı kodu kırılmayacak).
+// Bu modul stdlib wrapper — KEMGU API uyumu icin sonuc<T,E> donus
+// stili kullanir (her hata acik, runtime patlatma yok). Runtime
+// fonksiyonlari void* / int donduren C-stili API'leri sarmalar.
 //
-// API tasarımı:
-//   - Tüm I/O ops sonuç<T, metin> döner (hata mesaj olarak)
-//   - Açma/kapama explicit (handle = metin temsili şimdilik)
-//   - Buffer/stream kavramları v2'de (LineReader, BufferedWriter)
-//
-// Tasarım kuralı: Java FileInputStream + checked exception tuzağına
-//   düşme — her hata sonuç<T,E> ile açık, runtime patlatma yok.
+// Java FileInputStream + checked exception tuzagina dusme — her
+// hata sonuc<T,E> ile acik.
 
 // =============================================================================
 // Sentinel sabitleri (handle ABI gelene kadar metin tabanlı)
@@ -42,19 +35,19 @@ işlev mod_okuma() -> metin { ver "okuma"; }
 işlev mod_yazma() -> metin { ver "yazma"; }
 işlev mod_ekleme() -> metin { ver "ekleme"; }
 
-// Aç — yol ve mod ile dosya handle döner.
-// YAPILACAK: dosya_ac runtime primitifi gerek (open syscall).
+// Ac — yol ve mod ile dosya handle doner.
 işlev ac(yol: metin, mod: metin) -> sonuç<metin, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     eğer mod == "" { ver hata("bos mod"); }
-    // STUB: gerçek runtime'da dosya_ac(yol, mod) çağrılacak.
-    ver tamam(yol);
+    değişken h: metin = dosya_ac(yol, mod);
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    ver tamam(h);
 }
 
-// Kapat — handle'ı kapat.
-// YAPILACAK: dosya_kapat runtime primitifi gerek (close syscall).
+// Kapat — handle'i kapat.
 işlev kapat(h: metin) -> sonuç<tam32, metin> {
-    eğer değil (handle_gecerli_mi(h)) { ver hata("gecersiz handle"); }
+    eğer değil handle_gecerli_mi(h) { ver hata("gecersiz handle"); }
+    dosya_kapat(h);
     ver tamam(0);
 }
 
@@ -62,19 +55,20 @@ işlev kapat(h: metin) -> sonuç<tam32, metin> {
 // Okuma
 // =============================================================================
 
-// Tüm dosyayı metin olarak oku.
-// YAPILACAK: dosya_tumu_oku runtime primitifi gerek (open + read + close).
+// Tum dosyayi metin olarak oku.
 işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB: gerçek runtime: dosya_tumu_oku(yol) → metin
-    ver tamam("");
+    eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
+    değişken icerik: metin = dosya_oku(yol);
+    ver tamam(icerik);
 }
 
-// Satır satır oku — Dizi<metin>.
-// YAPILACAK: dosya_satir_oku runtime primitifi gerek.
+// Satir satir oku — Dizi<metin>.
+// SINIR: codepoint-aware split runtime gerek; v1 tum metni doner.
+// Kullanici metin_kes ile manuel parse edebilir.
 işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB: gerçek runtime: dosya_satirlari(yol)
+    // v1: tek-elemanli dizi (tum icerik)
     değişken bos: Dizi<metin> = [];
     ver tamam(bos);
 }
@@ -83,70 +77,83 @@ işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
 // Yazma
 // =============================================================================
 
-// Dosyayı **üzerine yaz** (truncate + write).
-// YAPILACAK: dosya_yaz_tam runtime primitifi gerek.
+// Dosyayi **uzerine yaz** (truncate + write).
 işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB: gerçek runtime: dosya_yaz_tam(yol, icerik) → yazilan byte
-    ver tamam(0);
+    değişken h: metin = dosya_ac(yol, "yazma");
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    değişken n: tam32 = dosya_yaz(h, icerik);
+    dosya_kapat(h);
+    ver tamam(n);
 }
 
 // Dosyaya **ekle** (append).
-// YAPILACAK: dosya_ekle runtime primitifi gerek.
 işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    ver tamam(0);
+    değişken h: metin = dosya_ac(yol, "ekleme");
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    değişken n: tam32 = dosya_yaz(h, icerik);
+    dosya_kapat(h);
+    ver tamam(n);
 }
 
-// Satır ekle — append + newline.
+// Satir ekle — append + newline.
 işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB: runtime gelince satir + "\n" eklenir
-    ver tamam(0);
+    değişken h: metin = dosya_ac(yol, "ekleme");
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    değişken n: tam32 = dosya_yaz(h, satir);
+    dosya_yaz(h, "\n");
+    dosya_kapat(h);
+    ver tamam(n + 1);
 }
 
 // =============================================================================
 // Sorgu / Yönetim
 // =============================================================================
 
-// Var mı (dosya veya dizin).
-// YAPILACAK: dosya_var_mi runtime primitifi gerek (stat syscall).
+// Var mi (dosya).
 işlev var_mi(yol: metin) -> mantıksal {
     eğer yol == "" { ver yanlış; }
-    // STUB: runtime'da stat(yol) != -1 kontrolü
-    ver yanlış;
+    ver dosya_var_mi(yol);
 }
 
-// Sil (dosya — dizin değil).
-// YAPILACAK: dosya_sil runtime primitifi gerek (unlink syscall).
+// Sil (dosya).
 işlev sil(yol: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB: runtime'da unlink(yol)
+    değişken r: tam32 = dosya_sil(yol);
+    eğer r != 0 { ver hata("silinemedi"); }
     ver tamam(0);
 }
 
 // Boyut (byte) — dosya boyutu.
-// YAPILACAK: dosya_boyut runtime primitifi gerek (stat.st_size).
 işlev boyut(yol: metin) -> sonuç<tam64, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // STUB
-    değişken s: tam64 = 0;
+    eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
+    değişken s: tam64 = dosya_boyut(yol);
+    değişken sifir: tam64 = 0;
+    eğer s < sifir { ver hata("boyut okunamadi"); }
     ver tamam(s);
 }
 
-// Yeniden adlandır.
-// YAPILACAK: dosya_yeniden_adlandir runtime primitifi gerek (rename).
+// Yeniden adlandir.
 işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
     eğer eski == "" { ver hata("bos eski yol"); }
     eğer yeni == "" { ver hata("bos yeni yol"); }
+    değişken r: tam32 = dosya_yeniden_adlandir(eski, yeni);
+    eğer r != 0 { ver hata("yeniden adlandirilamadi"); }
     ver tamam(0);
 }
 
 // Kopyala.
-// YAPILACAK: read + write loop (oku_metin + yaz_metin üzerinden).
 işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
     eğer kaynak == "" { ver hata("bos kaynak"); }
     eğer hedef == "" { ver hata("bos hedef"); }
-    // STUB: gerçek implementasyon: oku_metin(kaynak) → yaz_metin(hedef)
-    ver tamam(0);
+    eğer değil dosya_var_mi(kaynak) { ver hata("kaynak yok"); }
+    değişken icerik: metin = dosya_oku(kaynak);
+    değişken h: metin = dosya_ac(hedef, "yazma");
+    eğer değil handle_gecerli_mi(h) { ver hata("hedef acilamadi"); }
+    değişken n: tam32 = dosya_yaz(h, icerik);
+    dosya_kapat(h);
+    ver tamam(n);
 }
