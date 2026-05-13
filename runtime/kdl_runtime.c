@@ -402,17 +402,6 @@ KdlDizi *kdl_dizi_olustur(int32_t eleman_byte) {
     return d;
 }
 
-/* Initial capacity ile dizi olustur (Madde B — generic API'nin temel hali) */
-KdlDizi *kdl_dizi_olustur_n(int32_t eleman_byte, int64_t kapasite) {
-    KdlDizi *d = kdl_dizi_olustur(eleman_byte);
-    if (!d) return NULL;
-    if (kapasite > 0) {
-        d->veri = malloc((size_t)kapasite * (size_t)eleman_byte);
-        d->kapasite = (int32_t)kapasite;
-    }
-    return d;
-}
-
 void kdl_dizi_ekle_tam(KdlDizi *d, int32_t deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
@@ -423,7 +412,6 @@ void kdl_dizi_ekle_tam(KdlDizi *d, int32_t deger) {
     ((int32_t *)d->veri)[d->boyut++] = deger;
 }
 
-/* tam64 element ekleme */
 void kdl_dizi_ekle_tam64(KdlDizi *d, int64_t deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
@@ -434,28 +422,14 @@ void kdl_dizi_ekle_tam64(KdlDizi *d, int64_t deger) {
     ((int64_t *)d->veri)[d->boyut++] = deger;
 }
 
-/* metin (ptr) element ekleme */
-void kdl_dizi_ekle_metin(KdlDizi *d, const char *deger) {
+void kdl_dizi_ekle_ptr(KdlDizi *d, void *deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * sizeof(const char *));
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(void *));
         d->kapasite = yk;
     }
-    ((const char **)d->veri)[d->boyut++] = deger;
-}
-
-/* Generic byte-tabanli ekle — eleman_byte byte'i deger_ptr'den kopyalar */
-void kdl_dizi_ekle(KdlDizi *d, const void *deger_ptr) {
-    if (!d || !deger_ptr) return;
-    if (d->boyut == d->kapasite) {
-        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * (size_t)d->eleman_byte);
-        d->kapasite = yk;
-    }
-    memcpy((char *)d->veri + (size_t)d->boyut * (size_t)d->eleman_byte,
-           deger_ptr, (size_t)d->eleman_byte);
-    d->boyut++;
+    ((void **)d->veri)[d->boyut++] = deger;
 }
 
 int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
@@ -468,17 +442,13 @@ int64_t kdl_dizi_al_tam64(KdlDizi *d, int32_t i) {
     return ((int64_t *)d->veri)[i];
 }
 
-const char *kdl_dizi_al_metin(KdlDizi *d, int32_t i) {
+void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
     if (!d || i < 0 || i >= d->boyut) return NULL;
-    return ((const char **)d->veri)[i];
+    return ((void **)d->veri)[i];
 }
 
 int32_t kdl_dizi_boyut(KdlDizi *d) {
     return d ? d->boyut : 0;
-}
-
-int32_t kdl_dizi_kapasite(KdlDizi *d) {
-    return d ? d->kapasite : 0;
 }
 
 void kdl_dizi_serbest(KdlDizi *d) {

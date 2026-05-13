@@ -1,0 +1,20 @@
+özellik Toplanabilir {
+    işlev topla_iki_kat(kendin) -> tam32;
+}
+
+yapı Sayi { v: tam32; }
+
+uygula Toplanabilir için Sayi {
+    işlev topla_iki_kat(kendin) -> tam32 {
+        ver kendin.v + kendin.v;
+    }
+}
+
+işlev iki_kat<T: Toplanabilir>(x: T) -> tam32 {
+    ver x.topla_iki_kat();
+}
+
+işlev main() -> tam32 {
+    değişken s = Sayi { v: 21 };
+    ver iki_kat(s);
+}

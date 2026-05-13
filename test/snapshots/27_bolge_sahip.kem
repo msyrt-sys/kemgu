@@ -1,0 +1,10 @@
+yapı Veri { v: tam32; }
+
+işlev sahiplen(d: Veri) -> tam32 {
+    ver d.v;
+}
+
+işlev main() -> tam32 {
+    değişken d = Veri { v: 42 };
+    ver sahiplen(d);
+}

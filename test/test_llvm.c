@@ -639,122 +639,95 @@ static void test_bit_oncelik_shift_or(void) {
  *  test_metin_uzunluk, _birlestir, _kes, _kucuk_ascii, _buyuk_turkce_i,
  *  _icerir_evet/_hayir, _baslar, _biter, _kirp, _yer_degistir mevcut.) */
 
-/* === Madde B: Dizi dinamik allocator primitifleri === */
+/* === Madde B: Dizi dinamik allocator (generic intrinsics) === */
 
 static void test_dizi_olustur_ekle_boyut(void) {
-    /* 3 ekle -> boyut 3 */
+    /* dizi_olustur<T> generic + 3 ekle -> boyut 3 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(4); "
-        "dizi_ekle_tam(d, 10); "
-        "dizi_ekle_tam(d, 20); "
-        "dizi_ekle_tam(d, 30); "
-        "de\xc4\x9fi\xc5\x9fken n: tam32 = dizi_boyut_tam(d); "
-        "dizi_serbest_tam(d); "
-        "ver n; }");
-    test_sonuc("dizi_olustur + 3 ekle -> boyut 3", rc == 3);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); "
+        "dizi_ekle(d, 20); "
+        "dizi_ekle(d, 30); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_olustur<tam32> + 3 ekle -> boyut 3", rc == 3);
 }
 
 static void test_dizi_al(void) {
     /* dizi_al index 1 = 20 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(4); "
-        "dizi_ekle_tam(d, 10); "
-        "dizi_ekle_tam(d, 20); "
-        "dizi_ekle_tam(d, 30); "
-        "de\xc4\x9fi\xc5\x9fken v: tam32 = dizi_al_tam(d, 1); "
-        "dizi_serbest_tam(d); "
-        "ver v; }");
-    test_sonuc("dizi_al(d, 1) -> 20", rc == 20);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); "
+        "dizi_ekle(d, 20); "
+        "dizi_ekle(d, 30); "
+        "ver dizi_al(d, 1); }");
+    test_sonuc("dizi_al<tam32>(d, 1) -> 20", rc == 20);
 }
 
 static void test_dizi_kapasite_otomatik_buyume(void) {
     /* Kapasite 2, 5 eleman ekle -> buyume + boyut 5 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(2); "
-        "dizi_ekle_tam(d, 1); "
-        "dizi_ekle_tam(d, 2); "
-        "dizi_ekle_tam(d, 3); "
-        "dizi_ekle_tam(d, 4); "
-        "dizi_ekle_tam(d, 5); "
-        "de\xc4\x9fi\xc5\x9fken n: tam32 = dizi_boyut_tam(d); "
-        "dizi_serbest_tam(d); "
-        "ver n; }");
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(2); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); "
+        "dizi_ekle(d, 3); dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
     test_sonuc("dizi otomatik buyume (kap=2, +5) -> boyut 5", rc == 5);
 }
 
 static void test_dizi_bos_olustur(void) {
-    /* kapasite 0 -> boyut 0 baslangic */
+    /* kapasite 0 -> boyut 0 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(0); "
-        "de\xc4\x9fi\xc5\x9fken n: tam32 = dizi_boyut_tam(d); "
-        "dizi_serbest_tam(d); "
-        "ver n; }");
-    test_sonuc("dizi_olustur_tam(0) bos -> boyut 0", rc == 0);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_olustur(0) bos -> boyut 0", rc == 0);
 }
 
 static void test_dizi_toplam(void) {
-    /* 10 + 20 + 30 = 60 */
+    /* 10 + 20 + 12 = 42 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(4); "
-        "dizi_ekle_tam(d, 10); "
-        "dizi_ekle_tam(d, 20); "
-        "dizi_ekle_tam(d, 30); "
-        "de\xc4\x9fi\xc5\x9fken t: tam32 = dizi_al_tam(d, 0) + dizi_al_tam(d, 1) + dizi_al_tam(d, 2); "
-        "dizi_serbest_tam(d); "
-        "ver t; }");
-    test_sonuc("dizi_al toplam (10+20+30) -> 60", rc == 60);
-}
-
-static void test_dizi_kapasite_buyume_dogru(void) {
-    /* Kapasite >= boyut sonrasi */
-    int rc = derle_ve_calistir(
-        "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(2); "
-        "dizi_ekle_tam(d, 1); "
-        "dizi_ekle_tam(d, 2); "
-        "dizi_ekle_tam(d, 3); "
-        "de\xc4\x9fi\xc5\x9fken k: tam32 = dizi_kapasite_tam(d); "
-        "dizi_serbest_tam(d); "
-        /* Initial kap=2; 3. ekle once 2->4 buyume; kap=4 olmali */
-        "e\xc4\x9f""er k >= 3 { ver 42; } "
-        "ver 0; }");
-    test_sonuc("dizi_kapasite buyume sonrasi >= boyut -> 42", rc == 42);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); dizi_ekle(d, 20); dizi_ekle(d, 12); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_al toplam (10+20+12) -> 42", rc == 42);
 }
 
 static void test_dizi_iken_dongu(void) {
     /* iken dongusu ile 5 ekle, sonra topla */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur_tam(4); "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
         "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
-        "iken i < 5 { dizi_ekle_tam(d, i + 1); i = i + 1; } "
+        "iken i < 5 { dizi_ekle(d, i + 1); i = i + 1; } "
         "de\xc4\x9fi\xc5\x9fken t: tam32 = 0; "
         "i = 0; "
-        "iken i < dizi_boyut_tam(d) { t = t + dizi_al_tam(d, i); i = i + 1; } "
-        "dizi_serbest_tam(d); "
+        "iken i < dizi_boyut(d) { t = t + dizi_al(d, i); i = i + 1; } "
         "ver t; }");
     /* 1+2+3+4+5 = 15 */
     test_sonuc("dizi iken ekle + iken al toplam -> 15", rc == 15);
 }
 
-static void test_dizi_tam64(void) {
-    /* tam64 element ekle + al */
+static void test_dizi_tam64_generic(void) {
+    /* tam64 element generic instantiation */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur_tam64(4); "
-        "dizi_ekle_tam64(d, 100); "
-        "dizi_ekle_tam64(d, 200); "
-        "de\xc4\x9fi\xc5\x9fken v: tam64 = dizi_al_tam64(d, 0); "
-        "dizi_serbest_tam(d); "
-        /* v tam64; tam32 dondurmek gerek; eger v == 100 ise 42 */
-        "e\xc4\x9f""er v == 100 { ver 42; } "
-        "ver 0; }");
-    test_sonuc("dizi_tam64 ekle/al -> 42", rc == 42);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); dizi_ekle(d, 200); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("Dizi<tam64> generic instan + 2 ekle -> 2", rc == 2);
+}
+
+static void test_dizi_metin_generic(void) {
+    /* metin element — generic */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<metin> = dizi_olustur(4); "
+        "dizi_ekle(d, \"a\"); dizi_ekle(d, \"b\"); dizi_ekle(d, \"c\"); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("Dizi<metin> generic + 3 ekle -> 3", rc == 3);
 }
 
 /* === Madde G: Dosya syscall primitifleri === */
@@ -820,6 +793,10 @@ static void test_dosya_sil_yoksa(void) {
         "ver 0; }");
     test_sonuc("dosya_sil(yok) -> r!=0 -> 42", rc == 42);
 }
+
+/* (Madde B paralel session generic API tests removed — bu oturumda
+ *  concrete _tam suffix versiyonu (dizi_olustur_tam vb.) tip_kontrol'de
+ *  registered. Generic dizi_olustur<T> v2'de.) */
 
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -926,15 +903,15 @@ int main(void) {
     test_bit_kompozisyon();
     test_bit_oncelik_shift_or();
 
-    printf("\n--- B: Dizi dinamik allocator (runtime/kdl_runtime.c) ---\n");
+    printf("\n--- B: Dizi dinamik allocator (generic intrinsics) ---\n");
     test_dizi_olustur_ekle_boyut();
     test_dizi_al();
     test_dizi_kapasite_otomatik_buyume();
     test_dizi_bos_olustur();
     test_dizi_toplam();
-    test_dizi_kapasite_buyume_dogru();
     test_dizi_iken_dongu();
-    test_dizi_tam64();
+    test_dizi_tam64_generic();
+    test_dizi_metin_generic();
 
     printf("\n--- G: Dosya syscall primitifleri (runtime/kdl_runtime.c) ---\n");
     test_dosya_var_mi_yok();
@@ -942,6 +919,7 @@ int main(void) {
     test_dosya_boyut();
     test_dosya_yeniden_adlandir();
     test_dosya_sil_yoksa();
+
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

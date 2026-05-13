@@ -1,0 +1,11 @@
+işlev kuvvet(taban: tam32, us: tam32) -> tam32 {
+    eğer us == 0 { ver 1; }
+    değişken yarisi: tam32 = kuvvet(taban, us / 2);
+    değişken kare: tam32 = yarisi * yarisi;
+    eğer us % 2 == 0 { ver kare; }
+    ver kare * taban;
+}
+
+işlev main() -> tam32 {
+    ver kuvvet(2, 5);  // = 32
+}

@@ -1,0 +1,9 @@
+işlev hesapla(f: işlev(tam32) -> tam32, x: tam32) -> tam32 {
+    ver f(x);
+}
+
+işlev main() -> tam32 {
+    değişken kare = |n: tam32| n * n;
+    değişken iki_kat = |n: tam32| n * 2;
+    ver hesapla(kare, 6) + hesapla(iki_kat, 3);  // 36 + 6 = 42
+}
