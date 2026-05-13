@@ -1410,6 +1410,67 @@ static void test_sonuc_pattern_yanlis_tip(void) {
     arena_serbest(a);
 }
 
+/* Madde B: dizi_olustur / dizi_ekle / dizi_al tip kontrolu */
+static void test_dizi_olustur_temel(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(8); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_olustur(8) -> Dizi<tam32>", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_ekle_tip_uyumlu(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 42); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_ekle(d, 42) tam32 uyumlu", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_ekle_tip_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* metin literal -> Dizi<tam32>.ekle hata vermeli */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, \"hata\"); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_ekle metin -> tam32 dizi: hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_al_donus(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 42); "
+        "ver dizi_al(d, 0); }",
+        a);
+    test_sonuc("dizi_al donus tam32", h == 0);
+    arena_serbest(a);
+}
+
+static void test_dizi_olustur_tam64(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); "
+        "ver 0; }",
+        a);
+    test_sonuc("dizi_olustur context Dizi<tam64> instan", h == 0);
+    arena_serbest(a);
+}
+
 /* L-1: Lambda govde scope — parametre referansi */
 static void test_lambda_govde(void) {
     Arena *a = arena_olustur(0);
@@ -1670,6 +1731,11 @@ int main(void) {
     test_pattern_sonuc_tamam_bind();
     test_pattern_sonuc_hata_bind();
     test_pattern_sonuc_jokerli();
+    test_dizi_olustur_temel();
+    test_dizi_ekle_tip_uyumlu();
+    test_dizi_ekle_tip_uyumsuz();
+    test_dizi_al_donus();
+    test_dizi_olustur_tam64();
     test_sonuc_konstrüktörler();
 
     printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");
