@@ -436,6 +436,81 @@ static void test_hata_max_dur(void) {
     arena_serbest(a);
 }
 
+/* === Sonsuz loop koruma (ayni-pozisyon-ayni-kod tekrari) === */
+
+/* parse_yapi_tanimi: govde icinde sync keyword (TOK_KULLAN/TOK_MODUL vb.)
+ * varsa parse_alan -> P018 -> parser_panik_sync -> keyword'u tuketmez
+ * -> outer loop ayni pozisyonda yine parse_alan -> SONSUZ LOOP eski hali.
+ * Yeni: parser_hata ayni-pozisyon esigi asilinca hata_sayisi >= MAX
+ * yaparak inner loop'lari kirar; ayrica parse_yapi_tanimi loop guard'i
+ * gucu zorla ilerletir. */
+static void test_parser_yapi_keyword_sonsuz_loop_yok(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "yapi P { kullan modul disa }" — govde icinde sync keyword'ler */
+    const char *kaynak =
+        "yap\xc4\xb1 P { kullan mod\xc3\xbcl d\xc4\xb1\xc5\x9f" "a }";
+    Dugum *prog = parse_kaynak(kaynak, a, &hata);
+    /* Crash/hang olmamasi yeterli. Hata sayisi MAX altinda kalmali
+     * (eski bugda MAX'a yapisik kaliyordu cunku loop bitmiyordu). */
+    int ok = prog != NULL && hata >= 1 && hata <= PARSER_MAX_HATA;
+    test_sonuc("yapi govdesi sync keyword sonsuz loop yok", ok);
+    arena_serbest(a);
+}
+
+/* Random token streams: cok kategorili karisik bozuk ifadeler — parser
+ * MAX_AYNI_HATA esigine sahip oldugu icin durmali. */
+static void test_parser_ayni_pozisyon_tekrar_durur(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "yapi X { ( + ( + ( + ( + ( + }" — ayni token sirf
+     * parser_panik_sync sonrasi atlanmazsa ayni pozisyonda kalir */
+    const char *kaynak =
+        "yap\xc4\xb1 X { ( + ( + ( + ( + ( + ( + ( + ( + }";
+    Dugum *prog = parse_kaynak(kaynak, a, &hata);
+    int ok = prog != NULL && hata <= PARSER_MAX_HATA;
+    test_sonuc("ayni-pozisyon-ayni-kod tekrari durur", ok);
+    arena_serbest(a);
+}
+
+/* Mod a fuzz benzeri: cok kategorili rastgele karisik token stream
+ * — parser crash etmemeli, MAX'a sapmamali. */
+static void test_parser_karisik_token_stream(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* Lexer + parser keyword-icin-keyword karisigi — eski bugda P018
+     * kilitleniyordu */
+    const char *kaynak =
+        "i\xc5\x9flev yap\xc4\xb1 ver e\xc4\x9f" "er { ( + ; } [ ] mod\xc3\xbcl"
+        " kullan d\xc4\xb1\xc5\x9f" "a sabit -> ::";
+    Dugum *prog = parse_kaynak(kaynak, a, &hata);
+    int ok = prog != NULL && hata <= PARSER_MAX_HATA;
+    test_sonuc("karisik token stream crash etmiyor", ok);
+    arena_serbest(a);
+}
+
+/* Buyuk hata akisinda parser cokmemeli ve MAX'i asmamali.
+ * Onceki testte parser sonsuz loop'a giriyordu; simdi PARSER_MAX_AYNI_HATA
+ * esigi + MAX_HATA esigi onu garantiliyor. */
+static void test_parser_farkli_pozisyon_devam(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "yapi P { 1 1 1 ... }" — yapi govdesinde sayisal literal'lar
+     * her biri farkli pozisyonda P018 hatasi vermeli */
+    char buyuk[4096];
+    int n = 0;
+    n += snprintf(buyuk + n, sizeof(buyuk) - (size_t)n,
+                  "yap\xc4\xb1 P { ");
+    for (int i = 0; i < 300; i++) {
+        n += snprintf(buyuk + n, sizeof(buyuk) - (size_t)n, "%d ", i);
+    }
+    n += snprintf(buyuk + n, sizeof(buyuk) - (size_t)n, "}");
+    Dugum *prog = parse_kaynak(buyuk, a, &hata);
+    int ok = prog != NULL && hata >= 1 && hata <= PARSER_MAX_HATA;
+    test_sonuc("farkli-pozisyon hatalari MAX altinda tutulur", ok);
+    arena_serbest(a);
+}
+
 /* === Atama vs ifade_deyimi === */
 
 static void test_atama_deyimi(void) {
@@ -1623,6 +1698,10 @@ int main(void) {
     test_hata_eksik_noktali();
     test_hata_kurtarma_devam();
     test_hata_max_dur();
+    test_parser_yapi_keyword_sonsuz_loop_yok();
+    test_parser_ayni_pozisyon_tekrar_durur();
+    test_parser_karisik_token_stream();
+    test_parser_farkli_pozisyon_devam();
 
     printf("\n--- Atama / Ifade ---\n");
     test_atama_deyimi();
