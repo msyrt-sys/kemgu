@@ -1,23 +1,16 @@
 // KEMGU Stdlib — Sonuç<T,E>
 // ===========================
 //
-// SINIR (KIRMIZI_QUEUE C: "sonuç pattern desteği"):
-//   Mevcut parser `tamam(v) =>` ve `hata(m) =>` desenlerini kabul
-//   etmiyor (TOK_TAMAM, TOK_HATA parse_desen'de yok). Bu nedenle
-//   built-in `sonuç<T,E>` üzerinde harita/ya_da/bağla gibi inspection
-//   gerektiren ops yazılamıyor.
+// Madde C — parser fix HAZIRLANDI: `tamam(v) =>` ve `hata(m) =>`
+// pattern matching direkt calisir. Hem native sonuc<T,E> API
+// hem geri uyumluluk icin KSonuc<T,E> yapi tabanli paralel API
+// korundu. Yeni kod native sonuc<T,E> tercih etmelidir.
 //
-// İki katmanlı çözüm:
-//   1. Built-in `sonuç<T,E>` için **construction** wrapper'ları
-//      (yalnızca üretim — parser değişikliği olmadan kullanıcı kodu
-//      bu yapıyı kullanabilir, downstream `eşleş` parser fix geldiğinde
-//      tamam(v)/hata(m) ile inspect edilebilir).
-//   2. **KSonuc<T,E>** — yapı tabanlı paralel API. Tam pattern
-//      destekli (seçimlik üzerinden inspection). Geçici çözüm:
-//      parser fix landed olduğunda `sonuç<T,E>` direkt kullanılabilir.
+// Madde D — generic callback inference HAZIRLANDI: harita<T,U,E>,
+// ya_da<T,E>, bagla<T,U,E> tam generic.
 //
-// Tasarım kuralı: Java exception/Optional.get() tuzağına düşme —
-//   her hata durumu açık, deferred. C++ exception unwinding maliyeti yok.
+// Tasarim kurali: Java exception / Optional.get() tuzagina dusme —
+// her hata durumu acik, deferred. C++ exception unwinding maliyeti yok.
 
 // =============================================================================
 // 1. Built-in `sonuç<T,E>` construction wrapper'ları
@@ -32,6 +25,61 @@ işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
 
 işlev hata_yap<T, E>(h: E) -> sonuç<T, E> {
     ver hata(h);
+}
+
+// --- Sorgular (native sonuc<T,E>) ---
+
+işlev basarili_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
+    eşleş r {
+        tamam(v) => { ver doğru; }
+        hata(e) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev basarisiz_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
+    eşleş r {
+        tamam(v) => { ver yanlış; }
+        hata(e) => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- Cozumleme (native sonuc<T,E>) ---
+
+// ya_da — basarili degeri al, hatada varsayilan.
+işlev ya_da<T, E>(r: sonuç<T, E>, varsayilan: T) -> T {
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(e) => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Harita<T, U, E> — basarili degere f uygula, hata aynen gecer.
+işlev harita<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> U) -> sonuç<U, E> {
+    eşleş r {
+        tamam(v) => { ver tamam(f(v)); }
+        hata(e) => { ver hata(e); }
+    }
+    /* eşleş tum kollar ver ile bittiginde tip kontrol gecer */
+}
+
+// Harita hata<T, E, F> — hatayi f ile yeni hataya cevir.
+işlev harita_hata<T, E, F>(r: sonuç<T, E>, f: işlev(E) -> F) -> sonuç<T, F> {
+    eşleş r {
+        tamam(v) => { ver tamam(v); }
+        hata(e) => { ver hata(f(e)); }
+    }
+}
+
+// Bagla<T, U, E> — basarili ise f cagir (yeni sonuc doner), hata gecer.
+// flatMap karsiligi — Madde D ile birlikte calisir.
+işlev bagla<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> sonuç<U, E>) -> sonuç<U, E> {
+    eşleş r {
+        tamam(v) => { ver f(v); }
+        hata(e) => { ver hata(e); }
+    }
 }
 
 // =============================================================================
