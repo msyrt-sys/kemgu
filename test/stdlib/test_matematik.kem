@@ -1,0 +1,101 @@
+// KEMGU Stdlib Testi — Matematik
+// =================================
+//
+// Bu dosya `stdlib/temel/matematik.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu doğrular; --check geçerse tip imzaları
+// ve generic instantiation doğrudur.
+//
+// Makefile: `make calistir_stdlib_check`
+
+// --- mutlak ---
+işlev test_mutlak_pozitif() -> tam32 { ver mutlak(7); }
+işlev test_mutlak_negatif() -> tam32 { ver mutlak(0 - 7); }
+işlev test_mutlak_sifir() -> tam32 { ver mutlak(0); }
+
+// --- en_kucuk / en_buyuk ---
+işlev test_en_kucuk_a() -> tam32 { ver en_kucuk(3, 8); }
+işlev test_en_kucuk_b() -> tam32 { ver en_kucuk(8, 3); }
+işlev test_en_buyuk_a() -> tam32 { ver en_buyuk(3, 8); }
+işlev test_en_buyuk_b() -> tam32 { ver en_buyuk(8, 3); }
+
+// --- kare / kup ---
+işlev test_kare() -> tam32 { ver kare(5); }
+işlev test_kup() -> tam32 { ver kup(3); }
+
+// --- sinirla ---
+işlev test_sinirla_alt() -> tam32 { ver sinirla(0 - 5, 0, 10); }
+işlev test_sinirla_ust() -> tam32 { ver sinirla(20, 0, 10); }
+işlev test_sinirla_orta() -> tam32 { ver sinirla(5, 0, 10); }
+
+// --- isaret ---
+işlev test_isaret_pozitif() -> tam32 { ver isaret(42); }
+işlev test_isaret_negatif() -> tam32 { ver isaret(0 - 42); }
+işlev test_isaret_sifir() -> tam32 { ver isaret(0); }
+
+// --- kuvvet ---
+işlev test_kuvvet_2_10() -> tam32 { ver kuvvet(2, 10); }
+işlev test_kuvvet_3_4() -> tam32 { ver kuvvet(3, 4); }
+işlev test_kuvvet_5_0() -> tam32 { ver kuvvet(5, 0); }
+
+// --- kok_tam ---
+işlev test_kok_144() -> tam32 { ver kok_tam(144); }
+işlev test_kok_2() -> tam32 { ver kok_tam(2); }
+işlev test_kok_0() -> tam32 { ver kok_tam(0); }
+
+// --- mod ---
+işlev test_mod_17_5() -> tam32 { ver mod(17, 5); }
+işlev test_mod_100_7() -> tam32 { ver mod(100, 7); }
+
+// --- asal_mi ---
+işlev test_asal_2() -> mantıksal { ver asal_mi(2); }
+işlev test_asal_3() -> mantıksal { ver asal_mi(3); }
+işlev test_asal_4() -> mantıksal { ver asal_mi(4); }
+işlev test_asal_7() -> mantıksal { ver asal_mi(7); }
+işlev test_asal_9() -> mantıksal { ver asal_mi(9); }
+işlev test_asal_97() -> mantıksal { ver asal_mi(97); }
+
+// --- fibonacci ---
+işlev test_fibonacci_0() -> tam32 { ver fibonacci(0); }
+işlev test_fibonacci_1() -> tam32 { ver fibonacci(1); }
+işlev test_fibonacci_10() -> tam32 { ver fibonacci(10); }
+
+// --- faktöriyel ---
+işlev test_faktoriyel_0() -> tam32 { ver faktoriyel(0); }
+işlev test_faktoriyel_1() -> tam32 { ver faktoriyel(1); }
+işlev test_faktoriyel_5() -> tam32 { ver faktoriyel(5); }
+
+// --- çift / tek ---
+işlev test_cift_4() -> mantıksal { ver cift_mi(4); }
+işlev test_cift_5() -> mantıksal { ver cift_mi(5); }
+işlev test_tek_5() -> mantıksal { ver tek_mi(5); }
+işlev test_tek_4() -> mantıksal { ver tek_mi(4); }
+
+// --- negatif / pozitif / sifir ---
+işlev test_negatif() -> mantıksal { ver negatif_mi(0 - 5); }
+işlev test_pozitif() -> mantıksal { ver pozitif_mi(5); }
+işlev test_sifir() -> mantıksal { ver sifir_mi(0); }
+
+// --- iki_kat / yarisi ---
+işlev test_iki_kat() -> tam32 { ver iki_kat(21); }
+işlev test_yarisi() -> tam32 { ver yarisi(10); }
+
+// --- Bileşik kullanım ---
+işlev test_bilesik_a() -> tam32 {
+    değişken x: tam32 = kare(kuvvet(2, 3));   // (2^3)^2 = 64
+    ver x;
+}
+
+işlev test_bilesik_b() -> tam32 {
+    değişken x: tam32 = mutlak(0 - kare(7));  // |-49| = 49
+    ver sinirla(x, 0, 100);
+}
+
+işlev test_bilesik_c() -> mantıksal {
+    ver asal_mi(faktoriyel(4) - 1);            // 24 - 1 = 23, asal
+}
+
+işlev main() -> tam32 {
+    // 30+ test fonksiyonu yukarıda tanımlandı; main yalnızca bir tanesi
+    // çağırıp --check için entry point sağlar.
+    ver test_mutlak_pozitif();
+}

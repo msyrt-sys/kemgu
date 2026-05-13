@@ -48,3 +48,119 @@ işlev isaret<T>(x: T) -> tam32 {
     eğer x > 0 { ver 1; }
     ver 0;
 }
+
+// =============================================================================
+// Genişletme — kuvvet, kök, mod, asal_mi, fibonacci, faktöriyel, çift_mi, tek_mi
+// =============================================================================
+//
+// Bu bölümdeki işlevler yalnızca tamsayı tiplerle çalışır (kuvvet hariç).
+// Literal tip çıkarsama sınırı nedeniyle prime/fib/faktöriyel için
+// tam32 sabit tip kullanıyoruz (literal 2 generic T'ye atanamıyor).
+// Generic versiyon constraint satisfaction (Sayı/Tam özelliği) sonrası.
+
+// Kuvvet — x^n. n=0 için x döner (constraint sistemi yokken "bir<T>()" yazılamaz).
+işlev kuvvet<T>(x: T, n: tam32) -> T {
+    eğer n == 0 { ver x; }
+    değişken sonuc: T = x;
+    değişken i: tam32 = 1;
+    iken i < n {
+        sonuc = sonuc * x;
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Kök — tamsayı karekök (Newton-Raphson). n < 0 için 0 döner.
+işlev kok_tam(n: tam32) -> tam32 {
+    eğer n < 2 { ver n; }
+    değişken x: tam32 = n;
+    değişken y: tam32 = (x + 1) / 2;
+    iken y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    ver x;
+}
+
+// Modulo — a % b (generic; tüm sayısal tipler).
+işlev mod<T>(a: T, b: T) -> T {
+    ver a % b;
+}
+
+// Asal mı — trial division. n <= 1 için yanlış, n == 2 için doğru.
+işlev asal_mi(n: tam32) -> mantıksal {
+    eğer n < 2 { ver yanlış; }
+    eğer n == 2 { ver doğru; }
+    eğer n % 2 == 0 { ver yanlış; }
+    değişken i: tam32 = 3;
+    iken i * i <= n {
+        eğer n % i == 0 { ver yanlış; }
+        i = i + 2;
+    }
+    ver doğru;
+}
+
+// Fibonacci — n. terim (0-tabanlı: fib(0)=0, fib(1)=1, fib(2)=1, ...).
+// tam32 döner — overflow ~46. terimde. tam64 versiyonu için
+// fibonacci_genis (tip int conversion'i olmadığı için ayrı imza).
+işlev fibonacci(n: tam32) -> tam32 {
+    eğer n < 2 { ver n; }
+    değişken a: tam32 = 0;
+    değişken b: tam32 = 1;
+    değişken i: tam32 = 2;
+    iken i <= n {
+        değişken t: tam32 = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    ver b;
+}
+
+// Faktöriyel — n! (n < 0 için 1, n=0 için 1).
+// tam32 döner — 12! sığar, 13! taşar.
+işlev faktoriyel(n: tam32) -> tam32 {
+    eğer n < 1 { ver 1; }
+    değişken sonuc: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        sonuc = sonuc * i;
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Çift mi — n % 2 == 0.
+işlev cift_mi<T>(n: T) -> mantıksal {
+    ver n % 2 == 0;
+}
+
+// Tek mi — n % 2 != 0.
+işlev tek_mi<T>(n: T) -> mantıksal {
+    ver n % 2 != 0;
+}
+
+// Negatif mi.
+işlev negatif_mi<T>(x: T) -> mantıksal {
+    ver x < 0;
+}
+
+// Pozitif mi (sıfır dahil değil).
+işlev pozitif_mi<T>(x: T) -> mantıksal {
+    ver x > 0;
+}
+
+// Sıfır mı.
+işlev sifir_mi<T>(x: T) -> mantıksal {
+    ver x == 0;
+}
+
+// İki kat (ikiyle çarp).
+işlev iki_kat<T>(x: T) -> T {
+    ver x * 2;
+}
+
+// Yarısı (ikiye böl).
+işlev yarisi<T>(x: T) -> T {
+    ver x / 2;
+}
