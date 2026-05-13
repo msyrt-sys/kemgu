@@ -1530,6 +1530,116 @@ static void test_olarak_karakter_tam(void) {
     arena_serbest(a);
 }
 
+/* === Adim 4: Madde E v2 cast garantileri (E001-E004) === */
+
+/* E001: x olarak tekkez<T> derleme hatasi (Linear creation by cast forbidden) */
+static void test_E001_tekkez_hedef_yasak(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken t = x olarak tekkez<tam32>; "
+        "ver 0; }",
+        a);
+    test_sonuc("E001: x olarak tekkez<T> -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E001_tekkez_hedef_pozitif(void) {
+    /* tekkez<T> hedef ile cast'i denerse, hata SAYISI artmali */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver 1 olarak tekkez<tam32>; }",
+        a);
+    test_sonuc("E001 (2): 1 olarak tekkez<T> -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E002: metin olarak tam derleme hatasi */
+static void test_E002_metin_to_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver \"42\" olarak tam32; }",
+        a);
+    test_sonuc("E002: \"42\" olarak tam32 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E002_tam_to_metin(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = 42 olarak metin; "
+        "ver 0; }",
+        a);
+    test_sonuc("E002 (2): 42 olarak metin -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E003: tekkez<T> olarak T derleme hatasi (linear escape) */
+static void test_E003_tekkez_escape(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = t olarak tam32; "
+        "ver 0; }",
+        a);
+    test_sonuc("E003: tekkez<tam32> olarak tam32 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E003_tekkez_escape_metin(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(\"hi\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = t olarak metin; "
+        "ver 0; }",
+        a);
+    test_sonuc("E003 (2): tekkez<metin> olarak metin -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E004: tam64 olarak tam8 (kayip prezisyon) derleme hatasi */
+static void test_E004_tam64_to_tam8(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "de\xc4\x9fi\xc5\x9fken x: tam8 = y olarak tam8; "
+        "ver 0; }",
+        a);
+    test_sonuc("E004: tam64 olarak tam8 -> hata (kayip prezisyon)", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E004_tam64_to_tam16(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "de\xc4\x9fi\xc5\x9fken x: tam16 = y olarak tam16; "
+        "ver 0; }",
+        a);
+    test_sonuc("E004 (2): tam64 olarak tam16 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E004 pozitif: tam64 olarak tam32 izinli (32-bit native word) */
+static void test_E004_tam64_to_tam32_izinli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "ver y olarak tam32; }",
+        a);
+    test_sonuc("E004 (3): tam64 olarak tam32 -> OK (native word)", h == 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback / multi-param inference === */
 
 static void test_generic_callback_govde(void) {
@@ -1964,6 +2074,16 @@ int main(void) {
     test_olarak_kesirli_tam();
     test_olarak_metin_yasak();
     test_olarak_karakter_tam();
+    /* Adim 4: Cast guarantee testleri */
+    test_E001_tekkez_hedef_yasak();
+    test_E001_tekkez_hedef_pozitif();
+    test_E002_metin_to_tam();
+    test_E002_tam_to_metin();
+    test_E003_tekkez_escape();
+    test_E003_tekkez_escape_metin();
+    test_E004_tam64_to_tam8();
+    test_E004_tam64_to_tam16();
+    test_E004_tam64_to_tam32_izinli();
     test_generic_callback_govde();
     test_generic_callback_concrete_instan();
     test_generic_callback_tip_uyumsuz();

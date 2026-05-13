@@ -1089,19 +1089,34 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             return t_basit(tk, TIP_BOS);
         }
 
-        /* === Madde E: explicit tip donusturme (x olarak T) === */
+        /* === Madde E (v2): explicit tip donusturme (x olarak T) — 4 garanti ===
+         *   E001: x olarak tekkez<T> yasak (tekkez hedef)
+         *   E002: metin/yapi/dizi gibi sayisal-disi kaynak yasak
+         *   E003: tekkez<T> olarak X yasak (linear escape — kaynak tekkez)
+         *   E004: kayıp prezisyon (tam64 olarak tam8, kesirli64 olarak kesirli32)
+         */
         case DUGUM_TIP_DONUSTUR: {
             TipBilgisi *kt = tip_belirle(tk, d->veri.tip_donustur.kaynak);
             if (kt->kategori == TIP_HATA) return t_hata(tk);
             TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.tip_donustur.hedef_tip);
             if (!ht || ht->kategori == TIP_HATA) return t_hata(tk);
-            /* v1: sayisal tipler arasi (tam* / dtam* / kesirli*) izin verilir;
-             * mantiksal hedef yasak; lineer hedef yasak. */
+
+            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile yaratamazsin) */
             if (ht->kategori == TIP_TEKKEZ) {
                 tip_hata(tk, d, "E001",
                     "olarak ile tekkez<T> hedeflenemez (Linear Types kuralı)");
                 return t_hata(tk);
             }
+
+            /* E003: kaynak tekkez<T> yasak (linear escape — tekkez'i extract
+             * etmek icin kullan() gerek, olarak ile escape yapilamaz) */
+            if (kt->kategori == TIP_TEKKEZ) {
+                tip_hata(tk, d, "E003",
+                    "olarak ile tekkez<T> kaynaktan extract edilemez "
+                    "(kullan(...) gerekir)");
+                return t_hata(tk);
+            }
+
             int kaynak_sayisal = tip_sayisal_mi(kt);
             int hedef_sayisal = tip_sayisal_mi(ht);
             if (!kaynak_sayisal || !hedef_sayisal) {
@@ -1111,10 +1126,56 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 int int_to_char = (tip_tamsayi_mi(kt) &&
                                    ht->kategori == TIP_KARAKTER);
                 if (!char_to_int && !int_to_char) {
+                    /* E002: metin/dizi/yapi gibi sayisal disi kaynak/hedef */
                     tip_hata(tk, d, "E002",
                         "olarak: kaynak ve hedef sayisal/karakter olmali");
                     return t_hata(tk);
                 }
+            }
+
+            /* E004: Kayip prezisyon — tam64/dtam64 -> tam8/16/32 ya da
+             * kesirli64 -> kesirli32 explicit isaretsiz dusurme.
+             * Bu cesit cast yapilmasi gerekiyorsa, kullanici niyet
+             * ifade etmeli (& mask, mod, vs.) — implicit aritmetigi onler. */
+            int kw_kaynak = 0, kw_hedef = 0;
+            switch (kt->kategori) {
+                case TIP_TAM8: case TIP_DTAM8:    kw_kaynak = 8; break;
+                case TIP_TAM16: case TIP_DTAM16:  kw_kaynak = 16; break;
+                case TIP_TAM32: case TIP_DTAM32:  kw_kaynak = 32; break;
+                case TIP_TAM64: case TIP_DTAM64:  kw_kaynak = 64; break;
+                case TIP_KESIRLI32:               kw_kaynak = 320; break;
+                case TIP_KESIRLI64:               kw_kaynak = 640; break;
+                case TIP_KARAKTER:                kw_kaynak = 32; break;
+                default: break;
+            }
+            switch (ht->kategori) {
+                case TIP_TAM8: case TIP_DTAM8:    kw_hedef = 8; break;
+                case TIP_TAM16: case TIP_DTAM16:  kw_hedef = 16; break;
+                case TIP_TAM32: case TIP_DTAM32:  kw_hedef = 32; break;
+                case TIP_TAM64: case TIP_DTAM64:  kw_hedef = 64; break;
+                case TIP_KESIRLI32:               kw_hedef = 320; break;
+                case TIP_KESIRLI64:               kw_hedef = 640; break;
+                case TIP_KARAKTER:                kw_hedef = 32; break;
+                default: break;
+            }
+            /* E004: kayip prezisyon. Pratik kural: tam64 -> tam8/16 yasak,
+             * kesirli64 -> kesirli32 yasak. tam64 -> tam32 izinli (32-bit
+             * native word). Bu, "ortakli olunca cast" semantigini korur
+             * ama acik narrowing'i blok eder. */
+            int kaynak_int = kw_kaynak > 0 && kw_kaynak <= 64;
+            int hedef_int = kw_hedef > 0 && kw_hedef <= 64;
+            int kaynak_float = kw_kaynak >= 320;
+            int hedef_float = kw_hedef >= 320;
+            /* Sadece >32-bit kaynak -> <32-bit hedef yasak (significant lost) */
+            if (kaynak_int && hedef_int && kw_kaynak >= 64 && kw_hedef < 32) {
+                tip_hata(tk, d, "E004",
+                    "olarak: kayip prezisyon (tam64 -> tam8/tam16)");
+                return t_hata(tk);
+            }
+            if (kaynak_float && hedef_float && kw_kaynak > kw_hedef) {
+                tip_hata(tk, d, "E004",
+                    "olarak: kayip prezisyon (kesirli64 -> kesirli32)");
+                return t_hata(tk);
             }
             return ht;
         }
