@@ -450,6 +450,58 @@ static void test_metin_buyuk_turkce_i(void) {
     test_sonuc("metin_buyuk(\"i\") -> Turkce İ (2 byte)", rc == 2);
 }
 
+/* === Adim 2: Turkce-aware case folding === */
+
+static void test_metin_kucuk_tr_buyuk_I(void) {
+    /* I (1 byte) -> ı (2 byte: \xc4\xb1) — uzunluk = 2 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_tr(\"I\")); }");
+    test_sonuc("metin_kucuk_tr(\"I\") -> ı (2 byte)", rc == 2);
+}
+
+static void test_metin_buyuk_tr_kucuk_i(void) {
+    /* i -> İ (2 byte) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_buyuk_tr(\"i\")); }");
+    test_sonuc("metin_buyuk_tr(\"i\") -> İ (2 byte)", rc == 2);
+}
+
+static void test_metin_ascii_I_kalir(void) {
+    /* ASCII variant: I -> i (1 byte), Turkce I/ı yok */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_ascii(\"I\")); }");
+    test_sonuc("metin_kucuk_ascii(\"I\") -> i (1 byte, ASCII saf)", rc == 1);
+}
+
+static void test_metin_ascii_turkce_korunur(void) {
+    /* ASCII variant Turkce karakteri olduğu gibi bırakır */
+    /* "Aİ" 3 byte (A + İ olarak \xc4\xb0). metin_kucuk_ascii ile A->a kalir,
+     * İ degismez -> "aİ" 3 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_ascii(\"A\xc4\xb0\")); }");
+    test_sonuc("metin_kucuk_ascii(\"Aİ\") Turkce kalir (3 byte)", rc == 3);
+}
+
+static void test_metin_tr_yuvarlak_yolculuk(void) {
+    /* I -> ı -> I roundtrip uzunluk: I (1) -> ı (2) -> I (1) -> 1 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_buyuk_tr(metin_kucuk_tr(\"I\"))); }");
+    test_sonuc("metin_buyuk_tr(metin_kucuk_tr(\"I\")) round-trip -> 1", rc == 1);
+}
+
+static void test_metin_tr_turkce_c(void) {
+    /* C (1 byte) -> c (1 byte ASCII). Cc kucuk verir */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_tr(\"Cc\")); }");
+    test_sonuc("metin_kucuk_tr(\"Cc\") -> 2 byte", rc == 2);
+}
+
 static void test_metin_icerir_evet(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
@@ -929,6 +981,12 @@ int main(void) {
     test_metin_kes();
     test_metin_kucuk_ascii();
     test_metin_buyuk_turkce_i();
+    test_metin_kucuk_tr_buyuk_I();
+    test_metin_buyuk_tr_kucuk_i();
+    test_metin_ascii_I_kalir();
+    test_metin_ascii_turkce_korunur();
+    test_metin_tr_yuvarlak_yolculuk();
+    test_metin_tr_turkce_c();
     test_metin_icerir_evet();
     test_metin_icerir_hayir();
     test_metin_baslar();

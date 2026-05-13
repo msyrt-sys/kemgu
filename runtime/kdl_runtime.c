@@ -295,6 +295,48 @@ const char *kdl_metin_buyuk(const char *s) {
     return r;
 }
 
+/* === Adim 2: Turkce-aware aliaslari + ASCII-only ek versiyon === */
+
+/* metin_kucuk_tr: I/İ Turkce-aware kucuk (kdl_metin_kucuk ile ayni).
+ * Explicit isim — kullanici niyetini netlestirmek icin. */
+const char *kdl_metin_kucuk_tr(const char *s) {
+    return kdl_metin_kucuk(s);
+}
+
+/* metin_buyuk_tr: i/ı Turkce-aware buyuk (kdl_metin_buyuk ile ayni). */
+const char *kdl_metin_buyuk_tr(const char *s) {
+    return kdl_metin_buyuk(s);
+}
+
+/* metin_kucuk_ascii: SAF ASCII A-Z -> a-z. Turkce karakterler degismeden
+ * kalir (geri uyumluluk ihtiyaci icin). */
+const char *kdl_metin_kucuk_ascii(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        r[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
+/* metin_buyuk_ascii: SAF ASCII a-z -> A-Z. */
+const char *kdl_metin_buyuk_ascii(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        r[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
 /* metin_icerir: haystack icinde needle var mi (substring) */
 _Bool kdl_metin_icerir(const char *haystack, const char *needle) {
     if (!haystack || !needle) return 0;
