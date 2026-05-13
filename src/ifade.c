@@ -8,15 +8,19 @@
  * KEMGU Ifade Parser (Pratt)
  * ===========================
  *
- * Oncelik tablosu (CLAUDE.md ile birebir):
- *   1: veya               (sol)
- *   2: ve                 (sol)
- *   3: == !=              (sol)
- *   4: < > <= >=          (sol)
- *   5: + -                (sol)
- *   6: * / %              (sol)
- *   7: degil - & * (onek) (sag)
- *   8: . [] () ::         (sol — sonek)
+ * Oncelik tablosu (CLAUDE.md ile birebir, bit op'lar dahil):
+ *    1: veya                (sol)  — logical OR
+ *    2: ve                  (sol)  — logical AND
+ *    3: |                   (sol)  — bit OR
+ *    4: ^                   (sol)  — bit XOR
+ *    5: &                   (sol)  — bit AND
+ *    6: == !=               (sol)  — equality
+ *    7: < > <= >=           (sol)  — comparison
+ *    8: << >>               (sol)  — shift
+ *    9: + -                 (sol)  — additive
+ *   10: * / %               (sol)  — multiplicative
+ *   11: degil - ~ & * (onek) (sag) — prefix
+ *   12: . [] () ::          (sol — sonek)
  *
  * Birincil ifadeler:
  *   - Literaller (TAM, ONDALIK, METIN, KARAKTER, dogru/yanlis/bos)
@@ -51,21 +55,29 @@ typedef enum {
     ONC_YOK         = 0,
     ONC_VEYA        = 1,
     ONC_VE          = 2,
-    ONC_ESITLIK     = 3,
-    ONC_KARSILASTIR = 4,
-    ONC_TOPLAMA     = 5,
-    ONC_CARPMA      = 6,
-    ONC_ONEK        = 7,
-    ONC_SONEK       = 8,
+    ONC_BIT_VEYA    = 3,
+    ONC_BIT_OZVEYA  = 4,
+    ONC_BIT_VE      = 5,
+    ONC_ESITLIK     = 6,
+    ONC_KARSILASTIR = 7,
+    ONC_KAYDIR      = 8,
+    ONC_TOPLAMA     = 9,
+    ONC_CARPMA      = 10,
+    ONC_ONEK        = 11,
+    ONC_SONEK       = 12,
 } Oncelik;
 
 static int ikili_oncelik(TokenTipi t) {
     switch (t) {
         case TOK_VEYA:                                          return ONC_VEYA;
         case TOK_VE:                                            return ONC_VE;
+        case TOK_VEYA_BIT:                                      return ONC_BIT_VEYA;
+        case TOK_OZVEYA_BIT:                                    return ONC_BIT_OZVEYA;
+        case TOK_VE_BIT:                                        return ONC_BIT_VE;
         case TOK_ESIT_ESIT:    case TOK_ESIT_DEGIL:             return ONC_ESITLIK;
         case TOK_KUCUK:        case TOK_BUYUK:
         case TOK_KUCUK_ESIT:   case TOK_BUYUK_ESIT:             return ONC_KARSILASTIR;
+        case TOK_SOLA_KAYDIR:  case TOK_SAGA_KAYDIR:            return ONC_KAYDIR;
         case TOK_ARTI:         case TOK_EKSI:                   return ONC_TOPLAMA;
         case TOK_YILDIZ:       case TOK_BOLU:    case TOK_MOD:  return ONC_CARPMA;
         default:                                                return ONC_YOK;
@@ -88,12 +100,17 @@ static Operator token_ikili_op(TokenTipi t) {
     switch (t) {
         case TOK_VEYA:        return OP_VEYA;
         case TOK_VE:          return OP_VE;
+        case TOK_VEYA_BIT:    return OP_BIT_VEYA;
+        case TOK_OZVEYA_BIT:  return OP_BIT_OZVEYA;
+        case TOK_VE_BIT:      return OP_BIT_VE;
         case TOK_ESIT_ESIT:   return OP_ESIT;
         case TOK_ESIT_DEGIL:  return OP_ESIT_DEGIL;
         case TOK_KUCUK:       return OP_KUCUK;
         case TOK_BUYUK:       return OP_BUYUK;
         case TOK_KUCUK_ESIT:  return OP_KUCUK_ESIT;
         case TOK_BUYUK_ESIT:  return OP_BUYUK_ESIT;
+        case TOK_SOLA_KAYDIR: return OP_SOLA_KAYDIR;
+        case TOK_SAGA_KAYDIR: return OP_SAGA_KAYDIR;
         case TOK_ARTI:        return OP_ARTI;
         case TOK_EKSI:        return OP_EKSI;
         case TOK_YILDIZ:      return OP_CARPI;
@@ -378,6 +395,12 @@ static Dugum *parse_onek(Parser *p) {
             parser_ilerle(p);
             Dugum *operand = parse_onek(p);
             return dugum_tekli(p->arena, OP_DEGIL, operand, satir, sutun);
+        }
+        case TOK_DEGIL_BIT: {
+            /* ~x bitwise NOT */
+            parser_ilerle(p);
+            Dugum *operand = parse_onek(p);
+            return dugum_tekli(p->arena, OP_BIT_DEGIL, operand, satir, sutun);
         }
         case TOK_VE_BIT: {
             /* & x  veya  & degisken x */

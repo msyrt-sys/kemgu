@@ -1314,6 +1314,79 @@ static void test_cs_inherent_kayit(void) {
     arena_serbest(a);
 }
 
+/* === ADIM 30: Bit operatorleri tip kontrolu === */
+
+static void test_bit_ve_tam32(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("42 & 63", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: 42 & 63 -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_veya_tam32(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("40 | 2", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: 40 | 2 -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_degil_tam32(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("~42", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: ~42 -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_kaydir_tam32(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("21 << 1", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: 21 << 1 -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_ve_mantiksal_hata(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* doğru = TOK_DOGRU = mantiksal -> bit op kabul etmez */
+    TipBilgisi *t = ifade_tipi("42 & do\xc4\x9f" "ru", a, s, &hata);
+    int ok = hata > 0 && tip_kategorisi_esit(t, TIP_HATA);
+    test_sonuc("bit: 42 & dogru -> T028 hata", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_degil_mantiksal_hata(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("~do\xc4\x9f" "ru", a, s, &hata);
+    int ok = hata > 0 && tip_kategorisi_esit(t, TIP_HATA);
+    test_sonuc("bit: ~dogru -> T028 hata", ok);
+    arena_serbest(a);
+}
+
+static void test_kaydir_mantiksal_hata(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("1 << do\xc4\x9f" "ru", a, s, &hata);
+    int ok = hata > 0 && tip_kategorisi_esit(t, TIP_HATA);
+    test_sonuc("bit: 1 << dogru -> T028 hata", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1477,6 +1550,15 @@ int main(void) {
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
+
+    printf("\n--- Bit operatorleri (ADIM 30) ---\n");
+    test_bit_ve_tam32();
+    test_bit_veya_tam32();
+    test_bit_degil_tam32();
+    test_kaydir_tam32();
+    test_bit_ve_mantiksal_hata();
+    test_bit_degil_mantiksal_hata();
+    test_kaydir_mantiksal_hata();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

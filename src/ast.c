@@ -217,8 +217,14 @@ const char *operator_adi(Operator op) {
         case OP_BUYUK_ESIT:    return ">=";
         case OP_VE:            return "ve";
         case OP_VEYA:          return "veya";
+        case OP_BIT_VE:        return "&";
+        case OP_BIT_VEYA:      return "|";
+        case OP_BIT_OZVEYA:    return "^";
+        case OP_SOLA_KAYDIR:   return "<<";
+        case OP_SAGA_KAYDIR:   return ">>";
         case OP_NEG:           return "neg";
         case OP_DEGIL:         return "degil";
+        case OP_BIT_DEGIL:     return "~";
         case OP_REF:           return "&";
         case OP_REF_DEGISKEN:  return "&degisken";
         case OP_DEREFERANS:    return "deref*";

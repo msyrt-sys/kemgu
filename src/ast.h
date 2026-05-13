@@ -112,9 +112,17 @@ typedef enum {
     OP_VE,             /* ve */
     OP_VEYA,           /* veya */
 
+    /* Bit operatorleri (ikili) — page table / kripto kodu icin */
+    OP_BIT_VE,         /* &  bitwise AND */
+    OP_BIT_VEYA,       /* |  bitwise OR */
+    OP_BIT_OZVEYA,     /* ^  bitwise XOR */
+    OP_SOLA_KAYDIR,    /* << logical shift left */
+    OP_SAGA_KAYDIR,    /* >> arithmetic shift right (signed) / logical (unsigned) */
+
     /* Tekli */
     OP_NEG,            /* -x */
     OP_DEGIL,          /* degil x */
+    OP_BIT_DEGIL,      /* ~x bitwise NOT */
     OP_REF,            /* &x */
     OP_REF_DEGISKEN,   /* &degisken x */
     OP_DEREFERANS,     /* *x */
