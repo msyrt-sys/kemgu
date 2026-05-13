@@ -1,0 +1,273 @@
+// KEMGU Stdlib Testi — Dizi
+// =================================
+//
+// Bu dosya `stdlib/dizi.kem` ile birleştirilerek --check edilir.
+
+// --- uzunluk / bos_mu / dolu_mu ---
+işlev test_uzunluk_3() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver uzunluk(d);
+}
+
+işlev test_uzunluk_0() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver uzunluk(d);
+}
+
+işlev test_bos_mu_evet() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver bos_mu(d);
+}
+
+işlev test_bos_mu_hayir() -> mantıksal {
+    değişken d: Dizi<tam32> = [1];
+    ver bos_mu(d);
+}
+
+işlev test_dolu_mu() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2];
+    ver dolu_mu(d);
+}
+
+// --- ilk / son / al ---
+işlev test_ilk_dolu() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    değişken i: seçimlik<tam32> = ilk(d);
+    eşleş i {
+        değer(v) => { ver v; }
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ilk_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    değişken i: seçimlik<tam32> = ilk(d);
+    eşleş i {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_son_dolu() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    değişken s: seçimlik<tam32> = son(d);
+    eşleş s {
+        değer(v) => { ver v; }
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_al_iyi() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    değişken r: seçimlik<tam32> = al(d, 1);
+    eşleş r {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+işlev test_al_sinir_dis() -> mantıksal {
+    değişken d: Dizi<tam32> = [10, 20];
+    değişken r: seçimlik<tam32> = al(d, 5);
+    eşleş r {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- icerir / bul / indeks_bul ---
+işlev test_icerir_evet() -> mantıksal {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver icerir(d, 20);
+}
+
+işlev test_icerir_hayir() -> mantıksal {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver icerir(d, 99);
+}
+
+işlev test_bul_var() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    değişken r: seçimlik<tam32> = bul(d, 30);
+    eşleş r {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+işlev test_indeks_bul() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30, 40];
+    değişken r: seçimlik<tam32> = indeks_bul(d, 30);
+    eşleş r {
+        değer(v) => { ver v; }
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- ters_cevir ---
+işlev test_ters_cevir() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    değişken r = ters_cevir(d);
+    ver r[0];   // 3
+}
+
+işlev test_ters_cevir_tek() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    değişken r = ters_cevir(d);
+    ver r[0];
+}
+
+işlev test_ters_cevir_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    değişken r = ters_cevir(d);
+    ver uzunluk(r);
+}
+
+// --- sirala ---
+işlev test_sirala() -> tam32 {
+    değişken d: Dizi<tam32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    değişken r = sirala(d);
+    ver r[0];   // 1
+}
+
+işlev test_sirala_tersi() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 4, 3, 2, 1];
+    değişken r = sirala(d);
+    ver r[0];   // 1
+}
+
+// --- indirgeme (fold) ---
+işlev op_topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev op_carp(a: tam32, b: tam32) -> tam32 { ver a * b; }
+işlev op_maks(a: tam32, b: tam32) -> tam32 {
+    eğer a > b { ver a; }
+    ver b;
+}
+
+işlev test_indirgeme_toplam() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4, 5];
+    ver indirgeme_tam(d, 0, op_topla);   // 15
+}
+
+işlev test_indirgeme_carpim() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    ver indirgeme_tam(d, 1, op_carp);     // 24
+}
+
+işlev test_indirgeme_maks() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1];
+    ver indirgeme_tam(d, 0, op_maks);     // 8
+}
+
+// --- toplam / carpim ---
+işlev test_toplam() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4, 5];
+    ver toplam_tam(d);                    // 15
+}
+
+işlev test_carpim() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 3, 4];
+    ver carpim_tam(d);                    // 24
+}
+
+// --- min / maks ---
+işlev test_min() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1];
+    değişken m: seçimlik<tam32> = min_tam(d);
+    eşleş m {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+işlev test_maks() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1];
+    değişken m: seçimlik<tam32> = maks_tam(d);
+    eşleş m {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+// --- say / tum_mu / bir_mu ---
+işlev cift_filtre(x: tam32) -> mantıksal { ver x % 2 == 0; }
+işlev pozitif_filtre(x: tam32) -> mantıksal { ver x > 0; }
+
+işlev test_say() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4, 5, 6];
+    ver say_tam(d, cift_filtre);          // 3
+}
+
+işlev test_tum_mu_evet() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver tum_mu_tam(d, pozitif_filtre);
+}
+
+işlev test_tum_mu_hayir() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 0 - 3];
+    ver tum_mu_tam(d, pozitif_filtre);
+}
+
+işlev test_bir_mu_evet() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    ver bir_mu_tam(d, cift_filtre);
+}
+
+işlev test_bir_mu_hayir() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 3, 5, 7];
+    ver bir_mu_tam(d, cift_filtre);
+}
+
+// --- harita_yerinde ---
+işlev iki_kat_lokal(x: tam32) -> tam32 { ver x * 2; }
+
+işlev test_harita_yerinde() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    değişken r = harita_yerinde_tam(d, iki_kat_lokal);
+    ver r[0] + r[1] + r[2];                // 2 + 4 + 6 = 12
+}
+
+// --- esit_mi ---
+işlev test_esit_evet() -> mantıksal {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    değişken b: Dizi<tam32> = [1, 2, 3];
+    ver esit_mi(a, b);
+}
+
+işlev test_esit_uzunluk_farkli() -> mantıksal {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    değişken b: Dizi<tam32> = [1, 2];
+    ver esit_mi(a, b);
+}
+
+işlev test_esit_eleman_farkli() -> mantıksal {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    değişken b: Dizi<tam32> = [1, 9, 3];
+    ver esit_mi(a, b);
+}
+
+// --- Bileşik kullanım ---
+işlev test_pipeline() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 4, 2, 3];
+    değişken s = sirala(d);
+    değişken r = ters_cevir(s);
+    ver r[0];                              // 5 (en büyük)
+}
+
+işlev test_dizi_metin() -> mantıksal {
+    değişken d: Dizi<metin> = ["alma", "asma", "ayva"];
+    ver icerir(d, "asma");
+}
+
+işlev main() -> tam32 {
+    ver test_uzunluk_3();
+}
