@@ -571,6 +571,39 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 case OP_VE: case OP_VEYA:
                     return kontrol_ikili_mantiksal(tk, d, sol, sag);
 
+                case OP_BIT_VE: case OP_BIT_VEYA: case OP_BIT_OZVEYA: {
+                    /* Bit AND/OR/XOR: her iki operand tamsayi, ayni tip,
+                     * sonuc ayni tip. Page table / kripto kodu icin kritik. */
+                    if (!tip_tamsayi_mi(sol) || !tip_tamsayi_mi(sag)) {
+                        tip_hata(tk, d, "T028",
+                                 "bit operatoru (& | ^) tamsayi tipi ister");
+                        return t_hata(tk);
+                    }
+                    if (!tip_esit(sol, sag)) {
+                        tip_hata(tk, d, "T001",
+                                 "bit operatoru iki tarafi ayni tip olmali");
+                        return t_hata(tk);
+                    }
+                    return sol;
+                }
+
+                case OP_SOLA_KAYDIR: case OP_SAGA_KAYDIR: {
+                    /* Kaydir (<<, >>): sol tamsayi, sag tamsayi (kaydirma
+                     * miktari), sonuc sol tarafin tipi. Sag opsiyonel olarak
+                     * farkli tamsayi tipi olabilir. */
+                    if (!tip_tamsayi_mi(sol)) {
+                        tip_hata(tk, d, "T028",
+                                 "kaydirma operatoru sol taraf tamsayi ister");
+                        return t_hata(tk);
+                    }
+                    if (!tip_tamsayi_mi(sag)) {
+                        tip_hata(tk, d, "T028",
+                                 "kaydirma miktari tamsayi olmali");
+                        return t_hata(tk);
+                    }
+                    return sol;
+                }
+
                 default:
                     tip_hata(tk, d, "T001", "bilinmeyen ikili operator");
                     return t_hata(tk);
@@ -595,6 +628,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     return t_basit(tk, TIP_MANTIKSAL);
+
+                case OP_BIT_DEGIL:
+                    if (!tip_tamsayi_mi(op)) {
+                        tip_hata(tk, d, "T028",
+                                 "bit DEGIL (~) tamsayi tipi ister");
+                        return t_hata(tk);
+                    }
+                    return op;
 
                 case OP_REF:
                     /* Linear Types Spec V1 L004: tekkez referans alinamaz */

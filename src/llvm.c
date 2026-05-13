@@ -823,6 +823,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 case OP_MOD:   op = kesirli ? "frem" : "srem"; break;
                 case OP_VE:    op = "and"; break;
                 case OP_VEYA:  op = "or"; break;
+                /* Bit operatorleri — page table / kripto codegen */
+                case OP_BIT_VE:      op = "and"; break;
+                case OP_BIT_VEYA:    op = "or"; break;
+                case OP_BIT_OZVEYA:  op = "xor"; break;
+                case OP_SOLA_KAYDIR: op = "shl"; break;
+                case OP_SAGA_KAYDIR: op = "ashr"; break;  /* signed; dtamX
+                                                            icin lshr ileride */
                 default:
                     fputs("  ; ikili op desteklenmiyor\n", g->out);
                     return sol;
@@ -862,6 +869,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
                         r, op_s.tip, op_s.reg);
                 IfadeSonuc s = { r, "i1" };
+                return s;
+            }
+            if (d->veri.tekli.op == OP_BIT_DEGIL) {
+                /* ~x = xor TYPE x, -1 (tum bitleri ters cevir) */
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = xor %s %%%d, -1\n",
+                        r, op_s.tip, op_s.reg);
+                IfadeSonuc s = { r, op_s.tip };
                 return s;
             }
             fputs("  ; tekli op desteklenmiyor\n", g->out);

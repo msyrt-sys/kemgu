@@ -432,6 +432,99 @@ static void test_struct_donus_by_value(void) {
     test_sonuc("struct-by-value donus (yap() -> N{42}) -> 42", rc == 42);
 }
 
+/* === Bit Operatorleri Testleri (ADIM 30) === */
+
+static void test_bit_ve_temel(void) {
+    /* 42 & 63 = 42 (42 = 0b101010 ⊂ 0b111111) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 42 & 63; }");
+    test_sonuc("42 & 63 -> 42 (bit AND temel)", rc == 42);
+}
+
+static void test_bit_ve_mask(void) {
+    /* 42 & 0xFF (255) = 42 (alt 8 bit mask) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 42 & 255; }");
+    test_sonuc("42 & 255 -> 42 (mask alt 8 bit)", rc == 42);
+}
+
+static void test_bit_veya_kombine(void) {
+    /* 40 | 2 = 42 (0b101000 | 0b000010 = 0b101010) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 40 | 2; }");
+    test_sonuc("40 | 2 -> 42 (bit OR kombine)", rc == 42);
+}
+
+static void test_bit_veya_identity(void) {
+    /* 0 | 42 = 42 (OR sifir nokta) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 0 | 42; }");
+    test_sonuc("0 | 42 -> 42 (OR identity)", rc == 42);
+}
+
+static void test_bit_ozveya_temel(void) {
+    /* 42 ^ 0 = 42 (XOR identity) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 42 ^ 0; }");
+    test_sonuc("42 ^ 0 -> 42 (XOR identity)", rc == 42);
+}
+
+static void test_bit_ozveya_self_inverse(void) {
+    /* (42 ^ 0xAB) ^ 0xAB = 42 (XOR self-inverse) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver (42 ^ 171) ^ 171; }");
+    test_sonuc("(42 ^ 171) ^ 171 -> 42 (XOR self-inverse)", rc == 42);
+}
+
+static void test_sola_kaydir_temel(void) {
+    /* 21 << 1 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 21 << 1; }");
+    test_sonuc("21 << 1 -> 42 (shift left)", rc == 42);
+}
+
+static void test_sola_kaydir_sifir(void) {
+    /* 42 << 0 = 42 (no-op) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 42 << 0; }");
+    test_sonuc("42 << 0 -> 42 (shift 0 no-op)", rc == 42);
+}
+
+static void test_saga_kaydir_temel(void) {
+    /* 84 >> 1 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 84 >> 1; }");
+    test_sonuc("84 >> 1 -> 42 (arith shift right)", rc == 42);
+}
+
+static void test_saga_kaydir_buyuk(void) {
+    /* 168 >> 2 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 168 >> 2; }");
+    test_sonuc("168 >> 2 -> 42 (shift right 2)", rc == 42);
+}
+
+static void test_bit_degil_double(void) {
+    /* ~(~42) = 42 (double NOT) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver ~(~42); }");
+    test_sonuc("~(~42) -> 42 (double bitwise NOT)", rc == 42);
+}
+
+static void test_bit_kompozisyon(void) {
+    /* (1 << 5) | (1 << 3) | 2 = 32 | 8 | 2 = 42 (bit composition) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver (1 << 5) | (1 << 3) | 2; }");
+    test_sonuc("(1<<5) | (1<<3) | 2 -> 42 (kompozisyon)", rc == 42);
+}
+
+static void test_bit_oncelik_shift_or(void) {
+    /* 5 << 3 | 2 = (5 << 3) | 2 = 40 | 2 = 42 (shift > bit OR) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver 5 << 3 | 2; }");
+    test_sonuc("5 << 3 | 2 -> 42 (oncelik: shift > OR)", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -507,6 +600,21 @@ int main(void) {
 
     printf("\n--- ADIM 28: Allocator (bellek_al/serbest) ---\n");
     test_bellek_al_serbest();
+
+    printf("\n--- ADIM 30: Bit operatorleri ---\n");
+    test_bit_ve_temel();
+    test_bit_ve_mask();
+    test_bit_veya_kombine();
+    test_bit_veya_identity();
+    test_bit_ozveya_temel();
+    test_bit_ozveya_self_inverse();
+    test_sola_kaydir_temel();
+    test_sola_kaydir_sifir();
+    test_saga_kaydir_temel();
+    test_saga_kaydir_buyuk();
+    test_bit_degil_double();
+    test_bit_kompozisyon();
+    test_bit_oncelik_shift_or();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
