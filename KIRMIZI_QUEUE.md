@@ -45,7 +45,22 @@ eklenmez.
   3. v1 status quo: aynı tip, [i] sadece stack literal'da çalışsın
 - Engellediği iş: Daha kullanışlı stdlib (Liste, Sözlük vs runtime tipleri)
 
-## [2026-05-13] — dizi_olustur generic return-type inference
+## [2026-05-13] — Yeni anahtar kelime: `olarak` (explicit cast)
+
+- Kategori: yeni keyword + tip katmanı
+- Bağlam: Implicit tam32 -> tam64 promotion bidirectional context dışında
+  yasak (sayisal yanlis-uyumsuzluk hatalarini onler). Buna karşılık
+  explicit cast lazim: `x olarak tam64`.
+- Önerilen seçenekler:
+  1. `olarak` postfix operator: `x olarak tam64`  (TR-doğal — "X olarak Y")
+  2. `as` (İngilizce) — KEMGU Türkçe DNA'sına aykırı
+  3. Fonksiyon biçimi: `tam64(x)` (Go tarzı) — ad cakismasi riski (tam64
+     bir constructor tipi olur)
+- Karar: **(1) `olarak`** — KEMGU'nun Türkçe DNA'sını koruyor; 33 -> 34
+  anahtar kelime artisi spec etkisinde **kabul edildi** (Direktif Ek
+  v1.1 spec discussion sonrasi onayli).
+- Engellediği iş: Multi-tipli sayisal aritmetik (i32+i64), Dizi<T>
+  heap variantinde T-byte size hesabi.
 
 - Kategori: tip katmanı
 - Bağlam: `dizi_olustur(N) -> Dizi<T>` çağrısı T'yi sadece beklenen

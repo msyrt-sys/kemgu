@@ -747,6 +747,50 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             return t_basit(tk, TIP_BOS);
         }
 
+        case DUGUM_OLARAK: {
+            /* x olarak T — explicit cast (Kirmizi E) */
+            TipBilgisi *kt = tip_belirle(tk, d->veri.olarak.kaynak);
+            if (kt->kategori == TIP_HATA) return t_hata(tk);
+            TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.olarak.hedef_tip);
+            if (ht->kategori == TIP_HATA) return t_hata(tk);
+            /* Izin verilen donusumler:
+             *   tamsayi <-> tamsayi (sext/trunc — boyut farki, isaret farki)
+             *   kesirli <-> kesirli (fpext/fptrunc)
+             *   tamsayi <-> kesirli (sitofp/fptosi)
+             *   karakter <-> tamsayi (i32 <-> i32 — bit-cast effective)
+             * Yasak:
+             *   metin <-> sayisal
+             *   mantiksal <-> sayisal (T028 — bit op gibi)
+             *   referans/pointer <-> sayisal (guvensiz blokta cozulur)
+             *   yapi/dizi/seçimlik/sonuc — yasak
+             */
+            int k_int = tip_tamsayi_mi(kt);
+            int h_int = tip_tamsayi_mi(ht);
+            int k_kesirli = (kt->kategori == TIP_KESIRLI32 ||
+                              kt->kategori == TIP_KESIRLI64);
+            int h_kesirli = (ht->kategori == TIP_KESIRLI32 ||
+                              ht->kategori == TIP_KESIRLI64);
+            int k_mant = tip_mantiksal_mi(kt);
+            int k_karakter = (kt->kategori == TIP_KARAKTER);
+            int h_karakter = (ht->kategori == TIP_KARAKTER);
+
+            int izinli = 0;
+            if (k_int && h_int) izinli = 1;
+            else if (k_kesirli && h_kesirli) izinli = 1;
+            else if (k_int && h_kesirli) izinli = 1;
+            else if (k_kesirli && h_int) izinli = 1;
+            else if ((k_int || k_karakter) && (h_int || h_karakter)) izinli = 1;
+            else if (k_mant && h_int) izinli = 1;   /* bool -> int */
+            /* int -> bool YASAK (sifir/nonzero bilinmiyor; user 'x != 0' yazsin) */
+
+            if (!izinli) {
+                tip_hata(tk, d, "T032",
+                    "olarak: bu tip donusumune izin yok (sadece sayisal/karakter, bool->int)");
+                return t_hata(tk);
+            }
+            return ht;
+        }
+
         /* === Ikili === */
         case DUGUM_IKILI: {
             TipBilgisi *sol = tip_belirle(tk, d->veri.ikili.sol);

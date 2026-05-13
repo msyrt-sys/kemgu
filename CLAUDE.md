@@ -186,15 +186,16 @@ Sayı ayracı:        1_000_000
 Raw string:         r#"..."#
 ```
 
-### 33 Anahtar Kelime
+### 34 Anahtar Kelime
 ```
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
 tamam, hata, bölge, uygula, kendin, seçimlik, sonuç, değer, hiç,
-güvensiz, tekkez, imha
+güvensiz, tekkez, imha, olarak
 ```
 (`tekkez`, `imha` — Linear Types Spec V1; `kullan` ifade context'inde
-linear consume olarak ikinci anlama sahip — `kullan(t)`.)
+linear consume olarak ikinci anlama sahip — `kullan(t)`. `olarak` —
+Kırmızı E explicit cast: `x olarak tam64`.)
 
 ### Tip Sistemi
 ```

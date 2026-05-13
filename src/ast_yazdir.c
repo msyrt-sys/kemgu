@@ -321,6 +321,13 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             ast_yazdir_indent(d->veri.imha_ifade.operand, c, derinlik + 1);
             break;
 
+        case DUGUM_OLARAK:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.olarak.kaynak, c, derinlik + 1);
+            ast_yazdir_indent(d->veri.olarak.hedef_tip, c, derinlik + 1);
+            break;
+
         /* === Hata === */
 
         case DUGUM_HATA:

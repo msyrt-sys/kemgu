@@ -62,6 +62,7 @@ typedef enum {
     DUGUM_ALAN_ATAMA,      /* yapi_olustur icinde "ad: ifade" */
     DUGUM_KULLAN_IFADE,    /* kullan(e) — Linear Types Spec V1 (extract) */
     DUGUM_IMHA_IFADE,      /* imha(e)   — Linear Types Spec V1 (dispose) */
+    DUGUM_OLARAK,          /* x olarak T — Kirmizi E: explicit cast */
 
     /* Literaller */
     DUGUM_TAM,
@@ -417,6 +418,11 @@ struct Dugum {
         struct {
             Dugum *operand;
         } imha_ifade;              /* imha(e) — dispose */
+
+        struct {
+            Dugum *kaynak;         /* sol operand */
+            Dugum *hedef_tip;      /* sag operand — tip dugumu */
+        } olarak;                  /* x olarak T — Kirmizi E: explicit cast */
 
         /* === Desenler === */
 

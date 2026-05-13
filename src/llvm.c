@@ -1147,6 +1147,67 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return s;
         }
 
+        case DUGUM_OLARAK: {
+            /* x olarak T — Kirmizi E explicit cast */
+            IfadeSonuc kaynak = ifade_uret(g, d->veri.olarak.kaynak, NULL);
+            const char *hedef_ir = ast_tip_to_ir(g, d->veri.olarak.hedef_tip);
+            if (!hedef_ir) hedef_ir = "i32";
+            /* Eger zaten ayni tip ise no-op */
+            if (strcmp(kaynak.tip, hedef_ir) == 0) {
+                return kaynak;
+            }
+            /* int <-> int: int_donustur (sext/trunc/zext) */
+            int k_int = (strcmp(kaynak.tip, "i1") == 0 ||
+                          strcmp(kaynak.tip, "i8") == 0 ||
+                          strcmp(kaynak.tip, "i16") == 0 ||
+                          strcmp(kaynak.tip, "i32") == 0 ||
+                          strcmp(kaynak.tip, "i64") == 0);
+            int h_int = (strcmp(hedef_ir, "i1") == 0 ||
+                          strcmp(hedef_ir, "i8") == 0 ||
+                          strcmp(hedef_ir, "i16") == 0 ||
+                          strcmp(hedef_ir, "i32") == 0 ||
+                          strcmp(hedef_ir, "i64") == 0);
+            int k_kesirli = (strcmp(kaynak.tip, "float") == 0 ||
+                              strcmp(kaynak.tip, "double") == 0);
+            int h_kesirli = (strcmp(hedef_ir, "float") == 0 ||
+                              strcmp(hedef_ir, "double") == 0);
+
+            if (k_int && h_int) {
+                int rr = int_donustur(g, kaynak.reg, kaynak.tip, hedef_ir);
+                IfadeSonuc sn = { rr, hedef_ir };
+                return sn;
+            }
+            if (k_kesirli && h_kesirli) {
+                int rr = yeni_reg(g);
+                /* float <-> double: fpext/fptrunc */
+                const char *op = "fpext";
+                if (strcmp(kaynak.tip, "double") == 0 &&
+                    strcmp(hedef_ir, "float") == 0) op = "fptrunc";
+                fprintf(g->out, "  %%%d = %s %s %%%d to %s\n",
+                        rr, op, kaynak.tip, kaynak.reg, hedef_ir);
+                IfadeSonuc sn = { rr, hedef_ir };
+                return sn;
+            }
+            if (k_int && h_kesirli) {
+                /* signed int -> float/double: sitofp */
+                int rr = yeni_reg(g);
+                fprintf(g->out, "  %%%d = sitofp %s %%%d to %s\n",
+                        rr, kaynak.tip, kaynak.reg, hedef_ir);
+                IfadeSonuc sn = { rr, hedef_ir };
+                return sn;
+            }
+            if (k_kesirli && h_int) {
+                /* float/double -> signed int: fptosi */
+                int rr = yeni_reg(g);
+                fprintf(g->out, "  %%%d = fptosi %s %%%d to %s\n",
+                        rr, kaynak.tip, kaynak.reg, hedef_ir);
+                IfadeSonuc sn = { rr, hedef_ir };
+                return sn;
+            }
+            /* Diger durumlar: no-op (tip kontrol gecmis olmali) */
+            return kaynak;
+        }
+
         default: {
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
