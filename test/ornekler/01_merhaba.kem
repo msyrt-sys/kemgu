@@ -1,0 +1,21 @@
+// =====================================================================
+// 01_merhaba.kem — KEMGU Tutorial: Birinci adım
+// ---------------------------------------------------------------------
+// Bu örnek en küçük çalışan KEMGU programıdır.
+// Çalıştır: ./build/kemgu --check 01_merhaba.kem
+//          ./build/kemgu --llvm 01_merhaba.kem | clang -x ir - -o m.exe
+//          ./m.exe; echo $?   →  42
+// =====================================================================
+
+// Bir KEMGU programı `işlev main()` ile başlar.
+//
+//   - `işlev`            : işlev tanımlama anahtarı (= function)
+//   - `main`             : programın giriş noktası
+//   - `() -> tam32`      : parametre yok, dönüş tipi `tam32` (32-bit işaretli)
+//   - `{ ... }`          : işlev gövdesi (blok)
+//
+// `ver` ifadesi C'deki `return` ile aynı işi yapar.
+
+işlev main() -> tam32 {
+    ver 42;
+}

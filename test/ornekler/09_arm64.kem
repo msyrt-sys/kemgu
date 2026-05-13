@@ -1,0 +1,89 @@
+// =====================================================================
+// 09_arm64.kem — KEMGU Tutorial: Bit operatörleri + ARM64 cross-compile
+// ---------------------------------------------------------------------
+// Bu örnek bit operatörlerini ve KEMGU'nun ARM64 cross-compile yeteneğini
+// gösterir. Bir sayfa tablosu girişi modeller (gerçek ARMv8-A LPAE benzeri).
+//
+// Çalıştır (x86_64 native):
+//   ./build/kemgu --check 09_arm64.kem
+//   ./build/kemgu --llvm  09_arm64.kem | clang -x ir - -o app.exe
+//   ./app.exe; echo $?          → 42
+//
+// Çalıştır (ARM64 cross-compile — bare-metal):
+//   ./build/kemgu --llvm 09_arm64.kem > app.ll
+//   clang -target aarch64-unknown-none -x ir app.ll -c -o app.o
+//   file app.o                  → ELF 64-bit LSB relocatable, ARM aarch64
+//
+// (Referans: kernel.kem — aynı kavramların ilk hâli; bu tutorial yeniden
+// yazılmış halidir.)
+// =====================================================================
+
+// ----- Bit operatörleri -----
+//
+// `tam8`..`tam64` ve `dtam8`..`dtam64` üzerinde:
+//   &   bit AND
+//   |   bit OR
+//   ^   bit XOR
+//   ~   bit NOT (tekli)
+//   <<  sola kaydır
+//   >>  sağa kaydır
+//
+// Generic kapanışla çakışma (>>) parser tarafından `parser_buyuk_ayir`
+// ile çözülür — `Dizi<seçimlik<T>>` gibi yapılar sorunsuz çalışır.
+
+// ----- Sayfa tablosu girişi -----
+//
+// ARMv8-A LPAE benzeri sahte format:
+//   - üst 52 bit  : fiziksel adres (12 bit hizalı)
+//   - alt 12 bit  : izinler (read/write/execute/cache hints)
+//
+// Bu pattern bir kernel kodunda gerçekten görülür. KEMGU bit op'larıyla
+// libc bağımsız aritmetik yapar — bare-metal ortamda çalışır.
+
+işlev sayfa_giris(adres: tam64, izinler: tam64) -> tam64 {
+    // Adres bitlerini sola kaydır, izinleri alt 12 bite maskele, birleştir.
+    ver (adres << 12) | (izinler & 4095);
+}
+
+işlev sayfa_adresi(giris: tam64) -> tam64 {
+    // Üst bitleri al → fiziksel adres
+    ver giris >> 12;
+}
+
+işlev sayfa_izin(giris: tam64) -> tam64 {
+    // Alt 12 bit → izinler
+    ver giris & 4095;
+}
+
+// ----- Yardımcı: izin bayrağı kontrolü -----
+//
+// XOR ve AND birlikte: "şu bayrak set mi?"
+işlev izin_var_mi(izinler: tam64, bayrak: tam64) -> mantıksal {
+    eğer (izinler & bayrak) == bayrak {
+        ver doğru;
+    }
+    ver yanlış;
+}
+
+işlev main() -> tam32 {
+    // sayfa(adres=1, izin=7=read|write|exec)
+    //   sayfa_giris = (1 << 12) | (7 & 4095) = 4096 | 7 = 4103
+    //   sayfa_adresi(4103) = 4103 >> 12 = 1
+    //   sayfa_izin(4103)   = 4103 & 4095 = 7
+    değişken giris: tam64 = sayfa_giris(1, 7);
+
+    // İzin kontrolü: 7 & 4 (= execute bit) == 4 → doğru
+    değişken cal_var: mantıksal = izin_var_mi(7, 4);
+
+    // Bit kompozisyonu ile exit code 42 üret:
+    //   (1 << 5)   = 32
+    //   (1 << 3)   = 8
+    //   2          = 2
+    //   32 | 8 | 2 = 42  (tam32 — exit code için)
+    değişken kontrol: tam32 = (1 << 5) | (1 << 3) | 2;
+
+    eğer kontrol == 42 {
+        ver 42;
+    }
+    ver 1;
+}

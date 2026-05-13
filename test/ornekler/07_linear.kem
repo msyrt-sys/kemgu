@@ -1,0 +1,95 @@
+// =====================================================================
+// 07_linear.kem — KEMGU Tutorial: Linear Types V1 (tekkez<T>)
+// ---------------------------------------------------------------------
+// Lineer tipler — KEMGU'nun güvenlik DNA'sı.
+// Bir kaynak (örn. dosya tutamacı, kripto anahtarı, kilit) bir kez ve
+// yalnızca bir kez tüketilebilir. Derleyici bunu *yapısal olarak* zorunlu
+// kılar.
+// Çalıştır: ./build/kemgu --check 07_linear.kem
+// =====================================================================
+
+// ----- Neden lineer? -----
+//
+// Klasik dilde:
+//   File f = open("x");
+//   f.close();
+//   f.close();        // CRASH (double-free / use-after-free)
+//
+// KEMGU lineer tip ile:
+//   değişken f: tekkez<Dosya> = dosya_ac("x");
+//   imha(f);
+//   imha(f);          // ✗ Derleme hatası L002: move sonrası kullanım
+//
+// Hata değil — derleme zamanında yakalanır. Runtime'a ulaşamaz.
+
+// ----- Üç temel operasyon -----
+//
+//   1. `tekkez_yarat<T>(deger: T) -> tekkez<T>`  (Producer intrinsic)
+//   2. `kullan(t: tekkez<T>) -> T`               (Tüket + içeriği al)
+//   3. `imha(t: tekkez<T>) -> boş`               (Tüket + at)
+
+// ----- 1) En basit: yarat → kullan -----
+işlev tek_kez_kullan() -> tam32 {
+    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    ver kullan(k);                            // k tüketildi, 42 döndü
+}
+
+// ----- 2) Yarat → imha -----
+//
+// Değeri istemiyorsan `imha` ile at. Hala tüketim sayılır.
+işlev imha_ornegi() {
+    değişken k: tekkez<metin> = tekkez_yarat("merhaba");
+    imha(k);                                  // k tüketildi
+}
+
+// ----- 3) Move (sahiplik transferi) — parametre olarak ver -----
+//
+// Bir `tekkez<T>` çağrı argümanı olarak geçtiğinde sahiplik
+// fonksiyona geçer. Çağıran artık o değeri kullanamaz.
+işlev tuket(t: tekkez<tam32>) {
+    imha(t);
+}
+
+işlev cagri_ornegi() {
+    değişken k = tekkez_yarat(7);
+    tuket(k);                                 // k → tuket'e devredildi
+    // imha(k);                                ✗ L002 — move sonrası kullanım
+}
+
+// ----- 4) Sahiplik geri devri (LR-4) — `ver` ile -----
+//
+// İşlev `tekkez<T>` döndürerek çağırana sahiplik teslim eder.
+işlev sahip_uret() -> tekkez<tam32> {
+    ver tekkez_yarat(99);
+}
+
+işlev kullanan() {
+    değişken sahip = sahip_uret();
+    imha(sahip);                              // sahip tüketildi
+}
+
+// ----- 5) Pratik senaryo -----
+//
+// Lineer tipler kripto anahtarları, dosya tutamaçları, kilitler, ağ
+// soketleri için ideal. "OneTimeKey" konsepti tam olarak bu:
+//
+//   - Bir kez şifreleme yap → anahtar tüketilir
+//   - İkinci kullanım derleme zamanında engellenir
+//
+// Bu, OTP (One-Time Pad) tabanlı haberleşmenin temelini oluşturur.
+
+işlev main() -> tam32 {
+    // 1) tek_kez_kullan → 42
+    değişken r1 = tek_kez_kullan();
+
+    // 2) imha_ornegi — etki yok
+    imha_ornegi();
+
+    // 3) Move
+    cagri_ornegi();
+
+    // 4) Sahiplik dönüşü
+    kullanan();
+
+    ver r1;                                   // → 42
+}

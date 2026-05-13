@@ -1,0 +1,58 @@
+// =====================================================================
+// 02_degisken_tip.kem — KEMGU Tutorial: Değişkenler ve tipler
+// ---------------------------------------------------------------------
+// Bu örnek temel veri tiplerini, tip annotasyonunu ve tip çıkarsamasını
+// gösterir.
+// Çalıştır: ./build/kemgu --check 02_degisken_tip.kem
+// =====================================================================
+
+işlev main() -> tam32 {
+    // ----- Açık tip annotasyonu -----
+    //
+    //   `değişken <ad>: <tip> = <ifade>;`
+    //
+    // KEMGU'da çıplak `int` yoktur — her sayı tipi bit genişliğini belirtir.
+    // Bu, C/C++'taki sessiz taşmaları engeller.
+    değişken kucuk: tam8 = 127;
+    değişken normal: tam32 = 1_000_000;       // _ sayı ayracıdır
+    değişken buyuk: tam64 = 9_000_000_000;
+
+    // ----- Tip çıkarsama (inference) -----
+    //
+    // Tip yazılmazsa derleyici bağlamdan çıkarır. Sayı literali için
+    // varsayılan `tam32`'dir; sonra bağlamdan revize edilebilir.
+    değişken x = 42;                          // tam32 olarak çıkarsanır
+
+    // ----- Mantıksal -----
+    //
+    // `mantıksal` tipi yalnız `doğru` veya `yanlış` alır.
+    değişken dogru_mu: mantıksal = doğru;
+
+    // ----- Metin -----
+    //
+    // `metin` UTF-8 sliced; null değildir.
+    değişken ad: metin = "Mehmet";
+
+    // ----- Karakter -----
+    //
+    // `karakter` tek bir Unicode kod noktasını tutar. Türkçe doğal.
+    değişken c: karakter = 'Ö';
+
+    // ----- Sabitler -----
+    //
+    // Sabit yine `sabit` ile tanımlanır; modül seviyesinde olur.
+    // (Burada sadece bir not olarak — sabitler işlev içinde tanımlanmaz.)
+
+    // ----- Bilerek kullanılmayan değişkenler -----
+    //
+    // Şu an `_` ile prefiks kuralı yok; bilerek kullanılmayanlar uyarı vermez.
+    // (Bu konvansiyon ileride netleşecek.)
+
+    // Hepsini topla ve exit code olarak döndür: 127 + (bool→1 gibi davranmaz,
+    // henüz implicit conversion yok), o yüzden sadece `x`'i döndürüyoruz.
+    //
+    // ÖNEMLİ: KEMGU'da implicit type conversion ASLA yapılmaz —
+    // `tam8 + tam32` direkt geçmez, açık dönüşüm gerekir.
+    // (`dönüştür` operatörü planlanmakta.)
+    ver x;
+}

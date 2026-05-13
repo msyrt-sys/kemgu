@@ -1,0 +1,83 @@
+// =====================================================================
+// 04_islev.kem — KEMGU Tutorial: İşlevler, lambda, generic
+// ---------------------------------------------------------------------
+// Bu örnek:
+//   - İşlev tanımı + çağrı
+//   - Özyinelemeli (recursive) işlevler
+//   - Lambda ifadeleri
+//   - Generic işlevler (monomorphization)
+// gösterir.
+// Çalıştır: ./build/kemgu --check 04_islev.kem
+// =====================================================================
+
+// ----- Basit işlev -----
+//
+// İmza: `işlev <ad>(<parametreler>) -> <dönüş tipi> { ... }`
+// Parametre: `<isim>: <tip>` virgülle ayrılır.
+işlev topla(a: tam32, b: tam32) -> tam32 {
+    ver a + b;
+}
+
+// ----- Boş dönüş (void) -----
+//
+// Dönüş tipi yazılmazsa `boş` (= void) varsayılır.
+işlev hicbirsey() {
+    /* etki yok */
+}
+
+// ----- Özyinelemeli işlev -----
+//
+// Klasik fibonacci. KEMGU compiler özyinelemeyi destekler;
+// tail call optimization şu an yok (v1'de planda değil).
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+// ----- Generic işlev -----
+//
+// `<T>` ile tip parametresi tanımlanır; `T` parametre ve dönüş tipinde
+// kullanılabilir. Derleyici çağrı sırasında somut tip için ayrı bir
+// fonksiyon üretir (monomorphization — Rust tarzı).
+//
+// Bu, runtime dispatch tablosu olmaması anlamına gelir; sıfır maliyetli.
+işlev kimlik<T>(x: T) -> T {
+    ver x;
+}
+
+// ----- Generic + bound (kısıtlı generic) -----
+//
+// `T: Bound` ile tip parametresine kısıt eklenir. T, Bound özelliğini
+// uygulamış olmalıdır — derleme zamanında doğrulanır (T030 hatası
+// uygulanmamışsa).
+//
+// (Burada bound kullanmıyoruz; örnek için 06_secimlik.kem'e bak.)
+
+// ----- Lambda ifadeleri -----
+//
+// `|param: tip, ...| ifade` veya `|...| { blok }`.
+// Lambda'nın tipi `işlev(...) -> T` olur.
+
+işlev main() -> tam32 {
+    // Basit çağrı
+    değişken a = topla(17, 25);              // → 42
+
+    // Özyinelemeli
+    değişken b = fib(8);                      // → 21
+
+    // Generic — T = tam32 olarak instantiate edilir
+    değişken c = kimlik(7);                   // → 7
+
+    // Lambda — değişkene atanır, sonra çağrılır
+    değişken iki_kat = |x: tam32| x * 2;
+    değişken d = iki_kat(7);                  // → 14
+
+    // Boş işlev (kullanılmıyor)
+    hicbirsey();
+
+    // 42 + 21 + 7 + 14 = 84; iki_kat çağrısı 42 verir;
+    // a yine 42, toplam 42.
+    ver a;
+}
