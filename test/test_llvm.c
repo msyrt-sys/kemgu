@@ -66,11 +66,19 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     int rc = system(komut);
     if (rc != 0) return -1;
 
-    /* clang -x ir .ll runtime/kdl_runtime.c -o .exe
-     * Madde A ve G icin metin/dosya primitifleri runtime'a baglanmali. */
+    /* clang -x ir .ll -x none .o -o .exe; kdl_runtime.o link edilir
+     * (Madde A/B/G icin metin/dizi/dosya primitifleri runtime'a baglanmali).
+     * -x ir sadece .ll dosyasina uygulanmali; sonra -x none ile defaulta
+     * done ki .o file format'i otomatik tanin. */
+#ifdef _WIN32
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -x c runtime/kdl_runtime.c -o %s 2>%s",
+             "clang -x ir %s -x none build\\kdl_runtime.o -o %s 2>%s",
              LL_PATH, EXE_PATH, DEV_NULL);
+#else
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build/kdl_runtime.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#endif
     rc = system(komut);
     if (rc != 0) return -1;
 
@@ -626,6 +634,10 @@ static void test_bit_oncelik_shift_or(void) {
         "i\xc5\x9flev main() -> tam32 { ver 5 << 3 | 2; }");
     test_sonuc("5 << 3 | 2 -> 42 (oncelik: shift > OR)", rc == 42);
 }
+
+/* (Madde A duplicate test functions removed — bu oturumda yukarida zaten
+ *  test_metin_uzunluk, _birlestir, _kes, _kucuk_ascii, _buyuk_turkce_i,
+ *  _icerir_evet/_hayir, _baslar, _biter, _kirp, _yer_degistir mevcut.) */
 
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
