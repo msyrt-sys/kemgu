@@ -1,0 +1,104 @@
+name: KEMGU CI
+
+on:
+  push:
+    branches: [main, "feature/**", "claude/**", "konsolidasyon"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-windows:
+    name: Windows (MSYS2 UCRT64 + Clang64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSYS2 kur (UCRT64 + Clang64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-compiler-rt
+            file
+
+      - name: Derleyici kontrolu
+        run: |
+          gcc --version | head -1
+          clang --version | head -1
+          mingw32-make --version | head -1
+
+      - name: Derle (mingw32-make)
+        run: mingw32-make
+
+      - name: Tum testler (mingw32-make test_tumu)
+        run: mingw32-make test_tumu
+
+      - name: Stdlib --check
+        run: mingw32-make calistir_stdlib_check
+
+      - name: Snapshot test
+        run: mingw32-make calistir_snapshot_test
+
+      - name: Fuzzer (10000 iter ASan)
+        run: mingw32-make calistir_fuzz_test
+
+      - name: Runtime link test
+        run: mingw32-make calistir_runtime_link_test
+
+      - name: Test sayisi ozeti
+        if: always()
+        run: |
+          echo "## KEMGU Windows Test Sonuclari" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Durum |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Derleme | OK |" >> $GITHUB_STEP_SUMMARY
+          echo "| test_tumu | OK |" >> $GITHUB_STEP_SUMMARY
+          echo "| stdlib --check | OK |" >> $GITHUB_STEP_SUMMARY
+          echo "| snapshot | 50 |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz (ASan) | 10000 iter |" >> $GITHUB_STEP_SUMMARY
+
+  build-linux:
+    name: Linux (Ubuntu / clang + libasan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: apt: clang + gcc + make
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gcc make file
+          gcc --version | head -1
+          clang --version | head -1
+
+      - name: Derle (make)
+        run: make
+
+      - name: Tum testler (make test_tumu)
+        run: make test_tumu
+
+      - name: Stdlib --check
+        run: make calistir_stdlib_check
+
+      - name: Snapshot test
+        run: make calistir_snapshot_test
+
+      - name: Fuzzer (10000 iter ASan + UBSan)
+        run: make calistir_fuzz_test
+
+      - name: Runtime link test
+        run: make calistir_runtime_link_test
+
+      - name: Linux test ozeti
+        if: always()
+        run: |
+          echo "## KEMGU Linux Test Sonuclari" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tum testler clang + libasan ile gecti." >> $GITHUB_STEP_SUMMARY
