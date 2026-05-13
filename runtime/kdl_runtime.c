@@ -406,6 +406,77 @@ void kdl_dizi_serbest(KdlDizi *d) {
     free(d);
 }
 
+/* === I.2: Dizi dinamik allocator (Kirmizi B) — generic by-size === */
+
+/* Genel allocator: kapasite pre-allocate edilir, boyut=0.
+ * kapasite verilmezse (=0), ilk ekle 4 elemana buyutur. */
+KdlDizi *kdl_dizi_olustur_genel(int32_t eleman_byte, int64_t kapasite) {
+    KdlDizi *d = (KdlDizi *)malloc(sizeof(KdlDizi));
+    if (!d) return NULL;
+    d->veri = NULL;
+    d->boyut = 0;
+    d->kapasite = 0;
+    d->eleman_byte = eleman_byte;
+    if (kapasite > 0) {
+        d->veri = malloc((size_t)kapasite * (size_t)eleman_byte);
+        if (d->veri) d->kapasite = (int32_t)kapasite;
+    }
+    return d;
+}
+
+/* Ekle: 8/16/32/64 bit integerlar icin ozellestirilmis */
+void kdl_dizi_ekle_8(KdlDizi *d, int8_t deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(int8_t));
+        d->kapasite = yk;
+    }
+    ((int8_t *)d->veri)[d->boyut++] = deger;
+}
+
+void kdl_dizi_ekle_16(KdlDizi *d, int16_t deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(int16_t));
+        d->kapasite = yk;
+    }
+    ((int16_t *)d->veri)[d->boyut++] = deger;
+}
+
+/* kdl_dizi_ekle_32 = mevcut kdl_dizi_ekle_tam ile ayni davranis */
+void kdl_dizi_ekle_32(KdlDizi *d, int32_t deger) {
+    kdl_dizi_ekle_tam(d, deger);
+}
+
+void kdl_dizi_ekle_64(KdlDizi *d, int64_t deger) {
+    if (!d) return;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * sizeof(int64_t));
+        d->kapasite = yk;
+    }
+    ((int64_t *)d->veri)[d->boyut++] = deger;
+}
+
+/* Indexli al — eleman_byte cinsinden ofsetler. boyut disi -> 0 doner. */
+int8_t kdl_dizi_al_8(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return 0;
+    return ((int8_t *)d->veri)[i];
+}
+int16_t kdl_dizi_al_16(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return 0;
+    return ((int16_t *)d->veri)[i];
+}
+int32_t kdl_dizi_al_32(KdlDizi *d, int32_t i) {
+    return kdl_dizi_al_tam(d, i);
+}
+int64_t kdl_dizi_al_64(KdlDizi *d, int32_t i) {
+    if (!d || i < 0 || i >= d->boyut) return 0;
+    return ((int64_t *)d->veri)[i];
+}
+
 /* === B2: Concurrency minimal API ===
  *
  * Bu surumde sequential stub'lar (KEMGU programları thread spawn API'sini

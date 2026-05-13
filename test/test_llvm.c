@@ -494,6 +494,55 @@ static void test_metin_kirp_uzunluk(void) {
     test_sonuc("metin_kirp(\"  hi  \") uzunluk -> 2", rc == 2);
 }
 
+/* === Dizi dinamik allocator (Kirmizi B) === */
+
+static void test_dizi_olustur_ekle_al(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(10); "
+        "dizi_ekle(d, 10); dizi_ekle(d, 20); dizi_ekle(d, 12); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_olustur+ekle*3+al -> 42 (10+20+12)", rc == 42);
+}
+
+static void test_dizi_boyut_rt(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_boyut(d) sonra 3 ekle -> 3", rc == 3);
+}
+
+static void test_dizi_kapasite_buyume(void) {
+    /* Kapasite=2 ile basla, 5 ekle - realloc tetiklenmeli */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(2); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d) + dizi_al(d, 4); }");
+    test_sonuc("dizi kapasite buyume 5 ekle -> 5+5=10", rc == 10);
+}
+
+static void test_dizi_boyut_bos(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_olustur(5) sonra boyut=0 (kapasite!=boyut)", rc == 0);
+}
+
+static void test_dizi_iki_dizi(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: Dizi<tam32> = dizi_olustur(0); "
+        "de\xc4\x9fi\xc5\x9fken b: Dizi<tam32> = dizi_olustur(0); "
+        "dizi_ekle(a, 20); dizi_ekle(b, 22); "
+        "ver dizi_al(a, 0) + dizi_al(b, 0); }");
+    test_sonuc("iki ayri dizi -> 42 (20+22)", rc == 42);
+}
+
 /* === Bit Operatorleri Testleri (ADIM 30) === */
 
 static void test_bit_ve_temel(void) {
@@ -671,6 +720,13 @@ int main(void) {
     test_metin_birlestir_uzunluk();
     test_metin_kes_uzunluk();
     test_metin_kirp_uzunluk();
+
+    printf("\n--- Kirmizi B: Dizi dinamik allocator ---\n");
+    test_dizi_olustur_ekle_al();
+    test_dizi_boyut_rt();
+    test_dizi_kapasite_buyume();
+    test_dizi_boyut_bos();
+    test_dizi_iki_dizi();
 
     printf("\n--- ADIM 30: Bit operatorleri ---\n");
     test_bit_ve_temel();
