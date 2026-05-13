@@ -309,6 +309,12 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             ast_yazdir_indent(d->veri.tip_tekkez.ic_tip, c, derinlik + 1);
             break;
 
+        case DUGUM_TIP_SABITSURE:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.tip_sabitsure.ic_tip, c, derinlik + 1);
+            break;
+
         case DUGUM_KULLAN_IFADE:
             konum_yaz(c, d);
             fputc('\n', c);

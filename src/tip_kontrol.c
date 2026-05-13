@@ -841,6 +841,20 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             return tip_olustur_tekkez(tk->arena, ic);
         }
 
+        case DUGUM_TIP_SABITSURE: {
+            TipBilgisi *ic = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_sabitsure.ic_tip);
+            if (ic->kategori == TIP_HATA) return t_hata(tk);
+            /* CT006: sarılan tip sabitsüre-yetenekli olmalı */
+            if (!tip_sabitsure_yetenekli_mi(ic)) {
+                tip_hata(tk, tip_d, "CT006",
+                    "sabitsure<...> sarilan tip constant-time yetenekli degil "
+                    "(kesirli/metin/yapi/secimlik/nesting yasak)");
+                return t_hata(tk);
+            }
+            return tip_olustur_sabitsure(tk->arena, ic);
+        }
+
         case DUGUM_TIP_SONUC: {
             TipBilgisi *deger = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_sonuc.deger_tip);
@@ -955,6 +969,40 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
 
 /* === Tip belirle (ifade visitor) === */
 
+/* === Sabitsüre Spec V1 yardımcıları === */
+
+/* sabitsüre<T> sarmalayıcısını sok, T döner (kaynak sabitsüre değilse aynısı). */
+static TipBilgisi *tip_ic_cek(TipBilgisi *t) {
+    if (t && t->kategori == TIP_SABITSURE) return t->veri.sabitsure.ic;
+    return t;
+}
+
+/* İkili op için: sol veya sağ sabitsüre ise sonuç da sabitsüre yapılır. */
+static TipBilgisi *taint_yay(TipKontrol *tk, TipBilgisi *base,
+                              TipBilgisi *sol, TipBilgisi *sag) {
+    if (tip_sabitsure_mi(sol) || tip_sabitsure_mi(sag)) {
+        if (tip_sabitsure_mi(base)) return base;
+        return tip_olustur_sabitsure(tk->arena, base);
+    }
+    return base;
+}
+
+/* CT003 SABITSURE_LEAK helper:
+ * 'kaynak' (genelde değer ifadesinin tipi) sabitsüre<T> ve 'beklenen' normal T
+ * ise leak hatası. d düğümü ifade için. Hata raporlanırsa 1 döner. */
+static int ct003_leak_kontrol(TipKontrol *tk, const Dugum *d,
+                               const TipBilgisi *kaynak,
+                               const TipBilgisi *beklenen) {
+    if (!kaynak || !beklenen) return 0;
+    if (tip_sabitsure_mi(kaynak) && !tip_sabitsure_mi(beklenen)) {
+        tip_hata(tk, d, "CT003",
+            "sabitsure tipi normal tipe implicit donusturulemez "
+            "(ifsa(...) zorunlu)");
+        return 1;
+    }
+    return 0;
+}
+
 /* Yardimci: ikili sayisal op (sol == sag, ikisi de sayisal) */
 static TipBilgisi *kontrol_ikili_sayisal(TipKontrol *tk, const Dugum *d,
                                          TipBilgisi *sol, TipBilgisi *sag) {
@@ -966,11 +1014,24 @@ static TipBilgisi *kontrol_ikili_sayisal(TipKontrol *tk, const Dugum *d,
         tip_hata(tk, d, "T003", "ikili operatorun sag tarafi sayisal degil");
         return t_hata(tk);
     }
-    if (!tip_esit(sol, sag)) {
+    /* Sabitsüre Spec V1 CT004: sabitsüre üzerinde / veya % YASAK
+     * (x86 idiv/div, ARM udiv/sdiv variable-time). */
+    Operator op = d->veri.ikili.op;
+    if ((op == OP_BOLU || op == OP_MOD) &&
+        (tip_sabitsure_mi(sol) || tip_sabitsure_mi(sag))) {
+        tip_hata(tk, d, "CT004",
+            "sabitsure tipi uzerinde / veya % yasak (variable-time div)");
+        return t_hata(tk);
+    }
+    /* İç tipler eşit mi? sabitsüre<T> + T → her ikisinin iç T'si aynı olmalı.
+     * Bu sayede sabitsüre<tam32> + tam32 → sabitsüre<tam32> (taint yayılım). */
+    TipBilgisi *sol_ic = tip_ic_cek(sol);
+    TipBilgisi *sag_ic = tip_ic_cek(sag);
+    if (!tip_esit(sol_ic, sag_ic)) {
         tip_hata(tk, d, "T001", "ikili operator iki tarafi ayni tip olmali");
         return t_hata(tk);
     }
-    return sol;
+    return taint_yay(tk, sol_ic, sol, sag);
 }
 
 /* Yardimci: ikili mantiksal (sol+sag mantiksal) */
@@ -980,7 +1041,8 @@ static TipBilgisi *kontrol_ikili_mantiksal(TipKontrol *tk, const Dugum *d,
         tip_hata(tk, d, "T004", "mantiksal op iki tarafi mantiksal olmali");
         return t_hata(tk);
     }
-    return t_basit(tk, TIP_MANTIKSAL);
+    TipBilgisi *base = t_basit(tk, TIP_MANTIKSAL);
+    return taint_yay(tk, base, sol, sag);
 }
 
 /* Yardimci: yapi olusturma alan kontrolu (beklenen tip varsa generic
@@ -1233,13 +1295,20 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 case OP_CARPI: case OP_BOLU:  case OP_MOD:
                     return kontrol_ikili_sayisal(tk, d, sol, sag);
 
-                case OP_ESIT:  case OP_ESIT_DEGIL:
-                    if (!tip_esit(sol, sag)) {
+                case OP_ESIT:  case OP_ESIT_DEGIL: {
+                    /* İç tipler eşit olmalı (sabitsüre<T> == T iç olarak eşit) */
+                    TipBilgisi *sol_ic = tip_ic_cek(sol);
+                    TipBilgisi *sag_ic = tip_ic_cek(sag);
+                    if (!tip_esit(sol_ic, sag_ic)) {
                         tip_hata(tk, d, "T001",
                                  "esitlik karsilastirma ayni tip olmali");
                         return t_hata(tk);
                     }
-                    return t_basit(tk, TIP_MANTIKSAL);
+                    /* Sabitsüre Spec V1 CT-CMP: sabitsüre operand → sonuç
+                     * sabitsüre<mantıksal> (eşitlik bilgisi de gizli). */
+                    TipBilgisi *base = t_basit(tk, TIP_MANTIKSAL);
+                    return taint_yay(tk, base, sol, sag);
+                }
 
                 case OP_KUCUK: case OP_BUYUK:
                 case OP_KUCUK_ESIT: case OP_BUYUK_ESIT: {
@@ -1248,45 +1317,52 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                                  "karsilastirma sayisal tip ister");
                         return t_hata(tk);
                     }
-                    if (!tip_esit(sol, sag)) {
+                    TipBilgisi *sol_ic = tip_ic_cek(sol);
+                    TipBilgisi *sag_ic = tip_ic_cek(sag);
+                    if (!tip_esit(sol_ic, sag_ic)) {
                         tip_hata(tk, d, "T001",
                                  "karsilastirma iki tarafi ayni tip olmali");
                         return t_hata(tk);
                     }
-                    return t_basit(tk, TIP_MANTIKSAL);
+                    TipBilgisi *base = t_basit(tk, TIP_MANTIKSAL);
+                    return taint_yay(tk, base, sol, sag);
                 }
 
                 case OP_VE: case OP_VEYA:
                     return kontrol_ikili_mantiksal(tk, d, sol, sag);
 
                 case OP_BIT_VE: case OP_BIT_VEYA: case OP_BIT_OZVEYA: {
-                    /* Bit AND/OR/XOR: her iki operand tamsayi, ayni tip.
-                     * Bidirectional: sag, sol tipi context'inde yeniden
-                     * cikarsanir — literal'ler sol tipe kayar (page table). */
+                    /* Bit AND/OR/XOR: her iki operand tamsayi, iç tipler eşit.
+                     * Sabitsüre Spec V1: taint yayılım (sabitsüre<T> ^ T → sabitsüre<T>) */
                     if (!tip_tamsayi_mi(sol)) {
                         tip_hata(tk, d, "T028",
                                  "bit operatoru (& | ^) tamsayi tipi ister");
                         return t_hata(tk);
                     }
+                    /* Bidirectional: sag, sol iç tipinde yeniden çıkarsanır
+                     * (sabitsüre soyma) */
+                    TipBilgisi *sol_ic = tip_ic_cek(sol);
                     TipBilgisi *sag2 = tip_belirle_beklenen(tk,
-                        d->veri.ikili.sag, sol);
+                        d->veri.ikili.sag, sol_ic);
                     if (!tip_tamsayi_mi(sag2)) {
                         tip_hata(tk, d, "T028",
                                  "bit operatoru (& | ^) tamsayi tipi ister");
                         return t_hata(tk);
                     }
-                    if (!tip_esit(sol, sag2)) {
+                    TipBilgisi *sag2_ic = tip_ic_cek(sag2);
+                    if (!tip_esit(sol_ic, sag2_ic)) {
                         tip_hata(tk, d, "T001",
                                  "bit operatoru iki tarafi ayni tip olmali");
                         return t_hata(tk);
                     }
-                    return sol;
+                    return taint_yay(tk, sol_ic, sol, sag2);
                 }
 
                 case OP_SOLA_KAYDIR: case OP_SAGA_KAYDIR: {
                     /* Kaydir (<<, >>): sol tamsayi, sag tamsayi (kaydirma
-                     * miktari), sonuc sol tarafin tipi. Sag opsiyonel olarak
-                     * farkli tamsayi tipi olabilir. */
+                     * miktari). Sabitsüre Spec V1 CT008: kaydirma miktari
+                     * (sag) sabitsüre olamaz (variable-shift bazı CPU'larda
+                     * variable-time — ARM Cortex-M, eski Intel). */
                     if (!tip_tamsayi_mi(sol)) {
                         tip_hata(tk, d, "T028",
                                  "kaydirma operatoru sol taraf tamsayi ister");
@@ -1296,6 +1372,17 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d, "T028",
                                  "kaydirma miktari tamsayi olmali");
                         return t_hata(tk);
+                    }
+                    if (tip_sabitsure_mi(sag)) {
+                        tip_hata(tk, d, "CT008",
+                            "kaydirma miktari sabitsure olamaz "
+                            "(variable-shift variable-time)");
+                        return t_hata(tk);
+                    }
+                    /* Taint yayılım: sol sabitsüre ise sonuç sabitsüre */
+                    TipBilgisi *sol_ic = tip_ic_cek(sol);
+                    if (tip_sabitsure_mi(sol)) {
+                        return tip_olustur_sabitsure(tk->arena, sol_ic);
                     }
                     return sol;
                 }
@@ -1316,12 +1403,18 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d, "T003", "tekli '-' sayisal ister");
                         return t_hata(tk);
                     }
+                    /* Sabitsüre Spec V1: -sabitsure<T> -> sabitsure<T> (taint korunur) */
                     return op;
 
                 case OP_DEGIL:
                     if (!tip_mantiksal_mi(op)) {
                         tip_hata(tk, d, "T004", "'degil' mantiksal ister");
                         return t_hata(tk);
+                    }
+                    /* Taint korunur */
+                    if (tip_sabitsure_mi(op)) {
+                        return tip_olustur_sabitsure(tk->arena,
+                            t_basit(tk, TIP_MANTIKSAL));
                     }
                     return t_basit(tk, TIP_MANTIKSAL);
 
@@ -1331,6 +1424,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                                  "bit DEGIL (~) tamsayi tipi ister");
                         return t_hata(tk);
                     }
+                    /* Taint korunur */
                     return op;
 
                 case OP_REF:
@@ -1549,6 +1643,56 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 return tip_olustur_tekkez(tk->arena, ic);
             }
+            /* Sabitsüre Spec V1 producer: sabitsure_yarat(v: T) -> sabitsure<T>
+             * UTF-8: "sabits\xc3\xbcre_yarat" = 16 byte */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 16 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "sabits\xc3\xbc" "re_yarat", 16) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "CT005",
+                        "sabitsure_yarat tam olarak bir arguman gerektirir");
+                    return t_hata(tk);
+                }
+                TipBilgisi *ic = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (ic->kategori == TIP_HATA) return t_hata(tk);
+                /* Arg sabitsure ise nesting redundancy (CT006) */
+                if (tip_sabitsure_mi(ic)) {
+                    tip_hata(tk, d, "CT006",
+                        "sabitsure<sabitsure<T>> nesting yasak");
+                    return t_hata(tk);
+                }
+                /* İç tip yetenekli mi? */
+                if (!tip_sabitsure_yetenekli_mi(ic)) {
+                    tip_hata(tk, d, "CT006",
+                        "sabitsure_yarat: sarilan tip constant-time yetenekli degil "
+                        "(kesirli/metin/yapi yasak)");
+                    return t_hata(tk);
+                }
+                return tip_olustur_sabitsure(tk->arena, ic);
+            }
+            /* Sabitsüre Spec V1 declassification: ifsa(s: sabitsure<T>) -> T
+             * UTF-8: "if\xc5\x9fa" = 5 byte */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 5 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "if\xc5\x9f" "a", 5) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "CT007",
+                        "ifsa tam olarak bir arguman gerektirir");
+                    return t_hata(tk);
+                }
+                TipBilgisi *s = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (s->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_sabitsure_mi(s)) {
+                    tip_hata(tk, d, "CT007",
+                        "ifsa(...) operandi sabitsure tipinde olmali");
+                    return t_hata(tk);
+                }
+                return s->veri.sabitsure.ic;
+            }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
             if (d->veri.cagri.hedef &&
@@ -1644,8 +1788,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     /* Concrete'i gb'de tutuyoruz; bind onceden yapildi */
                     continue;
                 }
-                /* bek (substitue edilmis) ile arg_tip karsilastir */
-                if (!tip_esit(arg_tip, bek) &&
+                /* Sabitsüre Spec V1 CT003: arg sabitsure<T> → param T leak.
+                 * Önce bunu kontrol et (T001'den önce); ifsa(...) gerek. */
+                if (arg_tip->kategori != TIP_HATA &&
+                    param_tip->kategori != TIP_HATA &&
+                    ct003_leak_kontrol(tk, d->veri.cagri.argumanlar[i],
+                                        arg_tip, param_tip)) {
+                    /* hata raporlandı */
+                } else if (!tip_esit(arg_tip, bek) &&
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
@@ -1763,6 +1913,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             if (nesne_tip->kategori == TIP_REFERANS) {
                 nesne_tip = nesne_tip->veri.referans.hedef;
             }
+            /* Sabitsüre Spec V1: dizi de sabitsüre olabilir (sabitsure<Dizi<T>>) */
+            int dizi_sabitsure = tip_sabitsure_mi(nesne_tip);
+            if (dizi_sabitsure) nesne_tip = nesne_tip->veri.sabitsure.ic;
 
             if (nesne_tip->kategori != TIP_DIZI) {
                 tip_hata(tk, d, "T008", "indeksleme dizi tipi gerek");
@@ -1772,7 +1925,21 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T005", "indeks tamsayi olmali");
                 return t_hata(tk);
             }
-            return nesne_tip->veri.dizi.eleman;
+            /* Sabitsüre Spec V1 CT002 SABITSURE_INDEX:
+             * indeks sabitsüre olamaz — cache-line granülaritesinde gizli
+             * bilgiyi sızdırır (Bernstein 2005 AES T-table saldırısı). */
+            if (tip_sabitsure_mi(idx_tip)) {
+                tip_hata(tk, d, "CT002",
+                    "sabitsure tipinde dizi indeksi yasak "
+                    "(cache-timing yan kanali — ifsa(idx) kullanin)");
+                return t_hata(tk);
+            }
+            /* Sabitsüre dizi içeren eleman tipi — sabitsüre kalır (taint) */
+            TipBilgisi *elem = nesne_tip->veri.dizi.eleman;
+            if (dizi_sabitsure && !tip_sabitsure_mi(elem)) {
+                return tip_olustur_sabitsure(tk->arena, elem);
+            }
+            return elem;
         }
 
         /* === Yol (x::y) === */
@@ -2059,11 +2226,52 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                        "dizi_olustur", 12) == 0 &&
                 beklenen->kategori == TIP_DIZI &&
                 d->veri.cagri.sayi == 1) {
-                /* Kapasiteyi tam64 olarak kontrol et */
                 tip_belirle_beklenen(tk, d->veri.cagri.argumanlar[0],
                     tip_olustur_basit(tk->arena, TIP_TAM64));
                 return tip_olustur_dizi(tk->arena,
                     (TipBilgisi *)beklenen->veri.dizi.eleman);
+            }
+            /* Sabitsüre Spec V1: beklenen sabitsure<X> ve cagri
+             * sabitsure_yarat(arg) ise — arg'ı X context'inde çıkarsa. */
+            if (beklenen->kategori == TIP_SABITSURE &&
+                d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 16 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "sabits\xc3\xbc" "re_yarat", 16) == 0 &&
+                d->veri.cagri.sayi == 1) {
+                TipBilgisi *ic = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[0],
+                    beklenen->veri.sabitsure.ic);
+                if (ic->kategori == TIP_HATA) return t_hata(tk);
+                if (tip_sabitsure_mi(ic)) {
+                    tip_hata(tk, d, "CT006",
+                        "sabitsure<sabitsure<T>> nesting yasak");
+                    return t_hata(tk);
+                }
+                if (!tip_sabitsure_yetenekli_mi(ic)) {
+                    tip_hata(tk, d, "CT006",
+                        "sabitsure_yarat: sarilan tip constant-time yetenekli "
+                        "degil");
+                    return t_hata(tk);
+                }
+                return tip_olustur_sabitsure(tk->arena, ic);
+            }
+            break;
+        }
+
+        case DUGUM_IKILI: {
+            /* Sabitsüre: beklenen sabitsüre<X> ise, operandlar X context'inde
+             * çıkarsanır. */
+            if (beklenen->kategori == TIP_SABITSURE) {
+                TipBilgisi *ic_bek = beklenen->veri.sabitsure.ic;
+                TipBilgisi *sol = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sol, ic_bek);
+                TipBilgisi *sag = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sag, ic_bek);
+                if (sol->kategori == TIP_HATA || sag->kategori == TIP_HATA) {
+                    return t_hata(tk);
+                }
             }
             break;
         }
@@ -2321,7 +2529,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 /* Bidirectional: literal'lar annot context'inde cikarsanir */
                 deger_tip = tip_belirle_beklenen(tk,
                     d->veri.degisken.deger, annot);
-                if (!tip_esit(annot, deger_tip) &&
+                /* Sabitsüre Spec V1 CT003: sabitsure<T> → T leak */
+                if (deger_tip->kategori != TIP_HATA &&
+                    annot->kategori != TIP_HATA &&
+                    ct003_leak_kontrol(tk, d, deger_tip, annot)) {
+                    /* hata raporlandı, atla */
+                } else if (!tip_esit(annot, deger_tip) &&
                     deger_tip->kategori != TIP_HATA &&
                     annot->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T001",
@@ -2363,7 +2576,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *ht = tip_belirle(tk, hedef);
             /* Bidirectional: deger hedef tip context'inde */
             TipBilgisi *dt = tip_belirle_beklenen(tk, d->veri.atama.deger, ht);
-            if (!tip_esit(ht, dt) &&
+            /* Sabitsüre Spec V1 CT003: sabitsure<T> → T leak */
+            if (dt->kategori != TIP_HATA && ht->kategori != TIP_HATA &&
+                ct003_leak_kontrol(tk, d, dt, ht)) {
+                /* hata raporlandı */
+            } else if (!tip_esit(ht, dt) &&
                 ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T001", "atama tipi uyumsuz");
             }
@@ -2379,7 +2596,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 /* Bidirectional: deger donus tipi context'inde */
                 TipBilgisi *deger = tip_belirle_beklenen(tk,
                     d->veri.ver.deger, tk->aktif_donus_tipi);
-                if (!tip_esit(deger, tk->aktif_donus_tipi) &&
+                /* Sabitsüre Spec V1 CT003: sabitsure<T> dönüş normal T'ye leak */
+                if (deger->kategori != TIP_HATA &&
+                    tk->aktif_donus_tipi->kategori != TIP_HATA &&
+                    ct003_leak_kontrol(tk, d, deger, tk->aktif_donus_tipi)) {
+                    /* hata raporlandı */
+                } else if (!tip_esit(deger, tk->aktif_donus_tipi) &&
                     deger->kategori != TIP_HATA &&
                     tk->aktif_donus_tipi->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T020",
@@ -2405,6 +2627,13 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             if (!tip_mantiksal_mi(kosul) && kosul->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T021", "eger kosulu mantiksal olmali");
             }
+            /* Sabitsüre Spec V1 CT001 SABITSURE_IF_BRANCH:
+             * gizli değer üzerinde dallanma timing kanalı açar. */
+            if (tip_sabitsure_mi(kosul)) {
+                tip_hata(tk, d, "CT001",
+                    "eger kosulu sabitsure tipinde olamaz "
+                    "(timing leak; ifsa(...) kullanin)");
+            }
             tip_kontrol_deyim(tk, d->veri.eger.gozdoldur);
             if (d->veri.eger.yan) {
                 tip_kontrol_deyim(tk, d->veri.eger.yan);
@@ -2416,6 +2645,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *kosul = tip_belirle(tk, d->veri.iken.kosul);
             if (!tip_mantiksal_mi(kosul) && kosul->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T021", "iken kosulu mantiksal olmali");
+            }
+            /* Sabitsüre Spec V1 CT001 SABITSURE_WHILE_BRANCH */
+            if (tip_sabitsure_mi(kosul)) {
+                tip_hata(tk, d, "CT001",
+                    "iken kosulu sabitsure tipinde olamaz "
+                    "(loop iteration count = gizli = timing leak)");
             }
             tip_kontrol_deyim(tk, d->veri.iken.govde);
             break;
@@ -2455,6 +2690,13 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         case DUGUM_ESLES: {
             /* Eşleş'in deger tipini belirle (secimlik<T> veya sonuc<T,H>) */
             TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
+            /* Sabitsüre Spec V1 CT001 SABITSURE_MATCH: scrutinee sabitsure
+             * olamaz — kol seçimi gizli bilgiyle dallanır. */
+            if (tip_sabitsure_mi(dt)) {
+                tip_hata(tk, d, "CT001",
+                    "esles deger sabitsure tipinde olamaz "
+                    "(kol secimi timing leak)");
+            }
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
                 Scope *eski = tk->scope;

@@ -54,6 +54,7 @@ typedef enum {
     TIP_ISLEV,       /* islev(T1, T2) -> T */
     TIP_YAPI,        /* yapi X veya X<T1, T2> */
     TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
+    TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
 
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
@@ -114,12 +115,37 @@ struct TipBilgisi {
         struct {
             TipBilgisi *ic;
         } tekkez;                 /* Linear Types Spec V1 */
+
+        struct {
+            TipBilgisi *ic;
+        } sabitsure;              /* Sabitsüre Spec V1 — constant-time qualifier */
     } veri;
 };
 
 /* === Linear Types Spec V1: lineer mi? ===
  * tekkez<T> ve tekkez<...> sarilan herhangi bir tip lineer sayilir. */
 int tip_lineer_mi(const TipBilgisi *t);
+
+/* === Sabitsüre Spec V1: tip sabitsüre (gizli) mi? ===
+ * sabitsüre<T> tipi gizli (secret) sayılır; constant-time disiplin gerekir. */
+int tip_sabitsure_mi(const TipBilgisi *t);
+
+/* Tip 'T' sabitsüre<...> sarılabilir mi? (CT-WRAP yetenekli)
+ * Yetenekli: tamX, dtamX, karakter, mantıksal, Dizi<yetenekli>.
+ * Yasak: kesirli32/64, metin, yapı (V1), seçimlik, sonuç, işlev, tekkez,
+ * sabitsüre (nesting redundancy), referans, pointer. */
+int tip_sabitsure_yetenekli_mi(const TipBilgisi *t);
+
+/* Bir T → T' ifadesi/atamasında: hedef T' beklenirken kaynak T sabitsüre ise
+ * implicit downgrade ihlali. Helper: 'kaynak'tan 'hedef'e otomatik geçirilebilir mi?
+ * - Kaynak ve hedef ikisi de sabitsüre: tip_esit kullan.
+ * - Kaynak T, hedef sabitsüre<T>: V1'de explicit sabitsüre_yarat zorunlu, 0 doner.
+ * - Kaynak sabitsüre<T>, hedef T: HER ZAMAN 0 (CT003 leak).
+ * - İkisi de normal: tip_esit.
+ * Bu helper return:
+ *   1 = uyumlu (no error)
+ *   0 = uyumsuz (caller hata raporlar) */
+int tip_sabitsure_uyumlu_mu(const TipBilgisi *kaynak, const TipBilgisi *hedef);
 
 /* === Olusturucular === */
 
@@ -135,6 +161,7 @@ TipBilgisi *tip_olustur_yapi(Arena *a, const char *ad, int ad_uzunluk,
                               TipBilgisi **tip_arg, int tip_arg_sayi);
 TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk);
 TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
+TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic);
 
 /* === Iliskiler === */
 

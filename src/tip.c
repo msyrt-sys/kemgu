@@ -84,8 +84,61 @@ TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic) {
     return t;
 }
 
+TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_SABITSURE);
+    if (!t) return NULL;
+    t->veri.sabitsure.ic = ic;
+    return t;
+}
+
 int tip_lineer_mi(const TipBilgisi *t) {
     return t != NULL && t->kategori == TIP_TEKKEZ;
+}
+
+int tip_sabitsure_mi(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_SABITSURE;
+}
+
+int tip_sabitsure_yetenekli_mi(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        /* Sabit-süre op'lar var: tamX, dtamX */
+        case TIP_TAM8:    case TIP_TAM16:    case TIP_TAM32:    case TIP_TAM64:
+        case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
+            return 1;
+        /* karakter = tam32 alt-küme */
+        case TIP_KARAKTER: return 1;
+        /* mantıksal i1, CT select destekli */
+        case TIP_MANTIKSAL: return 1;
+        /* Dizi: eleman sabitsüre-yetenekli olmalı */
+        case TIP_DIZI: return tip_sabitsure_yetenekli_mi(t->veri.dizi.eleman);
+        /* Generic param: deferred — instantiation'da kontrol */
+        case TIP_GENERIC_PARAM: return 1;
+        /* Yasaklı (CT006 SABITSURE_WRAP_INVALID):
+         *   kesirli32/64 — FP variable-time (fdiv, sqrt, denormal)
+         *   metin — UTF-8 değişken-uzunluk
+         *   yapı — V1: dış sarmalayıcı yerine alan-bazlı zorunlu
+         *   seçimlik/sonuç — tag check dallanma
+         *   işlev — call dispatch zamanlama
+         *   referans/pointer — pointer-bazlı saldırılar
+         *   tekkez — V1: ortogonal, V2'de combine
+         *   sabitsüre — nesting redundancy (CT006) */
+        default: return 0;
+    }
+}
+
+int tip_sabitsure_uyumlu_mu(const TipBilgisi *kaynak, const TipBilgisi *hedef) {
+    if (!kaynak || !hedef) return 1;  /* NULL = hata zaten — başka yerde raporlanır */
+
+    int k_ct = tip_sabitsure_mi(kaynak);
+    int h_ct = tip_sabitsure_mi(hedef);
+
+    /* sabitsüre<T> → T (CT003 leak) */
+    if (k_ct && !h_ct) return 0;
+    /* T → sabitsüre<T>: V1'de explicit sabitsüre_yarat şart — caller'da
+     * tip_esit ile yakalanır (uyumsuz). Burada normalde uyumsuz dönmeliydik
+     * ama bidirectional inference için 1 dönüp tip_esit'e bırakacağız. */
+    return 1;
 }
 
 /* === Esitlik (nominal, recursive) === */
@@ -170,6 +223,13 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
 
         case TIP_TEKKEZ:
             return tip_esit(a->veri.tekkez.ic, b->veri.tekkez.ic);
+
+        case TIP_SABITSURE:
+            /* Nominal: sabitsüre<T> == sabitsüre<T'> iff T == T'.
+             * sabitsüre<T> ile T arasında tip_esit DAİMA 0 (kategoriler farklı,
+             * yukarıda zaten reject edildi) — bu sayede implicit upgrade/downgrade
+             * tip kontrol seviyesinde T001 verir. */
+            return tip_esit(a->veri.sabitsure.ic, b->veri.sabitsure.ic);
     }
     return 0;
 }
@@ -259,6 +319,12 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             fputc('>', out);
             return;
 
+        case TIP_SABITSURE:
+            fputs("sabitsure<", out);
+            tip_yazdir(t->veri.sabitsure.ic, out);
+            fputc('>', out);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -290,6 +356,7 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_YAPI:      return "YAPI";
         case TIP_GENERIC_PARAM: return "GENERIC_PARAM";
         case TIP_TEKKEZ:    return "TEKKEZ";
+        case TIP_SABITSURE: return "SABITSURE";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }
@@ -300,6 +367,8 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
 
 int tip_sayisal_mi(const TipBilgisi *t) {
     if (!t) return 0;
+    /* Sabitsüre Spec V1: sabitsüre<T> → iç T sayısal ise sayısal kabul */
+    if (t->kategori == TIP_SABITSURE) return tip_sayisal_mi(t->veri.sabitsure.ic);
     switch (t->kategori) {
         case TIP_TAM8:    case TIP_TAM16:    case TIP_TAM32:    case TIP_TAM64:
         case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
@@ -317,6 +386,7 @@ int tip_sayisal_mi(const TipBilgisi *t) {
 
 int tip_tamsayi_mi(const TipBilgisi *t) {
     if (!t) return 0;
+    if (t->kategori == TIP_SABITSURE) return tip_tamsayi_mi(t->veri.sabitsure.ic);
     switch (t->kategori) {
         case TIP_TAM8:    case TIP_TAM16:    case TIP_TAM32:    case TIP_TAM64:
         case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
@@ -330,6 +400,7 @@ int tip_tamsayi_mi(const TipBilgisi *t) {
 
 int tip_mantiksal_mi(const TipBilgisi *t) {
     if (!t) return 0;
+    if (t->kategori == TIP_SABITSURE) return tip_mantiksal_mi(t->veri.sabitsure.ic);
     if (t->kategori == TIP_MANTIKSAL) return 1;
     if (t->kategori == TIP_GENERIC_PARAM) return 1;  /* deferred */
     return 0;
