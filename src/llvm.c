@@ -969,6 +969,84 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "ptr";
                 }
             }
+            /* Madde B: dizi_* built-in -> kdl_dizi_* */
+            else if (cagri_adi_uz >= 5 && memcmp(cagri_adi, "dizi_", 5) == 0) {
+                static char kdl_dizi_buf[64];
+                int dz_uz = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_dizi_buf, "kdl_", 4);
+                memcpy(kdl_dizi_buf + 4, cagri_adi, (size_t)dz_uz);
+                kdl_dizi_buf[4 + dz_uz] = '\0';
+
+                /* dizi_olustur_* -> kdl_dizi_olustur_n + ek eleman_byte arg
+                 * KdlDizi struct'i pointer ABI; KEMGU Dizi<T> -> ptr. */
+                if (dz_uz == 16 && memcmp(cagri_adi, "dizi_olustur_tam", 16) == 0) {
+                    cagri_adi = "kdl_dizi_olustur_n"; cagri_adi_uz = 18;
+                    /* args[0] = kapasite(tam64). Yeni args: {byte=4, kapasite}. */
+                    IfadeSonuc *ya = (IfadeSonuc *)arena_ayir(g->arena,
+                        sizeof(IfadeSonuc) * 2);
+                    int byte_reg = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 4\n", byte_reg);
+                    ya[0].reg = byte_reg; ya[0].tip = "i32";
+                    ya[1] = args[0];
+                    args = ya;
+                    n = 2;             /* outer n (cagri arg sayisi) — args dizi boyutu */
+                    kdl_donus = "ptr";
+                } else if (dz_uz == 18 && memcmp(cagri_adi, "dizi_olustur_tam64", 18) == 0) {
+                    cagri_adi = "kdl_dizi_olustur_n"; cagri_adi_uz = 18;
+                    IfadeSonuc *ya = (IfadeSonuc *)arena_ayir(g->arena,
+                        sizeof(IfadeSonuc) * 2);
+                    int byte_reg = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 8\n", byte_reg);
+                    ya[0].reg = byte_reg; ya[0].tip = "i32";
+                    ya[1] = args[0];
+                    args = ya;
+                    n = 2;
+                    kdl_donus = "ptr";
+                } else if (dz_uz == 18 && memcmp(cagri_adi, "dizi_olustur_metin", 18) == 0) {
+                    cagri_adi = "kdl_dizi_olustur_n"; cagri_adi_uz = 18;
+                    IfadeSonuc *ya = (IfadeSonuc *)arena_ayir(g->arena,
+                        sizeof(IfadeSonuc) * 2);
+                    int byte_reg = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 8\n", byte_reg);  /* ptr=8 byte */
+                    ya[0].reg = byte_reg; ya[0].tip = "i32";
+                    ya[1] = args[0];
+                    args = ya;
+                    n = 2;
+                    kdl_donus = "ptr";
+                } else {
+                    cagri_adi = kdl_dizi_buf; cagri_adi_uz = 4 + dz_uz;
+                    if (dz_uz == 13 && memcmp(kdl_dizi_buf + 4, "dizi_ekle_tam", 13) == 0) {
+                        kdl_donus = "void";
+                    } else if (dz_uz == 15 &&
+                               (memcmp(kdl_dizi_buf + 4, "dizi_ekle_tam64", 15) == 0 ||
+                                memcmp(kdl_dizi_buf + 4, "dizi_ekle_metin", 15) == 0)) {
+                        kdl_donus = "void";
+                    } else if (dz_uz == 11 && memcmp(kdl_dizi_buf + 4, "dizi_al_tam", 11) == 0) {
+                        kdl_donus = "i32";
+                    } else if (dz_uz == 13 &&
+                               memcmp(kdl_dizi_buf + 4, "dizi_al_tam64", 13) == 0) {
+                        kdl_donus = "i64";
+                    } else if (dz_uz == 13 &&
+                               memcmp(kdl_dizi_buf + 4, "dizi_al_metin", 13) == 0) {
+                        kdl_donus = "ptr";
+                    } else if (dz_uz == 14 &&
+                               memcmp(kdl_dizi_buf + 4, "dizi_boyut_tam", 14) == 0) {
+                        /* kdl_dizi_boyut — _tam suffix duser */
+                        cagri_adi = "kdl_dizi_boyut"; cagri_adi_uz = 14;
+                        kdl_donus = "i32";
+                    } else if (dz_uz == 17 &&
+                               memcmp(kdl_dizi_buf + 4, "dizi_kapasite_tam", 17) == 0) {
+                        cagri_adi = "kdl_dizi_kapasite"; cagri_adi_uz = 17;
+                        kdl_donus = "i32";
+                    } else if (dz_uz == 16 &&
+                               memcmp(kdl_dizi_buf + 4, "dizi_serbest_tam", 16) == 0) {
+                        cagri_adi = "kdl_dizi_serbest"; cagri_adi_uz = 16;
+                        kdl_donus = "void";
+                    } else {
+                        kdl_donus = "ptr";
+                    }
+                }
+            }
             /* Madde G: dosya_* built-in -> kdl_dosya_* */
             else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "dosya_", 6) == 0) {
                 static char kdl_dosya_buf[64];
@@ -1467,7 +1545,19 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
-    fputs("declare i64 @kdl_dosya_boyut(ptr)\n\n", out);
+    fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
+
+    /* Madde B: Dizi dinamik allocator (kdl_dizi_*) */
+    fputs("declare ptr @kdl_dizi_olustur_n(i32, i64)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam64(ptr, i64)\n", out);
+    fputs("declare void @kdl_dizi_ekle_metin(ptr, ptr)\n", out);
+    fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
+    fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
+    fputs("declare ptr @kdl_dizi_al_metin(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+    fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
+    fputs("declare void @kdl_dizi_serbest(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
