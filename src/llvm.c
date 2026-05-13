@@ -1639,6 +1639,10 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_metin_biter(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
     fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n", out);
+    fputs("declare ptr @kdl_metin_kucuk_tr(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_buyuk_tr(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_kucuk_ascii(ptr)\n", out);
+    fputs("declare ptr @kdl_metin_buyuk_ascii(ptr)\n", out);
 
     /* Madde G: Dosya syscall primitifleri (kdl_dosya_*) */
     fputs("declare ptr @kdl_dosya_ac(ptr, ptr)\n", out);
