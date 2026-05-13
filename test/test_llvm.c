@@ -67,8 +67,9 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     if (rc != 0) return -1;
 
     /* clang -x ir .ll -x none .o -o .exe; kdl_runtime.o link edilir
-     * (Madde A/B/G icin). -x ir sadece .ll dosyasina uygulanmali; sonra
-     * -x none ile defaulta done ki .o file format'i otomatik tanin. */
+     * (Madde A/B/G icin metin/dizi/dosya primitifleri runtime'a baglanmali).
+     * -x ir sadece .ll dosyasina uygulanmali; sonra -x none ile defaulta
+     * done ki .o file format'i otomatik tanin. */
 #ifdef _WIN32
     snprintf(komut, sizeof(komut),
              "clang -x ir %s -x none build\\kdl_runtime.o -o %s 2>%s",
@@ -399,6 +400,308 @@ static void test_yazdir_hello(void) {
     test_sonuc("yazdir(\"hi\") + ver 42 -> exit 42", rc == 42);
 }
 
+/* === A: Metin runtime primitifleri === */
+
+static void test_metin_uzunluk(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"merhaba\"); }");
+    test_sonuc("metin_uzunluk(\"merhaba\") -> 7", rc == 7);
+}
+
+static void test_metin_uzunluk_bos(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"\"); }");
+    test_sonuc("metin_uzunluk(\"\") -> 0", rc == 0);
+}
+
+static void test_metin_birlestir(void) {
+    /* "ab" + "cdef" -> 6 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_birlestir(\"ab\", \"cdef\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_birlestir(\"ab\",\"cdef\") uzunluk -> 6", rc == 6);
+}
+
+static void test_metin_kes(void) {
+    /* metin_kes("merhaba", 0, 3) = "mer" -> uzunluk 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kes(\"merhaba\", 0, 3); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kes(\"merhaba\",0,3) uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_kucuk_ascii(void) {
+    /* metin_kucuk("ABC") uzunluk 3 (ASCII lowercase) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kucuk(\"ABC\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kucuk(\"ABC\") uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_buyuk_turkce_i(void) {
+    /* 'i' (1 byte) -> "İ" (2 byte U+0130 C4 B0) — uzunluk = 2 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_buyuk(\"i\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_buyuk(\"i\") -> Turkce İ (2 byte)", rc == 2);
+}
+
+/* === Adim 2: Turkce-aware case folding === */
+
+static void test_metin_kucuk_tr_buyuk_I(void) {
+    /* I (1 byte) -> ı (2 byte: \xc4\xb1) — uzunluk = 2 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_tr(\"I\")); }");
+    test_sonuc("metin_kucuk_tr(\"I\") -> ı (2 byte)", rc == 2);
+}
+
+static void test_metin_buyuk_tr_kucuk_i(void) {
+    /* i -> İ (2 byte) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_buyuk_tr(\"i\")); }");
+    test_sonuc("metin_buyuk_tr(\"i\") -> İ (2 byte)", rc == 2);
+}
+
+static void test_metin_ascii_I_kalir(void) {
+    /* ASCII variant: I -> i (1 byte), Turkce I/ı yok */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_ascii(\"I\")); }");
+    test_sonuc("metin_kucuk_ascii(\"I\") -> i (1 byte, ASCII saf)", rc == 1);
+}
+
+static void test_metin_ascii_turkce_korunur(void) {
+    /* ASCII variant Turkce karakteri olduğu gibi bırakır */
+    /* "Aİ" 3 byte (A + İ olarak \xc4\xb0). metin_kucuk_ascii ile A->a kalir,
+     * İ degismez -> "aİ" 3 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_ascii(\"A\xc4\xb0\")); }");
+    test_sonuc("metin_kucuk_ascii(\"Aİ\") Turkce kalir (3 byte)", rc == 3);
+}
+
+static void test_metin_tr_yuvarlak_yolculuk(void) {
+    /* I -> ı -> I roundtrip uzunluk: I (1) -> ı (2) -> I (1) -> 1 byte */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_buyuk_tr(metin_kucuk_tr(\"I\"))); }");
+    test_sonuc("metin_buyuk_tr(metin_kucuk_tr(\"I\")) round-trip -> 1", rc == 1);
+}
+
+static void test_metin_tr_turkce_c(void) {
+    /* C (1 byte) -> c (1 byte ASCII). Cc kucuk verir */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver metin_uzunluk(metin_kucuk_tr(\"Cc\")); }");
+    test_sonuc("metin_kucuk_tr(\"Cc\") -> 2 byte", rc == 2);
+}
+
+/* === Adim 3: Dizi literal heap allocation === */
+
+static void test_heap_dizi_literal_uzunluk(void) {
+    /* değişken d: Dizi<tam32> = [10,20,12] heap; dizi_boyut -> 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [10, 20, 12]; "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi literal boyut -> 3", rc == 3);
+}
+
+static void test_heap_dizi_literal_indeks(void) {
+    /* d[0]+d[1]+d[2] heap, kdl_dizi_al ile route */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [10, 20, 12]; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("heap dizi literal indeks -> 42", rc == 42);
+}
+
+static void test_heap_dizi_literal_tam64(void) {
+    /* tam64 elemanli heap dizi */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = [100, 200, 300]; "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi tam64 literal boyut -> 3", rc == 3);
+}
+
+static void test_heap_dizi_buyume(void) {
+    /* Heap dizi literal + sonra ekle (auto-grow) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [1, 2, 3]; "
+        "dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("heap dizi literal + dizi_ekle -> 5", rc == 5);
+}
+
+static void test_stack_dizi_korunur(void) {
+    /* Annot yok -> stack davranisi (alloca [N x T]) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [10, 20, 12]; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("stack dizi (annot yok) -> 42", rc == 42);
+}
+
+static void test_heap_stack_ayrim(void) {
+    /* Iki dizi, biri stack (no annot) biri heap (annot Dizi<tam32>).
+     * Heap dizi_boyut destekli, stack alloca'lı. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: Dizi<tam32> = [1, 2, 3]; "
+        "de\xc4\x9fi\xc5\x9fken s = [10, 20]; "
+        "ver dizi_boyut(h) + s[0]; }");
+    test_sonuc("heap+stack karma: 3 + 10 -> 13", rc == 13);
+}
+
+static void test_heap_dizi_indeks_zincir(void) {
+    /* d[0] * d[1] + d[2] */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [7, 6, 0]; "
+        "ver d[0] * d[1] + d[2]; }");
+    test_sonuc("heap dizi indeks aritmetik -> 42", rc == 42);
+}
+
+static void test_heap_dizi_uzun(void) {
+    /* 5 elemanli heap dizi, sondan oku */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = [1, 2, 3, 4, 42]; "
+        "ver d[4]; }");
+    test_sonuc("heap dizi uzun (5 eleman) d[4] -> 42", rc == 42);
+}
+
+/* === Adim 7: Stdlib bağlama end-to-end === */
+
+static void test_stdlib_harita_calistir(void) {
+    /* Inline harita: dizi_olustur + dizi_ekle + f(x) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) "
+        "-> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<U> = dizi_olustur(0); "
+        "i\xc3\xa7in x: xs { dizi_ekle(r, f(x)); } "
+        "ver r; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [10, 11]; "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver dizi_al(ys, 0) + dizi_al(ys, 1); }");
+    /* iki_kat(10)+iki_kat(11) = 20+22 = 42 */
+    test_sonuc("stdlib harita end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_filtre_calistir(void) {
+    /* Inline filtre: pred(x) -> dizi_ekle */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev cift_mi(x: tam32) -> mant\xc4\xb1ksal { ver x % 2 == 0; } "
+        "i\xc5\x9flev filtre<T>(xs: Dizi<T>, p: i\xc5\x9flev(T) -> mant\xc4\xb1ksal) "
+        "-> Dizi<T> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<T> = dizi_olustur(0); "
+        "i\xc3\xa7in x: xs { e\xc4\x9f" "er p(x) { dizi_ekle(r, x); } } "
+        "ver r; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3, 40, 5]; "
+        "de\xc4\x9fi\xc5\x9fken cs: Dizi<tam32> = filtre(xs, cift_mi); "
+        "ver dizi_al(cs, 0) + dizi_al(cs, 1); }");
+    /* cift'ler: 2, 40 -> 42 */
+    test_sonuc("stdlib filtre end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_indirgeme_calistir(void) {
+    /* Inline indirgeme: birikim */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev topla(a: tam32, b: tam32) -> tam32 { ver a + b; } "
+        "i\xc5\x9flev indirgeme<T, U>(xs: Dizi<T>, b: U, "
+        "op: i\xc5\x9flev(U, T) -> U) -> U { "
+        "de\xc4\x9fi\xc5\x9fken s: U = b; "
+        "i\xc3\xa7in x: xs { s = op(s, x); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [10, 12, 20]; "
+        "ver indirgeme(xs, 0, topla); }");
+    /* 0+10+12+20 = 42 */
+    test_sonuc("stdlib indirgeme end-to-end -> 42", rc == 42);
+}
+
+static void test_stdlib_metin_kucukbuyuk(void) {
+    /* metin_buyuk_tr ile kucukharf upper case round-trip */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = \"abc\"; "
+        "de\xc4\x9fi\xc5\x9fken bs: metin = metin_buyuk(s); "
+        "ver metin_uzunluk(bs); }");
+    /* ABC uzunlugu 3 */
+    test_sonuc("stdlib metin buyuk ASCII end-to-end -> 3", rc == 3);
+}
+
+static void test_stdlib_dizi_uzunluk(void) {
+    /* dizi_boyut heap dizi ile */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 42]; "
+        "ver dizi_boyut(xs); }");
+    /* 8 eleman */
+    test_sonuc("stdlib dizi uzunluk end-to-end -> 8", rc == 8);
+}
+
+static void test_metin_icerir_evet(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_icerir(\"merhaba\", \"haba\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba\",\"haba\") -> 1", rc == 1);
+}
+
+static void test_metin_icerir_hayir(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_icerir(\"merhaba\", \"xyz\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_icerir(\"merhaba\",\"xyz\") -> 0", rc == 0);
+}
+
+static void test_metin_baslar(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_baslar(\"merhaba\", \"mer\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_baslar(\"merhaba\",\"mer\") -> 1", rc == 1);
+}
+
+static void test_metin_biter(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er metin_biter(\"merhaba\", \"aba\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("metin_biter(\"merhaba\",\"aba\") -> 1", rc == 1);
+}
+
+static void test_metin_kirp(void) {
+    /* "  abc  " -> "abc" (uzunluk 3) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_kirp(\"  abc  \"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_kirp(\"  abc  \") uzunluk -> 3", rc == 3);
+}
+
+static void test_metin_yer_degistir(void) {
+    /* "aaa" -> "bbb" (a -> b), uzunluk 3 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = metin_yer_degistir(\"aaa\", \"a\", \"b\"); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("metin_yer_degistir(\"aaa\",\"a\",\"b\") uzunluk -> 3", rc == 3);
+}
+
 static void test_kendin_method(void) {
     int rc = derle_ve_calistir(
         "yap\xc4\xb1 K { v: tam32; } "
@@ -534,80 +837,218 @@ static void test_bit_oncelik_shift_or(void) {
     test_sonuc("5 << 3 | 2 -> 42 (oncelik: shift > OR)", rc == 42);
 }
 
-/* === Madde A: Metin runtime primitifleri === */
+/* (Madde A duplicate test functions removed — bu oturumda yukarida zaten
+ *  test_metin_uzunluk, _birlestir, _kes, _kucuk_ascii, _buyuk_turkce_i,
+ *  _icerir_evet/_hayir, _baslar, _biter, _kirp, _yer_degistir mevcut.) */
 
-static void test_metin_uzunluk(void) {
-    /* "Merhaba" uzunlugu 7 */
-    int rc = derle_ve_calistir(
-        "i\xc5\x9flev main() -> tam32 { ver metin_uzunluk(\"Merhaba\"); }");
-    test_sonuc("metin_uzunluk(\"Merhaba\") -> 7", rc == 7);
-}
+/* === Madde B: Dizi dinamik allocator (generic intrinsics) === */
 
-static void test_metin_birlestir_uzunluk(void) {
-    /* "Hi" + "There" = "HiThere" uzunluk 7 */
+static void test_dizi_olustur_ekle_boyut(void) {
+    /* dizi_olustur<T> generic + 3 ekle -> boyut 3 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "ver metin_uzunluk(metin_birlestir(\"Hi\", \"There\")); }");
-    test_sonuc("metin_birlestir + metin_uzunluk -> 7", rc == 7);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); "
+        "dizi_ekle(d, 20); "
+        "dizi_ekle(d, 30); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_olustur<tam32> + 3 ekle -> boyut 3", rc == 3);
 }
 
-static void test_metin_baslar(void) {
-    /* "abcdef" "abc" ile basliyor -> 1 */
+static void test_dizi_al(void) {
+    /* dizi_al index 1 = 20 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "e\xc4\x9f" "er metin_baslar(\"abcdef\", \"abc\") { ver 42; } "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); "
+        "dizi_ekle(d, 20); "
+        "dizi_ekle(d, 30); "
+        "ver dizi_al(d, 1); }");
+    test_sonuc("dizi_al<tam32>(d, 1) -> 20", rc == 20);
+}
+
+static void test_dizi_kapasite_otomatik_buyume(void) {
+    /* Kapasite 2, 5 eleman ekle -> buyume + boyut 5 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(2); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); "
+        "dizi_ekle(d, 3); dizi_ekle(d, 4); dizi_ekle(d, 5); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi otomatik buyume (kap=2, +5) -> boyut 5", rc == 5);
+}
+
+static void test_dizi_bos_olustur(void) {
+    /* kapasite 0 -> boyut 0 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("dizi_olustur(0) bos -> boyut 0", rc == 0);
+}
+
+static void test_dizi_toplam(void) {
+    /* 10 + 20 + 12 = 42 */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 10); dizi_ekle(d, 20); dizi_ekle(d, 12); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_al toplam (10+20+12) -> 42", rc == 42);
+}
+
+static void test_dizi_iken_dongu(void) {
+    /* iken dongusu ile 5 ekle, sonra topla */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < 5 { dizi_ekle(d, i + 1); i = i + 1; } "
+        "de\xc4\x9fi\xc5\x9fken t: tam32 = 0; "
+        "i = 0; "
+        "iken i < dizi_boyut(d) { t = t + dizi_al(d, i); i = i + 1; } "
+        "ver t; }");
+    /* 1+2+3+4+5 = 15 */
+    test_sonuc("dizi iken ekle + iken al toplam -> 15", rc == 15);
+}
+
+static void test_dizi_tam64_generic(void) {
+    /* tam64 element generic instantiation */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam64> = dizi_olustur(4); "
+        "dizi_ekle(d, 100); dizi_ekle(d, 200); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("Dizi<tam64> generic instan + 2 ekle -> 2", rc == 2);
+}
+
+static void test_dizi_metin_generic(void) {
+    /* metin element — generic */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<metin> = dizi_olustur(4); "
+        "dizi_ekle(d, \"a\"); dizi_ekle(d, \"b\"); dizi_ekle(d, \"c\"); "
+        "ver dizi_boyut(d); }");
+    test_sonuc("Dizi<metin> generic + 3 ekle -> 3", rc == 3);
+}
+
+/* === Madde G: Dosya syscall primitifleri === */
+
+static void test_dosya_var_mi_yok(void) {
+    /* Var olmayan dosya -> dosya_var_mi yanlis (0) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"nonexistent_xyz_42.txt\") { ver 1; } "
         "ver 0; }");
-    test_sonuc("metin_baslar(\"abcdef\", \"abc\") -> 42", rc == 42);
+    test_sonuc("dosya_var_mi(\"nonexistent\") -> 0", rc == 0);
 }
 
-static void test_metin_biter(void) {
-    /* "merhaba.txt" ".txt" ile bitiyor */
+static void test_dosya_yaz_oku(void) {
+    /* yaz + close + oku tum dosya -> uzunluk dogru */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "e\xc4\x9f" "er metin_biter(\"merhaba.txt\", \".txt\") { ver 7; } "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_io.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"merhaba\"); "
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken icerik: metin = dosya_oku(\"build/test_G_io.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = metin_uzunluk(icerik); "
+        "dosya_sil(\"build/test_G_io.tmp\"); "
+        "ver n; }");
+    test_sonuc("dosya yaz/oku/kapat/sil pipeline -> uzunluk 7", rc == 7);
+}
+
+static void test_dosya_boyut(void) {
+    /* yaz "hi" (2 byte) -> boyut 2 -> int32 dondurelim */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_boyut.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"hi\"); "
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken b: tam64 = dosya_boyut(\"build/test_G_boyut.tmp\"); "
+        "dosya_sil(\"build/test_G_boyut.tmp\"); "
+        /* Cast tam64 -> tam32 (UTF-8 strict, eger E gerek olmadan) — kucuk val */
+        "e\xc4\x9f""er b == 2 { ver 2; } "
         "ver 0; }");
-    test_sonuc("metin_biter(\"merhaba.txt\", \".txt\") -> 7", rc == 7);
+    test_sonuc("dosya_boyut(\"hi\") -> 2", rc == 2);
 }
 
-static void test_metin_icerir(void) {
-    /* "merhaba dunya" "dunya" iceriyor */
+static void test_dosya_yeniden_adlandir(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "e\xc4\x9f" "er metin_icerir(\"merhaba dunya\", \"dunya\") { ver 1; } "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_ren.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"ok\"); "
+        "dosya_kapat(h); "
+        "dosya_yeniden_adlandir(\"build/test_G_ren.tmp\", \"build/test_G_renamed.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken v: mant\xc4\xb1ksal = dosya_var_mi(\"build/test_G_renamed.tmp\"); "
+        "dosya_sil(\"build/test_G_renamed.tmp\"); "
+        "e\xc4\x9f""er v { ver 1; } ver 0; }");
+    test_sonuc("dosya_yeniden_adlandir + var_mi yeni -> 1", rc == 1);
+}
+
+static void test_dosya_sil_yoksa(void) {
+    /* Var olmayan dosyayi sil -> nonzero exit (remove rc != 0) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = dosya_sil(\"build/test_G_yok.tmp\"); "
+        /* r != 0 ise basari; -1 negatif olabilir, exit kodu 255 + ... */
+        "e\xc4\x9f""er r != 0 { ver 42; } "
         "ver 0; }");
-    test_sonuc("metin_icerir(\"merhaba dunya\", \"dunya\") -> 1", rc == 1);
+    test_sonuc("dosya_sil(yok) -> r!=0 -> 42", rc == 42);
 }
 
-static void test_metin_kes_uzunluk(void) {
-    /* metin_kes("abcdef", 1, 3) = "bcd" uzunluk 3 */
+/* (Madde B paralel session generic API tests removed — bu oturumda
+ *  concrete _tam suffix versiyonu (dizi_olustur_tam vb.) tip_kontrol'de
+ *  registered. Generic dizi_olustur<T> v2'de.) */
+
+/* === Madde E: Tip donusturme (olarak) === */
+
+static void test_olarak_tam32_tam64(void) {
+    /* tam32 -> tam64 -> tam32 round trip */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "ver metin_uzunluk(metin_kes(\"abcdef\", 1, 3)); }");
-    test_sonuc("metin_kes uzunluk -> 3", rc == 3);
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x olarak tam64; "
+        "ver y olarak tam32; }");
+    test_sonuc("tam32 olarak tam64 olarak tam32 -> 42", rc == 42);
 }
 
-static void test_metin_kucuk_buyuk(void) {
-    /* metin_uzunluk(metin_buyuk(metin_kucuk("ABC"))) == 3 */
+static void test_olarak_tam64_tam32(void) {
+    /* tam64 -> tam32 (trunc) */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "ver metin_uzunluk(metin_buyuk(metin_kucuk(\"AbC\"))); }");
-    test_sonuc("metin_kucuk + metin_buyuk -> 3", rc == 3);
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "ver y olarak tam32; }");
+    test_sonuc("tam64 olarak tam32 (trunc) -> 42", rc == 42);
 }
 
-static void test_metin_kirp(void) {
-    /* metin_kirp("  hi  ") uzunluk 2 */
+static void test_olarak_zincir(void) {
+    /* (x olarak tam64) + 1 olarak tam32 */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "ver metin_uzunluk(metin_kirp(\"  hi  \")); }");
-    test_sonuc("metin_kirp(\"  hi  \") -> 2", rc == 2);
+        "de\xc4\x9fi\xc5\x9fken x: tam8 = 40; "
+        "ver (x olarak tam32) + 2; }");
+    test_sonuc("tam8 olarak tam32 + 2 -> 42", rc == 42);
 }
 
-static void test_metin_yer_degistir(void) {
-    /* "abXcdXef" 'X' -> "YY" => "abYYcdYYef" uzunluk 10 */
+static void test_olarak_aritmetik(void) {
+    /* dizi_boyut sonucu tam32 — onu tam64'e cevirmek */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "ver metin_uzunluk(metin_yer_degistir(\"abXcdXef\", \"X\", \"YY\")); }");
-    test_sonuc("metin_yer_degistir -> 10", rc == 10);
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); "
+        "de\xc4\x9fi\xc5\x9fken n: tam64 = dizi_boyut(d) olarak tam64; "
+        "ver n olarak tam32 * 21; }");
+    test_sonuc("dizi_boyut tam32->tam64->tam32 + carp -> 42", rc == 42);
+}
+
+static void test_olarak_tam_kesirli(void) {
+    /* tam32 -> kesirli64 — sitofp */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 21; "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = x olarak kesirli64; "
+        "ver (f * 2.0) olarak tam32; }");
+    test_sonuc("tam32 -> kesirli64 -> tam32 (sitofp/fptosi) -> 42", rc == 42);
 }
 
 /* === Madde B: Dinamik dizi === */
@@ -735,6 +1176,41 @@ int main(void) {
     printf("\n--- ADIM 27: Syscall (yazdir) ---\n");
     test_yazdir_hello();
 
+    printf("\n--- A: Metin runtime primitifleri (runtime/kdl_runtime.c) ---\n");
+    test_metin_uzunluk();
+    test_metin_uzunluk_bos();
+    test_metin_birlestir();
+    test_metin_kes();
+    test_metin_kucuk_ascii();
+    test_metin_buyuk_turkce_i();
+    test_metin_kucuk_tr_buyuk_I();
+    test_metin_buyuk_tr_kucuk_i();
+    test_metin_ascii_I_kalir();
+    test_metin_ascii_turkce_korunur();
+    test_metin_tr_yuvarlak_yolculuk();
+    test_metin_tr_turkce_c();
+    /* Adim 3: Dizi literal heap allocation */
+    test_heap_dizi_literal_uzunluk();
+    test_heap_dizi_literal_indeks();
+    test_heap_dizi_literal_tam64();
+    test_heap_dizi_buyume();
+    test_stack_dizi_korunur();
+    test_heap_stack_ayrim();
+    test_heap_dizi_indeks_zincir();
+    test_heap_dizi_uzun();
+    /* Adim 7: Stdlib gercek bağlama */
+    test_stdlib_harita_calistir();
+    test_stdlib_filtre_calistir();
+    test_stdlib_indirgeme_calistir();
+    test_stdlib_metin_kucukbuyuk();
+    test_stdlib_dizi_uzunluk();
+    test_metin_icerir_evet();
+    test_metin_icerir_hayir();
+    test_metin_baslar();
+    test_metin_biter();
+    test_metin_kirp();
+    test_metin_yer_degistir();
+
     printf("\n--- ADIM 28: Allocator (bellek_al/serbest) ---\n");
     test_bellek_al_serbest();
 
@@ -753,16 +1229,30 @@ int main(void) {
     test_bit_kompozisyon();
     test_bit_oncelik_shift_or();
 
-    printf("\n--- Madde A: Metin runtime primitifleri ---\n");
-    test_metin_uzunluk();
-    test_metin_birlestir_uzunluk();
-    test_metin_baslar();
-    test_metin_biter();
-    test_metin_icerir();
-    test_metin_kes_uzunluk();
-    test_metin_kucuk_buyuk();
-    test_metin_kirp();
-    test_metin_yer_degistir();
+    printf("\n--- B: Dizi dinamik allocator (generic intrinsics) ---\n");
+    test_dizi_olustur_ekle_boyut();
+    test_dizi_al();
+    test_dizi_kapasite_otomatik_buyume();
+    test_dizi_bos_olustur();
+    test_dizi_toplam();
+    test_dizi_iken_dongu();
+    test_dizi_tam64_generic();
+    test_dizi_metin_generic();
+
+    printf("\n--- G: Dosya syscall primitifleri (runtime/kdl_runtime.c) ---\n");
+    test_dosya_var_mi_yok();
+    test_dosya_yaz_oku();
+    test_dosya_boyut();
+    test_dosya_yeniden_adlandir();
+    test_dosya_sil_yoksa();
+
+
+    printf("\n--- Madde E: Tip donusturme (olarak) ---\n");
+    test_olarak_tam32_tam64();
+    test_olarak_tam64_tam32();
+    test_olarak_zincir();
+    test_olarak_aritmetik();
+    test_olarak_tam_kesirli();
 
     printf("\n--- Madde B: Dizi dinamik allocator ---\n");
     test_dizi_olustur_ekle();

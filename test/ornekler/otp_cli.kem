@@ -1,0 +1,128 @@
+/*
+ * KEMGU OTP CLI — One-Time Pad şifreleme aracı (showcase demo)
+ *
+ * Komutlar:
+ *   otp uret <dosya> <boyut>          : N byte rastgele anahtar üret
+ *   otp sifrele <metin> <anahtar> <çıktı>
+ *   otp coz <şifreli> <anahtar> <çıktı>
+ *
+ * Linear Types Spec V1 felsefesi:
+ *   - Anahtar dosya yolu tek kullanımlık (KEMGU linear bağlama)
+ *   - Şifreleme/çözme aynı XOR runtime fonksiyonu (OTP simetrik)
+ *   - Runtime: malloc/zeroize/free disiplini her byte buffer için
+ *
+ * Çıkış kodları:
+ *   0  başarı
+ *   1  argüman eksik
+ *   2  bilinmeyen komut
+ *   3  üret hatası (yol/boyut sorunu)
+ *   4  şifreleme/çözme hatası
+ *   5  anahtar mesajdan kısa
+ */
+
+işlev kullanim_yazdir() -> tam32 {
+    yazdir("KEMGU OTP CLI");
+    yazdir("Kullanim: otp_cli <komut> [argumanlar...]");
+    yazdir("Komutlar:");
+    yazdir("  uret <dosya> <boyut>");
+    yazdir("  sifrele <metin> <anahtar> <cikti>");
+    yazdir("  coz <sifreli> <anahtar> <cikti>");
+    ver 1;
+}
+
+işlev uret_komut() -> tam32 {
+    eğer arg_sayi() < 4 {
+        yazdir("HATA: uret 2 arguman gerektirir: <dosya> <boyut>");
+        ver 1;
+    }
+    değişken dosya: metin = arg_al(2);
+    değişken boyut_metni: metin = arg_al(3);
+    /* boyut_metni'ni tam32'ye cevirme — basit yontem: metin_uzunluk ile
+     * sabit boyutlar (8/16/32/64) destekliyoruz. Tam parsing v2'de. */
+    değişken boyut: tam32 = 32;
+    eğer metin_baslar(boyut_metni, "8") {
+        boyut = 8;
+    } değilse {
+        eğer metin_baslar(boyut_metni, "16") {
+            boyut = 16;
+        } değilse {
+            eğer metin_baslar(boyut_metni, "64") {
+                boyut = 64;
+            } değilse {
+                eğer metin_baslar(boyut_metni, "128") {
+                    boyut = 128;
+                } değilse {
+                    boyut = 32;
+                }
+            }
+        }
+    }
+    değişken yazildi: tam32 = otp_anahtar_uret(dosya, boyut);
+    eğer yazildi < 0 {
+        yazdir("HATA: anahtar uretme basarisiz");
+        ver 3;
+    }
+    yazdir("Anahtar uretildi");
+    ver 0;
+}
+
+işlev sifrele_komut() -> tam32 {
+    eğer arg_sayi() < 5 {
+        yazdir("HATA: sifrele 3 arguman: <metin> <anahtar> <cikti>");
+        ver 1;
+    }
+    değişken metin_yol: metin = arg_al(2);
+    değişken anahtar_yol: metin = arg_al(3);
+    değişken cikti_yol: metin = arg_al(4);
+    değişken sonuc: tam32 = otp_xor_uygula(metin_yol, anahtar_yol, cikti_yol);
+    eğer sonuc == 0 - 2 {
+        yazdir("HATA: anahtar mesajdan kisa (OTP guvenligi)");
+        ver 5;
+    }
+    eğer sonuc < 0 {
+        yazdir("HATA: sifreleme basarisiz");
+        ver 4;
+    }
+    yazdir("Sifrelendi");
+    ver 0;
+}
+
+işlev coz_komut() -> tam32 {
+    eğer arg_sayi() < 5 {
+        yazdir("HATA: coz 3 arguman: <sifreli> <anahtar> <cikti>");
+        ver 1;
+    }
+    değişken sifreli_yol: metin = arg_al(2);
+    değişken anahtar_yol: metin = arg_al(3);
+    değişken cikti_yol: metin = arg_al(4);
+    /* OTP simetrik: cozme = sifreleme (ayni XOR) */
+    değişken sonuc: tam32 = otp_xor_uygula(sifreli_yol, anahtar_yol, cikti_yol);
+    eğer sonuc == 0 - 2 {
+        yazdir("HATA: anahtar sifrelinden kisa");
+        ver 5;
+    }
+    eğer sonuc < 0 {
+        yazdir("HATA: cozme basarisiz");
+        ver 4;
+    }
+    yazdir("Cozuldu");
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    eğer arg_sayi() < 2 {
+        ver kullanim_yazdir();
+    }
+    değişken komut: metin = arg_al(1);
+    eğer metin_baslar(komut, "uret") {
+        ver uret_komut();
+    }
+    eğer metin_baslar(komut, "sifrele") {
+        ver sifrele_komut();
+    }
+    eğer metin_baslar(komut, "coz") {
+        ver coz_komut();
+    }
+    yazdir("HATA: bilinmeyen komut (uret/sifrele/coz)");
+    ver 2;
+}

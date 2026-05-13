@@ -1471,6 +1471,378 @@ static void test_dizi_olustur_tam64(void) {
     arena_serbest(a);
 }
 
+/* === Madde E: Tip donusturme (olarak) === */
+
+static void test_olarak_tam_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x olarak tam64; "
+        "ver 0; }",
+        a);
+    test_sonuc("x: tam32 olarak tam64 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_tam_kesirli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = x olarak kesirli64; "
+        "ver 0; }",
+        a);
+    test_sonuc("tam32 olarak kesirli64 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_kesirli_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: kesirli64 = 3.14; "
+        "ver f olarak tam32; }",
+        a);
+    test_sonuc("kesirli64 olarak tam32 — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_metin_yasak(void) {
+    Arena *a = arena_olustur(0);
+    /* metin -> tam32 yasak (kaynak sayisal degil) */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver \"hi\" olarak tam32; }",
+        a);
+    test_sonuc("metin olarak tam32 -> hata (E002)", h > 0);
+    arena_serbest(a);
+}
+
+static void test_olarak_karakter_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c: karakter = 'A'; "
+        "ver c olarak tam32; }",
+        a);
+    test_sonuc("karakter olarak tam32 — OK", h == 0);
+    arena_serbest(a);
+}
+
+/* === Adim 4: Madde E v2 cast garantileri (E001-E004) === */
+
+/* E001: x olarak tekkez<T> derleme hatasi (Linear creation by cast forbidden) */
+static void test_E001_tekkez_hedef_yasak(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken t = x olarak tekkez<tam32>; "
+        "ver 0; }",
+        a);
+    test_sonuc("E001: x olarak tekkez<T> -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E001_tekkez_hedef_pozitif(void) {
+    /* tekkez<T> hedef ile cast'i denerse, hata SAYISI artmali */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver 1 olarak tekkez<tam32>; }",
+        a);
+    test_sonuc("E001 (2): 1 olarak tekkez<T> -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E002: metin olarak tam derleme hatasi */
+static void test_E002_metin_to_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver \"42\" olarak tam32; }",
+        a);
+    test_sonuc("E002: \"42\" olarak tam32 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E002_tam_to_metin(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = 42 olarak metin; "
+        "ver 0; }",
+        a);
+    test_sonuc("E002 (2): 42 olarak metin -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E003: tekkez<T> olarak T derleme hatasi (linear escape) */
+static void test_E003_tekkez_escape(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = t olarak tam32; "
+        "ver 0; }",
+        a);
+    test_sonuc("E003: tekkez<tam32> olarak tam32 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E003_tekkez_escape_metin(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(\"hi\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = t olarak metin; "
+        "ver 0; }",
+        a);
+    test_sonuc("E003 (2): tekkez<metin> olarak metin -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E004: tam64 olarak tam8 (kayip prezisyon) derleme hatasi */
+static void test_E004_tam64_to_tam8(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "de\xc4\x9fi\xc5\x9fken x: tam8 = y olarak tam8; "
+        "ver 0; }",
+        a);
+    test_sonuc("E004: tam64 olarak tam8 -> hata (kayip prezisyon)", h > 0);
+    arena_serbest(a);
+}
+
+static void test_E004_tam64_to_tam16(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "de\xc4\x9fi\xc5\x9fken x: tam16 = y olarak tam16; "
+        "ver 0; }",
+        a);
+    test_sonuc("E004 (2): tam64 olarak tam16 -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* E004 pozitif: tam64 olarak tam32 izinli (32-bit native word) */
+static void test_E004_tam64_to_tam32_izinli(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = 42; "
+        "ver y olarak tam32; }",
+        a);
+    test_sonuc("E004 (3): tam64 olarak tam32 -> OK (native word)", h == 0);
+    arena_serbest(a);
+}
+
+/* === Adim 5: Bound-aware monomorphization === */
+
+static void test_bound_islev_pozitif(void) {
+    /* T: Karsilastirilabilir; uygula bildirimi var -> OK */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 Nokta { x: tam32; } "
+        "uygula Karsilastirilabilir i\xc3\xa7in Nokta {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(e: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: Nokta = Nokta { x: 1 }; "
+        "ver en_buyuk(n); }",
+        a);
+    test_sonuc("bound pozitif: Nokta uygula Karsilastirilabilir -> OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_islev_negatif(void) {
+    /* T: Karsilastirilabilir; Cizgi uygula yok -> T030 */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 Cizgi { x: tam32; } "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(e: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c: Cizgi = Cizgi { x: 1 }; "
+        "ver en_buyuk(c); }",
+        a);
+    test_sonuc("bound negatif: Cizgi uygula yok -> T030", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_iki_param_pozitif(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { x: tam32; } "
+        "yap\xc4\xb1 Y { y: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "uygula B i\xc3\xa7in Y {} "
+        "i\xc5\x9flev f<T: A, U: B>(t: T, u: U) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "de\xc4\x9fi\xc5\x9fken y: Y = Y { y: 2 }; "
+        "ver f(x, y); }",
+        a);
+    test_sonuc("bound iki param pozitif (A, B)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_iki_param_negatif(void) {
+    /* Y bound A icin uygula yok */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} "
+        "yap\xc4\xb1 X { x: tam32; } "
+        "yap\xc4\xb1 Y { y: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "i\xc5\x9flev f<T: A>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: Y = Y { y: 1 }; "
+        "ver f(y); }",
+        a);
+    test_sonuc("bound iki param negatif (Y!A) -> T030", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_bilinmeyen_ozellik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { x: tam32; } "
+        "i\xc5\x9flev f<T: BilinmeyenOzellik>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "ver f(x); }",
+        a);
+    test_sonuc("bound bilinmeyen ozellik -> T031", h > 0);
+    arena_serbest(a);
+}
+
+static void test_bound_yok_bound_check_yok(void) {
+    /* T (bound yok) -> her tip kabul (Adim D inference): hata yok */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { x: tam32; } "
+        "i\xc5\x9flev kimlik<T>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: X = X { x: 1 }; "
+        "ver kimlik(x); }",
+        a);
+    test_sonuc("bound yok (T:) -> her tip kabul", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_compound_dizi(void) {
+    /* T: Karsilastirilabilir; param Dizi<T> (compound) */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "yap\xc4\xb1 N { x: tam32; } "
+        "uygula Karsilastirilabilir i\xc3\xa7in N {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(d: Dizi<T>) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: Dizi<N> = [N { x: 1 }]; "
+        "ver en_buyuk(n); }",
+        a);
+    test_sonuc("bound compound Dizi<N> -> OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_bound_metin_tip_atla(void) {
+    /* T:Karsilastirilabilir; metin (built-in) — bound check'ten kacar (v1).
+     * metin TIP_YAPI degil, dolayisi ile arg_ad NULL -> bound check skip. */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Karsilastirilabilir {} "
+        "i\xc5\x9flev en_buyuk<T: Karsilastirilabilir>(t: T) -> tam32 { ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver en_buyuk(\"hi\"); }",
+        a);
+    test_sonuc("bound metin (built-in) — skip (v1)", h == 0);
+    arena_serbest(a);
+}
+
+/* === Madde D: Generic callback / multi-param inference === */
+
+static void test_generic_callback_govde(void) {
+    Arena *a = arena_olustur(0);
+    /* harita govde icinde f(x) - x: T, f: islev(T)->U, f(x) -> U */
+    int h = program_kontrol(
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; }",
+        a);
+    test_sonuc("harita<T,U> govde tip kontrol — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_concrete_instan(void) {
+    Arena *a = arena_olustur(0);
+    /* harita(intDizi, ikiKat) — T=tam32, U=tam32 */
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("harita concrete instan — OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_tip_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* harita(metinDizi, ikiKat:tam32->tam32) — T conflict (metin vs tam32) */
+    int h = program_kontrol(
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken s: Dizi<U> = dizi_olustur(8); "
+        "i\xc3\xa7in x: xs { dizi_ekle(s, f(x)); } "
+        "ver s; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<metin> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("harita metin vs tam32 — T conflict", h > 0);
+    arena_serbest(a);
+}
+
+static void test_generic_donus_substitusyon(void) {
+    Arena *a = arena_olustur(0);
+    /* f: islev(T) -> U; cagri donus tipi inferred U */
+    int h = program_kontrol(
+        "i\xc5\x9flev tek<T, U>(x: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(x); } "
+        "i\xc5\x9flev ikiyle(x: tam32) -> tam64 { ver 42; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam64 = tek(5, ikiyle); "
+        "ver 0; }",
+        a);
+    test_sonuc("tek<T,U> donus inferred U=tam64", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_iclice_inference(void) {
+    Arena *a = arena_olustur(0);
+    /* T derinden iclie: Dizi<Dizi<T>> */
+    int h = program_kontrol(
+        "i\xc5\x9flev duzlestir<T>(xs: Dizi<Dizi<T>>) -> tam32 { "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { ver 0; }",
+        a);
+    test_sonuc("Dizi<Dizi<T>> param — govde tip kontrol", h == 0);
+    arena_serbest(a);
+}
+
 /* L-1: Lambda govde scope — parametre referansi */
 static void test_lambda_govde(void) {
     Arena *a = arena_olustur(0);
@@ -1481,6 +1853,92 @@ static void test_lambda_govde(void) {
         a);
     /* Lambda govdesinde x kullanim — scope dogruysa tip kontrol gecer */
     test_sonuc("lambda govde scope (x: tam32 -> x*2)", h == 0);
+    arena_serbest(a);
+}
+
+/* === Madde D: Generic callback tip cikarsamasi === */
+
+/* D-1: Dizi<T> param -> T arg'dan cikarsanir */
+static void test_gen_callback_dizi_param(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev ilki<T>(xs: Dizi<T>) -> T { "
+        "ver dizi_al(xs, 0); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 7); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = ilki(d); "
+        "ver v; }",
+        a);
+    test_sonuc("D: Dizi<T> param -> T inferred (tam32)", h == 0);
+    arena_serbest(a);
+}
+
+/* D-2: harita<T,U>(Dizi<T>, islev(T)->U) -> Dizi<U> — multi-param compound */
+static void test_gen_callback_harita(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev harita<T, U>(xs: Dizi<T>, f: i\xc5\x9flev(T) -> U) -> Dizi<U> { "
+        "de\xc4\x9fi\xc5\x9fken r: Dizi<U> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < dizi_boyut(xs) { "
+        "  dizi_ekle(r, f(dizi_al(xs, i))); "
+        "  i = i + 1; "
+        "} "
+        "ver r; } "
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = dizi_olustur(4); "
+        "de\xc4\x9fi\xc5\x9fken ys: Dizi<tam32> = harita(xs, iki_kat); "
+        "ver 0; }",
+        a);
+    test_sonuc("D: harita<T,U>(Dizi<T>, islev(T)->U) -> Dizi<U>", h == 0);
+    arena_serbest(a);
+}
+
+/* D-3: Callback'in return tipi U farkli, T'den ayri inference */
+static void test_gen_callback_farkli_donus(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev ucur<T, U>(x: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(x); } "
+        "i\xc5\x9flev uzunluk_al(s: metin) -> tam32 { ver metin_uzunluk(s); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = ucur(\"merhaba\", uzunluk_al); "
+        "ver n; }",
+        a);
+    test_sonuc("D: ucur<T,U>(T, islev(T)->U) -> U", h == 0);
+    arena_serbest(a);
+}
+
+/* D-4: secimlik<T> param compound */
+static void test_gen_callback_secimlik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev varsayilan<T>(o: se\xc3\xa7imlik<T>, d: T) -> T { "
+        "e\xc5\x9fle\xc5\x9f o { "
+        "  de\xc4\x9f" "er(v) => { ver v; } "
+        "  hi\xc3\xa7 => { ver d; } "
+        "} "
+        "ver d; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken o: se\xc3\xa7imlik<tam32> = de\xc4\x9f" "er(42); "
+        "ver varsayilan(o, 0); }",
+        a);
+    test_sonuc("D: varsayilan<T>(secimlik<T>, T) -> T", h == 0);
+    arena_serbest(a);
+}
+
+/* D-5: Birden cok generic param bagimsiz callsite */
+static void test_gen_callback_coklu(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev cift<A, B>(a: A, b: B) -> A { ver a; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = cift(42, \"hi\"); "
+        "ver r; }",
+        a);
+    test_sonuc("D: cift<A,B>(A, B) -> A — coklu generic", h == 0);
     arena_serbest(a);
 }
 
@@ -1798,6 +2256,35 @@ int main(void) {
     test_dizi_ekle_tip_uyumsuz();
     test_dizi_al_donus();
     test_dizi_olustur_tam64();
+    test_olarak_tam_tam();
+    test_olarak_tam_kesirli();
+    test_olarak_kesirli_tam();
+    test_olarak_metin_yasak();
+    test_olarak_karakter_tam();
+    /* Adim 4: Cast guarantee testleri */
+    test_E001_tekkez_hedef_yasak();
+    test_E001_tekkez_hedef_pozitif();
+    test_E002_metin_to_tam();
+    test_E002_tam_to_metin();
+    test_E003_tekkez_escape();
+    test_E003_tekkez_escape_metin();
+    test_E004_tam64_to_tam8();
+    test_E004_tam64_to_tam16();
+    test_E004_tam64_to_tam32_izinli();
+    /* Adim 5: Bound-aware monomorphization */
+    test_bound_islev_pozitif();
+    test_bound_islev_negatif();
+    test_bound_iki_param_pozitif();
+    test_bound_iki_param_negatif();
+    test_bound_bilinmeyen_ozellik();
+    test_bound_yok_bound_check_yok();
+    test_bound_compound_dizi();
+    test_bound_metin_tip_atla();
+    test_generic_callback_govde();
+    test_generic_callback_concrete_instan();
+    test_generic_callback_tip_uyumsuz();
+    test_generic_donus_substitusyon();
+    test_generic_iclice_inference();
     test_sonuc_konstrüktörler();
 
     printf("\n--- C: sonuç pattern matching (runtime primitif oturumu) ---\n");
@@ -1809,6 +2296,13 @@ int main(void) {
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
+
+    printf("\n--- D: Generic callback tip cikarsama (multi-param compound) ---\n");
+    test_gen_callback_dizi_param();
+    test_gen_callback_harita();
+    test_gen_callback_farkli_donus();
+    test_gen_callback_secimlik();
+    test_gen_callback_coklu();
 
     printf("\n--- Bit operatorleri (ADIM 30) ---\n");
     test_bit_ve_tam32();

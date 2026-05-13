@@ -93,6 +93,27 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         p[0] = tip_olustur_basit(a, TIP_METIN);
         EKLE_BUILTIN("metin_buyuk", 11, p, 1, tip_olustur_basit(a, TIP_METIN));
     }
+    /* Adim 2: metin_kucuk_tr / metin_buyuk_tr / *_ascii varyantlari */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kucuk_tr", 14, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_buyuk_tr", 14, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kucuk_ascii", 17, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_buyuk_ascii", 17, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
     /* metin_icerir(metin, metin) -> mantiksal */
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
@@ -167,6 +188,105 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     /* yaz_metin built-in YOK — stdlib/dosya.kem 2-param yaz_metin
      * tanimlar; cakisma onlemek icin (KIRMIZI_QUEUE: dosya_yaz_metin
      * rename gelecek). */
+
+    /* === G: Dosya syscall built-in'leri (runtime/kdl_runtime.c) === */
+
+    /* dosya_ac(yol: metin, mod: metin) -> metin  (handle opaque ptr) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_ac", 8, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* dosya_oku(yol: metin) -> metin  (tum dosya icerigini metin olarak) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_oku", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* dosya_yaz(handle: metin, icerik: metin) -> tam32  (yazilan byte) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_yaz", 9, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dosya_kapat(handle: metin) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_kapat", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* dosya_var_mi(yol: metin) -> mantıksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_var_mi", 12, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
+    /* dosya_sil(yol: metin) -> tam32 (0 basari, !=0 hata) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_sil", 9, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dosya_yeniden_adlandir(eski: metin, yeni: metin) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_yeniden_adlandir", 22, p, 2,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dosya_boyut(yol: metin) -> tam64 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
+    }
+
+    /* === Adim 1 (OTP CLI): CLI args + OTP yardimcilari === */
+
+    /* arg_sayi() -> tam32 */
+    EKLE_BUILTIN("arg_sayi", 8, NULL, 0, tip_olustur_basit(a, TIP_TAM32));
+
+    /* arg_al(i: tam32) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("arg_al", 6, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* otp_anahtar_uret(yol: metin, boyut: tam32) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("otp_anahtar_uret", 16, p, 2,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* otp_xor_uygula(msg, anahtar, cikti) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 3);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        p[2] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("otp_xor_uygula", 14, p, 3,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* === Adim 6: Dizi capacity API === */
+    /* dizi_kapasite(d: Dizi<T>) -> tam32 — generic, T atlanir */
+    /* dizi_kapasite_ayarla(d: Dizi<T>, yeni: tam32) -> bos */
+    /* Bu built-inler intrinsic gibi (tip kontrol DUGUM_CAGRI'de
+     * ozel handler), sadece sembol tablosu lookup icin kayit */
 
     #undef EKLE_BUILTIN
     tk->dosya_adi = dosya_adi;
@@ -255,11 +375,378 @@ static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
 
+/* === Madde D: Generic call inference helpers (paralel session, kullanilmaz) ===
+ *
+ * Bu bolumdeki GenericBaglama + linked list yardimcilari paralel commit
+ * tarafindan eklendi. Bu oturumda alternatif GenBaglamalar (array) +
+ * gen_bagla/gen_unify/gen_substitue daha asagida tanimli ve cagri site'da
+ * o kullaniliyor. Asagidaki yardimcilar kullanilmiyor — tutuldu zira ileride
+ * bound check icin gerekli olabilir (param_tip_generic_iceriyor_mu vb.). */
+
+#if 0  /* kullanilmiyor — kullanilirsa #if 1 yap */
+
+/* Generic param adi -> concrete tip baglamasi (linked list) */
+typedef struct GenericBaglama {
+    const char *ad;
+    int ad_uzunluk;
+    TipBilgisi *tip;
+    struct GenericBaglama *sonraki;
+} GenericBaglama;
+
+static TipBilgisi *baglama_bul(GenericBaglama *b,
+                                const char *ad, int ad_uz) {
+    for (; b; b = b->sonraki) {
+        if (b->ad_uzunluk == ad_uz &&
+            memcmp(b->ad, ad, (size_t)ad_uz) == 0) {
+            return b->tip;
+        }
+    }
+    return NULL;
+}
+
+static void baglama_ekle(TipKontrol *tk, GenericBaglama **bas,
+                          const char *ad, int ad_uz,
+                          TipBilgisi *tip) {
+    if (!tip || tip->kategori == TIP_GENERIC_PARAM) return;
+    /* Varsa override etme — ilk binding kalir (zaten anchor) */
+    if (baglama_bul(*bas, ad, ad_uz)) return;
+    GenericBaglama *b = (GenericBaglama *)arena_ayir_sifir(tk->arena,
+                                                            sizeof(GenericBaglama));
+    if (!b) return;
+    b->ad = ad;
+    b->ad_uzunluk = ad_uz;
+    b->tip = tip;
+    b->sonraki = *bas;
+    *bas = b;
+}
+
+static int param_tip_generic_iceriyor_mu(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_GENERIC_PARAM) return 1;
+    switch (t->kategori) {
+        case TIP_REFERANS: return param_tip_generic_iceriyor_mu(t->veri.referans.hedef);
+        case TIP_POINTER:  return param_tip_generic_iceriyor_mu(t->veri.pointer.hedef);
+        case TIP_DIZI:     return param_tip_generic_iceriyor_mu(t->veri.dizi.eleman);
+        case TIP_SECIMLIK: return param_tip_generic_iceriyor_mu(t->veri.secimlik.ic);
+        case TIP_SONUC:
+            return param_tip_generic_iceriyor_mu(t->veri.sonuc.deger) ||
+                   param_tip_generic_iceriyor_mu(t->veri.sonuc.hata);
+        case TIP_TEKKEZ:   return param_tip_generic_iceriyor_mu(t->veri.tekkez.ic);
+        case TIP_ISLEV: {
+            for (int i = 0; i < t->veri.islev.param_sayi; i++) {
+                if (param_tip_generic_iceriyor_mu(t->veri.islev.parametreler[i]))
+                    return 1;
+            }
+            return param_tip_generic_iceriyor_mu(t->veri.islev.donus);
+        }
+        case TIP_YAPI:
+            for (int i = 0; i < t->veri.yapi.tip_arg_sayi; i++) {
+                if (param_tip_generic_iceriyor_mu(t->veri.yapi.tip_arg[i]))
+                    return 1;
+            }
+            return 0;
+        default: return 0;
+    }
+}
+
+/* tip_subst_baglamalar: t icindeki GENERIC_PARAM'lari baglamalardan al */
+static TipBilgisi *tip_subst_baglamalar(TipKontrol *tk, TipBilgisi *t,
+                                         GenericBaglama *b) {
+    if (!t || !b) return t;
+    switch (t->kategori) {
+        case TIP_GENERIC_PARAM: {
+            TipBilgisi *bound = baglama_bul(b,
+                t->veri.generic_param.ad,
+                t->veri.generic_param.ad_uzunluk);
+            return bound ? bound : t;
+        }
+        case TIP_REFERANS: {
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.referans.hedef, b);
+            if (nh == t->veri.referans.hedef) return t;
+            return tip_olustur_referans(tk->arena, nh,
+                t->veri.referans.degisken_mi);
+        }
+        case TIP_POINTER: {
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.pointer.hedef, b);
+            if (nh == t->veri.pointer.hedef) return t;
+            return tip_olustur_pointer(tk->arena, nh);
+        }
+        case TIP_DIZI: {
+            TipBilgisi *ne = tip_subst_baglamalar(tk,
+                t->veri.dizi.eleman, b);
+            if (ne == t->veri.dizi.eleman) return t;
+            return tip_olustur_dizi(tk->arena, ne);
+        }
+        case TIP_SECIMLIK: {
+            TipBilgisi *ni = tip_subst_baglamalar(tk,
+                t->veri.secimlik.ic, b);
+            if (ni == t->veri.secimlik.ic) return t;
+            return tip_olustur_secimlik(tk->arena, ni);
+        }
+        case TIP_SONUC: {
+            TipBilgisi *nd = tip_subst_baglamalar(tk,
+                t->veri.sonuc.deger, b);
+            TipBilgisi *nh = tip_subst_baglamalar(tk,
+                t->veri.sonuc.hata, b);
+            if (nd == t->veri.sonuc.deger && nh == t->veri.sonuc.hata) return t;
+            return tip_olustur_sonuc(tk->arena, nd, nh);
+        }
+        case TIP_TEKKEZ: {
+            TipBilgisi *ni = tip_subst_baglamalar(tk,
+                t->veri.tekkez.ic, b);
+            if (ni == t->veri.tekkez.ic) return t;
+            return tip_olustur_tekkez(tk->arena, ni);
+        }
+        case TIP_ISLEV: {
+            int n = t->veri.islev.param_sayi;
+            int degisen = 0;
+            TipBilgisi **np = NULL;
+            if (n > 0) {
+                np = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    np[i] = tip_subst_baglamalar(tk,
+                        t->veri.islev.parametreler[i], b);
+                    if (np[i] != t->veri.islev.parametreler[i]) degisen = 1;
+                }
+            }
+            TipBilgisi *nd = tip_subst_baglamalar(tk, t->veri.islev.donus, b);
+            if (!degisen && nd == t->veri.islev.donus) return t;
+            return tip_olustur_islev(tk->arena, np, n, nd);
+        }
+        default: return t;
+    }
+}
+
+/* tip_unify: param ve arg'i paralel walk, generic baglamalari topla */
+static void tip_unify(TipKontrol *tk,
+                       TipBilgisi *param, TipBilgisi *arg,
+                       GenericBaglama **bas) {
+    if (!param || !arg) return;
+    if (param->kategori == TIP_GENERIC_PARAM) {
+        baglama_ekle(tk, bas,
+            param->veri.generic_param.ad,
+            param->veri.generic_param.ad_uzunluk, arg);
+        return;
+    }
+    if (param->kategori != arg->kategori) return;
+    switch (param->kategori) {
+        case TIP_REFERANS:
+            tip_unify(tk, param->veri.referans.hedef,
+                          arg->veri.referans.hedef, bas);
+            break;
+        case TIP_POINTER:
+            tip_unify(tk, param->veri.pointer.hedef,
+                          arg->veri.pointer.hedef, bas);
+            break;
+        case TIP_DIZI:
+            tip_unify(tk, param->veri.dizi.eleman,
+                          arg->veri.dizi.eleman, bas);
+            break;
+        case TIP_SECIMLIK:
+            tip_unify(tk, param->veri.secimlik.ic,
+                          arg->veri.secimlik.ic, bas);
+            break;
+        case TIP_SONUC:
+            tip_unify(tk, param->veri.sonuc.deger,
+                          arg->veri.sonuc.deger, bas);
+            tip_unify(tk, param->veri.sonuc.hata,
+                          arg->veri.sonuc.hata, bas);
+            break;
+        case TIP_TEKKEZ:
+            tip_unify(tk, param->veri.tekkez.ic,
+                          arg->veri.tekkez.ic, bas);
+            break;
+        case TIP_ISLEV: {
+            if (param->veri.islev.param_sayi != arg->veri.islev.param_sayi) break;
+            for (int i = 0; i < param->veri.islev.param_sayi; i++) {
+                tip_unify(tk, param->veri.islev.parametreler[i],
+                              arg->veri.islev.parametreler[i], bas);
+            }
+            tip_unify(tk, param->veri.islev.donus,
+                          arg->veri.islev.donus, bas);
+            break;
+        }
+        case TIP_YAPI: {
+            if (param->veri.yapi.tip_arg_sayi != arg->veri.yapi.tip_arg_sayi) break;
+            for (int i = 0; i < param->veri.yapi.tip_arg_sayi; i++) {
+                tip_unify(tk, param->veri.yapi.tip_arg[i],
+                              arg->veri.yapi.tip_arg[i], bas);
+            }
+            break;
+        }
+        default: break;
+    }
+}
+
+#endif  /* kullanilmiyor — paralel session helperlari */
+
 /* Forward (ADIM 15.5: bound check) */
 static const char *tip_dugumu_kok_adi(const Dugum *t, int *out_uz);
 
 static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
+}
+
+/* === Madde D: Generic callback tip cikarsamasi (multi-param + compound) ===
+ *
+ * Bir cagri site'da `hedef<T,U,V>(...)` icin:
+ *   1. param_tip <-> arg_tip unification ile her generic param T,U,V'yi
+ *      argumanlarin somut tiplerinden cikar (compound tipler dahil:
+ *      Dizi<T>, islev(T)->U, secimlik<T>, sonuc<T,E>, &T, *T)
+ *   2. Donus tipi compound olabilir; her generic param tekrar substitue edilir
+ *
+ * Mevcut tek-T inference yerine name->concrete map kullanir. */
+
+typedef struct GenBaglama {
+    const char *ad;
+    int ad_uz;
+    const TipBilgisi *concrete;
+} GenBaglama;
+
+typedef struct GenBaglamalar {
+    GenBaglama girisler[16];   /* En fazla 16 generic param — pratikte yeterli */
+    int sayi;
+} GenBaglamalar;
+
+static void gen_bagla(GenBaglamalar *gb, const char *ad, int ad_uz,
+                       const TipBilgisi *concrete) {
+    if (!gb || !ad || gb->sayi >= 16) return;
+    /* Var olan binding mi? — ilk gorulen kazanir */
+    for (int i = 0; i < gb->sayi; i++) {
+        if (gb->girisler[i].ad_uz == ad_uz &&
+            memcmp(gb->girisler[i].ad, ad, (size_t)ad_uz) == 0) {
+            return;  /* zaten bagli */
+        }
+    }
+    gb->girisler[gb->sayi].ad = ad;
+    gb->girisler[gb->sayi].ad_uz = ad_uz;
+    gb->girisler[gb->sayi].concrete = concrete;
+    gb->sayi++;
+}
+
+static const TipBilgisi *gen_bul(const GenBaglamalar *gb,
+                                  const char *ad, int ad_uz) {
+    if (!gb) return NULL;
+    for (int i = 0; i < gb->sayi; i++) {
+        if (gb->girisler[i].ad_uz == ad_uz &&
+            memcmp(gb->girisler[i].ad, ad, (size_t)ad_uz) == 0) {
+            return gb->girisler[i].concrete;
+        }
+    }
+    return NULL;
+}
+
+/* param_tip ile arg_tip'i unify et — TIP_GENERIC_PARAM gorulen yerlere
+ * arg_tip'ten karsilik binding ekle. Compound tiplere recursive. */
+static void gen_unify(GenBaglamalar *gb, const TipBilgisi *param,
+                       const TipBilgisi *arg) {
+    if (!param || !arg) return;
+    if (param->kategori == TIP_GENERIC_PARAM) {
+        gen_bagla(gb, param->veri.generic_param.ad,
+                  param->veri.generic_param.ad_uzunluk, arg);
+        return;
+    }
+    /* Arg tarafi da generic param ise (govdede T->T gibi) — skip */
+    if (arg->kategori == TIP_GENERIC_PARAM) return;
+    /* Kategoriler farkliysa unify imkansiz — skip (hata zaten tip_esit'te) */
+    if (param->kategori != arg->kategori) return;
+
+    switch (param->kategori) {
+        case TIP_REFERANS:
+            gen_unify(gb, param->veri.referans.hedef, arg->veri.referans.hedef);
+            break;
+        case TIP_POINTER:
+            gen_unify(gb, param->veri.pointer.hedef, arg->veri.pointer.hedef);
+            break;
+        case TIP_DIZI:
+            gen_unify(gb, param->veri.dizi.eleman, arg->veri.dizi.eleman);
+            break;
+        case TIP_SECIMLIK:
+            gen_unify(gb, param->veri.secimlik.ic, arg->veri.secimlik.ic);
+            break;
+        case TIP_SONUC:
+            gen_unify(gb, param->veri.sonuc.deger, arg->veri.sonuc.deger);
+            gen_unify(gb, param->veri.sonuc.hata,  arg->veri.sonuc.hata);
+            break;
+        case TIP_ISLEV: {
+            int n = param->veri.islev.param_sayi;
+            if (n == arg->veri.islev.param_sayi) {
+                for (int i = 0; i < n; i++) {
+                    gen_unify(gb,
+                        param->veri.islev.parametreler[i],
+                        arg->veri.islev.parametreler[i]);
+                }
+            }
+            gen_unify(gb, param->veri.islev.donus, arg->veri.islev.donus);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+/* Compound tip icinde TIP_GENERIC_PARAM'leri concrete tiplerle degistir.
+ * gb NULL veya generic param eslemiyorsa orjinal tipi doner. */
+static TipBilgisi *gen_substitue(TipKontrol *tk, const TipBilgisi *t,
+                                   const GenBaglamalar *gb) {
+    if (!t || !gb || gb->sayi == 0) return (TipBilgisi *)t;
+    if (t->kategori == TIP_GENERIC_PARAM) {
+        const TipBilgisi *c = gen_bul(gb,
+            t->veri.generic_param.ad, t->veri.generic_param.ad_uzunluk);
+        return c ? (TipBilgisi *)c : (TipBilgisi *)t;
+    }
+    switch (t->kategori) {
+        case TIP_REFERANS: {
+            TipBilgisi *nh = gen_substitue(tk, t->veri.referans.hedef, gb);
+            if (nh == t->veri.referans.hedef) return (TipBilgisi *)t;
+            return tip_olustur_referans(tk->arena, nh,
+                                         t->veri.referans.degisken_mi);
+        }
+        case TIP_POINTER: {
+            TipBilgisi *nh = gen_substitue(tk, t->veri.pointer.hedef, gb);
+            if (nh == t->veri.pointer.hedef) return (TipBilgisi *)t;
+            return tip_olustur_pointer(tk->arena, nh);
+        }
+        case TIP_DIZI: {
+            TipBilgisi *ne = gen_substitue(tk, t->veri.dizi.eleman, gb);
+            if (ne == t->veri.dizi.eleman) return (TipBilgisi *)t;
+            return tip_olustur_dizi(tk->arena, ne);
+        }
+        case TIP_SECIMLIK: {
+            TipBilgisi *ni = gen_substitue(tk, t->veri.secimlik.ic, gb);
+            if (ni == t->veri.secimlik.ic) return (TipBilgisi *)t;
+            return tip_olustur_secimlik(tk->arena, ni);
+        }
+        case TIP_SONUC: {
+            TipBilgisi *nd = gen_substitue(tk, t->veri.sonuc.deger, gb);
+            TipBilgisi *nh = gen_substitue(tk, t->veri.sonuc.hata, gb);
+            if (nd == t->veri.sonuc.deger && nh == t->veri.sonuc.hata)
+                return (TipBilgisi *)t;
+            return tip_olustur_sonuc(tk->arena, nd, nh);
+        }
+        case TIP_ISLEV: {
+            int n = t->veri.islev.param_sayi;
+            TipBilgisi **yeni_p = NULL;
+            int degisti = 0;
+            if (n > 0) {
+                yeni_p = (TipBilgisi **)arena_ayir(tk->arena,
+                    sizeof(TipBilgisi *) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    yeni_p[i] = gen_substitue(tk,
+                        t->veri.islev.parametreler[i], gb);
+                    if (yeni_p[i] != t->veri.islev.parametreler[i]) degisti = 1;
+                }
+            }
+            TipBilgisi *nd = gen_substitue(tk, t->veri.islev.donus, gb);
+            if (!degisti && nd == t->veri.islev.donus) return (TipBilgisi *)t;
+            return tip_olustur_islev(tk->arena, yeni_p, n, nd);
+        }
+        default:
+            return (TipBilgisi *)t;
+    }
 }
 
 /* === Ad cevirici (built-in tip ad) === */
@@ -643,6 +1130,97 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             return t_basit(tk, TIP_BOS);
         }
 
+        /* === Madde E (v2): explicit tip donusturme (x olarak T) — 4 garanti ===
+         *   E001: x olarak tekkez<T> yasak (tekkez hedef)
+         *   E002: metin/yapi/dizi gibi sayisal-disi kaynak yasak
+         *   E003: tekkez<T> olarak X yasak (linear escape — kaynak tekkez)
+         *   E004: kayıp prezisyon (tam64 olarak tam8, kesirli64 olarak kesirli32)
+         */
+        case DUGUM_TIP_DONUSTUR: {
+            TipBilgisi *kt = tip_belirle(tk, d->veri.tip_donustur.kaynak);
+            if (kt->kategori == TIP_HATA) return t_hata(tk);
+            TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.tip_donustur.hedef_tip);
+            if (!ht || ht->kategori == TIP_HATA) return t_hata(tk);
+
+            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile yaratamazsin) */
+            if (ht->kategori == TIP_TEKKEZ) {
+                tip_hata(tk, d, "E001",
+                    "olarak ile tekkez<T> hedeflenemez (Linear Types kuralı)");
+                return t_hata(tk);
+            }
+
+            /* E003: kaynak tekkez<T> yasak (linear escape — tekkez'i extract
+             * etmek icin kullan() gerek, olarak ile escape yapilamaz) */
+            if (kt->kategori == TIP_TEKKEZ) {
+                tip_hata(tk, d, "E003",
+                    "olarak ile tekkez<T> kaynaktan extract edilemez "
+                    "(kullan(...) gerekir)");
+                return t_hata(tk);
+            }
+
+            int kaynak_sayisal = tip_sayisal_mi(kt);
+            int hedef_sayisal = tip_sayisal_mi(ht);
+            if (!kaynak_sayisal || !hedef_sayisal) {
+                /* Karakter <-> tam* da izinli */
+                int char_to_int = (kt->kategori == TIP_KARAKTER &&
+                                   tip_tamsayi_mi(ht));
+                int int_to_char = (tip_tamsayi_mi(kt) &&
+                                   ht->kategori == TIP_KARAKTER);
+                if (!char_to_int && !int_to_char) {
+                    /* E002: metin/dizi/yapi gibi sayisal disi kaynak/hedef */
+                    tip_hata(tk, d, "E002",
+                        "olarak: kaynak ve hedef sayisal/karakter olmali");
+                    return t_hata(tk);
+                }
+            }
+
+            /* E004: Kayip prezisyon — tam64/dtam64 -> tam8/16/32 ya da
+             * kesirli64 -> kesirli32 explicit isaretsiz dusurme.
+             * Bu cesit cast yapilmasi gerekiyorsa, kullanici niyet
+             * ifade etmeli (& mask, mod, vs.) — implicit aritmetigi onler. */
+            int kw_kaynak = 0, kw_hedef = 0;
+            switch (kt->kategori) {
+                case TIP_TAM8: case TIP_DTAM8:    kw_kaynak = 8; break;
+                case TIP_TAM16: case TIP_DTAM16:  kw_kaynak = 16; break;
+                case TIP_TAM32: case TIP_DTAM32:  kw_kaynak = 32; break;
+                case TIP_TAM64: case TIP_DTAM64:  kw_kaynak = 64; break;
+                case TIP_KESIRLI32:               kw_kaynak = 320; break;
+                case TIP_KESIRLI64:               kw_kaynak = 640; break;
+                case TIP_KARAKTER:                kw_kaynak = 32; break;
+                default: break;
+            }
+            switch (ht->kategori) {
+                case TIP_TAM8: case TIP_DTAM8:    kw_hedef = 8; break;
+                case TIP_TAM16: case TIP_DTAM16:  kw_hedef = 16; break;
+                case TIP_TAM32: case TIP_DTAM32:  kw_hedef = 32; break;
+                case TIP_TAM64: case TIP_DTAM64:  kw_hedef = 64; break;
+                case TIP_KESIRLI32:               kw_hedef = 320; break;
+                case TIP_KESIRLI64:               kw_hedef = 640; break;
+                case TIP_KARAKTER:                kw_hedef = 32; break;
+                default: break;
+            }
+            /* E004: kayip prezisyon. Pratik kural: tam64 -> tam8/16 yasak,
+             * kesirli64 -> kesirli32 yasak. tam64 -> tam32 izinli (32-bit
+             * native word). Bu, "ortakli olunca cast" semantigini korur
+             * ama acik narrowing'i blok eder. */
+            int kaynak_int = kw_kaynak > 0 && kw_kaynak <= 64;
+            int hedef_int = kw_hedef > 0 && kw_hedef <= 64;
+            int kaynak_float = kw_kaynak >= 320;
+            int hedef_float = kw_hedef >= 320;
+            /* Sadece >32-bit kaynak -> <32-bit hedef yasak (significant lost) */
+            if (kaynak_int && hedef_int && kw_kaynak >= 64 && kw_hedef < 32) {
+                tip_hata(tk, d, "E004",
+                    "olarak: kayip prezisyon (tam64 -> tam8/tam16)");
+                return t_hata(tk);
+            }
+            if (kaynak_float && hedef_float && kw_kaynak > kw_hedef) {
+                tip_hata(tk, d, "E004",
+                    "olarak: kayip prezisyon (kesirli64 -> kesirli32)");
+                return t_hata(tk);
+            }
+            return ht;
+        }
+
         /* === Ikili === */
         case DUGUM_IKILI: {
             TipBilgisi *sol = tip_belirle(tk, d->veri.ikili.sol);
@@ -909,6 +1487,45 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     }
                     return tip_olustur_basit(tk->arena, TIP_TAM32);
                 }
+                /* Adim 6: dizi_kapasite(d: Dizi<T>) -> tam32 */
+                if (uz_b == 13 && memcmp(ad_b, "dizi_kapasite", 13) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_kapasite bir arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_kapasite argumani Dizi<T> olmali");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_TAM32);
+                }
+
+                /* Adim 6: dizi_kapasite_ayarla(d, yeni: tam32) -> bos */
+                if (uz_b == 20 &&
+                    memcmp(ad_b, "dizi_kapasite_ayarla", 20) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_kapasite_ayarla iki arguman gerektirir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *yt = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_kapasite_ayarla ilk arg Dizi<T> olmali");
+                    }
+                    if (!tip_tamsayi_mi(yt) && yt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
+                            "dizi_kapasite_ayarla yeni kapasite tamsayi olmali");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_BOS);
+                }
             }
 
             /* Linear Types Spec V1 producer intrinsic: tekkez_yarat(e) */
@@ -1002,25 +1619,33 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
-            /* Generic islev: ilk TIP_GENERIC_PARAM gorulen yere ilk uygun
-             * argumanin tipini bagla (basit inference — tek param T icin
-             * cogu pratik durumda yeterli). */
-            TipBilgisi *inferred_T = NULL;
+            /* Madde D: Multi-param + compound type generic inference.
+             * GenBaglamalar ile her arg/param ciftinde unify, donus
+             * tipini substitue et. */
+            GenBaglamalar gb;
+            gb.sayi = 0;
+            /* Once unify arg tipleri ile (substitue olmadan) — daha sonra
+             * argumanlar substitue edilmis param tipi context'inde tekrar
+             * cikarsanir. Iki pas: pas 1 inference, pas 2 type check. */
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
-                /* Bidirectional: arg, parametre tipi context'inde cikarsanir */
-                TipBilgisi *bek = param_tip;
-                if (param_tip->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                    bek = inferred_T;
-                }
+                TipBilgisi *arg_tip = tip_belirle(tk,
+                    d->veri.cagri.argumanlar[i]);
+                gen_unify(&gb, param_tip, arg_tip);
+            }
+            /* Pas 2: arg tipini substitue edilmis param tipi context'inde
+             * cikarsama + tip kontrolu */
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
+                TipBilgisi *bek = gen_substitue(tk, param_tip, &gb);
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[i], bek);
                 if (param_tip->kategori == TIP_GENERIC_PARAM) {
-                    if (!inferred_T) inferred_T = arg_tip;
-                    /* Generic params herhangi bir tipi kabul eder */
+                    /* Concrete'i gb'de tutuyoruz; bind onceden yapildi */
                     continue;
                 }
-                if (!tip_esit(arg_tip, param_tip) &&
+                /* bek (substitue edilmis) ile arg_tip karsilastir */
+                if (!tip_esit(arg_tip, bek) &&
                     arg_tip->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
@@ -1031,12 +1656,66 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         d->veri.cagri.argumanlar[i]);
                 }
             }
-            /* Donus tipi generic ise inferred T ile degistir */
-            TipBilgisi *donus = hedef_tip->veri.islev.donus;
-            if (donus && donus->kategori == TIP_GENERIC_PARAM && inferred_T) {
-                return inferred_T;
+            /* === Adim 5: Bound-aware monomorphization check ===
+             * hedef bir islev tanimlayicisi ise, tip_param_boundlari kontrol
+             * et: her generic T'nin concrete tipi her bound (ozellik) icin
+             * uygula tablosu kanitlamali. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const Sembol *fn_s = sembol_bul(tk->scope,
+                    d->veri.cagri.hedef->veri.tanimlayici.metin,
+                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+                if (fn_s && fn_s->kategori == SEMBOL_ISLEV &&
+                    fn_s->ast_dugumu &&
+                    fn_s->ast_dugumu->tip == DUGUM_ISLEV) {
+                    const Dugum *islev = fn_s->ast_dugumu;
+                    int tps = islev->veri.islev.tip_param_sayi;
+                    if (tps > 0 && islev->veri.islev.tip_param_bound_sayilari) {
+                        for (int pi = 0; pi < tps; pi++) {
+                            int bs = islev->veri.islev.tip_param_bound_sayilari[pi];
+                            if (bs == 0) continue;
+                            const char *tp_ad = islev->veri.islev.tip_paramlar[pi];
+                            int tp_uz = (int)strlen(tp_ad);
+                            const TipBilgisi *concrete = gen_bul(&gb,
+                                tp_ad, tp_uz);
+                            if (!concrete) continue;  /* Inferred degil — abstract */
+                            if (concrete->kategori == TIP_GENERIC_PARAM) continue;
+                            const char *arg_ad = NULL;
+                            int arg_uz = 0;
+                            if (concrete->kategori == TIP_YAPI) {
+                                arg_ad = concrete->veri.yapi.ad;
+                                arg_uz = concrete->veri.yapi.ad_uzunluk;
+                            }
+                            if (!arg_ad) continue;  /* Built-in tip — bound check yok */
+                            for (int bi = 0; bi < bs; bi++) {
+                                const Dugum *bd =
+                                    islev->veri.islev.tip_param_boundlari[pi][bi];
+                                int bd_uz = 0;
+                                const char *bd_ad = tip_dugumu_kok_adi(bd, &bd_uz);
+                                if (!bd_ad) continue;
+                                const Sembol *oz_s = sembol_bul(tk->global_scope,
+                                                                 bd_ad, bd_uz);
+                                if (!oz_s || oz_s->kategori != SEMBOL_OZELLIK) {
+                                    tip_hata(tk, d, "T031",
+                                        "bilinmeyen ozellik (islev generic bound)");
+                                    continue;
+                                }
+                                if (!uygula_tablosu_implementations_eder(
+                                        &tk->uygulamalar,
+                                        arg_ad, arg_uz, bd_ad, bd_uz)) {
+                                    tip_hata(tk, d, "T030",
+                                        "tip argumani islev bound'unu "
+                                        "karsilamiyor (uygula bildirimi yok)");
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            return donus;
+
+            /* Donus tipi — generic param compound olabilir, substitue et */
+            TipBilgisi *donus = hedef_tip->veri.islev.donus;
+            return gen_substitue(tk, donus, &gb);
         }
 
         /* === Erisim (x.y) === */
