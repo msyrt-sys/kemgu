@@ -1314,6 +1314,72 @@ static void test_cs_inherent_kayit(void) {
     arena_serbest(a);
 }
 
+/* === Generic callback tip cikarsama (Kirmizi D) === */
+
+static void test_generic_callback_basit(void) {
+    Arena *a = arena_olustur(0);
+    /* cagir<T, U>(v: T, f: islev(T) -> U) -> U; main: cagir(6, kare) -> tam32 */
+    int h = program_kontrol(
+        "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
+        "i\xc5\x9flev cagir<T, U>(v: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(v); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = cagir(6, kare); ver r; }", a);
+    test_sonuc("generic callback: cagir<T,U>(6, kare) -> tam32 (0 hata)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_donus_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    /* cagir(6, kare) doner tam32 ama tam64'e atanmaya calisilirsa hata */
+    int h = program_kontrol(
+        "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
+        "i\xc5\x9flev cagir<T, U>(v: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "ver f(v); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam64 = cagir(6, kare); ver 0; }", a);
+    test_sonuc("generic callback donus tam64 uyumsuz -> hata", h > 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_body_inference(void) {
+    Arena *a = arena_olustur(0);
+    /* Body icinde: degisken sonuc: U = f(v) — U govde scope'unda generic param;
+     * concrete deferred kabul gerekir (mevcut tip_esit deferred semantigi) */
+    int h = program_kontrol(
+        "i\xc5\x9flev cagir<T, U>(v: T, f: i\xc5\x9flev(T) -> U) -> U { "
+        "de\xc4\x9fi\xc5\x9fken sonuc: U = f(v); ver sonuc; } "
+        "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
+        "i\xc5\x9flev main() -> tam32 { ver cagir(5, kare); }", a);
+    test_sonuc("generic callback body: U = f(v) tip cikarsanir -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_iki_args(void) {
+    Arena *a = arena_olustur(0);
+    /* islev2<T, U>(a: T, b: T) -> U gerek yok, sadeleştirildi:
+     * islev1<T>(v: T) -> T (klasik kimlik) */
+    int h = program_kontrol(
+        "i\xc5\x9flev kimlik<T>(v: T) -> T { ver v; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam64 = kimlik(42); ver 0; }", a);
+    test_sonuc("generic kimlik<T>: U = T -> tam64 deferred OK", h == 0);
+    arena_serbest(a);
+}
+
+static void test_generic_callback_dizi_T(void) {
+    Arena *a = arena_olustur(0);
+    /* ilkele<T>(xs: Dizi<T>) -> T  — T Dizi'den cikarsanir */
+    /* Pratik: Dizi<tam32> verince T = tam32 */
+    int h = program_kontrol(
+        "i\xc5\x9flev ilkele<T>(xs: Dizi<T>) -> T { ver xs[0]; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [10, 20, 30]; "
+        "ver ilkele(xs); }", a);
+    test_sonuc("generic ilkele<T>(xs: Dizi<T>) -> T -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === ADIM 30: Bit operatorleri tip kontrolu === */
 
 static void test_bit_ve_tam32(void) {
@@ -1550,6 +1616,13 @@ int main(void) {
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
+
+    printf("\n--- Generic callback tip cikarsama (Kirmizi D) ---\n");
+    test_generic_callback_basit();
+    test_generic_callback_donus_uyumsuz();
+    test_generic_callback_body_inference();
+    test_generic_callback_iki_args();
+    test_generic_callback_dizi_T();
 
     printf("\n--- Bit operatorleri (ADIM 30) ---\n");
     test_bit_ve_tam32();
