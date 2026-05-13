@@ -2,6 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 
+static HataCallback g_hata_callback = NULL;
+static void *g_hata_callback_ctx = NULL;
+
+void hata_callback_ayarla(HataCallback cb, void *ctx) {
+    g_hata_callback = cb;
+    g_hata_callback_ctx = ctx;
+}
+
 static const char *satir_baslangici_bul(const char *kaynak, int hedef_satir) {
     const char *p = kaynak;
     int satir = 1;
@@ -29,6 +37,12 @@ void hata_raporla(
     const char *mesaj,
     const char *ipucu
 ) {
+    /* LSP/test toplama modu: callback varsa stderr yazma — sadece callback cagir. */
+    if (g_hata_callback) {
+        g_hata_callback(satir, sutun, kod, mesaj, ipucu, g_hata_callback_ctx);
+        return;
+    }
+
     int satir_genislik = 1;
     int s = satir;
     while (s >= 10) { satir_genislik++; s /= 10; }

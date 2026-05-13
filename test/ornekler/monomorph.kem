@@ -1,0 +1,13 @@
+// Tam monomorphization testi: Kutu<tam32> ve Kutu<metin> ayrı struct'lar
+//   %struct.Kutu.i32 = type { i32 }
+//   %struct.Kutu.ptr = type { ptr }
+
+yapı Kutu<T> { deger: T; }
+
+işlev main() -> tam32 {
+    değişken k_i: Kutu<tam32> = Kutu { deger: 42 };
+    değişken k_s: Kutu<metin> = Kutu { deger: "merhaba" };
+    yazdır_tam(k_i.deger);
+    yazdır(k_s.deger);
+    ver 0;
+}

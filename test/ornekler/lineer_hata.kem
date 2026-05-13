@@ -1,0 +1,25 @@
+// Linear Types Spec V1 — Tipik hata örnekleri
+// `kemgu --check lineer_hata.kem` → birden fazla L00X / LR0XX hatası raporlar.
+// Bu dosya YANLIŞ kullanım sergiler; başarısız tip kontrolü beklenir.
+
+işlev hata1_tuketilmedi() {
+    // L001: scope sonunda tüketilmedi
+    değişken k = tekkez_yarat(5);
+}
+
+işlev hata2_cift_tuketim() {
+    değişken k = tekkez_yarat(5);
+    değişken n1 = kullan(k);
+    değişken n2 = kullan(k);   // L002: move sonrası erişim
+}
+
+işlev hata3_aliasing() {
+    değişken k = tekkez_yarat(5);
+    değişken r = &k;            // L004: tekkez referans alınamaz
+    imha(k);
+}
+
+// LR002: yapı tekkez alan içeremez (V1)
+yapı YasakSahip {
+    sahip: tekkez<tam32>;
+}

@@ -1,0 +1,14 @@
+// LLVM A.3+A.5 testi: eger/degilse + karsilastirma
+// Beklenen cikis kodu: 42
+
+işlev mutlak_yerel(x: tam32) -> tam32 {
+    eğer x < 0 {
+        ver -x;
+    } değilse {
+        ver x;
+    }
+}
+
+işlev main() -> tam32 {
+    ver mutlak_yerel(-42);
+}

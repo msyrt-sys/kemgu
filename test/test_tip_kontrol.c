@@ -1092,6 +1092,228 @@ static void test_gn_ic_ice(void) {
     arena_serbest(a);
 }
 
+/* === Constraint satisfaction (ADIM 15.5) === */
+
+/* CS-1: Bound karsilanmiyor -> T030 */
+static void test_cs_bound_violation(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say {} "
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "yap\xc4\xb1 Vektor<T: Say> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound karsilanmiyor (uygula yok) -> T030 hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-2: Bound karsilaniyor (uygula var) -> OK */
+static void test_cs_bound_satisfied(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say {} "
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "uygula Say i\xc3\xa7in Tam {} "
+        "yap\xc4\xb1 Vektor<T: Say> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound karsilaniyor (uygula var) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-3: Bound olmadan eski davranis korunur */
+static void test_cs_bound_yok(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 Tam { x: tam32; } "
+        "yap\xc4\xb1 Vektor<T> { ic: T; } "
+        "i\xc5\x9flev f() -> Vektor<Tam> "
+        "{ ver Vektor { ic: Tam { x: 0 } }; }", a);
+    test_sonuc("cs: bound yok -> 0 hata (eski davranis)", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-4: Coklu bound, hepsi karsilaniyor */
+static void test_cs_coklu_bound_ok(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        "uygula B i\xc3\xa7in X {} "
+        "yap\xc4\xb1 K<T: A + B> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: coklu bound hepsi karsilaniyor -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-5: Coklu bound, bir tanesi karsilanmiyor */
+static void test_cs_coklu_bound_eksik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik A {} \xc3\xb6zellik B {} "
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula A i\xc3\xa7in X {} "
+        /* B icin uygula yok */
+        "yap\xc4\xb1 K<T: A + B> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: B icin uygula yok -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-6: Bilinmeyen ozellik bound olarak -> T031 */
+static void test_cs_bound_bilinmeyen(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { v: tam32; } "
+        "yap\xc4\xb1 K<T: BilinmeyenOzellik> { ic: T; } "
+        "i\xc5\x9flev f() -> K<X> { ver K { ic: X { v: 0 } }; }", a);
+    test_sonuc("cs: bilinmeyen ozellik bound -> T031 hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-8: uygula gövdesinde tip hatasi yakalanir */
+static void test_cs_uygula_govde_hata(void) {
+    Arena *a = arena_olustur(0);
+    /* uygula icinde tam32 dondurmesi gerek ama metin veriyor */
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev m() -> tam32 { ver \"hata\"; } }",
+        a);
+    test_sonuc("cs: uygula govde tip hatasi -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-9: uygula gövdesi temiz kod -> hata yok */
+static void test_cs_uygula_govde_temiz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { "
+        "i\xc5\x9flev m() -> tam32 { ver 42; } }",
+        a);
+    test_sonuc("cs: uygula govde temiz -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-10: method dispatch (x.method()) calisir */
+static void test_cs_method_dispatch(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { i\xc5\x9flev say() -> tam32 { ver 42; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.say(); }",
+        a);
+    test_sonuc("cs: method dispatch (k.say()) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-11: method arg sayisi uyumsuzlugu */
+static void test_cs_method_arg_sayi(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula K { i\xc5\x9flev al(x: tam32) -> tam32 { ver x; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.al(); }",
+        a);
+    /* arg yok, 1 bekleniyor */
+    test_sonuc("cs: method arg sayisi yanlis -> hata", h > 0);
+    arena_serbest(a);
+}
+
+/* CS-12: Trait method (impl Trait icin K) bulunur */
+static void test_cs_trait_method(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xb6zellik Say { i\xc5\x9flev cevir() -> tam32; } "
+        "yap\xc4\xb1 K { v: tam32; } "
+        "uygula Say i\xc3\xa7in K { "
+        "i\xc5\x9flev cevir() -> tam32 { ver 42; } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = K { v: 0 }; "
+        "ver k.cevir(); }",
+        a);
+    test_sonuc("cs: trait method (k.cevir()) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* P-1: hiç ifadesi seçimlik<T> olarak tip alir */
+static void test_hic_secimlik(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> se\xc3\xa7" "imlik<tam32> { ver hi\xc3\xa7; }",
+        a);
+    test_sonuc("hiç -> seçimlik<T> tip alir", h == 0);
+    arena_serbest(a);
+}
+
+/* P-2: değer(x) seçimlik<T> konstrüktör */
+static void test_deger_konstrüktör(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> se\xc3\xa7" "imlik<tam32> "
+        "{ ver de\xc4\x9f" "er(42); }",
+        a);
+    test_sonuc("değer(42) -> seçimlik<tam32>", h == 0);
+    arena_serbest(a);
+}
+
+/* P-3: pattern binding eşleş içinde değer(v) ile v bind */
+static void test_pattern_binding(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(s: se\xc3\xa7" "imlik<tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f s { "
+        "  de\xc4\x9f" "er(v) => { ver v; } "
+        "  hi\xc3\xa7 => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("pattern binding (değer(v) => v) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* P-4: tamam(v), hata(e) sonuç konstrüktörleri */
+static void test_sonuc_konstrüktörler(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> sonu\xc3\xa7<tam32, metin> "
+        "{ ver tamam(42); }",
+        a);
+    test_sonuc("tamam(42) -> sonuç<tam32, metin>", h == 0);
+    arena_serbest(a);
+}
+
+/* L-1: Lambda govde scope — parametre referansi */
+static void test_lambda_govde(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = |x: tam32| x * 2; "
+        "ver 0; }",
+        a);
+    /* Lambda govdesinde x kullanim — scope dogruysa tip kontrol gecer */
+    test_sonuc("lambda govde scope (x: tam32 -> x*2)", h == 0);
+    arena_serbest(a);
+}
+
+/* CS-7: Inherent impl kayit edilir, sorgu basarili */
+static void test_cs_inherent_kayit(void) {
+    Arena *a = arena_olustur(0);
+    /* uygula X { ... } -> inherent, ozellik yok */
+    int h = program_kontrol(
+        "yap\xc4\xb1 X { v: tam32; } "
+        "uygula X { i\xc5\x9flev yeni() -> X { ver X { v: 0 }; } }", a);
+    /* Inherent impl tek basina hata uretmemeli */
+    test_sonuc("cs: inherent impl -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1230,6 +1452,31 @@ int main(void) {
     test_gn_iki_param();
     test_gn_iki_param_erisim();
     test_gn_ic_ice();
+
+    printf("\n--- Constraint Satisfaction (15.5) ---\n");
+    test_cs_bound_violation();
+    test_cs_bound_satisfied();
+    test_cs_bound_yok();
+    test_cs_coklu_bound_ok();
+    test_cs_coklu_bound_eksik();
+    test_cs_bound_bilinmeyen();
+    test_cs_inherent_kayit();
+
+    printf("\n--- Constraint v2 (19) ---\n");
+    test_cs_uygula_govde_hata();
+    test_cs_uygula_govde_temiz();
+    test_cs_method_dispatch();
+    test_cs_method_arg_sayi();
+    test_cs_trait_method();
+
+    printf("\n--- hiç/değer + Pattern binding (25) ---\n");
+    test_hic_secimlik();
+    test_deger_konstrüktör();
+    test_pattern_binding();
+    test_sonuc_konstrüktörler();
+
+    printf("\n--- Lambda govde scope (29) ---\n");
+    test_lambda_govde();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

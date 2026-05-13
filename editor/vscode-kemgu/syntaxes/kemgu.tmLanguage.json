@@ -1,0 +1,156 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "KEMGU",
+  "scopeName": "source.kemgu",
+  "fileTypes": ["kem"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#literals" },
+    { "include": "#strings" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.kemgu",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.kemgu",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "name": "comment.block.kemgu", "begin": "/\\*", "end": "\\*/" }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.kemgu",
+          "match": "\\b(eğer|değilse|için|iken|eşleş|ver|güvensiz)\\b"
+        },
+        {
+          "name": "keyword.declaration.kemgu",
+          "match": "\\b(işlev|yapı|özellik|modül|değişken|sabit|uygula|tip|kullan|dışa)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.kemgu",
+          "match": "\\b(ve|veya|değil)\\b"
+        },
+        {
+          "name": "keyword.other.kemgu",
+          "match": "\\b(bölge|kendin|seçimlik|sonuç|değer|hiç|tamam|hata)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.kemgu",
+          "match": "\\b(tam8|tam16|tam32|tam64|dtam8|dtam16|dtam32|dtam64|kesirli32|kesirli64|karakter|metin|mantıksal|boş|Dizi)\\b"
+        },
+        {
+          "name": "support.type.kemgu",
+          "match": "\\b[A-Z][a-zA-ZığĞüÜşŞıİöÖçÇ_0-9]*\\b"
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.language.kemgu",
+          "match": "\\b(doğru|yanlış)\\b"
+        },
+        {
+          "name": "constant.numeric.hex.kemgu",
+          "match": "\\b0x[0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.bin.kemgu",
+          "match": "\\b0b[01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.kemgu",
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*(e[+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.kemgu",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.kemgu",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.kemgu",
+              "match": "\\\\(n|t|r|\\\\|\"|x[0-9a-fA-F]{2})" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.kemgu",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.kemgu",
+              "match": "\\\\(n|t|r|\\\\|'|x[0-9a-fA-F]{2})" }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.kemgu",
+          "begin": "r#\"",
+          "end": "\"#"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.kemgu",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.scope.kemgu",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.comparison.kemgu",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.kemgu",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.assignment.kemgu",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.ref.kemgu",
+          "match": "&"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "entity.name.function.kemgu",
+          "match": "\\b[a-zığüşıöç_][a-zA-Z0-9ığĞüÜşŞıİöÖçÇ_]*(?=\\s*\\()"
+        },
+        {
+          "name": "variable.other.kemgu",
+          "match": "\\b[a-zığüşıöç_][a-zA-Z0-9ığĞüÜşŞıİöÖçÇ_]*\\b"
+        }
+      ]
+    }
+  }
+}

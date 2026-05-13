@@ -7,6 +7,7 @@
 #include "sembol.h"
 #include "tip_kontrol.h"
 #include "llvm.h"
+#include "lsp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@
  * Dosya argumani yoksa stdin'den okur.
  */
 
-typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK, MOD_LLVM } Mod;
+typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK, MOD_LLVM, MOD_LSP } Mod;
 
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
@@ -162,11 +163,12 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
 
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse | --check | --llvm] [dosya]\n"
+        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp] [dosya]\n"
         "  --token   Lexer akisini yazdir\n"
         "  --parse   Parser calistir + AST yazdir\n"
         "  --check   Parser + tip kontrol (varsayilan)\n"
         "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
+        "  --lsp     Language Server (stdio JSON-RPC)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -188,6 +190,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[arg_idx], "--llvm") == 0) {
             mod = MOD_LLVM;
             arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--lsp") == 0) {
+            mod = MOD_LSP;
+            arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
             kullanim_yazdir(argv[0]);
@@ -197,6 +202,11 @@ int main(int argc, char *argv[]) {
             kullanim_yazdir(argv[0]);
             return 2;
         }
+    }
+
+    /* LSP modu dosya/kaynak okumaz — stdio loop'una gecer */
+    if (mod == MOD_LSP) {
+        return lsp_server_calistir(stdin, stdout);
     }
 
     char *kaynak;

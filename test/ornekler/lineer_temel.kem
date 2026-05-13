@@ -1,0 +1,35 @@
+// Linear Types Spec V1 — Temel kullanım örneği
+// `kemgu --check lineer_temel.kem` → "OK" beklenir.
+
+// Producer intrinsic: tekkez_yarat<T>(deger: T) -> tekkez<T>
+// Consumer'lar: kullan(t) -> T  (extract),  imha(t) -> boş  (dispose)
+
+işlev tek_kez_kullan() -> tam32 {
+    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    ver kullan(k);    // k tüketildi, ic değer döndü
+}
+
+işlev imha_ornegi() {
+    değişken k: tekkez<metin> = tekkez_yarat("merhaba");
+    imha(k);          // k tüketildi, değer atıldı
+}
+
+// İşlev parametresi olarak tekkez: ownership transfer (move)
+işlev tuket(t: tekkez<tam32>) {
+    imha(t);
+}
+
+işlev cagri_ornegi() {
+    değişken k = tekkez_yarat(7);
+    tuket(k);         // k → tuket fonksiyonuna devredildi
+}
+
+// Lineer sahiplik geri devri (LR-4): ver ile çağırana
+işlev sahip_uret() -> tekkez<tam32> {
+    ver tekkez_yarat(99);
+}
+
+işlev kullanan() {
+    değişken sahip = sahip_uret();
+    imha(sahip);
+}

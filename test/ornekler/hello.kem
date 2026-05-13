@@ -1,0 +1,5 @@
+// D.1 IO testi: temel yazdir
+işlev main() -> tam32 {
+    yazdır("Merhaba, KEMGU!");
+    ver 0;
+}

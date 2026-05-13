@@ -1,0 +1,41 @@
+// KEMGU Stdlib — Karşılaştırma
+// =============================
+//
+// Generic eşitlik ve sıralama helpers'ı.
+//
+// Not: `kendin` parametresi parser'da henüz desteklenmiyor — bu modül
+// fonksiyonel stil (free function) kullanıyor. Method-based API ileride
+// `kendin` parser desteği eklendiğinde gelecek.
+//
+// Tasarım kuralı: Java equals/hashCode tuzağına düşme — fonksiyonel.
+
+işlev esit_mi<T>(a: T, b: T) -> mantıksal {
+    ver a == b;
+}
+
+işlev farkli_mi<T>(a: T, b: T) -> mantıksal {
+    ver a != b;
+}
+
+// -1: a < b, 0: a == b, +1: a > b
+işlev karsilastir<T>(a: T, b: T) -> tam32 {
+    eğer a < b { ver 0 - 1; }
+    eğer a > b { ver 1; }
+    ver 0;
+}
+
+// Üç değerden en küçük.
+işlev en_kucuk_uc<T>(a: T, b: T, c: T) -> T {
+    değişken m: T = a;
+    eğer b < m { m = b; }
+    eğer c < m { m = c; }
+    ver m;
+}
+
+// Üç değerden en büyük.
+işlev en_buyuk_uc<T>(a: T, b: T, c: T) -> T {
+    değişken m: T = a;
+    eğer b > m { m = b; }
+    eğer c > m { m = c; }
+    ver m;
+}
