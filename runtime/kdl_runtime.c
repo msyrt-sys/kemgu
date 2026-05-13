@@ -222,6 +222,141 @@ int kdl_metin_esit(const char *a, const char *b) {
     return strcmp(a, b) == 0;
 }
 
+/* === J.2: Metin runtime primitifleri (Kirmizi queue A) ===
+ *
+ * UTF-8 farkindaligi: metin_uzunluk byte sayisi doner (eski API). Asagidaki
+ * fonksiyonlar byte-bazli, ASCII guvenli; ileride UTF-8 boundary uyumu icin
+ * v2 (kdl_metin_uzunluk_kp, vs.) eklenir.
+ *
+ * Heap leak notu: Yeni metin dondurenler malloc kullanir. KEMGU tarafinda
+ * bolge sistemi henuz metin'e baglanmadi — su an leak kabul (kisa vade).
+ */
+
+/* Substring: [baslangic, son) byte aralig.
+ * son <= 0 veya baslangic >= boyut => bos metin. */
+const char *kdl_metin_kes(const char *s, int32_t baslangic, int32_t son) {
+    if (!s) return NULL;
+    int32_t n = (int32_t)strlen(s);
+    if (baslangic < 0) baslangic = 0;
+    if (son > n) son = n;
+    if (son < baslangic) son = baslangic;
+    int32_t uz = son - baslangic;
+    char *r = (char *)malloc((size_t)uz + 1);
+    if (!r) return NULL;
+    if (uz > 0) memcpy(r, s + baslangic, (size_t)uz);
+    r[uz] = '\0';
+    return r;
+}
+
+/* ASCII lower: a-z'ye cevirir. UTF-8 multi-byte unchanged. */
+const char *kdl_metin_kucuk(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c >= 'A' && c <= 'Z') r[i] = (char)(c + ('a' - 'A'));
+        else r[i] = (char)c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
+/* ASCII upper: A-Z'ye cevirir. UTF-8 multi-byte unchanged. */
+const char *kdl_metin_buyuk(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *r = (char *)malloc(n + 1);
+    if (!r) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c >= 'a' && c <= 'z') r[i] = (char)(c - ('a' - 'A'));
+        else r[i] = (char)c;
+    }
+    r[n] = '\0';
+    return r;
+}
+
+/* s ara'yi icerir mi (1=evet, 0=hayir). Bos ara => 1 (string convention). */
+int32_t kdl_metin_icerir(const char *s, const char *ara) {
+    if (!s || !ara) return 0;
+    return strstr(s, ara) != NULL ? 1 : 0;
+}
+
+/* s ile basliyor mu */
+int32_t kdl_metin_baslar(const char *s, const char *ile) {
+    if (!s || !ile) return 0;
+    size_t ns = strlen(s);
+    size_t ni = strlen(ile);
+    if (ni > ns) return 0;
+    return memcmp(s, ile, ni) == 0 ? 1 : 0;
+}
+
+/* s ile bitiyor mu */
+int32_t kdl_metin_biter(const char *s, const char *ile) {
+    if (!s || !ile) return 0;
+    size_t ns = strlen(s);
+    size_t ni = strlen(ile);
+    if (ni > ns) return 0;
+    return memcmp(s + ns - ni, ile, ni) == 0 ? 1 : 0;
+}
+
+/* Bos byte (space/tab/CR/LF) kirp. Heap'te yeni metin. */
+const char *kdl_metin_kirp(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    size_t i = 0;
+    while (i < n && (s[i] == ' ' || s[i] == '\t' ||
+                     s[i] == '\r' || s[i] == '\n')) i++;
+    size_t j = n;
+    while (j > i && (s[j-1] == ' ' || s[j-1] == '\t' ||
+                     s[j-1] == '\r' || s[j-1] == '\n')) j--;
+    size_t uz = j - i;
+    char *r = (char *)malloc(uz + 1);
+    if (!r) return NULL;
+    if (uz > 0) memcpy(r, s + i, uz);
+    r[uz] = '\0';
+    return r;
+}
+
+/* Tum 'eski' alt-stringlerini 'yeni' ile degistir. Heap'te yeni metin. */
+const char *kdl_metin_yer_degistir(const char *s,
+                                    const char *eski, const char *yeni) {
+    if (!s || !eski) return kdl_metin_kopya(s);
+    if (!yeni) yeni = "";
+    size_t neski = strlen(eski);
+    if (neski == 0) return kdl_metin_kopya(s);
+    size_t nyeni = strlen(yeni);
+    /* Once kac kez gectigini say */
+    size_t adet = 0;
+    for (const char *p = s; (p = strstr(p, eski)) != NULL; p += neski) adet++;
+    size_t ns = strlen(s);
+    size_t sonuc_uz = ns + adet * (nyeni > neski ? nyeni - neski : 0)
+                        - adet * (neski > nyeni ? neski - nyeni : 0);
+    char *r = (char *)malloc(sonuc_uz + 1);
+    if (!r) return NULL;
+    char *yaz = r;
+    const char *oku = s;
+    while (1) {
+        const char *bul = strstr(oku, eski);
+        if (!bul) {
+            size_t kalan = strlen(oku);
+            memcpy(yaz, oku, kalan);
+            yaz += kalan;
+            break;
+        }
+        size_t once = (size_t)(bul - oku);
+        memcpy(yaz, oku, once);
+        yaz += once;
+        memcpy(yaz, yeni, nyeni);
+        yaz += nyeni;
+        oku = bul + neski;
+    }
+    *yaz = '\0';
+    return r;
+}
+
 /* === I: Dinamik Dizi (heap) ===
  *
  * KDL DinamikDizi temsili: { ptr veri, i32 boyut, i32 kapasite } yapisi.
