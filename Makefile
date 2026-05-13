@@ -265,7 +265,7 @@ calistir_json_test: $(BUILD)/test_json$(EXE)
 calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
 	./$(BUILD)/test_lsp$(EXE)
 
-calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE)
+calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	./$(BUILD)/test_llvm$(EXE)
 
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
