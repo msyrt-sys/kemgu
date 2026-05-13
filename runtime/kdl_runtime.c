@@ -761,6 +761,45 @@ const char *kdl_dosya_tumu_oku(const char *yol) {
     return buf;
 }
 
+/* === G: Dosya yonetim primitifleri === */
+
+/* dosya_oku — kdl_dosya_tumu_oku alias (KEMGU API ad uyumu icin) */
+const char *kdl_dosya_oku(const char *yol) {
+    return kdl_dosya_tumu_oku(yol);
+}
+
+/* dosya_var_mi — fopen kontrolu (stat yerine portable) */
+int kdl_dosya_var_mi(const char *yol) {
+    if (!yol) return 0;
+    FILE *f = fopen(yol, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* dosya_sil — remove(yol). Basari 0, hata !=0 */
+int32_t kdl_dosya_sil(const char *yol) {
+    if (!yol) return -1;
+    return (int32_t)remove(yol);
+}
+
+/* dosya_yeniden_adlandir — rename(eski, yeni) */
+int32_t kdl_dosya_yeniden_adlandir(const char *eski, const char *yeni) {
+    if (!eski || !yeni) return -1;
+    return (int32_t)rename(eski, yeni);
+}
+
+/* dosya_boyut — fseek/ftell ile byte sayisi (yoksa -1) */
+int64_t kdl_dosya_boyut(const char *yol) {
+    if (!yol) return -1;
+    FILE *f = fopen(yol, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fclose(f);
+    return n < 0 ? -1 : (int64_t)n;
+}
+
 /* Arena-aware metin birlestirme (verilen bolgeye yerlestirir) */
 const char *kdl_bolge_metin_birlestir(KdlArena *a,
                                        const char *x, const char *y) {

@@ -969,6 +969,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "ptr";
                 }
             }
+            /* Madde G: dosya_* built-in -> kdl_dosya_* */
+            else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "dosya_", 6) == 0) {
+                static char kdl_dosya_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_dosya_buf, "kdl_", 4);
+                memcpy(kdl_dosya_buf + 4, cagri_adi, (size_t)n);
+                kdl_dosya_buf[4 + n] = '\0';
+                cagri_adi = kdl_dosya_buf; cagri_adi_uz = 4 + n;
+                /* dosya_ac/oku -> ptr (metin); _yaz/_sil/_yeniden_adlandir -> i32;
+                 * _kapat -> void; _var_mi -> i1; _boyut -> i64 */
+                if (n == 8 && memcmp(kdl_dosya_buf + 4, "dosya_ac", 8) == 0) {
+                    kdl_donus = "ptr";
+                } else if (n == 9 && memcmp(kdl_dosya_buf + 4, "dosya_oku", 9) == 0) {
+                    kdl_donus = "ptr";
+                } else if ((n == 9 && memcmp(kdl_dosya_buf + 4, "dosya_yaz", 9) == 0) ||
+                           (n == 9 && memcmp(kdl_dosya_buf + 4, "dosya_sil", 9) == 0) ||
+                           (n == 22 && memcmp(kdl_dosya_buf + 4,
+                                              "dosya_yeniden_adlandir", 22) == 0)) {
+                    kdl_donus = "i32";
+                } else if (n == 11 && memcmp(kdl_dosya_buf + 4, "dosya_kapat", 11) == 0) {
+                    kdl_donus = "void";
+                } else if (n == 12 && memcmp(kdl_dosya_buf + 4, "dosya_var_mi", 12) == 0) {
+                    kdl_donus = "i1";
+                } else if (n == 11 && memcmp(kdl_dosya_buf + 4, "dosya_boyut", 11) == 0) {
+                    kdl_donus = "i64";
+                } else {
+                    kdl_donus = "ptr";
+                }
+            }
 
             const char *donus = kdl_donus ? kdl_donus
                               : (ik ? ik->donus_tip : (beklenen ? beklenen : "i32"));
@@ -1428,7 +1457,17 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_metin_baslar(ptr, ptr)\n", out);
     fputs("declare i1 @kdl_metin_biter(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n\n", out);
+    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n", out);
+
+    /* Madde G: Dosya syscall primitifleri (kdl_dosya_*) */
+    fputs("declare ptr @kdl_dosya_ac(ptr, ptr)\n", out);
+    fputs("declare ptr @kdl_dosya_oku(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_yaz(ptr, ptr)\n", out);
+    fputs("declare void @kdl_dosya_kapat(ptr)\n", out);
+    fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
+    fputs("declare i64 @kdl_dosya_boyut(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

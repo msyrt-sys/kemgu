@@ -639,6 +639,70 @@ static void test_bit_oncelik_shift_or(void) {
  *  test_metin_uzunluk, _birlestir, _kes, _kucuk_ascii, _buyuk_turkce_i,
  *  _icerir_evet/_hayir, _baslar, _biter, _kirp, _yer_degistir mevcut.) */
 
+/* === Madde G: Dosya syscall primitifleri === */
+
+static void test_dosya_var_mi_yok(void) {
+    /* Var olmayan dosya -> dosya_var_mi yanlis (0) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f""er dosya_var_mi(\"nonexistent_xyz_42.txt\") { ver 1; } "
+        "ver 0; }");
+    test_sonuc("dosya_var_mi(\"nonexistent\") -> 0", rc == 0);
+}
+
+static void test_dosya_yaz_oku(void) {
+    /* yaz + close + oku tum dosya -> uzunluk dogru */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_io.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"merhaba\"); "
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken icerik: metin = dosya_oku(\"build/test_G_io.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = metin_uzunluk(icerik); "
+        "dosya_sil(\"build/test_G_io.tmp\"); "
+        "ver n; }");
+    test_sonuc("dosya yaz/oku/kapat/sil pipeline -> uzunluk 7", rc == 7);
+}
+
+static void test_dosya_boyut(void) {
+    /* yaz "hi" (2 byte) -> boyut 2 -> int32 dondurelim */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_boyut.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"hi\"); "
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken b: tam64 = dosya_boyut(\"build/test_G_boyut.tmp\"); "
+        "dosya_sil(\"build/test_G_boyut.tmp\"); "
+        /* Cast tam64 -> tam32 (UTF-8 strict, eger E gerek olmadan) — kucuk val */
+        "e\xc4\x9f""er b == 2 { ver 2; } "
+        "ver 0; }");
+    test_sonuc("dosya_boyut(\"hi\") -> 2", rc == 2);
+}
+
+static void test_dosya_yeniden_adlandir(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G_ren.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"ok\"); "
+        "dosya_kapat(h); "
+        "dosya_yeniden_adlandir(\"build/test_G_ren.tmp\", \"build/test_G_renamed.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken v: mant\xc4\xb1ksal = dosya_var_mi(\"build/test_G_renamed.tmp\"); "
+        "dosya_sil(\"build/test_G_renamed.tmp\"); "
+        "e\xc4\x9f""er v { ver 1; } ver 0; }");
+    test_sonuc("dosya_yeniden_adlandir + var_mi yeni -> 1", rc == 1);
+}
+
+static void test_dosya_sil_yoksa(void) {
+    /* Var olmayan dosyayi sil -> nonzero exit (remove rc != 0) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = dosya_sil(\"build/test_G_yok.tmp\"); "
+        /* r != 0 ise basari; -1 negatif olabilir, exit kodu 255 + ... */
+        "e\xc4\x9f""er r != 0 { ver 42; } "
+        "ver 0; }");
+    test_sonuc("dosya_sil(yok) -> r!=0 -> 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -743,6 +807,13 @@ int main(void) {
     test_bit_degil_double();
     test_bit_kompozisyon();
     test_bit_oncelik_shift_or();
+
+    printf("\n--- G: Dosya syscall primitifleri (runtime/kdl_runtime.c) ---\n");
+    test_dosya_var_mi_yok();
+    test_dosya_yaz_oku();
+    test_dosya_boyut();
+    test_dosya_yeniden_adlandir();
+    test_dosya_sil_yoksa();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
