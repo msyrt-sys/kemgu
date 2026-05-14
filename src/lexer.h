@@ -37,6 +37,9 @@ typedef enum {
     TOK_IMHA,           /* imha        — Linear Types Spec V1 */
     TOK_OLARAK,         /* olarak      — Madde E: tip donusturme (x olarak T) */
     TOK_SABITSURE,      /* sabitsüre   — Sabitsüre Spec V1 (constant-time) */
+    TOK_YETKI,          /* yetki       — Capability Spec V1 (object-capability) */
+    TOK_DELEGE,         /* delege      — Capability Spec V1 (sub-capability) */
+    TOK_GERI_AL,        /* geri_al     — Capability Spec V1 (revoke) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */

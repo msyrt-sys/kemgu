@@ -22,6 +22,7 @@ typedef struct {
 static const AnahtarKelime tablo[] = {
     {"bo\xc5\x9f",                       4, TOK_BOS       },  /* boş         */
     {"b\xc3\xb6lge",                     6, TOK_BOLGE     },  /* bölge       */
+    {"delege",                            6, TOK_DELEGE    },  /* delege      */
     {"de\xc4\x9f" "er",                  6, TOK_DEGER     },  /* değer       */
     {"de\xc4\x9f" "il",                  6, TOK_DEGIL     },  /* değil       */
     {"de\xc4\x9f" "ilse",                8, TOK_DEGILSE   },  /* değilse     */
@@ -30,6 +31,7 @@ static const AnahtarKelime tablo[] = {
     {"d\xc4\xb1\xc5\x9f" "a",           6, TOK_DISA      },  /* dışa        */
     {"e\xc4\x9f" "er",                   5, TOK_EGER      },  /* eğer        */
     {"e\xc5\x9fle\xc5\x9f",             7, TOK_ESLES     },  /* eşleş       */
+    {"geri_al",                           7, TOK_GERI_AL   },  /* geri_al     */
     {"g\xc3\xbcvensiz",                  9, TOK_GUVENSIZ  },  /* güvensiz    */
     {"hata",                              4, TOK_HATA      },  /* hata        */
     {"hi\xc3\xa7",                       4, TOK_HIC       },  /* hiç         */
@@ -53,6 +55,7 @@ static const AnahtarKelime tablo[] = {
     {"veya",                              4, TOK_VEYA      },  /* veya        */
     {"yanl\xc4\xb1\xc5\x9f",            8, TOK_YANLIS    },  /* yanlış      */
     {"yap\xc4\xb1",                      5, TOK_YAPI      },  /* yapı        */
+    {"yetki",                             5, TOK_YETKI     },  /* yetki       */
     {"\xc3\xb6zellik",                   8, TOK_OZELLIK   },  /* özellik     */
 };
 
