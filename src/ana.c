@@ -8,6 +8,7 @@
 #include "tip_kontrol.h"
 #include "llvm.h"
 #include "lsp.h"
+#include "wcet.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,6 +118,7 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
 
     int parser_hata = p.hata_sayisi;
     int tk_hata = 0;
+    int rt_hata = 0;
 
     if (parser_hata == 0 && prog) {
         Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
@@ -124,15 +126,23 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
         tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
         tip_kontrol_program(&tk, prog);
         tk_hata = tk.hata_sayisi;
+
+        /* Realtime Spec V1: gerçekzamanlı işlevler icin RT001-RT005
+         * denetimi + WCET hesabı (sembol tablosu hazır olunca). */
+        WcetKontrol wk;
+        wcet_kontrol_baslat(&wk, a, g, dosya_adi, kaynak);
+        wcet_kontrol_program(&wk, prog);
+        rt_hata = wk.hata_sayisi;
     }
 
-    int toplam = parser_hata + tk_hata;
+    int toplam = parser_hata + tk_hata + rt_hata;
     if (toplam == 0) {
         fprintf(stdout, "OK: %s — tip kontrolu basarili.\n", dosya_adi);
     } else {
         fprintf(stdout,
-                "HATA: %s — parser %d, tip kontrol %d (toplam %d hata).\n",
-                dosya_adi, parser_hata, tk_hata, toplam);
+                "HATA: %s — parser %d, tip kontrol %d, realtime %d "
+                "(toplam %d hata).\n",
+                dosya_adi, parser_hata, tk_hata, rt_hata, toplam);
     }
 
     arena_serbest(a);

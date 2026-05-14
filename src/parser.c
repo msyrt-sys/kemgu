@@ -136,6 +136,7 @@ static int sync_token_mu(TokenTipi t) {
         case TOK_NOKTALI_VIRGUL:
         case TOK_SAG_SUSLU:
         case TOK_ISLEV:
+        case TOK_GERCEKZAMANLI:   /* Realtime Spec V1 — ust duzey islev modifier */
         case TOK_YAPI:
         case TOK_OZELLIK:
         case TOK_MODUL:
@@ -288,7 +289,28 @@ Dugum *parse_parametre(Parser *p) {
  * Özellik gövdesi ve uygula imzalari icin kullanilir. */
 
 static Dugum *parse_islev_genel(Parser *p, int imza_yeterli) {
+    /* Realtime Spec V1: opsiyonel 'gerçekzamanlı' modifier önek olarak gelir.
+     * RT006: aynı modifier iki kez yazılırsa hata. */
+    int gercekzamanli_mi = 0;
+    if (parser_eslesir(p, TOK_GERCEKZAMANLI)) {
+        gercekzamanli_mi = 1;
+        parser_ilerle(p);
+        if (parser_eslesir(p, TOK_GERCEKZAMANLI)) {
+            Token tdup = parser_simdiki(p);
+            parser_hata(p, tdup, "RT006",
+                "'ger\xc3\xa7" "ekzamanl\xc4\xb1' modifier iki kez yaz\xc4\xb1lm\xc4\xb1\xc5\x9f",
+                NULL);
+            parser_ilerle(p);
+        }
+    }
+
     Token islev_tok = parser_simdiki(p);
+    if (islev_tok.tip != TOK_ISLEV) {
+        parser_hata(p, islev_tok, "P018",
+            "'ger\xc3\xa7" "ekzamanl\xc4\xb1' sonras\xc4\xb1 'i\xc5\x9flev' bekleniyor",
+            NULL);
+        return dugum_hata(p->arena, islev_tok.satir, islev_tok.sutun);
+    }
     parser_ilerle(p);  /* 'islev' */
 
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P014",
@@ -343,6 +365,7 @@ static Dugum *parse_islev_genel(Parser *p, int imza_yeterli) {
     d->veri.islev.param_sayi = params.sayi;
     d->veri.islev.donus_tipi = donus;
     d->veri.islev.govde = govde;
+    d->veri.islev.gercekzamanli_mi = gercekzamanli_mi;
     return d;
 }
 
@@ -565,7 +588,7 @@ static Dugum *parse_ozellik_tanimi(Parser *p) {
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
         Token sm = parser_simdiki(p);
-        if (sm.tip == TOK_ISLEV) {
+        if (sm.tip == TOK_ISLEV || sm.tip == TOK_GERCEKZAMANLI) {
             Dugum *m = parse_islev_genel(p, 1);  /* imza yeterli */
             if (m) liste_ekle(&uyeler, p->arena, m);
         } else {
@@ -640,7 +663,7 @@ static Dugum *parse_uygula_tanimi(Parser *p) {
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
         Token sm = parser_simdiki(p);
-        if (sm.tip == TOK_ISLEV) {
+        if (sm.tip == TOK_ISLEV || sm.tip == TOK_GERCEKZAMANLI) {
             Dugum *m = parse_islev_tanimi(p);  /* govde zorunlu */
             if (m) liste_ekle(&islevler, p->arena, m);
         } else {
@@ -749,6 +772,7 @@ static Dugum *parse_disa(Parser *p) {
     Dugum *tanim = NULL;
     Token sonra = parser_simdiki(p);
     switch (sonra.tip) {
+        case TOK_GERCEKZAMANLI:   /* Realtime Spec V1: 'dışa gerçekzamanlı işlev ...' */
         case TOK_ISLEV:  tanim = parse_islev_tanimi(p); break;
         case TOK_YAPI:   tanim = parse_yapi_tanimi(p);  break;
         case TOK_SABIT:  tanim = parse_sabit_tanimi(p); break;
@@ -803,6 +827,7 @@ static Dugum *parse_modul_tanimi(Parser *p) {
 static Dugum *parse_ust_oge(Parser *p) {
     Token t = parser_simdiki(p);
     switch (t.tip) {
+        case TOK_GERCEKZAMANLI:   /* Realtime Spec V1: 'gerçekzamanlı işlev ...' */
         case TOK_ISLEV:   return parse_islev_tanimi(p);
         case TOK_YAPI:    return parse_yapi_tanimi(p);
         case TOK_OZELLIK: return parse_ozellik_tanimi(p);

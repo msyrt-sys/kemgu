@@ -1,0 +1,84 @@
+// =============================================================================
+// KEMGU Realtime Spec V1 — Drone Kontrol Döngüsü Örneği
+// =============================================================================
+//
+// Hedef: 1 kHz (1 ms budget) drone kontrol döngüsü.
+// PID controller + motor güncelleme straight-line (V1 realtime kuralı).
+//
+// `kemgu --check test/ornekler/drone_kontrol.kem` → OK.
+// Tüm gerçekzamanlı işlevler RT001-RT005 denetiminden geçer.
+//
+// WCET hesabı (pessimistic, RT.7.1 cost tablosu):
+//   pid_hesapla   ~ 45 cycle   (4 erişim/load + 4 mul + 3 add + 1 sub + ret)
+//   motor_yenile  ~ 220 cycle  (4 × pid_hesapla ~ 4 × 55 + 4 store)
+//   kontrol_dongu ~ 250 cycle  (motor_yenile + clamp)
+//
+// 200 MHz ARM Cortex'te 250 cycle ≈ 1.25 µs → 1 ms bütçenin %0.125'i.
+
+yapı PIDDurum {
+    onceki_hata: kesirli32;
+    integral:    kesirli32;
+}
+
+yapı Motor4 {
+    m0: kesirli32;
+    m1: kesirli32;
+    m2: kesirli32;
+    m3: kesirli32;
+}
+
+// PID katsayıları — modul-seviyesi sabit (V1: işlev içinde sabit yok).
+sabit KP: kesirli32 = 0.85;
+sabit KI: kesirli32 = 0.05;
+sabit KD: kesirli32 = 0.20;
+sabit DT: kesirli32 = 0.001;
+
+// PID hesabı — straight-line, RT001-RT005 geçer.
+gerçekzamanlı işlev pid_hesapla(
+    d: &değişken PIDDurum,
+    hedef: kesirli32,
+    olcum: kesirli32) -> kesirli32
+{
+    değişken hata_: kesirli32 = hedef - olcum;
+    değişken turev: kesirli32 = (hata_ - d.onceki_hata) / DT;
+    d.integral = d.integral + hata_ * DT;
+    d.onceki_hata = hata_;
+    ver KP * hata_ + KI * d.integral + KD * turev;
+}
+
+// Saturate — clamp pwm değerini güvenli aralıkta.
+gerçekzamanlı işlev kirp(deger: kesirli32,
+                         alt: kesirli32,
+                         ust: kesirli32) -> kesirli32
+{
+    eğer deger < alt { ver alt; }
+    eğer deger > ust { ver ust; }
+    ver deger;
+}
+
+// Tek-motor kontrol — pid_hesapla + kirp + dönüş.
+gerçekzamanlı işlev motor_kontrol(d: &değişken PIDDurum,
+                                    hedef: kesirli32,
+                                    olcum: kesirli32) -> kesirli32
+{
+    değişken cikti: kesirli32 = pid_hesapla(d, hedef, olcum);
+    ver kirp(cikti, 0.0, 1.0);
+}
+
+// Tüm motorların güncellenmesi — manuel unroll (V1: loop yok).
+gerçekzamanlı işlev kontrol_dongu(
+    p0: &değişken PIDDurum,
+    p1: &değişken PIDDurum,
+    p2: &değişken PIDDurum,
+    p3: &değişken PIDDurum,
+    hedef: kesirli32,
+    olc0: kesirli32, olc1: kesirli32,
+    olc2: kesirli32, olc3: kesirli32) -> Motor4
+{
+    ver Motor4 {
+        m0: motor_kontrol(p0, hedef, olc0),
+        m1: motor_kontrol(p1, hedef, olc1),
+        m2: motor_kontrol(p2, hedef, olc2),
+        m3: motor_kontrol(p3, hedef, olc3),
+    };
+}
