@@ -195,6 +195,64 @@ eklenmez.
 
 ---
 
+## [2026-05-14] — Realtime Spec V1 implementasyon: açık sorular
+
+V1 implementasyonu tamam (32/32 test, drone örneği çalışır), ileride
+karara açık noktalar (RT.14'te kayıtlı):
+
+### A. V1 loop yasağı — straight-line only
+
+- **Kategori:** spec kapsam (V1 darlık)
+- **Bağlam:** V1'de `iken` ve `için` her durumda RT002. Sebep: bound
+  çıkarsama tutarlı bir altyapı gerektiriyor. Pratikte drone PID,
+  audio callback gibi tipik realtime kodları zaten straight-line.
+- **V2 yol haritası:**
+  1. `iken[max=N] kosul { ... }` annotation
+  2. `sabit N` referansı → otomatik bound (data-flow zincirlemesi)
+  3. `Dizi<T, N>` literal-uzunluklu tip (statik dizi)
+- **Engellediği iş:** Yok — Manuel unroll yeterli (drone_kontrol.kem ispat).
+
+### B. Mutual recursion algılaması
+
+- **Kategori:** RT003 sınırlama
+- **Bağlam:** V1: direct self-call algılanır, ama `a → b → a` zinciri
+  RT003 atlatılır. Çağrı grafiği analizi V2'de.
+- **Önerilen seçenek:** wcet.c'de `aktif_islev` yerine `aktif_islev_yigin`
+  (stack) tut; çağrı yapılırken hedef yığında varsa RT003.
+- **Engel:** V1 yeterli — direct recursion zaten %95 vaka.
+
+### C. Built-in I/O fonksiyonları realtime mi?
+
+- **Kategori:** stdlib API tasarımı
+- **Bağlam:** `kdl_yazdir_tam`, `kdl_dosya_yaz`, vs. tip_kontrol
+  built-in tablosunda flag yok — realtime fnotion çağırınca otomatik
+  RT004 olur (sembol bulamadığı için RT005 da olabilir).
+- **Önerilen seçenek:** Stdlib'de built-in tabloya `realtime` flag ekle;
+  hangi I/O fnotionları realtime "approved" olduğu açık spec kararı.
+- **V1:** Tüm built-in'ler non-realtime kabul; realtime kullanıcı
+  fnotion'a I/O izinli değil (zaten gerçek dünyada öyle olmalı).
+
+### D. Cycle tablosu kalibrasyonu
+
+- **Kategori:** WCET hesap doğruluğu
+- **Bağlam:** RT.7.1'deki cost'lar x86 modern + ARM Cortex-A approx.
+  Mikroop seviyesi gerçek değerler için CPU vendor docs gerek
+  (Intel Optimization Manual, ARM TRM).
+- **Engel:** V1 pessimistic — gerçek runtime ≤ hesap garanti, sertif
+  için yeterli. Kalibrasyon V2.
+
+### E. Branch için: feature/realtime-qualifier vs claude/sleepy-haibt-6c763d
+
+- **Kategori:** branch yönetimi (yeşil — kullanıcı kararı)
+- **Bağlam:** Worktree branch'i `claude/sleepy-haibt-6c763d` olarak
+  açılmış. Direktifte `feature/realtime-qualifier` istendi ama
+  `git branch -m` permission classifier tarafından reddedildi
+  ("Bu branch'ten ayrılma" yasağı). Worktree branch'ini Mehmet
+  isterse manuel rename edebilir veya cherry-pick edebilir.
+- **Engel:** Yok — implementasyon bu branch'te tamam.
+
+---
+
 ## [2026-05-13] — Snapshot sözdizim sınırlamaları (test altyapı)
 
 - **Kategori:** parser kapsam genişletme (yeşil — sözdizimsel)

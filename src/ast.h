@@ -177,6 +177,7 @@ struct Dugum {
             int param_sayi;
             Dugum *donus_tipi;     /* NULL = donus yok */
             Dugum *govde;          /* DUGUM_BLOK veya NULL (sadece imza) */
+            int gercekzamanli_mi;  /* Realtime Spec V1 — hard real-time qualifier */
         } islev;
 
         struct {

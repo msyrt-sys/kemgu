@@ -1876,6 +1876,12 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     if (!donus) donus = "void";
     g_donus_tip = donus;
 
+    /* Realtime Spec V1: gercekzamanli isleve metadata yorumu (V1 minimal;
+     * V2'de gercek LLVM metadata: !realtime !N). */
+    if (islev->veri.islev.gercekzamanli_mi) {
+        fputs("; @kemgu.realtime\n", g->out);
+    }
+
     fprintf(g->out, "define %s @", donus);
     ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
