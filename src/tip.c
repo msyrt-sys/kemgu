@@ -91,8 +91,32 @@ TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic) {
     return t;
 }
 
+TipBilgisi *tip_olustur_yetki(Arena *a, TipBilgisi *kaynak) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_YETKI);
+    if (!t) return NULL;
+    t->veri.yetki.kaynak = kaynak;
+    return t;
+}
+
+int tip_yetki_mi(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_YETKI) return 1;
+    /* tekkez<yetki<R>> da capability sayilir */
+    if (t->kategori == TIP_TEKKEZ) return tip_yetki_mi(t->veri.tekkez.ic);
+    return 0;
+}
+
+const TipBilgisi *tip_yetki_kaynak(const TipBilgisi *t) {
+    if (!t) return NULL;
+    if (t->kategori == TIP_YETKI) return t->veri.yetki.kaynak;
+    if (t->kategori == TIP_TEKKEZ) return tip_yetki_kaynak(t->veri.tekkez.ic);
+    return NULL;
+}
+
 int tip_lineer_mi(const TipBilgisi *t) {
-    return t != NULL && t->kategori == TIP_TEKKEZ;
+    if (!t) return 0;
+    /* tekkez<...> + Capability Spec V1: yetki<R> de linear takip edilir */
+    return t->kategori == TIP_TEKKEZ || t->kategori == TIP_YETKI;
 }
 
 int tip_sabitsure_mi(const TipBilgisi *t) {
@@ -230,6 +254,11 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
              * yukarıda zaten reject edildi) — bu sayede implicit upgrade/downgrade
              * tip kontrol seviyesinde T001 verir. */
             return tip_esit(a->veri.sabitsure.ic, b->veri.sabitsure.ic);
+
+        case TIP_YETKI:
+            /* Capability Spec V1: yetki<R> == yetki<R'> iff R == R'.
+             * Tip eslesmesi nominal — Dosya != Soket vs. (CP004 enforcement). */
+            return tip_esit(a->veri.yetki.kaynak, b->veri.yetki.kaynak);
     }
     return 0;
 }
@@ -325,6 +354,12 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             fputc('>', out);
             return;
 
+        case TIP_YETKI:
+            fputs("yetki<", out);
+            tip_yazdir(t->veri.yetki.kaynak, out);
+            fputc('>', out);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -357,6 +392,7 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_GENERIC_PARAM: return "GENERIC_PARAM";
         case TIP_TEKKEZ:    return "TEKKEZ";
         case TIP_SABITSURE: return "SABITSURE";
+        case TIP_YETKI:     return "YETKI";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }

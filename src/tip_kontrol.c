@@ -300,15 +300,20 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
 /* === Linear Types Spec V1: yardimci fonksiyonlar === */
 
 /* Eger ifade DUGUM_TANIMLAYICI ise ve sembolu lineer ise -> tuket.
- * Cift tuketim L002 hatasi. */
+ * Cift tuketim L002 hatasi (tekkez) veya CP005 (yetki). */
 static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
     if (!d || d->tip != DUGUM_TANIMLAYICI) return;
     Sembol *s = sembol_bul_yazilabilir(tk->scope,
         d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
-    if (!s || !s->tip || s->tip->kategori != TIP_TEKKEZ) return;
+    if (!s || !s->tip || !tip_lineer_mi(s->tip)) return;
     if (s->lineer_tuketildi >= 1) {
-        tip_hata(tk, d, "L002",
-            "lineer baglama iki kez tuketildi (move sonrasi erisim)");
+        if (s->tip->kategori == TIP_YETKI) {
+            tip_hata(tk, d, "CP005",
+                "yetki<R> iki kez tuketildi (move sonrasi erisim)");
+        } else {
+            tip_hata(tk, d, "L002",
+                "lineer baglama iki kez tuketildi (move sonrasi erisim)");
+        }
     }
     s->lineer_tuketildi++;
 }
@@ -327,10 +332,10 @@ static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
         d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
     if (yerel_check) return;
 
-    /* Parent scope'ta lineer baglama mi? */
+    /* Parent scope'ta lineer baglama mi? (tekkez veya yetki) */
     const Sembol *parent = sembol_bul(tk->lambda_baslangic_scope,
         d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
-    if (!parent || !parent->tip || parent->tip->kategori != TIP_TEKKEZ) return;
+    if (!parent || !parent->tip || !tip_lineer_mi(parent->tip)) return;
 
     /* SADECE flag — closure-itself-linear (LC-2) tip isaretlemesi icin */
     tk->lambda_lineer_yakalama = 1;
@@ -344,13 +349,20 @@ static void scope_lineer_kapanis_check(TipKontrol *tk, Scope *s) {
         Sembol *sem = &l->sembol;
         if (sem->kategori != SEMBOL_DEGISKEN &&
             sem->kategori != SEMBOL_PARAMETRE) continue;
-        if (!sem->tip || sem->tip->kategori != TIP_TEKKEZ) continue;
+        /* Linear takip: tekkez<T> ve yetki<R> ikisi de */
+        if (!sem->tip || !tip_lineer_mi(sem->tip)) continue;
         if (sem->lineer_tuketildi == 0) {
             tk->hata_sayisi++;
+            const char *kod = (sem->tip->kategori == TIP_YETKI)
+                              ? "CP005" : "L001";
+            const char *mesaj = (sem->tip->kategori == TIP_YETKI)
+                ? "yetki<R> scope sonunda tuketilmedi"
+                : "lineer baglama scope sonunda tuketilmedi";
+            const char *ipucu = (sem->tip->kategori == TIP_YETKI)
+                ? "geri_al(y) veya I/O cagrisi ile tuketin"
+                : "kullan(...) veya imha(...) ile tuketin";
             hata_raporla(tk->dosya_adi, tk->kaynak,
-                         sem->satir, sem->sutun, "L001",
-                         "lineer baglama scope sonunda tuketilmedi",
-                         "kullan(...) veya imha(...) ile tuketin");
+                         sem->satir, sem->sutun, kod, mesaj, ipucu);
         }
     }
 }
@@ -853,6 +865,60 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                 return t_hata(tk);
             }
             return tip_olustur_sabitsure(tk->arena, ic);
+        }
+
+        case DUGUM_TIP_YETKI: {
+            /* Capability Spec V1: yetki<R>, R = kaynak tipi.
+             * V1: R DUGUM_TIP_BASIT veya DUGUM_TIP_KULLANICI olmalı,
+             * adı bilinen kaynak setinden (Dosya/Soket/Bellek/Donanim/OTP_Anahtar).
+             * Bilinmeyen kaynak: CP004 (CAPABILITY_TYPE_MISMATCH/INVALID). */
+            const Dugum *r = tip_d->veri.tip_yetki.kaynak_tipi;
+            if (!r) {
+                tip_hata(tk, tip_d, "CP004",
+                    "yetki<R> icin kaynak tipi gerekli");
+                return t_hata(tk);
+            }
+            /* Kaynak adi bul */
+            const char *ad = NULL;
+            int ad_uz = 0;
+            if (r->tip == DUGUM_TIP_BASIT) {
+                ad = r->veri.tip_basit.ad;
+                ad_uz = r->veri.tip_basit.ad_uzunluk;
+            } else if (r->tip == DUGUM_TIP_KULLANICI &&
+                       r->veri.tip_kullanici.yol &&
+                       r->veri.tip_kullanici.yol->tip == DUGUM_TANIMLAYICI) {
+                ad = r->veri.tip_kullanici.yol->veri.tanimlayici.metin;
+                ad_uz = r->veri.tip_kullanici.yol->veri.tanimlayici.uzunluk;
+            }
+            int ok = 0;
+            if (ad && ad_uz > 0) {
+                /* OTP_Anahtar 11 byte, Dosya 5, Soket 5, Bellek 6, Donanim 7 */
+                if ((ad_uz == 5 && memcmp(ad, "Dosya", 5) == 0) ||
+                    (ad_uz == 5 && memcmp(ad, "Soket", 5) == 0) ||
+                    (ad_uz == 6 && memcmp(ad, "Bellek", 6) == 0) ||
+                    (ad_uz == 7 && memcmp(ad, "Donanim", 7) == 0) ||
+                    (ad_uz == 11 && memcmp(ad, "OTP_Anahtar", 11) == 0)) {
+                    ok = 1;
+                }
+            }
+            if (!ok) {
+                tip_hata(tk, tip_d, "CP004",
+                    "yetki<R>: bilinmeyen kaynak tipi "
+                    "(Dosya/Soket/Bellek/Donanim/OTP_Anahtar bekleniyor)");
+                return t_hata(tk);
+            }
+            /* Kaynak TIP_YAPI olarak temsil edilir (ad bazli nominal eslesme).
+             * ast_tip_to_bilgi'ye gitmeyiz cunku kaynak tipler symbol table'da
+             * tanimli degil; built-in nominal isimler. */
+            char *ad_kopya = (char *)arena_ayir(tk->arena, (size_t)ad_uz + 1);
+            if (ad_kopya) {
+                memcpy(ad_kopya, ad, (size_t)ad_uz);
+                ad_kopya[ad_uz] = '\0';
+            }
+            TipBilgisi *kaynak = tip_olustur_yapi(tk->arena,
+                                                 ad_kopya, ad_uz,
+                                                 NULL, 0);
+            return tip_olustur_yetki(tk->arena, kaynak);
         }
 
         case DUGUM_TIP_SONUC: {
@@ -1428,18 +1494,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return op;
 
                 case OP_REF:
-                    /* Linear Types Spec V1 L004: tekkez referans alinamaz */
-                    if (op->kategori == TIP_TEKKEZ) {
-                        tip_hata(tk, d, "L004",
-                            "lineer (tekkez) tipinde referans alinamaz");
+                    /* Linear Types Spec V1 L004 + Capability CP005:
+                     * lineer (tekkez veya yetki) tipinde referans alinamaz */
+                    if (tip_lineer_mi(op)) {
+                        const char *kod = (op->kategori == TIP_YETKI)
+                                          ? "CP005" : "L004";
+                        const char *msg = (op->kategori == TIP_YETKI)
+                            ? "yetki<R> tipinde referans alinamaz (linear ihlal)"
+                            : "lineer (tekkez) tipinde referans alinamaz";
+                        tip_hata(tk, d, kod, msg);
                         return t_hata(tk);
                     }
                     return tip_olustur_referans(tk->arena, op, 0);
 
                 case OP_REF_DEGISKEN:
-                    if (op->kategori == TIP_TEKKEZ) {
-                        tip_hata(tk, d, "L004",
-                            "lineer (tekkez) tipinde &degisken alinamaz");
+                    if (tip_lineer_mi(op)) {
+                        const char *kod = (op->kategori == TIP_YETKI)
+                                          ? "CP005" : "L004";
+                        const char *msg = (op->kategori == TIP_YETKI)
+                            ? "yetki<R> tipinde &degisken alinamaz (linear ihlal)"
+                            : "lineer (tekkez) tipinde &degisken alinamaz";
+                        tip_hata(tk, d, kod, msg);
                         return t_hata(tk);
                     }
                     return tip_olustur_referans(tk->arena, op, 1);
@@ -1693,6 +1768,108 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 return s->veri.sabitsure.ic;
             }
+            /* === Capability Spec V1 intrinsics === */
+            /* yetki_olustur(kaynak_tipi: tam16, izin: tam16) -> yetki<R> */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 13 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "yetki_olustur", 13) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "CP004",
+                        "yetki_olustur tam 2 arguman gerektirir "
+                        "(kaynak_tipi: tam16, izin: tam16)");
+                    return t_hata(tk);
+                }
+                /* Arg 1: kaynak tipi sabitini (literal) bekle — R'yi cikarmak icin */
+                Dugum *arg0 = d->veri.cagri.argumanlar[0];
+                if (arg0->tip != DUGUM_TAM) {
+                    tip_hata(tk, arg0, "CP004",
+                        "yetki_olustur ilk argumani sabit tamsayi olmali "
+                        "(1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar)");
+                    return t_hata(tk);
+                }
+                int64_t kt = arg0->veri.tam.deger;
+                const char *kaynak_ad = NULL;
+                int kaynak_uz = 0;
+                switch (kt) {
+                    case 1: kaynak_ad = "Dosya"; kaynak_uz = 5; break;
+                    case 2: kaynak_ad = "Soket"; kaynak_uz = 5; break;
+                    case 3: kaynak_ad = "Bellek"; kaynak_uz = 6; break;
+                    case 4: kaynak_ad = "Donanim"; kaynak_uz = 7; break;
+                    case 5: kaynak_ad = "OTP_Anahtar"; kaynak_uz = 11; break;
+                    default:
+                        tip_hata(tk, arg0, "CP004",
+                            "yetki_olustur: bilinmeyen kaynak tipi id");
+                        return t_hata(tk);
+                }
+                /* Arg 2: izin tipi tamsayi */
+                TipBilgisi *izin_t = tip_belirle(tk, d->veri.cagri.argumanlar[1]);
+                if (izin_t->kategori != TIP_HATA && !tip_tamsayi_mi(izin_t)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "CP004",
+                        "yetki_olustur izin argumani tamsayi olmali");
+                }
+                /* Kaynak adi arena'ya kopyala */
+                char *ad_kopya = (char *)arena_ayir(tk->arena,
+                                                    (size_t)kaynak_uz + 1);
+                if (ad_kopya) {
+                    memcpy(ad_kopya, kaynak_ad, (size_t)kaynak_uz);
+                    ad_kopya[kaynak_uz] = '\0';
+                }
+                TipBilgisi *kaynak = tip_olustur_yapi(tk->arena,
+                                                     ad_kopya, kaynak_uz,
+                                                     NULL, 0);
+                return tip_olustur_yetki(tk->arena, kaynak);
+            }
+            /* delege(y: yetki<R>, izin: tam16) -> yetki<R>
+             * y *tüketilmez*; üretilen alt-yetki linear takip edilir. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 6 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "delege", 6) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "CP004",
+                        "delege tam 2 arguman gerektirir (y, izin)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "delege ilk argumani yetki<R> olmali");
+                    return t_hata(tk);
+                }
+                TipBilgisi *izin_t = tip_belirle(tk, d->veri.cagri.argumanlar[1]);
+                if (izin_t->kategori != TIP_HATA && !tip_tamsayi_mi(izin_t)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "CP004",
+                        "delege izin argumani tamsayi olmali");
+                }
+                /* Yeni yetki uretilir; y tuketilmez (alt-yetki kavrami) */
+                return y_tip;
+            }
+            /* geri_al(y: yetki<R>) -> bos — y tuketilir */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 7 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "geri_al", 7) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "CP004",
+                        "geri_al tam 1 arguman gerektirir (yetki<R>)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "geri_al argumani yetki<R> olmali");
+                    return t_hata(tk);
+                }
+                /* Linear tuketim */
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
             if (d->veri.cagri.hedef &&
@@ -1800,8 +1977,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
                 }
-                /* Linear Types Spec V1: param tekkez ise arg consume */
-                if (param_tip && param_tip->kategori == TIP_TEKKEZ) {
+                /* Linear Types Spec V1 + Capability Spec V1:
+                 * param lineer (tekkez veya yetki) ise arg consume */
+                if (param_tip && tip_lineer_mi(param_tip)) {
                     lineer_tuket_eger_baglamaysa(tk,
                         d->veri.cagri.argumanlar[i]);
                 }
@@ -2549,8 +2727,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             }
             TipBilgisi *son = annot ? annot : deger_tip;
-            /* Linear Types Spec V1: deger lineer baglamadan move ise tuket */
-            if (son && son->kategori == TIP_TEKKEZ) {
+            /* Linear Types Spec V1 + Capability Spec V1:
+             * deger lineer baglamadan move ise tuket (tekkez VEYA yetki). */
+            if (son && tip_lineer_mi(son)) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.degisken.deger);
             }
             Sembol s;
@@ -2612,9 +2791,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     tip_hata(tk, d, "T020",
                              "ver tipi islev donus tipi ile uyumsuz");
                 }
-                /* Linear Types Spec V1: lineer baglama ver ile cagirana
-                 * devredildi → tuket */
-                if (deger && deger->kategori == TIP_TEKKEZ) {
+                /* Linear Types Spec V1 + Capability Spec V1:
+                 * lineer baglama (tekkez VEYA yetki) ver ile cagirana devir → tuket */
+                if (deger && tip_lineer_mi(deger)) {
                     lineer_tuket_eger_baglamaysa(tk, d->veri.ver.deger);
                 }
             } else {
