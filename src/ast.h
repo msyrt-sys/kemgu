@@ -84,6 +84,7 @@ typedef enum {
     DUGUM_TIP_KULLANICI,   /* modul::Tip<T1,T2> */
     DUGUM_TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
     DUGUM_TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
+    DUGUM_TIP_YETKI,       /* yetki<R> — Capability Spec V1 (object-capability) */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -415,6 +416,11 @@ struct Dugum {
         struct {
             Dugum *ic_tip;
         } tip_sabitsure;           /* sabitsüre<T> — Sabitsüre Spec V1 */
+
+        struct {
+            Dugum *kaynak_tipi;    /* R: DUGUM_TIP_BASIT veya DUGUM_TIP_KULLANICI
+                                      (Dosya/Soket/Bellek/Donanim/OTP_Anahtar) */
+        } tip_yetki;               /* yetki<R> — Capability Spec V1 */
 
         struct {
             Dugum *operand;
