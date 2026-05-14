@@ -1,0 +1,249 @@
+// KEMGU Stdlib — Kripto Anahtar (Key Management, Linear + CT)
+// =============================================================
+//
+// Anahtar yönetimi `tekkez<Anahtar>` linear types ile.
+// - Anahtar tek-kullanımlık: kopya yapılamaz
+// - `kullan(a)` tüketir; sonrasında `a`'ya erişim L002 hatası
+// - `imha(a)` zeroize-on-drop semantiği (V2: gerçek bellek temizleme)
+// - HKDF (HMAC-based KDF, RFC 5869) iskeleti
+//
+// Niye linear?
+//   - C: anahtar bellekte uzun süre kalır, attack window
+//   - Rust Zeroize trait: opt-in, programcı ihmal eder
+//   - KEMGU tekkez: compiler GARANTI ileri scope'da kullanılmaz
+//   - L001 (tüketilmedi) hatası — scope sonunda anahtar drop edilmedi ise
+//
+// Bu dosya saf KEMGU. --check ile doğrulanır.
+//
+// Sınırlamalar (V1):
+//   - Bellek zeroize V2 (LLVM intrinsic `llvm.memset.element.unordered.atomic`
+//     ile explicit-zero pass; compiler `imha` çağrısı sonrası emit edecek)
+//   - HKDF tam impl (HMAC chain) `karma.kem` SHA-256 ile birleşik V2'de
+
+// =============================================================================
+// Anahtar Tipleri — Tüm sabitsüre içerikli yapılar
+// =============================================================================
+
+// 256-bit (32 bayt) simetrik anahtar — ChaCha20, AES-256 uyumlu
+yapı SimetrikAnahtar256 {
+    bayt0: sabitsüre<dtam8>;
+    bayt1: sabitsüre<dtam8>;
+    bayt2: sabitsüre<dtam8>;
+    bayt3: sabitsüre<dtam8>;
+    bayt4: sabitsüre<dtam8>;
+    bayt5: sabitsüre<dtam8>;
+    bayt6: sabitsüre<dtam8>;
+    bayt7: sabitsüre<dtam8>;
+    // V1 sınırı: yapıda Dizi<sabitsüre<dtam8>> alanı denedik; çalışıyor.
+    // Burada özet olarak 8 alan; gerçek 32-bayt için Dizi ile gösteriyoruz:
+    govde: Dizi<sabitsüre<dtam8>>;  // 32-byte tam içerik
+}
+
+// 128-bit nonce — IV (ChaCha20-Poly1305: 96-bit; AES: 128-bit)
+yapı Nonce128 {
+    govde: Dizi<sabitsüre<dtam8>>;  // 16 byte
+}
+
+// HKDF Salt — 256-bit
+yapı HKDF_Salt {
+    govde: Dizi<sabitsüre<dtam8>>;  // 32 byte
+}
+
+// =============================================================================
+// Anahtar Yaratma — tekkez sarmalama
+// =============================================================================
+//
+// İçeride sabitsüre yapı; dışarıda tekkez (linear). Çift güvence:
+//   - sabitsüre: yan kanal yok
+//   - tekkez: kopya yok, ileri scope'a sızmaz, scope sonunda L001 garantisi
+
+işlev anahtar_yarat(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar256> {
+    değişken a: SimetrikAnahtar256 = SimetrikAnahtar256 {
+        bayt0: govde[0],
+        bayt1: govde[1],
+        bayt2: govde[2],
+        bayt3: govde[3],
+        bayt4: govde[4],
+        bayt5: govde[5],
+        bayt6: govde[6],
+        bayt7: govde[7],
+        govde: govde
+    };
+    ver tekkez_yarat(a);
+}
+
+// =============================================================================
+// Anahtar İmha — explicit zeroize (V2: derleyici tarafından emit edilen pass)
+// =============================================================================
+//
+// `imha(anahtar)` tek noktadan tüketim — sonrası L002. Compiler V2'de
+// bu çağrı sonrası bellek zeroize'lemek için LLVM intrinsic emit eder.
+
+işlev anahtar_imha(a: tekkez<SimetrikAnahtar256>) -> tam32 {
+    imha(a);
+    ver 0;
+}
+
+// =============================================================================
+// HKDF (RFC 5869) — HMAC-Based Key Derivation Function
+// =============================================================================
+//
+// İki adım:
+//   1. Extract: PRK = HMAC-SHA256(salt, IKM)  — uniformlaştırır
+//   2. Expand: OKM = HMAC-SHA256(PRK, T(1) || info || 0x01)
+//              T(i) = HMAC(PRK, T(i-1) || info || i)
+//
+// V1: API yüzeyi + iskelet; HMAC çağrısı placeholder (karma.kem ile bağlanır V2).
+
+// Extract aşaması — IKM'yi salt ile uniformize et
+işlev hkdf_extract(
+    salt: Dizi<sabitsüre<dtam8>>,
+    salt_uzunluk: tam32,
+    ikm: Dizi<sabitsüre<dtam8>>,
+    ikm_uzunluk: tam32,
+    prk: Dizi<sabitsüre<dtam8>>
+) -> tam32 {
+    // V1 PLACEHOLDER: gerçek HMAC-SHA256 V2'de.
+    // Burada XOR-blend stub — KESINLIKLE üretim için kullanma.
+    değişken sifir: dtam8 = 0;
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        prk[i] = sabitsüre_yarat(sifir);
+        i = i + 1;
+    }
+    // XOR salt ve IKM bayt bayt — gerçekte HMAC-SHA256
+    değişken j: tam32 = 0;
+    iken j < salt_uzunluk {
+        prk[j] = prk[j] ^ salt[j];
+        j = j + 1;
+    }
+    değişken k: tam32 = 0;
+    iken k < ikm_uzunluk {
+        prk[k] = prk[k] ^ ikm[k];
+        k = k + 1;
+    }
+    ver 0;
+}
+
+// Expand aşaması — istenen uzunlukta OKM üret
+işlev hkdf_expand(
+    prk: Dizi<sabitsüre<dtam8>>,
+    info: Dizi<sabitsüre<dtam8>>,
+    info_uzunluk: tam32,
+    okm: Dizi<sabitsüre<dtam8>>,
+    okm_uzunluk: tam32
+) -> tam32 {
+    // V1 PLACEHOLDER: gerçek expand loop HMAC + counter V2.
+    // Burada PRK rotasyonel-genişletme stub.
+    değişken i: tam32 = 0;
+    iken i < okm_uzunluk {
+        // V1: prk[i mod 32] ^ info[i mod info_uzunluk]
+        // Mod yerine bit mask kullanırız (modulo 2^k pattern):
+        değişken pi: tam32 = i & 31;  // i mod 32
+        değişken ii: tam32 = 0;
+        eğer info_uzunluk > 0 {
+            // info_uzunluk PUBLIC, bu yüzden dallanma OK
+            // i mod info_uzunluk — Hailey: i & 15 var, ama info_uzunluk değişken
+            // V1 stub: 16-byte sabit
+            ii = i & 15;
+        }
+        değişken sifir: dtam8 = 0;
+        değişken karistirma: sabitsüre<dtam8> = prk[pi];
+        eğer info_uzunluk > 0 {
+            karistirma = karistirma ^ info[ii];
+        }
+        okm[i] = karistirma;
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// Anahtar Türetme — HKDF üzerinden tek-adim wrapper
+// =============================================================================
+//
+// IKM + salt + info -> derived key.
+// Sonuç tekkez<SimetrikAnahtar256> — kullanıcı sonra `kullan` veya `imha` ile.
+
+işlev anahtar_turet(
+    ikm: Dizi<sabitsüre<dtam8>>,
+    ikm_uzunluk: tam32,
+    salt: Dizi<sabitsüre<dtam8>>,
+    salt_uzunluk: tam32,
+    info: Dizi<sabitsüre<dtam8>>,
+    info_uzunluk: tam32,
+    sonuc_govde: Dizi<sabitsüre<dtam8>>
+) -> tam32 {
+    değişken prk: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
+        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8))
+    ];
+    hkdf_extract(salt, salt_uzunluk, ikm, ikm_uzunluk, prk);
+    hkdf_expand(prk, info, info_uzunluk, sonuc_govde, 32);
+    ver 0;
+}
+
+// =============================================================================
+// Anahtar Karşılaştırma — sabit-süre eşitlik (CRYPTO-1 önlemesi)
+// =============================================================================
+//
+// HMAC tag karşılaştırması veya passwd hash compare için ZORUNLU.
+// `a == b` (byte-byte) yerine OR-toplama + zeroness.
+// Gerçek MAC compare için bu fonksiyon kritik.
+
+işlev anahtar_govdesi_esit(
+    a: Dizi<sabitsüre<dtam8>>,
+    b: Dizi<sabitsüre<dtam8>>,
+    uzunluk: tam32
+) -> sabitsüre<mantıksal> {
+    değişken sifir: dtam8 = 0;
+    değişken acc: sabitsüre<dtam8> = sabitsüre_yarat(sifir);
+    değişken i: tam32 = 0;
+    iken i < uzunluk {
+        acc = acc | (a[i] ^ b[i]);
+        i = i + 1;
+    }
+    ver acc == sabitsüre_yarat(sifir);
+}
+
+// =============================================================================
+// OTP Anahtar (One-Time Pad) — tekkez, kullan-bir-kez
+// =============================================================================
+//
+// Mehmet'in stratejik hedefi: linear types + CT + OTP. Bir kez kullanılır,
+// sonra L002 garantili erişim yok.
+//
+// İskelet — gerçek OTP kullanımı:
+//   1. anahtar_yarat ile rastgele 32-bayt
+//   2. otp_sifrele(metin, anahtar) — `kullan(anahtar)` ile içeride tüketilir
+//   3. anahtar = artık erişilemez (L002)
+
+işlev otp_sifrele(
+    metin: Dizi<sabitsüre<dtam8>>,
+    anahtar_l: tekkez<SimetrikAnahtar256>,
+    sifreli: Dizi<sabitsüre<dtam8>>,
+    n: tam32
+) -> tam32 {
+    // `kullan` ile anahtarı tüket — sonrasında anahtar_l L002
+    değişken anahtar: SimetrikAnahtar256 = kullan(anahtar_l);
+    değişken i: tam32 = 0;
+    iken i < n {
+        sifreli[i] = metin[i] ^ anahtar.govde[i];
+        i = i + 1;
+    }
+    ver 0;
+}

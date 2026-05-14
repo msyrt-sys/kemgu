@@ -1,0 +1,231 @@
+// KEMGU Stdlib — Kripto Temel (Constant-Time Primitives)
+// =========================================================
+//
+// Yan kanal saldırılarına karşı sabit-süre garantili kripto temel taşları.
+// Sabitsüre Spec V1 (belgeler/KEMGU_Sabitsure_Spec_V1.md) çerçevesinde
+// derleme zamanı kontrolü; bu modül sabit_süre_eşit / sabit_süre_seç /
+// sabit_süre_xor üçlüsünü sağlar.
+//
+// Tasarım kararları:
+//   - Sabitsüre qualifier'ı agresif kullan — kripto'nun mantığı bu
+//   - LLVM speculation barrier (lfence) sabitsüre sınırlarında otomatik
+//   - sabit_süre_seç bitmask tabanlı (LLVM `select` V2'de built-in)
+//   - sabit_süre_eşit XOR-toplama + zeroness check (OR-reduction)
+//   - Tüm operasyonlar branchless (CT001'i programcı ihlal etmemeli)
+//
+// Bu dosya saf KEMGU. Hiçbir runtime/FFI bağımlılığı yok.
+// Tek dosya derleme (`--check`) ile doğrulanır.
+//
+// ---------------------------------------------------------
+// Niye bu yol? (kripto-yazılım deneyiminden gelen kararlar)
+//
+// 1. OpenSSL CRYPTO_memcmp: C'de elden, tipte zorlama yok. KEMGU'da
+//    sabitsüre<dtam8> parametresi çağrı yerinde T -> sabitsüre<T>
+//    upgrade'i derleme zamanı yakalar.
+// 2. Go crypto/subtle.ConstantTimeCompare: opt-in. "Forgot to use"
+//    CVE-2023-39532 (etcd) gibi gerçek vakalar. KEMGU'da tip sistemi
+//    reddeder, opt-in değil mandatory.
+// 3. Rust subtle::ConstantTimeEq: trait olarak elden. `if secret == ...`
+//    sessizce compile olur. KEMGU CT001 ile reddeder.
+// 4. Bernstein 2005 AES T-table cache-timing — `s_box[k^p]` patern.
+//    KEMGU CT002 indeks yasağı bu sınıfı engeller.
+
+// =============================================================================
+// 1. sabit_süre_eşit — Constant-Time Bytewise Equality
+// =============================================================================
+//
+// XOR-toplama yaklaşımı: tüm a[i] ^ b[i] OR-toplanır, sonuç 0 ise eşit.
+// OpenSSL CRYPTO_memcmp ve libsodium sodium_memcmp ile eşdeğer.
+//
+// Dönüş tipi sabitsüre<mantıksal> — gizli karşılaştırma sonucu da gizli.
+// Dallanma için `ifşa(...)` zorunlu (CT001).
+
+işlev sabit_süre_eşit_blok(
+    a: Dizi<sabitsüre<dtam8>>,
+    b: Dizi<sabitsüre<dtam8>>,
+    uzunluk: tam32
+) -> sabitsüre<mantıksal> {
+    // XOR-toplama: tüm diff'leri OR-le, sonuç 0 ise eşit
+    değişken sifir: dtam8 = 0;
+    değişken acc: sabitsüre<dtam8> = sabitsüre_yarat(sifir);
+    değişken i: tam32 = 0;
+    iken i < uzunluk {
+        // a[i] ^ b[i] — eşitse 0; OR ile birikim
+        acc = acc | (a[i] ^ b[i]);
+        i = i + 1;
+    }
+    // acc 0 ise eşit. Sabitsüre dogrudan == ile karşılaştırılır;
+    // dönen sabitsüre<mantıksal> — programcı ifşa() ile dallanabilir.
+    değişken bir: dtam8 = 0;
+    ver acc == sabitsüre_yarat(bir);
+}
+
+// Tek bayt karşılaştırma — built-in == sabitsüre'da zaten CT garantili.
+işlev sabit_süre_eşit_bayt(a: sabitsüre<dtam8>, b: sabitsüre<dtam8>) -> sabitsüre<mantıksal> {
+    ver a == b;
+}
+
+// 32-bit kelime karşılaştırma.
+işlev sabit_süre_eşit_u32(a: sabitsüre<dtam32>, b: sabitsüre<dtam32>) -> sabitsüre<mantıksal> {
+    ver a == b;
+}
+
+// 64-bit kelime karşılaştırma.
+işlev sabit_süre_eşit_u64(a: sabitsüre<dtam64>, b: sabitsüre<dtam64>) -> sabitsüre<mantıksal> {
+    ver a == b;
+}
+
+// =============================================================================
+// 2. sabit_süre_seç — Branchless Selection (mask-based)
+// =============================================================================
+//
+// LLVM seviyesinde `select` opcode ile aslında native bir tek instruction;
+// ama KEMGU IR'da explicit bitmask kullanıyoruz. Maske 0 veya all-ones.
+// V2'de sabitsüre_seç built-in olacak ve mask kullanıcı tarafından
+// hesaplanmayacak.
+//
+// Spec CT.9'da `sabitsüre_seç` ileride built-in olarak işaretli.
+// Bu sürüm mask-tabanlı; arayüz olarak ileri-uyumlu şekilde
+// koruyoruz: ad aynı, parametre form'u aynı (maske).
+
+// u8 sürümü — internal NOT hesabı mümkün
+işlev sabit_süre_seç_u8(
+    maske: sabitsüre<dtam8>,
+    t: sabitsüre<dtam8>,
+    f: sabitsüre<dtam8>
+) -> sabitsüre<dtam8> {
+    // maske: 0xFF (true) veya 0x00 (false)
+    değişken hepsi: dtam8 = 255;
+    değişken not_mask: sabitsüre<dtam8> = maske ^ sabitsüre_yarat(hepsi);
+    ver (t & maske) | (f & not_mask);
+}
+
+işlev sabit_süre_seç_u32(
+    maske: sabitsüre<dtam32>,
+    t: sabitsüre<dtam32>,
+    f: sabitsüre<dtam32>
+) -> sabitsüre<dtam32> {
+    // maske: 0xFFFFFFFF (true) veya 0x00000000 (false)
+    değişken hepsi: dtam32 = 4294967295;
+    değişken not_mask: sabitsüre<dtam32> = maske ^ sabitsüre_yarat(hepsi);
+    ver (t & maske) | (f & not_mask);
+}
+
+işlev sabit_süre_seç_u64(
+    maske: sabitsüre<dtam64>,
+    t: sabitsüre<dtam64>,
+    f: sabitsüre<dtam64>
+) -> sabitsüre<dtam64> {
+    // maske: 0xFFFFFFFFFFFFFFFF veya 0
+    değişken hepsi: dtam64 = 18446744073709551615;
+    değişken not_mask: sabitsüre<dtam64> = maske ^ sabitsüre_yarat(hepsi);
+    ver (t & maske) | (f & not_mask);
+}
+
+// =============================================================================
+// 3. sabit_süre_xor — XOR (CT-safe; zaten ^ ile aynıdır)
+// =============================================================================
+//
+// API tutarlılığı için — kullanıcılar kripto kodunda `sabit_süre_xor`
+// görmeyi bekler. Built-in ^ ile eşdeğer ama isim semantik değeri taşır.
+
+işlev sabit_süre_xor_u8(a: sabitsüre<dtam8>, b: sabitsüre<dtam8>) -> sabitsüre<dtam8> {
+    ver a ^ b;
+}
+
+işlev sabit_süre_xor_u32(a: sabitsüre<dtam32>, b: sabitsüre<dtam32>) -> sabitsüre<dtam32> {
+    ver a ^ b;
+}
+
+işlev sabit_süre_xor_u64(a: sabitsüre<dtam64>, b: sabitsüre<dtam64>) -> sabitsüre<dtam64> {
+    ver a ^ b;
+}
+
+// Blok XOR — sonuc[i] = a[i] ^ b[i] for i in 0..n
+// CTR/CFB modlarinin temel operasyonu; ChaCha20 keystream XOR'u burada.
+işlev sabit_süre_xor_blok(
+    a: Dizi<sabitsüre<dtam8>>,
+    b: Dizi<sabitsüre<dtam8>>,
+    sonuc: Dizi<sabitsüre<dtam8>>,
+    n: tam32
+) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        sonuc[i] = a[i] ^ b[i];
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// 4. sabit_süre_maske_uret — mantıksal sonuçtan dtam* maskeye dönüşüm
+// =============================================================================
+//
+// sabitsüre<mantıksal> -> sabitsüre<dtam*> mask dönüşümü manuel.
+// Pattern: `m olarak sabitsüre<dtam*>` destekleniyor mu? E002 verir
+// (mantıksal sayısal değil). Bu yüzden bit hile kullanıyoruz:
+//
+//   maske = (a ^ b);              // 0 eşitse
+//   maske = maske | (maske >> 4); // OR-reduce
+//   ...                            // tam scan
+//   sonuç = -(maske & 1)          // 0 eşitse, all-ones farkliysa
+//
+// Aşağıdaki yardımcılar mask'i üretir: 0xFF (farklı) veya 0 (eşit).
+// `sabit_süre_seç_*` ile direkt birleştirilebilir.
+
+işlev sabit_süre_diff_mask_u8(a: sabitsüre<dtam8>, b: sabitsüre<dtam8>) -> sabitsüre<dtam8> {
+    // 0xFF if different, 0 if equal
+    değişken d: sabitsüre<dtam8> = a ^ b;
+    // OR-reduce to LSB
+    d = d | (d >> 4);
+    d = d | (d >> 2);
+    d = d | (d >> 1);
+    değişken sifir: dtam8 = 0;
+    değişken bir: dtam8 = 1;
+    // (d & 1): 1 if diff, 0 if equal — subtract from 0 wraps to 0xFF
+    ver sabitsüre_yarat(sifir) - (d & sabitsüre_yarat(bir));
+}
+
+işlev sabit_süre_diff_mask_u32(a: sabitsüre<dtam32>, b: sabitsüre<dtam32>) -> sabitsüre<dtam32> {
+    // 0xFFFFFFFF if different, 0 if equal
+    değişken d: sabitsüre<dtam32> = a ^ b;
+    d = d | (d >> 16);
+    d = d | (d >> 8);
+    d = d | (d >> 4);
+    d = d | (d >> 2);
+    d = d | (d >> 1);
+    değişken sifir: dtam32 = 0;
+    değişken bir: dtam32 = 1;
+    ver sabitsüre_yarat(sifir) - (d & sabitsüre_yarat(bir));
+}
+
+// =============================================================================
+// 5. Yardımcı: ROTR/ROTL — döngüsel kaydırma (SHA, ChaCha gibi yapılar için)
+// =============================================================================
+//
+// Bit rotation — döngüsel kaydırma. SHA256 ve ChaCha20 quarter-round
+// için temel ilkel.  V1: shift miktarı public sabit zorunlu (CT008).
+
+işlev rotr_u32(x: sabitsüre<dtam32>, n: tam32) -> sabitsüre<dtam32> {
+    // (x >> n) | (x << (32 - n))
+    değişken sag: sabitsüre<dtam32> = x >> n;
+    değişken sol: sabitsüre<dtam32> = x << (32 - n);
+    ver sag | sol;
+}
+
+işlev rotl_u32(x: sabitsüre<dtam32>, n: tam32) -> sabitsüre<dtam32> {
+    değişken sol: sabitsüre<dtam32> = x << n;
+    değişken sag: sabitsüre<dtam32> = x >> (32 - n);
+    ver sol | sag;
+}
+
+işlev rotr_u64(x: sabitsüre<dtam64>, n: tam32) -> sabitsüre<dtam64> {
+    değişken sag: sabitsüre<dtam64> = x >> n;
+    değişken sol: sabitsüre<dtam64> = x << (64 - n);
+    ver sag | sol;
+}
+
+// =============================================================================
+// Sürüm bilgisi
+// =============================================================================
+sabit KRIPTO_VERSIYON: tam32 = 1;

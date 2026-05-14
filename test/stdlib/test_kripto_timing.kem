@@ -1,0 +1,232 @@
+// KEMGU Stdlib Testi — Kripto Sabitsüre (CT) Compile-Time Garantileri
+// =====================================================================
+//
+// Bu test dosyası `--check` sırasında sabitsüre disiplininin POZİTİF
+// kullanımını doğrular. CT-correct kod desenlerinin temiz derlendiğini
+// gösterir; CT001/CT002/CT003 negatif testleri test/test_sabitsure.c
+// içindedir (compile-fail test'leri C harness gerektirir).
+//
+// Burada:
+//   - Tüm gizli operasyonlar sabitsüre etiketli mi?
+//   - Branch-free idiomlar (mask, XOR-reduce) doğru tip taşır mı?
+//   - Generic CT functions (sabit_süre_sec_*) doğru taint yayılır mı?
+//   - Linear + CT kombinasyonu (tekkez<SimetrikAnahtar256>) çalışır mı?
+
+// ============================================================================
+// T1: Sabitsüre üzerinde bitwise op'lar — tüm operatörler taint yayar
+// ============================================================================
+
+işlev test_t1_bitwise_and() -> sabitsüre<dtam32> {
+    değişken a: sabitsüre<dtam32> = sabitsüre_yarat((0xFFFF0000 olarak dtam32));
+    değişken b: sabitsüre<dtam32> = sabitsüre_yarat((0x12345678 olarak dtam32));
+    ver a & b;  // sabitsüre<dtam32> bekleniyor
+}
+
+işlev test_t1_bitwise_or() -> sabitsüre<dtam32> {
+    değişken a: sabitsüre<dtam32> = sabitsüre_yarat((0x00FF00FF olarak dtam32));
+    değişken b: sabitsüre<dtam32> = sabitsüre_yarat((0xFF00FF00 olarak dtam32));
+    ver a | b;
+}
+
+işlev test_t1_bitwise_xor() -> sabitsüre<dtam32> {
+    değişken a: sabitsüre<dtam32> = sabitsüre_yarat((0xAAAAAAAA olarak dtam32));
+    değişken b: sabitsüre<dtam32> = sabitsüre_yarat((0x55555555 olarak dtam32));
+    ver a ^ b;
+}
+
+// ============================================================================
+// T2: Sabit kaydırma miktarı (CT008'i karşılar) — public shift OK
+// ============================================================================
+
+işlev test_t2_shift_left_sabit() -> sabitsüre<dtam32> {
+    değişken x: sabitsüre<dtam32> = sabitsüre_yarat((0x12345678 olarak dtam32));
+    ver x << 4;  // 4 sabit/public, CT008 ihlali değil
+}
+
+işlev test_t2_shift_right_sabit() -> sabitsüre<dtam32> {
+    değişken x: sabitsüre<dtam32> = sabitsüre_yarat((0x80000000 olarak dtam32));
+    ver x >> 16;
+}
+
+// ============================================================================
+// T3: sabit_süre_seç — mask-based branchless multiplexer
+// ============================================================================
+
+işlev test_t3_sec_true_branch() -> sabitsüre<dtam32> {
+    değişken hepsi: dtam32 = 4294967295;
+    ver sabit_süre_seç_u32(
+        sabitsüre_yarat(hepsi),
+        sabitsüre_yarat((100 olarak dtam32)),
+        sabitsüre_yarat((200 olarak dtam32))
+    );
+}
+
+işlev test_t3_sec_false_branch() -> sabitsüre<dtam32> {
+    değişken sifir: dtam32 = 0;
+    ver sabit_süre_seç_u32(
+        sabitsüre_yarat(sifir),
+        sabitsüre_yarat((100 olarak dtam32)),
+        sabitsüre_yarat((200 olarak dtam32))
+    );
+}
+
+// ============================================================================
+// T4: sabit_süre_eşit dönüş tipi sabitsüre<mantıksal>
+// ============================================================================
+
+işlev test_t4_esit_donus_sabitsure() -> sabitsüre<mantıksal> {
+    değişken a: sabitsüre<dtam8> = sabitsüre_yarat((10 olarak dtam8));
+    değişken b: sabitsüre<dtam8> = sabitsüre_yarat((10 olarak dtam8));
+    ver sabit_süre_eşit_bayt(a, b);
+}
+
+işlev test_t4_esit_blok_donus_sabitsure() -> sabitsüre<mantıksal> {
+    değişken s: dtam8 = 0;
+    değişken a: Dizi<sabitsüre<dtam8>> = [sabitsüre_yarat(s), sabitsüre_yarat(s)];
+    değişken b: Dizi<sabitsüre<dtam8>> = [sabitsüre_yarat(s), sabitsüre_yarat(s)];
+    ver sabit_süre_eşit_blok(a, b, 2);
+}
+
+// ============================================================================
+// T5: Linear + CT kombinasyonu — tekkez<SimetrikAnahtar256>
+// ============================================================================
+//
+// Yapı içerikleri sabitsüre; dış sarmalayıcı tekkez. İki disiplin birlikte:
+//   - Yan kanal yok (sabitsüre alan)
+//   - Kopya yok, sızdırma yok (tekkez tip)
+
+işlev test_t5_linear_ct_anahtar() -> tam32 {
+    değişken s: dtam8 = 0xAA;
+    değişken govde: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+    ];
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    // Yalnız tek-kullanım: imha veya kullan
+    ver anahtar_imha(a);
+}
+
+// ============================================================================
+// T6: Iç içe sabitsüre op'ları (taint yayılım çoklu seviye)
+// ============================================================================
+
+işlev test_t6_ic_ice_op() -> sabitsüre<dtam32> {
+    değişken a: sabitsüre<dtam32> = sabitsüre_yarat((1 olarak dtam32));
+    değişken b: sabitsüre<dtam32> = sabitsüre_yarat((2 olarak dtam32));
+    değişken c: sabitsüre<dtam32> = sabitsüre_yarat((3 olarak dtam32));
+    // Hepsi sabitsüre; her ara değer de sabitsüre — tip kontrol bunu zincirler
+    ver ((a + b) ^ c) & sabitsüre_yarat((0xFF olarak dtam32));
+}
+
+// ============================================================================
+// T7: Public + sabitsüre = sabitsüre (upgrade safe)
+// ============================================================================
+
+işlev test_t7_upgrade_public_secret() -> sabitsüre<dtam32> {
+    değişken pub: dtam32 = 100;
+    değişken sec: sabitsüre<dtam32> = sabitsüre_yarat((50 olarak dtam32));
+    ver sec + pub;  // sabitsüre, public upgrade güvenli
+}
+
+işlev test_t7_upgrade_xor() -> sabitsüre<dtam32> {
+    değişken pub: dtam32 = 0x12345678;
+    değişken sec: sabitsüre<dtam32> = sabitsüre_yarat((0xDEADBEEF olarak dtam32));
+    ver pub ^ sec;
+}
+
+// ============================================================================
+// T8: Sabitsüre döngü içinde — döngü değişkeni public, içerik sabitsüre
+// ============================================================================
+
+işlev test_t8_dongu_icinde_sabitsure() -> sabitsüre<dtam32> {
+    değişken acc: sabitsüre<dtam32> = sabitsüre_yarat((0 olarak dtam32));
+    değişken sifir: dtam32 = 0;
+    değişken arr: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat((1 olarak dtam32)),
+        sabitsüre_yarat((2 olarak dtam32)),
+        sabitsüre_yarat((3 olarak dtam32)),
+        sabitsüre_yarat((4 olarak dtam32))
+    ];
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        // i PUBLIC — döngü sayacı, arr[i] CT002 ihlali değil
+        acc = acc + arr[i];
+        i = i + 1;
+    }
+    ver acc;
+}
+
+// ============================================================================
+// T9: ROTR — public shift miktarı + sabitsüre operand
+// ============================================================================
+
+işlev test_t9_rotr_sabit_amount() -> sabitsüre<dtam32> {
+    değişken x: sabitsüre<dtam32> = sabitsüre_yarat((0x12345678 olarak dtam32));
+    ver rotr_u32(x, 16);  // 16 PUBLIC sabit
+}
+
+// ============================================================================
+// T10: Tüm CT primitif kombinasyonu — gerçek kripto akış
+// ============================================================================
+
+işlev test_t10_birlesik_ct_akis() -> sabitsüre<mantıksal> {
+    // Senaryo: HMAC-tag karşılaştırma
+    değişken s: dtam8 = 0;
+    değişken hesaplanan: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+    ];
+    değişken beklenen: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+    ];
+    // Tag eşitlik — CT-safe karşılaştırma
+    ver sabit_süre_eşit_blok(hesaplanan, beklenen, 16);
+}
+
+// ============================================================================
+// T11: Diff mask + sabit_süre_seç birleşimi (cmove pattern)
+// ============================================================================
+//
+// `if a == b then t else f` desenini CT olarak — mask + select.
+
+işlev test_t11_cmove_pattern() -> sabitsüre<dtam32> {
+    değişken a: sabitsüre<dtam32> = sabitsüre_yarat((42 olarak dtam32));
+    değişken b: sabitsüre<dtam32> = sabitsüre_yarat((42 olarak dtam32));
+    değişken t: sabitsüre<dtam32> = sabitsüre_yarat((100 olarak dtam32));
+    değişken f: sabitsüre<dtam32> = sabitsüre_yarat((200 olarak dtam32));
+    // a == b? Diff mask kullan
+    değişken diff_mask: sabitsüre<dtam32> = sabit_süre_diff_mask_u32(a, b);
+    // diff_mask: 0 if eşit, 0xFFFFFFFF if farklı
+    // Eşitse t istiyoruz: invert mask
+    değişken hepsi: dtam32 = 4294967295;
+    değişken esit_mask: sabitsüre<dtam32> = diff_mask ^ sabitsüre_yarat(hepsi);
+    ver sabit_süre_seç_u32(esit_mask, t, f);
+}
+
+// ============================================================================
+// T12: Generic CT — sabit_süre_seç çağrı zinciri (generic instantiation)
+// ============================================================================
+
+işlev test_t12_generic_chain_u8() -> sabitsüre<dtam8> {
+    değişken m: dtam8 = 255;
+    ver sabit_süre_seç_u8(
+        sabitsüre_yarat(m),
+        sabit_süre_seç_u8(
+            sabitsüre_yarat(m),
+            sabitsüre_yarat((10 olarak dtam8)),
+            sabitsüre_yarat((20 olarak dtam8))
+        ),
+        sabitsüre_yarat((30 olarak dtam8))
+    );
+}
