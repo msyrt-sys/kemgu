@@ -324,6 +324,12 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             ast_yazdir_indent(d->veri.tip_yetki.kaynak_tipi, c, derinlik + 1);
             break;
 
+        case DUGUM_TIP_VEKTOR:
+            konum_yaz(c, d);
+            fprintf(c, " lane=%d\n", d->veri.tip_vektor.lane_sayi);
+            ast_yazdir_indent(d->veri.tip_vektor.eleman_tip, c, derinlik + 1);
+            break;
+
         case DUGUM_KULLAN_IFADE:
             konum_yaz(c, d);
             fputc('\n', c);

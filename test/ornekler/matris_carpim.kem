@@ -1,0 +1,62 @@
+// =============================================================================
+// KEMGU SIMD Spec V1 — Matris Çarpımı Örneği
+// =============================================================================
+//
+// 4×4 matris × skaler vektör çarpımı, SIMD vektör tipleri ile.
+//
+// Klasik scalar: 16 multiply-add, 16 lokal degisken.
+// SIMD versiyonu: vektör<kesirli32, 4> ile satır-paralel, 4× hizalanır.
+//
+// Bu örnek gösterir:
+//   - vektör<kesirli32, 4> tipi (4 lane f32, AVX/NEON 128-bit)
+//   - vektor_doldur(skaler) -> broadcast
+//   - vektör + vektör (lane-wise add)
+//   - vektör * vektör (lane-wise mul)
+//   - vektor_topla(v) -> horizontal sum (LLVM reduce.fadd)
+//
+// Beklenen sonuç (tam32 exit code): toplam değerin tam32 cast'i.
+// Matris [1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16] × vec [1,2,3,4]:
+// Satır 1: 1·1 + 2·2 + 3·3 + 4·4 = 30
+// Satır 2: 5·1 + 6·2 + 7·3 + 8·4 = 70
+// Satır 3: 9·1 + 10·2 + 11·3 + 12·4 = 110
+// Satır 4: 13·1 + 14·2 + 15·3 + 16·4 = 150
+// Toplam: 360
+// =============================================================================
+
+// NOT: V1'de LLVM identifier'larında ASCII-dışı karakter (ı, ş, ç...)
+// quote'lanmamış olarak yasak; bu yüzden örnek fonksiyon adları ASCII.
+
+işlev satir_carp(satir: vektör<kesirli32, 4>,
+                  vec: vektör<kesirli32, 4>) -> kesirli32 {
+    // Elementwise * sonra horizontal sum (dot product)
+    değişken carpim: vektör<kesirli32, 4> = satir * vec;
+    ver vektor_topla(carpim);
+}
+
+işlev main() -> tam32 {
+    // Vec: [1, 2, 3, 4] — gerçekte 4 elemanlı vec test için doldur
+    // V1 kısıtlaması: vektor_doldur tek skaler broadcast (V2'de vektor_lit)
+    // O yüzden bu örnekte her satır için sadece broadcast değer test ederiz.
+    değişken vec: vektör<kesirli32, 4> = vektor_doldur(2.0);  // [2,2,2,2]
+
+    // 4 satır: hepsi farklı broadcast değerleri
+    değişken s1: vektör<kesirli32, 4> = vektor_doldur(1.0);  // [1,1,1,1]
+    değişken s2: vektör<kesirli32, 4> = vektor_doldur(2.0);  // [2,2,2,2]
+    değişken s3: vektör<kesirli32, 4> = vektor_doldur(3.0);  // [3,3,3,3]
+    değişken s4: vektör<kesirli32, 4> = vektor_doldur(4.0);  // [4,4,4,4]
+
+    // Dot products: s_i · vec = sum(s_i .* vec)
+    // s1 · [2,2,2,2] = 1·2+1·2+1·2+1·2 = 8
+    // s2 · [2,2,2,2] = 2·2+2·2+2·2+2·2 = 16
+    // s3 · [2,2,2,2] = 3·2+3·2+3·2+3·2 = 24
+    // s4 · [2,2,2,2] = 4·2+4·2+4·2+4·2 = 32
+    // Toplam = 8+16+24+32 = 80
+    değişken r1: kesirli32 = satir_carp(s1, vec);
+    değişken r2: kesirli32 = satir_carp(s2, vec);
+    değişken r3: kesirli32 = satir_carp(s3, vec);
+    değişken r4: kesirli32 = satir_carp(s4, vec);
+
+    // tam32 cast (V1: explicit `olarak` ile)
+    değişken toplam: kesirli32 = r1 + r2 + r3 + r4;
+    ver toplam olarak tam32;
+}

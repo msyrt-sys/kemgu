@@ -41,6 +41,7 @@ typedef enum {
     TOK_YETKI,          /* yetki       — Capability Spec V1 (object-capability) */
     TOK_DELEGE,         /* delege      — Capability Spec V1 (sub-capability) */
     TOK_GERI_AL,        /* geri_al     — Capability Spec V1 (revoke) */
+    TOK_VEKTOR,         /* vektör      — SIMD Spec V1 (vector<T, N>) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */
