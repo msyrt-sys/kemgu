@@ -432,6 +432,7 @@ static int param_tip_generic_iceriyor_mu(const TipBilgisi *t) {
             return param_tip_generic_iceriyor_mu(t->veri.sonuc.deger) ||
                    param_tip_generic_iceriyor_mu(t->veri.sonuc.hata);
         case TIP_TEKKEZ:   return param_tip_generic_iceriyor_mu(t->veri.tekkez.ic);
+        case TIP_VEKTOR:   return param_tip_generic_iceriyor_mu(t->veri.vektor.eleman);
         case TIP_ISLEV: {
             for (int i = 0; i < t->veri.islev.param_sayi; i++) {
                 if (param_tip_generic_iceriyor_mu(t->veri.islev.parametreler[i]))
@@ -499,6 +500,12 @@ static TipBilgisi *tip_subst_baglamalar(TipKontrol *tk, TipBilgisi *t,
             if (ni == t->veri.tekkez.ic) return t;
             return tip_olustur_tekkez(tk->arena, ni);
         }
+        case TIP_VEKTOR: {
+            TipBilgisi *ne = tip_subst_baglamalar(tk,
+                t->veri.vektor.eleman, b);
+            if (ne == t->veri.vektor.eleman) return t;
+            return tip_olustur_vektor(tk->arena, ne, t->veri.vektor.lane_sayi);
+        }
         case TIP_ISLEV: {
             int n = t->veri.islev.param_sayi;
             int degisen = 0;
@@ -558,6 +565,11 @@ static void tip_unify(TipKontrol *tk,
         case TIP_TEKKEZ:
             tip_unify(tk, param->veri.tekkez.ic,
                           arg->veri.tekkez.ic, bas);
+            break;
+        case TIP_VEKTOR:
+            if (param->veri.vektor.lane_sayi != arg->veri.vektor.lane_sayi) break;
+            tip_unify(tk, param->veri.vektor.eleman,
+                          arg->veri.vektor.eleman, bas);
             break;
         case TIP_ISLEV: {
             if (param->veri.islev.param_sayi != arg->veri.islev.param_sayi) break;
@@ -855,6 +867,28 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             return tip_olustur_sabitsure(tk->arena, ic);
         }
 
+        case DUGUM_TIP_VEKTOR: {
+            /* SIMD Spec V1: vektör<T, N>
+             *   V001: T vektör-yetenekli olmalı (tam/dtam/kesirli/mantıksal)
+             *   V002: N {2,4,8,16,32,64} setinde olmalı */
+            TipBilgisi *eleman = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_vektor.eleman_tip);
+            int lane = tip_d->veri.tip_vektor.lane_sayi;
+            if (eleman->kategori == TIP_HATA) return t_hata(tk);
+            if (!tip_vektor_eleman_yetenekli_mi(eleman)) {
+                tip_hata(tk, tip_d, "V001",
+                    "vektor<T, N> tipinde T vektor-yetenekli skaler olmali "
+                    "(tam/dtam/kesirli/mantiksal)");
+                return t_hata(tk);
+            }
+            if (!tip_vektor_lane_gecerli_mi(lane)) {
+                tip_hata(tk, tip_d, "V002",
+                    "vektor<T, N> tipinde N {2,4,8,16,32,64} setinde olmali");
+                return t_hata(tk);
+            }
+            return tip_olustur_vektor(tk->arena, eleman, lane);
+        }
+
         case DUGUM_TIP_SONUC: {
             TipBilgisi *deger = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_sonuc.deger_tip);
@@ -1004,8 +1038,51 @@ static int ct003_leak_kontrol(TipKontrol *tk, const Dugum *d,
 }
 
 /* Yardimci: ikili sayisal op (sol == sag, ikisi de sayisal) */
+/* SIMD Spec V1: ikili operatör vektör üzerinde mi?
+ * Sol veya sağ vektör ise vektör semantikleriyle çöz. */
+static TipBilgisi *kontrol_ikili_vektor(TipKontrol *tk, const Dugum *d,
+                                         TipBilgisi *sol, TipBilgisi *sag) {
+    int sol_v = tip_vektor_mu(sol);
+    int sag_v = tip_vektor_mu(sag);
+    /* V004: skaler + vektör (V1'de yasak — explicit vektör_doldur gerek) */
+    if (sol_v != sag_v) {
+        tip_hata(tk, d, "V004",
+            "vektor ile skaler karma operasyon V1'de yasak — "
+            "vektor_doldur(s) ile explicit broadcast kullan");
+        return t_hata(tk);
+    }
+    /* V003: lane sayıları eşit olmalı */
+    if (sol->veri.vektor.lane_sayi != sag->veri.vektor.lane_sayi) {
+        tip_hata(tk, d, "V003",
+            "vektor operandlarinin lane sayilari (N) esit olmali");
+        return t_hata(tk);
+    }
+    /* V003: element tipleri eşit olmalı */
+    if (!tip_esit(sol->veri.vektor.eleman, sag->veri.vektor.eleman)) {
+        tip_hata(tk, d, "V003",
+            "vektor operandlarinin element tipleri (T) esit olmali");
+        return t_hata(tk);
+    }
+    /* V005: kesirli vektörde % yasak */
+    Operator op = d->veri.ikili.op;
+    int eleman_kesirli =
+        sol->veri.vektor.eleman->kategori == TIP_KESIRLI32 ||
+        sol->veri.vektor.eleman->kategori == TIP_KESIRLI64;
+    if (op == OP_MOD && eleman_kesirli) {
+        tip_hata(tk, d, "V005",
+            "kesirli vektor uzerinde % yasak (FP modulo undefined)");
+        return t_hata(tk);
+    }
+    /* Eşit lane + eşit element → aynı tip dönsün */
+    return sol;
+}
+
 static TipBilgisi *kontrol_ikili_sayisal(TipKontrol *tk, const Dugum *d,
                                          TipBilgisi *sol, TipBilgisi *sag) {
+    /* SIMD Spec V1: önce vektör hattı */
+    if (tip_vektor_mu(sol) || tip_vektor_mu(sag)) {
+        return kontrol_ikili_vektor(tk, d, sol, sag);
+    }
     if (!tip_sayisal_mi(sol)) {
         tip_hata(tk, d, "T003", "ikili operatorun sol tarafi sayisal degil");
         return t_hata(tk);
@@ -1332,6 +1409,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return kontrol_ikili_mantiksal(tk, d, sol, sag);
 
                 case OP_BIT_VE: case OP_BIT_VEYA: case OP_BIT_OZVEYA: {
+                    /* SIMD Spec V1: vektör tamsayı tiplerinde bit op izinli;
+                     * kesirli vektörde V006 hata. */
+                    if (tip_vektor_mu(sol) || tip_vektor_mu(sag)) {
+                        if (tip_vektor_mu(sol) && tip_vektor_mu(sag)) {
+                            /* Kesirli vektörde bit op yasak (V006) */
+                            int kesirli_elem =
+                                sol->veri.vektor.eleman->kategori == TIP_KESIRLI32 ||
+                                sol->veri.vektor.eleman->kategori == TIP_KESIRLI64;
+                            if (kesirli_elem) {
+                                tip_hata(tk, d, "V006",
+                                    "kesirli vektor uzerinde bit operatoru yasak");
+                                return t_hata(tk);
+                            }
+                        }
+                        return kontrol_ikili_vektor(tk, d, sol, sag);
+                    }
                     /* Bit AND/OR/XOR: her iki operand tamsayi, iç tipler eşit.
                      * Sabitsüre Spec V1: taint yayılım (sabitsüre<T> ^ T → sabitsüre<T>) */
                     if (!tip_tamsayi_mi(sol)) {
@@ -1671,6 +1764,226 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return t_hata(tk);
                 }
                 return tip_olustur_sabitsure(tk->arena, ic);
+            }
+            /* === SIMD Spec V1 intrinsicleri ===
+             * Bunların hepsi generic (vektör<T, N>); built-in tablo yerine
+             * burada özel-cased. Argümanın tipinden T ve N çıkarılır. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const char *fn_ad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int fn_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                /* vektor_doldur(s: T) — V1: tek arg, dönüş <unknown,?>; bidirectional
+                 * context'ten gelen beklenen tip vektor<T,N> ise ona uy.
+                 * Beklenen yoksa hata. */
+                if (fn_uz == 14 && memcmp(fn_ad, "vektor_doldur", 13) == 0 &&
+                    fn_ad[13] == '\0') {
+                    /* Bu yol kullanılmıyor — string null-terminate edilmemiş */
+                }
+                /* vektor_doldur(s: T) — context'ten N öğrenir (bidirectional) */
+                if (fn_uz == 13 && memcmp(fn_ad, "vektor_doldur", 13) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "V020",
+                            "vektor_doldur tam olarak 1 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *arg_t = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (arg_t->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_eleman_yetenekli_mi(arg_t)) {
+                        tip_hata(tk, d, "V001",
+                            "vektor_doldur argumani vektor-yetenekli skaler olmali");
+                        return t_hata(tk);
+                    }
+                    /* N bilinmiyor — beklenen tip vektor ise N'i kullan */
+                    /* Default N=4 (V1 — bidirectional inference kullanılmadan) */
+                    return tip_olustur_vektor(tk->arena, arg_t, 4);
+                }
+                /* vektor_eleman(v, i) -> T */
+                if (fn_uz == 13 && memcmp(fn_ad, "vektor_eleman", 13) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "V020",
+                            "vektor_eleman(v, i) 2 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *it = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[1]);
+                    if (vt->kategori == TIP_HATA || it->kategori == TIP_HATA)
+                        return t_hata(tk);
+                    if (!tip_vektor_mu(vt)) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "V020",
+                            "vektor_eleman ilk arguman vektor olmali");
+                        return t_hata(tk);
+                    }
+                    if (!tip_tamsayi_mi(it)) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "V020",
+                            "vektor_eleman ikinci arguman tamsayi olmali");
+                        return t_hata(tk);
+                    }
+                    return vt->veri.vektor.eleman;
+                }
+                /* vektor_topla(v) -> T (sum reduction) */
+                if (fn_uz == 12 && memcmp(fn_ad, "vektor_topla", 12) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_topla 1 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (vt->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_mu(vt)) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_topla operandi vektor olmali");
+                        return t_hata(tk);
+                    }
+                    if (!tip_sayisal_mi(vt->veri.vektor.eleman)) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_topla operandi sayisal vektor olmali");
+                        return t_hata(tk);
+                    }
+                    return vt->veri.vektor.eleman;
+                }
+                /* vektor_min(v) -> T, vektor_max(v) -> T */
+                if ((fn_uz == 10 && memcmp(fn_ad, "vektor_min", 10) == 0) ||
+                    (fn_uz == 10 && memcmp(fn_ad, "vektor_max", 10) == 0)) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_min/max 1 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (vt->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_mu(vt) || !tip_sayisal_mi(vt->veri.vektor.eleman)) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_min/max operandi sayisal vektor olmali");
+                        return t_hata(tk);
+                    }
+                    return vt->veri.vektor.eleman;
+                }
+                /* vektor_esit(a, b) -> vektor<mantiksal, N> */
+                if (fn_uz == 11 && memcmp(fn_ad, "vektor_esit", 11) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "V020",
+                            "vektor_esit 2 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *at = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *bt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[1]);
+                    if (at->kategori == TIP_HATA || bt->kategori == TIP_HATA)
+                        return t_hata(tk);
+                    if (!tip_vektor_mu(at) || !tip_vektor_mu(bt)) {
+                        tip_hata(tk, d, "V003",
+                            "vektor_esit her iki argumani vektor olmali");
+                        return t_hata(tk);
+                    }
+                    if (at->veri.vektor.lane_sayi != bt->veri.vektor.lane_sayi ||
+                        !tip_esit(at->veri.vektor.eleman, bt->veri.vektor.eleman)) {
+                        tip_hata(tk, d, "V003",
+                            "vektor_esit operandlari ayni T, N olmali");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_vektor(tk->arena,
+                        tip_olustur_basit(tk->arena, TIP_MANTIKSAL),
+                        at->veri.vektor.lane_sayi);
+                }
+                /* vektor_kucuk / vektor_buyuk (analog) */
+                if ((fn_uz == 12 && memcmp(fn_ad, "vektor_kucuk", 12) == 0) ||
+                    (fn_uz == 12 && memcmp(fn_ad, "vektor_buyuk", 12) == 0)) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "V020",
+                            "vektor_kucuk/buyuk 2 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *at = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *bt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[1]);
+                    if (at->kategori == TIP_HATA || bt->kategori == TIP_HATA)
+                        return t_hata(tk);
+                    if (!tip_vektor_mu(at) || !tip_vektor_mu(bt) ||
+                        at->veri.vektor.lane_sayi != bt->veri.vektor.lane_sayi ||
+                        !tip_esit(at->veri.vektor.eleman, bt->veri.vektor.eleman)) {
+                        tip_hata(tk, d, "V003",
+                            "vektor_kucuk/buyuk operandlari ayni T, N vektor olmali");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_vektor(tk->arena,
+                        tip_olustur_basit(tk->arena, TIP_MANTIKSAL),
+                        at->veri.vektor.lane_sayi);
+                }
+                /* vektor_sec(mask, a, b) -> vektor<T, N> */
+                if (fn_uz == 10 && memcmp(fn_ad, "vektor_sec", 10) == 0) {
+                    if (d->veri.cagri.sayi != 3) {
+                        tip_hata(tk, d, "V010",
+                            "vektor_sec(mask, a, b) 3 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *mt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *at = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[1]);
+                    TipBilgisi *bt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[2]);
+                    if (mt->kategori == TIP_HATA || at->kategori == TIP_HATA ||
+                        bt->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_mu(mt) ||
+                        mt->veri.vektor.eleman->kategori != TIP_MANTIKSAL) {
+                        tip_hata(tk, d, "V010",
+                            "vektor_sec mask vektor<mantiksal, N> olmali");
+                        return t_hata(tk);
+                    }
+                    if (!tip_vektor_mu(at) || !tip_vektor_mu(bt) ||
+                        at->veri.vektor.lane_sayi != bt->veri.vektor.lane_sayi ||
+                        at->veri.vektor.lane_sayi != mt->veri.vektor.lane_sayi ||
+                        !tip_esit(at->veri.vektor.eleman, bt->veri.vektor.eleman)) {
+                        tip_hata(tk, d, "V010",
+                            "vektor_sec a/b ayni vektor tipi, N mask ile esit olmali");
+                        return t_hata(tk);
+                    }
+                    return at;
+                }
+                /* vektor_ve_azalt(v: vektor<mantiksal, N>) -> mantiksal
+                 *   13 byte */
+                if (fn_uz == 15 && memcmp(fn_ad, "vektor_ve_azalt", 15) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_ve_azalt 1 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (vt->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_mu(vt) ||
+                        vt->veri.vektor.eleman->kategori != TIP_MANTIKSAL) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_ve_azalt operandi vektor<mantiksal, N> olmali");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_MANTIKSAL);
+                }
+                /* vektor_veya_azalt(v) -> mantiksal */
+                if (fn_uz == 17 && memcmp(fn_ad, "vektor_veya_azalt", 17) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_veya_azalt 1 arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (vt->kategori == TIP_HATA) return t_hata(tk);
+                    if (!tip_vektor_mu(vt) ||
+                        vt->veri.vektor.eleman->kategori != TIP_MANTIKSAL) {
+                        tip_hata(tk, d, "V009",
+                            "vektor_veya_azalt operandi vektor<mantiksal, N> olmali");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_MANTIKSAL);
+                }
             }
             /* Sabitsüre Spec V1 declassification: ifsa(s: sabitsure<T>) -> T
              * UTF-8: "if\xc5\x9fa" = 5 byte */
@@ -2256,6 +2569,33 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     return t_hata(tk);
                 }
                 return tip_olustur_sabitsure(tk->arena, ic);
+            }
+            /* SIMD Spec V1: beklenen vektor<T, N> ve cagri vektor_doldur(s)
+             * ise — s'yi T context'inde çıkarsa, dönüş vektor<T, N>. */
+            if (beklenen->kategori == TIP_VEKTOR &&
+                d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 13 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "vektor_doldur", 13) == 0 &&
+                d->veri.cagri.sayi == 1) {
+                TipBilgisi *arg_t = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[0],
+                    beklenen->veri.vektor.eleman);
+                if (arg_t->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_vektor_eleman_yetenekli_mi(arg_t)) {
+                    tip_hata(tk, d, "V001",
+                        "vektor_doldur argumani vektor-yetenekli skaler olmali");
+                    return t_hata(tk);
+                }
+                /* arg tip vs beklenen element tip uyumsuzsa T001 */
+                if (!tip_esit(arg_t, beklenen->veri.vektor.eleman)) {
+                    tip_hata(tk, d, "T001",
+                        "vektor_doldur arg tipi beklenen element tipi ile uyumsuz");
+                    return t_hata(tk);
+                }
+                return tip_olustur_vektor(tk->arena, arg_t,
+                    beklenen->veri.vektor.lane_sayi);
             }
             break;
         }
