@@ -372,6 +372,46 @@ static Dugum *parse_birincil(Parser *p) {
             return d;
         }
 
+        /* === Capability Spec V1: delege(y, izin) ve geri_al(y) ===
+         * DUGUM_CAGRI olarak parse edilir; tip kontrolünde özel-case.
+         * Target: DUGUM_TANIMLAYICI("delege" / "geri_al"). */
+        case TOK_DELEGE:
+        case TOK_GERI_AL: {
+            int satir = t.satir;
+            int sutun = t.sutun;
+            const char *ad = (t.tip == TOK_DELEGE) ? "delege" : "geri_al";
+            int ad_uz = (int)strlen(ad);
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P150",
+                         "delege/geri_al icin '(' bekleniyor");
+            /* Argumanlari topla */
+            Dugum *args[8];
+            int arg_sayi = 0;
+            if (parser_simdiki(p).tip != TOK_SAG_PAREN) {
+                args[arg_sayi++] = parse_ifade(p);
+                while (parser_simdiki(p).tip == TOK_VIRGUL && arg_sayi < 8) {
+                    parser_ilerle(p);
+                    args[arg_sayi++] = parse_ifade(p);
+                }
+            }
+            parser_bekle(p, TOK_SAG_PAREN, "P151",
+                         "delege/geri_al icin ')' bekleniyor");
+            Dugum *hedef = dugum_tanimlayici(p->arena, ad, ad_uz, satir, sutun);
+            d = dugum_olustur(p->arena, DUGUM_CAGRI, satir, sutun);
+            if (d) {
+                d->veri.cagri.hedef = hedef;
+                Dugum **arg_dizi = NULL;
+                if (arg_sayi > 0) {
+                    arg_dizi = (Dugum **)arena_ayir(p->arena,
+                                                    sizeof(Dugum *) * arg_sayi);
+                    for (int i = 0; i < arg_sayi; i++) arg_dizi[i] = args[i];
+                }
+                d->veri.cagri.argumanlar = arg_dizi;
+                d->veri.cagri.sayi = arg_sayi;
+            }
+            return d;
+        }
+
         default:
             parser_hata(p, t, "P010", "ifade bekleniyor", NULL);
             d = dugum_hata(p->arena, t.satir, t.sutun);
@@ -635,6 +675,19 @@ Dugum *parse_tip(Parser *p) {
         Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_SABITSURE,
                                  t.satir, t.sutun);
         if (d) d->veri.tip_sabitsure.ic_tip = ic;
+        return d;
+    }
+
+    /* === yetki<R> — Capability Spec V1 (object-capability) === */
+    if (t.tip == TOK_YETKI) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P350", "yetki<...> icin '<' bekleniyor");
+        Dugum *kaynak = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P351", "yetki<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_YETKI,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_yetki.kaynak_tipi = kaynak;
         return d;
     }
 
