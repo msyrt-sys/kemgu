@@ -1114,3 +1114,36 @@ int32_t kdl_otp_xor_uygula(const char *msg_yol,
     free((void *)anahtar_buf);
     return (int32_t)yazildi;
 }
+
+/* === D.7 SIMD Spec V1 — Hizali Bellek === */
+
+/* kdl_bellek_hizali_al(boyut, hizalama) -> ptr
+ *
+ * Hizalama 16/32/64 byte (vektör tipi boyutuna gore). NULL doner basarisizsa.
+ * Cross-platform:
+ *   - POSIX: posix_memalign
+ *   - Windows (MSVC/MinGW): _aligned_malloc
+ *
+ * Hizalama 2^n olmali; degilse implementation-defined.
+ * Free icin kdl_bellek_hizali_serbest cagrılmali (Windows MinGW _aligned_free). */
+void *kdl_bellek_hizali_al(int64_t boyut, int64_t hizalama) {
+    if (boyut <= 0 || hizalama <= 0) return NULL;
+#ifdef _WIN32
+    return _aligned_malloc((size_t)boyut, (size_t)hizalama);
+#else
+    void *ptr = NULL;
+    if (posix_memalign(&ptr, (size_t)hizalama, (size_t)boyut) != 0) {
+        return NULL;
+    }
+    return ptr;
+#endif
+}
+
+void kdl_bellek_hizali_serbest(void *p) {
+    if (!p) return;
+#ifdef _WIN32
+    _aligned_free(p);
+#else
+    free(p);
+#endif
+}

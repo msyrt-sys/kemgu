@@ -195,6 +195,61 @@ eklenmez.
 
 ---
 
+## [2026-05-14] — SIMD Spec V1: V2'ye bırakılan özellikler
+
+SIMD intrinsics V1 tamamlandı (belgeler/KEMGU_SIMD_Spec_V1.md). Aşağıdaki
+özellikler V1 kapsamı dışı, V2'ye bırakıldı:
+
+### A. LLVM ASCII identifier kısıtlaması
+
+- **Kategori:** LLVM backend (yeşil — workaround mevcut)
+- **Bağlam:** LLVM IR identifier'lari ASCII karakter olmali, ya da `"..."`
+  içinde quote'lanmalı. KEMGU işlev adlarında Türkçe karakter (ş, ı, ğ vb.)
+  kullanıldığında LLVM derleme hatası verir:
+  ```
+  define float @satır_carp(...)
+                   ^ expected '(' in function argument list
+  ```
+- **Mevcut çözüm:** Vektör örnekleri ASCII fonksiyon adı kullanır
+  (test/ornekler/matris_carpim.kem'de `satir_carp` — `satır` yerine).
+- **Önerilen çözüm:** `ad_yaz` fonksiyonu non-ASCII byte algılarsa
+  identifier'i `@"..."` quote ile sarmala. LLVM destekler.
+
+### B. vektor_yukle / vektor_sakla (Dizi<T> + bounds)
+
+- **Kategori:** runtime + tip kontrol genişlemesi
+- **Bağlam:** SD.2.1'de tanımlı `vektor_yukle(p, ofs)` ve `vektor_sakla(p, ofs, v)`
+  intrinsicleri V1'de yok. Dizi<T> ile entegrasyon için bounds check
+  semantiği (ofs + N <= length) gerekir.
+- **Engellediği iş:** Gerçek matris çarpımı (bellek-load yerine sadece
+  vektor_doldur broadcast üzerinden çalışıyor şu an).
+
+### C. vektor_karistir / vektor_birlestir (shuffle)
+
+- **Kategori:** LLVM intrinsic + parser
+- **Bağlam:** `shufflevector` LLVM IR mevcut, ama indeks listesi compile-time
+  sabit dizi olarak parse'lanmalı. V1'de yapılmadı.
+
+### D. Hedef-spesifik feature flag
+
+- **Kategori:** build sistem (yeşil)
+- **Bağlam:** AVX-512 mantıksal vektör (N=64) için `clang -march=skylake-avx512`
+  bayrağı gerekli; AVX2 max N=8 (i32) veya N=16 (i8). KEMGU bu farkı
+  bilmeden tüm vektör tiplerini kabul eder; LLVM `-march=...` üzerine bırakır.
+- **Engellediği iş:** Yok — kullanıcı clang bayrağıyla seçer.
+
+### E. vektor_doldur default N=4 (context yoksa)
+
+- **Kategori:** tip kontrol (sarı)
+- **Bağlam:** `vektor_doldur(s)` çağrısı bidirectional context (beklenen
+  vektor<T, N>) olmadan ne zaman çağrılırsa, dönüş tipi `vektor<T_arg, 4>`
+  varsayılır. Bu V1'de pragmatik; ama yanıltıcı — ya hata vermeli ya da
+  context gerektirmeli.
+- **Önerilen çözüm:** V2'de explicit `vektor_doldur<T, N>(s)` generic
+  parametre, ya da context yoksa hata (V003-like).
+
+---
+
 ## [2026-05-13] — Snapshot sözdizim sınırlamaları (test altyapı)
 
 - **Kategori:** parser kapsam genişletme (yeşil — sözdizimsel)

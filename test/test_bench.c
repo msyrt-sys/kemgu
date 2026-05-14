@@ -373,6 +373,82 @@ static BenchSonuc bench_fuzz_throughput(void) {
     return s;
 }
 
+/* === SIMD Spec V1: vektor vs skaler karsilastirmasi ===
+ * Bu bench, tip kontrol + LLVM IR uretim sirasinda SIMD vs skaler kodun
+ * derleyici aciligindan ne kadar maliyetli olduguna bakar. Calistirma
+ * zamanli speedup degerlendirmesi ayri test/test_simd_llvm.c'de yapilir.
+ *
+ * Saf-KEMGU benchmark: scalar 4'lu toplama vs vektor 4-lane toplama
+ * (her ikisi de tip kontrol'den geciriliyor; SIMD intrinsic resolution
+ * extra cost). */
+static BenchSonuc bench_simd_kontrol_skaler(void) {
+    int iter = ITER_HIZLI;
+    /* Skaler: 4 lokal degisken topla */
+    const char *skaler_kaynak =
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken a: tam32 = 1;\n"
+        "    de\xc4\x9fi\xc5\x9fken b: tam32 = 2;\n"
+        "    de\xc4\x9fi\xc5\x9fken c: tam32 = 3;\n"
+        "    de\xc4\x9fi\xc5\x9fken d: tam32 = 4;\n"
+        "    ver a + b + c + d;\n"
+        "}\n";
+    double t0 = simdiki_ns();
+    for (int i = 0; i < iter; i++) {
+        Arena *a = arena_olustur(0);
+        Lexer l; lexer_baslat(&l, skaler_kaynak, "bench");
+        Parser p; parser_baslat(&p, &l, a, "bench", skaler_kaynak);
+        Dugum *prog = parser_calistir(&p);
+        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        TipKontrol tk;
+        tip_kontrol_baslat(&tk, a, g, "bench", skaler_kaynak);
+        tip_kontrol_program(&tk, prog);
+        arena_serbest(a);
+    }
+    double dt = simdiki_ns() - t0;
+    BenchSonuc s;
+    s.ad = "simd_skaler_kontrol";
+    s.ns_avg = dt / iter;
+    s.iter_per_s = 1e9 * iter / dt;
+    s.iter_count = iter;
+    s.birim = "iters";
+    s.birim_per_iter = 1;
+    s.birim_per_s = s.iter_per_s;
+    return s;
+}
+
+static BenchSonuc bench_simd_kontrol_vektor(void) {
+    int iter = ITER_HIZLI;
+    /* Vektör: 4 lane vektör + reduction */
+    const char *vektor_kaynak =
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken v: vekt\xc3\xb6r<tam32, 4> = "
+        "vektor_doldur(10);\n"
+        "    ver vektor_topla(v);\n"
+        "}\n";
+    double t0 = simdiki_ns();
+    for (int i = 0; i < iter; i++) {
+        Arena *a = arena_olustur(0);
+        Lexer l; lexer_baslat(&l, vektor_kaynak, "bench");
+        Parser p; parser_baslat(&p, &l, a, "bench", vektor_kaynak);
+        Dugum *prog = parser_calistir(&p);
+        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        TipKontrol tk;
+        tip_kontrol_baslat(&tk, a, g, "bench", vektor_kaynak);
+        tip_kontrol_program(&tk, prog);
+        arena_serbest(a);
+    }
+    double dt = simdiki_ns() - t0;
+    BenchSonuc s;
+    s.ad = "simd_vektor_kontrol";
+    s.ns_avg = dt / iter;
+    s.iter_per_s = 1e9 * iter / dt;
+    s.iter_count = iter;
+    s.birim = "iters";
+    s.birim_per_iter = 1;
+    s.birim_per_s = s.iter_per_s;
+    return s;
+}
+
 /* === JSON yazici === */
 
 static void json_yaz(FILE *out, BenchSonuc *r, int n) {
@@ -479,6 +555,17 @@ int main(void) {
            sonuclar[n-1].birim_per_s, sonuclar[n-1].birim);
 
     sonuclar[n++] = bench_fuzz_throughput();
+    printf("  %-22s %10.0f ns/iter  (%10.0f %s/sec)\n",
+           sonuclar[n-1].ad, sonuclar[n-1].ns_avg,
+           sonuclar[n-1].birim_per_s, sonuclar[n-1].birim);
+
+    /* SIMD Spec V1: skaler vs vektor karsilastirmasi */
+    sonuclar[n++] = bench_simd_kontrol_skaler();
+    printf("  %-22s %10.0f ns/iter  (%10.0f %s/sec)\n",
+           sonuclar[n-1].ad, sonuclar[n-1].ns_avg,
+           sonuclar[n-1].birim_per_s, sonuclar[n-1].birim);
+
+    sonuclar[n++] = bench_simd_kontrol_vektor();
     printf("  %-22s %10.0f ns/iter  (%10.0f %s/sec)\n",
            sonuclar[n-1].ad, sonuclar[n-1].ns_avg,
            sonuclar[n-1].birim_per_s, sonuclar[n-1].birim);

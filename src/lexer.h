@@ -37,6 +37,7 @@ typedef enum {
     TOK_IMHA,           /* imha        — Linear Types Spec V1 */
     TOK_OLARAK,         /* olarak      — Madde E: tip donusturme (x olarak T) */
     TOK_SABITSURE,      /* sabitsüre   — Sabitsüre Spec V1 (constant-time) */
+    TOK_VEKTOR,         /* vektör      — SIMD Spec V1 (vector<T, N>) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */

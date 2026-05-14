@@ -91,6 +91,14 @@ TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic) {
     return t;
 }
 
+TipBilgisi *tip_olustur_vektor(Arena *a, TipBilgisi *eleman, int lane_sayi) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_VEKTOR);
+    if (!t) return NULL;
+    t->veri.vektor.eleman = eleman;
+    t->veri.vektor.lane_sayi = lane_sayi;
+    return t;
+}
+
 int tip_lineer_mi(const TipBilgisi *t) {
     return t != NULL && t->kategori == TIP_TEKKEZ;
 }
@@ -230,6 +238,12 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
              * yukarıda zaten reject edildi) — bu sayede implicit upgrade/downgrade
              * tip kontrol seviyesinde T001 verir. */
             return tip_esit(a->veri.sabitsure.ic, b->veri.sabitsure.ic);
+
+        case TIP_VEKTOR:
+            /* SIMD Spec V1: vektör<T1, N1> == vektör<T2, N2> iff
+             * T1==T2 ve N1==N2 (nominal, recursive). */
+            return a->veri.vektor.lane_sayi == b->veri.vektor.lane_sayi
+                && tip_esit(a->veri.vektor.eleman, b->veri.vektor.eleman);
     }
     return 0;
 }
@@ -325,6 +339,12 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             fputc('>', out);
             return;
 
+        case TIP_VEKTOR:
+            fputs("vektor<", out);
+            tip_yazdir(t->veri.vektor.eleman, out);
+            fprintf(out, ", %d>", t->veri.vektor.lane_sayi);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -357,6 +377,7 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_GENERIC_PARAM: return "GENERIC_PARAM";
         case TIP_TEKKEZ:    return "TEKKEZ";
         case TIP_SABITSURE: return "SABITSURE";
+        case TIP_VEKTOR:    return "VEKTOR";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }
@@ -404,4 +425,39 @@ int tip_mantiksal_mi(const TipBilgisi *t) {
     if (t->kategori == TIP_MANTIKSAL) return 1;
     if (t->kategori == TIP_GENERIC_PARAM) return 1;  /* deferred */
     return 0;
+}
+
+/* === SIMD Spec V1 yardımcıları === */
+
+int tip_vektor_eleman_yetenekli_mi(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        case TIP_TAM8:    case TIP_TAM16:    case TIP_TAM32:    case TIP_TAM64:
+        case TIP_DTAM8:   case TIP_DTAM16:   case TIP_DTAM32:   case TIP_DTAM64:
+        case TIP_KESIRLI32: case TIP_KESIRLI64:
+        case TIP_MANTIKSAL:
+            return 1;
+        case TIP_GENERIC_PARAM:
+            return 1;  /* deferred */
+        default:
+            return 0;
+    }
+}
+
+int tip_vektor_lane_gecerli_mi(int n) {
+    switch (n) {
+        case 2:
+        case 4:
+        case 8:
+        case 16:
+        case 32:
+        case 64:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+int tip_vektor_mu(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_VEKTOR;
 }

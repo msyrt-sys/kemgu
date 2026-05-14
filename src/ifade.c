@@ -638,6 +638,40 @@ Dugum *parse_tip(Parser *p) {
         return d;
     }
 
+    /* === vektor<T, N> — SIMD Spec V1 === */
+    if (t.tip == TOK_VEKTOR) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P350", "vektor<T, N> icin '<' bekleniyor");
+        Dugum *eleman = parse_tip(p);
+        parser_bekle(p, TOK_VIRGUL, "P351", "',' bekleniyor (vektor<T, N>)");
+        /* Lane sayısı compile-time tamsayı literal */
+        Token lane_tok = parser_simdiki(p);
+        int lane_sayi = 0;
+        if (lane_tok.tip == TOK_TAMSAYI) {
+            /* Sayı parse: alt çizgi olmadığını varsay */
+            char buf[16];
+            int n = lane_tok.uzunluk < (int)sizeof(buf) - 1
+                ? lane_tok.uzunluk : (int)sizeof(buf) - 1;
+            for (int i = 0; i < n; i++) buf[i] = lane_tok.baslangic[i];
+            buf[n] = '\0';
+            lane_sayi = (int)strtol(buf, NULL, 10);
+            parser_ilerle(p);
+        } else {
+            parser_hata(p, lane_tok, "P352",
+                "vektor<T, N> ikinci argumani compile-time tamsayi literal olmali",
+                NULL);
+        }
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P353", "vektor<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_VEKTOR,
+                                 t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_vektor.eleman_tip = eleman;
+            d->veri.tip_vektor.lane_sayi = lane_sayi;
+        }
+        return d;
+    }
+
     /* === secimlik<T> === */
     if (t.tip == TOK_SECIMLIK) {
         parser_ilerle(p);
