@@ -678,6 +678,32 @@ Dugum *parse_tip(Parser *p) {
         return d;
     }
 
+    /* === görev<T> — Concurrency / DRF V1 === */
+    if (t.tip == TOK_GOREV) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P360", "gorev<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P361", "gorev<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_GOREV,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_gorev.ic_tip = ic;
+        return d;
+    }
+
+    /* === kanal<T> — Concurrency / DRF V1 === */
+    if (t.tip == TOK_KANAL) {
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P362", "kanal<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P363", "kanal<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_KANAL,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_kanal.ic_tip = ic;
+        return d;
+    }
+
     /* === yetki<R> — Capability Spec V1 (object-capability) === */
     if (t.tip == TOK_YETKI) {
         parser_ilerle(p);

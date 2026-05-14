@@ -86,6 +86,8 @@ typedef enum {
     DUGUM_TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
     DUGUM_TIP_YETKI,       /* yetki<R> — Capability Spec V1 (object-capability) */
     DUGUM_TIP_VEKTOR,      /* vektör<T, N> — SIMD Spec V1 */
+    DUGUM_TIP_GOREV,       /* görev<T> — Concurrency / DRF V1 */
+    DUGUM_TIP_KANAL,       /* kanal<T> — Concurrency / DRF V1 */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -428,6 +430,14 @@ struct Dugum {
             Dugum *eleman_tip;     /* T (element tipi — basit/dtam/kesirli/mantıksal) */
             int lane_sayi;         /* N: 2,4,8,16,32,64 (compile-time literal) */
         } tip_vektor;              /* vektör<T, N> — SIMD Spec V1 */
+
+        struct {
+            Dugum *ic_tip;         /* T — thread'in dönüş tipi (görev<T>) */
+        } tip_gorev;               /* görev<T> — Concurrency / DRF V1 */
+
+        struct {
+            Dugum *ic_tip;         /* T — kanaldan geçen mesaj tipi (kanal<T>) */
+        } tip_kanal;               /* kanal<T> — Concurrency / DRF V1 */
 
         struct {
             Dugum *operand;

@@ -955,6 +955,22 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             return tip_olustur_vektor(tk->arena, eleman, lane);
         }
 
+        case DUGUM_TIP_GOREV: {
+            /* Concurrency / DRF V1: görev<T> — thread handle (linear) */
+            TipBilgisi *ic = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_gorev.ic_tip);
+            if (ic->kategori == TIP_HATA) return t_hata(tk);
+            return tip_olustur_gorev(tk->arena, ic);
+        }
+
+        case DUGUM_TIP_KANAL: {
+            /* Concurrency / DRF V1: kanal<T> — channel endpoint (linear) */
+            TipBilgisi *ic = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_kanal.ic_tip);
+            if (ic->kategori == TIP_HATA) return t_hata(tk);
+            return tip_olustur_kanal(tk->arena, ic);
+        }
+
         case DUGUM_TIP_SONUC: {
             TipBilgisi *deger = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_sonuc.deger_tip);
@@ -2183,6 +2199,140 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
+            /* === Concurrency / DRF V1 intrinsics === */
+            /* görev_başlat(c: işlev() -> T) -> görev<T>
+             * c yakaladığı lineer değerleri t_yeni'ye transfer eder (DRF-L2).
+             * V1'de c bir lambda (DUGUM_LAMBDA) veya değişken (linear closure) olur. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "g\xc3\xb6rev_ba\xc5\x9f" "lat", 14) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF001",
+                        "gorev_baslat tam 1 arguman gerektirir "
+                        "(closure: islev() -> T)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *c_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (c_tip->kategori == TIP_HATA) return t_hata(tk);
+                /* c bir islev tipi olmali (tekkez<islev(...)> da olur — LC-2) */
+                const TipBilgisi *cf = c_tip;
+                if (cf->kategori == TIP_TEKKEZ) cf = cf->veri.tekkez.ic;
+                if (cf->kategori != TIP_ISLEV) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF001",
+                        "gorev_baslat argumani islev() -> T tipinde olmali");
+                    return t_hata(tk);
+                }
+                if (cf->veri.islev.param_sayi != 0) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF001",
+                        "gorev_baslat closure'i parametresiz olmali (() -> T)");
+                    return t_hata(tk);
+                }
+                /* Linear closure ise (LC-3 ile beraber thread'e transfer) — tuket */
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                /* görev<T> dön — T = closure dönüş tipi */
+                TipBilgisi *donus = cf->veri.islev.donus;
+                if (!donus) donus = tip_olustur_basit(tk->arena, TIP_BOS);
+                return tip_olustur_gorev(tk->arena, donus);
+            }
+            /* görev_birleştir(g: görev<T>) -> T — g tuketilir (R-BİRLEŞTİR) */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 17 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "g\xc3\xb6rev_birle\xc5\x9f" "tir", 17) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF002",
+                        "gorev_birlestir tam 1 arguman gerektirir (gorev<T>)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *g_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (g_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_gorev_mu(g_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF002",
+                        "gorev_birlestir argumani gorev<T> olmali");
+                    return t_hata(tk);
+                }
+                /* Linear tuketim — g birleştirildikten sonra erişilemez */
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                /* T'yi dön */
+                return g_tip->veri.gorev.ic;
+            }
+            /* kanal_gönder(k: kanal<T>, v: T) -> bos — v tuketilir (DRF-L5) */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 13 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_g\xc3\xb6nder", 13) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "DRF003",
+                        "kanal_gonder tam 2 arguman gerektirir (kanal<T>, v: T)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *k_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (k_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_kanal_mu(k_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF003",
+                        "kanal_gonder ilk argumani kanal<T> olmali");
+                    return t_hata(tk);
+                }
+                TipBilgisi *t_tip = k_tip->veri.kanal.ic;
+                TipBilgisi *v_tip = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1], t_tip);
+                if (v_tip->kategori != TIP_HATA && !tip_esit(v_tip, t_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "DRF003",
+                        "kanal_gonder v argumani kanal eleman tipinde olmali");
+                }
+                /* v tuketilir (lineer ise) — k tuketilmez (kanal yeniden kullanilir) */
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[1]);
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            /* kanal_al(k: kanal<T>) -> T — k tuketilmez */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 8 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_al", 8) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF004",
+                        "kanal_al tam 1 arguman gerektirir (kanal<T>)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *k_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (k_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_kanal_mu(k_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF004",
+                        "kanal_al argumani kanal<T> olmali");
+                    return t_hata(tk);
+                }
+                /* T'yi dön — k tuketilmez */
+                return k_tip->veri.kanal.ic;
+            }
+            /* dondur(v: &değişken T) -> &T — mutable referansi immutable yapar
+             * (R-PAYLAŞ — Plan Karar E hibrit: built-in + frozen flag V2'de) */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 6 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dondur", 6) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF005",
+                        "dondur tam 1 arguman gerektirir (&degisken T)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *v_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (v_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (v_tip->kategori != TIP_REFERANS ||
+                    !v_tip->veri.referans.degisken_mi) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF005",
+                        "dondur argumani &degisken T olmali");
+                    return t_hata(tk);
+                }
+                /* Immutable referans dön */
+                return tip_olustur_referans(tk->arena,
+                                            v_tip->veri.referans.hedef, 0);
+            }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
             if (d->veri.cagri.hedef &&
@@ -2836,10 +2986,11 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     for (int j = 0; j < yapi->veri.yapi.alan_sayi; j++) {
         const Dugum *alan = yapi->veri.yapi.alanlar[j];
         TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
-        /* Linear Types Spec V1 LR-2: yapi tekkez alan iceremez (V1) */
-        if (alan_tipi && alan_tipi->kategori == TIP_TEKKEZ) {
+        /* Linear Types Spec V1 LR-2: yapi tekkez/yetki/gorev alani iceremez (V1)
+         * DRF V1 genişletmesi: tüm linear tipler LR-2 altında. */
+        if (alan_tipi && tip_lineer_mi(alan_tipi)) {
             tip_hata(tk, alan, "LR002",
-                "yapi alani tekkez tipinde olamaz (V1: yapi lineer alan iceremez)");
+                "yapi alani lineer tipte olamaz (V1: yapi lineer alan iceremez)");
         }
         Sembol s;
         memset(&s, 0, sizeof(s));

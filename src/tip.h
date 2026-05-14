@@ -57,6 +57,8 @@ typedef enum {
     TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
     TIP_YETKI,       /* yetki<R> — Capability Spec V1 (object-capability) */
     TIP_VEKTOR,      /* vektör<T, N> — SIMD Spec V1 */
+    TIP_GOREV,       /* görev<T> — Concurrency / DRF V1 */
+    TIP_KANAL,       /* kanal<T> — Concurrency / DRF V1 */
 
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
@@ -131,6 +133,14 @@ struct TipBilgisi {
             TipBilgisi *eleman;
             int lane_sayi;        /* N: 2,4,8,16,32,64 */
         } vektor;                 /* SIMD Spec V1 — vektör<T, N> */
+
+        struct {
+            TipBilgisi *ic;       /* T — thread'in dönüş tipi */
+        } gorev;                  /* Concurrency / DRF V1 — görev<T> */
+
+        struct {
+            TipBilgisi *ic;       /* T — kanaldan geçen mesaj tipi */
+        } kanal;                  /* Concurrency / DRF V1 — kanal<T> */
     } veri;
 };
 
@@ -176,6 +186,14 @@ TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_yetki(Arena *a, TipBilgisi *kaynak);
 TipBilgisi *tip_olustur_vektor(Arena *a, TipBilgisi *eleman, int lane_sayi);
+TipBilgisi *tip_olustur_gorev(Arena *a, TipBilgisi *ic);
+TipBilgisi *tip_olustur_kanal(Arena *a, TipBilgisi *ic);
+
+/* === Concurrency / DRF V1 helper === */
+/* görev<T> mü? */
+int tip_gorev_mu(const TipBilgisi *t);
+/* kanal<T> mü? */
+int tip_kanal_mu(const TipBilgisi *t);
 
 /* === Capability Spec V1 helper === */
 /* yetki<R> mi? (TIP_YETKI veya iceren tekkez<yetki<R>>) */

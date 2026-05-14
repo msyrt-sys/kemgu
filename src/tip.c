@@ -121,11 +121,39 @@ TipBilgisi *tip_olustur_vektor(Arena *a, TipBilgisi *eleman, int lane_sayi) {
     return t;
 }
 
+TipBilgisi *tip_olustur_gorev(Arena *a, TipBilgisi *ic) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_GOREV);
+    if (!t) return NULL;
+    t->veri.gorev.ic = ic;
+    return t;
+}
+
+TipBilgisi *tip_olustur_kanal(Arena *a, TipBilgisi *ic) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_KANAL);
+    if (!t) return NULL;
+    t->veri.kanal.ic = ic;
+    return t;
+}
+
+int tip_gorev_mu(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_GOREV;
+}
+
+int tip_kanal_mu(const TipBilgisi *t) {
+    return t != NULL && t->kategori == TIP_KANAL;
+}
+
 
 int tip_lineer_mi(const TipBilgisi *t) {
     if (!t) return 0;
-    /* tekkez<...> + Capability Spec V1: yetki<R> de linear takip edilir */
-    return t->kategori == TIP_TEKKEZ || t->kategori == TIP_YETKI;
+    /* tekkez<...> + Capability Spec V1: yetki<R> de linear takip edilir.
+     * Concurrency / DRF V1: görev<T> linear (tek-birleştirme: DRF-L1/L2).
+     * kanal<T> non-linear V1: kanal endpoint birden çok thread arasında
+     * "transfer tamponu" (ρ_kanal); v gönderiminde v tüketilir ama kanal
+     * yeniden kullanılır. */
+    return t->kategori == TIP_TEKKEZ
+        || t->kategori == TIP_YETKI
+        || t->kategori == TIP_GOREV;
 }
 
 int tip_sabitsure_mi(const TipBilgisi *t) {
@@ -274,6 +302,14 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
              * T1==T2 ve N1==N2 (nominal, recursive). */
             return a->veri.vektor.lane_sayi == b->veri.vektor.lane_sayi
                 && tip_esit(a->veri.vektor.eleman, b->veri.vektor.eleman);
+
+        case TIP_GOREV:
+            /* DRF V1: görev<T1> == görev<T2> iff T1==T2 */
+            return tip_esit(a->veri.gorev.ic, b->veri.gorev.ic);
+
+        case TIP_KANAL:
+            /* DRF V1: kanal<T1> == kanal<T2> iff T1==T2 */
+            return tip_esit(a->veri.kanal.ic, b->veri.kanal.ic);
     }
     return 0;
 }
@@ -381,6 +417,18 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             fprintf(out, ", %d>", t->veri.vektor.lane_sayi);
             return;
 
+        case TIP_GOREV:
+            fputs("gorev<", out);
+            tip_yazdir(t->veri.gorev.ic, out);
+            fputc('>', out);
+            return;
+
+        case TIP_KANAL:
+            fputs("kanal<", out);
+            tip_yazdir(t->veri.kanal.ic, out);
+            fputc('>', out);
+            return;
+
         case TIP_BILINMIYOR: fputs("?", out); return;
         case TIP_HATA:       fputs("(HATA)", out); return;
     }
@@ -415,6 +463,8 @@ const char *tip_kategorisi_adi(TipKategorisi k) {
         case TIP_SABITSURE: return "SABITSURE";
         case TIP_YETKI:     return "YETKI";
         case TIP_VEKTOR:    return "VEKTOR";
+        case TIP_GOREV:     return "GOREV";
+        case TIP_KANAL:     return "KANAL";
         case TIP_BILINMIYOR: return "BILINMIYOR";
         case TIP_HATA:      return "HATA";
     }

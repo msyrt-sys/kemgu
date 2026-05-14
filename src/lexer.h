@@ -42,6 +42,8 @@ typedef enum {
     TOK_DELEGE,         /* delege      — Capability Spec V1 (sub-capability) */
     TOK_GERI_AL,        /* geri_al     — Capability Spec V1 (revoke) */
     TOK_VEKTOR,         /* vektör      — SIMD Spec V1 (vector<T, N>) */
+    TOK_GOREV,          /* görev       — Concurrency / DRF V1 (görev<T>) */
+    TOK_KANAL,          /* kanal       — Concurrency / DRF V1 (kanal<T>) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */
