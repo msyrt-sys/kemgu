@@ -1494,18 +1494,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return op;
 
                 case OP_REF:
-                    /* Linear Types Spec V1 L004: tekkez referans alinamaz */
-                    if (op->kategori == TIP_TEKKEZ) {
-                        tip_hata(tk, d, "L004",
-                            "lineer (tekkez) tipinde referans alinamaz");
+                    /* Linear Types Spec V1 L004 + Capability CP005:
+                     * lineer (tekkez veya yetki) tipinde referans alinamaz */
+                    if (tip_lineer_mi(op)) {
+                        const char *kod = (op->kategori == TIP_YETKI)
+                                          ? "CP005" : "L004";
+                        const char *msg = (op->kategori == TIP_YETKI)
+                            ? "yetki<R> tipinde referans alinamaz (linear ihlal)"
+                            : "lineer (tekkez) tipinde referans alinamaz";
+                        tip_hata(tk, d, kod, msg);
                         return t_hata(tk);
                     }
                     return tip_olustur_referans(tk->arena, op, 0);
 
                 case OP_REF_DEGISKEN:
-                    if (op->kategori == TIP_TEKKEZ) {
-                        tip_hata(tk, d, "L004",
-                            "lineer (tekkez) tipinde &degisken alinamaz");
+                    if (tip_lineer_mi(op)) {
+                        const char *kod = (op->kategori == TIP_YETKI)
+                                          ? "CP005" : "L004";
+                        const char *msg = (op->kategori == TIP_YETKI)
+                            ? "yetki<R> tipinde &degisken alinamaz (linear ihlal)"
+                            : "lineer (tekkez) tipinde &degisken alinamaz";
+                        tip_hata(tk, d, kod, msg);
                         return t_hata(tk);
                     }
                     return tip_olustur_referans(tk->arena, op, 1);
@@ -1968,8 +1977,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
                 }
-                /* Linear Types Spec V1: param tekkez ise arg consume */
-                if (param_tip && param_tip->kategori == TIP_TEKKEZ) {
+                /* Linear Types Spec V1 + Capability Spec V1:
+                 * param lineer (tekkez veya yetki) ise arg consume */
+                if (param_tip && tip_lineer_mi(param_tip)) {
                     lineer_tuket_eger_baglamaysa(tk,
                         d->veri.cagri.argumanlar[i]);
                 }
@@ -2712,8 +2722,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             }
             TipBilgisi *son = annot ? annot : deger_tip;
-            /* Linear Types Spec V1: deger lineer baglamadan move ise tuket */
-            if (son && son->kategori == TIP_TEKKEZ) {
+            /* Linear Types Spec V1 + Capability Spec V1:
+             * deger lineer baglamadan move ise tuket (tekkez VEYA yetki). */
+            if (son && tip_lineer_mi(son)) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.degisken.deger);
             }
             Sembol s;
@@ -2775,9 +2786,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     tip_hata(tk, d, "T020",
                              "ver tipi islev donus tipi ile uyumsuz");
                 }
-                /* Linear Types Spec V1: lineer baglama ver ile cagirana
-                 * devredildi → tuket */
-                if (deger && deger->kategori == TIP_TEKKEZ) {
+                /* Linear Types Spec V1 + Capability Spec V1:
+                 * lineer baglama (tekkez VEYA yetki) ver ile cagirana devir → tuket */
+                if (deger && tip_lineer_mi(deger)) {
                     lineer_tuket_eger_baglamaysa(tk, d->veri.ver.deger);
                 }
             } else {
