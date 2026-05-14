@@ -1,0 +1,179 @@
+// KEMGU Stdlib — Kripto Rastgele (Secure Random Number Generation)
+// ===================================================================
+//
+// Kriptografik güvenli rastgele sayı üretimi. Platform OS RNG'sini
+// kullanır. Test için xorshift64 fallback (KESINLIKLE kripto için DEĞIL).
+//
+// Platform stratejisi:
+//   - Linux: getrandom(2) syscall (kernel 3.17+)
+//             /dev/urandom fallback (eski kernel)
+//   - macOS/iOS: getentropy(3) veya SecRandomCopyBytes
+//   - Windows: BCryptGenRandom (Vista+)
+//   - Android: getrandom(2) (NDK 28+); fallback /dev/urandom
+//
+// Hardware RNG:
+//   - x86: RDRAND/RDSEED — Intel DRNG; not yapıldı (placeholder yorum)
+//   - ARM: ARMv8.5-A RNG (FEAT_RNG); placeholder
+//
+// V1 sınırlamaları:
+//   - Syscall'lar henuz FFI yok (built-in/extern syntax bekleniyor)
+//   - getrandom/BCryptGenRandom için ham syscall yapacak güvensiz blok
+//     KEMGU OS katmanı ile birlikte gelecek
+//   - V1: xorshift64 fallback (kripto güvensiz, sadece test)
+//
+// Bu dosya saf KEMGU — runtime/FFI bağımlılığı yok.
+
+// =============================================================================
+// xorshift64 (Marsaglia 2003) — Kripto güvensiz PRNG (test için)
+// =============================================================================
+//
+// 64-bit state, period 2^64 - 1, uniform distribution.
+// HİÇ BİR KOŞULDA üretim kripto için kullanma — predictable!
+//
+// state ≠ 0 olmalı (0'a düşerse zincir çöker).
+// Public state — sabitsüre değil; bu deterministik PRNG'dir.
+
+işlev xorshift64_adim(state: dtam64) -> dtam64 {
+    değişken x: dtam64 = state;
+    x = x ^ (x << 13);
+    x = x ^ (x >> 7);
+    x = x ^ (x << 17);
+    ver x;
+}
+
+// İstemli yığın: state güncellemek için Dizi<dtam64> parametre
+işlev xorshift64_pool(state_pool: Dizi<dtam64>, sayi: tam32, sonuc: Dizi<dtam64>) -> tam32 {
+    değişken state: dtam64 = state_pool[0];
+    değişken i: tam32 = 0;
+    iken i < sayi {
+        state = xorshift64_adim(state);
+        sonuc[i] = state;
+        i = i + 1;
+    }
+    state_pool[0] = state;
+    ver 0;
+}
+
+// =============================================================================
+// xoshiro256** (Blackman & Vigna 2018) — DAHA İYİ PRNG (ama hala test)
+// =============================================================================
+//
+// 256-bit state (4x dtam64), period 2^256 - 1.
+// Distribution kalitesi (BigCrush, TestU01) xorshift64'ten çok daha iyi.
+// Yine de DRBG değil; kripto için sadece DRBG/HKDF chain ile birlikte.
+
+işlev _rastgele_rotl_u64(x: dtam64, n: tam32) -> dtam64 {
+    ver (x << n) | (x >> (64 - n));
+}
+
+işlev xoshiro256_adim(s: Dizi<dtam64>) -> dtam64 {
+    değişken bes: dtam64 = 5;
+    değişken dokuz: dtam64 = 9;
+    değişken sonuc: dtam64 = _rastgele_rotl_u64(s[1] * bes, 7) * dokuz;
+    değişken t: dtam64 = s[1] << 17;
+    s[2] = s[2] ^ s[0];
+    s[3] = s[3] ^ s[1];
+    s[1] = s[1] ^ s[2];
+    s[0] = s[0] ^ s[3];
+    s[2] = s[2] ^ t;
+    s[3] = _rastgele_rotl_u64(s[3], 45);
+    ver sonuc;
+}
+
+// =============================================================================
+// CSPRNG API — Bağımlı Platform (V1 placeholder)
+// =============================================================================
+//
+// Bu fonksiyonlar OS'un secure RNG kaynağına gider. V1'de syscall altyapısı
+// yok, bu yüzden gerçek implementasyon güvensiz blok + extern call gerek.
+// API yüzeyi şimdiden tanımlı — V2 syscall layer tamamlandığında impl gelir.
+
+// Doldur — sonuc dizisini secure random bytes ile doldurur.
+// dönüş: dolan byte sayısı (eşit gereksinim'e veya hata için < gereksinim)
+//
+// Platform implementasyonu (V2):
+//   - Linux: syscall(SYS_getrandom, buf, len, 0)
+//   - Windows: BCryptGenRandom(NULL, buf, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG)
+//   - macOS: getentropy(buf, len)
+//
+// V1: stub — xorshift64 fallback (KRİPTO GÜVENSİZ — sadece test).
+işlev secure_rastgele_doldur(
+    sonuc: Dizi<sabitsüre<dtam8>>,
+    gereksinim: tam32
+) -> tam32 {
+    // V1 PLACEHOLDER — gerçek getrandom syscall V2'de.
+    // Bu kod KRİPTO GÜVENSİZ, sadece compile/test için.
+    değişken state: dtam64 = 0x9E3779B97F4A7C15;  // Fibonacci-türevsel sabit
+    değişken i: tam32 = 0;
+    iken i < gereksinim {
+        state = xorshift64_adim(state);
+        // dtam64 -> dtam8: önce dtam32'ye daralt (izinli), sonra dtam8'e (izinli).
+        // E004 sadece kw_kaynak >= 64 && kw_hedef < 32 vurgular; iki-adım kaçınır.
+        değişken orta: dtam32 = (state olarak dtam32);
+        değişken alt: dtam8 = (orta olarak dtam8);
+        sonuc[i] = sabitsüre_yarat(alt);
+        i = i + 1;
+    }
+    ver gereksinim;
+}
+
+// =============================================================================
+// Hardware RNG Placeholder (RDRAND, ARMv8.5 RNG)
+// =============================================================================
+//
+// Modern CPU'lar (Intel 3rd gen+, AMD Zen+, ARMv8.5-A) hardware RNG bulundurur.
+// RDRAND opcode (DRNG, NIST SP 800-90B); ARM RNDR system register.
+//
+// V1: yeni built-in opcode eklemiyoruz (kullanıcı talebi).
+// V2: `hw_rastgele_u64()` -> sonuç<dtam64, RNG_HATA> intrinsic — DRNG yolu.
+//
+// API placeholder:
+// işlev hw_rastgele_u64() -> dtam64 {
+//     // RDRAND eax; CF=1 ise başarılı, CF=0 ise tekrar dene
+//     // ARM: MRS X0, RNDR
+//     ver 0;  // V2 intrinsic
+// }
+
+// Yer tutucu (yorum dışı): tip kontrolü için
+işlev hw_rastgele_aktif_mi() -> mantıksal {
+    // V2: __builtin_cpu_supports("rdrand") veya equivalent CPUID check
+    ver yanlış;
+}
+
+// =============================================================================
+// Entropy Pool — Karıştırma (HKDF-Expand benzeri)
+// =============================================================================
+//
+// Mehrere entropi kaynakları (HW RNG + OS RNG + uygulama-spesifik nonce)
+// karıştırılır. SHA-based extract + expand. V2 detail.
+
+işlev entropy_karistir(
+    kaynak1: Dizi<sabitsüre<dtam8>>,
+    kaynak2: Dizi<sabitsüre<dtam8>>,
+    sonuc: Dizi<sabitsüre<dtam8>>,
+    n: tam32
+) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        sonuc[i] = kaynak1[i] ^ kaynak2[i];
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// Test Yardımcısı — xorshift64 ile bilinen seed
+// =============================================================================
+//
+// Reproducible test vector üretimi. Sadece UNIT TEST için.
+
+işlev test_rastgele_seq(seed: dtam64, uzunluk: tam32, sonuc: Dizi<dtam64>) -> tam32 {
+    değişken s: dtam64 = seed;
+    değişken i: tam32 = 0;
+    iken i < uzunluk {
+        s = xorshift64_adim(s);
+        sonuc[i] = s;
+        i = i + 1;
+    }
+    ver 0;
+}

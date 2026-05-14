@@ -61,7 +61,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/escape.c $(SRCDIR)/llvm.c $(SRCDIR)/json.c $(SRCDIR)/lsp.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_stdlib_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
 
 # === Ana hedef ===
 
@@ -348,10 +348,13 @@ calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BU
 # Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
 # birlestirilip --check'ten gecirilir (tek dosya derleme, import yok).
 # Test dosyasi yoksa kutuphane tek basina kontrol edilir.
-calistir_stdlib_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
+calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
 		[ -f "$$f" ] || continue; \
+		case "$$f" in \
+			stdlib/kripto.kem) continue;; \
+		esac; \
 		mod=$$(basename "$$f" .kem); \
 		test_f="test/stdlib/test_$$mod.kem"; \
 		if [ -f "$$test_f" ]; then \
@@ -366,6 +369,28 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 		fi; \
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
+
+# Kripto bundle kontrolu — stdlib/kripto.kem + stdlib/kripto/*.kem birlikte
+# her bir test/stdlib/test_kripto*.kem dosyasi ile karistirilir.
+# (Import sistemi olmadigi icin bundle yaklasimi gerekli; kripto'nun alt
+# modulleri (karma, sifre, rastgele, anahtar) base API + birbirine atif yapar.)
+calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
+	@echo "kripto bundle tip kontrolu..."
+	@bundle_base="$(BUILD)/_kripto_base.kem"; \
+	cat stdlib/kripto.kem stdlib/kripto/*.kem > "$$bundle_base"; \
+	./$(BUILD)/kemgu$(EXE) --check "$$bundle_base" || \
+		{ echo "FAIL: kripto bundle base"; rm -f "$$bundle_base"; exit 1; }; \
+	for test_f in test/stdlib/test_kripto*.kem; do \
+		[ -f "$$test_f" ] || continue; \
+		bname=$$(basename "$$test_f" .kem); \
+		combined="$(BUILD)/_kripto_$$bname.kem"; \
+		cat "$$bundle_base" "$$test_f" > "$$combined"; \
+		./$(BUILD)/kemgu$(EXE) --check "$$combined" || \
+			{ echo "FAIL: kripto + $$test_f"; rm -f "$$combined" "$$bundle_base"; exit 1; }; \
+		rm -f "$$combined"; \
+	done; \
+	rm -f "$$bundle_base"
+	@echo "Kripto bundle (kripto.kem + kripto/*.kem) + tum test_kripto* --check gecti!"
 
 # ARM64 (aarch64) cross-compile dogrulama — DGX Spark / Android NDK altyapisi
 # Mevcut KEMGU --llvm IR ciktisini clang -target ile ARM64 ELF object'e cevirir.

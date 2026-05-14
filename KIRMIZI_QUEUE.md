@@ -215,3 +215,61 @@ eklenmez.
   4. uygula specialization sözdizimi
 
 - **Engellediği iş:** Yok — basitleştirmeler test'in özünü değiştirmedi.
+
+---
+
+## [2026-05-14] — stdlib::kripto bundle yaklaşımı + V1 sınırları
+
+- **Kategori:** modül sistemi / runtime gereksinimi
+- **Bağlam:** `stdlib/kripto.kem` + `stdlib/kripto/{karma,sifre,rastgele,anahtar}.kem`
+  beş ayrı modül eklendi. Import sistemi olmadığından submodüller base API'ye
+  ve birbirine referans verir; bu yüzden `calistir_kripto_check` "bundle"
+  yaklaşımı kullanıldı (Makefile concat).
+
+### A. Modül import — V2 takvimine
+- **Sorun:** Her submodül ChaCha20/SHA256/HKDF içerikleri için base
+  primitif'lere erişmek istiyor; tek-dosya derleme bunu engelliyor.
+- **Önerilen:** `kullan stdlib::kripto::karma` sözdizimini ifade context'inde
+  parse + sembol tablosu cross-file linker.
+- **Geçici çözüm:** Makefile `cat stdlib/kripto.kem stdlib/kripto/*.kem > bundle`
+  konsantrasyon. `calistir_kripto_check` hedefi.
+
+### B. Hardware RNG (RDRAND / ARM RNDR)
+- **Kategori:** yeni unsafe primitif (üretim için 🔴)
+- **Bağlam:** rastgele.kem'de `hw_rastgele_u64() -> dtam64` API tanımlı
+  fakat implementasyon yok. CSPRNG'in hardware seed'i kritik.
+- **Önerilen seçenekler:**
+  1. `__builtin_rdrand_u64` benzeri intrinsic (x86 + ARM ayrı path)
+  2. `güvensiz` blok içinde inline asm (yeni keyword `asm` lazım)
+  3. C ABI FFI (mevcut güvensiz blok + extern fn)
+- **Engellediği iş:** Üretim-grade kripto. V1 stub (xorshift64) kripto güvensiz.
+
+### C. Dosya I/O syscall altyapısı
+- **Kategori:** runtime (yeşil — runtime/OS layer ile çözülür)
+- **Bağlam:** `test/ornekler/sifrele_dosya.kem` AEAD demo derler ama
+  gerçek dosya açma/okuma syscall altyapısı bekliyor.
+- **Önerilen:** OS katmanı (KEMGU işletim sistemi tarafı) syscall wrapper.
+
+### D. mantıksal → dtam mask dönüşümü E002 verir
+- **Kategori:** tip kontrol kuralı (yeşil — kural sıkı; alternatif çözüm var)
+- **Bağlam:** `m olarak sabitsüre<dtam32>` (m: sabitsüre<mantıksal>) → E002
+  "olarak: kaynak ve hedef sayısal/karakter olmalı". Mask'a manuel
+  dönüşüm için bit hile (`acc == 0` üzerinden) kullanıldı.
+- **Öneri:** `sabitsüre<mantıksal> -> sabitsüre<dtam8>` cast'i izinli kıl
+  (kayıp prezisyon yok; 0/1 → 0/1).
+
+### E. dtam64 → dtam8 narrowing tek adımda yasak (E004)
+- **Kategori:** tip kontrol kuralı (yeşil — geçici çözüm var)
+- **Bağlam:** `state olarak dtam8` (state: dtam64) → E004. Çözüm:
+  `(state olarak dtam32) olarak dtam8` iki adım (kw_kaynak >= 64 &&
+  kw_hedef < 32 koşulu sadece bir-adımda vurdu).
+- **Öneri:** dtam64 → dtam8 implicit & 0xFF semantiği ile izinli kıl
+  (kullanıcı niyeti ortada).
+
+### Sonuç (görev kapsamında)
+- 5 modül eklendi (kripto.kem + kripto/*.kem)
+- 67 test geçti (3 dosya: test_kripto, test_kripto_vektor, test_kripto_timing)
+- Örnek dosya: test/ornekler/sifrele_dosya.kem
+- Belge: belgeler/KILAVUZ.md §14 (Kripto stdlib)
+- src/ dokunulmadı; yalnız Makefile (calistir_kripto_check eklendi) ve
+  stdlib/ + test/ + belgeler/ değişti.

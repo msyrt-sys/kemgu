@@ -595,6 +595,174 @@ güvensiz olduğunu görmek için.
 
 ---
 
+## 14. Kripto stdlib (constant-time)
+
+KEMGU stdlib'de `kripto` modülü — yan kanal saldırılarına karşı sabit-süre
+garantili kripto temel taşları. Sabitsüre Spec V1 ile sıkı tip uyumu.
+
+### 14.1 Modül haritası
+
+```
+stdlib/
+├── kripto.kem               — Base CT primitives
+└── kripto/
+    ├── karma.kem            — SHA-256 + BLAKE3 placeholder
+    ├── sifre.kem            — ChaCha20 + Poly1305 + AEAD
+    ├── rastgele.kem         — xorshift64 + xoshiro256 + OS RNG iskelet
+    └── anahtar.kem          — tekkez<SimetrikAnahtar256> + HKDF + OTP
+```
+
+### 14.2 Base API (kripto.kem)
+
+```kemgu
+// Sabit-süre eşitlik — XOR-toplama + zeroness; OpenSSL CRYPTO_memcmp eşdeğeri
+işlev sabit_süre_eşit_blok(
+    a: Dizi<sabitsüre<dtam8>>,
+    b: Dizi<sabitsüre<dtam8>>,
+    uzunluk: tam32
+) -> sabitsüre<mantıksal>
+
+// Branchless seçim — LLVM `select` opcode; V1: bitmask
+işlev sabit_süre_seç_u32(
+    maske: sabitsüre<dtam32>,   // 0xFFFFFFFF (true) veya 0 (false)
+    t: sabitsüre<dtam32>,
+    f: sabitsüre<dtam32>
+) -> sabitsüre<dtam32>
+
+// XOR (CT-safe; ^ ile eşdeğer ama isim semantik)
+işlev sabit_süre_xor_blok(
+    a: Dizi<sabitsüre<dtam8>>,
+    b: Dizi<sabitsüre<dtam8>>,
+    sonuc: Dizi<sabitsüre<dtam8>>,
+    n: tam32
+) -> tam32
+```
+
+Tipik kullanım:
+
+```kemgu
+// HMAC tag karşılaştırma — `if tag != computed` deseni TIMING SALDIRISIDIR
+değişken sonuc: sabitsüre<mantıksal> = sabit_süre_eşit_blok(
+    hesaplanan_tag, beklenen_tag, 16
+);
+// Dallanmak için ifşa zorunlu:
+eğer ifşa(sonuc) { /* tag eşleşti, decrypt'e devam */ }
+```
+
+### 14.3 Hash (karma.kem)
+
+SHA-256 (FIPS 180-4) sabit-süre referans:
+
+```kemgu
+işlev sha256_blok_sikistir(
+    state: Dizi<sabitsüre<dtam32>>,    // h0..h7
+    blok_w: Dizi<sabitsüre<dtam32>>    // 16 x dtam32 (512-bit message block)
+) -> tam32
+```
+
+Σ0, Σ1, σ0, σ1, Ch, Maj fonksiyonları branchless. Round constants K[64]
+ve initial values H0[8] PUBLIC (RFC standartı).
+
+### 14.4 ChaCha20-Poly1305 AEAD (sifre.kem)
+
+RFC 8439 — Quarter Round + 20 round + Poly1305 MAC + AEAD construction:
+
+```kemgu
+işlev aead_chacha20_poly1305_sifrele(
+    key: Dizi<sabitsüre<dtam32>>,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    aad: Dizi<sabitsüre<dtam32>>, aad_uzunluk: tam32,
+    plaintext: Dizi<sabitsüre<dtam32>>, plaintext_uzunluk: tam32,
+    ciphertext: Dizi<sabitsüre<dtam32>>,
+    tag: Dizi<sabitsüre<dtam32>>
+) -> tam32
+
+işlev aead_chacha20_poly1305_dogrula(
+    ...
+) -> sabitsüre<mantıksal>     // tag mismatch sabitsüre — programcı ifşa edilmesin
+```
+
+Niye AES değil? AES T-table cache-timing (Bernstein 2005); ChaCha20 sadece
+ADD/XOR/ROTL, her arşitektürde uniform.
+
+### 14.5 Anahtar yönetimi (anahtar.kem)
+
+`tekkez<SimetrikAnahtar256>` linear types + sabitsüre iç içe:
+
+```kemgu
+// Anahtar yaratma — tekkez sarmalama
+değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+
+// Tek-kullanım: kullan veya imha
+otp_sifrele(metin, a, sifreli, n);   // `kullan(a)` içeride — sonrası L002
+// a'ya buradan erişim derleme hatası
+```
+
+HKDF (RFC 5869) iskeleti:
+
+```kemgu
+işlev anahtar_turet(
+    ikm: Dizi<sabitsüre<dtam8>>, ikm_uzunluk: tam32,
+    salt: Dizi<sabitsüre<dtam8>>, salt_uzunluk: tam32,
+    info: Dizi<sabitsüre<dtam8>>, info_uzunluk: tam32,
+    sonuc_govde: Dizi<sabitsüre<dtam8>>  // 32-byte
+) -> tam32
+```
+
+### 14.6 Rastgele sayı (rastgele.kem)
+
+Platform RNG iskeleti (V2'de syscall):
+- Linux: getrandom(2)
+- Windows: BCryptGenRandom
+- macOS: getentropy(3)
+
+V1: xorshift64 + xoshiro256 fallback (kripto için **kullanma**, sadece test):
+
+```kemgu
+işlev secure_rastgele_doldur(
+    sonuc: Dizi<sabitsüre<dtam8>>,
+    gereksinim: tam32
+) -> tam32
+```
+
+Hardware RNG (RDRAND, ARMv8.5 RNDR) için placeholder yorum — yeni
+built-in opcode V2'de.
+
+### 14.7 Örnek: ChaCha20-Poly1305 ile dosya şifreleme
+
+[`test/ornekler/sifrele_dosya.kem`](../test/ornekler/sifrele_dosya.kem)
+
+Akış:
+1. Parola → HKDF → 32-byte anahtar
+2. Rastgele nonce (12 bayt)
+3. AEAD encrypt (ChaCha20 + Poly1305)
+4. Authenticated decrypt — tag mismatch'te `sabitsüre<mantıksal>` yanlış
+
+### 14.8 Test
+
+Toplam **67 test** (3 dosya, hepsi `--check` ile geçer):
+
+| Dosya | Test# | Konu |
+|-------|-------|------|
+| `test_kripto.kem`        | 42 | K1-K6: base + her submodül + bundle entegrasyon |
+| `test_kripto_vektor.kem` | 8  | NIST SHA-256, RFC 8439 ChaCha20, RFC 5869 HKDF |
+| `test_kripto_timing.kem` | 17 | CT compile-time pozitif (taint, mask, generic, linear) |
+
+```bash
+make calistir_kripto_check       # yalnız kripto bundle
+make calistir_stdlib_check       # tüm stdlib (kripto dahil)
+```
+
+### 14.9 Sınırlamalar (V1)
+
+- HKDF/HMAC tam implementasyon V2 (karma.kem ile birleşik tek pipeline)
+- Poly1305 reduction stub — V2: Barrett/Montgomery 130-bit mul
+- Dosya I/O yok — `kemgu --llvm` ile derleme yapılır ama gerçek I/O syscall
+- Hardware RNG placeholder — yeni built-in opcode V2'de
+- Modül import yok — şu an bundle yaklaşımı (Makefile concat)
+
+---
+
 ## Devam
 
 - Tutorial: [`test/ornekler/01_merhaba.kem`](../test/ornekler/) → `09_arm64.kem`.

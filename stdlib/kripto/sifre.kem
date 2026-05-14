@@ -1,0 +1,321 @@
+// KEMGU Stdlib — Kripto Şifre (ChaCha20 + Poly1305, AEAD)
+// =========================================================
+//
+// RFC 8439 — ChaCha20 ve Poly1305, IETF (Bernstein/Krovetz).
+// Yan kanala kapalı: ADD/XOR/ROTL — hepsi sabit-süre.
+// S-box yok (AES'in T-table sorunu yok); cache-timing immün.
+//
+// AEAD construction: ChaCha20-Poly1305 (RFC 8439 §2.8).
+//
+// Niye ChaCha20 (AES değil)?
+//   - AES T-table optimizasyonu cache-timing kanalı (Bernstein 2005)
+//   - AES-NI yoksa (eski CPU, ARM Cortex-M) constant-time soft-AES yavaş
+//   - ChaCha20: 32-bit ADD/XOR/ROTL; her arşitektürde uniform süre
+//   - Wireguard, TLS 1.3, OpenSSH gibi modern protokoller ChaCha20'yu tercih
+//
+// Bu dosya saf KEMGU; --check ile doğrulanır.
+//
+// Sınırlamalar (V1):
+//   - Modül standalone (import yok); rotr/rotl içerden tanımlı
+//   - Block counter PUBLIC (tüm CT prototip ChaCha implementasyonları gibi)
+//   - Poly1305 prime reduction sade Barrett iz (V2'de unsigned Montgomery)
+
+// =============================================================================
+// İçsel CT yardımcıları (modül standalone)
+// =============================================================================
+
+işlev _sifre_rotl_u32(x: sabitsüre<dtam32>, n: tam32) -> sabitsüre<dtam32> {
+    değişken sol: sabitsüre<dtam32> = x << n;
+    değişken sag: sabitsüre<dtam32> = x >> (32 - n);
+    ver sol | sag;
+}
+
+// =============================================================================
+// ChaCha20 Quarter Round (RFC 8439 §2.1)
+// =============================================================================
+//
+// QR(a, b, c, d):
+//   a += b; d ^= a; d = ROTL(d, 16);
+//   c += d; b ^= c; b = ROTL(b, 12);
+//   a += b; d ^= a; d = ROTL(d, 8);
+//   c += d; b ^= c; b = ROTL(b, 7);
+//
+// State 4x4 matrix; QR 4 elemana uygulanır. Tüm operasyonlar CT.
+// Indeks parametreleri PUBLIC (4-deep tuple yok, ayrı param'lar).
+
+işlev chacha20_qr(
+    state: Dizi<sabitsüre<dtam32>>,
+    a_idx: tam32, b_idx: tam32, c_idx: tam32, d_idx: tam32
+) -> tam32 {
+    değişken a: sabitsüre<dtam32> = state[a_idx];
+    değişken b: sabitsüre<dtam32> = state[b_idx];
+    değişken c: sabitsüre<dtam32> = state[c_idx];
+    değişken d: sabitsüre<dtam32> = state[d_idx];
+
+    a = a + b;
+    d = d ^ a;
+    d = _sifre_rotl_u32(d, 16);
+
+    c = c + d;
+    b = b ^ c;
+    b = _sifre_rotl_u32(b, 12);
+
+    a = a + b;
+    d = d ^ a;
+    d = _sifre_rotl_u32(d, 8);
+
+    c = c + d;
+    b = b ^ c;
+    b = _sifre_rotl_u32(b, 7);
+
+    state[a_idx] = a;
+    state[b_idx] = b;
+    state[c_idx] = c;
+    state[d_idx] = d;
+    ver 0;
+}
+
+// =============================================================================
+// ChaCha20 İç Çekirdek — 20 round (10 double round)
+// =============================================================================
+//
+// State 16-element (4x4 matrix):
+//   row 0:  constants "expand 32-byte k" (4 dtam32)
+//   row 1-2: key (8 dtam32)
+//   row 3:  block counter (1) + nonce (3)
+//
+// 10 double round (column + diagonal QR) = 20 round toplam.
+
+işlev chacha20_cekirdek(state: Dizi<sabitsüre<dtam32>>) -> tam32 {
+    değişken r: tam32 = 0;
+    iken r < 10 {
+        // Column rounds: QR(0,4,8,12), QR(1,5,9,13), QR(2,6,10,14), QR(3,7,11,15)
+        chacha20_qr(state, 0, 4, 8, 12);
+        chacha20_qr(state, 1, 5, 9, 13);
+        chacha20_qr(state, 2, 6, 10, 14);
+        chacha20_qr(state, 3, 7, 11, 15);
+        // Diagonal rounds: QR(0,5,10,15), QR(1,6,11,12), QR(2,7,8,13), QR(3,4,9,14)
+        chacha20_qr(state, 0, 5, 10, 15);
+        chacha20_qr(state, 1, 6, 11, 12);
+        chacha20_qr(state, 2, 7, 8, 13);
+        chacha20_qr(state, 3, 4, 9, 14);
+        r = r + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// ChaCha20 Block Function (RFC 8439 §2.3)
+// =============================================================================
+//
+// Üretir 64-byte keystream block'u (16 dtam32).
+// Input: key (32 byte = 8 dtam32), counter (1 dtam32), nonce (12 byte = 3 dtam32)
+// Output: 16 dtam32 keystream
+//
+// state_init = [
+//   constants (4),  // "expa" "nd 3" "2-by" "te k"
+//   key[0..3],
+//   key[4..7],
+//   counter, nonce[0..2]
+// ]
+// state_out = state_init + chacha20_cekirdek(state_init)  // element-wise add
+
+işlev chacha20_blok(
+    key: Dizi<sabitsüre<dtam32>>,
+    counter: dtam32,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    keystream: Dizi<sabitsüre<dtam32>>
+) -> tam32 {
+    // Constants: "expa", "nd 3", "2-by", "te k" little-endian
+    değişken c0: dtam32 = 0x61707865;
+    değişken c1: dtam32 = 0x3320646E;
+    değişken c2: dtam32 = 0x79622D32;
+    değişken c3: dtam32 = 0x6B206574;
+
+    // Initialize state
+    değişken state: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat(c0), sabitsüre_yarat(c1), sabitsüre_yarat(c2), sabitsüre_yarat(c3),
+        key[0], key[1], key[2], key[3],
+        key[4], key[5], key[6], key[7],
+        sabitsüre_yarat(counter), nonce[0], nonce[1], nonce[2]
+    ];
+
+    // Save original for final add
+    değişken orig: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat(c0), sabitsüre_yarat(c1), sabitsüre_yarat(c2), sabitsüre_yarat(c3),
+        key[0], key[1], key[2], key[3],
+        key[4], key[5], key[6], key[7],
+        sabitsüre_yarat(counter), nonce[0], nonce[1], nonce[2]
+    ];
+
+    // 20 round (10 double round)
+    chacha20_cekirdek(state);
+
+    // Element-wise add original to mixed
+    değişken i: tam32 = 0;
+    iken i < 16 {
+        keystream[i] = state[i] + orig[i];
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// ChaCha20 Encrypt/Decrypt (XOR ile aynı operasyon)
+// =============================================================================
+//
+// `metin` ve `şifreli` Dizi<sabitsüre<dtam32>> — 16 word birim.
+// Tam stream API V2'de (byte-level + counter increment).
+
+işlev chacha20_xor_blok(
+    keystream: Dizi<sabitsüre<dtam32>>,
+    metin: Dizi<sabitsüre<dtam32>>,
+    cikti: Dizi<sabitsüre<dtam32>>,
+    n: tam32
+) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        cikti[i] = metin[i] ^ keystream[i];
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// Poly1305 (RFC 8439 §2.5) — MAC (Message Authentication Code)
+// =============================================================================
+//
+// p = 2^130 - 5 (prime)
+// r ∈ Z_p — clamp edilmiş 16-byte key
+// s ∈ {0, 1}^128 — nonce (16-byte)
+//
+// MAC(msg) = (Σ msg_blocks * r^i mod p) + s mod 2^128
+//
+// V1: tek-blok placeholder + clamp; tam reduction V2 (Barrett/Montgomery).
+// Tüm aritmetik sabit-süre (no DIV/MOD).
+
+// Poly1305 r clamp (RFC 8439 §2.5): r[3], r[7], r[11], r[15] &= 0x0F;
+//                                    r[4], r[8], r[12] &= 0xFC
+işlev poly1305_r_clamp(r: Dizi<sabitsüre<dtam8>>) -> tam32 {
+    değişken mask0F: dtam8 = 0x0F;
+    değişken maskFC: dtam8 = 0xFC;
+    r[3] = r[3] & sabitsüre_yarat(mask0F);
+    r[7] = r[7] & sabitsüre_yarat(mask0F);
+    r[11] = r[11] & sabitsüre_yarat(mask0F);
+    r[15] = r[15] & sabitsüre_yarat(mask0F);
+    r[4] = r[4] & sabitsüre_yarat(maskFC);
+    r[8] = r[8] & sabitsüre_yarat(maskFC);
+    r[12] = r[12] & sabitsüre_yarat(maskFC);
+    ver 0;
+}
+
+// Poly1305 tek-blok stub — V1: yalnız framework, V2 full Barrett reduction
+// MAC: (h + r * msg_block) mod p — burada modular reduction stub.
+işlev poly1305_blok_birikim(
+    h: Dizi<sabitsüre<dtam32>>,
+    r: Dizi<sabitsüre<dtam32>>,
+    msg_blok: Dizi<sabitsüre<dtam32>>
+) -> tam32 {
+    // V1 placeholder: yalnız XOR ile birikim (NOT a real Poly1305!)
+    // V2: 130-bit mul + Barrett reduction mod 2^130-5
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        h[i] = h[i] ^ (r[i] & msg_blok[i]);
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =============================================================================
+// ChaCha20-Poly1305 AEAD (RFC 8439 §2.8)
+// =============================================================================
+//
+// AEAD_CHACHA20_POLY1305(key, nonce, AAD, plaintext):
+//   1. otk = ChaCha20(key, nonce, counter=0)[0..32]  // 256-bit one-time key
+//   2. ciphertext = ChaCha20(key, nonce, counter=1, ...) ⊕ plaintext
+//   3. tag = Poly1305(otk, AAD || pad16 || CT || pad16 || len(AAD) || len(CT))
+//   4. output: (ciphertext, tag)
+//
+// V1: yalnız iskelet — Poly1305 stub'a bağlı.
+
+işlev aead_chacha20_poly1305_sifrele(
+    key: Dizi<sabitsüre<dtam32>>,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    aad: Dizi<sabitsüre<dtam32>>,
+    aad_uzunluk: tam32,
+    plaintext: Dizi<sabitsüre<dtam32>>,
+    plaintext_uzunluk: tam32,
+    ciphertext: Dizi<sabitsüre<dtam32>>,
+    tag: Dizi<sabitsüre<dtam32>>
+) -> tam32 {
+    // 1. one-time-key generation
+    değişken otk: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+    ];
+    chacha20_blok(key, 0, nonce, otk);
+
+    // 2. ciphertext = ChaCha20(counter=1, ...) ⊕ plaintext
+    değişken keystream: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+    ];
+    chacha20_blok(key, 1, nonce, keystream);
+    chacha20_xor_blok(keystream, plaintext, ciphertext, plaintext_uzunluk);
+
+    // 3. tag = Poly1305(otk, AAD || pad16 || CT || pad16 || len_AAD || len_CT)
+    // V1 stub: yalnız çağrı yapısı; tam framing V2.
+    poly1305_blok_birikim(tag, otk, ciphertext);
+
+    ver 0;
+}
+
+// =============================================================================
+// AEAD Doğrulama (decrypt + tag check)
+// =============================================================================
+//
+// V1 stub — gerçek implementasyon decrypt + tag-compare (constant-time)
+// gerektirir. sabit_süre_eşit_blok ile tag karşılaştırma kritik:
+// "if tag != computed_tag" deseni TIMING SALDIRISIDIR (CRYPTO-1).
+
+işlev aead_chacha20_poly1305_dogrula(
+    key: Dizi<sabitsüre<dtam32>>,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    aad: Dizi<sabitsüre<dtam32>>,
+    aad_uzunluk: tam32,
+    ciphertext: Dizi<sabitsüre<dtam32>>,
+    ciphertext_uzunluk: tam32,
+    beklenen_tag: Dizi<sabitsüre<dtam32>>,
+    plaintext: Dizi<sabitsüre<dtam32>>
+) -> sabitsüre<mantıksal> {
+    // 1. Hesapla tag
+    değişken hesaplanan_tag: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
+        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+    ];
+    // ... AEAD encrypt prosedürü ile aynı (tag üretimi)
+    // V1: stub
+
+    // 2. Sabit-süre tag eşitlik
+    değişken acc: sabitsüre<dtam32> = sabitsüre_yarat((0 olarak dtam32));
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        acc = acc | (hesaplanan_tag[i] ^ beklenen_tag[i]);
+        i = i + 1;
+    }
+    // acc 0 ise eşit; dönüş sabitsüre<mantıksal>
+    değişken sifir: dtam32 = 0;
+    ver acc == sabitsüre_yarat(sifir);
+}

@@ -1,0 +1,191 @@
+// KEMGU Örnek — ChaCha20-Poly1305 ile dosya şifreleme
+// =====================================================
+//
+// Bu örnek stdlib/kripto kullanılarak bir dosyanın AEAD ile şifrelenmesini
+// göstermek için yazıldı. V1 sınırı: dosya I/O henüz syscall altyapısı
+// bekliyor; bu örnek `--check` modunda derlenir, runtime'da `--llvm` ile
+// derleme yapılır (ama dosya I/O placeholder).
+//
+// Akış:
+//   1. anahtar oluştur (HKDF ile parola türetilir)
+//   2. nonce (12 bayt) — counter-based veya random
+//   3. AEAD encrypt: ChaCha20-Poly1305
+//   4. tag (16 bayt) ciphertext'in başına/sonuna eklenir
+//
+// Niye AEAD?
+//   - Yalnız ChaCha20 = sadece şifre (confidentiality), authenticity yok
+//   - AEAD = confidentiality + authenticity tek pas geçişte
+//   - "Encrypt-then-MAC" pattern üzerinde inşa edilir; Poly1305 MAC
+
+// ============================================================================
+// Stdlib kripto referansı (bu örnek bağımsız, gerçek kullanım `import` ile
+// olacak; şu an stdlib import sistemi yok, bu yüzden bu kodu kullanırken
+// stdlib/kripto*.kem dosyaları manuel concat edilmeli).
+// ============================================================================
+
+// ============================================================================
+// Yapılar — dosya başlık ve sonuç şekli
+// ============================================================================
+
+// Dosya başlığı: nonce + AAD + length
+yapı SifreliDosyaBaslik {
+    nonce0: sabitsüre<dtam32>;
+    nonce1: sabitsüre<dtam32>;
+    nonce2: sabitsüre<dtam32>;
+    uzunluk: tam64;          // plaintext bayt sayısı (public, length attack varsayım)
+}
+
+// Şifreli dosya sonucu: header + ciphertext + tag
+yapı SifreliDosya {
+    baslik: SifreliDosyaBaslik;
+    ciphertext: Dizi<sabitsüre<dtam32>>;
+    tag0: sabitsüre<dtam32>;
+    tag1: sabitsüre<dtam32>;
+    tag2: sabitsüre<dtam32>;
+    tag3: sabitsüre<dtam32>;
+}
+
+// ============================================================================
+// Parola -> Anahtar Türetme (HKDF)
+// ============================================================================
+//
+// Parolayı doğrudan anahtar olarak kullanmak güvensiz (low entropy);
+// HKDF ile uniformize et + salt ile randomize.
+
+işlev parola_to_anahtar(
+    parola: Dizi<sabitsüre<dtam8>>,
+    parola_uzunluk: tam32,
+    salt: Dizi<sabitsüre<dtam8>>,
+    anahtar_govde: Dizi<sabitsüre<dtam8>>
+) -> tam32 {
+    değişken info: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat((0x4B olarak dtam8)),  // 'K'
+        sabitsüre_yarat((0x45 olarak dtam8)),  // 'E'
+        sabitsüre_yarat((0x4D olarak dtam8)),  // 'M'
+        sabitsüre_yarat((0x47 olarak dtam8)),  // 'G'
+        sabitsüre_yarat((0x55 olarak dtam8)),  // 'U'
+        sabitsüre_yarat((0x2D olarak dtam8)),  // '-'
+        sabitsüre_yarat((0x76 olarak dtam8)),  // 'v'
+        sabitsüre_yarat((0x31 olarak dtam8))   // '1'
+    ];
+    // HKDF kullan (V1 stub; V2: gerçek HMAC-SHA256 chain)
+    anahtar_turet(parola, parola_uzunluk, salt, 16, info, 8, anahtar_govde);
+    ver 0;
+}
+
+// ============================================================================
+// Şifreleme — ChaCha20-Poly1305 AEAD
+// ============================================================================
+
+işlev dosya_sifrele(
+    parola: Dizi<sabitsüre<dtam8>>,
+    parola_uzunluk: tam32,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    salt: Dizi<sabitsüre<dtam8>>,
+    plaintext: Dizi<sabitsüre<dtam32>>,
+    plaintext_uzunluk: tam32,
+    ciphertext: Dizi<sabitsüre<dtam32>>,
+    tag: Dizi<sabitsüre<dtam32>>
+) -> tam32 {
+    // 1. Parola -> 32-byte anahtar
+    değişken s: dtam8 = 0;
+    değişken anahtar_govde: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+    ];
+    parola_to_anahtar(parola, parola_uzunluk, salt, anahtar_govde);
+
+    // 2. Anahtarı 8 x dtam32'ye pack et (KEMGU'da bayt -> kelime LE)
+    // V1: kısa-yol — direct sabitsüre_yarat (gerçek pack ileride)
+    değişken sifir32: dtam32 = 0;
+    değişken key: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32)
+    ];
+    // V2: anahtar_govde[0..3] -> key[0] LE pack, vb.
+
+    // 3. AAD yok (boş)
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir32)];
+
+    // 4. AEAD encrypt
+    aead_chacha20_poly1305_sifrele(
+        key, nonce, aad, 0,
+        plaintext, plaintext_uzunluk,
+        ciphertext, tag
+    );
+
+    ver 0;
+}
+
+// ============================================================================
+// Çözme — AEAD authenticated decryption
+// ============================================================================
+
+işlev dosya_coz(
+    parola: Dizi<sabitsüre<dtam8>>,
+    parola_uzunluk: tam32,
+    nonce: Dizi<sabitsüre<dtam32>>,
+    salt: Dizi<sabitsüre<dtam8>>,
+    ciphertext: Dizi<sabitsüre<dtam32>>,
+    ciphertext_uzunluk: tam32,
+    beklenen_tag: Dizi<sabitsüre<dtam32>>,
+    plaintext: Dizi<sabitsüre<dtam32>>
+) -> sabitsüre<mantıksal> {
+    değişken s: dtam8 = 0;
+    değişken anahtar_govde: Dizi<sabitsüre<dtam8>> = [
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
+        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+    ];
+    parola_to_anahtar(parola, parola_uzunluk, salt, anahtar_govde);
+
+    değişken sifir32: dtam32 = 0;
+    değişken key: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
+        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32)
+    ];
+
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir32)];
+
+    // AEAD verify ve decrypt — tag mismatch ise sabitsüre<mantıksal> yanlış döner
+    ver aead_chacha20_poly1305_dogrula(
+        key, nonce, aad, 0,
+        ciphertext, ciphertext_uzunluk,
+        beklenen_tag, plaintext
+    );
+}
+
+// ============================================================================
+// Örnek ana akış (V2'de syscall ile çalışan dosya I/O)
+// ============================================================================
+
+işlev main() -> tam32 {
+    // Bu örnek `--check` ile derlenir. Runtime için stdin/stdout
+    // veya gerçek dosya operasyonları syscall altyapısı bekler.
+    //
+    // Örnek senaryo (V2 ile gerçekleşecek):
+    //   1. parola := kullanıcıdan oku (terminal echo-off)
+    //   2. salt := dosyanın ilk 16 baytı (veya rastgele üret)
+    //   3. nonce := dosyanın sonraki 12 baytı
+    //   4. ciphertext := geri kalan - 16 byte (tag)
+    //   5. tag := son 16 byte
+    //   6. dosya_coz çağır; sonuç dosyaya yaz
+
+    // V1 doğrulama: tip akışı doğru mu?
+    ver 0;
+}
