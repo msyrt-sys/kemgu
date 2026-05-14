@@ -56,6 +56,7 @@ typedef enum {
     TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
     TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
     TIP_YETKI,       /* yetki<R> — Capability Spec V1 (object-capability) */
+    TIP_VEKTOR,      /* vektör<T, N> — SIMD Spec V1 */
 
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
@@ -125,6 +126,11 @@ struct TipBilgisi {
         struct {
             TipBilgisi *kaynak;   /* R: kaynak tipi (Dosya, Soket, vs.) */
         } yetki;                  /* Capability Spec V1 — object-capability */
+
+        struct {
+            TipBilgisi *eleman;
+            int lane_sayi;        /* N: 2,4,8,16,32,64 */
+        } vektor;                 /* SIMD Spec V1 — vektör<T, N> */
     } veri;
 };
 
@@ -169,6 +175,7 @@ TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk);
 TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_yetki(Arena *a, TipBilgisi *kaynak);
+TipBilgisi *tip_olustur_vektor(Arena *a, TipBilgisi *eleman, int lane_sayi);
 
 /* === Capability Spec V1 helper === */
 /* yetki<R> mi? (TIP_YETKI veya iceren tekkez<yetki<R>>) */
@@ -194,5 +201,19 @@ int tip_sayisal_mi(const TipBilgisi *t);
 int tip_tamsayi_mi(const TipBilgisi *t);
 /* Mantiksal mi? */
 int tip_mantiksal_mi(const TipBilgisi *t);
+
+/* === SIMD Spec V1: vektör helpers === */
+
+/* Bir tipin vektör-yetenekli skaler eleman tipi olup olmadığını döner.
+ * Yetenekli: tamX, dtamX, kesirli32/64, mantıksal.
+ * Yasak: karakter, metin, yapı, referans, pointer, seçimlik, sonuç, işlev,
+ *        tekkez, sabitsüre, dizi, vektör (nested). */
+int tip_vektor_eleman_yetenekli_mi(const TipBilgisi *t);
+
+/* N (lane sayısı) izinli {2, 4, 8, 16, 32, 64} setinde mi? */
+int tip_vektor_lane_gecerli_mi(int n);
+
+/* Tip vektör mü? */
+int tip_vektor_mu(const TipBilgisi *t);
 
 #endif /* KEMGU_TIP_H */

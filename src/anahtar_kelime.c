@@ -52,6 +52,7 @@ static const AnahtarKelime tablo[] = {
     {"tekkez",                            6, TOK_TEKKEZ    },  /* tekkez      */
     {"uygula",                            6, TOK_UYGULA    },  /* uygula      */
     {"ve",                                2, TOK_VE        },  /* ve          */
+    {"vekt\xc3\xb6r",                    7, TOK_VEKTOR    },  /* vektör      */
     {"ver",                               3, TOK_VER       },  /* ver         */
     {"veya",                              4, TOK_VEYA      },  /* veya        */
     {"yanl\xc4\xb1\xc5\x9f",            8, TOK_YANLIS    },  /* yanlış      */

@@ -192,6 +192,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_TIP_TEKKEZ:        return "TIP_TEKKEZ";
         case DUGUM_TIP_SABITSURE:     return "TIP_SABITSURE";
         case DUGUM_TIP_YETKI:         return "TIP_YETKI";
+        case DUGUM_TIP_VEKTOR:        return "TIP_VEKTOR";
         case DUGUM_KULLAN_IFADE:      return "KULLAN_IFADE";
         case DUGUM_IMHA_IFADE:        return "IMHA_IFADE";
         case DUGUM_TIP_DONUSTUR:      return "TIP_DONUSTUR";

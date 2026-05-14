@@ -267,6 +267,20 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d->tip == DUGUM_TIP_YETKI) {
         return "%kdl_yetki";
     }
+    /* SIMD Spec V1: vektör<T, N> → <N x T> LLVM IR */
+    if (tip_d->tip == DUGUM_TIP_VEKTOR) {
+        const char *eleman_ir = ast_tip_to_ir(g, tip_d->veri.tip_vektor.eleman_tip);
+        int lane = tip_d->veri.tip_vektor.lane_sayi;
+        /* "<N x T>" stringini arena'da kur */
+        int buf_sz = 32;
+        char *buf = (char *)arena_ayir(g->arena, (size_t)buf_sz);
+        if (buf) {
+            int n = snprintf(buf, (size_t)buf_sz, "<%d x %s>", lane, eleman_ir);
+            (void)n;
+            return buf;
+        }
+        return "i32";
+    }
     return "i32";  /* default */
 }
 
@@ -312,6 +326,9 @@ static int tip_genisligi(const char *ir) {
 static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
                         const char *dst_tip) {
     if (!src_tip || !dst_tip || strcmp(src_tip, dst_tip) == 0) return src_reg;
+    /* SIMD Spec V1: vektör tipler arasında otomatik conversion yok (tip
+     * kontrolü zaten engelliyor); src değişmeden döner. */
+    if (src_tip[0] == '<' || dst_tip[0] == '<') return src_reg;
     int src_w = tip_genisligi(src_tip);
     int dst_w = tip_genisligi(dst_tip);
     if (src_w == 0 || dst_w == 0) return src_reg;
@@ -571,7 +588,21 @@ static const char *fcmp_pred(Operator op) {
 }
 
 static int tip_kesirli_mi(const char *ir) {
-    return ir && (strcmp(ir, "float") == 0 || strcmp(ir, "double") == 0);
+    if (!ir) return 0;
+    if (strcmp(ir, "float") == 0 || strcmp(ir, "double") == 0) return 1;
+    /* SIMD Spec V1: vektör IR tip "<N x float>" / "<N x double>" de kesirli */
+    if (ir[0] == '<') {
+        /* Suffix "x float>" veya "x double>" arar */
+        const char *fp = strstr(ir, " x float>");
+        const char *dp = strstr(ir, " x double>");
+        if (fp || dp) return 1;
+    }
+    return 0;
+}
+
+/* SIMD Spec V1: IR tip vektör mi? ("<N x T>" formatı) */
+static int tip_vektor_ir_mi(const char *ir) {
+    return ir && ir[0] == '<' && strstr(ir, " x ") != NULL;
 }
 
 /* Beklenen tip 'metin' veya 'ptr' ise string literal pointer'a yukselt */
@@ -1093,6 +1124,149 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
                     IfadeSonuc s = { 0, "void" };
                     return s;
+                }
+            }
+
+            /* === SIMD Spec V1 intrinsicleri === */
+            {
+                const char *fn = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int fn_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+
+                /* vektor_doldur(s) — beklenen "<N x T>" ise splat üret */
+                if (fn_uz == 13 && memcmp(fn, "vektor_doldur", 13) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    /* Beklenen vektör IR tipinden N ve T çıkar */
+                    if (beklenen && tip_vektor_ir_mi(beklenen)) {
+                        /* "<N x T>" formatı: N ve T parse */
+                        int N = 0;
+                        const char *p = beklenen + 1;
+                        while (*p >= '0' && *p <= '9') {
+                            N = N * 10 + (*p - '0');
+                            p++;
+                        }
+                        /* Element tipini ayır */
+                        const char *t_start = strstr(beklenen, " x ");
+                        char eleman_buf[32] = "i32";
+                        if (t_start) {
+                            t_start += 3;
+                            const char *t_end = strchr(t_start, '>');
+                            if (t_end && (t_end - t_start) < 31) {
+                                int len = (int)(t_end - t_start);
+                                memcpy(eleman_buf, t_start, (size_t)len);
+                                eleman_buf[len] = '\0';
+                            }
+                        }
+                        IfadeSonuc s = ifade_uret(g,
+                            d->veri.cagri.argumanlar[0], eleman_buf);
+                        /* insertelement <N x T> undef, T s, i32 0 */
+                        int r1 = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = insertelement %s undef, %s %%%d, i32 0\n",
+                            r1, beklenen, eleman_buf, s.reg);
+                        /* shufflevector <N x T> %r1, <N x T> undef, <N x i32> zeroinitializer */
+                        int r2 = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = shufflevector %s %%%d, %s undef, <%d x i32> zeroinitializer\n",
+                            r2, beklenen, r1, beklenen, N);
+                        IfadeSonuc res = { r2, beklenen };
+                        /* beklenen mevcut hafıza yapısından kopyalanmalı çünkü
+                         * stable ptr şart — alıcı zaten arena'da tutuyor */
+                        return res;
+                    }
+                    /* Beklenen yoksa default <4 x i32> */
+                    IfadeSonuc s = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "i32");
+                    int r1 = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = insertelement <4 x i32> undef, i32 %%%d, i32 0\n",
+                        r1, s.reg);
+                    int r2 = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = shufflevector <4 x i32> %%%d, <4 x i32> undef, <4 x i32> zeroinitializer\n",
+                        r2, r1);
+                    IfadeSonuc res = { r2, "<4 x i32>" };
+                    return res;
+                }
+
+                /* vektor_eleman(v, i) -> T (extractelement) */
+                if (fn_uz == 13 && memcmp(fn, "vektor_eleman", 13) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc vs = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], NULL);
+                    IfadeSonuc is = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i32");
+                    /* Element tipini IR'dan çıkar */
+                    const char *t_start = strstr(vs.tip, " x ");
+                    char eleman_buf[32] = "i32";
+                    if (t_start) {
+                        t_start += 3;
+                        const char *t_end = strchr(t_start, '>');
+                        if (t_end && (t_end - t_start) < 31) {
+                            int len = (int)(t_end - t_start);
+                            memcpy(eleman_buf, t_start, (size_t)len);
+                            eleman_buf[len] = '\0';
+                        }
+                    }
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = extractelement %s %%%d, i32 %%%d\n",
+                        r, vs.tip, vs.reg, is.reg);
+                    /* Eleman IR string'i arena'da kalıcı kopya */
+                    char *kalici = (char *)arena_ayir(g->arena,
+                                                      strlen(eleman_buf) + 1);
+                    if (kalici) strcpy(kalici, eleman_buf);
+                    IfadeSonuc res = { r, kalici ? kalici : "i32" };
+                    return res;
+                }
+
+                /* vektor_topla(v) -> T (llvm.vector.reduce.add or fadd) */
+                if (fn_uz == 12 && memcmp(fn, "vektor_topla", 12) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    IfadeSonuc vs = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], NULL);
+                    /* N + element tipini parse */
+                    int N = 0;
+                    const char *p = vs.tip + 1;
+                    while (*p >= '0' && *p <= '9') {
+                        N = N * 10 + (*p - '0'); p++;
+                    }
+                    const char *t_start = strstr(vs.tip, " x ");
+                    char eleman_buf[32] = "i32";
+                    if (t_start) {
+                        t_start += 3;
+                        const char *t_end = strchr(t_start, '>');
+                        if (t_end && (t_end - t_start) < 31) {
+                            int len = (int)(t_end - t_start);
+                            memcpy(eleman_buf, t_start, (size_t)len);
+                            eleman_buf[len] = '\0';
+                        }
+                    }
+                    int kesirli_elem = (strcmp(eleman_buf, "float") == 0 ||
+                                         strcmp(eleman_buf, "double") == 0);
+                    /* LLVM intrinsic abbreviation: float→f32, double→f64,
+                     * i8/i16/i32/i64 olduğu gibi. */
+                    const char *abbr = eleman_buf;
+                    if (strcmp(eleman_buf, "float") == 0)  abbr = "f32";
+                    if (strcmp(eleman_buf, "double") == 0) abbr = "f64";
+                    int r = yeni_reg(g);
+                    if (kesirli_elem) {
+                        const char *start = "0.0";
+                        fprintf(g->out,
+                            "  %%%d = call %s @llvm.vector.reduce.fadd.v%d%s(%s %s, %s %%%d)\n",
+                            r, eleman_buf, N, abbr,
+                            eleman_buf, start,
+                            vs.tip, vs.reg);
+                    } else {
+                        fprintf(g->out,
+                            "  %%%d = call %s @llvm.vector.reduce.add.v%d%s(%s %%%d)\n",
+                            r, eleman_buf, N, abbr,
+                            vs.tip, vs.reg);
+                    }
+                    char *kalici = (char *)arena_ayir(g->arena,
+                                                      strlen(eleman_buf) + 1);
+                    if (kalici) strcpy(kalici, eleman_buf);
+                    IfadeSonuc res = { r, kalici ? kalici : "i32" };
+                    return res;
                 }
             }
             int n = d->veri.cagri.sayi;
