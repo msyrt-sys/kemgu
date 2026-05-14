@@ -260,6 +260,13 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d->tip == DUGUM_TIP_TEKKEZ) {
         return ast_tip_to_ir(g, tip_d->veri.tip_tekkez.ic_tip);
     }
+    /* Capability Spec V1: yetki<R> -> %kdl_yetki struct (16 byte)
+     * Bu, monomorphic by-value temsil. R bilgisi sadece type-check'te;
+     * runtime'da kaynak_tipi field (uint16) icinde.
+     * struct: { i64, i16, i16, i8, [3 x i8] } */
+    if (tip_d->tip == DUGUM_TIP_YETKI) {
+        return "%kdl_yetki";
+    }
     return "i32";  /* default */
 }
 
@@ -997,6 +1004,95 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * Modern LLVM intrinsic; declare gerekmez (built-in). */
                     fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
                     return inner;
+                }
+            }
+            /* Capability Spec V1 intrinsics — yetki_olustur, delege, geri_al */
+            {
+                const char *_ca = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int _uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                /* yetki_olustur(kt, izin) -> %kdl_yetki */
+                if (_uz == 13 && memcmp(_ca, "yetki_olustur", 13) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc arg_kt = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "i16");
+                    IfadeSonuc arg_izin = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i16");
+                    /* int_donustur tasiyici varsayim — trunc to i16 */
+                    int r_kt = arg_kt.reg;
+                    int r_izin = arg_izin.reg;
+                    if (strcmp(arg_kt.tip, "i16") != 0) {
+                        int t = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = trunc %s %%%d to i16\n",
+                            t, arg_kt.tip, r_kt);
+                        r_kt = t;
+                    }
+                    if (strcmp(arg_izin.tip, "i16") != 0) {
+                        int t = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = trunc %s %%%d to i16\n",
+                            t, arg_izin.tip, r_izin);
+                        r_izin = t;
+                    }
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %%kdl_yetki @kdl_yetki_olustur("
+                        "i16 %%%d, i16 %%%d)\n", r, r_kt, r_izin);
+                    IfadeSonuc s = { r, "%kdl_yetki" };
+                    return s;
+                }
+                /* delege(y, izin) -> %kdl_yetki */
+                if (_uz == 6 && memcmp(_ca, "delege", 6) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc arg_y = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "%kdl_yetki");
+                    IfadeSonuc arg_izin = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i16");
+                    int r_izin = arg_izin.reg;
+                    if (strcmp(arg_izin.tip, "i16") != 0) {
+                        int t = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = trunc %s %%%d to i16\n",
+                            t, arg_izin.tip, r_izin);
+                        r_izin = t;
+                    }
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %%kdl_yetki @kdl_yetki_delege("
+                        "%%kdl_yetki %%%d, i16 %%%d)\n",
+                        r, arg_y.reg, r_izin);
+                    IfadeSonuc s = { r, "%kdl_yetki" };
+                    return s;
+                }
+                /* geri_al(y) -> void — y bir tanimlayici ise alloca'ya pointer ver */
+                if (_uz == 7 && memcmp(_ca, "geri_al", 7) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    const Dugum *arg0 = d->veri.cagri.argumanlar[0];
+                    int ptr_reg = -1;
+                    if (arg0->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg0->veri.tanimlayici.metin,
+                            arg0->veri.tanimlayici.uzunluk);
+                        if (vi) {
+                            ptr_reg = vi->reg_no;
+                        }
+                    }
+                    if (ptr_reg < 0) {
+                        /* Geçici alloca + store + ptr — sub-optimal ama doğru */
+                        IfadeSonuc y_val = ifade_uret(g, arg0, "%kdl_yetki");
+                        int alloc = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", alloc);
+                        fprintf(g->out,
+                            "  store %%kdl_yetki %%%d, ptr %%%d\n",
+                            y_val.reg, alloc);
+                        ptr_reg = alloc;
+                    }
+                    fprintf(g->out,
+                        "  call void @kdl_yetki_geri_al(ptr %%%d)\n",
+                        ptr_reg);
+                    /* Donus: void/i32 0 (geri_al donus tipi bos) */
+                    IfadeSonuc s = { 0, "void" };
+                    return s;
                 }
             }
             int n = d->veri.cagri.sayi;
@@ -1952,6 +2048,9 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
           out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
     fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+    /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
+     * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
+    fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
     /* Built-in extern (libc) bildirimleri */
     fputs("declare i32 @puts(ptr)\n", out);
     fputs("declare ptr @malloc(i64)\n", out);
@@ -2008,7 +2107,18 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_yazdir_tam64(i64)\n", out);
     fputs("declare void @kdl_yazdir_satir()\n", out);
     fputs("declare void @kdl_yaz_tam(i32)\n", out);
-    fputs("declare void @kdl_yaz_tam64(i64)\n\n", out);
+    fputs("declare void @kdl_yaz_tam64(i64)\n", out);
+
+    /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
+    fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);
+    fputs("declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki, i16)\n", out);
+    fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
+    fputs("declare i32 @kdl_yetki_kontrol(%kdl_yetki, i16)\n", out);
+    fputs("declare i32 @kdl_yetki_kontrol_tipi(%kdl_yetki, i16, i16)\n", out);
+    fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
+    fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
+    fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
+    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

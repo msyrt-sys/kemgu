@@ -55,6 +55,7 @@ typedef enum {
     TIP_YAPI,        /* yapi X veya X<T1, T2> */
     TIP_TEKKEZ,      /* tekkez<T> — Linear Types Spec V1 */
     TIP_SABITSURE,   /* sabitsüre<T> — Sabitsüre Spec V1 (constant-time) */
+    TIP_YETKI,       /* yetki<R> — Capability Spec V1 (object-capability) */
 
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
@@ -120,6 +121,10 @@ struct TipBilgisi {
         struct {
             TipBilgisi *ic;
         } sabitsure;              /* Sabitsüre Spec V1 — constant-time qualifier */
+
+        struct {
+            TipBilgisi *kaynak;   /* R: kaynak tipi (Dosya, Soket, vs.) */
+        } yetki;                  /* Capability Spec V1 — object-capability */
     } veri;
 };
 
@@ -163,6 +168,13 @@ TipBilgisi *tip_olustur_yapi(Arena *a, const char *ad, int ad_uzunluk,
 TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk);
 TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_sabitsure(Arena *a, TipBilgisi *ic);
+TipBilgisi *tip_olustur_yetki(Arena *a, TipBilgisi *kaynak);
+
+/* === Capability Spec V1 helper === */
+/* yetki<R> mi? (TIP_YETKI veya iceren tekkez<yetki<R>>) */
+int tip_yetki_mi(const TipBilgisi *t);
+/* yetki<R> ise R'yi don. Aksi NULL. */
+const TipBilgisi *tip_yetki_kaynak(const TipBilgisi *t);
 
 /* === Iliskiler === */
 
