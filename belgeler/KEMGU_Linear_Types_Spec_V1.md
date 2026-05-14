@@ -274,3 +274,21 @@ Test dağılımı (`test/test_linear.c`):
 
 (LLVM IR çıkışı bu spec'in dışında — runtime overhead yok, mevcut backend
 `tekkez<T>`'yi `T` olarak emit eder.)
+
+---
+
+## DRF Teoremi ile İlişki (2026-05-14)
+
+Linear V1'in `L-NO-COPY` + `L-NO-ALIAS` kuralları, **Genişletilmiş DRF
+Teoremi** (Teorem 4', `KEMGU_DRF_Teoremi.md`) ispatının temel taşıyıcısıdır.
+İlgili lemmalar:
+
+- **DRF-L2 (Linear Move = Cross-Thread No-Alias)** — `tekkez<T>` thread
+  spawn'da move semantiği; çağıran thread `v`'ye erişimini kaybeder.
+- **DRF-L3 (Linear Closure Soundness)** — LC-2 ile otomatik
+  `tekkez<işlev>` olan closure'lar yalnız spawn edilen thread'de çalışır.
+- **DRF-L5 (Channel Atomicity)** — `kullan(t)` semantiğinin kanal
+  transferinde atomik move ile birleşimi.
+
+Detay: [`KEMGU_DRF_Lemmalar.md`](KEMGU_DRF_Lemmalar.md), Plan referansı
+[`KEMGU_DRF_Genisletme_Plan.md`](KEMGU_DRF_Genisletme_Plan.md) Karar C.

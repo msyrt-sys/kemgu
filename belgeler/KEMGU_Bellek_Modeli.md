@@ -270,6 +270,23 @@ Data race: iki thread aynı belleğe eşzamanlı erişir, en az biri yazma.
 - **Kanal transferi:** S3 → atomik transfer → asla iki sahip yok ∎
 - **Closure yakalama:** R-YAKALAMA-THREAD → move → kaynak erişim kaybeder ∎
 
+### Teorem 4' — Genişletilmiş DRF (2026-05-14)
+
+Linear Types V1 + Capability V1 + Sabitsüre V1 katmanlarının eklenmesiyle
+Teorem 4'ün **formel genişletilmiş versiyonu** ayrı dökümanlarda yazıldı:
+
+- [`KEMGU_DRF_Genisletme_Plan.md`](KEMGU_DRF_Genisletme_Plan.md) — plan + kararlar
+- [`KEMGU_Operasyonel_Semantik.md`](KEMGU_Operasyonel_Semantik.md) — küçük-adım semantik, izler, happens-before, data race formel tanımı
+- [`KEMGU_DRF_Lemmalar.md`](KEMGU_DRF_Lemmalar.md) — DRF-L1..L7 ara lemmaları
+- [`KEMGU_DRF_Teoremi.md`](KEMGU_DRF_Teoremi.md) — Teorem 4' tam ispatı (V1 statik)
+
+Yukarıdaki Teorem 4 ispat taslağı **korunur** (geriye uyumluluk + okur için
+hızlı özet). Teorem 4' onun **formel genişletilmiş varyantıdır**;
+`İyiTipli(Π) ⟹ ∀ τ ∈ Tr(Π) : ¬ data_race(τ)` ifadesi ile yapısal indüksiyon
+ispatı içerir. Lang syntax (`görev`/`kanal`) eklendikten sonra anlamlı hale
+gelir (şu an `Tr(Π)` her zaman tek-thread izleri içerdiğinden trivially
+korunur).
+
 ---
 
 ## MLKit ve Rust Karşılaştırması

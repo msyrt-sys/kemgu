@@ -331,6 +331,188 @@ SIMD intrinsics V1 tamamlandı (belgeler/KEMGU_SIMD_Spec_V1.md). Aşağıdaki
 
 ---
 
+## [2026-05-14] — DRF teoremi genişletme planı: KARARLAR ONAYLANDI ✓
+
+**Mehmet onayı (2026-05-14):** Plan dökümanı Bölüm 7'deki tüm önerilerin
+hepsi onaylandı. Aşağıdaki maddeler **kapatılmış** sayılır (bilgi olarak
+kalır; geri dönülmesi gerekirse buradan başlanır).
+
+Onaylanan kararlar (önerilen seçenekler kabul):
+- **A:** V1'de kâğıt formalizasyon yeterli; Faz B (mekanize) V2'ye saklı.
+- **B:** V1 dar (statik DRF), V2 geniş (operasyonel), V3 metateorem.
+- **C:** Linear types DRF'in **temel taşıyıcısı** (S1'in compile-time önkoşulu).
+- **D:** Paralel — Faz A1+A2 hemen (yapıldı), lang syntax ayrı oturum, A3 son (yapıldı).
+- **E:** Frozen region **hibrit** — `dondur` builtin call + sembol flag (yeni keyword YOK).
+- **F:** V1 = SC varsayımı + LLVM IR `atomic acq_rel` fence emit
+  (görev/kanal/dondur sınırlarında); V2 weak memory.
+- **G:** Ayrı teoremler — Teorem 4' (DRF) + Teorem 7 (Authority Soundness)
+  ortak lemma DRF-L6 paylaşır.
+- **H:** Güvensiz **izolasyon** modu — güvensiz blok dışı DRF korunur.
+- **I:** **Çok dosya** organizasyon — modüler.
+- **J:** **30+** test eşiği (Linear/CT/RT'a yakın).
+
+Yapılan dökümanlar (Faz A tamamlandı — 2026-05-14):
+- `belgeler/KEMGU_DRF_Genisletme_Plan.md` (önceki commit)
+- `belgeler/KEMGU_Operasyonel_Semantik.md` — yeni
+- `belgeler/KEMGU_DRF_Lemmalar.md` (DRF-L1..L7) — yeni
+- `belgeler/KEMGU_DRF_Teoremi.md` (Teorem 4' V1 statik) — yeni
+- `belgeler/KEMGU_Bellek_Modeli.md` cross-ref (mevcut Teorem 4 korunur)
+- `belgeler/KEMGU_Linear_Types_Spec_V1.md` cross-ref
+- `belgeler/KEMGU_Capability_Spec_V1.md` cross-ref (CP.14)
+
+Beklenen sonraki adımlar (Faz B/C — bu görev kapsamı dışı):
+- Concurrency lang syntax (`görev`/`kanal`) parser implementasyonu — ayrı görev
+- Faz C: `test/test_drf.c` 30+ test — lang syntax sonrası
+- Faz B: Mekanize ispat (V2) — V1 kâğıdı yeterli
+
+### EKLEME (2026-05-14, aynı tarih): Concurrency lang syntax + Faz C tamamlandı
+
+Yukarıdaki "ayrı görev" maddeleri **aynı oturumda tamamlandı**:
+
+- **Lang syntax (`görev`/`kanal` keyword + 5 built-in çağrı):**
+  - Lexer: TOK_GOREV, TOK_KANAL eklendi (toplam 35 keyword).
+  - AST: DUGUM_TIP_GOREV, DUGUM_TIP_KANAL.
+  - Parser: `parse_tip` görev<T>, kanal<T> destekler.
+  - Tip sistemi: TIP_GOREV, TIP_KANAL kategorileri; `tip_olustur_gorev`,
+    `tip_olustur_kanal`; nominal eşitlik; yazdırma.
+  - Tip kontrol built-in handler'ları: `görev_başlat`, `görev_birleştir`,
+    `kanal_gönder`, `kanal_al`, `dondur` — yeni hata kodları DRF001-DRF005.
+  - Linear miras: `görev<T>` linear (tip_lineer_mi); kanal<T> non-linear
+    (transfer tamponu pragmatik karar V1).
+  - LR-2 güçlendirildi: tüm linear tipler yapı içinde yasak (eskiden
+    sadece TIP_TEKKEZ).
+
+- **Faz C test (`test/test_drf.c`):**
+  - 36/36 test geçti, ASan temiz.
+  - Plan Karar J eşiği (30+) sağlandı.
+  - 20 negative + 16 positive.
+
+- **Mevcut test paketi etkilenmedi:**
+  - test_linear 57/57, test_capability 40/40, test_sabitsure 39/39,
+    test_wcet 32/32, test_simd 30/30 — hepsi geçti.
+
+- **V1 implementasyon sınırları (V2'ye saklı):**
+  - Lambda body block-form (`|| { ver e; }`) destekli değil — ifade-form
+    zorunlu (`|| e`). Block tip çıkarsama V2.
+  - Concurrency runtime (thread/channel) yok — yalnız tip kontrol.
+    LLVM codegen extern fonksiyon olarak link-time'a bırakılır.
+  - `kanal_aç` üretici built-in yok V1 (kanal'lar parametre alınır).
+  - Weak memory model (C++11 MM) fence emit V2.
+
+---
+
+(Tarihçi referans için açık sorular metni aşağıda korunur — kararlar yukarıda.)
+
+## [2026-05-14] — DRF teoremi genişletme planı: açık tasarım soruları (TARİHÇE)
+
+DRF (Data Race Freedom) teoremi genişletme PLAN'ı hazırlandı —
+`belgeler/KEMGU_DRF_Genisletme_Plan.md`. Mevcut Teorem 4 (`Bellek_Modeli.md`
+satır 260-272) **kâğıt üzerinde, 4 satırlık informel** ispat taslağı. Linear
+Types V1 (onaylı), Capability V1 (taslak), Sabitsüre V1 (taslak), Realtime/SIMD
+katmanları geldikten sonra DRF'in yeniden ifade edilmesi gerekiyor.
+
+Aşağıdaki kararlar tip sistemine yeni katman + formal teorem etkisi
+kategorisinde → 🔴 Kırmızı. Plan dökümanı Bölüm 7'de detay var.
+
+### A. Proof assistant seçimi (V2 mekanizasyonu için)
+- **Kategori:** teorem / araç seçimi
+- **Bağlam:** Mevcut tüm KEMGU ispatları kâğıt üzerinde. TOPLAS makale planı
+  için mekanik ispat artı-değer; ama proof assistant syntax İngilizce
+  (Türkçe DNA ile çelişebilir).
+- **Önerilen seçenekler:**
+  1. Coq (gallina) — akademik standart, MathComp ekosistemi
+  2. Isabelle/HOL — seL4 ekibi kullandı, kâğıt benzeri
+  3. Lean 4 — modern, hızlı, mathlib aktif
+  4. F* (effects) — DRF için doğal effects sistemi
+  5. Sadece kâğıt (V1 yeterli) — Faz B'yi V2'ye ertele
+- **Engellediği iş:** Faz B (mekanize) — V1 kâğıt yeterli, V2 saklı.
+
+### B. DRF teoreminin kapsamı
+- **Kategori:** teorem ifade darlığı
+- **Bağlam:** "Güvenli alt küme" tabiri muğlak. Dar/Geniş/Metateorem üç seçenek.
+- **Önerilen seçenekler:**
+  1. **Dar (V1):** `tip_kontrol = OK ∧ güvensiz yok` → derleyici reddeder
+  2. **Geniş (V2):** Tüm runtime izleri (operasyonel semantik gerek)
+  3. **Bütünleşik metateorem (V3):** DRF + Memory Safety + Side-Channel + BET
+- **Engellediği iş:** Yok — V1 dar yeterli, V2 V3 ileride.
+
+### C. Linear types'ın DRF'e statik mı yoksa semantik katkısı?
+- **Kategori:** teorem yapısı
+- **Bağlam:** S1 mevcut runtime invaryantı. Linear types compile-time zorlanır.
+  Linear DRF'in temel taşıyıcısı mı, yoksa güçlendirici mi?
+- **Önerilen seçenekler:**
+  1. **Temel taşıyıcı:** Linear zorlama → S1'in compile-time önkoşulu
+     (matematik güç tam gösterilir)
+  2. **Güçlendirici:** S1 runtime aksiyom, Linear sadece compile-time yakalar
+- **Engellediği iş:** (1) seçilirse Bölüm D ile bağlı (lang syntax zorunlu).
+
+### D. Concurrency lang syntax önceliği
+- **Kategori:** dil syntax / DRF prerequisite
+- **Bağlam:** `görev` / `kanal` keyword'leri DRF teoremi için gerekli. Şu an
+  sadece `src/bolge.h` API var (`bolge_olustur_sahip`,
+  `bolge_sahiplik_transfer`, `bolge_kanal_gonder`, `bolge_donmus_mu`).
+- **Önerilen seçenekler:**
+  1. Önce lang syntax — 10+ checkpoint, DRF teoremi bekler
+  2. Önce kâğıt ispat — varsayım "lang syntax buna sadık eklenecek"
+  3. Paralel — plan A1+A2 hemen, lang ayrı, A3 son
+- **Engellediği iş:** DRF ispatı A3 adımı (Plan Faz A).
+
+### E. Frozen region tipinin formal modeli
+- **Kategori:** yeni tip qualifier / API tasarımı
+- **Bağlam:** R-PAYLAŞ `dondur(v)` — runtime API mı, compile-time tip qualifier
+  mı? Yeni keyword `donmuş` gerekirse 🔴.
+- **Önerilen seçenekler:**
+  1. Runtime API — `dondur: &değişken T -> &T`, runtime invaryantı
+  2. Compile-time qualifier — `donmuş<T>` yeni tip operatörü (yeni keyword)
+  3. Hibrit — `dondur` builtin + sembol tablosu flag (yeni keyword yok)
+- **Engellediği iş:** DRF-L4 (Frozen Region Safety) lemma ifadesi.
+
+### F. Bellek modeli — Sequential Consistency vs Weak Memory
+- **Kategori:** memory model / ARM64 (DGX Spark hedefi)
+- **Bağlam:** DRF tanımı genelde SC varsayar. ARM64 weak memory model
+  (relaxed default + dmb sy fence). DGX Spark ARM64.
+- **Önerilen seçenekler:**
+  1. V1 SC varsayımı + runtime fence sorumluluğu — basit ama eksik
+  2. C++11 MM entegrasyonu — her `görev`/`kanal`/`dondur` acquire/release
+  3. Daha güçlü model (release-acquire default) — her boundary fence
+- **Engellediği iş:** LLVM IR fence emit politikası; V2 weak memory.
+
+### G. Capability + DRF: ayrı teorem mi, bileşke mi?
+- **Kategori:** teorem organizasyonu
+- **Bağlam:** `yetki<R>` linear (CP.1.1). DRF-L6 capability'i kapsar. Ama
+  Capability'nin asıl katkısı confused-deputy/ambient authority — DRF dışı.
+- **Önerilen seçenekler:**
+  1. Tek DRF teoremi — DRF-L6 ile kapsanır
+  2. Ayrı teorem — Teorem 4' (DRF) + Teorem 7 (Authority Soundness) ortak
+     lemma DRF-L6 paylaşır
+- **Engellediği iş:** Yok (ileride).
+
+### H. `güvensiz` blok + DRF: opt-out modeli
+- **Kategori:** teorem önkoşul yapısı / Teorem 5 ilişkisi
+- **Bağlam:** Mevcut Teorem 4 "Güvenli alt küme". Teorem 5 (Güvensiz Sınır
+  Bütünlüğü) güvensizden `*` çıkamaz diyor. DRF güvensiz bloğu nasıl ele alır?
+- **Önerilen seçenekler:**
+  1. Tamamen dışlama — "Π güvensiz blok içermez" önkoşul
+  2. Güvensiz izolasyon — güvensiz blok DRF garanti yok, dışı korunur
+  3. Programcı annotation — `[etiket: "no-DRF"]` opt-out
+- **Engellediği iş:** Teorem ifadesinin tam yazımı (Plan Bölüm 3.1).
+
+### I. Plan onayı + dosya yapısı
+- **Kategori:** belge organizasyonu
+- **Bağlam:** Plan dökümanı yazıldı. Sonra Operasyonel_Semantik.md, DRF_Lemmalar.md,
+  DRF_Teoremi.md (veya Bellek_Modeli.md yenile).
+- **Önerilen seçenekler:**
+  1. Çok dosya — modüler, küçük commit'ler, git history düzgün
+  2. Tek dosya `KEMGU_DRF_V2.md` — tüm bunları içerir
+- **Engellediği iş:** Faz A1 başlangıcı.
+
+### J. Test sayısı eşiği (🟡 Sarı — sessizlik onay)
+- **Kategori:** test minimum
+- **Bağlam:** Linear 50, Capability 35, Sabitsüre 30, Realtime 30, SIMD 25.
+- **Öneri:** **30+** (Linear/CT/RT'a yakın). ~20 negative + ~10 positive.
+
+---
+
 ## [2026-05-14] — stdlib::kripto bundle yaklaşımı + V1 sınırları
 
 - **Kategori:** modül sistemi / runtime gereksinimi

@@ -618,4 +618,27 @@ hata: CP005: linear yetki tüketilmedi (scope sonunda kullanılmış olmalı)
 
 ---
 
+## CP.14 — DRF Teoremi ile İlişki (2026-05-14)
+
+CP.1.1 Linear Integration sayesinde `yetki<R>` linear olarak takip edilir
+(L-NO-COPY = CP-NO-COPY, L-NO-ALIAS = CP-NO-ALIAS). Bu, **Genişletilmiş DRF
+Teoremi**'ne (Teorem 4', `KEMGU_DRF_Teoremi.md`) doğrudan katkı sağlar:
+
+- **DRF-L6 (Capability Linear Inheritance)** — `yetki<R>` thread'ler arası
+  transferde DRF-L2 ile aynı garantiyi taşır: çağıran thread token'ı
+  kaybeder, alıcı thread tek sahiptir.
+
+Confused-deputy ve ambient authority sınıfları **DRF kapsamı dışıdır**;
+ayrı bir teoreme bırakılır:
+
+- **Teorem 7 (Authority Soundness)** — taslak, gelecek belge:
+  `İyiTipli(Π) ⟹ Π'de confused-deputy attack izi olmaz`
+
+Plan referansı: [`KEMGU_DRF_Genisletme_Plan.md`](KEMGU_DRF_Genisletme_Plan.md)
+Karar G "ayrı teoremler, ortak DRF-L6 paylaşır".
+
+Detay: [`KEMGU_DRF_Lemmalar.md`](KEMGU_DRF_Lemmalar.md).
+
+---
+
 **END SPEC CP V1**
