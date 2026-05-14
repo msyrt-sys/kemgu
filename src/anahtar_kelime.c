@@ -30,6 +30,7 @@ static const AnahtarKelime tablo[] = {
     {"d\xc4\xb1\xc5\x9f" "a",           6, TOK_DISA      },  /* dışa        */
     {"e\xc4\x9f" "er",                   5, TOK_EGER      },  /* eğer        */
     {"e\xc5\x9fle\xc5\x9f",             7, TOK_ESLES     },  /* eşleş       */
+    {"ger\xc3\xa7" "ekzamanl\xc4\xb1", 15, TOK_GERCEKZAMANLI},/* gerçekzamanlı */
     {"g\xc3\xbcvensiz",                  9, TOK_GUVENSIZ  },  /* güvensiz    */
     {"hata",                              4, TOK_HATA      },  /* hata        */
     {"hi\xc3\xa7",                       4, TOK_HIC       },  /* hiç         */

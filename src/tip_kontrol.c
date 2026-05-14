@@ -2392,6 +2392,11 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
         : tip_olustur_basit(tk->arena, TIP_BOS);
     tk->scope = eski_scope;
     TipBilgisi *islev_tipi = tip_olustur_islev(tk->arena, ptipler, n, donus);
+    /* Realtime Spec V1: işlev imzasında qualifier flag taşınır. */
+    if (islev_tipi) {
+        islev_tipi->veri.islev.gercekzamanli_mi =
+            islev->veri.islev.gercekzamanli_mi;
+    }
 
     Sembol s;
     memset(&s, 0, sizeof(s));

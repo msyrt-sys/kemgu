@@ -97,6 +97,7 @@ struct TipBilgisi {
             TipBilgisi **parametreler;
             int param_sayi;
             TipBilgisi *donus;
+            int gercekzamanli_mi;     /* Realtime Spec V1 — hard real-time qualifier */
         } islev;
 
         struct {
