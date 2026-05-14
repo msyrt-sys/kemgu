@@ -100,7 +100,10 @@ kemgu/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
 │       ├── yapilar.kem                — Generic yapılar + referans (TAMAMLANDI ✓)
-│       └── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
+│       ├── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
+│       └── drone_kontrol.kem          — Realtime PID controller (TAMAMLANDI ✓)
+├── src/wcet.h/c                       — Realtime Spec V1 WCET + RT001-RT005 (TAMAMLANDI ✓)
+└── test/test_wcet.c                   — 32/32 test, ASan temiz
 ```
 
 ---

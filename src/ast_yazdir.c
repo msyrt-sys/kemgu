@@ -231,6 +231,9 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
         case DUGUM_ISLEV:
             fputc(' ', c);
             string_yaz(c, d->veri.islev.ad, d->veri.islev.ad_uzunluk);
+            if (d->veri.islev.gercekzamanli_mi) {
+                fputs(" [realtime]", c);
+            }
             konum_yaz(c, d);
             fputc('\n', c);
             indent_yaz(c, derinlik + 1);
