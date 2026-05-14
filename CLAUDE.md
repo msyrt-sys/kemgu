@@ -189,15 +189,20 @@ Sayı ayracı:        1_000_000
 Raw string:         r#"..."#
 ```
 
-### 33 Anahtar Kelime
+### 35 Anahtar Kelime
 ```
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
 tamam, hata, bölge, uygula, kendin, seçimlik, sonuç, değer, hiç,
-güvensiz, tekkez, imha
+güvensiz, tekkez, imha, görev, kanal
 ```
 (`tekkez`, `imha` — Linear Types Spec V1; `kullan` ifade context'inde
-linear consume olarak ikinci anlama sahip — `kullan(t)`.)
+linear consume olarak ikinci anlama sahip — `kullan(t)`. `görev`, `kanal`
+— Concurrency / DRF V1 tip kurucuları; `görev_başlat`, `görev_birleştir`,
+`kanal_gönder`, `kanal_al`, `dondur` built-in çağrılar.)
+
+Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
+`sabitsüre`, `gerçekzamanlı`, `yetki`, `delege`, `geri_al`, `vektör`.
 
 ### Tip Sistemi
 ```
@@ -653,7 +658,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 ```
 
 ### Sıradaki büyük seçenekler:
-- **Concurrency lang syntax** (görev/kanal anahtar kelimeleri, R-GÖREV uygulama)
+- **DRF V2 (operasyonel)** — Plan Karar B; runtime izler + C++11 weak memory model fence emit
+- **Concurrency runtime** — `görev`/`kanal` lang syntax mevcut (DRF V1 statik tip kontrol);
+  runtime thread/channel implementasyonu, LLVM codegen, semaforlar (Plan Karar F V2)
+- **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
+  block içindeki son `ver` deyimi tip dönüşü V2)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
