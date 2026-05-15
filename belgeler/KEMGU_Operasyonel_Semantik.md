@@ -168,11 +168,29 @@ v ::= n              -- skaler (tam/dtam/kesirli/mantıksal/karakter)
 ### 3.3 Memory Model (V1: Sequential Consistency)
 
 Plan Bölüm 7.F kararı: **V1 = SC varsayımı**. Tüm bellek operasyonları
-global bir sıralı izde gerçekleşir; weak memory (ARM64 relaxed) için
-runtime fence emit (LLVM `atomic acq_rel`) — Plan Karar F.
+global bir sıralı izde gerçekleşir; bu varsayım altında §6 happens-before
+ve data_race tanımları SC modelinin standart formudur.
 
-V2'de **C++11 MM** entegrasyonu (acquire/release fence'leri görev/kanal/
-dondur boundary'lerinde).
+**V1 kapsam sınırı (kritik):** Buradaki Teorem 4' ispatı **yalnız SC
+altında** geçerlidir. ARM64 / RISC-V / x86-TSO gibi weak memory
+mimarilerinde teoremin geçerliliği **V1 KAPSAMI DIŞINDADIR.** Derleyici
+**operasyonel önlem** olarak görev/kanal/dondur sınırlarında LLVM IR
+`atomic acq_rel` fence emit eder (`görev_başlat`, `görev_birleştir`,
+`kanal_gönder`, `kanal_al`, `dondur` çağrılarının codegen'inde — V2
+implementasyonu); fakat:
+
+> Bu fence emisyonunun gerçekten SC simülasyonu sağladığının **kanıtı
+> V2'ye saklıdır.** Boehm & Adve (2008) ile LLVM atomic semantiğinin
+> soundness denetimi (CompCertTSO benzeri) V2 kapsamında yapılır.
+
+Yani V1'in iddiası dar ve dürüsttür:
+
+```
+Π SC altında çalışırsa  ∧  İyiTipli(Π)  ⟹  ∀ τ ∈ Tr(Π) : ¬ data_race(τ)
+```
+
+Weak memory altında geçerlilik V2 hedefidir (`KEMGU_DRF_Genisletme_Plan.md`
+Karar F).
 
 ---
 
@@ -404,11 +422,14 @@ happens-before ile sıralanmamış.)
   4. sabitsüre_kontrol_program(Π) = OK                    (CT001..CT008 yok)
   5. bölge_atama_program(Π) = OK                          (escape + R-* aksiyom geçti)
   6. realtime_kontrol_program(Π) = OK (eğer var)          (RT001..RT007 yok)
-  7. Π hiçbir `güvensiz` blok içermez                     (Plan Karar H, izolasyon modu)
+  7. Π hiçbir `güvensiz` blok içermez                     (V1: strict exclusion)
 ```
 
-V1'de yedi koşul birlikte sağlanmalı. (7) `güvensiz` ile ilgili gevşetme
-Plan Karar H'da "güvensiz izolasyon" — güvensiz blok dışı koruma.
+V1'de yedi koşul birlikte sağlanmalı. (7) koşulu strict exclusion'dır:
+güvensiz blok bulunan herhangi bir program **otomatik** İyiTipli FAIL.
+Güvensiz dışı kodun korunup korunmadığı (izolasyon) ayrı bir teoremdir
+(`Teorem 5 — Güvensiz Sınır Bütünlüğü`) ve V3 metateoreminde DRF ile
+bileşkelendirilir (Plan Karar B "V3 bütünleşik").
 
 ### 7.1 Tip Kontrol Türetilebilirliği
 
@@ -423,46 +444,85 @@ DRF teoremi için **tek koşul**: `İyiTipli(Π) = doğru`. Bu durumda
 
 ---
 
-## 8. Anahtar Aksiyomlar (Bu Belgenin Sonuçları)
+## 8. Anahtar Korunum Teoremleri
 
-Aşağıdakiler **bu belgede aksiyomdur**; Bölüm 1-7'nin sonucudur. DRF
-lemmaları (`KEMGU_DRF_Lemmalar.md`) bunlardan türetilir.
+Bu bölümdeki ifadeler **teoremlerdir** — Bölüm 1-7 tanımlarından
+türetilebilir. DRF lemmaları (`KEMGU_DRF_Lemmalar.md`) bunlara
+dayanır.
 
-### A1 — Tip Korunumu
+> **Önceki sürüm notu:** İlk taslakta bu bölüm "aksiyomlar" olarak
+> başlıklandırılmıştı; ama DRF-L1 (Region-Thread Tekilliği) eski A2'yi
+> "ispatlıyor" gibi referans ederek döngüsel bir kuruluşa yol açıyordu.
+> Düzeltme: A2 → **DRF-L0** olarak Lemmalar dosyasına taşındı; A1 ve
+> A4 burada subject-reduction tarzı kısa ispat skecleriyle teorem
+> olarak duruyor; A3 doğrudan Linear V1 spec'ine atfı kalır.
+
+### Teorem A1 — Tip Korunumu (Subject Reduction)
 
 ```
 İyiTipli(Π) ∧ Π ⟹* S' ∧ S' = ⟨T⃗, σ, Σ, K⃗⟩
-  ⟹ ∀ T = ⟨t, e, Λ, Ρ⟩ ∈ T⃗ : Γ' ⊢ e : τ'        (uygun Γ', τ')
+  ⟹ ∀ T = ⟨t, e, Λ, Ρ⟩ ∈ T⃗ : ∃ Γ', τ' :  Γ' ⊢ e : τ'
 ```
 
-Reduksiyon tip değişikliğine sebep olmaz.
+**İspat skeci (Wright–Felleisen 1994 tarzı):**
 
-### A2 — Bölge Korunumu
+Yapısal indüksiyon `⟹` adımı üzerine. Her küçük-adım kuralı (S-* ve
+C-*) için, sol-taraf ifadesinin tipinden sağ-taraf ifadesinin tipinin
+çıkarsanabildiğini göster:
 
-```
-İyiTipli(Π) ∧ Π ⟹* S' = ⟨T⃗, σ, Σ, K⃗⟩
-  ⟹ Σ S1'i karşılar     (her ρ ∉ ρ_donmuş için |sahip| ≤ 1)
-```
+- **S-VAR** (`x ⟶ v`): `Γ ⊢ x : τ` (varsayım) ⟹ `σ(Ρ(x), 0) = v` ile
+  `v : τ` (DRF-L7 ile uyumlu, store tip-korunumu).
+- **S-ATAMA**: `x = e` adımının ilk e reduksiyonu indüksiyon hipotezi
+  ile tip korur; atama sonrası `() : boş` tipi sabit.
+- **S-LIN-KULLAN** (`kullan(x) ⟶ v`): tip kontrol `Γ ⊢ x : tekkez<τ>`
+  garanti etti; consume sonrası `v : τ` (L-CONS kuralı, B.3).
+- **C-GÖREV-BAŞLAT**: `görev_başlat(c) : görev<T>` (T = c'nin dönüş
+  tipi); reduksiyon `görev<T>` handle değerini bağlar — tip değişmedi.
+- **C-KANAL-GÖNDER/AL/DONDUR/BİRLEŞTİR**: her biri spec'in tip imzasını
+  korur; özel-case tip kontrol kuralları (DRF001-DRF005) garanti eder.
 
-Reduksiyon sahiplik singleton'unu kırmaz.
+∴ Hiçbir reduksiyon "tip değişikliği"ne yol açmaz; tip bilinmeyene
+düşmez. ∎
 
-### A3 — Lineer Korunumu
+### Teorem A3 — Lineer Korunumu
 
 ```
 İyiTipli(Π) ∧ Π ⟹* S' = ⟨T⃗, σ, Σ, K⃗⟩
   ⟹ ∀ T = ⟨t, e, Λ, Ρ⟩ : Λ tutarlı       (her tüketim ≤ 1)
 ```
 
-Reduksiyon linear tüketim sayısını >1 yapmaz.
+**Cite:** `KEMGU_Linear_Types_Spec_V1.md` B.3 (L-LINEARITY, L-CONS,
+L-DISPOSE, L-COND); `tip_kontrol.c` Λ takibi (`lineer_tuketildi` flag).
+Reduksiyon `Λ`'nın yalnız `AKTİF → TÜKETİLDİ` yönlü değişikliklerine
+izin verir; ters yön kuralı yoktur. ∎
 
-### A4 — Bellek Bütünlüğü
+### Teorem A4 — Bellek Bütünlüğü
 
 ```
-İyiTipli(Π) ∧ Π ⟹* S' ∧ mem_op(t, ρ, ofs, _) ∈ S'.kullanım
-  ⟹ Σ(ρ, z) ∈ {t, DONMUŞ}   (t bu ρ'nun sahibi ya da ρ donmuş)
+İyiTipli(Π) ∧ Π ⟹* S' ∧ mem_op(t, ρ, ofs, _) ∈ S'.olaylar
+  ⟹ Σ(ρ, z) ∈ {t, DONMUŞ}
 ```
 
-Bir thread ancak kendi sahip olduğu veya donmuş bölgeye erişir.
+**İspat skeci (yapısal indüksiyon mem_op üreten kurallar üzerine):**
+
+- **Temel:** Π başlangıçta tek thread `t₀`; tüm ρ ∈ Ρ₀ ya `t₀`'ın ya
+  ⊥ (kullanılmamış). Trivial: tek thread → `t₀` veya hiç.
+- **S-VAR/S-ATAMA** mem_op'ları: erişim `t`'nin kendi bağlamından,
+  `Ρ_t(x)` yalnız t'nin sahip olduğu bölgeleri içerir (tip kontrol
+  ve bölge atama bunu garanti eder — escape DFA + R-* aksiyomları).
+- **C-GÖREV-BAŞLAT**: yakalananlar `Σ` aracılığıyla `t_yeni`'ye
+  transfer; çağıran thread'in `Ρ_t₁`'inden silinir (Linear: Λ \ YD_lin;
+  non-Linear: R-YAKALAMA-THREAD ile bölge sahipliği değişimi).
+- **C-KANAL-GÖNDER/AL**: bölge `ρ_kanal(k)` veya alıcı `ρ_sahip(t_b)`'ye
+  geçer atomik (S3); ara durum (kanaldayken) hiçbir thread'in değil.
+- **C-DONDUR**: `Σ(ρ, z) = DONMUŞ` set edilir; DRF-L4 ile çoklu okuma
+  izinli, yazma yok.
+
+∴ Her mem_op anında thread, `ρ`'nun ya sahibidir ya da `ρ` donmuş. ∎
+
+> Eski "A2 — Bölge Korunumu" doğrudan DRF-L1'i ifade ediyordu; DRF-L0
+> olarak Lemmalar dosyasına taşındı. A4 (bu teorem) DRF-L0 + A1 + A3'ün
+> bir sonucudur ve DRF-L7 ile uyumludur.
 
 ---
 

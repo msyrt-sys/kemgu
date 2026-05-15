@@ -427,6 +427,62 @@ static void T36_kanal_lineer_v_tuketildi(void) {
 }
 
 /* ========================================================================
+ * GROUP D37-D39: Patch P2 — non-linear capture + dondur idempotency
+ * ======================================================================== */
+
+static void T37_dizi_yakala_pozitif(void) {
+    /* DRF-L3 (Linear Closure Soundness) — non-linear capture variantı:
+     * Dizi<tam32> görev_başlat closure'da yakalanır, görev_birleştir ile
+     * sonuç alınır, çağıran thread Dizi'ye dokunmaz → 0 hata.
+     * R-YAKALAMA-THREAD non-linear capture move semantiğini doğrular. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
+        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]);\n"
+        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+    test_sonuc("D37: Dizi non-linear capture + birlestir = 0 hata",
+               h == 0);
+}
+
+static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
+    /* D38: V1 KNOWN-LIMIT — non-linear capture sonrası çağıran thread'in
+     * yakalanan Dizi'ye erişimi V1 tip kontrolünde yakalanmıyor.
+     * V2 hedefi (Plan §9 risk tablosu: inter-procedural escape analizi):
+     * R-YAKALAMA-THREAD'in compile-time enforcement'i Dizi/yapı için
+     * bölge sahipliği transferi sonrası ihlal hata vermeli.
+     *
+     * V1 davranışı: 0 hata (V1 tip kontrol bu pattern'i yakalamıyor).
+     * Bu test V1 sınırını dokümante eder; V2'de h >= 1 olmalıdır. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
+        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]);\n"
+        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "    de\xc4\x9fi\xc5\x9fken s: tam32 = xs[1];\n");
+    test_sonuc("D38: Dizi capture sonrasi erisim V1 KNOWN-LIMIT "
+               "(V1: 0 hata, V2: hata bekleniyor)",
+               h == 0);
+}
+
+static void T39_dondur_idempotent_degil(void) {
+    /* DRF-L4 (Frozen Region) — dondur(v) idempotent DEĞİL.
+     *
+     * Spec netleştirme (2026-05-15, Patch P2):
+     *   dondur(&değişken T) -> &T
+     *   İkinci dondur çağrısı &T üzerinde DRF005 verir
+     *   (dondur argümanı &değişken T olmalı; &T immutable, kabul edilmez).
+     *
+     * Bu, dondurmanın "tek yönlü" olduğunu zorlar — bir kez immutable
+     * yapıldıktan sonra tekrar dondurma anlamsız ve tip hatası. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test(v: &de\xc4\x9fi\xc5\x9fken tam32) -> &tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken d1: &tam32 = dondur(v);\n"
+        "    de\xc4\x9fi\xc5\x9fken d2: &tam32 = dondur(d1);\n"
+        "    ver d2;\n"
+        "}\n");
+    test_sonuc("D39: dondur(dondur(v)) -> DRF005 (idempotent degil)",
+               h >= 1);
+}
+
+/* ========================================================================
  * Main
  * ======================================================================== */
 
@@ -485,6 +541,11 @@ int main(void) {
     T34_tekkez_gorev_lc2();
     T35_yetki_gorev_drf_l6();
     T36_kanal_lineer_v_tuketildi();
+
+    /* D37-D39: Patch P2 — non-linear capture + dondur idempotency */
+    T37_dizi_yakala_pozitif();
+    T38_dizi_yakala_sonrasi_erisim_v1_limit();
+    T39_dondur_idempotent_degil();
 
     printf("\n=== %d/%d test gecti (basarili) ===\n", basarili, toplam_test);
     if (basarisiz > 0) {

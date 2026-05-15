@@ -261,7 +261,14 @@ iterasyon_başı(d) → yeni(ρ_iterasyon(d))
 **Teorem 5 — Güvensiz Sınır Bütünlüğü:** Ham pointer güvensiz bloktan çıkamaz
 **Teorem 6 — Bölge Bölme Doğruluğu:** Optimizasyon gözlemlenebilir davranışı değiştirmez
 
-### Teorem 4 İspat Taslağı
+### Teorem 4 İspat Taslağı (Tarihsel — V1 öncesi informel)
+
+> **NOT (2026-05-15):** Aşağıdaki 4-bullet taslak V1 formel ispatının
+> (`KEMGU_DRF_Teoremi.md` — Teorem 4', İyiTipli(Π) üzerinden SC altında)
+> **öncesidir.** Geçerli ispat orada; bu blok yalnız tarihsel amaçla
+> korunur. Aşağıdaki bulletler bağımsız olarak yanıltıcıdır (S1
+> runtime invaryantı olarak kabul ediliyor, ispatlanmıyor; closure
+> yakalamada lineerlik ile bölge taşıyıcılarının ayrımı yok).
 
 Data race: iki thread aynı belleğe eşzamanlı erişir, en az biri yazma.
 
