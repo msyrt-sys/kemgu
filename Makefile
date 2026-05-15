@@ -230,6 +230,18 @@ $(BUILD)/test_drf$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                          $(TESTDIR)/test_drf.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Modul Import V1 testi (Faz 1 — Altyapi Bootstrap) ===
+
+$(BUILD)/test_modul_import$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                                  $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                                  $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                                  $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                                  $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                                  $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                                  $(SRCDIR)/wcet.c \
+                                  $(TESTDIR)/test_modul_import.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === SIMD Spec V1 testi (Clang64 + ASan — full pipeline) ===
 
 $(BUILD)/test_simd$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
@@ -376,6 +388,9 @@ calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_r
 
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
 	./$(BUILD)/test_linear$(EXE)
+
+calistir_modul_import_test: $(BUILD)/test_modul_import$(EXE)
+	./$(BUILD)/test_modul_import$(EXE)
 
 calistir_sabitsure_test: $(BUILD)/test_sabitsure$(EXE)
 	./$(BUILD)/test_sabitsure$(EXE)

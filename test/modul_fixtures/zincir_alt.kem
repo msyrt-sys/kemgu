@@ -1,0 +1,6 @@
+// Zincir alt modülü — temel_a'yı kullan
+kullan test::modul_fixtures::temel_a;
+
+işlev zincir_alt_hesap(x: tam32) -> tam32 {
+    ver a_topla(x, A_SABIT);
+}

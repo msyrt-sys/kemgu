@@ -1,0 +1,6 @@
+// Modül A — basit fonksiyon ve sabit
+sabit A_SABIT: tam32 = 42;
+
+işlev a_topla(x: tam32, y: tam32) -> tam32 {
+    ver x + y;
+}
