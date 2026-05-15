@@ -80,10 +80,16 @@ geçen program, mümkün olan tüm yürütme izlerinde data race içermez.
 4. `sabitsüre_kontrol_program(Π) = OK` (CT001..CT008 yok — DRF için ortogonal)
 5. `bölge_atama_program(Π) = OK` (escape DFA + R-* aksiyom geçti)
 6. `realtime_kontrol_program(Π) = OK` (RT001..RT007 yok — DRF için ortogonal)
-7. Π hiçbir `güvensiz` blok içermez (Plan Karar H "izolasyon")
+7. Π hiçbir `güvensiz` blok içermez (V1: strict exclusion — Plan Karar H)
 
 (4) ve (6) sabitsüre/realtime DRF için **doğrudan gerek değil** ama
 `İyiTipli` kavramının bütünlüğü için listelenir.
+
+> **Not (7) hakkında:** V1 strict exclusion — güvensiz blok bulunan
+> program `İyiTipli` testini geçemez (otomatik FAIL). Güvensiz dışı
+> kodun korunup korunmadığı (izolasyon) ayrı bir mesele; Teorem 5
+> (Güvensiz Sınır Bütünlüğü) ile birlikte V3 metateoreminde
+> bileşkelendirilir.
 
 ### 2.2 Sabitsüre / Realtime DRF ile İlişki
 
@@ -260,17 +266,60 @@ Karşılaştırma:
 - **Go** runtime detector; statik garanti yok.
 - **KEMGU** statik garanti, sıfır annotation (escape DFA otomatik).
 
-### 4.2 Linear Types'ın Matematik Gücü (Plan Karar C)
+### 4.2 İyiTipli(Π)'nin Çift Taşıyıcısı (Plan Karar C — düzeltildi)
 
-Plan Karar C: "Linear types DRF'in temel taşıyıcısı."
+İlk taslakta Plan Karar C "Linear types DRF'in **tek temel taşıyıcısı**"
+diye okundu. Dış review (2026-05-15, Patch P1.3) bu okumayı düzeltti:
+**DRF aslında iki ayrı taşıyıcıya dayanır** ve İyiTipli(Π) ikisini
+eş-zamanlı zorlar.
 
-İspat bu kararı destekler:
-- DRF-L2, DRF-L3, DRF-L5, DRF-L6 hepsi `L-NO-COPY` + `L-NO-ALIAS` üzerine
-  kuruldu.
-- Linear'sız (Linear V1 önce) DRF ispatı **runtime invaryantı** S1'e
-  bağımlıydı (eski Teorem 4 ispatı).
-- Linear V1 ile artık **compile-time** kanıt — `İyiTipli(Π)` doğru ise
-  S1 her z için **otomatik** doğru (kanıtlanan, kabul edilen değil).
+**Taşıyıcı 1 — Değer-düzeyi lineerlik (Linear V1 + Capability V1):**
+
+- `tekkez<T>`, `yetki<R>`, `görev<T>` linear olarak takip edilen değer
+  tipleri için L-NO-COPY + L-NO-ALIAS kuralları compile-time'da
+  çağırılan thread'in linear bağlamayı kaybetmesini zorlar.
+- DRF-L2, DRF-L3, DRF-L5, DRF-L6'nın **doğrudan** dayandığı taşıyıcı.
+- Pattern: `görev_başlat(c)` ile yakalanan linear v'nin Λ_t₁(v) =
+  TÜKETİLDİ olur; sonraki erişim L002 derleme hatası.
+
+**Taşıyıcı 2 — Bölge-düzeyi sahiplik (Region V1 + Linear-bağımsız):**
+
+- Heap-allocated reference tipler (non-linear `&T`, `Dizi<T>`, yapılar)
+  için S1 (Tekil Sahiplik) + R-YAKALAMA-THREAD ile bölge sahipliği
+  thread'e bağlanır.
+- DRF-L0 (Region Preservation) + DRF-L1 (Region-Thread Tekilliği) bu
+  taşıyıcı üzerinden çalışır — **Linear referansları olmasa bile**
+  heap referans yakalama da R-YAKALAMA-THREAD ile move semantik alır.
+- Linear V1'in DRF'e değil, R-YAKALAMA-THREAD'in işidir.
+
+**İki taşıyıcının birlikteliği:**
+
+```
+İyiTipli(Π) ⟹
+  (1) Λ tutarlı her t ∈ Threads, her z için  (Taşıyıcı 1)
+  (2) Σ S1'i karşılar her ρ, her z için       (Taşıyıcı 2)
+
+İkisi birlikte ⟹  ∀ τ ∈ Tr(Π) :  ¬ data_race(τ)   (Teorem 4')
+```
+
+**Linear-only programlar:**
+
+Eğer Π yalnız linear tipler kullanıyorsa Taşıyıcı 1 yeterli;
+bölge analizi triviyal.
+
+**Linear-yok programlar:**
+
+Eğer Π hiç linear tip kullanmıyorsa (klasik C-benzeri kod), Taşıyıcı 2
+hâlâ çalışır — R-YAKALAMA-THREAD `görev_başlat` ile yakalanan her
+referans/heap-değeri için sahiplik transferi yapar.
+
+**Karma programlar (en yaygın):**
+
+İki taşıyıcı bağımsız olarak işler; kompozisyonel.
+
+Sonuç: KEMGU'nun DRF garantisi **iki ayrı mekanizmanın** kompozisyonudur.
+İkisinden biri devre dışı kalsa DRF garantisi kalmaz; ikisi tip kontrol
+fazında zorlanır.
 
 ### 4.3 Donmuş Bölge S1 İstisnası
 

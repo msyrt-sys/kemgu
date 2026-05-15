@@ -331,6 +331,56 @@ SIMD intrinsics V1 tamamlandı (belgeler/KEMGU_SIMD_Spec_V1.md). Aşağıdaki
 
 ---
 
+## [2026-05-15] — DRF V1 Patch P1+P2 uygulandı (dış review concern'leri)
+
+Soundness boşlukları kapatıldı, framing düzeltildi, test 39/39'a çıktı.
+
+**P1 (wording + soundness):**
+- Op.Sem §3.3: V1 dar SC iddiasına çekildi, fence emit V2 saklı.
+- Op.Sem §8: "Aksiyom" → "Korunum Teoremi"; A2 silindi, DRF-L0 olarak
+  Lemmalar dosyasına taşındı (döngüsel kurgu kırıldı); A1+A4 subject-
+  reduction tarzı kısa ispat skecleri eklendi.
+- Teorem §4.2: "tek taşıyıcı" → "çift taşıyıcı" (Linear + Region
+  bağımsız mekanizmalar, kompozisyonel DRF).
+- Karar H: "izolasyon" → "exclusion (V1 strict)"; izolasyon V3 hedefi.
+- Bellek_Modeli.md: eski 4-bullet ispat taslağına "Tarihsel" notu +
+  yanıltıcı ifadelerin uyarısı.
+
+**P2 (test):**
+- D37: Dizi non-linear capture + görev_başlat = 0 hata (pozitif).
+- D38: V1 KNOWN-LIMIT — Dizi capture sonrası dış erişim V1'de yakalanmıyor;
+  V2 inter-procedural escape hedefi.
+- D39: dondur idempotent değil — `dondur(dondur(v))` → DRF005.
+
+Toplam: 39/39 ASan temiz.
+
+---
+
+## [2026-05-15] — DRF worktree branch rename — manuel müdahale gerek
+
+- **Kategori:** branch yönetimi (yeşil — kullanıcı kararı)
+- **Bağlam:** Direktif worktree branch'inin `feature/drf-genisletme-plan`
+  olmasını istemişti. Worktree olarak `claude/elegant-fermat-6a8537`
+  açılmış. `git branch -m feature/drf-genisletme-plan` denendi:
+  ```
+  fatal: a branch named 'feature/drf-genisletme-plan' already exists
+  ```
+  `git branch -a` çıktısı: `+ feature/drf-genisletme-plan` (başka bir
+  worktree'de checkout edilmiş — `+` işareti). Bu nedenle bizim
+  worktree branch'imiz olduğu gibi kalır.
+- **Önerilen seçenekler (Mehmet manuel):**
+  1. Mevcut `feature/drf-genisletme-plan`'i sil (eğer artık gerekmiyorsa)
+     → `git worktree remove <path>` + `git branch -d feature/drf-genisletme-plan`
+     → sonra `git branch -m feature/drf-genisletme-plan` bizim branch'te
+  2. Cherry-pick: bu worktree'deki commit'leri (`38280d1`, `c3bcd1d`,
+     yeni Patch P1+P2 commit'i) `feature/drf-genisletme-plan` üzerine taşı
+  3. Merge: bu branch'i `feature/drf-genisletme-plan`'a merge et
+  4. Bu branch'i olduğu gibi bırak (`claude/elegant-fermat-6a8537`) ve
+     direkt `main`'e merge et
+- **Engel:** Yok — implementasyon bu branch'te tamam.
+
+---
+
 ## [2026-05-14] — DRF teoremi genişletme planı: KARARLAR ONAYLANDI ✓
 
 **Mehmet onayı (2026-05-14):** Plan dökümanı Bölüm 7'deki tüm önerilerin
@@ -347,7 +397,10 @@ Onaylanan kararlar (önerilen seçenekler kabul):
   (görev/kanal/dondur sınırlarında); V2 weak memory.
 - **G:** Ayrı teoremler — Teorem 4' (DRF) + Teorem 7 (Authority Soundness)
   ortak lemma DRF-L6 paylaşır.
-- **H:** Güvensiz **izolasyon** modu — güvensiz blok dışı DRF korunur.
+- **H:** Güvensiz blok **exclusion** (V1 strict) — `İyiTipli(Π)` önkoşulu
+  `Π hiçbir güvensiz blok içermez` şartını taşır; içerirse İyiTipli FAIL.
+  İzolasyon (güvensiz dışı koruma + sınır güvenliği) **V3 metateorem
+  hedefi** olarak saklı (Plan Karar B "V3 bütünleşik güvenlik").
 - **I:** **Çok dosya** organizasyon — modüler.
 - **J:** **30+** test eşiği (Linear/CT/RT'a yakın).
 

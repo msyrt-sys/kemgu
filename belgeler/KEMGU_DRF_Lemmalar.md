@@ -6,18 +6,24 @@
 **Plan referansı:** [`KEMGU_DRF_Genisletme_Plan.md`](KEMGU_DRF_Genisletme_Plan.md), Bölüm 5
 
 Bu belge, KEMGU'nun **Genişletilmiş DRF Teoremi** (`Teorem 4'`) ispatında
-kullanılan 7 ara-lemmayı tanımlar. Lemmaların **bağımlılık grafı**
-(`KEMGU_DRF_Genisletme_Plan.md` Bölüm 5.2'de) ve ispat sırası:
+kullanılan 8 ara-lemmayı tanımlar (DRF-L0..L7). Lemmaların **bağımlılık
+grafı**:
 
 ```
-        DRF-L7  →  DRF-L1
+        DRF-L0  →  DRF-L7
+          ↓          ↓
+        DRF-L1
+          ↓
+        DRF-L2  →  DRF-L3
                      ↓
-                  DRF-L2  →  DRF-L3
-                                ↓
-                  DRF-L4   →   DRF-L5  →  DRF-L6
-                       ↘  ↓  ↗
-                       Teorem 4'
+        DRF-L4   →   DRF-L5  →  DRF-L6
+              ↘  ↓  ↗
+              Teorem 4'
 ```
+
+DRF-L0 tek-adım koruma (preservation); DRF-L1 tüm iz boyunca kapatma
+(progress + preservation kombinasyonu). DRF-L0 Op.Sem §8'den taşındı
+(Patch P1.2 — döngüsel kurguyu kırma).
 
 ---
 
@@ -39,6 +45,67 @@ kullanılan 7 ara-lemmayı tanımlar. Lemmaların **bağımlılık grafı**
 | Tr(Π) | Π'nin tüm reduksiyon izleri kümesi |
 | ≺_hb | Happens-before bağıntısı |
 | İyiTipli(Π) | 7 koşulun hepsi geçer (Op.Sem. §7) |
+
+---
+
+## Lemma DRF-L0 — Bölge Korunumu (Region Preservation)
+
+**(Operasyonel Semantik §8'den taşındı — döngüsel kurguyu kırma için.)**
+
+### İfade
+
+```
+İyiTipli(Π) ∧ Π ⟹* S' = ⟨T⃗, σ, Σ, K⃗⟩
+
+⟹
+
+Σ S1'i karşılar:  ∀ ρ ∉ {ρ_donmuş, ρ_lit, ρ_global, ρ_kanal(_)}, ∀ z :
+                  |{t : Σ(ρ, t, z) ∈ Threads}| ≤ 1
+```
+
+### Yorum
+
+DRF-L1 (Region-Thread Tekilliği) ile aynı iddianın **küçük-adım koruma
+(preservation) versiyonu**: reduksiyon adımı `Σ`'nın S1 invaryantını
+kırmaz. DRF-L1 ise indüksiyon **kapatma** versiyonu (tüm izler için
+sonuç).
+
+İlk taslakta bu önerme `Op.Sem §8 A2` olarak aksiyom listelendiği için
+DRF-L1'in ispatında "A2 ile" diye refer edilirken yapısal indüksiyon
+döngüsel görünüyordu. Şimdi DRF-L0 olarak tek-adım koruma lemması
+yazılır; DRF-L1 onu kullanır.
+
+### Varsayımlar
+
+- S1 (Bellek Modeli Katman 2): yaratılış anında her bölge tek sahipli
+- S2 (Başlangıç Sahipliği): yaratan thread sahiptir
+- S3 (Atomik Transfer): sahiplik değişimi atomik
+- R-GÖREV, R-BİRLEŞTİR, R-KANAL, R-PAYLAŞ kuralları
+
+### İspat (Tek-adım Koruma)
+
+`S ⟹ S'`. `Σ`'yı değiştiren tek-adım kuralları:
+
+- **C-GÖREV-BAŞLAT**: `Σ' = Σ[bölge(v_i) ↦ t_yeni]`. Önceki sahibi
+  t₁'di; tek sahip → tek sahip, S1 korunur. ∎
+- **C-KANAL-GÖNDER**: `Σ' = Σ[bölge(v) ↦ ρ_kanal(k)]`. ρ_kanal kümesi
+  lemmanın hariç tutmasında; bölgenin Threads-sahibi sayısı 1'den
+  0'a düşer. S1 korunur. ∎
+- **C-KANAL-AL**: `Σ' = Σ[bölge(v) ↦ ρ_sahip(t_b)]`. 0 → 1, tek sahip.
+  S1 korunur. ∎
+- **C-DONDUR**: `Σ' = Σ[bölge(v) ↦ DONMUŞ]`. ρ artık `ρ_donmuş`
+  kategorisinde, lemmanın hariç tutmasında. ∎
+- **C-BİRLEŞTİR**: t_hedef'in ρ_sahip bölgeleri serbest; geriye kalan
+  ρ_çağıran'a terfi (tek sahip → tek sahip). S1 korunur. ∎
+- **Diğer S-* kuralları**: Σ değişmiyor. ∎
+
+∴ Reduksiyon S1'i kırmaz. ∎
+
+### Kullanım
+
+DRF-L1 (Region-Thread Tekilliği) tüm izler boyunca tümleme yapar:
+indüksiyon temeli + DRF-L0 her adım için, indüksiyon hipotezi tüm izde.
+DRF-L7'nin (Tip-Soundness for Memory Access) bağımlısıdır.
 
 ---
 
@@ -113,11 +180,17 @@ S3 ile yönetilir.
 
 ### Varsayımlar
 
-- A2 (Bölge Korunumu) — Op.Sem. §8
+- **DRF-L0** (Region Preservation — yukarıda) — tek-adım koruma
 - S1, S2, S3 (Bellek Modeli Katman 2 aksiyomları)
 - R-GÖREV, R-KANAL, R-PAYLAŞ kuralları (Op.Sem. §5.4)
 
 ### İspat (Yapısal İndüksiyon Π'nin Reduksiyonu Üzerine)
+
+> İlk taslakta varsayım listesinde `A2 (Bölge Korunumu) — Op.Sem. §8`
+> vardı; bu döngüsel görünüyordu (A2 DRF-L1'i ifade ediyor, DRF-L1
+> A2'yi referans alıyor). Düzeltme (Patch P1.2): A2 silindi, DRF-L0
+> olarak yukarıdaki lemmaya dönüştürüldü. DRF-L1 indüksiyon temeli +
+> DRF-L0 her adım için → kapatma.
 
 **Temel:** Π başlangıçta tek thread `t₀`. `Σ₀(ρ_yerel(main), 0) = t₀`,
 diğer ρ'lar `⊥` veya t₀. Tekillik trivial.
@@ -404,8 +477,9 @@ de erişimi aynı kurallar altında.)
 
 | Lemma | İfade Özeti | Anahtar Varsayım | İspat Tekniği |
 |-------|--------------|------------------|---------------|
-| DRF-L7 | Bellek erişimi tipli ve bölgeli | A1 + İyiTipli | Yapısal indüksiyon kurallar |
-| DRF-L1 | Region-thread tekil sahip | A2 + S1/S2/S3 | İndüksiyon Σ-değiştiren kurallar |
+| DRF-L0 | Bölge korunumu (tek-adım preservation) | S1/S2/S3 | Σ-değiştiren kuralların case analizi |
+| DRF-L7 | Bellek erişimi tipli ve bölgeli | A1 (Tip Korunumu) + İyiTipli | Yapısal indüksiyon kurallar |
+| DRF-L1 | Region-thread tekil sahip (tüm izler) | DRF-L0 + S1/S2/S3 | İndüksiyon — temel + DRF-L0 her adım |
 | DRF-L2 | Linear move'da kaynak silinir | Linear L-NO-COPY/ALIAS + LC-2 | C-GÖREV-BAŞLAT kuralı |
 | DRF-L3 | Linear closure yalnız t_yeni'de | LC-2/LC-3 + R-YAKALAMA-THREAD | Tip kontrol + DRF-L7 |
 | DRF-L4 | Donmuş bölgede yazma yok | R-PAYLAŞ + Plan E hibrit | Tip kontrol reddeder |
@@ -418,14 +492,15 @@ de erişimi aynı kurallar altında.)
 
 İspatlar aşağıdaki sırada yazılmalı (yukarıdaki belge bu sırayı izledi):
 
-1. DRF-L7 (kök — diğer hepsi buna dayanır)
-2. DRF-L1 (region sahip tekilliği)
-3. DRF-L2 (linear move semantiği)
-4. DRF-L3 (linear closure DRF-L2'ye dayanır)
-5. DRF-L4 (frozen region — bağımsız)
-6. DRF-L5 (channel — DRF-L2'ye dayanır)
-7. DRF-L6 (capability — DRF-L2 ve DRF-L5'e dayanır)
-8. Ana Teorem 4' (`KEMGU_DRF_Teoremi.md`)
+1. DRF-L0 (region tek-adım koruma — Σ kuralları case analizi)
+2. DRF-L7 (memory access tipli + bölgeli — Op.Sem A1'e dayanır)
+3. DRF-L1 (region sahip tekilliği — DRF-L0 + indüksiyon)
+4. DRF-L2 (linear move semantiği)
+5. DRF-L3 (linear closure DRF-L2'ye dayanır)
+6. DRF-L4 (frozen region — bağımsız)
+7. DRF-L5 (channel — DRF-L2'ye dayanır)
+8. DRF-L6 (capability — DRF-L2 ve DRF-L5'e dayanır)
+9. Ana Teorem 4' (`KEMGU_DRF_Teoremi.md`)
 
 ---
 
