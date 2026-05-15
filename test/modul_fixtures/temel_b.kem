@@ -1,0 +1,9 @@
+// Modül B — basit yapı tanımı
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+işlev b_olustur(x: tam32, y: tam32) -> Nokta {
+    ver Nokta { x: x, y: y };
+}

@@ -24,6 +24,26 @@ Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırlar
 Yeşil katman çözümlerle (stub + skeleton) atlatıldı; runtime ve spec
 oturumunda toplu karara açık:
 
+### A-RESOLVED (2026-05-15): Modül import altyapısı zaten mevcut
+
+**Durum:** ÇÖZÜLDÜ (Faz 1 Altyapı Bootstrap analizi sonucu).
+
+`tip_kontrol.c:3660-3732` blokunda `kullan path::to::module;` deyimi tam
+implementasyonu yıllardır mevcut: yol "::" -> "/", ".kem" eklenir, dosya
+parse + tip kontrol edilir; duplicate korunur (`YuklenmisModul` linked
+list); sirküler import otomatik kırılır.
+
+V1 sınırı: Modül izolasyonu yok — yüklenen sembol global scope'a girer.
+İzolasyon (`pub/priv` semantiği) V2'ye saklı.
+
+Test: `test/test_modul_import.c` 17/17 ASan temiz (Faz 1 MVP).
+
+**Kripto bundle refaktörü:** stdlib/kripto/*.kem'ler `kullan stdlib::kripto;`
+import etmediği için bundle workaround hâlâ kullanılıyor. Multi-file
+altyapı çalışıyor; refaktör pure-mekanik iş, V2'ye saklı.
+
+---
+
 ### A. stdlib::metin — runtime primitif gerek (en kritik)
 
 - **Kategori:** runtime / built-in eksikliği
