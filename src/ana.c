@@ -149,7 +149,8 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
-static int mode_llvm(const char *kaynak, const char *dosya_adi) {
+static int mode_llvm(const char *kaynak, const char *dosya_adi,
+                     const char *hedef_triple) {
     Arena *a = arena_olustur(0);
     if (!a) {
         fprintf(stderr, "Arena olusturulamadi\n");
@@ -166,25 +167,56 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         arena_serbest(a);
         return 1;
     }
-    llvm_ir_uret(prog, stdout);
+    llvm_ir_uret_hedef(prog, stdout, hedef_triple);
     arena_serbest(a);
+    return 0;
+}
+
+/* Bilinen bare-metal ve host triple'lari — validasyon icin.
+ * Bilinmeyen triple uyari verir ama pass-through (clang'a iletilir). */
+static int triple_taninir_mi(const char *triple) {
+    if (!triple || !triple[0]) return 0;
+    static const char *bilinenler[] = {
+        "x86_64-pc-windows-gnu",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-none",
+        "aarch64-unknown-none-elf",
+        "riscv64-unknown-none-elf",
+        "riscv64-unknown-linux-gnu",
+        "x86_64-unknown-none",
+        NULL
+    };
+    for (int i = 0; bilinenler[i]; i++) {
+        if (strcmp(triple, bilinenler[i]) == 0) return 1;
+    }
     return 0;
 }
 
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp] [dosya]\n"
-        "  --token   Lexer akisini yazdir\n"
-        "  --parse   Parser calistir + AST yazdir\n"
-        "  --check   Parser + tip kontrol (varsayilan)\n"
-        "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
-        "  --lsp     Language Server (stdio JSON-RPC)\n"
-        "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
+        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp]\n"
+        "         [--hedef=<triple>] [dosya]\n"
+        "  --token            Lexer akisini yazdir\n"
+        "  --parse            Parser calistir + AST yazdir\n"
+        "  --check            Parser + tip kontrol (varsayilan)\n"
+        "  --llvm             LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
+        "  --lsp              Language Server (stdio JSON-RPC)\n"
+        "  --hedef=<triple>   LLVM hedef triple. Default: x86_64-pc-windows-gnu.\n"
+        "                     Bare-metal: '*-none-*' / '*-unknown-none' (libc emit'siz).\n"
+        "                     Yaygin: x86_64-unknown-linux-gnu, aarch64-unknown-none,\n"
+        "                     aarch64-apple-darwin, riscv64-unknown-none-elf.\n"
+        "  dosya              Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
 
 int main(int argc, char *argv[]) {
     Mod mod = MOD_CHECK;  /* default */
+    const char *hedef_triple = NULL;  /* NULL -> llvm.c default (host) */
     int arg_idx = 1;
 
     while (arg_idx < argc && argv[arg_idx][0] == '-') {
@@ -202,6 +234,20 @@ int main(int argc, char *argv[]) {
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--lsp") == 0) {
             mod = MOD_LSP;
+            arg_idx++;
+        } else if (strncmp(argv[arg_idx], "--hedef=", 8) == 0) {
+            hedef_triple = argv[arg_idx] + 8;
+            if (!hedef_triple[0]) {
+                fprintf(stderr,
+                    "--hedef= bos olamaz (triple bekleniyor)\n");
+                kullanim_yazdir(argv[0]);
+                return 2;
+            }
+            if (!triple_taninir_mi(hedef_triple)) {
+                fprintf(stderr,
+                    "Uyari: '%s' bilinen triple listesinde yok, "
+                    "pass-through.\n", hedef_triple);
+            }
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
@@ -240,7 +286,7 @@ int main(int argc, char *argv[]) {
         case MOD_TOKEN: rc = mode_token(kaynak, dosya_adi); break;
         case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
         case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
-        case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi); break;
+        case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi, hedef_triple); break;
         default:        rc = 2; break;
     }
 

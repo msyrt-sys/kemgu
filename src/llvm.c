@@ -2216,83 +2216,129 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
 
 /* === Public API === */
 
+/* Bare-metal hedefinde libc declare'leri emit edilmez.
+ * Pattern: triple icinde "-none-" substring varsa veya "-unknown-none"
+ * suffix'i varsa bare-metal. NULL/bos => host = 0.
+ *
+ * Ornek:
+ *   "aarch64-unknown-none"        -> 1 (bare-metal)
+ *   "riscv64-unknown-none-elf"    -> 1 (bare-metal — -none- substring)
+ *   "x86_64-unknown-linux-gnu"    -> 0 (host)
+ *   "x86_64-pc-windows-gnu"       -> 0 (host)
+ *   NULL                           -> 0 (default host) */
+int llvm_hedef_bare_metal_mi(const char *hedef_triple) {
+    if (!hedef_triple || !hedef_triple[0]) return 0;
+    return strstr(hedef_triple, "-none-") != NULL
+        || strstr(hedef_triple, "-unknown-none") != NULL;
+}
+
+void llvm_ir_uret_hedef(const Dugum *program, FILE *out,
+                        const char *hedef_triple);
+
 void llvm_ir_uret(const Dugum *program, FILE *out) {
+    /* Eski API — default triple ile yeni API'ye delege */
+    llvm_ir_uret_hedef(program, out, NULL);
+}
+
+void llvm_ir_uret_hedef(const Dugum *program, FILE *out,
+                        const char *hedef_triple) {
     if (!out) return;
+    const char *triple = (hedef_triple && hedef_triple[0])
+                         ? hedef_triple
+                         : "x86_64-pc-windows-gnu";
+    int bare_metal = llvm_hedef_bare_metal_mi(triple);
+
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
-    fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+    if (bare_metal) {
+        fprintf(out,
+            "; Bare-metal hedef: %s — libc/KDL declare'leri emit edilmez.\n",
+            triple);
+        fputs("; `clang -target <triple> -x ir - -c -o cikti.o` ile derlenir.\n",
+              out);
+    } else {
+        fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
+    }
+    fprintf(out, "target triple = \"%s\"\n\n", triple);
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
-     * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
+     * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv }
+     * Tip definition — bare-metal'de de gerekli (sadece tip, runtime degil). */
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
-    /* Built-in extern (libc) bildirimleri */
-    fputs("declare i32 @puts(ptr)\n", out);
-    fputs("declare ptr @malloc(i64)\n", out);
-    fputs("declare void @free(ptr)\n", out);
-    fputs("declare ptr @memcpy(ptr, ptr, i64)\n", out);
 
-    /* Madde A: Metin runtime primitifleri (kdl_metin_*) */
-    fputs("declare i32 @kdl_metin_uzunluk(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_birlestir(ptr, ptr)\n", out);
-    fputs("declare ptr @kdl_metin_kes(ptr, i32, i32)\n", out);
-    fputs("declare ptr @kdl_metin_kucuk(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_buyuk(ptr)\n", out);
-    fputs("declare i1 @kdl_metin_icerir(ptr, ptr)\n", out);
-    fputs("declare i1 @kdl_metin_baslar(ptr, ptr)\n", out);
-    fputs("declare i1 @kdl_metin_biter(ptr, ptr)\n", out);
-    fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n", out);
-    fputs("declare ptr @kdl_metin_kucuk_tr(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_buyuk_tr(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_kucuk_ascii(ptr)\n", out);
-    fputs("declare ptr @kdl_metin_buyuk_ascii(ptr)\n", out);
+    if (!bare_metal) {
+        /* Built-in extern (libc) bildirimleri — yalniz host hedefte */
+        fputs("declare i32 @puts(ptr)\n", out);
+        fputs("declare ptr @malloc(i64)\n", out);
+        fputs("declare void @free(ptr)\n", out);
+        fputs("declare ptr @memcpy(ptr, ptr, i64)\n", out);
 
-    /* Madde G: Dosya syscall primitifleri (kdl_dosya_*) */
-    fputs("declare ptr @kdl_dosya_ac(ptr, ptr)\n", out);
-    fputs("declare ptr @kdl_dosya_oku(ptr)\n", out);
-    fputs("declare i32 @kdl_dosya_yaz(ptr, ptr)\n", out);
-    fputs("declare void @kdl_dosya_kapat(ptr)\n", out);
-    fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
-    fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
-    fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
-    fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
+        /* Madde A: Metin runtime primitifleri (kdl_metin_*) */
+        fputs("declare i32 @kdl_metin_uzunluk(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_birlestir(ptr, ptr)\n", out);
+        fputs("declare ptr @kdl_metin_kes(ptr, i32, i32)\n", out);
+        fputs("declare ptr @kdl_metin_kucuk(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_buyuk(ptr)\n", out);
+        fputs("declare i1 @kdl_metin_icerir(ptr, ptr)\n", out);
+        fputs("declare i1 @kdl_metin_baslar(ptr, ptr)\n", out);
+        fputs("declare i1 @kdl_metin_biter(ptr, ptr)\n", out);
+        fputs("declare ptr @kdl_metin_kirp(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_yer_degistir(ptr, ptr, ptr)\n", out);
+        fputs("declare ptr @kdl_metin_kucuk_tr(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_buyuk_tr(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_kucuk_ascii(ptr)\n", out);
+        fputs("declare ptr @kdl_metin_buyuk_ascii(ptr)\n", out);
 
-    /* Madde B: Dinamik dizi (KdlDizi*) */
-    fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);
-    fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);
-    fputs("declare void @kdl_dizi_ekle_tam64(ptr, i64)\n", out);
-    fputs("declare void @kdl_dizi_ekle_ptr(ptr, ptr)\n", out);
-    fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
-    fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
-    fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
-    /* Adim 6: capacity API */
-    fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
-    fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)\n", out);
+        /* Madde G: Dosya syscall primitifleri (kdl_dosya_*) */
+        fputs("declare ptr @kdl_dosya_ac(ptr, ptr)\n", out);
+        fputs("declare ptr @kdl_dosya_oku(ptr)\n", out);
+        fputs("declare i32 @kdl_dosya_yaz(ptr, ptr)\n", out);
+        fputs("declare void @kdl_dosya_kapat(ptr)\n", out);
+        fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
+        fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
+        fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
+        fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
 
-    /* Adim 1: CLI args + OTP */
-    fputs("declare i32 @kdl_arg_sayi()\n", out);
-    fputs("declare ptr @kdl_arg_al(i32)\n", out);
-    fputs("declare i32 @kdl_otp_anahtar_uret(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_otp_xor_uygula(ptr, ptr, ptr)\n", out);
+        /* Madde B: Dinamik dizi (KdlDizi*) */
+        fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);
+        fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);
+        fputs("declare void @kdl_dizi_ekle_tam64(ptr, i64)\n", out);
+        fputs("declare void @kdl_dizi_ekle_ptr(ptr, ptr)\n", out);
+        fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
+        fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
+        fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
+        fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
+        /* Adim 6: capacity API */
+        fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
+        fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)\n", out);
 
-    /* src-bugfix: KDL I/O genisletme (yazdir_tam, yaz_tam vs.) */
-    fputs("declare void @kdl_yazdir_tam(i32)\n", out);
-    fputs("declare void @kdl_yazdir_tam64(i64)\n", out);
-    fputs("declare void @kdl_yazdir_satir()\n", out);
-    fputs("declare void @kdl_yaz_tam(i32)\n", out);
-    fputs("declare void @kdl_yaz_tam64(i64)\n", out);
+        /* Adim 1: CLI args + OTP */
+        fputs("declare i32 @kdl_arg_sayi()\n", out);
+        fputs("declare ptr @kdl_arg_al(i32)\n", out);
+        fputs("declare i32 @kdl_otp_anahtar_uret(ptr, i32)\n", out);
+        fputs("declare i32 @kdl_otp_xor_uygula(ptr, ptr, ptr)\n", out);
 
-    /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
-    fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);
-    fputs("declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki, i16)\n", out);
-    fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol(%kdl_yetki, i16)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol_tipi(%kdl_yetki, i16, i16)\n", out);
-    fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
-    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
+        /* src-bugfix: KDL I/O genisletme (yazdir_tam, yaz_tam vs.) */
+        fputs("declare void @kdl_yazdir_tam(i32)\n", out);
+        fputs("declare void @kdl_yazdir_tam64(i64)\n", out);
+        fputs("declare void @kdl_yazdir_satir()\n", out);
+        fputs("declare void @kdl_yaz_tam(i32)\n", out);
+        fputs("declare void @kdl_yaz_tam64(i64)\n", out);
+
+        /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
+        fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);
+        fputs("declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki, i16)\n", out);
+        fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
+        fputs("declare i32 @kdl_yetki_kontrol(%kdl_yetki, i16)\n", out);
+        fputs("declare i32 @kdl_yetki_kontrol_tipi(%kdl_yetki, i16, i16)\n", out);
+        fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
+        fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
+        fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
+        fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
+    } else {
+        fputs("; Bare-metal: libc/KDL declare'leri atlandi.\n", out);
+        fputs("; Kullanici programi runtime sembollerine bagli ise link hatasi alir.\n\n",
+              out);
+    }
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
