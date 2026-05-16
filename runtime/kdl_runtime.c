@@ -1188,6 +1188,24 @@ uint8_t kdl_yetki_iptal_mi(KdlYetki y) {
     return y.iptal;
 }
 
+/* yetki_izin_var_mi: KIRMIZI G.3 — KEMGU yuzeyinden izin biti kontrolu.
+ * y aktif degilse (iptal/id=0) her zaman 0.
+ * Aksi halde (y.izin & istenen) == istenen ise 1, degilse 0.
+ * istenen=0 -> y aktif oldukca 1 (edge case, izin sorgusu degil aktiflik).
+ *
+ * NOT: by-pointer arg — Windows x64 ABI'sinde 16-byte struct by-value
+ * geciste guvenilmez (sret/byval attribute farki). geri_al paterni gibi
+ * ptr alir. Read-only — query mutate etmez (const KdlYetki *).
+ *
+ * Mevcut kdl_yetki_izin (raw bit-field) compiler-internal kalir; bu
+ * boolean query KEMGU yetki_izin(y, izin) built-in'inin runtime'idir. */
+uint8_t kdl_yetki_izin_var_mi(const KdlYetki *y, uint16_t istenen) {
+    if (!y) return 0;
+    if (y->iptal) return 0;
+    if (y->id == 0) return 0;
+    return (uint8_t)(((uint16_t)(y->izin & istenen)) == istenen);
+}
+
 /* === Yetki-gated I/O sarmalayicilari (Capability spec CP.7) === */
 
 /* dosya_ac_yetkili: yol+izin ile aç, başarılı ise yetki<Dosya> döner.

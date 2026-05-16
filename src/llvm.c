@@ -1125,6 +1125,53 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     IfadeSonuc s = { 0, "void" };
                     return s;
                 }
+                /* KIRMIZI G.3: yetki_izin(y, istenen) -> mantiksal (i1)
+                 * Runtime kdl_yetki_izin_var_mi(ptr, i16) i8 doner; i1'e trunc.
+                 * By-pointer (geri_al paterni — Win64 ABI 16-byte struct
+                 * by-value sorununu bypass). y READ-ONLY, tuketim yok. */
+                if (_uz == 10 && memcmp(_ca, "yetki_izin", 10) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    const Dugum *arg0 = d->veri.cagri.argumanlar[0];
+                    int ptr_reg = -1;
+                    if (arg0->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg0->veri.tanimlayici.metin,
+                            arg0->veri.tanimlayici.uzunluk);
+                        if (vi) {
+                            ptr_reg = vi->reg_no;
+                        }
+                    }
+                    if (ptr_reg < 0) {
+                        /* Gecici alloca + store + ptr (rvalue yetki argumani) */
+                        IfadeSonuc y_val = ifade_uret(g, arg0, "%kdl_yetki");
+                        int alloc = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", alloc);
+                        fprintf(g->out,
+                            "  store %%kdl_yetki %%%d, ptr %%%d\n",
+                            y_val.reg, alloc);
+                        ptr_reg = alloc;
+                    }
+                    IfadeSonuc arg_izin = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i16");
+                    int r_izin = arg_izin.reg;
+                    if (strcmp(arg_izin.tip, "i16") != 0) {
+                        int t = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = trunc %s %%%d to i16\n",
+                            t, arg_izin.tip, r_izin);
+                        r_izin = t;
+                    }
+                    int r8 = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call i8 @kdl_yetki_izin_var_mi("
+                        "ptr %%%d, i16 %%%d)\n",
+                        r8, ptr_reg, r_izin);
+                    int r1 = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = trunc i8 %%%d to i1\n", r1, r8);
+                    IfadeSonuc s = { r1, "i1" };
+                    return s;
+                }
             }
 
             /* === SIMD Spec V1 intrinsicleri === */
@@ -2292,7 +2339,11 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
     fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
     fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
-    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
+    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n", out);
+    /* KIRMIZI G.3: yetki_izin(y, istenen) -> mantiksal (i1)
+     * Runtime: kdl_yetki_izin_var_mi i8 doner, KEMGU mantiksal seviyesinde
+     * trunc i8->i1. By-pointer arg (Win64 ABI 16-byte by-value sorunu icin). */
+    fputs("declare i8 @kdl_yetki_izin_var_mi(ptr, i16)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

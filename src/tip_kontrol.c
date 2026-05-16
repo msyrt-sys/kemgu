@@ -2183,6 +2183,36 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
+            /* KIRMIZI G.3: yetki_izin(y: yetki<R>, izin: tam16) -> mantiksal
+             * Query — y TUKETILMEZ (delege gibi, ama yeni token uretmiyor).
+             * Runtime kontrolu: iptal/id=0 -> 0; (y.izin & istenen) == istenen.
+             * Kaynak tipi denetlenmez (her R icin gecerli sorgu). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "yetki_izin", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "CP004",
+                        "yetki_izin tam 2 arguman gerektirir "
+                        "(y: yetki<R>, izin: tam16)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "yetki_izin ilk argumani yetki<R> olmali");
+                    return t_hata(tk);
+                }
+                TipBilgisi *izin_t = tip_belirle(tk, d->veri.cagri.argumanlar[1]);
+                if (izin_t->kategori != TIP_HATA && !tip_tamsayi_mi(izin_t)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "CP004",
+                        "yetki_izin izin argumani tamsayi olmali");
+                }
+                /* y tuketilmez — query islemi */
+                return tip_olustur_basit(tk->arena, TIP_MANTIKSAL);
+            }
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * x'in yapi tipi uzerinde method bul. */
             if (d->veri.cagri.hedef &&
