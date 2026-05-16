@@ -193,15 +193,18 @@ aşağıda). Bu nedenle stdlib::sonuc inspection runtime'da çalışmaz.
 
 ### E. Tip dönüştürme (tam32 ↔ tam64, vb.)
 
-- **Kategori:** tip / dönüştürme operatörü yok
-- **Bağlam:** fibonacci/faktöriyel için tam64 dönüş istemek doğal
-  ama `n: tam32`, `ver n;` tam64 dönüşte uyumsuz hata veriyor.
-  Implicit conversion yok, explicit `as` syntax yok.
-- **Önerilen seçenekler:**
-  1. `n as tam64` cast operatörü (Rust tarzı).
-  2. Implicit widening (Java/C tarzı) — KEMGU felsefesine ters.
-  3. `tam32_to_tam64(n)` built-in pair (her tip için).
-- **Geçici:** Stdlib şimdi tam32 sınırlı (fib(46+) overflow).
+**[2026-05-16 ÇÖZÜLDÜ — Track A C12 audit]:** `olarak` keyword
+(Madde E v2, commit 5f8c480) zaten implement edilmiş, çalışıyor.
+
+```
+değişken x: tam32 = 42;
+değişken y: tam64 = x olarak tam64;
+ver y olarak tam32;     // exit 42
+```
+
+`test_olarak_*` (test_llvm.c) 5 test + `test_olarak_*` (test_tip_kontrol.c)
+hepsi geçer. Tam tip dönüştürme matrisi: tam* ↔ tam*, tam* ↔ kesirli*,
+karakter ↔ tam32, mantıksal hariç (E002).
 
 ### F. Pattern binding scope (eşleş)
 

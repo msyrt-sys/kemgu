@@ -1,0 +1,51 @@
+// KIRMIZI C7 — sonuç<T,E> tagged union + pattern matching örneği
+// =================================================================
+//
+// LLVM v4 minimum viable codegen ile çalışır. `eşleş` deyimi sonuç
+// veya seçimlik tipleri üzerinde tüm variantları kapsayacak biçimde
+// yazılmalı (T041 exhaustiveness).
+//
+// Java try-catch / exception unwinding maliyeti yok. C++ exception
+// stack-unwind ezbersiz. Hata değer olarak yayılır — açık, izlenebilir.
+
+işlev bol(a: tam32, b: tam32) -> sonuç<tam32, tam32> {
+    eğer b == 0 { ver hata(0 - 1); }
+    ver tamam(a / b);
+}
+
+// Sonucu işle — `ya_da` deseni (T-shirt çözüm)
+işlev guvenli_bol(a: tam32, b: tam32, varsayilan: tam32) -> tam32 {
+    değişken r: sonuç<tam32, tam32> = bol(a, b);
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(e) => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Generic harita — sonuç içindeki değere f uygula
+işlev harita<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> U) -> sonuç<U, E> {
+    eşleş r {
+        tamam(v) => { ver tamam(f(v)); }
+        hata(e) => { ver hata(e); }
+    }
+}
+
+işlev iki_kat(x: tam32) -> tam32 {
+    ver x * 2;
+}
+
+işlev main() -> tam32 {
+    // Başarılı yol: 126/3 = 42
+    değişken a: tam32 = guvenli_bol(126, 3, 0);   // 42
+    // Başarısız yol: /0 -> hata, varsayılan 0
+    değişken b: tam32 = guvenli_bol(100, 0, 0);   // 0
+
+    // Generic harita zincirleme
+    değişken r: sonuç<tam32, tam32> = tamam(21);
+    değişken r2: sonuç<tam32, tam32> = harita(r, iki_kat);
+    değişken c: tam32 = guvenli_bol(0, 1, 0);     // 0/1 = 0
+
+    // a=42, b=0, r2=tamam(42) (matched but not extracted here), c=0
+    ver a + b + c;     // 42
+}

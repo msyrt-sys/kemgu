@@ -1,0 +1,45 @@
+// KIRMIZI C7 — seçimlik<T> tagged union + pattern matching örneği
+// ===================================================================
+//
+// `seçimlik<T>` Rust Option<T>, Haskell Maybe karşılığı — değer var/yok
+// disiplini. KEMGU'da null pointer YASAK; yokluk seçimlik<T>::hiç ile.
+//
+// LLVM v4 minimum viable: { i8 disc, i64 payload } tagged union.
+// disc=0 -> değer(v), disc=1 -> hiç.
+
+işlev bul_pozitif(x: tam32) -> seçimlik<tam32> {
+    eğer x > 0 { ver değer(x); }
+    ver hiç;
+}
+
+// `ya_da` deseni — değer varsa al, yoksa varsayılan
+işlev ya_da(s: seçimlik<tam32>, varsayilan: tam32) -> tam32 {
+    eşleş s {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Tip dönüştürme örneği (KIRMIZI Madde E — `olarak` keyword)
+işlev tam32_to_tam64(x: tam32) -> tam64 {
+    ver x olarak tam64;
+}
+
+işlev main() -> tam32 {
+    // Pozitif sayı: değer döner
+    değişken a: seçimlik<tam32> = bul_pozitif(42);
+    değişken aa: tam32 = ya_da(a, 0);     // 42
+
+    // Negatif/sıfır: hiç döner
+    değişken b: seçimlik<tam32> = bul_pozitif(0 - 5);
+    değişken bb: tam32 = ya_da(b, 0);     // 0
+
+    // Tip dönüştürme: tam32 -> tam64 -> tam32
+    değişken c64: tam64 = tam32_to_tam64(aa);
+    değişken cc: tam32 = c64 olarak tam32;  // 42
+
+    // aa=42, bb=0, cc=42 — toplam 84? Ama 42 istiyoruz.
+    // En basit: (aa + bb + cc) - 42 = 42
+    ver (aa + bb + cc) - 42;
+}
