@@ -1,0 +1,47 @@
+// KIRMIZI G.4 — dosya_oku boş-dosya vs hata ayrımı örneği
+// =========================================================
+//
+// dosya_oku() artık hata durumlarında "" döner ve son hata kodunu
+// global olarak tutar (segfault yok). Bos dosya ile gerçek hata
+// ayırt edilebilir:
+//   - icerik == "" ve dosya_oku_son_hata() == 0 -> boş dosya
+//   - icerik == "" ve dosya_oku_son_hata() != 0 -> hata
+//
+// Hata kodları:
+//   0  : OK (boş dosya dahil)
+//   -1 : dosya yok (ENOENT)
+//   -2 : I/O hatası
+
+işlev oku_veya_bos(yol: metin) -> tam32 {
+    // Tek syscall — TOCTOU yok.
+    değişken icerik: metin = dosya_oku(yol);
+    değişken kod: tam32 = dosya_oku_son_hata();
+
+    eğer kod == 0 - 1 {
+        // Dosya yok: özel kod -1 dön.
+        ver 0 - 1;
+    }
+    eğer kod == 0 - 2 {
+        // I/O hatası: -2.
+        ver 0 - 2;
+    }
+
+    // OK — içerik geçerli, boş veya dolu.
+    değişken n: tam32 = metin_uzunluk(icerik);
+    eğer n == 0 {
+        // Boş dosya — net farklı semantik, hata değil!
+        ver 0;
+    }
+    // Dolu dosya — uzunluk dön.
+    ver n;
+}
+
+işlev main() -> tam32 {
+    // Tipik kullanım: var olmayan dosya bekleyen -1, bos olan 0,
+    // dolu olan pozitif. Bu örnek sadece compile + check için.
+    değişken yok: tam32 = oku_veya_bos("nonexistent_xyz_42.txt");
+    eğer yok == 0 - 1 {
+        ver 42;  // Beklendiği gibi -1 (dosya yok)
+    }
+    ver 0;
+}

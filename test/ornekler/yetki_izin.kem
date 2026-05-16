@@ -1,0 +1,37 @@
+// KIRMIZI G.3 — yetki_izin built-in örneği
+// =========================================
+//
+// Capability runtime introspection: KEMGU yüzeyinden bir yetkinin
+// belirli izinlere sahip olup olmadığını sorgular. y tüketilmez —
+// sadece okur. Confused deputy senaryolarında dynamic izin denetimi.
+//
+// `yetki_izin(y: yetki<R>, izin: tam16) -> mantıksal`
+// Semantik: y.iptal && y.id!=0 && (y.izin & istenen) == istenen
+// İzin sabitleri (Capability Spec V1 CP.5):
+//   1 = OKU, 2 = YAZ, 4 = ÇALIŞTIR, 8 = SİL, 16 = DEVRET
+
+işlev guvenli_yaz(y: yetki<Dosya>) -> tam32 {
+    // Yazma izni var mı? Tek tüketim noktasından (Linear V1 disiplini —
+    // path-sensitive analiz V2'ye bırakıldı).
+    değişken kabul: mantıksal = yetki_izin(y, 2);
+    değişken sonuc: tam32 = 0 - 1;
+    eğer kabul {
+        // Yaz izni var — gerçek I/O burada. v1: marker 1.
+        sonuc = 1;
+    }
+    geri_al(y);  // Linear V1: tek tüketim noktası — her control yol.
+    ver sonuc;
+}
+
+işlev main() -> tam32 {
+    // y oku+yaz (3): yaz var
+    değişken y: yetki<Dosya> = yetki_olustur(1, 3);
+    değişken r1: tam32 = guvenli_yaz(y);  // y burada tüketildi
+
+    // y2 sadece oku (1): yaz yok
+    değişken y2: yetki<Dosya> = yetki_olustur(1, 1);
+    değişken r2: tam32 = guvenli_yaz(y2);  // -1 dönmeli
+
+    // r1=1 ve r2=-1 -> 1 + (-1) = 0 (validation marker)
+    ver r1 + r2;
+}
