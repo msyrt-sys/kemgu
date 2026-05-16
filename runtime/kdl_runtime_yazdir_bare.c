@@ -210,3 +210,89 @@ void kdl_yaz_onaltilik(uint64_t n) {
         kdl_ham_yaz(buf);
     }
 }
+
+/* === Continuation D1: UTF-8 karakter encode === *
+ *
+ * Unicode code point -> 1-4 byte UTF-8. RFC 3629 standardi.
+ * Donus: yazilan byte sayisi (1-4) veya 0 (gecersiz cp). */
+static int kdl_utf8_encode(int32_t cp, unsigned char buf[5]) {
+    if (cp < 0) return 0;
+    uint32_t c = (uint32_t)cp;
+    if (c < 0x80u) {
+        buf[0] = (unsigned char)c;
+        return 1;
+    } else if (c < 0x800u) {
+        buf[0] = (unsigned char)(0xC0u | (c >> 6));
+        buf[1] = (unsigned char)(0x80u | (c & 0x3Fu));
+        return 2;
+    } else if (c < 0x10000u) {
+        /* Surrogate aralik (D800-DFFF) RFC 3629'da yasak; v1 strict degil */
+        buf[0] = (unsigned char)(0xE0u | (c >> 12));
+        buf[1] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        buf[2] = (unsigned char)(0x80u | (c & 0x3Fu));
+        return 3;
+    } else if (c <= 0x10FFFFu) {
+        buf[0] = (unsigned char)(0xF0u | (c >> 18));
+        buf[1] = (unsigned char)(0x80u | ((c >> 12) & 0x3Fu));
+        buf[2] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        buf[3] = (unsigned char)(0x80u | (c & 0x3Fu));
+        return 4;
+    }
+    return 0;  /* Aralik disi (>0x10FFFF) */
+}
+
+void kdl_yazdir_karakter(int32_t cp) {
+    unsigned char buf[5];
+    int n = kdl_utf8_encode(cp, buf);
+    for (int i = 0; i < n; i++) {
+        KDL_UART_PUTC((char)buf[i]);
+    }
+    KDL_UART_PUTC('\n');
+}
+
+void kdl_yaz_karakter(int32_t cp) {
+    unsigned char buf[5];
+    int n = kdl_utf8_encode(cp, buf);
+    for (int i = 0; i < n; i++) {
+        KDL_UART_PUTC((char)buf[i]);
+    }
+}
+
+/* === Continuation D2: UART RX -> kdl_oku_karakter === *
+ *
+ * Backend secimi macro ile: -DKDL_UART_OKU_KARAKTER=kdl_uart_pl011_oku_karakter
+ * (varsayilan PL011). 16550 icin Makefile override eder.
+ */
+#ifndef KDL_UART_OKU_KARAKTER
+#  define KDL_UART_OKU_KARAKTER kdl_uart_pl011_oku_karakter
+#endif
+
+extern int32_t KDL_UART_OKU_KARAKTER(void);
+
+int32_t kdl_oku_karakter(void) {
+    return KDL_UART_OKU_KARAKTER();
+}
+
+/* === Continuation D3: line-buffered input === *
+ *
+ * '\n' veya '\r' goruncede durur, '\r\n' -> '\n' normalize. NUL ile
+ * sonlandirir. Max'a ulasilirsa erken doner. */
+int32_t kdl_oku_metin(char *buf, int32_t max) {
+    if (!buf || max <= 1) {
+        if (buf && max > 0) buf[0] = '\0';
+        return 0;
+    }
+    int32_t n = 0;
+    while (n < max - 1) {
+        int32_t c = KDL_UART_OKU_KARAKTER();
+        if (c < 0) break;
+        if (c == '\r') {
+            /* CRLF normalize: bir sonraki LF varsa yut */
+            continue;  /* '\r' atil */
+        }
+        if (c == '\n') break;
+        buf[n++] = (char)(c & 0xFF);
+    }
+    buf[n] = '\0';
+    return n;
+}
