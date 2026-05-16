@@ -1077,6 +1077,94 @@ static void test_dosya_oku_bos_yol(void) {
     test_sonuc("G.4: dosya_oku(\"\") -> uzunluk=0 + son_hata=-1", rc == 42);
 }
 
+/* === KIRMIZI K8d: bare-metal _baslat ↔ main alias === */
+
+/* IR'i kemgu --llvm ile uretir, dosyaya yazar, dosya icerigini okuyup
+ * grep paternlerine bakar. Hicbir clang gerek yok — IR analizi.
+ *
+ * Donus:
+ *   0: tum aramalar basarili (pattern var ya da yok beklendigi gibi)
+ *  -1: hata (kemgu calistirilamadi, dosya okunamadi, vs.) */
+static int ir_uret_ve_kontrol(const char *kemgu_kaynak,
+                               const char *bayrak,  /* "" veya "--baremetal" */
+                               int beklenen_main_alias_kontrol,
+                               int beklenen_triple_baremetal) {
+    FILE *f = fopen("build/test_llvm_temp.kem", "w");
+    if (!f) return -1;
+    fputs(kemgu_kaynak, f);
+    fclose(f);
+
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s %s --llvm %s > %s 2>%s",
+             KEMGU_BIN, bayrak, KEM_PATH, LL_PATH, DEV_NULL);
+    int rc = system(komut);
+    if (rc != 0) return -1;
+
+    /* IR dosyasini oku */
+    FILE *r = fopen("build/test_llvm_temp.ll", "rb");
+    if (!r) return -1;
+    fseek(r, 0, SEEK_END);
+    long sz = ftell(r);
+    fseek(r, 0, SEEK_SET);
+    char *buf = (char *)malloc((size_t)sz + 1);
+    if (!buf) { fclose(r); return -1; }
+    size_t got = fread(buf, 1, (size_t)sz, r);
+    buf[got] = '\0';
+    fclose(r);
+
+    int alias_var = (strstr(buf, "@_baslat = alias") != NULL);
+    int triple_aarch = (strstr(buf, "aarch64-unknown-none") != NULL);
+    int main_var = (strstr(buf, "define i32 @main(") != NULL);
+
+    free(buf);
+
+    /* Beklenti kontrolu:
+     *  beklenen_main_alias_kontrol:
+     *    1 = main var + alias var
+     *    2 = main var + alias yok
+     *  beklenen_triple_baremetal:
+     *    1 = aarch64-unknown-none triple
+     *    0 = host triple */
+    if (beklenen_main_alias_kontrol == 1) {
+        if (!main_var || !alias_var) return 1;
+    } else if (beklenen_main_alias_kontrol == 2) {
+        if (!main_var || alias_var) return 1;
+    }
+    if (beklenen_triple_baremetal == 1 && !triple_aarch) return 1;
+    if (beklenen_triple_baremetal == 0 && triple_aarch) return 1;
+    return 0;
+}
+
+static void test_k8d_host_default(void) {
+    /* Default (host) — @main var, @_baslat alias YOK, triple x86_64 */
+    int rc = ir_uret_ve_kontrol(
+        "i\xc5\x9flev main() -> tam32 { ver 42; }",
+        "", 2 /* main + alias yok */, 0 /* host triple */);
+    test_sonuc("K8d: host default -> @main, alias yok, host triple", rc == 0);
+}
+
+static void test_k8d_baremetal_alias(void) {
+    /* --baremetal — @main + @_baslat alias, triple aarch64 */
+    int rc = ir_uret_ve_kontrol(
+        "i\xc5\x9flev main() -> tam32 { ver 42; }",
+        "--baremetal", 1 /* main + alias */, 1 /* aarch64 */);
+    test_sonuc("K8d: --baremetal -> @main + _baslat alias + aarch64 triple",
+               rc == 0);
+}
+
+static void test_k8d_manuel_baslat_override(void) {
+    /* --baremetal + kullanici manuel _baslat — alias YOK (override).
+     * NOT: _baslat tanimlayinca aliasi otomatik atmak — manuel override. */
+    int rc = ir_uret_ve_kontrol(
+        "i\xc5\x9flev _baslat() -> tam32 { ver 99; }\n"
+        "i\xc5\x9flev main() -> tam32 { ver 42; }",
+        "--baremetal", 2 /* main var, alias YOK (manuel) */,
+        1 /* aarch64 triple */);
+    test_sonuc("K8d: --baremetal + manuel _baslat -> alias yok (override)",
+               rc == 0);
+}
+
 /* (Madde B paralel session generic API tests removed — bu oturumda
  *  concrete _tam suffix versiyonu (dizi_olustur_tam vb.) tip_kontrol'de
  *  registered. Generic dizi_olustur<T> v2'de.) */
@@ -1333,6 +1421,11 @@ int main(void) {
     test_dosya_oku_dolu_son_hata_sifir();
     test_dosya_oku_son_hata_guncel();
     test_dosya_oku_bos_yol();
+
+    printf("\n--- KIRMIZI K8d: bare-metal _baslat alias ---\n");
+    test_k8d_host_default();
+    test_k8d_baremetal_alias();
+    test_k8d_manuel_baslat_override();
 
 
     printf("\n--- Madde E: Tip donusturme (olarak) ---\n");

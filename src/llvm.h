@@ -29,7 +29,18 @@
  *   ./build/kemgu --llvm program.kem | clang -x ir - -o program.exe
  */
 
+/* LLVM IR uretim secenekleri. */
+typedef struct {
+    int baremetal;          /* 1 -> aarch64-unknown-none + main->_baslat alias */
+    const char *triple;     /* NULL -> default; aksi halde target triple override */
+} LlvmSecenek;
+
 /* AST'den LLVM IR text uret. NULL guvenli. */
 void llvm_ir_uret(const Dugum *program, FILE *out);
+
+/* Secenek-aware varyant. KIRMIZI K8d: bare-metal hedef + _baslat alias.
+ * NULL secenek default davranisa esit. */
+void llvm_ir_uret_secenek(const Dugum *program, FILE *out,
+                          const LlvmSecenek *secenek);
 
 #endif /* KEMGU_LLVM_H */
