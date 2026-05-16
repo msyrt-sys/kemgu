@@ -246,6 +246,11 @@ $(BUILD)/test_escape_interproc$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.
                                        $(TESTDIR)/test_escape_interproc.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Bare-Metal Target testi (Faz 5 — Altyapi Bootstrap) ===
+# kemgu.exe + clang + ld.lld + llvm-objdump'a baglidir. ASan'siz GCC.
+$(BUILD)/test_bare_metal$(EXE): $(TESTDIR)/test_bare_metal.c | $(BUILD)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $<
+
 # === Modul Import V1 testi (Faz 1 — Altyapi Bootstrap) ===
 
 $(BUILD)/test_modul_import$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
@@ -419,6 +424,9 @@ calistir_concurrency_runtime_test: $(BUILD)/test_concurrency_runtime$(EXE) $(BUI
 calistir_escape_interproc_test: $(BUILD)/test_escape_interproc$(EXE)
 	./$(BUILD)/test_escape_interproc$(EXE)
 
+calistir_bare_metal_test: $(BUILD)/test_bare_metal$(EXE) $(BUILD)/kemgu$(EXE)
+	./$(BUILD)/test_bare_metal$(EXE)
+
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
 	./$(BUILD)/test_linear$(EXE)
 
@@ -525,7 +533,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_modul_import_test calistir_dosya_test calistir_concurrency_runtime_test calistir_escape_interproc_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_modul_import_test calistir_dosya_test calistir_concurrency_runtime_test calistir_escape_interproc_test calistir_bare_metal_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:
