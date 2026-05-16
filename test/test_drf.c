@@ -443,23 +443,21 @@ static void T37_dizi_yakala_pozitif(void) {
                h == 0);
 }
 
-static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
-    /* D38: V1 KNOWN-LIMIT — non-linear capture sonrası çağıran thread'in
-     * yakalanan Dizi'ye erişimi V1 tip kontrolünde yakalanmıyor.
-     * V2 hedefi (Plan §9 risk tablosu: inter-procedural escape analizi):
-     * R-YAKALAMA-THREAD'in compile-time enforcement'i Dizi/yapı için
-     * bölge sahipliği transferi sonrası ihlal hata vermeli.
+static void T38_dizi_yakala_sonrasi_erisim_negatif(void) {
+    /* D38 (Faz 4 — R-YAKALAMA-THREAD compile-time enforcement):
+     * non-linear capture sonrası çağıran thread'in yakalanan Dizi'ye
+     * erişimi artık DRF007 hatası verir. Closure capture analizi
+     * tip_kontrol.c mark_lambda_captures fonksiyonu ile yapilir.
      *
-     * V1 davranışı: 0 hata (V1 tip kontrol bu pattern'i yakalamıyor).
-     * Bu test V1 sınırını dokümante eder; V2'de h >= 1 olmalıdır. */
+     * Faz 4 oncesi: 0 hata (KNOWN-LIMIT).
+     * Faz 4 sonrasi: en az 1 hata (DRF007). */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
         "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]);\n"
         "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
         "    de\xc4\x9fi\xc5\x9fken s: tam32 = xs[1];\n");
-    test_sonuc("D38: Dizi capture sonrasi erisim V1 KNOWN-LIMIT "
-               "(V1: 0 hata, V2: hata bekleniyor)",
-               h == 0);
+    test_sonuc("D38: Dizi capture sonrasi erisim -> DRF007 (Faz 4)",
+               h >= 1);
 }
 
 static void T39_dondur_idempotent_degil(void) {
@@ -544,7 +542,7 @@ int main(void) {
 
     /* D37-D39: Patch P2 — non-linear capture + dondur idempotency */
     T37_dizi_yakala_pozitif();
-    T38_dizi_yakala_sonrasi_erisim_v1_limit();
+    T38_dizi_yakala_sonrasi_erisim_negatif();
     T39_dondur_idempotent_degil();
 
     printf("\n=== %d/%d test gecti (basarili) ===\n", basarili, toplam_test);

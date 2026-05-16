@@ -57,6 +57,14 @@ typedef struct Sembol {
      * scope sonunda 0 = L001. */
     int lineer_tuketildi;          /* 0 = henuz tuketilmedi; 1+ = tuketim sayisi */
     int lineer_scope_seviyesi;     /* tanim aninda scope derinligi */
+    /* DRF V1 Faz 4 — R-YAKALAMA-THREAD: closure tarafindan thread'e transfer
+     * edildi mi? gorev_baslat(closure) closure'un yakaladigi her free var'i
+     * bu flag ile isaretler. Sonraki erisim DRF007 hatasi verir.
+     *
+     * Inter-procedural escape analizi V1 (Plan Faz 4) — kismi: lambda
+     * capture lokal analiz, kapsayan fonksiyona ait scope'tan free var
+     * tespit edilir. Tam inter-proc summary V2'ye sakli. */
+    int thread_transferred;        /* 0 = OK; 1 = closure ile transfer edildi */
 } Sembol;
 
 /* === Scope === */
