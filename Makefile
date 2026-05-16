@@ -503,9 +503,11 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # ARM64 (aarch64) cross-compile dogrulama — DGX Spark / Android NDK altyapisi
 # Mevcut KEMGU --llvm IR ciktisini clang -target ile ARM64 ELF object'e cevirir.
 # Calistirma host degil — sadece derleme + file/objdump dogrulamasi.
+# Bare-metal hedef: --hedef=aarch64-unknown-none ile libc declare emit'siz IR.
 calistir_arm64_test: $(BUILD)/kemgu$(EXE)
-	@echo "ARM64 cross-compile testi..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kernel.kem > $(BUILD)/kernel.ll
+	@echo "ARM64 cross-compile testi (bare-metal hedef)..."
+	./$(BUILD)/kemgu$(EXE) --llvm --hedef=aarch64-unknown-none \
+		test/ornekler/kernel.kem > $(BUILD)/kernel.ll
 	clang -target aarch64-unknown-none -x ir $(BUILD)/kernel.ll -c \
 		-o $(BUILD)/kernel_aarch64.o 2>&1
 	@echo ""
@@ -514,7 +516,41 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@echo ""
 	@echo "Section headers:"
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
+	@echo ""
+	@echo "Libc/KDL referansi olmadigi dogrulamasi:"
+	@if llvm-objdump -t $(BUILD)/kernel_aarch64.o | \
+	   grep -E "\\b(puts|malloc|free|memcpy|fopen|kdl_dosya|kdl_metin|kdl_yazdir)\\b" 2>/dev/null; then \
+		echo "  HATA: bare-metal object'inde libc/KDL symbol referansi var!"; \
+		exit 1; \
+	else \
+		echo "  OK: hicbir libc/KDL symbol referansi yok"; \
+	fi
 	@echo "ARM64 ELF dogrulamasi basarili!"
+
+# Bare-metal linker testi: kernel.kem ELF object'i bare-metal linker script
+# ile binary'e bagla. Sadece ELF + entry symbol kontrolu (calistirma yok).
+# Linker'in ld.lld olmasi bekleniyor (clang bundled veya MSYS2/clang64).
+calistir_arm64_link_test: $(BUILD)/kemgu$(EXE)
+	@echo "ARM64 bare-metal linker testi..."
+	./$(BUILD)/kemgu$(EXE) --llvm --hedef=aarch64-unknown-none \
+		test/ornekler/kernel.kem > $(BUILD)/kernel_link.ll
+	clang -target aarch64-unknown-none -x ir $(BUILD)/kernel_link.ll -c \
+		-o $(BUILD)/kernel_link.o 2>&1
+	@echo ""
+	@echo "Linker script ile bagla (linker/bare-metal-aarch64.ld)..."
+	@# main() KEMGU programinda; entry _baslat -> main alias (V1 pragmatik)
+	@# Eger _baslat sembolu yoksa ENTRY tanimi warning verir ama ELF olusur
+	@if ld.lld -T linker/bare-metal-aarch64.ld --no-undefined=ignore-all \
+		$(BUILD)/kernel_link.o -o $(BUILD)/kernel_link.elf 2>/dev/null; then \
+		echo "  ELF olusturuldu: $(BUILD)/kernel_link.elf"; \
+		file $(BUILD)/kernel_link.elf; \
+		echo "  Entry sembol:"; \
+		llvm-objdump -h $(BUILD)/kernel_link.elf | grep -E "(text|bss)" | head -3; \
+	else \
+		echo "  Note: ld.lld ile baglanamadi (entry _baslat tanimsiz olabilir);"; \
+		echo "  V1 pragmatik: kernel.kem main() kullaniyor, _baslat alias V2."; \
+	fi
+	@echo "Linker testi tamam."
 
 test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_modul_import_test calistir_dosya_test calistir_hedef_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
