@@ -339,6 +339,158 @@ static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
     s->lineer_tuketildi++;
 }
 
+/* DRF V1 Faz 4 — R-YAKALAMA-THREAD: lambda govdesini tara, free var'lari
+ * 'thread_transferred' isaretle. gorev_baslat(lambda) cagrildiginda
+ * cagrilir; sonraki kullanim DRF007 hatasi alir.
+ *
+ * Skip listesi: lambda parametre/iç değişken adlari (lokal scope).
+ * Free var = skip listesinde olmayan ve kapsayan scope'tan sembol bulunan
+ * tanımlayıcı.
+ *
+ * Inter-procedural escape analizi V1: lokal capture analizi yapilir.
+ * Lambda iç çağrıları (fn(x)) için summary kullanmaz — V2 hedefi.
+ *
+ * V1 sinir: iç değişken adı kapsayan ile shadow ediyorsa false-positive
+ * olabilir (V2'de gerçek scope tracking). */
+
+#define MTT_MAX_SKIP 64
+
+typedef struct {
+    Scope *kapsayan_scope;
+    const char *skip_adlar[MTT_MAX_SKIP];
+    int skip_uz[MTT_MAX_SKIP];
+    int skip_n;
+} MttContext;
+
+static void mtt_skip_ekle(MttContext *ctx, const char *ad, int uz) {
+    if (!ad || uz <= 0 || ctx->skip_n >= MTT_MAX_SKIP) return;
+    ctx->skip_adlar[ctx->skip_n] = ad;
+    ctx->skip_uz[ctx->skip_n] = uz;
+    ctx->skip_n++;
+}
+
+static int mtt_skip_listesinde(const MttContext *ctx, const char *ad, int uz) {
+    for (int i = 0; i < ctx->skip_n; i++) {
+        if (ctx->skip_uz[i] == uz &&
+            memcmp(ctx->skip_adlar[i], ad, (size_t)uz) == 0) return 1;
+    }
+    return 0;
+}
+
+static void mtt_visit(TipKontrol *tk, MttContext *ctx, const Dugum *d);
+
+static void mtt_visit(TipKontrol *tk, MttContext *ctx, const Dugum *d) {
+    if (!d) return;
+    switch (d->tip) {
+        case DUGUM_TANIMLAYICI: {
+            const char *ad = d->veri.tanimlayici.metin;
+            int uz = d->veri.tanimlayici.uzunluk;
+            if (mtt_skip_listesinde(ctx, ad, uz)) return;
+            Sembol *sem = sembol_bul_yazilabilir(ctx->kapsayan_scope, ad, uz);
+            if (sem && (sem->kategori == SEMBOL_DEGISKEN ||
+                        sem->kategori == SEMBOL_PARAMETRE)) {
+                sem->thread_transferred = 1;
+            }
+            return;
+        }
+        case DUGUM_IKILI:
+            mtt_visit(tk, ctx, d->veri.ikili.sol);
+            mtt_visit(tk, ctx, d->veri.ikili.sag);
+            return;
+        case DUGUM_TEKLI:
+            mtt_visit(tk, ctx, d->veri.tekli.operand);
+            return;
+        case DUGUM_ERISIM:
+            mtt_visit(tk, ctx, d->veri.erisim.nesne);
+            return;
+        case DUGUM_INDEKS:
+            mtt_visit(tk, ctx, d->veri.indeks.nesne);
+            mtt_visit(tk, ctx, d->veri.indeks.indeks);
+            return;
+        case DUGUM_CAGRI:
+            mtt_visit(tk, ctx, d->veri.cagri.hedef);
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                mtt_visit(tk, ctx, d->veri.cagri.argumanlar[i]);
+            }
+            return;
+        case DUGUM_VER:
+            mtt_visit(tk, ctx, d->veri.ver.deger);
+            return;
+        case DUGUM_EGER:
+            mtt_visit(tk, ctx, d->veri.eger.kosul);
+            mtt_visit(tk, ctx, d->veri.eger.gozdoldur);
+            mtt_visit(tk, ctx, d->veri.eger.yan);
+            return;
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++) {
+                mtt_visit(tk, ctx, d->veri.blok.deyimler[i]);
+            }
+            return;
+        case DUGUM_IFADE_DEYIMI:
+            mtt_visit(tk, ctx, d->veri.ifade_deyimi.ifade);
+            return;
+        case DUGUM_DEGISKEN:
+            /* iç değişken — skip listesine ekle, sonra value'yi gez */
+            if (d->veri.degisken.ad) {
+                mtt_skip_ekle(ctx,
+                    d->veri.degisken.ad,
+                    d->veri.degisken.ad_uzunluk);
+            }
+            mtt_visit(tk, ctx, d->veri.degisken.deger);
+            return;
+        case DUGUM_ATAMA:
+            mtt_visit(tk, ctx, d->veri.atama.hedef);
+            mtt_visit(tk, ctx, d->veri.atama.deger);
+            return;
+        case DUGUM_IKEN:
+            mtt_visit(tk, ctx, d->veri.iken.kosul);
+            mtt_visit(tk, ctx, d->veri.iken.govde);
+            return;
+        case DUGUM_ICIN:
+            mtt_visit(tk, ctx, d->veri.icin.koleksiyon);
+            if (d->veri.icin.degisken_adi) {
+                mtt_skip_ekle(ctx,
+                    d->veri.icin.degisken_adi,
+                    d->veri.icin.degisken_adi_uzunluk);
+            }
+            mtt_visit(tk, ctx, d->veri.icin.govde);
+            return;
+        case DUGUM_DIZI_OLUSTUR:
+            for (int i = 0; i < d->veri.dizi_olustur.sayi; i++) {
+                mtt_visit(tk, ctx, d->veri.dizi_olustur.elemanlar[i]);
+            }
+            return;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA) {
+                    mtt_visit(tk, ctx, aa->veri.alan_atama.deger);
+                }
+            }
+            return;
+        default:
+            return;
+    }
+}
+
+/* Lambda body'sindeki free var'lari thread_transferred isaretle.
+ * Lambda parametre adlari otomatik skip listesinde. */
+static void mark_lambda_captures(TipKontrol *tk, Scope *kapsayan,
+                                  const Dugum *lambda) {
+    if (!lambda || lambda->tip != DUGUM_LAMBDA) return;
+    MttContext ctx = {0};
+    ctx.kapsayan_scope = kapsayan;
+    /* Lambda parametrelerini skip listesine ekle */
+    for (int i = 0; i < lambda->veri.lambda.param_sayi; i++) {
+        const Dugum *p = lambda->veri.lambda.parametreler[i];
+        if (!p || p->tip != DUGUM_PARAMETRE) continue;
+        mtt_skip_ekle(&ctx,
+            p->veri.parametre.ad,
+            p->veri.parametre.ad_uzunluk);
+    }
+    mtt_visit(tk, &ctx, lambda->veri.lambda.govde);
+}
+
 /* Lambda govdesi icinde: parent scope'taki lineer baglamayi yakala.
  * Sadece bayrak set eder — tuketim asil consume context'inde
  * (kullan/imha/cagri arg/ver) gerceklesir. Boylece kullan(k) gibi
@@ -1337,6 +1489,16 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
             if (!s) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
+                return t_hata(tk);
+            }
+            /* DRF V1 Faz 4 — R-YAKALAMA-THREAD enforcement: closure ile
+             * thread'e transfer edilmis baglamaya erisim yasak.
+             * gorev_baslat(closure) closure'un yakaladigi free var'lari
+             * thread_transferred=1 isaretler; sonraki erisim DRF007. */
+            if (s->thread_transferred && !tk->lambda_govdesi_icinde) {
+                tip_hata(tk, d, "DRF007",
+                    "thread'e transfer edilmis baglama erisim "
+                    "(R-YAKALAMA-THREAD: closure capture sonrasi)");
                 return t_hata(tk);
             }
             /* Linear Types Spec V1: lambda govdesi icindeki lineer
@@ -2405,6 +2567,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 /* Linear closure ise (LC-3 ile beraber thread'e transfer) — tuket */
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                /* DRF V1 Faz 4 — R-YAKALAMA-THREAD: closure DUGUM_LAMBDA
+                 * ise yakaladığı free var'ları thread_transferred isaretle.
+                 * Sonraki erisim DRF007. */
+                const Dugum *closure = d->veri.cagri.argumanlar[0];
+                if (closure && closure->tip == DUGUM_LAMBDA) {
+                    mark_lambda_captures(tk, tk->scope, closure);
+                }
                 /* görev<T> dön — T = closure dönüş tipi */
                 TipBilgisi *donus = cf->veri.islev.donus;
                 if (!donus) donus = tip_olustur_basit(tk->arena, TIP_BOS);
