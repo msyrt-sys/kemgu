@@ -1278,6 +1278,72 @@ static void test_sonuc_div_zero_pattern(void) {
     test_sonuc("C7: bol(126,3) -> tamam(42) -> 42", rc == 42);
 }
 
+/* === C9: stdlib::sonuc inline kullanim LLVM e2e ===
+ * Stdlib henuz import sistemi olmadigi icin fonksiyonlari inline yaziyoruz.
+ * Esles + sonuc<T,E> + tagged union codegen birlikte calismayi dogrular. */
+
+static void test_c9_basarili_mi_ya_da(void) {
+    /* basarili_mi + ya_da fonksiyonlari, iki ayri sonuc deger */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev ya_da(r: sonu\xc3\xa7<tam32, tam32>, varsayilan: tam32) -> tam32 {\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    tamam(v) => { ver v; }\n"
+        "    hata(e) => { ver varsayilan; }\n"
+        "  }\n"
+        "  ver varsayilan;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken iyi: sonu\xc3\xa7<tam32, tam32> = tamam(42);\n"
+        "  de\xc4\x9fi\xc5\x9fken kotu: sonu\xc3\xa7<tam32, tam32> = hata(99);\n"
+        "  de\xc4\x9fi\xc5\x9fken a: tam32 = ya_da(iyi, 0);\n"
+        "  de\xc4\x9fi\xc5\x9fken b: tam32 = ya_da(kotu, 0);\n"
+        "  ver a + b;\n"
+        "}\n");
+    test_sonuc("C9: ya_da(tamam(42),0)+ya_da(hata(99),0) -> 42", rc == 42);
+}
+
+static void test_c9_generic_harita(void) {
+    /* harita<T,U,E> generic callback + sonuc tagged union */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev harita<T, U, E>(r: sonu\xc3\xa7<T, E>, f: i\xc5\x9flev(T) -> U)"
+        " -> sonu\xc3\xa7<U, E> {\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    tamam(v) => { ver tamam(f(v)); }\n"
+        "    hata(e) => { ver hata(e); }\n"
+        "  }\n"
+        "}\n"
+        "i\xc5\x9flev iki_kat(x: tam32) -> tam32 { ver x * 2; }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: sonu\xc3\xa7<tam32, tam32> = tamam(21);\n"
+        "  de\xc4\x9fi\xc5\x9fken r2: sonu\xc3\xa7<tam32, tam32> = harita(r, iki_kat);\n"
+        "  e\xc5\x9fle\xc5\x9f r2 {\n"
+        "    tamam(v) => { ver v; }\n"
+        "    hata(e) => { ver 0; }\n"
+        "  }\n"
+        "  ver 99;\n"
+        "}\n");
+    test_sonuc("C9: generic harita(tamam(21), iki_kat) -> tamam(42) -> 42",
+               rc == 42);
+}
+
+static void test_c9_secimlik_ya_da(void) {
+    /* secimlik<T> + ya_da pattern */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev ya_da(r: se\xc3\xa7imlik<tam32>, varsayilan: tam32) -> tam32 {\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    de\xc4\x9f""er(v) => { ver v; }\n"
+        "    hi\xc3\xa7 => { ver varsayilan; }\n"
+        "  }\n"
+        "  ver varsayilan;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken a: se\xc3\xa7imlik<tam32> = de\xc4\x9f""er(42);\n"
+        "  de\xc4\x9fi\xc5\x9fken b: se\xc3\xa7imlik<tam32> = hi\xc3\xa7;\n"
+        "  ver ya_da(a, 0) + ya_da(b, 0);\n"
+        "}\n");
+    test_sonuc("C9: secimlik ya_da(deger(42),0)+ya_da(hic,0) -> 42", rc == 42);
+}
+
 /* === C1: Capability runtime end-to-end (G.3 dersinden ABI fix) === */
 
 static void test_capability_olustur_geri_al(void) {
@@ -1603,6 +1669,11 @@ int main(void) {
     test_secimlik_deger_path();
     test_secimlik_hic_path();
     test_sonuc_div_zero_pattern();
+
+    printf("\n--- C9: Stdlib::sonuc inline LLVM e2e ---\n");
+    test_c9_basarili_mi_ya_da();
+    test_c9_generic_harita();
+    test_c9_secimlik_ya_da();
 
     printf("\n--- C1: Capability end-to-end (G.3 ABI fix) ---\n");
     test_capability_olustur_geri_al();
