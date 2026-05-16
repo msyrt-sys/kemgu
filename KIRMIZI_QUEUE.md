@@ -18,6 +18,24 @@ Format:
 
 ---
 
+## [2026-05-15] — Bump Allocator Spec V1 — TASLAK, onay bekliyor
+
+- **Kategori:** yeni unsafe primitif / breaking change altyapı
+- **Bağlam:** Bare-Metal Hedef Genişletme Kalem 6 — `malloc`/`realloc`/`free`
+  libc bağımlılığı bare-metal hedefte kullanılamaz. Bump allocator + statik
+  buffer + KdlArena ABI uyumu önerisi `BUMP_ALLOCATOR_SPEC_TASLAK.md`'de.
+- **6 açık soru (default önerili):**
+  1. S1 — Statik buffer boyutu: **64 KB default + compile-time override** ✓
+  2. S2 — Hizalama: **16 byte default** ✓
+  3. S3 — Taşma davranışı: **Seçenek A NULL dönüş** (ASLA exception ile uyumlu) ✓
+  4. S4 — Reset semantiği: **arena reset** (kullanildi = 0) ✓
+  5. S5 — ABI: **aynı KdlArena interface, farklı internal** ✓
+  6. S6 — Multi-arena: **V1 tek-arena, V2 multi** ✓
+- **Engellediği iş:** stdlib/metin/dizi bare-metal port; otp_anahtar_uret port.
+- **Implementation Faz 5+ — bu commit'te YOK.**
+
+---
+
 ## [2026-05-13] — stdlib genişletmesi: runtime + dil özellik kuyruğu
 
 Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırları.
