@@ -73,7 +73,24 @@ Track A "Capability + I/O Bug Fix Bundle" oturumunda kapatıldı.
 
 ---
 
-## [2026-05-16] — sonuç<T,E> / seçimlik<T> LLVM tagged union codegen
+## [2026-05-16] — sonuç<T,E> / seçimlik<T> LLVM tagged union codegen — **KAPATILDI** (V1)
+
+**[2026-05-16 ÇÖZÜLDÜ]:** Track A C7 (commit 4453b6d).
+
+V1 minimum viable codegen:
+- Tagged union `{ i8 disc, i64 payload }` (monomorphic)
+- Constructor emit (tamam/hata/değer/hiç)
+- `eşleş` pattern destructure + binding
+- 5 yeni end-to-end test (124/124 LLVM)
+
+V2'ye bırakılanlar (yeni iş kalemi olarak):
+- Generic monomorphization (per-tip struct)
+- Karmaşık T,E (yapı, dizi, metin pointer) için context-aware payload
+- Nested patterns, guard clauses, exhaustiveness check
+
+---
+
+## [2026-05-16] — sonuç<T,E> / seçimlik<T> LLVM tagged union codegen (orijinal madde)
 
 - **Kategori:** LLVM v4 (yeni codegen katmanı — 🔴 spec etkisi tartışılır).
 - **Bağlam:** Track A C3 audit'inde tespit. Parser + tip kontrol
