@@ -18,6 +18,75 @@ Format:
 
 ---
 
+## [2026-05-16] — Altyapı Bootstrap Faz 3-5 sırasında ortaya çıkan sınırlar
+
+### F3-A: LLVM identifier Türkçe karakter mangling yok
+
+**Durum:** AÇIK — Faz 3 concurrency runtime sırasında ortaya çıktı.
+
+**Bağlam:** `görev_başlat(dört)` çağrısında `dört` (UTF-8 `d\xc3\xb6rt`) LLVM
+IR'a `define i32 @dört()` olarak emit ediliyor; clang reddi (`error: expected
+'(' in function argument list`). Tüm KEMGU programlarında Türkçe karakterli
+fonksiyon/değişken adları LLVM tarafında geçersiz identifier üretir.
+
+**Mevcut çözüm:** ASCII fn adı kullan (örn. `dort` yerine `dört`).
+Test paketinde T24 bu yöntemi gösteriyor.
+
+**Önerilen çözümler:**
+1. `ad_yaz` fonksiyonunu Türkçe karakterleri `_XX_` veya `_<u+HHHH>_`
+   şeklinde encode etmesi (örn. `dort` → `d\xc3\xb6rt` → `d_C3B6_rt`).
+2. C++ mangling tarzı (Itanium ABI): `_ZN4dortE` benzeri.
+3. UTF-8 byte'ları base32/base64 encode.
+
+**Kategori:** ABI değişikliği (mangling şeması formal spec olmalı).
+
+**Engellediği iş:** Kısa vadede yok (ASCII alias işe yarar). Uzun vadede
+KEMGU'nun Türkçe DNA hedefi için elzem — sembol tablosu/IR'ın Türkçe
+identifier'ları kayıpsız taşıması gerek.
+
+---
+
+### F5-A: Bare-metal MMIO için raw pointer literal sözdizimi yok
+
+**Durum:** AÇIK — Faz 5 bare-metal target sırasında belirgin oldu.
+
+**Bağlam:** KEMGU'da pointer literal (`0x09000000 olarak *dtam8`) yazılamıyor.
+Memory-mapped UART/donanım register yazma için C wrapper veya inline asm
+gerekiyor. Faz 5 örneği (`bare_baslat.kem`) pure hesaplama ile sınırlı.
+
+**Önerilen çözümler:**
+1. `güvensiz` blok içinde integer literal'dan pointer'a cast: `*((0x09000000) olarak *dtam8) = 'M';`
+2. Donanım intrinsic ailesi: `mmio_yaz_dtam8(adres: tam64, deger: dtam8)`
+   (built-in compiler intrinsic, LLVM `inttoptr + store`).
+3. Inline asm keyword `montaj { ... }`.
+
+**Kategori:** unsafe primitif (donanım erişim sözdizimi).
+
+**Engellediği iş:** Bare-metal OS yazımı (serial console, GPIO, MMU
+register erişimi). Faz 5 sonrası KEMGU-yazılı OS hedefi için kritik.
+
+---
+
+### F5-B: Bare-metal stdlib subset implementasyon yok
+
+**Durum:** AÇIK — Faz 5 plan §B'de "Bare-metal stdlib subset (Dizi, tekkez)"
+istendi ama V1'de implementasyon yapılmadı.
+
+**Bağlam:** Bare-metal hedefte standart kütüphane fonksiyonları (Dizi
+allocate, tekkez kullan/imha) heap'siz çalışmalı. Şu an programcı pure
+hesaplama dışında bir şey yapamıyor.
+
+**Önerilen çözümler:**
+1. Bump arena allocator bare-metal'de (sabit boyutlu, link-time configure).
+2. Stack-only Dizi (alloca + GEP) — boyut compile-time sabit.
+3. Page allocator V2 (MMU kurulum sonrası).
+
+**Kategori:** runtime altyapı (yeni allocator implementasyonu).
+
+**Engellediği iş:** Bare-metal'de tekkez/Dizi kullanan örnekler ve testler.
+
+---
+
 ## [2026-05-13] — stdlib genişletmesi: runtime + dil özellik kuyruğu
 
 Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırları.
