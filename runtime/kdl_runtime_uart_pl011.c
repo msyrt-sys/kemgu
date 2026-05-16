@@ -48,6 +48,8 @@
 
 #define KDL_PL011_FR_TXFE  (1U << 7)   /* TX FIFO bos */
 #define KDL_PL011_FR_TXFF  (1U << 5)   /* TX FIFO dolu */
+#define KDL_PL011_FR_RXFF  (1U << 6)   /* RX FIFO dolu */
+#define KDL_PL011_FR_RXFE  (1U << 4)   /* RX FIFO bos */
 #define KDL_PL011_FR_BUSY  (1U << 3)   /* gonderim devam */
 
 /* === Mock yedek altyapı === */
@@ -57,21 +59,48 @@
 char     kdl_uart_pl011_mock_buf[KDL_UART_MOCK_BUF_SZ];
 uint32_t kdl_uart_pl011_mock_pos = 0;
 uint32_t kdl_uart_pl011_mock_fr_full_kalan = 0;
+char     kdl_uart_pl011_mock_rx_buf[KDL_UART_MOCK_BUF_SZ];
+uint32_t kdl_uart_pl011_mock_rx_uzunluk = 0;
+uint32_t kdl_uart_pl011_mock_rx_pos = 0;
 
 void kdl_uart_pl011_mock_temizle(void) {
     /* libc memset yok — el ile sıfırla */
     for (uint32_t i = 0; i < KDL_UART_MOCK_BUF_SZ; i++) {
         kdl_uart_pl011_mock_buf[i] = 0;
+        kdl_uart_pl011_mock_rx_buf[i] = 0;
     }
     kdl_uart_pl011_mock_pos = 0;
     kdl_uart_pl011_mock_fr_full_kalan = 0;
+    kdl_uart_pl011_mock_rx_uzunluk = 0;
+    kdl_uart_pl011_mock_rx_pos = 0;
+}
+
+void kdl_uart_pl011_mock_rx_doldur(const char *veri, uint32_t n) {
+    if (n > KDL_UART_MOCK_BUF_SZ) n = KDL_UART_MOCK_BUF_SZ;
+    for (uint32_t i = 0; i < n; i++) {
+        kdl_uart_pl011_mock_rx_buf[i] = veri[i];
+    }
+    kdl_uart_pl011_mock_rx_uzunluk = n;
+    kdl_uart_pl011_mock_rx_pos = 0;
 }
 
 static inline uint32_t kdl_pl011_oku32(uint32_t ofs) {
     if (ofs == KDL_PL011_FR) {
+        uint32_t bayrak = 0;
         if (kdl_uart_pl011_mock_fr_full_kalan > 0) {
             kdl_uart_pl011_mock_fr_full_kalan--;
-            return KDL_PL011_FR_TXFF;
+            bayrak |= KDL_PL011_FR_TXFF;
+        }
+        /* RX FIFO bos mu? rx_pos >= rx_uzunluk ise evet (RXFE set) */
+        if (kdl_uart_pl011_mock_rx_pos >= kdl_uart_pl011_mock_rx_uzunluk) {
+            bayrak |= KDL_PL011_FR_RXFE;
+        }
+        return bayrak;
+    }
+    if (ofs == KDL_PL011_DR) {
+        if (kdl_uart_pl011_mock_rx_pos < kdl_uart_pl011_mock_rx_uzunluk) {
+            return (uint32_t)(unsigned char)
+                kdl_uart_pl011_mock_rx_buf[kdl_uart_pl011_mock_rx_pos++];
         }
         return 0;
     }
@@ -133,3 +162,25 @@ void kdl_uart_pl011_yaz(const char *s) {
         kdl_uart_pl011_putc(*s++);
     }
 }
+
+int32_t kdl_uart_pl011_oku_karakter(void) {
+    /* FR.RXFE set oldugu surece bekle (RX FIFO bos -> veri yok) */
+    while (kdl_pl011_oku32(KDL_PL011_FR) & KDL_PL011_FR_RXFE) {
+        /* spin */
+    }
+    return (int32_t)(kdl_pl011_oku32(KDL_PL011_DR) & 0xFFU);
+}
+
+int32_t kdl_uart_pl011_rx_hazir(void) {
+    return (kdl_pl011_oku32(KDL_PL011_FR) & KDL_PL011_FR_RXFE) ? 0 : 1;
+}
+
+/* === Cross-target sürücü tablosu === */
+
+const KdlUartSurucu kdl_uart_pl011_surucu = {
+    .init         = kdl_uart_pl011_init,
+    .putc         = kdl_uart_pl011_putc,
+    .yaz          = kdl_uart_pl011_yaz,
+    .oku_karakter = kdl_uart_pl011_oku_karakter,
+    .rx_hazir     = kdl_uart_pl011_rx_hazir,
+};

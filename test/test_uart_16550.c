@@ -98,6 +98,40 @@ static void T8_yuksek_bit_byte(void) {
                (unsigned char)kdl_uart_16550_mock_buf[1] == 0x80);
 }
 
+/* === C2: RX okuma === */
+
+static void T9_rx_hazir_bos(void) {
+    kdl_uart_16550_mock_temizle();
+    test_sonuc("rx_hazir() bos -> 0",
+               kdl_uart_16550_rx_hazir() == 0);
+}
+
+static void T10_oku_karakter_tek(void) {
+    kdl_uart_16550_mock_temizle();
+    kdl_uart_16550_mock_rx_doldur("Z", 1);
+    test_sonuc("rx_hazir() veri var -> 1",
+               kdl_uart_16550_rx_hazir() == 1);
+    int32_t c = kdl_uart_16550_oku_karakter();
+    test_sonuc("oku_karakter() -> 'Z' (0x5A)", c == 'Z');
+}
+
+static void T11_oku_karakter_siralama(void) {
+    kdl_uart_16550_mock_temizle();
+    kdl_uart_16550_mock_rx_doldur("GU", 2);
+    int sirayla =
+        kdl_uart_16550_oku_karakter() == 'G' &&
+        kdl_uart_16550_oku_karakter() == 'U';
+    test_sonuc("oku_karakter x2 -> 'G','U' sira korur", sirayla);
+}
+
+static void T12_rx_hazir_tampon_bitti(void) {
+    kdl_uart_16550_mock_temizle();
+    kdl_uart_16550_mock_rx_doldur("Y", 1);
+    (void)kdl_uart_16550_oku_karakter();
+    test_sonuc("rx_hazir() tampon tukendi -> 0",
+               kdl_uart_16550_rx_hazir() == 0);
+}
+
 int main(void) {
     printf("=== KEMGU 16550A UART Surucusu Test Paketi ===\n");
 
@@ -109,6 +143,10 @@ int main(void) {
     puts("\n--- LSR + Sinir Senaryolari ---");
     T6_lsr_thre_bekle(); T7_satir_sonu_crlf();
     T8_yuksek_bit_byte();
+
+    puts("\n--- C2: RX okuma ---");
+    T9_rx_hazir_bos(); T10_oku_karakter_tek();
+    T11_oku_karakter_siralama(); T12_rx_hazir_tampon_bitti();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
