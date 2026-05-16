@@ -164,6 +164,61 @@ static void T16_yazdir_mantik_yanlis(void) {
                strcmp(kdl_uart_pl011_mock_buf, "yanl\xc4\xb1" "\xc5\x9f\n") == 0);
 }
 
+/* === C1: isaretsiz + onaltilik formatlar === */
+
+static void T18_isaretsiz_tam(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_isaretsiz_tam(4000000000U);  /* INT32_MAX'in ustunde */
+    test_sonuc("yazdir_isaretsiz_tam(4000000000) -> \"4000000000\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf, "4000000000\n") == 0);
+}
+
+static void T19_isaretsiz_tam64_max(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_isaretsiz_tam64(UINT64_MAX);
+    test_sonuc("yazdir_isaretsiz_tam64(UINT64_MAX) -> \"18446744073709551615\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf,
+                      "18446744073709551615\n") == 0);
+}
+
+static void T20_onaltilik_kucuk(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_onaltilik(0x42);
+    test_sonuc("yazdir_onaltilik(0x42) -> \"0x42\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf, "0x42\n") == 0);
+}
+
+static void T21_onaltilik_sifir(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_onaltilik(0);
+    test_sonuc("yazdir_onaltilik(0) -> \"0x0\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf, "0x0\n") == 0);
+}
+
+static void T22_onaltilik_64bit_max(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_onaltilik(UINT64_MAX);
+    test_sonuc("yazdir_onaltilik(UINT64_MAX) -> \"0xffffffffffffffff\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf,
+                      "0xffffffffffffffff\n") == 0);
+}
+
+static void T23_onaltilik_pl011_base(void) {
+    /* QEMU virt PL011 taban adresi ornek — gercek hata ayiklama use case */
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_onaltilik(0x09000000ULL);
+    test_sonuc("yazdir_onaltilik(0x9000000) -> \"0x9000000\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf, "0x9000000\n") == 0);
+}
+
+static void T24_yaz_onaltilik(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yaz_onaltilik(0xDEADBEEF);
+    kdl_yazdir_satir();
+    test_sonuc("yaz_onaltilik(0xDEADBEEF) + satir -> \"0xdeadbeef\\n\"",
+               strcmp(kdl_uart_pl011_mock_buf, "0xdeadbeef\n") == 0);
+}
+
 /* === Birlesik akis — bir program akisini simule et === */
 
 static void T17_program_akisi(void) {
@@ -195,6 +250,12 @@ int main(void) {
 
     puts("\n--- yazdir_mantiksal ---");
     T15_yazdir_mantik_dogru(); T16_yazdir_mantik_yanlis();
+
+    puts("\n--- C1: isaretsiz + onaltilik ---");
+    T18_isaretsiz_tam(); T19_isaretsiz_tam64_max();
+    T20_onaltilik_kucuk(); T21_onaltilik_sifir();
+    T22_onaltilik_64bit_max(); T23_onaltilik_pl011_base();
+    T24_yaz_onaltilik();
 
     puts("\n--- Birlesik akis ---");
     T17_program_akisi();

@@ -26,8 +26,16 @@ void kdl_yazdir_tam64(int64_t n);
 void kdl_yaz_tam(int32_t n);
 void kdl_yazdir_mantiksal(int b);
 
+/* Continuation C1: isaretsiz + onaltilik formatlar */
+void kdl_yazdir_isaretsiz_tam(uint32_t n);
+void kdl_yazdir_isaretsiz_tam64(uint64_t n);
+void kdl_yazdir_onaltilik(uint64_t n);
+void kdl_yaz_onaltilik(uint64_t n);
+
 /* Ic-icin kullanim (test dogrulamasi). Stack tampona biciminin
  * uretilen byte sayisini doner; NUL ile sonlanir. */
 int32_t kdl_format_tam64(int64_t n, char *cikti, int32_t kapasite);
+int32_t kdl_format_isaretsiz64(uint64_t n, char *cikti, int32_t kapasite);
+int32_t kdl_format_onaltilik64(uint64_t n, char *cikti, int32_t kapasite);
 
 #endif
