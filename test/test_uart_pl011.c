@@ -152,6 +152,51 @@ static void T10_yuksek_bit_byte(void) {
                (unsigned char)kdl_uart_pl011_mock_buf[2] == 0x7F);
 }
 
+/* === C2: RX okuma (oku_karakter + rx_hazir) === */
+
+static void T11_rx_hazir_bos(void) {
+    kdl_uart_pl011_mock_temizle();
+    test_sonuc("rx_hazir() bos tampon -> 0",
+               kdl_uart_pl011_rx_hazir() == 0);
+}
+
+static void T12_oku_karakter_tek(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("A", 1);
+    test_sonuc("rx_hazir() veri var -> 1",
+               kdl_uart_pl011_rx_hazir() == 1);
+    int32_t c = kdl_uart_pl011_oku_karakter();
+    test_sonuc("oku_karakter() -> 'A' (0x41)", c == 'A');
+}
+
+static void T13_oku_karakter_siralama(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("KEM", 3);
+    int sirayla =
+        kdl_uart_pl011_oku_karakter() == 'K' &&
+        kdl_uart_pl011_oku_karakter() == 'E' &&
+        kdl_uart_pl011_oku_karakter() == 'M';
+    test_sonuc("oku_karakter x3 -> 'K','E','M' sira korur", sirayla);
+}
+
+static void T14_oku_karakter_yuksek_bit(void) {
+    kdl_uart_pl011_mock_temizle();
+    char veri[2] = { (char)0xFF, (char)0x80 };
+    kdl_uart_pl011_mock_rx_doldur(veri, 2);
+    int32_t a = kdl_uart_pl011_oku_karakter();
+    int32_t b = kdl_uart_pl011_oku_karakter();
+    test_sonuc("oku_karakter 0xFF/0x80 -> 255/128 (unsigned)",
+               a == 255 && b == 128);
+}
+
+static void T15_rx_hazir_tampon_bitti(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("X", 1);
+    (void)kdl_uart_pl011_oku_karakter();  /* tüket */
+    test_sonuc("rx_hazir() tampon tukenince -> 0",
+               kdl_uart_pl011_rx_hazir() == 0);
+}
+
 int main(void) {
     printf("=== KEMGU PL011 UART Surucusu Test Paketi ===\n");
 
@@ -164,6 +209,11 @@ int main(void) {
     T6_fifo_dolu_spin(); T7_satir_sonu();
     T8_utf8_turkce(); T9_tampon_tasmasi_guvenli();
     T10_yuksek_bit_byte();
+
+    puts("\n--- C2: RX okuma ---");
+    T11_rx_hazir_bos(); T12_oku_karakter_tek();
+    T13_oku_karakter_siralama(); T14_oku_karakter_yuksek_bit();
+    T15_rx_hazir_tampon_bitti();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
