@@ -30,6 +30,9 @@
 
 typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK, MOD_LLVM, MOD_LSP } Mod;
 
+/* Faz 5 — hedef platform secimi */
+static LlvmHedef g_hedef = HEDEF_HOST;
+
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
     if (!f) {
@@ -166,19 +169,21 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         arena_serbest(a);
         return 1;
     }
-    llvm_ir_uret(prog, stdout);
+    llvm_ir_uret_hedef(prog, stdout, g_hedef);
     arena_serbest(a);
     return 0;
 }
 
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp] [dosya]\n"
+        "Kullanim: %s [bayraklar] [dosya]\n"
         "  --token   Lexer akisini yazdir\n"
         "  --parse   Parser calistir + AST yazdir\n"
         "  --check   Parser + tip kontrol (varsayilan)\n"
         "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
         "  --lsp     Language Server (stdio JSON-RPC)\n"
+        "  --hedef <host|bare-metal-x86_64|bare-metal-aarch64>\n"
+        "            Hedef platform (Faz 5: bare-metal triple + kdl declare yok)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -203,6 +208,24 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[arg_idx], "--lsp") == 0) {
             mod = MOD_LSP;
             arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--hedef") == 0) {
+            if (arg_idx + 1 >= argc) {
+                fprintf(stderr, "--hedef icin parametre gerekli "
+                                "(host|bare-metal-x86_64|bare-metal-aarch64)\n");
+                return 2;
+            }
+            const char *val = argv[arg_idx + 1];
+            if (strcmp(val, "host") == 0) {
+                g_hedef = HEDEF_HOST;
+            } else if (strcmp(val, "bare-metal-x86_64") == 0) {
+                g_hedef = HEDEF_BARE_METAL_X86_64;
+            } else if (strcmp(val, "bare-metal-aarch64") == 0) {
+                g_hedef = HEDEF_BARE_METAL_AARCH64;
+            } else {
+                fprintf(stderr, "Bilinmeyen --hedef degeri: %s\n", val);
+                return 2;
+            }
+            arg_idx += 2;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
             kullanim_yazdir(argv[0]);

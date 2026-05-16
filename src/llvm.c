@@ -2360,13 +2360,36 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
 /* === Public API === */
 
 void llvm_ir_uret(const Dugum *program, FILE *out) {
+    llvm_ir_uret_hedef(program, out, HEDEF_HOST);
+}
+
+void llvm_ir_uret_hedef(const Dugum *program, FILE *out, LlvmHedef hedef) {
     if (!out) return;
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
-    /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
+    /* Faz 5: hedef triple */
+    switch (hedef) {
+        case HEDEF_BARE_METAL_X86_64:
+            fputs("target triple = \"x86_64-unknown-none\"\n\n", out);
+            break;
+        case HEDEF_BARE_METAL_AARCH64:
+            fputs("target triple = \"aarch64-unknown-none\"\n\n", out);
+            break;
+        case HEDEF_HOST:
+        default:
+            fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+            break;
+    }
+    /* Faz 5 — Bare-metal: kdl_* runtime declare'leri emit edilmez; KEMGU
+     * programi pure aritmetik + control flow + raw pointer ops kullanmali.
+     * Programci runtime built-in kullanirsa link hatasi alir (dogru davranis).
+     *
+     * Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
+    int bare_metal = (hedef == HEDEF_BARE_METAL_X86_64 ||
+                      hedef == HEDEF_BARE_METAL_AARCH64);
+    if (!bare_metal) {
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
     /* Built-in extern (libc) bildirimleri */
     fputs("declare i32 @puts(ptr)\n", out);
@@ -2446,6 +2469,7 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_kanal_al(ptr)\n", out);
     fputs("declare i32 @kdl_kanal_bos_mu(ptr)\n", out);
     fputs("declare void @kdl_kanal_serbest(ptr)\n\n", out);
+    }  /* if (!bare_metal) — Faz 5 */
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);

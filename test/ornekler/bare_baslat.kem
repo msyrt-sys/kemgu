@@ -1,0 +1,28 @@
+// KEMGU Bare-Metal Ornek — pure aritmetik
+//
+// Derleme (x86_64):
+//   ./build/kemgu --llvm --hedef bare-metal-x86_64 test/ornekler/bare_baslat.kem > bare.ll
+//   clang -target x86_64-unknown-none -nostdlib \
+//         -Wl,-T,src/runtime_bare/linker_x86_64.ld \
+//         bare.ll -o bare.elf
+//
+// QEMU manuel test:
+//   qemu-system-x86_64 -kernel bare.elf -nographic
+//   (Exit code 42 isaretlemek icin QEMU exit device gerekli; bu ornekte
+//    sadece ELF binary olusturulur.)
+//
+// V1 sinirlari: KEMGU bare-metal modunda raw pointer literal yok,
+// MMIO icin C ile inline asm/wrapper gerekli. Bu ornek pure hesaplama.
+
+işlev hesapla(x: tam32) -> tam32 {
+    ver x * x + x + 6;
+}
+
+işlev _baslat() -> tam32 {
+    değişken sonuc: tam32 = hesapla(5);
+    // 5*5 + 5 + 6 = 36 -> hayir, ihtiyaç 42
+    // 5*7 + 5 + 2 = 42 — degil
+    // hesapla(5) = 25 + 5 + 6 = 36
+    // 42 yapmak icin: hesapla(5) + 6 = 42
+    ver sonuc + 6;
+}
