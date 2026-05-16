@@ -253,6 +253,11 @@ $(BUILD)/test_dosya$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                            $(TESTDIR)/test_dosya.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === --hedef CLI flag + LLVM emission hedef-duyarliligi (Bare-metal Faz) ===
+
+$(BUILD)/test_hedef$(EXE): $(TESTDIR)/test_hedef.c $(BUILD)/kemgu$(EXE) | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/test_hedef.c
+
 # === SIMD Spec V1 testi (Clang64 + ASan — full pipeline) ===
 
 $(BUILD)/test_simd$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
@@ -406,6 +411,9 @@ calistir_modul_import_test: $(BUILD)/test_modul_import$(EXE)
 calistir_dosya_test: $(BUILD)/test_dosya$(EXE)
 	./$(BUILD)/test_dosya$(EXE)
 
+calistir_hedef_test: $(BUILD)/test_hedef$(EXE)
+	./$(BUILD)/test_hedef$(EXE)
+
 calistir_sabitsure_test: $(BUILD)/test_sabitsure$(EXE)
 	./$(BUILD)/test_sabitsure$(EXE)
 
@@ -503,7 +511,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_modul_import_test calistir_dosya_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_modul_import_test calistir_dosya_test calistir_hedef_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:
