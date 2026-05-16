@@ -73,6 +73,38 @@ Track A "Capability + I/O Bug Fix Bundle" oturumunda kapatıldı.
 
 ---
 
+## [2026-05-16] — sonuç<T,E> / seçimlik<T> LLVM tagged union codegen
+
+- **Kategori:** LLVM v4 (yeni codegen katmanı — 🔴 spec etkisi tartışılır).
+- **Bağlam:** Track A C3 audit'inde tespit. Parser + tip kontrol
+  `eşleş r { tamam(v) => ..., hata(m) => ... }` ve `tamam(42)` /
+  `hata("x")` ifade construction'larını kabul ediyor ama LLVM emit
+  yok. `--llvm` çıktısında `@tamam`/`@hata` declare/define yok →
+  `undefined value '@tamam'` clang hatası.
+- **Gerekli:**
+  1. **Tagged union temsili:** `%kdl_sonuc_T_E = type { i8 disc, [N x i8] payload }`
+     veya benzeri. `disc=0`=tamam, `disc=1`=hata.
+  2. **Constructor emit:** `tamam(v)` → alloca + store disc=0 + store
+     payload(v); `hata(m)` → alloca + store disc=1 + store payload(m).
+  3. **Pattern destructure:** `eşleş` LLVM emit her kol için disc kontrolü
+     + payload extract + binding'i alloca'ya store.
+  4. **Generic instantiation:** `sonuç<tam32, metin>` ve `sonuç<metin, tam32>`
+     iki ayrı LLVM struct olarak emit.
+- **Engellediği iş:** stdlib::sonuc inspection runtime'da no-op.
+  Tüm `sonuç<T,E>` döndüren fonksiyonlar (G.4 stdlib oku_metin,
+  capability `dosya_ac_yetkili`, vb.) runtime'da kullanılamaz.
+  Aynı durum `seçimlik<T>` için de geçerli.
+- **Önceki çözümler (yerel work-around):**
+  - stdlib::sonuc.kem sadece construction wrapper (hata, tamam) tanımlı,
+    inspection yok.
+  - Test ornekleri sonuç döndürmüyor, `tam32` exit code kullanıyor.
+- **Risk sınıfı:** 🟡 (LLVM v3 → v4 doğal devamı, spec etkisi yok —
+  sum type encoding internal detail). KEMGU dil tasarım kararı zaten
+  alındı (`sonuç<T,E>` ve `seçimlik<T>` core'da).
+- **Tahmini iş:** 1-2 checkpoint (LLVM v4 alt-kalem).
+
+---
+
 ## [2026-05-13] — stdlib genişletmesi: runtime + dil özellik kuyruğu
 
 Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırları.
@@ -119,19 +151,15 @@ oturumunda toplu karara açık:
 
 ### C. Pattern matching: sonuç<T,E> için tamam/hata desenleri
 
-- **Kategori:** parser (yeni keyword desen tanıma)
-- **Bağlam:** `eşleş r { tamam(v) => ..., hata(m) => ... }` parser'da
-  `desen bekleniyor` (P211) hatası veriyor. `değer`/`hiç` keyword'leri
-  desen olarak tanınıyor (parse_desen'de TOK_DEGER, TOK_HIC sabitleri),
-  ama TOK_TAMAM, TOK_HATA yok.
-- **Etkilenen:** stdlib/sonuc.kem — harita, ya_da, bağla, hatayı_yay
-  hepsi pattern matching gerektiriyor; bunlar olmadan sonuç inspection
-  imkansız. Şu an sadece construction wrapper'ları yazıldı.
-- **Önerilen seçenekler:**
-  1. src/parser.c parse_desen'e `TOK_TAMAM` ve `TOK_HATA` ekle
-     (TOK_DEGER ile aynı conditional satıra).
-  2. Sembol tablosu/tip kontrol tarafı `değer(v)` ile aynı yolu izler.
-- **Engel:** yok (parser ufak değişiklik); spec içi ekleme sayılır.
+**[2026-05-16 — KISMEN ÇÖZÜLDÜ]:** Parser tarafı `parse_desen`'de
+`TOK_TAMAM`, `TOK_HATA` zaten var (sat 1054-1055) ve tip kontrol
+geçer. **Track A C3 audit'inde** tespit edildi.
+
+KALAN: LLVM emit eksikliği. `eşleş r { tamam(v) => ... }` tip-check
+geçer ama `--llvm` çıktısında `@tamam` constructor declare/define
+yok → derleme hatası. Bu **`sonuç<T,E>` ve `seçimlik<T>` için LLVM
+tagged union codegen** gerektirir (LLVM v4 kapsam — yeni iş kalemi
+aşağıda). Bu nedenle stdlib::sonuc inspection runtime'da çalışmaz.
 
 ### D. Generic callback tip çıkarsama: `işlev(T) -> U`
 
