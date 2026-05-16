@@ -237,6 +237,68 @@ static void T8_bare_metal_kdl_metin_yok(void) {
     test_sonuc("H8: bare-metal'de kdl_metin_* + libc (puts/malloc) YOK", ok);
 }
 
+/* === Kalem 7: 3 ek IR-level test === */
+
+static void T9_host_bare_declare_farki(void) {
+    /* Host vs bare-metal declare sayisi farki: bare-metal 0,
+     * host 30'dan fazla. Fark = host emit'i. */
+    llvm_calistir(NULL);  /* default host */
+    static char ir_host[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_host, sizeof(ir_host));
+    IrAnaliz host_a;
+    ir_analiz_et(ir_host, &host_a);
+
+    llvm_calistir("--hedef=aarch64-unknown-none");
+    static char ir_bare[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_bare, sizeof(ir_bare));
+    IrAnaliz bare_a;
+    ir_analiz_et(ir_bare, &bare_a);
+
+    /* Beklenen: host > 30, bare-metal = 0, fark >= 30 */
+    int ok = host_a.declare_sayisi > 30
+          && bare_a.declare_sayisi == 0
+          && (host_a.declare_sayisi - bare_a.declare_sayisi) >= 30;
+    test_sonuc("H9: host-bare declare sayi farki >= 30 (libc'siz)", ok);
+}
+
+static void T10_islev_emit_her_iki_modda(void) {
+    /* main() islevi bare-metal'de de host'ta da emit edilir (KEMGU programci
+     * kodu hedef-bagimsiz). 'define ... @main' satiri her iki modda da var. */
+    llvm_calistir(NULL);
+    static char ir_host[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_host, sizeof(ir_host));
+
+    llvm_calistir("--hedef=aarch64-unknown-none");
+    static char ir_bare[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_bare, sizeof(ir_bare));
+
+    int host_has = strstr(ir_host, "define ") != NULL
+                && strstr(ir_host, "@main") != NULL;
+    int bare_has = strstr(ir_bare, "define ") != NULL
+                && strstr(ir_bare, "@main") != NULL;
+    test_sonuc("H10: main() define her iki hedefte emit (kullanici kod hedef-bagimsiz)",
+               host_has && bare_has);
+}
+
+static void T11_yorum_baremetal_tutarli(void) {
+    /* Bare-metal yorum 'libc/KDL declare'leri atlandi' tek mesaji,
+     * host modunda yok. */
+    llvm_calistir("--hedef=aarch64-unknown-none");
+    static char ir_bare[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_bare, sizeof(ir_bare));
+
+    llvm_calistir(NULL);
+    static char ir_host[BUYUK_TAMPON];
+    dosya_oku(LL_PATH, ir_host, sizeof(ir_host));
+
+    int bare_yorum = strstr(ir_bare, "Bare-metal hedef:") != NULL
+                  && strstr(ir_bare, "atlandi") != NULL;
+    int host_yorum_yok = strstr(ir_host, "Bare-metal hedef:") == NULL
+                      && strstr(ir_host, "atlandi") == NULL;
+    test_sonuc("H11: bare-metal yorum tutarli (var bare, yok host)",
+               bare_yorum && host_yorum_yok);
+}
+
 int main(void) {
     printf("=== KEMGU --hedef CLI flag + LLVM Emission Testleri ===\n");
     printf("Bare-metal Faz Kalem 1+2: hedef-duyarli IR emission\n\n");
@@ -249,6 +311,9 @@ int main(void) {
     T6_bare_metal_kdl_yetki_tip_korunur();
     T7_bare_metal_kdl_dosya_yok();
     T8_bare_metal_kdl_metin_yok();
+    T9_host_bare_declare_farki();
+    T10_islev_emit_her_iki_modda();
+    T11_yorum_baremetal_tutarli();
 
     /* Temizlik */
     remove(KEM_PATH);

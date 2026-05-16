@@ -41,29 +41,75 @@
 
 ## Kalem Tamamlama Listesi
 
-(Her Kalem sonrası burası güncellenir.)
-
-- [ ] **K0:** Keşif + NOTES + branch
-- [ ] **K1:** CLI `--hedef` flag
-- [ ] **K2:** LLVM emission hedef-duyarlı
-- [ ] **K3:** `KEMGU_BARE_METAL` guard altyapısı + etiketleme
-- [ ] **K4:** `BARE_METAL_DESTEK.md` stdlib uyumluluk haritası
-- [ ] **K5:** `linker/bare-metal-aarch64.ld` + `_baslat` entry
-- [ ] **K6:** `BUMP_ALLOCATOR_SPEC_TASLAK.md`
-- [ ] **K7:** Test pipeline genişletme (objdump libc-symbol kontrol)
+- [x] **K0:** Keşif + NOTES + branch `feature/bare-metal-genisletme`
+- [x] **K1:** CLI `--hedef` flag (`ana.c`, 12 bilinen triple validasyon)
+- [x] **K2:** LLVM emission hedef-duyarlı (`llvm_ir_uret_hedef`,
+       `llvm_hedef_bare_metal_mi`); declare bloğu `*-none-*` / `*-unknown-none`
+       hedefinde atlanır; %kdl_yetki tip korunur
+- [x] **K3:** `KEMGU_BARE_METAL` guard zemini (#error host-runtime'da) +
+       her bölüme BARE-METAL-* etiket + Makefile `CC_DEFINES` desteği
+- [x] **K4:** `BARE_METAL_DESTEK.md` stdlib uyumluluk haritası — 8 SAF,
+       2 KISMI, 3 BAĞIMLI modül; **2629 satırın %69'u (1816 satır) SAF**
+- [x] **K5:** `linker/bare-metal-aarch64.ld` + `ENTRY(_baslat)` +
+       Makefile `calistir_arm64_link_test` + `calistir_arm64_test`
+       `--hedef=aarch64-unknown-none` + objdump libc-symbol kontrol
+- [x] **K6:** `BUMP_ALLOCATOR_SPEC_TASLAK.md` — 6 açık soru + önerilen
+       default'lar, KIRMIZI_QUEUE'ya madde eklendi (Mehmet onay bekler)
+- [x] **K7:** 3 ek IR-level test (toplam **11/11** `test_hedef`) +
+       `test_tumu`'a `calistir_arm64_test` eklendi + tam regression yeşil
 
 ---
 
-## Parking Lot
+## Parking Lot — V2/Faz 5+
 
-(Karar verilemeyen veya V2'ye saklı maddeler — Mehmet onayı sonrası ele alınır.)
-
-(boş — başlangıç)
+1. **Bump allocator implementation** — BUMP_ALLOCATOR_SPEC_TASLAK.md
+   onaylandıktan sonra `runtime/kdl_runtime_bare.c` yazılır
+2. **UART/Console driver** (`kdl_yazdir_*` bare-metal port)
+3. **HW RNG** (`hw_rastgele_u64` → RDRAND/RNDR/SBI)
+4. **Block I/O driver** (`dosya_*` → AHCI/VirtIO/NVMe + FAT32 min FS)
+5. **Cooperative scheduler** (`kdl_gorev_*`, `kdl_kanal_*` → IRQ-disable lock)
+6. **`_baslat` ⇄ `main` alias** — V1'de manuel; V2'de `--hedef=*-none-*`'da
+   otomatik bridge (KEMGU programcısı sadece `main()` yazar)
+7. **Multi-arena bump** (V1 tek-arena; V2 `kdl_bolge_olustur_buf`)
+8. **Linker symbol entegrasyonu** — `__heap_basi`/`__heap_sonu` runtime'a bağlanır
+9. **Branch rename `feature/bare-metal-faz2`** (kullanıcı önerisi `-faz2`
+   eki); `feature/bare-metal-genisletme` çalışma branch'i
 
 ---
 
 ## Bulunan Çakışma / Halt Riskleri
 
-(Halt olursa burası doldurulur.)
+**Halt yaşanmadı.** Routine belirsizlikler "en mantıklı default" ile çözüldü
+(NOTES Karar Defteri D1-D8).
 
-(boş — başlangıç)
+Önemli karar:
+- K1 build hatası (em-dash karakter) MinGW C11 parser tarafından stray
+  karakter; düzeltildi (em-dash → `--`); 5 dakika içinde çözüldü, halt
+  kriteri tetiklenmedi.
+- K3 `KEMGU_BARE_METAL` define edildiğinde host-runtime `#error` ile
+  derleme reddi — istenen davranış, regression değil.
+
+---
+
+## Commit Zinciri
+
+```
+b236725 Bare-metal: KIRMIZI_QUEUE bump allocator madde
+a4e677a Bare-metal: bump allocator spec taslagi (K6)
+c9c0f6f Bare-metal: linker sablonu + _baslat entry (K5)
+1ffa001 Bare-metal: stdlib uyumluluk haritasi (K4)
+a0ffc98 Bare-metal: KEMGU_BARE_METAL guard zemini + etiketleme (K3)
+<K1+K2 commit>  Bare-metal: --hedef CLI flag + LLVM emission hedef-duyarli (K1+K2)
+9132ba6  Faz 2 (Altyapi Bootstrap) MVP: dosya I/O 22/22  ← baz
+```
+
+## Toplam İstatistik
+
+- **7 commit** (K1+K2 birleşik + K3-K7 + KIRMIZI_QUEUE update)
+- **11/11** yeni `test_hedef` (Kalem 1+2+7 birleşik)
+- **`test_tumu`** yeşil: 0 regression
+- **3 yeni belge:** NOTES_BARE_METAL, BARE_METAL_DESTEK, BUMP_ALLOCATOR_SPEC_TASLAK
+- **1 yeni linker script:** linker/bare-metal-aarch64.ld
+- **2 yeni Makefile target:** `calistir_hedef_test`, `calistir_arm64_link_test`
+- **1 yeni Makefile değişken:** `CC_DEFINES` (opsiyonel `-DKEMGU_BARE_METAL`)
+- **calistir_arm64_test** yenilendi (objdump libc-symbol kontrol)
