@@ -168,6 +168,36 @@ Bu görev kapsamında: 🟢/🟡 ayrımı yok, direkt yap (Ek v1.1 §H).
   mingw-w64-clang-x86_64-qemu`)
 - Mevcut durum: target hazir, kullanici QEMU yuklerse otomatik aktif
 
+### Continuation D1+D2+D3+D4 (kullanici 3. yeniden devam istegi) — kalan iki maddenin kapanmasi
+
+**D1: kdl_yazdir_karakter bare-metal port (UTF-8 encode)**
+- runtime/kdl_runtime_yazdir_bare.c: `kdl_utf8_encode` helper (RFC 3629)
+- `kdl_yazdir_karakter(cp)`, `kdl_yaz_karakter(cp)` — 1-4 byte UTF-8
+- 6 yeni test: ASCII (1 byte), Türkçe ğ (2 byte), euro € (3 byte),
+  grinning 😀 (4 byte), no-newline yaz, Latin-1 ç
+- KEMGU built-in: `yazdir_karakter(karakter) -> bos`, `yaz_karakter`
+
+**D2: oku_karakter host + bare-metal + KEMGU built-in**
+- Host runtime/kdl_runtime.c: `kdl_oku_karakter()` — fgetc(stdin) wrapper
+- Bare-metal: KDL_UART_OKU_KARAKTER macro backend (default PL011)
+- KEMGU built-in: `oku_karakter() -> karakter`
+- 2 yeni test (basit + yuksek bit byte)
+
+**D3: kdl_oku_metin line-buffered**
+- Hem host hem bare-metal: max-1 byte oku, CR yut, LF/EOF durdur, NUL sonlandir
+- C runtime fonksiyonu (KEMGU dili built-in olarak henüz yok — buffer
+  parametresi tasarımı sonraki adım, Capability Spec ile bağlı)
+- 4 yeni test: basit, CRLF normalize, max kesim, max=2 edge
+
+**D4: uart_echo.kem bare-metal RX -> TX ornegi**
+- test/ornekler/uart_echo.kem: `oku_karakter()` + `yaz_karakter()` + sat sonu
+- Host calistirma: `echo "Z" | echo.exe` -> "Z" + "Tamam." ✓
+- Bare-metal cross-link: kernel_echo.elf, _start + main + 6 kdl_* sembol,
+  libc/CRT referansi YOK
+- Makefile: calistir_uart_echo_bare_metal
+
+**D fazi test toplami:** yazdir_bare 24 -> 36 (+12); echo host smoke OK.
+
 ---
 
 ## Pas Gecilen → Yeniden Degerlendirilen Continuation'lar
@@ -212,14 +242,16 @@ gecilen C2, C4, C5 yeniden incelendi ve uygun olanlar uygulandi.
 - 2f7d13b: K8b.C3 panik handler
 - 159265f: ilk final rapor (NOTES + README)
 - 4f32fd4: K8b.C2+C5 UART RX + vtable (yeniden degerlendirme)
-- (pending): K8b.C4 QEMU smoke target + final NOTES guncellemesi
+- 938dfd9: K8b.C4 QEMU smoke target + ilk yeniden devam final raporu
+- (pending): K8b.D1+D2+D3+D4 UTF-8 karakter + RX okuma + echo ornegi
 
-**Yeni dosyalar** (13):
+**Yeni dosyalar** (14):
 - runtime/kdl_uart.h, runtime/kdl_yazdir_bare.h, runtime/kdl_panik.h
 - runtime/kdl_runtime_uart_pl011.c, .._uart_16550.c, .._yazdir_bare.c, .._panik.c
 - test/test_uart_pl011.c, test_uart_16550.c, test_uart_vtable.c,
   test_yazdir_bare.c, test_panik.c
 - test/ornekler/uart_merhaba.kem
+- test/ornekler/uart_echo.kem
 - linker/bare-metal-aarch64.ld
 - boot/start_aarch64.S
 - BARE_METAL_DESTEK.md
@@ -233,13 +265,13 @@ gecilen C2, C4, C5 yeniden incelendi ve uygun olanlar uygulandi.
   yazdir_onaltilik, yaz_onaltilik)
 - Makefile: 8 yeni hedef (4 mock test + 4 bare-metal validate)
 
-**Test sayilari** (Track B icin yeni — yeniden degerlendirme dahil):
+**Test sayilari** (Track B icin yeni — 3 yeniden devam istegi dahil):
 - PL011 UART:        16/16 ✓ (K1'de 10 + C2'de 6 RX)
 - 16550A UART:       13/13 ✓ (K4'te 8 + C2'de 5 RX)
 - UartSurucu vtable: 21/21 ✓ (C5)
-- yazdir_bare:       24/24 ✓ (K2'de 17 + C1'de 7)
+- yazdir_bare:       36/36 ✓ (K2'de 17 + C1'de 7 + D1+D2+D3'te 12)
 - panik handler:      6/6 ✓ (C3)
-- **Toplam yeni:    80/80 ✓** (ASan temiz)
+- **Toplam yeni:    92/92 ✓** (ASan temiz)
 
 **Bare-metal cross-compile dogrulamalari** (tum libc-yok):
 - ARM64 PL011 ELF object: 3 sembol

@@ -34,7 +34,7 @@ yeterli).
 | PL011 UART | `runtime/kdl_runtime_uart_pl011.c` | `kdl_uart_pl011_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | QEMU virt @ 0x09000000, RPi 4 vb. (`-DKDL_PL011_BASE=...` override) |
 | 16550A UART | `runtime/kdl_runtime_uart_16550.c` | `kdl_uart_16550_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | PC COM1 @ 0x3F8 (inline asm in/out) |
 | **Cross-target UART vtable** | `runtime/kdl_uart.h` (struct) | `KdlUartSurucu`, `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` | const ROdata; hedef-bağımsız üst katman için indirect call |
-| Bare-metal yazdır | `runtime/kdl_runtime_yazdir_bare.c` | `kdl_yazdir_metin`, `_satir`, `kdl_yaz_metin`, `_tam`, `_tam64`, `kdl_yaz_tam`, `_mantiksal`, `kdl_yazdir_isaretsiz_tam(64)`, `_onaltilik`, `kdl_yaz_onaltilik`, `kdl_format_tam64(/isaretsiz64/onaltilik64)` | Stack-yalnız, libc-yok; backend `-DKDL_UART_PUTC=...` ile seçilir |
+| Bare-metal yazdır | `runtime/kdl_runtime_yazdir_bare.c` | `kdl_yazdir_metin`, `_satir`, `kdl_yaz_metin`, `_tam`, `_tam64`, `kdl_yaz_tam`, `_mantiksal`, `kdl_yazdir_isaretsiz_tam(64)`, `_onaltilik`, `kdl_yaz_onaltilik`, `kdl_yazdir_karakter`, `kdl_yaz_karakter`, `kdl_oku_karakter`, `kdl_oku_metin`, `kdl_format_*` | Stack-yalnız, libc-yok; backend `-DKDL_UART_PUTC=…`, `-DKDL_UART_OKU_KARAKTER=…` ile seçilir |
 | Panik handler | `runtime/kdl_runtime_panik.c` | `kdl_panik_dur(const char *)` NORETURN | UART'a "PANIK: <mesaj>" + ARM wfe / x86 hlt halt loop |
 | ARM64 _start | `boot/start_aarch64.S` | `_start`, `_halt`, `__bss_start`, `__bss_end`, `__stack_top` | SP setup + BSS zero + `bl main` + WFE spin |
 
@@ -59,6 +59,13 @@ yeterli).
 | `yazdir_satir() -> boş` | `@kdl_yazdir_satir()` | Her iki tarafta |
 | `yaz_tam(tam32) -> boş` | `@kdl_yaz_tam(i32)` | Her iki tarafta |
 | `yaz_tam64(tam64) -> boş` | `@kdl_yaz_tam64(i64)` | Her iki tarafta |
+| `yazdir_isaretsiz_tam(dtam32) -> boş` | `@kdl_yazdir_isaretsiz_tam(i32)` | Her iki tarafta |
+| `yazdir_isaretsiz_tam64(dtam64) -> boş` | `@kdl_yazdir_isaretsiz_tam64(i64)` | Her iki tarafta |
+| `yazdir_onaltilik(dtam64) -> boş` | `@kdl_yazdir_onaltilik(i64)` | Her iki tarafta |
+| `yaz_onaltilik(dtam64) -> boş` | `@kdl_yaz_onaltilik(i64)` | Her iki tarafta |
+| `yazdir_karakter(karakter) -> boş` | `@kdl_yazdir_karakter(i32)` | UTF-8 encode (1-4 byte), her iki tarafta |
+| `yaz_karakter(karakter) -> boş` | `@kdl_yaz_karakter(i32)` | UTF-8 encode, newline yok |
+| `oku_karakter() -> karakter` | `@kdl_oku_karakter() -> i32` | Host: getchar, bare-metal: UART RX |
 
 Önemli: KEMGU programı **platform-agnostiktir**. Aynı `.kem` dosyası
 hem host (`./build/kemgu --llvm a.kem | clang … build/kdl_runtime.o`)
@@ -88,14 +95,22 @@ derlenir. Bkz. `test/ornekler/uart_merhaba.kem`.
 - **Cross-target UART vtable** — ✓ tamamlandı (C5: `KdlUartSurucu` struct,
   `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` const tabloları).
 
-- **Karakter yazdır (`kdl_yazdir_karakter` UTF-8 encoding)** — Host
-  runtime'da var; bare-metal port henüz yok.
+- **Karakter yazdır (`kdl_yazdir_karakter` UTF-8 encoding)** — ✓ tamamlandı (D1)
+
+- **`oku_karakter` KEMGU built-in** — ✓ tamamlandı (D2). `kdl_oku_karakter`
+  host'ta `fgetc(stdin)`, bare-metal'da `KDL_UART_OKU_KARAKTER` macro ile
+  UART RX backend'ine bağlı. KEMGU dili tarafında `oku_karakter() -> karakter`
+  built-in olarak register.
+
+- **`oku_metin` line-buffered input** — ✓ tamamlandı (D3). C runtime
+  fonksiyonu; KEMGU dili built-in olarak henüz register edilmedi
+  (`Dizi<karakter>` veya buffer pointer parametresi tasarım kararı gerek).
 
 ### Orta vade
 
-- **KEMGU dil tarafı RX built-in** — driver seviyesi var, ama `oku_karakter()`
-  KEMGU built-in olarak henüz register edilmedi (`tip_kontrol.c` ekleme +
-  `llvm.c` mapping gerek). Capability Spec entegrasyonu ("okuma yetkisi"
+- **KEMGU dili `oku_metin` built-in** — driver var, C-tarafı kullanılabilir.
+  KEMGU dilinden çağrı için ya raw pointer (`*karakter`) ya `Dizi<karakter>`
+  parametresi gerek. Capability Spec entegrasyonu ("okuma yetkisi"
   parametresi) bu noktada formalize edilir.
 
 - **Bump allocator** — Mehmet onayında. Onay sonrası heap çağrıları
@@ -145,12 +160,14 @@ Tek tek bileşen testleri:
 mingw32-make calistir_uart_pl011_test          # PL011 mock 16 test (TX + RX)
 mingw32-make calistir_uart_16550_test          # 16550 mock 13 test (TX + RX)
 mingw32-make calistir_uart_vtable_test         # vtable 21 test (PL011 + 16550 ortak)
-mingw32-make calistir_yazdir_bare_test         # yazdır portu 24 test
+mingw32-make calistir_yazdir_bare_test         # yazdır + karakter + oku_metin 36 test
 mingw32-make calistir_panik_test               # panik handler 6 test
 mingw32-make calistir_uart_pl011_bare_metal    # PL011 ARM64 obj + symbol
 mingw32-make calistir_uart_16550_bare_metal    # 16550 x86_64 obj + symbol
 mingw32-make calistir_yazdir_bare_bare_metal   # yazdır ARM64 obj + symbol
 mingw32-make calistir_panik_bare_metal         # panik ARM64 obj + symbol
+mingw32-make calistir_uart_merhaba_bare_metal  # hello world ARM64 kernel.elf
+mingw32-make calistir_uart_echo_bare_metal     # echo (RX→TX) ARM64 kernel_echo.elf
 mingw32-make calistir_qemu_smoke               # ARM64 hello world QEMU'da (QEMU yoksa skip)
 ```
 

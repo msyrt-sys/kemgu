@@ -1,0 +1,25 @@
+// =====================================================================
+// uart_echo.kem — Bare-Metal UART Echo (Track B D4)
+// ---------------------------------------------------------------------
+// Hedef: ARM64 bare-metal (QEMU virt veya RPi 4).
+//
+// UART RX'ten karakter okur, aynı karakteri TX'e geri yazar. KEMGU'nun
+// hem yazma hem okuma uçlarının çalıştığını uçtan uca gösterir.
+//
+// Derleme: kemgu --llvm uart_echo.kem | clang -target aarch64-...
+// (Bkz. Makefile calistir_uart_echo_bare_metal)
+//
+// QEMU test (varsa):
+//   qemu-system-aarch64 -M virt -cpu cortex-a72 -nographic \
+//                       -kernel kernel_echo.elf
+//   (klavyeden harf gir → aynı harf görünür)
+// =====================================================================
+
+işlev main() -> tam32 {
+    yazdir_metin("KEMGU UART Echo — bir karakter giriniz:");
+    değişken c = oku_karakter();
+    yaz_karakter(c);
+    yazdir_satir();
+    yazdir_metin("Tamam.");
+    ver 0;
+}

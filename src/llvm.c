@@ -1398,6 +1398,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "yaz_onaltilik", 13) == 0) {
                 cagri_adi = "kdl_yaz_onaltilik"; cagri_adi_uz = 17;
                 param_beklenen[0] = "i64"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 15 &&
+                       memcmp(cagri_adi, "yazdir_karakter", 15) == 0) {
+                cagri_adi = "kdl_yazdir_karakter"; cagri_adi_uz = 19;
+                param_beklenen[0] = "i32"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 12 &&
+                       memcmp(cagri_adi, "yaz_karakter", 12) == 0) {
+                cagri_adi = "kdl_yaz_karakter"; cagri_adi_uz = 16;
+                param_beklenen[0] = "i32"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 12 &&
+                       memcmp(cagri_adi, "oku_karakter", 12) == 0) {
+                cagri_adi = "kdl_oku_karakter"; cagri_adi_uz = 16;
+                builtin_donus = "i32";
             }
             /* Not: `yaz_metin` built-in olarak register edilmiyor — bkz.
              * tip_kontrol.c'deki cakisma aciklamasi (stdlib/dosya.kem). */
@@ -2311,6 +2323,9 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_yazdir_isaretsiz_tam64(i64)\n", out);
     fputs("declare void @kdl_yazdir_onaltilik(i64)\n", out);
     fputs("declare void @kdl_yaz_onaltilik(i64)\n", out);
+    fputs("declare void @kdl_yazdir_karakter(i32)\n", out);
+    fputs("declare void @kdl_yaz_karakter(i32)\n", out);
+    fputs("declare i32 @kdl_oku_karakter()\n", out);
 
     /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
     fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);

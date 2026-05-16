@@ -219,6 +219,128 @@ static void T24_yaz_onaltilik(void) {
                strcmp(kdl_uart_pl011_mock_buf, "0xdeadbeef\n") == 0);
 }
 
+/* === D1: UTF-8 karakter encode === */
+
+static void T25_yazdir_karakter_ascii(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_karakter('A');  /* 0x41 — tek byte */
+    test_sonuc("yazdir_karakter('A') -> \"A\\n\"",
+               kdl_uart_pl011_mock_pos == 2 &&
+               kdl_uart_pl011_mock_buf[0] == 'A' &&
+               kdl_uart_pl011_mock_buf[1] == '\n');
+}
+
+static void T26_yazdir_karakter_2byte(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_karakter(0xE7);  /* 'ç' = 0xC3 0xA7 */
+    test_sonuc("yazdir_karakter(0xE7='c-cedilla') -> 0xC3 0xA7 + \\n",
+               kdl_uart_pl011_mock_pos == 3 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[0] == 0xC3 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[1] == 0xA7 &&
+               kdl_uart_pl011_mock_buf[2] == '\n');
+}
+
+static void T27_yazdir_karakter_3byte(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_karakter(0x20AC);  /* '€' = 0xE2 0x82 0xAC */
+    test_sonuc("yazdir_karakter(0x20AC=euro) -> 0xE2 0x82 0xAC + \\n",
+               kdl_uart_pl011_mock_pos == 4 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[0] == 0xE2 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[1] == 0x82 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[2] == 0xAC &&
+               kdl_uart_pl011_mock_buf[3] == '\n');
+}
+
+static void T28_yazdir_karakter_4byte(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_karakter(0x1F600);  /* 😀 = 0xF0 0x9F 0x98 0x80 */
+    test_sonuc("yazdir_karakter(0x1F600=grinning) -> 4 byte UTF-8 + \\n",
+               kdl_uart_pl011_mock_pos == 5 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[0] == 0xF0 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[1] == 0x9F &&
+               (unsigned char)kdl_uart_pl011_mock_buf[2] == 0x98 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[3] == 0x80 &&
+               kdl_uart_pl011_mock_buf[4] == '\n');
+}
+
+static void T29_yaz_karakter_no_satir(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yaz_karakter('X');
+    kdl_yaz_karakter('Y');
+    test_sonuc("yaz_karakter 'X' + 'Y' -> \"XY\" (newline yok)",
+               kdl_uart_pl011_mock_pos == 2 &&
+               kdl_uart_pl011_mock_buf[0] == 'X' &&
+               kdl_uart_pl011_mock_buf[1] == 'Y');
+}
+
+static void T30_yazdir_karakter_turk_g(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_yazdir_karakter(0x011F);  /* 'ğ' = 0xC4 0x9F */
+    test_sonuc("yazdir_karakter(0x011F='g-breve') -> 0xC4 0x9F + \\n",
+               kdl_uart_pl011_mock_pos == 3 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[0] == 0xC4 &&
+               (unsigned char)kdl_uart_pl011_mock_buf[1] == 0x9F &&
+               kdl_uart_pl011_mock_buf[2] == '\n');
+}
+
+/* === D2: oku_karakter (mock RX) === */
+
+static void T31_oku_karakter_basit(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("K", 1);
+    int32_t c = kdl_oku_karakter();
+    test_sonuc("oku_karakter() -> 'K' (kdl_uart_pl011_oku_karakter backend)",
+               c == 'K');
+}
+
+static void T32_oku_karakter_yuksek_bit(void) {
+    kdl_uart_pl011_mock_temizle();
+    char veri[2] = { (char)0xE2, (char)0x82 };
+    kdl_uart_pl011_mock_rx_doldur(veri, 2);
+    int32_t a = kdl_oku_karakter();
+    int32_t b = kdl_oku_karakter();
+    test_sonuc("oku_karakter 0xE2/0x82 -> 226/130",
+               a == 0xE2 && b == 0x82);
+}
+
+/* === D3: oku_metin (line-buffered) === */
+
+static void T33_oku_metin_basit(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("KEMGU\n", 6);
+    char buf[16];
+    int32_t n = kdl_oku_metin(buf, 16);
+    test_sonuc("oku_metin(\"KEMGU\\n\", 16) -> 5 byte + \"KEMGU\"",
+               n == 5 && strcmp(buf, "KEMGU") == 0);
+}
+
+static void T34_oku_metin_crlf_normalize(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("Hi\r\n", 4);
+    char buf[16];
+    int32_t n = kdl_oku_metin(buf, 16);
+    test_sonuc("oku_metin CRLF -> \"Hi\" (CR yutuldu, LF durdurdu)",
+               n == 2 && strcmp(buf, "Hi") == 0);
+}
+
+static void T35_oku_metin_max_kesim(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("ABCDEFGHIJ\n", 11);
+    char buf[5];
+    int32_t n = kdl_oku_metin(buf, 5);
+    test_sonuc("oku_metin max=5 -> 4 byte (\"ABCD\") + NUL",
+               n == 4 && strcmp(buf, "ABCD") == 0);
+}
+
+static void T36_oku_metin_max_iki(void) {
+    kdl_uart_pl011_mock_temizle();
+    kdl_uart_pl011_mock_rx_doldur("X\n", 2);
+    char buf[2];
+    int32_t n = kdl_oku_metin(buf, 2);
+    test_sonuc("oku_metin max=2 -> 1 byte + NUL",
+               n == 1 && strcmp(buf, "X") == 0);
+}
+
 /* === Birlesik akis — bir program akisini simule et === */
 
 static void T17_program_akisi(void) {
@@ -256,6 +378,18 @@ int main(void) {
     T20_onaltilik_kucuk(); T21_onaltilik_sifir();
     T22_onaltilik_64bit_max(); T23_onaltilik_pl011_base();
     T24_yaz_onaltilik();
+
+    puts("\n--- D1: UTF-8 karakter encode ---");
+    T25_yazdir_karakter_ascii(); T26_yazdir_karakter_2byte();
+    T27_yazdir_karakter_3byte(); T28_yazdir_karakter_4byte();
+    T29_yaz_karakter_no_satir(); T30_yazdir_karakter_turk_g();
+
+    puts("\n--- D2: oku_karakter ---");
+    T31_oku_karakter_basit(); T32_oku_karakter_yuksek_bit();
+
+    puts("\n--- D3: oku_metin (line-buffered) ---");
+    T33_oku_metin_basit(); T34_oku_metin_crlf_normalize();
+    T35_oku_metin_max_kesim(); T36_oku_metin_max_iki();
 
     puts("\n--- Birlesik akis ---");
     T17_program_akisi();

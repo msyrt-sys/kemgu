@@ -234,6 +234,30 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
                      tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* Track B D1/D2: karakter I/O (UTF-8 aware) — host runtime ve
+     * bare-metal runtime ayni semboller (kdl_yazdir_karakter,
+     * kdl_yaz_karakter, kdl_oku_karakter). */
+
+    /* yazdir_karakter(karakter) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_KARAKTER);
+        EKLE_BUILTIN("yazdir_karakter", 15, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yaz_karakter(karakter) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_KARAKTER);
+        EKLE_BUILTIN("yaz_karakter", 12, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* oku_karakter() -> karakter (kdl_oku_karakter — UART RX host/getchar) */
+    {
+        EKLE_BUILTIN("oku_karakter", 12, NULL, 0,
+                     tip_olustur_basit(a, TIP_KARAKTER));
+    }
+
     /* === G: Dosya syscall built-in'leri (runtime/kdl_runtime.c) === */
 
     /* dosya_ac(yol: metin, mod: metin) -> metin  (handle opaque ptr) */
