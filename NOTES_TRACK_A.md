@@ -129,8 +129,37 @@ end-to-end test yoktu → segfault tetiklendiğinde fark edildi.
 - ASLA ihlali: Yok.
 - 3 üst üste 🔴: Yok.
 
-## Sonuç
+### C6 — Struct-by-value ABI audit (dceaf52) 🟢 → ÇÖZÜLDÜ
+- **Tetik:** C1 fix capability'i kurtardı ama KEMGU user-side struct
+  param by-value ABI'sı doğrulanmamıştı.
+- **Audit:** 8/16/24-byte mixed struct by-value param → hepsi `exit=42`.
+  KEMGU LLVM emit'i clang ABI'sine doğru sokuyor (`byval` implicit).
+- **Eylem:** 3 regression test eklendi (119/119 LLVM).
+- **Bulgu:** KIRMIZI_QUEUE 16-byte gözlemi aktif (clang implicit handle,
+  explicit `byval` attribute gelecekte güvenli olacak).
 
-Çekirdek + 5 continuation tamamlandı. Doğal kapanış: tek başına bağımsız
-ek bir 🟢/🟡 aday kalmadı; geriye kalan iş §C3 LLVM v4 (büyük kapsam) ve
-Mehmet review borcu (bumper allocator, Spec B.0, Linear V2, UART).
+### C7 — LLVM v4 sonuç/seçimlik tagged union (4453b6d) 🟡 → ÇÖZÜLDÜ (V1)
+- **Tetik:** C3 audit'inde tespit edilen LLVM emit eksikliği (KIRMIZI_QUEUE).
+- **Tasarım:** Tagged union `{ i8 disc, i64 payload }` monomorphic.
+- **Yeni emit:**
+  - `tamam(v)` / `hata(m)` / `değer(v)` constructor DUGUM_CAGRI özel-case
+  - `hiç` literal DUGUM_TANIMLAYICI 4-byte UTF-8 özel-case
+  - `eşleş` deyim — pattern destructure + binding (payload i64→i32 trunc)
+- **Eylem:** 5 new end-to-end test (124/124 LLVM). `bol(126,3) → tamam(42)`
+  klasik kullanım gerçekten derleniyor + çalışıyor.
+- **V2 sınırlamalar:** generic monomorphization (per-tip struct), karmaşık
+  T,E için context-aware payload, nested patterns, guard clauses,
+  exhaustiveness check.
+
+## Sonuç (final)
+
+**7 continuation tamamlandı (C1-C7).** Doğal kapanış:
+- 13 commit toplam (7 kalem + 6 continuation)
+- 26 yeni test (G.3: 7, G.4: 5, K8d: 3, C1: 3, C6: 3, C7: 5)
+- 0 regression, ASan temiz
+- KIRMIZI_QUEUE: G.3/G.4/K8d/C/sonuç-seçimlik LLVM kapatıldı; 16-byte
+  ABI gözlemi aktif (bug değil ama gelecek için disiplin)
+
+Geriye kalan iş (bağımsız Track aday): Linear V2 path-sensitive (🔴 yeni
+tip katmanı), Mehmet review borcu (bump allocator, Spec B.0, UART),
+LLVM v4 generic monomorphization (C7 V2 alt-kalemi).
