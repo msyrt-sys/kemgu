@@ -18,6 +18,61 @@ Format:
 
 ---
 
+## [2026-05-16] — ÇÖZÜLDÜ: G.3 yetki_izin, G.4 dosya_oku empty/err, K8d _baslat alias
+
+Track A "Capability + I/O Bug Fix Bundle" oturumunda kapatıldı.
+
+### G.3 (kapatıldı): `yetki_izin` built-in
+- KEMGU yüzeyinden izin biti boolean sorgu (`mantıksal` dönüş).
+- Tip kontrol özel-case + LLVM emit + runtime `kdl_yetki_izin_var_mi`.
+- 7 yeni test (47/47 capability).
+- Commit: 80258b4.
+
+### G.4 (kapatıldı): `dosya_oku` boş-dosya vs hata ayrımı
+- Global `dosya_oku_son_hata()` getter (`tam32`: 0=OK, -1=yok, -2=I/O).
+- NULL yerine "" sentinel (segfault yok).
+- stdlib/dosya.kem `oku_metin` güncelleme (TOCTOU yok).
+- 5 yeni test (110/110 LLVM).
+- Commit: 4e68ddb.
+
+### K8d (kapatıldı): bare-metal `_baslat` ↔ `main` alias
+- Yeni CLI: `--baremetal`, `--triple=T`.
+- Bayrak aktifse target `aarch64-unknown-none-elf` + alias.
+- Manuel `_baslat` override: alias üretilmez.
+- 3 yeni IR test (113/113 LLVM).
+- Commit: 2c4202c.
+
+### C1 (Track A continuation, kapatıldı): capability runtime by-pointer
+- G.3 implementasyonunda fark edildi: **Win64 ABI'sinde 16-byte struct
+  by-value arg geçişi LLVM IR'de güvensiz** (`byval` attribute eksik →
+  segfault).
+- Tüm `kdl_yetki_*` query fonksiyonları artık `const KdlYetki *` alır.
+- 3 yeni end-to-end test (116/116 LLVM).
+- Commit: 229ac23.
+
+---
+
+## [2026-05-16] — GÖZLEM: 16-byte by-value struct arg ABI riski
+
+- **Kategori:** runtime ABI / LLVM emit disiplin (gözlem, action item).
+- **Bağlam:** C1 capability fix bir özel-vakayı kapsadı. Aynı sorun
+  *gelecek struct-by-value parametreli* runtime fonksiyonlarında da
+  oluşacak. Mevcut KEMGU LLVM v3 struct-by-value KEMGU işlev parametresi
+  destekli (test geçer), ama C runtime fn'lerine struct geçirirken
+  `byval` attribute eklenmiyor.
+- **Önerilen disiplin:**
+  1. C runtime fn'leri için struct argümanları DAİMA `const T *`.
+  2. KEMGU işlev parametreleri için struct-by-value `byval` attribute
+     eklenmeli (LLVM v3 testleri host'ta sret/byval kullanıyor — sret
+     return çalışıyor ama yapı arg test eksikliği).
+- **Engellediği iş:** Yok şu an — capability tarafı çözüldü. Yapı
+  arg'lı KEMGU işlevleri test_struct_param_by_value ile geçer
+  (LLVM emit doğru `byval` ekliyor olmalı — doğrulama gerekebilir).
+- **Aksiyon:** Yeni runtime fn imzaları için PR review checklist'ine
+  ekle: "16+ byte struct arg by-pointer mi?". KIRMIZI değil 🟡 gözlem.
+
+---
+
 ## [2026-05-13] — stdlib genişletmesi: runtime + dil özellik kuyruğu
 
 Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırları.
