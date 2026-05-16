@@ -1153,6 +1153,46 @@ static void test_k8d_baremetal_alias(void) {
                rc == 0);
 }
 
+/* === C1: Capability runtime end-to-end (G.3 dersinden ABI fix) === */
+
+static void test_capability_olustur_geri_al(void) {
+    /* yetki_olustur + geri_al end-to-end — segfault yok. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 3); "
+        "geri_al(y); "
+        "ver 42; }");
+    test_sonuc("C1: yetki_olustur+geri_al end-to-end -> 42", rc == 42);
+}
+
+static void test_capability_delege_e2e(void) {
+    /* delege(y, izin) — onceden segfault'tu (16-byte by-value ABI). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 3); "
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<Dosya> = delege(y, 1); "
+        "geri_al(y2); "
+        "geri_al(y); "
+        "ver 42; }");
+    test_sonuc("C1: delege(y, izin) end-to-end -> 42 (segfault yok)", rc == 42);
+}
+
+static void test_capability_yetki_izin_zincir(void) {
+    /* yetki_izin coklu sorgu + delege + zincirleme */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 3); "
+        "de\xc4\x9fi\xc5\x9fken oku_var: mant\xc4\xb1ksal = yetki_izin(y, 1); "
+        "de\xc4\x9fi\xc5\x9fken yaz_var: mant\xc4\xb1ksal = yetki_izin(y, 2); "
+        "de\xc4\x9fi\xc5\x9fken sil_var: mant\xc4\xb1ksal = yetki_izin(y, 8); "
+        "geri_al(y); "
+        "e\xc4\x9f""er oku_var { e\xc4\x9f""er yaz_var { "
+        "e\xc4\x9f""er de\xc4\x9fil sil_var { ver 42; } } } "
+        "ver 0; }");
+    test_sonuc("C1: yetki_izin coklu sorgu (oku+yaz var, sil yok) -> 42",
+               rc == 42);
+}
+
 static void test_k8d_manuel_baslat_override(void) {
     /* --baremetal + kullanici manuel _baslat — alias YOK (override).
      * NOT: _baslat tanimlayinca aliasi otomatik atmak — manuel override. */
@@ -1426,6 +1466,11 @@ int main(void) {
     test_k8d_host_default();
     test_k8d_baremetal_alias();
     test_k8d_manuel_baslat_override();
+
+    printf("\n--- C1: Capability end-to-end (G.3 ABI fix) ---\n");
+    test_capability_olustur_geri_al();
+    test_capability_delege_e2e();
+    test_capability_yetki_izin_zincir();
 
 
     printf("\n--- Madde E: Tip donusturme (olarak) ---\n");

@@ -58,6 +58,25 @@
 - 3 IR test: host (default) → @main alone, --baremetal → main + alias, manuel
   _baslat → ALIAS yok
 
+## Çekirdek Sonuç (3/3 kalem ✓)
+
+| Kalem | Commit | Test Δ | Tip |
+|-------|--------|--------|-----|
+| G.3 yetki_izin | 80258b4 | +7 (47/47 capability) | 🟢 spec-içi |
+| G.4 dosya_oku empty/err | 4e68ddb | +5 (110/110 LLVM) | 🟢 ABI uyumlu |
+| K8d _baslat alias | 2c4202c | +3 (113/113 LLVM) | 🟡 yeni CLI flag |
+
+**Toplam:** 15 yeni test, 3 commit, ASan temiz, stdlib --check tum
+modüller geçer. Host davranışı regression yok.
+
+### G.3 öğrenilen ders
+Win64 ABI'sinde **16-byte struct by-value arg geçişi LLVM IR'de
+güvensiz** — clang ya `byval` attribute eklemeli ya da pointer
+geçirilmeli. Mevcut `kdl_yetki_delege`, `kdl_yetki_kontrol` declare'ları
+by-value alıyor ama KEMGU testleri sadece tip-kontrol; LLVM
+end-to-end test yoktu → segfault tetiklendiğinde fark edildi.
+**Continuation kaynak**: bu declare'lar by-pointer'a çevrilmeli.
+
 ## Continuation log
 
-(çekirdek sonrası eklenecek)
+(devam burada eklenecek)
