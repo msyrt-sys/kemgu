@@ -3261,6 +3261,74 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     "esles deger sabitsure tipinde olamaz "
                     "(kol secimi timing leak)");
             }
+            /* C8 LLVM v4: Exhaustiveness check — sonuc<T,E> ve secimlik<T>
+             * scrutinee'lerinde tum variantlerin kapsanmasi sart (T041).
+             * Joker (_) veya catch-all tanimlayici (örn. 'her', 'r') tum
+             * variantleri kapsar. */
+            if (dt && (dt->kategori == TIP_SONUC ||
+                       dt->kategori == TIP_SECIMLIK)) {
+                int is_sonuc = (dt->kategori == TIP_SONUC);
+                int gor_first = 0;   /* tamam / deger */
+                int gor_second = 0;  /* hata / hic */
+                int joker = 0;       /* _ veya catch-all binding */
+                for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                    const Dugum *kol = d->veri.esles.kollar[i];
+                    if (!kol) continue;
+                    const Dugum *des = kol->veri.esles_kolu.desen;
+                    if (!des) continue;
+                    if (des->tip == DUGUM_DESEN_JOKER) {
+                        joker = 1;
+                    } else if (des->tip == DUGUM_DESEN_TANIMLAYICI) {
+                        const char *ad = des->veri.desen_tanimlayici.ad;
+                        int adu = des->veri.desen_tanimlayici.ad_uzunluk;
+                        /* "hic" 4-byte UTF-8 "hi\xc3\xa7" — seçimlik none */
+                        int is_hic = (adu == 4 &&
+                                      memcmp(ad, "hi\xc3\xa7", 4) == 0);
+                        if (is_hic && !is_sonuc) {
+                            gor_second = 1;  /* secimlik hiç */
+                        } else {
+                            joker = 1;  /* catch-all binding */
+                        }
+                    } else if (des->tip == DUGUM_DESEN_YAPICI) {
+                        const char *ad = des->veri.desen_yapici.ad;
+                        int adu = des->veri.desen_yapici.ad_uzunluk;
+                        if (is_sonuc) {
+                            if (adu == 5 && memcmp(ad, "tamam", 5) == 0)
+                                gor_first = 1;
+                            else if (adu == 4 && memcmp(ad, "hata", 4) == 0)
+                                gor_second = 1;
+                        } else {
+                            /* secimlik */
+                            if (adu == 6 &&
+                                memcmp(ad, "de\xc4\x9f" "er", 6) == 0)
+                                gor_first = 1;
+                        }
+                    }
+                }
+                if (!joker) {
+                    if (is_sonuc) {
+                        if (!gor_first || !gor_second) {
+                            const char *eksik = !gor_first
+                                ? "tamam(...)" : "hata(...)";
+                            char msg[128];
+                            snprintf(msg, sizeof(msg),
+                                "esles sonuc<T,E> uzerinde eksik desen: %s "
+                                "kolu yok (exhaustiveness)", eksik);
+                            tip_hata(tk, d, "T041", msg);
+                        }
+                    } else {
+                        if (!gor_first || !gor_second) {
+                            const char *eksik = !gor_first
+                                ? "de\xc4\x9f" "er(...)" : "hi\xc3\xa7";
+                            char msg[128];
+                            snprintf(msg, sizeof(msg),
+                                "esles secimlik<T> uzerinde eksik desen: %s "
+                                "kolu yok (exhaustiveness)", eksik);
+                            tip_hata(tk, d, "T041", msg);
+                        }
+                    }
+                }
+            }
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
                 Scope *eski = tk->scope;
