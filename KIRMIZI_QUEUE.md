@@ -113,26 +113,55 @@ oturumunda toplu karara açık:
 
 ### G. stdlib::dosya — syscall altyapısı gerek
 
-- **Kategori:** runtime / syscall layer
-- **Bağlam:** stdlib/dosya.kem'in tüm I/O ops'u stub (ac, kapat,
-  oku_metin, oku_satirlar, yaz_metin, ekle, ekle_satir, var_mi,
-  sil, boyut, yeniden_adlandir, kopyala). Sözdizimi --check geçer
-  ama runtime'da hiç bir şey yapmaz.
-- **Gerekli primitifler (POSIX karşılıkları):**
-  1. `dosya_ac(yol: metin, mod: metin) -> tam32`  (open syscall)
-  2. `dosya_kapat(handle: tam32) -> tam32`        (close)
-  3. `dosya_oku(handle, buffer, n) -> tam32`      (read)
-  4. `dosya_yaz(handle, buffer, n) -> tam32`      (write)
-  5. `dosya_var_mi(yol) -> mantıksal`             (stat / access)
-  6. `dosya_sil(yol) -> tam32`                    (unlink)
-  7. `dosya_yeniden_adlandir(eski, yeni) -> tam32` (rename)
-  8. `dosya_boyut(yol) -> tam64`                  (stat.st_size)
-- **Not:** test/ornekler/dosya_io.kem'de zaten `dosya_ac/yaz/kapat/
-  tumu_oku` kullanım örnekleri var — LLVM IR katmanında kısmen
-  mevcut (libc wrappers) ama tip_kontrol built-in tablosunda yok.
-  Build-time → check-time parite gerek.
-- **Önerilen yol:** runtime/dosya.c'de C wrapper'ları + LLVM IR
-  declare'leri + tip_kontrol.c'de EKLE_BUILTIN entries.
+**DURUM (2026-05-16): KISMI ÇÖZÜLDÜ — capability + linear disiplini eklendi.**
+
+İlk problem (KEMGU yüzeyinde capability/linear yokluğu) çözüldü. Stdlib eski
+API (metin handle, sonuc<T,metin>) korundu (deprecate yorum); yeni capability
++ linear API eklendi (aç, oku_tumu, yaz, kapat, oku_dosya, yaz_dosya, ekle_dosya).
+
+- **Yeni dosyalar/değişiklikler:**
+  - `stdlib/hata.kem` (yeni): IOHata yapısı + 6 IO_* sabit kodu + helper'lar.
+  - `stdlib/dosya.kem` (güncel): yetki<Dosya> ile aç, tekkez<DosyaTutac>
+    handle, kapat ile explicit close, eski API `kapat_v1` ile rename.
+  - `runtime/kdl_runtime.c` (yeni): `kdl_dosya_ac_lineer/oku_lineer/yaz_lineer/
+    kapat_lineer` — capability-gated FILE* sarmaliyici (libc tabanlı).
+  - `src/llvm.c`: 4 yeni `declare i64/ptr/i32/void @kdl_dosya_*_lineer(...)`.
+  - `src/tip_kontrol.c`: 4 yeni built-in tablo girişi (dosya_*_lineer).
+  - `Makefile`: `calistir_dosya_check` (bundle hata+dosya+test_dosya);
+    `calistir_dosya_test` (C-test ASan).
+  - `test/test_dosya.c`: 18 test, 5 grup (capability + linear + IOHata +
+    happy + edge), ASan temiz.
+
+- **V1 sınırları (kalan iş, KIRMIZI_QUEUE'ya yeni alt-maddeler):**
+
+  - **G.1 (gelecek):** `sonuç<tekkez<T>, E>` içinde tekkez tüketim takibi yok.
+    Compiler r değişkenini non-linear olarak görüyor; sonucu pattern matching
+    olmadan atarsan tekkez sızar. Yeşil — V2'de path-sensitive analiz.
+
+  - **G.2 (gelecek):** `Dosya` ismi capability tag + linear handle iki
+    bağlamda kullanılamaz (tip_kontrol.c:908 string-match). Kullanıcı handle
+    için ayrı isim (`DosyaTutac`) lazım. Spec güncellemesi V2.
+
+  - **G.3 (gelecek):** Yetki izin biti KEMGU yüzeyinden okunamıyor —
+    `yetki_izin(y) -> tam16` runtime'da var ama built-in tablosunda yok.
+    Sarı — V2'de `yetki_izin/yetki_id/yetki_iptal_mi` built-in eklenir.
+
+  - **G.4 (gelecek):** `kdl_dosya_oku_lineer` NULL/sentinel ayrımı yok —
+    boş dosya da "" döner, gerçek hata da. Çözüm: ek `out_hata: tam32`
+    parametresi veya alt-sonuc<metin, kod>. Sarı — V2.
+
+  - **G.5 (gelecek):** Linear V1 path-insensitive — `aç()` içinde yetki
+    branch'lerde geri_al edilemez; eager-consume pattern zorunlu. V2'de
+    path-sensitive analiz açılınca daha ergonomik kod yazılabilir.
+
+  - **G.6 (gelecek):** Eski API (`ac/kapat_v1/oku_metin/...`) silinmedi.
+    Deprecate yorum eklendi; geri uyumluluk korundu. V2'de import sistemi
+    gelip kullanıcılar yeni API'ye geçince temizlenecek.
+
+- **Closure notu:** Detay: `NOTES_KIRMIZI_G.md`. KIRMIZI_QUEUE G'nin **özü
+  çözüldü** — confused deputy + ambient authority + implicit close artık
+  KEMGU yüzeyinde derleme zamanında engelleniyor. Test sayısı: +18 yeni
+  (test_dosya); regresyon 1100+ test yeşil.
 
 ### H. Operatör: `!` (mantıksal değil) parse sorunu
 
