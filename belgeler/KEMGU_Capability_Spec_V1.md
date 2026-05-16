@@ -149,6 +149,7 @@ tip kontrolü ile doğrulanır. Bu, lexer/parser tablosunu minimal tutar.
 | `delege(y, yeni_izin)`         | `(yetki<R>, tam16) -> yetki<R>`                              | Alt-yetki üretir; `y` korunur |
 | `geri_al(y)`                   | `(yetki<R>) -> boş`                                           | `y` invalidate; tüketim |
 | `yetki_kontrol(y, gerekli)`    | `(yetki<R>, tam16) -> sonuc<boş, HataKodu>`                   | Runtime check (CP.6) |
+| `yetki_izin(y, istenen)`       | `(yetki<R>, tam16) -> mantıksal`                              | İzin biti boolean sorgu — y tüketilmez (KIRMIZI G.3 eklendi) |
 | `yetki_id(y)`                  | `(yetki<R>) -> tam64`                                         | Diagnostic (ifşa benzeri) |
 
 `yetki_olustur` SADECE kernel/runtime kodu içinde çağrılabilir — userspace
@@ -239,6 +240,26 @@ delege'nin dönüşü `yetki<R>` linear, takibe alınır.
 ```
 
 `y`'yi runtime'da iptal eder (iptal flag = 1) ve linear takipte tüketir.
+
+### CP-QUERY (Permission Inspection) — KIRMIZI G.3
+
+```
+Γ ⊢ y : yetki<R>     Γ ⊢ istenen : tam16
+─────────────────────────────────────────
+Γ ⊨ yetki_izin(y, istenen) : mantıksal   ⇒   Γ   (y tüketilmez)
+```
+
+Runtime karşılığı: `kdl_yetki_izin_var_mi(y, istenen) -> i1`. Semantik:
+
+```
+yetki_izin(y, istenen) = ¬y.iptal ∧ y.id ≠ 0 ∧ (y.izin ∧ istenen) = istenen
+```
+
+Confused deputy senaryolarında **dinamik izin denetimi** için kullanılır
+— compile-time izin literal değilse (örneğin runtime-input'tan gelen
+istenen), kod yine de güvenli kalır.
+
+`y` tüketilmez (delege'ye benzer ama yeni token üretmez — pure query).
 
 ### CP-IO (I/O Çağrısı)
 
@@ -378,18 +399,31 @@ y'nin izinlerinin alt-kümesi olmalı).
 `yetki<R>` IR tipi: `%kdl_yetki`. By-value veya by-pointer geçirim
 mevcut struct-by-value (LLVM v3) ile aynı.
 
-### CP.6.2 Producer / Delege / Revoke
+### CP.6.2 Producer / Delege / Revoke / Query
 
 ```llvm
 declare %kdl_yetki @kdl_yetki_olustur(i16 noundef, i16 noundef)
-declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki noundef, i16 noundef)
-declare void @kdl_yetki_geri_al(ptr noundef)  ; mutable: iptal=1
-declare i32 @kdl_yetki_kontrol(%kdl_yetki noundef, i16 noundef)
-declare i64 @kdl_yetki_id(%kdl_yetki noundef)
+declare %kdl_yetki @kdl_yetki_delege(ptr noundef, i16 noundef)    ; C1
+declare void @kdl_yetki_geri_al(ptr noundef)                       ; mutate: iptal=1
+declare i32 @kdl_yetki_kontrol(ptr noundef, i16 noundef)           ; C1
+declare i32 @kdl_yetki_kontrol_tipi(ptr, i16, i16)                 ; C1
+declare i64 @kdl_yetki_id(ptr noundef)                             ; C1
+declare i16 @kdl_yetki_tipi(ptr)                                   ; C1
+declare i16 @kdl_yetki_izin(ptr)                                   ; C1 — internal
+declare i8 @kdl_yetki_iptal_mi(ptr)                                ; C1
+declare i8 @kdl_yetki_izin_var_mi(ptr, i16)                        ; G.3 + C1
 ```
 
-`kdl_yetki_geri_al` mutate eder; KEMGU `geri_al(y)` çağrısı LLVM IR'de
-`y`'nin **alloca**'sına pointer geçirir.
+`kdl_yetki_geri_al` mutate eder; tüm query/inspector çağrıları `y`'nin
+**alloca**'sına pointer geçirir (KEMGU LLVM emit otomatik). Read-only
+arg'lar `const KdlYetki *` C imzasıyla.
+
+**ABI gerekçesi (C1, G.3 dersinden):** Win64 ABI'sinde 16-byte struct
+by-value arg geçişi `byval` attribute eklenmediği sürece LLVM IR'de
+güvensiz (segfault). KEMGU LLVM emit'i şu an `byval` üretmiyor,
+dolayısıyla **tüm `yetki<R>` arg'ları by-pointer**. Return değeri
+`%kdl_yetki` by-value çalışıyor (clang `sret` attribute'unu otomatik
+ekliyor 16-byte için).
 
 ### CP.6.3 Runtime Kontroller
 

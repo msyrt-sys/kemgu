@@ -79,4 +79,58 @@ end-to-end test yoktu → segfault tetiklendiğinde fark edildi.
 
 ## Continuation log
 
-(devam burada eklenecek)
+### C1 — Capability runtime by-pointer ABI (229ac23) 🟡 → ÇÖZÜLDÜ
+- **Tetik:** G.3 implementasyon sırasında segfault — Win64 ABI 16-byte
+  struct by-value arg gevşek.
+- **Etki:** `delege`, `yetki_kontrol`, `yetki_id`, vb. tüm capability
+  query LLVM IR cagrilari etkileniyordu — mevcut tip-kontrol testleri
+  geçiyordu çünkü end-to-end test yoktu.
+- **Eylem:** tüm `kdl_yetki_*` query'leri `const KdlYetki *` arg'a
+  geçirildi; LLVM declare/emit güncellendi; 3 yeni end-to-end test
+  (`test_capability_olustur_geri_al`, `test_capability_delege_e2e`,
+  `test_capability_yetki_izin_zincir`).
+- **Test Δ:** +3 LLVM (116/116 toplam).
+
+### C2 — KIRMIZI_QUEUE güncelleme (3d54e2b) 🟢 → ÇÖZÜLDÜ
+- G.3/G.4/K8d/C1 "ÇÖZÜLDÜ" notu.
+- Yeni gözlem: "16-byte by-value struct arg ABI riski" (action item).
+- Yeni queue maddesi: "`sonuç<T,E>`/`seçimlik<T>` LLVM tagged union"
+  (LLVM v4 kapsam — C3 audit ile tespit).
+
+### C3 — sonuç pattern matching audit 🟢 → KAPSAM AYIRT EDİLDİ
+- **Tetik:** KIRMIZI_QUEUE C maddesi (TOK_TAMAM/TOK_HATA desen eksik).
+- **Bulgu:** parser.c sat 1054-1055'te zaten var; tip-check geçer.
+- **Kalan iş:** LLVM tagged union codegen yok → derleme hatası
+  (`undefined value '@tamam'`). Bu yeni KIRMIZI_QUEUE maddesi olarak
+  ayrı yere alındı — LLVM v4 doğal kapsamı, **🔴 değil 🟡** (sum type
+  encoding internal detail, spec etkisi yok).
+- **Karar:** sahaya **uygulamadım** (kapsam dışı, halt değil).
+
+### C4 — Örnek dosyalar (56c3bcf) 🟢 → ÇÖZÜLDÜ
+- `test/ornekler/yetki_izin.kem`: G.3 kullanım, Linear V1 single-consume.
+- `test/ornekler/dosya_oku_g4.kem`: G.4 son_hata kontrol akışı.
+- İkisi de --check OK + LLVM derlemesi başarılı.
+- **Bulgu:** Linear V1 path-sensitive değil — `eğer dal_a { geri_al; ver }`
+  + `geri_al; ver` desenli kod CP005 verir. Tek consume noktası şart.
+
+### C5 — Capability Spec V1 güncelleme 🟡
+- CP.2.1 intrinsic tablosuna `yetki_izin(y, istenen) -> mantıksal`.
+- CP.3'e yeni inference kuralı: CP-QUERY.
+- CP.6.2 declare bölümü by-pointer ABI ile güncel.
+- Bu **spec patch** seviyesinde değişiklik (yeni intrinsic + ABI clarification);
+  yeni teorem/breaking yok → 🟡.
+
+## Halt kriteri gözlemleri
+
+- §A 🔴: Yok (her aday 🟢/🟡 sınıfında uygulandı veya kapsam dışı bırakıldı).
+- Regression: Yok (47/47 capability + 116/116 LLVM + stdlib --check).
+- Spec yetersizliği: C3 LLVM kısmı — yeni queue maddesi olarak kaydedildi
+  ama Mehmet onayı bekleyen 🔴 değil (🟡 LLVM v4 alt-kalemi).
+- ASLA ihlali: Yok.
+- 3 üst üste 🔴: Yok.
+
+## Sonuç
+
+Çekirdek + 5 continuation tamamlandı. Doğal kapanış: tek başına bağımsız
+ek bir 🟢/🟡 aday kalmadı; geriye kalan iş §C3 LLVM v4 (büyük kapsam) ve
+Mehmet review borcu (bumper allocator, Spec B.0, Linear V2, UART).
