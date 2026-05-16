@@ -1153,6 +1153,41 @@ static void test_k8d_baremetal_alias(void) {
                rc == 0);
 }
 
+/* === C6: Struct-by-value parametre ABI regression === */
+
+static void test_struct_byval_8byte(void) {
+    /* 8 byte struct (2x i32) — register'a sigar Win64 ABI */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 P { x: tam32; y: tam32; }\n"
+        "i\xc5\x9flev topla(p: P) -> tam32 { ver p.x + p.y; }\n"
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken p: P = P { x: 10, y: 32 }; "
+        "ver topla(p); }");
+    test_sonuc("C6: 8-byte struct (P{i32,i32}) by-value param -> 42", rc == 42);
+}
+
+static void test_struct_byval_16byte_mixed(void) {
+    /* 16 byte mixed struct (i64 + 2x i32) — Win64 MEMORY class */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 K { id: tam64; a: tam32; b: tam32; }\n"
+        "i\xc5\x9flev topla(k: K) -> tam32 { ver k.a + k.b; }\n"
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: K = K { id: 99, a: 10, b: 32 }; "
+        "ver topla(k); }");
+    test_sonuc("C6: 16-byte mixed struct by-value param -> 42", rc == 42);
+}
+
+static void test_struct_byval_24byte(void) {
+    /* 24 byte struct (3x i64) — Win64 MEMORY */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 B { a: tam64; b: tam64; c: tam64; }\n"
+        "i\xc5\x9flev topla(b: B) -> tam32 { ver (b.a + b.b + b.c) olarak tam32; }\n"
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: B = B { a: 10, b: 20, c: 12 }; "
+        "ver topla(b); }");
+    test_sonuc("C6: 24-byte struct by-value param -> 42", rc == 42);
+}
+
 /* === C1: Capability runtime end-to-end (G.3 dersinden ABI fix) === */
 
 static void test_capability_olustur_geri_al(void) {
@@ -1466,6 +1501,11 @@ int main(void) {
     test_k8d_host_default();
     test_k8d_baremetal_alias();
     test_k8d_manuel_baslat_override();
+
+    printf("\n--- C6: Struct-by-value ABI regression ---\n");
+    test_struct_byval_8byte();
+    test_struct_byval_16byte_mixed();
+    test_struct_byval_24byte();
 
     printf("\n--- C1: Capability end-to-end (G.3 ABI fix) ---\n");
     test_capability_olustur_geri_al();
