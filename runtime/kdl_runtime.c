@@ -853,9 +853,72 @@ const char *kdl_dosya_tumu_oku(const char *yol) {
 
 /* === G: Dosya yonetim primitifleri === */
 
-/* dosya_oku — kdl_dosya_tumu_oku alias (KEMGU API ad uyumu icin) */
+/* KIRMIZI G.4: Bos-dosya vs hata ayrimi.
+ *
+ * Mevcut sorun: kdl_dosya_oku NULL doner hem yokluk hem hata hem bos dosya
+ * icin (fread n=0 -> "" doner ama fopen=NULL bos dosya esit, KEMGU tarafi
+ * NULL'i metin gibi kullanip segfault verir).
+ *
+ * Cozum:
+ *   - Hata durumlarinda NULL yerine bos string "" doner (segfault yok).
+ *   - Son hata kodu globalde tutulur:
+ *       0  : OK (bos dosya dahil)
+ *      -1  : dosya yok (ENOENT benzeri)
+ *      -2  : I/O hatasi (ftell/malloc/fread)
+ *   - Yeni built-in dosya_oku_son_hata() KEMGU yuzeyinden hata sorgular.
+ *
+ * Thread-safe degil (v1) — TLS V2'de. */
+static int32_t kdl_dosya_oku_hata_kodu = 0;
+
+int32_t kdl_dosya_oku_son_hata(void) {
+    return kdl_dosya_oku_hata_kodu;
+}
+
+/* dosya_oku — guvenli wrapper: NULL yerine "" doner; hata kodu globalde.
+ * ABI uyumlu (eski cagrilar segfault yapmaz; bos dosya icin "" zaten alirdi). */
 const char *kdl_dosya_oku(const char *yol) {
-    return kdl_dosya_tumu_oku(yol);
+    /* Bos string sentineli — global static, free edilmez */
+    static const char bos_sentinel[1] = {0};
+    if (!yol) {
+        kdl_dosya_oku_hata_kodu = -1;
+        return bos_sentinel;
+    }
+    FILE *f = fopen(yol, "rb");
+    if (!f) {
+        kdl_dosya_oku_hata_kodu = -1;     /* ENOENT — dosya yok */
+        return bos_sentinel;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        kdl_dosya_oku_hata_kodu = -2;
+        return bos_sentinel;
+    }
+    long n = ftell(f);
+    if (n < 0) {
+        fclose(f);
+        kdl_dosya_oku_hata_kodu = -2;
+        return bos_sentinel;
+    }
+    fseek(f, 0, SEEK_SET);
+    /* Bos dosya: n=0 — basariyla bos string doner, hata kodu 0 */
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) {
+        fclose(f);
+        kdl_dosya_oku_hata_kodu = -2;
+        return bos_sentinel;
+    }
+    size_t r = (n > 0) ? fread(buf, 1, (size_t)n, f) : 0;
+    buf[r] = '\0';
+    fclose(f);
+    /* Kismi read (r < n) durumu yine OK; kullanici uzunluga bakar.
+     * Tam I/O failure (r=0 + n>0) ise -2 set ederiz. */
+    if (n > 0 && r == 0) {
+        free(buf);
+        kdl_dosya_oku_hata_kodu = -2;
+        return bos_sentinel;
+    }
+    kdl_dosya_oku_hata_kodu = 0;
+    return buf;
 }
 
 /* dosya_var_mi — fopen kontrolu (stat yerine portable) */

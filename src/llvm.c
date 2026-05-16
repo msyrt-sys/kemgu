@@ -1496,6 +1496,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "i1";
                 } else if (n == 11 && memcmp(kdl_dosya_buf + 4, "dosya_boyut", 11) == 0) {
                     kdl_donus = "i64";
+                } else if (n == 18 &&
+                           memcmp(kdl_dosya_buf + 4,
+                                  "dosya_oku_son_hata", 18) == 0) {
+                    /* KIRMIZI G.4: 0-arg, tam32 doner. */
+                    kdl_donus = "i32";
                 } else {
                     kdl_donus = "ptr";
                 }
@@ -1597,6 +1602,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             else if (cagri_adi_uz == 8 &&
                      memcmp(cagri_adi, "arg_sayi", 8) == 0) {
                 cagri_adi = "kdl_arg_sayi"; cagri_adi_uz = 12;
+                kdl_donus = "i32";
+            }
+            /* KIRMIZI G.4: dosya_oku_son_hata() -> tam32 (i32)
+             * KEMGU adi -> kdl_dosya_oku_son_hata, donus tam32 */
+            else if (cagri_adi_uz == 18 &&
+                     memcmp(cagri_adi, "dosya_oku_son_hata", 18) == 0) {
+                cagri_adi = "kdl_dosya_oku_son_hata"; cagri_adi_uz = 22;
                 kdl_donus = "i32";
             }
             else if (cagri_adi_uz == 6 &&
@@ -2303,6 +2315,8 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
+    /* KIRMIZI G.4: dosya_oku son cagri hata kodu sorgu */
+    fputs("declare i32 @kdl_dosya_oku_son_hata()\n", out);
 
     /* Madde B: Dinamik dizi (KdlDizi*) */
     fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);

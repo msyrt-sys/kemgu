@@ -56,10 +56,17 @@ işlev kapat(h: metin) -> sonuç<tam32, metin> {
 // =============================================================================
 
 // Tum dosyayi metin olarak oku.
+//
+// KIRMIZI G.4 sonrasi davranis:
+//   - Bos dosya: tamam("") doner (icerik=="" ve hata kodu==0).
+//   - Dosya yok / I/O hata: hata(...) doner (segfault yok).
+//   - TOCTOU: dosya_var_mi cikartildi — tek syscall (dosya_oku) yeterli.
 işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
     değişken icerik: metin = dosya_oku(yol);
+    değişken kod: tam32 = dosya_oku_son_hata();
+    eğer kod == 0 - 1 { ver hata("dosya yok"); }
+    eğer kod == 0 - 2 { ver hata("io hatasi"); }
     ver tamam(icerik);
 }
 
