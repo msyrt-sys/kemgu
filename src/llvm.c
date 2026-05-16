@@ -1072,11 +1072,30 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     IfadeSonuc s = { r, "%kdl_yetki" };
                     return s;
                 }
-                /* delege(y, izin) -> %kdl_yetki */
+                /* delege(y, izin) -> %kdl_yetki
+                 * C1 (G.3 dersi): y by-pointer (Win64 ABI bypass).
+                 * y READ-ONLY — delege y'yi mutate etmez (alt-yetki uretir). */
                 if (_uz == 6 && memcmp(_ca, "delege", 6) == 0 &&
                     d->veri.cagri.sayi == 2) {
-                    IfadeSonuc arg_y = ifade_uret(g,
-                        d->veri.cagri.argumanlar[0], "%kdl_yetki");
+                    const Dugum *arg0 = d->veri.cagri.argumanlar[0];
+                    int ptr_reg = -1;
+                    if (arg0->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg0->veri.tanimlayici.metin,
+                            arg0->veri.tanimlayici.uzunluk);
+                        if (vi) {
+                            ptr_reg = vi->reg_no;
+                        }
+                    }
+                    if (ptr_reg < 0) {
+                        IfadeSonuc y_val = ifade_uret(g, arg0, "%kdl_yetki");
+                        int alloc = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", alloc);
+                        fprintf(g->out,
+                            "  store %%kdl_yetki %%%d, ptr %%%d\n",
+                            y_val.reg, alloc);
+                        ptr_reg = alloc;
+                    }
                     IfadeSonuc arg_izin = ifade_uret(g,
                         d->veri.cagri.argumanlar[1], "i16");
                     int r_izin = arg_izin.reg;
@@ -1090,8 +1109,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = call %%kdl_yetki @kdl_yetki_delege("
-                        "%%kdl_yetki %%%d, i16 %%%d)\n",
-                        r, arg_y.reg, r_izin);
+                        "ptr %%%d, i16 %%%d)\n",
+                        r, ptr_reg, r_izin);
                     IfadeSonuc s = { r, "%kdl_yetki" };
                     return s;
                 }
@@ -2382,19 +2401,19 @@ void llvm_ir_uret_secenek(const Dugum *program, FILE *out,
     fputs("declare void @kdl_yaz_tam(i32)\n", out);
     fputs("declare void @kdl_yaz_tam64(i64)\n", out);
 
-    /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
+    /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*).
+     * C1 (G.3 dersinden): tum query arg'lari by-pointer (Win64 ABI
+     * 16-byte struct by-value gecisi LLVM IR'de segfault verir;
+     * by-pointer bypass). Return %kdl_yetki by-value calisir (sret). */
     fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);
-    fputs("declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki, i16)\n", out);
+    fputs("declare %kdl_yetki @kdl_yetki_delege(ptr, i16)\n", out);
     fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol(%kdl_yetki, i16)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol_tipi(%kdl_yetki, i16, i16)\n", out);
-    fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
-    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n", out);
-    /* KIRMIZI G.3: yetki_izin(y, istenen) -> mantiksal (i1)
-     * Runtime: kdl_yetki_izin_var_mi i8 doner, KEMGU mantiksal seviyesinde
-     * trunc i8->i1. By-pointer arg (Win64 ABI 16-byte by-value sorunu icin). */
+    fputs("declare i32 @kdl_yetki_kontrol(ptr, i16)\n", out);
+    fputs("declare i32 @kdl_yetki_kontrol_tipi(ptr, i16, i16)\n", out);
+    fputs("declare i64 @kdl_yetki_id(ptr)\n", out);
+    fputs("declare i16 @kdl_yetki_tipi(ptr)\n", out);
+    fputs("declare i16 @kdl_yetki_izin(ptr)\n", out);
+    fputs("declare i8 @kdl_yetki_iptal_mi(ptr)\n", out);
     fputs("declare i8 @kdl_yetki_izin_var_mi(ptr, i16)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {

@@ -1185,24 +1185,34 @@ KdlYetki kdl_yetki_olustur(uint16_t kt, uint16_t izin) {
     return y;
 }
 
+/* C1 (G.3 dersinden): Tum capability arg'lari by-pointer.
+ * Win64 ABI 16-byte struct by-value arg gecisi LLVM IR'de guvensiz
+ * (sret/byval attribute olmadan segfault); by-pointer ile bypass. */
+
 /* Alt-yetki uret — y *kalir*; y2 yeni id, ayni tip, yeni_izin & y.izin
  * (subset). yeni_izin & ~y.izin != 0 ise tum 0 doner (CP003 placeholder;
- * compile-time delege'de iznin literal olmasi tercih edilir). */
-KdlYetki kdl_yetki_delege(KdlYetki y, uint16_t yeni_izin) {
+ * compile-time delege'de iznin literal olmasi tercih edilir).
+ * NOT: y by-pointer; *y read-only — delege y'yi mutate etmez. */
+KdlYetki kdl_yetki_delege(const KdlYetki *y, uint16_t yeni_izin) {
     KdlYetki y2;
+    if (!y) {
+        y2.id = 0; y2.kaynak_tipi = 0; y2.izin = 0; y2.iptal = 1;
+        y2.rezerv[0] = y2.rezerv[1] = y2.rezerv[2] = 0;
+        return y2;
+    }
     /* Subset check: yeni & ~y.izin must be 0 */
-    if ((uint16_t)(yeni_izin & ~y.izin) != 0) {
+    if ((uint16_t)(yeni_izin & ~y->izin) != 0) {
         /* CP003 — invalid yetki dondur (id=0) */
         y2.id = 0;
-        y2.kaynak_tipi = y.kaynak_tipi;
+        y2.kaynak_tipi = y->kaynak_tipi;
         y2.izin = 0;
-        y2.iptal = 1;  /* zaten gecersiz */
+        y2.iptal = 1;
         y2.rezerv[0] = y2.rezerv[1] = y2.rezerv[2] = 0;
         return y2;
     }
     y2.id = kdl_yetki_id_uret();
-    y2.kaynak_tipi = y.kaynak_tipi;
-    y2.izin = yeni_izin & y.izin;
+    y2.kaynak_tipi = y->kaynak_tipi;
+    y2.izin = yeni_izin & y->izin;
     y2.iptal = 0;
     y2.rezerv[0] = y2.rezerv[1] = y2.rezerv[2] = 0;
     return y2;
@@ -1221,34 +1231,36 @@ void kdl_yetki_geri_al(KdlYetki *y) {
  *    0 = OK
  *   -2 = CP002 (revoked)
  *   -3 = CP003 (permission insufficient) */
-int32_t kdl_yetki_kontrol(KdlYetki y, uint16_t gerekli) {
-    if (y.iptal) return -2;
-    if (y.id == 0) return -2;  /* invalid yetki */
-    if ((uint16_t)(y.izin & gerekli) != gerekli) return -3;
+int32_t kdl_yetki_kontrol(const KdlYetki *y, uint16_t gerekli) {
+    if (!y) return -2;
+    if (y->iptal) return -2;
+    if (y->id == 0) return -2;
+    if ((uint16_t)(y->izin & gerekli) != gerekli) return -3;
     return 0;
 }
 
 /* Tip + izin kontrol — kaynak tipi de check edilir (CP004) */
-int32_t kdl_yetki_kontrol_tipi(KdlYetki y, uint16_t beklenen_tip,
+int32_t kdl_yetki_kontrol_tipi(const KdlYetki *y, uint16_t beklenen_tip,
                                 uint16_t gerekli) {
-    if (y.kaynak_tipi != beklenen_tip) return -4;  /* CP004 */
+    if (!y) return -2;
+    if (y->kaynak_tipi != beklenen_tip) return -4;  /* CP004 */
     return kdl_yetki_kontrol(y, gerekli);
 }
 
-uint64_t kdl_yetki_id(KdlYetki y) {
-    return y.id;
+uint64_t kdl_yetki_id(const KdlYetki *y) {
+    return y ? y->id : 0;
 }
 
-uint16_t kdl_yetki_tipi(KdlYetki y) {
-    return y.kaynak_tipi;
+uint16_t kdl_yetki_tipi(const KdlYetki *y) {
+    return y ? y->kaynak_tipi : 0;
 }
 
-uint16_t kdl_yetki_izin(KdlYetki y) {
-    return y.izin;
+uint16_t kdl_yetki_izin(const KdlYetki *y) {
+    return y ? y->izin : 0;
 }
 
-uint8_t kdl_yetki_iptal_mi(KdlYetki y) {
-    return y.iptal;
+uint8_t kdl_yetki_iptal_mi(const KdlYetki *y) {
+    return y ? y->iptal : 1;
 }
 
 /* yetki_izin_var_mi: KIRMIZI G.3 — KEMGU yuzeyinden izin biti kontrolu.
@@ -1297,12 +1309,13 @@ KdlYetki kdl_dosya_ac_yetkili(const char *yol, uint16_t izin) {
     return y;
 }
 
-/* dosya_oku_yetkili: yetki kontrol + tum dosyayi metin oku */
-const char *kdl_dosya_oku_yetkili(KdlYetki y) {
+/* dosya_oku_yetkili: yetki kontrol + tum dosyayi metin oku.
+ * C1: y by-pointer (Win64 ABI 16-byte by-value bypass). */
+const char *kdl_dosya_oku_yetkili(const KdlYetki *y) {
     if (kdl_yetki_kontrol_tipi(y, KDL_KAYNAK_DOSYA, KDL_IZIN_OKU) != 0) {
         return NULL;
     }
-    FILE *f = (FILE *)(uintptr_t)y.id;
+    FILE *f = (FILE *)(uintptr_t)y->id;
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1315,12 +1328,12 @@ const char *kdl_dosya_oku_yetkili(KdlYetki y) {
     return buf;
 }
 
-/* dosya_yaz_yetkili: yetki kontrol + metni yaz */
-int32_t kdl_dosya_yaz_yetkili(KdlYetki y, const char *s) {
+/* dosya_yaz_yetkili: yetki kontrol + metni yaz. C1: y by-pointer. */
+int32_t kdl_dosya_yaz_yetkili(const KdlYetki *y, const char *s) {
     if (kdl_yetki_kontrol_tipi(y, KDL_KAYNAK_DOSYA, KDL_IZIN_YAZ) != 0) {
         return -1;
     }
-    FILE *f = (FILE *)(uintptr_t)y.id;
+    FILE *f = (FILE *)(uintptr_t)y->id;
     if (!f || !s) return -1;
     return (int32_t)fwrite(s, 1, strlen(s), f);
 }
