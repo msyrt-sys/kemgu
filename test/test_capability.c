@@ -544,6 +544,81 @@ static void T40_ambient_authority_kaldirildi(void) {
 }
 
 /* ========================================================================
+ * GROUP C11 (41-47): KIRMIZI G.3 — yetki_izin built-in
+ * ======================================================================== *
+ *
+ * `yetki_izin(y: yetki<R>, izin: tam16) -> mantiksal`
+ * Capability runtime introspection (KEMGU yuzeyinden izin biti okuma).
+ * Query — y tuketilmez (delege gibi davrar ama yeni token uretmez).
+ * Bound check: (y.izin & istenen) == istenen ise dogru, aksi yanlis.
+ */
+
+static void T41_yetki_izin_var(void) {
+    /* y = oku+yaz (3), istenen oku (1) -> dogru — kondisyonel test */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 3);\n"
+        "    e\xc4\x9f" "er yetki_izin(y, 1) { }\n"
+        "    geri_al(y);");
+    test_sonuc("C11: yetki_izin(y, OKU) y aktif kalir", h == 0);
+}
+
+static void T42_yetki_izin_coklu(void) {
+    /* y = oku+yaz (3), istenen oku|yaz (3) -> dogru */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 3);\n"
+        "    de\xc4\x9fi\xc5\x9fken m: mant\xc4\xb1ksal = yetki_izin(y, 3);\n"
+        "    geri_al(y);");
+    test_sonuc("C11: yetki_izin(y, OKU|YAZ) cokul mask sorgu", h == 0);
+}
+
+static void T43_yetki_izin_donus_mantiksal(void) {
+    /* Donus tipi mantiksal — atama hedefi mantiksal olmali */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken m: mant\xc4\xb1ksal = yetki_izin(y, 1);\n"
+        "    geri_al(y);");
+    test_sonuc("C11: yetki_izin donusu mantiksal tipi", h == 0);
+}
+
+static void T44_yetki_izin_tuketmez(void) {
+    /* yetki_izin sorgu y'yi tuketmez — sonrasinda geri_al cagrilabilir.
+     * Eger tuketse, geri_al(y) ikinci kullanim = CP005 = hata. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken a: mant\xc4\xb1ksal = yetki_izin(y, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken b: mant\xc4\xb1ksal = yetki_izin(y, 2);\n"
+        "    geri_al(y);");
+    test_sonuc("C11: yetki_izin y'yi tuketmez (cogul sorgu + geri_al)", h == 0);
+}
+
+static void T45_yetki_izin_non_yetki(void) {
+    /* yetki_izin'in ilk argumani yetki<R> olmali — tam32 verilirse CP004 */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: tam32 = 5;\n"
+        "    de\xc4\x9fi\xc5\x9fken m: mant\xc4\xb1ksal = yetki_izin(k, 1);\n");
+    test_sonuc("C11: yetki_izin(tam32, ..) -> CP004", h >= 1);
+}
+
+static void T46_yetki_izin_eksik_arg(void) {
+    /* yetki_izin tam 2 arg gerektirir; 1 arg -> CP004 */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken m: mant\xc4\xb1ksal = yetki_izin(y);\n"
+        "    geri_al(y);");
+    test_sonuc("C11: yetki_izin tek arg -> CP004", h >= 1);
+}
+
+static void T47_yetki_izin_farkli_kaynak(void) {
+    /* yetki_izin her kaynak tipi icin gecerli (sadece izin bit kontrolu).
+     * Soket capability uzerinde de calismali. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken s: yetki<Soket> = yetki_olustur(2, 3);\n"
+        "    de\xc4\x9fi\xc5\x9fken m: mant\xc4\xb1ksal = yetki_izin(s, 1);\n"
+        "    geri_al(s);");
+    test_sonuc("C11: yetki_izin tum kaynak tiplerinde gecerli", h == 0);
+}
+
+/* ========================================================================
  * Ana
  * ======================================================================== */
 
@@ -601,6 +676,12 @@ int main(void) {
     T35_csrf_request_response_ayrik(); T36_sudo_subprocess_ayri();
     T37_heartbleed_memory_bounds(); T38_capability_handoff();
     T39_otp_tekkez_capability(); T40_ambient_authority_kaldirildi();
+
+    puts("\n--- C11: KIRMIZI G.3 yetki_izin built-in (7) ---");
+    T41_yetki_izin_var(); T42_yetki_izin_coklu();
+    T43_yetki_izin_donus_mantiksal(); T44_yetki_izin_tuketmez();
+    T45_yetki_izin_non_yetki(); T46_yetki_izin_eksik_arg();
+    T47_yetki_izin_farkli_kaynak();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
