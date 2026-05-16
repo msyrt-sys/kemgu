@@ -17,7 +17,12 @@
 CC = gcc          # Prod derleyici (UCRT64 MinGW-w64 GCC)
 CC_ASAN = clang   # ASan test derleyicisi (Clang64)
 
-CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP
+# Bare-metal opsiyonel: `make CC_DEFINES=-DKEMGU_BARE_METAL` kdl_runtime.c'yi
+# freestanding moda zorlar. Bu commit'te host-runtime libc'siz derlenmez
+# (#error guard) — gercek port BARE_METAL_DESTEK.md'de listelenir.
+CC_DEFINES ?=
+
+CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP $(CC_DEFINES)
 DEPFLAGS = -MMD -MP
 
 # AddressSanitizer + UBSan — bellek alan modul testleri icin (Clang64 ile)

@@ -19,7 +19,40 @@
  *
  * Turkce karakter cikti: UTF-8 olarak yazilir. Windows konsolunda
  * dogru goruntulemek icin chcp 65001 (varsayilan Win11) yeterli.
+ *
+ * === Bare-Metal Uyumluluk (KEMGU_BARE_METAL) ============================
+ *
+ * Bu dosya host POSIX/Windows ortami icin libc/syscall yuzeyi kullanir.
+ * Bare-metal hedefte (DGX Spark kernel, embedded ARM64, vb.) freestanding
+ * derleme gerek; libc'siz alternatif runtime yazilmali.
+ *
+ * Guard zemini: -DKEMGU_BARE_METAL ile derlenirse libc-bagimli bloklar
+ * pratiken atilir. Bu dosyada gercek bare-metal implementasyon YOKTUR;
+ * sadece zemin + etiketleme. Bkz. BARE_METAL_DESTEK.md ve
+ * NOTES_BARE_METAL.md.
+ *
+ * Fonksiyon etiketleri (BARE_METAL_DESTEK.md ile senkron):
+ *   BARE-METAL-SAFE         — libc bagimsiz, freestanding-uyumlu
+ *   BARE-METAL-INCOMPATIBLE — libc bagimli (printf, malloc, fopen, vb.)
+ *   BARE-METAL-MIXED        — bazi yollari libc bagimli, statik yollar SAFE
+ *
+ * Guard pattern ornek (gercek implementasyon bu commit'te YOK):
+ *
+ *   #ifndef KEMGU_BARE_METAL
+ *   void kdl_yazdir_metin(const char *s) { ... fputs/fputc ... }
+ *   #else
+ *   void kdl_yazdir_metin(const char *s) {
+ *       // Bare-metal: UART veya SBI putchar; runtime port'ta tanimlanir
+ *       (void)s;
+ *   }
+ *   #endif
  */
+#ifdef KEMGU_BARE_METAL
+/* Bare-metal: bu dosya host-runtime; ya freestanding port yaz ya da
+ * tanimlari KEMGU programcisinin kendi runtime'inda goster.
+ * Bu commit'te host-runtime LIBC bagimli; bare-metal'de derlenmemeli. */
+#error "kdl_runtime.c host-only (libc). Bare-metal icin port gerekli — BARE_METAL_DESTEK.md."
+#endif
 
 #include <stdio.h>
 #include <stdint.h>
@@ -37,7 +70,9 @@
 #define KDL_THREAD_POSIX 1
 #endif
 
-/* === D.1 IO === */
+/* === D.1 IO ===
+ * BARE-METAL-INCOMPATIBLE: fputs, fputc, printf, scanf — libc stdio
+ * Bare-metal alternatifi: UART/SBI putchar/getchar. */
 
 void kdl_yazdir_metin(const char *s) {
     if (s) {
@@ -144,13 +179,16 @@ int32_t kdl_oku_tam(void) {
     return n;
 }
 
-/* === D.3 Metin === */
+/* === D.3 Metin ===
+ * BARE-METAL-INCOMPATIBLE: strlen — libc string.h
+ * Bare-metal alternatifi: inline manuel strlen (trivial port). */
 
 int32_t kdl_metin_uzunluk(const char *s) {
     return s ? (int32_t)strlen(s) : 0;
 }
 
-/* === D.4 Sayisal === */
+/* === D.4 Sayisal ===
+ * BARE-METAL-SAFE: yalniz koşullu ifade, libc cagrisiz. */
 
 int32_t kdl_mutlak(int32_t x) {
     return x < 0 ? -x : x;
@@ -176,7 +214,10 @@ int64_t kdl_maks64(int64_t a, int64_t b) {
     return a > b ? a : b;
 }
 
-/* === J: Metin islemleri (heap alloc) === */
+/* === J: Metin islemleri (heap alloc) ===
+ * BARE-METAL-INCOMPATIBLE: malloc/strlen/memcpy/strstr/snprintf/atoi
+ * Bare-metal alternatifi: bump_allocator + manuel string ops.
+ * Bkz. BUMP_ALLOCATOR_SPEC_TASLAK.md. */
 
 /* Yeni metin allocate eder, kaynaktan kopyalar. NUL-terminator dahil. */
 const char *kdl_metin_kopya(const char *s) {
@@ -421,6 +462,10 @@ const char *kdl_metin_yer_degistir(const char *s, const char *eski_p,
 }
 
 /* === I: Dinamik Dizi (heap) ===
+ * BARE-METAL-INCOMPATIBLE: malloc/realloc/free
+ * Bare-metal alternatifi: bump_allocator (boyut sabit, free no-op).
+ * Reset semantik kullanılabilir — bkz. BUMP_ALLOCATOR_SPEC_TASLAK.md.
+ *
  *
  * KDL DinamikDizi temsili: { ptr veri, i32 boyut, i32 kapasite } yapisi.
  * Alanlar: tam32 indexlenir; eleman tipi runtime-bilinmez (eleman_byte verilir).
@@ -518,6 +563,10 @@ void kdl_dizi_serbest(KdlDizi *d) {
 }
 
 /* === B2: Concurrency minimal API ===
+ * BARE-METAL-INCOMPATIBLE: pthread, CreateThread, CRITICAL_SECTION
+ * Bare-metal alternatifi: cooperative scheduler / IRQ-disable spinlock
+ * (kernel mode). Userspace concurrency icin scheduler ABI gerek.
+ *
  *
  * Bu surumde sequential stub'lar (KEMGU programları thread spawn API'sini
  * kullanabilir; runtime suanlik aynı thread'te çalıştırır). Gerçek thread
@@ -704,6 +753,11 @@ void kdl_kanal_serbest(KdlKanal *k) {
 }
 
 /* === Arena bellek modeli (Bolge-tabanli, GC-yok) ===
+ * BARE-METAL-INCOMPATIBLE (V1): malloc/free chunk allocate
+ * Bare-metal alternatifi: bump allocator backing (statik buffer).
+ * KdlArena ABI korunabilir — yalnız chunk allocator port edilir.
+ * Bkz. BUMP_ALLOCATOR_SPEC_TASLAK.md.
+ *
  *
  * KEMGU'nun temel ozelligi: bolge (region) tabanli bellek. Bir bolgenin
  * omru biter -> tum tahsisleri tek seferde serbest. KEMGU compiler arena'si
@@ -785,7 +839,10 @@ int32_t kdl_bolge_toplam_byte(KdlArena *a) {
     return a ? (int32_t)a->toplam_tahsis : 0;
 }
 
-/* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) === */
+/* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) ===
+ * BARE-METAL-INCOMPATIBLE: fopen, fread, fwrite, fclose, fseek, ftell
+ * Bare-metal: dosya sistemi yok; storage driver ABI gerek (block I/O).
+ * V1 ignore; gercek OS persistence Faz 5 sonrasi. */
 
 /* Dosya ac: mod stringi "okuma"/"yazma"/"ekleme" (UTF-8 KEMGU) -> "rb"/"wb"/"ab" */
 void *kdl_dosya_ac(const char *yol, const char *mod) {
@@ -906,6 +963,8 @@ const char *kdl_bolge_metin_birlestir(KdlArena *a,
 }
 
 /* === CLI args (OTP CLI demo icin) ===
+ * BARE-METAL-INCOMPATIBLE: GetCommandLineA (Win32), /proc/self/cmdline (POSIX).
+ * Bare-metal: kernel kendi cmdline ABI'si (boot loader handoff) — port gerek. *
  *
  * Windows: GetCommandLineA() parse edilir (basit, quoted token destekli).
  * POSIX: /proc/self/cmdline okunup NULL-separated arglara bolunur.
@@ -989,7 +1048,8 @@ const char *kdl_arg_al(int32_t i) {
     return kdl_args[i];
 }
 
-/* === Binary dosya I/O (OTP CLI icin) === */
+/* === Binary dosya I/O (OTP CLI icin) ===
+ * BARE-METAL-INCOMPATIBLE: fopen, fread, fwrite (libc). */
 
 /* dosya_yaz_byte: ham byte dizisini dosyaya yaz (boyut byte yazilir).
  * Mod "wb" — uzeryine yazar. byteler ham KdlDizi* (kdl_dizi_*). */
@@ -1021,7 +1081,10 @@ const char *kdl_dosya_oku_byte(const char *yol, int32_t *boyut_out) {
     return buf;
 }
 
-/* === OTP yardimcilari (Linear Types Spec V1 ile entegre) === */
+/* === OTP yardimcilari (Linear Types Spec V1 ile entegre) ===
+ * BARE-METAL-MIXED:
+ *   kdl_prng_seed, kdl_prng_next64 — SAF (xorshift64, libc'siz)
+ *   kdl_otp_anahtar_uret — INCOMPATIBLE (malloc + fopen) */
 
 /* Basit deterministic PRNG (xorshift64). TRNG sonra. Seed-able. */
 static uint64_t kdl_prng_state = 0x123456789abcdef0ULL;
@@ -1059,7 +1122,11 @@ int32_t kdl_otp_anahtar_uret(const char *yol, int32_t boyut) {
     return (int32_t)yazildi;
 }
 
-/* === Capability Spec V1 — yetki<R> object-capability runtime === *
+/* === Capability Spec V1 — yetki<R> object-capability runtime ===
+ * BARE-METAL-SAFE: Tum kdl_yetki_* fonksiyonlari saf logic (bit op + PRNG).
+ * Yalniz kdl_yetki_id_uret xorshift state'ine erisir; libc bagimsiz.
+ * Bare-metal'de kernel-modunda capability dispatch ideal kullanim.
+ *
  *
  * Layout (16 byte):
  *   uint64_t id          ; unforgeable PRNG token (id=0 reserved invalid)
@@ -1188,7 +1255,9 @@ uint8_t kdl_yetki_iptal_mi(KdlYetki y) {
     return y.iptal;
 }
 
-/* === Yetki-gated I/O sarmalayicilari (Capability spec CP.7) === */
+/* === Yetki-gated I/O sarmalayicilari (Capability spec CP.7) ===
+ * BARE-METAL-MIXED: yetki struct'a kapsulleme SAFE; FILE* tabanli I/O
+ * INCOMPATIBLE. Port'ta yetki id'si block I/O sürücü handle'ina baglanir. */
 
 /* dosya_ac_yetkili: yol+izin ile aç, başarılı ise yetki<Dosya> döner.
  * id=0 -> başarısız. izin bit-field (KDL_IZIN_OKU=1, YAZ=2, ...) */
@@ -1309,7 +1378,9 @@ int32_t kdl_otp_xor_uygula(const char *msg_yol,
     return (int32_t)yazildi;
 }
 
-/* === D.7 SIMD Spec V1 — Hizali Bellek === */
+/* === D.7 SIMD Spec V1 — Hizali Bellek ===
+ * BARE-METAL-INCOMPATIBLE: posix_memalign (POSIX), _aligned_malloc (Win32)
+ * Bare-metal alternatifi: bump allocator + hizalama aritmetigi (trivial). */
 
 /* kdl_bellek_hizali_al(boyut, hizalama) -> ptr
  *
