@@ -1,0 +1,35 @@
+// =====================================================================
+// uart_merhaba.kem — Bare-Metal UART Hello World (Track B Kalem 3)
+// ---------------------------------------------------------------------
+// Hedef: ARM64 bare-metal (QEMU virt veya Raspberry Pi 4 sınıfı board).
+//
+// Bu program ARM PL011 UART üzerinden konsola yazar — libc yok, heap
+// yok, stack-yalnız çalışır. KEMGU'nun Hedef 3 (Evrensel OS) yol
+// haritasında bare-metal konsol çıktısının ilk uçtan uca testidir.
+//
+// Derleme + link (yardımcı script Makefile'da):
+//
+//   ./build/kemgu --llvm uart_merhaba.kem > merhaba.ll
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+//         -c merhaba.ll -o merhaba.o
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+//         -DKEMGU_BARE_METAL -Iruntime \
+//         -c runtime/kdl_runtime_uart_pl011.c -o uart_pl011.o
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+//         -DKEMGU_BARE_METAL -Iruntime \
+//         -c runtime/kdl_runtime_yazdir_bare.c -o yazdir_bare.o
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+//         -c boot/start_aarch64.S -o start.o
+//   ld.lld -T linker/bare-metal-aarch64.ld -o kernel.elf \
+//          start.o merhaba.o yazdir_bare.o uart_pl011.o
+//
+// QEMU test (varsa):
+//   qemu-system-aarch64 -M virt -cpu cortex-a72 -nographic \
+//                       -kernel kernel.elf
+// =====================================================================
+
+işlev main() -> tam32 {
+    yazdir_metin("Merhaba KEMGU - Bare Metal");
+    yazdir_tam(42);
+    ver 0;
+}
