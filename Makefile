@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_dosya_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_dosya_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
 
 # === Ana hedef ===
 
@@ -230,6 +230,19 @@ $(BUILD)/test_simd$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(TESTDIR)/test_simd.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === KIRMIZI_QUEUE G: test_dosya (Clang64 + ASan) ===
+# stdlib/hata.kem + stdlib/dosya.kem capability + linear disiplinli API testleri.
+# Prelude (stdlib/hata.kem + stdlib/dosya.kem) runtime'da disk'ten yuklenir.
+
+$(BUILD)/test_dosya$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                          $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                          $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                          $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                          $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                          $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                          $(TESTDIR)/test_dosya.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
 # === SIMD LLVM end-to-end testi (GCC; clang + kemgu cagrisi) ===
 
 $(BUILD)/test_simd_llvm$(EXE): $(TESTDIR)/test_simd_llvm.c | $(BUILD)
@@ -378,6 +391,9 @@ calistir_capability_test: $(BUILD)/test_capability$(EXE)
 calistir_simd_test: $(BUILD)/test_simd$(EXE)
 	./$(BUILD)/test_simd$(EXE)
 
+calistir_dosya_test: $(BUILD)/test_dosya$(EXE)
+	./$(BUILD)/test_dosya$(EXE)
+
 calistir_simd_llvm_test: $(BUILD)/test_simd_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	./$(BUILD)/test_simd_llvm$(EXE)
 
@@ -400,12 +416,13 @@ calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BU
 # Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
 # birlestirilip --check'ten gecirilir (tek dosya derleme, import yok).
 # Test dosyasi yoksa kutuphane tek basina kontrol edilir.
-calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
+calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check calistir_dosya_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
 		[ -f "$$f" ] || continue; \
 		case "$$f" in \
 			stdlib/kripto.kem) continue;; \
+			stdlib/dosya.kem) continue;; \
 		esac; \
 		mod=$$(basename "$$f" .kem); \
 		test_f="test/stdlib/test_$$mod.kem"; \
@@ -421,6 +438,27 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		fi; \
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
+
+# Dosya bundle kontrolu (KIRMIZI_QUEUE G) — stdlib/hata.kem + stdlib/dosya.kem
+# birlikte derlenir; ardindan test/stdlib/test_dosya.kem ile birlestirilip
+# --check'ten gecirilir. (import sistemi olmadigi icin bundle yaklasimi gerek;
+# dosya.kem IOHata icin hata.kem'e baglidir.)
+calistir_dosya_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
+	@echo "dosya bundle tip kontrolu (hata.kem + dosya.kem)..."
+	@bundle_base="$(BUILD)/_dosya_base.kem"; \
+	cat stdlib/hata.kem stdlib/dosya.kem > "$$bundle_base"; \
+	./$(BUILD)/kemgu$(EXE) --check "$$bundle_base" || \
+		{ echo "FAIL: dosya bundle base"; rm -f "$$bundle_base"; exit 1; }; \
+	test_f="test/stdlib/test_dosya.kem"; \
+	if [ -f "$$test_f" ]; then \
+		combined="$(BUILD)/_dosya_test.kem"; \
+		cat "$$bundle_base" "$$test_f" > "$$combined"; \
+		./$(BUILD)/kemgu$(EXE) --check "$$combined" || \
+			{ echo "FAIL: dosya + test_dosya"; rm -f "$$combined" "$$bundle_base"; exit 1; }; \
+		rm -f "$$combined"; \
+	fi; \
+	rm -f "$$bundle_base"
+	@echo "Dosya bundle (hata.kem + dosya.kem + test_dosya.kem) --check gecti!"
 
 # Kripto bundle kontrolu — stdlib/kripto.kem + stdlib/kripto/*.kem birlikte
 # her bir test/stdlib/test_kripto*.kem dosyasi ile karistirilir.
@@ -460,7 +498,7 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_dosya_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
 	@echo "Tum testler gecti!"
 
 clean:

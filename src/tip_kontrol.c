@@ -251,6 +251,46 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
     }
 
+    /* === KIRMIZI_QUEUE G: Lineer dosya tutaclari ============================
+     * stdlib/dosya.kem'in capability + lineer disiplinli API'sinin
+     * arkasini saglayan dusuk-seviye built-in'ler. KEMGU yuzeyinde
+     * isleyici 'tam64' (FILE* opak); izin bit alan (1=OKU, 2=YAZ, 4=EKLE).
+     * 0 isleyici = hata sinyalidir. */
+
+    /* dosya_ac_lineer(yol: metin, izin: tam32) -> tam64 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dosya_ac_lineer", 15, p, 2,
+                     tip_olustur_basit(a, TIP_TAM64));
+    }
+
+    /* dosya_oku_lineer(isleyici: tam64) -> metin */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dosya_oku_lineer", 16, p, 1,
+                     tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* dosya_yaz_lineer(isleyici: tam64, icerik: metin) -> tam32 */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_yaz_lineer", 16, p, 2,
+                     tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* dosya_kapat_lineer(isleyici: tam64) -> boş */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("dosya_kapat_lineer", 18, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* === Adim 1 (OTP CLI): CLI args + OTP yardimcilari === */
 
     /* arg_sayi() -> tam32 */

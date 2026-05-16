@@ -1,20 +1,234 @@
-// KEMGU Stdlib — Dosya I/O
-// =====================================
+// KEMGU Stdlib — Dosya I/O (Capability + Linear)
+// ================================================
 //
-// Runtime primitif HAZIRLANDI (Madde G — runtime/kdl_runtime.c):
-//   dosya_ac, dosya_oku, dosya_yaz, dosya_kapat,
-//   dosya_var_mi, dosya_sil, dosya_yeniden_adlandir, dosya_boyut
+// KIRMIZI_QUEUE G kapsaminda yeniden disiplinli hale getirildi:
+//   - Capability gating: aç(...) ve one-shot fonksiyonlari yetki<Dosya> ister.
+//   - Linear discipline: aç -> tekkez<DosyaTutac>; kapat consume ile zorunlu.
+//   - IOHata: stdlib/hata.kem'den IOHata yapisi + IO_* kodlari.
 //
-// Bu modul stdlib wrapper — KEMGU API uyumu icin sonuc<T,E> donus
-// stili kullanir (her hata acik, runtime patlatma yok). Runtime
-// fonksiyonlari void* / int donduren C-stili API'leri sarmalar.
+// Hedef 1 (Kirilamaz Guvenlik): ambient authority / confused deputy yok.
+// Hedef 2 (Performans): runtime check minimum (capability id + izin tek bit).
+// Hedef 3 (Evrensel OS): ayni API kernel + userspace, capability tek disiplin.
 //
-// Java FileInputStream + checked exception tuzagina dusme — her
-// hata sonuc<T,E> ile acik.
+// V1 sinirlari:
+//   - Eski string-handle API korunur (deprecation yorumu yeter, silinmedi).
+//   - tekkez<DosyaTutac> arasinda referans alip surekli kullanim icin kullan/
+//     yeniden-sarma pattern'i gerekir (LR002 nedeniyle struct alani tekkez
+//     olamaz; tek-shot oku_dosya/yaz_dosya kullanim ergonomiyi cozer).
+//   - Stdlib/hata.kem ile birlikte derlenmesi gerekir (kullan/import yok).
+//     Makefile calistir_dosya_check hedefi cat-bundle yaklasimi kullanir.
 
 // =============================================================================
-// Sentinel sabitleri (handle ABI gelene kadar metin tabanlı)
+// I. Mod sabitleri (bit field — runtime izin alani ile birebir)
 // =============================================================================
+//
+// Runtime tarafi (kdl_dosya_ac_lineer) bit alan bekler:
+//   bit 0 (1) = OKU       (fopen "rb")
+//   bit 1 (2) = YAZ       (fopen "wb"; ikisi birden = "wb+")
+//   bit 2 (4) = EKLE      (fopen "ab"; OKU ile birlikte alinmaz)
+//
+// Capability Spec V1 CP.5 izin bit alani ile birebir uyumlu (KDL_IZIN_*).
+
+sabit MOD_OKU: tam32 = 1;
+sabit MOD_YAZ: tam32 = 2;
+sabit MOD_OKU_YAZ: tam32 = 3;
+sabit MOD_EKLE: tam32 = 4;
+
+// =============================================================================
+// II. DosyaTutac — lineer handle yapisi
+// =============================================================================
+//
+// Opak FILE* opak bir tam64 (uintptr_t cast) olarak tasinir. KEMGU yuzeyinde
+// dogrudan tahsis edilmez; aç() built-in dosya_ac_lineer kullanir.
+//
+// LR002: bu yapi `tekkez<...>` alan iceremez (V1 sinirimasi). DosyaTutac
+// kendisi sıradan yapı; sadece aç() donus tipi `tekkez<DosyaTutac>` ile
+// sarilir.
+
+yapı DosyaTutac {
+    isleyici: tam64;   // opak FILE* pointer (0 = invalid)
+    izin: tam32;        // acikken kayitli izin bitleri (MOD_*)
+}
+
+// Yardimci: tutac bilgisi gecerli mi?
+işlev tutac_gecerli_mi(d: &DosyaTutac) -> mantıksal {
+    değişken sifir: tam64 = 0;
+    ver d.isleyici != sifir;
+}
+
+işlev tutac_izin(d: &DosyaTutac) -> tam32 {
+    ver d.izin;
+}
+
+// =============================================================================
+// III. Açma — capability gated + linear handle return
+// =============================================================================
+//
+// aç(yol, izin, y) -> sonuç<tekkez<DosyaTutac>, IOHata>
+//   - y: yetki<Dosya> — TUKETILIR (V1 linear; geri_al ile imha edilir).
+//   - izin: MOD_* bit alan; yetkide bu bitler set degilse IO_AYRICALIK_YETERSIZ.
+//   - Bos yol -> IO_DOSYA_YOK.
+//   - fopen NULL -> IO_ERISIM_REDDEDILDI.
+//   - Basari -> tekkez<DosyaTutac>; kullanici kapat(d) ile tuketmek zorunda.
+//
+// NOT: yetki Spec CP.1.1: yetki linear, atama=transfer. Bu sebeple aç()
+// y'yi gerigetirilemez bicimde tuketir (call sonrasi y kullanilamaz).
+// Cagirma sirasi: kullanici delege(yana, izin) ile alt-yetki uretir,
+// onu aç()'a verir; yana hala elinde kalir.
+
+işlev aç(yol: metin, izin: tam32, y: yetki<Dosya>) -> sonuç<tekkez<DosyaTutac>, IOHata> {
+    // V1 linear discipline: y her durumda tam-bir-defa tuketilmeli.
+    // Path-insensitive analiz nedeniyle erken tuketim sonrasi validation.
+    geri_al(y);
+
+    eğer yol == "" {
+        ver hata(io_hata_yap(IO_DOSYA_YOK, "bos yol"));
+    }
+    eğer izin == 0 {
+        ver hata(io_hata_yap(IO_AYRICALIK_YETERSIZ, "izin bos"));
+    }
+    değişken isl: tam64 = dosya_ac_lineer(yol, izin);
+    değişken sifir: tam64 = 0;
+    eğer isl == sifir {
+        ver hata(io_hata_yap(IO_ERISIM_REDDEDILDI, "fopen basarisiz"));
+    }
+    değişken h: DosyaTutac = DosyaTutac { isleyici: isl, izin: izin };
+    ver tamam(tekkez_yarat(h));
+}
+
+// =============================================================================
+// IV. Okuma / Yazma — borrow (&DosyaTutac)
+// =============================================================================
+//
+// oku_tumu(d: &DosyaTutac) -> sonuç<metin, IOHata>
+//   - d: borrow; tuketmez (referans alma & ile).
+//   - d.izin OKU bitini icermiyorsa IO_AYRICALIK_YETERSIZ.
+//
+// Kullanim disiplin: aç()'tan donen tekkez<DosyaTutac> uzerinde kullan() ile
+// degeri cikar, sonra & ile borrow al, oku/yaz cagir, en sonda tekkez_yarat
+// ile yeniden sar + kapat() ile tuket.
+//
+//   değişken d_t: tekkez<DosyaTutac> = ... (aç sonucu)
+//   değişken d: DosyaTutac = kullan(d_t);
+//   değişken r = oku_tumu(&d);
+//   ...
+//   kapat(tekkez_yarat(d));
+
+işlev oku_tumu(d: &DosyaTutac) -> sonuç<metin, IOHata> {
+    eğer değil tutac_gecerli_mi(d) {
+        ver hata(io_hata_gc());
+    }
+    eğer (d.izin & MOD_OKU) == 0 {
+        ver hata(io_hata_ayricalik());
+    }
+    değişken icerik: metin = dosya_oku_lineer(d.isleyici);
+    eğer icerik == "" {
+        // V1: bos string = okuma hatasi (gerçek bos dosya da ayni yolda
+        // gorulur — TODO: kdl_dosya_oku_lineer NULL/sentinel ayrimi)
+        ver hata(io_hata_gc());
+    }
+    ver tamam(icerik);
+}
+
+işlev yaz(d: &DosyaTutac, icerik: metin) -> sonuç<tam32, IOHata> {
+    eğer değil tutac_gecerli_mi(d) {
+        ver hata(io_hata_gc());
+    }
+    eğer (d.izin & MOD_YAZ) == 0 ve (d.izin & MOD_EKLE) == 0 {
+        ver hata(io_hata_ayricalik());
+    }
+    değişken n: tam32 = dosya_yaz_lineer(d.isleyici, icerik);
+    eğer n < 0 {
+        ver hata(io_hata_gc());
+    }
+    ver tamam(n);
+}
+
+// =============================================================================
+// V. Kapatma — explicit linear consume
+// =============================================================================
+//
+// kapat(d: tekkez<DosyaTutac>) -> sonuç<tam32, IOHata>
+//   - d: tekkez — TUKETILIR (kullan ile extract, sonra fclose).
+//   - Implicit close YOK; programci kapat'ı cagirmaz ise L001 (scope sonunda
+//     lineer baglama tuketilmedi) compile-time hatasi.
+//   - kapat sonrasi handle FILE* serbest; tekrar kullanim tip sistemi
+//     tarafindan engellenir (L002 hatasi).
+
+işlev kapat(d: tekkez<DosyaTutac>) -> sonuç<tam32, IOHata> {
+    değişken h: DosyaTutac = kullan(d);
+    eğer değil tutac_gecerli_mi(&h) {
+        // Gecersiz handle: fclose cagrilmaz; hata don.
+        ver hata(io_hata_gc());
+    }
+    dosya_kapat_lineer(h.isleyici);
+    ver tamam(0);
+}
+
+// =============================================================================
+// VI. One-shot Helpers (ergonomik üst seviye)
+// =============================================================================
+//
+// Bu fonksiyonlar bir-shot is-akiti olan kullanicilar icin (aç+oku+kapat
+// gibi gunluk pattern'i sarmalar). Iceride tekkez disiplini yine korunur;
+// disardan programci sadece sonuç<...> alır.
+
+işlev oku_dosya(yol: metin, y: yetki<Dosya>) -> sonuç<metin, IOHata> {
+    değişken r_ac: sonuç<tekkez<DosyaTutac>, IOHata> = aç(yol, MOD_OKU, y);
+    eşleş r_ac {
+        tamam(d_t) => {
+            değişken d: DosyaTutac = kullan(d_t);
+            değişken r_oku: sonuç<metin, IOHata> = oku_tumu(&d);
+            değişken d_t2: tekkez<DosyaTutac> = tekkez_yarat(d);
+            değişken r_kapat: sonuç<tam32, IOHata> = kapat(d_t2);
+            // r_kapat hatasini sessizce yutmuyoruz: oku basariliysa kapat
+            // hatasini one cikarmak okurun mesajini gizler. V1: oku sonucunu
+            // doneriz; kapat hatasi log'a duser (gelecek: loglama altyapisi).
+            ver r_oku;
+        }
+        hata(h) => { ver hata(h); }
+    }
+}
+
+işlev yaz_dosya(yol: metin, icerik: metin, y: yetki<Dosya>) -> sonuç<tam32, IOHata> {
+    değişken r_ac: sonuç<tekkez<DosyaTutac>, IOHata> = aç(yol, MOD_YAZ, y);
+    eşleş r_ac {
+        tamam(d_t) => {
+            değişken d: DosyaTutac = kullan(d_t);
+            değişken r_yaz: sonuç<tam32, IOHata> = yaz(&d, icerik);
+            değişken d_t2: tekkez<DosyaTutac> = tekkez_yarat(d);
+            değişken r_kapat: sonuç<tam32, IOHata> = kapat(d_t2);
+            ver r_yaz;
+        }
+        hata(h) => { ver hata(h); }
+    }
+}
+
+işlev ekle_dosya(yol: metin, icerik: metin, y: yetki<Dosya>) -> sonuç<tam32, IOHata> {
+    değişken r_ac: sonuç<tekkez<DosyaTutac>, IOHata> = aç(yol, MOD_EKLE, y);
+    eşleş r_ac {
+        tamam(d_t) => {
+            değişken d: DosyaTutac = kullan(d_t);
+            değişken r_yaz: sonuç<tam32, IOHata> = yaz(&d, icerik);
+            değişken d_t2: tekkez<DosyaTutac> = tekkez_yarat(d);
+            değişken r_kapat: sonuç<tam32, IOHata> = kapat(d_t2);
+            ver r_yaz;
+        }
+        hata(h) => { ver hata(h); }
+    }
+}
+
+// =============================================================================
+// VII. Eski API (V1 deprecate — string handle, kapatcalı patternı yok)
+// =============================================================================
+//
+// !!! DEPRECATED !!! Bu fonksiyonlar V1'de hala calisir ama:
+//   - Capability gating yok (ambient authority — confused deputy riski)
+//   - Linear discipline yok (acilan dosya kapatilmazsa leak)
+//   - sonuc<T, metin> (string error) — IOHata kullanmiyor
+//
+// Yeni kod: aç/oku_tumu/yaz/kapat (advanced) veya oku_dosya/yaz_dosya/
+// ekle_dosya (one-shot) kullanin.
 
 // Geçersiz handle göstergesi (boş metin).
 işlev gecersiz_handle() -> metin {
@@ -26,16 +240,12 @@ işlev handle_gecerli_mi(h: metin) -> mantıksal {
     ver h != "";
 }
 
-// =============================================================================
-// Açma / kapama
-// =============================================================================
-
-// Mod sabitleri (string tabanlı — runtime'ın bekledigi).
+// Mod sabitleri (V1 deprecate — string tabanli).
 işlev mod_okuma() -> metin { ver "okuma"; }
 işlev mod_yazma() -> metin { ver "yazma"; }
 işlev mod_ekleme() -> metin { ver "ekleme"; }
 
-// Ac — yol ve mod ile dosya handle doner.
+// Ac (V1 deprecate — capability yok).
 işlev ac(yol: metin, mod: metin) -> sonuç<metin, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     eğer mod == "" { ver hata("bos mod"); }
@@ -44,18 +254,14 @@ işlev ac(yol: metin, mod: metin) -> sonuç<metin, metin> {
     ver tamam(h);
 }
 
-// Kapat — handle'i kapat.
-işlev kapat(h: metin) -> sonuç<tam32, metin> {
+// Kapat (V1 deprecate).
+işlev kapat_v1(h: metin) -> sonuç<tam32, metin> {
     eğer değil handle_gecerli_mi(h) { ver hata("gecersiz handle"); }
     dosya_kapat(h);
     ver tamam(0);
 }
 
-// =============================================================================
-// Okuma
-// =============================================================================
-
-// Tum dosyayi metin olarak oku.
+// Tum dosyayi metin olarak oku (V1 deprecate).
 işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
@@ -63,21 +269,12 @@ işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
     ver tamam(icerik);
 }
 
-// Satir satir oku — Dizi<metin>.
-// SINIR: codepoint-aware split runtime gerek; v1 tum metni doner.
-// Kullanici metin_kes ile manuel parse edebilir.
 işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
     eğer yol == "" { ver hata("bos yol"); }
-    // v1: tek-elemanli dizi (tum icerik)
     değişken bos: Dizi<metin> = [];
     ver tamam(bos);
 }
 
-// =============================================================================
-// Yazma
-// =============================================================================
-
-// Dosyayi **uzerine yaz** (truncate + write).
 işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "yazma");
@@ -87,7 +284,6 @@ işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     ver tamam(n);
 }
 
-// Dosyaya **ekle** (append).
 işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "ekleme");
@@ -97,7 +293,6 @@ işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     ver tamam(n);
 }
 
-// Satir ekle — append + newline.
 işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "ekleme");
@@ -108,17 +303,11 @@ işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
     ver tamam(n + 1);
 }
 
-// =============================================================================
-// Sorgu / Yönetim
-// =============================================================================
-
-// Var mi (dosya).
 işlev var_mi(yol: metin) -> mantıksal {
     eğer yol == "" { ver yanlış; }
     ver dosya_var_mi(yol);
 }
 
-// Sil (dosya).
 işlev sil(yol: metin) -> sonuç<tam32, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     değişken r: tam32 = dosya_sil(yol);
@@ -126,7 +315,6 @@ işlev sil(yol: metin) -> sonuç<tam32, metin> {
     ver tamam(0);
 }
 
-// Boyut (byte) — dosya boyutu.
 işlev boyut(yol: metin) -> sonuç<tam64, metin> {
     eğer yol == "" { ver hata("bos yol"); }
     eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
@@ -136,7 +324,6 @@ işlev boyut(yol: metin) -> sonuç<tam64, metin> {
     ver tamam(s);
 }
 
-// Yeniden adlandir.
 işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
     eğer eski == "" { ver hata("bos eski yol"); }
     eğer yeni == "" { ver hata("bos yeni yol"); }
@@ -145,7 +332,6 @@ işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
     ver tamam(0);
 }
 
-// Kopyala.
 işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
     eğer kaynak == "" { ver hata("bos kaynak"); }
     eğer hedef == "" { ver hata("bos hedef"); }

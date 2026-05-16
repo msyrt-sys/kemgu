@@ -34,11 +34,11 @@ işlev test_ac_bos_yol() -> sonuç<metin, metin> {
 }
 
 işlev test_kapat_iyi() -> sonuç<tam32, metin> {
-    ver kapat("dosya.txt");
+    ver kapat_v1("dosya.txt");
 }
 
 işlev test_kapat_bos() -> sonuç<tam32, metin> {
-    ver kapat("");
+    ver kapat_v1("");
 }
 
 // --- oku_metin / oku_satirlar ---
@@ -114,7 +114,7 @@ işlev test_iki_ac_kapat() -> sonuç<tam32, metin> {
     değişken a: sonuç<metin, metin> = ac("a.txt", mod_okuma());
     değişken b: sonuç<metin, metin> = ac("b.txt", mod_yazma());
     // Stub gereği gerçek handle değil; tipler eşleşir.
-    ver kapat("a.txt");
+    ver kapat_v1("a.txt");
 }
 
 işlev main() -> tam32 {

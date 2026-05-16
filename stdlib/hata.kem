@@ -1,0 +1,94 @@
+// KEMGU Stdlib — Hata Varyantlari
+// ====================================
+//
+// KIRMIZI_QUEUE G kapsaminda eklendi: stdlib::dosya icin IOHata yapisi
+// ve standart hata kodlari. KEMGU'da enum yok; struct + sabit kod pattern'i
+// (Direktif §G ASLA: implicit conversion / exception yasak — her hata acik
+// sonuç<T, IOHata> uzerinden).
+//
+// Felsefe:
+//   - Java checked exception tuzagina dusme: hata sonuc icinde, programci
+//     pattern-match ile cozer.
+//   - Rust Result/Error trait karmasasi yok: tek struct, kod alani ile dispatch.
+//   - C errno global state tuzagina dusme: hata her zaman lokal donus.
+//
+// V1: IOHata yapisi sadece dosya I/O icin. V2'de network/parse/serial vb.
+// icin alt-yapilar gelecek (ortak ad alani: <subsystem>Hata).
+
+// =============================================================================
+// IOHata kod sabitleri
+// =============================================================================
+//
+// Kod 0 rezerve (basari sinyali; sonuc.tamam yolunda zaten kod yok).
+// 1-99: dosya I/O standart. 100+: subsystem-specific (V2 reserved).
+
+sabit IO_OK: tam32 = 0;
+sabit IO_DOSYA_YOK: tam32 = 1;            // ENOENT / dosya bulunamadi
+sabit IO_ERISIM_REDDEDILDI: tam32 = 2;    // EACCES / acilamadi
+sabit IO_GC_HATASI: tam32 = 3;            // generic giris/cikis hatasi
+sabit IO_KAYNAK_TUKENDI: tam32 = 4;       // ENOMEM / disk dolu / kuota
+sabit IO_BOZUK_YAZI: tam32 = 5;           // EILSEQ / UTF-8 bozuk / encoding hatasi
+sabit IO_AYRICALIK_YETERSIZ: tam32 = 6;   // capability izin bitleri uyumsuz
+
+// =============================================================================
+// IOHata yapisi
+// =============================================================================
+//
+// kod    : tip-disi anlam tasiyan disambiguator (IO_* sabitlerinden)
+// mesaj  : insan-okunabilir aciklama (loglama icin; ondisiplin programatik
+//          karar icin kod alani kullanilir)
+
+yapı IOHata {
+    kod: tam32;
+    mesaj: metin;
+}
+
+// IOHata olusturucu — kod + mesajdan tek noktadan uretim.
+işlev io_hata_yap(kod: tam32, mesaj: metin) -> IOHata {
+    ver IOHata { kod: kod, mesaj: mesaj };
+}
+
+// Yaygın hata sabitlerinin sarmalayicilari — kullanim kolayligi icin.
+işlev io_hata_dosya_yok(yol: metin) -> IOHata {
+    ver IOHata { kod: IO_DOSYA_YOK, mesaj: yol };
+}
+
+işlev io_hata_erisim() -> IOHata {
+    ver IOHata { kod: IO_ERISIM_REDDEDILDI, mesaj: "erisim reddedildi" };
+}
+
+işlev io_hata_gc() -> IOHata {
+    ver IOHata { kod: IO_GC_HATASI, mesaj: "giris/cikis hatasi" };
+}
+
+işlev io_hata_kaynak() -> IOHata {
+    ver IOHata { kod: IO_KAYNAK_TUKENDI, mesaj: "kaynak tukendi" };
+}
+
+işlev io_hata_bozuk() -> IOHata {
+    ver IOHata { kod: IO_BOZUK_YAZI, mesaj: "bozuk yazi" };
+}
+
+işlev io_hata_ayricalik() -> IOHata {
+    ver IOHata { kod: IO_AYRICALIK_YETERSIZ, mesaj: "ayricalik yetersiz" };
+}
+
+// =============================================================================
+// IOHata sorgulari
+// =============================================================================
+
+işlev io_hata_kodu(h: IOHata) -> tam32 {
+    ver h.kod;
+}
+
+işlev io_hata_dosya_yok_mu(h: IOHata) -> mantıksal {
+    ver h.kod == IO_DOSYA_YOK;
+}
+
+işlev io_hata_erisim_mi(h: IOHata) -> mantıksal {
+    ver h.kod == IO_ERISIM_REDDEDILDI;
+}
+
+işlev io_hata_ayricalik_mi(h: IOHata) -> mantıksal {
+    ver h.kod == IO_AYRICALIK_YETERSIZ;
+}

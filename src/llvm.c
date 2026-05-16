@@ -2257,6 +2257,13 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
 
+    /* KIRMIZI_QUEUE G: Lineer dosya tutaclari (kdl_dosya_*_lineer)
+     * isleyici tam64 (FILE* opak); izin bit alan (1=OKU, 2=YAZ, 4=EKLE). */
+    fputs("declare i64 @kdl_dosya_ac_lineer(ptr, i32)\n", out);
+    fputs("declare ptr @kdl_dosya_oku_lineer(i64)\n", out);
+    fputs("declare i32 @kdl_dosya_yaz_lineer(i64, ptr)\n", out);
+    fputs("declare void @kdl_dosya_kapat_lineer(i64)\n", out);
+
     /* Madde B: Dinamik dizi (KdlDizi*) */
     fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);

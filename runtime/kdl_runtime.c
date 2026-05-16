@@ -1341,3 +1341,72 @@ void kdl_bellek_hizali_serbest(void *p) {
     free(p);
 #endif
 }
+
+/* === KIRMIZI_QUEUE G — Lineer Dosya Tutaclari ===========================
+ *
+ * Linear handle pattern: KEMGU `tekkez<DosyaTutac>` yapisi `isleyici: tam64`
+ * alanini opak FILE* pointer (uintptr_t cast) olarak tasar. Capability gating
+ * KEMGU yuzeyinde (stdlib/dosya.kem) yapilir; bu C tarafi sadece FILE* I/O
+ * sarmaliyici. Disiplin:
+ *
+ *   - dosya_ac_lineer(yol, izin): FILE* aç, isleyici dön (0 = hata).
+ *   - dosya_oku_lineer(isleyici): tüm icerigi metin oku (heap, leak OK V1).
+ *   - dosya_yaz_lineer(isleyici, icerik): metin yaz, byte sayisi dön (<0 hata).
+ *   - dosya_kapat_lineer(isleyici): fclose.
+ *
+ * izin bit alan: 1=OKU 2=YAZ. Mod stringi izinden cikarsanir:
+ *   OKU         -> "rb"
+ *   YAZ         -> "wb"
+ *   OKU|YAZ     -> "wb+"   (truncate + read-write; v1 davranis)
+ *   diger       -> hata (0 dondur)
+ */
+
+int64_t kdl_dosya_ac_lineer(const char *yol, int32_t izin) {
+    if (!yol || !*yol) return 0;
+    const char *mod = NULL;
+    if ((izin & 1) && (izin & 2)) {
+        mod = "wb+";
+    } else if (izin & 2) {
+        mod = "wb";
+    } else if (izin & 4) {
+        /* CALISTIR bayrak ile aç = append (KEMGU "ekleme" karsiligi) */
+        mod = "ab";
+    } else if (izin & 1) {
+        mod = "rb";
+    } else {
+        return 0;  /* izin yok */
+    }
+    FILE *f = fopen(yol, mod);
+    if (!f) return 0;
+    return (int64_t)(uintptr_t)f;
+}
+
+const char *kdl_dosya_oku_lineer(int64_t isleyici) {
+    FILE *f = (FILE *)(uintptr_t)isleyici;
+    if (!f) return NULL;
+    /* Pozisyonu basa al, tum icerigi oku */
+    if (fseek(f, 0, SEEK_END) != 0) return NULL;
+    long n = ftell(f);
+    if (n < 0) return NULL;
+    if (fseek(f, 0, SEEK_SET) != 0) return NULL;
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) return NULL;
+    size_t got = fread(buf, 1, (size_t)n, f);
+    buf[got] = '\0';
+    return buf;
+}
+
+int32_t kdl_dosya_yaz_lineer(int64_t isleyici, const char *icerik) {
+    FILE *f = (FILE *)(uintptr_t)isleyici;
+    if (!f || !icerik) return -1;
+    size_t n = strlen(icerik);
+    size_t yazildi = fwrite(icerik, 1, n, f);
+    /* Flush — kucuk dosyalarda fclose sirasinda da yapilir ama eksiltici degil */
+    fflush(f);
+    return (int32_t)yazildi;
+}
+
+void kdl_dosya_kapat_lineer(int64_t isleyici) {
+    FILE *f = (FILE *)(uintptr_t)isleyici;
+    if (f) fclose(f);
+}
