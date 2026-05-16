@@ -63,6 +63,7 @@ ARM64 birincil, x86_64 ikincil. Drone'dan sunucuya tek yığın:
 | LLVM backend           | ✓ v3   | Tam/kesirli, yapı by-value, dizi, çağrı, generic mangling |
 | Bit operatörleri       | ✓      | `&`, `\|`, `^`, `~`, `<<`, `>>` — tam64 dahil |
 | ARM64 cross-compile    | ✓      | `make calistir_arm64_test` — bare-metal ELF üretir |
+| Bare-metal UART konsol | ✓ K8b  | ARM PL011 + x86_64 16550A, libc-yok yazdırma. Bkz. [BARE_METAL_DESTEK.md](BARE_METAL_DESTEK.md) |
 | LSP server             | ✓ v2   | Hover + completion + tanıma git |
 | Stdlib (saf KEMGU)     | ✓ 8 modül | matematik, dizi, opsiyonel, sonuç, metin (kısmen), dosya (skeleton) |
 | Snapshot + fuzz testleri | ✓    | 10k iterasyon temiz |
