@@ -267,6 +267,12 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d->tip == DUGUM_TIP_YETKI) {
         return "%kdl_yetki";
     }
+    /* DRF V1 Faz 3: gorev<T> ve kanal<T> -> ptr (opaque handle).
+     * Runtime KdlGorev ve KdlKanal struct'lari uzerine KEMGU tipsiz
+     * pointer goruyor. T bilgisi sadece tip kontrol seviyesinde. */
+    if (tip_d->tip == DUGUM_TIP_GOREV || tip_d->tip == DUGUM_TIP_KANAL) {
+        return "ptr";
+    }
     /* SIMD Spec V1: vektör<T, N> → <N x T> LLVM IR */
     if (tip_d->tip == DUGUM_TIP_VEKTOR) {
         const char *eleman_ir = ast_tip_to_ir(g, tip_d->veri.tip_vektor.eleman_tip);
@@ -1124,6 +1130,143 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
                     IfadeSonuc s = { 0, "void" };
                     return s;
+                }
+            }
+
+            /* === DRF V1 Faz 3 — Concurrency runtime intrinsics ===
+             * 5 (+1) built-in: gorev_baslat, gorev_birlestir, kanal_olustur,
+             * kanal_gonder, kanal_al, dondur. acq_rel fence senkronizasyon
+             * sinirlarinda emit. */
+            {
+                const char *cfn = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int cfn_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+
+                /* gorev_baslat(closure) -> gorev<T> (= ptr)
+                 * closure top-level islev tanimlayicisi olmali (V1 lambda yok).
+                 * acq_rel fence: spawn-edges happens-before transfer. */
+                if (cfn_uz == 14 &&
+                    memcmp(cfn, "g\xc3\xb6rev_ba\xc5\x9f" "lat", 14) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    const Dugum *arg = d->veri.cagri.argumanlar[0];
+                    if (!arg || arg->tip != DUGUM_TANIMLAYICI) {
+                        return hata(g, "gorev_baslat: V1'de arg top-level "
+                                       "islev adi olmali");
+                    }
+                    /* Fence: release (spawn yan tarafi) */
+                    fputs("  fence release\n", g->out);
+                    int r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call ptr "
+                                    "@kdl_gorev_basla_i32(ptr @", r);
+                    ad_yaz(g->out, arg->veri.tanimlayici.metin,
+                           arg->veri.tanimlayici.uzunluk);
+                    fputs(")\n", g->out);
+                    IfadeSonuc s = { r, "ptr" };
+                    return s;
+                }
+
+                /* gorev_birlestir(g) -> i32 — g tuketilir; fence acquire */
+                if (cfn_uz == 17 &&
+                    memcmp(cfn, "g\xc3\xb6rev_birle\xc5\x9f" "tir", 17) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    IfadeSonuc gv = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "ptr");
+                    int r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call i32 "
+                                    "@kdl_gorev_birlestir(ptr %%%d)\n",
+                            r, gv.reg);
+                    /* Fence: acquire (join sonrasi sonuc okumasi happens-after) */
+                    fputs("  fence acquire\n", g->out);
+                    IfadeSonuc s = { r, "i32" };
+                    return s;
+                }
+
+                /* kanal_olustur(kapasite) -> kanal<T> (= ptr) */
+                if (cfn_uz == 14 &&
+                    memcmp(cfn, "kanal_olu\xc5\x9f" "tur", 14) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    IfadeSonuc kap = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "i32");
+                    /* Kapasite i32'ye trunc/sext */
+                    int kap_reg = kap.reg;
+                    if (strcmp(kap.tip, "i32") != 0) {
+                        int t = yeni_reg(g);
+                        if (strcmp(kap.tip, "i64") == 0) {
+                            fprintf(g->out,
+                                "  %%%d = trunc i64 %%%d to i32\n",
+                                t, kap_reg);
+                        } else {
+                            fprintf(g->out,
+                                "  %%%d = sext %s %%%d to i32\n",
+                                t, kap.tip, kap_reg);
+                        }
+                        kap_reg = t;
+                    }
+                    int r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call ptr "
+                                    "@kdl_kanal_olustur(i32 %%%d)\n",
+                            r, kap_reg);
+                    IfadeSonuc s = { r, "ptr" };
+                    return s;
+                }
+
+                /* kanal_gonder(k, v) -> void — fence release */
+                if (cfn_uz == 13 &&
+                    memcmp(cfn, "kanal_g\xc3\xb6nder", 13) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc kv = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "ptr");
+                    IfadeSonuc vv = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i32");
+                    int v_reg = vv.reg;
+                    if (strcmp(vv.tip, "i32") != 0) {
+                        int t = yeni_reg(g);
+                        if (strcmp(vv.tip, "i64") == 0) {
+                            fprintf(g->out,
+                                "  %%%d = trunc i64 %%%d to i32\n",
+                                t, v_reg);
+                        } else {
+                            fprintf(g->out,
+                                "  %%%d = sext %s %%%d to i32\n",
+                                t, vv.tip, v_reg);
+                        }
+                        v_reg = t;
+                    }
+                    /* Fence: release (consumer'a transfer oncesi) */
+                    fputs("  fence release\n", g->out);
+                    fprintf(g->out, "  call void "
+                                    "@kdl_kanal_gonder(ptr %%%d, i32 %%%d)\n",
+                            kv.reg, v_reg);
+                    IfadeSonuc s = { 0, "void" };
+                    return s;
+                }
+
+                /* kanal_al(k) -> i32 — fence acquire */
+                if (cfn_uz == 8 &&
+                    memcmp(cfn, "kanal_al", 8) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    IfadeSonuc kv = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], "ptr");
+                    int r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call i32 "
+                                    "@kdl_kanal_al(ptr %%%d)\n",
+                            r, kv.reg);
+                    /* Fence: acquire (producer'dan transfer sonrasi) */
+                    fputs("  fence acquire\n", g->out);
+                    IfadeSonuc s = { r, "i32" };
+                    return s;
+                }
+
+                /* dondur(v: &degisken T) -> &T — codegen no-op; fence release
+                 * R-PAYLAS happens-before transfer noktasi (Plan §7.F). */
+                if (cfn_uz == 6 && memcmp(cfn, "dondur", 6) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    IfadeSonuc inner = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], beklenen);
+                    /* dondur: mutable referansi immutable yapar — runtime'da
+                     * pointer ayni, sadece tip seviyesi degisir. acq_rel
+                     * fence ile cross-thread paylasim oncesi yayinla. */
+                    fputs("  fence acq_rel\n", g->out);
+                    return inner;
                 }
             }
 
@@ -2292,7 +2435,17 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
     fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
     fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
-    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
+    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n", out);
+
+    /* DRF V1 Faz 3 — Concurrency runtime intrinsics (gorev/kanal)
+     * runtime/kdl_runtime.c B2 bolumuyle baglanir (CreateThread / pthread). */
+    fputs("declare ptr @kdl_gorev_basla_i32(ptr)\n", out);
+    fputs("declare i32 @kdl_gorev_birlestir(ptr)\n", out);
+    fputs("declare ptr @kdl_kanal_olustur(i32)\n", out);
+    fputs("declare void @kdl_kanal_gonder(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_kanal_al(ptr)\n", out);
+    fputs("declare i32 @kdl_kanal_bos_mu(ptr)\n", out);
+    fputs("declare void @kdl_kanal_serbest(ptr)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
