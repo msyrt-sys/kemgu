@@ -1394,6 +1394,104 @@ static void test_sonuc_pattern_joker(void) {
     arena_serbest(a);
 }
 
+/* C8 LLVM v4: Exhaustiveness check — T041
+ * sonuc/secimlik uzerinde eksik desen tespiti */
+
+static void test_c8_sonuc_exhaust_eksik_hata(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: sonu\xc3\xa7<tam32, tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: sonuc<T,E> tamam var, hata yok -> T041", h > 0);
+    arena_serbest(a);
+}
+
+static void test_c8_sonuc_exhaust_eksik_tamam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: sonu\xc3\xa7<tam32, tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  hata(e) => { ver e; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: sonuc<T,E> hata var, tamam yok -> T041", h > 0);
+    arena_serbest(a);
+}
+
+static void test_c8_sonuc_exhaust_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: sonu\xc3\xa7<tam32, tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "
+        "  hata(e) => { ver e; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: sonuc<T,E> her iki kol var -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_c8_sonuc_exhaust_joker_yeterli(void) {
+    /* tamam + _ catch-all yeterli — exhaustive sayilir */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: sonu\xc3\xa7<tam32, tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  tamam(v) => { ver v; } "
+        "  _ => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: sonuc tamam + joker -> exhaustive", h == 0);
+    arena_serbest(a);
+}
+
+static void test_c8_secimlik_exhaust_eksik_hic(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: se\xc3\xa7imlik<tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  de\xc4\x9f""er(v) => { ver v; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: secimlik deger var, hic yok -> T041", h > 0);
+    arena_serbest(a);
+}
+
+static void test_c8_secimlik_exhaust_eksik_deger(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: se\xc3\xa7imlik<tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  hi\xc3\xa7 => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: secimlik hic var, deger yok -> T041", h > 0);
+    arena_serbest(a);
+}
+
+static void test_c8_secimlik_exhaust_tam(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev test(r: se\xc3\xa7imlik<tam32>) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "  de\xc4\x9f""er(v) => { ver v; } "
+        "  hi\xc3\xa7 => { ver 0; } "
+        "} "
+        "ver 0; }",
+        a);
+    test_sonuc("C8: secimlik deger + hic -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* C-5: yanlis tip binding — tamam(v)'de v'yi yanlis tip operasyonda kullan */
 static void test_sonuc_pattern_yanlis_tip(void) {
     Arena *a = arena_olustur(0);
@@ -2293,6 +2391,15 @@ int main(void) {
     test_sonuc_hata_binding();
     test_sonuc_pattern_joker();
     test_sonuc_pattern_yanlis_tip();
+
+    printf("\n--- C8: Exhaustiveness check (T041) ---\n");
+    test_c8_sonuc_exhaust_eksik_hata();
+    test_c8_sonuc_exhaust_eksik_tamam();
+    test_c8_sonuc_exhaust_tam();
+    test_c8_sonuc_exhaust_joker_yeterli();
+    test_c8_secimlik_exhaust_eksik_hic();
+    test_c8_secimlik_exhaust_eksik_deger();
+    test_c8_secimlik_exhaust_tam();
 
     printf("\n--- Lambda govde scope (29) ---\n");
     test_lambda_govde();
