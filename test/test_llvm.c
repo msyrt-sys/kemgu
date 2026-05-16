@@ -1188,6 +1188,96 @@ static void test_struct_byval_24byte(void) {
     test_sonuc("C6: 24-byte struct by-value param -> 42", rc == 42);
 }
 
+/* === C7: LLVM v4 — sonuc<T,E> + secimlik<T> tagged union === */
+
+static void test_sonuc_tamam_path(void) {
+    /* sonuc<T,E> = tamam(v); esles tamam(v) => v -> v */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kontrol(r: sonu\xc3\xa7<tam32, metin>) -> tam32 {\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    tamam(v) => { ver v; }\n"
+        "    hata(m) => { ver 0 - 1; }\n"
+        "  }\n"
+        "  ver 99;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: sonu\xc3\xa7<tam32, metin> = tamam(42);\n"
+        "  ver kontrol(r);\n"
+        "}\n");
+    test_sonuc("C7: sonuc<tam32, metin> tamam path -> 42", rc == 42);
+}
+
+static void test_sonuc_hata_path(void) {
+    /* sonuc<T,E> = hata(m); esles hata kolu eslesir */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kontrol(r: sonu\xc3\xa7<tam32, tam32>) -> tam32 {\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    tamam(v) => { ver v; }\n"
+        "    hata(e) => { ver 42; }\n"
+        "  }\n"
+        "  ver 0;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: sonu\xc3\xa7<tam32, tam32> = hata(0 - 99);\n"
+        "  ver kontrol(r);\n"
+        "}\n");
+    test_sonuc("C7: sonuc hata path -> 42", rc == 42);
+}
+
+static void test_secimlik_deger_path(void) {
+    /* secimlik<T> = deger(v); esles deger(v) => v */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev bul(x: tam32) -> se\xc3\xa7imlik<tam32> {\n"
+        "  e\xc4\x9f""er x > 0 { ver de\xc4\x9f""er(x); }\n"
+        "  ver hi\xc3\xa7;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: se\xc3\xa7imlik<tam32> = bul(42);\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    de\xc4\x9f""er(v) => { ver v; }\n"
+        "    hi\xc3\xa7 => { ver 0; }\n"
+        "  }\n"
+        "  ver 99;\n"
+        "}\n");
+    test_sonuc("C7: secimlik deger path -> 42", rc == 42);
+}
+
+static void test_secimlik_hic_path(void) {
+    /* secimlik<T> = hic; esles hic kolu eslesir */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev bul(x: tam32) -> se\xc3\xa7imlik<tam32> {\n"
+        "  e\xc4\x9f""er x > 0 { ver de\xc4\x9f""er(x); }\n"
+        "  ver hi\xc3\xa7;\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: se\xc3\xa7imlik<tam32> = bul(0 - 5);\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    de\xc4\x9f""er(v) => { ver v; }\n"
+        "    hi\xc3\xa7 => { ver 42; }\n"
+        "  }\n"
+        "  ver 99;\n"
+        "}\n");
+    test_sonuc("C7: secimlik hic path -> 42", rc == 42);
+}
+
+static void test_sonuc_div_zero_pattern(void) {
+    /* Klasik kullanim: bol fonksiyonu sonuc doner, esles ile sade ele alis. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev bol(a: tam32, b: tam32) -> sonu\xc3\xa7<tam32, tam32> {\n"
+        "  e\xc4\x9f""er b == 0 { ver hata(0 - 1); }\n"
+        "  ver tamam(a / b);\n"
+        "}\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken r: sonu\xc3\xa7<tam32, tam32> = bol(126, 3);\n"
+        "  e\xc5\x9fle\xc5\x9f r {\n"
+        "    tamam(v) => { ver v; }\n"
+        "    hata(e) => { ver 0; }\n"
+        "  }\n"
+        "  ver 99;\n"
+        "}\n");
+    test_sonuc("C7: bol(126,3) -> tamam(42) -> 42", rc == 42);
+}
+
 /* === C1: Capability runtime end-to-end (G.3 dersinden ABI fix) === */
 
 static void test_capability_olustur_geri_al(void) {
@@ -1506,6 +1596,13 @@ int main(void) {
     test_struct_byval_8byte();
     test_struct_byval_16byte_mixed();
     test_struct_byval_24byte();
+
+    printf("\n--- C7: LLVM v4 sonuc/secimlik tagged union ---\n");
+    test_sonuc_tamam_path();
+    test_sonuc_hata_path();
+    test_secimlik_deger_path();
+    test_secimlik_hic_path();
+    test_sonuc_div_zero_pattern();
 
     printf("\n--- C1: Capability end-to-end (G.3 ABI fix) ---\n");
     test_capability_olustur_geri_al();

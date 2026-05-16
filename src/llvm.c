@@ -267,6 +267,14 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d->tip == DUGUM_TIP_YETKI) {
         return "%kdl_yetki";
     }
+    /* C7 LLVM v4: sonuc<T,E> ve secimlik<T> tagged union.
+     * V1 monomorphic { i8, i64 } — T,E generic V2'de. */
+    if (tip_d->tip == DUGUM_TIP_SONUC) {
+        return "%kdl_sonuc";
+    }
+    if (tip_d->tip == DUGUM_TIP_SECIMLIK) {
+        return "%kdl_secimlik";
+    }
     /* SIMD Spec V1: vektör<T, N> → <N x T> LLVM IR */
     if (tip_d->tip == DUGUM_TIP_VEKTOR) {
         const char *eleman_ir = ast_tip_to_ir(g, tip_d->veri.tip_vektor.eleman_tip);
@@ -535,6 +543,29 @@ static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
 
 /* Tanimlayici cozumle: alloca'dan load. */
 static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d) {
+    /* C7 LLVM v4: 'hiç' literal — secimlik<T> disc=1, payload=0.
+     * UTF-8 "hi\xc3\xa7" = 4 byte (h, i, ç — ı yok). */
+    if (d->veri.tanimlayici.uzunluk == 4 &&
+        memcmp(d->veri.tanimlayici.metin,
+               "hi\xc3\xa7", 4) == 0) {
+        int alloca = yeni_reg(g);
+        fprintf(g->out, "  %%%d = alloca %%kdl_secimlik\n", alloca);
+        int disc_p = yeni_reg(g);
+        fprintf(g->out,
+            "  %%%d = getelementptr %%kdl_secimlik, ptr %%%d, i32 0, i32 0\n",
+            disc_p, alloca);
+        fprintf(g->out, "  store i8 1, ptr %%%d\n", disc_p);
+        int pay_p = yeni_reg(g);
+        fprintf(g->out,
+            "  %%%d = getelementptr %%kdl_secimlik, ptr %%%d, i32 0, i32 1\n",
+            pay_p, alloca);
+        fprintf(g->out, "  store i64 0, ptr %%%d\n", pay_p);
+        int loaded = yeni_reg(g);
+        fprintf(g->out,
+            "  %%%d = load %%kdl_secimlik, ptr %%%d\n", loaded, alloca);
+        IfadeSonuc s = { loaded, "%kdl_secimlik" };
+        return s;
+    }
     LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
                             d->veri.tanimlayici.uzunluk);
     if (!i) {
@@ -1142,6 +1173,72 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         ptr_reg);
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
                     IfadeSonuc s = { 0, "void" };
+                    return s;
+                }
+                /* C7 LLVM v4: sonuc<T,E> ve secimlik<T> constructor'lari.
+                 * Tagged union { i8 disc, i64 payload }. Payload i64'e
+                 * zext (T=i32) veya direkt store (T=i64/ptr).
+                 *
+                 * tamam(v) -> disc=0, payload=zext v
+                 * hata(m)  -> disc=1, payload=zext m
+                 * deger(v) -> disc=0, payload=zext v (secimlik)
+                 * (hic icin ayri: TOK_HIC literal — bkz DUGUM_TANIMLAYICI). */
+                if ((_uz == 5 && memcmp(_ca, "tamam", 5) == 0 &&
+                     d->veri.cagri.sayi == 1) ||
+                    (_uz == 4 && memcmp(_ca, "hata", 4) == 0 &&
+                     d->veri.cagri.sayi == 1) ||
+                    (_uz == 5 && memcmp(_ca, "deger", 5) == 0 &&
+                     d->veri.cagri.sayi == 1) ||
+                    /* UTF-8 "deger" ascii alternatif — KEMGU "değer" */
+                    (_uz == 6 && memcmp(_ca, "de\xc4\x9f" "er", 6) == 0 &&
+                     d->veri.cagri.sayi == 1)) {
+                    int is_secimlik = (_uz == 5 && memcmp(_ca, "deger", 5) == 0) ||
+                                      (_uz == 6 && memcmp(_ca, "de\xc4\x9f" "er", 6) == 0);
+                    int is_hata = (_uz == 4 && memcmp(_ca, "hata", 4) == 0);
+                    const char *tip_adi = is_secimlik ? "%kdl_secimlik"
+                                                       : "%kdl_sonuc";
+                    int disc_val = is_hata ? 1 : 0;
+
+                    IfadeSonuc payload = ifade_uret(g,
+                        d->veri.cagri.argumanlar[0], NULL);
+                    /* Payload i64'e zext/sext (signed-safe via sext for int).
+                     * i32/i16/i8: sext (signed). i64: as-is. ptr: ptrtoint. */
+                    int payload_i64;
+                    if (strcmp(payload.tip, "i64") == 0) {
+                        payload_i64 = payload.reg;
+                    } else if (strcmp(payload.tip, "ptr") == 0) {
+                        payload_i64 = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = ptrtoint ptr %%%d to i64\n",
+                            payload_i64, payload.reg);
+                    } else {
+                        /* i1/i8/i16/i32 -> sext to i64 */
+                        payload_i64 = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = sext %s %%%d to i64\n",
+                            payload_i64, payload.tip, payload.reg);
+                    }
+                    /* alloca + store fields + load */
+                    int alloca = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %s\n", alloca, tip_adi);
+                    int disc_ptr = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 0\n",
+                        disc_ptr, tip_adi, alloca);
+                    fprintf(g->out,
+                        "  store i8 %d, ptr %%%d\n", disc_val, disc_ptr);
+                    int payload_ptr = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 1\n",
+                        payload_ptr, tip_adi, alloca);
+                    fprintf(g->out,
+                        "  store i64 %%%d, ptr %%%d\n",
+                        payload_i64, payload_ptr);
+                    int loaded = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = load %s, ptr %%%d\n",
+                        loaded, tip_adi, alloca);
+                    IfadeSonuc s = { loaded, tip_adi };
                     return s;
                 }
                 /* KIRMIZI G.3: yetki_izin(y, istenen) -> mantiksal (i1)
@@ -2113,6 +2210,178 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return 0;
         }
 
+        /* C7 LLVM v4: esles emit — pattern destructure tagged union.
+         * V1 kapsam: yalniz sonuc<T,E> / secimlik<T> uzerinde:
+         *   tamam(v) => ...   (disc=0)
+         *   hata(m)  => ...   (disc=1)
+         *   deger(v) => ...   (disc=0)
+         *   hic      => ...   (disc=1) — tanimlayici desen
+         *   _        => ...   (joker)  — her zaman eslesir
+         * Generic instantiation: payload i64'e sext/zext; binding'de
+         * trunc-back. Karmasik tipler (yapi, dizi) V2'de. */
+        case DUGUM_ESLES: {
+            const Dugum *deger = d->veri.esles.deger;
+            if (!deger) return 0;
+            IfadeSonuc dval = ifade_uret(g, deger, NULL);
+            /* Tagged union mu? (%kdl_sonuc veya %kdl_secimlik) */
+            const char *tip = dval.tip;
+            int is_sonuc = (strcmp(tip, "%kdl_sonuc") == 0);
+            int is_secimlik = (strcmp(tip, "%kdl_secimlik") == 0);
+            if (!is_sonuc && !is_secimlik) {
+                fprintf(g->out,
+                    "  ; esles: yalniz sonuc/secimlik V1 destekli (got %s)\n",
+                    tip);
+                return 0;
+            }
+            /* alloca + store (GEP icin) */
+            int alloca = yeni_reg(g);
+            fprintf(g->out, "  %%%d = alloca %s\n", alloca, tip);
+            fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                    tip, dval.reg, alloca);
+            int disc_ptr = yeni_reg(g);
+            fprintf(g->out,
+                "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 0\n",
+                disc_ptr, tip, alloca);
+            int disc_load = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load i8, ptr %%%d\n",
+                    disc_load, disc_ptr);
+
+            int L_end = yeni_label(g);
+            int her_dal_term = 1;  /* hepsi ret/break ise alt deyim emit gereksiz */
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                const Dugum *kol = d->veri.esles.kollar[i];
+                if (!kol) continue;
+                const Dugum *desen = kol->veri.esles_kolu.desen;
+                const Dugum *govde = kol->veri.esles_kolu.govde;
+                if (!desen || !govde) continue;
+
+                int L_body = yeni_label(g);
+                int L_next = (i + 1 < d->veri.esles.kol_sayi)
+                           ? yeni_label(g) : L_end;
+
+                /* Desen tipine gore eslesme kosulu */
+                if (desen->tip == DUGUM_DESEN_JOKER) {
+                    fprintf(g->out, "  br label %%bb%d\n", L_body);
+                } else if (desen->tip == DUGUM_DESEN_YAPICI) {
+                    const char *ad = desen->veri.desen_yapici.ad;
+                    int aduz = desen->veri.desen_yapici.ad_uzunluk;
+                    int disc_val;
+                    if ((aduz == 5 && memcmp(ad, "tamam", 5) == 0) ||
+                        (aduz == 5 && memcmp(ad, "deger", 5) == 0) ||
+                        (aduz == 6 && memcmp(ad, "de\xc4\x9f" "er", 6) == 0)) {
+                        disc_val = 0;
+                    } else if ((aduz == 4 && memcmp(ad, "hata", 4) == 0)) {
+                        disc_val = 1;
+                    } else {
+                        /* Bilinmeyen yapici — V1'de atla */
+                        fprintf(g->out,
+                            "  ; esles: bilinmeyen yapici '%.*s'\n",
+                            aduz, ad);
+                        fprintf(g->out, "  br label %%bb%d\n", L_next);
+                        fprintf(g->out, "bb%d:\n", L_body);
+                        fprintf(g->out, "  br label %%bb%d\n", L_next);
+                        if (L_next != L_end) fprintf(g->out, "bb%d:\n", L_next);
+                        continue;
+                    }
+                    int cmp = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = icmp eq i8 %%%d, %d\n",
+                        cmp, disc_load, disc_val);
+                    fprintf(g->out,
+                        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        cmp, L_body, L_next);
+                } else if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+                    /* 'hic' veya genel binding */
+                    const char *ad = desen->veri.desen_tanimlayici.ad;
+                    int aduz = desen->veri.desen_tanimlayici.ad_uzunluk;
+                    if (aduz == 3 && memcmp(ad, "hic", 3) == 0) {
+                        /* hic = secimlik disc=1 */
+                        int cmp = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = icmp eq i8 %%%d, 1\n",
+                            cmp, disc_load);
+                        fprintf(g->out,
+                            "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                            cmp, L_body, L_next);
+                    } else {
+                        /* Genel binding — her zaman eslesir
+                         * (binding alt-pattern olarak ic blokta) */
+                        fprintf(g->out, "  br label %%bb%d\n", L_body);
+                    }
+                } else {
+                    /* desen_literal V1'de sonuc/secimlik dis tip — atla */
+                    fprintf(g->out,
+                        "  ; esles: literal desen V1 sonuc/secimlik disinda\n");
+                    fprintf(g->out, "  br label %%bb%d\n", L_next);
+                }
+
+                /* Body label */
+                fprintf(g->out, "bb%d:\n", L_body);
+
+                /* Binding: yapici deseni ise alt_desen[0] varsa */
+                ScopeMarker mark = scope_gir(g);
+                if (desen->tip == DUGUM_DESEN_YAPICI &&
+                    desen->veri.desen_yapici.sayi == 1 &&
+                    desen->veri.desen_yapici.alt_desenler) {
+                    const Dugum *alt = desen->veri.desen_yapici.alt_desenler[0];
+                    if (alt && alt->tip == DUGUM_DESEN_TANIMLAYICI) {
+                        /* payload load + tanimlayici alloca */
+                        int payload_ptr = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 1\n",
+                            payload_ptr, tip, alloca);
+                        int payload_load = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = load i64, ptr %%%d\n",
+                            payload_load, payload_ptr);
+                        /* Default binding tipi i32 (V1 sinir).
+                         * Beklenen tip context'inden bilinmiyor — trunc i64->i32. */
+                        int bind_trunc = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = trunc i64 %%%d to i32\n",
+                            bind_trunc, payload_load);
+                        int bind_alloca = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = alloca i32\n", bind_alloca);
+                        fprintf(g->out,
+                            "  store i32 %%%d, ptr %%%d\n",
+                            bind_trunc, bind_alloca);
+                        isim_ekle(g, alt->veri.desen_tanimlayici.ad,
+                                  alt->veri.desen_tanimlayici.ad_uzunluk,
+                                  0, bind_alloca, "i32");
+                    }
+                }
+
+                int term;
+                if (govde->tip == DUGUM_BLOK) {
+                    term = blok_uret(g, govde);
+                } else {
+                    /* Tek ifade — degerini bos at, ifade_deyimi gibi */
+                    (void)ifade_uret(g, govde, NULL);
+                    term = 0;
+                }
+                scope_cik(g, mark);
+                if (!term) {
+                    fprintf(g->out, "  br label %%bb%d\n", L_end);
+                    her_dal_term = 0;
+                }
+
+                /* Next kol label (varsa) */
+                if (L_next != L_end) {
+                    fprintf(g->out, "bb%d:\n", L_next);
+                }
+            }
+
+            /* End label — eger her dal terminate ettiyse, unreachable
+             * terminator gerek (LLVM IR her basic block bir terminator).
+             * Hicbir kol eslesmezse fall-through; sonraki deyim devam. */
+            fprintf(g->out, "bb%d:\n", L_end);
+            if (her_dal_term) {
+                fprintf(g->out, "  unreachable\n");
+            }
+            return her_dal_term;
+        }
+
         default:
             fprintf(g->out, "  ; deyim tipi %d desteklenmiyor\n", d->tip);
             return 0;
@@ -2340,7 +2609,12 @@ void llvm_ir_uret_secenek(const Dugum *program, FILE *out,
     fprintf(out, "target triple = \"%s\"\n\n", triple);
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
-    fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
+    fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n", out);
+    /* LLVM v4 (C7): Tagged union for sonuc<T,E> ve secimlik<T>.
+     * V1: disc=i8, payload=i64 (ints/ptr fit; karmasik T,E V2'de
+     * generic monomorphization ile per-tip struct). */
+    fputs("%kdl_sonuc = type { i8, i64 }\n", out);
+    fputs("%kdl_secimlik = type { i8, i64 }\n\n", out);
     /* Built-in extern (libc) bildirimleri */
     fputs("declare i32 @puts(ptr)\n", out);
     fputs("declare ptr @malloc(i64)\n", out);
