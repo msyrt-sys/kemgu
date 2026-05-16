@@ -299,6 +299,27 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
 
 /* === Linear Types Spec V1: yardimci fonksiyonlar === */
 
+/* Read-only check — eger ifade lineer baglama ve zaten tuketildiyse hata.
+ * Tuketim sayisini ARTIRMAZ (CP-IO semantik: y tuketilmez ama revoked olmamali).
+ * Capability spec'inin "dosya_oku_yetkili / dosya_yaz_yetkili" gibi tuketim-
+ * yapmayan ops icin gereklidir. */
+static void lineer_kullanim_kontrolu(TipKontrol *tk, const Dugum *d) {
+    if (!d || d->tip != DUGUM_TANIMLAYICI) return;
+    Sembol *s = sembol_bul_yazilabilir(tk->scope,
+        d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+    if (!s || !s->tip || !tip_lineer_mi(s->tip)) return;
+    if (s->lineer_tuketildi >= 1) {
+        if (s->tip->kategori == TIP_YETKI) {
+            tip_hata(tk, d, "CP005",
+                "yetki<R> iptal sonrasi kullanim (tuketildi, sonra erisim)");
+        } else {
+            tip_hata(tk, d, "L002",
+                "lineer baglama tuketildi, sonra erisim");
+        }
+    }
+    /* Artirma yok — bu helper sadece kontrol */
+}
+
 /* Eger ifade DUGUM_TANIMLAYICI ise ve sembolu lineer ise -> tuket.
  * Cift tuketim L002 hatasi (tekkez) veya CP005 (yetki). */
 static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
@@ -2196,6 +2217,159 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return t_hata(tk);
                 }
                 /* Linear tuketim */
+                lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            /* === Faz 2: Yetki-gated dosya I/O built-in'leri (CP.7) ===
+             * Runtime: runtime/kdl_runtime.c kdl_dosya_*_yetkili.
+             * Linear semantik:
+             *   - dosya_ac_yetkili: üretici (Dosya kaynak tipi, izin literal)
+             *   - dosya_oku_yetkili: CP-IO — y tüketilmez
+             *   - dosya_yaz_yetkili: CP-IO — y tüketilmez
+             *   - dosya_kapat_yetkili: CP-GERI_AL semantik — y tüketilir */
+
+            /* dosya_ac_yetkili(yol: metin, izin: tam16) -> yetki<Dosya>
+             * Hata durumunda id=0 olan yetki döner (runtime iptal=1); kullanıcı
+             * yetki_id() ile kontrol eder. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 16 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dosya_ac_yetkili", 16) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "CP004",
+                        "dosya_ac_yetkili tam 2 arguman gerektirir "
+                        "(yol: metin, izin: tam16)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *yol_t = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (yol_t->kategori != TIP_HATA && yol_t->kategori != TIP_METIN) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "dosya_ac_yetkili ilk argumani metin olmali (yol)");
+                }
+                TipBilgisi *izin_t = tip_belirle(tk, d->veri.cagri.argumanlar[1]);
+                if (izin_t->kategori != TIP_HATA && !tip_tamsayi_mi(izin_t)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "CP004",
+                        "dosya_ac_yetkili izin argumani tamsayi olmali");
+                }
+                /* yetki<Dosya> dön — kaynak tipi nominal "Dosya" */
+                const char *ad = "Dosya";
+                int ad_uz = 5;
+                char *ad_kopya = (char *)arena_ayir(tk->arena,
+                                                    (size_t)ad_uz + 1);
+                if (ad_kopya) {
+                    memcpy(ad_kopya, ad, (size_t)ad_uz);
+                    ad_kopya[ad_uz] = '\0';
+                }
+                TipBilgisi *kaynak = tip_olustur_yapi(tk->arena,
+                                                     ad_kopya, ad_uz,
+                                                     NULL, 0);
+                return tip_olustur_yetki(tk->arena, kaynak);
+            }
+
+            /* dosya_oku_yetkili(y: yetki<Dosya>) -> metin
+             * CP-IO: y *tüketilmez*. Hata durumunda boş metin döner. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 17 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dosya_oku_yetkili", 17) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "CP004",
+                        "dosya_oku_yetkili tam 1 arguman gerektirir "
+                        "(yetki<Dosya>)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "dosya_oku_yetkili argumani yetki<Dosya> olmali");
+                    return t_hata(tk);
+                }
+                /* CP004: kaynak tipi Dosya olmali */
+                const TipBilgisi *kaynak = tip_yetki_kaynak(y_tip);
+                if (kaynak && kaynak->kategori == TIP_YAPI) {
+                    if (kaynak->veri.yapi.ad_uzunluk != 5 ||
+                        memcmp(kaynak->veri.yapi.ad, "Dosya", 5) != 0) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                            "dosya_oku_yetkili: yetki<Dosya> bekleniyor "
+                            "(yetki kaynak tipi farkli)");
+                    }
+                }
+                /* CP-IO: y tuketilmez ama revoked olmamali (CP005 check) */
+                lineer_kullanim_kontrolu(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_METIN);
+            }
+
+            /* dosya_yaz_yetkili(y: yetki<Dosya>, icerik: metin) -> tam32
+             * CP-IO: y *tüketilmez*. Dönüş: yazılan byte sayısı (-1 hata). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 17 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dosya_yaz_yetkili", 17) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "CP004",
+                        "dosya_yaz_yetkili tam 2 arguman gerektirir "
+                        "(yetki<Dosya>, icerik: metin)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "dosya_yaz_yetkili ilk argumani yetki<Dosya> olmali");
+                    return t_hata(tk);
+                }
+                const TipBilgisi *kaynak = tip_yetki_kaynak(y_tip);
+                if (kaynak && kaynak->kategori == TIP_YAPI) {
+                    if (kaynak->veri.yapi.ad_uzunluk != 5 ||
+                        memcmp(kaynak->veri.yapi.ad, "Dosya", 5) != 0) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                            "dosya_yaz_yetkili: yetki<Dosya> bekleniyor");
+                    }
+                }
+                TipBilgisi *icerik_t = tip_belirle(tk, d->veri.cagri.argumanlar[1]);
+                if (icerik_t->kategori != TIP_HATA &&
+                    icerik_t->kategori != TIP_METIN) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "CP004",
+                        "dosya_yaz_yetkili ikinci argumani metin olmali");
+                }
+                /* CP-IO: y tuketilmez ama revoked olmamali (CP005 check) */
+                lineer_kullanim_kontrolu(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_TAM32);
+            }
+
+            /* dosya_kapat_yetkili(y: yetki<Dosya>) -> bos
+             * CP-GERI_AL semantik: y tuketilir. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 19 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "dosya_kapat_yetkili", 19) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "CP004",
+                        "dosya_kapat_yetkili tam 1 arguman gerektirir "
+                        "(yetki<Dosya>)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_yetki_mi(y_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                        "dosya_kapat_yetkili argumani yetki<Dosya> olmali");
+                    return t_hata(tk);
+                }
+                const TipBilgisi *kaynak = tip_yetki_kaynak(y_tip);
+                if (kaynak && kaynak->kategori == TIP_YAPI) {
+                    if (kaynak->veri.yapi.ad_uzunluk != 5 ||
+                        memcmp(kaynak->veri.yapi.ad, "Dosya", 5) != 0) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
+                            "dosya_kapat_yetkili: yetki<Dosya> bekleniyor");
+                    }
+                }
+                /* Linear tuketim — geri_al gibi */
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }

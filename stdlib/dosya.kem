@@ -157,3 +157,52 @@ işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
     dosya_kapat(h);
     ver tamam(n);
 }
+
+// =============================================================================
+// Faz 2 — Yetki-gated dosya I/O (Capability Spec V1 entegrasyonu)
+// =============================================================================
+//
+// Direktif §B Hedef 1 (Kırılamaz Güvenlik) — confused-deputy + ambient
+// authority sorunlarını kapatmak için her syscall capability token
+// gerektirir. Built-in çağrılar:
+//
+//   dosya_ac_yetkili(yol: metin, izin: tam16) -> yetki<Dosya>
+//   dosya_oku_yetkili(y: yetki<Dosya>) -> metin           (y tüketilmez)
+//   dosya_yaz_yetkili(y: yetki<Dosya>, icerik: metin) -> tam32  (y tüketilmez)
+//   dosya_kapat_yetkili(y: yetki<Dosya>) -> ()            (y tüketilir, geri_al)
+//
+// Linear semantik: yetki<Dosya> CP.1.1 ile linear track; her scope sonunda
+// dosya_kapat_yetkili (veya geri_al) çağrısı zorunlu — aksi L001.
+//
+// V1 kararı: stdlib wrapper yok — wrapper işlevleri linear param için her
+// çağrıda y'yi tüketir (move semantic). Kullanıcı doğrudan built-in
+// çağırır; bu Capability Spec V1 CP.2 örüntüsünün doğal uzantısıdır.
+
+// İzin bit-field sabitleri (runtime/kdl_runtime.c KDL_IZIN_* ile birebir)
+sabit IZIN_OKU: tam16 = 1;
+sabit IZIN_YAZ: tam16 = 2;
+sabit IZIN_OKU_YAZ: tam16 = 3;
+sabit IZIN_CALISTIR: tam16 = 4;
+sabit IZIN_SIL: tam16 = 8;
+sabit IZIN_DEVRET: tam16 = 16;
+
+// IOHata kodları (tam32 — V1 pragmatik gösterim; sonuç<T,tam32> ile sarılır)
+// Karar 3: tam32 hata kodu + sabitler (en sade)
+sabit IO_OK: tam32 = 0;
+sabit IO_DOSYA_YOK: tam32 = 1;
+sabit IO_ERISIM_REDDEDILDI: tam32 = 2;
+sabit IO_GIRIS_CIKIS: tam32 = 3;
+sabit IO_KAYNAK_TUKENDI: tam32 = 4;
+sabit IO_YETKI_GECERSIZ: tam32 = 5;
+sabit IO_BOS_YOL: tam32 = 6;
+
+// Yetkinin gerçekten açıldığını runtime'da kontrol için:
+//   değişken y = dosya_ac_yetkili(yol, IZIN_OKU);
+//   değişken sifir: tam64 = 0;
+//   eğer yetki_id(y) == sifir { /* ac başarısız, y tüketme gerek yok */ }
+//   değilse { /* normal kullanım, sonunda dosya_kapat_yetkili(y) */ }
+//
+// Helper işlev YOK V1: Linear V1 parametre by-value y tüketmeden alamaz.
+// Kullanıcı yetki_id(y) != 0 kontrolünü doğrudan yapar (yetki_id by-value
+// alır ama capability spec CP-IO semantik ile y tüketilmemiş kabul edilir —
+// bu helper'lar tip_kontrol.c'ye built-in eklenince mümkün).
