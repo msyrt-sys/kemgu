@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal bench test_tumu
 
 # === Ana hedef ===
 
@@ -460,7 +460,57 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
+# =============================================================================
+# Bare-Metal UART / Konsol Surucusu (Track B — Hedef 3 Evrensel OS)
+# =============================================================================
+#
+# Heap'siz, libc'siz UART surucusu — bump allocator gerektirmez. Iki
+# desteklenen denetleyici:
+#   - runtime/kdl_runtime_uart_pl011.c   ARM PrimeCell PL011 (QEMU virt, RPi)
+#   - runtime/kdl_runtime_uart_16550.c   NS16550A (x86_64 COM1, port I/O)
+#
+# Host testleri KEMGU_UART_MOCK ile derlenir; MMIO/port erisimi global
+# tampona yonelir, surucu mantigi Windows host'unda dogrulanir.
+#
+# Bare-metal cross-compile dogrulamasi -DKEMGU_BARE_METAL ile yapilir;
+# llvm-objdump kontrolu libc sembol referansi olmadigini saglar.
+
+# === PL011 mock host testi (Clang64, ASan aktif) ===
+$(BUILD)/test_uart_pl011$(EXE): runtime/kdl_runtime_uart_pl011.c \
+                                $(TESTDIR)/test_uart_pl011.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE)
+	./$(BUILD)/test_uart_pl011$(EXE)
+
+# === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
+calistir_uart_pl011_bare_metal:
+	@echo "PL011 bare-metal cross-compile + symbol dogrulamasi..."
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo ""
+	@echo "Uretilen ARM64 ELF object:"
+	@file $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo ""
+	@echo "Beklenen semboller (T = text, undefined olmaz):"
+	@llvm-nm --defined-only $(BUILD)/kdl_uart_pl011_aarch64.o | \
+		grep -E 'kdl_uart_pl011_(init|putc|yaz)$$' || \
+		{ echo "FAIL: beklenen semboller eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_uart_pl011_aarch64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_uart_pl011_aarch64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "PL011 bare-metal dogrulamasi basarili!"
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test
 	@echo "Tum testler gecti!"
 
 clean:
