@@ -2275,12 +2275,50 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
 
 /* === Public API === */
 
+/* KIRMIZI K8d yardimcisi: program AST'sinde verilen adta bir DUGUM_ISLEV
+ * uyesi var mi? (Manuel _baslat override algilama.) */
+static int program_islev_var_mi(const Dugum *program,
+                                 const char *ad, int ad_uz) {
+    if (!program || program->tip != DUGUM_PROGRAM) return 0;
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *u = program->veri.program.uyeler[i];
+        if (!u) continue;
+        if (u->tip == DUGUM_ISLEV) {
+            if (u->veri.islev.ad_uzunluk == ad_uz &&
+                memcmp(u->veri.islev.ad, ad, (size_t)ad_uz) == 0) {
+                return 1;
+            }
+        } else if (u->tip == DUGUM_DISA && u->veri.disa.tanim &&
+                   u->veri.disa.tanim->tip == DUGUM_ISLEV) {
+            const Dugum *m = u->veri.disa.tanim;
+            if (m->veri.islev.ad_uzunluk == ad_uz &&
+                memcmp(m->veri.islev.ad, ad, (size_t)ad_uz) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 void llvm_ir_uret(const Dugum *program, FILE *out) {
+    llvm_ir_uret_secenek(program, out, NULL);
+}
+
+void llvm_ir_uret_secenek(const Dugum *program, FILE *out,
+                          const LlvmSecenek *secenek) {
     if (!out) return;
+    int baremetal = secenek ? secenek->baremetal : 0;
+    const char *triple = (secenek && secenek->triple) ? secenek->triple
+                       : baremetal ? "aarch64-unknown-none-elf"
+                                   : "x86_64-pc-windows-gnu";
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
+    if (baremetal) {
+        fputs("; KIRMIZI K8d: bare-metal hedef — main -> _baslat alias.\n",
+              out);
+    }
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+    fprintf(out, "target triple = \"%s\"\n\n", triple);
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
@@ -2533,6 +2571,30 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
         g.bekleyenler = bs->sonraki;
         specialize_emit(&g, bs->ast, bs->tip_args, bs->tip_arg_sayi,
                         bs->mangled);
+    }
+
+    /* KIRMIZI K8d: bare-metal hedefte main -> _baslat alias.
+     * Kullanici manuel _baslat tanimladiysa alias yok (override). */
+    if (baremetal) {
+        int main_var = program_islev_var_mi(program, "main", 4);
+        int baslat_var = program_islev_var_mi(program, "_baslat", 7);
+        if (main_var && baslat_var) {
+            fputs("\n; KIRMIZI K8d: manuel _baslat tespit edildi — alias yok\n",
+                  out);
+        } else if (main_var) {
+            /* main donus tipi i32 — alias signature ayni. */
+            fputs("\n; KIRMIZI K8d: bare-metal entry alias _baslat -> main\n",
+                  out);
+            fputs("@_baslat = alias i32 (), ptr @main\n", out);
+        } else if (baslat_var) {
+            /* main yok, _baslat var — kullanici dogrudan _baslat yazmis,
+             * hicbir sey yapmaya gerek yok. Diagnostic. */
+            fputs("\n; KIRMIZI K8d: main yok, _baslat dogrudan tanimli\n",
+                  out);
+        } else {
+            /* Ne main ne _baslat — bos modul; alias yok. */
+            fputs("\n; KIRMIZI K8d: main/_baslat yok — entry yok\n", out);
+        }
     }
 
     arena_serbest(a);

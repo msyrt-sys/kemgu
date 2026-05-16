@@ -149,7 +149,8 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
-static int mode_llvm(const char *kaynak, const char *dosya_adi) {
+static int mode_llvm(const char *kaynak, const char *dosya_adi,
+                     int baremetal, const char *triple) {
     Arena *a = arena_olustur(0);
     if (!a) {
         fprintf(stderr, "Arena olusturulamadi\n");
@@ -166,26 +167,36 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         arena_serbest(a);
         return 1;
     }
-    llvm_ir_uret(prog, stdout);
+    LlvmSecenek sec;
+    sec.baremetal = baremetal;
+    sec.triple = triple;
+    llvm_ir_uret_secenek(prog, stdout, &sec);
     arena_serbest(a);
     return 0;
 }
 
 static void kullanim_yazdir(const char *prog_adi) {
     fprintf(stderr,
-        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp] [dosya]\n"
-        "  --token   Lexer akisini yazdir\n"
-        "  --parse   Parser calistir + AST yazdir\n"
-        "  --check   Parser + tip kontrol (varsayilan)\n"
-        "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
-        "  --lsp     Language Server (stdio JSON-RPC)\n"
-        "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
+        "Kullanim: %s [--token | --parse | --check | --llvm | --lsp]\n"
+        "          [--baremetal] [--triple=<triple>] [dosya]\n"
+        "  --token       Lexer akisini yazdir\n"
+        "  --parse       Parser calistir + AST yazdir\n"
+        "  --check       Parser + tip kontrol (varsayilan)\n"
+        "  --llvm        LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
+        "  --lsp         Language Server (stdio JSON-RPC)\n"
+        "  --baremetal   (LLVM modu) Bare-metal hedef: target triple\n"
+        "                aarch64-unknown-none-elf + _baslat alias main'e\n"
+        "  --triple=T    (LLVM modu) Hedef triple override (default platforma\n"
+        "                gore secilir; --baremetal aarch64-unknown-none-elf)\n"
+        "  dosya         Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
 
 int main(int argc, char *argv[]) {
     Mod mod = MOD_CHECK;  /* default */
     int arg_idx = 1;
+    int baremetal = 0;
+    const char *triple = NULL;
 
     while (arg_idx < argc && argv[arg_idx][0] == '-') {
         if (strcmp(argv[arg_idx], "--token") == 0) {
@@ -202,6 +213,12 @@ int main(int argc, char *argv[]) {
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--lsp") == 0) {
             mod = MOD_LSP;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--baremetal") == 0) {
+            baremetal = 1;
+            arg_idx++;
+        } else if (strncmp(argv[arg_idx], "--triple=", 9) == 0) {
+            triple = argv[arg_idx] + 9;
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {
@@ -240,7 +257,8 @@ int main(int argc, char *argv[]) {
         case MOD_TOKEN: rc = mode_token(kaynak, dosya_adi); break;
         case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
         case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
-        case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi); break;
+        case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi,
+                                       baremetal, triple); break;
         default:        rc = 2; break;
     }
 
