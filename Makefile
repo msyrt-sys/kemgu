@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal bench test_tumu
 
 # === Ana hedef ===
 
@@ -565,6 +565,41 @@ calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
 	@echo "  (yok — temiz)"
 	@echo "Bare-metal hello world basarili!"
 
+# === 16550A mock host testi (Clang64, ASan aktif) ===
+$(BUILD)/test_uart_16550$(EXE): runtime/kdl_runtime_uart_16550.c \
+                                $(TESTDIR)/test_uart_16550.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE)
+	./$(BUILD)/test_uart_16550$(EXE)
+
+# === 16550A bare-metal cross-compile (x86_64 freestanding) ===
+calistir_uart_16550_bare_metal:
+	@echo "16550A bare-metal cross-compile + symbol dogrulamasi (x86_64)..."
+	clang -target x86_64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_16550.c \
+		-o $(BUILD)/kdl_uart_16550_x86_64.o
+	@echo ""
+	@echo "Uretilen x86_64 ELF object:"
+	@file $(BUILD)/kdl_uart_16550_x86_64.o
+	@echo ""
+	@echo "Beklenen semboller (T = text):"
+	@llvm-nm --defined-only $(BUILD)/kdl_uart_16550_x86_64.o | \
+		grep -E 'kdl_uart_16550_(init|putc|yaz)$$' || \
+		{ echo "FAIL: beklenen semboller eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_uart_16550_x86_64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_uart_16550_x86_64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "16550A bare-metal dogrulamasi basarili!"
+
 # === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
 calistir_uart_pl011_bare_metal:
 	@echo "PL011 bare-metal cross-compile + symbol dogrulamasi..."
@@ -592,7 +627,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test
 	@echo "Tum testler gecti!"
 
 clean:
