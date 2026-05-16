@@ -137,29 +137,67 @@ Bu görev kapsamında: 🟢/🟡 ayrımı yok, direkt yap (Ek v1.1 §H).
   - Mock modunda halt devre disi (test return)
 - test/test_panik.c: 6/6 ✓ (basit/null/bos/uzun/UTF-8/ardisik)
 
+### Continuation C2 + C5 (commit 4f32fd4) — kullanici yeniden degerlendirme istedi
+
+**C2 (UART RX yonu — driver seviyesi):**
+- Onceki gerekceyi (Capability Spec gerek) duzelttim: driver-seviyesi RX
+  guvenle eklenebilir; capability gating sadece KEMGU dili tarafinda
+  formalize edilir.
+- PL011: `kdl_uart_pl011_oku_karakter`, `_rx_hazir` (FR.RXFE poll + DR read)
+- 16550: `kdl_uart_16550_oku_karakter`, `_rx_hazir` (LSR.DR poll + RBR read)
+- Mock RX altyapisi: `kdl_uart_*_mock_rx_doldur`, `_mock_rx_buf`, `_mock_rx_pos`
+- Test sayilari: PL011 10→16 (+6), 16550 8→13 (+5)
+- Bare-metal cross-compile temiz, yeni sembol icin libc yok
+
+**C5 (cross-target UART abstraction):**
+- `KdlUartSurucu` struct (`init`, `putc`, `yaz`, `oku_karakter`, `rx_hazir`)
+- `const KdlUartSurucu kdl_uart_pl011_surucu` ve `kdl_uart_16550_surucu`
+  (R = ROdata sembolu)
+- test/test_uart_vtable.c: 21 test (vtable non-NULL + sembol esitligi +
+  PL011 + 16550 ortak generic test fonksiyonlari)
+- Indirect call kazanci: ust katman kod tek bir `surucu->putc` cagrisi ile
+  her iki driver'da calisir (kernel boot kodu, RTOS scheduler, vb.)
+
+### Continuation C4 (commit pending) — opsiyonel QEMU pipeline
+- Makefile `calistir_qemu_smoke` target
+- `command -v qemu-system-aarch64` ile sorgular; yoksa graceful skip
+- Varsa: `qemu-system-aarch64 -M virt -cpu cortex-a72 -nographic -kernel
+  kernel.elf` calistirir, stdout'u yakalar, "Merhaba KEMGU" + "42"
+  string aramasi yapar
+- QEMU host'ta YOK (MSYS2 pacman ile yuklenebilir: `pacman -S
+  mingw-w64-clang-x86_64-qemu`)
+- Mevcut durum: target hazir, kullanici QEMU yuklerse otomatik aktif
+
 ---
 
-## Pas Gecilen Continuation'lar
+## Pas Gecilen → Yeniden Degerlendirilen Continuation'lar
 
-### C2: kdl_oku_karakter (input)
-- Capability Spec V1 formalizasyonu gerek ("okuma yetkisi" kaynak tipi)
-- UART RX yolu donanim init'i de yapilmali (V1 init no-op idi)
-- Bu gorevin "sadece yazdirma" kapsamindan disari
-- KIRMIZI_QUEUE'ya eklenmedi — input yönü zaten roadmap'te
-  (bkz. BARE_METAL_DESTEK.md "Orta vade")
+**Kullanici "önerilerini otomatik uygulayarak devam et" dedi.** Önceden pas
+gecilen C2, C4, C5 yeniden incelendi ve uygun olanlar uygulandi.
 
-### C4: QEMU smoke test pipeline
-- qemu-system-aarch64 binary'si host PATH'inde yok
-- MSYS2 pacman ile yuklenmeli (~100 MB)
-- Otonom kurulum kararlari §G alaninda degil — kullanici onayina birak
-- Statik analiz (file + llvm-nm + llvm-objdump) yeterli kabul edildi
+### C2 — UYGULANDI (commit 4f32fd4)
+- Onceki gerekce: "Capability Spec V1 formalizasyonu gerek"
+- Duzeltme: driver-seviyesi RX safe (capability gating sadece dil tarafinda
+  formalize edilir; C kodunun ham okumasi tehlikeli degil)
+- Sonuc: PL011 + 16550 oku_karakter + rx_hazir API'leri tamamlandi
 
-### C5: Cross-target UART register abstraction
-- 2 driver var: PL011 (MMIO 32-bit) vs 16550 (Port 8-bit) — ABI tamamen farkli
-- "Ortak pattern" pre-mature: bir sonraki driver (Apple SPMC, BCM AUX, vb.)
-  geldiginde dogal abstraction cikar
-- Macro substitution (KDL_UART_PUTC) sufficient soyutlama saglar
-- Refactor kazanci sinirli, regression riski mevcut testlerin tum geneli
+### C4 — UYGULANDI (kismi: QEMU yokken skip)
+- QEMU host'ta yok ama Makefile target kuruldu: `calistir_qemu_smoke`
+- QEMU yuklenince otomatik aktif olur (kullanici tarafi `pacman -S ...`)
+- Otonom QEMU kurulumu yapilmadi (shared sistem modifikasyonu kullanici
+  onayina baglidir, §6 destructive action karari)
+
+### C5 — UYGULANDI (commit 4f32fd4)
+- Onceki gerekce: "pre-mature, macro substitution yeterli"
+- Duzeltme: const ROdata vtable (KdlUartSurucu) ek bellek maliyeti yok,
+  ust katman icin gerçek deger var (RTOS scheduler, driver switching),
+  21 test ile regression riski denetlendi
+
+### Pas (gerçek halt) — uygulanmadi
+- **KEMGU dili tarafinda `oku_karakter` built-in** — driver var ama
+  tip_kontrol.c + llvm.c entegrasyonu Capability Spec ile bagli; ayri gorev.
+- **Karakter UTF-8 encode bare-metal port** — host'ta var, bare-metal'da
+  yok. Kucuk ama scope kayisi (utf8.c'nin bare-metal portu gerekir).
 
 ---
 
@@ -172,11 +210,15 @@ Bu görev kapsamında: 🟢/🟡 ayrımı yok, direkt yap (Ek v1.1 §H).
 - f8f996f: K8b.4 x86_64 16550A driver
 - 5c99d6c: K8b.C1+C6 onaltilik/isaretsiz + BARE_METAL_DESTEK belge
 - 2f7d13b: K8b.C3 panik handler
+- 159265f: ilk final rapor (NOTES + README)
+- 4f32fd4: K8b.C2+C5 UART RX + vtable (yeniden degerlendirme)
+- (pending): K8b.C4 QEMU smoke target + final NOTES guncellemesi
 
-**Yeni dosyalar** (12):
+**Yeni dosyalar** (13):
 - runtime/kdl_uart.h, runtime/kdl_yazdir_bare.h, runtime/kdl_panik.h
 - runtime/kdl_runtime_uart_pl011.c, .._uart_16550.c, .._yazdir_bare.c, .._panik.c
-- test/test_uart_pl011.c, test_uart_16550.c, test_yazdir_bare.c, test_panik.c
+- test/test_uart_pl011.c, test_uart_16550.c, test_uart_vtable.c,
+  test_yazdir_bare.c, test_panik.c
 - test/ornekler/uart_merhaba.kem
 - linker/bare-metal-aarch64.ld
 - boot/start_aarch64.S
@@ -191,12 +233,13 @@ Bu görev kapsamında: 🟢/🟡 ayrımı yok, direkt yap (Ek v1.1 §H).
   yazdir_onaltilik, yaz_onaltilik)
 - Makefile: 8 yeni hedef (4 mock test + 4 bare-metal validate)
 
-**Test sayilari** (Track B icin yeni):
-- PL011 UART:        10/10 ✓
-- 16550A UART:        8/8 ✓
+**Test sayilari** (Track B icin yeni — yeniden degerlendirme dahil):
+- PL011 UART:        16/16 ✓ (K1'de 10 + C2'de 6 RX)
+- 16550A UART:       13/13 ✓ (K4'te 8 + C2'de 5 RX)
+- UartSurucu vtable: 21/21 ✓ (C5)
 - yazdir_bare:       24/24 ✓ (K2'de 17 + C1'de 7)
-- panik handler:      6/6 ✓
-- **Toplam yeni:    48/48 ✓** (ASan temiz)
+- panik handler:      6/6 ✓ (C3)
+- **Toplam yeni:    80/80 ✓** (ASan temiz)
 
 **Bare-metal cross-compile dogrulamalari** (tum libc-yok):
 - ARM64 PL011 ELF object: 3 sembol

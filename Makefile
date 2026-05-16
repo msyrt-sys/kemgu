@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke bench test_tumu
 
 # === Ana hedef ===
 
@@ -520,6 +520,35 @@ calistir_yazdir_bare_bare_metal:
 	fi
 	@echo "  (yok — temiz)"
 	@echo "yazdir_bare bare-metal dogrulamasi basarili!"
+
+# === QEMU smoke test (opsiyonel — qemu yoksa atlanir) ===
+# Bare-metal hello world ELF'ini QEMU virt'te calistirip stdout yakalar.
+# Beklenen cikti "Merhaba KEMGU - Bare Metal" + "42" satirlari icermeli.
+# QEMU PATH'te yoksa atlandi mesaji ile basariyla biter (CI uyumlu).
+calistir_qemu_smoke: $(BUILD)/kernel.elf
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		echo "QEMU bulundu, ARM64 smoke test calistiriliyor..."; \
+		timeout 5 qemu-system-aarch64 -M virt -cpu cortex-a72 \
+			-nographic -kernel $(BUILD)/kernel.elf < /dev/null \
+			2>/dev/null > $(BUILD)/qemu_smoke.out || true; \
+		echo "--- QEMU stdout ---"; \
+		cat $(BUILD)/qemu_smoke.out; \
+		echo "--- son ---"; \
+		if grep -q "Merhaba KEMGU" $(BUILD)/qemu_smoke.out && \
+		   grep -q "42" $(BUILD)/qemu_smoke.out; then \
+			echo "QEMU smoke test gecti: cikti dogru."; \
+		else \
+			echo "FAIL: beklenen cikti (Merhaba KEMGU + 42) yok"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — smoke test atlandi."; \
+		echo "Yuklemek icin (MSYS2): pacman -S mingw-w64-clang-x86_64-qemu"; \
+	fi
+
+# Build target — kernel.elf var olmali. Yoksa hello_world'u tetikle.
+$(BUILD)/kernel.elf:
+	@$(MAKE) calistir_uart_merhaba_bare_metal > /dev/null
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.

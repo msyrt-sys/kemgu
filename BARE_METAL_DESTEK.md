@@ -31,9 +31,11 @@ yeterli).
 
 | Modül | Dosya | API | Notlar |
 |-------|-------|-----|--------|
-| PL011 UART | `runtime/kdl_runtime_uart_pl011.c` | `kdl_uart_pl011_init`, `kdl_uart_pl011_putc`, `kdl_uart_pl011_yaz` | QEMU virt @ 0x09000000, RPi 4 vb. (`-DKDL_PL011_BASE=...` override) |
-| 16550A UART | `runtime/kdl_runtime_uart_16550.c` | `kdl_uart_16550_init`, `kdl_uart_16550_putc`, `kdl_uart_16550_yaz` | PC COM1 @ 0x3F8 (inline asm in/out) |
-| Bare-metal yazdır | `runtime/kdl_runtime_yazdir_bare.c` | `kdl_yazdir_metin`, `kdl_yazdir_satir`, `kdl_yaz_metin`, `kdl_yazdir_tam`, `kdl_yazdir_tam64`, `kdl_yaz_tam`, `kdl_yazdir_mantiksal`, `kdl_format_tam64` | Stack-yalnız, libc-yok; backend `-DKDL_UART_PUTC=...` ile seçilir |
+| PL011 UART | `runtime/kdl_runtime_uart_pl011.c` | `kdl_uart_pl011_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | QEMU virt @ 0x09000000, RPi 4 vb. (`-DKDL_PL011_BASE=...` override) |
+| 16550A UART | `runtime/kdl_runtime_uart_16550.c` | `kdl_uart_16550_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | PC COM1 @ 0x3F8 (inline asm in/out) |
+| **Cross-target UART vtable** | `runtime/kdl_uart.h` (struct) | `KdlUartSurucu`, `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` | const ROdata; hedef-bağımsız üst katman için indirect call |
+| Bare-metal yazdır | `runtime/kdl_runtime_yazdir_bare.c` | `kdl_yazdir_metin`, `_satir`, `kdl_yaz_metin`, `_tam`, `_tam64`, `kdl_yaz_tam`, `_mantiksal`, `kdl_yazdir_isaretsiz_tam(64)`, `_onaltilik`, `kdl_yaz_onaltilik`, `kdl_format_tam64(/isaretsiz64/onaltilik64)` | Stack-yalnız, libc-yok; backend `-DKDL_UART_PUTC=...` ile seçilir |
+| Panik handler | `runtime/kdl_runtime_panik.c` | `kdl_panik_dur(const char *)` NORETURN | UART'a "PANIK: <mesaj>" + ARM wfe / x86 hlt halt loop |
 | ARM64 _start | `boot/start_aarch64.S` | `_start`, `_halt`, `__bss_start`, `__bss_end`, `__stack_top` | SP setup + BSS zero + `bl main` + WFE spin |
 
 ### Compile-time bayraklar
@@ -75,27 +77,34 @@ derlenir. Bkz. `test/ornekler/uart_merhaba.kem`.
   CLI bayrağı eklenirse `yazdir` da otomatik `kdl_yazdir_metin`'e
   yönlenebilir.
 
-- **Onaltılık ve işaretsiz tam yazdır** — KAPSAMA EKLEYECEĞIM
-  (continuation C1).
+- **Onaltılık ve işaretsiz tam yazdır** — ✓ tamamlandı (C1)
 
-- **Bare-metal panic handler** — `kdl_panik_dur(const char *)` UART'a
-  mesaj + halt loop. KAPSAMA EKLEYECEĞIM (continuation C3).
+- **Bare-metal panic handler** — ✓ tamamlandı (C3)
+
+- **UART RX driver seviyesi** — ✓ tamamlandı (C2/C7-a: `kdl_uart_pl011_oku_karakter`,
+  `_rx_hazir`, 16550 paralel API). KEMGU dil tarafı `oku_karakter` built-in
+  + capability gating sonraki adım.
+
+- **Cross-target UART vtable** — ✓ tamamlandı (C5: `KdlUartSurucu` struct,
+  `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` const tabloları).
 
 - **Karakter yazdır (`kdl_yazdir_karakter` UTF-8 encoding)** — Host
   runtime'da var; bare-metal port henüz yok.
 
 ### Orta vade
 
-- **Input yönü** — `kdl_oku_karakter`, `kdl_oku_metin` UART RX yolu.
-  Capability Spec ile "okuma yetkisi" formalizasyonu gerekir.
+- **KEMGU dil tarafı RX built-in** — driver seviyesi var, ama `oku_karakter()`
+  KEMGU built-in olarak henüz register edilmedi (`tip_kontrol.c` ekleme +
+  `llvm.c` mapping gerek). Capability Spec entegrasyonu ("okuma yetkisi"
+  parametresi) bu noktada formalize edilir.
 
 - **Bump allocator** — Mehmet onayında. Onay sonrası heap çağrıları
   (`bellek_al`, dizi runtime, kdl_metin_birlestir vb.) bare-metal'da
   da çalışabilir hale gelir. Şu an kapsam dışı.
 
-- **QEMU smoke test pipeline** — `qemu-system-aarch64 -nographic -M virt
-  -kernel kernel.elf` ile semihosting çıktı yakalama. Toolchain kurulumu
-  gerek.
+- **QEMU smoke test pipeline** — ✓ Makefile target hazır (`calistir_qemu_smoke`).
+  QEMU PATH'te yoksa graceful skip eder; varsa otomatik çalışır,
+  stdout'tan "Merhaba KEMGU" + "42" karşılaştırması yapar.
 
 - **`--hedef` CLI bayrağı** — kemgu'ya bare-metal hedef seçimi. Şu an
   LLVM IR target-triple ASCII varsayım (`x86_64-w64-windows-gnu`); clang
@@ -133,12 +142,20 @@ mingw32-make calistir_uart_16550_bare_metal
 Tek tek bileşen testleri:
 
 ```bash
-mingw32-make calistir_uart_pl011_test          # PL011 mock 10 test
-mingw32-make calistir_uart_16550_test          # 16550 mock 8 test
-mingw32-make calistir_yazdir_bare_test         # yazdır portu 17 test
+mingw32-make calistir_uart_pl011_test          # PL011 mock 16 test (TX + RX)
+mingw32-make calistir_uart_16550_test          # 16550 mock 13 test (TX + RX)
+mingw32-make calistir_uart_vtable_test         # vtable 21 test (PL011 + 16550 ortak)
+mingw32-make calistir_yazdir_bare_test         # yazdır portu 24 test
+mingw32-make calistir_panik_test               # panik handler 6 test
 mingw32-make calistir_uart_pl011_bare_metal    # PL011 ARM64 obj + symbol
+mingw32-make calistir_uart_16550_bare_metal    # 16550 x86_64 obj + symbol
 mingw32-make calistir_yazdir_bare_bare_metal   # yazdır ARM64 obj + symbol
+mingw32-make calistir_panik_bare_metal         # panik ARM64 obj + symbol
+mingw32-make calistir_qemu_smoke               # ARM64 hello world QEMU'da (QEMU yoksa skip)
 ```
+
+QEMU yüklü değilse `calistir_qemu_smoke` graceful skip eder — `pacman -S
+mingw-w64-clang-x86_64-qemu` ile yüklenince otomatik aktif olur.
 
 ---
 
