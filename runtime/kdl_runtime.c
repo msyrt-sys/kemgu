@@ -97,6 +97,23 @@ void kdl_yazdir_satir(void) {
     fputc('\n', stdout);
 }
 
+/* Track B C1: isaretsiz + onaltilik formatlar (host paralel kayit). */
+void kdl_yazdir_isaretsiz_tam(uint32_t n) {
+    printf("%u\n", (unsigned)n);
+}
+
+void kdl_yazdir_isaretsiz_tam64(uint64_t n) {
+    printf("%llu\n", (unsigned long long)n);
+}
+
+void kdl_yazdir_onaltilik(uint64_t n) {
+    printf("0x%llx\n", (unsigned long long)n);
+}
+
+void kdl_yaz_onaltilik(uint64_t n) {
+    printf("0x%llx", (unsigned long long)n);
+}
+
 /* yazdir_* versiyonlari satir sonu eklemez */
 void kdl_yaz_metin(const char *s) {
     if (s) fputs(s, stdout);

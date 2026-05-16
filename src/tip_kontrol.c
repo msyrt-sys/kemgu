@@ -200,6 +200,40 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("yazdir_metin", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* Track B C1: isaretsiz + onaltilik yazdirma (bare-metal hata ayiklama
+     * + adres yazimi icin). Host runtime'da henuz implement edilmedi;
+     * link asamasinda eksik sembol uyari verebilir — bare-metal akis icin
+     * mevcut. */
+
+    /* yazdir_isaretsiz_tam(dtam32) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_DTAM32);
+        EKLE_BUILTIN("yazdir_isaretsiz_tam", 20, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yazdir_isaretsiz_tam64(dtam64) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_DTAM64);
+        EKLE_BUILTIN("yazdir_isaretsiz_tam64", 22, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yazdir_onaltilik(dtam64) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_DTAM64);
+        EKLE_BUILTIN("yazdir_onaltilik", 16, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+    /* yaz_onaltilik(dtam64) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_DTAM64);
+        EKLE_BUILTIN("yaz_onaltilik", 13, p, 1,
+                     tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* === G: Dosya syscall built-in'leri (runtime/kdl_runtime.c) === */
 
     /* dosya_ac(yol: metin, mod: metin) -> metin  (handle opaque ptr) */

@@ -135,3 +135,78 @@ void kdl_yazdir_mantiksal(int b) {
     }
     KDL_UART_PUTC('\n');
 }
+
+/* === Continuation C1: isaretsiz + onaltilik formatlar === */
+
+int32_t kdl_format_isaretsiz64(uint64_t n, char *cikti, int32_t kapasite) {
+    /* Max: 18446744073709551615 = 20 digit + NUL = 21 byte. */
+    if (!cikti || kapasite < 21) return -1;
+    char tmp[21];
+    int t = 0;
+    if (n == 0) {
+        tmp[t++] = '0';
+    } else {
+        while (n > 0) {
+            tmp[t++] = (char)('0' + (n % 10U));
+            n /= 10U;
+        }
+    }
+    int pos = 0;
+    while (t > 0) cikti[pos++] = tmp[--t];
+    cikti[pos] = '\0';
+    return (int32_t)pos;
+}
+
+int32_t kdl_format_onaltilik64(uint64_t n, char *cikti, int32_t kapasite) {
+    /* "0x" + 16 hex + NUL = 19 byte. */
+    if (!cikti || kapasite < 19) return -1;
+    cikti[0] = '0';
+    cikti[1] = 'x';
+    if (n == 0) {
+        cikti[2] = '0';
+        cikti[3] = '\0';
+        return 3;
+    }
+    char tmp[16];
+    int t = 0;
+    while (n > 0) {
+        uint32_t d = (uint32_t)(n & 0xFU);
+        tmp[t++] = (char)((d < 10U) ? ('0' + d) : ('a' + (d - 10U)));
+        n >>= 4;
+    }
+    int pos = 2;
+    while (t > 0) cikti[pos++] = tmp[--t];
+    cikti[pos] = '\0';
+    return (int32_t)pos;
+}
+
+void kdl_yazdir_isaretsiz_tam(uint32_t n) {
+    char buf[24];
+    if (kdl_format_isaretsiz64((uint64_t)n, buf, sizeof(buf)) > 0) {
+        kdl_ham_yaz(buf);
+    }
+    KDL_UART_PUTC('\n');
+}
+
+void kdl_yazdir_isaretsiz_tam64(uint64_t n) {
+    char buf[24];
+    if (kdl_format_isaretsiz64(n, buf, sizeof(buf)) > 0) {
+        kdl_ham_yaz(buf);
+    }
+    KDL_UART_PUTC('\n');
+}
+
+void kdl_yazdir_onaltilik(uint64_t n) {
+    char buf[24];
+    if (kdl_format_onaltilik64(n, buf, sizeof(buf)) > 0) {
+        kdl_ham_yaz(buf);
+    }
+    KDL_UART_PUTC('\n');
+}
+
+void kdl_yaz_onaltilik(uint64_t n) {
+    char buf[24];
+    if (kdl_format_onaltilik64(n, buf, sizeof(buf)) > 0) {
+        kdl_ham_yaz(buf);
+    }
+}
