@@ -189,6 +189,17 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
      * tanimlar; cakisma onlemek icin (KIRMIZI_QUEUE: dosya_yaz_metin
      * rename gelecek). */
 
+    /* yazdir_metin(metin) -> bos
+     * Bare-metal hedefte kdl_yazdir_metin (UART backend) cagrir;
+     * host hedefte ayni isimli sembolu (kdl_runtime.c libc yolu) cagrir.
+     * Eski "yazdir(metin) -> tam32 = puts" mappingi geriye uyum icin
+     * korunuyor — yazdir_metin yeni isim. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("yazdir_metin", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* === G: Dosya syscall built-in'leri (runtime/kdl_runtime.c) === */
 
     /* dosya_ac(yol: metin, mod: metin) -> metin  (handle opaque ptr) */

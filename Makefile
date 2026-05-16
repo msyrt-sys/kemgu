@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal bench test_tumu
 
 # === Ana hedef ===
 
@@ -520,6 +520,50 @@ calistir_yazdir_bare_bare_metal:
 	fi
 	@echo "  (yok — temiz)"
 	@echo "yazdir_bare bare-metal dogrulamasi basarili!"
+
+# === Bare-Metal Hello World (Track B Kalem 3) ===
+# uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
+# Pipeline: kemgu --llvm | clang -target aarch64-unknown-none -> kernel.elf
+calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
+	@echo "Bare-metal hello world: uart_merhaba.kem -> ARM64 ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba.ll
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+		-x ir $(BUILD)/uart_merhaba.ll -c -o $(BUILD)/uart_merhaba.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/uart_pl011_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_yazdir_bare.c \
+		-o $(BUILD)/yazdir_bare_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-c boot/start_aarch64.S -o $(BUILD)/start_aarch64.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kernel.elf \
+		$(BUILD)/start_aarch64.o $(BUILD)/uart_merhaba.o \
+		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o
+	@echo ""
+	@echo "Uretilen kernel:"
+	@file $(BUILD)/kernel.elf
+	@echo ""
+	@echo "Entry point + bolum yerleri:"
+	@llvm-objdump -h $(BUILD)/kernel.elf | sed -n '4,12p'
+	@echo ""
+	@echo "Tanimli semboller (T = text):"
+	@llvm-nm $(BUILD)/kernel.elf | grep -E '^[0-9a-f]+ T (_start|main|kdl_uart_pl011_(init|putc|yaz)|kdl_yazdir_(metin|tam|satir)|kdl_yaz_(metin|tam))$$' || true
+	@echo ""
+	@echo "Libc sembol referansi kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kernel.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kernel.elf; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "Bare-metal hello world basarili!"
 
 # === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
 calistir_uart_pl011_bare_metal:
