@@ -2462,6 +2462,31 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[1]);
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
+            /* kanal_oluştur(kapasite: tam32) -> kanal<T> — Faz 3 runtime
+             * V1: default eleman tipi tam32 (runtime int32-only).
+             * Context-driven inference için tip_belirle_beklenen path'inde
+             * beklenen kanal<T>'den T çıkarsanır. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_olu\xc5\x9f" "tur", 14) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF006",
+                        "kanal_olustur tam 1 arguman gerektirir (kapasite: tam32)");
+                    return t_hata(tk);
+                }
+                TipBilgisi *kap_tip = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[0],
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+                if (kap_tip->kategori != TIP_HATA && !tip_tamsayi_mi(kap_tip)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF006",
+                        "kanal_olustur kapasite tamsayi olmali");
+                }
+                /* Default eleman tipi: tam32 */
+                return tip_olustur_kanal(tk->arena,
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+            }
             /* kanal_al(k: kanal<T>) -> T — k tuketilmez */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
@@ -3045,6 +3070,21 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     tip_olustur_basit(tk->arena, TIP_TAM64));
                 return tip_olustur_dizi(tk->arena,
                     (TipBilgisi *)beklenen->veri.dizi.eleman);
+            }
+            /* DRF V1 Faz 3: beklenen kanal<T> ve cagri kanal_olustur(N) ise
+             * — kanal<T> dön. T context'ten gelir (runtime int32-only ama
+             * tip kontrolde generic). */
+            if (beklenen->kategori == TIP_KANAL &&
+                d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_olu\xc5\x9f" "tur", 14) == 0 &&
+                d->veri.cagri.sayi == 1) {
+                tip_belirle_beklenen(tk, d->veri.cagri.argumanlar[0],
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+                return tip_olustur_kanal(tk->arena,
+                    (TipBilgisi *)beklenen->veri.kanal.ic);
             }
             /* Sabitsüre Spec V1: beklenen sabitsure<X> ve cagri
              * sabitsure_yarat(arg) ise — arg'ı X context'inde çıkarsa. */
