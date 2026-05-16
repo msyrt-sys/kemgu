@@ -251,6 +251,16 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
     }
 
+    /* KIRMIZI G.4: dosya_oku_son_hata() -> tam32
+     *   0  -> son cagri OK (bos dosya dahil)
+     *  -1  -> dosya yok / fopen basarisiz
+     *  -2  -> I/O hatasi (ftell/malloc/fread)
+     * Son cagrilan dosya_oku icin hata kodu. Bos dosya VS hata ayrimi:
+     *   icerik=="" + son_hata==0 -> bos dosya (gercekten bos)
+     *   icerik=="" + son_hata!=0 -> hata; icerik kullanma. */
+    EKLE_BUILTIN("dosya_oku_son_hata", 18, NULL, 0,
+                 tip_olustur_basit(a, TIP_TAM32));
+
     /* === Adim 1 (OTP CLI): CLI args + OTP yardimcilari === */
 
     /* arg_sayi() -> tam32 */

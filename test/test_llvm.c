@@ -996,6 +996,87 @@ static void test_dosya_sil_yoksa(void) {
     test_sonuc("dosya_sil(yok) -> r!=0 -> 42", rc == 42);
 }
 
+/* === KIRMIZI G.4: dosya_oku empty-file vs error ayrimi === */
+
+static void test_dosya_oku_yok_son_hata_negatif(void) {
+    /* Var olmayan dosya -> icerik="" + son_hata=-1 (yok)
+     * Eski davranis NULL doneriz -> KEMGU segfault; yeni davranisla "" doner
+     * ve hata kodu globalde. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = dosya_oku(\"build/test_G4_yok.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken kod: tam32 = dosya_oku_son_hata(); "
+        /* kod == -1 ise basari (segfault yok + dogru kod) */
+        "e\xc4\x9f""er kod == 0 - 1 { ver 42; } "
+        "ver 0; }");
+    test_sonuc("G.4: dosya_oku(yok) -> son_hata=-1 + segfault yok", rc == 42);
+}
+
+static void test_dosya_oku_bos_dosya_son_hata_sifir(void) {
+    /* Bos dosya olustur, oku -> icerik="" + son_hata=0 (gercek bos) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        /* Bos dosya: ac, kapat (icerik yazma) */
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G4_bos.tmp\", \"yazma\"); "
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = dosya_oku(\"build/test_G4_bos.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken kod: tam32 = dosya_oku_son_hata(); "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = metin_uzunluk(s); "
+        "dosya_sil(\"build/test_G4_bos.tmp\"); "
+        /* uzunluk==0 + kod==0 -> bos dosya basariyla okundu */
+        "e\xc4\x9f""er n == 0 { e\xc4\x9f""er kod == 0 { ver 42; } } "
+        "ver 0; }");
+    test_sonuc("G.4: bos dosya oku -> uzunluk=0 + son_hata=0", rc == 42);
+}
+
+static void test_dosya_oku_dolu_son_hata_sifir(void) {
+    /* Dolu dosya -> son_hata=0, icerik dogru */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G4_dolu.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"selam dunya\"); "  /* 11 byte */
+        "dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = dosya_oku(\"build/test_G4_dolu.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken kod: tam32 = dosya_oku_son_hata(); "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = metin_uzunluk(s); "
+        "dosya_sil(\"build/test_G4_dolu.tmp\"); "
+        "e\xc4\x9f""er n == 11 { e\xc4\x9f""er kod == 0 { ver 42; } } "
+        "ver 0; }");
+    test_sonuc("G.4: dolu dosya oku -> uzunluk=11 + son_hata=0", rc == 42);
+}
+
+static void test_dosya_oku_son_hata_guncel(void) {
+    /* Ardisik cagrilarda son hata kodu en son cagriya gore guncel olmali.
+     * Once yok dosya (-1), sonra dolu dosya (0) — son cagri 0 doner. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        /* 1) Yok oku — hata -1 */
+        "de\xc4\x9fi\xc5\x9fken s1: metin = dosya_oku(\"build/test_G4_yok2.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken k1: tam32 = dosya_oku_son_hata(); "
+        /* 2) Dolu dosya olustur ve oku — hata 0 */
+        "de\xc4\x9fi\xc5\x9fken h: metin = dosya_ac(\"build/test_G4_son.tmp\", \"yazma\"); "
+        "dosya_yaz(h, \"x\"); dosya_kapat(h); "
+        "de\xc4\x9fi\xc5\x9fken s2: metin = dosya_oku(\"build/test_G4_son.tmp\"); "
+        "de\xc4\x9fi\xc5\x9fken k2: tam32 = dosya_oku_son_hata(); "
+        "dosya_sil(\"build/test_G4_son.tmp\"); "
+        /* k1=-1 ve k2=0 -> guncellik dogru */
+        "e\xc4\x9f""er k1 == 0 - 1 { e\xc4\x9f""er k2 == 0 { ver 42; } } "
+        "ver 0; }");
+    test_sonuc("G.4: dosya_oku_son_hata her cagriyla guncellenir", rc == 42);
+}
+
+static void test_dosya_oku_bos_yol(void) {
+    /* dosya_oku("") -> "" + son_hata=-1 (yol bos/yok) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken s: metin = dosya_oku(\"\"); "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = metin_uzunluk(s); "
+        "de\xc4\x9fi\xc5\x9fken k: tam32 = dosya_oku_son_hata(); "
+        "e\xc4\x9f""er n == 0 { e\xc4\x9f""er k == 0 - 1 { ver 42; } } "
+        "ver 0; }");
+    test_sonuc("G.4: dosya_oku(\"\") -> uzunluk=0 + son_hata=-1", rc == 42);
+}
+
 /* (Madde B paralel session generic API tests removed — bu oturumda
  *  concrete _tam suffix versiyonu (dizi_olustur_tam vb.) tip_kontrol'de
  *  registered. Generic dizi_olustur<T> v2'de.) */
@@ -1245,6 +1326,13 @@ int main(void) {
     test_dosya_boyut();
     test_dosya_yeniden_adlandir();
     test_dosya_sil_yoksa();
+
+    printf("\n--- KIRMIZI G.4: dosya_oku empty-file vs error ---\n");
+    test_dosya_oku_yok_son_hata_negatif();
+    test_dosya_oku_bos_dosya_son_hata_sifir();
+    test_dosya_oku_dolu_son_hata_sifir();
+    test_dosya_oku_son_hata_guncel();
+    test_dosya_oku_bos_yol();
 
 
     printf("\n--- Madde E: Tip donusturme (olarak) ---\n");
