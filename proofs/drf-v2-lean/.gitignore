@@ -1,0 +1,11 @@
+# Lake build artifaktlari + cache (asagidaki dosyalar reproducible)
+# Kaldirilan/yeniden indirilebilen icerik:
+.lake/
+
+# IDE
+*.olean
+*.ilean
+
+# Editor
+*.swp
+*~
