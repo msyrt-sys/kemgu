@@ -18,6 +18,49 @@ Format:
 
 ---
 
+## [2026-05-17] — DRF V2 mekanizasyon proof assistant kararı: Lean 4
+
+- **Kategori:** teorem / araç seçimi (önceki 2026-05-14 "kâğıt yeterli"
+  kararını **günceller**; mekanize V2 hedefi şimdi aktif).
+- **Bağlam:** Direktif Ek v1.1 Plan Karar B "V3 bütünleşik güvenlik
+  metateoremi" hedefi 2026-05-17 itibarıyla ileri çekildi. 2026-05-14'te
+  "kâğıt V1 yeterli, mekanize V2 saklı" karar verilmişti; Mehmet onayı
+  ile DRF V1 mekanize + diğer soundness bileşenleri + V3 metateorem
+  Faz A/B/C planı başlatıldı. Yeni branch:
+  `feature/drf-mekanize-ve-v3-metateorem`.
+
+### A. Proof assistant seçimi — KAPATILDI ✓
+
+- **[KAPATILDI 2026-05-17: Lean 4 (stable + mathlib4)]**
+- **Gerekçe özeti:** Modern sözdizim + IDE entegrasyon, mathlib4 aktif
+  gelişim, Iris-Lean concurrency yolu açık, hızlı artımlı build, Türkçe
+  uyumlu (transliterasyon politikası), öğrenme eğrisi orta.
+- **Detay:** `belgeler/KEMGU_DRF_Mekanize_Spec.md` §2 — Coq/Isabelle/HOL/
+  Lean 4/F* dört seçenek karşılaştırma tablosu + Lean 4 seçim gerekçesi
+  10 maddeli.
+
+### B. Lean 4 kurulum (BLOKER — Mehmet kararı bekler)
+
+- **Kategori:** geliştirme ortamı (yeşil — kullanıcı kararı)
+- **Bağlam:** 2026-05-17 itibarıyla bu sistemde Lean 4 / lake / elan
+  **kurulu değil** (PATH, AppData, scoop, winget hepsi boş). Spec
+  yazıldı (Faz A1), Faz A2 (lake proje başlatma) kurulum bekler.
+- **Önerilen seçenekler:**
+  1. **Yerel kur** (önerilen) — elan + lean + mathlib4, ~1 sa + 5-10 GB
+  2. **CI-only** — sadece GitHub Actions'ta build, lokal geliştirme yok
+  3. **Mekanizasyonu ertele** — V3 hedefini şimdilik geri çek
+- **Engellediği iş:** Faz A2 (Lake proje) ve sonrası. Faz A1 (spec)
+  bağımsız tamamlandı.
+
+### C. Faz B + C zaten Faz A onayına bağlı
+
+- Faz B (Memory Safety + Side-Channel + BET mekanize) Faz A6 sonu
+  checkpoint onayını bekler.
+- Faz C (V3 metateorem) Faz B3 sonu onayını bekler.
+- Plan: `belgeler/KEMGU_DRF_Mekanize_Spec.md` §8.
+
+---
+
 ## [2026-05-13] — stdlib genişletmesi: runtime + dil özellik kuyruğu
 
 Stdlib genişletme görevi sırasında karşılaşılan dil/derleyici sınırları.
@@ -389,6 +432,8 @@ kalır; geri dönülmesi gerekirse buradan başlanır).
 
 Onaylanan kararlar (önerilen seçenekler kabul):
 - **A:** V1'de kâğıt formalizasyon yeterli; Faz B (mekanize) V2'ye saklı.
+  **GÜNCELLEME 2026-05-17:** V2 mekanize hedefi ileri çekildi → Lean 4
+  seçildi → bkz. yukarıdaki "[2026-05-17] DRF V2 mekanizasyon" maddesi.
 - **B:** V1 dar (statik DRF), V2 geniş (operasyonel), V3 metateorem.
 - **C:** Linear types DRF'in **temel taşıyıcısı** (S1'in compile-time önkoşulu).
 - **D:** Paralel — Faz A1+A2 hemen (yapıldı), lang syntax ayrı oturum, A3 son (yapıldı).
