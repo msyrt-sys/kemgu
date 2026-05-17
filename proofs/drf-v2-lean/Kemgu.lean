@@ -8,7 +8,7 @@ import Kemgu.Sem.SmallStep
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
--- import Kemgu.Drf.L4FrozenRegionRead
+import Kemgu.Drf.L4FrozenRegionRead
 -- import Kemgu.Drf.L1BolgeThreadTekilligi
 -- import Kemgu.Drf.L7BellekErisimTipSoundness
 -- import Kemgu.Drf.L2LinearMoveCrossThread
