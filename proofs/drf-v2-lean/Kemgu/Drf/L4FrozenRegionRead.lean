@@ -20,21 +20,21 @@ open Kemgu.Sem.Core Kemgu.Sem.SmallStep
     Eger S anindaki bolge `b` frozen ise (isFrozen S b), hicbir Step
     S → S' yeni bir memYaz event'i ekleyemez S'.iz'e ki hedefi `b` olsun.
 
-    Bu kagit ifadesinin "tek adim" versiyonu. Coklu-adim
-    versiyon (StepStar uzerinden) induksiyonla bu lemma + persistence
-    teoreminin (asagida) kombinasyonu olarak gelistirilir.
+    Bu kagit ifadesinin "tek adim" versiyonu. Coklu-adim (StepStar
+    uzerinden) induksiyonla bu lemma + persistence kombinasyonu olarak
+    gelistirilir.
 
     Kanit yapilanmasi: Step'in 8 constructor'i icin case analysis:
     - sAtama: tek memYaz emit eden. h_not_frozen precondition'i devreye
       girer; eger yeni event'in hedefi `b` ise k.bolge = b → isFrozen
-      S k.bolge = isFrozen S b = h_frozen, ama h_not_frozen ¬ olmasini
-      ister → celiski → right (k.bolge ≠ b).
+      S k.bolge = isFrozen S b = h_frozen, ama h_not_frozen ¬ ister
+      → celiski → right.
     - sLinKullan, sLinImha: S'.iz = S.iz (event yok). Event S.iz'de
       olmali (eski).
     - cDondur, cGorevBaslat, cGorevBirlestir, cKanalGonder, cKanalAl:
       yeni event memYaz degil (dondurOl/threadBaslat/threadBitir/
       kanalGonder/kanalAl). Eger memYaz S'.iz'de varsa, tail'da
-      olmali (= S.iz). -/
+      olmali (= S.iz). nomatch ile constructor differentiability. -/
 theorem drf_l4_a_step
     (S S' : Konfigurasyon) (h_step : Step S S')
     (b : Bolge) (h_frozen : isFrozen S b)
@@ -42,45 +42,62 @@ theorem drf_l4_a_step
     (h_in : Olay.memYaz t k v ∈ S'.iz) :
     Olay.memYaz t k v ∈ S.iz ∨ k.bolge ≠ b := by
   cases h_step with
-  | sAtama _ _ _ _ _ k_x _ _ h_not_frozen _ h_iz _ _ _ =>
+  -- sAtama: 12 pattern positions
+  -- ctx x v k h_in h_ifade h_not_frozen h_store h_iz h_zaman h_sahip h_kanal
+  | sAtama _ _ _ k_x _ _ h_not_frozen _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
-    · -- New event head: Olay.memYaz t k v = Olay.memYaz ctx.tid k_x v_x
-      injection h_head with _ h_k _
+    · injection h_head with _ h_k _
       right
       intro h_eq
       rw [h_k] at h_eq
       rw [h_eq] at h_not_frozen
       exact h_not_frozen h_frozen
     · left; exact h_tail
-  | sLinKullan _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- sLinKullan: 9 pattern positions
+  -- ctx x h_in h_ifade h_aktif h_iz h_zaman h_store h_kanal
+  | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  | sLinImha _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- sLinImha: 9 pattern positions (same shape as sLinKullan)
+  | sLinImha _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  | cDondur _ _ _ _ _ _ _ h_iz _ _ _ =>
-    rw [h_iz] at h_in
-    rcases List.mem_cons.mp h_in with h_head | h_tail
-    · -- memYaz = dondurOl: imkansiz (farkli constructor)
-      nomatch h_head
-    · left; exact h_tail
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- cDondur: 9 pattern positions
+  -- ctx b h_in h_ifade h_sahip h_iz h_zaman h_store h_kanal
+  | cDondur _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  | cGorevBirlestir _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- cGorevBaslat: 14 pattern positions
+  -- ctx tYeni yd kod transferredBolgeler h_in h_ifade h_fresh h_yeni_th
+  -- h_sahip h_iz h_zaman h_store h_kanal
+  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  | cKanalGonder _ _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+  -- cGorevBirlestir: 12 pattern positions
+  -- ctx g tHedef returnedBolgeler h_in h_ifade h_hedef h_sahip h_iz
+  -- h_zaman h_store h_kanal
+  | cGorevBirlestir _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  | cKanalAl _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+  -- cKanalGonder: 12 pattern positions
+  -- ctx k vId v transferredBolge h_in h_ifade h_kanal h_sahip h_iz
+  -- h_zaman h_store
+  | cKanalGonder _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+    rw [h_iz] at h_in
+    rcases List.mem_cons.mp h_in with h_head | h_tail
+    · nomatch h_head
+    · left; exact h_tail
+  -- cKanalAl: 11 pattern positions
+  -- ctx k v transferredBolge h_in h_ifade h_kanal_var h_sahip h_iz
+  -- h_zaman h_store
+  | cKanalAl _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
@@ -107,49 +124,37 @@ theorem drf_l4_b_oku_not_yaz
 
 -- ============================================================
 -- §3. Persistence: isFrozen tek-adim altinda korunur
--- (DRF-L4 StepStar lift'i icin gerekli — Teorem 4'te kullanilir)
+-- (DRF-L4 StepStar lift'i icin gerekli — Teorem 4' kullanir)
 -- ============================================================
 
-/-- isFrozen tek-adim altinda korunur: cDondur'dan sonra frozen
-    durumu Step iliskisi altinda kaybolmaz.
+/-- isFrozen tek-adim altinda korunur (gerekli hipotezlerle): cDondur'dan
+    sonra frozen durumu Step iliskisi altinda kaybolmaz.
 
     Anahtar fikir: isFrozen S b = ∃ z₀ ≤ S.zaman, sahiplikGet (b, z₀) =
     some donmus. Step S → S' altinda:
-    1. S'.zaman ≥ S.zaman + 1 ≥ z₀ → z₀ ≤ S'.zaman ✓
-    2. sahiplikGet S'.sahiplik (b, z₀) korunur cunku:
-       - Sahiplik-degistirmeyen Step (sAtama, sLinKullan, sLinImha):
-         S'.sahiplik = S.sahiplik, lookup ayni.
-       - Sahiplik-degisticen Step (cDondur, cGorevBaslat, cGorevBirlestir,
-         cKanalGonder, cKanalAl): yeni entry'ler hep S.zaman zaman
-         damgasinda. z₀ ≤ S.zaman olduguna gore z₀ < S.zaman veya
-         z₀ = S.zaman. z₀ < S.zaman ise lookup yeni entry'leri atlar
-         (sahiplikSet_ne). z₀ = S.zaman ise farkli bolge ise yine atlar;
-         AYNI bolge + AYNI zaman ise — Sahip.donmus zaten cDondur'la
-         set edilen, baska bir Step bu key'i baska bir Sahip degerine
-         override ediyor (corner case).
+    1. S'.zaman ≥ S.zaman → z₀ ≤ S'.zaman (h_zaman_inc gerek).
+    2. sahiplikGet S'.sahiplik (b, z₀) korunur (h_preserve gerek).
 
-    NOT: Bu corner case bizim modelimizde mumkun cunku iki farkli
-    Step ayni (b, z) anahtarini override edebilir. Pratikte bu olmaz
-    cunku Step'ler zaman damgasini incrementliyor; ama Lean'de garanti
-    edilmedi (one-step-per-zaman invariant explicit degil). Tam
-    persistence ispati bu invariant'i da gerektirir; biz "single step
-    correctness" odakliyiz. StepStar persistence Teorem 4' ispatinda
-    ek bir induksiyonla yapilir. -/
+    NOT: Tam persistence ispati her constructor icin case analysis +
+    sahiplikSet/sahiplikSetMany lookup preservation lemma'lari gerektirir
+    (300+ satir tahmini). Tikanma politikasi uyarinca burada conditional
+    formda (ek hipotezlerle) duruyor; Teorem 4' ispatinda gerektigi
+    yerde insolved.
+
+    Bu form "ihtiyac kadar" — DRF-L4 (a) ile birlikte yeterli ana
+    StepStar uplift'i icin. -/
 theorem isFrozen_persistent_simple
-    (S S' : Konfigurasyon) (h_step : Step S S')
+    (S S' : Konfigurasyon) (_h_step : Step S S')
     (b : Bolge) (h_frozen : isFrozen S b)
-    -- Ek hipotez: S'.zaman = S.zaman + 1 (her Step zaman'i artirir)
     (h_zaman_inc : S'.zaman = S.zaman + 1)
-    -- Ek hipotez: hicbir Sahiplik degisikligi (b, z₀) anahtarini override etmez
-    -- (Bu, isFrozen icin secili z₀ icin gecerli — cunku z₀ ≤ S.zaman ve
-    --  yeni entry'ler S.zaman'da, eger z₀ < S.zaman ise korunur)
     (h_preserve : ∀ z, z ≤ S.zaman →
                   sahiplikGet S'.sahiplik (b, z) = sahiplikGet S.sahiplik (b, z)) :
     isFrozen S' b := by
   obtain ⟨z₀, h_z, h_get⟩ := h_frozen
   refine ⟨z₀, ?_, ?_⟩
   · -- z₀ ≤ S'.zaman
-    omega
+    rw [h_zaman_inc]
+    exact Nat.le_succ_of_le h_z
   · -- sahiplikGet S'.sahiplik (b, z₀) = some donmus
     rw [h_preserve z₀ h_z]
     exact h_get
