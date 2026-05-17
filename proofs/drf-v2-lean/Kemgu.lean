@@ -6,15 +6,16 @@
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
 
--- Faz A3-A5 (yapilacak): DRF lemmalar + Teorem 4'
--- import Kemgu.Drf.L0BolgeKorunumu
--- import Kemgu.Drf.L7BellekErisimTipSoundness
+-- Faz A3: DRF lemmalar
+import Kemgu.Drf.L0BolgeKorunumu
+-- import Kemgu.Drf.L4FrozenRegionRead
 -- import Kemgu.Drf.L1BolgeThreadTekilligi
+-- import Kemgu.Drf.L7BellekErisimTipSoundness
 -- import Kemgu.Drf.L2LinearMoveCrossThread
 -- import Kemgu.Drf.L3LinearClosureSoundness
--- import Kemgu.Drf.L4FrozenRegionRead
--- import Kemgu.Drf.L5ChannelAtomicity
+-- import Kemgu.Drf.L5KanalAtomikTransfer
 -- import Kemgu.Drf.L6CapabilityLinear
+-- Faz A3.10 (yapilacak): Teorem 4'
 -- import Kemgu.Drf.Drf
 
 -- Faz B (yapilacak): Memory Safety + Side-Channel + BET
