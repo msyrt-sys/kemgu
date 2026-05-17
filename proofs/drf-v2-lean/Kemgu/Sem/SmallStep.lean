@@ -55,17 +55,22 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       Step S S'
 
   /-- C-GOREV-BASLAT (Op.Sem §5.4 R-GOREV uygulamasi):
-      yeni thread t_yeni spawn edilir; yakalama listesindeki bolgeler
-      Sigma uzerinde t_yeni'ye transfer.
-      DRF-L2 (Linear Move) bu kurali kullanir. -/
+      yeni thread t_yeni spawn edilir; yakalama listesindeki tum
+      bolgeler Sigma uzerinde t_yeni'ye transfer (sahiplikSetMany).
+      DRF-L2 (Linear Move) bu kurali kullanir.
+      `transferredBolgeler` yakalanan v_i'lerin bolgeleri (yd → bolge
+      eslesmesi Pho_t'den gelir — V1'de implicit). -/
   | cGorevBaslat
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (tYeni : ThreadId)
       (yd : List VarId) (kod : Ifade)
+      (transferredBolgeler : List Bolge)
       (h_in        : ctx ∈ S.thread)
       (h_ifade     : ctx.ifade = .gorevBaslat yd kod)
       (h_fresh     : threadFresh S tYeni)
       (h_yeni_th   : ∃ yctx ∈ S'.thread, yctx.tid = tYeni ∧ yctx.ifade = kod)
+      (h_sahip     : S'.sahiplik = sahiplikSetMany S.sahiplik
+                        transferredBolgeler S.zaman (Sahip.thread tYeni))
       (h_iz        : S'.iz = .threadBaslat tYeni :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
@@ -73,14 +78,18 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       Step S S'
 
   /-- C-GOREV-BIRLESTIR (Op.Sem §5.4 R-BIRLESTIR):
-      birlestir(g) cagrisi; t_hedef bittiğinde ρ_sahip bolgeleri serbest,
-      donus degeri ρ_cagiran'a terfi. Iz'e threadBitir. -/
+      birlestir(g) cagrisi; t_hedef bittiginde Pho_sahip bolgeleri serbest,
+      donus degeri Pho_cagiran'a terfi. Iz'e threadBitir.
+      `returnedBolgeler` t_hedef'in caller'a terfi eden bolgeleri. -/
   | cGorevBirlestir
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (g : VarId) (tHedef : ThreadId)
+      (returnedBolgeler : List Bolge)
       (h_in        : ctx ∈ S.thread)
       (h_ifade     : ctx.ifade = .gorevBirlestir g)
       (h_hedef     : ∃ hctx ∈ S.thread, hctx.tid = tHedef ∧ hctx.ifade = .sabit .birim)
+      (h_sahip     : S'.sahiplik = sahiplikSetMany S.sahiplik
+                        returnedBolgeler S.zaman (Sahip.thread ctx.tid))
       (h_iz        : S'.iz = .threadBitir tHedef :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
@@ -88,28 +97,35 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       Step S S'
 
   /-- C-KANAL-GONDER (Op.Sem §5.4):
-      Sigma' = Sigma[bolge(v) ↦ Pho_kanal(k)] (S3 atomik transfer).
-      Linear v ise Lambda \\ {v}. -/
+      Sigma' = Sigma[bolge(v) ↦ kanalSahip k] (S3 atomik transfer).
+      `transferredBolge` v'nin bolgesi (bolge(v)). -/
   | cKanalGonder
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (k : KanalId) (vId : VarId) (v : Deger)
+      (transferredBolge : Bolge)
       (h_in        : ctx ∈ S.thread)
       (h_ifade     : ctx.ifade = .kanalGonderIf k vId)
       (h_kanal     : ∃ kd ∈ S'.kanal, kd.kid = k ∧ v ∈ kd.gonderKuyrugu)
+      (h_sahip     : S'.sahiplik = sahiplikSet S.sahiplik
+                        transferredBolge S.zaman (Sahip.kanalSahip k))
       (h_iz        : S'.iz = .kanalGonderOl ctx.tid k v :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store) :
       Step S S'
 
   /-- C-KANAL-AL (Op.Sem §5.4):
-      Sigma' = Sigma[bolge(v) ↦ Pho_sahip(t_alan)]; v artik t'nin lineer
-      ortamina geri eklenir. DRF-L5 atomicity bu kurali kullanir. -/
+      Sigma' = Sigma[bolge(v) ↦ Sahip.thread t_alan]; v artik t'nin lineer
+      ortamina geri eklenir. DRF-L5 atomicity bu kurali kullanir.
+      `transferredBolge` v'nin bolgesi. -/
   | cKanalAl
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (k : KanalId) (v : Deger)
+      (transferredBolge : Bolge)
       (h_in        : ctx ∈ S.thread)
       (h_ifade     : ctx.ifade = .kanalAlIf k)
       (h_kanal_var : ∃ kd ∈ S.kanal, kd.kid = k ∧ v ∈ kd.gonderKuyrugu)
+      (h_sahip     : S'.sahiplik = sahiplikSet S.sahiplik
+                        transferredBolge S.zaman (Sahip.thread ctx.tid))
       (h_iz        : S'.iz = .kanalAlOl ctx.tid k v :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store) :
@@ -117,13 +133,16 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
 
   /-- C-DONDUR (Op.Sem §5.4 R-PAYLAS):
       Sigma' = Sigma[bolge(v) ↦ DONMUS] @ S.zaman.
-      DRF-L4 frozen region read-soundness bu kurali kullanir. -/
+      DRF-L4 frozen region read-soundness bu kurali kullanir.
+      Refactor (A3.0'): once sadece "entry exists in S'.sahiplik" diyordu;
+      simdi tam atomic set semantigi (sahiplikSet) — diger entry'ler
+      degismez kalir, S1 preservation icin gerekli. -/
   | cDondur
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (b : Bolge)
       (h_in        : ctx ∈ S.thread)
       (h_ifade     : ctx.ifade = .dondurIf b)
-      (h_sahip     : ((b, S.zaman), Sahip.donmus) ∈ S'.sahiplik)
+      (h_sahip     : S'.sahiplik = sahiplikSet S.sahiplik b S.zaman Sahip.donmus)
       (h_iz        : S'.iz = .dondurOl ctx.tid b :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
