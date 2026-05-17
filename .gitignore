@@ -10,13 +10,14 @@ build/
 *.lib
 *.a
 
-# Calistirilabilirler (kok veya alt dizinde derlenmisse de yakala)
+# Calistirilabilirler (build dizini icin anchor — Lean proofs/drf-v2-lean/Kemgu/
+# dizini ile cakismasin diye `kemgu` yerine `/build/kemgu*` kullaniliyor)
 *.exe
-kemgu
-test_lexer
-test_arena
-test_ast
-test_parser
+/build/kemgu*
+/build/test_lexer*
+/build/test_arena*
+/build/test_ast*
+/build/test_parser*
 
 # AddressSanitizer / Dr. Memory ciktilari
 *.asan.log
