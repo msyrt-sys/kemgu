@@ -121,12 +121,57 @@ pacman -S mingw-w64-clang-x86_64-llvm
 Her shell oturumunda iki MSYS2 dağıtımı PATH'te olmalı:
 
 ```bash
+# Git Bash / MSYS shell
 export PATH=/c/msys64/clang64/bin:/c/msys64/ucrt64/bin:$PATH
 ```
 
 > Neden iki tane? UCRT64 GCC ASan runtime'ı içermez. Clang64 testler için,
 > UCRT64 prod ikilisi için kullanılır. Ayrıntı: [`CLAUDE.md`](CLAUDE.md) —
 > "Win11 26200 — ASan / Dr. Memory Notu".
+
+### Windows PowerShell / CMD
+
+PowerShell veya CMD kullanıyorsanız PATH'i kalıcı yapmanız gerekmez — repo
+köküne yerleşik build wrapper'ları MSYS2 yollarını oturum bazlı set eder:
+
+```powershell
+# PowerShell
+.\build.ps1 test_tumu          # `mingw32-make test_tumu` ile aynı
+.\build.ps1                    # build/kemgu.exe derler (default hedef)
+.\build.ps1 clean
+```
+
+```cmd
+REM CMD
+build.bat test_tumu
+build.bat
+```
+
+MSYS2 varsayılan dışı bir konumda (`C:\msys64` değilse) `MSYS2_ROOT` ortam
+değişkeniyle override edin:
+
+```powershell
+$env:MSYS2_ROOT = 'D:\msys64'
+.\build.ps1 test_tumu
+```
+
+> Wrapper PATH'i sadece kendi süreci için set eder — KEMGU dışındaki
+> PowerShell oturumlarınızı kirletmez (`gcc` gibi yaygın isimler MSYS2'ye
+> yönlenmez).
+
+PowerShell `Set-ExecutionPolicy Restricted` ile çalışıyorsa (Windows
+varsayılanı) `build.ps1` reddedilir. İki çözüm:
+
+```powershell
+# (a) Tek seferlik kalıcı izin (önerilir):
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# (b) Her çağrıda Bypass:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 test_tumu
+```
+
+ExecutionPolicy değiştirmek istemiyorsanız `build.bat` her zaman çalışır
+(CMD wrapper, policy gerektirmez).
 
 ### Linux / macOS (deneysel)
 
