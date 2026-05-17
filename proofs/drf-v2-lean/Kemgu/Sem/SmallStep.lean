@@ -40,18 +40,24 @@ def threadFresh (S : Konfigurasyon) (t : ThreadId) : Prop :=
 inductive Step : Konfigurasyon → Konfigurasyon → Prop where
 
   /-- S-ATAMA (Op.Sem §4.2): bir thread'in atama ifadesi.
-      Onkosul: t S.thread'de var ve ifadesi `atama x (sabit v)`.
+      Onkosul: t S.thread'de var, ifadesi `atama x (sabit v)`, ve
+      hedef bolge frozen DEGIL (A3.0'' refactor — DRF-L4 icin).
       Etki: store'a `(k, v)` push, iz'e `memYaz`, zaman+1. -/
   | sAtama
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (x : VarId) (v : Deger) (k : Konum)
-      (h_in    : ctx ∈ S.thread)
-      (h_ifade : ctx.ifade = .atama x (.sabit v))
-      (h_store : S'.store = (k, v) :: S.store)
-      (h_iz    : S'.iz = .memYaz ctx.tid k v :: S.iz)
-      (h_zaman : S'.zaman = S.zaman + 1)
-      (h_sahip : S'.sahiplik = S.sahiplik)
-      (h_kanal : S'.kanal = S.kanal) :
+      (h_in         : ctx ∈ S.thread)
+      (h_ifade      : ctx.ifade = .atama x (.sabit v))
+      -- A3.0'' refactor (DRF-L4 onkosulu):
+      -- IyiTipli'nin TipKontrolOk komponentinin kismi ifadesi.
+      -- "Frozen bolgeye yazma yasaktir" (kagit T022 lvalue benzeri).
+      -- Bu olmadan DRF-L4 (a) "no frozen writes" karsi-ornek ile bozulur.
+      (h_not_frozen : ¬ isFrozen S k.bolge)
+      (h_store      : S'.store = (k, v) :: S.store)
+      (h_iz         : S'.iz = .memYaz ctx.tid k v :: S.iz)
+      (h_zaman      : S'.zaman = S.zaman + 1)
+      (h_sahip      : S'.sahiplik = S.sahiplik)
+      (h_kanal      : S'.kanal = S.kanal) :
       Step S S'
 
   /-- C-GOREV-BASLAT (Op.Sem §5.4 R-GOREV uygulamasi):

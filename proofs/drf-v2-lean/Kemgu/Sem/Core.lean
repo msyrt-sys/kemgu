@@ -255,6 +255,26 @@ structure Konfigurasyon where
 
 
 -- ============================================================
+-- §10.1. isFrozen predicate (DRF-L4 icin gerekli, A3.0'' refactor)
+-- ============================================================
+
+/-- Bir bolge S anindaki "frozen" durumu: gecmiste z₀ ≤ S.zaman icin
+    sahiplikGet (b, z₀) = Sahip.donmus var ise.
+
+    Kullanim: sAtama precondition (`h_not_frozen : ¬ isFrozen S k.bolge`)
+    DRF-L4 (a) "no frozen writes" ispati icin gerekli.
+
+    Niye `∃ z₀ ≤ S.zaman`? cDondur(b) cagrildiktan sonra b kalici olarak
+    frozen olur — ama bizim time-stamped Sahiplik modelinde freeze entry
+    spesifik bir zaman damgasinda (cDondur'un calistigi anda). Sonraki
+    zamanlarda lookup (b, S.zaman') eski freeze entry'i bulamaz (farkli
+    key). Bu yuzden "frozen" durumu "gecmis bir zamanda freeze entry var"
+    olarak tanimlanir. Persistence asagidaki teoremlerle gosterilir. -/
+def isFrozen (S : Konfigurasyon) (b : Bolge) : Prop :=
+  ∃ z₀, z₀ ≤ S.zaman ∧ sahiplikGet S.sahiplik (b, z₀) = some Sahip.donmus
+
+
+-- ============================================================
 -- §11. Program + IyiTipli predicate (Op.Sem §7)
 -- ============================================================
 
