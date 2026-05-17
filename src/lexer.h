@@ -33,6 +33,8 @@ typedef enum {
     TOK_DEGER,          /* değer       */
     TOK_HIC,            /* hiç         */
     TOK_GUVENSIZ,       /* güvensiz    */
+    TOK_BOYUT,          /* boyut       */
+    TOK_TEKKEZ,         /* tekkez (Linear Types v1 — --experimental-linear) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */

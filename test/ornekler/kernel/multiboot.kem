@@ -1,0 +1,31 @@
+// Multiboot2 baslik — KEMGU'nun raw bayt yazma yetenegiyle olusturulur.
+// Linker script .multiboot bolumune koyar (binary basinda).
+//
+// Multiboot2 ozellikleri:
+//   magic = 0xE85250D6
+//   architecture = 0 (i386 protected mode — x86_64 long mode'a switch
+//                     bootloader veya kernel sorumlulugundadir)
+//   header_length = 24
+//   checksum = -(magic + arch + header_length)
+//
+// Bu basligi `[bolum: ".multiboot"]` ile bir constant array olarak
+// kodlamak yerine, simdilik raw asm directives ile tanimliyoruz.
+// (Sabit dizi runtime degeri ile binary section'a koymak ileride
+// eklenecek özellik — KEMGU "constant data section" desteklemiyor henuz.)
+
+[bolum: ".multiboot", ciplak]
+işlev __multiboot_header() {
+    güvensiz {
+        _asm(".align 8");
+        _asm(".long 0xE85250D6");     // magic
+        _asm(".long 0");              // architecture (i386)
+        _asm(".long 24");             // header_length
+        // checksum: '$' yerine '$$' ile literal kullaniyoruz cunku
+        // LLVM inline asm '$' karakterini operand referansi gibi yorumlar.
+        _asm(".long 0x100000000 - 0xE85250D6 - 0 - 24");
+        // End tag (8 bayt: type=0, flags=0, size=8)
+        _asm(".short 0");
+        _asm(".short 0");
+        _asm(".long 8");
+    }
+}

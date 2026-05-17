@@ -1,0 +1,23 @@
+PROGRAM (10 uye)  12:1
+  YAPI  12:1
+  YAPI  22:1
+  SABIT  36:1
+  SABIT  37:1
+  SABIT  38:1
+  SABIT  39:1
+  SABIT  40:1
+  SABIT  41:1
+  ISLEV "gdt_yukle"  44:1
+    parametreler (1):
+      PARAMETRE "ptr_adres"  44:18
+        TIP_BASIT "dtam64"  44:29
+    govde:
+      BLOK (1 deyim)  44:37
+        GUVENSIZ  45:5
+  ISLEV "cr3_ayarla"  51:1
+    parametreler (1):
+      PARAMETRE "pml4_adres"  51:19
+        TIP_BASIT "dtam64"  51:31
+    govde:
+      BLOK (1 deyim)  51:39
+        GUVENSIZ  52:5

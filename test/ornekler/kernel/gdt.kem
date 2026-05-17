@@ -1,0 +1,58 @@
+// KEMGU — Global Descriptor Table (GDT) tanimi
+// =============================================
+//
+// x86_64 long mode'da GDT minimal kullanilir: kod ve veri segmentleri
+// 64-bit modda "flat" — base=0, limit=2^64. CS/DS sadece privilege
+// level icin gerekir.
+//
+// GDT entry'si: 8 bayt — limit_low, base_low, base_mid, access,
+// granularity, base_high. (Detaylar Intel SDM Vol 3, Cilt 3.4.5).
+
+// Bir GDT girisi 8 bayttir. KEMGU'da struct olarak temsil ediyoruz.
+yapı GDTGiris {
+    limit_dusuk: dtam16;     // 0:15  limit
+    base_dusuk: dtam16;      // 16:31 base
+    base_orta: dtam8;        // 32:39 base
+    erisim: dtam8;           // 40:47 access bytes (P/DPL/S/Type)
+    granularity: dtam8;      // 48:55 (limit 16:19, G/D/L/AVL)
+    base_yuksek: dtam8;      // 56:63 base
+}
+
+// GDT pointer (lgdt komutuna verilir)
+yapı GDTPtr {
+    limit: dtam16;            // GDT byte boyutu - 1
+    base: dtam64;             // GDT baslangic adresi
+}
+
+// 5 girisli GDT — null + kod (kernel) + veri (kernel) + kod (user) + veri (user)
+// Erisim bayti:
+//   0x9A = present, ring 0, code segment, readable
+//   0x92 = present, ring 0, data segment, writable
+//   0xFA = present, ring 3, code segment, readable
+//   0xF2 = present, ring 3, data segment, writable
+// Granularity:
+//   0xA0 = 4KB granularity, 64-bit long mode
+
+sabit GDT_NULL_LIM:    dtam16 = 0;
+sabit GDT_KERN_KOD:    dtam8  = 154;    // 0x9A
+sabit GDT_KERN_VERI:   dtam8  = 146;    // 0x92
+sabit GDT_USER_KOD:    dtam8  = 250;    // 0xFA
+sabit GDT_USER_VERI:   dtam8  = 242;    // 0xF2
+sabit GDT_LONG_MODE:   dtam8  = 160;    // 0xA0 (4KB + 64-bit)
+
+// GDT'yi belege yukle (lgdt komutu inline asm ile)
+işlev gdt_yukle(ptr_adres: dtam64) {
+    güvensiz {
+        _asm("lgdt 0(%rax)");  // %rax = ptr_adres (ABI varsayim)
+    }
+}
+
+// CR3 register'i (page table base) ayarla
+işlev cr3_ayarla(pml4_adres: dtam64) {
+    güvensiz {
+        _asm("mov %rax, %cr3");
+    }
+}
+
+// Inline asm'in argument passing'i icin gerçek calling convention
+// destegi (bunlar ileride eklenecek — su an kavramsal).

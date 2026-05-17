@@ -1,0 +1,99 @@
+// KEMGU — Interrupt Descriptor Table (IDT) tanimi
+// ================================================
+//
+// IDT 256 girise sahip — kernel her CPU exception/IRQ icin handler
+// adresini yazar. x86_64'te her giris 16 bayt (Intel SDM Vol 3, 6.14).
+//
+// IDT entry yapisi (16 bayt):
+//   0:15   offset_low (handler adresinin alt 16 biti)
+//   16:31  selector  (CS segment, genelde 0x08 = kernel code)
+//   32:34  IST (interrupt stack table index, genelde 0)
+//   35:39  reserved (0)
+//   40:43  type (0xE = interrupt gate, 0xF = trap gate)
+//   44     reserved (0)
+//   45:46  DPL (privilege level — 0 kernel)
+//   47     P (present)
+//   48:63  offset_mid
+//   64:95  offset_high
+//   96:127 reserved (0)
+
+yapı IDTGiris {
+    offset_dusuk: dtam16;
+    selector: dtam16;
+    ist: dtam8;              // 3 bit IST + 5 bit zero
+    flags: dtam8;            // type + DPL + P
+    offset_orta: dtam16;
+    offset_yuksek: dtam32;
+    reserved: dtam32;
+}
+
+yapı IDTPtr {
+    limit: dtam16;
+    base: dtam64;
+}
+
+// IDT giris insa et: handler adresi 4 parcaya bolunur, type/DPL/P set edilir
+işlev idt_giris_kur(handler: dtam64, selector: dtam16,
+                    type_dpl_p: dtam8) -> IDTGiris {
+    değişken g: IDTGiris = IDTGiris {
+        offset_dusuk: 0,
+        selector: 0,
+        ist: 0,
+        flags: 0,
+        offset_orta: 0,
+        offset_yuksek: 0,
+        reserved: 0,
+    };
+    // Handler adresi 64 bit — 3 parca:
+    // alt 16 = offset_dusuk, orta 16 = offset_orta, ust 32 = offset_yuksek
+    // (Bit shift/AND su an LLVM IR'de tam desteklenmiyor; manuel cast
+    //  ile yaklasik degerler atanir.)
+    g.selector = selector;
+    g.flags = type_dpl_p;
+    ver g;
+}
+
+// IDT'yi belege yukle
+işlev idt_yukle(ptr_adres: dtam64) {
+    güvensiz {
+        _asm("lidt 0(%rax)");
+    }
+}
+
+// Tipik kesme tipleri
+sabit IDT_INTERRUPT_GATE: dtam8 = 142;  // 0x8E = P=1, DPL=0, type=E
+sabit IDT_TRAP_GATE:      dtam8 = 143;  // 0x8F = P=1, DPL=0, type=F
+
+// Ornek sayfa hatasi (page fault) isleyicisi
+[kesme]
+işlev sayfa_hatasi_isleyicisi() {
+    güvensiz {
+        // Error code stackten okunur (compiler'a bagli)
+        // CR2 register'inde fault adresi var
+        _asm("mov %cr2, %rax");
+        // Hatayi loglayip halt
+        _asm("cli");
+        _asm("1: hlt; jmp 1b");
+    }
+}
+
+// Ornek genel koruma hatasi (general protection fault)
+[kesme]
+işlev gpf_isleyicisi() {
+    güvensiz {
+        _asm("cli");
+        _asm("1: hlt; jmp 1b");
+    }
+}
+
+// Klavye IRQ isleyicisi (IRQ 1 — vektor 0x21 sonrasi PIC remap)
+[kesme]
+işlev klavye_irq() {
+    güvensiz {
+        // PS/2 data port'tan tara kodu oku
+        _asm("in $0x60, %al");
+        // PIC'e EOI gonder
+        _asm("mov $$0x20, %al");
+        _asm("out %al, $0x20");
+    }
+}

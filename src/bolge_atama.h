@@ -31,6 +31,10 @@ typedef struct BolgeAtama {
     int dongu_id_sayaci;          /* tekil id uretici */
     BolgeBilgisi *aktif_iterasyon; /* aktif dongu bolgesi */
     int ver_baglaminda;           /* 1 = ver icinde (R-VER aktif) */
+    /* Katman 2: concurrency */
+    int thread_id_sayaci;         /* yeni gorev (task) id'leri */
+    int kanal_id_sayaci;          /* yeni kanal id'leri */
+    BolgeBilgisi *aktif_gorev;    /* gorev govdesi icindeysek bolgesi */
 } BolgeAtama;
 
 void bolge_atama_baslat(BolgeAtama *ba, Arena *a,

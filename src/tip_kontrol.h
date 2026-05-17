@@ -71,4 +71,8 @@ void tip_kontrol_program(TipKontrol *tk, const Dugum *program);
 void tip_hata(TipKontrol *tk, const Dugum *d,
               const char *kod, const char *mesaj);
 
+/* Ipucu ile genisletilmis varyant (direktif Bolum 5.3) */
+void tip_hata_ip(TipKontrol *tk, const Dugum *d,
+                  const char *kod, const char *mesaj, const char *ipucu);
+
 #endif /* KEMGU_TIP_KONTROL_H */

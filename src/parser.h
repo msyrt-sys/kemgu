@@ -34,6 +34,15 @@ typedef struct Parser {
      * Default: 1 (evet). Kondisyonel ifadelerde (eger/iken/icin/esles
      * sonrasi) 0'a cekilir, cunku '{' blok basini gosterir. */
     int yapi_olusturma_izni;
+    /* Sistem programlama oznitelikleri — parse_ust_oge dolduruyor,
+     * parse_islev_tanimi okuyor. islev disindaki tanimlarda gormezden gelinir. */
+    int bekleyen_ciplak;
+    int bekleyen_kesme;
+    const char *bekleyen_bolum;
+    int bekleyen_bolum_uzunluk;
+    /* Feature flag: --experimental-linear (Direktif Ek v1 B grubu).
+     * Default 0. Acikken 'tekkez' parse edilir; kapali ise hata. */
+    int deneysel_linear;
 } Parser;
 
 /* === Public API === */

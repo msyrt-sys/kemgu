@@ -1,0 +1,47 @@
+PROGRAM (9 uye)  21:1
+  SABIT  21:1
+  SABIT  22:1
+  SABIT  23:1
+  SABIT  24:1
+  ISLEV "vga_karakter_yaz"  28:1
+    parametreler (4):
+      PARAMETRE "satir"  28:25
+        TIP_BASIT "dtam32"  28:32
+      PARAMETRE "sutun"  28:40
+        TIP_BASIT "dtam32"  28:47
+      PARAMETRE "ch"  29:24
+        TIP_BASIT "dtam8"  29:28
+      PARAMETRE "renk"  29:35
+        TIP_BASIT "dtam8"  29:41
+    govde:
+      BLOK (1 deyim)  29:48
+        GUVENSIZ  30:5
+  ISLEV "vga_kemgu_yaz"  41:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  41:24
+        GUVENSIZ  42:5
+  ISLEV "sonsuz_halt"  60:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  60:22
+        GUVENSIZ  61:5
+  ISLEV "kernel_main"  69:1
+    parametreler (0):
+    govde:
+      BLOK (2 deyim)  69:22
+        IFADE_DEYIMI  70:5
+          CAGRI  70:18
+            hedef:
+              TANIMLAYICI "vga_kemgu_yaz"  70:5
+            argumanlar (0):
+        IFADE_DEYIMI  71:5
+          CAGRI  71:16
+            hedef:
+              TANIMLAYICI "sonsuz_halt"  71:5
+            argumanlar (0):
+  ISLEV "_start"  78:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  78:17
+        GUVENSIZ  79:5

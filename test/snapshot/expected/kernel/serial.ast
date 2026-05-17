@@ -1,0 +1,85 @@
+PROGRAM (7 uye)  19:1
+  SABIT  19:1
+  ISLEV "port_yaz_dtam8"  25:1
+    parametreler (2):
+      PARAMETRE "port"  25:23
+        TIP_BASIT "dtam16"  25:29
+      PARAMETRE "deger"  25:37
+        TIP_BASIT "dtam8"  25:44
+    govde:
+      BLOK (1 deyim)  25:51
+        GUVENSIZ  26:5
+  ISLEV "port_oku_dtam8"  31:1
+    parametreler (1):
+      PARAMETRE "port"  31:23
+        TIP_BASIT "dtam16"  31:29
+    donus_tipi:
+      TIP_BASIT "dtam8"  31:40
+    govde:
+      BLOK (2 deyim)  31:46
+        GUVENSIZ  32:5
+        VER  35:5
+          TAM 0  35:9
+  ISLEV "serial_baslat"  39:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  39:24
+        GUVENSIZ  40:5
+  ISLEV "serial_yazima_hazir"  72:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "mantıksal"  72:33
+    govde:
+      BLOK (2 deyim)  72:44
+        GUVENSIZ  73:5
+        VER  79:5
+          MANTIKSAL dogru  79:9
+  ISLEV "serial_yaz_bayt"  83:1
+    parametreler (1):
+      PARAMETRE "b"  83:24
+        TIP_BASIT "dtam8"  83:27
+    govde:
+      BLOK (1 deyim)  83:34
+        GUVENSIZ  84:5
+  ISLEV "serial_yaz_metin"  94:1
+    parametreler (1):
+      PARAMETRE "s"  94:25
+        TIP_BASIT "metin"  94:28
+    govde:
+      BLOK (6 deyim)  94:35
+        IFADE_DEYIMI  97:5
+          CAGRI  97:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  97:5
+            argumanlar (1):
+              TAM 75  97:21
+        IFADE_DEYIMI  98:5
+          CAGRI  98:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  98:5
+            argumanlar (1):
+              TAM 69  98:21
+        IFADE_DEYIMI  99:5
+          CAGRI  99:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  99:5
+            argumanlar (1):
+              TAM 77  99:21
+        IFADE_DEYIMI  100:5
+          CAGRI  100:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  100:5
+            argumanlar (1):
+              TAM 71  100:21
+        IFADE_DEYIMI  101:5
+          CAGRI  101:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  101:5
+            argumanlar (1):
+              TAM 85  101:21
+        IFADE_DEYIMI  102:5
+          CAGRI  102:20
+            hedef:
+              TANIMLAYICI "serial_yaz_bayt"  102:5
+            argumanlar (1):
+              TAM 10  102:21

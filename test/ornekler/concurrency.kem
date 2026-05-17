@@ -1,0 +1,52 @@
+// KEMGU — Concurrency intrinsics (Bolge Katman 2)
+// ================================================
+//
+// KEMGU'nun bolge tabanli concurrency modeli:
+//   ρ_sahip(t)  — gorev t'ye ait bolge (R-GÖREV)
+//   ρ_kanal(k)  — kanal k'nin transfer tamponu (R-KANAL)
+//
+// Bu intrinsicleri kullanan kod tip kontrol + bolge analizinden
+// geçer. Runtime'da bir scheduler kutuphanesi tarafindan uygulanir
+// (henuz yazilmadi).
+//
+// Intrinsicler:
+//   _gorev_baslat(handle: dtam64) -> dtam64     // R-GÖREV: yeni ρ_sahip
+//   _gorev_birlestir(handle: dtam64) -> bos     // R-BİRLEŞTİR
+//   _kanal_olustur() -> dtam64                  // R-KANAL: yeni ρ_kanal
+//   _kanal_gonder(kanal: dtam64, deger: tam32)  // deger -> ρ_kanal'a transfer
+//   _kanal_al(kanal: dtam64) -> tam32           // ρ_kanal'dan al
+
+// === Producer-Consumer ornegi ===
+
+işlev uretici_govde() {
+    // Bir kanal uzerinden 1..5 sayilarini gonderir
+    // (Cocunda gercek runtime gerek — placeholder)
+}
+
+işlev tuketici_govde() {
+    // Kanaldan oku, topla, ver
+}
+
+işlev main() -> tam32 {
+    // Iki gorev baslat
+    değişken uretici: dtam64 = _gorev_baslat(0);
+    değişken tuketici: dtam64 = _gorev_baslat(0);
+
+    // Bir kanal olustur
+    değişken kanal: dtam64 = _kanal_olustur();
+
+    // Veri gonder (R-KANAL: deger ρ_kanal'a transfer)
+    _kanal_gonder(kanal, 10);
+    _kanal_gonder(kanal, 20);
+    _kanal_gonder(kanal, 12);
+
+    // Tek bir mesaj oku
+    değişken ilk: tam32 = _kanal_al(kanal);
+
+    // Gorevleri bekle (R-BİRLEŞTİR: sonuclar cagirana doner)
+    _gorev_birlestir(uretici);
+    _gorev_birlestir(tuketici);
+
+    // ilk + 30 = 42 (ornek)
+    ver ilk + 32;
+}

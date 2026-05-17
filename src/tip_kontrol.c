@@ -6,6 +6,19 @@
 
 /* === Setup === */
 
+/* Intrinsic islev: ad + parametre tipler + donus tipi -> global'e ekle */
+static void intrinsic_ekle(Arena *a, Scope *g, const char *ad,
+                            TipBilgisi **params, int n,
+                            TipBilgisi *donus) {
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = ad;
+    s.ad_uzunluk = (int)strlen(ad);
+    s.kategori = SEMBOL_ISLEV;
+    s.tip = tip_olustur_islev(a, params, n, donus);
+    sembol_ekle(g, a, &s);
+}
+
 void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
                         const char *dosya_adi, const char *kaynak) {
     tk->arena = a;
@@ -15,6 +28,155 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->hata_sayisi = 0;
     tk->dosya_adi = dosya_adi;
     tk->kaynak = kaynak;
+
+    /* === Sistem programlama intrinsics === */
+    TipBilgisi *t_bos    = tip_olustur_basit(a, TIP_BOS);
+    TipBilgisi *t_metin  = tip_olustur_basit(a, TIP_METIN);
+    TipBilgisi *t_dtam64 = tip_olustur_basit(a, TIP_DTAM64);
+
+    /* _asm(metin) -> bos */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = t_metin;
+        intrinsic_ekle(a, global, "_asm", p, 1, t_bos);
+    }
+
+    /* _yaz_volatile_dtamN(adres: dtam64, deger: dtamN) -> bos
+     * _oku_volatile_dtamN(adres: dtam64) -> dtamN */
+    struct { const char *yaz_ad; const char *oku_ad; TipKategorisi k; }
+    tipler[] = {
+        {"_yaz_volatile_dtam8",  "_oku_volatile_dtam8",  TIP_DTAM8},
+        {"_yaz_volatile_dtam16", "_oku_volatile_dtam16", TIP_DTAM16},
+        {"_yaz_volatile_dtam32", "_oku_volatile_dtam32", TIP_DTAM32},
+        {"_yaz_volatile_dtam64", "_oku_volatile_dtam64", TIP_DTAM64},
+    };
+    for (int i = 0; i < 4; i++) {
+        TipBilgisi *tn = tip_olustur_basit(a, tipler[i].k);
+        /* yaz: (dtam64, T) -> bos */
+        TipBilgisi **py = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 2);
+        py[0] = t_dtam64;
+        py[1] = tn;
+        intrinsic_ekle(a, global, tipler[i].yaz_ad, py, 2, t_bos);
+        /* oku: (dtam64) -> T */
+        TipBilgisi **po = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        po[0] = t_dtam64;
+        intrinsic_ekle(a, global, tipler[i].oku_ad, po, 1, tn);
+    }
+
+    /* === Atomic intrinsics — seq_cst sirali ===
+     * _atomik_oku_<size>(adres: dtam64) -> T
+     * _atomik_yaz_<size>(adres: dtam64, deger: T) -> bos
+     * _atomik_topla_<size>(adres: dtam64, deger: T) -> T (eski deger)
+     * _atomik_takas_<size>(adres: dtam64, yeni: T) -> T (eski deger)
+     * _atomik_cas_<size>(adres: dtam64, eski: T, yeni: T) -> mantiksal */
+    TipBilgisi *t_mant = tip_olustur_basit(a, TIP_MANTIKSAL);
+    struct { const char *suffix; TipKategorisi k; } atomik_tipler[] = {
+        {"dtam8",  TIP_DTAM8},
+        {"dtam16", TIP_DTAM16},
+        {"dtam32", TIP_DTAM32},
+        {"dtam64", TIP_DTAM64},
+    };
+    for (int i = 0; i < 4; i++) {
+        TipBilgisi *tn = tip_olustur_basit(a, atomik_tipler[i].k);
+        char adbuf[64];
+
+        /* oku: (dtam64) -> T */
+        snprintf(adbuf, sizeof(adbuf), "_atomik_oku_%s",
+                 atomik_tipler[i].suffix);
+        TipBilgisi **p1 = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p1[0] = t_dtam64;
+        intrinsic_ekle(a, global, ast_string_kopyala(a, adbuf,
+                                                     (int)strlen(adbuf)),
+                       p1, 1, tn);
+
+        /* yaz: (dtam64, T) -> bos */
+        snprintf(adbuf, sizeof(adbuf), "_atomik_yaz_%s",
+                 atomik_tipler[i].suffix);
+        TipBilgisi **p2 = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 2);
+        p2[0] = t_dtam64;
+        p2[1] = tn;
+        intrinsic_ekle(a, global, ast_string_kopyala(a, adbuf,
+                                                     (int)strlen(adbuf)),
+                       p2, 2, t_bos);
+
+        /* topla: (dtam64, T) -> T */
+        snprintf(adbuf, sizeof(adbuf), "_atomik_topla_%s",
+                 atomik_tipler[i].suffix);
+        TipBilgisi **p3 = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 2);
+        p3[0] = t_dtam64;
+        p3[1] = tn;
+        intrinsic_ekle(a, global, ast_string_kopyala(a, adbuf,
+                                                     (int)strlen(adbuf)),
+                       p3, 2, tn);
+
+        /* takas: (dtam64, T) -> T */
+        snprintf(adbuf, sizeof(adbuf), "_atomik_takas_%s",
+                 atomik_tipler[i].suffix);
+        TipBilgisi **p4 = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 2);
+        p4[0] = t_dtam64;
+        p4[1] = tn;
+        intrinsic_ekle(a, global, ast_string_kopyala(a, adbuf,
+                                                     (int)strlen(adbuf)),
+                       p4, 2, tn);
+
+        /* cas: (dtam64, T, T) -> mantiksal */
+        snprintf(adbuf, sizeof(adbuf), "_atomik_cas_%s",
+                 atomik_tipler[i].suffix);
+        TipBilgisi **p5 = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 3);
+        p5[0] = t_dtam64;
+        p5[1] = tn;
+        p5[2] = tn;
+        intrinsic_ekle(a, global, ast_string_kopyala(a, adbuf,
+                                                     (int)strlen(adbuf)),
+                       p5, 3, t_mant);
+    }
+
+    /* === Memory barrier intrinsics === */
+    /* _bellek_engeli() -> bos (full seq_cst fence) */
+    intrinsic_ekle(a, global, "_bellek_engeli", NULL, 0, t_bos);
+    /* _oku_engeli() -> bos (acquire fence) */
+    intrinsic_ekle(a, global, "_oku_engeli", NULL, 0, t_bos);
+    /* _yaz_engeli() -> bos (release fence) */
+    intrinsic_ekle(a, global, "_yaz_engeli", NULL, 0, t_bos);
+
+    /* === Concurrency (Bolge Katman 2) intrinsics ===
+     *  _gorev_baslat(islev_handle: dtam64) -> dtam64 (task handle, R-GÖREV)
+     *  _gorev_birlestir(handle: dtam64) -> bos       (R-BİRLEŞTİR)
+     *  _kanal_olustur() -> dtam64                    (kanal id, R-KANAL)
+     *  _kanal_gonder(kanal: dtam64, deger: tam32) -> bos
+     *  _kanal_al(kanal: dtam64) -> tam32
+     * Bunlar runtime'da bir scheduler/kanal kutuphanesi tarafindan
+     * uygulanir. Tip kontrol ve bolge analizi acisindan tanimlidir. */
+    TipBilgisi *t_tam32 = tip_olustur_basit(a, TIP_TAM32);
+
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = t_dtam64;
+        intrinsic_ekle(a, global, "_gorev_baslat", p, 1, t_dtam64);
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = t_dtam64;
+        intrinsic_ekle(a, global, "_gorev_birlestir", p, 1, t_bos);
+    }
+    intrinsic_ekle(a, global, "_kanal_olustur", NULL, 0, t_dtam64);
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a,
+                            sizeof(TipBilgisi *) * 2);
+        p[0] = t_dtam64;
+        p[1] = t_tam32;
+        intrinsic_ekle(a, global, "_kanal_gonder", p, 2, t_bos);
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = t_dtam64;
+        intrinsic_ekle(a, global, "_kanal_al", p, 1, t_tam32);
+    }
 }
 
 void tip_hata(TipKontrol *tk, const Dugum *d,
@@ -23,6 +185,14 @@ void tip_hata(TipKontrol *tk, const Dugum *d,
     tk->hata_sayisi++;
     hata_raporla(tk->dosya_adi, tk->kaynak,
                  d->satir, d->sutun, kod, mesaj, NULL);
+}
+
+void tip_hata_ip(TipKontrol *tk, const Dugum *d,
+                  const char *kod, const char *mesaj, const char *ipucu) {
+    if (!tk || !d) return;
+    tk->hata_sayisi++;
+    hata_raporla(tk->dosya_adi, tk->kaynak,
+                 d->satir, d->sutun, kod, mesaj, ipucu);
 }
 
 /* === Yardimci: hata tipi === */
@@ -36,6 +206,67 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
+
+/* Lambda govdesi BLOK ise tip_kontrol_deyim cagrilir. */
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+
+/* Lambda body'de outer scope'tan tekkez referansi var mi?
+ * Spec B.5 closure-itself-linear inferansi icin. */
+static int outer_tekkez_kullanim_var(TipKontrol *tk, const Dugum *d,
+                                       const Dugum *lambda) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_TANIMLAYICI: {
+            const char *ad = d->veri.tanimlayici.metin;
+            int n = d->veri.tanimlayici.uzunluk;
+            /* Lambda param mi? */
+            for (int i = 0; i < lambda->veri.lambda.param_sayi; i++) {
+                const Dugum *p = lambda->veri.lambda.parametreler[i];
+                if (p->veri.parametre.ad_uzunluk == n &&
+                    memcmp(p->veri.parametre.ad, ad, (size_t)n) == 0) {
+                    return 0;
+                }
+            }
+            /* Sembol tablosunda + tekkez mi? */
+            const Sembol *s = sembol_bul(tk->scope, ad, n);
+            if (s && s->tip && s->tip->kategori == TIP_TEKKEZ) {
+                return 1;
+            }
+            return 0;
+        }
+        case DUGUM_IKILI:
+            return outer_tekkez_kullanim_var(tk, d->veri.ikili.sol, lambda) ||
+                   outer_tekkez_kullanim_var(tk, d->veri.ikili.sag, lambda);
+        case DUGUM_TEKLI:
+            return outer_tekkez_kullanim_var(tk, d->veri.tekli.operand, lambda);
+        case DUGUM_CAGRI: {
+            if (outer_tekkez_kullanim_var(tk, d->veri.cagri.hedef, lambda))
+                return 1;
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                if (outer_tekkez_kullanim_var(tk, d->veri.cagri.argumanlar[i],
+                                                lambda)) return 1;
+            }
+            return 0;
+        }
+        case DUGUM_BLOK: {
+            for (int i = 0; i < d->veri.blok.sayi; i++) {
+                if (outer_tekkez_kullanim_var(tk, d->veri.blok.deyimler[i],
+                                                lambda)) return 1;
+            }
+            return 0;
+        }
+        case DUGUM_VER:
+            return d->veri.ver.deger &&
+                   outer_tekkez_kullanim_var(tk, d->veri.ver.deger, lambda);
+        case DUGUM_IFADE_DEYIMI:
+            return outer_tekkez_kullanim_var(tk, d->veri.ifade_deyimi.ifade,
+                                              lambda);
+        case DUGUM_DEGISKEN:
+            return outer_tekkez_kullanim_var(tk, d->veri.degisken.deger, lambda);
+        default:
+            return 0;
+    }
+}
 
 static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
@@ -126,6 +357,12 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             return tip_olustur_secimlik(tk->arena, ic);
         }
 
+        case DUGUM_TIP_TEKKEZ: {
+            TipBilgisi *ic = ast_tip_to_bilgi(tk,
+                tip_d->veri.tip_tekkez.ic_tip);
+            return tip_olustur_tekkez(tk->arena, ic);
+        }
+
         case DUGUM_TIP_SONUC: {
             TipBilgisi *deger = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_sonuc.deger_tip);
@@ -193,15 +430,20 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
 static TipBilgisi *kontrol_ikili_sayisal(TipKontrol *tk, const Dugum *d,
                                          TipBilgisi *sol, TipBilgisi *sag) {
     if (!tip_sayisal_mi(sol)) {
-        tip_hata(tk, d, "T003", "ikili operatorun sol tarafi sayisal degil");
+        tip_hata_ip(tk, d, "T003", "ikili operatorun sol tarafi sayisal degil",
+                    "Sol operandi sayisal bir tipe (tam32, kesirli64 vs.) cevirin.");
         return t_hata(tk);
     }
     if (!tip_sayisal_mi(sag)) {
-        tip_hata(tk, d, "T003", "ikili operatorun sag tarafi sayisal degil");
+        tip_hata_ip(tk, d, "T003", "ikili operatorun sag tarafi sayisal degil",
+                    "Sag operandi sayisal bir tipe (tam32, kesirli64 vs.) cevirin.");
         return t_hata(tk);
     }
     if (!tip_esit(sol, sag)) {
-        tip_hata(tk, d, "T001", "ikili operator iki tarafi ayni tip olmali");
+        tip_hata_ip(tk, d, "T001",
+                    "ikili operator iki tarafi ayni tip olmali",
+                    "Operandlar farkli tipte; ayni tipi kullanin veya bidirectional "
+                    "cikarsama icin degisken annotation ekleyin (orn. 'degisken x: tam64 = ...').");
         return t_hata(tk);
     }
     return sol;
@@ -317,7 +559,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             const Sembol *s = sembol_bul(tk->scope,
                 d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
             if (!s) {
-                tip_hata(tk, d, "T002", "tanimsiz sembol");
+                tip_hata_ip(tk, d, "T002", "tanimsiz sembol",
+                    "Bu ad scope'ta tanimli degil. Yazim hatasi olabilir, "
+                    "veya 'degisken' ile tanimlayin, ya da bir 'kullan' "
+                    "deyimi ile modul iceri aktarin.");
                 return t_hata(tk);
             }
             return s->tip ? s->tip : t_hata(tk);
@@ -331,7 +576,31 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
             switch (d->veri.ikili.op) {
-                case OP_ARTI:  case OP_EKSI:
+                /* Pointer aritmetigi: *T + i, i + *T, *T - i, *T - *T.
+                 * Sadece guvensiz blokta anlamli olsa da, tip kontrolu
+                 * her yerde calisir (uretim once tip kontrolu). */
+                case OP_ARTI: {
+                    if (sol->kategori == TIP_POINTER && tip_tamsayi_mi(sag))
+                        return sol;
+                    if (sag->kategori == TIP_POINTER && tip_tamsayi_mi(sol))
+                        return sag;
+                    return kontrol_ikili_sayisal(tk, d, sol, sag);
+                }
+                case OP_EKSI: {
+                    if (sol->kategori == TIP_POINTER && tip_tamsayi_mi(sag))
+                        return sol;
+                    if (sol->kategori == TIP_POINTER &&
+                        sag->kategori == TIP_POINTER) {
+                        if (!tip_esit(sol->veri.pointer.hedef,
+                                      sag->veri.pointer.hedef)) {
+                            tip_hata(tk, d, "T028",
+                                "pointer cikarma ayni hedef tip ister");
+                            return t_hata(tk);
+                        }
+                        return t_basit(tk, TIP_TAM64);
+                    }
+                    return kontrol_ikili_sayisal(tk, d, sol, sag);
+                }
                 case OP_CARPI: case OP_BOLU:  case OP_MOD:
                     return kontrol_ikili_sayisal(tk, d, sol, sag);
 
@@ -361,6 +630,33 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 case OP_VE: case OP_VEYA:
                     return kontrol_ikili_mantiksal(tk, d, sol, sag);
 
+                /* === Bit operatorleri: iki taraf da tamsayi olmali === */
+                case OP_BIT_VE: case OP_BIT_VEYA: case OP_BIT_OZVEYA:
+                case OP_SOLA_KAYDIR: case OP_SAGA_KAYDIR: {
+                    if (!tip_tamsayi_mi(sol)) {
+                        tip_hata(tk, d, "T030",
+                            "bit op sol taraf tamsayi olmali");
+                        return t_hata(tk);
+                    }
+                    if (!tip_tamsayi_mi(sag)) {
+                        tip_hata(tk, d, "T030",
+                            "bit op sag taraf tamsayi olmali");
+                        return t_hata(tk);
+                    }
+                    /* Bit-AND/OR/XOR: ayni tip ister.
+                     * Shift: sol tip sonuc; shift miktari herhangi tamsayi. */
+                    if (d->veri.ikili.op == OP_SOLA_KAYDIR ||
+                        d->veri.ikili.op == OP_SAGA_KAYDIR) {
+                        return sol;
+                    }
+                    if (!tip_esit(sol, sag)) {
+                        tip_hata(tk, d, "T001",
+                            "bit op iki tarafi ayni tip olmali");
+                        return t_hata(tk);
+                    }
+                    return sol;
+                }
+
                 default:
                     tip_hata(tk, d, "T001", "bilinmeyen ikili operator");
                     return t_hata(tk);
@@ -386,6 +682,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     }
                     return t_basit(tk, TIP_MANTIKSAL);
 
+                case OP_BIT_DEGIL:
+                    if (!tip_tamsayi_mi(op)) {
+                        tip_hata(tk, d, "T030", "'~' tamsayi ister");
+                        return t_hata(tk);
+                    }
+                    return op;
+
                 case OP_REF:
                     return tip_olustur_referans(tk->arena, op, 0);
 
@@ -408,6 +711,77 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* === Generic intrinsic'ler: kullan + imha + _tekkez_yarat === */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const char *ad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int ad_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+
+                /* _tekkez_yarat(val: T) -> tekkez<T> — producer intrinsic
+                 * Spec V1 Bolum B.6 OneTimeKey ureticisi icin altyapi. */
+                if (ad_uz == 13 && memcmp(ad, "_tekkez_yarat", 13) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "_tekkez_yarat tek arguman alir");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *vt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (vt->kategori == TIP_HATA) return t_hata(tk);
+                    if (vt->kategori == TIP_TEKKEZ) {
+                        tip_hata_ip(tk, d, "T045",
+                            "_tekkez_yarat zaten tekkez olan deger alamaz",
+                            "tekkez<T>'i tekrar sarmak anlamsiz; "
+                            "dogrudan kullan/imha ile tuket.");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_tekkez(tk->arena, vt);
+                }
+                /* imha(x: tekkez<T>) -> bos */
+                if (ad_uz == 4 && memcmp(ad, "imha", 4) == 0) {
+                    if (d->veri.cagri.sayi != 1) {
+                        tip_hata(tk, d, "T010",
+                            "imha tek arguman alir (tekkez<T>)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *xt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    if (!tip_tekkez_mi(xt) && xt->kategori != TIP_HATA) {
+                        tip_hata(tk, d, "T044",
+                            "imha argumani tekkez<T> tipi olmali");
+                        return t_hata(tk);
+                    }
+                    return t_basit(tk, TIP_BOS);
+                }
+                /* kullan(x: tekkez<T>, f: islev(T) -> R) -> R */
+                if (ad_uz == 6 && memcmp(ad, "kullan", 6) == 0) {
+                    if (d->veri.cagri.sayi != 2) {
+                        tip_hata(tk, d, "T010",
+                            "kullan iki arguman alir (tekkez<T>, islev)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *xt = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    TipBilgisi *ft = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[1]);
+                    if (!tip_tekkez_mi(xt) && xt->kategori != TIP_HATA) {
+                        tip_hata(tk, d, "T044",
+                            "kullan ilk argumani tekkez<T> tipi olmali");
+                        return t_hata(tk);
+                    }
+                    if (ft->kategori != TIP_ISLEV &&
+                        ft->kategori != TIP_HATA) {
+                        tip_hata(tk, d, "T006",
+                            "kullan ikinci argumani islev olmali");
+                        return t_hata(tk);
+                    }
+                    if (ft->kategori == TIP_ISLEV) {
+                        return ft->veri.islev.donus;
+                    }
+                    return t_hata(tk);
+                }
+            }
+
             TipBilgisi *hedef_tip = tip_belirle(tk, d->veri.cagri.hedef);
             if (hedef_tip->kategori == TIP_HATA) return t_hata(tk);
             if (hedef_tip->kategori != TIP_ISLEV) {
@@ -554,10 +928,47 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 params[i] = ast_tip_to_bilgi(tk, p->veri.parametre.tip);
             }
-            /* Govde tipi — basit: parse_ifade donus tipi.
-             * Tam degerlendirme ADIM 11.4'te (deyimler dahil). */
-            TipBilgisi *donus = tip_belirle(tk, d->veri.lambda.govde);
+
+            /* Lambda govdesi icin yeni scope — parametreler iceride
+             * gorunsun. Govde ifade veya blok olabilir. */
+            Scope *eski = tk->scope;
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, eski);
+            for (int i = 0; i < n; i++) {
+                const Dugum *p = d->veri.lambda.parametreler[i];
+                Sembol s;
+                memset(&s, 0, sizeof(s));
+                s.ad = p->veri.parametre.ad;
+                s.ad_uzunluk = p->veri.parametre.ad_uzunluk;
+                s.kategori = SEMBOL_PARAMETRE;
+                s.tip = params[i];
+                s.ast_dugumu = p;
+                s.satir = p->satir;
+                s.sutun = p->sutun;
+                sembol_ekle(tk->scope, tk->arena, &s);
+            }
+
+            TipBilgisi *donus;
+            if (d->veri.lambda.govde &&
+                d->veri.lambda.govde->tip == DUGUM_BLOK) {
+                /* Blok govde — ver deyimleri ile donus tipi cikarsamak
+                 * gerek. Simdilik bos tip + tam kontrol (yan etki). */
+                tip_kontrol_deyim(tk, d->veri.lambda.govde);
+                donus = t_basit(tk, TIP_BOS);
+            } else {
+                donus = tip_belirle(tk, d->veri.lambda.govde);
+            }
+
+            tk->scope = eski;
             return tip_olustur_islev(tk->arena, params, n, donus);
+        }
+
+        /* === boyut<T> — derleme zamani bayt boyut === */
+        case DUGUM_BOYUT: {
+            /* Tip cozumlemesi (ad arama vs.) — TIP_HATA donerse bizde hata */
+            TipBilgisi *t = ast_tip_to_bilgi(tk, d->veri.boyut.tip);
+            if (t->kategori == TIP_HATA) return t_hata(tk);
+            /* boyut<T> dtam64 doner (isaretsiz 64-bit bayt sayisi) */
+            return t_basit(tk, TIP_DTAM64);
         }
 
         /* === Hata dugumu === */
@@ -664,6 +1075,37 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 return t_basit(tk, beklenen->kategori);
             }
             break;
+
+        case DUGUM_BOYUT:
+            /* boyut<T> default dtam64, ama context tamsayisi varsa o tipte */
+            if (tip_tamsayi_mi(beklenen)) {
+                TipBilgisi *bt = ast_tip_to_bilgi(tk, d->veri.boyut.tip);
+                if (bt->kategori == TIP_HATA) return t_hata(tk);
+                return t_basit(tk, beklenen->kategori);
+            }
+            break;
+
+        case DUGUM_IKILI: {
+            /* Aritmetik ikili op: beklenen tipi her iki tarafa yay */
+            Operator op = d->veri.ikili.op;
+            if ((op == OP_ARTI || op == OP_EKSI || op == OP_CARPI ||
+                 op == OP_BOLU || op == OP_MOD) &&
+                (tip_sayisal_mi(beklenen))) {
+                TipBilgisi *sol = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sol, beklenen);
+                TipBilgisi *sag = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sag, beklenen);
+                if (sol->kategori == TIP_HATA ||
+                    sag->kategori == TIP_HATA) return t_hata(tk);
+                if (!tip_esit(sol, sag)) {
+                    tip_hata(tk, d, "T001",
+                        "ikili op iki tarafi ayni tip olmali (context'ten)");
+                    return t_hata(tk);
+                }
+                return sol;
+            }
+            break;
+        }
 
         case DUGUM_KESIRLI:
             if (beklenen->kategori == TIP_KESIRLI32 ||
@@ -866,6 +1308,20 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 deger_tip = tip_belirle(tk, d->veri.degisken.deger);
             }
             TipBilgisi *son = annot ? annot : deger_tip;
+
+            /* B-Adim 5 genisletme: closure-itself-linear (Spec B.5) —
+             * deger lambda + body'de outer tekkez referansi varsa,
+             * sembol tipi tekkez<orig> olarak sarmalanir. */
+            if (d->veri.degisken.deger &&
+                d->veri.degisken.deger->tip == DUGUM_LAMBDA &&
+                son && son->kategori != TIP_TEKKEZ) {
+                if (outer_tekkez_kullanim_var(tk,
+                        d->veri.degisken.deger->veri.lambda.govde,
+                        d->veri.degisken.deger)) {
+                    son = tip_olustur_tekkez(tk->arena, son);
+                }
+            }
+
             Sembol s;
             memset(&s, 0, sizeof(s));
             s.ad = d->veri.degisken.ad;
@@ -975,16 +1431,61 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_ESLES: {
-            /* deger tipini belirle (kontrol icin gerekli — desen tip kontrol
-             * ileride ADIM 11.6'da generic/secimlik desenleri ile detayli) */
+            /* deger tipini belirle */
             TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
-            (void)dt;
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
                 /* Yeni scope kol icin (desen icindeki tanimlayicilar) */
                 Scope *eski = tk->scope;
                 tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
-                /* Govde — blok ya da ifade. Basit: deyim olarak kontrol et */
+
+                /* === Pattern binding: desen tanimlayicisi tipini scope'a === */
+                const Dugum *desen = kol->veri.esles_kolu.desen;
+                if (desen && desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+                    /* Tip: match deger tipi */
+                    Sembol s;
+                    memset(&s, 0, sizeof(s));
+                    s.ad = desen->veri.desen_tanimlayici.ad;
+                    s.ad_uzunluk = desen->veri.desen_tanimlayici.ad_uzunluk;
+                    s.kategori = SEMBOL_DEGISKEN;
+                    s.tip = dt;
+                    s.ast_dugumu = desen;
+                    s.satir = desen->satir;
+                    s.sutun = desen->sutun;
+                    sembol_ekle(tk->scope, tk->arena, &s);
+                } else if (desen && desen->tip == DUGUM_DESEN_YAPICI) {
+                    /* Yapici argumanlari recursive — alt desenler de
+                     * tanimlayici olabilir. seçimlik<T> ve sonuç<T,H>
+                     * yapilarinda ic tip dt'nin generic param'i. */
+                    for (int j = 0; j < desen->veri.desen_yapici.sayi; j++) {
+                        const Dugum *alt = desen->veri.desen_yapici.alt_desenler[j];
+                        if (alt && alt->tip == DUGUM_DESEN_TANIMLAYICI) {
+                            /* Tip: secimlik<T>/sonuc<T,H> ise ic T,
+                             * yoksa dt (yaklasik). Suanlik dt. */
+                            TipBilgisi *alt_tip = dt;
+                            if (dt && dt->kategori == TIP_SECIMLIK) {
+                                alt_tip = dt->veri.secimlik.ic;
+                            } else if (dt && dt->kategori == TIP_SONUC &&
+                                       j == 0) {
+                                alt_tip = dt->veri.sonuc.deger;
+                            } else if (dt && dt->kategori == TIP_SONUC &&
+                                       j == 1) {
+                                alt_tip = dt->veri.sonuc.hata;
+                            }
+                            Sembol s;
+                            memset(&s, 0, sizeof(s));
+                            s.ad = alt->veri.desen_tanimlayici.ad;
+                            s.ad_uzunluk = alt->veri.desen_tanimlayici.ad_uzunluk;
+                            s.kategori = SEMBOL_DEGISKEN;
+                            s.tip = alt_tip;
+                            s.ast_dugumu = alt;
+                            s.satir = alt->satir;
+                            s.sutun = alt->sutun;
+                            sembol_ekle(tk->scope, tk->arena, &s);
+                        }
+                    }
+                }
+
                 tip_kontrol_deyim(tk, kol->veri.esles_kolu.govde);
                 tk->scope = eski;
             }

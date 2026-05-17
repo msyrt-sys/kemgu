@@ -32,4 +32,8 @@
 /* AST'den LLVM IR text uret. NULL guvenli. */
 void llvm_ir_uret(const Dugum *program, FILE *out);
 
+/* Hedef triple ozelligi ile (orn. "x86_64-unknown-none", "aarch64-unknown-linux-gnu").
+ * NULL ise varsayilan "x86_64-pc-windows-gnu" kullanilir. */
+void llvm_ir_uret_target(const Dugum *program, FILE *out, const char *triple);
+
 #endif /* KEMGU_LLVM_H */

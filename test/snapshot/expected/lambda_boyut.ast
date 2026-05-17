@@ -1,0 +1,60 @@
+PROGRAM (2 uye)  9:1
+  ISLEV "kare"  9:1
+    parametreler (1):
+      PARAMETRE "x"  9:13
+        TIP_BASIT "tam32"  9:16
+    donus_tipi:
+      TIP_BASIT "tam32"  9:26
+    govde:
+      BLOK (1 deyim)  9:32
+        VER  10:5
+          IKILI *  10:11
+            TANIMLAYICI "x"  10:9
+            TANIMLAYICI "x"  10:13
+  ISLEV "main"  13:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  13:18
+    govde:
+      BLOK (6 deyim)  13:24
+        DEGISKEN "k"  15:5
+          deger:
+            CAGRI  15:24
+              hedef:
+                TANIMLAYICI "kare"  15:20
+              argumanlar (1):
+                TAM 5  15:25
+        DEGISKEN "topla"  18:5
+          deger:
+            LAMBDA  18:24
+        DEGISKEN "t"  19:5
+          deger:
+            CAGRI  19:25
+              hedef:
+                TANIMLAYICI "topla"  19:20
+              argumanlar (2):
+                TAM 10  19:26
+                TAM 3  19:30
+        DEGISKEN "d"  22:5
+          deger:
+            CAGRI  22:38
+              hedef:
+                LAMBDA  22:21
+              argumanlar (1):
+                TAM 8  22:39
+        DEGISKEN "b32"  26:5
+          tip:
+            TIP_BASIT "tam32"  26:21
+          deger:
+            BOYUT  26:29
+              TIP_BASIT "tam32"  26:35
+        VER  29:5
+          IKILI +  29:23
+            IKILI -  29:19
+              IKILI +  29:15
+                IKILI +  29:11
+                  TANIMLAYICI "k"  29:9
+                  TANIMLAYICI "t"  29:13
+                TANIMLAYICI "d"  29:17
+              TAM 4  29:21
+            TANIMLAYICI "b32"  29:25

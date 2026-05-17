@@ -1,0 +1,90 @@
+// KEMGU bare-metal x86_64 kernel scaffold
+// =========================================
+//
+// Bu, KEMGU dilinde yazilmis bir cekirdek iskeletidir. Multiboot2
+// uyumlu bir bootloader (GRUB) tarafindan yuklenir, VGA text-mode
+// ekrana "KEMGU" yazar ve halt loop'una girer.
+//
+// Derleme (linux/macOS host icin):
+//   kemgu --build --freestanding --target=x86_64-unknown-none \
+//         --linker-script=kernel.ld kernel.kem multiboot.kem -o kernel.elf
+//   grub-mkrescue -o kernel.iso isodir/   # isodir/boot/kernel.elf icine
+//   qemu-system-x86_64 -cdrom kernel.iso  # test
+//
+// Windows host icin clang Linux ELF uretebilir ama linker script
+// kullanımı dikkat ister. Sub-WSL kullanmak en pratik yol.
+//
+// Bu dosyanin kendisi --check ve --llvm modlarinda KEMGU
+// derleyicisinde test edilebilir.
+
+// === VGA text-mode sabitleri ===
+sabit VGA_ADRES: dtam64 = 753664;     // 0xB8000
+sabit VGA_GENISLIK: dtam32 = 80;
+sabit VGA_YUKSEKLIK: dtam32 = 25;
+sabit RENK_BEYAZ: dtam8 = 7;          // BG=siyah, FG=acik gri
+
+// === Yardimci: tek karakter VGA'ya yaz ===
+// VGA hucresi: 2 bayt (karakter + ozellik)
+işlev vga_karakter_yaz(satir: dtam32, sutun: dtam32,
+                       ch: dtam8, renk: dtam8) {
+    güvensiz {
+        // VGA_ADRES + (satir * 80 + sutun) * 2 — satir/sutun kullaniliyor
+        değişken s64: dtam64 = 0;
+        değişken c64: dtam64 = 0;
+        değişken offset: dtam64 = VGA_ADRES + (s64 * 80 + c64) * 2;
+        _yaz_volatile_dtam8(offset, ch);
+        _yaz_volatile_dtam8(offset + 1, renk);
+    }
+}
+
+// === Bir metin literali pozisyona yaz (simdilik sabit dize) ===
+işlev vga_kemgu_yaz() {
+    güvensiz {
+        // K E M G U beyaz renkte ekrana yaz
+        // VGA_ADRES = 0xB8000
+        _yaz_volatile_dtam8(VGA_ADRES + 0,  75);   // 'K'
+        _yaz_volatile_dtam8(VGA_ADRES + 1,  7);    // renk
+        _yaz_volatile_dtam8(VGA_ADRES + 2,  69);   // 'E'
+        _yaz_volatile_dtam8(VGA_ADRES + 3,  7);
+        _yaz_volatile_dtam8(VGA_ADRES + 4,  77);   // 'M'
+        _yaz_volatile_dtam8(VGA_ADRES + 5,  7);
+        _yaz_volatile_dtam8(VGA_ADRES + 6,  71);   // 'G'
+        _yaz_volatile_dtam8(VGA_ADRES + 7,  7);
+        _yaz_volatile_dtam8(VGA_ADRES + 8,  85);   // 'U'
+        _yaz_volatile_dtam8(VGA_ADRES + 9,  7);
+    }
+}
+
+// === Sonsuz halt dongusu — kernel donus etmemeli ===
+[ciplak]
+işlev sonsuz_halt() {
+    güvensiz {
+        _asm("cli");
+        _asm("1: hlt; jmp 1b");
+    }
+}
+
+// === Kernel ana giris noktasi ===
+// Bootloader (sonra _start) bunu cagirir.
+işlev kernel_main() {
+    vga_kemgu_yaz();
+    sonsuz_halt();
+}
+
+// === Bootloader entry — multiboot'tan ilk dusen kod ===
+// .text.boot bolumune konur (linker script ilk yere koyar).
+// naked: prologue/epilogue yok — assembly tam kontrol.
+[ciplak, bolum: ".text.boot"]
+işlev _start() {
+    güvensiz {
+        // Stack pointer'i ayarla — stack_top sembolu linker script'te.
+        // NOT: LLVM inline asm'de '$' operandi LLVM operand referansidir
+        // ($0, $1, ...), bu yuzden literal '$' icin '$$' kullanilir.
+        _asm("mov $$stack_top, %rsp");
+        // Kernel'i cagir
+        _asm("call kernel_main");
+        // Donerse halt
+        _asm("cli");
+        _asm("1: hlt; jmp 1b");
+    }
+}

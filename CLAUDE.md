@@ -93,7 +93,20 @@ kemgu/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
 │       ├── yapilar.kem                — Generic yapılar + referans (TAMAMLANDI ✓)
-│       └── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
+│       ├── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
+│       ├── lambda_boyut.kem           — Lambda IIFE + boyut<T> + lifting (ADIM 14)
+│       ├── faz1_kapsamli.kem          — Tüm OS-ready özellikler tek dosyada (ADIM 14 ek)
+│       ├── kernel/                    — Bare-metal kernel scaffold (ADIM 15)
+│       │   ├── kernel.kem             — VGA write + halt + _start naked entry
+│       │   ├── multiboot.kem          — Multiboot2 başlık (inline asm)
+│       │   ├── kernel.ld              — Linker script (1MB layout)
+│       │   ├── gdt.kem                — Global Descriptor Table (ADIM 16)
+│       │   ├── idt.kem                — Interrupt Descriptor Table (ADIM 16)
+│       │   ├── paging.kem             — Sayfa tablolari PML4/PDPT/PD/PT (ADIM 16)
+│       │   ├── serial.kem             — UART 16550 driver scaffold (ADIM 16)
+│       │   ├── pci.kem                — PCI Configuration Space (ADIM 16)
+│       │   └── README.md              — Derleme talimatları
+│       └── concurrency.kem            — Task + kanal kullanim ornegi (Katman 2)
 ```
 
 ---
@@ -184,7 +197,7 @@ Raw string:         r#"..."#
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
 tamam, hata, bölge, uygula, kendin, seçimlik, sonuç, değer, hiç,
-güvensiz
+güvensiz, boyut
 ```
 
 ### Tip Sistemi
@@ -383,11 +396,223 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-### Sıradaki büyük seçenekler:
-- **Tam Katman 1 escape analizi** (DFA tabanlı)
-- **Bölge çözümleyici Katman 2** (concurrency: R-GÖREV, R-BİRLEŞTİR, R-KANAL)
-- **LLVM backend genişletme** (parametreler, kontrol akışı, yapılar, dizi, çağrı)
-- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
+### ADIM 14: Lambda + Pointer Aritmetik + boyut<T> (sizeof) — TAMAMLANDI ✓
+
+**Yeni keyword: `boyut` (31'inci anahtar kelime).** Tip parametresi alir, `dtam64` doner:
+
+```kem
+boyut<tam32>         // → 4 (dtam64)
+boyut<*tam32>        // → 8 (x86_64 pointer)
+boyut<kesirli64>     // → 8
+```
+
+**Bidirectional çıkarsama:** Tamsayı beklenen bağlamlarda otomatik daralma:
+```kem
+değişken b: tam32 = boyut<tam32>;   // dtam64 yerine tam32
+```
+
+**Pointer aritmetiği (tip kontrol):**
+- `*T + tamsayi` → `*T`
+- `tamsayi + *T` → `*T`
+- `*T - tamsayi` → `*T`
+- `*T - *T` → `tam64` (pointer farkı — hedef tipleri eşit olmalı, yoksa T028)
+
+**LLVM backend genişletme (lambda + lifting):**
+- Parametreler: `define i32 @f(i32 %x, i32 %y)` — SSA isim olarak doğrudan
+- Tanımlayıcı arama: lokal sembol tablosu (parametre + `değişken` bagi)
+- `değişken x = expr;` → SSA register'a baglar
+- Dogrudan çağrı: `call i32 @f(...)`
+- **Lambda lifting:** `(|x| x+1)(41)` → `@__lambda_0` üst düzey fonksiyona dönüşür
+- Değişkene bağlı lambda: `değişken f = |a,b| a+b; f(10,3)` çalışır (capture YOK)
+- `boyut<T>` derleme zamanı sabite dönüşür
+
+**Örnek:**
+```bash
+./build/kemgu --llvm test/ornekler/lambda_boyut.kem | clang -x ir - -o lb.exe
+./lb.exe; echo $?   # → 42 ✓
+```
+
+**Yeni testler:**
+- Lexer: 104/104 (+1 boyut)
+- Parser: 82/82 (+4: boyut/boyut_pointer/boyut_aritmetik + lambda_boyut.kem)
+- Tip kontrol: 98/98 (+8: 4 boyut + 4 pointer aritmetik)
+- **Toplam: 404/404 ✓ (önceden 392)**
+
+### ADIM 14 EK: OS-ready LLVM backend — TAMAMLANDI ✓
+
+**Alloca/load/store modeline geçiş + tam tip eşlemesi.** Tüm değişkenler artık `alloca`+`store`/`load` pattern'i kullanır (clang -O0 yaklaşımı). Bu sayede:
+
+**Tip desteği (LLVM IR):**
+| KEMGU | LLVM |
+|-------|------|
+| tam8/dtam8 | i8 |
+| tam16/dtam16 | i16 |
+| tam32/dtam32 | i32 |
+| tam64/dtam64 | i64 |
+| kesirli32 | float |
+| kesirli64 | double |
+| mantıksal | i1 |
+| karakter | i32 (UTF-32) |
+| *T, &T | ptr |
+| Dizi\<T\> | { ptr, i64 } (slice) |
+| yapı X | %struct.X |
+| boş | void |
+
+**Yeni dil özellikleri (codegen):**
+- **`değişken x: T = expr; x = yeni;`** — alloca + store, atama LLVM `store`
+- **`eğer / değilse`** — `br i1` + then/else/end basic block'ları
+- **`iken cond { ... }`** — header/body/end blokları
+- **`için x: koleksiyon { ... }`** — `Dizi<T>` üzerinde iterasyon (slice extract + indeks)
+- **`eşleş x { literal => ...; _ => ...; }`** — literal + joker + tanımlayıcı (binding) desen zinciri
+- **`yapı X { alan: T; }`** — `%struct.X = type {...}`, `getelementptr` ile alan erişim/atama
+- **`Dizi<T>` + `[1,2,3]` + `xs[i]`** — slice representation, indeks load/store
+- **Çoklu dosya derleme** — `kemgu f1.kem f2.kem` AST'leri birleştirir, harici çağrılar `declare` ile emit
+- **`-c` modu (object file)** — `kemgu -c f.kem -o f.o` clang ile .o üretir
+- **`--build` modu** — `kemgu --build *.kem -o app.exe` tam derleme + link
+- **Inline assembly + volatile MMIO** — sistem programlama intrinsics:
+
+**OS programlama intrinsics (güvensiz blokta):**
+```kem
+güvensiz {
+    _asm("hlt");                            // inline assembly
+    _yaz_volatile_dtam8(0xB8000, 65);       // MMIO write
+    değişken s = _oku_volatile_dtam32(0x1000);  // MMIO read
+}
+```
+9 intrinsic: `_asm`, `_yaz_volatile_dtam{8,16,32,64}`, `_oku_volatile_dtam{8,16,32,64}`. Tip kontrol tarafından da tanınır (predeclared global scope'ta).
+
+**Yeni örnek:** `test/ornekler/faz1_kapsamli.kem` — 80 satır, tüm özellikleri kullanır (recursive fib, faktoriyel, struct, dizi+for, match, lambda IIFE, boyut<T>, inline asm), → exit 42
+
+**Tüm dilin LLVM tarafından desteklenen pipeline'ı:**
+```bash
+kemgu --build prog.kem -o prog.exe        # tek dosya
+kemgu --build m1.kem m2.kem -o app.exe    # çoklu dosya
+kemgu -c lib.kem -o lib.o                 # object file (ayrı derleme)
+clang lib.o ana.o -o app.exe              # manuel linker
+```
+
+**Test sayisi: 406/406 ✓** (+1: faz1_kapsamli.kem parser dosya testi)
+
+### ADIM 14 EK 2: OS-PROGRAMING TOOLCHAIN — TAMAMLANDI ✓ (ADIM 15)
+
+KEMGU artık bare-metal kernel üretebilir. Yeni özellikler:
+
+**Oznitelik sistemi (parser + LLVM):**
+```kem
+[bolum: ".text.boot"]      // linker section
+[ciplak]                   // naked function (prologue/epilogue yok)
+[kesme]                    // interrupt handler (x86_intrcc calling conv)
+[ciplak, bolum: ".multiboot"]   // birden cok oznitelik
+```
+
+LLVM IR çıktı örnekleri:
+- `[ciplak]` → `define void @f() #0 { ... } attributes #0 = { naked }`
+- `[kesme]` → `define x86_intrcc void @f() { ... }`
+- `[bolum: ".text.boot"]` → `define void @f() section ".text.boot" { ... }`
+
+**Atomic intrinsics (23 adet):**
+```kem
+güvensiz {
+    değişken v: dtam32 = _atomik_oku_dtam32(adres);          // load atomic
+    _atomik_yaz_dtam32(adres, deger);                         // store atomic
+    değişken eski: dtam32 = _atomik_topla_dtam32(adres, 1);   // atomicrmw add
+    değişken takas: dtam32 = _atomik_takas_dtam32(adres, 99); // atomicrmw xchg
+    değişken basarili: mantıksal = _atomik_cas_dtam32(adres, eski, yeni); // cmpxchg
+    _bellek_engeli();     // fence seq_cst
+    _oku_engeli();        // fence acquire
+    _yaz_engeli();        // fence release
+}
+```
+Tüm intrinsics 4 boyutta (dtam8/16/32/64): 4×5 = 20 atomic op + 3 fence = 23.
+
+**CLI bayraklar:**
+```bash
+kemgu --freestanding              # -nostdlib -ffreestanding -fno-builtin
+kemgu --target=x86_64-unknown-none  # cross-compile, ELF cikti
+kemgu --linker-script=kernel.ld     # custom linker script (-Wl,-T,...)
+```
+
+**Sabit (constant) codegen:**
+```kem
+sabit VGA_ADRES: dtam64 = 0xB8000;
+// → @VGA_ADRES = constant i64 753664
+// TANIMLAYICI ile load edilir
+```
+
+**Bidirectional çıkarsama: ikili op için yayım:**
+```kem
+değişken x: dtam64 = VGA_ADRES + 1;  // 1 dtam64'e çıkarsanır (eskiden tam32 idi)
+```
+
+**Bootloader/kernel scaffold:** `test/ornekler/kernel/`
+- `kernel.kem` — VGA write, halt loop, _start (naked)
+- `multiboot.kem` — Multiboot2 başlığı (inline asm)
+- `kernel.ld` — linker script (1MB layout)
+- `README.md` — derleme talimatı (GRUB ISO + QEMU)
+
+**Sonuç:** `ld.lld -m elf_x86_64 -T kernel.ld kernel.o multiboot.o -o kernel.elf` → ELF 64-bit bare-metal executable, multiboot2 uyumlu, GRUB ile yüklenebilir, QEMU'da çalışır.
+
+```
+$ llvm-objdump -h kernel.elf
+.multiboot    @ 0x100000  (Multiboot2 başlık)
+.text.boot    @ 0x100020  (_start entry, naked)
+.text         @ 0x100030  (kernel_main, vga_kemgu_yaz, sonsuz_halt)
+.rodata       @ 0x100200  (VGA_ADRES, sabit veriler)
+.bss          + stack_top (16KB stack)
+```
+
+### ADIM 16: KERNEL YAZARI HAZIRLIK — TAMAMLANDI ✓
+
+**Sabit array codegen (`.rodata` raw bytes):**
+```kem
+sabit BAYTLAR: Dizi<dtam8> = [65, 66, 67, 68];
+// @BAYTLAR.data = private constant [4 x i8] [i8 65, ...]
+// @BAYTLAR = constant { ptr, i64 } { ptr @BAYTLAR.data, i64 4 }
+```
+
+**String literal runtime (UTF-8 slice):** `metin` artik `{ ptr, i64 }` slice
+```kem
+değişken s: metin = "Merhaba";
+// @.str0 = [7 x i8], @.s0 = { ptr, i64 } { ptr @.str0, i64 7 }
+```
+
+**Closure (free var capture):**
+```kem
+değişken y: tam32 = 10;
+değişken topla = |x: tam32| x + y;   // y captured
+ver topla(32);  // -> 42
+```
+- Free var walker (recursive AST traversal)
+- Env struct alloca caller'da
+- Lambda `(ptr env, params...)` imzali — env'den captures load
+- Call site env_ptr'yi ilk arg olarak gecirir
+
+**Bölge Katman 2 (concurrency aksiyomlari):**
+- `_gorev_baslat(handle) -> dtam64` — R-GÖREV (yeni ρ_sahip)
+- `_gorev_birlestir(handle)` — R-BİRLEŞTİR
+- `_kanal_olustur() -> dtam64` — R-KANAL (yeni ρ_kanal)
+- `_kanal_gonder(kanal, deger)` — deger ρ_kanal'a transfer
+- `_kanal_al(kanal) -> tam32`
+- bolge_atama.c bunlari taniyor + 5 yeni test
+
+**Kernel yazimi ornek dosyalari (`test/ornekler/kernel/`):**
+- `gdt.kem` — Global Descriptor Table tanimi
+- `idt.kem` — Interrupt Descriptor Table + handler örnekleri
+- `paging.kem` — Sayfa tablolari (PML4/PDPT/PD/PT)
+- `serial.kem` — UART 16550 driver scaffold
+- `pci.kem` — PCI Configuration Space (Mechanism 1)
+- `concurrency.kem` — Task + kanal kullanimi (Katman 2)
+
+**Test sayisi:** **411/411 ✓** (+5 Katman 2 bolge testleri)
+
+### Hala kalan (gercek runtime + dil tamamlama):
+
+- **Tam Katman 1 escape analizi** (DFA tabanlı — su an context-tracking)
+- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen scope)
+- **Concurrency runtime** (scheduler, kanal implementation — sonradan)
+- **Bit shift / bit AND / bit OR** operatorleri (page table bit alanlari icin)
+- **Yapi initializer atama** (karisik literal kontrol)
+- **Generic monomorphization codegen** (su an tip sistemi farkinda ama LLVM yok)
 - **Bootstrapping** (uzun vade)
 
 ### İlerideki Fazlar
@@ -457,9 +682,9 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 TİP + BÖLGE + LLVM FAZLARI TAMAMLANDI** (END-TO-END DERLEYİCİ!)
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel) → LLVM IR → native exe
-- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → **(genişletme: tam escape, Katman 2, LLVM cağrı/yapı/kontrol akışı)**
+- **Faz:** **🎉🎉🎉🎉🎉 KERNEL YAZARI HAZIR — TAM ÖZELLİK SETİ** (ADIM 16: sabit array + string slice + closure + Katman 2 + driver örnekleri)
+- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (Katman 1 + Katman 2) → LLVM IR (alloca, tam tip, kontrol akışı, struct, slice, closure, sabit array, string literal, intrinsics, naked/section/x86_intrcc, atomic) → çoklu dosya / linker / object file → ELF bare-metal kernel
+- **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14: Lambda + boyut + ptr aritmetik~~ ✓ → ~~14 ek: alloca + kontrol akışı + struct/dizi + multi-file + asm/volatile~~ ✓ → ~~15: oznitelikler + atomic + freestanding + cross-compile + kernel scaffold~~ ✓ → ~~16: sabit array + string literal + closure + Katman 2 + driver örnekleri~~ ✓ → **(tam DFA escape analizi, bit operatörleri, hiç/değer ifade, concurrency runtime, generic monomorphization, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
   - Generic: Monomorphization (Rust gibi)

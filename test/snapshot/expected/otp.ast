@@ -1,0 +1,62 @@
+PROGRAM (5 uye)  25:1
+  ISLEV "otp_uret_demo"  25:1
+    parametreler (0):
+    donus_tipi:
+      HATA  25:27 (error recovery)
+  ISLEV "otp_xor"  32:1
+    parametreler (2):
+      PARAMETRE "b"  32:16
+        TIP_BASIT "tam8"  32:19
+      PARAMETRE "anahtar_bayt"  32:25
+        TIP_BASIT "tam8"  32:39
+    donus_tipi:
+      TIP_BASIT "tam8"  32:48
+    govde:
+      BLOK (1 deyim)  32:53
+        VER  33:5
+          IKILI ^  33:11
+            TANIMLAYICI "b"  33:9
+            TANIMLAYICI "anahtar_bayt"  33:13
+  ISLEV "otp_isle"  40:1
+    parametreler (1):
+      PARAMETRE "anahtar"  40:17
+        HATA  40:26 (error recovery)
+  ISLEV "otp_iptal"  46:1
+    parametreler (1):
+      PARAMETRE "anahtar"  46:18
+        HATA  46:27 (error recovery)
+  ISLEV "main"  59:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  59:18
+    govde:
+      BLOK (4 deyim)  59:24
+        DEGISKEN "anahtar"  61:5
+          tip:
+            HATA  61:25 (error recovery)
+          deger:
+            IKILI >  61:37
+              IKILI <  61:31
+                HATA  61:31 (error recovery)
+                TANIMLAYICI "tam32"  61:32
+              HATA  61:39 (error recovery)
+        ATAMA  61:39
+          hedef:
+            HATA  61:39 (error recovery)
+          deger:
+            CAGRI  61:54
+              hedef:
+                TANIMLAYICI "otp_uret_demo"  61:41
+              argumanlar (0):
+        DEGISKEN "sifreli"  63:5
+          tip:
+            TIP_BASIT "tam32"  63:25
+          deger:
+            CAGRI  63:41
+              hedef:
+                TANIMLAYICI "otp_isle"  63:33
+              argumanlar (2):
+                TANIMLAYICI "anahtar"  63:42
+                TAM 305419896  63:51
+        VER  65:5
+          TAM 42  65:9

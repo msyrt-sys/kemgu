@@ -1,0 +1,88 @@
+// KEMGU — Sayfa Tablolari (Paging)
+// =================================
+//
+// x86_64 4-seviyeli sayfa tablosu (PML4 → PDPT → PD → PT).
+// Her tablo 512 girisli, her giris 8 bayt = 4KB sayfa.
+//
+// Sayfa tablosu girisi (PTE) bit alanlari (Intel SDM Vol 3, 4.5):
+//   0     Present (P)         — sayfa fiziksel bellekte mi
+//   1     Read/Write (R/W)    — 0=okuma, 1=okuma/yazma
+//   2     User/Supervisor (U/S) — 0=ring 0, 1=ring 3 erisebilir
+//   3     PWT — page write-through
+//   4     PCD — page cache disable
+//   5     Accessed (A)        — CPU okuyunca/yazinca set eder
+//   6     Dirty (D)           — sadece son seviye, yazinca set
+//   7     PS/PAT
+//   8-11  Reserved/avail
+//   12-51 Sayfa cerceve adresi (40 bit, 4KB hizali)
+//   52-62 Avail
+//   63    NX (no-execute)
+
+sabit PAGE_PRESENT:  dtam64 = 1;        // bit 0
+sabit PAGE_RW:       dtam64 = 2;        // bit 1
+sabit PAGE_USER:     dtam64 = 4;        // bit 2
+sabit PAGE_PWT:      dtam64 = 8;        // bit 3
+sabit PAGE_PCD:      dtam64 = 16;       // bit 4
+sabit PAGE_ACCESS:   dtam64 = 32;       // bit 5
+sabit PAGE_DIRTY:    dtam64 = 64;       // bit 6
+sabit PAGE_PS:       dtam64 = 128;      // bit 7
+// PAGE_NX bit 63 — su an sabit ifade 64-bit shift tam degil
+
+// Sayfa cerceve adresi 4KB hizali olur.
+// PTE = (fiziksel_adres & 0xFFFFFFFFFF000) | bayraklar
+işlev pte_olustur(fiziksel: dtam64, bayraklar: dtam64) -> dtam64 {
+    // 4KB hizalama maskesi: tum bitleri set, alt 12 sifir
+    // 0xFFFFFFFFFFFFF000 — KEMGU literal yetersiz, bit and yok henuz
+    // Sade form: doğrudan toplama (cerceve zaten hizali kabul)
+    ver fiziksel + bayraklar;
+}
+
+// PML4 root page table (1 sayfa = 4KB = 512 entry * 8 bayt)
+// Bu sabit normalde .bss'te ya da kernel calistirinda dinamik tahsis.
+// Demo amacli sabit array.
+sabit PML4_BOSALTILMIS: Dizi<dtam64> = [0, 0, 0, 0, 0, 0, 0, 0];
+// Gerçek kernel'de 512 girisli olmali — siralarla ileride duzeltilebilir.
+
+// Paging'i etkin kil — CR3'e PML4 adresi yaz + CR0.PG set
+işlev paging_baslat(pml4: dtam64) {
+    güvensiz {
+        // CR3 = pml4_adres
+        _asm("mov %rdi, %cr3");
+        // CR0.PG (bit 31) set — ABI: rax = mov olarak girer
+        _asm("mov %cr0, %rax");
+        _asm("or $$0x80000000, %eax");
+        _asm("mov %rax, %cr0");
+    }
+}
+
+// TLB'yi temizle (sayfa tablosu degisikligi sonrasi)
+işlev tlb_invalidate_sayfa(vadres: dtam64) {
+    güvensiz {
+        _asm("invlpg 0(%rdi)");
+    }
+}
+
+işlev tlb_invalidate_tum() {
+    güvensiz {
+        _asm("mov %cr3, %rax");
+        _asm("mov %rax, %cr3");
+    }
+}
+
+// Sanal adres -> PML4/PDPT/PD/PT indeksleri (her biri 9 bit)
+işlev pml4_indeks(vadres: dtam64) -> dtam64 {
+    // (vadres >> 39) & 0x1FF — bit kaydirma yok henuz
+    ver vadres;
+}
+
+işlev pdpt_indeks(vadres: dtam64) -> dtam64 {
+    ver vadres;
+}
+
+işlev pd_indeks(vadres: dtam64) -> dtam64 {
+    ver vadres;
+}
+
+işlev pt_indeks(vadres: dtam64) -> dtam64 {
+    ver vadres;
+}

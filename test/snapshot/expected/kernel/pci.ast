@@ -1,0 +1,80 @@
+PROGRAM (12 uye)  21:1
+  SABIT  21:1
+  SABIT  22:1
+  YAPI  25:1
+  ISLEV "pci_config_oku32"  36:1
+    parametreler (4):
+      PARAMETRE "bus"  36:25
+        TIP_BASIT "dtam8"  36:30
+      PARAMETRE "cihaz"  36:37
+        TIP_BASIT "dtam8"  36:44
+      PARAMETRE "islev"  36:51
+        TIP_BASIT "dtam8"  36:58
+      PARAMETRE "offset"  37:24
+        TIP_BASIT "dtam8"  37:32
+    donus_tipi:
+      TIP_BASIT "dtam32"  37:42
+    govde:
+      BLOK (2 deyim)  37:49
+        GUVENSIZ  38:5
+        VER  52:5
+          TAM 0  52:9
+  ISLEV "pci_id_al"  56:1
+    parametreler (3):
+      PARAMETRE "bus"  56:18
+        TIP_BASIT "dtam8"  56:23
+      PARAMETRE "cihaz"  56:30
+        TIP_BASIT "dtam8"  56:37
+      PARAMETRE "islev"  56:44
+        TIP_BASIT "dtam8"  56:51
+    donus_tipi:
+      TIP_BASIT "dtam32"  56:61
+    govde:
+      BLOK (1 deyim)  56:68
+        VER  57:5
+          CAGRI  57:25
+            hedef:
+              TANIMLAYICI "pci_config_oku32"  57:9
+            argumanlar (4):
+              TANIMLAYICI "bus"  57:26
+              TANIMLAYICI "cihaz"  57:31
+              TANIMLAYICI "islev"  57:38
+              TAM 0  57:45
+  ISLEV "pci_cihaz_var"  61:1
+    parametreler (2):
+      PARAMETRE "bus"  61:22
+        TIP_BASIT "dtam8"  61:27
+      PARAMETRE "cihaz"  61:34
+        TIP_BASIT "dtam8"  61:41
+    donus_tipi:
+      TIP_BASIT "mantıksal"  61:51
+    govde:
+      BLOK (2 deyim)  61:62
+        DEGISKEN "id"  62:5
+          tip:
+            TIP_BASIT "dtam32"  62:20
+          deger:
+            CAGRI  62:38
+              hedef:
+                TANIMLAYICI "pci_id_al"  62:29
+              argumanlar (3):
+                TANIMLAYICI "bus"  62:39
+                TANIMLAYICI "cihaz"  62:44
+                TAM 0  62:51
+        VER  64:5
+          MANTIKSAL dogru  64:9
+  ISLEV "pci_bus_tara"  68:1
+    parametreler (0):
+    govde:
+      BLOK (2 deyim)  68:23
+        DEGISKEN "bus"  69:5
+          tip:
+            TIP_BASIT "tam32"  69:21
+          deger:
+            TAM 0  69:29
+        IKEN  70:5
+  SABIT  81:1
+  SABIT  82:1
+  SABIT  83:1
+  SABIT  84:1
+  SABIT  85:1

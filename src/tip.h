@@ -54,6 +54,9 @@ typedef enum {
     TIP_ISLEV,       /* islev(T1, T2) -> T */
     TIP_YAPI,        /* yapi X veya X<T1, T2> */
 
+    /* === Linear (affine) — Direktif Ek v1 B grubu === */
+    TIP_TEKKEZ,        /* tekkez<T> — en fazla bir kez tüketilir */
+
     /* === Generic === */
     TIP_GENERIC_PARAM,  /* T (yapı/islev içinde tip parametresi) */
 
@@ -109,6 +112,10 @@ struct TipBilgisi {
             const char *ad;
             int ad_uzunluk;
         } generic_param;
+
+        struct {
+            TipBilgisi *ic;        /* tekkez<T> -> T */
+        } tekkez;
     } veri;
 };
 
@@ -125,6 +132,10 @@ TipBilgisi *tip_olustur_islev(Arena *a, TipBilgisi **params, int param_sayi,
 TipBilgisi *tip_olustur_yapi(Arena *a, const char *ad, int ad_uzunluk,
                               TipBilgisi **tip_arg, int tip_arg_sayi);
 TipBilgisi *tip_olustur_generic_param(Arena *a, const char *ad, int ad_uzunluk);
+TipBilgisi *tip_olustur_tekkez(Arena *a, TipBilgisi *ic);
+
+/* Linear (tekkez) tipi mi? */
+int tip_tekkez_mi(const TipBilgisi *t);
 
 /* === Iliskiler === */
 

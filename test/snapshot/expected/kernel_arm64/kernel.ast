@@ -1,0 +1,73 @@
+PROGRAM (6 uye)  21:1
+  SABIT  21:1
+  ISLEV "uart_yaz_bayt"  24:1
+    parametreler (1):
+      PARAMETRE "ch"  24:22
+        TIP_BASIT "dtam8"  24:26
+    govde:
+      BLOK (1 deyim)  24:33
+        GUVENSIZ  25:5
+  ISLEV "uart_kemgu_yaz"  31:1
+    parametreler (0):
+    govde:
+      BLOK (6 deyim)  31:25
+        IFADE_DEYIMI  32:5
+          CAGRI  32:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  32:5
+            argumanlar (1):
+              TAM 75  32:19
+        IFADE_DEYIMI  33:5
+          CAGRI  33:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  33:5
+            argumanlar (1):
+              TAM 69  33:19
+        IFADE_DEYIMI  34:5
+          CAGRI  34:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  34:5
+            argumanlar (1):
+              TAM 77  34:19
+        IFADE_DEYIMI  35:5
+          CAGRI  35:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  35:5
+            argumanlar (1):
+              TAM 71  35:19
+        IFADE_DEYIMI  36:5
+          CAGRI  36:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  36:5
+            argumanlar (1):
+              TAM 85  36:19
+        IFADE_DEYIMI  37:5
+          CAGRI  37:18
+            hedef:
+              TANIMLAYICI "uart_yaz_bayt"  37:5
+            argumanlar (1):
+              TAM 10  37:19
+  ISLEV "sonsuz_halt"  42:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  42:22
+        GUVENSIZ  43:5
+  ISLEV "kernel_main"  51:1
+    parametreler (0):
+    govde:
+      BLOK (2 deyim)  51:22
+        IFADE_DEYIMI  52:5
+          CAGRI  52:19
+            hedef:
+              TANIMLAYICI "uart_kemgu_yaz"  52:5
+            argumanlar (0):
+        IFADE_DEYIMI  53:5
+          CAGRI  53:16
+            hedef:
+              TANIMLAYICI "sonsuz_halt"  53:5
+            argumanlar (0):
+  ISLEV "_start"  61:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  61:17
+        GUVENSIZ  62:5

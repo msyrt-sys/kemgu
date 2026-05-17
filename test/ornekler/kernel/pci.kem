@@ -1,0 +1,85 @@
+// KEMGU — PCI Configuration Space erisim (Mechanism 1)
+// ======================================================
+//
+// PCI configuration space iki port araciligiyla erisilir:
+//   0xCF8 — CONFIG_ADDRESS (32 bit)
+//   0xCFC — CONFIG_DATA   (32 bit)
+//
+// Adres formati (CONFIG_ADDRESS register):
+//   bit 31    Enable
+//   bit 24-30 Reserved (0)
+//   bit 16-23 Bus number (0-255)
+//   bit 11-15 Device number (0-31)
+//   bit 8-10  Function number (0-7)
+//   bit 2-7   Register number (0-63, dword)
+//   bit 0-1   Reserved (0)
+//
+// Bir cihazi okumak:
+//   1. CONFIG_ADDRESS'a kodlanmis adresi yaz
+//   2. CONFIG_DATA'dan oku
+
+sabit PCI_CONFIG_ADDRESS: dtam16 = 3320;   // 0xCF8
+sabit PCI_CONFIG_DATA:    dtam16 = 3324;   // 0xCFC
+
+// PCI cihaz tanimlayicisi
+yapı PCICihaz {
+    bus: dtam8;
+    cihaz: dtam8;
+    islev: dtam8;
+    saglayici_id: dtam16;
+    cihaz_id: dtam16;
+    sinif: dtam8;
+    alt_sinif: dtam8;
+}
+
+// 32-bit PCI config register oku
+işlev pci_config_oku32(bus: dtam8, cihaz: dtam8, islev: dtam8,
+                       offset: dtam8) -> dtam32 {
+    güvensiz {
+        // Adres olustur:
+        //   adres = (1 << 31) | (bus << 16) | (dev << 11) |
+        //           (fn << 8) | (offset & 0xFC)
+        // KEMGU'da bit-shift henuz yok — inline asm ile manuel.
+        _asm("mov $$0xCF8, %dx");
+        // Olusturma ve port'a yazma
+        _asm("mov %edi, %eax");        // adres -> %eax
+        _asm("out %eax, %dx");
+        // Data port'tan oku
+        _asm("mov $$0xCFC, %dx");
+        _asm("in %dx, %eax");
+        // Sonuc %eax'ta
+    }
+    ver 0;  // placeholder
+}
+
+// Saglayici (vendor) ve cihaz ID al
+işlev pci_id_al(bus: dtam8, cihaz: dtam8, islev: dtam8) -> dtam32 {
+    ver pci_config_oku32(bus, cihaz, islev, 0);
+}
+
+// Cihaz var mi? (vendor != 0xFFFF)
+işlev pci_cihaz_var(bus: dtam8, cihaz: dtam8) -> mantıksal {
+    değişken id: dtam32 = pci_id_al(bus, cihaz, 0);
+    // (id & 0xFFFF) != 0xFFFF kontrolu — bit AND henuz yok
+    ver doğru;  // basitlestirildi
+}
+
+// PCI bus'ini tara (basit numaralandirma)
+işlev pci_bus_tara() {
+    değişken bus: tam32 = 0;
+    iken bus < 256 {
+        değişken dev: tam32 = 0;
+        iken dev < 32 {
+            // Cihaz varsa raporla — gercek kernel'de listeleme yapar
+            dev = dev + 1;
+        }
+        bus = bus + 1;
+    }
+}
+
+// Yaygin PCI sinif kodlari (class:subclass)
+sabit PCI_SINIF_DEPOLAMA:   dtam8 = 1;    // mass storage (IDE, SATA, NVMe)
+sabit PCI_SINIF_AG:         dtam8 = 2;    // network (Ethernet)
+sabit PCI_SINIF_EKRAN:      dtam8 = 3;    // VGA, video
+sabit PCI_SINIF_MULTIMEDIA: dtam8 = 4;    // ses karti
+sabit PCI_SINIF_KOPRU:      dtam8 = 6;    // host/PCI/ISA bridges

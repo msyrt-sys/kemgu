@@ -1,0 +1,70 @@
+PROGRAM (5 uye)  4:1
+  YAPI  4:1
+  YAPI  9:1
+  ISLEV "nokta_olustur"  14:1
+    parametreler (2):
+      PARAMETRE "x"  14:22
+        TIP_BASIT "tam32"  14:25
+      PARAMETRE "y"  14:32
+        TIP_BASIT "tam32"  14:35
+    donus_tipi:
+      TIP_BASIT "Nokta"  14:45
+    govde:
+      BLOK (1 deyim)  14:51
+        VER  15:5
+          YAPI_OLUSTUR  15:9
+  ISLEV "kutu_doldur"  21:1
+    parametreler (2):
+      PARAMETRE "k"  21:20
+        TIP_REFERANS (degisken)  21:23
+          TIP_KULLANICI  21:35
+      PARAMETRE "eleman"  21:48
+        TIP_BASIT "tam32"  21:56
+    govde:
+      BLOK (2 deyim)  21:63
+        ATAMA  22:5
+          hedef:
+            ERISIM "icerik"  22:6
+              TANIMLAYICI "k"  22:5
+          deger:
+            TANIMLAYICI "eleman"  22:16
+        ATAMA  23:5
+          hedef:
+            ERISIM "bos_mu"  23:6
+              TANIMLAYICI "k"  23:5
+          deger:
+            MANTIKSAL yanlis  23:16
+  ISLEV "mesafe_kare"  26:1
+    parametreler (2):
+      PARAMETRE "a"  26:20
+        TIP_REFERANS  26:23
+          TIP_BASIT "Nokta"  26:24
+      PARAMETRE "b"  26:31
+        TIP_REFERANS  26:34
+          TIP_BASIT "Nokta"  26:35
+    donus_tipi:
+      TIP_BASIT "tam32"  26:45
+    govde:
+      BLOK (3 deyim)  26:51
+        DEGISKEN "dx"  27:5
+          deger:
+            IKILI -  27:25
+              ERISIM "x"  27:22
+                TANIMLAYICI "a"  27:21
+              ERISIM "x"  27:28
+                TANIMLAYICI "b"  27:27
+        DEGISKEN "dy"  28:5
+          deger:
+            IKILI -  28:25
+              ERISIM "y"  28:22
+                TANIMLAYICI "a"  28:21
+              ERISIM "y"  28:28
+                TANIMLAYICI "b"  28:27
+        VER  29:5
+          IKILI +  29:17
+            IKILI *  29:12
+              TANIMLAYICI "dx"  29:9
+              TANIMLAYICI "dx"  29:14
+            IKILI *  29:22
+              TANIMLAYICI "dy"  29:19
+              TANIMLAYICI "dy"  29:24

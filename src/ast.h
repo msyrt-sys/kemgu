@@ -60,6 +60,7 @@ typedef enum {
     DUGUM_YAPI_OLUSTUR,
     DUGUM_DIZI_OLUSTUR,
     DUGUM_ALAN_ATAMA,      /* yapi_olustur icinde "ad: ifade" */
+    DUGUM_BOYUT,           /* boyut<T> — derleme zamani bayt boyut */
 
     /* Literaller */
     DUGUM_TAM,
@@ -79,6 +80,7 @@ typedef enum {
     DUGUM_TIP_SONUC,       /* sonuc<T,H> */
     DUGUM_TIP_ISLEV,       /* islev(...) -> T */
     DUGUM_TIP_KULLANICI,   /* modul::Tip<T1,T2> */
+    DUGUM_TIP_TEKKEZ,      /* tekkez<T> — linear types v1 */
 
     /* Desenler (esles icin) */
     DUGUM_DESEN_LITERAL,
@@ -94,24 +96,33 @@ typedef enum {
 /* === Operator (CLAUDE.md ile birebir) === */
 
 typedef enum {
-    /* Ikili */
+    /* Ikili — aritmetik */
     OP_ARTI,           /* + */
     OP_EKSI,           /* - */
     OP_CARPI,          /* * */
     OP_BOLU,           /* / */
     OP_MOD,            /* % */
+    /* Ikili — karsilastirma */
     OP_ESIT,           /* == */
     OP_ESIT_DEGIL,     /* != */
     OP_KUCUK,          /* < */
     OP_BUYUK,          /* > */
     OP_KUCUK_ESIT,     /* <= */
     OP_BUYUK_ESIT,     /* >= */
+    /* Ikili — mantiksal */
     OP_VE,             /* ve */
     OP_VEYA,           /* veya */
+    /* Ikili — bit operatorleri (yeni) */
+    OP_BIT_VE,         /* &  (ikili context) */
+    OP_BIT_VEYA,       /* |  (ikili context) */
+    OP_BIT_OZVEYA,     /* ^  */
+    OP_SOLA_KAYDIR,    /* << */
+    OP_SAGA_KAYDIR,    /* >> */
 
     /* Tekli */
     OP_NEG,            /* -x */
-    OP_DEGIL,          /* degil x */
+    OP_DEGIL,          /* degil x (mantiksal not) */
+    OP_BIT_DEGIL,      /* ~x (bit-wise not) */
     OP_REF,            /* &x */
     OP_REF_DEGISKEN,   /* &degisken x */
     OP_DEREFERANS,     /* *x */
@@ -159,6 +170,11 @@ struct Dugum {
             int param_sayi;
             Dugum *donus_tipi;     /* NULL = donus yok */
             Dugum *govde;          /* DUGUM_BLOK veya NULL (sadece imza) */
+            /* Oznitelikler (sistem programlama icin) */
+            int ciplak_mi;         /* [ciplak] - naked function */
+            int kesme_mi;          /* [kesme] - interrupt handler */
+            const char *bolum;     /* [bolum: "..."] - linker section */
+            int bolum_uzunluk;
         } islev;
 
         struct {
@@ -326,6 +342,10 @@ struct Dugum {
             Dugum *deger;
         } alan_atama;
 
+        struct {
+            Dugum *tip;            /* tip ifadesi (DUGUM_TIP_*) */
+        } boyut;
+
         /* === Literaller === */
 
         struct { int64_t deger; } tam;
@@ -376,6 +396,10 @@ struct Dugum {
             Dugum **tip_arg;       /* generic argumanlar (tip listesi) */
             int tip_arg_sayi;
         } tip_kullanici;
+
+        struct {
+            Dugum *ic_tip;         /* tekkez<T> -> T */
+        } tip_tekkez;
 
         /* === Desenler === */
 

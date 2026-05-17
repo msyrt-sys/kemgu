@@ -34,6 +34,20 @@ BolgeBilgisi *bolge_olustur_iterasyon(Arena *a, int dongu_id) {
     return b;
 }
 
+BolgeBilgisi *bolge_olustur_sahip(Arena *a, int thread_id) {
+    BolgeBilgisi *b = bolge_olustur_basit(a, BOLGE_SAHIP);
+    if (!b) return NULL;
+    b->veri.sahip.thread_id = thread_id;
+    return b;
+}
+
+BolgeBilgisi *bolge_olustur_kanal(Arena *a, int kanal_id) {
+    BolgeBilgisi *b = bolge_olustur_basit(a, BOLGE_KANAL);
+    if (!b) return NULL;
+    b->veri.kanal.kanal_id = kanal_id;
+    return b;
+}
+
 /* === Iliskiler === */
 
 int bolge_esit(const BolgeBilgisi *a, const BolgeBilgisi *b) {

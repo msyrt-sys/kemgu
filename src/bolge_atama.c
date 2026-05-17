@@ -11,6 +11,19 @@ void bolge_atama_baslat(BolgeAtama *ba, Arena *a,
     ba->dongu_id_sayaci = 0;
     ba->aktif_iterasyon = NULL;
     ba->ver_baglaminda = 0;
+    ba->thread_id_sayaci = 0;
+    ba->kanal_id_sayaci = 0;
+    ba->aktif_gorev = NULL;
+}
+
+/* Cagri hedefi intrinsic-style ad mi (örn. "_gorev_baslat") */
+static int cagri_intrinsic_mi(const Dugum *d, const char *ad) {
+    if (!d || d->tip != DUGUM_CAGRI) return 0;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (!h || h->tip != DUGUM_TANIMLAYICI) return 0;
+    int uz = (int)strlen(ad);
+    return h->veri.tanimlayici.uzunluk == uz &&
+           memcmp(h->veri.tanimlayici.metin, ad, (size_t)uz) == 0;
 }
 
 /* Yardimci: aktif baglama gore "varsayilan tahsis bolgesi" */
@@ -56,6 +69,56 @@ BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
                 ba->islev_adi, ba->islev_adi_uz);
 
         case DUGUM_CAGRI: {
+            /* === R-GÖREV: _gorev_baslat(closure) -> yeni SAHIP bolgesi ===
+             * Yeni gorev kendine ait bolgeyi alir; donus degeri ise gorev
+             * handle'i (genelde dtam64 id) — escape ederse CAGIRAN olur. */
+            if (cagri_intrinsic_mi(d, "_gorev_baslat")) {
+                BolgeBilgisi *sahip = bolge_olustur_sahip(ba->arena,
+                    ba->thread_id_sayaci++);
+                /* Closure argumaninin govdesi bu SAHIP bolgesinde
+                 * calisir — recursive analiz oraya yapilabilir. */
+                (void)sahip;
+                /* R-GÖREV: donus -> CAGIRAN (handle) */
+                if (ba->ver_baglaminda) {
+                    return bolge_olustur_cagiran(ba->arena,
+                        ba->islev_adi, ba->islev_adi_uz);
+                }
+                return bolge_olustur_yerel(ba->arena,
+                    ba->islev_adi, ba->islev_adi_uz);
+            }
+
+            /* === R-KANAL: _kanal_olustur() -> yeni KANAL bolgesi === */
+            if (cagri_intrinsic_mi(d, "_kanal_olustur")) {
+                return bolge_olustur_kanal(ba->arena,
+                    ba->kanal_id_sayaci++);
+            }
+
+            /* _kanal_gonder(ch, val) -> deger KANAL'a transfer.
+             * Sonuc: bos (LIT) — fonksiyon void. */
+            if (cagri_intrinsic_mi(d, "_kanal_gonder")) {
+                /* Burada gercek "transfer" semantigi var:
+                 * val'in eski bolgesi terk edilir. Type system bunu
+                 * enforce eder (gelecek). Su an: LIT don. */
+                return bolge_olustur_basit(ba->arena, BOLGE_LIT);
+            }
+
+            /* _kanal_al(ch) -> alici thread'in SAHIP bolgesinden deger.
+             * Bu fonksiyon icinde aktif gorev varsa o bolge; yoksa yerel. */
+            if (cagri_intrinsic_mi(d, "_kanal_al")) {
+                if (ba->aktif_gorev) return ba->aktif_gorev;
+                return varsayilan_tahsis(ba);
+            }
+
+            /* _gorev_birlestir(handle) -> R-BIRLESTIR: gorev sonucu donus tipi
+             * cagiranin bolgesinde — escape eder. */
+            if (cagri_intrinsic_mi(d, "_gorev_birlestir")) {
+                if (ba->ver_baglaminda) {
+                    return bolge_olustur_cagiran(ba->arena,
+                        ba->islev_adi, ba->islev_adi_uz);
+                }
+                return varsayilan_tahsis(ba);
+            }
+
             /* Cagrinin sonucu: islev donus tipi
              * Varsayilan: yerel (escape ederse R-VER zaten flag aktif) */
             return varsayilan_tahsis(ba);

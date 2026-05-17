@@ -1,0 +1,95 @@
+// KEMGU ADIM 14 — Faz 1 kapsamli ornek
+// =====================================
+//
+// Test eder:
+//   1. atama (mutable variable)
+//   2. eger / iken / icin / esles (kontrol akisi)
+//   3. yapi (struct) — alan erisim + mutation
+//   4. dizi (Dizi<T>) — olusturma + indeksleme + iterasyon
+//   5. recursive islev cagrisi
+//   6. lambda IIFE + lambda variable
+//   7. boyut<T> (sizeof)
+//   8. inline asm + volatile intrinsics (guvensiz)
+//
+// Derleme:
+//   kemgu --build test/ornekler/faz1_kapsamli.kem -o faz1.exe
+//   ./faz1.exe; echo $?     // beklenen: 42
+
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+// Iken loop ile faktoriyel
+işlev faktoriyel(n: tam32) -> tam32 {
+    değişken sonuc: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        sonuc = sonuc * i;
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Recursive fibonacci
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 { ver n; }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+// Dizi toplama (icin loop)
+işlev dizi_topla(xs: Dizi<tam32>) -> tam32 {
+    değişken t: tam32 = 0;
+    için x: xs {
+        t = t + x;
+    }
+    ver t;
+}
+
+// Pattern matching
+işlev kategorile(n: tam32) -> tam32 {
+    eşleş n {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        _ => { ver n * 10; }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    // 1. Atama + iken
+    değişken fakt5: tam32 = faktoriyel(5);   // 120
+
+    // 2. Recursive (eger + recursion)
+    değişken f10: tam32 = fib(10);            // 55
+
+    // 3. Yapi + alan erisim
+    değişken n: Nokta = Nokta { x: 7, y: 8 };
+    n.x = n.x + 3;                            // 10
+    değişken yapi_top: tam32 = n.x + n.y;     // 18
+
+    // 4. Dizi + icin
+    değişken xs: Dizi<tam32> = [1, 2, 3, 4, 5];
+    değişken dizi_top: tam32 = dizi_topla(xs); // 15
+
+    // 5. Esles
+    değişken pat: tam32 = kategorile(7);      // 70
+
+    // 6. Lambda IIFE + lambda variable
+    değişken lam: tam32 = (|x: tam32| x * x)(6);  // 36
+    değişken topla = |a: tam32, b: tam32| a + b;
+    değişken lam2: tam32 = topla(20, 5);          // 25
+
+    // 7. boyut<T>
+    değişken b: tam32 = boyut<tam32>;          // 4
+
+    // 8. Inline asm
+    güvensiz {
+        _asm("nop");
+    }
+
+    // Hesap: bu degerlerden 42 cikarmak icin formul
+    //   120 + 55 + 18 + 15 + 70 + 36 + 25 + 4 = 343
+    //   343 - 301 = 42
+    ver fakt5 + f10 + yapi_top + dizi_top + pat + lam + lam2 + b - 301;
+}

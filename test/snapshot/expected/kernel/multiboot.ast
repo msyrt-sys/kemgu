@@ -1,0 +1,6 @@
+PROGRAM (1 uye)  16:1
+  ISLEV "__multiboot_header"  17:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  17:29
+        GUVENSIZ  18:5

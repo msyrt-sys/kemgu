@@ -1,0 +1,56 @@
+PROGRAM (4 uye)  3:1
+  YAPI  3:1
+  ISLEV "hasta_oluştur"  9:1
+    parametreler (2):
+      PARAMETRE "ad"  9:23
+        TIP_BASIT "metin"  9:27
+      PARAMETRE "yaş"  9:34
+        TIP_BASIT "tam32"  9:40
+    donus_tipi:
+      TIP_BASIT "Hasta"  9:50
+    govde:
+      BLOK (1 deyim)  9:56
+        VER  10:5
+          YAPI_OLUSTUR  10:9
+  ISLEV "tanı_ekle"  17:1
+    parametreler (2):
+      PARAMETRE "hasta"  17:19
+        TIP_REFERANS (degisken)  17:26
+          TIP_BASIT "Hasta"  17:38
+      PARAMETRE "tanı"  17:45
+        TIP_BASIT "metin"  17:52
+    govde:
+      BLOK (1 deyim)  17:59
+        ATAMA  18:5
+          hedef:
+            ERISIM "tanı"  18:10
+              TANIMLAYICI "hasta"  18:5
+          deger:
+            CAGRI  18:25
+              hedef:
+                TANIMLAYICI "değer"  18:19
+              argumanlar (1):
+                TANIMLAYICI "tanı"  18:26
+  ISLEV "bilgi_yazdır"  21:1
+    parametreler (1):
+      PARAMETRE "hasta"  21:22
+        TIP_REFERANS  21:29
+          TIP_BASIT "Hasta"  21:30
+    govde:
+      BLOK (1 deyim)  21:37
+        EGER  23:5
+          kosul:
+            IKILI >=  23:22
+              ERISIM "yaş"  23:16
+                TANIMLAYICI "hasta"  23:11
+              TAM 18  23:25
+          eger:
+            BLOK (1 deyim)  23:28
+              DEGISKEN "durum"  25:9
+                deger:
+                  METIN "yetişkin"  25:28
+          degilse:
+            BLOK (1 deyim)  26:16
+              DEGISKEN "durum"  27:9
+                deger:
+                  METIN "çocuk"  27:28

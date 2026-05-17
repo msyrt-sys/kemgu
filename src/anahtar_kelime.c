@@ -20,6 +20,7 @@ typedef struct {
 /* Sıralama: Python sorted(key=lambda x: x[1]) ile doğrulandı.
  * Her satırdaki uzunluk = UTF-8 byte uzunluğu (strlen). */
 static const AnahtarKelime tablo[] = {
+    {"boyut",                             5, TOK_BOYUT     },  /* boyut       */
     {"bo\xc5\x9f",                       4, TOK_BOS       },  /* boş         */
     {"b\xc3\xb6lge",                     6, TOK_BOLGE     },  /* bölge       */
     {"de\xc4\x9f" "er",                  6, TOK_DEGER     },  /* değer       */
@@ -43,6 +44,7 @@ static const AnahtarKelime tablo[] = {
     {"se\xc3\xa7imlik",                  9, TOK_SECIMLIK  },  /* seçimlik    */
     {"sonu\xc3\xa7",                     6, TOK_SONUC     },  /* sonuç       */
     {"tamam",                             5, TOK_TAMAM     },  /* tamam       */
+    {"tekkez",                            6, TOK_TEKKEZ    },  /* tekkez (lineer) */
     {"uygula",                            6, TOK_UYGULA    },  /* uygula      */
     {"ve",                                2, TOK_VE        },  /* ve          */
     {"ver",                               3, TOK_VER       },  /* ver         */

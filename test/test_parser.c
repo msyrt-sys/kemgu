@@ -815,6 +815,41 @@ static void test_ifade_lambda(void) {
     arena_serbest(a);
 }
 
+static void test_ifade_boyut(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("boyut<tam32>", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_BOYUT)
+          && e->veri.boyut.tip != NULL
+          && e->veri.boyut.tip->tip == DUGUM_TIP_BASIT;
+    test_sonuc("ifade boyut: boyut<tam32>", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_boyut_pointer(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *e = ifade_parse("boyut<*tam32>", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_BOYUT)
+          && e->veri.boyut.tip != NULL
+          && e->veri.boyut.tip->tip == DUGUM_TIP_POINTER;
+    test_sonuc("ifade boyut: boyut<*tam32>", ok);
+    arena_serbest(a);
+}
+
+static void test_ifade_boyut_aritmetik(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* boyut<T> ifadenin diger her seyle birlikte calismasi */
+    Dugum *e = ifade_parse("boyut<tam32> + boyut<tam64>", a, &hata);
+    int ok = ifade_dogrula(e, hata, DUGUM_IKILI)
+          && e->veri.ikili.op == OP_ARTI
+          && e->veri.ikili.sol->tip == DUGUM_BOYUT
+          && e->veri.ikili.sag->tip == DUGUM_BOYUT;
+    test_sonuc("ifade boyut: boyut<T> + boyut<T>", ok);
+    arena_serbest(a);
+}
+
 /* === Kalan deyim testleri (ADIM 10.A) === */
 
 /* Yardimci: deyimi 'islev _f() { DEYIM }' icine sar, ilk deyimi cek. */
@@ -1195,6 +1230,21 @@ static void test_ornek_hasta(void) {
                      "test/ornekler/hasta.kem", 4);
 }
 
+static void test_ornek_lambda_boyut(void) {
+    ornek_dosya_test("ornek: lambda_boyut.kem (2 islev)",
+                     "test/ornekler/lambda_boyut.kem", 2);
+}
+
+static void test_ornek_faz1_kapsamli(void) {
+    ornek_dosya_test("ornek: faz1_kapsamli.kem (5 islev + yapi)",
+                     "test/ornekler/faz1_kapsamli.kem", 5);
+}
+
+static void test_ornek_kernel_arm64(void) {
+    ornek_dosya_test("ornek: kernel_arm64/kernel.kem (4 islev)",
+                     "test/ornekler/kernel_arm64/kernel.kem", 4);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1298,6 +1348,11 @@ int main(void) {
     test_ifade_dizi_bos();
     test_ifade_lambda();
 
+    printf("\n--- Ifade: boyut<T> ---\n");
+    test_ifade_boyut();
+    test_ifade_boyut_pointer();
+    test_ifade_boyut_aritmetik();
+
     printf("\n--- Deyim: Eger ---\n");
     test_deyim_eger_basit();
     test_deyim_eger_degilse();
@@ -1336,6 +1391,9 @@ int main(void) {
     test_ornek_yapilar();
     test_ornek_eslesme();
     test_ornek_hasta();
+    test_ornek_lambda_boyut();
+    test_ornek_faz1_kapsamli();
+    test_ornek_kernel_arm64();
 
     printf("\n========================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

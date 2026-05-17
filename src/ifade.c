@@ -49,23 +49,31 @@ static int sayi_tokeni_temizle(const char *kaynak, int uzunluk,
 
 typedef enum {
     ONC_YOK         = 0,
-    ONC_VEYA        = 1,
-    ONC_VE          = 2,
-    ONC_ESITLIK     = 3,
-    ONC_KARSILASTIR = 4,
-    ONC_TOPLAMA     = 5,
-    ONC_CARPMA      = 6,
-    ONC_ONEK        = 7,
-    ONC_SONEK       = 8,
+    ONC_VEYA        = 1,    /* mantiksal veya */
+    ONC_VE          = 2,    /* mantiksal ve */
+    ONC_BIT_VEYA    = 3,    /* | (bit) */
+    ONC_BIT_OZVEYA  = 4,    /* ^ (bit xor) */
+    ONC_BIT_VE      = 5,    /* & (bit) */
+    ONC_ESITLIK     = 6,    /* == != */
+    ONC_KARSILASTIR = 7,    /* < > <= >= */
+    ONC_KAYDIR      = 8,    /* << >> */
+    ONC_TOPLAMA     = 9,    /* + - */
+    ONC_CARPMA      = 10,   /* * / % */
+    ONC_ONEK        = 11,   /* unary */
+    ONC_SONEK       = 12,   /* . [] () :: */
 } Oncelik;
 
 static int ikili_oncelik(TokenTipi t) {
     switch (t) {
         case TOK_VEYA:                                          return ONC_VEYA;
         case TOK_VE:                                            return ONC_VE;
+        case TOK_VEYA_BIT:                                      return ONC_BIT_VEYA;
+        case TOK_OZVEYA_BIT:                                    return ONC_BIT_OZVEYA;
+        case TOK_VE_BIT:                                        return ONC_BIT_VE;
         case TOK_ESIT_ESIT:    case TOK_ESIT_DEGIL:             return ONC_ESITLIK;
         case TOK_KUCUK:        case TOK_BUYUK:
         case TOK_KUCUK_ESIT:   case TOK_BUYUK_ESIT:             return ONC_KARSILASTIR;
+        case TOK_SOLA_KAYDIR:  case TOK_SAGA_KAYDIR:            return ONC_KAYDIR;
         case TOK_ARTI:         case TOK_EKSI:                   return ONC_TOPLAMA;
         case TOK_YILDIZ:       case TOK_BOLU:    case TOK_MOD:  return ONC_CARPMA;
         default:                                                return ONC_YOK;
@@ -88,12 +96,17 @@ static Operator token_ikili_op(TokenTipi t) {
     switch (t) {
         case TOK_VEYA:        return OP_VEYA;
         case TOK_VE:          return OP_VE;
+        case TOK_VEYA_BIT:    return OP_BIT_VEYA;
+        case TOK_OZVEYA_BIT:  return OP_BIT_OZVEYA;
+        case TOK_VE_BIT:      return OP_BIT_VE;
         case TOK_ESIT_ESIT:   return OP_ESIT;
         case TOK_ESIT_DEGIL:  return OP_ESIT_DEGIL;
         case TOK_KUCUK:       return OP_KUCUK;
         case TOK_BUYUK:       return OP_BUYUK;
         case TOK_KUCUK_ESIT:  return OP_KUCUK_ESIT;
         case TOK_BUYUK_ESIT:  return OP_BUYUK_ESIT;
+        case TOK_SOLA_KAYDIR: return OP_SOLA_KAYDIR;
+        case TOK_SAGA_KAYDIR: return OP_SAGA_KAYDIR;
         case TOK_ARTI:        return OP_ARTI;
         case TOK_EKSI:        return OP_EKSI;
         case TOK_YILDIZ:      return OP_CARPI;
@@ -294,11 +307,14 @@ static Dugum *parse_birincil(Parser *p) {
          *   hic           -> None benzeri (ifade)
          *   deger(v)      -> Some(v) yapicisi (cagri)
          *   tamam(v)      -> Ok(v) yapicisi
-         *   hata(e)       -> Err(e) yapicisi */
+         *   hata(e)       -> Err(e) yapicisi
+         * 'kullan' linear types built-in olarak ifade-context'te de
+         * tanimlayici/cagri olur (B grubu Spec B.5). */
         case TOK_HIC:
         case TOK_DEGER:
         case TOK_TAMAM:
-        case TOK_HATA: {
+        case TOK_HATA:
+        case TOK_KULLAN: {
             d = dugum_tanimlayici(p->arena, t.baslangic, t.uzunluk,
                                   t.satir, t.sutun);
             parser_ilerle(p);
@@ -323,8 +339,24 @@ static Dugum *parse_birincil(Parser *p) {
         case TOK_VEYA_BIT:
             return parse_lambda(p);
 
+        case TOK_BOYUT: {
+            int satir = t.satir;
+            int sutun = t.sutun;
+            parser_ilerle(p);  /* 'boyut' tuket */
+            parser_bekle(p, TOK_KUCUK, "P160",
+                         "boyut<...> icin '<' bekleniyor");
+            Dugum *tip = parse_tip(p);
+            parser_buyuk_ayir(p);
+            parser_bekle(p, TOK_BUYUK, "P161",
+                         "boyut<...> icin '>' bekleniyor");
+            Dugum *bd = yapi_dugum_olustur(p, DUGUM_BOYUT, satir, sutun);
+            if (bd) bd->veri.boyut.tip = tip;
+            return bd;
+        }
+
         default:
-            parser_hata(p, t, "P010", "ifade bekleniyor", NULL);
+            parser_hata(p, t, "P010", "ifade bekleniyor",
+                        "Bir literal (42, \"merhaba\"), tanimlayici, parantezli ifade veya operator beklenir.");
             d = dugum_hata(p->arena, t.satir, t.sutun);
             return d;
     }
@@ -363,6 +395,12 @@ static Dugum *parse_onek(Parser *p) {
             parser_ilerle(p);
             Dugum *operand = parse_onek(p);
             return dugum_tekli(p->arena, OP_DEREFERANS, operand, satir, sutun);
+        }
+        case TOK_DEGIL_BIT: {
+            /* ~x bit-wise NOT */
+            parser_ilerle(p);
+            Dugum *operand = parse_onek(p);
+            return dugum_tekli(p->arena, OP_BIT_DEGIL, operand, satir, sutun);
         }
         default:
             return parse_birincil(p);
@@ -538,6 +576,29 @@ Dugum *parse_tip(Parser *p) {
         Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_POINTER,
                                  t.satir, t.sutun);
         if (d) d->veri.tip_pointer.hedef_tip = hedef;
+        return d;
+    }
+
+    /* === tekkez<T> — Linear Types v1 (feature flag) === */
+    if (t.tip == TOK_TEKKEZ) {
+        if (!p->deneysel_linear) {
+            parser_hata(p, t, "P322",
+                "tekkez kullanimi --experimental-linear flag'i gerektirir",
+                "Derleyiciye --experimental-linear flag'ini ekleyin "
+                "veya tekkez<T> yerine standart tipler kullanin.");
+            parser_ilerle(p);
+            return dugum_hata(p->arena, t.satir, t.sutun);
+        }
+        parser_ilerle(p);
+        parser_bekle(p, TOK_KUCUK, "P320",
+                     "tekkez<...> icin '<' bekleniyor");
+        Dugum *ic = parse_tip(p);
+        parser_buyuk_ayir(p);
+        parser_bekle(p, TOK_BUYUK, "P321",
+                     "tekkez<...> icin '>' bekleniyor");
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_TEKKEZ,
+                                 t.satir, t.sutun);
+        if (d) d->veri.tip_tekkez.ic_tip = ic;
         return d;
     }
 

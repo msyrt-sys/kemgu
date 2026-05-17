@@ -1092,6 +1092,161 @@ static void test_gn_ic_ice(void) {
     arena_serbest(a);
 }
 
+/* === boyut<T> (sizeof) === */
+
+static void test_boyut_basit(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* boyut<tam32> -> dtam64 */
+    TipBilgisi *t = ifade_tipi("boyut<tam32>", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_DTAM64);
+    test_sonuc("boyut: boyut<tam32> -> dtam64", ok);
+    arena_serbest(a);
+}
+
+static void test_boyut_pointer(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* boyut<*tam32> -> dtam64 (kontrol kategorisi) */
+    TipBilgisi *t = ifade_tipi("boyut<*tam32>", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_DTAM64);
+    test_sonuc("boyut: boyut<*tam32> -> dtam64", ok);
+    arena_serbest(a);
+}
+
+static void test_boyut_bilinmeyen_tip(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* boyut<Bilinmeyen> -> hata */
+    TipBilgisi *t = ifade_tipi("boyut<Bilinmeyen>", a, s, &hata);
+    int ok = hata > 0 && tip_kategorisi_esit(t, TIP_HATA);
+    test_sonuc("boyut: boyut<Bilinmeyen> -> hata", ok);
+    arena_serbest(a);
+}
+
+static void test_boyut_aritmetik(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* boyut<tam32> + boyut<tam8> -> dtam64 (ayni tip oldugu icin OK) */
+    TipBilgisi *t = ifade_tipi("boyut<tam32> + boyut<tam8>", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_DTAM64);
+    test_sonuc("boyut: dtam64 + dtam64 -> dtam64", ok);
+    arena_serbest(a);
+}
+
+/* === Bit operatorleri === */
+
+static void test_bit_ve(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("x & y", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: x & y -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_veya(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("x | y", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: x | y -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_xor(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("x ^ y", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: x ^ y -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_kaydir(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("x << 4", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: x << 4 -> tam32 (sol tip)", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_not(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    TipBilgisi *t = ifade_tipi("~x", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM32);
+    test_sonuc("bit: ~x -> tam32", ok);
+    arena_serbest(a);
+}
+
+static void test_bit_uyumsuz(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* z mantiksal — bit op'a girmesin */
+    TipBilgisi *t = ifade_tipi("z & x", a, s, &hata);
+    int ok = hata > 0 && tip_kategorisi_esit(t, TIP_HATA);
+    test_sonuc("bit: mantiksal & tamsayi -> hata", ok);
+    arena_serbest(a);
+}
+
+/* === Pointer aritmetigi === */
+
+static void test_ptr_arti_int(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* p32 (*tam32) + tamsayi -> *tam32 */
+    TipBilgisi *t = ifade_tipi("p32 + 1", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_POINTER);
+    test_sonuc("ptr: *T + int -> *T", ok);
+    arena_serbest(a);
+}
+
+static void test_ptr_eksi_int(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* p32 (*tam32) - tamsayi -> *tam32 */
+    TipBilgisi *t = ifade_tipi("p32 - 4", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_POINTER);
+    test_sonuc("ptr: *T - int -> *T", ok);
+    arena_serbest(a);
+}
+
+static void test_int_arti_ptr(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* int + *T -> *T (komutatif) */
+    TipBilgisi *t = ifade_tipi("1 + p32", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_POINTER);
+    test_sonuc("ptr: int + *T -> *T", ok);
+    arena_serbest(a);
+}
+
+static void test_ptr_eksi_ptr(void) {
+    Arena *a = arena_olustur(0);
+    Scope *s = scope_hazirla(a);
+    int hata;
+    /* p32 - p32 -> tam64 (pointer difference) */
+    TipBilgisi *t = ifade_tipi("p32 - p32", a, s, &hata);
+    int ok = hata == 0 && tip_kategorisi_esit(t, TIP_TAM64);
+    test_sonuc("ptr: *T - *T -> tam64", ok);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -1230,6 +1385,26 @@ int main(void) {
     test_gn_iki_param();
     test_gn_iki_param_erisim();
     test_gn_ic_ice();
+
+    printf("\n--- boyut<T> (sizeof) ---\n");
+    test_boyut_basit();
+    test_boyut_pointer();
+    test_boyut_bilinmeyen_tip();
+    test_boyut_aritmetik();
+
+    printf("\n--- Bit Operatorleri ---\n");
+    test_bit_ve();
+    test_bit_veya();
+    test_bit_xor();
+    test_bit_kaydir();
+    test_bit_not();
+    test_bit_uyumsuz();
+
+    printf("\n--- Pointer Aritmetigi ---\n");
+    test_ptr_arti_int();
+    test_ptr_eksi_int();
+    test_int_arti_ptr();
+    test_ptr_eksi_ptr();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

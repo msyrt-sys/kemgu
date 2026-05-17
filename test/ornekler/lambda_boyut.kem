@@ -1,0 +1,30 @@
+// KEMGU ornek: lambda + boyut<T> (sizeof) + IIFE
+// ================================================
+//
+// Derleme ve calistirma:
+//   kemgu --llvm test/ornekler/lambda_boyut.kem | clang -x ir - -o lb.exe
+//   ./lb.exe
+//   echo $?      // beklenen: 42
+
+işlev kare(x: tam32) -> tam32 {
+    ver x * x;
+}
+
+işlev main() -> tam32 {
+    // Adlandirilmis islev cagirisi
+    değişken k = kare(5);          // 25
+
+    // Lambda degiskene baglanir, sonra cagirilir
+    değişken topla = |a: tam32, b: tam32| a + b;
+    değişken t = topla(10, 3);     // 13
+
+    // Lambda IIFE — dogrudan tanimla ve cagir
+    değişken d = (|x: tam32| x - 4)(8);  // 4
+
+    // boyut<T> derleme zamani sabit. Bidirectional cikarsama ile tam32
+    // beklenen baglamlarda dtam64 yerine context tipi alir.
+    değişken b32: tam32 = boyut<tam32>;   // 4
+
+    // Tumunu topla: 25 + 13 + 4 - 4 + 4 = 42
+    ver k + t + d - 4 + b32;
+}

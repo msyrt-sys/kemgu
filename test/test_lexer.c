@@ -57,6 +57,8 @@ static void test_anahtar_kelimeler(void) {
     tek_token_test("de\xc4\x9f" "er", "de\xc4\x9f" "er", TOK_DEGER, "de\xc4\x9f" "er");
     tek_token_test("hi\xc3\xa7", "hi\xc3\xa7", TOK_HIC, "hi\xc3\xa7");
     tek_token_test("g\xc3\xbcvensiz", "g\xc3\xbcvensiz", TOK_GUVENSIZ, "g\xc3\xbcvensiz");
+    tek_token_test("boyut", "boyut", TOK_BOYUT, "boyut");
+    tek_token_test("tekkez", "tekkez", TOK_TEKKEZ, "tekkez");
 }
 
 /* ===== Tanımlayıcı testleri ===== */

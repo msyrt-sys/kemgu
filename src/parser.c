@@ -50,6 +50,11 @@ void parser_baslat(Parser *p, Lexer *l, Arena *a,
     p->dosya_adi = dosya_adi;
     p->kaynak = kaynak;
     p->yapi_olusturma_izni = 1;
+    p->bekleyen_ciplak = 0;
+    p->bekleyen_kesme = 0;
+    p->bekleyen_bolum = NULL;
+    p->bekleyen_bolum_uzunluk = 0;
+    p->deneysel_linear = 0;
 }
 
 Token parser_simdiki(const Parser *p) {
@@ -182,7 +187,8 @@ static Dugum *parse_esles_kolu(Parser *p);
 Dugum *parse_parametre(Parser *p) {
     Token ad_tok = parser_simdiki(p);
     if (ad_tok.tip != TOK_TANIMLAYICI) {
-        parser_hata(p, ad_tok, "P012", "parametre adi bekleniyor", NULL);
+        parser_hata(p, ad_tok, "P012", "parametre adi bekleniyor",
+                    "Sozdizimi: islev ad(p1: tip, p2: tip) -> donus_tipi { ... }");
         return dugum_hata(p->arena, ad_tok.satir, ad_tok.sutun);
     }
     parser_ilerle(p);
@@ -232,7 +238,8 @@ static Dugum *parse_islev_tanimi(Parser *p) {
         govde = parse_blok(p);
     } else {
         parser_hata(p, parser_simdiki(p), "P017",
-                    "islev govdesi icin '{' bekleniyor", NULL);
+                    "islev govdesi icin '{' bekleniyor",
+                    "Islev govdesi suslu parantez icine alinmalidir: islev f() { ... }");
     }
 
     Dugum *d = dugum_olustur(p->arena, DUGUM_ISLEV,
@@ -245,6 +252,15 @@ static Dugum *parse_islev_tanimi(Parser *p) {
     d->veri.islev.param_sayi = params.sayi;
     d->veri.islev.donus_tipi = donus;
     d->veri.islev.govde = govde;
+    /* Bekleyen oznitelikleri al ve temizle */
+    d->veri.islev.ciplak_mi = p->bekleyen_ciplak;
+    d->veri.islev.kesme_mi = p->bekleyen_kesme;
+    d->veri.islev.bolum = p->bekleyen_bolum;
+    d->veri.islev.bolum_uzunluk = p->bekleyen_bolum_uzunluk;
+    p->bekleyen_ciplak = 0;
+    p->bekleyen_kesme = 0;
+    p->bekleyen_bolum = NULL;
+    p->bekleyen_bolum_uzunluk = 0;
     return d;
 }
 
@@ -302,7 +318,8 @@ static char **parse_tip_param_listesi(Parser *p, int *out_sayi) {
 static Dugum *parse_alan(Parser *p) {
     Token ad_tok = parser_simdiki(p);
     if (ad_tok.tip != TOK_TANIMLAYICI) {
-        parser_hata(p, ad_tok, "P018", "alan adi bekleniyor", NULL);
+        parser_hata(p, ad_tok, "P018", "alan adi bekleniyor",
+                    "Yapi alani sozdizimi: ad: tip; (orn. yas: tam32;)");
         parser_panik_sync(p);
         return dugum_hata(p->arena, ad_tok.satir, ad_tok.sutun);
     }
@@ -342,8 +359,15 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     liste_baslat(&alanlar);
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token once = parser_simdiki(p);
         Dugum *alan = parse_alan(p);
         if (alan) liste_ekle(&alanlar, p->arena, alan);
+        /* Sonsuz dongu korumasi: token ilerlemediyse zorla ilerle */
+        if (parser_simdiki(p).baslangic == once.baslangic &&
+            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+            parser_ilerle(p);
+        }
+        if (p->hata_sayisi >= PARSER_MAX_HATA) break;
     }
     parser_bekle(p, TOK_SAG_SUSLU, "P023", "'}' bekleniyor");
 
@@ -473,8 +497,14 @@ static Dugum *parse_modul_tanimi(Parser *p) {
     liste_baslat(&uyeler);
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token once = parser_simdiki(p);
         Dugum *uye = parse_ust_oge(p);
         if (uye) liste_ekle(&uyeler, p->arena, uye);
+        /* Sonsuz dongu korumasi: token ilerlemediyse zorla ilerle */
+        if (parser_simdiki(p).baslangic == once.baslangic &&
+            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+            parser_ilerle(p);
+        }
         if (p->hata_sayisi >= PARSER_MAX_HATA) break;
     }
     parser_bekle(p, TOK_SAG_SUSLU, "P062", "'}' bekleniyor");
@@ -490,9 +520,55 @@ static Dugum *parse_modul_tanimi(Parser *p) {
     return d;
 }
 
+/* === Oznitelikler ([ciplak], [kesme], [bolum: "..."]) === */
+
+static void parse_oznitelikler(Parser *p) {
+    /* Default sifirla */
+    p->bekleyen_ciplak = 0;
+    p->bekleyen_kesme = 0;
+    p->bekleyen_bolum = NULL;
+    p->bekleyen_bolum_uzunluk = 0;
+
+    while (parser_eslesir(p, TOK_SOL_KOSELI)) {
+        parser_ilerle(p);
+        do {
+            Token ad = parser_bekle(p, TOK_TANIMLAYICI, "P200",
+                                     "oznitelik adi bekleniyor");
+            if (ad.uzunluk == 6 &&
+                memcmp(ad.baslangic, "ciplak", 6) == 0) {
+                p->bekleyen_ciplak = 1;
+            } else if (ad.uzunluk == 5 &&
+                       memcmp(ad.baslangic, "kesme", 5) == 0) {
+                p->bekleyen_kesme = 1;
+            } else if (ad.uzunluk == 5 &&
+                       memcmp(ad.baslangic, "bolum", 5) == 0) {
+                parser_bekle(p, TOK_IKI_NOKTA, "P201",
+                             "bolum icin ':' bekleniyor");
+                Token deger = parser_bekle(p, TOK_METIN, "P202",
+                                            "bolum adi metin literali bekleniyor");
+                /* Tirnaklari ayikla */
+                int ic_uz = deger.uzunluk - 2;
+                if (ic_uz < 0) ic_uz = 0;
+                p->bekleyen_bolum = ast_string_kopyala(p->arena,
+                                                       deger.baslangic + 1,
+                                                       ic_uz);
+                p->bekleyen_bolum_uzunluk = ic_uz;
+            } else {
+                parser_hata(p, ad, "P203",
+                            "bilinmeyen oznitelik (ciplak/kesme/bolum)", NULL);
+            }
+        } while (parser_tuket(p, TOK_VIRGUL));
+        parser_bekle(p, TOK_SAG_KOSELI, "P204",
+                     "oznitelik listesinde ']' bekleniyor");
+    }
+}
+
 /* === Ust oge === */
 
 static Dugum *parse_ust_oge(Parser *p) {
+    /* Once oznitelikleri parse et (islev disinda yoksayilir) */
+    parse_oznitelikler(p);
+
     Token t = parser_simdiki(p);
     switch (t.tip) {
         case TOK_ISLEV:   return parse_islev_tanimi(p);
@@ -504,7 +580,7 @@ static Dugum *parse_ust_oge(Parser *p) {
         default:
             parser_hata(p, t, "P001",
                 "ust duzey tanim bekleniyor (islev/yapi/kullan/disa/modul/sabit)",
-                NULL);
+                "KEMGU dosyalari yalnizca tanimlar icerir; deyimler islev govdesi icinde olmalidir.");
             parser_panik_sync(p);
             return NULL;
     }
@@ -810,8 +886,14 @@ static Dugum *parse_esles_deyimi(Parser *p) {
     liste_baslat(&kollar);
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token once = parser_simdiki(p);
         Dugum *kol = parse_esles_kolu(p);
         if (kol) liste_ekle(&kollar, p->arena, kol);
+        /* Sonsuz dongu korumasi: token ilerlemediyse zorla ilerle */
+        if (parser_simdiki(p).baslangic == once.baslangic &&
+            !parser_eslesir(p, TOK_DOSYA_SONU)) {
+            parser_ilerle(p);
+        }
         if (p->hata_sayisi >= PARSER_MAX_HATA) break;
     }
     parser_bekle(p, TOK_SAG_SUSLU, "P231",

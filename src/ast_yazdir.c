@@ -271,6 +271,12 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
 
         /* === Tipler === */
 
+        case DUGUM_BOYUT:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.boyut.tip, c, derinlik + 1);
+            break;
+
         case DUGUM_TIP_BASIT:
             fputc(' ', c);
             string_yaz(c, d->veri.tip_basit.ad, d->veri.tip_basit.ad_uzunluk);
@@ -301,6 +307,12 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             konum_yaz(c, d);
             fputc('\n', c);
             ast_yazdir_indent(d->veri.tip_secimlik.ic_tip, c, derinlik + 1);
+            break;
+
+        case DUGUM_TIP_TEKKEZ:
+            konum_yaz(c, d);
+            fputc('\n', c);
+            ast_yazdir_indent(d->veri.tip_tekkez.ic_tip, c, derinlik + 1);
             break;
 
         /* === Hata === */

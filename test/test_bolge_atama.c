@@ -175,6 +175,54 @@ static void test_yol_global(void) {
     arena_serbest(a);
 }
 
+/* === Katman 2: R-GOREV, R-KANAL === */
+
+static void test_r_gorev_baslat(void) {
+    Arena *a = arena_olustur(0);
+    /* _gorev_baslat(0) cagrisi — yeni SAHIP bolgesi yaratir.
+     * Donus degeri (handle) ver_baglaminda olmadan YEREL. */
+    BolgeBilgisi *b = ifade_bolgesi("_gorev_baslat(0)", a, 0);
+    test_sonuc("R-GÖREV: _gorev_baslat handle YEREL",
+               b && b->kategori == BOLGE_YEREL);
+    arena_serbest(a);
+}
+
+static void test_r_gorev_handle_ver(void) {
+    Arena *a = arena_olustur(0);
+    /* ver baglaminda: handle CAGIRAN'a escape eder */
+    BolgeBilgisi *b = ifade_bolgesi("_gorev_baslat(0)", a, 1);
+    test_sonuc("R-GÖREV: ver icinde handle -> CAGIRAN",
+               b && b->kategori == BOLGE_CAGIRAN);
+    arena_serbest(a);
+}
+
+static void test_r_kanal_olustur(void) {
+    Arena *a = arena_olustur(0);
+    BolgeBilgisi *b = ifade_bolgesi("_kanal_olustur()", a, 0);
+    test_sonuc("R-KANAL: _kanal_olustur -> KANAL",
+               b && b->kategori == BOLGE_KANAL);
+    arena_serbest(a);
+}
+
+static void test_r_kanal_gonder(void) {
+    Arena *a = arena_olustur(0);
+    /* _kanal_gonder(0, 42) — value transfer; sonuc LIT (void) */
+    BolgeBilgisi *b = ifade_bolgesi("_kanal_gonder(0, 42)", a, 0);
+    test_sonuc("R-KANAL: gonder -> LIT (void)",
+               b && b->kategori == BOLGE_LIT);
+    arena_serbest(a);
+}
+
+static void test_r_birlestir(void) {
+    Arena *a = arena_olustur(0);
+    /* _gorev_birlestir(handle) — task join, sonuc cagiran tarafinda */
+    BolgeBilgisi *b = ifade_bolgesi("_gorev_birlestir(0)", a, 0);
+    /* Default: YEREL */
+    test_sonuc("R-BIRLESTIR: _gorev_birlestir YEREL",
+               b && b->kategori == BOLGE_YEREL);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -200,6 +248,13 @@ int main(void) {
     printf("\n--- Sonek ---\n");
     test_erisim_yerel();
     test_yol_global();
+
+    printf("\n--- Katman 2: Concurrency ---\n");
+    test_r_gorev_baslat();
+    test_r_gorev_handle_ver();
+    test_r_kanal_olustur();
+    test_r_kanal_gonder();
+    test_r_birlestir();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

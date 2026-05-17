@@ -1,0 +1,92 @@
+// KEMGU One-Time Pad (OTP) Linear Types Ornegi
+// =============================================
+//
+// Direktif Ek v1 — B grubu Spec B.6 ilk kullanici.
+// Bilgi-teorik guvenli (information-theoretically secure) sifreleme:
+//   sifreli = duz_metin XOR anahtar
+//   duz_metin = sifreli XOR anahtar   (simetri)
+//
+// Linear types ile garantiler:
+//   1. Anahtar IKI KEZ kullanilamaz (Venona class hatasi yapisal imkansiz)
+//   2. Kullanilmadan dusen anahtar yok (compile-time zorlanir)
+//   3. imha() sonrasi bellek sifirlanir (LLVM volatile memset)
+//
+// Derleme (--experimental-linear flag zorunlu):
+//   kemgu --experimental-linear --build test/ornekler/otp.kem -o otp.exe
+//
+// NOT: Su an stdlib modul altyapisi olmadigi icin bu dosya monolitik.
+// Gercek kullanim icin kripto.otp modulu olusturulacak (gelecek).
+
+// === OTP'nin cekirdek primitifleri ===
+
+// Linear deger ureticisi (Spec B.6 + Sarı katman intrinsic):
+// `_tekkez_yarat(val) -> tekkez<T>` — sarmalayici. Gercek kernel'da
+// `rng_oku() -> _tekkez_yarat(bayt)` zinciri kurulur.
+işlev otp_uret_demo() -> tekkez<tam32> {
+    // Demo: sabit bayttan tekkez deger uret (production'da TRNG'den)
+    ver _tekkez_yarat(0xDEADBEEF);
+}
+
+// Bir bayti OTP ile sifrele/sif coz (XOR — simetri).
+// Anahtari TUKETIR — return value sadece sifreli bayt.
+işlev otp_xor(b: tam8, anahtar_bayt: tam8) -> tam8 {
+    ver b ^ anahtar_bayt;
+}
+
+// Anahtar kullanim sarmalayicisi — kullan() ile tek-sefer enforce.
+// Linear value `anahtar` tuketilir, return value sifreli sonuc.
+// NOT: Bu fonksiyon dogrudan kullanilmiyor — kullan(x, lambda) deseni
+// onerilir. Burada sadece dokumantasyon amaciyla var.
+işlev otp_isle(anahtar: tekkez<tam32>, veri: tam32) -> tam32 {
+    imha(anahtar);  // anahtar tuketildi + bellek sifirlandi (LLVM memset)
+    ver veri;       // gercekte: veri XOR anahtar.bytes (basitlestirildi)
+}
+
+// Anahtar atilmak istenirse — explicit yok etme (Drop).
+işlev otp_iptal(anahtar: tekkez<tam32>) {
+    imha(anahtar);  // zeroize + scope dısı
+}
+
+// === Senaryo: ust seviye API kullanimi ===
+//
+// Spec'in cekirdek garanti'lerini gosterir:
+//   - "kullan veya imha" zorunlu (T041)
+//   - iki kez tuketim hatasi (T040)
+//   - '_' baglama yasak (T042)
+//
+// Asagidaki main bunlari pozitif yolda kullanir.
+
+işlev main() -> tam32 {
+    // Linear anahtar uret — _tekkez_yarat ile (Spec B.6 producer)
+    değişken anahtar: tekkez<tam32> = otp_uret_demo();
+    // Anahtari kullan + tuket (zeroize)
+    değişken sifreli: tam32 = otp_isle(anahtar, 0x12345678);
+    // anahtar artik tuketildi — tekrar imha(anahtar) T040 verir
+    ver 42;
+}
+
+// === Hata senaryolari (yorum olarak — bu kod COMPILE ETMEMELI) ===
+//
+// 1. T040 — iki kez tuketim:
+//   işlev hata1(a: tekkez<tam32>) -> tam32 {
+//       imha(a);
+//       imha(a);    // HATA: zaten tuketildi
+//       ver 0;
+//   }
+//
+// 2. T041 — hic tuketim yok:
+//   işlev hata2(a: tekkez<tam32>) -> tam32 {
+//       ver 0;      // HATA: a tuketilmedi
+//   }
+//
+// 3. T042 — '_' baglama:
+//   işlev hata3(a: tekkez<tam32>) -> tam32 {
+//       değişken _: tekkez<tam32> = a;   // HATA: sessiz drop
+//       ver 0;
+//   }
+//
+// 4. T044 — yanlis tip:
+//   işlev hata4(x: tam32) -> tam32 {
+//       imha(x);    // HATA: x tekkez<T> degil
+//       ver 0;
+//   }

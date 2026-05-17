@@ -1,0 +1,58 @@
+PROGRAM (9 uye)  20:1
+  YAPI  20:1
+  YAPI  30:1
+  ISLEV "idt_giris_kur"  36:1
+    parametreler (3):
+      PARAMETRE "handler"  36:22
+        TIP_BASIT "dtam64"  36:31
+      PARAMETRE "selector"  36:39
+        TIP_BASIT "dtam16"  36:49
+      PARAMETRE "type_dpl_p"  37:21
+        TIP_BASIT "dtam8"  37:33
+    donus_tipi:
+      TIP_BASIT "IDTGiris"  37:43
+    govde:
+      BLOK (4 deyim)  37:52
+        DEGISKEN "g"  38:5
+          tip:
+            TIP_BASIT "IDTGiris"  38:19
+          deger:
+            YAPI_OLUSTUR  38:30
+        ATAMA  51:5
+          hedef:
+            ERISIM "selector"  51:6
+              TANIMLAYICI "g"  51:5
+          deger:
+            TANIMLAYICI "selector"  51:18
+        ATAMA  52:5
+          hedef:
+            ERISIM "flags"  52:6
+              TANIMLAYICI "g"  52:5
+          deger:
+            TANIMLAYICI "type_dpl_p"  52:15
+        VER  53:5
+          TANIMLAYICI "g"  53:9
+  ISLEV "idt_yukle"  57:1
+    parametreler (1):
+      PARAMETRE "ptr_adres"  57:18
+        TIP_BASIT "dtam64"  57:29
+    govde:
+      BLOK (1 deyim)  57:37
+        GUVENSIZ  58:5
+  SABIT  64:1
+  SABIT  65:1
+  ISLEV "sayfa_hatasi_isleyicisi"  69:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  69:34
+        GUVENSIZ  70:5
+  ISLEV "gpf_isleyicisi"  82:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  82:25
+        GUVENSIZ  83:5
+  ISLEV "klavye_irq"  91:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  91:21
+        GUVENSIZ  92:5

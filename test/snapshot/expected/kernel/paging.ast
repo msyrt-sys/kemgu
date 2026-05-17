@@ -1,0 +1,83 @@
+PROGRAM (17 uye)  21:1
+  SABIT  21:1
+  SABIT  22:1
+  SABIT  23:1
+  SABIT  24:1
+  SABIT  25:1
+  SABIT  26:1
+  SABIT  27:1
+  SABIT  28:1
+  ISLEV "pte_olustur"  33:1
+    parametreler (2):
+      PARAMETRE "fiziksel"  33:20
+        TIP_BASIT "dtam64"  33:30
+      PARAMETRE "bayraklar"  33:38
+        TIP_BASIT "dtam64"  33:49
+    donus_tipi:
+      TIP_BASIT "dtam64"  33:60
+    govde:
+      BLOK (1 deyim)  33:67
+        VER  37:5
+          IKILI +  37:18
+            TANIMLAYICI "fiziksel"  37:9
+            TANIMLAYICI "bayraklar"  37:20
+  SABIT  43:1
+  ISLEV "paging_baslat"  47:1
+    parametreler (1):
+      PARAMETRE "pml4"  47:22
+        TIP_BASIT "dtam64"  47:28
+    govde:
+      BLOK (1 deyim)  47:36
+        GUVENSIZ  48:5
+  ISLEV "tlb_invalidate_sayfa"  59:1
+    parametreler (1):
+      PARAMETRE "vadres"  59:29
+        TIP_BASIT "dtam64"  59:37
+    govde:
+      BLOK (1 deyim)  59:45
+        GUVENSIZ  60:5
+  ISLEV "tlb_invalidate_tum"  65:1
+    parametreler (0):
+    govde:
+      BLOK (1 deyim)  65:29
+        GUVENSIZ  66:5
+  ISLEV "pml4_indeks"  73:1
+    parametreler (1):
+      PARAMETRE "vadres"  73:20
+        TIP_BASIT "dtam64"  73:28
+    donus_tipi:
+      TIP_BASIT "dtam64"  73:39
+    govde:
+      BLOK (1 deyim)  73:46
+        VER  75:5
+          TANIMLAYICI "vadres"  75:9
+  ISLEV "pdpt_indeks"  78:1
+    parametreler (1):
+      PARAMETRE "vadres"  78:20
+        TIP_BASIT "dtam64"  78:28
+    donus_tipi:
+      TIP_BASIT "dtam64"  78:39
+    govde:
+      BLOK (1 deyim)  78:46
+        VER  79:5
+          TANIMLAYICI "vadres"  79:9
+  ISLEV "pd_indeks"  82:1
+    parametreler (1):
+      PARAMETRE "vadres"  82:18
+        TIP_BASIT "dtam64"  82:26
+    donus_tipi:
+      TIP_BASIT "dtam64"  82:37
+    govde:
+      BLOK (1 deyim)  82:44
+        VER  83:5
+          TANIMLAYICI "vadres"  83:9
+  ISLEV "pt_indeks"  86:1
+    parametreler (1):
+      PARAMETRE "vadres"  86:18
+        TIP_BASIT "dtam64"  86:26
+    donus_tipi:
+      TIP_BASIT "dtam64"  86:37
+    govde:
+      BLOK (1 deyim)  86:44
+        VER  87:5
+          TANIMLAYICI "vadres"  87:9

@@ -1,0 +1,49 @@
+PROGRAM (2 uye)  4:1
+  ISLEV "fibonacci"  4:1
+    parametreler (1):
+      PARAMETRE "n"  4:18
+        TIP_BASIT "tam32"  4:21
+    donus_tipi:
+      TIP_BASIT "tam32"  4:31
+    govde:
+      BLOK (2 deyim)  4:37
+        EGER  5:5
+          kosul:
+            IKILI <  5:13
+              TANIMLAYICI "n"  5:11
+              TAM 2  5:15
+          eger:
+            BLOK (1 deyim)  5:17
+              VER  6:9
+                TANIMLAYICI "n"  6:13
+        VER  8:5
+          IKILI +  8:26
+            CAGRI  8:18
+              hedef:
+                TANIMLAYICI "fibonacci"  8:9
+              argumanlar (1):
+                IKILI -  8:21
+                  TANIMLAYICI "n"  8:19
+                  TAM 1  8:23
+            CAGRI  8:37
+              hedef:
+                TANIMLAYICI "fibonacci"  8:28
+              argumanlar (1):
+                IKILI -  8:40
+                  TANIMLAYICI "n"  8:38
+                  TAM 2  8:42
+  ISLEV "ana"  11:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  11:17
+    govde:
+      BLOK (2 deyim)  11:23
+        DEGISKEN "sonuc"  12:5
+          deger:
+            CAGRI  12:33
+              hedef:
+                TANIMLAYICI "fibonacci"  12:24
+              argumanlar (1):
+                TAM 10  12:34
+        VER  13:5
+          TANIMLAYICI "sonuc"  13:9

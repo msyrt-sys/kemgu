@@ -65,6 +65,9 @@ BolgeBilgisi *bolge_olustur_basit(Arena *a, BolgeKategorisi k);
 BolgeBilgisi *bolge_olustur_yerel(Arena *a, const char *islev_adi, int uz);
 BolgeBilgisi *bolge_olustur_cagiran(Arena *a, const char *islev_adi, int uz);
 BolgeBilgisi *bolge_olustur_iterasyon(Arena *a, int dongu_id);
+/* Katman 2: concurrency */
+BolgeBilgisi *bolge_olustur_sahip(Arena *a, int thread_id);
+BolgeBilgisi *bolge_olustur_kanal(Arena *a, int kanal_id);
 
 /* === Iliskiler === */
 

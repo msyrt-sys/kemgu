@@ -1,0 +1,74 @@
+// KEMGU bare-metal ARM64 (aarch64) kernel scaffold
+// =================================================
+//
+// Hedef: ARM64 (Apple Silicon, Pi 3/4/5, DGX Spark).
+// Bootloader: U-Boot veya UEFI/GRUB; bu scaffold _start entry
+// noktasi tanir.
+//
+// Derleme:
+//   kemgu --build --freestanding \
+//         --target=aarch64-unknown-none \
+//         --linker-script=test/ornekler/kernel_arm64/kernel.ld \
+//         test/ornekler/kernel_arm64/kernel.kem \
+//         -o kernel-arm64.elf
+//
+// Bu scaffold:
+//   - QEMU virt platformu PL011 UART'a (0x09000000) yazar
+//   - Pi 3+ icin MMIO UART adresi farkli — runtime tespiti yok
+//   - WFI loop ile halt
+
+// === PL011 UART (QEMU virt machine) ===
+sabit UART0_DR: dtam64   = 150994944;  // 0x09000000 — data register
+
+// UART'a karakter yaz (volatile MMIO)
+işlev uart_yaz_bayt(ch: dtam8) {
+    güvensiz {
+        _yaz_volatile_dtam8(UART0_DR, ch);
+    }
+}
+
+// "KEMGU\n" yaz
+işlev uart_kemgu_yaz() {
+    uart_yaz_bayt(75);   // 'K'
+    uart_yaz_bayt(69);   // 'E'
+    uart_yaz_bayt(77);   // 'M'
+    uart_yaz_bayt(71);   // 'G'
+    uart_yaz_bayt(85);   // 'U'
+    uart_yaz_bayt(10);   // '\n'
+}
+
+// Sonsuz halt — ARM64'te WFI (Wait For Interrupt)
+[ciplak]
+işlev sonsuz_halt() {
+    güvensiz {
+        _asm("msr daifset, #2");   // interrupt mask
+        _asm("1: wfi");
+        _asm("b 1b");
+    }
+}
+
+// Kernel ana giris noktasi
+işlev kernel_main() {
+    uart_kemgu_yaz();
+    sonsuz_halt();
+}
+
+// _start: ARM64 entry — naked, .text.boot bolumune konur
+// Bootloader yukleyip atladığında x0..x7'de boot parametreleri olabilir
+// (DTB pointer Pi/U-Boot'ta, EFI image handle vb.).
+// Stack pointer ayari + bss zero + kernel_main cagrisi.
+[ciplak, bolum: ".text.boot"]
+işlev _start() {
+    güvensiz {
+        // Stack pointer'i ayarla (linker sembolu)
+        _asm("adrp x0, stack_top");
+        _asm("add x0, x0, #:lo12:stack_top");
+        _asm("mov sp, x0");
+        // Kernel'i cagir
+        _asm("bl kernel_main");
+        // Donerse halt
+        _asm("msr daifset, #2");
+        _asm("1: wfi");
+        _asm("b 1b");
+    }
+}

@@ -1,0 +1,87 @@
+PROGRAM (3 uye)  21:1
+  ISLEV "uretici_govde"  21:1
+    parametreler (0):
+    govde:
+      BLOK (0 deyim)  21:24
+  ISLEV "tuketici_govde"  26:1
+    parametreler (0):
+    govde:
+      BLOK (0 deyim)  26:25
+  ISLEV "main"  30:1
+    parametreler (0):
+    donus_tipi:
+      TIP_BASIT "tam32"  30:18
+    govde:
+      BLOK (10 deyim)  30:24
+        DEGISKEN "uretici"  32:5
+          tip:
+            TIP_BASIT "dtam64"  32:25
+          deger:
+            CAGRI  32:47
+              hedef:
+                TANIMLAYICI "_gorev_baslat"  32:34
+              argumanlar (1):
+                TAM 0  32:48
+        DEGISKEN "tuketici"  33:5
+          tip:
+            TIP_BASIT "dtam64"  33:26
+          deger:
+            CAGRI  33:48
+              hedef:
+                TANIMLAYICI "_gorev_baslat"  33:35
+              argumanlar (1):
+                TAM 0  33:49
+        DEGISKEN "kanal"  36:5
+          tip:
+            TIP_BASIT "dtam64"  36:23
+          deger:
+            CAGRI  36:46
+              hedef:
+                TANIMLAYICI "_kanal_olustur"  36:32
+              argumanlar (0):
+        IFADE_DEYIMI  39:5
+          CAGRI  39:18
+            hedef:
+              TANIMLAYICI "_kanal_gonder"  39:5
+            argumanlar (2):
+              TANIMLAYICI "kanal"  39:19
+              TAM 10  39:26
+        IFADE_DEYIMI  40:5
+          CAGRI  40:18
+            hedef:
+              TANIMLAYICI "_kanal_gonder"  40:5
+            argumanlar (2):
+              TANIMLAYICI "kanal"  40:19
+              TAM 20  40:26
+        IFADE_DEYIMI  41:5
+          CAGRI  41:18
+            hedef:
+              TANIMLAYICI "_kanal_gonder"  41:5
+            argumanlar (2):
+              TANIMLAYICI "kanal"  41:19
+              TAM 12  41:26
+        DEGISKEN "ilk"  44:5
+          tip:
+            TIP_BASIT "tam32"  44:21
+          deger:
+            CAGRI  44:38
+              hedef:
+                TANIMLAYICI "_kanal_al"  44:29
+              argumanlar (1):
+                TANIMLAYICI "kanal"  44:39
+        IFADE_DEYIMI  47:5
+          CAGRI  47:21
+            hedef:
+              TANIMLAYICI "_gorev_birlestir"  47:5
+            argumanlar (1):
+              TANIMLAYICI "uretici"  47:22
+        IFADE_DEYIMI  48:5
+          CAGRI  48:21
+            hedef:
+              TANIMLAYICI "_gorev_birlestir"  48:5
+            argumanlar (1):
+              TANIMLAYICI "tuketici"  48:22
+        VER  51:5
+          IKILI +  51:13
+            TANIMLAYICI "ilk"  51:9
+            TAM 32  51:15

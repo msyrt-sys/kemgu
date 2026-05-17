@@ -35,12 +35,14 @@ endif
 
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
+       $(SRCDIR)/ast_kaynak.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
-       $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
+       $(SRCDIR)/tip_kontrol.c $(SRCDIR)/tekkez_kontrol.c \
+       $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c \
        $(SRCDIR)/llvm.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_snapshot_test calistir_fuzz_test calistir_bench coverage test_tumu
 
 # === Ana hedef ===
 
@@ -101,6 +103,21 @@ $(BUILD)/test_tip_kontrol$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(TESTDIR)/test_tip_kontrol.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
+# === Tekkez (linear types) testi (Clang64 + ASan) ===
+
+$(BUILD)/test_tekkez$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                            $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                            $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                            $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                            $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
+                            $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                            $(SRCDIR)/tekkez_kontrol.c \
+                            $(TESTDIR)/test_tekkez.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+calistir_tekkez_test: $(BUILD)/test_tekkez$(EXE)
+	./$(BUILD)/test_tekkez$(EXE)
+
 # === Bolge testi (Clang64 + ASan — arena + bolge) ===
 
 $(BUILD)/test_bolge$(EXE): $(SRCDIR)/arena.c $(SRCDIR)/bolge.c \
@@ -117,6 +134,38 @@ $(BUILD)/test_bolge_atama$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(SRCDIR)/bolge_atama.c \
                                   $(TESTDIR)/test_bolge_atama.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Snapshot testi (Clang64 + ASan — parser tum bagimliliklar) ===
+
+$(BUILD)/test_snapshot$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                              $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                              $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                              $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                              $(SRCDIR)/ifade.c \
+                              $(TESTDIR)/test_snapshot.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Fuzz testi (Clang64 + ASan — random input parser) ===
+
+$(BUILD)/test_fuzz$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                          $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                          $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                          $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                          $(SRCDIR)/ifade.c \
+                          $(TESTDIR)/test_fuzz.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# === Bench (UCRT64 GCC, ASan'SIZ — gercek perf — -O2 ile) ===
+
+$(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
+                           $(SRCDIR)/hata.c $(SRCDIR)/lexer.c \
+                           $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+                           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
+                           $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
+                           $(SRCDIR)/tip_kontrol.c $(SRCDIR)/bolge.c \
+                           $(SRCDIR)/bolge_atama.c $(SRCDIR)/llvm.c \
+                           $(TESTDIR)/test_bench.c | $(BUILD)
+	$(CC) -Wall -Wextra -std=c11 -O2 -I$(SRCDIR) -o $@ $^
 
 # === Genel obje kurallari ===
 
@@ -157,8 +206,53 @@ calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 	./$(BUILD)/test_bolge_atama$(EXE)
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test
+calistir_snapshot_test: $(BUILD)/test_snapshot$(EXE)
+	./$(BUILD)/test_snapshot$(EXE) 2>/dev/null
+
+# Fuzz: KEMGU hata mesajlari stderr'e flood eder, /dev/null'a at.
+# ASan return code'u zaten ana kanalda kalir (bash $?).
+calistir_fuzz_test: $(BUILD)/test_fuzz$(EXE)
+	./$(BUILD)/test_fuzz$(EXE) 2>/dev/null
+
+# Bench test_tumu icinde DEGIL — sadece elle calistirilir
+calistir_bench: $(BUILD)/test_bench$(EXE)
+	./$(BUILD)/test_bench$(EXE)
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_tekkez_test calistir_bolge_test calistir_bolge_atama_test calistir_snapshot_test calistir_fuzz_test
 	@echo "Tum testler gecti!"
+
+# === Coverage (gcov ile parser/lexer/tip kontrol branch coverage) ===
+# GCC --coverage flag'leri ile derler, calistirir, gcov raporu uretir.
+# Cikti: build/coverage/<file>.c.gcov
+
+COV_DIR = $(BUILD)/coverage
+COV_FLAGS = --coverage -O0 -g
+COV_SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
+           $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c \
+           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c $(SRCDIR)/ifade.c \
+           $(SRCDIR)/tip.c $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+           $(SRCDIR)/bolge.c $(SRCDIR)/bolge_atama.c
+
+$(COV_DIR)/test_parser_cov$(EXE): $(COV_SRCS) $(TESTDIR)/test_parser.c
+	mkdir -p $(COV_DIR)
+	$(CC) -Wall -Wextra -std=c11 $(COV_FLAGS) -I$(SRCDIR) -o $@ $^
+
+# UCRT64 gcov GCC --coverage output ile uyumlu (Clang gcov degil)
+GCOV = /c/msys64/ucrt64/bin/gcov.exe
+
+coverage: $(COV_DIR)/test_parser_cov$(EXE)
+	./$(COV_DIR)/test_parser_cov$(EXE) > /dev/null 2>&1 || true
+	@echo "=== Parser/Lexer/Tip coverage (test_parser uzerinden) ==="
+	@cd $(COV_DIR) && for f in parser ifade lexer tip_kontrol bolge_atama ast utf8; do \
+	    if [ -f "test_parser_cov-$$f.gcda" ]; then \
+	        result=$$($(GCOV) -bc test_parser_cov-$$f.gcda 2>/dev/null \
+	            | grep -E "Lines executed|Branches executed" \
+	            | head -2 | tr '\n' ' '); \
+	        printf "  %-15s %s\n" "$$f.c:" "$$result"; \
+	    fi; \
+	done
+	@echo ""
+	@echo "Detayli rapor: $(COV_DIR)/*.gcov"
 
 clean:
 	rm -rf $(BUILD)
