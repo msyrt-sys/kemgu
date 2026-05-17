@@ -70,10 +70,11 @@ theorem drf_l4_a_step
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- cGorevBaslat: 14 pattern positions
-  -- ctx tYeni yd kod transferredBolgeler h_in h_ifade h_fresh h_yeni_th
-  -- h_sahip h_iz h_zaman h_store h_kanal
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- cGorevBaslat (A3.0''' refactored): 16 pattern positions
+  -- ctx tYeni yd kod transferredBolgeler linearYakalananlar
+  -- h_in h_ifade h_fresh h_yeni_th h_sahip h_lineer_caller
+  -- h_iz h_zaman h_store h_kanal
+  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
