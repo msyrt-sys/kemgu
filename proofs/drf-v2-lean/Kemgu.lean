@@ -13,6 +13,7 @@ import Kemgu.Drf.L1BolgeThreadTekilligi
 import Kemgu.Drf.L7BellekErisimTipSoundness
 import Kemgu.Drf.L2LinearMoveCrossThread
 import Kemgu.Drf.L3LinearClosureSoundness
+import Kemgu.Drf.L5KanalAtomikTransfer
 -- import Kemgu.Drf.L2LinearMoveCrossThread
 -- import Kemgu.Drf.L3LinearClosureSoundness
 -- import Kemgu.Drf.L5KanalAtomikTransfer
