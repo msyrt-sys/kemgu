@@ -15,12 +15,8 @@ import Kemgu.Drf.L2LinearMoveCrossThread
 import Kemgu.Drf.L3LinearClosureSoundness
 import Kemgu.Drf.L5KanalAtomikTransfer
 import Kemgu.Drf.L6CapabilityLinear
--- import Kemgu.Drf.L2LinearMoveCrossThread
--- import Kemgu.Drf.L3LinearClosureSoundness
--- import Kemgu.Drf.L5KanalAtomikTransfer
--- import Kemgu.Drf.L6CapabilityLinear
--- Faz A3.10 (yapilacak): Teorem 4'
--- import Kemgu.Drf.Drf
+-- Faz A3.10: Teorem 4'
+import Kemgu.Drf.Drf
 
 -- Faz B (yapilacak): Memory Safety + Side-Channel + BET
 -- import Kemgu.MemSafety.Theorems
