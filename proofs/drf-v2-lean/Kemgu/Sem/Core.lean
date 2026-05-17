@@ -130,15 +130,59 @@ abbrev Store := List (Konum × Deger)
 -- Kaynak: Op.Sem §2.4
 -- ============================================================
 
-/-- Bir bolgenin sahip durumu. ⊥ = bos, donmus = R-PAYLAS. -/
+/-- Bir bolgenin sahip durumu.
+    ⊥ = bos (sahibi yok), donmus = R-PAYLAS (coklu okuyucu, sifir yazici),
+    kanalSahip = kanal transit'inde (R-KANAL gonderim sonrasi, alim oncesi). -/
 inductive Sahip : Type where
   | bos                              -- ⊥ (henuz sahibi yok)
   | thread (t : ThreadId)            -- belirli thread sahip
+  | kanalSahip (k : KanalId)         -- kanal transit'inde — Op.Sem §5.4 C-KANAL-GONDER
   | donmus                           -- DONMUS (R-PAYLAS, coklu okuyucu)
 deriving Repr, DecidableEq
 
 /-- Sigma : (Bolge × Zaman) → Sahip -/
 abbrev Sahiplik := List ((Bolge × Zaman) × Sahip)
+
+
+-- ============================================================
+-- §7.1. Sahiplik lookup + atomic set + temel lemma'lar
+-- DRF-L0 (Bolge Korunumu) ve diger lemmalar bu helper'lara dayanir.
+-- Kaynak: Op.Sem §5.4 R-* aksiyomlarinin atomic transfer semantigi
+-- ============================================================
+
+/-- Sahiplik lookup: bir (bolge, zaman) anahtarina karsi gelen sahip degerini
+    bul. Birinci eslesen entry'i dondurur (newest-wins; sahiplikSet prepend
+    kullanir, bu sayede yeni entry eskisini "shadow"lar). -/
+def sahiplikGet : Sahiplik → (Bolge × Zaman) → Option Sahip
+  | [], _ => none
+  | (k, v) :: rest, key => if k = key then some v else sahiplikGet rest key
+
+/-- Sahiplik atomik set (Op.Sem §5.4 R-* aksiyomlari S3 atomic transfer):
+    (bolge, zaman) anahtarina yeni sahip degerini ata.
+    Implementasyon: prepend; sahiplikGet ilk eslesen entry'i dondurdugu icin
+    yeni deger eski entry'i mantiksal olarak override eder (eski entry fiziksel
+    olarak listede kalir ama lookup ona ulasmaz). Bu hem bellek hem ispat
+    sadeligi acisindan tercih edilen tasarim. -/
+def sahiplikSet (s : Sahiplik) (b : Bolge) (t : Zaman) (yeni : Sahip) : Sahiplik :=
+  ((b, t), yeni) :: s
+
+/-- Coklu bolge atomic set: foldl ile sirayla prepend.
+    cGorevBaslat (R-GOREV) ve cGorevBirlestir (R-BIRLESTIR) icin —
+    her iki kural birden cok bolgenin sahipligini ayni zaman damgasinda
+    degistirir. -/
+def sahiplikSetMany (s : Sahiplik) (bs : List Bolge) (t : Zaman) (yeni : Sahip) : Sahiplik :=
+  bs.foldl (fun acc b => sahiplikSet acc b t yeni) s
+
+/-- Set sonra get ayni anahtarda yeni degeri doner. -/
+theorem sahiplikSet_eq (s : Sahiplik) (b : Bolge) (t : Zaman) (yeni : Sahip) :
+    sahiplikGet (sahiplikSet s b t yeni) (b, t) = some yeni := by
+  simp [sahiplikSet, sahiplikGet]
+
+/-- Set sonra get farkli anahtarda eski lookup degismez. -/
+theorem sahiplikSet_ne (s : Sahiplik) (b b' : Bolge) (t t' : Zaman) (yeni : Sahip)
+    (h : (b', t') ≠ (b, t)) :
+    sahiplikGet (sahiplikSet s b t yeni) (b', t') = sahiplikGet s (b', t') := by
+  simp [sahiplikSet, sahiplikGet, h.symm]
 
 
 -- ============================================================
