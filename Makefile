@@ -62,7 +62,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
 
 # === Ana hedef ===
 
@@ -474,7 +474,286 @@ calistir_arm64_test: $(BUILD)/kemgu$(EXE)
 	@llvm-objdump -h $(BUILD)/kernel_aarch64.o | sed -n '4,9p'
 	@echo "ARM64 ELF dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check
+# =============================================================================
+# Bare-Metal UART / Konsol Surucusu (Track B — Hedef 3 Evrensel OS)
+# =============================================================================
+#
+# Heap'siz, libc'siz UART surucusu — bump allocator gerektirmez. Iki
+# desteklenen denetleyici:
+#   - runtime/kdl_runtime_uart_pl011.c   ARM PrimeCell PL011 (QEMU virt, RPi)
+#   - runtime/kdl_runtime_uart_16550.c   NS16550A (x86_64 COM1, port I/O)
+#
+# Host testleri KEMGU_UART_MOCK ile derlenir; MMIO/port erisimi global
+# tampona yonelir, surucu mantigi Windows host'unda dogrulanir.
+#
+# Bare-metal cross-compile dogrulamasi -DKEMGU_BARE_METAL ile yapilir;
+# llvm-objdump kontrolu libc sembol referansi olmadigini saglar.
+
+# === PL011 mock host testi (Clang64, ASan aktif) ===
+$(BUILD)/test_uart_pl011$(EXE): runtime/kdl_runtime_uart_pl011.c \
+                                $(TESTDIR)/test_uart_pl011.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE)
+	./$(BUILD)/test_uart_pl011$(EXE)
+
+# === Bare-metal yazdir_* port (PL011 backend, mock test) ===
+$(BUILD)/test_yazdir_bare$(EXE): runtime/kdl_runtime_uart_pl011.c \
+                                  runtime/kdl_runtime_yazdir_bare.c \
+                                  $(TESTDIR)/test_yazdir_bare.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_yazdir_bare_test: $(BUILD)/test_yazdir_bare$(EXE)
+	./$(BUILD)/test_yazdir_bare$(EXE)
+
+# === yazdir_bare bare-metal cross-compile dogrulamasi ===
+calistir_yazdir_bare_bare_metal:
+	@echo "yazdir_bare (PL011 backend) bare-metal cross-compile dogrulamasi..."
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/kdl_uart_pl011_aarch64.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_yazdir_bare.c \
+		-o $(BUILD)/kdl_yazdir_bare_aarch64.o
+	@echo ""
+	@echo "Beklenen kdl_yazdir_* semboller:"
+	@llvm-nm --defined-only $(BUILD)/kdl_yazdir_bare_aarch64.o | \
+		grep -E 'kdl_yazdir_(metin|satir|tam|tam64|mantiksal)|kdl_yaz_(metin|tam)|kdl_format_tam64' || \
+		{ echo "FAIL: yazdir_* semboller eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_yazdir_bare_aarch64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_yazdir_bare_aarch64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "yazdir_bare bare-metal dogrulamasi basarili!"
+
+# === Bare-Metal UART Echo (Track B D4) ===
+# uart_echo.kem -> ARM64 ELF (RX -> TX). Hello world ile ayni runtime,
+# ek olarak kdl_oku_karakter / kdl_yaz_karakter sembollerini kullanir.
+calistir_uart_echo_bare_metal: $(BUILD)/kemgu$(EXE)
+	@echo "Bare-metal echo: uart_echo.kem -> ARM64 ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_echo.kem > $(BUILD)/uart_echo.ll
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+		-x ir $(BUILD)/uart_echo.ll -c -o $(BUILD)/uart_echo.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/uart_pl011_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_yazdir_bare.c \
+		-o $(BUILD)/yazdir_bare_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-c boot/start_aarch64.S -o $(BUILD)/start_aarch64.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kernel_echo.elf \
+		$(BUILD)/start_aarch64.o $(BUILD)/uart_echo.o \
+		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o
+	@echo ""
+	@echo "Uretilen echo kernel:"
+	@file $(BUILD)/kernel_echo.elf
+	@echo ""
+	@echo "Beklenen RX + TX semboller:"
+	@llvm-nm $(BUILD)/kernel_echo.elf | grep -E '^[0-9a-f]+ T (_start|main|kdl_oku_karakter|kdl_yaz_karakter|kdl_uart_pl011_oku_karakter|kdl_uart_pl011_putc)$$' || true
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kernel_echo.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|getchar|fgetc|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kernel_echo.elf; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "Bare-metal echo basarili!"
+
+# === QEMU smoke test (opsiyonel — qemu yoksa atlanir) ===
+# Bare-metal hello world ELF'ini QEMU virt'te calistirip stdout yakalar.
+# Beklenen cikti "Merhaba KEMGU - Bare Metal" + "42" satirlari icermeli.
+# QEMU PATH'te yoksa atlandi mesaji ile basariyla biter (CI uyumlu).
+calistir_qemu_smoke: $(BUILD)/kernel.elf
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		echo "QEMU bulundu, ARM64 smoke test calistiriliyor..."; \
+		timeout 5 qemu-system-aarch64 -M virt -cpu cortex-a72 \
+			-nographic -kernel $(BUILD)/kernel.elf < /dev/null \
+			2>/dev/null > $(BUILD)/qemu_smoke.out || true; \
+		echo "--- QEMU stdout ---"; \
+		cat $(BUILD)/qemu_smoke.out; \
+		echo "--- son ---"; \
+		if grep -q "Merhaba KEMGU" $(BUILD)/qemu_smoke.out && \
+		   grep -q "42" $(BUILD)/qemu_smoke.out; then \
+			echo "QEMU smoke test gecti: cikti dogru."; \
+		else \
+			echo "FAIL: beklenen cikti (Merhaba KEMGU + 42) yok"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — smoke test atlandi."; \
+		echo "Yuklemek icin (MSYS2): pacman -S mingw-w64-clang-x86_64-qemu"; \
+	fi
+
+# Build target — kernel.elf var olmali. Yoksa hello_world'u tetikle.
+$(BUILD)/kernel.elf:
+	@$(MAKE) calistir_uart_merhaba_bare_metal > /dev/null
+
+# === Bare-Metal Hello World (Track B Kalem 3) ===
+# uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
+# Pipeline: kemgu --llvm | clang -target aarch64-unknown-none -> kernel.elf
+calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
+	@echo "Bare-metal hello world: uart_merhaba.kem -> ARM64 ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba.ll
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+		-x ir $(BUILD)/uart_merhaba.ll -c -o $(BUILD)/uart_merhaba.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/uart_pl011_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_yazdir_bare.c \
+		-o $(BUILD)/yazdir_bare_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-c boot/start_aarch64.S -o $(BUILD)/start_aarch64.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kernel.elf \
+		$(BUILD)/start_aarch64.o $(BUILD)/uart_merhaba.o \
+		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o
+	@echo ""
+	@echo "Uretilen kernel:"
+	@file $(BUILD)/kernel.elf
+	@echo ""
+	@echo "Entry point + bolum yerleri:"
+	@llvm-objdump -h $(BUILD)/kernel.elf | sed -n '4,12p'
+	@echo ""
+	@echo "Tanimli semboller (T = text):"
+	@llvm-nm $(BUILD)/kernel.elf | grep -E '^[0-9a-f]+ T (_start|main|kdl_uart_pl011_(init|putc|yaz)|kdl_yazdir_(metin|tam|satir)|kdl_yaz_(metin|tam))$$' || true
+	@echo ""
+	@echo "Libc sembol referansi kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kernel.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kernel.elf; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "Bare-metal hello world basarili!"
+
+# === UartSurucu vtable testi (her iki driver birlikte) ===
+$(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
+                                  runtime/kdl_runtime_uart_16550.c \
+                                  $(TESTDIR)/test_uart_vtable.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_uart_vtable_test: $(BUILD)/test_uart_vtable$(EXE)
+	./$(BUILD)/test_uart_vtable$(EXE)
+
+# === Panik handler host testi (Clang64, ASan aktif) ===
+$(BUILD)/test_panik$(EXE): runtime/kdl_runtime_uart_pl011.c \
+                           runtime/kdl_runtime_panik.c \
+                           $(TESTDIR)/test_panik.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_panik_test: $(BUILD)/test_panik$(EXE)
+	./$(BUILD)/test_panik$(EXE)
+
+# === Panik handler bare-metal cross-compile (ARM64) ===
+calistir_panik_bare_metal:
+	@echo "Panik handler bare-metal cross-compile dogrulamasi..."
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_panik.c \
+		-o $(BUILD)/kdl_panik_aarch64.o
+	@echo ""
+	@echo "Beklenen sembol:"
+	@llvm-nm --defined-only $(BUILD)/kdl_panik_aarch64.o | \
+		grep -E 'kdl_panik_dur$$' || \
+		{ echo "FAIL: kdl_panik_dur eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_panik_aarch64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|abort|exit' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_panik_aarch64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "Panik bare-metal dogrulamasi basarili!"
+
+# === 16550A mock host testi (Clang64, ASan aktif) ===
+$(BUILD)/test_uart_16550$(EXE): runtime/kdl_runtime_uart_16550.c \
+                                $(TESTDIR)/test_uart_16550.c | $(BUILD)
+	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
+
+calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE)
+	./$(BUILD)/test_uart_16550$(EXE)
+
+# === 16550A bare-metal cross-compile (x86_64 freestanding) ===
+calistir_uart_16550_bare_metal:
+	@echo "16550A bare-metal cross-compile + symbol dogrulamasi (x86_64)..."
+	clang -target x86_64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_16550.c \
+		-o $(BUILD)/kdl_uart_16550_x86_64.o
+	@echo ""
+	@echo "Uretilen x86_64 ELF object:"
+	@file $(BUILD)/kdl_uart_16550_x86_64.o
+	@echo ""
+	@echo "Beklenen semboller (T = text):"
+	@llvm-nm --defined-only $(BUILD)/kdl_uart_16550_x86_64.o | \
+		grep -E 'kdl_uart_16550_(init|putc|yaz)$$' || \
+		{ echo "FAIL: beklenen semboller eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_uart_16550_x86_64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_uart_16550_x86_64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "16550A bare-metal dogrulamasi basarili!"
+
+# === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
+calistir_uart_pl011_bare_metal:
+	@echo "PL011 bare-metal cross-compile + symbol dogrulamasi..."
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_runtime_uart_pl011.c \
+		-o $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo ""
+	@echo "Uretilen ARM64 ELF object:"
+	@file $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo ""
+	@echo "Beklenen semboller (T = text, undefined olmaz):"
+	@llvm-nm --defined-only $(BUILD)/kdl_uart_pl011_aarch64.o | \
+		grep -E 'kdl_uart_pl011_(init|putc|yaz)$$' || \
+		{ echo "FAIL: beklenen semboller eksik"; exit 1; }
+	@echo ""
+	@echo "Libc sembol referansi (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kdl_uart_pl011_aarch64.o | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kdl_uart_pl011_aarch64.o; \
+		exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "PL011 bare-metal dogrulamasi basarili!"
+
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test
 	@echo "Tum testler gecti!"
 
 clean:
