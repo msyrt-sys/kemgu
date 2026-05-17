@@ -621,3 +621,23 @@ kategorisinde → 🔴 Kırmızı. Plan dökümanı Bölüm 7'de detay var.
 - Belge: belgeler/KILAVUZ.md §14 (Kripto stdlib)
 - src/ dokunulmadı; yalnız Makefile (calistir_kripto_check eklendi) ve
   stdlib/ + test/ + belgeler/ değişti.
+
+---
+## KQ-EKİ-2026-05-17: Eski oturum kurtarması — bekleyen kararlar
+
+Branch: `feature/eski-adim-14-15-16-kurtarma` (commit `a49563f`)
+Rapor: KURTARMA_ANALIZ.md (disk'te, commit edilmedi)
+
+Bekleyen kararlar:
+1. **4 operasyonel belge kurtarma** (Hata_Kodlari, LLVM_Backend, 
+   Bolge_Cozumleyici, Tip_Sistemi) — güncel mimariye göre yeniden yaz, 
+   eski belgeleri referans al. Öncelik: doçentlik dosyası dönemi.
+2. **`boyut<T>` keyword** — sizeof equivalent. Sistem programlama için 
+   gerekli mi karar verilmeli. Kernel scaffold kararıyla birlikte 
+   değerlendirilir.
+3. **Kernel scaffold mimari kararı** — dil tarafı (KEMGU'da yazılı, 
+   `[ciplak]` attribute + `_asm` intrinsic) vs altyapı tarafı (C runtime + 
+   `--hedef` flag). Hibrid yaklaşım mümkün. Self-hosting stratejisiyle birlikte.
+4. **`src/ast_kaynak.c/h`** — AST→source pretty printer. LSP format komutu 
+   gerektiğinde port edilir. Sarı kategori.
+---
