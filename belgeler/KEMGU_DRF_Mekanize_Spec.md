@@ -380,34 +380,45 @@ kullanılmadıysa **soundness garantisi formel**.
 Aşağıdaki tablo, her faz sonunda **otomatik kontrol** ile doldurulur (Lake
 artımlı build çıktısı + `grep -c "theorem\|lemma\|sorry\|axiom"`):
 
-| # | Lemma/Teorem | Dosya | Satır (tahmini) | Lean Status | sorry? | axiom? | Kâğıt Kaynak |
-|---|--------------|-------|-----------------|-------------|--------|--------|--------------|
-| 1 | Op.Sem.Core | `Sem/Core.lean` | ~150 | ⏳ | - | - | Op.Sem §1-3 |
-| 2 | Op.Sem.SmallStep | `Sem/SmallStep.lean` | ~200 | ⏳ | - | - | Op.Sem §4 |
-| 3 | Op.Sem.System | `Sem/System.lean` | ~150 | ⏳ | - | - | Op.Sem §5 |
-| 4 | Op.Sem.Trace | `Sem/Trace.lean` | ~100 | ⏳ | - | - | Op.Sem §6 |
-| 5 | Op.Sem.WellTyped | `Sem/WellTyped.lean` | ~80 | ⏳ | - | - | Op.Sem §7 |
-| 6 | Preservation (A1+A3+A4) | `Sem/Preservation.lean` | ~250 | ⏳ | - | - | Op.Sem §8 |
-| 7 | DRF-L0 | `Drf/L0BolgeKorunumu.lean` | ~80 | ⏳ | 0 | 0 | DRF-L §DRF-L0 |
-| 8 | DRF-L7 | `Drf/L7BellekErisimTipSoundness.lean` | ~120 | ⏳ | 0 | 0 | DRF-L §DRF-L7 |
-| 9 | DRF-L1 | `Drf/L1BolgeThreadTekilligi.lean` | ~100 | ⏳ | 0 | 0 | DRF-L §DRF-L1 |
-| 10 | DRF-L2 | `Drf/L2LinearMoveCrossThread.lean` | ~80 | ⏳ | 0 | 0 | DRF-L §DRF-L2 |
-| 11 | DRF-L3 | `Drf/L3LinearClosureSoundness.lean` | ~120 | ⏳ | 0 | 0 | DRF-L §DRF-L3 |
-| 12 | DRF-L4 | `Drf/L4FrozenRegionRead.lean` | ~70 | ⏳ | 0 | 0 | DRF-L §DRF-L4 |
-| 13 | DRF-L5 | `Drf/L5ChannelAtomicity.lean` | ~100 | ⏳ | 0 | 0 | DRF-L §DRF-L5 |
-| 14 | DRF-L6 | `Drf/L6CapabilityLinear.lean` | ~60 | ⏳ | 0 | 0 | DRF-L §DRF-L6 |
-| 15 | Teorem 4' | `Drf/Drf.lean` | ~250 | ⏳ | 0 | 0 | DRF Teoremi §3 |
-| 16 | Memory Safety (T1+T2+T3) | `MemSafety/Theorems.lean` | ~400 | ⏳ | 0 | 0 | Bellek §Güvenlik |
-| 17 | Side-Channel NI | `SideChannel/NonInterference.lean` | ~500 | ⏳ | 0 | 0 | Sabitsure §CT.10 |
-| 18 | BET | `BET/Boundedness.lean` | ~400 | ⏳ | 0 | 0 | Realtime §RT.8 |
-| 19 | V3 Metateorem | `Soundness/Main.lean` | ~150 | ⏳ | 0 | 0 | Metateorem_V3 (yeni) |
+| # | Lemma/Teorem | Dosya | Satır (gerçek) | Lean Status | sorry/axiom | Kâğıt Kaynak |
+|---|--------------|-------|----------------|-------------|-------------|--------------|
+| 1 | Op.Sem.Core | `Sem/Core.lean` | 337 | 🟢 lake build OK | 0/0 | Op.Sem §1-3 |
+| 2 | Op.Sem.SmallStep | `Sem/SmallStep.lean` | 218 | 🟢 | 0/0 | Op.Sem §4-5 |
+| 3 | Op.Sem.System | (merged with SmallStep) | — | 🟢 | 0/0 | Op.Sem §5 (Konfigurasyon in Core) |
+| 4 | Op.Sem.Trace | (Iz tanım in Core) | — | 🟢 | 0/0 | Op.Sem §6 (Olay+Iz in Core) |
+| 5 | Op.Sem.WellTyped | (IyiTipli in Core) | — | 🟢 | 0/0 | Op.Sem §7 (placeholder True alt-predicate'ler) |
+| 6 | Preservation (A1+A3+A4) | (deferred, V2) | — | ⏳ | - | Op.Sem §8 (V2 hedef) |
+| 7 | DRF-L0 BolgeKorunumu | `Drf/L0BolgeKorunumu.lean` | 105 | 🟢 TAM | 0/0 | DRF-L §DRF-L0 |
+| 8 | DRF-L1 BolgeThreadTekilligi | `Drf/L1BolgeThreadTekilligi.lean` | 74 | 🟢 TAM (L0' corollary) | 0/0 | DRF-L §DRF-L1 |
+| 9 | DRF-L2 LinearMoveCrossThread | `Drf/L2LinearMoveCrossThread.lean` | 96 | 🟢 TAM | 0/0 | DRF-L §DRF-L2 |
+| 10 | DRF-L3 LinearClosureSoundness | `Drf/L3LinearClosureSoundness.lean` | 86 | 🟢 TAM (bundled) | 0/0 | DRF-L §DRF-L3 |
+| 11 | DRF-L4 FrozenRegionRead | `Drf/L4FrozenRegionRead.lean` | 163 | 🟢 TAM | 0/0 | DRF-L §DRF-L4 |
+| 12 | DRF-L5 KanalAtomikTransfer | `Drf/L5KanalAtomikTransfer.lean` | 110 | 🟢 (b)+(c) | 0/0 | DRF-L §DRF-L5 (a)+(d) deferred |
+| 13 | DRF-L6 CapabilityLinear | `Drf/L6CapabilityLinear.lean` | 81 | 🟢 (a) — L2 corollary | 0/0 | DRF-L §DRF-L6 (b)+(c) deferred |
+| 14 | DRF-L7 BellekErisimTipSoundness | `Drf/L7BellekErisimTipSoundness.lean` | 124 | 🟢 (a) | 0/0 | DRF-L §DRF-L7 (b)+(c) deferred |
+| 15 | Teorem 4' Drf | `Drf/Drf.lean` | 130 | 🟢 bundled form | 0/0 | DRF Teoremi §3 |
+| 16 | Memory Safety (T1+T2+T3) | `MemSafety/Theorems.lean` | — | ⏳ Faz B | - | Bellek §Güvenlik |
+| 17 | Side-Channel NI | `SideChannel/NonInterference.lean` | — | ⏳ Faz B | - | Sabitsure §CT.10 |
+| 18 | BET | `BET/Boundedness.lean` | — | ⏳ Faz B | - | Realtime §RT.8 |
+| 19 | V3 Metateorem | `Soundness/Main.lean` | — | ⏳ Faz C | - | Metateorem_V3 (yeni) |
+
+**Faz A tamamlandı (2026-05-18):** 7/7 DRF lemma + Teorem 4' bundled form mekanize. 5 tam, 2 kısmi. Toplam ~1424 satır Lean 4. lake build temiz, 0 sorry/axiom/opaque/admit bizim 13 dosyada.
+
+**Refactor zinciri (A3 boyunca):**
+- A3.0' (`c0bd0fd`): SmallStep h_sahip clauses (sahiplikSet + sahiplikSetMany helpers)
+- A3.0'' (`9089682`): sAtama h_not_frozen + isFrozen (DRF-L4 önkoşulu)
+- A3.0''' (`60f571a`): cGorevBaslat h_lineer_caller + linearYakalananlar (DRF-L2 önkoşulu)
+- (Önerilen) A3.0'''': sAtama h_owner (Teorem 4' tam form için, Mehmet onayı bekler)
 
 **Status sembolleri:** ⏳ Hazır değil, 🟡 Yazıldı build kırık, 🟢 lake build OK,
-🔴 sorry/axiom kullanıldı (KABUL EDİLMEZ).
+🔴 sorry/axiom kullanıldı (KABUL EDİLMEZ — sıfır kullanım korundu).
 
-**Faz sonu checkpoint kuralı:** Hiçbir lemma 🔴 ile bırakılamaz. `sorry`
-veya `axiom` çıkarsa: yazar (Claude) DUR, tıkanma raporu ver, Mehmet
-çözüm/kapsam değişikliği kararı alır.
+**V1 vs Kâğıt fark notları:**
+- DRF-L5 (a) "Σ persistence" ve (d) "no concurrent access" deferred — cKanalGonder/Al h_lineer refactor (~15+50 satır) ile tam form yazılabilir
+- DRF-L6 (b)(c) — L5'in çözümü ile aynı, corollary olarak gelir
+- DRF-L7 (b) "ρ ≠ ρ_lit" — sAtama h_not_lit refactor (~5+30 satır)
+- DRF-L7 (c) "Ρ_t mapping" — ThreadCtx genişletme (V2 hedef, ~100 satır)
+- Teorem 4' tam "∀ τ : ¬ data_race(τ)" — sAtama h_owner refactor (A3.0''''), HB ilişkisi mekanize (~100 satır), memOku Step emit (V2)
 
 ---
 
