@@ -63,7 +63,8 @@ theorem drf_l7_a_step
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- cGorevBaslat (A3.0''' refactored): 16 pattern positions
+  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head

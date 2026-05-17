@@ -64,23 +64,32 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       yeni thread t_yeni spawn edilir; yakalama listesindeki tum
       bolgeler Sigma uzerinde t_yeni'ye transfer (sahiplikSetMany).
       DRF-L2 (Linear Move) bu kurali kullanir.
-      `transferredBolgeler` yakalanan v_i'lerin bolgeleri (yd → bolge
-      eslesmesi Pho_t'den gelir — V1'de implicit). -/
+      `transferredBolgeler` yakalanan v_i'lerin bolgeleri.
+      `linearYakalananlar` yakalama listesinin LINEAR alt-kumesi
+      (Lineerlik takip eden) — A3.0''' refactor (DRF-L2 onkosulu). -/
   | cGorevBaslat
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (tYeni : ThreadId)
       (yd : List VarId) (kod : Ifade)
       (transferredBolgeler : List Bolge)
-      (h_in        : ctx ∈ S.thread)
-      (h_ifade     : ctx.ifade = .gorevBaslat yd kod)
-      (h_fresh     : threadFresh S tYeni)
-      (h_yeni_th   : ∃ yctx ∈ S'.thread, yctx.tid = tYeni ∧ yctx.ifade = kod)
-      (h_sahip     : S'.sahiplik = sahiplikSetMany S.sahiplik
-                        transferredBolgeler S.zaman (Sahip.thread tYeni))
-      (h_iz        : S'.iz = .threadBaslat tYeni :: S.iz)
-      (h_zaman     : S'.zaman = S.zaman + 1)
-      (h_store     : S'.store = S.store)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (linearYakalananlar : List VarId)
+      (h_in             : ctx ∈ S.thread)
+      (h_ifade          : ctx.ifade = .gorevBaslat yd kod)
+      (h_fresh          : threadFresh S tYeni)
+      (h_yeni_th        : ∃ yctx ∈ S'.thread, yctx.tid = tYeni ∧ yctx.ifade = kod)
+      (h_sahip          : S'.sahiplik = sahiplikSetMany S.sahiplik
+                            transferredBolgeler S.zaman (Sahip.thread tYeni))
+      -- A3.0''' refactor (DRF-L2 onkosulu):
+      -- IyiTipli'nin lineer-kontrol komponentinin kismi ifadesi.
+      -- "Linear yakalananlar caller'da tuketildi" (kagit Lambda1' = Lambda1 \ {YD ∩ Linear}).
+      -- Bu olmadan DRF-L2 "linear move = cross-thread no-alias" karsi-ornek ile bozulur.
+      (h_lineer_caller  : ∃ ctx' ∈ S'.thread, ctx'.tid = ctx.tid ∧
+                            ∀ v ∈ linearYakalananlar,
+                              (v, Lineerlik.tuketildi) ∈ ctx'.lineer)
+      (h_iz             : S'.iz = .threadBaslat tYeni :: S.iz)
+      (h_zaman          : S'.zaman = S.zaman + 1)
+      (h_store          : S'.store = S.store)
+      (h_kanal          : S'.kanal = S.kanal) :
       Step S S'
 
   /-- C-GOREV-BIRLESTIR (Op.Sem §5.4 R-BIRLESTIR):
