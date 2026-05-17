@@ -97,6 +97,52 @@ void kdl_yazdir_satir(void) {
     fputc('\n', stdout);
 }
 
+/* Track B C1: isaretsiz + onaltilik formatlar (host paralel kayit). */
+void kdl_yazdir_isaretsiz_tam(uint32_t n) {
+    printf("%u\n", (unsigned)n);
+}
+
+void kdl_yazdir_isaretsiz_tam64(uint64_t n) {
+    printf("%llu\n", (unsigned long long)n);
+}
+
+void kdl_yazdir_onaltilik(uint64_t n) {
+    printf("0x%llx\n", (unsigned long long)n);
+}
+
+void kdl_yaz_onaltilik(uint64_t n) {
+    printf("0x%llx", (unsigned long long)n);
+}
+
+/* Track B D1: kdl_yaz_karakter zaten asagida tanimli (mevcut host runtime
+ * kdl_yaz_karakter satir 175 civari) — yeniden tanim cakismayi onlemek
+ * icin burayi atla. */
+
+/* Track B D2: oku_karakter host — getchar wrapper */
+int32_t kdl_oku_karakter(void) {
+    int c = fgetc(stdin);
+    if (c == EOF) return -1;
+    return (int32_t)(c & 0xFF);
+}
+
+/* Track B D3: oku_metin host — fgets benzeri ama CR/LF normalize */
+int32_t kdl_oku_metin(char *buf, int32_t max) {
+    if (!buf || max <= 1) {
+        if (buf && max > 0) buf[0] = '\0';
+        return 0;
+    }
+    int32_t n = 0;
+    while (n < max - 1) {
+        int c = fgetc(stdin);
+        if (c == EOF) break;
+        if (c == '\r') continue;
+        if (c == '\n') break;
+        buf[n++] = (char)(c & 0xFF);
+    }
+    buf[n] = '\0';
+    return n;
+}
+
 /* yazdir_* versiyonlari satir sonu eklemez */
 void kdl_yaz_metin(const char *s) {
     if (s) fputs(s, stdout);

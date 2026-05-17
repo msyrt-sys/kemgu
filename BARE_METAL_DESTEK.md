@@ -1,0 +1,197 @@
+# KEMGU Bare-Metal Destek Haritası
+
+Bu belge KEMGU'nun bare-metal (libc'siz, OS'siz) ortamda hangi kapasitelere
+sahip olduğunu **şu anki commit itibariyle** özetler. Eksik olanlar
+açık şekilde işaretlenir; eksiklik yol haritasına eklenir.
+
+İlgili kaynaklar:
+- `belgeler/MIMARI.md` §ARM64 cross — cross-compile pipeline
+- `NOTES_TRACK_B.md` — UART/Konsol Driver çalışmasının karar defteri
+- `linker/bare-metal-aarch64.ld` — ARM64 yerleşim
+- `boot/start_aarch64.S` — ARM64 _start
+
+---
+
+## Hedefler
+
+| Hedef | Toolchain | Linker | Test |
+|-------|-----------|--------|------|
+| ARM64 (aarch64-unknown-none) | clang 22+, llvm-objdump | ld.lld -m aarch64linux | `make calistir_uart_pl011_bare_metal`, `calistir_uart_merhaba_bare_metal` |
+| x86_64 (x86_64-unknown-none) | clang 22+, llvm-objdump | ld.lld -m elf_x86_64 | `make calistir_uart_16550_bare_metal` |
+
+QEMU smoke testi opsiyonel — şu an pipeline'a dahil değil (toolchain
+kurulu değilse `file` + `llvm-objdump -h` + `llvm-nm` ile statik analiz
+yeterli).
+
+---
+
+## Runtime Modülleri
+
+### Çalışan (bare-metal'da derlenir + link olur)
+
+| Modül | Dosya | API | Notlar |
+|-------|-------|-----|--------|
+| PL011 UART | `runtime/kdl_runtime_uart_pl011.c` | `kdl_uart_pl011_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | QEMU virt @ 0x09000000, RPi 4 vb. (`-DKDL_PL011_BASE=...` override) |
+| 16550A UART | `runtime/kdl_runtime_uart_16550.c` | `kdl_uart_16550_init`, `_putc`, `_yaz`, `_oku_karakter`, `_rx_hazir` | PC COM1 @ 0x3F8 (inline asm in/out) |
+| **Cross-target UART vtable** | `runtime/kdl_uart.h` (struct) | `KdlUartSurucu`, `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` | const ROdata; hedef-bağımsız üst katman için indirect call |
+| Bare-metal yazdır | `runtime/kdl_runtime_yazdir_bare.c` | `kdl_yazdir_metin`, `_satir`, `kdl_yaz_metin`, `_tam`, `_tam64`, `kdl_yaz_tam`, `_mantiksal`, `kdl_yazdir_isaretsiz_tam(64)`, `_onaltilik`, `kdl_yaz_onaltilik`, `kdl_yazdir_karakter`, `kdl_yaz_karakter`, `kdl_oku_karakter`, `kdl_oku_metin`, `kdl_format_*` | Stack-yalnız, libc-yok; backend `-DKDL_UART_PUTC=…`, `-DKDL_UART_OKU_KARAKTER=…` ile seçilir |
+| Panik handler | `runtime/kdl_runtime_panik.c` | `kdl_panik_dur(const char *)` NORETURN | UART'a "PANIK: <mesaj>" + ARM wfe / x86 hlt halt loop |
+| ARM64 _start | `boot/start_aarch64.S` | `_start`, `_halt`, `__bss_start`, `__bss_end`, `__stack_top` | SP setup + BSS zero + `bl main` + WFE spin |
+
+### Compile-time bayraklar
+
+| Bayrak | Etki | Kullanım |
+|--------|------|----------|
+| `KEMGU_BARE_METAL` | Gerçek MMIO/port erişimi etkin | `clang -target ...-unknown-none -DKEMGU_BARE_METAL ...` |
+| `KEMGU_UART_MOCK` | Sürücü-özel mock buffer'a yönlendir | Test ortamı (host derleme) |
+| `KDL_PL011_BASE` | PL011 taban adresi override | Raspberry Pi 4 = 0xFE201000 |
+| `KDL_16550_BASE` | 16550 port taban override | COM2 = 0x2F8 |
+| `KDL_UART_PUTC` | yazdır backend sembolü | `kdl_uart_pl011_putc` veya `kdl_uart_16550_putc` |
+
+### KEMGU dili tarafı (LLVM emit)
+
+| KEMGU built-in | LLVM IR çağrısı | Host/bare-metal ortak |
+|----------------|-----------------|-----------------------|
+| `yazdir(metin) -> tam32` | `@puts(ptr)` | Yalnız host (eski API) |
+| `yazdir_metin(metin) -> boş` | `@kdl_yazdir_metin(ptr)` | **Her iki tarafta**: host = libc fputs, bare-metal = UART |
+| `yazdir_tam(tam32) -> boş` | `@kdl_yazdir_tam(i32)` | **Her iki tarafta**: aynı sembol, farklı runtime |
+| `yazdir_tam64(tam64) -> boş` | `@kdl_yazdir_tam64(i64)` | Her iki tarafta |
+| `yazdir_satir() -> boş` | `@kdl_yazdir_satir()` | Her iki tarafta |
+| `yaz_tam(tam32) -> boş` | `@kdl_yaz_tam(i32)` | Her iki tarafta |
+| `yaz_tam64(tam64) -> boş` | `@kdl_yaz_tam64(i64)` | Her iki tarafta |
+| `yazdir_isaretsiz_tam(dtam32) -> boş` | `@kdl_yazdir_isaretsiz_tam(i32)` | Her iki tarafta |
+| `yazdir_isaretsiz_tam64(dtam64) -> boş` | `@kdl_yazdir_isaretsiz_tam64(i64)` | Her iki tarafta |
+| `yazdir_onaltilik(dtam64) -> boş` | `@kdl_yazdir_onaltilik(i64)` | Her iki tarafta |
+| `yaz_onaltilik(dtam64) -> boş` | `@kdl_yaz_onaltilik(i64)` | Her iki tarafta |
+| `yazdir_karakter(karakter) -> boş` | `@kdl_yazdir_karakter(i32)` | UTF-8 encode (1-4 byte), her iki tarafta |
+| `yaz_karakter(karakter) -> boş` | `@kdl_yaz_karakter(i32)` | UTF-8 encode, newline yok |
+| `oku_karakter() -> karakter` | `@kdl_oku_karakter() -> i32` | Host: getchar, bare-metal: UART RX |
+
+Önemli: KEMGU programı **platform-agnostiktir**. Aynı `.kem` dosyası
+hem host (`./build/kemgu --llvm a.kem | clang … build/kdl_runtime.o`)
+hem ARM64 bare-metal (`… clang -target aarch64-unknown-none … +
+kdl_runtime_uart_pl011.o + kdl_runtime_yazdir_bare.o`) link akışlarında
+derlenir. Bkz. `test/ornekler/uart_merhaba.kem`.
+
+---
+
+## Eksikler (Açık Maddeler)
+
+### Kısa vade
+
+- **`yazdir(metin) -> puts` map'i** host'ta libc puts'a gidiyor.
+  Bare-metal'da kullanıcı `yazdir_metin` çağırmalı. `--hedef bare-metal`
+  CLI bayrağı eklenirse `yazdir` da otomatik `kdl_yazdir_metin`'e
+  yönlenebilir.
+
+- **Onaltılık ve işaretsiz tam yazdır** — ✓ tamamlandı (C1)
+
+- **Bare-metal panic handler** — ✓ tamamlandı (C3)
+
+- **UART RX driver seviyesi** — ✓ tamamlandı (C2/C7-a: `kdl_uart_pl011_oku_karakter`,
+  `_rx_hazir`, 16550 paralel API). KEMGU dil tarafı `oku_karakter` built-in
+  + capability gating sonraki adım.
+
+- **Cross-target UART vtable** — ✓ tamamlandı (C5: `KdlUartSurucu` struct,
+  `kdl_uart_pl011_surucu`, `kdl_uart_16550_surucu` const tabloları).
+
+- **Karakter yazdır (`kdl_yazdir_karakter` UTF-8 encoding)** — ✓ tamamlandı (D1)
+
+- **`oku_karakter` KEMGU built-in** — ✓ tamamlandı (D2). `kdl_oku_karakter`
+  host'ta `fgetc(stdin)`, bare-metal'da `KDL_UART_OKU_KARAKTER` macro ile
+  UART RX backend'ine bağlı. KEMGU dili tarafında `oku_karakter() -> karakter`
+  built-in olarak register.
+
+- **`oku_metin` line-buffered input** — ✓ tamamlandı (D3). C runtime
+  fonksiyonu; KEMGU dili built-in olarak henüz register edilmedi
+  (`Dizi<karakter>` veya buffer pointer parametresi tasarım kararı gerek).
+
+### Orta vade
+
+- **KEMGU dili `oku_metin` built-in** — driver var, C-tarafı kullanılabilir.
+  KEMGU dilinden çağrı için ya raw pointer (`*karakter`) ya `Dizi<karakter>`
+  parametresi gerek. Capability Spec entegrasyonu ("okuma yetkisi"
+  parametresi) bu noktada formalize edilir.
+
+- **Bump allocator** — Mehmet onayında. Onay sonrası heap çağrıları
+  (`bellek_al`, dizi runtime, kdl_metin_birlestir vb.) bare-metal'da
+  da çalışabilir hale gelir. Şu an kapsam dışı.
+
+- **QEMU smoke test pipeline** — ✓ Makefile target hazır (`calistir_qemu_smoke`).
+  QEMU PATH'te yoksa graceful skip eder; varsa otomatik çalışır,
+  stdout'tan "Merhaba KEMGU" + "42" karşılaştırması yapar.
+
+- **`--hedef` CLI bayrağı** — kemgu'ya bare-metal hedef seçimi. Şu an
+  LLVM IR target-triple ASCII varsayım (`x86_64-w64-windows-gnu`); clang
+  `-target` ile override edilir. Native KEMGU çalışmasında otomatik
+  yönlendirme yok.
+
+### Uzun vade
+
+- **Self-host bootloader** — ARM64 boot kod KEMGU'da yazılması (kendi
+  start.kem).
+
+- **SMP başlatma** — multi-CPU çekirdek desteği (PSCI çağrıları).
+
+- **Sayfa tablosu setup** — MMU etkinleştirme, sanal bellek.
+
+- **Interrupt handling** — IRQ vektör tablosu, exception level geçişleri.
+
+---
+
+## Cross-Compile Hızlı Başlangıç
+
+ARM64 bare-metal hello world:
+
+```bash
+export PATH=/c/msys64/clang64/bin:/c/msys64/ucrt64/bin:$PATH
+mingw32-make calistir_uart_merhaba_bare_metal
+```
+
+x86_64 bare-metal driver doğrulaması:
+
+```bash
+mingw32-make calistir_uart_16550_bare_metal
+```
+
+Tek tek bileşen testleri:
+
+```bash
+mingw32-make calistir_uart_pl011_test          # PL011 mock 16 test (TX + RX)
+mingw32-make calistir_uart_16550_test          # 16550 mock 13 test (TX + RX)
+mingw32-make calistir_uart_vtable_test         # vtable 21 test (PL011 + 16550 ortak)
+mingw32-make calistir_yazdir_bare_test         # yazdır + karakter + oku_metin 36 test
+mingw32-make calistir_panik_test               # panik handler 6 test
+mingw32-make calistir_uart_pl011_bare_metal    # PL011 ARM64 obj + symbol
+mingw32-make calistir_uart_16550_bare_metal    # 16550 x86_64 obj + symbol
+mingw32-make calistir_yazdir_bare_bare_metal   # yazdır ARM64 obj + symbol
+mingw32-make calistir_panik_bare_metal         # panik ARM64 obj + symbol
+mingw32-make calistir_uart_merhaba_bare_metal  # hello world ARM64 kernel.elf
+mingw32-make calistir_uart_echo_bare_metal     # echo (RX→TX) ARM64 kernel_echo.elf
+mingw32-make calistir_qemu_smoke               # ARM64 hello world QEMU'da (QEMU yoksa skip)
+```
+
+QEMU yüklü değilse `calistir_qemu_smoke` graceful skip eder — `pacman -S
+mingw-w64-clang-x86_64-qemu` ile yüklenince otomatik aktif olur.
+
+---
+
+## Strateji: Hedef 3 (Evrensel OS) Yol Haritası
+
+Bu Track B (UART/Konsol) Hedef 3'ün **ilk işe yarayan adımıdır**:
+"konsola çıktı veren bare-metal kernel". Sonraki adımlar:
+
+1. **Track A (Capability + Linear)** ile sinerji — bare-metal'da yetki
+   tabanlı I/O (`yetki<UART>` ile `putc` çağrısı). Şu an iki track
+   bağımsız ilerliyor.
+
+2. **Bump allocator onayı** — Mehmet sürecinde. Onaylanırsa bare-metal'da
+   `Dizi<T>`, `metin_birlestir` vb. heap-bağımlı API'ler de çalışır.
+
+3. **`--hedef bare-metal` flag** — kemgu CLI tarafında hedef bilgisi
+   `yazdir → kdl_yazdir_metin` gibi otomatik yönlendirmeleri sağlar.
+
+4. **Bootloader + init** — Şu an _start asm. KEMGU'da yazılması (`güvensiz`
+   blok + inline asm benzeri primitif gerekir — yeni 🔴 keyword: `asm`).
+
+5. **Multi-core + MMU** — sayfa tablosu setup, SMP başlatma. Uzun vade.
