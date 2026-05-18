@@ -18,10 +18,12 @@ import Kemgu.Drf.L6CapabilityLinear
 -- Faz A3.10: Teorem 4'
 import Kemgu.Drf.Drf
 
--- Faz B (yapilacak): Memory Safety + Side-Channel + BET
--- import Kemgu.MemSafety.Theorems
--- import Kemgu.SideChannel.NonInterference
--- import Kemgu.BET.Boundedness
+-- Faz B1: Memory Safety (T1 weak via L4; T2/T3 iskelet — bolge lifecycle refactor bekler)
+import Kemgu.MemSafety.Theorems
+-- Faz B2: BET iskelet (realtime model refactor bekler)
+import Kemgu.BET.Boundedness
+-- Faz B3: Side-Channel iskelet (sabitsure tracking refactor bekler)
+import Kemgu.SideChannel.NonInterference
 
 -- Faz C (yapilacak): V3 metateorem
 -- import Kemgu.Soundness.Main
