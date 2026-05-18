@@ -39,6 +39,21 @@ Format:
   Lean 4/F* dört seçenek karşılaştırma tablosu + Lean 4 seçim gerekçesi
   10 maddeli.
 
+### D. V3 Bütünleşik Metateorem — V1 BUNDLED TAMAMLANDI ✓
+
+- **[V1 BUNDLED TAMAMLANDI 2026-05-18: Lean 4 mekanize]**
+- **Mekanize:** `proofs/drf-v2-lean/Kemgu/Soundness/Main.lean` —
+  `kemgu_soundness_v3` teoremi tam ispatlı (DrfHolds + MemSafe_perStep
+  TAM, SCR + BET placeholder True deferred V2).
+- **Spec:** `belgeler/KEMGU_Metateorem_V3.md` (yeni döküman 2026-05-18).
+- **Faz A + B + γ + C:** 4 refactor turu (A3.0' .. A3.0''''), 7 DRF lemma
+  + T1 + Teorem 4' + V3 bundled metateorem, ~2030 satır Lean 4,
+  0 sorry/axiom/opaque/admit, lake build temiz (18/18 job).
+- **V2 hedefler:** Cross-Step HB ordering, T2/T3 lifecycle, BET realtime,
+  SCR sabitsure two-execution simulation. Toplam ~1100 satır V2 refactor.
+- **TOPLAS makale:** V1 bundled paper hazır; V2 tam form opsiyonel
+  ikinci paper veya konsolide tek paper.
+
 ### B. Lean 4 kurulum (BLOKER — Mehmet kararı bekler)
 
 - **Kategori:** geliştirme ortamı (yeşil — kullanıcı kararı)
