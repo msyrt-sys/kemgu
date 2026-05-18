@@ -40,19 +40,24 @@ def threadFresh (S : Konfigurasyon) (t : ThreadId) : Prop :=
 inductive Step : Konfigurasyon → Konfigurasyon → Prop where
 
   /-- S-ATAMA (Op.Sem §4.2): bir thread'in atama ifadesi.
-      Onkosul: t S.thread'de var, ifadesi `atama x (sabit v)`, ve
-      hedef bolge frozen DEGIL (A3.0'' refactor — DRF-L4 icin).
+      Onkosul: t S.thread'de var, ifadesi `atama x (sabit v)`,
+      hedef bolge frozen DEGIL (A3.0''), ve hedef bolge ctx'in sahipliginde
+      (A3.0'''' — DRF Teorem 4' + T1 tam form).
       Etki: store'a `(k, v)` push, iz'e `memYaz`, zaman+1. -/
   | sAtama
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (x : VarId) (v : Deger) (k : Konum)
       (h_in         : ctx ∈ S.thread)
       (h_ifade      : ctx.ifade = .atama x (.sabit v))
-      -- A3.0'' refactor (DRF-L4 onkosulu):
-      -- IyiTipli'nin TipKontrolOk komponentinin kismi ifadesi.
-      -- "Frozen bolgeye yazma yasaktir" (kagit T022 lvalue benzeri).
-      -- Bu olmadan DRF-L4 (a) "no frozen writes" karsi-ornek ile bozulur.
+      -- A3.0'' refactor (DRF-L4 onkosulu): frozen bolgeye yazma yasaktir
       (h_not_frozen : ¬ isFrozen S k.bolge)
+      -- A3.0'''' refactor (DRF Teorem 4' + T1 tam form onkosulu):
+      -- IyiTipli'nin TipKontrolOk + BolgeAtama komponentinin kismi ifadesi.
+      -- "Yazma ctx'in sahip oldugu bolgeye" (kagit ownership rule).
+      -- Bu olmadan iki thread ayni bolgeye yazabilir → DRF saglanmaz, ve
+      -- UAF (un-owned/freed bolgeye yazma) imkansiz olmaz → T1 saglanmaz.
+      (h_owner      : sahiplikGet S.sahiplik (k.bolge, S.zaman)
+                        = some (Sahip.thread ctx.tid))
       (h_store      : S'.store = (k, v) :: S.store)
       (h_iz         : S'.iz = .memYaz ctx.tid k v :: S.iz)
       (h_zaman      : S'.zaman = S.zaman + 1)

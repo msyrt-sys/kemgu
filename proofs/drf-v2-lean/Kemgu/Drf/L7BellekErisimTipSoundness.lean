@@ -43,8 +43,8 @@ theorem drf_l7_a_step
     (h_not_in_S : Olay.memYaz t k v ∉ S.iz) :
     (k, v) ∈ S'.store := by
   cases h_step with
-  -- sAtama: 12 positions, h_store at 8, h_iz at 9
-  | sAtama _ _ _ _ _ _ _ h_store h_iz _ _ _ =>
+  -- sAtama (A3.0'''' refactored): 13 positions, h_store at 9, h_iz at 10
+  | sAtama _ _ _ _ _ _ _ _ h_store h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · -- New event: memYaz t k v = memYaz ctx.tid k_x v_x
