@@ -17,6 +17,9 @@ import Kemgu.Drf.L5KanalAtomikTransfer
 import Kemgu.Drf.L6CapabilityLinear
 -- Faz A3.10: Teorem 4'
 import Kemgu.Drf.Drf
+-- Faz V2.1: Cross-Step DRF altyapi (HB ordering) + iskelet
+import Kemgu.Drf.HappensBefore
+import Kemgu.Drf.DrfCrossStep
 
 -- Faz B1: Memory Safety (T1 weak via L4; T2/T3 iskelet — bolge lifecycle refactor bekler)
 import Kemgu.MemSafety.Theorems
