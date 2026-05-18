@@ -396,29 +396,35 @@ artımlı build çıktısı + `grep -c "theorem\|lemma\|sorry\|axiom"`):
 | 12 | DRF-L5 KanalAtomikTransfer | `Drf/L5KanalAtomikTransfer.lean` | 110 | 🟢 (b)+(c) | 0/0 | DRF-L §DRF-L5 (a)+(d) deferred |
 | 13 | DRF-L6 CapabilityLinear | `Drf/L6CapabilityLinear.lean` | 81 | 🟢 (a) — L2 corollary | 0/0 | DRF-L §DRF-L6 (b)+(c) deferred |
 | 14 | DRF-L7 BellekErisimTipSoundness | `Drf/L7BellekErisimTipSoundness.lean` | 124 | 🟢 (a) | 0/0 | DRF-L §DRF-L7 (b)+(c) deferred |
-| 15 | Teorem 4' Drf | `Drf/Drf.lean` | 130 | 🟢 bundled form | 0/0 | DRF Teoremi §3 |
-| 16 | Memory Safety (T1+T2+T3) | `MemSafety/Theorems.lean` | — | ⏳ Faz B | - | Bellek §Güvenlik |
-| 17 | Side-Channel NI | `SideChannel/NonInterference.lean` | — | ⏳ Faz B | - | Sabitsure §CT.10 |
-| 18 | BET | `BET/Boundedness.lean` | — | ⏳ Faz B | - | Realtime §RT.8 |
-| 19 | V3 Metateorem | `Soundness/Main.lean` | — | ⏳ Faz C | - | Metateorem_V3 (yeni) |
+| 15 | Teorem 4' Drf (same-Step + bundled) | `Drf/Drf.lean` | 167 | 🟢 TAM (γ ile) | 0/0 | DRF Teoremi §3 |
+| 16 | T1 Bellek Güvenliği | `MemSafety/Theorems.lean` | 164 | 🟢 TAM (γ ile) | 0/0 | Bellek §T1 |
+| 17 | T2 Bölge Güvenliği | (same file, doc) | — | ⏳ V2 | - | Bellek §T2 — lifecycle refactor |
+| 18 | T3 Sızıntısızlık | (same file, doc) | — | ⏳ V2 | - | Bellek §T3 |
+| 19 | BET | `BET/Boundedness.lean` | 50 | ⏳ iskelet | - | Realtime §RT.8 — V2 refactor |
+| 20 | Side-Channel NI | `SideChannel/NonInterference.lean` | 60 | ⏳ iskelet | - | Sabitsure §CT.10 — V2 refactor |
+| 21 | **V3 Bütünleşik Metateorem M** | `Soundness/Main.lean` | 105 | 🟢 TAM bundled | 0/0 | Metateorem_V3 (yeni) |
 
-**Faz A tamamlandı (2026-05-18):** 7/7 DRF lemma + Teorem 4' bundled form mekanize. 5 tam, 2 kısmi. Toplam ~1424 satır Lean 4. lake build temiz, 0 sorry/axiom/opaque/admit bizim 13 dosyada.
+**Faz A + B + γ + C tamamlandı (2026-05-18):** 7 DRF lemma + T1 + Teorem 4' + V3 metateorem mekanize. 7 tam + 3 kısmi + 4 iskelet (V2). Toplam ~2030 satır Lean 4. lake build temiz, 0 sorry/axiom/opaque/admit bizim 17 dosyada.
 
-**Refactor zinciri (A3 boyunca):**
+**Refactor zinciri (Faz A + γ):**
 - A3.0' (`c0bd0fd`): SmallStep h_sahip clauses (sahiplikSet + sahiplikSetMany helpers)
 - A3.0'' (`9089682`): sAtama h_not_frozen + isFrozen (DRF-L4 önkoşulu)
 - A3.0''' (`60f571a`): cGorevBaslat h_lineer_caller + linearYakalananlar (DRF-L2 önkoşulu)
-- (Önerilen) A3.0'''': sAtama h_owner (Teorem 4' tam form için, Mehmet onayı bekler)
+- A3.0'''' (`6d2cde8`): sAtama h_owner (T1 tam + DRF Teorem 4' tam — γ)
 
-**Status sembolleri:** ⏳ Hazır değil, 🟡 Yazıldı build kırık, 🟢 lake build OK,
+**Status sembolleri:** ⏳ Hazır değil / V2 hedef, 🟡 Yazıldı build kırık, 🟢 lake build OK,
 🔴 sorry/axiom kullanıldı (KABUL EDİLMEZ — sıfır kullanım korundu).
 
-**V1 vs Kâğıt fark notları:**
-- DRF-L5 (a) "Σ persistence" ve (d) "no concurrent access" deferred — cKanalGonder/Al h_lineer refactor (~15+50 satır) ile tam form yazılabilir
+**V1 vs Kâğıt fark notları (V2 hedefler):**
+- DRF-L5 (a) "Σ persistence" ve (d) "no concurrent access" deferred — cKanalGonder/Al h_lineer refactor (~15+50 satır)
 - DRF-L6 (b)(c) — L5'in çözümü ile aynı, corollary olarak gelir
 - DRF-L7 (b) "ρ ≠ ρ_lit" — sAtama h_not_lit refactor (~5+30 satır)
 - DRF-L7 (c) "Ρ_t mapping" — ThreadCtx genişletme (V2 hedef, ~100 satır)
-- Teorem 4' tam "∀ τ : ¬ data_race(τ)" — sAtama h_owner refactor (A3.0''''), HB ilişkisi mekanize (~100 satır), memOku Step emit (V2)
+- Teorem 4' cross-Step — HB ilişkisi mekanize (~100 satır), memOku Step emit (V2)
+- T2/T3 — bölge lifecycle Step constructor'ları (~250 satır B1'' refactor)
+- BET — realtime + WCET (~350 satır B2' refactor)
+- Side-Channel NI — sabitsure tag + two-execution simulation (~400 satır B3' refactor)
+- V3 cross-Step ve SCR/BET tam form — yukarıdaki tüm V2 refactor'ları sonra V3 tam form
 
 ---
 

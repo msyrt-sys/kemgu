@@ -25,5 +25,5 @@ import Kemgu.BET.Boundedness
 -- Faz B3: Side-Channel iskelet (sabitsure tracking refactor bekler)
 import Kemgu.SideChannel.NonInterference
 
--- Faz C (yapilacak): V3 metateorem
--- import Kemgu.Soundness.Main
+-- Faz C: V3 Butunleşik Guvenlik Metateoremi (bundled form)
+import Kemgu.Soundness.Main

@@ -29,6 +29,8 @@ Bir Kırmızı spec onaylanınca → o spec'in tüm Yeşil + Sarı alt-adımlar�
 **Onaylı specler:**
 - **Linear Types Spec V1** (`tekkez<T>` + `kullan` + `imha` + stdlib + intrinsic'ler)
   → Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md`
+- **DRF V1 Statik (Teorem 4') + V3 Bütünleşik Metateorem V1 Bundled** [V1 BUNDLED TAMAMLANDI 2026-05-18 — Lean 4 mekanize]
+  → Plan Karar B "V3 bütünleşik" hedefi V1 bundled formda tamamlandı (Faz A+B+γ+C). Spec: `belgeler/KEMGU_Metateorem_V3.md`. Mekanize: `proofs/drf-v2-lean/Kemgu/Soundness/Main.lean`. Detay: `KIRMIZI_QUEUE.md` [2026-05-17] Bölüm D.
 - (gelecek)
 
 ---
