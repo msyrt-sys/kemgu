@@ -42,9 +42,9 @@ theorem drf_l4_a_step
     (h_in : Olay.memYaz t k v ∈ S'.iz) :
     Olay.memYaz t k v ∈ S.iz ∨ k.bolge ≠ b := by
   cases h_step with
-  -- sAtama: 12 pattern positions
-  -- ctx x v k h_in h_ifade h_not_frozen h_store h_iz h_zaman h_sahip h_kanal
-  | sAtama _ _ _ k_x _ _ h_not_frozen _ h_iz _ _ _ =>
+  -- sAtama (A3.0'''' refactored): 13 pattern positions
+  -- ctx x v k h_in h_ifade h_not_frozen h_owner h_store h_iz h_zaman h_sahip h_kanal
+  | sAtama _ _ _ k_x _ _ h_not_frozen _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · injection h_head with _ h_k _
