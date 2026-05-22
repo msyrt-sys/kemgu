@@ -227,6 +227,31 @@ inductive Ifade : Type where
 
 
 -- ============================================================
+-- §9.5. FaultSebep — Plan v2 Adim 1.1 (Onarim Plani §4.2)
+-- Konfigurasyon.fault icin sebep kategorileri. Tum sebepler V1 SC
+-- altinda gozlenebilir runtime hatalari (frozen yazma, sahip olmadan
+-- yazma, lineer cifte tuketim).
+--
+-- NOT (Adim 1.1, 2026-05-18): Bu enum ve Konfigurasyon.fault alani
+-- eklendi. Mevcut Step constructor'lari (sAtama, cGorevBaslat, ...)
+-- henuz S'.fault'i KISITLAMIYOR — Adim 1.2 + 1.3'te dual constructor
+-- (sAtamaTamam + sAtamaHataDonmus + sAtamaHataSahipDegil, vs.) ile
+-- semantik tamamlanacak. Adim 7'de discharge lemmalari fault case'leri
+-- typed program icin imkansiz olarak gosterecek.
+-- Kaynak: belgeler/KEMGU_Mekanize_Onarim_Plan.md §4.2 + §4.4.
+-- ============================================================
+
+inductive FaultSebep : Type where
+  | donmusYazma             (b : Bolge)                  -- sAtama: frozen bolgeye yazma
+  | sahipDegil              (b : Bolge) (t : ThreadId)   -- sAtama: ctx sahip degil
+  | lineerCagiranTukenmedi  (v : VarId)                  -- cGorevBaslat: caller'da linear tuketilmemis
+  | lineerZatenTuketildi    (v : VarId)                  -- sLinKullan/sLinImha: ikinci consume
+  | lineerKanalTuket        (v : VarId)                  -- cKanalGonder: linear v cifte gonderim
+  | zatenDonmus             (b : Bolge)                  -- cDondur: zaten frozen bolge
+deriving Repr, DecidableEq
+
+
+-- ============================================================
 -- §10. Thread baglami + Kanal durumu + Konfigurasyon
 -- Kaynak: Op.Sem §5.1, §5.2
 -- ============================================================
@@ -244,7 +269,13 @@ structure KanalDurumu where
   gonderKuyrugu : List Deger
 
 /-- Tum sistem konfigurasyonu (Op.Sem §5.2).
-    S = ⟨T_, sigma, Sigma, K_⟩ + zaman + iz. -/
+    S = ⟨T_, sigma, Sigma, K_⟩ + zaman + iz + fault.
+    `fault` alani Plan v2 Adim 1.1'de eklendi: `none` = normal yurutme;
+    `some sebep` = fault state'e gecilmis. Mevcut Step constructor'lari
+    (Adim 1.2 oncesi) S'.fault'i KISITLAMIYOR — default `none` sayesinde
+    geriye uyumlu. Adim 1.2'de dual (Tamam + Hata*) constructor'lar ile
+    her gecisin fault semantigi netlestirilecek.
+    Kaynak: belgeler/KEMGU_Mekanize_Onarim_Plan.md §4.4. -/
 structure Konfigurasyon where
   thread      : List ThreadCtx
   store       : Store
@@ -252,6 +283,7 @@ structure Konfigurasyon where
   kanal       : List KanalDurumu
   zaman       : Zaman
   iz          : Iz
+  fault       : Option FaultSebep := none
 
 
 -- ============================================================
