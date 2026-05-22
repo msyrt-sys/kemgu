@@ -42,14 +42,19 @@ theorem t1_bellek_guvenligi_tam
     -- Thread t k.bolge'nin sahibidir S.zaman'da
     sahiplikGet S.sahiplik (k.bolge, S.zaman) = some (Sahip.thread t) := by
   cases h_step with
-  | sAtama _ _ _ _ _ _ _ h_owner _ h_iz _ _ _ =>
+  -- sAtamaTamam (Plan v2 Adim 1.2 rename): 13 pattern positions, h_owner at 8
+  | sAtamaTamam _ _ _ _ _ _ _ h_owner _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
-    · -- New event: t = ctx.tid, k = k_x (from sAtama)
+    · -- New event: t = ctx.tid, k = k_x (from sAtamaTamam)
       injection h_head with h_t h_k _
       rw [h_t, h_k]
       exact h_owner
     · exact absurd h_in_S h_not_in_S
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
   | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
@@ -93,15 +98,20 @@ theorem t1_bellek_guvenligi_corollary_full
     sahiplikGet S.sahiplik (k.bolge, S.zaman) = some (Sahip.thread t)
     ∧ ¬ isFrozen S k.bolge := by
   refine ⟨t1_bellek_guvenligi_tam S S' h_step t k v h_event h_not_in_S, ?_⟩
-  -- ¬ isFrozen S k.bolge from sAtama's h_not_frozen
+  -- ¬ isFrozen S k.bolge from sAtamaTamam's h_not_frozen
   cases h_step with
-  | sAtama _ _ _ _ _ _ h_not_frozen _ _ h_iz _ _ _ =>
+  -- sAtamaTamam (Plan v2 Adim 1.2 rename): 13 pattern positions, h_not_frozen at 7
+  | sAtamaTamam _ _ _ _ _ _ h_not_frozen _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · injection h_head with _ h_k _
       rw [h_k]
       exact h_not_frozen
     · exact absurd h_in_S h_not_in_S
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
   | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S

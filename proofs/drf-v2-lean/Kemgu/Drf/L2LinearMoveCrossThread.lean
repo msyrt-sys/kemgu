@@ -81,7 +81,10 @@ theorem drf_l2_step_uygulama_ornegi
     -- Bu lemma'nin asil amaci: cases analizinde h_lineer_caller'i ortaya cikarir.
     True := by
   cases h_step with
-  | sAtama _ _ _ _ _ _ _ _ _ _ _ _ => trivial
+  -- Plan v2 Adim 1.2: sAtama -> sAtamaTamam (rename, mantik ayni); 2 yeni Hata case
+  | sAtamaTamam _ _ _ _ _ _ _ _ _ _ _ _ => trivial
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => trivial
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => trivial
   | sLinKullan _ _ _ _ _ _ _ _ _ => trivial
   | sLinImha _ _ _ _ _ _ _ _ _ => trivial
   | cDondur _ _ _ _ _ _ _ _ _ => trivial

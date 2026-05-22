@@ -42,9 +42,9 @@ theorem drf_l4_a_step
     (h_in : Olay.memYaz t k v ∈ S'.iz) :
     Olay.memYaz t k v ∈ S.iz ∨ k.bolge ≠ b := by
   cases h_step with
-  -- sAtama (A3.0'''' refactored): 13 pattern positions
+  -- sAtamaTamam (Plan v2 Adim 1.2 rename): 13 pattern positions
   -- ctx x v k h_in h_ifade h_not_frozen h_owner h_store h_iz h_zaman h_sahip h_kanal
-  | sAtama _ _ _ k_x _ _ h_not_frozen _ _ h_iz _ _ _ =>
+  | sAtamaTamam _ _ _ k_x _ _ h_not_frozen _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · injection h_head with _ h_k _
@@ -54,6 +54,10 @@ theorem drf_l4_a_step
       rw [h_eq] at h_not_frozen
       exact h_not_frozen h_frozen
     · left; exact h_tail
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
   -- sLinKullan: 9 pattern positions
   -- ctx x h_in h_ifade h_aktif h_iz h_zaman h_store h_kanal
   | sLinKullan _ _ _ _ _ h_iz _ _ _ =>

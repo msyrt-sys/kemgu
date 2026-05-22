@@ -39,23 +39,25 @@ def threadFresh (S : Konfigurasyon) (t : ThreadId) : Prop :=
     (c) store/sahiplik/iz/zaman degisikliklerini taşır. -/
 inductive Step : Konfigurasyon → Konfigurasyon → Prop where
 
-  /-- S-ATAMA (Op.Sem §4.2): bir thread'in atama ifadesi.
+  /-- S-ATAMA Tamam (Plan v2 Adim 1.2): atama Ok varyanti.
       Onkosul: t S.thread'de var, ifadesi `atama x (sabit v)`,
       hedef bolge frozen DEGIL (A3.0''), ve hedef bolge ctx'in sahipliginde
       (A3.0'''' — DRF Teorem 4' + T1 tam form).
-      Etki: store'a `(k, v)` push, iz'e `memYaz`, zaman+1. -/
-  | sAtama
+      Etki: store'a `(k, v)` push, iz'e `memYaz`, zaman+1.
+
+      Adim 1.2 NOT: Eski sAtama'nin preconditions'i (h_not_frozen, h_owner)
+      KORUNDU — Plan v2 §4.2 "runtime guard reinterpretation". Adim 7
+      discharge lemmalari bu guard'larin typed program icin saglandigini
+      ispatlayacak.
+
+      Pattern position: 13 (eski sAtama ile bit-bit ayni — cases icin
+      rename ile yeterli). Adim 7'de h_fault := none eklenince 14 olur. -/
+  | sAtamaTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (x : VarId) (v : Deger) (k : Konum)
       (h_in         : ctx ∈ S.thread)
       (h_ifade      : ctx.ifade = .atama x (.sabit v))
-      -- A3.0'' refactor (DRF-L4 onkosulu): frozen bolgeye yazma yasaktir
       (h_not_frozen : ¬ isFrozen S k.bolge)
-      -- A3.0'''' refactor (DRF Teorem 4' + T1 tam form onkosulu):
-      -- IyiTipli'nin TipKontrolOk + BolgeAtama komponentinin kismi ifadesi.
-      -- "Yazma ctx'in sahip oldugu bolgeye" (kagit ownership rule).
-      -- Bu olmadan iki thread ayni bolgeye yazabilir → DRF saglanmaz, ve
-      -- UAF (un-owned/freed bolgeye yazma) imkansiz olmaz → T1 saglanmaz.
       (h_owner      : sahiplikGet S.sahiplik (k.bolge, S.zaman)
                         = some (Sahip.thread ctx.tid))
       (h_store      : S'.store = (k, v) :: S.store)
@@ -63,6 +65,42 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_zaman      : S'.zaman = S.zaman + 1)
       (h_sahip      : S'.sahiplik = S.sahiplik)
       (h_kanal      : S'.kanal = S.kanal) :
+      Step S S'
+
+  /-- S-ATAMA Hata Donmus (Plan v2 Adim 1.2): frozen bolgeye yazma.
+      Fault state'e gecis: S'.fault = some FaultSebep.donmusYazma.
+      Etki: store/sahiplik/kanal/iz DEGISMEZ (fault non-observable),
+      sadece S'.fault set.
+
+      Pattern position: 8.
+
+      Adim 7 NOT: typed program bu constructor'a ulasamaz (typing excludes
+      frozen write) — discharge lemma `typing_excludes_sAtamaHataDonmus`
+      ile exfalso. -/
+  | sAtamaHataDonmus
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (x : VarId) (v : Deger) (k : Konum)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .atama x (.sabit v))
+      (h_frozen : isFrozen S k.bolge)
+      (h_fault  : S'.fault = some (FaultSebep.donmusYazma k.bolge)) :
+      Step S S'
+
+  /-- S-ATAMA Hata Sahip Degil (Plan v2 Adim 1.2): ctx hedef bolgenin
+      sahibi degil. Fault: S'.fault = some FaultSebep.sahipDegil.
+
+      DRF-L0 ihlal olur (iki thread potansiyel race) — Adim 7 typed
+      program ispati exfalso (`typing_excludes_sAtamaHataSahipDegil`).
+
+      Pattern position: 8. -/
+  | sAtamaHataSahipDegil
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (x : VarId) (v : Deger) (k : Konum)
+      (h_in        : ctx ∈ S.thread)
+      (h_ifade     : ctx.ifade = .atama x (.sabit v))
+      (h_not_owner : sahiplikGet S.sahiplik (k.bolge, S.zaman)
+                       ≠ some (Sahip.thread ctx.tid))
+      (h_fault     : S'.fault = some (FaultSebep.sahipDegil k.bolge ctx.tid)) :
       Step S S'
 
   /-- C-GOREV-BASLAT (Op.Sem §5.4 R-GOREV uygulamasi):
