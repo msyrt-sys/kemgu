@@ -93,7 +93,8 @@ theorem kemgu_drf_v1_no_concurrent_writes
     -- Iki yeni event de ayni Step'ten → ayni emitter (sAtama → ctx.tid)
     t1 = t2 := by
   cases h_step with
-  | sAtama _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- sAtamaTamam (Plan v2 Adim 1.2 rename): 13 positions
+  | sAtamaTamam _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     -- Both events new ⟹ both are head of S'.iz ⟹ same event
     rw [h_iz] at h_event1 h_event2
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
@@ -103,6 +104,10 @@ theorem kemgu_drf_v1_no_concurrent_writes
         rw [h_t1, h_t2]
       · exact absurd h2_in_S h_event2_new
     · exact absurd h1_in_S h_event1_new
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
   | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new

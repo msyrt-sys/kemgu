@@ -43,8 +43,8 @@ theorem drf_l7_a_step
     (h_not_in_S : Olay.memYaz t k v ∉ S.iz) :
     (k, v) ∈ S'.store := by
   cases h_step with
-  -- sAtama (A3.0'''' refactored): 13 positions, h_store at 9, h_iz at 10
-  | sAtama _ _ _ _ _ _ _ _ h_store h_iz _ _ _ =>
+  -- sAtamaTamam (Plan v2 Adim 1.2 rename): 13 positions, h_store at 9, h_iz at 10
+  | sAtamaTamam _ _ _ _ _ _ _ _ h_store h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · -- New event: memYaz t k v = memYaz ctx.tid k_x v_x
@@ -52,6 +52,10 @@ theorem drf_l7_a_step
       rw [h_k, h_v, h_store]
       apply List.mem_cons_self
     · exact absurd h_in_S h_not_in_S
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
+  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
   | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S

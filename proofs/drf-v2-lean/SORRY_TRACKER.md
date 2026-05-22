@@ -15,22 +15,87 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | Hafta | Tarih | Adim | sorry sayisi | Notlar |
 |-------|-------|------|--------------|--------|
 | 1 | 2026-05-18 | 1.1 | 0 | FaultSebep enum + Konfigurasyon.fault eklendi; constructor refactor henuz yok |
+| 1 | 2026-05-18 | 1.2 | 10 | sAtama Tamam/Hata dual; 5 yer (L4 + L7 + Drf + MemSafety T1 + MemSafety T1') gecici sorry; L2 wrapper trivial |
 
 ---
 
 ## Aktif sorry listesi
 
-(Adim 1.2'den itibaren dolacak. Her giris asagidaki sablonu izler:)
-
+Sablon (her giris):
 ```
-- [ ] proofs/drf-v2-lean/<dosya>:<satir> — <lemma_adi>
+- [ ] <dosya>:<satir> — <lemma_adi>
       Case: <fault constructor adi>
       Sebep: Pattern matching exhaustivity; fault case'i Discharge olmadan kapatamiyoruz
       Discharge: Adim 7 — <typing_excludes_*_fault lemma adi>
       Eklendi: YYYY-MM-DD (commit hash)
 ```
 
-Henuz aktif sorry yok (Adim 1.1 build-clean).
+**Adim 1.2 sonrasi: 10 aktif sorry** (kategori: sAtamaHata* exhaustivity)
+
+### DRF-L4 (FrozenRegionRead)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/L4FrozenRegionRead.lean` — `drf_l4_a_step`
+      Case: `sAtamaHataDonmus`
+      Sebep: Pattern matching exhaustivity; sAtama dual'a refactor edildi, fault constructor case'i Discharge olmadan kapatamiyoruz
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataDonmus`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/L4FrozenRegionRead.lean` — `drf_l4_a_step`
+      Case: `sAtamaHataSahipDegil`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataSahipDegil`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+### DRF-L7 (BellekErisimTipSoundness)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/L7BellekErisimTipSoundness.lean` — `drf_l7_a_step`
+      Case: `sAtamaHataDonmus`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataDonmus`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/L7BellekErisimTipSoundness.lean` — `drf_l7_a_step`
+      Case: `sAtamaHataSahipDegil`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataSahipDegil`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+### Drf (Teorem 4' Same-Step)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/Drf.lean` — `kemgu_drf_v1_no_concurrent_writes`
+      Case: `sAtamaHataDonmus`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataDonmus`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/Drf/Drf.lean` — `kemgu_drf_v1_no_concurrent_writes`
+      Case: `sAtamaHataSahipDegil`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataSahipDegil`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+### MemSafety T1 (Bellek Guvenligi tam form)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean` — `t1_bellek_guvenligi_tam`
+      Case: `sAtamaHataDonmus`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataDonmus`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean` — `t1_bellek_guvenligi_tam`
+      Case: `sAtamaHataSahipDegil`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataSahipDegil`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+### MemSafety T1' (Corollary full)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean` — `t1_bellek_guvenligi_corollary_full`
+      Case: `sAtamaHataDonmus`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataDonmus`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+- [ ] `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean` — `t1_bellek_guvenligi_corollary_full`
+      Case: `sAtamaHataSahipDegil`
+      Discharge: Adim 7 — `typing_excludes_sAtamaHataSahipDegil`
+      Eklendi: 2026-05-18 (Adim 1.2 commit)
+
+### Trivial bypass (sorry GEREKMIYOR)
+
+L2 wrapper'i (`drf_l2_step_uygulama_ornegi`) sonuc tipi `True`; her case `trivial` ile geciliyor. Yeni `sAtamaHataDonmus`/`sAtamaHataSahipDegil` case'leri de `trivial` ile kapatildi (sorry kullanilmadi).
 
 ---
 
@@ -39,8 +104,8 @@ Henuz aktif sorry yok (Adim 1.1 build-clean).
 | Adim | Hafta | Beklenen sorry hareketi | Toplam |
 |------|-------|--------------------------|--------|
 | 1.1 — FaultSebep + Konfigurasyon.fault | 1 | 0 | 0 |
-| 1.2 — sAtama Tamam/Hata dual + L0/L4 case extension | 2 | +~4 | ~4 |
-| 1.3 — Diger 6 Step constructor Tamam/Hata dual + L0-L7 case extension | 3 | +~12 | ~16 |
+| 1.2 — sAtama Tamam/Hata dual (5 dosya × 2 case, L2 trivial) | 1-2 | +10 (revize, eski tahmin +4 hatalı) | 10 |
+| 1.3 — Diger 6 Step constructor Tamam/Hata dual | 2-3 | +~30 (5 yeni Hata × 6 cases yerinde) | ~40 |
 | 2 — ConfigTyped iskeleti (5 alt-yapi) | 4-6 | sabit | ~16 |
 | 3 — Minimal HasType (klasik) | 7-8 | sabit | ~16 |
 | 4 — Progress + Preservation (HasType) | 8-10 | sabit | ~16 |
