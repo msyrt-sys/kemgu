@@ -37,7 +37,10 @@ abbrev Zaman := Nat
 /-- Tip sozdizimi (Op.Sem §1). DRF teoreminin kapsami icin
     yeterli minimal subset. Tam grammar belgeler/KEMGU_Grammar_EBNF.md'de. -/
 inductive Tip : Type where
+  | bos        : Tip                       -- bos (Unit, Op.Sem §1; Plan v2 Adim 2'de eklendi)
   | scalar     : Tip                       -- skaler kategori (tam_w/dtam_w/...)
+  | mantiksal  : Tip                       -- mantiksal (Bool, Op.Sem §1; Plan v2 Adim 2'de eklendi)
+  | metin      : Tip                       -- metin (string, Op.Sem §1; Plan v2 Adim 2'de eklendi)
   | refIm      : Tip → Tip                 -- &T  (immutable reference)
   | refMut     : Tip → Tip                 -- &degisken T
   | ptr        : Tip → Tip                 -- *T  (guvensiz)
