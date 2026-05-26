@@ -103,14 +103,17 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_fault     : S'.fault = some (FaultSebep.sahipDegil k.bolge ctx.tid)) :
       Step S S'
 
-  /-- C-GOREV-BASLAT (Op.Sem §5.4 R-GOREV uygulamasi):
+  /-- C-GOREV-BASLAT Tamam (Plan v2 Adim 1.3): cGorevBaslat Ok varyanti.
       yeni thread t_yeni spawn edilir; yakalama listesindeki tum
       bolgeler Sigma uzerinde t_yeni'ye transfer (sahiplikSetMany).
       DRF-L2 (Linear Move) bu kurali kullanir.
       `transferredBolgeler` yakalanan v_i'lerin bolgeleri.
       `linearYakalananlar` yakalama listesinin LINEAR alt-kumesi
-      (Lineerlik takip eden) — A3.0''' refactor (DRF-L2 onkosulu). -/
-  | cGorevBaslat
+      (Lineerlik takip eden) — A3.0''' refactor (DRF-L2 onkosulu).
+
+      Pattern position: 16 (eski cGorevBaslat ile ayni — cases icin
+      rename ile yeterli). -/
+  | cGorevBaslatTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (tYeni : ThreadId)
       (yd : List VarId) (kod : Ifade)
@@ -135,11 +138,32 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_kanal          : S'.kanal = S.kanal) :
       Step S S'
 
-  /-- C-GOREV-BIRLESTIR (Op.Sem §5.4 R-BIRLESTIR):
+  /-- C-GOREV-BASLAT Hata Lineer Ihlal (Plan v2 Adim 1.3): linear yakalanmis
+      bir degisken caller'da tuketilmemis (vIhlal hala aktif). Fault:
+      lineerCagiranTukenmedi. Pattern position: 8.
+
+      Adim 7 NOT: typed program (LinearOK katmani) bu constructor'a
+      ulasamaz — discharge lemma `typing_excludes_cGorevBaslatHataLineerIhlal`. -/
+  | cGorevBaslatHataLineerIhlal
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (tYeni : ThreadId)
+      (yd : List VarId) (kod : Ifade)
+      (vIhlal : VarId)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .gorevBaslat yd kod)
+      (h_vAktif : ∃ ctx' ∈ S.thread, ctx'.tid = ctx.tid ∧
+                    (vIhlal, Lineerlik.aktif) ∈ ctx'.lineer)
+      (h_fault  : S'.fault = some (FaultSebep.lineerCagiranTukenmedi vIhlal)) :
+      Step S S'
+
+  /-- C-GOREV-BIRLESTIR Tamam (Plan v2 Adim 1.3): cGorevBirlestir Ok varyanti.
       birlestir(g) cagrisi; t_hedef bittiginde Pho_sahip bolgeleri serbest,
       donus degeri Pho_cagiran'a terfi. Iz'e threadBitir.
-      `returnedBolgeler` t_hedef'in caller'a terfi eden bolgeleri. -/
-  | cGorevBirlestir
+      `returnedBolgeler` t_hedef'in caller'a terfi eden bolgeleri.
+
+      Plan v2 §4.5 NOT: cGorevBirlestir icin Hata varyanti YOK — Adim 1.3
+      yalniz rename. Pattern position: 12. -/
+  | cGorevBirlestirTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (g : VarId) (tHedef : ThreadId)
       (returnedBolgeler : List Bolge)
@@ -154,10 +178,11 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_kanal     : S'.kanal = S.kanal) :
       Step S S'
 
-  /-- C-KANAL-GONDER (Op.Sem §5.4):
+  /-- C-KANAL-GONDER Tamam (Plan v2 Adim 1.3): cKanalGonder Ok varyanti.
       Sigma' = Sigma[bolge(v) ↦ kanalSahip k] (S3 atomik transfer).
-      `transferredBolge` v'nin bolgesi (bolge(v)). -/
-  | cKanalGonder
+      `transferredBolge` v'nin bolgesi (bolge(v)).
+      Pattern position: 12. -/
+  | cKanalGonderTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (k : KanalId) (vId : VarId) (v : Deger)
       (transferredBolge : Bolge)
@@ -171,11 +196,29 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_store     : S'.store = S.store) :
       Step S S'
 
-  /-- C-KANAL-AL (Op.Sem §5.4):
+  /-- C-KANAL-GONDER Hata Lineer Tuket (Plan v2 Adim 1.3): linear v zaten
+      tuketilmis (cifte gonderim). Fault: lineerKanalTuket.
+      Pattern position: 7.
+
+      Adim 7 NOT: typed program (LinearOK) cifte tuket eylemine ulasamaz —
+      discharge lemma `typing_excludes_cKanalGonderHataLineerTuket`. -/
+  | cKanalGonderHataLineerTuket
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (k : KanalId) (vId : VarId)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .kanalGonderIf k vId)
+      (h_tuket  : (vId, Lineerlik.tuketildi) ∈ ctx.lineer)
+      (h_fault  : S'.fault = some (FaultSebep.lineerKanalTuket vId)) :
+      Step S S'
+
+  /-- C-KANAL-AL Tamam (Plan v2 Adim 1.3): cKanalAl Ok varyanti.
       Sigma' = Sigma[bolge(v) ↦ Sahip.thread t_alan]; v artik t'nin lineer
       ortamina geri eklenir. DRF-L5 atomicity bu kurali kullanir.
-      `transferredBolge` v'nin bolgesi. -/
-  | cKanalAl
+      `transferredBolge` v'nin bolgesi.
+
+      Plan v2 §4.5 NOT: cKanalAl icin Hata varyanti YOK — alim icin
+      precondition zayif. Pattern position: 11. -/
+  | cKanalAlTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (k : KanalId) (v : Deger)
       (transferredBolge : Bolge)
@@ -189,13 +232,14 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_store     : S'.store = S.store) :
       Step S S'
 
-  /-- C-DONDUR (Op.Sem §5.4 R-PAYLAS):
+  /-- C-DONDUR Tamam (Plan v2 Adim 1.3): cDondur Ok varyanti.
       Sigma' = Sigma[bolge(v) ↦ DONMUS] @ S.zaman.
       DRF-L4 frozen region read-soundness bu kurali kullanir.
       Refactor (A3.0'): once sadece "entry exists in S'.sahiplik" diyordu;
       simdi tam atomic set semantigi (sahiplikSet) — diger entry'ler
-      degismez kalir, S1 preservation icin gerekli. -/
-  | cDondur
+      degismez kalir, S1 preservation icin gerekli.
+      Pattern position: 9. -/
+  | cDondurTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (b : Bolge)
       (h_in        : ctx ∈ S.thread)
@@ -207,9 +251,24 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_kanal     : S'.kanal = S.kanal) :
       Step S S'
 
-  /-- S-LIN-KULLAN (Op.Sem §4.2): Linear consume.
-      Lambda(x) = aktif → Lambda' = Lambda[x ↦ tuketildi]. -/
-  | sLinKullan
+  /-- C-DONDUR Hata Zaten Donmus (Plan v2 Adim 1.3): bolge zaten frozen,
+      cifte dondur cagrisi. Fault: zatenDonmus. Pattern position: 6.
+
+      Adim 7 NOT: typed program once dondurmaz iki kez — discharge
+      lemma `typing_excludes_cDondurHataZatenDonmus`. -/
+  | cDondurHataZatenDonmus
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (b : Bolge)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .dondurIf b)
+      (h_zaten  : isFrozen S b)
+      (h_fault  : S'.fault = some (FaultSebep.zatenDonmus b)) :
+      Step S S'
+
+  /-- S-LIN-KULLAN Tamam (Plan v2 Adim 1.3): Linear consume Ok varyanti.
+      Lambda(x) = aktif → Lambda' = Lambda[x ↦ tuketildi].
+      Pattern position: 9. -/
+  | sLinKullanTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (x : VarId)
       (h_in        : ctx ∈ S.thread)
@@ -221,9 +280,24 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_kanal     : S'.kanal = S.kanal) :
       Step S S'
 
-  /-- S-LIN-IMHA (Op.Sem §4.2): Linear imha (silinme).
-      Lambda(x) = aktif → Lambda' = Lambda[x ↦ tuketildi]. -/
-  | sLinImha
+  /-- S-LIN-KULLAN Hata Zaten Tuketildi (Plan v2 Adim 1.3): linear x zaten
+      consume edildi. Fault: lineerZatenTuketildi. Pattern position: 6.
+
+      Adim 7 NOT: typed program (LinearOK) zaten tuketilmis kullanim'a
+      ulasamaz — discharge lemma `typing_excludes_sLinKullanHataZatenTuketildi`. -/
+  | sLinKullanHataZatenTuketildi
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (x : VarId)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .kullanIf x)
+      (h_tuket  : (x, Lineerlik.tuketildi) ∈ ctx.lineer)
+      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x)) :
+      Step S S'
+
+  /-- S-LIN-IMHA Tamam (Plan v2 Adim 1.3): Linear imha (silinme) Ok varyanti.
+      Lambda(x) = aktif → Lambda' = Lambda[x ↦ tuketildi].
+      Pattern position: 9. -/
+  | sLinImhaTamam
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (x : VarId)
       (h_in        : ctx ∈ S.thread)
@@ -233,6 +307,21 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
       (h_kanal     : S'.kanal = S.kanal) :
+      Step S S'
+
+  /-- S-LIN-IMHA Hata Zaten Tuketildi (Plan v2 Adim 1.3): linear x zaten
+      consume edildi (imha sonrasi). Fault: lineerZatenTuketildi (paylasilir).
+      Pattern position: 6.
+
+      Adim 7 NOT: typed program zaten tuketilmis imha'ya ulasamaz —
+      discharge lemma `typing_excludes_sLinImhaHataZatenTuketildi`. -/
+  | sLinImhaHataZatenTuketildi
+      (S S' : Konfigurasyon)
+      (ctx : ThreadCtx) (x : VarId)
+      (h_in     : ctx ∈ S.thread)
+      (h_ifade  : ctx.ifade = .imhaIf x)
+      (h_tuket  : (x, Lineerlik.tuketildi) ∈ ctx.lineer)
+      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x)) :
       Step S S'
 
 
