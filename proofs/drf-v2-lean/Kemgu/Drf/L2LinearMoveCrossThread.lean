@@ -85,15 +85,21 @@ theorem drf_l2_step_uygulama_ornegi
   | sAtamaTamam _ _ _ _ _ _ _ _ _ _ _ _ => trivial
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ => trivial
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => trivial
-  | sLinKullan _ _ _ _ _ _ _ _ _ => trivial
-  | sLinImha _ _ _ _ _ _ _ _ _ => trivial
-  | cDondur _ _ _ _ _ _ _ _ _ => trivial
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ h_lineer_caller _ _ _ _ =>
+  -- Plan v2 Adim 1.3: rename + 5 yeni Hata (sonuc True → hepsi trivial)
+  | sLinKullanTamam _ _ _ _ _ _ _ _ _ => trivial
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => trivial
+  | sLinImhaTamam _ _ _ _ _ _ _ _ _ => trivial
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => trivial
+  | cDondurTamam _ _ _ _ _ _ _ _ _ => trivial
+  | cDondurHataZatenDonmus _ _ _ _ _ _ => trivial
+  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ h_lineer_caller _ _ _ _ =>
     -- h_lineer_caller burada available; gerek olursa DRF-L2 uygulanir
     trivial
-  | cGorevBirlestir _ _ _ _ _ _ _ _ _ _ _ _ => trivial
-  | cKanalGonder _ _ _ _ _ _ _ _ _ _ _ _ => trivial
-  | cKanalAl _ _ _ _ _ _ _ _ _ _ _ => trivial
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => trivial
+  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ _ _ _ _ => trivial
+  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ _ _ _ => trivial
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => trivial
+  | cKanalAlTamam _ _ _ _ _ _ _ _ _ _ _ => trivial
 
 
 end Kemgu.Drf.L2LinearMoveCrossThread

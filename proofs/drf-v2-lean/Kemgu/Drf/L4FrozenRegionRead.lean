@@ -58,51 +58,44 @@ theorem drf_l4_a_step
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
   -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  -- sLinKullan: 9 pattern positions
-  -- ctx x h_in h_ifade h_aktif h_iz h_zaman h_store h_kanal
-  | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
+  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case (sorry, Adim 7 discharge)
+  | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  -- sLinImha: 9 pattern positions (same shape as sLinKullan)
-  | sLinImha _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  -- cDondur: 9 pattern positions
-  -- ctx b h_in h_ifade h_sahip h_iz h_zaman h_store h_kanal
-  | cDondur _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- cGorevBaslat (A3.0''' refactored): 16 pattern positions
-  -- ctx tYeni yd kod transferredBolgeler linearYakalananlar
-  -- h_in h_ifade h_fresh h_yeni_th h_sahip h_lineer_caller
-  -- h_iz h_zaman h_store h_kanal
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
+  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- cGorevBirlestir: 12 pattern positions
-  -- ctx g tHedef returnedBolgeler h_in h_ifade h_hedef h_sahip h_iz
-  -- h_zaman h_store h_kanal
-  | cGorevBirlestir _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- cKanalGonder: 12 pattern positions
-  -- ctx k vId v transferredBolge h_in h_ifade h_kanal h_sahip h_iz
-  -- h_zaman h_store
-  | cKanalGonder _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- cKanalAl: 11 pattern positions
-  -- ctx k v transferredBolge h_in h_ifade h_kanal_var h_sahip h_iz
-  -- h_zaman h_store
-  | cKanalAl _ _ _ _ _ _ _ _ h_iz _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head

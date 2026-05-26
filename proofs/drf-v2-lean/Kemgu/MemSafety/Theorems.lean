@@ -55,33 +55,44 @@ theorem t1_bellek_guvenligi_tam
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
   -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
+  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case
+  | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | sLinImha _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | cDondur _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
+  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBirlestir _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cKanalGonder _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cKanalAl _ _ _ _ _ _ _ _ h_iz _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
@@ -112,33 +123,44 @@ theorem t1_bellek_guvenligi_corollary_full
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
   -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  | sLinKullan _ _ _ _ _ h_iz _ _ _ =>
+  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case
+  | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | sLinImha _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | cDondur _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBaslat _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
+  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBirlestir _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cKanalGonder _ _ _ _ _ _ _ _ _ h_iz _ _ =>
+  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cKanalAl _ _ _ _ _ _ _ _ h_iz _ _ =>
+  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
