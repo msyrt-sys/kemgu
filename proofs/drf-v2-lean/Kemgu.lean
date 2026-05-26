@@ -5,6 +5,8 @@
 -- Faz A2: Operasyonel semantik altyapisi
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+-- Plan v2 Adim 2: ConfigTyped iskelet (DegerTipli + SigmaTipli + SahiplikTutarli + KanalTutarli + KonfTipli)
+import Kemgu.Sem.StateTipli
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
