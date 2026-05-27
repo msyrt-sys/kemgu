@@ -70,13 +70,55 @@ inductive IsValue : Ifade → Prop where
 -/
 theorem progress
     (e : Ifade) (τ : Tip)
-    (_h_typed : HasType tipOrtamBos e τ)
+    (h_typed : HasType tipOrtamBos e τ)
     (S : Konfigurasyon) (ctx : ThreadCtx)
     (_h_ctx_in : ctx ∈ S.thread) (_h_ctx_ifade : ctx.ifade = e)
     (_h_no_fault : S.fault = none) :
     IsValue e ∨ ∃ S', Step S S' := by
-  -- TODO: Adim 4.2'de tam ispat — 12 HasType case + Step constructor insa
-  sorry
+  -- Adim 4.2 partial proof: 12 HasType case analizi
+  -- TAMAM (7): t_tanim, t_sabit, t_atama, t_gorev_birlestir, t_kanal_gonder,
+  --            t_kullan, t_imha (6 vacuous boş Γ = [] + 1 value)
+  -- KALAN  (5): t_seq, t_gorev_baslat, t_kanal_al, t_dondur, t_guvensiz
+  --             (Step constructor insasi/induktif IH — Adim 4.2b)
+  cases h_typed with
+  -- VACUOUS: boş Γ ile lookup imkansiz (kontradiksyon)
+  -- NOT: Lean 4 cases pattern Γ index'i outer tipOrtamBos'tan auto-bind ediyor.
+  -- Pattern args = constructor binder count - 1.
+  | t_tanim x _ h_get =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- VALUE: sabit v dogrudan IsValue
+  | t_sabit v _ _ =>
+    left; exact IsValue.iv_sabit v
+  -- VACUOUS:
+  | t_atama x _ _ h_get _ =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- TODO: Adim 4.2b — seq induktif Progress (alt-ifadelere IH uygula)
+  | t_seq _ _ _ _ _ _ =>
+    sorry
+  -- TODO: Adim 4.2b — Step.cGorevBaslatTamam insasi (threadFresh + yenContext)
+  | t_gorev_baslat _ _ _ _ =>
+    sorry
+  -- VACUOUS:
+  | t_gorev_birlestir _ _ h_get =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- VACUOUS:
+  | t_kanal_gonder _ _ _ h_get =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- TODO: Adim 4.2b — Step.cKanalAlTamam insa (kanal var/yok ayrimi)
+  | t_kanal_al _ _ =>
+    sorry
+  -- TODO: Adim 4.2b — Step.cDondurTamam insa (b zaten frozen/değil ayrimi)
+  | t_dondur _ =>
+    sorry
+  -- VACUOUS:
+  | t_kullan _ _ h_get =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- VACUOUS:
+  | t_imha _ _ h_get =>
+    exfalso; simp [tipOrtamGet] at h_get
+  -- TODO: Adim 4.2b — guvensiz induktif Progress (alt-ifadeye IH)
+  | t_guvensiz _ _ _ =>
+    sorry
 
 
 -- ============================================================
