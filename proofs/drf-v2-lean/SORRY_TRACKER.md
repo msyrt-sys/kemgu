@@ -17,6 +17,9 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | 1 | 2026-05-18 | 1.1 | 0 | FaultSebep enum + Konfigurasyon.fault eklendi; constructor refactor henuz yok |
 | 1 | 2026-05-18 | 1.2 | 10 | sAtama Tamam/Hata dual; 5 yer (L4 + L7 + Drf + MemSafety T1 + MemSafety T1') gecici sorry; L2 wrapper trivial |
 | 1 | 2026-05-22 | 1.3 | +25 (=35 toplam) | C1 checkpoint: kalan 6 Step constructor dual (cGorevBaslat/cGorevBirlestir/cKanalGonder/cKanalAl/cDondur/sLinKullan/sLinImha); 5 yer x 5 yeni Hata case = 25 sorry; L2 trivial bypass |
+| 2 | 2026-05-22 | 2 | 0 (35 sabit) | ConfigTyped iskelet: KonfTipli + 4 alt-yapi tam, ThreadTipli placeholder True |
+| 2 | 2026-05-22 | 3 | 0 (35 sabit) | Minimal HasType: 12 Ifade kurali, klasik tip sistemi (TAPL §8.3) |
+| 2 | 2026-05-22 | 4.1 | +6 (=41 toplam) | Progress + Preservation ISKELET: statement'lar sorry, full proof Adim 4.2-4.4'te |
 
 ---
 
@@ -169,6 +172,40 @@ L2 wrapper'i (`drf_l2_step_uygulama_ornegi`) sonuc tipi `True`; her case `trivia
 
 ---
 
+## Adim 4.1 yeni sorry'leri (Progress/Preservation iskelet, 2026-05-22)
+
+Tum sorry'ler `proofs/drf-v2-lean/Kemgu/Sem/ProgressKorunum.lean`'de:
+
+- [ ] `ProgressKorunum.lean:71` — `progress`
+      Sebep: HasType 12 case + Step constructor insa, V1 minimal Wright-Felleisen
+      Tamamlanma: Adim 4.2 — 12 HasType case analizi
+
+- [ ] `ProgressKorunum.lean:102` — `preservation`
+      Sebep: Step 15 constructor (8 Tamam + 7 Hata) case analizi, HasType korunumu
+      Tamamlanma: Adim 4.3 — Step constructor case analizi; Hata cases'leri Adim 7 Discharge ile exfalso
+
+- [ ] `ProgressKorunum.lean:126` — `preservation_sigmaTipli`
+      Sebep: SigmaTipli korunumu — Step store-modify cases'leri (sAtamaTamam push)
+      Tamamlanma: Adim 4.4
+
+- [ ] `ProgressKorunum.lean:142` — `preservation_sahiplikTutarli`
+      Sebep: SahiplikTutarli korunumu — frozen persistence + sahiplik degisimi case'leri
+      Tamamlanma: Adim 4.4
+
+- [ ] `ProgressKorunum.lean:155` — `preservation_kanalTutarli`
+      Sebep: KanalTutarli korunumu — cKanalGonder ekleme + cKanalAl cikarma cases'leri
+      Tamamlanma: Adim 4.4
+
+- [ ] `ProgressKorunum.lean:178` — `preservation_konfTipli`
+      Sebep: KonfTipli ana korunum — 4 sub-lemma conjunction + ThreadTipli (True placeholder)
+      Tamamlanma: Adim 4.4
+
+**Adim 4.1 yeni sorry: 6**. Toplam: 35 + 6 = **41 sorry**.
+
+NOT: `soundness_corollary` (`ProgressKorunum.lean:188`) sorry kullanmaz — `True` return ile iskelet (Adim 4 sonu Progress + Preservation StepStar induktif birlesimi ile gercek soundness corollary).
+
+---
+
 ## Asamali plan ve sorry beklentisi
 
 | Adim | Hafta | Beklenen sorry hareketi | Toplam |
@@ -196,7 +233,11 @@ Her checkpoint'te:
 
 CHECKPOINT listesi (Plan §7.5):
 - [x] **C0:** Adim 1.1 — FaultSebep + Konfigurasyon.fault, build temiz, sorry: 0
-- [x] **C1 (bu commit):** Adim 1.3 sonu — tum 8 Step constructor dual (sAtama/cGorevBaslat/cGorevBirlestir/cKanalGonder/cKanalAl/cDondur/sLinKullan/sLinImha), sorry: 35 geçici
+- [x] **C1:** Adim 1.3 sonu — tum 8 Step constructor dual, sorry: 35
+- [x] **C2:** Adim 2 sonu — ConfigTyped iskelet (KonfTipli + 4 alt-yapi tam), sorry: 35
+- [x] **C2.5:** Adim 3 sonu — Minimal HasType (12 kural), sorry: 35
+- [x] **C2.75 (bu commit):** Adim 4.1 sonu — Progress + Preservation iskelet, sorry: 41 (+6 placeholder)
+- [ ] **C3:** Adim 4.4 sonu — Progress + Preservation full + ConfigTyped korunum proof'lari (sorry: 35'e geri dusus)
 - [ ] **C2:** Adim 2 sonu — ConfigTyped 5 alt-yapi
 - [ ] **C3:** Adim 4 sonu — HasType Progress/Preservation (klasik)
 - [ ] **C4:** Adim 6 sonu — HasType + LinearOK + RegionOK

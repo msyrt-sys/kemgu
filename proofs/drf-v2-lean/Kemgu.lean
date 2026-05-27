@@ -9,6 +9,8 @@ import Kemgu.Sem.SmallStep
 import Kemgu.Sem.StateTipli
 -- Plan v2 Adim 3: Minimal HasType (klasik tip sistemi, 12 Ifade kurali)
 import Kemgu.Sem.HasType
+-- Plan v2 Adim 4.1: Progress + Preservation iskelet (statement'lar sorry, Adim 4.2-4.4 doldurur)
+import Kemgu.Sem.ProgressKorunum
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
