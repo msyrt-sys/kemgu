@@ -7,6 +7,8 @@ import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
 -- Plan v2 Adim 2: ConfigTyped iskelet (DegerTipli + SigmaTipli + SahiplikTutarli + KanalTutarli + KonfTipli)
 import Kemgu.Sem.StateTipli
+-- Plan v2 Adim 3: Minimal HasType (klasik tip sistemi, 12 Ifade kurali)
+import Kemgu.Sem.HasType
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
