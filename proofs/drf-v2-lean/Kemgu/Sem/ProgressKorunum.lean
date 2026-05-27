@@ -1,0 +1,211 @@
+/-
+KEMGU DRF Mekanize — Progress + Preservation (Plan v2 Adim 4)
+Kaynak (kagit formel): belgeler/KEMGU_Mekanize_Onarim_Plan.md §7.2 Adim 4
+Wright-Felleisen: TAPL §8.3.2 (Progress) + §8.3.3 (Preservation)
+Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz
+
+Adim 4.1 ISKELET (bu commit):
+- IsValue predicate (tam, ispat gerekmez)
+- Progress + Preservation statement (sorry placeholder, TODO Adim 4.2-4.3)
+- 4 ConfigTyped korunum lemma statement (sorry placeholder, TODO Adim 4.4)
+
+Adim 4'un alt-adimlari:
+- 4.1 (bu): Iskelet + statement'lar
+- 4.2: Progress proof — 12 HasType case analizi
+- 4.3: Preservation proof — 15 Step constructor case analizi
+- 4.4: ConfigTyped korunum lemmalari + birlesim
+
+Plan v2 §7.2 tahmini: ~300 satir, ~2 hafta — 4 alt-oturuma yayilir.
+
+Onkosul: Adim 3 (HasType), Adim 2 (StateTipli + KonfTipli).
+-/
+
+import Kemgu.Sem.Core
+import Kemgu.Sem.SmallStep
+import Kemgu.Sem.StateTipli
+import Kemgu.Sem.HasType
+
+namespace Kemgu.Sem.ProgressKorunum
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli Kemgu.Sem.HasType
+
+-- ============================================================
+-- §1. IsValue — Bir ifadenin deger olmasi (TAPL §8.3.1 normal form)
+-- ============================================================
+
+/-- Bir ifade `e` bir DEGER (irreducible normal form) ise IsValue e.
+
+    KEMGU'da degerli ifadeler:
+    - `Ifade.sabit v` — literal deger (her v : Deger icin)
+
+    Diger ifadeler (atama, seq, gorevBaslat, kanalGonderIf, kullanIf, vs.)
+    DEGER DEGIL — Step reduksiyonu ile ilerlerler.
+
+    V1 sinir: Closure'lar Ifade'de yok (Plan §1 minimal subset);
+    closure deger Adim 5 LinearOK + Ifade'nin closureRef gibi
+    bir ekleme ile gelir (V2 hedef). -/
+inductive IsValue : Ifade → Prop where
+  | iv_sabit (v : Deger) : IsValue (Ifade.sabit v)
+
+
+-- ============================================================
+-- §2. Progress (TAPL §8.3.2) — ISKELET
+-- ============================================================
+
+/-- Progress (Wright-Felleisen, TAPL §8.3.2 KEMGU adaptasyonu):
+
+    Bos ortamda HasType olan bir e ifadesi ya bir DEGERdir
+    (IsValue e) ya da bir reduksiyon adimi alabilir (Step S → S').
+
+    KEMGU adaptasyonu: e bir thread'in ifadesi varsayilir; tek-thread
+    konfigurasyon altinda Progress single-step semantiginde calisir.
+
+    V1 sinirlari:
+    - S.thread = [ctx] (tek thread)
+    - h_no_fault: fault state Progress disinda
+    - HasType bos Γ ile (kapatilmis program)
+
+    Adim 4.2'de tam ispat — 12 HasType kurali icin case analizi:
+    - t_sabit ⟹ IsValue (sol kol)
+    - Diger 11 kural ⟹ Step yardimcilarini insa et (sag kol)
+-/
+theorem progress
+    (e : Ifade) (τ : Tip)
+    (_h_typed : HasType tipOrtamBos e τ)
+    (S : Konfigurasyon) (ctx : ThreadCtx)
+    (_h_ctx_in : ctx ∈ S.thread) (_h_ctx_ifade : ctx.ifade = e)
+    (_h_no_fault : S.fault = none) :
+    IsValue e ∨ ∃ S', Step S S' := by
+  -- TODO: Adim 4.2'de tam ispat — 12 HasType case + Step constructor insa
+  sorry
+
+
+-- ============================================================
+-- §3. Preservation (TAPL §8.3.3) — ISKELET
+-- ============================================================
+
+/-- Preservation (Wright-Felleisen, TAPL §8.3.3 KEMGU adaptasyonu):
+
+    Eger e : τ ve Step S → S' (S.thread ctx içinde e ise), o zaman
+    S' içinde ayni thread'in yeni ifadesi de τ tipinde tip-uyumlu kalir.
+
+    KEMGU adaptasyonu: Step Configuration semantiginde, thread tid
+    aracilgiyla ctx ↔ ctx' eslestirmesi.
+
+    V1 sinirlari:
+    - HasType bos Γ ile (kapatilmis)
+    - Lineerlik/bolge korunumu YOK (Adim 5/6'da eklenecek)
+
+    Adim 4.3'te tam ispat — Step'in 15 constructor'i (8 Tamam + 7 Hata)
+    icin case analizi. Hata constructor'lari typed program'da ulasilmaz
+    (Adim 7 Discharge) — buradaki Preservation salt structural.
+-/
+theorem preservation
+    (S S' : Konfigurasyon) (_h_step : Step S S')
+    (ctx : ThreadCtx) (τ : Tip)
+    (_h_in : ctx ∈ S.thread)
+    (_h_typed : HasType tipOrtamBos ctx.ifade τ) :
+    ∃ ctx' ∈ S'.thread,
+      ctx'.tid = ctx.tid ∧
+      HasType tipOrtamBos ctx'.ifade τ := by
+  -- TODO: Adim 4.3'te tam ispat — 15 Step constructor case analizi
+  sorry
+
+
+-- ============================================================
+-- §4. ConfigTyped korunum lemmalari (Plan §5.3)
+-- Her alt-yapi icin ayri Preservation lemma — KonfTipli'nin induktif
+-- cekirdegi. Adim 4.4'te detay.
+-- ============================================================
+
+/-- SigmaTipli (StoreTyped) korunumu.
+    Step S → S' altinda store'un tip-uyumu korunur.
+
+    Adim 4.4 full ispat: Step 15 constructor case'i — hangileri store'a
+    yazar (sAtamaTamam, h_store ile (k,v) push), hangileri degistirmez.
+    `h_no_fault_target` sayesinde Hata constructor'lari typed exfalso. -/
+theorem preservation_sigmaTipli
+    (Γ : TipOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (_h_step : Step S S')
+    (_h_sigma : SigmaTipli Γ Ρ S.store)
+    (_h_no_fault_target : S'.fault = none) :
+    SigmaTipli Γ Ρ S'.store := by
+  -- TODO: Adim 4.4'te tam ispat — Step constructor case'leri
+  sorry
+
+/-- SahiplikTutarli (SahiplikConsistent) korunumu.
+    Sahiplik haritasinin bilinen-bolge + frozen-persistence kosullari
+    Step altinda korunur.
+
+    Adim 4.4 full ispat: cGorevBaslat/cGorevBirlestir/cKanal*/cDondur
+    sahiplik degisimi yapar — her birinde Tutarli kosullarinin korundugu
+    gosterilir. -/
+theorem preservation_sahiplikTutarli
+    (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (_h_step : Step S S')
+    (_h_sahip : SahiplikTutarli Ρ S.sahiplik S.zaman) :
+    SahiplikTutarli Ρ S'.sahiplik S'.zaman := by
+  -- TODO: Adim 4.4'te tam ispat
+  sorry
+
+/-- KanalTutarli (KanalConsistent) korunumu.
+    Kanal kuyrugundaki her degerin tip-uyumu Step altinda korunur.
+
+    Adim 4.4 full ispat: cKanalGonder ekler (DegerTipli ile), cKanalAl
+    cikartir — her ikisi de invariant'i korur. -/
+theorem preservation_kanalTutarli
+    (Γ : TipOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (_h_step : Step S S')
+    (_h_kanal : KanalTutarli Γ Ρ S.kanal) :
+    KanalTutarli Γ Ρ S'.kanal := by
+  -- TODO: Adim 4.4'te tam ispat
+  sorry
+
+
+-- ============================================================
+-- §5. KonfTipli korunumu — ana Preservation teorem catısı
+-- (4 alt-lemma'nin conjunction'i + ThreadTipli iskelet)
+-- ============================================================
+
+/-- KonfTipli korunumu — Plan v2 §5.3 "Preservation theorem'in induktif
+    cekirdegi".
+
+    Bu teorem KEMGU'nun yapilanmasinin SOUNDNESS catısı: typed konfigurasyon
+    Step altinda typed kalir. ThreadTipli su anlik `True` (Adim 2 iskelet),
+    Adim 6 sonu Typed (HasType + LinearOK + RegionOK) ile gercek tanim.
+
+    Adim 4.4 full ispat: 4 sub-lemma conjunction + ThreadTipli True =
+    KonfTipli S' korunumu. -/
+theorem preservation_konfTipli
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (_h_step : Step S S')
+    (_h_konf : KonfTipli Γ Λ Ρ S)
+    (_h_no_fault_target : S'.fault = none) :
+    KonfTipli Γ Λ Ρ S' := by
+  -- TODO: Adim 4.4'te tam ispat — 4 sub-lemma + ThreadTipli (True placeholder)
+  sorry
+
+
+-- ============================================================
+-- §6. Soundness corollary (Wright-Felleisen)
+-- ISKELET — Progress + Preservation'in birlesimi.
+-- ============================================================
+
+/-- Soundness (Wright-Felleisen birlesimi):
+    "Well-typed programs never get stuck" — bos ortamda HasType olan
+    bir program StepStar altinda her zaman ya bir degere ulasir ya da
+    Step almaya devam edebilir.
+
+    Adim 4 sonu (4.4 sonrasi) bu corollary Progress + Preservation
+    induktif birlesimiyle dolar. Su an iskelet. -/
+theorem soundness_corollary
+    (S S' : Konfigurasyon) (_h_run : StepStar S S')
+    (ctx : ThreadCtx) (τ : Tip)
+    (_h_in : ctx ∈ S.thread)
+    (_h_typed : HasType tipOrtamBos ctx.ifade τ) :
+    -- "Stuck olmaz": ya S' icinde bir IsValue thread var ya da Step alabilir
+    True := by
+  -- TODO: Adim 4 sonu — Progress + Preservation StepStar induksiyon
+  trivial
+
+
+end Kemgu.Sem.ProgressKorunum
