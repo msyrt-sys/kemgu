@@ -20,6 +20,7 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | 2 | 2026-05-22 | 2 | 0 (35 sabit) | ConfigTyped iskelet: KonfTipli + 4 alt-yapi tam, ThreadTipli placeholder True |
 | 2 | 2026-05-22 | 3 | 0 (35 sabit) | Minimal HasType: 12 Ifade kurali, klasik tip sistemi (TAPL §8.3) |
 | 2 | 2026-05-22 | 4.1 | +6 (=41 toplam) | Progress + Preservation ISKELET: statement'lar sorry, full proof Adim 4.2-4.4'te |
+| 2 | 2026-05-22 | 4.2 | +4 (=45 toplam) | progress kismi proof: 7/12 case kanitlandi (6 vacuous bos Γ + 1 t_sabit IsValue), 5 case sub-sorry (t_seq, t_gorev_baslat, t_kanal_al, t_dondur, t_guvensiz — Step constructor insasi/induktif Adim 4.2b) |
 
 ---
 
@@ -176,9 +177,16 @@ L2 wrapper'i (`drf_l2_step_uygulama_ornegi`) sonuc tipi `True`; her case `trivia
 
 Tum sorry'ler `proofs/drf-v2-lean/Kemgu/Sem/ProgressKorunum.lean`'de:
 
-- [ ] `ProgressKorunum.lean:71` — `progress`
-      Sebep: HasType 12 case + Step constructor insa, V1 minimal Wright-Felleisen
-      Tamamlanma: Adim 4.2 — 12 HasType case analizi
+- [x] ~~`ProgressKorunum.lean:71` — `progress`~~ (Adim 4.2'de 7/12 case kanitlandi; 5 sub-sorry asagida)
+      Tamam (7): t_tanim, t_sabit, t_atama, t_gorev_birlestir, t_kanal_gonder, t_kullan, t_imha
+      Kalan (5): t_seq, t_gorev_baslat, t_kanal_al, t_dondur, t_guvensiz (Adim 4.2b)
+
+  Sub-sorry'ler (progress lemma icinde):
+  - [ ] `progress.t_seq`: induktif Progress (alt-ifadelere IH), Adim 4.2b
+  - [ ] `progress.t_gorev_baslat`: Step.cGorevBaslatTamam insasi (threadFresh + yenContext), Adim 4.2b
+  - [ ] `progress.t_kanal_al`: Step.cKanalAlTamam insa (kanal var/yok ayrimi), Adim 4.2b
+  - [ ] `progress.t_dondur`: Step.cDondurTamam insa (b frozen/değil ayrimi), Adim 4.2b
+  - [ ] `progress.t_guvensiz`: induktif Progress (alt-ifadeye IH), Adim 4.2b
 
 - [ ] `ProgressKorunum.lean:102` — `preservation`
       Sebep: Step 15 constructor (8 Tamam + 7 Hata) case analizi, HasType korunumu
@@ -236,7 +244,8 @@ CHECKPOINT listesi (Plan §7.5):
 - [x] **C1:** Adim 1.3 sonu — tum 8 Step constructor dual, sorry: 35
 - [x] **C2:** Adim 2 sonu — ConfigTyped iskelet (KonfTipli + 4 alt-yapi tam), sorry: 35
 - [x] **C2.5:** Adim 3 sonu — Minimal HasType (12 kural), sorry: 35
-- [x] **C2.75 (bu commit):** Adim 4.1 sonu — Progress + Preservation iskelet, sorry: 41 (+6 placeholder)
+- [x] **C2.75:** Adim 4.1 sonu — Progress + Preservation iskelet, sorry: 41 (+6 placeholder)
+- [x] **C2.85 (bu commit):** Adim 4.2 sonu — progress kismi proof (7/12 case), sorry: 45 (progress'in 1 sorry'si 5 sub-sorry'ye dağıldı, 7 case typed)
 - [ ] **C3:** Adim 4.4 sonu — Progress + Preservation full + ConfigTyped korunum proof'lari (sorry: 35'e geri dusus)
 - [ ] **C2:** Adim 2 sonu — ConfigTyped 5 alt-yapi
 - [ ] **C3:** Adim 4 sonu — HasType Progress/Preservation (klasik)
