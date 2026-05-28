@@ -1,0 +1,62 @@
+// Virtqueue layout testi: saf model, donanim register'i yok.
+
+işlev test_queue_num_max_sifir_gecersiz() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(0, 1) == yanlış;
+}
+
+işlev test_queue_size_sifir_gecersiz() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(8, 0) == yanlış;
+}
+
+işlev test_queue_size_max_ustu_gecersiz() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(8, 16) == yanlış;
+}
+
+işlev test_queue_size_max_ve_iki_kuvveti_gecerli() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(256, 256);
+}
+
+işlev test_queue_size_iki_kuvveti_degil_gecersiz() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(256, 255) == yanlış;
+}
+
+işlev test_queue_size_bir_gecerli() -> mantıksal {
+    ver virtqueue_queue_boyutu_gecerli_mi(1, 1);
+}
+
+işlev test_descriptor_alignment_dogru_gecerli() -> mantıksal {
+    ver virtqueue_desc_hizali_mi(4096);
+}
+
+işlev test_used_ring_alignment_bozuk_gecersiz() -> mantıksal {
+    ver virtqueue_used_hizali_mi(4098) == yanlış;
+}
+
+işlev test_layout_alignment_bozuk_gecersiz() -> mantıksal {
+    ver virtqueue_layout_gecerli_mi(8, 8, 4096, 8192, 12290) == yanlış;
+}
+
+işlev test_layout_byte_hesaplari() -> mantıksal {
+    ver virtqueue_desc_bytes_hesapla(8) == 128 ve
+        virtqueue_avail_bytes_hesapla(8) == 22 ve
+        virtqueue_used_bytes_hesapla(8) == 70 ve
+        virtqueue_used_offset_hesapla(8) == 152 ve
+        virtqueue_toplam_bytes_hesapla(8) == 222;
+}
+
+işlev main() -> tam32 {
+    eğer test_queue_num_max_sifir_gecersiz() ve
+       test_queue_size_sifir_gecersiz() ve
+       test_queue_size_max_ustu_gecersiz() ve
+       test_queue_size_max_ve_iki_kuvveti_gecerli() ve
+       test_queue_size_iki_kuvveti_degil_gecersiz() ve
+       test_queue_size_bir_gecerli() ve
+       test_descriptor_alignment_dogru_gecerli() ve
+       test_used_ring_alignment_bozuk_gecersiz() ve
+       test_layout_alignment_bozuk_gecersiz() ve
+       test_layout_byte_hesaplari() {
+        ver 0;
+    }
+    ver 1;
+}
+
