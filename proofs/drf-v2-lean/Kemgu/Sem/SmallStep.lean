@@ -64,7 +64,11 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz         : S'.iz = .memYaz ctx.tid k v :: S.iz)
       (h_zaman      : S'.zaman = S.zaman + 1)
       (h_sahip      : S'.sahiplik = S.sahiplik)
-      (h_kanal      : S'.kanal = S.kanal) :
+      (h_kanal      : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      -- (typed_no_fault catı icin temel). Hata'lar S'.fault = some
+      -- set ederken Tamam'lar S'.fault = none garanti eder.
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- S-ATAMA Hata Donmus (Plan v2 Adim 1.2): frozen bolgeye yazma.
@@ -149,7 +153,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz             : S'.iz = .threadBaslat tYeni :: S.iz)
       (h_zaman          : S'.zaman = S.zaman + 1)
       (h_store          : S'.store = S.store)
-      (h_kanal          : S'.kanal = S.kanal) :
+      (h_kanal          : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- C-GOREV-BASLAT Hata Lineer Ihlal (Plan v2 Adim 1.3): linear yakalanmis
@@ -195,7 +201,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz        : S'.iz = .threadBitir tHedef :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (h_kanal     : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- C-KANAL-GONDER Tamam (Plan v2 Adim 1.3): cKanalGonder Ok varyanti.
@@ -213,7 +221,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                         transferredBolge S.zaman (Sahip.kanalSahip k))
       (h_iz        : S'.iz = .kanalGonderOl ctx.tid k v :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
-      (h_store     : S'.store = S.store) :
+      (h_store     : S'.store = S.store)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- C-KANAL-GONDER Hata Lineer Tuket (Plan v2 Adim 1.3): linear v zaten
@@ -255,7 +265,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                         transferredBolge S.zaman (Sahip.thread ctx.tid))
       (h_iz        : S'.iz = .kanalAlOl ctx.tid k v :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
-      (h_store     : S'.store = S.store) :
+      (h_store     : S'.store = S.store)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- C-DONDUR Tamam (Plan v2 Adim 1.3): cDondur Ok varyanti.
@@ -274,7 +286,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz        : S'.iz = .dondurOl ctx.tid b :: S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (h_kanal     : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- C-DONDUR Hata Zaten Donmus (Plan v2 Adim 1.3): bolge zaten frozen,
@@ -309,7 +323,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz        : S'.iz = S.iz)            -- mem_op degil, gozlemlenebilir olay yok
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (h_kanal     : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- S-LIN-KULLAN Hata Zaten Tuketildi (Plan v2 Adim 1.3): linear x zaten
@@ -344,7 +360,9 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz        : S'.iz = S.iz)
       (h_zaman     : S'.zaman = S.zaman + 1)
       (h_store     : S'.store = S.store)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (h_kanal     : S'.kanal = S.kanal)
+      -- Plan v2 Adim 7 yarım: Tamam Step fault'i preserve eder
+      (h_no_fault_target : S'.fault = none) :
       Step S S'
 
   /-- S-LIN-IMHA Hata Zaten Tuketildi (Plan v2 Adim 1.3): linear x zaten
