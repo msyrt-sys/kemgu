@@ -1,0 +1,81 @@
+// VirtIO feature negotiation testi: saf model, FEATURES_OK register'i yok.
+
+işlev test_ortak_feature_accepted_icinde() -> mantıksal {
+    değişken feature: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(feature, feature);
+    ver virtio_feature_var_mi(accepted, feature);
+}
+
+işlev test_cihaz_desteklemiyorsa_accepted_disinda() -> mantıksal {
+    değişken feature: dtam64 = VIRTIO_BLK_F_FLUSH();
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(virtio_feature_sifir(), feature);
+    ver virtio_feature_var_mi(accepted, feature) == yanlış;
+}
+
+işlev test_driver_desteklemiyorsa_accepted_disinda() -> mantıksal {
+    değişken feature: dtam64 = VIRTIO_BLK_F_RO();
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(feature, virtio_feature_sifir());
+    ver virtio_feature_var_mi(accepted, feature) == yanlış;
+}
+
+işlev test_zorunlu_feature_cihazda_varsa_gecerli() -> mantıksal {
+    değişken required: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
+    değişken supported: dtam64 = required | VIRTIO_BLK_F_FLUSH();
+    değişken device: dtam64 = required | VIRTIO_BLK_F_RO();
+    ver virtio_feature_negotiation_gecerli_mi(device, supported, required);
+}
+
+işlev test_zorunlu_feature_cihazda_yoksa_gecersiz() -> mantıksal {
+    değişken required: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
+    değişken supported: dtam64 = required;
+    değişken device: dtam64 = VIRTIO_BLK_F_RO();
+    ver virtio_feature_negotiation_gecerli_mi(device, supported, required) == yanlış;
+}
+
+işlev test_zorunlu_feature_driver_supported_disinda_gecersiz() -> mantıksal {
+    değişken required: dtam64 = VIRTIO_BLK_F_FLUSH();
+    değişken supported: dtam64 = VIRTIO_BLK_F_RO();
+    değişken device: dtam64 = required | supported;
+    ver virtio_feature_negotiation_gecerli_mi(device, supported, required) == yanlış;
+}
+
+işlev test_required_sifir_opsiyonel_gecerli() -> mantıksal {
+    değişken device: dtam64 = VIRTIO_BLK_F_RO();
+    değişken supported: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
+    ver virtio_feature_negotiation_gecerli_mi(device, supported, virtio_feature_sifir());
+}
+
+işlev test_tum_maskeler_bos_gecerli_accepted_sifir() -> mantıksal {
+    değişken sifir: dtam64 = virtio_feature_sifir();
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(sifir, sifir);
+    ver virtio_feature_bos_mu(accepted) ve
+        virtio_feature_negotiation_gecerli_mi(sifir, sifir, sifir);
+}
+
+işlev test_cihaz_bos_required_dolu_gecersiz() -> mantıksal {
+    değişken required: dtam64 = VIRTIO_BLK_F_SIZE_MAX();
+    ver virtio_feature_negotiation_gecerli_mi(virtio_feature_sifir(), required, required) == yanlış;
+}
+
+işlev test_accepted_sadece_kesisim() -> mantıksal {
+    değişken device: dtam64 = VIRTIO_BLK_F_SIZE_MAX() | VIRTIO_BLK_F_SEG_MAX();
+    değişken supported: dtam64 = VIRTIO_BLK_F_SEG_MAX() | VIRTIO_BLK_F_BLK_SIZE();
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(device, supported);
+    ver accepted == VIRTIO_BLK_F_SEG_MAX();
+}
+
+işlev main() -> tam32 {
+    eğer test_ortak_feature_accepted_icinde() ve
+       test_cihaz_desteklemiyorsa_accepted_disinda() ve
+       test_driver_desteklemiyorsa_accepted_disinda() ve
+       test_zorunlu_feature_cihazda_varsa_gecerli() ve
+       test_zorunlu_feature_cihazda_yoksa_gecersiz() ve
+       test_zorunlu_feature_driver_supported_disinda_gecersiz() ve
+       test_required_sifir_opsiyonel_gecerli() ve
+       test_tum_maskeler_bos_gecerli_accepted_sifir() ve
+       test_cihaz_bos_required_dolu_gecersiz() ve
+       test_accepted_sadece_kesisim() {
+        ver 0;
+    }
+    ver 1;
+}
