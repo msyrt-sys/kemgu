@@ -1,0 +1,127 @@
+// VirtIO mock transport testi: status, feature ve queue saf modellerini birlestirir.
+
+işlev virtio_mock_test_cihaz(
+    magic: tam32,
+    version: tam32,
+    device_id: tam32,
+    device_features: dtam64,
+    driver_supported: dtam64,
+    driver_required: dtam64,
+    queue_num_max: tam32,
+    queue_size: tam32
+) -> VirtioMockCihaz {
+    ver VirtioMockCihaz {
+        magic: magic,
+        version: version,
+        device_id: device_id,
+        device_features: device_features,
+        driver_supported: driver_supported,
+        driver_required: driver_required,
+        queue_num_max: queue_num_max,
+        queue_size: queue_size
+    };
+}
+
+işlev virtio_mock_test_gecerli_cihaz() -> VirtioMockCihaz {
+    değişken required: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
+    değişken supported: dtam64 = required | VIRTIO_BLK_F_FLUSH();
+    değişken device: dtam64 = required | VIRTIO_BLK_F_RO();
+    ver virtio_mock_test_cihaz(
+        virtio_mock_magic_degeri(),
+        virtio_mock_modern_version(),
+        virtio_mock_block_device_id(),
+        device,
+        supported,
+        required,
+        8,
+        8
+    );
+}
+
+işlev test_gecerli_mock_init() -> mantıksal {
+    ver virtio_mock_init_gecerli_mi(virtio_mock_test_gecerli_cihaz());
+}
+
+işlev test_magic_yanlis_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.magic = 0;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_version_legacy_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.version = 1;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_device_block_degil_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.device_id = 1;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_zorunlu_feature_cihazda_yoksa_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.device_features = VIRTIO_BLK_F_RO();
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_queue_max_sifir_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.queue_num_max = 0;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_queue_size_iki_kuvveti_degil_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.queue_size = 6;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_queue_size_max_ustu_gecersiz() -> mantıksal {
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_gecerli_cihaz();
+    cihaz.queue_num_max = 8;
+    cihaz.queue_size = 16;
+    ver virtio_mock_init_gecerli_mi(cihaz) == yanlış;
+}
+
+işlev test_required_sifir_accepted_sifir_gecerli() -> mantıksal {
+    değişken sifir: dtam64 = virtio_feature_sifir();
+    değişken cihaz: VirtioMockCihaz = virtio_mock_test_cihaz(
+        virtio_mock_magic_degeri(),
+        virtio_mock_modern_version(),
+        virtio_mock_block_device_id(),
+        sifir,
+        sifir,
+        sifir,
+        4,
+        4
+    );
+    ver virtio_mock_init_gecerli_mi(cihaz);
+}
+
+işlev test_status_akisi_final_15() -> mantıksal {
+    değişken status: tam32 = virtio_mock_status_reset();
+    status = virtio_status_ekle(status, virtio_mock_status_acknowledge());
+    status = virtio_status_ekle(status, virtio_mock_status_driver());
+    status = virtio_status_ekle(status, virtio_mock_status_features_ok());
+    status = virtio_status_ekle(status, virtio_mock_status_driver_ok());
+    ver status == 15 ve virtio_mock_status_akisi_gecerli_mi();
+}
+
+işlev main() -> tam32 {
+    eğer test_gecerli_mock_init() ve
+       test_magic_yanlis_gecersiz() ve
+       test_version_legacy_gecersiz() ve
+       test_device_block_degil_gecersiz() ve
+       test_zorunlu_feature_cihazda_yoksa_gecersiz() ve
+       test_queue_max_sifir_gecersiz() ve
+       test_queue_size_iki_kuvveti_degil_gecersiz() ve
+       test_queue_size_max_ustu_gecersiz() ve
+       test_required_sifir_accepted_sifir_gecerli() ve
+       test_status_akisi_final_15() {
+        ver 0;
+    }
+    ver 1;
+}
+
