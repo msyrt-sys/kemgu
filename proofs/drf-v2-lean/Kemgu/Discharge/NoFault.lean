@@ -30,10 +30,12 @@ import Kemgu.Sem.StateTipli
 import Kemgu.Sem.HasType
 import Kemgu.Sem.LineerTamam
 import Kemgu.Sem.RegionTamam
+import Kemgu.Discharge.Aile2
 
 namespace Kemgu.Discharge.NoFault
 open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
      Kemgu.Sem.HasType Kemgu.Sem.LineerTamam Kemgu.Sem.RegionTamam
+     Kemgu.Discharge.Aile2
 
 -- ============================================================
 -- §1. Tek-adim fault korunumu (typed varsayımı altında)
@@ -59,7 +61,7 @@ open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
 theorem step_fault_preserves_typed
     (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (S S' : Konfigurasyon) (h_step : Step S S')
-    (_h_typed_S : KonfTipliFull Γ Λ Ρ S)
+    (h_typed_S : KonfTipliFull Γ Λ Ρ S)
     (_h_no_fault : S.fault = none) :
     S'.fault = none := by
   cases h_step with
@@ -96,12 +98,22 @@ theorem step_fault_preserves_typed
   | cDondurHataZatenDonmus _ _ _ _ _ _ _ _ _ _ _ =>
     -- TODO Adim 8: typing_excludes_cDondurHataZatenDonmus uygula
     sorry
-  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ _ _ _ _ _ =>
-    -- TODO Adim 8: typing_excludes_sLinKullanHataZatenTuketildi uygula
-    sorry
-  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ _ _ _ _ _ =>
-    -- TODO Adim 8: typing_excludes_sLinImhaHataZatenTuketildi uygula
-    sorry
+  | sLinKullanHataZatenTuketildi ctx x_pat h_in h_ifade h_tuket _ _ _ _ _ _ =>
+    -- Adim 8 P1: Aile 2 dispatch — typing_excludes_sLinKullanHataZatenTuketildi
+    have h_thread := h_typed_S.2.1
+    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
+    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
+    rw [h_ifade] at h_typed
+    exact (typing_excludes_sLinKullanHataZatenTuketildi
+            Γ Λ Ρ x_pat τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
+  | sLinImhaHataZatenTuketildi ctx x_pat h_in h_ifade h_tuket _ _ _ _ _ _ =>
+    -- Adim 8 P1: Aile 2 dispatch — typing_excludes_sLinImhaHataZatenTuketildi
+    have h_thread := h_typed_S.2.1
+    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
+    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
+    rw [h_ifade] at h_typed
+    exact (typing_excludes_sLinImhaHataZatenTuketildi
+            Γ Λ Ρ x_pat τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
 
 
 -- ============================================================

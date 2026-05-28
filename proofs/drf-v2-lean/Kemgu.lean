@@ -17,6 +17,8 @@ import Kemgu.Sem.LineerTamam
 import Kemgu.Sem.RegionTamam
 -- Plan v2 Adim 7: No-Fault catı teoremi (Plan §6.3) + Discharge ailesi V1 durum yorumu
 import Kemgu.Discharge.NoFault
+-- Plan v2 Adim 8 P1: Aile 2 Discharge (Fault Impossibility) — 2 Linear FULL + 5 sorry
+import Kemgu.Discharge.Aile2
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
