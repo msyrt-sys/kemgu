@@ -222,26 +222,27 @@ abbrev bolgeOrtamBos : BolgeOrtam := []
 -- Ayri isim altinda (import cycle onlemek icin) — yorum §0'da.
 -- ============================================================
 
-/-- Thread'lerin tip-uyumu (Plan §5.2.3 hedef tam tanim).
+/-- Thread'lerin tip-uyumu (Plan §5.2.3 hedef tam tanim — Adim 8 P1 GUNCEL).
 
     Her thread baglaminin ifadesi Typed (HasType + LineerTamam + RegionTamam)
     olmali; bazi τ tipi + bazi Λ'/Ρ' cikis ortamlari ile.
 
-    Plan v2 §5.2.3:
-    ```
-    ∀ ctx ∈ threads,
-      ∃ Λ_ctx Ρ_ctx τ Λ' Ρ',
-        Typed Γ Λ_ctx Ρ_ctx ctx.ifade τ Λ' Ρ'
-        ∧ ctx.lineer ≈ Λ_ctx
-    ```
+    Adim 8 P1 GUNCEL: Plan §5.2.3'un `ctx.lineer ≈ Λ_ctx` kopru sarti
+    EKLENDI — V1 minimal'de tek paylasimli Λ (her ctx ayni Λ'yi kullanir),
+    `(y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin` iff form.
+    Bu kopru Aile 2 Linear lemma'larini (typing_excludes_sLinKullan/Imha)
+    full ispat icin saglar.
 
-    V1 sinir: `ctx.lineer ≈ Λ_ctx` (lineer baglama uyumu) Adim 7
-    Discharge'de eklenir; burada her ctx icin Typed varligi yeterli. -/
+    V2 hedef: her thread'in kendi Λ_ctx'i (signature degisikligi gerek). -/
 def ThreadTipliFull (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
                     (threads : List ThreadCtx) : Prop :=
   ∀ ctx ∈ threads,
-    ∃ τ : Tip, ∃ Λ' : LineerOrtam, ∃ Ρ' : BolgeOrtam,
-      Typed Γ Λ Ρ ctx.ifade τ Λ' Ρ'
+    -- §1 Tipli ifade
+    (∃ τ : Tip, ∃ Λ' : LineerOrtam, ∃ Ρ' : BolgeOrtam,
+      Typed Γ Λ Ρ ctx.ifade τ Λ' Ρ')
+    -- §2 Plan §5.2.3 köprü: ctx.lineer ↔ Λ uyumu (Adim 8 P1)
+    ∧ (∀ y : VarId, ∀ lin : Lineerlik,
+        (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
 
 
 -- ============================================================
