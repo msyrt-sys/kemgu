@@ -22,6 +22,7 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | 2 | 2026-05-22 | 4.1 | +6 (=41 toplam) | Progress + Preservation ISKELET: statement'lar sorry, full proof Adim 4.2-4.4'te |
 | 2 | 2026-05-22 | 4.2 | +4 (=45 toplam) | progress kismi proof: 7/12 case kanitlandi (6 vacuous bos Γ + 1 t_sabit IsValue), 5 case sub-sorry (t_seq, t_gorev_baslat, t_kanal_al, t_dondur, t_guvensiz — Step constructor insasi/induktif Adim 4.2b) |
 | 2 | 2026-05-22 | 4.x V1 sinir | 0 (=45 sabit) | Adim 4.2b/4.3/4.4 V1 SINIR — KEMGU Configuration semantik klasik Wright-Felleisen lone form ile uyumsuz; Step S' insasi non-trivial. preservation imzasi guclendirildi (h_no_fault_target eklendi). Full proof'lar Adim 7 Discharge + Adim 5-6 LinearOK/RegionOK sonrasi tractable. |
+| 2 | 2026-05-22 | 5 | +2 (=47 toplam) | LineerTamam katmani (LinearOK Plan §3.3) — 13 kural inductive tam + helpers (Tip.lineerMi, lineerOrtam{Get,Update}) + TypedAdim5 conjunction iskelet + progress_lineer/preservation_lineer sub-lemma iskelet sorry (Adim 5.2/5.3 hedef). |
 
 ---
 
@@ -247,10 +248,11 @@ CHECKPOINT listesi (Plan §7.5):
 - [x] **C2.5:** Adim 3 sonu — Minimal HasType (12 kural), sorry: 35
 - [x] **C2.75:** Adim 4.1 sonu — Progress + Preservation iskelet, sorry: 41 (+6 placeholder)
 - [x] **C2.85:** Adim 4.2 sonu — progress kismi proof (7/12 case), sorry: 45
-- [x] **C2.9 (bu commit):** Adim 4 sub-step V1 sinir notu + preservation imza guclendirildi. sorry: 45 sabit.
-  - Adim 4.2b/4.3/4.4 V1 SINIR — Step inşa zorlu (KEMGU Configuration semantik)
-  - Full proof'lar V2/Adim 5-7 sonrasi (Typed conjunction + Discharge lemmalari)
-- [ ] **C3:** Adim 4.4 sonu — Progress + Preservation full + ConfigTyped korunum (V2 hedef, sorry: 35)
+- [x] **C2.9:** Adim 4 sub-step V1 sinir notu + preservation imza guclendirildi. sorry: 45 sabit.
+- [x] **C2.95 (bu commit):** Adim 5 (LineerTamam katmani) — 13 kural inductive tam + helpers + TypedAdim5 + 2 sub-lemma iskelet. sorry: 47 (+2).
+- [ ] **C3:** Adim 6 (RegionTamam + Typed full conjunction) sonu — sorry: 47 (sabit, iskelet artar)
+- [ ] **C4:** Adim 7 (Discharge ailesi + No-Fault çatı) sonu — sorry DUSER (her discharge lemma birkac sorry kapatir)
+- [ ] **C5:** Adim 8 (L0-L7 + T1 + Drf adapt) sonu — sorry: 0, MERGE'e hazir
 - [ ] **C2:** Adim 2 sonu — ConfigTyped 5 alt-yapi
 - [ ] **C3:** Adim 4 sonu — HasType Progress/Preservation (klasik)
 - [ ] **C4:** Adim 6 sonu — HasType + LinearOK + RegionOK
