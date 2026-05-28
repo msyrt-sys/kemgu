@@ -1,0 +1,80 @@
+// VirtIO status state machine: saf KEMGU model, MMIO veya QEMU baglantisi yok.
+
+işlev virtio_status_ekle(mevcut: tam32, bit: tam32) -> tam32 {
+    ver mevcut | bit;
+}
+
+işlev virtio_status_failed_mi(status: tam32) -> mantıksal {
+    ver (status & VIRTIO_STATUS_FAILED) == VIRTIO_STATUS_FAILED;
+}
+
+işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
+    eğer virtio_status_failed_mi(mevcut) {
+        eşleş bit {
+            128 => { ver doğru; }
+            1 => { ver yanlış; }
+            2 => { ver yanlış; }
+            4 => { ver yanlış; }
+            8 => { ver yanlış; }
+        }
+        ver yanlış;
+    }
+
+    eğer bit == VIRTIO_STATUS_FAILED {
+        ver doğru;
+    }
+
+    eşleş mevcut {
+        0 => {
+            eşleş bit {
+                1 => { ver doğru; }
+                2 => { ver yanlış; }
+                4 => { ver yanlış; }
+                8 => { ver yanlış; }
+                128 => { ver doğru; }
+            }
+        }
+        1 => {
+            eşleş bit {
+                1 => { ver yanlış; }
+                2 => { ver doğru; }
+                4 => { ver yanlış; }
+                8 => { ver yanlış; }
+                128 => { ver doğru; }
+            }
+        }
+        3 => {
+            eşleş bit {
+                1 => { ver yanlış; }
+                2 => { ver yanlış; }
+                4 => { ver yanlış; }
+                8 => { ver doğru; }
+                128 => { ver doğru; }
+            }
+        }
+        11 => {
+            eşleş bit {
+                1 => { ver yanlış; }
+                2 => { ver yanlış; }
+                4 => { ver doğru; }
+                8 => { ver yanlış; }
+                128 => { ver doğru; }
+            }
+        }
+        15 => {
+            eşleş bit {
+                1 => { ver yanlış; }
+                2 => { ver yanlış; }
+                4 => { ver yanlış; }
+                8 => { ver yanlış; }
+                128 => { ver doğru; }
+            }
+        }
+    }
+    ver yanlış;
+}
+
+işlev virtio_status_sonraki_gecerli_mi(mevcut: tam32, sonraki: tam32) -> mantıksal {
+    değişken bit: tam32 = sonraki & ~mevcut;
+    ver virtio_status_gecis_gecerli_mi(mevcut, bit);
+}

@@ -1,0 +1,8 @@
+// VirtIO status register bitleri: bu dosya donanim erisimi icermez.
+
+sabit VIRTIO_STATUS_RESET: tam32 = 0;
+sabit VIRTIO_STATUS_ACKNOWLEDGE: tam32 = 1;
+sabit VIRTIO_STATUS_DRIVER: tam32 = 2;
+sabit VIRTIO_STATUS_DRIVER_OK: tam32 = 4;
+sabit VIRTIO_STATUS_FEATURES_OK: tam32 = 8;
+sabit VIRTIO_STATUS_FAILED: tam32 = 128;

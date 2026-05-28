@@ -1,0 +1,77 @@
+// VirtIO status testi: saf state machine, donanim veya MMIO yok.
+
+işlev test_reset_to_ack() -> mantıksal {
+    ver virtio_status_gecis_gecerli_mi(
+        VIRTIO_STATUS_RESET,
+        VIRTIO_STATUS_ACKNOWLEDGE
+    );
+}
+
+işlev test_ack_to_driver() -> mantıksal {
+    değişken status: tam32 = virtio_status_ekle(
+        VIRTIO_STATUS_RESET,
+        VIRTIO_STATUS_ACKNOWLEDGE
+    );
+    ver virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER);
+}
+
+işlev test_driver_to_features_ok() -> mantıksal {
+    değişken status: tam32 = virtio_status_ekle(
+        VIRTIO_STATUS_ACKNOWLEDGE,
+        VIRTIO_STATUS_DRIVER
+    );
+    ver virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_FEATURES_OK);
+}
+
+işlev test_features_ok_to_driver_ok() -> mantıksal {
+    değişken status: tam32 = virtio_status_ekle(
+        virtio_status_ekle(VIRTIO_STATUS_ACKNOWLEDGE, VIRTIO_STATUS_DRIVER),
+        VIRTIO_STATUS_FEATURES_OK
+    );
+    ver virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK);
+}
+
+işlev test_reset_to_driver_reject() -> mantıksal {
+    ver virtio_status_gecis_gecerli_mi(
+        VIRTIO_STATUS_RESET,
+        VIRTIO_STATUS_DRIVER
+    ) == yanlış;
+}
+
+işlev test_failed_to_driver_ok_reject() -> mantıksal {
+    ver virtio_status_gecis_gecerli_mi(
+        VIRTIO_STATUS_FAILED,
+        VIRTIO_STATUS_DRIVER_OK
+    ) == yanlış;
+}
+
+işlev test_cumulative_bits_preserved() -> mantıksal {
+    değişken status: tam32 = VIRTIO_STATUS_RESET;
+    status = virtio_status_ekle(status, VIRTIO_STATUS_ACKNOWLEDGE);
+    status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER);
+    status = virtio_status_ekle(status, VIRTIO_STATUS_FEATURES_OK);
+    ver status == 11;
+}
+
+işlev test_failed_bit_terminal() -> mantıksal {
+    değişken status: tam32 = virtio_status_ekle(
+        VIRTIO_STATUS_ACKNOWLEDGE,
+        VIRTIO_STATUS_FAILED
+    );
+    ver virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK) == yanlış;
+}
+
+işlev main() -> tam32 {
+    eğer test_reset_to_ack() ve
+       test_ack_to_driver() ve
+       test_driver_to_features_ok() ve
+       test_features_ok_to_driver_ok() ve
+       test_reset_to_driver_reject() ve
+       test_failed_to_driver_ok_reject() ve
+       test_cumulative_bits_preserved() ve
+       test_failed_bit_terminal() {
+        ver 0;
+    }
+    ver 1;
+}
+
