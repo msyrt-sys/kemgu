@@ -5,7 +5,7 @@ işlev virtio_status_ekle(mevcut: tam32, bit: tam32) -> tam32 {
 }
 
 işlev virtio_status_failed_mi(status: tam32) -> mantıksal {
-    ver (status & VIRTIO_STATUS_FAILED) == VIRTIO_STATUS_FAILED;
+    ver (status & 128) == 128;
 }
 
 işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
@@ -20,7 +20,7 @@ işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
         ver yanlış;
     }
 
-    eğer bit == VIRTIO_STATUS_FAILED {
+    eğer bit == 128 {
         ver doğru;
     }
 
