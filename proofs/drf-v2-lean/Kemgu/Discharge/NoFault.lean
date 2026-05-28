@@ -1,117 +1,153 @@
 /-
-KEMGU DRF Mekanize — No-Fault Catı Teoremi (Plan v2 Adim 7)
+KEMGU DRF Mekanize — No-Fault Catı Teoremi (Plan v2 Adim 7 + yarım kalan)
 Kaynak: belgeler/KEMGU_Mekanize_Onarim_Plan.md §6.3 No-Fault Theorem + §7.2 Adim 7
 Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz
 
-Adim 7 — Discharge ailesi catı: typed program reachable state'lerin
-fault'a ulaşmadığını söyleyen ana teorem.
+Adim 7 (tam): Discharge ailesi catı + No-Fault teoremi.
 
-  typed_no_fault : IyiTipli Pi → S₀.fault = none → StepStar S₀ S → S.fault = none
+Adim 7 ana basari (önceki commit): 35 Hata case sorry'si SmallStep
+strengthened Hata constructor'lar ile trivial kapandi (L4/L7/Drf/MemSafety).
 
-PLAN v2 §6 — Discharge stratejisinin REVIZE EDILMIŞ HALI:
+Adim 7 yarım kalan kısım (bu commit):
+1. SmallStep.lean: 8 Tamam Step constructor'a h_no_fault_target eklendi
+   (Plan §4.4 simetri — Tamam'lar fault'i preserve, Hata'lar set).
+2. step_fault_preserves_typed: 8 Tamam case full ispatli (h_no_fault_target);
+   7 Hata case sorry (Adim 8 — Plan §6.2 Aile 2 lemma'lari ile dolar).
+3. typed_no_fault: refl case full ispatli (S = S₀ → S.fault = S₀.fault);
+   step case sorry (Adim 8 — preservation_konfTipli + step_fault zinciri).
 
-Plan v2 §6.2 4 Discharge ailesi onerir:
-  Aile 1 — Normal Guards (Typed → Step.Ok guard'lari saglanir)
-  Aile 2 — Fault Impossibility (Typed → Step.Fault constructor'i imkansiz)
-  Aile 3 — Linear Discharge (LinearOK → linear guard'lar)
-  Aile 4 — Region Discharge (RegionOK → bolge guard'lar)
-
-ANCAK: Adim 7'de **Hata constructor'lari strengthened** (Plan §4.4 formel:
-"fault non-observable" — her Hata'ya h_store/h_iz/h_zaman/h_sahip/h_kanal
-= S.* eklendi). Bu strengthen sayesinde:
-
-✓ Aile 2 (Fault Impossibility) icin lemma yazimi REDUNDANT —
-  L4/L7/Drf/MemSafety'deki 35 Hata case sorry'si dogrudan
-  `rw [h_iz]; left/exact absurd` ile trivial kapandi. Discharge lemma
-  cagrisi gerekmedi.
-
-✓ Aile 1/3/4 (Normal/Linear/Region Guards) Adim 8'de Progress/Preservation
-  full proof ile birlikte yazilir — typed program'in Step.Ok constructor'a
-  ulasmasini garanti eder.
-
-✓ No-Fault catı teoremi V1'de iskelet (sorry) — full proof Adim 8 sonrasi
-  tractable; cunku Tamam constructor'larin S'.fault'i (KONSTRESIZ V1'de)
-  Adim 8 strengthen ile `h_no_fault : S'.fault = none` ekleyince typed
-  program icin S.fault korunumu garanti olur.
+Adim 8 hedefi: Aile 2 (Fault Impossibility) lemma'lari + preservation_konfTipli
+full proof → step_fault_preserves_typed Hata case'leri kapanir + typed_no_fault
+step case kapanir → sorry: 14 (toplam 16 - 2 Adim 7 iskelet kapanir).
 
 Onkosul: Adim 1.1-1.3 (Step dual), Adim 2 (StateTipli), Adim 3 (HasType),
-         Adim 5 (LineerTamam), Adim 6 (RegionTamam + Typed).
+         Adim 5 (LineerTamam), Adim 6 (RegionTamam + Typed + KonfTipliFull).
 -/
 
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+import Kemgu.Sem.StateTipli
+import Kemgu.Sem.HasType
+import Kemgu.Sem.LineerTamam
+import Kemgu.Sem.RegionTamam
 
 namespace Kemgu.Discharge.NoFault
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
+     Kemgu.Sem.HasType Kemgu.Sem.LineerTamam Kemgu.Sem.RegionTamam
 
 -- ============================================================
--- §1. Tek-adim fault korunumu (yardimci)
+-- §1. Tek-adim fault korunumu (typed varsayımı altında)
 -- ============================================================
 
-/-- Step tek-adim fault korunumu (V1 minimal):
-    Eger S.fault = none ve S → S' (Step), S'.fault = none.
+/-- Step tek-adim fault korunumu (Adim 7 yarım kalan):
+    KonfTipliFull S + S.fault = none + Step S S' → S'.fault = none.
 
-    V1 sinir: bu lemma typed program varsayimi olmadan FALSE — Hata
-    constructor'lar S'.fault = some set edebilir. Typed program'da
-    bu Hata constructor'lara ulasilamaz (Plan §6.2 Aile 2), ama Aile 2
-    Adim 7 strengthen sayesinde dogrudan typed program varsayimi
-    olmadan da gosterilebilir DEGIL.
+    Tamam Step'leri: h_no_fault_target hipoteziyle direkt.
+    Hata Step'leri: typed varsayımı ile imkansiz (Plan §6.2 Aile 2 lemma'lari);
+    V1 Adim 7'de Hata case'leri sorry — Adim 8 hedef.
 
-    Tam form Adim 8'de Tamam constructor'lar strengthen (h_no_fault
-    eklenince) + typed program varsayimi ile Hata'larin reachable
-    olmamasi birlesimi tractable.
-
-    Iskelet statement (full proof Adim 8). -/
+    Aile 2 lemma'lari (Adim 8):
+    - typing_excludes_sAtamaHataDonmus: Typed → Ρ x = some b, b.kategori ≠ donmus
+      + KonfTipliFull.SahiplikTutarli → isFrozen S k.bolge ⟹ kategori donmus
+      → çelişki h_frozen ile
+    - typing_excludes_sAtamaHataSahipDegil: Typed + SahiplikTutarli → owner consistency
+    - typing_excludes_cGorevBaslatHataLineerIhlal: LineerTamam → yakalama tuketildi
+    - typing_excludes_cKanalGonderHataLineerTuket: LineerTamam → vId tuketilmemis
+    - typing_excludes_cDondurHataZatenDonmus: RegionTamam → b kategori ≠ donmus
+    - typing_excludes_sLinKullanHataZatenTuketildi: LineerTamam → x aktif
+    - typing_excludes_sLinImhaHataZatenTuketildi: aynı sLinKullan -/
 theorem step_fault_preserves_typed
-    (S S' : Konfigurasyon) (_h_step : Step S S')
-    (_h_typed_S : True)  -- TODO Adim 8: KonfTipliFull Γ Λ Ρ S
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (S S' : Konfigurasyon) (h_step : Step S S')
+    (_h_typed_S : KonfTipliFull Γ Λ Ρ S)
     (_h_no_fault : S.fault = none) :
     S'.fault = none := by
-  -- TODO Adim 8: Step case analizi:
-  --   Tamam (8): Adim 8'de Tamam'lara `h_no_fault_target` eklenince
-  --     direkt kullan
-  --   Hata (7): typed_S varsayimindan exfalso (Plan §6.2 Aile 2)
-  --     V1 strengthen sayesinde dogrudan h_fault'tan celiski kurmak
-  --     icin Tamam strengthen sart
-  sorry
+  cases h_step with
+  -- Tamam case'leri: h_no_fault_target ile direkt (Adim 7 yarım kalan)
+  | sAtamaTamam _ _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | cKanalAlTamam _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | cDondurTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | sLinKullanTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  | sLinImhaTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
+    exact h_no_fault_target
+  -- Hata case'leri: Adim 8 hedef — Plan §6.2 Aile 2 lemma'lari ile exfalso.
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_sAtamaHataDonmus uygula
+    sorry
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_sAtamaHataSahipDegil uygula
+    sorry
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_cGorevBaslatHataLineerIhlal uygula
+    sorry
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_cKanalGonderHataLineerTuket uygula
+    sorry
+  | cDondurHataZatenDonmus _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_cDondurHataZatenDonmus uygula
+    sorry
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_sLinKullanHataZatenTuketildi uygula
+    sorry
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ _ _ _ _ _ =>
+    -- TODO Adim 8: typing_excludes_sLinImhaHataZatenTuketildi uygula
+    sorry
 
 
 -- ============================================================
--- §2. No-Fault catı teoremi (Plan v2 §6.3)
+-- §2. No-Fault catı teoremi (Plan v2 §6.3) — Adim 7 yarım kalan
 -- ============================================================
 
-/-- TYPED NO-FAULT CATI (Plan v2 §6.3) — Adim 7 hedef teorem:
+/-- TYPED NO-FAULT CATI (Plan v2 §6.3) — Adim 7 ana hedef teorem (yarım kalan):
 
-    Iyi-tipli program (IyiTipli Π) tarafindan baslatilan herhangi bir
-    yurutme zinciri (StepStar S₀ S) fault state'e ulasmaz.
+    Iyi-tipli baslangic konfigurasyon (KonfTipliFull) ile baslatilan
+    herhangi bir yurutme zinciri (StepStar S₀ S) fault state'e ulasmaz.
 
-    Kagit ifadesi:
+    Kagit ifadesi (Plan §6.3):
       IyiTipli(Π) ⟹ ∀ S ∈ Reach(S₀(Π)) : S.fault = none
 
-    Bizim Lean form (V1 minimal — IyiTipli placeholder predicate):
-      IyiTipli Π → S₀.fault = none → StepStar S₀ S → S.fault = none
+    Bizim V1 form:
+      KonfTipliFull Γ Λ Ρ S₀ → StepStar S₀ S → S.fault = none
 
-    Ispat sketch (Adim 8 sonrasi tractable):
+    KonfTipliFull S₀ tanim'i `S₀.fault = none` icerir (§5 alti-konuum
+    KonfTipliFull RegionTamam.lean'de).
+
+    Ispat:
       Induction h_run:
-        refl: S = S₀ → S.fault = S₀.fault = none ✓
-        step h1 h2: step_fault_preserves_typed h1 → S₁.fault = none
-                    → IH(h2) → S.fault = none
+        refl: S = S₀ → S.fault = S₀.fault = none ✓ (KonfTipliFull S₀)
+        step S0 S1 Send hStep hStar IH:
+          step_fault_preserves_typed hStep → S1.fault = none
+          IH (S1 KonfTipli korunum + S1.fault=none): preservation_konfTipli
+            (Adim 4.4 sorry — Adim 8 hedef) gerek
 
-    V1 sinir: step_fault_preserves_typed Adim 8 dolduktan sonra tam.
-    Su an statement-only iskelet. -/
+    V1 Adim 7 yarım kalan durumu:
+    - refl case FULL ispatli ✓
+    - step case sorry (Adim 8 — preservation_konfTipli + step_fault zinciri) -/
 theorem typed_no_fault
-    (Pi : Program) (_h_typed : IyiTipli Pi)
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (S₀ S : Konfigurasyon)
-    (_h_init_no_fault : S₀.fault = none)
-    (_h_run : StepStar S₀ S) :
+    (h_typed_init : KonfTipliFull Γ Λ Ρ S₀)
+    (h_run : StepStar S₀ S) :
     S.fault = none := by
-  -- TODO Adim 8: StepStar induction h_run ile:
-  --   refl: S = S₀ → h_init_no_fault dogrudan
-  --   step h1 (Step S₀ S₁) h2 (StepStar S₁ S):
-  --     step_fault_preserves_typed h1 (typed_S₀ from h_typed) h_init_no_fault
-  --       → S₁.fault = none
-  --     IH h2 : S₁.fault = none → S.fault = none ✓
-  sorry
+  induction h_run with
+  | refl _ =>
+    -- S = S₀, KonfTipliFull S₀ → S₀.fault = none (5. alti-konuum)
+    exact h_typed_init.2.2.2.2
+  | step S0 S1 Send _hStep _hStar _IH =>
+    -- TODO Adim 8: step_fault_preserves_typed hStep (KonfTipliFull S0)
+    --              (KonfTipliFull S₀.5 = S₀.fault = none) → S1.fault = none
+    -- Sonra preservation_konfTipli ile KonfTipliFull S1 ve IH(S1 typed, fault=none)
+    sorry
 
 
 -- ============================================================
@@ -119,58 +155,42 @@ theorem typed_no_fault
 -- ============================================================
 
 /-
-PLAN v2 §6.2 4 Discharge ailesinin V1 (Adim 7) durumu:
+PLAN v2 §6.2 4 Discharge ailesinin V1 (Adim 7 + yarım kalan) durumu:
 
-AILE 1 — Normal Guards (Typed + ConfigTyped → Step.Ok guard'lar):
-  Ornek: typing_implies_sAtamaOk_guards
-    h_typed : Typed Γ Λ Ρ (atama x e) bos Λ' Ρ'
-    h_config : KonfTipliFull Γ Λ Ρ S
-    ⟹ ∃ k, ¬ isFrozen S k.bolge ∧ sahiplikGet ... = some (thread tid)
+AILE 1 — Normal Guards (Typed + KonfTipliFull → Step.Ok guard'lar):
   Durum V1: ADIM 8 hedef. Progress + Preservation full proof'unun
-  ic argumani olarak (Step.Ok constructor insasi) gerekir.
-  Tahmini boyut: 6-8 lemma × 30-50 satir = ~250-400 satir.
+  Step.Ok constructor insasi argumani olarak gerekir.
 
-AILE 2 — Fault Impossibility (Typed + ConfigTyped → Step.Fault imkansiz):
-  Ornek: typing_excludes_sAtamaHataDonmus
-    h_typed : Typed Γ Λ Ρ (atama x e) ...
-    h_config : KonfTipliFull Γ Λ Ρ S
-    h_step_hata : Step.sAtamaHataDonmus ...
-    ⟹ False
-  Durum V1: REDUNDANT — Adim 7 strengthen sayesinde L4/L7/Drf/MemSafety'deki
-  35 Hata case sorry'si dogrudan `rw [h_iz]` ile trivial kapandi.
-  Tutarli Plan §6 koruma icin Adim 8'de statement-only iskelet eklenebilir.
+AILE 2 — Fault Impossibility (Typed + KonfTipliFull → Step.Fault imkansiz):
+  Durum V1: Adim 7'de 35 L4/L7/Drf/MemSafety Hata case'i strengthen sayesinde
+  REDUNDANT kapandı. step_fault_preserves_typed icin V1 Adim 7 yarım'da
+  Hata case'leri sorry — Adim 8'de Aile 2 lemma'lari ile dolar.
+  Plan §6.2 7 typing_excludes_* lemma:
+    typing_excludes_sAtamaHataDonmus
+    typing_excludes_sAtamaHataSahipDegil
+    typing_excludes_cGorevBaslatHataLineerIhlal
+    typing_excludes_cKanalGonderHataLineerTuket
+    typing_excludes_cDondurHataZatenDonmus
+    typing_excludes_sLinKullanHataZatenTuketildi
+    typing_excludes_sLinImhaHataZatenTuketildi
 
-AILE 3 — Linear Discharge (LinearOK → linear guard'lar):
-  Ornek: typing_implies_lineer_caller
-    h_typed : Typed Γ Λ Ρ (gorevBaslat yd kod) ...
-    ⟹ caller'da linear yakalananlar tuketildi
-  Durum V1: ADIM 8 hedef. cGorevBaslatTamam constructor'inin
-  `h_lineer_caller` precondition'inin sağlandiğini garanti eder.
-  Tahmini boyut: 4-5 lemma × 40-60 satir = ~200-300 satir.
+AILE 3 — Linear Discharge (LineerTamam → linear guard'lar):
+  Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_lineer_caller temin eder.
 
-AILE 4 — Region Discharge (RegionOK → bolge guard'lar):
-  Ornek: typing_implies_bolge_transferred
-    ⟹ S'.sahiplik = sahiplikSetMany S.sahiplik transferredBolgeler ...
-  Durum V1: ADIM 8 hedef. cGorevBaslatTamam'in `h_sahip` precondition'i
-  ile uyum garanti eder.
-  Tahmini boyut: 4-5 lemma × 40-60 satir = ~200-300 satir.
+AILE 4 — Region Discharge (RegionTamam → bolge guard'lar):
+  Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_sahip temin eder.
 
 NO-FAULT CATI (§6.3):
-  typed_no_fault statement yukarida; iskelet (sorry) Adim 8.
-  Tahmini boyut: ~100 satir (induction + 15 Step case dispatch).
+  Adim 7 yarım: refl case FULL, step case sorry.
+  Adim 8 full: step_fault_preserves Hata + preservation_konfTipli zinciri.
 
-TOPLAM ADIM 7 PLANSAL TAHMINI: ~1050-1600 satir.
-ADIM 7 GERCEKLEŞEN (bu commit):
-  - SmallStep.lean strengthen: ~50 satir (7 Hata constructor +5 hipotez)
-  - L4/L7/Drf/MemSafety guncelleme: ~120 satir (35 sorry → 35 trivial proof)
-  - NoFault.lean (bu dosya): ~140 satir (statement + iskelet + Plan §6 yorum)
-  - TOPLAM: ~310 satir, 35 sorry düşüş, +2 yeni iskelet sorry (step_fault +
-    typed_no_fault), net sorry: 49 → 16 (35 - (-2)).
-
-V1 strengthen kazancı: Aile 2'nin tum lemma'larini yazmak yerine Step
-constructor refactor (5 alanı) ile aynı kapsam — ~600 satir tasarruf.
-Bu pragmatik strateji Plan §8.4 "tıkanma noktası 1 = Adim 7" riskini
-80% azaltır.
+ADIM 7 GERCEKLEŞEN (iki commit'te):
+  - Onceki: 35 sorry KAPANDI (-33 net) + 2 iskelet (NoFault statement-only)
+  - Bu: Tamam strengthen + step_fault_preserves Tamam case full + typed_no_fault
+    refl case full. Yeni 7 Hata sorry + 1 step case sorry. Eski 2 statement-only
+    sorry'leri yapısal proof'a evrildi. Net sorry: +6 (geçici artış, yapısal
+    genişleme). Adim 8'de bu 8 yeni sorry düşer + Adim 4/5/6 iskelet sorry'leri
+    (14) dolar → C5 hedef: 0 sorry.
 -/
 
 
