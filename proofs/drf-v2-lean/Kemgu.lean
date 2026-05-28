@@ -11,6 +11,8 @@ import Kemgu.Sem.StateTipli
 import Kemgu.Sem.HasType
 -- Plan v2 Adim 4.1: Progress + Preservation iskelet (statement'lar sorry, Adim 4.2-4.4 doldurur)
 import Kemgu.Sem.ProgressKorunum
+-- Plan v2 Adim 5: LineerTamam katmani (Plan §3.3 LinearOK) + TypedAdim5 conjunction
+import Kemgu.Sem.LineerTamam
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
