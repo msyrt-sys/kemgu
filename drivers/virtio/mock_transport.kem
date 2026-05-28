@@ -1,0 +1,181 @@
+// VirtIO mock transport: saf init modeli, gercek MMIO register erisimi yok.
+
+yapı VirtioMockCihaz {
+    magic: tam32;
+    version: tam32;
+    device_id: tam32;
+    device_features: dtam64;
+    driver_supported: dtam64;
+    driver_required: dtam64;
+    queue_num_max: tam32;
+    queue_size: tam32;
+}
+
+yapı VirtioMockInitSonuc {
+    accepted_features: dtam64;
+    final_status: tam32;
+    queue_size: tam32;
+}
+
+işlev virtio_mock_magic_degeri() -> tam32 { ver 1953655158; }
+
+işlev virtio_mock_modern_version() -> tam32 { ver 2; }
+
+işlev virtio_mock_block_device_id() -> tam32 { ver 2; }
+
+işlev virtio_mock_status_reset() -> tam32 { ver 0; }
+
+işlev virtio_mock_status_acknowledge() -> tam32 { ver 1; }
+
+işlev virtio_mock_status_driver() -> tam32 { ver 2; }
+
+işlev virtio_mock_status_driver_ok() -> tam32 { ver 4; }
+
+işlev virtio_mock_status_features_ok() -> tam32 { ver 8; }
+
+işlev virtio_mock_desc_adres() -> tam32 { ver 4096; }
+
+işlev virtio_mock_avail_adres() -> tam32 { ver 8192; }
+
+işlev virtio_mock_used_adres() -> tam32 { ver 12288; }
+
+işlev virtio_mock_magic_gecerli_mi(magic: tam32) -> mantıksal {
+    ver magic == virtio_mock_magic_degeri();
+}
+
+işlev virtio_mock_version_modern_mi(version: tam32) -> mantıksal {
+    ver version == virtio_mock_modern_version();
+}
+
+işlev virtio_mock_block_device_mi(device_id: tam32) -> mantıksal {
+    ver device_id == virtio_mock_block_device_id();
+}
+
+işlev virtio_mock_feature_gecerli_mi(cihaz: VirtioMockCihaz) -> mantıksal {
+    ver virtio_feature_negotiation_gecerli_mi(
+        cihaz.device_features,
+        cihaz.driver_supported,
+        cihaz.driver_required
+    );
+}
+
+işlev virtio_mock_queue_gecerli_mi(cihaz: VirtioMockCihaz) -> mantıksal {
+    ver virtqueue_layout_gecerli_mi(
+        cihaz.queue_num_max,
+        cihaz.queue_size,
+        virtio_mock_desc_adres(),
+        virtio_mock_avail_adres(),
+        virtio_mock_used_adres()
+    );
+}
+
+işlev virtio_mock_status_sonraki(
+    status: tam32,
+    bit: tam32,
+    beklenen: tam32
+) -> sonuç<tam32, metin> {
+    eğer değil virtio_status_gecis_gecerli_mi(status, bit) {
+        ver hata("StatusGecisGecersiz");
+    }
+
+    değişken sonraki: tam32 = virtio_status_ekle(status, bit);
+    eğer sonraki != beklenen {
+        ver hata("StatusGecisGecersiz");
+    }
+
+    ver tamam(sonraki);
+}
+
+işlev virtio_mock_status_final_hesapla() -> sonuç<tam32, metin> {
+    değişken status: tam32 = virtio_mock_status_reset();
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_acknowledge()) {
+        ver hata("StatusGecisGecersiz");
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_acknowledge());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_driver()) {
+        ver hata("StatusGecisGecersiz");
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_driver());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_features_ok()) {
+        ver hata("StatusGecisGecersiz");
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_features_ok());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_driver_ok()) {
+        ver hata("StatusGecisGecersiz");
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_driver_ok());
+
+    eğer status != 15 { ver hata("StatusGecisGecersiz"); }
+    ver tamam(status);
+}
+
+işlev virtio_mock_status_akisi_gecerli_mi() -> mantıksal {
+    değişken status: tam32 = virtio_mock_status_reset();
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_acknowledge()) {
+        ver yanlış;
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_acknowledge());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_driver()) {
+        ver yanlış;
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_driver());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_features_ok()) {
+        ver yanlış;
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_features_ok());
+
+    eğer değil virtio_status_gecis_gecerli_mi(status, virtio_mock_status_driver_ok()) {
+        ver yanlış;
+    }
+    status = virtio_status_ekle(status, virtio_mock_status_driver_ok());
+
+    ver status == 15;
+}
+
+işlev virtio_mock_init_gecerli_mi(cihaz: VirtioMockCihaz) -> mantıksal {
+    eğer değil virtio_mock_magic_gecerli_mi(cihaz.magic) { ver yanlış; }
+    eğer değil virtio_mock_version_modern_mi(cihaz.version) { ver yanlış; }
+    eğer değil virtio_mock_block_device_mi(cihaz.device_id) { ver yanlış; }
+    eğer değil virtio_mock_feature_gecerli_mi(cihaz) { ver yanlış; }
+    eğer değil virtio_mock_queue_gecerli_mi(cihaz) { ver yanlış; }
+    ver virtio_mock_status_akisi_gecerli_mi();
+}
+
+işlev virtio_mock_init(cihaz: VirtioMockCihaz) -> sonuç<VirtioMockInitSonuc, metin> {
+    eğer değil virtio_mock_magic_gecerli_mi(cihaz.magic) {
+        ver hata("MagicGecersiz");
+    }
+    eğer değil virtio_mock_version_modern_mi(cihaz.version) {
+        ver hata("VersionModernDegil");
+    }
+    eğer değil virtio_mock_block_device_mi(cihaz.device_id) {
+        ver hata("DeviceBlokDegil");
+    }
+    eğer değil virtio_mock_feature_gecerli_mi(cihaz) {
+        ver hata("FeatureNegotiationBasarisiz");
+    }
+    eğer değil virtio_mock_queue_gecerli_mi(cihaz) {
+        ver hata("QueueGecersiz");
+    }
+    eğer değil virtio_mock_status_akisi_gecerli_mi() {
+        ver hata("StatusGecisGecersiz");
+    }
+
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(
+        cihaz.device_features,
+        cihaz.driver_supported
+    );
+
+    ver tamam(VirtioMockInitSonuc {
+        accepted_features: accepted,
+        final_status: 15,
+        queue_size: cihaz.queue_size
+    });
+}
