@@ -13,6 +13,8 @@ import Kemgu.Sem.HasType
 import Kemgu.Sem.ProgressKorunum
 -- Plan v2 Adim 5: LineerTamam katmani (Plan §3.3 LinearOK) + TypedAdim5 conjunction
 import Kemgu.Sem.LineerTamam
+-- Plan v2 Adim 6: RegionTamam katmani (Plan §3.4 RegionOK) + Typed full + ThreadTipliFull + KonfTipliFull
+import Kemgu.Sem.RegionTamam
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
