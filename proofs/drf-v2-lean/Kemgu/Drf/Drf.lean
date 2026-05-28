@@ -104,35 +104,42 @@ theorem kemgu_drf_v1_no_concurrent_writes
         rw [h_t1, h_t2]
       · exact absurd h2_in_S h_event2_new
     · exact absurd h1_in_S h_event1_new
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case
+  -- Plan v2 Adim 7: Hata strengthen sayesinde her Hata case trivial.
+  -- h_event1 (∈ S'.iz) + rw h_iz → h_event1 (∈ S.iz) → absurd h_event1_new.
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
-  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
-  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
     · nomatch h1_head
     · exact absurd h1_in_S h_event1_new
-  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
-  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cDondurHataZatenDonmus _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
     · nomatch h1_head
     · exact absurd h1_in_S h_event1_new
-  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event1
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
@@ -143,8 +150,9 @@ theorem kemgu_drf_v1_no_concurrent_writes
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
     · nomatch h1_head
     · exact absurd h1_in_S h_event1_new
-  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
-  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event1
+    exact absurd h_event1 h_event1_new
   | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event1
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S

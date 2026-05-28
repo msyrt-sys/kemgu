@@ -52,35 +52,42 @@ theorem drf_l7_a_step
       rw [h_k, h_v, h_store]
       apply List.mem_cons_self
     · exact absurd h_in_S h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case
+  -- Plan v2 Adim 7: Hata strengthen sayesinde her Hata case trivial.
+  -- h_event (S'.iz) + rw h_iz → h_event (S.iz) → absurd h_not_in_S.
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
-  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cDondurHataZatenDonmus _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S
@@ -91,8 +98,9 @@ theorem drf_l7_a_step
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
-  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_event
+    exact absurd h_event h_not_in_S
   | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_event
     rcases List.mem_cons.mp h_event with h_head | h_in_S

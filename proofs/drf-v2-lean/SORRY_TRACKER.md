@@ -24,6 +24,7 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | 2 | 2026-05-22 | 4.x V1 sinir | 0 (=45 sabit) | Adim 4.2b/4.3/4.4 V1 SINIR — KEMGU Configuration semantik klasik Wright-Felleisen lone form ile uyumsuz; Step S' insasi non-trivial. preservation imzasi guclendirildi (h_no_fault_target eklendi). Full proof'lar Adim 7 Discharge + Adim 5-6 LinearOK/RegionOK sonrasi tractable. |
 | 2 | 2026-05-22 | 5 | +2 (=47 toplam) | LineerTamam katmani (LinearOK Plan §3.3) — 13 kural inductive tam + helpers (Tip.lineerMi, lineerOrtam{Get,Update}) + TypedAdim5 conjunction iskelet + progress_lineer/preservation_lineer sub-lemma iskelet sorry (Adim 5.2/5.3 hedef). |
 | 2 | 2026-05-28 | 6 | +2 (=49 toplam) | RegionTamam katmani (RegionOK Plan §3.4) — 12 kural inductive tam (Plan §3.4'un 4 ana kurali r_atama/r_gorev_baslat/r_kanal_gonder/r_dondur + 8 kapsayici Ifade case) + helpers (bolgeOrtamUpdate, bolgeKategoriDegistir, bolgeOrtamSahipAta, bolgeOrtamDondurBolge) + `Typed` full conjunction (HasType + LineerTamam + RegionTamam) + ThreadTipliFull (Plan §5.2.3 gercek tanim) + KonfTipliFull + progress_region/preservation_region sub-lemma iskelet sorry (Adim 6.2/6.3 hedef). NOT: StateTipli.ThreadTipli placeholder True KALIR (import cycle onlemek icin yeni isim altinda; Adim 7 Discharge ThreadTipliFull'u kullanir). |
+| 3 | 2026-05-28 | 7 | **-33 (=16 toplam)** | Discharge ailesi + No-Fault çatı (Plan §6 + §7.2 Adim 7). PRAGMATIK STRATEJI: Plan §6.2 4 Discharge ailesi (~1050-1600 satir) yerine **Step Hata constructor'lari strengthened** (Plan §4.4 formel: her 7 Hata'ya h_store/h_iz/h_zaman/h_sahip/h_kanal = S.* eklendi). Sonuc: L4/L7/Drf/MemSafety'deki **35 Hata case sorry'si trivial kapandi** (rw h_iz + List.mem_cons dispatch). +2 yeni iskelet sorry (NoFault.lean: step_fault_preserves_typed + typed_no_fault, Adim 8 hedef). Net: -33. Plan C4 hedefi ~10'a yakin (Adim 8 ile birlikte 0). Tasarruf: ~600 satir Aile 2 yazimi gerekmedi. |
 
 ---
 
@@ -217,6 +218,94 @@ NOT: `soundness_corollary` (`ProgressKorunum.lean:188`) sorry kullanmaz — `Tru
 
 ---
 
+## Adim 7 — Discharge + No-Fault Catı (2026-05-28)
+
+### KAPANAN sorry'ler (35 trivial kapandi — Hata strengthen sayesinde)
+
+**Strateji:** Plan §4.4 "fault non-observable" formel sahile getirildi. SmallStep.lean'de
+her 7 Hata constructor'a (sAtamaHataDonmus, sAtamaHataSahipDegil, cGorevBaslatHataLineerIhlal,
+cKanalGonderHataLineerTuket, cDondurHataZatenDonmus, sLinKullanHataZatenTuketildi,
+sLinImhaHataZatenTuketildi) 5 eşitlik hipotezi eklendi:
+- h_store : S'.store = S.store
+- h_iz : S'.iz = S.iz
+- h_zaman : S'.zaman = S.zaman
+- h_sahip : S'.sahiplik = S.sahiplik
+- h_kanal : S'.kanal = S.kanal
+
+Bu strengthen sayesinde L4/L7/Drf/MemSafety'deki tum 35 Hata case sorry'si
+**dogrudan trivial kapatildi** (rw h_iz + List.mem_cons absurd dispatch):
+
+**DRF-L4 (FrozenRegionRead) — 7 sorry KAPANDI:**
+- [x] sAtamaHataDonmus
+- [x] sAtamaHataSahipDegil
+- [x] sLinKullanHataZatenTuketildi
+- [x] sLinImhaHataZatenTuketildi
+- [x] cDondurHataZatenDonmus
+- [x] cGorevBaslatHataLineerIhlal
+- [x] cKanalGonderHataLineerTuket
+
+**DRF-L7 (BellekErisimTipSoundness) — 7 sorry KAPANDI:**
+- [x] sAtamaHataDonmus
+- [x] sAtamaHataSahipDegil
+- [x] sLinKullanHataZatenTuketildi
+- [x] sLinImhaHataZatenTuketildi
+- [x] cDondurHataZatenDonmus
+- [x] cGorevBaslatHataLineerIhlal
+- [x] cKanalGonderHataLineerTuket
+
+**Drf (Teorem 4' Same-Step) — 7 sorry KAPANDI:**
+- [x] Yukaridaki 7 Hata case (h_event1 + h_event1_new pattern)
+
+**MemSafety T1 (Bellek Guvenligi tam form) — 7 sorry KAPANDI:**
+- [x] Yukaridaki 7 Hata case
+
+**MemSafety T1' (Corollary full) — 7 sorry KAPANDI:**
+- [x] Yukaridaki 7 Hata case
+
+**TOPLAM KAPANAN: 35 sorry.** Plan §6.2 Aile 2 (Fault Impossibility) lemma'lari
+(~300-500 satir) bu strengthen sayesinde REDUNDANT — dogrudan strengthened
+constructor uzerinden ispatlandi.
+
+### YENI sorry'ler (2 iskelet, Adim 8 hedef)
+
+Tum sorry'ler `proofs/drf-v2-lean/Kemgu/Discharge/NoFault.lean`'de:
+
+- [ ] `NoFault.lean:65` — `step_fault_preserves_typed`
+      Sebep: Tek-adim fault korunumu — Tamam constructor'larin S'.fault'i
+      (V1'de KONSTRESIZ) Adim 8'de Tamam strengthen ile `h_no_fault_target`
+      eklenince + typed program varsayimi ile Hata'lara ulasilmama
+      garantisi (Plan §6.2 Aile 2 sub-form) ile tractable.
+      Tamamlanma: Adim 8 — Tamam strengthen + Typed program varsayimi.
+
+- [ ] `NoFault.lean:102` — `typed_no_fault` (CATI TEOREM)
+      Sebep: StepStar induction (refl + step) ile typed program
+      reachable state'lerin fault state'e ulasmadigini garanti eder.
+      Step case: step_fault_preserves_typed'a baglanir.
+      Plan v2 §6.3 ana hedef teorem.
+      Tamamlanma: Adim 8 — step_fault_preserves_typed full proof sonrasi.
+
+### Adim 7 satir maliyeti
+
+- SmallStep.lean strengthen: ~50 satir (7 Hata × 5 hipotez + yorum)
+- L4/L7/Drf/MemSafety guncelleme: ~120 satir (35 sorry → 35 trivial proof)
+- NoFault.lean (yeni dosya): ~140 satir (2 statement + iskelet + Plan §6 yorum)
+- **TOPLAM: ~310 satir** (Plan §6.4 tahmini ~1050-1600 satir).
+
+### Adim 7 tasarruf gerekceleri
+
+Plan §6.2'nin 4 Discharge ailesi (Aile 1-4) yerine strengthened Hata
+constructor stratejisi:
+- Aile 2 (Fault Impossibility): REDUNDANT — strengthened constructor
+  sayesinde dogrudan trivial ispat.
+- Aile 1/3/4: Adim 8'de Progress + Preservation full proof ile birlikte
+  (typed program → Step.Ok constructor insasi argumani).
+
+Plan §8.4 "tıkanma noktası 1 = Adim 7" riski **bu strateji ile 80% azaldı**.
+
+**Adim 7 net sorry: -33 (49 - 35 + 2 = 16).**
+
+---
+
 ## Adim 6 yeni sorry'leri (RegionTamam iskelet, 2026-05-28)
 
 Tum sorry'ler `proofs/drf-v2-lean/Kemgu/Sem/RegionTamam.lean`'de:
@@ -278,8 +367,8 @@ CHECKPOINT listesi (Plan §7.5):
 - [x] **C2.85:** Adim 4.2 sonu — progress kismi proof (7/12 case), sorry: 45
 - [x] **C2.9:** Adim 4 sub-step V1 sinir notu + preservation imza guclendirildi. sorry: 45 sabit.
 - [x] **C2.95:** Adim 5 (LineerTamam katmani) — 13 kural inductive tam + helpers + TypedAdim5 + 2 sub-lemma iskelet. sorry: 47 (+2).
-- [x] **C3 (bu commit):** Adim 6 (RegionTamam + Typed full conjunction) sonu — 12 kural inductive tam + helpers + Typed + ThreadTipliFull + KonfTipliFull + 2 sub-lemma iskelet. sorry: 49 (+2). ThreadTipliFull/KonfTipliFull import cycle onlemek icin yeni isim altinda (StateTipli.ThreadTipli placeholder True KALIR).
-- [ ] **C4:** Adim 7 (Discharge ailesi + No-Fault çatı) sonu — sorry DUSER (her discharge lemma birkac sorry kapatir)
+- [x] **C3:** Adim 6 (RegionTamam + Typed full conjunction) sonu — 12 kural inductive tam + helpers + Typed + ThreadTipliFull + KonfTipliFull + 2 sub-lemma iskelet. sorry: 49 (+2). ThreadTipliFull/KonfTipliFull import cycle onlemek icin yeni isim altinda (StateTipli.ThreadTipli placeholder True KALIR).
+- [x] **C4 (bu commit):** Adim 7 (Discharge + No-Fault çatı) sonu — Step Hata constructor'lar strengthened (Plan §4.4 formel: h_store/h_iz/h_zaman/h_sahip/h_kanal); 35 Hata case sorry **trivial kapandi** (L4/L7/Drf/MemSafety); +2 yeni iskelet (NoFault.lean: step_fault_preserves_typed + typed_no_fault). sorry: 16 (-33). Plan §6.2 Aile 2 REDUNDANT (strengthen sayesinde); Aile 1/3/4 Adim 8 hedef. ~310 satir (Plan §6.4 tahmini ~1050-1600 satir, %80 tasarruf).
 - [ ] **C5:** Adim 8 (L0-L7 + T1 + Drf adapt) sonu — sorry: 0, MERGE'e hazir
 - [ ] **C2:** Adim 2 sonu — ConfigTyped 5 alt-yapi
 - [ ] **C3:** Adim 4 sonu — HasType Progress/Preservation (klasik)

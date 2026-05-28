@@ -54,35 +54,43 @@ theorem drf_l4_a_step
       rw [h_eq] at h_not_frozen
       exact h_not_frozen h_frozen
     · left; exact h_tail
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataDonmus ile dolacak (Discharge Aile 2)
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ => sorry
-  -- TODO: Adim 7'de typing_excludes_sAtamaHataSahipDegil ile dolacak (Discharge Aile 2)
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ => sorry
-  -- Plan v2 Adim 1.3: 7 rename + 5 yeni Hata case (sorry, Adim 7 discharge)
+  -- Plan v2 Adim 7: Hata constructor'lar strengthen edildi (h_iz : S'.iz = S.iz)
+  -- Fault non-observable (Plan §4.4) sayesinde her Hata case trivial:
+  -- h_in (memYaz ∈ S'.iz) + rw h_iz → h_in (memYaz ∈ S.iz) → left.
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  -- TODO: Adim 7'de typing_excludes_sLinKullanHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinKullanHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | sLinImhaTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  -- TODO: Adim 7'de typing_excludes_sLinImhaHataZatenTuketildi ile dolacak (Discharge Aile 2)
-  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ => sorry
+  | sLinImhaHataZatenTuketildi _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | cDondurTamam _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- TODO: Adim 7'de typing_excludes_cDondurHataZatenDonmus ile dolacak (Discharge Aile 2)
-  | cDondurHataZatenDonmus _ _ _ _ _ _ => sorry
+  | cDondurHataZatenDonmus _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- TODO: Adim 7'de typing_excludes_cGorevBaslatHataLineerIhlal ile dolacak (Discharge Aile 2)
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ => sorry
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
@@ -93,8 +101,9 @@ theorem drf_l4_a_step
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  -- TODO: Adim 7'de typing_excludes_cKanalGonderHataLineerTuket ile dolacak (Discharge Aile 2)
-  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ => sorry
+  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+    rw [h_iz] at h_in
+    left; exact h_in
   | cKanalAlTamam _ _ _ _ _ _ _ _ h_iz _ _ =>
     rw [h_iz] at h_in
     rcases List.mem_cons.mp h_in with h_head | h_tail
