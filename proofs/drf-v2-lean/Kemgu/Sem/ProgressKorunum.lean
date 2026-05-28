@@ -145,11 +145,21 @@ theorem preservation
     (S S' : Konfigurasyon) (_h_step : Step S S')
     (ctx : ThreadCtx) (τ : Tip)
     (_h_in : ctx ∈ S.thread)
-    (_h_typed : HasType tipOrtamBos ctx.ifade τ) :
+    (_h_typed : HasType tipOrtamBos ctx.ifade τ)
+    (_h_no_fault_target : S'.fault = none) :  -- Adim 4.3 imza guclendirmesi
     ∃ ctx' ∈ S'.thread,
       ctx'.tid = ctx.tid ∧
       HasType tipOrtamBos ctx'.ifade τ := by
   -- TODO: Adim 4.3'te tam ispat — 15 Step constructor case analizi
+  -- Strateji (V2 hedef):
+  --   1. Hata constructors (7): exfalso + h_no_fault_target vs h_fault celiski
+  --   2. Tamam constructors (8): thread tracking — Step ctx_step.tid == ctx.tid
+  --      ise yeni ifade tipi korundu (small-step preservation lemma'sı per
+  --      constructor); ctx_step.tid != ctx.tid ise ctx korunur (başka thread).
+  --   3. sAtamaTamam: yeni ctx'.ifade Configuration'da ilerletilmis kismi
+  --      (örn. atama sonrasi bos ifade). HasType bos -> Tip.bos için tutar.
+  -- V1 sinir: tam proof Plan §7.2 Adim 4.3 (2 hafta) + KEMGU thread tracking
+  -- detayları açıklığa kavuşunca.
   sorry
 
 
@@ -249,5 +259,57 @@ theorem soundness_corollary
   -- TODO: Adim 4 sonu — Progress + Preservation StepStar induksiyon
   trivial
 
+
+-- ============================================================
+-- §7. Adim 4 sub-step durumu — V1 sinir notu
+-- ============================================================
+
+/-
+Adim 4 sub-step durumu (2026-05-22, Adim 4.2 sonrasi):
+
+✅ Adim 4.1 (iskelet): 6 statement placeholder — TAMAM
+✅ Adim 4.2 (partial progress): 7/12 case kanitli — TAMAM
+   - Vacuous Γ = [] (6): t_tanim, t_atama, t_gorev_birlestir, t_kanal_gonder, t_kullan, t_imha
+   - Value (1): t_sabit (IsValue.iv_sabit)
+
+⏳ Adim 4.2b (kalan 5 case): V1 SINIR
+   - t_seq, t_guvensiz: induktif Progress alt-ifadelere — induction tactic + IH gerek
+   - t_gorev_baslat: Step.cGorevBaslatTamam insasi — threadFresh witness + S' yenContext
+   - t_kanal_al: Step.cKanalAlTamam insa — kanal h_kanal_var: ∃ kd ∈ S.kanal kanal bos
+     ise Step alinamaz (Progress tam form'u BOZULUR — V1 sinir)
+   - t_dondur: Step.cDondurTamam insa — h_sahip update
+   Plan §7.2 ~1 hafta ek calisma.
+
+⏳ Adim 4.3 (preservation full): V1 SINIR
+   Signature guclendirildi (_h_no_fault_target eklendi, Adim 4.3 zemin).
+   - 15 Step constructor case (8 Tamam + 7 Hata)
+   - Hata (7): exfalso + h_no_fault_target vs h_fault celiski
+   - Tamam (8): thread tracking + per-constructor preservation lemma
+   - sAtamaTamam icin: atama sonrasi ifade (ctx.ifade' = ??) — KEMGU
+     Configuration semantik detayi gerek (Step ifadeleri DEGISTIRMIYOR mu,
+     yoksa ifadeyi ilerletiyormu? V1 model belirtilmemis)
+   Plan §7.2 ~1.5 hafta.
+
+⏳ Adim 4.4 (ConfigTyped korunum lemmalari): V1 SINIR
+   - preservation_sigmaTipli: sAtamaTamam (k,v) push icin DegerTipli garantisi gerek
+   - preservation_sahiplikTutarli: frozen persistence + sahiplik update case'leri
+   - preservation_kanalTutarli: cKanalGonder/cKanalAl kanal degisim case'leri
+   - preservation_konfTipli: 4 sub-lemma conjunction
+   Tum lemmalarda Hata (7) exfalso (h_no_fault_target var), Tamam (8) per-konunum
+   case detayı. Plan §7.2 ~1.5 hafta.
+
+KAPSAM NOTU (Plan §7.2 + KEMGU V1 spesifik):
+
+KEMGU semantik karmaşıklıgi V1'de (Configuration-level Step, multi-thread,
+sahiplik haritasi vs.) klasik Wright-Felleisen Soundness'i adapte etmeyi
+guc kilar. Plan §3 felsefesi "asamali insa" — bu sub-step'ler Adim 5-6
+sonrasi (LinearOK + RegionOK + Typed conjunction) ek bilgi ile daha
+tractable olur. Adim 7 Discharge lemmalari + No-Fault çatı bu lemmaları
+gercek-anlam'da doldurma sirasi.
+
+Tikanma politikasi (CLAUDE.md): Bu noktada DURMA emri kullanici tarafindan
+"Adim 5'e kadar otomatik devam et" olarak verildi — yani Adim 4 sub-step'ler
+mevcut iskelet durumunda korunur, Adim 5 baslamadan oturum bitirilir.
+-/
 
 end Kemgu.Sem.ProgressKorunum

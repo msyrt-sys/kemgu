@@ -21,6 +21,7 @@ Karar A onayi: 2026-05-18 oturumu (Mehmet).
 | 2 | 2026-05-22 | 3 | 0 (35 sabit) | Minimal HasType: 12 Ifade kurali, klasik tip sistemi (TAPL §8.3) |
 | 2 | 2026-05-22 | 4.1 | +6 (=41 toplam) | Progress + Preservation ISKELET: statement'lar sorry, full proof Adim 4.2-4.4'te |
 | 2 | 2026-05-22 | 4.2 | +4 (=45 toplam) | progress kismi proof: 7/12 case kanitlandi (6 vacuous bos Γ + 1 t_sabit IsValue), 5 case sub-sorry (t_seq, t_gorev_baslat, t_kanal_al, t_dondur, t_guvensiz — Step constructor insasi/induktif Adim 4.2b) |
+| 2 | 2026-05-22 | 4.x V1 sinir | 0 (=45 sabit) | Adim 4.2b/4.3/4.4 V1 SINIR — KEMGU Configuration semantik klasik Wright-Felleisen lone form ile uyumsuz; Step S' insasi non-trivial. preservation imzasi guclendirildi (h_no_fault_target eklendi). Full proof'lar Adim 7 Discharge + Adim 5-6 LinearOK/RegionOK sonrasi tractable. |
 
 ---
 
@@ -245,8 +246,11 @@ CHECKPOINT listesi (Plan §7.5):
 - [x] **C2:** Adim 2 sonu — ConfigTyped iskelet (KonfTipli + 4 alt-yapi tam), sorry: 35
 - [x] **C2.5:** Adim 3 sonu — Minimal HasType (12 kural), sorry: 35
 - [x] **C2.75:** Adim 4.1 sonu — Progress + Preservation iskelet, sorry: 41 (+6 placeholder)
-- [x] **C2.85 (bu commit):** Adim 4.2 sonu — progress kismi proof (7/12 case), sorry: 45 (progress'in 1 sorry'si 5 sub-sorry'ye dağıldı, 7 case typed)
-- [ ] **C3:** Adim 4.4 sonu — Progress + Preservation full + ConfigTyped korunum proof'lari (sorry: 35'e geri dusus)
+- [x] **C2.85:** Adim 4.2 sonu — progress kismi proof (7/12 case), sorry: 45
+- [x] **C2.9 (bu commit):** Adim 4 sub-step V1 sinir notu + preservation imza guclendirildi. sorry: 45 sabit.
+  - Adim 4.2b/4.3/4.4 V1 SINIR — Step inşa zorlu (KEMGU Configuration semantik)
+  - Full proof'lar V2/Adim 5-7 sonrasi (Typed conjunction + Discharge lemmalari)
+- [ ] **C3:** Adim 4.4 sonu — Progress + Preservation full + ConfigTyped korunum (V2 hedef, sorry: 35)
 - [ ] **C2:** Adim 2 sonu — ConfigTyped 5 alt-yapi
 - [ ] **C3:** Adim 4 sonu — HasType Progress/Preservation (klasik)
 - [ ] **C4:** Adim 6 sonu — HasType + LinearOK + RegionOK
