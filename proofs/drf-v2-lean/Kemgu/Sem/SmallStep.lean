@@ -83,7 +83,15 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_in     : ctx ∈ S.thread)
       (h_ifade  : ctx.ifade = .atama x (.sabit v))
       (h_frozen : isFrozen S k.bolge)
-      (h_fault  : S'.fault = some (FaultSebep.donmusYazma k.bolge)) :
+      (h_fault  : S'.fault = some (FaultSebep.donmusYazma k.bolge))
+      -- Plan v2 Adim 7 strengthen: "fault non-observable" (Plan §4.4) formel:
+      -- store/iz/zaman/sahiplik/kanal DEGISMEZ. Bu Hata case'lerinin
+      -- DRF lemma'larinda trivial kapanmasini saglar (Discharge gerekmez).
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
   /-- S-ATAMA Hata Sahip Degil (Plan v2 Adim 1.2): ctx hedef bolgenin
@@ -100,7 +108,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_ifade     : ctx.ifade = .atama x (.sabit v))
       (h_not_owner : sahiplikGet S.sahiplik (k.bolge, S.zaman)
                        ≠ some (Sahip.thread ctx.tid))
-      (h_fault     : S'.fault = some (FaultSebep.sahipDegil k.bolge ctx.tid)) :
+      (h_fault     : S'.fault = some (FaultSebep.sahipDegil k.bolge ctx.tid))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store     : S'.store = S.store)
+      (h_iz        : S'.iz = S.iz)
+      (h_zaman     : S'.zaman = S.zaman)
+      (h_sahip     : S'.sahiplik = S.sahiplik)
+      (h_kanal     : S'.kanal = S.kanal) :
       Step S S'
 
   /-- C-GOREV-BASLAT Tamam (Plan v2 Adim 1.3): cGorevBaslat Ok varyanti.
@@ -153,7 +167,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_ifade  : ctx.ifade = .gorevBaslat yd kod)
       (h_vAktif : ∃ ctx' ∈ S.thread, ctx'.tid = ctx.tid ∧
                     (vIhlal, Lineerlik.aktif) ∈ ctx'.lineer)
-      (h_fault  : S'.fault = some (FaultSebep.lineerCagiranTukenmedi vIhlal)) :
+      (h_fault  : S'.fault = some (FaultSebep.lineerCagiranTukenmedi vIhlal))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
   /-- C-GOREV-BIRLESTIR Tamam (Plan v2 Adim 1.3): cGorevBirlestir Ok varyanti.
@@ -208,7 +228,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_in     : ctx ∈ S.thread)
       (h_ifade  : ctx.ifade = .kanalGonderIf k vId)
       (h_tuket  : (vId, Lineerlik.tuketildi) ∈ ctx.lineer)
-      (h_fault  : S'.fault = some (FaultSebep.lineerKanalTuket vId)) :
+      (h_fault  : S'.fault = some (FaultSebep.lineerKanalTuket vId))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
   /-- C-KANAL-AL Tamam (Plan v2 Adim 1.3): cKanalAl Ok varyanti.
@@ -262,7 +288,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_in     : ctx ∈ S.thread)
       (h_ifade  : ctx.ifade = .dondurIf b)
       (h_zaten  : isFrozen S b)
-      (h_fault  : S'.fault = some (FaultSebep.zatenDonmus b)) :
+      (h_fault  : S'.fault = some (FaultSebep.zatenDonmus b))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
   /-- S-LIN-KULLAN Tamam (Plan v2 Adim 1.3): Linear consume Ok varyanti.
@@ -291,7 +323,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_in     : ctx ∈ S.thread)
       (h_ifade  : ctx.ifade = .kullanIf x)
       (h_tuket  : (x, Lineerlik.tuketildi) ∈ ctx.lineer)
-      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x)) :
+      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
   /-- S-LIN-IMHA Tamam (Plan v2 Adim 1.3): Linear imha (silinme) Ok varyanti.
@@ -321,7 +359,13 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_in     : ctx ∈ S.thread)
       (h_ifade  : ctx.ifade = .imhaIf x)
       (h_tuket  : (x, Lineerlik.tuketildi) ∈ ctx.lineer)
-      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x)) :
+      (h_fault  : S'.fault = some (FaultSebep.lineerZatenTuketildi x))
+      -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
+      (h_store  : S'.store = S.store)
+      (h_iz     : S'.iz = S.iz)
+      (h_zaman  : S'.zaman = S.zaman)
+      (h_sahip  : S'.sahiplik = S.sahiplik)
+      (h_kanal  : S'.kanal = S.kanal) :
       Step S S'
 
 

@@ -15,6 +15,8 @@ import Kemgu.Sem.ProgressKorunum
 import Kemgu.Sem.LineerTamam
 -- Plan v2 Adim 6: RegionTamam katmani (Plan §3.4 RegionOK) + Typed full + ThreadTipliFull + KonfTipliFull
 import Kemgu.Sem.RegionTamam
+-- Plan v2 Adim 7: No-Fault catı teoremi (Plan §6.3) + Discharge ailesi V1 durum yorumu
+import Kemgu.Discharge.NoFault
 
 -- Faz A3: DRF lemmalar
 import Kemgu.Drf.L0BolgeKorunumu
