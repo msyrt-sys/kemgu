@@ -291,6 +291,14 @@ def KonfTipliFull (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
   ∧ (∀ (x : VarId) (b : Bolge),
        bolgeOrtamGet S.bolge x = some b →
        (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus))
+  -- Adim 8 V2 P5 (AtamaSahipligi): aktif thread, atadigi bolgenin sahibidir.
+  -- typing_excludes_sAtamaHataSahipDegil bunu kullanir (sahip-olmadan-yazma yasagi).
+  -- Satisfiable: atama yapmayan thread'ler vacuous; yapanlar hedefi sahiplenir.
+  -- KORUNUM (sAtamaTamam h_owner = bu invariant): preservation_konfTipli (ayri).
+  ∧ (∀ ctx ∈ S.thread, ∀ (y : VarId) (e : Ifade),
+       ctx.ifade = Ifade.atama y e →
+       ∀ (b : Bolge), bolgeOrtamGet S.bolge y = some b →
+         sahiplikGet S.sahiplik (b, S.zaman) = some (Sahip.thread ctx.tid))
 
 
 -- ============================================================
@@ -308,9 +316,15 @@ theorem konfTipliFull_intro
     (h_bolge_eq : S.bolge = Ρ)
     (h_frozen_kat : ∀ (x : VarId) (b : Bolge),
                       bolgeOrtamGet S.bolge x = some b →
-                      (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus)) :
+                      (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus))
+    (h_atama_sahip : ∀ ctx ∈ S.thread, ∀ (y : VarId) (e : Ifade),
+                       ctx.ifade = Ifade.atama y e →
+                       ∀ (b : Bolge), bolgeOrtamGet S.bolge y = some b →
+                         sahiplikGet S.sahiplik (b, S.zaman)
+                           = some (Sahip.thread ctx.tid)) :
     KonfTipliFull Γ Λ Ρ S :=
-  ⟨h_store, h_thread, h_sahip, h_kanal, h_fault, h_bolge_eq, h_frozen_kat⟩
+  ⟨h_store, h_thread, h_sahip, h_kanal, h_fault, h_bolge_eq, h_frozen_kat,
+   h_atama_sahip⟩
 
 /-- KonfTipliFull'den bilesenleri cikarma (5-tuple projection). -/
 theorem konfTipliFull_elim
@@ -324,7 +338,11 @@ theorem konfTipliFull_elim
     ∧ S.bolge = Ρ
     ∧ (∀ (x : VarId) (b : Bolge),
          bolgeOrtamGet S.bolge x = some b →
-         (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus)) :=
+         (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus))
+    ∧ (∀ ctx ∈ S.thread, ∀ (y : VarId) (e : Ifade),
+         ctx.ifade = Ifade.atama y e →
+         ∀ (b : Bolge), bolgeOrtamGet S.bolge y = some b →
+           sahiplikGet S.sahiplik (b, S.zaman) = some (Sahip.thread ctx.tid)) :=
   h
 
 

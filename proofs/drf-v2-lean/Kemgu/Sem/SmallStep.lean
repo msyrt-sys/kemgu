@@ -124,7 +124,11 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz        : S'.iz = S.iz)
       (h_zaman     : S'.zaman = S.zaman)
       (h_sahip     : S'.sahiplik = S.sahiplik)
-      (h_kanal     : S'.kanal = S.kanal) :
+      (h_kanal     : S'.kanal = S.kanal)
+      -- Adim 8 V2: atanan x'in bolgesi, yazilan konum k'nin bolgesidir →
+      -- KonfTipliFull AtamaSahipligi invariant'i ile sahiplik celiskisi uretir
+      -- (typing_excludes_sAtamaHataSahipDegil).
+      (h_x_bolge   : StateTipli.bolgeOrtamGet S.bolge x = some k.bolge) :
       Step S S'
 
   /-- C-GOREV-BASLAT Tamam (Plan v2 Adim 1.3): cGorevBaslat Ok varyanti.

@@ -60,7 +60,7 @@ theorem drf_l4_a_step
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>

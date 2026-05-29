@@ -109,7 +109,7 @@ theorem kemgu_drf_v1_no_concurrent_writes
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>

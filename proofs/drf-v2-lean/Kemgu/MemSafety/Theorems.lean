@@ -55,7 +55,7 @@ theorem t1_bellek_guvenligi_tam
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
@@ -130,7 +130,7 @@ theorem t1_bellek_guvenligi_corollary_full
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>
