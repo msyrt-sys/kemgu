@@ -170,8 +170,14 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
 
   /-- R-DONDUR (Plan §3.4): hedef bolge b'yi iceren tum entry'ler
       kategori = donmus olur — frozen marker.
-          Ρ' = Ρ.update b ρ_donmus -/
-  | r_dondur (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (b : Bolge) :
+          Ρ' = Ρ.update b ρ_donmus
+      Adim 8 V2 strengthen: b kayitli (bolgeOrtamGet Ρ x = some b) ve ZATEN
+      donmus DEGIL (b.kategori ≠ donmus). r_atama frozen-yazma yasagi ile
+      simetrik (cifte-dondur yasagi). typing_excludes_cDondurHataZatenDonmus
+      bu sartlari + KonfTipliFull kopru ile kullanir. -/
+  | r_dondur (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (b : Bolge) (x : VarId) :
+               bolgeOrtamGet Ρ x = some b →
+               b.kategori ≠ BolgeKategorisi.donmus →
                Ρ' = bolgeOrtamDondurBolge Ρ b →
                RegionTamam Γ Ρ (Ifade.dondurIf b) Ρ'
 
