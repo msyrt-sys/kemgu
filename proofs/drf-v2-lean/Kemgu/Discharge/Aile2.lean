@@ -163,9 +163,42 @@ theorem typing_excludes_sAtamaHataDonmus
     rw [h_kb] at h_frozen
     exact h_notdonmus (h_iff.mp h_frozen)
 
+/-- AILE 2 Region — typing_excludes_cDondurHataZatenDonmus (Adim 8 V2).
+
+    Plan §6.2: typed program zaten donmus bolgeyi tekrar donduramaz (cifte freeze).
+
+    Adim 8 V2: r_dondur strengthen (b kayitli + b.kategori ≠ donmus) +
+    KonfTipliFull kopru ile:
+    - r_dondur (Typed.regionOK): bolgeOrtamGet Ρ x = some b ∧ b.kategori ≠ donmus.
+    - S.bolge = Ρ → bolgeOrtamGet S.bolge x = some b.
+    - kopru (h_frozen_kat): isFrozen S b ↔ b.kategori = donmus.
+    - h_zaten: isFrozen S b → b.kategori = donmus → celiski (h_notdonmus).
+
+    NOT: b SERBEST degil — dondurIf b ifadesinde acik; sAtamaHataDonmus
+    (frozen-yazma) ile simetrik temiz pattern, Step degisikligi GEREKMEDI. -/
+theorem typing_excludes_cDondurHataZatenDonmus
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (b : Bolge) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Λ Ρ (Ifade.dondurIf b) τ Λ' Ρ')
+    (S : Konfigurasyon)
+    (h_bolge_eq : S.bolge = Ρ)
+    (h_frozen_kat : ∀ (y : VarId) (b' : Bolge),
+                      bolgeOrtamGet S.bolge y = some b' →
+                      (isFrozen S b' ↔ b'.kategori = BolgeKategorisi.donmus))
+    (h_zaten : isFrozen S b) :
+    False := by
+  have h_regionOK := h_typed.regionOK
+  cases h_regionOK with
+  | r_dondur _ _ _ x h_get h_notdonmus _ =>
+    -- h_get : bolgeOrtamGet Ρ x = some b ; h_notdonmus : b.kategori ≠ donmus
+    have h_get_S : bolgeOrtamGet S.bolge x = some b := by
+      rw [h_bolge_eq]; exact h_get
+    have h_iff := h_frozen_kat x b h_get_S
+    exact h_notdonmus (h_iff.mp h_zaten)
+
 
 -- ============================================================
--- §2. Adim 8 V2 hedef — kalan 3 Aile 2 lemma'si (V1 sinirlar)
+-- §2. Adim 8 V2 hedef — kalan 2 Aile 2 lemma'si (V1 sinirlar)
 -- ============================================================
 
 /-
@@ -181,9 +214,9 @@ theorem typing_excludes_sAtamaHataSahipDegil
     Benzer pattern: Typed + KonfTipliFull → ctx.tid sahip kanit.
   V1 sinir: Typed'a "ctx sahip bolge atamasi" sarti eklenmeli.
 
-theorem typing_excludes_cDondurHataZatenDonmus
-    Typed.regionOK r_dondur → b kategori ≠ donmus (yeni dondurma) → çelişki.
-  V1 sinir: r_dondur kurali zaten frozen değil sartı içermez (eklenmeli).
+(typing_excludes_cDondurHataZatenDonmus — Adim 8 V2 Phase 4'te §1b'de FULL
+ ispatlandi: r_dondur strengthen (b kayitli + kategori≠donmus) + S.bolge=Ρ
+ + FrozenKategori kopru. b dondurIf b'de acik oldugu icin Step degisikligi yok.)
 
 theorem typing_excludes_cGorevBaslatHataLineerIhlal
     LineerTamam.l_gorev_baslat → yakalama lineer tuketim sartı → vIhlal
