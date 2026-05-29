@@ -158,8 +158,9 @@ theorem typed_no_fault
     S.fault = none := by
   induction h_run with
   | refl _ =>
-    -- S = S₀, KonfTipliFull S₀ → S₀.fault = none (5. alti-konuum)
-    exact h_typed_init.2.2.2.2
+    -- S = S₀, KonfTipliFull S₀ → S₀.fault = none (5. alti-konuum;
+    -- Adim 8 V2'de S.bolge=Ρ + kopru eklendi → fault projeksiyonu .2.2.2.2.1)
+    exact h_typed_init.2.2.2.2.1
   | step S0 S1 Send _hStep _hStar _IH =>
     -- TODO Adim 8: step_fault_preserves_typed hStep (KonfTipliFull S0)
     --              (KonfTipliFull S₀.5 = S₀.fault = none) → S1.fault = none
