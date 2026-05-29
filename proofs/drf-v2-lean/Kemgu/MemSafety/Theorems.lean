@@ -52,7 +52,7 @@ theorem t1_bellek_guvenligi_tam
       exact h_owner
     · exact absurd h_in_S h_not_in_S
   -- Plan v2 Adim 7: Hata strengthen sayesinde her Hata case trivial.
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
@@ -127,7 +127,7 @@ theorem t1_bellek_guvenligi_corollary_full
       exact h_not_frozen
     · exact absurd h_in_S h_not_in_S
   -- Plan v2 Adim 7: Hata strengthen sayesinde her Hata case trivial (T1' corollary).
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>

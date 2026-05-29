@@ -106,7 +106,7 @@ theorem kemgu_drf_v1_no_concurrent_writes
     · exact absurd h1_in_S h_event1_new
   -- Plan v2 Adim 7: Hata strengthen sayesinde her Hata case trivial.
   -- h_event1 (∈ S'.iz) + rw h_iz → h_event1 (∈ S.iz) → absurd h_event1_new.
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
