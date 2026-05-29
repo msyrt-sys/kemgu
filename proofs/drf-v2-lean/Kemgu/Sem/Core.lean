@@ -287,6 +287,13 @@ structure Konfigurasyon where
   zaman       : Zaman
   iz          : Iz
   fault       : Option FaultSebep := none
+  -- Plan v2 Adim 8 V2 (Ρ→Konfigurasyon refactor): runtime bolge ortami.
+  -- Tip `List (VarId × Bolge)` = StateTipli.BolgeOrtam (Core'da abbrev import
+  -- edilemez — defeq). KonfTipliFull `S.bolge = Ρ` ile statik Ρ'ya baglar.
+  -- Step kurallari (sAtama/cDondur) `k.bolge`/`b`'yi `bolgeOrtamGet S.bolge x`
+  -- ile tiplenmis ifadeye baglar → Aile 2 region discharge'lari acilir.
+  -- Default `[]`: mevcut config'ler (hicbiri pozisyonel insa edilmiyor) etkilenmez.
+  bolge       : List (VarId × Bolge) := []
 
 
 -- ============================================================
