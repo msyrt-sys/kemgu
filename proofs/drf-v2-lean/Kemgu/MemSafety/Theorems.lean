@@ -83,7 +83,7 @@ theorem t1_bellek_guvenligi_tam
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
@@ -158,7 +158,7 @@ theorem t1_bellek_guvenligi_corollary_full
     rcases List.mem_cons.mp h_event with h_head | h_in_S
     · nomatch h_head
     · exact absurd h_in_S h_not_in_S
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>

@@ -99,9 +99,18 @@ theorem step_fault_preserves_typed
     have h_atama_sahip := h_typed_S.2.2.2.2.2.2.2
     exact (typing_excludes_sAtamaHataSahipDegil
             S ctx x _ k h_in h_ifade h_atama_sahip h_x_bolge h_not_owner).elim
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ _ _ _ _ =>
-    -- TODO Adim 8: typing_excludes_cGorevBaslatHataLineerIhlal uygula
-    sorry
+  | cGorevBaslatHataLineerIhlal ctx _ yd kod vIhlal h_in h_ifade h_vTuketildi _ _ _ _ _ _ h_vIhlal_in =>
+    -- Adim 8 V2 P6: Aile 2 linear dispatch — typing_excludes_cGorevBaslatHataLineerIhlal
+    have h_thread := h_typed_S.2.1
+    -- ana ctx'in Typed'i (l_gorev_baslat icin)
+    obtain ⟨h_typed_exists, _⟩ := h_thread ctx h_in
+    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
+    rw [h_ifade] at h_typed
+    -- faulting ctx' + onun koprusu
+    obtain ⟨ctx', h_ctx'_in, _h_tid, h_tuket⟩ := h_vTuketildi
+    obtain ⟨_, h_bridge'⟩ := h_thread ctx' h_ctx'_in
+    exact (typing_excludes_cGorevBaslatHataLineerIhlal
+            Γ Λ Ρ yd kod vIhlal τ' Λ'' Ρ'' h_typed ctx' h_bridge' h_vIhlal_in h_tuket).elim
   | cKanalGonderHataLineerTuket ctx kId vId h_in h_ifade h_tuket _ _ _ _ _ _ =>
     -- Adim 8 P2: Aile 2 dispatch — typing_excludes_cKanalGonderHataLineerTuket
     have h_thread := h_typed_S.2.1
@@ -207,9 +216,10 @@ AILE 2 — Fault Impossibility (Typed + KonfTipliFull → Step.Fault imkansiz):
     typing_excludes_sAtamaHataDonmus               ✓ P3 (Ρ→Konf + h_x_bolge + kopru)
     typing_excludes_cDondurHataZatenDonmus         ✓ P4 (r_dondur strengthen + kopru)
     typing_excludes_sAtamaHataSahipDegil           ✓ P5 (AtamaSahipligi invariant + h_x_bolge)
-    typing_excludes_cGorevBaslatHataLineerIhlal    ⏳ P6 (l_gorev_baslat strengthen + Step vIhlal∈yd)
-  Kalan 1: cGorevBaslat — l_gorev_baslat strengthen + Step vIhlal∈yd linkage
-  (lineer katman). Kapaninca step_fault_preserves_typed Hata case'leri TAM.
+    typing_excludes_cGorevBaslatHataLineerIhlal    ✓ P6 (use-after-move + l_gorev_baslat strengthen)
+  >>> TUM 7 Aile 2 lemma'si TAMAM → step_fault_preserves_typed (7 Hata + 8 Tamam)
+  TAM ISPATLI (sorry-suz). Kalan: typed_no_fault step + preservation_konfTipli
+  (kopru/invariant korunumu, Configuration-form).
 
 AILE 3 — Linear Discharge (LineerTamam → linear guard'lar):
   Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_lineer_caller temin eder.

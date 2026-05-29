@@ -120,12 +120,12 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
       Plan v2 §3.3 "l_gorev_baslat":
         Λ' = Λ \ (yd ∩ {v | Tip.lineerMi (Γ v)})
 
-      V1 sinir: Λ' tam set difference notasyonu zor — inductive olarak
-      "yeterli Λ_inner ve disardan tuketim" durumu. Detayli iyileştirme
-      Adim 7 Discharge'da. -/
+      Adim 8 V2 P6 strengthen (use-after-move): yakalanan hicbir v ZATEN
+      tuketilmis olamaz — ∀ v ∈ yd, lineerOrtamGet Λ v ≠ some tuketildi.
+      l_kanal_gonder ile simetrik; cifte-move yasagi.
+      typing_excludes_cGorevBaslatHataLineerIhlal bu sarti kullanir. -/
   | l_gorev_baslat (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (yd : List VarId) (kod : Ifade) :
-                     -- V1: kod inner Lambda ile typed (henuz tam form yok)
-                     -- Λ' caller'da consumed yd ∩ Linear kapsar
+                     (∀ v ∈ yd, lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi) →
                      LineerTamam Γ Λ (Ifade.gorevBaslat yd kod) Λ'
 
   /-- L-GOREV-BIRLESTIR: birlestir(g) — Λ etkilenmez (V1 sinir).

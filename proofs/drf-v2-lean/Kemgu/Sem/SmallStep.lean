@@ -168,28 +168,38 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_no_fault_target : S'.fault = none) :
       Step S S'
 
-  /-- C-GOREV-BASLAT Hata Lineer Ihlal (Plan v2 Adim 1.3): linear yakalanmis
-      bir degisken caller'da tuketilmemis (vIhlal hala aktif). Fault:
-      lineerCagiranTukenmedi. Pattern position: 8.
+  /-- C-GOREV-BASLAT Hata (Adim 8 V2 P6 — use-after-move reformulasyonu):
+      yakalanan bir lineer (vIhlal ∈ yd) ZATEN TUKETILMIS — cifte-move /
+      move-sonrasi kullanim. Fault: lineerYakalananZatenTuketildi.
 
-      Adim 7 NOT: typed program (LinearOK katmani) bu constructor'a
-      ulasamaz — discharge lemma `typing_excludes_cGorevBaslatHataLineerIhlal`. -/
+      Onceki V1 model (vIhlal hala AKTIF) tipli programdan da ateslenebiliyordu
+      (capturing icin lineer'lar zaten aktif olmali) → sound discharge yoktu.
+      Use-after-move (tuketildi) reformulasyonu sLinKullan/sLinImha (cifte-tuketim)
+      ile tutarli ve dischargeable. Cross-thread aliasing kompozisyonel korunur:
+      yakalama consume eder; sonraki caller-kullanimi double-use olarak yakalanir.
+
+      Adim 8 NOT: typed program (l_gorev_baslat strengthen: yakalanan v zaten
+      tuketilmis olamaz) bu constructor'a ulasamaz —
+      typing_excludes_cGorevBaslatHataLineerIhlal. h_iz pozisyonu: 11. -/
   | cGorevBaslatHataLineerIhlal
       (S S' : Konfigurasyon)
       (ctx : ThreadCtx) (tYeni : ThreadId)
       (yd : List VarId) (kod : Ifade)
       (vIhlal : VarId)
-      (h_in     : ctx ∈ S.thread)
-      (h_ifade  : ctx.ifade = .gorevBaslat yd kod)
-      (h_vAktif : ∃ ctx' ∈ S.thread, ctx'.tid = ctx.tid ∧
-                    (vIhlal, Lineerlik.aktif) ∈ ctx'.lineer)
-      (h_fault  : S'.fault = some (FaultSebep.lineerCagiranTukenmedi vIhlal))
+      (h_in         : ctx ∈ S.thread)
+      (h_ifade      : ctx.ifade = .gorevBaslat yd kod)
+      (h_vTuketildi : ∃ ctx' ∈ S.thread, ctx'.tid = ctx.tid ∧
+                        (vIhlal, Lineerlik.tuketildi) ∈ ctx'.lineer)
+      (h_fault      : S'.fault = some (FaultSebep.lineerYakalananZatenTuketildi vIhlal))
       -- Plan v2 Adim 7 strengthen: fault non-observable (Plan §4.4)
-      (h_store  : S'.store = S.store)
-      (h_iz     : S'.iz = S.iz)
-      (h_zaman  : S'.zaman = S.zaman)
-      (h_sahip  : S'.sahiplik = S.sahiplik)
-      (h_kanal  : S'.kanal = S.kanal) :
+      (h_store      : S'.store = S.store)
+      (h_iz         : S'.iz = S.iz)
+      (h_zaman      : S'.zaman = S.zaman)
+      (h_sahip      : S'.sahiplik = S.sahiplik)
+      (h_kanal      : S'.kanal = S.kanal)
+      -- Adim 8 V2 P6: vIhlal yakalanan bir degisken (yd icinde) — fault'u
+      -- tiplenmis ifadeye baglar (yd baglantisi).
+      (h_vIhlal_in  : vIhlal ∈ yd) :
       Step S S'
 
   /-- C-GOREV-BIRLESTIR Tamam (Plan v2 Adim 1.3): cGorevBirlestir Ok varyanti.

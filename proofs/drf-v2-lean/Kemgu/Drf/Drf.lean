@@ -137,7 +137,7 @@ theorem kemgu_drf_v1_no_concurrent_writes
     rcases List.mem_cons.mp h_event1 with h1_head | h1_in_S
     · nomatch h1_head
     · exact absurd h1_in_S h_event1_new
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event1
     exact absurd h_event1 h_event1_new
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>
