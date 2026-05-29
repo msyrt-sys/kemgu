@@ -121,22 +121,61 @@ theorem typing_excludes_cKanalGonderHataLineerTuket
 
 
 -- ============================================================
--- §2. Adim 8 P2/V2 hedef — kalan 4 Aile 2 lemma'si (V1 sinirlar)
+-- §1b. Region Aile 2 lemma (FULL — Adim 8 V2 Ρ→Konfigurasyon)
+-- ============================================================
+
+/-- AILE 2 Region — typing_excludes_sAtamaHataDonmus (Adim 8 V2).
+
+    Plan §6.2: typed program donmus (frozen) bolgeye atama yapamaz.
+
+    Adim 8 V2 (Ρ→Konfigurasyon refactor) ile mumkun oldu:
+    - r_atama (Typed.regionOK): bolgeOrtamGet Ρ x = some b ∧ b.kategori ≠ donmus.
+    - Step linkage (h_x_bolge): bolgeOrtamGet S.bolge x = some k.bolge.
+    - KonfTipliFull: S.bolge = Ρ (h_bolge_eq) → k.bolge = b.
+    - KonfTipliFull kopru (h_frozen_kat): isFrozen S b ↔ b.kategori = donmus.
+    - h_frozen: isFrozen S k.bolge = isFrozen S b → b.kategori = donmus.
+    - Celiski: h_notdonmus (b.kategori ≠ donmus).
+
+    NOT: k SERBEST degil artik — h_x_bolge Step kuralinda k.bolge'yi x'e baglar
+    (Ρ→Konfigurasyon'un cozdugu temel sorun). -/
+theorem typing_excludes_sAtamaHataDonmus
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (x : VarId) (e : Ifade) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Λ Ρ (Ifade.atama x e) τ Λ' Ρ')
+    (S : Konfigurasyon) (k : Konum)
+    (h_bolge_eq : S.bolge = Ρ)
+    (h_frozen_kat : ∀ (y : VarId) (b : Bolge),
+                      bolgeOrtamGet S.bolge y = some b →
+                      (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus))
+    (h_x_bolge : bolgeOrtamGet S.bolge x = some k.bolge)
+    (h_frozen : isFrozen S k.bolge) :
+    False := by
+  have h_regionOK := h_typed.regionOK
+  cases h_regionOK with
+  | r_atama _ _ _ _ b h_get h_notdonmus _ =>
+    -- h_get : bolgeOrtamGet Ρ x = some b ; h_notdonmus : b.kategori ≠ donmus
+    have h_get_S : bolgeOrtamGet S.bolge x = some b := by
+      rw [h_bolge_eq]; exact h_get
+    -- iki lookup ayni x → k.bolge = b
+    have h_kb : k.bolge = b := Option.some.inj (h_x_bolge.symm.trans h_get_S)
+    -- kopru + h_frozen → b.kategori = donmus → celiski
+    have h_iff := h_frozen_kat x b h_get_S
+    rw [h_kb] at h_frozen
+    exact h_notdonmus (h_iff.mp h_frozen)
+
+
+-- ============================================================
+-- §2. Adim 8 V2 hedef — kalan 3 Aile 2 lemma'si (V1 sinirlar)
 -- ============================================================
 
 /-
-P2 hedef Aile 2 lemma'lari (Adim 8 ileri parca):
+Kalan Aile 2 lemma'lari (Adim 8 V2/P4+ hedef):
 
-theorem typing_excludes_sAtamaHataDonmus
-    (Γ Λ Ρ) (x e τ Λ' Ρ')
-    (h_typed : Typed Γ Λ Ρ (Ifade.atama x e) τ Λ' Ρ')
-    (S : Konfigurasyon) (h_config : KonfTipliFull Γ Λ Ρ S)
-    (k : Konum) (h_frozen : isFrozen S k.bolge) :
-    False
-  V1 sinir: BolgeOrtam ↔ Sahiplik kopru gerek. SahiplikTutarli'ye
-  bolge.kategori invariant eklenmeli (V2.0 Sahiplik refactor).
-  Typed.regionOK r_atama → bolgeOrtamGet Ρ x = some b, b.kategori ≠ donmus
-  → isFrozen S b iff b.kategori = donmus → çelişki.
+(typing_excludes_sAtamaHataDonmus — Adim 8 V2 Phase 3'te §1b'de FULL
+ ispatlandi: Ρ→Konfigurasyon + Step h_x_bolge linkage + KonfTipliFull
+ FrozenKategori kopru ile. Kalan asagidakiler ayni desenle:
+ sAtamaHataSahipDegil ownership kopru, cDondur r_dondur strengthen,
+ cGorevBaslat l_gorev_baslat strengthen + yd baglantisi.)
 
 theorem typing_excludes_sAtamaHataSahipDegil
     Benzer pattern: Typed + KonfTipliFull → ctx.tid sahip kanit.

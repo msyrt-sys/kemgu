@@ -57,7 +57,7 @@ theorem drf_l4_a_step
   -- Plan v2 Adim 7: Hata constructor'lar strengthen edildi (h_iz : S'.iz = S.iz)
   -- Fault non-observable (Plan §4.4) sayesinde her Hata case trivial:
   -- h_in (memYaz ∈ S'.iz) + rw h_iz → h_in (memYaz ∈ S.iz) → left.
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>

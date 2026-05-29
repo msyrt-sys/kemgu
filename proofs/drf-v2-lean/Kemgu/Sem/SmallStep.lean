@@ -5,6 +5,7 @@ Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz
 -/
 
 import Kemgu.Sem.Core
+import Kemgu.Sem.StateTipli
 
 namespace Kemgu.Sem.SmallStep
 open Kemgu.Sem.Core
@@ -95,7 +96,12 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_iz     : S'.iz = S.iz)
       (h_zaman  : S'.zaman = S.zaman)
       (h_sahip  : S'.sahiplik = S.sahiplik)
-      (h_kanal  : S'.kanal = S.kanal) :
+      (h_kanal  : S'.kanal = S.kanal)
+      -- Adim 8 V2 (Ρ→Konfigurasyon): atanan x'in bolgesi, yazilan konum k'nin
+      -- bolgesidir → fault'u tiplenmis ifadeye baglar. r_atama statik
+      -- "kategori ≠ donmus" + KonfTipliFull kopru (isFrozen↔kategori) ile
+      -- typing_excludes_sAtamaHataDonmus celiski uretir.
+      (h_x_bolge : StateTipli.bolgeOrtamGet S.bolge x = some k.bolge) :
       Step S S'
 
   /-- S-ATAMA Hata Sahip Degil (Plan v2 Adim 1.2): ctx hedef bolgenin

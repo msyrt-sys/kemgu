@@ -83,9 +83,17 @@ theorem step_fault_preserves_typed
   | sLinImhaTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
     exact h_no_fault_target
   -- Hata case'leri: Adim 8 hedef — Plan §6.2 Aile 2 lemma'lari ile exfalso.
-  | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ _ _ _ _ =>
-    -- TODO Adim 8: typing_excludes_sAtamaHataDonmus uygula
-    sorry
+  | sAtamaHataDonmus ctx x _ k h_in h_ifade h_frozen _ _ _ _ _ _ h_x_bolge =>
+    -- Adim 8 V2: Aile 2 region dispatch — typing_excludes_sAtamaHataDonmus
+    have h_thread := h_typed_S.2.1
+    obtain ⟨h_typed_exists, _h_bridge⟩ := h_thread ctx h_in
+    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
+    rw [h_ifade] at h_typed
+    have h_bolge_eq := h_typed_S.2.2.2.2.2.1
+    have h_frozen_kat := h_typed_S.2.2.2.2.2.2
+    exact (typing_excludes_sAtamaHataDonmus
+            Γ Λ Ρ x _ τ' Λ'' Ρ'' h_typed S k
+            h_bolge_eq h_frozen_kat h_x_bolge h_frozen).elim
   | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ _ _ _ _ =>
     -- TODO Adim 8: typing_excludes_sAtamaHataSahipDegil uygula
     sorry
