@@ -273,6 +273,18 @@ def KonfTipliFull (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
   ∧ SahiplikTutarli Ρ S.sahiplik S.zaman
   ∧ KanalTutarli Γ Ρ S.kanal
   ∧ S.fault = none
+  -- Adim 8 V2 (Ρ→Konfigurasyon): runtime bolge ortami statik Ρ ile ozdes.
+  ∧ S.bolge = Ρ
+  -- Adim 8 V2 kopru (FrozenKategoriTutarli): kayitli her bolge icin
+  -- "ownership haritasinda frozen ⟺ statik kategori donmus". Aile 2 region
+  -- discharge'lari (sAtamaHataDonmus / cDondurHataZatenDonmus) bu bileseni kullanir.
+  -- Satisfiable: baslangic config'inde frozen yok + kategori donmus yok → ↔ vacuous.
+  -- NOT: bu bilesenin Step altinda KORUNUMU preservation_konfTipli'de (ayri sorry —
+  -- cDondurTamam'in S.bolge'yi de guncellemesi gerekir); discharge icin gerekmez
+  -- cunku KonfTipliFull burada HIPOTEZ (step_fault_preserves_typed).
+  ∧ (∀ (x : VarId) (b : Bolge),
+       bolgeOrtamGet S.bolge x = some b →
+       (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus))
 
 
 -- ============================================================
@@ -286,9 +298,13 @@ theorem konfTipliFull_intro
     (h_thread : ThreadTipliFull Γ Λ Ρ S.thread)
     (h_sahip  : SahiplikTutarli Ρ S.sahiplik S.zaman)
     (h_kanal  : KanalTutarli Γ Ρ S.kanal)
-    (h_fault  : S.fault = none) :
+    (h_fault  : S.fault = none)
+    (h_bolge_eq : S.bolge = Ρ)
+    (h_frozen_kat : ∀ (x : VarId) (b : Bolge),
+                      bolgeOrtamGet S.bolge x = some b →
+                      (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus)) :
     KonfTipliFull Γ Λ Ρ S :=
-  ⟨h_store, h_thread, h_sahip, h_kanal, h_fault⟩
+  ⟨h_store, h_thread, h_sahip, h_kanal, h_fault, h_bolge_eq, h_frozen_kat⟩
 
 /-- KonfTipliFull'den bilesenleri cikarma (5-tuple projection). -/
 theorem konfTipliFull_elim
@@ -298,7 +314,11 @@ theorem konfTipliFull_elim
     ∧ ThreadTipliFull Γ Λ Ρ S.thread
     ∧ SahiplikTutarli Ρ S.sahiplik S.zaman
     ∧ KanalTutarli Γ Ρ S.kanal
-    ∧ S.fault = none :=
+    ∧ S.fault = none
+    ∧ S.bolge = Ρ
+    ∧ (∀ (x : VarId) (b : Bolge),
+         bolgeOrtamGet S.bolge x = some b →
+         (isFrozen S b ↔ b.kategori = BolgeKategorisi.donmus)) :=
   h
 
 
