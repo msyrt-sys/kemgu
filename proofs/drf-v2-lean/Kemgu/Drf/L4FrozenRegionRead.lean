@@ -88,7 +88,7 @@ theorem drf_l4_a_step
     rcases List.mem_cons.mp h_in with h_head | h_tail
     · nomatch h_head
     · left; exact h_tail
-  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_in
     left; exact h_in
   | cGorevBirlestirTamam _ _ _ _ _ _ _ _ h_iz _ _ _ =>

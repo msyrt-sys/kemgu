@@ -222,9 +222,40 @@ theorem typing_excludes_sAtamaHataSahipDegil
     False :=
   h_not_owner (h_atama_sahip ctx h_in x e h_ifade k.bolge h_x_bolge)
 
+/-- AILE 2 Linear — typing_excludes_cGorevBaslatHataLineerIhlal (Adim 8 V2 P6).
+
+    Plan §6.2: typed program, gorev yakalamasinda ZATEN-TUKETILMIS bir lineer'i
+    kullanamaz (use-after-move; Mehmet onayli reformulasyon).
+
+    Adim 8 V2 P6: l_gorev_baslat strengthen (∀ v∈yd, Λ v ≠ tuketildi) +
+    ThreadTipliFull kopru ile (l_kanal_gonder deseni):
+    - Typed.lineerOK → l_gorev_baslat → ∀ v∈yd, lineerOrtamGet Λ v ≠ some tuketildi.
+    - Kopru (faulting ctx'): (vIhlal, tuketildi) ∈ ctx'.lineer → Λ vIhlal = some tuketildi.
+    - h_vIhlal_in: vIhlal ∈ yd → l_gorev_baslat vIhlal'e uygulanir → celiski.
+
+    NOT: ctx' (faulting) ile ana ctx ayni paylasimli Λ'yi kullanir (V1); kopru
+    ctx' icin de gecerli (ThreadTipliFull ∀ ctx ∈ threads). -/
+theorem typing_excludes_cGorevBaslatHataLineerIhlal
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (yd : List VarId) (kod : Ifade) (vIhlal : VarId)
+    (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Λ Ρ (Ifade.gorevBaslat yd kod) τ Λ' Ρ')
+    (ctx' : ThreadCtx)
+    (h_bridge' : ∀ y : VarId, ∀ lin : Lineerlik,
+                   (y, lin) ∈ ctx'.lineer ↔ lineerOrtamGet Λ y = some lin)
+    (h_vIhlal_in : vIhlal ∈ yd)
+    (h_tuket : (vIhlal, Lineerlik.tuketildi) ∈ ctx'.lineer) :
+    False := by
+  have h_lineerOK := h_typed.lineerOK
+  cases h_lineerOK with
+  | l_gorev_baslat _ _ _ _ h_captures =>
+    -- h_captures : ∀ v ∈ yd, lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi
+    have h_tuket_Λ := (h_bridge' vIhlal Lineerlik.tuketildi).mp h_tuket
+    exact h_captures vIhlal h_vIhlal_in h_tuket_Λ
+
 
 -- ============================================================
--- §2. Adim 8 V2 hedef — kalan 1 Aile 2 lemma'si (V1 sinirlar)
+-- §2. Adim 8 V2 — TUM Aile 2 Discharge lemma'lari TAMAM (7/7)
 -- ============================================================
 
 /-
@@ -243,11 +274,14 @@ Kalan Aile 2 lemma'lari (Adim 8 V2/P4+ hedef):
  ispatlandi: r_dondur strengthen (b kayitli + kategori≠donmus) + S.bolge=Ρ
  + FrozenKategori kopru. b dondurIf b'de acik oldugu icin Step degisikligi yok.)
 
-theorem typing_excludes_cGorevBaslatHataLineerIhlal
-    LineerTamam.l_gorev_baslat → yakalama lineer tuketim sartı → vIhlal
-    aktif olamaz.
-  V1 sinir: V1 minimal l_gorev_baslat form yakalama bilgisi tutmaz + vIhlal
-  Step kuralinda serbest (yd'ye bagli degil) → V2 (Ρ runtime + yd baglantisi).
+(typing_excludes_cGorevBaslatHataLineerIhlal — Adim 8 V2 Phase 6'da §1b'de FULL
+ ispatlandi: use-after-move reformulasyonu (Step `aktif`→`tuketildi` + vIhlal∈yd)
+ + l_gorev_baslat strengthen (∀ v∈yd, Λ v ≠ tuketildi) + kopru.)
+
+>>> TUM 7 Aile 2 (Fault Impossibility) lemma'si TAMAM:
+    sLinKullan/sLinImha (P1), cKanalGonder (P2), sAtama (P3), cDondur (P4),
+    sAtamaSahipDegil (P5), cGorevBaslat (P6). step_fault_preserves_typed'in
+    7 Hata case'i TAM discharge edildi.
 
 NOT: typing_excludes_cKanalGonderHataLineerTuket Adim 8 P2'de §1'de FULL
 ispatlandi (l_kanal_gonder strengthen `Λ vId ≠ some tuketildi` + kopru).

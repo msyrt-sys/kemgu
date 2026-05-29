@@ -247,7 +247,7 @@ inductive Ifade : Type where
 inductive FaultSebep : Type where
   | donmusYazma             (b : Bolge)                  -- sAtama: frozen bolgeye yazma
   | sahipDegil              (b : Bolge) (t : ThreadId)   -- sAtama: ctx sahip degil
-  | lineerCagiranTukenmedi  (v : VarId)                  -- cGorevBaslat: caller'da linear tuketilmemis
+  | lineerYakalananZatenTuketildi (v : VarId)            -- cGorevBaslat: yakalanan lineer zaten tuketilmis (use-after-move; Adim 8 V2 P6)
   | lineerZatenTuketildi    (v : VarId)                  -- sLinKullan/sLinImha: ikinci consume
   | lineerKanalTuket        (v : VarId)                  -- cKanalGonder: linear v cifte gonderim
   | zatenDonmus             (b : Bolge)                  -- cDondur: zaten frozen bolge
