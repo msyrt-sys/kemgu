@@ -57,7 +57,7 @@ theorem drf_l7_a_step
   | sAtamaHataDonmus _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
-  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ =>
+  | sAtamaHataSahipDegil _ _ _ _ _ _ _ _ _ h_iz _ _ _ _ =>
     rw [h_iz] at h_event
     exact absurd h_event h_not_in_S
   | sLinKullanTamam _ _ _ _ _ h_iz _ _ _ =>

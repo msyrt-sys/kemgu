@@ -196,9 +196,35 @@ theorem typing_excludes_cDondurHataZatenDonmus
     have h_iff := h_frozen_kat x b h_get_S
     exact h_notdonmus (h_iff.mp h_zaten)
 
+/-- AILE 2 Ownership — typing_excludes_sAtamaHataSahipDegil (Adim 8 V2 P5).
+
+    Plan §6.2: typed program sahip OLMADIGI bolgeye yazamaz.
+
+    Adim 8 V2 P5: KonfTipliFull AtamaSahipligi invariant'i + Step h_x_bolge
+    linkage ile (Typed GEREKMEZ):
+    - AtamaSahipligi: aktif thread ctx, atadigi y'nin bolgesini S.zaman'da sahiplenir.
+    - h_ifade: ctx.ifade = atama x e ; h_x_bolge: bolgeOrtamGet S.bolge x = some k.bolge.
+    - AtamaSahipligi ctx ... → sahiplikGet S.sahiplik (k.bolge, S.zaman)
+      = some (Sahip.thread ctx.tid).
+    - h_not_owner bunu reddeder → celiski. -/
+theorem typing_excludes_sAtamaHataSahipDegil
+    (S : Konfigurasyon) (ctx : ThreadCtx) (x : VarId) (e : Ifade) (k : Konum)
+    (h_in : ctx ∈ S.thread)
+    (h_ifade : ctx.ifade = Ifade.atama x e)
+    (h_atama_sahip : ∀ ctx' ∈ S.thread, ∀ (y : VarId) (e' : Ifade),
+                       ctx'.ifade = Ifade.atama y e' →
+                       ∀ (b : Bolge), bolgeOrtamGet S.bolge y = some b →
+                         sahiplikGet S.sahiplik (b, S.zaman)
+                           = some (Sahip.thread ctx'.tid))
+    (h_x_bolge : bolgeOrtamGet S.bolge x = some k.bolge)
+    (h_not_owner : sahiplikGet S.sahiplik (k.bolge, S.zaman)
+                     ≠ some (Sahip.thread ctx.tid)) :
+    False :=
+  h_not_owner (h_atama_sahip ctx h_in x e h_ifade k.bolge h_x_bolge)
+
 
 -- ============================================================
--- §2. Adim 8 V2 hedef — kalan 2 Aile 2 lemma'si (V1 sinirlar)
+-- §2. Adim 8 V2 hedef — kalan 1 Aile 2 lemma'si (V1 sinirlar)
 -- ============================================================
 
 /-
@@ -210,9 +236,8 @@ Kalan Aile 2 lemma'lari (Adim 8 V2/P4+ hedef):
  sAtamaHataSahipDegil ownership kopru, cDondur r_dondur strengthen,
  cGorevBaslat l_gorev_baslat strengthen + yd baglantisi.)
 
-theorem typing_excludes_sAtamaHataSahipDegil
-    Benzer pattern: Typed + KonfTipliFull → ctx.tid sahip kanit.
-  V1 sinir: Typed'a "ctx sahip bolge atamasi" sarti eklenmeli.
+(typing_excludes_sAtamaHataSahipDegil — Adim 8 V2 Phase 5'te §1b'de FULL
+ ispatlandi: KonfTipliFull AtamaSahipligi invariant + Step h_x_bolge linkage.)
 
 (typing_excludes_cDondurHataZatenDonmus — Adim 8 V2 Phase 4'te §1b'de FULL
  ispatlandi: r_dondur strengthen (b kayitli + kategori≠donmus) + S.bolge=Ρ
