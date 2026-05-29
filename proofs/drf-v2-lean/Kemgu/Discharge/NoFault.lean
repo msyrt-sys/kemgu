@@ -92,9 +92,14 @@ theorem step_fault_preserves_typed
   | cGorevBaslatHataLineerIhlal _ _ _ _ _ _ _ _ _ _ _ _ _ _ =>
     -- TODO Adim 8: typing_excludes_cGorevBaslatHataLineerIhlal uygula
     sorry
-  | cKanalGonderHataLineerTuket _ _ _ _ _ _ _ _ _ _ _ _ =>
-    -- TODO Adim 8: typing_excludes_cKanalGonderHataLineerTuket uygula
-    sorry
+  | cKanalGonderHataLineerTuket ctx kId vId h_in h_ifade h_tuket _ _ _ _ _ _ =>
+    -- Adim 8 P2: Aile 2 dispatch — typing_excludes_cKanalGonderHataLineerTuket
+    have h_thread := h_typed_S.2.1
+    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
+    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
+    rw [h_ifade] at h_typed
+    exact (typing_excludes_cKanalGonderHataLineerTuket
+            Γ Λ Ρ kId vId τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
   | cDondurHataZatenDonmus _ _ _ _ _ _ _ _ _ _ _ =>
     -- TODO Adim 8: typing_excludes_cDondurHataZatenDonmus uygula
     sorry
@@ -175,16 +180,17 @@ AILE 1 — Normal Guards (Typed + KonfTipliFull → Step.Ok guard'lar):
 
 AILE 2 — Fault Impossibility (Typed + KonfTipliFull → Step.Fault imkansiz):
   Durum V1: Adim 7'de 35 L4/L7/Drf/MemSafety Hata case'i strengthen sayesinde
-  REDUNDANT kapandı. step_fault_preserves_typed icin V1 Adim 7 yarım'da
-  Hata case'leri sorry — Adim 8'de Aile 2 lemma'lari ile dolar.
-  Plan §6.2 7 typing_excludes_* lemma:
-    typing_excludes_sAtamaHataDonmus
-    typing_excludes_sAtamaHataSahipDegil
-    typing_excludes_cGorevBaslatHataLineerIhlal
-    typing_excludes_cKanalGonderHataLineerTuket
-    typing_excludes_cDondurHataZatenDonmus
-    typing_excludes_sLinKullanHataZatenTuketildi
-    typing_excludes_sLinImhaHataZatenTuketildi
+  REDUNDANT kapandı. step_fault_preserves_typed Hata case'leri Aile 2 lemma'lari
+  ile dolar. Plan §6.2 7 typing_excludes_* lemma (Aile2.lean):
+    typing_excludes_sLinKullanHataZatenTuketildi   ✓ P1 (l_kullan kopru)
+    typing_excludes_sLinImhaHataZatenTuketildi     ✓ P1 (l_imha kopru)
+    typing_excludes_cKanalGonderHataLineerTuket    ✓ P2 (l_kanal_gonder strengthen)
+    typing_excludes_sAtamaHataDonmus               ⏳ V2 (k serbest; Ρ runtime gerek)
+    typing_excludes_sAtamaHataSahipDegil           ⏳ V2 (Typed ownership gerek)
+    typing_excludes_cGorevBaslatHataLineerIhlal    ⏳ V2 (vIhlal serbest; yd baglantisi)
+    typing_excludes_cDondurHataZatenDonmus         ⏳ V2 (isFrozen↔kategori kopru, Ρ runtime)
+  Kalan 4'un ortak kok nedeni: statik Ρ sabit + runtime degisken-ortami yok.
+  Tek V2 refactor (Ρ → Konfigurasyon) dordunu birden acar.
 
 AILE 3 — Linear Discharge (LineerTamam → linear guard'lar):
   Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_lineer_caller temin eder.
