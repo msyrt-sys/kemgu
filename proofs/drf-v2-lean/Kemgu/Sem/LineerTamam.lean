@@ -134,8 +134,15 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
                         LineerTamam Γ Λ (Ifade.gorevBirlestir g) Λ
 
   /-- L-KANAL-GONDER: v lineer ise tuketilir.
-      V1 minimal: serbest Λ' (Adim 7'de v consumed kosulu). -/
+      Adim 8 P2 strengthen (Plan §6.2 Aile 2): gonderilen v ZATEN tuketilmis
+      olamaz (`lineerOrtamGet Λ v ≠ some tuketildi`). Bu sart l_kullan/l_imha
+      ile simetrik — "aktif veya kayitsiz (none)" gonderilebilir, yalniz
+      "tuketildi" (cifte gonderim) reddedilir.
+      Soundness: non-lineer v icin Λ v = none → `none ≠ some tuketildi` trivial
+      saglanir; gercekten yalniz cifte-gonderim reddedilir.
+      typing_excludes_cKanalGonderHataLineerTuket (Aile2.lean) bu sarti kullanir. -/
   | l_kanal_gonder (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (k : KanalId) (v : VarId) :
+                     lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi →
                      LineerTamam Γ Λ (Ifade.kanalGonderIf k v) Λ'
 
   /-- L-KANAL-AL: kanal'dan deger alinir, yeni lineer baglama olabilir.

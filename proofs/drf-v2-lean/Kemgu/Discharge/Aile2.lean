@@ -6,19 +6,21 @@ Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
 Plan v2 §6.2 Aile 2 Discharge: typed program (Typed + KonfTipliFull) altinda
 Step.Hata constructor'lara ulaslamayacagini garanti eden lemma'lar.
 
-V1 (Adim 8 P1) durum — bu dosyada SADECE TAM ISPATLI lemma'lar:
-✓ 2 Linear lemma FULL ispatli (sLinKullan, sLinImha) — Plan §5.2.3
-  ThreadTipliFull kopru sayesinde (ctx.lineer ↔ Λ uyumu).
+V1 (Adim 8 P1 + P2) durum — bu dosyada SADECE TAM ISPATLI lemma'lar:
+✓ 3 Linear lemma FULL ispatli (sLinKullan, sLinImha — P1; cKanalGonder — P2)
+  — Plan §5.2.3 ThreadTipliFull kopru sayesinde (ctx.lineer ↔ Λ uyumu) +
+  P2'de l_kanal_gonder strengthen (`Λ vId ≠ some tuketildi`).
 
-P2 hedef — Adim 8 ileri parcalarinda eklenecek lemma'lar:
-- typing_excludes_sAtamaHataDonmus (BolgeOrtam ↔ Sahiplik kopru gerek)
-- typing_excludes_sAtamaHataSahipDegil (Sahiplik kopru)
-- typing_excludes_cDondurHataZatenDonmus (Region invariant)
-- typing_excludes_cGorevBaslatHataLineerIhlal (LineerTamam V2 strengthen)
-- typing_excludes_cKanalGonderHataLineerTuket (LineerTamam V2 strengthen)
+Kalan hedef — Adim 8 P3+/V2 parcalarinda eklenecek lemma'lar:
+- typing_excludes_sAtamaHataDonmus (V2: BolgeOrtam ↔ Sahiplik kopru; Ρ runtime'da yok)
+- typing_excludes_sAtamaHataSahipDegil (V2: Typed ownership + Sahiplik kopru)
+- typing_excludes_cDondurHataZatenDonmus (V2: r_dondur strengthen + isFrozen↔kategori invariant)
+- typing_excludes_cGorevBaslatHataLineerIhlal (V2: vIhlal serbest; yd baglantisi yok)
 
-Bu 5 lemma'nin yokluğunda step_fault_preserves_typed Hata case'leri V1'de
-sorry kalir (NoFault.lean'de Adim 8 P2 TODO).
+Bu 4 lemma'nin ortak kok nedeni: statik Ρ sabit + runtime degisken-ortami yok.
+Tek V2 refactor (Ρ'yu Konfigurasyona tasi + Step'ten gecir) dordunu birden acar.
+Yoklukta step_fault_preserves_typed'in 4 Hata case'i V1'de sorry kalir
+(NoFault.lean'de TODO).
 
 Onkosul: Adim 1.1-1.3, Adim 2-3 (StateTipli, HasType), Adim 5-6
          (LineerTamam, RegionTamam), Adim 7 (Tamam strengthen, NoFault).
@@ -87,9 +89,39 @@ theorem typing_excludes_sLinImhaHataZatenTuketildi
     rw [h_tuket_Λ] at h_aktif
     nomatch h_aktif
 
+/-- AILE 2 Linear — typing_excludes_cKanalGonderHataLineerTuket (Adim 8 P2).
+
+    Plan §6.2 ifadesi: typed (LinearOK) program cKanalGonderHataLineerTuket
+    constructor'ina ulasilamaz (tuketilmis lineer deger kanala gonderilemez).
+
+    Ispat: Typed.lineerOK → l_kanal_gonder kuralı (Adim 8 P2 strengthen) →
+    `lineerOrtamGet Λ vId ≠ some tuketildi`.
+    Köprü (h_bridge, ThreadTipliFull'dan): (vId, tuketildi) ∈ ctx.lineer →
+    lineerOrtamGet Λ vId = some tuketildi.
+    Iki bilgi dogrudan çelişir: h_notconsumed h_tuket_Λ : False.
+
+    NOT: vId burada SERBEST degil — Step kuralı `ctx.ifade = kanalGonderIf k vId`
+    ile gonderilen degiskeni ifadeye baglar; bu yuzden sLinKullan/Imha ile ayni
+    temiz pattern uygulanir (sAtama/cGorevBaslat'ta bu baglanti yok → V2). -/
+theorem typing_excludes_cKanalGonderHataLineerTuket
+    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (k : KanalId) (vId : VarId) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Λ Ρ (Ifade.kanalGonderIf k vId) τ Λ' Ρ')
+    (ctx : ThreadCtx)
+    (h_bridge : ∀ y : VarId, ∀ lin : Lineerlik,
+                  (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
+    (h_tuket : (vId, Lineerlik.tuketildi) ∈ ctx.lineer) :
+    False := by
+  have h_lineerOK := h_typed.lineerOK
+  cases h_lineerOK with
+  | l_kanal_gonder _ _ _ _ h_notconsumed =>
+    -- h_notconsumed : lineerOrtamGet Λ vId ≠ some Lineerlik.tuketildi
+    have h_tuket_Λ := (h_bridge vId Lineerlik.tuketildi).mp h_tuket
+    exact h_notconsumed h_tuket_Λ
+
 
 -- ============================================================
--- §2. Adim 8 P2 hedef — 5 Aile 2 lemma'si eklenecek (V1 sinirlar)
+-- §2. Adim 8 P2/V2 hedef — kalan 4 Aile 2 lemma'si (V1 sinirlar)
 -- ============================================================
 
 /-
@@ -117,13 +149,13 @@ theorem typing_excludes_cDondurHataZatenDonmus
 theorem typing_excludes_cGorevBaslatHataLineerIhlal
     LineerTamam.l_gorev_baslat → yakalama lineer tuketim sartı → vIhlal
     aktif olamaz.
-  V1 sinir: V1 minimal l_gorev_baslat form yakalama bilgisi tutmaz (V2
-  strengthen gerek).
+  V1 sinir: V1 minimal l_gorev_baslat form yakalama bilgisi tutmaz + vIhlal
+  Step kuralinda serbest (yd'ye bagli degil) → V2 (Ρ runtime + yd baglantisi).
 
-theorem typing_excludes_cKanalGonderHataLineerTuket
-    LineerTamam.l_kanal_gonder → vId Linear ise aktif → tuket çelişki.
-  V1 sinir: V1 minimal l_kanal_gonder serbest Λ → Λ' (lineer bilgi yok,
-  V2 strengthen gerek).
+NOT: typing_excludes_cKanalGonderHataLineerTuket Adim 8 P2'de §1'de FULL
+ispatlandi (l_kanal_gonder strengthen `Λ vId ≠ some tuketildi` + kopru).
+Burada cKanalGonder temiz cunku gonderilen vId ifadeye bagli; sAtama/cGorevBaslat
+serbest k/vIhlal'den dolayi ayni temiz pattern'i alamaz (V2 kok neden ortak).
 -/
 
 
