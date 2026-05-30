@@ -450,6 +450,22 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
     return tip_olustur_basit(tk->arena, TIP_HATA);
 }
 
+/* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
+ * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
+ * yetki<MMIO> degilse MM002 raporlanir. */
+static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    const TipBilgisi *k = tip_yetki_kaynak(y);
+    int mmio = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
+                k->veri.yapi.ad && k->veri.yapi.ad_uzunluk == 4 &&
+                memcmp(k->veri.yapi.ad, "MMIO", 4) == 0);
+    if (!mmio) {
+        tip_hata(tk, arg, "MM002",
+                 "mmio islemi ilk argumani yetki<MMIO> olmali");
+    }
+}
+
 /* Forward declaration (ADIM 11.6'da tanimli, kontrol_yapi_olustur_ic
  * tarafindan kullaniliyor — generic substitusyon icin) */
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
@@ -973,11 +989,15 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             }
             int ok = 0;
             if (ad && ad_uz > 0) {
-                /* OTP_Anahtar 11 byte, Dosya 5, Soket 5, Bellek 6, Donanim 7 */
+                /* OTP_Anahtar 11, Dosya 5, Soket 5, Bellek 6, Donanim 7, MMIO 4.
+                 * MMIO Foundation (Karar 3): yetki<MMIO> tek top-level kaynak;
+                 * cihaza-ozel (orn. MMIO_VirtIO) AYRI kaynak DEGIL — adres
+                 * bolgesiyle daraltilmis MMIO formu olarak modellenir. */
                 if ((ad_uz == 5 && memcmp(ad, "Dosya", 5) == 0) ||
                     (ad_uz == 5 && memcmp(ad, "Soket", 5) == 0) ||
                     (ad_uz == 6 && memcmp(ad, "Bellek", 6) == 0) ||
                     (ad_uz == 7 && memcmp(ad, "Donanim", 7) == 0) ||
+                    (ad_uz == 4 && memcmp(ad, "MMIO", 4) == 0) ||
                     (ad_uz == 11 && memcmp(ad, "OTP_Anahtar", 11) == 0)) {
                     ok = 1;
                 }
@@ -985,7 +1005,7 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             if (!ok) {
                 tip_hata(tk, tip_d, "CP004",
                     "yetki<R>: bilinmeyen kaynak tipi "
-                    "(Dosya/Soket/Bellek/Donanim/OTP_Anahtar bekleniyor)");
+                    "(Dosya/Soket/Bellek/Donanim/MMIO/OTP_Anahtar bekleniyor)");
                 return t_hata(tk);
             }
             /* Kaynak TIP_YAPI olarak temsil edilir (ad bazli nominal eslesme).
@@ -2184,7 +2204,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (arg0->tip != DUGUM_TAM) {
                     tip_hata(tk, arg0, "CP004",
                         "yetki_olustur ilk argumani sabit tamsayi olmali "
-                        "(1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar)");
+                        "(1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar "
+                        "6=MMIO)");
                     return t_hata(tk);
                 }
                 int64_t kt = arg0->veri.tam.deger;
@@ -2196,6 +2217,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     case 3: kaynak_ad = "Bellek"; kaynak_uz = 6; break;
                     case 4: kaynak_ad = "Donanim"; kaynak_uz = 7; break;
                     case 5: kaynak_ad = "OTP_Anahtar"; kaynak_uz = 11; break;
+                    case 6: kaynak_ad = "MMIO"; kaynak_uz = 4; break;
                     default:
                         tip_hata(tk, arg0, "CP004",
                             "yetki_olustur: bilinmeyen kaynak tipi id");
@@ -2266,6 +2288,64 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 /* Linear tuketim */
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            /* === MMIO Foundation intrinsics (Karar 1-4) ===
+             * mmio_oku32(y: yetki<MMIO>, adres: tam64) -> tam32
+             * mmio_yaz32(y: yetki<MMIO>, adres: tam64, deger: tam32) -> bos
+             *
+             * y ÖDÜNÇ alinir: delege/kanal_al gibi TÜKETİLMEZ. Surucu tek
+             * yetkiyle bircok register'a erisir; tuketim yalniz geri_al ile.
+             * Donus duz tam32 (Karar 4 — sonuc<> degil, WCET icin). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku32", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku32 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku32 adres argumani tamsayi (tam64) olmali");
+                }
+                /* y TÜKETİLMEZ (odunc) — return tam32 */
+                return tip_olustur_basit(tk->arena, TIP_TAM32);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz32", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz32 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam32)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz32 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz32 deger argumani tamsayi (tam32) olmali");
+                }
+                /* y TÜKETİLMEZ (odunc) — return bos */
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
             /* === Concurrency / DRF V1 intrinsics === */

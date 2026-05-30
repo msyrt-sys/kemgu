@@ -72,11 +72,13 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
      * done ki .o file format'i otomatik tanin. */
 #ifdef _WIN32
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -x none build\\kdl_runtime.o -o %s 2>%s",
+             "clang -x ir %s -x none build\\kdl_runtime.o "
+             "build\\kdl_runtime_mmio.o -o %s 2>%s",
              LL_PATH, EXE_PATH, DEV_NULL);
 #else
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -x none build/kdl_runtime.o -o %s 2>%s",
+             "clang -x ir %s -x none build/kdl_runtime.o "
+             "build/kdl_runtime_mmio.o -o %s 2>%s",
              LL_PATH, EXE_PATH, DEV_NULL);
 #endif
     rc = system(komut);
@@ -1103,6 +1105,42 @@ static void test_dizi_tam64(void) {
     test_sonuc("dizi<tam64> generic instan -> 2", rc == 2);
 }
 
+/* === MMIO Foundation: capability-parametreli register erisimi === */
+
+static void test_mmio_yaz_oku_round_trip(void) {
+    /* yetki<MMIO> uret; yaz 42; oku; exit = okunan deger. Host mock tampon
+     * round-trip yapar (kdl_runtime_mmio.c). geri_al ile linear tuketim. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz32(y, 4096, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam32 = mmio_oku32(y, 4096);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio yaz 42 -> oku -> exit 42", rc == 42);
+}
+
+static void test_mmio_sabit_adres(void) {
+    /* Ust duzey sabit adres (cross-file sabit codegen kok cozumu) +
+     * iki ayri register: yaz(taban+0)=30, yaz(taban+4)=12, oku ikisini topla. */
+    int rc = derle_ve_calistir(
+        "sabit TABAN: tam64 = 268435456;\n"
+        "sabit OFS_A: tam64 = 0;\n"
+        "sabit OFS_B: tam64 = 4;\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz32(y, TABAN + OFS_A, 30);\n"
+        "  mmio_yaz32(y, TABAN + OFS_B, 12);\n"
+        "  de\xc4\x9fi\xc5\x9fken s: tam32 = mmio_oku32(y, TABAN + OFS_A)"
+        " + mmio_oku32(y, TABAN + OFS_B);\n"
+        "  geri_al(y);\n"
+        "  ver s;\n"
+        "}");
+    test_sonuc("mmio sabit adres (taban+ofs) iki register topla -> 42",
+               rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -1260,6 +1298,10 @@ int main(void) {
     test_dizi_boyut();
     test_dizi_buyume();
     test_dizi_tam64();
+
+    printf("\n--- MMIO Foundation: yetki<MMIO> register erisimi ---\n");
+    test_mmio_yaz_oku_round_trip();
+    test_mmio_sabit_adres();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
