@@ -73,6 +73,17 @@ typedef struct IslevKayit {
     struct IslevKayit *sonraki;
 } IslevKayit;
 
+/* Ust duzey sabit kaydi — referans yerlerinde deger ifadesi inline edilir.
+ * Ayni dosyadaki + `kullan` ile yuklenen sabitleri codegen'de cozumler
+ * (cross-file sabit "; HATA: tanimsiz tanimlayici" hatasinin kok cozumu). */
+typedef struct SabitKayit {
+    const char *ad;
+    int ad_uz;
+    const Dugum *deger;    /* sabit.deger — inline edilecek ifade */
+    const Dugum *tip;      /* sabit.tip — beklenen IR tipi icin (NULL olabilir) */
+    struct SabitKayit *sonraki;
+} SabitKayit;
+
 /* Tip substitution context: generic param adi -> ir tipi */
 typedef struct TipSubst {
     const char *ad;
@@ -117,6 +128,7 @@ typedef struct LlvmGen {
     MonoKayit *monolar;     /* emit edilmis instantiation'lar */
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
     YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
+    SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -152,6 +164,29 @@ static LlvmIsim *isim_bul(LlvmGen *g, const char *ad, int ad_uz) {
     for (LlvmIsim *i = g->isimler; i; i = i->sonraki) {
         if (i->ad_uz == ad_uz && memcmp(i->ad, ad, (size_t)ad_uz) == 0) {
             return i;
+        }
+    }
+    return NULL;
+}
+
+/* === Ust duzey sabit tablosu === */
+
+static void sabit_kayit(LlvmGen *g, const Dugum *d) {
+    if (!d || d->tip != DUGUM_SABIT) return;
+    SabitKayit *s = (SabitKayit *)arena_ayir_sifir(g->arena, sizeof(SabitKayit));
+    if (!s) return;
+    s->ad = d->veri.sabit.ad;
+    s->ad_uz = d->veri.sabit.ad_uzunluk;
+    s->deger = d->veri.sabit.deger;
+    s->tip = d->veri.sabit.tip;
+    s->sonraki = g->sabitler;
+    g->sabitler = s;
+}
+
+static SabitKayit *sabit_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (SabitKayit *s = g->sabitler; s; s = s->sonraki) {
+        if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
+            return s;
         }
     }
     return NULL;
@@ -534,7 +569,8 @@ static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
 }
 
 /* Tanimlayici cozumle: alloca'dan load. */
-static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d) {
+static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
+                                    const char *beklenen) {
     LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
                             d->veri.tanimlayici.uzunluk);
     if (!i) {
@@ -551,6 +587,16 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d) {
             fputs(" to ptr\n", g->out);
             IfadeSonuc s = { r, "ptr" };
             return s;
+        }
+        /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
+         * dosyadaki ve `kullan` ile yuklenen sabitler codegen'de cozulur
+         * (cross-file "; HATA: tanimsiz tanimlayici" sorununun kok cozumu). */
+        SabitKayit *sk = sabit_bul(g, d->veri.tanimlayici.metin,
+                                   d->veri.tanimlayici.uzunluk);
+        if (sk && sk->deger) {
+            const char *sb = beklenen;
+            if (!sb && sk->tip) sb = ast_tip_to_ir(g, sk->tip);
+            return ifade_uret(g, sk->deger, sb);
         }
         return hata(g, "tanimsiz tanimlayici");
     }
@@ -787,7 +833,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return metin_lit_uret(g, d);
 
         case DUGUM_TANIMLAYICI:
-            return tanimlayici_yukle(g, d);
+            return tanimlayici_yukle(g, d, beklenen);
 
         case DUGUM_YAPI_OLUSTUR:
             return yapi_olustur_uret(g, d);
@@ -1122,6 +1168,37 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         "  call void @kdl_yetki_geri_al(ptr %%%d)\n",
                         ptr_reg);
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
+                    IfadeSonuc s = { 0, "void" };
+                    return s;
+                }
+                /* MMIO Foundation: mmio_oku32(y, adres) -> i32.
+                 * y compile-time yetki ispati (runtime'a gecmez — WCET).
+                 * adres i64'e genisletilir; kdl_mmio_oku32 cagrilir
+                 * (host: mock tampon, bare-metal: volatile load — pl011 idiomu). */
+                if (_uz == 10 && memcmp(_ca, "mmio_oku32", 10) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call i32 @kdl_mmio_oku32(i64 %%%d)\n",
+                        r, adr64);
+                    IfadeSonuc s = { r, "i32" };
+                    return s;
+                }
+                /* mmio_yaz32(y, adres, deger) -> void (volatile store) */
+                if (_uz == 10 && memcmp(_ca, "mmio_yaz32", 10) == 0 &&
+                    d->veri.cagri.sayi == 3) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    IfadeSonuc val = ifade_uret(g,
+                        d->veri.cagri.argumanlar[2], "i32");
+                    int val32 = int_donustur(g, val.reg, val.tip, "i32");
+                    fprintf(g->out,
+                        "  call void @kdl_mmio_yaz32(i64 %%%d, i32 %%%d)\n",
+                        adr64, val32);
                     IfadeSonuc s = { 0, "void" };
                     return s;
                 }
@@ -2338,6 +2415,11 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
     fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
 
+    /* MMIO Foundation — 32-bit register erisimi (kdl_mmio_*).
+     * Host: mock tampon; bare-metal (-DKEMGU_BARE_METAL): volatile load/store. */
+    fputs("declare i32 @kdl_mmio_oku32(i64)\n", out);
+    fputs("declare void @kdl_mmio_yaz32(i64, i32)\n\n", out);
+
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
         return;
@@ -2461,6 +2543,18 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
         else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
             islev_kayit(&g, uye->veri.disa.tanim);
+        }
+    }
+
+    /* Pre-pass: ust duzey sabitleri kayit et (referans yerlerinde inline).
+     * `kullan` pre-pass'i sabitleri program uyelerine zaten eklemis olur;
+     * boylece hem ayni dosya hem cross-file sabit codegen'de cozulur. */
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (uye->tip == DUGUM_SABIT) sabit_kayit(&g, uye);
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_SABIT) {
+            sabit_kayit(&g, uye->veri.disa.tanim);
         }
     }
 
