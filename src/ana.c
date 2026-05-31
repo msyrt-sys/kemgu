@@ -149,6 +149,10 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
+/* C2: IR-verifier kapisi varsayilan ACIK; --no-verify ile kapatilir
+ * (benchmark kacis yolu). */
+static int g_llvm_dogrula = 1;
+
 static int mode_llvm(const char *kaynak, const char *dosya_adi) {
     Arena *a = arena_olustur(0);
     if (!a) {
@@ -166,7 +170,59 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         arena_serbest(a);
         return 1;
     }
-    llvm_ir_uret(prog, stdout);
+
+    /* --no-verify: kapi kapali, dogrudan emit. */
+    if (!g_llvm_dogrula) {
+        llvm_ir_uret(prog, stdout);
+        arena_serbest(a);
+        return 0;
+    }
+
+    /* C2 kapisi: IR'i once tampona uret, opt pass'lerinden ONCE dogrula,
+     * sonra stdout'a yaz. Text backend oldugu icin LLVMVerifyModule yerine
+     * llvm_ir_dogrula (terminator-tamlik tarayici) kullanilir.
+     * tmpfile acilamazsa guvenli taraf: dogrulamayi atla, yine de emit et. */
+    FILE *tf = tmpfile();
+    if (!tf) {
+        llvm_ir_uret(prog, stdout);
+        arena_serbest(a);
+        return 0;
+    }
+    llvm_ir_uret(prog, tf);
+
+    long boyut = ftell(tf);
+    if (boyut < 0) {
+        rewind(tf);
+        char tampon[4096];
+        size_t r;
+        while ((r = fread(tampon, 1, sizeof(tampon), tf)) > 0) {
+            fwrite(tampon, 1, r, stdout);
+        }
+        fclose(tf);
+        arena_serbest(a);
+        return 0;  /* ftell desteklenmiyor — dogrulamasiz akit */
+    }
+    rewind(tf);
+    char *ir = (char *)malloc((size_t)boyut + 1);
+    if (!ir) {
+        fclose(tf);
+        llvm_ir_uret(prog, stdout);  /* bellek yok — fallback */
+        arena_serbest(a);
+        return 0;
+    }
+    size_t okunan = fread(ir, 1, (size_t)boyut, tf);
+    ir[okunan] = '\0';
+    fclose(tf);
+
+    char hata[256];
+    if (llvm_ir_dogrula(ir, hata, sizeof(hata)) != 0) {
+        fprintf(stderr, "kdl: internal-codegen-error: %s\n", hata);
+        free(ir);
+        arena_serbest(a);
+        return 1;
+    }
+    fwrite(ir, 1, okunan, stdout);
+    free(ir);
     arena_serbest(a);
     return 0;
 }
@@ -179,6 +235,7 @@ static void kullanim_yazdir(const char *prog_adi) {
         "  --check   Parser + tip kontrol (varsayilan)\n"
         "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
         "  --lsp     Language Server (stdio JSON-RPC)\n"
+        "  --no-verify  LLVM IR dogrulama kapisini kapat (sadece --llvm)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -202,6 +259,9 @@ int main(int argc, char *argv[]) {
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--lsp") == 0) {
             mod = MOD_LSP;
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--no-verify") == 0) {
+            g_llvm_dogrula = 0;  /* C2 kapisini kapat (benchmark kacisi) */
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--help") == 0 ||
                    strcmp(argv[arg_idx], "-h") == 0) {

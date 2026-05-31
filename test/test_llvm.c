@@ -90,8 +90,86 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     return rc;
 }
 
+/* Mevcut bir .kem dosyasini --llvm | clang ile derle + calistir, exit code
+ * don. derle_ve_calistir gibi ama kaynak string yerine dosya yolu alir —
+ * Turkce UTF-8 program metnini C string'e gomme zahmetini onler. */
+static int derle_dosya_ve_calistir(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return -1;
+#ifdef _WIN32
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build\\kdl_runtime.o "
+             "build\\kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#else
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build/kdl_runtime.o "
+             "build/kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#endif
+    if (system(komut) != 0) return -1;
+    snprintf(komut, sizeof(komut), "%s", EXE_PATH);
+    return system(komut);
+}
+
+/* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
+ * 1 = IR gecerli (her BB terminator'lu, dominance vs.), 0 = reddedildi.
+ * C1/C2 kabul kriteri: emit edilen modul opt verifier'dan gecmeli. */
+static int kemgu_llvm_opt_verify(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return 0;
+    snprintf(komut, sizeof(komut),
+             "opt -passes=verify -disable-output %s 2>%s", LL_PATH, DEV_NULL);
+    return system(komut) == 0;
+}
+
 
 /* === Testler === */
+
+/* --- C1: esles (match) deyimi codegen --- */
+
+static void test_esles_wildcard(void) {
+    /* '_' catch-all: eslesmeyen tum girdiler son dala duser. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev g(x: tam32) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f x { 5 => { ver 50; } _ => { ver 77; } } "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er g(5) != 50 { ver 1; } "
+        "e\xc4\x9f" "er g(99) != 77 { ver 2; } ver 42; }");
+    test_sonuc("esles wildcard '_' -> exit 42", rc == 42);
+}
+
+static void test_esles_nested(void) {
+    /* Ic ice esles — driver status state machine deseni. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev f(a: tam32, b: tam32) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f a { "
+        "0 => { e\xc5\x9fle\xc5\x9f b { 1 => { ver 11; } 2 => { ver 12; } } } "
+        "1 => { e\xc5\x9fle\xc5\x9f b { 1 => { ver 21; } 2 => { ver 22; } } } } "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er f(0,1) != 11 { ver 1; } "
+        "e\xc4\x9f" "er f(1,2) != 22 { ver 2; } "
+        "e\xc4\x9f" "er f(0,9) != 0 { ver 3; } ver 42; }");
+    test_sonuc("esles ic ice (driver deseni) -> exit 42", rc == 42);
+}
+
+static void test_esles_match_early_return_verify(void) {
+    /* Snapshot fiksturu: her case BB ret/br ile bitmeli -> opt kabul eder. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/match_early_return.kem");
+    test_sonuc("esles match_early_return: opt -passes=verify PASS", ok);
+}
+
+static void test_esles_match_early_return_calistir(void) {
+    /* Erken-ver dallari + tail'e dusen dallar + eslesmeyen -> dogru secim. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/match_early_return.kem");
+    test_sonuc("esles match_early_return: arm secimi -> exit 42", rc == 42);
+}
 
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
@@ -1302,6 +1380,12 @@ int main(void) {
     printf("\n--- MMIO Foundation: yetki<MMIO> register erisimi ---\n");
     test_mmio_yaz_oku_round_trip();
     test_mmio_sabit_adres();
+
+    printf("\n--- C1: esles (match) deyimi codegen ---\n");
+    test_esles_wildcard();
+    test_esles_nested();
+    test_esles_match_early_return_verify();
+    test_esles_match_early_return_calistir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
