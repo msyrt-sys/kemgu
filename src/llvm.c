@@ -2147,6 +2147,97 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return 0;
         }
 
+        /* C1: esles deyimi lowering — switch-with-fall-out.
+         * Onceki durum: bu case yoktu -> default -> "; desteklenmiyor"
+         * yorumu, tum esles govdesi dusurulurdu (driver'lar magic-number
+         * eger zincirine inmek zorunda kaldi). Simdi her kol kendi
+         * BB'sinde uretilir ve her BB tam bir terminator (ret/br) ile biter.
+         *
+         * Sema:
+         *     <scrut'u bir kez degerlendir>          ; acik blok
+         *     %c = icmp eq <sty> %s, <lit0>
+         *     br i1 %c, label %body0, label %test1
+         *   body0: <govde0>   -> 'ver' ise 'ret', degilse 'br L_end'
+         *   test1: %c = icmp eq <sty> %s, <lit1> ; br body1, test2
+         *     ...
+         *   testN: br L_end                         ; hicbiri eslesmedi
+         *   L_end: <sonraki deyimler / islev epilogu>
+         *
+         * Joker '_' veya tanimlayici desen = catch-all: kosulsuz dal;
+         * sonraki kollar erisilemez. v1 codegen literal + catch-all
+         * destekler (driver ihtiyaci: tamsayi literalleri). */
+        case DUGUM_ESLES: {
+            IfadeSonuc s = ifade_uret(g, d->veri.esles.deger, NULL);
+            const char *sty = s.tip ? s.tip : "i32";
+            int kesirli = (strcmp(sty, "float") == 0 ||
+                           strcmp(sty, "double") == 0);
+            const char *cmpop = kesirli ? "fcmp oeq" : "icmp eq";
+            int L_end = yeni_label(g);
+            int n = d->veri.esles.kol_sayi;
+            int acik = 1;  /* testler icin acik bir blok mevcut mu */
+
+            for (int i = 0; i < n && acik; i++) {
+                const Dugum *kol = d->veri.esles.kollar[i];
+                if (!kol || kol->tip != DUGUM_ESLES_KOLU) continue;
+                const Dugum *desen = kol->veri.esles_kolu.desen;
+                const Dugum *govde = kol->veri.esles_kolu.govde;
+                int catchall = desen &&
+                    (desen->tip == DUGUM_DESEN_JOKER ||
+                     desen->tip == DUGUM_DESEN_TANIMLAYICI);
+                int L_body = yeni_label(g);
+                int L_next = -1;
+
+                if (catchall) {
+                    fprintf(g->out, "  br label %%bb%d\n", L_body);
+                } else {
+                    L_next = yeni_label(g);
+                    if (desen && desen->tip == DUGUM_DESEN_LITERAL) {
+                        IfadeSonuc lit = ifade_uret(g,
+                            desen->veri.desen_literal.deger, sty);
+                        int litr = int_donustur(g, lit.reg, lit.tip, sty);
+                        int cr = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
+                                cr, cmpop, sty, s.reg, litr);
+                        fprintf(g->out,
+                                "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                                cr, L_body, L_next);
+                    } else {
+                        /* Desteklenmeyen desen (yapici vb.): asla eslesme,
+                         * sonraki teste gec. Govde BB yine de gecerli
+                         * (terminator'lu) IR olarak uretilir; erisilmez. */
+                        fprintf(g->out, "  br label %%bb%d\n", L_next);
+                    }
+                }
+
+                /* Govde BB */
+                fprintf(g->out, "bb%d:\n", L_body);
+                ScopeMarker m = scope_gir(g);
+                int body_term = 0;
+                if (govde && govde->tip == DUGUM_BLOK) {
+                    body_term = blok_uret(g, govde);
+                } else if (govde) {
+                    (void)ifade_uret(g, govde, NULL);
+                }
+                scope_cik(g, m);
+                if (!body_term) {
+                    fprintf(g->out, "  br label %%bb%d\n", L_end);
+                }
+
+                if (catchall) {
+                    acik = 0;  /* sonraki kollar erisilemez */
+                } else {
+                    fprintf(g->out, "bb%d:\n", L_next);
+                }
+            }
+
+            /* Hicbir kol eslesmezse acik test blogu L_end'e duser. */
+            if (acik) {
+                fprintf(g->out, "  br label %%bb%d\n", L_end);
+            }
+            fprintf(g->out, "bb%d:\n", L_end);
+            return 0;
+        }
+
         default:
             fprintf(g->out, "  ; deyim tipi %d desteklenmiyor\n", d->tip);
             return 0;

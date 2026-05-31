@@ -32,4 +32,20 @@
 /* AST'den LLVM IR text uret. NULL guvenli. */
 void llvm_ir_uret(const Dugum *program, FILE *out);
 
+/*
+ * C2: IR-verifier kapisi (text backend icin LLVMVerifyModule esdegeri).
+ *
+ * libLLVM linklenmedigi icin (text uretici) LLVMVerifyModule cagrilamaz;
+ * bunun yerine emit edilen IR metnini tarayarak her `define`'in her temel
+ * blogunun gecerli bir terminator (ret/br/switch/unreachable/...) ile
+ * bittigini dogrular;  LangRef "her basic block bir terminator ile biter"
+ * degismezini uygular. Bu, C1 sinifi missing-terminator regresyonlarini
+ * (or. esles kolunun bir sonraki bloga dusmesi) opt'a/clang'a varmadan
+ * yakalar.
+ *
+ * Donus: 0 = gecerli; !=0 = ihlal bulundu. `hata` doluysa ilk ihlalin
+ * aciklamasi yazilir (en fazla hata_boyut-1 bayt + NUL).
+ */
+int llvm_ir_dogrula(const char *ir_metni, char *hata, size_t hata_boyut);
+
 #endif /* KEMGU_LLVM_H */
