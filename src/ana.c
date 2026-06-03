@@ -216,7 +216,7 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
 
     char hata[256];
     if (llvm_ir_dogrula(ir, hata, sizeof(hata)) != 0) {
-        fprintf(stderr, "kdl: internal-codegen-error: %s\n", hata);
+        fprintf(stderr, "kemgu: internal-codegen-error: %s\n", hata);
         free(ir);
         arena_serbest(a);
         return 1;
