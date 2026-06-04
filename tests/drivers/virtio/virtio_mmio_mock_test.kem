@@ -6,7 +6,9 @@ kullan drivers::virtio::features;
 kullan drivers::virtio::virtqueue_layout;
 kullan drivers::virtio::virtio_mmio;
 
-sabit TEST_MMIO_OKU_YAZ: tam32 = 3;
+sabit TEST_MMIO_OKU: tam32 = 1;
+sabit TEST_MMIO_YAZ: tam32 = 2;
+sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
 
 // MMIO yetkisi host-mock register penceresini test oncesi hazirlamak icin kullanilir.
 işlev virtio_mmio_test_seed(
@@ -81,7 +83,7 @@ işlev test_init_basari_final_status_15() -> mantıksal {
             8
         );
     ver durum.basarili ve
-        durum.final_status == 15 ve
+        durum.final_status == virtio_status_surucu_tamam_degeri() ve
         durum.accepted_features == VIRTIO_BLK_F_BLK_SIZE() ve
         durum.queue_num_max == 8 ve
         durum.queue_size == 8;
@@ -112,7 +114,8 @@ işlev test_status_register_final_15() -> mantıksal {
     // MMIO yetkisi helper'in tek okuma sahipligi kuralini test etmek icin ayrica uretilir.
     değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
     değişken status: tam32 = virtio_mmio_status_oku(y2, VIRTIO_MMIO_TABAN);
-    ver durum.final_status == 15 ve status == 15;
+    ver durum.final_status == virtio_status_surucu_tamam_degeri() ve
+        status == virtio_status_surucu_tamam_degeri();
 }
 
 işlev test_invalid_magic_failed() -> mantıksal {
@@ -140,7 +143,7 @@ işlev test_invalid_magic_failed() -> mantıksal {
     // MMIO yetkisi FAILED status readback icin tek seferlik kullanilir.
     değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
     değişken status: tam32 = virtio_mmio_status_oku(y2, VIRTIO_MMIO_TABAN);
-    ver durum.hata_kodu == 1 ve status == VIRTIO_STATUS_FAILED;
+    ver durum.hata_kodu == VIRTIO_MMIO_HATA_MAGIC ve status == VIRTIO_STATUS_FAILED;
 }
 
 işlev test_legacy_version_reject() -> mantıksal {
@@ -163,7 +166,7 @@ işlev test_legacy_version_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             8
         );
-    ver değil durum.basarili ve durum.hata_kodu == 2;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_VERSION;
 }
 
 işlev test_device_block_degil_reject() -> mantıksal {
@@ -186,7 +189,7 @@ işlev test_device_block_degil_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             8
         );
-    ver değil durum.basarili ve durum.hata_kodu == 3;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_DEVICE;
 }
 
 işlev test_required_feature_missing_reject() -> mantıksal {
@@ -209,7 +212,7 @@ işlev test_required_feature_missing_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             8
         );
-    ver değil durum.basarili ve durum.hata_kodu == 5;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURE;
 }
 
 işlev test_queue_max_sifir_reject() -> mantıksal {
@@ -232,7 +235,7 @@ işlev test_queue_max_sifir_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             8
         );
-    ver değil durum.basarili ve durum.hata_kodu == 7;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
 }
 
 işlev test_queue_size_iki_kuvveti_degil_reject() -> mantıksal {
@@ -255,7 +258,7 @@ işlev test_queue_size_iki_kuvveti_degil_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             6
         );
-    ver değil durum.basarili ve durum.hata_kodu == 7;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
 }
 
 işlev test_queue_size_max_ustu_reject() -> mantıksal {
@@ -278,12 +281,12 @@ işlev test_queue_size_max_ustu_reject() -> mantıksal {
             VIRTIO_BLK_F_BLK_SIZE(),
             16
         );
-    ver değil durum.basarili ve durum.hata_kodu == 7;
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
 }
 
 işlev test_status_features_ok_helper() -> mantıksal {
-    ver virtio_mmio_features_ok_set_mi(11) ve
-        değil virtio_mmio_features_ok_set_mi(3);
+    ver virtio_mmio_features_ok_set_mi(virtio_status_ozellik_tamam_degeri()) ve
+        değil virtio_mmio_features_ok_set_mi(virtio_status_surucu_degeri());
 }
 
 işlev main() -> tam32 {

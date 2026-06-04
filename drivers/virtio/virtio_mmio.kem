@@ -14,6 +14,14 @@ sabit VIRTIO_MMIO_QUEUE_SEL0: tam32 = 0;
 sabit VIRTIO_MMIO_DESC_TEST_ADRES: tam32 = 4096;
 sabit VIRTIO_MMIO_AVAIL_TEST_ADRES: tam32 = 8192;
 sabit VIRTIO_MMIO_USED_TEST_ADRES: tam32 = 12288;
+sabit VIRTIO_MMIO_HATA_YOK: tam32 = 0;
+sabit VIRTIO_MMIO_HATA_MAGIC: tam32 = 101;
+sabit VIRTIO_MMIO_HATA_VERSION: tam32 = 102;
+sabit VIRTIO_MMIO_HATA_DEVICE: tam32 = 103;
+sabit VIRTIO_MMIO_HATA_STATUS: tam32 = 104;
+sabit VIRTIO_MMIO_HATA_FEATURE: tam32 = 105;
+sabit VIRTIO_MMIO_HATA_FEATURES_OK: tam32 = 106;
+sabit VIRTIO_MMIO_HATA_QUEUE: tam32 = 107;
 
 yapı VirtioMmioProbeSonuc {
     magic: tam32;
@@ -64,26 +72,6 @@ işlev virtio_mmio_block_device_mi(device_id: tam32) -> mantıksal {
 
 işlev virtio_mmio_features_ok_set_mi(status: tam32) -> mantıksal {
     ver (status & VIRTIO_STATUS_FEATURES_OK) == VIRTIO_STATUS_FEATURES_OK;
-}
-
-// TODO(codex-next-pr): status.kem esles codegen'i native return icin duzelince dogrudan onu kullan.
-işlev virtio_mmio_status_gecis_runtime_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
-    eğer bit == VIRTIO_STATUS_FAILED { ver doğru; }
-    eğer (mevcut & VIRTIO_STATUS_FAILED) == VIRTIO_STATUS_FAILED { ver yanlış; }
-
-    eğer mevcut == VIRTIO_STATUS_RESET {
-        ver bit == VIRTIO_STATUS_ACKNOWLEDGE;
-    }
-    eğer mevcut == VIRTIO_STATUS_ACKNOWLEDGE {
-        ver bit == VIRTIO_STATUS_DRIVER;
-    }
-    eğer mevcut == 3 {
-        ver bit == VIRTIO_STATUS_FEATURES_OK;
-    }
-    eğer mevcut == 11 {
-        ver bit == VIRTIO_STATUS_DRIVER_OK;
-    }
-    ver yanlış;
 }
 
 işlev virtio_mmio_queue_layout_gecerli_mi(queue_num_max: tam32, queue_size: tam32) -> mantıksal {
@@ -154,7 +142,7 @@ işlev virtio_mmio_transport_init_durum(
     değişken device_id: tam32 =
         mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_ID));
 
-    değişken hata_kodu: tam32 = 0;
+    değişken hata_kodu: tam32 = VIRTIO_MMIO_HATA_YOK;
     değişken status: tam32 = VIRTIO_STATUS_RESET;
     değişken device_features: dtam64 = 0;
     değişken accepted_features: dtam64 = 0;
@@ -162,48 +150,48 @@ işlev virtio_mmio_transport_init_durum(
 
     eğer değil virtio_mmio_magic_gecerli_mi(magic) {
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-        hata_kodu = 1;
+        hata_kodu = VIRTIO_MMIO_HATA_MAGIC;
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         eğer değil virtio_mmio_version_modern_mi(version) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 2;
+            hata_kodu = VIRTIO_MMIO_HATA_VERSION;
         }
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         eğer değil virtio_mmio_block_device_mi(device_id) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 3;
+            hata_kodu = VIRTIO_MMIO_HATA_DEVICE;
         }
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
     }
 
-    eğer hata_kodu == 0 {
-        eğer değil virtio_mmio_status_gecis_runtime_gecerli_mi(status, VIRTIO_STATUS_ACKNOWLEDGE) {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_ACKNOWLEDGE) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 4;
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
         }
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_ACKNOWLEDGE);
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
     }
 
-    eğer hata_kodu == 0 {
-        eğer değil virtio_mmio_status_gecis_runtime_gecerli_mi(status, VIRTIO_STATUS_DRIVER) {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 4;
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
         }
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER);
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         mmio_yaz32(
             y,
             virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_FEATURES_SEL),
@@ -214,18 +202,18 @@ işlev virtio_mmio_transport_init_durum(
         device_features = device_features_low olarak dtam64;
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         eğer değil virtio_feature_negotiation_gecerli_mi(
             device_features,
             driver_supported,
             driver_required
         ) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 5;
+            hata_kodu = VIRTIO_MMIO_HATA_FEATURE;
         }
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         accepted_features = virtio_feature_kabul_maskesi(device_features, driver_supported);
         değişken accepted_low: tam32 = accepted_features olarak tam32;
 
@@ -241,27 +229,27 @@ işlev virtio_mmio_transport_init_durum(
         );
     }
 
-    eğer hata_kodu == 0 {
-        eğer değil virtio_mmio_status_gecis_runtime_gecerli_mi(status, VIRTIO_STATUS_FEATURES_OK) {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_FEATURES_OK) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 4;
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
         }
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_FEATURES_OK);
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         değişken features_ok_readback: tam32 =
             mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS));
         eğer değil virtio_mmio_features_ok_set_mi(features_ok_readback) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 6;
+            hata_kodu = VIRTIO_MMIO_HATA_FEATURES_OK;
         }
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         mmio_yaz32(
             y,
             virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_SEL),
@@ -271,20 +259,20 @@ işlev virtio_mmio_transport_init_durum(
             mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM_MAX));
     }
 
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         eğer değil virtio_mmio_queue_layout_gecerli_mi(queue_num_max, queue_size) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 7;
+            hata_kodu = VIRTIO_MMIO_HATA_QUEUE;
         }
     }
 
-    eğer hata_kodu == 0 {
-        eğer değil virtio_mmio_status_gecis_runtime_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK) {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK) {
             mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
-            hata_kodu = 4;
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
         }
     }
-    eğer hata_kodu == 0 {
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER_OK);
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
 
@@ -324,13 +312,13 @@ işlev virtio_mmio_transport_init(
             queue_size
         );
 
-    eğer durum.hata_kodu == 1 { ver hata("MagicGecersiz"); }
-    eğer durum.hata_kodu == 2 { ver hata("VersionModernDegil"); }
-    eğer durum.hata_kodu == 3 { ver hata("DeviceBlokDegil"); }
-    eğer durum.hata_kodu == 4 { ver hata("StatusGecisGecersiz"); }
-    eğer durum.hata_kodu == 5 { ver hata("FeatureNegotiationBasarisiz"); }
-    eğer durum.hata_kodu == 6 { ver hata("FeaturesOkReddedildi"); }
-    eğer durum.hata_kodu == 7 { ver hata("QueueGecersiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_MAGIC { ver hata("MagicGecersiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_VERSION { ver hata("VersionModernDegil"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_DEVICE { ver hata("DeviceBlokDegil"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_STATUS { ver hata("StatusGecisGecersiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURE { ver hata("FeatureNegotiationBasarisiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURES_OK { ver hata("FeaturesOkReddedildi"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE { ver hata("QueueGecersiz"); }
 
     ver tamam(VirtioMmioInitSonuc {
         magic: durum.magic,
