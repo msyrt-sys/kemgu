@@ -1,0 +1,308 @@
+// VirtIO MMIO host-mock testi: gercek mmio_oku32/mmio_yaz32 primitive'lerini kullanir.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::status;
+kullan drivers::virtio::features;
+kullan drivers::virtio::virtqueue_layout;
+kullan drivers::virtio::virtio_mmio;
+
+sabit TEST_MMIO_OKU: tam32 = 1;
+sabit TEST_MMIO_YAZ: tam32 = 2;
+sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
+
+// MMIO yetkisi host-mock register penceresini test oncesi hazirlamak icin kullanilir.
+işlev virtio_mmio_test_seed(
+    // MMIO yetkisi seed yazimlari boyunca odunc kullanilip caller'a geri verilir.
+    y: yetki<MMIO>,
+    magic: tam32,
+    version: tam32,
+    device_id: tam32,
+    device_features: tam32,
+    queue_num_max: tam32
+) -> yetki<MMIO> {
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_MAGIC_VALUE), magic);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_VERSION), version);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DEVICE_ID), device_id);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DEVICE_FEATURES), device_features);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM_MAX), queue_num_max);
+    ver y;
+}
+
+işlev test_mmio_round_trip_magic() -> mantıksal {
+    // MMIO yetkisi tek yaz-oku round-trip icin olusturulur ve sonda iade edilir.
+    değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    mmio_yaz32(
+        y,
+        virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_MAGIC_VALUE),
+        VIRTIO_MMIO_MAGIC_BEKLENEN
+    );
+    değişken magic: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_MAGIC_VALUE));
+    geri_al(y);
+    ver magic == VIRTIO_MMIO_MAGIC_BEKLENEN;
+}
+
+işlev test_probe_okur() -> mantıksal {
+    // MMIO yetkisi probe oncesi registerlari seed edip probe'a devretmek icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan probe'a aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken probe: VirtioMmioProbeSonuc = virtio_mmio_probe(y1, VIRTIO_MMIO_TABAN);
+    ver probe.magic == VIRTIO_MMIO_MAGIC_BEKLENEN ve
+        probe.version == VIRTIO_MMIO_VERSION_MODERN ve
+        probe.device_id == VIRTIO_MMIO_DEVICE_ID_BLOCK ve
+        probe.modern ve
+        probe.block;
+}
+
+işlev test_init_basari_final_status_15() -> mantıksal {
+    // MMIO yetkisi basarili init boyunca transport fonksiyonuna devredilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    ver durum.basarili ve
+        durum.final_status == virtio_status_surucu_tamam_degeri() ve
+        durum.accepted_features == VIRTIO_BLK_F_BLK_SIZE() ve
+        durum.queue_num_max == 8 ve
+        durum.queue_size == 8;
+}
+
+işlev test_status_register_final_15() -> mantıksal {
+    // MMIO yetkisi init sonrasinda host-mock status register'ini okumak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    eğer değil durum.basarili { ver yanlış; }
+
+    // MMIO yetkisi helper'in tek okuma sahipligi kuralini test etmek icin ayrica uretilir.
+    değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    değişken status: tam32 = virtio_mmio_status_oku(y2, VIRTIO_MMIO_TABAN);
+    ver durum.final_status == virtio_status_surucu_tamam_degeri() ve
+        status == virtio_status_surucu_tamam_degeri();
+}
+
+işlev test_invalid_magic_failed() -> mantıksal {
+    // MMIO yetkisi gecersiz magic hata yolunda FAILED yazimini dogrulamak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        0,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    eğer durum.basarili { ver yanlış; }
+
+    // MMIO yetkisi FAILED status readback icin tek seferlik kullanilir.
+    değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    değişken status: tam32 = virtio_mmio_status_oku(y2, VIRTIO_MMIO_TABAN);
+    ver durum.hata_kodu == VIRTIO_MMIO_HATA_MAGIC ve status == VIRTIO_STATUS_FAILED;
+}
+
+işlev test_legacy_version_reject() -> mantıksal {
+    // MMIO yetkisi legacy version hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        1,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_VERSION;
+}
+
+işlev test_device_block_degil_reject() -> mantıksal {
+    // MMIO yetkisi block disi device id hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        1,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_DEVICE;
+}
+
+işlev test_required_feature_missing_reject() -> mantıksal {
+    // MMIO yetkisi eksik zorunlu feature hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        0,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURE;
+}
+
+işlev test_queue_max_sifir_reject() -> mantıksal {
+    // MMIO yetkisi queue_num_max=0 hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        0
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            8
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
+}
+
+işlev test_queue_size_iki_kuvveti_degil_reject() -> mantıksal {
+    // MMIO yetkisi power-of-two olmayan queue size hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            6
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
+}
+
+işlev test_queue_size_max_ustu_reject() -> mantıksal {
+    // MMIO yetkisi queue_size > queue_num_max hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan init hata yoluna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtio_mmio_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y1,
+            VIRTIO_MMIO_TABAN,
+            VIRTIO_BLK_F_BLK_SIZE(),
+            VIRTIO_BLK_F_BLK_SIZE(),
+            16
+        );
+    ver değil durum.basarili ve durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE;
+}
+
+işlev test_status_features_ok_helper() -> mantıksal {
+    ver virtio_mmio_features_ok_set_mi(virtio_status_ozellik_tamam_degeri()) ve
+        değil virtio_mmio_features_ok_set_mi(virtio_status_surucu_degeri());
+}
+
+işlev main() -> tam32 {
+    eğer test_mmio_round_trip_magic() ve
+       test_probe_okur() ve
+       test_init_basari_final_status_15() ve
+       test_status_register_final_15() ve
+       test_invalid_magic_failed() ve
+       test_legacy_version_reject() ve
+       test_device_block_degil_reject() ve
+       test_required_feature_missing_reject() ve
+       test_queue_max_sifir_reject() ve
+       test_queue_size_iki_kuvveti_degil_reject() ve
+       test_queue_size_max_ustu_reject() ve
+       test_status_features_ok_helper() {
+        ver 0;
+    }
+    ver 1;
+}
