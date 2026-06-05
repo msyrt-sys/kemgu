@@ -129,6 +129,10 @@ typedef struct LlvmGen {
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
     YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
+    /* C2.5: sonuç/seçimlik value codegen — yapısal beklenen tip kanalı.
+     * tamam/hata/değer/hiç yapıcıları tam tipi (T, H) buradan okur. */
+    const Dugum *beklenen_tip;       /* yapıcının inşa edeceği sonuç/seçimlik tip düğümü */
+    const Dugum *aktif_donus_dugum;  /* aktif islevin donus tipi AST düğümü (ver için) */
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -139,6 +143,8 @@ typedef struct IfadeSonuc {
 /* === Forward === */
 
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d, const char *beklenen);
+static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
+                              const Dugum *arg, const Dugum *beklenen);
 static int blok_uret(LlvmGen *g, const Dugum *blok);
 static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
 static int mono_emitlendi(LlvmGen *g, const char *mangled);
@@ -312,6 +318,34 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
         if (buf) {
             int n = snprintf(buf, (size_t)buf_sz, "<%d x %s>", lane, eleman_ir);
             (void)n;
+            return buf;
+        }
+        return "i32";
+    }
+    /* C2.5: sonuç<T,H> → {i8 tag, T, H} (tag: 0=tamam, 1=hata).
+     *       seçimlik<T> → {i8 tag, T} (tag: 0=değer, 1=hiç).
+     * Ayrık alanlar (union değil): by-value LLVM aggregate, struct ABI'siyle
+     * aynı. void/boş payload → i8 dummy (LLVM struct alanı sized olmalı). */
+    if (tip_d->tip == DUGUM_TIP_SONUC) {
+        const char *t_ir = ast_tip_to_ir(g, tip_d->veri.tip_sonuc.deger_tip);
+        const char *h_ir = ast_tip_to_ir(g, tip_d->veri.tip_sonuc.hata_tip);
+        if (!t_ir || strcmp(t_ir, "void") == 0) t_ir = "i8";
+        if (!h_ir || strcmp(h_ir, "void") == 0) h_ir = "i8";
+        int sz = (int)strlen(t_ir) + (int)strlen(h_ir) + 16;
+        char *buf = (char *)arena_ayir(g->arena, (size_t)sz);
+        if (buf) {
+            snprintf(buf, (size_t)sz, "{i8, %s, %s}", t_ir, h_ir);
+            return buf;
+        }
+        return "i32";
+    }
+    if (tip_d->tip == DUGUM_TIP_SECIMLIK) {
+        const char *t_ir = ast_tip_to_ir(g, tip_d->veri.tip_secimlik.ic_tip);
+        if (!t_ir || strcmp(t_ir, "void") == 0) t_ir = "i8";
+        int sz = (int)strlen(t_ir) + 12;
+        char *buf = (char *)arena_ayir(g->arena, (size_t)sz);
+        if (buf) {
+            snprintf(buf, (size_t)sz, "{i8, %s}", t_ir);
             return buf;
         }
         return "i32";
@@ -571,6 +605,12 @@ static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
 /* Tanimlayici cozumle: alloca'dan load. */
 static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
                                     const char *beklenen) {
+    /* C2.5: hiç → seçimlik<T> {i8 1, undef} (beklenen seçimlik ise). */
+    if (d->veri.tanimlayici.uzunluk == 4 &&
+        memcmp(d->veri.tanimlayici.metin, "hi\xc3\xa7", 4) == 0 &&
+        g->beklenen_tip && g->beklenen_tip->tip == DUGUM_TIP_SECIMLIK) {
+        return yapici_uret(g, "hi\xc3\xa7", 4, NULL, g->beklenen_tip);
+    }
     LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
                             d->veri.tanimlayici.uzunluk);
     if (!i) {
@@ -754,6 +794,133 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
             load_r, alan_ir, gep_r);
     IfadeSonuc s = { load_r, alan_ir };
     return s;
+}
+
+/* === C2.5: sonuç/seçimlik tagged-union yardımcıları === */
+
+/* "{i8, T, H}" aggregate IR stringinden idx'inci alanın tipini cikar.
+ * Derinlik farkında ({..}, [..], <..> içeren alanlar için). 1=başarı. */
+static int agg_alan_ir(const char *agg, int idx, char *out, size_t out_n) {
+    if (!agg || agg[0] != '{' || out_n == 0) return 0;
+    const char *p = agg + 1;
+    int field = 0, depth = 0;
+    while (*p == ' ') p++;
+    const char *bas = p;
+    for (;;) {
+        char c = *p;
+        if (c == '\0') return 0;
+        if (depth == 0 && (c == ',' || c == '}')) {
+            if (field == idx) {
+                const char *son = p;
+                while (son > bas && son[-1] == ' ') son--;
+                size_t k = (size_t)(son - bas);
+                if (k >= out_n) k = out_n - 1;
+                memcpy(out, bas, k);
+                out[k] = '\0';
+                return 1;
+            }
+            if (c == '}') return 0;
+            field++;
+            p++;
+            while (*p == ' ') p++;
+            bas = p;
+            continue;
+        }
+        if (c == '{' || c == '[' || c == '<') depth++;
+        else if (c == '}' || c == ']' || c == '>') depth--;
+        p++;
+    }
+}
+
+/* Yapıcı adı + beklenen sonuç/seçimlik tip düğümü → tag, payload alan indeksi,
+ * payload tip düğümü. 1=tanınan yapıcı. payload_field<0 → payload yok (hiç). */
+static int yapici_bilgi(const char *yad, int yuz, const Dugum *beklenen,
+                        int *tag, int *payload_field,
+                        const Dugum **payload_tip) {
+    *payload_tip = NULL;
+    if (!beklenen) return 0;
+    if (beklenen->tip == DUGUM_TIP_SONUC) {
+        if (yuz == 5 && memcmp(yad, "tamam", 5) == 0) {
+            *tag = 0; *payload_field = 1;
+            *payload_tip = beklenen->veri.tip_sonuc.deger_tip; return 1;
+        }
+        if (yuz == 4 && memcmp(yad, "hata", 4) == 0) {
+            *tag = 1; *payload_field = 2;
+            *payload_tip = beklenen->veri.tip_sonuc.hata_tip; return 1;
+        }
+        return 0;
+    }
+    if (beklenen->tip == DUGUM_TIP_SECIMLIK) {
+        if (yuz == 6 && memcmp(yad, "de\xc4\x9f" "er", 6) == 0) {
+            *tag = 0; *payload_field = 1;
+            *payload_tip = beklenen->veri.tip_secimlik.ic_tip; return 1;
+        }
+        if (yuz == 4 && memcmp(yad, "hi\xc3\xa7", 4) == 0) {
+            *tag = 1; *payload_field = -1; return 1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+/* tamam(x)/hata(e)/değer(x)/hiç → {i8 tag, payload...} inline inşa (by-value).
+ * yapi_olustur_uret ile aynı desen: alloca + GEP+store + load. */
+static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
+                              const Dugum *arg, const Dugum *beklenen) {
+    int tag = 0, pf = -1;
+    const Dugum *payload_tip = NULL;
+    if (!yapici_bilgi(yad, yuz, beklenen, &tag, &pf, &payload_tip)) {
+        return hata(g, "sonuc/secimlik yapicisi cozulemedi");
+    }
+    const char *agg = ast_tip_to_ir(g, beklenen);
+    int ar = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", ar, agg);
+    /* tag (alan 0) */
+    int gt = yeni_reg(g);
+    fprintf(g->out, "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 0\n",
+            gt, agg, ar);
+    fprintf(g->out, "  store i8 %d, ptr %%%d\n", tag, gt);
+    /* payload (alan pf) */
+    if (pf >= 0 && arg) {
+        const char *pir = ast_tip_to_ir(g, payload_tip);
+        if (!pir || strcmp(pir, "void") == 0) pir = "i8";
+        const Dugum *eski = g->beklenen_tip;
+        g->beklenen_tip = payload_tip;  /* iç içe yapıcı için */
+        IfadeSonuc pv = ifade_uret(g, arg, pir);
+        g->beklenen_tip = eski;
+        int pr = pv.reg;
+        if (!tip_kesirli_mi(pir) && !tip_kesirli_mi(pv.tip) &&
+            tip_genisligi(pir) > 0 && tip_genisligi(pv.tip) > 0) {
+            pr = int_donustur(g, pv.reg, pv.tip, pir);
+        }
+        int gp = yeni_reg(g);
+        fprintf(g->out, "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 %d\n",
+                gp, agg, ar, pf);
+        fprintf(g->out, "  store %s %%%d, ptr %%%d\n", pir, pr, gp);
+    }
+    int lr = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, agg, ar);
+    IfadeSonuc s = { lr, agg };
+    return s;
+}
+
+/* Bir eşleş deseni sonuç/seçimlik yapıcı deseni mi? (tamam/hata/değer/hiç) */
+static int yapici_desen_mi(const Dugum *desen) {
+    const char *ad = NULL; int uz = 0;
+    if (!desen) return 0;
+    if (desen->tip == DUGUM_DESEN_YAPICI) {
+        ad = desen->veri.desen_yapici.ad; uz = desen->veri.desen_yapici.ad_uzunluk;
+    } else if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+        ad = desen->veri.desen_tanimlayici.ad;
+        uz = desen->veri.desen_tanimlayici.ad_uzunluk;
+    } else {
+        return 0;
+    }
+    if (!ad) return 0;
+    return (uz == 5 && memcmp(ad, "tamam", 5) == 0) ||
+           (uz == 4 && memcmp(ad, "hata", 4) == 0) ||
+           (uz == 6 && memcmp(ad, "de\xc4\x9f" "er", 6) == 0) ||
+           (uz == 4 && memcmp(ad, "hi\xc3\xa7", 4) == 0);
 }
 
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
@@ -1062,6 +1229,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {
                 return hata(g, "cagri hedefi tanimlayici degil");
+            }
+            /* C2.5: sonuç/seçimlik yapıcıları — tamam(x)/hata(e)/değer(x).
+             * Beklenen yapısal tip sonuç/seçimlik ise generic call yerine
+             * tagged-union inşası → @tamam/@hata tanımsız sembolleri kalkar. */
+            {
+                const char *ca = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int cuz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                int ctor = (cuz == 5 && memcmp(ca, "tamam", 5) == 0) ||
+                           (cuz == 4 && memcmp(ca, "hata", 4) == 0) ||
+                           (cuz == 6 && memcmp(ca, "de\xc4\x9f" "er", 6) == 0);
+                if (ctor && g->beklenen_tip &&
+                    (g->beklenen_tip->tip == DUGUM_TIP_SONUC ||
+                     g->beklenen_tip->tip == DUGUM_TIP_SECIMLIK) &&
+                    d->veri.cagri.sayi >= 1) {
+                    return yapici_uret(g, ca, cuz,
+                                       d->veri.cagri.argumanlar[0],
+                                       g->beklenen_tip);
+                }
             }
             /* Sabitsüre Spec V1 intrinsics: sabitsure_yarat (16 byte) ve
              * ifsa (5 byte). Argümanı pass-through, sonra speculation
@@ -1872,7 +2057,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
     switch (d->tip) {
         case DUGUM_VER: {
             if (d->veri.ver.deger) {
+                /* C2.5: ver tamam(x)/hata(e)/değer(x)/hiç — beklenen yapısal
+                 * tip = aktif islevin dönüş tipi. */
+                const Dugum *eski_bt = g->beklenen_tip;
+                g->beklenen_tip = g->aktif_donus_dugum;
                 IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
+                g->beklenen_tip = eski_bt;
                 int rr = int_donustur(g, s.reg, s.tip, donus_tip);
                 fprintf(g->out, "  ret %s %%%d\n", donus_tip, rr);
             } else {
@@ -1955,7 +2145,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* Annot var: dogrudan alloca, sonra store */
                     int alloca_reg = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
+                    /* C2.5: değişken r: sonuç/seçimlik = tamam(x)/hiç — beklenen
+                     * yapısal tip = değişkenin annotasyonu. */
+                    const Dugum *eski_bt = g->beklenen_tip;
+                    g->beklenen_tip = d->veri.degisken.tip;
                     dv = ifade_uret(g, d->veri.degisken.deger, tip);
+                    g->beklenen_tip = eski_bt;
                     int rr = int_donustur(g, dv.reg, dv.tip, tip);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             tip, rr, alloca_reg);
@@ -2181,17 +2376,54 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 if (!kol || kol->tip != DUGUM_ESLES_KOLU) continue;
                 const Dugum *desen = kol->veri.esles_kolu.desen;
                 const Dugum *govde = kol->veri.esles_kolu.govde;
-                int catchall = desen &&
+                int is_ctor = yapici_desen_mi(desen);
+                int catchall = !is_ctor && desen &&
                     (desen->tip == DUGUM_DESEN_JOKER ||
                      desen->tip == DUGUM_DESEN_TANIMLAYICI);
                 int L_body = yeni_label(g);
                 int L_next = -1;
+                int ctor_pf = -1;               /* payload alan indeksi (>=0) */
+                const Dugum *ctor_bind = NULL;  /* bağlanacak alt-desen */
 
                 if (catchall) {
                     fprintf(g->out, "  br label %%bb%d\n", L_body);
                 } else {
                     L_next = yeni_label(g);
-                    if (desen && desen->tip == DUGUM_DESEN_LITERAL) {
+                    if (is_ctor) {
+                        /* C2.5: sonuç/seçimlik destructuring — tag oku + dallan.
+                         * scrutinee {i8 tag, ...} aggregate; tamam/değer=0,
+                         * hata/hiç=1. */
+                        const char *yad; int yuz;
+                        if (desen->tip == DUGUM_DESEN_YAPICI) {
+                            yad = desen->veri.desen_yapici.ad;
+                            yuz = desen->veri.desen_yapici.ad_uzunluk;
+                            if (desen->veri.desen_yapici.sayi > 0) {
+                                ctor_bind =
+                                    desen->veri.desen_yapici.alt_desenler[0];
+                            }
+                        } else {
+                            yad = desen->veri.desen_tanimlayici.ad;
+                            yuz = desen->veri.desen_tanimlayici.ad_uzunluk;
+                        }
+                        int tag;
+                        if (yuz == 4 && memcmp(yad, "hata", 4) == 0) {
+                            tag = 1; ctor_pf = 2;
+                        } else if (yuz == 4 &&
+                                   memcmp(yad, "hi\xc3\xa7", 4) == 0) {
+                            tag = 1; ctor_pf = -1;
+                        } else {  /* tamam / değer */
+                            tag = 0; ctor_pf = 1;
+                        }
+                        int tr = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = extractvalue %s %%%d, 0\n",
+                                tr, sty, s.reg);
+                        int cr = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = icmp eq i8 %%%d, %d\n",
+                                cr, tr, tag);
+                        fprintf(g->out,
+                                "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                                cr, L_body, L_next);
+                    } else if (desen && desen->tip == DUGUM_DESEN_LITERAL) {
                         IfadeSonuc lit = ifade_uret(g,
                             desen->veri.desen_literal.deger, sty);
                         int litr = int_donustur(g, lit.reg, lit.tip, sty);
@@ -2202,9 +2434,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                                 cr, L_body, L_next);
                     } else {
-                        /* Desteklenmeyen desen (yapici vb.): asla eslesme,
-                         * sonraki teste gec. Govde BB yine de gecerli
-                         * (terminator'lu) IR olarak uretilir; erisilmez. */
+                        /* Desteklenmeyen desen (custom ADT vb.): asla eşleşme,
+                         * sonraki teste geç. Govde BB yine de geçerli
+                         * (terminator'lu) IR olarak üretilir; erişilmez. */
                         fprintf(g->out, "  br label %%bb%d\n", L_next);
                     }
                 }
@@ -2212,6 +2444,30 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 /* Govde BB */
                 fprintf(g->out, "bb%d:\n", L_body);
                 ScopeMarker m = scope_gir(g);
+                /* C2.5: ctor payload'ını çıkar + bağlı değişkene ata
+                 * (tamam(v)/hata(e)/değer(s)). 'tanimsiz tanimlayici' kalkar. */
+                if (is_ctor && ctor_pf >= 0 && ctor_bind &&
+                    ctor_bind->tip == DUGUM_DESEN_TANIMLAYICI) {
+                    char ftype[160];
+                    if (agg_alan_ir(sty, ctor_pf, ftype, sizeof(ftype))) {
+                        int pr = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
+                                pr, sty, s.reg, ctor_pf);
+                        int ar = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %s\n", ar, ftype);
+                        fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                                ftype, pr, ar);
+                        size_t fl = strlen(ftype);
+                        char *ftcopy = (char *)arena_ayir(g->arena, fl + 1);
+                        if (ftcopy) {
+                            memcpy(ftcopy, ftype, fl + 1);
+                            isim_ekle(g,
+                                ctor_bind->veri.desen_tanimlayici.ad,
+                                ctor_bind->veri.desen_tanimlayici.ad_uzunluk,
+                                1, ar, ftcopy);
+                        }
+                    }
+                }
                 int body_term = 0;
                 if (govde && govde->tip == DUGUM_BLOK) {
                     body_term = blok_uret(g, govde);
@@ -2348,6 +2604,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         : "void";
     if (!donus) donus = "void";
     g_donus_tip = donus;
+    g->aktif_donus_dugum = islev->veri.islev.donus_tipi;  /* C2.5: ver yapıcısı için */
 
     /* Realtime Spec V1: gercekzamanli isleve metadata yorumu (V1 minimal;
      * V2'de gercek LLVM metadata: !realtime !N). */
