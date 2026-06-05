@@ -6,3 +6,18 @@ sabit VIRTIO_STATUS_DRIVER: tam32 = 2;
 sabit VIRTIO_STATUS_DRIVER_OK: tam32 = 4;
 sabit VIRTIO_STATUS_FEATURES_OK: tam32 = 8;
 sabit VIRTIO_STATUS_FAILED: tam32 = 128;
+
+// VirtIO MMIO v2 register offsetleri; taban adresi transport dosyasinda tutulur.
+sabit VIRTIO_MMIO_MAGIC_VALUE: tam64 = 0;
+sabit VIRTIO_MMIO_VERSION: tam64 = 4;
+sabit VIRTIO_MMIO_DEVICE_ID: tam64 = 8;
+sabit VIRTIO_MMIO_VENDOR_ID: tam64 = 12;
+sabit VIRTIO_MMIO_DEVICE_FEATURES: tam64 = 16;
+sabit VIRTIO_MMIO_DEVICE_FEATURES_SEL: tam64 = 20;
+sabit VIRTIO_MMIO_DRIVER_FEATURES: tam64 = 32;
+sabit VIRTIO_MMIO_DRIVER_FEATURES_SEL: tam64 = 36;
+sabit VIRTIO_MMIO_QUEUE_SEL: tam64 = 48;
+sabit VIRTIO_MMIO_QUEUE_NUM_MAX: tam64 = 52;
+sabit VIRTIO_MMIO_QUEUE_NUM: tam64 = 56;
+sabit VIRTIO_MMIO_QUEUE_READY: tam64 = 68;
+sabit VIRTIO_MMIO_STATUS: tam64 = 112;

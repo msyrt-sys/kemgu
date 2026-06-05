@@ -1,73 +1,110 @@
 // VirtIO status state machine: saf KEMGU model, MMIO veya QEMU baglantisi yok.
 
+kullan drivers::virtio::constants;
+
+sabit VIRTIO_DURUM_BILINMEYEN: tam32 = 90;
+sabit VIRTIO_DURUM_SIFIRLA: tam32 = 91;
+sabit VIRTIO_DURUM_ONAYLA: tam32 = 92;
+sabit VIRTIO_DURUM_SURUCU: tam32 = 93;
+sabit VIRTIO_DURUM_OZELLIK_TAMAM: tam32 = 94;
+sabit VIRTIO_DURUM_SURUCU_TAMAM: tam32 = 95;
+sabit VIRTIO_DURUM_BASARISIZ: tam32 = 96;
+
 işlev virtio_status_ekle(mevcut: tam32, bit: tam32) -> tam32 {
     ver mevcut | bit;
 }
 
+işlev virtio_status_sifirla_degeri() -> tam32 {
+    ver VIRTIO_STATUS_RESET;
+}
+
+işlev virtio_status_onayla_degeri() -> tam32 {
+    ver virtio_status_ekle(VIRTIO_STATUS_RESET, VIRTIO_STATUS_ACKNOWLEDGE);
+}
+
+işlev virtio_status_surucu_degeri() -> tam32 {
+    ver virtio_status_ekle(virtio_status_onayla_degeri(), VIRTIO_STATUS_DRIVER);
+}
+
+işlev virtio_status_ozellik_tamam_degeri() -> tam32 {
+    ver virtio_status_ekle(virtio_status_surucu_degeri(), VIRTIO_STATUS_FEATURES_OK);
+}
+
+işlev virtio_status_surucu_tamam_degeri() -> tam32 {
+    ver virtio_status_ekle(virtio_status_ozellik_tamam_degeri(), VIRTIO_STATUS_DRIVER_OK);
+}
+
+işlev virtio_status_basarisiz_degeri() -> tam32 {
+    ver VIRTIO_STATUS_FAILED;
+}
+
 işlev virtio_status_failed_mi(status: tam32) -> mantıksal {
-    ver (status & 128) == 128;
+    ver (status & VIRTIO_STATUS_FAILED) == VIRTIO_STATUS_FAILED;
+}
+
+işlev virtio_status_durum_kodu(status: tam32) -> tam32 {
+    eğer status == virtio_status_sifirla_degeri() {
+        ver VIRTIO_DURUM_SIFIRLA;
+    }
+    eğer status == virtio_status_onayla_degeri() {
+        ver VIRTIO_DURUM_ONAYLA;
+    }
+    eğer status == virtio_status_surucu_degeri() {
+        ver VIRTIO_DURUM_SURUCU;
+    }
+    eğer status == virtio_status_ozellik_tamam_degeri() {
+        ver VIRTIO_DURUM_OZELLIK_TAMAM;
+    }
+    eğer status == virtio_status_surucu_tamam_degeri() {
+        ver VIRTIO_DURUM_SURUCU_TAMAM;
+    }
+    eğer virtio_status_failed_mi(status) {
+        ver VIRTIO_DURUM_BASARISIZ;
+    }
+    ver VIRTIO_DURUM_BILINMEYEN;
 }
 
 işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
-    eğer virtio_status_failed_mi(mevcut) {
-        eşleş bit {
-            128 => { ver doğru; }
-            1 => { ver yanlış; }
-            2 => { ver yanlış; }
-            4 => { ver yanlış; }
-            8 => { ver yanlış; }
-        }
-        ver yanlış;
-    }
-
-    eğer bit == 128 {
+    eğer bit == VIRTIO_STATUS_FAILED {
         ver doğru;
     }
 
-    eşleş mevcut {
-        0 => {
-            eşleş bit {
-                1 => { ver doğru; }
-                2 => { ver yanlış; }
-                4 => { ver yanlış; }
-                8 => { ver yanlış; }
-                128 => { ver doğru; }
-            }
+    değişken durum: tam32 = virtio_status_durum_kodu(mevcut);
+    // KEMGU identifier desenleri baglar; named tag sabitleri boolean esles guard'i ile karsilastirilir.
+    eşleş durum == VIRTIO_DURUM_SIFIRLA {
+        doğru => {
+            ver bit == VIRTIO_STATUS_ACKNOWLEDGE;
         }
-        1 => {
-            eşleş bit {
-                1 => { ver yanlış; }
-                2 => { ver doğru; }
-                4 => { ver yanlış; }
-                8 => { ver yanlış; }
-                128 => { ver doğru; }
-            }
-        }
-        3 => {
-            eşleş bit {
-                1 => { ver yanlış; }
-                2 => { ver yanlış; }
-                4 => { ver yanlış; }
-                8 => { ver doğru; }
-                128 => { ver doğru; }
-            }
-        }
-        11 => {
-            eşleş bit {
-                1 => { ver yanlış; }
-                2 => { ver yanlış; }
-                4 => { ver doğru; }
-                8 => { ver yanlış; }
-                128 => { ver doğru; }
-            }
-        }
-        15 => {
-            eşleş bit {
-                1 => { ver yanlış; }
-                2 => { ver yanlış; }
-                4 => { ver yanlış; }
-                8 => { ver yanlış; }
-                128 => { ver doğru; }
+        yanlış => {
+            eşleş durum == VIRTIO_DURUM_ONAYLA {
+                doğru => {
+                    ver bit == VIRTIO_STATUS_DRIVER;
+                }
+                yanlış => {
+                    eşleş durum == VIRTIO_DURUM_SURUCU {
+                        doğru => {
+                            ver bit == VIRTIO_STATUS_FEATURES_OK;
+                        }
+                        yanlış => {
+                            eşleş durum == VIRTIO_DURUM_OZELLIK_TAMAM {
+                                doğru => {
+                                    ver bit == VIRTIO_STATUS_DRIVER_OK;
+                                }
+                                yanlış => {
+                                    eşleş durum == VIRTIO_DURUM_SURUCU_TAMAM {
+                                        doğru => { ver yanlış; }
+                                        yanlış => {
+                                            eşleş durum == VIRTIO_DURUM_BASARISIZ {
+                                                doğru => { ver yanlış; }
+                                                yanlış => { ver yanlış; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
