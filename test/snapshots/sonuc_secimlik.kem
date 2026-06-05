@@ -1,0 +1,44 @@
+// C2.5 fikstürü — sonuç/seçimlik value codegen (skaler payload'lar).
+//
+// test_llvm.c kullanır: tamam/hata (sonuç) ve değer/hiç (seçimlik) yapıcıları
+// + eşleş destructuring + payload binding. Exit kodu her dalın doğruluğunu
+// kanıtlar. opt -passes=verify temiz geçmeli.
+//
+//   bol      : b==0 → hata("..."), aksi → tamam(a/b)
+//   hesapla  : eşleş bol(a,b) { tamam(v) => v ; hata(e) => 7 }
+//   ilk      : d>0 → değer(d*2), aksi → hiç
+//   opsiyonel: eşleş ilk(d) { değer(x) => x ; hiç => 100 }
+
+işlev bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifira bolme"); }
+    ver tamam(a / b);
+}
+
+işlev hesapla(a: tam32, b: tam32) -> tam32 {
+    eşleş bol(a, b) {
+        tamam(v) => { ver v; }      // payload binding: v
+        hata(e) => { ver 7; }       // payload binding: e (kullanılmıyor)
+    }
+    ver 0;
+}
+
+işlev ilk(d: tam32) -> seçimlik<tam32> {
+    eğer d > 0 { ver değer(d * 2); }
+    ver hiç;
+}
+
+işlev opsiyonel(d: tam32) -> tam32 {
+    eşleş ilk(d) {
+        değer(x) => { ver x; }      // payload binding: x
+        hiç => { ver 100; }         // payload yok
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    eğer hesapla(84, 2) != 42 { ver 1; }   // tamam(42)
+    eğer hesapla(10, 0) != 7  { ver 2; }   // hata → 7
+    eğer opsiyonel(21) != 42  { ver 3; }   // değer(42)
+    eğer opsiyonel(0)  != 100 { ver 4; }   // hiç → 100
+    ver 42;
+}
