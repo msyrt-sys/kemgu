@@ -44,7 +44,7 @@ PR'da yukarıdaki dizinlerden herhangi birinde değişiklik varsa **PR otomatik 
 - `vektör<T,N>` — SIMD intrinsics. Bulk descriptor kopyalama için kullanılabilir.
 - `sonuç<T,E>` — Result tipi. Driver init dönüş tipi standartı.
 - `seçimlik<T>` — Option tipi.
-- `eşleş` — exhaustive pattern matching.
+- `eşleş` — pattern matching (exhaustiveness şu an derleyici tarafından zorlanmıyor; kapalı tip üzerinde tamlık garantisi yok).
 
 Yeni sentaks "şu olsaydı daha temiz olurdu" diye düşünüyorsan: **görev sana yanlış scope ile verilmiş demektir.** Geri bildir, BLOCKED işaretle.
 
