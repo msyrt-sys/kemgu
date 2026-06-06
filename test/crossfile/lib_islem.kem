@@ -1,0 +1,7 @@
+// C2.6 cross-file fikstürü — ara kütüphane: kendisi de kullan içerir
+// (transitif zinciri kurar: transitif -> lib_islem -> lib_sayi).
+kullan test::crossfile::lib_sayi;
+
+dışa işlev uc_kat(x: tam32) -> tam32 {
+    ver iki_kat(x) + x;   // iki_kat lib_sayi'dan (transitif)
+}

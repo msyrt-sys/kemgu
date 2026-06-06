@@ -1,0 +1,13 @@
+// C2.6 cross-file fikstürü — başka dosyadaki sonuç-dönüşlü fonksiyonu çağır +
+// eşleş ile destructure et. Cross-file çağrı C2.5 tagged-union ABI'sini
+// ({i8, T, H} by-value) bozmamalı.
+//   bol(84,2) = tamam(42) → v=42
+kullan test::crossfile::lib_sonuc;
+
+işlev main() -> tam32 {
+    eşleş bol(84, 2) {
+        tamam(v) => { ver v; }
+        hata(e) => { ver 0; }
+    }
+    ver 0;
+}

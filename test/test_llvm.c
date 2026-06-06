@@ -196,6 +196,30 @@ static void test_sonuc_struct_payload_calistir(void) {
     test_sonuc("sonuc struct payload + param ABI -> exit 42", rc == 42);
 }
 
+/* --- C2.6: cross-file fonksiyon cagrisi (transitif kullan) --- */
+
+static void test_crossfile_transitif_verify(void) {
+    /* transitif -> lib_islem -> lib_sayi; iki_kat transitif yuklenmeli. */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif.kem");
+    test_sonuc("crossfile transitif: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_transitif_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/transitif.kem");
+    test_sonuc("crossfile transitif (uc_kat(14)) -> exit 42", rc == 42);
+}
+
+static void test_crossfile_sonuc_verify(void) {
+    /* cross-file sonuç dönüşlü çağrı — C2.5 tagged-union ABI uyumu. */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri.kem");
+    test_sonuc("crossfile sonuc ABI: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_sonuc_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri.kem");
+    test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -1417,6 +1441,12 @@ int main(void) {
     test_sonuc_secimlik_calistir();
     test_sonuc_struct_payload_verify();
     test_sonuc_struct_payload_calistir();
+
+    printf("\n--- C2.6: cross-file fonksiyon cagrisi ---\n");
+    test_crossfile_transitif_verify();
+    test_crossfile_transitif_calistir();
+    test_crossfile_sonuc_verify();
+    test_crossfile_sonuc_calistir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
