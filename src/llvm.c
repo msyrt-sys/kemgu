@@ -2784,12 +2784,26 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Pre-pass: kullan dosyalarini yukle (program->uyeler listesini AST
      * uzerinde mutate ederek genislet) */
     {
-        Dugum **eski_uyeler = program->veri.program.uyeler;
-        int eski_sayi = program->veri.program.sayi;
-        Dugum **yeni_uyeler = NULL;
-        int yeni_sayi = 0;
-        int kap = 0;
+        /* Fixed-point kullan genisletme (transitif import destegi, C2.6):
+         * worklist'i orijinal uyelerle baslat; DUGUM_KULLAN gordukce dosyayi
+         * yukle ve uyelerini worklist'in SONUNA ekle — boylece import edilen
+         * dosyanin kendi kullan'lari da islenir (A<-B<-C). Non-kullan uyeler
+         * cikti listesine gider. yuklenmis_dosyalar dedup'u cycle/diamond ve
+         * cift yuklemeyi engeller (terminasyon garantisi). Cikti sirasi
+         * degisebilir ama LLVM cagrilari ada gore cozer + imzalar ayri
+         * pre-pass'te kaydedilir, bu yuzden onemsiz. */
+        Dugum **is_l = NULL; int is_sayi = 0; int is_kap = 0;        /* worklist */
+        Dugum **yeni_uyeler = NULL; int yeni_sayi = 0; int kap = 0;  /* cikti */
 
+        #define IS_EKLE(u) do { \
+            if (is_sayi == is_kap) { \
+                is_kap = is_kap == 0 ? 16 : is_kap * 2; \
+                Dugum **r = (Dugum **)realloc(is_l, sizeof(Dugum *) * (size_t)is_kap); \
+                if (!r) break; \
+                is_l = r; \
+            } \
+            is_l[is_sayi++] = (u); \
+        } while (0)
         #define EKLE_UYE(u) do { \
             if (yeni_sayi == kap) { \
                 kap = kap == 0 ? 16 : kap * 2; \
@@ -2800,8 +2814,12 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
             yeni_uyeler[yeni_sayi++] = (u); \
         } while (0)
 
-        for (int i = 0; i < eski_sayi; i++) {
-            Dugum *uye = eski_uyeler[i];
+        for (int i = 0; i < program->veri.program.sayi; i++) {
+            IS_EKLE(program->veri.program.uyeler[i]);
+        }
+
+        for (int wi = 0; wi < is_sayi; wi++) {
+            Dugum *uye = is_l[wi];
             if (uye->tip == DUGUM_KULLAN) {
                 /* Dosya yolu uret */
                 const char *y = uye->veri.kullan.yol;
@@ -2846,20 +2864,22 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
                     yd->sonraki = g.yuklenmis_dosyalar;
                     g.yuklenmis_dosyalar = yd;
                 }
-                /* Parse */
+                /* Parse + worklist'e ekle (transitif kullan'lar da islensin) */
                 Lexer ml; lexer_baslat(&ml, src, dy);
                 Parser mp; parser_baslat(&mp, &ml, a, dy, src);
                 Dugum *mprog = parser_calistir(&mp);
                 if (mprog && mp.hata_sayisi == 0) {
                     for (int k = 0; k < mprog->veri.program.sayi; k++) {
-                        EKLE_UYE(mprog->veri.program.uyeler[k]);
+                        IS_EKLE(mprog->veri.program.uyeler[k]);
                     }
                 }
             } else {
                 EKLE_UYE(uye);
             }
         }
+        #undef IS_EKLE
         #undef EKLE_UYE
+        free(is_l);
         /* program->veri.program AST'sini mutate et */
         Dugum *mut_p = (Dugum *)program;
         if (yeni_uyeler) {
