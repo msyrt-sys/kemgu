@@ -171,6 +171,31 @@ static void test_esles_match_early_return_calistir(void) {
     test_sonuc("esles match_early_return: arm secimi -> exit 42", rc == 42);
 }
 
+/* --- C2.5: sonuç/seçimlik value codegen --- */
+
+static void test_sonuc_secimlik_verify(void) {
+    /* tamam/hata/değer/hiç + eşleş destructuring -> tagged-union, opt temiz. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/sonuc_secimlik.kem");
+    test_sonuc("sonuc/secimlik: opt -passes=verify PASS", ok);
+}
+
+static void test_sonuc_secimlik_calistir(void) {
+    /* tamam/hata round-trip + değer/hiç + payload binding -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/sonuc_secimlik.kem");
+    test_sonuc("sonuc/secimlik: tamam/hata/deger/hic -> exit 42", rc == 42);
+}
+
+static void test_sonuc_struct_payload_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/sonuc_struct_payload.kem");
+    test_sonuc("sonuc struct payload: opt -passes=verify PASS", ok);
+}
+
+static void test_sonuc_struct_payload_calistir(void) {
+    /* struct payload (by-value) + sonuç-as-parameter ABI -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/sonuc_struct_payload.kem");
+    test_sonuc("sonuc struct payload + param ABI -> exit 42", rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -1386,6 +1411,12 @@ int main(void) {
     test_esles_nested();
     test_esles_match_early_return_verify();
     test_esles_match_early_return_calistir();
+
+    printf("\n--- C2.5: sonuc/secimlik value codegen ---\n");
+    test_sonuc_secimlik_verify();
+    test_sonuc_secimlik_calistir();
+    test_sonuc_struct_payload_verify();
+    test_sonuc_struct_payload_calistir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
