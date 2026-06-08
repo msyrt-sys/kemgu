@@ -1,0 +1,9 @@
+// C2.6 cross-file fikstürü — giriş noktası. Yalnız lib_islem'i kullan eder;
+// lib_sayi TRANSİTİF olarak (lib_islem üzerinden) yüklenmeli. Fixed-point
+// kullan pre-pass'i çalışmazsa iki_kat tanımsız sembol olurdu.
+//   uc_kat(14) = iki_kat(14) + 14 = 28 + 14 = 42
+kullan test::crossfile::lib_islem;
+
+işlev main() -> tam32 {
+    ver uc_kat(14);
+}
