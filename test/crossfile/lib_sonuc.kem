@@ -1,0 +1,5 @@
+// C2.6 cross-file fikstürü — sonuç<T,H> dönüşlü kütüphane (C2.5 ABI uyumu).
+dışa işlev bol(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifira bolme"); }
+    ver tamam(a / b);
+}
