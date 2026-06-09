@@ -1,0 +1,97 @@
+// VirtIO-blk config-space okuma: capacity, blk_size, size_max, seg_max.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::virtio_mmio;
+
+sabit VIRTIO_BLK_CFG_HATA_YOK: tam32 = 0;
+sabit VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE: tam32 = 301;
+sabit VIRTIO_BLK_CFG_GENERATION_RETRY_MAX: tam32 = 8;
+
+yapı BlkYapilandirma {
+    kapasite_sektor: tam64;
+    blok_boyut: tam32;
+    size_max: tam32;
+    seg_max: tam32;
+}
+
+işlev blk_cfg_adres(taban: tam64, alan: tam64) -> tam64 {
+    ver virtio_mmio_adres(taban, VIRTIO_BLK_CFG_TABAN + alan);
+}
+
+işlev blk_cfg_u64_birlestir(low: tam32, high: tam32) -> tam64 {
+    ver ((high olarak tam64) << 32) | (low olarak tam64);
+}
+
+// MMIO yetkisi config-space okuma boyunca sahiplenilir ve fonksiyon sonunda tek noktada iade edilir.
+işlev blk_yapilandirma_oku_cekirdek(
+    // MMIO yetkisi capacity/config generation register okumalari icin gereklidir.
+    y: yetki<MMIO>,
+    taban: tam64,
+    host_mock_generation_flip_sayisi: tam32
+) -> sonuç<BlkYapilandirma, tam32> {
+    değişken deneme: tam32 = 0;
+    değişken okundu: mantıksal = yanlış;
+    değişken hata_kodu: tam32 = VIRTIO_BLK_CFG_HATA_YOK;
+    değişken cfg: BlkYapilandirma = BlkYapilandirma {
+        kapasite_sektor: 0,
+        blok_boyut: 0,
+        size_max: 0,
+        seg_max: 0
+    };
+
+    iken deneme < VIRTIO_BLK_CFG_GENERATION_RETRY_MAX {
+        eğer değil okundu {
+            değişken gen_once: tam32 =
+                mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_CONFIG_GENERATION));
+            değişken capacity_low: tam32 =
+                mmio_oku32(y, blk_cfg_adres(taban, VIRTIO_BLK_CFG_CAPACITY));
+            değişken capacity_high: tam32 =
+                mmio_oku32(y, blk_cfg_adres(taban, VIRTIO_BLK_CFG_CAPACITY_HIGH));
+
+            cfg.kapasite_sektor = blk_cfg_u64_birlestir(capacity_low, capacity_high);
+            cfg.size_max = mmio_oku32(y, blk_cfg_adres(taban, VIRTIO_BLK_CFG_SIZE_MAX));
+            cfg.seg_max = mmio_oku32(y, blk_cfg_adres(taban, VIRTIO_BLK_CFG_SEG_MAX));
+            cfg.blok_boyut = mmio_oku32(y, blk_cfg_adres(taban, VIRTIO_BLK_CFG_BLK_SIZE));
+
+            eğer host_mock_generation_flip_sayisi > deneme {
+                mmio_yaz32(
+                    y,
+                    virtio_mmio_adres(taban, VIRTIO_MMIO_CONFIG_GENERATION),
+                    gen_once + 1
+                );
+            }
+
+            değişken gen_again: tam32 =
+                mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_CONFIG_GENERATION));
+            eğer gen_once == gen_again {
+                okundu = doğru;
+                deneme = VIRTIO_BLK_CFG_GENERATION_RETRY_MAX;
+            } değilse {
+                deneme = deneme + 1;
+            }
+        } değilse {
+            deneme = VIRTIO_BLK_CFG_GENERATION_RETRY_MAX;
+        }
+    }
+
+    eğer değil okundu {
+        hata_kodu = VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE;
+    }
+
+    geri_al(y);
+
+    eğer hata_kodu == VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE {
+        ver hata(VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE);
+    }
+
+    ver tamam(cfg);
+}
+
+// MMIO yetkisi virtio-blk config register okumalari icin sahiplenilir ve sonuc donmeden iade edilir.
+işlev blk_yapilandirma_oku(
+    // MMIO yetkisi config-space okumasinda gerekli tum volatile read'leri yetkilendirir.
+    y: yetki<MMIO>,
+    taban: tam64
+) -> sonuç<BlkYapilandirma, tam32> {
+    ver blk_yapilandirma_oku_cekirdek(y, taban, 0);
+}
