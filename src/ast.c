@@ -149,6 +149,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_DISA:              return "DISA";
         case DUGUM_ISLEV:             return "ISLEV";
         case DUGUM_YAPI:              return "YAPI";
+        case DUGUM_CESIT:             return "CESIT";
         case DUGUM_OZELLIK:           return "OZELLIK";
         case DUGUM_UYGULA:            return "UYGULA";
         case DUGUM_SABIT:             return "SABIT";
@@ -201,6 +202,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_DESEN_LITERAL:     return "DESEN_LITERAL";
         case DUGUM_DESEN_TANIMLAYICI: return "DESEN_TANIMLAYICI";
         case DUGUM_DESEN_YAPICI:      return "DESEN_YAPICI";
+        case DUGUM_DESEN_YOL:         return "DESEN_YOL";
         case DUGUM_DESEN_JOKER:       return "DESEN_JOKER";
         case DUGUM_ESLES_KOLU:        return "ESLES_KOLU";
         case DUGUM_HATA:              return "HATA";

@@ -1,0 +1,22 @@
+// C2.7 fikstürü — çeşit (custom sum type) temel: tanım + Ad::Varyant inşa +
+// eşleş destructuring (payloadsuz, discriminant tag). Her varyant doğru
+// dallanmalı; opt -passes=verify temiz.
+//   Renk -> i8 discriminant (Kirmizi=0, Yesil=1, Mavi=2)
+
+çeşit Renk { Kirmizi, Yesil, Mavi }
+
+işlev renk_kodu(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 10; }
+        Renk::Yesil   => { ver 20; }
+        Renk::Mavi    => { ver 30; }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    eğer renk_kodu(Renk::Kirmizi) != 10 { ver 1; }
+    eğer renk_kodu(Renk::Yesil)   != 20 { ver 2; }
+    eğer renk_kodu(Renk::Mavi)    != 30 { ver 3; }
+    ver 42;
+}

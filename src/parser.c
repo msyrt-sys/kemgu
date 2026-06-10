@@ -559,6 +559,86 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     return d;
 }
 
+/* === Cesit (custom sum type — C2.7) ===
+ * cesit_tanimi = "çeşit" tanimlayici "{" [varyant ("," varyant)* [","]] "}"
+ * v1: yalnız payloadsuz isim varyantları (virgül veya yenisatır ayraçlı).
+ * Varyant(tip) (payload) ve generic <T> v1'de net hatayla reddedilir;
+ * keyword forward-compatible kalır. */
+static Dugum *parse_cesit_tanimi(Parser *p) {
+    Token cesit_tok = parser_simdiki(p);
+    parser_ilerle(p);  /* 'çeşit' */
+
+    Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P350",
+                                "cesit adi bekleniyor");
+
+    /* Generic v1'de YOK */
+    if (parser_eslesir(p, TOK_KUCUK)) {
+        parser_hata(p, parser_simdiki(p), "P353",
+            "cesit generic v1'de desteklenmiyor (gelecek surum)", NULL);
+        while (!parser_eslesir(p, TOK_BUYUK) &&
+               !parser_eslesir(p, TOK_SOL_SUSLU) &&
+               !parser_eslesir(p, TOK_DOSYA_SONU)) {
+            parser_ilerle(p);
+        }
+        if (parser_eslesir(p, TOK_BUYUK)) parser_ilerle(p);
+    }
+
+    parser_bekle(p, TOK_SOL_SUSLU, "P351", "cesit govdesi icin '{' bekleniyor");
+
+    Liste varyantlar;
+    liste_baslat(&varyantlar);
+    while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
+           !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token v = parser_simdiki(p);
+        if (v.tip != TOK_TANIMLAYICI) {
+            parser_hata(p, v, "P352", "cesit varyant adi bekleniyor", NULL);
+            parser_panik_sync(p);
+            break;
+        }
+        parser_ilerle(p);
+        /* Payload reddi (v1): Varyant(tip) */
+        if (parser_eslesir(p, TOK_SOL_PAREN)) {
+            parser_hata(p, parser_simdiki(p), "P354",
+                "cesit varyant payload'u v1'de desteklenmiyor (gelecek surum)",
+                NULL);
+            int derinlik = 0;  /* ( ... ) tüket */
+            do {
+                Token tt = parser_simdiki(p);
+                if (tt.tip == TOK_DOSYA_SONU) break;
+                if (tt.tip == TOK_SOL_PAREN) derinlik++;
+                else if (tt.tip == TOK_SAG_PAREN) derinlik--;
+                parser_ilerle(p);
+            } while (derinlik > 0);
+        }
+        Dugum *vd = dugum_tanimlayici(p->arena, v.baslangic, v.uzunluk,
+                                      v.satir, v.sutun);
+        if (vd) liste_ekle(&varyantlar, p->arena, vd);
+        parser_tuket(p, TOK_VIRGUL);  /* virgül opsiyonel */
+        if (p->hata_sayisi >= PARSER_MAX_HATA) break;
+    }
+    parser_bekle(p, TOK_SAG_SUSLU, "P355", "cesit sonunda '}' bekleniyor");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_CESIT,
+                             cesit_tok.satir, cesit_tok.sutun);
+    if (!d) return NULL;
+    d->veri.cesit.ad =
+        ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
+    d->veri.cesit.ad_uzunluk = ad_tok.uzunluk;
+    int n = varyantlar.sayi;
+    Dugum **varr = liste_array_yap(&varyantlar, p->arena);
+    int kap = n > 0 ? n : 1;
+    char **v_adlar = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
+    int *v_uzlar = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    for (int i = 0; i < n; i++) {
+        v_adlar[i] = (char *)varr[i]->veri.tanimlayici.metin;
+        v_uzlar[i] = varr[i]->veri.tanimlayici.uzunluk;
+    }
+    d->veri.cesit.varyantlar = v_adlar;
+    d->veri.cesit.varyant_uzunluklar = v_uzlar;
+    d->veri.cesit.varyant_sayi = n;
+    return d;
+}
+
 /* === Ozellik (trait) tanimi ===
  * ozellik_tanimi = "ozellik" tanimlayici [tip_param_listesi] "{" uyeler "}"
  *
@@ -775,6 +855,7 @@ static Dugum *parse_disa(Parser *p) {
         case TOK_GERCEKZAMANLI:   /* Realtime Spec V1: 'dışa gerçekzamanlı işlev ...' */
         case TOK_ISLEV:  tanim = parse_islev_tanimi(p); break;
         case TOK_YAPI:   tanim = parse_yapi_tanimi(p);  break;
+        case TOK_CESIT:  tanim = parse_cesit_tanimi(p); break;
         case TOK_SABIT:  tanim = parse_sabit_tanimi(p); break;
         default:
             parser_hata(p, sonra, "P050",
@@ -830,6 +911,7 @@ static Dugum *parse_ust_oge(Parser *p) {
         case TOK_GERCEKZAMANLI:   /* Realtime Spec V1: 'gerçekzamanlı işlev ...' */
         case TOK_ISLEV:   return parse_islev_tanimi(p);
         case TOK_YAPI:    return parse_yapi_tanimi(p);
+        case TOK_CESIT:   return parse_cesit_tanimi(p);
         case TOK_OZELLIK: return parse_ozellik_tanimi(p);
         case TOK_UYGULA:  return parse_uygula_tanimi(p);
         case TOK_KULLAN:  return parse_kullan(p);
@@ -838,7 +920,7 @@ static Dugum *parse_ust_oge(Parser *p) {
         case TOK_SABIT:   return parse_sabit_tanimi(p);
         default:
             parser_hata(p, t, "P001",
-                "ust duzey tanim bekleniyor (islev/yapi/ozellik/uygula/kullan/disa/modul/sabit)",
+                "ust duzey tanim bekleniyor (islev/yapi/cesit/ozellik/uygula/kullan/disa/modul/sabit)",
                 NULL);
             parser_panik_sync(p);
             return NULL;
@@ -1058,6 +1140,23 @@ static Dugum *parse_desen(Parser *p) {
         int satir = t.satir;
         int sutun = t.sutun;
         parser_ilerle(p);
+
+        /* C2.7: Cesit::Varyant deseni (payloadsuz sum-type varyantı). */
+        if (parser_eslesir(p, TOK_CIFT_IKI_NOKTA)) {
+            parser_ilerle(p);
+            Token vt = parser_bekle(p, TOK_TANIMLAYICI, "P212",
+                "Cesit::Varyant deseninde varyant adi bekleniyor");
+            Dugum *d = dugum_olustur(p->arena, DUGUM_DESEN_YOL, satir, sutun);
+            if (d) {
+                d->veri.desen_yol.cesit_ad =
+                    ast_string_kopyala(p->arena, ad_baslangic, ad_uzunluk);
+                d->veri.desen_yol.cesit_uz = ad_uzunluk;
+                d->veri.desen_yol.varyant_ad =
+                    ast_string_kopyala(p->arena, vt.baslangic, vt.uzunluk);
+                d->veri.desen_yol.varyant_uz = vt.uzunluk;
+            }
+            return d;
+        }
 
         if (parser_eslesir(p, TOK_SOL_PAREN)) {
             parser_ilerle(p);

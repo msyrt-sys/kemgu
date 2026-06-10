@@ -60,6 +60,7 @@ static const AnahtarKelime tablo[] = {
     {"yanl\xc4\xb1\xc5\x9f",            8, TOK_YANLIS    },  /* yanlış      */
     {"yap\xc4\xb1",                      5, TOK_YAPI      },  /* yapı        */
     {"yetki",                             5, TOK_YETKI     },  /* yetki       */
+    {"\xc3\xa7" "e\xc5\x9fit",            7, TOK_CESIT     },  /* çeşit  (C2.7) */
     {"\xc3\xb6zellik",                   8, TOK_OZELLIK   },  /* özellik     */
 };
 
