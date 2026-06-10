@@ -1,0 +1,262 @@
+// VirtIO-blk init dizisi: probe, status, feature, queue bind ve config okuma.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::status;
+kullan drivers::virtio::features;
+kullan drivers::virtio::virtio_mmio;
+kullan drivers::virtio::virtqueue_bind;
+kullan drivers::virtio::virtio_blk_config;
+
+sabit BLK_MMIO_OKU_YAZ: tam32 = 3;
+sabit BLK_QUEUE_INDEX: tam16 = 0;
+sabit BLK_QUEUE_BOYUT: tam32 = 8;
+sabit BLK_BASLAT_HATA_YOK: tam32 = 0;
+sabit BLK_BASLAT_HATA_AYGIT_YOK: tam32 = 1;
+sabit BLK_BASLAT_HATA_MODERN_DEGIL: tam32 = 2;
+sabit BLK_BASLAT_HATA_BLOK_DEGIL: tam32 = 3;
+sabit BLK_BASLAT_HATA_FEATURE_RED: tam32 = 4;
+sabit BLK_BASLAT_HATA_QUEUE: tam32 = 5;
+sabit BLK_BASLAT_HATA_CFG: tam32 = 6;
+
+çeşit BaslatHatasi {
+    AygitYok,
+    ModernDegil,
+    BlokDegil,
+    FeatureRed,
+    QueueKurulumBasarisiz,
+    YapilandirmaHatasi
+}
+
+yapı BlkAygit {
+    kapasite_sektor: tam64;
+    blok_boyut: tam32;
+    accepted_features: dtam64;
+    queue_num: tam32;
+    queue_size: tam32;
+    final_status: tam32;
+}
+
+işlev blk_driver_supported_features() -> dtam64 {
+    ver VIRTIO_BLK_F_BLK_SIZE();
+}
+
+işlev blk_driver_required_features() -> dtam64 {
+    ver VIRTIO_BLK_F_BLK_SIZE();
+}
+
+işlev blk_varsayilan_queue() -> Virtqueue {
+    ver Virtqueue {
+        boyut: BLK_QUEUE_BOYUT,
+        desc_adres: VIRTIO_MMIO_DESC_TEST_ADRES olarak tam64,
+        avail_adres: VIRTIO_MMIO_AVAIL_TEST_ADRES olarak tam64,
+        used_adres: VIRTIO_MMIO_USED_TEST_ADRES olarak tam64
+    };
+}
+
+// MMIO yetkisi init dizisi boyunca ana sahiplik olarak tutulur ve hata/basari sonunda iade edilir.
+işlev blk_baslat_cekirdek(
+    // MMIO yetkisi VirtIO-blk init register erisimlerinin tamamini yetkilendirir.
+    y: yetki<MMIO>,
+    taban: tam64,
+    host_mock_generation_flip_sayisi: tam32
+) -> sonuç<BlkAygit, BaslatHatasi> {
+    değişken hata_kodu: tam32 = BLK_BASLAT_HATA_YOK;
+    değişken status: tam32 = VIRTIO_STATUS_RESET;
+    değişken accepted_features: dtam64 = 0;
+    değişken queue_num: tam32 = 0;
+    değişken cfg: BlkYapilandirma = BlkYapilandirma {
+        kapasite_sektor: 0,
+        blok_boyut: 0,
+        size_max: 0,
+        seg_max: 0
+    };
+
+    // MMIO alt-yetkisi D1 probe helper'ina devredilir; ana yetki init sonunda iade edilir.
+    değişken y_probe: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+    değişken probe: VirtioMmioProbeSonuc = virtio_mmio_probe(y_probe, taban);
+
+    eğer probe.device_id == 0 {
+        hata_kodu = BLK_BASLAT_HATA_AYGIT_YOK;
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_mmio_magic_gecerli_mi(probe.magic) {
+            hata_kodu = BLK_BASLAT_HATA_MODERN_DEGIL;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil probe.modern {
+            hata_kodu = BLK_BASLAT_HATA_MODERN_DEGIL;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil probe.block {
+            hata_kodu = BLK_BASLAT_HATA_BLOK_DEGIL;
+        }
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        // MMIO alt-yetkisi D1 status helper'ina reset yazimi icin devredilir.
+        değişken y_reset: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        virtio_mmio_status_yaz(y_reset, taban, status);
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_ACKNOWLEDGE) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_ACKNOWLEDGE);
+        // MMIO alt-yetkisi D1 status helper'ina ACKNOWLEDGE yazimi icin devredilir.
+        değişken y_ack: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        virtio_mmio_status_yaz(y_ack, taban, status);
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER);
+        // MMIO alt-yetkisi D1 status helper'ina DRIVER yazimi icin devredilir.
+        değişken y_driver: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        virtio_mmio_status_yaz(y_driver, taban, status);
+    }
+
+    değişken device_features: dtam64 = 0;
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        // MMIO yetkisi feature register secimi ve cihaz feature okumasini yapmak icin kullanilir.
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_FEATURES_SEL), VIRTIO_MMIO_FEATURE_SEL_LOW);
+        değişken device_features_low: tam32 =
+            mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_FEATURES));
+        device_features = device_features_low olarak dtam64;
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_feature_negotiation_gecerli_mi(
+            device_features,
+            blk_driver_supported_features(),
+            blk_driver_required_features()
+        ) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        accepted_features =
+            virtio_feature_kabul_maskesi(device_features, blk_driver_supported_features());
+        değişken accepted_low: tam32 = accepted_features olarak tam32;
+
+        // MMIO yetkisi kabul edilen driver feature maskesini cihaza yazmak icin kullanilir.
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DRIVER_FEATURES_SEL), VIRTIO_MMIO_FEATURE_SEL_LOW);
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DRIVER_FEATURES), accepted_low);
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_FEATURES_OK) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_FEATURES_OK);
+        // MMIO alt-yetkisi D1 status helper'ina FEATURES_OK yazimi icin devredilir.
+        değişken y_features_ok: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        virtio_mmio_status_yaz(y_features_ok, taban, status);
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        // MMIO alt-yetkisi D1 status helper'iyle FEATURES_OK readback yapmak icin devredilir.
+        değişken y_features_read: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        değişken features_ok_readback: tam32 = virtio_mmio_status_oku(y_features_read, taban);
+        eğer değil virtio_mmio_features_ok_set_mi(features_ok_readback) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+
+    değişken vq: Virtqueue = blk_varsayilan_queue();
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        // MMIO alt-yetkisi D3 virtqueue_bagla fonksiyonuna queue register kurulumu icin devredilir.
+        değişken y_queue: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        değişken queue_sonuc: sonuç<tam32, tam32> =
+            virtqueue_bagla(y_queue, taban, BLK_QUEUE_INDEX, &vq);
+        eşleş queue_sonuc {
+            tamam(q) => {
+                queue_num = q;
+            }
+            hata(kod) => {
+                hata_kodu = BLK_BASLAT_HATA_QUEUE;
+            }
+        }
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        // MMIO alt-yetkisi D4/D5 config okuma cekirdegine generation retry testi icin devredilir.
+        değişken y_cfg: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        değişken cfg_sonuc: sonuç<BlkYapilandirma, tam32> =
+            blk_yapilandirma_oku_cekirdek(y_cfg, taban, host_mock_generation_flip_sayisi);
+        eşleş cfg_sonuc {
+            tamam(okunan_cfg) => {
+                cfg = okunan_cfg;
+            }
+            hata(kod) => {
+                hata_kodu = BLK_BASLAT_HATA_CFG;
+            }
+        }
+    }
+
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK) {
+            hata_kodu = BLK_BASLAT_HATA_FEATURE_RED;
+        }
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER_OK);
+        // MMIO alt-yetkisi D1 status helper'ina DRIVER_OK yazimi icin devredilir.
+        değişken y_driver_ok: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
+        virtio_mmio_status_yaz(y_driver_ok, taban, status);
+    }
+
+    eğer hata_kodu != BLK_BASLAT_HATA_YOK {
+        // MMIO yetkisi tum hata yollarinda FAILED durumunu yazmak icin kullanilir.
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+    }
+
+    geri_al(y);
+    eğer hata_kodu == BLK_BASLAT_HATA_AYGIT_YOK {
+        ver hata(BaslatHatasi::AygitYok);
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_MODERN_DEGIL {
+        ver hata(BaslatHatasi::ModernDegil);
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_BLOK_DEGIL {
+        ver hata(BaslatHatasi::BlokDegil);
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_FEATURE_RED {
+        ver hata(BaslatHatasi::FeatureRed);
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_QUEUE {
+        ver hata(BaslatHatasi::QueueKurulumBasarisiz);
+    }
+    eğer hata_kodu == BLK_BASLAT_HATA_CFG {
+        ver hata(BaslatHatasi::YapilandirmaHatasi);
+    }
+
+    ver tamam(BlkAygit {
+        kapasite_sektor: cfg.kapasite_sektor,
+        blok_boyut: cfg.blok_boyut,
+        accepted_features: accepted_features,
+        queue_num: queue_num,
+        queue_size: vq.boyut,
+        final_status: status
+    });
+}
+
+// MMIO yetkisi public init API'sinde alinip cekirdege devredilir; cekirdek iade eder.
+işlev blk_baslat(
+    // MMIO yetkisi VirtIO-blk baslatma dizisi icin caller'dan devralinir.
+    y: yetki<MMIO>,
+    taban: tam64
+) -> sonuç<BlkAygit, BaslatHatasi> {
+    ver blk_baslat_cekirdek(y, taban, 0);
+}
