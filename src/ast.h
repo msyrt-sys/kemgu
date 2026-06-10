@@ -31,6 +31,7 @@ typedef enum {
     /* Tanimlar */
     DUGUM_ISLEV,
     DUGUM_YAPI,
+    DUGUM_CESIT,           /* çeşit Ad { A, B, C } — C2.7 sum type (payloadsuz v1) */
     DUGUM_OZELLIK,
     DUGUM_UYGULA,
     DUGUM_SABIT,
@@ -93,6 +94,7 @@ typedef enum {
     DUGUM_DESEN_LITERAL,
     DUGUM_DESEN_TANIMLAYICI,
     DUGUM_DESEN_YAPICI,    /* TipAdi(alt_desen, ...) */
+    DUGUM_DESEN_YOL,       /* Cesit::Varyant — C2.7 (payloadsuz varyant deseni) */
     DUGUM_DESEN_JOKER,     /* _ */
     DUGUM_ESLES_KOLU,      /* desen => blok/ifade */
 
@@ -198,6 +200,16 @@ struct Dugum {
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
         } yapi;
+
+        /* C2.7: çeşit Ad { A, B, C } — payloadsuz isimli varyant kümesi (sum type).
+         * Varyant indeksi = bildirim sırası (0'dan); discriminant tag. */
+        struct {
+            const char *ad;
+            int ad_uzunluk;
+            char **varyantlar;          /* varyant adları (arena) */
+            int *varyant_uzunluklar;    /* her varyantın byte uzunluğu */
+            int varyant_sayi;
+        } cesit;
 
         struct {
             const char *ad;
@@ -469,6 +481,12 @@ struct Dugum {
             Dugum **alt_desenler;
             int sayi;
         } desen_yapici;
+
+        /* C2.7: Cesit::Varyant deseni (payloadsuz). */
+        struct {
+            const char *cesit_ad; int cesit_uz;
+            const char *varyant_ad; int varyant_uz;
+        } desen_yol;
 
         /* DUGUM_DESEN_JOKER — veri yok */
 

@@ -810,6 +810,21 @@ Dugum *parse_tip(Parser *p) {
         return d;
     }
 
+    /* === boş (TOK_BOS) — birim/unit tip (C2.7) ===
+     * `bos` (ASCII tanımlayıcı) zaten aşağıdaki TANIMLAYICI yolundan
+     * DUGUM_TIP_BASIT olur; `boş` keyword'ünü de aynı basit tipe indirger
+     * (tip pozisyonunda P011 yerine geçerli birim-tip). */
+    if (t.tip == TOK_BOS) {
+        parser_ilerle(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_BASIT, t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_basit.ad =
+                ast_string_kopyala(p->arena, t.baslangic, t.uzunluk);
+            d->veri.tip_basit.ad_uzunluk = t.uzunluk;
+        }
+        return d;
+    }
+
     /* === Tanimlayici: basit veya kullanici tipi ===
      *   ad                   -> DUGUM_TIP_BASIT (ornegin tam32, metin)
      *   ad < T1, T2, ... >   -> DUGUM_TIP_KULLANICI (generic)

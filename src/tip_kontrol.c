@@ -879,11 +879,37 @@ static int basit_tip_adindan(const char *ad, int uz, TipKategorisi *out) {
         {"mant\xc4\xb1ksal", 10, TIP_MANTIKSAL},
         /* bos: b,o,ş = 1+1+2 = 4 byte */
         {"bo\xc5\x9f", 4, TIP_BOS},
+        /* C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul) */
+        {"bos", 3, TIP_BOS},
     };
     int n = (int)(sizeof(tbl) / sizeof(tbl[0]));
     for (int i = 0; i < n; i++) {
         if (tbl[i].uz == uz && memcmp(tbl[i].ad, ad, (size_t)uz) == 0) {
             *out = tbl[i].k;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* === C2.7: çeşit (sum type) yardımcıları === */
+
+/* 'ad' kayıtlı bir çeşit mi? DUGUM_CESIT döner, değilse NULL. */
+static const Dugum *cesit_ara(TipKontrol *tk, const char *ad, int uz) {
+    Scope *s0 = tk->scope ? tk->scope : tk->global_scope;
+    const Sembol *s = sembol_bul(s0, ad, uz);
+    if (s && s->kategori == SEMBOL_YAPI && s->ast_dugumu &&
+        s->ast_dugumu->tip == DUGUM_CESIT) {
+        return s->ast_dugumu;
+    }
+    return NULL;
+}
+
+/* çeşit'te verilen varyant adı tanımlı mı? */
+static int cesit_varyant_var(const Dugum *cd, const char *ad, int uz) {
+    for (int i = 0; i < cd->veri.cesit.varyant_sayi; i++) {
+        if (cd->veri.cesit.varyant_uzunluklar[i] == uz &&
+            memcmp(cd->veri.cesit.varyantlar[i], ad, (size_t)uz) == 0) {
             return 1;
         }
     }
@@ -2740,6 +2766,20 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T016", "yol cozumlemesi karmasik");
                 return t_hata(tk);
             }
+            /* C2.7: Cesit::Varyant — sol bir çeşit ise varyant değeri (tip = çeşit). */
+            {
+                const Dugum *cd = cesit_ara(tk,
+                    sol->veri.tanimlayici.metin, sol->veri.tanimlayici.uzunluk);
+                if (cd) {
+                    if (!cesit_varyant_var(cd, d->veri.yol.sag_ad,
+                                           d->veri.yol.sag_ad_uzunluk)) {
+                        tip_hata(tk, d, "M002", "cesit varyanti bulunamadi");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_yapi(tk->arena,
+                        cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk, NULL, 0);
+                }
+            }
             const Sembol *m = sembol_bul(tk->scope,
                 sol->veri.tanimlayici.metin, sol->veri.tanimlayici.uzunluk);
             if (!m || m->kategori != SEMBOL_MODUL || !m->modul_scope) {
@@ -3170,6 +3210,22 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     }
 }
 
+/* C2.7: çeşit'i nominal tip olarak kaydet (SEMBOL_YAPI; varyantlar ast_dugumu'nda).
+ * yapı'ya analog ama alansız/generic'siz — varyant kümesi DUGUM_CESIT'te. */
+static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
+    Sembol c;
+    memset(&c, 0, sizeof(c));
+    c.ad = cesit->veri.cesit.ad;
+    c.ad_uzunluk = cesit->veri.cesit.ad_uzunluk;
+    c.kategori = SEMBOL_YAPI;   /* nominal isimli tip (çeşit dahil) */
+    c.ast_dugumu = cesit;       /* exhaustiveness + varyant doğrulama buradan */
+    c.satir = cesit->satir;
+    c.sutun = cesit->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &c) != 0) {
+        tip_hata(tk, cesit, "T026", "tip tanimi cakismasi (cesit)");
+    }
+}
+
 static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
     int n = islev->veri.islev.param_sayi;
     TipBilgisi **ptipler = NULL;
@@ -3315,10 +3371,14 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
-        else if (uye->tip == DUGUM_DISA &&
-                 uye->veri.disa.tanim &&
+        else if (uye->tip == DUGUM_CESIT) pre_populate_cesit(tk, uye);
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_YAPI) {
             pre_populate_yapi(tk, uye->veri.disa.tanim);
+        }
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_CESIT) {
+            pre_populate_cesit(tk, uye->veri.disa.tanim);
         }
     }
 
@@ -3335,6 +3395,175 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
                               ? uye->veri.disa.tanim : uye;
         if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
         else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
+    }
+}
+
+/* C2.7: eşleş kapsayıcılık (Maranget usefulness, flat + sonuç<_,çeşit> bir
+ * seviye nesting). Kapalı tip (çeşit / seçimlik / sonuç) üzerinde eksik varyant
+ * → M001. Top-level wildcard '_' veya binding catch-all → exhaustive. Açık
+ * tipler (tamsayı vb.) denetlenmez (geriye uyum: mevcut eşleş'ler kırılmaz). */
+static void esles_exhaustive_kontrol(TipKontrol *tk, const Dugum *d,
+                                     TipBilgisi *dt) {
+    if (!dt || dt->kategori == TIP_HATA) return;
+    int n = d->veri.esles.kol_sayi;
+
+    /* Top-level wildcard / catch-all binding? ('hiç' hariç — o seçimlik varyantı) */
+    for (int i = 0; i < n; i++) {
+        const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+        if (!ds) continue;
+        if (ds->tip == DUGUM_DESEN_JOKER) return;
+        if (ds->tip == DUGUM_DESEN_TANIMLAYICI) {
+            const char *a = ds->veri.desen_tanimlayici.ad;
+            int u = ds->veri.desen_tanimlayici.ad_uzunluk;
+            if (!(u == 4 && memcmp(a, "hi\xc3\xa7", 4) == 0)) return;
+        }
+    }
+
+    /* çeşit: her varyant Cesit::Varyant ile kapsanmalı */
+    if (dt->kategori == TIP_YAPI) {
+        const Dugum *cd = cesit_ara(tk, dt->veri.yapi.ad,
+                                    dt->veri.yapi.ad_uzunluk);
+        if (!cd) return;  /* yapı (struct) → exhaustiveness yok */
+        char eksik[256]; int eo = 0, eksik_var = 0;
+        for (int v = 0; v < cd->veri.cesit.varyant_sayi; v++) {
+            const char *va = cd->veri.cesit.varyantlar[v];
+            int vu = cd->veri.cesit.varyant_uzunluklar[v];
+            int kapsandi = 0;
+            for (int i = 0; i < n; i++) {
+                const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+                if (ds && ds->tip == DUGUM_DESEN_YOL &&
+                    ds->veri.desen_yol.varyant_uz == vu &&
+                    memcmp(ds->veri.desen_yol.varyant_ad, va, (size_t)vu) == 0) {
+                    kapsandi = 1; break;
+                }
+            }
+            if (!kapsandi) {
+                eksik_var = 1;
+                if (eo < (int)sizeof(eksik) - vu - 4) {
+                    if (eo) { eksik[eo++] = ','; eksik[eo++] = ' '; }
+                    memcpy(eksik + eo, va, (size_t)vu); eo += vu;
+                }
+            }
+        }
+        eksik[eo] = '\0';
+        if (eksik_var) {
+            char msg[320];
+            snprintf(msg, sizeof(msg),
+                "esles exhaustive degil — eksik varyant(lar): [%s]", eksik);
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
+    }
+
+    /* seçimlik<T>: değer + hiç */
+    if (dt->kategori == TIP_SECIMLIK) {
+        int deger_c = 0, hic_c = 0;
+        for (int i = 0; i < n; i++) {
+            const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+            if (!ds) continue;
+            if (ds->tip == DUGUM_DESEN_YAPICI &&
+                ds->veri.desen_yapici.ad_uzunluk == 6 &&
+                memcmp(ds->veri.desen_yapici.ad, "de\xc4\x9f" "er", 6) == 0) {
+                deger_c = 1;
+            }
+            if (ds->tip == DUGUM_DESEN_TANIMLAYICI &&
+                ds->veri.desen_tanimlayici.ad_uzunluk == 4 &&
+                memcmp(ds->veri.desen_tanimlayici.ad, "hi\xc3\xa7", 4) == 0) {
+                hic_c = 1;
+            }
+        }
+        if (!deger_c || !hic_c) {
+            char msg[128]; int o = 0; int once = 0;
+            o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                          "esles exhaustive degil — eksik: [");
+            if (!deger_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "de\xc4\x9f" "er"); once = 1;
+            }
+            if (!hic_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "%shi\xc3\xa7", once ? ", " : "");
+            }
+            snprintf(msg + o, (size_t)((int)sizeof(msg) - o), "]");
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
+    }
+
+    /* sonuç<T,H>: tamam + hata; H çeşit ise hata içi varyant düzeyi (D6). */
+    if (dt->kategori == TIP_SONUC) {
+        int tamam_c = 0, hata_catchall = 0;
+        for (int i = 0; i < n; i++) {
+            const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+            if (!ds || ds->tip != DUGUM_DESEN_YAPICI) continue;
+            const char *a = ds->veri.desen_yapici.ad;
+            int u = ds->veri.desen_yapici.ad_uzunluk;
+            if (u == 5 && memcmp(a, "tamam", 5) == 0) tamam_c = 1;
+            else if (u == 4 && memcmp(a, "hata", 4) == 0) {
+                if (ds->veri.desen_yapici.sayi > 0) {
+                    const Dugum *sub = ds->veri.desen_yapici.alt_desenler[0];
+                    if (sub && (sub->tip == DUGUM_DESEN_TANIMLAYICI ||
+                                sub->tip == DUGUM_DESEN_JOKER)) hata_catchall = 1;
+                } else {
+                    hata_catchall = 1;
+                }
+            }
+        }
+        int hata_exh = hata_catchall;
+        char eksik[256]; int eo = 0;
+        TipBilgisi *H = dt->veri.sonuc.hata;
+        const Dugum *hcd = (H && H->kategori == TIP_YAPI)
+            ? cesit_ara(tk, H->veri.yapi.ad, H->veri.yapi.ad_uzunluk) : NULL;
+        if (!hata_exh && hcd) {
+            int hepsi = 1;
+            for (int v = 0; v < hcd->veri.cesit.varyant_sayi; v++) {
+                const char *va = hcd->veri.cesit.varyantlar[v];
+                int vu = hcd->veri.cesit.varyant_uzunluklar[v];
+                int kapsandi = 0;
+                for (int i = 0; i < n; i++) {
+                    const Dugum *ds =
+                        d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+                    if (ds && ds->tip == DUGUM_DESEN_YAPICI &&
+                        ds->veri.desen_yapici.ad_uzunluk == 4 &&
+                        memcmp(ds->veri.desen_yapici.ad, "hata", 4) == 0 &&
+                        ds->veri.desen_yapici.sayi > 0) {
+                        const Dugum *sub =
+                            ds->veri.desen_yapici.alt_desenler[0];
+                        if (sub && sub->tip == DUGUM_DESEN_YOL &&
+                            sub->veri.desen_yol.varyant_uz == vu &&
+                            memcmp(sub->veri.desen_yol.varyant_ad, va,
+                                   (size_t)vu) == 0) { kapsandi = 1; break; }
+                    }
+                }
+                if (!kapsandi) {
+                    hepsi = 0;
+                    if (eo < (int)sizeof(eksik) - vu - 10) {
+                        if (eo) { eksik[eo++] = ','; eksik[eo++] = ' '; }
+                        eo += snprintf(eksik + eo,
+                            (size_t)((int)sizeof(eksik) - eo),
+                            "hata(%.*s)", vu, va);
+                    }
+                }
+            }
+            hata_exh = hepsi;
+        }
+        eksik[eo] = '\0';
+        if (!tamam_c || !hata_exh) {
+            char msg[320]; int o = 0; int once = 0;
+            o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                          "esles exhaustive degil — eksik: [");
+            if (!tamam_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "tamam"); once = 1;
+            }
+            if (!hata_exh) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "%s%s", once ? ", " : "", eo ? eksik : "hata");
+            }
+            snprintf(msg + o, (size_t)((int)sizeof(msg) - o), "]");
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
     }
 }
 
@@ -3575,6 +3804,18 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                                 sembol_ekle(tk->scope, tk->arena, &s);
                             }
                         }
+                    } else if (desen->tip == DUGUM_DESEN_YOL) {
+                        /* C2.7: Cesit::Varyant deseni — payloadsuz, binding yok;
+                         * yalnız varyantın çeşit'e ait olduğunu doğrula. */
+                        const Dugum *cd = (dt && dt->kategori == TIP_YAPI)
+                            ? cesit_ara(tk, dt->veri.yapi.ad,
+                                        dt->veri.yapi.ad_uzunluk) : NULL;
+                        if (cd && !cesit_varyant_var(cd,
+                                desen->veri.desen_yol.varyant_ad,
+                                desen->veri.desen_yol.varyant_uz)) {
+                            tip_hata(tk, desen, "M002",
+                                     "cesit varyanti bulunamadi");
+                        }
                     }
                     /* DESEN_LITERAL, DESEN_JOKER: binding yok */
                 }
@@ -3584,6 +3825,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 tk->scope = eski;
                 tk->scope_seviyesi--;
             }
+            /* C2.7: kapalı tip üzerinde kapsayıcılık denetimi. */
+            esles_exhaustive_kontrol(tk, d, dt);
             break;
         }
 
