@@ -231,6 +231,24 @@ static const char *subst_bul(LlvmGen *g, const char *ad, int ad_uz) {
     return NULL;
 }
 
+/* === C2.7: çeşit (sum type) codegen yardımcıları === */
+
+/* çeşit discriminant IR tipi: ≤256 varyant → i8, değilse i16. */
+static const char *cesit_disc_ir(const Dugum *c) {
+    return c->veri.cesit.varyant_sayi > 256 ? "i16" : "i8";
+}
+
+/* Varyant adından tag indeksi (bildirim sırası). -1 = bulunamadı. */
+static int cesit_varyant_indeksi(const Dugum *c, const char *ad, int uz) {
+    for (int i = 0; i < c->veri.cesit.varyant_sayi; i++) {
+        if (c->veri.cesit.varyant_uzunluklar[i] == uz &&
+            memcmp(c->veri.cesit.varyantlar[i], ad, (size_t)uz) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     if (!tip_d) return NULL;
     if (tip_d->tip == DUGUM_TIP_BASIT) {
@@ -249,11 +267,14 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
         if (ESLES("mant" "\xc4\xb1" "ksal")) return "i1";
         if (ESLES("karakter")) return "i32";
         if (ESLES("metin")) return "ptr";
-        if (ESLES("bo" "\xc5\x9f")) return "void";
+        if (ESLES("bo" "\xc5\x9f") || ESLES("bos")) return "void";
         #undef ESLES
         /* Taninmayan basit tip — kullanici yapisi olabilir mi? */
         YapiKayit *yk = yapi_bul(g, a, u);
         if (yk) {
+            if (yk->ast && yk->ast->tip == DUGUM_CESIT) {  /* C2.7: çeşit → disc */
+                return cesit_disc_ir(yk->ast);
+            }
             int sz = yk->ad_uz + 1;
             char *buf = (char *)arena_ayir(g->arena, (size_t)sz + 1);
             if (buf) {
@@ -274,6 +295,9 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
                 y->veri.tanimlayici.metin,
                 y->veri.tanimlayici.uzunluk);
             if (yk) {
+                if (yk->ast && yk->ast->tip == DUGUM_CESIT) {  /* C2.7 */
+                    return cesit_disc_ir(yk->ast);
+                }
                 /* "%Ad" stringini arena'da olustur */
                 int uz = yk->ad_uz + 1;
                 char *buf = (char *)arena_ayir(g->arena, (size_t)uz + 1);
@@ -548,6 +572,18 @@ static void yapi_kayit(LlvmGen *g, const Dugum *y) {
     r->ad = y->veri.yapi.ad;
     r->ad_uz = y->veri.yapi.ad_uzunluk;
     r->ast = y;
+    r->sonraki = g->yapilar;
+    g->yapilar = r;
+}
+
+/* C2.7: çeşit'i yapilar listesine kaydet (ast = DUGUM_CESIT; ast_tip_to_ir
+ * ve DUGUM_YOL bunu çeşit olarak tanır). */
+static void cesit_kayit(LlvmGen *g, const Dugum *c) {
+    YapiKayit *r = (YapiKayit *)arena_ayir_sifir(g->arena, sizeof(YapiKayit));
+    if (!r) return;
+    r->ad = c->veri.cesit.ad;
+    r->ad_uz = c->veri.cesit.ad_uzunluk;
+    r->ast = c;
     r->sonraki = g->yapilar;
     g->yapilar = r;
 }
@@ -1007,6 +1043,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
 
         case DUGUM_ERISIM:
             return erisim_uret(g, d);
+
+        case DUGUM_YOL: {
+            /* C2.7: Cesit::Varyant → discriminant sabiti (varyant indeksi). */
+            const Dugum *sol = d->veri.yol.sol;
+            if (sol && sol->tip == DUGUM_TANIMLAYICI) {
+                YapiKayit *yk = yapi_bul(g, sol->veri.tanimlayici.metin,
+                                         sol->veri.tanimlayici.uzunluk);
+                if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                    int idx = cesit_varyant_indeksi(yk->ast,
+                        d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
+                    if (idx < 0) idx = 0;
+                    const char *disc = cesit_disc_ir(yk->ast);
+                    int r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add %s 0, %d\n", r, disc, idx);
+                    IfadeSonuc s = { r, disc };
+                    return s;
+                }
+            }
+            return hata(g, "yol ifadesi desteklenmiyor (cesit disi)");
+        }
 
         case DUGUM_DIZI_OLUSTUR: {
             /* [e1, e2, ...] -> alloca [N x T] + store + return ptr
@@ -2390,21 +2446,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 } else {
                     L_next = yeni_label(g);
                     if (is_ctor) {
-                        /* C2.5: sonuç/seçimlik destructuring — tag oku + dallan.
-                         * scrutinee {i8 tag, ...} aggregate; tamam/değer=0,
-                         * hata/hiç=1. */
+                        /* C2.5/C2.7: sonuç/seçimlik destructuring — tag oku +
+                         * dallan. tamam/değer=0, hata/hiç=1. Alt-desen DESEN_YOL
+                         * ise (hata(Cesit::V)) payload disc'ini de kontrol et
+                         * (D6 bir-seviye nesting: tag==hata AND disc==idx). */
                         const char *yad; int yuz;
+                        const Dugum *sub = NULL;
                         if (desen->tip == DUGUM_DESEN_YAPICI) {
                             yad = desen->veri.desen_yapici.ad;
                             yuz = desen->veri.desen_yapici.ad_uzunluk;
                             if (desen->veri.desen_yapici.sayi > 0) {
-                                ctor_bind =
-                                    desen->veri.desen_yapici.alt_desenler[0];
+                                sub = desen->veri.desen_yapici.alt_desenler[0];
                             }
                         } else {
                             yad = desen->veri.desen_tanimlayici.ad;
                             yuz = desen->veri.desen_tanimlayici.ad_uzunluk;
                         }
+                        ctor_bind = sub;
                         int tag;
                         if (yuz == 4 && memcmp(yad, "hata", 4) == 0) {
                             tag = 1; ctor_pf = 2;
@@ -2417,9 +2475,56 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         int tr = yeni_reg(g);
                         fprintf(g->out, "  %%%d = extractvalue %s %%%d, 0\n",
                                 tr, sty, s.reg);
-                        int cr = yeni_reg(g);
+                        int c1 = yeni_reg(g);
                         fprintf(g->out, "  %%%d = icmp eq i8 %%%d, %d\n",
-                                cr, tr, tag);
+                                c1, tr, tag);
+                        int cr = c1;
+                        if (sub && sub->tip == DUGUM_DESEN_YOL && ctor_pf >= 0) {
+                            char ftype[160];
+                            if (agg_alan_ir(sty, ctor_pf, ftype, sizeof(ftype))) {
+                                int idx = -1;
+                                YapiKayit *yk = yapi_bul(g,
+                                    sub->veri.desen_yol.cesit_ad,
+                                    sub->veri.desen_yol.cesit_uz);
+                                if (yk && yk->ast &&
+                                    yk->ast->tip == DUGUM_CESIT) {
+                                    idx = cesit_varyant_indeksi(yk->ast,
+                                        sub->veri.desen_yol.varyant_ad,
+                                        sub->veri.desen_yol.varyant_uz);
+                                }
+                                if (idx < 0) idx = 0;
+                                int pr = yeni_reg(g);
+                                fprintf(g->out,
+                                    "  %%%d = extractvalue %s %%%d, %d\n",
+                                    pr, sty, s.reg, ctor_pf);
+                                int c2 = yeni_reg(g);
+                                fprintf(g->out,
+                                    "  %%%d = icmp eq %s %%%d, %d\n",
+                                    c2, ftype, pr, idx);
+                                int cand = yeni_reg(g);
+                                fprintf(g->out, "  %%%d = and i1 %%%d, %%%d\n",
+                                        cand, c1, c2);
+                                cr = cand;
+                            }
+                        }
+                        fprintf(g->out,
+                                "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                                cr, L_body, L_next);
+                    } else if (desen && desen->tip == DUGUM_DESEN_YOL) {
+                        /* C2.7: bare Cesit::Variant — scrutinee iN discriminant. */
+                        int idx = -1;
+                        YapiKayit *yk = yapi_bul(g,
+                            desen->veri.desen_yol.cesit_ad,
+                            desen->veri.desen_yol.cesit_uz);
+                        if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                            idx = cesit_varyant_indeksi(yk->ast,
+                                desen->veri.desen_yol.varyant_ad,
+                                desen->veri.desen_yol.varyant_uz);
+                        }
+                        if (idx < 0) idx = 0;
+                        int cr = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = icmp eq %s %%%d, %d\n",
+                                cr, sty, s.reg, idx);
                         fprintf(g->out,
                                 "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                                 cr, L_body, L_next);
@@ -2898,9 +3003,14 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
         if (uye->tip == DUGUM_YAPI) yapi_kayit(&g, uye);
+        else if (uye->tip == DUGUM_CESIT) cesit_kayit(&g, uye);  /* C2.7 */
         else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_YAPI) {
             yapi_kayit(&g, uye->veri.disa.tanim);
+        }
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_CESIT) {
+            cesit_kayit(&g, uye->veri.disa.tanim);
         }
     }
 

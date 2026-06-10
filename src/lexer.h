@@ -11,6 +11,7 @@ typedef enum {
     TOK_VER,            /* ver         */
     TOK_ISLEV,          /* işlev       */
     TOK_YAPI,           /* yapı        */
+    TOK_CESIT,          /* çeşit       — C2.7 custom sum type */
     TOK_OZELLIK,        /* özellik     */
     TOK_MODUL,          /* modül       */
     TOK_DEGISKEN,       /* değişken    */

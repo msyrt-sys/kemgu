@@ -1,0 +1,12 @@
+// C2.7 NEGATİF fikstür — non-exhaustive eşleş (Mavi varyantı eksik).
+// --check M001 ile BAŞARISIZ olmalı (test bunu doğrular).
+
+çeşit Renk { Kirmizi, Yesil, Mavi }
+
+işlev f(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 1; }
+        Renk::Yesil   => { ver 2; }
+    }
+    ver 0;
+}
