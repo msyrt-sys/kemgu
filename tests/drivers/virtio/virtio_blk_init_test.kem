@@ -1,0 +1,233 @@
+// VirtIO-blk init host-mock testi: gercek MMIO primitive'leri ve D1/D3/D4-D5 parcalari kullanilir.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::features;
+kullan drivers::virtio::status;
+kullan drivers::virtio::virtio_mmio;
+kullan drivers::virtio::virtio_blk;
+
+sabit TEST_MMIO_OKU: tam32 = 1;
+sabit TEST_MMIO_YAZ: tam32 = 2;
+sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
+
+sabit BLK_TEST_TAMAM: tam32 = 0;
+sabit BLK_TEST_AYGIT_YOK: tam32 = 10;
+sabit BLK_TEST_MODERN_DEGIL: tam32 = 20;
+sabit BLK_TEST_BLOK_DEGIL: tam32 = 30;
+sabit BLK_TEST_FEATURE_RED: tam32 = 40;
+sabit BLK_TEST_QUEUE_HATA: tam32 = 50;
+sabit BLK_TEST_CFG_HATA: tam32 = 60;
+
+// MMIO yetkisi host-mock register penceresini her test oncesi deterministik hazirlamak icin kullanilir.
+işlev blk_test_seed(
+    // MMIO yetkisi seed yazimlari boyunca odunc kullanilir ve caller'a geri dondurulur.
+    y: yetki<MMIO>,
+    magic: tam32,
+    version: tam32,
+    device_id: tam32,
+    device_features: tam32,
+    queue_num_max: tam32,
+    capacity_low: tam32,
+    capacity_high: tam32,
+    block_size: tam32,
+    generation: tam32
+) -> yetki<MMIO> {
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_MAGIC_VALUE), magic);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_VERSION), version);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DEVICE_ID), device_id);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_VENDOR_ID), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_STATUS), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DEVICE_FEATURES_SEL), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DEVICE_FEATURES), device_features);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DRIVER_FEATURES_SEL), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_DRIVER_FEATURES), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_SEL), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM_MAX), queue_num_max);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_READY), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_HIGH), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_HIGH), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_HIGH), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_CONFIG_GENERATION), generation);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_CAPACITY), capacity_low);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_CAPACITY_HIGH), capacity_high);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_SIZE_MAX), 0);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_SEG_MAX), 0);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_BLK_SIZE), block_size);
+    ver y;
+}
+
+işlev blk_test_baslat(
+    magic: tam32,
+    version: tam32,
+    device_id: tam32,
+    device_features: tam32,
+    queue_num_max: tam32
+) -> sonuç<BlkAygit, BaslatHatasi> {
+    // MMIO yetkisi host-mock seed ve public blk_baslat akisi icin olusturulur.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan blk_baslat'a aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_test_seed(
+        y0,
+        magic,
+        version,
+        device_id,
+        device_features,
+        queue_num_max,
+        4096,
+        0,
+        512,
+        0
+    );
+    ver blk_baslat(y1, VIRTIO_MMIO_TABAN);
+}
+
+işlev blk_test_baslat_cekirdek_cfg_flip(flip_sayisi: tam32) -> sonuç<BlkAygit, BaslatHatasi> {
+    // MMIO yetkisi config generation hata yolunu host-mock cekirdek parametresiyle sinamak icin olusturulur.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan blk_baslat_cekirdek'e aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_test_seed(
+        y0,
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8,
+        4096,
+        0,
+        512,
+        0
+    );
+    ver blk_baslat_cekirdek(y1, VIRTIO_MMIO_TABAN, flip_sayisi);
+}
+
+işlev blk_test_sonuc_kodu(r: sonuç<BlkAygit, BaslatHatasi>) -> tam32 {
+    eşleş r {
+        tamam(aygit) => { ver BLK_TEST_TAMAM; }
+        hata(BaslatHatasi::AygitYok) => { ver BLK_TEST_AYGIT_YOK; }
+        hata(BaslatHatasi::ModernDegil) => { ver BLK_TEST_MODERN_DEGIL; }
+        hata(BaslatHatasi::BlokDegil) => { ver BLK_TEST_BLOK_DEGIL; }
+        hata(BaslatHatasi::FeatureRed) => { ver BLK_TEST_FEATURE_RED; }
+        hata(BaslatHatasi::QueueKurulumBasarisiz) => { ver BLK_TEST_QUEUE_HATA; }
+        hata(BaslatHatasi::YapilandirmaHatasi) => { ver BLK_TEST_CFG_HATA; }
+    }
+    ver 99;
+}
+
+işlev blk_test_status_oku() -> tam32 {
+    // MMIO yetkisi blk_baslat sonrasi status register readback'i icin tek seferlik kullanilir.
+    değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    değişken status: tam32 = virtio_mmio_status_oku(y, VIRTIO_MMIO_TABAN);
+    ver status;
+}
+
+işlev test_happy_path_driver_ok() -> mantıksal {
+    değişken sonuc: sonuç<BlkAygit, BaslatHatasi> = blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    );
+
+    eşleş sonuc {
+        tamam(aygit) => {
+            ver aygit.kapasite_sektor == (4096 olarak tam64) ve
+                aygit.blok_boyut == 512 ve
+                aygit.accepted_features == VIRTIO_BLK_F_BLK_SIZE() ve
+                aygit.queue_num == 8 ve
+                aygit.queue_size == 8 ve
+                aygit.final_status == virtio_status_surucu_tamam_degeri() ve
+                blk_test_status_oku() == virtio_status_surucu_tamam_degeri();
+        }
+        hata(BaslatHatasi::AygitYok) => { ver yanlış; }
+        hata(BaslatHatasi::ModernDegil) => { ver yanlış; }
+        hata(BaslatHatasi::BlokDegil) => { ver yanlış; }
+        hata(BaslatHatasi::FeatureRed) => { ver yanlış; }
+        hata(BaslatHatasi::QueueKurulumBasarisiz) => { ver yanlış; }
+        hata(BaslatHatasi::YapilandirmaHatasi) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_aygit_yok_hatasi() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        0,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    )) == BLK_TEST_AYGIT_YOK;
+}
+
+işlev test_modern_degil_hatasi() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        1,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    )) == BLK_TEST_MODERN_DEGIL;
+}
+
+işlev test_blok_degil_hatasi() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        1,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    )) == BLK_TEST_BLOK_DEGIL;
+}
+
+işlev test_feature_red_hatasi_ve_failed_status() -> mantıksal {
+    değişken kod: tam32 = blk_test_sonuc_kodu(blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        0,
+        8
+    ));
+    ver kod == BLK_TEST_FEATURE_RED ve blk_test_status_oku() == VIRTIO_STATUS_FAILED;
+}
+
+işlev test_queue_kurulum_hatasi() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat(
+        VIRTIO_MMIO_MAGIC_BEKLENEN,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        0
+    )) == BLK_TEST_QUEUE_HATA;
+}
+
+işlev test_yapilandirma_hatasi() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat_cekirdek_cfg_flip(8)) == BLK_TEST_CFG_HATA;
+}
+
+işlev test_magic_bozuk_modern_degil() -> mantıksal {
+    ver blk_test_sonuc_kodu(blk_test_baslat(
+        0,
+        VIRTIO_MMIO_VERSION_MODERN,
+        VIRTIO_MMIO_DEVICE_ID_BLOCK,
+        VIRTIO_BLK_F_BLK_SIZE() olarak tam32,
+        8
+    )) == BLK_TEST_MODERN_DEGIL;
+}
+
+işlev main() -> tam32 {
+    eğer test_happy_path_driver_ok() ve
+       test_aygit_yok_hatasi() ve
+       test_modern_degil_hatasi() ve
+       test_blok_degil_hatasi() ve
+       test_feature_red_hatasi_ve_failed_status() ve
+       test_queue_kurulum_hatasi() ve
+       test_yapilandirma_hatasi() ve
+       test_magic_bozuk_modern_degil() {
+        ver 0;
+    }
+    ver 1;
+}
