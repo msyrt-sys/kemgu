@@ -220,6 +220,44 @@ static void test_crossfile_sonuc_calistir(void) {
     test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
 }
 
+/* --- C2.7: çeşit (custom sum type) + exhaustiveness --- */
+
+/* `kemgu --check <kem_yol>` başarılı mı? 1 = OK (exit 0), 0 = hata. */
+static int kemgu_check_basarili(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --check %s > %s 2>%s", KEMGU_BIN, kem_yol, DEV_NULL, DEV_NULL);
+    return system(komut) == 0;
+}
+
+static void test_cesit_temel_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_temel.kem");
+    test_sonuc("cesit temel: opt -passes=verify PASS", ok);
+}
+
+static void test_cesit_temel_calistir(void) {
+    /* Ad::Varyant inşa + eşleş destructuring (i8 discriminant). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_temel.kem");
+    test_sonuc("cesit temel (Ad::Varyant + eslesme) -> exit 42", rc == 42);
+}
+
+static void test_cesit_sonuc_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_sonuc.kem");
+    test_sonuc("cesit sonuc (D6 sonuc<bos,cesit>): opt verify PASS", ok);
+}
+
+static void test_cesit_sonuc_calistir(void) {
+    /* D6: hata(Cesit::V) bir-seviye nesting (tag==hata AND disc==idx). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_sonuc.kem");
+    test_sonuc("cesit sonuc D6 (hata(Cesit::V) nesting) -> exit 42", rc == 42);
+}
+
+static void test_cesit_exhaustive_negatif(void) {
+    /* Eksik varyant -> --check M001 ile BAŞARISIZ olmalı. */
+    int ok = kemgu_check_basarili("test/snapshots/cesit_eksik.kem");
+    test_sonuc("cesit non-exhaustive -> --check basarisiz (M001)", ok == 0);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -1447,6 +1485,13 @@ int main(void) {
     test_crossfile_transitif_calistir();
     test_crossfile_sonuc_verify();
     test_crossfile_sonuc_calistir();
+
+    printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
+    test_cesit_temel_verify();
+    test_cesit_temel_calistir();
+    test_cesit_sonuc_verify();
+    test_cesit_sonuc_calistir();
+    test_cesit_exhaustive_negatif();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
