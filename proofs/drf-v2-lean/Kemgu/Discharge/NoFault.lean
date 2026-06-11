@@ -427,10 +427,308 @@ theorem adim_korunum
         exact tidAyrik_degisim h13 _ rfl
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
       intro h_konf
-      -- TODO 🔴 TEK BLOKER: kategori-anahtar disiplini (DECISIONS_LOG.md
-      -- DUR-SOR). id-anahtarlama onayi sonrasi: Yol-B premise + transport
-      -- lemmasi ile comp-2; comp-1/7/10 id-anahtarla acilir.
-      sorry
+      subst h_S'
+      obtain ⟨h_sigma, h_thread, h_sahip, h_kanal, h_fault, h_beq, h_fkat,
+              h_hvar, h_hbolge, h_bagli, h_transit, h_bayrik, h_tayrik,
+              h_kap, h_kayrik⟩ := h_konf
+      subst h_beq
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      -- odakli tip inversion: kod tipli + yakalama yazilabilir + Yol-B
+      obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
+      rw [h_if] at h_ty
+      obtain ⟨ht0, hl0, hr0⟩ := h_ty
+      have h_inv : (∃ τd, HasType Γ Δ kod τd)
+          ∧ (∃ Λkod, LineerTamam Γ
+               (yd.map (fun v => (v, Lineerlik.aktif))) kod Λkod)
+          ∧ (∀ v ∈ yd, ∀ b : Bolge, bolgeOrtamGet S.bolge v = some b →
+               kategoriYazilabilir b.kategori = true)
+          ∧ (∀ y : VarId, ¬ HedefVar kod y)
+          ∧ (∀ b : Bolge, ¬ HedefBolge kod b)
+          ∧ (∃ Ρkod, RegionTamam Γ S.bolge kod Ρkod) := by
+        match ht0, hl0, hr0 with
+        | HasType.t_gorev_baslat _ _ _ _ τd htk,
+          LineerTamam.l_gorev_baslat _ _ Λkod _ _ _ hlk,
+          RegionTamam.r_gorev_baslat _ _ _ Ρkod _ _ _
+            h_cap h_khv h_khb hrk _ =>
+          exact ⟨⟨τd, htk⟩, ⟨Λkod, hlk⟩, h_cap, h_khv, h_khb, ⟨Ρkod, hrk⟩⟩
+      obtain ⟨⟨τd, htk⟩, ⟨Λkod, hlk⟩, h_cap, h_khv, h_khb, ⟨Ρkod, hrk⟩⟩ := h_inv
+      -- yeni bolge ortami + tid-ayriklik on-bilgileri
+      have h_tneq : ∀ c, (c ∈ ts1 ∨ c ∈ ts2) → c.tid ≠ ctx.tid := by
+        intro c hc
+        have h13 := h_tayrik
+        rw [h_t] at h13
+        exact tidAyrik_odakdisi h13 hc
+      have h_cin : ∀ c, (c ∈ ts1 ∨ c ∈ ts2) → c ∈ S.thread := by
+        intro c hc
+        rw [h_t]
+        rcases hc with h1 | h2
+        · exact List.mem_append.mpr (Or.inl h1)
+        · exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h2))
+      -- odaksiz thread'in hedefleri yakalanmis OLAMAZ (sahiplik catismasi)
+      have h_hv_kosul : ∀ c, c ∈ S.thread → c.tid ≠ ctx.tid →
+          ∀ y, HedefVar c.ifade y →
+          bolgeOrtamGet (bolgeOrtamSahipAta S.bolge yd tYeni) y
+            = bolgeOrtamGet S.bolge y := by
+        intro c hc h_ne y hy
+        by_cases h_in : y ∈ yd
+        · cases h_lk : bolgeOrtamGet S.bolge y with
+          | none => exact sahipAta_get_none S.bolge yd tYeni y h_lk
+          | some by0 =>
+              exfalso
+              have h_yz := h_cap y h_in by0 h_lk
+              have h_own := h_hvar c hc y hy by0 h_lk h_yz
+              have h_f := h_sahipler by0 (List.mem_filterMap.mpr ⟨y, h_in, h_lk⟩)
+              rw [h_own] at h_f
+              have h_t2 := Option.some.inj h_f
+              injection h_t2 with h_t3
+              exact h_ne h_t3
+        · exact sahipAta_get_notin S.bolge yd tYeni y h_in
+      have h_hb_kosul : ∀ c, c ∈ S.thread → c.tid ≠ ctx.tid →
+          ∀ x bb, HedefBolge c.ifade bb →
+          kategoriYazilabilir bb.kategori = true →
+          bolgeOrtamGet S.bolge x = some bb →
+          bolgeOrtamGet (bolgeOrtamSahipAta S.bolge yd tYeni) x = some bb := by
+        intro c hc h_ne x bb hb h_yz h_lk
+        by_cases h_in : x ∈ yd
+        · exfalso
+          have h_own := h_hbolge c hc bb hb ⟨x, h_lk⟩ h_yz
+          have h_f := h_sahipler bb (List.mem_filterMap.mpr ⟨x, h_in, h_lk⟩)
+          rw [h_own] at h_f
+          have h_t2 := Option.some.inj h_f
+          injection h_t2 with h_t3
+          exact h_ne h_t3
+        · rw [sahipAta_get_notin S.bolge yd tYeni x h_in]
+          exact h_lk
+      -- ters-analiz id-formu (comp-1/3/10/12 icin)
+      have h_inv_id : ∀ x b,
+          bolgeOrtamGet (bolgeOrtamSahipAta S.bolge yd tYeni) x = some b →
+          ∃ b0, bolgeOrtamGet S.bolge x = some b0 ∧ b0.id = b.id := by
+        intro x b h
+        rcases sahipAta_get_inv' S.bolge yd tYeni x b h with
+            ⟨b0, h0, hr, _⟩ | he
+        · exact ⟨b0, h0, by simp [hr, bolgeKategoriDegistir]⟩
+        · exact ⟨b, he, rfl⟩
+      -- transfer kumesiyle id-ayriklik (eski-sahipli bb'ler icin)
+      have h_yok_gen : ∀ bb : Bolge,
+          sahiplikGet S.sahiplik bb ≠ some (Sahip.thread ctx.tid) →
+          ∀ b'' ∈ bolgeleriTopla S.bolge yd, b''.id ≠ bb.id := by
+        intro bb h_ne b'' h_in h_id
+        have h_f := h_sahipler b'' h_in
+        rw [sahiplikGet_id_esit S.sahiplik b'' bb h_id] at h_f
+        exact h_ne h_f
+      refine ⟨bolgeOrtamSahipAta S.bolge yd tYeni,
+              ?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+              h_kap, h_kayrik⟩
+      · -- comp 1: SigmaTipli (store sabit; kayit id-tasima)
+        intro k v h_kv
+        obtain ⟨τv, h_dt, x, b', h_x, h_id⟩ := h_sigma k v h_kv
+        obtain ⟨b'', h_x', h_id'⟩ :=
+          sahipAta_id_koruma S.bolge yd tYeni x b' h_x
+        exact ⟨τv, degerTipli_ortam v τv h_dt, x, b'', h_x', h_id'.trans h_id⟩
+      · -- comp 2: ThreadTipliFull (odaksiz: transport; odak: gorevVal;
+        --          cocuk: Yol-B hedefsiz transport)
+        intro c h_mem
+        rcases List.mem_append.mp h_mem with h_main | h_yeni
+        · rcases List.mem_append.mp h_main with h1 | h2
+          · obtain ⟨τc, Λc, Ρc, h_tyc⟩ := h_thread c (h_cin c (Or.inl h1))
+            obtain ⟨Ρc', h_rc', _⟩ := regionTamam_transport h_tyc.regionOK
+              (bolgeOrtamSahipAta S.bolge yd tYeni)
+              (h_hv_kosul c (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1)))
+              (h_hb_kosul c (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1)))
+            exact ⟨τc, Λc, Ρc', ⟨h_tyc.hasType, h_tyc.lineerOK, h_rc'⟩⟩
+          · rcases List.mem_cons.mp h2 with he | h3
+            · subst he
+              exact ⟨Tip.gorev τd, lineerTuketListe ctx.lineer yd,
+                bolgeOrtamSahipAta S.bolge yd tYeni,
+                ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_gorev tYeni τd),
+                 LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+            · obtain ⟨τc, Λc, Ρc, h_tyc⟩ := h_thread c (h_cin c (Or.inr h3))
+              obtain ⟨Ρc', h_rc', _⟩ := regionTamam_transport h_tyc.regionOK
+                (bolgeOrtamSahipAta S.bolge yd tYeni)
+                (h_hv_kosul c (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3)))
+                (h_hb_kosul c (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3)))
+              exact ⟨τc, Λc, Ρc', ⟨h_tyc.hasType, h_tyc.lineerOK, h_rc'⟩⟩
+        · rcases List.mem_cons.mp h_yeni with he | h3
+          · subst he
+            obtain ⟨Ρkod', h_rkod', _⟩ := regionTamam_transport hrk
+              (bolgeOrtamSahipAta S.bolge yd tYeni)
+              (fun y hy => absurd hy (h_khv y))
+              (fun _ bb hb _ _ => absurd hb (h_khb bb))
+            exact ⟨τd, Λkod, Ρkod', ⟨htk, hlk, h_rkod'⟩⟩
+          · cases h3
+      · -- comp 3: SahiplikTutarli (id-genel)
+        intro bb sah h_lk
+        rcases sahiplikSetMany_lookup_inv _ _ _ bb sah h_lk with
+            ⟨⟨b'', h_in'', h_idb⟩, _⟩ | h_eski
+        · rcases List.mem_filterMap.mp h_in'' with ⟨v0, h_v0, h_v0lk⟩
+          obtain ⟨b''', h_x', h_id'⟩ :=
+            sahipAta_id_koruma S.bolge yd tYeni v0 b'' h_v0lk
+          exact ⟨v0, b''', h_x', h_id'.trans h_idb⟩
+        · obtain ⟨x, b', h_x, h_id⟩ := h_sahip bb sah h_eski
+          obtain ⟨b'', h_x', h_id'⟩ :=
+            sahipAta_id_koruma S.bolge yd tYeni x b' h_x
+          exact ⟨x, b'', h_x', h_id'.trans h_id⟩
+      · -- comp 4: KanalTutarli (kanal sabit; ortam-swap)
+        intro kd h_kd w h_w
+        exact degerTipli_ortam w _ (h_kanal kd h_kd w h_w)
+      · -- comp 7: FrozenKategoriTutarli
+        intro x bb h_bb
+        rcases sahipAta_get_inv' S.bolge yd tYeni x bb h_bb with
+            ⟨b0, h_b0, h_recat, h_xin⟩ | h_eski
+        · constructor
+          · intro h_fr
+            exfalso
+            have h_lk2 : sahiplikGet (sahiplikSetMany S.sahiplik
+                (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+                = some Sahip.donmus := h_fr
+            rcases sahiplikSetMany_analiz (bolgeleriTopla S.bolge yd)
+                S.sahiplik (Sahip.thread tYeni) bb with
+                ⟨h_get, _⟩ | ⟨_, h_yok⟩
+            · rw [h_get] at h_lk2; cases h_lk2
+            · exact h_yok b0
+                (List.mem_filterMap.mpr ⟨x, h_xin, h_b0⟩)
+                (by simp [h_recat, bolgeKategoriDegistir])
+          · intro h_kat
+            rw [h_recat] at h_kat
+            simp [bolgeKategoriDegistir] at h_kat
+        · have h_yok : ∀ b'' ∈ bolgeleriTopla S.bolge yd, b''.id ≠ bb.id := by
+            intro b'' h_in h_id
+            rcases List.mem_filterMap.mp h_in with ⟨v0, h_v0, h_v0lk⟩
+            have h_vx : v0 = x := h_bayrik v0 x b'' bb h_v0lk h_eski h_id
+            subst h_vx
+            have h_yz := h_cap v0 h_v0 bb h_eski
+            have h_rec := sahipAta_get_in' S.bolge yd tYeni v0 bb h_v0 h_eski
+            rw [h_bb] at h_rec
+            have h_bbk := Option.some.inj h_rec
+            rw [h_bbk] at h_yz
+            simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+          have h_pres : sahiplikGet (sahiplikSetMany S.sahiplik
+              (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+              = sahiplikGet S.sahiplik bb :=
+            sahiplikSetMany_ne _ _ _ _ h_yok
+          have h_iff := h_fkat x bb h_eski
+          constructor
+          · intro h_fr
+            refine h_iff.mp ?_
+            show sahiplikGet S.sahiplik bb = some Sahip.donmus
+            rw [← h_pres]
+            exact h_fr
+          · intro h_kat
+            show sahiplikGet (sahiplikSetMany S.sahiplik
+                (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+                = some Sahip.donmus
+            rw [h_pres]
+            exact h_iff.mpr h_kat
+      · -- comp 8: HedefVarSahipligi
+        intro c h_mem y hy bb h_bb h_yz
+        have h_unf : c ∈ S.thread → c.tid ≠ ctx.tid →
+            sahiplikGet (sahiplikSetMany S.sahiplik
+              (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+              = some (Sahip.thread c.tid) := by
+          intro hc h_ne
+          rcases sahipAta_get_inv' S.bolge yd tYeni y bb h_bb with
+              ⟨b0, _, h_recat, _⟩ | h_eski
+          · rw [h_recat] at h_yz
+            simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+          · have h_own := h_hvar c hc y hy bb h_eski h_yz
+            have h_yok := h_yok_gen bb (by
+              rw [h_own]
+              intro h_f
+              have h_t2 := Option.some.inj h_f
+              injection h_t2 with h_t3
+              exact h_ne h_t3)
+            rw [sahiplikSetMany_ne _ _ _ _ h_yok]
+            exact h_own
+        rcases List.mem_append.mp h_mem with h_main | h_yeni
+        · rcases List.mem_append.mp h_main with h1 | h2
+          · exact h_unf (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1))
+          · rcases List.mem_cons.mp h2 with he | h3
+            · subst he; exact absurd hy (fun h => nomatch h)
+            · exact h_unf (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3))
+        · rcases List.mem_cons.mp h_yeni with he | h3
+          · subst he; exact absurd hy (h_khv y)
+          · cases h3
+      · -- comp 9: HedefBolgeSahipligi
+        intro c h_mem bb hb h_kayit h_yz
+        obtain ⟨x, h_x⟩ := h_kayit
+        have h_unf : c ∈ S.thread → c.tid ≠ ctx.tid →
+            sahiplikGet (sahiplikSetMany S.sahiplik
+              (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+              = some (Sahip.thread c.tid) := by
+          intro hc h_ne
+          rcases sahipAta_get_inv' S.bolge yd tYeni x bb h_x with
+              ⟨b0, _, h_recat, _⟩ | h_eski
+          · rw [h_recat] at h_yz
+            simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+          · have h_own := h_hbolge c hc bb hb ⟨x, h_eski⟩ h_yz
+            have h_yok := h_yok_gen bb (by
+              rw [h_own]
+              intro h_f
+              have h_t2 := Option.some.inj h_f
+              injection h_t2 with h_t3
+              exact h_ne h_t3)
+            rw [sahiplikSetMany_ne _ _ _ _ h_yok]
+            exact h_own
+        rcases List.mem_append.mp h_mem with h_main | h_yeni
+        · rcases List.mem_append.mp h_main with h1 | h2
+          · exact h_unf (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1))
+          · rcases List.mem_cons.mp h2 with he | h3
+            · subst he; exact absurd hb (fun h => nomatch h)
+            · exact h_unf (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3))
+        · rcases List.mem_cons.mp h_yeni with he | h3
+          · subst he; exact absurd hb (h_khb bb)
+          · cases h3
+      · -- comp 10: DegiskenlerBagli (id-koruma + konum id-kongruansi)
+        intro z τz h_gz
+        obtain ⟨bz, vz, h_bz, h_kz, h_dtz⟩ := h_bagli z τz h_gz
+        obtain ⟨bz', h_bz', h_idz⟩ :=
+          sahipAta_id_koruma S.bolge yd tYeni z bz h_bz
+        refine ⟨bz', vz, h_bz', ?_, degerTipli_ortam vz τz h_dtz⟩
+        rw [konumGet_id_esit S.store ⟨bz', 0⟩ ⟨bz, 0⟩ h_idz rfl]
+        exact h_kz
+      · -- comp 11: KanalTransit (transit bolge thread-sahipli olamaz)
+        intro kd h_kd h_ne'
+        obtain ⟨bT, h_bT⟩ := h_transit kd h_kd h_ne'
+        have h_yok : ∀ b'' ∈ bolgeleriTopla S.bolge yd, b''.id ≠ bT.id := by
+          intro b'' h_in h_id
+          have h_f := h_sahipler b'' h_in
+          rw [sahiplikGet_id_esit S.sahiplik b'' bT h_id, h_bT] at h_f
+          cases h_f
+        refine ⟨bT, ?_⟩
+        show sahiplikGet (sahiplikSetMany S.sahiplik
+            (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bT
+            = some (Sahip.kanalSahip kd.kid)
+        rw [sahiplikSetMany_ne _ _ _ _ h_yok]
+        exact h_bT
+      · -- comp 12: BolgeAyrik (id-koruma ile eskiye indirgeme)
+        intro x1 x2 b1 b2 h_1 h_2 h_id
+        obtain ⟨b01, h_01, h_i1⟩ := h_inv_id x1 b1 h_1
+        obtain ⟨b02, h_02, h_i2⟩ := h_inv_id x2 b2 h_2
+        exact h_bayrik x1 x2 b01 b02 h_01 h_02
+          (h_i1.trans (h_id.trans h_i2.symm))
+      · -- comp 13: TidAyrik (degisim + taze-tid ekleme)
+        have h13S := h_tayrik
+        rw [h_t] at h13S
+        have h13' := tidAyrik_degisim h13S
+          { ctx with ifade := .sabit (.gorevVal tYeni),
+                     lineer := lineerTuketListe ctx.lineer yd } rfl
+        have h_fresh' : ∀ a ∈ ts1 ++ { ctx with
+            ifade := Ifade.sabit (Deger.gorevVal tYeni),
+            lineer := lineerTuketListe ctx.lineer yd } :: ts2,
+            a.tid ≠ (⟨tYeni, kod,
+              yd.map (fun v => (v, Lineerlik.aktif))⟩ : ThreadCtx).tid := by
+          intro a ha
+          rcases List.mem_append.mp ha with h1 | h2
+          · exact h_fresh a (by
+              rw [h_t]; exact List.mem_append.mpr (Or.inl h1))
+          · rcases List.mem_cons.mp h2 with he | h3
+            · subst he
+              exact h_fresh ctx h_ctx_in
+            · exact h_fresh a (by
+                rw [h_t]
+                exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+        exact tidAyrik_ekle h13' h_fresh'
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       intro h_konf
       subst h_S'
