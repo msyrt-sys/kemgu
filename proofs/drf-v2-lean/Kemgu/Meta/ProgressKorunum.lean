@@ -108,7 +108,7 @@ theorem progress_konf
          ∧ ctx'.tid = ctx.tid) := by
   induction e generalizing S ts1 ts2 ctx τ Λin Λ' Ρ' with
   | tanim x =>
-      obtain ⟨_, _, _, _, _, _, _, _, _, h_bagli, _⟩ := h_konf
+      obtain ⟨_, _, _, _, _, _, _, _, _, h_bagli, _, _, _, _, _⟩ := h_konf
       match h_ht with
       | HasType.t_tanim _ _ _ _ h_get =>
         obtain ⟨b, v, h_b, h_v, _⟩ := h_bagli x τ h_get
@@ -184,7 +184,7 @@ theorem progress_konf
   | gorevBaslat yd kod _ih_kod =>
       match h_rt with
       | RegionTamam.r_gorev_baslat _ _ _ _ _ _ tY h_yazlar _ _ =>
-        obtain ⟨_, _, _, _, _, h_beq, _, h_hvar, _, _, _⟩ := h_konf
+        obtain ⟨_, _, _, _, _, h_beq, _, h_hvar, _, _, _, _, _, _, _⟩ := h_konf
         have h_ctx_in : ctx ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
         have h_sahipler : ∀ bb ∈ bolgeleriTopla S.bolge yd,
@@ -219,7 +219,7 @@ theorem progress_konf
       match h_ht, h_rt with
       | HasType.t_kanal_gonder _ _ _ _ h_gv,
         RegionTamam.r_kanal_gonder _ _ _ _ _ b h_gb h_yaz _ =>
-        obtain ⟨_, _, _, _, _, h_beq, _, h_hvar, _, h_bagli, _⟩ := h_konf
+        obtain ⟨_, _, _, _, _, h_beq, _, h_hvar, _, h_bagli, _, _, _, _, _⟩ := h_konf
         have h_ctx_in : ctx ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
         obtain ⟨bv, val, h_bv, h_val, _⟩ := h_bagli v (Δ k) h_gv
@@ -240,7 +240,7 @@ theorem progress_konf
                 h_t h_if h_b_S h_val h_owner h_q rfl,
               rfl, rfl⟩)
   | kanalAlIf k =>
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, h_transit⟩ := h_konf
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, h_transit, _, _, _, _⟩ := h_konf
       cases h_q : kanalIlk S.kanal k with
       | none =>
           exact Or.inr (Or.inl (Engelli.bas k h_q))
@@ -268,7 +268,7 @@ theorem progress_konf
   | dondurIf b =>
       match h_rt with
       | RegionTamam.r_dondur _ _ _ _ x h_gx h_yaz _ =>
-        obtain ⟨_, _, _, _, _, h_beq, _, _, h_hbolge, _, _⟩ := h_konf
+        obtain ⟨_, _, _, _, _, h_beq, _, _, h_hbolge, _, _, _, _, _, _⟩ := h_konf
         have h_ctx_in : ctx ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
         have h_owner := h_hbolge ctx h_ctx_in b
