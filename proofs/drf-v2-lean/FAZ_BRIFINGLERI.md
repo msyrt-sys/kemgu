@@ -1,5 +1,10 @@
 # DRF Onarım v3 — Faz Brifingleri (ADIM 0 onayı sonrası)
 
+> **DURUM (2026-06-11 oturum 4 sonu — kararli batch):** adim_korunum **15/21**;
+> kalan 6 sorry TEK BLOKER: 🔴 kategori-anahtar (DECISIONS_LOG.md DUR-SOR,
+> onay bekliyor). Onay → id-anahtar gecisi + Yol-B premise + transport →
+> sorry 0. Durustluk paketi indi (IyiTipliCekirdek + README + DECISIONS_LOG).
+>
 > **DURUM (2026-06-11 oturum 2 sonu — invariant onayi sonrasi):**
 > ✅ F1 ✅ F2 ✅ F3 ✅ F4-yapisal ✅ F6 ✅ **F4-ispat A+B (onayli invariant uctan uca)** ✅ **F5 TAM (progress_konf 12/12 — sorry suz!)**
 > Build 29/29 temiz; sorry **15 → 1**. Son commit: 0973d7d.
