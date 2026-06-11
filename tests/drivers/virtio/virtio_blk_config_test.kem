@@ -60,7 +60,7 @@ işlev test_1gib_config_okunur() -> mantıksal {
         131072,
         128
     );
-    değişken sonuc: sonuç<BlkYapilandirma, tam32> =
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
         blk_yapilandirma_oku(y1, VIRTIO_MMIO_TABAN);
     eşleş sonuc {
         tamam(cfg) => {
@@ -72,7 +72,7 @@ işlev test_1gib_config_okunur() -> mantıksal {
                 TEST_1GIB_SEKTOR
             );
         }
-        hata(kod) => {
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
             ver yanlış;
         }
     }
@@ -92,7 +92,7 @@ işlev test_capacity_high_word_birlesir() -> mantıksal {
         131072,
         128
     );
-    değişken sonuc: sonuç<BlkYapilandirma, tam32> =
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
         blk_yapilandirma_oku(y1, VIRTIO_MMIO_TABAN);
     eşleş sonuc {
         tamam(cfg) => {
@@ -104,7 +104,7 @@ işlev test_capacity_high_word_birlesir() -> mantıksal {
                 TEST_HIGH_CAPACITY
             );
         }
-        hata(kod) => {
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
             ver yanlış;
         }
     }
@@ -124,7 +124,7 @@ işlev test_generation_flip_bir_retry_sonra_okunur() -> mantıksal {
         131072,
         128
     );
-    değişken sonuc: sonuç<BlkYapilandirma, tam32> =
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
         blk_yapilandirma_oku_cekirdek(y1, VIRTIO_MMIO_TABAN, 1);
     eşleş sonuc {
         tamam(cfg) => {
@@ -138,7 +138,7 @@ işlev test_generation_flip_bir_retry_sonra_okunur() -> mantıksal {
                 ver yanlış;
             }
         }
-        hata(kod) => {
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
             ver yanlış;
         }
     }
@@ -164,14 +164,14 @@ işlev test_generation_sekiz_retry_asimi_hata() -> mantıksal {
         131072,
         128
     );
-    değişken sonuc: sonuç<BlkYapilandirma, tam32> =
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
         blk_yapilandirma_oku_cekirdek(y1, VIRTIO_MMIO_TABAN, 8);
     eşleş sonuc {
         tamam(cfg) => {
             ver yanlış;
         }
-        hata(kod) => {
-            ver kod == VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE;
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
+            ver doğru;
         }
     }
     ver yanlış;

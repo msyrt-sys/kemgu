@@ -12,17 +12,17 @@
 
 Bu PR virtio-blk cihazina ozel config-space alanlarini okuyan `blk_yapilandirma_oku` yuzeyini ekler. Okunan veri `BlkYapilandirma` yapisinda tasinir: `kapasite_sektor`, `blok_boyut`, `size_max` ve `seg_max`. Capacity VirtIO-blk sozlesmesine gore 512-byte sektor birimindedir; 1 GiB host-mock disk testinde beklenen deger `2097152` sektordur.
 
-Config okuma VirtIO generation protokolunu izler: `ConfigGeneration` once okunur, config alanlari okunur, generation tekrar okunur. Deger degismisse okuma bastan denenir. Dongu `VIRTIO_BLK_CFG_GENERATION_RETRY_MAX = 8` ile sinirlidir; bu sinir asilirsa `sonuc<BlkYapilandirma, tam32>` hata kodu olarak `VIRTIO_BLK_CFG_HATA_GENERATION_INSTABILITE` doner.
+Config okuma VirtIO generation protokolunu izler: `ConfigGeneration` once okunur, config alanlari okunur, generation tekrar okunur. Deger degismisse okuma bastan denenir. Dongu `VIRTIO_BLK_CFG_GENERATION_RETRY_MAX = 8` ile sinirlidir; bu sinir asilirsa `sonuc<BlkYapilandirma, YapilandirmaHatasi>` hata payload'i olarak `YapilandirmaHatasi::GenerationInstabilite` doner.
 
 `mmio_oku64` olmadigi icin capacity `mmio_oku32` ile low/high iki parcadan okunur. `blk_size` yalniz `VIRTIO_BLK_F_BLK_SIZE` negotiate edildiyse anlamsal olarak gecerlidir; bu PR feature handshake'i tekrar yapmaz, sadece register degerini okur.
 
 ## Kapsam Disi
 
-Full init dizisi (`blk_baslat`), request handling, DMA allocation, used-ring tuketimi, ISR ve custom enum hata tipi bu PR'in disindadir. Hata payload'i C2.7 custom enum destegi gelene kadar `tam32` kod olarak kalir.
+Full init dizisi (`blk_baslat`), request handling, DMA allocation, used-ring tuketimi ve ISR bu PR'in disindadir. Hata payload'i C2.7 sonrasi `YapilandirmaHatasi` cesit tipiyle temsil edilir.
 
 ## Test
 
-Host-mock testleri config-space registerlarini `mmio_yaz32` ile seed eder ve `blk_yapilandirma_oku` sonucunu `esles` ile dogrular. Kapsanan senaryolar: 1 GiB disk (`capacity=2097152`, `blk_size=512`), high-word capacity birlestirme, generation flip sonrasi tek retry ile basari, 8 retry boyunca kararsiz generation hata yolu ve 64-bit birlestirme helper'i.
+Host-mock testleri config-space registerlarini `mmio_yaz32` ile seed eder ve `blk_yapilandirma_oku` sonucunu `esles` ile dogrular. Kapsanan senaryolar: 1 GiB disk (`capacity=2097152`, `blk_size=512`), high-word capacity birlestirme, generation flip sonrasi tek retry ile basari, 8 retry boyunca kararsiz generation icin `YapilandirmaHatasi::GenerationInstabilite` hata yolu ve 64-bit birlestirme helper'i.
 
 ## Sonraki Adim
 

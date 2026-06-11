@@ -178,13 +178,16 @@ işlev blk_baslat_cekirdek(
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         // MMIO alt-yetkisi D3 virtqueue_bagla fonksiyonuna queue register kurulumu icin devredilir.
         değişken y_queue: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        değişken queue_sonuc: sonuç<tam32, tam32> =
+        değişken queue_sonuc: sonuç<tam32, BagHatasi> =
             virtqueue_bagla(y_queue, taban, BLK_QUEUE_INDEX, &vq);
         eşleş queue_sonuc {
             tamam(q) => {
                 queue_num = q;
             }
-            hata(kod) => {
+            hata(BagHatasi::QueueKullanilamaz) => {
+                hata_kodu = BLK_BASLAT_HATA_QUEUE;
+            }
+            hata(BagHatasi::GecersizBoyut) => {
                 hata_kodu = BLK_BASLAT_HATA_QUEUE;
             }
         }
@@ -193,13 +196,13 @@ işlev blk_baslat_cekirdek(
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         // MMIO alt-yetkisi D4/D5 config okuma cekirdegine generation retry testi icin devredilir.
         değişken y_cfg: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        değişken cfg_sonuc: sonuç<BlkYapilandirma, tam32> =
+        değişken cfg_sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
             blk_yapilandirma_oku_cekirdek(y_cfg, taban, host_mock_generation_flip_sayisi);
         eşleş cfg_sonuc {
             tamam(okunan_cfg) => {
                 cfg = okunan_cfg;
             }
-            hata(kod) => {
+            hata(YapilandirmaHatasi::GenerationInstabilite) => {
                 hata_kodu = BLK_BASLAT_HATA_CFG;
             }
         }
