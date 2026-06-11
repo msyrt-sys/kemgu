@@ -46,6 +46,39 @@ def ifadeyleKonf (S : Konfigurasyon) (ts1 ts2 : List ThreadCtx)
     (ctx : ThreadCtx) (e : Ifade) : Konfigurasyon :=
   { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 }
 
+/-- Taze thread kimligi: mevcutlarin maksimumundan buyuk (F5 progress
+    taniki — cGorevBaslatTamam'in h_fresh'i icin). -/
+def tazeTid (S : Konfigurasyon) : ThreadId :=
+  (S.thread.foldl (fun acc ctx => max acc ctx.tid) 0) + 1
+
+/-- foldl-max tohumu asla kucultmez. -/
+theorem foldl_max_ge_acc (l : List ThreadCtx) (acc : Nat) :
+    acc ≤ l.foldl (fun a c => max a c.tid) acc := by
+  induction l generalizing acc with
+  | nil => exact Nat.le_refl acc
+  | cons c rest ih =>
+      exact Nat.le_trans (Nat.le_max_left acc c.tid) (ih (max acc c.tid))
+
+/-- Listedeki her tid foldl-max'tan kucuk-esit. -/
+theorem foldl_max_ge_mem (l : List ThreadCtx) (acc : Nat) (ctx : ThreadCtx)
+    (h : ctx ∈ l) :
+    ctx.tid ≤ l.foldl (fun a c => max a c.tid) acc := by
+  induction l generalizing acc with
+  | nil => cases h
+  | cons c rest ih =>
+      rcases List.mem_cons.mp h with h_eq | h_tail
+      · subst h_eq
+        exact Nat.le_trans (Nat.le_max_right acc ctx.tid)
+          (foldl_max_ge_acc rest (max acc ctx.tid))
+      · exact ih (max acc c.tid) h_tail
+
+/-- tazeTid gercekten taze. -/
+theorem tazeTid_fresh (S : Konfigurasyon) : threadFresh S (tazeTid S) := by
+  intro ctx h_ctx h_eq
+  have h_le := foldl_max_ge_mem S.thread 0 ctx h_ctx
+  rw [h_eq] at h_le
+  exact Nat.not_succ_le_self _ h_le
+
 
 -- ============================================================
 -- §2. Tek-adim reduksiyon — Step (21 kural)
