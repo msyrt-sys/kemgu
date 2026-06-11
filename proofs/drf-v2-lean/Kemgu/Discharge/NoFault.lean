@@ -1398,8 +1398,258 @@ theorem adim_korunum
         rw [← e1, ← e2, h_p]
   | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
       intro h_konf
-      -- TODO 🔴 TEK BLOKER: kategori-anahtar (DECISIONS_LOG.md DUR-SOR).
-      sorry
+      subst h_S'
+      obtain ⟨h_sigma, h_thread, h_sahip, h_kanal, h_fault, h_beq, h_fkat,
+              h_hvar, h_hbolge, h_bagli, h_transit, h_bayrik, h_tayrik,
+              h_kap, h_kayrik⟩ := h_konf
+      subst h_beq
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      -- odakli tip inversion: b kayitli (x0) + yazilabilir
+      obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
+      rw [h_if] at h_ty
+      obtain ⟨_, _, hr0⟩ := h_ty
+      have h_inv : ∃ x0, bolgeOrtamGet S.bolge x0 = some b
+          ∧ kategoriYazilabilir b.kategori = true := by
+        match hr0 with
+        | RegionTamam.r_dondur _ _ _ _ x0 h_x0 h_yzb _ =>
+          exact ⟨x0, h_x0, h_yzb⟩
+      obtain ⟨x0, h_x0, h_yzb⟩ := h_inv
+      -- tid-ayriklik + uyelik on-bilgileri
+      have h_tneq : ∀ c, (c ∈ ts1 ∨ c ∈ ts2) → c.tid ≠ ctx.tid := by
+        intro c hc
+        have h13 := h_tayrik
+        rw [h_t] at h13
+        exact tidAyrik_odakdisi h13 hc
+      have h_cin : ∀ c, (c ∈ ts1 ∨ c ∈ ts2) → c ∈ S.thread := by
+        intro c hc
+        rw [h_t]
+        rcases hc with h1 | h2
+        · exact List.mem_append.mpr (Or.inl h1)
+        · exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h2))
+      -- dondur lookup analizleri
+      have h_d_inv_id : ∀ x bb,
+          bolgeOrtamGet (bolgeOrtamDondurBolge S.bolge b) x = some bb →
+          ∃ b0, bolgeOrtamGet S.bolge x = some b0 ∧ b0.id = bb.id := by
+        intro x bb h
+        rw [dondur_get] at h
+        cases h_lk : bolgeOrtamGet S.bolge x with
+        | none => rw [h_lk] at h; cases h
+        | some br =>
+            rw [h_lk, Option.map_some] at h
+            by_cases hid : br.id = b.id
+            · rw [if_pos hid] at h
+              have h2 := congrArg Bolge.id (Option.some.inj h)
+              have h_rfl : br.id
+                  = (bolgeKategoriDegistir br BolgeKategorisi.donmus).id := rfl
+              exact ⟨br, rfl, h_rfl.trans h2⟩
+            · rw [if_neg hid] at h
+              exact ⟨br, rfl, congrArg Bolge.id (Option.some.inj h)⟩
+      have h_d_koruma : ∀ x b0, bolgeOrtamGet S.bolge x = some b0 →
+          ∃ b', bolgeOrtamGet (bolgeOrtamDondurBolge S.bolge b) x = some b'
+            ∧ b'.id = b0.id := by
+        intro x b0 h
+        rw [dondur_get, h]
+        by_cases hid : b0.id = b.id
+        · exact ⟨bolgeKategoriDegistir b0 BolgeKategorisi.donmus,
+            by rw [Option.map_some, if_pos hid], rfl⟩
+        · exact ⟨b0, by rw [Option.map_some, if_neg hid], rfl⟩
+      -- transport kosullari (odaksiz thread'ler)
+      have h_hv_kosul : ∀ c, c ∈ S.thread → c.tid ≠ ctx.tid →
+          ∀ y, HedefVar c.ifade y →
+          bolgeOrtamGet (bolgeOrtamDondurBolge S.bolge b) y
+            = bolgeOrtamGet S.bolge y := by
+        intro c hc h_ne y hy
+        rw [dondur_get]
+        cases h_lk : bolgeOrtamGet S.bolge y with
+        | none => rfl
+        | some by0 =>
+            by_cases hid : by0.id = b.id
+            · exfalso
+              have h_yx : y = x0 := h_bayrik y x0 by0 b h_lk h_x0 hid
+              rw [h_yx] at h_lk
+              have h_byb : by0 = b := Option.some.inj (h_lk.symm.trans h_x0)
+              rw [h_yx] at hy
+              rw [h_byb] at h_lk
+              have h_own := h_hvar c hc x0 hy b h_lk h_yzb
+              rw [h_own] at h_owner
+              have h_t2 := Option.some.inj h_owner
+              injection h_t2 with h_t3
+              exact h_ne h_t3
+            · rw [Option.map_some, if_neg hid]
+      have h_hb_kosul : ∀ c, c ∈ S.thread → c.tid ≠ ctx.tid →
+          ∀ x bb, HedefBolge c.ifade bb →
+          kategoriYazilabilir bb.kategori = true →
+          bolgeOrtamGet S.bolge x = some bb →
+          bolgeOrtamGet (bolgeOrtamDondurBolge S.bolge b) x = some bb := by
+        intro c hc h_ne x bb hb h_yz h_lk
+        rw [dondur_get, h_lk, Option.map_some]
+        by_cases hid : bb.id = b.id
+        · exfalso
+          have h_xx : x = x0 := h_bayrik x x0 bb b h_lk h_x0 hid
+          rw [h_xx] at h_lk
+          have h_bbb : bb = b := Option.some.inj (h_lk.symm.trans h_x0)
+          rw [h_bbb] at hb h_yz h_lk
+          have h_own := h_hbolge c hc b hb ⟨x0, h_lk⟩ h_yz
+          rw [h_own] at h_owner
+          have h_t2 := Option.some.inj h_owner
+          injection h_t2 with h_t3
+          exact h_ne h_t3
+        · rw [if_neg hid]
+      refine ⟨bolgeOrtamDondurBolge S.bolge b,
+              ?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+              h_kap, h_kayrik⟩
+      · -- comp 1: SigmaTipli
+        intro kk ww h_kw
+        obtain ⟨τw, h_dt, x, b', h_x, h_id⟩ := h_sigma kk ww h_kw
+        obtain ⟨b'', h_x', h_id'⟩ := h_d_koruma x b' h_x
+        exact ⟨τw, degerTipli_ortam ww τw h_dt, x, b'', h_x', h_id'.trans h_id⟩
+      · -- comp 2: ThreadTipliFull
+        intro c h_mem
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · obtain ⟨τc, Λc, Ρc, h_tyc⟩ := h_thread c (h_cin c (Or.inl h1))
+          obtain ⟨Ρc', h_rc', _⟩ := regionTamam_transport h_tyc.regionOK _
+            (h_hv_kosul c (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1)))
+            (h_hb_kosul c (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1)))
+          exact ⟨τc, Λc, Ρc', ⟨h_tyc.hasType, h_tyc.lineerOK, h_rc'⟩⟩
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he
+            exact ⟨Tip.bos, ctx.lineer, bolgeOrtamDondurBolge S.bolge b,
+              ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+               LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+          · obtain ⟨τc, Λc, Ρc, h_tyc⟩ := h_thread c (h_cin c (Or.inr h3))
+            obtain ⟨Ρc', h_rc', _⟩ := regionTamam_transport h_tyc.regionOK _
+              (h_hv_kosul c (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3)))
+              (h_hb_kosul c (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3)))
+            exact ⟨τc, Λc, Ρc', ⟨h_tyc.hasType, h_tyc.lineerOK, h_rc'⟩⟩
+      · -- comp 3: SahiplikTutarli
+        intro bb sah h_lk
+        by_cases h_eq : bb.id = b.id
+        · obtain ⟨b'', h_x', h_id'⟩ := h_d_koruma x0 b h_x0
+          exact ⟨x0, b'', h_x', h_id'.trans h_eq.symm⟩
+        · rw [sahiplikSet_ne S.sahiplik b bb _ h_eq] at h_lk
+          obtain ⟨x, b', h_x, h_id⟩ := h_sahip bb sah h_lk
+          obtain ⟨b'', h_x', h_id'⟩ := h_d_koruma x b' h_x
+          exact ⟨x, b'', h_x', h_id'.trans h_id⟩
+      · -- comp 4: KanalTutarli
+        intro kd h_kd w h_w
+        exact degerTipli_ortam w _ (h_kanal kd h_kd w h_w)
+      · -- comp 7: FrozenKategoriTutarli (id-anahtarin kilit case'i)
+        intro x bb h_bb
+        rw [dondur_get] at h_bb
+        cases h_lk : bolgeOrtamGet S.bolge x with
+        | none => rw [h_lk] at h_bb; cases h_bb
+        | some b0 =>
+            rw [h_lk, Option.map_some] at h_bb
+            have h_b0bb := Option.some.inj h_bb
+            by_cases hid : b0.id = b.id
+            · rw [if_pos hid] at h_b0bb
+              constructor
+              · intro _
+                rw [← h_b0bb]
+                simp [bolgeKategoriDegistir]
+              · intro _
+                show sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bb
+                    = some Sahip.donmus
+                rw [sahiplikSet, sahiplikGet,
+                    if_pos (show b.id = bb.id by rw [← h_b0bb]; exact hid.symm)]
+            · rw [if_neg hid] at h_b0bb
+              rw [h_b0bb] at h_lk hid
+              have h_pres := sahiplikSet_ne S.sahiplik b bb Sahip.donmus hid
+              have h_iff := h_fkat x bb h_lk
+              constructor
+              · intro h_fr
+                refine h_iff.mp ?_
+                show sahiplikGet S.sahiplik bb = some Sahip.donmus
+                rw [← h_pres]
+                exact h_fr
+              · intro h_kat
+                show sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bb
+                    = some Sahip.donmus
+                rw [h_pres]
+                exact h_iff.mpr h_kat
+      · -- comp 8: HedefVarSahipligi
+        intro c h_mem y hy bb h_bb h_yz
+        rw [dondur_get] at h_bb
+        have h_unf : c ∈ S.thread → c.tid ≠ ctx.tid →
+            sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bb
+              = some (Sahip.thread c.tid) := by
+          intro hc h_ne
+          cases h_lk : bolgeOrtamGet S.bolge y with
+          | none => rw [h_lk] at h_bb; cases h_bb
+          | some b0 =>
+              rw [h_lk, Option.map_some] at h_bb
+              have h_b0bb := Option.some.inj h_bb
+              by_cases hid : b0.id = b.id
+              · rw [if_pos hid] at h_b0bb
+                rw [← h_b0bb] at h_yz
+                simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+              · rw [if_neg hid] at h_b0bb
+                rw [h_b0bb] at h_lk hid
+                have h_own := h_hvar c hc y hy bb h_lk h_yz
+                rw [sahiplikSet_ne S.sahiplik b bb _ hid]
+                exact h_own
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · exact h_unf (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1))
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he; exact absurd hy (fun h => nomatch h)
+          · exact h_unf (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3))
+      · -- comp 9: HedefBolgeSahipligi
+        intro c h_mem bb hb h_kayit h_yz
+        obtain ⟨x, h_x⟩ := h_kayit
+        rw [dondur_get] at h_x
+        have h_unf : c ∈ S.thread → c.tid ≠ ctx.tid →
+            sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bb
+              = some (Sahip.thread c.tid) := by
+          intro hc h_ne
+          cases h_lk : bolgeOrtamGet S.bolge x with
+          | none => rw [h_lk] at h_x; cases h_x
+          | some b0 =>
+              rw [h_lk, Option.map_some] at h_x
+              have h_b0bb := Option.some.inj h_x
+              by_cases hid : b0.id = b.id
+              · rw [if_pos hid] at h_b0bb
+                rw [← h_b0bb] at h_yz
+                simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+              · rw [if_neg hid] at h_b0bb
+                rw [h_b0bb] at h_lk hid
+                have h_own := h_hbolge c hc bb hb ⟨x, h_lk⟩ h_yz
+                rw [sahiplikSet_ne S.sahiplik b bb _ hid]
+                exact h_own
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · exact h_unf (h_cin c (Or.inl h1)) (h_tneq c (Or.inl h1))
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he; exact absurd hb (fun h => nomatch h)
+          · exact h_unf (h_cin c (Or.inr h3)) (h_tneq c (Or.inr h3))
+      · -- comp 10: DegiskenlerBagli
+        intro z τz h_gz
+        obtain ⟨bz, vz, h_bz, h_kz, h_dtz⟩ := h_bagli z τz h_gz
+        obtain ⟨bz', h_bz', h_idz⟩ := h_d_koruma z bz h_bz
+        refine ⟨bz', vz, h_bz', ?_, degerTipli_ortam vz τz h_dtz⟩
+        rw [konumGet_id_esit S.store ⟨bz', 0⟩ ⟨bz, 0⟩ h_idz rfl]
+        exact h_kz
+      · -- comp 11: KanalTransit
+        intro kd h_kd h_ne'
+        obtain ⟨bT, h_bT⟩ := h_transit kd h_kd h_ne'
+        have h_idne : bT.id ≠ b.id := by
+          intro h_id
+          rw [sahiplikGet_id_esit S.sahiplik bT b h_id, h_owner] at h_bT
+          cases h_bT
+        refine ⟨bT, ?_⟩
+        show sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bT
+            = some (Sahip.kanalSahip kd.kid)
+        rw [sahiplikSet_ne S.sahiplik b bT _ h_idne]
+        exact h_bT
+      · -- comp 12: BolgeAyrik
+        intro x1 x2 b1 b2 h_1 h_2 h_id
+        obtain ⟨b01, h_01, h_i1⟩ := h_d_inv_id x1 b1 h_1
+        obtain ⟨b02, h_02, h_i2⟩ := h_d_inv_id x2 b2 h_2
+        exact h_bayrik x1 x2 b01 b02 h_01 h_02
+          (h_i1.trans (h_id.trans h_i2.symm))
+      · -- comp 13: TidAyrik
+        have h13 := h_tayrik
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   -- ============ Hata kurallari: Aile 2 exfalso — TAM ============
   | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
       intro h_konf
