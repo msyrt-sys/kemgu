@@ -45,6 +45,7 @@ typedef enum {
     TOK_VEKTOR,         /* vektör      — SIMD Spec V1 (vector<T, N>) */
     TOK_GOREV,          /* görev       — Concurrency / DRF V1 (görev<T>) */
     TOK_KANAL,          /* kanal       — Concurrency / DRF V1 (kanal<T>) */
+    TOK_SATIRICI_ASM,   /* satıriçi_asm — C5 inline assembly (güvensiz içinde) */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */
