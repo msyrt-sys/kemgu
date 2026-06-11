@@ -2657,6 +2657,17 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return 0;
         }
 
+        /* C5 on-kosul #1: guvensiz blogu — codegen acisindan duz blok.
+         * Onceki durum: bu case yoktu -> default -> "; desteklenmiyor"
+         * yorumu, ic blok TAMAMEN dusurulurdu (latent miscompile).
+         * Statik kapi tip kontrolunde; burada ic blok aynen uretilir. */
+        case DUGUM_GUVENSIZ: {
+            ScopeMarker m = scope_gir(g);
+            int term = blok_uret(g, d->veri.guvensiz.blok);
+            scope_cik(g, m);
+            return term;
+        }
+
         default:
             fprintf(g->out, "  ; deyim tipi %d desteklenmiyor\n", d->tip);
             return 0;
