@@ -2444,6 +2444,41 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                             i->llvm_tip, rr, i->reg_no);
                 }
             } else if (d->veri.atama.hedef &&
+                       d->veri.atama.hedef->tip == DUGUM_INDEKS) {
+                /* Audit fix #2: arr[i] = v — onceden SESSIZCE dusurulurdu
+                 * (hedef yalniz tanimlayici/erisim taniyordu).
+                 * Stack dizi: INDEKS okuma yolunun GEP aynasi + store.
+                 * Heap dizi (KdlDizi): runtime'da eleman-yazma setter'i
+                 * YOK (kdl_dizi_yaz_eleman) — runtime/ bu görevin scope
+                 * disinda; gorunur yorum + DUR-SOR raporu (sessiz degil). */
+                const Dugum *hedef = d->veri.atama.hedef;
+                int heap_dizi = 0;
+                if (hedef->veri.indeks.nesne &&
+                    hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        hedef->veri.indeks.nesne->veri.tanimlayici.metin,
+                        hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
+                    if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
+                }
+                if (heap_dizi) {
+                    fprintf(g->out,
+                        "  ; atama: heap dizi eleman atamasi runtime "
+                        "setter bekliyor (kdl_dizi_yaz_eleman yok)\n");
+                } else {
+                    IfadeSonuc nesne = ifade_uret(g,
+                        hedef->veri.indeks.nesne, NULL);
+                    IfadeSonuc idx = ifade_uret(g,
+                        hedef->veri.indeks.indeks, "i64");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, NULL);
+                    int gep_r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr %%%d, i64 %%%d\n",
+                        gep_r, v.tip, nesne.reg, idx_r);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            v.tip, v.reg, gep_r);
+                }
+            } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_ERISIM) {
                 /* C-track fix (init-test koku #3): `x.alan = v` daha once
                  * SESSIZCE DUSURULUYORDU (yalniz tanimlayici hedef vardi;

@@ -1441,6 +1441,18 @@ static void test_audit_deref_okuma(void) {
     test_sonuc("audit: *p deref yukleme round-trip -> exit 42", rc == 42);
 }
 
+static void test_audit_stack_dizi_eleman_atama(void) {
+    /* Gap #2 (stack): d[i] = v onceden sessizce dusurulurdu -> toplam
+     * 6 kalirdi. Yaz -> oku round-trip: 1 + 38 + 3 = 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [1, 2, 3]; "
+        "d[1] = 38; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("audit: stack d[i]=v yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1717,6 +1729,7 @@ int main(void) {
 
     printf("\n--- Codegen coverage audit (runtime round-trip) ---\n");
     test_audit_deref_okuma();
+    test_audit_stack_dizi_eleman_atama();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
