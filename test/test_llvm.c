@@ -1365,6 +1365,29 @@ static void test_mmio_genis_calistir(void) {
     test_sonuc("mmio typed-width fikstur (le16 komsu + le64) -> exit 42", rc == 42);
 }
 
+/* --- C5 on-kosul #1: guvensiz blok lowering --- */
+
+static void test_guvensiz_blok_emit(void) {
+    /* Onceki durum: DUGUM_GUVENSIZ llvm.c'de default'a duser, ic blok
+     * TAMAMEN dusurulurdu -> x = 0 kalir, exit 0 (latent miscompile).
+     * Fix sonrasi ic deyimler emit edilir -> exit 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { x = 41; x = x + 1; } "
+        "ver x; }");
+    test_sonuc("guvensiz ic deyimler emit edilir -> exit 42", rc == 42);
+}
+
+static void test_guvensiz_icinde_ver(void) {
+    /* guvensiz icindeki 'ver' terminator olarak fonksiyona yayilmali
+     * (blok_uret term=1 doner, cift-ret/epilog karismaz). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev f() -> tam32 { g\xc3\xbcvensiz { ver 42; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { ver f(); }");
+    test_sonuc("guvensiz icinde 'ver' terminator -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -1558,6 +1581,10 @@ int main(void) {
     test_cesit_sonuc_verify();
     test_cesit_sonuc_calistir();
     test_cesit_exhaustive_negatif();
+
+    printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
+    test_guvensiz_blok_emit();
+    test_guvensiz_icinde_ver();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
