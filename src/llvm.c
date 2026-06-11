@@ -46,6 +46,9 @@ typedef struct LlvmIsim {
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
     int dinamik_dizi_mi;
+    /* Matris-A fix / D-005: dtamN (isaretsiz) degisken/parametre.
+     * IR tipi ayni (iN) ama udiv/urem/lshr/u-pred + zext gerektirir. */
+    int isaretsiz;
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -67,6 +70,7 @@ typedef struct IslevKayit {
     const char *ad;
     int ad_uz;
     const char *donus_tip;
+    int donus_isaretsiz;   /* D-005: donus tipi dtamN ise 1 */
     /* Generic islev: AST'yi sakla, instantiation icin gerekli */
     const Dugum *ast;
     int generic_mi;  /* tip_param_sayi > 0 */
@@ -144,6 +148,11 @@ typedef struct LlvmGen {
 typedef struct IfadeSonuc {
     int reg;               /* -1 = error */
     const char *tip;       /* IR tipi */
+    /* Matris-A fix / D-005: deger isaretsiz (dtamN) mi? IR tipinde
+     * isaret bilgisi tasinamadigi icin yan kanal. Mevcut `{ reg, tip }`
+     * baslaticilarinda C11 kurali geregi 0 (isaretli) kalir — guvenli
+     * varsayilan. */
+    int isaretsiz;
 } IfadeSonuc;
 
 /* === Forward === */
@@ -424,8 +433,8 @@ static int tip_genisligi(const char *ir) {
 
 /* src tipindeki reg'i dst tipine cevir. Sadece int donusumleri.
  * Ayni tip -> reg ayni doner. */
-static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
-                        const char *dst_tip) {
+static int int_donustur_im(LlvmGen *g, int src_reg, const char *src_tip,
+                           const char *dst_tip, int isaretsiz) {
     if (!src_tip || !dst_tip || strcmp(src_tip, dst_tip) == 0) return src_reg;
     /* SIMD Spec V1: vektör tipler arasında otomatik conversion yok (tip
      * kontrolü zaten engelliyor); src değişmeden döner. */
@@ -435,15 +444,34 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
     if (src_w == 0 || dst_w == 0) return src_reg;
     int r = yeni_reg(g);
     if (src_w < dst_w) {
-        /* Genislet (sext for signed) */
-        fprintf(g->out, "  %%%d = sext %s %%%d to %s\n",
-                r, src_tip, src_reg, dst_tip);
+        /* Matris-A fix / D-005: i1 HER ZAMAN zext (dogru=1; sext -1
+         * yapardi — '41 + (b olarak tam32)' 40 donuyordu). dtamN
+         * (isaretsiz) genisletme de zext (200 -> 200, -56 degil). */
+        if (strcmp(src_tip, "i1") == 0 || isaretsiz) {
+            fprintf(g->out, "  %%%d = zext %s %%%d to %s\n",
+                    r, src_tip, src_reg, dst_tip);
+        } else {
+            fprintf(g->out, "  %%%d = sext %s %%%d to %s\n",
+                    r, src_tip, src_reg, dst_tip);
+        }
     } else {
         /* Daralt */
         fprintf(g->out, "  %%%d = trunc %s %%%d to %s\n",
                 r, src_tip, src_reg, dst_tip);
     }
     return r;
+}
+
+static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
+                        const char *dst_tip) {
+    return int_donustur_im(g, src_reg, src_tip, dst_tip, 0);
+}
+
+/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
+static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
+    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
+           memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
 }
 
 /* === Pre-pass: metin literallerini topla === */
@@ -561,6 +589,8 @@ static void islev_kayit(LlvmGen *g, const Dugum *i) {
         ? ast_tip_to_ir(g, i->veri.islev.donus_tipi)
         : "void";
     r->donus_tip = dt ? dt : "void";
+    /* D-005: dtamN donusu cagri sonucuna tasinir */
+    r->donus_isaretsiz = ast_tip_isaretsiz_mi(i->veri.islev.donus_tipi);
     r->sonraki = g->islevler;
     g->islevler = r;
 }
@@ -754,7 +784,7 @@ static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
     int r = yeni_reg(g);
     fprintf(g->out, "  ; HATA: %s\n", mesaj);
     fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-    IfadeSonuc s = { r, "i32" };
+    IfadeSonuc s = { r, "i32", 0 };
     return s;
 }
 
@@ -781,7 +811,7 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             ad_yaz(g->out, d->veri.tanimlayici.metin,
                    d->veri.tanimlayici.uzunluk);
             fputs(" to ptr\n", g->out);
-            IfadeSonuc s = { r, "ptr" };
+            IfadeSonuc s = { r, "ptr", 0 };
             return s;
         }
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
@@ -799,7 +829,7 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
     int r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
             r, i->llvm_tip, i->reg_no);
-    IfadeSonuc s = { r, i->llvm_tip };
+    IfadeSonuc s = { r, i->llvm_tip, i->isaretsiz };
     return s;
 }
 
@@ -812,6 +842,20 @@ static const char *icmp_pred(Operator op) {
         case OP_BUYUK:       return "sgt";
         case OP_KUCUK_ESIT:  return "sle";
         case OP_BUYUK_ESIT:  return "sge";
+        default:             return NULL;
+    }
+}
+
+/* D-005: isaretsiz (dtamN) karsilastirma — u-pred'ler. Onceki durum:
+ * dtam8 200 > 100 signed icmp'le (-56 > 100) YANLIS donuyordu. */
+static const char *icmp_pred_u(Operator op) {
+    switch (op) {
+        case OP_ESIT:        return "eq";
+        case OP_ESIT_DEGIL:  return "ne";
+        case OP_KUCUK:       return "ult";
+        case OP_BUYUK:       return "ugt";
+        case OP_KUCUK_ESIT:  return "ule";
+        case OP_BUYUK_ESIT:  return "uge";
         default:             return NULL;
     }
 }
@@ -855,7 +899,7 @@ static IfadeSonuc metin_lit_uret(LlvmGen *g, const Dugum *d) {
     fprintf(g->out,
         "  %%%d = getelementptr [%d x i8], ptr @.str.%d, i32 0, i32 0\n",
         r, s->byte_uz + 1, s->id);
-    IfadeSonuc res = { r, "ptr" };
+    IfadeSonuc res = { r, "ptr", 0 };
     return res;
 }
 
@@ -903,7 +947,7 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
     /* Struct degerini yukle (by-value akis icin) */
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", load_r, yapi_ir, alloca_r);
-    IfadeSonuc s = { load_r, yapi_ir };
+    IfadeSonuc s = { load_r, yapi_ir, 0 };
     return s;
 }
 
@@ -932,12 +976,14 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     if (idx < 0) return hata(g, "alan bulunamadi");
     const char *alan_ir = ast_tip_to_ir(g, alan_tip_d);
 
+    int alan_isz = ast_tip_isaretsiz_mi(alan_tip_d);  /* D-005 */
+
     /* Struct value ise: extractvalue */
     if (nesne.tip && nesne.tip[0] == '%') {
         int r = yeni_reg(g);
         fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
                 r, nesne.tip, nesne.reg, idx);
-        IfadeSonuc s = { r, alan_ir };
+        IfadeSonuc s = { r, alan_ir, alan_isz };
         return s;
     }
     /* Ptr ise: GEP + load */
@@ -948,7 +994,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
             load_r, alan_ir, gep_r);
-    IfadeSonuc s = { load_r, alan_ir };
+    IfadeSonuc s = { load_r, alan_ir, alan_isz };
     return s;
 }
 
@@ -1125,7 +1171,7 @@ static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
     }
     int lr = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, agg, ar);
-    IfadeSonuc s = { lr, agg };
+    IfadeSonuc s = { lr, agg, 0 };
     return s;
 }
 
@@ -1151,7 +1197,7 @@ static int yapici_desen_mi(const Dugum *desen) {
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                               const char *beklenen) {
     if (!d) {
-        IfadeSonuc s = { yeni_reg(g), "i32" };
+        IfadeSonuc s = { yeni_reg(g), "i32", 0 };
         fprintf(g->out, "  %%%d = add i32 0, 0\n", s.reg);
         return s;
     }
@@ -1170,7 +1216,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = add %s 0, %" PRId64 "\n",
                         r, tip, d->veri.tam.deger);
             }
-            IfadeSonuc s = { r, tip };
+            IfadeSonuc s = { r, tip, 0 };
             return s;
         }
 
@@ -1185,7 +1231,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = add %s 0, %d\n",
                         r, tip, d->veri.mantiksal.deger ? 1 : 0);
             }
-            IfadeSonuc s = { r, tip };
+            IfadeSonuc s = { r, tip, 0 };
             return s;
         }
 
@@ -1193,7 +1239,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = add i32 0, %u\n",
                     r, d->veri.karakter.kod_noktasi);
-            IfadeSonuc s = { r, "i32" };
+            IfadeSonuc s = { r, "i32", 0 };
             return s;
         }
 
@@ -1217,7 +1263,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 buf[n] = '.'; buf[n+1] = '0'; buf[n+2] = '\0';
             }
             fprintf(g->out, "  %%%d = fadd %s 0.0, %s\n", r, tip, buf);
-            IfadeSonuc s = { r, tip };
+            IfadeSonuc s = { r, tip, 0 };
             return s;
         }
 
@@ -1246,7 +1292,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     const char *disc = cesit_disc_ir(yk->ast);
                     int r = yeni_reg(g);
                     fprintf(g->out, "  %%%d = add %s 0, %d\n", r, disc, idx);
-                    IfadeSonuc s = { r, disc };
+                    IfadeSonuc s = { r, disc, 0 };
                     return s;
                 }
             }
@@ -1268,7 +1314,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (n == 0) {
                 int alloca_r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = alloca [0 x i8]\n", alloca_r);
-                IfadeSonuc s = { alloca_r, "ptr" };
+                IfadeSonuc s = { alloca_r, "ptr", 0 };
                 return s;
             }
 
@@ -1294,7 +1340,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                         elem_ir, er, gepi);
             }
-            IfadeSonuc s = { alloca_r, "ptr" };
+            IfadeSonuc s = { alloca_r, "ptr", 0 };
             return s;
         }
 
@@ -1323,7 +1369,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         rr, et, fn, v_load, idx_r);
-                    IfadeSonuc s = { rr, et };
+                    IfadeSonuc s = { rr, et, 0 };
                     return s;
                 }
             }
@@ -1340,7 +1386,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int load_r = yeni_reg(g);
             fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
                     load_r, elem_ir, gep_r);
-            IfadeSonuc s = { load_r, elem_ir };
+            IfadeSonuc s = { load_r, elem_ir, 0 };
             return s;
         }
 
@@ -1383,20 +1429,25 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "bb%d:\n", L_son);
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = load i1, ptr %%%d\n", r, slot);
-                IfadeSonuc s = { r, "i1" };
+                IfadeSonuc s = { r, "i1", 0 };
                 return s;
             }
             const char *cmp_i = icmp_pred(d->veri.ikili.op);
             const char *op_beklenen = cmp_i ? NULL : beklenen;
             IfadeSonuc sol = ifade_uret(g, d->veri.ikili.sol, op_beklenen);
             IfadeSonuc sag = ifade_uret(g, d->veri.ikili.sag, sol.tip);
+            /* D-005: operandlardan biri isaretsizse (dtamN) tum islem
+             * isaretsiz semantikle yapilir (udiv/urem/lshr/u-pred). */
+            int isz = sol.isaretsiz || sag.isaretsiz;
             /* Tipler ayniysa donusum yok; degilse int donusumu (float ile karisma yok) */
             int sag_r = sag.reg;
             if (!tip_kesirli_mi(sol.tip)) {
-                sag_r = int_donustur(g, sag.reg, sag.tip, sol.tip);
+                sag_r = int_donustur_im(g, sag.reg, sag.tip, sol.tip,
+                                        sag.isaretsiz);
             }
             int kesirli = tip_kesirli_mi(sol.tip);
             if (cmp_i) {
+                if (isz) cmp_i = icmp_pred_u(d->veri.ikili.op);
                 int r_cmp = yeni_reg(g);
                 if (kesirli) {
                     const char *cmp_f = fcmp_pred(d->veri.ikili.op);
@@ -1407,7 +1458,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = icmp %s %s %%%d, %%%d\n",
                             r_cmp, cmp_i, sol.tip, sol.reg, sag_r);
                 }
-                IfadeSonuc s = { r_cmp, "i1" };
+                IfadeSonuc s = { r_cmp, "i1", 0 };
                 return s;
             }
             const char *op = NULL;
@@ -1415,8 +1466,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 case OP_ARTI:  op = kesirli ? "fadd" : "add"; break;
                 case OP_EKSI:  op = kesirli ? "fsub" : "sub"; break;
                 case OP_CARPI: op = kesirli ? "fmul" : "mul"; break;
-                case OP_BOLU:  op = kesirli ? "fdiv" : "sdiv"; break;
-                case OP_MOD:   op = kesirli ? "frem" : "srem"; break;
+                case OP_BOLU:
+                    op = kesirli ? "fdiv" : (isz ? "udiv" : "sdiv"); break;
+                case OP_MOD:
+                    op = kesirli ? "frem" : (isz ? "urem" : "srem"); break;
                 /* OP_VE/OP_VEYA buraya ULASMAZ — yukarida kisa-devre
                  * dali (D-002) tum ve/veya'yi intercept eder. */
                 /* Bit operatorleri — page table / kripto codegen */
@@ -1424,8 +1477,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 case OP_BIT_VEYA:    op = "or"; break;
                 case OP_BIT_OZVEYA:  op = "xor"; break;
                 case OP_SOLA_KAYDIR: op = "shl"; break;
-                case OP_SAGA_KAYDIR: op = "ashr"; break;  /* signed; dtamX
-                                                            icin lshr ileride */
+                case OP_SAGA_KAYDIR:
+                    /* D-005: isaretsizde mantiksal kaydirma */
+                    op = isz ? "lshr" : "ashr"; break;
                 default:
                     fputs("  ; ikili op desteklenmiyor\n", g->out);
                     return sol;
@@ -1433,7 +1487,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
                     r, op, sol.tip, sol.reg, sag_r);
-            IfadeSonuc s = { r, sol.tip };
+            IfadeSonuc s = { r, sol.tip, isz };
             return s;
         }
 
@@ -1456,7 +1510,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         op_d->veri.tanimlayici.metin,
                         op_d->veri.tanimlayici.uzunluk);
                     if (vi) {
-                        IfadeSonuc s = { vi->reg_no, "ptr" };
+                        IfadeSonuc s = { vi->reg_no, "ptr", 0 };
                         return s;
                     }
                 }
@@ -1465,7 +1519,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = alloca %s\n", t, v.tip);
                 fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                         v.tip, v.reg, t);
-                IfadeSonuc s = { t, "ptr" };
+                IfadeSonuc s = { t, "ptr", 0 };
                 return s;
             }
             /* Audit fix #1: OP_DEREFERANS — *p ham pointer YUKU.
@@ -1481,7 +1535,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
                         r, yuk_tip, p.reg);
-                IfadeSonuc s = { r, yuk_tip };
+                IfadeSonuc s = { r, yuk_tip, 0 };
                 return s;
             }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
@@ -1494,7 +1548,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = sub %s 0, %%%d\n",
                             r, op_s.tip, op_s.reg);
                 }
-                IfadeSonuc s = { r, op_s.tip };
+                IfadeSonuc s = { r, op_s.tip, 0 };
                 return s;
             }
             if (d->veri.tekli.op == OP_DEGIL) {
@@ -1504,13 +1558,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     r = yeni_reg(g);
                     fprintf(g->out, "  %%%d = xor i1 %%%d, true\n",
                             r, op_s.reg);
-                    IfadeSonuc s = { r, "i1" };
+                    IfadeSonuc s = { r, "i1", 0 };
                     return s;
                 }
                 r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
                         r, op_s.tip, op_s.reg);
-                IfadeSonuc s = { r, "i1" };
+                IfadeSonuc s = { r, "i1", 0 };
                 return s;
             }
             if (d->veri.tekli.op == OP_BIT_DEGIL) {
@@ -1518,7 +1572,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = xor %s %%%d, -1\n",
                         r, op_s.tip, op_s.reg);
-                IfadeSonuc s = { r, op_s.tip };
+                IfadeSonuc s = { r, op_s.tip, 0 };
                 return s;
             }
             fputs("  ; tekli op desteklenmiyor\n", g->out);
@@ -1555,7 +1609,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
-                IfadeSonuc s = { r, donus };
+                IfadeSonuc s = { r, donus, 0 };
                 return s;
             }
             /* Kampanya seed (a) / D-001: mat::kare(x) — YOL hedefli cagri.
@@ -1601,10 +1655,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (vd) {
                         r = yeni_reg(g);
                         fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                        IfadeSonuc s = { r, "i32" };
+                        IfadeSonuc s = { r, "i32", 0 };
                         return s;
                     }
-                    IfadeSonuc s = { r, donus };
+                    IfadeSonuc s = { r, donus, 0 };
                     return s;
                 }
                 /* cozulemedi — mevcut hata yoluna dus (gorunur yorum) */
@@ -1705,7 +1759,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
-                    IfadeSonuc s = { r, "%kdl_yetki" };
+                    IfadeSonuc s = { r, "%kdl_yetki", 0 };
                     return s;
                 }
                 /* delege(y, izin) -> %kdl_yetki */
@@ -1746,7 +1800,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
-                    IfadeSonuc s = { r, "%kdl_yetki" };
+                    IfadeSonuc s = { r, "%kdl_yetki", 0 };
                     return s;
                 }
                 /* geri_al(y) -> void — y bir tanimlayici ise alloca'ya pointer ver */
@@ -1776,7 +1830,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         "  call void @kdl_yetki_geri_al(ptr %%%d)\n",
                         ptr_reg);
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
-                    IfadeSonuc s = { 0, "void" };
+                    IfadeSonuc s = { 0, "void", 0 };
                     return s;
                 }
                 /* MMIO Foundation: mmio_oku32(y, adres) -> i32.
@@ -1792,7 +1846,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i32 @kdl_mmio_oku32(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i32" };
+                    IfadeSonuc s = { r, "i32", 0 };
                     return s;
                 }
                 /* mmio_yaz32(y, adres, deger) -> void (volatile store) */
@@ -1807,7 +1861,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz32(i64 %%%d, i32 %%%d)\n",
                         adr64, val32);
-                    IfadeSonuc s = { 0, "void" };
+                    IfadeSonuc s = { 0, "void", 0 };
                     return s;
                 }
                 /* mmio_oku16(y, adres) -> i16 (volatile 16-bit load — le16
@@ -1821,7 +1875,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i16 @kdl_mmio_oku16(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i16" };
+                    IfadeSonuc s = { r, "i16", 0 };
                     return s;
                 }
                 /* mmio_yaz16(y, adres, deger) -> void (volatile 16-bit store) */
@@ -1836,7 +1890,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz16(i64 %%%d, i16 %%%d)\n",
                         adr64, val16);
-                    IfadeSonuc s = { 0, "void" };
+                    IfadeSonuc s = { 0, "void", 0 };
                     return s;
                 }
                 /* mmio_oku64(y, adres) -> i64 (volatile 64-bit load — le64
@@ -1850,7 +1904,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i64 @kdl_mmio_oku64(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i64" };
+                    IfadeSonuc s = { r, "i64", 0 };
                     return s;
                 }
                 /* mmio_yaz64(y, adres, deger) -> void (volatile 64-bit store) */
@@ -1865,7 +1919,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz64(i64 %%%d, i64 %%%d)\n",
                         adr64, val64);
-                    IfadeSonuc s = { 0, "void" };
+                    IfadeSonuc s = { 0, "void", 0 };
                     return s;
                 }
             }
@@ -1911,7 +1965,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         fprintf(g->out,
                             "  %%%d = shufflevector %s %%%d, %s undef, <%d x i32> zeroinitializer\n",
                             r2, beklenen, r1, beklenen, N);
-                        IfadeSonuc res = { r2, beklenen };
+                        IfadeSonuc res = { r2, beklenen, 0 };
                         /* beklenen mevcut hafıza yapısından kopyalanmalı çünkü
                          * stable ptr şart — alıcı zaten arena'da tutuyor */
                         return res;
@@ -1927,7 +1981,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = shufflevector <4 x i32> %%%d, <4 x i32> undef, <4 x i32> zeroinitializer\n",
                         r2, r1);
-                    IfadeSonuc res = { r2, "<4 x i32>" };
+                    IfadeSonuc res = { r2, "<4 x i32>", 0 };
                     return res;
                 }
 
@@ -1958,7 +2012,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     char *kalici = (char *)arena_ayir(g->arena,
                                                       strlen(eleman_buf) + 1);
                     if (kalici) strcpy(kalici, eleman_buf);
-                    IfadeSonuc res = { r, kalici ? kalici : "i32" };
+                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0 };
                     return res;
                 }
 
@@ -2008,7 +2062,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     char *kalici = (char *)arena_ayir(g->arena,
                                                       strlen(eleman_buf) + 1);
                     if (kalici) strcpy(kalici, eleman_buf);
-                    IfadeSonuc res = { r, kalici ? kalici : "i32" };
+                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0 };
                     return res;
                 }
             }
@@ -2084,7 +2138,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
                     }
                     fputs(")\n", g->out);
-                    IfadeSonuc s = { rr, donus_indirect };
+                    IfadeSonuc s = { rr, donus_indirect, 0 };
                     return s;
                 }
             }
@@ -2265,7 +2319,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
                     rr, kap_i32);
-                IfadeSonuc s = { rr, "ptr" };
+                IfadeSonuc s = { rr, "ptr", 0 };
                 return s;
             }
             else if (cagri_adi_uz == 9 &&
@@ -2289,7 +2343,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* void donus — placeholder i32 0 */
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                IfadeSonuc s = { rr, "i32" };
+                IfadeSonuc s = { rr, "i32", 0 };
                 return s;
             }
             else if (cagri_adi_uz == 7 &&
@@ -2308,7 +2362,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                     rr, et, fn, args[0].reg, idx_i32);
-                IfadeSonuc s = { rr, et };
+                IfadeSonuc s = { rr, et, 0 };
                 return s;
             }
             else if (cagri_adi_uz == 10 &&
@@ -2317,7 +2371,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
                     rr, args[0].reg);
-                IfadeSonuc s = { rr, "i32" };
+                IfadeSonuc s = { rr, "i32", 0 };
                 return s;
             }
             /* Adim 6: dizi_kapasite + dizi_kapasite_ayarla */
@@ -2327,7 +2381,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i32 @kdl_dizi_kapasite(ptr %%%d)\n",
                     rr, args[0].reg);
-                IfadeSonuc s = { rr, "i32" };
+                IfadeSonuc s = { rr, "i32", 0 };
                 return s;
             }
             else if (cagri_adi_uz == 20 &&
@@ -2339,7 +2393,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     args[0].reg, yk);
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                IfadeSonuc s = { rr, "i32" };
+                IfadeSonuc s = { rr, "i32", 0 };
                 return s;
             }
             /* Adim 1: CLI args + OTP yardimcilari */
@@ -2448,7 +2502,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         }
                     }
                 }
-                IfadeSonuc s = { r, donus_t };
+                IfadeSonuc s = { r, donus_t, 0 };
                 return s;
             }
 
@@ -2465,7 +2519,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* Caller bir IfadeSonuc bekliyor — placeholder i32 0 */
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                IfadeSonuc s = { r, "i32" };
+                IfadeSonuc s = { r, "i32", 0 };
                 return s;
             }
             int r = yeni_reg(g);
@@ -2477,7 +2531,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
-            IfadeSonuc s = { r, donus };
+            IfadeSonuc s = { r, donus, ik ? ik->donus_isaretsiz : 0 };
             return s;
         }
 
@@ -2495,7 +2549,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             (void)ifade_uret(g, d->veri.imha_ifade.operand, NULL);
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-            IfadeSonuc s = { r, "i32" };
+            IfadeSonuc s = { r, "i32", 0 };
             return s;
         }
 
@@ -2503,32 +2557,37 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* Madde E: x olarak T — explicit cast */
             const char *hedef = ast_tip_to_ir(g, d->veri.tip_donustur.hedef_tip);
             if (!hedef) hedef = "i32";
+            /* D-005: hedef tip isaretsizligi sonuca tasinir */
+            int hedef_isz = ast_tip_isaretsiz_mi(
+                d->veri.tip_donustur.hedef_tip);
             IfadeSonuc kaynak = ifade_uret(g, d->veri.tip_donustur.kaynak,
                                             hedef);
             if (strcmp(kaynak.tip, hedef) == 0) {
+                kaynak.isaretsiz = hedef_isz;
                 return kaynak;
             }
             int k_kesirli = tip_kesirli_mi(kaynak.tip);
             int h_kesirli = tip_kesirli_mi(hedef);
             int r = yeni_reg(g);
             if (!k_kesirli && !h_kesirli) {
-                /* int -> int: sext/trunc (int_donustur kullanir) */
-                int rr = int_donustur(g, kaynak.reg, kaynak.tip, hedef);
-                IfadeSonuc s = { rr, hedef };
+                /* int -> int: zext/sext/trunc — kaynak isaretsizse zext */
+                int rr = int_donustur_im(g, kaynak.reg, kaynak.tip, hedef,
+                                         kaynak.isaretsiz);
+                IfadeSonuc s = { rr, hedef, hedef_isz };
                 return s;
             }
             if (!k_kesirli && h_kesirli) {
                 /* int -> float/double: sitofp */
                 fprintf(g->out, "  %%%d = sitofp %s %%%d to %s\n",
                         r, kaynak.tip, kaynak.reg, hedef);
-                IfadeSonuc s = { r, hedef };
+                IfadeSonuc s = { r, hedef, 0 };
                 return s;
             }
             if (k_kesirli && !h_kesirli) {
                 /* float/double -> int: fptosi */
                 fprintf(g->out, "  %%%d = fptosi %s %%%d to %s\n",
                         r, kaynak.tip, kaynak.reg, hedef);
-                IfadeSonuc s = { r, hedef };
+                IfadeSonuc s = { r, hedef, 0 };
                 return s;
             }
             /* float <-> double */
@@ -2540,7 +2599,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = fptrunc double %%%d to float\n",
                         r, kaynak.reg);
             }
-            IfadeSonuc s = { r, hedef };
+            IfadeSonuc s = { r, hedef, 0 };
             return s;
         }
 
@@ -2548,7 +2607,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
             fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-            IfadeSonuc s = { r, "i32" };
+            IfadeSonuc s = { r, "i32", 0 };
             return s;
         }
     }
@@ -2668,12 +2727,16 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     g->beklenen_tip = d->veri.degisken.tip;
                     dv = ifade_uret(g, d->veri.degisken.deger, tip);
                     g->beklenen_tip = eski_bt;
-                    int rr = int_donustur(g, dv.reg, dv.tip, tip);
+                    int rr = int_donustur_im(g, dv.reg, dv.tip, tip,
+                                             dv.isaretsiz);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             tip, rr, alloca_reg);
                     isim_ekle(g, d->veri.degisken.ad,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
+                    /* D-005: dtamN annot -> isaretsiz isim */
+                    g->isimler->isaretsiz =
+                        ast_tip_isaretsiz_mi(d->veri.degisken.tip);
                     if (eleman_tip) {
                         g->isimler->eleman_llvm_tip = eleman_tip;
                     }
@@ -2688,6 +2751,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     isim_ekle(g, d->veri.degisken.ad,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
+                    g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
                 }
             } else {
                 /* Deger yok, sadece annot ile alloca */
@@ -2697,6 +2761,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 isim_ekle(g, d->veri.degisken.ad,
                           d->veri.degisken.ad_uzunluk,
                           1, alloca_reg, tip);
+                g->isimler->isaretsiz =
+                    ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
                 if (eleman_tip) {
                     g->isimler->eleman_llvm_tip = eleman_tip;
                 }
@@ -3442,6 +3508,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         fprintf(g->out, ", ptr %%%d\n", alloca_reg);
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk,
                   0, alloca_reg, tip);
+        /* D-005: dtamN parametre -> isaretsiz isim */
+        g->isimler->isaretsiz =
+            ast_tip_isaretsiz_mi(p->veri.parametre.tip);
         /* Adim 7: Eger parametre Dizi<T> ise heap dizi olarak isaretle
          * (caller'dan gelen ptr KdlDizi*). Eleman tipi de yakala. */
         if (p->veri.parametre.tip &&

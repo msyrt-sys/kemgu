@@ -1483,6 +1483,49 @@ static void test_audit_linear_kullan_round_trip(void) {
                rc == 42);
 }
 
+static void test_matris_a_dtam_kiyas(void) {
+    /* D-005: dtam8 200 > 100 — signed olsa -56 > 100 = yanlis. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er a > 100 { ver 42; } ver 1; }");
+    test_sonuc("matris-A: dtam8 isaretsiz karsilastirma -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_a_dtam_bolme_kaydir(void) {
+    /* D-005: udiv + lshr. dtam8 200/2=100, 200>>1=100; signed olsa
+     * -56/2=-28, -56>>1=-28 -> farkli. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er (a / 2) olarak tam32 == 100 ve "
+        "(a >> 1) olarak tam32 == 100 { ver 42; } ver 1; }");
+    test_sonuc("matris-A: dtam8 udiv+lshr -> exit 42", rc == 42);
+}
+
+static void test_matris_a_i1_zext(void) {
+    /* D-005 (en yaygin gap): dogru olarak tam32 == 1 (sext olsa -1). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: mant\xc4\xb1ksal = do\xc4\x9fru; "
+        "ver 41 + (b olarak tam32); }");
+    test_sonuc("matris-A: i1 zext (dogru olarak tam32 = 1) -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_a_dtam_param_donus(void) {
+    /* D-005: dtamN param + donus boyunca signedness korunur. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev yari(x: dtam8) -> dtam8 { ver x / 2; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er yari(a) > 50 { "
+        "ver (yari(a)) olarak tam32 - 58; } ver 1; }");
+    test_sonuc("matris-A: dtam param/donus signedness -> exit 42",
+               rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
@@ -1818,6 +1861,12 @@ int main(void) {
     printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
+
+    printf("\n--- Matris A: tipler x operatorler (signedness) ---\n");
+    test_matris_a_dtam_kiyas();
+    test_matris_a_dtam_bolme_kaydir();
+    test_matris_a_i1_zext();
+    test_matris_a_dtam_param_donus();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
