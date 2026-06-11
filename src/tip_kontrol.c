@@ -18,6 +18,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     uygula_tablosu_baslat(&tk->uygulamalar);
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
+    tk->guvensiz_baglam = 0;
 
     /* Built-in islevler — LLVM'de libc karsiliklarina map edilir */
     #define EKLE_BUILTIN(_ad, _ad_uz, _params, _n_params, _donus) do { \
@@ -1747,6 +1748,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     if (op->kategori != TIP_POINTER) {
                         tip_hata(tk, d, "T001",
                                  "'*' sadece pointer tipinde kullanilir");
+                        return t_hata(tk);
+                    }
+                    /* C5 on-kosul #2: *T ham pointer dereferansi yalniz
+                     * guvensiz blokta (ast.h'deki kural artik enforce). */
+                    if (tk->guvensiz_baglam == 0) {
+                        tip_hata(tk, d, "G001",
+                                 "*T dereferans yalniz guvensiz blok "
+                                 "icinde kullanilabilir");
                         return t_hata(tk);
                     }
                     return op->veri.pointer.hedef;
@@ -3934,9 +3943,13 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_GUVENSIZ:
-            /* Aciklama yok-saymi: gerekli olabilir ama tip kontrol
-             * acisindan blok ile ayni */
+            /* Aciklama yok-sayilir; blok ile ayni AMA unsafe-context
+             * bayragi kurulur (C5 on-kosul #2): *T deref (G001) ve
+             * satiriçi_asm (G002) yalniz bu baglam icinde gecerli.
+             * Derinlik sayaci — ic ice guvensiz dogru calisir. */
+            tk->guvensiz_baglam++;
             tip_kontrol_deyim(tk, d->veri.guvensiz.blok);
+            tk->guvensiz_baglam--;
             break;
 
         case DUGUM_BLOK: {
