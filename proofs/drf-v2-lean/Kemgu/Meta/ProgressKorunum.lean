@@ -41,6 +41,9 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
   | birlestir (g : VarId) :
       (∀ hctx ∈ S.thread, ∀ v : Deger, hctx.ifade ≠ Ifade.sabit v) →
       Engelli S (Ifade.gorevBirlestir g)
+  | gonder_dolu (k : KanalId) (v : VarId) :
+      kanalIlk S.kanal k ≠ none →
+      Engelli S (Ifade.kanalGonderIf k v)
   | seq_sol (a b : Ifade) :
       Engelli S a → Engelli S (Ifade.seq a b)
   | atama_ic (x : VarId) (e : Ifade) :
@@ -72,6 +75,8 @@ theorem engelli_konf_transfer
           exact h_nv v h_eq
         · exact h_yok hctx
             (by simp [ifadeyleKonf]; exact Or.inr (Or.inr h3)) v h_eq
+  | gonder_dolu k v h_dolu =>
+      exact Engelli.gonder_dolu k v (by simpa [ifadeyleKonf] using h_dolu)
   | seq_sol a b _ ih => exact Engelli.seq_sol a b ih
   | atama_ic x e _ ih => exact Engelli.atama_ic x e ih
   | guvensiz_ic e _ ih => exact Engelli.guvensiz_ic e ih
@@ -224,12 +229,16 @@ theorem progress_konf
         subst h_bb
         have h_owner := h_hvar ctx h_ctx_in v
           (by rw [h_if]; exact HedefVar.kanal_gonder k v) bv h_b_S h_yaz
-        exact Or.inr (Or.inr ⟨_,
-          { ctx with ifade := .sabit .birim,
-                     lineer := lineerTuket ctx.lineer v }, ts2,
-          Step.cKanalGonderTamam S _ ts1 ts2 ctx k v bv val
-            h_t h_if h_b_S h_val h_owner rfl,
-          rfl, rfl⟩)
+        cases h_q : kanalIlk S.kanal k with
+        | some w =>
+            exact Or.inr (Or.inl (Engelli.gonder_dolu k v (by rw [h_q]; simp)))
+        | none =>
+            exact Or.inr (Or.inr ⟨_,
+              { ctx with ifade := .sabit .birim,
+                         lineer := lineerTuket ctx.lineer v }, ts2,
+              Step.cKanalGonderTamam S _ ts1 ts2 ctx k v bv val
+                h_t h_if h_b_S h_val h_owner h_q rfl,
+              rfl, rfl⟩)
   | kanalAlIf k =>
       obtain ⟨_, _, _, _, _, _, _, _, _, _, h_transit⟩ := h_konf
       cases h_q : kanalIlk S.kanal k with
