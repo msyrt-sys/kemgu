@@ -79,7 +79,7 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
   | r_atama (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (x : VarId) (e : Ifade)
             (b : Bolge) :
               bolgeOrtamGet Ρ x = some b →
-              b.kategori ≠ BolgeKategorisi.donmus →
+              kategoriYazilabilir b.kategori = true →
               RegionTamam Γ Ρ e Ρ' →
               RegionTamam Γ Ρ (Ifade.atama x e) Ρ'
 
@@ -93,8 +93,11 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
       Bolge atamasi kategori = sahip(tYeni) olur.
           Ρ' = Ρ ∪ {bolge(v) ↦ ρ_sahip(tYeni) : v ∈ yd}
       V1 implementasyon `bolgeOrtamSahipAta` ile. -/
-  | r_gorev_baslat (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam)
+  | r_gorev_baslat (Γ : TipOrtam) (Ρ Ρ' Ρkod : BolgeOrtam)
                    (yd : List VarId) (kod : Ifade) (tYeni : ThreadId) :
+                     (∀ v ∈ yd, ∀ b : Bolge, bolgeOrtamGet Ρ v = some b →
+                        kategoriYazilabilir b.kategori = true) →
+                     RegionTamam Γ Ρ kod Ρkod →
                      Ρ' = bolgeOrtamSahipAta Ρ yd tYeni →
                      RegionTamam Γ Ρ (Ifade.gorevBaslat yd kod) Ρ'
 
@@ -109,6 +112,7 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
   | r_kanal_gonder (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam)
                    (k : KanalId) (v : VarId) (b : Bolge) :
                      bolgeOrtamGet Ρ v = some b →
+                     kategoriYazilabilir b.kategori = true →
                      Ρ' = bolgeOrtamUpdate Ρ v
                             (bolgeKategoriDegistir b (BolgeKategorisi.kanalRho k)) →
                      RegionTamam Γ Ρ (Ifade.kanalGonderIf k v) Ρ'
@@ -127,7 +131,7 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
       bu sartlari + KonfTipliFull kopru ile kullanir. -/
   | r_dondur (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (b : Bolge) (x : VarId) :
                bolgeOrtamGet Ρ x = some b →
-               b.kategori ≠ BolgeKategorisi.donmus →
+               kategoriYazilabilir b.kategori = true →
                Ρ' = bolgeOrtamDondurBolge Ρ b →
                RegionTamam Γ Ρ (Ifade.dondurIf b) Ρ'
 

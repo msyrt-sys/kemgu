@@ -272,7 +272,7 @@ theorem storeBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Tip)
 theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
     KonfTipliFull (gammaProgram Pi) (deltaProgram Pi)
                   (rhoBaslangic Pi) (baslangicKonf Pi) := by
-  refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
   · -- (1) SigmaTipli
     intro k v h_kv
     rcases List.mem_map.mp h_kv with ⟨p, h_p, h_eq⟩
@@ -323,8 +323,8 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
     · intro h_kat
       rw [h_bvar] at h_kat
       nomatch h_kat
-  · -- (8) AtamaSahipligi
-    intro ctx h_ctx y _h_ao b h_b
+  · -- (8) HedefVarSahipligi (tum kayitli bolgeler thread 0'da)
+    intro ctx h_ctx y _h_hv b h_b _h_yaz
     rcases List.mem_cons.mp h_ctx with h_eq | h_nil
     · subst h_eq
       have h_bvar : b = varBolge y := rhoBaslangic_get_inv Pi.cevre y b h_b
@@ -334,13 +334,28 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
              = some (Sahip.thread 0)
       exact sahiplikBaslangic_get Pi.cevre y τ h_y
     · cases h_nil
-  · -- (9) DegiskenlerBagli
+  · -- (9) HedefBolgeSahipligi (kayitli bolge-literalleri de thread 0'da)
+    intro ctx h_ctx b _h_hb h_kayitli _h_yaz
+    rcases List.mem_cons.mp h_ctx with h_eq | h_nil
+    · subst h_eq
+      obtain ⟨x, h_x⟩ := h_kayitli
+      have h_bvar : b = varBolge x := rhoBaslangic_get_inv Pi.cevre x b h_x
+      obtain ⟨τ, h_yx⟩ := rhoBaslangic_get_mem Pi.cevre x b h_x
+      rw [h_bvar]
+      show sahiplikGet (baslangicKonf Pi).sahiplik (varBolge x)
+             = some (Sahip.thread 0)
+      exact sahiplikBaslangic_get Pi.cevre x τ h_yx
+    · cases h_nil
+  · -- (10) DegiskenlerBagli
     intro x τ h_x
     refine ⟨varBolge x, varsayilanDeger τ, ?_, ?_, ?_⟩
     · exact rhoBaslangic_get Pi.cevre x τ (tipOrtamGet_mem Pi.cevre x τ h_x)
     · exact storeBaslangic_get Pi.cevre x τ h_x
     · have h_mem := tipOrtamGet_mem Pi.cevre x τ h_x
       exact varsayilanDeger_tipli _ _ τ (h_iyi.cevreBasit (x, τ) h_mem)
+  · -- (11) KanalTransit (bos kanal listesi — vacuous)
+    intro kd h_kd
+    cases h_kd
 
 
 -- ============================================================

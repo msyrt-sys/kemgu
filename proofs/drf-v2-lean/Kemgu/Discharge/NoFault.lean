@@ -82,7 +82,10 @@ theorem step_fault_preserves_typed
       exfalso
       have h_ctx_in : ctx ∈ S.thread := by
         rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
-      exact typing_excludes_sAtamaHataSahipDegil S ctx x _ b h_ctx_in h_if
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataSahipDegil Γ Δ ctx.lineer Ρ S ctx x _ b
+        τ' Λ'' Ρ'' h_typed h_ctx_in h_if h_typed_S.2.2.2.2.2.1
         h_typed_S.2.2.2.2.2.2.2.1 h_b h_not_owner
   | cGorevBaslatHataLineerIhlal S S' ts1 ts2 ctx yd kod vIhlal h_t h_if h_in h_tuket h_S' =>
       intro h_typed_S _
@@ -143,7 +146,8 @@ theorem step_fault_preserves_typed
         show KonfTipliFull Γ Δ Ρ
           { S with thread := ts1 ++ { ctx with ifade := a } :: ts2 }
         exact konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx a h_typed_S h_t h_typed_a
-          (fun y h => by rw [h_if]; exact AtamaOdak.seq_sol a b y h)
+          (fun y h => by rw [h_if]; exact HedefVar.seq_sol a b y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.seq_sol a b bb h)
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx a).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1
@@ -159,7 +163,8 @@ theorem step_fault_preserves_typed
         show KonfTipliFull Γ Δ Ρ
           { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 }
         exact konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_typed_S h_t h_typed_e
-          (fun y h => by rw [h_if]; exact AtamaOdak.atama_ic x e y h)
+          (fun y h => by rw [h_if]; exact HedefVar.atama_ic x e y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.atama_ic x e bb h)
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1
@@ -175,7 +180,8 @@ theorem step_fault_preserves_typed
         show KonfTipliFull Γ Δ Ρ
           { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 }
         exact konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_typed_S h_t h_typed_e
-          (fun y h => by rw [h_if]; exact AtamaOdak.guvensiz_ic e y h)
+          (fun y h => by rw [h_if]; exact HedefVar.guvensiz_ic e y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.guvensiz_ic e bb h)
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1

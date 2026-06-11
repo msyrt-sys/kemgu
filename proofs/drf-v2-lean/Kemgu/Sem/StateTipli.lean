@@ -91,6 +91,19 @@ def bolgeOrtamDondurBolge (Ρ : BolgeOrtam) (b : Bolge) : BolgeOrtam :=
 def bolgeleriTopla (Ρ : BolgeOrtam) (yd : List VarId) : List Bolge :=
   yd.filterMap (bolgeOrtamGet Ρ)
 
+/-- Yazilabilir bolge kategorileri (F4-ispat — onayli invariant tasarimi):
+    sahip(t) / kanalRho(k) / donmus kategorileri TRANSFER-DISI — bu
+    kategorilerdeki bolgelere yazma/dondurma/devretme statik olarak yasak
+    (r_atama / r_dondur / r_kanal_gonder / r_gorev_baslat premise'leri).
+    Boylece "thread, yazilabilir-kategorili hedef bolgelerinin guncel
+    sahibidir" invarianti adim altinda korunabilir: sahiplik degistiren
+    her kural hedef kategoriyi ES-ZAMANLI transfer-disi yapar. -/
+def kategoriYazilabilir : BolgeKategorisi → Bool
+  | BolgeKategorisi.donmus     => false
+  | BolgeKategorisi.sahip _    => false
+  | BolgeKategorisi.kanalRho _ => false
+  | _                          => true
+
 
 -- ============================================================
 -- §2. DegerTipli (ValueTyped) — Plan v2 §5.2.1

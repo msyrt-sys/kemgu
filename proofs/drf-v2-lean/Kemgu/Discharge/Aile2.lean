@@ -75,7 +75,7 @@ theorem typing_excludes_cGorevBaslatHataLineerIhlal
     False := by
   have h_lineerOK := h_typed.lineerOK
   match h_lineerOK with
-  | LineerTamam.l_gorev_baslat _ _ _ _ h_captures =>
+  | LineerTamam.l_gorev_baslat _ _ _ _ _ h_captures _ =>
     exact h_captures vIhlal h_vIhlal_in h_tuket
 
 
@@ -98,13 +98,15 @@ theorem typing_excludes_sAtamaHataDonmus
     False := by
   have h_regionOK := h_typed.regionOK
   match h_regionOK with
-  | RegionTamam.r_atama _ _ _ _ _ bIc h_get h_notdonmus _ =>
+  | RegionTamam.r_atama _ _ _ _ _ bIc h_get h_yaz _ =>
     have h_get_S : bolgeOrtamGet S.bolge x = some bIc := by
       rw [h_bolge_eq]; exact h_get
     have h_bb : b = bIc := Option.some.inj (h_b.symm.trans h_get_S)
     have h_iff := h_frozen_kat x bIc h_get_S
     rw [h_bb] at h_frozen
-    exact h_notdonmus (h_iff.mp h_frozen)
+    have h_kat := h_iff.mp h_frozen
+    rw [h_kat] at h_yaz
+    simp [kategoriYazilabilir] at h_yaz
 
 /-- AILE 2 Region — typing_excludes_cDondurHataZatenDonmus. -/
 theorem typing_excludes_cDondurHataZatenDonmus
@@ -120,24 +122,41 @@ theorem typing_excludes_cDondurHataZatenDonmus
     False := by
   have h_regionOK := h_typed.regionOK
   match h_regionOK with
-  | RegionTamam.r_dondur _ _ _ _ xIc h_get h_notdonmus _ =>
+  | RegionTamam.r_dondur _ _ _ _ xIc h_get h_yaz _ =>
     have h_get_S : bolgeOrtamGet S.bolge xIc = some b := by
       rw [h_bolge_eq]; exact h_get
     have h_iff := h_frozen_kat xIc b h_get_S
-    exact h_notdonmus (h_iff.mp h_zaten)
+    have h_kat := h_iff.mp h_zaten
+    rw [h_kat] at h_yaz
+    simp [kategoriYazilabilir] at h_yaz
 
-/-- AILE 2 Ownership — typing_excludes_sAtamaHataSahipDegil (AtamaOdak). -/
+/-- AILE 2 Ownership — typing_excludes_sAtamaHataSahipDegil
+    (F4 onayli invariant — HedefVar formu): tipleme r_atama hedefin
+    yazilabilir oldugunu verir; HedefVarSahipligi invarianti yazilabilir
+    hedefin sahipligini verir → h_not_owner celiski. -/
 theorem typing_excludes_sAtamaHataSahipDegil
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λin : LineerOrtam) (Ρ : BolgeOrtam)
     (S : Konfigurasyon) (ctx : ThreadCtx) (x : VarId) (e : Ifade) (b : Bolge)
+    (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Δ Λin Ρ (Ifade.atama x e) τ Λ' Ρ')
     (h_in : ctx ∈ S.thread)
     (h_ifade : ctx.ifade = Ifade.atama x e)
-    (h_atama_sahip : ∀ ctx' ∈ S.thread, ∀ y : VarId, AtamaOdak ctx'.ifade y →
+    (h_bolge_eq : S.bolge = Ρ)
+    (h_hedef_sahip : ∀ ctx' ∈ S.thread, ∀ y : VarId, HedefVar ctx'.ifade y →
                        ∀ b' : Bolge, bolgeOrtamGet S.bolge y = some b' →
+                         kategoriYazilabilir b'.kategori = true →
                          sahiplikGet S.sahiplik b' = some (Sahip.thread ctx'.tid))
     (h_b : bolgeOrtamGet S.bolge x = some b)
     (h_not_owner : sahiplikGet S.sahiplik b ≠ some (Sahip.thread ctx.tid)) :
-    False :=
-  h_not_owner
-    (h_atama_sahip ctx h_in x (h_ifade ▸ AtamaOdak.bas x e) b h_b)
+    False := by
+  have h_regionOK := h_typed.regionOK
+  match h_regionOK with
+  | RegionTamam.r_atama _ _ _ _ _ bIc h_get h_yaz _ =>
+    have h_get_S : bolgeOrtamGet S.bolge x = some bIc := by
+      rw [h_bolge_eq]; exact h_get
+    have h_bb : b = bIc := Option.some.inj (h_b.symm.trans h_get_S)
+    subst h_bb
+    exact h_not_owner
+      (h_hedef_sahip ctx h_in x (h_ifade ▸ HedefVar.atama_bas x e) b h_b h_yaz)
 
 end Kemgu.Discharge.Aile2
