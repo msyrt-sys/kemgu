@@ -231,6 +231,75 @@ static void M15_adres_non_integer(void) {
 }
 
 /* ========================================================================
+ * C9 — typed-width varyantlari (M16-M23)
+ * mmio_oku16/yaz16 (tam16) + mmio_oku64/yaz64 (tam64). 32-bit ile ayni desen.
+ * ======================================================================== */
+
+static void M16_oku16_temel(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y, 4096);\n"
+        "    geri_al(y);");
+    test_sonuc("M16: mmio_oku16(yetki<MMIO>, adres) -> tam16 = 0 hata", h == 0);
+}
+
+static void M17_yaz16_temel(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 2);\n"
+        "    mmio_yaz16(y, 4096, 42);\n"
+        "    geri_al(y);");
+    test_sonuc("M17: mmio_yaz16(yetki<MMIO>, adres, tam16) = 0 hata", h == 0);
+}
+
+static void M18_oku64_temel(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 4096);\n"
+        "    geri_al(y);");
+    test_sonuc("M18: mmio_oku64(yetki<MMIO>, adres) -> tam64 = 0 hata", h == 0);
+}
+
+static void M19_yaz64_temel(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 2);\n"
+        "    mmio_yaz64(y, 4096, 42);\n"
+        "    geri_al(y);");
+    test_sonuc("M19: mmio_yaz64(yetki<MMIO>, adres, tam64) = 0 hata", h == 0);
+}
+
+static void M20_oku16_arg_sayisi(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y);\n"
+        "    geri_al(y);");
+    test_sonuc("M20: mmio_oku16(y) tek arg -> MM001", h >= 1);
+}
+
+static void M21_yaz64_arg_sayisi(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 2);\n"
+        "    mmio_yaz64(y, 4096);\n"
+        "    geri_al(y);");
+    test_sonuc("M21: mmio_yaz64(y, adres) 2 arg -> MM001", h >= 1);
+}
+
+static void M22_oku64_yanlis_kaynak(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 1);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 4096);\n"
+        "    geri_al(y);");
+    test_sonuc("M22: mmio_oku64(yetki<Dosya>) -> MM002 (kaynak yanlis)", h >= 1);
+}
+
+static void M23_yaz16_deger_metin(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 2);\n"
+        "    mmio_yaz16(y, 4096, \"abc\");\n"
+        "    geri_al(y);");
+    test_sonuc("M23: mmio_yaz16 deger metin -> MM003", h >= 1);
+}
+
+/* ========================================================================
  * Ana
  * ======================================================================== */
 
@@ -253,6 +322,12 @@ int main(void) {
     M10_oku_arg_sayisi(); M11_yaz_arg_sayisi();
     M12_leak_geri_al_yok(); M13_cift_geri_al();
     M14_ilk_arg_non_yetki(); M15_adres_non_integer();
+
+    puts("\n--- C9: typed-width 16/64-bit (M16-M23) ---");
+    M16_oku16_temel(); M17_yaz16_temel();
+    M18_oku64_temel(); M19_yaz64_temel();
+    M20_oku16_arg_sayisi(); M21_yaz64_arg_sayisi();
+    M22_oku64_yanlis_kaynak(); M23_yaz16_deger_metin();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
