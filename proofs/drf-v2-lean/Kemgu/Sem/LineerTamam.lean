@@ -107,34 +107,30 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
             LineerTamam Γ Λa b Λb →
             LineerTamam Γ Λ (Ifade.seq a b) Λb
 
-  /-- L-GOREV-BASLAT: yakalama listesinde lineer olanlar TUKETILIR (caller'da).
-      Plan v2 §3.3 "l_gorev_baslat":
-        Λ' = Λ \ (yd ∩ {v | Tip.lineerMi (Γ v)})
-
-      Adim 8 V2 P6 strengthen (use-after-move): yakalanan hicbir v ZATEN
-      tuketilmis olamaz — ∀ v ∈ yd, lineerOrtamGet Λ v ≠ some tuketildi.
-      l_kanal_gonder ile simetrik; cifte-move yasagi.
-      typing_excludes_cGorevBaslatHataLineerIhlal bu sarti kullanir. -/
-  | l_gorev_baslat (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (yd : List VarId) (kod : Ifade) :
+  /-- L-GOREV-BASLAT: yakalama listesindeki aktif lineer'lar caller'da
+      TUKETILIR — cikis ortami ARTIK BELIRLI (F3: serbest Λ' vakumu kapandi):
+        Λ' = lineerTuketListe Λ yd
+      (cGorevBaslatTamam'in runtime guncellemesiyle birebir ayni fonksiyon).
+      Use-after-move guard'i korunur: yakalanan hicbir v zaten tuketilmis
+      olamaz — typing_excludes_cGorevBaslatHataLineerIhlal bunu kullanir. -/
+  | l_gorev_baslat (Γ : TipOrtam) (Λ : LineerOrtam) (yd : List VarId) (kod : Ifade) :
                      (∀ v ∈ yd, lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi) →
-                     LineerTamam Γ Λ (Ifade.gorevBaslat yd kod) Λ'
+                     LineerTamam Γ Λ (Ifade.gorevBaslat yd kod)
+                                   (lineerTuketListe Λ yd)
 
   /-- L-GOREV-BIRLESTIR: birlestir(g) — Λ etkilenmez (V1 sinir).
       V2 hedef: g'nin gorev<τ> donus ile yeni lineer baglama. -/
   | l_gorev_birlestir (Γ : TipOrtam) (Λ : LineerOrtam) (g : VarId) :
                         LineerTamam Γ Λ (Ifade.gorevBirlestir g) Λ
 
-  /-- L-KANAL-GONDER: v lineer ise tuketilir.
-      Adim 8 P2 strengthen (Plan §6.2 Aile 2): gonderilen v ZATEN tuketilmis
-      olamaz (`lineerOrtamGet Λ v ≠ some tuketildi`). Bu sart l_kullan/l_imha
-      ile simetrik — "aktif veya kayitsiz (none)" gonderilebilir, yalniz
-      "tuketildi" (cifte gonderim) reddedilir.
-      Soundness: non-lineer v icin Λ v = none → `none ≠ some tuketildi` trivial
-      saglanir; gercekten yalniz cifte-gonderim reddedilir.
-      typing_excludes_cKanalGonderHataLineerTuket (Aile2.lean) bu sarti kullanir. -/
-  | l_kanal_gonder (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (k : KanalId) (v : VarId) :
+  /-- L-KANAL-GONDER: v lineer-aktif ise tuketilir — cikis ortami ARTIK
+      BELIRLI (F3): Λ' = lineerTuket Λ v (cKanalGonderTamam ile birebir).
+      Cifte-gonderim guard'i korunur (zaten-tuketilmis gonderilemez);
+      typing_excludes_cKanalGonderHataLineerTuket bunu kullanir. -/
+  | l_kanal_gonder (Γ : TipOrtam) (Λ : LineerOrtam) (k : KanalId) (v : VarId) :
                      lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi →
-                     LineerTamam Γ Λ (Ifade.kanalGonderIf k v) Λ'
+                     LineerTamam Γ Λ (Ifade.kanalGonderIf k v)
+                                   (lineerTuket Λ v)
 
   /-- L-KANAL-AL: kanal'dan deger alinir, yeni lineer baglama olabilir.
       V1: Λ degismez (alinan deger receiver'da bind edilmis varsayilir). -/

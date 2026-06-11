@@ -9,6 +9,7 @@ bir yeni olay ekler → iki yeni memYaz ayni olaydir → ayni thread).
 
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+import Kemgu.Sem.Kopru
 import Kemgu.Drf.L0BolgeKorunumu
 import Kemgu.Drf.L1BolgeThreadTekilligi
 import Kemgu.Drf.L2LinearMoveCrossThread
@@ -19,7 +20,7 @@ import Kemgu.Drf.L6CapabilityLinear
 import Kemgu.Drf.L7BellekErisimTipSoundness
 
 namespace Kemgu.Drf.Drf
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru
 open Kemgu.Drf.L0BolgeKorunumu Kemgu.Drf.L4FrozenRegionRead
 
 -- ============================================================

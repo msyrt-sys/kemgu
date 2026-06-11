@@ -8,6 +8,7 @@ Onkosul: Faz A + B + γ tum mekanize bilesenler
 
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+import Kemgu.Sem.Kopru
 import Kemgu.Drf.L0BolgeKorunumu
 import Kemgu.Drf.L1BolgeThreadTekilligi
 import Kemgu.Drf.L2LinearMoveCrossThread
@@ -22,7 +23,7 @@ import Kemgu.BET.Boundedness
 import Kemgu.SideChannel.NonInterference
 
 namespace Kemgu.Soundness.Main
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru
 open Kemgu.Drf.L0BolgeKorunumu
 open Kemgu.MemSafety.Theorems
 

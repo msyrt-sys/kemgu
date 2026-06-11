@@ -8,9 +8,10 @@ F2: Sahiplik guncel-durum modeli — S1 invariant zaman'siz forma indi.
 
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+import Kemgu.Sem.Kopru
 
 namespace Kemgu.Drf.L0BolgeKorunumu
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru
 
 -- ============================================================
 -- §1. S1 invariant tanimi (Bellek Modeli §Katman 2)

@@ -33,9 +33,9 @@ open Kemgu.Sem.Core Kemgu.Sem.StateTipli
 /-- AILE 2 Linear — typing_excludes_sLinKullanHataZatenTuketildi.
     l_kullan: Λ x = aktif; kopru + h_tuket: Λ x = tuketildi → celiski. -/
 theorem typing_excludes_sLinKullanHataZatenTuketildi
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (x : VarId) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.kullanIf x) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.kullanIf x) τ Λ' Ρ')
     (ctx : ThreadCtx)
     (h_bridge : ∀ y : VarId, ∀ lin : Lineerlik,
                   (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
@@ -51,9 +51,9 @@ theorem typing_excludes_sLinKullanHataZatenTuketildi
 
 /-- AILE 2 Linear — typing_excludes_sLinImhaHataZatenTuketildi (simetrik). -/
 theorem typing_excludes_sLinImhaHataZatenTuketildi
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (x : VarId) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.imhaIf x) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.imhaIf x) τ Λ' Ρ')
     (ctx : ThreadCtx)
     (h_bridge : ∀ y : VarId, ∀ lin : Lineerlik,
                   (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
@@ -70,9 +70,9 @@ theorem typing_excludes_sLinImhaHataZatenTuketildi
 /-- AILE 2 Linear — typing_excludes_cKanalGonderHataLineerTuket.
     l_kanal_gonder: Λ vId ≠ tuketildi; kopru + h_tuket → celiski. -/
 theorem typing_excludes_cKanalGonderHataLineerTuket
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (k : KanalId) (vId : VarId) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.kanalGonderIf k vId) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.kanalGonderIf k vId) τ Λ' Ρ')
     (ctx : ThreadCtx)
     (h_bridge : ∀ y : VarId, ∀ lin : Lineerlik,
                   (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
@@ -80,7 +80,7 @@ theorem typing_excludes_cKanalGonderHataLineerTuket
     False := by
   have h_lineerOK := h_typed.lineerOK
   match h_lineerOK with
-  | LineerTamam.l_kanal_gonder _ _ _ _ _ h_notconsumed =>
+  | LineerTamam.l_kanal_gonder _ _ _ _ h_notconsumed =>
     have h_mem := lineerOrtamGet_mem ctx.lineer vId Lineerlik.tuketildi h_tuket
     have h_tuket_Λ := (h_bridge vId Lineerlik.tuketildi).mp h_mem
     exact h_notconsumed h_tuket_Λ
@@ -89,10 +89,10 @@ theorem typing_excludes_cKanalGonderHataLineerTuket
     (use-after-move): l_gorev_baslat: ∀ v∈yd, Λ v ≠ tuketildi;
     kopru + h_tuket (vIhlal ∈ yd) → celiski. -/
 theorem typing_excludes_cGorevBaslatHataLineerIhlal
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (yd : List VarId) (kod : Ifade) (vIhlal : VarId)
     (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.gorevBaslat yd kod) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.gorevBaslat yd kod) τ Λ' Ρ')
     (ctx' : ThreadCtx)
     (h_bridge' : ∀ y : VarId, ∀ lin : Lineerlik,
                    (y, lin) ∈ ctx'.lineer ↔ lineerOrtamGet Λ y = some lin)
@@ -101,7 +101,7 @@ theorem typing_excludes_cGorevBaslatHataLineerIhlal
     False := by
   have h_lineerOK := h_typed.lineerOK
   match h_lineerOK with
-  | LineerTamam.l_gorev_baslat _ _ _ _ _ h_captures =>
+  | LineerTamam.l_gorev_baslat _ _ _ _ h_captures =>
     have h_mem := lineerOrtamGet_mem ctx'.lineer vIhlal Lineerlik.tuketildi h_tuket
     have h_tuket_Λ := (h_bridge' vIhlal Lineerlik.tuketildi).mp h_mem
     exact h_captures vIhlal h_vIhlal_in h_tuket_Λ
@@ -115,9 +115,9 @@ theorem typing_excludes_cGorevBaslatHataLineerIhlal
     r_atama: Ρ x = some b' ∧ b'.kategori ≠ donmus; S.bolge = Ρ + h_b →
     b = b'; FrozenKategori koprusu + h_frozen → kategori = donmus → celiski. -/
 theorem typing_excludes_sAtamaHataDonmus
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (x : VarId) (e : Ifade) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.atama x e) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.atama x e) τ Λ' Ρ')
     (S : Konfigurasyon) (b : Bolge)
     (h_bolge_eq : S.bolge = Ρ)
     (h_frozen_kat : ∀ (y : VarId) (b' : Bolge),
@@ -139,9 +139,9 @@ theorem typing_excludes_sAtamaHataDonmus
 /-- AILE 2 Region — typing_excludes_cDondurHataZatenDonmus.
     r_dondur: Ρ kayitli + kategori ≠ donmus; kopru + h_zaten → celiski. -/
 theorem typing_excludes_cDondurHataZatenDonmus
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (b : Bolge) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Λ Ρ (Ifade.dondurIf b) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λ Ρ (Ifade.dondurIf b) τ Λ' Ρ')
     (S : Konfigurasyon)
     (h_bolge_eq : S.bolge = Ρ)
     (h_frozen_kat : ∀ (y : VarId) (b' : Bolge),

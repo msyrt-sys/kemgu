@@ -8,10 +8,11 @@ F2: zaman'siz guncel-durum sahiplik formu.
 
 import Kemgu.Sem.Core
 import Kemgu.Sem.SmallStep
+import Kemgu.Sem.Kopru
 import Kemgu.Drf.L0BolgeKorunumu
 
 namespace Kemgu.Drf.L1BolgeThreadTekilligi
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Drf.L0BolgeKorunumu
+open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru Kemgu.Drf.L0BolgeKorunumu
 
 /-- DRF-L1 — Region-Thread Tekilligi: bizim modelde DRF-L0' corollary'si
     (s1_invariant "lookup thread donerse tek" formu; donmus/kanalSahip/bos
