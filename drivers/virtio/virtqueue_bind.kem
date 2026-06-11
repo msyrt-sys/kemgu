@@ -4,10 +4,12 @@ kullan drivers::virtio::constants;
 kullan drivers::virtio::virtio_mmio;
 kullan drivers::virtio::virtqueue_layout;
 
-sabit VIRTQUEUE_BAG_HATA_QUEUE_KULLANILAMAZ: tam32 = 201;
-sabit VIRTQUEUE_BAG_HATA_GECERSIZ_BOYUT: tam32 = 202;
-sabit VIRTQUEUE_BAG_HATA_YOK: tam32 = 0;
 sabit VIRTQUEUE_U32_MASK: tam64 = 4294967295;
+
+çeşit BagHatasi {
+    QueueKullanilamaz,
+    GecersizBoyut
+}
 
 yapı Virtqueue {
     boyut: tam32;
@@ -52,8 +54,9 @@ işlev virtqueue_bagla(
     taban: tam64,
     queue_index: tam16,
     vq: &Virtqueue
-) -> sonuç<tam32, tam32> {
-    değişken hata_kodu: tam32 = VIRTQUEUE_BAG_HATA_YOK;
+) -> sonuç<tam32, BagHatasi> {
+    değişken queue_kullanilamaz: mantıksal = yanlış;
+    değişken gecersiz_boyut: mantıksal = yanlış;
     değişken queue_num: tam32 = 0;
 
     mmio_yaz32(
@@ -65,17 +68,17 @@ işlev virtqueue_bagla(
     değişken queue_num_max: tam32 =
         mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM_MAX));
     eğer queue_num_max == 0 {
-        hata_kodu = VIRTQUEUE_BAG_HATA_QUEUE_KULLANILAMAZ;
+        queue_kullanilamaz = doğru;
     }
 
-    eğer hata_kodu == VIRTQUEUE_BAG_HATA_YOK {
+    eğer değil queue_kullanilamaz {
         queue_num = virtqueue_min(vq.boyut, queue_num_max);
         eğer değil virtqueue_bagla_layout_gecerli_mi(queue_num_max, queue_num, vq) {
-            hata_kodu = VIRTQUEUE_BAG_HATA_GECERSIZ_BOYUT;
+            gecersiz_boyut = doğru;
         }
     }
 
-    eğer hata_kodu == VIRTQUEUE_BAG_HATA_YOK {
+    eğer değil queue_kullanilamaz ve değil gecersiz_boyut {
         mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM), queue_num);
         mmio_yaz32(
             y,
@@ -114,11 +117,11 @@ işlev virtqueue_bagla(
 
     geri_al(y);
 
-    eğer hata_kodu == VIRTQUEUE_BAG_HATA_QUEUE_KULLANILAMAZ {
-        ver hata(VIRTQUEUE_BAG_HATA_QUEUE_KULLANILAMAZ);
+    eğer queue_kullanilamaz {
+        ver hata(BagHatasi::QueueKullanilamaz);
     }
-    eğer hata_kodu == VIRTQUEUE_BAG_HATA_GECERSIZ_BOYUT {
-        ver hata(VIRTQUEUE_BAG_HATA_GECERSIZ_BOYUT);
+    eğer gecersiz_boyut {
+        ver hata(BagHatasi::GecersizBoyut);
     }
     ver tamam(queue_num);
 }

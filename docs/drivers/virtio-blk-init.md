@@ -32,8 +32,10 @@ döndürür. Hata tipi ilk gerçek `çeşit` kullanımıdır: `AygitYok`,
 Init sırası şöyledir: D1 probe, status reset, ACKNOWLEDGE, DRIVER, feature
 negotiation, FEATURES_OK yazımı ve readback, D3 queue bind, D4/D5 config read,
 son olarak DRIVER_OK. Feature eksikliği veya FEATURES_OK readback reddi
-`FeatureRed` olarak döner. Queue bağlama hataları `QueueKurulumBasarisiz`,
-config generation stabil olmaması `YapilandirmaHatasi` olarak ayrılır. Her hata
+`FeatureRed` olarak döner. Queue bağlama hataları artık `BagHatasi` üzerinden
+exhaustive eşleşip dışarı `QueueKurulumBasarisiz` olarak yansır; config
+generation stabil olmaması `YapilandirmaHatasi::GenerationInstabilite`
+üzerinden dışarı `BaslatHatasi::YapilandirmaHatasi` olarak ayrılır. Her hata
 yolunda status register'a FAILED yazılır ve `yetki<MMIO>` iade edilir.
 
 ## Kapsam Dışı
