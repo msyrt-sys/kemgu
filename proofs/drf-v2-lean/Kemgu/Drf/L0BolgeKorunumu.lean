@@ -41,6 +41,15 @@ theorem sahiplikGet_funkc (s : Sahiplik) (key : Bolge) (v1 v2 : Sahip)
   rw [h1] at h2
   exact Option.some.inj h2
 
+/-- S1 YAPISAL: modelimizde her konfigurasyon S1'i saglar (lookup
+    deterministik — "preservation by structural function design").
+    Bu, kemgu_soundness_v3'un h_init_s1 hipotezini gereksizlestirir. -/
+theorem s1_yapisal (S : Konfigurasyon) : s1_invariant S := by
+  intro b t1 t2 h1 h2
+  have h_eq : Sahip.thread t1 = Sahip.thread t2 :=
+    sahiplikGet_funkc S.sahiplik b _ _ h1 h2
+  injection h_eq
+
 -- ============================================================
 -- §3. DRF-L0: Bolge Korunumu (preservation)
 -- ============================================================
