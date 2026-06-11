@@ -1439,6 +1439,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
                     return inner;
                 }
+                /* Linear Types V1: tekkez_yarat(e) -> tekkez<T>.
+                 * IR'da zero-overhead sarmalayici: tekkez<T> = T
+                 * (ast_tip_to_ir ic tipi acar) -> arg pass-through.
+                 * Audit gap #4: onceden generic call yoluna dusup
+                 * TANIMSIZ @tekkez_yarat sembolu uretiyordu (link
+                 * hatasi — lineer kod hic calistirilamiyordu). */
+                if (_uz == 12 &&
+                    memcmp(_ca, "tekkez_yarat", 12) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    return ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                      beklenen);
+                }
             }
             /* Capability Spec V1 intrinsics — yetki_olustur, delege, geri_al */
             {
@@ -2237,6 +2249,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             fputs(")\n", g->out);
             IfadeSonuc s = { r, donus };
+            return s;
+        }
+
+        /* Linear Types V1 — IR'da zero-overhead (tekkez<T> = T):
+         * Audit gap #5: kullan(e) lineer unwrap — onceden default'a
+         * dusup ('ifade tipi 33 desteklenmiyor') SESSIZ 0 donerdi.
+         * Lineer muhasebe tamamen tip kontrolde; IR pass-through. */
+        case DUGUM_KULLAN_IFADE:
+            return ifade_uret(g, d->veri.kullan_ifade.operand, beklenen);
+
+        /* Audit gap #6: imha(e) — linear dispose. Operand yan etkileri
+         * icin degerlendirilir, deger dusurulur (primitif/transparent
+         * tipler icin runtime is yok). Onceden sessiz 0 + yorum. */
+        case DUGUM_IMHA_IFADE: {
+            (void)ifade_uret(g, d->veri.imha_ifade.operand, NULL);
+            int r = yeni_reg(g);
+            fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+            IfadeSonuc s = { r, "i32" };
             return s;
         }
 
