@@ -833,42 +833,57 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     return s;
 }
 
-/* C-track fix (init-test koku #3): `x.alan = v` LVALUE adresi.
- * erisim_uret'in okuma mantigini aynalar ama load YERINE alan ADRESINI
- * (GEP) doner. Nesne tanimlayici olmali (tek seviye — driver deseni
- * `cfg.alan = v` / `vq.alan = v`); ic ice erisim v2.
- *   - lokal struct (llvm_tip "%Ad"): alloca dogrudan struct adresi
- *   - referans param / ptr (llvm_tip "ptr"): alloca'dan ptr yukle,
- *     yapi tipi alan adina gore cozulur (erisim_uret ile ayni
- *     konservatif arama)
+/* C-track fix (init-test koku #3) + audit fix #3: `x.alan = v` ve
+ * ic ice `a.b.c = v` LVALUE adresi. erisim_uret'in okuma mantigini
+ * aynalar ama load YERINE alan ADRESINI (GEP) doner.
+ *   - nesne tanimlayici + lokal struct (llvm_tip "%Ad"): alloca
+ *     dogrudan struct adresi
+ *   - nesne tanimlayici + referans param / ptr ("ptr"): alloca'dan
+ *     ptr yukle, yapi tipi alan adina gore cozulur (erisim_uret ile
+ *     ayni konservatif arama)
+ *   - nesne ERISIM (audit gap #3): ozyineleme — ic alanin ADRESI
+ *     taban olur, ic alan tipi ("%Ic") yapi kaydini verir. Onceden
+ *     -1 donerdi -> a.b.c = v sessizce dusurulurdu.
  * Donus: alan adresi reg (>=0) + alan_ir_out; cozulemezse -1. */
 static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                          const char **alan_ir_out) {
     if (!d || d->tip != DUGUM_ERISIM) return -1;
     const Dugum *nesne_d = d->veri.erisim.nesne;
-    if (!nesne_d || nesne_d->tip != DUGUM_TANIMLAYICI) return -1;
-    LlvmIsim *vi = isim_bul(g, nesne_d->veri.tanimlayici.metin,
-                            nesne_d->veri.tanimlayici.uzunluk);
-    if (!vi || !vi->llvm_tip) return -1;
+    if (!nesne_d) return -1;
 
     YapiKayit *yk = NULL;
     int taban_reg = -1;
-    if (vi->llvm_tip[0] == '%') {
-        yk = yapi_bul(g, vi->llvm_tip + 1,
-                      (int)strlen(vi->llvm_tip + 1));
-        taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
-    } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
-        for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
-            if (yapi_alan_indeksi(y, d->veri.erisim.alan,
-                                   d->veri.erisim.alan_uzunluk,
-                                   NULL) >= 0) {
-                yk = y;
+
+    if (nesne_d->tip == DUGUM_TANIMLAYICI) {
+        LlvmIsim *vi = isim_bul(g, nesne_d->veri.tanimlayici.metin,
+                                nesne_d->veri.tanimlayici.uzunluk);
+        if (!vi || !vi->llvm_tip) return -1;
+        if (vi->llvm_tip[0] == '%') {
+            yk = yapi_bul(g, vi->llvm_tip + 1,
+                          (int)strlen(vi->llvm_tip + 1));
+            taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
+        } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
+            for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+                if (yapi_alan_indeksi(y, d->veri.erisim.alan,
+                                       d->veri.erisim.alan_uzunluk,
+                                       NULL) >= 0) {
+                    yk = y;
+                }
             }
+            if (!yk) return -1;
+            taban_reg = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
+                    taban_reg, vi->reg_no);
+        } else {
+            return -1;
         }
-        if (!yk) return -1;
-        taban_reg = yeni_reg(g);
-        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
-                taban_reg, vi->reg_no);
+    } else if (nesne_d->tip == DUGUM_ERISIM) {
+        /* a.b.c: ic erisimin (a.b) ALAN ADRESINI al; tipi struct
+         * ("%Ic") olmali ki alan GEP'i kurulabilsin. */
+        const char *ic_ir = NULL;
+        taban_reg = erisim_lvalue(g, nesne_d, &ic_ir);
+        if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
+        yk = yapi_bul(g, ic_ir + 1, (int)strlen(ic_ir + 1));
     } else {
         return -1;
     }
@@ -1293,6 +1308,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { t, "ptr" };
                 return s;
             }
+            /* Audit fix #1: OP_DEREFERANS — *p ham pointer YUKU.
+             * Onceki durum: "tekli op desteklenmiyor" + ptr DEGERI
+             * donerdi -> ret baglaminda gecersiz IR, aritmetikte sessiz
+             * yanlis deger. Yuklenecek tip: beklenen (ver/atama/cagri
+             * baglamindan forward edilir), yoksa i32 varsayilan. */
+            if (d->veri.tekli.op == OP_DEREFERANS) {
+                IfadeSonuc p = ifade_uret(g, d->veri.tekli.operand, NULL);
+                const char *yuk_tip =
+                    (beklenen && strcmp(beklenen, "ptr") != 0)
+                        ? beklenen : "i32";
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+                        r, yuk_tip, p.reg);
+                IfadeSonuc s = { r, yuk_tip };
+                return s;
+            }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
             if (d->veri.tekli.op == OP_NEG) {
                 int r = yeni_reg(g);
@@ -1407,6 +1438,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * Modern LLVM intrinsic; declare gerekmez (built-in). */
                     fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
                     return inner;
+                }
+                /* Linear Types V1: tekkez_yarat(e) -> tekkez<T>.
+                 * IR'da zero-overhead sarmalayici: tekkez<T> = T
+                 * (ast_tip_to_ir ic tipi acar) -> arg pass-through.
+                 * Audit gap #4: onceden generic call yoluna dusup
+                 * TANIMSIZ @tekkez_yarat sembolu uretiyordu (link
+                 * hatasi — lineer kod hic calistirilamiyordu). */
+                if (_uz == 12 &&
+                    memcmp(_ca, "tekkez_yarat", 12) == 0 &&
+                    d->veri.cagri.sayi == 1) {
+                    return ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                      beklenen);
                 }
             }
             /* Capability Spec V1 intrinsics — yetki_olustur, delege, geri_al */
@@ -2209,6 +2252,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return s;
         }
 
+        /* Linear Types V1 — IR'da zero-overhead (tekkez<T> = T):
+         * Audit gap #5: kullan(e) lineer unwrap — onceden default'a
+         * dusup ('ifade tipi 33 desteklenmiyor') SESSIZ 0 donerdi.
+         * Lineer muhasebe tamamen tip kontrolde; IR pass-through. */
+        case DUGUM_KULLAN_IFADE:
+            return ifade_uret(g, d->veri.kullan_ifade.operand, beklenen);
+
+        /* Audit gap #6: imha(e) — linear dispose. Operand yan etkileri
+         * icin degerlendirilir, deger dusurulur (primitif/transparent
+         * tipler icin runtime is yok). Onceden sessiz 0 + yorum. */
+        case DUGUM_IMHA_IFADE: {
+            (void)ifade_uret(g, d->veri.imha_ifade.operand, NULL);
+            int r = yeni_reg(g);
+            fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+            IfadeSonuc s = { r, "i32" };
+            return s;
+        }
+
         case DUGUM_TIP_DONUSTUR: {
             /* Madde E: x olarak T — explicit cast */
             const char *hedef = ast_tip_to_ir(g, d->veri.tip_donustur.hedef_tip);
@@ -2426,6 +2487,41 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             i->llvm_tip, rr, i->reg_no);
+                }
+            } else if (d->veri.atama.hedef &&
+                       d->veri.atama.hedef->tip == DUGUM_INDEKS) {
+                /* Audit fix #2: arr[i] = v — onceden SESSIZCE dusurulurdu
+                 * (hedef yalniz tanimlayici/erisim taniyordu).
+                 * Stack dizi: INDEKS okuma yolunun GEP aynasi + store.
+                 * Heap dizi (KdlDizi): runtime'da eleman-yazma setter'i
+                 * YOK (kdl_dizi_yaz_eleman) — runtime/ bu görevin scope
+                 * disinda; gorunur yorum + DUR-SOR raporu (sessiz degil). */
+                const Dugum *hedef = d->veri.atama.hedef;
+                int heap_dizi = 0;
+                if (hedef->veri.indeks.nesne &&
+                    hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        hedef->veri.indeks.nesne->veri.tanimlayici.metin,
+                        hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
+                    if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
+                }
+                if (heap_dizi) {
+                    fprintf(g->out,
+                        "  ; atama: heap dizi eleman atamasi runtime "
+                        "setter bekliyor (kdl_dizi_yaz_eleman yok)\n");
+                } else {
+                    IfadeSonuc nesne = ifade_uret(g,
+                        hedef->veri.indeks.nesne, NULL);
+                    IfadeSonuc idx = ifade_uret(g,
+                        hedef->veri.indeks.indeks, "i64");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, NULL);
+                    int gep_r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr %%%d, i64 %%%d\n",
+                        gep_r, v.tip, nesne.reg, idx_r);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            v.tip, v.reg, gep_r);
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_ERISIM) {

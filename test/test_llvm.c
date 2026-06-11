@@ -1426,6 +1426,73 @@ static void test_yetki_delege_abi(void) {
                rc == 42);
 }
 
+/* --- Codegen coverage audit: lowering bosluk regresyonlari ---
+ * KRITIK: hepsi RUNTIME round-trip assert eder (yaz -> oku -> dogru
+ * deger). opt-verify bu sinifi YAKALAMAZ (dusurulen deyim / yanlis
+ * deger gecerli-ama-yanlis IR uretir). */
+
+static void test_audit_deref_okuma(void) {
+    /* Gap #1: *p deref load emit etmiyordu — ptr DEGERI donerdi. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; ver oku(&x); }");
+    test_sonuc("audit: *p deref yukleme round-trip -> exit 42", rc == 42);
+}
+
+static void test_audit_stack_dizi_eleman_atama(void) {
+    /* Gap #2 (stack): d[i] = v onceden sessizce dusurulurdu -> toplam
+     * 6 kalirdi. Yaz -> oku round-trip: 1 + 38 + 3 = 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [1, 2, 3]; "
+        "d[1] = 38; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("audit: stack d[i]=v yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_nested_alan_atama(void) {
+    /* Gap #3: a.b.c = v onceden dusurulurdu (erisim_lvalue tek seviye).
+     * 3-seviye yaz -> oku round-trip. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Ic { x: tam32; } "
+        "yap\xc4\xb1 Orta { ic: Ic; } "
+        "yap\xc4\xb1 Dis { orta: Orta; y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dis = "
+        "Dis { orta: Orta { ic: Ic { x: 0 } }, y: 2 }; "
+        "d.orta.ic.x = 40; "
+        "ver d.orta.ic.x + d.y; }");
+    test_sonuc("audit: a.b.c = v ic ice yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_linear_kullan_round_trip(void) {
+    /* Gap #4+#5: tekkez_yarat onceden TANIMSIZ sembol (link hatasi),
+     * kullan(e) sessiz 0 donerdi. Zero-overhead pass-through dogrula:
+     * tekkez_yarat(42) -> kullan(t) -> 42. Lineer muhasebe tip
+     * kontrolde (program --check'ten de gecer). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = kullan(t); "
+        "ver v; }");
+    test_sonuc("audit: tekkez_yarat -> kullan round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_linear_imha(void) {
+    /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "imha(t); "
+        "ver 42; }");
+    test_sonuc("audit: imha(t) lineer dispose -> exit 42", rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1699,6 +1766,13 @@ int main(void) {
     test_ref_struct_param_sonuc_calistir();
     test_struct_alan_atama();
     test_yetki_delege_abi();
+
+    printf("\n--- Codegen coverage audit (runtime round-trip) ---\n");
+    test_audit_deref_okuma();
+    test_audit_stack_dizi_eleman_atama();
+    test_audit_nested_alan_atama();
+    test_audit_linear_kullan_round_trip();
+    test_audit_linear_imha();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
