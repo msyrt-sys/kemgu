@@ -3681,6 +3681,23 @@ static void esles_exhaustive_kontrol(TipKontrol *tk, const Dugum *d,
 
 /* === Deyim tip kontrolu === */
 
+/* C5 C.1: satirici_asm operandi icin izinli tip — yalniz kopyalanabilir
+ * primitif (tamN, dtamN, mantiksal, karakter) + ham *T pointer.
+ * Kesirli, metin, yapi, dizi, referans, tekkez, yetki: HAYIR (v1). */
+static int asm_operand_tipi_uygun(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        case TIP_TAM8:  case TIP_TAM16:  case TIP_TAM32:  case TIP_TAM64:
+        case TIP_DTAM8: case TIP_DTAM16: case TIP_DTAM32: case TIP_DTAM64:
+        case TIP_MANTIKSAL:
+        case TIP_KARAKTER:
+        case TIP_POINTER:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
     if (!d) return;
 
@@ -3951,6 +3968,66 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             tip_kontrol_deyim(tk, d->veri.guvensiz.blok);
             tk->guvensiz_baglam--;
             break;
+
+        /* === C5: satıriçi_asm tip kurallari ===
+         * G002 — yalniz guvensiz blokta.
+         * C.1 (lineer kara kutu) — operandlar yalniz kopyalanabilir
+         * primitif (tamN/dtamN/mantiksal/karakter/ham *T); tekkez/yetki
+         * DOGRUDAN GECEMEZ, cikti lineer OLAMAZ. Asm lineer-notr:
+         * lineer yukumluluk ne tuketilir ne uretilir (yalniz ham adres
+         * KEMGU seviyesinde cikarilip gecirilir).
+         * C.2 — yalniz guvensiz-gate; capability ERTELENDI (borc notu). */
+        case DUGUM_SATIRICI_ASM: {
+            if (tk->guvensiz_baglam == 0) {
+                tip_hata(tk, d, "G002",
+                         "satirici_asm yalniz guvensiz blok "
+                         "icinde kullanilabilir");
+            }
+            for (int i = 0; i < d->veri.satirici_asm.cikti_sayi; i++) {
+                const char *ad = d->veri.satirici_asm.cikti_adlar[i];
+                int uz = d->veri.satirici_asm.cikti_ad_uzlar[i];
+                const Sembol *s = sembol_bul(tk->scope, ad, uz);
+                if (!s) {
+                    tip_hata(tk, d, "T002",
+                             "asm cikti hedefi tanimsiz degisken");
+                    continue;
+                }
+                if (s->kategori != SEMBOL_DEGISKEN &&
+                    s->kategori != SEMBOL_PARAMETRE) {
+                    tip_hata(tk, d, "T022",
+                             "asm cikti hedefi degisken olmali (lvalue)");
+                    continue;
+                }
+                if (s->tip && tip_lineer_mi(s->tip)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm cikti hedefi lineer (tekkez/yetki) "
+                             "olamaz — asm lineer deger uretemez");
+                    continue;
+                }
+                if (!asm_operand_tipi_uygun(s->tip)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm operandi yalniz kopyalanabilir primitif "
+                             "(tamN/dtamN/mantiksal/karakter/*T)");
+                }
+            }
+            for (int i = 0; i < d->veri.satirici_asm.girdi_sayi; i++) {
+                TipBilgisi *t = tip_belirle(tk,
+                    d->veri.satirici_asm.girdi_ifadeler[i]);
+                if (!t || t->kategori == TIP_HATA) continue;
+                if (tip_lineer_mi(t)) {
+                    tip_hata(tk, d, "AS002",
+                             "lineer (tekkez/yetki) deger asm'e dogrudan "
+                             "gecemez — once ham adres cikar");
+                    continue;
+                }
+                if (!asm_operand_tipi_uygun(t)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm operandi yalniz kopyalanabilir primitif "
+                             "(tamN/dtamN/mantiksal/karakter/*T)");
+                }
+            }
+            break;
+        }
 
         case DUGUM_BLOK: {
             Scope *eski = tk->scope;

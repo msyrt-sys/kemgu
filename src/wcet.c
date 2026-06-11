@@ -223,6 +223,27 @@ static int64_t walk(WcetKontrol *wk, const Dugum *d) {
         case DUGUM_GUVENSIZ:
             return walk(wk, d->veri.guvensiz.blok);
 
+        /* === C5 C.3: satirici_asm — opak cevrim maliyeti ===
+         * Acik 'cevrim:' anotasyonu ZORUNLU; yoksa RT007 (sessizce 0
+         * SAYILMAZ). Anotasyon varsa girdi ifade maliyetlerine eklenir.
+         * Realtime-disi baglamda wcet hic kosulmadigi icin anotasyon
+         * dogal olarak opsiyonel kalir. */
+        case DUGUM_SATIRICI_ASM: {
+            if (d->veri.satirici_asm.cevrim < 0) {
+                rt_hata(wk, d, "RT007",
+                    "gercekzamanli govdede satirici_asm acik 'cevrim:' "
+                    "anotasyonu ister (opak maliyet 0 sayilamaz)");
+                return -1;
+            }
+            int64_t toplam = d->veri.satirici_asm.cevrim;
+            for (int i = 0; i < d->veri.satirici_asm.girdi_sayi; i++) {
+                int64_t c = walk(wk, d->veri.satirici_asm.girdi_ifadeler[i]);
+                if (c < 0) return -1;
+                toplam += c;
+            }
+            return toplam;
+        }
+
         /* === Blok / atama / deyim === */
         case DUGUM_BLOK: {
             int64_t toplam = 0;

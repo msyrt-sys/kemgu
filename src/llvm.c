@@ -2668,6 +2668,143 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return term;
         }
 
+        /* === C5: satirici_asm lowering ===
+         * call [ret] asm sideeffect "sablon", "kisitlar"(girdiler)
+         * 'sideeffect' HER ZAMAN (DCE asm'i silemesin — MMIO/privileged
+         * asm icin zorunlu; saf-hesap istisnasi v2). Kisit sirasi LLVM
+         * kurali: ciktilar, girdiler, bozulanlar (clobber).
+         * Cikti baglama GCC-tarzi lvalue: 0 cikti → void; 1 cikti →
+         * dogrudan tip + store; N cikti → {T0,T1,...} agregat +
+         * extractvalue + store'lar. Tuple tipi ICAT EDILMEZ (KEMGU
+         * yuzeyinde cikti zaten &degisken'lere yazilir). */
+        case DUGUM_SATIRICI_ASM: {
+            int n_out = d->veri.satirici_asm.cikti_sayi;
+            int n_in = d->veri.satirici_asm.girdi_sayi;
+            int n_clb = d->veri.satirici_asm.bozulan_sayi;
+
+            /* Cikti hedef alloca'lari (isim tablosundan) */
+            LlvmIsim **hedefler = NULL;
+            if (n_out > 0) {
+                hedefler = (LlvmIsim **)arena_ayir_sifir(g->arena,
+                    sizeof(LlvmIsim *) * (size_t)n_out);
+                if (!hedefler) return 0;
+                for (int i = 0; i < n_out; i++) {
+                    hedefler[i] = isim_bul(g,
+                        d->veri.satirici_asm.cikti_adlar[i],
+                        d->veri.satirici_asm.cikti_ad_uzlar[i]);
+                    if (!hedefler[i]) {
+                        fprintf(g->out,
+                            "  ; satirici_asm: cikti hedefi bulunamadi\n");
+                        return 0;
+                    }
+                }
+            }
+
+            /* Girdi ifadelerini degerlendir (asm cagrisindan ONCE) */
+            IfadeSonuc *girdiler = NULL;
+            if (n_in > 0) {
+                girdiler = (IfadeSonuc *)arena_ayir_sifir(g->arena,
+                    sizeof(IfadeSonuc) * (size_t)n_in);
+                if (!girdiler) return 0;
+                for (int i = 0; i < n_in; i++) {
+                    girdiler[i] = ifade_uret(g,
+                        d->veri.satirici_asm.girdi_ifadeler[i], NULL);
+                }
+            }
+
+            /* Donus tipi: void / T0 / {T0, T1, ...} */
+            char rett[256];
+            if (n_out == 0) {
+                snprintf(rett, sizeof(rett), "void");
+            } else if (n_out == 1) {
+                snprintf(rett, sizeof(rett), "%s",
+                         hedefler[0]->llvm_tip ? hedefler[0]->llvm_tip
+                                               : "i32");
+            } else {
+                int off = snprintf(rett, sizeof(rett), "{ ");
+                for (int i = 0; i < n_out && off < (int)sizeof(rett) - 8;
+                     i++) {
+                    off += snprintf(rett + off, sizeof(rett) - (size_t)off,
+                                    "%s%s", i ? ", " : "",
+                                    hedefler[i]->llvm_tip
+                                        ? hedefler[i]->llvm_tip : "i32");
+                }
+                snprintf(rett + off, sizeof(rett) - (size_t)off, " }");
+            }
+
+            /* call satiri */
+            int r = -1;
+            if (n_out == 0) {
+                fputs("  call void asm sideeffect \"", g->out);
+            } else {
+                r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s asm sideeffect \"",
+                        r, rett);
+            }
+            /* Sablon — IR string escape (global metin sabitleriyle ayni) */
+            {
+                const char *m = d->veri.satirici_asm.sablon;
+                int uz = d->veri.satirici_asm.sablon_uz;
+                for (int i = 0; i < uz; i++) {
+                    unsigned char ch = (unsigned char)m[i];
+                    if (ch == '\\' || ch == '"' || ch < 0x20 || ch >= 0x7F) {
+                        fprintf(g->out, "\\%02X", ch);
+                    } else {
+                        fputc(ch, g->out);
+                    }
+                }
+            }
+            fputs("\", \"", g->out);
+            /* Kisit listesi: ciktilar, girdiler, bozulanlar */
+            {
+                int ilk = 1;
+                for (int i = 0; i < n_out; i++) {
+                    if (!ilk) fputc(',', g->out);
+                    ilk = 0;
+                    fwrite(d->veri.satirici_asm.cikti_kisitlar[i], 1,
+                           (size_t)d->veri.satirici_asm.cikti_kisit_uzlar[i],
+                           g->out);
+                }
+                for (int i = 0; i < n_in; i++) {
+                    if (!ilk) fputc(',', g->out);
+                    ilk = 0;
+                    fwrite(d->veri.satirici_asm.girdi_kisitlar[i], 1,
+                           (size_t)d->veri.satirici_asm.girdi_kisit_uzlar[i],
+                           g->out);
+                }
+                for (int i = 0; i < n_clb; i++) {
+                    if (!ilk) fputc(',', g->out);
+                    ilk = 0;
+                    fwrite(d->veri.satirici_asm.bozulanlar[i], 1,
+                           (size_t)d->veri.satirici_asm.bozulan_uzlar[i],
+                           g->out);
+                }
+            }
+            fputs("\"(", g->out);
+            for (int i = 0; i < n_in; i++) {
+                if (i > 0) fputs(", ", g->out);
+                fprintf(g->out, "%s %%%d", girdiler[i].tip, girdiler[i].reg);
+            }
+            fputs(")\n", g->out);
+
+            /* Cikti(lar)i hedef alloca'lara yaz */
+            if (n_out == 1) {
+                fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                        rett, r, hedefler[0]->reg_no);
+            } else if (n_out > 1) {
+                for (int i = 0; i < n_out; i++) {
+                    const char *ti = hedefler[i]->llvm_tip
+                        ? hedefler[i]->llvm_tip : "i32";
+                    int er = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
+                            er, rett, r, i);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            ti, er, hedefler[i]->reg_no);
+                }
+            }
+            return 0;
+        }
+
         default:
             fprintf(g->out, "  ; deyim tipi %d desteklenmiyor\n", d->tip);
             return 0;

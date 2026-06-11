@@ -34,6 +34,9 @@
  *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *   G001: *T dereferans guvensiz blok disinda (C5 on-kosul #2)
  *   G002: satiriçi_asm guvensiz blok disinda (C5)
+ *   AS002: asm operandi uygunsuz tip — yalniz kopyalanabilir primitif
+ *          (tamN, dtamN, mantiksal, karakter, ham *T); tekkez/yetki
+ *          dogrudan gecemez, cikti lineer olamaz (C5 C.1 kara kutu)
  *
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
