@@ -51,6 +51,36 @@ SESSİZ DEĞİL: codegen görünür `; atama: heap dizi eleman atamasi runtime
 setter bekliyor` yorumu emit ediyor. Ayrı küçük görevde kapatılacak
 (runtime'a ~5 satır setter + llvm.c'de ~10 satır çağrı).
 
+## D-006 — `&p.x` / `&d[i]` parser önceliği: KAPSAM DIŞI (ifade.c) (2026-06-11)
+
+**Bulgu (matris C):** `&p.x` AST'de `(&p).x`, `&d[i]` ise `(&d)[i]` olarak parse
+ediliyor — dökümante önceliğe AYKIRI (CLAUDE.md: postfix `.`/`[]` seviye 8, prefix `&`
+seviye 7 → postfix daha sıkı bağlamalı → `&(p.x)` / `&(d[i])` olmalı). Yanlış ağaç
+codegen'de `(&p)`'yi ptr'e çevirip `.x`'i ptr-path GEP+load ile değer olarak okuyor;
+`artir(&p.x)` çağrısında i32 değer ptr-param'a geçip **segfault**.
+
+**Karar:** Fix `src/ifade.c`'de (prefix `&`/`*`/`-` operandının postfix zincirini de
+kapsaması) — **bu kampanyanın scope-lock'u `src/llvm.c + test/` DIŞINDA.** Ayrı parser
+görevi. Codegen tarafı doğru AST verilirse zaten hazır: `&x.a` için `erisim_lvalue`,
+`&d[i]` için INDEKS-GEP adresi mevcut; yalnız doğru ağaç gelmeli.
+
+**Etki:** Alan/eleman adresi alma (`&x.a`, `&d[i]`) ve bunları fonksiyona geçirme
+şu an kullanılamaz. `&v` (tüm değişken) ve `*(&v)` round-trip ÇALIŞIYOR.
+
+## D-007 — Struct-değerli diziler (`arr[i].alan`, `a.b[i].c`, `d[i][j]`): feature, ertelendi (2026-06-11)
+
+**Bulgu (matris B):** Eleman tipi struct olan diziler (`[P{..}, P{..}]`) — hem stack
+(`d[i].alan` okuma exit-yanlış) hem heap (`Dizi<P>` + `dizi_ekle(.., p)` → struct
+değerini `kdl_dizi_ekle_tam`'a i32 olarak geçirip clang-fail). Stack tarafı eleman-tipi
+takibi (INDEKS `beklenen`'e düşüyor, struct çıkaramıyor); heap tarafı KdlDizi yalnız
+i32/i64/ptr saklıyor (struct-by-value runtime gerektirir — D-003 sınıfı, `runtime/`
+scope dışı).
+
+**Karar:** Mekanik değil (DIZI_OLUSTUR struct eleman tipi + INDEKS eleman-tip
+propagasyonu + lvalue zinciri + runtime aggregate). Kampanyaya dahil EDİLMEDİ; ayrı
+"struct-değerli dizi" feature görevi. Skalerli diziler (`d[i]` oku+yaz) ÇALIŞIYOR
+(audit gap #2). Çok-boyut `d[i][j]` de aynı feature'a bağlı (ertelendi).
+
 ## D-005 [YÜKSEK] — İşaretsiz (dtamN) + i1 genişletme: signedness yan-kanalı (2026-06-11)
 
 **Karar:** `dtamN` (işaretsiz tamsayı) değerler IR'da işaret bilgisini `IfadeSonuc.isaretsiz`
