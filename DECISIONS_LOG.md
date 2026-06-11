@@ -51,6 +51,24 @@ SESSİZ DEĞİL: codegen görünür `; atama: heap dizi eleman atamasi runtime
 setter bekliyor` yorumu emit ediyor. Ayrı küçük görevde kapatılacak
 (runtime'a ~5 satır setter + llvm.c'de ~10 satır çağrı).
 
+## D-005 [YÜKSEK] — İşaretsiz (dtamN) + i1 genişletme: signedness yan-kanalı (2026-06-11)
+
+**Karar:** `dtamN` (işaretsiz tamsayı) değerler IR'da işaret bilgisini `IfadeSonuc.isaretsiz`
+/ `LlvmIsim.isaretsiz` / `IslevKayit.donus_isaretsiz` yan-kanalında taşır. İşaretsiz
+operand → `udiv`/`urem`/`lshr` + işaretsiz karşılaştırma yüklemi (`ult/ugt/ule/uge`);
+genişletme `zext`. **i1 (mantıksal) genişletme HER ZAMAN `zext`.**
+
+**Gerekçe / önceki SESSİZ-YANLIŞ durum:** Tüm tamsayılar işaretli lower ediliyordu:
+- `dtam8 200 > 100` → signed `icmp sgt` ile `-56 > 100` = YANLIŞ (probe exit 1, beklenen 42).
+- `dtam8 / dtam8` → `sdiv`, `dtam >> 1` → `ashr` (işaret bitini kopyalar).
+- **`doğru olarak tam32`** → `sext i1` = `-1`; `41 + (-1)` = 40 (beklenen 42). Bu en
+  yaygın gap — her bool→int dönüşümü yanlıştı.
+
+**Kapsam/sınırlar:** Yan-kanal değişken/parametre/dönüş/alan/cast üzerinden akıyor.
+İkili işlemde operandlardan biri işaretsizse işlem işaretsiz. Karışık işaretli/işaretsiz
+aritmetik tip kontrolde zaten engelli (örtük dönüşüm yok). `{reg,tip}` eski başlatıcılar
+C11 gereği `isaretsiz=0` (işaretli) → güvenli varsayılan, regresyon yok.
+
 ## D-004 — LAMBDA codegen: V2'ye ERTELENDİ (2026-06-11)
 
 Closure codegen (ortam yakalama, env struct, fonksiyon-pointer ABI'si) mekanik
