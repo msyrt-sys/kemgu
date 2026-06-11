@@ -153,6 +153,7 @@ static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
                               const Dugum *arg, const Dugum *beklenen);
 static int blok_uret(LlvmGen *g, const Dugum *blok);
 static void islev_uret(LlvmGen *g, const Dugum *islev);
+static int kosul_i1(LlvmGen *g, const Dugum *d);
 static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
 static int mono_emitlendi(LlvmGen *g, const char *mangled);
 static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
@@ -1344,6 +1345,47 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_IKILI: {
+            /* Kampanya seed (b) / D-002 [YUKSEK]: ve/veya KISA-DEVRE.
+             * Onceki durum: 'and/or i32' — HER IKI taraf da kosulsuz
+             * degerlendiriliyordu; yan etkili sag taraf (cagri) icin
+             * SESSIZ-YANLIS semantik. Standart kisa-devre: sol
+             * yeterliyse sag hic degerlendirilmez. phi yerine mevcut
+             * codegen idiomu olan bellek-slot deseni. Sonuc tipi i1
+             * (icmp/degil ile ayni yuzey). */
+            if (d->veri.ikili.op == OP_VE || d->veri.ikili.op == OP_VEYA) {
+                int ve_mi = (d->veri.ikili.op == OP_VE);
+                int slot = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca i1\n", slot);
+                int sol_i1 = kosul_i1(g, d->veri.ikili.sol);
+                int L_sag = yeni_label(g);
+                int L_kisa = yeni_label(g);
+                int L_son = yeni_label(g);
+                if (ve_mi) {
+                    /* sol dogruysa sag belirler; yanlissa sonuc yanlis */
+                    fprintf(g->out,
+                        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        sol_i1, L_sag, L_kisa);
+                } else {
+                    /* sol dogruysa sonuc dogru; yanlissa sag belirler */
+                    fprintf(g->out,
+                        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        sol_i1, L_kisa, L_sag);
+                }
+                fprintf(g->out, "bb%d:\n", L_sag);
+                int sag_i1 = kosul_i1(g, d->veri.ikili.sag);
+                fprintf(g->out, "  store i1 %%%d, ptr %%%d\n",
+                        sag_i1, slot);
+                fprintf(g->out, "  br label %%bb%d\n", L_son);
+                fprintf(g->out, "bb%d:\n", L_kisa);
+                fprintf(g->out, "  store i1 %s, ptr %%%d\n",
+                        ve_mi ? "false" : "true", slot);
+                fprintf(g->out, "  br label %%bb%d\n", L_son);
+                fprintf(g->out, "bb%d:\n", L_son);
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = load i1, ptr %%%d\n", r, slot);
+                IfadeSonuc s = { r, "i1" };
+                return s;
+            }
             const char *cmp_i = icmp_pred(d->veri.ikili.op);
             const char *op_beklenen = cmp_i ? NULL : beklenen;
             IfadeSonuc sol = ifade_uret(g, d->veri.ikili.sol, op_beklenen);
@@ -1375,8 +1417,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 case OP_CARPI: op = kesirli ? "fmul" : "mul"; break;
                 case OP_BOLU:  op = kesirli ? "fdiv" : "sdiv"; break;
                 case OP_MOD:   op = kesirli ? "frem" : "srem"; break;
-                case OP_VE:    op = "and"; break;
-                case OP_VEYA:  op = "or"; break;
+                /* OP_VE/OP_VEYA buraya ULASMAZ — yukarida kisa-devre
+                 * dali (D-002) tum ve/veya'yi intercept eder. */
                 /* Bit operatorleri — page table / kripto codegen */
                 case OP_BIT_VE:      op = "and"; break;
                 case OP_BIT_VEYA:    op = "or"; break;

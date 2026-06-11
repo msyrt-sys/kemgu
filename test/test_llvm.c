@@ -1500,6 +1500,30 @@ static void test_kampanya_modul_mangling(void) {
                "-> exit 42", rc == 42);
 }
 
+static void test_kampanya_short_circuit(void) {
+    /* D-002 [YUKSEK]: ve/veya kisa-devre. Onceki 'and/or i32' her iki
+     * tarafi da degerlendiriyordu — yan etki gozlemiyle dogrulanir:
+     * 'yanlis ve f()' ve 'dogru veya f()' f'i CAGIRMAMALI (boyut 0),
+     * 'dogru ve f()' CAGIRMALI (boyut 1). Deger semantigi de assert. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev ekle_ve_dogru(d: Dizi<tam32>) -> mant\xc4\xb1ksal { "
+        "dizi_ekle(d, 1); ver do\xc4\x9fru; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
+        "e\xc4\x9f" "er yanl\xc4\xb1\xc5\x9f ve ekle_ve_dogru(d) { ver 1; } "
+        "e\xc4\x9f" "er do\xc4\x9fru veya ekle_ve_dogru(d) { } "
+        "de\xc4\x9filse { ver 2; } "
+        "e\xc4\x9f" "er dizi_boyut(d) != 0 { ver 3; } "
+        "e\xc4\x9f" "er do\xc4\x9fru ve ekle_ve_dogru(d) { } "
+        "de\xc4\x9filse { ver 4; } "
+        "e\xc4\x9f" "er dizi_boyut(d) != 1 { ver 5; } "
+        "e\xc4\x9f" "er (do\xc4\x9fru ve do\xc4\x9fru) ve "
+        "(yanl\xc4\xb1\xc5\x9f veya do\xc4\x9fru) { ver 42; } "
+        "ver 6; }");
+    test_sonuc("kampanya: ve/veya kisa-devre (yan etki + deger) "
+               "-> exit 42", rc == 42);
+}
+
 static void test_audit_linear_imha(void) {
     /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
     int rc = derle_ve_calistir(
@@ -1793,6 +1817,7 @@ int main(void) {
 
     printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
     test_kampanya_modul_mangling();
+    test_kampanya_short_circuit();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
