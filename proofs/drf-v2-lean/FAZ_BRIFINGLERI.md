@@ -1,36 +1,33 @@
 # DRF Onarım v3 — Faz Brifingleri (ADIM 0 onayı sonrası)
 
-> **DURUM (2026-06-11 oturum sonu):**
-> ✅ **F1** (654a8ab) ✅ **F2** (ca07545) ✅ **F3** (e708ee1) ✅ **F4-yapısal + F6** (124052d).
-> Build 29/29 temiz; sorry **15 → 7** (hepsi iki iskelette: `adim_korunum` + progress ailesi).
+> **DURUM (2026-06-11 oturum 2 sonu — invariant onayi sonrasi):**
+> ✅ F1 ✅ F2 ✅ F3 ✅ F4-yapisal ✅ F6 ✅ **F4-ispat A+B (onayli invariant uctan uca)** ✅ **F5 TAM (progress_konf 12/12 — sorry suz!)**
+> Build 29/29 temiz; sorry **15 → 1**. Son commit: 0973d7d.
 >
-> **KALAN İŞ — F4-ispat (adim_korunum doldurma, ~600-900 satır):**
-> 1. Hata (7): Aile 2 exfalso (step_fault_preserves_typed deseni kopyalanır — mekanik).
-> 2. Tamam (11): bileşen-bileşen; redex-sonucu tiplemeleri ∃-form sayesinde
->    SigmaTipli/KanalTutarli'dan gelir. ÖNCE iki strengthen gerekir:
->    `l_gorev_baslat` + `r_gorev_baslat`'a çocuk-gövde premise'i (spawn edilen
->    thread'in ThreadTipliFull üyeliği için).
-> 3. Congruence (3): ∃-form IH YETMEZ — güçlendirilmiş "çıktı-ortam-kararlı"
->    yardımcı lemma gerekir: *iç adım, odaktaki ifadenin statik çıktı
->    ortamlarını (Λout, Ρout) korur* (örn. kullanIf x: statik çıktı
->    `update Λ x tuketildi` = runtime sonrası ortam — örnekler uyumlu).
-> 4. 🔴 **DUR-SOR (F4-ispat brifinginde tasarlanacak):** `AtamaSahipligi`
->    bileşeninin sSeqAtla altında korunumu eski invarianttan GELMEZ
->    (yeni odağa giren atamalar): tipleme↔sahiplik ilişkilendiren ek
->    invariant gerekli (aday: "thread, Ρ-erişilebilir donmuş-olmayan tüm
->    bölgelerinin güncel sahibidir" — spawn transferi ile bölümlenmiş form).
->    Bu tasarım kararı Mehmet'e sorulmalı.
+> **KALAN TEK SORRY — `adim_korunum` (NoFault.lean):**
+> 1. Hata (7): mekanik — h_konf.5 + step_fault_preserves_typed → S'.fault
+>    celiski (yarim gunluk is).
+> 2. Tamam (11): bilesen-bilesen (11 bilesen × 11 kural); en agirlari:
+>    ThreadTipliFull (odakli thread: redex-sonucu sabit-deger tiplemeleri
+>    ∃-form sayesinde SigmaTipli/KanalTutarli'dan; ODAKSIZ thread'ler:
+>    Ρ-degisen kurallarda (spawn/kanalGonder/dondur) RegionTamam'in
+>    guncellenmis-Ρ'da yeniden kurulmasi — kategori-degisim↔sahiplik-degisim
+>    es-zamanlilik lemmalari: bolgeOrtamSahipAta/Update/DondurBolge lookup
+>    iliskileri), HedefVar/HedefBolge sahipligi (yazilabilir-muafiyet sayesinde
+>    transfer adimlarinda otomatik; sahiplik-degismeyen adimlarda dogrudan),
+>    DegiskenlerBagli (sAtama store-push: BolgeAyrik — bolge-id↔var enjektifligi
+>    invarianti GEREKEBILIR — 12. bilesen adayi, kontrol et).
+> 3. Congruence (3): cikti-ortam-kararli guclendirilmis IH: "ic adim odakli
+>    ifadenin statik cikti ortamlarini (Λout, Ρout) korur" yardimci lemmasi
+>    + tipleme yeniden-birlestirme (l_seq/r_seq kompozisyonu Λa = ctx.lineer
+>    senkronu — sSeqAtla'daki l_sabit-identity arguman genellemesi).
+> Tahmin: ~500-800 satir. NOT: cocuk-thread ThreadTipliFull'u icin
+> cGorevBaslatTamam case'inde cocugun kod'u l/r_gorev_baslat cocuk-govde
+> premise'lerinden gelir (F4-A'da eklendi) — yalniz cocugun lineer ortami
+> yd-aktif listesi ile premise ortami birebir (tasarim gerekce notu dosyada).
 >
-> **KALAN İŞ — F5 (progress, ~500-800 satır):** `progress_konf` ambient-Γ formu
-> (KonfTipliFull tanıkları: AtamaSahipligi→h_owner, DegiskenlerBagli→konum/değer,
-> kanalIlk dolu/boş→cKanalAlTamam/Engelli); `threadFresh` tanığı (1 + max tid
-> lemması); kanal-transit invariant'ı (kuyruk dolu → kanalSahip bölge var —
-> KonfTipliFull'a 10. bileşen adayı). Eski kapalı-Γ `progress`/`progress_typed`
-> iskeletleri progress_konf gelince silinir.
->
-> **F6 kalanı:** typed_no_fault conjunct'ı zaten teoremde (adim_korunum'a bağlı);
-> F4-ispat kapanınca kemgu_soundness_v3 sorry'siz zincire oturur. README +
-> kapanış güncellemesi C5'te.
+> **F6 kalani:** adim_korunum kapaninca kemgu_soundness_v3 + iyiTipli_no_fault
+> sorry'suz zincire oturur → C5/C6 (sorry 0, merge adayi); README guncelle.
 
 **Onay:** 2026-06-11 (Mehmet) — ADIM 0 raporundaki 5 açık soru önerilen yönde onaylandı:
 (1) Sorun 3 kalıcı-form sahiplik, F2'ye dahil; (2) kapsam-dışı üçlü scope-guard;
