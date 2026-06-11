@@ -1,0 +1,38 @@
+// =====================================================================
+// MMIO Foundation typed-width (C9) — verify-gate fiksturu
+// =====================================================================
+// 16/64-bit MMIO load/store; opt -passes=verify TEMIZ gecmeli.
+// D9 (virtio-blk) ring-bellek deseninin minyaturu:
+//   - le16 avail/used idx (komsu 16-bit alanlar)
+//   - le64 descriptor addr
+// Komsu idx alanlari (taban+64 ve taban+66) eski (adres>>2) kelime-collapse
+// mock'ta ayni slota duserdi; byte-adreslenebilir mock'ta AYRI slotlar.
+// =====================================================================
+
+sabit RING_TABAN: tam64 = 167772160;   // 0x0A000000 — QEMU virt VirtIO slot 0
+sabit OFS_IDX:    tam64 = 64;           // le16 avail idx
+sabit OFS_IDX2:   tam64 = 66;           // le16 komsu idx (eski mock'ta cakisirdi)
+sabit OFS_DESC:   tam64 = 0;            // le64 descriptor addr
+
+// yetki<MMIO> THREAD edilir (alinir + "ver y" ile geri verilir).
+işlev ring_yaz(y: yetki<MMIO>) -> yetki<MMIO> {
+    mmio_yaz16(y, RING_TABAN + OFS_IDX, 10);
+    mmio_yaz16(y, RING_TABAN + OFS_IDX2, 32);
+    mmio_yaz64(y, RING_TABAN + OFS_DESC, 4096);
+    ver y;
+}
+
+işlev main() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    değişken y1: yetki<MMIO> = ring_yaz(y);
+    // le16 oku: surucu deseni — tam16 sonuc 'olarak tam32' ile genisletilir
+    // (KEMGU'da implicit int genisletme YOK; acik 'olarak' zorunlu).
+    değişken a: tam16 = mmio_oku16(y1, RING_TABAN + OFS_IDX);
+    değişken b: tam16 = mmio_oku16(y1, RING_TABAN + OFS_IDX2);
+    değişken d: tam64 = mmio_oku64(y1, RING_TABAN + OFS_DESC);
+    geri_al(y1);
+    // d le64 round-trip dogrulamasi; bozulursa erken cik.
+    eğer d != (4096 olarak tam64) { ver 1; }
+    // a(10) + b(32) = 42 — komsu 16-bit alanlar ayrisiyor (cakisma yok).
+    ver (a olarak tam32) + (b olarak tam32);
+}

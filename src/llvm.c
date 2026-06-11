@@ -1443,6 +1443,64 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     IfadeSonuc s = { 0, "void" };
                     return s;
                 }
+                /* mmio_oku16(y, adres) -> i16 (volatile 16-bit load — le16
+                 * ring alanlari: avail/used idx, descriptor flags/next). */
+                if (_uz == 10 && memcmp(_ca, "mmio_oku16", 10) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call i16 @kdl_mmio_oku16(i64 %%%d)\n",
+                        r, adr64);
+                    IfadeSonuc s = { r, "i16" };
+                    return s;
+                }
+                /* mmio_yaz16(y, adres, deger) -> void (volatile 16-bit store) */
+                if (_uz == 10 && memcmp(_ca, "mmio_yaz16", 10) == 0 &&
+                    d->veri.cagri.sayi == 3) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    IfadeSonuc val = ifade_uret(g,
+                        d->veri.cagri.argumanlar[2], "i16");
+                    int val16 = int_donustur(g, val.reg, val.tip, "i16");
+                    fprintf(g->out,
+                        "  call void @kdl_mmio_yaz16(i64 %%%d, i16 %%%d)\n",
+                        adr64, val16);
+                    IfadeSonuc s = { 0, "void" };
+                    return s;
+                }
+                /* mmio_oku64(y, adres) -> i64 (volatile 64-bit load — le64
+                 * descriptor addr alani). */
+                if (_uz == 10 && memcmp(_ca, "mmio_oku64", 10) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call i64 @kdl_mmio_oku64(i64 %%%d)\n",
+                        r, adr64);
+                    IfadeSonuc s = { r, "i64" };
+                    return s;
+                }
+                /* mmio_yaz64(y, adres, deger) -> void (volatile 64-bit store) */
+                if (_uz == 10 && memcmp(_ca, "mmio_yaz64", 10) == 0 &&
+                    d->veri.cagri.sayi == 3) {
+                    IfadeSonuc adr = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int adr64 = int_donustur(g, adr.reg, adr.tip, "i64");
+                    IfadeSonuc val = ifade_uret(g,
+                        d->veri.cagri.argumanlar[2], "i64");
+                    int val64 = int_donustur(g, val.reg, val.tip, "i64");
+                    fprintf(g->out,
+                        "  call void @kdl_mmio_yaz64(i64 %%%d, i64 %%%d)\n",
+                        adr64, val64);
+                    IfadeSonuc s = { 0, "void" };
+                    return s;
+                }
             }
 
             /* === SIMD Spec V1 intrinsicleri === */
@@ -2870,8 +2928,12 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
 
     /* MMIO Foundation — 32-bit register erisimi (kdl_mmio_*).
      * Host: mock tampon; bare-metal (-DKEMGU_BARE_METAL): volatile load/store. */
+    fputs("declare i16 @kdl_mmio_oku16(i64)\n", out);
+    fputs("declare void @kdl_mmio_yaz16(i64, i16)\n", out);
     fputs("declare i32 @kdl_mmio_oku32(i64)\n", out);
-    fputs("declare void @kdl_mmio_yaz32(i64, i32)\n\n", out);
+    fputs("declare void @kdl_mmio_yaz32(i64, i32)\n", out);
+    fputs("declare i64 @kdl_mmio_oku64(i64)\n", out);
+    fputs("declare void @kdl_mmio_yaz64(i64, i64)\n\n", out);
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
