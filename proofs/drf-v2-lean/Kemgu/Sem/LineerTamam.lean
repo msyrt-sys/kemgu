@@ -113,8 +113,9 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
       (cGorevBaslatTamam'in runtime guncellemesiyle birebir ayni fonksiyon).
       Use-after-move guard'i korunur: yakalanan hicbir v zaten tuketilmis
       olamaz — typing_excludes_cGorevBaslatHataLineerIhlal bunu kullanir. -/
-  | l_gorev_baslat (Γ : TipOrtam) (Λ : LineerOrtam) (yd : List VarId) (kod : Ifade) :
+  | l_gorev_baslat (Γ : TipOrtam) (Λ Λkod : LineerOrtam) (yd : List VarId) (kod : Ifade) :
                      (∀ v ∈ yd, lineerOrtamGet Λ v ≠ some Lineerlik.tuketildi) →
+                     LineerTamam Γ (yd.map (fun v => (v, Lineerlik.aktif))) kod Λkod →
                      LineerTamam Γ Λ (Ifade.gorevBaslat yd kod)
                                    (lineerTuketListe Λ yd)
 
