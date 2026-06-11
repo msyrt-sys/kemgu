@@ -18,7 +18,7 @@ open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru Kemgu.Drf.L0BolgeKorunum
     (s1_invariant "lookup thread donerse tek" formu; donmus/kanalSahip/bos
     thread olmadigi icin implicit olarak dislanir). -/
 theorem drf_l1_bolge_thread_tekilligi
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S₀ S : Konfigurasyon) (h_run : StepStar S₀ S)
     (h_init : s1_invariant S₀) :
     s1_invariant S :=
@@ -26,7 +26,7 @@ theorem drf_l1_bolge_thread_tekilligi
 
 /-- DRF-L1 (kagit fidelity formu, explicit exclusion listesi). -/
 theorem drf_l1_bolge_thread_tekilligi_kagit_form
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S₀ S : Konfigurasyon) (h_run : StepStar S₀ S)
     (h_init : s1_invariant S₀)
     (b : Bolge)
