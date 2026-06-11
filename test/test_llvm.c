@@ -1526,6 +1526,22 @@ static void test_matris_a_dtam_param_donus(void) {
                rc == 42);
 }
 
+static void test_matris_c_deref_ref_round_trip(void) {
+    /* Matris C: *(&v) skaler round-trip — &v gercek adres, *  yukler. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = 42; "
+        "g\xc3\xbcvensiz { ver *(&v); } ver 1; }");
+    test_sonuc("matris-C: *(&v) round-trip -> exit 42", rc == 42);
+}
+
+static void test_matris_b_deref_atama_t022(void) {
+    /* Matris B: *p = v spec geregi T022-RED (DOGRULA). Lvalue yalniz
+     * tanimlayici/erisim/indeks; ham pointer-deref hedefi degil. */
+    int ok = kemgu_check_basarili("test/snapshots/deref_atama_t022.kem");
+    test_sonuc("matris-B: *p=v -> T022 reddi (spec-dogru)", ok == 0);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
@@ -1867,6 +1883,10 @@ int main(void) {
     test_matris_a_dtam_bolme_kaydir();
     test_matris_a_i1_zext();
     test_matris_a_dtam_param_donus();
+
+    printf("\n--- Matris B+C: erisim/isaretci (in-scope green + DUR-SOR) ---\n");
+    test_matris_c_deref_ref_round_trip();
+    test_matris_b_deref_atama_t022();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

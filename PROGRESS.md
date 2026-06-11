@@ -18,8 +18,17 @@ Durum: ✅ yeşil/gap-yok · 🔧 gap bulundu+fix · ⏭️ kapsam dışı (DECI
 - ✅ tam8/16/32/64 işaretli aritmetik+karşılaştırma+bit+taşma+`~`+mod/neg (a5,a6,a10)
 - ✅ tam64 geniş (a7), kesirli64 aritmetik+karşılaştırma (a8)
 
-## B. Erişim/atama — ⬜
-## C. İşaretçi/referans zincirleri — ⬜
+## B. Erişim/atama
+- ✅ struct alan oku+yaz tek/iç içe (x.a, a.b.c — audit + nested fix); stack `d[i]`
+  oku+yaz (audit gap #2)
+- ⏭️ **D-007:** struct-değerli diziler — `arr[i].alan` (stack: eleman-tip takibi yok;
+  heap: KdlDizi skaler-only), `a.b[i].c`, `d[i][j]` çok-boyut. Feature/runtime, ertelendi.
+- ⏭️ heap `d[i]=v` → D-003 · `*p=v` → T022-red (DOĞRULANDI, spec-doğru)
+
+## C. İşaretçi/referans zincirleri
+- ✅ `&v` (skaler/struct — &Struct fix), `*(&v)` round-trip, &-param mutasyon (sret yolu)
+- ⏭️ **D-006:** `&p.x` → `(&p).x`, `&d[i]` → `(&d)[i]` — parser önceliği (ifade.c,
+  SCOPE DIŞI). Codegen doğru AST'ye hazır. Ayrı parser görevi.
 ## D. Kontrol akışı — ⬜
 ## E. Fonksiyon sınırı — ⬜
 ## F. Bölge/lineer/yetki etkileşimleri — ⬜

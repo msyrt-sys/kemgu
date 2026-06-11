@@ -1,0 +1,11 @@
+// Matris B: *p = v — spec gereği T022 ile REDDEDİLMELİ.
+// Lvalue yalnız tanımlayıcı/erişim/indeks; ham pointer-deref hedefi değil.
+işlev kur(p: *tam32) -> tam32 {
+    güvensiz { *p = 42; }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken v: tam32 = 0;
+    ver 0;
+}
