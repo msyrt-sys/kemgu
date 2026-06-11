@@ -174,12 +174,13 @@ theorem preservation_sigmaTipli
   -- TODO F4
   sorry
 
-/-- SahiplikTutarli korunumu — F4'te adim_korunum'un izdusumu. -/
+/-- SahiplikTutarli korunumu — F4'te adim_korunum'un izdusumu.
+    (F2: zaman'siz form.) -/
 theorem preservation_sahiplikTutarli
     (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
     (_h_step : Step S S')
-    (_h_sahip : SahiplikTutarli Ρ S.sahiplik S.zaman) :
-    SahiplikTutarli Ρ S'.sahiplik S'.zaman := by
+    (_h_sahip : SahiplikTutarli Ρ S.sahiplik) :
+    SahiplikTutarli Ρ S'.sahiplik := by
   -- TODO F4
   sorry
 

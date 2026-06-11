@@ -1,27 +1,16 @@
 /-
-KEMGU DRF Mekanize — No-Fault Catı Teoremi (Plan v2 Adim 7 + yarım kalan)
-Kaynak: belgeler/KEMGU_Mekanize_Onarim_Plan.md §6.3 No-Fault Theorem + §7.2 Adim 7
+KEMGU DRF Mekanize — No-Fault Catı Teoremi (Onarim v3 F2)
+Kaynak: belgeler/KEMGU_Mekanize_Onarim_Plan.md §6.3 + FAZ_BRIFINGLERI.md F2
 Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz
 
-Adim 7 (tam): Discharge ailesi catı + No-Fault teoremi.
+F2 guncellemesi: step_fault_preserves_typed yeni 21-kural Step formuna
+yeniden yazildi:
+- Tamam kurallari: h_S' esitliginden S'.fault = none dogrudan (rfl).
+- Hata kurallari: Aile 2 dispatch (F2 lookup-form + AtamaOdak).
+- Congruence kurallari (YENI): konfTipliFull_odak (Tipli §7) +
+  tersine-cevirme lemmalari + IH — SORRY'SUZ.
 
-Adim 7 ana basari (önceki commit): 35 Hata case sorry'si SmallStep
-strengthened Hata constructor'lar ile trivial kapandi (L4/L7/Drf/MemSafety).
-
-Adim 7 yarım kalan kısım (bu commit):
-1. SmallStep.lean: 8 Tamam Step constructor'a h_no_fault_target eklendi
-   (Plan §4.4 simetri — Tamam'lar fault'i preserve, Hata'lar set).
-2. step_fault_preserves_typed: 8 Tamam case full ispatli (h_no_fault_target);
-   7 Hata case sorry (Adim 8 — Plan §6.2 Aile 2 lemma'lari ile dolar).
-3. typed_no_fault: refl case full ispatli (S = S₀ → S.fault = S₀.fault);
-   step case sorry (Adim 8 — preservation_konfTipli + step_fault zinciri).
-
-Adim 8 hedefi: Aile 2 (Fault Impossibility) lemma'lari + preservation_konfTipli
-full proof → step_fault_preserves_typed Hata case'leri kapanir + typed_no_fault
-step case kapanir → sorry: 14 (toplam 16 - 2 Adim 7 iskelet kapanir).
-
-Onkosul: Adim 1.1-1.3 (Step dual), Adim 2 (StateTipli), Adim 3 (HasType),
-         Adim 5 (LineerTamam), Adim 6 (RegionTamam + Typed + KonfTipliFull).
+typed_no_fault step case: F4 hedefi (adim_korunum zinciri) — sorry kalir.
 -/
 
 import Kemgu.Sem.Core
@@ -42,142 +31,167 @@ open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
 -- §1. Tek-adim fault korunumu (typed varsayımı altında)
 -- ============================================================
 
-/-- Step tek-adim fault korunumu (Adim 7 yarım kalan):
+/-- Step tek-adim fault korunumu (F2 — TAM ISPATLI, sorry'suz):
     KonfTipliFull S + S.fault = none + Step S S' → S'.fault = none.
 
-    Tamam Step'leri: h_no_fault_target hipoteziyle direkt.
-    Hata Step'leri: typed varsayımı ile imkansiz (Plan §6.2 Aile 2 lemma'lari);
-    V1 Adim 7'de Hata case'leri sorry — Adim 8 hedef.
-
-    Aile 2 lemma'lari (Adim 8):
-    - typing_excludes_sAtamaHataDonmus: Typed → Ρ x = some b, b.kategori ≠ donmus
-      + KonfTipliFull.SahiplikTutarli → isFrozen S k.bolge ⟹ kategori donmus
-      → çelişki h_frozen ile
-    - typing_excludes_sAtamaHataSahipDegil: Typed + SahiplikTutarli → owner consistency
-    - typing_excludes_cGorevBaslatHataLineerIhlal: LineerTamam → yakalama tuketildi
-    - typing_excludes_cKanalGonderHataLineerTuket: LineerTamam → vId tuketilmemis
-    - typing_excludes_cDondurHataZatenDonmus: RegionTamam → b kategori ≠ donmus
-    - typing_excludes_sLinKullanHataZatenTuketildi: LineerTamam → x aktif
-    - typing_excludes_sLinImhaHataZatenTuketildi: aynı sLinKullan -/
+    Tamam: h_S' esitligi fault := none icerir.
+    Hata: Aile 2 typing_excludes_* lemmalari ile exfalso.
+    Congruence: konfTipliFull_odak ile ic konfigurasyonun tipliligi
+    kurulur, IH uygulanir. -/
 theorem step_fault_preserves_typed
     (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (S S' : Konfigurasyon) (h_step : Step S S')
     (h_typed_S : KonfTipliFull Γ Λ Ρ S)
-    (_h_no_fault : S.fault = none) :
+    (h_no_fault : S.fault = none) :
     S'.fault = none := by
-  cases h_step with
-  -- Tamam case'leri: h_no_fault_target ile direkt (Adim 7 yarım kalan)
-  | sAtamaTamam _ _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | cGorevBaslatTamam _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | cGorevBirlestirTamam _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | cKanalGonderTamam _ _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | cKanalAlTamam _ _ _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | cDondurTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | sLinKullanTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  | sLinImhaTamam _ _ _ _ _ _ _ _ _ h_no_fault_target =>
-    exact h_no_fault_target
-  -- Hata case'leri: Adim 8 hedef — Plan §6.2 Aile 2 lemma'lari ile exfalso.
-  | sAtamaHataDonmus ctx x _ k h_in h_ifade h_frozen _ _ _ _ _ _ h_x_bolge =>
-    -- Adim 8 V2: Aile 2 region dispatch — typing_excludes_sAtamaHataDonmus
-    have h_thread := h_typed_S.2.1
-    obtain ⟨h_typed_exists, _h_bridge⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    have h_bolge_eq := h_typed_S.2.2.2.2.2.1
-    have h_frozen_kat := h_typed_S.2.2.2.2.2.2.1
-    exact (typing_excludes_sAtamaHataDonmus
-            Γ Λ Ρ x _ τ' Λ'' Ρ'' h_typed S k
-            h_bolge_eq h_frozen_kat h_x_bolge h_frozen).elim
-  | sAtamaHataSahipDegil ctx x _ k h_in h_ifade h_not_owner _ _ _ _ _ _ h_x_bolge =>
-    -- Adim 8 V2 P5: Aile 2 ownership dispatch — typing_excludes_sAtamaHataSahipDegil
-    have h_atama_sahip := h_typed_S.2.2.2.2.2.2.2
-    exact (typing_excludes_sAtamaHataSahipDegil
-            S ctx x _ k h_in h_ifade h_atama_sahip h_x_bolge h_not_owner).elim
-  | cGorevBaslatHataLineerIhlal ctx _ yd kod vIhlal h_in h_ifade h_vTuketildi _ _ _ _ _ _ h_vIhlal_in =>
-    -- Adim 8 V2 P6: Aile 2 linear dispatch — typing_excludes_cGorevBaslatHataLineerIhlal
-    have h_thread := h_typed_S.2.1
-    -- ana ctx'in Typed'i (l_gorev_baslat icin)
-    obtain ⟨h_typed_exists, _⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    -- faulting ctx' + onun koprusu
-    obtain ⟨ctx', h_ctx'_in, _h_tid, h_tuket⟩ := h_vTuketildi
-    obtain ⟨_, h_bridge'⟩ := h_thread ctx' h_ctx'_in
-    exact (typing_excludes_cGorevBaslatHataLineerIhlal
-            Γ Λ Ρ yd kod vIhlal τ' Λ'' Ρ'' h_typed ctx' h_bridge' h_vIhlal_in h_tuket).elim
-  | cKanalGonderHataLineerTuket ctx kId vId h_in h_ifade h_tuket _ _ _ _ _ _ =>
-    -- Adim 8 P2: Aile 2 dispatch — typing_excludes_cKanalGonderHataLineerTuket
-    have h_thread := h_typed_S.2.1
-    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    exact (typing_excludes_cKanalGonderHataLineerTuket
-            Γ Λ Ρ kId vId τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
-  | cDondurHataZatenDonmus ctx b h_in h_ifade h_zaten _ _ _ _ _ _ =>
-    -- Adim 8 V2: Aile 2 region dispatch — typing_excludes_cDondurHataZatenDonmus
-    have h_thread := h_typed_S.2.1
-    obtain ⟨h_typed_exists, _h_bridge⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    have h_bolge_eq := h_typed_S.2.2.2.2.2.1
-    have h_frozen_kat := h_typed_S.2.2.2.2.2.2.1
-    exact (typing_excludes_cDondurHataZatenDonmus
-            Γ Λ Ρ b τ' Λ'' Ρ'' h_typed S
-            h_bolge_eq h_frozen_kat h_zaten).elim
-  | sLinKullanHataZatenTuketildi ctx x_pat h_in h_ifade h_tuket _ _ _ _ _ _ =>
-    -- Adim 8 P1: Aile 2 dispatch — typing_excludes_sLinKullanHataZatenTuketildi
-    have h_thread := h_typed_S.2.1
-    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    exact (typing_excludes_sLinKullanHataZatenTuketildi
-            Γ Λ Ρ x_pat τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
-  | sLinImhaHataZatenTuketildi ctx x_pat h_in h_ifade h_tuket _ _ _ _ _ _ =>
-    -- Adim 8 P1: Aile 2 dispatch — typing_excludes_sLinImhaHataZatenTuketildi
-    have h_thread := h_typed_S.2.1
-    obtain ⟨h_typed_exists, h_bridge⟩ := h_thread ctx h_in
-    obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_exists
-    rw [h_ifade] at h_typed
-    exact (typing_excludes_sLinImhaHataZatenTuketildi
-            Γ Λ Ρ x_pat τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket).elim
+  revert h_typed_S h_no_fault
+  induction h_step with
+  -- ============ Tamam kurallari: dogrudan ============
+  | sVarOku S S' ts1 ts2 ctx x b v h_t h_if h_b h_v h_S' =>
+      intro _ _; subst h_S'; rfl
+  | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
+      intro _ _; subst h_S'; rfl
+  | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
+      intro _ _; subst h_S'; rfl
+  | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
+      intro _ _; subst h_S'; rfl
+  | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
+      intro _ _; subst h_S'; rfl
+  | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
+      intro _ _; subst h_S'; rfl
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+      intro _ _; subst h_S'; rfl
+  | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
+      intro _ _; subst h_S'; rfl
+  | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
+      intro _ _; subst h_S'; rfl
+  | sLinKullanTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro _ _; subst h_S'; rfl
+  | sLinImhaTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro _ _; subst h_S'; rfl
+  -- ============ Hata kurallari: Aile 2 exfalso ============
+  | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, _⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataDonmus Γ Λ Ρ x _ τ' Λ'' Ρ'' h_typed S b
+        h_typed_S.2.2.2.2.2.1 h_typed_S.2.2.2.2.2.2.1 h_b h_frozen
+  | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_not_owner h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      exact typing_excludes_sAtamaHataSahipDegil S ctx x _ b h_ctx_in h_if
+        h_typed_S.2.2.2.2.2.2.2 h_b h_not_owner
+  | cGorevBaslatHataLineerIhlal S S' ts1 ts2 ctx yd kod vIhlal h_t h_if h_in h_tuket h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, h_bridge⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cGorevBaslatHataLineerIhlal Γ Λ Ρ yd kod vIhlal
+        τ' Λ'' Ρ'' h_typed ctx h_bridge h_in h_tuket
+  | cKanalGonderHataLineerTuket S S' ts1 ts2 ctx k vId h_t h_if h_tuket h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, h_bridge⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cKanalGonderHataLineerTuket Γ Λ Ρ k vId
+        τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket
+  | cDondurHataZatenDonmus S S' ts1 ts2 ctx b h_t h_if h_zaten h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, _⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cDondurHataZatenDonmus Γ Λ Ρ b τ' Λ'' Ρ'' h_typed S
+        h_typed_S.2.2.2.2.2.1 h_typed_S.2.2.2.2.2.2.1 h_zaten
+  | sLinKullanHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, h_bridge⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinKullanHataZatenTuketildi Γ Λ Ρ x
+        τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket
+  | sLinImhaHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_typed_S _
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, h_bridge⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinImhaHataZatenTuketildi Γ Λ Ρ x
+        τ' Λ'' Ρ'' h_typed ctx h_bridge h_tuket
+  -- ============ Congruence kurallari: odaklama + IH ============
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_typed_S h_no_fault
+      subst h_S1 h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, _⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      have h_typed_a := typed_seq_sol h_typed
+      have h_konf1 : KonfTipliFull Γ Λ Ρ (ifadeyleKonf S ts1 ts2 ctx a) := by
+        show KonfTipliFull Γ Λ Ρ
+          { S with thread := ts1 ++ { ctx with ifade := a } :: ts2 }
+        exact konfTipliFull_odak Γ Λ Ρ S ts1 ts2 ctx a h_typed_S h_t h_typed_a
+          (fun y h => by rw [h_if]; exact AtamaOdak.seq_sol a b y h)
+      have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx a).fault = none := by
+        simpa [ifadeyleKonf] using h_no_fault
+      simpa using ih h_konf1 h_nf1
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_typed_S h_no_fault
+      subst h_S1 h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, _⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      have h_typed_e := typed_atama_ic h_typed
+      have h_konf1 : KonfTipliFull Γ Λ Ρ (ifadeyleKonf S ts1 ts2 ctx e) := by
+        show KonfTipliFull Γ Λ Ρ
+          { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 }
+        exact konfTipliFull_odak Γ Λ Ρ S ts1 ts2 ctx e h_typed_S h_t h_typed_e
+          (fun y h => by rw [h_if]; exact AtamaOdak.atama_ic x e y h)
+      have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
+        simpa [ifadeyleKonf] using h_no_fault
+      simpa using ih h_konf1 h_nf1
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_typed_S h_no_fault
+      subst h_S1 h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨⟨τ', Λ'', Ρ'', h_typed⟩, _⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      have h_typed_e := typed_guvensiz_ic h_typed
+      have h_konf1 : KonfTipliFull Γ Λ Ρ (ifadeyleKonf S ts1 ts2 ctx e) := by
+        show KonfTipliFull Γ Λ Ρ
+          { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 }
+        exact konfTipliFull_odak Γ Λ Ρ S ts1 ts2 ctx e h_typed_S h_t h_typed_e
+          (fun y h => by rw [h_if]; exact AtamaOdak.guvensiz_ic e y h)
+      have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
+        simpa [ifadeyleKonf] using h_no_fault
+      simpa using ih h_konf1 h_nf1
 
 
 -- ============================================================
--- §2. No-Fault catı teoremi (Plan v2 §6.3) — Adim 7 yarım kalan
+-- §2. No-Fault catı teoremi (Plan v2 §6.3)
 -- ============================================================
 
-/-- TYPED NO-FAULT CATI (Plan v2 §6.3) — Adim 7 ana hedef teorem (yarım kalan):
+/-- TYPED NO-FAULT CATI (Plan v2 §6.3):
+    KonfTipliFull S₀ → StepStar S₀ S → S.fault = none.
 
-    Iyi-tipli baslangic konfigurasyon (KonfTipliFull) ile baslatilan
-    herhangi bir yurutme zinciri (StepStar S₀ S) fault state'e ulasmaz.
-
-    Kagit ifadesi (Plan §6.3):
-      IyiTipli(Π) ⟹ ∀ S ∈ Reach(S₀(Π)) : S.fault = none
-
-    Bizim V1 form:
-      KonfTipliFull Γ Λ Ρ S₀ → StepStar S₀ S → S.fault = none
-
-    KonfTipliFull S₀ tanim'i `S₀.fault = none` icerir (§5 alti-konuum
-    KonfTipliFull RegionTamam.lean'de).
-
-    Ispat:
-      Induction h_run:
-        refl: S = S₀ → S.fault = S₀.fault = none ✓ (KonfTipliFull S₀)
-        step S0 S1 Send hStep hStar IH:
-          step_fault_preserves_typed hStep → S1.fault = none
-          IH (S1 KonfTipli korunum + S1.fault=none): preservation_konfTipli
-            (Adim 4.4 sorry — Adim 8 hedef) gerek
-
-    V1 Adim 7 yarım kalan durumu:
-    - refl case FULL ispatli ✓
-    - step case sorry (Adim 8 — preservation_konfTipli + step_fault zinciri) -/
+    refl: KonfTipliFull S₀'in 5. bileseni.
+    step: step_fault_preserves_typed + KonfTipliFull KORUNUMU gerekir —
+    korunum F4 `adim_korunum` hedefi (sorry). -/
 theorem typed_no_fault
     (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
     (S₀ S : Konfigurasyon)
@@ -186,60 +200,10 @@ theorem typed_no_fault
     S.fault = none := by
   induction h_run with
   | refl _ =>
-    -- S = S₀, KonfTipliFull S₀ → S₀.fault = none (5. alti-konuum;
-    -- Adim 8 V2'de S.bolge=Ρ + kopru eklendi → fault projeksiyonu .2.2.2.2.1)
     exact h_typed_init.2.2.2.2.1
   | step S0 S1 Send _hStep _hStar _IH =>
-    -- TODO Adim 8: step_fault_preserves_typed hStep (KonfTipliFull S0)
-    --              (KonfTipliFull S₀.5 = S₀.fault = none) → S1.fault = none
-    -- Sonra preservation_konfTipli ile KonfTipliFull S1 ve IH(S1 typed, fault=none)
+    -- TODO F4: adim_korunum (KonfTipliFull S0 → Step → ∃ Λ' Ρ',
+    -- KonfTipliFull S1) + IH zinciri. Bkz. FAZ_BRIFINGLERI.md F4.
     sorry
-
-
--- ============================================================
--- §3. Plan v2 §6.2 Discharge ailelerinin V1 durumu
--- ============================================================
-
-/-
-PLAN v2 §6.2 4 Discharge ailesinin V1 (Adim 7 + yarım kalan) durumu:
-
-AILE 1 — Normal Guards (Typed + KonfTipliFull → Step.Ok guard'lar):
-  Durum V1: ADIM 8 hedef. Progress + Preservation full proof'unun
-  Step.Ok constructor insasi argumani olarak gerekir.
-
-AILE 2 — Fault Impossibility (Typed + KonfTipliFull → Step.Fault imkansiz):
-  Durum V1: Adim 7'de 35 L4/L7/Drf/MemSafety Hata case'i strengthen sayesinde
-  REDUNDANT kapandı. step_fault_preserves_typed Hata case'leri Aile 2 lemma'lari
-  ile dolar. Plan §6.2 7 typing_excludes_* lemma (Aile2.lean):
-    typing_excludes_sLinKullanHataZatenTuketildi   ✓ P1 (l_kullan kopru)
-    typing_excludes_sLinImhaHataZatenTuketildi     ✓ P1 (l_imha kopru)
-    typing_excludes_cKanalGonderHataLineerTuket    ✓ P2 (l_kanal_gonder strengthen)
-    typing_excludes_sAtamaHataDonmus               ✓ P3 (Ρ→Konf + h_x_bolge + kopru)
-    typing_excludes_cDondurHataZatenDonmus         ✓ P4 (r_dondur strengthen + kopru)
-    typing_excludes_sAtamaHataSahipDegil           ✓ P5 (AtamaSahipligi invariant + h_x_bolge)
-    typing_excludes_cGorevBaslatHataLineerIhlal    ✓ P6 (use-after-move + l_gorev_baslat strengthen)
-  >>> TUM 7 Aile 2 lemma'si TAMAM → step_fault_preserves_typed (7 Hata + 8 Tamam)
-  TAM ISPATLI (sorry-suz). Kalan: typed_no_fault step + preservation_konfTipli
-  (kopru/invariant korunumu, Configuration-form).
-
-AILE 3 — Linear Discharge (LineerTamam → linear guard'lar):
-  Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_lineer_caller temin eder.
-
-AILE 4 — Region Discharge (RegionTamam → bolge guard'lar):
-  Durum V1: ADIM 8 hedef. cGorevBaslatTamam h_sahip temin eder.
-
-NO-FAULT CATI (§6.3):
-  Adim 7 yarım: refl case FULL, step case sorry.
-  Adim 8 full: step_fault_preserves Hata + preservation_konfTipli zinciri.
-
-ADIM 7 GERCEKLEŞEN (iki commit'te):
-  - Onceki: 35 sorry KAPANDI (-33 net) + 2 iskelet (NoFault statement-only)
-  - Bu: Tamam strengthen + step_fault_preserves Tamam case full + typed_no_fault
-    refl case full. Yeni 7 Hata sorry + 1 step case sorry. Eski 2 statement-only
-    sorry'leri yapısal proof'a evrildi. Net sorry: +6 (geçici artış, yapısal
-    genişleme). Adim 8'de bu 8 yeni sorry düşer + Adim 4/5/6 iskelet sorry'leri
-    (14) dolar → C5 hedef: 0 sorry.
--/
-
 
 end Kemgu.Discharge.NoFault

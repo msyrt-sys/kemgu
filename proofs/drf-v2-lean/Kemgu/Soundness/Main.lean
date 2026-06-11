@@ -31,13 +31,13 @@ open Kemgu.MemSafety.Theorems
 -- ============================================================
 
 /-- Memory Safety per-Step: her yeni memYaz event'i icin yazan thread
-    hedef bolgenin sahibidir. T1 tam form'un per-Step ifadesi. -/
+    hedef bolgenin GUNCEL sahibidir (F2 zaman'siz form). -/
 def MemSafe_perStep (S : Konfigurasyon) : Prop :=
   ∀ (S' : Konfigurasyon) (_h_step : Step S S')
     (t : ThreadId) (k : Konum) (v : Deger),
     Olay.memYaz t k v ∈ S'.iz →
     Olay.memYaz t k v ∉ S.iz →
-    sahiplikGet S.sahiplik (k.bolge, S.zaman) = some (Sahip.thread t)
+    sahiplikGet S.sahiplik k.bolge = some (Sahip.thread t)
 
 /-- Data Race Freedom: s1_invariant'in StepStar boyunca korunmasi.
     DRF Teorem 4' bundled form (same-Step + s1 preservation). -/

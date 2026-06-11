@@ -36,51 +36,11 @@ open Kemgu.Sem.Core Kemgu.Sem.StateTipli
      Kemgu.Sem.HasType Kemgu.Sem.LineerTamam
 
 -- ============================================================
--- §1. BolgeOrtam helper'lari (Ρ lookup zaten StateTipli'de;
---     update + sahip atama + dondur burada)
+-- §1. BolgeOrtam helper'lari — F2'de StateTipli'ye TASINDI
+-- (bolgeOrtamUpdate / bolgeKategoriDegistir / bolgeOrtamSahipAta /
+--  bolgeOrtamDondurBolge / bolgeleriTopla artik StateTipli'de —
+--  Step kurallari da runtime S.bolge guncellemeleri icin kullaniyor.)
 -- ============================================================
-
-/-- BolgeOrtam Ρ update: bir VarId'nin Bolge atamasini degistir.
-    Implementasyon: prepend (newest-wins) — sahiplikSet/lineerOrtamUpdate
-    ile ayni desen (Core.lean §7.1, LineerTamam §2). -/
-def bolgeOrtamUpdate (Ρ : BolgeOrtam) (x : VarId) (b : Bolge) : BolgeOrtam :=
-  (x, b) :: Ρ
-
-/-- Bolge kategori degistirme yardimi: id korur, kategori degisir.
-    R-GOREV (sahip), R-KANAL (kanalRho), R-PAYLAS (donmus) gecislerinde
-    kullanilir. -/
-def bolgeKategoriDegistir (b : Bolge) (yeni : BolgeKategorisi) : Bolge :=
-  { b with kategori := yeni }
-
-/-- R-GOREV destekleyici: yakalama listesi yd icin her v VarId'nin
-    Bolge atamasini kategori = sahip(t) olarak guncelle.
-    Plan v2 §3.4 r_gorev_baslat:
-        Ρ' = Ρ ∪ {bolge(v) ↦ ρ_sahip(tYeni) : v ∈ yd}
-
-    V1 implementasyonu: foldl ile her v icin orijinal Ρ'dan lookup,
-    sonuca prepend (newest-wins'ten dolayi acc'taki yeni entry eski
-    Ρ entry'sini shadow eder). -/
-def bolgeOrtamSahipAta (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
-    : BolgeOrtam :=
-  yd.foldl
-    (fun acc v =>
-      match bolgeOrtamGet Ρ v with
-      | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
-      | none   => acc)
-    Ρ
-
-/-- R-PAYLAS destekleyici: Bolge b'yi iceren tum entry'leri kategori =
-    donmus olarak guncelle (id eslesmesi uzerinden).
-    Plan v2 §3.4 r_dondur: Ρ' = Ρ.update b ρ_donmus
-
-    V1 implementasyonu: List.map ile her entry kontrol; id eslesirse
-    kategori donmus'a degisir. -/
-def bolgeOrtamDondurBolge (Ρ : BolgeOrtam) (b : Bolge) : BolgeOrtam :=
-  Ρ.map (fun
-    | (x, br) =>
-      if br.id = b.id
-        then (x, bolgeKategoriDegistir br BolgeKategorisi.donmus)
-        else (x, br))
 
 
 -- ============================================================

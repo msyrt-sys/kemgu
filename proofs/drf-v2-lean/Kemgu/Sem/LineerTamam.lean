@@ -46,21 +46,10 @@ def Tip.lineerMi : Tip → Bool
 
 
 -- ============================================================
--- §2. LineerOrtam helper'lari (Λ lookup + update)
+-- §2. LineerOrtam helper'lari — F2'de Core'a TASINDI
+-- (lineerOrtamGet / lineerOrtamUpdate / lineerTuket / lineerTuketListe
+--  artik Kemgu.Sem.Core'da — Step kurallari da kullaniyor.)
 -- ============================================================
-
-/-- LineerOrtam Λ lookup: bir VarId'nin Lineerlik durumu.
-    `none` = degisken kayitsiz; `some Lineerlik.aktif` = tuketilmemis;
-    `some Lineerlik.tuketildi` = tuketildi. -/
-def lineerOrtamGet : LineerOrtam → VarId → Option Lineerlik
-  | [], _ => none
-  | (k, v) :: rest, key => if k = key then some v else lineerOrtamGet rest key
-
-/-- LineerOrtam Λ update: bir VarId'nin Lineerlik durumunu degistir.
-    Implementasyon: prepend (newest-wins) — yeni entry eski entry'i mantiken
-    override eder. sahiplikSet ile ayni desen (Core.lean §7.1). -/
-def lineerOrtamUpdate (Λ : LineerOrtam) (x : VarId) (lin : Lineerlik) : LineerOrtam :=
-  (x, lin) :: Λ
 
 
 -- ============================================================
