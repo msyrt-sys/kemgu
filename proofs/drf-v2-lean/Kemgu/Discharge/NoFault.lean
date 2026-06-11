@@ -30,12 +30,13 @@ import Kemgu.Sem.StateTipli
 import Kemgu.Sem.HasType
 import Kemgu.Sem.LineerTamam
 import Kemgu.Sem.RegionTamam
+import Kemgu.Sem.Tipli
 import Kemgu.Discharge.Aile2
 
 namespace Kemgu.Discharge.NoFault
 open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
      Kemgu.Sem.HasType Kemgu.Sem.LineerTamam Kemgu.Sem.RegionTamam
-     Kemgu.Discharge.Aile2
+     Kemgu.Sem.Tipli Kemgu.Discharge.Aile2
 
 -- ============================================================
 -- §1. Tek-adim fault korunumu (typed varsayımı altında)

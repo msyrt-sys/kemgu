@@ -12,20 +12,22 @@ Bu katman lineer durum (Lambda) gecislerini izler:
 - Cifte consume yasagi
 
 HasType (Adim 3) sadece tip uyumu; LineerTamam onun uzerine lineerlik
-bilgisi ekler. Adim 6 RegionOK + Typed conjunction'i sonu KonfTipli.ThreadTipli
-(Adim 2 iskelet `True`) gercek tanim alir.
+bilgisi ekler.
 
-Onkosul: Adim 1.1-1.3 (Step dual), Adim 2 (StateTipli), Adim 3 (HasType).
+Onarim v3 F1 NOT: Bu dosya artik YALNIZ judgment katmanidir. TypedAdim5
+SILINDI (Tipli.Typed kullanilir); progress_lineer/preservation_lineer
+Meta/ProgressKorunum.lean'e tasinip Typed-formda birlestirildi.
+SmallStep/ProgressKorunum import'lari kaldirildi (judgment Step'e bagimsiz).
+
+Onkosul: Adim 2 (StateTipli), Adim 3 (HasType).
 -/
 
 import Kemgu.Sem.Core
-import Kemgu.Sem.SmallStep
 import Kemgu.Sem.StateTipli
 import Kemgu.Sem.HasType
-import Kemgu.Sem.ProgressKorunum
 
 namespace Kemgu.Sem.LineerTamam
-open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli Kemgu.Sem.HasType Kemgu.Sem.ProgressKorunum
+open Kemgu.Sem.Core Kemgu.Sem.StateTipli Kemgu.Sem.HasType
 
 -- ============================================================
 -- §1. Tip.lineerMi — bir tipin lineer kategoride olmasi
@@ -176,112 +178,14 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
 
 
 -- ============================================================
--- §4. Typed conjunction iskelet (Plan v2 §3.6)
--- HasType + LineerTamam birlesimi. Adim 6 RegionOK eklenince tam Typed.
--- ============================================================
-
-/-- Typed iskelet (Adim 5 hali): HasType + LineerTamam conjunction.
-    Adim 6'da RegionOK eklenip Typed Γ Λ Ρ e τ Λ' Ρ' formuna tamamlanir.
-
-    Mevcut Adim 5 hali (Plan §3.6 "Typed structure"):
-        Typed Γ Λ e τ Λ' = HasType Γ e τ ∧ LineerTamam Γ Λ e Λ'
-
-    Adim 6 hedef:
-        Typed Γ Λ Ρ e τ Λ' Ρ' = HasType Γ e τ
-                              ∧ LineerTamam Γ Λ e Λ'
-                              ∧ RegionTamam Γ Ρ e Ρ' -/
-structure TypedAdim5 (Γ : TipOrtam) (Λ : LineerOrtam)
-                     (e : Ifade) (τ : Tip)
-                     (Λ' : LineerOrtam) : Prop where
-  hasType    : HasType Γ e τ
-  lineerOK   : LineerTamam Γ Λ e Λ'
-
-
--- ============================================================
--- §5. Progress + Preservation update (Plan §7.2 Adim 5)
--- LineerTamam katmani eklenmiş yeni statement'lar.
+-- §4. Yardimci abbrev
 -- ============================================================
 
 /-- "Bos lineer ortam" — program seviyesi (kapatilmis tipli ifadeler). -/
 abbrev lineerOrtamBos : LineerOrtam := []
 
-/-- Progress (LineerTamam ile) — Plan v2 §3.7 + §7.2.
-
-    Adim 4.2'deki progress (yalnız HasType) artik LineerTamam ile zenginlesti:
-    "Iyi-tipli + Lineer-uyumlu program ya degerdir ya da Step alabilir."
-
-    V1 sinir: full proof Adim 7 Discharge sonrasi (Hata case'leri exfalso).
-    Su an statement-only iskelet. -/
-theorem progress_lineer
-    (e : Ifade) (τ : Tip) (Λ' : LineerOrtam)
-    (_h_typed_lin : TypedAdim5 tipOrtamBos lineerOrtamBos e τ Λ')
-    (S : Konfigurasyon) (ctx : ThreadCtx)
-    (_h_ctx_in : ctx ∈ S.thread) (_h_ctx_ifade : ctx.ifade = e)
-    (_h_no_fault : S.fault = none) :
-    IsValue e ∨ ∃ S', Step S S' := by
-  -- TODO: Adim 5.2 — TypedAdim5 destructure (hasType + lineerOK) ve
-  -- progress (Adim 4.2 kismi) + LineerTamam ek bilgisi ile case analizi.
-  -- Hata case'leri Adim 7 Discharge ile.
-  sorry
-
-/-- Preservation (LineerTamam ile) — Plan v2 §3.7 + §7.2.
-
-    Step S → S' altinda Typed (HasType + LineerTamam) korunur.
-    LineerTamam Λ -> Λ' gecisi Step ifadeleri tarafindan tutulur.
-
-    V1 sinir: full proof Adim 7 Discharge sonrasi. -/
-theorem preservation_lineer
-    (S S' : Konfigurasyon) (_h_step : Step S S')
-    (ctx : ThreadCtx) (τ : Tip) (Λ' : LineerOrtam)
-    (_h_in : ctx ∈ S.thread)
-    (_h_typed_lin : TypedAdim5 tipOrtamBos lineerOrtamBos ctx.ifade τ Λ')
-    (_h_no_fault_target : S'.fault = none) :
-    ∃ ctx' ∈ S'.thread, ∃ Λ'_new,
-      ctx'.tid = ctx.tid ∧
-      TypedAdim5 tipOrtamBos lineerOrtamBos ctx'.ifade τ Λ'_new := by
-  -- TODO: Adim 5.3 — Step constructor case analizi:
-  --   Hata (7): exfalso + h_no_fault_target vs h_fault
-  --   Tamam (8): hasType korunumu (Adim 4.3) + lineerTamam korunumu
-  --     - cGorevBaslatTamam: linearYakalananlar tuketim (h_lineer_caller)
-  --     - sLinKullanTamam/sLinImhaTamam: Λ' = Λ \ {x ↦ tuketildi}
-  --     - diger Tamam'lar: Λ degismez (genel kural)
-  sorry
-
-
--- ============================================================
--- §6. Adim 5 sub-step durumu — V1 sinir + sonraki adim
--- ============================================================
-
-/-
-Adim 5 (LineerTamam katmani) — DURUM 2026-05-22:
-
-✅ Adim 5.1 (bu commit): LineerTamam inductive (13 kural) + helper'lar
-   + TypedAdim5 conjunction + sub-lemma statement'lar (sorry)
-
-⏳ Adim 5.2 (gelecek): progress_lineer full proof
-   - HasType (Adim 3) + LineerTamam case analizi
-   - Hata Step constructor'lari Adim 7 Discharge ile exfalso
-
-⏳ Adim 5.3 (gelecek): preservation_lineer full proof
-   - 15 Step constructor case
-   - LineerTamam Λ → Λ' korunumu per constructor
-
-KEMGU ile uyum:
-- TipOrtam (Γ) zaten Adim 2'de
-- LineerOrtam (Λ) Core.lean §5'te var (List (VarId × Lineerlik))
-- Lineerlik (aktif | tuketildi) Core.lean §5'te
-- Tip.lineerMi yeni eklendi (yalniz tekkez true)
-
-Adim 6 hedef (sonraki):
-- RegionTamam (RegionOK) katmani — bolge gecisleri (Plan v2 §3.4)
-- Typed full = HasType ∧ LineerTamam ∧ RegionTamam (Plan §3.6)
-- KonfTipli.ThreadTipli iskelet (Adim 2 placeholder True) Typed ile dolar
-- L0-L7 lemmalari Typed hipotezi alabilir
-
-V1 sinir notu: KEMGU semantik karmaşıklığı (Configuration Step) klasik
-Wright-Felleisen lone-form'a uyumsuz. progress_lineer ve
-preservation_lineer V1'de full proof Adim 7 Discharge + No-Fault çatı
-sonrasi tractable.
--/
+-- Onarim v3 F1 NOT: TypedAdim5 + progress_lineer + preservation_lineer
+-- SILINDI/TASINDI — birlesik Typed formu Kemgu/Sem/Tipli.lean'de,
+-- meta-teoremler Kemgu/Meta/ProgressKorunum.lean'de (Typed-formda dedup).
 
 end Kemgu.Sem.LineerTamam
