@@ -1469,6 +1469,30 @@ static void test_audit_nested_alan_atama(void) {
                rc == 42);
 }
 
+static void test_audit_linear_kullan_round_trip(void) {
+    /* Gap #4+#5: tekkez_yarat onceden TANIMSIZ sembol (link hatasi),
+     * kullan(e) sessiz 0 donerdi. Zero-overhead pass-through dogrula:
+     * tekkez_yarat(42) -> kullan(t) -> 42. Lineer muhasebe tip
+     * kontrolde (program --check'ten de gecer). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = kullan(t); "
+        "ver v; }");
+    test_sonuc("audit: tekkez_yarat -> kullan round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_linear_imha(void) {
+    /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "imha(t); "
+        "ver 42; }");
+    test_sonuc("audit: imha(t) lineer dispose -> exit 42", rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1747,6 +1771,8 @@ int main(void) {
     test_audit_deref_okuma();
     test_audit_stack_dizi_eleman_atama();
     test_audit_nested_alan_atama();
+    test_audit_linear_kullan_round_trip();
+    test_audit_linear_imha();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
