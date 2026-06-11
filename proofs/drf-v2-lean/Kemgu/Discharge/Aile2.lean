@@ -32,10 +32,12 @@ import Kemgu.Sem.StateTipli
 import Kemgu.Sem.HasType
 import Kemgu.Sem.LineerTamam
 import Kemgu.Sem.RegionTamam
+import Kemgu.Sem.Tipli
 
 namespace Kemgu.Discharge.Aile2
 open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.StateTipli
      Kemgu.Sem.HasType Kemgu.Sem.LineerTamam Kemgu.Sem.RegionTamam
+     Kemgu.Sem.Tipli
 
 -- ============================================================
 -- §1. Linear Aile 2 lemma'lari (FULL ispat — Plan §5.2.3 kopru)

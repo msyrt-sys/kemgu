@@ -3,12 +3,10 @@ KEMGU DRF Mekanize — ConfigTyped Iskelet (Plan v2 Adim 2)
 Kaynak (kagit formel): belgeler/KEMGU_Mekanize_Onarim_Plan.md §5
 Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
 
-Adim 2 NOT (iskelet): Plan v2 §5'in 5 alt-yapisindan 4'u tam tanimli
-burada (DegerTipli + SigmaTipli + SahiplikTutarli + KanalTutarli). 5.
-alt-yapi (ThreadTipli) Adim 5+6 sonrasi (LinearOK + RegionOK eklenince)
-Typed predicate'ine baglanip gercek tanimla doldurulacak — su an Adim
-2'de bilinçli olarak placeholder True (asamali insa zorunlu;
-KONFTIPLI uretim usulu degil — Plan §1.1 vacuous elestirisi farkindayim).
+Onarim v3 F1 NOT: Bu dosya artik yalniz state-tipi YAPI TASLARINI icerir
+(TipOrtam/BolgeOrtam + DegerTipli + SigmaTipli + SahiplikTutarli +
+KanalTutarli). Eski ThreadTipli/KonfTipli placeholder'lari (True) SILINDI —
+gercek formlar Kemgu/Sem/Tipli.lean'de (ThreadTipliFull + KonfTipliFull).
 
 Onkosul: Adim 1.1 (Konfigurasyon.fault), Adim 1.2-1.3 (Step Tamam/Hata dual).
 -/
@@ -161,86 +159,12 @@ def KanalTutarli (Γ : TipOrtam) (Ρ : BolgeOrtam)
 
 
 -- ============================================================
--- §6. ThreadTipli (ThreadsTyped) — Plan v2 §5.2.3 — ISKELET
--- Adim 5+6 sonrasi (LinearOK + RegionOK + Typed) gercek tanimla
--- doldurulacak. Su an placeholder True.
+-- §6. NOT (Onarim v3 F1): ThreadTipli/KonfTipli placeholder'lari SILINDI
 -- ============================================================
-
-/-- Thread'lerin tip-uyumu (Adim 2 placeholder).
-
-    Plan v2 §5.2.3 hedef tam tanim:
-    ```
-    ∀ ctx ∈ threads,
-      ∃ Λ_ctx Ρ_ctx τ Λ' Ρ',
-        Typed Γ Λ_ctx Ρ_ctx ctx.ifade τ Λ' Ρ'
-        ∧ ctx.lineer ≈ Λ_ctx
-    ```
-
-    Suanki state: `Typed` predicate'i Adim 3-6'da inductive olarak
-    eklenecek (HasType + LinearOK + RegionOK birlesimi). Adim 6 sonu
-    gercek tanim doldurulur. Burada placeholder `True` — BU BILINCLI
-    GECICI iskelet, Plan §1.1 "vacuous predicates" elestirisi farkinda;
-    UYGUNSUZ degil cunku asamali insa gerektirir (Plan §7.2). -/
-def ThreadTipli (_Γ : TipOrtam) (_Λ : LineerOrtam) (_Ρ : BolgeOrtam)
-                (_threads : List ThreadCtx) : Prop :=
-  True
-
-
--- ============================================================
--- §7. KonfTipli (ConfigTyped) — Plan v2 §5.2 — ANA MERKEZ PREDIKAT
--- Tüm 5 alt-yapi + fault yokluğu birleşimi.
--- ============================================================
-
-/-- Konfigurasyon tipli — Plan v2 §5'in merkezi predicate'i.
-
-    Discharge lemmalari (Adim 7) typed program ile state-typing koprusunu
-    bu predicate uzerinden kurar. Her Step constructor (Tamam veya Hata)
-    icin KonfTipli korunumu Preservation theorem'in (Adim 4+) induktif
-    cekirdegi.
-
-    Mevcut Adim 2 state'i:
-    - SigmaTipli (StoreTyped): tam tanim ✓
-    - ThreadTipli (ThreadsTyped): iskelet `True` (Adim 6 sonu tam)
-    - SahiplikTutarli (SahiplikConsistent): tam tanim ✓
-    - KanalTutarli (KanalConsistent): tam tanim ✓
-    - S.fault = none: tam (Adim 1.1 Konfigurasyon.fault := none default'tan)
--/
-def KonfTipli (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
-              (S : Konfigurasyon) : Prop :=
-  SigmaTipli Γ Ρ S.store
-  ∧ ThreadTipli Γ Λ Ρ S.thread
-  ∧ SahiplikTutarli Ρ S.sahiplik S.zaman
-  ∧ KanalTutarli Γ Ρ S.kanal
-  ∧ S.fault = none
-
-
--- ============================================================
--- §8. Temel teknik lemmalar (iskelet)
--- Korunum lemmalari (Preservation_*) Adim 4'te Progress + Preservation
--- ile birlikte eklenir.
--- ============================================================
-
-/-- KonfTipli yapilandirma yardimi (5-tuple introduce). -/
-theorem konfTipli_intro
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam) (S : Konfigurasyon)
-    (h_store  : SigmaTipli Γ Ρ S.store)
-    (h_thread : ThreadTipli Γ Λ Ρ S.thread)
-    (h_sahip  : SahiplikTutarli Ρ S.sahiplik S.zaman)
-    (h_kanal  : KanalTutarli Γ Ρ S.kanal)
-    (h_fault  : S.fault = none) :
-    KonfTipli Γ Λ Ρ S :=
-  ⟨h_store, h_thread, h_sahip, h_kanal, h_fault⟩
-
-/-- KonfTipli'den bilesenleri cikarma (5-tuple projection). -/
-theorem konfTipli_elim
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam) (S : Konfigurasyon)
-    (h : KonfTipli Γ Λ Ρ S) :
-    SigmaTipli Γ Ρ S.store
-    ∧ ThreadTipli Γ Λ Ρ S.thread
-    ∧ SahiplikTutarli Ρ S.sahiplik S.zaman
-    ∧ KanalTutarli Γ Ρ S.kanal
-    ∧ S.fault = none :=
-  h
-
+-- Eski §6 `ThreadTipli := True` ve §7 `KonfTipli` (placeholder bileşenli)
+-- ADIM 0 raporu Sorun 1 envanterindeydi. Gercek formlar:
+--   Kemgu/Sem/Tipli.lean → ThreadTipliFull + KonfTipliFull
+-- Import dongusu kok nedeni F1 katmanlamasiyla kalkti (judgment'lar ile
+-- birlesim/meta katmanlari ayrildi) — placeholder'a gerek kalmadi.
 
 end Kemgu.Sem.StateTipli

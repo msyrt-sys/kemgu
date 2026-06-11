@@ -9,12 +9,14 @@ import Kemgu.Sem.SmallStep
 import Kemgu.Sem.StateTipli
 -- Plan v2 Adim 3: Minimal HasType (klasik tip sistemi, 12 Ifade kurali)
 import Kemgu.Sem.HasType
--- Plan v2 Adim 4.1: Progress + Preservation iskelet (statement'lar sorry, Adim 4.2-4.4 doldurur)
-import Kemgu.Sem.ProgressKorunum
--- Plan v2 Adim 5: LineerTamam katmani (Plan §3.3 LinearOK) + TypedAdim5 conjunction
+-- Plan v2 Adim 5: LineerTamam katmani (Plan §3.3 LinearOK) — yalniz judgment (F1)
 import Kemgu.Sem.LineerTamam
--- Plan v2 Adim 6: RegionTamam katmani (Plan §3.4 RegionOK) + Typed full + ThreadTipliFull + KonfTipliFull
+-- Plan v2 Adim 6: RegionTamam katmani (Plan §3.4 RegionOK) — yalniz judgment (F1)
 import Kemgu.Sem.RegionTamam
+-- Onarim v3 F1: Typed + ThreadTipliFull + KonfTipliFull birlesim katmani
+import Kemgu.Sem.Tipli
+-- Onarim v3 F1: Meta katmani — progress/preservation iskeletleri (F4/F5 doldurur)
+import Kemgu.Meta.ProgressKorunum
 -- Plan v2 Adim 7: No-Fault catı teoremi (Plan §6.3) + Discharge ailesi V1 durum yorumu
 import Kemgu.Discharge.NoFault
 -- Plan v2 Adim 8 P1: Aile 2 Discharge (Fault Impossibility) — 2 Linear FULL + 5 sorry
