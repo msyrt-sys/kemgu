@@ -133,6 +133,7 @@ typedef struct LlvmGen {
      * tamam/hata/değer/hiç yapıcıları tam tipi (T, H) buradan okur. */
     const Dugum *beklenen_tip;       /* yapıcının inşa edeceği sonuç/seçimlik tip düğümü */
     const Dugum *aktif_donus_dugum;  /* aktif islevin donus tipi AST düğümü (ver için) */
+    int hata_sayisi;                 /* C5 AS001: olumcul codegen hatasi sayaci */
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -2678,6 +2679,30 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
          * extractvalue + store'lar. Tuple tipi ICAT EDILMEZ (KEMGU
          * yuzeyinde cikti zaten &degisken'lere yazilir). */
         case DUGUM_SATIRICI_ASM: {
+            /* C5 AS001: arch-tag, hedef mimariyle uyusmali. Uyusmazsa
+             * asm EMIT EDILMEZ (bozuk IR yasak) + olumcul hata sayilir;
+             * cagiran (ana.c) derlemeyi hata koduyla bitirir. */
+            {
+                const char *hm = KEMGU_HEDEF_MIMARI;
+                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                if (!d->veri.satirici_asm.mimari ||
+                    d->veri.satirici_asm.mimari_uz != hm_uz ||
+                    memcmp(d->veri.satirici_asm.mimari, hm,
+                           (size_t)hm_uz) != 0) {
+                    fprintf(stderr,
+                        "hata[AS001]: satirici_asm mimari etiketi '%.*s' "
+                        "hedef mimariyle uyusmuyor (hedef: %s) — "
+                        "satir %d\n",
+                        d->veri.satirici_asm.mimari_uz,
+                        d->veri.satirici_asm.mimari
+                            ? d->veri.satirici_asm.mimari : "",
+                        hm, d->satir);
+                    g->hata_sayisi++;
+                    fprintf(g->out,
+                        "  ; AS001: mimari uyusmazligi — asm emit edilmedi\n");
+                    return 0;
+                }
+            }
             int n_out = d->veri.satirici_asm.cikti_sayi;
             int n_in = d->veri.satirici_asm.girdi_sayi;
             int n_clb = d->veri.satirici_asm.bozulan_sayi;
@@ -2987,12 +3012,13 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
 
 /* === Public API === */
 
-void llvm_ir_uret(const Dugum *program, FILE *out) {
-    if (!out) return;
+int llvm_ir_uret(const Dugum *program, FILE *out) {
+    if (!out) return 0;
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    fputs("target triple = \"x86_64-pc-windows-gnu\"\n\n", out);
+    /* C5/C8: triple tek kaynaktan (llvm.h) — hedefe-duyarli secim C8'de */
+    fputs("target triple = \"" KEMGU_HEDEF_TRIPLE "\"\n\n", out);
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
@@ -3085,11 +3111,11 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
 
     if (!program || program->tip != DUGUM_PROGRAM) {
         fputs("; (program AST'si yok)\n", out);
-        return;
+        return 0;
     }
 
     Arena *a = arena_olustur(0);
-    if (!a) return;
+    if (!a) return 0;
 
     LlvmGen g;
     memset(&g, 0, sizeof(g));
@@ -3296,5 +3322,7 @@ void llvm_ir_uret(const Dugum *program, FILE *out) {
                         bs->mangled);
     }
 
+    int hatalar = g.hata_sayisi;
     arena_serbest(a);
+    return hatalar;
 }
