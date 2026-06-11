@@ -37,5 +37,15 @@ Durum: ✅ yeşil/gap-yok · 🔧 gap bulundu+fix · ⏭️ kapsam dışı (DECI
 - struct param+dönüş by-value, karşılıklı özyineleme, dizi param (`için`),
   aggregate (sonuç) dönüş + extractvalue, @modul.ad çağrı (codegen; T016 type-check
   ayrı), **yetki<R> param sınır pass-through**, **tekkez<T> param sınır round-trip**.
-## F. Bölge/lineer/yetki etkileşimleri — ⬜
-## stretch — ⬜
+## F. Bölge/lineer/yetki etkileşimleri — ✅ (concurrency hariç)
+- ✅ tekkez çağrıdan geçiyor + eşleş-kolunda tüketim (sonuç<tekkez<T>,H>); tekkez
+  çağrı-zinciri tüketim; yetki<R> MMIO capability-gate round-trip + geri_al tüketimi;
+  ÇAPRAZ capability+lineer birlikte (ikisi de tüketiliyor); LR002 struct-lineer-alan reddi.
+- ⏭️ **D-008:** dondur/kanal/görev codegen YOK (concurrency runtime V2). "Lineer değer
+  kanaldan geçiyor" buna bağlı. İŞARETLENDİ.
+
+## stretch — ✅ (asm-struct hariç)
+- ✅ generic (`$` yolu) instantiation round-trip; tek-varyant çeşit + eşleş; çeşit
+  codegen yukarıdaki F/D hücrelerinde (sonuç<tekkez>, eşleş, exhaustive).
+- ⏭️ **D-009:** satıriçi_asm çıktısı struct alanına (`&r.deger`) — parser çıktı clause
+  düz &var only. Ertelendi.

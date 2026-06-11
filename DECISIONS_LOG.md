@@ -81,6 +81,25 @@ propagasyonu + lvalue zinciri + runtime aggregate). Kampanyaya dahil EDİLMEDİ;
 "struct-değerli dizi" feature görevi. Skalerli diziler (`d[i]` oku+yaz) ÇALIŞIYOR
 (audit gap #2). Çok-boyut `d[i][j]` de aynı feature'a bağlı (ertelendi).
 
+## D-008 — Concurrency (`dondur`/`kanal`/`görev`) codegen: YOK, işaretlendi (2026-06-11)
+
+**Bulgu (matris F):** `dondur(&değişken x)` → `call ptr @dondur(...)` tanımsız sembol
+(link-fail); `kanal_oluştur()` → T002 tanımsız. Concurrency / DRF V1 yalnız statik
+tip-kontrol katmanında (görev/kanal keyword + DRF001-005); runtime thread/channel +
+codegen YOK (CLAUDE.md: "Plan Karar F V2 — runtime thread/channel implementasyonu").
+
+**Karar:** Kampanya dışı — codegen değil, koca bir runtime+codegen alt-sistemi (V2).
+İŞARETLENDİ. "Lineer değer kanaldan geçiyor" hücresi (F çapraz) buna bağlı, ertelendi.
+
+## D-009 — `satıriçi_asm` çıktısı struct alanına (`çıktı("=r", &r.deger)`): parser, ertelendi (2026-06-11)
+
+**Bulgu (stretch):** asm `çıktı` clause grammar yalnız düz `&değişken_adi` kabul ediyor
+(parser.c P269 TANIMLAYICI bekler); `&r.deger` alan-erişimi P264 ile parse-fail.
+
+**Karar:** C5 v1 tasarımı asm çıktısını düz değişkene bağlar (deyim-form). Alan hedefi
+istenirse: asm→temp değişken sonra `r.deger = temp`. Grammar genişletmesi parser.c'de
+(scope dışı) + dil kararı. Ertelendi. Çekirdek asm (düz &var çıktı) ÇALIŞIYOR (C5).
+
 ## D-005 [YÜKSEK] — İşaretsiz (dtamN) + i1 genişletme: signedness yan-kanalı (2026-06-11)
 
 **Karar:** `dtamN` (işaretsiz tamsayı) değerler IR'da işaret bilgisini `IfadeSonuc.isaretsiz`
