@@ -161,7 +161,338 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
 
 
 -- ============================================================
--- §3. NOT (Onarim v3 F1): birlesim + meta katmanlari TASINDI
+-- §3. Ortam-guncelleme lookup lemmalari (Onarim v3 kapanis)
+-- sahipAta / update / dondurBolge'nin bolgeOrtamGet analizleri —
+-- regionTamam_yaz_geri + regionTamam_transport'un mekanik temeli.
+-- ============================================================
+
+/-- update lookup: anahtar eslesirse yeni deger, degilse eski. -/
+theorem bolgeOrtamUpdate_get (Ρ : BolgeOrtam) (x : VarId) (b : Bolge)
+    (y : VarId) :
+    bolgeOrtamGet (bolgeOrtamUpdate Ρ x b) y
+      = if x = y then some b else bolgeOrtamGet Ρ y := rfl
+
+/-- sahipAta foldl govdesi: y yd'de degilse acc-lookup korunur. -/
+theorem sahipAta_foldl_notin (Ρ : BolgeOrtam) (t : ThreadId) :
+    ∀ (yd : List VarId) (acc : BolgeOrtam) (y : VarId), y ∉ yd →
+    bolgeOrtamGet (yd.foldl (fun acc v =>
+        match bolgeOrtamGet Ρ v with
+        | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
+        | none   => acc) acc) y = bolgeOrtamGet acc y
+  | [], _, _, _ => rfl
+  | v :: rest, acc, y, h => by
+      have h_ne : v ≠ y := fun he => h (he ▸ List.Mem.head _)
+      have h_rest : y ∉ rest := fun hm => h (List.Mem.tail _ hm)
+      rw [List.foldl_cons, sahipAta_foldl_notin Ρ t rest _ y h_rest]
+      cases h_lk : bolgeOrtamGet Ρ v with
+      | some b =>
+          show bolgeOrtamGet
+              ((v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc) y
+            = bolgeOrtamGet acc y
+          rw [bolgeOrtamGet, if_neg h_ne]
+      | none => rfl
+
+/-- sahipAta foldl govdesi: Ρ-kayitsiz y icin acc-lookup korunur. -/
+theorem sahipAta_foldl_none (Ρ : BolgeOrtam) (t : ThreadId) :
+    ∀ (yd : List VarId) (acc : BolgeOrtam) (y : VarId),
+    bolgeOrtamGet Ρ y = none →
+    bolgeOrtamGet (yd.foldl (fun acc v =>
+        match bolgeOrtamGet Ρ v with
+        | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
+        | none   => acc) acc) y = bolgeOrtamGet acc y
+  | [], _, _, _ => rfl
+  | v :: rest, acc, y, h_none => by
+      rw [List.foldl_cons, sahipAta_foldl_none Ρ t rest _ y h_none]
+      cases h_lk : bolgeOrtamGet Ρ v with
+      | some b =>
+          have h_ne : v ≠ y := by
+            intro he; rw [he, h_none] at h_lk; cases h_lk
+          show bolgeOrtamGet
+              ((v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc) y
+            = bolgeOrtamGet acc y
+          rw [bolgeOrtamGet, if_neg h_ne]
+      | none => rfl
+
+/-- sahipAta: y ∉ yd → lookup degismez. -/
+theorem sahipAta_get_notin (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (y : VarId) (h : y ∉ yd) :
+    bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y = bolgeOrtamGet Ρ y :=
+  sahipAta_foldl_notin Ρ t yd Ρ y h
+
+/-- sahipAta: Ρ-kayitsiz y → lookup yine kayitsiz. -/
+theorem sahipAta_get_none (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (y : VarId) (h : bolgeOrtamGet Ρ y = none) :
+    bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y = none :=
+  (sahipAta_foldl_none Ρ t yd Ρ y h).trans h
+
+/-- sahipAta: y ∈ yd ∧ kayitli → lookup = sahip-recat'li deger. -/
+theorem sahipAta_get_in (Ρ : BolgeOrtam) (t : ThreadId) :
+    ∀ (yd : List VarId) (acc : BolgeOrtam) (y : VarId) (b : Bolge),
+    y ∈ yd → bolgeOrtamGet Ρ y = some b →
+    bolgeOrtamGet (yd.foldl (fun acc v =>
+        match bolgeOrtamGet Ρ v with
+        | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
+        | none   => acc) acc) y
+      = some (bolgeKategoriDegistir b (BolgeKategorisi.sahip t))
+  | [], _, _, _, h, _ => absurd h (List.not_mem_nil)
+  | v :: rest, acc, y, b, h_mem, h_lk => by
+      by_cases h_rest : y ∈ rest
+      · rw [List.foldl_cons]
+        exact sahipAta_get_in Ρ t rest _ y b h_rest h_lk
+      · have h_vy : v = y := by
+          cases h_mem with
+          | head => rfl
+          | tail _ hr => exact absurd hr h_rest
+        subst h_vy
+        rw [List.foldl_cons, sahipAta_foldl_notin Ρ t rest _ v h_rest, h_lk]
+        show bolgeOrtamGet ((v, _) :: acc) v = _
+        rw [bolgeOrtamGet, if_pos rfl]
+
+/-- sahipAta lookup tersine-analizi: sonuc ya yd-recat'inden ya eskidir. -/
+theorem sahipAta_get_inv (Ρ : BolgeOrtam) (t : ThreadId) :
+    ∀ (yd : List VarId) (acc : BolgeOrtam) (y : VarId) (bb : Bolge),
+    bolgeOrtamGet (yd.foldl (fun acc v =>
+        match bolgeOrtamGet Ρ v with
+        | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
+        | none   => acc) acc) y = some bb →
+    (∃ b0, bolgeOrtamGet Ρ y = some b0
+        ∧ bb = bolgeKategoriDegistir b0 (BolgeKategorisi.sahip t) ∧ y ∈ yd)
+    ∨ bolgeOrtamGet acc y = some bb
+  | [], _, _, _, h => Or.inr h
+  | v :: rest, acc, y, bb, h => by
+      rw [List.foldl_cons] at h
+      rcases sahipAta_get_inv Ρ t rest _ y bb h with
+          ⟨b0, h_b0, h_bb, h_in⟩ | h_acc
+      · exact Or.inl ⟨b0, h_b0, h_bb, List.Mem.tail _ h_in⟩
+      · cases h_lk : bolgeOrtamGet Ρ v with
+        | none => rw [h_lk] at h_acc; exact Or.inr h_acc
+        | some b =>
+            rw [h_lk] at h_acc
+            by_cases h_vy : v = y
+            · subst h_vy
+              rw [bolgeOrtamGet, if_pos rfl] at h_acc
+              exact Or.inl ⟨b, h_lk, (Option.some.inj h_acc).symm,
+                List.Mem.head _⟩
+            · rw [bolgeOrtamGet, if_neg h_vy] at h_acc
+              exact Or.inr h_acc
+
+/-- sahipAta id-koruma: kayitli degiskenin lookup'u id-esit kalir. -/
+theorem sahipAta_id_koruma (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (x : VarId) (b : Bolge) (h : bolgeOrtamGet Ρ x = some b) :
+    ∃ b', bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) x = some b'
+      ∧ b'.id = b.id := by
+  by_cases h_in : x ∈ yd
+  · exact ⟨bolgeKategoriDegistir b (BolgeKategorisi.sahip t),
+      sahipAta_get_in Ρ t yd Ρ x b h_in h, rfl⟩
+  · exact ⟨b, (sahipAta_get_notin Ρ yd t x h_in).trans h, rfl⟩
+
+/-- sahipAta giriş-mutabakati cikista korunur (transport agreement). -/
+theorem sahipAta_agree (Ρ Ρn : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (y : VarId) (h : bolgeOrtamGet Ρn y = bolgeOrtamGet Ρ y) :
+    bolgeOrtamGet (bolgeOrtamSahipAta Ρn yd t) y
+      = bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y := by
+  by_cases h_in : y ∈ yd
+  · cases h_lk : bolgeOrtamGet Ρ y with
+    | some b =>
+        have h1 : bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y
+            = some (bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :=
+          sahipAta_get_in Ρ t yd Ρ y b h_in h_lk
+        have h2 : bolgeOrtamGet (bolgeOrtamSahipAta Ρn yd t) y
+            = some (bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :=
+          sahipAta_get_in Ρn t yd Ρn y b h_in (h.trans h_lk)
+        rw [h1, h2]
+    | none =>
+        rw [sahipAta_get_none Ρ yd t y h_lk,
+            sahipAta_get_none Ρn yd t y (h.trans h_lk)]
+  · rw [sahipAta_get_notin Ρ yd t y h_in,
+        sahipAta_get_notin Ρn yd t y h_in, h]
+
+/-- dondurBolge lookup: map-formu (id-eslesen girisler donmus-recat). -/
+theorem dondur_get (Ρ : BolgeOrtam) (b : Bolge) (y : VarId) :
+    bolgeOrtamGet (bolgeOrtamDondurBolge Ρ b) y
+      = (bolgeOrtamGet Ρ y).map (fun br =>
+          if br.id = b.id
+            then bolgeKategoriDegistir br BolgeKategorisi.donmus
+            else br) := by
+  induction Ρ with
+  | nil => rfl
+  | cons p rest ih =>
+      obtain ⟨x0, br0⟩ := p
+      show bolgeOrtamGet
+          ((if br0.id = b.id
+              then (x0, bolgeKategoriDegistir br0 BolgeKategorisi.donmus)
+              else (x0, br0)) :: bolgeOrtamDondurBolge rest b) y = _
+      by_cases h0 : br0.id = b.id
+      · rw [if_pos h0]
+        by_cases hx : x0 = y
+        · rw [bolgeOrtamGet, if_pos hx,
+              bolgeOrtamGet, if_pos hx, Option.map_some, if_pos h0]
+        · rw [bolgeOrtamGet, if_neg hx, bolgeOrtamGet, if_neg hx]
+          exact ih
+      · rw [if_neg h0]
+        by_cases hx : x0 = y
+        · rw [bolgeOrtamGet, if_pos hx,
+              bolgeOrtamGet, if_pos hx, Option.map_some, if_neg h0]
+        · rw [bolgeOrtamGet, if_neg hx, bolgeOrtamGet, if_neg hx]
+          exact ih
+
+
+-- ============================================================
+-- §4. Yaz-geri + Transport (Onarim v3 kapanis — DECISIONS_LOG tasarimi)
+-- ============================================================
+
+/-- YAZ-GERI: cikis ortaminda YAZILABILIR kategorili gorunen kayit,
+    giriste de aynidir — tum R-guncellemeleri yazilamaz kategori
+    (sahip/kanalRho/donmus) yazar. -/
+theorem regionTamam_yaz_geri {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
+    (h : RegionTamam Γ Ρ e Ρout) :
+    ∀ (y : VarId) (b : Bolge),
+    bolgeOrtamGet Ρout y = some b →
+    kategoriYazilabilir b.kategori = true →
+    bolgeOrtamGet Ρ y = some b := by
+  induction h with
+  | r_tanim _ _ => exact fun _ _ h_o _ => h_o
+  | r_sabit _ _ => exact fun _ _ h_o _ => h_o
+  | r_atama _ _ _ _ _ _ _ _ ih => exact ih
+  | r_seq _ _ _ _ _ _ _ ih_a ih_b =>
+      exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
+  | r_gorev_baslat _ _ _ yd _ tY _ _ _ _ h_eq _ =>
+      intro y b h_o h_y
+      subst h_eq
+      rcases sahipAta_get_inv _ tY yd _ y b h_o with
+          ⟨b0, _, h_bb, _⟩ | h_acc
+      · rw [h_bb] at h_y
+        simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_y
+      · exact h_acc
+  | r_gorev_birlestir _ _ => exact fun _ _ h_o _ => h_o
+  | r_kanal_gonder _ _ k v b0 _ _ h_eq =>
+      intro y b h_o h_y
+      subst h_eq
+      rw [bolgeOrtamUpdate_get] at h_o
+      by_cases hv : v = y
+      · rw [if_pos hv] at h_o
+        rw [← Option.some.inj h_o] at h_y
+        simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_y
+      · rw [if_neg hv] at h_o
+        exact h_o
+  | r_kanal_al _ _ => exact fun _ _ h_o _ => h_o
+  | r_dondur _ _ b0 x _ _ h_eq =>
+      intro y b h_o h_y
+      subst h_eq
+      rw [dondur_get] at h_o
+      cases h_lk : bolgeOrtamGet _ y with
+      | none => rw [h_lk] at h_o; cases h_o
+      | some br =>
+          rw [h_lk, Option.map_some] at h_o
+          by_cases hid : br.id = b0.id
+          · rw [if_pos hid] at h_o
+            rw [← Option.some.inj h_o] at h_y
+            simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_y
+          · rw [if_neg hid] at h_o
+            exact h_o
+  | r_kullan _ _ => exact fun _ _ h_o _ => h_o
+  | r_imha _ _ => exact fun _ _ h_o _ => h_o
+  | r_guvensiz _ _ _ _ ih => exact ih
+
+/-- TRANSPORT (DECISIONS_LOG tasarimi — DisindaEsit-Y formu): e'nin
+    HEDEF degiskenlerinde mutabik (HedefVar) ve yazilabilir HEDEF-bolge
+    kayitlarini koruyan (HedefBolge) yeni ortam altinda e yine
+    region-tamamdir; giriste mutabik HER anahtar cikista da mutabik
+    kalir. r_gorev_baslat cocuk-govdesi Yol-B hedefsiz-premise'leriyle
+    kosulsuz tasinir. -/
+theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
+    (h : RegionTamam Γ Ρ e Ρout) :
+    ∀ (Ρn : BolgeOrtam),
+    (∀ y, HedefVar e y → bolgeOrtamGet Ρn y = bolgeOrtamGet Ρ y) →
+    (∀ x bb, HedefBolge e bb → kategoriYazilabilir bb.kategori = true →
+       bolgeOrtamGet Ρ x = some bb → bolgeOrtamGet Ρn x = some bb) →
+    ∃ Ρoutn, RegionTamam Γ Ρn e Ρoutn
+      ∧ ∀ y, bolgeOrtamGet Ρn y = bolgeOrtamGet Ρ y →
+          bolgeOrtamGet Ρoutn y = bolgeOrtamGet Ρout y := by
+  induction h with
+  | r_tanim _ x =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_tanim _ _ x, fun _ h => h⟩
+  | r_sabit _ v =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_sabit _ _ v, fun _ h => h⟩
+  | r_atama _ _ x e b h_gx h_yz _ ih =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρe', h_re', h_agree⟩ := ih Ρn
+        (fun y hy => h_hv y (HedefVar.atama_ic x e y hy))
+        (fun x' bb hb hyz hlk =>
+          h_hb x' bb (HedefBolge.atama_ic x e bb hb) hyz hlk)
+      have h_gx' : bolgeOrtamGet Ρn x = some b := by
+        rw [h_hv x (HedefVar.atama_bas x e)]; exact h_gx
+      exact ⟨Ρe', RegionTamam.r_atama _ _ _ x e b h_gx' h_yz h_re', h_agree⟩
+  | r_seq _ _ _ a b h_ra _ ih_a ih_b =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρa', h_ra', agree_a⟩ := ih_a Ρn
+        (fun y hy => h_hv y (HedefVar.seq_sol a b y hy))
+        (fun x bb hb hyz hlk =>
+          h_hb x bb (HedefBolge.seq_sol a b bb hb) hyz hlk)
+      obtain ⟨Ρb', h_rb', agree_b⟩ := ih_b Ρa'
+        (fun y hy => agree_a y (h_hv y (HedefVar.seq_sag a b y hy)))
+        (fun x bb hb hyz hlk => by
+          have h_geri := regionTamam_yaz_geri h_ra x bb hlk hyz
+          have h_n := h_hb x bb (HedefBolge.seq_sag a b bb hb) hyz h_geri
+          have h_ag := agree_a x (h_n.trans h_geri.symm)
+          rw [h_ag]; exact hlk)
+      exact ⟨Ρb', RegionTamam.r_seq _ _ _ _ a b h_ra' h_rb',
+        fun y hy => agree_b y (agree_a y hy)⟩
+  | r_gorev_baslat _ _ Ρkod yd kod tY h_cap h_kodhv h_kodhb _ h_eq ih =>
+      intro Ρn h_hv _
+      obtain ⟨Ρkod', h_kod', _⟩ := ih Ρn
+        (fun y hy => absurd hy (h_kodhv y))
+        (fun _ bb hb _ _ => absurd hb (h_kodhb bb))
+      refine ⟨bolgeOrtamSahipAta Ρn yd tY,
+        RegionTamam.r_gorev_baslat _ _ _ Ρkod' yd kod tY ?_
+          h_kodhv h_kodhb h_kod' rfl, ?_⟩
+      · intro v hv b hlk
+        rw [h_hv v (HedefVar.gorev_yakala yd kod v hv)] at hlk
+        exact h_cap v hv b hlk
+      · intro y hy
+        subst h_eq
+        exact sahipAta_agree _ Ρn yd tY y hy
+  | r_gorev_birlestir _ g =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_gorev_birlestir _ _ g, fun _ h => h⟩
+  | r_kanal_gonder _ _ k v b h_lk h_yz h_eq =>
+      intro Ρn h_hv _
+      have h_lk' : bolgeOrtamGet Ρn v = some b := by
+        rw [h_hv v (HedefVar.kanal_gonder k v)]; exact h_lk
+      refine ⟨bolgeOrtamUpdate Ρn v
+          (bolgeKategoriDegistir b (BolgeKategorisi.kanalRho k)),
+        RegionTamam.r_kanal_gonder _ _ _ k v b h_lk' h_yz rfl, ?_⟩
+      intro y hy
+      subst h_eq
+      rw [bolgeOrtamUpdate_get, bolgeOrtamUpdate_get]
+      by_cases hv : v = y
+      · rw [if_pos hv, if_pos hv]
+      · rw [if_neg hv, if_neg hv]; exact hy
+  | r_kanal_al _ k =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_kanal_al _ _ k, fun _ h => h⟩
+  | r_dondur _ _ b x h_lk h_yz h_eq =>
+      intro Ρn _ h_hb
+      have h_lk' : bolgeOrtamGet Ρn x = some b :=
+        h_hb x b (HedefBolge.dondur_bas b) h_yz h_lk
+      refine ⟨bolgeOrtamDondurBolge Ρn b,
+        RegionTamam.r_dondur _ _ _ b x h_lk' h_yz rfl, ?_⟩
+      intro y hy
+      subst h_eq
+      rw [dondur_get, dondur_get, hy]
+  | r_kullan _ x =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_kullan _ _ x, fun _ h => h⟩
+  | r_imha _ x =>
+      exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_imha _ _ x, fun _ h => h⟩
+  | r_guvensiz _ _ e _ ih =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρe', h_re', h_agree⟩ := ih Ρn
+        (fun y hy => h_hv y (HedefVar.guvensiz_ic e y hy))
+        (fun x bb hb hyz hlk =>
+          h_hb x bb (HedefBolge.guvensiz_ic e bb hb) hyz hlk)
+      exact ⟨Ρe', RegionTamam.r_guvensiz _ _ _ e h_re', h_agree⟩
+
+
+-- ============================================================
+-- §5. NOT (Onarim v3 F1): birlesim + meta katmanlari TASINDI
 -- ============================================================
 -- Typed + ThreadTipliFull + KonfTipliFull (+intro/elim, bolgeOrtamBos)
 --   → Kemgu/Sem/Tipli.lean
