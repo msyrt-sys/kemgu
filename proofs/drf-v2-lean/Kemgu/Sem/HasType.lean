@@ -72,11 +72,13 @@ inductive HasType : TipOrtam → Ifade → Tip → Prop where
                     HasType Γ kod τd →
                     HasType Γ (Ifade.gorevBaslat yd kod) (Tip.gorev τd)
 
-  /-- T-GOREV-BIRLESTIR: birlestir(g) ile gorev tipinden τ cikar.
-      Kagit: Γ(g) = gorev<τ> ⟹ Γ ⊢ birlestir(g) : τ. -/
+  /-- T-GOREV-BIRLESTIR: birlestir(g) — V1 daraltma (F2): sonuc tipi bos.
+      Join sync-only; donus DEGERI tasima V2 hedef (gorev<τ>'den τ cikarimi
+      icin ifade-ilerletme redex sonucunun gorev sonuc-degerine baglanmasi
+      gerekir — F2 redexi `sabit birim`e ilerletir, tip uyumu icin bos). -/
   | t_gorev_birlestir (Γ : TipOrtam) (g : VarId) (τ : Tip) :
                        tipOrtamGet Γ g = some (Tip.gorev τ) →
-                       HasType Γ (Ifade.gorevBirlestir g) τ
+                       HasType Γ (Ifade.gorevBirlestir g) Tip.bos
 
   /-- T-KANAL-GONDER: gonder(k, v) tipi bos (etki: kanala v eklenir).
       Kagit: Γ(v) = τ ⟹ Γ ⊢ kanalGonderIf(k, v) : bos.
@@ -100,14 +102,13 @@ inductive HasType : TipOrtam → Ifade → Tip → Prop where
   | t_dondur  (Γ : TipOrtam) (b : Bolge) :
                 HasType Γ (Ifade.dondurIf b) Tip.bos
 
-  /-- T-KULLAN: linear consume — tekkez<τ>'den τ cikar.
-      Kagit: Γ(x) = tekkez<τ> ⟹ Γ ⊢ kullan(x) : τ.
-
-      NOT: Linear consumption garantisi (x sadece bir kez kullanilir)
-      Adim 5 LinearOK'ta saglanir; burada salt tip uyumu. -/
+  /-- T-KULLAN: linear consume — V1 daraltma (F2): sonuc tipi bos.
+      Consume effect-only; tekkez<τ>'den DEGER cikarimi V2 hedef
+      (F2 redexi `sabit birim`e ilerletir; lineer disiplin LineerTamam'da).
+      Linear consumption garantisi (tek kez) Adim 5 LinearOK'ta. -/
   | t_kullan  (Γ : TipOrtam) (x : VarId) (τ : Tip) :
                 tipOrtamGet Γ x = some (Tip.tekkez τ) →
-                HasType Γ (Ifade.kullanIf x) τ
+                HasType Γ (Ifade.kullanIf x) Tip.bos
 
   /-- T-IMHA: linear imha — tekkez<τ>'yi yok eder, sonuc bos.
       Kagit: Γ(x) = tekkez<τ> ⟹ Γ ⊢ imha(x) : bos.

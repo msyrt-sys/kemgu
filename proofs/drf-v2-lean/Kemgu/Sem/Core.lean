@@ -94,6 +94,7 @@ inductive Deger : Type where
   | diziVal     (b : Bolge) (uzunluk : Nat)
   | closureVal  (kodId : DugumId) (yakalama : List VarId)
   | yetkiTok    (id : Nat) (kaynak : String)
+  | gorevVal    (t : ThreadId)                         -- gorev tanitici (F2: spawn sonucu)
   | birim                                              -- () bos tip
 end
 
@@ -112,6 +113,105 @@ deriving Repr, DecidableEq
 /-- Lambda : VarId → Lineerlik (assoc list ile) -/
 abbrev LineerOrtam := List (VarId × Lineerlik)
 
+/-- LineerOrtam Λ lookup: bir VarId'nin Lineerlik durumu.
+    (F2: LineerTamam'dan Core'a tasindi — Step kurallari da kullanir.) -/
+def lineerOrtamGet : LineerOrtam → VarId → Option Lineerlik
+  | [], _ => none
+  | (k, v) :: rest, key => if k = key then some v else lineerOrtamGet rest key
+
+/-- LineerOrtam Λ update: prepend (newest-wins). -/
+def lineerOrtamUpdate (Λ : LineerOrtam) (x : VarId) (lin : Lineerlik) : LineerOrtam :=
+  (x, lin) :: Λ
+
+/-- Tek degiskeni tuket (aktifse tuketildi'ye gecir; degilse dokunma).
+    cKanalGonderTamam ctx' guncellemesi. -/
+def lineerTuket (Λ : LineerOrtam) (v : VarId) : LineerOrtam :=
+  match lineerOrtamGet Λ v with
+  | some Lineerlik.aktif => lineerOrtamUpdate Λ v Lineerlik.tuketildi
+  | _ => Λ
+
+/-- Yakalama listesindeki aktif baglamalari tuket (cGorevBaslatTamam). -/
+def lineerTuketListe (Λ : LineerOrtam) (yd : List VarId) : LineerOrtam :=
+  yd.foldl lineerTuket Λ
+
+/-- lineerTuket baska degiskenin lookup'unu degistirmez. -/
+theorem lineerTuket_baska (Λ : LineerOrtam) (w x : VarId) (h_ne : w ≠ x) :
+    lineerOrtamGet (lineerTuket Λ w) x = lineerOrtamGet Λ x := by
+  unfold lineerTuket
+  cases hw : lineerOrtamGet Λ w with
+  | none => rfl
+  | some lin =>
+    cases lin with
+    | aktif => simp [lineerOrtamUpdate, lineerOrtamGet, h_ne]
+    | tuketildi => rfl
+
+/-- lineerTuket mevcut 'tuketildi' lookup'larini korur. -/
+theorem lineerTuket_korur (Λ : LineerOrtam) (x w : VarId)
+    (h : lineerOrtamGet Λ x = some Lineerlik.tuketildi) :
+    lineerOrtamGet (lineerTuket Λ w) x = some Lineerlik.tuketildi := by
+  by_cases h_ne : w = x
+  · subst h_ne
+    unfold lineerTuket
+    rw [h]
+    exact h
+  · rw [lineerTuket_baska Λ w x h_ne]; exact h
+
+/-- lineerTuket aktif degiskeni tuketildi yapar. -/
+theorem lineerTuket_tuketir (Λ : LineerOrtam) (w : VarId)
+    (h : lineerOrtamGet Λ w = some Lineerlik.aktif) :
+    lineerOrtamGet (lineerTuket Λ w) w = some Lineerlik.tuketildi := by
+  unfold lineerTuket
+  rw [h]
+  show lineerOrtamGet (lineerOrtamUpdate Λ w Lineerlik.tuketildi) w
+      = some Lineerlik.tuketildi
+  simp [lineerOrtamUpdate, lineerOrtamGet]
+
+/-- lineerTuketListe mevcut 'tuketildi' lookup'larini korur (fold). -/
+theorem lineerTuketListe_korur (yd : List VarId) (Λ : LineerOrtam) (x : VarId)
+    (h : lineerOrtamGet Λ x = some Lineerlik.tuketildi) :
+    lineerOrtamGet (lineerTuketListe Λ yd) x = some Lineerlik.tuketildi := by
+  induction yd generalizing Λ with
+  | nil => exact h
+  | cons w rest ih =>
+      exact ih (lineerTuket Λ w) (lineerTuket_korur Λ x w h)
+
+/-- DRF-L2 cekirdegi: yakalama listesindeki aktif lineer baglama,
+    lineerTuketListe sonrasi TUKETILDI olur. -/
+theorem lineerTuketListe_tuketir (yd : List VarId) (Λ : LineerOrtam)
+    (v : VarId) (h_v : v ∈ yd)
+    (h_aktif : lineerOrtamGet Λ v = some Lineerlik.aktif) :
+    lineerOrtamGet (lineerTuketListe Λ yd) v = some Lineerlik.tuketildi := by
+  induction yd generalizing Λ with
+  | nil => cases h_v
+  | cons w rest ih =>
+      by_cases h_wv : w = v
+      · subst h_wv
+        have h_w : lineerOrtamGet (lineerTuket Λ w) w
+            = some Lineerlik.tuketildi := lineerTuket_tuketir Λ w h_aktif
+        exact lineerTuketListe_korur rest (lineerTuket Λ w) w h_w
+      · have h_v_rest : v ∈ rest := by
+          cases h_v with
+          | head => exact absurd rfl h_wv
+          | tail _ h => exact h
+        have h_aktif' : lineerOrtamGet (lineerTuket Λ w) v
+            = some Lineerlik.aktif := by
+          rw [lineerTuket_baska Λ w v h_wv]; exact h_aktif
+        exact ih (lineerTuket Λ w) h_v_rest h_aktif'
+
+/-- Lookup uyeligi: get bir deger donduruyorsa o cift listededir.
+    (Aile 2 kopru gecisleri icin — gölgeleme yonu tek tarafli.) -/
+theorem lineerOrtamGet_mem : ∀ (Λ : LineerOrtam) (x : VarId) (l : Lineerlik),
+    lineerOrtamGet Λ x = some l → (x, l) ∈ Λ
+  | [], _, _, h => by simp [lineerOrtamGet] at h
+  | (k, v) :: rest, x, l, h => by
+      by_cases hk : k = x
+      · subst hk
+        simp [lineerOrtamGet] at h
+        subst h
+        exact List.Mem.head _
+      · simp [lineerOrtamGet, hk] at h
+        exact List.Mem.tail _ (lineerOrtamGet_mem rest x l h)
+
 
 -- ============================================================
 -- §6. Konum + Store (sigma)
@@ -126,6 +226,14 @@ deriving Repr, DecidableEq
 
 /-- Store sigma : Konum → Deger (assoc list temsili) -/
 abbrev Store := List (Konum × Deger)
+
+/-- Store lookup: ilk eslesen entry (newest-wins; sAtamaTamam prepend eder).
+    F2: sVarOku (degisken okuma) ve cKanalGonderTamam (gonderilen deger)
+    bu lookup'i kullanir. Offset-0 konvansiyonu: degisken x'in konumu
+    ⟨bolge(x), 0⟩ (V1). -/
+def konumGet : Store → Konum → Option Deger
+  | [], _ => none
+  | (k, v) :: rest, key => if k = key then some v else konumGet rest key
 
 
 -- ============================================================
@@ -143,8 +251,16 @@ inductive Sahip : Type where
   | donmus                           -- DONMUS (R-PAYLAS, coklu okuyucu)
 deriving Repr, DecidableEq
 
-/-- Sigma : (Bolge × Zaman) → Sahip -/
-abbrev Sahiplik := List ((Bolge × Zaman) × Sahip)
+/-- Sigma : Bolge → Sahip (GUNCEL-DURUM modeli; assoc list, newest-wins).
+
+    Onarim v3 F2 (Sorun 3 onarimi — ADIM0_DENETIM_RAPORU §2.2):
+    Eski model (Bolge × Zaman) anahtarliydi ve tam-anahtar lookup
+    "z aninda verilen sahiplik z+1'de gorunmez" kusurunu tasiyordu
+    (h_owner guard'i sonlu baslangic listesiyle yeterince adim sonra
+    hic saglanamiyordu → progress yapisal imkansiz). Guncel-durum
+    modeli lineerOrtam/bolgeOrtam idiyomuyla ayni; sahiplik TARIHI
+    artik iz'de (Olay listesi) yasar. Mehmet onayi: 2026-06-11. -/
+abbrev Sahiplik := List (Bolge × Sahip)
 
 
 -- ============================================================
@@ -153,39 +269,67 @@ abbrev Sahiplik := List ((Bolge × Zaman) × Sahip)
 -- Kaynak: Op.Sem §5.4 R-* aksiyomlarinin atomic transfer semantigi
 -- ============================================================
 
-/-- Sahiplik lookup: bir (bolge, zaman) anahtarina karsi gelen sahip degerini
-    bul. Birinci eslesen entry'i dondurur (newest-wins; sahiplikSet prepend
-    kullanir, bu sayede yeni entry eskisini "shadow"lar). -/
-def sahiplikGet : Sahiplik → (Bolge × Zaman) → Option Sahip
+/-- Sahiplik lookup: bolgenin GUNCEL sahibi (ilk eslesen entry —
+    newest-wins; sahiplikSet prepend kullanir). -/
+def sahiplikGet : Sahiplik → Bolge → Option Sahip
   | [], _ => none
   | (k, v) :: rest, key => if k = key then some v else sahiplikGet rest key
 
-/-- Sahiplik atomik set (Op.Sem §5.4 R-* aksiyomlari S3 atomic transfer):
-    (bolge, zaman) anahtarina yeni sahip degerini ata.
-    Implementasyon: prepend; sahiplikGet ilk eslesen entry'i dondurdugu icin
-    yeni deger eski entry'i mantiksal olarak override eder (eski entry fiziksel
-    olarak listede kalir ama lookup ona ulasmaz). Bu hem bellek hem ispat
-    sadeligi acisindan tercih edilen tasarim. -/
-def sahiplikSet (s : Sahiplik) (b : Bolge) (t : Zaman) (yeni : Sahip) : Sahiplik :=
-  ((b, t), yeni) :: s
+/-- Sahiplik atomik set (Op.Sem §5.4 S3 atomic transfer): prepend;
+    yeni entry eskisini mantiken override eder. -/
+def sahiplikSet (s : Sahiplik) (b : Bolge) (yeni : Sahip) : Sahiplik :=
+  (b, yeni) :: s
 
-/-- Coklu bolge atomic set: foldl ile sirayla prepend.
-    cGorevBaslat (R-GOREV) ve cGorevBirlestir (R-BIRLESTIR) icin —
-    her iki kural birden cok bolgenin sahipligini ayni zaman damgasinda
-    degistirir. -/
-def sahiplikSetMany (s : Sahiplik) (bs : List Bolge) (t : Zaman) (yeni : Sahip) : Sahiplik :=
-  bs.foldl (fun acc b => sahiplikSet acc b t yeni) s
+/-- Coklu bolge atomic set (R-GOREV / R-BIRLESTIR). -/
+def sahiplikSetMany (s : Sahiplik) (bs : List Bolge) (yeni : Sahip) : Sahiplik :=
+  bs.foldl (fun acc b => sahiplikSet acc b yeni) s
 
 /-- Set sonra get ayni anahtarda yeni degeri doner. -/
-theorem sahiplikSet_eq (s : Sahiplik) (b : Bolge) (t : Zaman) (yeni : Sahip) :
-    sahiplikGet (sahiplikSet s b t yeni) (b, t) = some yeni := by
+theorem sahiplikSet_eq (s : Sahiplik) (b : Bolge) (yeni : Sahip) :
+    sahiplikGet (sahiplikSet s b yeni) b = some yeni := by
   simp [sahiplikSet, sahiplikGet]
 
 /-- Set sonra get farkli anahtarda eski lookup degismez. -/
-theorem sahiplikSet_ne (s : Sahiplik) (b b' : Bolge) (t t' : Zaman) (yeni : Sahip)
-    (h : (b', t') ≠ (b, t)) :
-    sahiplikGet (sahiplikSet s b t yeni) (b', t') = sahiplikGet s (b', t') := by
+theorem sahiplikSet_ne (s : Sahiplik) (b b' : Bolge) (yeni : Sahip)
+    (h : b' ≠ b) :
+    sahiplikGet (sahiplikSet s b yeni) b' = sahiplikGet s b' := by
   simp [sahiplikSet, sahiplikGet, h.symm]
+
+/-- SetMany, listede olmayan bolgenin lookup'unu degistirmez.
+    (Frozen-persistence ispatinin cekirdegi — F2.) -/
+theorem sahiplikSetMany_ne (bs : List Bolge) (s : Sahiplik) (b' : Bolge)
+    (yeni : Sahip) (h : b' ∉ bs) :
+    sahiplikGet (sahiplikSetMany s bs yeni) b' = sahiplikGet s b' := by
+  induction bs generalizing s with
+  | nil => rfl
+  | cons b rest ih =>
+      have h_ne : b' ≠ b := fun he => h (he ▸ List.Mem.head _)
+      have h_rest : b' ∉ rest := fun hm => h (List.Mem.tail _ hm)
+      calc sahiplikGet (sahiplikSetMany s (b :: rest) yeni) b'
+          = sahiplikGet (sahiplikSetMany (sahiplikSet s b yeni) rest yeni) b' := rfl
+        _ = sahiplikGet (sahiplikSet s b yeni) b' := ih (sahiplikSet s b yeni) h_rest
+        _ = sahiplikGet s b' := sahiplikSet_ne s b b' yeni h_ne
+
+/-- SetMany, listedeki her bolgenin lookup'unu yeni degere goturur
+    (tum yeni entry'ler ayni degeri tasir). -/
+theorem sahiplikSetMany_mem (s : Sahiplik) (bs : List Bolge) (yeni : Sahip)
+    {b : Bolge} (h : b ∈ bs) :
+    sahiplikGet (sahiplikSetMany s bs yeni) b = some yeni := by
+  induction bs generalizing s with
+  | nil => cases h
+  | cons b1 rest ih =>
+      by_cases hb : b ∈ rest
+      · exact ih (sahiplikSet s b1 yeni) hb
+      · have hbb : b = b1 := by
+          cases h with
+          | head => rfl
+          | tail _ hr => exact absurd hr hb
+        subst hbb
+        calc sahiplikGet (sahiplikSetMany s (b :: rest) yeni) b
+            = sahiplikGet (sahiplikSetMany (sahiplikSet s b yeni) rest yeni) b := rfl
+          _ = sahiplikGet (sahiplikSet s b yeni) b :=
+              sahiplikSetMany_ne rest (sahiplikSet s b yeni) b yeni hb
+          _ = some yeni := sahiplikSet_eq s b yeni
 
 
 -- ============================================================
@@ -271,6 +415,25 @@ structure KanalDurumu where
   kid           : KanalId
   gonderKuyrugu : List Deger
 
+/-- Kanala mesaj ekle (FIFO sona). Kanal kaydi yoksa yarat — total fonksiyon,
+    cKanalGonderTamam varlik guard'ina ihtiyac duymaz (F2). -/
+def kanalEkle (ks : List KanalDurumu) (k : KanalId) (v : Deger) : List KanalDurumu :=
+  if ks.any (fun kd => kd.kid = k)
+    then ks.map (fun kd =>
+           if kd.kid = k then { kd with gonderKuyrugu := kd.gonderKuyrugu ++ [v] } else kd)
+    else ⟨k, [v]⟩ :: ks
+
+/-- Kanalin ilk bekleyen mesaji (FIFO bas). -/
+def kanalIlk (ks : List KanalDurumu) (k : KanalId) : Option Deger :=
+  match ks.find? (fun kd => kd.kid = k) with
+  | some kd => kd.gonderKuyrugu.head?
+  | none => none
+
+/-- Kanalin ilk mesajini cikar (FIFO pop — cKanalAlTamam). -/
+def kanalCikar (ks : List KanalDurumu) (k : KanalId) : List KanalDurumu :=
+  ks.map (fun kd =>
+    if kd.kid = k then { kd with gonderKuyrugu := kd.gonderKuyrugu.tail } else kd)
+
 /-- Tum sistem konfigurasyonu (Op.Sem §5.2).
     S = ⟨T_, sigma, Sigma, K_⟩ + zaman + iz + fault.
     `fault` alani Plan v2 Adim 1.1'de eklendi: `none` = normal yurutme;
@@ -300,20 +463,17 @@ structure Konfigurasyon where
 -- §10.1. isFrozen predicate (DRF-L4 icin gerekli, A3.0'' refactor)
 -- ============================================================
 
-/-- Bir bolge S anindaki "frozen" durumu: gecmiste z₀ ≤ S.zaman icin
-    sahiplikGet (b, z₀) = Sahip.donmus var ise.
+/-- Bir bolge S anindaki "frozen" durumu (F2 guncel-durum modeli):
+    bolgenin guncel sahibi DONMUS ise.
 
-    Kullanim: sAtama precondition (`h_not_frozen : ¬ isFrozen S k.bolge`)
-    DRF-L4 (a) "no frozen writes" ispati icin gerekli.
-
-    Niye `∃ z₀ ≤ S.zaman`? cDondur(b) cagrildiktan sonra b kalici olarak
-    frozen olur — ama bizim time-stamped Sahiplik modelinde freeze entry
-    spesifik bir zaman damgasinda (cDondur'un calistigi anda). Sonraki
-    zamanlarda lookup (b, S.zaman') eski freeze entry'i bulamaz (farkli
-    key). Bu yuzden "frozen" durumu "gecmis bir zamanda freeze entry var"
-    olarak tanimlanir. Persistence asagidaki teoremlerle gosterilir. -/
+    Eski ∃z₀≤S.zaman formu zaman-anahtarli Sahiplik'in kalintisiydi;
+    guncel-durum modelinde dogrudan lookup yeterli. Persistence artik
+    kural-tasarimindan gelir: sahiplik yazan her Tamam kurali hedef
+    bolgenin guncel sahibinin bir thread/kanal olmasini sart kosar
+    (donmus bolge transfer edilemez) → donmus entry asla override
+    edilmez. Bkz. L4 isFrozen_persistent (F2'de KOSULSUZ ispatli). -/
 def isFrozen (S : Konfigurasyon) (b : Bolge) : Prop :=
-  ∃ z₀, z₀ ≤ S.zaman ∧ sahiplikGet S.sahiplik (b, z₀) = some Sahip.donmus
+  sahiplikGet S.sahiplik b = some Sahip.donmus
 
 
 -- ============================================================

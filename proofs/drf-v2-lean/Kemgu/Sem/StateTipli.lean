@@ -39,6 +39,41 @@ def bolgeOrtamGet : BolgeOrtam → VarId → Option Bolge
   | [], _ => none
   | (k, v) :: rest, key => if k = key then some v else bolgeOrtamGet rest key
 
+-- F2 NOT: asagidaki dort yardimci RegionTamam'dan buraya tasindi —
+-- Step kurallari (SmallStep) da runtime S.bolge guncellemeleri icin kullanir.
+
+/-- BolgeOrtam Ρ update: prepend (newest-wins). -/
+def bolgeOrtamUpdate (Ρ : BolgeOrtam) (x : VarId) (b : Bolge) : BolgeOrtam :=
+  (x, b) :: Ρ
+
+/-- Bolge kategori degistirme: id korur, kategori degisir. -/
+def bolgeKategoriDegistir (b : Bolge) (yeni : BolgeKategorisi) : Bolge :=
+  { b with kategori := yeni }
+
+/-- R-GOREV destekleyici: yd'deki her v'nin Bolge atamasi kategori =
+    sahip(t) olur (foldl + prepend, newest-wins shadow). -/
+def bolgeOrtamSahipAta (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    : BolgeOrtam :=
+  yd.foldl
+    (fun acc v =>
+      match bolgeOrtamGet Ρ v with
+      | some b => (v, bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :: acc
+      | none   => acc)
+    Ρ
+
+/-- R-PAYLAS destekleyici: b'yi (id eslesmesiyle) iceren tum entry'ler
+    kategori = donmus olur. -/
+def bolgeOrtamDondurBolge (Ρ : BolgeOrtam) (b : Bolge) : BolgeOrtam :=
+  Ρ.map (fun
+    | (x, br) =>
+      if br.id = b.id
+        then (x, bolgeKategoriDegistir br BolgeKategorisi.donmus)
+        else (x, br))
+
+/-- Yakalama listesinin bolgeleri (cGorevBaslatTamam transfer kumesi). -/
+def bolgeleriTopla (Ρ : BolgeOrtam) (yd : List VarId) : List Bolge :=
+  yd.filterMap (bolgeOrtamGet Ρ)
+
 
 -- ============================================================
 -- §2. DegerTipli (ValueTyped) — Plan v2 §5.2.1
@@ -77,6 +112,8 @@ inductive DegerTipli (Γ : TipOrtam) (Ρ : BolgeOrtam) : Deger → Tip → Prop 
                               (Tip.islev args ret)
   | dt_yetki   (id : Nat) (kaynak : String) :
                 DegerTipli Γ Ρ (Deger.yetkiTok id kaynak) (Tip.yetki kaynak)
+  | dt_gorev   (t : ThreadId) (τ : Tip) :
+                DegerTipli Γ Ρ (Deger.gorevVal t) (Tip.gorev τ)
   | dt_birim   :
                 DegerTipli Γ Ρ Deger.birim Tip.bos
 
@@ -120,27 +157,18 @@ def SigmaTipli (Γ : TipOrtam) (Ρ : BolgeOrtam) (store : Store) : Prop :=
 -- Sahiplik haritasinin bilinen bolgelere refer ettigi + frozen persistence.
 -- ============================================================
 
-/-- Sahiplik haritasi tutarliligi.
+/-- Sahiplik haritasi tutarliligi (F2 guncel-durum modeli):
+    thread'in sahiplendigi her bolge BolgeOrtam'da kayitli — un-owned
+    bolgelere sahiplik atamasi yasak.
 
-    Iki kosul:
-    (1) Sahiplenen thread'in oldugu her (b, z) entry'sinde b bilinen
-        (BolgeOrtam'da kayit) — un-owned bolgelere sahiplik atamasi yasak.
-    (2) Frozen persistence: bir bolge frozen olduktan sonra her sonraki
-        zaman damgasinda da frozen olmali (R-PAYLAS aksiyomu Op.Sem §5.4
-        + DRF-L4 frozen region read-soundness icin gerekli).
-
-    Adim 7 Discharge: cDondurTamam Step'i alindiginda frozen entry eklenir;
-    bu predicate'in (2) kosulu typed program'da Step korunumuyla preserved. -/
-def SahiplikTutarli (Ρ : BolgeOrtam) (sahiplik : Sahiplik) (zaman : Zaman) : Prop :=
-  -- (1) Thread sahipligi bilinen bolgede
-  (∀ (b : Bolge) (z : Zaman) (t : ThreadId), z ≤ zaman →
-    sahiplikGet sahiplik (b, z) = some (Sahip.thread t) →
-    ∃ x, bolgeOrtamGet Ρ x = some b)
-  ∧
-  -- (2) Frozen persistence
-  (∀ (b : Bolge) (z₀ z : Zaman), z₀ ≤ z → z ≤ zaman →
-    sahiplikGet sahiplik (b, z₀) = some Sahip.donmus →
-    sahiplikGet sahiplik (b, z) = some Sahip.donmus)
+    Eski (2) "frozen persistence" bileseni KALDIRILDI: guncel-durum
+    modelinde persistence kural-tasarimindan gelir (transfer kurallari
+    guncel sahibi thread/kanal olan bolgelerle sinirli → donmus entry
+    override edilmez; L4 isFrozen_persistent teoremi). -/
+def SahiplikTutarli (Ρ : BolgeOrtam) (sahiplik : Sahiplik) : Prop :=
+  ∀ (b : Bolge) (t : ThreadId),
+    sahiplikGet sahiplik b = some (Sahip.thread t) →
+    ∃ x, bolgeOrtamGet Ρ x = some b
 
 
 -- ============================================================
