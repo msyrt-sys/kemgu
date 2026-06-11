@@ -2130,6 +2130,81 @@ static void test_guvensiz_kapaninca_deref_ret(void) {
     arena_serbest(a);
 }
 
+/* === C5: satirici_asm tip kurallari (G002 / AS001 / AS002) === */
+
+static void test_asm_temiz(void) {
+    Arena *a = arena_olustur(0);
+    /* guvensiz icinde, x86_64 tagli, primitif cikti -> 0 hata */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"nop\"# "
+        "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
+        "ver x; }", a);
+    test_sonuc("asm: guvensiz + x86_64 + primitif cikti -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+static void test_asm_guvensiz_disi_g002(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"nop\"# "
+        "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } "
+        "ver x; }", a);
+    test_sonuc("asm: guvensiz DISINDA -> G002 (1 hata)", h == 1);
+    arena_serbest(a);
+}
+
+static void test_asm_arm64_as001(void) {
+    Arena *a = arena_olustur(0);
+    /* arm64 tag, x86_64 hedef -> AS001 */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: arm64 "
+        "\xc5\x9f" "ablon: r#\"wfi\"# } } "
+        "ver 0; }", a);
+    test_sonuc("asm: arm64 tag x86_64 hedefte -> AS001 (1 hata)", h == 1);
+    arena_serbest(a);
+}
+
+static void test_asm_tekkez_girdi_as002(void) {
+    Arena *a = arena_olustur(0);
+    /* C.1 lineer kara kutu: tekkez girdi DOGRUDAN gecemez */
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"nop\"# "
+        "girdi(\"r\", t) } } "
+        "imha(t); ver 0; }", a);
+    test_sonuc("asm: tekkez girdi -> AS002 (1 hata, lineer-notr)", h == 1);
+    arena_serbest(a);
+}
+
+static void test_asm_yapi_girdi_as002(void) {
+    Arena *a = arena_olustur(0);
+    /* C.1: yapi (kompozit) operand olamaz — yalniz primitif */
+    int h = program_kontrol(
+        "yap\xc4\xb1 N { x: tam32; } "
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: N = N { x: 1 }; "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"nop\"# "
+        "girdi(\"r\", n) } } "
+        "ver 0; }", a);
+    test_sonuc("asm: yapi girdi -> AS002 (1 hata, primitif degil)", h == 1);
+    arena_serbest(a);
+}
+
 int main(void) {
     /* Hata mesajlarini sustur (test ciktisi temiz) */
     if (!freopen("NUL", "w", stderr)) {
@@ -2365,6 +2440,13 @@ int main(void) {
     test_guvensiz_deref_disarda_ret();
     test_guvensiz_ic_ice_deref_ok();
     test_guvensiz_kapaninca_deref_ret();
+
+    printf("\n--- C5: satirici_asm (G002 / AS001 / AS002) ---\n");
+    test_asm_temiz();
+    test_asm_guvensiz_disi_g002();
+    test_asm_arm64_as001();
+    test_asm_tekkez_girdi_as002();
+    test_asm_yapi_girdi_as002();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
