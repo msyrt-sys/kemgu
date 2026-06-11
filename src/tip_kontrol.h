@@ -34,6 +34,8 @@
  *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *   G001: *T dereferans guvensiz blok disinda (C5 on-kosul #2)
  *   G002: satiriçi_asm guvensiz blok disinda (C5)
+ *   AS001: asm mimari etiketi hedef mimariyle uyusmuyor (C5 arch-tag;
+ *          hedef KEMGU_HEDEF_MIMARI — llvm.h, hedefe-duyarli C8'de)
  *   AS002: asm operandi uygunsuz tip — yalniz kopyalanabilir primitif
  *          (tamN, dtamN, mantiksal, karakter, ham *T); tekkez/yetki
  *          dogrudan gecemez, cikti lineer olamaz (C5 C.1 kara kutu)

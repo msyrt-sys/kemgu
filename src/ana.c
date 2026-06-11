@@ -171,11 +171,12 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         return 1;
     }
 
-    /* --no-verify: kapi kapali, dogrudan emit. */
+    /* --no-verify: kapi kapali, dogrudan emit.
+     * C5 AS001: olumcul codegen hatasi varsa hata koduyla bit. */
     if (!g_llvm_dogrula) {
-        llvm_ir_uret(prog, stdout);
+        int n = llvm_ir_uret(prog, stdout);
         arena_serbest(a);
-        return 0;
+        return n > 0 ? 1 : 0;
     }
 
     /* C2 kapisi: IR'i once tampona uret, opt pass'lerinden ONCE dogrula,
@@ -184,11 +185,17 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
      * tmpfile acilamazsa guvenli taraf: dogrulamayi atla, yine de emit et. */
     FILE *tf = tmpfile();
     if (!tf) {
-        llvm_ir_uret(prog, stdout);
+        int n = llvm_ir_uret(prog, stdout);
         arena_serbest(a);
-        return 0;
+        return n > 0 ? 1 : 0;
     }
-    llvm_ir_uret(prog, tf);
+    int codegen_hata = llvm_ir_uret(prog, tf);
+    if (codegen_hata > 0) {
+        /* C5 AS001: hata mesaji stderr'e zaten yazildi; IR yayinlanmaz. */
+        fclose(tf);
+        arena_serbest(a);
+        return 1;
+    }
 
     long boyut = ftell(tf);
     if (boyut < 0) {
@@ -206,9 +213,9 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
     char *ir = (char *)malloc((size_t)boyut + 1);
     if (!ir) {
         fclose(tf);
-        llvm_ir_uret(prog, stdout);  /* bellek yok — fallback */
+        int n = llvm_ir_uret(prog, stdout);  /* bellek yok — fallback */
         arena_serbest(a);
-        return 0;
+        return n > 0 ? 1 : 0;
     }
     size_t okunan = fread(ir, 1, (size_t)boyut, tf);
     ir[okunan] = '\0';

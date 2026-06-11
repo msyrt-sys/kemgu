@@ -2,6 +2,7 @@
 #include "hata.h"
 #include "lexer.h"
 #include "parser.h"
+#include "llvm.h"   /* C5 AS001: KEMGU_HEDEF_MIMARI (tek kaynak) */
 
 #include <string.h>
 #include <stdio.h>
@@ -3982,6 +3983,22 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "G002",
                          "satirici_asm yalniz guvensiz blok "
                          "icinde kullanilabilir");
+            }
+            /* AS001: arch-tag hedef mimariyle uyusmali (llvm.h tek
+             * kaynak; hedefe-duyarli triple C8'de). Yanlis hedefe
+             * sessizce bozuk IR uretmek yerine derleme hatasi. */
+            {
+                const char *hm = KEMGU_HEDEF_MIMARI;
+                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                if (d->veri.satirici_asm.mimari &&
+                    (d->veri.satirici_asm.mimari_uz != hm_uz ||
+                     memcmp(d->veri.satirici_asm.mimari, hm,
+                            (size_t)hm_uz) != 0)) {
+                    tip_hata(tk, d, "AS001",
+                             "satirici_asm mimari etiketi hedef "
+                             "mimariyle uyusmuyor (hedef: x86_64; "
+                             "hedefe-duyarli triple C8'de)");
+                }
             }
             for (int i = 0; i < d->veri.satirici_asm.cikti_sayi; i++) {
                 const char *ad = d->veri.satirici_asm.cikti_adlar[i];
