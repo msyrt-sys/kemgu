@@ -193,31 +193,249 @@ theorem step_fault_preserves_typed
 
 /-- BIRLESIK ADIM KORUNUMU (FAZ_BRIFINGLERI.md F4 madde 2):
     Tipli konfigurasyon bir adim sonra da tiplidir (bolge ortami evrilir).
-    Fault-yoklugu sonucun 5. bileseninde — typed_no_fault asagida bunun
-    StepStar kosesi olarak ispatlanir (hipotez dongusu YOK).
 
-    ISKELET (sorry) — F4-ispat fazinin kalan isi. Yol haritasi:
-    - Hata (7): Aile 2 exfalso (step_fault_preserves_typed deseninin aynisi).
-    - Congruence (3): konfTipliFull_odak + IH + yeniden-sarma; sarma icin
-      CIKTI-ORTAM-KARARLI guclendirilmis IH gerekir ("ic adim, ifadenin
-      statik cikti ortamini korur" formu — ∃-form yetersiz).
-    - Tamam (11): bilesen-bilesen; kritik onkosullar:
-      * ThreadTipliFull: redex sonuc-degeri tiplenmesi (∃-form sayesinde
-        SigmaTipli/KanalTutarli'dan DegerTipli yeterli); spawn cocugu icin
-        l_gorev_baslat + r_gorev_baslat'a cocuk-govde premise'i (strengthen).
-      * AtamaSahipligi: sSeqAtla'da yeni odaktaki atamanin sahipligi eski
-        invariant'tan GELMEZ — tipleme↔sahiplik iliskilendiren ek invariant
-        tasarimi gerekir (per-thread erisim-bolgesi sahipligi; DUR-SOR
-        isaretli, F4-ispat brifinginde tasarlanacak).
-      * FrozenKategori: cDondurTamam S.bolge + sahiplik senkron guncelliyor
-        (F2 tasarimi geregi iki taraf birlikte donuyor). -/
+    KAPANIS DURUMU (bu pass):
+    - Hata (7): TAM — Aile 2 exfalso (step_fault deseninin aynisi).
+    - Tamam (5/11) TAM: sVarOku / sSeqAtla / sGuvensizAtla / sLinKullan /
+      sLinImha (bolge+sahiplik+kanal degismeyen kurallar — bilesenler
+      degisim-yardimcilariyla tasinir; comp-2 tanigi: degerTipli_ortam /
+      typed_seq_atla / typed_guvensiz_ic / dt_birim).
+    - KALAN sorry'ler asagida tek tek isaretli:
+      sAtamaTamam (BolgeAyrik 12. bilesen gerekli — on-onayli, mekanik);
+      cGorevBirlestir/cKanalAl (TidAyrik bileseni + setMany/lookup-inv
+      lemmalari — mekanik);
+      cGorevBaslat/cKanalGonder/cDondur (Ρ-DEGISTIREN kurallar — odaksiz
+      thread'lerin RegionTamam'inin guncellenmis-Ρ'da yeniden kurulmasi
+      INVARIANT-MIMARI CATALI gerektirir — DUR-SOR raporunda);
+      cong (3) (cikti-ortam-kararli IH — catal cozumune bagimli). -/
 theorem adim_korunum
     (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
-    (S S' : Konfigurasyon) (_h_step : Step S S')
-    (_h_konf : KonfTipliFull Γ Δ Ρ S) :
+    (S S' : Konfigurasyon) (h_step : Step S S')
+    (h_konf : KonfTipliFull Γ Δ Ρ S) :
     ∃ Ρ', KonfTipliFull Γ Δ Ρ' S' := by
-  -- TODO F4-ispat: yukaridaki yol haritasi. Bkz. FAZ_BRIFINGLERI.md F4.
-  sorry
+  revert h_konf
+  induction h_step with
+  -- ============ TAM Tamam kurallari (bolge/sahiplik/kanal sabit) ============
+  | sVarOku S S' ts1 ts2 ctx x b v h_t h_if h_b h_v h_S' =>
+      intro h_konf
+      subst h_S'
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 2: odakli thread sabit v'ye ilerledi
+        have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        refine threadTipli_degisim h_thread _ ?_
+        have h_mem := konumGet_mem S.store ⟨b, 0⟩ v h_v
+        obtain ⟨τv, h_dt, _⟩ := h_konf.1 ⟨b, 0⟩ v h_mem
+        exact ⟨τv, ctx.lineer, Ρ,
+          ⟨HasType.t_sabit _ _ _ _ (degerTipli_ortam v τv h_dt),
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · -- comp 8
+        have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl (fun y h => nomatch h)
+      · -- comp 9
+        have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+  | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
+      intro h_konf
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 2: seq (sabit v) b → b (typed_seq_atla)
+        have h_thread := h_konf.2.1
+        obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
+        rw [h_if] at h_ty
+        have h_thread' := h_thread
+        rw [h_t] at h_thread'
+        exact threadTipli_degisim h_thread' _ ⟨τ0, Λ0, Ρ0, typed_seq_atla h_ty⟩
+      · -- comp 8: b'nin hedefleri seq_sag ile zaten kapsaniyordu
+        have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl
+          (fun y h => by rw [h_if]; exact HedefVar.seq_sag _ _ y h)
+      · -- comp 9
+        have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl
+          (fun b' h => by rw [h_if]; exact HedefBolge.seq_sag _ _ b' h)
+  | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
+      intro h_konf
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+      · have h_thread := h_konf.2.1
+        obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
+        rw [h_if] at h_ty
+        have h_thread' := h_thread
+        rw [h_t] at h_thread'
+        exact threadTipli_degisim h_thread' _ (typed_guvensiz_ic h_ty)
+      · have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl (fun y h => nomatch h)
+      · have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+  | sLinKullanTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro h_konf
+      subst h_S'
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+      · have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        exact threadTipli_degisim h_thread _
+          ⟨Tip.bos, lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi, Ρ,
+           ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl (fun y h => nomatch h)
+      · have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+  | sLinImhaTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro h_konf
+      subst h_S'
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+      · have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        exact threadTipli_degisim h_thread _
+          ⟨Tip.bos, lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi, Ρ,
+           ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl (fun y h => nomatch h)
+      · have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+  -- ============ KALAN Tamam kurallari — isaretli sorry'ler ============
+  | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
+      intro h_konf
+      -- TODO F4-ispat: store-push — comp 1 (degerTipli_ortam []→Ρ + h_b
+      -- kayitliligi), comp 10 (BolgeAyrik 12. bilesen GEREKLI: yeni
+      -- (⟨b,0⟩,v) girisi yalniz x'in konumunu golgeler — bolge-id↔var
+      -- enjektifligi; on-onayli mekanik ekleme, catal cozumuyle birlikte).
+      sorry
+  | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := sahipAta).
+      -- Odaksiz thread'lerin + cocugun RegionTamam'i guncellenmis-Ρ'da
+      -- yeniden kurulmali → DUR-SOR raporundaki Yol A/B/C karari gerekli.
+      sorry
+  | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
+      intro h_konf
+      -- TODO F4-ispat: sahiplik := setMany rb (thread ctx.tid) —
+      -- comp 3/7/8/9 icin sahiplikSetMany_lookup_inv + TidAyrik bileseni
+      -- (bitmis thread tekilligi) — mekanik, catal-bagimsiz.
+      sorry
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := update kanalRho).
+      sorry
+  | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
+      intro h_konf
+      -- TODO F4-ispat: sahiplik := set tb (thread ctx.tid); kanal pop —
+      -- comp 4 (kanalCikar tail-tipliligi), comp 11 (pop sonrasi transit:
+      -- kuyruk hala dolu ise ayni kanalda IKINCI transit bolge gerekir —
+      -- KanalTransit'in coklu-mesaj formu KONTROL EDILMELI; comp 2 odakli
+      -- sabit v tiplemesi KanalTutarli'dan. Catal-bagimsiz, mekanik agirlikli.
+      sorry
+  | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := dondurBolge).
+      sorry
+  -- ============ Hata kurallari: Aile 2 exfalso — TAM ============
+  | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataDonmus Γ Δ ctx.lineer Ρ x _ τ' Λ'' Ρ''
+        h_typed S b h_konf.2.2.2.2.2.1 h_konf.2.2.2.2.2.2.1 h_b h_frozen
+  | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_not_owner h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataSahipDegil Γ Δ ctx.lineer Ρ S ctx x _ b
+        τ' Λ'' Ρ'' h_typed h_ctx_in h_if h_konf.2.2.2.2.2.1
+        h_konf.2.2.2.2.2.2.2.1 h_b h_not_owner
+  | cGorevBaslatHataLineerIhlal S S' ts1 ts2 ctx yd kod vIhlal h_t h_if h_in h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cGorevBaslatHataLineerIhlal Γ Δ ctx.lineer Ρ
+        yd kod vIhlal τ' Λ'' Ρ'' h_typed h_in h_tuket
+  | cKanalGonderHataLineerTuket S S' ts1 ts2 ctx k vId h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cKanalGonderHataLineerTuket Γ Δ ctx.lineer Ρ
+        k vId τ' Λ'' Ρ'' h_typed h_tuket
+  | cDondurHataZatenDonmus S S' ts1 ts2 ctx b h_t h_if h_zaten h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cDondurHataZatenDonmus Γ Δ ctx.lineer Ρ
+        b τ' Λ'' Ρ'' h_typed S
+        h_konf.2.2.2.2.2.1 h_konf.2.2.2.2.2.2.1 h_zaten
+  | sLinKullanHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinKullanHataZatenTuketildi Γ Δ ctx.lineer Ρ
+        x τ' Λ'' Ρ'' h_typed h_tuket
+  | sLinImhaHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinImhaHataZatenTuketildi Γ Δ ctx.lineer Ρ
+        x τ' Λ'' Ρ'' h_typed h_tuket
+  -- ============ Congruence — catal cozumune bagimli ============
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL-bagimli: yeniden-sarma icin cikti-ortam-
+      -- kararli IH + b-parcasinin transportu (DUR-SOR raporu).
+      sorry
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL-bagimli (sSeqCong ile ayni).
+      sorry
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+      intro h_konf
+      -- TODO F4-ispat 🔴 CATAL-bagimli (sSeqCong ile ayni).
+      sorry
 
 
 -- ============================================================

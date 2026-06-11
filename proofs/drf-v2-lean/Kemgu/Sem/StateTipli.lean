@@ -162,6 +162,49 @@ end
 
 
 -- ============================================================
+-- §2.5. DegerTipli cevre-bagimsizligi (F4-ispat)
+-- DegerTipli'nin hicbir kurali Γ/Ρ parametrelerini TUKETMEZ (fantom) —
+-- istenen cevre ciftine tasinabilir. (t_sabit'in [] cevre formu ile
+-- SigmaTipli/KanalTutarli'nin Ρ'li formu arasinda gecis taniki.)
+-- ============================================================
+
+mutual
+
+theorem degerTipli_ortam {Γ Γ' : TipOrtam} {Ρ Ρ' : BolgeOrtam} :
+    ∀ (v : Deger) (τ : Tip), DegerTipli Γ Ρ v τ → DegerTipli Γ' Ρ' v τ
+  | .skaler _, _, h => by
+      cases h; exact DegerTipli.dt_skaler _
+  | .metinDeg _ _, _, h => by
+      cases h; exact DegerTipli.dt_metin _ _
+  | .yapiVal b alanlar, _, h => by
+      cases h with
+      | dt_yapi _ _ name h_al =>
+          exact DegerTipli.dt_yapi b alanlar name
+            (degerTipliAlanlar_ortam alanlar h_al)
+  | .diziVal _ _, _, h => by
+      cases h; exact DegerTipli.dt_dizi _ _ _
+  | .closureVal _ _, _, h => by
+      cases h; exact DegerTipli.dt_closure _ _ _ _
+  | .yetkiTok _ _, _, h => by
+      cases h; exact DegerTipli.dt_yetki _ _
+  | .gorevVal _, _, h => by
+      cases h; exact DegerTipli.dt_gorev _ _
+  | .birim, _, h => by
+      cases h; exact DegerTipli.dt_birim
+
+theorem degerTipliAlanlar_ortam {Γ Γ' : TipOrtam} {Ρ Ρ' : BolgeOrtam} :
+    ∀ (vs : List Deger), DegerTipliAlanlar Γ Ρ vs → DegerTipliAlanlar Γ' Ρ' vs
+  | [], _ => DegerTipliAlanlar.dta_nil
+  | v :: vs, h => by
+      cases h with
+      | dta_cons _ _ τ h_v h_vs =>
+          exact DegerTipliAlanlar.dta_cons v vs τ
+            (degerTipli_ortam v τ h_v)
+            (degerTipliAlanlar_ortam vs h_vs)
+
+end
+
+-- ============================================================
 -- §3. SigmaTipli (StoreTyped) — Plan v2 §5.2.2
 -- Store'daki her (k, v) icin: deger tip uyumlu + konum bilinen bolgede.
 -- ============================================================
