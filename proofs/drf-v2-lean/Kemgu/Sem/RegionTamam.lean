@@ -276,6 +276,23 @@ theorem sahipAta_get_inv (Ρ : BolgeOrtam) (t : ThreadId) :
             · rw [bolgeOrtamGet, if_neg h_vy] at h_acc
               exact Or.inr h_acc
 
+/-- sahipAta_get_in — bolgeOrtamSahipAta formu (rw-dostu). -/
+theorem sahipAta_get_in' (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (y : VarId) (b : Bolge) (h_in : y ∈ yd)
+    (h_lk : bolgeOrtamGet Ρ y = some b) :
+    bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y
+      = some (bolgeKategoriDegistir b (BolgeKategorisi.sahip t)) :=
+  sahipAta_get_in Ρ t yd Ρ y b h_in h_lk
+
+/-- sahipAta_get_inv — bolgeOrtamSahipAta formu (rcases-dostu). -/
+theorem sahipAta_get_inv' (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
+    (y : VarId) (bb : Bolge)
+    (h : bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y = some bb) :
+    (∃ b0, bolgeOrtamGet Ρ y = some b0
+        ∧ bb = bolgeKategoriDegistir b0 (BolgeKategorisi.sahip t) ∧ y ∈ yd)
+    ∨ bolgeOrtamGet Ρ y = some bb :=
+  sahipAta_get_inv Ρ t yd Ρ y bb h
+
 /-- sahipAta id-koruma: kayitli degiskenin lookup'u id-esit kalir. -/
 theorem sahipAta_id_koruma (Ρ : BolgeOrtam) (yd : List VarId) (t : ThreadId)
     (x : VarId) (b : Bolge) (h : bolgeOrtamGet Ρ x = some b) :
