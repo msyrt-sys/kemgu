@@ -1,0 +1,46 @@
+# KEMGU sürücü testleri — kök Makefile'a DOKUNMADAN ayrı harness (AGENTS.md:72).
+#
+# Kullanım (repo kökünden):
+#   make -f tests/drivers/Makefile.drivers                       # tüm yeşil sürücü testleri
+#   make -f tests/drivers/Makefile.drivers calistir_blk_oku_test
+#
+# Önkoşul kemgu + runtime: kök Makefile target'ları ile derlenir (kök Makefile
+# DEĞİŞTİRİLMEZ, yalnız çağrılır). Recipe: `kullan` import'ları kemgu tarafından
+# CWD-göreli (repo kökü) çözülür; --llvm | clang -x ir | çalıştır, exit 0 = geçti.
+
+ifeq ($(OS),Windows_NT)
+EXE := .exe
+else
+EXE :=
+endif
+
+KEMGU  := build/kemgu$(EXE)
+RT     := build/kdl_runtime.o build/kdl_runtime_mmio.o
+DTESTS := tests/drivers/virtio
+
+.PHONY: drivers_test onkosul calistir_blk_oku_test calistir_mmio_mock_test
+
+drivers_test: calistir_mmio_mock_test calistir_blk_oku_test
+	@echo "=== Tum (yesil) surucu testleri gecti ==="
+
+onkosul:
+	$(MAKE) -f Makefile $(KEMGU) build/kdl_runtime.o build/kdl_runtime_mmio.o
+
+calistir_blk_oku_test: onkosul
+	@echo "--- D9 blk_oku host-mock testi ---"
+	$(KEMGU) --llvm $(DTESTS)/virtio_blk_oku_test.kem > build/_d_blkoku.ll 2>build/_d_blkoku.err
+	clang -x ir build/_d_blkoku.ll -x none $(RT) -o build/_d_blkoku$(EXE) 2>build/_d_blkoku.cerr
+	./build/_d_blkoku$(EXE)
+	@echo "  blk_oku: GECTI (exit 0) — basari+veri, IOERR, UNSUPP, GecersizSektor, DescriptorTukendi, TamamlanmaYok"
+
+calistir_mmio_mock_test: onkosul
+	@echo "--- D1 virtio_mmio host-mock testi ---"
+	$(KEMGU) --llvm $(DTESTS)/virtio_mmio_mock_test.kem > build/_d_mmiomock.ll 2>build/_d_mmiomock.err
+	clang -x ir build/_d_mmiomock.ll -x none $(RT) -o build/_d_mmiomock$(EXE) 2>build/_d_mmiomock.cerr
+	./build/_d_mmiomock$(EXE)
+	@echo "  virtio_mmio_mock: GECTI (exit 0)"
+
+# DAHIL DEĞİL (origin/main'de zaten kırık — D9 scope dışı):
+#   virtio_blk_init_test     -> segfault: virtqueue_bagla `&Virtqueue` param codegen bug'ı (C-track fix bekliyor)
+#   virtio_blk_config_test   -> assertion exit 1 (D4/D5)
+#   virtqueue_bind/feature/mock_transport_test -> eksik `kullan` import (link hatası, test dosyası düzeltmesi)
