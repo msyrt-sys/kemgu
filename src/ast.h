@@ -47,6 +47,7 @@ typedef enum {
     DUGUM_ICIN,
     DUGUM_ESLES,
     DUGUM_GUVENSIZ,
+    DUGUM_SATIRICI_ASM,    /* satıriçi_asm { ... } — C5 inline assembly */
     DUGUM_BLOK,
     DUGUM_IFADE_DEYIMI,    /* sadece ifade ; (ornegin f(); ) */
 
@@ -305,6 +306,28 @@ struct Dugum {
             int aciklama_metin_uzunluk;
             Dugum *blok;
         } guvensiz;
+
+        /* C5: satıriçi_asm { mimari: x86_64  şablon: r#"..."#
+         *       çıktı("=r", &v)  girdi("r", e)  bozulan("~{cc}")
+         *       çevrim: 3 }
+         * Kısıt degerleri ham LLVM/GCC string (Türkçeleştirilmez);
+         * yüzey sözcükleri Türkçe. Paralel dizi deseni (bkz. cesit). */
+        struct {
+            const char *mimari;  int mimari_uz;   /* arch-tag (zorunlu) */
+            const char *sablon;  int sablon_uz;   /* asm template (zorunlu) */
+            /* çıktı("kısıt", &ad): her çıktı bir &değişken lvalue'ya yazar */
+            char **cikti_kisitlar; int *cikti_kisit_uzlar;
+            char **cikti_adlar;    int *cikti_ad_uzlar;
+            int cikti_sayi;
+            /* girdi("kısıt", ifade) */
+            char **girdi_kisitlar; int *girdi_kisit_uzlar;
+            Dugum **girdi_ifadeler;
+            int girdi_sayi;
+            /* bozulan("kısıt") — clobber listesi */
+            char **bozulanlar; int *bozulan_uzlar;
+            int bozulan_sayi;
+            int64_t cevrim;    /* -1 = anotasyon yok (gerçekzamanlı'da RT007) */
+        } satirici_asm;
 
         struct {
             Dugum **deyimler;

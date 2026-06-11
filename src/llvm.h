@@ -29,8 +29,20 @@
  *   ./build/kemgu --llvm program.kem | clang -x ir - -o program.exe
  */
 
-/* AST'den LLVM IR text uret. NULL guvenli. */
-void llvm_ir_uret(const Dugum *program, FILE *out);
+/* C5/C8: hedef mimari + triple — TEK KAYNAK, su an sabit-kodlu.
+ * Hedefe-duyarli triple secimi C8'in isi (bu PR'da YAPILMAZ).
+ * satirici_asm 'mimari:' etiketi KEMGU_HEDEF_MIMARI ile karsilastirilir;
+ * uyusmazsa AS001 derleme hatasi (yanlis hedefe sessizce bozuk IR
+ * uretmek YASAK). Sonuc: arm64-tagli asm bu triple altinda reddedilir,
+ * x86_64 asm calisir — kasitli. */
+#define KEMGU_HEDEF_MIMARI "x86_64"
+#define KEMGU_HEDEF_TRIPLE "x86_64-pc-windows-gnu"
+
+/* AST'den LLVM IR text uret. NULL guvenli.
+ * Donus: olumcul codegen hatasi sayisi (AS001 mimari uyusmazligi).
+ * >0 ise cikti IR'i KULLANILMAMALI (hatali asm bloklari emit edilmedi);
+ * cagiran derlemeyi hata koduyla bitirmeli. */
+int llvm_ir_uret(const Dugum *program, FILE *out);
 
 /*
  * C2: IR-verifier kapisi (text backend icin LLVMVerifyModule esdegeri).

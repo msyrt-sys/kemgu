@@ -25,6 +25,8 @@
  *   RT004 — REALTIME_CALLS_NONRT        (gercekzamanli olmayan cagri)
  *   RT005 — REALTIME_WCET_UNKNOWN       (cagrilan bilinmeyen sembol)
  *   RT006 — parser hatasi (modifier duplicate) — bkz parser.c
+ *   RT007 — satirici_asm 'cevrim:' anotasyonu eksik (C5 C.3 — opak
+ *           asm maliyeti gerçekzamanlı baglamda acikca bildirilmeli)
  *
  * V1 sinirlamalari:
  *   - Loop yok (RT002 her zaman). V2: bounded loop annotation.
