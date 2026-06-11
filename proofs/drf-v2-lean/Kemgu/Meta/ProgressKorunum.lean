@@ -183,7 +183,7 @@ theorem progress_konf
             rfl, h_tid1⟩)
   | gorevBaslat yd kod _ih_kod =>
       match h_rt with
-      | RegionTamam.r_gorev_baslat _ _ _ _ _ _ tY h_yazlar _ _ =>
+      | RegionTamam.r_gorev_baslat _ _ _ _ _ _ tY h_yazlar _ _ _ _ =>
         obtain ⟨_, _, _, _, _, h_beq, _, h_hvar, _, _, _, _, _, _, _⟩ := h_konf
         have h_ctx_in : ctx ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
