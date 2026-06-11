@@ -833,6 +833,60 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     return s;
 }
 
+/* C-track fix (init-test koku #3): `x.alan = v` LVALUE adresi.
+ * erisim_uret'in okuma mantigini aynalar ama load YERINE alan ADRESINI
+ * (GEP) doner. Nesne tanimlayici olmali (tek seviye — driver deseni
+ * `cfg.alan = v` / `vq.alan = v`); ic ice erisim v2.
+ *   - lokal struct (llvm_tip "%Ad"): alloca dogrudan struct adresi
+ *   - referans param / ptr (llvm_tip "ptr"): alloca'dan ptr yukle,
+ *     yapi tipi alan adina gore cozulur (erisim_uret ile ayni
+ *     konservatif arama)
+ * Donus: alan adresi reg (>=0) + alan_ir_out; cozulemezse -1. */
+static int erisim_lvalue(LlvmGen *g, const Dugum *d,
+                         const char **alan_ir_out) {
+    if (!d || d->tip != DUGUM_ERISIM) return -1;
+    const Dugum *nesne_d = d->veri.erisim.nesne;
+    if (!nesne_d || nesne_d->tip != DUGUM_TANIMLAYICI) return -1;
+    LlvmIsim *vi = isim_bul(g, nesne_d->veri.tanimlayici.metin,
+                            nesne_d->veri.tanimlayici.uzunluk);
+    if (!vi || !vi->llvm_tip) return -1;
+
+    YapiKayit *yk = NULL;
+    int taban_reg = -1;
+    if (vi->llvm_tip[0] == '%') {
+        yk = yapi_bul(g, vi->llvm_tip + 1,
+                      (int)strlen(vi->llvm_tip + 1));
+        taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
+    } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
+        for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+            if (yapi_alan_indeksi(y, d->veri.erisim.alan,
+                                   d->veri.erisim.alan_uzunluk,
+                                   NULL) >= 0) {
+                yk = y;
+            }
+        }
+        if (!yk) return -1;
+        taban_reg = yeni_reg(g);
+        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
+                taban_reg, vi->reg_no);
+    } else {
+        return -1;
+    }
+    if (!yk || yk->ast->tip != DUGUM_YAPI) return -1;
+
+    const Dugum *alan_tip_d = NULL;
+    int idx = yapi_alan_indeksi(yk, d->veri.erisim.alan,
+                                 d->veri.erisim.alan_uzunluk, &alan_tip_d);
+    if (idx < 0) return -1;
+    if (alan_ir_out) *alan_ir_out = ast_tip_to_ir(g, alan_tip_d);
+
+    int gep_r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
+    ad_yaz(g->out, yk->ad, yk->ad_uz);
+    fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", taban_reg, idx);
+    return gep_r;
+}
+
 /* === C2.5: sonuç/seçimlik tagged-union yardımcıları === */
 
 /* "{i8, T, H}" aggregate IR stringinden idx'inci alanın tipini cikar.
@@ -1209,6 +1263,36 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_TEKLI: {
+            /* C-track fix (&Struct segfault, D9 bulgusu): OP_REF ve
+             * OP_REF_DEGISKEN operandin ADRESINI uretmeli. Onceki durum:
+             * asagida "tekli op desteklenmiyor" yorumuna dusup operandin
+             * DEGERI donuyordu -> `f(&v)` cagrisinda struct BY-VALUE
+             * gecer, callee imzasi `ptr` bekler (opt -verify bunu
+             * yakalamaz: imza-uyumsuz direkt cagri gecerli-ama-UB IR),
+             * callee ilk 8 byte'i pointer sanip deref eder -> runtime
+             * SEGFAULT. Tanimlayici: alloca adresi dogrudan donulur.
+             * Diger operandlar (rvalue): degeri temp alloca'ya
+             * materyalize edilir — read-only referans semantigi. */
+            if (d->veri.tekli.op == OP_REF ||
+                d->veri.tekli.op == OP_REF_DEGISKEN) {
+                const Dugum *op_d = d->veri.tekli.operand;
+                if (op_d && op_d->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        op_d->veri.tanimlayici.metin,
+                        op_d->veri.tanimlayici.uzunluk);
+                    if (vi) {
+                        IfadeSonuc s = { vi->reg_no, "ptr" };
+                        return s;
+                    }
+                }
+                IfadeSonuc v = ifade_uret(g, op_d, NULL);
+                int t = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca %s\n", t, v.tip);
+                fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                        v.tip, v.reg, t);
+                IfadeSonuc s = { t, "ptr" };
+                return s;
+            }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
             if (d->veri.tekli.op == OP_NEG) {
                 int r = yeni_reg(g);
@@ -1353,10 +1437,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
+                    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de
+                     * sret pointer ile DONER — clang'in C tarafi icin
+                     * urettigi imza `void(ptr sret, i16, i16)`. Onceki
+                     * first-class-donus formu backend demotion'ina bel
+                     * bagliyordu; sret'i acikca emit ediyoruz. */
+                    int sret = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
+                    fprintf(g->out,
+                        "  call void @kdl_yetki_olustur("
+                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "i16 %%%d, i16 %%%d)\n", sret, r_kt, r_izin);
                     int r = yeni_reg(g);
                     fprintf(g->out,
-                        "  %%%d = call %%kdl_yetki @kdl_yetki_olustur("
-                        "i16 %%%d, i16 %%%d)\n", r, r_kt, r_izin);
+                        "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
                     IfadeSonuc s = { r, "%kdl_yetki" };
                     return s;
                 }
@@ -1375,11 +1469,29 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
+                    /* C-track ABI fix (init-test segfault koku #2):
+                     * Win64 C ABI 16B struct ARGUMANI pointer ile gecer
+                     * (`void(ptr sret, ptr, i16)`). Onceki first-class
+                     * `%kdl_yetki` arg formu C tarafinin bekledigi
+                     * pointer'la uyusmuyordu -> kdl_yetki_delege
+                     * prologunda copte deref, runtime SEGFAULT (opt
+                     * -verify yakalamaz: imza-uyumsuz cagri gecerli IR).
+                     * Deger temp alloca'ya yazilir, adresi gecirilir. */
+                    int y_slot = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", y_slot);
+                    fprintf(g->out,
+                        "  store %%kdl_yetki %%%d, ptr %%%d\n",
+                        arg_y.reg, y_slot);
+                    int sret = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
+                    fprintf(g->out,
+                        "  call void @kdl_yetki_delege("
+                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "ptr %%%d, i16 %%%d)\n",
+                        sret, y_slot, r_izin);
                     int r = yeni_reg(g);
                     fprintf(g->out,
-                        "  %%%d = call %%kdl_yetki @kdl_yetki_delege("
-                        "%%kdl_yetki %%%d, i16 %%%d)\n",
-                        r, arg_y.reg, r_izin);
+                        "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
                     IfadeSonuc s = { r, "%kdl_yetki" };
                     return s;
                 }
@@ -2315,6 +2427,26 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             i->llvm_tip, rr, i->reg_no);
                 }
+            } else if (d->veri.atama.hedef &&
+                       d->veri.atama.hedef->tip == DUGUM_ERISIM) {
+                /* C-track fix (init-test koku #3): `x.alan = v` daha once
+                 * SESSIZCE DUSURULUYORDU (yalniz tanimlayici hedef vardi;
+                 * if'e girmeden return 0). Sonuc: blk_yapilandirma_oku
+                 * cfg alanlari hep 0 kaldi (D4/D5 config testinin exit 1
+                 * nedeni). Simdi: alan adresi (GEP) + store — hem lokal
+                 * struct hem &Struct referans param hedefi calisir. */
+                const char *alan_ir = NULL;
+                int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir);
+                if (adr >= 0 && alan_ir) {
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                               alan_ir);
+                    int rr = int_donustur(g, v.reg, v.tip, alan_ir);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            alan_ir, rr, adr);
+                } else {
+                    fprintf(g->out,
+                        "  ; atama: erisim hedefi cozulemedi\n");
+                }
             }
             return 0;
         }
@@ -3090,15 +3222,21 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_oku_karakter()\n", out);
 
     /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
-    fputs("declare %kdl_yetki @kdl_yetki_olustur(i16, i16)\n", out);
-    fputs("declare %kdl_yetki @kdl_yetki_delege(%kdl_yetki, i16)\n", out);
+    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de sret/pointer ile
+     * tasinir (clang -emit-llvm dogrulamasi: `void(ptr sret, ptr, i16)`).
+     * First-class %kdl_yetki arg/donus declare'lari C tarafiyla
+     * UYUSMUYORDU (runtime segfault). Tum sinir imzalari C-uyumlu. */
+    fputs("declare void @kdl_yetki_olustur(ptr sret(%kdl_yetki) align 8,"
+          " i16, i16)\n", out);
+    fputs("declare void @kdl_yetki_delege(ptr sret(%kdl_yetki) align 8,"
+          " ptr, i16)\n", out);
     fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol(%kdl_yetki, i16)\n", out);
-    fputs("declare i32 @kdl_yetki_kontrol_tipi(%kdl_yetki, i16, i16)\n", out);
-    fputs("declare i64 @kdl_yetki_id(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_tipi(%kdl_yetki)\n", out);
-    fputs("declare i16 @kdl_yetki_izin(%kdl_yetki)\n", out);
-    fputs("declare i8 @kdl_yetki_iptal_mi(%kdl_yetki)\n\n", out);
+    fputs("declare i32 @kdl_yetki_kontrol(ptr, i16)\n", out);
+    fputs("declare i32 @kdl_yetki_kontrol_tipi(ptr, i16, i16)\n", out);
+    fputs("declare i64 @kdl_yetki_id(ptr)\n", out);
+    fputs("declare i16 @kdl_yetki_tipi(ptr)\n", out);
+    fputs("declare i16 @kdl_yetki_izin(ptr)\n", out);
+    fputs("declare i8 @kdl_yetki_iptal_mi(ptr)\n\n", out);
 
     /* MMIO Foundation — 32-bit register erisimi (kdl_mmio_*).
      * Host: mock tampon; bare-metal (-DKEMGU_BARE_METAL): volatile load/store. */

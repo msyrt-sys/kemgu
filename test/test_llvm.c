@@ -1365,6 +1365,67 @@ static void test_mmio_genis_calistir(void) {
     test_sonuc("mmio typed-width fikstur (le16 komsu + le64) -> exit 42", rc == 42);
 }
 
+/* --- C-track: &Struct referans-param + alan atama + yetki ABI --- */
+
+static void test_ref_struct_param_alan_okuma(void) {
+    /* D9 x3 repro: onceki durum — &v cagri argumani struct DEGERINI
+     * gecirirdi (OP_REF lowering yoktu, "tekli op desteklenmiyor") ->
+     * callee ptr bekler, ilk alani pointer sanir -> runtime SEGFAULT
+     * (exit 139). opt -verify bunu YAKALAMAZ (imza-uyumsuz direkt
+     * cagri gecerli-ama-UB IR). */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Vq { taban: tam64; boyut: tam32; } "
+        "i\xc5\x9flev kur(y: tam32, vq: &Vq) -> tam32 { "
+        "ver vq.boyut + y; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v: Vq = Vq { taban: 4096, boyut: 40 }; "
+        "ver kur(2, &v); }");
+    test_sonuc("&Struct param + alan okuma round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_ref_struct_param_sonuc_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/ref_struct_sonuc.kem");
+    test_sonuc("&Struct param + sonuc donus: opt verify PASS", ok);
+}
+
+static void test_ref_struct_param_sonuc_calistir(void) {
+    /* D9 w1 repro: &Struct param + sonuc<bos,cesit> donus + esles. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/ref_struct_sonuc.kem");
+    test_sonuc("&Struct param + sonuc donus (w1) -> exit 42", rc == 42);
+}
+
+static void test_struct_alan_atama(void) {
+    /* Init-test koku #3: `x.alan = v` onceden SESSIZCE dusurulurdu
+     * (DUGUM_ATAMA yalniz tanimlayici hedef taniyordu) -> D4/D5
+     * blk_yapilandirma cfg alanlari hep 0 kalirdi. Hem lokal struct
+     * hem &degisken referans param hedefi dogrulanir. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 K { a: tam32; b: tam64; } "
+        "i\xc5\x9flev doldur(k: &de\xc4\x9fi\xc5\x9fken K) -> tam32 { "
+        "k.a = 40; k.b = 2; ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: K = K { a: 0, b: 0 }; "
+        "doldur(&k); "
+        "ver k.a + (k.b olarak tam32); }");
+    test_sonuc("alan atama: &degisken ref uzerinden mutasyon -> exit 42",
+               rc == 42);
+}
+
+static void test_yetki_delege_abi(void) {
+    /* Init-test koku #2: %kdl_yetki (16B) IR<->C sinirinda first-class
+     * arg gecirilirdi; Win64 C ABI pointer bekler -> kdl_yetki_delege
+     * prologunda segfault. Fix: sret/ptr C-uyumlu imzalar. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "de\xc4\x9fi\xc5\x9fken y1: yetki<MMIO> = delege(y, 3); "
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y1, 1); "
+        "ver 42; }");
+    test_sonuc("yetki_olustur + delege zinciri (Win64 C ABI) -> exit 42",
+               rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1631,6 +1692,13 @@ int main(void) {
     test_asm_arm64_llvm_reddi();
     test_asm_arm64_check_reddi();
     test_asm_guvensiz_disi_reddi();
+
+    printf("\n--- C-track: &Struct ref-param + alan atama + yetki ABI ---\n");
+    test_ref_struct_param_alan_okuma();
+    test_ref_struct_param_sonuc_verify();
+    test_ref_struct_param_sonuc_calistir();
+    test_struct_alan_atama();
+    test_yetki_delege_abi();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
