@@ -336,6 +336,61 @@ theorem sahiplikSetMany_ne (bs : List Bolge) (s : Sahiplik) (b' : Bolge)
         _ = sahiplikGet (sahiplikSet s b yeni) b' := ih (sahiplikSet s b yeni) h_rest
         _ = sahiplikGet s b' := sahiplikSet_ne s b b' yeni h_ne
 
+/-- SetMany lookup analizi: sonuc ya yeni atamadan (b ∈ bs) ya eskidir. -/
+theorem sahiplikSetMany_lookup_inv (bs : List Bolge) (s : Sahiplik)
+    (yeni : Sahip) (b : Bolge) (v : Sahip)
+    (h : sahiplikGet (sahiplikSetMany s bs yeni) b = some v) :
+    (b ∈ bs ∧ v = yeni) ∨ sahiplikGet s b = some v := by
+  induction bs generalizing s with
+  | nil => exact Or.inr h
+  | cons b1 rest ih =>
+      have h' : sahiplikGet (sahiplikSetMany (sahiplikSet s b1 yeni) rest yeni) b
+          = some v := h
+      rcases ih (sahiplikSet s b1 yeni) h' with ⟨h_mem, h_v⟩ | h_eski
+      · exact Or.inl ⟨List.Mem.tail _ h_mem, h_v⟩
+      · by_cases h_eq : b = b1
+        · subst h_eq
+          rw [sahiplikSet_eq] at h_eski
+          exact Or.inl ⟨List.Mem.head _, (Option.some.inj h_eski).symm⟩
+        · rw [sahiplikSet_ne s b1 b yeni h_eq] at h_eski
+          exact Or.inr h_eski
+
+/-- head? bir deger donduruyorsa o listededir. -/
+theorem head?_mem {α : Type} {l : List α} {v : α}
+    (h : l.head? = some v) : v ∈ l := by
+  cases l with
+  | nil => cases h
+  | cons a rest =>
+      have : a = v := Option.some.inj h
+      rw [← this]
+      exact List.Mem.head _
+
+/-- tail uyeligi tam listeye tasinir. -/
+theorem tail_uye {α : Type} {l : List α} {w : α}
+    (h : w ∈ l.tail) : w ∈ l := by
+  cases l with
+  | nil => cases h
+  | cons a rest => exact List.Mem.tail _ h
+
+/-- tail uzunlugu kucuk-esittir. -/
+theorem tail_uzunluk {α : Type} (l : List α) :
+    l.tail.length ≤ l.length := by
+  cases l with
+  | nil => exact Nat.le_refl _
+  | cons a rest => exact Nat.le_succ _
+
+/-- Kapasite-1 dolu kuyrugun tail'i bos. -/
+theorem tail_bos_kapasite {α : Type} {q : List α}
+    (h_kap : q.length ≤ 1) (h_dolu : q ≠ []) : q.tail = [] := by
+  cases q with
+  | nil => exact absurd rfl h_dolu
+  | cons a rest =>
+      cases rest with
+      | nil => rfl
+      | cons b r2 =>
+          exfalso
+          simp [List.length] at h_kap
+
 /-- SetMany, listedeki her bolgenin lookup'unu yeni degere goturur
     (tum yeni entry'ler ayni degeri tasir). -/
 theorem sahiplikSetMany_mem (s : Sahiplik) (bs : List Bolge) (yeni : Sahip)
