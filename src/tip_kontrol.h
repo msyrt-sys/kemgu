@@ -32,6 +32,8 @@
  *   T017: yapi olusturmada bilinmeyen alan
  *   T030: generic tip argumani bound'u karsilamiyor (constraint violation)
  *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
+ *   G001: *T dereferans guvensiz blok disinda (C5 on-kosul #2)
+ *   G002: satiriçi_asm guvensiz blok disinda (C5)
  *
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
@@ -60,6 +62,10 @@ typedef struct TipKontrol {
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */
     Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
+    /* === C5: unsafe-context bayragi === */
+    int guvensiz_baglam;           /* >0 = guvensiz blok icindeyiz (derinlik).
+                                      *T dereferans (G001) ve satiriçi_asm (G002)
+                                      yalniz guvensiz baglamda gecerli. */
 } TipKontrol;
 
 void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
