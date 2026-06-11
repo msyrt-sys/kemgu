@@ -100,7 +100,7 @@ theorem kemgu_drf_v1_no_concurrent_writes
 /-- TEOREM 4' V1 bundled — S1 invariant StepStar korunumu
     (DRF lemmalarinin birlesik formu; cross-Step HB V2.1 hedefi). -/
 theorem kemgu_drf_v1_bundled
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S₀ S : Konfigurasyon) (h_run : StepStar S₀ S)
     (h_init_s1 : s1_invariant S₀) :
     s1_invariant S :=

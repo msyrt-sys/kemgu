@@ -6,8 +6,8 @@ Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
 F6 yeniden ifade (Mehmet onayli — ADIM 0 acik soru 4):
 - SCR/BET placeholder-True conjunct'lari TEOREMDEN CIKARILDI (gorunus ile
   icerik farki — dis degerlendirmenin ana elestirisi). V2 hedefleri yorumda.
-- Hipotez GERCEK IyiTipli (Kopru.lean — HasType/LineerTamam/RegionTamam'a
-  bagli) + kosu baslangicKonf'tan; eski vakum-IyiTipli + serbest S₀ formu
+- Hipotez GERCEK IyiTipliCekirdek (Kopru.lean — HasType/LineerTamam/RegionTamam'a
+  bagli) + kosu baslangicKonf'tan; eski vakum-IyiTipliCekirdek + serbest S₀ formu
   kaldirildi.
 - YENI conjunct: No-Fault (iyiTipli_no_fault — F3 koprusu + F4
   typed_no_fault zinciri; adim_korunum iskeletine baglidir).
@@ -63,7 +63,7 @@ def DrfHolds (S : Konfigurasyon) : Prop :=
 /-- TEOREM M (V3 KEMGU SOUNDNESS — F6 yeniden ifade):
 
     Kagit ifadesi (daraltilmis durust V1 formu):
-      IyiTipli(Π) ⟹ S₀(Π)'den ulasilabilir her S icin:
+      IyiTipliCekirdek(Π) ⟹ S₀(Π)'den ulasilabilir her S icin:
         DataRaceFree(S) ∧ MemorySafe(S) ∧ S fault degil.
 
     Bilesenler:
@@ -79,7 +79,7 @@ def DrfHolds (S : Konfigurasyon) : Prop :=
     - BoundedExecutionTime placeholder (V2: B2' WCET + cycle counting,
       ~350 satir). -/
 theorem kemgu_soundness_v3
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S : Konfigurasyon)
     (h_run : StepStar (baslangicKonf Pi) S) :
     DrfHolds S

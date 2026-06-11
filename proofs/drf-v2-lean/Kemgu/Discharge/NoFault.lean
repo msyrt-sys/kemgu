@@ -427,9 +427,9 @@ theorem adim_korunum
         exact tidAyrik_degisim h13 _ rfl
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := sahipAta).
-      -- Odaksiz thread'lerin + cocugun RegionTamam'i guncellenmis-Ρ'da
-      -- yeniden kurulmali → DUR-SOR raporundaki Yol A/B/C karari gerekli.
+      -- TODO 🔴 TEK BLOKER: kategori-anahtar disiplini (DECISIONS_LOG.md
+      -- DUR-SOR). id-anahtarlama onayi sonrasi: Yol-B premise + transport
+      -- lemmasi ile comp-2; comp-1/7/10 id-anahtarla acilir.
       sorry
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       intro h_konf
@@ -560,7 +560,7 @@ theorem adim_korunum
         exact tidAyrik_degisim h13 _ rfl
   | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := update kanalRho).
+      -- TODO 🔴 TEK BLOKER: kategori-anahtar (DECISIONS_LOG.md DUR-SOR).
       sorry
   | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
       intro h_konf
@@ -745,7 +745,7 @@ theorem adim_korunum
         rw [← e1, ← e2, h_p]
   | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := dondurBolge).
+      -- TODO 🔴 TEK BLOKER: kategori-anahtar (DECISIONS_LOG.md DUR-SOR).
       sorry
   -- ============ Hata kurallari: Aile 2 exfalso — TAM ============
   | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
@@ -816,16 +816,16 @@ theorem adim_korunum
   -- ============ Congruence — catal cozumune bagimli ============
   | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL-bagimli: yeniden-sarma icin cikti-ortam-
-      -- kararli IH + b-parcasinin transportu (DUR-SOR raporu).
+      -- TODO 🔴 kategori-anahtar cozumune bagimli: cikti-ortam-kararli IH
+      -- + transport (DECISIONS_LOG.md).
       sorry
   | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL-bagimli (sSeqCong ile ayni).
+      -- TODO 🔴 kategori-anahtar cozumune bagimli (sSeqCong ile ayni).
       sorry
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO F4-ispat 🔴 CATAL-bagimli (sSeqCong ile ayni).
+      -- TODO 🔴 kategori-anahtar cozumune bagimli (sSeqCong ile ayni).
       sorry
 
 
@@ -853,9 +853,9 @@ theorem typed_no_fault
     exact ih Ρ1 h_konf1
 
 /-- Program-seviyesi No-Fault (F3 koprusuyle — kagit formu):
-    IyiTipli(Π) ⟹ S₀(Π)'den ulasilabilir hicbir konfigurasyon fault degil. -/
+    IyiTipliCekirdek(Π) ⟹ S₀(Π)'den ulasilabilir hicbir konfigurasyon fault degil. -/
 theorem iyiTipli_no_fault
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S : Konfigurasyon)
     (h_run : StepStar (baslangicKonf Pi) S) :
     S.fault = none :=

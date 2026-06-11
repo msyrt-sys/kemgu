@@ -4,12 +4,12 @@ Kaynak: ADIM0_DENETIM_RAPORU.md Bolum 2.1 + FAZ_BRIFINGLERI.md F3
 Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
 
 ADIM 0 Sorun 1'in kapanisi: TipKontrolOk ailesi artik GERCEK predikatlar
-(HasType / LineerTamam / RegionTamam'a bagli); IyiTipli yeniden tanimlandi
+(HasType / LineerTamam / RegionTamam'a bagli); IyiTipliCekirdek yeniden tanimlandi
 (Realtime alani kaldirildi — Mehmet onayi; Capability/Sabitsure sozdizimsel
 scope-guard). MIMARININ KILIT TASI: `iyiTipli_baslangic` koprusu —
 iyi-tipli programin baslangic konfigurasyonu KonfTipliFull'dur. Boylece
 typed_no_fault / adim_korunum zinciri Program-seviyesi hipoteze baglanir
-(eski modelde bu kopru HIC yoktu — IyiTipli ile KonfTipliFull ayri
+(eski modelde bu kopru HIC yoktu — IyiTipliCekirdek ile KonfTipliFull ayri
 dunyalardaydi). Satisfiability tanigi da burada (vakum-hipotez sigortasi).
 -/
 
@@ -54,7 +54,7 @@ def rhoBaslangic (Pi : Program) : BolgeOrtam :=
 
 /-- Varsayilanlanabilir tipler (DegerTipli kurali olan kategoriler).
     mantiksal/karakter/ref/ptr/tekkez/kanal/sabitsure V1'de deger
-    temsiline sahip degil → cevre'de yasak (IyiTipli.cevreBasit). -/
+    temsiline sahip degil → cevre'de yasak (IyiTipliCekirdek.cevreBasit). -/
 def tipVarsayilanlanabilir : Tip → Bool
   | Tip.bos        => true
   | Tip.scalar     => true
@@ -148,11 +148,24 @@ def SabitsureKontrolOk (Pi : Program) : Prop :=
   Pi.cevre.all
     (fun p => match p.2 with | Tip.sabitsure _ => false | _ => true) = true
 
-/-- IyiTipli(Π) — GERCEK form (F3).
-    Realtime alani KALDIRILDI (V1 Ifade'de realtime yapisi yok).
-    cevreBasit: cevre tipleri deger temsiline sahip olmali (V1 siniri —
-    DegiskenlerBagli koprusu icin sart). -/
-structure IyiTipli (Pi : Program) : Prop where
+/-- IyiTipliCekirdek(Π) — V1 CEKIRDEK iyi-tiplilik (F3 gercek form +
+    F4-kapanis gorunur-kisit paketi).
+
+    ⚠ DIKKAT — CEKIRDEK ALT-KUME: bu predikat TAM KEMGU dilinin degil,
+    V1 cekirdek alt-kumesinin iyi-tipliligidir. Teoremler (ozellikle
+    kemgu_soundness_v3) bu hipotezle okunmali — TAM-DIL DRF DEGILDIR.
+    Gorunur kisitlar:
+    - cevreBasit: cevre tipleri deger temsiline sahip (ref/ptr/tekkez
+      cevre-degiskeni yok — V1).
+    - KAPASITE-1 kanallar (semantik duzeyde: cKanalGonderTamam h_bos
+      guard.i — dolu kanala gonderim bloklar; buffer.li kanal V2).
+    - YOL-B (planli, kategori-anahtar cozumuyle birlikte): gorev
+      govdeleri yazma-hedefsiz (HedefVar/HedefBolge bos) — premise
+      r_gorev_baslat.a girecek; per-thread Ρ tam cozumu V2.
+    Realtime alani KALDIRILDI (V1 Ifade.de realtime yapisi yok).
+    DERLEYICI dilin ust-kumesini kabul eder; bkz. README scope notu +
+    DECISIONS_LOG.md. -/
+structure IyiTipliCekirdek (Pi : Program) : Prop where
   tipOk        : TipKontrolOk Pi
   lineerOk     : LineerKontrolOk Pi
   bolgeOk      : BolgeAtamaOk Pi
@@ -266,10 +279,10 @@ theorem storeBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Tip)
 -- §4. KOPRU TEOREMI — iyiTipli_baslangic (mimarinin kilit tasi)
 -- ============================================================
 
-/-- IyiTipli(Π) ⟹ KonfTipliFull(S₀(Π)) — Program-seviyesi tip kontrolu,
+/-- IyiTipliCekirdek(Π) ⟹ KonfTipliFull(S₀(Π)) — Program-seviyesi tip kontrolu,
     konfigurasyon-seviyesi tipliligi KURAR. typed_no_fault / adim_korunum
-    zinciri boylece kagit-formdaki "IyiTipli(Π) ⟹ ..." iddialarina baglanir. -/
-theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
+    zinciri boylece kagit-formdaki "IyiTipliCekirdek(Π) ⟹ ..." iddialarina baglanir. -/
+theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipliCekirdek Pi) :
     KonfTipliFull (gammaProgram Pi) (deltaProgram Pi)
                   (rhoBaslangic Pi) (baslangicKonf Pi) := by
   refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -377,7 +390,7 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
 -- ============================================================
 
 /-- Bos program iyi-tipli (tum kosullar bos liste uzerinde). -/
-theorem bos_program_iyiTipli : IyiTipli { islevler := [] } := by
+theorem bos_program_iyiTipli : IyiTipliCekirdek { islevler := [] } := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro p h; cases h
   · intro p h; cases h

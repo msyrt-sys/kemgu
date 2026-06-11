@@ -55,9 +55,9 @@ theorem s1_yapisal (S : Konfigurasyon) : s1_invariant S := by
 -- ============================================================
 
 /-- DRF-L0 — Bolge Korunumu: Step altinda S1 korunur.
-    Ispat yapisal (lookup fonksiyonel) — Step/IyiTipli detaylari gerekmez. -/
+    Ispat yapisal (lookup fonksiyonel) — Step/IyiTipliCekirdek detaylari gerekmez. -/
 theorem drf_l0_bolge_korunumu
-    (Pi : Program) (_h_iyi : IyiTipli Pi)
+    (Pi : Program) (_h_iyi : IyiTipliCekirdek Pi)
     (S S' : Konfigurasyon) (_h_step : Step S S')
     (_h_s1 : s1_invariant S) :
     s1_invariant S' := by
@@ -72,7 +72,7 @@ theorem drf_l0_bolge_korunumu
 
 /-- DRF-L0' — StepStar altinda da S1 korunur. -/
 theorem drf_l0_bolge_korunumu_starStep
-    (Pi : Program) (h_iyi : IyiTipli Pi)
+    (Pi : Program) (h_iyi : IyiTipliCekirdek Pi)
     (S S' : Konfigurasyon) (h_run : StepStar S S')
     (h_s1 : s1_invariant S) :
     s1_invariant S' := by
