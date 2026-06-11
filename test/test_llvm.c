@@ -1426,6 +1426,21 @@ static void test_yetki_delege_abi(void) {
                rc == 42);
 }
 
+/* --- Codegen coverage audit: lowering bosluk regresyonlari ---
+ * KRITIK: hepsi RUNTIME round-trip assert eder (yaz -> oku -> dogru
+ * deger). opt-verify bu sinifi YAKALAMAZ (dusurulen deyim / yanlis
+ * deger gecerli-ama-yanlis IR uretir). */
+
+static void test_audit_deref_okuma(void) {
+    /* Gap #1: *p deref load emit etmiyordu — ptr DEGERI donerdi. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; ver oku(&x); }");
+    test_sonuc("audit: *p deref yukleme round-trip -> exit 42", rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1699,6 +1714,9 @@ int main(void) {
     test_ref_struct_param_sonuc_calistir();
     test_struct_alan_atama();
     test_yetki_delege_abi();
+
+    printf("\n--- Codegen coverage audit (runtime round-trip) ---\n");
+    test_audit_deref_okuma();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

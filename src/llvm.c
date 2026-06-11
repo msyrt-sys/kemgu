@@ -1293,6 +1293,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { t, "ptr" };
                 return s;
             }
+            /* Audit fix #1: OP_DEREFERANS — *p ham pointer YUKU.
+             * Onceki durum: "tekli op desteklenmiyor" + ptr DEGERI
+             * donerdi -> ret baglaminda gecersiz IR, aritmetikte sessiz
+             * yanlis deger. Yuklenecek tip: beklenen (ver/atama/cagri
+             * baglamindan forward edilir), yoksa i32 varsayilan. */
+            if (d->veri.tekli.op == OP_DEREFERANS) {
+                IfadeSonuc p = ifade_uret(g, d->veri.tekli.operand, NULL);
+                const char *yuk_tip =
+                    (beklenen && strcmp(beklenen, "ptr") != 0)
+                        ? beklenen : "i32";
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+                        r, yuk_tip, p.reg);
+                IfadeSonuc s = { r, yuk_tip };
+                return s;
+            }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
             if (d->veri.tekli.op == OP_NEG) {
                 int r = yeni_reg(g);
