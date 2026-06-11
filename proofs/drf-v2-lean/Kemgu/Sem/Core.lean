@@ -230,23 +230,44 @@ abbrev Store := List (Konum × Deger)
 /-- Store lookup: ilk eslesen entry (newest-wins; sAtamaTamam prepend eder).
     F2: sVarOku (degisken okuma) ve cKanalGonderTamam (gonderilen deger)
     bu lookup'i kullanir. Offset-0 konvansiyonu: degisken x'in konumu
-    ⟨bolge(x), 0⟩ (V1). -/
+    ⟨bolge(x), 0⟩ (V1).
+
+    ID-ANAHTARLAMA (Onarim v3 — DECISIONS_LOG kategori-anahtar karari):
+    karsilastirma bolge KIMLIGI (.id) + ofset uzerinden — kategori
+    DEGISKEN OZNITELIKTIR (recat erisimi koparmaz). BolgeAyrik
+    (id↔degisken injektivligi) bu anahtarlamanin tutarlilik temelidir. -/
 def konumGet : Store → Konum → Option Deger
   | [], _ => none
-  | (k, v) :: rest, key => if k = key then some v else konumGet rest key
+  | (k, v) :: rest, key =>
+      if k.bolge.id = key.bolge.id ∧ k.ofset = key.ofset then some v
+      else konumGet rest key
 
-/-- Lookup uyeligi (store): get bir deger donduruyorsa cift listededir. -/
+/-- Lookup uyeligi (store, id-formu): get bir deger donduruyorsa
+    id+ofset eslesen bir cift listededir. -/
 theorem konumGet_mem : ∀ (s : Store) (k : Konum) (v : Deger),
-    konumGet s k = some v → (k, v) ∈ s
+    konumGet s k = some v →
+    ∃ k', (k', v) ∈ s ∧ k'.bolge.id = k.bolge.id ∧ k'.ofset = k.ofset
   | [], _, _, h => by simp [konumGet] at h
   | (k0, v0) :: rest, k, v, h => by
-      by_cases hk : k0 = k
-      · subst hk
-        simp [konumGet] at h
-        subst h
-        exact List.Mem.head _
-      · simp [konumGet, hk] at h
-        exact List.Mem.tail _ (konumGet_mem rest k v h)
+      by_cases hk : k0.bolge.id = k.bolge.id ∧ k0.ofset = k.ofset
+      · rw [konumGet, if_pos hk] at h
+        exact ⟨k0, (Option.some.inj h) ▸ List.Mem.head _, hk⟩
+      · rw [konumGet, if_neg hk] at h
+        obtain ⟨k', h_mem, h_id⟩ := konumGet_mem rest k v h
+        exact ⟨k', List.Mem.tail _ h_mem, h_id⟩
+
+/-- Lookup id-kongruansi (store): id+ofset esit anahtarlar ayni sonucu verir. -/
+theorem konumGet_id_esit : ∀ (s : Store) (k k' : Konum),
+    k.bolge.id = k'.bolge.id → k.ofset = k'.ofset →
+    konumGet s k = konumGet s k'
+  | [], _, _, _, _ => rfl
+  | (k0, v0) :: rest, k, k', h_id, h_of => by
+      rw [konumGet, konumGet]
+      by_cases hk : k0.bolge.id = k.bolge.id ∧ k0.ofset = k.ofset
+      · rw [if_pos hk, if_pos ⟨hk.1.trans h_id, hk.2.trans h_of⟩]
+      · rw [if_neg hk,
+            if_neg (fun hc => hk ⟨hc.1.trans h_id.symm, hc.2.trans h_of.symm⟩)]
+        exact konumGet_id_esit rest k k' h_id h_of
 
 
 -- ============================================================
@@ -283,10 +304,26 @@ abbrev Sahiplik := List (Bolge × Sahip)
 -- ============================================================
 
 /-- Sahiplik lookup: bolgenin GUNCEL sahibi (ilk eslesen entry —
-    newest-wins; sahiplikSet prepend kullanir). -/
+    newest-wins; sahiplikSet prepend kullanir).
+
+    ID-ANAHTARLAMA (Onarim v3 — DECISIONS_LOG kategori-anahtar karari):
+    karsilastirma bolge KIMLIGI (.id) uzerinden — kategori degisken
+    ozniteliktir; recat (sahipAta/dondurBolge) sahiplik erisimini
+    koparmaz. BolgeAyrik (id↔degisken injektivligi) temel. -/
 def sahiplikGet : Sahiplik → Bolge → Option Sahip
   | [], _ => none
-  | (k, v) :: rest, key => if k = key then some v else sahiplikGet rest key
+  | (k, v) :: rest, key => if k.id = key.id then some v else sahiplikGet rest key
+
+/-- Lookup id-kongruansi (sahiplik): id-esit bolgeler ayni sonucu verir. -/
+theorem sahiplikGet_id_esit : ∀ (s : Sahiplik) (b b' : Bolge),
+    b.id = b'.id → sahiplikGet s b = sahiplikGet s b'
+  | [], _, _, _ => rfl
+  | (k0, v0) :: rest, b, b', h_id => by
+      rw [sahiplikGet, sahiplikGet]
+      by_cases hk : k0.id = b.id
+      · rw [if_pos hk, if_pos (hk.trans h_id)]
+      · rw [if_neg hk, if_neg (fun hc => hk (hc.trans h_id.symm))]
+        exact sahiplikGet_id_esit rest b b' h_id
 
 /-- Sahiplik atomik set (Op.Sem §5.4 S3 atomic transfer): prepend;
     yeni entry eskisini mantiken override eder. -/
@@ -302,58 +339,73 @@ theorem sahiplikSet_eq (s : Sahiplik) (b : Bolge) (yeni : Sahip) :
     sahiplikGet (sahiplikSet s b yeni) b = some yeni := by
   simp [sahiplikSet, sahiplikGet]
 
-/-- Set sonra get farkli anahtarda eski lookup degismez. -/
+/-- Set sonra get id-farkli anahtarda eski lookup degismez (id-formu). -/
 theorem sahiplikSet_ne (s : Sahiplik) (b b' : Bolge) (yeni : Sahip)
-    (h : b' ≠ b) :
+    (h : b'.id ≠ b.id) :
     sahiplikGet (sahiplikSet s b yeni) b' = sahiplikGet s b' := by
-  simp [sahiplikSet, sahiplikGet, h.symm]
+  rw [sahiplikSet, sahiplikGet, if_neg (fun he => h he.symm)]
 
-/-- Lookup uyeligi (sahiplik): get bir deger donduruyorsa cift listededir. -/
+/-- Lookup uyeligi (sahiplik, id-formu): get bir deger donduruyorsa
+    id-eslesen bir cift listededir. -/
 theorem sahiplikGet_mem : ∀ (s : Sahiplik) (b : Bolge) (v : Sahip),
-    sahiplikGet s b = some v → (b, v) ∈ s
+    sahiplikGet s b = some v → ∃ b'', (b'', v) ∈ s ∧ b''.id = b.id
   | [], _, _, h => by simp [sahiplikGet] at h
   | (k, w) :: rest, b, v, h => by
-      by_cases hk : k = b
-      · subst hk
-        simp [sahiplikGet] at h
-        subst h
-        exact List.Mem.head _
-      · simp [sahiplikGet, hk] at h
-        exact List.Mem.tail _ (sahiplikGet_mem rest b v h)
+      by_cases hk : k.id = b.id
+      · rw [sahiplikGet, if_pos hk] at h
+        exact ⟨k, (Option.some.inj h) ▸ List.Mem.head _, hk⟩
+      · rw [sahiplikGet, if_neg hk] at h
+        obtain ⟨b'', h_mem, h_id⟩ := sahiplikGet_mem rest b v h
+        exact ⟨b'', List.Mem.tail _ h_mem, h_id⟩
 
-/-- SetMany, listede olmayan bolgenin lookup'unu degistirmez.
-    (Frozen-persistence ispatinin cekirdegi — F2.) -/
-theorem sahiplikSetMany_ne (bs : List Bolge) (s : Sahiplik) (b' : Bolge)
-    (yeni : Sahip) (h : b' ∉ bs) :
-    sahiplikGet (sahiplikSetMany s bs yeni) b' = sahiplikGet s b' := by
+/-- SetMany ana analiz (id-formu): lookup ya yeni atamadan gelir
+    (id-eslesen liste uyesi tanigiyla) ya da liste id-ayriksa eskidir. -/
+theorem sahiplikSetMany_analiz (bs : List Bolge) (s : Sahiplik)
+    (yeni : Sahip) (b : Bolge) :
+    (sahiplikGet (sahiplikSetMany s bs yeni) b = some yeni
+       ∧ ∃ b'' ∈ bs, b''.id = b.id)
+    ∨ (sahiplikGet (sahiplikSetMany s bs yeni) b = sahiplikGet s b
+       ∧ ∀ b'' ∈ bs, b''.id ≠ b.id) := by
   induction bs generalizing s with
-  | nil => rfl
-  | cons b rest ih =>
-      have h_ne : b' ≠ b := fun he => h (he ▸ List.Mem.head _)
-      have h_rest : b' ∉ rest := fun hm => h (List.Mem.tail _ hm)
-      calc sahiplikGet (sahiplikSetMany s (b :: rest) yeni) b'
-          = sahiplikGet (sahiplikSetMany (sahiplikSet s b yeni) rest yeni) b' := rfl
-        _ = sahiplikGet (sahiplikSet s b yeni) b' := ih (sahiplikSet s b yeni) h_rest
-        _ = sahiplikGet s b' := sahiplikSet_ne s b b' yeni h_ne
+  | nil => exact Or.inr ⟨rfl, fun _ hm => absurd hm (List.not_mem_nil)⟩
+  | cons b1 rest ih =>
+      rcases ih (sahiplikSet s b1 yeni) with ⟨h_get, b'', h_mem, h_id⟩ | ⟨h_get, h_yok⟩
+      · exact Or.inl ⟨h_get, b'', List.Mem.tail _ h_mem, h_id⟩
+      · by_cases h_eq : b1.id = b.id
+        · refine Or.inl ⟨?_, b1, List.Mem.head _, h_eq⟩
+          show sahiplikGet (sahiplikSetMany (sahiplikSet s b1 yeni) rest yeni) b
+              = some yeni
+          rw [h_get, sahiplikSet, sahiplikGet, if_pos h_eq]
+        · refine Or.inr ⟨?_, ?_⟩
+          · show sahiplikGet (sahiplikSetMany (sahiplikSet s b1 yeni) rest yeni) b
+                = sahiplikGet s b
+            rw [h_get]
+            exact sahiplikSet_ne s b1 b yeni (fun he => h_eq he.symm)
+          · intro b'' h_mem
+            cases h_mem with
+            | head => exact h_eq
+            | tail _ hr => exact h_yok b'' hr
 
-/-- SetMany lookup analizi: sonuc ya yeni atamadan (b ∈ bs) ya eskidir. -/
+/-- SetMany, id-bazinda listeyle ayrik bolgenin lookup'unu degistirmez
+    (Frozen-persistence ispatinin cekirdegi — F2; id-formu). -/
+theorem sahiplikSetMany_ne (bs : List Bolge) (s : Sahiplik) (b' : Bolge)
+    (yeni : Sahip) (h : ∀ b'' ∈ bs, b''.id ≠ b'.id) :
+    sahiplikGet (sahiplikSetMany s bs yeni) b' = sahiplikGet s b' := by
+  rcases sahiplikSetMany_analiz bs s yeni b' with ⟨_, b'', h_mem, h_id⟩ | ⟨h_get, _⟩
+  · exact absurd h_id (h b'' h_mem)
+  · exact h_get
+
+/-- SetMany lookup analizi (id-formu): sonuc ya yeni atamadan
+    (id-eslesen uye tanigiyla) ya eskidir. -/
 theorem sahiplikSetMany_lookup_inv (bs : List Bolge) (s : Sahiplik)
     (yeni : Sahip) (b : Bolge) (v : Sahip)
     (h : sahiplikGet (sahiplikSetMany s bs yeni) b = some v) :
-    (b ∈ bs ∧ v = yeni) ∨ sahiplikGet s b = some v := by
-  induction bs generalizing s with
-  | nil => exact Or.inr h
-  | cons b1 rest ih =>
-      have h' : sahiplikGet (sahiplikSetMany (sahiplikSet s b1 yeni) rest yeni) b
-          = some v := h
-      rcases ih (sahiplikSet s b1 yeni) h' with ⟨h_mem, h_v⟩ | h_eski
-      · exact Or.inl ⟨List.Mem.tail _ h_mem, h_v⟩
-      · by_cases h_eq : b = b1
-        · subst h_eq
-          rw [sahiplikSet_eq] at h_eski
-          exact Or.inl ⟨List.Mem.head _, (Option.some.inj h_eski).symm⟩
-        · rw [sahiplikSet_ne s b1 b yeni h_eq] at h_eski
-          exact Or.inr h_eski
+    ((∃ b'' ∈ bs, b''.id = b.id) ∧ v = yeni) ∨ sahiplikGet s b = some v := by
+  rcases sahiplikSetMany_analiz bs s yeni b with ⟨h_get, h_tanik⟩ | ⟨h_get, _⟩
+  · rw [h_get] at h
+    exact Or.inl ⟨h_tanik, (Option.some.inj h).symm⟩
+  · rw [h_get] at h
+    exact Or.inr h
 
 /-- head? bir deger donduruyorsa o listededir. -/
 theorem head?_mem {α : Type} {l : List α} {v : α}
@@ -392,25 +444,13 @@ theorem tail_bos_kapasite {α : Type} {q : List α}
           simp [List.length] at h_kap
 
 /-- SetMany, listedeki her bolgenin lookup'unu yeni degere goturur
-    (tum yeni entry'ler ayni degeri tasir). -/
+    (tum yeni entry'ler ayni degeri tasir; id-anahtarla bile uniform). -/
 theorem sahiplikSetMany_mem (s : Sahiplik) (bs : List Bolge) (yeni : Sahip)
     {b : Bolge} (h : b ∈ bs) :
     sahiplikGet (sahiplikSetMany s bs yeni) b = some yeni := by
-  induction bs generalizing s with
-  | nil => cases h
-  | cons b1 rest ih =>
-      by_cases hb : b ∈ rest
-      · exact ih (sahiplikSet s b1 yeni) hb
-      · have hbb : b = b1 := by
-          cases h with
-          | head => rfl
-          | tail _ hr => exact absurd hr hb
-        subst hbb
-        calc sahiplikGet (sahiplikSetMany s (b :: rest) yeni) b
-            = sahiplikGet (sahiplikSetMany (sahiplikSet s b yeni) rest yeni) b := rfl
-          _ = sahiplikGet (sahiplikSet s b yeni) b :=
-              sahiplikSetMany_ne rest (sahiplikSet s b yeni) b yeni hb
-          _ = some yeni := sahiplikSet_eq s b yeni
+  rcases sahiplikSetMany_analiz bs s yeni b with ⟨h_get, _⟩ | ⟨_, h_yok⟩
+  · exact h_get
+  · exact absurd rfl (h_yok b h)
 
 
 -- ============================================================

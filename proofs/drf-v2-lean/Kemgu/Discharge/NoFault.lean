@@ -229,8 +229,8 @@ theorem adim_korunum
         have h_thread := h_konf.2.1
         rw [h_t] at h_thread
         refine threadTipli_degisim h_thread _ ?_
-        have h_mem := konumGet_mem S.store ⟨b, 0⟩ v h_v
-        obtain ⟨τv, h_dt, _⟩ := h_konf.1 ⟨b, 0⟩ v h_mem
+        obtain ⟨k', h_mem', _⟩ := konumGet_mem S.store ⟨b, 0⟩ v h_v
+        obtain ⟨τv, h_dt, _⟩ := h_konf.1 k' v h_mem'
         exact ⟨τv, ctx.lineer, Ρ,
           ⟨HasType.t_sabit _ _ _ _ (degerTipli_ortam v τv h_dt),
            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
@@ -378,13 +378,12 @@ theorem adim_korunum
         intro kk ww h_kv
         rcases List.mem_cons.mp h_kv with h_head | h_tail
         · obtain ⟨h_kk, h_ww⟩ := Prod.mk.injEq .. ▸ h_head
-          refine ⟨τx, ?_, ⟨x, ?_⟩⟩
+          refine ⟨τx, ?_, ⟨x, b, ?_, ?_⟩⟩
           · rw [h_ww]
             exact degerTipli_ortam v τx h_dtv
-          · rw [h_kk]
-            show bolgeOrtamGet Ρ x = some b
-            rw [← h_beq]
+          · rw [← h_beq]
             exact h_b
+          · rw [h_kk]
         · exact h_konf.1 kk ww h_tail
       · -- comp 2: odakli thread sabit birim'e ilerledi
         have h_thread := h_konf.2.1
@@ -405,21 +404,22 @@ theorem adim_korunum
         intro z τz h_gz
         obtain ⟨bz, vz, h_bz, h_kz, h_dtz⟩ :=
           h_konf.2.2.2.2.2.2.2.2.2.1 z τz h_gz
-        by_cases h_eqk : (⟨b, 0⟩ : Konum) = ⟨bz, 0⟩
+        by_cases h_eqk : b.id = bz.id
         · -- yeni giris golgeledi: BolgeAyrik → z = x → ayni tip
-          have h_bzb : b = bz := congrArg Konum.bolge h_eqk
           have h_zx : z = x := by
             have h_ba := h_konf.2.2.2.2.2.2.2.2.2.2.2.1
-            exact h_ba z x bz b h_bz h_b (by rw [← h_bzb])
+            exact h_ba z x bz b h_bz h_b h_eqk.symm
           subst h_zx
           have h_tau : τz = τx :=
             Option.some.inj (h_gz.symm.trans h_gx)
           refine ⟨bz, v, h_bz, ?_, ?_⟩
-          · simp only [konumGet, if_pos h_eqk]
+          · show konumGet ((⟨b, 0⟩, v) :: S.store) ⟨bz, 0⟩ = some v
+            rw [konumGet, if_pos (⟨h_eqk, rfl⟩ : _ ∧ _)]
           · rw [h_tau]
             exact degerTipli_ortam v τx h_dtv
         · refine ⟨bz, vz, h_bz, ?_, h_dtz⟩
-          simp only [konumGet, if_neg h_eqk]
+          show konumGet ((⟨b, 0⟩, v) :: S.store) ⟨bz, 0⟩ = some vz
+          rw [konumGet, if_neg (fun hc => h_eqk hc.1)]
           exact h_kz
       · -- comp 13
         have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
@@ -452,8 +452,10 @@ theorem adim_korunum
       · -- comp 3 (id-genel): yeni atamalar rb'den — eski tHedef-sahipli
         intro bb sah h_lk
         rcases sahiplikSetMany_lookup_inv rb S.sahiplik _ bb sah h_lk with
-            ⟨h_mem, _⟩ | h_eski
-        · exact h_konf.2.2.1 bb (Sahip.thread tHedef) (h_donen bb h_mem)
+            ⟨⟨b'', h_mem'', h_idb⟩, _⟩ | h_eski
+        · obtain ⟨x', b', h_x', h_id'⟩ :=
+            h_konf.2.2.1 b'' (Sahip.thread tHedef) (h_donen b'' h_mem'')
+          exact ⟨x', b', h_x', h_id'.trans h_idb⟩
         · exact h_konf.2.2.1 bb sah h_eski
       · -- comp 7: rb donmus icermez (eski sahipleri tHedef)
         intro xx bb h_bb
@@ -468,11 +470,11 @@ theorem adim_korunum
           · exact (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mp h_eski
         · intro h_kat
           have h_eski := (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mpr h_kat
-          have h_notin : bb ∉ rb := by
-            intro h_in
-            have := h_donen bb h_in
-            rw [h_eski] at this
-            cases this
+          have h_notin : ∀ b'' ∈ rb, b''.id ≠ bb.id := by
+            intro b'' h_in h_idb
+            have h_th := h_donen b'' h_in
+            rw [sahiplikGet_id_esit S.sahiplik b'' bb h_idb, h_eski] at h_th
+            cases h_th
           show sahiplikGet
               (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bb
               = some Sahip.donmus
@@ -493,10 +495,10 @@ theorem adim_korunum
                 exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
               exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
         obtain ⟨h_c_in, h_c_own⟩ := h_c_eski
-        have h_notin : bb ∉ rb := by
-          intro h_in
-          have h_th := h_donen bb h_in
-          rw [h_c_own] at h_th
+        have h_notin : ∀ b'' ∈ rb, b''.id ≠ bb.id := by
+          intro b'' h_in h_idb
+          have h_th := h_donen b'' h_in
+          rw [sahiplikGet_id_esit S.sahiplik b'' bb h_idb, h_c_own] at h_th
           have h_tid_eq : c.tid = tHedef := by
             injection Option.some.inj h_th
           have h_ce : c = hctx :=
@@ -524,10 +526,10 @@ theorem adim_korunum
                 exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
               exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
         obtain ⟨h_c_in, h_c_own⟩ := h_c_eski
-        have h_notin : bb ∉ rb := by
-          intro h_in
-          have h_th := h_donen bb h_in
-          rw [h_c_own] at h_th
+        have h_notin : ∀ b'' ∈ rb, b''.id ≠ bb.id := by
+          intro b'' h_in h_idb
+          have h_th := h_donen b'' h_in
+          rw [sahiplikGet_id_esit S.sahiplik b'' bb h_idb, h_c_own] at h_th
           have h_tid_eq : c.tid = tHedef := by
             injection Option.some.inj h_th
           have h_ce : c = hctx :=
@@ -543,11 +545,11 @@ theorem adim_korunum
       · -- comp 11: transit bolgeler rb'de olamaz (kanalSahip ≠ thread)
         intro kd h_kd h_ne
         obtain ⟨bT, h_bT⟩ := h_konf.2.2.2.2.2.2.2.2.2.2.1 kd h_kd h_ne
-        have h_notin : bT ∉ rb := by
-          intro h_in
-          have := h_donen bT h_in
-          rw [h_bT] at this
-          cases this
+        have h_notin : ∀ b'' ∈ rb, b''.id ≠ bT.id := by
+          intro b'' h_in h_idb
+          have h_th := h_donen b'' h_in
+          rw [sahiplikGet_id_esit S.sahiplik b'' bT h_idb, h_bT] at h_th
+          cases h_th
         refine ⟨bT, ?_⟩
         show sahiplikGet
             (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bT
@@ -597,9 +599,10 @@ theorem adim_korunum
             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
       · -- comp 3 (id-genel): tb zaten kayitliydi (eski kanalSahip kaydi)
         intro bb sah h_lk
-        by_cases h_eq : bb = tb
-        · subst h_eq
-          exact h_konf.2.2.1 bb (Sahip.kanalSahip k) h_transit
+        by_cases h_eq : bb.id = tb.id
+        · obtain ⟨x', b', h_x', h_id'⟩ :=
+            h_konf.2.2.1 tb (Sahip.kanalSahip k) h_transit
+          exact ⟨x', b', h_x', h_id'.trans h_eq.symm⟩
         · rw [sahiplikSet_ne S.sahiplik tb bb _ h_eq] at h_lk
           exact h_konf.2.2.1 bb sah h_lk
       · -- comp 4: pop sonrasi kuyruk tipliligi
@@ -619,17 +622,17 @@ theorem adim_korunum
           have h_fr' : sahiplikGet
               (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
               = some Sahip.donmus := h_fr
-          by_cases h_eq : bb = tb
-          · subst h_eq
-            rw [sahiplikSet_eq] at h_fr'
+          by_cases h_eq : bb.id = tb.id
+          · rw [sahiplikSet, sahiplikGet, if_pos h_eq.symm] at h_fr'
             cases h_fr'
           · rw [sahiplikSet_ne S.sahiplik tb bb _ h_eq] at h_fr'
             exact (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mp h_fr'
         · intro h_kat
           have h_eski := (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mpr h_kat
-          have h_eq : bb ≠ tb := by
-            intro he; subst he
-            have := h_transit.symm.trans h_eski
+          have h_eq : bb.id ≠ tb.id := by
+            intro he
+            have h_e2 := (sahiplikGet_id_esit S.sahiplik bb tb he).symm.trans h_eski
+            have := h_transit.symm.trans h_e2
             cases this
           show sahiplikGet
               (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
@@ -651,9 +654,10 @@ theorem adim_korunum
                 exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
               exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
         obtain ⟨_, h_c_own⟩ := h_c_eski
-        have h_ne : bb ≠ tb := by
-          intro he; subst he
-          have := h_transit.symm.trans h_c_own
+        have h_ne : bb.id ≠ tb.id := by
+          intro he
+          have h_e2 := (sahiplikGet_id_esit S.sahiplik bb tb he).symm.trans h_c_own
+          have := h_transit.symm.trans h_e2
           cases this
         show sahiplikGet
             (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
@@ -675,9 +679,10 @@ theorem adim_korunum
                 exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
               exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
         obtain ⟨_, h_c_own⟩ := h_c_eski
-        have h_ne : bb ≠ tb := by
-          intro he; subst he
-          have := h_transit.symm.trans h_c_own
+        have h_ne : bb.id ≠ tb.id := by
+          intro he
+          have h_e2 := (sahiplikGet_id_esit S.sahiplik bb tb he).symm.trans h_c_own
+          have := h_transit.symm.trans h_e2
           cases this
         show sahiplikGet
             (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
@@ -701,9 +706,10 @@ theorem adim_korunum
           subst h_img
           obtain ⟨bT, h_bT⟩ :=
             h_konf.2.2.2.2.2.2.2.2.2.2.1 kd0 h_kd0 h_ne'
-          have h_ne2 : bT ≠ tb := by
-            intro he; subst he
-            have := h_transit.symm.trans h_bT
+          have h_ne2 : bT.id ≠ tb.id := by
+            intro he
+            have h_e2 := (sahiplikGet_id_esit S.sahiplik bT tb he).symm.trans h_bT
+            have := h_transit.symm.trans h_e2
             have h_kk : k = kd0.kid := by injection Option.some.inj this
             exact h_k0 h_kk.symm
           refine ⟨bT, ?_⟩

@@ -666,10 +666,10 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
       intro h_frozen
       subst h_S'
-      have h_not_in : b ∉ bolgeleriTopla S.bolge yd := by
-        intro h_in
-        have h_own := h_sahipler b h_in
-        rw [h_frozen] at h_own
+      have h_not_in : ∀ b'' ∈ bolgeleriTopla S.bolge yd, b''.id ≠ b.id := by
+        intro b'' h_in h_id
+        have h_own := h_sahipler b'' h_in
+        rw [sahiplikGet_id_esit S.sahiplik b'' b h_id, h_frozen] at h_own
         nomatch h_own
       show sahiplikGet (sahiplikSetMany S.sahiplik (bolgeleriTopla S.bolge yd)
              (Sahip.thread tYeni)) b = some Sahip.donmus
@@ -679,10 +679,10 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       intro h_frozen
       subst h_S'
-      have h_not_in : b ∉ rb := by
-        intro h_in
-        have h_own := h_donen b h_in
-        rw [h_frozen] at h_own
+      have h_not_in : ∀ b'' ∈ rb, b''.id ≠ b.id := by
+        intro b'' h_in h_id
+        have h_own := h_donen b'' h_in
+        rw [sahiplikGet_id_esit S.sahiplik b'' b h_id, h_frozen] at h_own
         nomatch h_own
       show sahiplikGet (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) b
              = some Sahip.donmus
@@ -690,8 +690,10 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | cKanalGonderTamam S S' ts1 ts2 ctx k vId b' v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro h_frozen
       subst h_S'
-      have h_ne : b ≠ b' := by
-        intro he; rw [he, h_owner] at h_frozen; nomatch h_frozen
+      have h_ne : b.id ≠ b'.id := by
+        intro he
+        rw [sahiplikGet_id_esit S.sahiplik b b' he, h_owner] at h_frozen
+        nomatch h_frozen
       show sahiplikGet (sahiplikSet S.sahiplik b' (Sahip.kanalSahip k)) b
              = some Sahip.donmus
       rw [sahiplikSet_ne _ _ _ _ h_ne]; exact h_frozen
@@ -700,16 +702,20 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
       intro h_frozen
       subst h_S'
-      have h_ne : b ≠ tb := by
-        intro he; rw [he, h_transit] at h_frozen; nomatch h_frozen
+      have h_ne : b.id ≠ tb.id := by
+        intro he
+        rw [sahiplikGet_id_esit S.sahiplik b tb he, h_transit] at h_frozen
+        nomatch h_frozen
       show sahiplikGet (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) b
              = some Sahip.donmus
       rw [sahiplikSet_ne _ _ _ _ h_ne]; exact h_frozen
   | cDondurTamam S S' ts1 ts2 ctx b' h_t h_if h_owner h_S' =>
       intro h_frozen
       subst h_S'
-      have h_ne : b ≠ b' := by
-        intro he; rw [he, h_owner] at h_frozen; nomatch h_frozen
+      have h_ne : b.id ≠ b'.id := by
+        intro he
+        rw [sahiplikGet_id_esit S.sahiplik b b' he, h_owner] at h_frozen
+        nomatch h_frozen
       show sahiplikGet (sahiplikSet S.sahiplik b' Sahip.donmus) b
              = some Sahip.donmus
       rw [sahiplikSet_ne _ _ _ _ h_ne]; exact h_frozen
