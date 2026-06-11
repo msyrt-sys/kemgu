@@ -302,14 +302,14 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
           obtain ⟨Ρ', h_r⟩ := h_iyi.bolgeOk p h_mem
           exact ⟨τ, Λ', Ρ', ⟨h_t, h_l, h_r⟩⟩
     · cases h_nil
-  · -- (3) SahiplikTutarli
-    intro b t h_b
+  · -- (3) SahiplikTutarli (id-genel form)
+    intro b sah h_b
     have h_mem := sahiplikGet_mem _ b _ h_b
     rcases List.mem_map.mp h_mem with ⟨p, h_p, h_eq⟩
     obtain ⟨h_bb, _⟩ := Prod.mk.injEq .. ▸ h_eq
-    refine ⟨p.1, ?_⟩
-    rw [← h_bb]
-    exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
+    refine ⟨p.1, varBolge p.1, ?_, ?_⟩
+    · exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
+    · rw [← h_bb]
   · -- (4) KanalTutarli (bos kanal listesi)
     intro kd h_kd
     cases h_kd
