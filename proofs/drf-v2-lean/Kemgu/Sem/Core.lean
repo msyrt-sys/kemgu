@@ -235,6 +235,19 @@ def konumGet : Store → Konum → Option Deger
   | [], _ => none
   | (k, v) :: rest, key => if k = key then some v else konumGet rest key
 
+/-- Lookup uyeligi (store): get bir deger donduruyorsa cift listededir. -/
+theorem konumGet_mem : ∀ (s : Store) (k : Konum) (v : Deger),
+    konumGet s k = some v → (k, v) ∈ s
+  | [], _, _, h => by simp [konumGet] at h
+  | (k0, v0) :: rest, k, v, h => by
+      by_cases hk : k0 = k
+      · subst hk
+        simp [konumGet] at h
+        subst h
+        exact List.Mem.head _
+      · simp [konumGet, hk] at h
+        exact List.Mem.tail _ (konumGet_mem rest k v h)
+
 
 -- ============================================================
 -- §7. Sahiplik haritasi (Sigma — Katman 2)

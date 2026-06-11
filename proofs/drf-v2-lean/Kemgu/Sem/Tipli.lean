@@ -71,6 +71,23 @@ theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     RegionTamam.r_atama _ _ _ _ _ _ _ _ hre =>
     exact ⟨τx, Λ', Ρ', ⟨hte, hle, hre⟩⟩
 
+/-- Seq-atla tiplemesi: sol taraf DEGER ise sag taraf AYNI giris-ortamindan
+    ve AYNI cikti-ortamlarina tiplidir (l_sabit/r_sabit identity —
+    sSeqAtla'nin adim_korunum comp-2 taniki). -/
+theorem typed_seq_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {v : Deger} {b : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.seq (Ifade.sabit v) b) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ b τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_seq _ _ _ _ _ _ hta htb,
+    LineerTamam.l_seq _ _ Λa _ _ _ hla hlb,
+    RegionTamam.r_seq _ _ Ρa _ _ _ hra hrb =>
+    match hla, hra with
+    | LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _ =>
+      exact ⟨htb, hlb, hrb⟩
+
 /-- Guvensiz ic ifadesi tiplidir (sGuvensizCong tipleme tarafi). -/
 theorem typed_guvensiz_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {e : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
@@ -235,5 +252,81 @@ theorem konfTipliFull_odak
       · have h_in : ctx'' ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
         exact h_hbolge ctx'' h_in b h_hb h_kayitli h_yaz
+
+-- ============================================================
+-- §7. Odakli-thread DEGISIM yardimcilari (F4-ispat)
+-- Bolge/sahiplik DEGISMEYEN adimlar icin: liste cerrahisinde odakli
+-- thread degisince bilesenlerin tasinmasi.
+-- ============================================================
+
+/-- ThreadTipliFull, odakli thread'in (tipli) bir baskasiyla
+    degistirilmesi altinda korunur (ayni Ρ). -/
+theorem threadTipli_degisim
+    {Γ : TipOrtam} {Δ : KanalOrtam} {Ρ : BolgeOrtam}
+    {ts1 ts2 : List ThreadCtx} {ctx : ThreadCtx}
+    (h : ThreadTipliFull Γ Δ Ρ (ts1 ++ ctx :: ts2))
+    (ctx' : ThreadCtx)
+    (h' : ∃ τ Λ' Ρ', Typed Γ Δ ctx'.lineer Ρ ctx'.ifade τ Λ' Ρ') :
+    ThreadTipliFull Γ Δ Ρ (ts1 ++ ctx' :: ts2) := by
+  intro c h_mem
+  rcases List.mem_append.mp h_mem with h1 | h2
+  · exact h c (List.mem_append.mpr (Or.inl h1))
+  · rcases List.mem_cons.mp h2 with h_eq | h3
+    · subst h_eq; exact h'
+    · exact h c (List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+
+/-- HedefVar-sahipligi (KonfTipliFull 8. bilesen govdesi), odakli thread'in
+    hedef-buyutmeyen + tid-koruyan degisimi altinda korunur
+    (ayni bolge-ortami `bOrt` ve sahiplik `sah` uzerinde). -/
+theorem hedefVarSahip_degisim
+    {bOrt : BolgeOrtam} {sah : Sahiplik}
+    {ts1 ts2 : List ThreadCtx} {ctx : ThreadCtx}
+    (h : ∀ c ∈ ts1 ++ ctx :: ts2, ∀ y : VarId, HedefVar c.ifade y →
+           ∀ b : Bolge, bolgeOrtamGet bOrt y = some b →
+             kategoriYazilabilir b.kategori = true →
+             sahiplikGet sah b = some (Sahip.thread c.tid))
+    (ctx' : ThreadCtx)
+    (h_tid : ctx'.tid = ctx.tid)
+    (h_hv : ∀ y : VarId, HedefVar ctx'.ifade y → HedefVar ctx.ifade y) :
+    ∀ c ∈ ts1 ++ ctx' :: ts2, ∀ y : VarId, HedefVar c.ifade y →
+      ∀ b : Bolge, bolgeOrtamGet bOrt y = some b →
+        kategoriYazilabilir b.kategori = true →
+        sahiplikGet sah b = some (Sahip.thread c.tid) := by
+  intro c h_mem y h_y b h_b h_yaz
+  rcases List.mem_append.mp h_mem with h1 | h2
+  · exact h c (List.mem_append.mpr (Or.inl h1)) y h_y b h_b h_yaz
+  · rcases List.mem_cons.mp h2 with h_eq | h3
+    · subst h_eq
+      rw [h_tid]
+      exact h ctx (List.mem_append.mpr (Or.inr (List.Mem.head _)))
+        y (h_hv y h_y) b h_b h_yaz
+    · exact h c (List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+        y h_y b h_b h_yaz
+
+/-- HedefBolge-sahipligi (9. bilesen) — ayni desen. -/
+theorem hedefBolgeSahip_degisim
+    {bOrt : BolgeOrtam} {sah : Sahiplik}
+    {ts1 ts2 : List ThreadCtx} {ctx : ThreadCtx}
+    (h : ∀ c ∈ ts1 ++ ctx :: ts2, ∀ b : Bolge, HedefBolge c.ifade b →
+           (∃ x, bolgeOrtamGet bOrt x = some b) →
+           kategoriYazilabilir b.kategori = true →
+           sahiplikGet sah b = some (Sahip.thread c.tid))
+    (ctx' : ThreadCtx)
+    (h_tid : ctx'.tid = ctx.tid)
+    (h_hb : ∀ b : Bolge, HedefBolge ctx'.ifade b → HedefBolge ctx.ifade b) :
+    ∀ c ∈ ts1 ++ ctx' :: ts2, ∀ b : Bolge, HedefBolge c.ifade b →
+      (∃ x, bolgeOrtamGet bOrt x = some b) →
+      kategoriYazilabilir b.kategori = true →
+      sahiplikGet sah b = some (Sahip.thread c.tid) := by
+  intro c h_mem b h_b h_kayit h_yaz
+  rcases List.mem_append.mp h_mem with h1 | h2
+  · exact h c (List.mem_append.mpr (Or.inl h1)) b h_b h_kayit h_yaz
+  · rcases List.mem_cons.mp h2 with h_eq | h3
+    · subst h_eq
+      rw [h_tid]
+      exact h ctx (List.mem_append.mpr (Or.inr (List.Mem.head _)))
+        b (h_hb b h_b) h_kayit h_yaz
+    · exact h c (List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+        b h_b h_kayit h_yaz
 
 end Kemgu.Sem.Tipli
