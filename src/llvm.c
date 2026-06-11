@@ -833,42 +833,57 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     return s;
 }
 
-/* C-track fix (init-test koku #3): `x.alan = v` LVALUE adresi.
- * erisim_uret'in okuma mantigini aynalar ama load YERINE alan ADRESINI
- * (GEP) doner. Nesne tanimlayici olmali (tek seviye — driver deseni
- * `cfg.alan = v` / `vq.alan = v`); ic ice erisim v2.
- *   - lokal struct (llvm_tip "%Ad"): alloca dogrudan struct adresi
- *   - referans param / ptr (llvm_tip "ptr"): alloca'dan ptr yukle,
- *     yapi tipi alan adina gore cozulur (erisim_uret ile ayni
- *     konservatif arama)
+/* C-track fix (init-test koku #3) + audit fix #3: `x.alan = v` ve
+ * ic ice `a.b.c = v` LVALUE adresi. erisim_uret'in okuma mantigini
+ * aynalar ama load YERINE alan ADRESINI (GEP) doner.
+ *   - nesne tanimlayici + lokal struct (llvm_tip "%Ad"): alloca
+ *     dogrudan struct adresi
+ *   - nesne tanimlayici + referans param / ptr ("ptr"): alloca'dan
+ *     ptr yukle, yapi tipi alan adina gore cozulur (erisim_uret ile
+ *     ayni konservatif arama)
+ *   - nesne ERISIM (audit gap #3): ozyineleme — ic alanin ADRESI
+ *     taban olur, ic alan tipi ("%Ic") yapi kaydini verir. Onceden
+ *     -1 donerdi -> a.b.c = v sessizce dusurulurdu.
  * Donus: alan adresi reg (>=0) + alan_ir_out; cozulemezse -1. */
 static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                          const char **alan_ir_out) {
     if (!d || d->tip != DUGUM_ERISIM) return -1;
     const Dugum *nesne_d = d->veri.erisim.nesne;
-    if (!nesne_d || nesne_d->tip != DUGUM_TANIMLAYICI) return -1;
-    LlvmIsim *vi = isim_bul(g, nesne_d->veri.tanimlayici.metin,
-                            nesne_d->veri.tanimlayici.uzunluk);
-    if (!vi || !vi->llvm_tip) return -1;
+    if (!nesne_d) return -1;
 
     YapiKayit *yk = NULL;
     int taban_reg = -1;
-    if (vi->llvm_tip[0] == '%') {
-        yk = yapi_bul(g, vi->llvm_tip + 1,
-                      (int)strlen(vi->llvm_tip + 1));
-        taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
-    } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
-        for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
-            if (yapi_alan_indeksi(y, d->veri.erisim.alan,
-                                   d->veri.erisim.alan_uzunluk,
-                                   NULL) >= 0) {
-                yk = y;
+
+    if (nesne_d->tip == DUGUM_TANIMLAYICI) {
+        LlvmIsim *vi = isim_bul(g, nesne_d->veri.tanimlayici.metin,
+                                nesne_d->veri.tanimlayici.uzunluk);
+        if (!vi || !vi->llvm_tip) return -1;
+        if (vi->llvm_tip[0] == '%') {
+            yk = yapi_bul(g, vi->llvm_tip + 1,
+                          (int)strlen(vi->llvm_tip + 1));
+            taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
+        } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
+            for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+                if (yapi_alan_indeksi(y, d->veri.erisim.alan,
+                                       d->veri.erisim.alan_uzunluk,
+                                       NULL) >= 0) {
+                    yk = y;
+                }
             }
+            if (!yk) return -1;
+            taban_reg = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
+                    taban_reg, vi->reg_no);
+        } else {
+            return -1;
         }
-        if (!yk) return -1;
-        taban_reg = yeni_reg(g);
-        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
-                taban_reg, vi->reg_no);
+    } else if (nesne_d->tip == DUGUM_ERISIM) {
+        /* a.b.c: ic erisimin (a.b) ALAN ADRESINI al; tipi struct
+         * ("%Ic") olmali ki alan GEP'i kurulabilsin. */
+        const char *ic_ir = NULL;
+        taban_reg = erisim_lvalue(g, nesne_d, &ic_ir);
+        if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
+        yk = yapi_bul(g, ic_ir + 1, (int)strlen(ic_ir + 1));
     } else {
         return -1;
     }
