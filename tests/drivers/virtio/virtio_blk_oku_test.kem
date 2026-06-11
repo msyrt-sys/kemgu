@@ -1,0 +1,155 @@
+// VirtIO-blk blk_oku host-mock testi: gerçek MMIO primitive'leri + D9 blk_oku.
+// Recipe (repo kökünden): kemgu --llvm <bu dosya> | clang -x ir ... | run (exit 0 = geçti).
+// Otomatik: make -f tests/drivers/Makefile.drivers calistir_blk_oku_test
+
+kullan drivers::virtio::virtqueue_bind;    // Virtqueue
+kullan drivers::virtio::virtio_blk;        // BlkAygit
+kullan drivers::virtio::virtio_blk_oku;    // blk_oku_cekirdek, IOHatasi, Tampon512
+
+sabit TEST_MMIO_OKU_YAZ: tam32 = 3;        // OKU|YAZ
+sabit TEST_DATA_ADRES: tam64 = 2048;       // caller 512B tamponu (ring'lerle çakışmaz)
+sabit TEST_KAPASITE: tam64 = 4096;         // sektör cinsinden kapasite
+
+işlev test_vq() -> Virtqueue {
+    ver Virtqueue {
+        boyut: 8,
+        desc_adres: 4096 olarak tam64,
+        avail_adres: 8192 olarak tam64,
+        used_adres: 12288 olarak tam64
+    };
+}
+
+// boyut < 3: descriptor zinciri (header/data/status) kurulamaz
+işlev test_vq_kucuk() -> Virtqueue {
+    ver Virtqueue {
+        boyut: 2,
+        desc_adres: 4096 olarak tam64,
+        avail_adres: 8192 olarak tam64,
+        used_adres: 12288 olarak tam64
+    };
+}
+
+işlev test_aygit() -> BlkAygit {
+    ver BlkAygit {
+        kapasite_sektor: TEST_KAPASITE,
+        blok_boyut: 512,
+        accepted_features: 0,
+        queue_num: 8,
+        queue_size: 8,
+        final_status: 15
+    };
+}
+
+işlev test_tampon() -> Tampon512 {
+    ver Tampon512 { adres: TEST_DATA_ADRES };
+}
+
+işlev kosu(sektor: tam64, hms: tam16) -> sonuç<boş, IOHatasi> {
+    // MMIO yetkisi tek sektör okuma için üretilir; cekirdek iade eder.
+    değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    ver blk_oku_cekirdek(y, test_vq(), test_aygit(), sektor, test_tampon(), hms);
+}
+
+işlev kosu_kucuk(sektor: tam64, hms: tam16) -> sonuç<boş, IOHatasi> {
+    değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    ver blk_oku_cekirdek(y, test_vq_kucuk(), test_aygit(), sektor, test_tampon(), hms);
+}
+
+// Başarı + tampon içerik doğrulaması (sektöre bağlı 512B desen).
+işlev test_basari_ve_veri() -> mantıksal {
+    değişken r: sonuç<boş, IOHatasi> = kosu(7, 0 olarak tam16);
+    değişken ok: mantıksal = yanlış;
+    eşleş r {
+        tamam(_) => { ok = doğru; }
+        hata(IOHatasi::AygitHatasi) => { ok = yanlış; }
+        hata(IOHatasi::Desteklenmiyor) => { ok = yanlış; }
+        hata(IOHatasi::GecersizSektor) => { ok = yanlış; }
+        hata(IOHatasi::DescriptorTukendi) => { ok = yanlış; }
+        hata(IOHatasi::TamamlanmaYok) => { ok = yanlış; }
+    }
+
+    // tampon.adres'ten veri oku: word[0] = sektor+0, word[127] = sektor+127
+    değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    değişken w0: tam32 = mmio_oku32(y, TEST_DATA_ADRES);
+    değişken w127: tam32 = mmio_oku32(y, TEST_DATA_ADRES + (508 olarak tam64));
+    geri_al(y);
+
+    ver ok ve w0 == 7 ve w127 == 134;
+}
+
+// status=IOERR -> AygitHatasi
+işlev test_ioerr() -> mantıksal {
+    eşleş kosu(7, 1 olarak tam16) {
+        tamam(_) => { ver yanlış; }
+        hata(IOHatasi::AygitHatasi) => { ver doğru; }
+        hata(IOHatasi::Desteklenmiyor) => { ver yanlış; }
+        hata(IOHatasi::GecersizSektor) => { ver yanlış; }
+        hata(IOHatasi::DescriptorTukendi) => { ver yanlış; }
+        hata(IOHatasi::TamamlanmaYok) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// status=UNSUPP -> Desteklenmiyor
+işlev test_unsupp() -> mantıksal {
+    eşleş kosu(7, 2 olarak tam16) {
+        tamam(_) => { ver yanlış; }
+        hata(IOHatasi::AygitHatasi) => { ver yanlış; }
+        hata(IOHatasi::Desteklenmiyor) => { ver doğru; }
+        hata(IOHatasi::GecersizSektor) => { ver yanlış; }
+        hata(IOHatasi::DescriptorTukendi) => { ver yanlış; }
+        hata(IOHatasi::TamamlanmaYok) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// sektor >= kapasite -> GecersizSektor (cihaza hiç gidilmez)
+işlev test_gecersiz_sektor() -> mantıksal {
+    eşleş kosu(TEST_KAPASITE, 0 olarak tam16) {
+        tamam(_) => { ver yanlış; }
+        hata(IOHatasi::AygitHatasi) => { ver yanlış; }
+        hata(IOHatasi::Desteklenmiyor) => { ver yanlış; }
+        hata(IOHatasi::GecersizSektor) => { ver doğru; }
+        hata(IOHatasi::DescriptorTukendi) => { ver yanlış; }
+        hata(IOHatasi::TamamlanmaYok) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// boyut < 3 -> DescriptorTukendi
+işlev test_descriptor_tukendi() -> mantıksal {
+    eşleş kosu_kucuk(7, 0 olarak tam16) {
+        tamam(_) => { ver yanlış; }
+        hata(IOHatasi::AygitHatasi) => { ver yanlış; }
+        hata(IOHatasi::Desteklenmiyor) => { ver yanlış; }
+        hata(IOHatasi::GecersizSektor) => { ver yanlış; }
+        hata(IOHatasi::DescriptorTukendi) => { ver doğru; }
+        hata(IOHatasi::TamamlanmaYok) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// cihaz tamamlamazsa (used.idx ilerlemez) -> TamamlanmaYok
+işlev test_tamamlanma_yok() -> mantıksal {
+    eşleş kosu(7, 255 olarak tam16) {
+        tamam(_) => { ver yanlış; }
+        hata(IOHatasi::AygitHatasi) => { ver yanlış; }
+        hata(IOHatasi::Desteklenmiyor) => { ver yanlış; }
+        hata(IOHatasi::GecersizSektor) => { ver yanlış; }
+        hata(IOHatasi::DescriptorTukendi) => { ver yanlış; }
+        hata(IOHatasi::TamamlanmaYok) => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev main() -> tam32 {
+    eğer test_basari_ve_veri() ve
+       test_ioerr() ve
+       test_unsupp() ve
+       test_gecersiz_sektor() ve
+       test_descriptor_tukendi() ve
+       test_tamamlanma_yok() {
+        ver 0;
+    }
+    ver 1;
+}
