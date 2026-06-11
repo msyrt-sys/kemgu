@@ -29,7 +29,13 @@ Durum: ✅ yeşil/gap-yok · 🔧 gap bulundu+fix · ⏭️ kapsam dışı (DECI
 - ✅ `&v` (skaler/struct — &Struct fix), `*(&v)` round-trip, &-param mutasyon (sret yolu)
 - ⏭️ **D-006:** `&p.x` → `(&p).x`, `&d[i]` → `(&d)[i]` — parser önceliği (ifade.c,
   SCOPE DIŞI). Codegen doğru AST'ye hazır. Ayrı parser görevi.
-## D. Kontrol akışı — ⬜
-## E. Fonksiyon sınırı — ⬜
+## D. Kontrol akışı — ✅ gap yok
+- iç içe eğer/değilse (4-yol), iken+döngü-taşıyan birikim, ver erken-dönüş iç içe
+  döngüde, ve/veya dal-koşulu kısa-devre, çeşit exhaustive eşleş (i8 dispatch).
+
+## E. Fonksiyon sınırı — ✅ gap yok
+- struct param+dönüş by-value, karşılıklı özyineleme, dizi param (`için`),
+  aggregate (sonuç) dönüş + extractvalue, @modul.ad çağrı (codegen; T016 type-check
+  ayrı), **yetki<R> param sınır pass-through**, **tekkez<T> param sınır round-trip**.
 ## F. Bölge/lineer/yetki etkileşimleri — ⬜
 ## stretch — ⬜
