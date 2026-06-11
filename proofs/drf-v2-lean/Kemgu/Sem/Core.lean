@@ -598,6 +598,35 @@ def kanalCikar (ks : List KanalDurumu) (k : KanalId) : List KanalDurumu :=
   ks.map (fun kd =>
     if kd.kid = k then { kd with gonderKuyrugu := kd.gonderKuyrugu.tail } else kd)
 
+/-- kanalEkle uyelik analizi: yeni listede gorulen kayit ya append'li
+    eski k-kaydi, ya k-disi eski kayit, ya da taze ⟨k,[v]⟩ kaydidir
+    (dal taniklari any-bayragini tasir — birbirini dislar). -/
+theorem kanalEkle_uye (ks : List KanalDurumu) (k : KanalId) (v : Deger)
+    (kd' : KanalDurumu) (h : kd' ∈ kanalEkle ks k v) :
+    (∃ kd0 ∈ ks, kd0.kid = k
+       ∧ kd' = { kd0 with gonderKuyrugu := kd0.gonderKuyrugu ++ [v] }
+       ∧ ks.any (fun kd => kd.kid = k) = true)
+    ∨ (kd' ∈ ks ∧ kd'.kid ≠ k)
+    ∨ (kd' = ⟨k, [v]⟩ ∧ ks.any (fun kd => kd.kid = k) = false) := by
+  unfold kanalEkle at h
+  by_cases h_any : ks.any (fun kd => kd.kid = k) = true
+  · rw [if_pos h_any] at h
+    rcases List.mem_map.mp h with ⟨kd0, h0, h_img⟩
+    by_cases hk : kd0.kid = k
+    · rw [if_pos hk] at h_img
+      exact Or.inl ⟨kd0, h0, hk, h_img.symm, h_any⟩
+    · rw [if_neg hk] at h_img
+      subst h_img
+      exact Or.inr (Or.inl ⟨h0, hk⟩)
+  · rw [if_neg h_any] at h
+    have h_any' : ks.any (fun kd => kd.kid = k) = false :=
+      Bool.eq_false_iff.mpr h_any
+    rcases List.mem_cons.mp h with he | h_tail
+    · exact Or.inr (Or.inr ⟨he, h_any'⟩)
+    · refine Or.inr (Or.inl ⟨h_tail, ?_⟩)
+      intro hk
+      exact h_any (List.any_eq_true.mpr ⟨kd', h_tail, by simp [hk]⟩)
+
 /-- Tum sistem konfigurasyonu (Op.Sem §5.2).
     S = ⟨T_, sigma, Sigma, K_⟩ + zaman + iz + fault.
     `fault` alani Plan v2 Adim 1.1'de eklendi: `none` = normal yurutme;
