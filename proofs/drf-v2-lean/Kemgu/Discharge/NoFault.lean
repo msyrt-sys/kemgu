@@ -57,7 +57,7 @@ theorem step_fault_preserves_typed
       intro _ _; subst h_S'; rfl
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       intro _ _; subst h_S'; rfl
-  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro _ _; subst h_S'; rfl
   | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
       intro _ _; subst h_S'; rfl
@@ -340,7 +340,7 @@ theorem adim_korunum
       -- comp 3/7/8/9 icin sahiplikSetMany_lookup_inv + TidAyrik bileseni
       -- (bitmis thread tekilligi) — mekanik, catal-bagimsiz.
       sorry
-  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro h_konf
       -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := update kanalRho).
       sorry

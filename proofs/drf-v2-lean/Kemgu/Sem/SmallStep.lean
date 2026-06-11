@@ -296,6 +296,10 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_b     : bolgeOrtamGet S.bolge vId = some b)
       (h_v     : konumGet S.store ⟨b, 0⟩ = some v)
       (h_owner : sahiplikGet S.sahiplik b = some (Sahip.thread ctx.tid))
+      -- KAPASITE-1 (Mehmet karari, 2026-06-11): dolu kanala gonderim BLOKLAR
+      -- (rendezvous-benzeri); boylece kuyruk uzunlugu ≤ 1 invarianti korunur
+      -- ve cKanalAl pop sonrasi transit-tanigi sorunu kalkmaz. Buffer = V2.
+      (h_bos   : kanalIlk S.kanal k = none)
       (h_S'    : S' = { S with
                 thread := ts1 ++ { ctx with
                             ifade  := .sabit .birim,
@@ -513,7 +517,7 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
       refine Or.inr (Or.inr (Or.inr ⟨.threadBitir tHedef, rfl, ?_, ?_, rfl⟩))
       · intro t0 k0 v0 hh; nomatch hh
       · intro t0 k0 v0 hh; nomatch hh
-  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       subst h_S'
       refine Or.inr (Or.inr (Or.inr ⟨.kanalGonderOl ctx.tid k v, rfl, ?_, ?_, rfl⟩))
       · intro t0 k0 v0 hh; nomatch hh
@@ -594,7 +598,7 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       subst h_S'; exact Or.inr ⟨_, rfl, rfl, rfl, rfl, rfl⟩
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       subst h_S'; exact Or.inl rfl
-  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_S' =>
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       subst h_S'; exact Or.inl rfl
   | cKanalGonderHataLineerTuket S S' ts1 ts2 ctx k vId h_t h_if h_tuket h_S' =>
       subst h_S'; exact Or.inr ⟨_, rfl, rfl, rfl, rfl, rfl⟩
@@ -683,7 +687,7 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       show sahiplikGet (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) b
              = some Sahip.donmus
       rw [sahiplikSetMany_ne _ _ _ _ h_not_in]; exact h_frozen
-  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b' v h_t h_if h_b h_v h_owner h_S' =>
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b' v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro h_frozen
       subst h_S'
       have h_ne : b ≠ b' := by
