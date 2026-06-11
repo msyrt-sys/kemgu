@@ -134,6 +134,11 @@ typedef struct LlvmGen {
     const Dugum *beklenen_tip;       /* yapıcının inşa edeceği sonuç/seçimlik tip düğümü */
     const Dugum *aktif_donus_dugum;  /* aktif islevin donus tipi AST düğümü (ver için) */
     int hata_sayisi;                 /* C5 AS001: olumcul codegen hatasi sayaci */
+    /* Kampanya seed (a) / D-001: modul uyesi emit edilirken aktif
+     * "modul.altmodul" oneki — kardes islevlere ciplak-ad cagrilar
+     * islev_bul fallback'inde bu onekle mangle edilip cozulur. */
+    const char *aktif_modul_onek;
+    int aktif_modul_onek_uz;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -147,6 +152,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d, const char *beklenen);
 static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
                               const Dugum *arg, const Dugum *beklenen);
 static int blok_uret(LlvmGen *g, const Dugum *blok);
+static void islev_uret(LlvmGen *g, const Dugum *islev);
 static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
 static int mono_emitlendi(LlvmGen *g, const char *mangled);
 static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
@@ -565,6 +571,118 @@ static IslevKayit *islev_bul(LlvmGen *g, const char *ad, int ad_uz) {
         }
     }
     return NULL;
+}
+
+/* === Kampanya seed (a) / DECISIONS_LOG D-001: modul ad-mangling ===
+ * Sema: @<modul>.<ad> — ic ice modul "<m1>.<m2>.<ad>". LLVM @ adlari
+ * nokta icerebilir (örn. @llvm.x86.*); KEMGU kullanici adlarinda '.'
+ * olamayacagi icin cakisma riski yok. Onceki durum: modul uyeleri HIC
+ * emit edilmiyordu + mat::f() cagrisi sessiz 0 donerdi (audit DUR-SOR
+ * #2). Tip kontrolu modul scope'unu zaten cozuyor; bu katman yalniz
+ * IR ad uzayini duzlestirir. */
+static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
+                                const char *ad, int ad_uz, int *out_uz) {
+    char *m = (char *)arena_ayir(g->arena,
+                                 (size_t)onek_uz + 1 + (size_t)ad_uz + 1);
+    if (!m) return NULL;
+    memcpy(m, onek, (size_t)onek_uz);
+    m[onek_uz] = '.';
+    memcpy(m + onek_uz + 1, ad, (size_t)ad_uz);
+    m[onek_uz + 1 + ad_uz] = '\0';
+    if (out_uz) *out_uz = onek_uz + 1 + ad_uz;
+    return m;
+}
+
+/* mat::alt::f yol zincirini "mat.alt.f" noktali ada knit eder.
+ * Donus: yazilan uzunluk, sigmazsa/desteklenmeyen dugumde -1. */
+static int yol_noktali_ad(const Dugum *y, char *buf, int kap) {
+    if (!y) return -1;
+    if (y->tip == DUGUM_TANIMLAYICI) {
+        int u = y->veri.tanimlayici.uzunluk;
+        if (u >= kap) return -1;
+        memcpy(buf, y->veri.tanimlayici.metin, (size_t)u);
+        return u;
+    }
+    if (y->tip == DUGUM_YOL) {
+        int o = yol_noktali_ad(y->veri.yol.sol, buf, kap);
+        if (o < 0) return -1;
+        int su = y->veri.yol.sag_ad_uzunluk;
+        if (o + 1 + su >= kap) return -1;
+        buf[o] = '.';
+        memcpy(buf + o + 1, y->veri.yol.sag_ad, (size_t)su);
+        return o + 1 + su;
+    }
+    return -1;
+}
+
+/* Modul uyelerini (islev + disa islev + ic ice modul) mangled adla
+ * islev kayit tablosuna ekle. AST kopyasi arena'da kalici (kayit
+ * ast pointer'i saklar; specialize_emit'in sahte-dugum deseni). */
+static void modul_uyeleri_kayit(LlvmGen *g, const Dugum *m,
+                                const char *onek, int onek_uz) {
+    for (int i = 0; i < m->veri.modul.sayi; i++) {
+        const Dugum *uye = m->veri.modul.uyeler[i];
+        if (uye && uye->tip == DUGUM_DISA && uye->veri.disa.tanim) {
+            uye = uye->veri.disa.tanim;
+        }
+        if (!uye) continue;
+        if (uye->tip == DUGUM_ISLEV) {
+            int muz = 0;
+            const char *mangled = modul_mangle(g, onek, onek_uz,
+                uye->veri.islev.ad, uye->veri.islev.ad_uzunluk, &muz);
+            if (!mangled) continue;
+            Dugum *kopya = (Dugum *)arena_ayir(g->arena, sizeof(Dugum));
+            if (!kopya) continue;
+            *kopya = *uye;
+            kopya->veri.islev.ad = mangled;
+            kopya->veri.islev.ad_uzunluk = muz;
+            islev_kayit(g, kopya);
+        } else if (uye->tip == DUGUM_MODUL) {
+            int yeni_uz = 0;
+            const char *yeni_onek = modul_mangle(g, onek, onek_uz,
+                uye->veri.modul.ad, uye->veri.modul.ad_uzunluk, &yeni_uz);
+            if (yeni_onek) {
+                modul_uyeleri_kayit(g, uye, yeni_onek, yeni_uz);
+            }
+        }
+    }
+}
+
+/* Modul uyelerini emit et (kayit asamasinda olusan mangled-adli AST
+ * kopyalari uzerinden). aktif_modul_onek emit suresince set edilir —
+ * govde icindeki kardes ciplak-ad cagrilar islev_bul fallback'iyle
+ * "<onek>.<ad>"a cozulur. */
+static void modul_uyeleri_emit(LlvmGen *g, const Dugum *m,
+                               const char *onek, int onek_uz) {
+    for (int i = 0; i < m->veri.modul.sayi; i++) {
+        const Dugum *uye = m->veri.modul.uyeler[i];
+        if (uye && uye->tip == DUGUM_DISA && uye->veri.disa.tanim) {
+            uye = uye->veri.disa.tanim;
+        }
+        if (!uye) continue;
+        if (uye->tip == DUGUM_ISLEV && uye->veri.islev.govde) {
+            int muz = 0;
+            const char *mangled = modul_mangle(g, onek, onek_uz,
+                uye->veri.islev.ad, uye->veri.islev.ad_uzunluk, &muz);
+            IslevKayit *ik = mangled ? islev_bul(g, mangled, muz) : NULL;
+            if (ik && ik->ast) {
+                const char *eski_onek = g->aktif_modul_onek;
+                int eski_uz = g->aktif_modul_onek_uz;
+                g->aktif_modul_onek = onek;
+                g->aktif_modul_onek_uz = onek_uz;
+                islev_uret(g, ik->ast);
+                g->aktif_modul_onek = eski_onek;
+                g->aktif_modul_onek_uz = eski_uz;
+            }
+        } else if (uye->tip == DUGUM_MODUL) {
+            int yeni_uz = 0;
+            const char *yeni_onek = modul_mangle(g, onek, onek_uz,
+                uye->veri.modul.ad, uye->veri.modul.ad_uzunluk, &yeni_uz);
+            if (yeni_onek) {
+                modul_uyeleri_emit(g, uye, yeni_onek, yeni_uz);
+            }
+        }
+    }
 }
 
 static void yapi_kayit(LlvmGen *g, const Dugum *y) {
@@ -1398,6 +1516,57 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { r, donus };
                 return s;
             }
+            /* Kampanya seed (a) / D-001: mat::kare(x) — YOL hedefli cagri.
+             * Yol zinciri noktali ada knit edilir (@mat.kare) ve kayitli
+             * modul uyesine direkt cagri emit edilir. Onceki durum:
+             * '; HATA: cagri hedefi tanimlayici degil' + SESSIZ 0. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_YOL) {
+                char tam_ad[256];
+                int tuz = yol_noktali_ad(d->veri.cagri.hedef,
+                                         tam_ad, (int)sizeof(tam_ad));
+                IslevKayit *mik = (tuz > 0)
+                    ? islev_bul(g, tam_ad, tuz) : NULL;
+                if (mik) {
+                    int n = d->veri.cagri.sayi;
+                    IfadeSonuc *args = NULL;
+                    if (n > 0) {
+                        args = (IfadeSonuc *)arena_ayir(g->arena,
+                            sizeof(IfadeSonuc) * (size_t)n);
+                        for (int i = 0; i < n; i++) {
+                            args[i] = ifade_uret(g,
+                                d->veri.cagri.argumanlar[i], NULL);
+                        }
+                    }
+                    const char *donus = mik->donus_tip
+                        ? mik->donus_tip : "i32";
+                    int vd = (strcmp(donus, "void") == 0);
+                    int r = -1;
+                    if (vd) {
+                        fputs("  call void @", g->out);
+                    } else {
+                        r = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = call %s @", r, donus);
+                    }
+                    ad_yaz(g->out, mik->ad, mik->ad_uz);
+                    fputs("(", g->out);
+                    for (int i = 0; i < n; i++) {
+                        if (i > 0) fputs(", ", g->out);
+                        fprintf(g->out, "%s %%%d",
+                                args[i].tip, args[i].reg);
+                    }
+                    fputs(")\n", g->out);
+                    if (vd) {
+                        r = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+                        IfadeSonuc s = { r, "i32" };
+                        return s;
+                    }
+                    IfadeSonuc s = { r, donus };
+                    return s;
+                }
+                /* cozulemedi — mevcut hata yoluna dus (gorunur yorum) */
+            }
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {
                 return hata(g, "cagri hedefi tanimlayici degil");
@@ -1830,6 +1999,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             IslevKayit *ik = islev_bul(g,
                 d->veri.cagri.hedef->veri.tanimlayici.metin,
                 d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+            /* D-001: modul govdesi icinden kardes islev ciplak-ad cagrisi
+             * — duz ad bulunamadiysa aktif onekle ("<modul>.<ad>") dene.
+             * Built-in'ler kayitli olmadigi icin etkilenmez. */
+            if (!ik && g->aktif_modul_onek) {
+                int muz = 0;
+                const char *mangled = modul_mangle(g,
+                    g->aktif_modul_onek, g->aktif_modul_onek_uz,
+                    d->veri.cagri.hedef->veri.tanimlayici.metin,
+                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk, &muz);
+                if (mangled) ik = islev_bul(g, mangled, muz);
+            }
 
             /* Adim 7: Indirect call — hedef bir parametre/lokal degisken
              * (function pointer) ise call ptr ile ara. Args burada erken
@@ -1869,6 +2049,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
 
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+            /* D-001: ik onek-fallback ile farkli (mangled) ad altinda
+             * bulunduysa cagri adini ona cevir (@modul.ad). */
+            if (ik && (ik->ad_uz != cagri_adi_uz ||
+                       memcmp(ik->ad, cagri_adi, (size_t)cagri_adi_uz) != 0)) {
+                cagri_adi = ik->ad;
+                cagri_adi_uz = ik->ad_uz;
+            }
 
             /* Built-in libc / kdl mapping */
             const char *kdl_donus = NULL;  /* override (NULL ise auto) */
@@ -3492,6 +3679,17 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
                  uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
             islev_kayit(&g, uye->veri.disa.tanim);
         }
+        /* D-001: modul uyeleri mangled adla (@modul.ad) kayit edilir */
+        else if (uye->tip == DUGUM_MODUL) {
+            modul_uyeleri_kayit(&g, uye,
+                uye->veri.modul.ad, uye->veri.modul.ad_uzunluk);
+        }
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_MODUL) {
+            const Dugum *m = uye->veri.disa.tanim;
+            modul_uyeleri_kayit(&g, m,
+                m->veri.modul.ad, m->veri.modul.ad_uzunluk);
+        }
     }
 
     /* Pre-pass: ust duzey sabitleri kayit et (referans yerlerinde inline).
@@ -3521,6 +3719,15 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         } else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                    uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
             islev_uret(&g, uye->veri.disa.tanim);
+        } else if (uye->tip == DUGUM_MODUL) {
+            /* D-001: modul uyeleri @modul.ad olarak emit edilir */
+            modul_uyeleri_emit(&g, uye,
+                uye->veri.modul.ad, uye->veri.modul.ad_uzunluk);
+        } else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                   uye->veri.disa.tanim->tip == DUGUM_MODUL) {
+            const Dugum *m = uye->veri.disa.tanim;
+            modul_uyeleri_emit(&g, m,
+                m->veri.modul.ad, m->veri.modul.ad_uzunluk);
         } else if (uye->tip == DUGUM_UYGULA) {
             /* uygula gövdesindeki methodlari emit et — kendin parametresi
              * uygula.tip ile degistirilir */

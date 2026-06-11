@@ -1483,6 +1483,23 @@ static void test_audit_linear_kullan_round_trip(void) {
                rc == 42);
 }
 
+static void test_kampanya_modul_mangling(void) {
+    /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
+     * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
+     * uyeler hic emit edilmiyordu, cagri sessiz 0 (probe: 6, beklenen
+     * 42). NOT: --check modul cozumu ayri tip_kontrol isi (D-001). */
+    int rc = derle_ve_calistir(
+        "mod\xc3\xbcl mat { "
+        "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
+        "i\xc5\x9flev dordun(x: tam32) -> tam32 { ver kare(kare(x)); } "
+        "mod\xc3\xbcl ic { "
+        "i\xc5\x9flev arti_bir(x: tam32) -> tam32 { ver x + 1; } } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver mat::dordun(2) + mat::ic::arti_bir(25); }");
+    test_sonuc("kampanya: modul mangling (@mat.dordun, ic ice, kardes) "
+               "-> exit 42", rc == 42);
+}
+
 static void test_audit_linear_imha(void) {
     /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
     int rc = derle_ve_calistir(
@@ -1773,6 +1790,9 @@ int main(void) {
     test_audit_nested_alan_atama();
     test_audit_linear_kullan_round_trip();
     test_audit_linear_imha();
+
+    printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
+    test_kampanya_modul_mangling();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
