@@ -230,18 +230,21 @@ def SigmaTipli (Γ : TipOrtam) (Ρ : BolgeOrtam) (store : Store) : Prop :=
 -- Sahiplik haritasinin bilinen bolgelere refer ettigi + frozen persistence.
 -- ============================================================
 
-/-- Sahiplik haritasi tutarliligi (F2 guncel-durum modeli):
-    thread'in sahiplendigi her bolge BolgeOrtam'da kayitli — un-owned
-    bolgelere sahiplik atamasi yasak.
+/-- Sahiplik haritasi tutarliligi (F4-kapanis ID-GENEL formu):
+    sahiplik haritasindaki HER bolge (sahibi kim olursa olsun),
+    BolgeOrtam'da AYNI ID ile kayitli — un-tracked bolgelere sahiplik
+    atamasi yasak.
 
-    Eski (2) "frozen persistence" bileseni KALDIRILDI: guncel-durum
-    modelinde persistence kural-tasarimindan gelir (transfer kurallari
-    guncel sahibi thread/kanal olan bolgelerle sinirli → donmus entry
-    override edilmez; L4 isFrozen_persistent teoremi). -/
+    ID-form gerekce: kategori-degistiren kurallar (kanal transit /
+    sahip-ata / dondur) kayitli Bolge DEGERINI recat'ler; tam-Bolge
+    esleme korunamaz, id eslemesi korunur (id'ler hic degismez).
+    Eski tam-Bolge / yalniz-thread formu cKanalAl korunumunda kiriliyordu;
+    bu bilesenin tuketicisi yok (yalniz koprude kurulur). -/
 def SahiplikTutarli (Ρ : BolgeOrtam) (sahiplik : Sahiplik) : Prop :=
-  ∀ (b : Bolge) (t : ThreadId),
-    sahiplikGet sahiplik b = some (Sahip.thread t) →
-    ∃ x, bolgeOrtamGet Ρ x = some b
+  ∀ (b : Bolge) (sah : Sahip),
+    sahiplikGet sahiplik b = some sah →
+    ∃ (x : VarId) (b' : Bolge),
+      bolgeOrtamGet Ρ x = some b' ∧ b'.id = b.id
 
 
 -- ============================================================
