@@ -213,16 +213,17 @@ end
 
     Iki kosul:
     (1) Her (k, v) entry'si icin bazi τ tipinde DegerTipli v τ.
-    (2) k.bolge BolgeOrtam'da kayitli (yani bilinen bolge).
+    (2) k.bolge ID-BAZINDA BolgeOrtam'da kayitli (bilinen bolge kimligi).
 
-    Ikinci sart, store'da rastgele bolge referanslarinin olmamasini garanti
-    eder — sahiplikGet ile uyum saglar (her bolge bir VarId araciligiyla
-    BolgeOrtam'da kayitli olmali). -/
+    Ikinci sart ID-formundadir (kategori-anahtar karari): kategori-
+    degistiren kurallar (sahipAta/dondurBolge) kayitli Bolge degerini
+    recat'ler; tam-deger eslemesi korunamaz, id eslemesi korunur.
+    sahiplikGet/konumGet de id-anahtarli oldugundan erisim tutarli. -/
 def SigmaTipli (Γ : TipOrtam) (Ρ : BolgeOrtam) (store : Store) : Prop :=
   ∀ (k : Konum) (v : Deger), (k, v) ∈ store →
     ∃ τ : Tip,
       DegerTipli Γ Ρ v τ ∧
-      ∃ x, bolgeOrtamGet Ρ x = some k.bolge
+      ∃ x b', bolgeOrtamGet Ρ x = some b' ∧ b'.id = k.bolge.id
 
 
 -- ============================================================

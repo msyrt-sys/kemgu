@@ -217,10 +217,11 @@ theorem sahiplikBaslangic_get_inv (cevre : List (VarId × Tip)) (b : Bolge)
   induction cevre with
   | nil => simp [sahiplikGet] at h
   | cons p rest ih =>
-      by_cases hp : varBolge p.1 = b
-      · simp [sahiplikGet, hp] at h
-        exact h.symm
-      · simp [sahiplikGet, hp] at h
+      rw [List.map_cons, sahiplikGet] at h
+      by_cases hp : (varBolge p.1).id = b.id
+      · rw [if_pos hp] at h
+        exact (Option.some.inj h).symm
+      · rw [if_neg hp] at h
         exact ih h
 
 /-- Sahiplik₀ lookup: cevre'de kayitli degiskenin bolgesi thread 0'da. -/
@@ -231,11 +232,12 @@ theorem sahiplikBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Ti
   induction cevre with
   | nil => cases h
   | cons p rest ih =>
-      by_cases hp : varBolge p.1 = varBolge x
-      · simp [sahiplikGet, hp]
+      rw [List.map_cons, sahiplikGet]
+      by_cases hp : (varBolge p.1).id = (varBolge x).id
+      · rw [if_pos hp]
       · cases h with
         | head => exact absurd rfl hp
-        | tail _ hr => simp [sahiplikGet, hp]; exact ih hr
+        | tail _ hr => rw [if_neg hp]; exact ih hr
 
 /-- Ρ₀ lookup → cevre uyeligi. -/
 theorem rhoBaslangic_get_mem (cevre : List (VarId × Tip)) (y : VarId)
@@ -267,11 +269,11 @@ theorem storeBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Tip)
         simp [tipOrtamGet] at h
         subst h
         simp [konumGet]
-      · have h_ne : (⟨varBolge p.1, 0⟩ : Konum) ≠ ⟨varBolge x, 0⟩ := by
-          intro he
-          exact hp (varBolge_inj (congrArg Konum.bolge he))
+      · have h_ne : ¬((varBolge p.1).id = (varBolge x).id ∧ (0 : Nat) = 0) := by
+          intro ⟨he, _⟩
+          exact hp he
         simp [tipOrtamGet, hp] at h
-        simp [konumGet, h_ne]
+        rw [List.map_cons, konumGet, if_neg h_ne]
         exact ih h
 
 
@@ -290,12 +292,11 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipliCekirdek Pi) :
     intro k v h_kv
     rcases List.mem_map.mp h_kv with ⟨p, h_p, h_eq⟩
     obtain ⟨h_k, h_v⟩ := Prod.mk.injEq .. ▸ h_eq
-    refine ⟨p.2, ?_, ⟨p.1, ?_⟩⟩
+    refine ⟨p.2, ?_, ⟨p.1, varBolge p.1, ?_, ?_⟩⟩
     · rw [← h_v]
       exact varsayilanDeger_tipli _ _ p.2 (h_iyi.cevreBasit p h_p)
+    · exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
     · rw [← h_k]
-      show bolgeOrtamGet (rhoBaslangic Pi) p.1 = some (varBolge p.1)
-      exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
   · -- (2) ThreadTipliFull (tek main thread; per-thread lineer = Λ₀)
     intro ctx h_ctx
     rcases List.mem_cons.mp h_ctx with h_eq | h_nil
@@ -317,12 +318,13 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipliCekirdek Pi) :
     · cases h_nil
   · -- (3) SahiplikTutarli (id-genel form)
     intro b sah h_b
-    have h_mem := sahiplikGet_mem _ b _ h_b
+    obtain ⟨b'', h_mem, h_id⟩ := sahiplikGet_mem _ b _ h_b
     rcases List.mem_map.mp h_mem with ⟨p, h_p, h_eq⟩
     obtain ⟨h_bb, _⟩ := Prod.mk.injEq .. ▸ h_eq
     refine ⟨p.1, varBolge p.1, ?_, ?_⟩
     · exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
-    · rw [← h_bb]
+    · rw [h_bb]
+      exact h_id
   · -- (4) KanalTutarli (bos kanal listesi)
     intro kd h_kd
     cases h_kd
