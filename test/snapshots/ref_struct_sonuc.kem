@@ -1,0 +1,24 @@
+// C-track regresyon (D9 w1 repro): &Struct param + sonuç<boş, çeşit> dönüş.
+// Fix öncesi: çağrı &v yerine struct DEĞERİNİ geçirirdi (OP_REF lowering
+// yoktu) -> callee ptr bekler, ilk alan pointer sanılır -> segfault (139).
+çeşit KurHata { Bos }
+
+yapı Virtqueue {
+    taban: tam64;
+    boyut: tam32;
+}
+
+işlev kur(y: tam32, vq: &Virtqueue) -> sonuç<boş, KurHata> {
+    eğer vq.boyut < 0 { ver hata(KurHata::Bos); }
+    eğer vq.boyut + y != 42 { ver hata(KurHata::Bos); }
+    ver tamam(boş);
+}
+
+işlev main() -> tam32 {
+    değişken v: Virtqueue = Virtqueue { taban: 4096, boyut: 40 };
+    eşleş kur(2, &v) {
+        tamam(x) => { ver 42; }
+        hata(e) => { ver 1; }
+    }
+    ver 2;
+}
