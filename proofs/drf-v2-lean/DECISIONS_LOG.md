@@ -49,4 +49,47 @@ dokunuş (set_eq/ne koşulları id'ye iner; kapalı 15 case'in sahiplik
 argümanları sadeleşerek yeniden geçer; sonra 3 Ρ-case + 3 cong + Yol-B
 premise + transport kapanır → sorry 0).
 
-**Durum:** ONAY BEKLİYOR. Kalan 6 sorry'nin tek blokeri.
+**Durum: ✅ ÇÖZÜLDÜ (2026-06-12, Mehmet onayı — id-anahtarlama passı).**
+Uygulandı: `sahiplikGet`/`konumGet` id(+ofset)-anahtarlı; `SigmaTipli`
+koşul-2 id-formu; kongruans lemmaları (`sahiplikGet_id_esit` /
+`konumGet_id_esit`); `sahiplikSetMany_analiz` master lemması. 15 kapalı
+case sadeleşerek yeniden geçti (köprü TAM). Yol-B premise GERÇEK olarak
+`r_gorev_baslat`'a girdi; `regionTamam_transport` + `regionTamam_yaz_geri`
+TAM ispatlandı; **3 Ρ-case kapandı → adim_korunum 18/21**.
+
+## 2026-06-12 — ⭐ Fırsat-kontrol sonucu: write-free premise GEREKLİ
+
+**Soru (Mehmet):** id-anahtarlama Yol-B yazma-hedefsiz kısıtını gereksiz
+kılar mı?
+
+**CEVAP: HAYIR — kısıt kalıyor (ve artık GERÇEK premise).** id-anahtarlama
+ERİŞİM sorununu çözer (recat sonrası store/sahiplik lookup'ları kopmaz);
+`r_atama`'nın KATEGORİ disiplinini değiştirmez: yakalanan bölgeler spawn'da
+`sahip(tYeni)` kategorisine geçer → `kategoriYazilabilir = false` → çocuğun
+kendi yakaladığı bölgeye yazması spawn-sonrası ortamda statik tiplenemez.
+Kategoriyi gevşetmek (sahip-kategorisini yazılabilir saymak) caller-after-
+spawn fault-discharge'ını kırar (comp-8 muafiyeti kaybolur). Çocuğun kendi
+bölgesine yazabilmesi = per-thread Ρ (Yol A) = V2. Docstring güncel
+(IyiTipliCekirdek: "GERCEK premise" bloğu).
+
+## 2026-06-12 — KALAN TEK BLOKER: odak-adım güçlendirilmiş-IH (cong ×3)
+
+**Bulgu:** kategori-anahtar çözüldükten sonra cong case'leri (sSeqCong/
+sAtamaCong/sGuvensizCong) farklı ve tek blokere indi: IH yalnız
+`KonfTipliFull S1'` verir; odaklanmış S1 yalnız `a` taşıdığından devam-
+ifadesi `b`'nin (i) Λmid/Ρmid altında yeniden tiplenmesi (l_seq/r_seq
+kompozisyonu), (ii) hedef-sahiplikleri (comp-8/9 büyüyen hedef kümesi)
+IH'den gelmez.
+
+**Tasarım (sonraki oturum; final teorem ifadesi DEĞİŞMEZ — iç-lemma
+güçlendirmesi):** `adim_korunum` sonucuna odak-yükü ekle
+(`∃ Ρ', KonfTipliFull ... ∧ OdakUyum S S' Ρ Ρ'`):
+1. Lineer: Λ' ≼ Λ-statik-çıktı monotonluğu (≼: tüketildiler ⊆, aktifler ⊇
+   — sVarOku lineer-okumayı runtime'da tüketmediğinden eşitlik değil) +
+   lineer-≼ transport lemması (13 kural, aktif/¬tüketildi premise'leri
+   monoton).
+2. Region: `regionTamam_transport` (MEVCUT — hazır) + OdakUyum'un
+   yazılabilir-hedef mutabakatı.
+3. comp-8/9: b'nin hedefleri Ρmid'de yazılabilir (r_seq 2. premise) →
+   `regionTamam_yaz_geri` (MEVCUT) → a-dokunmamış → sahiplik korunmuş.
+Tahmin: ~600-900 satır (21 kuralda odak-yükü + ≼-lemmaları + 3 cong).

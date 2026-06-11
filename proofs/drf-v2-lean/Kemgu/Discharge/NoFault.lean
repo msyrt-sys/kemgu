@@ -194,20 +194,17 @@ theorem step_fault_preserves_typed
 /-- BIRLESIK ADIM KORUNUMU (FAZ_BRIFINGLERI.md F4 madde 2):
     Tipli konfigurasyon bir adim sonra da tiplidir (bolge ortami evrilir).
 
-    KAPANIS DURUMU (bu pass):
+    KAPANIS DURUMU (Onarim v3 id-anahtarlama passi — 18/21):
     - Hata (7): TAM — Aile 2 exfalso (step_fault deseninin aynisi).
-    - Tamam (5/11) TAM: sVarOku / sSeqAtla / sGuvensizAtla / sLinKullan /
-      sLinImha (bolge+sahiplik+kanal degismeyen kurallar — bilesenler
-      degisim-yardimcilariyla tasinir; comp-2 tanigi: degerTipli_ortam /
-      typed_seq_atla / typed_guvensiz_ic / dt_birim).
-    - KALAN sorry'ler asagida tek tek isaretli:
-      sAtamaTamam (BolgeAyrik 12. bilesen gerekli — on-onayli, mekanik);
-      cGorevBirlestir/cKanalAl (TidAyrik bileseni + setMany/lookup-inv
-      lemmalari — mekanik);
-      cGorevBaslat/cKanalGonder/cDondur (Ρ-DEGISTIREN kurallar — odaksiz
-      thread'lerin RegionTamam'inin guncellenmis-Ρ'da yeniden kurulmasi
-      INVARIANT-MIMARI CATALI gerektirir — DUR-SOR raporunda);
-      cong (3) (cikti-ortam-kararli IH — catal cozumune bagimli). -/
+    - Tamam (11/11) TAM: sVarOku / sSeqAtla / sGuvensizAtla / sLinKullan /
+      sLinImha / sAtamaTamam / cGorevBirlestir / cKanalAl (degisim-
+      yardimcilari + BolgeAyrik/TidAyrik/kapasite-1) + Ρ-DEGISTIREN
+      cGorevBaslat / cKanalGonder / cDondur (id-anahtarlama +
+      Yol-B hedefsiz-govde premise + regionTamam_transport/yaz_geri).
+    - KALAN (3): yalniz congruence (sSeqCong/sAtamaCong/sGuvensizCong) —
+      TEK BLOKER: odak-adim guclendirilmis-IH ("kalan-yukumluluk
+      tasima"); tasarim cong-blok yorumunda + DECISIONS_LOG.md.
+      Final teorem ifadesini DEGISTIRMEZ (ic-lemma guclendirmesi). -/
 theorem adim_korunum
     (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
     (S S' : Konfigurasyon) (h_step : Step S S')
@@ -350,7 +347,7 @@ theorem adim_korunum
       · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
         rw [h_t] at h13
         exact tidAyrik_degisim h13 _ rfl
-  -- ============ KALAN Tamam kurallari — isaretli sorry'ler ============
+  -- ============ Tamam kurallari (devam) — TUMU TAM ============
   | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
       intro h_konf
       subst h_S'
@@ -1716,19 +1713,43 @@ theorem adim_korunum
       rw [h_if] at h_typed
       exact typing_excludes_sLinImhaHataZatenTuketildi Γ Δ ctx.lineer Ρ
         x τ' Λ'' Ρ'' h_typed h_tuket
-  -- ============ Congruence — catal cozumune bagimli ============
+  -- ============ Congruence — TEK KALAN BLOKER ============
+  -- NOT (Onarim v3 kapanis durumu): kategori-anahtar COZULDU (id-
+  -- anahtarlama, 3 P-case kapali). Kalan bloker FARKLI ve tek:
+  -- ODAK-ADIM GUCLENDIRILMIS-IH ("kalan-yukumluluk tasima").
+  --
+  -- Sorun: IH yalniz KonfTipliFull S1' verir; S1 odakta YALNIZ a
+  -- tasidigindan devam-ifadesi b'nin (i) Λmid/Ρmid-altinda yeniden
+  -- tiplenmesi (l_seq/r_seq kompozisyonu) ve (ii) hedef-sahiplikleri
+  -- (comp-8/9 buyuyen hedef kumesi) IH'den GELMEZ.
+  --
+  -- Cozum tasarimi (sonraki oturum — adim_korunum'un mutual
+  -- guclendirilmesi, final teorem ifadesi DEGISMEZ):
+  -- (1) adim_korunum sonucu odak-yuku tasisin:
+  --     ∃ Ρ', KonfTipliFull Γ Δ Ρ' S' ∧ OdakUyum S S' Ρ Ρ' — OdakUyum:
+  --     odakli thread'in lineer'i icin Λ' ≼ Λ-statik-cikti
+  --     (≼ : tuketildi'ler ⊆, aktif'ler ⊇ — sVarOku lineer-okumayi
+  --     runtime'da tuketmedigi icin esitlik degil monotonluk) ve
+  --     Ρ'-vs-Ρ icin yazilabilir-hedeflerde mutabakat.
+  -- (2) lineer-≼ transport: LineerTamam Γ Λa b Λb ∧ Λmid ≼ Λa →
+  --     ∃ Λb', LineerTamam Γ Λmid b Λb' (13 kural, aktif/¬tuketildi
+  --     premise'leri ≼ altinda monoton).
+  -- (3) b'nin Region tarafi regionTamam_transport ile (mevcut),
+  --     kosullari OdakUyum'dan.
+  -- (4) comp-8/9 buyuyen kume: b'nin hedefleri Ρmid'de yazilabilir
+  --     (r_seq ikinci premise) → yaz_geri ile a-dokunmamis →
+  --     sahiplik korunmus.
   | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO 🔴 kategori-anahtar cozumune bagimli: cikti-ortam-kararli IH
-      -- + transport (DECISIONS_LOG.md).
+      -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (yukaridaki blok).
       sorry
   | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO 🔴 kategori-anahtar cozumune bagimli (sSeqCong ile ayni).
+      -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (sSeqCong blogu).
       sorry
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
       intro h_konf
-      -- TODO 🔴 kategori-anahtar cozumune bagimli (sSeqCong ile ayni).
+      -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (sSeqCong blogu).
       sorry
 
 
