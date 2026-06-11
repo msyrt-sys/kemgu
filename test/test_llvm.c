@@ -1596,6 +1596,57 @@ static void test_matris_d_esles_cesit_exhaustive(void) {
                rc == 42);
 }
 
+static void test_matris_f_tekkez_esles_kolu(void) {
+    /* Matris F (oncelik): tekkez sonuc<tekkez<T>,H>'ten cikip esles
+     * kolunda tuketiliyor — lineer deger cagri+esles+kullan zinciri. */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Yok { Bos } "
+        "i\xc5\x9flev al() -> sonu\xc3\xa7<tekkez<tam32>, Yok> { "
+        "ver tamam(tekkez_yarat(42)); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f al() { "
+        "tamam(t) => { ver kullan(t); } "
+        "hata(e) => { ver 1; } } ver 2; }");
+    test_sonuc("matris-F: tekkez esles-kolunda tuketim -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_f_capability_lineer_capraz(void) {
+    /* Matris F CAPRAZ: yetki<MMIO> (capability-gate) + tekkez<tam32>
+     * ayni scope'ta, ikisi de tuketiliyor (geri_al + kullan). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "mmio_yaz32(y, 4096, 1); "
+        "geri_al(y); "
+        "ver kullan(t); }");
+    test_sonuc("matris-F: capability + lineer capraz (ikisi tuketilir) "
+               "-> exit 42", rc == 42);
+}
+
+static void test_matris_f_yetki_mmio_gate(void) {
+    /* Matris F: yetki al + capability-gate'li typed MMIO round-trip. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "mmio_yaz32(y, 4096, 42); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = mmio_oku32(y, 4096); "
+        "geri_al(y); ver v; }");
+    test_sonuc("matris-F: yetki MMIO capability-gate round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_stretch_tek_varyant_cesit(void) {
+    /* stretch: tek-varyant cesit + esles (kenar durum). */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Birim { Tek } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: Birim = Birim::Tek; "
+        "e\xc5\x9fle\xc5\x9f b { Birim::Tek => { ver 42; } } ver 1; }");
+    test_sonuc("stretch: tek-varyant cesit + esles -> exit 42", rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
@@ -1947,6 +1998,12 @@ int main(void) {
     test_matris_e_yetki_param_sinir();
     test_matris_e_tekkez_param_sinir();
     test_matris_d_esles_cesit_exhaustive();
+
+    printf("\n--- Matris F + stretch: lineer/bolge/yetki etkilesimleri ---\n");
+    test_matris_f_tekkez_esles_kolu();
+    test_matris_f_capability_lineer_capraz();
+    test_matris_f_yetki_mmio_gate();
+    test_stretch_tek_varyant_cesit();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
