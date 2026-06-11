@@ -1542,6 +1542,60 @@ static void test_matris_b_deref_atama_t022(void) {
     test_sonuc("matris-B: *p=v -> T022 reddi (spec-dogru)", ok == 0);
 }
 
+static void test_matris_de_karsilikli_ozyineleme(void) {
+    /* Matris D/E: karsilikli ozyineleme (cift_mi <-> tek_mi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev cift_mi(n: tam32) -> mant\xc4\xb1ksal { "
+        "e\xc4\x9f" "er n == 0 { ver do\xc4\x9fru; } ver tek_mi(n - 1); } "
+        "i\xc5\x9flev tek_mi(n: tam32) -> mant\xc4\xb1ksal { "
+        "e\xc4\x9f" "er n == 0 { ver yanl\xc4\xb1\xc5\x9f; } "
+        "ver cift_mi(n - 1); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er cift_mi(10) ve de\xc4\x9fil tek_mi(10) { ver 42; } "
+        "ver 1; }");
+    test_sonuc("matris-D/E: karsilikli ozyineleme -> exit 42", rc == 42);
+}
+
+static void test_matris_e_yetki_param_sinir(void) {
+    /* Matris E: yetki<R> fonksiyon SINIRINDA pass-through (Win64 sret
+     * ABI yolu calismaya devam — &Struct fix sonrasi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kullan_yetki(y: yetki<MMIO>) -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y, 1); ver 42; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "ver kullan_yetki(y); }");
+    test_sonuc("matris-E: yetki<R> param sinir pass-through -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_e_tekkez_param_sinir(void) {
+    /* Matris E: tekkez<T> fonksiyon SINIRINDA pass-through + cagrida
+     * tuketim (lineer kara kutu zero-overhead). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev tuket(t: tekkez<tam32>) -> tam32 { ver kullan(t); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "ver tuket(t); }");
+    test_sonuc("matris-E: tekkez<T> param sinir round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_d_esles_cesit_exhaustive(void) {
+    /* Matris D: cesit varyantlari tum kollar (i8 discriminant dispatch). */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Renk { Kirmizi, Yesil, Mavi } "
+        "i\xc5\x9flev kod(r: Renk) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "Renk::Kirmizi => { ver 10; } "
+        "Renk::Yesil => { ver 20; } "
+        "Renk::Mavi => { ver 12; } } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver kod(Renk::Kirmizi) + kod(Renk::Mavi) + kod(Renk::Yesil); }");
+    test_sonuc("matris-D: cesit exhaustive esles (10+12+20) -> exit 42",
+               rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
@@ -1887,6 +1941,12 @@ int main(void) {
     printf("\n--- Matris B+C: erisim/isaretci (in-scope green + DUR-SOR) ---\n");
     test_matris_c_deref_ref_round_trip();
     test_matris_b_deref_atama_t022();
+
+    printf("\n--- Matris D+E: kontrol akisi + fonksiyon siniri ---\n");
+    test_matris_de_karsilikli_ozyineleme();
+    test_matris_e_yetki_param_sinir();
+    test_matris_e_tekkez_param_sinir();
+    test_matris_d_esles_cesit_exhaustive();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
