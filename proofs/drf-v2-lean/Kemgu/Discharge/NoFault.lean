@@ -221,7 +221,10 @@ theorem adim_korunum
       subst h_S'
       refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
               h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
-              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
       · -- comp 2: odakli thread sabit v'ye ilerledi
         have h_thread := h_konf.2.1
         rw [h_t] at h_thread
@@ -239,6 +242,9 @@ theorem adim_korunum
         have h9 := h_konf.2.2.2.2.2.2.2.2.1
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
       intro h_konf
       subst h_S'
@@ -246,7 +252,10 @@ theorem adim_korunum
         rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
       refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
               h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
-              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
       · -- comp 2: seq (sabit v) b → b (typed_seq_atla)
         have h_thread := h_konf.2.1
         obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
@@ -264,6 +273,9 @@ theorem adim_korunum
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl
           (fun b' h => by rw [h_if]; exact HedefBolge.seq_sag _ _ b' h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       intro h_konf
       subst h_S'
@@ -271,7 +283,10 @@ theorem adim_korunum
         rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
       refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
               h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
-              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
       · have h_thread := h_konf.2.1
         obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
         rw [h_if] at h_ty
@@ -284,12 +299,18 @@ theorem adim_korunum
       · have h9 := h_konf.2.2.2.2.2.2.2.2.1
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | sLinKullanTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
       intro h_konf
       subst h_S'
       refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
               h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
-              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
       · have h_thread := h_konf.2.1
         rw [h_t] at h_thread
         exact threadTipli_degisim h_thread _
@@ -302,12 +323,18 @@ theorem adim_korunum
       · have h9 := h_konf.2.2.2.2.2.2.2.2.1
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | sLinImhaTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
       intro h_konf
       subst h_S'
       refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
               h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
-              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2⟩
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
       · have h_thread := h_konf.2.1
         rw [h_t] at h_thread
         exact threadTipli_degisim h_thread _
@@ -320,6 +347,9 @@ theorem adim_korunum
       · have h9 := h_konf.2.2.2.2.2.2.2.2.1
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   -- ============ KALAN Tamam kurallari — isaretli sorry'ler ============
   | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
       intro h_konf

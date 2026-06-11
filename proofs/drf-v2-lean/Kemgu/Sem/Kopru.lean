@@ -272,7 +272,7 @@ theorem storeBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Tip)
 theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
     KonfTipliFull (gammaProgram Pi) (deltaProgram Pi)
                   (rhoBaslangic Pi) (baslangicKonf Pi) := by
-  refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- (1) SigmaTipli
     intro k v h_kv
     rcases List.mem_map.mp h_kv with ⟨p, h_p, h_eq⟩
@@ -356,6 +356,20 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
   · -- (11) KanalTransit (bos kanal listesi — vacuous)
     intro kd h_kd
     cases h_kd
+  · -- (12) BolgeAyrik: varBolge id'si VarId'nin kendisi — enjektif
+    intro x1 x2 b1 b2 h1 h2 h_id
+    have e1 : b1 = varBolge x1 := rhoBaslangic_get_inv Pi.cevre x1 b1 h1
+    have e2 : b2 = varBolge x2 := rhoBaslangic_get_inv Pi.cevre x2 b2 h2
+    rw [e1, e2] at h_id
+    exact h_id
+  · -- (13) TidAyrik (tek thread)
+    exact List.Pairwise.cons (fun b hb => nomatch hb) List.Pairwise.nil
+  · -- (14) KanalKapasite1 (bos kanal — vacuous)
+    intro kd h_kd
+    cases h_kd
+  · -- (15) KanalAyrik (bos kanal — vacuous)
+    intro kd1 h_kd1
+    cases h_kd1
 
 
 -- ============================================================

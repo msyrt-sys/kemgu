@@ -142,6 +142,104 @@ inductive HedefBolge : Ifade → Bolge → Prop where
 
 
 -- ============================================================
+-- §3.5. TidAyrik — thread kimlik tekilligi (F4-kapanis, on-onayli analog)
+-- ============================================================
+
+/-- Thread kimlikleri konum-bazli ayrik (Pairwise — ayni tid iki konumda
+    olamaz; cGorevBirlestir'in bitmis-thread tekillik argumani + spawn/
+    dondur sahiplik-catismasi argumanlarinin temeli). -/
+def TidAyrik (threads : List ThreadCtx) : Prop :=
+  threads.Pairwise (fun a b => a.tid ≠ b.tid)
+
+/-- TidAyrik, odakli thread'in ayni-tid'li degisimi altinda korunur. -/
+theorem tidAyrik_degisim {ts1 ts2 : List ThreadCtx} {ctx : ThreadCtx}
+    (h : TidAyrik (ts1 ++ ctx :: ts2))
+    (ctx' : ThreadCtx) (h_tid : ctx'.tid = ctx.tid) :
+    TidAyrik (ts1 ++ ctx' :: ts2) := by
+  unfold TidAyrik at h ⊢
+  induction ts1 with
+  | nil =>
+      rw [List.nil_append] at h ⊢
+      rw [List.pairwise_cons] at h ⊢
+      obtain ⟨h_all, h_rest⟩ := h
+      exact ⟨fun b hb => by rw [h_tid]; exact h_all b hb, h_rest⟩
+  | cons a ts1' ih =>
+      rw [List.cons_append] at h ⊢
+      rw [List.pairwise_cons] at h ⊢
+      obtain ⟨h_all, h_rest⟩ := h
+      refine ⟨?_, ih h_rest⟩
+      intro b hb
+      rcases List.mem_append.mp hb with h1 | h2
+      · exact h_all b (List.mem_append.mpr (Or.inl h1))
+      · rcases List.mem_cons.mp h2 with h_eq | h3
+        · subst h_eq
+          rw [h_tid]
+          exact h_all ctx (List.mem_append.mpr (Or.inr (List.Mem.head _)))
+        · exact h_all b (List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+
+/-- TidAyrik altinda tid, uyeyi belirler. -/
+theorem tidAyrik_tekil {l : List ThreadCtx} (h : TidAyrik l)
+    {c1 c2 : ThreadCtx} (h1 : c1 ∈ l) (h2 : c2 ∈ l)
+    (h_eq : c1.tid = c2.tid) : c1 = c2 := by
+  induction l with
+  | nil => cases h1
+  | cons a rest ih =>
+      unfold TidAyrik at h
+      rw [List.pairwise_cons] at h
+      obtain ⟨h_all, h_rest⟩ := h
+      rcases List.mem_cons.mp h1 with e1 | m1
+      · rcases List.mem_cons.mp h2 with e2 | m2
+        · subst e1; exact e2.symm
+        · subst e1; exact absurd h_eq (h_all c2 m2)
+      · rcases List.mem_cons.mp h2 with e2 | m2
+        · subst e2; exact absurd h_eq.symm (h_all c1 m1)
+        · exact ih h_rest m1 m2
+
+/-- Odak-disi uye, odakli thread'le ayni tid'i tasiyamaz. -/
+theorem tidAyrik_odakdisi {ts1 ts2 : List ThreadCtx} {ctx : ThreadCtx}
+    (h : TidAyrik (ts1 ++ ctx :: ts2))
+    {c : ThreadCtx} (hc : c ∈ ts1 ∨ c ∈ ts2) :
+    c.tid ≠ ctx.tid := by
+  induction ts1 with
+  | nil =>
+      rcases hc with h1 | h2
+      · cases h1
+      · unfold TidAyrik at h
+        rw [List.nil_append, List.pairwise_cons] at h
+        exact fun he => h.1 c h2 he.symm
+  | cons a ts1' ih =>
+      unfold TidAyrik at h
+      rw [List.cons_append, List.pairwise_cons] at h
+      obtain ⟨h_all, h_rest⟩ := h
+      rcases hc with h1 | h2
+      · rcases List.mem_cons.mp h1 with e | h3
+        · subst e
+          exact h_all ctx (List.mem_append.mpr (Or.inr (List.Mem.head _)))
+        · exact ih h_rest (Or.inl h3)
+      · exact ih h_rest (Or.inr h2)
+
+/-- TidAyrik, taze-tid'li tek eleman eklenmesi altinda korunur (spawn). -/
+theorem tidAyrik_ekle {l : List ThreadCtx} (h : TidAyrik l)
+    {x : ThreadCtx} (h_fresh : ∀ a ∈ l, a.tid ≠ x.tid) :
+    TidAyrik (l ++ [x]) := by
+  induction l with
+  | nil =>
+      exact List.Pairwise.cons (fun b hb => nomatch hb) List.Pairwise.nil
+  | cons a rest ih =>
+      unfold TidAyrik at h ⊢
+      rw [List.cons_append, List.pairwise_cons]
+      rw [List.pairwise_cons] at h
+      obtain ⟨h_all, h_rest⟩ := h
+      refine ⟨?_, ih h_rest (fun b hb => h_fresh b (List.Mem.tail _ hb))⟩
+      intro b hb
+      rcases List.mem_append.mp hb with h1 | h2
+      · exact h_all b h1
+      · rcases List.mem_cons.mp h2 with e | h3
+        · subst e; exact h_fresh a (List.Mem.head _)
+        · cases h3
+
+
+-- ============================================================
 -- §4. ThreadTipliFull — per-thread lineer (F4)
 -- ============================================================
 
@@ -190,6 +288,20 @@ def KonfTipliFull (Γ : TipOrtam) (Δ : KanalOrtam)
          ∧ DegerTipli Γ Ρ v τ)
   ∧ (∀ kd ∈ S.kanal, kd.gonderKuyrugu ≠ [] →
        ∃ b : Bolge, sahiplikGet S.sahiplik b = some (Sahip.kanalSahip kd.kid))
+  -- 12. BolgeAyrik (on-onayli): bolge-id, kayitli degiskeni belirler —
+  -- store-golgelemesi (sAtama comp-10) ve id-takma-ad argumanlarinin temeli.
+  ∧ (∀ (x1 x2 : VarId) (b1 b2 : Bolge),
+       bolgeOrtamGet S.bolge x1 = some b1 →
+       bolgeOrtamGet S.bolge x2 = some b2 →
+       b1.id = b2.id → x1 = x2)
+  -- 13. TidAyrik (on-onayli analog): thread kimlikleri konum-bazli ayrik.
+  ∧ TidAyrik S.thread
+  -- 14. KanalKapasite1 (Mehmet karari): kuyruk uzunlugu ≤ 1 —
+  -- cKanalAl pop sonrasi transit-tanigi sorununu kapatir; buffer V2.
+  ∧ (∀ kd ∈ S.kanal, kd.gonderKuyrugu.length ≤ 1)
+  -- 15. KanalAyrik: kanal kaydi kid'le belirlenir (kanalEkle yeni kayit
+  -- yalniz kayit-yokken acar; uniform map-guncellemeler korur).
+  ∧ (∀ kd1 ∈ S.kanal, ∀ kd2 ∈ S.kanal, kd1.kid = kd2.kid → kd1 = kd2)
 
 
 -- ============================================================
@@ -211,11 +323,15 @@ theorem konfTipliFull_odak
     KonfTipliFull Γ Δ Ρ
       { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 } := by
   obtain ⟨h_sigma, h_thread, h_sahip, h_kanal, h_fault, h_beq, h_fkat,
-          h_hvar, h_hbolge, h_bagli, h_transit⟩ := h_konf
+          h_hvar, h_hbolge, h_bagli, h_transit, h_bayrik, h_tayrik,
+          h_kap, h_kayrik⟩ := h_konf
   have h_ctx_in : ctx ∈ S.thread := by
     rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+  have h_tayrik' : TidAyrik (ts1 ++ { ctx with ifade := e } :: ts2) := by
+    rw [h_t] at h_tayrik
+    exact tidAyrik_degisim h_tayrik _ rfl
   refine ⟨h_sigma, ?_, h_sahip, h_kanal, h_fault, h_beq, h_fkat,
-          ?_, ?_, h_bagli, h_transit⟩
+          ?_, ?_, h_bagli, h_transit, h_bayrik, h_tayrik', h_kap, h_kayrik⟩
   · -- ThreadTipliFull (guncellenmis liste)
     intro ctx'' h_mem
     rcases List.mem_append.mp h_mem with h1 | h2
