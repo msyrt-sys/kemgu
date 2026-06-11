@@ -29,10 +29,27 @@ abbrev TipOrtam := List (VarId × Tip)
     Plan v2 §3.4'te RegionOK imzasinda kullanilir. -/
 abbrev BolgeOrtam := List (VarId × Bolge)
 
+/-- Kanal tipi ortami Δ : KanalId → Tip (F3 — t_kanal_al vakumunun
+    kapanisi: alinan degerin tipi kanala baglanir; total fonksiyon). -/
+abbrev KanalOrtam := KanalId → Tip
+
 /-- TipOrtam lookup: ilk eslesen entry'i dondurur (newest-wins). -/
 def tipOrtamGet : TipOrtam → VarId → Option Tip
   | [], _ => none
   | (k, v) :: rest, key => if k = key then some v else tipOrtamGet rest key
+
+/-- Lookup uyeligi (tip ortami). -/
+theorem tipOrtamGet_mem : ∀ (Γ : TipOrtam) (x : VarId) (τ : Tip),
+    tipOrtamGet Γ x = some τ → (x, τ) ∈ Γ
+  | [], _, _, h => by simp [tipOrtamGet] at h
+  | (k, v) :: rest, x, τ, h => by
+      by_cases hk : k = x
+      · subst hk
+        simp [tipOrtamGet] at h
+        subst h
+        exact List.Mem.head _
+      · simp [tipOrtamGet, hk] at h
+        exact List.Mem.tail _ (tipOrtamGet_mem rest x τ h)
 
 /-- BolgeOrtam lookup. -/
 def bolgeOrtamGet : BolgeOrtam → VarId → Option Bolge
@@ -176,14 +193,15 @@ def SahiplikTutarli (Ρ : BolgeOrtam) (sahiplik : Sahiplik) : Prop :=
 -- Kanal kuyrugundaki her degerin tip-uyumlu olmasi.
 -- ============================================================
 
-/-- Kanal durumlari tutarliligi.
-    Her kanal entry'sinin gonderKuyrugu'undaki her deger bazi τ ile
-    DegerTipli — yani kanal uzerinden gecen tum mesajlar typed. -/
-def KanalTutarli (Γ : TipOrtam) (Ρ : BolgeOrtam)
+/-- Kanal durumlari tutarliligi (F3 — Δ'li KESIN form):
+    her kuyruktaki deger, kanalin eleman tipi Δ(kid)'de DegerTipli.
+    (Eski ∃τ formu her deger icin saglanabiliyordu — vakumdu; kesin tip
+    cKanalAlTamam preservation'inin temeli.) -/
+def KanalTutarli (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
                  (kanal : List KanalDurumu) : Prop :=
   ∀ kd ∈ kanal,
     ∀ v ∈ kd.gonderKuyrugu,
-      ∃ τ, DegerTipli Γ Ρ v τ
+      DegerTipli Γ Ρ v (Δ kd.kid)
 
 
 -- ============================================================

@@ -15,6 +15,8 @@ import Kemgu.Sem.LineerTamam
 import Kemgu.Sem.RegionTamam
 -- Onarim v3 F1: Typed + ThreadTipliFull + KonfTipliFull birlesim katmani
 import Kemgu.Sem.Tipli
+-- Onarim v3 F3: gercek IyiTipli + Program↔Konfigurasyon koprusu
+import Kemgu.Sem.Kopru
 -- Onarim v3 F1: Meta katmani — progress/preservation iskeletleri (F4/F5 doldurur)
 import Kemgu.Meta.ProgressKorunum
 -- Plan v2 Adim 7: No-Fault catı teoremi (Plan §6.3) + Discharge ailesi V1 durum yorumu

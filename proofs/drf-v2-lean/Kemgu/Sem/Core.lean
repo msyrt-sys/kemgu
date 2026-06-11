@@ -295,6 +295,19 @@ theorem sahiplikSet_ne (s : Sahiplik) (b b' : Bolge) (yeni : Sahip)
     sahiplikGet (sahiplikSet s b yeni) b' = sahiplikGet s b' := by
   simp [sahiplikSet, sahiplikGet, h.symm]
 
+/-- Lookup uyeligi (sahiplik): get bir deger donduruyorsa cift listededir. -/
+theorem sahiplikGet_mem : ∀ (s : Sahiplik) (b : Bolge) (v : Sahip),
+    sahiplikGet s b = some v → (b, v) ∈ s
+  | [], _, _, h => by simp [sahiplikGet] at h
+  | (k, w) :: rest, b, v, h => by
+      by_cases hk : k = b
+      · subst hk
+        simp [sahiplikGet] at h
+        subst h
+        exact List.Mem.head _
+      · simp [sahiplikGet, hk] at h
+        exact List.Mem.tail _ (sahiplikGet_mem rest b v h)
+
 /-- SetMany, listede olmayan bolgenin lookup'unu degistirmez.
     (Frozen-persistence ispatinin cekirdegi — F2.) -/
 theorem sahiplikSetMany_ne (bs : List Bolge) (s : Sahiplik) (b' : Bolge)
@@ -480,9 +493,14 @@ def isFrozen (S : Konfigurasyon) (b : Bolge) : Prop :=
 -- §11. Program + IyiTipli predicate (Op.Sem §7)
 -- ============================================================
 
-/-- Program: ust duzey tanim listesi (Op.Sem §1) -/
+/-- Program: ust duzey tanim listesi (Op.Sem §1).
+    F3 zenginlestirme: `cevre` (ust-duzey degisken bildirimleri — eski model
+    degisken bildirimi icermiyordu, gercek TipKontrolOk icin sart) ve
+    `kanalCevre` (kanal eleman tipleri Δ). Default'lar geriye uyumlu. -/
 structure Program where
-  islevler : List (String × Ifade)
+  islevler   : List (String × Ifade)
+  cevre      : List (VarId × Tip) := []
+  kanalCevre : KanalId → Tip := fun _ => Tip.bos
 
 /-- Bir ifade gövdesinde guvensiz blok var mi (recursive). -/
 def ifadeGuvensizIcerirMi : Ifade → Bool
@@ -501,39 +519,14 @@ def programGuvensizIcerir (Pi : Program) : Bool :=
 def NoGuvensiz (Pi : Program) : Prop :=
   programGuvensizIcerir Pi = false
 
-/-- Tip kontrolu gecer (Op.Sem §7 kosul 1).
-    V1 mekanize: placeholder True. V2'de tam tip sistemi inductive olarak
-    eklenir; bu predicate o zaman gerçek tip turetilebilirligine baglanir. -/
-def TipKontrolOk (_Pi : Program) : Prop := True
-
-/-- Lineer kontrol gecer (Op.Sem §7 kosul 2). V1 placeholder. -/
-def LineerKontrolOk (_Pi : Program) : Prop := True
-
-/-- Capability kontrol gecer (Op.Sem §7 kosul 3). V1 placeholder. -/
-def CapabilityKontrolOk (_Pi : Program) : Prop := True
-
-/-- Sabitsure kontrol gecer (Op.Sem §7 kosul 4). V1 placeholder. -/
-def SabitsureKontrolOk (_Pi : Program) : Prop := True
-
-/-- Bolge atama gecer (Op.Sem §7 kosul 5). V1 placeholder. -/
-def BolgeAtamaOk (_Pi : Program) : Prop := True
-
-/-- Realtime kontrol gecer (Op.Sem §7 kosul 6). V1 placeholder. -/
-def RealtimeKontrolOk (_Pi : Program) : Prop := True
-
-/-- IyiTipli(Pi) — Op.Sem §7'nin yedi kosulu birlikte.
-    Bu structure DRF lemmalarinin uniform hipotezi olarak kullanilir.
-    Sub-predicate'lerin placeholder True olmasi: V1 sinir, V2'de
-    tip sistemi mechanize edilince bu alanlarin ispatlari programdan
-    turetilebilir; simdi sadece structure tasiyici. -/
-structure IyiTipli (Pi : Program) : Prop where
-  tipOk           : TipKontrolOk Pi
-  lineerOk        : LineerKontrolOk Pi
-  capabilityOk    : CapabilityKontrolOk Pi
-  sabitsureOk     : SabitsureKontrolOk Pi
-  bolgeOk         : BolgeAtamaOk Pi
-  realtimeOk      : RealtimeKontrolOk Pi
-  noGuvensiz      : NoGuvensiz Pi
+-- F3 NOT (ADIM 0 Sorun 1 onarimi): eski placeholder'lar
+-- (TipKontrolOk/LineerKontrolOk/CapabilityKontrolOk/SabitsureKontrolOk/
+--  BolgeAtamaOk/RealtimeKontrolOk := True) ve vakum IyiTipli SILINDI.
+-- GERCEK tanimlar Kemgu/Sem/Kopru.lean'de: TipKontrolOk HasType'a,
+-- LineerKontrolOk LineerTamam'a, BolgeAtamaOk RegionTamam'a baglanir;
+-- Capability/Sabitsure sozdizimsel scope-guard; Realtime alani KALDIRILDI
+-- (V1 Ifade'de realtime yapisi yok — guard bile vakum olurdu; Mehmet
+-- onayi 2026-06-11). NoGuvensiz (sozdizimsel, gercek) burada kalir.
 
 
 end Kemgu.Sem.Core

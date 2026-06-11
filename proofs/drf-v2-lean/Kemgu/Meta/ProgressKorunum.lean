@@ -63,7 +63,7 @@ inductive IsValue : Ifade → Prop where
     (t_kanal_al bos-kuyruk durumu). -/
 theorem progress
     (e : Ifade) (τ : Tip)
-    (h_typed : HasType tipOrtamBos e τ)
+    (h_typed : HasType tipOrtamBos kanalOrtamBos e τ)
     (S : Konfigurasyon) (ctx : ThreadCtx)
     (_h_ctx_in : ctx ∈ S.thread) (_h_ctx_ifade : ctx.ifade = e)
     (_h_no_fault : S.fault = none) :
@@ -88,10 +88,10 @@ theorem progress
   | t_gorev_birlestir _ _ h_get =>
     exfalso; simp [tipOrtamGet] at h_get
   -- VACUOUS:
-  | t_kanal_gonder _ _ _ h_get =>
+  | t_kanal_gonder _ _ h_get =>
     exfalso; simp [tipOrtamGet] at h_get
   -- TODO: F5 — Step.cKanalAlTamam insa + Engelli disjunct (kanal bos durumu)
-  | t_kanal_al _ _ =>
+  | t_kanal_al _ =>
     sorry
   -- TODO: F5 — Step.cDondurTamam insa
   | t_dondur _ =>
@@ -119,11 +119,11 @@ theorem preservation
     (S S' : Konfigurasyon) (_h_step : Step S S')
     (ctx : ThreadCtx) (τ : Tip)
     (_h_in : ctx ∈ S.thread)
-    (_h_typed : HasType tipOrtamBos ctx.ifade τ)
+    (_h_typed : HasType tipOrtamBos kanalOrtamBos ctx.ifade τ)
     (_h_no_fault_target : S'.fault = none) :
     ∃ ctx' ∈ S'.thread,
       ctx'.tid = ctx.tid ∧
-      HasType tipOrtamBos ctx'.ifade τ := by
+      HasType tipOrtamBos kanalOrtamBos ctx'.ifade τ := by
   -- TODO F4: adim_korunum ile degistir (ifade-yanlis — yukaridaki not)
   sorry
 
@@ -135,7 +135,7 @@ theorem preservation
 theorem progress_typed
     (e : Ifade) (τ : Tip)
     (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (_h_typed : Typed tipOrtamBos lineerOrtamBos bolgeOrtamBos e τ Λ' Ρ')
+    (_h_typed : Typed tipOrtamBos kanalOrtamBos lineerOrtamBos bolgeOrtamBos e τ Λ' Ρ')
     (S : Konfigurasyon) (ctx : ThreadCtx)
     (_h_ctx_in : ctx ∈ S.thread) (_h_ctx_ifade : ctx.ifade = e)
     (_h_no_fault : S.fault = none) :
@@ -149,12 +149,12 @@ theorem preservation_typed
     (ctx : ThreadCtx) (τ : Tip)
     (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
     (_h_in : ctx ∈ S.thread)
-    (_h_typed : Typed tipOrtamBos lineerOrtamBos bolgeOrtamBos
+    (_h_typed : Typed tipOrtamBos kanalOrtamBos lineerOrtamBos bolgeOrtamBos
                       ctx.ifade τ Λ' Ρ')
     (_h_no_fault_target : S'.fault = none) :
     ∃ ctx' ∈ S'.thread, ∃ Λ'_new : LineerOrtam, ∃ Ρ'_new : BolgeOrtam,
       ctx'.tid = ctx.tid ∧
-      Typed tipOrtamBos lineerOrtamBos bolgeOrtamBos
+      Typed tipOrtamBos kanalOrtamBos lineerOrtamBos bolgeOrtamBos
             ctx'.ifade τ Λ'_new Ρ'_new := by
   -- TODO F4: adim_korunum ile degistir (ifade-yanlis)
   sorry
@@ -186,10 +186,10 @@ theorem preservation_sahiplikTutarli
 
 /-- KanalTutarli korunumu — F4'te adim_korunum'un izdusumu. -/
 theorem preservation_kanalTutarli
-    (Γ : TipOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
     (_h_step : Step S S')
-    (_h_kanal : KanalTutarli Γ Ρ S.kanal) :
-    KanalTutarli Γ Ρ S'.kanal := by
+    (_h_kanal : KanalTutarli Γ Δ Ρ S.kanal) :
+    KanalTutarli Γ Δ Ρ S'.kanal := by
   -- TODO F4
   sorry
 
@@ -201,11 +201,11 @@ theorem preservation_kanalTutarli
     (FAZ_BRIFINGLERI.md F4 madde 2). typed_no_fault'un step case'i
     bu lemmanin Full-formuna baglanir. -/
 theorem preservation_konfTipliFull
-    (Γ : TipOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam) (S S' : Konfigurasyon)
     (_h_step : Step S S')
-    (_h_konf : KonfTipliFull Γ Λ Ρ S)
+    (_h_konf : KonfTipliFull Γ Δ Λ Ρ S)
     (_h_no_fault_target : S'.fault = none) :
-    KonfTipliFull Γ Λ Ρ S' := by
+    KonfTipliFull Γ Δ Λ Ρ S' := by
   -- TODO F4: adim_korunum (∃ Λ' Ρ' formu) ile degistir
   sorry
 
@@ -220,7 +220,7 @@ theorem soundness_corollary
     (S S' : Konfigurasyon) (_h_run : StepStar S S')
     (ctx : ThreadCtx) (τ : Tip)
     (_h_in : ctx ∈ S.thread)
-    (_h_typed : HasType tipOrtamBos ctx.ifade τ) :
+    (_h_typed : HasType tipOrtamBos kanalOrtamBos ctx.ifade τ) :
     True := by
   trivial
 
