@@ -1306,6 +1306,65 @@ static void test_mmio_sabit_adres(void) {
                rc == 42);
 }
 
+/* === C9: typed-width MMIO (16/64-bit) + byte-adreslenebilir mock === */
+
+static void test_mmio16_round_trip(void) {
+    /* 16-bit yaz 42 -> oku16 -> exit. ver: tam16 (i16) -> tam32 (sext). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz16(y, 4096, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y, 4096);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio16 yaz 42 -> oku16 -> exit 42", rc == 42);
+}
+
+static void test_mmio64_round_trip(void) {
+    /* 64-bit yaz 42 -> oku64 -> exit. ver: tam64 (i64) -> tam32 (trunc). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz64(y, 8192, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 8192);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio64 yaz 42 -> oku64 -> exit 42", rc == 42);
+}
+
+static void test_mmio16_komsu_ayrisir(void) {
+    /* KRITIK regresyon kanit: eski (adres>>2) kelime-collapse mock'ta 4096 ve
+     * 4098 AYNI kelimeye duser (4096>>2 == 4098>>2 == 1024); ikinci yaz
+     * birinciyi ezer -> oku16(4096)=32 -> toplam 64 (eski exit-5 sinifi hata).
+     * Byte-adreslenebilir mock'ta ayri slotlar: 10 + 32 = 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz16(y, 4096, 10);\n"
+        "  mmio_yaz16(y, 4098, 32);\n"
+        "  de\xc4\x9fi\xc5\x9fken a: tam16 = mmio_oku16(y, 4096);\n"
+        "  de\xc4\x9fi\xc5\x9fken b: tam16 = mmio_oku16(y, 4098);\n"
+        "  geri_al(y);\n"
+        "  ver a + b;\n"
+        "}");
+    test_sonuc("mmio16 komsu alanlar ayrisir (eski exit-5 cakismasi duzeldi) -> 42",
+               rc == 42);
+}
+
+static void test_mmio_genis_verify(void) {
+    /* Fikstur: le16 komsu idx + le64 desc; her BB terminator'lu, opt temiz. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/mmio_genis.kem");
+    test_sonuc("mmio typed-width fikstur: opt -passes=verify PASS", ok);
+}
+
+static void test_mmio_genis_calistir(void) {
+    /* le16 komsu (10+32) + le64 round-trip (4096) dogrulamasi -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/mmio_genis.kem");
+    test_sonuc("mmio typed-width fikstur (le16 komsu + le64) -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -1467,6 +1526,13 @@ int main(void) {
     printf("\n--- MMIO Foundation: yetki<MMIO> register erisimi ---\n");
     test_mmio_yaz_oku_round_trip();
     test_mmio_sabit_adres();
+
+    printf("\n--- C9: typed-width MMIO (16/64-bit) + byte-adreslenebilir mock ---\n");
+    test_mmio16_round_trip();
+    test_mmio64_round_trip();
+    test_mmio16_komsu_ayrisir();
+    test_mmio_genis_verify();
+    test_mmio_genis_calistir();
 
     printf("\n--- C1: esles (match) deyimi codegen ---\n");
     test_esles_wildcard();

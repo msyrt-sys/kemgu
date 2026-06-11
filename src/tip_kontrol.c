@@ -2374,6 +2374,109 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* y TÜKETİLMEZ (odunc) — return bos */
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
+            /* === MMIO typed-width varyantlari (C9) ===
+             * Ayni 32-bit deseni; D9 ring-bellek erisimi icin le16/le64.
+             * mmio_oku16(y, adres) -> tam16 ; mmio_yaz16(y, adres, deger: tam16)
+             * mmio_oku64(y, adres) -> tam64 ; mmio_yaz64(y, adres, deger: tam64)
+             * y ÖDÜNÇ alinir (tuketmez); adres tam64; donus duz tamN. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku16", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku16 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku16 adres argumani tamsayi (tam64) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_TAM16);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz16", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz16 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam16)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz16 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM16));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz16 deger argumani tamsayi (tam16) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku64", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku64 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku64 adres argumani tamsayi (tam64) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_TAM64);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz64", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz64 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz64 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz64 deger argumani tamsayi (tam64) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
             /* === Concurrency / DRF V1 intrinsics === */
             /* görev_başlat(c: işlev() -> T) -> görev<T>
              * c yakaladığı lineer değerleri t_yeni'ye transfer eder (DRF-L2).
