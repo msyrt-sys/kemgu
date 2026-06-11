@@ -480,6 +480,59 @@ static void W32_wcet_cagri_zincir(void) {
  * Ana
  * ======================================================================== */
 
+/* ========================================================================
+ * GROUP W10 (33-35): C5 C.3 — satirici_asm RT007 (cevrim anotasyonu)
+ * ======================================================================== */
+
+static void W33_rt007_asm_cevrimsiz(void) {
+    /* gerçekzamanlı + asm + cevrim YOK -> RT007 (sessiz 0 ASLA) */
+    int rt;
+    int h = derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev oku() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
+        "ver x; }\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W10: rt + asm + cevrim yok -> RT007", h >= 1 && rt >= 1);
+}
+
+static void W34_rt007_asm_cevrimli_ok(void) {
+    /* cevrim: 24 -> RT007 yok; WCET toplamina dahil (wc >= 24) */
+    int rt;
+    int64_t wc;
+    int h = derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev oku() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) "
+        "\xc3\xa7" "evrim: 24 } } "
+        "ver x; }\n",
+        NULL, NULL, &rt, &wc);
+    test_sonuc("W10: rt + asm + cevrim:24 -> 0 hata, WCET >= 24",
+               h == 0 && rt == 0 && wc >= 24);
+}
+
+static void W35_rt007_normal_islev_cevrimsiz_ok(void) {
+    /* Realtime-disi baglamda cevrim opsiyonel — wcet hic kosulmaz */
+    int rt;
+    int h = derle(
+        "i\xc5\x9flev oku() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
+        "mimari: x86_64 "
+        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
+        "ver x; }\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W10: normal islev + asm + cevrim yok -> 0 hata (opsiyonel)",
+               h == 0 && rt == 0);
+}
+
 int main(void) {
     FILE *eski = freopen("/dev/null", "w", stderr);
     if (!eski) {
@@ -537,6 +590,11 @@ int main(void) {
     W30_wcet_basit_donus();
     W31_wcet_max_dal_buyuk();
     W32_wcet_cagri_zincir();
+
+    puts("\n--- W10: RT007 satirici_asm cevrim (3) ---");
+    W33_rt007_asm_cevrimsiz();
+    W34_rt007_asm_cevrimli_ok();
+    W35_rt007_normal_islev_cevrimsiz_ok();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

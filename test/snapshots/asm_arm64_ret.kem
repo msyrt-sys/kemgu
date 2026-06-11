@@ -1,0 +1,17 @@
+// C5 AS001: arm64-tagli asm x86_64 triple altinda REDDEDILMELI.
+// Hedefe-duyarli triple gelince (C8) bu dosya ARM64 hedefinde derlenecek.
+işlev sayac_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mrs $0, CNTPCT_EL0"#
+            çıktı("=r", &x)
+        }
+    }
+    ver x;
+}
+
+işlev main() -> tam32 {
+    ver 0;
+}

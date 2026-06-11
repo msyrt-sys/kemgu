@@ -1365,6 +1365,45 @@ static void test_mmio_genis_calistir(void) {
     test_sonuc("mmio typed-width fikstur (le16 komsu + le64) -> exit 42", rc == 42);
 }
 
+/* --- C5: satirici_asm (inline assembly) --- */
+
+static void test_asm_round_trip_verify(void) {
+    /* Coklu cikti + girdi + clobber: emit edilen modul opt'tan gecmeli. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/asm_round_trip.kem");
+    test_sonuc("satirici_asm round-trip: opt -passes=verify PASS", ok);
+}
+
+static void test_asm_round_trip_calistir(void) {
+    /* x86: girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/asm_round_trip.kem");
+    test_sonuc("satirici_asm x86 girdi/cikti round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_asm_arm64_llvm_reddi(void) {
+    /* AS001: arm64-tagli asm x86 triple altinda --llvm BASARISIZ olmali
+     * (bozuk IR uretilmez; hedefe-duyarli triple C8'de). */
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm test/snapshots/asm_arm64_ret.kem > %s 2>%s",
+             KEMGU_BIN, LL_PATH, DEV_NULL);
+    int rc = system(komut);
+    test_sonuc("satirici_asm arm64 tag -> --llvm AS001 reddi", rc != 0);
+}
+
+static void test_asm_arm64_check_reddi(void) {
+    /* AS001 ayni zamanda --check yolunda (kaynak konumuyla). */
+    int ok = kemgu_check_basarili("test/snapshots/asm_arm64_ret.kem");
+    test_sonuc("satirici_asm arm64 tag -> --check AS001 reddi", ok == 0);
+}
+
+static void test_asm_guvensiz_disi_reddi(void) {
+    /* G002: guvensiz disinda satirici_asm --check'te reddedilir. */
+    int ok = kemgu_check_basarili("test/snapshots/asm_guvensiz_disi.kem");
+    test_sonuc("satirici_asm guvensiz disinda -> --check G002 reddi",
+               ok == 0);
+}
+
 /* --- C5 on-kosul #1: guvensiz blok lowering --- */
 
 static void test_guvensiz_blok_emit(void) {
@@ -1585,6 +1624,13 @@ int main(void) {
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
     test_guvensiz_icinde_ver();
+
+    printf("\n--- C5: satirici_asm (inline assembly) ---\n");
+    test_asm_round_trip_verify();
+    test_asm_round_trip_calistir();
+    test_asm_arm64_llvm_reddi();
+    test_asm_arm64_check_reddi();
+    test_asm_guvensiz_disi_reddi();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
