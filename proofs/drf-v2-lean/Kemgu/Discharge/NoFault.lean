@@ -353,11 +353,78 @@ theorem adim_korunum
   -- ============ KALAN Tamam kurallari — isaretli sorry'ler ============
   | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
       intro h_konf
-      -- TODO F4-ispat: store-push — comp 1 (degerTipli_ortam []→Ρ + h_b
-      -- kayitliligi), comp 10 (BolgeAyrik 12. bilesen GEREKLI: yeni
-      -- (⟨b,0⟩,v) girisi yalniz x'in konumunu golgeler — bolge-id↔var
-      -- enjektifligi; on-onayli mekanik ekleme, catal cozumuyle birlikte).
-      sorry
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      -- yazilan degerin tipi: t_atama + t_sabit tersine-cevirme
+      obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty
+      have h_inv : ∃ τx, tipOrtamGet Γ x = some τx
+          ∧ DegerTipli Γ ([] : BolgeOrtam) v τx := by
+        match h_ty.hasType with
+        | HasType.t_atama _ _ _ _ τx h_gx hte =>
+          match hte with
+          | HasType.t_sabit _ _ _ _ h_dt =>
+            exact ⟨τx, h_gx, h_dt⟩
+      obtain ⟨τx, h_gx, h_dtv⟩ := h_inv
+      have h_beq := h_konf.2.2.2.2.2.1
+      refine ⟨Ρ, ?_, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 1: yeni store girisi tipli + kayitli
+        intro kk ww h_kv
+        rcases List.mem_cons.mp h_kv with h_head | h_tail
+        · obtain ⟨h_kk, h_ww⟩ := Prod.mk.injEq .. ▸ h_head
+          refine ⟨τx, ?_, ⟨x, ?_⟩⟩
+          · rw [h_ww]
+            exact degerTipli_ortam v τx h_dtv
+          · rw [h_kk]
+            show bolgeOrtamGet Ρ x = some b
+            rw [← h_beq]
+            exact h_b
+        · exact h_konf.1 kk ww h_tail
+      · -- comp 2: odakli thread sabit birim'e ilerledi
+        have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        exact threadTipli_degisim h_thread _
+          ⟨Tip.bos, ctx.lineer, Ρ,
+           ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · -- comp 8
+        have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        exact hedefVarSahip_degisim h8 _ rfl (fun y h => nomatch h)
+      · -- comp 9
+        have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        exact hedefBolgeSahip_degisim h9 _ rfl (fun b' h => nomatch h)
+      · -- comp 10: store-golgeleme — BolgeAyrik ile
+        intro z τz h_gz
+        obtain ⟨bz, vz, h_bz, h_kz, h_dtz⟩ :=
+          h_konf.2.2.2.2.2.2.2.2.2.1 z τz h_gz
+        by_cases h_eqk : (⟨b, 0⟩ : Konum) = ⟨bz, 0⟩
+        · -- yeni giris golgeledi: BolgeAyrik → z = x → ayni tip
+          have h_bzb : b = bz := congrArg Konum.bolge h_eqk
+          have h_zx : z = x := by
+            have h_ba := h_konf.2.2.2.2.2.2.2.2.2.2.2.1
+            exact h_ba z x bz b h_bz h_b (by rw [← h_bzb])
+          subst h_zx
+          have h_tau : τz = τx :=
+            Option.some.inj (h_gz.symm.trans h_gx)
+          refine ⟨bz, v, h_bz, ?_, ?_⟩
+          · simp only [konumGet, if_pos h_eqk]
+          · rw [h_tau]
+            exact degerTipli_ortam v τx h_dtv
+        · refine ⟨bz, vz, h_bz, ?_, h_dtz⟩
+          simp only [konumGet, if_neg h_eqk]
+          exact h_kz
+      · -- comp 13
+        have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
       intro h_konf
       -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := sahipAta).
@@ -366,22 +433,316 @@ theorem adim_korunum
       sorry
   | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
       intro h_konf
-      -- TODO F4-ispat: sahiplik := setMany rb (thread ctx.tid) —
-      -- comp 3/7/8/9 icin sahiplikSetMany_lookup_inv + TidAyrik bileseni
-      -- (bitmis thread tekilligi) — mekanik, catal-bagimsiz.
-      sorry
+      subst h_S'
+      obtain ⟨hctx, h_hctx_in, h_hctx_tid, vSon, h_hctx_if⟩ := h_hedef
+      have h13S := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+      refine ⟨Ρ, h_konf.1, ?_, ?_, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, ?_, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 2: odakli thread sabit birim'e ilerledi
+        have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        exact threadTipli_degisim h_thread _
+          ⟨Tip.bos, ctx.lineer, Ρ,
+           ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · -- comp 3 (id-genel): yeni atamalar rb'den — eski tHedef-sahipli
+        intro bb sah h_lk
+        rcases sahiplikSetMany_lookup_inv rb S.sahiplik _ bb sah h_lk with
+            ⟨h_mem, _⟩ | h_eski
+        · exact h_konf.2.2.1 bb (Sahip.thread tHedef) (h_donen bb h_mem)
+        · exact h_konf.2.2.1 bb sah h_eski
+      · -- comp 7: rb donmus icermez (eski sahipleri tHedef)
+        intro xx bb h_bb
+        constructor
+        · intro h_fr
+          have h_fr' : sahiplikGet
+              (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bb
+              = some Sahip.donmus := h_fr
+          rcases sahiplikSetMany_lookup_inv rb S.sahiplik _ bb _ h_fr' with
+              ⟨_, h_v⟩ | h_eski
+          · exact absurd h_v (by intro h; cases h)
+          · exact (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mp h_eski
+        · intro h_kat
+          have h_eski := (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mpr h_kat
+          have h_notin : bb ∉ rb := by
+            intro h_in
+            have := h_donen bb h_in
+            rw [h_eski] at this
+            cases this
+          show sahiplikGet
+              (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bb
+              = some Sahip.donmus
+          rw [sahiplikSetMany_ne rb S.sahiplik bb _ h_notin]
+          exact h_eski
+      · -- comp 8: rb-hedefli odaksiz thread olamaz (TidAyrik tekillik)
+        intro c h_mem y h_hv bb h_bb h_yaz
+        have h_c_eski : c ∈ S.thread ∧ sahiplikGet S.sahiplik bb
+            = some (Sahip.thread c.tid) := by
+          rcases List.mem_append.mp h_mem with h1 | h2
+          · have h_in : c ∈ S.thread := by
+              rw [h_t]; exact List.mem_append.mpr (Or.inl h1)
+            exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
+          · rcases List.mem_cons.mp h2 with h_eq | h3
+            · subst h_eq; exact absurd h_hv (fun h => nomatch h)
+            · have h_in : c ∈ S.thread := by
+                rw [h_t]
+                exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
+              exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
+        obtain ⟨h_c_in, h_c_own⟩ := h_c_eski
+        have h_notin : bb ∉ rb := by
+          intro h_in
+          have h_th := h_donen bb h_in
+          rw [h_c_own] at h_th
+          have h_tid_eq : c.tid = tHedef := by
+            injection Option.some.inj h_th
+          have h_ce : c = hctx :=
+            tidAyrik_tekil h13S h_c_in h_hctx_in
+              (h_tid_eq.trans h_hctx_tid.symm)
+          rw [h_ce, h_hctx_if] at h_hv
+          exact (fun h => nomatch h : ¬ HedefVar (Ifade.sabit vSon) y) h_hv
+        show sahiplikGet
+            (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bb
+            = some (Sahip.thread c.tid)
+        rw [sahiplikSetMany_ne rb S.sahiplik bb _ h_notin]
+        exact h_c_own
+      · -- comp 9: ayni desen (HedefBolge)
+        intro c h_mem bb h_hb h_kayit h_yaz
+        have h_c_eski : c ∈ S.thread ∧ sahiplikGet S.sahiplik bb
+            = some (Sahip.thread c.tid) := by
+          rcases List.mem_append.mp h_mem with h1 | h2
+          · have h_in : c ∈ S.thread := by
+              rw [h_t]; exact List.mem_append.mpr (Or.inl h1)
+            exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
+          · rcases List.mem_cons.mp h2 with h_eq | h3
+            · subst h_eq; exact absurd h_hb (fun h => nomatch h)
+            · have h_in : c ∈ S.thread := by
+                rw [h_t]
+                exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
+              exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
+        obtain ⟨h_c_in, h_c_own⟩ := h_c_eski
+        have h_notin : bb ∉ rb := by
+          intro h_in
+          have h_th := h_donen bb h_in
+          rw [h_c_own] at h_th
+          have h_tid_eq : c.tid = tHedef := by
+            injection Option.some.inj h_th
+          have h_ce : c = hctx :=
+            tidAyrik_tekil h13S h_c_in h_hctx_in
+              (h_tid_eq.trans h_hctx_tid.symm)
+          rw [h_ce, h_hctx_if] at h_hb
+          exact (fun h => nomatch h : ¬ HedefBolge (Ifade.sabit vSon) bb) h_hb
+        show sahiplikGet
+            (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bb
+            = some (Sahip.thread c.tid)
+        rw [sahiplikSetMany_ne rb S.sahiplik bb _ h_notin]
+        exact h_c_own
+      · -- comp 11: transit bolgeler rb'de olamaz (kanalSahip ≠ thread)
+        intro kd h_kd h_ne
+        obtain ⟨bT, h_bT⟩ := h_konf.2.2.2.2.2.2.2.2.2.2.1 kd h_kd h_ne
+        have h_notin : bT ∉ rb := by
+          intro h_in
+          have := h_donen bT h_in
+          rw [h_bT] at this
+          cases this
+        refine ⟨bT, ?_⟩
+        show sahiplikGet
+            (sahiplikSetMany S.sahiplik rb (Sahip.thread ctx.tid)) bT
+            = some (Sahip.kanalSahip kd.kid)
+        rw [sahiplikSetMany_ne rb S.sahiplik bT _ h_notin]
+        exact h_bT
+      · -- comp 13
+        have h13 := h13S
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
   | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
       intro h_konf
       -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := update kanalRho).
       sorry
   | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
       intro h_konf
-      -- TODO F4-ispat: sahiplik := set tb (thread ctx.tid); kanal pop —
-      -- comp 4 (kanalCikar tail-tipliligi), comp 11 (pop sonrasi transit:
-      -- kuyruk hala dolu ise ayni kanalda IKINCI transit bolge gerekir —
-      -- KanalTransit'in coklu-mesaj formu KONTROL EDILMELI; comp 2 odakli
-      -- sabit v tiplemesi KanalTutarli'dan. Catal-bagimsiz, mekanik agirlikli.
-      sorry
+      subst h_S'
+      -- bulunan kanal kaydi (find? analizi)
+      have h_kdF : ∃ kdF ∈ S.kanal, kdF.kid = k
+          ∧ kdF.gonderKuyrugu.head? = some v := by
+        unfold kanalIlk at h_v
+        cases h_f : S.kanal.find? (fun kd => kd.kid = k) with
+        | none => rw [h_f] at h_v; cases h_v
+        | some kdF =>
+            rw [h_f] at h_v
+            have h_q : kdF.gonderKuyrugu.head? = some v := h_v
+            refine ⟨kdF, List.mem_of_find?_eq_some h_f, ?_, h_q⟩
+            have h_pred := List.find?_some h_f
+            simpa using h_pred
+      obtain ⟨kdF, h_kdF_in, h_kdF_kid, h_kdF_head⟩ := h_kdF
+      have h_v_mem : v ∈ kdF.gonderKuyrugu := head?_mem h_kdF_head
+      have h_kdF_dolu : kdF.gonderKuyrugu ≠ [] := by
+        intro h_nil; rw [h_nil] at h_kdF_head; cases h_kdF_head
+      have h14 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+      have h15 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+      refine ⟨Ρ, h_konf.1, ?_, ?_, ?_, rfl,
+              h_konf.2.2.2.2.2.1, ?_, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_, ?_, ?_⟩
+      · -- comp 2: odakli thread alinan degere ilerledi (KanalTutarli tipi)
+        have h_thread := h_konf.2.1
+        rw [h_t] at h_thread
+        have h_dtv := h_konf.2.2.2.1 kdF h_kdF_in v h_v_mem
+        exact threadTipli_degisim h_thread _
+          ⟨Δ kdF.kid, ctx.lineer, Ρ,
+           ⟨HasType.t_sabit _ _ _ _ (degerTipli_ortam v _ h_dtv),
+            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩⟩
+      · -- comp 3 (id-genel): tb zaten kayitliydi (eski kanalSahip kaydi)
+        intro bb sah h_lk
+        by_cases h_eq : bb = tb
+        · subst h_eq
+          exact h_konf.2.2.1 bb (Sahip.kanalSahip k) h_transit
+        · rw [sahiplikSet_ne S.sahiplik tb bb _ h_eq] at h_lk
+          exact h_konf.2.2.1 bb sah h_lk
+      · -- comp 4: pop sonrasi kuyruk tipliligi
+        intro kd' h_kd' w h_w
+        rcases List.mem_map.mp h_kd' with ⟨kd0, h_kd0, h_img⟩
+        by_cases h_k0 : kd0.kid = k
+        · rw [if_pos h_k0] at h_img
+          subst h_img
+          exact h_konf.2.2.2.1 kd0 h_kd0 w (tail_uye h_w)
+        · rw [if_neg h_k0] at h_img
+          subst h_img
+          exact h_konf.2.2.2.1 kd0 h_kd0 w h_w
+      · -- comp 7: tb'nin yeni sahibi thread (donmus degil)
+        intro xx bb h_bb
+        constructor
+        · intro h_fr
+          have h_fr' : sahiplikGet
+              (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+              = some Sahip.donmus := h_fr
+          by_cases h_eq : bb = tb
+          · subst h_eq
+            rw [sahiplikSet_eq] at h_fr'
+            cases h_fr'
+          · rw [sahiplikSet_ne S.sahiplik tb bb _ h_eq] at h_fr'
+            exact (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mp h_fr'
+        · intro h_kat
+          have h_eski := (h_konf.2.2.2.2.2.2.1 xx bb h_bb).mpr h_kat
+          have h_eq : bb ≠ tb := by
+            intro he; subst he
+            have := h_transit.symm.trans h_eski
+            cases this
+          show sahiplikGet
+              (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+              = some Sahip.donmus
+          rw [sahiplikSet_ne S.sahiplik tb bb _ h_eq]
+          exact h_eski
+      · -- comp 8: hedef bolge tb olamaz (eski sahibi kanal'di)
+        intro c h_mem y h_hv bb h_bb h_yaz
+        have h_c_eski : c ∈ S.thread ∧ sahiplikGet S.sahiplik bb
+            = some (Sahip.thread c.tid) := by
+          rcases List.mem_append.mp h_mem with h1 | h2
+          · have h_in : c ∈ S.thread := by
+              rw [h_t]; exact List.mem_append.mpr (Or.inl h1)
+            exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
+          · rcases List.mem_cons.mp h2 with h_eq | h3
+            · subst h_eq; exact absurd h_hv (fun h => nomatch h)
+            · have h_in : c ∈ S.thread := by
+                rw [h_t]
+                exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
+              exact ⟨h_in, h_konf.2.2.2.2.2.2.2.1 c h_in y h_hv bb h_bb h_yaz⟩
+        obtain ⟨_, h_c_own⟩ := h_c_eski
+        have h_ne : bb ≠ tb := by
+          intro he; subst he
+          have := h_transit.symm.trans h_c_own
+          cases this
+        show sahiplikGet
+            (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+            = some (Sahip.thread c.tid)
+        rw [sahiplikSet_ne S.sahiplik tb bb _ h_ne]
+        exact h_c_own
+      · -- comp 9: ayni desen
+        intro c h_mem bb h_hb h_kayit h_yaz
+        have h_c_eski : c ∈ S.thread ∧ sahiplikGet S.sahiplik bb
+            = some (Sahip.thread c.tid) := by
+          rcases List.mem_append.mp h_mem with h1 | h2
+          · have h_in : c ∈ S.thread := by
+              rw [h_t]; exact List.mem_append.mpr (Or.inl h1)
+            exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
+          · rcases List.mem_cons.mp h2 with h_eq | h3
+            · subst h_eq; exact absurd h_hb (fun h => nomatch h)
+            · have h_in : c ∈ S.thread := by
+                rw [h_t]
+                exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
+              exact ⟨h_in, h_konf.2.2.2.2.2.2.2.2.1 c h_in bb h_hb h_kayit h_yaz⟩
+        obtain ⟨_, h_c_own⟩ := h_c_eski
+        have h_ne : bb ≠ tb := by
+          intro he; subst he
+          have := h_transit.symm.trans h_c_own
+          cases this
+        show sahiplikGet
+            (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+            = some (Sahip.thread c.tid)
+        rw [sahiplikSet_ne S.sahiplik tb bb _ h_ne]
+        exact h_c_own
+      · -- comp 11: pop edilen kanal bosalir (kapasite-1); digerleri korunur
+        intro kd' h_kd' h_ne'
+        rcases List.mem_map.mp h_kd' with ⟨kd0, h_kd0, h_img⟩
+        by_cases h_k0 : kd0.kid = k
+        · rw [if_pos h_k0] at h_img
+          subst h_img
+          have h_kd0F : kd0 = kdF :=
+            h15 kd0 h_kd0 kdF h_kdF_in (h_k0.trans h_kdF_kid.symm)
+          exfalso
+          apply h_ne'
+          show kd0.gonderKuyrugu.tail = []
+          rw [h_kd0F]
+          exact tail_bos_kapasite (h14 kdF h_kdF_in) h_kdF_dolu
+        · rw [if_neg h_k0] at h_img
+          subst h_img
+          obtain ⟨bT, h_bT⟩ :=
+            h_konf.2.2.2.2.2.2.2.2.2.2.1 kd0 h_kd0 h_ne'
+          have h_ne2 : bT ≠ tb := by
+            intro he; subst he
+            have := h_transit.symm.trans h_bT
+            have h_kk : k = kd0.kid := by injection Option.some.inj this
+            exact h_k0 h_kk.symm
+          refine ⟨bT, ?_⟩
+          show sahiplikGet
+              (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bT
+              = some (Sahip.kanalSahip kd0.kid)
+          rw [sahiplikSet_ne S.sahiplik tb bT _ h_ne2]
+          exact h_bT
+      · -- comp 13
+        have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
+      · -- comp 14: pop uzunlugu kucultur
+        intro kd' h_kd'
+        rcases List.mem_map.mp h_kd' with ⟨kd0, h_kd0, h_img⟩
+        by_cases h_k0 : kd0.kid = k
+        · rw [if_pos h_k0] at h_img
+          subst h_img
+          exact Nat.le_trans (tail_uzunluk _) (h14 kd0 h_kd0)
+        · rw [if_neg h_k0] at h_img
+          subst h_img
+          exact h14 kd0 h_kd0
+      · -- comp 15: uniform map kid-tekilligi korur
+        intro kd1 h1 kd2 h2 h_kid
+        rcases List.mem_map.mp h1 with ⟨p1, hp1, e1⟩
+        rcases List.mem_map.mp h2 with ⟨p2, hp2, e2⟩
+        have hk1 : kd1.kid = p1.kid := by
+          rw [← e1]
+          by_cases h : p1.kid = k
+          · rw [if_pos h]
+          · rw [if_neg h]
+        have hk2 : kd2.kid = p2.kid := by
+          rw [← e2]
+          by_cases h : p2.kid = k
+          · rw [if_pos h]
+          · rw [if_neg h]
+        have h_p : p1 = p2 :=
+          h15 p1 hp1 p2 hp2 (hk1 ▸ hk2 ▸ h_kid)
+        rw [← e1, ← e2, h_p]
   | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
       intro h_konf
       -- TODO F4-ispat 🔴 CATAL: Ρ-DEGISTIREN kural (bolge := dondurBolge).
