@@ -1,9 +1,18 @@
 /-
-KEMGU V3 Bütünleşik Güvenlik Metateoremi (Faz C)
-Kaynak (kagit formel): belgeler/KEMGU_Metateorem_V3.md
+KEMGU V3 Bütünleşik Güvenlik Metateoremi (Onarim v3 F6)
+Kaynak (kagit formel): belgeler/KEMGU_Metateorem_V3.md + FAZ_BRIFINGLERI.md F6
 Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
 
-Onkosul: Faz A + B + γ tum mekanize bilesenler
+F6 yeniden ifade (Mehmet onayli — ADIM 0 acik soru 4):
+- SCR/BET placeholder-True conjunct'lari TEOREMDEN CIKARILDI (gorunus ile
+  icerik farki — dis degerlendirmenin ana elestirisi). V2 hedefleri yorumda.
+- Hipotez GERCEK IyiTipli (Kopru.lean — HasType/LineerTamam/RegionTamam'a
+  bagli) + kosu baslangicKonf'tan; eski vakum-IyiTipli + serbest S₀ formu
+  kaldirildi.
+- YENI conjunct: No-Fault (iyiTipli_no_fault — F3 koprusu + F4
+  typed_no_fault zinciri; adim_korunum iskeletine baglidir).
+- s1_invariant icin h_init hipotezi kaldirildi (s1_yapisal — model her
+  konfigurasyonda saglar).
 -/
 
 import Kemgu.Sem.Core
@@ -19,6 +28,7 @@ import Kemgu.Drf.L6CapabilityLinear
 import Kemgu.Drf.L7BellekErisimTipSoundness
 import Kemgu.Drf.Drf
 import Kemgu.MemSafety.Theorems
+import Kemgu.Discharge.NoFault
 import Kemgu.BET.Boundedness
 import Kemgu.SideChannel.NonInterference
 
@@ -26,6 +36,7 @@ namespace Kemgu.Soundness.Main
 open Kemgu.Sem.Core Kemgu.Sem.SmallStep Kemgu.Sem.Kopru
 open Kemgu.Drf.L0BolgeKorunumu
 open Kemgu.MemSafety.Theorems
+open Kemgu.Discharge.NoFault
 
 -- ============================================================
 -- §1. V3 bileşen predicate'leri
@@ -40,65 +51,48 @@ def MemSafe_perStep (S : Konfigurasyon) : Prop :=
     Olay.memYaz t k v ∉ S.iz →
     sahiplikGet S.sahiplik k.bolge = some (Sahip.thread t)
 
-/-- Data Race Freedom: s1_invariant'in StepStar boyunca korunmasi.
-    DRF Teorem 4' bundled form (same-Step + s1 preservation). -/
+/-- Data Race Freedom: s1_invariant (tekil sahiplik). -/
 def DrfHolds (S : Konfigurasyon) : Prop :=
   s1_invariant S
 
-/-- Side-Channel Resistance: placeholder True (V2 hedef).
-    Tam form: information-flow non-interference (sabitsure tag tracking +
-    two-execution simulation). B3' refactor sonra mekanize edilecek. -/
-def SideChannelResistant_v2_placeholder (_Pi : Program) : Prop := True
-
-/-- Bounded Execution Time: placeholder True (V2 hedef).
-    Tam form: WCET hesap + cycle counting (realtime annotation + cost
-    semantics). B2' refactor sonra mekanize edilecek. -/
-def BET_v2_placeholder (_Pi : Program) : Prop := True
-
 
 -- ============================================================
--- §2. V3 Metateorem M — Bundled Soundness
+-- §2. V3 Metateorem M — Bundled Soundness (F6 durust formu)
 -- ============================================================
 
-/-- TEOREM M (V3 KEMGU SOUNDNESS, V1 BUNDLED FORM):
+/-- TEOREM M (V3 KEMGU SOUNDNESS — F6 yeniden ifade):
 
-    Kagit ifadesi:
-      Π : TipKontrol(Π) = OK ∧ ¬GuvensizBlok(Π)
-      ⟹ MemorySafe(Π) ∧ DataRaceFree(Π)
-       ∧ SideChannelResistant(Π_CT) ∧ BoundedExecutionTime(Π_RT)
+    Kagit ifadesi (daraltilmis durust V1 formu):
+      IyiTipli(Π) ⟹ S₀(Π)'den ulasilabilir her S icin:
+        DataRaceFree(S) ∧ MemorySafe(S) ∧ S fault degil.
 
-    V1 bundled form (mevcut commit'ler):
-    - MemorySafe: T1 tam form (per-Step) — sAtama h_owner garantisi
-    - DataRaceFree: s1_invariant StepStar boyunca korunur (DRF-L0' starStep)
-    - SideChannelResistant: placeholder True (V2 hedef)
-    - BoundedExecutionTime: placeholder True (V2 hedef)
+    Bilesenler:
+    - DRF: s1_invariant (yapisal — s1_yapisal) + same-Step Teorem 4'
+      (kemgu_drf_v1_no_concurrent_writes; cross-Step HB V2.1 hedefi).
+    - MemSafe: T1 tam form (per-Step ownership — t1_bellek_guvenligi_tam).
+    - No-Fault: iyiTipli_no_fault (F3 koprusu + F4 typed_no_fault;
+      adim_korunum iskeletine bagli — F4-ispat fazi kapaninca tam).
 
-    İspat dort parça refine + her parça mevcut teorem application'i:
-    (1) drf_l0_bolge_korunumu_starStep  → DRF
-    (2) t1_bellek_guvenligi_tam        → MemSafe
-    (3) trivial                         → SCR placeholder
-    (4) trivial                         → BET placeholder
-
-    Bu yapısal "konsolide soundness" formudur — modern PL toplulukta
-    Iris/RustBelt/CompCert/seL4 geleneklerine yakindir. -/
+    CIKARILANLAR (eski vakum conjunct'lar — ADIM 0 Sorun 1):
+    - SideChannelResistant placeholder (V2: B3' sabitsure tag + two-run
+      simulation, ~400 satir).
+    - BoundedExecutionTime placeholder (V2: B2' WCET + cycle counting,
+      ~350 satir). -/
 theorem kemgu_soundness_v3
     (Pi : Program) (h_iyi : IyiTipli Pi)
-    (S₀ S : Konfigurasyon) (h_run : StepStar S₀ S)
-    (h_init_s1 : s1_invariant S₀) :
+    (S : Konfigurasyon)
+    (h_run : StepStar (baslangicKonf Pi) S) :
     DrfHolds S
     ∧ MemSafe_perStep S
-    ∧ SideChannelResistant_v2_placeholder Pi
-    ∧ BET_v2_placeholder Pi := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · -- (1) DRF: s1_invariant korunur
-    exact drf_l0_bolge_korunumu_starStep Pi h_iyi S₀ S h_run h_init_s1
-  · -- (2) MemSafe: t1_bellek_guvenligi_tam direct per-Step
+    ∧ S.fault = none := by
+  refine ⟨?_, ?_, ?_⟩
+  · -- (1) DRF: s1 yapisal
+    exact s1_yapisal S
+  · -- (2) MemSafe: T1 per-Step
     intro S' h_step t k v h_event h_not_in_S
     exact t1_bellek_guvenligi_tam S S' h_step t k v h_event h_not_in_S
-  · -- (3) SCR placeholder
-    trivial
-  · -- (4) BET placeholder
-    trivial
+  · -- (3) No-Fault: F3 kopru + F4 catı
+    exact iyiTipli_no_fault Pi h_iyi S h_run
 
 
 -- ============================================================
@@ -106,37 +100,14 @@ theorem kemgu_soundness_v3
 -- ============================================================
 
 /-
-V3 V2 tam form için gerekli refactor'lar (Mehmet onayi bekler):
-
-(1) MemSafe T2/T3 tam:
-    - B1'' refactor: bolge lifecycle Step constructor'lari (bolgeYarat,
-      bolgeSerbest), Konfigurasyon yaratilmis_bolgeler alani
-    - T2 counting argument, T3 reachability + termination
-    - Maliyet: ~250 satir
-
-(2) DRF cross-Step:
-    - HB ordering mekanize (sequenced-before transitive ∪
-      synchronizes-with) inductive predicate
-    - data_race tam form: yukaridakine ek ¬ (e1 ≺_hb e2) ∧ ¬ (e2 ≺_hb e1)
-    - Tam Teorem 4': ∀ τ ∈ Tr(Π) : ¬ data_race(τ)
-    - Maliyet: ~100 satir
-
-(3) SideChannelResistant tam:
-    - B3' refactor: sabitsure tag (Deger.secret), two-execution simulation
-    - Non-interference: iki secret giris ile iki run public-equivalent
-    - Maliyet: ~400 satir
-
-(4) BET tam:
-    - B2' refactor: realtime annotation (Tip.realtime), cycle counting
-      (Konfigurasyon.cycles), WCET fonksiyonu (Ifade → Nat)
-    - BET teoremi: realtime islev cagrildiginda Step* sayisi ≤ WCET
-    - Maliyet: ~350 satir
-
-Toplam V2 hedef: ~1100 satir + ispatlar.
-
-V1 bundled form (mevcut) → V2 tam form (refactor sonra). TOPLAS makale
-plani: V1 paper + V2 paper iki ayri yayinlama opsiyon, ya da V2 hazir
-olunca tek konsolide paper.
+V3 V2 tam form hedefleri:
+(1) MemSafe T2/T3: bolge lifecycle constructor'lari + counting (~250 satir)
+(2) DRF cross-Step: HB ordering + data_race tam formu (~100 satir);
+    F2'nin sVarOku'su ile read-race altyapisi hazir
+(3) SideChannelResistant: sabitsure tag + two-execution simulation (~400)
+(4) BET: WCET + cycle counting (~350)
+Bunlar TEOREM IFADESINE yalniz mekanize olduklarinda girecek
+(F6 ilkesi: gorunus = icerik).
 -/
 
 end Kemgu.Soundness.Main

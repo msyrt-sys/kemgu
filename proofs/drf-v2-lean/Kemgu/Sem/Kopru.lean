@@ -224,61 +224,6 @@ theorem sahiplikBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Ti
         | head => exact absurd rfl hp
         | tail _ hr => simp [sahiplikGet, hp]; exact ih hr
 
-/-- Λ₀ insa fonksiyonu (lemma ifadelerinde kisaltma). -/
-def lamF : (VarId × Tip) → Option (VarId × Lineerlik) :=
-  fun p => if Tip.lineerMi p.2 then some (p.1, Lineerlik.aktif) else none
-
-/-- lambdaBaslangic = filterMap lamF (tanim acilimi). -/
-theorem lambdaBaslangic_def (Pi : Program) :
-    lambdaBaslangic Pi = Pi.cevre.filterMap lamF := rfl
-
-/-- Λ₀'in tum degerleri aktif (filterMap yalniz aktif uretir). -/
-theorem lambdaB_deger_aktif (cevre : List (VarId × Tip))
-    (y : VarId) (lin : Lineerlik)
-    (h : (y, lin) ∈ cevre.filterMap lamF) :
-    lin = Lineerlik.aktif := by
-  rcases List.mem_filterMap.mp h with ⟨p, _, hp⟩
-  unfold lamF at hp
-  by_cases hl : Tip.lineerMi p.2
-  · rw [if_pos hl] at hp
-    have h_pair := Option.some.inj hp
-    exact (Prod.mk.injEq .. ▸ h_pair).2.symm
-  · rw [if_neg hl] at hp
-    exact absurd hp (by simp)
-
-/-- Λ₀'da kayitli anahtar aktif'e cozulur (deger uniform — nodup gerekmez). -/
-theorem lambdaB_get_aktif (cevre : List (VarId × Tip))
-    (y : VarId) (lin : Lineerlik)
-    (h : (y, lin) ∈ cevre.filterMap lamF) :
-    lineerOrtamGet (cevre.filterMap lamF) y = some Lineerlik.aktif := by
-  induction cevre with
-  | nil => exact absurd h (by simp)
-  | cons p rest ih =>
-      by_cases hl : Tip.lineerMi p.2
-      · have h_fm : (p :: rest).filterMap lamF
-            = (p.1, Lineerlik.aktif) :: rest.filterMap lamF := by
-          simp [lamF, List.filterMap_cons, hl]
-        rw [h_fm] at h ⊢
-        by_cases hp : p.1 = y
-        · simp [lineerOrtamGet, hp]
-        · rcases List.mem_cons.mp h with h_head | h_tail
-          · exact absurd (Prod.mk.injEq .. ▸ h_head.symm).1 hp
-          · simp only [lineerOrtamGet, hp, if_false]
-            exact ih h_tail
-      · have h_fm : (p :: rest).filterMap lamF = rest.filterMap lamF := by
-          simp [lamF, List.filterMap_cons, hl]
-        rw [h_fm] at h ⊢
-        exact ih h
-
-/-- Λ₀ uyelik → lookup (kopru iff'in zor yonu). -/
-theorem lambdaBaslangic_mem_get (Pi : Program) (y : VarId) (lin : Lineerlik)
-    (h : (y, lin) ∈ lambdaBaslangic Pi) :
-    lineerOrtamGet (lambdaBaslangic Pi) y = some lin := by
-  rw [lambdaBaslangic_def] at h ⊢
-  have ha := lambdaB_deger_aktif Pi.cevre y lin h
-  subst ha
-  exact lambdaB_get_aktif Pi.cevre y _ h
-
 /-- Ρ₀ lookup → cevre uyeligi. -/
 theorem rhoBaslangic_get_mem (cevre : List (VarId × Tip)) (y : VarId)
     (b : Bolge)
@@ -325,7 +270,7 @@ theorem storeBaslangic_get (cevre : List (VarId × Tip)) (x : VarId) (τ : Tip)
     konfigurasyon-seviyesi tipliligi KURAR. typed_no_fault / adim_korunum
     zinciri boylece kagit-formdaki "IyiTipli(Π) ⟹ ..." iddialarina baglanir. -/
 theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
-    KonfTipliFull (gammaProgram Pi) (deltaProgram Pi) (lambdaBaslangic Pi)
+    KonfTipliFull (gammaProgram Pi) (deltaProgram Pi)
                   (rhoBaslangic Pi) (baslangicKonf Pi) := by
   refine ⟨?_, ?_, ?_, ?_, rfl, rfl, ?_, ?_, ?_⟩
   · -- (1) SigmaTipli
@@ -338,32 +283,24 @@ theorem iyiTipli_baslangic (Pi : Program) (h_iyi : IyiTipli Pi) :
     · rw [← h_k]
       show bolgeOrtamGet (rhoBaslangic Pi) p.1 = some (varBolge p.1)
       exact rhoBaslangic_get Pi.cevre p.1 p.2 h_p
-  · -- (2) ThreadTipliFull (tek main thread)
+  · -- (2) ThreadTipliFull (tek main thread; per-thread lineer = Λ₀)
     intro ctx h_ctx
     rcases List.mem_cons.mp h_ctx with h_eq | h_nil
     · subst h_eq
-      constructor
-      · -- Typed anaGovde
-        show ∃ τ Λ' Ρ', Typed _ _ _ _ (anaGovde Pi) τ Λ' Ρ'
-        unfold anaGovde
-        cases h_is : Pi.islevler with
-        | nil =>
-            exact ⟨Tip.bos, lambdaBaslangic Pi, rhoBaslangic Pi,
-              ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
-               LineerTamam.l_sabit _ _ _,
-               RegionTamam.r_sabit _ _ _⟩⟩
-        | cons p rest =>
-            have h_mem : p ∈ Pi.islevler := h_is ▸ List.Mem.head _
-            obtain ⟨τ, h_t⟩ := h_iyi.tipOk p h_mem
-            obtain ⟨Λ', h_l⟩ := h_iyi.lineerOk p h_mem
-            obtain ⟨Ρ', h_r⟩ := h_iyi.bolgeOk p h_mem
-            exact ⟨τ, Λ', Ρ', ⟨h_t, h_l, h_r⟩⟩
-      · -- kopru iff
-        intro y lin
-        constructor
-        · exact lambdaBaslangic_mem_get Pi y lin
-        · intro h_get
-          exact lineerOrtamGet_mem _ y lin h_get
+      show ∃ τ Λ' Ρ', Typed _ _ (lambdaBaslangic Pi) _ (anaGovde Pi) τ Λ' Ρ'
+      unfold anaGovde
+      cases h_is : Pi.islevler with
+      | nil =>
+          exact ⟨Tip.bos, lambdaBaslangic Pi, rhoBaslangic Pi,
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _,
+             RegionTamam.r_sabit _ _ _⟩⟩
+      | cons p rest =>
+          have h_mem : p ∈ Pi.islevler := h_is ▸ List.Mem.head _
+          obtain ⟨τ, h_t⟩ := h_iyi.tipOk p h_mem
+          obtain ⟨Λ', h_l⟩ := h_iyi.lineerOk p h_mem
+          obtain ⟨Ρ', h_r⟩ := h_iyi.bolgeOk p h_mem
+          exact ⟨τ, Λ', Ρ', ⟨h_t, h_l, h_r⟩⟩
     · cases h_nil
   · -- (3) SahiplikTutarli
     intro b t h_b
@@ -425,7 +362,6 @@ theorem bos_program_iyiTipli : IyiTipli { islevler := [] } := by
     taniktir (vakum-hipotez elestirisine somut cevap). -/
 example : KonfTipliFull (gammaProgram { islevler := [] })
     (deltaProgram { islevler := [] })
-    (lambdaBaslangic { islevler := [] })
     (rhoBaslangic { islevler := [] })
     (baslangicKonf { islevler := [] }) :=
   iyiTipli_baslangic _ bos_program_iyiTipli

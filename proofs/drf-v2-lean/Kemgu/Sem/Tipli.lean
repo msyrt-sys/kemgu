@@ -101,15 +101,14 @@ inductive AtamaOdak : Ifade → VarId → Prop where
 -- §4. ThreadTipliFull — Plan v2 §5.2.3 (Δ'li)
 -- ============================================================
 
-/-- Thread'lerin tip-uyumu. V1: tek paylasimli Λ + iff koprusu
-    (F4'te per-thread Λ_ctx'e gecilir, kopru silinir). -/
-def ThreadTipliFull (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam)
+/-- Thread'lerin tip-uyumu (F4: PER-THREAD lineer ortam — her ctx kendi
+    ctx.lineer'i ile Typed; paylasimli-Λ iff koprusu SILINDI; ADIM 0
+    acik soru 3 onayi). -/
+def ThreadTipliFull (Γ : TipOrtam) (Δ : KanalOrtam)
                     (Ρ : BolgeOrtam) (threads : List ThreadCtx) : Prop :=
   ∀ ctx ∈ threads,
-    (∃ τ : Tip, ∃ Λ' : LineerOrtam, ∃ Ρ' : BolgeOrtam,
-      Typed Γ Δ Λ Ρ ctx.ifade τ Λ' Ρ')
-    ∧ (∀ y : VarId, ∀ lin : Lineerlik,
-        (y, lin) ∈ ctx.lineer ↔ lineerOrtamGet Λ y = some lin)
+    ∃ τ : Tip, ∃ Λ' : LineerOrtam, ∃ Ρ' : BolgeOrtam,
+      Typed Γ Δ ctx.lineer Ρ ctx.ifade τ Λ' Ρ'
 
 
 -- ============================================================
@@ -122,10 +121,10 @@ def ThreadTipliFull (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam)
     8. AtamaSahipligi (AtamaOdak formu)
     9. DegiskenlerBagli (F3 YENI): Γ'daki her degisken icin bolge + konum +
        tip-uyumlu deger mevcut — sVarOku progress/preservation temeli. -/
-def KonfTipliFull (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam)
+def KonfTipliFull (Γ : TipOrtam) (Δ : KanalOrtam)
                   (Ρ : BolgeOrtam) (S : Konfigurasyon) : Prop :=
   SigmaTipli Γ Ρ S.store
-  ∧ ThreadTipliFull Γ Δ Λ Ρ S.thread
+  ∧ ThreadTipliFull Γ Δ Ρ S.thread
   ∧ SahiplikTutarli Ρ S.sahiplik
   ∧ KanalTutarli Γ Δ Ρ S.kanal
   ∧ S.fault = none
@@ -149,10 +148,10 @@ def KonfTipliFull (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam)
 
 /-- KonfTipliFull'den bilesenleri cikarma (9-bilesen projection). -/
 theorem konfTipliFull_elim
-    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
-    (S : Konfigurasyon) (h : KonfTipliFull Γ Δ Λ Ρ S) :
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
+    (S : Konfigurasyon) (h : KonfTipliFull Γ Δ Ρ S) :
     SigmaTipli Γ Ρ S.store
-    ∧ ThreadTipliFull Γ Δ Λ Ρ S.thread
+    ∧ ThreadTipliFull Γ Δ Ρ S.thread
     ∧ SahiplikTutarli Ρ S.sahiplik
     ∧ KanalTutarli Γ Δ Ρ S.kanal
     ∧ S.fault = none
@@ -178,14 +177,14 @@ theorem konfTipliFull_elim
 /-- KonfTipliFull odaklama altinda kapali (F3: 9 bilesen — yeni
     DegiskenlerBagli bileseni state-only, odaklamadan etkilenmez). -/
 theorem konfTipliFull_odak
-    (Γ : TipOrtam) (Δ : KanalOrtam) (Λ : LineerOrtam) (Ρ : BolgeOrtam)
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
     (S : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
     (e : Ifade)
-    (h_konf : KonfTipliFull Γ Δ Λ Ρ S)
+    (h_konf : KonfTipliFull Γ Δ Ρ S)
     (h_t : S.thread = ts1 ++ ctx :: ts2)
-    (h_typed_e : ∃ τ Λ' Ρ', Typed Γ Δ Λ Ρ e τ Λ' Ρ')
+    (h_typed_e : ∃ τ Λ' Ρ', Typed Γ Δ ctx.lineer Ρ e τ Λ' Ρ')
     (h_odak_kapali : ∀ y : VarId, AtamaOdak e y → AtamaOdak ctx.ifade y) :
-    KonfTipliFull Γ Δ Λ Ρ
+    KonfTipliFull Γ Δ Ρ
       { S with thread := ts1 ++ { ctx with ifade := e } :: ts2 } := by
   obtain ⟨h_sigma, h_thread, h_sahip, h_kanal, h_fault, h_beq, h_fkat,
           h_asahip, h_bagli⟩ := h_konf
@@ -200,7 +199,7 @@ theorem konfTipliFull_odak
       exact h_thread ctx'' h_in
     · rcases List.mem_cons.mp h2 with h_eq | h3
       · subst h_eq
-        exact ⟨h_typed_e, (h_thread ctx h_ctx_in).2⟩
+        exact h_typed_e
       · have h_in : ctx'' ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3))
         exact h_thread ctx'' h_in
