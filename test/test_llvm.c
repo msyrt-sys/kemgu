@@ -1453,6 +1453,22 @@ static void test_audit_stack_dizi_eleman_atama(void) {
                rc == 42);
 }
 
+static void test_audit_nested_alan_atama(void) {
+    /* Gap #3: a.b.c = v onceden dusurulurdu (erisim_lvalue tek seviye).
+     * 3-seviye yaz -> oku round-trip. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Ic { x: tam32; } "
+        "yap\xc4\xb1 Orta { ic: Ic; } "
+        "yap\xc4\xb1 Dis { orta: Orta; y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dis = "
+        "Dis { orta: Orta { ic: Ic { x: 0 } }, y: 2 }; "
+        "d.orta.ic.x = 40; "
+        "ver d.orta.ic.x + d.y; }");
+    test_sonuc("audit: a.b.c = v ic ice yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
 /* --- C5: satirici_asm (inline assembly) --- */
 
 static void test_asm_round_trip_verify(void) {
@@ -1730,6 +1746,7 @@ int main(void) {
     printf("\n--- Codegen coverage audit (runtime round-trip) ---\n");
     test_audit_deref_okuma();
     test_audit_stack_dizi_eleman_atama();
+    test_audit_nested_alan_atama();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
