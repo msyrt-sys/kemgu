@@ -97,6 +97,15 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
                    (yd : List VarId) (kod : Ifade) (tYeni : ThreadId) :
                      (∀ v ∈ yd, ∀ b : Bolge, bolgeOrtamGet Ρ v = some b →
                         kategoriYazilabilir b.kategori = true) →
+                     -- YOL-B V1 DARALTMASI (Mehmet karari — DECISIONS_LOG
+                     -- Catal 1): gorev govdesi YAZMA-HEDEFSIZDIR. Gerekce:
+                     -- yakalanan bolgeler sahip(tYeni) kategorisine gecer
+                     -- (yazilamaz); hedefli govdenin spawn-sonrasi ortamda
+                     -- tiplenmesi kategori disipliniyle celisir —
+                     -- id-anahtarlama bunu COZMEZ (erisim degil kategori
+                     -- sorunu). Hedefli govde = V2 (per-thread Ρ).
+                     (∀ y : VarId, ¬ HedefVar kod y) →
+                     (∀ b : Bolge, ¬ HedefBolge kod b) →
                      RegionTamam Γ Ρ kod Ρkod →
                      Ρ' = bolgeOrtamSahipAta Ρ yd tYeni →
                      RegionTamam Γ Ρ (Ifade.gorevBaslat yd kod) Ρ'

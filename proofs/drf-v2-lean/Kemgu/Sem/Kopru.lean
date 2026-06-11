@@ -159,9 +159,14 @@ def SabitsureKontrolOk (Pi : Program) : Prop :=
       cevre-degiskeni yok — V1).
     - KAPASITE-1 kanallar (semantik duzeyde: cKanalGonderTamam h_bos
       guard.i — dolu kanala gonderim bloklar; buffer.li kanal V2).
-    - YOL-B (planli, kategori-anahtar cozumuyle birlikte): gorev
-      govdeleri yazma-hedefsiz (HedefVar/HedefBolge bos) — premise
-      r_gorev_baslat.a girecek; per-thread Ρ tam cozumu V2.
+    - YOL-B (GERCEK premise — r_gorev_baslat hedefsiz-govde sartlari):
+      gorev govdeleri yazma-hedefsizdir (∀y ¬HedefVar kod y /
+      ∀b ¬HedefBolge kod b). Yakalanan bolgeler sahip(t) kategorisine
+      gectiginden hedefli govde V1 kategori disipliniyle celisir;
+      per-thread Ρ tam cozumu V2.
+    - ID-ANAHTARLAMA: sahiplikGet/konumGet bolge KIMLIGI (.id) ile
+      karsilastirir — kategori degisken oznitelik (model karari,
+      kisit degil; DECISIONS_LOG).
     Realtime alani KALDIRILDI (V1 Ifade.de realtime yapisi yok).
     DERLEYICI dilin ust-kumesini kabul eder; bkz. README scope notu +
     DECISIONS_LOG.md. -/

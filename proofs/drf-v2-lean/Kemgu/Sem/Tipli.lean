@@ -102,43 +102,9 @@ theorem typed_guvensiz_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
 
 
 -- ============================================================
--- §3. HedefVar / HedefBolge — sahiplik gerektiren hedefler (F4 onayli)
--- ============================================================
-
-/-- `HedefVar e y`: e'nin govdesinde (gorevBaslat ic-govdeleri HARIC —
-    onlar cocuk thread'in hedefleri) y degiskenini hedefleyen sahiplik
-    gerektiren bir operasyon var: atama hedefi, kanala gonderim,
-    gorev yakalamasi. seq'in HER IKI kolu kapsanir (sSeqAtla'da saga
-    gecis invariant'i bozmasin). -/
-inductive HedefVar : Ifade → VarId → Prop where
-  | atama_bas (y : VarId) (e : Ifade) :
-      HedefVar (Ifade.atama y e) y
-  | kanal_gonder (k : KanalId) (y : VarId) :
-      HedefVar (Ifade.kanalGonderIf k y) y
-  | gorev_yakala (yd : List VarId) (kod : Ifade) (y : VarId) :
-      y ∈ yd → HedefVar (Ifade.gorevBaslat yd kod) y
-  | seq_sol (a b : Ifade) (y : VarId) :
-      HedefVar a y → HedefVar (Ifade.seq a b) y
-  | seq_sag (a b : Ifade) (y : VarId) :
-      HedefVar b y → HedefVar (Ifade.seq a b) y
-  | atama_ic (x : VarId) (e : Ifade) (y : VarId) :
-      HedefVar e y → HedefVar (Ifade.atama x e) y
-  | guvensiz_ic (e : Ifade) (y : VarId) :
-      HedefVar e y → HedefVar (Ifade.guvensiz e) y
-
-/-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
-    dondurIf var (dondur sahiplik gerektirir — h_owner). -/
-inductive HedefBolge : Ifade → Bolge → Prop where
-  | dondur_bas (b : Bolge) :
-      HedefBolge (Ifade.dondurIf b) b
-  | seq_sol (a c : Ifade) (b : Bolge) :
-      HedefBolge a b → HedefBolge (Ifade.seq a c) b
-  | seq_sag (a c : Ifade) (b : Bolge) :
-      HedefBolge c b → HedefBolge (Ifade.seq a c) b
-  | atama_ic (x : VarId) (e : Ifade) (b : Bolge) :
-      HedefBolge e b → HedefBolge (Ifade.atama x e) b
-  | guvensiz_ic (e : Ifade) (b : Bolge) :
-      HedefBolge e b → HedefBolge (Ifade.guvensiz e) b
+-- §3. HedefVar / HedefBolge — Onarim v3 kapanisinda Core.lean §9.2'ye
+-- TASINDI (r_gorev_baslat'in Yol-B hedefsiz-govde premise'i icin
+-- RegionTamam katmaninin gorebildigi yere). Tanimlar degismedi.
 
 
 -- ============================================================
