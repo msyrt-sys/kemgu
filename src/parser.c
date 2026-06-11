@@ -207,6 +207,7 @@ static Dugum *parse_iken_deyimi(Parser *p);
 static Dugum *parse_icin_deyimi(Parser *p);
 static Dugum *parse_esles_deyimi(Parser *p);
 static Dugum *parse_guvensiz_blogu(Parser *p);
+static Dugum *parse_satirici_asm(Parser *p);
 static Dugum *parse_desen(Parser *p);
 static Dugum *parse_esles_kolu(Parser *p);
 
@@ -968,6 +969,7 @@ static Dugum *parse_deyim(Parser *p) {
         case TOK_ICIN:        return parse_icin_deyimi(p);
         case TOK_ESLES:       return parse_esles_deyimi(p);
         case TOK_GUVENSIZ:    return parse_guvensiz_blogu(p);
+        case TOK_SATIRICI_ASM: return parse_satirici_asm(p);
         default:
             return parse_ifade_veya_atama_deyimi(p);
     }
@@ -1306,6 +1308,249 @@ static Dugum *parse_guvensiz_blogu(Parser *p) {
     d->veri.guvensiz.aciklama_metin = aciklama_metin;
     d->veri.guvensiz.aciklama_metin_uzunluk = aciklama_metin_uz;
     d->veri.guvensiz.blok = blok;
+    return d;
+}
+
+/* === satıriçi_asm (C5 inline assembly) ===
+ * satirici_asm = "satıriçi_asm" "{" clause* "}"
+ * clause = "mimari" ":" tanimlayici
+ *        | "şablon" ":" (metin | ham_metin)
+ *        | "çevrim" ":" tam_literal
+ *        | "çıktı"  "(" metin "," "&" ["değişken"] tanimlayici ")"
+ *        | "girdi"  "(" metin "," ifade ")"
+ *        | "bozulan" "(" metin ")"
+ * Clause adlari contextual identifier (keyword degil); ';' ayraci yok —
+ * her clause bilinen bir adla basladigi icin gramer belirsizlik icermez.
+ * Kisit degerleri ham LLVM/GCC string olarak saklanir. */
+
+/* Token icerigini metin literalinden cikar: "..." veya r#"..."#.
+ * 1 = basarili (bas/uz doldurulur), 0 = metin degil. */
+static int metin_token_icerik(Token t, const char **bas, int *uz) {
+    if (t.tip == TOK_METIN) {
+        *bas = t.baslangic + 1;
+        *uz = t.uzunluk - 2;
+        if (*uz < 0) *uz = 0;
+        return 1;
+    }
+    if (t.tip == TOK_HAM_METIN) {
+        /* r + N '#' + '"' ... '"' + N '#' */
+        const char *ic = t.baslangic + 1;
+        int n_hash = 0;
+        while (*ic == '#') { ic++; n_hash++; }
+        ic++; /* açılış '"' */
+        const char *son = t.baslangic + t.uzunluk - n_hash - 1; /* kapanış '"' */
+        *bas = ic;
+        *uz = (int)(son - ic);
+        if (*uz < 0) *uz = 0;
+        return 1;
+    }
+    return 0;
+}
+
+static int clause_es(Token t, const char *ad) {
+    int uz = (int)strlen(ad);
+    return t.tip == TOK_TANIMLAYICI && t.uzunluk == uz &&
+           memcmp(t.baslangic, ad, (size_t)uz) == 0;
+}
+
+/* "ad" ":" metin_clause yardimcisi: kisit metnini oku, arena'ya kopyala. */
+static int asm_kisit_oku(Parser *p, const char **kisit, int *kisit_uz) {
+    Token mt = parser_simdiki(p);
+    const char *bas; int uz;
+    if (!metin_token_icerik(mt, &bas, &uz)) {
+        parser_hata(p, mt, "P263",
+                    "kisit icin metin literali bekleniyor", NULL);
+        return 0;
+    }
+    parser_ilerle(p);
+    *kisit = ast_string_kopyala(p->arena, bas, uz);
+    *kisit_uz = uz;
+    return 1;
+}
+
+static Dugum *parse_satirici_asm(Parser *p) {
+    Token asm_tok = parser_simdiki(p);
+    parser_ilerle(p);
+
+    parser_bekle(p, TOK_SOL_SUSLU, "P260",
+                 "satirici_asm govdesi icin '{' bekleniyor");
+
+    const char *mimari = NULL;  int mimari_uz = 0;
+    const char *sablon = NULL;  int sablon_uz = 0;
+    int64_t cevrim = -1;
+
+    /* Toplama listeleri — cesit deseni: string'ler gecici Dugum'lere
+     * sarilir (METIN/TANIMLAYICI), sonda paralel dizilere kopyalanir. */
+    Liste cikti_k, cikti_a, girdi_k, girdi_e, bozulan_k;
+    liste_baslat(&cikti_k); liste_baslat(&cikti_a);
+    liste_baslat(&girdi_k); liste_baslat(&girdi_e);
+    liste_baslat(&bozulan_k);
+
+    while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
+           !parser_eslesir(p, TOK_DOSYA_SONU)) {
+        Token c = parser_simdiki(p);
+
+        if (clause_es(c, "mimari")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_IKI_NOKTA, "P262", "':' bekleniyor");
+            Token ad = parser_bekle(p, TOK_TANIMLAYICI, "P261",
+                                    "mimari adi bekleniyor (x86_64/arm64)");
+            if (ad.tip == TOK_TANIMLAYICI) {
+                mimari = ast_string_kopyala(p->arena,
+                                            ad.baslangic, ad.uzunluk);
+                mimari_uz = ad.uzunluk;
+            }
+        } else if (clause_es(c, "\xc5\x9f" "ablon")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_IKI_NOKTA, "P262", "':' bekleniyor");
+            Token mt = parser_simdiki(p);
+            const char *bas; int uz;
+            if (metin_token_icerik(mt, &bas, &uz)) {
+                parser_ilerle(p);
+                sablon = ast_string_kopyala(p->arena, bas, uz);
+                sablon_uz = uz;
+            } else {
+                parser_hata(p, mt, "P263",
+                    "sablon icin metin literali bekleniyor (r#\"...\"# onerilir)",
+                    NULL);
+                parser_ilerle(p);
+            }
+        } else if (clause_es(c, "\xc3\xa7" "evrim")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_IKI_NOKTA, "P262", "':' bekleniyor");
+            Dugum *cv = parse_ifade(p);
+            if (cv && cv->tip == DUGUM_TAM && cv->veri.tam.deger >= 0) {
+                cevrim = cv->veri.tam.deger;
+            } else {
+                parser_hata(p, c, "P268",
+                    "cevrim icin negatif olmayan tam sayi literali bekleniyor",
+                    NULL);
+            }
+        } else if (clause_es(c, "\xc3\xa7\xc4\xb1kt\xc4\xb1")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P264", "'(' bekleniyor");
+            const char *k; int kuz;
+            if (!asm_kisit_oku(p, &k, &kuz)) { parser_panik_sync(p); continue; }
+            parser_bekle(p, TOK_VIRGUL, "P264", "',' bekleniyor");
+            if (!parser_tuket(p, TOK_VE_BIT)) {
+                parser_hata(p, parser_simdiki(p), "P269",
+                    "cikti hedefi '&degisken_adi' bekleniyor", NULL);
+            }
+            parser_tuket(p, TOK_DEGISKEN); /* opsiyonel: &degisken x */
+            Token hedef = parser_bekle(p, TOK_TANIMLAYICI, "P269",
+                                       "cikti hedef degisken adi bekleniyor");
+            parser_bekle(p, TOK_SAG_PAREN, "P264", "')' bekleniyor");
+            if (hedef.tip == TOK_TANIMLAYICI) {
+                Dugum *kd = dugum_metin(p->arena, k, kuz, c.satir, c.sutun);
+                Dugum *ad = dugum_tanimlayici(p->arena, hedef.baslangic,
+                                              hedef.uzunluk,
+                                              hedef.satir, hedef.sutun);
+                if (kd && ad) {
+                    liste_ekle(&cikti_k, p->arena, kd);
+                    liste_ekle(&cikti_a, p->arena, ad);
+                }
+            }
+        } else if (clause_es(c, "girdi")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P264", "'(' bekleniyor");
+            const char *k; int kuz;
+            if (!asm_kisit_oku(p, &k, &kuz)) { parser_panik_sync(p); continue; }
+            parser_bekle(p, TOK_VIRGUL, "P264", "',' bekleniyor");
+            Dugum *e = parse_ifade(p);
+            parser_bekle(p, TOK_SAG_PAREN, "P264", "')' bekleniyor");
+            if (e) {
+                Dugum *kd = dugum_metin(p->arena, k, kuz, c.satir, c.sutun);
+                if (kd) {
+                    liste_ekle(&girdi_k, p->arena, kd);
+                    liste_ekle(&girdi_e, p->arena, e);
+                }
+            }
+        } else if (clause_es(c, "bozulan")) {
+            parser_ilerle(p);
+            parser_bekle(p, TOK_SOL_PAREN, "P264", "'(' bekleniyor");
+            const char *k; int kuz;
+            if (!asm_kisit_oku(p, &k, &kuz)) { parser_panik_sync(p); continue; }
+            parser_bekle(p, TOK_SAG_PAREN, "P264", "')' bekleniyor");
+            Dugum *kd = dugum_metin(p->arena, k, kuz, c.satir, c.sutun);
+            if (kd) liste_ekle(&bozulan_k, p->arena, kd);
+        } else {
+            parser_hata(p, c, "P261",
+                "bilinmeyen satirici_asm clause'u "
+                "(mimari/sablon/cikti/girdi/bozulan/cevrim)", NULL);
+            parser_ilerle(p);
+        }
+        if (p->hata_sayisi >= PARSER_MAX_HATA) break;
+    }
+    parser_bekle(p, TOK_SAG_SUSLU, "P260",
+                 "satirici_asm sonunda '}' bekleniyor");
+
+    /* Zorunlu clause kontrolleri */
+    if (!mimari) {
+        parser_hata(p, asm_tok, "P266",
+            "satirici_asm 'mimari:' clause'u zorunlu (arch-tag)", NULL);
+    }
+    if (!sablon) {
+        parser_hata(p, asm_tok, "P267",
+            "satirici_asm 'sablon:' clause'u zorunlu", NULL);
+    }
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_SATIRICI_ASM,
+                             asm_tok.satir, asm_tok.sutun);
+    if (!d) return NULL;
+    d->veri.satirici_asm.mimari = mimari;
+    d->veri.satirici_asm.mimari_uz = mimari_uz;
+    d->veri.satirici_asm.sablon = sablon;
+    d->veri.satirici_asm.sablon_uz = sablon_uz;
+    d->veri.satirici_asm.cevrim = cevrim;
+
+    /* Gecici Dugum listelerini paralel dizilere ac */
+    Dugum **ck = liste_array_yap(&cikti_k, p->arena);
+    Dugum **ca = liste_array_yap(&cikti_a, p->arena);
+    int n_out = cikti_k.sayi;
+    int kap = n_out > 0 ? n_out : 1;
+    char **o_kisit = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
+    int *o_kuz = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    char **o_ad = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
+    int *o_auz = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    for (int i = 0; i < n_out; i++) {
+        o_kisit[i] = (char *)ck[i]->veri.metin_lit.metin;
+        o_kuz[i] = ck[i]->veri.metin_lit.uzunluk;
+        o_ad[i] = (char *)ca[i]->veri.tanimlayici.metin;
+        o_auz[i] = ca[i]->veri.tanimlayici.uzunluk;
+    }
+    d->veri.satirici_asm.cikti_kisitlar = o_kisit;
+    d->veri.satirici_asm.cikti_kisit_uzlar = o_kuz;
+    d->veri.satirici_asm.cikti_adlar = o_ad;
+    d->veri.satirici_asm.cikti_ad_uzlar = o_auz;
+    d->veri.satirici_asm.cikti_sayi = n_out;
+
+    Dugum **gk = liste_array_yap(&girdi_k, p->arena);
+    int n_in = girdi_k.sayi;
+    kap = n_in > 0 ? n_in : 1;
+    char **i_kisit = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
+    int *i_kuz = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    for (int i = 0; i < n_in; i++) {
+        i_kisit[i] = (char *)gk[i]->veri.metin_lit.metin;
+        i_kuz[i] = gk[i]->veri.metin_lit.uzunluk;
+    }
+    d->veri.satirici_asm.girdi_kisitlar = i_kisit;
+    d->veri.satirici_asm.girdi_kisit_uzlar = i_kuz;
+    d->veri.satirici_asm.girdi_ifadeler = liste_array_yap(&girdi_e, p->arena);
+    d->veri.satirici_asm.girdi_sayi = n_in;
+
+    Dugum **bk = liste_array_yap(&bozulan_k, p->arena);
+    int n_clb = bozulan_k.sayi;
+    kap = n_clb > 0 ? n_clb : 1;
+    char **b_kisit = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
+    int *b_kuz = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    for (int i = 0; i < n_clb; i++) {
+        b_kisit[i] = (char *)bk[i]->veri.metin_lit.metin;
+        b_kuz[i] = bk[i]->veri.metin_lit.uzunluk;
+    }
+    d->veri.satirici_asm.bozulanlar = b_kisit;
+    d->veri.satirici_asm.bozulan_uzlar = b_kuz;
+    d->veri.satirici_asm.bozulan_sayi = n_clb;
+
     return d;
 }
 

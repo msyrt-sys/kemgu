@@ -163,6 +163,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_ICIN:              return "ICIN";
         case DUGUM_ESLES:             return "ESLES";
         case DUGUM_GUVENSIZ:          return "GUVENSIZ";
+        case DUGUM_SATIRICI_ASM:      return "SATIRICI_ASM";
         case DUGUM_BLOK:              return "BLOK";
         case DUGUM_IFADE_DEYIMI:      return "IFADE_DEYIMI";
         case DUGUM_IKILI:             return "IKILI";

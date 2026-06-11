@@ -1,0 +1,25 @@
+// C5: satıriçi_asm x86 girdi/çıktı round-trip testi.
+// oku_arti_iki(40): girdi $1'i çıktıya taşı + 2 ekle → 42.
+// Çoklu çıktı + bozulan da sergilenir: b sabit 100 alır.
+işlev oku_arti_iki(g: tam32) -> tam32 {
+    değişken s: tam32 = 0;
+    değişken b: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov $2, $0
+add $$2, $0
+mov $$100, $1"#
+            çıktı("=r", &s)
+            çıktı("=r", &b)
+            girdi("r", g)
+            bozulan("~{cc}")
+        }
+    }
+    eğer b != 100 { ver 1; }
+    ver s;
+}
+
+işlev main() -> tam32 {
+    ver oku_arti_iki(40);
+}
