@@ -1,0 +1,15 @@
+işlev main() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken v: *tam8 = bölge_al(y, 4);
+    değişken yuz: tam8 = 100;
+    değişken sonuc: tam32 = 0;
+    güvensiz {
+        v[0] = yuz; v[1] = yuz; v[2] = 42;
+        değişken toplam: tam8 = v[0] + v[1];
+        eğer toplam olarak tam32 == 0 - 56 {
+            sonuc = v[2] olarak tam32;
+        }
+    }
+    geri_al(y);
+    ver sonuc;
+}

@@ -1647,6 +1647,58 @@ static void test_stretch_tek_varyant_cesit(void) {
     test_sonuc("stretch: tek-varyant cesit + esles -> exit 42", rc == 42);
 }
 
+/* --- v1 bölge-container: bölge_al<T> + *T indeksleme --- */
+
+static void test_bolge_al_dosya(const char *isim, const char *ad) {
+    /* fixture: --check GECMELI + E2E calisip 42 donmeli. */
+    char yol[128];
+    snprintf(yol, sizeof(yol), "test/snapshots/%s.kem", isim);
+    int ok = kemgu_check_basarili(yol);
+    int rc = ok ? derle_dosya_ve_calistir(yol) : -1;
+    char mesaj[160];
+    snprintf(mesaj, sizeof(mesaj),
+             "bolge_al: %s --check + E2E -> exit 42", ad);
+    test_sonuc(mesaj, ok == 1 && rc == 42);
+}
+
+static void test_bolge_al_genislikler(void) {
+    /* DoD: T = tam8 / tam64 / struct — GENISLIK dogrulamali round-trip.
+     * tam8: 100+100 wrap -56 (i8 stride+load kaniti); tam64: 2^32 farki
+     * (i64 kaniti); struct: GEP-null sizeof (padding dahil), v[0]/v[2]
+     * alan butunlugu. Onceki durum: *T indeksleme T008 ile bloklu +
+     * eleman tipi beklenen/RHS'ten -> yanlis genislik riski. */
+    test_bolge_al_dosya("bolge_al_tam8", "tam8 wrap (-56)");
+    test_bolge_al_dosya("bolge_al_tam64", "tam64 2^32 fark");
+    test_bolge_al_dosya("bolge_al_struct", "struct sizeof+alan");
+}
+
+static void test_bolge_al_grow_copy(void) {
+    /* DoD: kucuk alloc doldur -> buyuk alloc -> bellek_kopyala
+     * (E002 dar gevsetme: *T -> metin) -> icerik korunuyor. */
+    test_bolge_al_dosya("bolge_al_grow", "grow bellek_kopyala");
+}
+
+static void test_bolge_al_negatifler(void) {
+    /* BL001: beklenen *T baglami yok -> ret. Ters cast metin -> *T
+     * KAPALI (E002 dar gevsetme yalniz *T -> metin yonu acti). */
+    int ok1 = kemgu_check_basarili("test/snapshots/bolge_al_bl001.kem");
+    test_sonuc("bolge_al: beklenen *T yok -> BL001 reddi", ok1 == 0);
+    int ok2 = kemgu_check_basarili("test/snapshots/bolge_al_ters_cast.kem");
+    test_sonuc("bolge_al: metin -> *T ters cast KAPALI (E002)", ok2 == 0);
+}
+
+static void test_bolge_al_guvensiz_gate(void) {
+    /* G001 tutarliligi: *T indeksleme guvensiz DISINDA reddedilir. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<Bellek> = yetki_olustur(3, 3); "
+        "de\xc4\x9fi\xc5\x9fken v: *tam32 = b\xc3\xb6lge_al(y, 4); "
+        "g\xc3\xbcvensiz { v[0] = 42; "
+        "de\xc4\x9fi\xc5\x9fken s: tam32 = v[0]; "
+        "geri_al(y); ver s; } ver 1; }");
+    test_sonuc("bolge_al: tam32 temel round-trip -> exit 42", rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
@@ -1980,6 +2032,12 @@ int main(void) {
     test_audit_linear_imha();
 
     printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
+    printf("\n--- v1 bolge-container: bolge_al<T> + *T indeksleme ---\n");
+    test_bolge_al_guvensiz_gate();
+    test_bolge_al_genislikler();
+    test_bolge_al_grow_copy();
+    test_bolge_al_negatifler();
+
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
 
