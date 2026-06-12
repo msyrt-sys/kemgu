@@ -1682,11 +1682,27 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * '; HATA: cagri hedefi tanimlayici degil' + SESSIZ 0. */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_YOL) {
-                char tam_ad[256];
-                int tuz = yol_noktali_ad(d->veri.cagri.hedef,
-                                         tam_ad, (int)sizeof(tam_ad));
-                IslevKayit *mik = (tuz > 0)
-                    ? islev_bul(g, tam_ad, tuz) : NULL;
+                const Dugum *yol_h = d->veri.cagri.hedef;
+                IslevKayit *mik = NULL;
+                /* Tek-gecis ad cozumu: binding'deki TAM onek + sag_ad ile
+                 * mangle — goreli yol (m icinden ic::f -> @m.ic.f) dogru
+                 * cozulur; eski string-knit yalniz yazildigi segmentleri
+                 * biliyordu. Binding yoksa eski yola dus. */
+                if (yol_h->cozum_kategori == COZUM_MODUL_UYESI &&
+                    yol_h->cozum_modul_onek) {
+                    int muz = 0;
+                    const char *mangled = modul_mangle(g,
+                        yol_h->cozum_modul_onek, yol_h->cozum_modul_onek_uz,
+                        yol_h->veri.yol.sag_ad, yol_h->veri.yol.sag_ad_uzunluk,
+                        &muz);
+                    if (mangled) mik = islev_bul(g, mangled, muz);
+                }
+                if (!mik) {
+                    char tam_ad[256];
+                    int tuz = yol_noktali_ad(yol_h,
+                                             tam_ad, (int)sizeof(tam_ad));
+                    mik = (tuz > 0) ? islev_bul(g, tam_ad, tuz) : NULL;
+                }
                 if (mik) {
                     int n = d->veri.cagri.sayi;
                     IfadeSonuc *args = NULL;
@@ -2192,20 +2208,48 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
             }
 
-            IslevKayit *ik = islev_bul(g,
-                d->veri.cagri.hedef->veri.tanimlayici.metin,
-                d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
-            /* D-001: modul govdesi icinden kardes islev ciplak-ad cagrisi
-             * — duz ad bulunamadiysa aktif onekle ("<modul>.<ad>") dene.
-             * Built-in'ler kayitli olmadigi icin etkilenmez. */
-            if (!ik && g->aktif_modul_onek) {
+            /* === Tek-gecis ad cozumu (bkz. ast.h CozumKategorisi) ===
+             * Resolver binding'i varsa arama ANAHTARINI o belirler —
+             * string'le yeniden cozum YOK; tip kontrol ile codegen insa
+             * geregi ayni sembole baglanir. Binding yoksa (COZUM_YOK:
+             * built-in'ler, resolver kosmamis AST'ler) eski global-first
+             * + aktif-onek-fallback yolu korunur (graceful degradation). */
+            const Dugum *cg_hedef = d->veri.cagri.hedef;
+            IslevKayit *ik = NULL;
+            if (cg_hedef->cozum_kategori == COZUM_MODUL_UYESI &&
+                cg_hedef->cozum_modul_onek) {
+                /* Modul uyesi: resolver'in yazdigi onekle mangle et —
+                 * ayni adli global VARSA BILE ona dusulmez. */
                 int muz = 0;
                 const char *mangled = modul_mangle(g,
-                    g->aktif_modul_onek, g->aktif_modul_onek_uz,
-                    d->veri.cagri.hedef->veri.tanimlayici.metin,
-                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk, &muz);
+                    cg_hedef->cozum_modul_onek,
+                    cg_hedef->cozum_modul_onek_uz,
+                    cg_hedef->veri.tanimlayici.metin,
+                    cg_hedef->veri.tanimlayici.uzunluk, &muz);
                 if (mangled) ik = islev_bul(g, mangled, muz);
+            } else if (cg_hedef->cozum_kategori == COZUM_GLOBAL) {
+                ik = islev_bul(g,
+                    cg_hedef->veri.tanimlayici.metin,
+                    cg_hedef->veri.tanimlayici.uzunluk);
+            } else if (cg_hedef->cozum_kategori == COZUM_YOK) {
+                ik = islev_bul(g,
+                    cg_hedef->veri.tanimlayici.metin,
+                    cg_hedef->veri.tanimlayici.uzunluk);
+                /* D-001: modul govdesi icinden kardes islev ciplak-ad
+                 * cagrisi — duz ad bulunamadiysa aktif onekle
+                 * ("<modul>.<ad>") dene. Built-in'ler kayitli olmadigi
+                 * icin etkilenmez. */
+                if (!ik && g->aktif_modul_onek) {
+                    int muz = 0;
+                    const char *mangled = modul_mangle(g,
+                        g->aktif_modul_onek, g->aktif_modul_onek_uz,
+                        cg_hedef->veri.tanimlayici.metin,
+                        cg_hedef->veri.tanimlayici.uzunluk, &muz);
+                    if (mangled) ik = islev_bul(g, mangled, muz);
+                }
             }
+            /* COZUM_YEREL: ik NULL kalir — asagidaki indirect-call yolu
+             * (function pointer lokali/parametresi) devralir. */
 
             /* Adim 7: Indirect call — hedef bir parametre/lokal degisken
              * (function pointer) ise call ptr ile ara. Args burada erken

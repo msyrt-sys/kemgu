@@ -9,6 +9,7 @@
 #include "llvm.h"
 #include "lsp.h"
 #include "wcet.h"
+#include "hata.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,6 +154,15 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
  * (benchmark kacis yolu). */
 static int g_llvm_dogrula = 1;
 
+/* Tek-gecis ad cozumu: resolver gecisinde hatalar susturulur —
+ * --llvm tip hatali programlarda da eskisi gibi emit etmeye devam
+ * eder (binding'siz dugumler codegen'de string fallback'ine duser). */
+static void sessiz_hata_cb(int satir, int sutun, const char *kod,
+                           const char *mesaj, const char *ipucu, void *ctx) {
+    (void)satir; (void)sutun; (void)kod;
+    (void)mesaj; (void)ipucu; (void)ctx;
+}
+
 static int mode_llvm(const char *kaynak, const char *dosya_adi) {
     Arena *a = arena_olustur(0);
     if (!a) {
@@ -169,6 +179,21 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
                 p.hata_sayisi);
         arena_serbest(a);
         return 1;
+    }
+
+    /* Tek-gecis ad cozumu: resolver (tip_kontrol) binding'leri AST'ye
+     * yazar, codegen string'le yeniden cozmek yerine bunlari tuketir
+     * (bkz. ast.h CozumKategorisi). Scope/Sembol'ler ayni arena'da —
+     * binding pointer'lari llvm_ir_uret boyunca gecerli. */
+    if (prog) {
+        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        if (g) {
+            TipKontrol tk;
+            tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
+            hata_callback_ayarla(sessiz_hata_cb, NULL);
+            tip_kontrol_program(&tk, prog);
+            hata_callback_ayarla(NULL, NULL);
+        }
     }
 
     /* --no-verify: kapi kapali, dogrudan emit.
