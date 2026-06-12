@@ -255,11 +255,18 @@ iterasyon_başı(d) → yeni(ρ_iterasyon(d))
 ## Güvenlik Teoremleri
 
 **Teorem 1 — Bellek Güvenliği:** Serbest bırakılmış bölgeye erişim yok
+  *(V1 bundled mekanize 2026-05-18: `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean`*
+  *— `t1_bellek_guvenligi_tam`; sAtama h_owner garantisi ile UAF prevention.*
+  *V2 T2/T3 + lifecycle: bkz. `KEMGU_Metateorem_V3.md`.)*
 **Teorem 2 — Bölge Güvenliği:** Her bölge tam 1 kez yaratılır, 1 kez serbest bırakılır
 **Teorem 3 — Sızıntısızlık:** Erişilemeyen bölge sonlu sürede serbest bırakılır
 **Teorem 4 — Data Race Freedom:** Güvenli alt kümede data race imkansız
 **Teorem 5 — Güvensiz Sınır Bütünlüğü:** Ham pointer güvensiz bloktan çıkamaz
 **Teorem 6 — Bölge Bölme Doğruluğu:** Optimizasyon gözlemlenebilir davranışı değiştirmez
+
+**V3 Bütünleşik Metateorem M** (2026-05-18, V1 bundled mekanize):
+T1 + Teorem 4' + SCR (placeholder) + BET (placeholder) → birleşik
+`kemgu_soundness_v3`. Bkz. [`KEMGU_Metateorem_V3.md`](KEMGU_Metateorem_V3.md).
 
 ### Teorem 4 İspat Taslağı (Tarihsel — V1 öncesi informel)
 
