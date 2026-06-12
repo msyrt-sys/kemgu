@@ -137,6 +137,31 @@ typedef enum {
     OP_DEREFERANS,     /* *x */
 } Operator;
 
+/* === Tek-gecis ad cozumu (resolver binding) ===
+ *
+ * Resolver (tip_kontrol.c) ad-referansi dugumlerine (DUGUM_TANIMLAYICI,
+ * DUGUM_YOL) kazanan sembolu ve kategorisini YAZAR; codegen (llvm.c)
+ * adlari string'le yeniden COZMEZ, bu kaydi TUKETIR. Boylece tip kontrol
+ * ile codegen insa geregi ayni sembole anlasir (onceki sapma: tip kontrol
+ * module-first/lexical, codegen global-first cozuyordu).
+ *
+ * dugum_olustur arena_ayir_sifir kullandigi icin varsayilan deger
+ * COZUM_YOK / NULL — resolver kosmamis AST'lerde (or. dogrudan
+ * llvm_ir_uret cagrilari) codegen eski string yoluna duser (graceful
+ * degradation). Built-in'ler (yazdir, dizi_ekle, tekkez_yarat, ...)
+ * sembol tablosunda olmadigi icin COZUM_YOK kalir — codegen'in built-in
+ * eslemeleri etkilenmez. */
+
+struct Sembol;  /* sembol.h — circular include yerine forward decl
+                   (sembol.h ast.h'yi include eder) */
+
+typedef enum {
+    COZUM_YOK = 0,      /* resolver yazmadi (varsayilan) */
+    COZUM_YEREL,        /* islev/blok scope — lokal degisken/parametre */
+    COZUM_MODUL_UYESI,  /* modul uyesi — mangling oneki cozum_modul_onek */
+    COZUM_GLOBAL,       /* global scope tanimi */
+} CozumKategorisi;
+
 /* === Dugum yapisi (tagged union) === */
 
 typedef struct Dugum Dugum;
@@ -145,6 +170,14 @@ struct Dugum {
     DugumTipi tip;
     int satir;             /* 1'den baslar */
     int sutun;             /* 1'den baslar (UTF-8 byte konumu) */
+
+    /* Tek-gecis ad cozumu binding'i (yalniz ad-referansi dugumlerinde
+     * dolu). cozum_modul_onek COZUM_MODUL_UYESI icin "m1.m2" formatinda
+     * noktali mangling onekidir (llvm.c modul_mangle ile ayni sema). */
+    const struct Sembol *cozum_sembol;
+    CozumKategorisi cozum_kategori;
+    const char *cozum_modul_onek;
+    int cozum_modul_onek_uz;
 
     union {
         /* === Ust duzey === */

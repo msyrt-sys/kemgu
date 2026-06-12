@@ -1,0 +1,10 @@
+// Tek-geçiş ad çözümü ön-koşul testi: modül işlev gövdeleri tip
+// kontrolüne DAHİL olmalı. Önceki durum: tip_kontrol_tanim işlev
+// sembolünü yalnız global scope'ta arıyordu (sembol modül scope'unda)
+// → sessiz erken dönüş → gövde HİÇ denetlenmiyordu; bariz tip hatası
+// --check'ten geçiyordu.
+modül m {
+    dışa işlev bozuk() -> tam32 { ver doğru; }
+}
+
+işlev main() -> tam32 { ver 0; }
