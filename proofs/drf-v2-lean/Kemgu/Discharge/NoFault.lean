@@ -134,7 +134,7 @@ theorem step_fault_preserves_typed
       exact typing_excludes_sLinImhaHataZatenTuketildi Γ Δ ctx.lineer Ρ
         x τ' Λ'' Ρ'' h_typed h_tuket
   -- ============ Congruence kurallari: odaklama + IH ============
-  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_typed_S h_no_fault
       subst h_S1 h_S'
       have h_ctx_in : ctx ∈ S.thread := by
@@ -151,7 +151,7 @@ theorem step_fault_preserves_typed
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx a).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1
-  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_typed_S h_no_fault
       subst h_S1 h_S'
       have h_ctx_in : ctx ∈ S.thread := by
@@ -168,7 +168,7 @@ theorem step_fault_preserves_typed
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1
-  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_typed_S h_no_fault
       subst h_S1 h_S'
       have h_ctx_in : ctx ∈ S.thread := by
@@ -1749,15 +1749,15 @@ theorem adim_korunum
   -- (4) comp-8/9 buyuyen kume: b'nin hedefleri Ρmid'de yazilabilir
   --     (r_seq ikinci premise) → yaz_geri ile a-dokunmamis →
   --     sahiplik korunmus.
-  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_konf
       -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (yukaridaki blok).
       sorry
-  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_konf
       -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (sSeqCong blogu).
       sorry
-  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_konf
       -- TODO 🔴 TEK BLOKER: odak-adim guclendirilmis-IH (sSeqCong blogu).
       sorry

@@ -105,7 +105,8 @@ theorem progress_konf
     (h_lin : ctx.lineer = Λin) :
     IsValue e ∨ Engelli S e
     ∨ (∃ S' ctx' ts2', Step S S' ∧ S'.thread = ts1 ++ ctx' :: ts2'
-         ∧ ctx'.tid = ctx.tid) := by
+         ∧ ctx'.tid = ctx.tid
+         ∧ (ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y])) := by
   induction e generalizing S ts1 ts2 ctx τ Λin Λ' Ρ' with
   | tanim x =>
       obtain ⟨_, _, _, _, _, _, _, _, _, h_bagli, _, _, _, _, _⟩ := h_konf
@@ -113,7 +114,8 @@ theorem progress_konf
       | HasType.t_tanim _ _ _ _ h_get =>
         obtain ⟨b, v, h_b, h_v, _⟩ := h_bagli x τ h_get
         exact Or.inr (Or.inr ⟨_, { ctx with ifade := .sabit v }, ts2,
-          Step.sVarOku S _ ts1 ts2 ctx x b v h_t h_if h_b h_v rfl, rfl, rfl⟩)
+          Step.sVarOku S _ ts1 ts2 ctx x b v h_t h_if h_b h_v rfl, rfl, rfl,
+          Or.inl rfl⟩)
   | sabit v =>
       exact Or.inl (IsValue.iv_sabit v)
   | atama x e ih_e =>
@@ -131,7 +133,7 @@ theorem progress_konf
         have h_hvar := h_konf.2.2.2.2.2.2.2.1
         rcases ih_e τx Λin Λ' Ρ' h_te h_le h_re (ifadeyleKonf S ts1 ts2 ctx e)
             h_konf1 ts1 ts2 { ctx with ifade := e } rfl rfl h_lin with
-            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1⟩
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
         · -- e deger → sAtamaTamam
           cases h_val with
           | iv_sabit v =>
@@ -141,7 +143,7 @@ theorem progress_konf
               (by rw [h_if]; exact HedefVar.atama_bas x (.sabit v)) b h_b_S h_yaz
             exact Or.inr (Or.inr ⟨_, { ctx with ifade := .sabit .birim }, ts2,
               Step.sAtamaTamam S _ ts1 ts2 ctx x v b h_t h_if h_b_S h_owner rfl,
-              rfl, rfl⟩)
+              rfl, rfl, Or.inl rfl⟩)
         · -- e engelli → atama da engelli
           exact Or.inr (Or.inl (Engelli.atama_ic x e
             (engelli_konf_transfer S ts1 ts2 ctx e e h_eng h_t
@@ -151,8 +153,8 @@ theorem progress_konf
             ts2',
             Step.sAtamaCong S _ (ifadeyleKonf S ts1 ts2 ctx e) S1'
               ts1 ts2 ts2' ctx ctx1' x e ctx1'.ifade
-              h_t h_if rfl h_step1 h_t1' h_tid1 rfl rfl,
-            rfl, h_tid1⟩)
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
   | seq a b ih_a _ih_b =>
       match h_ht, h_lt, h_rt with
       | HasType.t_seq _ _ _ _ τa _ hta _,
@@ -164,12 +166,13 @@ theorem progress_konf
           (fun bb h => by rw [h_if]; exact HedefBolge.seq_sol a b bb h)
         rcases ih_a τa Λin Λa Ρa hta hla hra (ifadeyleKonf S ts1 ts2 ctx a)
             h_konf1 ts1 ts2 { ctx with ifade := a } rfl rfl h_lin with
-            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1⟩
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
         · -- a deger → sSeqAtla
           cases h_val with
           | iv_sabit v =>
             exact Or.inr (Or.inr ⟨_, { ctx with ifade := b }, ts2,
-              Step.sSeqAtla S _ ts1 ts2 ctx v b h_t h_if rfl, rfl, rfl⟩)
+              Step.sSeqAtla S _ ts1 ts2 ctx v b h_t h_if rfl, rfl, rfl,
+              Or.inl rfl⟩)
         · -- a engelli → seq de engelli
           exact Or.inr (Or.inl (Engelli.seq_sol a b
             (engelli_konf_transfer S ts1 ts2 ctx a a h_eng h_t
@@ -179,8 +182,8 @@ theorem progress_konf
             ts2',
             Step.sSeqCong S _ (ifadeyleKonf S ts1 ts2 ctx a) S1'
               ts1 ts2 ts2' ctx ctx1' a ctx1'.ifade b
-              h_t h_if rfl h_step1 h_t1' h_tid1 rfl rfl,
-            rfl, h_tid1⟩)
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
   | gorevBaslat yd kod _ih_kod =>
       match h_rt with
       | RegionTamam.r_gorev_baslat _ _ _ _ _ _ tY h_yazlar _ _ _ _ =>
@@ -202,7 +205,7 @@ theorem progress_konf
           ts2 ++ [⟨tazeTid S, kod, yd.map (fun v => (v, Lineerlik.aktif))⟩],
           Step.cGorevBaslatTamam S _ ts1 ts2 ctx (tazeTid S) yd kod
             h_t h_if (tazeTid_fresh S) h_sahipler rfl,
-          by simp, rfl⟩)
+          by simp, rfl, Or.inr ⟨_, rfl⟩⟩)
   | gorevBirlestir g =>
       by_cases h_var : ∃ hctx ∈ S.thread, ∃ vSon : Deger,
           hctx.ifade = Ifade.sabit vSon
@@ -211,7 +214,7 @@ theorem progress_konf
           Step.cGorevBirlestirTamam S _ ts1 ts2 ctx g hctx.tid []
             h_t h_if ⟨hctx, h_in, rfl, vSon, h_v⟩
             (fun bb h => nomatch h) rfl,
-          rfl, rfl⟩)
+          rfl, rfl, Or.inl rfl⟩)
       · refine Or.inr (Or.inl (Engelli.birlestir g ?_))
         intro hctx h_in v h_eq
         exact h_var ⟨hctx, h_in, v, h_eq⟩
@@ -238,7 +241,7 @@ theorem progress_konf
                          lineer := lineerTuket ctx.lineer v }, ts2,
               Step.cKanalGonderTamam S _ ts1 ts2 ctx k v bv val
                 h_t h_if h_b_S h_val h_owner h_q rfl,
-              rfl, rfl⟩)
+              rfl, rfl, Or.inl rfl⟩)
   | kanalAlIf k =>
       obtain ⟨_, _, _, _, _, _, _, _, _, _, h_transit, _, _, _, _⟩ := h_konf
       cases h_q : kanalIlk S.kanal k with
@@ -264,7 +267,7 @@ theorem progress_konf
           rw [h_kid] at h_tb
           exact Or.inr (Or.inr ⟨_, { ctx with ifade := .sabit v }, ts2,
             Step.cKanalAlTamam S _ ts1 ts2 ctx k v tb h_t h_if h_q h_tb rfl,
-            rfl, rfl⟩)
+            rfl, rfl, Or.inl rfl⟩)
   | dondurIf b =>
       match h_rt with
       | RegionTamam.r_dondur _ _ _ _ x h_gx h_yaz _ =>
@@ -275,7 +278,8 @@ theorem progress_konf
           (by rw [h_if]; exact HedefBolge.dondur_bas b)
           ⟨x, by rw [h_beq]; exact h_gx⟩ h_yaz
         exact Or.inr (Or.inr ⟨_, { ctx with ifade := .sabit .birim }, ts2,
-          Step.cDondurTamam S _ ts1 ts2 ctx b h_t h_if h_owner rfl, rfl, rfl⟩)
+          Step.cDondurTamam S _ ts1 ts2 ctx b h_t h_if h_owner rfl, rfl, rfl,
+          Or.inl rfl⟩)
   | kullanIf x =>
       match h_lt with
       | LineerTamam.l_kullan _ _ _ _ _ h_aktif =>
@@ -286,7 +290,7 @@ theorem progress_konf
                      lineer := lineerOrtamUpdate ctx.lineer x
                                  Lineerlik.tuketildi }, ts2,
           Step.sLinKullanTamam S _ ts1 ts2 ctx x h_t h_if h_aktif_ctx rfl,
-          rfl, rfl⟩)
+          rfl, rfl, Or.inl rfl⟩)
   | imhaIf x =>
       match h_lt with
       | LineerTamam.l_imha _ _ _ _ _ h_aktif =>
@@ -297,7 +301,7 @@ theorem progress_konf
                      lineer := lineerOrtamUpdate ctx.lineer x
                                  Lineerlik.tuketildi }, ts2,
           Step.sLinImhaTamam S _ ts1 ts2 ctx x h_t h_if h_aktif_ctx rfl,
-          rfl, rfl⟩)
+          rfl, rfl, Or.inl rfl⟩)
   | guvensiz e ih_e =>
       match h_ht, h_lt, h_rt with
       | HasType.t_guvensiz _ _ _ _ hte,
@@ -309,11 +313,12 @@ theorem progress_konf
           (fun bb h => by rw [h_if]; exact HedefBolge.guvensiz_ic e bb h)
         rcases ih_e τ Λin Λ' Ρ' hte hle hre (ifadeyleKonf S ts1 ts2 ctx e)
             h_konf1 ts1 ts2 { ctx with ifade := e } rfl rfl h_lin with
-            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1⟩
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
         · cases h_val with
           | iv_sabit v =>
             exact Or.inr (Or.inr ⟨_, { ctx with ifade := .sabit v }, ts2,
-              Step.sGuvensizAtla S _ ts1 ts2 ctx v h_t h_if rfl, rfl, rfl⟩)
+              Step.sGuvensizAtla S _ ts1 ts2 ctx v h_t h_if rfl, rfl, rfl,
+              Or.inl rfl⟩)
         · exact Or.inr (Or.inl (Engelli.guvensiz_ic e
             (engelli_konf_transfer S ts1 ts2 ctx e e h_eng h_t
               (fun v h => by rw [h_if] at h; cases h))))
@@ -321,7 +326,7 @@ theorem progress_konf
             { ctx1' with ifade := .guvensiz ctx1'.ifade }, ts2',
             Step.sGuvensizCong S _ (ifadeyleKonf S ts1 ts2 ctx e) S1'
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
-              h_t h_if rfl h_step1 h_t1' h_tid1 rfl rfl,
-            rfl, h_tid1⟩)
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
 
 end Kemgu.Meta.ProgressKorunum
