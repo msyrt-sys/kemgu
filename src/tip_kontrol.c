@@ -946,6 +946,97 @@ static Scope *yol_modul_scope_coz(TipKontrol *tk, const Dugum *d) {
     return NULL;
 }
 
+/* === Tek-gecis ad cozumu: binding yazimi (bkz. ast.h CozumKategorisi) ===
+ *
+ * Resolver her ad-referansinda kazanan sembolu + kategorisini AST
+ * dugumune yazar; codegen string'le yeniden cozmek yerine bunu tuketir.
+ * Tek dogruluk kaynagi burasi. */
+
+/* SCOPE_MODUL scope'unun modul sembolunu bul: modul sembolu parent
+ * scope'a modul_scope=s ile kaydedilir (bkz. pre_populate_modul). */
+static const Sembol *scope_modul_sembolu(const Scope *s) {
+    if (!s || !s->parent) return NULL;
+    for (const SembolLink *l = s->parent->bas; l; l = l->sonraki) {
+        if (l->sembol.kategori == SEMBOL_MODUL &&
+            l->sembol.modul_scope == s) {
+            return &l->sembol;
+        }
+    }
+    return NULL;
+}
+
+/* SCOPE_MODUL scope'unun noktali mangling onekini turet ("m1.m2") —
+ * llvm.c modul_mangle ile ayni sema (KEMGU adlarinda '.' olamaz,
+ * cakisma yok). Arena'da null-terminated string doner; turetilemezse
+ * NULL (binding yazilmaz, codegen eski yola duser — guvenli taraf). */
+#define COZUM_MODUL_DERINLIK_MAX 16
+static const char *modul_onek_turet(TipKontrol *tk, const Scope *s,
+                                    int *out_uz) {
+    const Sembol *zincir[COZUM_MODUL_DERINLIK_MAX];
+    int n = 0;
+    const Scope *k = s;
+    while (k && k->kategori == SCOPE_MODUL) {
+        if (n >= COZUM_MODUL_DERINLIK_MAX) return NULL;
+        const Sembol *ms = scope_modul_sembolu(k);
+        if (!ms) return NULL;
+        zincir[n++] = ms;
+        k = k->parent;
+    }
+    if (n == 0) return NULL;
+    int toplam = n - 1;  /* noktalar */
+    for (int i = 0; i < n; i++) toplam += zincir[i]->ad_uzunluk;
+    char *onek = (char *)arena_ayir(tk->arena, (size_t)toplam + 1);
+    if (!onek) return NULL;
+    int poz = 0;
+    for (int i = n - 1; i >= 0; i--) {  /* distan ice: m1.m2 */
+        memcpy(onek + poz, zincir[i]->ad, (size_t)zincir[i]->ad_uzunluk);
+        poz += zincir[i]->ad_uzunluk;
+        if (i > 0) onek[poz++] = '.';
+    }
+    onek[toplam] = '\0';
+    if (out_uz) *out_uz = toplam;
+    return onek;
+}
+
+/* Kazanan sembolu d dugumune bagla. AST dugumleri arena'da yazilabilir
+ * nesnelerdir; resolver binding alanlarinin tek yazaridir — const'u
+ * yalniz bu noktada kaldiririz. */
+static void cozum_bagla(TipKontrol *tk, const Dugum *d,
+                        const Sembol *sem, const Scope *bulundugu) {
+    if (!d || !sem || !bulundugu) return;
+    Dugum *yd = (Dugum *)d;
+    if (bulundugu->kategori == SCOPE_GLOBAL) {
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_GLOBAL;
+    } else if (bulundugu->kategori == SCOPE_MODUL) {
+        int ouz = 0;
+        const char *onek = modul_onek_turet(tk, bulundugu, &ouz);
+        if (!onek) return;  /* onek yoksa binding yazma (COZUM_YOK kalir) */
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_MODUL_UYESI;
+        yd->cozum_modul_onek = onek;
+        yd->cozum_modul_onek_uz = ouz;
+    } else {
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_YEREL;
+    }
+}
+
+/* sembol_bul + binding: scope zincirini yuruyup kazanan sembolu VE
+ * bulundugu scope'u tespit eder, d'ye baglar. sembol_bul ile ayni
+ * arama sirasi (yerel -> iceren modul -> global). */
+static const Sembol *sembol_coz_ve_bagla(TipKontrol *tk, const Dugum *d,
+                                         const char *ad, int uz) {
+    for (const Scope *s = tk->scope; s; s = s->parent) {
+        const Sembol *sem = sembol_bul_yerel(s, ad, uz);
+        if (sem) {
+            cozum_bagla(tk, d, sem, s);
+            return sem;
+        }
+    }
+    return NULL;
+}
+
 /* T016 fix: bir yol-sol'unu (TANIMLAYICI ya da modul-yolu) bir çeşit
  * tanimina coz. Renk -> dogrudan; g::Renk -> modul g icinde Renk.
  * Boylece modul-nitelikli varyant erisimi g::Renk::Kirmizi calisir. */
@@ -1490,7 +1581,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 TipBilgisi *ic = tip_olustur_basit(tk->arena, TIP_BILINMIYOR);
                 return tip_olustur_secimlik(tk->arena, ic);
             }
-            const Sembol *s = sembol_bul(tk->scope,
+            /* Tek-gecis ad cozumu: kazanan sembol + kategori dugume
+             * yazilir (codegen tuketir — bkz. ast.h CozumKategorisi). */
+            const Sembol *s = sembol_coz_ve_bagla(tk, d,
                 d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
             if (!s) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
@@ -3009,6 +3102,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "modul uyesi bulunamadi");
                 return t_hata(tk);
             }
+            /* Tek-gecis ad cozumu: kazanan uye + TAM modul oneki YOL
+             * dugumune yazilir. Goreli yol (m icinden ic::g) boylece
+             * codegen'de dogru mangle edilir (@m.ic.g) — onceki string
+             * yolu yalniz yazildigi kadarini ("ic.g") biliyordu. */
+            cozum_bagla(tk, d, uye, msc);
             return uye->tip ? uye->tip : t_hata(tk);
         }
 
@@ -4261,15 +4359,31 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
     switch (d->tip) {
         case DUGUM_ISLEV: {
-            const Sembol *islev_sem = sembol_bul_yerel(tk->global_scope,
+            /* Tek-gecis ad cozumu on-kosulu: islev sembolu TANIMLANDIGI
+             * scope'ta aranir (tk->scope — modul uyesi icin DUGUM_MODUL
+             * case'i modul scope'unu kurdu). Onceki durum: yalniz
+             * tk->global_scope'a bakiliyordu -> modul islev govdeleri
+             * HIC denetlenmiyordu (sembol modul scope'unda, sessiz erken
+             * donus) ya da ayni adli global ikizin imzasina karsi
+             * denetleniyordu (arity farkinda OOB okuma). */
+            const Sembol *islev_sem = sembol_bul_yerel(tk->scope,
                 d->veri.islev.ad, d->veri.islev.ad_uzunluk);
             if (!islev_sem || !islev_sem->tip ||
                 islev_sem->tip->kategori != TIP_ISLEV) return;
+            /* Cift-tanim ikizinde (T024 zaten raporlandi) yanlis imzaya
+             * karsi denetimi ve parametre dizisi OOB'sini onle. Built-in
+             * golgelemesinde (ast_dugumu NULL) arity farki ayni OOB'yi
+             * tetiklerdi — sayilar uyusmuyorsa govdeyi atla. */
+            if (islev_sem->ast_dugumu && islev_sem->ast_dugumu != d) return;
+            if (islev_sem->tip->veri.islev.param_sayi !=
+                d->veri.islev.param_sayi) return;
 
             Scope *eski = tk->scope;
             TipBilgisi *eski_donus = tk->aktif_donus_tipi;
             tk->scope_seviyesi++;
-            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->global_scope);
+            /* Govde scope'unun parent'i tanimlandigi scope: modul
+             * uyesinde ciplak adlar once kardesleri gorur (lexical). */
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, eski);
             tk->aktif_donus_tipi = islev_sem->tip->veri.islev.donus;
 
             /* Generic params'i govde scope'una ekle */
