@@ -518,6 +518,205 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
 
 
 -- ============================================================
+-- §4.5. BolgeIliski + iliski-transport (Onarim v3 kapanis — cong
+-- odak-yuku Region ayagi). "Runtime-Ρn, statik-Ρo" iliskisi:
+-- yazilabilir kayitlar AYNEN korunur, kayitsizlik korunur, id'ler
+-- korunur — tum R-premise'leri bu iliski altinda tasinir ve iliski
+-- ciktilara KOMPOZISYONEL gecer (cong-zincirinin tek ihtiyaci).
+-- ============================================================
+
+/-- Ρn (runtime) ile Ρo (statik) iliskisi: (R2) yazilabilir-kayit
+    aynen-koruma, (R3) kayitsizlik-koruma, (R4) id-koruma. -/
+def BolgeIliski (Ρn Ρo : BolgeOrtam) : Prop :=
+  (∀ y bb, bolgeOrtamGet Ρo y = some bb →
+     kategoriYazilabilir bb.kategori = true → bolgeOrtamGet Ρn y = some bb)
+  ∧ (∀ y, bolgeOrtamGet Ρo y = none → bolgeOrtamGet Ρn y = none)
+  ∧ (∀ y bb, bolgeOrtamGet Ρo y = some bb →
+     ∃ bb', bolgeOrtamGet Ρn y = some bb' ∧ bb'.id = bb.id)
+
+theorem bolgeIliski_refl (Ρ : BolgeOrtam) : BolgeIliski Ρ Ρ :=
+  ⟨fun _ _ h _ => h, fun _ h => h, fun _ bb h => ⟨bb, h, rfl⟩⟩
+
+/-- sahipAta-cikti kayitsizligi giris kayitsizligini gerektirir. -/
+theorem sahipAta_get_none_inv (Ρ : BolgeOrtam) (yd : List VarId)
+    (t : ThreadId) (y : VarId)
+    (h : bolgeOrtamGet (bolgeOrtamSahipAta Ρ yd t) y = none) :
+    bolgeOrtamGet Ρ y = none := by
+  cases h_lk : bolgeOrtamGet Ρ y with
+  | none => rfl
+  | some b =>
+      by_cases h_in : y ∈ yd
+      · rw [sahipAta_get_in' Ρ yd t y b h_in h_lk] at h; cases h
+      · rw [sahipAta_get_notin Ρ yd t y h_in, h_lk] at h; cases h
+
+/-- ILISKI-TRANSPORT: BolgeIliski altinda region-tiplenme korunur ve
+    iliski CIKTILARA gecer. Tum premise'ler iliskiden ICERIDE turetilir
+    (r_atama FIX-G cikti-kontrolu sayesinde (R2) ile dogrudan compose
+    eder; yakalama/dondur/gonderim premise'leri yazilabilirlik uzerinden
+    aynen tasinir). -/
+theorem regionTamam_iliski_transport {Γ : TipOrtam}
+    {Ρo Ρout : BolgeOrtam} {e : Ifade}
+    (h : RegionTamam Γ Ρo e Ρout) :
+    ∀ Ρn, BolgeIliski Ρn Ρo →
+    ∃ Ρoutn, RegionTamam Γ Ρn e Ρoutn ∧ BolgeIliski Ρoutn Ρout := by
+  induction h with
+  | r_tanim _ x =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_tanim _ _ x, hi⟩
+  | r_sabit _ v =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_sabit _ _ v, hi⟩
+  | r_atama _ _ x e b _ h_gx h_yz ih =>
+      intro Ρn hi
+      obtain ⟨Ρen, h_re', hi'⟩ := ih Ρn hi
+      exact ⟨Ρen, RegionTamam.r_atama _ _ _ x e b h_re'
+        (hi'.1 x b h_gx h_yz) h_yz, hi'⟩
+  | r_seq _ _ _ a b _ _ ih_a ih_b =>
+      intro Ρn hi
+      obtain ⟨Ρan, h_ra', hi_a⟩ := ih_a Ρn hi
+      obtain ⟨Ρbn, h_rb', hi_b⟩ := ih_b Ρan hi_a
+      exact ⟨Ρbn, RegionTamam.r_seq _ _ _ _ a b h_ra' h_rb', hi_b⟩
+  | r_gorev_baslat Ρo' _ Ρkod yd kod tY h_cap h_khv h_khb _ h_eq ih =>
+      intro Ρn hi
+      subst h_eq
+      obtain ⟨Ρkodn, h_kod', _⟩ := ih Ρn hi
+      refine ⟨bolgeOrtamSahipAta Ρn yd tY,
+        RegionTamam.r_gorev_baslat _ _ _ Ρkodn yd kod tY ?_
+          h_khv h_khb h_kod' rfl, ?_, ?_, ?_⟩
+      · -- yakalama yazilabilirligi Ρn'de
+        intro v hv b h_lk
+        cases h_lko : bolgeOrtamGet Ρo' v with
+        | none => rw [hi.2.1 v h_lko] at h_lk; cases h_lk
+        | some b0 =>
+            have h_yz0 := h_cap v hv b0 h_lko
+            have h_n := hi.1 v b0 h_lko h_yz0
+            rw [h_n] at h_lk
+            rw [← Option.some.inj h_lk]
+            exact h_yz0
+      · -- (R2)
+        intro y bb h_o h_yzb
+        by_cases h_in : y ∈ yd
+        · cases h_lko : bolgeOrtamGet Ρo' y with
+          | none => rw [sahipAta_get_none Ρo' yd tY y h_lko] at h_o; cases h_o
+          | some b0 =>
+              rw [sahipAta_get_in' Ρo' yd tY y b0 h_in h_lko] at h_o
+              rw [← Option.some.inj h_o] at h_yzb
+              simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yzb
+        · rw [sahipAta_get_notin Ρo' yd tY y h_in] at h_o
+          rw [sahipAta_get_notin Ρn yd tY y h_in]
+          exact hi.1 y bb h_o h_yzb
+      · -- (R3)
+        intro y h_o
+        have h_bo := sahipAta_get_none_inv Ρo' yd tY y h_o
+        exact sahipAta_get_none Ρn yd tY y (hi.2.1 y h_bo)
+      · -- (R4)
+        intro y bb h_o
+        by_cases h_in : y ∈ yd
+        · cases h_lko : bolgeOrtamGet Ρo' y with
+          | none => rw [sahipAta_get_none Ρo' yd tY y h_lko] at h_o; cases h_o
+          | some b0 =>
+              rw [sahipAta_get_in' Ρo' yd tY y b0 h_in h_lko] at h_o
+              have h_yz0 := h_cap y h_in b0 h_lko
+              have h_n := hi.1 y b0 h_lko h_yz0
+              refine ⟨bolgeKategoriDegistir b0 (BolgeKategorisi.sahip tY),
+                sahipAta_get_in' Ρn yd tY y b0 h_in h_n, ?_⟩
+              rw [← Option.some.inj h_o]
+        · rw [sahipAta_get_notin Ρo' yd tY y h_in] at h_o
+          obtain ⟨bb', h_n, h_id⟩ := hi.2.2 y bb h_o
+          exact ⟨bb', (sahipAta_get_notin Ρn yd tY y h_in).trans h_n, h_id⟩
+  | r_gorev_birlestir _ g =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_gorev_birlestir _ _ g, hi⟩
+  | r_kanal_gonder Ρo' _ k v b h_lk h_yz h_eq =>
+      intro Ρn hi
+      subst h_eq
+      have h_n := hi.1 v b h_lk h_yz
+      refine ⟨bolgeOrtamUpdate Ρn v
+          (bolgeKategoriDegistir b (BolgeKategorisi.kanalRho k)),
+        RegionTamam.r_kanal_gonder _ _ _ k v b h_n h_yz rfl, ?_, ?_, ?_⟩
+      · intro y bb h_o h_yzb
+        rw [bolgeOrtamUpdate_get] at h_o
+        by_cases hv : v = y
+        · rw [if_pos hv] at h_o
+          rw [← Option.some.inj h_o] at h_yzb
+          simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yzb
+        · rw [if_neg hv] at h_o
+          rw [bolgeOrtamUpdate_get, if_neg hv]
+          exact hi.1 y bb h_o h_yzb
+      · intro y h_o
+        rw [bolgeOrtamUpdate_get] at h_o
+        by_cases hv : v = y
+        · rw [if_pos hv] at h_o; cases h_o
+        · rw [if_neg hv] at h_o
+          rw [bolgeOrtamUpdate_get, if_neg hv]
+          exact hi.2.1 y h_o
+      · intro y bb h_o
+        rw [bolgeOrtamUpdate_get] at h_o
+        rw [bolgeOrtamUpdate_get]
+        by_cases hv : v = y
+        · rw [if_pos hv] at h_o
+          rw [if_pos hv]
+          exact ⟨_, rfl, by rw [← Option.some.inj h_o]⟩
+        · rw [if_neg hv] at h_o
+          rw [if_neg hv]
+          exact hi.2.2 y bb h_o
+  | r_kanal_al _ k =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_kanal_al _ _ k, hi⟩
+  | r_dondur Ρo' _ b x h_lk h_yz h_eq =>
+      intro Ρn hi
+      subst h_eq
+      have h_n := hi.1 x b h_lk h_yz
+      refine ⟨bolgeOrtamDondurBolge Ρn b,
+        RegionTamam.r_dondur _ _ _ b x h_n h_yz rfl, ?_, ?_, ?_⟩
+      · intro y bb h_o h_yzb
+        rw [dondur_get] at h_o
+        cases h_lko : bolgeOrtamGet Ρo' y with
+        | none => rw [h_lko] at h_o; cases h_o
+        | some b0 =>
+            rw [h_lko, Option.map_some] at h_o
+            by_cases hid : b0.id = b.id
+            · rw [if_pos hid] at h_o
+              rw [← Option.some.inj h_o] at h_yzb
+              simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yzb
+            · rw [if_neg hid] at h_o
+              have h_b0bb := Option.some.inj h_o
+              rw [h_b0bb] at h_lko hid
+              have h_nn := hi.1 y bb h_lko h_yzb
+              rw [dondur_get, h_nn, Option.map_some, if_neg hid]
+      · intro y h_o
+        rw [dondur_get] at h_o
+        cases h_lko : bolgeOrtamGet Ρo' y with
+        | none =>
+            rw [dondur_get, hi.2.1 y h_lko]
+            rfl
+        | some b0 => rw [h_lko, Option.map_some] at h_o; cases h_o
+      · intro y bb h_o
+        rw [dondur_get] at h_o
+        cases h_lko : bolgeOrtamGet Ρo' y with
+        | none => rw [h_lko] at h_o; cases h_o
+        | some b0 =>
+            rw [h_lko, Option.map_some] at h_o
+            obtain ⟨b0', h_n0, h_id0⟩ := hi.2.2 y b0 h_lko
+            rw [dondur_get, h_n0, Option.map_some]
+            by_cases hid : b0.id = b.id
+            · rw [if_pos hid] at h_o
+              rw [if_pos (h_id0.trans hid)]
+              refine ⟨_, rfl, ?_⟩
+              rw [← Option.some.inj h_o]
+              exact h_id0
+            · rw [if_neg hid] at h_o
+              rw [if_neg (fun hh => hid (h_id0.symm.trans hh))]
+              refine ⟨b0', rfl, ?_⟩
+              rw [← Option.some.inj h_o]
+              exact h_id0
+  | r_kullan _ x =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_kullan _ _ x, hi⟩
+  | r_imha _ x =>
+      exact fun Ρn hi => ⟨Ρn, RegionTamam.r_imha _ _ x, hi⟩
+  | r_guvensiz _ _ e _ ih =>
+      intro Ρn hi
+      obtain ⟨Ρen, h_re', hi'⟩ := ih Ρn hi
+      exact ⟨Ρen, RegionTamam.r_guvensiz _ _ _ e h_re', hi'⟩
+
+
+-- ============================================================
 -- §5. NOT (Onarim v3 F1): birlesim + meta katmanlari TASINDI
 -- ============================================================
 -- Typed + ThreadTipliFull + KonfTipliFull (+intro/elim, bolgeOrtamBos)
