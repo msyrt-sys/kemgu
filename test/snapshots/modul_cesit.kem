@@ -1,0 +1,16 @@
+// T016 fix: modül-yerel çeşit + modül-nitelikli varyant erişimi
+// (g::Renk::Kirmizi) + modül-yerel çeşit üstünde eşleş. --check + 42.
+modül g {
+    çeşit Renk { Kirmizi, Yesil }
+    işlev kod(r: Renk) -> tam32 {
+        eşleş r {
+            Renk::Kirmizi => { ver 42; }
+            Renk::Yesil => { ver 0; }
+        }
+        ver 1;
+    }
+}
+
+işlev main() -> tam32 {
+    ver g::kod(g::Renk::Kirmizi);
+}
