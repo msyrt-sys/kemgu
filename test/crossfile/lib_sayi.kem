@@ -1,0 +1,4 @@
+// C2.6 cross-file fikstürü — taban kütüphane (transitif zincirin dibi).
+dışa işlev iki_kat(x: tam32) -> tam32 {
+    ver x * 2;
+}

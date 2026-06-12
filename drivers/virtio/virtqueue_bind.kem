@@ -1,0 +1,127 @@
+// VirtIO split virtqueue register binding: QueueSel..QueueReady, DMA allocation yok.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::virtio_mmio;
+kullan drivers::virtio::virtqueue_layout;
+
+sabit VIRTQUEUE_U32_MASK: tam64 = 4294967295;
+
+çeşit BagHatasi {
+    QueueKullanilamaz,
+    GecersizBoyut
+}
+
+yapı Virtqueue {
+    boyut: tam32;
+    desc_adres: tam64;
+    avail_adres: tam64;
+    used_adres: tam64;
+}
+
+işlev virtqueue_min(a: tam32, b: tam32) -> tam32 {
+    eğer a < b { ver a; }
+    ver b;
+}
+
+işlev virtqueue_adres_low(adres: tam64) -> tam32 {
+    ver (adres & VIRTQUEUE_U32_MASK) olarak tam32;
+}
+
+işlev virtqueue_adres_high(adres: tam64) -> tam32 {
+    ver (adres >> 32) olarak tam32;
+}
+
+işlev virtqueue_bagla_layout_gecerli_mi(
+    queue_num_max: tam32,
+    queue_num: tam32,
+    vq: &Virtqueue
+) -> mantıksal {
+    ver virtqueue_layout_gecerli_mi(
+        queue_num_max,
+        queue_num,
+        virtqueue_adres_low(vq.desc_adres),
+        virtqueue_adres_low(vq.avail_adres),
+        virtqueue_adres_low(vq.used_adres)
+    );
+}
+
+// TODO(codex-next-pr): descriptor/avail/used DMA allocation ve tekkez sahipligi eklenecek.
+
+// MMIO yetkisi queue register baglama boyunca sahiplenilir ve fonksiyon sonunda tek noktada iade edilir.
+işlev virtqueue_bagla(
+    // MMIO yetkisi QueueSel..QueueReady register erisimleri icin gereklidir.
+    y: yetki<MMIO>,
+    taban: tam64,
+    queue_index: tam16,
+    vq: &Virtqueue
+) -> sonuç<tam32, BagHatasi> {
+    değişken queue_kullanilamaz: mantıksal = yanlış;
+    değişken gecersiz_boyut: mantıksal = yanlış;
+    değişken queue_num: tam32 = 0;
+
+    mmio_yaz32(
+        y,
+        virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_SEL),
+        queue_index olarak tam32
+    );
+
+    değişken queue_num_max: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM_MAX));
+    eğer queue_num_max == 0 {
+        queue_kullanilamaz = doğru;
+    }
+
+    eğer değil queue_kullanilamaz {
+        queue_num = virtqueue_min(vq.boyut, queue_num_max);
+        eğer değil virtqueue_bagla_layout_gecerli_mi(queue_num_max, queue_num, vq) {
+            gecersiz_boyut = doğru;
+        }
+    }
+
+    eğer değil queue_kullanilamaz ve değil gecersiz_boyut {
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM), queue_num);
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DESC_LOW),
+            virtqueue_adres_low(vq.desc_adres)
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DESC_HIGH),
+            virtqueue_adres_high(vq.desc_adres)
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DRIVER_LOW),
+            virtqueue_adres_low(vq.avail_adres)
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DRIVER_HIGH),
+            virtqueue_adres_high(vq.avail_adres)
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DEVICE_LOW),
+            virtqueue_adres_low(vq.used_adres)
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_DEVICE_HIGH),
+            virtqueue_adres_high(vq.used_adres)
+        );
+
+        // TODO(codex): explicit dmb ishst -- C-track barrier intrinsic'i bekliyor.
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_READY), 1);
+    }
+
+    geri_al(y);
+
+    eğer queue_kullanilamaz {
+        ver hata(BagHatasi::QueueKullanilamaz);
+    }
+    eğer gecersiz_boyut {
+        ver hata(BagHatasi::GecersizBoyut);
+    }
+    ver tamam(queue_num);
+}

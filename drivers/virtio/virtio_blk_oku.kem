@@ -1,0 +1,192 @@
+// VirtIO-blk sektör okuma (blk_oku): 3-descriptor zinciri + host-mock tamamlanma.
+//
+// Handle modeli NOTU: D1/D3/D6 deseni bileşik veriyi `&Struct` ile geçirir.
+// blk_oku BY-VALUE struct alır (Virtqueue/BlkAygit/Tampon512) — Mehmet onayı.
+// Sebep: `&Struct` referans-parametreli + `sonuç<>` dönüşlü fonksiyon mevcut
+// codegen'de (src/llvm.c) host-mock'ta segfault ediyor (latent bug; aynısı
+// virtqueue_bagla'yı ve dolayısıyla blk_baslat init testini de etkiliyor).
+// KEMGU "bileşik tipler otomatik referansla aktarılır" (CLAUDE.md) olduğundan
+// read-only input'lar için by-value semantik aynıdır (kopya yok). Çıktı tamponu
+// Tampon512={adres} adres-indireksiyonu ile yazılır (zero-copy DMA). Codegen
+// bug'ı C-track'te düzeltilince `&`-imzasına mekanik geri dönülebilir.
+
+kullan drivers::virtio::virtqueue_bind;   // Virtqueue
+kullan drivers::virtio::virtio_blk;       // BlkAygit
+
+// VirtIO 1.2 §2.7.5 — split virtqueue descriptor flag'leri
+sabit VIRTQ_DESC_F_NEXT: tam16 = 1;       // zincir devam ediyor (next geçerli)
+sabit VIRTQ_DESC_F_WRITE: tam16 = 2;      // device-write (cihaz bu tampona yazar)
+
+// VirtIO 1.2 §5.2.6 — virtio-blk istek tipi ve status baytı
+sabit VIRTIO_BLK_T_IN: tam32 = 0;         // sektör OKUMA
+sabit VIRTIO_BLK_S_OK: tam16 = 0;
+sabit VIRTIO_BLK_S_IOERR: tam16 = 1;
+sabit VIRTIO_BLK_S_UNSUPP: tam16 = 2;
+
+sabit BLK_SEKTOR_BYTE: tam64 = 512;       // tek sektör = 512 byte
+sabit BLK_SEKTOR_WORD: tam32 = 128;       // 512 / 4 (32-bit kelime sayısı)
+
+// descriptor alan offsetleri (16-byte stride): addr le64, len le32, flags le16, next le16
+sabit DESC_STRIDE: tam64 = 16;
+sabit DESC_ADDR: tam64 = 0;
+sabit DESC_LEN: tam64 = 8;
+sabit DESC_FLAGS: tam64 = 12;
+sabit DESC_NEXT: tam64 = 14;
+
+// avail/used ring offsetleri (base: flags le16 @+0, idx le16 @+2, ring @+4)
+sabit RING_IDX: tam64 = 2;
+sabit AVAIL_RING0: tam64 = 4;             // avail.ring[0] (le16 desc head)
+sabit USED_RING0_ID: tam64 = 4;           // used.ring[0].id (le32)
+sabit USED_RING0_LEN: tam64 = 8;          // used.ring[0].len (le32)
+
+// request header offsetleri (type le32 @+0, reserved le32 @+4, sector le64 @+8)
+sabit BLK_HDR_RESERVED: tam64 = 4;
+sabit BLK_HDR_SECTOR: tam64 = 8;
+
+// Sürücü-içi scratch DMA tamponları. Host-mock'ta sabit adres; gerçek DMA
+// tahsisi (tekkez sahipliği) ileride — bkz. virtqueue_bind TODO.
+sabit BLK_REQ_HDR_ADRES: tam64 = 1024;    // 16 byte request header
+sabit BLK_REQ_STATUS_ADRES: tam64 = 1280; // 1 byte status (+pad)
+
+// host_mock_status sentineli: cihaz tamamlamasını simüle ETME (gerçek HW yolu).
+sabit BLK_HOST_MOCK_TAMAMLAMA_YOK: tam16 = 255;
+
+çeşit IOHatasi {
+    AygitHatasi,         // VIRTIO_BLK_S_IOERR — cihaz G/Ç hatası
+    Desteklenmiyor,      // VIRTIO_BLK_S_UNSUPP — istek tipi desteklenmiyor
+    GecersizSektor,      // sürücü: sektor >= aygit.kapasite_sektor
+    DescriptorTukendi,   // sürücü: zincir için yeterli boş descriptor yok (< 3)
+    TamamlanmaYok        // sürücü: used.idx ilerlemedi (poll'da ilerleme yok)
+}
+
+// Caller'ın 512B okuma tamponunun mock-fiziksel adresi (zero-copy DMA hedefi).
+yapı Tampon512 {
+    adres: tam64;
+}
+
+// MMIO yetkisi sektör okuma boyunca sahiplenilir ve fonksiyon sonunda tek
+// noktada iade edilir. host_mock_status: host-mock cihazın yazacağı status
+// baytı (Faz 1 simülasyonu); BLK_HOST_MOCK_TAMAMLAMA_YOK ile tamamlama atlanır.
+işlev blk_oku_cekirdek(
+    // MMIO yetkisi descriptor/avail/used ring ve scratch tampon erişimlerini yetkilendirir.
+    y: yetki<MMIO>,
+    vq: Virtqueue,
+    aygit: BlkAygit,
+    sektor: tam64,
+    tampon: Tampon512,
+    host_mock_status: tam16
+) -> sonuç<boş, IOHatasi> {
+    // hata_kodu: 0=OK 1=GecersizSektor 2=DescriptorTukendi 3=AygitHatasi
+    //            4=Desteklenmiyor 5=TamamlanmaYok (tek geri_al + tek mapping)
+    değişken hata_kodu: tam32 = 0;
+
+    eğer sektor >= aygit.kapasite_sektor {
+        hata_kodu = 1;
+    }
+    eğer hata_kodu == 0 {
+        eğer vq.boyut < 3 {
+            hata_kodu = 2;
+        }
+    }
+
+    eğer hata_kodu == 0 {
+        değişken d: tam64 = vq.desc_adres;
+
+        // desc[0] header (device-READ): istek başlığını gösterir
+        mmio_yaz64(y, d + DESC_ADDR, BLK_REQ_HDR_ADRES);
+        mmio_yaz32(y, d + DESC_LEN, 16);
+        mmio_yaz16(y, d + DESC_FLAGS, VIRTQ_DESC_F_NEXT);
+        mmio_yaz16(y, d + DESC_NEXT, 1 olarak tam16);
+
+        // desc[1] data (device-WRITE): cihaz sektör verisini buraya yazar
+        mmio_yaz64(y, d + DESC_STRIDE + DESC_ADDR, tampon.adres);
+        mmio_yaz32(y, d + DESC_STRIDE + DESC_LEN, BLK_SEKTOR_BYTE olarak tam32);
+        mmio_yaz16(y, d + DESC_STRIDE + DESC_FLAGS, VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE);
+        mmio_yaz16(y, d + DESC_STRIDE + DESC_NEXT, 2 olarak tam16);
+
+        // desc[2] status (device-WRITE): cihaz status baytını buraya yazar
+        mmio_yaz64(y, d + DESC_STRIDE + DESC_STRIDE + DESC_ADDR, BLK_REQ_STATUS_ADRES);
+        mmio_yaz32(y, d + DESC_STRIDE + DESC_STRIDE + DESC_LEN, 1);
+        mmio_yaz16(y, d + DESC_STRIDE + DESC_STRIDE + DESC_FLAGS, VIRTQ_DESC_F_WRITE);
+        mmio_yaz16(y, d + DESC_STRIDE + DESC_STRIDE + DESC_NEXT, 0 olarak tam16);
+
+        // request header: type=IN (read), reserved=0, sector (le64)
+        mmio_yaz32(y, BLK_REQ_HDR_ADRES, VIRTIO_BLK_T_IN);
+        mmio_yaz32(y, BLK_REQ_HDR_ADRES + BLK_HDR_RESERVED, 0);
+        mmio_yaz64(y, BLK_REQ_HDR_ADRES + BLK_HDR_SECTOR, sektor);
+
+        // used.idx'i publish öncesi oku (poll referansı — son görülen idx)
+        değişken eski_used: tam16 = mmio_oku16(y, vq.used_adres + RING_IDX);
+
+        // avail publish: ring[0]=head(desc 0), avail.idx++
+        mmio_yaz16(y, vq.avail_adres + AVAIL_RING0, 0 olarak tam16);
+        değişken eski_avail: tam16 = mmio_oku16(y, vq.avail_adres + RING_IDX);
+        mmio_yaz16(y, vq.avail_adres + RING_IDX, eski_avail + (1 olarak tam16));
+
+        // TODO(C10): bare-metal'de buraya `dmb ishst` gerekir — avail yazımı
+        // cihaz okumasından ÖNCE görünür olmalı (DMA ring ordering). Host-mock'ta
+        // bariyer no-op olduğu için D9 bu PR'da bariyersiz çalışır.
+
+        // ===== HOST-MOCK CİHAZ SİMÜLASYONU (Faz 1) =====================
+        // Gerçek HW (D10): bu blok KALKAR; cihaz veriyi/status'u/used ring'i
+        // kendisi doldurur, sürücü IRQ ile tamamlanmayı bekler. Şimdilik used
+        // ring'i ve veriyi host_mock_status'a göre burada üretiyoruz.
+        eğer host_mock_status != BLK_HOST_MOCK_TAMAMLAMA_YOK {
+            eğer host_mock_status == VIRTIO_BLK_S_OK {
+                // sektöre bağlı deterministik 512B doldur (gerçek diskte cihaz yazar)
+                değişken adr: tam64 = tampon.adres;
+                değişken i: tam32 = 0;
+                iken i < BLK_SEKTOR_WORD {
+                    mmio_yaz32(y, adr, (sektor olarak tam32) + i);
+                    adr = adr + (4 olarak tam64);
+                    i = i + 1;
+                }
+            }
+            mmio_yaz16(y, BLK_REQ_STATUS_ADRES, host_mock_status);
+            mmio_yaz32(y, vq.used_adres + USED_RING0_ID, 0);
+            mmio_yaz32(y, vq.used_adres + USED_RING0_LEN, BLK_SEKTOR_BYTE olarak tam32);
+            mmio_yaz16(y, vq.used_adres + RING_IDX, eski_used + (1 olarak tam16));
+        }
+        // ===== /SİMÜLASYON =============================================
+
+        // used ring poll: idx son görülenden ilerlediyse istek tamamlandı
+        değişken yeni_used: tam16 = mmio_oku16(y, vq.used_adres + RING_IDX);
+        eğer yeni_used == eski_used {
+            hata_kodu = 5;
+        }
+        eğer hata_kodu == 0 {
+            // cihaz status baytını oku ve IOHatasi'ya map'le (le16; üst bayt 0)
+            değişken st: tam16 = mmio_oku16(y, BLK_REQ_STATUS_ADRES);
+            eğer st == VIRTIO_BLK_S_IOERR {
+                hata_kodu = 3;
+            }
+            eğer st == VIRTIO_BLK_S_UNSUPP {
+                hata_kodu = 4;
+            }
+        }
+    }
+
+    geri_al(y);
+
+    eğer hata_kodu == 1 { ver hata(IOHatasi::GecersizSektor); }
+    eğer hata_kodu == 2 { ver hata(IOHatasi::DescriptorTukendi); }
+    eğer hata_kodu == 3 { ver hata(IOHatasi::AygitHatasi); }
+    eğer hata_kodu == 4 { ver hata(IOHatasi::Desteklenmiyor); }
+    eğer hata_kodu == 5 { ver hata(IOHatasi::TamamlanmaYok); }
+    ver tamam(boş);
+}
+
+// Public API: bir sektörü vq üzerinden okuyup tampon.adres'e yazar.
+// NOT (Faz 1): host-mock'ta cihaz tamamlamasını başarı (OK) olarak simüle eder.
+// Hata yolları (IOERR/UNSUPP) blk_oku_cekirdek'e host_mock_status verilerek test
+// edilir. Gerçek HW tamamlaması D10 (IRQ) ile gelir.
+işlev blk_oku(
+    // MMIO yetkisi sektör okuma dizisi için caller'dan devralınır ve iade edilir.
+    y: yetki<MMIO>,
+    vq: Virtqueue,
+    aygit: BlkAygit,
+    sektor: tam64,
+    tampon: Tampon512
+) -> sonuç<boş, IOHatasi> {
+    ver blk_oku_cekirdek(y, vq, aygit, sektor, tampon, VIRTIO_BLK_S_OK);
+}

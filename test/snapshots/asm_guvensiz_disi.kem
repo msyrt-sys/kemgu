@@ -1,0 +1,14 @@
+// C5 G002: satıriçi_asm güvensiz blok DIŞINDA — --check reddetmeli.
+işlev f() -> tam32 {
+    değişken x: tam32 = 0;
+    satıriçi_asm {
+        mimari: x86_64
+        şablon: r#"nop"#
+        çıktı("=r", &x)
+    }
+    ver x;
+}
+
+işlev main() -> tam32 {
+    ver 0;
+}

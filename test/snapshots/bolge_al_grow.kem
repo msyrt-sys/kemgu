@@ -1,0 +1,14 @@
+işlev main() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken eski: *tam32 = bölge_al(y, 4);
+    değişken yeni: *tam32 = bölge_al(y, 16);
+    değişken sonuc: tam32 = 0;
+    güvensiz {
+        eski[0] = 10; eski[1] = 11; eski[2] = 12; eski[3] = 9;
+        bellek_kopyala(yeni olarak metin, eski olarak metin, 16);
+        yeni[4] = 100;
+        sonuc = yeni[0] + yeni[1] + yeni[2] + yeni[3];
+    }
+    geri_al(y);
+    ver sonuc;
+}

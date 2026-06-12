@@ -1,0 +1,192 @@
+// Virtqueue binding host-mock testi: register etkileri gercek MMIO primitive'leriyle okunur.
+
+sabit TEST_MMIO_OKU: tam32 = 1;
+sabit TEST_MMIO_YAZ: tam32 = 2;
+sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
+sabit TEST_DESC_ADRES: tam64 = 4294971392;
+sabit TEST_AVAIL_ADRES: tam64 = 8589942784;
+sabit TEST_USED_ADRES: tam64 = 12884914176;
+sabit TEST_DESC_BOZUK_ADRES: tam64 = 4294971393;
+
+işlev virtqueue_bind_test_vq(boyut: tam32) -> Virtqueue {
+    ver Virtqueue {
+        boyut: boyut,
+        desc_adres: TEST_DESC_ADRES,
+        avail_adres: TEST_AVAIL_ADRES,
+        used_adres: TEST_USED_ADRES
+    };
+}
+
+// MMIO yetkisi host-mock queue registerlarini test oncesi hazirlamak icin kullanilir.
+işlev virtqueue_bind_test_seed(
+    // MMIO yetkisi seed yazimlari boyunca odunc kullanilip caller'a geri verilir.
+    y: yetki<MMIO>,
+    queue_num_max: tam32
+) -> yetki<MMIO> {
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_SEL), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM_MAX), queue_num_max);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_READY), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_HIGH), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_HIGH), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_LOW), 0);
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_HIGH), 0);
+    ver y;
+}
+
+işlev virtqueue_bind_test_basari(queue_index: tam16, boyut: tam32, queue_num_max: tam32, beklenen_num: tam32) -> mantıksal {
+    değişken vq: Virtqueue = virtqueue_bind_test_vq(boyut);
+    // MMIO yetkisi queue binding basari yoluna devredilip fonksiyon icinde iade edilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan binding fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtqueue_bind_test_seed(y0, queue_num_max);
+    değişken sonuc: sonuç<tam32, BagHatasi> =
+        virtqueue_bagla(y1, VIRTIO_MMIO_TABAN, queue_index, &vq);
+
+    eşleş sonuc {
+        tamam(queue_num_sonuc) => {
+            // MMIO yetkisi binding sonrasi register readback icin ayrica uretilir.
+            değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+            değişken queue_sel: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_SEL));
+            değişken queue_num: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_NUM));
+            değişken desc_low: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_LOW));
+            değişken desc_high: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DESC_HIGH));
+            değişken driver_low: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_LOW));
+            değişken driver_high: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DRIVER_HIGH));
+            değişken device_low: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_LOW));
+            değişken device_high: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_DEVICE_HIGH));
+            değişken ready: tam32 =
+                mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_READY));
+            geri_al(y2);
+
+            ver queue_num_sonuc == beklenen_num ve
+                queue_sel == (queue_index olarak tam32) ve
+                queue_num == beklenen_num ve
+                desc_low == virtqueue_adres_low(TEST_DESC_ADRES) ve
+                desc_high == virtqueue_adres_high(TEST_DESC_ADRES) ve
+                driver_low == virtqueue_adres_low(TEST_AVAIL_ADRES) ve
+                driver_high == virtqueue_adres_high(TEST_AVAIL_ADRES) ve
+                device_low == virtqueue_adres_low(TEST_USED_ADRES) ve
+                device_high == virtqueue_adres_high(TEST_USED_ADRES) ve
+                ready == 1;
+        }
+        hata(BagHatasi::QueueKullanilamaz) => {
+            ver yanlış;
+        }
+        hata(BagHatasi::GecersizBoyut) => {
+            ver yanlış;
+        }
+    }
+    ver yanlış;
+}
+
+işlev virtqueue_bind_test_hata(boyut: tam32, queue_num_max: tam32, beklenen_hata: BagHatasi) -> mantıksal {
+    değişken vq: Virtqueue = virtqueue_bind_test_vq(boyut);
+    // MMIO yetkisi queue binding hata yoluna devredilir; hata yolunda fonksiyon tarafindan iade edilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan binding fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtqueue_bind_test_seed(y0, queue_num_max);
+    değişken sonuc: sonuç<tam32, BagHatasi> =
+        virtqueue_bagla(y1, VIRTIO_MMIO_TABAN, 0, &vq);
+
+    eşleş sonuc {
+        tamam(queue_num_sonuc) => {
+            ver yanlış;
+        }
+        hata(BagHatasi::QueueKullanilamaz) => {
+            eşleş beklenen_hata {
+                BagHatasi::QueueKullanilamaz => { ver doğru; }
+                BagHatasi::GecersizBoyut => { ver yanlış; }
+            }
+        }
+        hata(BagHatasi::GecersizBoyut) => {
+            eşleş beklenen_hata {
+                BagHatasi::QueueKullanilamaz => { ver yanlış; }
+                BagHatasi::GecersizBoyut => { ver doğru; }
+            }
+        }
+    }
+    ver yanlış;
+}
+
+işlev test_queue_index_0_7_register_yazilir() -> mantıksal {
+    ver virtqueue_bind_test_basari(0, 8, 8, 8) ve
+        virtqueue_bind_test_basari(1, 8, 8, 8) ve
+        virtqueue_bind_test_basari(2, 8, 8, 8) ve
+        virtqueue_bind_test_basari(3, 8, 8, 8) ve
+        virtqueue_bind_test_basari(4, 8, 8, 8) ve
+        virtqueue_bind_test_basari(5, 8, 8, 8) ve
+        virtqueue_bind_test_basari(6, 8, 8, 8) ve
+        virtqueue_bind_test_basari(7, 8, 8, 8);
+}
+
+işlev test_queue_num_max_sifir_hata() -> mantıksal {
+    ver virtqueue_bind_test_hata(8, 0, BagHatasi::QueueKullanilamaz);
+}
+
+işlev test_queue_num_min_secimi() -> mantıksal {
+    ver virtqueue_bind_test_basari(0, 16, 8, 8);
+}
+
+işlev test_queue_size_iki_kuvveti_degil_hata() -> mantıksal {
+    ver virtqueue_bind_test_hata(6, 8, BagHatasi::GecersizBoyut);
+}
+
+işlev test_adres_low_high_bolunur() -> mantıksal {
+    ver virtqueue_adres_low(TEST_DESC_ADRES) == 4096 ve
+        virtqueue_adres_high(TEST_DESC_ADRES) == 1 ve
+        virtqueue_adres_low(TEST_AVAIL_ADRES) == 8192 ve
+        virtqueue_adres_high(TEST_AVAIL_ADRES) == 2 ve
+        virtqueue_adres_low(TEST_USED_ADRES) == 12288 ve
+        virtqueue_adres_high(TEST_USED_ADRES) == 3;
+}
+
+işlev test_alignment_bozuk_hata() -> mantıksal {
+    değişken vq: Virtqueue = Virtqueue {
+        boyut: 8,
+        desc_adres: TEST_DESC_BOZUK_ADRES,
+        avail_adres: TEST_AVAIL_ADRES,
+        used_adres: TEST_USED_ADRES
+    };
+    // MMIO yetkisi bozuk alignment hata yolunu calistirmak icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan binding fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = virtqueue_bind_test_seed(y0, 8);
+    değişken sonuc: sonuç<tam32, BagHatasi> =
+        virtqueue_bagla(y1, VIRTIO_MMIO_TABAN, 0, &vq);
+
+    eşleş sonuc {
+        tamam(queue_num_sonuc) => {
+            ver yanlış;
+        }
+        hata(BagHatasi::QueueKullanilamaz) => {
+            ver yanlış;
+        }
+        hata(BagHatasi::GecersizBoyut) => {
+            ver doğru;
+        }
+    }
+    ver yanlış;
+}
+
+işlev main() -> tam32 {
+    eğer test_queue_index_0_7_register_yazilir() ve
+       test_queue_num_max_sifir_hata() ve
+       test_queue_num_min_secimi() ve
+       test_queue_size_iki_kuvveti_degil_hata() ve
+       test_adres_low_high_bolunur() ve
+       test_alignment_bozuk_hata() {
+        ver 0;
+    }
+    ver 1;
+}

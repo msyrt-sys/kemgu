@@ -1,0 +1,4 @@
+işlev main() -> tam32 {
+    değişken n: tam32 = bölge_al(yetki_olustur(3,3), 4);
+    ver 0;
+}

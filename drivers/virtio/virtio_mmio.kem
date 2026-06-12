@@ -1,0 +1,332 @@
+// VirtIO MMIO v2 transport: gercek MMIO register erisimi, DMA allocation yok.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::status;
+kullan drivers::virtio::features;
+kullan drivers::virtio::virtqueue_layout;
+
+sabit VIRTIO_MMIO_TABAN: tam64 = 167772160;        // 0x0A000000, QEMU virt slot 0
+sabit VIRTIO_MMIO_MAGIC_BEKLENEN: tam32 = 1953655158; // 0x74726976
+sabit VIRTIO_MMIO_VERSION_MODERN: tam32 = 2;
+sabit VIRTIO_MMIO_DEVICE_ID_BLOCK: tam32 = 2;
+sabit VIRTIO_MMIO_FEATURE_SEL_LOW: tam32 = 0;
+sabit VIRTIO_MMIO_QUEUE_SEL0: tam32 = 0;
+sabit VIRTIO_MMIO_DESC_TEST_ADRES: tam32 = 4096;
+sabit VIRTIO_MMIO_AVAIL_TEST_ADRES: tam32 = 8192;
+sabit VIRTIO_MMIO_USED_TEST_ADRES: tam32 = 12288;
+sabit VIRTIO_MMIO_HATA_YOK: tam32 = 0;
+sabit VIRTIO_MMIO_HATA_MAGIC: tam32 = 101;
+sabit VIRTIO_MMIO_HATA_VERSION: tam32 = 102;
+sabit VIRTIO_MMIO_HATA_DEVICE: tam32 = 103;
+sabit VIRTIO_MMIO_HATA_STATUS: tam32 = 104;
+sabit VIRTIO_MMIO_HATA_FEATURE: tam32 = 105;
+sabit VIRTIO_MMIO_HATA_FEATURES_OK: tam32 = 106;
+sabit VIRTIO_MMIO_HATA_QUEUE: tam32 = 107;
+
+yapı VirtioMmioProbeSonuc {
+    magic: tam32;
+    version: tam32;
+    device_id: tam32;
+    vendor_id: tam32;
+    modern: mantıksal;
+    block: mantıksal;
+}
+
+yapı VirtioMmioInitSonuc {
+    magic: tam32;
+    version: tam32;
+    device_id: tam32;
+    accepted_features: dtam64;
+    queue_num_max: tam32;
+    queue_size: tam32;
+    final_status: tam32;
+}
+
+yapı VirtioMmioInitDurum {
+    basarili: mantıksal;
+    hata_kodu: tam32;
+    magic: tam32;
+    version: tam32;
+    device_id: tam32;
+    accepted_features: dtam64;
+    queue_num_max: tam32;
+    queue_size: tam32;
+    final_status: tam32;
+}
+
+işlev virtio_mmio_adres(taban: tam64, offset: tam64) -> tam64 {
+    ver taban + offset;
+}
+
+işlev virtio_mmio_magic_gecerli_mi(magic: tam32) -> mantıksal {
+    ver magic == VIRTIO_MMIO_MAGIC_BEKLENEN;
+}
+
+işlev virtio_mmio_version_modern_mi(version: tam32) -> mantıksal {
+    ver version == VIRTIO_MMIO_VERSION_MODERN;
+}
+
+işlev virtio_mmio_block_device_mi(device_id: tam32) -> mantıksal {
+    ver device_id == VIRTIO_MMIO_DEVICE_ID_BLOCK;
+}
+
+işlev virtio_mmio_features_ok_set_mi(status: tam32) -> mantıksal {
+    ver (status & VIRTIO_STATUS_FEATURES_OK) == VIRTIO_STATUS_FEATURES_OK;
+}
+
+işlev virtio_mmio_queue_layout_gecerli_mi(queue_num_max: tam32, queue_size: tam32) -> mantıksal {
+    ver virtqueue_layout_gecerli_mi(
+        queue_num_max,
+        queue_size,
+        VIRTIO_MMIO_DESC_TEST_ADRES,
+        VIRTIO_MMIO_AVAIL_TEST_ADRES,
+        VIRTIO_MMIO_USED_TEST_ADRES
+    );
+}
+
+// MMIO yetkisi probe boyunca register okumalari icin sahiplenilir ve sonda iade edilir.
+işlev virtio_mmio_probe(y: yetki<MMIO>, taban: tam64) -> VirtioMmioProbeSonuc {
+    değişken magic: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_MAGIC_VALUE));
+    değişken version: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_VERSION));
+    değişken device_id: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_ID));
+    değişken vendor_id: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_VENDOR_ID));
+
+    eğer virtio_mmio_magic_gecerli_mi(magic) ve
+       virtio_mmio_version_modern_mi(version) ve
+       virtio_mmio_block_device_mi(device_id) {
+        yazdir_metin("[virtio-mmio] device detected: magic=0x74726976 version=2 device_id=2");
+    }
+
+    geri_al(y);
+    ver VirtioMmioProbeSonuc {
+        magic: magic,
+        version: version,
+        device_id: device_id,
+        vendor_id: vendor_id,
+        modern: virtio_mmio_version_modern_mi(version),
+        block: virtio_mmio_block_device_mi(device_id)
+    };
+}
+
+// MMIO yetkisi tek status okumasini yapmak icin sahiplenilir ve sonda iade edilir.
+işlev virtio_mmio_status_oku(y: yetki<MMIO>, taban: tam64) -> tam32 {
+    değişken status: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS));
+    geri_al(y);
+    ver status;
+}
+
+// MMIO yetkisi tek status yazmasini yapmak icin sahiplenilir ve sonda iade edilir.
+işlev virtio_mmio_status_yaz(y: yetki<MMIO>, taban: tam64, deger: tam32) {
+    mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), deger);
+    geri_al(y);
+}
+
+// MMIO yetkisi init handshake boyunca odunc register erisimleri icin sahiplenilir.
+işlev virtio_mmio_transport_init_durum(
+    // MMIO yetkisi gercek register handshake'i boyunca ayni scope'ta odunc kullanilir.
+    y: yetki<MMIO>,
+    taban: tam64,
+    driver_supported: dtam64,
+    driver_required: dtam64,
+    queue_size: tam32
+) -> VirtioMmioInitDurum {
+    değişken magic: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_MAGIC_VALUE));
+    değişken version: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_VERSION));
+    değişken device_id: tam32 =
+        mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_ID));
+
+    değişken hata_kodu: tam32 = VIRTIO_MMIO_HATA_YOK;
+    değişken status: tam32 = VIRTIO_STATUS_RESET;
+    değişken device_features: dtam64 = 0;
+    değişken accepted_features: dtam64 = 0;
+    değişken queue_num_max: tam32 = 0;
+
+    eğer değil virtio_mmio_magic_gecerli_mi(magic) {
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+        hata_kodu = VIRTIO_MMIO_HATA_MAGIC;
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_mmio_version_modern_mi(version) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_VERSION;
+        }
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_mmio_block_device_mi(device_id) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_DEVICE;
+        }
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_ACKNOWLEDGE) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
+        }
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_ACKNOWLEDGE);
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
+        }
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER);
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_FEATURES_SEL),
+            VIRTIO_MMIO_FEATURE_SEL_LOW
+        );
+        değişken device_features_low: tam32 =
+            mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_DEVICE_FEATURES));
+        device_features = device_features_low olarak dtam64;
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_feature_negotiation_gecerli_mi(
+            device_features,
+            driver_supported,
+            driver_required
+        ) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_FEATURE;
+        }
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        accepted_features = virtio_feature_kabul_maskesi(device_features, driver_supported);
+        değişken accepted_low: tam32 = accepted_features olarak tam32;
+
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_DRIVER_FEATURES_SEL),
+            VIRTIO_MMIO_FEATURE_SEL_LOW
+        );
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_DRIVER_FEATURES),
+            accepted_low
+        );
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_FEATURES_OK) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
+        }
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_FEATURES_OK);
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        değişken features_ok_readback: tam32 =
+            mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS));
+        eğer değil virtio_mmio_features_ok_set_mi(features_ok_readback) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_FEATURES_OK;
+        }
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        mmio_yaz32(
+            y,
+            virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_SEL),
+            VIRTIO_MMIO_QUEUE_SEL0
+        );
+        queue_num_max =
+            mmio_oku32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_QUEUE_NUM_MAX));
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_mmio_queue_layout_gecerli_mi(queue_num_max, queue_size) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_QUEUE;
+        }
+    }
+
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        eğer değil virtio_status_gecis_gecerli_mi(status, VIRTIO_STATUS_DRIVER_OK) {
+            mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), VIRTIO_STATUS_FAILED);
+            hata_kodu = VIRTIO_MMIO_HATA_STATUS;
+        }
+    }
+    eğer hata_kodu == VIRTIO_MMIO_HATA_YOK {
+        status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER_OK);
+        mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), status);
+
+        yazdir_metin("[virtio-mmio] device detected: magic=0x74726976 version=2 device_id=2");
+    }
+
+    geri_al(y);
+
+    ver VirtioMmioInitDurum {
+        basarili: hata_kodu == 0,
+        hata_kodu: hata_kodu,
+        magic: magic,
+        version: version,
+        device_id: device_id,
+        accepted_features: accepted_features,
+        queue_num_max: queue_num_max,
+        queue_size: queue_size,
+        final_status: status
+    };
+}
+
+// MMIO yetkisi sonuc tabanli init API'sine devredilir ve cekirdek tarafindan iade edilir.
+işlev virtio_mmio_transport_init(
+    // MMIO yetkisi durum cekirdegine aktarilir; wrapper yetkiyi yeniden kullanmaz.
+    y: yetki<MMIO>,
+    taban: tam64,
+    driver_supported: dtam64,
+    driver_required: dtam64,
+    queue_size: tam32
+) -> sonuç<VirtioMmioInitSonuc, metin> {
+    değişken durum: VirtioMmioInitDurum =
+        virtio_mmio_transport_init_durum(
+            y,
+            taban,
+            driver_supported,
+            driver_required,
+            queue_size
+        );
+
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_MAGIC { ver hata("MagicGecersiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_VERSION { ver hata("VersionModernDegil"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_DEVICE { ver hata("DeviceBlokDegil"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_STATUS { ver hata("StatusGecisGecersiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURE { ver hata("FeatureNegotiationBasarisiz"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_FEATURES_OK { ver hata("FeaturesOkReddedildi"); }
+    eğer durum.hata_kodu == VIRTIO_MMIO_HATA_QUEUE { ver hata("QueueGecersiz"); }
+
+    ver tamam(VirtioMmioInitSonuc {
+        magic: durum.magic,
+        version: durum.version,
+        device_id: durum.device_id,
+        accepted_features: durum.accepted_features,
+        queue_num_max: durum.queue_num_max,
+        queue_size: durum.queue_size,
+        final_status: durum.final_status
+    });
+}

@@ -385,6 +385,7 @@ const char *token_tipi_adi(TokenTipi tip) {
         case TOK_VER: return "VER";
         case TOK_ISLEV: return "ISLEV";
         case TOK_YAPI: return "YAPI";
+        case TOK_CESIT: return "CESIT";
         case TOK_OZELLIK: return "OZELLIK";
         case TOK_MODUL: return "MODUL";
         case TOK_DEGISKEN: return "DEGISKEN";
@@ -418,6 +419,7 @@ const char *token_tipi_adi(TokenTipi tip) {
         case TOK_VEKTOR: return "VEKTOR";
         case TOK_GOREV: return "GOREV";
         case TOK_KANAL: return "KANAL";
+        case TOK_SATIRICI_ASM: return "SATIRICI_ASM";
         case TOK_TAMSAYI: return "TAMSAYI";
         case TOK_ONDALIK: return "ONDALIK";
         case TOK_METIN: return "METIN";

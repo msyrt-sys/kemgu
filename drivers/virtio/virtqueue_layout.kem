@@ -1,0 +1,149 @@
+// VirtIO virtqueue layout modeli: saf hesaplama, MMIO/DMA erisimi yok.
+
+yapı VirtqueueLayout {
+    queue_size: tam32;
+    desc_bytes: tam32;
+    avail_bytes: tam32;
+    used_bytes: tam32;
+    used_offset: tam32;
+    toplam_bytes: tam32;
+}
+
+işlev virtqueue_desc_elem_bytes() -> tam32 { ver 16; }
+
+işlev virtqueue_avail_base_bytes() -> tam32 { ver 6; }
+
+işlev virtqueue_avail_elem_bytes() -> tam32 { ver 2; }
+
+işlev virtqueue_used_base_bytes() -> tam32 { ver 6; }
+
+işlev virtqueue_used_elem_bytes() -> tam32 { ver 8; }
+
+işlev virtqueue_desc_align() -> tam32 { ver 16; }
+
+işlev virtqueue_avail_align() -> tam32 { ver 2; }
+
+işlev virtqueue_used_align() -> tam32 { ver 4; }
+
+// TODO(codex-next-pr): overflow-safe layout arithmetic.
+işlev virtqueue_layout_queue_size_ust_sinir() -> tam32 { ver 32768; }
+
+işlev virtqueue_iki_kuvveti_mi(n: tam32) -> mantıksal {
+    eğer n == 0 { ver yanlış; }
+    ver (n & (n - 1)) == 0;
+}
+
+işlev virtqueue_queue_boyutu_gecerli_mi(queue_num_max: tam32, queue_size: tam32) -> mantıksal {
+    eğer queue_num_max == 0 { ver yanlış; }
+    eğer queue_size == 0 { ver yanlış; }
+    eğer queue_size > queue_num_max { ver yanlış; }
+    ver virtqueue_iki_kuvveti_mi(queue_size);
+}
+
+işlev virtqueue_layout_hesaplanabilir_mi(queue_size: tam32) -> mantıksal {
+    eğer queue_size == 0 { ver yanlış; }
+    ver queue_size <= virtqueue_layout_queue_size_ust_sinir();
+}
+
+işlev virtqueue_hizali_mi(adres: tam32, hizalama: tam32) -> mantıksal {
+    eğer hizalama == 0 { ver yanlış; }
+    ver adres % hizalama == 0;
+}
+
+işlev virtqueue_desc_hizali_mi(adres: tam32) -> mantıksal {
+    ver virtqueue_hizali_mi(adres, virtqueue_desc_align());
+}
+
+işlev virtqueue_avail_hizali_mi(adres: tam32) -> mantıksal {
+    ver virtqueue_hizali_mi(adres, virtqueue_avail_align());
+}
+
+işlev virtqueue_used_hizali_mi(adres: tam32) -> mantıksal {
+    ver virtqueue_hizali_mi(adres, virtqueue_used_align());
+}
+
+işlev virtqueue_alignment_gecerli_mi(desc_adres: tam32, avail_adres: tam32, used_adres: tam32) -> mantıksal {
+    ver virtqueue_desc_hizali_mi(desc_adres) ve
+        virtqueue_avail_hizali_mi(avail_adres) ve
+        virtqueue_used_hizali_mi(used_adres);
+}
+
+işlev virtqueue_desc_bytes_hesapla(queue_size: tam32) -> tam32 {
+    ver queue_size * virtqueue_desc_elem_bytes();
+}
+
+işlev virtqueue_avail_bytes_hesapla(queue_size: tam32) -> tam32 {
+    ver virtqueue_avail_base_bytes() + (queue_size * virtqueue_avail_elem_bytes());
+}
+
+işlev virtqueue_used_bytes_hesapla(queue_size: tam32) -> tam32 {
+    ver virtqueue_used_base_bytes() + (queue_size * virtqueue_used_elem_bytes());
+}
+
+işlev virtqueue_align_up(deger: tam32, hizalama: tam32) -> tam32 {
+    eğer hizalama == 0 { ver deger; }
+
+    değişken kalan: tam32 = deger % hizalama;
+    eğer kalan == 0 { ver deger; }
+    ver deger + (hizalama - kalan);
+}
+
+işlev virtqueue_used_offset_hesapla(queue_size: tam32) -> tam32 {
+    değişken desc_bytes: tam32 = virtqueue_desc_bytes_hesapla(queue_size);
+    değişken avail_bytes: tam32 = virtqueue_avail_bytes_hesapla(queue_size);
+    ver virtqueue_align_up(desc_bytes + avail_bytes, virtqueue_used_align());
+}
+
+işlev virtqueue_toplam_bytes_hesapla(queue_size: tam32) -> tam32 {
+    değişken used_offset: tam32 = virtqueue_used_offset_hesapla(queue_size);
+    değişken used_bytes: tam32 = virtqueue_used_bytes_hesapla(queue_size);
+    ver used_offset + used_bytes;
+}
+
+işlev virtqueue_layout_gecerli_mi(
+    queue_num_max: tam32,
+    queue_size: tam32,
+    desc_adres: tam32,
+    avail_adres: tam32,
+    used_adres: tam32
+) -> mantıksal {
+    eğer değil virtqueue_queue_boyutu_gecerli_mi(queue_num_max, queue_size) {
+        ver yanlış;
+    }
+    eğer değil virtqueue_layout_hesaplanabilir_mi(queue_size) {
+        ver yanlış;
+    }
+    ver virtqueue_alignment_gecerli_mi(desc_adres, avail_adres, used_adres);
+}
+
+işlev virtqueue_layout_hesapla(
+    queue_num_max: tam32,
+    queue_size: tam32,
+    desc_adres: tam32,
+    avail_adres: tam32,
+    used_adres: tam32
+) -> sonuç<VirtqueueLayout, metin> {
+    eğer queue_num_max == 0 { ver hata("QueueYok"); }
+    eğer queue_size == 0 { ver hata("QueueBoyutSifir"); }
+    eğer queue_size > queue_num_max { ver hata("QueueBoyutBuyuk"); }
+    eğer değil virtqueue_iki_kuvveti_mi(queue_size) { ver hata("QueueBoyutIkiKuvvetiDegil"); }
+    eğer değil virtqueue_layout_hesaplanabilir_mi(queue_size) { ver hata("QueueBoyutBuyuk"); }
+    eğer değil virtqueue_alignment_gecerli_mi(desc_adres, avail_adres, used_adres) {
+        ver hata("AlignmentGecersiz");
+    }
+
+    değişken desc_bytes: tam32 = virtqueue_desc_bytes_hesapla(queue_size);
+    değişken avail_bytes: tam32 = virtqueue_avail_bytes_hesapla(queue_size);
+    değişken used_bytes: tam32 = virtqueue_used_bytes_hesapla(queue_size);
+    değişken used_offset: tam32 = virtqueue_used_offset_hesapla(queue_size);
+    değişken toplam_bytes: tam32 = used_offset + used_bytes;
+
+    ver tamam(VirtqueueLayout {
+        queue_size: queue_size,
+        desc_bytes: desc_bytes,
+        avail_bytes: avail_bytes,
+        used_bytes: used_bytes,
+        used_offset: used_offset,
+        toplam_bytes: toplam_bytes
+    });
+}

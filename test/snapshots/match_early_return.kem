@@ -1,0 +1,30 @@
+// C1 regresyon fikstürü — eşleş erken-ver + tail-ver fall-through.
+//
+// Bu dosya bir IR/codegen fikstürüdür (AST snapshot baseline'ı DEĞİL;
+// test_snapshot.c hardcoded listesinde yer almaz). test_llvm.c tarafından
+// kullanılır: `kemgu --llvm` çıktısı `opt -passes=verify`'dan geçmeli ve
+// derlenip çalıştırıldığında her kol doğru seçilmelidir.
+//
+// `kademe`: 4 dallı eşleş. İki dal (0, 1) erken `ver` eder → kendi case
+// BB'leri `ret` ile biter. İki dal (2, 3) gövdesi `ver` etmez → tail
+// `ver 99`'a (eşleş sonrası) `br` ile düşer. Eşleşmeyen girdiler (ör. 7)
+// de aynı tail'e düşer. Hiçbir case BB'si terminator'sız kalmaz.
+
+işlev kademe(x: tam32) -> tam32 {
+    eşleş x {
+        0 => { ver 10; }
+        1 => { ver 20; }
+        2 => { }
+        3 => { }
+    }
+    ver 99;
+}
+
+işlev main() -> tam32 {
+    eğer kademe(0) != 10 { ver 1; }   // erken ver dalı
+    eğer kademe(1) != 20 { ver 2; }   // erken ver dalı
+    eğer kademe(2) != 99 { ver 3; }   // tail'e düşen dal
+    eğer kademe(3) != 99 { ver 4; }   // tail'e düşen dal
+    eğer kademe(7) != 99 { ver 5; }   // eşleşmeyen → tail
+    ver 42;
+}

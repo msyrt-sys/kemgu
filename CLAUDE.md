@@ -367,11 +367,14 @@ Tekli:  OP_NEG (-x), OP_DEGIL (değil x), OP_REF (&x),
     - `mode_check`: parser çalıştır + tip_kontrol_program → "OK" / "HATA"
     - **Test sonuçları:** `fibonacci.kem` ✓, `yapilar.kem` ✓ tip kontrolünden geçti
     - **Bilinen sınırlamalar (gelecek iyileştirmeler):**
-      - `hasta.kem`: `hiç` ve `değer(...)` ifade context'inde tanınmıyor
-        (parse_birincil'de TOK_HIC ve TOK_DEGER için case yok — pattern
-        matching dışında ifade olarak kullanım için ek destek gerekli)
-      - `eslesme.kem`: `eşleş` desen tanımlayıcıları (örn. `değer(s) => s`)
-        kol gövdesi scope'una eklenmiyor — pattern binding desteği eksik
+      - `hiç`/`değer`/`tamam`/`hata` yapıcıları, beklenen tip (sonuç/seçimlik)
+        bilindiğinde ifade context'inde çalışır (C2.5 codegen: `ver`, annotasyonlu
+        `değişken`). Beklenen tipin bilinmediği çıplak context (annotasyonsuz)
+        hâlâ çözülemez.
+      - **(GÜNCEL — C2.5):** `eşleş` yapıcı-deseni binding (`tamam(v)`/`hata(e)`/
+        `değer(s)`) hem tip kontrolünde (`tip_kontrol.c:3543-3577`) hem codegen'de
+        (`llvm.c` DUGUM_ESLES destructuring) ÇALIŞIR. Eski "pattern binding eksik"
+        notu geçersizdi — sorun yalnız codegen'deydi, o da C2.5'te kapandı.
 
 ### 🎉 TİP SİSTEMİ FAZI TAMAMLANDI (90 yeni test, toplam 365/365)
 
@@ -664,7 +667,7 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
   block içindeki son `ver` deyimi tip dönüşü V2)
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
-- **`hiç`/`değer` ifade desteği + pattern binding** (esles desen tanımlayıcıları scope'a)
+- ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
 - **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)

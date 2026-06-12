@@ -426,24 +426,32 @@ static Dugum *parse_onek(Parser *p) {
     int satir = t.satir;
     int sutun = t.sutun;
 
+    /* D-006: TUM onek operatorlerinin operandi parse_oncelik(p, ONC_ONEK)
+     * ile alinir (eskiden parse_onek ile, ki sonek YUTMUYORDU). Boylece
+     * sonek (. [] () :: olarak — ONC_SONEK=12 > ONC_ONEK=11) operanda
+     * baglanir, ikili operatorler (<=10) baglanmaz.
+     *   &p.x  -> &(p.x)      (eskiden (&p).x  -> kopya-adres -> SEGFAULT)
+     *   &d[i] -> &(d[i])     (eskiden (&d)[i])
+     *   *p.x  -> *(p.x),  -x.y -> -(x.y),  ~x.y -> ~(x.y)
+     * Ic ice onek (*&x, --x) korunur: parse_oncelik once parse_onek
+     * cagirir, o da bir sonraki oneki recursive isler. Binary '* &'
+     * (carpma/bit) ETKILENMEZ — onlar infix konumda, parse_onek'e hic
+     * girmez. 'degil' (Madde H) zaten bu deseni kullaniyordu. */
     switch (t.tip) {
         case TOK_EKSI: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_NEG, operand, satir, sutun);
         }
         case TOK_DEGIL: {
             parser_ilerle(p);
-            /* Madde H: degil X(args) -> degil (X(args)). Sonek operatorler
-             * onek'ten daha yuksek oncelikte (12 > 11), bu yuzden parse_oncelik
-             * ile ONC_ONEK seviyesinde recurse et — sonek alir, ikili dur. */
             Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_DEGIL, operand, satir, sutun);
         }
         case TOK_DEGIL_BIT: {
             /* ~x bitwise NOT */
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_BIT_DEGIL, operand, satir, sutun);
         }
         case TOK_VE_BIT: {
@@ -454,12 +462,12 @@ static Dugum *parse_onek(Parser *p) {
                 parser_ilerle(p);
                 op = OP_REF_DEGISKEN;
             }
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, op, operand, satir, sutun);
         }
         case TOK_YILDIZ: {
             parser_ilerle(p);
-            Dugum *operand = parse_onek(p);
+            Dugum *operand = parse_oncelik(p, ONC_ONEK);
             return dugum_tekli(p->arena, OP_DEREFERANS, operand, satir, sutun);
         }
         default:
@@ -806,6 +814,21 @@ Dugum *parse_tip(Parser *p) {
             d->veri.tip_islev.parametreler = liste_array_yap(&params, p->arena);
             d->veri.tip_islev.param_sayi = params.sayi;
             d->veri.tip_islev.donus_tip = donus;
+        }
+        return d;
+    }
+
+    /* === boş (TOK_BOS) — birim/unit tip (C2.7) ===
+     * `bos` (ASCII tanımlayıcı) zaten aşağıdaki TANIMLAYICI yolundan
+     * DUGUM_TIP_BASIT olur; `boş` keyword'ünü de aynı basit tipe indirger
+     * (tip pozisyonunda P011 yerine geçerli birim-tip). */
+    if (t.tip == TOK_BOS) {
+        parser_ilerle(p);
+        Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_BASIT, t.satir, t.sutun);
+        if (d) {
+            d->veri.tip_basit.ad =
+                ast_string_kopyala(p->arena, t.baslangic, t.uzunluk);
+            d->veri.tip_basit.ad_uzunluk = t.uzunluk;
         }
         return d;
     }
