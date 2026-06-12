@@ -73,14 +73,22 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
   | r_sabit (Γ : TipOrtam) (Ρ : BolgeOrtam) (v : Deger) :
               RegionTamam Γ Ρ (Ifade.sabit v) Ρ
 
-  /-- R-ATAMA (Plan §3.4): x'in bolgesi donmus olmamali; e icin region
-      tamam (Ρ → Ρ'); sonuc Ρ'.
-      Bu kural FROZEN YAZMA YASAGINI tasiyici. -/
+  /-- R-ATAMA (Plan §3.4): e icin region tamam (Ρ → Ρ'); x'in bolgesi
+      E-SONRASI ortamda (Ρ') yazilabilir olmali; sonuc Ρ'.
+      Bu kural FROZEN YAZMA YASAGINI tasiyici.
+
+      FIX-G (Onarim v3 kapanis — degerlendirme-sirasi sadakati):
+      x-kontrolu GIRIS ortami Ρ'dan CIKIS ortami Ρ''ye alindi. Yazma,
+      e degerlendirildikten SONRA gerceklesir — giris-ani kontrolu
+      `x := (x'i kanala gonderen e)` gibi use-after-send programlarini
+      statik kabul edip runtime fault'a dusurur (counterexample-2,
+      DECISIONS_LOG). Cikis-ani kontrolu yazma-aninin gercek bolge
+      durumunu denetler (KEMGU R-ATAMA aksiyomunun yazma-ani semantigi). -/
   | r_atama (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (x : VarId) (e : Ifade)
             (b : Bolge) :
-              bolgeOrtamGet Ρ x = some b →
-              kategoriYazilabilir b.kategori = true →
               RegionTamam Γ Ρ e Ρ' →
+              bolgeOrtamGet Ρ' x = some b →
+              kategoriYazilabilir b.kategori = true →
               RegionTamam Γ Ρ (Ifade.atama x e) Ρ'
 
   /-- R-SEQ: a Ρ → Ρa, b Ρa → Ρb; sonuc Ρb. -/
@@ -431,15 +439,16 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
       exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_tanim _ _ x, fun _ h => h⟩
   | r_sabit _ v =>
       exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_sabit _ _ v, fun _ h => h⟩
-  | r_atama _ _ x e b h_gx h_yz _ ih =>
+  | r_atama _ _ x e b _ h_gx h_yz ih =>
       intro Ρn h_hv h_hb
       obtain ⟨Ρe', h_re', h_agree⟩ := ih Ρn
         (fun y hy => h_hv y (HedefVar.atama_ic x e y hy))
         (fun x' bb hb hyz hlk =>
           h_hb x' bb (HedefBolge.atama_ic x e bb hb) hyz hlk)
-      have h_gx' : bolgeOrtamGet Ρn x = some b := by
-        rw [h_hv x (HedefVar.atama_bas x e)]; exact h_gx
-      exact ⟨Ρe', RegionTamam.r_atama _ _ _ x e b h_gx' h_yz h_re', h_agree⟩
+      have h_gx' : bolgeOrtamGet Ρe' x = some b := by
+        rw [h_agree x (h_hv x (HedefVar.atama_bas x e))]
+        exact h_gx
+      exact ⟨Ρe', RegionTamam.r_atama _ _ _ x e b h_re' h_gx' h_yz, h_agree⟩
   | r_seq _ _ _ a b h_ra _ ih_a ih_b =>
       intro Ρn h_hv h_hb
       obtain ⟨Ρa', h_ra', agree_a⟩ := ih_a Ρn

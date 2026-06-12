@@ -122,7 +122,7 @@ theorem progress_konf
       match h_ht, h_lt, h_rt with
       | HasType.t_atama _ _ _ _ τx h_gx h_te,
         LineerTamam.l_atama _ _ _ _ _ h_le,
-        RegionTamam.r_atama _ _ _ _ _ b h_gb h_yaz h_re =>
+        RegionTamam.r_atama _ _ _ _ _ b h_re h_gb h_yaz =>
         have h_ctx_in : ctx ∈ S.thread := by
           rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
         have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_konf h_t
@@ -134,9 +134,11 @@ theorem progress_konf
         rcases ih_e τx Λin Λ' Ρ' h_te h_le h_re (ifadeyleKonf S ts1 ts2 ctx e)
             h_konf1 ts1 ts2 { ctx with ifade := e } rfl rfl h_lin with
             h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
-        · -- e deger → sAtamaTamam
+        · -- e deger → sAtamaTamam (FIX-G: r_sabit → cikis = giris ortami)
           cases h_val with
           | iv_sabit v =>
+            match h_re with
+            | RegionTamam.r_sabit _ _ _ =>
             have h_b_S : bolgeOrtamGet S.bolge x = some b := by
               rw [h_beq]; exact h_gb
             have h_owner := h_hvar ctx h_ctx_in x

@@ -68,7 +68,7 @@ theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
   match ht, hl, hr with
   | HasType.t_atama _ _ _ _ τx _ hte,
     LineerTamam.l_atama _ _ _ _ _ hle,
-    RegionTamam.r_atama _ _ _ _ _ _ _ _ hre =>
+    RegionTamam.r_atama _ _ _ _ _ _ hre _ _ =>
     exact ⟨τx, Λ', Ρ', ⟨hte, hle, hre⟩⟩
 
 /-- Seq-atla tiplemesi: sol taraf DEGER ise sag taraf AYNI giris-ortamindan
