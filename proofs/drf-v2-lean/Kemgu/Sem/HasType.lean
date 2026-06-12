@@ -1,0 +1,105 @@
+/-
+KEMGU DRF Mekanize — Minimal HasType (Onarim v3 F3)
+Kaynak (kagit formel): belgeler/KEMGU_Mekanize_Onarim_Plan.md §3.2
+Politika: ASCII identifier, Turkce yorum, mathlib bagimsiz, sorry/axiom YOK
+
+F3 guncellemeleri:
+- KANAL TIPI ORTAMI Δ : KanalOrtam eklendi (t_kanal_al vakumunun kapanisi:
+  alinan degerin tipi artik Δ k — "her τ" serbestligi kalkti; t_kanal_gonder
+  de gonderilen degiskenin tipini Δ k'ye baglar — kanal disiplini).
+- F2 V1 daraltmalari korunur: t_gorev_birlestir/t_kullan : bos.
+-/
+
+import Kemgu.Sem.Core
+import Kemgu.Sem.StateTipli
+
+namespace Kemgu.Sem.HasType
+open Kemgu.Sem.Core Kemgu.Sem.StateTipli
+
+-- ============================================================
+-- §1. HasType — Klasik tip sistemi (12 Ifade kurali, Δ'li form)
+-- ============================================================
+
+/-- Klasik tip judgment Γ; Δ ⊢ e : τ.
+    Γ degisken tipleri, Δ kanal eleman tipleri. Lineerlik (Λ) ve bolge (Ρ)
+    bilgisi ayri katmanlarda (LineerTamam / RegionTamam). -/
+inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
+
+  /-- T-TANIM: degisken referansi tipini Γ'dan alir. -/
+  | t_tanim   (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId) (τ : Tip) :
+                tipOrtamGet Γ x = some τ →
+                HasType Γ Δ (Ifade.tanim x) τ
+
+  /-- T-SABIT: literal tipi DegerTipli'den. -/
+  | t_sabit   (Γ : TipOrtam) (Δ : KanalOrtam) (v : Deger) (τ : Tip) :
+                DegerTipli Γ [] v τ →
+                HasType Γ Δ (Ifade.sabit v) τ
+
+  /-- T-ATAMA: x := e tip-uyumlu ise sonuc bos (no subtyping). -/
+  | t_atama   (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId) (e : Ifade) (τ : Tip) :
+                tipOrtamGet Γ x = some τ →
+                HasType Γ Δ e τ →
+                HasType Γ Δ (Ifade.atama x e) Tip.bos
+
+  /-- T-SEQ: a; b dizisinin tipi son ifadenin tipi. -/
+  | t_seq     (Γ : TipOrtam) (Δ : KanalOrtam) (a b : Ifade) (τa τb : Tip) :
+                HasType Γ Δ a τa →
+                HasType Γ Δ b τb →
+                HasType Γ Δ (Ifade.seq a b) τb
+
+  /-- T-GOREV-BASLAT: gorev_baslat(yd, kod) : gorev<τd>. -/
+  | t_gorev_baslat (Γ : TipOrtam) (Δ : KanalOrtam)
+                   (yd : List VarId) (kod : Ifade) (τd : Tip) :
+                    HasType Γ Δ kod τd →
+                    HasType Γ Δ (Ifade.gorevBaslat yd kod) (Tip.gorev τd)
+
+  /-- T-GOREV-BIRLESTIR: V1 daraltma (F2) — sonuc bos (join sync-only). -/
+  | t_gorev_birlestir (Γ : TipOrtam) (Δ : KanalOrtam) (g : VarId) (τ : Tip) :
+                       tipOrtamGet Γ g = some (Tip.gorev τ) →
+                       HasType Γ Δ (Ifade.gorevBirlestir g) Tip.bos
+
+  /-- T-KANAL-GONDER (F3 disiplin): gonderilen degiskenin tipi kanalin
+      eleman tipi Δ k olmali. -/
+  | t_kanal_gonder (Γ : TipOrtam) (Δ : KanalOrtam) (k : KanalId) (v : VarId) :
+                    tipOrtamGet Γ v = some (Δ k) →
+                    HasType Γ Δ (Ifade.kanalGonderIf k v) Tip.bos
+
+  /-- T-KANAL-AL (F3 — vakum kapandi): alinan degerin tipi Δ k. -/
+  | t_kanal_al  (Γ : TipOrtam) (Δ : KanalOrtam) (k : KanalId) :
+                  HasType Γ Δ (Ifade.kanalAlIf k) (Δ k)
+
+  /-- T-DONDUR: dondur(b) : bos. -/
+  | t_dondur  (Γ : TipOrtam) (Δ : KanalOrtam) (b : Bolge) :
+                HasType Γ Δ (Ifade.dondurIf b) Tip.bos
+
+  /-- T-KULLAN: V1 daraltma (F2) — consume effect-only, sonuc bos. -/
+  | t_kullan  (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId) (τ : Tip) :
+                tipOrtamGet Γ x = some (Tip.tekkez τ) →
+                HasType Γ Δ (Ifade.kullanIf x) Tip.bos
+
+  /-- T-IMHA: tekkez<τ> imha, sonuc bos. -/
+  | t_imha    (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId) (τ : Tip) :
+                tipOrtamGet Γ x = some (Tip.tekkez τ) →
+                HasType Γ Δ (Ifade.imhaIf x) Tip.bos
+
+  /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
+  | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
+                HasType Γ Δ e τ →
+                HasType Γ Δ (Ifade.guvensiz e) τ
+
+
+-- ============================================================
+-- §2. Yardimci helper'lar
+-- ============================================================
+
+/-- Bos tip ortami. -/
+abbrev tipOrtamBos : TipOrtam := []
+
+/-- Varsayilan kanal ortami (her kanal bos eleman tipli). -/
+abbrev kanalOrtamBos : KanalOrtam := fun _ => Tip.bos
+
+/-- "Kapatilmis" tipli — bos Γ ile HasType (program seviyesi). -/
+def IyiTipliKapali (e : Ifade) (τ : Tip) : Prop :=
+  HasType tipOrtamBos kanalOrtamBos e τ
+
+end Kemgu.Sem.HasType
