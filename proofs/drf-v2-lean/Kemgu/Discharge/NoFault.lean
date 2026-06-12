@@ -1713,10 +1713,20 @@ theorem adim_korunum
       rw [h_if] at h_typed
       exact typing_excludes_sLinImhaHataZatenTuketildi Γ Δ ctx.lineer Ρ
         x τ' Λ'' Ρ'' h_typed h_tuket
-  -- ============ Congruence — TEK KALAN BLOKER ============
-  -- NOT (Onarim v3 kapanis durumu): kategori-anahtar COZULDU (id-
-  -- anahtarlama, 3 P-case kapali). Kalan bloker FARKLI ve tek:
-  -- ODAK-ADIM GUCLENDIRILMIS-IH ("kalan-yukumluluk tasima").
+  -- ============ Congruence — 🔴 DUR-SOR: Step-duzeltmesi gerekli ====
+  -- KRITIK (2026-06-12, DECISIONS_LOG son kayit): OdakUyum-tasariminin
+  -- saglamlik-testi, adim_korunum'un MEVCUT Step ile YANLIS oldugunu
+  -- gosterdi — cong-penceresi (ifadeyleKonf) kosan thread'i pencerede
+  -- "bitmis" gosterir; cGorevBirlestirTamam.h_hedef (ifade-okuyan tek
+  -- global premise, tHedef serbest) pencereden kanar: kosan thread'in
+  -- bolgeleri calinir, restorasyon sonrasi comp-8 HER Ρ' icin ihlal
+  -- (tam counterexample DECISIONS_LOG'da). Fix-F (cong cerceve
+  -- yan-kosulu: ts2' = ts2 ∨ spawn-append) onayi olmadan bu 3 case
+  -- KAPATILAMAZ (sorry-0 matematiksel imkansiz).
+  --
+  -- Onay sonrasi plan: Fix-F + asagidaki ODAK-ADIM GUCLENDIRILMIS-IH
+  -- ("kalan-yukumluluk tasima"; lineer ayagi LineerKucuk-ailesiyle
+  -- HAZIR — LineerTamam.lean §5).
   --
   -- Sorun: IH yalniz KonfTipliFull S1' verir; S1 odakta YALNIZ a
   -- tasidigindan devam-ifadesi b'nin (i) Λmid/Ρmid-altinda yeniden

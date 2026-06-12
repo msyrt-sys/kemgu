@@ -72,6 +72,59 @@ spawn fault-discharge'ını kırar (comp-8 muafiyeti kaybolur). Çocuğun kendi
 bölgesine yazabilmesi = per-thread Ρ (Yol A) = V2. Docstring güncel
 (IyiTipliCekirdek: "GERCEK premise" bloğu).
 
+## 2026-06-12 — 🔴 DUR-SOR (AÇIK): cong-penceresi + serbest-tHedef join
+## = adim_korunum MEVCUT Step İLE YANLIŞ (counterexample)
+
+**Bulgu (son pass, OdakUyum-tasarımını sağlamlık testinden geçirirken):**
+`adim_korunum` mevcut Step-semantiğiyle KANITLANAMAZ — ifade YANLIŞ.
+Kök neden iki katmanlı:
+1. `cGorevBirlestirTamam.h_hedef` diğer thread'lerin İFADELERİNİ okur
+   (`∃ hctx ∈ S.thread, ... hctx.ifade = sabit vSon`) — Step'in tek
+   ifade-okuyan global premise'i. `tHedef` ayrıca `g`'ye BAĞLANMAMIŞ
+   (serbest değişken — linkage premise'i yok).
+2. Cong kuralları (`ifadeyleKonf` penceresi) koşan thread'i pencerede
+   alt-ifadesine indirger → pencereli listede `seq (sabit v) b` koşan
+   bir thread "bitmiş" (`sabit v`) GÖRÜNÜR.
+
+**Counterexample (tam kurgu):**
+- Γ: g : gorev bos; x : scalar. Ρ: g↦bg, x↦bx (yerel). Store: g-konumu
+  `gorevVal 0` (varsayılan!), x-konumu `skaler 0`. Sahiplik: bg,bx ↦
+  thread 0. Threadler: T = ⟨0, seq (sabit birim) (atama x (sabit
+  (skaler 1)))⟩, J = ⟨1, gorevBirlestir g⟩. **KonfTipliFull S: 15/15
+  sağlanır** (comp-8: T'nin hedefi x sahibi 0 ✓).
+- Adım: `sSeqCong` (odak T) → S1'de T pencereli (`ifade = sabit birim`).
+  İç adım: `cGorevBirlestirTamam` (ctx := J, tHedef := 0, h_hedef
+  tanığı := PENCERELİ-T, rb := [bx] — h_donen ✓). J biter, **bx sahibi
+  thread 1'e geçer**. Cong-restorasyon: T'nin `seq (sabit birim)
+  (atama x ...)` ifadesi GERİ gelir.
+- S'-comp-8 İHLAL: T'nin HedefVar-x'i yazılabilir-kayıtlı, sahibi artık
+  1 ≠ 0. comp-8 `S'.bolge`/`S'.sahiplik` okur — HİÇBİR Ρ' seçimi
+  kurtarmaz → `KonfTipliFull Γ Δ Ρ' S'` her Ρ' için YANLIŞ →
+  adim_korunum YANLIŞ. (Devamında T'nin x-yazımı J-sahipli bölgeye
+  yazar — GERÇEK DRF-ihlali: model bug'ı, ispat tekniği sorunu değil.)
+
+**Önerilen düzeltme (Fix-F — çerçeve yan-koşulu):** üç cong kuralına
+(`sSeqCong`/`sAtamaCong`/`sGuvensizCong`) premise ekle:
+`h_yan : ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y]`
+(ts1-prefix `h_t1'` ile zaten sabit). Bu, iç adımı ODAKLI pozisyona
+kilitler: pencere yalnız odaklı thread'in alt-ifade redüksiyonunu sarar;
+diğer thread'lerin adımları (gerçek join dahil) doğrudan S-üstünde
+atılır — orada `h_hedef` GERÇEK listeyi görür ve koşan-T'yi dışlar.
+DAVRANIŞ KAYBI YOK: elenen adımlar yalnız dış-düzeyde temsil edilemeyen
+pencere-artefakt'larıdır (semantik-niyet restorasyonu). Maliyet: Step 3
+kural + progress_konf cong-tanıklarına yan-koşul tanığı (mekanik — tüm
+tanıklar zaten ts2-veya-spawn-append formunda) + step_iz_analiz/
+step_fault_gorunum/step_donmus_korunur arity (+1 hipotez, mekanik).
+Opsiyonel ikinci katman (ayrı karar): h_hedef'e g-linkage
+(g-konumunda `gorevVal tHedef`) — pencereden bağımsız sağlamlaştırma.
+
+**Statü: ONAY BEKLİYOR.** Step = kemgu_soundness_v3'ün denotasyonunun
+parçası → görev guardrail'i ("dış kontratı değiştirmek gerekiyorsa
+DUR-SOR — build yakalamaz sınıfı") tetiklendi. Fix-F olmadan sorry-0
+MATEMATİKSEL OLARAK İMKANSIZ (counterexample). Onay sonrası kalan plan:
+Fix-F (statement) → OdakYuk payload (aşağıdaki tasarım; Fix-F sayesinde
+payload yalnız odaklı-pozisyon için, sade form) → 3 cong → sorry 0.
+
 ## 2026-06-12 — KALAN TEK BLOKER: odak-adım güçlendirilmiş-IH (cong ×3)
 
 **Bulgu:** kategori-anahtar çözüldükten sonra cong case'leri (sSeqCong/
@@ -93,3 +146,11 @@ güçlendirmesi):** `adim_korunum` sonucuna odak-yükü ekle
 3. comp-8/9: b'nin hedefleri Ρmid'de yazılabilir (r_seq 2. premise) →
    `regionTamam_yaz_geri` (MEVCUT) → a-dokunmamış → sahiplik korunmuş.
 Tahmin: ~600-900 satır (21 kuralda odak-yükü + ≼-lemmaları + 3 cong).
+
+**GÜNCELLEME (2026-06-12 son pass):** (1)'in ≼-ailesi İNDİ ve TAM:
+`LineerKucuk` + `lineerKucuk_{refl,update_tuketildi,tuket,tuketListe}` +
+`lineerTamam_kucuk_transport` (LineerTamam.lean §5, Step-bağımsız).
+ANCAK OdakYuk-payload'ın kendisi YENİ DUR-SOR'a bağlandı: tasarım
+sağlamlık-testi, adim_korunum'un mevcut Step ile YANLIŞ olduğunu
+gösterdi (yukarıdaki cong-penceresi counterexample'ı) — Fix-F onayı
+olmadan hiçbir payload cong'u kapatamaz.
