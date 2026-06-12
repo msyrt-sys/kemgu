@@ -27,8 +27,10 @@ Durum: ✅ yeşil/gap-yok · 🔧 gap bulundu+fix · ⏭️ kapsam dışı (DECI
 
 ## C. İşaretçi/referans zincirleri
 - ✅ `&v` (skaler/struct — &Struct fix), `*(&v)` round-trip, &-param mutasyon (sret yolu)
-- ⏭️ **D-006:** `&p.x` → `(&p).x`, `&d[i]` → `(&d)[i]` — parser önceliği (ifade.c,
-  SCOPE DIŞI). Codegen doğru AST'ye hazır. Ayrı parser görevi.
+- ✅ **D-006 ÇÖZÜLDÜ** (ifade.c, ayrı görev): `&p.x`=`&(p.x)`, `&d[i]`=`&(d[i])`,
+  `&a.b.c` — postfix prefix'ten sıkı; prefix operandı `parse_oncelik(ONC_ONEK)`.
+  deref-oku round-trip yeşil, segfault yok. (`&p.x` YAZ → `*p=v` T022-red, ayrı;
+  `&arr[i].alan` codegen D-007 bloklu.)
 ## D. Kontrol akışı — ✅ gap yok
 - iç içe eğer/değilse (4-yol), iken+döngü-taşıyan birikim, ver erken-dönüş iç içe
   döngüde, ve/veya dal-koşulu kısa-devre, çeşit exhaustive eşleş (i8 dispatch).

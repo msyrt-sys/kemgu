@@ -51,21 +51,34 @@ SESSİZ DEĞİL: codegen görünür `; atama: heap dizi eleman atamasi runtime
 setter bekliyor` yorumu emit ediyor. Ayrı küçük görevde kapatılacak
 (runtime'a ~5 satır setter + llvm.c'de ~10 satır çağrı).
 
-## D-006 — `&p.x` / `&d[i]` parser önceliği: KAPSAM DIŞI (ifade.c) (2026-06-11)
+## D-006 — `&p.x` / `&d[i]` parser önceliği: ✅ ÇÖZÜLDÜ (ifade.c) (2026-06-11)
 
 **Bulgu (matris C):** `&p.x` AST'de `(&p).x`, `&d[i]` ise `(&d)[i]` olarak parse
-ediliyor — dökümante önceliğe AYKIRI (CLAUDE.md: postfix `.`/`[]` seviye 8, prefix `&`
-seviye 7 → postfix daha sıkı bağlamalı → `&(p.x)` / `&(d[i])` olmalı). Yanlış ağaç
-codegen'de `(&p)`'yi ptr'e çevirip `.x`'i ptr-path GEP+load ile değer olarak okuyor;
-`artir(&p.x)` çağrısında i32 değer ptr-param'a geçip **segfault**.
+ediliyordu — dökümante önceliğe AYKIRI (postfix `.`/`[]` prefix `&`'den sıkı bağlamalı
+→ `&(p.x)` / `&(d[i])` olmalı). Yanlış ağaç codegen'de `(&p)`'yi ptr'e çevirip `.x`'i
+ptr-path GEP+load ile değer olarak okuyor; `artir(&p.x)` çağrısında i32 değer ptr-param'a
+geçip **segfault**.
 
-**Karar:** Fix `src/ifade.c`'de (prefix `&`/`*`/`-` operandının postfix zincirini de
-kapsaması) — **bu kampanyanın scope-lock'u `src/llvm.c + test/` DIŞINDA.** Ayrı parser
-görevi. Codegen tarafı doğru AST verilirse zaten hazır: `&x.a` için `erisim_lvalue`,
-`&d[i]` için INDEKS-GEP adresi mevcut; yalnız doğru ağaç gelmeli.
+**Kök neden:** `parse_onek` (ifade.c) prefix `-`/`~`/`&`/`&değişken`/`*` operandını
+`parse_onek` ile alıyordu — bu yalnız bir sonraki öneki işleyip postfix YUTMUYORDU.
+`değil` (Madde H) zaten doğru deseni (`parse_oncelik(p, ONC_ONEK)`) kullanıyordu.
 
-**Etki:** Alan/eleman adresi alma (`&x.a`, `&d[i]`) ve bunları fonksiyona geçirme
-şu an kullanılamaz. `&v` (tüm değişken) ve `*(&v)` round-trip ÇALIŞIYOR.
+**Fix (ayrı görev, scope `ifade.c + test/`):** Beş prefix operatörün operandı da
+`parse_oncelik(p, ONC_ONEK)` ile alınır. ONC_SONEK(12) > ONC_ONEK(11) → postfix
+(`. [] () :: olarak`) operanda bağlanır; ikili operatörler (≤10) bağlanmaz → `&x+y`
+hâlâ `(&x)+y`. İç içe önek (`*&x`, `--x`) korunur (parse_oncelik önce parse_onek çağırıp
+sonraki öneki recursive işler). **Öncelik tablosu değişmedi** (lokalize fix, değer-bazlı
+ripple yok). Binary `*`/`&` (çarpma/bit) infix konumda, parse_onek'e girmez → etkilenmez.
+
+**Doğrulandı (runtime round-trip):** `&p.x`, `&d[i]`, `&a.b.c` deref-oku → 42 (segfault
+yok); regresyon `*(&x)`, `-p.x`=`-(p.x)`, `&x+y`, `&v`, `*p` → hepsi yeşil; parser/
+snapshot/fuzzer (20000 iter) + tüm test_tumu yeşil, 0 ASan.
+
+**Not (D-006 dışı, ayrı feature):** `&p.x` üzerinden YAZMA `*p = v` deref-assignment
+gerektirir — bu dilde **T022-red** (deref-hedef lvalue değil, tasarım kararı). Scaler
+alan referansına yazma ifade edilemez; struct ref'e yazma `ref.alan = v` ile zaten
+çalışıyor (&Struct task). `&arr[i].alan` parse artık doğru ama codegen D-007 (struct-
+değerli dizi) ile bloklu.
 
 ## D-007 — Struct-değerli diziler (`arr[i].alan`, `a.b[i].c`, `d[i][j]`): feature, ertelendi (2026-06-11)
 

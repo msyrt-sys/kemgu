@@ -1,0 +1,189 @@
+// ============================================================================
+// kütüphane/dizi.kem — KEMGU stdlib: bölge-tabanlı büyüyen Liste<T> (v1)
+// ============================================================================
+//
+// İlk saf-KEMGU stdlib dosyası. Self-contained: modül + in-file validasyon
+// (ayrı-dosya import henüz yok; bkz. import-araştırması görevi).
+//
+// Tasarım notları (probe-matrisi bulgularıyla):
+//  - Liste<T> yapısı TOP-LEVEL: modül-nitelikli tip annotasyonu
+//    (dizi::Liste<T>) parser'da henüz desteklenmiyor (T016 follow-up) ve
+//    modül-içi yapı emisyonu D-001 v1 kapsamı dışında. İşlevler modül içinde.
+//  - Yetki disiplini: yetki<Bellek> LINEER — fonksiyona geçiş MOVE'dur
+//    (capability-borrow yok, Capability V1 sınırı). Bu yüzden yetki isteyen
+//    her operasyon yetkiyi sonunda TEK NOKTADA geri_al ile tüketir; çağıran
+//    her çağrı için taze yetki üretir (v1'de Bellek ambient: yetki_olustur).
+//    V2 gerçek bölge yetkisinde yalnız çağrı-yerleri değişir.
+//  - Grow kopyası eleman-eleman döngüyle: dilde sizeof(T) yok →
+//    bellek_kopyala bayt sayısı T'ye bağlı hesaplanamaz. Eleman-döngü
+//    tip-güvenli ve bölge_al'ın GEP-tabanlı sizeof'uyla tutarlı.
+//  - al() 'varsayilan: T' şahit-parametresi taşır: hem sınır-dışı erişimde
+//    ÇÖKMEZLİK (panik yok, varsayılan döner) hem dönüş-T'sinin her bağlamda
+//    çıkarsanabilirliği.
+//  - *T indeksleme yalnız güvensiz blokta (G001) — ham erişimler işaretli.
+
+yapı Liste<T> {
+    veri: *T;
+    boy: tam64;
+    kapasite: tam64;
+}
+
+modül dizi {
+
+    // Boş liste: kapasite 0. Yetki yalnız 0-tahsis için ödünç alınır ve
+    // burada tüketilir (lineer disiplin).
+    işlev yarat<T>(böl: yetki<Bellek>) -> Liste<T> {
+        değişken tampon: *T = bölge_al(böl, 0);
+        geri_al(böl);
+        ver Liste { veri: tampon, boy: 0, kapasite: 0 };
+    }
+
+    // Kapasiteyi tam n'e ayır (içerik korunmaz — ilk ayırma için).
+    işlev kapasiteAyır<T>(l: &Liste<T>, böl: yetki<Bellek>, n: tam64) {
+        değişken yeni_veri: *T = bölge_al(böl, n);
+        geri_al(böl);
+        l.veri = yeni_veri;
+        l.kapasite = n;
+    }
+
+    // Doluysa büyüt: 0 → 4, sonra 2×. İçerik eleman-eleman taşınır;
+    // eski tampon bölgeye terk edilir (v1 malloc-vekâleten, free yok).
+    // geri_al KOŞULSUZ son noktada (lineer denetçi akış-duyarsız — L005).
+    işlev büyü<T>(l: &Liste<T>, böl: yetki<Bellek>) {
+        eğer l.boy == l.kapasite {
+            değişken yeni_kap: tam64 = 4;
+            eğer l.kapasite > (0 olarak tam64) {
+                yeni_kap = l.kapasite * (2 olarak tam64);
+            }
+            değişken yeni_veri: *T = bölge_al(böl, yeni_kap);
+            değişken eski: *T = l.veri;
+            güvensiz {
+                değişken i: tam64 = 0;
+                iken i < l.boy {
+                    yeni_veri[i] = eski[i];
+                    i = i + (1 olarak tam64);
+                }
+            }
+            l.veri = yeni_veri;
+            l.kapasite = yeni_kap;
+        }
+        geri_al(böl);
+    }
+
+    // Sona ekle; gerekirse büyür. Yetki büyü'ye MOVE edilir (tek tüketim).
+    işlev ekle<T>(l: &Liste<T>, böl: yetki<Bellek>, v: T) {
+        büyü(l, böl);
+        değişken d: *T = l.veri;
+        güvensiz {
+            d[l.boy] = v;
+        }
+        l.boy = l.boy + (1 olarak tam64);
+    }
+
+    // i. elemanı oku. Sınır dışı → varsayilan (ÇÖKMEZLİK: panik yok).
+    işlev al<T>(l: &Liste<T>, i: tam64, varsayilan: T) -> T {
+        eğer i >= l.boy {
+            ver varsayilan;
+        }
+        eğer i < (0 olarak tam64) {
+            ver varsayilan;
+        }
+        değişken d: *T = l.veri;
+        güvensiz {
+            ver d[i];
+        }
+        ver varsayilan;
+    }
+
+    işlev boy<T>(l: &Liste<T>) -> tam64 {
+        ver l.boy;
+    }
+
+    // v1 NO-OP: tampon bölgeye aittir, bölgeyle birlikte ölür
+    // (malloc-vekâleten dönemde bilinçli sızıntı; gerçek arena V2).
+    işlev serbest<T>(l: Liste<T>) {
+    }
+
+    // ===== In-file validasyon (modül içi: generic'ler kardeş çıplak-ad
+    // ===== çözümüyle monomorphize olur; dışarıya tek non-generic giriş) =====
+
+    // tam32: 6 ekleme → 0→4→8 büyüme tetiklenir; değer + boy doğrulanır.
+    işlev test_tam32() -> tam32 {
+        değişken l: Liste<tam32> = yarat(yetki_olustur(3, 3));
+        değişken i: tam32 = 0;
+        iken i < 6 {
+            ekle(&l, yetki_olustur(3, 3), i * 10);
+            i = i + 1;
+        }
+        eğer boy(&l) != (6 olarak tam64) { ver 11; }
+        eğer al(&l, 0, 0 - 1) != 0 { ver 12; }
+        eğer al(&l, 3, 0 - 1) != 30 { ver 13; }
+        eğer al(&l, 5, 0 - 1) != 50 { ver 14; }
+        eğer l.kapasite != (8 olarak tam64) { ver 15; }
+        eğer al(&l, 9, 0 - 7) != 0 - 7 { ver 16; }   // sınır-dışı → varsayılan
+        serbest(l);
+        ver 0;
+    }
+
+    // tam64: 2^32 üstü değerler — i64 GENİŞLİK kanıtı (i32 olsaydı kırpılırdı).
+    işlev test_tam64() -> tam32 {
+        değişken taban: tam64 = 4_294_967_296;
+        değişken l: Liste<tam64> = yarat(yetki_olustur(3, 3));
+        değişken i: tam64 = 0;
+        iken i < (5 olarak tam64) {
+            ekle(&l, yetki_olustur(3, 3), taban + i);
+            i = i + (1 olarak tam64);
+        }
+        eğer boy(&l) != (5 olarak tam64) { ver 21; }
+        değişken sifir: tam64 = 0;
+        eğer al(&l, 0, sifir) != taban { ver 22; }
+        eğer al(&l, 4, sifir) - taban != (4 olarak tam64) { ver 23; }
+        serbest(l);
+        ver 0;
+    }
+
+    // struct T: alan bütünlüğü (a: tam32 + b: tam64 karışık genişlik,
+    // GEP-null sizeof padding'i doğru hesaplamalı).
+    işlev test_yapi() -> tam32 {
+        değişken bos_n: Nokta = Nokta { a: 0 - 1, b: 0 };
+        değişken l: Liste<Nokta> = yarat(yetki_olustur(3, 3));
+        değişken i: tam32 = 0;
+        iken i < 5 {
+            ekle(&l, yetki_olustur(3, 3), Nokta { a: i, b: (100 olarak tam64) });
+            i = i + 1;
+        }
+        eğer boy(&l) != (5 olarak tam64) { ver 31; }
+        değişken n0: Nokta = al(&l, 0, bos_n);
+        değişken n4: Nokta = al(&l, 4, bos_n);
+        eğer n0.a != 0 { ver 32; }
+        eğer n4.a != 4 { ver 33; }
+        eğer n0.b + n4.b != (200 olarak tam64) { ver 34; }
+        serbest(l);
+        ver 0;
+    }
+
+    // Dışarıya tek non-generic giriş (YOL-hedefli generic çağrı codegen'de
+    // henüz yönlendirilmiyor — modül-içi kardeş çağrılar kullanılır).
+    işlev test_hepsi() -> tam32 {
+        değişken t1: tam32 = test_tam32();
+        eğer t1 != 0 { ver t1; }
+        değişken t2: tam32 = test_tam64();
+        eğer t2 != 0 { ver t2; }
+        değişken t3: tam32 = test_yapi();
+        eğer t3 != 0 { ver t3; }
+        ver 0;
+    }
+}
+
+// test_yapi'nin eleman tipi (top-level: modül-içi yapı emisyonu v1'de yok).
+yapı Nokta {
+    a: tam32;
+    b: tam64;
+}
+
+işlev main() -> tam32 {
+    eğer dizi::test_hepsi() == 0 {
+        ver 42;
+    }
+    ver dizi::test_hepsi();
+}
