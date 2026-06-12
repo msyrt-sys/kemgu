@@ -154,3 +154,49 @@ ANCAK OdakYuk-payload'ın kendisi YENİ DUR-SOR'a bağlandı: tasarım
 sağlamlık-testi, adim_korunum'un mevcut Step ile YANLIŞ olduğunu
 gösterdi (yukarıdaki cong-penceresi counterexample'ı) — Fix-F onayı
 olmadan hiçbir payload cong'u kapatamaz.
+
+## 2026-06-12 — ✅ FIX-F UYGULANDI (Mehmet onayı) + g-linkage ERTELENDİ
+
+**FIX-F (cong çerçeve yan-koşulu) indi:** `sSeqCong/sAtamaCong/
+sGuvensizCong += h_yan : ts2' = ts2 ∨ ∃y, ts2' = ts2 ++ [y]`.
+
+**Davranış-kaybı doğrulaması (kritik şart):** Fix-F yalnız iç adımı
+odaklı pozisyona kilitler. Elenen adımlar = ts1-prefix'i veya ts2-yan
+thread'leri değiştiren iç adımlar — bunların HER İKİSİ dış-düzeyde
+DOĞRUDAN temsil edilir (başka thread'in adımı S-üstünde cong'suz
+atılır; orada h_hedef GERÇEK listeyi görür). progress_konf'un 12 adım-
+tanığının tamamı yan-şekli doğal sağladı (ts2 veya spawn-append) —
+hiçbir meşru interleaving (gerçek join, dondur, kanal) elenmedi; tek
+elenen sınıf pencere-artefaktı join'iydi (counterexample-1). ✓
+
+**Join-hedef gevşekliği (DÖKÜMANTE — DRF için sorun değil):**
+`cGorevBirlestirTamam.tHedef`, `g`'nin konumundaki `gorevVal`-değerine
+bağlanmamıştır; joiner, "bitmiş görünen" HERHANGİ bir thread'le (ve boş
+`rb := []` ile her zaman) birleşebilir — done-thread'ler arası non-
+determinizm. Fix-F sonrası bu yalnız GERÇEKTEN bitmiş thread'leri
+seçebilir (pencere kanalı kapandı) → sahiplik-güvenliği ihlali yok;
+soundness-teoremi tüm non-deterministik seçimler üzerinden kanıtlı.
+**g-linkage (h_hedef'e `gorevVal tHedef` konum-bağı) = ERTELENDİ
+(Mehmet kararı)** — V2 sağlamlaştırması (semantik daraltma değil,
+belirlemecilik artışı).
+
+## 2026-06-12 — FIX-G: r_atama yazma-anı (çıkış-ortamı) kontrolü
+
+**Bulgu (counterexample-2, sAtamaCong-kompozisyon sağlamlık testi):**
+`r_atama` x-kontrolünü GİRİŞ ortamında yapıyordu; `x := (x'i kanala
+gönderen e)` türü use-after-send programları statik kabul edilip
+runtime'da sAtamaHataSahipDegil fault'una düşüyordu → typed_no_fault
+cong-kapanışında kırılırdı. **Düzeltme:** x-premise'i e'nin ÇIKIŞ
+ortamına alındı (`RegionTamam Γ Ρ e Ρ' → lookup Ρ' x = some b → yaz`).
+**Model-sadakat:** x := e'de yazma, e değerlendirildikten SONRA
+gerçekleşir — KEMGU R-ATAMA aksiyomunun yazma-anı semantiği; çıkış-anı
+kontrolü yazma anının gerçek bölge durumunu denetler. Yan kazanç:
+iliski-transport'ta r_atama (R2) ile DOĞRUDAN compose eder (cong-
+kapanışının kilit taşı).
+
+## 2026-06-12 — 🎉 SORRY 0 (@ bb1893b)
+
+adim_korunum 21/21 + adim_odak_yuku 21/21 + progress_konf 12/12 +
+köprü 15/15 TAM. `kemgu_soundness_v3` + `IyiTipliCekirdek` metinleri
+değişmedi (dış kontrat bit-eşit). typed_no_fault → iyiTipli_no_fault →
+kemgu_soundness_v3 zinciri sorry'siz/axiom'suz. C5/C6 merge adayı.
