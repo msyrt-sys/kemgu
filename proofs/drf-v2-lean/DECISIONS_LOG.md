@@ -72,7 +72,7 @@ spawn fault-discharge'ını kırar (comp-8 muafiyeti kaybolur). Çocuğun kendi
 bölgesine yazabilmesi = per-thread Ρ (Yol A) = V2. Docstring güncel
 (IyiTipliCekirdek: "GERCEK premise" bloğu).
 
-## 2026-06-12 — 🔴 DUR-SOR (AÇIK): cong-penceresi + serbest-tHedef join
+## 2026-06-12 — 🔴 DUR-SOR (✅ ÇÖZÜLDÜ — FIX-F onaylandi, asagida): cong-penceresi + serbest-tHedef join
 ## = adim_korunum MEVCUT Step İLE YANLIŞ (counterexample)
 
 **Bulgu (son pass, OdakUyum-tasarımını sağlamlık testinden geçirirken):**
@@ -118,7 +118,7 @@ step_fault_gorunum/step_donmus_korunur arity (+1 hipotez, mekanik).
 Opsiyonel ikinci katman (ayrı karar): h_hedef'e g-linkage
 (g-konumunda `gorevVal tHedef`) — pencereden bağımsız sağlamlaştırma.
 
-**Statü: ONAY BEKLİYOR.** Step = kemgu_soundness_v3'ün denotasyonunun
+**Statü: ✅ ONAYLANDI ve UYGULANDI (2026-06-12 — asagidaki FIX-F kaydi).** Step = kemgu_soundness_v3'ün denotasyonunun
 parçası → görev guardrail'i ("dış kontratı değiştirmek gerekiyorsa
 DUR-SOR — build yakalamaz sınıfı") tetiklendi. Fix-F olmadan sorry-0
 MATEMATİKSEL OLARAK İMKANSIZ (counterexample). Onay sonrası kalan plan:
