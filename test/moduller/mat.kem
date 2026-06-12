@@ -1,0 +1,9 @@
+// A capraz-modul fikstur: genel topla disari acik, gizli_carp degil.
+genel işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+
+işlev gizli_carp(a: tam32, b: tam32) -> tam32 { ver a * b; }
+
+// modul-ici kullanim: gizli uye kardesten cagrilabilir
+genel işlev iki_kati_carpim(a: tam32, b: tam32) -> tam32 {
+    ver gizli_carp(a, b) * 2;
+}

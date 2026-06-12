@@ -1,0 +1,9 @@
+// A dogrulama: modul-ICI yapi emisyonu (gap fix) — Nokta yalniz bu
+// modulde tanimli ve kullanilir; disari yalniz ilkel (tam32) doner.
+// (Capraz-modul yapi KULLANIMI = D'nin isi — nitelikli tip annotation.)
+yapı Nokta { x: tam32; y: tam32; }
+
+genel işlev mesafe_kare() -> tam32 {
+    değişken n: Nokta = Nokta { x: 3, y: 4 };
+    ver n.x * n.x + n.y * n.y;
+}

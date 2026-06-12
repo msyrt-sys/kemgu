@@ -188,3 +188,57 @@ Regression guard: `test/snapshots/ad_cozum_sapma.kem` (exit 42) + `ad_cozum_govd
 nitelikli TİP annotation (D) DOKUNULMADI. `DUGUM_ERISIM` (method dispatch) binding'i v2.
 Identifier-yük (lvalue/load) codegen'i lokal isim tablosuyla devam ediyor (sapma çağrı
 sitelerindeydi); modül-üyesi `sabit` referansı v1'de zaten desteklenmiyor.
+
+## D-011 [YÜKSEK] — Çok-dosya modül temeli: whole-program namespaced yükleme (2026-06-13)
+
+**Karar (yüzey Mehmet kilidi):** `kullan dizi;` nitelikli bağ (düzleştirme YOK),
+`kullan dizi::{Liste,ekle};` seçili niteliksiz, `kullan dizi olarak d;` alias; GLOB yok;
+modül=dosya (dizi.kem ⇒ `dizi`); arama yolu [içe-aktaran dizini → proje kökü → kütüphane/],
+İLK eşleşme kazanır; private-by-default + `genel` export işareti; iki-faz yükleme
+(döngüsel import v1'de hata değil); seçili-import çakışması KULLANIMDA T042
+(nitelikli erişim geçerli kalır).
+
+**Mimari:** Loader (ana.c `modulleri_yukle`) entry'nin kullan grafiğini BFS gezer, her
+dosyayı bir kez parse edip sentetik `DUGUM_MODUL(dosya_modulu=1)` olarak program AST'sinin
+başına ekler → `tip_kontrol_program` faz-1 (pre_populate: kanonik kayıtlar) + faz-2
+(`kullan_baglari_kur`: görünür bağlar) → B'nin resolver'ı çapraz-dosya adları
+`COZUM_MODUL_UYESI` binding'iyle çözer → TEK codegen tüm modülleri `@modul.ad` emit eder.
+**B-entegrasyon doğrulaması:** binding düşseydi `@topla` tanımsız kalırdı (link hatası) —
+exit-42 E2E testleri bunu yapısal olarak kanıtlıyor.
+
+**[ETKİ-YÜKSEK] Legacy düzleştirme korundu:** Çok-segment çıplak `kullan a::b::c;`
+ESKİ düzleştirme yolunda kaldı (tip_kontrol DUGUM_KULLAN + llvm.c kullan pre-pass).
+Sebep: drivers/virtio/*.kem (çapraz-dosya struct kullanıyor — D bölgesine bağımlı) ve
+test/crossfile fikstürleri bu semantiğe test-pinli; görevin kendi kısıtları
+(drivers 2/2 + test_llvm taban düşmeyecek + D'ye dokunma) başka çözüm bırakmıyor.
+Yeni biçimler (tek-segment / seçili / alias) HER ZAMAN namespaced yükleyicide.
+Çıkış stratejisi: D (nitelikli tip) inince sürücüler yeni biçime taşınıp legacy kaldırılır.
+
+**[ETKİ] Diğer taktik kararlar:**
+1. **builtin_scope ayrımı:** built-in'ler global'in PARENT'ına taşındı; dosya-modül
+   scope'ları da oraya bağlanır → giriş dosyasının özel adları modüllere sızmaz
+   (private-by-default iki yönlü). Yan etki: built-in adı gölgeleme artık T024 değil
+   (gölge kazanır) — suite'te pinli test yoktu.
+2. **Kanonik modül sembolü gizli (`Sembol.gizli`):** dosya-modül kaydı builtin_scope'ta
+   ama normal çözümde görünmez — `dizi::f` import'suz ÇÖZÜLMEZ (T016). Önek türetme
+   (`scope_modul_sembolu`) SembolLink'i doğrudan taradığı için mangling etkilenmez.
+3. **Seçili alias `ithal_onek` taşır:** `cozum_bagla` alias'ı görünce binding'i
+   MODUL_UYESI + asıl modül öneki olarak yazar — codegen değişikliği GEREKMEDİ.
+4. **Ad-bazlı modül dedup:** aynı ada ikinci yükleme yok (ilk çözüm kazanır) —
+   döngü/elmas importlar doğal sonlanır; farklı dizinlerden aynı ad = tek modül (v1).
+5. **mode_llvm yükleme hatasında IR üretmez** (eksik modül zaten link edilemez);
+   mode_check yükleme hatasını ayrı sayaçla raporlar ("yukleme N").
+6. **Windows UTF-8:** loader `dosya_ac_utf8` (MultiByteToWideChar→_wfopen) —
+   kütüphane/ ayağı E2E testle (UTF-8 dizin) doğrulandı.
+7. **Modül-içi tip emisyonu gap fix (llvm.c):** yapı/çeşit pre-pass'i artık DUGUM_MODUL
+   içine iner (düz adla, ilk-kazanır); metin literal taraması DUGUM_MODUL + DUGUM_ESLES
+   düğümlerine de iner (önceden modüldeki stringler @.str'e toplanmıyordu).
+8. **v1 sınırları:** modül-içi `sabit` codegen'de kayıtsız (önceden de öyleydi);
+   in-file modüllerde görünürlük denetimi YOK (geriye uyum — `dışa` eski anlamında);
+   LSP loader koşmaz; aynı adlı struct'lar modüller arası düz IR-ad uzayını paylaşır
+   (D'de nitelikli tip ile ayrışacak); seçili/alias çok-segment yol v1'de P046.
+
+**Testler:** test_llvm 182→194 (+12 A testi: çapraz-modül fonk/--check, seçili, alias,
+T041 negatif, transitif, gölgeleme, kütüphane-UTF8, modül-içi yapı x2, T042 negatif,
+nitelikli-çakışma); parser 102→107 (+5 gramer). Fikstürler: test/moduller/*.kem;
+kütüphane fikstürleri runtime'da yazılıp silinir.
