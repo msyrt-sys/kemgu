@@ -46,6 +46,7 @@ typedef enum {
     TOK_GOREV,          /* görev       — Concurrency / DRF V1 (görev<T>) */
     TOK_KANAL,          /* kanal       — Concurrency / DRF V1 (kanal<T>) */
     TOK_SATIRICI_ASM,   /* satıriçi_asm — C5 inline assembly (güvensiz içinde) */
+    TOK_GENEL,          /* genel       — Çok-dosya modül A: export işareti */
 
     /* ===== Literaller ===== */
     TOK_TAMSAYI,        /* 42, 0xFF, 0b1010 */

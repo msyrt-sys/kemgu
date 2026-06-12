@@ -192,11 +192,28 @@ struct Dugum {
             int ad_uzunluk;
             Dugum **uyeler;
             int sayi;
+            /* Çok-dosya modül A: 1 = bu modül bir .kem dosyasından
+             * yüklendi (loader sentetik sarmalayıcısı). Görünürlük
+             * (genel) yalnız dosya-modüllerinde uygulanır; dosya-içi
+             * modüller geriye-uyumlu (tüm üyeler görünür). */
+            int dosya_modulu;
         } modul;
 
         struct {
             const char *yol;       /* "x::y::z" tek string */
             int yol_uzunluk;
+            /* Çok-dosya modül A — yeni içe-aktarma biçimleri:
+             *   kullan dizi;                  -> nitelikli erişim bağı
+             *   kullan dizi::{Liste, ekle};   -> seçili adlar niteliksiz
+             *   kullan dizi olarak d;         -> alias (d::...)
+             * segment_sayi: yol'daki ad sayısı (1 = yeni namespaced
+             * yükleme; >1 + seçili/alias yok = legacy düzleştirme). */
+            int segment_sayi;
+            char **secili_adlar;       /* NULL = seçili liste yok */
+            int *secili_uzunluklar;
+            int secili_sayi;
+            const char *alias_ad;      /* NULL = alias yok */
+            int alias_ad_uz;
         } kullan;
 
         struct {
@@ -218,6 +235,7 @@ struct Dugum {
             Dugum *donus_tipi;     /* NULL = donus yok */
             Dugum *govde;          /* DUGUM_BLOK veya NULL (sadece imza) */
             int gercekzamanli_mi;  /* Realtime Spec V1 — hard real-time qualifier */
+            int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
         } islev;
 
         struct {
@@ -233,6 +251,7 @@ struct Dugum {
             int *tip_param_bound_sayilari;
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
+            int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
         } yapi;
 
         /* C2.7: çeşit Ad { A, B, C } — payloadsuz isimli varyant kümesi (sum type).
@@ -243,6 +262,7 @@ struct Dugum {
             char **varyantlar;          /* varyant adları (arena) */
             int *varyant_uzunluklar;    /* her varyantın byte uzunluğu */
             int varyant_sayi;
+            int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
         } cesit;
 
         struct {
@@ -273,6 +293,7 @@ struct Dugum {
             int ad_uzunluk;
             Dugum *tip;
             Dugum *deger;
+            int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
         } sabit;
 
         struct {
@@ -288,6 +309,7 @@ struct Dugum {
             const char *ad;
             int ad_uzunluk;
             Dugum *tip;
+            int genel_mi;          /* A: 1 = 'genel' (alan export — D'de kullanılır) */
         } alan;
 
         /* === Deyimler === */
