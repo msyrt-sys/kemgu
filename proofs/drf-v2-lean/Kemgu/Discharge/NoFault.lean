@@ -188,6 +188,708 @@ theorem step_fault_preserves_typed
 
 
 -- ============================================================
+-- §1.5. ODAK-ADIM YUKU (Onarim v3 kapanis — cong-kapanisinin motoru)
+-- Her adimin odakli cifti OdakYuk tasir: FIX-F yan-kosullari +
+-- cerrah_kilit verilen ayrisimi RULE-odagina pinler; boylece yuk
+-- yalniz odakli cift icin kanitlanir (odaksiz-pozisyon ayrisimlari
+-- hipotez-celiskisiyle bos dusur).
+-- ============================================================
+
+theorem adim_odak_yuku
+    (Γ : TipOrtam) (Δ : KanalOrtam) (Ρ : BolgeOrtam)
+    (S S' : Konfigurasyon) (h_step : Step S S')
+    (h_konf : KonfTipliFull Γ Δ Ρ S) :
+    ∀ ts1o ts2o ctxo ts2o' ctxo',
+      S.thread = ts1o ++ ctxo :: ts2o →
+      S'.thread = ts1o ++ ctxo' :: ts2o' →
+      (ts2o' = ts2o ∨ ∃ y, ts2o' = ts2o ++ [y]) →
+      OdakYuk Γ Δ S S' ctxo ctxo' := by
+  revert h_konf
+  induction h_step with
+  | sVarOku S S' ts1 ts2 ctx x b v h_t h_if h_b h_v h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit v = ctx.ifade := congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) :: ts2
+          = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        have h_bagli : ∃ b0 v0, bolgeOrtamGet S.bolge x = some b0
+            ∧ konumGet S.store ⟨b0, 0⟩ = some v0 ∧ DegerTipli Γ Ρ v0 τo := by
+          match ht with
+          | HasType.t_tanim _ _ _ _ h_gx =>
+            exact h_konf.2.2.2.2.2.2.2.2.2.1 x τo h_gx
+        obtain ⟨b0, v0, h_b0, h_k0, h_dt0⟩ := h_bagli
+        have h_bb0 : b0 = b := Option.some.inj (h_b0.symm.trans h_b)
+        rw [h_bb0] at h_k0
+        have h_v0 : v0 = v := Option.some.inj (h_k0.symm.trans h_v)
+        rw [h_v0] at h_dt0
+        match hr with
+        | RegionTamam.r_tanim _ _ _ =>
+          match hl with
+          | LineerTamam.l_tanim_nonlin _ _ _ _ _ _ =>
+              exact ⟨ctx.lineer, S.bolge,
+                ⟨HasType.t_sabit _ _ _ _ (degerTipli_ortam v τo h_dt0),
+                 LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+                lineerKucuk_refl _, bolgeIliski_refl _⟩
+          | LineerTamam.l_tanim_lin _ _ _ _ _ _ _ =>
+              exact ⟨ctx.lineer, S.bolge,
+                ⟨HasType.t_sabit _ _ _ _ (degerTipli_ortam v τo h_dt0),
+                 LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+                lineerKucuk_update_geri ctx.lineer x, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_atama _ _ _ _ τx h_gx hte,
+          LineerTamam.l_atama _ _ _ _ _ hle,
+          RegionTamam.r_atama _ _ _ _ _ b2 hre h_gx2 h_yz2 =>
+          match hte, hle, hre with
+          | HasType.t_sabit _ _ _ _ _, LineerTamam.l_sabit _ _ _,
+            RegionTamam.r_sabit _ _ _ =>
+            exact ⟨ctx.lineer, S.bolge,
+              ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+               LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+              lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := b } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : b = ctx.ifade := congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        exact seq_ne_sag (Ifade.sabit v) b h_i.symm
+      have h2' : ts1 ++ ({ ctx with ifade := b } : ThreadCtx) :: ts2
+          = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        exact ⟨Λo, Ρoo, typed_seq_atla h_ty,
+          lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit v = ctx.ifade := congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) :: ts2
+          = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_guvensiz _ _ _ _ hte,
+          LineerTamam.l_guvensiz _ _ _ _ hle,
+          RegionTamam.r_guvensiz _ _ _ _ hre =>
+          exact ⟨Λo, Ρoo, ⟨hte, hle, hre⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | sLinKullanTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi } : ThreadCtx) :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_kullan _ _ _ _ _,
+          LineerTamam.l_kullan _ _ _ _ _ _,
+          RegionTamam.r_kullan _ _ _ =>
+          exact ⟨lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi, S.bolge,
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | sLinImhaTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi } : ThreadCtx) :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_imha _ _ _ _ _,
+          LineerTamam.l_imha _ _ _ _ _ _,
+          RegionTamam.r_imha _ _ _ =>
+          exact ⟨lineerOrtamUpdate ctx.lineer x Lineerlik.tuketildi, S.bolge,
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit (Deger.gorevVal tYeni), lineer := lineerTuketListe ctx.lineer yd } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit (Deger.gorevVal tYeni) = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit (Deger.gorevVal tYeni), lineer := lineerTuketListe ctx.lineer yd } : ThreadCtx)
+          :: (ts2 ++ [⟨tYeni, kod, yd.map (fun v => (v, Lineerlik.aktif))⟩])
+          = ts1o ++ ctxo' :: ts2o' := by
+        rw [show ts1 ++ ({ ctx with ifade := Ifade.sabit (Deger.gorevVal tYeni), lineer := lineerTuketListe ctx.lineer yd } : ThreadCtx)
+            :: (ts2 ++ [⟨tYeni, kod, yd.map (fun v => (v, Lineerlik.aktif))⟩])
+          = (ts1 ++ { ctx with ifade := Ifade.sabit (Deger.gorevVal tYeni), lineer := lineerTuketListe ctx.lineer yd } :: ts2)
+            ++ [⟨tYeni, kod, yd.map (fun v => (v, Lineerlik.aktif))⟩]
+          by simp]
+        exact h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2'
+          (Or.inr ⟨_, rfl⟩) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_gorev_baslat _ _ _ _ τd h_tkod,
+          LineerTamam.l_gorev_baslat _ _ Λkod _ _ h_ntuk h_lkod,
+          RegionTamam.r_gorev_baslat _ _ _ Ρkod _ _ tYs
+            h_cap h_khv h_khb h_rkod h_eqR =>
+          subst h_eqR
+          refine ⟨lineerTuketListe ctx.lineer yd,
+            bolgeOrtamSahipAta S.bolge yd tYeni,
+            ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_gorev tYeni τd),
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, ?_, ?_, ?_⟩
+          · intro y bb h_o h_yz
+            by_cases h_in : y ∈ yd
+            · cases h_lk : bolgeOrtamGet S.bolge y with
+              | none =>
+                  rw [sahipAta_get_none _ _ _ _ h_lk] at h_o; cases h_o
+              | some b0 =>
+                  rw [sahipAta_get_in' _ _ _ _ b0 h_in h_lk] at h_o
+                  rw [← Option.some.inj h_o] at h_yz
+                  simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+            · rw [sahipAta_get_notin _ _ _ _ h_in] at h_o
+              rw [sahipAta_get_notin _ _ _ _ h_in]
+              exact h_o
+          · intro y h_o
+            exact sahipAta_get_none _ _ _ _ (sahipAta_get_none_inv _ _ _ _ h_o)
+          · intro y bb h_o
+            by_cases h_in : y ∈ yd
+            · cases h_lk : bolgeOrtamGet S.bolge y with
+              | none =>
+                  rw [sahipAta_get_none _ _ _ _ h_lk] at h_o; cases h_o
+              | some b0 =>
+                  rw [sahipAta_get_in' _ _ _ _ b0 h_in h_lk] at h_o
+                  refine ⟨bolgeKategoriDegistir b0 (BolgeKategorisi.sahip tYeni),
+                    sahipAta_get_in' _ _ _ _ b0 h_in h_lk, ?_⟩
+                  rw [← Option.some.inj h_o]
+                  rfl
+            · rw [sahipAta_get_notin _ _ _ _ h_in] at h_o
+              exact ⟨bb, by rw [sahipAta_get_notin _ _ _ _ h_in]; exact h_o,
+                rfl⟩
+      · intro y bb h_o h_yz
+        have h_o2 : bolgeOrtamGet (bolgeOrtamSahipAta S.bolge yd tYeni) y
+            = some bb := h_o
+        by_cases h_in : y ∈ yd
+        · exfalso
+          cases h_lk : bolgeOrtamGet S.bolge y with
+          | none => rw [sahipAta_get_none _ _ _ _ h_lk] at h_o2; cases h_o2
+          | some b0 =>
+              rw [sahipAta_get_in' _ _ _ _ b0 h_in h_lk] at h_o2
+              rw [← Option.some.inj h_o2] at h_yz
+              simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+        · rw [sahipAta_get_notin _ _ _ _ h_in] at h_o2
+          refine ⟨h_o2, ?_⟩
+          intro h_own
+          have h_yok : ∀ b'' ∈ bolgeleriTopla S.bolge yd, b''.id ≠ bb.id := by
+            intro b'' h_bin h_id
+            rcases List.mem_filterMap.mp h_bin with ⟨v0, h_v0, h_v0lk⟩
+            have h_vy : v0 = y :=
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1 v0 y b'' bb h_v0lk h_o2 h_id
+            rw [h_vy] at h_v0
+            exact h_in h_v0
+          show sahiplikGet (sahiplikSetMany S.sahiplik
+              (bolgeleriTopla S.bolge yd) (Sahip.thread tYeni)) bb
+              = some (Sahip.thread ctx.tid)
+          rw [sahiplikSetMany_ne _ _ _ _ h_yok]
+          exact h_own
+  | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_gorev_birlestir _ _ _ _ _,
+          LineerTamam.l_gorev_birlestir _ _ _,
+          RegionTamam.r_gorev_birlestir _ _ _ =>
+          exact ⟨ctx.lineer, S.bolge,
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        refine ⟨h_o, ?_⟩
+        intro h_own
+        have h_yok : ∀ b'' ∈ rb, b''.id ≠ bb.id := by
+          intro b'' h_in h_id
+          have h_f := h_donen b'' h_in
+          rw [sahiplikGet_id_esit S.sahiplik b'' bb h_id, h_own] at h_f
+          have h_t2 := Option.some.inj h_f
+          injection h_t2 with h_t3
+          obtain ⟨hctx, h_hin, h_htid, vSon, h_hif⟩ := h_hedef
+          have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+          have h_ce : ctx = hctx :=
+            tidAyrik_tekil h13 h_ctx_in h_hin (h_t3.trans h_htid.symm)
+          rw [← h_ce] at h_hif
+          rw [h_if] at h_hif
+          nomatch h_hif
+        show sahiplikGet (sahiplikSetMany S.sahiplik rb
+            (Sahip.thread ctx.tid)) bb = some (Sahip.thread ctx.tid)
+        rw [sahiplikSetMany_ne _ _ _ _ h_yok]
+        exact h_own
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerTuket ctx.lineer vId } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim, lineer := lineerTuket ctx.lineer vId } : ThreadCtx) :: ts2
+          = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_kanal_gonder _ _ _ _ _,
+          LineerTamam.l_kanal_gonder _ _ _ _ _,
+          RegionTamam.r_kanal_gonder _ _ _ _ _ bR h_bR h_yzR h_eqR =>
+          subst h_eqR
+          have h_eqb : bR = b := Option.some.inj (h_bR.symm.trans h_b)
+          refine ⟨lineerTuket ctx.lineer vId,
+            bolgeOrtamUpdate S.bolge vId
+              (bolgeKategoriDegistir bR (BolgeKategorisi.kanalRho k)),
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _, ?_⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+          rw [h_eqb]
+          exact RegionTamam.r_sabit _ _ _
+      · intro y bb h_o h_yz
+        have h_o2 : bolgeOrtamGet (bolgeOrtamUpdate S.bolge vId
+            (bolgeKategoriDegistir b (BolgeKategorisi.kanalRho k))) y
+            = some bb := h_o
+        rw [bolgeOrtamUpdate_get] at h_o2
+        by_cases hv : vId = y
+        · rw [if_pos hv] at h_o2
+          rw [← Option.some.inj h_o2] at h_yz
+          simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+        · rw [if_neg hv] at h_o2
+          refine ⟨h_o2, ?_⟩
+          intro h_own
+          have h_ne2 : bb.id ≠ b.id := by
+            intro h_id
+            exact hv (h_konf.2.2.2.2.2.2.2.2.2.2.2.1 vId y b bb h_b h_o2
+              h_id.symm)
+          show sahiplikGet (sahiplikSet S.sahiplik b (Sahip.kanalSahip k)) bb
+              = some (Sahip.thread ctx.tid)
+          rw [sahiplikSet_ne _ _ _ _ h_ne2]
+          exact h_own
+  | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit v = ctx.ifade := congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit v } : ThreadCtx) :: ts2
+          = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      have h_kdF : ∃ kdF ∈ S.kanal, kdF.kid = k
+          ∧ kdF.gonderKuyrugu.head? = some v := by
+        unfold kanalIlk at h_v
+        cases h_f : S.kanal.find? (fun kd => kd.kid = k) with
+        | none => rw [h_f] at h_v; cases h_v
+        | some kdF =>
+            rw [h_f] at h_v
+            have h_q : kdF.gonderKuyrugu.head? = some v := h_v
+            refine ⟨kdF, List.mem_of_find?_eq_some h_f, ?_, h_q⟩
+            have h_pred := List.find?_some h_f
+            simpa using h_pred
+      obtain ⟨kdF, h_kdF_in, h_kdF_kid, h_kdF_head⟩ := h_kdF
+      have h_dtv := h_konf.2.2.2.1 kdF h_kdF_in v (head?_mem h_kdF_head)
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_kanal_al _ _ _,
+          LineerTamam.l_kanal_al _ _ _,
+          RegionTamam.r_kanal_al _ _ _ =>
+          refine ⟨ctx.lineer, S.bolge,
+            ⟨HasType.t_sabit _ _ _ _ ?_,
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+          rw [← h_kdF_kid]
+          exact degerTipli_ortam v _ h_dtv
+      · intro y bb h_o h_yz
+        refine ⟨h_o, ?_⟩
+        intro h_own
+        by_cases hid : bb.id = tb.id
+        · show sahiplikGet (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+              = some (Sahip.thread ctx.tid)
+          rw [sahiplikSet, sahiplikGet, if_pos hid.symm]
+        · show sahiplikGet (sahiplikSet S.sahiplik tb (Sahip.thread ctx.tid)) bb
+              = some (Sahip.thread ctx.tid)
+          rw [sahiplikSet_ne _ _ _ _ hid]
+          exact h_own
+  | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_i : Ifade.sabit Deger.birim = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        nomatch h_i
+      have h2' : ts1 ++ ({ ctx with ifade := Ifade.sabit Deger.birim } : ThreadCtx)
+          :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_dondur _ _ _,
+          LineerTamam.l_dondur _ _ _,
+          RegionTamam.r_dondur _ _ _ _ x0 h_x0 h_yzb h_eqR =>
+          subst h_eqR
+          exact ⟨ctx.lineer, bolgeOrtamDondurBolge S.bolge b,
+            ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+             LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩,
+            lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y bb h_o h_yz
+        have h_o2 : bolgeOrtamGet (bolgeOrtamDondurBolge S.bolge b) y
+            = some bb := h_o
+        rw [dondur_get] at h_o2
+        cases h_lk : bolgeOrtamGet S.bolge y with
+        | none => rw [h_lk] at h_o2; cases h_o2
+        | some b0 =>
+            rw [h_lk, Option.map_some] at h_o2
+            by_cases hid : b0.id = b.id
+            · rw [if_pos hid] at h_o2
+              rw [← Option.some.inj h_o2] at h_yz
+              simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_yz
+            · rw [if_neg hid] at h_o2
+              have h_b0bb := Option.some.inj h_o2
+              rw [h_b0bb] at hid
+              refine ⟨congrArg Option.some h_b0bb, ?_⟩
+              intro h_own
+              show sahiplikGet (sahiplikSet S.sahiplik b Sahip.donmus) bb
+                  = some (Sahip.thread ctx.tid)
+              rw [sahiplikSet_ne _ _ _ _ hid]
+              exact h_own
+  -- ============ Hata kurallari: Aile 2 exfalso ============
+  | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataDonmus Γ Δ ctx.lineer Ρ x _ τ' Λ'' Ρ''
+        h_typed S b h_konf.2.2.2.2.2.1 h_konf.2.2.2.2.2.2.1 h_b h_frozen
+  | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_not_owner h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sAtamaHataSahipDegil Γ Δ ctx.lineer Ρ S ctx x _ b
+        τ' Λ'' Ρ'' h_typed h_ctx_in h_if h_konf.2.2.2.2.2.1
+        h_konf.2.2.2.2.2.2.2.1 h_b h_not_owner
+  | cGorevBaslatHataLineerIhlal S S' ts1 ts2 ctx yd kod vIhlal h_t h_if h_in h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cGorevBaslatHataLineerIhlal Γ Δ ctx.lineer Ρ
+        yd kod vIhlal τ' Λ'' Ρ'' h_typed h_in h_tuket
+  | cKanalGonderHataLineerTuket S S' ts1 ts2 ctx k vId h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cKanalGonderHataLineerTuket Γ Δ ctx.lineer Ρ
+        k vId τ' Λ'' Ρ'' h_typed h_tuket
+  | cDondurHataZatenDonmus S S' ts1 ts2 ctx b h_t h_if h_zaten h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_cDondurHataZatenDonmus Γ Δ ctx.lineer Ρ
+        b τ' Λ'' Ρ'' h_typed S
+        h_konf.2.2.2.2.2.1 h_konf.2.2.2.2.2.2.1 h_zaten
+  | sLinKullanHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinKullanHataZatenTuketildi Γ Δ ctx.lineer Ρ
+        x τ' Λ'' Ρ'' h_typed h_tuket
+  | sLinImhaHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuket h_S' =>
+      intro h_konf
+      exfalso
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      exact typing_excludes_sLinImhaHataZatenTuketildi Γ Δ ctx.lineer Ρ
+        x τ' Λ'' Ρ'' h_typed h_tuket
+  -- ============ Congruence: ic-yukten kompozisyon ============
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S1
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ0, Λ0, Ρ0, h_ty0⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty0
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx a) :=
+        konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx a h_konf h_t
+          (typed_seq_sol h_ty0)
+          (fun y h => by rw [h_if]; exact HedefVar.seq_sol a b y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.seq_sol a b bb h)
+      obtain ⟨h_nei, h_A, h_B⟩ :=
+        ih h_konf1 ts1 ts2 { ctx with ifade := a } ts2' ctx' rfl h_t1' h_yan
+      have h_ne : ({ ctx' with ifade := Ifade.seq a' b } : ThreadCtx) ≠ ctx := by
+        intro h_e
+        have h_if2x := congrArg ThreadCtx.ifade h_e
+        have h_if2 : Ifade.seq a' b = ctx.ifade := h_if2x
+        have h_lin2x := congrArg ThreadCtx.lineer h_e
+        have h_lin2 : ctx'.lineer = ctx.lineer := h_lin2x
+        rw [h_if] at h_if2
+        injection h_if2 with h_aa _
+        apply h_nei
+        show (⟨ctx'.tid, ctx'.ifade, ctx'.lineer⟩ : ThreadCtx)
+            = ⟨ctx.tid, a, ctx.lineer⟩
+        rw [h_tid, h_if', h_aa, h_lin2]
+      have h2' : ts1 ++ ({ ctx' with ifade := Ifade.seq a' b } : ThreadCtx)
+          :: ts2' = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' h_yan h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_seq _ _ _ _ τa _ hta htb,
+          LineerTamam.l_seq _ _ Λa _ _ _ hla hlb,
+          RegionTamam.r_seq _ _ Ρa _ _ _ hra hrb =>
+          obtain ⟨Λa', Ρa', h_tya', h_ka, h_ia⟩ := h_A τa Λa Ρa ⟨hta, hla, hra⟩
+          rw [h_if'] at h_tya'
+          obtain ⟨Λb', h_lb', h_kb⟩ := lineerTamam_kucuk_transport hlb Λa' h_ka
+          obtain ⟨Ρb', h_rb', h_ib⟩ := regionTamam_iliski_transport hrb Ρa' h_ia
+          exact ⟨Λb', Ρb',
+            ⟨HasType.t_seq _ _ _ _ _ _ h_tya'.hasType htb,
+             LineerTamam.l_seq _ _ _ _ a' b h_tya'.lineerOK h_lb',
+             RegionTamam.r_seq _ _ _ _ a' b h_tya'.regionOK h_rb'⟩,
+            h_kb, h_ib⟩
+      · exact h_B
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S1
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ0, Λ0, Ρ0, h_ty0⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty0
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx e) :=
+        konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_konf h_t
+          (typed_atama_ic h_ty0)
+          (fun y h => by rw [h_if]; exact HedefVar.atama_ic x e y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.atama_ic x e bb h)
+      obtain ⟨h_nei, h_A, h_B⟩ :=
+        ih h_konf1 ts1 ts2 { ctx with ifade := e } ts2' ctx' rfl h_t1' h_yan
+      have h_ne : ({ ctx' with ifade := Ifade.atama x e' } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_if2x := congrArg ThreadCtx.ifade h_e
+        have h_if2 : Ifade.atama x e' = ctx.ifade := h_if2x
+        have h_lin2x := congrArg ThreadCtx.lineer h_e
+        have h_lin2 : ctx'.lineer = ctx.lineer := h_lin2x
+        rw [h_if] at h_if2
+        injection h_if2 with _ h_ee
+        apply h_nei
+        show (⟨ctx'.tid, ctx'.ifade, ctx'.lineer⟩ : ThreadCtx)
+            = ⟨ctx.tid, e, ctx.lineer⟩
+        rw [h_tid, h_if', h_ee, h_lin2]
+      have h2' : ts1 ++ ({ ctx' with ifade := Ifade.atama x e' } : ThreadCtx)
+          :: ts2' = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' h_yan h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_atama _ _ _ _ τx h_gx hte,
+          LineerTamam.l_atama _ _ _ _ _ hle,
+          RegionTamam.r_atama _ _ _ _ _ bA hre h_gxA h_yzA =>
+          obtain ⟨Λe', Ρe', h_tye', h_ke, h_ie⟩ := h_A τx Λo Ρoo ⟨hte, hle, hre⟩
+          rw [h_if'] at h_tye'
+          exact ⟨Λe', Ρe',
+            ⟨HasType.t_atama _ _ _ _ τx h_gx h_tye'.hasType,
+             LineerTamam.l_atama _ _ _ _ _ h_tye'.lineerOK,
+             RegionTamam.r_atama _ _ _ _ _ bA h_tye'.regionOK
+               (h_ie.1 x bA h_gxA h_yzA) h_yzA⟩,
+            h_ke, h_ie⟩
+      · exact h_B
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S1
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ0, Λ0, Ρ0, h_ty0⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty0
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx e) :=
+        konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_konf h_t
+          (typed_guvensiz_ic h_ty0)
+          (fun y h => by rw [h_if]; exact HedefVar.guvensiz_ic e y h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.guvensiz_ic e bb h)
+      obtain ⟨h_nei, h_A, h_B⟩ :=
+        ih h_konf1 ts1 ts2 { ctx with ifade := e } ts2' ctx' rfl h_t1' h_yan
+      have h_ne : ({ ctx' with ifade := Ifade.guvensiz e' } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_if2x := congrArg ThreadCtx.ifade h_e
+        have h_if2 : Ifade.guvensiz e' = ctx.ifade := h_if2x
+        have h_lin2x := congrArg ThreadCtx.lineer h_e
+        have h_lin2 : ctx'.lineer = ctx.lineer := h_lin2x
+        rw [h_if] at h_if2
+        injection h_if2 with h_ee
+        apply h_nei
+        show (⟨ctx'.tid, ctx'.ifade, ctx'.lineer⟩ : ThreadCtx)
+            = ⟨ctx.tid, e, ctx.lineer⟩
+        rw [h_tid, h_if', h_ee, h_lin2]
+      have h2' : ts1 ++ ({ ctx' with ifade := Ifade.guvensiz e' } : ThreadCtx)
+          :: ts2' = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' h_yan h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_guvensiz _ _ _ _ hte,
+          LineerTamam.l_guvensiz _ _ _ _ hle,
+          RegionTamam.r_guvensiz _ _ _ _ hre =>
+          obtain ⟨Λe', Ρe', h_tye', h_ke, h_ie⟩ := h_A τo Λo Ρoo ⟨hte, hle, hre⟩
+          rw [h_if'] at h_tye'
+          exact ⟨Λe', Ρe',
+            ⟨HasType.t_guvensiz _ _ _ _ h_tye'.hasType,
+             LineerTamam.l_guvensiz _ _ _ _ h_tye'.lineerOK,
+             RegionTamam.r_guvensiz _ _ _ _ h_tye'.regionOK⟩,
+            h_ke, h_ie⟩
+      · exact h_B
+
+
+-- ============================================================
 -- §2. ADIM KORUNUM — birlesik korunum (F4 cekirdegi, dairesellik kirici)
 -- ============================================================
 

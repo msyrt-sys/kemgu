@@ -602,6 +602,41 @@ inductive HedefBolge : Ifade → Bolge → Prop where
   | guvensiz_ic (e : Ifade) (b : Bolge) :
       HedefBolge e b → HedefBolge (Ifade.guvensiz e) b
 
+/-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
+theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}
+    (h : HedefVar (Ifade.seq a b) y) : HedefVar a y ∨ HedefVar b y := by
+  cases h with
+  | seq_sol _ _ _ h => exact Or.inl h
+  | seq_sag _ _ _ h => exact Or.inr h
+
+theorem hedefBolge_seq_inv {a b : Ifade} {bb : Bolge}
+    (h : HedefBolge (Ifade.seq a b) bb) :
+    HedefBolge a bb ∨ HedefBolge b bb := by
+  cases h with
+  | seq_sol _ _ _ h => exact Or.inl h
+  | seq_sag _ _ _ h => exact Or.inr h
+
+theorem hedefVar_atama_inv {x : VarId} {e : Ifade} {y : VarId}
+    (h : HedefVar (Ifade.atama x e) y) : y = x ∨ HedefVar e y := by
+  cases h with
+  | atama_bas _ _ => exact Or.inl rfl
+  | atama_ic _ _ _ h => exact Or.inr h
+
+theorem hedefBolge_atama_inv {x : VarId} {e : Ifade} {bb : Bolge}
+    (h : HedefBolge (Ifade.atama x e) bb) : HedefBolge e bb := by
+  cases h with
+  | atama_ic _ _ _ h => exact h
+
+theorem hedefVar_guvensiz_inv {e : Ifade} {y : VarId}
+    (h : HedefVar (Ifade.guvensiz e) y) : HedefVar e y := by
+  cases h with
+  | guvensiz_ic _ _ h => exact h
+
+theorem hedefBolge_guvensiz_inv {e : Ifade} {bb : Bolge}
+    (h : HedefBolge (Ifade.guvensiz e) bb) : HedefBolge e bb := by
+  cases h with
+  | guvensiz_ic _ _ h => exact h
+
 
 -- ============================================================
 -- §9.5. FaultSebep — Plan v2 Adim 1.1 (Onarim Plani §4.2)
