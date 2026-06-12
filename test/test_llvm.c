@@ -1830,6 +1830,36 @@ static void test_stdlib_liste_e2e(void) {
                rc == 42);
 }
 
+/* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
+
+static void test_ad_cozum_sapma_check(void) {
+    /* Sapma programi --check'ten gecmeli (ciplak kardes cagrilari +
+     * goreli YOL, module-first/lexical kuralla cozulur). */
+    int ok = kemgu_check_basarili("test/snapshots/ad_cozum_sapma.kem");
+    test_sonuc("ad-cozum: sapma programi --check gecer (kardes-oncelik)",
+               ok == 1);
+}
+
+static void test_ad_cozum_sapma_e2e(void) {
+    /* Regresyon guard'i: tip kontrol (module-first/lexical) ile codegen
+     * ayni sembole baglanmali. Onceki durum: codegen global-first —
+     * ciplak f() modul icinde @f'e (global) baglaniyordu, goreli yol
+     * (ic::g) hic cozulemiyordu -> exit 42 yerine yanlis deger / -1. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/ad_cozum_sapma.kem");
+    test_sonuc("ad-cozum: kardes-oncelik tip kontrol == codegen -> exit 42",
+               rc == 42);
+}
+
+static void test_ad_cozum_modul_govde_denetimi(void) {
+    /* On-kosul guard'i: modul islev govdeleri tip kontrolune DAHIL.
+     * Onceki durum: islev sembolu yalniz global scope'ta araniyordu ->
+     * sessiz erken donus -> 'ver dogru;' (mantiksal != tam32) --check'ten
+     * GECIYORDU. */
+    int ok = kemgu_check_basarili("test/snapshots/ad_cozum_govde.kem");
+    test_sonuc("ad-cozum: modul govdesi denetlenir (T020 --check kirmizi)",
+               ok == 0);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. (T016 fix
@@ -2180,6 +2210,11 @@ int main(void) {
 
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
+
+    printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
+    test_ad_cozum_sapma_check();
+    test_ad_cozum_sapma_e2e();
+    test_ad_cozum_modul_govde_denetimi();
 
     printf("\n--- Matris A: tipler x operatorler (signedness) ---\n");
     test_matris_a_dtam_kiyas();

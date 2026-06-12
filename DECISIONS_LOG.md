@@ -137,3 +137,54 @@ Closure codegen (ortam yakalama, env struct, fonksiyon-pointer ABI'si) mekanik
 değil — ayrı feature tasarımı. Kampanyada yok. Mevcut durum: lambda ifadesi
 `; ifade tipi desteklenmiyor` + 0 döner; stdlib yüksek-mertebe işlevleri
 adlandırılmış işlevlerle çalışıyor (test_stdlib_* yeşil).
+
+## D-010 [YÜKSEK] — Tek-geçiş ad çözümü: resolver binding'i AST'te, codegen tüketir (2026-06-12)
+
+**Karar (çekirdek spec — Mehmet belirledi):** Her ad-referansı düğümüne (`DUGUM_TANIMLAYICI`,
+`DUGUM_YOL`) "çözülmüş binding" eklendi (`ast.h`: `cozum_sembol` + `cozum_kategori`
+{YEREL, MODUL_UYESI, GLOBAL} + `cozum_modul_onek`). Resolver (`tip_kontrol.c`) binding'i
+module-first/lexical kuralla doldurur ve düğüme YAZAR (tek doğruluk kaynağı); codegen
+(`llvm.c`) string'le yeniden ÇÖZMEZ, kaydı okuyup tam o sembolü emit eder (`@modul.ad`
+mangling'i ile). Sonuç: tip kontrol ile codegen inşa gereği aynı sembole anlaşır.
+
+**Önceki SAPMA (ADIM-0'da ampirik üretildi):** global `f` + modül-kardeşi `f`, modül
+içinden çıplak `f()`: tip kontrol modül-kardeşine (lexical, imza-ayrık varyantla kanıtlı),
+codegen `islev_bul` global-first olduğundan global'e bağlanıyordu → exit 2 yerine 1;
+imza-ayrık ikizde geçersiz IR (`call i32 @f()` vs `define i32 @f(i32)`). Göreli YOL
+(`m` içinden `ic::g()`) codegen'de hiç çözülemiyordu (string-knit "ic.g" kayıt "m.ic.g").
+Regression guard: `test/snapshots/ad_cozum_sapma.kem` (exit 42) + `ad_cozum_govde.kem`.
+
+**[ETKİ] Taktik seçimler (otomatik uygulandı):**
+1. **Binding alanları union DIŞINDA ortak başlıkta** — `dugum_olustur` `arena_ayir_sifir`
+   kullandığından varsayılan `COZUM_YOK`/NULL; mevcut düğüm üretim yolları (ifade.c dahil)
+   değişmedi, ifade.c'ye dokunulmadı. Maliyet ~24B/düğüm (derleyici için ihmal edilebilir).
+2. **`sembol.h`/`tip_kontrol.h` API'sine dokunulmadı** — modül öneki, bulunan SCOPE_MODUL
+   scope'undan türetilir (`modul_onek_turet`: parent scope'ta `modul_scope==s` olan modül
+   sembolünün adını biriktirir, iç içe "m1.m2"); `ast.h`'de yalnız `struct Sembol` forward
+   declaration (sembol.h→ast.h yönlü include, döngü yok).
+3. **ÖN-KOŞUL TAMİRİ (`tip_kontrol.c` DUGUM_ISLEV):** İşlev sembolü artık tanımlandığı
+   scope'ta aranır (`sembol_bul_yerel(tk->scope)`, eskisi `tk->global_scope`) ve gövde
+   scope'unun parent'ı `tk->scope` (eskisi global). Önceki durum: modül işlev gövdeleri
+   HİÇ tip-kontrol edilmiyordu (sembol modül scope'unda → sessiz erken dönüş; `ver doğru;`
+   → tam32 --check'ten GEÇİYORDU) ya da aynı adlı global ikizin imzasına karşı denetleniyor,
+   arity farkında parametre dizisi OOB okumasıyla ÇÖKÜYORDU (RC=139 repro'landı). İkiz/
+   builtin-gölgeleme koruması: `ast_dugumu != d` veya param sayısı uyuşmazsa gövde atlanır
+   (T024 zaten raporlu).
+4. **`ana.c mode_llvm`'e resolver geçişi eklendi (KAPSAM dışı dosya — gerekçe):** codegen'in
+   tüketeceği binding'i ancak resolver yazabilir; mode_llvm bugüne dek tip_kontrol'ü HİÇ
+   çalıştırmıyordu (CLAUDE.md'deki pipeline tarifi aspirasyoneldi). mode_check kalıbı
+   kopyalandı; hatalar `hata_callback_ayarla(sessiz_cb)` ile susturulur → tip hatalı
+   programlar --llvm'de ESKİSİ GİBİ emit edilir (CLI çıktısı bayt-bayt korunur), binding'i
+   eksik düğümler codegen'de string fallback'ine düşer. Tek arena → Sembol* ömrü
+   `llvm_ir_uret` boyunca geçerli (SembolLink linked-list, relocation yok).
+5. **Graceful degradation tasarım gereği KALICI:** `COZUM_YOK` → eski global-first +
+   aktif-önek-fallback yolu aynen korunur. Sebep: built-in'ler (yazdir/dizi_ekle/
+   tekkez_yarat/...) ya sembol tablosunda değil ya da IslevKayit'ta kayıtsız; ayrıca
+   resolver koşmadan doğrudan `llvm_ir_uret` çağıran tüketiciler kırılmamalı.
+6. **`COZUM_YEREL` callee → indirect-call yolu:** lokal function-pointer, aynı adlı global
+   işlevi artık GÖLGELEYEBİLİR (tip kontrolle tutarlı; eski codegen global'i seçerdi).
+
+**Kapsam/sınırlar:** Çoklu-dosya/modül yükleme (A), generic specialization çekirdeği (C),
+nitelikli TİP annotation (D) DOKUNULMADI. `DUGUM_ERISIM` (method dispatch) binding'i v2.
+Identifier-yük (lvalue/load) codegen'i lokal isim tablosuyla devam ediyor (sapma çağrı
+sitelerindeydi); modül-üyesi `sabit` referansı v1'de zaten desteklenmiyor.
