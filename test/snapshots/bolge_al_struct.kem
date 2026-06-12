@@ -1,0 +1,18 @@
+yapı Cift { a: tam32; b: tam64; }
+işlev main() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken v: *Cift = bölge_al(y, 3);
+    değişken sonuc: tam32 = 0;
+    değişken uc_yuz: tam64 = 300;
+    güvensiz {
+        v[0] = Cift { a: 40, b: 100 };
+        v[2] = Cift { a: 2, b: 200 };
+        değişken s0: Cift = v[0];
+        değişken s2: Cift = v[2];
+        eğer s0.b + s2.b == uc_yuz {
+            sonuc = s0.a + s2.a;
+        }
+    }
+    geri_al(y);
+    ver sonuc;
+}

@@ -31,6 +31,7 @@ typedef enum {
     /* Tanimlar */
     DUGUM_ISLEV,
     DUGUM_YAPI,
+    DUGUM_CESIT,           /* çeşit Ad { A, B, C } — C2.7 sum type (payloadsuz v1) */
     DUGUM_OZELLIK,
     DUGUM_UYGULA,
     DUGUM_SABIT,
@@ -46,6 +47,7 @@ typedef enum {
     DUGUM_ICIN,
     DUGUM_ESLES,
     DUGUM_GUVENSIZ,
+    DUGUM_SATIRICI_ASM,    /* satıriçi_asm { ... } — C5 inline assembly */
     DUGUM_BLOK,
     DUGUM_IFADE_DEYIMI,    /* sadece ifade ; (ornegin f(); ) */
 
@@ -93,6 +95,7 @@ typedef enum {
     DUGUM_DESEN_LITERAL,
     DUGUM_DESEN_TANIMLAYICI,
     DUGUM_DESEN_YAPICI,    /* TipAdi(alt_desen, ...) */
+    DUGUM_DESEN_YOL,       /* Cesit::Varyant — C2.7 (payloadsuz varyant deseni) */
     DUGUM_DESEN_JOKER,     /* _ */
     DUGUM_ESLES_KOLU,      /* desen => blok/ifade */
 
@@ -134,6 +137,31 @@ typedef enum {
     OP_DEREFERANS,     /* *x */
 } Operator;
 
+/* === Tek-gecis ad cozumu (resolver binding) ===
+ *
+ * Resolver (tip_kontrol.c) ad-referansi dugumlerine (DUGUM_TANIMLAYICI,
+ * DUGUM_YOL) kazanan sembolu ve kategorisini YAZAR; codegen (llvm.c)
+ * adlari string'le yeniden COZMEZ, bu kaydi TUKETIR. Boylece tip kontrol
+ * ile codegen insa geregi ayni sembole anlasir (onceki sapma: tip kontrol
+ * module-first/lexical, codegen global-first cozuyordu).
+ *
+ * dugum_olustur arena_ayir_sifir kullandigi icin varsayilan deger
+ * COZUM_YOK / NULL — resolver kosmamis AST'lerde (or. dogrudan
+ * llvm_ir_uret cagrilari) codegen eski string yoluna duser (graceful
+ * degradation). Built-in'ler (yazdir, dizi_ekle, tekkez_yarat, ...)
+ * sembol tablosunda olmadigi icin COZUM_YOK kalir — codegen'in built-in
+ * eslemeleri etkilenmez. */
+
+struct Sembol;  /* sembol.h — circular include yerine forward decl
+                   (sembol.h ast.h'yi include eder) */
+
+typedef enum {
+    COZUM_YOK = 0,      /* resolver yazmadi (varsayilan) */
+    COZUM_YEREL,        /* islev/blok scope — lokal degisken/parametre */
+    COZUM_MODUL_UYESI,  /* modul uyesi — mangling oneki cozum_modul_onek */
+    COZUM_GLOBAL,       /* global scope tanimi */
+} CozumKategorisi;
+
 /* === Dugum yapisi (tagged union) === */
 
 typedef struct Dugum Dugum;
@@ -142,6 +170,14 @@ struct Dugum {
     DugumTipi tip;
     int satir;             /* 1'den baslar */
     int sutun;             /* 1'den baslar (UTF-8 byte konumu) */
+
+    /* Tek-gecis ad cozumu binding'i (yalniz ad-referansi dugumlerinde
+     * dolu). cozum_modul_onek COZUM_MODUL_UYESI icin "m1.m2" formatinda
+     * noktali mangling onekidir (llvm.c modul_mangle ile ayni sema). */
+    const struct Sembol *cozum_sembol;
+    CozumKategorisi cozum_kategori;
+    const char *cozum_modul_onek;
+    int cozum_modul_onek_uz;
 
     union {
         /* === Ust duzey === */
@@ -198,6 +234,16 @@ struct Dugum {
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
         } yapi;
+
+        /* C2.7: çeşit Ad { A, B, C } — payloadsuz isimli varyant kümesi (sum type).
+         * Varyant indeksi = bildirim sırası (0'dan); discriminant tag. */
+        struct {
+            const char *ad;
+            int ad_uzunluk;
+            char **varyantlar;          /* varyant adları (arena) */
+            int *varyant_uzunluklar;    /* her varyantın byte uzunluğu */
+            int varyant_sayi;
+        } cesit;
 
         struct {
             const char *ad;
@@ -293,6 +339,28 @@ struct Dugum {
             int aciklama_metin_uzunluk;
             Dugum *blok;
         } guvensiz;
+
+        /* C5: satıriçi_asm { mimari: x86_64  şablon: r#"..."#
+         *       çıktı("=r", &v)  girdi("r", e)  bozulan("~{cc}")
+         *       çevrim: 3 }
+         * Kısıt degerleri ham LLVM/GCC string (Türkçeleştirilmez);
+         * yüzey sözcükleri Türkçe. Paralel dizi deseni (bkz. cesit). */
+        struct {
+            const char *mimari;  int mimari_uz;   /* arch-tag (zorunlu) */
+            const char *sablon;  int sablon_uz;   /* asm template (zorunlu) */
+            /* çıktı("kısıt", &ad): her çıktı bir &değişken lvalue'ya yazar */
+            char **cikti_kisitlar; int *cikti_kisit_uzlar;
+            char **cikti_adlar;    int *cikti_ad_uzlar;
+            int cikti_sayi;
+            /* girdi("kısıt", ifade) */
+            char **girdi_kisitlar; int *girdi_kisit_uzlar;
+            Dugum **girdi_ifadeler;
+            int girdi_sayi;
+            /* bozulan("kısıt") — clobber listesi */
+            char **bozulanlar; int *bozulan_uzlar;
+            int bozulan_sayi;
+            int64_t cevrim;    /* -1 = anotasyon yok (gerçekzamanlı'da RT007) */
+        } satirici_asm;
 
         struct {
             Dugum **deyimler;
@@ -469,6 +537,12 @@ struct Dugum {
             Dugum **alt_desenler;
             int sayi;
         } desen_yapici;
+
+        /* C2.7: Cesit::Varyant deseni (payloadsuz). */
+        struct {
+            const char *cesit_ad; int cesit_uz;
+            const char *varyant_ad; int varyant_uz;
+        } desen_yol;
 
         /* DUGUM_DESEN_JOKER — veri yok */
 

@@ -1,0 +1,38 @@
+// VirtIO status register bitleri: bu dosya donanim erisimi icermez.
+
+sabit VIRTIO_STATUS_RESET: tam32 = 0;
+sabit VIRTIO_STATUS_ACKNOWLEDGE: tam32 = 1;
+sabit VIRTIO_STATUS_DRIVER: tam32 = 2;
+sabit VIRTIO_STATUS_DRIVER_OK: tam32 = 4;
+sabit VIRTIO_STATUS_FEATURES_OK: tam32 = 8;
+sabit VIRTIO_STATUS_FAILED: tam32 = 128;
+
+// VirtIO MMIO v2 register offsetleri; taban adresi transport dosyasinda tutulur.
+sabit VIRTIO_MMIO_MAGIC_VALUE: tam64 = 0;
+sabit VIRTIO_MMIO_VERSION: tam64 = 4;
+sabit VIRTIO_MMIO_DEVICE_ID: tam64 = 8;
+sabit VIRTIO_MMIO_VENDOR_ID: tam64 = 12;
+sabit VIRTIO_MMIO_DEVICE_FEATURES: tam64 = 16;
+sabit VIRTIO_MMIO_DEVICE_FEATURES_SEL: tam64 = 20;
+sabit VIRTIO_MMIO_DRIVER_FEATURES: tam64 = 32;
+sabit VIRTIO_MMIO_DRIVER_FEATURES_SEL: tam64 = 36;
+sabit VIRTIO_MMIO_QUEUE_SEL: tam64 = 48;
+sabit VIRTIO_MMIO_QUEUE_NUM_MAX: tam64 = 52;
+sabit VIRTIO_MMIO_QUEUE_NUM: tam64 = 56;
+sabit VIRTIO_MMIO_QUEUE_READY: tam64 = 68;
+sabit VIRTIO_MMIO_STATUS: tam64 = 112;
+sabit VIRTIO_MMIO_QUEUE_DESC_LOW: tam64 = 128;
+sabit VIRTIO_MMIO_QUEUE_DESC_HIGH: tam64 = 132;
+sabit VIRTIO_MMIO_QUEUE_DRIVER_LOW: tam64 = 144;
+sabit VIRTIO_MMIO_QUEUE_DRIVER_HIGH: tam64 = 148;
+sabit VIRTIO_MMIO_QUEUE_DEVICE_LOW: tam64 = 160;
+sabit VIRTIO_MMIO_QUEUE_DEVICE_HIGH: tam64 = 164;
+sabit VIRTIO_MMIO_CONFIG_GENERATION: tam64 = 252;
+
+// VirtIO block device config-space offsetleri; config tabani MMIO 0x100 adresindedir.
+sabit VIRTIO_BLK_CFG_TABAN: tam64 = 256;
+sabit VIRTIO_BLK_CFG_CAPACITY: tam64 = 0;
+sabit VIRTIO_BLK_CFG_CAPACITY_HIGH: tam64 = 4;
+sabit VIRTIO_BLK_CFG_SIZE_MAX: tam64 = 8;
+sabit VIRTIO_BLK_CFG_SEG_MAX: tam64 = 12;
+sabit VIRTIO_BLK_CFG_BLK_SIZE: tam64 = 20;

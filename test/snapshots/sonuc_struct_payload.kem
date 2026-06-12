@@ -1,0 +1,27 @@
+// C2.5 fikstürü — sonuç struct payload + sonuç-as-parameter ABI.
+//
+// sonuç<Nokta, tam32> → {i8, %Nokta, i32}: payload bir struct (by-value).
+// cozumle() sonuç'u PARAMETRE olarak alır (aggregate-by-value ABI); yap()'ın
+// dönüşü doğrudan ona geçirilir. Bağlı `n` bir %Nokta değeridir; n.x/n.y
+// extractvalue ile okunur. opt -passes=verify temiz geçmeli.
+
+yapı Nokta { x: tam32; y: tam32; }
+
+işlev yap(ok: mantıksal) -> sonuç<Nokta, tam32> {
+    eğer ok { ver tamam(Nokta { x: 40, y: 2 }); }
+    ver hata(99);
+}
+
+işlev cozumle(r: sonuç<Nokta, tam32>) -> tam32 {
+    eşleş r {
+        tamam(n) => { ver n.x + n.y; }   // struct payload binding + alan erişimi
+        hata(kod) => { ver kod; }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    eğer cozumle(yap(doğru)) != 42 { ver 1; }   // tamam(Nokta{40,2}) → 42
+    eğer cozumle(yap(yanlış)) != 99 { ver 2; }  // hata(99) → 99
+    ver 42;
+}

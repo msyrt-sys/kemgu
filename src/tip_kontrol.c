@@ -2,6 +2,7 @@
 #include "hata.h"
 #include "lexer.h"
 #include "parser.h"
+#include "llvm.h"   /* C5 AS001: KEMGU_HEDEF_MIMARI (tek kaynak) */
 
 #include <string.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     uygula_tablosu_baslat(&tk->uygulamalar);
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
+    tk->guvensiz_baglam = 0;
 
     /* Built-in islevler — LLVM'de libc karsiliklarina map edilir */
     #define EKLE_BUILTIN(_ad, _ad_uz, _params, _n_params, _donus) do { \
@@ -450,6 +452,34 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
     return tip_olustur_basit(tk->arena, TIP_HATA);
 }
 
+/* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
+ * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
+ * yetki<MMIO> degilse MM002 raporlanir. */
+static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    const TipBilgisi *k = tip_yetki_kaynak(y);
+    int mmio = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
+                k->veri.yapi.ad && k->veri.yapi.ad_uzunluk == 4 &&
+                memcmp(k->veri.yapi.ad, "MMIO", 4) == 0);
+    if (!mmio) {
+        tip_hata(tk, arg, "MM002",
+                 "mmio islemi ilk argumani yetki<MMIO> olmali");
+    }
+}
+
+/* v1 bölge-container: bölge_al ilk argümanı herhangi bir yetki<R>
+ * ÖDÜNÇ alır (mmio deseni — TÜKETMEZ). v1'de R kısıtlanmaz; gerçek
+ * arena (V2) AYNI imzayla R'yi kullanacak (evrim-koruyan). */
+static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    if (!tip_yetki_mi(y)) {
+        tip_hata(tk, arg, "BL002",
+                 "bolge_al ilk argumani yetki<R> olmali (odunc alinir)");
+    }
+}
+
 /* Forward declaration (ADIM 11.6'da tanimli, kontrol_yapi_olustur_ic
  * tarafindan kullaniliyor — generic substitusyon icin) */
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
@@ -863,11 +893,177 @@ static int basit_tip_adindan(const char *ad, int uz, TipKategorisi *out) {
         {"mant\xc4\xb1ksal", 10, TIP_MANTIKSAL},
         /* bos: b,o,ş = 1+1+2 = 4 byte */
         {"bo\xc5\x9f", 4, TIP_BOS},
+        /* C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul) */
+        {"bos", 3, TIP_BOS},
     };
     int n = (int)(sizeof(tbl) / sizeof(tbl[0]));
     for (int i = 0; i < n; i++) {
         if (tbl[i].uz == uz && memcmp(tbl[i].ad, ad, (size_t)uz) == 0) {
             *out = tbl[i].k;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* === C2.7: çeşit (sum type) yardımcıları === */
+
+/* 'ad' kayıtlı bir çeşit mi? DUGUM_CESIT döner, değilse NULL. */
+static const Dugum *cesit_ara(TipKontrol *tk, const char *ad, int uz) {
+    Scope *s0 = tk->scope ? tk->scope : tk->global_scope;
+    const Sembol *s = sembol_bul(s0, ad, uz);
+    if (s && s->kategori == SEMBOL_YAPI && s->ast_dugumu &&
+        s->ast_dugumu->tip == DUGUM_CESIT) {
+        return s->ast_dugumu;
+    }
+    return NULL;
+}
+
+/* T016 fix: bir yol ifadesini (TANIMLAYICI ya da YOL) isaret ettigi
+ * modul_scope'a coz. mat -> mat'in scope'u; mat::ic -> ic'in scope'u
+ * (recursive). Modul degilse NULL. Codegen'in @m1.m2 duzlestirmesiyle
+ * ayni kapsam zinciri. */
+static Scope *yol_modul_scope_coz(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        const Sembol *m = sembol_bul(tk->scope,
+            d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+        if (m && m->kategori == SEMBOL_MODUL && m->modul_scope) {
+            return m->modul_scope;
+        }
+        return NULL;
+    }
+    if (d->tip == DUGUM_YOL) {
+        Scope *parent = yol_modul_scope_coz(tk, d->veri.yol.sol);
+        if (!parent) return NULL;
+        const Sembol *m = sembol_bul_yerel(parent,
+            d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
+        if (m && m->kategori == SEMBOL_MODUL && m->modul_scope) {
+            return m->modul_scope;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+/* === Tek-gecis ad cozumu: binding yazimi (bkz. ast.h CozumKategorisi) ===
+ *
+ * Resolver her ad-referansinda kazanan sembolu + kategorisini AST
+ * dugumune yazar; codegen string'le yeniden cozmek yerine bunu tuketir.
+ * Tek dogruluk kaynagi burasi. */
+
+/* SCOPE_MODUL scope'unun modul sembolunu bul: modul sembolu parent
+ * scope'a modul_scope=s ile kaydedilir (bkz. pre_populate_modul). */
+static const Sembol *scope_modul_sembolu(const Scope *s) {
+    if (!s || !s->parent) return NULL;
+    for (const SembolLink *l = s->parent->bas; l; l = l->sonraki) {
+        if (l->sembol.kategori == SEMBOL_MODUL &&
+            l->sembol.modul_scope == s) {
+            return &l->sembol;
+        }
+    }
+    return NULL;
+}
+
+/* SCOPE_MODUL scope'unun noktali mangling onekini turet ("m1.m2") —
+ * llvm.c modul_mangle ile ayni sema (KEMGU adlarinda '.' olamaz,
+ * cakisma yok). Arena'da null-terminated string doner; turetilemezse
+ * NULL (binding yazilmaz, codegen eski yola duser — guvenli taraf). */
+#define COZUM_MODUL_DERINLIK_MAX 16
+static const char *modul_onek_turet(TipKontrol *tk, const Scope *s,
+                                    int *out_uz) {
+    const Sembol *zincir[COZUM_MODUL_DERINLIK_MAX];
+    int n = 0;
+    const Scope *k = s;
+    while (k && k->kategori == SCOPE_MODUL) {
+        if (n >= COZUM_MODUL_DERINLIK_MAX) return NULL;
+        const Sembol *ms = scope_modul_sembolu(k);
+        if (!ms) return NULL;
+        zincir[n++] = ms;
+        k = k->parent;
+    }
+    if (n == 0) return NULL;
+    int toplam = n - 1;  /* noktalar */
+    for (int i = 0; i < n; i++) toplam += zincir[i]->ad_uzunluk;
+    char *onek = (char *)arena_ayir(tk->arena, (size_t)toplam + 1);
+    if (!onek) return NULL;
+    int poz = 0;
+    for (int i = n - 1; i >= 0; i--) {  /* distan ice: m1.m2 */
+        memcpy(onek + poz, zincir[i]->ad, (size_t)zincir[i]->ad_uzunluk);
+        poz += zincir[i]->ad_uzunluk;
+        if (i > 0) onek[poz++] = '.';
+    }
+    onek[toplam] = '\0';
+    if (out_uz) *out_uz = toplam;
+    return onek;
+}
+
+/* Kazanan sembolu d dugumune bagla. AST dugumleri arena'da yazilabilir
+ * nesnelerdir; resolver binding alanlarinin tek yazaridir — const'u
+ * yalniz bu noktada kaldiririz. */
+static void cozum_bagla(TipKontrol *tk, const Dugum *d,
+                        const Sembol *sem, const Scope *bulundugu) {
+    if (!d || !sem || !bulundugu) return;
+    Dugum *yd = (Dugum *)d;
+    if (bulundugu->kategori == SCOPE_GLOBAL) {
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_GLOBAL;
+    } else if (bulundugu->kategori == SCOPE_MODUL) {
+        int ouz = 0;
+        const char *onek = modul_onek_turet(tk, bulundugu, &ouz);
+        if (!onek) return;  /* onek yoksa binding yazma (COZUM_YOK kalir) */
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_MODUL_UYESI;
+        yd->cozum_modul_onek = onek;
+        yd->cozum_modul_onek_uz = ouz;
+    } else {
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_YEREL;
+    }
+}
+
+/* sembol_bul + binding: scope zincirini yuruyup kazanan sembolu VE
+ * bulundugu scope'u tespit eder, d'ye baglar. sembol_bul ile ayni
+ * arama sirasi (yerel -> iceren modul -> global). */
+static const Sembol *sembol_coz_ve_bagla(TipKontrol *tk, const Dugum *d,
+                                         const char *ad, int uz) {
+    for (const Scope *s = tk->scope; s; s = s->parent) {
+        const Sembol *sem = sembol_bul_yerel(s, ad, uz);
+        if (sem) {
+            cozum_bagla(tk, d, sem, s);
+            return sem;
+        }
+    }
+    return NULL;
+}
+
+/* T016 fix: bir yol-sol'unu (TANIMLAYICI ya da modul-yolu) bir çeşit
+ * tanimina coz. Renk -> dogrudan; g::Renk -> modul g icinde Renk.
+ * Boylece modul-nitelikli varyant erisimi g::Renk::Kirmizi calisir. */
+static const Dugum *yol_cesit_coz(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        return cesit_ara(tk, d->veri.tanimlayici.metin,
+                         d->veri.tanimlayici.uzunluk);
+    }
+    if (d->tip == DUGUM_YOL) {
+        Scope *p = yol_modul_scope_coz(tk, d->veri.yol.sol);
+        if (!p) return NULL;
+        const Sembol *s = sembol_bul_yerel(p, d->veri.yol.sag_ad,
+                                           d->veri.yol.sag_ad_uzunluk);
+        if (s && s->kategori == SEMBOL_YAPI && s->ast_dugumu &&
+            s->ast_dugumu->tip == DUGUM_CESIT) {
+            return s->ast_dugumu;
+        }
+    }
+    return NULL;
+}
+
+/* çeşit'te verilen varyant adı tanımlı mı? */
+static int cesit_varyant_var(const Dugum *cd, const char *ad, int uz) {
+    for (int i = 0; i < cd->veri.cesit.varyant_sayi; i++) {
+        if (cd->veri.cesit.varyant_uzunluklar[i] == uz &&
+            memcmp(cd->veri.cesit.varyantlar[i], ad, (size_t)uz) == 0) {
             return 1;
         }
     }
@@ -973,11 +1169,15 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             }
             int ok = 0;
             if (ad && ad_uz > 0) {
-                /* OTP_Anahtar 11 byte, Dosya 5, Soket 5, Bellek 6, Donanim 7 */
+                /* OTP_Anahtar 11, Dosya 5, Soket 5, Bellek 6, Donanim 7, MMIO 4.
+                 * MMIO Foundation (Karar 3): yetki<MMIO> tek top-level kaynak;
+                 * cihaza-ozel (orn. MMIO_VirtIO) AYRI kaynak DEGIL — adres
+                 * bolgesiyle daraltilmis MMIO formu olarak modellenir. */
                 if ((ad_uz == 5 && memcmp(ad, "Dosya", 5) == 0) ||
                     (ad_uz == 5 && memcmp(ad, "Soket", 5) == 0) ||
                     (ad_uz == 6 && memcmp(ad, "Bellek", 6) == 0) ||
                     (ad_uz == 7 && memcmp(ad, "Donanim", 7) == 0) ||
+                    (ad_uz == 4 && memcmp(ad, "MMIO", 4) == 0) ||
                     (ad_uz == 11 && memcmp(ad, "OTP_Anahtar", 11) == 0)) {
                     ok = 1;
                 }
@@ -985,7 +1185,7 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             if (!ok) {
                 tip_hata(tk, tip_d, "CP004",
                     "yetki<R>: bilinmeyen kaynak tipi "
-                    "(Dosya/Soket/Bellek/Donanim/OTP_Anahtar bekleniyor)");
+                    "(Dosya/Soket/Bellek/Donanim/MMIO/OTP_Anahtar bekleniyor)");
                 return t_hata(tk);
             }
             /* Kaynak TIP_YAPI olarak temsil edilir (ad bazli nominal eslesme).
@@ -1381,7 +1581,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 TipBilgisi *ic = tip_olustur_basit(tk->arena, TIP_BILINMIYOR);
                 return tip_olustur_secimlik(tk->arena, ic);
             }
-            const Sembol *s = sembol_bul(tk->scope,
+            /* Tek-gecis ad cozumu: kazanan sembol + kategori dugume
+             * yazilir (codegen tuketir — bkz. ast.h CozumKategorisi). */
+            const Sembol *s = sembol_coz_ve_bagla(tk, d,
                 d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
             if (!s) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
@@ -1448,6 +1650,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
 
+            /* v1 bölge-container (E002 DAR gevsetme): YALNIZ guvenli yon
+             * *T -> metin (typed -> opaque ptr) — bellek_kopyala grow-copy
+             * icin. TERS YON KAPALI: metin -> *T ve tamN -> *T yasak;
+             * typed buffer YALNIZ bölge_al'den dogar (tip butunlugu). */
+            if (kt->kategori == TIP_POINTER && ht->kategori == TIP_METIN) {
+                return ht;
+            }
             int kaynak_sayisal = tip_sayisal_mi(kt);
             int hedef_sayisal = tip_sayisal_mi(ht);
             if (!kaynak_sayisal || !hedef_sayisal) {
@@ -1701,6 +1910,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     if (op->kategori != TIP_POINTER) {
                         tip_hata(tk, d, "T001",
                                  "'*' sadece pointer tipinde kullanilir");
+                        return t_hata(tk);
+                    }
+                    /* C5 on-kosul #2: *T ham pointer dereferansi yalniz
+                     * guvensiz blokta (ast.h'deki kural artik enforce). */
+                    if (tk->guvensiz_baglam == 0) {
+                        tip_hata(tk, d, "G001",
+                                 "*T dereferans yalniz guvensiz blok "
+                                 "icinde kullanilabilir");
                         return t_hata(tk);
                     }
                     return op->veri.pointer.hedef;
@@ -2184,7 +2401,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (arg0->tip != DUGUM_TAM) {
                     tip_hata(tk, arg0, "CP004",
                         "yetki_olustur ilk argumani sabit tamsayi olmali "
-                        "(1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar)");
+                        "(1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar "
+                        "6=MMIO)");
                     return t_hata(tk);
                 }
                 int64_t kt = arg0->veri.tam.deger;
@@ -2196,6 +2414,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     case 3: kaynak_ad = "Bellek"; kaynak_uz = 6; break;
                     case 4: kaynak_ad = "Donanim"; kaynak_uz = 7; break;
                     case 5: kaynak_ad = "OTP_Anahtar"; kaynak_uz = 11; break;
+                    case 6: kaynak_ad = "MMIO"; kaynak_uz = 4; break;
                     default:
                         tip_hata(tk, arg0, "CP004",
                             "yetki_olustur: bilinmeyen kaynak tipi id");
@@ -2266,6 +2485,188 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 /* Linear tuketim */
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            /* v1 bölge-container: bölge_al beklenen-TIP_POINTER yolu
+             * tip_belirle_beklenen'de; buraya dusmesi = beklenen *T
+             * baglami YOK (annotasyonsuz) -> T cikarsanamaz. Sessiz
+             * varsayilan YOK (dizi_olustur'un tam32 default'unun aksine
+             * ham pointer'da yanlis genislik tehlikeli). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "b\xc3\xb6lge_al", 9) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "BL002",
+                        "bolge_al tam 2 arguman gerektirir "
+                        "(b\xc3\xb6l: yetki<R>, n: tam64)");
+                    return t_hata(tk);
+                }
+                tip_hata(tk, d, "BL001",
+                    "bolge_al beklenen *T baglami ister "
+                    "(degisken v: *T = bolge_al(bol, n))");
+                return t_hata(tk);
+            }
+            /* === MMIO Foundation intrinsics (Karar 1-4) ===
+             * mmio_oku32(y: yetki<MMIO>, adres: tam64) -> tam32
+             * mmio_yaz32(y: yetki<MMIO>, adres: tam64, deger: tam32) -> bos
+             *
+             * y ÖDÜNÇ alinir: delege/kanal_al gibi TÜKETİLMEZ. Surucu tek
+             * yetkiyle bircok register'a erisir; tuketim yalniz geri_al ile.
+             * Donus duz tam32 (Karar 4 — sonuc<> degil, WCET icin). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku32", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku32 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku32 adres argumani tamsayi (tam64) olmali");
+                }
+                /* y TÜKETİLMEZ (odunc) — return tam32 */
+                return tip_olustur_basit(tk->arena, TIP_TAM32);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz32", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz32 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam32)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz32 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz32 deger argumani tamsayi (tam32) olmali");
+                }
+                /* y TÜKETİLMEZ (odunc) — return bos */
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            /* === MMIO typed-width varyantlari (C9) ===
+             * Ayni 32-bit deseni; D9 ring-bellek erisimi icin le16/le64.
+             * mmio_oku16(y, adres) -> tam16 ; mmio_yaz16(y, adres, deger: tam16)
+             * mmio_oku64(y, adres) -> tam64 ; mmio_yaz64(y, adres, deger: tam64)
+             * y ÖDÜNÇ alinir (tuketmez); adres tam64; donus duz tamN. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku16", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku16 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku16 adres argumani tamsayi (tam64) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_TAM16);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz16", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz16 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam16)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz16 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM16));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz16 deger argumani tamsayi (tam16) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_BOS);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_oku64", 10) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_oku64 tam 2 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_oku64 adres argumani tamsayi (tam64) olmali");
+                }
+                return tip_olustur_basit(tk->arena, TIP_TAM64);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "mmio_yaz64", 10) == 0) {
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "mmio_yaz64 tam 3 arguman gerektirir "
+                        "(y: yetki<MMIO>, adres: tam64, deger: tam64)");
+                    return t_hata(tk);
+                }
+                mmio_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *adr = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (adr->kategori != TIP_HATA && !tip_tamsayi_mi(adr)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                        "mmio_yaz64 adres argumani tamsayi (tam64) olmali");
+                }
+                TipBilgisi *deg = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[2],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (deg->kategori != TIP_HATA && !tip_tamsayi_mi(deg)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                        "mmio_yaz64 deger argumani tamsayi (tam64) olmali");
+                }
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
             /* === Concurrency / DRF V1 intrinsics === */
@@ -2627,6 +3028,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int dizi_sabitsure = tip_sabitsure_mi(nesne_tip);
             if (dizi_sabitsure) nesne_tip = nesne_tip->veri.sabitsure.ic;
 
+            /* v1 bölge-container (T008 gevsetme): *T ham pointer tabani
+             * da indekslenebilir — eleman tipi pointee. *p deref'le ayni
+             * guvenlik sinifi: YALNIZ guvensiz blokta (G001 tutarliligi).
+             * TIP_DIZI yolu AYNEN korunur. */
+            if (nesne_tip->kategori == TIP_POINTER) {
+                if (!tip_tamsayi_mi(idx_tip)) {
+                    tip_hata(tk, d, "T005", "indeks tamsayi olmali");
+                    return t_hata(tk);
+                }
+                if (tk->guvensiz_baglam == 0) {
+                    tip_hata(tk, d, "G001",
+                             "*T pointer indeksleme yalniz guvensiz blok "
+                             "icinde kullanilabilir");
+                    return t_hata(tk);
+                }
+                return nesne_tip->veri.pointer.hedef
+                       ? nesne_tip->veri.pointer.hedef : t_hata(tk);
+            }
             if (nesne_tip->kategori != TIP_DIZI) {
                 tip_hata(tk, d, "T008", "indeksleme dizi tipi gerek");
                 return t_hata(tk);
@@ -2654,24 +3073,40 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Yol (x::y) === */
         case DUGUM_YOL: {
-            /* Sol modul tanimlayici olmali */
             const Dugum *sol = d->veri.yol.sol;
-            if (sol->tip != DUGUM_TANIMLAYICI) {
-                tip_hata(tk, d, "T016", "yol cozumlemesi karmasik");
-                return t_hata(tk);
+            /* C2.7: Cesit::Varyant — sol bir çeşit ise varyant değeri.
+             * T016 fix: sol modul-nitelikli olabilir (g::Renk::Kirmizi). */
+            {
+                const Dugum *cd = yol_cesit_coz(tk, sol);
+                if (cd) {
+                    if (!cesit_varyant_var(cd, d->veri.yol.sag_ad,
+                                           d->veri.yol.sag_ad_uzunluk)) {
+                        tip_hata(tk, d, "M002", "cesit varyanti bulunamadi");
+                        return t_hata(tk);
+                    }
+                    return tip_olustur_yapi(tk->arena,
+                        cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk, NULL, 0);
+                }
             }
-            const Sembol *m = sembol_bul(tk->scope,
-                sol->veri.tanimlayici.metin, sol->veri.tanimlayici.uzunluk);
-            if (!m || m->kategori != SEMBOL_MODUL || !m->modul_scope) {
+            /* T016 fix: modul yolu — sol TANIMLAYICI (mat::f) ya da YOL
+             * (mat::ic::f) olabilir; sol'u modul_scope'a coz, sag uyeyi
+             * yerel ara. Codegen @modul.ad / ic ice @m1.m2.ad ile tutarli. */
+            Scope *msc = yol_modul_scope_coz(tk, sol);
+            if (!msc) {
                 tip_hata(tk, d, "T016", "modul bulunamadi");
                 return t_hata(tk);
             }
-            const Sembol *uye = sembol_bul_yerel(m->modul_scope,
+            const Sembol *uye = sembol_bul_yerel(msc,
                 d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
             if (!uye) {
                 tip_hata(tk, d, "T002", "modul uyesi bulunamadi");
                 return t_hata(tk);
             }
+            /* Tek-gecis ad cozumu: kazanan uye + TAM modul oneki YOL
+             * dugumune yazilir. Goreli yol (m icinden ic::g) boylece
+             * codegen'de dogru mangle edilir (@m.ic.g) — onceki string
+             * yolu yalniz yazildigi kadarini ("ic.g") biliyordu. */
+            cozum_bagla(tk, d, uye, msc);
             return uye->tip ? uye->tip : t_hata(tk);
         }
 
@@ -2941,6 +3376,28 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 return tip_olustur_dizi(tk->arena,
                     (TipBilgisi *)beklenen->veri.dizi.eleman);
             }
+            /* v1 bölge-container: bölge_al(böl: yetki<R>, n: tam64) -> *T.
+             * T context-driven (dizi_olustur deseni): beklenen *T olmali
+             * (değişken v: *T = bölge_al(böl, n)). Yetki ÖDÜNÇ alinir
+             * (tüketilmez — mmio deseni). v1 lowering malloc-vekaleten;
+             * gerçek arena V2'de AYNI imzayla. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "b\xc3\xb6lge_al", 9) == 0 &&
+                beklenen->kategori == TIP_POINTER &&
+                d->veri.cagri.sayi == 2) {
+                bolge_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *n = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (n->kategori != TIP_HATA && !tip_tamsayi_mi(n)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "BL002",
+                        "bolge_al eleman sayisi tamsayi (tam64) olmali");
+                }
+                return (TipBilgisi *)beklenen;  /* *T aynen doner */
+            }
             /* Sabitsüre Spec V1: beklenen sabitsure<X> ve cagri
              * sabitsure_yarat(arg) ise — arg'ı X context'inde çıkarsa. */
             if (beklenen->kategori == TIP_SABITSURE &&
@@ -3090,6 +3547,22 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     }
 }
 
+/* C2.7: çeşit'i nominal tip olarak kaydet (SEMBOL_YAPI; varyantlar ast_dugumu'nda).
+ * yapı'ya analog ama alansız/generic'siz — varyant kümesi DUGUM_CESIT'te. */
+static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
+    Sembol c;
+    memset(&c, 0, sizeof(c));
+    c.ad = cesit->veri.cesit.ad;
+    c.ad_uzunluk = cesit->veri.cesit.ad_uzunluk;
+    c.kategori = SEMBOL_YAPI;   /* nominal isimli tip (çeşit dahil) */
+    c.ast_dugumu = cesit;       /* exhaustiveness + varyant doğrulama buradan */
+    c.satir = cesit->satir;
+    c.sutun = cesit->sutun;
+    if (sembol_ekle(tk->global_scope, tk->arena, &c) != 0) {
+        tip_hata(tk, cesit, "T026", "tip tanimi cakismasi (cesit)");
+    }
+}
+
 static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
     int n = islev->veri.islev.param_sayi;
     TipBilgisi **ptipler = NULL;
@@ -3222,43 +3695,280 @@ static void pre_populate_uygula(TipKontrol *tk, const Dugum *uy) {
     }
 }
 
-static void pre_populate(TipKontrol *tk, const Dugum *program) {
-    if (!program || program->tip != DUGUM_PROGRAM) return;
+/* T016 fix: bir uye dizisini (program ya da modul govdesi) mevcut
+ * tk->global_scope / tk->scope icine pre-populate eder. Cagiran modul
+ * govdesi icin bu iki scope'u modul_scope'a takas eder; boylece mevcut
+ * pre_populate_* (global_scope'a sabit ekleyen) helper'lari modul
+ * uyelerini dogru scope'a kaydeder. Codegen'in @modul.ad duzlestirme
+ * modeliyle TUTARLI: her modul kendi ad-uzayini tasir. */
+static void pre_populate_modul(TipKontrol *tk, const Dugum *m);
 
+static void pre_populate_uyeler(TipKontrol *tk, Dugum *const *uyeler,
+                                int sayi) {
     /* 1) Once ozellikleri ekle (bound referansi icin) */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_OZELLIK) pre_populate_ozellik(tk, uye);
     }
 
     /* 2) Yapilari (tipleri) ekle */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
-        else if (uye->tip == DUGUM_DISA &&
-                 uye->veri.disa.tanim &&
+        else if (uye->tip == DUGUM_CESIT) pre_populate_cesit(tk, uye);
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_YAPI) {
             pre_populate_yapi(tk, uye->veri.disa.tanim);
+        }
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_CESIT) {
+            pre_populate_cesit(tk, uye->veri.disa.tanim);
         }
     }
 
     /* 3) Uygula bildirimlerini kayit et (yapi+ozellik bilindikten sonra) */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_UYGULA) pre_populate_uygula(tk, uye);
     }
 
-    /* 4) Islevler ve sabitler */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    /* 4) Islevler, sabitler ve ic ice moduller */
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
                               ? uye->veri.disa.tanim : uye;
         if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
         else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
+        else if (gercek->tip == DUGUM_MODUL) pre_populate_modul(tk, gercek);
+    }
+}
+
+/* T016 fix: modulu SEMBOL_MODUL olarak kaydet + modul_scope kur.
+ * modul_scope parent'i mevcut global_scope (ic ice modul = parent modul
+ * scope'u) -> uyeler once kendi modulunde, sonra ust kapsamda cozulur. */
+static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
+    Scope *eski_global = tk->global_scope;
+    Scope *eski_scope = tk->scope;
+
+    Scope *msc = scope_olustur(tk->arena, SCOPE_MODUL, eski_global);
+    if (!msc) return;
+
+    /* Uye pre-populate'i modul_scope baglaminda yap (helper'lar
+     * tk->global_scope'a ekler; tk->scope tip-adi cozumu icin). */
+    tk->global_scope = msc;
+    tk->scope = msc;
+    pre_populate_uyeler(tk, m->veri.modul.uyeler, m->veri.modul.sayi);
+    tk->global_scope = eski_global;
+    tk->scope = eski_scope;
+
+    /* Modul sembolunu ust (parent) scope'a ekle */
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = m->veri.modul.ad;
+    s.ad_uzunluk = m->veri.modul.ad_uzunluk;
+    s.kategori = SEMBOL_MODUL;
+    s.modul_scope = msc;
+    s.ast_dugumu = m;
+    s.satir = m->satir;
+    s.sutun = m->sutun;
+    if (sembol_ekle(eski_global, tk->arena, &s) != 0) {
+        tip_hata(tk, m, "T024", "modul tanimi cakismasi");
+    }
+}
+
+static void pre_populate(TipKontrol *tk, const Dugum *program) {
+    if (!program || program->tip != DUGUM_PROGRAM) return;
+    pre_populate_uyeler(tk, program->veri.program.uyeler,
+                        program->veri.program.sayi);
+}
+
+/* C2.7: eşleş kapsayıcılık (Maranget usefulness, flat + sonuç<_,çeşit> bir
+ * seviye nesting). Kapalı tip (çeşit / seçimlik / sonuç) üzerinde eksik varyant
+ * → M001. Top-level wildcard '_' veya binding catch-all → exhaustive. Açık
+ * tipler (tamsayı vb.) denetlenmez (geriye uyum: mevcut eşleş'ler kırılmaz). */
+static void esles_exhaustive_kontrol(TipKontrol *tk, const Dugum *d,
+                                     TipBilgisi *dt) {
+    if (!dt || dt->kategori == TIP_HATA) return;
+    int n = d->veri.esles.kol_sayi;
+
+    /* Top-level wildcard / catch-all binding? ('hiç' hariç — o seçimlik varyantı) */
+    for (int i = 0; i < n; i++) {
+        const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+        if (!ds) continue;
+        if (ds->tip == DUGUM_DESEN_JOKER) return;
+        if (ds->tip == DUGUM_DESEN_TANIMLAYICI) {
+            const char *a = ds->veri.desen_tanimlayici.ad;
+            int u = ds->veri.desen_tanimlayici.ad_uzunluk;
+            if (!(u == 4 && memcmp(a, "hi\xc3\xa7", 4) == 0)) return;
+        }
+    }
+
+    /* çeşit: her varyant Cesit::Varyant ile kapsanmalı */
+    if (dt->kategori == TIP_YAPI) {
+        const Dugum *cd = cesit_ara(tk, dt->veri.yapi.ad,
+                                    dt->veri.yapi.ad_uzunluk);
+        if (!cd) return;  /* yapı (struct) → exhaustiveness yok */
+        char eksik[256]; int eo = 0, eksik_var = 0;
+        for (int v = 0; v < cd->veri.cesit.varyant_sayi; v++) {
+            const char *va = cd->veri.cesit.varyantlar[v];
+            int vu = cd->veri.cesit.varyant_uzunluklar[v];
+            int kapsandi = 0;
+            for (int i = 0; i < n; i++) {
+                const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+                if (ds && ds->tip == DUGUM_DESEN_YOL &&
+                    ds->veri.desen_yol.varyant_uz == vu &&
+                    memcmp(ds->veri.desen_yol.varyant_ad, va, (size_t)vu) == 0) {
+                    kapsandi = 1; break;
+                }
+            }
+            if (!kapsandi) {
+                eksik_var = 1;
+                if (eo < (int)sizeof(eksik) - vu - 4) {
+                    if (eo) { eksik[eo++] = ','; eksik[eo++] = ' '; }
+                    memcpy(eksik + eo, va, (size_t)vu); eo += vu;
+                }
+            }
+        }
+        eksik[eo] = '\0';
+        if (eksik_var) {
+            char msg[320];
+            snprintf(msg, sizeof(msg),
+                "esles exhaustive degil — eksik varyant(lar): [%s]", eksik);
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
+    }
+
+    /* seçimlik<T>: değer + hiç */
+    if (dt->kategori == TIP_SECIMLIK) {
+        int deger_c = 0, hic_c = 0;
+        for (int i = 0; i < n; i++) {
+            const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+            if (!ds) continue;
+            if (ds->tip == DUGUM_DESEN_YAPICI &&
+                ds->veri.desen_yapici.ad_uzunluk == 6 &&
+                memcmp(ds->veri.desen_yapici.ad, "de\xc4\x9f" "er", 6) == 0) {
+                deger_c = 1;
+            }
+            if (ds->tip == DUGUM_DESEN_TANIMLAYICI &&
+                ds->veri.desen_tanimlayici.ad_uzunluk == 4 &&
+                memcmp(ds->veri.desen_tanimlayici.ad, "hi\xc3\xa7", 4) == 0) {
+                hic_c = 1;
+            }
+        }
+        if (!deger_c || !hic_c) {
+            char msg[128]; int o = 0; int once = 0;
+            o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                          "esles exhaustive degil — eksik: [");
+            if (!deger_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "de\xc4\x9f" "er"); once = 1;
+            }
+            if (!hic_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "%shi\xc3\xa7", once ? ", " : "");
+            }
+            snprintf(msg + o, (size_t)((int)sizeof(msg) - o), "]");
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
+    }
+
+    /* sonuç<T,H>: tamam + hata; H çeşit ise hata içi varyant düzeyi (D6). */
+    if (dt->kategori == TIP_SONUC) {
+        int tamam_c = 0, hata_catchall = 0;
+        for (int i = 0; i < n; i++) {
+            const Dugum *ds = d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+            if (!ds || ds->tip != DUGUM_DESEN_YAPICI) continue;
+            const char *a = ds->veri.desen_yapici.ad;
+            int u = ds->veri.desen_yapici.ad_uzunluk;
+            if (u == 5 && memcmp(a, "tamam", 5) == 0) tamam_c = 1;
+            else if (u == 4 && memcmp(a, "hata", 4) == 0) {
+                if (ds->veri.desen_yapici.sayi > 0) {
+                    const Dugum *sub = ds->veri.desen_yapici.alt_desenler[0];
+                    if (sub && (sub->tip == DUGUM_DESEN_TANIMLAYICI ||
+                                sub->tip == DUGUM_DESEN_JOKER)) hata_catchall = 1;
+                } else {
+                    hata_catchall = 1;
+                }
+            }
+        }
+        int hata_exh = hata_catchall;
+        char eksik[256]; int eo = 0;
+        TipBilgisi *H = dt->veri.sonuc.hata;
+        const Dugum *hcd = (H && H->kategori == TIP_YAPI)
+            ? cesit_ara(tk, H->veri.yapi.ad, H->veri.yapi.ad_uzunluk) : NULL;
+        if (!hata_exh && hcd) {
+            int hepsi = 1;
+            for (int v = 0; v < hcd->veri.cesit.varyant_sayi; v++) {
+                const char *va = hcd->veri.cesit.varyantlar[v];
+                int vu = hcd->veri.cesit.varyant_uzunluklar[v];
+                int kapsandi = 0;
+                for (int i = 0; i < n; i++) {
+                    const Dugum *ds =
+                        d->veri.esles.kollar[i]->veri.esles_kolu.desen;
+                    if (ds && ds->tip == DUGUM_DESEN_YAPICI &&
+                        ds->veri.desen_yapici.ad_uzunluk == 4 &&
+                        memcmp(ds->veri.desen_yapici.ad, "hata", 4) == 0 &&
+                        ds->veri.desen_yapici.sayi > 0) {
+                        const Dugum *sub =
+                            ds->veri.desen_yapici.alt_desenler[0];
+                        if (sub && sub->tip == DUGUM_DESEN_YOL &&
+                            sub->veri.desen_yol.varyant_uz == vu &&
+                            memcmp(sub->veri.desen_yol.varyant_ad, va,
+                                   (size_t)vu) == 0) { kapsandi = 1; break; }
+                    }
+                }
+                if (!kapsandi) {
+                    hepsi = 0;
+                    if (eo < (int)sizeof(eksik) - vu - 10) {
+                        if (eo) { eksik[eo++] = ','; eksik[eo++] = ' '; }
+                        eo += snprintf(eksik + eo,
+                            (size_t)((int)sizeof(eksik) - eo),
+                            "hata(%.*s)", vu, va);
+                    }
+                }
+            }
+            hata_exh = hepsi;
+        }
+        eksik[eo] = '\0';
+        if (!tamam_c || !hata_exh) {
+            char msg[320]; int o = 0; int once = 0;
+            o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                          "esles exhaustive degil — eksik: [");
+            if (!tamam_c) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "tamam"); once = 1;
+            }
+            if (!hata_exh) {
+                o += snprintf(msg + o, (size_t)((int)sizeof(msg) - o),
+                              "%s%s", once ? ", " : "", eo ? eksik : "hata");
+            }
+            snprintf(msg + o, (size_t)((int)sizeof(msg) - o), "]");
+            tip_hata(tk, d, "M001", msg);
+        }
+        return;
     }
 }
 
 /* === Deyim tip kontrolu === */
+
+/* C5 C.1: satirici_asm operandi icin izinli tip — yalniz kopyalanabilir
+ * primitif (tamN, dtamN, mantiksal, karakter) + ham *T pointer.
+ * Kesirli, metin, yapi, dizi, referans, tekkez, yetki: HAYIR (v1). */
+static int asm_operand_tipi_uygun(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        case TIP_TAM8:  case TIP_TAM16:  case TIP_TAM32:  case TIP_TAM64:
+        case TIP_DTAM8: case TIP_DTAM16: case TIP_DTAM32: case TIP_DTAM64:
+        case TIP_MANTIKSAL:
+        case TIP_KARAKTER:
+        case TIP_POINTER:
+            return 1;
+        default:
+            return 0;
+    }
+}
 
 static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
     if (!d) return;
@@ -3495,6 +4205,18 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                                 sembol_ekle(tk->scope, tk->arena, &s);
                             }
                         }
+                    } else if (desen->tip == DUGUM_DESEN_YOL) {
+                        /* C2.7: Cesit::Varyant deseni — payloadsuz, binding yok;
+                         * yalnız varyantın çeşit'e ait olduğunu doğrula. */
+                        const Dugum *cd = (dt && dt->kategori == TIP_YAPI)
+                            ? cesit_ara(tk, dt->veri.yapi.ad,
+                                        dt->veri.yapi.ad_uzunluk) : NULL;
+                        if (cd && !cesit_varyant_var(cd,
+                                desen->veri.desen_yol.varyant_ad,
+                                desen->veri.desen_yol.varyant_uz)) {
+                            tip_hata(tk, desen, "M002",
+                                     "cesit varyanti bulunamadi");
+                        }
                     }
                     /* DESEN_LITERAL, DESEN_JOKER: binding yok */
                 }
@@ -3504,14 +4226,96 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 tk->scope = eski;
                 tk->scope_seviyesi--;
             }
+            /* C2.7: kapalı tip üzerinde kapsayıcılık denetimi. */
+            esles_exhaustive_kontrol(tk, d, dt);
             break;
         }
 
         case DUGUM_GUVENSIZ:
-            /* Aciklama yok-saymi: gerekli olabilir ama tip kontrol
-             * acisindan blok ile ayni */
+            /* Aciklama yok-sayilir; blok ile ayni AMA unsafe-context
+             * bayragi kurulur (C5 on-kosul #2): *T deref (G001) ve
+             * satiriçi_asm (G002) yalniz bu baglam icinde gecerli.
+             * Derinlik sayaci — ic ice guvensiz dogru calisir. */
+            tk->guvensiz_baglam++;
             tip_kontrol_deyim(tk, d->veri.guvensiz.blok);
+            tk->guvensiz_baglam--;
             break;
+
+        /* === C5: satıriçi_asm tip kurallari ===
+         * G002 — yalniz guvensiz blokta.
+         * C.1 (lineer kara kutu) — operandlar yalniz kopyalanabilir
+         * primitif (tamN/dtamN/mantiksal/karakter/ham *T); tekkez/yetki
+         * DOGRUDAN GECEMEZ, cikti lineer OLAMAZ. Asm lineer-notr:
+         * lineer yukumluluk ne tuketilir ne uretilir (yalniz ham adres
+         * KEMGU seviyesinde cikarilip gecirilir).
+         * C.2 — yalniz guvensiz-gate; capability ERTELENDI (borc notu). */
+        case DUGUM_SATIRICI_ASM: {
+            if (tk->guvensiz_baglam == 0) {
+                tip_hata(tk, d, "G002",
+                         "satirici_asm yalniz guvensiz blok "
+                         "icinde kullanilabilir");
+            }
+            /* AS001: arch-tag hedef mimariyle uyusmali (llvm.h tek
+             * kaynak; hedefe-duyarli triple C8'de). Yanlis hedefe
+             * sessizce bozuk IR uretmek yerine derleme hatasi. */
+            {
+                const char *hm = KEMGU_HEDEF_MIMARI;
+                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                if (d->veri.satirici_asm.mimari &&
+                    (d->veri.satirici_asm.mimari_uz != hm_uz ||
+                     memcmp(d->veri.satirici_asm.mimari, hm,
+                            (size_t)hm_uz) != 0)) {
+                    tip_hata(tk, d, "AS001",
+                             "satirici_asm mimari etiketi hedef "
+                             "mimariyle uyusmuyor (hedef: x86_64; "
+                             "hedefe-duyarli triple C8'de)");
+                }
+            }
+            for (int i = 0; i < d->veri.satirici_asm.cikti_sayi; i++) {
+                const char *ad = d->veri.satirici_asm.cikti_adlar[i];
+                int uz = d->veri.satirici_asm.cikti_ad_uzlar[i];
+                const Sembol *s = sembol_bul(tk->scope, ad, uz);
+                if (!s) {
+                    tip_hata(tk, d, "T002",
+                             "asm cikti hedefi tanimsiz degisken");
+                    continue;
+                }
+                if (s->kategori != SEMBOL_DEGISKEN &&
+                    s->kategori != SEMBOL_PARAMETRE) {
+                    tip_hata(tk, d, "T022",
+                             "asm cikti hedefi degisken olmali (lvalue)");
+                    continue;
+                }
+                if (s->tip && tip_lineer_mi(s->tip)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm cikti hedefi lineer (tekkez/yetki) "
+                             "olamaz — asm lineer deger uretemez");
+                    continue;
+                }
+                if (!asm_operand_tipi_uygun(s->tip)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm operandi yalniz kopyalanabilir primitif "
+                             "(tamN/dtamN/mantiksal/karakter/*T)");
+                }
+            }
+            for (int i = 0; i < d->veri.satirici_asm.girdi_sayi; i++) {
+                TipBilgisi *t = tip_belirle(tk,
+                    d->veri.satirici_asm.girdi_ifadeler[i]);
+                if (!t || t->kategori == TIP_HATA) continue;
+                if (tip_lineer_mi(t)) {
+                    tip_hata(tk, d, "AS002",
+                             "lineer (tekkez/yetki) deger asm'e dogrudan "
+                             "gecemez — once ham adres cikar");
+                    continue;
+                }
+                if (!asm_operand_tipi_uygun(t)) {
+                    tip_hata(tk, d, "AS002",
+                             "asm operandi yalniz kopyalanabilir primitif "
+                             "(tamN/dtamN/mantiksal/karakter/*T)");
+                }
+            }
+            break;
+        }
 
         case DUGUM_BLOK: {
             Scope *eski = tk->scope;
@@ -3555,15 +4359,31 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
     switch (d->tip) {
         case DUGUM_ISLEV: {
-            const Sembol *islev_sem = sembol_bul_yerel(tk->global_scope,
+            /* Tek-gecis ad cozumu on-kosulu: islev sembolu TANIMLANDIGI
+             * scope'ta aranir (tk->scope — modul uyesi icin DUGUM_MODUL
+             * case'i modul scope'unu kurdu). Onceki durum: yalniz
+             * tk->global_scope'a bakiliyordu -> modul islev govdeleri
+             * HIC denetlenmiyordu (sembol modul scope'unda, sessiz erken
+             * donus) ya da ayni adli global ikizin imzasina karsi
+             * denetleniyordu (arity farkinda OOB okuma). */
+            const Sembol *islev_sem = sembol_bul_yerel(tk->scope,
                 d->veri.islev.ad, d->veri.islev.ad_uzunluk);
             if (!islev_sem || !islev_sem->tip ||
                 islev_sem->tip->kategori != TIP_ISLEV) return;
+            /* Cift-tanim ikizinde (T024 zaten raporlandi) yanlis imzaya
+             * karsi denetimi ve parametre dizisi OOB'sini onle. Built-in
+             * golgelemesinde (ast_dugumu NULL) arity farki ayni OOB'yi
+             * tetiklerdi — sayilar uyusmuyorsa govdeyi atla. */
+            if (islev_sem->ast_dugumu && islev_sem->ast_dugumu != d) return;
+            if (islev_sem->tip->veri.islev.param_sayi !=
+                d->veri.islev.param_sayi) return;
 
             Scope *eski = tk->scope;
             TipBilgisi *eski_donus = tk->aktif_donus_tipi;
             tk->scope_seviyesi++;
-            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, tk->global_scope);
+            /* Govde scope'unun parent'i tanimlandigi scope: modul
+             * uyesinde ciplak adlar once kardesleri gorur (lexical). */
+            tk->scope = scope_olustur(tk->arena, SCOPE_ISLEV, eski);
             tk->aktif_donus_tipi = islev_sem->tip->veri.islev.donus;
 
             /* Generic params'i govde scope'una ekle */
@@ -3800,13 +4620,23 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_MODUL:
-            /* Modul scope kontrolu basit — recursive */
-            /* Su an: ic uyeleri global scope'a ekle (modul ad alani yok) */
+        case DUGUM_MODUL: {
+            /* T016 fix: uyeleri MODUL SCOPE baglaminda kontrol et —
+             * boylece kardes islevlere ciplak-ad cagrilar (kare()) ve
+             * modul-yerel tipler cozulur. Modul sembolu pre_populate'da
+             * mevcut scope'a (parent) eklendi; scope'unu bulup gir. */
+            const Sembol *ms = sembol_bul_yerel(tk->scope,
+                d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+            Scope *eski = tk->scope;
+            if (ms && ms->kategori == SEMBOL_MODUL && ms->modul_scope) {
+                tk->scope = ms->modul_scope;
+            }
             for (int i = 0; i < d->veri.modul.sayi; i++) {
                 tip_kontrol_tanim(tk, d->veri.modul.uyeler[i]);
             }
+            tk->scope = eski;
             break;
+        }
 
         case DUGUM_HATA:
             break;

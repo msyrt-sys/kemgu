@@ -361,6 +361,28 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             ast_yazdir_indent(d->veri.tip_donustur.hedef_tip, c, derinlik + 1);
             break;
 
+        /* === C5: satıriçi_asm — mimari + şablon + operand sayilari === */
+
+        case DUGUM_SATIRICI_ASM:
+            fputc(' ', c);
+            string_yaz(c, d->veri.satirici_asm.mimari,
+                       d->veri.satirici_asm.mimari_uz);
+            fputc(' ', c);
+            string_yaz(c, d->veri.satirici_asm.sablon,
+                       d->veri.satirici_asm.sablon_uz);
+            fprintf(c, " cikti=%d girdi=%d bozulan=%d",
+                    d->veri.satirici_asm.cikti_sayi,
+                    d->veri.satirici_asm.girdi_sayi,
+                    d->veri.satirici_asm.bozulan_sayi);
+            if (d->veri.satirici_asm.cevrim >= 0) {
+                fprintf(c, " cevrim=%" PRId64, d->veri.satirici_asm.cevrim);
+            }
+            konum_yaz(c, d);
+            fputc('\n', c);
+            cocuk_listesi_yaz(c, d->veri.satirici_asm.girdi_ifadeler,
+                              d->veri.satirici_asm.girdi_sayi, derinlik);
+            break;
+
         /* === Hata === */
 
         case DUGUM_HATA:

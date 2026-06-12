@@ -1,0 +1,76 @@
+// VirtIO feature negotiation modeli: saf maske hesabi, MMIO erisimi yok.
+
+işlev virtio_feature_sifir() -> dtam64 { ver 0; }
+
+işlev VIRTIO_BLK_F_SIZE_MAX() -> dtam64 { ver 2; }
+
+işlev VIRTIO_BLK_F_SEG_MAX() -> dtam64 { ver 4; }
+
+işlev VIRTIO_BLK_F_BLK_SIZE() -> dtam64 { ver 64; }
+
+işlev VIRTIO_BLK_F_FLUSH() -> dtam64 { ver 512; }
+
+işlev VIRTIO_BLK_F_RO() -> dtam64 { ver 32; }
+
+işlev VIRTIO_BLK_F_MQ() -> dtam64 { ver 4096; }
+
+işlev VIRTIO_BLK_F_DISCARD() -> dtam64 { ver 8192; }
+
+işlev VIRTIO_BLK_F_WRITE_ZEROES() -> dtam64 { ver 16384; }
+
+işlev virtio_feature_bos_mu(mask: dtam64) -> mantıksal {
+    ver mask == virtio_feature_sifir();
+}
+
+işlev virtio_feature_var_mi(mask: dtam64, feature: dtam64) -> mantıksal {
+    ver (mask & feature) == feature;
+}
+
+işlev virtio_feature_kabul_maskesi(device_features: dtam64, driver_supported: dtam64) -> dtam64 {
+    ver device_features & driver_supported;
+}
+
+işlev virtio_feature_zorunlu_destek_disinda_mi(driver_supported: dtam64, driver_required: dtam64) -> mantıksal {
+    ver (driver_required & driver_supported) != driver_required;
+}
+
+işlev virtio_feature_zorunlu_karsilaniyor_mu(
+    device_features: dtam64,
+    driver_supported: dtam64,
+    driver_required: dtam64
+) -> mantıksal {
+    değişken accepted: dtam64 = virtio_feature_kabul_maskesi(device_features, driver_supported);
+    ver (driver_required & accepted) == driver_required;
+}
+
+işlev virtio_feature_negotiation_gecerli_mi(
+    device_features: dtam64,
+    driver_supported: dtam64,
+    driver_required: dtam64
+) -> mantıksal {
+    ver virtio_feature_zorunlu_karsilaniyor_mu(
+        device_features,
+        driver_supported,
+        driver_required
+    );
+}
+
+işlev virtio_feature_negotiation_yap(
+    device_features: dtam64,
+    driver_supported: dtam64,
+    driver_required: dtam64
+) -> sonuç<dtam64, metin> {
+    eğer virtio_feature_zorunlu_destek_disinda_mi(driver_supported, driver_required) {
+        ver hata("FeatureDestekDisiZorunlu");
+    }
+
+    eğer değil virtio_feature_zorunlu_karsilaniyor_mu(
+        device_features,
+        driver_supported,
+        driver_required
+    ) {
+        ver hata("FeatureZorunluEksik");
+    }
+
+    ver tamam(virtio_feature_kabul_maskesi(device_features, driver_supported));
+}

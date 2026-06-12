@@ -1,0 +1,73 @@
+// =====================================================================
+// MMIO Foundation — Smoke / Referans Ornek
+// =====================================================================
+// Codex'in `drivers/virtio/virtio_mmio.kem` icin bakacagi kanonik ornek.
+// `--parse`, `--check`, `--llvm` asamalarindan TEMIZ gecer (HATA yok).
+//
+// Gosterilen sorular:
+//   1) MMIO read nasil cagrilir?   -> mmio_oku32(y, adres)
+//   2) MMIO write nasil cagrilir?  -> mmio_yaz32(y, adres, deger)
+//   3) yetki<MMIO> nasil saglanir/tuketilir? -> yetki_olustur(6, izin) ...
+//                                               geri_al(y)
+//   4) Basarisizlik nasil temsil edilir? -> Gecersiz adres bir PROGRAMLAMA
+//      hatasidir; capability bolgesi compile/init-time yakalar. MMIO load
+//      runtime'da basarisiz OLMAZ; donus duz tam32 (Karar 4 — sonuc<> yok).
+// =====================================================================
+
+// --- VirtIO MMIO register offset sabitleri (ayni dosyada; codegen inline) ---
+// Taban: QEMU `virt` makinesi VirtIO slot 0 (0x0A000000).
+sabit VIRTIO_MMIO_TABAN: tam64   = 167772160;   // 0x0A000000
+sabit VIRTIO_MMIO_MAGIC: tam64   = 0;           // 0x000  MagicValue ("virt")
+sabit VIRTIO_MMIO_VERSION: tam64 = 4;           // 0x004  Version
+sabit VIRTIO_MMIO_STATUS: tam64  = 112;         // 0x070  Status
+
+// Beklenen magic ("virt" LE = 0x74726976) + status bit'leri.
+sabit VIRTIO_MAGIC_BEKLENEN: tam32 = 1953655158; // 0x74726976
+sabit STATUS_ACKNOWLEDGE: tam32    = 1;
+sabit STATUS_DRIVER: tam32         = 2;
+
+// İzin bit'leri (Capability Spec V1): 1=OKU 2=YAZ. MMIO icin OKU|YAZ = 3.
+sabit MMIO_OKU_YAZ: tam32 = 3;
+
+// ---------------------------------------------------------------------
+// Yazma yardimcisi — yetki<MMIO> THREAD edilir (alinir + "ver y" ile geri
+// verilir). yetki<MMIO> linear (object-capability) oldugu icin bir fonksiyona
+// gecmek onu tuketir; cok-fonksiyonlu surucude yetkiyi geri dondurerek
+// caller'da yeniden kullanilabilir kilariz.
+// ---------------------------------------------------------------------
+işlev mmio_status_yaz(y: yetki<MMIO>, deger: tam32) -> yetki<MMIO> {
+    mmio_yaz32(y, VIRTIO_MMIO_TABAN + VIRTIO_MMIO_STATUS, deger);
+    ver y;
+}
+
+// ---------------------------------------------------------------------
+// Handshake — yetki<MMIO>'yu sahiplenir, register'lara erisir, tuketir.
+// Okuma `mmio_oku32` yetkiyi ODUNC alir (tuketmez) — ayni scope'ta kalir.
+// Yazma `mmio_status_yaz` yetkiyi THREAD eder. Sonda `geri_al(y)` tuketir.
+// Donus: okunan magic degeri.
+// ---------------------------------------------------------------------
+işlev virtio_handshake(y: yetki<MMIO>) -> tam32 {
+    // Okuma yetkiyi ODUNC alir — y tuketilmez, ayni scope'ta kalir.
+    değişken magic: tam32 =
+        mmio_oku32(y, VIRTIO_MMIO_TABAN + VIRTIO_MMIO_MAGIC);
+
+    // Status durum makinesi: ACKNOWLEDGE -> ACK|DRIVER.
+    // ONEMLI: yetki<MMIO> linear oldugu icin THREAD ederken HER ADIMDA
+    // YENI bir baglama kullanilir (ayni isme reatama linear'da CALISMAZ —
+    // tuketilen baglama "canlanmaz", CP005 verir). y -> y1 -> y2.
+    değişken y1: yetki<MMIO> = mmio_status_yaz(y, STATUS_ACKNOWLEDGE);
+    değişken y2: yetki<MMIO> =
+        mmio_status_yaz(y1, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
+
+    geri_al(y2);   // linear tuketim — capability iade edilir
+    ver magic;
+}
+
+işlev main() -> tam32 {
+    // yetki<MMIO> uret: kaynak id 6 = MMIO, izin = OKU|YAZ.
+    // GERCEK surucude bu yetki cekirdek/init tarafindan saglanir ve
+    // VirtIO MMIO penceresiyle (taban + uzunluk) bolge-daraltilir
+    // (Karar 3 — `yetki<MMIO>` tek kaynak, adres bolgesiyle daraltilir).
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    ver virtio_handshake(y);
+}

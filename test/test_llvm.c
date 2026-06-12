@@ -72,11 +72,13 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
      * done ki .o file format'i otomatik tanin. */
 #ifdef _WIN32
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -x none build\\kdl_runtime.o -o %s 2>%s",
+             "clang -x ir %s -x none build\\kdl_runtime.o "
+             "build\\kdl_runtime_mmio.o -o %s 2>%s",
              LL_PATH, EXE_PATH, DEV_NULL);
 #else
     snprintf(komut, sizeof(komut),
-             "clang -x ir %s -x none build/kdl_runtime.o -o %s 2>%s",
+             "clang -x ir %s -x none build/kdl_runtime.o "
+             "build/kdl_runtime_mmio.o -o %s 2>%s",
              LL_PATH, EXE_PATH, DEV_NULL);
 #endif
     rc = system(komut);
@@ -88,8 +90,173 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
     return rc;
 }
 
+/* Mevcut bir .kem dosyasini --llvm | clang ile derle + calistir, exit code
+ * don. derle_ve_calistir gibi ama kaynak string yerine dosya yolu alir —
+ * Turkce UTF-8 program metnini C string'e gomme zahmetini onler. */
+static int derle_dosya_ve_calistir(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return -1;
+#ifdef _WIN32
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build\\kdl_runtime.o "
+             "build\\kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#else
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build/kdl_runtime.o "
+             "build/kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#endif
+    if (system(komut) != 0) return -1;
+    snprintf(komut, sizeof(komut), "%s", EXE_PATH);
+    return system(komut);
+}
+
+/* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
+ * 1 = IR gecerli (her BB terminator'lu, dominance vs.), 0 = reddedildi.
+ * C1/C2 kabul kriteri: emit edilen modul opt verifier'dan gecmeli. */
+static int kemgu_llvm_opt_verify(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return 0;
+    snprintf(komut, sizeof(komut),
+             "opt -passes=verify -disable-output %s 2>%s", LL_PATH, DEV_NULL);
+    return system(komut) == 0;
+}
+
 
 /* === Testler === */
+
+/* --- C1: esles (match) deyimi codegen --- */
+
+static void test_esles_wildcard(void) {
+    /* '_' catch-all: eslesmeyen tum girdiler son dala duser. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev g(x: tam32) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f x { 5 => { ver 50; } _ => { ver 77; } } "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er g(5) != 50 { ver 1; } "
+        "e\xc4\x9f" "er g(99) != 77 { ver 2; } ver 42; }");
+    test_sonuc("esles wildcard '_' -> exit 42", rc == 42);
+}
+
+static void test_esles_nested(void) {
+    /* Ic ice esles — driver status state machine deseni. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev f(a: tam32, b: tam32) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f a { "
+        "0 => { e\xc5\x9fle\xc5\x9f b { 1 => { ver 11; } 2 => { ver 12; } } } "
+        "1 => { e\xc5\x9fle\xc5\x9f b { 1 => { ver 21; } 2 => { ver 22; } } } } "
+        "ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er f(0,1) != 11 { ver 1; } "
+        "e\xc4\x9f" "er f(1,2) != 22 { ver 2; } "
+        "e\xc4\x9f" "er f(0,9) != 0 { ver 3; } ver 42; }");
+    test_sonuc("esles ic ice (driver deseni) -> exit 42", rc == 42);
+}
+
+static void test_esles_match_early_return_verify(void) {
+    /* Snapshot fiksturu: her case BB ret/br ile bitmeli -> opt kabul eder. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/match_early_return.kem");
+    test_sonuc("esles match_early_return: opt -passes=verify PASS", ok);
+}
+
+static void test_esles_match_early_return_calistir(void) {
+    /* Erken-ver dallari + tail'e dusen dallar + eslesmeyen -> dogru secim. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/match_early_return.kem");
+    test_sonuc("esles match_early_return: arm secimi -> exit 42", rc == 42);
+}
+
+/* --- C2.5: sonuç/seçimlik value codegen --- */
+
+static void test_sonuc_secimlik_verify(void) {
+    /* tamam/hata/değer/hiç + eşleş destructuring -> tagged-union, opt temiz. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/sonuc_secimlik.kem");
+    test_sonuc("sonuc/secimlik: opt -passes=verify PASS", ok);
+}
+
+static void test_sonuc_secimlik_calistir(void) {
+    /* tamam/hata round-trip + değer/hiç + payload binding -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/sonuc_secimlik.kem");
+    test_sonuc("sonuc/secimlik: tamam/hata/deger/hic -> exit 42", rc == 42);
+}
+
+static void test_sonuc_struct_payload_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/sonuc_struct_payload.kem");
+    test_sonuc("sonuc struct payload: opt -passes=verify PASS", ok);
+}
+
+static void test_sonuc_struct_payload_calistir(void) {
+    /* struct payload (by-value) + sonuç-as-parameter ABI -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/sonuc_struct_payload.kem");
+    test_sonuc("sonuc struct payload + param ABI -> exit 42", rc == 42);
+}
+
+/* --- C2.6: cross-file fonksiyon cagrisi (transitif kullan) --- */
+
+static void test_crossfile_transitif_verify(void) {
+    /* transitif -> lib_islem -> lib_sayi; iki_kat transitif yuklenmeli. */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif.kem");
+    test_sonuc("crossfile transitif: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_transitif_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/transitif.kem");
+    test_sonuc("crossfile transitif (uc_kat(14)) -> exit 42", rc == 42);
+}
+
+static void test_crossfile_sonuc_verify(void) {
+    /* cross-file sonuç dönüşlü çağrı — C2.5 tagged-union ABI uyumu. */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri.kem");
+    test_sonuc("crossfile sonuc ABI: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_sonuc_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri.kem");
+    test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
+}
+
+/* --- C2.7: çeşit (custom sum type) + exhaustiveness --- */
+
+/* `kemgu --check <kem_yol>` başarılı mı? 1 = OK (exit 0), 0 = hata. */
+static int kemgu_check_basarili(const char *kem_yol) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --check %s > %s 2>%s", KEMGU_BIN, kem_yol, DEV_NULL, DEV_NULL);
+    return system(komut) == 0;
+}
+
+static void test_cesit_temel_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_temel.kem");
+    test_sonuc("cesit temel: opt -passes=verify PASS", ok);
+}
+
+static void test_cesit_temel_calistir(void) {
+    /* Ad::Varyant inşa + eşleş destructuring (i8 discriminant). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_temel.kem");
+    test_sonuc("cesit temel (Ad::Varyant + eslesme) -> exit 42", rc == 42);
+}
+
+static void test_cesit_sonuc_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_sonuc.kem");
+    test_sonuc("cesit sonuc (D6 sonuc<bos,cesit>): opt verify PASS", ok);
+}
+
+static void test_cesit_sonuc_calistir(void) {
+    /* D6: hata(Cesit::V) bir-seviye nesting (tag==hata AND disc==idx). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_sonuc.kem");
+    test_sonuc("cesit sonuc D6 (hata(Cesit::V) nesting) -> exit 42", rc == 42);
+}
+
+static void test_cesit_exhaustive_negatif(void) {
+    /* Eksik varyant -> --check M001 ile BAŞARISIZ olmalı. */
+    int ok = kemgu_check_basarili("test/snapshots/cesit_eksik.kem");
+    test_sonuc("cesit non-exhaustive -> --check basarisiz (M001)", ok == 0);
+}
 
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
@@ -1103,6 +1270,708 @@ static void test_dizi_tam64(void) {
     test_sonuc("dizi<tam64> generic instan -> 2", rc == 2);
 }
 
+/* === MMIO Foundation: capability-parametreli register erisimi === */
+
+static void test_mmio_yaz_oku_round_trip(void) {
+    /* yetki<MMIO> uret; yaz 42; oku; exit = okunan deger. Host mock tampon
+     * round-trip yapar (kdl_runtime_mmio.c). geri_al ile linear tuketim. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz32(y, 4096, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam32 = mmio_oku32(y, 4096);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio yaz 42 -> oku -> exit 42", rc == 42);
+}
+
+static void test_mmio_sabit_adres(void) {
+    /* Ust duzey sabit adres (cross-file sabit codegen kok cozumu) +
+     * iki ayri register: yaz(taban+0)=30, yaz(taban+4)=12, oku ikisini topla. */
+    int rc = derle_ve_calistir(
+        "sabit TABAN: tam64 = 268435456;\n"
+        "sabit OFS_A: tam64 = 0;\n"
+        "sabit OFS_B: tam64 = 4;\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz32(y, TABAN + OFS_A, 30);\n"
+        "  mmio_yaz32(y, TABAN + OFS_B, 12);\n"
+        "  de\xc4\x9fi\xc5\x9fken s: tam32 = mmio_oku32(y, TABAN + OFS_A)"
+        " + mmio_oku32(y, TABAN + OFS_B);\n"
+        "  geri_al(y);\n"
+        "  ver s;\n"
+        "}");
+    test_sonuc("mmio sabit adres (taban+ofs) iki register topla -> 42",
+               rc == 42);
+}
+
+/* === C9: typed-width MMIO (16/64-bit) + byte-adreslenebilir mock === */
+
+static void test_mmio16_round_trip(void) {
+    /* 16-bit yaz 42 -> oku16 -> exit. ver: tam16 (i16) -> tam32 (sext). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz16(y, 4096, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y, 4096);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio16 yaz 42 -> oku16 -> exit 42", rc == 42);
+}
+
+static void test_mmio64_round_trip(void) {
+    /* 64-bit yaz 42 -> oku64 -> exit. ver: tam64 (i64) -> tam32 (trunc). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz64(y, 8192, 42);\n"
+        "  de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 8192);\n"
+        "  geri_al(y);\n"
+        "  ver v;\n"
+        "}");
+    test_sonuc("mmio64 yaz 42 -> oku64 -> exit 42", rc == 42);
+}
+
+static void test_mmio16_komsu_ayrisir(void) {
+    /* KRITIK regresyon kanit: eski (adres>>2) kelime-collapse mock'ta 4096 ve
+     * 4098 AYNI kelimeye duser (4096>>2 == 4098>>2 == 1024); ikinci yaz
+     * birinciyi ezer -> oku16(4096)=32 -> toplam 64 (eski exit-5 sinifi hata).
+     * Byte-adreslenebilir mock'ta ayri slotlar: 10 + 32 = 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
+        "  mmio_yaz16(y, 4096, 10);\n"
+        "  mmio_yaz16(y, 4098, 32);\n"
+        "  de\xc4\x9fi\xc5\x9fken a: tam16 = mmio_oku16(y, 4096);\n"
+        "  de\xc4\x9fi\xc5\x9fken b: tam16 = mmio_oku16(y, 4098);\n"
+        "  geri_al(y);\n"
+        "  ver a + b;\n"
+        "}");
+    test_sonuc("mmio16 komsu alanlar ayrisir (eski exit-5 cakismasi duzeldi) -> 42",
+               rc == 42);
+}
+
+static void test_mmio_genis_verify(void) {
+    /* Fikstur: le16 komsu idx + le64 desc; her BB terminator'lu, opt temiz. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/mmio_genis.kem");
+    test_sonuc("mmio typed-width fikstur: opt -passes=verify PASS", ok);
+}
+
+static void test_mmio_genis_calistir(void) {
+    /* le16 komsu (10+32) + le64 round-trip (4096) dogrulamasi -> exit 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/mmio_genis.kem");
+    test_sonuc("mmio typed-width fikstur (le16 komsu + le64) -> exit 42", rc == 42);
+}
+
+/* --- C-track: &Struct referans-param + alan atama + yetki ABI --- */
+
+static void test_ref_struct_param_alan_okuma(void) {
+    /* D9 x3 repro: onceki durum — &v cagri argumani struct DEGERINI
+     * gecirirdi (OP_REF lowering yoktu, "tekli op desteklenmiyor") ->
+     * callee ptr bekler, ilk alani pointer sanir -> runtime SEGFAULT
+     * (exit 139). opt -verify bunu YAKALAMAZ (imza-uyumsuz direkt
+     * cagri gecerli-ama-UB IR). */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Vq { taban: tam64; boyut: tam32; } "
+        "i\xc5\x9flev kur(y: tam32, vq: &Vq) -> tam32 { "
+        "ver vq.boyut + y; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v: Vq = Vq { taban: 4096, boyut: 40 }; "
+        "ver kur(2, &v); }");
+    test_sonuc("&Struct param + alan okuma round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_ref_struct_param_sonuc_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/ref_struct_sonuc.kem");
+    test_sonuc("&Struct param + sonuc donus: opt verify PASS", ok);
+}
+
+static void test_ref_struct_param_sonuc_calistir(void) {
+    /* D9 w1 repro: &Struct param + sonuc<bos,cesit> donus + esles. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/ref_struct_sonuc.kem");
+    test_sonuc("&Struct param + sonuc donus (w1) -> exit 42", rc == 42);
+}
+
+static void test_struct_alan_atama(void) {
+    /* Init-test koku #3: `x.alan = v` onceden SESSIZCE dusurulurdu
+     * (DUGUM_ATAMA yalniz tanimlayici hedef taniyordu) -> D4/D5
+     * blk_yapilandirma cfg alanlari hep 0 kalirdi. Hem lokal struct
+     * hem &degisken referans param hedefi dogrulanir. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 K { a: tam32; b: tam64; } "
+        "i\xc5\x9flev doldur(k: &de\xc4\x9fi\xc5\x9fken K) -> tam32 { "
+        "k.a = 40; k.b = 2; ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: K = K { a: 0, b: 0 }; "
+        "doldur(&k); "
+        "ver k.a + (k.b olarak tam32); }");
+    test_sonuc("alan atama: &degisken ref uzerinden mutasyon -> exit 42",
+               rc == 42);
+}
+
+static void test_yetki_delege_abi(void) {
+    /* Init-test koku #2: %kdl_yetki (16B) IR<->C sinirinda first-class
+     * arg gecirilirdi; Win64 C ABI pointer bekler -> kdl_yetki_delege
+     * prologunda segfault. Fix: sret/ptr C-uyumlu imzalar. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "de\xc4\x9fi\xc5\x9fken y1: yetki<MMIO> = delege(y, 3); "
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y1, 1); "
+        "ver 42; }");
+    test_sonuc("yetki_olustur + delege zinciri (Win64 C ABI) -> exit 42",
+               rc == 42);
+}
+
+/* --- Codegen coverage audit: lowering bosluk regresyonlari ---
+ * KRITIK: hepsi RUNTIME round-trip assert eder (yaz -> oku -> dogru
+ * deger). opt-verify bu sinifi YAKALAMAZ (dusurulen deyim / yanlis
+ * deger gecerli-ama-yanlis IR uretir). */
+
+static void test_audit_deref_okuma(void) {
+    /* Gap #1: *p deref load emit etmiyordu — ptr DEGERI donerdi. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; ver oku(&x); }");
+    test_sonuc("audit: *p deref yukleme round-trip -> exit 42", rc == 42);
+}
+
+static void test_audit_stack_dizi_eleman_atama(void) {
+    /* Gap #2 (stack): d[i] = v onceden sessizce dusurulurdu -> toplam
+     * 6 kalirdi. Yaz -> oku round-trip: 1 + 38 + 3 = 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [1, 2, 3]; "
+        "d[1] = 38; "
+        "ver d[0] + d[1] + d[2]; }");
+    test_sonuc("audit: stack d[i]=v yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_nested_alan_atama(void) {
+    /* Gap #3: a.b.c = v onceden dusurulurdu (erisim_lvalue tek seviye).
+     * 3-seviye yaz -> oku round-trip. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Ic { x: tam32; } "
+        "yap\xc4\xb1 Orta { ic: Ic; } "
+        "yap\xc4\xb1 Dis { orta: Orta; y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dis = "
+        "Dis { orta: Orta { ic: Ic { x: 0 } }, y: 2 }; "
+        "d.orta.ic.x = 40; "
+        "ver d.orta.ic.x + d.y; }");
+    test_sonuc("audit: a.b.c = v ic ice yaz-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_audit_linear_kullan_round_trip(void) {
+    /* Gap #4+#5: tekkez_yarat onceden TANIMSIZ sembol (link hatasi),
+     * kullan(e) sessiz 0 donerdi. Zero-overhead pass-through dogrula:
+     * tekkez_yarat(42) -> kullan(t) -> 42. Lineer muhasebe tip
+     * kontrolde (program --check'ten de gecer). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = kullan(t); "
+        "ver v; }");
+    test_sonuc("audit: tekkez_yarat -> kullan round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_a_dtam_kiyas(void) {
+    /* D-005: dtam8 200 > 100 — signed olsa -56 > 100 = yanlis. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er a > 100 { ver 42; } ver 1; }");
+    test_sonuc("matris-A: dtam8 isaretsiz karsilastirma -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_a_dtam_bolme_kaydir(void) {
+    /* D-005: udiv + lshr. dtam8 200/2=100, 200>>1=100; signed olsa
+     * -56/2=-28, -56>>1=-28 -> farkli. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er (a / 2) olarak tam32 == 100 ve "
+        "(a >> 1) olarak tam32 == 100 { ver 42; } ver 1; }");
+    test_sonuc("matris-A: dtam8 udiv+lshr -> exit 42", rc == 42);
+}
+
+static void test_matris_a_i1_zext(void) {
+    /* D-005 (en yaygin gap): dogru olarak tam32 == 1 (sext olsa -1). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: mant\xc4\xb1ksal = do\xc4\x9fru; "
+        "ver 41 + (b olarak tam32); }");
+    test_sonuc("matris-A: i1 zext (dogru olarak tam32 = 1) -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_a_dtam_param_donus(void) {
+    /* D-005: dtamN param + donus boyunca signedness korunur. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev yari(x: dtam8) -> dtam8 { ver x / 2; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; "
+        "e\xc4\x9f" "er yari(a) > 50 { "
+        "ver (yari(a)) olarak tam32 - 58; } ver 1; }");
+    test_sonuc("matris-A: dtam param/donus signedness -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_c_deref_ref_round_trip(void) {
+    /* Matris C: *(&v) skaler round-trip — &v gercek adres, *  yukler. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = 42; "
+        "g\xc3\xbcvensiz { ver *(&v); } ver 1; }");
+    test_sonuc("matris-C: *(&v) round-trip -> exit 42", rc == 42);
+}
+
+static void test_matris_b_deref_atama_t022(void) {
+    /* Matris B: *p = v spec geregi T022-RED (DOGRULA). Lvalue yalniz
+     * tanimlayici/erisim/indeks; ham pointer-deref hedefi degil. */
+    int ok = kemgu_check_basarili("test/snapshots/deref_atama_t022.kem");
+    test_sonuc("matris-B: *p=v -> T022 reddi (spec-dogru)", ok == 0);
+}
+
+static void test_matris_de_karsilikli_ozyineleme(void) {
+    /* Matris D/E: karsilikli ozyineleme (cift_mi <-> tek_mi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev cift_mi(n: tam32) -> mant\xc4\xb1ksal { "
+        "e\xc4\x9f" "er n == 0 { ver do\xc4\x9fru; } ver tek_mi(n - 1); } "
+        "i\xc5\x9flev tek_mi(n: tam32) -> mant\xc4\xb1ksal { "
+        "e\xc4\x9f" "er n == 0 { ver yanl\xc4\xb1\xc5\x9f; } "
+        "ver cift_mi(n - 1); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er cift_mi(10) ve de\xc4\x9fil tek_mi(10) { ver 42; } "
+        "ver 1; }");
+    test_sonuc("matris-D/E: karsilikli ozyineleme -> exit 42", rc == 42);
+}
+
+static void test_matris_e_yetki_param_sinir(void) {
+    /* Matris E: yetki<R> fonksiyon SINIRINDA pass-through (Win64 sret
+     * ABI yolu calismaya devam — &Struct fix sonrasi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev kullan_yetki(y: yetki<MMIO>) -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y, 1); ver 42; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "ver kullan_yetki(y); }");
+    test_sonuc("matris-E: yetki<R> param sinir pass-through -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_e_tekkez_param_sinir(void) {
+    /* Matris E: tekkez<T> fonksiyon SINIRINDA pass-through + cagrida
+     * tuketim (lineer kara kutu zero-overhead). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev tuket(t: tekkez<tam32>) -> tam32 { ver kullan(t); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "ver tuket(t); }");
+    test_sonuc("matris-E: tekkez<T> param sinir round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_d_esles_cesit_exhaustive(void) {
+    /* Matris D: cesit varyantlari tum kollar (i8 discriminant dispatch). */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Renk { Kirmizi, Yesil, Mavi } "
+        "i\xc5\x9flev kod(r: Renk) -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f r { "
+        "Renk::Kirmizi => { ver 10; } "
+        "Renk::Yesil => { ver 20; } "
+        "Renk::Mavi => { ver 12; } } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver kod(Renk::Kirmizi) + kod(Renk::Mavi) + kod(Renk::Yesil); }");
+    test_sonuc("matris-D: cesit exhaustive esles (10+12+20) -> exit 42",
+               rc == 42);
+}
+
+/* --- D-006: &-of-field/element parser onceligi (postfix > prefix) --- */
+
+static void test_d006_ref_alan_okuma(void) {
+    /* &p.x = &(p.x): alan adresi -> deref-oku round-trip. Eskiden
+     * (&p).x -> kopya-adres -> i32 deger ptr-param'a -> SEGFAULT. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 P { x: tam32; y: tam32; } "
+        "i\xc5\x9flev artir(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p + 1; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken p: P = P { x: 41, y: 0 }; "
+        "g\xc3\xbcvensiz { ver artir(&p.x); } ver 1; }");
+    test_sonuc("D-006: &p.x = &(p.x) deref-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_d006_ref_eleman_okuma(void) {
+    /* &d[i] = &(d[i]): eleman adresi -> deref-oku. Eskiden (&d)[i]. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [10, 42, 30]; "
+        "g\xc3\xbcvensiz { ver oku(&d[1]); } ver 1; }");
+    test_sonuc("D-006: &d[i] = &(d[i]) deref-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_d006_ref_nested_alan(void) {
+    /* &a.b.c = &((a.b).c): ic ice alan adresi. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Ic { v: tam32; } "
+        "yap\xc4\xb1 Dis { ic: Ic; } "
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dis = Dis { ic: Ic { v: 42 } }; "
+        "g\xc3\xbcvensiz { ver oku(&d.ic.v); } ver 1; }");
+    test_sonuc("D-006: &a.b.c ic ice alan adresi -> exit 42", rc == 42);
+}
+
+static void test_d006_regresyon_kombinasyonlar(void) {
+    /* Oncelik degisimi diger &/postfix/onek kombinasyonlarini bozmasin:
+     * &x duz, *(&x) round-trip, &x+y aritmetik (= (&x adresi degil;
+     * burada deger baglaminda *(&x)+y), -p.x = -(p.x), ic ice *& . */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 P { x: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 20; "
+        "de\xc4\x9fi\xc5\x9fken p: P = P { x: 0 - 22 }; "
+        "g\xc3\xbcvensiz { "
+        "de\xc4\x9fi\xc5\x9fken a: tam32 = *(&x); "      /* *& round-trip = 20 */
+        "de\xc4\x9fi\xc5\x9fken b: tam32 = -p.x; "        /* -(p.x) = 22 */
+        "ver a + b; } ver 1; }");
+    test_sonuc("D-006 regresyon: *(&x) + -p.x = 20+22 -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_f_tekkez_esles_kolu(void) {
+    /* Matris F (oncelik): tekkez sonuc<tekkez<T>,H>'ten cikip esles
+     * kolunda tuketiliyor — lineer deger cagri+esles+kullan zinciri. */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Yok { Bos } "
+        "i\xc5\x9flev al() -> sonu\xc3\xa7<tekkez<tam32>, Yok> { "
+        "ver tamam(tekkez_yarat(42)); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc5\x9fle\xc5\x9f al() { "
+        "tamam(t) => { ver kullan(t); } "
+        "hata(e) => { ver 1; } } ver 2; }");
+    test_sonuc("matris-F: tekkez esles-kolunda tuketim -> exit 42",
+               rc == 42);
+}
+
+static void test_matris_f_capability_lineer_capraz(void) {
+    /* Matris F CAPRAZ: yetki<MMIO> (capability-gate) + tekkez<tam32>
+     * ayni scope'ta, ikisi de tuketiliyor (geri_al + kullan). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "mmio_yaz32(y, 4096, 1); "
+        "geri_al(y); "
+        "ver kullan(t); }");
+    test_sonuc("matris-F: capability + lineer capraz (ikisi tuketilir) "
+               "-> exit 42", rc == 42);
+}
+
+static void test_matris_f_yetki_mmio_gate(void) {
+    /* Matris F: yetki al + capability-gate'li typed MMIO round-trip. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
+        "mmio_yaz32(y, 4096, 42); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = mmio_oku32(y, 4096); "
+        "geri_al(y); ver v; }");
+    test_sonuc("matris-F: yetki MMIO capability-gate round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_stretch_tek_varyant_cesit(void) {
+    /* stretch: tek-varyant cesit + esles (kenar durum). */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Birim { Tek } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: Birim = Birim::Tek; "
+        "e\xc5\x9fle\xc5\x9f b { Birim::Tek => { ver 42; } } ver 1; }");
+    test_sonuc("stretch: tek-varyant cesit + esles -> exit 42", rc == 42);
+}
+
+/* --- v1 bölge-container: bölge_al<T> + *T indeksleme --- */
+
+static void test_bolge_al_dosya(const char *isim, const char *ad) {
+    /* fixture: --check GECMELI + E2E calisip 42 donmeli. */
+    char yol[128];
+    snprintf(yol, sizeof(yol), "test/snapshots/%s.kem", isim);
+    int ok = kemgu_check_basarili(yol);
+    int rc = ok ? derle_dosya_ve_calistir(yol) : -1;
+    char mesaj[160];
+    snprintf(mesaj, sizeof(mesaj),
+             "bolge_al: %s --check + E2E -> exit 42", ad);
+    test_sonuc(mesaj, ok == 1 && rc == 42);
+}
+
+static void test_bolge_al_genislikler(void) {
+    /* DoD: T = tam8 / tam64 / struct — GENISLIK dogrulamali round-trip.
+     * tam8: 100+100 wrap -56 (i8 stride+load kaniti); tam64: 2^32 farki
+     * (i64 kaniti); struct: GEP-null sizeof (padding dahil), v[0]/v[2]
+     * alan butunlugu. Onceki durum: *T indeksleme T008 ile bloklu +
+     * eleman tipi beklenen/RHS'ten -> yanlis genislik riski. */
+    test_bolge_al_dosya("bolge_al_tam8", "tam8 wrap (-56)");
+    test_bolge_al_dosya("bolge_al_tam64", "tam64 2^32 fark");
+    test_bolge_al_dosya("bolge_al_struct", "struct sizeof+alan");
+}
+
+static void test_bolge_al_grow_copy(void) {
+    /* DoD: kucuk alloc doldur -> buyuk alloc -> bellek_kopyala
+     * (E002 dar gevsetme: *T -> metin) -> icerik korunuyor. */
+    test_bolge_al_dosya("bolge_al_grow", "grow bellek_kopyala");
+}
+
+static void test_bolge_al_negatifler(void) {
+    /* BL001: beklenen *T baglami yok -> ret. Ters cast metin -> *T
+     * KAPALI (E002 dar gevsetme yalniz *T -> metin yonu acti). */
+    int ok1 = kemgu_check_basarili("test/snapshots/bolge_al_bl001.kem");
+    test_sonuc("bolge_al: beklenen *T yok -> BL001 reddi", ok1 == 0);
+    int ok2 = kemgu_check_basarili("test/snapshots/bolge_al_ters_cast.kem");
+    test_sonuc("bolge_al: metin -> *T ters cast KAPALI (E002)", ok2 == 0);
+}
+
+static void test_bolge_al_guvensiz_gate(void) {
+    /* G001 tutarliligi: *T indeksleme guvensiz DISINDA reddedilir. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken y: yetki<Bellek> = yetki_olustur(3, 3); "
+        "de\xc4\x9fi\xc5\x9fken v: *tam32 = b\xc3\xb6lge_al(y, 4); "
+        "g\xc3\xbcvensiz { v[0] = 42; "
+        "de\xc4\x9fi\xc5\x9fken s: tam32 = v[0]; "
+        "geri_al(y); ver s; } ver 1; }");
+    test_sonuc("bolge_al: tam32 temel round-trip -> exit 42", rc == 42);
+}
+
+static void test_modul_typecheck_e2e_check(void) {
+    /* T016 fix: modül programı artik --check GECER (eskiden T016 ile
+     * blokluyordu — codegen'den once). ic ice + kardes + YOL cagri. */
+    int ok = kemgu_check_basarili("test/snapshots/modul_e2e.kem");
+    test_sonuc("T016: modul programi --check gecer (ic ice+kardes+YOL)",
+               ok == 1);
+}
+
+static void test_modul_typecheck_e2e_run(void) {
+    /* T016 fix: ayni program E2E derlenip calisir -> 42 (16+26). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/modul_e2e.kem");
+    test_sonuc("T016: modul programi E2E calisir -> exit 42", rc == 42);
+}
+
+static void test_modul_cesit_check(void) {
+    /* T016 fix: modul-yerel cesit + g::Renk::Kirmizi modul-nitelikli
+     * varyant + modul-yerel cesit ustunde esles -> --check gecer. */
+    int ok = kemgu_check_basarili("test/snapshots/modul_cesit.kem");
+    test_sonuc("T016: modul cesit varyanti (g::Renk::Kirmizi) --check",
+               ok == 1);
+}
+
+static void test_modul_cesit_run(void) {
+    int rc = derle_dosya_ve_calistir("test/snapshots/modul_cesit.kem");
+    test_sonuc("T016: modul cesit varyanti E2E -> exit 42", rc == 42);
+}
+
+/* --- Ilk stdlib: kütüphane/dizi.kem Liste<T> (in-file validasyon) --- */
+
+/* Windows'ta system() cmd.exe ANSI codepage kullanir — UTF-8 'kütüphane'
+ * yolu bozulur (bash/MSYS'te sorun yok). Dosyayi UTF-16 yolla acip
+ * (_wfopen) ASCII gecici yola kopyalariz; testler o yoldan kosar. */
+static const char *stdlib_dizi_yolu(void) {
+#ifdef _WIN32
+    static int hazir = 0;
+    if (!hazir) {
+        FILE *src = _wfopen(L"kütüphane/dizi.kem", L"rb");
+        if (!src) return NULL;
+        FILE *dst = fopen("build/_stdlib_dizi.kem", "wb");
+        if (!dst) { fclose(src); return NULL; }
+        char buf[4096];
+        size_t r;
+        while ((r = fread(buf, 1, sizeof(buf), src)) > 0) {
+            fwrite(buf, 1, r, dst);
+        }
+        fclose(src);
+        fclose(dst);
+        hazir = 1;
+    }
+    return "build/_stdlib_dizi.kem";
+#else
+    return "k\xc3\xbct\xc3\xbcphane/dizi.kem";
+#endif
+}
+
+static void test_stdlib_liste_check(void) {
+    /* Liste<T>: generic yapi + *T tampon + bolge_al + modul ici generic
+     * monomorphization — --check GECMELI. */
+    const char *yol = stdlib_dizi_yolu();
+    int ok = yol ? kemgu_check_basarili(yol) : 0;
+    test_sonuc("stdlib Liste<T>: kutuphane/dizi.kem --check", ok == 1);
+}
+
+static void test_stdlib_liste_e2e(void) {
+    /* In-file validasyon: tam32 (6 ekle, 0->4->8 buyume), tam64 (2^32
+     * genislik kaniti), struct Nokta (alan butunlugu) + sinir-disi
+     * varsayilan + boy/kapasite -> tum kontroller 0, main 42. */
+    const char *yol = stdlib_dizi_yolu();
+    int rc = yol ? derle_dosya_ve_calistir(yol) : -1;
+    test_sonuc("stdlib Liste<T>: cok-tipli round-trip E2E -> exit 42",
+               rc == 42);
+}
+
+/* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
+
+static void test_ad_cozum_sapma_check(void) {
+    /* Sapma programi --check'ten gecmeli (ciplak kardes cagrilari +
+     * goreli YOL, module-first/lexical kuralla cozulur). */
+    int ok = kemgu_check_basarili("test/snapshots/ad_cozum_sapma.kem");
+    test_sonuc("ad-cozum: sapma programi --check gecer (kardes-oncelik)",
+               ok == 1);
+}
+
+static void test_ad_cozum_sapma_e2e(void) {
+    /* Regresyon guard'i: tip kontrol (module-first/lexical) ile codegen
+     * ayni sembole baglanmali. Onceki durum: codegen global-first —
+     * ciplak f() modul icinde @f'e (global) baglaniyordu, goreli yol
+     * (ic::g) hic cozulemiyordu -> exit 42 yerine yanlis deger / -1. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/ad_cozum_sapma.kem");
+    test_sonuc("ad-cozum: kardes-oncelik tip kontrol == codegen -> exit 42",
+               rc == 42);
+}
+
+static void test_ad_cozum_modul_govde_denetimi(void) {
+    /* On-kosul guard'i: modul islev govdeleri tip kontrolune DAHIL.
+     * Onceki durum: islev sembolu yalniz global scope'ta araniyordu ->
+     * sessiz erken donus -> 'ver dogru;' (mantiksal != tam32) --check'ten
+     * GECIYORDU. */
+    int ok = kemgu_check_basarili("test/snapshots/ad_cozum_govde.kem");
+    test_sonuc("ad-cozum: modul govdesi denetlenir (T020 --check kirmizi)",
+               ok == 0);
+}
+
+static void test_kampanya_modul_mangling(void) {
+    /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
+     * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. (T016 fix
+     * sonrasi --check de gecer; bkz test_modul_typecheck_*.) */
+    int rc = derle_ve_calistir(
+        "mod\xc3\xbcl mat { "
+        "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
+        "i\xc5\x9flev dordun(x: tam32) -> tam32 { ver kare(kare(x)); } "
+        "mod\xc3\xbcl ic { "
+        "i\xc5\x9flev arti_bir(x: tam32) -> tam32 { ver x + 1; } } } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver mat::dordun(2) + mat::ic::arti_bir(25); }");
+    test_sonuc("kampanya: modul mangling (@mat.dordun, ic ice, kardes) "
+               "-> exit 42", rc == 42);
+}
+
+static void test_kampanya_short_circuit(void) {
+    /* D-002 [YUKSEK]: ve/veya kisa-devre. Onceki 'and/or i32' her iki
+     * tarafi da degerlendiriyordu — yan etki gozlemiyle dogrulanir:
+     * 'yanlis ve f()' ve 'dogru veya f()' f'i CAGIRMAMALI (boyut 0),
+     * 'dogru ve f()' CAGIRMALI (boyut 1). Deger semantigi de assert. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev ekle_ve_dogru(d: Dizi<tam32>) -> mant\xc4\xb1ksal { "
+        "dizi_ekle(d, 1); ver do\xc4\x9fru; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
+        "e\xc4\x9f" "er yanl\xc4\xb1\xc5\x9f ve ekle_ve_dogru(d) { ver 1; } "
+        "e\xc4\x9f" "er do\xc4\x9fru veya ekle_ve_dogru(d) { } "
+        "de\xc4\x9filse { ver 2; } "
+        "e\xc4\x9f" "er dizi_boyut(d) != 0 { ver 3; } "
+        "e\xc4\x9f" "er do\xc4\x9fru ve ekle_ve_dogru(d) { } "
+        "de\xc4\x9filse { ver 4; } "
+        "e\xc4\x9f" "er dizi_boyut(d) != 1 { ver 5; } "
+        "e\xc4\x9f" "er (do\xc4\x9fru ve do\xc4\x9fru) ve "
+        "(yanl\xc4\xb1\xc5\x9f veya do\xc4\x9fru) { ver 42; } "
+        "ver 6; }");
+    test_sonuc("kampanya: ve/veya kisa-devre (yan etki + deger) "
+               "-> exit 42", rc == 42);
+}
+
+static void test_audit_linear_imha(void) {
+    /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "imha(t); "
+        "ver 42; }");
+    test_sonuc("audit: imha(t) lineer dispose -> exit 42", rc == 42);
+}
+
+/* --- C5: satirici_asm (inline assembly) --- */
+
+static void test_asm_round_trip_verify(void) {
+    /* Coklu cikti + girdi + clobber: emit edilen modul opt'tan gecmeli. */
+    int ok = kemgu_llvm_opt_verify("test/snapshots/asm_round_trip.kem");
+    test_sonuc("satirici_asm round-trip: opt -passes=verify PASS", ok);
+}
+
+static void test_asm_round_trip_calistir(void) {
+    /* x86: girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/asm_round_trip.kem");
+    test_sonuc("satirici_asm x86 girdi/cikti round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_asm_arm64_llvm_reddi(void) {
+    /* AS001: arm64-tagli asm x86 triple altinda --llvm BASARISIZ olmali
+     * (bozuk IR uretilmez; hedefe-duyarli triple C8'de). */
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm test/snapshots/asm_arm64_ret.kem > %s 2>%s",
+             KEMGU_BIN, LL_PATH, DEV_NULL);
+    int rc = system(komut);
+    test_sonuc("satirici_asm arm64 tag -> --llvm AS001 reddi", rc != 0);
+}
+
+static void test_asm_arm64_check_reddi(void) {
+    /* AS001 ayni zamanda --check yolunda (kaynak konumuyla). */
+    int ok = kemgu_check_basarili("test/snapshots/asm_arm64_ret.kem");
+    test_sonuc("satirici_asm arm64 tag -> --check AS001 reddi", ok == 0);
+}
+
+static void test_asm_guvensiz_disi_reddi(void) {
+    /* G002: guvensiz disinda satirici_asm --check'te reddedilir. */
+    int ok = kemgu_check_basarili("test/snapshots/asm_guvensiz_disi.kem");
+    test_sonuc("satirici_asm guvensiz disinda -> --check G002 reddi",
+               ok == 0);
+}
+
+/* --- C5 on-kosul #1: guvensiz blok lowering --- */
+
+static void test_guvensiz_blok_emit(void) {
+    /* Onceki durum: DUGUM_GUVENSIZ llvm.c'de default'a duser, ic blok
+     * TAMAMEN dusurulurdu -> x = 0 kalir, exit 0 (latent miscompile).
+     * Fix sonrasi ic deyimler emit edilir -> exit 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
+        "g\xc3\xbcvensiz { x = 41; x = x + 1; } "
+        "ver x; }");
+    test_sonuc("guvensiz ic deyimler emit edilir -> exit 42", rc == 42);
+}
+
+static void test_guvensiz_icinde_ver(void) {
+    /* guvensiz icindeki 'ver' terminator olarak fonksiyona yayilmali
+     * (blok_uret term=1 doner, cift-ret/epilog karismaz). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev f() -> tam32 { g\xc3\xbcvensiz { ver 42; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { ver f(); }");
+    test_sonuc("guvensiz icinde 'ver' terminator -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -1260,6 +2129,120 @@ int main(void) {
     test_dizi_boyut();
     test_dizi_buyume();
     test_dizi_tam64();
+
+    printf("\n--- MMIO Foundation: yetki<MMIO> register erisimi ---\n");
+    test_mmio_yaz_oku_round_trip();
+    test_mmio_sabit_adres();
+
+    printf("\n--- C9: typed-width MMIO (16/64-bit) + byte-adreslenebilir mock ---\n");
+    test_mmio16_round_trip();
+    test_mmio64_round_trip();
+    test_mmio16_komsu_ayrisir();
+    test_mmio_genis_verify();
+    test_mmio_genis_calistir();
+
+    printf("\n--- C1: esles (match) deyimi codegen ---\n");
+    test_esles_wildcard();
+    test_esles_nested();
+    test_esles_match_early_return_verify();
+    test_esles_match_early_return_calistir();
+
+    printf("\n--- C2.5: sonuc/secimlik value codegen ---\n");
+    test_sonuc_secimlik_verify();
+    test_sonuc_secimlik_calistir();
+    test_sonuc_struct_payload_verify();
+    test_sonuc_struct_payload_calistir();
+
+    printf("\n--- C2.6: cross-file fonksiyon cagrisi ---\n");
+    test_crossfile_transitif_verify();
+    test_crossfile_transitif_calistir();
+    test_crossfile_sonuc_verify();
+    test_crossfile_sonuc_calistir();
+
+    printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
+    test_cesit_temel_verify();
+    test_cesit_temel_calistir();
+    test_cesit_sonuc_verify();
+    test_cesit_sonuc_calistir();
+    test_cesit_exhaustive_negatif();
+
+    printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
+    test_guvensiz_blok_emit();
+    test_guvensiz_icinde_ver();
+
+    printf("\n--- C5: satirici_asm (inline assembly) ---\n");
+    test_asm_round_trip_verify();
+    test_asm_round_trip_calistir();
+    test_asm_arm64_llvm_reddi();
+    test_asm_arm64_check_reddi();
+    test_asm_guvensiz_disi_reddi();
+
+    printf("\n--- C-track: &Struct ref-param + alan atama + yetki ABI ---\n");
+    test_ref_struct_param_alan_okuma();
+    test_ref_struct_param_sonuc_verify();
+    test_ref_struct_param_sonuc_calistir();
+    test_struct_alan_atama();
+    test_yetki_delege_abi();
+
+    printf("\n--- Codegen coverage audit (runtime round-trip) ---\n");
+    test_audit_deref_okuma();
+    test_audit_stack_dizi_eleman_atama();
+    test_audit_nested_alan_atama();
+    test_audit_linear_kullan_round_trip();
+    test_audit_linear_imha();
+
+    printf("\n--- T016: modul type-check (E2E --check + run) ---\n");
+    test_modul_typecheck_e2e_check();
+    test_modul_typecheck_e2e_run();
+    test_modul_cesit_check();
+    test_modul_cesit_run();
+
+    printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
+    printf("\n--- v1 bolge-container: bolge_al<T> + *T indeksleme ---\n");
+    test_bolge_al_guvensiz_gate();
+    test_bolge_al_genislikler();
+    test_bolge_al_grow_copy();
+    test_bolge_al_negatifler();
+
+    printf("\n--- Ilk stdlib: Liste<T> (kutuphane/dizi.kem) ---\n");
+    test_stdlib_liste_check();
+    test_stdlib_liste_e2e();
+
+    test_kampanya_modul_mangling();
+    test_kampanya_short_circuit();
+
+    printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
+    test_ad_cozum_sapma_check();
+    test_ad_cozum_sapma_e2e();
+    test_ad_cozum_modul_govde_denetimi();
+
+    printf("\n--- Matris A: tipler x operatorler (signedness) ---\n");
+    test_matris_a_dtam_kiyas();
+    test_matris_a_dtam_bolme_kaydir();
+    test_matris_a_i1_zext();
+    test_matris_a_dtam_param_donus();
+
+    printf("\n--- Matris B+C: erisim/isaretci (in-scope green + DUR-SOR) ---\n");
+    test_matris_c_deref_ref_round_trip();
+    test_matris_b_deref_atama_t022();
+
+    printf("\n--- Matris D+E: kontrol akisi + fonksiyon siniri ---\n");
+    test_matris_de_karsilikli_ozyineleme();
+    test_matris_e_yetki_param_sinir();
+    test_matris_e_tekkez_param_sinir();
+    test_matris_d_esles_cesit_exhaustive();
+
+    printf("\n--- D-006: &-of-field/element parser onceligi ---\n");
+    test_d006_ref_alan_okuma();
+    test_d006_ref_eleman_okuma();
+    test_d006_ref_nested_alan();
+    test_d006_regresyon_kombinasyonlar();
+
+    printf("\n--- Matris F + stretch: lineer/bolge/yetki etkilesimleri ---\n");
+    test_matris_f_tekkez_esles_kolu();
+    test_matris_f_capability_lineer_capraz();
+    test_matris_f_yetki_mmio_gate();
+    test_stretch_tek_varyant_cesit();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

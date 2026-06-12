@@ -1,0 +1,194 @@
+// VirtIO-blk config-space host-mock testi: capacity/blk_size/generation retry.
+
+kullan drivers::virtio::constants;
+kullan drivers::virtio::virtio_mmio;
+kullan drivers::virtio::virtio_blk_config;
+
+sabit TEST_MMIO_OKU: tam32 = 1;
+sabit TEST_MMIO_YAZ: tam32 = 2;
+sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
+sabit TEST_1GIB_SEKTOR: tam64 = 2097152;
+sabit TEST_1GIB_SEKTOR_LOW: tam32 = 2097152;
+sabit TEST_1GIB_SEKTOR_HIGH: tam32 = 0;
+sabit TEST_HIGH_CAPACITY_LOW: tam32 = 0;
+sabit TEST_HIGH_CAPACITY_HIGH: tam32 = 1;
+sabit TEST_HIGH_CAPACITY: tam64 = 4294967296;
+
+// MMIO yetkisi host-mock config-space registerlarini test oncesi hazirlamak icin kullanilir.
+işlev blk_cfg_test_seed(
+    // MMIO yetkisi seed yazimlari boyunca odunc kullanilip caller'a geri verilir.
+    y: yetki<MMIO>,
+    generation: tam32,
+    capacity_low: tam32,
+    capacity_high: tam32,
+    blk_size: tam32,
+    size_max: tam32,
+    seg_max: tam32
+) -> yetki<MMIO> {
+    mmio_yaz32(y, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_CONFIG_GENERATION), generation);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_CAPACITY), capacity_low);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_CAPACITY_HIGH), capacity_high);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_BLK_SIZE), blk_size);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_SIZE_MAX), size_max);
+    mmio_yaz32(y, blk_cfg_adres(VIRTIO_MMIO_TABAN, VIRTIO_BLK_CFG_SEG_MAX), seg_max);
+    ver y;
+}
+
+işlev blk_cfg_test_alanlar_dogru_mu(
+    kapasite_sektor: tam64,
+    blok_boyut: tam32,
+    size_max: tam32,
+    seg_max: tam32,
+    beklenen_kapasite: tam64
+) -> mantıksal {
+    ver kapasite_sektor == beklenen_kapasite ve
+        blok_boyut == 512 ve
+        size_max == 131072 ve
+        seg_max == 128;
+}
+
+işlev test_1gib_config_okunur() -> mantıksal {
+    // MMIO yetkisi config seed ve okuma fonksiyonuna aktarim icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan config okuma fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_cfg_test_seed(
+        y0,
+        7,
+        TEST_1GIB_SEKTOR_LOW,
+        TEST_1GIB_SEKTOR_HIGH,
+        512,
+        131072,
+        128
+    );
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
+        blk_yapilandirma_oku(y1, VIRTIO_MMIO_TABAN);
+    eşleş sonuc {
+        tamam(cfg) => {
+            ver blk_cfg_test_alanlar_dogru_mu(
+                cfg.kapasite_sektor,
+                cfg.blok_boyut,
+                cfg.size_max,
+                cfg.seg_max,
+                TEST_1GIB_SEKTOR
+            );
+        }
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
+            ver yanlış;
+        }
+    }
+    ver yanlış;
+}
+
+işlev test_capacity_high_word_birlesir() -> mantıksal {
+    // MMIO yetkisi high-word capacity seed ve okuma fonksiyonuna aktarim icin kullanilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan config okuma fonksiyonuna aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_cfg_test_seed(
+        y0,
+        9,
+        TEST_HIGH_CAPACITY_LOW,
+        TEST_HIGH_CAPACITY_HIGH,
+        512,
+        131072,
+        128
+    );
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
+        blk_yapilandirma_oku(y1, VIRTIO_MMIO_TABAN);
+    eşleş sonuc {
+        tamam(cfg) => {
+            ver blk_cfg_test_alanlar_dogru_mu(
+                cfg.kapasite_sektor,
+                cfg.blok_boyut,
+                cfg.size_max,
+                cfg.seg_max,
+                TEST_HIGH_CAPACITY
+            );
+        }
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
+            ver yanlış;
+        }
+    }
+    ver yanlış;
+}
+
+işlev test_generation_flip_bir_retry_sonra_okunur() -> mantıksal {
+    // MMIO yetkisi generation flip simule eden retry cekirdegine aktarilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan retry cekirdegine aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_cfg_test_seed(
+        y0,
+        1,
+        TEST_1GIB_SEKTOR_LOW,
+        TEST_1GIB_SEKTOR_HIGH,
+        512,
+        131072,
+        128
+    );
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
+        blk_yapilandirma_oku_cekirdek(y1, VIRTIO_MMIO_TABAN, 1);
+    eşleş sonuc {
+        tamam(cfg) => {
+            eğer değil blk_cfg_test_alanlar_dogru_mu(
+                cfg.kapasite_sektor,
+                cfg.blok_boyut,
+                cfg.size_max,
+                cfg.seg_max,
+                TEST_1GIB_SEKTOR
+            ) {
+                ver yanlış;
+            }
+        }
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
+            ver yanlış;
+        }
+    }
+
+    // MMIO yetkisi retry sonrasi generation register readback icin ayrica uretilir.
+    değişken y2: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    değişken gen: tam32 =
+        mmio_oku32(y2, virtio_mmio_adres(VIRTIO_MMIO_TABAN, VIRTIO_MMIO_CONFIG_GENERATION));
+    geri_al(y2);
+    ver gen == 2;
+}
+
+işlev test_generation_sekiz_retry_asimi_hata() -> mantıksal {
+    // MMIO yetkisi kararsiz generation hata yoluna aktarilir.
+    değişken y0: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
+    // MMIO yetkisi seed helper'indan retry cekirdegine aktarilan sahipligi temsil eder.
+    değişken y1: yetki<MMIO> = blk_cfg_test_seed(
+        y0,
+        3,
+        TEST_1GIB_SEKTOR_LOW,
+        TEST_1GIB_SEKTOR_HIGH,
+        512,
+        131072,
+        128
+    );
+    değişken sonuc: sonuç<BlkYapilandirma, YapilandirmaHatasi> =
+        blk_yapilandirma_oku_cekirdek(y1, VIRTIO_MMIO_TABAN, 8);
+    eşleş sonuc {
+        tamam(cfg) => {
+            ver yanlış;
+        }
+        hata(YapilandirmaHatasi::GenerationInstabilite) => {
+            ver doğru;
+        }
+    }
+    ver yanlış;
+}
+
+işlev test_u64_helper_birlestirir() -> mantıksal {
+    ver blk_cfg_u64_birlestir(0, 1) == TEST_HIGH_CAPACITY ve
+        blk_cfg_u64_birlestir(TEST_1GIB_SEKTOR_LOW, TEST_1GIB_SEKTOR_HIGH) == TEST_1GIB_SEKTOR;
+}
+
+işlev main() -> tam32 {
+    eğer test_1gib_config_okunur() ve
+       test_capacity_high_word_birlesir() ve
+       test_generation_flip_bir_retry_sonra_okunur() ve
+       test_generation_sekiz_retry_asimi_hata() ve
+       test_u64_helper_birlestirir() {
+        ver 0;
+    }
+    ver 1;
+}
