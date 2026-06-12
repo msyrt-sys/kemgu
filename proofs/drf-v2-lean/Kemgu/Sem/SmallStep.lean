@@ -167,6 +167,7 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
       (h_tid   : ctx'.tid = ctx.tid)
       (h_if'   : ctx'.ifade = e')
+      (h_yan   : ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y])  -- FIX-F
       (h_S'    : S' = { S1' with
                 thread := ts1 ++ { ctx' with ifade := .atama x e' } :: ts2' }) :
       Step S S'
@@ -194,6 +195,12 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
       (h_tid   : ctx'.tid = ctx.tid)
       (h_if'   : ctx'.ifade = a')
+      -- FIX-F (Mehmet onayi — DECISIONS_LOG cong-penceresi counterexample):
+      -- ic adim odakli pozisyona kilitli: yan thread'ler degismez (spawn
+      -- appendi haric). Pencere-artefakti adimlar (kosan thread'i pencerede
+      -- bitmis goren join) elenir; mesru adimlar dis-duzeyde dogrudan temsil
+      -- edilir — davranis kaybi yok.
+      (h_yan   : ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y])
       (h_S'    : S' = { S1' with
                 thread := ts1 ++ { ctx' with ifade := .seq a' b } :: ts2' }) :
       Step S S'
@@ -221,6 +228,7 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
       (h_tid   : ctx'.tid = ctx.tid)
       (h_if'   : ctx'.ifade = e')
+      (h_yan   : ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y])  -- FIX-F
       (h_S'    : S' = { S1' with
                 thread := ts1 ++ { ctx' with ifade := .guvensiz e' } :: ts2' }) :
       Step S S'
@@ -492,17 +500,17 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_not_owner h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
-  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
   | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
-  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
-  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
@@ -567,7 +575,7 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       subst h_S'; exact Or.inr ⟨_, rfl, rfl, rfl, rfl, rfl⟩
   | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_no h_S' =>
       subst h_S'; exact Or.inr ⟨_, rfl, rfl, rfl, rfl, rfl⟩
-  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
       · exact Or.inl h_f
@@ -576,7 +584,7 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
           by simpa [ifadeyleKonf] using h_z⟩
   | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
-  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
       · exact Or.inl h_f
@@ -585,7 +593,7 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
           by simpa [ifadeyleKonf] using h_z⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
-  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
       · exact Or.inl h_f
@@ -641,7 +649,7 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       intro h_frozen; subst h_S'; exact h_frozen
   | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b' h_t h_if h_b h_no h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
-  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx e).sahiplik b
@@ -649,7 +657,7 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       simpa using ih h1
   | sSeqAtla S S' ts1 ts2 ctx v bb h_t h_if h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
-  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
@@ -657,7 +665,7 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       simpa using ih h1
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
-  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_S' ih =>
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx e).sahiplik b
