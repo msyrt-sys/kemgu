@@ -1784,6 +1784,52 @@ static void test_modul_cesit_run(void) {
     test_sonuc("T016: modul cesit varyanti E2E -> exit 42", rc == 42);
 }
 
+/* --- Ilk stdlib: kütüphane/dizi.kem Liste<T> (in-file validasyon) --- */
+
+/* Windows'ta system() cmd.exe ANSI codepage kullanir — UTF-8 'kütüphane'
+ * yolu bozulur (bash/MSYS'te sorun yok). Dosyayi UTF-16 yolla acip
+ * (_wfopen) ASCII gecici yola kopyalariz; testler o yoldan kosar. */
+static const char *stdlib_dizi_yolu(void) {
+#ifdef _WIN32
+    static int hazir = 0;
+    if (!hazir) {
+        FILE *src = _wfopen(L"kütüphane/dizi.kem", L"rb");
+        if (!src) return NULL;
+        FILE *dst = fopen("build/_stdlib_dizi.kem", "wb");
+        if (!dst) { fclose(src); return NULL; }
+        char buf[4096];
+        size_t r;
+        while ((r = fread(buf, 1, sizeof(buf), src)) > 0) {
+            fwrite(buf, 1, r, dst);
+        }
+        fclose(src);
+        fclose(dst);
+        hazir = 1;
+    }
+    return "build/_stdlib_dizi.kem";
+#else
+    return "k\xc3\xbct\xc3\xbcphane/dizi.kem";
+#endif
+}
+
+static void test_stdlib_liste_check(void) {
+    /* Liste<T>: generic yapi + *T tampon + bolge_al + modul ici generic
+     * monomorphization — --check GECMELI. */
+    const char *yol = stdlib_dizi_yolu();
+    int ok = yol ? kemgu_check_basarili(yol) : 0;
+    test_sonuc("stdlib Liste<T>: kutuphane/dizi.kem --check", ok == 1);
+}
+
+static void test_stdlib_liste_e2e(void) {
+    /* In-file validasyon: tam32 (6 ekle, 0->4->8 buyume), tam64 (2^32
+     * genislik kaniti), struct Nokta (alan butunlugu) + sinir-disi
+     * varsayilan + boy/kapasite -> tum kontroller 0, main 42. */
+    const char *yol = stdlib_dizi_yolu();
+    int rc = yol ? derle_dosya_ve_calistir(yol) : -1;
+    test_sonuc("stdlib Liste<T>: cok-tipli round-trip E2E -> exit 42",
+               rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
      * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. (T016 fix
@@ -2127,6 +2173,10 @@ int main(void) {
     test_bolge_al_genislikler();
     test_bolge_al_grow_copy();
     test_bolge_al_negatifler();
+
+    printf("\n--- Ilk stdlib: Liste<T> (kutuphane/dizi.kem) ---\n");
+    test_stdlib_liste_check();
+    test_stdlib_liste_e2e();
 
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
