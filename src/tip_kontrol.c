@@ -907,6 +907,55 @@ static const Dugum *cesit_ara(TipKontrol *tk, const char *ad, int uz) {
     return NULL;
 }
 
+/* T016 fix: bir yol ifadesini (TANIMLAYICI ya da YOL) isaret ettigi
+ * modul_scope'a coz. mat -> mat'in scope'u; mat::ic -> ic'in scope'u
+ * (recursive). Modul degilse NULL. Codegen'in @m1.m2 duzlestirmesiyle
+ * ayni kapsam zinciri. */
+static Scope *yol_modul_scope_coz(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        const Sembol *m = sembol_bul(tk->scope,
+            d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+        if (m && m->kategori == SEMBOL_MODUL && m->modul_scope) {
+            return m->modul_scope;
+        }
+        return NULL;
+    }
+    if (d->tip == DUGUM_YOL) {
+        Scope *parent = yol_modul_scope_coz(tk, d->veri.yol.sol);
+        if (!parent) return NULL;
+        const Sembol *m = sembol_bul_yerel(parent,
+            d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
+        if (m && m->kategori == SEMBOL_MODUL && m->modul_scope) {
+            return m->modul_scope;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+/* T016 fix: bir yol-sol'unu (TANIMLAYICI ya da modul-yolu) bir çeşit
+ * tanimina coz. Renk -> dogrudan; g::Renk -> modul g icinde Renk.
+ * Boylece modul-nitelikli varyant erisimi g::Renk::Kirmizi calisir. */
+static const Dugum *yol_cesit_coz(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        return cesit_ara(tk, d->veri.tanimlayici.metin,
+                         d->veri.tanimlayici.uzunluk);
+    }
+    if (d->tip == DUGUM_YOL) {
+        Scope *p = yol_modul_scope_coz(tk, d->veri.yol.sol);
+        if (!p) return NULL;
+        const Sembol *s = sembol_bul_yerel(p, d->veri.yol.sag_ad,
+                                           d->veri.yol.sag_ad_uzunluk);
+        if (s && s->kategori == SEMBOL_YAPI && s->ast_dugumu &&
+            s->ast_dugumu->tip == DUGUM_CESIT) {
+            return s->ast_dugumu;
+        }
+    }
+    return NULL;
+}
+
 /* çeşit'te verilen varyant adı tanımlı mı? */
 static int cesit_varyant_var(const Dugum *cd, const char *ad, int uz) {
     for (int i = 0; i < cd->veri.cesit.varyant_sayi; i++) {
@@ -2873,16 +2922,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Yol (x::y) === */
         case DUGUM_YOL: {
-            /* Sol modul tanimlayici olmali */
             const Dugum *sol = d->veri.yol.sol;
-            if (sol->tip != DUGUM_TANIMLAYICI) {
-                tip_hata(tk, d, "T016", "yol cozumlemesi karmasik");
-                return t_hata(tk);
-            }
-            /* C2.7: Cesit::Varyant — sol bir çeşit ise varyant değeri (tip = çeşit). */
+            /* C2.7: Cesit::Varyant — sol bir çeşit ise varyant değeri.
+             * T016 fix: sol modul-nitelikli olabilir (g::Renk::Kirmizi). */
             {
-                const Dugum *cd = cesit_ara(tk,
-                    sol->veri.tanimlayici.metin, sol->veri.tanimlayici.uzunluk);
+                const Dugum *cd = yol_cesit_coz(tk, sol);
                 if (cd) {
                     if (!cesit_varyant_var(cd, d->veri.yol.sag_ad,
                                            d->veri.yol.sag_ad_uzunluk)) {
@@ -2893,13 +2937,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk, NULL, 0);
                 }
             }
-            const Sembol *m = sembol_bul(tk->scope,
-                sol->veri.tanimlayici.metin, sol->veri.tanimlayici.uzunluk);
-            if (!m || m->kategori != SEMBOL_MODUL || !m->modul_scope) {
+            /* T016 fix: modul yolu — sol TANIMLAYICI (mat::f) ya da YOL
+             * (mat::ic::f) olabilir; sol'u modul_scope'a coz, sag uyeyi
+             * yerel ara. Codegen @modul.ad / ic ice @m1.m2.ad ile tutarli. */
+            Scope *msc = yol_modul_scope_coz(tk, sol);
+            if (!msc) {
                 tip_hata(tk, d, "T016", "modul bulunamadi");
                 return t_hata(tk);
             }
-            const Sembol *uye = sembol_bul_yerel(m->modul_scope,
+            const Sembol *uye = sembol_bul_yerel(msc,
                 d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
             if (!uye) {
                 tip_hata(tk, d, "T002", "modul uyesi bulunamadi");
@@ -3471,18 +3517,25 @@ static void pre_populate_uygula(TipKontrol *tk, const Dugum *uy) {
     }
 }
 
-static void pre_populate(TipKontrol *tk, const Dugum *program) {
-    if (!program || program->tip != DUGUM_PROGRAM) return;
+/* T016 fix: bir uye dizisini (program ya da modul govdesi) mevcut
+ * tk->global_scope / tk->scope icine pre-populate eder. Cagiran modul
+ * govdesi icin bu iki scope'u modul_scope'a takas eder; boylece mevcut
+ * pre_populate_* (global_scope'a sabit ekleyen) helper'lari modul
+ * uyelerini dogru scope'a kaydeder. Codegen'in @modul.ad duzlestirme
+ * modeliyle TUTARLI: her modul kendi ad-uzayini tasir. */
+static void pre_populate_modul(TipKontrol *tk, const Dugum *m);
 
+static void pre_populate_uyeler(TipKontrol *tk, Dugum *const *uyeler,
+                                int sayi) {
     /* 1) Once ozellikleri ekle (bound referansi icin) */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_OZELLIK) pre_populate_ozellik(tk, uye);
     }
 
     /* 2) Yapilari (tipleri) ekle */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_YAPI) pre_populate_yapi(tk, uye);
         else if (uye->tip == DUGUM_CESIT) pre_populate_cesit(tk, uye);
         else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
@@ -3496,19 +3549,59 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
     }
 
     /* 3) Uygula bildirimlerini kayit et (yapi+ozellik bilindikten sonra) */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         if (uye->tip == DUGUM_UYGULA) pre_populate_uygula(tk, uye);
     }
 
-    /* 4) Islevler ve sabitler */
-    for (int i = 0; i < program->veri.program.sayi; i++) {
-        const Dugum *uye = program->veri.program.uyeler[i];
+    /* 4) Islevler, sabitler ve ic ice moduller */
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *uye = uyeler[i];
         const Dugum *gercek = (uye->tip == DUGUM_DISA && uye->veri.disa.tanim)
                               ? uye->veri.disa.tanim : uye;
         if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
         else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
+        else if (gercek->tip == DUGUM_MODUL) pre_populate_modul(tk, gercek);
     }
+}
+
+/* T016 fix: modulu SEMBOL_MODUL olarak kaydet + modul_scope kur.
+ * modul_scope parent'i mevcut global_scope (ic ice modul = parent modul
+ * scope'u) -> uyeler once kendi modulunde, sonra ust kapsamda cozulur. */
+static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
+    Scope *eski_global = tk->global_scope;
+    Scope *eski_scope = tk->scope;
+
+    Scope *msc = scope_olustur(tk->arena, SCOPE_MODUL, eski_global);
+    if (!msc) return;
+
+    /* Uye pre-populate'i modul_scope baglaminda yap (helper'lar
+     * tk->global_scope'a ekler; tk->scope tip-adi cozumu icin). */
+    tk->global_scope = msc;
+    tk->scope = msc;
+    pre_populate_uyeler(tk, m->veri.modul.uyeler, m->veri.modul.sayi);
+    tk->global_scope = eski_global;
+    tk->scope = eski_scope;
+
+    /* Modul sembolunu ust (parent) scope'a ekle */
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = m->veri.modul.ad;
+    s.ad_uzunluk = m->veri.modul.ad_uzunluk;
+    s.kategori = SEMBOL_MODUL;
+    s.modul_scope = msc;
+    s.ast_dugumu = m;
+    s.satir = m->satir;
+    s.sutun = m->sutun;
+    if (sembol_ekle(eski_global, tk->arena, &s) != 0) {
+        tip_hata(tk, m, "T024", "modul tanimi cakismasi");
+    }
+}
+
+static void pre_populate(TipKontrol *tk, const Dugum *program) {
+    if (!program || program->tip != DUGUM_PROGRAM) return;
+    pre_populate_uyeler(tk, program->veri.program.uyeler,
+                        program->veri.program.sayi);
 }
 
 /* C2.7: eşleş kapsayıcılık (Maranget usefulness, flat + sonuç<_,çeşit> bir
@@ -4333,13 +4426,23 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_MODUL:
-            /* Modul scope kontrolu basit — recursive */
-            /* Su an: ic uyeleri global scope'a ekle (modul ad alani yok) */
+        case DUGUM_MODUL: {
+            /* T016 fix: uyeleri MODUL SCOPE baglaminda kontrol et —
+             * boylece kardes islevlere ciplak-ad cagrilar (kare()) ve
+             * modul-yerel tipler cozulur. Modul sembolu pre_populate'da
+             * mevcut scope'a (parent) eklendi; scope'unu bulup gir. */
+            const Sembol *ms = sembol_bul_yerel(tk->scope,
+                d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+            Scope *eski = tk->scope;
+            if (ms && ms->kategori == SEMBOL_MODUL && ms->modul_scope) {
+                tk->scope = ms->modul_scope;
+            }
             for (int i = 0; i < d->veri.modul.sayi; i++) {
                 tip_kontrol_tanim(tk, d->veri.modul.uyeler[i]);
             }
+            tk->scope = eski;
             break;
+        }
 
         case DUGUM_HATA:
             break;

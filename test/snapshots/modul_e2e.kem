@@ -1,0 +1,13 @@
+// T016 fix: modül type-check E2E — iç içe modül + kardeş çıplak-ad çağrı +
+// mat::f() YOL çağrı. --check geçer + çalışır + 42 (16 + 26).
+modül mat {
+    işlev kare(x: tam32) -> tam32 { ver x * x; }
+    işlev dordun(x: tam32) -> tam32 { ver kare(kare(x)); }  // kardeş çıplak-ad
+    modül ic {
+        işlev arti_bir(x: tam32) -> tam32 { ver x + 1; }
+    }
+}
+
+işlev main() -> tam32 {
+    ver mat::dordun(2) + mat::ic::arti_bir(25);  // YOL + iç içe YOL
+}

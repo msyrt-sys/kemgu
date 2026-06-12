@@ -1647,11 +1647,37 @@ static void test_stretch_tek_varyant_cesit(void) {
     test_sonuc("stretch: tek-varyant cesit + esles -> exit 42", rc == 42);
 }
 
+static void test_modul_typecheck_e2e_check(void) {
+    /* T016 fix: modül programı artik --check GECER (eskiden T016 ile
+     * blokluyordu — codegen'den once). ic ice + kardes + YOL cagri. */
+    int ok = kemgu_check_basarili("test/snapshots/modul_e2e.kem");
+    test_sonuc("T016: modul programi --check gecer (ic ice+kardes+YOL)",
+               ok == 1);
+}
+
+static void test_modul_typecheck_e2e_run(void) {
+    /* T016 fix: ayni program E2E derlenip calisir -> 42 (16+26). */
+    int rc = derle_dosya_ve_calistir("test/snapshots/modul_e2e.kem");
+    test_sonuc("T016: modul programi E2E calisir -> exit 42", rc == 42);
+}
+
+static void test_modul_cesit_check(void) {
+    /* T016 fix: modul-yerel cesit + g::Renk::Kirmizi modul-nitelikli
+     * varyant + modul-yerel cesit ustunde esles -> --check gecer. */
+    int ok = kemgu_check_basarili("test/snapshots/modul_cesit.kem");
+    test_sonuc("T016: modul cesit varyanti (g::Renk::Kirmizi) --check",
+               ok == 1);
+}
+
+static void test_modul_cesit_run(void) {
+    int rc = derle_dosya_ve_calistir("test/snapshots/modul_cesit.kem");
+    test_sonuc("T016: modul cesit varyanti E2E -> exit 42", rc == 42);
+}
+
 static void test_kampanya_modul_mangling(void) {
     /* D-001 [YUKSEK]: modul uyeleri @modul.ad olarak emit + mat::f()
-     * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. Onceden
-     * uyeler hic emit edilmiyordu, cagri sessiz 0 (probe: 6, beklenen
-     * 42). NOT: --check modul cozumu ayri tip_kontrol isi (D-001). */
+     * YOL cagrisi + ic ice modul + kardes ciplak-ad cagri. (T016 fix
+     * sonrasi --check de gecer; bkz test_modul_typecheck_*.) */
     int rc = derle_ve_calistir(
         "mod\xc3\xbcl mat { "
         "i\xc5\x9flev kare(x: tam32) -> tam32 { ver x * x; } "
@@ -1978,6 +2004,12 @@ int main(void) {
     test_audit_nested_alan_atama();
     test_audit_linear_kullan_round_trip();
     test_audit_linear_imha();
+
+    printf("\n--- T016: modul type-check (E2E --check + run) ---\n");
+    test_modul_typecheck_e2e_check();
+    test_modul_typecheck_e2e_run();
+    test_modul_cesit_check();
+    test_modul_cesit_run();
 
     printf("\n--- Kampanya: modul mangling + short-circuit ---\n");
     test_kampanya_modul_mangling();
