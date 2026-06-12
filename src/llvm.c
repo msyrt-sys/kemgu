@@ -245,6 +245,30 @@ static void ad_yaz(FILE *out, const char *ad, int ad_uz) {
     fwrite(ad, 1, (size_t)ad_uz, out);
 }
 
+/* Liste<T> stdlib fix: IR yerel ad (%ad) yazimi — Turkce (non-ASCII)
+ * karakterli KEMGU adlari (örn. parametre 'böl') ciplak %böl olarak
+ * GECERSIZ IR uretiyordu (LLVM identifier ASCII). Non-ASCII veya IR'da
+ * ozel karakter varsa LLVM'in tirnakli formu kullanilir: %"böl". */
+static void yerel_ad_yaz(FILE *out, const char *ad, int ad_uz) {
+    int ascii_guvenli = 1;
+    for (int i = 0; i < ad_uz; i++) {
+        unsigned char c = (unsigned char)ad[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '.' ||
+              c == '$' || c == '-')) {
+            ascii_guvenli = 0;
+            break;
+        }
+    }
+    if (ascii_guvenli) {
+        fwrite(ad, 1, (size_t)ad_uz, out);
+    } else {
+        fputc('"', out);
+        fwrite(ad, 1, (size_t)ad_uz, out);
+        fputc('"', out);
+    }
+}
+
 /* AST tip dugumunden (DUGUM_TIP_BASIT, DUGUM_TIP_KULLANICI) LLVM IR tipi.
  * NULL -> NULL doner. Bilinmeyen -> "i32" (varsayilan). */
 /* Generic param substitusyon kontrolu */
@@ -841,7 +865,7 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = bitcast ptr ", r);
             ad_yaz(g->out, "@", 1);
-            ad_yaz(g->out, d->veri.tanimlayici.metin,
+            yerel_ad_yaz(g->out, d->veri.tanimlayici.metin,
                    d->veri.tanimlayici.uzunluk);
             fputs(" to ptr\n", g->out);
             IfadeSonuc s = { r, "ptr", 0 };
@@ -1642,7 +1666,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (strcmp(donus, "void") == 0) donus = "i32";
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @", r, donus);
-                ad_yaz(g->out, m_ad, m_ad_uz);
+                yerel_ad_yaz(g->out, m_ad, m_ad_uz);
                 fputs("(", g->out);
                 for (int i = 0; i < n + 1; i++) {
                     if (i > 0) fputs(", ", g->out);
@@ -1684,7 +1708,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         r = yeni_reg(g);
                         fprintf(g->out, "  %%%d = call %s @", r, donus);
                     }
-                    ad_yaz(g->out, mik->ad, mik->ad_uz);
+                    yerel_ad_yaz(g->out, mik->ad, mik->ad_uz);
                     fputs("(", g->out);
                     for (int i = 0; i < n; i++) {
                         if (i > 0) fputs(", ", g->out);
@@ -2700,7 +2724,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
                 if (strcmp(donus_t, "void") == 0) {
                     /* donussuz generic (or. buyu<T>) — void call */
-                    fprintf(g->out, "  call void @%s(", mangled);
+                    fputs("  call void @", g->out);
+                    yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
+                    fputs("(", g->out);
                     for (int i = 0; i < n; i++) {
                         if (i > 0) fputs(", ", g->out);
                         fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
@@ -2712,7 +2738,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     return s0;
                 }
                 int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = call %s @%s(", r, donus_t, mangled);
+                fprintf(g->out, "  %%%d = call %s @", r, donus_t);
+                yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
+                fputs("(", g->out);
                 for (int i = 0; i < n; i++) {
                     if (i > 0) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
@@ -2725,7 +2753,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (strcmp(donus, "void") == 0) {
                 /* void-returning call: register atama yok */
                 fputs("  call void @", g->out);
-                ad_yaz(g->out, cagri_adi, cagri_adi_uz);
+                yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
                 for (int i = 0; i < n; i++) {
                     if (i > 0) fputs(", ", g->out);
@@ -2740,7 +2768,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = call %s @", r, donus);
-            ad_yaz(g->out, cagri_adi, cagri_adi_uz);
+            yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
             for (int i = 0; i < n; i++) {
                 if (i > 0) fputs(", ", g->out);
@@ -3689,7 +3717,29 @@ static void specialize_emit(LlvmGen *g, const Dugum *islev,
     sahte.veri.islev.ad = mangled;
     sahte.veri.islev.ad_uzunluk = (int)strlen(mangled);
     sahte.veri.islev.tip_param_sayi = 0;  /* artik generic degil */
+
+    /* Liste<T> stdlib fix: generic MODUL uyesi bekleyenler kuyrugundan
+     * (modul emisyon baglami DISINDA) specialize edilir — govdedeki
+     * kardes ciplak-ad cagrilarinin (örn. buyu) cozulmesi icin islev
+     * adindaki "modul." onekini aktif_modul_onek olarak kur.
+     * "dizi.ekle" -> onek "dizi"; ic ice "a.b.f" -> "a.b". */
+    const char *eski_onek = g->aktif_modul_onek;
+    int eski_onek_uz = g->aktif_modul_onek_uz;
+    {
+        const char *iad = islev->veri.islev.ad;
+        int iuz = islev->veri.islev.ad_uzunluk;
+        int son_nokta = -1;
+        for (int i = 0; i < iuz; i++) {
+            if (iad[i] == '.') son_nokta = i;
+        }
+        if (son_nokta > 0) {
+            g->aktif_modul_onek = iad;
+            g->aktif_modul_onek_uz = son_nokta;
+        }
+    }
     islev_uret(g, &sahte);
+    g->aktif_modul_onek = eski_onek;
+    g->aktif_modul_onek_uz = eski_onek_uz;
 
     /* Subst pop */
     g->substler = eski_substler;
@@ -3713,7 +3763,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     }
 
     fprintf(g->out, "define %s @", donus);
-    ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
+    yerel_ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
 
     /* Parametre listesi */
@@ -3730,7 +3780,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         param_tipler[i] = tip;
         if (i > 0) fputs(", ", g->out);
         fprintf(g->out, "%s %%", tip);
-        ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+        yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                     p->veri.parametre.ad_uzunluk);
     }
     fputs(") {\nentry:\n", g->out);
 
@@ -3745,7 +3796,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         int alloca_reg = yeni_reg(g);
         fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
         fprintf(g->out, "  store %s %%", tip);
-        ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+        yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                     p->veri.parametre.ad_uzunluk);
         fprintf(g->out, ", ptr %%%d\n", alloca_reg);
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk,
                   0, alloca_reg, tip);
