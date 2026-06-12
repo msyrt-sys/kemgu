@@ -275,6 +275,29 @@ theorem lineerKucuk_tuket {Λ' Λ : LineerOrtam}
                     rw [lineerOrtamGet, if_neg h_ne]
                     exact h.2.2 y h_y
 
+/-- Λ, kendi update-tuketildi'sinden kucuktur (sVarOku lineer-okuma:
+    runtime tuketmez, statik cikti tuketir — Λ ≼ update Λ x tuk). -/
+theorem lineerKucuk_update_geri (Λ : LineerOrtam) (x : VarId) :
+    LineerKucuk Λ (lineerOrtamUpdate Λ x Lineerlik.tuketildi) := by
+  refine ⟨?_, ?_, ?_⟩ <;> intro y h_y
+  · have h_y' : lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y
+        = some Lineerlik.aktif := h_y
+    rw [lineerOrtamGet] at h_y'
+    by_cases hx : x = y
+    · rw [if_pos hx] at h_y'; cases h_y'
+    · rw [if_neg hx] at h_y'; exact h_y'
+  · show lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y
+        = some Lineerlik.tuketildi
+    rw [lineerOrtamGet]
+    by_cases hx : x = y
+    · rw [if_pos hx]
+    · rw [if_neg hx]; exact h_y
+  · have h_y' : lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y = none := h_y
+    rw [lineerOrtamGet] at h_y'
+    by_cases hx : x = y
+    · rw [if_pos hx] at h_y'; cases h_y'
+    · rw [if_neg hx] at h_y'; exact h_y'
+
 /-- ≼, lineerTuketListe altinda monoton. -/
 theorem lineerKucuk_tuketListe {Λ' Λ : LineerOrtam}
     (h : LineerKucuk Λ' Λ) (yd : List VarId) :

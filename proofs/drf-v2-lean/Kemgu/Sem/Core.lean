@@ -407,6 +407,65 @@ theorem sahiplikSetMany_lookup_inv (bs : List Bolge) (s : Sahiplik)
   · rw [h_get] at h
     exact Or.inr h
 
+/-- LISTE CIFT-AYRISIM KILIDI (FIX-F cerceve kosullariyla — Onarim v3
+    kapanis): ayni-prefix iki ayrisim + her iki tarafta yan-sekil
+    (suffix esit veya tek-append) + odak-degisimi (cR' ≠ cR) →
+    ayrisimlar AYNI pozisyondadir ve bilesenler esittir. -/
+theorem cerrah_kilit {α : Type} :
+    ∀ (ts1 u1 : List α) {c cR c' cR' : α} {ts2 u2 ts2' u2X : List α},
+    u1 ++ cR :: u2 = ts1 ++ c :: ts2 →
+    u1 ++ cR' :: u2X = ts1 ++ c' :: ts2' →
+    (u2X = u2 ∨ ∃ ch, u2X = u2 ++ [ch]) →
+    (ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y]) →
+    cR' ≠ cR →
+    ts1 = u1 ∧ c = cR ∧ c' = cR' ∧ ts2 = u2 ∧ ts2' = u2X := by
+  intro ts1
+  induction ts1 with
+  | nil =>
+      intro u1 c cR c' cR' ts2 u2 ts2' u2X h1 h2 h_u2X h_ts2' h_ne
+      cases u1 with
+      | nil =>
+          simp only [List.nil_append] at h1 h2
+          injection h1 with h_c h_t
+          injection h2 with h_c' h_t'
+          exact ⟨rfl, h_c.symm, h_c'.symm, h_t.symm, h_t'.symm⟩
+      | cons a u1' =>
+          simp only [List.cons_append, List.nil_append] at h1 h2
+          injection h1 with h_ca h_t1
+          injection h2 with h_ca' h_t1'
+          exfalso
+          rcases h_ts2' with h_e | ⟨y, h_e⟩
+          · rw [h_e, ← h_t1] at h_t1'
+            have h_tail := List.append_cancel_left h_t1'
+            injection h_tail with h_head _
+            exact h_ne h_head
+          · rcases h_u2X with h_x | ⟨ch, h_x⟩
+            · rw [h_e, ← h_t1, h_x] at h_t1'
+              have h_len := congrArg List.length h_t1'
+              simp [List.length_append] at h_len
+            · rw [h_e, ← h_t1, h_x] at h_t1'
+              rw [show (u1' ++ cR :: u2) ++ [y] = u1' ++ cR :: (u2 ++ [y])
+                    by simp] at h_t1'
+              have h_tail := List.append_cancel_left h_t1'
+              injection h_tail with h_head _
+              exact h_ne h_head
+  | cons bHead ts1' ih =>
+      intro u1 c cR c' cR' ts2 u2 ts2' u2X h1 h2 h_u2X h_ts2' h_ne
+      cases u1 with
+      | nil =>
+          simp only [List.nil_append, List.cons_append] at h1 h2
+          injection h1 with h_b h_t1
+          injection h2 with h_b' h_t1'
+          exact absurd (h_b'.trans h_b.symm) h_ne
+      | cons a u1' =>
+          simp only [List.cons_append] at h1 h2
+          injection h1 with h_ab h_t1
+          injection h2 with h_ab' h_t1'
+          obtain ⟨h_1, h_2, h_3, h_4, h_5⟩ :=
+            ih u1' h_t1 h_t1' h_u2X h_ts2' h_ne
+          refine ⟨?_, h_2, h_3, h_4, h_5⟩
+          rw [h_ab, h_1]
+
 /-- head? bir deger donduruyorsa o listededir. -/
 theorem head?_mem {α : Type} {l : List α} {v : α}
     (h : l.head? = some v) : v ∈ l := by
@@ -492,6 +551,13 @@ inductive Ifade : Type where
   | kullanIf       (x : VarId)                              -- kullan(x) — Linear
   | imhaIf         (x : VarId)                              -- imha(x)   — Linear
   | guvensiz       (e : Ifade)                              -- guvensiz blok
+
+
+/-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
+theorem seq_ne_sag (a b : Ifade) : Ifade.seq a b ≠ b := by
+  intro h
+  have h_size := congrArg sizeOf h
+  simp at h_size
 
 
 -- ============================================================
