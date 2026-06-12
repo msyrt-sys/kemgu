@@ -51,6 +51,10 @@ typedef struct LlvmIsim {
      * genisligini BURADAN alir — beklenen/RHS'ten almak tam8/tam64/
      * struct icin yanlis genislik miscompile'iydi (ADIM-0 raporu). */
     const char *pointee_llvm_tip;
+    /* Liste<T> BUG-2 fix: tek-tip-arg'li generic kullanici tipi
+     * (Liste<tam64> -> "i64") — &Liste<T> parametresinden T inference
+     * icin yan-kanal (yapi IR'i type-erased %Liste, T tasimaz). */
+    const char *generic_arg_ir;
     /* Matris-A fix / D-005: dtamN (isaretsiz) degisken/parametre.
      * IR tipi ayni (iN) ama udiv/urem/lshr/u-pred + zext gerektirir. */
     int isaretsiz;
@@ -259,6 +263,20 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d);
 static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d && tip_d->tip == DUGUM_TIP_POINTER) {
         return ast_tip_to_ir(g, tip_d->veri.tip_pointer.hedef_tip);
+    }
+    return NULL;
+}
+
+/* Liste<T> BUG-2 fix: annot Kullanici<X> (tek tip-arg) ise X'in IR'i.
+ * &Kullanici<X> icin referans soyulur. Subst aktifken (specialize
+ * govdesi) X=T generic parami da dogru IR'a cozulur — ic cagri zinciri. */
+static const char *generic_arg_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (tip_d && tip_d->tip == DUGUM_TIP_REFERANS) {
+        tip_d = tip_d->veri.tip_referans.hedef_tip;
+    }
+    if (tip_d && tip_d->tip == DUGUM_TIP_KULLANICI &&
+        tip_d->veri.tip_kullanici.tip_arg_sayi == 1) {
+        return ast_tip_to_ir(g, tip_d->veri.tip_kullanici.tip_arg[0]);
     }
     return NULL;
 }
@@ -2298,6 +2316,56 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (!bekle && i == 1 && dizi_eleman_beklenen) {
                         bekle = dizi_eleman_beklenen;
                     }
+                    /* Liste<T> BUG-3 fix (probe pF): ciplak literal arg
+                     * callee'nin tam64 paramina i32 emit ediliyordu ->
+                     * 'call (..., i32)' vs 'define (i64)' imza-uyumsuz
+                     * IR -> SEGFAULT. Tip kontrol literal'i param
+                     * baglaminda zaten tam64'e cikarsiyor; codegen de
+                     * ayni beklenen'i kullanmali. Generic islevde yalniz
+                     * SOMUT paramlara uygulanir — generic-param (T) adli
+                     * BASIT paramlar atlanir (T inference arg'in dogal
+                     * tipinden calismali). */
+                    if (!bekle && ik && ik->ast &&
+                        i < ik->ast->veri.islev.param_sayi) {
+                        const Dugum *pp =
+                            ik->ast->veri.islev.parametreler[i];
+                        const Dugum *ppt = pp ? pp->veri.parametre.tip
+                                              : NULL;
+                        int generic_param_mi = 0;
+                        if (ik->generic_mi && ppt) {
+                            /* Param tipi icinde generic-param adi
+                             * geciyorsa beklenen verme (BASIT T, *T,
+                             * &Liste<T> — inference yollari). */
+                            for (int gi = 0;
+                                 gi < ik->ast->veri.islev.tip_param_sayi;
+                                 gi++) {
+                                const char *gp =
+                                    ik->ast->veri.islev.tip_paramlar[gi];
+                                int gp_uz = (int)strlen(gp);
+                                const Dugum *bak = ppt;
+                                if (bak->tip == DUGUM_TIP_POINTER) {
+                                    bak = bak->veri.tip_pointer.hedef_tip;
+                                }
+                                if (bak && bak->tip == DUGUM_TIP_REFERANS) {
+                                    bak = bak->veri.tip_referans.hedef_tip;
+                                }
+                                if (bak && bak->tip == DUGUM_TIP_KULLANICI) {
+                                    generic_param_mi = 1;  /* Liste<T> vb. */
+                                    break;
+                                }
+                                if (bak && bak->tip == DUGUM_TIP_BASIT &&
+                                    bak->veri.tip_basit.ad_uzunluk == gp_uz &&
+                                    memcmp(bak->veri.tip_basit.ad, gp,
+                                           (size_t)gp_uz) == 0) {
+                                    generic_param_mi = 1;
+                                    break;
+                                }
+                            }
+                        }
+                        if (ppt && !generic_param_mi) {
+                            bekle = ast_tip_to_ir(g, ppt);
+                        }
+                    }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
                     if (bekle && strcmp(args[i].tip, bekle) != 0 &&
                         (strcmp(bekle, "i64") == 0 ||
@@ -2496,13 +2564,85 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     for (int pi = 0; pi < gislev->veri.islev.param_sayi &&
                                        pi < n && !inferred; pi++) {
                         const Dugum *p = gislev->veri.islev.parametreler[pi];
-                        if (p->veri.parametre.tip &&
-                            p->veri.parametre.tip->tip == DUGUM_TIP_BASIT) {
-                            const char *pad = p->veri.parametre.tip->veri.tip_basit.ad;
-                            int puz = p->veri.parametre.tip->veri.tip_basit.ad_uzunluk;
+                        const Dugum *pt = p->veri.parametre.tip;
+                        if (!pt) continue;
+                        if (pt->tip == DUGUM_TIP_BASIT) {
+                            const char *pad = pt->veri.tip_basit.ad;
+                            int puz = pt->veri.tip_basit.ad_uzunluk;
                             if (puz == tp_uz && memcmp(pad, tp, (size_t)tp_uz) == 0) {
                                 inferred = args[pi].tip;
                             }
+                            continue;
+                        }
+                        /* Liste<T> BUG-2 fix: compound param inference.
+                         * Onceki durum: yalniz duz `v: T` paramdan T
+                         * cikarsanir, `veri: *T` / `l: &Liste<T>` dusup
+                         * $i32 default'a iner — bolge_al sizeof'u 4'e
+                         * duser = SESSIZ HEAP OVERFLOW (probe pF). */
+                        const Dugum *arg_d = d->veri.cagri.argumanlar[pi];
+                        /* (a) `veri: *T` param: arg pointee'sinden */
+                        if (pt->tip == DUGUM_TIP_POINTER &&
+                            pt->veri.tip_pointer.hedef_tip &&
+                            pt->veri.tip_pointer.hedef_tip->tip ==
+                                DUGUM_TIP_BASIT) {
+                            const Dugum *h = pt->veri.tip_pointer.hedef_tip;
+                            if (h->veri.tip_basit.ad_uzunluk == tp_uz &&
+                                memcmp(h->veri.tip_basit.ad, tp,
+                                       (size_t)tp_uz) == 0 &&
+                                arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                                LlvmIsim *vi = isim_bul(g,
+                                    arg_d->veri.tanimlayici.metin,
+                                    arg_d->veri.tanimlayici.uzunluk);
+                                if (vi && vi->pointee_llvm_tip) {
+                                    inferred = vi->pointee_llvm_tip;
+                                }
+                            }
+                            continue;
+                        }
+                        /* (b) `l: &Kullanici<T>` param: arg `&x` ->
+                         * x'in generic_arg_ir yan-kanali (yapi IR'i
+                         * type-erased, T'yi tasimaz). */
+                        if (pt->tip == DUGUM_TIP_REFERANS) {
+                            const Dugum *ic = pt->veri.tip_referans.hedef_tip;
+                            if (ic && ic->tip == DUGUM_TIP_KULLANICI &&
+                                ic->veri.tip_kullanici.tip_arg_sayi == 1 &&
+                                ic->veri.tip_kullanici.tip_arg[0] &&
+                                ic->veri.tip_kullanici.tip_arg[0]->tip ==
+                                    DUGUM_TIP_BASIT) {
+                                const Dugum *ta =
+                                    ic->veri.tip_kullanici.tip_arg[0];
+                                if (ta->veri.tip_basit.ad_uzunluk == tp_uz &&
+                                    memcmp(ta->veri.tip_basit.ad, tp,
+                                           (size_t)tp_uz) == 0) {
+                                    /* Arg `&x` (adres-al) ya da ciplak
+                                     * `l` (zaten &Liste<T> ref-param —
+                                     * ic generic-cagri zinciri). */
+                                    const Dugum *id_d = NULL;
+                                    if (arg_d &&
+                                        arg_d->tip == DUGUM_TEKLI &&
+                                        (arg_d->veri.tekli.op == OP_REF ||
+                                         arg_d->veri.tekli.op ==
+                                             OP_REF_DEGISKEN) &&
+                                        arg_d->veri.tekli.operand &&
+                                        arg_d->veri.tekli.operand->tip ==
+                                            DUGUM_TANIMLAYICI) {
+                                        id_d = arg_d->veri.tekli.operand;
+                                    } else if (arg_d &&
+                                               arg_d->tip ==
+                                                   DUGUM_TANIMLAYICI) {
+                                        id_d = arg_d;
+                                    }
+                                    if (id_d) {
+                                        LlvmIsim *vi = isim_bul(g,
+                                            id_d->veri.tanimlayici.metin,
+                                            id_d->veri.tanimlayici.uzunluk);
+                                        if (vi && vi->generic_arg_ir) {
+                                            inferred = vi->generic_arg_ir;
+                                        }
+                                    }
+                                }
+                            }
+                            continue;
                         }
                     }
                     tip_args[ti] = inferred ? inferred : "i32";
@@ -2537,14 +2677,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     }
                 }
 
-                int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = call %s @%s(", r, donus, mangled);
-                for (int i = 0; i < n; i++) {
-                    if (i > 0) fputs(", ", g->out);
-                    fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
-                }
-                fputs(")\n", g->out);
-                /* Generic islev'in donus tipi T olabilir — inferred tipini al */
+                /* Liste<T> BUG-1 fix: donus tipi T substitusyonu CALL
+                 * emisyonundan ONCE hesaplanmali. Onceki durum: call
+                 * 'donus' (default i32) ile basiliyor, dogru tip yalniz
+                 * IfadeSonuc'a konuyordu -> 'call i32 @f$i64' (define
+                 * i64) imza-uyumsuz IR, clang reddediyor (probe pC/pD/
+                 * pE/pI). Struct donus (%Nokta) dahil. */
                 const char *donus_t = donus;
                 if (gislev->veri.islev.donus_tipi &&
                     gislev->veri.islev.donus_tipi->tip == DUGUM_TIP_BASIT) {
@@ -2560,6 +2698,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         }
                     }
                 }
+                if (strcmp(donus_t, "void") == 0) {
+                    /* donussuz generic (or. buyu<T>) — void call */
+                    fprintf(g->out, "  call void @%s(", mangled);
+                    for (int i = 0; i < n; i++) {
+                        if (i > 0) fputs(", ", g->out);
+                        fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
+                    }
+                    fputs(")\n", g->out);
+                    int r0 = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 0\n", r0);
+                    IfadeSonuc s0 = { r0, "i32", 0 };
+                    return s0;
+                }
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @%s(", r, donus_t, mangled);
+                for (int i = 0; i < n; i++) {
+                    if (i > 0) fputs(", ", g->out);
+                    fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
+                }
+                fputs(")\n", g->out);
                 IfadeSonuc s = { r, donus_t, 0 };
                 return s;
             }
@@ -2798,6 +2956,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
+                    /* Liste<T> BUG-2: Kullanici<X> annot -> X IR kaydi */
+                    g->isimler->generic_arg_ir =
+                        generic_arg_ir_al(g, d->veri.degisken.tip);
                     if (eleman_tip) {
                         g->isimler->eleman_llvm_tip = eleman_tip;
                     }
@@ -2826,6 +2987,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
+                g->isimler->generic_arg_ir =
+                    generic_arg_ir_al(g, d->veri.degisken.tip);
                 if (eleman_tip) {
                     g->isimler->eleman_llvm_tip = eleman_tip;
                 }
@@ -3592,6 +3755,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* v1 bölge-container: *T parametre -> pointee kaydi */
         g->isimler->pointee_llvm_tip =
             pointee_ir_al(g, p->veri.parametre.tip);
+        /* Liste<T> BUG-2: &Kullanici<X> param -> X IR kaydi (subst
+         * aktifken X=T dogru cozulur -> ic generic-cagri zinciri) */
+        g->isimler->generic_arg_ir =
+            generic_arg_ir_al(g, p->veri.parametre.tip);
         /* Adim 7: Eger parametre Dizi<T> ise heap dizi olarak isaretle
          * (caller'dan gelen ptr KdlDizi*). Eleman tipi de yakala. */
         if (p->veri.parametre.tip &&
