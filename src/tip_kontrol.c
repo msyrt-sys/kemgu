@@ -468,6 +468,18 @@ static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     }
 }
 
+/* v1 bölge-container: bölge_al ilk argümanı herhangi bir yetki<R>
+ * ÖDÜNÇ alır (mmio deseni — TÜKETMEZ). v1'de R kısıtlanmaz; gerçek
+ * arena (V2) AYNI imzayla R'yi kullanacak (evrim-koruyan). */
+static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    if (!tip_yetki_mi(y)) {
+        tip_hata(tk, arg, "BL002",
+                 "bolge_al ilk argumani yetki<R> olmali (odunc alinir)");
+    }
+}
+
 /* Forward declaration (ADIM 11.6'da tanimli, kontrol_yapi_olustur_ic
  * tarafindan kullaniliyor — generic substitusyon icin) */
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
@@ -1496,6 +1508,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
 
+            /* v1 bölge-container (E002 DAR gevsetme): YALNIZ guvenli yon
+             * *T -> metin (typed -> opaque ptr) — bellek_kopyala grow-copy
+             * icin. TERS YON KAPALI: metin -> *T ve tamN -> *T yasak;
+             * typed buffer YALNIZ bölge_al'den dogar (tip butunlugu). */
+            if (kt->kategori == TIP_POINTER && ht->kategori == TIP_METIN) {
+                return ht;
+            }
             int kaynak_sayisal = tip_sayisal_mi(kt);
             int hedef_sayisal = tip_sayisal_mi(ht);
             if (!kaynak_sayisal || !hedef_sayisal) {
@@ -2326,6 +2345,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 lineer_tuket_eger_baglamaysa(tk, d->veri.cagri.argumanlar[0]);
                 return tip_olustur_basit(tk->arena, TIP_BOS);
             }
+            /* v1 bölge-container: bölge_al beklenen-TIP_POINTER yolu
+             * tip_belirle_beklenen'de; buraya dusmesi = beklenen *T
+             * baglami YOK (annotasyonsuz) -> T cikarsanamaz. Sessiz
+             * varsayilan YOK (dizi_olustur'un tam32 default'unun aksine
+             * ham pointer'da yanlis genislik tehlikeli). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "b\xc3\xb6lge_al", 9) == 0) {
+                if (d->veri.cagri.sayi != 2) {
+                    tip_hata(tk, d, "BL002",
+                        "bolge_al tam 2 arguman gerektirir "
+                        "(b\xc3\xb6l: yetki<R>, n: tam64)");
+                    return t_hata(tk);
+                }
+                tip_hata(tk, d, "BL001",
+                    "bolge_al beklenen *T baglami ister "
+                    "(degisken v: *T = bolge_al(bol, n))");
+                return t_hata(tk);
+            }
             /* === MMIO Foundation intrinsics (Karar 1-4) ===
              * mmio_oku32(y: yetki<MMIO>, adres: tam64) -> tam32
              * mmio_yaz32(y: yetki<MMIO>, adres: tam64, deger: tam32) -> bos
@@ -2846,6 +2886,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int dizi_sabitsure = tip_sabitsure_mi(nesne_tip);
             if (dizi_sabitsure) nesne_tip = nesne_tip->veri.sabitsure.ic;
 
+            /* v1 bölge-container (T008 gevsetme): *T ham pointer tabani
+             * da indekslenebilir — eleman tipi pointee. *p deref'le ayni
+             * guvenlik sinifi: YALNIZ guvensiz blokta (G001 tutarliligi).
+             * TIP_DIZI yolu AYNEN korunur. */
+            if (nesne_tip->kategori == TIP_POINTER) {
+                if (!tip_tamsayi_mi(idx_tip)) {
+                    tip_hata(tk, d, "T005", "indeks tamsayi olmali");
+                    return t_hata(tk);
+                }
+                if (tk->guvensiz_baglam == 0) {
+                    tip_hata(tk, d, "G001",
+                             "*T pointer indeksleme yalniz guvensiz blok "
+                             "icinde kullanilabilir");
+                    return t_hata(tk);
+                }
+                return nesne_tip->veri.pointer.hedef
+                       ? nesne_tip->veri.pointer.hedef : t_hata(tk);
+            }
             if (nesne_tip->kategori != TIP_DIZI) {
                 tip_hata(tk, d, "T008", "indeksleme dizi tipi gerek");
                 return t_hata(tk);
@@ -3173,6 +3231,28 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     tip_olustur_basit(tk->arena, TIP_TAM64));
                 return tip_olustur_dizi(tk->arena,
                     (TipBilgisi *)beklenen->veri.dizi.eleman);
+            }
+            /* v1 bölge-container: bölge_al(böl: yetki<R>, n: tam64) -> *T.
+             * T context-driven (dizi_olustur deseni): beklenen *T olmali
+             * (değişken v: *T = bölge_al(böl, n)). Yetki ÖDÜNÇ alinir
+             * (tüketilmez — mmio deseni). v1 lowering malloc-vekaleten;
+             * gerçek arena V2'de AYNI imzayla. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "b\xc3\xb6lge_al", 9) == 0 &&
+                beklenen->kategori == TIP_POINTER &&
+                d->veri.cagri.sayi == 2) {
+                bolge_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                TipBilgisi *n = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[1],
+                    tip_olustur_basit(tk->arena, TIP_TAM64));
+                if (n->kategori != TIP_HATA && !tip_tamsayi_mi(n)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[1], "BL002",
+                        "bolge_al eleman sayisi tamsayi (tam64) olmali");
+                }
+                return (TipBilgisi *)beklenen;  /* *T aynen doner */
             }
             /* Sabitsüre Spec V1: beklenen sabitsure<X> ve cagri
              * sabitsure_yarat(arg) ise — arg'ı X context'inde çıkarsa. */
