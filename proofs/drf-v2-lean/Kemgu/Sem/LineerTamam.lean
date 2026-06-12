@@ -174,4 +174,176 @@ abbrev lineerOrtamBos : LineerOrtam := []
 -- SILINDI/TASINDI — birlesik Typed formu Kemgu/Sem/Tipli.lean'de,
 -- meta-teoremler Kemgu/Meta/ProgressKorunum.lean'de (Typed-formda dedup).
 
+
+-- ============================================================
+-- §5. LineerKucuk (≼) — "daha-az-tuketilmis" on-siralamasi
+-- (Onarim v3 kapanis — cong odak-yuku icin lineer monotonluk:
+--  runtime lineer ortami, statik ciktidan daha az tuketmis olabilir
+--  [sVarOku lineer-okumayi runtime'da tuketmez] — tum aktif /
+--  ¬tuketildi premise'leri bu yonde monoton tasinir.)
+-- ============================================================
+
+/-- Λ' ≼ Λ : Λ' "daha az tuketilmis" — Λ'nin aktifleri Λ''de aktif,
+    Λ''nin tuketilmisleri Λ'da tuketilmis, Λ'nin kayitsizlari Λ''de
+    kayitsiz. -/
+def LineerKucuk (Λ' Λ : LineerOrtam) : Prop :=
+  (∀ x, lineerOrtamGet Λ x = some Lineerlik.aktif →
+     lineerOrtamGet Λ' x = some Lineerlik.aktif)
+  ∧ (∀ x, lineerOrtamGet Λ' x = some Lineerlik.tuketildi →
+     lineerOrtamGet Λ x = some Lineerlik.tuketildi)
+  ∧ (∀ x, lineerOrtamGet Λ x = none → lineerOrtamGet Λ' x = none)
+
+theorem lineerKucuk_refl (Λ : LineerOrtam) : LineerKucuk Λ Λ :=
+  ⟨fun _ h => h, fun _ h => h, fun _ h => h⟩
+
+/-- ≼, update-tuketildi altinda monoton. -/
+theorem lineerKucuk_update_tuketildi {Λ' Λ : LineerOrtam}
+    (h : LineerKucuk Λ' Λ) (x : VarId) :
+    LineerKucuk (lineerOrtamUpdate Λ' x Lineerlik.tuketildi)
+                (lineerOrtamUpdate Λ x Lineerlik.tuketildi) := by
+  refine ⟨?_, ?_, ?_⟩ <;> intro y h_y
+  · show lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ') y = _
+    have h_y' : lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y
+        = some Lineerlik.aktif := h_y
+    rw [lineerOrtamGet] at h_y' ⊢
+    by_cases hx : x = y
+    · rw [if_pos hx] at h_y'; cases h_y'
+    · rw [if_neg hx] at h_y'
+      rw [if_neg hx]
+      exact h.1 y h_y'
+  · show lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y
+        = some Lineerlik.tuketildi
+    have h_y' : lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ') y
+        = some Lineerlik.tuketildi := h_y
+    rw [lineerOrtamGet] at h_y' ⊢
+    by_cases hx : x = y
+    · rw [if_pos hx]
+    · rw [if_neg hx] at h_y'
+      rw [if_neg hx]
+      exact h.2.1 y h_y'
+  · show lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ') y = none
+    have h_y' : lineerOrtamGet ((x, Lineerlik.tuketildi) :: Λ) y
+        = none := h_y
+    rw [lineerOrtamGet] at h_y' ⊢
+    by_cases hx : x = y
+    · rw [if_pos hx] at h_y'; cases h_y'
+    · rw [if_neg hx] at h_y'
+      rw [if_neg hx]
+      exact h.2.2 y h_y'
+
+/-- ≼, lineerTuket altinda monoton (lookup kombinasyon analizi). -/
+theorem lineerKucuk_tuket {Λ' Λ : LineerOrtam}
+    (h : LineerKucuk Λ' Λ) (v : VarId) :
+    LineerKucuk (lineerTuket Λ' v) (lineerTuket Λ v) := by
+  unfold lineerTuket
+  cases hv : lineerOrtamGet Λ v with
+  | none =>
+      rw [h.2.2 v hv]
+      exact h
+  | some lin =>
+      cases lin with
+      | aktif =>
+          rw [h.1 v hv]
+          exact lineerKucuk_update_tuketildi h v
+      | tuketildi =>
+          cases hv' : lineerOrtamGet Λ' v with
+          | none => exact h
+          | some lin' =>
+              cases lin' with
+              | tuketildi => exact h
+              | aktif =>
+                  -- Λ' v aktif, Λ v tuketildi: yalniz Λ'-tarafi tuketir
+                  refine ⟨?_, ?_, ?_⟩ <;> intro y h_y
+                  · have h_ne : v ≠ y := by
+                      intro he; rw [he] at hv; rw [hv] at h_y; cases h_y
+                    show lineerOrtamGet ((v, Lineerlik.tuketildi) :: Λ') y
+                        = some Lineerlik.aktif
+                    rw [lineerOrtamGet, if_neg h_ne]
+                    exact h.1 y h_y
+                  · have h_y' : lineerOrtamGet
+                        ((v, Lineerlik.tuketildi) :: Λ') y
+                        = some Lineerlik.tuketildi := h_y
+                    rw [lineerOrtamGet] at h_y'
+                    by_cases hx : v = y
+                    · rw [← hx]; exact hv
+                    · rw [if_neg hx] at h_y'
+                      exact h.2.1 y h_y'
+                  · have h_ne : v ≠ y := by
+                      intro he; rw [he] at hv; rw [hv] at h_y; cases h_y
+                    show lineerOrtamGet ((v, Lineerlik.tuketildi) :: Λ') y
+                        = none
+                    rw [lineerOrtamGet, if_neg h_ne]
+                    exact h.2.2 y h_y
+
+/-- ≼, lineerTuketListe altinda monoton. -/
+theorem lineerKucuk_tuketListe {Λ' Λ : LineerOrtam}
+    (h : LineerKucuk Λ' Λ) (yd : List VarId) :
+    LineerKucuk (lineerTuketListe Λ' yd) (lineerTuketListe Λ yd) := by
+  induction yd generalizing Λ' Λ with
+  | nil => exact h
+  | cons v rest ih => exact ih (lineerKucuk_tuket h v)
+
+/-- ≼-TRANSPORT: daha-az-tuketilmis ortam altinda lineer-tiplenme
+    korunur (tum aktif / ¬tuketildi premise'leri monoton); cikti da
+    ≼-iliskili. Cong odak-yuku kompozisyonunun lineer ayagi. -/
+theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
+    {Λ Λout : LineerOrtam} {e : Ifade}
+    (h : LineerTamam Γ Λ e Λout) :
+    ∀ Λn, LineerKucuk Λn Λ →
+    ∃ Λoutn, LineerTamam Γ Λn e Λoutn ∧ LineerKucuk Λoutn Λout := by
+  induction h with
+  | l_tanim_nonlin _ x τ h_g h_lin =>
+      exact fun Λn hk =>
+        ⟨Λn, LineerTamam.l_tanim_nonlin _ _ x τ h_g h_lin, hk⟩
+  | l_tanim_lin _ x τ h_g h_lin h_a =>
+      intro Λn hk
+      exact ⟨lineerOrtamUpdate Λn x Lineerlik.tuketildi,
+        LineerTamam.l_tanim_lin _ _ x τ h_g h_lin (hk.1 x h_a),
+        lineerKucuk_update_tuketildi hk x⟩
+  | l_sabit _ v =>
+      exact fun Λn hk => ⟨Λn, LineerTamam.l_sabit _ _ v, hk⟩
+  | l_atama _ _ x e _ ih =>
+      intro Λn hk
+      obtain ⟨Λen, h_e, hk'⟩ := ih Λn hk
+      exact ⟨Λen, LineerTamam.l_atama _ _ _ x e h_e, hk'⟩
+  | l_seq _ _ _ a b _ _ ih_a ih_b =>
+      intro Λn hk
+      obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
+      obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
+      exact ⟨Λbn, LineerTamam.l_seq _ _ _ _ a b h_a h_b, hk_b⟩
+  | l_gorev_baslat _ Λkod yd kod h_ntuket h_kod =>
+      intro Λn hk
+      refine ⟨lineerTuketListe Λn yd,
+        LineerTamam.l_gorev_baslat _ _ Λkod yd kod ?_ h_kod,
+        lineerKucuk_tuketListe hk yd⟩
+      intro v hv h_tuk
+      exact h_ntuket v hv (hk.2.1 v h_tuk)
+  | l_gorev_birlestir _ g =>
+      exact fun Λn hk => ⟨Λn, LineerTamam.l_gorev_birlestir _ _ g, hk⟩
+  | l_kanal_gonder _ k v h_ntuket =>
+      intro Λn hk
+      refine ⟨lineerTuket Λn v,
+        LineerTamam.l_kanal_gonder _ _ k v ?_,
+        lineerKucuk_tuket hk v⟩
+      intro h_tuk
+      exact h_ntuket (hk.2.1 v h_tuk)
+  | l_kanal_al _ k =>
+      exact fun Λn hk => ⟨Λn, LineerTamam.l_kanal_al _ _ k, hk⟩
+  | l_dondur _ b =>
+      exact fun Λn hk => ⟨Λn, LineerTamam.l_dondur _ _ b, hk⟩
+  | l_kullan _ x τ h_g h_a =>
+      intro Λn hk
+      exact ⟨lineerOrtamUpdate Λn x Lineerlik.tuketildi,
+        LineerTamam.l_kullan _ _ x τ h_g (hk.1 x h_a),
+        lineerKucuk_update_tuketildi hk x⟩
+  | l_imha _ x τ h_g h_a =>
+      intro Λn hk
+      exact ⟨lineerOrtamUpdate Λn x Lineerlik.tuketildi,
+        LineerTamam.l_imha _ _ x τ h_g (hk.1 x h_a),
+        lineerKucuk_update_tuketildi hk x⟩
+  | l_guvensiz _ _ e _ ih =>
+      intro Λn hk
+      obtain ⟨Λen, h_e, hk'⟩ := ih Λn hk
+      exact ⟨Λen, LineerTamam.l_guvensiz _ _ _ e h_e, hk'⟩
+
 end Kemgu.Sem.LineerTamam
