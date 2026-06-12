@@ -86,8 +86,8 @@ theorem typing_excludes_cGorevBaslatHataLineerIhlal
 /-- AILE 2 Region — typing_excludes_sAtamaHataDonmus. -/
 theorem typing_excludes_sAtamaHataDonmus
     (Γ : TipOrtam) (Δ : KanalOrtam) (Λin : LineerOrtam) (Ρ : BolgeOrtam)
-    (x : VarId) (e : Ifade) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Δ Λin Ρ (Ifade.atama x e) τ Λ' Ρ')
+    (x : VarId) (v : Deger) (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
+    (h_typed : Typed Γ Δ Λin Ρ (Ifade.atama x (Ifade.sabit v)) τ Λ' Ρ')
     (S : Konfigurasyon) (b : Bolge)
     (h_bolge_eq : S.bolge = Ρ)
     (h_frozen_kat : ∀ (y : VarId) (b' : Bolge),
@@ -98,7 +98,9 @@ theorem typing_excludes_sAtamaHataDonmus
     False := by
   have h_regionOK := h_typed.regionOK
   match h_regionOK with
-  | RegionTamam.r_atama _ _ _ _ _ bIc h_get h_yaz _ =>
+  | RegionTamam.r_atama _ _ _ _ _ bIc h_re h_get h_yaz =>
+    match h_re with
+    | RegionTamam.r_sabit _ _ _ =>
     have h_get_S : bolgeOrtamGet S.bolge x = some bIc := by
       rw [h_bolge_eq]; exact h_get
     have h_bb : b = bIc := Option.some.inj (h_b.symm.trans h_get_S)
@@ -136,11 +138,11 @@ theorem typing_excludes_cDondurHataZatenDonmus
     hedefin sahipligini verir → h_not_owner celiski. -/
 theorem typing_excludes_sAtamaHataSahipDegil
     (Γ : TipOrtam) (Δ : KanalOrtam) (Λin : LineerOrtam) (Ρ : BolgeOrtam)
-    (S : Konfigurasyon) (ctx : ThreadCtx) (x : VarId) (e : Ifade) (b : Bolge)
+    (S : Konfigurasyon) (ctx : ThreadCtx) (x : VarId) (v : Deger) (b : Bolge)
     (τ : Tip) (Λ' : LineerOrtam) (Ρ' : BolgeOrtam)
-    (h_typed : Typed Γ Δ Λin Ρ (Ifade.atama x e) τ Λ' Ρ')
+    (h_typed : Typed Γ Δ Λin Ρ (Ifade.atama x (Ifade.sabit v)) τ Λ' Ρ')
     (h_in : ctx ∈ S.thread)
-    (h_ifade : ctx.ifade = Ifade.atama x e)
+    (h_ifade : ctx.ifade = Ifade.atama x (Ifade.sabit v))
     (h_bolge_eq : S.bolge = Ρ)
     (h_hedef_sahip : ∀ ctx' ∈ S.thread, ∀ y : VarId, HedefVar ctx'.ifade y →
                        ∀ b' : Bolge, bolgeOrtamGet S.bolge y = some b' →
@@ -151,12 +153,14 @@ theorem typing_excludes_sAtamaHataSahipDegil
     False := by
   have h_regionOK := h_typed.regionOK
   match h_regionOK with
-  | RegionTamam.r_atama _ _ _ _ _ bIc h_get h_yaz _ =>
+  | RegionTamam.r_atama _ _ _ _ _ bIc h_re h_get h_yaz =>
+    match h_re with
+    | RegionTamam.r_sabit _ _ _ =>
     have h_get_S : bolgeOrtamGet S.bolge x = some bIc := by
       rw [h_bolge_eq]; exact h_get
     have h_bb : b = bIc := Option.some.inj (h_b.symm.trans h_get_S)
     subst h_bb
     exact h_not_owner
-      (h_hedef_sahip ctx h_in x (h_ifade ▸ HedefVar.atama_bas x e) b h_b h_yaz)
+      (h_hedef_sahip ctx h_in x (h_ifade ▸ HedefVar.atama_bas x (Ifade.sabit v)) b h_b h_yaz)
 
 end Kemgu.Discharge.Aile2
