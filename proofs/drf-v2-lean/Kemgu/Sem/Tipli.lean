@@ -108,6 +108,32 @@ theorem typed_guvensiz_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
 
 
 -- ============================================================
+-- §3.2. OdakYuk — odak-adim yuku (Onarim v3 kapanis, cong-kapanisi)
+-- ============================================================
+
+/-- ODAK-ADIM YUKU: bir adimin odakli thread-cifti (ctx → ctx') icin
+    tasidigi uc taahhut — cong-sarmalamasinin devam-ifadesi icin
+    ihtiyac duydugu HER SEY:
+    (E) odak gercekten degisti (cerrah_kilit ile pozisyon-pinleme);
+    (A) on-ifadenin HERHANGI tiplenmesi, ayni τ ile, art-duruma tasinir
+        — lineer cikti ≼-iliskili (runtime daha az tuketir), bolge
+        ciktisi BolgeIliski ile (yazilabilir-aynen + id koruma);
+    (B) art-ortamda yazilabilir-kayitli her bolge on-ortamda aynen
+        kayitliydi VE odak-thread sahipligi korunur. -/
+def OdakYuk (Γ : TipOrtam) (Δ : KanalOrtam) (S S' : Konfigurasyon)
+    (ctx ctx' : ThreadCtx) : Prop :=
+  ctx' ≠ ctx
+  ∧ (∀ τ Λout Ρout, Typed Γ Δ ctx.lineer S.bolge ctx.ifade τ Λout Ρout →
+       ∃ Λout' Ρout', Typed Γ Δ ctx'.lineer S'.bolge ctx'.ifade τ Λout' Ρout'
+         ∧ LineerKucuk Λout' Λout ∧ BolgeIliski Ρout' Ρout)
+  ∧ (∀ y bb, bolgeOrtamGet S'.bolge y = some bb →
+       kategoriYazilabilir bb.kategori = true →
+       bolgeOrtamGet S.bolge y = some bb
+       ∧ (sahiplikGet S.sahiplik bb = some (Sahip.thread ctx.tid) →
+          sahiplikGet S'.sahiplik bb = some (Sahip.thread ctx.tid)))
+
+
+-- ============================================================
 -- §3.5. TidAyrik — thread kimlik tekilligi (F4-kapanis, on-onayli analog)
 -- ============================================================
 
