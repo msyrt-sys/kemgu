@@ -1,0 +1,6 @@
+// A dogrulama: arama yolunun kütüphane/ ayagi (UTF-8 dizin yolu).
+kullan ktest_yardimci;
+
+işlev main() -> tam32 {
+    ver ktest_yardimci::sabit_deger();
+}

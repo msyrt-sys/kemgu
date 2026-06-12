@@ -1830,6 +1830,139 @@ static void test_stdlib_liste_e2e(void) {
                rc == 42);
 }
 
+/* --- [YUKSEK] A: cok-dosya modul temeli (feature/cok-dosya-modul-temeli) ---
+ *
+ * Fiksturler: test/moduller dizinindeki .kem dosyalari (repo'da).
+ * kütüphane/ fiksturlerini
+ * (arama yolu 3. ayagi + golgeleme) testler RUNTIME'da olusturup siler —
+ * stdlib dizinine kalici test dosyasi koymayiz. Windows'ta UTF-8 yol
+ * icin _wfopen (bkz. stdlib_dizi_yolu ayni desen). */
+
+static int kutuphane_fixture_yaz(int golge_mi, const char *icerik) {
+#ifdef _WIN32
+    FILE *f = _wfopen(golge_mi
+        ? L"kütüphane/golge_yardimci.kem"
+        : L"kütüphane/ktest_yardimci.kem", L"wb");
+#else
+    FILE *f = fopen(golge_mi
+        ? "k\xc3\xbct\xc3\xbcphane/golge_yardimci.kem"
+        : "k\xc3\xbct\xc3\xbcphane/ktest_yardimci.kem", "wb");
+#endif
+    if (!f) return 0;
+    fputs(icerik, f);
+    fclose(f);
+    return 1;
+}
+
+static void kutuphane_fixture_sil(int golge_mi) {
+#ifdef _WIN32
+    _wremove(golge_mi
+        ? L"kütüphane/golge_yardimci.kem"
+        : L"kütüphane/ktest_yardimci.kem");
+#else
+    remove(golge_mi
+        ? "k\xc3\xbct\xc3\xbcphane/golge_yardimci.kem"
+        : "k\xc3\xbct\xc3\xbcphane/ktest_yardimci.kem");
+#endif
+}
+
+static void test_a_capraz_modul_check(void) {
+    int ok = kemgu_check_basarili("test/moduller/ana_mat.kem");
+    test_sonuc("A: capraz-modul fonksiyon --check gecer (kullan mat)",
+               ok == 1);
+}
+
+static void test_a_capraz_modul_e2e(void) {
+    /* mat::topla(20,22) iki dosya boyunca -> 42. Binding MODUL_UYESI
+     * yazilmazsa @topla tanimsiz kalir (link hatasi, rc=-1) — COZUM_YOK
+     * fallback'ine dusus burada yakalanir (B-entegrasyon guard'i). */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_mat.kem");
+    test_sonuc("A: capraz-modul cagri (kullan mat; mat::topla) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_secili_import_e2e(void) {
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_secili.kem");
+    test_sonuc("A: secili import (kullan mat::{topla}; topla) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_alias_import_e2e(void) {
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_alias.kem");
+    test_sonuc("A: alias import (kullan mat olarak m; m::topla) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_gorunurluk_negatif(void) {
+    /* mat::gizli_carp 'genel' degil -> T041, --check kirmizi. */
+    int ok = kemgu_check_basarili("test/moduller/ana_gizli.kem");
+    test_sonuc("A: genel-olmayan uyeye capraz erisim -> T041 (--check red)",
+               ok == 0);
+}
+
+static void test_a_transitif_e2e(void) {
+    /* ana -> zincir -> mat (yeni-bicim transitif yukleme). */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_zincir.kem");
+    test_sonuc("A: transitif import (ana->zincir->mat) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_golgeleme_e2e(void) {
+    /* Arama yolu: dosya dizinindeki golge_yardimci.kem (42),
+     * kütüphane/golge_yardimci.kem'i (1) GOLGELER. */
+    if (!kutuphane_fixture_yaz(1,
+            "genel i\xc5\x9flev deger() -> tam32 { ver 1; }\n")) {
+        test_sonuc("A: golgeleme (fixture yazilamadi)", 0);
+        return;
+    }
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_golge.kem");
+    kutuphane_fixture_sil(1);
+    test_sonuc("A: arama yolu golgeleme (dizin > kutuphane) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_modul_ici_yapi_check(void) {
+    int ok = kemgu_check_basarili("test/moduller/ana_geometri.kem");
+    test_sonuc("A: modul-ici yapi (Nokta) --check gecer", ok == 1);
+}
+
+static void test_a_modul_ici_yapi_e2e(void) {
+    /* Gap fix: modul icinde tanimlanan struct '%Nokta = type' olarak
+     * emit edilir; ayni modulun fonksiyonu kurar + alan erisir + ilkel
+     * doner (3*3+4*4=25; +17=42). Capraz-modul yapi KULLANIMI yok (D). */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_geometri.kem");
+    test_sonuc("A: modul-ici yapi emisyonu (geometri::mesafe_kare) -> 42",
+               rc == 42);
+}
+
+static void test_a_secili_cakisma_negatif(void) {
+    /* kullan a::{f} + kullan b::{f} -> ciplak f kullanimi T042. */
+    int ok = kemgu_check_basarili("test/moduller/ana_belirsiz.kem");
+    test_sonuc("A: secili import cakismasi ciplak kullanimda T042 (red)",
+               ok == 0);
+}
+
+static void test_a_secili_cakisma_nitelikli_e2e(void) {
+    /* Ayni cakismada nitelikli erisim (a::f / b::f) gecerli kalir. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_nitelikli.kem");
+    test_sonuc("A: cakismada nitelikli erisim calisir (40+2) -> exit 42",
+               rc == 42);
+}
+
+static void test_a_kutuphane_arama_e2e(void) {
+    /* Yalniz kütüphane/'de olan modul 3. ayaktan cozulur (UTF-8 yol
+     * Windows'ta _wfopen donusumuyle acilir — loader dosya_ac_utf8). */
+    if (!kutuphane_fixture_yaz(0,
+            "genel i\xc5\x9flev sabit_deger() -> tam32 { ver 42; }\n")) {
+        test_sonuc("A: kutuphane arama (fixture yazilamadi)", 0);
+        return;
+    }
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_kutuphane.kem");
+    kutuphane_fixture_sil(0);
+    test_sonuc("A: arama yolu kutuphane/ ayagi (UTF-8) -> exit 42",
+               rc == 42);
+}
+
 /* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
 
 static void test_ad_cozum_sapma_check(void) {
@@ -2210,6 +2343,20 @@ int main(void) {
 
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
+
+    printf("\n--- [YUKSEK] A: cok-dosya modul temeli ---\n");
+    test_a_capraz_modul_check();
+    test_a_capraz_modul_e2e();
+    test_a_secili_import_e2e();
+    test_a_alias_import_e2e();
+    test_a_gorunurluk_negatif();
+    test_a_transitif_e2e();
+    test_a_golgeleme_e2e();
+    test_a_kutuphane_arama_e2e();
+    test_a_modul_ici_yapi_check();
+    test_a_modul_ici_yapi_e2e();
+    test_a_secili_cakisma_negatif();
+    test_a_secili_cakisma_nitelikli_e2e();
 
     printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
     test_ad_cozum_sapma_check();

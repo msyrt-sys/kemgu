@@ -1,0 +1,6 @@
+// A dogrulama: transitif (ana -> zincir -> mat).
+kullan zincir;
+
+işlev main() -> tam32 {
+    ver zincir::dortle_topla(21);
+}
