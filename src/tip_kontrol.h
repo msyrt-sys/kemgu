@@ -39,6 +39,10 @@
  *   AS002: asm operandi uygunsuz tip — yalniz kopyalanabilir primitif
  *          (tamN, dtamN, mantiksal, karakter, ham *T); tekkez/yetki
  *          dogrudan gecemez, cikti lineer olamaz (C5 C.1 kara kutu)
+ *   BL001: bolge_al beklenen *T baglami yok — degisken v: *T annot'u
+ *          sart, sessiz varsayilan YOK (v1 bolge-container)
+ *   BL002: bolge_al arguman hatasi (ilk arg yetki<R> degil / arg
+ *          sayisi != 2 / eleman sayisi tamsayi degil)
  *
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.

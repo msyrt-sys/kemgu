@@ -1,0 +1,5 @@
+işlev main() -> tam32 {
+    değişken m: metin = "abc";
+    güvensiz { değişken v: *tam32 = m olarak *tam32; }
+    ver 0;
+}

@@ -46,6 +46,11 @@ typedef struct LlvmIsim {
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
     int dinamik_dizi_mi;
+    /* v1 bölge-container: *T degisken/parametrenin POINTEE IR tipi
+     * (örn. "i8", "i64", "%N"). veri[i] oku/yaz eleman tipini/
+     * genisligini BURADAN alir — beklenen/RHS'ten almak tam8/tam64/
+     * struct icin yanlis genislik miscompile'iydi (ADIM-0 raporu). */
+    const char *pointee_llvm_tip;
     /* Matris-A fix / D-005: dtamN (isaretsiz) degisken/parametre.
      * IR tipi ayni (iN) ama udiv/urem/lshr/u-pred + zext gerektirir. */
     int isaretsiz;
@@ -244,6 +249,16 @@ static const char *subst_bul(LlvmGen *g, const char *ad, int ad_uz) {
         if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
             return s->ir;
         }
+    }
+    return NULL;
+}
+
+/* v1 bölge-container: AST tip dugumu *T ise pointee'nin IR tipi,
+ * degilse NULL. (LlvmIsim.pointee_llvm_tip kaynaklari icin.) */
+static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d);
+static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (tip_d && tip_d->tip == DUGUM_TIP_POINTER) {
+        return ast_tip_to_ir(g, tip_d->veri.tip_pointer.hedef_tip);
     }
     return NULL;
 }
@@ -1347,6 +1362,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         case DUGUM_INDEKS: {
             /* Adim 3 (B v2): heap dizi tanimlayicisi mi? Eger oyle ise
              * kdl_dizi_al route et. Aksi halde mevcut GEP yolu (stack). */
+            const char *pointee_elem = NULL;
             if (d->veri.indeks.nesne &&
                 d->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                 LlvmIsim *vi = isim_bul(g,
@@ -1372,12 +1388,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     IfadeSonuc s = { rr, et, 0 };
                     return s;
                 }
+                /* v1 bölge-container: *T tabani — eleman tipi POINTEE'den
+                 * (beklenen/i32 fallback yanlis genislik uretirdi). */
+                if (vi && vi->pointee_llvm_tip) {
+                    pointee_elem = vi->pointee_llvm_tip;
+                }
             }
             /* arr[i] -> GEP ptr (T*) + load (stack) */
             IfadeSonuc nesne = ifade_uret(g, d->veri.indeks.nesne, NULL);
             IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i64");
             int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
-            const char *elem_ir = beklenen ? beklenen : "i32";
+            const char *elem_ir = pointee_elem ? pointee_elem
+                                  : (beklenen ? beklenen : "i32");
             int gep_r = yeni_reg(g);
             /* opaque pointer arithmetic: getelementptr T, ptr, idx */
             fprintf(g->out,
@@ -1715,6 +1737,42 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     d->veri.cagri.sayi == 1) {
                     return ifade_uret(g, d->veri.cagri.argumanlar[0],
                                       beklenen);
+                }
+                /* v1 bölge-container: bölge_al(böl: yetki<R>, n) -> *T.
+                 * v1 malloc-VEKALETEN (gerçek arena V2, AYNI imza).
+                 * T: g->beklenen_tip kanali (degisken annot *T) —
+                 * tip kontrol BL001 ile annot'u zaten garanti eder.
+                 * sizeof(T): GEP-null + ptrtoint idiomu (datalayout-
+                 * dogru; struct padding/align dahil). Yetki argumani
+                 * compile-time ispat — mmio deseni gibi IR'a GECMEZ. */
+                if (_uz == 9 &&
+                    memcmp(_ca, "b\xc3\xb6lge_al", 9) == 0 &&
+                    d->veri.cagri.sayi == 2) {
+                    const char *pointee_ir = "i32";
+                    if (g->beklenen_tip &&
+                        g->beklenen_tip->tip == DUGUM_TIP_POINTER) {
+                        const char *pp = ast_tip_to_ir(g,
+                            g->beklenen_tip->veri.tip_pointer.hedef_tip);
+                        if (pp) pointee_ir = pp;
+                    }
+                    IfadeSonuc n = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "i64");
+                    int n64 = int_donustur(g, n.reg, n.tip, "i64");
+                    int szp = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr null, i64 1\n",
+                        szp, pointee_ir);
+                    int szi = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = ptrtoint ptr %%%d to i64\n", szi, szp);
+                    int tot = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = mul i64 %%%d, %%%d\n",
+                            tot, n64, szi);
+                    int buf = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call ptr @malloc(i64 %%%d)\n", buf, tot);
+                    IfadeSonuc s = { buf, "ptr", 0 };
+                    return s;
                 }
             }
             /* Capability Spec V1 intrinsics — yetki_olustur, delege, geri_al */
@@ -2737,6 +2795,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* D-005: dtamN annot -> isaretsiz isim */
                     g->isimler->isaretsiz =
                         ast_tip_isaretsiz_mi(d->veri.degisken.tip);
+                    /* v1 bölge-container: *T annot -> pointee kaydi */
+                    g->isimler->pointee_llvm_tip =
+                        pointee_ir_al(g, d->veri.degisken.tip);
                     if (eleman_tip) {
                         g->isimler->eleman_llvm_tip = eleman_tip;
                     }
@@ -2763,6 +2824,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                           1, alloca_reg, tip);
                 g->isimler->isaretsiz =
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
+                g->isimler->pointee_llvm_tip =
+                    pointee_ir_al(g, d->veri.degisken.tip);
                 if (eleman_tip) {
                     g->isimler->eleman_llvm_tip = eleman_tip;
                 }
@@ -2793,12 +2856,19 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * disinda; gorunur yorum + DUR-SOR raporu (sessiz degil). */
                 const Dugum *hedef = d->veri.atama.hedef;
                 int heap_dizi = 0;
+                const char *pointee_elem = NULL;
                 if (hedef->veri.indeks.nesne &&
                     hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                     LlvmIsim *vi = isim_bul(g,
                         hedef->veri.indeks.nesne->veri.tanimlayici.metin,
                         hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
                     if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
+                    /* v1 bölge-container: *T tabani — eleman tipi
+                     * POINTEE'den (RHS tipi tam8/tam64 hedefte yanlis
+                     * genislik uretirdi). */
+                    else if (vi && vi->pointee_llvm_tip) {
+                        pointee_elem = vi->pointee_llvm_tip;
+                    }
                 }
                 if (heap_dizi) {
                     fprintf(g->out,
@@ -2810,13 +2880,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     IfadeSonuc idx = ifade_uret(g,
                         hedef->veri.indeks.indeks, "i64");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
-                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, NULL);
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                              pointee_elem);
+                    const char *elem_ir = pointee_elem ? pointee_elem
+                                                       : v.tip;
+                    int vr = v.reg;
+                    if (pointee_elem) {
+                        vr = int_donustur_im(g, v.reg, v.tip, pointee_elem,
+                                             v.isaretsiz);
+                    }
                     int gep_r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = getelementptr %s, ptr %%%d, i64 %%%d\n",
-                        gep_r, v.tip, nesne.reg, idx_r);
+                        gep_r, elem_ir, nesne.reg, idx_r);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            v.tip, v.reg, gep_r);
+                            elem_ir, vr, gep_r);
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_ERISIM) {
@@ -3511,6 +3589,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-005: dtamN parametre -> isaretsiz isim */
         g->isimler->isaretsiz =
             ast_tip_isaretsiz_mi(p->veri.parametre.tip);
+        /* v1 bölge-container: *T parametre -> pointee kaydi */
+        g->isimler->pointee_llvm_tip =
+            pointee_ir_al(g, p->veri.parametre.tip);
         /* Adim 7: Eger parametre Dizi<T> ise heap dizi olarak isaretle
          * (caller'dan gelen ptr KdlDizi*). Eleman tipi de yakala. */
         if (p->veri.parametre.tip &&

@@ -1,0 +1,14 @@
+işlev main() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken v: *tam64 = bölge_al(y, 4);
+    değişken buyuk: tam64 = 4_294_967_296;
+    değişken sonuc: tam32 = 0;
+    güvensiz {
+        v[0] = buyuk;
+        v[1] = buyuk + (42 olarak tam64);
+        değişken fark: tam64 = v[1] - v[0];
+        sonuc = fark olarak tam32;
+    }
+    geri_al(y);
+    ver sonuc;
+}
