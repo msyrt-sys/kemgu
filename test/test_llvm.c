@@ -1596,6 +1596,64 @@ static void test_matris_d_esles_cesit_exhaustive(void) {
                rc == 42);
 }
 
+/* --- D-006: &-of-field/element parser onceligi (postfix > prefix) --- */
+
+static void test_d006_ref_alan_okuma(void) {
+    /* &p.x = &(p.x): alan adresi -> deref-oku round-trip. Eskiden
+     * (&p).x -> kopya-adres -> i32 deger ptr-param'a -> SEGFAULT. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 P { x: tam32; y: tam32; } "
+        "i\xc5\x9flev artir(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p + 1; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken p: P = P { x: 41, y: 0 }; "
+        "g\xc3\xbcvensiz { ver artir(&p.x); } ver 1; }");
+    test_sonuc("D-006: &p.x = &(p.x) deref-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_d006_ref_eleman_okuma(void) {
+    /* &d[i] = &(d[i]): eleman adresi -> deref-oku. Eskiden (&d)[i]. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d = [10, 42, 30]; "
+        "g\xc3\xbcvensiz { ver oku(&d[1]); } ver 1; }");
+    test_sonuc("D-006: &d[i] = &(d[i]) deref-oku round-trip -> exit 42",
+               rc == 42);
+}
+
+static void test_d006_ref_nested_alan(void) {
+    /* &a.b.c = &((a.b).c): ic ice alan adresi. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Ic { v: tam32; } "
+        "yap\xc4\xb1 Dis { ic: Ic; } "
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dis = Dis { ic: Ic { v: 42 } }; "
+        "g\xc3\xbcvensiz { ver oku(&d.ic.v); } ver 1; }");
+    test_sonuc("D-006: &a.b.c ic ice alan adresi -> exit 42", rc == 42);
+}
+
+static void test_d006_regresyon_kombinasyonlar(void) {
+    /* Oncelik degisimi diger &/postfix/onek kombinasyonlarini bozmasin:
+     * &x duz, *(&x) round-trip, &x+y aritmetik (= (&x adresi degil;
+     * burada deger baglaminda *(&x)+y), -p.x = -(p.x), ic ice *& . */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 P { x: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 20; "
+        "de\xc4\x9fi\xc5\x9fken p: P = P { x: 0 - 22 }; "
+        "g\xc3\xbcvensiz { "
+        "de\xc4\x9fi\xc5\x9fken a: tam32 = *(&x); "      /* *& round-trip = 20 */
+        "de\xc4\x9fi\xc5\x9fken b: tam32 = -p.x; "        /* -(p.x) = 22 */
+        "ver a + b; } ver 1; }");
+    test_sonuc("D-006 regresyon: *(&x) + -p.x = 20+22 -> exit 42",
+               rc == 42);
+}
+
 static void test_matris_f_tekkez_esles_kolu(void) {
     /* Matris F (oncelik): tekkez sonuc<tekkez<T>,H>'ten cikip esles
      * kolunda tuketiliyor — lineer deger cagri+esles+kullan zinciri. */
@@ -2088,6 +2146,12 @@ int main(void) {
     test_matris_e_yetki_param_sinir();
     test_matris_e_tekkez_param_sinir();
     test_matris_d_esles_cesit_exhaustive();
+
+    printf("\n--- D-006: &-of-field/element parser onceligi ---\n");
+    test_d006_ref_alan_okuma();
+    test_d006_ref_eleman_okuma();
+    test_d006_ref_nested_alan();
+    test_d006_regresyon_kombinasyonlar();
 
     printf("\n--- Matris F + stretch: lineer/bolge/yetki etkilesimleri ---\n");
     test_matris_f_tekkez_esles_kolu();
