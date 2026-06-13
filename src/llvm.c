@@ -391,6 +391,23 @@ static const char *cesit_struct_ir(LlvmGen *g, const Dugum *cd) {
     return yapi_ad_ir(g, cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk);
 }
 
+/* C3 çapraz-modül: çeşit YapiKayit'ını sol-yoldan çöz — sol TANIMLAYICI
+ * (Renk) ise adından, YOL (m::Renk) ise sag_ad'inden (çeşit adı düz IR-ad
+ * uzayında, D-011). DUGUM_CESIT değilse NULL. */
+static YapiKayit *cesit_kayit_yoldan(LlvmGen *g, const Dugum *sol) {
+    if (!sol) return NULL;
+    YapiKayit *yk = NULL;
+    if (sol->tip == DUGUM_TANIMLAYICI) {
+        yk = yapi_bul(g, sol->veri.tanimlayici.metin,
+                      sol->veri.tanimlayici.uzunluk);
+    } else if (sol->tip == DUGUM_YOL) {
+        yk = yapi_bul(g, sol->veri.yol.sag_ad,
+                      sol->veri.yol.sag_ad_uzunluk);
+    }
+    if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) return yk;
+    return NULL;
+}
+
 /* C3: çeşit varyant değeri inşası. Payloadsuz çeşit → bare iN disc sabiti
  * (eski davranış). Payload çeşit → {iDISC, alanlar} struct (alloca + GEP+
  * store + load, yapici_uret deseni). cagri varsa argümanları payload'a yazar
@@ -1738,19 +1755,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return erisim_uret(g, d);
 
         case DUGUM_YOL: {
-            /* C2.7: Cesit::Varyant → discriminant sabiti (varyant indeksi). */
+            /* C2.7/C3: Cesit::Varyant (bare) → disc/struct. sol TANIMLAYICI
+             * (Renk) ya da YOL (m::Renk — çapraz-modül) olabilir. */
             const Dugum *sol = d->veri.yol.sol;
-            if (sol && sol->tip == DUGUM_TANIMLAYICI) {
-                YapiKayit *yk = yapi_bul(g, sol->veri.tanimlayici.metin,
-                                         sol->veri.tanimlayici.uzunluk);
-                if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
-                    int idx = cesit_varyant_indeksi(yk->ast,
-                        d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
-                    if (idx < 0) idx = 0;
-                    /* C3: payloadsuz çeşit → disc; payload çeşit → struct
-                     * (bare varyant: yalnız disc, payload alanları undef). */
-                    return cesit_yapici_uret(g, yk->ast, idx, NULL, 0);
-                }
+            YapiKayit *yk = cesit_kayit_yoldan(g, sol);
+            if (yk) {
+                int idx = cesit_varyant_indeksi(yk->ast,
+                    d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
+                if (idx < 0) idx = 0;
+                /* payloadsuz çeşit → disc; payload çeşit → struct
+                 * (bare varyant: yalnız disc, payload alanları undef). */
+                return cesit_yapici_uret(g, yk->ast, idx, NULL, 0);
             }
             return hata(g, "yol ifadesi desteklenmiyor (cesit disi)");
         }
@@ -2079,14 +2094,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * yolundan ÖNCE. sol bir çeşit + sag varyant ise tagged-union
              * inşası (cesit_yapici_uret), değilse normal modül çağrısı. */
             if (d->veri.cagri.hedef &&
-                d->veri.cagri.hedef->tip == DUGUM_YOL &&
-                d->veri.cagri.hedef->veri.yol.sol &&
-                d->veri.cagri.hedef->veri.yol.sol->tip == DUGUM_TANIMLAYICI) {
+                d->veri.cagri.hedef->tip == DUGUM_YOL) {
                 const Dugum *yh = d->veri.cagri.hedef;
-                const Dugum *sol = yh->veri.yol.sol;
-                YapiKayit *yk = yapi_bul(g, sol->veri.tanimlayici.metin,
-                                         sol->veri.tanimlayici.uzunluk);
-                if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                /* sol TANIMLAYICI (Cesit) ya da YOL (m::Cesit — çapraz-modül) */
+                YapiKayit *yk = cesit_kayit_yoldan(g, yh->veri.yol.sol);
+                if (yk) {
                     int vi = cesit_varyant_indeksi(yk->ast,
                         yh->veri.yol.sag_ad, yh->veri.yol.sag_ad_uzunluk);
                     if (vi < 0) vi = 0;

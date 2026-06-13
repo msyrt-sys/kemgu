@@ -298,6 +298,23 @@ static void test_turkce_tip_adi_calistir(void) {
                rc == 42);
 }
 
+static void test_cesit_capraz_modul_calistir(void) {
+    /* SELF-HOSTING deseni: payload + recursive çeşit MODÜLDE (ifd::Ifade) —
+     * nitelikli yapıcı ifd::Ifade::Topla(&a,&b) + nitelikli annotation +
+     * çapraz-modül recursive değerlendirme. (3+4)*6 = 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_ifd.kem");
+    test_sonuc("C3 capraz-modul payload+recursive cesit (modul AST) -> 42",
+               rc == 42);
+}
+
+static void test_cesit_kenar_calistir(void) {
+    /* Robustness: payload çeşit struct ALANI + NESTED çeşit + metin payload +
+     * by-value fonksiyon dönüşü — hepsi tek programda. 20+7+15 = 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_kenar.kem");
+    test_sonuc("C3 cesit kenar (struct-alan+nested+metin+by-value) -> 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -308,6 +325,18 @@ static void test_aritmetik(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 1 + 2 * 3 + 35; }");
     test_sonuc("1 + 2*3 + 35 -> exit 42", rc == 42);
+}
+
+static void test_tam64_literal_baglam(void) {
+    /* Sayı literal bağlam-bağımlı: tam64 + literal artık T001 vermez
+     * (literal karşı tarafın tipinde çıkar). x:tam64; x+1, x>8, x*1 ... */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam64 = 20; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x + 1; "      /* 21 */
+        "e\xc4\x9f" "er y > 10 { y = y * 2; } "          /* 42 */
+        "ver y olarak tam32; }");
+    test_sonuc("tam64 + literal baglam (x+1, y>10, y*2) -> exit 42", rc == 42);
 }
 
 static void test_tekli_neg(void) {
@@ -2261,6 +2290,7 @@ int main(void) {
     printf("\n--- Literaller + aritmetik ---\n");
     test_lit_42();
     test_aritmetik();
+    test_tam64_literal_baglam();
     test_tekli_neg();
 
     printf("\n--- Karsilastirma ---\n");
@@ -2455,6 +2485,8 @@ int main(void) {
     test_cesit_agac_verify();
     test_cesit_agac_calistir();
     test_turkce_tip_adi_calistir();
+    test_cesit_capraz_modul_calistir();
+    test_cesit_kenar_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
