@@ -1963,6 +1963,31 @@ static void test_a_kutuphane_arama_e2e(void) {
                rc == 42);
 }
 
+/* --- [YUKSEK] C: capraz-modul generic monomorphization --- */
+
+static void test_c_capraz_generic_fonk_check(void) {
+    int ok = kemgu_check_basarili("test/moduller/ana_sayi.kem");
+    test_sonuc("C: capraz-modul generic fonk --check gecer (kullan sayi)",
+               ok == 1);
+}
+
+static void test_c_capraz_generic_fonk_e2e(void) {
+    /* sayi::azami i32+i64 instantiation + dedup (ikinci $i32 cagri tek
+     * define). Routing dusseydi @sayi.azami plain emit -> 'undefined
+     * value' link hatasi (rc=-1). Exit 42 = yapisal routing+dedup guard. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_sayi.kem");
+    test_sonuc("C: capraz-modul generic fonk (azami$i32+$i64+dedup) -> 42",
+               rc == 42);
+}
+
+static void test_c_capraz_generic_transitif_e2e(void) {
+    /* azami3<T> -> azami<T> (kardes generic, ayni modul). Owning-modul
+     * baglaminda specialize (binding-koruma): @sayi.azami$i32 cozulmeli. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_sayi_transitif.kem");
+    test_sonuc("C: capraz-modul transitif mono (azami3->azami) -> exit 42",
+               rc == 42);
+}
+
 /* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
 
 static void test_ad_cozum_sapma_check(void) {
@@ -2357,6 +2382,11 @@ int main(void) {
     test_a_modul_ici_yapi_e2e();
     test_a_secili_cakisma_negatif();
     test_a_secili_cakisma_nitelikli_e2e();
+
+    printf("\n--- [YUKSEK] C: capraz-modul generic monomorphization ---\n");
+    test_c_capraz_generic_fonk_check();
+    test_c_capraz_generic_fonk_e2e();
+    test_c_capraz_generic_transitif_e2e();
 
     printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
     test_ad_cozum_sapma_check();

@@ -242,3 +242,58 @@ Yeni biçimler (tek-segment / seçili / alias) HER ZAMAN namespaced yükleyicide
 T041 negatif, transitif, gölgeleme, kütüphane-UTF8, modül-içi yapı x2, T042 negatif,
 nitelikli-çakışma); parser 102→107 (+5 gramer). Fikstürler: test/moduller/*.kem;
 kütüphane fikstürleri runtime'da yazılıp silinir.
+
+---
+
+## D-012 [YÜKSEK] — Çapraz-modül generic monomorphization: FONKSİYON routing (faz C-1) (2026-06-13)
+
+**Bağlam:** A (whole-program namespaced yükleme) + B (tek-geçiş resolver) main'e
+merge edildi. Generic gövdeler ZATEN bellekte + ZATEN çözülü. C = çapraz-modül
+generic instantiation'ın YÖNLENDİRİLMESİ + EMİSYONU (gövde-görünürlüğü ya da
+yeniden-çözüm DEĞİL).
+
+**GAP (kodla teyit edildi):** Çapraz-modül qualified çağrı `m::f(...)` codegen'de
+İKİ ayrı yol kullanıyor: TANIMLAYICI yolu (modül-içi/global, `ifade_uret`
+DUGUM_CAGRI ~2660) generic'i specialize ediyordu; ama YOL yolu (`m::f` qualified,
+DUGUM_YOL hedef, ~1726) jenerik kontrolü YAPMADAN `mik->donus_tip @modul.f`
+**plain** emit ediyordu. Sonuç: `call i32 @sayi.azami(...)` → clang `use of
+undefined value '@sayi.azami'` (define yalnız `@sayi.azami$i32` adında üretilir).
+
+**Karar (mekanizma):**
+1. **Tek-kaynak helper'lar (DRY):** `generic_islev_cagri_uret()` (inference +
+   mangle + bekleyen-enqueue + substituted-return emit) ve `generic_param_beklenen()`
+   (somut param → IR beklenen; generic-param içeren param → NULL = arg doğal
+   tipinden T inference). Her İKİ yol (TANIMLAYICI + YOL) bu helper'ları çağırır;
+   TANIMLAYICI'nın eski inline bloğu (~175 satır) helper çağrısıyla değiştirildi.
+2. **Mangling şeması [ETKİ]:** Mevcut `$`-specialization mangling AYNEN korunur.
+   Modül-nitelik mangled ada zaten gömülü çünkü `gislev->veri.islev.ad` modül
+   kaydında `@modul.ad`'a yeniden yazılı (`modul_uyeleri_kayit`); `mangle_et`
+   bundan `dizi.ekle$i64` üretir. Modül için AYRI mekanizma EKLENMEDİ — `.` (modül)
+   + `$` (specialization) iki ayraç doğal kompoze olur.
+3. **Dedup anahtarı [ETKİ]:** Modül-nitelikli mangled ad (`sayi.azami$i32`) =
+   `mono_emitlendi` + bekleyenler tarama anahtarı. Aynı specialization birden çok
+   use-site'tan referanslansa BİR kez emit. Doğrulama: ikinci $i32 çağrısı + i64
+   çağrı, IR'da her define BİR kez (yapısal: duplicate-symbol link hatası yok).
+4. **Binding-koruma [ETKİ-YÜKSEK]:** Specialize edilen gövdenin iç kardeş çağrıları
+   owning-modülün üyelerine işaret eder — use-site bağlamında YENİDEN ÇÖZÜLMEZ.
+   Mekanizma: `specialize_emit` mangled addaki SON `.`'tan öneki türetir
+   (`sayi.azami$i32` → önek `sayi`) ve `aktif_modul_onek` olarak kurar; gövdedeki
+   çıplak-ad kardeş çağrılar `islev_bul` fallback'iyle `sayi.azami`'ye çözülür.
+   Transitif (`azami3$i32 → azami$i32`, hepsi `sayi` bağlamında) bu yolla çalışır.
+5. **Linkage seçimi [ETKİ]:** A her şeyi TEK LLVM modülüne splice ettiği için
+   mevcut specialization linkage'ı (define, external default) çapraz-modül için
+   yeterli — TEYİT edildi (E2E link + çalıştırma). `linkonce_odr`+COMDAT ayrık-
+   derleme (v2) işi → **ERTELENDİ** (tek modül, katlanacak ayrı obje yok).
+
+**Kapsam/sınırlar:**
+- Bu faz yalnız generic FONKSİYON (`@sayi.azami$i64`). Generic STRUCT (Liste<T>)
+  faz C-2 (sonraki commit).
+- Doğrulama INFERENCE ile (param tiplerinden T). Explicit yazılı tip-arg
+  `f<i64>(...)` parser'da DESTEKLENMİYOR (`yap<tam32>(42)` = karşılaştırma zinciri
+  olarak parse ediliyor) → açıkça D-bitişik parser fork; bu görevde EKLENMEDİ,
+  witness-param inference ile köşe dönüldü.
+
+**Testler:** test_llvm 194→197 (+3 C testi: çapraz-modül generic fonk --check,
+azami$i32+$i64+dedup E2E, transitif azami3→azami E2E). Fikstürler:
+test/moduller/{sayi,ana_sayi,ana_sayi_transitif}.kem. parser 107, tip_kontrol 174
+düşmedi. In-file generic canary'ler (kimlik<T>, Liste<T>) yeşil.

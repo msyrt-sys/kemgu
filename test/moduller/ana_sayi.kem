@@ -1,0 +1,17 @@
+// C dogrulama: capraz-modul generic FONKSIYON.
+//  - sayi::azami(a,b) i64 (tam64 arg) -> @sayi.azami$i64
+//  - sayi::azami(20,42) + sayi::azami(1,2) i32 -> @sayi.azami$i32 (tek define = dedup)
+// INFERENCE ile (yazili tip-arg YOK). Sonuc 42.
+kullan sayi;
+
+işlev main() -> tam32 {
+    değişken a: tam64 = 100;
+    değişken b: tam64 = 8;
+    değişken büyük: tam64 = sayi::azami(a, b);
+    değişken x: tam32 = sayi::azami(20, 42);
+    değişken y: tam32 = sayi::azami(1, 2);
+    eğer büyük == (100 olarak tam64) ve x == 42 ve y == 2 {
+        ver 42;
+    }
+    ver 0;
+}

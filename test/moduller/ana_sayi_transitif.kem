@@ -1,0 +1,8 @@
+// C dogrulama: capraz-modul TRANSITIF mono. sayi::azami3(10,42,7) ->
+// @sayi.azami3$i32, govdesi azami<T>'yi owning-modul ("sayi") baglaminda
+// @sayi.azami$i32 olarak specialize eder (binding-koruma). max=42.
+kullan sayi;
+
+işlev main() -> tam32 {
+    ver sayi::azami3(10, 42, 7);
+}
