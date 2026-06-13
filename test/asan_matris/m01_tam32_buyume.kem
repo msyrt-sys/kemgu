@@ -1,0 +1,9 @@
+// EKSEN: eleman tipi tam32 (4-byte) × kapasite aşımı (olustur(4)+10 → realloc).
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 { dizi_ekle(d, i + 1); i = i + 1; }
+    değişken s: tam32 = 0; i = 0;
+    iken i < dizi_boyut(d) { s = s + dizi_al(d, i); i = i + 1; }   // 1..10 = 55
+    eğer s == 55 { ver 42; } ver s;
+}

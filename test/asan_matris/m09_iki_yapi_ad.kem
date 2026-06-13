@@ -1,0 +1,22 @@
+// EKSEN: iki yapı AYNI alan adı 'ad' ama FARKLI eleman tipi (T.ad=metin 8-byte,
+// U.ad=tam32 4-byte). D-029 alan-adı çözümü + D-030 element-byte birlikte sınanır.
+yapı T { ad: Dizi<metin>; deg: Dizi<tam32>; }
+yapı U { ad: Dizi<tam32>; sonuc: Dizi<tam64>; }
+işlev doldurT(t: &T) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 8 { dizi_ekle(t.ad, "pq"); dizi_ekle(t.deg, 3); i = i + 1; } ver 0;
+}
+işlev doldurU(u: &U) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 8 { dizi_ekle(u.ad, 4); dizi_ekle(u.sonuc, 1); i = i + 1; } ver 0;
+}
+işlev main() -> tam32 {
+    değişken t: T = T { ad: dizi_olustur(4), deg: dizi_olustur(4) };
+    değişken u: U = U { ad: dizi_olustur(4), sonuc: dizi_olustur(4) };
+    doldurT(&t); doldurU(&u);
+    değişken s: tam32 = 0; değişken i: tam32 = 0;
+    iken i < dizi_boyut(t.ad) { s = s + metin_uzunluk(dizi_al(t.ad, i)); i = i + 1; }  // 8*2=16
+    i = 0; iken i < dizi_boyut(u.ad) { s = s + dizi_al(u.ad, i); i = i + 1; }          // 8*4=32
+    // t.ad (metin) ve u.ad (tam32) DOĞRU tipte okunmalı: 16+32=48; -6 = 42
+    eğer s == 48 { ver 42; } ver s;
+}
