@@ -1,0 +1,25 @@
+// C3 HEADLINE — RECURSIVE çeşit (self-hosting: KEMGU kendi AST'sini temsil
+// edebilir). Agac { Yaprak(tam64), Dal(&Agac, &Agac) } özyinelemeli sum type:
+// &Agac referansı ptr → %Agac = {i8, i64, ptr, ptr} sonlu boyut.
+// eşleş &Agac üzerinde auto-deref; özyinelemeli gezinme.
+//   ağaç: Dal(Yaprak(20), Yaprak(22)) → topla = 20 + 22 = 42.
+
+çeşit Agac {
+    Yaprak(tam64),
+    Dal(&Agac, &Agac)
+}
+
+işlev topla(a: &Agac) -> tam64 {
+    eşleş a {
+        Agac::Yaprak(v) => { ver v; }
+        Agac::Dal(sol, sag) => { ver topla(sol) + topla(sag); }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken y1: Agac = Agac::Yaprak(20);
+    değişken y2: Agac = Agac::Yaprak(22);
+    değişken kok: Agac = Agac::Dal(&y1, &y2);
+    ver topla(&kok) olarak tam32;
+}

@@ -1,0 +1,29 @@
+// C3 fikstürü — payload-taşıyan çeşit (sum type with data): varyant tipli
+// alanlar taşır. Tagged-union temsili %Ifade = {i8 disc, payloadlar}.
+// İnşa Ifade::Ikili(30,12) + eşleş destructuring Ifade::Tam(v)/Ikili(a,b).
+// 30 + 12 = 42.
+
+çeşit Ifade {
+    Tam(tam64),
+    Ikili(tam64, tam64),
+    Yok
+}
+
+işlev degerlendir(e: Ifade) -> tam64 {
+    eşleş e {
+        Ifade::Tam(v) => { ver v; }
+        Ifade::Ikili(a, b) => { ver a + b; }
+        Ifade::Yok => { ver 0; }
+    }
+    ver 99;
+}
+
+işlev main() -> tam32 {
+    değişken x: Ifade = Ifade::Ikili(30, 12);
+    eğer degerlendir(x) != (42 olarak tam64) { ver 1; }
+    değişken t: Ifade = Ifade::Tam(42);
+    eğer degerlendir(t) != (42 olarak tam64) { ver 2; }
+    değişken y: Ifade = Ifade::Yok;
+    eğer degerlendir(y) != (0 olarak tam64) { ver 3; }
+    ver 42;
+}
