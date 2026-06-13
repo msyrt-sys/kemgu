@@ -50,3 +50,5 @@ import Kemgu.SideChannel.NonInterference
 import Kemgu.Soundness.Main
 -- Cekirdek ANLAMLILIK tanigi: somut konkuran program (iki gorev + kanal) IyiTipliCekirdek saglar
 import Kemgu.Soundness.EszamanliTanik
+-- OPERASYONEL tanik: somut konkuran program StepStar ile 4 adim yurur (gercek send+recv)
+import Kemgu.Soundness.OperasyonelTanik
