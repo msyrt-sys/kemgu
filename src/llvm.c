@@ -3536,6 +3536,33 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
         case DUGUM_ESLES: {
             IfadeSonuc s = ifade_uret(g, d->veri.esles.deger, NULL);
             const char *sty = s.tip ? s.tip : "i32";
+            /* C3: &Cesit referansı (ptr) üzerinde eşleş — struct'ı yükle
+             * (recursive AST: ağaç referansla gezilir). Desenlerden payload
+             * çeşit'i çöz; scrutinee ptr ise load %Cesit. */
+            if (strcmp(sty, "ptr") == 0) {
+                const Dugum *cd = NULL;
+                for (int ki = 0; ki < d->veri.esles.kol_sayi && !cd; ki++) {
+                    const Dugum *kol = d->veri.esles.kollar[ki];
+                    if (!kol || kol->tip != DUGUM_ESLES_KOLU) continue;
+                    const Dugum *ds = kol->veri.esles_kolu.desen;
+                    if (ds && ds->tip == DUGUM_DESEN_YOL) {
+                        YapiKayit *yk = yapi_bul(g,
+                            ds->veri.desen_yol.cesit_ad,
+                            ds->veri.desen_yol.cesit_uz);
+                        if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                            cd = yk->ast;
+                        }
+                    }
+                }
+                if (cd && cesit_payload_var(cd)) {
+                    const char *agg = cesit_struct_ir(g, cd);
+                    int lr = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+                            lr, agg, s.reg);
+                    s.reg = lr;
+                    sty = agg;
+                }
+            }
             int kesirli = (strcmp(sty, "float") == 0 ||
                            strcmp(sty, "double") == 0);
             const char *cmpop = kesirli ? "fcmp oeq" : "icmp eq";

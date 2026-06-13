@@ -4472,6 +4472,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         case DUGUM_ESLES: {
             /* Eşleş'in deger tipini belirle (secimlik<T> veya sonuc<T,H>) */
             TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
+            /* C3: &Cesit referansı üzerinde eşleş — otomatik dereference
+             * (recursive AST: çeşit ağacı referansla gezilir). */
+            if (dt && dt->kategori == TIP_REFERANS && dt->veri.referans.hedef) {
+                dt = dt->veri.referans.hedef;
+            }
             /* Sabitsüre Spec V1 CT001 SABITSURE_MATCH: scrutinee sabitsure
              * olamaz — kol seçimi gizli bilgiyle dallanır. */
             if (tip_sabitsure_mi(dt)) {
