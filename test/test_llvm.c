@@ -290,6 +290,14 @@ static void test_cesit_agac_calistir(void) {
                rc == 42);
 }
 
+static void test_turkce_tip_adi_calistir(void) {
+    /* Türkçe kimlik: non-ASCII tip adları (yapı Köşe + çeşit Düğüm) IR'da
+     * quote'lanır (%"Düğüm"). Alan erişimi + recursive ağaç çalışır. 10+32=42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/turkce_tip_adi.kem");
+    test_sonuc("Turkce tip adi (yapi Kose + cesit Dugum) -> exit 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2446,6 +2454,7 @@ int main(void) {
     test_cesit_payload_yapi_calistir();
     test_cesit_agac_verify();
     test_cesit_agac_calistir();
+    test_turkce_tip_adi_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
