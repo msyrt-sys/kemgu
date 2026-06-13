@@ -7,7 +7,11 @@
 //
 // MILESTONE M1: ASCII çekirdek (identifier + ondalık + tek-kar op + ayraç + EOF).
 // MILESTONE M2: UTF-8 + TÜRKÇE anahtar kelimeler (44 keyword + bayt-sütün).
-// MILESTONE M3 (bu dosya): operatörler + noktalama — MAXIMAL MUNCH.
+// MILESTONE M4: literaller — sayi_emit (ondalık/hex/bin/oct + float kesir+üs),
+//   dize_emit ("..." + escape ham-bırakma + L001), karakter_emit ('a'/UTF-8 +
+//   L009/L010). C lexer sayi_oku/metin_oku/karakter_oku ile birebir (span-exact).
+//   NOT: ham string r#"..."# + // /* yorum → M5.
+// MILESTONE M3: operatörler + noktalama — MAXIMAL MUNCH.
 //   - Çatışma zincirleri (C lexer ile birebir, switch 318-375):
 //     . / .. / ...   :  / ::   <  / <= / <<   >  / >= / >>
 //     =  / == / =>    -  / -= / ->   + / +=   * / *=   / / /=   % / %=   ! / !=
@@ -219,6 +223,109 @@ işlev op_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32)
     emit("HATALI", satir, sutun, pos, 1); ver 1;            // default (L005)
 }
 
+// ---- M4: literaller (sayı / metin / karakter) ----
+
+işlev hex_rakam_mi(b: tam32) -> mantıksal {                 // 0-9 a-f A-F
+    ver rakam_mi(b) veya (b >= 97 ve b <= 102) veya (b >= 65 ve b <= 70);
+}
+// UTF-8 lider-bayttan karakter bayt-uzunluğu (utf8.c utf8_karakter_uzunlugu).
+işlev utf8_uz(b: tam32) -> tam32 {
+    eğer b < 128 { ver 1; }
+    eğer (b >= 192) ve (b <= 223) { ver 2; }
+    eğer (b >= 224) ve (b <= 239) { ver 3; }
+    eğer (b >= 240) ve (b <= 247) { ver 4; }
+    ver 0;
+}
+
+// Sayı token'ı emit (C sayi_oku birebir) → tüketilen bayt. TAMSAYI veya ONDALIK.
+işlev sayi_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken p: tam32 = pos;
+    değişken ondalik: tam32 = 0;
+    eğer bayt(kaynak, p) == 48 {                             // '0' → prefix?
+        değişken s: tam32 = ikinci_bayt(kaynak, p + 1, uz);
+        eğer (s == 120) veya (s == 88) {                    // 0x 0X (erken return)
+            p = p + 2;
+            iken (p < uz) ve (hex_rakam_mi(bayt(kaynak, p)) veya (bayt(kaynak, p) == 95)) { p = p + 1; }
+            emit("TAMSAYI", satir, sutun, pos, p - pos); ver p - pos;
+        }
+        eğer (s == 98) veya (s == 66) {                     // 0b 0B
+            p = p + 2;
+            iken (p < uz) ve ((bayt(kaynak, p) == 48) veya (bayt(kaynak, p) == 49) veya (bayt(kaynak, p) == 95)) { p = p + 1; }
+            emit("TAMSAYI", satir, sutun, pos, p - pos); ver p - pos;
+        }
+        eğer (s == 111) veya (s == 79) {                    // 0o 0O
+            p = p + 2;
+            iken (p < uz) ve (((bayt(kaynak, p) >= 48) ve (bayt(kaynak, p) <= 55)) veya (bayt(kaynak, p) == 95)) { p = p + 1; }
+            emit("TAMSAYI", satir, sutun, pos, p - pos); ver p - pos;
+        }
+    }
+    iken (p < uz) ve (rakam_mi(bayt(kaynak, p)) veya (bayt(kaynak, p) == 95)) { p = p + 1; }  // ondalık gövde
+    eğer (p < uz) ve (bayt(kaynak, p) == 46) {              // kesir: '.' && sonraki!='.'
+        eğer ikinci_bayt(kaynak, p + 1, uz) != 46 {
+            ondalik = 1;
+            p = p + 1;
+            iken (p < uz) ve (rakam_mi(bayt(kaynak, p)) veya (bayt(kaynak, p) == 95)) { p = p + 1; }
+        }
+    }
+    eğer (p < uz) ve ((bayt(kaynak, p) == 101) veya (bayt(kaynak, p) == 69)) {  // üs: e/E
+        ondalik = 1;
+        p = p + 1;
+        eğer (p < uz) ve ((bayt(kaynak, p) == 43) veya (bayt(kaynak, p) == 45)) { p = p + 1; }  // ±
+        iken (p < uz) ve (rakam_mi(bayt(kaynak, p)) veya (bayt(kaynak, p) == 95)) { p = p + 1; }
+    }
+    eğer ondalik == 1 { emit("ONDALIK", satir, sutun, pos, p - pos); }
+    değilse { emit("TAMSAYI", satir, sutun, pos, p - pos); }
+    ver p - pos;
+}
+
+// Metin "..." emit (C metin_oku birebir) → tüketilen bayt. METIN veya HATALI(L001).
+// NOT: ad `dize_emit` — codegen `metin_*` ön-ekini runtime intrinsic'e yönlendirir
+// (llvm.c:2961), bu yüzden `metin_emit` adı KULLANILAMAZ (kdl_metin_emit çakışması).
+işlev dize_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken p: tam32 = pos + 1;                            // açılış "
+    değişken durum: tam32 = 0;                             // 0=devam 1=kapandı 2=newline
+    iken (p < uz) ve (durum == 0) {
+        değişken c: tam32 = bayt(kaynak, p);
+        eğer c == 34 { durum = 1; }                        // kapanış "
+        değilse {
+            eğer c == 92 {                                 // \ → \ + 1 (escape ham)
+                p = p + 1;
+                eğer p < uz { p = p + 1; }
+            } değilse {
+                eğer c == 10 { durum = 2; }                // \n → L001
+                değilse { p = p + 1; }
+            }
+        }
+    }
+    eğer durum == 1 { p = p + 1; emit("METIN", satir, sutun, pos, p - pos); ver p - pos; }
+    emit("HATALI", satir, sutun, pos, p - pos); ver p - pos;  // newline veya EOF → L001
+}
+
+// Karakter '...' emit (C karakter_oku birebir) → tüketilen bayt. KARAKTER / HATALI(L009/L010).
+işlev karakter_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken p: tam32 = pos + 1;                            // açılış '
+    eğer (p >= uz) veya (bayt(kaynak, p) == 39) {           // boş/EOF → L009
+        eğer p < uz { p = p + 1; }
+        emit("HATALI", satir, sutun, pos, p - pos); ver p - pos;
+    }
+    eğer bayt(kaynak, p) == 92 {                            // \ escape (ham, +1)
+        p = p + 1;
+        eğer p < uz { p = p + 1; }
+    } değilse {                                             // tek UTF-8 karakter
+        değişken cl: tam32 = utf8_uz(bayt(kaynak, p));
+        eğer cl == 0 { cl = 1; }
+        değişken i: tam32 = 0;
+        iken i < cl { eğer p < uz { p = p + 1; } i = i + 1; }
+    }
+    eğer (p >= uz) veya (bayt(kaynak, p) != 39) {           // kapanış ' yok → L010
+        iken (p < uz) ve (bayt(kaynak, p) != 39) ve (bayt(kaynak, p) != 10) { p = p + 1; }
+        eğer (p < uz) ve (bayt(kaynak, p) == 39) { p = p + 1; }
+        emit("HATALI", satir, sutun, pos, p - pos); ver p - pos;
+    }
+    p = p + 1;                                              // kapanış '
+    emit("KARAKTER", satir, sutun, pos, p - pos); ver p - pos;
+}
+
 işlev lex_dosya(kaynak: metin) -> tam32 {
     değişken uz: tam32 = metin_uzunluk(kaynak);
     değişken pos: tam32 = 0;
@@ -238,11 +345,9 @@ işlev lex_dosya(kaynak: metin) -> tam32 {
         değişken t_sat: tam32 = satir;
         değişken t_sut: tam32 = sutun;
 
-        eğer rakam_mi(tb) {                                 // TAMSAYI (ondalık)
-            iken (pos < uz) ve (rakam_mi(bayt(kaynak, pos)) veya (bayt(kaynak, pos) == 95)) {
-                pos = pos + 1; sutun = sutun + 1;
-            }
-            emit("TAMSAYI", t_sat, t_sut, t_off, pos - t_off);
+        eğer rakam_mi(tb) {                                 // TAMSAYI / ONDALIK (M4)
+            değişken slen: tam32 = sayi_emit(kaynak, pos, uz, t_sat, t_sut);
+            pos = pos + slen; sutun = sutun + slen;
         } değilse {
             değişken bu: tam32 = kimlik_basi_uz(kaynak, pos, uz);
             eğer bu > 0 {                                  // IDENT / anahtar (UTF-8)
@@ -255,9 +360,19 @@ işlev lex_dosya(kaynak: metin) -> tam32 {
                 }
                 değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
                 emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
-            } değilse {                                    // operatör/noktalama (maximal munch)
-                değişken olen: tam32 = op_emit(kaynak, pos, uz, t_sat, t_sut);
-                pos = pos + olen; sutun = sutun + olen;
+            } değilse {
+                eğer tb == 34 {                            // "  → METIN (M4)
+                    değişken mlen: tam32 = dize_emit(kaynak, pos, uz, t_sat, t_sut);
+                    pos = pos + mlen; sutun = sutun + mlen;
+                } değilse {
+                    eğer tb == 39 {                        // '  → KARAKTER (M4)
+                        değişken klen: tam32 = karakter_emit(kaynak, pos, uz, t_sat, t_sut);
+                        pos = pos + klen; sutun = sutun + klen;
+                    } değilse {                            // operatör/noktalama (maximal munch)
+                        değişken olen: tam32 = op_emit(kaynak, pos, uz, t_sat, t_sut);
+                        pos = pos + olen; sutun = sutun + olen;
+                    }
+                }
             }
         }
     }

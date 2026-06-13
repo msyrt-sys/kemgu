@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-039 — SELF-HOST lexer M4: literaller (sayı/float/metin/karakter) — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M4: tam literal
+desteği — `sayi_emit` (ondalık + 0x/0b/0o + float kesir+üs), `dize_emit`
+(`"..."`), `karakter_emit` (`'a'`/UTF-8). C lexer sayi_oku/metin_oku/karakter_oku
+ile span-exact (kaynak L106-268 birebir port).
+
+**Kapsam:** Sayı — 4 taban (0x/0b/0o erken-return TAMSAYI; boş gövde `0x` hatasız),
+float kesir (`.` guard `sonraki≠.` → `1.5` vs `1..5`; trailing-dot `7.`), üs `e/E±`.
+Metin — escape DECODE EDİLMEZ (`\`+1 bayt atlanır, C gibi); newline/EOF → HATALI
+(L001). Karakter — escape (`\`+1) veya UTF-8 tek-karakter (utf8_uz); boş `''`→L009,
+çok/kapanmamış→L010. Hepsi tüketilen bayt döner.
+
+**KÖK-NEDEN bulgu [self-host isim kısıtı]:** Codegen `metin_*` ön-ekini runtime
+intrinsic'e yönlendiriyor (llvm.c:2961 `memcmp(cagri_adi,"metin_",6)`) → `kdl_metin_*`
+(ptr dönüş). `işlev metin_emit` bu yüzden `kdl_metin_emit` sayıldı → IR tip hatası
+(`store i32 ptr`). **Çözüm:** `metin_emit`→`dize_emit`. (Pure-prefix dispatch'ler
+yalnız `metin_`/`dosya_`; `karakter_`/`sayi_`/`dizi_` exact-match → güvenli.)
+Kaynak değiştirilmedi — isim kuralıyla çözüldü.
+
+**Doğrulama:** `make calistir_lexer_diff` → **18/18 SIFIR-DİFF** (13 M1-M3 + 5 M4).
+Spot: `1..5 1.5 7. 0x 1e10 "tam"` → bayt-exact (`7.`=ONDALIK trailing-dot,
+`0x`=TAMSAYI boş-hex, `1..5`=TAMSAYI+ARALIK+TAMSAYI). `--check` temiz.
+
+**Sıradaki (M5):** trivia — `//` satır + `/* */` İÇ İÇE yorum (derinlik sayacı) +
+ham string `r#"..."#` (hash eşleme, L002/L011). Kasıtlı NON-hata parite (kapanmamış
+blok-yorum sessiz, geçersiz UTF-8→bayt-bayt HATALI).
+
+---
+
 ## D-038 — SELF-HOST lexer M3: operatörler + noktalama (maximal munch) — sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M2'nin tek-karakter
