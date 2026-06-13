@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-031 — ASan/UBSan codegen denetimi: harness + 8 pre-existing crash teşhisi (2026-06-13)
+
+**Bağlam:** D-030 (dizi_olustur heap-overflow) gösterdi ki test_llvm E2E zinciri
+(`kemgu --llvm | clang | run`) üretilen kodu SANITIZER'SIZ koşuyor → codegen
+bellek hataları gözden kaçıyor. KEMGU'nun #1 hedefi bellek güvenliği olduğundan,
+proaktif bir ASan/UBSan denetimi eklendi.
+
+**Karar:** `test/asan_e2e_denetim.sh` + `make calistir_asan_denetim` — tüm
+çalışabilir örnekleri `clang -fsanitize=address,undefined` ile derleyip çalıştırır,
+ihlalleri raporlar. **Sonuç: 84 örnek ASan/UBSan-TEMİZ**, 8 bilinen başarısızlık
+(ALLOWLIST, nedeni belgeli), 27 atla (main yok / parse-only).
+
+**Bulunan 8 pre-existing crash (test suite E2E koşmadığı için saklıydı):**
+
+*Sınıf A — dizi-literal → `Dizi<T>` parametresi (4):* `03_kontrol`, `35_binary_search`,
+`36_quicksort_stub`, `40_dizi_islemler`. Kök-neden: array literal `[1,2,3]` STACK
+`[N x T]` üretir; `Dizi<T>` PARAMETRESİ ise dinamik `KdlDizi*` bekler (param
+`dinamik_dizi_mi=1`). `xs[i]` / `için x: xs` / `dizi_boyut(xs)` stack array'i
+KdlDizi olarak okur → misaligned access → SEGFAULT. (Dinamik dizi `dizi_olustur`
+parametre olarak ÇALIŞIR — D-024; yalnız stack-literal→param yolu kırık.)
+**KARAR Mehmet'e açık (DUR-SOR):** stack-array-literal ↔ dinamik-KdlDizi temsil
+uyumsuzluğu. Seçenekler: (a) çağrı sınırında literal→KdlDizi coercion, (b) array
+literal Dizi<T> bağlamında daima heap, (c) `için`/`[]` param için stack-array
+yolu. Hepsi temsil/semantik kararı — tek başıma değiştirmedim.
+
+*Sınıf B — lambda/closure (4):* `04_islev`, `10_lambda`, `25_closure_capture`,
+`42_lambda_hesap`. Garbage func-ptr çağrısı → access-violation. **Bilinen:
+D-004 ile LAMBDA codegen V2'ye ERTELENDİ** (fonksiyon-değer codegen yok). Yeni
+bug değil; bu örnekler ertelenen özelliği egzersiz ediyor.
+
+**Kapsam:** Bu commit DENETİM ALTYAPISI + teşhis. 8 crash'in fix'i ayrı
+(A = temsil kararı Mehmet'te; B = V2 lambda feature). Harness bunları ALLOWLIST'le
+dışlar; fix indikçe ALLOWLIST'ten çıkarılır → denetim regresyon koruması olur.
+Bu, derleyici tip-kontrolünden geçen ama segfault eden programların (bellek
+güvenliği ihlali) gelecekte yakalanmasını kurumsallaştırır.
+
+---
+
 ## D-030 [YÜKSEK] — Kök-neden fix: dizi_olustur element_byte heap-buffer-overflow (ptr/tam64 dizi) (2026-06-13)
 
 **Bağlam:** D-029'da "kapsam dışı, pre-existing" diye bırakılan `m*n*p+18`=18 bug'ı.

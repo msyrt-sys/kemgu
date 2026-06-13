@@ -453,6 +453,12 @@ calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BU
 # Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
 # birlestirilip --check'ten gecirilir (tek dosya derleme, import yok).
 # Test dosyasi yoksa kutuphane tek basina kontrol edilir.
+# ASan/UBSan codegen bellek güvenliği denetimi — üretilen kodu sanitizer ile
+# derleyip çalıştırır (test_llvm E2E sanitizer'sız koşar). D-030 sınıfı codegen
+# bellek hatalarını yakalar. Bilinen başarısızlıklar betikteki ALLOWLIST'te.
+calistir_asan_denetim: $(BUILD)/kemgu$(EXE)
+	@bash test/asan_e2e_denetim.sh
+
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
