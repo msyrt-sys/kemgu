@@ -1,0 +1,24 @@
+// EKSEN: tek yapıda KARIŞIK eleman-byte koleksiyonlar (Dizi<tam32>+Dizi<metin>+
+// Dizi<tam64>) + &Yapi param erişimi + her birini sınır-üstü doldur. D-029×D-030.
+yapı M { a: Dizi<tam32>; b: Dizi<metin>; c: Dizi<tam64>; }
+işlev doldur(m: &M) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 10 {
+        dizi_ekle(m.a, i + 1);                  // tam32 (4-byte)
+        dizi_ekle(m.b, "xy");                   // metin (8-byte)
+        dizi_ekle(m.c, (i olarak tam64) + 1);   // tam64 (8-byte)
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken m: M = M { a: dizi_olustur(4), b: dizi_olustur(4), c: dizi_olustur(4) };
+    doldur(&m);
+    değişken sa: tam32 = 0; değişken sb: tam32 = 0; değişken sc: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(m.a) { sa = sa + dizi_al(m.a, i); i = i + 1; }   // 55
+    i = 0; iken i < dizi_boyut(m.b) { sb = sb + metin_uzunluk(dizi_al(m.b, i)); i = i + 1; }  // 20
+    i = 0; iken i < dizi_boyut(m.c) { sc = sc + dizi_al(m.c, i); i = i + 1; }  // 55
+    eğer sa == 55 ve sb == 20 ve sc == (55 olarak tam64) { ver 42; }
+    ver sa + sb + (sc olarak tam32);
+}
