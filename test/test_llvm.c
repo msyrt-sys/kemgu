@@ -2012,6 +2012,20 @@ static void test_c_capraz_generic_struct_coklu_e2e(void) {
                rc == 42);
 }
 
+static void test_c_specialization_module_first_korunur(void) {
+    /* [B x C kesisim guard'i] Specialization yolu B'nin module-first
+     * binding'ini KORUR — global-first sapmaya dusmez. Ayirt edici kurulum:
+     * top-level GLOBAL yardim()=100, arac::yardim()=1 onu golgeler;
+     * arac::capraz<T> govdesindeki ciplak yardim() arac::yardim'e baglidir
+     * (B binding'i COZUM_MODUL_UYESI). capraz(0) specialize edilince
+     * (@arac.capraz$i32) govde B binding'ini tuketmeli -> @arac.yardim (1).
+     * 100 donerse specialization global-first sapmis = B bug'i specialization
+     * yolunda delinmis. exit 1 = kose kapali. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_golge_jenerik.kem");
+    test_sonuc("C: specialization module-first binding'i korur (golge -> 1)",
+               rc == 1);
+}
+
 /* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
 
 static void test_ad_cozum_sapma_check(void) {
@@ -2414,6 +2428,7 @@ int main(void) {
     test_c_capraz_generic_struct_check();
     test_c_capraz_generic_struct_e2e();
     test_c_capraz_generic_struct_coklu_e2e();
+    test_c_specialization_module_first_korunur();
 
     printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
     test_ad_cozum_sapma_check();
