@@ -258,6 +258,38 @@ static void test_cesit_exhaustive_negatif(void) {
     test_sonuc("cesit non-exhaustive -> --check basarisiz (M001)", ok == 0);
 }
 
+/* --- C3: payload-taşıyan çeşit (sum type with data) --- */
+
+static void test_cesit_payload_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_payload.kem");
+    test_sonuc("C3 cesit payload: opt -passes=verify PASS", ok);
+}
+
+static void test_cesit_payload_calistir(void) {
+    /* Ifade{Tam(tam64),Ikili(tam64,tam64),Yok} — inşa + destructuring. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_payload.kem");
+    test_sonuc("C3 cesit payload (Ifade::Ikili(30,12)) -> exit 42", rc == 42);
+}
+
+static void test_cesit_payload_yapi_calistir(void) {
+    /* Karışık genişlik + struct payload + payloadsuz varyant aynı çeşitte. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_payload_yapi.kem");
+    test_sonuc("C3 cesit payload struct+karisik (Olay) -> exit 42", rc == 42);
+}
+
+static void test_cesit_agac_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/snapshots/cesit_agac.kem");
+    test_sonuc("C3 recursive cesit (Agac): opt -passes=verify PASS", ok);
+}
+
+static void test_cesit_agac_calistir(void) {
+    /* HEADLINE: recursive çeşit (AST ağacı) — &Agac referans auto-deref +
+     * özyinelemeli gezinme. Self-hosting ön-koşulu. 20+22 -> 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_agac.kem");
+    test_sonuc("C3 recursive cesit AST (Dal(Yaprak,Yaprak)) -> exit 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2407,6 +2439,13 @@ int main(void) {
     test_cesit_sonuc_verify();
     test_cesit_sonuc_calistir();
     test_cesit_exhaustive_negatif();
+
+    printf("\n--- C3: payload-tasiyan cesit (sum type with data) ---\n");
+    test_cesit_payload_verify();
+    test_cesit_payload_calistir();
+    test_cesit_payload_yapi_calistir();
+    test_cesit_agac_verify();
+    test_cesit_agac_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

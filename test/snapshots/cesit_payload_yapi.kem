@@ -1,0 +1,36 @@
+// C3 fikstürü — payload çeşit karışık genişlik + STRUCT payload + payloadsuz
+// varyant aynı çeşitte. %Olay = {i8 disc, i8, %Nokta, i8, i64}.
+// Konum(Nokta) struct payload; Cift(tam8,tam64) çok-alan; Bos payloadsuz.
+// (Yapı inşası eğer-koşulunda izinli değil — ara değişkenle kurulur.)
+
+yapı Nokta { x: tam32; y: tam32; }
+
+çeşit Olay {
+    Tus(tam8),
+    Konum(Nokta),
+    Cift(tam8, tam64),
+    Bos
+}
+
+işlev kod(o: Olay) -> tam64 {
+    eşleş o {
+        Olay::Tus(k) => { ver k olarak tam64; }
+        Olay::Konum(n) => { ver (n.x + n.y) olarak tam64; }
+        Olay::Cift(a, b) => { ver (a olarak tam64) + b; }
+        Olay::Bos => { ver 0; }
+    }
+    ver 99;
+}
+
+işlev main() -> tam32 {
+    değişken c: Olay = Olay::Cift(10, 32);
+    değişken nk: Nokta = Nokta { x: 20, y: 22 };
+    değişken n: Olay = Olay::Konum(nk);
+    değişken t: Olay = Olay::Tus(42);
+    değişken b: Olay = Olay::Bos;
+    eğer kod(c) != (42 olarak tam64) { ver 1; }
+    eğer kod(n) != (42 olarak tam64) { ver 2; }
+    eğer kod(t) != (42 olarak tam64) { ver 3; }
+    eğer kod(b) != (0 olarak tam64) { ver 4; }
+    ver 42;
+}

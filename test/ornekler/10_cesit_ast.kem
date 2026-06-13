@@ -1,0 +1,35 @@
+// ============================================================================
+// 10_cesit_ast.kem — payload-taşıyan ÖZYİNELEMELİ çeşit (sum type) ile mini
+// aritmetik AST değerlendirici. Self-hosting ön-koşulunun gösterimi:
+// KEMGU kendi soyut sözdizim ağacını (AST) kendi çeşit'leriyle temsil edebilir.
+// ============================================================================
+//
+//  Ifade { Sayi(tam64), Topla(&Ifade, &Ifade), Carp(&Ifade, &Ifade) }
+//  &Ifade referansı ptr → özyineleme sonlu boyut (%Ifade = {i8, i64, ptr, ptr, ptr, ptr}).
+//  eşleş referans üzerinde otomatik dereference; özyinelemeli değerlendirme.
+//
+//  Değerlendirilen ağaç:  (3 + 4) * 6  =  42
+
+çeşit Ifade {
+    Sayi(tam64),
+    Topla(&Ifade, &Ifade),
+    Carp(&Ifade, &Ifade)
+}
+
+işlev hesapla(e: &Ifade) -> tam64 {
+    eşleş e {
+        Ifade::Sayi(n)     => { ver n; }
+        Ifade::Topla(a, b) => { ver hesapla(a) + hesapla(b); }
+        Ifade::Carp(a, b)  => { ver hesapla(a) * hesapla(b); }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken s3: Ifade = Ifade::Sayi(3);
+    değişken s4: Ifade = Ifade::Sayi(4);
+    değişken topla: Ifade = Ifade::Topla(&s3, &s4);   // 3 + 4
+    değişken s6: Ifade = Ifade::Sayi(6);
+    değişken carp: Ifade = Ifade::Carp(&topla, &s6);   // (3+4) * 6
+    ver hesapla(&carp) olarak tam32;
+}
