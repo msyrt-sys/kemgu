@@ -1,15 +1,17 @@
-// Çapraz-dosya stdlib Liste<T> kanıtı (HEADLINE): ayrı entry, `kullan dizi;`,
-// kütüphane/dizi.kem'i arama yolundan (içe-aktaran dizini → kök → kütüphane/)
-// bulur. SAF INFERENCE — yazılı nitelikli tip (dizi::Liste<i64>) YOK.
+// D dilim-1 HEADLINE: nitelikli tip annotation çapraz-dosya generic'i T'siz
+// ÜRETİM imzasıyla kullanılabilir yapar. `değişken l: dizi::Liste<tam64>`
+// annotation'ı T=tam64'ü RHS cross-module çağrıya (dizi::oluştur) besler —
+// oluştur(böl: yetki<Bellek>) -> Liste<T> paramlarında T YOK (witness YOK).
 //
-// Akış: yarat → ekle×5 (kapasite 0→4→8, büyü transitif + eleman-kopyalı grow)
-//   ekle 10,1,1,1 (cap 0→4, boy 4); ekle 32 → büyü cap 4→8 ([10,1,1,1] kopya),
-//   idx4=32. boy=5, al(0)=10, al(4)=32, al(9)=sınır-dışı→sifir. 10+32 = 42.
+// Akış: oluştur → ekle×5 (kapasite 0→4→8, büyü transitif + eleman-kopyalı
+//   grow). ekle 10,1,1,1 (cap 0→4); ekle 32 → büyü cap 4→8 ([10,1,1,1] kopya),
+//   idx4=32. boy=5 (annotation yan-kanalı → @dizi.boy$i64), al(0)=10, al(4)=32.
+//   al(9)=sınır-dışı→sifir. 10+32 = 42.
 kullan dizi;
 
 işlev main() -> tam32 {
     değişken sifir: tam64 = 0;
-    değişken l = dizi::yarat(sifir);
+    değişken l: dizi::Liste<tam64> = dizi::oluştur(yetki_olustur(3, 3));
     dizi::ekle(&l, yetki_olustur(3, 3), 10 olarak tam64);
     dizi::ekle(&l, yetki_olustur(3, 3), 1 olarak tam64);
     dizi::ekle(&l, yetki_olustur(3, 3), 1 olarak tam64);
