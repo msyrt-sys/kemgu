@@ -837,7 +837,9 @@ Dugum *parse_tip(Parser *p) {
      *   ad                   -> DUGUM_TIP_BASIT (ornegin tam32, metin)
      *   ad < T1, T2, ... >   -> DUGUM_TIP_KULLANICI (generic)
      *   "Dizi" + < T >       -> DUGUM_TIP_DIZI (ozel — Dizi standart konteyneri)
-     * Yol (::) destegi su an YOK (gelecekte ADIM 10.C'de eklenir). */
+     *   modül::Tip [<...>]   -> DUGUM_TIP_KULLANICI (yol=DUGUM_YOL) — D dilim-1
+     * NOT: tip pozisyonunda `::` yalnız modül-nitelikli TİP demek; ifade
+     * pozisyonundaki `f<i64>()` AYRI sorun (burada DEĞİL). */
     if (t.tip == TOK_TANIMLAYICI) {
         const char *ad = t.baslangic;
         int ad_uz = t.uzunluk;
@@ -845,14 +847,35 @@ Dugum *parse_tip(Parser *p) {
         int sutun = t.sutun;
         parser_ilerle(p);
 
+        /* Nitelikli tip yolu: modül::Tip [::Tip...]. DUGUM_YOL zincirine knit
+         * edilir; DUGUM_TIP_KULLANICI.yol bunu zaten kabul ediyor (ast.h). */
+        Dugum *nitelikli_yol = NULL;
+        if (parser_eslesir(p, TOK_CIFT_IKI_NOKTA)) {
+            Dugum *sol = dugum_tanimlayici(p->arena, ad, ad_uz, satir, sutun);
+            while (parser_eslesir(p, TOK_CIFT_IKI_NOKTA)) {
+                parser_ilerle(p);
+                Token sag = parser_bekle(p, TOK_TANIMLAYICI, "P124",
+                    "nitelikli tip adi bekleniyor (modul::Tip)");
+                Dugum *y = dugum_olustur(p->arena, DUGUM_YOL, satir, sutun);
+                if (y) {
+                    y->veri.yol.sol = sol;
+                    y->veri.yol.sag_ad = ast_string_kopyala(p->arena,
+                        sag.baslangic, sag.uzunluk);
+                    y->veri.yol.sag_ad_uzunluk = sag.uzunluk;
+                }
+                sol = y;
+            }
+            nitelikli_yol = sol;
+        }
+
         /* Generic argumanlari? */
         if (parser_eslesir(p, TOK_KUCUK)) {
             Liste args;
             liste_baslat(&args);
             (void)parse_generic_listesi(p, "P318", "P319", 1, &args);
 
-            /* "Dizi" ozel: DUGUM_TIP_DIZI */
-            if (ad_uz == 4 && memcmp(ad, "Dizi", 4) == 0) {
+            /* "Dizi" ozel: DUGUM_TIP_DIZI — yalniz NITELIKSIZ Dizi<T> */
+            if (!nitelikli_yol && ad_uz == 4 && memcmp(ad, "Dizi", 4) == 0) {
                 if (args.sayi != 1) {
                     parser_hata(p, t, "P318b",
                         "Dizi<T> tam olarak bir tip argumani gerektirir",
@@ -867,8 +890,10 @@ Dugum *parse_tip(Parser *p) {
                 return d;
             }
 
-            /* Genel: kullanici tipi */
-            Dugum *yol = dugum_tanimlayici(p->arena, ad, ad_uz, satir, sutun);
+            /* Genel: kullanici tipi (nitelikli veya degil) */
+            Dugum *yol = nitelikli_yol
+                ? nitelikli_yol
+                : dugum_tanimlayici(p->arena, ad, ad_uz, satir, sutun);
             Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_KULLANICI,
                                      satir, sutun);
             if (d) {
@@ -880,7 +905,20 @@ Dugum *parse_tip(Parser *p) {
             return d;
         }
 
-        /* Basit tip (jenerik degil) */
+        /* Generic-arg yok ama NITELIKLI: dizi::Nokta -> DUGUM_TIP_KULLANICI
+         * (yol=YOL, tip_arg_sayi=0). DUGUM_TIP_BASIT yol tasiyamaz. */
+        if (nitelikli_yol) {
+            Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_KULLANICI,
+                                     satir, sutun);
+            if (d) {
+                d->veri.tip_kullanici.yol = nitelikli_yol;
+                d->veri.tip_kullanici.tip_arg = NULL;
+                d->veri.tip_kullanici.tip_arg_sayi = 0;
+            }
+            return d;
+        }
+
+        /* Basit tip (niteliksiz, jenerik degil) */
         Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_BASIT, satir, sutun);
         if (d) {
             d->veri.tip_basit.ad = ast_string_kopyala(p->arena, ad, ad_uz);

@@ -1,0 +1,20 @@
+// D dilim-1: nitelikli annotation ÇOKLU-TİP. Aynı dizi::Liste<T> hem tam64
+// hem tam32 — her biri kendi nitelikli annotation'ıyla (T'yi üretim oluştur'a
+// besler). Ayrık specialization @dizi.oluştur$i64/$i32, paylaşılan %Liste.
+// büyük=30+10=40, küçük=2 → 42.
+kullan dizi;
+
+işlev main() -> tam32 {
+    değişken sifir64: tam64 = 0;
+    değişken l: dizi::Liste<tam64> = dizi::oluştur(yetki_olustur(3, 3));
+    dizi::ekle(&l, yetki_olustur(3, 3), 30 olarak tam64);
+    dizi::ekle(&l, yetki_olustur(3, 3), 10 olarak tam64);
+    değişken büyük: tam64 = dizi::al(&l, 0, sifir64) + dizi::al(&l, 1, sifir64);
+
+    değişken sifir32: tam32 = 0;
+    değişken m: dizi::Liste<tam32> = dizi::oluştur(yetki_olustur(3, 3));
+    dizi::ekle(&m, yetki_olustur(3, 3), 2);
+    değişken küçük: tam32 = dizi::al(&m, 0, sifir32);
+
+    ver (büyük olarak tam32) + küçük;
+}
