@@ -5,6 +5,91 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-028 — String stdlib IV: değişkenli mini dil (string-anahtarlı sembol tablosu) + PROB: yapı-yerel codegen bug'ı (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** Self-hosting'in ad
+çözümü çekirdeği: değişkenli mini dil — atama + STRING-ANAHTARLI sembol tablosu
+(`test/ornekler/16_degiskenli_dil.kem`). `( DEĞİŞKEN '=' ifade ';' )* ifade`.
+Sembol tablosu = paralel `Dizi<metin>` (adlar) + `Dizi<tam32>` (değerler); arama
+`metin_esit` ile (byte-byte ad). Token adları `metin_kes(kaynak, i, 1)` ile
+çıkarılır (tek-harf değişken). `"x=6;y=7;x*y"` → 42.
+
+**Yeni doğrulanan yetenekler:** `Dizi<metin>` (ptr-eleman dizisi, string saklar),
+`metin_kes(start, **uzunluk**)` semantiği (DOĞRULANDI: start,length — bitiş değil),
+`harf_mi` ile identifier lexing, `metin_esit` ile string-key sözlük arama.
+
+**Doğrulama (adversarial, 8 senaryo):** `x=6;y=7;x*y`=42, `x=6;x*7`=42,
+`a=2;b=3;c=7;a*b*c`=42, `x=50;y=8;x-y`=42, `x=5;x=42;x`=42 (yeniden-atama/güncelle),
+`z=10;(z+4)*3`=42 (değişken+parantez), `40+2`=42, `x=21;x+x`=42. opt-verify PASS.
+test_llvm 225→**227**. 0 ASan. Derleyici dokunulmadı.
+
+**🔴 PROB (bu çalışma sırasında bulunan CİDDİ codegen bug'ı) — yapı-yerel
+bozulması:** İlk denemede token+sembol tablosu İKİ `yapı` (Tokenler + Semboller,
+Dizi alanlı) olarak paketlenmişti. ÇALIŞMADI. İzole edilen kök neden:
+> **Bir `yapı` yerel değişkeni inşa edildiğinde (`değişken u: U = U { f:
+> dizi_olustur(N), ... }`), önceden tanımlanmış BAŞKA bir `yapı` yerelinin
+> koleksiyon-alanı içeriği BOZULUYOR.** Minimal repro: `t: T` (Dizi alanlı)
+> oluştur+doldur (boyut 3), sonra `u: U` (yine `dizi_olustur` alan-init'li)
+> oluştur → `dizi_boyut(t.kind)` 3 yerine **6** okuyor.
+> - İkinci yapı KOLEKSİYONSUZ ise (`V { x: tam32 }`) → bozulmuyor (33 ✓).
+> - İkinci yapının inşası `dizi_olustur` çağırıyorsa → bozuyor (63 ✗).
+> IR yüzeysel doğru (alloca %T %0/%1, construct→%1, copy→%0); mekanizma
+> struct-by-value yerel kopya/alloca etkileşiminde, runtime tracing gerekiyor.
+> NOT: D-027 (15_agac_insa) İKİ yapı (Agac+Tokenler) kullanıp ÇALIŞIYOR —
+> tetikleyici spesifik (yapı-alan-okuma aynı fonksiyonda + dizi_olustur'lu 2.
+> yapı). Ayrı görev olarak fix'e havale edildi (spawn_task).
+
+**Workaround (shipped):** Yapı-paketleme yerine açık `Dizi` PARAMETRELERİ
+(D-024/D-026 deseni — kanıtlı). faktor/terim/ifade 6 param alır (kindler,
+degerler, adlar, imlec, s_ad, s_deg). Verbose ama sağlam; yerel Dizi'ler
+(ptr) yapı-yerel bug'ından etkilenmez.
+
+**Self-hosting durumu:** LEXER + PARSER + AST + EVAL + DEĞİŞKEN/SEMBOL — bir mini
+dilin tüm derleyici fazları KEMGU'da. Sıradaki: yapı-yerel bug fix (sonra struct
+bundling temizliği), çok-deyimli dil, uzun vade derleyici alt-kümesi.
+
+---
+
+## D-027 — Self-hosting CAPSTONE: tam derleyici hattı (lex→parse(AST inşa)→eval) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** Self-hosting'in eksik
+ORTA parçası. D-026 parser'ı değeri doğrudan hesaplıyordu; D-027 parser önce bir
+SOYUT SÖZDİZİM AĞACI (AST) İNŞA ediyor, sonra AYRI bir geçiş ağacı geziyor — gerçek
+bir derleyicinin yapısı (`test/ornekler/15_agac_insa.kem`). Tam hat KEMGU'da:
+**lex → parse(AST inşa) → eval(AST gez).**
+
+**AST temsili — İNDEKS-TABANLI ARENA:** düğümler paralel `Dizi<tam32>`'lerde
+(tur/deger/sol/sag), çocuklar İNDEKS ile gösterilir (pointer değil). Bu, KEMGU'nun
+KENDİ derleyicisinin arena+AST modelinin (ast.c) birebir KEMGU karşılığı —
+self-hosting'e en yakın yapı. Heap-tahsisli özyinelemeli çeşit (henüz yok)
+GEREKTİRMEZ; mevcut dizi intrinsic'leriyle (dizi_ekle=düğüm ayır, dizi_al=oku,
+dizi_yaz=imleç) tamamen ifade edilir. Arena append-only → indeksler kararlı.
+
+**Yeni doğrulanan kompozisyon yeteneği:** Diziler `yapı` içinde paketlenip
+&referansla aktarılır (`yapı Agac { tur: Dizi<tam32>; ... }`, `&Agac` param,
+`a.tur` field→dizi erişimi, struct construction'da `dizi_olustur()` field değeri).
+struct + koleksiyon kompozisyonu E2E çalışıyor (probe ile doğrulandı). İmleç + iki
+struct (Agac arena + Tokenler) → parser durumu 2 param.
+
+**Doğrulama (adversarial, 10 ifade — AST yolu üzerinden):** `2+4*10`=42,
+`2+3*4`=14 (öncelik), `(2+3)*4`=20, `2*(3+(4*5))`=46, `100-2*3-2`=92,
+`((100-16))/2`=42, `1+2*3+4*5+15`=42, `(((7)))`=7. opt-verify PASS. test_llvm
+223→**225**. 0 ASan. Derleyici dokunulmadı.
+
+**Self-hosting tablosu — 4 parça da KEMGU'da:**
+| Faz | Demo | Temsil |
+|-----|------|--------|
+| LEXER | D-024 | metin → token akışı (Dizi) |
+| PARSER | D-026/D-027 | token → öncelikli AST (arena) |
+| AST | D-027/D-022 | indeks-arena / özyinelemeli çeşit |
+| EVAL | D-027/D-022 | ağaç gezme |
+
+**Sıradaki:** string-key sembol tablosu (`metin_esit` + paralel ad/değer dizileri)
+→ değişkenli ifadeler; sonra çoklu-deyim + atama (mini dil); uzun vade gerçek
+derleyici alt-kümesinin KEMGU'da yeniden yazımı.
+
+---
+
 ## D-026 — String stdlib III: özyinelemeli-iniş öncelikli ayrıştırıcı (parser yarısı) (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-024 token akışı
