@@ -73,15 +73,22 @@ static char *stdin_oku(void) {
     return tampon;
 }
 
+/* Self-host diff-oracle formatı (D-035 ADIM-0 / lexer-M1):
+ *   <TIP>\t<satır>\t<sütün>\t<offset>\t<uzunluk>
+ * Eski format (`%-20s "%.*s"\t\t%d:%d`) ham lexeme'i gömüyordu — string
+ * literal'deki `"`/newline formatı bozardı + 20-char padding/çift-tab parse-zor.
+ * Yeni format: ham lexeme YOK (offset+uzunluk'tan kaynaktan kurtarılır) →
+ * kaçış-kopyalama riski sıfır; tek-tab → makine-parse-edilebilir; KEMGU-lexer
+ * birebir aynı satırı üretir → `diff` = otomatik doğruluk (sıfır-diff oracle). */
 static int mode_token(const char *kaynak, const char *dosya_adi) {
     Lexer l;
     lexer_baslat(&l, kaynak, dosya_adi);
     Token t;
     do {
         t = lexer_sonraki_token(&l);
-        printf("%-20s \"%.*s\"\t\t%d:%d\n",
-               token_tipi_adi(t.tip), t.uzunluk, t.baslangic,
-               t.satir, t.sutun);
+        long ofset = (long)(t.baslangic - kaynak);
+        printf("%s\t%d\t%d\t%ld\t%d\n",
+               token_tipi_adi(t.tip), t.satir, t.sutun, ofset, t.uzunluk);
     } while (t.tip != TOK_DOSYA_SONU);
     return 0;
 }

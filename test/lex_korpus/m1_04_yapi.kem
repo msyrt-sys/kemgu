@@ -1,0 +1,3 @@
+genel sabit liste = ( a , b , c ) ;
+sabit nokta = { x y z } ;
+sabit cagri = topla ( a , b ) + carp ( c , d ) ;

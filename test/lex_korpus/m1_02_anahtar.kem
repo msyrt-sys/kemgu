@@ -1,0 +1,5 @@
+sabit a = 1;
+iken (a) {
+  ver a;
+}
+kullan olarak tamam hata ve veya yetki delege genel tekkez imha kendin
