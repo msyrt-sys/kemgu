@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-036 — SELF-HOST lexer M1: ASCII çekirdek iskelet — C lexer'a karşı sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yeni `selfhost/lexer.kem` + korpus + harness; C tarafı yalnız
+`--token` dump formatı]:** Gerçek KEMGU lexer'ını KEMGU'da yazma fazının M1'i
+(ADIM-0/D-035 planı). Hedef: tam ikame (bootstrap) — Mehmet onayı. M1 = ASCII
+çekirdek, C lexer'a karşı SIFIR-DİFF.
+
+**M1 kapsamı (`selfhost/lexer.kem`):** ASCII identifier + **15 ASCII anahtar kelime**
+(iken/ve/veya/ver/delege/hata/imha/kendin/kullan/olarak/sabit/tamam/tekkez/yetki/
+genel) + ondalık tamsayı (`_` ayraç) + tek-karakter op (`+ - * / % =`) + ayraçlar
+(`( ) { } , ;`) + DOSYA_SONU. Satır/sütün/offset C `ilerle` desenine BİREBİR (\n →
+satır++/sütün=1; diğer → sütün++; bayt-tabanlı). (Türkçe keyword/UTF-8 → M2;
+çok-karakter op → M3; sayı varyant/literal → M4; yorum/raw → M5.)
+
+**Diff-oracle formatı (D-035 — Mehmet "C'nin daha iyisi" istedi):** C `--token`
+(ana.c) ESKİ `%-20s "%.*s"\t\t%d:%d` (ham lexeme gömülü → string-literal'de kırılır,
+padding+çift-tab parse-zor) YERİNE: `<TIP>\t<satır>\t<sütün>\t<offset>\t<uzunluk>`.
+Ham lexeme YOK (offset+uzunluk'tan kurtarılır) → kaçış-kopyalama riski SIFIR + tek-tab
+makine-parse-edilebilir. KEMGU-lexer birebir aynı satırı üretir → `diff` = otomatik
+doğruluk. Hiçbir test `--token`'a bağlı değil (test_lexer API-tabanlı, etkilenmez).
+
+**Teknik notlar:** `arg_al(1)`+`dosya_oku` ile dosya okuma (DOĞRULANDI: çalışır).
+`yaz_metin` builtin DEĞİL → string bayt-bayt `yaz_karakter` ile (`yaz_str`).
+`yaz_karakter` `karakter` ister → `yb(c)` = `c olarak karakter` cast helper'ı.
+metin_bayt işaretli ama M1 ASCII (<128) → sorun yok (Türkçe işaretlilik M2'de).
+
+**Doğrulama:** `make calistir_lexer_diff` (`test/lexer_diff_harness.sh`) — 5 ASCII
+korpus (`test/lex_korpus/m1_*.kem`: aritmetik, 15 keyword, sayı-ayraç, yapı-punct,
+identifier-kenar) → **5/5 SIFIR-DİFF**. test_lexer 103/103 (format değişikliği API'yi
+bozmadı). Prod 0 uyarı. selfhost/lexer.kem --check temiz.
+
+**Sıradaki (M2):** UTF-8 identifier (byte-byte 0xC3/C4/C5 + ikinci-bayt; metin_bayt
+İŞARETLİ → signed-karşılaştır) + 28 Türkçe anahtar kelime + bayt-tabanlı sütün
+doğrulama. Korpus Türkçe keyword'lerle genişler; M1 korpusları regresyon kalır.
+
+---
+
 ## D-034 — Self-hosting: mini dil V3 — FONKSİYONLAR (tanım+çağrı+özyineleme) → Turing-tam (saf KEMGU) (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-033 (kontrol akışı)
