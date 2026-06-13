@@ -59,14 +59,14 @@ işlev parola_to_anahtar(
     anahtar_govde: Dizi<sabitsüre<dtam8>>
 ) -> tam32 {
     değişken info: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat((0x4B olarak dtam8)),  // 'K'
-        sabitsüre_yarat((0x45 olarak dtam8)),  // 'E'
-        sabitsüre_yarat((0x4D olarak dtam8)),  // 'M'
-        sabitsüre_yarat((0x47 olarak dtam8)),  // 'G'
-        sabitsüre_yarat((0x55 olarak dtam8)),  // 'U'
-        sabitsüre_yarat((0x2D olarak dtam8)),  // '-'
-        sabitsüre_yarat((0x76 olarak dtam8)),  // 'v'
-        sabitsüre_yarat((0x31 olarak dtam8))   // '1'
+        sabitsüre_olustur((0x4B olarak dtam8)),  // 'K'
+        sabitsüre_olustur((0x45 olarak dtam8)),  // 'E'
+        sabitsüre_olustur((0x4D olarak dtam8)),  // 'M'
+        sabitsüre_olustur((0x47 olarak dtam8)),  // 'G'
+        sabitsüre_olustur((0x55 olarak dtam8)),  // 'U'
+        sabitsüre_olustur((0x2D olarak dtam8)),  // '-'
+        sabitsüre_olustur((0x76 olarak dtam8)),  // 'v'
+        sabitsüre_olustur((0x31 olarak dtam8))   // '1'
     ];
     // HKDF kullan (V1 stub; V2: gerçek HMAC-SHA256 chain)
     anahtar_turet(parola, parola_uzunluk, salt, 16, info, 8, anahtar_govde);
@@ -90,30 +90,30 @@ işlev dosya_sifrele(
     // 1. Parola -> 32-byte anahtar
     değişken s: dtam8 = 0;
     değişken anahtar_govde: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     parola_to_anahtar(parola, parola_uzunluk, salt, anahtar_govde);
 
     // 2. Anahtarı 8 x dtam32'ye pack et (KEMGU'da bayt -> kelime LE)
-    // V1: kısa-yol — direct sabitsüre_yarat (gerçek pack ileride)
+    // V1: kısa-yol — direct sabitsüre_olustur (gerçek pack ileride)
     değişken sifir32: dtam32 = 0;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32)
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32)
     ];
     // V2: anahtar_govde[0..3] -> key[0] LE pack, vb.
 
     // 3. AAD yok (boş)
-    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir32)];
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir32)];
 
     // 4. AEAD encrypt
     aead_chacha20_poly1305_sifrele(
@@ -141,26 +141,26 @@ işlev dosya_coz(
 ) -> sabitsüre<mantıksal> {
     değişken s: dtam8 = 0;
     değişken anahtar_govde: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     parola_to_anahtar(parola, parola_uzunluk, salt, anahtar_govde);
 
     değişken sifir32: dtam32 = 0;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32),
-        sabitsüre_yarat(sifir32), sabitsüre_yarat(sifir32)
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32),
+        sabitsüre_olustur(sifir32), sabitsüre_olustur(sifir32)
     ];
 
-    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir32)];
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir32)];
 
     // AEAD verify ve decrypt — tag mismatch ise sabitsüre<mantıksal> yanlış döner
     ver aead_chacha20_poly1305_dogrula(

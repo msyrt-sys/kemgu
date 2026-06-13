@@ -1470,16 +1470,16 @@ static void test_audit_nested_alan_atama(void) {
 }
 
 static void test_audit_linear_kullan_round_trip(void) {
-    /* Gap #4+#5: tekkez_yarat onceden TANIMSIZ sembol (link hatasi),
+    /* Gap #4+#5: tekkez_olustur onceden TANIMSIZ sembol (link hatasi),
      * kullan(e) sessiz 0 donerdi. Zero-overhead pass-through dogrula:
-     * tekkez_yarat(42) -> kullan(t) -> 42. Lineer muhasebe tip
+     * tekkez_olustur(42) -> kullan(t) -> 42. Lineer muhasebe tip
      * kontrolde (program --check'ten de gecer). */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(42); "
         "de\xc4\x9fi\xc5\x9fken v: tam32 = kullan(t); "
         "ver v; }");
-    test_sonuc("audit: tekkez_yarat -> kullan round-trip -> exit 42",
+    test_sonuc("audit: tekkez_olustur -> kullan round-trip -> exit 42",
                rc == 42);
 }
 
@@ -1575,7 +1575,7 @@ static void test_matris_e_tekkez_param_sinir(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev tuket(t: tekkez<tam32>) -> tam32 { ver kullan(t); } "
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(42); "
         "ver tuket(t); }");
     test_sonuc("matris-E: tekkez<T> param sinir round-trip -> exit 42",
                rc == 42);
@@ -1660,7 +1660,7 @@ static void test_matris_f_tekkez_esles_kolu(void) {
     int rc = derle_ve_calistir(
         "\xc3\xa7" "e\xc5\x9fit Yok { Bos } "
         "i\xc5\x9flev al() -> sonu\xc3\xa7<tekkez<tam32>, Yok> { "
-        "ver tamam(tekkez_yarat(42)); } "
+        "ver tamam(tekkez_olustur(42)); } "
         "i\xc5\x9flev main() -> tam32 { "
         "e\xc5\x9fle\xc5\x9f al() { "
         "tamam(t) => { ver kullan(t); } "
@@ -1675,7 +1675,7 @@ static void test_matris_f_capability_lineer_capraz(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
-        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(42); "
         "mmio_yaz32(y, 4096, 1); "
         "geri_al(y); "
         "ver kullan(t); }");
@@ -2146,7 +2146,7 @@ static void test_audit_linear_imha(void) {
     /* Gap #6: imha(e) onceden sessiz 0 + 'desteklenmiyor' yorumu. */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(5); "
         "imha(t); "
         "ver 42; }");
     test_sonuc("audit: imha(t) lineer dispose -> exit 42", rc == 42);

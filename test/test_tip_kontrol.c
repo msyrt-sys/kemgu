@@ -1584,7 +1584,7 @@ static void test_E003_tekkez_escape(void) {
     Arena *a = arena_olustur(0);
     int h = program_kontrol(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(42); "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(42); "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = t olarak tam32; "
         "ver 0; }",
         a);
@@ -1596,7 +1596,7 @@ static void test_E003_tekkez_escape_metin(void) {
     Arena *a = arena_olustur(0);
     int h = program_kontrol(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t = tekkez_yarat(\"hi\"); "
+        "de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(\"hi\"); "
         "de\xc4\x9fi\xc5\x9fken s: metin = t olarak metin; "
         "ver 0; }",
         a);
@@ -2179,7 +2179,7 @@ static void test_asm_tekkez_girdi_as002(void) {
     /* C.1 lineer kara kutu: tekkez girdi DOGRUDAN gecemez */
     int h = program_kontrol(
         "i\xc5\x9flev f() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_yarat(5); "
+        "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(5); "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
         "mimari: x86_64 "
         "\xc5\x9f" "ablon: r#\"nop\"# "

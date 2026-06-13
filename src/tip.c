@@ -196,7 +196,7 @@ int tip_sabitsure_uyumlu_mu(const TipBilgisi *kaynak, const TipBilgisi *hedef) {
 
     /* sabitsüre<T> → T (CT003 leak) */
     if (k_ct && !h_ct) return 0;
-    /* T → sabitsüre<T>: V1'de explicit sabitsüre_yarat şart — caller'da
+    /* T → sabitsüre<T>: V1'de explicit sabitsüre_olustur şart — caller'da
      * tip_esit ile yakalanır (uyumsuz). Burada normalde uyumsuz dönmeliydik
      * ama bidirectional inference için 1 dönüp tip_esit'e bırakacağız. */
     return 1;

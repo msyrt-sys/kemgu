@@ -161,7 +161,7 @@ int tip_sabitsure_yetenekli_mi(const TipBilgisi *t);
 /* Bir T → T' ifadesi/atamasında: hedef T' beklenirken kaynak T sabitsüre ise
  * implicit downgrade ihlali. Helper: 'kaynak'tan 'hedef'e otomatik geçirilebilir mi?
  * - Kaynak ve hedef ikisi de sabitsüre: tip_esit kullan.
- * - Kaynak T, hedef sabitsüre<T>: V1'de explicit sabitsüre_yarat zorunlu, 0 doner.
+ * - Kaynak T, hedef sabitsüre<T>: V1'de explicit sabitsüre_olustur zorunlu, 0 doner.
  * - Kaynak sabitsüre<T>, hedef T: HER ZAMAN 0 (CT003 leak).
  * - İkisi de normal: tip_esit.
  * Bu helper return:

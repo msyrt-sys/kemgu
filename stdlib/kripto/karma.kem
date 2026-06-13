@@ -68,7 +68,7 @@ işlev _karma_sigma1_low(x: sabitsüre<dtam32>) -> sabitsüre<dtam32> {
 işlev _karma_ch(x: sabitsüre<dtam32>, y: sabitsüre<dtam32>, z: sabitsüre<dtam32>) -> sabitsüre<dtam32> {
     // ~x = x ^ 0xFFFFFFFF — sabitsüre üzerinde bitwise NOT yok, XOR ile.
     değişken hepsi: dtam32 = 4294967295;
-    değişken not_x: sabitsüre<dtam32> = x ^ sabitsüre_yarat(hepsi);
+    değişken not_x: sabitsüre<dtam32> = x ^ sabitsüre_olustur(hepsi);
     ver (x & y) ^ (not_x & z);
 }
 
@@ -132,37 +132,37 @@ işlev sha256_blok_sikistir(
 ) -> tam32 {
     // Message schedule W[64] inşa et
     değişken W: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
 
     // İlk 16 kelime blok'tan kopyalanır (W[0..15] = blok_w[0..15])
@@ -237,14 +237,14 @@ işlev sha256_blok_sikistir(
 işlev blake3_init() -> Dizi<sabitsüre<dtam32>> {
     // Stub: 8 başlangıç state'i (BLAKE3 IV — SHA-256 H0 ile aynı)
     ver [
-        sabitsüre_yarat((0x6A09E667 olarak dtam32)),
-        sabitsüre_yarat((0xBB67AE85 olarak dtam32)),
-        sabitsüre_yarat((0x3C6EF372 olarak dtam32)),
-        sabitsüre_yarat((0xA54FF53A olarak dtam32)),
-        sabitsüre_yarat((0x510E527F olarak dtam32)),
-        sabitsüre_yarat((0x9B05688C olarak dtam32)),
-        sabitsüre_yarat((0x1F83D9AB olarak dtam32)),
-        sabitsüre_yarat((0x5BE0CD19 olarak dtam32))
+        sabitsüre_olustur((0x6A09E667 olarak dtam32)),
+        sabitsüre_olustur((0xBB67AE85 olarak dtam32)),
+        sabitsüre_olustur((0x3C6EF372 olarak dtam32)),
+        sabitsüre_olustur((0xA54FF53A olarak dtam32)),
+        sabitsüre_olustur((0x510E527F olarak dtam32)),
+        sabitsüre_olustur((0x9B05688C olarak dtam32)),
+        sabitsüre_olustur((0x1F83D9AB olarak dtam32)),
+        sabitsüre_olustur((0x5BE0CD19 olarak dtam32))
     ];
 }
 
@@ -266,8 +266,8 @@ işlev hmac_pad_uret(
     değişken opad: dtam8 = 0x5C;
     değişken i: tam32 = 0;
     iken i < anahtar_uzunluk {
-        inner[i] = anahtar[i] ^ sabitsüre_yarat(ipad);
-        outer[i] = anahtar[i] ^ sabitsüre_yarat(opad);
+        inner[i] = anahtar[i] ^ sabitsüre_olustur(ipad);
+        outer[i] = anahtar[i] ^ sabitsüre_olustur(opad);
         i = i + 1;
     }
     ver 0;
