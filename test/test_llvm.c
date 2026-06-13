@@ -358,6 +358,22 @@ static void test_metin_tokenizer_calistir(void) {
                rc == 42);
 }
 
+static void test_token_akisi_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/13_token_akisi.kem");
+    test_sonuc("token akisi: opt -passes=verify PASS", ok);
+}
+
+static void test_token_akisi_calistir(void) {
+    /* SELF-HOSTING mimarisi: İKİ FAZLI lexer → token akışı → değerlendirici.
+     * metin_bayt ile lexle() token'ları İKİ PARALEL Dizi<tam32>'ye (kind+değer)
+     * doldurur; diziler fonksiyonlara REFERANSLA (ptr) aktarılır; degerlendir()
+     * akışı soldan sağa hesaplar. string + koleksiyon stdlib birlikte.
+     * "2*3+36" → ((2*3)+36) = 42. (8 ayrı ifadeyle adversarial doğrulandı.) */
+    int rc = derle_dosya_ve_calistir("test/ornekler/13_token_akisi.kem");
+    test_sonuc("Token akisi (lexer->Dizi<tam32>->eval, iki faz) -> exit 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2534,6 +2550,8 @@ int main(void) {
     test_metin_bayt_calistir();
     test_metin_esit_calistir();
     test_metin_tokenizer_calistir();
+    test_token_akisi_verify();
+    test_token_akisi_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

@@ -51,6 +51,43 @@ adım. Sonra: gerçek lexer → parser (self-hosting derleyici çekirdeği).
 
 ---
 
+## D-024 — String stdlib II: iki fazlı lexer → token akışı → değerlendirici (saf KEMGU) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-023'ün doğal devamı
+(Mehmet: "string/**koleksiyon** stdlib"). Mevcut KdlDizi koleksiyonu (`dizi_olustur/
+ekle/al/boyut`) + D-023 metin primitifleri birleştirilerek self-hosting'in GERÇEK
+mimarisi gösterildi: metin önce TOKEN AKIŞINA çevrilir (lexer), sonra AYRI bir geçiş
+bu akışı değerlendirir (`test/ornekler/13_token_akisi.kem`).
+
+**Önce paralel "Harita" workflow'u:** KdlDizi yüzeyi (intrinsic'ler, element-tip
+çıkarsama, runtime, kanıtlı kalıplar, riskler) 5 paralel okuyucuyla eksiksiz
+haritalandı (ultracode). Çıkan iki kritik gerçek E2E probe ile doğrulandı:
+- **Proven kalıp:** `dizi_olustur → iken dizi_ekle → iken dizi_al` toplama (15 ✓).
+- **YENİ doğrulanan yetenek:** `Dizi<tam32>` FONKSİYON PARAMETRESİ olarak çalışır
+  (4×10+2=42 ✓). Eski CLAUDE.md notu "dizi param yok" STATİK dizi içindi; dinamik
+  Dizi = ptr olduğundan sorunsuz aktarılır. İki fazlı mimariyi mümkün kılar.
+
+**Tasarım:** Token = iki PARALEL `Dizi<tam32>` (kindler + degerler). Tür kodları
+0=SAYI/1=ARTI/2=CARPI/3=EKSI. `lexle(metin, kindler, degerler)` bayt-bayt tarar,
+sayıları biriktirir, operatörleri token'lar (diziler referansla aktarılır).
+`degerlendir(kindler, degerler)` akışı soldan sağa hesaplar. Token kuralı:
+SAYI (op SAYI)*.
+
+**Doğrulama (adversarial):** 8 ayrı ifadeyle birden — `2*3+36`=42, `7*6`=42,
+`100-58`=42, `2*3*7`=42, `50-3-5`=42, `1+2+3`=6, `9`=9, `10*10-58`=42. Çok-basamaklı
+sayı, üç operatör, tek sayı, değişken token sayısı — hepsi doğru (şanslı 42 değil).
+opt -passes=verify PASS. test_llvm 218→**220** ([143] verify + [144] run).
+0 ASan. Derleyici dokunulmadı → diğer suite'ler etkilenmez.
+
+**Tuzak (kayda değer):** `uygula` bir ANAHTAR KELİME (trait impl) — fonksiyon adı
+olamaz; `op_uygula` yapıldı. (35 keyword listesi: işlev adlarında kaçınılmalı.)
+
+**Sıradaki:** gerçek lexer→parser (parantez/öncelik), veya token'ı (kind,value)
+çift olarak tek dizide (struct/çeşit element) — şimdilik paralel-dizi pragmatik.
+String-key sembol tablosu (metin_esit ile) self-hosting derleyici için gerekecek.
+
+---
+
 ## D-001 [YÜKSEK] — Modül ad-mangling şeması: `@<modul>.<ad>` (2026-06-11)
 
 **Karar:** Modül üyesi işlevler IR'da `@modul.ad` olarak emit edilir; iç içe modül
