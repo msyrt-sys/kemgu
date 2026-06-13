@@ -66,7 +66,7 @@ Data race: iki thread aynı belleğe eşzamanlı erişir, en az biri yazma.
 | R-LIT, R-YEREL, R-VER, R-İTERASYON, R-KOŞUL, R-GÖMME, R-BÖLME | Katman 1 | Bölge atama aksiyomları |
 | R-YAKALAMA, R-YAKALAMA-YEREL, R-YAKALAMA-ESCAPE, R-YAKALAMA-THREAD | Katman 1 | Closure yakalama bölge terfi |
 | S1 (Tekil Sahiplik) | Katman 2 | `\|{t : sahip(ρ,t,t_z)}\| = 1` |
-| S2 (Başlangıç Sahipliği) | Katman 2 | Yaratan thread sahiptir |
+| S2 (Başlangıç Sahipliği) | Katman 2 | Oluşturan thread sahiptir |
 | S3 (Atomik Transfer) | Katman 2 | Transfer tek t_z adımında olur |
 | R-GÖREV | Katman 2 | `görev_başlat(c)` → yakalananların sahibi değişir |
 | R-BİRLEŞTİR | Katman 2 | `g.birleştir()` → dönüş değeri ρ_çağıran'a terfi |

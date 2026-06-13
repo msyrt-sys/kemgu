@@ -786,7 +786,7 @@ DRF-L lemmaların onarım sonrası 6-7'si Linear+Region yeni temelde; L6 V2'de t
 
 Onarım bittikten sonra:
 - **V2.1 Cross-Step HB**: yeni temel üzerinde, daha düzgün argument (~200 satır azalma)
-- **V2.2 T2/T3**: bölge lifecycle, ConfigTyped'a `yaratilmis_bolgeler` alanı eklenir (~250 satır)
+- **V2.2 T2/T3**: bölge lifecycle, ConfigTyped'a `olusturulmus_bolgeler` alanı eklenir (~250 satır)
 - **V2.3 BET**: yeni katman RealtimeOK (~350 satır)
 - **V2.4 NI**: yeni katman SabitsureOK + two-execution (~400 satır)
 - **V2.5 Cross-Step DRF tam**: V2.1'in tamamlanması (~200 satır)

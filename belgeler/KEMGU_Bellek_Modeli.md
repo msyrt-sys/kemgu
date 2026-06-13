@@ -127,7 +127,7 @@ S1 (Tekil Sahiplik):
     |{t ∈ Threads : sahip(ρ, t, t_z) = doğru}| = 1
 
 S2 (Başlangıç Sahipliği):
-  bölge ρ, thread t içinde yaratıldı ⟹ sahip(ρ, t, t_yaratım) = doğru
+  bölge ρ, thread t içinde oluşturuldu ⟹ sahip(ρ, t, t_oluşturma) = doğru
 
 S3 (Atomik Transfer):
   sahip(ρ, t₁, t_z) = doğru ∧ transfer(ρ, t₁, t₂, t_z)
@@ -258,7 +258,7 @@ iterasyon_başı(d) → yeni(ρ_iterasyon(d))
   *(V1 bundled mekanize 2026-05-18: `proofs/drf-v2-lean/Kemgu/MemSafety/Theorems.lean`*
   *— `t1_bellek_guvenligi_tam`; sAtama h_owner garantisi ile UAF prevention.*
   *V2 T2/T3 + lifecycle: bkz. `KEMGU_Metateorem_V3.md`.)*
-**Teorem 2 — Bölge Güvenliği:** Her bölge tam 1 kez yaratılır, 1 kez serbest bırakılır
+**Teorem 2 — Bölge Güvenliği:** Her bölge tam 1 kez oluşturulur, 1 kez serbest bırakılır
 **Teorem 3 — Sızıntısızlık:** Erişilemeyen bölge sonlu sürede serbest bırakılır
 **Teorem 4 — Data Race Freedom:** Güvenli alt kümede data race imkansız
 **Teorem 5 — Güvensiz Sınır Bütünlüğü:** Ham pointer güvensiz bloktan çıkamaz

@@ -47,7 +47,7 @@ güncel, Türkçe commit. Politika: ASCII identifier, Türkçe yorum, mathlib ba
 ## F1 — Modül yeniden katmanlama (davranış değişikliği yok)
 
 **Hedef:** Judgment tanımları ile meta-teoremleri ayır; placeholder çiftlenmesini kaldır;
-`typed_no_fault`'un ihtiyaç duyduğu Full-korunum lemmasının yaşayabileceği modülü yarat.
+`typed_no_fault`'un ihtiyaç duyduğu Full-korunum lemmasının yaşayabileceği modülü oluştur.
 
 **Yeni DAG:**
 ```

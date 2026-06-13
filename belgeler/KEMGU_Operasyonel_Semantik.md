@@ -49,9 +49,9 @@ e  ::= x | n | f(e⃗) | e.l | e[e] | e₁ op e₂ | -e | !e
      | eğer e { s⃗ } değilse { s⃗ }
      | eşleş e { desen => e, ... }
      | kullan(e) | imha(e)                       -- Linear V1 consumer
-     | tekkez_yarat(e)                            -- Linear V1 producer
+     | tekkez_olustur(e)                            -- Linear V1 producer
      | yetki_olustur(kt, izin) | delege(e,e) | geri_al(e)   -- Capability V1
-     | sabitsüre_yarat(e) | ifşa(e)              -- Sabitsüre V1
+     | sabitsüre_olustur(e) | ifşa(e)              -- Sabitsüre V1
      | görev_başlat(e) | birleştir(e)            -- Concurrency (V2 syntax)
      | gönder(g,e) | al(a) | dondur(e)           -- Concurrency
 
