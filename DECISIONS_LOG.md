@@ -471,3 +471,58 @@ kaldırır (üretim imzası geri).
 Fikstürler: test/moduller/{dizi_nitelikli_param,sekil,sekil_kullan}.kem + dizi_{kullan,
 coklu,yapi}.kem nitelikli annotation'a güncellendi. kütüphane/dizi.kem oluştur+üretim imza.
 parser 107, tip_kontrol 174, drivers (uart_vtable 21) düşmedi. 0 ASan. stdlib --check yeşil.
+
+---
+
+## D-016 — D2 (legacy flatten kaldırma): ADIM-0 araştırma → DUR-SOR (kod DEĞİŞMEDİ) (2026-06-13)
+
+**Görev:** Çok-segment `kullan a::b::c;` legacy flatten'i kaldır; drivers/virtio +
+test/crossfile bağımlılarını D1 (nitelikli tip) yoluna taşı. **SONUÇ: yapısal +
+D1-aşan blocker → DUR-SOR. Hiçbir kod/test/fikstür değişmedi (baseline 205 korundu).**
+
+**Legacy flatten ne yapıyor (file:line):**
+- Parser: `src/parser.c:816-926` — `kullan a::b::c;` → `segment_sayi>1` (seçili/alias yok).
+- Loader: `src/ana.c:181-206` — legacy formları ATLAR (`kullan_yeni_bicim` filtresi).
+- Tip kontrol: `src/tip_kontrol.c:4807-4885` (DUGUM_KULLAN legacy) — `a::b::c`→`a/b/c.kem`
+  dosyasını yükler, `tip_kontrol_program`'ı RECURSIVE çağırır → yüklenen dosyanın
+  top-level bildirimlerini İÇE-AKTARAN scope'a NİTELİKSİZ kaydeder (= flatten).
+- Codegen: `src/llvm.c:4138-4199` — dosyayı yükler, top-level üyeleri programa DÜZ
+  (plain-ad) splice eder. **Constants top-level olduğu için codegen INLINE eder.**
+
+**Bağımlı listesi (tam):**
+- GATED (test_llvm suite): `test/crossfile/{transitif,lib_islem,sonuc_cagri,lib_sayi,
+  lib_sonuc}.kem` — yalnız FONKSİYON (`dışa işlev uc_kat/iki_kat/bol`), struct/sabit yok.
+- GATESİZ (suite'te değil): `drivers/virtio/*.kem` (6) + `tests/drivers/virtio/*.kem` (9)
+  — `sabit` CONSTANTS (constants.kem ~her dosyada) + `işlev` + struct. Çoğu private
+  (`işlev`/`sabit`, `genel` değil); flatten görünürlüğü yok sayar.
+
+**PROBE sonuçları (go/no-go):**
+- ✅ Struct selective import: `kullan mod::{Nokta}; Nokta{x,y}; n.x` → exit 42. Niteliksiz
+  construct + alan erişimi ÇALIŞIR.
+- ❌ **Constant cross-file codegen GAP (KRİTİK blocker):** `kullan konst::{DEGER}` VE
+  `konst::DEGER` — `--check` GEÇER ama E2E **exit 0** (değer değil). Cross-file `sabit`
+  codegen'de KAYITSIZ (D-011 belgeli: "modül-içi sabit codegen'de kayıtsız"). Legacy
+  flatten çalışıyor ÇÜNKÜ constants'ı top-level splice ediyor (codegen inline).
+  Yeni modül sistemi modül-içi sayar → emit etmez → 0.
+- ❌ `dışa işlev` + selective import → T041 ("'genel' değil"). `dışa` ≠ `genel`; migrasyon
+  `dışa`→`genel` görünürlük değişikliği ister (yüzey-sözdizimi değil).
+- virtio entry testleri ZATEN KIRIK: `virtio_blk_init_test` (11 hata), `virtio_blk_oku_test`
+  (14 hata) bugün `--check` GEÇMİYOR (aktif/eksik virtio track). Korunacak yeşil yok.
+
+**DUR-SOR gerekçesi (brief koşulları karşılandı):**
+1. **D1'i AŞAR:** virtio constants.kem'i her yerde kullanır; cross-file `sabit` codegen
+   yok → migrasyon constants'ı bozar (0). Yeni codegen özelliği gerekir (yüzey-sözdizimi
+   DEĞİL, kapsam dışı).
+2. **YAPISAL iş:** `genel` görünürlük değişikliği onlarca `sabit`/`işlev`'de; virtio
+   zaten kırık (baseline yok). Minimal selective-import dokunuşu değil.
+3. Flatten kaldırma TÜM bağımlıların migrasyonunu ister; virtio migrate edilemiyor →
+   kaldırma BLOKE. Kısmi (yalnız crossfile) migrasyon kaldırmayı sağlamaz + gated
+   fikstürleri risksiz değiştirmez → yapılmadı.
+
+**D2 için ön-koşul (sonraki adım):** (a) cross-file `sabit` codegen (modül sabitlerini
+kaydet/inline) — ayrı dilim; (b) virtio + crossfile `dışa`→`genel` + selective-import
+migrasyonu; SONRA flatten kaldırılabilir. Alternatif: virtio track'i ayrı ele al.
+
+**Doğrulama:** Kod/test DEĞİŞMEDİ. test_llvm 205, parser 107, tip_kontrol 174, drivers
+(uart_vtable 21/uart_16550 13) korundu. ELLEME (proofs/, bölge/escape/wcet/lsp, D1
+faz-reorder, per-modül namespacing) DOKUNULMADI.
