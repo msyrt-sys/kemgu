@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-030 [YÜKSEK] — Kök-neden fix: dizi_olustur element_byte heap-buffer-overflow (ptr/tam64 dizi) (2026-06-13)
+
+**Bağlam:** D-029'da "kapsam dışı, pre-existing" diye bırakılan `m*n*p+18`=18 bug'ı.
+Runtime trace + **AddressSanitizer** ile kök-neden bulundu — CİDDİ bir bellek
+güvenliği (heap-buffer-overflow) bug'ı.
+
+**KÖK-NEDEN (ASan KANITI):**
+```
+AddressSanitizer: heap-buffer-overflow WRITE size 8 in kdl_dizi_ekle_ptr
+  <- token_ekle <- lexle ;  allocated by kdl_dizi_kapasite_ayarla <- calistir
+```
+`dizi_olustur` codegen'i element_byte'ı **SABİT 4** emit ediyordu
+(`kdl_dizi_olustur(i32 4)`). `dizi_olustur(N)` → `kapasite_ayarla(N)` →
+buffer = N×4 byte. Ama `Dizi<metin>` (8-byte ptr eleman) `dizi_ekle_ptr` ile
+8-byte yazıyor → N×4 buffer yalnız **N/2 ptr** tutar; (N/2+1). yazım (boyut hâlâ
+< kapasite olduğu için realloc tetiklenmeden) HEAP'i taşırıyor. Token-adı dizisi
+`dizi_olustur(32)` → 128 byte → 16 ptr; 17. token (`t.ad[16]`) taşma → komşu
+bellek + sonraki metin_kes buffer'ları bozuluyor → değişken adı GARBAGE →
+`sembol_ara` bulamıyor → 0 → `m*n*p`=0. Non-deterministik (ASLR'ye göre değişen
+garbage) — D-029'da kafa karıştıran buydu.
+
+**Neden 17 token (m*n*p) çalışıp 19 (m*n*p+18) çökmüştü:** ikisi de `t.ad[16]`'ı
+taşırır ama +18 fazladan 2 taşma yazımı (17,18) yapıp "p" adının buffer'ını
+deterministik olarak eziyordu; 17-token tek taşma çoğu zaman zararsız komşuyu
+bozuyordu (şanslı 24).
+
+**Fix [YÜKSEK]:** dizi_olustur element_byte'ı eleman tipinden hesapla:
+ptr/i64 → 8, i8/i16/i32 → 4. Kaynak: `g->beklenen_tip` (değişken annotasyonu
+`Dizi<T>`). Bilinmiyorsa (struct-alan inşası — yapi_olustur_uret per-alan
+beklenen_tip set etmez) **8 = güvenli max** (i32'yi 2x reserve eder ama taşma
+İMKANSIZ; tüm eleman tipleri ≤8 byte). kapasite_ayarla N×8 ayırır → ptr/tam64
+güvenli; sonraki dizi_ekle realloc'ları zaten sizeof ile doğru.
+
+**Etki:** Bu bug `Dizi<metin>`/`Dizi<&T>`/`Dizi<tam64>` >N/2 eleman tutan HER
+programı sessizce bozuyordu (yalnız demo değil). Bellek güvenliği — KEMGU'nun
+çekirdek hedefi.
+
+**Repro test (kırmızı→yeşil):** `test/snapshots/dizi_metin_kapasite.kem` — 20
+metin (>16) ekle+oku = 42. Fix öncesi ASan heap-overflow + crash (127); sonrası
+ASan TEMİZ + 42. test_llvm [150]. 16_degiskenli_dil.kem ana ifadesi
+`m=2;n=3;p=4;m*n*p+18` (19 token, >16) yapıldı — gerçek demo bağlamında regresyon
+koruması. Adversarial: 4-değişken zincir (`m*n*p*q-78`), uzun ifadeler hepsi 42.
+
+**Doğrulama:** test_llvm +2 ([150] kapasite, demo güncel). 22 suite + 0 ASan +
+prod 0 uyarı + stdlib 12. (D-029'daki "kapsam dışı pre-existing" notu → ÇÖZÜLDÜ.)
+
+---
+
 ## D-029 [YÜKSEK] — Kök-neden fix: yapı alan-adı çakışması codegen bug'ı (D-028 PROB ÇÖZÜLDÜ) (2026-06-13)
 
 **Bağlam:** D-028 PROB'u "dizi_olustur-alan-init'li 2. yapı, 1. yapının koleksiyon
