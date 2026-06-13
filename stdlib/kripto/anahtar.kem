@@ -57,7 +57,7 @@ yapı HKDF_Salt {
 //   - sabitsüre: yan kanal yok
 //   - tekkez: kopya yok, ileri scope'a sızmaz, scope sonunda L001 garantisi
 
-işlev anahtar_yarat(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar256> {
+işlev anahtar_olustur(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar256> {
     değişken a: SimetrikAnahtar256 = SimetrikAnahtar256 {
         bayt0: govde[0],
         bayt1: govde[1],
@@ -228,7 +228,7 @@ işlev anahtar_govdesi_esit(
 // sonra L002 garantili erişim yok.
 //
 // İskelet — gerçek OTP kullanımı:
-//   1. anahtar_yarat ile rastgele 32-bayt
+//   1. anahtar_olustur ile rastgele 32-bayt
 //   2. otp_sifrele(metin, anahtar) — `kullan(anahtar)` ile içeride tüketilir
 //   3. anahtar = artık erişilemez (L002)
 

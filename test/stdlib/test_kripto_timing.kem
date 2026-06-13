@@ -107,7 +107,7 @@ işlev test_t5_linear_ct_anahtar() -> tam32 {
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
-    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     // Yalnız tek-kullanım: imha veya kullan
     ver anahtar_imha(a);
 }

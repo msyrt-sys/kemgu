@@ -1,5 +1,5 @@
 // C faz-2 fikstur: capraz-modul generic STRUCT (Liste<T> + transitif büyü<T>).
-// Minimal bölge-tabanlı büyüyen kapsayıcı: yarat / büyü / ekle / al.
+// Minimal bölge-tabanlı büyüyen kapsayıcı: olustur / büyü / ekle / al.
 //  - Witness-param INFERENCE (explicit yazılı tip-arg parser'da yok; D işi).
 //  - bölge/yetki built-in'leri specialized gövdede owning-modül ("kap")
 //    bağlamında çalışır.
@@ -12,7 +12,7 @@ yapı Liste<T> {
     kapasite: tam64;
 }
 
-genel işlev yarat<T>(taban: T) -> Liste<T> {
+genel işlev olustur<T>(taban: T) -> Liste<T> {
     değişken böl: yetki<Bellek> = yetki_olustur(3, 3);
     değişken tampon: *T = bölge_al(böl, 0);
     geri_al(böl);
