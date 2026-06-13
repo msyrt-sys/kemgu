@@ -392,6 +392,16 @@ static void test_oncelikli_ayristirici_calistir(void) {
                " -> exit 42", rc == 42);
 }
 
+static void test_dizi_metin_kapasite(void) {
+    /* D-030 kök-neden fix: dizi_olustur element_byte sabit 4 idi; Dizi<metin>
+     * (8-byte ptr) için kapasite_ayarla yarı boyut reserve edip dizi_ekle_ptr'de
+     * HEAP-BUFFER-OVERFLOW (ASan onaylı). 20 metin (>16) ekle + oku → 20*2+2=42.
+     * Fix öncesi crash/garbage; sonrası 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/dizi_metin_kapasite.kem");
+    test_sonuc("Dizi<metin> kapasite (element_byte=8, 20 ptr, overflow yok) -> 42",
+               rc == 42);
+}
+
 static void test_yapi_alan_cakismasi(void) {
     /* D-029 kök-neden fix: iki yapı AYNI alan adını paylaşınca (T.ad + U.ad),
      * &T parametresi üzerinde `t.ad` erişimi codegen'de YANLIŞ yapıya (global
@@ -2630,6 +2640,7 @@ int main(void) {
     test_oncelikli_ayristirici_calistir();
     test_agac_insa_verify();
     test_agac_insa_calistir();
+    test_dizi_metin_kapasite();
     test_yapi_alan_cakismasi();
     test_degiskenli_dil_verify();
     test_degiskenli_dil_calistir();

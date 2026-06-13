@@ -1,0 +1,12 @@
+// D-030 repro: Dizi<metin> (ptr eleman) dizi_olustur(32) ile reserve edilince
+// element_byte=4 (sabit) → 32*4=128 byte = yalnız 16 ptr → 17. ekleme HEAP
+// OVERFLOW. 20 metin ekle, hepsini oku: bozulma olmadan 20*2+2 = 42 olmalı.
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = dizi_olustur(32);
+    değişken i: tam32 = 0;
+    iken i < 20 { dizi_ekle(d, "ab"); i = i + 1; }
+    değişken t: tam32 = 0;
+    i = 0;
+    iken i < dizi_boyut(d) { t = t + metin_uzunluk(dizi_al(d, i)); i = i + 1; }
+    ver t + 2;
+}

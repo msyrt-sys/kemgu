@@ -3010,14 +3010,34 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * — element tipi arg/return inference ile belirlenir. */
             else if (cagri_adi_uz == 12 &&
                      memcmp(cagri_adi, "dizi_olustur", 12) == 0) {
-                /* dizi_olustur(N) -> ptr (KdlDizi*). Adim 6: eleman_byte
-                 * context'ten (beklenen ptr ise default 4; gercek T size
-                 * gelecek surumde annotation'dan). v1 default 4 (tam32). */
+                /* dizi_olustur(N) -> ptr (KdlDizi*). D-030 fix: element_byte
+                 * ptr/i64 elemanlar icin 8 OLMALI. Sabit 4 degeri,
+                 * kapasite_ayarla'da ptr/tam64 dizisini YARI boyutta reserve
+                 * edip dizi_ekle_ptr/tam64'te (boyut<kapasite iken) HEAP-BUFFER-
+                 * OVERFLOW'a yol aciyordu (ASan: kdl_dizi_ekle_ptr container
+                 * overflow; Dizi<metin> 32 reserve -> yalniz 16 ptr). Eleman
+                 * tipi degisken annotasyonundan (g->beklenen_tip = Dizi<T>);
+                 * bilinmiyorsa (struct-alan inşası vb.) 8 = guvenli max (i32'yi
+                 * 2x reserve eder ama tasma imkansiz). */
+                int eb = 8;
+                {
+                    const Dugum *bt = g->beklenen_tip;
+                    if (bt && bt->tip == DUGUM_TIP_REFERANS)
+                        bt = bt->veri.tip_referans.hedef_tip;
+                    if (bt && bt->tip == DUGUM_TIP_DIZI) {
+                        const char *eir = ast_tip_to_ir(g,
+                            bt->veri.tip_dizi.eleman_tip);
+                        if (eir && strcmp(eir, "ptr") != 0 &&
+                            strcmp(eir, "i64") != 0) {
+                            eb = 4;  /* i8/i16/i32 -> 4 byte */
+                        }
+                    }
+                }
                 int rr = yeni_reg(g);
                 int kap = args[0].reg;
                 int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
                 fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(i32 4)\n", rr);
+                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n", rr, eb);
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
