@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-027 — Self-hosting CAPSTONE: tam derleyici hattı (lex→parse(AST inşa)→eval) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** Self-hosting'in eksik
+ORTA parçası. D-026 parser'ı değeri doğrudan hesaplıyordu; D-027 parser önce bir
+SOYUT SÖZDİZİM AĞACI (AST) İNŞA ediyor, sonra AYRI bir geçiş ağacı geziyor — gerçek
+bir derleyicinin yapısı (`test/ornekler/15_agac_insa.kem`). Tam hat KEMGU'da:
+**lex → parse(AST inşa) → eval(AST gez).**
+
+**AST temsili — İNDEKS-TABANLI ARENA:** düğümler paralel `Dizi<tam32>`'lerde
+(tur/deger/sol/sag), çocuklar İNDEKS ile gösterilir (pointer değil). Bu, KEMGU'nun
+KENDİ derleyicisinin arena+AST modelinin (ast.c) birebir KEMGU karşılığı —
+self-hosting'e en yakın yapı. Heap-tahsisli özyinelemeli çeşit (henüz yok)
+GEREKTİRMEZ; mevcut dizi intrinsic'leriyle (dizi_ekle=düğüm ayır, dizi_al=oku,
+dizi_yaz=imleç) tamamen ifade edilir. Arena append-only → indeksler kararlı.
+
+**Yeni doğrulanan kompozisyon yeteneği:** Diziler `yapı` içinde paketlenip
+&referansla aktarılır (`yapı Agac { tur: Dizi<tam32>; ... }`, `&Agac` param,
+`a.tur` field→dizi erişimi, struct construction'da `dizi_olustur()` field değeri).
+struct + koleksiyon kompozisyonu E2E çalışıyor (probe ile doğrulandı). İmleç + iki
+struct (Agac arena + Tokenler) → parser durumu 2 param.
+
+**Doğrulama (adversarial, 10 ifade — AST yolu üzerinden):** `2+4*10`=42,
+`2+3*4`=14 (öncelik), `(2+3)*4`=20, `2*(3+(4*5))`=46, `100-2*3-2`=92,
+`((100-16))/2`=42, `1+2*3+4*5+15`=42, `(((7)))`=7. opt-verify PASS. test_llvm
+223→**225**. 0 ASan. Derleyici dokunulmadı.
+
+**Self-hosting tablosu — 4 parça da KEMGU'da:**
+| Faz | Demo | Temsil |
+|-----|------|--------|
+| LEXER | D-024 | metin → token akışı (Dizi) |
+| PARSER | D-026/D-027 | token → öncelikli AST (arena) |
+| AST | D-027/D-022 | indeks-arena / özyinelemeli çeşit |
+| EVAL | D-027/D-022 | ağaç gezme |
+
+**Sıradaki:** string-key sembol tablosu (`metin_esit` + paralel ad/değer dizileri)
+→ değişkenli ifadeler; sonra çoklu-deyim + atama (mini dil); uzun vade gerçek
+derleyici alt-kümesinin KEMGU'da yeniden yazımı.
+
+---
+
 ## D-026 — String stdlib III: özyinelemeli-iniş öncelikli ayrıştırıcı (parser yarısı) (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-024 token akışı
