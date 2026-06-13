@@ -50,15 +50,15 @@ işlev test_v1_sha256_abc_blok() -> tam32 {
     // L = 24 bit = 0x00000018 — 64-bit length BE'de son iki kelime
     değişken w15: dtam32 = 24;
     değişken blok: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(w0), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(w15)
+        sabitsüre_olustur(w0), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(w15)
     ];
     değişken H: Dizi<dtam32> = sha256_H0();
     değişken state: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(H[0]), sabitsüre_yarat(H[1]), sabitsüre_yarat(H[2]), sabitsüre_yarat(H[3]),
-        sabitsüre_yarat(H[4]), sabitsüre_yarat(H[5]), sabitsüre_yarat(H[6]), sabitsüre_yarat(H[7])
+        sabitsüre_olustur(H[0]), sabitsüre_olustur(H[1]), sabitsüre_olustur(H[2]), sabitsüre_olustur(H[3]),
+        sabitsüre_olustur(H[4]), sabitsüre_olustur(H[5]), sabitsüre_olustur(H[6]), sabitsüre_olustur(H[7])
     ];
     ver sha256_blok_sikistir(state, blok);
 }
@@ -90,25 +90,25 @@ işlev test_v2_chacha20_key_layout() -> tam32 {
     değişken k0: dtam32 = 0x03020100;  // LE: 0x00,0x01,0x02,0x03
     değişken k1: dtam32 = 0x07060504;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(k0), sabitsüre_yarat(k1),
-        sabitsüre_yarat((0x0B0A0908 olarak dtam32)),
-        sabitsüre_yarat((0x0F0E0D0C olarak dtam32)),
-        sabitsüre_yarat((0x13121110 olarak dtam32)),
-        sabitsüre_yarat((0x17161514 olarak dtam32)),
-        sabitsüre_yarat((0x1B1A1918 olarak dtam32)),
-        sabitsüre_yarat((0x1F1E1D1C olarak dtam32))
+        sabitsüre_olustur(k0), sabitsüre_olustur(k1),
+        sabitsüre_olustur((0x0B0A0908 olarak dtam32)),
+        sabitsüre_olustur((0x0F0E0D0C olarak dtam32)),
+        sabitsüre_olustur((0x13121110 olarak dtam32)),
+        sabitsüre_olustur((0x17161514 olarak dtam32)),
+        sabitsüre_olustur((0x1B1A1918 olarak dtam32)),
+        sabitsüre_olustur((0x1F1E1D1C olarak dtam32))
     ];
     değişken nonce: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0x00000000 olarak dtam32)),
-        sabitsüre_yarat((0x4A000000 olarak dtam32)),
-        sabitsüre_yarat((0x00000000 olarak dtam32))
+        sabitsüre_olustur((0x00000000 olarak dtam32)),
+        sabitsüre_olustur((0x4A000000 olarak dtam32)),
+        sabitsüre_olustur((0x00000000 olarak dtam32))
     ];
     değişken sifir: dtam32 = 0;
     değişken ks: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     // counter=1 (RFC 8439 §2.3.2 önce bloku için)
     ver chacha20_blok(key, 1, nonce, ks);
@@ -119,10 +119,10 @@ işlev test_v2_chacha20_key_layout() -> tam32 {
 //   After QR: a=0xea2a92f4, b=0xcb1cf8ce, c=0x4581472e, d=0x5881c4bb
 işlev test_v2_chacha_qr_rfc_vector() -> tam32 {
     değişken s: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0x11111111 olarak dtam32)),
-        sabitsüre_yarat((0x01020304 olarak dtam32)),
-        sabitsüre_yarat((0x9B8D6F43 olarak dtam32)),
-        sabitsüre_yarat((0x01234567 olarak dtam32))
+        sabitsüre_olustur((0x11111111 olarak dtam32)),
+        sabitsüre_olustur((0x01020304 olarak dtam32)),
+        sabitsüre_olustur((0x9B8D6F43 olarak dtam32)),
+        sabitsüre_olustur((0x01234567 olarak dtam32))
     ];
     ver chacha20_qr(s, 0, 1, 2, 3);
     // Runtime'da: s[0] == 0xEA2A92F4 vb. (--llvm + clang + run)
@@ -143,38 +143,38 @@ işlev test_v2_chacha_qr_rfc_vector() -> tam32 {
 işlev test_v3_hkdf_ikm_layout() -> tam32 {
     değişken b: dtam8 = 0x0B;
     değişken ikm: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b),
-        sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b),
-        sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b),
-        sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b),
-        sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b), sabitsüre_yarat(b),
-        sabitsüre_yarat(b), sabitsüre_yarat(b)
+        sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b),
+        sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b),
+        sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b),
+        sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b),
+        sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b), sabitsüre_olustur(b),
+        sabitsüre_olustur(b), sabitsüre_olustur(b)
     ];
     değişken s: dtam8 = 0;
     değişken prk: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken salt: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat((0x00 olarak dtam8)),
-        sabitsüre_yarat((0x01 olarak dtam8)),
-        sabitsüre_yarat((0x02 olarak dtam8)),
-        sabitsüre_yarat((0x03 olarak dtam8)),
-        sabitsüre_yarat((0x04 olarak dtam8)),
-        sabitsüre_yarat((0x05 olarak dtam8)),
-        sabitsüre_yarat((0x06 olarak dtam8)),
-        sabitsüre_yarat((0x07 olarak dtam8)),
-        sabitsüre_yarat((0x08 olarak dtam8)),
-        sabitsüre_yarat((0x09 olarak dtam8)),
-        sabitsüre_yarat((0x0A olarak dtam8)),
-        sabitsüre_yarat((0x0B olarak dtam8)),
-        sabitsüre_yarat((0x0C olarak dtam8))
+        sabitsüre_olustur((0x00 olarak dtam8)),
+        sabitsüre_olustur((0x01 olarak dtam8)),
+        sabitsüre_olustur((0x02 olarak dtam8)),
+        sabitsüre_olustur((0x03 olarak dtam8)),
+        sabitsüre_olustur((0x04 olarak dtam8)),
+        sabitsüre_olustur((0x05 olarak dtam8)),
+        sabitsüre_olustur((0x06 olarak dtam8)),
+        sabitsüre_olustur((0x07 olarak dtam8)),
+        sabitsüre_olustur((0x08 olarak dtam8)),
+        sabitsüre_olustur((0x09 olarak dtam8)),
+        sabitsüre_olustur((0x0A olarak dtam8)),
+        sabitsüre_olustur((0x0B olarak dtam8)),
+        sabitsüre_olustur((0x0C olarak dtam8))
     ];
     ver hkdf_extract(salt, 13, ikm, 22, prk);
 }
@@ -182,16 +182,16 @@ işlev test_v3_hkdf_ikm_layout() -> tam32 {
 // V3.2: HKDF info — RFC 5869 Test Case 1 info layout
 işlev test_v3_hkdf_info_layout() -> sabitsüre<dtam8> {
     değişken info: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat((0xF0 olarak dtam8)),
-        sabitsüre_yarat((0xF1 olarak dtam8)),
-        sabitsüre_yarat((0xF2 olarak dtam8)),
-        sabitsüre_yarat((0xF3 olarak dtam8)),
-        sabitsüre_yarat((0xF4 olarak dtam8)),
-        sabitsüre_yarat((0xF5 olarak dtam8)),
-        sabitsüre_yarat((0xF6 olarak dtam8)),
-        sabitsüre_yarat((0xF7 olarak dtam8)),
-        sabitsüre_yarat((0xF8 olarak dtam8)),
-        sabitsüre_yarat((0xF9 olarak dtam8))
+        sabitsüre_olustur((0xF0 olarak dtam8)),
+        sabitsüre_olustur((0xF1 olarak dtam8)),
+        sabitsüre_olustur((0xF2 olarak dtam8)),
+        sabitsüre_olustur((0xF3 olarak dtam8)),
+        sabitsüre_olustur((0xF4 olarak dtam8)),
+        sabitsüre_olustur((0xF5 olarak dtam8)),
+        sabitsüre_olustur((0xF6 olarak dtam8)),
+        sabitsüre_olustur((0xF7 olarak dtam8)),
+        sabitsüre_olustur((0xF8 olarak dtam8)),
+        sabitsüre_olustur((0xF9 olarak dtam8))
     ];
     ver info[0];  // 0xF0 beklenir
 }
@@ -205,22 +205,22 @@ işlev test_v3_hkdf_info_layout() -> sabitsüre<dtam8> {
 
 işlev test_v4_poly1305_r_clamp() -> tam32 {
     değişken r: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat((0x85 olarak dtam8)),
-        sabitsüre_yarat((0xD6 olarak dtam8)),
-        sabitsüre_yarat((0xBE olarak dtam8)),
-        sabitsüre_yarat((0x78 olarak dtam8)),  // -> 0x78 (& 0x0F = 0x08? hayır 0x78 & 0x0F = 0x08; 0x78 & 0xFC = 0x78)
-        sabitsüre_yarat((0x57 olarak dtam8)),
-        sabitsüre_yarat((0x55 olarak dtam8)),
-        sabitsüre_yarat((0x6D olarak dtam8)),
-        sabitsüre_yarat((0x33 olarak dtam8)),  // -> 0x33 & 0x0F = 0x03
-        sabitsüre_yarat((0x7F olarak dtam8)),
-        sabitsüre_yarat((0x44 olarak dtam8)),
-        sabitsüre_yarat((0x52 olarak dtam8)),
-        sabitsüre_yarat((0xFE olarak dtam8)),  // -> 0xFE & 0x0F = 0x0E (yanlış doc; aslında 0x0E olur)
-        sabitsüre_yarat((0x42 olarak dtam8)),
-        sabitsüre_yarat((0xD5 olarak dtam8)),
-        sabitsüre_yarat((0x06 olarak dtam8)),
-        sabitsüre_yarat((0xA8 olarak dtam8))
+        sabitsüre_olustur((0x85 olarak dtam8)),
+        sabitsüre_olustur((0xD6 olarak dtam8)),
+        sabitsüre_olustur((0xBE olarak dtam8)),
+        sabitsüre_olustur((0x78 olarak dtam8)),  // -> 0x78 (& 0x0F = 0x08? hayır 0x78 & 0x0F = 0x08; 0x78 & 0xFC = 0x78)
+        sabitsüre_olustur((0x57 olarak dtam8)),
+        sabitsüre_olustur((0x55 olarak dtam8)),
+        sabitsüre_olustur((0x6D olarak dtam8)),
+        sabitsüre_olustur((0x33 olarak dtam8)),  // -> 0x33 & 0x0F = 0x03
+        sabitsüre_olustur((0x7F olarak dtam8)),
+        sabitsüre_olustur((0x44 olarak dtam8)),
+        sabitsüre_olustur((0x52 olarak dtam8)),
+        sabitsüre_olustur((0xFE olarak dtam8)),  // -> 0xFE & 0x0F = 0x0E (yanlış doc; aslında 0x0E olur)
+        sabitsüre_olustur((0x42 olarak dtam8)),
+        sabitsüre_olustur((0xD5 olarak dtam8)),
+        sabitsüre_olustur((0x06 olarak dtam8)),
+        sabitsüre_olustur((0xA8 olarak dtam8))
     ];
     ver poly1305_r_clamp(r);
 }

@@ -2071,18 +2071,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                        g->beklenen_tip);
                 }
             }
-            /* Sabitsüre Spec V1 intrinsics: sabitsure_yarat (16 byte) ve
+            /* Sabitsüre Spec V1 intrinsics: sabitsure_olustur (16 byte) ve
              * ifsa (5 byte). Argümanı pass-through, sonra speculation
              * barrier (x86 lfence) emit ederiz. Zero-overhead — IR seviyesi
              * tipleri T (iç tip) ile aynı. */
             {
                 const char *_ca = d->veri.cagri.hedef->veri.tanimlayici.metin;
                 int _uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
-                int _is_yarat = (_uz == 16 &&
-                    memcmp(_ca, "sabits\xc3\xbc" "re_yarat", 16) == 0);
+                int _is_olustur = (_uz == 18 &&
+                    memcmp(_ca, "sabits\xc3\xbc" "re_olustur", 18) == 0);
                 int _is_ifsa = (_uz == 5 &&
                     memcmp(_ca, "if\xc5\x9f" "a", 5) == 0);
-                if ((_is_yarat || _is_ifsa) && d->veri.cagri.sayi == 1) {
+                if ((_is_olustur || _is_ifsa) && d->veri.cagri.sayi == 1) {
                     IfadeSonuc inner = ifade_uret(g,
                         d->veri.cagri.argumanlar[0], beklenen);
                     /* x86 lfence speculation barrier — Spectre v1 mitigation.
@@ -2090,14 +2090,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
                     return inner;
                 }
-                /* Linear Types V1: tekkez_yarat(e) -> tekkez<T>.
+                /* Linear Types V1: tekkez_olustur(e) -> tekkez<T>.
                  * IR'da zero-overhead sarmalayici: tekkez<T> = T
                  * (ast_tip_to_ir ic tipi acar) -> arg pass-through.
                  * Audit gap #4: onceden generic call yoluna dusup
-                 * TANIMSIZ @tekkez_yarat sembolu uretiyordu (link
+                 * TANIMSIZ @tekkez_olustur sembolu uretiyordu (link
                  * hatasi — lineer kod hic calistirilamiyordu). */
-                if (_uz == 12 &&
-                    memcmp(_ca, "tekkez_yarat", 12) == 0 &&
+                if (_uz == 14 &&
+                    memcmp(_ca, "tekkez_olustur", 14) == 0 &&
                     d->veri.cagri.sayi == 1) {
                     return ifade_uret(g, d->veri.cagri.argumanlar[0],
                                       beklenen);

@@ -8,11 +8,11 @@ PROGRAM (1 uye)  1:1
       BLOK (4 deyim)  1:24
         DEGISKEN "k"  2:5
           deger:
-            CAGRI  2:32
+            CAGRI  2:34
               hedef:
-                TANIMLAYICI "tekkez_yarat"  2:20
+                TANIMLAYICI "tekkez_olustur"  2:20
               argumanlar (1):
-                TAM 42  2:33
+                TAM 42  2:35
         DEGISKEN "tuket"  3:5
           deger:
             LAMBDA  3:24
