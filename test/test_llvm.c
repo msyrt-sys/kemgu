@@ -392,6 +392,16 @@ static void test_oncelikli_ayristirici_calistir(void) {
                " -> exit 42", rc == 42);
 }
 
+static void test_yapi_alan_cakismasi(void) {
+    /* D-029 kök-neden fix: iki yapı AYNI alan adını paylaşınca (T.ad + U.ad),
+     * &T parametresi üzerinde `t.ad` erişimi codegen'de YANLIŞ yapıya (global
+     * alan-adı aramasıyla ilk eşleşen = U, alan 0) çözülüp t.kind'e (alan 0)
+     * yazıyordu → t.kind boyutu 3 yerine 6. Doğru sonuç: 33. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/yapi_yerel_bozulma.kem");
+    test_sonuc("yapi alan-adi cakismasi (&T uzerinde t.ad dogru alan) -> 33",
+               rc == 33);
+}
+
 static void test_degiskenli_dil_verify(void) {
     int ok = kemgu_llvm_opt_verify("test/ornekler/16_degiskenli_dil.kem");
     test_sonuc("degiskenli dil: opt -passes=verify PASS", ok);
@@ -2620,6 +2630,7 @@ int main(void) {
     test_oncelikli_ayristirici_calistir();
     test_agac_insa_verify();
     test_agac_insa_calistir();
+    test_yapi_alan_cakismasi();
     test_degiskenli_dil_verify();
     test_degiskenli_dil_calistir();
 

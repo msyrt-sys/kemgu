@@ -1,0 +1,12 @@
+// Repro: dizi_olustur-alan-init'li 2. yapı yereli, 1. yapı yerelinin
+// koleksiyon alanını bozuyor mu? (D-028 PROB). Beklenen exit 33; bug'da 63.
+yapı T { kind: Dizi<tam32>; deger: Dizi<tam32>; ad: Dizi<metin>; imlec: Dizi<tam32>; }
+yapı U { ad: Dizi<metin>; deger: Dizi<tam32>; }
+işlev te(t: &T, k: tam32, d: tam32, a: metin) -> tam32 { dizi_ekle(t.kind, k); dizi_ekle(t.deger, d); dizi_ekle(t.ad, a); ver 0; }
+işlev doldur(t: &T) -> tam32 { te(t, 0, 40, ""); te(t, 1, 0, ""); te(t, 0, 2, ""); ver 0; }
+işlev main() -> tam32 {
+  değişken t: T = T { kind: dizi_olustur(8), deger: dizi_olustur(8), ad: dizi_olustur(8), imlec: dizi_olustur(1) };
+  doldur(&t);
+  değişken u: U = U { ad: dizi_olustur(2), deger: dizi_olustur(2) };
+  ver dizi_boyut(t.kind) * 10 + dizi_boyut(t.deger);   // beklenen 33
+}
