@@ -1243,7 +1243,12 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
             continue;
         }
         const char *alan_ir = ast_tip_to_ir(g, alan_tip_d);
+        /* [D-044] Alan tipini beklenen_tip kanalına koy: Dizi<T> alanına `[]`/
+         * `[...]` verilince DIZI_OLUSTUR heap KdlDizi üretsin (stack değil). */
+        const Dugum *eski_bt = g->beklenen_tip;
+        g->beklenen_tip = alan_tip_d;
         IfadeSonuc deger = ifade_uret(g, aa->veri.alan_atama.deger, alan_ir);
+        g->beklenen_tip = eski_bt;
         int dr = deger.reg;
         if (!tip_kesirli_mi(alan_ir) && !tip_kesirli_mi(deger.tip)
             && tip_genisligi(alan_ir) > 0 && tip_genisligi(deger.tip) > 0) {
@@ -1843,7 +1848,41 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_DIZI_OLUSTUR: {
-            /* [e1, e2, ...] -> alloca [N x T] + store + return ptr
+            /* [D-044] Beklenen tip Dizi<T> ise -> HEAP KdlDizi (kdl_dizi_olustur
+             * + dizi_ekle), stack [N x T] DEĞİL. değişken-annot dışı bağlamlar
+             * (yapı alanı, çağrı argümanı, ver) için kök-fix: önceden bu yol yoktu
+             * → struct-field `[]` 0-byte stack alloca olur, dizi_ekle SEGFAULT. */
+            if (g->beklenen_tip && g->beklenen_tip->tip == DUGUM_TIP_DIZI) {
+                const Dugum *elem_d = g->beklenen_tip->veri.tip_dizi.eleman_tip;
+                const char *elem_ir = ast_tip_to_ir(g, elem_d);
+                if (!elem_ir) elem_ir = "i32";
+                int eb = 4;
+                if (strcmp(elem_ir, "i8") == 0) eb = 1;
+                else if (strcmp(elem_ir, "i16") == 0) eb = 2;
+                else if (strcmp(elem_ir, "i64") == 0) eb = 8;
+                else if (strcmp(elem_ir, "double") == 0) eb = 8;
+                else if (strcmp(elem_ir, "ptr") == 0) eb = 8;
+                int hn = d->veri.dizi_olustur.sayi;
+                int kdl_reg = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n", kdl_reg, eb);
+                const Dugum *eski_bt = g->beklenen_tip;
+                g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
+                for (int i = 0; i < hn; i++) {
+                    IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
+                    int vr = int_donustur(g, v.reg, v.tip, elem_ir);
+                    const char *fn = "kdl_dizi_ekle_tam";
+                    if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+                    else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    fprintf(g->out, "  call void @%s(ptr %%%d, %s %%%d)\n",
+                            fn, kdl_reg, elem_ir, vr);
+                }
+                g->beklenen_tip = eski_bt;
+                IfadeSonuc s = { kdl_reg, "ptr", 0 };
+                return s;
+            }
+
+            /* [e1, e2, ...] -> alloca [N x T] + store + return ptr (stack)
              *
              * SSA register sirasi onemli: alloca emit etmeden once eleman
              * degerlerini hesaplayamayiz cunku alloca_reg = %N rezerve eder
