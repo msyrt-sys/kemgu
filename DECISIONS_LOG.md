@@ -5,6 +5,28 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-049 — SELF-HOST parser P5: modül/kullan/dışa/genel + geri_al/delege + TAM-clamp — 115/118 GERÇEK .kem (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P5: üst-düzey
+modül/kullan/dışa/genel + iki ifade-builtin'i + tamsayı taşma davranışı. parser.c
+parse_kullan/parse_disa/parse_genel/parse_modul + parse_birincil DELEGE/GERI_AL birebir.
+
+**Kapsam:** `kullan m::seg::{a,b} olarak d;` (KULLAN deger=`::`-yol; seçili/alias
+dump'ta yok). `dışa <tanım>` (DISA sarmalar). `genel <tanım>` (SARMALAMAZ — iç tanımı
+döner; genel_mi dump'ta yok). `modül Ad { üyeler }` (recursive parse_ust_oge). İfade:
+`delege(...)`/`geri_al(...)` → DUGUM_CAGRI (hedef TANIMLAYICI). **TAM taşma:**
+`tamsayi_deger` artık strtoll gibi int64-max'a CLAMP eder (`0xFFFF...FFFF` → LLONG_MAX,
+önce wrap → -1).
+
+**Doğrulama:** `make calistir_parser_diff` → 11/11 korpus + **115/118 GERÇEK .kem**
+(ornekler/drivers/stdlib/moduller/crossfile). Kalan 3: KESIRLI float (drone_kontrol,
+matris_carpim) + tip_alias (ayrı). C derleyici değişmedi.
+
+**Sınır:** KESIRLI float (%g dump) → sıradaki (runtime float-format intrinsic gerek).
+satıriçi_asm deyimi henüz yok (korpusta nadirse sonra).
+
+---
+
 ## D-048 — SELF-HOST parser P3: bildirimler — 69/113 GERÇEK .kem --ast sıfır-diff (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P3: tüm
