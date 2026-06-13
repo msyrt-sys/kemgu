@@ -101,7 +101,7 @@ typedef struct Scope {
 
 /* === API === */
 
-/* Yeni scope yarat. parent NULL = global. */
+/* Yeni scope olustur. parent NULL = global. */
 Scope *scope_olustur(Arena *a, ScopeKategorisi kat, Scope *parent);
 
 /* Sembol ekle. Ayni isim yerel scope'ta varsa -1 doner (caller hata

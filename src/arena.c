@@ -32,7 +32,7 @@ static size_t hizala_yukari(size_t n) {
     return (n + maske) & ~maske;
 }
 
-/* Yeni bir blok yarat (malloc + ham bellek). Basarisiz -> NULL. */
+/* Yeni bir blok olustur (malloc + ham bellek). Basarisiz -> NULL. */
 static ArenaBlok *blok_olustur(size_t istenen_boyut) {
     ArenaBlok *blok = (ArenaBlok *)malloc(sizeof(ArenaBlok));
     if (!blok) return NULL;
@@ -146,7 +146,7 @@ void *arena_ayir(Arena *arena, size_t boyut) {
         return ptr;
     }
 
-    /* Yer yok — yeni blok yarat. */
+    /* Yer yok — yeni blok olustur. */
     size_t yeni_boyut = sonraki_blok_boyutu(blok->boyut, hizali_boyut);
     ArenaBlok *yeni_blok = blok_olustur(yeni_boyut);
     if (!yeni_blok) {

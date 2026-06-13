@@ -19,7 +19,7 @@
 // Compiler **escape analizi** ile karar verir:
 //   - Bir değer `ver` ile dönüyorsa → ρ_çağıran (çağırana terfi)
 //   - Sadece içeride kullanılıyorsa → ρ_yerel (işlev bitince imha)
-//   - Döngü gövdesinde yaratılıyorsa → ρ_iterasyon (tur sonu imha)
+//   - Döngü gövdesinde oluşturuluyorsa → ρ_iterasyon (tur sonu imha)
 
 // ----- 1) Escape EDİYOR — ρ_çağıran -----
 //
@@ -45,7 +45,7 @@ işlev sadece_kullan() -> tam32 {
 
 // ----- 3) Döngü gövdesi — ρ_iterasyon -----
 //
-// Her tur yeni bir Kutu yaratılır; tur sonunda atılır.
+// Her tur yeni bir Kutu oluşturulur; tur sonunda atılır.
 // Compiler bu pattern'i tanıyıp her seferinde free yapmaz; iterasyon
 // bölgesi toplu olarak temizlenir.
 işlev dongu_toplam(n: tam32) -> tam32 {
@@ -82,7 +82,7 @@ işlev karsi(a: &Kutu) -> tam32 {
 }
 
 işlev main() -> tam32 {
-    // 1) Escape: k1 çağıran bölgesinde yaratılır
+    // 1) Escape: k1 çağıran bölgesinde oluşturulur
     değişken k1 = kutu_dondur(40);
 
     // 2) Escape değil: kullan bölgesi geçici, dönen tam32 (basit tip)

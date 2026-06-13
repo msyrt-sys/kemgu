@@ -66,7 +66,7 @@ void arena_sifirla(Arena *arena);
  * Hizali bellek tahsisi (_Alignof(max_align_t)).
  *   boyut = 0  -> NULL (malloc gibi)
  * Mevcut blokta yer yoksa yeni blok eklenir (geometric x2, MAX cap'li).
- * Cap ustu tek tahsisler icin ozel blok yaratilir.
+ * Cap ustu tek tahsisler icin ozel blok olusturulur.
  * Donus: NULL (basarisiz, hata bayragi set) veya gecerli pointer.
  */
 void *arena_ayir(Arena *arena, size_t boyut);
