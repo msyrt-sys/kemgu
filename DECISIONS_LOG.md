@@ -5,6 +5,59 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-029 [YÜKSEK] — Kök-neden fix: yapı alan-adı çakışması codegen bug'ı (D-028 PROB ÇÖZÜLDÜ) (2026-06-13)
+
+**Bağlam:** D-028 PROB'u "dizi_olustur-alan-init'li 2. yapı, 1. yapının koleksiyon
+alanını bozuyor (boyut 3→6)" diye gözlemlemişti. Runtime trace ile KÖK-NEDEN
+bulundu — gözlem yanlış çerçevelenmişti (yapı-yerel kopya değil).
+
+**KÖK-NEDEN 1 (alan-adı çözüm bug'ı) — KANIT (runtime trace):**
+`kdl_dizi_olustur/ekle/boyut` pointer + boyut trace'lendi. Minimal repro'da
+(T{kind,deger,ad,imlec} + U{ad,deger}; `te()` t.kind/t.deger/t.ad'ye ekler):
+```
+ekle_tam CE0(kind)  ekle_tam 68A0(deger)  ekle_ptr CE0(ad → YANLIŞ! 6780 olmalı)
+```
+`dizi_ekle(t.ad, …)` t.ad'ye (6780) değil **t.kind'e (CE0, alan 0)** yazıyordu →
+t.kind 3 yerine 6 eleman (3 kind + 3 ad), t.ad boş. İKİ KOLEKSİYON ALİASLANMIYOR;
+**t.ad alanı YANLIŞ alana (kind) çözülüyor.** Tetikleyici: U'nun da `ad` alanı
+olması (U.ad index 0). Hipotez U alan adlarını `isim/sonuc` yapınca doğrulandı (33).
+
+**Mekanizma (codegen):** `erisim_uret` (+`erisim_lvalue`), nesnenin IR tipi `ptr`
+(yani &Yapi parametre) iken yapı tipini IR'dan çıkaramıyor → **TÜM yapılarda alan
+adına göre ilk eşleşeni arıyordu** (llvm.c eski 1227-1234). T.ad (index 2) + U.ad
+(index 0) varken `t.ad` → U'ya çözülüp `getelementptr %U, …, 0, 0` = T'nin alan 0'ı
+(kind). GEP base nesne.reg (gerçek T) olduğu için sessizce kind'e yazıyordu.
+
+**Fix 1:** `LlvmIsim.ref_yapi_ir` alanı eklendi (&Yapi/*Yapi/Yapi değişken/param
+→ "%T"). `ref_yapi_ir_al()` helper'ı referans/pointer soyup yapı IR'ını verir.
+param + annotasyonlu `değişken` kaydında set edilir. `erisim_uret`/`erisim_lvalue`
+artık nesne TANIMLAYICI ise kayıtlı yapı tipini kullanır; alan-adı arama yalnız
+SON ÇARE (yapı tipi bilinmiyorsa). Struct-VALUE (`%T`) yolu zaten doğruydu.
+
+**KÖK-NEDEN 2 (yan keşif — struct-bundled proof yazarken):** `dizi_al(s.ad, i)`
+s.ad bir `Dizi<metin>` ALANI iken SEGFAULT. `dizi_eleman_beklenen` çıkarsaması
+yalnız TANIMLAYICI arg0 (düz değişken) için çalışıyordu; struct-alan dizi (s.ad)
+için eleman tipi çıkarsanmıyor → `kdl_dizi_al_tam` (i32) route edip metin ptr'ini
+i32 okuyordu → çöp ptr → strcmp segfault.
+**Fix 2:** `dizi_alan_eleman_ir()` helper'ı — dizi-builtin arg0 DUGUM_ERISIM ise
+alanın Dizi<T> eleman IR tipini çözer. Inference bloğuna ERISIM dalı eklendi.
+
+**Repro test (önce KIRMIZI sonra YEŞİL):** `test/snapshots/yapi_yerel_bozulma.kem`
+(33 bekleniyor, bug'da 63) → `test_yapi_alan_cakismasi` (test_llvm [150]).
+**Canlı kanıt:** `test/ornekler/16_degiskenli_dil.kem` açık-param workaround'undan
+YAPI-PAKETLİ sürüme taşındı (Tokenler + Semboller, İKİSİ DE `ad` alanı taşıyor —
+çakışma senaryosu) → "x=6;y=7;x*y" = 42 (test_llvm [152]).
+
+**Doğrulama:** test_llvm 227→**228**, +22 suite (tip_kontrol 174, snapshot 50, …).
+0 ASan. Prod 0 uyarı. stdlib 12 OK. Repro 63→33, sembol-tablosu segfault→42.
+
+**Kapsam dışı (PRE-EXISTING, bu fix değil):** "m=2;n=3;p=4;m*n*p+18" = 18 (3-değişken
+çarpım zinciri + toplama) HEM yapı-paketli HEM commit'li açık-param D-028'de
+başarısız → ayrı, önceden var olan demo/codegen sorunu (m*n / m*n-39 / m*3+1 çalışır;
+çarpım-zinciri+toplama dar bir kombinasyon). Bu fix'ten bağımsız; ayrı göreve havale.
+
+---
+
 ## D-028 — String stdlib IV: değişkenli mini dil (string-anahtarlı sembol tablosu) + PROB: yapı-yerel codegen bug'ı (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** Self-hosting'in ad
@@ -22,6 +75,8 @@ Sembol tablosu = paralel `Dizi<metin>` (adlar) + `Dizi<tam32>` (değerler); aram
 `a=2;b=3;c=7;a*b*c`=42, `x=50;y=8;x-y`=42, `x=5;x=42;x`=42 (yeniden-atama/güncelle),
 `z=10;(z+4)*3`=42 (değişken+parantez), `40+2`=42, `x=21;x+x`=42. opt-verify PASS.
 test_llvm 225→**227**. 0 ASan. Derleyici dokunulmadı.
+
+**✅ ÇÖZÜLDÜ → D-029 (kök-neden: alan-adı çakışması, yapı-yerel kopya DEĞİL).**
 
 **🔴 PROB (bu çalışma sırasında bulunan CİDDİ codegen bug'ı) — yapı-yerel
 bozulması:** İlk denemede token+sembol tablosu İKİ `yapı` (Tokenler + Semboller,
