@@ -7,10 +7,13 @@
 //
 // MILESTONE M1: ASCII çekirdek (identifier + ondalık + tek-kar op + ayraç + EOF).
 // MILESTONE M2: UTF-8 + TÜRKÇE anahtar kelimeler (44 keyword + bayt-sütün).
+// MILESTONE M5: trivia + ham string. bosluk_atla'ya `//` satır + `/* */` İÇ İÇE
+//   blok yorum (derinlik sayacı); ham string r#"..."# (hash eşleme, L002/L011).
+//   C bosluk_atla/ham_metin_oku birebir. Kasıtlı NON-hata: kapanmamış blok-yorum
+//   SESSİZ biter. Ham string ÇOK-SATIRLI → satir/sutun re-scan ile güncellenir.
 // MILESTONE M4: literaller — sayi_emit (ondalık/hex/bin/oct + float kesir+üs),
 //   dize_emit ("..." + escape ham-bırakma + L001), karakter_emit ('a'/UTF-8 +
 //   L009/L010). C lexer sayi_oku/metin_oku/karakter_oku ile birebir (span-exact).
-//   NOT: ham string r#"..."# + // /* yorum → M5.
 // MILESTONE M3: operatörler + noktalama — MAXIMAL MUNCH.
 //   - Çatışma zincirleri (C lexer ile birebir, switch 318-375):
 //     . / .. / ...   :  / ::   <  / <= / <<   >  / >= / >>
@@ -326,17 +329,85 @@ işlev karakter_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: 
     emit("KARAKTER", satir, sutun, pos, p - pos); ver p - pos;
 }
 
+// ---- M5: ham string (raw) ----
+
+// pos 'r'da; r" veya r#...#" başlangıcı mı (C dispatch L294-301 birebir).
+işlev ham_basi_mi(kaynak: metin, pos: tam32, uz: tam32) -> mantıksal {
+    değişken s: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
+    eğer s == 34 { ver doğru; }                             // r"
+    eğer s == 35 {                                          // r#...#"
+        değişken b: tam32 = pos + 1;
+        iken (b < uz) ve (bayt(kaynak, b) == 35) { b = b + 1; }
+        eğer (b < uz) ve (bayt(kaynak, b) == 34) { ver doğru; }
+    }
+    ver yanlış;
+}
+// Ham string r#"..."# emit (C ham_metin_oku birebir) → tüketilen bayt.
+// HAM_METIN / HATALI(L011 geçersiz baş, L002 kapanmamış). ÇOK-SATIRLI olabilir.
+işlev ham_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken p: tam32 = pos + 1;                            // 'r' atla
+    değişken hash_sayisi: tam32 = 0;
+    iken (p < uz) ve (bayt(kaynak, p) == 35) { hash_sayisi = hash_sayisi + 1; p = p + 1; }
+    eğer (p >= uz) veya (bayt(kaynak, p) != 34) {           // L011
+        emit("HATALI", satir, sutun, pos, p - pos); ver p - pos;
+    }
+    p = p + 1;                                              // açılış "
+    değişken bitti: tam32 = 0;
+    iken (p < uz) ve (bitti == 0) {
+        eğer bayt(kaynak, p) == 34 {                        // " → kapanış hash say
+            p = p + 1;
+            değişken kapanan: tam32 = 0;
+            iken (p < uz) ve (bayt(kaynak, p) == 35) ve (kapanan < hash_sayisi) {
+                kapanan = kapanan + 1; p = p + 1;
+            }
+            eğer kapanan == hash_sayisi { bitti = 1; }
+        } değilse {
+            p = p + 1;
+        }
+    }
+    eğer bitti == 1 { emit("HAM_METIN", satir, sutun, pos, p - pos); ver p - pos; }
+    emit("HATALI", satir, sutun, pos, p - pos); ver p - pos;  // L002 EOF
+}
+
 işlev lex_dosya(kaynak: metin) -> tam32 {
     değişken uz: tam32 = metin_uzunluk(kaynak);
     değişken pos: tam32 = 0;
     değişken satir: tam32 = 1;
     değişken sutun: tam32 = 1;
     iken doğru {
-        // boşluk atla (ilerle deseni; bayt-tabanlı sütün)
-        iken (pos < uz) ve bosluk_mu(bayt(kaynak, pos)) {
-            eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
-            değilse { sutun = sutun + 1; }
-            pos = pos + 1;
+        // boşluk + yorum atla (C bosluk_atla birebir: WS + // + /* iç içe)
+        değişken trivia: mantıksal = doğru;
+        iken trivia {
+            eğer (pos < uz) ve bosluk_mu(bayt(kaynak, pos)) {
+                eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+                değilse { sutun = sutun + 1; }
+                pos = pos + 1;
+            } değilse {
+                eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                    pos = pos + 2; sutun = sutun + 2;        // // satır yorumu (\n tüketme)
+                    iken (pos < uz) ve (bayt(kaynak, pos) != 10) { pos = pos + 1; sutun = sutun + 1; }
+                } değilse {
+                    eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                        pos = pos + 2; sutun = sutun + 2;    // /* iç içe blok yorum
+                        değişken derinlik: tam32 = 1;
+                        iken (pos < uz) ve (derinlik > 0) {
+                            eğer (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                                pos = pos + 2; sutun = sutun + 2; derinlik = derinlik + 1;
+                            } değilse {
+                                eğer (bayt(kaynak, pos) == 42) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                                    pos = pos + 2; sutun = sutun + 2; derinlik = derinlik - 1;
+                                } değilse {
+                                    eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+                                    değilse { sutun = sutun + 1; }
+                                    pos = pos + 1;
+                                }
+                            }
+                        }
+                    } değilse {
+                        trivia = yanlış;                     // trivia bitti
+                    }
+                }
+            }
         }
         eğer pos >= uz { emit("DOSYA_SONU", satir, sutun, pos, 0); ver 0; }
 
@@ -350,16 +421,27 @@ işlev lex_dosya(kaynak: metin) -> tam32 {
             pos = pos + slen; sutun = sutun + slen;
         } değilse {
             değişken bu: tam32 = kimlik_basi_uz(kaynak, pos, uz);
-            eğer bu > 0 {                                  // IDENT / anahtar (UTF-8)
-                pos = pos + bu; sutun = sutun + bu;
-                değişken devam: mantıksal = doğru;
-                iken devam {
-                    değişken du: tam32 = kimlik_devam_uz(kaynak, pos, uz);
-                    eğer du == 0 { devam = yanlış; }
-                    değilse { pos = pos + du; sutun = sutun + du; }
+            eğer bu > 0 {                                  // IDENT / anahtar / ham string
+                eğer (tb == 114) ve ham_basi_mi(kaynak, pos, uz) {  // r" veya r#...#" (M5)
+                    değişken hlen: tam32 = ham_emit(kaynak, pos, uz, t_sat, t_sut);
+                    değişken k: tam32 = 0;                 // ÇOK-SATIRLI → satir/sutun re-scan
+                    iken k < hlen {
+                        eğer bayt(kaynak, pos + k) == 10 { satir = satir + 1; sutun = 1; }
+                        değilse { sutun = sutun + 1; }
+                        k = k + 1;
+                    }
+                    pos = pos + hlen;
+                } değilse {                                // IDENT / anahtar (UTF-8)
+                    pos = pos + bu; sutun = sutun + bu;
+                    değişken devam: mantıksal = doğru;
+                    iken devam {
+                        değişken du: tam32 = kimlik_devam_uz(kaynak, pos, uz);
+                        eğer du == 0 { devam = yanlış; }
+                        değilse { pos = pos + du; sutun = sutun + du; }
+                    }
+                    değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
+                    emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
                 }
-                değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
-                emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
             } değilse {
                 eğer tb == 34 {                            // "  → METIN (M4)
                     değişken mlen: tam32 = dize_emit(kaynak, pos, uz, t_sat, t_sut);

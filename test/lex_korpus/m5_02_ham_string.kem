@@ -1,0 +1,13 @@
+r"basit ham"
+r"ters \n bölü ham kalır"
+r#"tırnak " içeride"#
+r##"hash #"# içeride"##
+r"türkçe çğş ham"
+mesaj = r"atama"
+çok = r"birinci
+ikinci
+üçüncü"
+son = 5
+r#"çok
+satır #"#
+bitti = 1

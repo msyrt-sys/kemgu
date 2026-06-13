@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-040 — SELF-HOST lexer M5: trivia (yorum) + ham string — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M5: `bosluk_atla`'ya
+`//` satır + `/* */` İÇ İÇE blok yorum (derinlik sayacı); ham string `r#"..."#`
+(`ham_basi_mi` + `ham_emit`, hash eşleme). C bosluk_atla/ham_metin_oku birebir.
+
+**Kapsam:** `//` → `\n`'e kadar (tüketmeden). `/*` → derinlik sayacı, iç içe
+(`/* /* */ */` doğru). Ham string: açılış N hash = kapanış N hash; `r"..."` (0 hash)
+özel; iç tırnak literal. L011 (geçersiz baş), L002 (kapanmamış). **Çok-satırlı
+trivia/ham string → satir/sutun re-scan** (yorum: bosluk_atla içinde inline; ham
+string: hlen span'i üzerinden re-scan, `\n`→satir++).
+
+**Kasıtlı NON-hata parite:** kapanmamış blok-yorum SESSİZ EOF'ta biter (HATALI YOK —
+C ile aynı). `//`/`/*` string/ham-string İÇİNDE yorum değil (literal tarama önce).
+
+**Doğrulama:** `make calistir_lexer_diff` → **22/22 SIFIR-DİFF** (18 M1-M4 + 4 M5).
+Spot: `a /* /* iç */ dış */ b` → `b` 1:25 (iç içe tüketildi); `x = r"çok⏎satır"⏎y`
+→ `y` satır 4 (çok-satırlı ham string satir izleme bayt-exact). `--check` temiz.
+
+**Sıradaki (M6):** bootstrap kapanışı — KEMGU-lexer'ı (a) KENDİ kaynağına +
+(b) tüm gerçek `.kem` korpusuna karşı sıfır-diff doğrula (self-lexing ispatı).
+
+---
+
 ## D-039 — SELF-HOST lexer M4: literaller (sayı/float/metin/karakter) — sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M4: tam literal
