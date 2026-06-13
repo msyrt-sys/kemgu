@@ -6,13 +6,13 @@ kullan kap;
 
 işlev main() -> tam32 {
     değişken sifir64: tam64 = 0;
-    değişken l = kap::yarat(sifir64);
+    değişken l = kap::olustur(sifir64);
     kap::ekle(&l, 30 olarak tam64);
     kap::ekle(&l, 10 olarak tam64);
     değişken büyük: tam64 = kap::al(&l, 0, sifir64) + kap::al(&l, 1, sifir64);
 
     değişken sifir32: tam32 = 0;
-    değişken m = kap::yarat(sifir32);
+    değişken m = kap::olustur(sifir32);
     kap::ekle(&m, 2);
     değişken küçük: tam32 = kap::al(&m, 0, sifir32);
 

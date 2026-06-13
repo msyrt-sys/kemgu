@@ -342,8 +342,8 @@ işlev test_k4_entropy_karis() -> tam32 {
 // K5: Anahtar (34-38)
 // ============================================================================
 
-// 34. anahtar_yarat — linear key
-işlev test_k5_anahtar_yarat() -> tam32 {
+// 34. anahtar_olustur — linear key
+işlev test_k5_anahtar_olustur() -> tam32 {
     değişken s: dtam8 = 0xAB;
     değişken govde: Dizi<sabitsüre<dtam8>> = [
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
@@ -355,7 +355,7 @@ işlev test_k5_anahtar_yarat() -> tam32 {
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
-    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     ver anahtar_imha(a);
 }
 
@@ -428,7 +428,7 @@ işlev test_k5_otp_sifrele() -> tam32 {
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
-    değişken anahtar: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken anahtar: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     değişken metin: Dizi<sabitsüre<dtam8>> = [
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
@@ -478,7 +478,7 @@ işlev test_k6_aead_sifrele() -> tam32 {
     ver aead_chacha20_poly1305_sifrele(key, nonce, aad, 2, pt, 2, ct, tag);
 }
 
-// 41. HKDF + anahtar_yarat tek hatta
+// 41. HKDF + anahtar_olustur tek hatta
 işlev test_k6_hkdf_to_anahtar() -> tam32 {
     değişken s: dtam8 = 0;
     değişken ikm: Dizi<sabitsüre<dtam8>> = [
@@ -501,7 +501,7 @@ işlev test_k6_hkdf_to_anahtar() -> tam32 {
         sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     anahtar_turet(ikm, 4, salt, 4, info, 2, govde);
-    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     ver anahtar_imha(a);
 }
 

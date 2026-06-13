@@ -847,10 +847,10 @@ static void test_prog_yapi_bilinmeyen_tip(void) {
 static void test_prog_yapi_islev_kullanim(void) {
     Arena *a = arena_olustur(0);
     /* yapi Hasta { yas: tam32; }
-     * islev yarat() -> Hasta { ver Hasta { yas: 30 }; } */
+     * islev olustur() -> Hasta { ver Hasta { yas: 30 }; } */
     int h = program_kontrol(
         "yap\xc4\xb1 Hasta { yas: tam32; } "
-        "i\xc5\x9flev yarat() -> Hasta { ver Hasta { yas: 30 }; }", a);
+        "i\xc5\x9flev olustur() -> Hasta { ver Hasta { yas: 30 }; }", a);
     test_sonuc("program: yapi olusturma + ver -> 0 hata", h == 0);
     arena_serbest(a);
 }
