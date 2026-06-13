@@ -1,0 +1,20 @@
+// C faz-2 dogrulama: capraz-modul generic STRUCT COKLU-TIP instantiation.
+// Ayni Liste<T> hem tam64 hem tam32 ile (type-erased %Liste, ayrik
+// specialization'lar @kap.ekle$i64 / @kap.ekle$i32). Saf inference.
+// büyük=30+10=40, küçük=2 -> 42.
+kullan kap;
+
+işlev main() -> tam32 {
+    değişken sifir64: tam64 = 0;
+    değişken l = kap::yarat(sifir64);
+    kap::ekle(&l, 30 olarak tam64);
+    kap::ekle(&l, 10 olarak tam64);
+    değişken büyük: tam64 = kap::al(&l, 0, sifir64) + kap::al(&l, 1, sifir64);
+
+    değişken sifir32: tam32 = 0;
+    değişken m = kap::yarat(sifir32);
+    kap::ekle(&m, 2);
+    değişken küçük: tam32 = kap::al(&m, 0, sifir32);
+
+    ver (büyük olarak tam32) + küçük;
+}

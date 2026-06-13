@@ -1,0 +1,19 @@
+// C faz-2 dogrulama (HEADLINE): capraz-modul generic STRUCT, saf INFERENCE.
+// kap::Liste<T> dis modulden; yarat/ekle/al + transitif büyü (kapasite
+// 0->4->8, eleman-kopyalı grow). Yazılı nitelikli tip (kap::Liste<i64>) YOK.
+//
+// Eleman akışı: ekle 10,1,1,1 (cap 0->4, boy 4); ekle 32 -> büyü cap 4->8
+// (transitif + [10,1,1,1] kopyası), idx4=32. al(0)=10 + al(4)=32 = 42.
+kullan kap;
+
+işlev main() -> tam32 {
+    değişken sifir: tam64 = 0;
+    değişken l = kap::yarat(sifir);
+    kap::ekle(&l, 10 olarak tam64);
+    kap::ekle(&l, 1 olarak tam64);
+    kap::ekle(&l, 1 olarak tam64);
+    kap::ekle(&l, 1 olarak tam64);
+    kap::ekle(&l, 32 olarak tam64);
+    değişken s: tam64 = kap::al(&l, 0, sifir) + kap::al(&l, 4, sifir);
+    ver s olarak tam32;
+}
