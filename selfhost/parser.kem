@@ -32,6 +32,7 @@ yapı Ayr {
     cocuk: Dizi<tam32>;   // düz çocuk indeks listesi
     hata_say: tam32;     // parser hata sayısı
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
+    sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
 }
 
 // ---- Çıktı yardımcıları ----
@@ -564,7 +565,24 @@ işlev tip_i(p: &değişken Ayr, i: tam32) -> metin { ver dizi_al(p.t_ad, i); }
 işlev lex_i(p: &değişken Ayr, i: tam32) -> metin {
     ver metin_kes(p.kaynak, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
 }
-işlev simdiki(p: &değişken Ayr) -> metin { ver tip_i(p, p.imlec); }
+işlev simdiki(p: &değişken Ayr) -> metin {
+    değişken t: metin = tip_i(p, p.imlec);
+    eğer (p.sk_pending == 1) ve metin_esit(t, "SAGA_KAYDIR") { ver "BUYUK"; }
+    ver t;
+}
+// Generic kapanışı `>` bekle; `>>` (SAGA_KAYDIR) iki `>`'a böl (parser_buyuk_ayir).
+işlev bekle_buyuk(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = tip_i(p, p.imlec);  // RAW (sk_pending atla)
+    eğer metin_esit(t, "BUYUK") { ilerle(p); ver 1; }
+    eğer metin_esit(t, "SAGA_KAYDIR") {
+        eğer p.sk_pending == 1 { p.sk_pending = 0; p.imlec = p.imlec + 1; ver 1; }
+        p.sk_pending = 1;  // ilk > tüketildi (ilerleme yok)
+        ver 1;
+    }
+    p.hata_say = p.hata_say + 1;
+    ver 0;
+}
+işlev simdiki_buyuk_mu(p: &değişken Ayr) -> mantıksal { ver metin_esit(simdiki(p), "BUYUK"); }
 işlev sim_mi(p: &değişken Ayr, t: metin) -> mantıksal { ver metin_esit(simdiki(p), t); }
 işlev sim_lex(p: &değişken Ayr) -> metin { ver lex_i(p, p.imlec); }
 işlev sim_sat(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sat, p.imlec); }
@@ -623,12 +641,139 @@ işlev ikili_op_ad(t: metin) -> metin {
 //      değil ama çağrı sırası: parse_oncelik <-> parse_onek <-> parse_birincil
 //      <-> parse_sonek hepsi aşağıda; KEMGU forward-ref destekler. ----
 
-// Minimal tip (P1: TIP_BASIT — tek tanımlayıcı). Tam tip sözdizimi → P4.
+// Generic argüman listesi `< T1, T2, ... >` → çocuk Dizi (>> kapanış böl).
+işlev parse_generic_args(p: &değişken Ayr) -> Dizi<tam32> {
+    bekle(p, "KUCUK");
+    değişken args: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+    iken devam {
+        dizi_ekle(args, parse_tip(p));
+        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+        değilse { devam = yanlış; }
+    }
+    bekle_buyuk(p);
+    ver args;
+}
+// Tek-argümanlı generic tip (seçimlik/tekkez/sabitsüre/görev/kanal/yetki).
+işlev parse_tek_arg(p: &değişken Ayr, dad: metin, s: tam32, u: tam32) -> tam32 {
+    bekle(p, "KUCUK");
+    değişken ic: tam32 = parse_tip(p);
+    bekle_buyuk(p);
+    ver dugum1(p, dad, "", s, u, ic);
+}
+
+// Tam tip sözdizimi (ifade.c parse_tip ile birebir) — P4.
 işlev parse_tip(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = simdiki(p);
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
-    değişken ad: metin = sim_lex(p);
+    // &T / &değişken T
+    eğer metin_esit(t, "VE_BIT") {
+        ilerle(p);
+        değişken dv: metin = "";
+        eğer sim_mi(p, "DEGISKEN") { ilerle(p); dv = "degisken"; }
+        ver dugum1(p, "TIP_REFERANS", dv, s, u, parse_tip(p));
+    }
+    // *T
+    eğer metin_esit(t, "YILDIZ") {
+        ilerle(p);
+        ver dugum1(p, "TIP_POINTER", "", s, u, parse_tip(p));
+    }
+    eğer metin_esit(t, "TEKKEZ") { ilerle(p); ver parse_tek_arg(p, "TIP_TEKKEZ", s, u); }
+    eğer metin_esit(t, "SABITSURE") { ilerle(p); ver parse_tek_arg(p, "TIP_SABITSURE", s, u); }
+    eğer metin_esit(t, "GOREV") { ilerle(p); ver parse_tek_arg(p, "TIP_GOREV", s, u); }
+    eğer metin_esit(t, "KANAL") { ilerle(p); ver parse_tek_arg(p, "TIP_KANAL", s, u); }
+    eğer metin_esit(t, "YETKI") { ilerle(p); ver parse_tek_arg(p, "TIP_YETKI", s, u); }
+    eğer metin_esit(t, "SECIMLIK") { ilerle(p); ver parse_tek_arg(p, "TIP_SECIMLIK", s, u); }
+    // sonuç<T,H>
+    eğer metin_esit(t, "SONUC") {
+        ilerle(p);
+        bekle(p, "KUCUK");
+        değişken dt: tam32 = parse_tip(p);
+        bekle(p, "VIRGUL");
+        değişken ht: tam32 = parse_tip(p);
+        bekle_buyuk(p);
+        ver dugum2(p, "TIP_SONUC", "", s, u, dt, ht);
+    }
+    // vektör<T, N> (N = compile-time tamsayı)
+    eğer metin_esit(t, "VEKTOR") {
+        ilerle(p);
+        bekle(p, "KUCUK");
+        değişken et: tam32 = parse_tip(p);
+        bekle(p, "VIRGUL");
+        değişken lane: metin = sim_lex(p);
+        bekle(p, "TAMSAYI");
+        bekle_buyuk(p);
+        ver dugum1(p, "TIP_VEKTOR", lane, s, u, et);
+    }
+    // işlev(T1, ...) -> T
+    eğer metin_esit(t, "ISLEV") {
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken kids: Dizi<tam32> = [];
+        eğer sim_mi(p, "SAG_PAREN") == yanlış {
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                eğer sim_mi(p, "SAG_PAREN") { devam = yanlış; }
+                değilse {
+                    dizi_ekle(kids, parse_tip(p));
+                    eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                    değilse { devam = yanlış; }
+                }
+            }
+        }
+        bekle(p, "SAG_PAREN");
+        bekle(p, "OK");
+        dizi_ekle(kids, parse_tip(p));   // dönüş tipi (çocukların SONU)
+        ver dugum_n(p, "TIP_ISLEV", "", s, u, kids);
+    }
+    // boş → birim tip (TIP_BASIT "boş")
+    eğer metin_esit(t, "BOS") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        ver dugum0(p, "TIP_BASIT", ad, s, u);
+    }
+    // Tanımlayıcı: basit / kullanıcı / Dizi / nitelikli yol / generic
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        // nitelikli yol: modül::Tip[::Tip...]
+        değişken yol: tam32 = 0;
+        değişken nitelikli: mantıksal = yanlış;
+        eğer sim_mi(p, "CIFT_IKI_NOKTA") {
+            yol = dugum0(p, "TANIMLAYICI", ad, s, u);
+            iken sim_mi(p, "CIFT_IKI_NOKTA") {
+                ilerle(p);
+                değişken sag: metin = sim_lex(p);
+                bekle(p, "TANIMLAYICI");
+                yol = dugum1(p, "YOL", sag, s, u, yol);
+            }
+            nitelikli = doğru;
+        }
+        // generic argümanlar?
+        eğer sim_mi(p, "KUCUK") {
+            değişken args: Dizi<tam32> = parse_generic_args(p);
+            // Dizi<T> özel (yalnız niteliksiz)
+            eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") ve (dizi_boyut(args) == 1) {
+                ver dugum1(p, "TIP_DIZI", "", s, u, dizi_al(args, 0));
+            }
+            değişken yk: tam32 = yol;
+            eğer nitelikli == yanlış { yk = dugum0(p, "TANIMLAYICI", ad, s, u); }
+            değişken kids: Dizi<tam32> = [];
+            dizi_ekle(kids, yk);
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(args) { dizi_ekle(kids, dizi_al(args, i)); i = i + 1; }
+            ver dugum_n(p, "TIP_KULLANICI", "", s, u, kids);
+        }
+        // niteliksiz generic-siz: nitelikli yol → KULLANICI, değilse BASIT
+        eğer nitelikli {
+            ver dugum1(p, "TIP_KULLANICI", "", s, u, yol);
+        }
+        ver dugum0(p, "TIP_BASIT", ad, s, u);
+    }
+    p.hata_say = p.hata_say + 1;
     ilerle(p);
-    ver dugum0(p, "TIP_BASIT", ad, s, u);
+    ver dugum0(p, "HATA", "", s, u);
 }
 
 // Yapı oluşturma: Tip { alan: ifade, ... } (poz = tip_id).
@@ -1105,7 +1250,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
         hata_say: 0,
-        yapi_izni: 1
+        yapi_izni: 1,
+        sk_pending: 0
     };
 }
 
