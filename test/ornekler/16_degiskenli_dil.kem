@@ -1,23 +1,33 @@
 // ============================================================================
 // 16_degiskenli_dil.kem — DEĞİŞKENLİ mini dil: atama + STRING-ANAHTARLI sembol
-// tablosu. Self-hosting'in bir sonraki yapı taşı: değişken adları (metin) ile
-// indekslenen bir sembol tablosu (gerçek derleyicinin ad çözümü çekirdeği).
+// tablosu. Self-hosting'in ad çözümü çekirdeği.
 //
 // Dil:  ( DEĞİŞKEN '=' ifade ';' )*  ifade
 //   atamalar bir sembol tablosuna yazılır; son ifade değişken aramasıyla hesaplanır.
 //
-// Sembol tablosu = paralel Dizi<metin> (adlar) + Dizi<tam32> (değerler);
-// arama metin_esit ile (byte-byte ad karşılaştırma). Token adları metin_kes
-// ile kaynaktan çıkarılır. Değişkenler TEK HARF (lexer sadeliği).
-//
-// Token akışı ve sembol tablosu açık Dizi PARAMETRELERİ olarak aktarılır
-// (D-024/D-026 deseni — yapı-paketleme yerine; yapı-yerel codegen kısıtı için
-// bkz. DECISIONS_LOG D-028 PROB).
+// Token tablosu ve sembol tablosu İKİ `yapı` olarak paketlenir (Tokenler +
+// Semboller), &referansla aktarılır — gerçek bir derleyicinin durum-paketi
+// deseni. HER İKİSİ DE `ad` alanı taşır (Tokenler.ad = token adı, Semboller.ad =
+// sembol adı): D-029'da düzeltilen alan-adı-çakışması codegen bug'ının canlı
+// kanıtı — `t.ad` artık doğru yapıya (Tokenler) çözülüyor (eski codegen Semboller'e
+// çözüp t.kind'i bozuyordu).
 //
 // Token türleri: 0=SAYI 1=+ 2=- 3=* 4=/ 5=( 6=) 7=DEĞİŞKEN 8== 9=;
 //
 // Çalıştırılan:  "x=6;y=7;x*y"  →  x=6, y=7,  x*y = 42
 // ============================================================================
+
+yapı Tokenler {
+    kind: Dizi<tam32>;
+    deger: Dizi<tam32>;
+    ad: Dizi<metin>;        // DEĞİŞKEN token'ının adı (diğerlerinde "")
+    imlec: Dizi<tam32>;     // tek elemanlı: konum
+}
+
+yapı Semboller {
+    ad: Dizi<metin>;        // <- Tokenler.ad ile AYNI alan adı (D-029 kanıtı)
+    deger: Dizi<tam32>;
+}
 
 işlev rakam_mi(b: tam8) -> mantıksal {
     değişken k: tam32 = b olarak tam32;
@@ -29,9 +39,15 @@ işlev harf_mi(b: tam8) -> mantıksal {
     ver (k >= 97 ve k <= 122) veya (k >= 65 ve k <= 90);
 }
 
+işlev token_ekle(t: &Tokenler, kind: tam32, deger: tam32, ad: metin) -> tam32 {
+    dizi_ekle(t.kind, kind);
+    dizi_ekle(t.deger, deger);
+    dizi_ekle(t.ad, ad);            // <- önceki bug: t.kind'e yazıyordu
+    ver 0;
+}
+
 // LEXER — metni token akışına çevir (tek-harf değişkenler).
-işlev lexle(kaynak: metin, kindler: Dizi<tam32>, degerler: Dizi<tam32>,
-            adlar: Dizi<metin>) -> tam32 {
+işlev lexle(kaynak: metin, t: &Tokenler) -> tam32 {
     değişken uz: tam32 = metin_uzunluk(kaynak);
     değişken i: tam32 = 0;
     değişken sayi: tam32 = 0;
@@ -42,13 +58,9 @@ işlev lexle(kaynak: metin, kindler: Dizi<tam32>, degerler: Dizi<tam32>,
             sayi = sayi * 10 + (b olarak tam32) - 48;
             sayi_var = doğru;
         } değilse {
-            eğer sayi_var {
-                dizi_ekle(kindler, 0); dizi_ekle(degerler, sayi); dizi_ekle(adlar, "");
-                sayi = 0; sayi_var = yanlış;
-            }
+            eğer sayi_var { token_ekle(t, 0, sayi, ""); sayi = 0; sayi_var = yanlış; }
             eğer harf_mi(b) {
-                dizi_ekle(kindler, 7); dizi_ekle(degerler, 0);
-                dizi_ekle(adlar, metin_kes(kaynak, i, 1));   // DEĞİŞKEN adı
+                token_ekle(t, 7, 0, metin_kes(kaynak, i, 1));   // DEĞİŞKEN
             } değilse {
                 değişken tur: tam32 = 0;
                 eğer b == 43 { tur = 1; }
@@ -59,130 +71,111 @@ işlev lexle(kaynak: metin, kindler: Dizi<tam32>, degerler: Dizi<tam32>,
                 değilse eğer b == 41 { tur = 6; }
                 değilse eğer b == 61 { tur = 8; }   // '='
                 değilse eğer b == 59 { tur = 9; }   // ';'
-                eğer tur != 0 {
-                    dizi_ekle(kindler, tur); dizi_ekle(degerler, 0); dizi_ekle(adlar, "");
-                }
+                eğer tur != 0 { token_ekle(t, tur, 0, ""); }
             }
         }
         i = i + 1;
     }
-    eğer sayi_var {
-        dizi_ekle(kindler, 0); dizi_ekle(degerler, sayi); dizi_ekle(adlar, "");
-    }
+    eğer sayi_var { token_ekle(t, 0, sayi, ""); }
     ver 0;
 }
 
 // Sembol tablosuna yaz (varsa güncelle, yoksa ekle).
-işlev sembol_koy(s_ad: Dizi<metin>, s_deg: Dizi<tam32>, ad: metin, deger: tam32) -> tam32 {
+işlev sembol_koy(s: &Semboller, ad: metin, deger: tam32) -> tam32 {
     değişken i: tam32 = 0;
-    değişken n: tam32 = dizi_boyut(s_ad);
+    değişken n: tam32 = dizi_boyut(s.ad);
     iken i < n {
-        eğer metin_esit(dizi_al(s_ad, i), ad) { dizi_yaz(s_deg, i, deger); ver 0; }
+        eğer metin_esit(dizi_al(s.ad, i), ad) { dizi_yaz(s.deger, i, deger); ver 0; }
         i = i + 1;
     }
-    dizi_ekle(s_ad, ad); dizi_ekle(s_deg, deger);
+    dizi_ekle(s.ad, ad); dizi_ekle(s.deger, deger);
     ver 0;
 }
 
 // Sembol tablosunda ara (tanımsız → 0).
-işlev sembol_ara(s_ad: Dizi<metin>, s_deg: Dizi<tam32>, ad: metin) -> tam32 {
+işlev sembol_ara(s: &Semboller, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
-    değişken n: tam32 = dizi_boyut(s_ad);
+    değişken n: tam32 = dizi_boyut(s.ad);
     iken i < n {
-        eğer metin_esit(dizi_al(s_ad, i), ad) { ver dizi_al(s_deg, i); }
+        eğer metin_esit(dizi_al(s.ad, i), ad) { ver dizi_al(s.deger, i); }
         i = i + 1;
     }
     ver 0;
 }
 
 // faktör = SAYI | DEĞİŞKEN | '(' ifade ')'
-işlev faktor(kindler: Dizi<tam32>, degerler: Dizi<tam32>, adlar: Dizi<metin>,
-             imlec: Dizi<tam32>, s_ad: Dizi<metin>, s_deg: Dizi<tam32>) -> tam32 {
-    değişken p: tam32 = dizi_al(imlec, 0);
-    değişken k: tam32 = dizi_al(kindler, p);
+işlev faktor(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    değişken k: tam32 = dizi_al(t.kind, p);
     eğer k == 5 {                                   // '('
-        dizi_yaz(imlec, 0, p + 1);
-        değişken v: tam32 = ifade(kindler, degerler, adlar, imlec, s_ad, s_deg);
-        dizi_yaz(imlec, 0, dizi_al(imlec, 0) + 1);  // ')' tüket
+        dizi_yaz(t.imlec, 0, p + 1);
+        değişken v: tam32 = ifade(t, s);
+        dizi_yaz(t.imlec, 0, dizi_al(t.imlec, 0) + 1);
         ver v;
     }
     eğer k == 7 {                                   // DEĞİŞKEN
-        dizi_yaz(imlec, 0, p + 1);
-        ver sembol_ara(s_ad, s_deg, dizi_al(adlar, p));
+        dizi_yaz(t.imlec, 0, p + 1);
+        ver sembol_ara(s, dizi_al(t.ad, p));
     }
-    dizi_yaz(imlec, 0, p + 1);                       // SAYI
-    ver dizi_al(degerler, p);
+    dizi_yaz(t.imlec, 0, p + 1);                     // SAYI
+    ver dizi_al(t.deger, p);
 }
 
 // terim = faktör ( ('*'|'/') faktör )*
-işlev terim(kindler: Dizi<tam32>, degerler: Dizi<tam32>, adlar: Dizi<metin>,
-            imlec: Dizi<tam32>, s_ad: Dizi<metin>, s_deg: Dizi<tam32>) -> tam32 {
-    değişken sol: tam32 = faktor(kindler, degerler, adlar, imlec, s_ad, s_deg);
+işlev terim(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken sol: tam32 = faktor(t, s);
     iken doğru {
-        değişken p: tam32 = dizi_al(imlec, 0);
-        eğer p >= dizi_boyut(kindler) { ver sol; }
-        değişken op: tam32 = dizi_al(kindler, p);
-        eğer op == 3 {
-            dizi_yaz(imlec, 0, p + 1);
-            sol = sol * faktor(kindler, degerler, adlar, imlec, s_ad, s_deg);
-        } değilse eğer op == 4 {
-            dizi_yaz(imlec, 0, p + 1);
-            sol = sol / faktor(kindler, degerler, adlar, imlec, s_ad, s_deg);
-        } değilse {
-            ver sol;
-        }
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver sol; }
+        değişken op: tam32 = dizi_al(t.kind, p);
+        eğer op == 3 { dizi_yaz(t.imlec, 0, p + 1); sol = sol * faktor(t, s); }
+        değilse eğer op == 4 { dizi_yaz(t.imlec, 0, p + 1); sol = sol / faktor(t, s); }
+        değilse { ver sol; }
     }
     ver sol;
 }
 
 // ifade = terim ( ('+'|'-') terim )*
-işlev ifade(kindler: Dizi<tam32>, degerler: Dizi<tam32>, adlar: Dizi<metin>,
-            imlec: Dizi<tam32>, s_ad: Dizi<metin>, s_deg: Dizi<tam32>) -> tam32 {
-    değişken sol: tam32 = terim(kindler, degerler, adlar, imlec, s_ad, s_deg);
+işlev ifade(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken sol: tam32 = terim(t, s);
     iken doğru {
-        değişken p: tam32 = dizi_al(imlec, 0);
-        eğer p >= dizi_boyut(kindler) { ver sol; }
-        değişken op: tam32 = dizi_al(kindler, p);
-        eğer op == 1 {
-            dizi_yaz(imlec, 0, p + 1);
-            sol = sol + terim(kindler, degerler, adlar, imlec, s_ad, s_deg);
-        } değilse eğer op == 2 {
-            dizi_yaz(imlec, 0, p + 1);
-            sol = sol - terim(kindler, degerler, adlar, imlec, s_ad, s_deg);
-        } değilse {
-            ver sol;
-        }
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver sol; }
+        değişken op: tam32 = dizi_al(t.kind, p);
+        eğer op == 1 { dizi_yaz(t.imlec, 0, p + 1); sol = sol + terim(t, s); }
+        değilse eğer op == 2 { dizi_yaz(t.imlec, 0, p + 1); sol = sol - terim(t, s); }
+        değilse { ver sol; }
     }
     ver sol;
 }
 
 // Tam yorumlayıcı: lex → atamaları işle (sembol tablosu) → son ifade.
 işlev calistir(kaynak: metin) -> tam32 {
-    değişken kindler: Dizi<tam32> = dizi_olustur(32);
-    değişken degerler: Dizi<tam32> = dizi_olustur(32);
-    değişken adlar: Dizi<metin> = dizi_olustur(32);
-    lexle(kaynak, kindler, degerler, adlar);
+    değişken t: Tokenler = Tokenler {
+        kind: dizi_olustur(32), deger: dizi_olustur(32),
+        ad: dizi_olustur(32), imlec: dizi_olustur(1)
+    };
+    lexle(kaynak, &t);
+    dizi_ekle(t.imlec, 0);
 
-    değişken imlec: Dizi<tam32> = dizi_olustur(1);
-    dizi_ekle(imlec, 0);
-
-    değişken s_ad: Dizi<metin> = dizi_olustur(8);
-    değişken s_deg: Dizi<tam32> = dizi_olustur(8);
+    değişken s: Semboller = Semboller {
+        ad: dizi_olustur(8), deger: dizi_olustur(8)
+    };
 
     iken doğru {
-        değişken p: tam32 = dizi_al(imlec, 0);
+        değişken p: tam32 = dizi_al(t.imlec, 0);
         // DEĞİŞKEN '=' ... ';'  ataması mı?
-        eğer dizi_al(kindler, p) == 7 ve dizi_al(kindler, p + 1) == 8 {
-            değişken ad: metin = dizi_al(adlar, p);
-            dizi_yaz(imlec, 0, p + 2);                  // DEĞİŞKEN ve '=' tüket
-            değişken v: tam32 = ifade(kindler, degerler, adlar, imlec, s_ad, s_deg);
-            sembol_koy(s_ad, s_deg, ad, v);
-            değişken q: tam32 = dizi_al(imlec, 0);       // ';' tüket
-            eğer q < dizi_boyut(kindler) ve dizi_al(kindler, q) == 9 {
-                dizi_yaz(imlec, 0, q + 1);
+        eğer dizi_al(t.kind, p) == 7 ve dizi_al(t.kind, p + 1) == 8 {
+            değişken ad: metin = dizi_al(t.ad, p);
+            dizi_yaz(t.imlec, 0, p + 2);                  // DEĞİŞKEN ve '=' tüket
+            değişken v: tam32 = ifade(&t, &s);
+            sembol_koy(&s, ad, v);
+            değişken q: tam32 = dizi_al(t.imlec, 0);       // ';' tüket
+            eğer q < dizi_boyut(t.kind) ve dizi_al(t.kind, q) == 9 {
+                dizi_yaz(t.imlec, 0, q + 1);
             }
         } değilse {
-            ver ifade(kindler, degerler, adlar, imlec, s_ad, s_deg);   // sonuç
+            ver ifade(&t, &s);                           // sonuç
         }
     }
     ver 0;
