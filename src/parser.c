@@ -595,6 +595,12 @@ static Dugum *parse_cesit_tanimi(Parser *p) {
 
     Liste varyantlar;
     liste_baslat(&varyantlar);
+    /* C3 payload: her varyantın payload tip dizisi + sayısı (geçici, sonra
+     * arena'ya kopyalanır). Bildirim-sırası bounded (disc i8/i16). */
+    #define PARSER_CESIT_MAX_VARYANT 1024
+    Dugum **gecici_payload[PARSER_CESIT_MAX_VARYANT];
+    int gecici_payload_sayi[PARSER_CESIT_MAX_VARYANT];
+    int vsay = 0;
     while (!parser_eslesir(p, TOK_SAG_SUSLU) &&
            !parser_eslesir(p, TOK_DOSYA_SONU)) {
         Token v = parser_simdiki(p);
@@ -604,23 +610,33 @@ static Dugum *parse_cesit_tanimi(Parser *p) {
             break;
         }
         parser_ilerle(p);
-        /* Payload reddi (v1): Varyant(tip) */
+        /* C3: Varyant(tip1, tip2, ...) — payload tip listesi (opsiyonel) */
+        Dugum **pl_tipler = NULL;
+        int pl_sayi = 0;
         if (parser_eslesir(p, TOK_SOL_PAREN)) {
-            parser_hata(p, parser_simdiki(p), "P354",
-                "cesit varyant payload'u v1'de desteklenmiyor (gelecek surum)",
-                NULL);
-            int derinlik = 0;  /* ( ... ) tüket */
-            do {
-                Token tt = parser_simdiki(p);
-                if (tt.tip == TOK_DOSYA_SONU) break;
-                if (tt.tip == TOK_SOL_PAREN) derinlik++;
-                else if (tt.tip == TOK_SAG_PAREN) derinlik--;
-                parser_ilerle(p);
-            } while (derinlik > 0);
+            parser_ilerle(p);  /* ( */
+            Liste pl;
+            liste_baslat(&pl);
+            if (!parser_eslesir(p, TOK_SAG_PAREN)) {
+                do {
+                    if (parser_eslesir(p, TOK_SAG_PAREN)) break;
+                    Dugum *t = parse_tip(p);
+                    liste_ekle(&pl, p->arena, t);
+                } while (parser_tuket(p, TOK_VIRGUL));
+            }
+            parser_bekle(p, TOK_SAG_PAREN, "P354",
+                         "cesit varyant payload'unda ')' bekleniyor");
+            pl_tipler = liste_array_yap(&pl, p->arena);
+            pl_sayi = pl.sayi;
         }
         Dugum *vd = dugum_tanimlayici(p->arena, v.baslangic, v.uzunluk,
                                       v.satir, v.sutun);
         if (vd) liste_ekle(&varyantlar, p->arena, vd);
+        if (vsay < PARSER_CESIT_MAX_VARYANT) {
+            gecici_payload[vsay] = pl_tipler;
+            gecici_payload_sayi[vsay] = pl_sayi;
+            vsay++;
+        }
         parser_tuket(p, TOK_VIRGUL);  /* virgül opsiyonel */
         if (p->hata_sayisi >= PARSER_MAX_HATA) break;
     }
@@ -637,14 +653,23 @@ static Dugum *parse_cesit_tanimi(Parser *p) {
     int kap = n > 0 ? n : 1;
     char **v_adlar = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
     int *v_uzlar = (int *)arena_ayir(p->arena, sizeof(int) * (size_t)kap);
+    Dugum ***v_payload = (Dugum ***)arena_ayir(p->arena,
+                                               sizeof(Dugum **) * (size_t)kap);
+    int *v_payload_sayi = (int *)arena_ayir(p->arena,
+                                            sizeof(int) * (size_t)kap);
     for (int i = 0; i < n; i++) {
         v_adlar[i] = (char *)varr[i]->veri.tanimlayici.metin;
         v_uzlar[i] = varr[i]->veri.tanimlayici.uzunluk;
+        v_payload[i] = (i < vsay) ? gecici_payload[i] : NULL;
+        v_payload_sayi[i] = (i < vsay) ? gecici_payload_sayi[i] : 0;
     }
     d->veri.cesit.varyantlar = v_adlar;
     d->veri.cesit.varyant_uzunluklar = v_uzlar;
     d->veri.cesit.varyant_sayi = n;
+    d->veri.cesit.varyant_payload_tipleri = v_payload;
+    d->veri.cesit.varyant_payload_sayilari = v_payload_sayi;
     return d;
+    #undef PARSER_CESIT_MAX_VARYANT
 }
 
 /* === Ozellik (trait) tanimi ===
@@ -1280,6 +1305,22 @@ static Dugum *parse_desen(Parser *p) {
                 d->veri.desen_yol.varyant_ad =
                     ast_string_kopyala(p->arena, vt.baslangic, vt.uzunluk);
                 d->veri.desen_yol.varyant_uz = vt.uzunluk;
+            }
+            /* C3: payload bağlama deseni Cesit::V(a, b) — alt-desenler */
+            if (d && parser_eslesir(p, TOK_SOL_PAREN)) {
+                parser_ilerle(p);  /* ( */
+                Liste alt;
+                liste_baslat(&alt);
+                if (!parser_eslesir(p, TOK_SAG_PAREN)) {
+                    do {
+                        if (parser_eslesir(p, TOK_SAG_PAREN)) break;
+                        liste_ekle(&alt, p->arena, parse_desen(p));
+                    } while (parser_tuket(p, TOK_VIRGUL));
+                }
+                parser_bekle(p, TOK_SAG_PAREN, "P213",
+                             "Cesit::V payload deseninde ')' bekleniyor");
+                d->veri.desen_yol.alt_desenler = liste_array_yap(&alt, p->arena);
+                d->veri.desen_yol.alt_sayi = alt.sayi;
             }
             return d;
         }
