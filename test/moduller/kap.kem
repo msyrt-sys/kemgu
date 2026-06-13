@@ -1,0 +1,63 @@
+// C faz-2 fikstur: capraz-modul generic STRUCT (Liste<T> + transitif büyü<T>).
+// Minimal bölge-tabanlı büyüyen kapsayıcı: yarat / büyü / ekle / al.
+//  - Witness-param INFERENCE (explicit yazılı tip-arg parser'da yok; D işi).
+//  - bölge/yetki built-in'leri specialized gövdede owning-modül ("kap")
+//    bağlamında çalışır.
+//  - Liste<T> type-erased (%Liste = {ptr,i64,i64}); T yan-kanal/subst ile.
+//  - Modül-nitelikli tip annotasyonu (kap::Liste<T>) KULLANILMAZ — saf
+//    inference (yazılı nitelikli tip = D).
+yapı Liste<T> {
+    veri: *T;
+    boy: tam64;
+    kapasite: tam64;
+}
+
+genel işlev yarat<T>(taban: T) -> Liste<T> {
+    değişken böl: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken tampon: *T = bölge_al(böl, 0);
+    geri_al(böl);
+    ver Liste { veri: tampon, boy: 0, kapasite: 0 };
+}
+
+// Doluysa büyüt: 0 -> 4, sonra 2x. İçerik eleman-eleman taşınır.
+// taban: T yalnız tip-tanık (inference); değer kullanılmaz.
+genel işlev büyü<T>(l: &Liste<T>, taban: T) {
+    eğer l.boy == l.kapasite {
+        değişken böl: yetki<Bellek> = yetki_olustur(3, 3);
+        değişken yeni_kap: tam64 = 4;
+        eğer l.kapasite > (0 olarak tam64) {
+            yeni_kap = l.kapasite * (2 olarak tam64);
+        }
+        değişken yeni_veri: *T = bölge_al(böl, yeni_kap);
+        geri_al(böl);
+        değişken eski: *T = l.veri;
+        güvensiz {
+            değişken i: tam64 = 0;
+            iken i < l.boy {
+                yeni_veri[i] = eski[i];
+                i = i + (1 olarak tam64);
+            }
+        }
+        l.veri = yeni_veri;
+        l.kapasite = yeni_kap;
+    }
+}
+
+// Sona ekle; gerekirse büyür (transitif kardeş generic çağrısı büyü<T>).
+genel işlev ekle<T>(l: &Liste<T>, v: T) {
+    büyü(l, v);
+    değişken d: *T = l.veri;
+    güvensiz {
+        d[l.boy] = v;
+    }
+    l.boy = l.boy + (1 olarak tam64);
+}
+
+// i. eleman; sınır-dışıysa varsayılan (çökmezlik). varsayilan: T tanık.
+genel işlev al<T>(l: &Liste<T>, i: tam64, varsayilan: T) -> T {
+    eğer i >= l.boy { ver varsayilan; }
+    değişken d: *T = l.veri;
+    güvensiz {
+        ver d[i];
+    }
+}
