@@ -1,0 +1,6 @@
+// A dogrulama: alias import — m::topla.
+kullan mat olarak m;
+
+işlev main() -> tam32 {
+    ver m::topla(20, 22);
+}

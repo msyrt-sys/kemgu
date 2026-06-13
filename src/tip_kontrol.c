@@ -21,13 +21,28 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
 
+    /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
+     * kayitlari) global'in PARENT'i olan ayri bir scope'ta yasar. Dosya-modul
+     * scope'lari da builtin_scope'a baglanir: moduller built-in'leri gorur
+     * ama giris dosyasinin ozel (top-level) adlarini GORMEZ. Yan etki:
+     * kullanici built-in adi golgeleyebilir (onceden T024 cift-tanim idi). */
+    tk->builtin_scope = NULL;
+    if (global->parent == NULL) {
+        Scope *b0 = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        if (b0) {
+            global->parent = b0;
+            tk->builtin_scope = b0;
+        }
+    }
+    if (!tk->builtin_scope) tk->builtin_scope = global;
+
     /* Built-in islevler — LLVM'de libc karsiliklarina map edilir */
     #define EKLE_BUILTIN(_ad, _ad_uz, _params, _n_params, _donus) do { \
         Sembol _s; memset(&_s, 0, sizeof(_s)); \
         _s.ad = (_ad); _s.ad_uzunluk = (_ad_uz); \
         _s.kategori = SEMBOL_ISLEV; \
         _s.tip = tip_olustur_islev(a, (_params), (_n_params), (_donus)); \
-        sembol_ekle(global, a, &_s); \
+        sembol_ekle(tk->builtin_scope, a, &_s); \
     } while (0)
 
     /* yazdir(metin) -> tam32  (libc puts) */
@@ -923,10 +938,24 @@ static const Dugum *cesit_ara(TipKontrol *tk, const char *ad, int uz) {
  * modul_scope'a coz. mat -> mat'in scope'u; mat::ic -> ic'in scope'u
  * (recursive). Modul degilse NULL. Codegen'in @m1.m2 duzlestirmesiyle
  * ayni kapsam zinciri. */
+/* A: gizli-farkindalikli ad arama — dosya-modul kanonik kayitlari
+ * (gizli=1, builtin_scope'ta) normal cozumde GORUNMEZ; onlara yalniz
+ * 'kullan' ile kurulan gorunur alias'lar uzerinden erisilir. Ayni
+ * scope'ta es-adli ikinci sembol olamayacagi icin gizli eslesmede
+ * parent'a gecmek dogru semantigi verir. */
+static const Sembol *gorunur_sembol_bul(const Scope *s,
+                                        const char *ad, int uz) {
+    for (; s; s = s->parent) {
+        const Sembol *sem = sembol_bul_yerel(s, ad, uz);
+        if (sem && !sem->gizli) return sem;
+    }
+    return NULL;
+}
+
 static Scope *yol_modul_scope_coz(TipKontrol *tk, const Dugum *d) {
     if (!d) return NULL;
     if (d->tip == DUGUM_TANIMLAYICI) {
-        const Sembol *m = sembol_bul(tk->scope,
+        const Sembol *m = gorunur_sembol_bul(tk->scope,
             d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
         if (m && m->kategori == SEMBOL_MODUL && m->modul_scope) {
             return m->modul_scope;
@@ -1005,6 +1034,16 @@ static void cozum_bagla(TipKontrol *tk, const Dugum *d,
                         const Sembol *sem, const Scope *bulundugu) {
     if (!d || !sem || !bulundugu) return;
     Dugum *yd = (Dugum *)d;
+    /* A: secili-import alias'i — kazanan ASIL modulun uyesidir; binding
+     * alias'in tasidigi onekle MODUL_UYESI olarak yazilir (codegen
+     * @onek.ad emit eder). Bulundugu scope'un kategorisi onemsiz. */
+    if (sem->ithal_onek) {
+        yd->cozum_sembol = sem;
+        yd->cozum_kategori = COZUM_MODUL_UYESI;
+        yd->cozum_modul_onek = sem->ithal_onek;
+        yd->cozum_modul_onek_uz = sem->ithal_onek_uz;
+        return;
+    }
     if (bulundugu->kategori == SCOPE_GLOBAL) {
         yd->cozum_sembol = sem;
         yd->cozum_kategori = COZUM_GLOBAL;
@@ -1029,10 +1068,17 @@ static const Sembol *sembol_coz_ve_bagla(TipKontrol *tk, const Dugum *d,
                                          const char *ad, int uz) {
     for (const Scope *s = tk->scope; s; s = s->parent) {
         const Sembol *sem = sembol_bul_yerel(s, ad, uz);
-        if (sem) {
-            cozum_bagla(tk, d, sem, s);
-            return sem;
+        if (!sem) continue;
+        /* A: dosya-modul kanonik kaydi gorunmez — parent'a gec */
+        if (sem->gizli) continue;
+        /* A: ayni ad birden cok secili import'tan geldi — T042 */
+        if (sem->ithal_cakisma) {
+            tip_hata(tk, d, "T042",
+                "belirsiz ad: birden cok secili import ayni adi getirdi "
+                "(nitelikli erisim kullanin: modul::ad)");
         }
+        cozum_bagla(tk, d, sem, s);
+        return sem;
     }
     return NULL;
 }
@@ -3102,6 +3148,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "modul uyesi bulunamadi");
                 return t_hata(tk);
             }
+            /* A: dosya-modul gorunurlugu — yalniz 'genel' uyeler capraz-
+             * modul erisilebilir. Modulun KENDI icinden (tk->scope zinciri
+             * msc'den geciyorsa) tum kardesler gorunur. Dosya-ici moduller
+             * (dosya_modulu=0) geriye uyumlu: denetim yok. */
+            if (msc->dosya_modulu && !uye->genel) {
+                int iceriden = 0;
+                for (const Scope *s = tk->scope; s; s = s->parent) {
+                    if (s == msc) { iceriden = 1; break; }
+                }
+                if (!iceriden) {
+                    tip_hata(tk, d, "T041",
+                        "modul uyesi 'genel' degil (private-by-default: "
+                        "disari acmak icin 'genel' isareti gerekir)");
+                    return t_hata(tk);
+                }
+            }
             /* Tek-gecis ad cozumu: kazanan uye + TAM modul oneki YOL
              * dugumune yazilir. Goreli yol (m icinden ic::g) boylece
              * codegen'de dogru mangle edilir (@m.ic.g) — onceki string
@@ -3542,6 +3604,7 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     y.ast_dugumu = yapi;
     y.satir = yapi->satir;
     y.sutun = yapi->sutun;
+    y.genel = yapi->veri.yapi.genel_mi;
     if (sembol_ekle(tk->global_scope, tk->arena, &y) != 0) {
         tip_hata(tk, yapi, "T026", "yapi tanimi cakismasi");
     }
@@ -3558,6 +3621,7 @@ static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
     c.ast_dugumu = cesit;       /* exhaustiveness + varyant doğrulama buradan */
     c.satir = cesit->satir;
     c.sutun = cesit->sutun;
+    c.genel = cesit->veri.cesit.genel_mi;
     if (sembol_ekle(tk->global_scope, tk->arena, &c) != 0) {
         tip_hata(tk, cesit, "T026", "tip tanimi cakismasi (cesit)");
     }
@@ -3618,6 +3682,7 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
     s.ast_dugumu = islev;
     s.satir = islev->satir;
     s.sutun = islev->sutun;
+    s.genel = islev->veri.islev.genel_mi;
     if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
         tip_hata(tk, islev, "T024", "islev tanimi cakismasi");
     }
@@ -3634,6 +3699,7 @@ static void pre_populate_sabit(TipKontrol *tk, const Dugum *sabit) {
     s.ast_dugumu = sabit;
     s.satir = sabit->satir;
     s.sutun = sabit->sutun;
+    s.genel = sabit->veri.sabit.genel_mi;
     if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
         tip_hata(tk, sabit, "T024", "sabit tanimi cakismasi");
     }
@@ -3750,8 +3816,19 @@ static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
     Scope *eski_global = tk->global_scope;
     Scope *eski_scope = tk->scope;
 
-    Scope *msc = scope_olustur(tk->arena, SCOPE_MODUL, eski_global);
+    /* A: dosya-modul — scope parent'i builtin_scope (giris dosyasinin
+     * ozel adlari modul govdelerine SIZMAZ, built-in'ler gorunur);
+     * kanonik sembol builtin_scope'a GIZLI olarak kaydedilir (yalniz
+     * 'kullan' alias'lari ve onek turetme erisir). Dosya-ici modul:
+     * eski davranis (parent + sembol = mevcut global). */
+    int dosya_m = m->veri.modul.dosya_modulu;
+    Scope *parent = dosya_m ? tk->builtin_scope : eski_global;
+    Scope *msc = scope_olustur(tk->arena, SCOPE_MODUL, parent);
     if (!msc) return;
+    /* Gorunurluk bayragi: dosya-modul icindeki ic ice moduller de
+     * dosya-modul sayilir (genel denetimi onlara da uygulanir). */
+    msc->dosya_modulu = dosya_m ||
+        (eski_global && eski_global->dosya_modulu);
 
     /* Uye pre-populate'i modul_scope baglaminda yap (helper'lar
      * tk->global_scope'a ekler; tk->scope tip-adi cozumu icin). */
@@ -3771,7 +3848,9 @@ static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
     s.ast_dugumu = m;
     s.satir = m->satir;
     s.sutun = m->sutun;
-    if (sembol_ekle(eski_global, tk->arena, &s) != 0) {
+    s.gizli = dosya_m;  /* dosya-modul: yalniz kullan-alias'lariyla erisim */
+    if (sembol_ekle(dosya_m ? tk->builtin_scope : eski_global,
+                    tk->arena, &s) != 0) {
         tip_hata(tk, m, "T024", "modul tanimi cakismasi");
     }
 }
@@ -3780,6 +3859,130 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate_uyeler(tk, program->veri.program.uyeler,
                         program->veri.program.sayi);
+}
+
+/* === A: kullan baglari (iki-fazli yuklemenin 2. fazi) ===
+ *
+ * Loader (ana.c) erisilebilir dosya-modulleri kesfedip parse etti ve
+ * sentetik DUGUM_MODUL (dosya_modulu=1) olarak programa ekledi;
+ * pre_populate kanonik kayitlari (gizli, builtin_scope) kurdu. Bu faz
+ * her 'kullan' bildirimini, BILDIRIMI ICEREN dosyanin scope'una
+ * gorunur baglara cevirir:
+ *   kullan dizi;            -> SEMBOL_MODUL "dizi" (nitelikli erisim)
+ *   kullan dizi olarak d;   -> SEMBOL_MODUL "d" (alias)
+ *   kullan dizi::{a, b};    -> modul bagi + a/b uye alias'lari
+ *                              (ithal_onek="dizi" — binding MODUL_UYESI)
+ * Tum moduller kayitli oldugu icin bildirim sirasi onemsiz (dongusel
+ * import v1'de hata degil). Cok-segment ciplak yol (kullan a::b::c;)
+ * legacy duzlestirme olarak tanim fazinda islenir. */
+
+static int kullan_yeni_bicim_mi(const Dugum *k) {
+    return k->veri.kullan.segment_sayi <= 1 ||
+           k->veri.kullan.secili_sayi > 0 ||
+           k->veri.kullan.alias_ad != NULL;
+}
+
+static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
+    if (!kullan_yeni_bicim_mi(k)) return;  /* legacy — tanim fazinda */
+    const char *mad = k->veri.kullan.yol;
+    int muz = k->veri.kullan.yol_uzunluk;
+    const Sembol *kanonik = sembol_bul_yerel(tk->builtin_scope, mad, muz);
+    if (!kanonik || kanonik->kategori != SEMBOL_MODUL ||
+        !kanonik->modul_scope) {
+        tip_hata(tk, k, "T040",
+            "kullan: mod\xc3\xbcl y\xc3\xbcklenemedi "
+            "(dosya bulunamad\xc4\xb1 ya da y\xc3\xbckleyici ko\xc5\x9fmad\xc4\xb1)");
+        return;
+    }
+
+    /* Modul bagi — alias varsa o adla (kullan dizi olarak d;) */
+    {
+        Sembol mb;
+        memset(&mb, 0, sizeof(mb));
+        mb.ad = k->veri.kullan.alias_ad ? k->veri.kullan.alias_ad
+                                        : kanonik->ad;
+        mb.ad_uzunluk = k->veri.kullan.alias_ad ? k->veri.kullan.alias_ad_uz
+                                                : kanonik->ad_uzunluk;
+        mb.kategori = SEMBOL_MODUL;
+        mb.modul_scope = kanonik->modul_scope;
+        mb.ast_dugumu = kanonik->ast_dugumu;
+        mb.satir = k->satir;
+        mb.sutun = k->sutun;
+        if (sembol_ekle(hedef, tk->arena, &mb) != 0) {
+            /* Ayni modul ikinci kez kullan edildiyse sessiz (idempotent);
+             * farkli bir tanimla cakistiysa T024. */
+            Sembol *mevcut = sembol_bul_yazilabilir(hedef, mb.ad,
+                                                    mb.ad_uzunluk);
+            if (!(mevcut && mevcut->kategori == SEMBOL_MODUL &&
+                  mevcut->modul_scope == kanonik->modul_scope)) {
+                tip_hata(tk, k, "T024", "kullan: ad cakismasi (modul bagi)");
+            }
+        }
+    }
+
+    /* Secili adlar (kullan dizi::{Liste, ekle};) */
+    for (int i = 0; i < k->veri.kullan.secili_sayi; i++) {
+        const char *ad = k->veri.kullan.secili_adlar[i];
+        int uz = k->veri.kullan.secili_uzunluklar[i];
+        const Sembol *hs = sembol_bul_yerel(kanonik->modul_scope, ad, uz);
+        if (!hs) {
+            tip_hata(tk, k, "T002", "secili import: modul uyesi bulunamadi");
+            continue;
+        }
+        if (!hs->genel) {
+            tip_hata(tk, k, "T041",
+                "secili import: uye 'genel' degil (private-by-default)");
+            continue;
+        }
+        Sembol alias = *hs;
+        alias.ithal_onek = kanonik->ad;       /* mangling oneki = modul adi */
+        alias.ithal_onek_uz = kanonik->ad_uzunluk;
+        alias.gizli = 0;
+        alias.ithal_cakisma = 0;
+        alias.satir = k->satir;
+        alias.sutun = k->sutun;
+        if (sembol_ekle(hedef, tk->arena, &alias) != 0) {
+            Sembol *mevcut = sembol_bul_yazilabilir(hedef, ad, uz);
+            if (mevcut && mevcut->ithal_onek) {
+                /* Iki secili import ayni adi getirdi: kullanim aninda
+                 * T042 (a::f / b::f nitelikli erisim gecerli kalir). */
+                if (mevcut->ithal_onek_uz != alias.ithal_onek_uz ||
+                    memcmp(mevcut->ithal_onek, alias.ithal_onek,
+                           (size_t)alias.ithal_onek_uz) != 0) {
+                    mevcut->ithal_cakisma = 1;
+                }
+            } else {
+                tip_hata(tk, k, "T024",
+                    "secili import: yerel tanimla ad cakismasi");
+            }
+        }
+    }
+}
+
+static void kullan_baglari_kur(TipKontrol *tk, const Dugum *program) {
+    if (!program || program->tip != DUGUM_PROGRAM) return;
+    for (int i = 0; i < program->veri.program.sayi; i++) {
+        const Dugum *uye = program->veri.program.uyeler[i];
+        if (!uye) continue;
+        if (uye->tip == DUGUM_KULLAN) {
+            kullan_isle(tk, uye, tk->global_scope);
+        } else if (uye->tip == DUGUM_MODUL) {
+            /* Modulun kendi kullan'lari kendi scope'una baglanir */
+            Scope *arama = uye->veri.modul.dosya_modulu
+                ? tk->builtin_scope : tk->global_scope;
+            const Sembol *ms = sembol_bul_yerel(arama,
+                uye->veri.modul.ad, uye->veri.modul.ad_uzunluk);
+            if (!ms || ms->kategori != SEMBOL_MODUL || !ms->modul_scope) {
+                continue;
+            }
+            for (int j = 0; j < uye->veri.modul.sayi; j++) {
+                const Dugum *mu = uye->veri.modul.uyeler[j];
+                if (mu && mu->tip == DUGUM_KULLAN) {
+                    kullan_isle(tk, mu, ms->modul_scope);
+                }
+            }
+        }
+    }
 }
 
 /* C2.7: eşleş kapsayıcılık (Maranget usefulness, flat + sonuç<_,çeşit> bir
@@ -4547,6 +4750,12 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_KULLAN: {
+            /* A: yeni bicim (tek-segment / secili / alias) faz-2'de
+             * (kullan_baglari_kur) islendi — burada is yok. Asagisi
+             * LEGACY cok-segment duzlestirme yoludur (drivers/ +
+             * test/crossfile tuketicileri icin korunur). */
+            if (kullan_yeni_bicim_mi(d)) break;
+
             /* Yol formati: "x::y::z" -> "x/y/z.kem"
              * Arama sirasi: cari dizin, "stdlib/" prefix'i. */
             const char *y = d->veri.kullan.yol;
@@ -4624,9 +4833,13 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             /* T016 fix: uyeleri MODUL SCOPE baglaminda kontrol et —
              * boylece kardes islevlere ciplak-ad cagrilar (kare()) ve
              * modul-yerel tipler cozulur. Modul sembolu pre_populate'da
-             * mevcut scope'a (parent) eklendi; scope'unu bulup gir. */
-            const Sembol *ms = sembol_bul_yerel(tk->scope,
-                d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+             * mevcut scope'a (parent) eklendi; scope'unu bulup gir.
+             * A: dosya-modul kanonigi builtin_scope'ta (gizli). */
+            const Sembol *ms = d->veri.modul.dosya_modulu
+                ? sembol_bul_yerel(tk->builtin_scope,
+                      d->veri.modul.ad, d->veri.modul.ad_uzunluk)
+                : sembol_bul_yerel(tk->scope,
+                      d->veri.modul.ad, d->veri.modul.ad_uzunluk);
             Scope *eski = tk->scope;
             if (ms && ms->kategori == SEMBOL_MODUL && ms->modul_scope) {
                 tk->scope = ms->modul_scope;
@@ -4651,6 +4864,9 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate(tk, program);
+    /* A faz-2: tum moduller kayitli — kullan baglarini kur (dongusel
+     * import bildirim sirasi onemsiz). */
+    kullan_baglari_kur(tk, program);
     for (int i = 0; i < program->veri.program.sayi; i++) {
         tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }

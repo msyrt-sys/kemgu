@@ -15,6 +15,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <windows.h>   /* MultiByteToWideChar — UTF-8 dosya yolu (kütüphane/) */
+#include <wchar.h>
+#endif
+
 /*
  * KEMGU CLI:
  *   kemgu [--token | --parse | --check | --llvm] [dosya]
@@ -104,6 +109,258 @@ static int mode_parse(const char *kaynak, const char *dosya_adi) {
     return rc;
 }
 
+/* ============================================================
+ * A: Cok-dosya modul yukleyici (whole-program, iki-fazli)
+ * ============================================================
+ *
+ * Giris dosyasinin yeni-bicim 'kullan' grafigini BFS ile gezer:
+ * her erisilebilir modul dosyasi BIR KEZ parse edilir ve sentetik
+ * DUGUM_MODUL (dosya_modulu=1) olarak program AST'sinin BASINA
+ * eklenir. Ardindan tip_kontrol_program tek namespaced sembol
+ * tablosunu kurar (faz-1 kayit + faz-2 kullan baglari) ve B'nin
+ * resolver'i capraz-dosya adlari MODUL_UYESI binding'iyle cozer;
+ * codegen ayni AST'den tum modulleri @modul.ad olarak emit eder.
+ *
+ * Arama yolu (ILK eslesme kazanir):
+ *   1) ice-aktaran dosyanin dizini
+ *   2) proje koku (cwd)
+ *   3) kütüphane/
+ * Modul = dosya: dizi.kem => modul 'dizi'. Ayni ada ikinci yukleme
+ * yok (ad bazli dedup — dongusel import dogal olarak sonlanir).
+ * Cok-segment ciplak 'kullan a::b;' LEGACY duzlestirme yolundadir
+ * (tip_kontrol/llvm icindeki eski yol) — buraya girmez. */
+
+/* fopen Windows'ta ANSI codepage kullanir — UTF-8 yol (kütüphane/)
+ * bozulur. UTF-8 -> UTF-16 cevirip _wfopen. */
+static FILE *dosya_ac_utf8(const char *yol, const char *kip) {
+#ifdef _WIN32
+    wchar_t wyol[1024];
+    wchar_t wkip[8];
+    if (MultiByteToWideChar(CP_UTF8, 0, yol, -1, wyol, 1024) <= 0) {
+        return fopen(yol, kip);
+    }
+    if (MultiByteToWideChar(CP_UTF8, 0, kip, -1, wkip, 8) <= 0) {
+        return fopen(yol, kip);
+    }
+    return _wfopen(wyol, wkip);
+#else
+    return fopen(yol, kip);
+#endif
+}
+
+/* Dosya icerigini arena'ya oku; NULL = acilamadi. */
+static char *dosya_icerik_oku(Arena *a, const char *yol) {
+    FILE *f = dosya_ac_utf8(yol, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long boyut = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (boyut < 0) { fclose(f); return NULL; }
+    char *icerik = (char *)arena_ayir(a, (size_t)boyut + 1);
+    if (!icerik) { fclose(f); return NULL; }
+    size_t okunan = fread(icerik, 1, (size_t)boyut, f);
+    icerik[okunan] = '\0';
+    fclose(f);
+    return icerik;
+}
+
+/* yol'un dizin kismini out'a yaz ("a/b/c.kem" -> "a/b"); dizin yoksa "." */
+static void dizin_al(const char *yol, char *out, size_t n) {
+    int son = -1;
+    for (int i = 0; yol[i]; i++) {
+        if (yol[i] == '/' || yol[i] == '\\') son = i;
+    }
+    if (son < 0 || (size_t)son + 1 >= n) {
+        snprintf(out, n, ".");
+        return;
+    }
+    memcpy(out, yol, (size_t)son);
+    out[son] = '\0';
+}
+
+static int kullan_yeni_bicim(const Dugum *k) {
+    return k->veri.kullan.segment_sayi <= 1 ||
+           k->veri.kullan.secili_sayi > 0 ||
+           k->veri.kullan.alias_ad != NULL;
+}
+
+typedef struct KullanIsi {
+    const Dugum *k;               /* yeni-bicim DUGUM_KULLAN */
+    const char *ithalatci_yol;    /* iceren dosyanin yolu (arama + hata) */
+    const char *ithalatci_kaynak; /* hata konum raporu icin */
+} KullanIsi;
+
+typedef struct YukluAd {
+    const char *ad;
+    int uz;
+    struct YukluAd *sonraki;
+} YukluAd;
+
+/* prog uyelerini yeni-bicim kullan'larla isi listesine ekle */
+static int kullan_isleri_topla(Arena *a, Dugum *const *uyeler, int sayi,
+                               const char *yol, const char *kaynak,
+                               KullanIsi **isler, int *is_sayi, int *kap) {
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *u = uyeler[i];
+        if (!u || u->tip != DUGUM_KULLAN) continue;
+        if (!kullan_yeni_bicim(u)) continue;  /* legacy yol */
+        if (*is_sayi == *kap) {
+            int yeni_kap = *kap == 0 ? 16 : *kap * 2;
+            KullanIsi *yeni = (KullanIsi *)arena_ayir(a,
+                sizeof(KullanIsi) * (size_t)yeni_kap);
+            if (!yeni) return 0;
+            if (*isler) {
+                memcpy(yeni, *isler, sizeof(KullanIsi) * (size_t)*is_sayi);
+            }
+            *isler = yeni;
+            *kap = yeni_kap;
+        }
+        (*isler)[*is_sayi].k = u;
+        (*isler)[*is_sayi].ithalatci_yol = yol;
+        (*isler)[*is_sayi].ithalatci_kaynak = kaynak;
+        (*is_sayi)++;
+    }
+    return 1;
+}
+
+/* Faz-1: kesfet + parse + sentetik DUGUM_MODUL olarak prog'a ekle.
+ * Hata sayisi doner (0 = temiz). prog mutate edilir. */
+static int modulleri_yukle(Arena *a, Dugum *prog,
+                           const char *giris_yolu, const char *giris_kaynak) {
+    if (!prog || prog->tip != DUGUM_PROGRAM) return 0;
+
+    KullanIsi *isler = NULL;
+    int is_sayi = 0, is_kap = 0;
+    YukluAd *yuklu = NULL;
+    Dugum **moduller = NULL;
+    int modul_sayi = 0, modul_kap = 0;
+    int hata = 0;
+
+    kullan_isleri_topla(a, prog->veri.program.uyeler,
+                        prog->veri.program.sayi,
+                        giris_yolu, giris_kaynak,
+                        &isler, &is_sayi, &is_kap);
+
+    for (int wi = 0; wi < is_sayi; wi++) {
+        const Dugum *k = isler[wi].k;
+        const char *mad = k->veri.kullan.yol;
+        int muz = k->veri.kullan.yol_uzunluk;
+        if (!mad || muz <= 0) continue;
+
+        /* Ad bazli dedup (dongusel/elmas import sonlanir) */
+        int zaten = 0;
+        for (YukluAd *y = yuklu; y; y = y->sonraki) {
+            if (y->uz == muz && memcmp(y->ad, mad, (size_t)muz) == 0) {
+                zaten = 1;
+                break;
+            }
+        }
+        if (zaten) continue;
+
+        /* Arama yolu: ithalatci dizini -> proje koku -> kütüphane/ */
+        char aday[1024];
+        char dizin[512];
+        dizin_al(isler[wi].ithalatci_yol, dizin, sizeof(dizin));
+        char *icerik = NULL;
+        const char *bulunan_yol = NULL;
+        char *yol_kalici = NULL;
+        for (int deneme = 0; deneme < 3 && !icerik; deneme++) {
+            if (deneme == 0) {
+                snprintf(aday, sizeof(aday), "%s/%.*s.kem", dizin, muz, mad);
+            } else if (deneme == 1) {
+                snprintf(aday, sizeof(aday), "%.*s.kem", muz, mad);
+            } else {
+                snprintf(aday, sizeof(aday),
+                         "k\xc3\xbct\xc3\xbcphane/%.*s.kem", muz, mad);
+            }
+            /* Giris dosyasinin kendisi modul olarak yuklenemez */
+            if (strcmp(aday, giris_yolu) == 0) continue;
+            icerik = dosya_icerik_oku(a, aday);
+        }
+        if (!icerik) {
+            hata_raporla(isler[wi].ithalatci_yol, isler[wi].ithalatci_kaynak,
+                         k->satir, k->sutun, "T040",
+                         "kullan: mod\xc3\xbcl dosyas\xc4\xb1 bulunamad\xc4\xb1",
+                         "arama yolu: dosya dizini, proje k\xc3\xb6k\xc3\xbc, "
+                         "k\xc3\xbct\xc3\xbcphane/");
+            hata++;
+            continue;
+        }
+        bulunan_yol = aday;
+
+        /* Yol kalici kopya (parser hata mesajlari + ithalatci dizini) */
+        {
+            size_t yuz = strlen(bulunan_yol);
+            yol_kalici = (char *)arena_ayir(a, yuz + 1);
+            if (!yol_kalici) { hata++; continue; }
+            memcpy(yol_kalici, bulunan_yol, yuz + 1);
+        }
+
+        /* Parse */
+        Lexer ml;
+        lexer_baslat(&ml, icerik, yol_kalici);
+        Parser mp;
+        parser_baslat(&mp, &ml, a, yol_kalici, icerik);
+        Dugum *fprog = parser_calistir(&mp);
+        if (!fprog || mp.hata_sayisi > 0) {
+            hata += mp.hata_sayisi > 0 ? mp.hata_sayisi : 1;
+            continue;
+        }
+
+        /* Sentetik dosya-modul dugumu */
+        Dugum *md = dugum_olustur(a, DUGUM_MODUL, k->satir, k->sutun);
+        if (!md) { hata++; continue; }
+        md->veri.modul.ad = mad;   /* kullan.yol arena'da null-terminated */
+        md->veri.modul.ad_uzunluk = muz;
+        md->veri.modul.uyeler = fprog->veri.program.uyeler;
+        md->veri.modul.sayi = fprog->veri.program.sayi;
+        md->veri.modul.dosya_modulu = 1;
+
+        if (modul_sayi == modul_kap) {
+            int yeni_kap = modul_kap == 0 ? 8 : modul_kap * 2;
+            Dugum **yeni = (Dugum **)arena_ayir(a,
+                sizeof(Dugum *) * (size_t)yeni_kap);
+            if (!yeni) { hata++; continue; }
+            if (moduller) {
+                memcpy(yeni, moduller, sizeof(Dugum *) * (size_t)modul_sayi);
+            }
+            moduller = yeni;
+            modul_kap = yeni_kap;
+        }
+        moduller[modul_sayi++] = md;
+
+        /* Yuklu olarak isaretle */
+        YukluAd *ya = (YukluAd *)arena_ayir_sifir(a, sizeof(YukluAd));
+        if (ya) {
+            ya->ad = mad;
+            ya->uz = muz;
+            ya->sonraki = yuklu;
+            yuklu = ya;
+        }
+
+        /* Transitif: yuklenen dosyanin kendi kullan'lari */
+        kullan_isleri_topla(a, fprog->veri.program.uyeler,
+                            fprog->veri.program.sayi,
+                            yol_kalici, icerik,
+                            &isler, &is_sayi, &is_kap);
+    }
+
+    /* Splice: [dosya-moduller..., orijinal uyeler...] */
+    if (modul_sayi > 0) {
+        int eski_sayi = prog->veri.program.sayi;
+        Dugum **yeni = (Dugum **)arena_ayir(a,
+            sizeof(Dugum *) * (size_t)(modul_sayi + eski_sayi));
+        if (yeni) {
+            memcpy(yeni, moduller, sizeof(Dugum *) * (size_t)modul_sayi);
+            memcpy(yeni + modul_sayi, prog->veri.program.uyeler,
+                   sizeof(Dugum *) * (size_t)eski_sayi);
+            prog->veri.program.uyeler = yeni;
+            prog->veri.program.sayi = modul_sayi + eski_sayi;
+        }
+    }
+    return hata;
+}
+
 static int mode_check(const char *kaynak, const char *dosya_adi) {
     Arena *a = arena_olustur(0);
     if (!a) {
@@ -118,10 +375,15 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     Dugum *prog = parser_calistir(&p);
 
     int parser_hata = p.hata_sayisi;
+    int yukleme_hata = 0;
     int tk_hata = 0;
     int rt_hata = 0;
 
     if (parser_hata == 0 && prog) {
+        /* A: cok-dosya modul yukleme (kesfet + parse + splice) —
+         * tip kontrolu tum modulleri tek tabloda gorur. */
+        yukleme_hata = modulleri_yukle(a, prog, dosya_adi, kaynak);
+
         Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
         TipKontrol tk;
         tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
@@ -136,14 +398,15 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
         rt_hata = wk.hata_sayisi;
     }
 
-    int toplam = parser_hata + tk_hata + rt_hata;
+    int toplam = parser_hata + yukleme_hata + tk_hata + rt_hata;
     if (toplam == 0) {
         fprintf(stdout, "OK: %s — tip kontrolu basarili.\n", dosya_adi);
     } else {
         fprintf(stdout,
-                "HATA: %s — parser %d, tip kontrol %d, realtime %d "
-                "(toplam %d hata).\n",
-                dosya_adi, parser_hata, tk_hata, rt_hata, toplam);
+                "HATA: %s — parser %d, yukleme %d, tip kontrol %d, "
+                "realtime %d (toplam %d hata).\n",
+                dosya_adi, parser_hata, yukleme_hata, tk_hata, rt_hata,
+                toplam);
     }
 
     arena_serbest(a);
@@ -179,6 +442,22 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
                 p.hata_sayisi);
         arena_serbest(a);
         return 1;
+    }
+
+    /* A: cok-dosya modul yukleme — codegen'den ONCE; sentetik moduller
+     * program AST'sine eklenir, resolver binding'leri capraz-dosya
+     * cozer, codegen @modul.ad olarak emit eder. Yukleme hatasi
+     * (dosya yok / parse hatasi) IR uretimini durdurur — eksik modul
+     * zaten link edilemezdi. */
+    if (prog) {
+        int yukleme_hata = modulleri_yukle(a, prog, dosya_adi, kaynak);
+        if (yukleme_hata > 0) {
+            fprintf(stderr,
+                    "kullan yukleme hatalari: %d (LLVM IR uretilmedi)\n",
+                    yukleme_hata);
+            arena_serbest(a);
+            return 1;
+        }
     }
 
     /* Tek-gecis ad cozumu: resolver (tip_kontrol) binding'leri AST'ye

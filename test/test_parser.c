@@ -195,9 +195,90 @@ static void test_kullan_yol(void) {
     if (ok) {
         Dugum *k = prog->veri.program.uyeler[0];
         ok = (k->tip == DUGUM_KULLAN)
-          && (strcmp(k->veri.kullan.yol, "std::dosya::oku") == 0);
+          && (strcmp(k->veri.kullan.yol, "std::dosya::oku") == 0)
+          && (k->veri.kullan.segment_sayi == 3)
+          && (k->veri.kullan.secili_sayi == 0)
+          && (k->veri.kullan.alias_ad == NULL);
     }
     test_sonuc("kullan std::dosya::oku;", ok);
+    arena_serbest(a);
+}
+
+/* === A: yeni kullan bicimleri (secili / alias) + genel === */
+
+static void test_kullan_secili(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "kullan dizi::{Liste, ekle};" */
+    Dugum *prog = parse_kaynak("kullan dizi::{Liste, ekle};", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *k = prog->veri.program.uyeler[0];
+        ok = (k->tip == DUGUM_KULLAN)
+          && (strcmp(k->veri.kullan.yol, "dizi") == 0)
+          && (k->veri.kullan.segment_sayi == 1)
+          && (k->veri.kullan.secili_sayi == 2)
+          && (strcmp(k->veri.kullan.secili_adlar[0], "Liste") == 0)
+          && (strcmp(k->veri.kullan.secili_adlar[1], "ekle") == 0);
+    }
+    test_sonuc("kullan dizi::{Liste, ekle};", ok);
+    arena_serbest(a);
+}
+
+static void test_kullan_alias(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* "kullan dizi olarak d;" */
+    Dugum *prog = parse_kaynak("kullan dizi olarak d;", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *k = prog->veri.program.uyeler[0];
+        ok = (k->tip == DUGUM_KULLAN)
+          && (strcmp(k->veri.kullan.yol, "dizi") == 0)
+          && (k->veri.kullan.alias_ad != NULL)
+          && (strcmp(k->veri.kullan.alias_ad, "d") == 0);
+    }
+    test_sonuc("kullan dizi olarak d;", ok);
+    arena_serbest(a);
+}
+
+static void test_kullan_secili_cok_segment_hata(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    /* v1 siniri: cok-segment + secili -> P046 */
+    parse_kaynak("kullan a::b::{f};", a, &hata);
+    test_sonuc("kullan a::b::{f}; -> P046 (v1 siniri)", hata >= 1);
+    arena_serbest(a);
+}
+
+static void test_genel_islev(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *prog = parse_kaynak(
+        "genel i\xc5\x9flev topla(a: tam32) -> tam32 { ver a; }", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *f = prog->veri.program.uyeler[0];
+        ok = (f->tip == DUGUM_ISLEV) && (f->veri.islev.genel_mi == 1);
+    }
+    test_sonuc("genel islev -> genel_mi=1 (sarmalama yok)", ok);
+    arena_serbest(a);
+}
+
+static void test_genel_yapi_ve_alan(void) {
+    Arena *a = arena_olustur(0);
+    int hata = -1;
+    Dugum *prog = parse_kaynak(
+        "genel yap\xc4\xb1 N { genel x: tam32; y: tam32; }", a, &hata);
+    int ok = prog && prog->veri.program.sayi == 1 && hata == 0;
+    if (ok) {
+        Dugum *y = prog->veri.program.uyeler[0];
+        ok = (y->tip == DUGUM_YAPI) && (y->veri.yapi.genel_mi == 1)
+          && (y->veri.yapi.alan_sayi == 2)
+          && (y->veri.yapi.alanlar[0]->veri.alan.genel_mi == 1)
+          && (y->veri.yapi.alanlar[1]->veri.alan.genel_mi == 0);
+    }
+    test_sonuc("genel yapi + genel alan bayraklari", ok);
     arena_serbest(a);
 }
 
@@ -1671,6 +1752,11 @@ int main(void) {
     printf("\n--- Kullan ---\n");
     test_kullan_basit();
     test_kullan_yol();
+    test_kullan_secili();
+    test_kullan_alias();
+    test_kullan_secili_cok_segment_hata();
+    test_genel_islev();
+    test_genel_yapi_ve_alan();
 
     printf("\n--- Modul ---\n");
     test_modul_bos();

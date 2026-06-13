@@ -1,0 +1,8 @@
+// A dogrulama (negatif): iki secili import ayni adi getirdi —
+// ciplak kullanim T042; nitelikli erisim gecerli kalir.
+kullan cift_a::{f};
+kullan cift_b::{f};
+
+işlev main() -> tam32 {
+    ver f();
+}

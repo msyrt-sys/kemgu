@@ -1,0 +1,6 @@
+// A dogrulama: capraz-modul fonksiyon cagrisi (iki dosya).
+kullan mat;
+
+işlev main() -> tam32 {
+    ver mat::topla(20, 22);
+}

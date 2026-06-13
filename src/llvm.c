@@ -629,6 +629,20 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             break;
         case DUGUM_SABIT:
             ast_taransa_metinleri(g, d->veri.sabit.deger); break;
+        case DUGUM_MODUL:
+            /* A: modul uyeleri de taranir — onceden modul icindeki metin
+             * literalleri @.str.N olarak toplanmiyordu (gap). */
+            ast_taransa_metinleri_liste(g, d->veri.modul.uyeler,
+                                         d->veri.modul.sayi); break;
+        case DUGUM_ESLES:
+            ast_taransa_metinleri(g, d->veri.esles.deger);
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *kol = d->veri.esles.kollar[i];
+                if (kol && kol->tip == DUGUM_ESLES_KOLU) {
+                    ast_taransa_metinleri(g, kol->veri.esles_kolu.govde);
+                }
+            }
+            break;
         default: break;
     }
 }
@@ -793,6 +807,35 @@ static void cesit_kayit(LlvmGen *g, const Dugum *c) {
     r->ast = c;
     r->sonraki = g->yapilar;
     g->yapilar = r;
+}
+
+/* A: modul icindeki yapi/cesit tanimlarini kaydet (recursive — ic ice
+ * moduller dahil). Onceki gap: yapi pre-pass'i yalniz top-level'a
+ * bakiyordu; modul icinde tanimlanan struct '%Ad = type' olarak HIC
+ * emit edilmiyordu -> modul fonksiyonunda yapi kullanimi gecersiz IR.
+ * Adlar duz (mangling'siz) IR tip uzayina kaydedilir; ayni adli ikinci
+ * kayit ATLANIR (ilk kazanir — v1 siniri, capraz-modul ayni-adli
+ * struct'lar D'de nitelikli tip ile ayrisacak). */
+static void modul_tipleri_kayit(LlvmGen *g, const Dugum *m) {
+    for (int i = 0; i < m->veri.modul.sayi; i++) {
+        const Dugum *uye = m->veri.modul.uyeler[i];
+        if (uye && uye->tip == DUGUM_DISA && uye->veri.disa.tanim) {
+            uye = uye->veri.disa.tanim;
+        }
+        if (!uye) continue;
+        if (uye->tip == DUGUM_YAPI) {
+            if (!yapi_bul(g, uye->veri.yapi.ad, uye->veri.yapi.ad_uzunluk)) {
+                yapi_kayit(g, uye);
+            }
+        } else if (uye->tip == DUGUM_CESIT) {
+            if (!yapi_bul(g, uye->veri.cesit.ad,
+                          uye->veri.cesit.ad_uzunluk)) {
+                cesit_kayit(g, uye);
+            }
+        } else if (uye->tip == DUGUM_MODUL) {
+            modul_tipleri_kayit(g, uye);
+        }
+    }
 }
 
 /* === Module-basi globaller === */
@@ -4037,6 +4080,15 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
         for (int wi = 0; wi < is_sayi; wi++) {
             Dugum *uye = is_l[wi];
+            /* A: yeni-bicim kullan (tek-segment / secili / alias) —
+             * loader (ana.c) sentetik DUGUM_MODUL olarak ekledi;
+             * burada duzlestirme YAPILMAZ (meta dugum, atla). */
+            if (uye->tip == DUGUM_KULLAN &&
+                (uye->veri.kullan.segment_sayi <= 1 ||
+                 uye->veri.kullan.secili_sayi > 0 ||
+                 uye->veri.kullan.alias_ad != NULL)) {
+                continue;
+            }
             if (uye->tip == DUGUM_KULLAN) {
                 /* Dosya yolu uret */
                 const char *y = uye->veri.kullan.yol;
@@ -4123,6 +4175,14 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_CESIT) {
             cesit_kayit(&g, uye->veri.disa.tanim);
+        }
+        /* A: modul icindeki yapi/cesit tanimlari (gap fix) */
+        else if (uye->tip == DUGUM_MODUL) {
+            modul_tipleri_kayit(&g, uye);
+        }
+        else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
+                 uye->veri.disa.tanim->tip == DUGUM_MODUL) {
+            modul_tipleri_kayit(&g, uye->veri.disa.tanim);
         }
     }
 
