@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-026 — String stdlib III: özyinelemeli-iniş öncelikli ayrıştırıcı (parser yarısı) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-024 token akışı
+üzerine self-hosting'in PARSER yarısı: operatör ÖNCELİĞİ + PARANTEZ destekli
+özyinelemeli-iniş (recursive-descent) ifade ayrıştırıcısı
+(`test/ornekler/14_oncelikli_ayristirici.kem`). Gramer:
+`ifade=terim(('+'|'-')terim)*; terim=faktör(('*'|'/')faktör)*; faktör=SAYI|'('ifade')'`.
+
+**Enabling (D-025):** Özyinelemeli iniş, çağrılar arası paylaşılan MUTABLE konum
+imleci gerektirir. KEMGU'da global mutable yok + skalerler değerle geçer →
+imleç = tek-elemanlı `Dizi<tam32>` (ptr → referansla paylaşılır), `dizi_yaz` ile
+yerinde ilerletilir. faktör→ifade→terim→faktör KARŞILIKLI özyineleme (forward
+referans; iki-geçişli pre-populate codegen'de islev_kayit pre-pass ile çözülür).
+
+**Doğrulama (adversarial, 17 ifade):** Öncelik — `2+4*10`=42 (soldan-sağa 60
+DEĞİL), `2+3*4`=14, `100-2*3`=94, `2*3+4*5`=26. Parantez — `(2+3)*4`=20,
+`(2+4)*(3+4)`=42, `2*(3+(4*5))`=46, `((9))`=9. Bölme — `100/2-8`=42, `84/2`=42,
+`(100-16)/2`=42. opt-verify PASS. test_llvm 221→**223**. 0 ASan. Derleyici
+dokunulmadı.
+
+**Tuzak:** `iken doğru { ... ver ... }` idiomu (KEMGU'da `break` keyword YOK) —
+döngüden yalnız erken `ver` ile çıkılır; codegen + opt-verify temiz.
+
+**Self-hosting durumu:** Artık 3 parça da KEMGU'da ÇALIŞIYOR — LEXER (D-024
+metin→token), PARSER (D-026 token→öncelikli değerlendirme), AST+EVAL (D-022
+özyinelemeli çeşit yorumlayıcı). Sıradaki: parser'ın değerlendirme yerine çeşit
+AST İNŞA etmesi (token→AST), sonra string-key sembol tablosu (metin_esit).
+
+---
+
 ## D-025 [YÜKSEK] — dizi_yaz intrinsic: in-place eleman güncelleme (mutable cursor) (2026-06-13)
 
 **Karar [YÜKSEK — yeni intrinsic]:** `dizi_yaz<T>(d: Dizi<T>, i: tam32, e: T) ->
