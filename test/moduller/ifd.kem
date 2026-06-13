@@ -1,0 +1,16 @@
+// Çapraz-modül payload + recursive çeşit fikstürü — modüler AST (self-hosting
+// deseni: compiler'ın AST'si kendi modülünde). genel çeşit + genel işlev.
+genel çeşit Ifade {
+    Sayi(tam64),
+    Topla(&Ifade, &Ifade),
+    Carp(&Ifade, &Ifade)
+}
+
+genel işlev hesapla(e: &Ifade) -> tam64 {
+    eşleş e {
+        Ifade::Sayi(n)     => { ver n; }
+        Ifade::Topla(a, b) => { ver hesapla(a) + hesapla(b); }
+        Ifade::Carp(a, b)  => { ver hesapla(a) * hesapla(b); }
+    }
+    ver 0;
+}

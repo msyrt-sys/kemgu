@@ -1,0 +1,35 @@
+// C3 robustness — payload çeşit kenar durumları (regresyon koruması):
+// (1) çeşit struct ALANI olarak, (2) NESTED çeşit (payload başka çeşit),
+// (3) metin (string) payload, (4) by-value fonksiyon dönüşü.
+// Toplam doğrulama → exit 42.
+
+çeşit Ic { X(tam64), Y }
+çeşit Token { Sayi(tam64), Ad(metin), Yuva(Ic) }
+yapı Kutu { etiket: tam32; ic: Token; }
+
+işlev token_deger(t: Token) -> tam64 {
+    eşleş t {
+        Token::Sayi(n) => { ver n; }
+        Token::Ad(s)   => { ver metin_uzunluk(s) olarak tam64; }
+        Token::Yuva(i) => {
+            eşleş i { Ic::X(v) => { ver v; } Ic::Y => { ver 0; } }
+        }
+    }
+    ver 99;
+}
+
+işlev kutu_yap(t: Token) -> Kutu {
+    ver Kutu { etiket: 7, ic: t };
+}
+
+işlev main() -> tam32 {
+    değişken ic: Ic = Ic::X(20);
+    değişken t1: Token = Token::Yuva(ic);
+    değişken k: Kutu = kutu_yap(t1);
+    değişken a: tam64 = token_deger(k.ic);            // 20 (struct alan + nested)
+    değişken t2: Token = Token::Ad("merhaba");
+    değişken b: tam64 = token_deger(t2);              // 7 (metin payload)
+    değişken t3: Token = Token::Sayi(15);
+    değişken c: tam64 = token_deger(t3);              // 15
+    ver (a + b + c) olarak tam32;                     // 20+7+15 = 42
+}
