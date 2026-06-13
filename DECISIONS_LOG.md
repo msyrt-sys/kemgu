@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-037 — SELF-HOST lexer M2: UTF-8 + 44 Türkçe anahtar kelime — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus genişler; C tarafı 0
+değişiklik].** M1 ASCII çekirdeği M2'de UTF-8 Türkçe'ye genişletildi. Tam ikame
+(bootstrap) yolunda ikinci milestone.
+
+**Kapsam (M2):**
+- **UTF-8 identifier:** ASCII `[A-Za-z_]` + 2-bayt Türkçe harf. `turkce_2byte_mi`
+  fonksiyonu `utf8.c turkce_harf_2byte` ile BİREBİR: 0xC3(195)→ç Ç ö Ö ü Ü,
+  0xC4(196)→ğ Ğ ı İ, 0xC5(197)→ş Ş (2.bayt değerleri tek tek eşleşir).
+- **44 anahtar kelime:** M1'in 15 ASCII'sine geri_al/uygula/kanal + 27 Türkçe
+  (`anahtar_tip` tam-eşleşme zinciri; `metin_esit` UTF-8 lexeme byte-byte).
+- **Bayt-tabanlı sütün:** Türkçe karakter sütünü +2 ilerletir (C `ilerle` deseni —
+  her bayt 1 sütün). Doğrulandı: `değişken`=10 bayt → uzunluk 10, sonraki token
+  sütün 12; `çörek_adedi`=13 bayt.
+- **Değişken-bayt identifier taraması:** `kimlik_basi_uz`/`kimlik_devam_uz` her
+  karakterin bayt-uzunluğunu döner (1 ASCII | 2 Türkçe | 0 yok), tarama buna göre
+  ilerler.
+
+**`metin_bayt` İŞARETLİ-bayt çözümü (ADIM-0 ön-koşulu):** `metin_bayt` `tam8`
+(işaretli) döner → Türkçe 0xC3 = -61. Dağınık işaretli sabitler yerine tek
+`bayt(s,i)` helper'ı UNSIGNED (0-255) döndürür (`eğer b<0 { ver b+256 }`). Tüm
+bayt karşılaştırmaları 195/167/... gibi doğal unsigned değerlerle. Temiz + UTF-8
+dayanıklı.
+
+**Doğrulama:** `make calistir_lexer_diff` → **9/9 SIFIR-DİFF** (5 M1 + 4 M2 korpus:
+44 keyword · Türkçe identifier ç/ğ/ı/ö/ş/ü · karışık · kelime-sınır). Kelime-sınır
+adversaryel: `değişken`→DEGISKEN ama `değişkenler`/`değişken2`→TANIMLAYICI (yalnız
+tam eşleşme). `--check` temiz. C tarafı değişmedi → prod/test_lexer etkilenmedi.
+
+**Sıradaki (M3):** çok-karakter operatörler (`==`, `!=`, `<=`, `>=`, `->`, `::`,
+`&&` yok→`ve`, `&değişken`, `>>` generic-böl) — maksimal-munch. Korpus operatör
+ağırlıklı genişler; M1/M2 regresyon kalır. (Literal varyant → M4, yorum/raw → M5.)
+
+---
+
 ## D-036 — SELF-HOST lexer M1: ASCII çekirdek iskelet — C lexer'a karşı sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yeni `selfhost/lexer.kem` + korpus + harness; C tarafı yalnız

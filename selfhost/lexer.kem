@@ -1,27 +1,24 @@
 // ============================================================================
 // selfhost/lexer.kem — KEMGU lexer'ı KEMGU'da (SELF-HOST bootstrap).
 //
-// HEDEF: C lexer'ının (src/lexer.c) TAM İKAMESİ — KEMGU ile yazılmış.
-// Doğruluk: C-lexer'ın `--token` dump'ına karşı SIFIR-DİFF (oracle).
-//
-// MILESTONE M1 (bu dosya): ASCII çekirdek iskelet.
-//   - ASCII identifier + 15 ASCII anahtar kelime (Türkçe keyword'ler → M2/UTF-8)
-//   - ondalık tamsayı (hex/bin/float → M4)
-//   - tek-karakter operatör: + - * / % = (çok-karakter == -> vb. → M3)
-//   - ayraçlar: ( ) { } , ;  (köşeli/iki-nokta vb. → sonraki M)
-//   - satır/sütun/offset takibi C ile BİREBİR (ilerle deseni)
-//   - DOSYA_SONU
-//
-// Dump formatı (D-035 — C ana.c ile aynı):
+// HEDEF: C lexer'ının (src/lexer.c) TAM İKAMESİ. Doğruluk: C-lexer `--token`
+// dump'ına karşı SIFIR-DİFF (oracle). Format (D-035):
 //   <TIP>\t<satır>\t<sütün>\t<offset>\t<uzunluk>
-// (ham lexeme YOK → kaçış-kopyalama riski sıfır; offset+uzunluk'tan kurtarılır.)
 //
-// Kullanım: kemgu_lexer.exe <kaynak.kem>   (arg_al(1) + dosya_oku)
+// MILESTONE M1: ASCII çekirdek (identifier + ondalık + tek-kar op + ayraç + EOF).
+// MILESTONE M2 (bu dosya): UTF-8 + TÜRKÇE anahtar kelimeler.
+//   - UTF-8 identifier: ASCII [A-Za-z_] + 2-byte Türkçe harf (0xC3/C4/C5 + 2.bayt)
+//     — utf8.c turkce_harf_2byte ile BİREBİR.
+//   - 44 anahtar kelime (15 M1 ASCII + geri_al/uygula/kanal + 27 Türkçe).
+//   - bayt-tabanlı sütün (Türkçe karakter sütünü 2 ilerletir — C ilerle deseni).
+//   - metin_bayt İŞARETLİ → bayt() helper'ı UNSIGNED (0-255) döndürür.
+//   (çok-karakter op → M3; sayı varyant/literal → M4; yorum/raw → M5.)
+//
+// Kullanım: kemgu_lexer.exe <kaynak.kem>
 // ============================================================================
 
 // Tek bayt yaz (yaz_karakter `karakter` ister; tam32 → karakter cast).
 işlev yb(c: tam32) -> tam32 { yaz_karakter(c olarak karakter); ver 0; }
-
 // Bir metni satır-sonu EKLEMEDEN bayt-bayt yaz (yaz_metin builtin değil).
 işlev yaz_str(s: metin) -> tam32 {
     değişken n: tam32 = metin_uzunluk(s);
@@ -29,8 +26,6 @@ işlev yaz_str(s: metin) -> tam32 {
     iken i < n { yb(metin_bayt(s, i) olarak tam32); i = i + 1; }
     ver 0;
 }
-
-// Bir token satırı yaz: TIP \t satır \t sütun \t offset \t uzunluk \n
 işlev emit(tip: metin, satir: tam32, sutun: tam32, offset: tam32, uzunluk: tam32) -> tam32 {
     yaz_str(tip);     yb(9);
     yaz_tam(satir);   yb(9);
@@ -40,20 +35,58 @@ işlev emit(tip: metin, satir: tam32, sutun: tam32, offset: tam32, uzunluk: tam3
     ver 0;
 }
 
+// metin_bayt işaretli tam8 döner (Türkçe 0xC3 = -61). UNSIGNED bayt (0-255).
+işlev bayt(s: metin, i: tam32) -> tam32 {
+    değişken b: tam32 = metin_bayt(s, i) olarak tam32;
+    eğer b < 0 { ver b + 256; }
+    ver b;
+}
+
 işlev rakam_mi(b: tam32) -> mantıksal { ver b >= 48 ve b <= 57; }
 işlev harf_mi(b: tam32) -> mantıksal {
     ver (b >= 97 ve b <= 122) veya (b >= 65 ve b <= 90);
 }
 işlev bosluk_mu(b: tam32) -> mantıksal {
-    ver (b == 32) veya (b == 9) veya (b == 13) veya (b == 10);   // sp tab cr lf
-}
-işlev kimlik_basi_mi(b: tam32) -> mantıksal { ver harf_mi(b) veya (b == 95); }   // _
-işlev kimlik_devam_mi(b: tam32) -> mantıksal {
-    ver harf_mi(b) veya rakam_mi(b) veya (b == 95);
+    ver (b == 32) veya (b == 9) veya (b == 13) veya (b == 10);
 }
 
-// Bir kelime ASCII anahtar kelime mi → token adı; değilse "TANIMLAYICI".
+// İki bayt bir Türkçe harf mi (utf8.c turkce_harf_2byte ile BİREBİR).
+//   0xC3(195): ç Ç ö Ö ü Ü   0xC4(196): ğ Ğ ı İ   0xC5(197): ş Ş
+işlev turkce_2byte_mi(b0: tam32, b1: tam32) -> mantıksal {
+    eğer b0 == 195 {
+        ver (b1 == 167) veya (b1 == 135) veya (b1 == 182)
+          veya (b1 == 150) veya (b1 == 188) veya (b1 == 156);
+    }
+    eğer b0 == 196 {
+        ver (b1 == 159) veya (b1 == 158) veya (b1 == 177) veya (b1 == 176);
+    }
+    eğer b0 == 197 { ver (b1 == 159) veya (b1 == 158); }
+    ver yanlış;
+}
+// identifier-BAŞ karakter bayt-uzunluğu: 1 (ASCII harf/_) | 2 (Türkçe) | 0.
+işlev kimlik_basi_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos >= uz { ver 0; }
+    değişken b0: tam32 = bayt(kaynak, pos);
+    eğer harf_mi(b0) veya (b0 == 95) { ver 1; }
+    eğer pos + 1 < uz {
+        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+    }
+    ver 0;
+}
+// identifier-DEVAM karakter bayt-uzunluğu: 1 (ASCII harf/rakam/_) | 2 (Türkçe) | 0.
+işlev kimlik_devam_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos >= uz { ver 0; }
+    değişken b0: tam32 = bayt(kaynak, pos);
+    eğer harf_mi(b0) veya rakam_mi(b0) veya (b0 == 95) { ver 1; }
+    eğer pos + 1 < uz {
+        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+    }
+    ver 0;
+}
+
+// Bir kelime anahtar kelime mi → token adı; değilse "TANIMLAYICI". (44 keyword)
 işlev anahtar_tip(w: metin) -> metin {
+    // ASCII
     eğer metin_esit(w, "iken") { ver "IKEN"; }
     eğer metin_esit(w, "ve") { ver "VE"; }
     eğer metin_esit(w, "veya") { ver "VEYA"; }
@@ -69,10 +102,40 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "tekkez") { ver "TEKKEZ"; }
     eğer metin_esit(w, "yetki") { ver "YETKI"; }
     eğer metin_esit(w, "genel") { ver "GENEL"; }
+    eğer metin_esit(w, "geri_al") { ver "GERI_AL"; }
+    eğer metin_esit(w, "uygula") { ver "UYGULA"; }
+    eğer metin_esit(w, "kanal") { ver "KANAL"; }
+    // Türkçe (UTF-8 lexeme'ler doğrudan)
+    eğer metin_esit(w, "eğer") { ver "EGER"; }
+    eğer metin_esit(w, "değilse") { ver "DEGILSE"; }
+    eğer metin_esit(w, "için") { ver "ICIN"; }
+    eğer metin_esit(w, "eşleş") { ver "ESLES"; }
+    eğer metin_esit(w, "işlev") { ver "ISLEV"; }
+    eğer metin_esit(w, "yapı") { ver "YAPI"; }
+    eğer metin_esit(w, "çeşit") { ver "CESIT"; }
+    eğer metin_esit(w, "özellik") { ver "OZELLIK"; }
+    eğer metin_esit(w, "modül") { ver "MODUL"; }
+    eğer metin_esit(w, "değişken") { ver "DEGISKEN"; }
+    eğer metin_esit(w, "doğru") { ver "DOGRU"; }
+    eğer metin_esit(w, "yanlış") { ver "YANLIS"; }
+    eğer metin_esit(w, "boş") { ver "BOS"; }
+    eğer metin_esit(w, "değil") { ver "DEGIL"; }
+    eğer metin_esit(w, "dışa") { ver "DISA"; }
+    eğer metin_esit(w, "bölge") { ver "BOLGE"; }
+    eğer metin_esit(w, "seçimlik") { ver "SECIMLIK"; }
+    eğer metin_esit(w, "sonuç") { ver "SONUC"; }
+    eğer metin_esit(w, "değer") { ver "DEGER"; }
+    eğer metin_esit(w, "hiç") { ver "HIC"; }
+    eğer metin_esit(w, "güvensiz") { ver "GUVENSIZ"; }
+    eğer metin_esit(w, "sabitsüre") { ver "SABITSURE"; }
+    eğer metin_esit(w, "gerçekzamanlı") { ver "GERCEKZAMANLI"; }
+    eğer metin_esit(w, "vektör") { ver "VEKTOR"; }
+    eğer metin_esit(w, "görev") { ver "GOREV"; }
+    eğer metin_esit(w, "satıriçi_asm") { ver "SATIRICI_ASM"; }
     ver "TANIMLAYICI";
 }
 
-// Tek-karakter operatör/ayraç → token adı ("HATALI" = M1 dışı).
+// Tek-karakter operatör/ayraç → token adı ("HATALI" = M1/M2 dışı).
 işlev tek_kar_tip(b: tam32) -> metin {
     eğer b == 43 { ver "ARTI"; }
     eğer b == 45 { ver "EKSI"; }
@@ -89,42 +152,46 @@ işlev tek_kar_tip(b: tam32) -> metin {
     ver "HATALI";
 }
 
-// Kaynağı lex'le, token'ları dump et (C lexer ile birebir konum).
 işlev lex_dosya(kaynak: metin) -> tam32 {
     değişken uz: tam32 = metin_uzunluk(kaynak);
     değişken pos: tam32 = 0;
     değişken satir: tam32 = 1;
     değişken sutun: tam32 = 1;
     iken doğru {
-        // boşluk atla (ilerle deseni: \n → satır++/sütün=1, diğer → sütün++)
-        iken (pos < uz) ve bosluk_mu(metin_bayt(kaynak, pos) olarak tam32) {
-            değişken wb: tam32 = metin_bayt(kaynak, pos) olarak tam32;
-            eğer wb == 10 { satir = satir + 1; sutun = 1; }
+        // boşluk atla (ilerle deseni; bayt-tabanlı sütün)
+        iken (pos < uz) ve bosluk_mu(bayt(kaynak, pos)) {
+            eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
             değilse { sutun = sutun + 1; }
             pos = pos + 1;
         }
         eğer pos >= uz { emit("DOSYA_SONU", satir, sutun, pos, 0); ver 0; }
 
-        değişken tb: tam32 = metin_bayt(kaynak, pos) olarak tam32;
+        değişken tb: tam32 = bayt(kaynak, pos);
         değişken t_off: tam32 = pos;
         değişken t_sat: tam32 = satir;
         değişken t_sut: tam32 = sutun;
 
         eğer rakam_mi(tb) {                                 // TAMSAYI (ondalık)
-            iken (pos < uz) ve (rakam_mi(metin_bayt(kaynak, pos) olarak tam32)
-                               veya ((metin_bayt(kaynak, pos) olarak tam32) == 95)) {
+            iken (pos < uz) ve (rakam_mi(bayt(kaynak, pos)) veya (bayt(kaynak, pos) == 95)) {
                 pos = pos + 1; sutun = sutun + 1;
             }
             emit("TAMSAYI", t_sat, t_sut, t_off, pos - t_off);
-        } değilse eğer kimlik_basi_mi(tb) {                  // IDENT / anahtar
-            iken (pos < uz) ve kimlik_devam_mi(metin_bayt(kaynak, pos) olarak tam32) {
+        } değilse {
+            değişken bu: tam32 = kimlik_basi_uz(kaynak, pos, uz);
+            eğer bu > 0 {                                  // IDENT / anahtar (UTF-8)
+                pos = pos + bu; sutun = sutun + bu;
+                değişken devam: mantıksal = doğru;
+                iken devam {
+                    değişken du: tam32 = kimlik_devam_uz(kaynak, pos, uz);
+                    eğer du == 0 { devam = yanlış; }
+                    değilse { pos = pos + du; sutun = sutun + du; }
+                }
+                değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
+                emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
+            } değilse {                                    // tek-karakter
                 pos = pos + 1; sutun = sutun + 1;
+                emit(tek_kar_tip(tb), t_sat, t_sut, t_off, 1);
             }
-            değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
-            emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
-        } değilse {                                          // tek-karakter
-            pos = pos + 1; sutun = sutun + 1;
-            emit(tek_kar_tip(tb), t_sat, t_sut, t_off, 1);
         }
     }
     ver 0;
@@ -137,7 +204,7 @@ işlev main() -> tam32 {
     }
     değişken yol: metin = arg_al(1);
     değişken kaynak: metin = dosya_oku(yol);
-    eğer metin_uzunluk(kaynak) == 0 { lex_dosya(""); ver 0; }  // boş/yok dosya
+    eğer metin_uzunluk(kaynak) == 0 { lex_dosya(""); ver 0; }
     lex_dosya(kaynak);
     ver 0;
 }
