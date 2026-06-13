@@ -2247,6 +2247,41 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return t_hata(tk);
                 }
 
+                /* dizi_yaz<T>(d: Dizi<T>, i: tam32, e: T) -> bos
+                 * i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi).
+                 * Mutable cursor / in-place güncelleme (recursive-descent
+                 * parser konum imleci) için gerekli. */
+                if (uz_b == 8 && memcmp(ad_b, "dizi_yaz", 8) == 0) {
+                    if (d->veri.cagri.sayi != 3) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_yaz uc arguman gerektirir (d, i, e)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_yaz ilk argumani Dizi<T> olmali");
+                    }
+                    TipBilgisi *idx = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (!tip_tamsayi_mi(idx) && idx->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
+                            "dizi_yaz indeks tamsayi olmali");
+                    }
+                    TipBilgisi *bek = (dt->kategori == TIP_DIZI)
+                        ? dt->veri.dizi.eleman : NULL;
+                    TipBilgisi *et = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[2], bek);
+                    if (bek && !tip_esit(et, bek) &&
+                        et->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[2], "T001",
+                            "dizi_yaz eleman tipi Dizi'nin eleman tipinden farkli");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_BOS);
+                }
+
                 /* dizi_boyut(d: Dizi<T>) -> tam32 */
                 if (uz_b == 10 && memcmp(ad_b, "dizi_boyut", 10) == 0) {
                     if (d->veri.cagri.sayi != 1) {

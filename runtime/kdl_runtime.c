@@ -546,6 +546,24 @@ void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
     return ((void **)d->veri)[i];
 }
 
+/* dizi_yaz: i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi). Sınır dışı
+ * (i<0 || i>=boyut) veya NULL → sessizce yok sayılır (boyutu büyütmez —
+ * yalnız mevcut elemanı değiştirir; büyütme için dizi_ekle). */
+void kdl_dizi_yaz_tam(KdlDizi *d, int32_t i, int32_t deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((int32_t *)d->veri)[i] = deger;
+}
+
+void kdl_dizi_yaz_tam64(KdlDizi *d, int32_t i, int64_t deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((int64_t *)d->veri)[i] = deger;
+}
+
+void kdl_dizi_yaz_ptr(KdlDizi *d, int32_t i, void *deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((void **)d->veri)[i] = deger;
+}
+
 int32_t kdl_dizi_boyut(KdlDizi *d) {
     return d ? d->boyut : 0;
 }
