@@ -82,6 +82,7 @@ makine-denetimli).
 | Satıriçi assembly `satıriçi_asm` | codegen | Yalnız `güvensiz` blokta. `mimari:` + `şablon:` ile gerçek LLVM inline-asm'e indirgenir (çoklu çıktı dahil). |
 | Çok-dosya modüller (`kullan`, `genel`) | codegen | Aşağıda ayrı bölüm. |
 | Çapraz-modül generic monomorphization | codegen | Generic fonk **ve** struct'lar dosyalar arası örneklenir (`kap::Liste<T>`). |
+| Nitelikli tip annotasyonu (`mod::Tip<args>`) | codegen | Tip pozisyonunda modül-nitelikli tip: `değişken l: dizi::Liste<tam64> = dizi::oluştur(böl)`. Çapraz-modül struct alan erişimi dahil. **v1 sınırı:** nitelikli *inşa ifadesi* `mod::Yapı{...}` henüz yok (factory + çıkarsama ile). |
 | Bit operatörleri (`&` `\|` `<<` `>>`) | codegen | Tamsayı genişlikleri arası otomatik dönüşüm. |
 
 ### Derleyici
@@ -129,7 +130,7 @@ mingw32-make calistir_drf_lean_proof     # cd proofs/drf-v2-lean && lake build
 
 Tümü `--check`'ten geçer; runtime/FFI bağımlılığı yok.
 
-- `kütüphane/dizi.kem` — generic büyüyen liste **`Liste<T>`** (`yarat`/`ekle`/
+- `kütüphane/dizi.kem` — generic büyüyen liste **`Liste<T>`** (`oluştur`/`ekle`/
   `al`/`boy`/`büyü`; kabiliyet tabanlı `*T` tampon). Uçtan uca çalışır (KDL
   runtime'a bağlanır).
 - `stdlib/temel/` — `matematik`, `karsilastir`, `sayisal` (saf jenerik yardımcılar).
@@ -173,9 +174,9 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 
 ### Test & Kalite
 
-- **1197 birim/entegrasyon testi**, 31 paket, **0 başarısız** — canlı çalıştırıldı.
+- **1200+ birim/entegrasyon testi**, 31 paket, **0 başarısız** — canlı çalıştırıldı.
   Bellek alan paketler Clang64 **ASan + UBSan** ile derlenir, temiz.
-  (Öne çıkanlar: `llvm` 201 uçtan-uca derle+çalıştır, `tip_kontrol` 174,
+  (Öne çıkanlar: `llvm` 205 uçtan-uca derle+çalıştır, `tip_kontrol` 174,
   `parser` 107, `lexer` 103, `linear` 57, `capability` 40, `snapshot` 50.)
 - **30.000 fuzz iterasyonu** (10.000 + 4×5.000), **0 çökme**, ASan/UBSan altında.
 - **Lean ispatı** `lake build` temiz, 0 `sorry`.
@@ -393,7 +394,7 @@ mingw32-make calistir_parser_test          # 107/107
 mingw32-make calistir_tip_kontrol_test     # 174/174
 mingw32-make calistir_linear_test          # 57/57
 mingw32-make calistir_capability_test      # 40/40
-mingw32-make calistir_llvm_test            # 201/201  (derle + çalıştır + exit kodu)
+mingw32-make calistir_llvm_test            # 205/205  (derle + çalıştır + exit kodu)
 mingw32-make calistir_stdlib_check         # saf-KEMGU stdlib --check
 mingw32-make calistir_arm64_test           # bare-metal ELF cross-compile
 mingw32-make calistir_fuzz_test            # 10.000 iter
@@ -411,7 +412,6 @@ sızıntıyla biterse `ERROR: AddressSanitizer: ...` çıkar ve adım onaylanmaz
 Dürüst zaman-ufukları. Hiçbiri "mevcut" değildir.
 
 ### Devam eden / yakın
-- **Nitelikli tip annotasyonu** (refinement/yazılı nitelikli tip) — *geliştiriliyor*.
 - **Açık tip argümanı** (turbofish) — jenerik çağrı/inşada `f<T>(...)` /
   `Tip<T>{...}` (şu an yalnız çıkarsama).
 - **Gerçek kabiliyet ödünç alma** (mevcut MOVE/`delege` çözümü yerine).
