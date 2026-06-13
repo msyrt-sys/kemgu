@@ -273,6 +273,48 @@ static void yerel_ad_yaz(FILE *out, const char *ad, int ad_uz) {
     }
 }
 
+/* Türkçe kimlik: yapı/çeşit IR tip adı "%Ad" — non-ASCII (Türkçe) ad LLVM'de
+ * quote'lanmalı (`%"Düğüm"`). yerel_ad_yaz ile aynı ASCII-güvenli kuralı;
+ * arena'da null-terminated döner (tanım + tüm kullanımlar TUTARLI). */
+static const char *yapi_ad_ir(LlvmGen *g, const char *ad, int uz) {
+    int ascii = 1;
+    for (int i = 0; i < uz; i++) {
+        unsigned char c = (unsigned char)ad[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '.' ||
+              c == '$' || c == '-')) {
+            ascii = 0;
+            break;
+        }
+    }
+    int extra = ascii ? 1 : 3;  /* '%'  ya da  '%' '"' '"' */
+    char *buf = (char *)arena_ayir(g->arena, (size_t)uz + (size_t)extra + 1);
+    if (!buf) return "%yapi";
+    int o = 0;
+    buf[o++] = '%';
+    if (!ascii) buf[o++] = '"';
+    memcpy(buf + o, ad, (size_t)uz);
+    o += uz;
+    if (!ascii) buf[o++] = '"';
+    buf[o] = '\0';
+    return buf;
+}
+
+static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
+
+/* "%Ad" veya quote'lu "%\"Ad\"" IR tip stringinden YapiKayit bul. yapi_ad_ir
+ * ile simetrik (Türkçe ad quote'lanır; bu okuma tarafı quote'u soyar). */
+static YapiKayit *yapi_bul_ir(LlvmGen *g, const char *ir) {
+    if (!ir || ir[0] != '%') return NULL;
+    const char *nm = ir + 1;
+    int nl = (int)strlen(nm);
+    if (nl >= 2 && nm[0] == '"' && nm[nl - 1] == '"') {
+        nm++;
+        nl -= 2;
+    }
+    return yapi_bul(g, nm, nl);
+}
+
 /* AST tip dugumunden (DUGUM_TIP_BASIT, DUGUM_TIP_KULLANICI) LLVM IR tipi.
  * NULL -> NULL doner. Bilinmeyen -> "i32" (varsayilan). */
 /* Generic param substitusyon kontrolu */
@@ -346,13 +388,7 @@ static int cesit_varyant_payload_n(const Dugum *c, int vi) {
 
 /* C3: payload çeşit'in IR struct adı "%Ad" (arena). */
 static const char *cesit_struct_ir(LlvmGen *g, const Dugum *cd) {
-    int uz = cd->veri.cesit.ad_uzunluk;
-    char *buf = (char *)arena_ayir(g->arena, (size_t)uz + 2);
-    if (!buf) return "%cesit";
-    buf[0] = '%';
-    memcpy(buf + 1, cd->veri.cesit.ad, (size_t)uz);
-    buf[uz + 1] = '\0';
-    return buf;
+    return yapi_ad_ir(g, cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk);
 }
 
 /* C3: çeşit varyant değeri inşası. Payloadsuz çeşit → bare iN disc sabiti
@@ -438,14 +474,7 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
                 !cesit_payload_var(yk->ast)) {
                 return cesit_disc_ir(yk->ast);
             }
-            int sz = yk->ad_uz + 1;
-            char *buf = (char *)arena_ayir(g->arena, (size_t)sz + 1);
-            if (buf) {
-                buf[0] = '%';
-                memcpy(buf + 1, yk->ad, (size_t)yk->ad_uz);
-                buf[sz] = '\0';
-                return buf;
-            }
+            return yapi_ad_ir(g, yk->ad, yk->ad_uz);
         }
         return "i32";
     }
@@ -472,15 +501,7 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
                     !cesit_payload_var(yk->ast)) {
                     return cesit_disc_ir(yk->ast);
                 }
-                /* "%Ad" stringini arena'da olustur */
-                int uz = yk->ad_uz + 1;
-                char *buf = (char *)arena_ayir(g->arena, (size_t)uz + 1);
-                if (buf) {
-                    buf[0] = '%';
-                    memcpy(buf + 1, yk->ad, (size_t)yk->ad_uz);
-                    buf[uz] = '\0';
-                    return buf;
-                }
+                return yapi_ad_ir(g, yk->ad, yk->ad_uz);
             }
             return "ptr";
         }
@@ -970,7 +991,7 @@ static void yapi_tip_tanimlari_emit(LlvmGen *g) {
             const Dugum *c = y->ast;
             if (!cesit_payload_var(c)) continue;
             fputs("%", g->out);
-            ad_yaz(g->out, y->ad, y->ad_uz);
+            yerel_ad_yaz(g->out, y->ad, y->ad_uz);
             fprintf(g->out, " = type { %s", cesit_disc_ir(c));
             for (int vi = 0; vi < c->veri.cesit.varyant_sayi; vi++) {
                 int pn = cesit_varyant_payload_n(c, vi);
@@ -984,7 +1005,7 @@ static void yapi_tip_tanimlari_emit(LlvmGen *g) {
             continue;
         }
         fputs("%", g->out);
-        ad_yaz(g->out, y->ad, y->ad_uz);
+        yerel_ad_yaz(g->out, y->ad, y->ad_uz);
         fputs(" = type { ", g->out);
         for (int i = 0; i < y->ast->veri.yapi.alan_sayi; i++) {
             if (i > 0) fputs(", ", g->out);
@@ -1128,12 +1149,8 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
                              d->veri.yapi_olustur.tip_ad_uzunluk);
     if (!y) return hata(g, "yapi tipi bilinmiyor");
 
-    /* Tip stringi olustur: "%Ad" */
-    int tip_uz = y->ad_uz + 1;
-    char *yapi_ir = (char *)arena_ayir(g->arena, (size_t)tip_uz + 1);
-    yapi_ir[0] = '%';
-    memcpy(yapi_ir + 1, y->ad, (size_t)y->ad_uz);
-    yapi_ir[tip_uz] = '\0';
+    /* Tip stringi: "%Ad" (Türkçe ad ise quote'lu — yapi_ad_ir). */
+    const char *yapi_ir = yapi_ad_ir(g, y->ad, y->ad_uz);
 
     int alloca_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = alloca %s\n", alloca_r, yapi_ir);
@@ -1177,7 +1194,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     /* Yapi tipini cikar: nesne.tip "%Ad" ise yapi adi, "ptr" ise ad arama */
     YapiKayit *yk = NULL;
     if (nesne.tip && nesne.tip[0] == '%') {
-        yk = yapi_bul(g, nesne.tip + 1, (int)strlen(nesne.tip + 1));
+        yk = yapi_bul_ir(g, nesne.tip);
     } else {
         /* Konservatif: alan adina gore en uygun yapiyi bul */
         for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
@@ -1208,7 +1225,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     /* Ptr ise: GEP + load */
     int gep_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
-    ad_yaz(g->out, yk->ad, yk->ad_uz);
+    yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
     fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", nesne.reg, idx);
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
@@ -1243,8 +1260,7 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                                 nesne_d->veri.tanimlayici.uzunluk);
         if (!vi || !vi->llvm_tip) return -1;
         if (vi->llvm_tip[0] == '%') {
-            yk = yapi_bul(g, vi->llvm_tip + 1,
-                          (int)strlen(vi->llvm_tip + 1));
+            yk = yapi_bul_ir(g, vi->llvm_tip);
             taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
         } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
             for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
@@ -1267,7 +1283,7 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
         const char *ic_ir = NULL;
         taban_reg = erisim_lvalue(g, nesne_d, &ic_ir);
         if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
-        yk = yapi_bul(g, ic_ir + 1, (int)strlen(ic_ir + 1));
+        yk = yapi_bul_ir(g, ic_ir);
     } else {
         return -1;
     }
@@ -1281,7 +1297,7 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
 
     int gep_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
-    ad_yaz(g->out, yk->ad, yk->ad_uz);
+    yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
     fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", taban_reg, idx);
     return gep_r;
 }
