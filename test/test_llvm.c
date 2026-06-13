@@ -374,6 +374,24 @@ static void test_token_akisi_calistir(void) {
                rc == 42);
 }
 
+static void test_oncelikli_ayristirici_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/14_oncelikli_ayristirici.kem");
+    test_sonuc("oncelikli ayristirici: opt -passes=verify PASS", ok);
+}
+
+static void test_oncelikli_ayristirici_calistir(void) {
+    /* SELF-HOSTING parser yarısı: ÖZYİNELEMELİ-İNİŞ ifade ayrıştırıcısı —
+     * operatör ÖNCELİĞİ + PARANTEZ. Token akışı (Dizi<tam32>) bir gramerle
+     * değerlendirilir; paylaşılan MUTABLE konum imleci (dizi_yaz) ile
+     * faktör→ifade→terim→faktör karşılıklı özyineleme. "2+4*10" → 2+(4*10) = 42
+     * (soldan-sağa 60 olurdu — gerçek öncelik). 17 ifadeyle adversarial
+     * doğrulandı (öncelik + iç içe parantez + bölme). */
+    int rc = derle_dosya_ve_calistir(
+        "test/ornekler/14_oncelikli_ayristirici.kem");
+    test_sonuc("Oncelikli ayristirici (recursive-descent, oncelik+parantez)"
+               " -> exit 42", rc == 42);
+}
+
 static void test_dizi_yaz_calistir(void) {
     /* Yeni intrinsic dizi_yaz(d, i, v): i. elemanı YERİNDE günceller
      * (dizi_al'ın yazma eşi). Mutable cursor / in-place güncelleme. */
@@ -2565,6 +2583,8 @@ int main(void) {
     test_token_akisi_verify();
     test_token_akisi_calistir();
     test_dizi_yaz_calistir();
+    test_oncelikli_ayristirici_verify();
+    test_oncelikli_ayristirici_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
