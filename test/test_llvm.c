@@ -1848,10 +1848,31 @@ static void test_stdlib_liste_coklu_e2e(void) {
 }
 
 static void test_stdlib_liste_yapi_e2e(void) {
-    /* Capraz-dosya STRUCT-ELEMAN: Liste<Nokta> (karisik genislik a:tam32 +
-     * b:tam64). T=Nokta witness ile cikarsanir; alan butunlugu + a-toplami. */
+    /* Capraz-dosya STRUCT-ELEMAN: dizi::Liste<Nokta> (karisik genislik
+     * a:tam32 + b:tam64). Nitelikli annotation T=Nokta'yi besler. */
     int rc = derle_dosya_ve_calistir("test/moduller/dizi_yapi.kem");
     test_sonuc("stdlib Liste<T>: capraz-dosya struct-eleman (Nokta) -> exit 42",
+               rc == 42);
+}
+
+/* --- [YUKSEK] D dilim-1: nitelikli tip annotation (modül::Tip) --- */
+
+static void test_d_nitelikli_tip_param_e2e(void) {
+    /* Param/donus nitelikli tip: ilk_iki(l: &dizi::Liste<tam64>). Imza
+     * (pre_populate) kullan gorunur-alias'indan ONCE cozulur -> gizli
+     * kanonik fallback. Param annotasyonu yan-kanali da besler. -> 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/dizi_nitelikli_param.kem");
+    test_sonuc("D: nitelikli tip PARAM (&dizi::Liste<tam64>) -> exit 42",
+               rc == 42);
+}
+
+static void test_d_capraz_modul_struct_use_e2e(void) {
+    /* Capraz-modul STRUCT USE: sekil::Nokta nitelikli tip (degisken +
+     * param), sekil::yap factory ile kurulur, alanlari okunur (n.x/n.y —
+     * capraz-modul alan erisimi tip kontrolde yukle-tum-modul aramasiyla
+     * cozulur). 20+22 -> 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/sekil_kullan.kem");
+    test_sonuc("D: capraz-modul struct USE (sekil::Nokta + alan) -> exit 42",
                rc == 42);
 }
 
@@ -2430,6 +2451,10 @@ int main(void) {
     test_stdlib_liste_e2e();
     test_stdlib_liste_coklu_e2e();
     test_stdlib_liste_yapi_e2e();
+
+    printf("\n--- [YUKSEK] D dilim-1: nitelikli tip annotation ---\n");
+    test_d_nitelikli_tip_param_e2e();
+    test_d_capraz_modul_struct_use_e2e();
 
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();
