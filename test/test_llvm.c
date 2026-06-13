@@ -428,6 +428,23 @@ static void test_degiskenli_dil_calistir(void) {
                rc == 42);
 }
 
+static void test_kontrol_dili_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/17_kontrol_dili.kem");
+    test_sonuc("kontrol dili: opt -passes=verify PASS", ok);
+}
+
+static void test_kontrol_dili_calistir(void) {
+    /* SELF-HOSTING: mini dil V2 — KONTROL AKIŞI (eğer/değilse + iken + bloklar).
+     * Çok-harf IDENT/anahtar lexer (eger/degilse/iken) + karşılaştırma (< > ==)
+     * + flat-token deyim yürütücü (blok atla/yürüt, döngü re-eval). Mini-dilin
+     * if/while'ı KEMGU'nun if/while'ıyla yorumlanır. Program: iken-döngü ile
+     * t=55, eğer/değilse ile r=42. 18+ adversarial (iç içe döngü/if, faktöriyel,
+     * boş blok, ardışık döngü). ASan/UBSan temiz. */
+    int rc = derle_dosya_ve_calistir("test/ornekler/17_kontrol_dili.kem");
+    test_sonuc("Kontrol dili (eger/degilse/iken + blok, imperatif) -> exit 42",
+               rc == 42);
+}
+
 static void test_agac_insa_verify(void) {
     int ok = kemgu_llvm_opt_verify("test/ornekler/15_agac_insa.kem");
     test_sonuc("agac insa: opt -passes=verify PASS", ok);
@@ -2644,6 +2661,8 @@ int main(void) {
     test_yapi_alan_cakismasi();
     test_degiskenli_dil_verify();
     test_degiskenli_dil_calistir();
+    test_kontrol_dili_verify();
+    test_kontrol_dili_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

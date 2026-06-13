@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-033 — Self-hosting: mini dil V2 — KONTROL AKIŞI + deyim blokları (saf KEMGU) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-028 (atama + sembol
+tablosu + ifade) üstüne, mini-dili gerçek bir İMPERATİF dile çıkardım: koşul
+(`eger`/`degilse`), döngü (`iken`) ve `{ deyim* }` blokları
+(`test/ornekler/17_kontrol_dili.kem`). "Çok-deyimli → gerçek derleyici alt-kümesi"
+adımı; kontrol akışı = gerçek dil. **Bounded:** yalnız bu dilim — fonksiyon-tanımı
+SONRAKİ dilime bırakıldı (DUR-SOR sınırına uyuldu).
+
+**Yeni yetenekler (hepsi saf-KEMGU, mevcut intrinsic'lerle):**
+- **Lexer V2:** çok-harf IDENT + ASCII anahtar kelime tanıma (eger/degilse/iken,
+  metin_esit ile) + 2-karakter `==` (lookahead) + `< > { }` token'ları.
+- **İfade:** karşılaştırma seviyesi (`<`/`>`/`==`, sonuç 1/0) toplama üstünde.
+- **Yürütücü (flat-token, ağaç-yürüyen):** `deyim_calistir` (atama/eğer/iken
+  dağıtımı), `blok_calistir` (`{ deyim* }`), `blok_atla` (eşleşen `}` say,
+  yanlış dal/döngü-çıkışı için), `eger_calistir` (koşullu dal + opsiyonel
+  degilse), `iken_calistir` (koşulu re-eval + gövde tekrar yürütme, imleç
+  konum kaydet/sıfırla). Mini-dilin if/while'ı KEMGU'nun if/while'ıyla yorumlanır.
+
+**Doğrulama (adversarial, 18+ program):** iken-döngü toplam (1..10=55), eğer/değilse
+her iki dal, if-içinde-döngü, döngü-içinde-if, İÇ İÇE döngü, ardışık döngüler,
+boş blok, faktöriyel (3!=6), false-from-start döngü, çok-harf değişken, iç içe
+if-else. Headline: `i=0;t=0; iken(i<10){t=t+i+1;i=i+1;} r=0; eger(t==55){r=t-13;}
+degilse{r=0;} r` = 42. opt-verify PASS. **ASan/UBSan TEMİZ** (42, 0 ihlal — yoğun
+dizi kullanımı, D-029/D-030 fix'leri + matris kapsaması geçerli).
+
+**Testler:** test_llvm 229→**231** ([154] verify + [155] run). asan_e2e_denetim
+84→85 (yeni örnek otomatik kapsanır, temiz). Derleyici dokunulmadı → diğer suite'ler
+etkilenmez. **Sıradaki:** mini-dilde fonksiyon-tanımı/çağrısı (ayrı büyük dilim),
+sonra gerçek derleyici alt-kümesi.
+
+---
+
 ## D-032 — ASan/UBSan bellek güvenliği matrisi: D-029/D-030 eksenleri kalıcı regresyon ağı (2026-06-13)
 
 **Karar:** D-029 (yapı alan-adı çözümü) ve D-030 (dizi_olustur element_byte
