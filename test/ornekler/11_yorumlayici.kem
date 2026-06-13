@@ -1,0 +1,96 @@
+// ============================================================================
+// 11_yorumlayici.kem — Küçük bir ifade dilinin AĞAÇ-YÜRÜYEN YORUMLAYICISI.
+//
+// Self-hosting doğrulama eseri: KEMGU bu oturumda eklenen ÖZYİNELEMELİ
+// payload-taşıyan çeşit'i kullanarak hem soyut sözdizim ağacını (AST) hem de
+// LEKSİK ORTAMI (environment) temsil ediyor — yani kendi dilinin küçük bir
+// klonunu kendi tip sistemiyle ifade edip değerlendirebiliyor.
+//
+// Dil:  sabitler, değişken yuvaları (slot), +  *  -, < (karşılaştırma),
+//       koşul (eğer/değilse) ve bağla (let yuva = değer içinde gövde).
+//
+// İki özyinelemeli çeşit:
+//   Ifade  — değerlendirilecek ağaç (&Ifade referansı ptr → sonlu boyut).
+//   Cevre  — yuva→değer bağlamlarının zinciri (immutable assoc-list).
+//
+// &T referansı ptr olarak temsil edilir; eşleş referans üstünde otomatik
+// dereference yapar. Ortam, özyinelemeli çağrılar boyunca elden ele aktarılır.
+//
+// Değerlendirilen program:
+//     bağla x = 6 içinde  ( eğer x < 10  ise  x * 7  değilse  0 )
+//   =  bağla x = 6 içinde  ( 6 < 10 → doğru → 6 * 7 )  =  42
+// ============================================================================
+
+çeşit Ifade {
+    Sabit(tam64),                          // 42
+    Degisken(tam64),                       // yuva kimliği (slot id)
+    Topla(&Ifade, &Ifade),                 // a + b
+    Carp(&Ifade, &Ifade),                  // a * b
+    Cikar(&Ifade, &Ifade),                 // a - b
+    Kucuk(&Ifade, &Ifade),                 // a < b  → 1 / 0
+    Kosul(&Ifade, &Ifade, &Ifade),         // koşul ? doğru_dal : yanlış_dal
+    Bagla(tam64, &Ifade, &Ifade)           // bağla yuva = değer içinde gövde
+}
+
+// Ortam: yuva→değer zinciri. Bos = boş; Bag(yuva, değer, kalan) bir bağlam +
+// önceki ortam. Aramada yeni bağlam eskisini gölgeler (en yakın eşleşme).
+çeşit Cevre {
+    Bos,
+    Bag(tam64, tam64, &Cevre)
+}
+
+// Ortamda yuva ara — bulunamazsa 0 (tanımsız değişken konvansiyonu).
+işlev ara(ortam: &Cevre, yuva: tam64) -> tam64 {
+    eşleş ortam {
+        Cevre::Bos => { ver 0; }
+        Cevre::Bag(y, d, kalan) => {
+            eğer y == yuva { ver d; }
+            ver ara(kalan, yuva);
+        }
+    }
+    ver 0;
+}
+
+// Ağacı verilen ortamda değerlendir (özyinelemeli, ortam elden ele aktarılır).
+işlev degerlendir(e: &Ifade, ortam: &Cevre) -> tam64 {
+    eşleş e {
+        Ifade::Sabit(n)        => { ver n; }
+        Ifade::Degisken(yuva)  => { ver ara(ortam, yuva); }
+        Ifade::Topla(a, b)     => { ver degerlendir(a, ortam) + degerlendir(b, ortam); }
+        Ifade::Carp(a, b)      => { ver degerlendir(a, ortam) * degerlendir(b, ortam); }
+        Ifade::Cikar(a, b)     => { ver degerlendir(a, ortam) - degerlendir(b, ortam); }
+        Ifade::Kucuk(a, b)     => {
+            eğer degerlendir(a, ortam) < degerlendir(b, ortam) { ver 1; }
+            ver 0;
+        }
+        Ifade::Kosul(k, dt, yt) => {
+            eğer degerlendir(k, ortam) != 0 { ver degerlendir(dt, ortam); }
+            ver degerlendir(yt, ortam);
+        }
+        Ifade::Bagla(yuva, deger, govde) => {
+            değişken v: tam64 = degerlendir(deger, ortam);
+            değişken yeni: Cevre = Cevre::Bag(yuva, v, ortam);
+            ver degerlendir(govde, &yeni);
+        }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    // Yuva 0 = "x".  Ağacı yapraktan köke kur (referanslar yerel değişkenlere).
+    değişken alti: Ifade   = Ifade::Sabit(6);
+    değişken on: Ifade     = Ifade::Sabit(10);
+    değişken yedi: Ifade   = Ifade::Sabit(7);
+    değişken sifir: Ifade  = Ifade::Sabit(0);
+
+    değişken xv: Ifade     = Ifade::Degisken(0);     // x
+    değişken xv2: Ifade    = Ifade::Degisken(0);     // x (ikinci kullanım)
+
+    değişken kosul: Ifade  = Ifade::Kucuk(&xv, &on);       // x < 10
+    değişken carp: Ifade   = Ifade::Carp(&xv2, &yedi);     // x * 7
+    değişken dal: Ifade    = Ifade::Kosul(&kosul, &carp, &sifir); // x<10 ? x*7 : 0
+    değişken prog: Ifade   = Ifade::Bagla(0, &alti, &dal);  // bağla x=6 içinde dal
+
+    değişken bos: Cevre = Cevre::Bos;
+    ver degerlendir(&prog, &bos) olarak tam32;   // → 42
+}

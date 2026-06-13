@@ -315,6 +315,18 @@ static void test_cesit_kenar_calistir(void) {
                rc == 42);
 }
 
+static void test_yorumlayici_calistir(void) {
+    /* SELF-HOSTING DOĞRULAMA: küçük bir ifade dilinin ağaç-yürüyen
+     * yorumlayıcısı — AST (Ifade) ve leksik ORTAM (Cevre) iki özyinelemeli
+     * payload çeşit; ortam özyineli çağrılarda elden ele aktarılır; eşleş
+     * kolunda yerel çeşit kurup &referansını alma. bağla x=6 içinde
+     * (x<10 ? x*7 : 0) = 42. Bu oturumun tüm çeşit yığınını gerçek programda
+     * birden zorlar. */
+    int rc = derle_dosya_ve_calistir("test/ornekler/11_yorumlayici.kem");
+    test_sonuc("Yorumlayici (Ifade AST + Cevre ortam, ozyineli) -> exit 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2487,6 +2499,7 @@ int main(void) {
     test_turkce_tip_adi_calistir();
     test_cesit_capraz_modul_calistir();
     test_cesit_kenar_calistir();
+    test_yorumlayici_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
