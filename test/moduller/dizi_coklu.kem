@@ -1,0 +1,19 @@
+// Çapraz-dosya Liste<T> ÇOKLU-TİP: aynı kütüphane/dizi.kem'den hem tam64 hem
+// tam32 liste (type-erased %Liste paylaşılır, ayrık specialization'lar
+// @dizi.ekle$i64 / @dizi.ekle$i32). Saf inference. büyük=30+10=40, küçük=2 → 42.
+kullan dizi;
+
+işlev main() -> tam32 {
+    değişken sifir64: tam64 = 0;
+    değişken l = dizi::yarat(sifir64);
+    dizi::ekle(&l, yetki_olustur(3, 3), 30 olarak tam64);
+    dizi::ekle(&l, yetki_olustur(3, 3), 10 olarak tam64);
+    değişken büyük: tam64 = dizi::al(&l, 0, sifir64) + dizi::al(&l, 1, sifir64);
+
+    değişken sifir32: tam32 = 0;
+    değişken m = dizi::yarat(sifir32);
+    dizi::ekle(&m, yetki_olustur(3, 3), 2);
+    değişken küçük: tam32 = dizi::al(&m, 0, sifir32);
+
+    ver (büyük olarak tam32) + küçük;
+}

@@ -347,3 +347,61 @@ ilgisiz altsistem (capability-borrow) genişletilmedi.
 **Testler:** test_llvm 197→200 (+3 C-2: struct --check, headline yarat/ekle/al+büyü
 E2E, çoklu-tip i64+i32 E2E). Fikstürler: test/moduller/{kap,ana_kap,ana_kap_coklu}.kem.
 parser 107, tip_kontrol 174 düşmedi. In-file Liste<T> (kütüphane/dizi.kem) canary yeşil.
+
+---
+
+## D-014 — Üretim Liste<T> gerçek çapraz-dosya modüle taşındı (relocation + PROB) (2026-06-13)
+
+**Bağlam:** D-013 minimal `kap` container'ıyla çapraz-modül struct'ı kanıtlamıştı.
+Bu adım ÜRETİM `kütüphane/dizi.kem` Liste<T>'sini gerçek importable modül yapar —
+v1'de ERTELENEN relocation (B+A+C ile mümkün): Liste o zaman top-level'a zorlanmıştı
+çünkü (a) modül-içi struct emisyonu (A) + (b) cross-module generic routing (C) yoktu.
+
+**Yapı kararı (no-src-change, stdlib + test):**
+- `kütüphane/dizi.kem` artık **mat.kem düzeni**: top-level `genel yapı Liste<T>` +
+  7 op (`genel işlev`), AÇIK `modül dizi { }` SARMALAYICISI YOK. Loader dosyayı
+  zaten `modül dizi`'ye sarar; açık sarmalayıcı `dizi.dizi` İÇ-İÇE olurdu (loader
+  `fprog.uyeler`'i sentetik DUGUM_MODUL üyesi yapar — ana.c:315). → Liste<T> artık
+  modül dizi üyesi (A modül-içi struct emisyonu → type-erased `%Liste`).
+- In-file `main` + test_* (v1 self-contained) **kaldırıldı** — import edilince entry
+  main'iyle çakışır. Doğrulama ayrı çapraz-dosya entry'lerine taşındı
+  (test/moduller/dizi_{kullan,coklu,yapi}.kem; `kullan dizi;`, kütüphane/ arama
+  yolundan bulunur). "In-file canary" → "çapraz-dosya canary" (eşdeğer kapsam yeşil).
+
+**PROB RAPORU (görevin asıl çıktısı):**
+1. **`yarat` INFERENCE-FRIENDLY DEĞİL → witness-param gerekti.** Üretim imzası
+   `yarat(böl: yetki<Bellek>) -> Liste<T>` — paramlarında T YOK → T yalnız
+   dönüş-bağlamı annotasyonundan (`değişken l: Liste<tam32> = ...`) çıkarsanırdı.
+   Çapraz-dosya'da: yazılı nitelikli annotasyon (`dizi::Liste<tam32>`) = D (yasak);
+   explicit call-site tip-arg (`yarat<i64>()`) parser'da YOK (karşılaştırma zinciri
+   olarak parse). **DEMO adaptasyonu:** `yarat<T>(taban: T)` tip-tanık param (değer
+   kullanılmaz) + yetki içeride üretilir → T arg'dan çıkarsanır. **Üretim API kararı
+   DEĞİL** — gerçek çözüm explicit-type-arg parsing (ayrı görev, syntax fork) ya da
+   return-type-driven inference. `ekle`/`al` zaten T-değer param'lı → çıkarsama sorunsuz.
+2. **Capability-borrow workaround çapraz-dosya SORUNSUZ.** `yetki<Bellek>` lineer-MOVE
+   disiplini (her op taze `yetki_olustur(3,3)`, son `geri_al`; ekle→büyü MOVE) çapraz-
+   dosya'da AYNEN çalışır — yetki built-in'leri modül çözümünden bağımsız, specialized
+   gövdede owning-bağlamda emit edilir. Runtime-link (kdl_yetki_*) sorunsuz.
+3. **Küçük inference WART (düzeltilmedi, raporlandı):** `değişken l = dizi::yarat(...)`
+   (annotasyonsuz) sonucu `l` element-tip yan-kanalı (`generic_arg_ir`) TAŞIMAZ —
+   yalnız değişken-annotasyonundan set ediliyor. Sonuç: T'nin TEK kaynağı `&Liste<T>`
+   param olan doğrudan çağrı (örn. `dizi::boy(&l)`) i32'ye default'lar → `@dizi.boy$i32`
+   emit edilir. **ZARARSIZ** burada: `boy` dönüşü somut `tam64`, gövde T'den bağımsız —
+   $i32/$i64 gövdesi ÖZDEŞ. Ama T-DÖNÜŞLÜ böyle bir op olsaydı yanlış tip verirdi.
+   Transitif çağrı (ekle→büyü, l param subst'lı) DOĞRU ($i64). Gerçek çözüm: generic
+   call sonucunu değişkene atarken instantiated-T'yi yan-kanala propagate et (küçük
+   codegen işi, kapsam dışı — mono değil, ergonomi). DUR-SOR yerine raporlandı.
+
+**Doğrulama (saf inference, hepsi exit 42):** çapraz-dosya grow headline (yarat/ekle×5/
+al + transitif büyü, kapasite 0→4→8), çoklu-tip (i64+i32 ayrık spec, paylaşılan %Liste),
+struct-eleman (Liste<Nokta> karışık genişlik). IR: `@dizi.{yarat,ekle,al,boy}$i64` +
+`@"dizi.büyü$i64"` owning-bağlamda; çoklu-tip $i64/$i32 ikiz set.
+
+**Kapsam/sınırlar:** src/ kodu DEĞİŞMEDİ (stdlib + test). Yazılı nitelikli tip (D),
+legacy flatten, proofs/, bölge/escape/wcet/lsp dokunulmadı. struct-eleman Liste<Nokta>
+çalışıyor (D-013'te denenmemişti — burada doğrulandı).
+
+**Testler:** test_llvm 201→203 (stdlib_liste_e2e in-file→çapraz-dosya güncellendi;
++çoklu-tip +struct-eleman; --check modül-alone). Fikstürler: kütüphane/dizi.kem (v2
+yeniden yazıldı), test/moduller/dizi_{kullan,coklu,yapi}.kem. parser 107, tip_kontrol
+174, drivers (uart_vtable 21) düşmedi. 0 ASan. stdlib --check yeşil.
