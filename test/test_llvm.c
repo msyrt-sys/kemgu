@@ -2483,6 +2483,29 @@ static void test_dongu_yerel_alloca_hoist(void) {
     test_sonuc("dongu-yerel alloca hoist: 500000 iter crash yok -> exit 42", rc == 42);
 }
 
+/* --- D-044: yapı Dizi<T> alanı + boş/[...] literal -> HEAP KdlDizi --- */
+
+static void test_yapi_dizi_alani_heap(void) {
+    /* ESKIDEN: 'Yapı { d: [] }' (Dizi<T> alanı) DIZI_OLUSTUR'u STACK [0 x i8]
+     * üretirdi -> alan 0-byte stack buffer'a işaret eder -> dizi_ekle(t.d,..)
+     * KdlDizi* sanıp SEGFAULT. Fix (D-044): DIZI_OLUSTUR beklenen_tip Dizi<T>
+     * ise heap kdl_dizi_olustur üretir; yapi_olustur alan tipini beklenen_tip'e
+     * koyar. &değişken Tablo param üzerinden field-append çalışır. toplam=42. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Tablo { adlar: Dizi<metin>; sayilar: Dizi<tam32>; } "
+        "i\xc5\x9flev ekle(t: &de\xc4\x9fi\xc5\x9fken Tablo, ad: metin, n: tam32) -> tam32 { "
+        "dizi_ekle(t.adlar, ad); dizi_ekle(t.sayilar, n); ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken t: Tablo = Tablo { adlar: [], sayilar: [] }; "
+        "ekle(&de\xc4\x9fi\xc5\x9fken t, \"bir\", 10); "
+        "ekle(&de\xc4\x9fi\xc5\x9fken t, \"iki\", 32); "
+        "de\xc4\x9fi\xc5\x9fken toplam: tam32 = 0; "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < dizi_boyut(t.sayilar) { toplam = toplam + dizi_al(t.sayilar, i); i = i + 1; } "
+        "ver toplam; }");
+    test_sonuc("yapı Dizi<T> alanı boş-literal -> heap (segfault yok) -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2713,6 +2736,9 @@ int main(void) {
 
     printf("\n--- D-041: dongu-yerel alloca hoist ---\n");
     test_dongu_yerel_alloca_hoist();
+
+    printf("\n--- D-044: yapı Dizi<T> alanı heap ---\n");
+    test_yapi_dizi_alani_heap();
 
     printf("\n--- C5: satirici_asm (inline assembly) ---\n");
     test_asm_round_trip_verify();

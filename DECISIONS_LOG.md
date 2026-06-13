@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-044 [YÜKSEK] — Kök-neden fix: yapı Dizi<T> alanı boş/[...] literal → STACK [0xi8] → SEGFAULT (2026-06-13)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Parser
+self-host P1 de-risk'inde ortaya çıktı (virtio track'teki "&Struct-param+Dizi"
+segfault'unun kök-nedeni). `Yapı { d: [] }` veya `{ d: [e,...] }` — alan tipi
+`Dizi<T>` iken — `DUGUM_DIZI_OLUSTUR` codegen'i **her zaman STACK `[N x i8]`**
+üretiyordu (boş `[]` → `alloca [0 x i8]`). Alan KdlDizi* yerine 0-byte STACK
+buffer'a işaret eder; `dizi_ekle(t.d, ..)` onu KdlDizi* sanıp `.veri/.boyut/...`
+erişince **SEGFAULT**. `--check` geçiyordu (tip sistemi `[]`'i geçerli Dizi<T>
+sayar) → latent codegen miscompile.
+
+**Neden gizliydi:** `değişken d: Dizi<T> = []` ZATEN çalışıyordu — ama AYRI bir
+özel-yol (DUGUM_DEGISKEN handler'ı, llvm.c:3341) heap'e dönüştürüyordu. Diğer TÜM
+bağlamlar (yapı alanı, çağrı argümanı, `ver`) bu yoldan geçmiyordu → stack.
+
+**Fix (kök, genel):** (A) `DUGUM_DIZI_OLUSTUR` artık `g->beklenen_tip` `Dizi<T>`
+ise HEAP `kdl_dizi_olustur` + eleman başına `dizi_ekle` üretir (eleman_byte
+eleman IR tipinden; iç içe için beklenen_tip elemana inilir). (B) `yapi_olustur_uret`
+alan değerini değerlendirmeden ÖNCE `g->beklenen_tip = alan_tip_d` koyar. Böylece
+TÜM Dizi<T> bağlamları (sadece değişken değil) doğru heap üretir.
+
+**Doğrulama:** De-risk (`yapı Tablo{adlar:Dizi<metin>; sayilar:Dizi<tam32>}` +
+`&değişken Tablo` param field-append) → exit 42 (segfault yok). test_llvm yeni
+[161] regresyon. Tüm test paketi + ASan + lexer bootstrap YEŞİL (aşağıda).
+
+**Kapsam/sınır:** Yalnız `[]`/`[...]` literalin heap-Dizi yönlendirmesi eklendi —
+stack-dizi yolu (annot yok / index'lenen sabit dizi) korunur. `t.d[i]` index
+sintaksı struct-field heap-dizi için ayrı (builtin `dizi_al/ekle/boyut` çalışır;
+INDEX düğümü gerekirse sonra).
+
+---
+
 ## D-043 — SELF-HOST parser ADIM-0: AST temsili + --ast diff-oracle (2026-06-13)
 
 **Karar [ETKİ: düşük — additive C: yeni `--ast` modu + `ast_duz_yaz`; mevcut yol
