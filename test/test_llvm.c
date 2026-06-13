@@ -392,6 +392,23 @@ static void test_oncelikli_ayristirici_calistir(void) {
                " -> exit 42", rc == 42);
 }
 
+static void test_agac_insa_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/15_agac_insa.kem");
+    test_sonuc("agac insa: opt -passes=verify PASS", ok);
+}
+
+static void test_agac_insa_calistir(void) {
+    /* SELF-HOSTING TAM HAT: lex → parse(AST İNŞA) → eval(AST gez). Parser artık
+     * değeri doğrudan hesaplamıyor; İNDEKS-TABANLI ARENA AST inşa ediyor
+     * (paralel Dizi<tam32>, çocuklar indeks — KEMGU'nun kendi arena+AST modeli),
+     * ayrı bir geçiş ağacı geziyor. Diziler `yapı` içinde paketlenip &referansla
+     * aktarılır (struct + koleksiyon). "2+4*10" → AST (+ 2 (* 4 10)) → 42.
+     * 10 ifadeyle adversarial doğrulandı (öncelik + iç içe parantez + bölme). */
+    int rc = derle_dosya_ve_calistir("test/ornekler/15_agac_insa.kem");
+    test_sonuc("Agac insa (lex->parse(AST)->eval, arena+struct) -> exit 42",
+               rc == 42);
+}
+
 static void test_dizi_yaz_calistir(void) {
     /* Yeni intrinsic dizi_yaz(d, i, v): i. elemanı YERİNDE günceller
      * (dizi_al'ın yazma eşi). Mutable cursor / in-place güncelleme. */
@@ -2585,6 +2602,8 @@ int main(void) {
     test_dizi_yaz_calistir();
     test_oncelikli_ayristirici_verify();
     test_oncelikli_ayristirici_calistir();
+    test_agac_insa_verify();
+    test_agac_insa_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
