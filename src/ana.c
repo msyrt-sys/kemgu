@@ -34,7 +34,7 @@
  * Dosya argumani yoksa stdin'den okur.
  */
 
-typedef enum { MOD_TOKEN, MOD_PARSE, MOD_CHECK, MOD_LLVM, MOD_LSP } Mod;
+typedef enum { MOD_TOKEN, MOD_PARSE, MOD_AST, MOD_CHECK, MOD_LLVM, MOD_LSP } Mod;
 
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
@@ -111,6 +111,22 @@ static int mode_parse(const char *kaynak, const char *dosya_adi) {
     ast_yazdir(prog, stdout);
     printf("\n=== Toplam parser hata sayisi: %d ===\n", p.hata_sayisi);
 
+    int rc = (p.hata_sayisi > 0) ? 1 : 0;
+    arena_serbest(a);
+    return rc;
+}
+
+/* --ast: DÜZ AST dump (self-host parser diff-oracle, D-043). Yalnız ağaç —
+ * başlık/özet yok (--parse insan-okunur; --ast makine/diff). */
+static int mode_ast(const char *kaynak, const char *dosya_adi) {
+    Arena *a = arena_olustur(0);
+    if (!a) { fprintf(stderr, "Arena olusturulamadi\n"); return 1; }
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Parser p;
+    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+    Dugum *prog = parser_calistir(&p);
+    ast_duz_yaz(prog, stdout, 0);
     int rc = (p.hata_sayisi > 0) ? 1 : 0;
     arena_serbest(a);
     return rc;
@@ -569,6 +585,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[arg_idx], "--parse") == 0) {
             mod = MOD_PARSE;
             arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--ast") == 0) {
+            mod = MOD_AST;
+            arg_idx++;
         } else if (strcmp(argv[arg_idx], "--check") == 0) {
             mod = MOD_CHECK;
             arg_idx++;
@@ -617,6 +636,7 @@ int main(int argc, char *argv[]) {
     switch (mod) {
         case MOD_TOKEN: rc = mode_token(kaynak, dosya_adi); break;
         case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
+        case MOD_AST:   rc = mode_ast(kaynak, dosya_adi); break;
         case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
         case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi); break;
         default:        rc = 2; break;
