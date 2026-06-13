@@ -703,3 +703,41 @@ Tam regresyon: test_llvm 213→214 (+tam64 literal bağlam E2E), tip_kontrol 174
 sabitsure 39 (guard sonrası), simd 30, simd_llvm 5, wcet 35, mmio 23, lexer 103,
 parser 107, linear 57, drf 39, capability 40, snapshot 50, arena/ast/tip/sembol.
 0 ASan. stdlib --check yeşil. Temiz rebuild 0 uyarı.
+
+---
+
+## D-022 — Self-hosting doğrulama eseri: ağaç-yürüyen yorumlayıcı (saf KEMGU) (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız örnek + test, derleyici değişmedi]:** Bu oturumda
+eklenen özyinelemeli payload çeşit yığınını GERÇEK bir programda birden zorlamak
+için, küçük bir ifade dilinin ağaç-yürüyen yorumlayıcısı saf KEMGU ile yazıldı
+(`test/ornekler/11_yorumlayici.kem`) ve E2E regresyon testine bağlandı.
+
+**Gerekçe:** Generic çeşit'in (sıradaki büyük aday) codegen monomorfizasyonu
+per-T layout gerektiriyor (yeni instantiation-izleme + mangled struct emisyonu;
+yapıcı/eşleş/annotasyon sitelerinde) — "her commit yeşil + E2E" disiplini altında
+tek hamlede temiz inmesi yüksek riskli, tip-kontrol-only yarım özellik olurdu.
+Bunun yerine SIFIR derleyici-regresyon riski olan, shipped çeşit işini gerçekçi
+yük altında doğrulayan ve bir sonraki özelliği KANITLA gerekçelendiren eseri seçtim.
+
+**Ne kanıtlıyor:** KEMGU kendi dilinin küçük bir klonunu kendi tip sistemiyle
+ifade edip değerlendirebiliyor — HEM AST (`çeşit Ifade`, 8 varyant: Sabit,
+Degisken, Topla, Carp, Cikar, Kucuk, Kosul/3-payload, Bagla/karışık-tip) HEM
+leksik ORTAM (`çeşit Cevre` immutable assoc-list) özyinelemeli payload çeşit.
+Ortam özyineli çağrılar boyunca elden ele aktarılır; `eşleş` kolunda yerel çeşit
+kurup `&referansını` alma (`Cevre::Bag(yuva,v,ortam)` → `&yeni`); nested match +
+koşul + karşılaştırma. Program: `bağla x=6 içinde (x<10 ? x*7 : 0)` = **42**
+(--check ✓ + E2E exit 42 ✓). `x*7` bu oturumun D-021 literal-bağlam düzeltmesini
+de doğrular (tam64 değer * literal).
+
+**Kapsam/sınırlar:** Değişken erişimi tam sayı YUVA kimliğiyle (slot id) — `metin`
+eşitliği intrinsic'i yok, isimle arama V2. Tek dosya. Yorumlayıcı kapsamı: tam
+sayı aritmetik + karşılaştırma + koşul + let; tip/closure/fonksiyon-değer yok.
+
+**Sıradaki büyük adayı kanıtlıyor:** Bu eser genel container ihtiyacını (örn.
+`Opsiyonel<T>`, `Liste<çeşit>`) somutlaştırıyor → **generic çeşit** ve **gerçek
+string/koleksiyon stdlib** self-hosting'in net ön-koşulları olarak doğrulandı.
+
+**Testler:** test_llvm 214→215 ([139] Yorumlayici E2E). Diğer tüm suite'ler
+değişmedi (derleyici dokunulmadı). 0 ASan. Temiz rebuild 0 uyarı. Hiçbir test
+`ornekler/` dizinini enumerate etmiyor (yeni dosya izole).
