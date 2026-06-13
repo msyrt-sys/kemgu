@@ -176,6 +176,10 @@ static YapiKayit *yapi_bul(LlvmGen *g, const char *ad, int ad_uz);
 static int mono_emitlendi(LlvmGen *g, const char *mangled);
 static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
                               const char **tipler, int tip_sayi);
+static int tip_kesirli_mi(const char *ir);
+static int tip_genisligi(const char *ir);
+static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
+                        const char *dst_tip);
 
 /* === Isim tablosu === */
 
@@ -312,6 +316,89 @@ static const char *cesit_disc_ir(const Dugum *c) {
     return c->veri.cesit.varyant_sayi > 256 ? "i16" : "i8";
 }
 
+/* C3: çeşit'in payload taşıyan varyantı var mı? Varsa tagged-union struct
+ * temsili (`%Ad = {iDISC, alanlar}`); yoksa bare iN disc (eski davranış). */
+static int cesit_payload_var(const Dugum *c) {
+    if (!c->veri.cesit.varyant_payload_sayilari) return 0;
+    for (int i = 0; i < c->veri.cesit.varyant_sayi; i++) {
+        if (c->veri.cesit.varyant_payload_sayilari[i] > 0) return 1;
+    }
+    return 0;
+}
+
+/* C3: vi. varyantın payload alanlarının struct'taki başlangıç indeksi.
+ * Alan 0 = disc; varyantlar bildirim sırasıyla peş peşe (sonuç {tag,T,H}
+ * deseni). offset(vi) = 1 + sum(payload_sayilari[0..vi-1]). */
+static int cesit_varyant_alan_ofset(const Dugum *c, int vi) {
+    int ofs = 1;
+    if (!c->veri.cesit.varyant_payload_sayilari) return ofs;
+    for (int i = 0; i < vi && i < c->veri.cesit.varyant_sayi; i++) {
+        ofs += c->veri.cesit.varyant_payload_sayilari[i];
+    }
+    return ofs;
+}
+
+static int cesit_varyant_payload_n(const Dugum *c, int vi) {
+    if (vi < 0 || vi >= c->veri.cesit.varyant_sayi ||
+        !c->veri.cesit.varyant_payload_sayilari) return 0;
+    return c->veri.cesit.varyant_payload_sayilari[vi];
+}
+
+/* C3: payload çeşit'in IR struct adı "%Ad" (arena). */
+static const char *cesit_struct_ir(LlvmGen *g, const Dugum *cd) {
+    int uz = cd->veri.cesit.ad_uzunluk;
+    char *buf = (char *)arena_ayir(g->arena, (size_t)uz + 2);
+    if (!buf) return "%cesit";
+    buf[0] = '%';
+    memcpy(buf + 1, cd->veri.cesit.ad, (size_t)uz);
+    buf[uz + 1] = '\0';
+    return buf;
+}
+
+/* C3: çeşit varyant değeri inşası. Payloadsuz çeşit → bare iN disc sabiti
+ * (eski davranış). Payload çeşit → {iDISC, alanlar} struct (alloca + GEP+
+ * store + load, yapici_uret deseni). cagri varsa argümanları payload'a yazar
+ * (Cesit::V(args)); yoksa yalnız disc (bare Cesit::V — payloadsuz varyant). */
+static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
+                                    const Dugum *cagri, int n) {
+    const char *disc = cesit_disc_ir(cd);
+    if (!cesit_payload_var(cd)) {
+        int r = yeni_reg(g);
+        fprintf(g->out, "  %%%d = add %s 0, %d\n", r, disc, vi);
+        IfadeSonuc s = { r, disc, 0 };
+        return s;
+    }
+    const char *agg = cesit_struct_ir(g, cd);
+    int ar = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", ar, agg);
+    int gt = yeni_reg(g);
+    fprintf(g->out, "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 0\n",
+            gt, agg, ar);
+    fprintf(g->out, "  store %s %d, ptr %%%d\n", disc, vi, gt);
+    int pn = cesit_varyant_payload_n(cd, vi);
+    int ofs = cesit_varyant_alan_ofset(cd, vi);
+    for (int j = 0; j < pn && cagri && j < n; j++) {
+        const char *pir = ast_tip_to_ir(g,
+            cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+        if (!pir || strcmp(pir, "void") == 0) pir = "i8";
+        IfadeSonuc pv = ifade_uret(g, cagri->veri.cagri.argumanlar[j], pir);
+        int pr = pv.reg;
+        if (!tip_kesirli_mi(pir) && !tip_kesirli_mi(pv.tip) &&
+            tip_genisligi(pir) > 0 && tip_genisligi(pv.tip) > 0) {
+            pr = int_donustur(g, pv.reg, pv.tip, pir);
+        }
+        int gp = yeni_reg(g);
+        fprintf(g->out,
+                "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 %d\n",
+                gp, agg, ar, ofs + j);
+        fprintf(g->out, "  store %s %%%d, ptr %%%d\n", pir, pr, gp);
+    }
+    int lr = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, agg, ar);
+    IfadeSonuc s = { lr, agg, 0 };
+    return s;
+}
+
 /* Varyant adından tag indeksi (bildirim sırası). -1 = bulunamadı. */
 static int cesit_varyant_indeksi(const Dugum *c, const char *ad, int uz) {
     for (int i = 0; i < c->veri.cesit.varyant_sayi; i++) {
@@ -346,7 +433,9 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
         /* Taninmayan basit tip — kullanici yapisi olabilir mi? */
         YapiKayit *yk = yapi_bul(g, a, u);
         if (yk) {
-            if (yk->ast && yk->ast->tip == DUGUM_CESIT) {  /* C2.7: çeşit → disc */
+            /* çeşit: payloadsuz → bare iN disc; payload → %Ad struct (aşağı). */
+            if (yk->ast && yk->ast->tip == DUGUM_CESIT &&
+                !cesit_payload_var(yk->ast)) {
                 return cesit_disc_ir(yk->ast);
             }
             int sz = yk->ad_uz + 1;
@@ -379,7 +468,8 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
              * degilse "ptr" (trait vb. kullanici tipi). */
             YapiKayit *yk = yapi_bul(g, yad, yuz);
             if (yk) {
-                if (yk->ast && yk->ast->tip == DUGUM_CESIT) {  /* C2.7 */
+                if (yk->ast && yk->ast->tip == DUGUM_CESIT &&
+                    !cesit_payload_var(yk->ast)) {
                     return cesit_disc_ir(yk->ast);
                 }
                 /* "%Ad" stringini arena'da olustur */
@@ -874,6 +964,25 @@ static void str_globalleri_emit(LlvmGen *g) {
 static void yapi_tip_tanimlari_emit(LlvmGen *g) {
     /* %YapiAdi = type { tip1, tip2, ... } */
     for (YapiKayit *y = g->yapilar; y; y = y->sonraki) {
+        /* C3: çeşit — payload taşıyorsa tagged-union struct, taşımıyorsa
+         * bare iN disc (struct tipi gerekmez, atla). */
+        if (y->ast && y->ast->tip == DUGUM_CESIT) {
+            const Dugum *c = y->ast;
+            if (!cesit_payload_var(c)) continue;
+            fputs("%", g->out);
+            ad_yaz(g->out, y->ad, y->ad_uz);
+            fprintf(g->out, " = type { %s", cesit_disc_ir(c));
+            for (int vi = 0; vi < c->veri.cesit.varyant_sayi; vi++) {
+                int pn = cesit_varyant_payload_n(c, vi);
+                for (int j = 0; j < pn; j++) {
+                    const char *ir = ast_tip_to_ir(g,
+                        c->veri.cesit.varyant_payload_tipleri[vi][j]);
+                    fprintf(g->out, ", %s", ir ? ir : "i32");
+                }
+            }
+            fputs(" }\n", g->out);
+            continue;
+        }
         fputs("%", g->out);
         ad_yaz(g->out, y->ad, y->ad_uz);
         fputs(" = type { ", g->out);
@@ -1622,11 +1731,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int idx = cesit_varyant_indeksi(yk->ast,
                         d->veri.yol.sag_ad, d->veri.yol.sag_ad_uzunluk);
                     if (idx < 0) idx = 0;
-                    const char *disc = cesit_disc_ir(yk->ast);
-                    int r = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = add %s 0, %d\n", r, disc, idx);
-                    IfadeSonuc s = { r, disc, 0 };
-                    return s;
+                    /* C3: payloadsuz çeşit → disc; payload çeşit → struct
+                     * (bare varyant: yalnız disc, payload alanları undef). */
+                    return cesit_yapici_uret(g, yk->ast, idx, NULL, 0);
                 }
             }
             return hata(g, "yol ifadesi desteklenmiyor (cesit disi)");
@@ -1951,6 +2058,25 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fputs(")\n", g->out);
                 IfadeSonuc s = { r, donus, 0 };
                 return s;
+            }
+            /* C3: çeşit varyant YAPICISI X::V(args) — modül-fonksiyon YOL
+             * yolundan ÖNCE. sol bir çeşit + sag varyant ise tagged-union
+             * inşası (cesit_yapici_uret), değilse normal modül çağrısı. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_YOL &&
+                d->veri.cagri.hedef->veri.yol.sol &&
+                d->veri.cagri.hedef->veri.yol.sol->tip == DUGUM_TANIMLAYICI) {
+                const Dugum *yh = d->veri.cagri.hedef;
+                const Dugum *sol = yh->veri.yol.sol;
+                YapiKayit *yk = yapi_bul(g, sol->veri.tanimlayici.metin,
+                                         sol->veri.tanimlayici.uzunluk);
+                if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                    int vi = cesit_varyant_indeksi(yk->ast,
+                        yh->veri.yol.sag_ad, yh->veri.yol.sag_ad_uzunluk);
+                    if (vi < 0) vi = 0;
+                    return cesit_yapici_uret(g, yk->ast, vi, d,
+                                             d->veri.cagri.sayi);
+                }
             }
             /* Kampanya seed (a) / D-001: mat::kare(x) — YOL hedefli cagri.
              * Yol zinciri noktali ada knit edilir (@mat.kare) ve kayitli
@@ -3430,6 +3556,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 int L_next = -1;
                 int ctor_pf = -1;               /* payload alan indeksi (>=0) */
                 const Dugum *ctor_bind = NULL;  /* bağlanacak alt-desen */
+                const Dugum *cesit_match_cd = NULL;  /* C3: payload çeşit cd */
+                int cesit_match_vi = 0;              /* C3: eşleşen varyant idx */
 
                 if (catchall) {
                     fprintf(g->out, "  br label %%bb%d\n", L_body);
@@ -3501,20 +3629,36 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                                 cr, L_body, L_next);
                     } else if (desen && desen->tip == DUGUM_DESEN_YOL) {
-                        /* C2.7: bare Cesit::Variant — scrutinee iN discriminant. */
+                        /* C2.7/C3: Cesit::Variant[(a,b)] — payloadsuz çeşit:
+                         * scrutinee bare iN disc; payload çeşit: struct, alan
+                         * 0'dan disc çıkar. Payload bağlama için cd/vi kaydet. */
                         int idx = -1;
+                        const Dugum *cd = NULL;
                         YapiKayit *yk = yapi_bul(g,
                             desen->veri.desen_yol.cesit_ad,
                             desen->veri.desen_yol.cesit_uz);
                         if (yk && yk->ast && yk->ast->tip == DUGUM_CESIT) {
-                            idx = cesit_varyant_indeksi(yk->ast,
+                            cd = yk->ast;
+                            idx = cesit_varyant_indeksi(cd,
                                 desen->veri.desen_yol.varyant_ad,
                                 desen->veri.desen_yol.varyant_uz);
                         }
                         if (idx < 0) idx = 0;
+                        int disc_reg = s.reg;
+                        const char *disc_ty = sty;
+                        if (cd && cesit_payload_var(cd)) {
+                            disc_ty = cesit_disc_ir(cd);
+                            int dr = yeni_reg(g);
+                            fprintf(g->out,
+                                "  %%%d = extractvalue %s %%%d, 0\n",
+                                dr, sty, s.reg);
+                            disc_reg = dr;
+                            cesit_match_cd = cd;
+                            cesit_match_vi = idx;
+                        }
                         int cr = yeni_reg(g);
                         fprintf(g->out, "  %%%d = icmp eq %s %%%d, %d\n",
-                                cr, sty, s.reg, idx);
+                                cr, disc_ty, disc_reg, idx);
                         fprintf(g->out,
                                 "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                                 cr, L_body, L_next);
@@ -3560,6 +3704,43 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 ctor_bind->veri.desen_tanimlayici.ad,
                                 ctor_bind->veri.desen_tanimlayici.ad_uzunluk,
                                 1, ar, ftcopy);
+                        }
+                    }
+                }
+                /* C3: çeşit payload deseni Cesit::V(a, b) — varyant alanlarını
+                 * extractvalue ile çıkar + bağlı değişkenlere ata. */
+                if (cesit_match_cd && desen &&
+                    desen->tip == DUGUM_DESEN_YOL &&
+                    desen->veri.desen_yol.alt_sayi > 0) {
+                    const Dugum *cd = cesit_match_cd;
+                    int vi = cesit_match_vi;
+                    int ofs = cesit_varyant_alan_ofset(cd, vi);
+                    int pn = cesit_varyant_payload_n(cd, vi);
+                    int an = desen->veri.desen_yol.alt_sayi;
+                    for (int j = 0; j < an && j < pn; j++) {
+                        const Dugum *alt = desen->veri.desen_yol.alt_desenler[j];
+                        if (!alt || alt->tip != DUGUM_DESEN_TANIMLAYICI) {
+                            continue;  /* joker (_) vb. — bind yok */
+                        }
+                        const char *pir = ast_tip_to_ir(g,
+                            cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+                        if (!pir) pir = "i32";
+                        int pr = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = extractvalue %s %%%d, %d\n",
+                            pr, sty, s.reg, ofs + j);
+                        int ar = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %s\n", ar, pir);
+                        fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                                pir, pr, ar);
+                        size_t pl = strlen(pir);
+                        char *pcopy = (char *)arena_ayir(g->arena, pl + 1);
+                        if (pcopy) {
+                            memcpy(pcopy, pir, pl + 1);
+                            isim_ekle(g,
+                                alt->veri.desen_tanimlayici.ad,
+                                alt->veri.desen_tanimlayici.ad_uzunluk,
+                                1, ar, pcopy);
                         }
                     }
                 }
