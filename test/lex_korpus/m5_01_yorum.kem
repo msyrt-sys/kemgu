@@ -1,0 +1,11 @@
+// satır yorumu en başta
+değişken x = 5 // satır sonu yorumu
+/* blok yorum */ değişken y = 10
+/* çok
+satıra
+yayılan */ sabit Z = 1
+a /* iç içe /* derin */ yorum */ b
+işlev f /* param */ a b
+oran = 100 / 2 // bölme yorum değil
+yol = "http://site" // string içi // yorum değil
+son = 42

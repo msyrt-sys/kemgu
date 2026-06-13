@@ -1,0 +1,13 @@
+işlev topla a b
+yapı Nokta x y z
+dizi [ indeks ]
+çağrı ( arg1 arg2 )
+blok { gövde }
+a : tam32
+b :: yol
+liste , virgül , ayraç
+deyim ;
+! tek
+a != b
+!c
+=== üç
