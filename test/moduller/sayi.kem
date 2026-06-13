@@ -1,0 +1,11 @@
+// C fikstur: capraz-modul GENERIC fonksiyon.
+// azami<T> dis modulden cagrilir; azami3<T> transitif mono (kardes azami<T>'yi
+// owning-modul baglaminda specialize eder — binding-koruma testi).
+genel işlev azami<T>(a: T, b: T) -> T {
+    eğer a > b { ver a; }
+    ver b;
+}
+
+genel işlev azami3<T>(a: T, b: T, c: T) -> T {
+    ver azami(azami(a, b), c);
+}
