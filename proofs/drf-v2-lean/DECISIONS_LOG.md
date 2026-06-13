@@ -200,3 +200,47 @@ adim_korunum 21/21 + adim_odak_yuku 21/21 + progress_konf 12/12 +
 köprü 15/15 TAM. `kemgu_soundness_v3` + `IyiTipliCekirdek` metinleri
 değişmedi (dış kontrat bit-eşit). typed_no_fault → iyiTipli_no_fault →
 kemgu_soundness_v3 zinciri sorry'siz/axiom'suz. C5/C6 merge adayı.
+
+## 2026-06-13 — ✅ ADDITIVE: Operasyonel StepStar tanığı (gerçek send+recv)
+
+**Bağlam:** `eszamanli_soundness` (EszamanliTanik.lean) STATİK — "başlangıç
+konfigürasyonundan ULAŞILAN her S için DRF+bellek-güvenli+fault-suz". Ama
+programın GERÇEKTEN adımladığını göstermez (refl/sıfır-adım tanığıyla
+trivial okunabilir). Dış değerlendirme eleştirisi: "tanık vacuous mu?"
+
+**Eklenen (PURELY ADDITIVE — çekirdek değişmedi):**
+`Kemgu/Soundness/OperasyonelTanik.lean` (yeni dosya). Somut konkuran program
+`eszamanliProgram` (iki görev + bir kanal) operasyonel semantikte **4 GERÇEK
+adım** yürür:
+```
+K0 --sSeqCong[cGorevBaslatTamam]--> K1   (görev 1 spawn; çocuk = kanal_al 0)
+K1 --sSeqAtla--------------------->  K2   (spawn değeri atılır, sağ'a geç)
+K2 --cKanalGonderTamam----------->   K3   (görev 0: kanal 0'a skaler 0 GÖNDER)
+K3 --cKanalAlTamam--------------->   K4   (görev 1: kanal 0'dan skaler 0 AL)
+```
+- `eszamanli_operasyonel_kosu : StepStar (baslangicKonf eszamanliProgram) K4`
+- `K4_gercek_send_recv` : K4.iz'de HEM `kanalGonderOl 0 0 (skaler 0)` HEM
+  `kanalAlOl 1 0 (skaler 0)`, gönderen 0 ≠ alıcı 1.
+- `eszamanli_operasyonel_tanik` (ANA): ∃S, StepStar ∧ (gerçek iki-görev
+  send+recv) ∧ DrfHolds S ∧ MemSafe_perStep S ∧ S.fault=none. Güvenlik
+  parçası DOĞRUDAN `eszamanli_soundness K4`ten — operasyonel koşu da V3
+  metateoreminin kapsamında.
+
+**Non-vacuity gerekçesi (dejenere DEĞİL):** (1) StepStar 4 gerçek adım
+(refl değil); (2) izde gönderen≠alıcı iki ayrı thread haberleşmesi —
+tek-thread sıralı parça değil; (3) sonuçta iki thread context (0,1) yan
+yana yaşar — gerçek konkuranlık. Yol-B asimetrisi tanığı zorlamadı: GÖNDER
+ebeveyne (main), AL spawn edilen çocuğa düştü — çekirdek r_gorev_baslat
+hedefsiz-govde şartına doğal uyum.
+
+**Çekirdek dokunulmazlığı:** IyiTipliCekirdek, kemgu_soundness_v3,
+Step/StepStar kuralları, invariant'lar — HİÇBİRİ değişmedi. Yalnız somut
+konfigürasyon def'leri + 4 adım lemması + paketleme teoremi eklendi.
+
+**Altın-standart denetim:**
+- `lake build` yeşil (31 job, exit 0).
+- `#print axioms`: tüm yeni teoremler `[propext, Classical.choice, Quot.sound]`
+  (adım lemmaları yalnız `[propext]`). sorryAx YOK, yeni aksiyom YOK.
+- sorry/admit/native_decide gerçek kodda YOK (yalnız yorum).
+- Mevcut teoremler (kemgu_soundness_v3, eszamanli_program_iyiTipli,
+  eszamanli_soundness) bit-eşit ispatlı kaldı — regresyon yok.
