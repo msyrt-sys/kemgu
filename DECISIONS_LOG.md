@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-032 — ASan/UBSan bellek güvenliği matrisi: D-029/D-030 eksenleri kalıcı regresyon ağı (2026-06-13)
+
+**Karar:** D-029 (yapı alan-adı çözümü) ve D-030 (dizi_olustur element_byte
+heap-overflow) hatalarının yaşadığı EKSENLERİ sınır-noktalarında zorlayan, kendini
+doğrulayan (başarı=exit 42) temsili bir program seti — `test/asan_matris/m01..m10.kem`
+— + `test/asan_matris_calistir.sh` + `make calistir_asan_matris`. Her program HEM
+sanitizer'sız (değer doğruluğu) HEM ASan/UBSan altında (bellek güvenliği) koşulur.
+Tam kartezyen değil; her eksende SINIR-NOKTALARI.
+
+**Kapsanan eksenler (neden D-030/D-029'a odaklı):**
+- **Eleman-byte sınırı** (D-030 element-SIZE'dı): tam32 (4-byte) vs tam64/metin/&Yapi
+  (8-byte). m01-m04. 8-byte tipler için olustur(4)+10/20 ekle = eski "kapasitenin
+  yarısında heap-overflow" tetikleyicisini + realloc büyüme yolunu zorlar.
+- **Küçük eleman**: tam8/tam16 (i32 stride) m05.
+- **dizi_yaz in-place** (D-025) × tam64 + metin × sınır-üstü indeks: m06, m07.
+- **Yapı konfigürasyonları** (D-029 alan-adı): tek yapıda KARIŞIK eleman-byte
+  koleksiyonlar (Dizi<tam32>+Dizi<metin>+Dizi<tam64> bir arada, her biri doğru
+  byte) m08; iki yapı AYNI alan adı 'ad' FARKLI eleman tipi (T.ad=metin 8-byte,
+  U.ad=tam32 4-byte) m09; &Yapi param üzerinden alan erişimi m04/m08/m09;
+  tam-kapasite + realloc geçişi m10.
+
+**Sonuç: 10/10 TEMİZ — değer-doğru + ASan/UBSan ihlali YOK.** Yeni codegen bug'ı
+bulunmadı. D-029/D-030 fix'leri tüm sınır eksenlerinde geçerli. Bu, KEMGU'nun
+çekirdek iddiasına (bellek güvenliği — buffer-overflow imkansız) sınır-zorlamalı
+bir güven verir + kalıcı regresyon ağı (gelecekte element-byte/alan-çözüm
+regresyonlarını yakalar). Derleyici DOKUNULMADI (yalnız fikstür + harness +
+make hedefi). Tüm suite yeşil, temiz build.
+
+---
+
 ## D-031 — ASan/UBSan codegen denetimi: harness + 8 pre-existing crash teşhisi (2026-06-13)
 
 **Bağlam:** D-030 (dizi_olustur heap-overflow) gösterdi ki test_llvm E2E zinciri

@@ -1,0 +1,11 @@
+// EKSEN: dizi_yaz (in-place) × metin (8-byte ptr) × sınır-üstü indeks.
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 { dizi_ekle(d, "x"); i = i + 1; }          // 10× "x" (len 1)
+    dizi_yaz(d, 9, "abcd");                                 // yüksek indeks in-place
+    dizi_yaz(d, 5, "ab");
+    değişken s: tam32 = 0; i = 0;
+    iken i < dizi_boyut(d) { s = s + metin_uzunluk(dizi_al(d, i)); i = i + 1; }  // 8*1+2+4=14
+    eğer s == 14 { ver 42; } ver s;
+}

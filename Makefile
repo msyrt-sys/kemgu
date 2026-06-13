@@ -459,6 +459,11 @@ calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BU
 calistir_asan_denetim: $(BUILD)/kemgu$(EXE)
 	@bash test/asan_e2e_denetim.sh
 
+# ASan/UBSan bellek güvenliği MATRİSİ — D-029/D-030 eksenlerini sınırda zorlayan
+# kalıcı regresyon ağı. Her program kendini doğrular (exit 42) + sanitizer-temiz.
+calistir_asan_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
+	@bash test/asan_matris_calistir.sh
+
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
