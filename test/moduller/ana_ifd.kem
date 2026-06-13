@@ -1,0 +1,12 @@
+// Çapraz-modül payload çeşit: ifd::Ifade nitelikli annotation + nitelikli
+// yapıcı (ifd::Ifade::Topla(&a,&b)) + recursive değerlendirme. (3+4)*6 = 42.
+kullan ifd;
+
+işlev main() -> tam32 {
+    değişken s3: ifd::Ifade = ifd::Ifade::Sayi(3);
+    değişken s4: ifd::Ifade = ifd::Ifade::Sayi(4);
+    değişken topla: ifd::Ifade = ifd::Ifade::Topla(&s3, &s4);
+    değişken s6: ifd::Ifade = ifd::Ifade::Sayi(6);
+    değişken carp: ifd::Ifade = ifd::Ifade::Carp(&topla, &s6);
+    ver ifd::hesapla(&carp) olarak tam32;
+}

@@ -642,3 +642,37 @@ DEĞİŞMEDİ (quote yok). test_llvm 210→211 (+Türkçe tip-adı E2E). Tam reg
 lexer 103, parser 107, tip_kontrol 174, snapshot 50, linear 57, drf 39, capability
 40, ast/arena/sembol/tip/sabitsure. 0 ASan. Temiz rebuild 0 uyarı.
 Fikstür: test/snapshots/turkce_tip_adi.kem.
+
+---
+
+## D-020 — Çapraz-modül payload + recursive çeşit (modüler AST) (2026-06-13)
+
+**Self-hosting deseni:** Compiler'ın AST'si kendi modülünde yaşamalı (`genel çeşit
+Ifade { Sayi(tam64), Topla(&Ifade,&Ifade) }` modül `ifd`'de), parser/codegen
+modüllerince import edilmeli. D-018 payload çeşit'i MODÜL-İÇİ doğrulamıştı; bu
+adım çapraz-modülü kapatır (D-018 follow-up'ı).
+
+**Düzeltilen gap'ler:**
+1. **Codegen nitelikli yapıcı (`m::Cesit::V(args)`):** `cesit_kayit_yoldan(g, sol)`
+   — çeşit'i sol-yoldan çözer (sol TANIMLAYICI=`Renk` ya da YOL=`m::Renk` →
+   sag_ad'den, düz IR-ad uzayı D-011). DUGUM_YOL (bare) + DUGUM_CAGRI (yapıcı)
+   yolları artık YOL sol kabul eder (önceden yalnız TANIMLAYICI → i32 fallback
+   miscompile).
+2. **Tip-kontrol payload-tip çözümü (recursive/modül-yerel):** Recursive çeşit'in
+   payload tipi `&Ifade` dışarıdan (caller scope) çözülürken T011/M004 veriyordu
+   (Ifade modül-yerel). `ast_tip_to_bilgi` DUGUM_TIP_BASIT artık çözülemezse
+   `yapi_sembol_capraz_bul` (D1) ile yüklü modüllerde düz adla arar — alan-erişimi
+   çapraz-modül çözümüyle simetrik.
+
+**Doğrulama:** Modüler recursive AST (`kullan ifd; ifd::Ifade::Topla(&a,&b);
+ifd::hesapla(&kök)`) — (3+4)*6 = 42, HEM --check HEM E2E. Çapraz-modül payloadsuz
+çeşit (Renk) + primitive-payload çeşit (Ifade::Ikili) de doğrulandı.
+
+**Kapsam/sınırlar:** Nitelikli payload DESENİ (`eşleş` içinde `m::Cesit::V(a,b)`)
+denenmedi — match genelde modül-içi (genel işlev). Çapraz-modül match nitelikli
+desen gerekirse follow-up. Generic çeşit hâlâ ayrı.
+
+**Testler:** test_llvm 211→212 (+çapraz-modül payload+recursive cesit E2E).
+tip_kontrol 174, parser 107, snapshot 50, linear 57, drf 39, capability 40,
+ast/arena/sembol. 0 ASan. stdlib --check yeşil. Temiz rebuild 0 uyarı.
+Fikstür: test/moduller/{ifd,ana_ifd}.kem.
