@@ -57,6 +57,19 @@ typedef struct Sembol {
      * scope sonunda 0 = L001. */
     int lineer_tuketildi;          /* 0 = henuz tuketilmedi; 1+ = tuketim sayisi */
     int lineer_scope_seviyesi;     /* tanim aninda scope derinligi */
+
+    /* === Cok-dosya modul A: gorunurluk + ithal (import) alanlari ===
+     * memset(0) ile baslatilan tum mevcut kod icin varsayilanlar guvenli. */
+    int genel;                     /* 1 = 'genel' (capraz-modul export) */
+    int gizli;                     /* 1 = dosya-modul kanonik kaydi — normal
+                                      ad cozumunde GORUNMEZ (yalniz 'kullan'
+                                      alias'lari ve onek turetme erisir) */
+    const char *ithal_onek;        /* secili import alias'i: asil modulun
+                                      mangling oneki ("dizi") — binding bunu
+                                      MODUL_UYESI olarak yazar. NULL = alias degil */
+    int ithal_onek_uz;
+    int ithal_cakisma;             /* 1 = ayni ad birden cok secili import'tan
+                                      geldi — KULLANIMDA T042 belirsizlik hatasi */
 } Sembol;
 
 /* === Scope === */
@@ -80,6 +93,10 @@ typedef struct Scope {
     SembolLink *bas;               /* sembol listesinin basi */
     SembolLink *son;               /* sondaki link (hizli ekleme icin) */
     int sembol_sayisi;
+    /* Cok-dosya modul A: 1 = bu SCOPE_MODUL bir .kem dosya-modulu —
+     * uyelerine capraz-modul erisim yalniz 'genel' isaretlilere acik.
+     * Dosya-ici moduller 0 (geriye uyumlu: tum uyeler gorunur). */
+    int dosya_modulu;
 } Scope;
 
 /* === API === */

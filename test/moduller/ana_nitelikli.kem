@@ -1,0 +1,7 @@
+// A dogrulama: ayni secili-import cakismasinda nitelikli erisim calisir.
+kullan cift_a::{f};
+kullan cift_b::{f};
+
+işlev main() -> tam32 {
+    ver cift_a::f() + cift_b::f();
+}

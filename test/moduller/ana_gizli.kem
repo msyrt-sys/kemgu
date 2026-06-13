@@ -1,0 +1,6 @@
+// A dogrulama (negatif): genel-olmayan uyeye capraz-modul erisim = T041.
+kullan mat;
+
+işlev main() -> tam32 {
+    ver mat::gizli_carp(6, 7);
+}

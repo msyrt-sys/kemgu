@@ -59,6 +59,10 @@ typedef struct TipKontrol {
     Arena *arena;
     Scope *scope;                  /* mevcut scope */
     Scope *global_scope;           /* yapi/islev tanimlari icin (ileri referans) */
+    Scope *builtin_scope;          /* A: built-in'ler + dosya-modul kanonik
+                                      kayitlari (gizli). global_scope'un parent'i;
+                                      dosya-modul scope'lari da buna baglanir —
+                                      giris dosyasinin ozel adlari modullere sizmaz. */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
     UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
     YuklenmisModul *yuklenmisler;  /* duplicate-load engelleme */

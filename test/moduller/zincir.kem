@@ -1,0 +1,6 @@
+// A dogrulama: transitif import — zincir mat'i kullanir.
+kullan mat;
+
+genel işlev dortle_topla(x: tam32) -> tam32 {
+    ver mat::topla(x, x);
+}

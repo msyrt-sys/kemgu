@@ -486,9 +486,15 @@ static char **parse_tip_param_listesi_genis(Parser *p, int *out_sayi,
 
 
 /* === Yapi tanimi === */
-/* alan_tanimi = tanimlayici ":" tip ";" */
+/* alan_tanimi = ["genel"] tanimlayici ":" tip ";"
+ * A: 'genel' alan oneki — capraz-modul alan gorunurlugu (D'de tuketilir). */
 
 static Dugum *parse_alan(Parser *p) {
+    int genel_mi = 0;
+    if (parser_eslesir(p, TOK_GENEL)) {
+        parser_ilerle(p);
+        genel_mi = 1;
+    }
     Token ad_tok = parser_simdiki(p);
     if (ad_tok.tip != TOK_TANIMLAYICI) {
         parser_hata(p, ad_tok, "P018", "alan adi bekleniyor", NULL);
@@ -509,6 +515,7 @@ static Dugum *parse_alan(Parser *p) {
         ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
     d->veri.alan.ad_uzunluk = ad_tok.uzunluk;
     d->veri.alan.tip = tip;
+    d->veri.alan.genel_mi = genel_mi;
     return d;
 }
 
@@ -799,7 +806,16 @@ static Dugum *parse_sabit_tanimi(Parser *p) {
 }
 
 /* === Kullan ===
- * kullan_bildirimi = "kullan" modul_yolu ";" */
+ * kullan_bildirimi = "kullan" modul_yolu
+ *                    [ "::" "{" ad ("," ad)* "}" | "olarak" ad ] ";"
+ *
+ * Çok-dosya modül A biçimleri:
+ *   kullan dizi;                  -> nitelikli erişim bağı (dizi::...)
+ *   kullan dizi::{Liste, ekle};   -> seçili adlar niteliksiz
+ *   kullan dizi olarak d;         -> alias (d::...)
+ * Çok-segment çıplak yol (kullan a::b::c;) legacy düzleştirme olarak
+ * korunur (drivers/ + test/crossfile tüketicileri). Seçili/alias
+ * biçimleri v1'de tek-segment modül adı gerektirir. */
 
 static Dugum *parse_kullan(Parser *p) {
     Token kullan_tok = parser_simdiki(p);
@@ -810,6 +826,7 @@ static Dugum *parse_kullan(Parser *p) {
 
     /* Ham toplam uzunluk hesapla */
     int toplam_uz = ilk.uzunluk;
+    int segment_sayi = 1;
     /* Geçici depolama icin counter+arena gerek - basit: tek pass yap */
     /* Stratejimiz: arena'da parca parca buyut. Once ilk yaz, sonra ekle. */
     char *yol = (char *)arena_ayir(p->arena, (size_t)ilk.uzunluk + 1);
@@ -818,8 +835,53 @@ static Dugum *parse_kullan(Parser *p) {
         yol[ilk.uzunluk] = '\0';
     }
 
+    /* Seçili import listesi (kullan m::{a, b};) */
+    char **secili_adlar = NULL;
+    int *secili_uzunluklar = NULL;
+    int secili_sayi = 0;
+
     while (parser_eslesir(p, TOK_CIFT_IKI_NOKTA)) {
         parser_ilerle(p);
+        /* "::{" -> seçili import listesi */
+        if (parser_eslesir(p, TOK_SOL_SUSLU)) {
+            parser_ilerle(p);
+            Liste adlar;
+            liste_baslat(&adlar);
+            for (;;) {
+                Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P043",
+                                            "secili import adi bekleniyor");
+                /* Adi DUGUM_TANIMLAYICI olarak gecici tasi (liste Dugum* ister) */
+                Dugum *ad_d = dugum_tanimlayici(p->arena, ad_tok.baslangic,
+                                                ad_tok.uzunluk,
+                                                ad_tok.satir, ad_tok.sutun);
+                if (ad_d) liste_ekle(&adlar, p->arena, ad_d);
+                if (parser_eslesir(p, TOK_VIRGUL)) { parser_ilerle(p); continue; }
+                break;
+            }
+            parser_bekle(p, TOK_SAG_SUSLU, "P044",
+                         "secili import listesi icin '}' bekleniyor");
+            secili_sayi = adlar.sayi;
+            if (secili_sayi > 0) {
+                Dugum **arr = liste_array_yap(&adlar, p->arena);
+                secili_adlar = (char **)arena_ayir(p->arena,
+                    sizeof(char *) * (size_t)secili_sayi);
+                secili_uzunluklar = (int *)arena_ayir(p->arena,
+                    sizeof(int) * (size_t)secili_sayi);
+                if (secili_adlar && secili_uzunluklar && arr) {
+                    for (int i = 0; i < secili_sayi; i++) {
+                        secili_adlar[i] =
+                            (char *)arr[i]->veri.tanimlayici.metin;
+                        secili_uzunluklar[i] =
+                            arr[i]->veri.tanimlayici.uzunluk;
+                    }
+                } else {
+                    secili_sayi = 0;
+                    secili_adlar = NULL;
+                    secili_uzunluklar = NULL;
+                }
+            }
+            break;  /* liste yoldan sonra son oge */
+        }
         Token sonra = parser_bekle(p, TOK_TANIMLAYICI, "P041",
                                    "yol devami bekleniyor");
         /* Yeni boyut: eski + 2 (::) + sonra.uzunluk + 1 (null) */
@@ -833,7 +895,27 @@ static Dugum *parse_kullan(Parser *p) {
             yol = yeni;
             toplam_uz = yeni_uz;
         }
+        segment_sayi++;
     }
+
+    /* "olarak d" -> alias */
+    const char *alias_ad = NULL;
+    int alias_ad_uz = 0;
+    if (parser_eslesir(p, TOK_OLARAK)) {
+        parser_ilerle(p);
+        Token a_tok = parser_bekle(p, TOK_TANIMLAYICI, "P045",
+                                   "alias adi bekleniyor");
+        alias_ad = ast_string_kopyala(p->arena, a_tok.baslangic, a_tok.uzunluk);
+        alias_ad_uz = a_tok.uzunluk;
+    }
+
+    /* v1 siniri: seçili/alias yalniz tek-segment modul adiyla */
+    if (segment_sayi > 1 && (secili_sayi > 0 || alias_ad)) {
+        parser_hata(p, kullan_tok, "P046",
+            "secili/alias import v1'de tek modul adi gerektirir "
+            "(kullan modul::{...} / kullan modul olarak m)", NULL);
+    }
+
     parser_bekle(p, TOK_NOKTALI_VIRGUL, "P042", "';' bekleniyor");
 
     Dugum *d = dugum_olustur(p->arena, DUGUM_KULLAN,
@@ -841,6 +923,12 @@ static Dugum *parse_kullan(Parser *p) {
     if (!d) return NULL;
     d->veri.kullan.yol = yol;
     d->veri.kullan.yol_uzunluk = toplam_uz;
+    d->veri.kullan.segment_sayi = segment_sayi;
+    d->veri.kullan.secili_adlar = secili_adlar;
+    d->veri.kullan.secili_uzunluklar = secili_uzunluklar;
+    d->veri.kullan.secili_sayi = secili_sayi;
+    d->veri.kullan.alias_ad = alias_ad;
+    d->veri.kullan.alias_ad_uz = alias_ad_uz;
     return d;
 }
 
@@ -871,6 +959,41 @@ static Dugum *parse_disa(Parser *p) {
     if (!d) return NULL;
     d->veri.disa.tanim = tanim;
     return d;
+}
+
+/* === Genel (Çok-dosya modül A: çapraz-modül export işareti) ===
+ * 'genel' tanımı SARMALAMAZ (dışa'nın aksine) — tanım düğümünde
+ * genel_mi bayrağını kurar. Görünürlük yalnız dosya-modüllerinde
+ * uygulanır (tip_kontrol DUGUM_YOL); dosya-içi modüller etkilenmez. */
+
+static Dugum *parse_genel(Parser *p) {
+    parser_ilerle(p);  /* 'genel' */
+    Token sonra = parser_simdiki(p);
+    Dugum *tanim = NULL;
+    switch (sonra.tip) {
+        case TOK_GERCEKZAMANLI:   /* 'genel gerçekzamanlı işlev ...' */
+        case TOK_ISLEV:  tanim = parse_islev_tanimi(p); break;
+        case TOK_YAPI:   tanim = parse_yapi_tanimi(p);  break;
+        case TOK_CESIT:  tanim = parse_cesit_tanimi(p); break;
+        case TOK_SABIT:  tanim = parse_sabit_tanimi(p); break;
+        default:
+            parser_hata(p, sonra, "P051",
+                "'genel' sonrasi tanim bekleniyor (islev/yapi/cesit/sabit)",
+                NULL);
+            tanim = dugum_hata(p->arena, sonra.satir, sonra.sutun);
+            parser_panik_sync(p);
+            return tanim;
+    }
+    if (tanim) {
+        switch (tanim->tip) {
+            case DUGUM_ISLEV: tanim->veri.islev.genel_mi = 1; break;
+            case DUGUM_YAPI:  tanim->veri.yapi.genel_mi = 1;  break;
+            case DUGUM_CESIT: tanim->veri.cesit.genel_mi = 1; break;
+            case DUGUM_SABIT: tanim->veri.sabit.genel_mi = 1; break;
+            default: break;
+        }
+    }
+    return tanim;
 }
 
 /* === Modul ===
@@ -917,6 +1040,7 @@ static Dugum *parse_ust_oge(Parser *p) {
         case TOK_UYGULA:  return parse_uygula_tanimi(p);
         case TOK_KULLAN:  return parse_kullan(p);
         case TOK_DISA:    return parse_disa(p);
+        case TOK_GENEL:   return parse_genel(p);
         case TOK_MODUL:   return parse_modul_tanimi(p);
         case TOK_SABIT:   return parse_sabit_tanimi(p);
         default:

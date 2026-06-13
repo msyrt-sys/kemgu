@@ -1,0 +1,6 @@
+// A dogrulama: arama yolu — dosya dizini kütüphane/'yi golgeler.
+kullan golge_yardimci;
+
+işlev main() -> tam32 {
+    ver golge_yardimci::deger();
+}

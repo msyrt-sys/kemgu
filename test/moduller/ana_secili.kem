@@ -1,0 +1,6 @@
+// A dogrulama: secili import — topla niteliksiz gelir.
+kullan mat::{topla};
+
+işlev main() -> tam32 {
+    ver topla(20, 22);
+}

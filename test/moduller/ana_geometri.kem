@@ -1,0 +1,6 @@
+// A dogrulama: modul-ici yapi kuran fonksiyonu cagir (25 + 17 = 42).
+kullan geometri;
+
+işlev main() -> tam32 {
+    ver geometri::mesafe_kare() + 17;
+}
