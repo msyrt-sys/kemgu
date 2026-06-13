@@ -327,6 +327,83 @@ static void test_yorumlayici_calistir(void) {
                rc == 42);
 }
 
+static void test_metin_bayt_calistir(void) {
+    /* Madde A genişletme: metin_bayt(s, i) indeksli ham bayt erişimi. ASCII
+     * 'B' = 66. metin literali CALL argümanı + 'olarak' cast altında — pre-pass
+     * cast düğümünü taramıyordu (sessiz `add i32 0,0` miscompile), düzeltildi. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver (metin_bayt(\"ABC\", 1) olarak tam32); }");
+    test_sonuc("metin_bayt(\"ABC\",1)='B'=66 (literal arg+cast) -> exit 66",
+               rc == 66);
+}
+
+static void test_metin_esit_calistir(void) {
+    /* metin_esit: byte-byte eşitlik. Eşit -> 1, farklı -> dal atlanır. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_esit(\"ver\", \"ver\") { "
+        "e\xc4\x9f" "er metin_esit(\"ver\", \"yap\") { ver 1; } ver 42; } "
+        "ver 2; }");
+    test_sonuc("metin_esit (anahtar kelime tanima) -> exit 42", rc == 42);
+}
+
+static void test_metin_tokenizer_calistir(void) {
+    /* SELF-HOSTING 2. ön-koşul (gerçek string işlemleri): saf KEMGU
+     * tokenizer — metin_uzunluk + metin_bayt ile "N+N+N" ifadesini bayt-bayt
+     * tarar, sayıları toplar. "10+20+12" = 42. Bir KEMGU programı kendi
+     * girdisini karakter karakter okuyabiliyor (lexer temeli). */
+    int rc = derle_dosya_ve_calistir("test/ornekler/12_metin_tokenizer.kem");
+    test_sonuc("Metin tokenizer (metin_bayt tarama, N+N+N) -> exit 42",
+               rc == 42);
+}
+
+static void test_token_akisi_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/13_token_akisi.kem");
+    test_sonuc("token akisi: opt -passes=verify PASS", ok);
+}
+
+static void test_token_akisi_calistir(void) {
+    /* SELF-HOSTING mimarisi: İKİ FAZLI lexer → token akışı → değerlendirici.
+     * metin_bayt ile lexle() token'ları İKİ PARALEL Dizi<tam32>'ye (kind+değer)
+     * doldurur; diziler fonksiyonlara REFERANSLA (ptr) aktarılır; degerlendir()
+     * akışı soldan sağa hesaplar. string + koleksiyon stdlib birlikte.
+     * "2*3+36" → ((2*3)+36) = 42. (8 ayrı ifadeyle adversarial doğrulandı.) */
+    int rc = derle_dosya_ve_calistir("test/ornekler/13_token_akisi.kem");
+    test_sonuc("Token akisi (lexer->Dizi<tam32>->eval, iki faz) -> exit 42",
+               rc == 42);
+}
+
+static void test_oncelikli_ayristirici_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/14_oncelikli_ayristirici.kem");
+    test_sonuc("oncelikli ayristirici: opt -passes=verify PASS", ok);
+}
+
+static void test_oncelikli_ayristirici_calistir(void) {
+    /* SELF-HOSTING parser yarısı: ÖZYİNELEMELİ-İNİŞ ifade ayrıştırıcısı —
+     * operatör ÖNCELİĞİ + PARANTEZ. Token akışı (Dizi<tam32>) bir gramerle
+     * değerlendirilir; paylaşılan MUTABLE konum imleci (dizi_yaz) ile
+     * faktör→ifade→terim→faktör karşılıklı özyineleme. "2+4*10" → 2+(4*10) = 42
+     * (soldan-sağa 60 olurdu — gerçek öncelik). 17 ifadeyle adversarial
+     * doğrulandı (öncelik + iç içe parantez + bölme). */
+    int rc = derle_dosya_ve_calistir(
+        "test/ornekler/14_oncelikli_ayristirici.kem");
+    test_sonuc("Oncelikli ayristirici (recursive-descent, oncelik+parantez)"
+               " -> exit 42", rc == 42);
+}
+
+static void test_dizi_yaz_calistir(void) {
+    /* Yeni intrinsic dizi_yaz(d, i, v): i. elemanı YERİNDE günceller
+     * (dizi_al'ın yazma eşi). Mutable cursor / in-place güncelleme. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "dizi_yaz(d, 2, 39); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_yaz(d,2,39) in-place -> 1+2+39 = exit 42", rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2500,6 +2577,14 @@ int main(void) {
     test_cesit_capraz_modul_calistir();
     test_cesit_kenar_calistir();
     test_yorumlayici_calistir();
+    test_metin_bayt_calistir();
+    test_metin_esit_calistir();
+    test_metin_tokenizer_calistir();
+    test_token_akisi_verify();
+    test_token_akisi_calistir();
+    test_dizi_yaz_calistir();
+    test_oncelikli_ayristirici_verify();
+    test_oncelikli_ayristirici_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

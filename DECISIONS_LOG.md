@@ -5,6 +5,145 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-026 — String stdlib III: özyinelemeli-iniş öncelikli ayrıştırıcı (parser yarısı) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-024 token akışı
+üzerine self-hosting'in PARSER yarısı: operatör ÖNCELİĞİ + PARANTEZ destekli
+özyinelemeli-iniş (recursive-descent) ifade ayrıştırıcısı
+(`test/ornekler/14_oncelikli_ayristirici.kem`). Gramer:
+`ifade=terim(('+'|'-')terim)*; terim=faktör(('*'|'/')faktör)*; faktör=SAYI|'('ifade')'`.
+
+**Enabling (D-025):** Özyinelemeli iniş, çağrılar arası paylaşılan MUTABLE konum
+imleci gerektirir. KEMGU'da global mutable yok + skalerler değerle geçer →
+imleç = tek-elemanlı `Dizi<tam32>` (ptr → referansla paylaşılır), `dizi_yaz` ile
+yerinde ilerletilir. faktör→ifade→terim→faktör KARŞILIKLI özyineleme (forward
+referans; iki-geçişli pre-populate codegen'de islev_kayit pre-pass ile çözülür).
+
+**Doğrulama (adversarial, 17 ifade):** Öncelik — `2+4*10`=42 (soldan-sağa 60
+DEĞİL), `2+3*4`=14, `100-2*3`=94, `2*3+4*5`=26. Parantez — `(2+3)*4`=20,
+`(2+4)*(3+4)`=42, `2*(3+(4*5))`=46, `((9))`=9. Bölme — `100/2-8`=42, `84/2`=42,
+`(100-16)/2`=42. opt-verify PASS. test_llvm 221→**223**. 0 ASan. Derleyici
+dokunulmadı.
+
+**Tuzak:** `iken doğru { ... ver ... }` idiomu (KEMGU'da `break` keyword YOK) —
+döngüden yalnız erken `ver` ile çıkılır; codegen + opt-verify temiz.
+
+**Self-hosting durumu:** Artık 3 parça da KEMGU'da ÇALIŞIYOR — LEXER (D-024
+metin→token), PARSER (D-026 token→öncelikli değerlendirme), AST+EVAL (D-022
+özyinelemeli çeşit yorumlayıcı). Sıradaki: parser'ın değerlendirme yerine çeşit
+AST İNŞA etmesi (token→AST), sonra string-key sembol tablosu (metin_esit).
+
+---
+
+## D-025 [YÜKSEK] — dizi_yaz intrinsic: in-place eleman güncelleme (mutable cursor) (2026-06-13)
+
+**Karar [YÜKSEK — yeni intrinsic]:** `dizi_yaz<T>(d: Dizi<T>, i: tam32, e: T) ->
+boş` — dinamik dizinin i. elemanını YERİNDE günceller. Koleksiyon API'sinde
+göze batan eksiklik: `dizi_ekle` (append) + `dizi_al` (oku) vardı ama eleman-SET
+yoktu. Bu, recursive-descent parser'ın paylaşılan MUTABLE KONUM İMLECİ için şart
+(tek elemanlı Dizi<tam32>, ptr → çağrılar arası paylaşılır, dizi_yaz ile ilerletilir).
+
+**Uygulama (dizi_al/dizi_ekle simetrisi):**
+- tip_kontrol.c: `dizi_yaz` özel-cased (DUGUM_CAGRI) — 3 arg, arg0 Dizi<T>, arg1
+  tam32 indeks (T028), arg2 eleman T (T001 uyumsuzluk).
+- llvm.c: element-tip varyant dispatch (i32→kdl_dizi_yaz_tam, i64→_tam64,
+  ptr→_ptr); index i32'ye, değer eleman-tipine cast. declare satırları eklendi.
+  **dizi_deger_arg:** dizi_ekle/al'da değer/indeks arg[1]; dizi_yaz'da DEĞER
+  arg[2] — `dizi_eleman_beklenen` forward'ı bu pozisyona yönlendirildi (önceki
+  sabit `i == 1` literal-eleman-tip çıkarsamasını yanlış arga verirdi).
+- runtime: kdl_dizi_yaz_tam/_tam64/_ptr — sınır dışı (i<0||i>=boyut)/NULL →
+  sessizce yok say (boyut BÜYÜTMEZ; büyütme dizi_ekle ile). dizi_al ile simetrik.
+
+**Doğrulama:** in-place (d[1]=40) + cursor (c[0]=c[0]+2) E2E; tam32 + tam64
+varyant dispatch ayrı ayrı E2E (42). Tam regresyon: test_llvm 220→**221**, +22
+suite (tip_kontrol 174, snapshot 50, parser 107, …). 0 ASan. Prod 0 uyarı.
+stdlib --check 12 OK. (Sınır: shrink/insert/remove yok — append+set+read yeterli.)
+
+---
+
+## D-023 [YÜKSEK] — String stdlib I: metin_bayt intrinsic + metin literal pre-pass düzeltmesi (2026-06-13)
+
+**Bağlam:** Self-hosting'in 2. ön-koşulu "gerçek string işlemleri" (Mehmet: "4
+konsolide, sonra 3"). Mevcut `kdl_metin_*` yüzeyi zaten geniş (uzunluk, birleştir,
+kes, içerir, başlar/biter, kırp, yer_değiştir, küçük/büyük±tr/ascii) AMA bir
+tokenizer'ın temel taşı eksikti: **indeksli karakter erişimi**.
+
+**Karar 1 [YÜKSEK — yeni intrinsic]:** `metin_bayt(s: metin, i: tam32) -> tam8`
+— s'in i. HAM BAYT'ı (UTF-8; ASCII'de = karakter). Sınır dışı/NULL → 0 (taşma
+imkansız, KEMGU güvenlik hedefi). `metin_uzunluk` ile birlikte bir metin üzerinde
+bayt-bayt gezinmeyi (lexer döngüsü) sağlar. Ayrıca `metin_esit(metin,metin) ->
+mantıksal` builtin olarak bağlandı (runtime'da `kdl_metin_esit` zaten vardı ama
+tip-kontrol builtin tablosuna kayıtlı değildi — anahtar kelime tanıma için).
+Runtime'daki ESKİ `int kdl_metin_esit` (ölü; ne builtin ne C çağıranı vardı)
+`_Bool` dönen tek sürümle değiştirildi (i1 declare + diğer boolean metin fn'leriyle
+tutarlı). DEĞER naming: metin_bayt/metin_esit — temiz.
+
+**Karar 2 [ORTOGONAL CORRECTNESS FIX]:** Metin literal pre-pass (`ast_taransa_
+metinleri`, @.str.N toplayıcı) **cast düğümünü taramıyordu**. `metin_uzunluk("...")
+olarak tam32` gibi — literal `DUGUM_TIP_DONUSTUR` (x olarak T) altında kalınca
+"kayitsiz" düşüp **sessizce `add i32 0,0`'a** derleniyordu (yanlış değer, hata yok).
+Eklenen case'ler: DUGUM_TIP_DONUSTUR (.kaynak), DUGUM_LAMBDA (.govde),
+DUGUM_KULLAN_IFADE/DUGUM_IMHA_IFADE (.operand). Bu, TÜM metin builtin'lerini
+literal+cast argümanıyla kullanılabilir yapar (yaygın durum). Bug sınıfı: herhangi
+bir metin literali taranmayan bir düğümün altında → sessiz miscompile.
+
+**Doğrulama:** `metin_uzunluk("hello")`=5, `metin_bayt("ABC",1)`='B'=66,
+`metin_esit("ver","ver")`=1 — hepsi literal+cast argümanla E2E. Saf-KEMGU
+tokenizer `test/ornekler/12_metin_tokenizer.kem` (metin_uzunluk + metin_bayt ile
+"N+N+N" bayt-bayt tarama): "10+20+12" = 42. Bir KEMGU programı kendi girdisini
+karakter karakter okuyabiliyor — lexer/self-hosting temeli.
+
+**Tam regresyon:** test_llvm 215→**218** (+metin_bayt/esit/tokenizer). tip_kontrol
+174, snapshot 50 (IR baseline drift YOK — fikstürlerde cast-altı metin yok),
+otp_cli 9, parser 107, lexer 103, linear 57, drf 39, capability 40, sabitsure 39,
+wcet 35, mmio 23, simd 30, simd_llvm 5, arena/ast/tip/sembol/json/lsp/bolge/escape.
+**0 ASan.** Prod temiz rebuild **0 uyarı.** stdlib --check yeşil.
+
+**Sınırlar / sıradaki:** metin_bayt BYTE döner (UTF-8 codepoint değil) — ASCII
+tokenizing için doğru; çok-baytlı codepoint iterasyonu V2. İsimle değişken arama
+hâlâ slot-id (string-key assoc V2). Koleksiyon tarafı (Liste<T>) zaten KdlDizi
+runtime'da var; tokenizer'ın token LİSTESİ üretmesi (dizi_ekle ile) doğal sonraki
+adım. Sonra: gerçek lexer → parser (self-hosting derleyici çekirdeği).
+
+---
+
+## D-024 — String stdlib II: iki fazlı lexer → token akışı → değerlendirici (saf KEMGU) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-023'ün doğal devamı
+(Mehmet: "string/**koleksiyon** stdlib"). Mevcut KdlDizi koleksiyonu (`dizi_olustur/
+ekle/al/boyut`) + D-023 metin primitifleri birleştirilerek self-hosting'in GERÇEK
+mimarisi gösterildi: metin önce TOKEN AKIŞINA çevrilir (lexer), sonra AYRI bir geçiş
+bu akışı değerlendirir (`test/ornekler/13_token_akisi.kem`).
+
+**Önce paralel "Harita" workflow'u:** KdlDizi yüzeyi (intrinsic'ler, element-tip
+çıkarsama, runtime, kanıtlı kalıplar, riskler) 5 paralel okuyucuyla eksiksiz
+haritalandı (ultracode). Çıkan iki kritik gerçek E2E probe ile doğrulandı:
+- **Proven kalıp:** `dizi_olustur → iken dizi_ekle → iken dizi_al` toplama (15 ✓).
+- **YENİ doğrulanan yetenek:** `Dizi<tam32>` FONKSİYON PARAMETRESİ olarak çalışır
+  (4×10+2=42 ✓). Eski CLAUDE.md notu "dizi param yok" STATİK dizi içindi; dinamik
+  Dizi = ptr olduğundan sorunsuz aktarılır. İki fazlı mimariyi mümkün kılar.
+
+**Tasarım:** Token = iki PARALEL `Dizi<tam32>` (kindler + degerler). Tür kodları
+0=SAYI/1=ARTI/2=CARPI/3=EKSI. `lexle(metin, kindler, degerler)` bayt-bayt tarar,
+sayıları biriktirir, operatörleri token'lar (diziler referansla aktarılır).
+`degerlendir(kindler, degerler)` akışı soldan sağa hesaplar. Token kuralı:
+SAYI (op SAYI)*.
+
+**Doğrulama (adversarial):** 8 ayrı ifadeyle birden — `2*3+36`=42, `7*6`=42,
+`100-58`=42, `2*3*7`=42, `50-3-5`=42, `1+2+3`=6, `9`=9, `10*10-58`=42. Çok-basamaklı
+sayı, üç operatör, tek sayı, değişken token sayısı — hepsi doğru (şanslı 42 değil).
+opt -passes=verify PASS. test_llvm 218→**220** ([143] verify + [144] run).
+0 ASan. Derleyici dokunulmadı → diğer suite'ler etkilenmez.
+
+**Tuzak (kayda değer):** `uygula` bir ANAHTAR KELİME (trait impl) — fonksiyon adı
+olamaz; `op_uygula` yapıldı. (35 keyword listesi: işlev adlarında kaçınılmalı.)
+
+**Sıradaki:** gerçek lexer→parser (parantez/öncelik), veya token'ı (kind,value)
+çift olarak tek dizide (struct/çeşit element) — şimdilik paralel-dizi pragmatik.
+String-key sembol tablosu (metin_esit ile) self-hosting derleyici için gerekecek.
+
+---
+
 ## D-001 [YÜKSEK] — Modül ad-mangling şeması: `@<modul>.<ad>` (2026-06-11)
 
 **Karar:** Modül üyesi işlevler IR'da `@modul.ad` olarak emit edilir; iç içe modül
