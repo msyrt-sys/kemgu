@@ -1,0 +1,31 @@
+işlev a() -> tam32 {
+    eşleş durum {
+        0 => sıfır;
+        1 => bir;
+        deger(v) => v;
+        tamam(sonuc) => sonuc;
+        hata(mesaj) => yazdır(mesaj);
+        _ => varsayılan;
+    }
+    ver 0;
+}
+işlev b() -> tam32 {
+    eşleş renk {
+        Renk::Kırmızı => 1;
+        Renk::Yeşil => 2;
+        Sonuç::Tamam(deger) => deger;
+        Çift::Yap(a, b) => a + b;
+        _ => { ver 0; }
+    }
+    ver 0;
+}
+işlev c() -> tam32 {
+    güvensiz {
+        tehlikeli_işlem();
+        bellek_eriş(adres);
+    }
+    güvensiz [neden: "MMIO erişimi"] {
+        oku(kayıt);
+    }
+    ver 0;
+}
