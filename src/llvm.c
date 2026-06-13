@@ -58,6 +58,11 @@ typedef struct LlvmIsim {
     /* Matris-A fix / D-005: dtamN (isaretsiz) degisken/parametre.
      * IR tipi ayni (iN) ama udiv/urem/lshr/u-pred + zext gerektirir. */
     int isaretsiz;
+    /* D-029 fix: degisken/parametre bir YAPI ya da &Yapi veya *Yapi ise yapinin
+     * IR adi ("%T"). Field erisiminde (erisim_uret / erisim_lvalue) DOGRU
+     * yapiyi cozmek icin — onceki "ptr ise global alan-adi ara" fallback'i
+     * iki yapi ayni alan adini paylasinca YANLIS yapiya cozuyordu. */
+    const char *ref_yapi_ir;
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -337,6 +342,20 @@ static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
     return NULL;
 }
 
+/* D-029 fix: tip dugumu bir YAPI ya da &Yapi veya *Yapi ise yapinin IR adi ("%T"),
+ * degilse NULL. Referans/pointer soyulur; ic tip yapi-kayitli ise ast_tip_to_ir
+ * "%Ad" doner (Dizi/seçimlik/sonuç/jenerik degil — yalniz nominal yapi). Field
+ * erisiminde nesnenin DOGRU yapi tipini (global alan-adi tahmini yerine) verir. */
+static const char *ref_yapi_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (!tip_d) return NULL;
+    const Dugum *ic = tip_d;
+    if (ic->tip == DUGUM_TIP_REFERANS) ic = ic->veri.tip_referans.hedef_tip;
+    else if (ic->tip == DUGUM_TIP_POINTER) ic = ic->veri.tip_pointer.hedef_tip;
+    const char *ir = ast_tip_to_ir(g, ic);
+    if (ir && ir[0] == '%') return ir;   /* yalniz yapi (%Ad) */
+    return NULL;
+}
+
 /* Liste<T> BUG-2 fix: annot Kullanici<X> (tek tip-arg) ise X'in IR'i.
  * &Kullanici<X> icin referans soyulur. Subst aktifken (specialize
  * govdesi) X=T generic parami da dogru IR'a cozulur — ic cagri zinciri. */
@@ -612,6 +631,33 @@ static int yapi_alan_indeksi(const YapiKayit *y, const char *ad, int ad_uz,
         }
     }
     return -1;
+}
+
+/* D-029 fix (2): dizi-builtin arg0 bir struct ALANI (s.ad, DUGUM_ERISIM) ise
+ * alanin Dizi<T> eleman IR tipini ("ptr"/"i64"/"i32") doner — yoksa NULL.
+ * dizi_eleman_beklenen yalniz TANIMLAYICI arg0 (duz degisken) icin set ediliyordu;
+ * struct-alan tutan dizi (s.ad: Dizi<metin>) icin eleman tipi cikarsanmiyor ->
+ * dizi_al kdl_dizi_al_tam (i32) route edip metin ptr'ini i32 okuyor -> SEGFAULT. */
+static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
+    if (!erisim || erisim->tip != DUGUM_ERISIM) return NULL;
+    const Dugum *nesne = erisim->veri.erisim.nesne;
+    YapiKayit *yk = NULL;
+    if (nesne && nesne->tip == DUGUM_TANIMLAYICI) {
+        LlvmIsim *vi = isim_bul(g, nesne->veri.tanimlayici.metin,
+                                nesne->veri.tanimlayici.uzunluk);
+        if (vi) {
+            if (vi->llvm_tip && vi->llvm_tip[0] == '%')
+                yk = yapi_bul_ir(g, vi->llvm_tip);
+            else if (vi->ref_yapi_ir)
+                yk = yapi_bul_ir(g, vi->ref_yapi_ir);
+        }
+    }
+    if (!yk) return NULL;
+    const Dugum *alan_tip = NULL;
+    int idx = yapi_alan_indeksi(yk, erisim->veri.erisim.alan,
+                                erisim->veri.erisim.alan_uzunluk, &alan_tip);
+    if (idx < 0 || !alan_tip || alan_tip->tip != DUGUM_TIP_DIZI) return NULL;
+    return ast_tip_to_ir(g, alan_tip->veri.tip_dizi.eleman_tip);
 }
 
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
@@ -1220,12 +1266,22 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
 static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     IfadeSonuc nesne = ifade_uret(g, d->veri.erisim.nesne, NULL);
 
-    /* Yapi tipini cikar: nesne.tip "%Ad" ise yapi adi, "ptr" ise ad arama */
+    /* Yapi tipini cikar: nesne.tip "%Ad" ise yapi adi, "ptr" ise once
+     * nesnenin KAYITLI yapi tipi (ref_yapi_ir), yoksa alan-adi arama. */
     YapiKayit *yk = NULL;
     if (nesne.tip && nesne.tip[0] == '%') {
         yk = yapi_bul_ir(g, nesne.tip);
     } else {
-        /* Konservatif: alan adina gore en uygun yapiyi bul */
+        /* D-029 fix: nesne TANIMLAYICI ise (&Yapi param/lokal) kayitli yapi
+         * tipini kullan — global alan-adi tahmini iki yapi ayni alan adini
+         * paylasinca YANLIS yapiya cozuyordu (t.ad -> U.ad alan 0 -> t.kind). */
+        const Dugum *nd = d->veri.erisim.nesne;
+        if (nd && nd->tip == DUGUM_TANIMLAYICI) {
+            LlvmIsim *vi = isim_bul(g, nd->veri.tanimlayici.metin,
+                                    nd->veri.tanimlayici.uzunluk);
+            if (vi && vi->ref_yapi_ir) yk = yapi_bul_ir(g, vi->ref_yapi_ir);
+        }
+        /* Son care (yapi tipi bilinmiyorsa): alan-adi arama (geriye uyum). */
         for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
             if (yapi_alan_indeksi(y, d->veri.erisim.alan,
                                    d->veri.erisim.alan_uzunluk, NULL) >= 0) {
@@ -1292,6 +1348,10 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
             yk = yapi_bul_ir(g, vi->llvm_tip);
             taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
         } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
+            /* D-029 fix: &Yapi lokal/param -> kayitli yapi tipi; yoksa
+             * son care alan-adi arama (iki yapi ayni alan adi paylasinca
+             * eski global arama YANLIS yapiya cozuyordu). */
+            if (vi->ref_yapi_ir) yk = yapi_bul_ir(g, vi->ref_yapi_ir);
             for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
                 if (yapi_alan_indeksi(y, d->veri.erisim.alan,
                                        d->veri.erisim.alan_uzunluk,
@@ -2684,6 +2744,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         if (vi && vi->eleman_llvm_tip) {
                             dizi_eleman_beklenen = vi->eleman_llvm_tip;
                         }
+                    } else if (arg0 && arg0->tip == DUGUM_ERISIM) {
+                        /* D-029 fix (2): dizi struct-alani (s.ad) -> alan
+                         * tipinden eleman IR cikar (yoksa metin ptr i32
+                         * okunup SEGFAULT). */
+                        const char *et = dizi_alan_eleman_ir(g, arg0);
+                        if (et) dizi_eleman_beklenen = et;
                     }
                 }
             }
@@ -3324,6 +3390,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
+                    /* D-029 fix: &Yapi, *Yapi veya Yapi annot -> yapi IR kaydi */
+                    g->isimler->ref_yapi_ir =
+                        ref_yapi_ir_al(g, d->veri.degisken.tip);
                     /* Liste<T> BUG-2: Kullanici<X> annot -> X IR kaydi */
                     g->isimler->generic_arg_ir =
                         generic_arg_ir_al(g, d->veri.degisken.tip);
@@ -3355,6 +3424,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
+                g->isimler->ref_yapi_ir =
+                    ref_yapi_ir_al(g, d->veri.degisken.tip);
                 g->isimler->generic_arg_ir =
                     generic_arg_ir_al(g, d->veri.degisken.tip);
                 if (eleman_tip) {
@@ -4229,6 +4300,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* v1 bölge-container: *T parametre -> pointee kaydi */
         g->isimler->pointee_llvm_tip =
             pointee_ir_al(g, p->veri.parametre.tip);
+        /* D-029 fix: &Yapi, *Yapi veya Yapi parametre -> yapi IR kaydi (field
+         * erisiminde dogru yapi cozumu) */
+        g->isimler->ref_yapi_ir =
+            ref_yapi_ir_al(g, p->veri.parametre.tip);
         /* Liste<T> BUG-2: &Kullanici<X> param -> X IR kaydi (subst
          * aktifken X=T dogru cozulur -> ic generic-cagri zinciri) */
         g->isimler->generic_arg_ir =
