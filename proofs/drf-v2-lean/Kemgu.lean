@@ -48,3 +48,5 @@ import Kemgu.SideChannel.NonInterference
 
 -- Faz C: V3 Butunleşik Guvenlik Metateoremi (bundled form)
 import Kemgu.Soundness.Main
+-- Cekirdek ANLAMLILIK tanigi: somut konkuran program (iki gorev + kanal) IyiTipliCekirdek saglar
+import Kemgu.Soundness.EszamanliTanik
