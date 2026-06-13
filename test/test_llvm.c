@@ -445,6 +445,24 @@ static void test_kontrol_dili_calistir(void) {
                rc == 42);
 }
 
+static void test_fonksiyon_dili_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/ornekler/18_fonksiyon_dili.kem");
+    test_sonuc("fonksiyon dili: opt -passes=verify PASS", ok);
+}
+
+static void test_fonksiyon_dili_calistir(void) {
+    /* SELF-HOSTING: mini dil V3 — FONKSİYONLAR (tanım + çağrı + ÖZYİNELEME).
+     * islev ad(p) { ... don ifade; } + ad(arg) çağrısı. Fonksiyon tablosu
+     * (ön-geçiş), kapsam yığını (ust marker, slot reuse), don return-flag,
+     * özyineleme-güvenli imleç kaydet/geri-yükle (KEMGU'nun çağrı yığını).
+     * Toy-dili Turing-tam'a tamamlar. Program: fakt(5)-78 = 42. 9 adversarial
+     * (fib, çok-param, karşılıklı özyineleme, fonksiyon-içi döngü, iç içe çağrı,
+     * global erişim). ASan/UBSan temiz (fib(12) derin özyineleme dahil). */
+    int rc = derle_dosya_ve_calistir("test/ornekler/18_fonksiyon_dili.kem");
+    test_sonuc("Fonksiyon dili (tanim+cagri+ozyineleme, Turing-tam) -> exit 42",
+               rc == 42);
+}
+
 static void test_agac_insa_verify(void) {
     int ok = kemgu_llvm_opt_verify("test/ornekler/15_agac_insa.kem");
     test_sonuc("agac insa: opt -passes=verify PASS", ok);
@@ -2663,6 +2681,8 @@ int main(void) {
     test_degiskenli_dil_calistir();
     test_kontrol_dili_verify();
     test_kontrol_dili_calistir();
+    test_fonksiyon_dili_verify();
+    test_fonksiyon_dili_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
