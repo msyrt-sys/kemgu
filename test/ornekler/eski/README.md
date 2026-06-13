@@ -28,8 +28,8 @@ köprüsü). **2026-05-13 src-bugfix branch'inde 5 yeni I/O built-in eklendi:**
 | `yaz` (4-char) | metin -> bos | ✗ (eklenmedi) |
 | `uzunluk`, `min`, `maks` | — | ✗ (stdlib seed gerek) |
 | `oku_dosya`, `yaz_dosya` | — | ✗ (stdlib/dosya cakisma + runtime) |
-| `bellek_yarat`, `bellek_oku`, `bellek_yaz` | — | ✗ (stdlib seed gerek) |
-| `kanal_yarat`, `kanal_gonder`, `kanal_al` | — | partial (runtime var, tip_kontrol yok) |
+| `bellek_olustur`, `bellek_oku`, `bellek_yaz` | — | ✗ (stdlib seed gerek) |
+| `kanal_olustur`, `kanal_gonder`, `kanal_al` | — | partial (runtime var, tip_kontrol yok) |
 
 **Eski dosyalardan port durumu (2026-05-13):**
 - 15/16 dosya halen --check'ten gecmiyor. Cogu Turkce I'li `yazdır` veya 4-char

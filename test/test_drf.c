@@ -392,7 +392,7 @@ static void T34_tekkez_gorev_lc2(void) {
      * V1 sınır: lineer yakalama lambda body'sinde tuketmek block-form gerek;
      * burada outer-scope tüketim ile L001 kontrolünü test ediyoruz. */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n"
         "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| n);\n"
         "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
@@ -418,7 +418,7 @@ static void T36_kanal_lineer_v_tuketildi(void) {
      * Daha sonra v'ye erisim -> L002 */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<tekkez<tam32>>) {\n"
-        "    de\xc4\x9fi\xc5\x9fken v = tekkez_yarat(7);\n"
+        "    de\xc4\x9fi\xc5\x9fken v = tekkez_olustur(7);\n"
         "    kanal_g\xc3\xb6nder(k, v);\n"
         "    imha(v);\n"
         "}\n");

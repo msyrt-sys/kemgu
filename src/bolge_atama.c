@@ -146,7 +146,7 @@ BolgeBilgisi *bolge_belirle(BolgeAtama *ba, const Dugum *d) {
         }
 
         case DUGUM_ICIN: {
-            /* Yeni iterasyon bolgesi yarat */
+            /* Yeni iterasyon bolgesi olustur */
             BolgeBilgisi *eski_it = ba->aktif_iterasyon;
             int eski_d = ba->dongu_derinligi;
             ba->aktif_iterasyon = bolge_olustur_iterasyon(ba->arena,

@@ -24,21 +24,21 @@
 
 // ----- Üç temel operasyon -----
 //
-//   1. `tekkez_yarat<T>(deger: T) -> tekkez<T>`  (Producer intrinsic)
+//   1. `tekkez_olustur<T>(deger: T) -> tekkez<T>`  (Producer intrinsic)
 //   2. `kullan(t: tekkez<T>) -> T`               (Tüket + içeriği al)
 //   3. `imha(t: tekkez<T>) -> boş`               (Tüket + at)
 
-// ----- 1) En basit: yarat → kullan -----
+// ----- 1) En basit: oluştur → kullan -----
 işlev tek_kez_kullan() -> tam32 {
-    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    değişken k: tekkez<tam32> = tekkez_olustur(42);
     ver kullan(k);                            // k tüketildi, 42 döndü
 }
 
-// ----- 2) Yarat → imha -----
+// ----- 2) Oluştur → imha -----
 //
 // Değeri istemiyorsan `imha` ile at. Hala tüketim sayılır.
 işlev imha_ornegi() {
-    değişken k: tekkez<metin> = tekkez_yarat("merhaba");
+    değişken k: tekkez<metin> = tekkez_olustur("merhaba");
     imha(k);                                  // k tüketildi
 }
 
@@ -51,7 +51,7 @@ işlev tuket(t: tekkez<tam32>) {
 }
 
 işlev cagri_ornegi() {
-    değişken k = tekkez_yarat(7);
+    değişken k = tekkez_olustur(7);
     tuket(k);                                 // k → tuket'e devredildi
     // imha(k);                                ✗ L002 — move sonrası kullanım
 }
@@ -60,7 +60,7 @@ işlev cagri_ornegi() {
 //
 // İşlev `tekkez<T>` döndürerek çağırana sahiplik teslim eder.
 işlev sahip_uret() -> tekkez<tam32> {
-    ver tekkez_yarat(99);
+    ver tekkez_olustur(99);
 }
 
 işlev kullanan() {

@@ -59,13 +59,13 @@ import; aksi takdirde (özellikle `kullan(...)` formu) ifade.
 
 ```kemgu
 // Üretim
-değişken k: tekkez<tam32> = tekkez_yarat(42);
+değişken k: tekkez<tam32> = tekkez_olustur(42);
 
 // Çıkarım (extract) → değer döner, k tüketilir
 değişken n: tam32 = kullan(k);
 
 // İmha → değer atılır, k tüketilir
-değişken k2: tekkez<tam32> = tekkez_yarat(7);
+değişken k2: tekkez<tam32> = tekkez_olustur(7);
 imha(k2);
 
 // Linear closure (otomatik)
@@ -91,7 +91,7 @@ tekkez<T> : tip
 ```
 Γ ⊢ e : T
 ─────────────────────────────────────
-Γ ⊨ tekkez_yarat(e) : tekkez<T> ⇒ Γ
+Γ ⊨ tekkez_olustur(e) : tekkez<T> ⇒ Γ
 ```
 Producer **lineer borç** üretir; girdi `e` lineer değilse Γ değişmez.
 
@@ -127,7 +127,7 @@ tüketilmelidir. Tüketim şekilleri:
 - `kullan(t)` veya `imha(t)`
 - Çağrı argümanına geçirme (ownership devri)
 - `ver t` (ownership devri çağırana)
-- `tekkez_yarat`'a wrap etme
+- `tekkez_olustur`'a wrap etme
 - Bir `tekkez` field'ı olan yapıyı kurmada alan değeri olarak verme
 
 Tüketilmemiş = compile error (L001 LINEAR_NOT_CONSUMED).
@@ -145,7 +145,7 @@ eğer p { kullan(t); }                         // HATA — değilse'de tüketim 
 
 ## B.4 — Producer Intrinsic
 
-`tekkez_yarat<T>(değer: T) -> tekkez<T>` — built-in derleyici intrinsic'i.
+`tekkez_olustur<T>(değer: T) -> tekkez<T>` — built-in derleyici intrinsic'i.
 Sembol tablosuna global olarak işaretlenir; gövdesi yok, derleyici doğrudan
 tip imzasını verir.
 
@@ -191,7 +191,7 @@ Bir `tekkez<T>` değeri, kendisi `tekkez<...>` olmayan bir yapıya gömülemez.
 ```
 yapı Sıradan { x: tekkez<tam32>; }   // HATA LR002 (Sıradan tekkez değil)
 yapı Sahip { x: tekkez<tam32>; }
-değişken s: tekkez<Sahip> = tekkez_yarat(Sahip { x: tekkez_yarat(1) });   // OK
+değişken s: tekkez<Sahip> = tekkez_olustur(Sahip { x: tekkez_olustur(1) });   // OK
 ```
 
 (V1'de yapılar lineer alan içeremez. V2'de "lineer yapı" kavramı eklenebilir;
@@ -220,7 +220,7 @@ varsa), closure kendisi otomatik `tekkez<işlev(...)>` olarak işaretlenir.
 Aksi: LC001 LINEAR_CLOSURE_NOT_LINEAR.
 
 ```
-değişken k: tekkez<tam32> = tekkez_yarat(5);
+değişken k: tekkez<tam32> = tekkez_olustur(5);
 değişken c = || { kullan(k) };   // c : tekkez<işlev() -> tam32>  (otomatik)
 değişken sonuç = c();             // OK — c tüketildi
 değişken sonuç2 = c();            // HATA L002 — c tekrar çağrıldı
@@ -233,7 +233,7 @@ sahiptir; ek `kullan(c)` yazmaya gerek yok.
 ### B.8 Test Minimum Sayısı: **50**
 
 Test dağılımı (`test/test_linear.c`):
-- L1–L10: Tip ifadesi + tekkez_yarat (producer)
+- L1–L10: Tip ifadesi + tekkez_olustur (producer)
 - L11–L18: kullan extract + tek-tüketim
 - L19–L24: imha dispose + tek-tüketim
 - L25–L30: Single-use enforcement (L001/L002)

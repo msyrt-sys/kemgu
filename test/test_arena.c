@@ -111,7 +111,7 @@ static void test_blok_dolunca_yeni_blok(void) {
     void *p2 = arena_ayir(a, 32);
     void *p3 = arena_ayir(a, 32);  /* yeni blok ister */
     int ok = (p1 && p2 && p3) && (arena_toplam_byte(a) > 64);
-    test_sonuc("dolu blok sonrasi yeni blok yaratilir", ok);
+    test_sonuc("dolu blok sonrasi yeni blok olusturulur", ok);
     arena_serbest(a);
 }
 
@@ -136,7 +136,7 @@ static void test_geometric_buyume(void) {
 
 static void test_buyuk_tahsis_cap_ustu(void) {
     Arena *a = arena_olustur(128);
-    /* MAX_BLOK ustu tek tahsis -> ozel blok yaratilmali */
+    /* MAX_BLOK ustu tek tahsis -> ozel blok olusturulmali */
     size_t buyuk = (size_t)ARENA_MAX_BLOK_BOYUTU + 1024u;
     void *p = arena_ayir(a, buyuk);
     int ok = (p != NULL) && (arena_toplam_byte(a) >= buyuk);
@@ -158,7 +158,7 @@ static void test_sifirla_kullanim_temizler(void) {
 
 static void test_sifirla_ilk_blok_kalir(void) {
     Arena *a = arena_olustur(128);
-    /* Cok blok yarat */
+    /* Cok blok olustur */
     for (int i = 0; i < 20; i++) arena_ayir(a, 32);
     size_t once = arena_toplam_byte(a);
 

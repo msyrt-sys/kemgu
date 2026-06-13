@@ -77,8 +77,8 @@ yazılır; DRF-L1 onu kullanır.
 
 ### Varsayımlar
 
-- S1 (Bellek Modeli Katman 2): yaratılış anında her bölge tek sahipli
-- S2 (Başlangıç Sahipliği): yaratan thread sahiptir
+- S1 (Bellek Modeli Katman 2): oluşturuluş anında her bölge tek sahipli
+- S2 (Başlangıç Sahipliği): oluşturan thread sahiptir
 - S3 (Atomik Transfer): sahiplik değişimi atomik
 - R-GÖREV, R-BİRLEŞTİR, R-KANAL, R-PAYLAŞ kuralları
 
@@ -507,7 +507,7 @@ de erişimi aynı kurallar altında.)
 ## V1 Sınırları
 
 - **Inter-procedural escape soundness:** DRF-L3 yerel callee analizi varsayar;
-  callee başka closure'lar yaratırsa V2'de genişletilir.
+  callee başka closure'lar oluşturursa V2'de genişletilir.
 - **Weak memory model:** DRF-L5 SC altında ispatlandı (Plan Karar F). V2
   C++11 MM ile fence emit + acquire/release lemma'ları gerekir.
 - **Pattern matching consume:** `eşleş` desen-binding'de linear tüketim

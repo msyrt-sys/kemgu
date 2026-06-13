@@ -642,11 +642,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
       `sembol_bul_yazilabilir` (mutable lookup, tüketim işaretleme için).
     - **Tip kontrol:** L001 (tüketilmedi), L002 (move sonrası), L004
       (referans yasağı), L007 (consume operandı tekkez değil), L008
-      (`tekkez_yarat` arity), LR002 (yapı/dizi tekkez içeremez).
-    - **Producer intrinsic:** `tekkez_yarat<T>(e: T) -> tekkez<T>` —
+      (`tekkez_olustur` arity), LR002 (yapı/dizi tekkez içeremez).
+    - **Producer intrinsic:** `tekkez_olustur<T>(e: T) -> tekkez<T>` —
       özel built-in (sembol tablosu yok, CAGRI handler'ında özel-case).
     - **Tüketim noktaları:** `kullan`, `imha`, çağrı argümanı, `ver`,
-      yapı alan değeri, değişken atama (move), `tekkez_yarat` iç wrap,
+      yapı alan değeri, değişken atama (move), `tekkez_olustur` iç wrap,
       lineer closure çağrısı (LC-3).
     - **Closure-itself-linear (LC-2):** Lambda gövdesi içinde lineer
       bağlama yakalandığında lambda tipi otomatik `tekkez<islev(...)>`.

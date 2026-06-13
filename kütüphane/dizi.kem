@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // GERÇEK ÇAPRAZ-DOSYA MODÜL. Ayrı bir main'den `kullan dizi;` ile import
-// edilir; üyelere `dizi::yarat` / `dizi::ekle` / `dizi::al` ... nitelikli
+// edilir; üyelere `dizi::oluştur` / `dizi::ekle` / `dizi::al` ... nitelikli
 // erişimle (INFERENCE üzerinden) ulaşılır.
 //
 // v1 → v2 RELOCATION (B+A+C ile mümkün oldu):

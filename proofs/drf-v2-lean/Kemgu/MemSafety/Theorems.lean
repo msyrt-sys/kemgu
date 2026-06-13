@@ -71,9 +71,9 @@ theorem t1_bellek_guvenligi_corollary_full
 -- ============================================================
 
 /-
-TEOREM 2 — V1 modelinde bolge lifecycle (yarat/serbest) event'leri YOK;
+TEOREM 2 — V1 modelinde bolge lifecycle (oluştur/serbest) event'leri YOK;
 T2 trivial-vacuous. Meaningful form B1' refactor (V2 hedef):
-Step.bolgeYarat/bolgeSerbest + Konfigurasyon.yaratilmis_bolgeler +
+Step.bolgeOlustur/bolgeSerbest + Konfigurasyon.olusturulmus_bolgeler +
 counting argument (~250-300 satir).
 -/
 

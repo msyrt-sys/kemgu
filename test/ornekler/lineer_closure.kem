@@ -6,7 +6,7 @@
 // Bu closure tek kez çağrılabilir; çağrı = tüketim (LC-3).
 
 işlev lineer_closure_ornegi() {
-    değişken anahtar: tekkez<tam32> = tekkez_yarat(123);
+    değişken anahtar: tekkez<tam32> = tekkez_olustur(123);
 
     // c yakalama yapar — tipi otomatik: tekkez<islev() -> tam32>
     değişken c = || kullan(anahtar);

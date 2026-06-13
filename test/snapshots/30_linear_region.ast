@@ -9,11 +9,11 @@ PROGRAM (1 uye)  1:1
         BLOK (2 deyim)  2:5
           DEGISKEN "k"  3:9
             deger:
-              CAGRI  3:36
+              CAGRI  3:38
                 hedef:
-                  TANIMLAYICI "tekkez_yarat"  3:24
+                  TANIMLAYICI "tekkez_olustur"  3:24
                 argumanlar (1):
-                  TAM 42  3:37
+                  TAM 42  3:39
           IFADE_DEYIMI  4:9
             IMHA_IFADE  4:9
               TANIMLAYICI "k"  4:14

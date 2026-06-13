@@ -179,7 +179,7 @@ Regression guard: `test/snapshots/ad_cozum_sapma.kem` (exit 42) + `ad_cozum_govd
    `llvm_ir_uret` boyunca geçerli (SembolLink linked-list, relocation yok).
 5. **Graceful degradation tasarım gereği KALICI:** `COZUM_YOK` → eski global-first +
    aktif-önek-fallback yolu aynen korunur. Sebep: built-in'ler (yazdir/dizi_ekle/
-   tekkez_yarat/...) ya sembol tablosunda değil ya da IslevKayit'ta kayıtsız; ayrıca
+   tekkez_olustur/...) ya sembol tablosunda değil ya da IslevKayit'ta kayıtsız; ayrıca
    resolver koşmadan doğrudan `llvm_ir_uret` çağıran tüketiciler kırılmamalı.
 6. **`COZUM_YEREL` callee → indirect-call yolu:** lokal function-pointer, aynı adlı global
    işlevi artık GÖLGELEYEBİLİR (tip kontrolle tutarlı; eski codegen global'i seçerdi).
@@ -315,12 +315,12 @@ layout yeniden-mimarisi DEĞİL.
 - T yalnız (a) specialized fonksiyon gövdesinde subst (T→i64 push edilir → `*T`
   pointee, `bölge_al` sizeof doğru), (b) inference yan-kanalları (`generic_arg_ir`,
   `pointee_llvm_tip`) ile taşınır.
-- `yarat`/`ekle`/`al`/`büyü` çapraz-modül çağrıları D-012 YOL routing'iyle
-  `@kap.yarat$i64` vb. olarak specialize+emit edilir; struct değer (`%Liste`
+- `oluştur`/`ekle`/`al`/`büyü` çapraz-modül çağrıları D-012 YOL routing'iyle
+  `@kap.oluştur$i64` vb. olarak specialize+emit edilir; struct değer (`%Liste`
   by-value dönüş) + `&Liste<T>` by-pointer param mevcut v2/v3 makinesi.
 
 **Doğrulama (saf INFERENCE — yazılı nitelikli tip YOK):**
-- HEADLINE: `kullan kap; değişken l = kap::yarat(sifir); kap::ekle(&l,10)…;
+- HEADLINE: `kullan kap; değişken l = kap::oluştur(sifir); kap::ekle(&l,10)…;
   kap::al(&l,0)+kap::al(&l,4)` → 42. Transitif büyü<T> (kapasite 0→4→8, eleman-
   kopyalı grow) `@"kap.büyü$i64"` olarak owning-modül bağlamında specialize edilir
   (5. eleman idx4'e düşer — grow olmasa heap-overflow; deterministik 42 = yapısal kanıt).
@@ -329,22 +329,22 @@ layout yeniden-mimarisi DEĞİL.
 - Dedup: `ekle$i64` 2 çağrı → 1 define (yapısal: link hatası yok).
 
 **Witness-param inference [ETKİ — DUR-SOR yerine köşe dönüşü]:** Üretimdeki
-Liste<T> `yarat`'ı T'yi DÖNÜŞ-bağlamı annotasyonundan (`değişken l: Liste<tam64>`)
+Liste<T> `oluştur`'ı T'yi DÖNÜŞ-bağlamı annotasyonundan (`değişken l: Liste<tam64>`)
 çıkarır — ama nitelikli annotasyon (`kap::Liste<tam64>`) D işi + headline bunu
-YASAKLIYOR. Explicit call-site tip-arg (`yarat<i64>()`) parser'da YOK (yeni
+YASAKLIYOR. Explicit call-site tip-arg (`oluştur<i64>()`) parser'da YOK (yeni
 semantik fork → kapsam dışı). Çözüm: minimal kapsayıcıda her generic fonk bir
-**tip-tanık** value-param taşır (`yarat<T>(taban: T)`, `büyü/al` zaten T-param'lı)
+**tip-tanık** value-param taşır (`oluştur<T>(taban: T)`, `büyü/al` zaten T-param'lı)
 → T arg'dan çıkarsanır, annotasyon/explicit-tip-arg GEREKMEZ. Üretim Liste<T>'nin
-TAM taşınması (yetki-disiplinli yarat'ın return-context inference'ı) follow-up;
+TAM taşınması (yetki-disiplinli oluştur'ın return-context inference'ı) follow-up;
 ilgisiz altsistem (capability-borrow) genişletilmedi.
 
 **Kapsam/sınırlar:**
 - Fikstür modülü `kap` (test/moduller/kap.kem) — `kütüphane/dizi.kem` in-file
   canary'siyle (kendi main'i var) çakışmamak için ayrı ad.
-- Liste<T> uzunluk/sınır built-in dönüş tipi taşımaz; minimal yarat/ekle/al/büyü.
+- Liste<T> uzunluk/sınır built-in dönüş tipi taşımaz; minimal oluştur/ekle/al/büyü.
 - Yazılı nitelikli generic-tip annotasyonu (`kap::Liste<i64>`) → D (dokunulmadı).
 
-**Testler:** test_llvm 197→200 (+3 C-2: struct --check, headline yarat/ekle/al+büyü
+**Testler:** test_llvm 197→200 (+3 C-2: struct --check, headline oluştur/ekle/al+büyü
 E2E, çoklu-tip i64+i32 E2E). Fikstürler: test/moduller/{kap,ana_kap,ana_kap_coklu}.kem.
 parser 107, tip_kontrol 174 düşmedi. In-file Liste<T> (kütüphane/dizi.kem) canary yeşil.
 
@@ -369,12 +369,12 @@ v1'de ERTELENEN relocation (B+A+C ile mümkün): Liste o zaman top-level'a zorla
   yolundan bulunur). "In-file canary" → "çapraz-dosya canary" (eşdeğer kapsam yeşil).
 
 **PROB RAPORU (görevin asıl çıktısı):**
-1. **`yarat` INFERENCE-FRIENDLY DEĞİL → witness-param gerekti.** Üretim imzası
-   `yarat(böl: yetki<Bellek>) -> Liste<T>` — paramlarında T YOK → T yalnız
+1. **`oluştur` INFERENCE-FRIENDLY DEĞİL → witness-param gerekti.** Üretim imzası
+   `oluştur(böl: yetki<Bellek>) -> Liste<T>` — paramlarında T YOK → T yalnız
    dönüş-bağlamı annotasyonundan (`değişken l: Liste<tam32> = ...`) çıkarsanırdı.
    Çapraz-dosya'da: yazılı nitelikli annotasyon (`dizi::Liste<tam32>`) = D (yasak);
-   explicit call-site tip-arg (`yarat<i64>()`) parser'da YOK (karşılaştırma zinciri
-   olarak parse). **DEMO adaptasyonu:** `yarat<T>(taban: T)` tip-tanık param (değer
+   explicit call-site tip-arg (`oluştur<i64>()`) parser'da YOK (karşılaştırma zinciri
+   olarak parse). **DEMO adaptasyonu:** `oluştur<T>(taban: T)` tip-tanık param (değer
    kullanılmaz) + yetki içeride üretilir → T arg'dan çıkarsanır. **Üretim API kararı
    DEĞİL** — gerçek çözüm explicit-type-arg parsing (ayrı görev, syntax fork) ya da
    return-type-driven inference. `ekle`/`al` zaten T-değer param'lı → çıkarsama sorunsuz.
@@ -382,7 +382,7 @@ v1'de ERTELENEN relocation (B+A+C ile mümkün): Liste o zaman top-level'a zorla
    disiplini (her op taze `yetki_olustur(3,3)`, son `geri_al`; ekle→büyü MOVE) çapraz-
    dosya'da AYNEN çalışır — yetki built-in'leri modül çözümünden bağımsız, specialized
    gövdede owning-bağlamda emit edilir. Runtime-link (kdl_yetki_*) sorunsuz.
-3. **Küçük inference WART (düzeltilmedi, raporlandı):** `değişken l = dizi::yarat(...)`
+3. **Küçük inference WART (düzeltilmedi, raporlandı):** `değişken l = dizi::oluştur(...)`
    (annotasyonsuz) sonucu `l` element-tip yan-kanalı (`generic_arg_ir`) TAŞIMAZ —
    yalnız değişken-annotasyonundan set ediliyor. Sonuç: T'nin TEK kaynağı `&Liste<T>`
    param olan doğrudan çağrı (örn. `dizi::boy(&l)`) i32'ye default'lar → `@dizi.boy$i32`
@@ -392,9 +392,9 @@ v1'de ERTELENEN relocation (B+A+C ile mümkün): Liste o zaman top-level'a zorla
    call sonucunu değişkene atarken instantiated-T'yi yan-kanala propagate et (küçük
    codegen işi, kapsam dışı — mono değil, ergonomi). DUR-SOR yerine raporlandı.
 
-**Doğrulama (saf inference, hepsi exit 42):** çapraz-dosya grow headline (yarat/ekle×5/
+**Doğrulama (saf inference, hepsi exit 42):** çapraz-dosya grow headline (oluştur/ekle×5/
 al + transitif büyü, kapasite 0→4→8), çoklu-tip (i64+i32 ayrık spec, paylaşılan %Liste),
-struct-eleman (Liste<Nokta> karışık genişlik). IR: `@dizi.{yarat,ekle,al,boy}$i64` +
+struct-eleman (Liste<Nokta> karışık genişlik). IR: `@dizi.{oluştur,ekle,al,boy}$i64` +
 `@"dizi.büyü$i64"` owning-bağlamda; çoklu-tip $i64/$i32 ikiz set.
 
 **Kapsam/sınırlar:** src/ kodu DEĞİŞMEDİ (stdlib + test). Yazılı nitelikli tip (D),
@@ -447,7 +447,7 @@ kaldırır (üretim imzası geri).
    element-tip yan-kanalını besler. `değişken l: dizi::Liste<tam64>` → l.generic_arg_ir=i64
    → `dizi::boy(&l)` artık `@dizi.boy$i64` (i32 DEĞİL). codegen değişikliği yalnız
    `ast_tip_to_ir` YOL→`%sag_ad` (düz yapı adı).
-6. **RENAME fold:** kütüphane/dizi.kem `yarat`→`oluştur` (yetki_olustur ile tutarlı);
+6. **RENAME fold:** kütüphane/dizi.kem `oluştur`→`oluştur` (yetki_olustur ile tutarlı);
    DEMO witness-param `taban: T` KALDIRILDI — üretim imzası `oluştur(böl) -> Liste<T>`.
    T artık nitelikli annotation'dan (return-context).
 
@@ -526,3 +526,39 @@ migrasyonu; SONRA flatten kaldırılabilir. Alternatif: virtio track'i ayrı ele
 **Doğrulama:** Kod/test DEĞİŞMEDİ. test_llvm 205, parser 107, tip_kontrol 174, drivers
 (uart_vtable 21/uart_16550 13) korundu. ELLEME (proofs/, bölge/escape/wcet/lsp, D1
 faz-reorder, per-modül namespacing) DOKUNULMADI.
+
+---
+
+## D-017 [YÜKSEK] — İsimlendirme borcu: yasaklı üretici sözcüğü → `olustur` (depo-geneli) (2026-06-13)
+
+**Direktif (DEĞER — istisnasız):** Türkçe keyword/fonksiyon/intrinsic/örnek/yorumlarda
+yasaklı üretici sözcüğü KULLANILMAZ. Standart karşılık: → `olustur` (üreticiler;
+`_*` son-eki → `_olustur`), `yetki_olustur` ile tutarlı ASCII. (`çevrim`/`cevrim` =
+CPU cycle/WCET — DOĞRU, dokunulmadı; 33 örnek korundu.)
+
+**Kapsam:** Depo-geneli ~670 örnek (4 izole commit, her biri build+test yeşil).
+
+**[YÜKSEK] — Üretici intrinsic adı değişikliği (derleyici tanıma):**
+- `tekkez` üretici intrinsic → `tekkez_olustur`: tip_kontrol.c + llvm.c eşleştiricileri
+  (string + bayt-uzunluk 12→14).
+- `sabitsüre` üretici intrinsic → `sabitsüre_olustur`: ÜÇ eşleştirici (tip_kontrol.c ×2
+  [biri beklenen-bağlam çıkarsama, 3523 — atlanırsa op testleri kırılır], llvm.c ×1),
+  bayt-uzunluk 16→18 (`sabits`+ü[2 byte]+`re_olustur`). `_is_*` C değişkeni de yeniden
+  adlandırıldı. Snapshot .ast baseline'ları (18_tekkez, 29/30_linear) regen.
+  **Tuzak [ETKİ]:** ikinci/üçüncü eşleştiricinin bayt-uzunluğu kolayca atlanır — string
+  güncellenip uzunluk eski kalırsa eşleşme sessizce DÜŞER (test_sabitsure 4 hata yakaladı).
+
+**Üretici fonksiyonlar:** `anahtar_olustur` (kripto: stdlib/kripto/anahtar.kem def +
+test_kripto* çağrı + test_k5_anahtar_olustur), `kap` fikstürü `olustur<T>`, test_tip_kontrol
+gömülü Hasta üreticisi. Tümü ASCII `olustur`.
+
+**Yorum/doc/Lean-yorum:** src yorumları + test etiketleri (.c/.h ASCII, .kem/.md Türkçe
+morfoloji: `…ılır`→`oluşturulur`, `…an`→`oluşturan`, bağlanma ünlüsü). belgeler/*.md,
+README, CLAUDE.md, KILAVUZ, spec'ler. proofs/*.lean YALNIZ YORUM (gerçek Lean kodu
+yasaklı sözcük İÇERMİYOR — V2-hipotetik adlar yorumda; Lean derlemesi etkilenmez).
+
+**Doğrulama:** Depo-geneli grep (büyük/küçük harf duyarsız, .git hariç) = **0 örnek**.
+`çevrim`/`cevrim` = 33 (korundu). Tam test: test_llvm 205, tip_kontrol 174, linear 57,
+sabitsure 39, arena 19, ast 31, tip 26, sembol 18, capability 40, snapshot 50, drf 39.
+kripto + stdlib --check geçti. 0 ASan. Temiz rebuild 0 uyarı. BUNDAN SONRA yeni örnek
+GİRİLMEZ.
