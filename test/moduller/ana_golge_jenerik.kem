@@ -1,0 +1,11 @@
+// C regression-guard: top-level GLOBAL yardim()=100, arac::yardim()=1 onu
+// gölgeler. arac::capraz(0) specialize edilir; gövdesindeki yardim()
+// module-first (arac) çözülmeli -> 1. 100 dönerse specialization global-first
+// sapmış (B bug'ı specialization yolunda).
+kullan arac;
+
+işlev yardim() -> tam32 { ver 100; }
+
+işlev main() -> tam32 {
+    ver arac::capraz(0);
+}
