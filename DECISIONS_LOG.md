@@ -5,6 +5,142 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-042 — SELF-HOST lexer M6: BOOTSTRAP kapanışı — 249/249 gerçek .kem sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yeni harness + Makefile hedefi].** M6 = self-host lexer'ın
+asıl ispatı: KEMGU-lexer (selfhost/lexer.kem) TÜM gerçek KEMGU korpusunu C lexer
+(oracle) ile **sıfır-diff** lex'ler.
+
+**Kapsam:** `test/lexer_bootstrap_harness.sh` — KEMGU-lexer'ı derler, `build/`
+(üretilmiş temp) hariç tüm `.kem` dosyalarını (`stdlib/`, `drivers/`, `kütüphane/`,
+`test/**`, **`selfhost/lexer.kem`'in KENDİSİ** = self-lexing) C `--token` dump'ına
+karşı diff'ler. `make calistir_lexer_bootstrap`.
+
+**Sonuç:** **249/249 SIFIR-DİFF** — KEMGU-lexer C lexer'ı gerçek dünya KEMGU
+kodunda TAM İKAME EDER. Self-lexing dahil (4566 token, kendi kaynağı). M1-M5
+korpus 22/22 regresyon kalır.
+
+**Engel + çözüm:** İlk koşuda 3 büyük dosya (lexer.kem dahil) crash etti (exit 127,
+~binlerce iterasyon sonra) → kök-neden D-041 codegen alloca bug'ı. Düzeltildi.
+
+**Bootstrap durumu:** Lexer parite TAM. Sıradaki gerçek-entegrasyon adımı
+(parser'ın KEMGU-lexer çıktısını tüketmesi / C lexer'ın emekliye ayrılması)
+mimari karar gerektirir (Token API köprüsü) → DUR-SOR (Mehmet). M6 = token-parite
++ self-lexing ispatı tamamlandı.
+
+---
+
+## D-041 [YÜKSEK] — Kök-neden fix: dongu govde alloca'sı → stack overflow (entry hoist + renumber) (2026-06-13)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Döngü
+gövdesindeki `değişken` (ve koşul/ifade temp'leri) BLOK-İÇİ `alloca` üretiyordu.
+LLVM yalnız **entry-blok** alloca'sını fonksiyon girişinde BİR KEZ tahsis eder;
+başka blok'taki alloca her ÇALIŞMADA stack ayırır → uzun döngüde **STACK
+OVERFLOW**. Latent bug — toy programlar az iterasyonla tetiklemedi; **self-host
+lexer'ın binlerce-iterasyonlu ana döngüsü açtı** (exit 127, ~3775 tokende crash,
+dosyaya göre farklı nokta = döngü-başı alloca kanıtı).
+
+**Fix:** `islev_uret` gövdeyi `tmpfile()` buffer'a yazar; `hoist_renumber` tüm
+`%N = alloca` satırlarını entry blok başına taşır. Taşıma SSA ardışık-numara
+kuralını bozduğundan (`clang`: "instruction expected to be numbered") TÜM numaralı
+değerler (`%<rakam>`; `%bb<ad>`/`%<ad>` hariç) yeniden numaralanır. **Güvenli
+çünkü:** tüm alloca'lar statik-boyut (operandsız) → erken taşıma ileri-referans
+yaratmaz; codegen **phi kullanmaz** (alloca/load-store) → tek-geçiş renumber yeterli;
+koşullu alloca'yı her zaman tahsis etmek semantik olarak zararsız (kullanılmayan
+stack).
+
+**Doğrulama:** Tüm test paketi YEŞİL — test_llvm **234/234** (yeni [160]:
+500000-iter döngü-yerel alloca, crash yok → 42), birim testleri (57/39/35/40/23/
+30/5/50/9/6/16/36/13/6/21 hepsi 0 başarısız), ASan matris 20000 iter/0 crash,
+stdlib --check temiz. Self-host lexer artık kendi kaynağını crash'sız lex'ler.
+
+**Kapsam/sınır:** Yalnız alloca yerleşimi değişti — ABI/imza/struct-layout/semantik
+DEĞİŞMEDİ (mem2reg/SROA zaten hoist ederdi; fix sadece text-IR'ı geçerli kılar).
+Tüm fonksiyonlar tek yoldan (`islev_uret`) emit → fix global.
+
+---
+
+## D-040 — SELF-HOST lexer M5: trivia (yorum) + ham string — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M5: `bosluk_atla`'ya
+`//` satır + `/* */` İÇ İÇE blok yorum (derinlik sayacı); ham string `r#"..."#`
+(`ham_basi_mi` + `ham_emit`, hash eşleme). C bosluk_atla/ham_metin_oku birebir.
+
+**Kapsam:** `//` → `\n`'e kadar (tüketmeden). `/*` → derinlik sayacı, iç içe
+(`/* /* */ */` doğru). Ham string: açılış N hash = kapanış N hash; `r"..."` (0 hash)
+özel; iç tırnak literal. L011 (geçersiz baş), L002 (kapanmamış). **Çok-satırlı
+trivia/ham string → satir/sutun re-scan** (yorum: bosluk_atla içinde inline; ham
+string: hlen span'i üzerinden re-scan, `\n`→satir++).
+
+**Kasıtlı NON-hata parite:** kapanmamış blok-yorum SESSİZ EOF'ta biter (HATALI YOK —
+C ile aynı). `//`/`/*` string/ham-string İÇİNDE yorum değil (literal tarama önce).
+
+**Doğrulama:** `make calistir_lexer_diff` → **22/22 SIFIR-DİFF** (18 M1-M4 + 4 M5).
+Spot: `a /* /* iç */ dış */ b` → `b` 1:25 (iç içe tüketildi); `x = r"çok⏎satır"⏎y`
+→ `y` satır 4 (çok-satırlı ham string satir izleme bayt-exact). `--check` temiz.
+
+**Sıradaki (M6):** bootstrap kapanışı — KEMGU-lexer'ı (a) KENDİ kaynağına +
+(b) tüm gerçek `.kem` korpusuna karşı sıfır-diff doğrula (self-lexing ispatı).
+
+---
+
+## D-039 — SELF-HOST lexer M4: literaller (sayı/float/metin/karakter) — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M4: tam literal
+desteği — `sayi_emit` (ondalık + 0x/0b/0o + float kesir+üs), `dize_emit`
+(`"..."`), `karakter_emit` (`'a'`/UTF-8). C lexer sayi_oku/metin_oku/karakter_oku
+ile span-exact (kaynak L106-268 birebir port).
+
+**Kapsam:** Sayı — 4 taban (0x/0b/0o erken-return TAMSAYI; boş gövde `0x` hatasız),
+float kesir (`.` guard `sonraki≠.` → `1.5` vs `1..5`; trailing-dot `7.`), üs `e/E±`.
+Metin — escape DECODE EDİLMEZ (`\`+1 bayt atlanır, C gibi); newline/EOF → HATALI
+(L001). Karakter — escape (`\`+1) veya UTF-8 tek-karakter (utf8_uz); boş `''`→L009,
+çok/kapanmamış→L010. Hepsi tüketilen bayt döner.
+
+**KÖK-NEDEN bulgu [self-host isim kısıtı]:** Codegen `metin_*` ön-ekini runtime
+intrinsic'e yönlendiriyor (llvm.c:2961 `memcmp(cagri_adi,"metin_",6)`) → `kdl_metin_*`
+(ptr dönüş). `işlev metin_emit` bu yüzden `kdl_metin_emit` sayıldı → IR tip hatası
+(`store i32 ptr`). **Çözüm:** `metin_emit`→`dize_emit`. (Pure-prefix dispatch'ler
+yalnız `metin_`/`dosya_`; `karakter_`/`sayi_`/`dizi_` exact-match → güvenli.)
+Kaynak değiştirilmedi — isim kuralıyla çözüldü.
+
+**Doğrulama:** `make calistir_lexer_diff` → **18/18 SIFIR-DİFF** (13 M1-M3 + 5 M4).
+Spot: `1..5 1.5 7. 0x 1e10 "tam"` → bayt-exact (`7.`=ONDALIK trailing-dot,
+`0x`=TAMSAYI boş-hex, `1..5`=TAMSAYI+ARALIK+TAMSAYI). `--check` temiz.
+
+**Sıradaki (M5):** trivia — `//` satır + `/* */` İÇ İÇE yorum (derinlik sayacı) +
+ham string `r#"..."#` (hash eşleme, L002/L011). Kasıtlı NON-hata parite (kapanmamış
+blok-yorum sessiz, geçersiz UTF-8→bayt-bayt HATALI).
+
+---
+
+## D-038 — SELF-HOST lexer M3: operatörler + noktalama (maximal munch) — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M2'nin tek-karakter
+`tek_kar_tip`'i, tüm çok-karakter operatörleri MAXIMAL MUNCH ile çözen `op_emit`
+ile değiştirildi (C lexer switch 318-375 ile birebir).
+
+**Kapsam:** Çatışma zincirleri — `.`/`..`/`...`, `:`/`::`, `<`/`<=`/`<<`,
+`>`/`>=`/`>>`, `=`/`==`/`=>`, `-`/`-=`/`->`, `+`/`+=`, `*`/`*=`, `/`/`/=`,
+`%`/`%=`, `!`/`!=`. Bit ops `& | ^ ~` KOŞULSUZ (`&&` yok; `&değişken` lexer'da
+BİRLEŞMEZ). `>>` daima tek `SAGA_KAYDIR` (generic'i parser böler). Tek `!`→HATALI.
+Kalan ayraç `[ ] :`. `op_emit` tüketilen bayt sayısını döner (sütün/pos ilerletme).
+`ikinci_bayt` sınır-güvenli lookahead (OOB→0).
+
+**Doğrulama:** `make calistir_lexer_diff` → **13/13 SIFIR-DİFF** (9 M1/M2 + 4 M3).
+Adversaryel munch spot-check: `a>>b ....x !c ===z` → C oracle ile bayt-exact
+(`>>`=tek SAGA_KAYDIR, `....`=UC_NOKTA+NOKTA, `!c`=HATALI+TANIMLAYICI,
+`===`=ESIT_ESIT+ESIT). Not: C stderr L005 mesajı token dump'ında değil → diff'i
+etkilemez; HATALI tokenı eşleşir. `--check` temiz.
+
+**Sınır (kasıtlı):** `//` `/*` trivia M5'te (M3 yalnız `/` `/=`). `digit.` (float)
+M4'e ait — M3 korpusu `digit.` içermez (yalnız `..`/`...` aralık güvenli).
+
+**Sıradaki (M4):** literaller — hex/bin/oct tamsayı, float (kesir+üs), karakter/
+metin (escape ham bırakma). Korpus literal-ağırlıklı genişler.
+
+---
+
 ## D-037 — SELF-HOST lexer M2: UTF-8 + 44 Türkçe anahtar kelime — sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus genişler; C tarafı 0

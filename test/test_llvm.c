@@ -2460,6 +2460,29 @@ static void test_guvensiz_icinde_ver(void) {
     test_sonuc("guvensiz icinde 'ver' terminator -> exit 42", rc == 42);
 }
 
+/* --- D-041: dongu-yerel alloca hoist (stack overflow regresyonu) --- */
+
+static void test_dongu_yerel_alloca_hoist(void) {
+    /* ESKIDEN: dongu govdesindeki 'degisken' her iterasyonda BLOK-ici alloca
+     * uretirdi -> LLVM yalniz entry-blok alloca'sini bir kez tahsis eder,
+     * diger blok'taki her CALISMADA stack ayirir -> uzun dongu STACK OVERFLOW.
+     * Bu bug'i self-host lexer (binlerce iterasyonlu ana dongu) acti (D-041).
+     * Fix: islev_uret govdeyi buffer'a yazip TUM alloca'lari entry blok'a
+     * tasir + SSA numaralarini yeniden sirala. 500000 iter CRASH ETMEDEN
+     * 42 donmeli (toplam=500000, 500000-499958=42). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken toplam: tam32 = 0; "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 0; "
+        "iken i < 500000 { "
+        "de\xc4\x9fi\xc5\x9fken a: tam32 = i; "
+        "de\xc4\x9fi\xc5\x9fken b: tam32 = a + 1; "
+        "toplam = toplam + (b - a); "
+        "i = i + 1; } "
+        "ver toplam - 499958; }");
+    test_sonuc("dongu-yerel alloca hoist: 500000 iter crash yok -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2687,6 +2710,9 @@ int main(void) {
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
     test_guvensiz_icinde_ver();
+
+    printf("\n--- D-041: dongu-yerel alloca hoist ---\n");
+    test_dongu_yerel_alloca_hoist();
 
     printf("\n--- C5: satirici_asm (inline assembly) ---\n");
     test_asm_round_trip_verify();
