@@ -1,0 +1,6 @@
+işlev a() -> tam32 { ver x ve y veya z; }
+işlev b() -> tam32 { ver a == b veya c != d ve e < f; }
+işlev c() -> tam32 { ver p < q ve r >= s veya t <= u ve v > w; }
+işlev d() -> tam32 { ver a & b | c ^ d; }
+işlev e() -> tam32 { ver x << 2 | y >> 1 & maske; }
+işlev f() -> tam32 { ver bayrak ve doğru veya yanlış; }

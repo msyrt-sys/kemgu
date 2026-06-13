@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-045 — SELF-HOST parser P1: Pratt ifade parser — 6/6 korpus --ast sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/parser.kem` + korpus; C tarafı yalnız additive
+`yaz_bayt` intrinsic].** Aşama 1 P1: KEMGU'da tam Pratt ifade parser. C `--ast`
+oracle'ına karşı sıfır-diff.
+
+**P1a — token-tablo temeli:** Lexer scanning REUSE (emit sink'i print→`dizi_ekle`),
+token tablosu `Ayr` struct'ta (paralel Dizi). 250/250 gerçek .kem'de re-emit
+`--token` sıfır-diff (foundation kanıtı). State threading: `&değişken Ayr`
+(D-044'e dayanır; scalar+Dizi alan mutasyonu + ref-param passthrough de-risk edildi).
+
+**P1b — Pratt ifade:** ifade.c ile birebir öncelik (VEYA=1…CARPMA=10, ÖNEK=11,
+SONEK=12). Birincil (TAM/TANIMLAYICI/MANTIKSAL/BOS/METIN/KARAKTER + paren), önek
+(neg/değil/~/&/&değişken/deref*), sonek zinciri (.alan/[i]/(args)/::yol/olarak),
+yapı/dizi/lambda oluşturma, kullan/imha. Düğüm pozisyonları C ile birebir
+(ikili/tekli=operatör tokenı; sonek=sonek tokenı; literal=kendi tokenı). Sayı
+değeri (`_` temizle + 0x/0b/0o taban → int64 → ondalık string) ifade.c parse ile
+aynı. AST = düz düğüm tablosu (append-on-create flat çocuk listesi). Düz dumper
+preorder, `\t\n\r\\` kaçışlı (`yaz_kacis`).
+
+**Yeni intrinsic `yaz_bayt(tam32)` (additive):** `yaz_karakter` argümanını
+codepoint sayıp UTF-8 ENCODE eder → METIN değer dump'ında Türkçe bayt mojibake
+(`ç`→`Ã§`). `yaz_bayt` HAM bayt yazar (putchar & 0xFF). 3 yer: tip_kontrol.c
+builtin registry, llvm.c dispatch+declare, runtime. Lexer ASCII-only olduğu için
+bunu hiç tetiklemedi; parser ham UTF-8 yazar → gerekli.
+
+**Doğrulama:** `make calistir_parser_diff` → **6/6 SIFIR-DİFF** (aritmetik/mantık-bit/
+önek-sonek/literal/bileşik/metin — Türkçe METIN + KARAKTER U+XXXX dahil). test_tumu
+29 suite + ASan YEŞİL (yaz_bayt regresyonsuz). lexer bootstrap 256/256. `--check` temiz.
+
+**Sınır (P1 dışı, sonraki adımlar):** KESIRLI float (%g formatı — ayrı adım); diğer
+deyimler (P2); param/generic/bildirim (P3); tam tip sözdizimi (P4). P1 sarmalayıcı:
+`işlev f() -> T { ver İFADE; }` (param yok, tek `ver` deyimi).
+
+---
+
 ## D-044 [YÜKSEK] — Kök-neden fix: yapı Dizi<T> alanı boş/[...] literal → STACK [0xi8] → SEGFAULT (2026-06-13)
 
 **Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Parser

@@ -152,6 +152,12 @@ void kdl_yaz_tam(int32_t n) {
     printf("%d", n);
 }
 
+/* yaz_bayt: HAM bayt (düşük 8 bit) — putchar. yaz_karakter UTF-8 codepoint
+ * encode eder; bu ise ham byte yazar (self-host parser UTF-8 değer dump'ı). */
+void kdl_yaz_bayt(int32_t b) {
+    putchar(b & 0xFF);
+}
+
 void kdl_yaz_karakter(int32_t cp) {
     unsigned char buf[5];
     int n = 0;

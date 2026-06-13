@@ -474,6 +474,11 @@ calistir_lexer_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 calistir_lexer_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/lexer_bootstrap_harness.sh
 
+# SELF-HOST parser (selfhost/parser.kem) --ast düz-dump'ını C --ast oracle'ına
+# karşı sıfır-diff doğrula (D-043/D-045). P1+ korpus: test/parse_korpus/.
+calistir_parser_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/parser_diff_harness.sh
+
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
