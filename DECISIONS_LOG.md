@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-035 — SELF-HOST PIVOT ADIM-0: gerçek KEMGU lexer'ını KEMGU'da yazma — KAPSAM+PLAN (kod yok) (2026-06-13)
+
+**Karar:** Toy-dil arkı (D-022→D-034) bitti; gerçek faz = gerçek KEMGU lexer'ını
+KEMGU'da yeniden yazmak. ADIM-0 = yalnız SURVEY+PLAN (paralel okuyucu workflow'u +
+kritik DOĞRULA'ların elle testi). Lexer yazımı M1'de başlar (Mehmet onayından sonra).
+
+**TOKEN KÜMESİ (C lexer survey):** ~68 TokenTipi. **43 anahtar kelime** (28 Türkçe-
+karakterli: eğer/işlev/değişken/çeşit… + 15 ASCII: iken/ver/sabit…). **31 operatör**
+— kritik ÇOK-KARAKTER (maksimal-munch + tarama-sırası): `== != <= >= += -= *= /= %=
+<< >> -> => :: .. ...`. 5 literal ailesi (tamsayı dec/hex/bin/oct + `_`; ondalık+
+bilimsel; metin+backslash-skip; ham `r#"…"#` değişken-hash; karakter+escape+UTF-8).
+2 yorum (// satır; /* */ İÇ İÇE). UTF-8 identifier. Hata: L001/002/005/009/010/011.
+
+**DIFF-HARNESS (doğruluğun otomatik kanıtı):** C `--token` dump zaten kararlı format
+(`ana.c:82`: `%-20s "%.*s"\t\t%d:%d` = tip-adı + lexeme + satır:sütun). KEMGU-lexer
+AYNI formatı üretir → `diff oracle.txt aday.txt` = sıfır-diff testi. `token_tipi_adi`
+68 enum→ASCII eşlemesi (lexer.c:378-472) KEMGU'da `eşleş`/dizi ile yeniden üretilir.
+Hedef: `make calistir_lexer_diff` korpus üstünde.
+
+**STDLIB ÖN-KOŞULLARI: [YÜKSEK ENGEL YOK].** `dosya_oku(yol)->metin` VAR (DOĞRULANDI:
+TIP_METIN, kdl_runtime.c:914). `metin_bayt`/`metin_uzunluk`/`metin_kes`/`metin_esit`
++ `Dizi<T>` + `yazdir_metin` yeterli. metin_to_tam/escape-unescape KAYITLI değil ama
+LEXER KAPSAMI DIŞI (değer hesaplama = parser/codegen). Lexer yalnız bayt-tanıma yapar.
+
+**DOĞRULANAN kritik gerçekler (elle test):**
+- `metin_bayt` İŞARETLİ tam8 döner → Türkçe baytlar 0xC3/C4/C5 = **-61/-60/-59**
+  (195 değil). `ve` LOJİK and. → UTF-8 Türkçe tanıma: signed-değerle karşılaştır
+  (b==0-61) ya da bitsel `&` ile maskele. **M2 ön-koşulu.**
+- `dosya_oku -> metin` (seçimlik değil; dosya yoksa NULL/boş → uzunluk-tabanlı kontrol).
+- `--token` formatı birebir doğrulandı.
+
+**ARTIMLI PLAN (6 milestone, her biri sıfır-diff korpus kapısı):**
+M1 ASCII iskelet (identifier+ondalık+tek-kar op+ayraç+3-5 ASCII keyword+format altyapısı);
+M2 UTF-8 + 43 Türkçe keyword + bayt-tabanlı sütun; M3 çok-karakter op (maksimal-munch);
+M4 sayı varyantları + metin/karakter literal; M5 yorumlar (iç içe) + ham metin; M6 tam
+küme + GERÇEK .kem korpusu (hasta/fibonacci/eslesme/drone) ile tam sıfır-diff = doğruluk
+sertifikası.
+
+**RİSKLER:** trait GEREKMEZ (düz prosedürel + Dizi+struct). EN BÜYÜK: byte-tabanlı
+Türkçe UTF-8 + metin_bayt işaretlilik (M2; erken test edildi ✓). İkincil: çok-kar tarama
+sırası (M3), iç içe yorum derinlik sayacı (M5), ham-metin değişken-hash (M5).
+
+**MEHMET'E AÇIK (DUR-SOR — rewrite onayı + kararlar):**
+1. Hedef: C-lexer TAM İKAME (bootstrap) mi, PARALEL doğrulama prototipi mi?
+2. `--token` format BİREBİR mi (20-char pad+`\t\t`) yoksa basitleştir+C'yi de uyarla mı?
+3. Keyword kapsamı: 43 (genel/satıriçi_asm dahil/hariç netleştir).
+4. Token-text temsili: bölge+metin_kes kopya mı, (kaynak,offset,uzunluk) mu?
+5. M1 başlasın mı?
+
+---
+
 ## D-034 — Self-hosting: mini dil V3 — FONKSİYONLAR (tanım+çağrı+özyineleme) → Turing-tam (saf KEMGU) (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-033 (kontrol akışı)
