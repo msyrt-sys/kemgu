@@ -1,0 +1,302 @@
+// ============================================================================
+// 17_kontrol_dili.kem — Mini dil V2: KONTROL AKIŞI + deyim blokları.
+//
+// D-028 (atama + sembol tablosu + ifade) üstüne kurar; mini-dili gerçek bir
+// İMPERATİF dile çıkarır: koşul (eğer/değilse), döngü (iken) ve `{ deyim* }`
+// blokları. Mini-dilin if/while'ı KEMGU'nun kendi if/while'ıyla yorumlanır
+// (saf-KEMGU ağaç-yürüyen yürütücü; flat token akışı + imleç konum yönetimi).
+//
+// Mini-dil sözdizimi (ASCII anahtar kelimeler — byte-lexer sadeliği):
+//   program = deyim* ifade
+//   deyim   = ATAMA | EGER | IKEN
+//   ATAMA   = IDENT '=' ifade ';'
+//   EGER    = 'eger' '(' ifade ')' blok [ 'degilse' blok ]
+//   IKEN    = 'iken' '(' ifade ')' blok
+//   blok    = '{' deyim* '}'
+//   ifade   = toplama ( ('<'|'>'|'==') toplama )?       // tek karşılaştırma
+//   toplama = terim (('+'|'-') terim)* ; terim = faktör (('*'|'/') faktör)*
+//   faktör  = SAYI | IDENT | '(' ifade ')'
+//   IDENT/anahtar = harf dizisi (çok-harf); SAYI = ondalık.
+//
+// Çalıştırılan:
+//   i=0; t=0; iken (i<10) { t = t+i+1; i = i+1; }      // t = 1+..+10 = 55
+//   r=0; eger (t==55) { r = t-13; } degilse { r = 0; }  // r = 42
+//   r                                                    // sonuç = 42
+//
+// Token türleri: 0=SAYI 1=+ 2=- 3=* 4=/ 5=( 6=) 7=IDENT 8== 9=; 10={ 11=}
+//                12=< 13=> 14=== 15=eger 16=degilse 17=iken
+// ============================================================================
+
+yapı Tokenler {
+    kind: Dizi<tam32>;
+    deger: Dizi<tam32>;
+    ad: Dizi<metin>;
+    imlec: Dizi<tam32>;
+}
+yapı Semboller {
+    ad: Dizi<metin>;
+    deger: Dizi<tam32>;
+}
+
+işlev rakam_mi(b: tam8) -> mantıksal {
+    değişken k: tam32 = b olarak tam32;
+    ver k >= 48 ve k <= 57;
+}
+işlev harf_mi(b: tam8) -> mantıksal {
+    değişken k: tam32 = b olarak tam32;
+    ver (k >= 97 ve k <= 122) veya (k >= 65 ve k <= 90);
+}
+
+işlev token_ekle(t: &Tokenler, kind: tam32, deger: tam32, ad: metin) -> tam32 {
+    dizi_ekle(t.kind, kind); dizi_ekle(t.deger, deger); dizi_ekle(t.ad, ad);
+    ver 0;
+}
+
+// Bir kelimeyi anahtar kelime ya da IDENT olarak token'la.
+işlev kelime_token(t: &Tokenler, w: metin) -> tam32 {
+    eğer metin_esit(w, "eger") { token_ekle(t, 15, 0, ""); }
+    değilse eğer metin_esit(w, "degilse") { token_ekle(t, 16, 0, ""); }
+    değilse eğer metin_esit(w, "iken") { token_ekle(t, 17, 0, ""); }
+    değilse { token_ekle(t, 7, 0, w); }
+    ver 0;
+}
+
+// LEXER — çok-harf IDENT/anahtar + 2-karakter '=='.
+işlev lexle(kaynak: metin, t: &Tokenler) -> tam32 {
+    değişken uz: tam32 = metin_uzunluk(kaynak);
+    değişken i: tam32 = 0;
+    değişken sayi: tam32 = 0;
+    değişken sayi_var: mantıksal = yanlış;
+    değişken ad_basla: tam32 = 0;
+    değişken ad_var: mantıksal = yanlış;
+    iken i < uz {
+        değişken b: tam8 = metin_bayt(kaynak, i);
+        eğer rakam_mi(b) {
+            sayi = sayi * 10 + (b olarak tam32) - 48;
+            sayi_var = doğru;
+        } değilse eğer harf_mi(b) {
+            eğer sayi_var { token_ekle(t, 0, sayi, ""); sayi = 0; sayi_var = yanlış; }
+            eğer değil ad_var { ad_basla = i; ad_var = doğru; }
+        } değilse {
+            eğer sayi_var { token_ekle(t, 0, sayi, ""); sayi = 0; sayi_var = yanlış; }
+            eğer ad_var {
+                kelime_token(t, metin_kes(kaynak, ad_basla, i - ad_basla));
+                ad_var = yanlış;
+            }
+            değişken tur: tam32 = 0;
+            eğer b == 43 { tur = 1; }
+            değilse eğer b == 45 { tur = 2; }
+            değilse eğer b == 42 { tur = 3; }
+            değilse eğer b == 47 { tur = 4; }
+            değilse eğer b == 40 { tur = 5; }
+            değilse eğer b == 41 { tur = 6; }
+            değilse eğer b == 59 { tur = 9; }
+            değilse eğer b == 123 { tur = 10; }   // {
+            değilse eğer b == 125 { tur = 11; }   // }
+            değilse eğer b == 60 { tur = 12; }    // <
+            değilse eğer b == 62 { tur = 13; }    // >
+            değilse eğer b == 61 {                 // '=' veya '=='
+                eğer (i + 1 < uz) ve (metin_bayt(kaynak, i + 1) == 61) {
+                    tur = 14; i = i + 1;           // '==' (ekstra karakter tüket)
+                } değilse { tur = 8; }             // '='
+            }
+            eğer tur != 0 { token_ekle(t, tur, 0, ""); }
+            // tanınmayan (boşluk vb.) atlanır
+        }
+        i = i + 1;
+    }
+    eğer sayi_var { token_ekle(t, 0, sayi, ""); }
+    eğer ad_var { kelime_token(t, metin_kes(kaynak, ad_basla, uz - ad_basla)); }
+    ver 0;
+}
+
+// === Sembol tablosu ===
+işlev sembol_koy(s: &Semboller, ad: metin, deger: tam32) -> tam32 {
+    değişken i: tam32 = 0; değişken n: tam32 = dizi_boyut(s.ad);
+    iken i < n {
+        eğer metin_esit(dizi_al(s.ad, i), ad) { dizi_yaz(s.deger, i, deger); ver 0; }
+        i = i + 1;
+    }
+    dizi_ekle(s.ad, ad); dizi_ekle(s.deger, deger); ver 0;
+}
+işlev sembol_ara(s: &Semboller, ad: metin) -> tam32 {
+    değişken i: tam32 = 0; değişken n: tam32 = dizi_boyut(s.ad);
+    iken i < n {
+        eğer metin_esit(dizi_al(s.ad, i), ad) { ver dizi_al(s.deger, i); }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// === İfade parser/değerlendirici (öncelik + karşılaştırma) ===
+işlev faktor(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    değişken k: tam32 = dizi_al(t.kind, p);
+    eğer k == 5 {                                   // '('
+        dizi_yaz(t.imlec, 0, p + 1);
+        değişken v: tam32 = ifade(t, s);
+        dizi_yaz(t.imlec, 0, dizi_al(t.imlec, 0) + 1);  // ')'
+        ver v;
+    }
+    eğer k == 7 {                                   // IDENT
+        dizi_yaz(t.imlec, 0, p + 1);
+        ver sembol_ara(s, dizi_al(t.ad, p));
+    }
+    dizi_yaz(t.imlec, 0, p + 1);                     // SAYI
+    ver dizi_al(t.deger, p);
+}
+işlev terim(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken sol: tam32 = faktor(t, s);
+    iken doğru {
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver sol; }
+        değişken op: tam32 = dizi_al(t.kind, p);
+        eğer op == 3 { dizi_yaz(t.imlec, 0, p + 1); sol = sol * faktor(t, s); }
+        değilse eğer op == 4 { dizi_yaz(t.imlec, 0, p + 1); sol = sol / faktor(t, s); }
+        değilse { ver sol; }
+    }
+    ver sol;
+}
+işlev toplama(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken sol: tam32 = terim(t, s);
+    iken doğru {
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver sol; }
+        değişken op: tam32 = dizi_al(t.kind, p);
+        eğer op == 1 { dizi_yaz(t.imlec, 0, p + 1); sol = sol + terim(t, s); }
+        değilse eğer op == 2 { dizi_yaz(t.imlec, 0, p + 1); sol = sol - terim(t, s); }
+        değilse { ver sol; }
+    }
+    ver sol;
+}
+// ifade = toplama ( ('<'|'>'|'==') toplama )?   — sonuç 1/0
+işlev ifade(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken sol: tam32 = toplama(t, s);
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    eğer p >= dizi_boyut(t.kind) { ver sol; }
+    değişken op: tam32 = dizi_al(t.kind, p);
+    eğer op == 12 {                                  // '<'
+        dizi_yaz(t.imlec, 0, p + 1);
+        değişken sag: tam32 = toplama(t, s);
+        eğer sol < sag { ver 1; } ver 0;
+    }
+    eğer op == 13 {                                  // '>'
+        dizi_yaz(t.imlec, 0, p + 1);
+        değişken sag: tam32 = toplama(t, s);
+        eğer sol > sag { ver 1; } ver 0;
+    }
+    eğer op == 14 {                                  // '=='
+        dizi_yaz(t.imlec, 0, p + 1);
+        değişken sag: tam32 = toplama(t, s);
+        eğer sol == sag { ver 1; } ver 0;
+    }
+    ver sol;
+}
+
+// === Yürütücü ===
+// Bir '{ … }' bloğunu YÜRÜTMEDEN atla (eşleşen '}' bul). imleç '{' üstünde.
+işlev blok_atla(t: &Tokenler) -> tam32 {
+    değişken derinlik: tam32 = 0;
+    iken doğru {
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver 0; }
+        değişken k: tam32 = dizi_al(t.kind, p);
+        dizi_yaz(t.imlec, 0, p + 1);
+        eğer k == 10 { derinlik = derinlik + 1; }
+        eğer k == 11 { derinlik = derinlik - 1; eğer derinlik == 0 { ver 0; } }
+    }
+    ver 0;
+}
+// '{ deyim* }' bloğunu YÜRÜT. imleç '{' üstünde.
+işlev blok_calistir(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    dizi_yaz(t.imlec, 0, p + 1);                      // '{' tüket
+    iken doğru {
+        değişken q: tam32 = dizi_al(t.imlec, 0);
+        eğer q >= dizi_boyut(t.kind) { ver 0; }
+        eğer dizi_al(t.kind, q) == 11 { dizi_yaz(t.imlec, 0, q + 1); ver 0; }  // '}' tüket
+        deyim_calistir(t, s);
+    }
+    ver 0;
+}
+// 'eger (kosul) blok [degilse blok]'. imleç EGER üstünde.
+işlev eger_calistir(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    dizi_yaz(t.imlec, 0, p + 2);                      // EGER '(' tüket
+    değişken c: tam32 = ifade(t, s);                  // imleç ')' üstünde
+    dizi_yaz(t.imlec, 0, dizi_al(t.imlec, 0) + 1);    // ')' tüket → '{'
+    eğer c != 0 { blok_calistir(t, s); } değilse { blok_atla(t); }
+    değişken q: tam32 = dizi_al(t.imlec, 0);
+    eğer (q < dizi_boyut(t.kind)) ve (dizi_al(t.kind, q) == 16) {  // degilse
+        dizi_yaz(t.imlec, 0, q + 1);                  // DEGILSE tüket → '{'
+        eğer c != 0 { blok_atla(t); } değilse { blok_calistir(t, s); }
+    }
+    ver 0;
+}
+// 'iken (kosul) blok'. imleç IKEN üstünde.
+işlev iken_calistir(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    dizi_yaz(t.imlec, 0, p + 2);                      // IKEN '(' tüket
+    değişken kosul_pos: tam32 = dizi_al(t.imlec, 0);
+    iken doğru {
+        dizi_yaz(t.imlec, 0, kosul_pos);              // koşula dön
+        değişken c: tam32 = ifade(t, s);              // imleç ')'
+        dizi_yaz(t.imlec, 0, dizi_al(t.imlec, 0) + 1);  // ')' tüket → '{'
+        eğer c == 0 { blok_atla(t); ver 0; }          // döngü bitti, gövdeyi atla
+        blok_calistir(t, s);                          // gövdeyi yürüt
+    }
+    ver 0;
+}
+// Tek deyim yürüt. imleç deyim başında.
+işlev deyim_calistir(t: &Tokenler, s: &Semboller) -> tam32 {
+    değişken p: tam32 = dizi_al(t.imlec, 0);
+    değişken k: tam32 = dizi_al(t.kind, p);
+    eğer k == 15 { ver eger_calistir(t, s); }
+    eğer k == 17 { ver iken_calistir(t, s); }
+    eğer (k == 7) ve (dizi_al(t.kind, p + 1) == 8) {  // ATAMA: IDENT '=' ifade ';'
+        değişken ad: metin = dizi_al(t.ad, p);
+        dizi_yaz(t.imlec, 0, p + 2);
+        değişken v: tam32 = ifade(t, s);
+        sembol_koy(s, ad, v);
+        değişken q: tam32 = dizi_al(t.imlec, 0);
+        eğer (q < dizi_boyut(t.kind)) ve (dizi_al(t.kind, q) == 9) {
+            dizi_yaz(t.imlec, 0, q + 1);              // ';' tüket
+        }
+        ver 0;
+    }
+    // ifade-deyimi (değer atılır) — yine de ';' varsa tüket
+    ifade(t, s);
+    değişken q2: tam32 = dizi_al(t.imlec, 0);
+    eğer (q2 < dizi_boyut(t.kind)) ve (dizi_al(t.kind, q2) == 9) {
+        dizi_yaz(t.imlec, 0, q2 + 1);
+    }
+    ver 0;
+}
+
+// Tam yürütücü: deyimleri sırayla işle, son ifade = sonuç.
+işlev calistir(kaynak: metin) -> tam32 {
+    değişken t: Tokenler = Tokenler {
+        kind: dizi_olustur(64), deger: dizi_olustur(64),
+        ad: dizi_olustur(64), imlec: dizi_olustur(1)
+    };
+    lexle(kaynak, &t);
+    dizi_ekle(t.imlec, 0);
+    değişken s: Semboller = Semboller { ad: dizi_olustur(8), deger: dizi_olustur(8) };
+
+    iken doğru {
+        değişken p: tam32 = dizi_al(t.imlec, 0);
+        eğer p >= dizi_boyut(t.kind) { ver 0; }
+        değişken k: tam32 = dizi_al(t.kind, p);
+        değişken deyim_mi: mantıksal = yanlış;
+        eğer (k == 7) ve (dizi_al(t.kind, p + 1) == 8) { deyim_mi = doğru; }
+        eğer k == 15 { deyim_mi = doğru; }
+        eğer k == 17 { deyim_mi = doğru; }
+        eğer deyim_mi { deyim_calistir(&t, &s); }
+        değilse { ver ifade(&t, &s); }                // son ifade = sonuç
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    ver calistir("i=0; t=0; iken (i<10) { t=t+i+1; i=i+1; } r=0; eger (t==55) { r=t-13; } degilse { r=0; } r") olarak tam32;
+}
