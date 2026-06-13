@@ -148,7 +148,7 @@ typedef enum {
  * dugum_olustur arena_ayir_sifir kullandigi icin varsayilan deger
  * COZUM_YOK / NULL — resolver kosmamis AST'lerde (or. dogrudan
  * llvm_ir_uret cagrilari) codegen eski string yoluna duser (graceful
- * degradation). Built-in'ler (yazdir, dizi_ekle, tekkez_yarat, ...)
+ * degradation). Built-in'ler (yazdir, dizi_ekle, tekkez_olustur, ...)
  * sembol tablosunda olmadigi icin COZUM_YOK kalir — codegen'in built-in
  * eslemeleri etkilenmez. */
 

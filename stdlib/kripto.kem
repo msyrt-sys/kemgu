@@ -47,7 +47,7 @@ işlev sabit_süre_eşit_blok(
 ) -> sabitsüre<mantıksal> {
     // XOR-toplama: tüm diff'leri OR-le, sonuç 0 ise eşit
     değişken sifir: dtam8 = 0;
-    değişken acc: sabitsüre<dtam8> = sabitsüre_yarat(sifir);
+    değişken acc: sabitsüre<dtam8> = sabitsüre_olustur(sifir);
     değişken i: tam32 = 0;
     iken i < uzunluk {
         // a[i] ^ b[i] — eşitse 0; OR ile birikim
@@ -57,7 +57,7 @@ işlev sabit_süre_eşit_blok(
     // acc 0 ise eşit. Sabitsüre dogrudan == ile karşılaştırılır;
     // dönen sabitsüre<mantıksal> — programcı ifşa() ile dallanabilir.
     değişken bir: dtam8 = 0;
-    ver acc == sabitsüre_yarat(bir);
+    ver acc == sabitsüre_olustur(bir);
 }
 
 // Tek bayt karşılaştırma — built-in == sabitsüre'da zaten CT garantili.
@@ -96,7 +96,7 @@ işlev sabit_süre_seç_u8(
 ) -> sabitsüre<dtam8> {
     // maske: 0xFF (true) veya 0x00 (false)
     değişken hepsi: dtam8 = 255;
-    değişken not_mask: sabitsüre<dtam8> = maske ^ sabitsüre_yarat(hepsi);
+    değişken not_mask: sabitsüre<dtam8> = maske ^ sabitsüre_olustur(hepsi);
     ver (t & maske) | (f & not_mask);
 }
 
@@ -107,7 +107,7 @@ işlev sabit_süre_seç_u32(
 ) -> sabitsüre<dtam32> {
     // maske: 0xFFFFFFFF (true) veya 0x00000000 (false)
     değişken hepsi: dtam32 = 4294967295;
-    değişken not_mask: sabitsüre<dtam32> = maske ^ sabitsüre_yarat(hepsi);
+    değişken not_mask: sabitsüre<dtam32> = maske ^ sabitsüre_olustur(hepsi);
     ver (t & maske) | (f & not_mask);
 }
 
@@ -118,7 +118,7 @@ işlev sabit_süre_seç_u64(
 ) -> sabitsüre<dtam64> {
     // maske: 0xFFFFFFFFFFFFFFFF veya 0
     değişken hepsi: dtam64 = 18446744073709551615;
-    değişken not_mask: sabitsüre<dtam64> = maske ^ sabitsüre_yarat(hepsi);
+    değişken not_mask: sabitsüre<dtam64> = maske ^ sabitsüre_olustur(hepsi);
     ver (t & maske) | (f & not_mask);
 }
 
@@ -183,7 +183,7 @@ işlev sabit_süre_diff_mask_u8(a: sabitsüre<dtam8>, b: sabitsüre<dtam8>) -> s
     değişken sifir: dtam8 = 0;
     değişken bir: dtam8 = 1;
     // (d & 1): 1 if diff, 0 if equal — subtract from 0 wraps to 0xFF
-    ver sabitsüre_yarat(sifir) - (d & sabitsüre_yarat(bir));
+    ver sabitsüre_olustur(sifir) - (d & sabitsüre_olustur(bir));
 }
 
 işlev sabit_süre_diff_mask_u32(a: sabitsüre<dtam32>, b: sabitsüre<dtam32>) -> sabitsüre<dtam32> {
@@ -196,7 +196,7 @@ işlev sabit_süre_diff_mask_u32(a: sabitsüre<dtam32>, b: sabitsüre<dtam32>) -
     d = d | (d >> 1);
     değişken sifir: dtam32 = 0;
     değişken bir: dtam32 = 1;
-    ver sabitsüre_yarat(sifir) - (d & sabitsüre_yarat(bir));
+    ver sabitsüre_olustur(sifir) - (d & sabitsüre_olustur(bir));
 }
 
 // =============================================================================

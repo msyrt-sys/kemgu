@@ -17,7 +17,7 @@ makine-denetimli eşzamanlılık-güvenliği ispatı — KEMGU'yu ayıran şeydi
 
 ```kemgu
 işlev main() -> tam32 {
-    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    değişken k: tekkez<tam32> = tekkez_olustur(42);
     ver kullan(k);          // lineer kaynak; tam bir kez tüketilir.
     // ver kullan(k);       // ✗ L002 — tüketim sonrası kullanım (derleme hatası)
 }
@@ -73,7 +73,7 @@ makine-denetimli).
 
 | Özellik | Derinlik | Notlar |
 |---------|----------|--------|
-| Lineer tipler `tekkez<T>` (`kullan`/`imha`) | codegen | L001 tüketilmedi, L002 move sonrası kullanım, L004 referans yasağı. Üretici `tekkez_yarat<T>`. Closure yakalarsa lambda da lineer olur. |
+| Lineer tipler `tekkez<T>` (`kullan`/`imha`) | codegen | L001 tüketilmedi, L002 move sonrası kullanım, L004 referans yasağı. Üretici `tekkez_olustur<T>`. Closure yakalarsa lambda da lineer olur. |
 | Bölge tabanlı bellek `bölge` (**GC yok**) | tip | Bölge temsili + R-* atama aksiyomları + fixed-point escape analizi modülleri. Çalışma-zamanı tahsisinde GC/refcount yok. Otomatik-serbestleyen gerçek arena V2. |
 | Kabiliyet token'ları `yetki<R>` | codegen | `yetki<Bellek>`, `yetki<MMIO>`, `yetki<Dosya>` … Lineer (sızıntı/çift-kullanım = CP005). `delege` (alt-token) + `geri_al` (iptal). |
 | `seçimlik<T>` (null yok) · `sonuç<T,H>` (istisna yok) | codegen | `eşleş` ile `değer(s)`/`hiç`, `tamam(v)`/`hata(e)` deseni — değer bağlama codegen'de çalışır. |
@@ -188,14 +188,14 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 ```kemgu
 // ----- Lineer tipler: KEMGU'nun imza güvenlik özelliği -----
 işlev tek_kez_kullan() -> tam32 {
-    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    değişken k: tekkez<tam32> = tekkez_olustur(42);
     ver kullan(k);                 // k tüketildi → 42
 }
 
 işlev tuket(t: tekkez<tam32>) { imha(t); }
 
 işlev main() -> tam32 {
-    değişken k = tekkez_yarat(7);
+    değişken k = tekkez_olustur(7);
     tuket(k);                      // sahiplik tuket'e geçti
     // imha(k);                    // ✗ L002 — move sonrası kullanım (derleme hatası)
     ver tek_kez_kullan();          // → 42
@@ -230,7 +230,7 @@ bir bayrak gerekmez — giriş dosyasını verirsiniz, `kullan` grafiği otomati
 // ----- kap.kem  (modül adı = "kap") -----
 yapı Liste<T> { veri: *T; boy: tam64; kapasite: tam64; }
 
-genel işlev yarat<T>(taban: T) -> Liste<T> { /* ... */ }
+genel işlev oluştur<T>(taban: T) -> Liste<T> { /* ... */ }
 genel işlev ekle<T>(l: &Liste<T>, v: T)     { /* ... */ }
 genel işlev al<T>(l: &Liste<T>, i: tam64, varsayilan: T) -> T { /* ... */ }
 ```
@@ -241,7 +241,7 @@ kullan kap;
 
 işlev main() -> tam32 {
     değişken sifir: tam64 = 0;
-    değişken l = kap::yarat(sifir);        // Liste<tam64> — saf çıkarsama, çapraz-modül
+    değişken l = kap::oluştur(sifir);        // Liste<tam64> — saf çıkarsama, çapraz-modül
     kap::ekle(&l, 10 olarak tam64);
     kap::ekle(&l, 32 olarak tam64);
     ver (kap::al(&l, 0, sifir) + kap::al(&l, 1, sifir)) olarak tam32;   // → 42
@@ -249,7 +249,7 @@ işlev main() -> tam32 {
 ```
 
 Generic `Liste<T>` struct'ı **kap** modülünden çapraz-dosya monomorphize edilir
-(`@kap.yarat$i64` …). Diğer biçimler:
+(`@kap.oluştur$i64` …). Diğer biçimler:
 
 ```kemgu
 kullan mat;                 // nitelikli erişim:  mat::topla(...)

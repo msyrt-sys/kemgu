@@ -134,18 +134,18 @@ işlev chacha20_blok(
 
     // Initialize state
     değişken state: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(c0), sabitsüre_yarat(c1), sabitsüre_yarat(c2), sabitsüre_yarat(c3),
+        sabitsüre_olustur(c0), sabitsüre_olustur(c1), sabitsüre_olustur(c2), sabitsüre_olustur(c3),
         key[0], key[1], key[2], key[3],
         key[4], key[5], key[6], key[7],
-        sabitsüre_yarat(counter), nonce[0], nonce[1], nonce[2]
+        sabitsüre_olustur(counter), nonce[0], nonce[1], nonce[2]
     ];
 
     // Save original for final add
     değişken orig: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(c0), sabitsüre_yarat(c1), sabitsüre_yarat(c2), sabitsüre_yarat(c3),
+        sabitsüre_olustur(c0), sabitsüre_olustur(c1), sabitsüre_olustur(c2), sabitsüre_olustur(c3),
         key[0], key[1], key[2], key[3],
         key[4], key[5], key[6], key[7],
-        sabitsüre_yarat(counter), nonce[0], nonce[1], nonce[2]
+        sabitsüre_olustur(counter), nonce[0], nonce[1], nonce[2]
     ];
 
     // 20 round (10 double round)
@@ -199,13 +199,13 @@ işlev chacha20_xor_blok(
 işlev poly1305_r_clamp(r: Dizi<sabitsüre<dtam8>>) -> tam32 {
     değişken mask0F: dtam8 = 0x0F;
     değişken maskFC: dtam8 = 0xFC;
-    r[3] = r[3] & sabitsüre_yarat(mask0F);
-    r[7] = r[7] & sabitsüre_yarat(mask0F);
-    r[11] = r[11] & sabitsüre_yarat(mask0F);
-    r[15] = r[15] & sabitsüre_yarat(mask0F);
-    r[4] = r[4] & sabitsüre_yarat(maskFC);
-    r[8] = r[8] & sabitsüre_yarat(maskFC);
-    r[12] = r[12] & sabitsüre_yarat(maskFC);
+    r[3] = r[3] & sabitsüre_olustur(mask0F);
+    r[7] = r[7] & sabitsüre_olustur(mask0F);
+    r[11] = r[11] & sabitsüre_olustur(mask0F);
+    r[15] = r[15] & sabitsüre_olustur(mask0F);
+    r[4] = r[4] & sabitsüre_olustur(maskFC);
+    r[8] = r[8] & sabitsüre_olustur(maskFC);
+    r[12] = r[12] & sabitsüre_olustur(maskFC);
     ver 0;
 }
 
@@ -250,27 +250,27 @@ işlev aead_chacha20_poly1305_sifrele(
 ) -> tam32 {
     // 1. one-time-key generation
     değişken otk: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
     chacha20_blok(key, 0, nonce, otk);
 
     // 2. ciphertext = ChaCha20(counter=1, ...) ⊕ plaintext
     değişken keystream: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
     chacha20_blok(key, 1, nonce, keystream);
     chacha20_xor_blok(keystream, plaintext, ciphertext, plaintext_uzunluk);
@@ -302,14 +302,14 @@ işlev aead_chacha20_poly1305_dogrula(
 ) -> sabitsüre<mantıksal> {
     // 1. Hesapla tag
     değişken hesaplanan_tag: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32)),
-        sabitsüre_yarat((0 olarak dtam32)), sabitsüre_yarat((0 olarak dtam32))
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
     // ... AEAD encrypt prosedürü ile aynı (tag üretimi)
     // V1: stub
 
     // 2. Sabit-süre tag eşitlik
-    değişken acc: sabitsüre<dtam32> = sabitsüre_yarat((0 olarak dtam32));
+    değişken acc: sabitsüre<dtam32> = sabitsüre_olustur((0 olarak dtam32));
     değişken i: tam32 = 0;
     iken i < 4 {
         acc = acc | (hesaplanan_tag[i] ^ beklenen_tag[i]);
@@ -317,5 +317,5 @@ işlev aead_chacha20_poly1305_dogrula(
     }
     // acc 0 ise eşit; dönüş sabitsüre<mantıksal>
     değişken sifir: dtam32 = 0;
-    ver acc == sabitsüre_yarat(sifir);
+    ver acc == sabitsüre_olustur(sifir);
 }

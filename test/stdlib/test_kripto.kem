@@ -12,7 +12,7 @@
 //   K2 (13-20): Karma helpers — rotr, sigma, ch, maj
 //   K3 (21-28): Şifre — chacha20 quarter round + block
 //   K4 (29-33): Rastgele — xorshift64, xoshiro256
-//   K5 (34-38): Anahtar — yarat, eşit, HKDF, OTP
+//   K5 (34-38): Anahtar — oluştur, eşit, HKDF, OTP
 //   K6 (39-42): Bundle entegrasyon — birden fazla modül çağrısı
 
 // ============================================================================
@@ -23,38 +23,38 @@
 işlev test_k1_esit_bayt_aynı() -> sabitsüre<mantıksal> {
     değişken a: dtam8 = 42;
     değişken b: dtam8 = 42;
-    ver sabit_süre_eşit_bayt(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_eşit_bayt(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 2. sabit_süre_eşit_bayt — farklı baytlar
 işlev test_k1_esit_bayt_farkli() -> sabitsüre<mantıksal> {
     değişken a: dtam8 = 42;
     değişken b: dtam8 = 99;
-    ver sabit_süre_eşit_bayt(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_eşit_bayt(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 3. sabit_süre_eşit_u32 — 32-bit eşitlik
 işlev test_k1_esit_u32() -> sabitsüre<mantıksal> {
     değişken a: dtam32 = 0xDEADBEEF;
     değişken b: dtam32 = 0xDEADBEEF;
-    ver sabit_süre_eşit_u32(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_eşit_u32(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 4. sabit_süre_eşit_u64 — 64-bit eşitlik
 işlev test_k1_esit_u64() -> sabitsüre<mantıksal> {
     değişken a: dtam64 = 0x123456789ABCDEF0;
     değişken b: dtam64 = 0x123456789ABCDEF0;
-    ver sabit_süre_eşit_u64(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_eşit_u64(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 5. sabit_süre_eşit_blok — dizi karşılaştırması
 işlev test_k1_esit_blok() -> sabitsüre<mantıksal> {
     değişken s: dtam8 = 1;
     değişken a: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken b: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver sabit_süre_eşit_blok(a, b, 4);
 }
@@ -64,7 +64,7 @@ işlev test_k1_sec_u8_true() -> sabitsüre<dtam8> {
     değişken hepsi: dtam8 = 255;
     değişken t: dtam8 = 10;
     değişken f: dtam8 = 20;
-    ver sabit_süre_seç_u8(sabitsüre_yarat(hepsi), sabitsüre_yarat(t), sabitsüre_yarat(f));
+    ver sabit_süre_seç_u8(sabitsüre_olustur(hepsi), sabitsüre_olustur(t), sabitsüre_olustur(f));
 }
 
 // 7. sabit_süre_seç_u8 — false mask seçim
@@ -72,7 +72,7 @@ işlev test_k1_sec_u8_false() -> sabitsüre<dtam8> {
     değişken sifir: dtam8 = 0;
     değişken t: dtam8 = 10;
     değişken f: dtam8 = 20;
-    ver sabit_süre_seç_u8(sabitsüre_yarat(sifir), sabitsüre_yarat(t), sabitsüre_yarat(f));
+    ver sabit_süre_seç_u8(sabitsüre_olustur(sifir), sabitsüre_olustur(t), sabitsüre_olustur(f));
 }
 
 // 8. sabit_süre_seç_u32 — 32-bit branchless select
@@ -80,14 +80,14 @@ işlev test_k1_sec_u32() -> sabitsüre<dtam32> {
     değişken m: dtam32 = 4294967295;
     değişken t: dtam32 = 1000;
     değişken f: dtam32 = 2000;
-    ver sabit_süre_seç_u32(sabitsüre_yarat(m), sabitsüre_yarat(t), sabitsüre_yarat(f));
+    ver sabit_süre_seç_u32(sabitsüre_olustur(m), sabitsüre_olustur(t), sabitsüre_olustur(f));
 }
 
 // 9. sabit_süre_xor_u32 — XOR taint propagation
 işlev test_k1_xor_u32() -> sabitsüre<dtam32> {
     değişken a: dtam32 = 0xF0F0F0F0;
     değişken b: dtam32 = 0x0F0F0F0F;
-    ver sabit_süre_xor_u32(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_xor_u32(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 10. sabit_süre_xor_blok — dizi XOR
@@ -95,13 +95,13 @@ işlev test_k1_xor_blok() -> tam32 {
     değişken v: dtam8 = 0xAA;
     değişken w: dtam8 = 0x55;
     değişken a: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(v), sabitsüre_yarat(v), sabitsüre_yarat(v), sabitsüre_yarat(v)
+        sabitsüre_olustur(v), sabitsüre_olustur(v), sabitsüre_olustur(v), sabitsüre_olustur(v)
     ];
     değişken b: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(w), sabitsüre_yarat(w), sabitsüre_yarat(w), sabitsüre_yarat(w)
+        sabitsüre_olustur(w), sabitsüre_olustur(w), sabitsüre_olustur(w), sabitsüre_olustur(w)
     ];
     değişken c: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(v), sabitsüre_yarat(v), sabitsüre_yarat(v), sabitsüre_yarat(v)
+        sabitsüre_olustur(v), sabitsüre_olustur(v), sabitsüre_olustur(v), sabitsüre_olustur(v)
     ];
     ver sabit_süre_xor_blok(a, b, c, 4);
 }
@@ -110,14 +110,14 @@ işlev test_k1_xor_blok() -> tam32 {
 işlev test_k1_diff_mask_u8() -> sabitsüre<dtam8> {
     değişken a: dtam8 = 42;
     değişken b: dtam8 = 43;
-    ver sabit_süre_diff_mask_u8(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_diff_mask_u8(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // 12. sabit_süre_diff_mask_u32 — 32-bit diff to mask
 işlev test_k1_diff_mask_u32() -> sabitsüre<dtam32> {
     değişken a: dtam32 = 100;
     değişken b: dtam32 = 100;
-    ver sabit_süre_diff_mask_u32(sabitsüre_yarat(a), sabitsüre_yarat(b));
+    ver sabit_süre_diff_mask_u32(sabitsüre_olustur(a), sabitsüre_olustur(b));
 }
 
 // ============================================================================
@@ -127,31 +127,31 @@ işlev test_k1_diff_mask_u32() -> sabitsüre<dtam32> {
 // 13. rotr_u32 — round-trip identity
 işlev test_k2_rotr_u32() -> sabitsüre<dtam32> {
     değişken x: dtam32 = 0xDEADBEEF;
-    ver rotr_u32(sabitsüre_yarat(x), 16);
+    ver rotr_u32(sabitsüre_olustur(x), 16);
 }
 
 // 14. rotl_u32 — left rotation
 işlev test_k2_rotl_u32() -> sabitsüre<dtam32> {
     değişken x: dtam32 = 0xCAFEBABE;
-    ver rotl_u32(sabitsüre_yarat(x), 8);
+    ver rotl_u32(sabitsüre_olustur(x), 8);
 }
 
 // 15. rotr_u64 — 64-bit rotation
 işlev test_k2_rotr_u64() -> sabitsüre<dtam64> {
     değişken x: dtam64 = 0x123456789ABCDEF0;
-    ver rotr_u64(sabitsüre_yarat(x), 32);
+    ver rotr_u64(sabitsüre_olustur(x), 32);
 }
 
 // 16. _karma_sigma0 — SHA-256 Σ0
 işlev test_k2_sigma0() -> sabitsüre<dtam32> {
     değişken x: dtam32 = 0x6A09E667;
-    ver _karma_sigma0(sabitsüre_yarat(x));
+    ver _karma_sigma0(sabitsüre_olustur(x));
 }
 
 // 17. _karma_sigma1 — SHA-256 Σ1
 işlev test_k2_sigma1() -> sabitsüre<dtam32> {
     değişken x: dtam32 = 0x510E527F;
-    ver _karma_sigma1(sabitsüre_yarat(x));
+    ver _karma_sigma1(sabitsüre_olustur(x));
 }
 
 // 18. _karma_ch — choose function
@@ -159,7 +159,7 @@ işlev test_k2_ch() -> sabitsüre<dtam32> {
     değişken a: dtam32 = 0xFFFF0000;
     değişken b: dtam32 = 0x12345678;
     değişken c: dtam32 = 0xDEADBEEF;
-    ver _karma_ch(sabitsüre_yarat(a), sabitsüre_yarat(b), sabitsüre_yarat(c));
+    ver _karma_ch(sabitsüre_olustur(a), sabitsüre_olustur(b), sabitsüre_olustur(c));
 }
 
 // 19. _karma_maj — majority function
@@ -167,7 +167,7 @@ işlev test_k2_maj() -> sabitsüre<dtam32> {
     değişken a: dtam32 = 0xAAAAAAAA;
     değişken b: dtam32 = 0x55555555;
     değişken c: dtam32 = 0xAAAAAAAA;
-    ver _karma_maj(sabitsüre_yarat(a), sabitsüre_yarat(b), sabitsüre_yarat(c));
+    ver _karma_maj(sabitsüre_olustur(a), sabitsüre_olustur(b), sabitsüre_olustur(c));
 }
 
 // 20. sha256_K — round constants
@@ -183,16 +183,16 @@ işlev test_k2_K_table() -> dtam32 {
 // 21. _sifre_rotl_u32 — ChaCha rotate left
 işlev test_k3_rotl() -> sabitsüre<dtam32> {
     değişken x: dtam32 = 0x12345678;
-    ver _sifre_rotl_u32(sabitsüre_yarat(x), 16);
+    ver _sifre_rotl_u32(sabitsüre_olustur(x), 16);
 }
 
 // 22. chacha20_qr — quarter round
 işlev test_k3_qr() -> tam32 {
     değişken s: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat((0x11111111 olarak dtam32)),
-        sabitsüre_yarat((0x01020304 olarak dtam32)),
-        sabitsüre_yarat((0x9B8D6F43 olarak dtam32)),
-        sabitsüre_yarat((0x01234567 olarak dtam32))
+        sabitsüre_olustur((0x11111111 olarak dtam32)),
+        sabitsüre_olustur((0x01020304 olarak dtam32)),
+        sabitsüre_olustur((0x9B8D6F43 olarak dtam32)),
+        sabitsüre_olustur((0x01234567 olarak dtam32))
     ];
     ver chacha20_qr(s, 0, 1, 2, 3);
 }
@@ -201,10 +201,10 @@ işlev test_k3_qr() -> tam32 {
 işlev test_k3_cekirdek() -> tam32 {
     değişken sifir: dtam32 = 0;
     değişken state: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver chacha20_cekirdek(state);
 }
@@ -213,17 +213,17 @@ işlev test_k3_cekirdek() -> tam32 {
 işlev test_k3_blok() -> tam32 {
     değişken sifir: dtam32 = 0;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken nonce: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken ks: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver chacha20_blok(key, 0, nonce, ks);
 }
@@ -232,13 +232,13 @@ işlev test_k3_blok() -> tam32 {
 işlev test_k3_xor_blok() -> tam32 {
     değişken sifir: dtam32 = 0;
     değişken ks: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken metin: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken cikti: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver chacha20_xor_blok(ks, metin, cikti, 4);
 }
@@ -247,10 +247,10 @@ işlev test_k3_xor_blok() -> tam32 {
 işlev test_k3_poly_clamp() -> tam32 {
     değişken s: dtam8 = 0xFF;
     değişken r: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver poly1305_r_clamp(r);
 }
@@ -259,13 +259,13 @@ işlev test_k3_poly_clamp() -> tam32 {
 işlev test_k3_poly_birikim() -> tam32 {
     değişken sifir: dtam32 = 0;
     değişken h: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken r: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken m: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver poly1305_blok_birikim(h, r, m);
 }
@@ -274,18 +274,18 @@ işlev test_k3_poly_birikim() -> tam32 {
 işlev test_k3_aead_dogrula() -> sabitsüre<mantıksal> {
     değişken sifir: dtam32 = 0;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken nonce: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
-    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir)];
-    değişken ct: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir)];
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir)];
+    değişken ct: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir)];
     değişken tag: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
-    değişken pt: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir)];
+    değişken pt: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir)];
     ver aead_chacha20_poly1305_dogrula(key, nonce, aad, 1, ct, 1, tag, pt);
 }
 
@@ -318,7 +318,7 @@ işlev test_k4_xoshiro() -> dtam64 {
 işlev test_k4_secure_doldur() -> tam32 {
     değişken sifir: dtam8 = 0;
     değişken cikti: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver secure_rastgele_doldur(cikti, 4);
 }
@@ -327,13 +327,13 @@ işlev test_k4_secure_doldur() -> tam32 {
 işlev test_k4_entropy_karis() -> tam32 {
     değişken s: dtam8 = 1;
     değişken a: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken b: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken c: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver entropy_karistir(a, b, c, 4);
 }
@@ -342,20 +342,20 @@ işlev test_k4_entropy_karis() -> tam32 {
 // K5: Anahtar (34-38)
 // ============================================================================
 
-// 34. anahtar_yarat — linear key
-işlev test_k5_anahtar_yarat() -> tam32 {
+// 34. anahtar_olustur — linear key
+işlev test_k5_anahtar_olustur() -> tam32 {
     değişken s: dtam8 = 0xAB;
     değişken govde: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
-    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     ver anahtar_imha(a);
 }
 
@@ -363,10 +363,10 @@ işlev test_k5_anahtar_yarat() -> tam32 {
 işlev test_k5_govde_esit() -> sabitsüre<mantıksal> {
     değişken s: dtam8 = 42;
     değişken a: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken b: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver anahtar_govdesi_esit(a, b, 4);
 }
@@ -375,20 +375,20 @@ işlev test_k5_govde_esit() -> sabitsüre<mantıksal> {
 işlev test_k5_hkdf_extract() -> tam32 {
     değişken s: dtam8 = 1;
     değişken salt: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken ikm: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken prk: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver hkdf_extract(salt, 4, ikm, 4, prk);
 }
@@ -397,20 +397,20 @@ işlev test_k5_hkdf_extract() -> tam32 {
 işlev test_k5_hkdf_expand() -> tam32 {
     değişken s: dtam8 = 0xC0;
     değişken prk: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken info: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken okm: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver hkdf_expand(prk, info, 2, okm, 4);
 }
@@ -419,21 +419,21 @@ işlev test_k5_hkdf_expand() -> tam32 {
 işlev test_k5_otp_sifrele() -> tam32 {
     değişken s: dtam8 = 0xAB;
     değişken govde: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
-    değişken anahtar: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken anahtar: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     değişken metin: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken sifreli: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver otp_sifrele(metin, anahtar, sifreli, 4);
 }
@@ -447,14 +447,14 @@ işlev test_k6_sha256_blok() -> tam32 {
     değişken H: Dizi<dtam32> = sha256_H0();
     değişken sifir: dtam32 = 0;
     değişken state: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(H[0]), sabitsüre_yarat(H[1]), sabitsüre_yarat(H[2]), sabitsüre_yarat(H[3]),
-        sabitsüre_yarat(H[4]), sabitsüre_yarat(H[5]), sabitsüre_yarat(H[6]), sabitsüre_yarat(H[7])
+        sabitsüre_olustur(H[0]), sabitsüre_olustur(H[1]), sabitsüre_olustur(H[2]), sabitsüre_olustur(H[3]),
+        sabitsüre_olustur(H[4]), sabitsüre_olustur(H[5]), sabitsüre_olustur(H[6]), sabitsüre_olustur(H[7])
     ];
     değişken blok: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver sha256_blok_sikistir(state, blok);
 }
@@ -463,45 +463,45 @@ işlev test_k6_sha256_blok() -> tam32 {
 işlev test_k6_aead_sifrele() -> tam32 {
     değişken sifir: dtam32 = 0;
     değişken key: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir),
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     değişken nonce: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
-    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)];
-    değişken pt: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)];
-    değişken ct: Dizi<sabitsüre<dtam32>> = [sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)];
+    değişken aad: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)];
+    değişken pt: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)];
+    değişken ct: Dizi<sabitsüre<dtam32>> = [sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)];
     değişken tag: Dizi<sabitsüre<dtam32>> = [
-        sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir), sabitsüre_yarat(sifir)
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir)
     ];
     ver aead_chacha20_poly1305_sifrele(key, nonce, aad, 2, pt, 2, ct, tag);
 }
 
-// 41. HKDF + anahtar_yarat tek hatta
+// 41. HKDF + anahtar_olustur tek hatta
 işlev test_k6_hkdf_to_anahtar() -> tam32 {
     değişken s: dtam8 = 0;
     değişken ikm: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken salt: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken info: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken govde: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     anahtar_turet(ikm, 4, salt, 4, info, 2, govde);
-    değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+    değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
     ver anahtar_imha(a);
 }
 
@@ -509,16 +509,16 @@ işlev test_k6_hkdf_to_anahtar() -> tam32 {
 işlev test_k6_hmac_pad() -> tam32 {
     değişken s: dtam8 = 0xAA;
     değişken anahtar: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken inner: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     değişken outer: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s),
-        sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s), sabitsüre_yarat(s)
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s),
+        sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s), sabitsüre_olustur(s)
     ];
     ver hmac_pad_uret(anahtar, 8, inner, outer);
 }

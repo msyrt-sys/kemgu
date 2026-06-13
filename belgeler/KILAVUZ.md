@@ -287,7 +287,7 @@ yapı Kutu<T> {
     bos_mu: mantıksal;
 }
 
-işlev kutu_yarat<T>(deger: T) -> Kutu<T> {
+işlev kutu_olustur<T>(deger: T) -> Kutu<T> {
     ver Kutu { icerik: deger, bos_mu: yanlış };
 }
 ```
@@ -387,7 +387,7 @@ Her bölge **tek thread**'e aittir:
 - `ρ_kanal(k)` — kanal `k`'nın transfer tamponu.
 
 Aksiyomlar:
-- **R-GÖREV:** Görev yarattığında yeni bölge `ρ_sahip(yeni_thread)`.
+- **R-GÖREV:** Görev oluşturduğunda yeni bölge `ρ_sahip(yeni_thread)`.
 - **R-BİRLEŞTİR:** Join sonrası transfer; sahip değişir.
 - **R-KANAL:** Kanal üzerinden transfer; sahiplik el değiştirir.
 - **R-PAYLAŞ:** İmmutable paylaşım (v1: yok).
@@ -404,7 +404,7 @@ Linear Types Spec V1 — onaylı. Kaynak yönetimini *yapısal olarak* zorunlu k
 | Konsept            | Anlam                                                |
 |--------------------|------------------------------------------------------|
 | `tekkez<T>`        | Lineer tip — bir kez tüketilebilir                   |
-| `tekkez_yarat<T>(e)` | Producer intrinsic — `T` → `tekkez<T>`             |
+| `tekkez_olustur<T>(e)` | Producer intrinsic — `T` → `tekkez<T>`             |
 | `kullan(t)`        | Tüket + iç değeri al (`tekkez<T>` → `T`)             |
 | `imha(t)`          | Tüket + at (`tekkez<T>` → `boş`)                     |
 
@@ -412,13 +412,13 @@ Linear Types Spec V1 — onaylı. Kaynak yönetimini *yapısal olarak* zorunlu k
 
 ```kemgu
 işlev tek_kez_kullan() -> tam32 {
-    değişken k: tekkez<tam32> = tekkez_yarat(42);
+    değişken k: tekkez<tam32> = tekkez_olustur(42);
     ver kullan(k);     // k tüketildi
     // ver kullan(k);  // ✗ L002: move sonrası kullanım
 }
 
 işlev imha_ornegi() {
-    değişken k: tekkez<metin> = tekkez_yarat("merhaba");
+    değişken k: tekkez<metin> = tekkez_olustur("merhaba");
     imha(k);           // değer atıldı
 }
 ```
@@ -431,7 +431,7 @@ işlev tuket(t: tekkez<tam32>) {
 }
 
 işlev cagri_ornegi() {
-    değişken k = tekkez_yarat(7);
+    değişken k = tekkez_olustur(7);
     tuket(k);          // k → tuket'e devredildi
     // imha(k);        // ✗ L002
 }
@@ -441,7 +441,7 @@ işlev cagri_ornegi() {
 
 ```kemgu
 işlev sahip_uret() -> tekkez<tam32> {
-    ver tekkez_yarat(99);     // LR-4: ver ile çağırana devir
+    ver tekkez_olustur(99);     // LR-4: ver ile çağırana devir
 }
 ```
 
@@ -453,7 +453,7 @@ işlev sahip_uret() -> tekkez<tam32> {
 | L002  | Move sonrası kullanım                     |
 | L004  | Lineer değer üzerinden referans yasak     |
 | L007  | Consume operandı `tekkez<T>` değil        |
-| L008  | `tekkez_yarat` parametre sayısı yanlış    |
+| L008  | `tekkez_olustur` parametre sayısı yanlış    |
 | LR002 | Yapı/dizi alanı `tekkez<T>` içeremez (v1) |
 
 Örnek hata sergileyen dosya: [`test/ornekler/lineer_hata.kem`](../test/ornekler/lineer_hata.kem).
@@ -690,8 +690,8 @@ ADD/XOR/ROTL, her arşitektürde uniform.
 `tekkez<SimetrikAnahtar256>` linear types + sabitsüre iç içe:
 
 ```kemgu
-// Anahtar yaratma — tekkez sarmalama
-değişken a: tekkez<SimetrikAnahtar256> = anahtar_yarat(govde);
+// Anahtar oluşturma — tekkez sarmalama
+değişken a: tekkez<SimetrikAnahtar256> = anahtar_olustur(govde);
 
 // Tek-kullanım: kullan veya imha
 otp_sifrele(metin, a, sifreli, n);   // `kullan(a)` içeride — sonrası L002

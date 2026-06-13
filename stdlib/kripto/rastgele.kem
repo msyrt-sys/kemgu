@@ -111,7 +111,7 @@ işlev secure_rastgele_doldur(
         // E004 sadece kw_kaynak >= 64 && kw_hedef < 32 vurgular; iki-adım kaçınır.
         değişken orta: dtam32 = (state olarak dtam32);
         değişken alt: dtam8 = (orta olarak dtam8);
-        sonuc[i] = sabitsüre_yarat(alt);
+        sonuc[i] = sabitsüre_olustur(alt);
         i = i + 1;
     }
     ver gereksinim;

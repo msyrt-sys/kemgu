@@ -1735,7 +1735,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.tip_donustur.hedef_tip);
             if (!ht || ht->kategori == TIP_HATA) return t_hata(tk);
 
-            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile yaratamazsin) */
+            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile olusturamazsin) */
             if (ht->kategori == TIP_TEKKEZ) {
                 tip_hata(tk, d, "E001",
                     "olarak ile tekkez<T> hedeflenemez (Linear Types kuralı)");
@@ -2193,15 +2193,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
             }
 
-            /* Linear Types Spec V1 producer intrinsic: tekkez_yarat(e) */
+            /* Linear Types Spec V1 producer intrinsic: tekkez_olustur(e) */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
-                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 12 &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
                 memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
-                       "tekkez_yarat", 12) == 0) {
+                       "tekkez_olustur", 14) == 0) {
                 if (d->veri.cagri.sayi != 1) {
                     tip_hata(tk, d, "L008",
-                        "tekkez_yarat tam olarak bir arguman gerektirir");
+                        "tekkez_olustur tam olarak bir arguman gerektirir");
                     return t_hata(tk);
                 }
                 TipBilgisi *ic = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
@@ -2214,16 +2214,16 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 return tip_olustur_tekkez(tk->arena, ic);
             }
-            /* Sabitsüre Spec V1 producer: sabitsure_yarat(v: T) -> sabitsure<T>
-             * UTF-8: "sabits\xc3\xbcre_yarat" = 16 byte */
+            /* Sabitsüre Spec V1 producer: sabitsüre_olustur(v: T) -> sabitsüre<T>
+             * UTF-8: "sabits\xc3\xbcre_olustur" = 18 byte */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
-                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 16 &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 18 &&
                 memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
-                       "sabits\xc3\xbc" "re_yarat", 16) == 0) {
+                       "sabits\xc3\xbc" "re_olustur", 18) == 0) {
                 if (d->veri.cagri.sayi != 1) {
                     tip_hata(tk, d, "CT005",
-                        "sabitsure_yarat tam olarak bir arguman gerektirir");
+                        "sabitsure_olustur tam olarak bir arguman gerektirir");
                     return t_hata(tk);
                 }
                 TipBilgisi *ic = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
@@ -2237,7 +2237,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* İç tip yetenekli mi? */
                 if (!tip_sabitsure_yetenekli_mi(ic)) {
                     tip_hata(tk, d, "CT006",
-                        "sabitsure_yarat: sarilan tip constant-time yetenekli degil "
+                        "sabitsure_olustur: sarilan tip constant-time yetenekli degil "
                         "(kesirli/metin/yapi yasak)");
                     return t_hata(tk);
                 }
@@ -3516,13 +3516,13 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 return (TipBilgisi *)beklenen;  /* *T aynen doner */
             }
             /* Sabitsüre Spec V1: beklenen sabitsure<X> ve cagri
-             * sabitsure_yarat(arg) ise — arg'ı X context'inde çıkarsa. */
+             * sabitsure_olustur(arg) ise — arg'ı X context'inde çıkarsa. */
             if (beklenen->kategori == TIP_SABITSURE &&
                 d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
-                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 16 &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 18 &&
                 memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
-                       "sabits\xc3\xbc" "re_yarat", 16) == 0 &&
+                       "sabits\xc3\xbc" "re_olustur", 18) == 0 &&
                 d->veri.cagri.sayi == 1) {
                 TipBilgisi *ic = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[0],
@@ -3535,7 +3535,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 }
                 if (!tip_sabitsure_yetenekli_mi(ic)) {
                     tip_hata(tk, d, "CT006",
-                        "sabitsure_yarat: sarilan tip constant-time yetenekli "
+                        "sabitsure_olustur: sarilan tip constant-time yetenekli "
                         "degil");
                     return t_hata(tk);
                 }
@@ -3605,7 +3605,7 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d);
 /* === 1. Gecis: yapi/islev/sabit sembollerini global'e ekle === */
 
 static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
-    /* Yapi scope yarat */
+    /* Yapi scope olustur */
     Scope *yapi_s = scope_olustur(tk->arena, SCOPE_YAPI, tk->global_scope);
 
     /* Generic params -> yapi scope'a ekle */

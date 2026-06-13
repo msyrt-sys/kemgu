@@ -21,7 +21,7 @@
  *   L002 — LINEAR_DOUBLE_USE            (cift tuketim / move sonrasi)
  *   L004 — LINEAR_REFERENCE_ATTEMPT     (referans alma)
  *   L007 — kullan/imha operandi tekkez tipinde olmali
- *   L008 — tekkez_yarat arity hatasi
+ *   L008 — tekkez_olustur arity hatasi
  *   LR002 — LINEAR_REGION_EMBED         (yapi/dizi tekkez iceremez V1)
  *
  * Tum testler tip_kontrol.hata_sayisi'ni dogrular.
@@ -92,19 +92,19 @@ static int kontrol_main(const char *govde) {
 }
 
 /* ========================================================================
- * GROUP L1-L10: Tip ifadesi + tekkez_yarat (producer)
+ * GROUP L1-L10: Tip ifadesi + tekkez_olustur (producer)
  * ======================================================================== */
 
 static void T1_tip_tekkez_tam32(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k: tekkez<tam32> = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k: tekkez<tam32> = tekkez_olustur(5);\n"
         "    imha(k);");
-    test_sonuc("L1: tekkez<tam32> + tekkez_yarat + imha = 0 hata", h == 0);
+    test_sonuc("L1: tekkez<tam32> + tekkez_olustur + imha = 0 hata", h == 0);
 }
 
 static void T2_tip_tekkez_metin(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k: tekkez<metin> = tekkez_yarat(\"selam\");\n"
+        "    de\xc4\x9fi\xc5\x9fken k: tekkez<metin> = tekkez_olustur(\"selam\");\n"
         "    imha(k);");
     test_sonuc("L2: tekkez<metin> + producer + imha = 0 hata", h == 0);
 }
@@ -112,7 +112,7 @@ static void T2_tip_tekkez_metin(void) {
 static void T3_tip_tekkez_mantiksal(void) {
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken k: tekkez<mant\xc4\xb1ksal>"
-        " = tekkez_yarat(do\xc4\x9fru);\n"
+        " = tekkez_olustur(do\xc4\x9fru);\n"
         "    imha(k);");
     test_sonuc("L3: tekkez<mantiksal> = 0 hata", h == 0);
 }
@@ -120,16 +120,16 @@ static void T3_tip_tekkez_mantiksal(void) {
 static void T4_tip_tekkez_dizi(void) {
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken k: tekkez<Dizi<tam32>>"
-        " = tekkez_yarat([1, 2, 3]);\n"
+        " = tekkez_olustur([1, 2, 3]);\n"
         "    imha(k);");
     test_sonuc("L4: tekkez<Dizi<tam32>> nested = 0 hata", h == 0);
 }
 
 static void T5_tip_tekkez_inner_tekkez(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken ic: tekkez<tam32> = tekkez_yarat(1);\n"
+        "    de\xc4\x9fi\xc5\x9fken ic: tekkez<tam32> = tekkez_olustur(1);\n"
         "    de\xc4\x9fi\xc5\x9fken di\xc5\x9f: tekkez<tekkez<tam32>>"
-        " = tekkez_yarat(ic);\n"
+        " = tekkez_olustur(ic);\n"
         "    imha(di\xc5\x9f);");
     test_sonuc("L5: tekkez<tekkez<tam32>> iclim move + imha = 0 hata", h == 0);
 }
@@ -137,35 +137,35 @@ static void T5_tip_tekkez_inner_tekkez(void) {
 static void T6_producer_donus(void) {
     /* Producer dönüsü tekkez<T> — annotsuz değişken bunu çıkarsamali */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    imha(k);");
     test_sonuc("L6: annotsuz değişken tekkez<tam32> çıkarsar", h == 0);
 }
 
 static void T7_producer_zero_arg(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat();\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur();\n"
         "    imha(k);");
-    test_sonuc("L7: tekkez_yarat() (0 arg) -> L008", h >= 1);
+    test_sonuc("L7: tekkez_olustur() (0 arg) -> L008", h >= 1);
 }
 
 static void T8_producer_two_arg(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(1, 2);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(1, 2);\n"
         "    imha(k);");
-    test_sonuc("L8: tekkez_yarat(1,2) (2 arg) -> L008", h >= 1);
+    test_sonuc("L8: tekkez_olustur(1,2) (2 arg) -> L008", h >= 1);
 }
 
 static void T9_imha_temizleme(void) {
     int h = kontrol_main(
-        "    imha(tekkez_yarat(0));");
-    test_sonuc("L9: gecici tekkez (imha + tekkez_yarat ic-ice) = 0 hata", h == 0);
+        "    imha(tekkez_olustur(0));");
+    test_sonuc("L9: gecici tekkez (imha + tekkez_olustur ic-ice) = 0 hata", h == 0);
 }
 
 static void T10_kullan_temizleme(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken n = kullan(tekkez_yarat(7));\n");
-    test_sonuc("L10: gecici tekkez (kullan + tekkez_yarat ic-ice) = 0 hata", h == 0);
+        "    de\xc4\x9fi\xc5\x9fken n = kullan(tekkez_olustur(7));\n");
+    test_sonuc("L10: gecici tekkez (kullan + tekkez_olustur ic-ice) = 0 hata", h == 0);
 }
 
 /* ========================================================================
@@ -174,7 +174,7 @@ static void T10_kullan_temizleme(void) {
 
 static void T11_kullan_extract(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(7);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(7);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n");
     test_sonuc("L11: kullan(k) extract = 0 hata", h == 0);
 }
@@ -188,22 +188,22 @@ static void T12_kullan_non_tekkez(void) {
 
 static void T13_kullan_metin(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(\"merhaba\");\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(\"merhaba\");\n"
         "    de\xc4\x9fi\xc5\x9fken s = kullan(k);\n");
     test_sonuc("L13: kullan(tekkez<metin>) = 0 hata", h == 0);
 }
 
 static void T14_kullan_sonra_aritmetik(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(10);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(10);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k) + 1;\n");
     test_sonuc("L14: kullan(k) sonra aritmetik = 0 hata", h == 0);
 }
 
 static void T15_iki_baglama_iki_kullan(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k1 = tekkez_yarat(1);\n"
-        "    de\xc4\x9fi\xc5\x9fken k2 = tekkez_yarat(2);\n"
+        "    de\xc4\x9fi\xc5\x9fken k1 = tekkez_olustur(1);\n"
+        "    de\xc4\x9fi\xc5\x9fken k2 = tekkez_olustur(2);\n"
         "    de\xc4\x9fi\xc5\x9fken n1 = kullan(k1);\n"
         "    de\xc4\x9fi\xc5\x9fken n2 = kullan(k2);\n");
     test_sonuc("L15: iki bagimsiz tekkez bagimsiz tuketim = 0 hata", h == 0);
@@ -212,7 +212,7 @@ static void T15_iki_baglama_iki_kullan(void) {
 static void T16_ver_kullan_donus(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev tek_kez_al() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(99);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(99);\n"
         "    ver kullan(k);\n"
         "}\n");
     test_sonuc("L16: ver kullan(k) -> tam32 donus = 0 hata", h == 0);
@@ -220,7 +220,7 @@ static void T16_ver_kullan_donus(void) {
 
 static void T17_kullan_sonra_yeni_baglama(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n"
         "    de\xc4\x9fi\xc5\x9fken m: tam32 = n + 1;\n");
     test_sonuc("L17: kullan, sonra yeni non-linear baglama = 0 hata", h == 0);
@@ -229,7 +229,7 @@ static void T17_kullan_sonra_yeni_baglama(void) {
 static void T18_kullan_donus_tipi_ic(void) {
     /* kullan(tekkez<metin>) -> metin; metin'i sonra islev'e ver */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(\"a\");\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(\"a\");\n"
         "    de\xc4\x9fi\xc5\x9fken s: metin = kullan(k);\n");
     test_sonuc("L18: kullan donus tipi ic_tip ile uyumlu", h == 0);
 }
@@ -240,7 +240,7 @@ static void T18_kullan_donus_tipi_ic(void) {
 
 static void T19_imha_basit(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    imha(k);\n");
     test_sonuc("L19: imha(k) basit = 0 hata", h == 0);
 }
@@ -254,8 +254,8 @@ static void T20_imha_non_tekkez(void) {
 
 static void T21_iki_baglama_imha_kullan(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k1 = tekkez_yarat(5);\n"
-        "    de\xc4\x9fi\xc5\x9fken k2 = tekkez_yarat(7);\n"
+        "    de\xc4\x9fi\xc5\x9fken k1 = tekkez_olustur(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k2 = tekkez_olustur(7);\n"
         "    imha(k1);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k2);\n");
     test_sonuc("L21: imha + kullan farkli baglamalar = 0 hata", h == 0);
@@ -263,14 +263,14 @@ static void T21_iki_baglama_imha_kullan(void) {
 
 static void T22_imha_gecici(void) {
     int h = kontrol_main(
-        "    imha(tekkez_yarat(0));\n");
-    test_sonuc("L22: imha(tekkez_yarat(0)) gecici = 0 hata", h == 0);
+        "    imha(tekkez_olustur(0));\n");
+    test_sonuc("L22: imha(tekkez_olustur(0)) gecici = 0 hata", h == 0);
 }
 
 static void T23_imha_sonra_kullan(void) {
     /* imha sonra kullan: k tüketildi, kullan L002 */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    imha(k);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n");
     test_sonuc("L23: imha sonra kullan -> L002", h >= 1);
@@ -278,7 +278,7 @@ static void T23_imha_sonra_kullan(void) {
 
 static void T24_imha_iki_kez(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    imha(k);\n"
         "    imha(k);\n");
     test_sonuc("L24: imha + imha -> L002", h >= 1);
@@ -290,13 +290,13 @@ static void T24_imha_iki_kez(void) {
 
 static void T25_baglama_tuketilmedi(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n");
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n");
     test_sonuc("L25: baglama scope sonunda tuketilmedi -> L001", h >= 1);
 }
 
 static void T26_kullan_iki_kez(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken a = kullan(k);\n"
         "    de\xc4\x9fi\xc5\x9fken b = kullan(k);\n");
     test_sonuc("L26: kullan + kullan -> L002", h >= 1);
@@ -304,7 +304,7 @@ static void T26_kullan_iki_kez(void) {
 
 static void T27_imha_kullan_yanyana(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    imha(k);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n");
     test_sonuc("L27: imha + kullan -> L002", h >= 1);
@@ -312,7 +312,7 @@ static void T27_imha_kullan_yanyana(void) {
 
 static void T28_kullan_imha_yanyana(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n"
         "    imha(k);\n");
     test_sonuc("L28: kullan + imha -> L002", h >= 1);
@@ -321,14 +321,14 @@ static void T28_kullan_imha_yanyana(void) {
 static void T29_islev_govdesi_baglama_l001(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev test() {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(7);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(7);\n"
         "}\n");
     test_sonuc("L29: islev govdesi tuketilmemis baglama -> L001", h >= 1);
 }
 
 static void T30_move_yeni_baglama(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken k2 = k;\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k2);\n");
     test_sonuc("L30: k -> k2 (move) + kullan(k2) = 0 hata", h == 0);
@@ -340,7 +340,7 @@ static void T30_move_yeni_baglama(void) {
 
 static void T31_move_sonrasi_erisim(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken k2 = k;\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n"
         "    imha(k2);\n");
@@ -349,7 +349,7 @@ static void T31_move_sonrasi_erisim(void) {
 
 static void T32_move_yeni_baglama_kullan(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken k2 = k;\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k2);\n");
     test_sonuc("L32: move + kullan(yeni) = 0 hata", h == 0);
@@ -358,7 +358,7 @@ static void T32_move_yeni_baglama_kullan(void) {
 static void T33_ver_move(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev al() -> tekkez<tam32> {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    ver k;\n"
         "}\n");
     test_sonuc("L33: ver k (move cagirana) = 0 hata", h == 0);
@@ -370,7 +370,7 @@ static void T34_param_move(void) {
         "    imha(t);\n"
         "}\n"
         "i\xc5\x9flev test() {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    tuket(k);\n"
         "}\n");
     test_sonuc("L34: f(k) cagri arg consume = 0 hata", h == 0);
@@ -379,14 +379,14 @@ static void T34_param_move(void) {
 static void T35_move_sonra_l001(void) {
     /* k moved to k2, k2 NOT consumed -> L001 (k2) ; k cleanup ok */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken k2 = k;\n");
     test_sonuc("L35: move + k2 tuketilmedi -> L001", h >= 1);
 }
 
 static void T36_double_move(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken k1 = k;\n"
         "    de\xc4\x9fi\xc5\x9fken k2 = k;\n"
         "    imha(k1);\n"
@@ -400,7 +400,7 @@ static void T36_double_move(void) {
 
 static void T37_ref_lineer(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken r = &k;\n"
         "    imha(k);\n");
     test_sonuc("L37: &k (lineer ref) -> L004", h >= 1);
@@ -408,7 +408,7 @@ static void T37_ref_lineer(void) {
 
 static void T38_ref_degisken_lineer(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken r = &de\xc4\x9fi\xc5\x9fken k;\n"
         "    imha(k);\n");
     test_sonuc("L38: &degisken k (lineer mut ref) -> L004", h >= 1);
@@ -423,7 +423,7 @@ static void T39_ref_non_lineer(void) {
 
 static void T40_ref_tekrar_lineer(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken r1 = &k;\n"
         "    de\xc4\x9fi\xc5\x9fken r2 = &k;\n"
         "    imha(k);\n");
@@ -434,7 +434,7 @@ static void T41_param_ref_lineer(void) {
     /* islev imzasi tekkez ref kabul etmemeli (& kullanilmis): bu testi
      * basit tutmak icin: degiskende & kullan, sonuc L004 */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken n: &tam32 = &k;\n"
         "    imha(k);\n");
     test_sonuc("L41: &k atama hedefi de hata uretir (L004)", h >= 1);
@@ -455,7 +455,7 @@ static void T43_yapi_lineer_alan_yasak(void) {
     int h = hata_sayisi(
         "yap\xc4\xb1 S\xc4\xb1radan { x: tekkez<tam32>; }\n"
         "i\xc5\x9flev test() {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    imha(k);\n"
         "}\n");
     test_sonuc("L43: yapi { tekkez<tam32> } alan -> LR002", h >= 1);
@@ -471,7 +471,7 @@ static void T44_yapi_lineer_alan_metin(void) {
 
 static void T45_dizi_lineer_eleman_yasak(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken d = [tekkez_yarat(1), tekkez_yarat(2)];\n"
+        "    de\xc4\x9fi\xc5\x9fken d = [tekkez_olustur(1), tekkez_olustur(2)];\n"
         "    imha(d);\n");
     /* LR002 olmasi yeterli; ek hatalar olabilir (genel yapi) */
     test_sonuc("L45: dizi lineer eleman -> LR002+", h >= 1);
@@ -492,7 +492,7 @@ static void T46_yapi_normal_alan_ok(void) {
 static void T47_lambda_lineer_yakalama(void) {
     /* k yakalandi, c kendisi tekkez<islev()->tam32>. c() consume. */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken c = || kullan(k);\n"
         "    de\xc4\x9fi\xc5\x9fken n = c();\n");
     test_sonuc("L47: lineer yakalayan closure + c() = 0 hata", h == 0);
@@ -500,7 +500,7 @@ static void T47_lambda_lineer_yakalama(void) {
 
 static void T48_lambda_iki_kez_cagri(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken c = || kullan(k);\n"
         "    de\xc4\x9fi\xc5\x9fken n1 = c();\n"
         "    de\xc4\x9fi\xc5\x9fken n2 = c();\n");
@@ -516,7 +516,7 @@ static void T49_lambda_non_lineer(void) {
 
 static void T50_lambda_cagrilmadi_l001(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(5);\n"
         "    de\xc4\x9fi\xc5\x9fken c = || kullan(k);\n");
     test_sonuc("L50: lineer closure cagrilmadi -> L001 (closure tuketilmedi)",
                h >= 1);
@@ -527,16 +527,16 @@ static void T50_lambda_cagrilmadi_l001(void) {
  * ======================================================================== */
 
 static void T51_ic_ice_kullan(void) {
-    /* kullan(tekkez_yarat(...)) gecici → 0 hata */
+    /* kullan(tekkez_olustur(...)) gecici → 0 hata */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken n: tam32 = kullan(tekkez_yarat(99));\n");
-    test_sonuc("L51: kullan(tekkez_yarat(...)) gecici = 0 hata", h == 0);
+        "    de\xc4\x9fi\xc5\x9fken n: tam32 = kullan(tekkez_olustur(99));\n");
+    test_sonuc("L51: kullan(tekkez_olustur(...)) gecici = 0 hata", h == 0);
 }
 
 static void T52_lineer_donus_kullan(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev al() -> tekkez<tam32> {\n"
-        "    ver tekkez_yarat(7);\n"
+        "    ver tekkez_olustur(7);\n"
         "}\n"
         "i\xc5\x9flev test() {\n"
         "    de\xc4\x9fi\xc5\x9fken k = al();\n"
@@ -548,7 +548,7 @@ static void T52_lineer_donus_kullan(void) {
 static void T53_lineer_donus_kullanılmadı(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev al() -> tekkez<tam32> {\n"
-        "    ver tekkez_yarat(7);\n"
+        "    ver tekkez_olustur(7);\n"
         "}\n"
         "i\xc5\x9flev test() {\n"
         "    de\xc4\x9fi\xc5\x9fken k = al();\n"
@@ -559,7 +559,7 @@ static void T53_lineer_donus_kullanılmadı(void) {
 static void T54_iki_islev_zincir(void) {
     int h = hata_sayisi(
         "i\xc5\x9flev al() -> tekkez<tam32> {\n"
-        "    ver tekkez_yarat(1);\n"
+        "    ver tekkez_olustur(1);\n"
         "}\n"
         "i\xc5\x9flev tuket(t: tekkez<tam32>) {\n"
         "    imha(t);\n"
@@ -585,7 +585,7 @@ static void T55_otp_anahtar_iki_kez_tuketim(void) {
         "    ver 0;\n"
         "}\n"
         "i\xc5\x9flev test() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    sifrele(k);\n"
         "    coz(k);\n"   /* L002: k iki kez kullanildi! */
         "    ver 0;\n"
@@ -597,7 +597,7 @@ static void T56_otp_anahtar_imha_garantili(void) {
     /* imha(anahtar) cagrildiginda lineer baglama tuketilir, hata yok */
     int h = hata_sayisi(
         "i\xc5\x9flev test() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    imha(k);\n"
         "    ver 0;\n"
         "}\n");
@@ -608,7 +608,7 @@ static void T57_otp_anahtar_tuketilmedi(void) {
     /* Anahtar uretildi ama hic kullanilmadi -> L001 (scope sonu hatasi) */
     int h = hata_sayisi(
         "i\xc5\x9flev test() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    ver 0;\n"   /* k tuketilmedi! */
         "}\n");
     test_sonuc("L57: OTP anahtar tuketilmedi -> L001", h >= 1);
@@ -621,7 +621,7 @@ int main(void) {
     printf("KEMGU Linear Types Spec V1 Test Paketi\n");
     printf("==========================================\n\n");
 
-    printf("--- L1-L10: Tip + tekkez_yarat (producer) ---\n");
+    printf("--- L1-L10: Tip + tekkez_olustur (producer) ---\n");
     T1_tip_tekkez_tam32();
     T2_tip_tekkez_metin();
     T3_tip_tekkez_mantiksal();

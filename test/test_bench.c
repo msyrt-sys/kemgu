@@ -197,7 +197,7 @@ static BenchSonuc bench_linear(void) {
      * program ile tekrarliyoruz. */
     const char *kaynak =
         "i\xc5\x9flev main() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken k = tekkez_yarat(42);\n"
+        "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    imha(k);\n"
         "    ver 0;\n"
         "}\n";

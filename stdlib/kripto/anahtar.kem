@@ -50,14 +50,14 @@ yapı HKDF_Salt {
 }
 
 // =============================================================================
-// Anahtar Yaratma — tekkez sarmalama
+// Anahtar Oluşturma — tekkez sarmalama
 // =============================================================================
 //
 // İçeride sabitsüre yapı; dışarıda tekkez (linear). Çift güvence:
 //   - sabitsüre: yan kanal yok
 //   - tekkez: kopya yok, ileri scope'a sızmaz, scope sonunda L001 garantisi
 
-işlev anahtar_yarat(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar256> {
+işlev anahtar_olustur(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar256> {
     değişken a: SimetrikAnahtar256 = SimetrikAnahtar256 {
         bayt0: govde[0],
         bayt1: govde[1],
@@ -69,7 +69,7 @@ işlev anahtar_yarat(govde: Dizi<sabitsüre<dtam8>>) -> tekkez<SimetrikAnahtar25
         bayt7: govde[7],
         govde: govde
     };
-    ver tekkez_yarat(a);
+    ver tekkez_olustur(a);
 }
 
 // =============================================================================
@@ -108,7 +108,7 @@ işlev hkdf_extract(
     değişken sifir: dtam8 = 0;
     değişken i: tam32 = 0;
     iken i < 32 {
-        prk[i] = sabitsüre_yarat(sifir);
+        prk[i] = sabitsüre_olustur(sifir);
         i = i + 1;
     }
     // XOR salt ve IKM bayt bayt — gerçekte HMAC-SHA256
@@ -175,22 +175,22 @@ işlev anahtar_turet(
     sonuc_govde: Dizi<sabitsüre<dtam8>>
 ) -> tam32 {
     değişken prk: Dizi<sabitsüre<dtam8>> = [
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8)),
-        sabitsüre_yarat((0 olarak dtam8)), sabitsüre_yarat((0 olarak dtam8))
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8)),
+        sabitsüre_olustur((0 olarak dtam8)), sabitsüre_olustur((0 olarak dtam8))
     ];
     hkdf_extract(salt, salt_uzunluk, ikm, ikm_uzunluk, prk);
     hkdf_expand(prk, info, info_uzunluk, sonuc_govde, 32);
@@ -211,13 +211,13 @@ işlev anahtar_govdesi_esit(
     uzunluk: tam32
 ) -> sabitsüre<mantıksal> {
     değişken sifir: dtam8 = 0;
-    değişken acc: sabitsüre<dtam8> = sabitsüre_yarat(sifir);
+    değişken acc: sabitsüre<dtam8> = sabitsüre_olustur(sifir);
     değişken i: tam32 = 0;
     iken i < uzunluk {
         acc = acc | (a[i] ^ b[i]);
         i = i + 1;
     }
-    ver acc == sabitsüre_yarat(sifir);
+    ver acc == sabitsüre_olustur(sifir);
 }
 
 // =============================================================================
@@ -228,7 +228,7 @@ işlev anahtar_govdesi_esit(
 // sonra L002 garantili erişim yok.
 //
 // İskelet — gerçek OTP kullanımı:
-//   1. anahtar_yarat ile rastgele 32-bayt
+//   1. anahtar_olustur ile rastgele 32-bayt
 //   2. otp_sifrele(metin, anahtar) — `kullan(anahtar)` ile içeride tüketilir
 //   3. anahtar = artık erişilemez (L002)
 

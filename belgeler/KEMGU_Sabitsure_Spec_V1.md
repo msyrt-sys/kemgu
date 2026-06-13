@@ -97,22 +97,22 @@ Bir yeni anahtar kelime:
 ### Üretim (Wrap)
 
 ```
-sabitsüre_yarat(v: T) -> sabitsüre<T>       // built-in intrinsic
+sabitsüre_olustur(v: T) -> sabitsüre<T>       // built-in intrinsic
 ```
 
 Implicit yükseltme: `T` bekleyen yere `sabitsüre<T>` geçirilirse hata; tersi
 (yani `sabitsüre<T>` bekleyen yere `T`) **otomatik wrap** edilebilir
-(public → secret upgrade her zaman güvenli). V1: explicit `sabitsüre_yarat`
+(public → secret upgrade her zaman güvenli). V1: explicit `sabitsüre_olustur`
 zorunlu, otomatik upgrade YOK (basitlik).
 
 ### Sözdizimsel Örnekler
 
 ```kemgu
 // Üretim
-değişken k: sabitsüre<dtam32> = sabitsüre_yarat(0xC0DE_1234);
+değişken k: sabitsüre<dtam32> = sabitsüre_olustur(0xC0DE_1234);
 
 // Aritmetik (sonuç da sabitsüre — taint yayılır)
-değişken k2: sabitsüre<dtam32> = k ^ sabitsüre_yarat(0xFFFF_FFFF);
+değişken k2: sabitsüre<dtam32> = k ^ sabitsüre_olustur(0xFFFF_FFFF);
 
 // Karşılaştırma (sonuç sabitsüre<mantıksal>!)
 değişken eşit: sabitsüre<mantıksal> = k == k2;
@@ -150,7 +150,7 @@ indirgenmez (nesting sabitsüre redundancy hatası `CT006`).
 ```
 Γ ⊢ v : T          T sabitsure-yetenekli
 ─────────────────────────────────────────
-Γ ⊢ sabitsüre_yarat(v) : sabitsüre<T>
+Γ ⊢ sabitsüre_olustur(v) : sabitsüre<T>
 ```
 
 ### CT-DECLASS (Açık İfşa)
@@ -308,7 +308,7 @@ Pratikte minimal emisyon: `call void @llvm.x86.sse2.lfence()` (x86) veya
 çıktısı LLVM IR text olduğundan, ileride `--ct-strict` flag'i ile clang'a
 geçilebilir.
 
-V1 kapsamı (basit emisyon): Her `sabitsüre_yarat` çağrısının LLVM
+V1 kapsamı (basit emisyon): Her `sabitsüre_olustur` çağrısının LLVM
 karşılığından **sonra** ve her `ifşa` çağrısından **sonra** bir tek
 `call void @llvm.x86.sse2.lfence()` yerleştirilir. Bu, hem mental modelin
 test edilmesini sağlar hem de ileride genişletilebilir bir hook'tur.
@@ -327,7 +327,7 @@ flag ile clang'ı bilgilendir; ARM SVE/NEON için ayrı barrier; Rust'taki
 | CT002 | SABITSURE_INDEX           | `arr[sabitsüre_idx]` — cache-timing |
 | CT003 | SABITSURE_LEAK            | sabitsüre→T implicit (atama, çağrı, ver) |
 | CT004 | SABITSURE_DIVMOD          | sabitsüre üzerinde `/` veya `%` |
-| CT005 | SABITSURE_PRODUCER_ARITY  | `sabitsüre_yarat(...)` 1 arg gerekir |
+| CT005 | SABITSURE_PRODUCER_ARITY  | `sabitsüre_olustur(...)` 1 arg gerekir |
 | CT006 | SABITSURE_WRAP_INVALID    | yetenekli olmayan T (kesirli, metin, nesting) |
 | CT007 | SABITSURE_DECLASS_ARITY   | `ifşa(...)` 1 arg + operand sabitsüre |
 | CT008 | SABITSURE_SHIFT_AMOUNT    | kaydırma miktarı sabitsüre |
@@ -360,7 +360,7 @@ Test dağılımı (`test/test_sabitsure.c`):
 
 | Grup | Test # | Konu |
 |------|--------|------|
-| S1   | 1-4    | Tip ifadesi + sabitsüre_yarat (producer) — pozitif |
+| S1   | 1-4    | Tip ifadesi + sabitsüre_olustur (producer) — pozitif |
 | S2   | 5-8    | Aritmetik taint yayılımı (+, ^, &, <<) — pozitif |
 | S3   | 9-12   | `ifşa` declassification — pozitif |
 | S4   | 13-16  | CT001 if/while/match branch — negatif |
@@ -382,7 +382,7 @@ Test dağılımı (`test/test_sabitsure.c`):
 4. **Tip sistemi**: `TIP_SABITSURE` kategori + `tip_olustur_sabitsure` +
    `tip_sabitsure_mi`. Recursive nominal eşitlik, yazdırma.
 5. **Tip kontrol** (kritik kısım):
-   - `sabitsüre_yarat(...)` producer intrinsic
+   - `sabitsüre_olustur(...)` producer intrinsic
    - `ifşa(...)` declassification intrinsic
    - CT001 branch yasağı: DUGUM_EGER.kosul, DUGUM_IKEN.kosul, DUGUM_ESLES.deger
    - CT002 index yasağı: DUGUM_INDEKS.indeks
@@ -390,7 +390,7 @@ Test dağılımı (`test/test_sabitsure.c`):
    - CT004 div/mod: DUGUM_IKILI(OP_BOLU/OP_MOD)
    - CT006 wrap check: ast_tip_to_bilgi'de yetenekli tip kontrolü
    - CT008 shift: DUGUM_IKILI(OP_SOLA_KAYDIR/OP_SAGA_KAYDIR) sağ taraf
-6. **LLVM**: minimal — `sabitsüre<T>` IR olarak `T`; `sabitsüre_yarat` ve
+6. **LLVM**: minimal — `sabitsüre<T>` IR olarak `T`; `sabitsüre_olustur` ve
    `ifşa` çağrılarından sonra `call void @llvm.x86.sse2.lfence()` emisyonu
    (target=x86; ARM ileride).
 7. **`test/test_sabitsure.c`**: 30+ test, ASan temiz.

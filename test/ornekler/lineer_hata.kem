@@ -4,17 +4,17 @@
 
 işlev hata1_tuketilmedi() {
     // L001: scope sonunda tüketilmedi
-    değişken k = tekkez_yarat(5);
+    değişken k = tekkez_olustur(5);
 }
 
 işlev hata2_cift_tuketim() {
-    değişken k = tekkez_yarat(5);
+    değişken k = tekkez_olustur(5);
     değişken n1 = kullan(k);
     değişken n2 = kullan(k);   // L002: move sonrası erişim
 }
 
 işlev hata3_aliasing() {
-    değişken k = tekkez_yarat(5);
+    değişken k = tekkez_olustur(5);
     değişken r = &k;            // L004: tekkez referans alınamaz
     imha(k);
 }

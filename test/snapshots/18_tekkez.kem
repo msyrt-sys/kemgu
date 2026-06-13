@@ -1,5 +1,5 @@
 işlev main() -> tam32 {
-    değişken t = tekkez_yarat(42);
+    değişken t = tekkez_olustur(42);
     imha(t);
     ver 42;
 }

@@ -680,7 +680,7 @@ structure KanalDurumu where
   kid           : KanalId
   gonderKuyrugu : List Deger
 
-/-- Kanala mesaj ekle (FIFO sona). Kanal kaydi yoksa yarat — total fonksiyon,
+/-- Kanala mesaj ekle (FIFO sona). Kanal kaydi yoksa oluştur — total fonksiyon,
     cKanalGonderTamam varlik guard'ina ihtiyac duymaz (F2). -/
 def kanalEkle (ks : List KanalDurumu) (k : KanalId) (v : Deger) : List KanalDurumu :=
   if ks.any (fun kd => kd.kid = k)
