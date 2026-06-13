@@ -562,3 +562,55 @@ yasaklı sözcük İÇERMİYOR — V2-hipotetik adlar yorumda; Lean derlemesi et
 sabitsure 39, arena 19, ast 31, tip 26, sembol 18, capability 40, snapshot 50, drf 39.
 kripto + stdlib --check geçti. 0 ASan. Temiz rebuild 0 uyarı. BUNDAN SONRA yeni örnek
 GİRİLMEZ.
+
+---
+
+## D-018 [YÜKSEK] — Payload-taşıyan çeşit (sum type with data) + recursive AST (C3) (2026-06-13)
+
+**Stratejik hedef:** Evrensel OS / self-hosting. Direktif ön-koşulu: "payload-taşıyan
+çeşit [AST için şart]". Bu adım payloadsuz çeşit'i (C2.7) payload-taşıyan + ÖZYİNELEMELİ
+sum type'a genişletir → KEMGU kendi AST'sini kendi çeşit'leriyle temsil edebilir.
+
+**Sözdizim/semantik [YÜKSEK]:**
+- Tanım: `çeşit Ifade { Tam(tam64), Ikili(tam64,tam64), Yok }` — varyantlar tipli
+  alanlar taşır (payloadsuz varyant aynı çeşitte serbest).
+- İnşa: `Ifade::Ikili(30, 12)` (CAGRI(YOL,args) — ayrı sözdizim eklenmedi, mevcut
+  parse'a oturdu).
+- Eşleş destructuring: `Ifade::Tam(v) =>` / `Ifade::Ikili(a, b) =>` (DESEN_YOL
+  alt-desenleri → payload tiplerine bind).
+
+**Temsil (hibrit) [ETKİ]:** Payloadsuz çeşit → bare iN disc (C2.7 DEĞİŞMEDİ — geriye
+uyum). Payload çeşit → `%Ad = type { iDISC, [tüm varyant payload alanları peş peşe] }`
+(sonuç `{tag,T,H}` deseni; union DEĞİL — basitlik + ABI by-value). Varyant vi'nin alan
+ofseti = `1 + sum(payload_sayilari[0..vi-1])`. AST: cesit struct'a paralel diziler
+(`varyant_payload_tipleri` Dugum***, `varyant_payload_sayilari` int*); desen_yol'a
+`alt_desenler`.
+
+**Recursive çeşit [ETKİ-YÜKSEK — self-hosting HEADLINE]:** `çeşit Agac { Yaprak(tam64),
+Dal(&Agac, &Agac) }` — özyineleme `&Agac` REFERANSI ile (ptr, sonlu boyut
+`%Agac={i8,i64,ptr,ptr}`). Eşleş `&Cesit` scrutinee'sinde OTOMATIK DEREFERENCE eklendi
+(tip_kontrol: TIP_REFERANS→hedef; llvm: ptr→`load %Cesit`, desenlerden çeşit çözülür).
+Özyinelemeli gezinme E2E çalışır.
+
+**Tip kontrol:** `cesit_yapici_tip_kontrol` (M002 yok varyant, M003 arity, M004 payload
+tip) iki CAGRI yolunda. DESEN_YOL payload binding (alt-desen → SEMBOL_DEGISKEN, varyant
+tipinde). Exhaustiveness mevcut (varyant adı bazlı — payload drilling gerekmiyor v1).
+
+**Doğrulama (E2E exit 42):** Ifade{Tam/Ikili/Yok}; Olay{Tus(tam8),Konum(Nokta),
+Cift(tam8,tam64),Bos} (karışık genişlik + STRUCT payload); Agac recursive AST; mini
+aritmetik AST değerlendirici örneği `(3+4)*6` (test/ornekler/10_cesit_ast.kem).
+
+**Kapsam/sınırlar:**
+- Generic çeşit (`çeşit Kutu<T>`) HÂLÂ yok (parser P353 reddi — ayrı dilim).
+- Türkçe (non-ASCII) çeşit/yapı TİP ADI codegen'de quote edilmiyor (`%İfd` geçersiz
+  LLVM ad) — YAPI emisyonuyla ORTAK pre-existing sınır; örnekler ASCII tip adı kullanır
+  (Ifade/Agac/Olay). Quote'lama ayrı robustness işi.
+- Exhaustiveness payload-desen-derinliği denetlemez (varyant kapsaması yeterli).
+- Nitelikli payload çeşit yapıcısı (`m::Cesit::V(args)`) codegen'de sol=TANIMLAYICI
+  varsayar (modül-içi/düz ad). Çapraz-modül payload çeşit follow-up.
+
+**Testler:** test_llvm 205→210 (+5 C3: payload verify/run, struct+karışık, recursive
+verify/run). parser 107 (payload+desen sözdizimi), tip_kontrol 174, snapshot 50, linear
+57, drf 39, lexer 103, ast 31, arena 19. 0 ASan. Temiz rebuild 0 uyarı. Fikstürler:
+test/snapshots/cesit_{payload,payload_yapi,agac}.kem + test/ornekler/10_cesit_ast.kem.
+4 izole commit (parser→tip→codegen→recursive→test).

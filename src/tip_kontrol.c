@@ -1138,6 +1138,24 @@ static int cesit_varyant_var(const Dugum *cd, const char *ad, int uz) {
     return 0;
 }
 
+/* C3: varyant adının bildirim-sırası indeksi (-1 = yok). */
+static int cesit_varyant_index(const Dugum *cd, const char *ad, int uz) {
+    for (int i = 0; i < cd->veri.cesit.varyant_sayi; i++) {
+        if (cd->veri.cesit.varyant_uzunluklar[i] == uz &&
+            memcmp(cd->veri.cesit.varyantlar[i], ad, (size_t)uz) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* C3: i. varyantın payload alan sayısı (0 = payloadsuz). */
+static int cesit_varyant_payload_sayi(const Dugum *cd, int vi) {
+    if (vi < 0 || vi >= cd->veri.cesit.varyant_sayi) return 0;
+    if (!cd->veri.cesit.varyant_payload_sayilari) return 0;
+    return cd->veri.cesit.varyant_payload_sayilari[vi];
+}
+
 /* === AST tip -> TipBilgisi cevirici === */
 
 TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
@@ -1654,6 +1672,46 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
     return kontrol_yapi_olustur_ic(tk, d, NULL);
 }
 
+/* C3: d bir çeşit varyant YAPICISI mı (Cesit::V(args))? Öyleyse arg sayısını
+ * + tiplerini varyant payload'una göre kontrol et ve TIP_YAPI(cesit) dön.
+ * Değilse NULL (çağıran normal çağrı/modül-fonksiyon yoluna düşer). */
+static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d) {
+    if (!d || d->tip != DUGUM_CAGRI || !d->veri.cagri.hedef ||
+        d->veri.cagri.hedef->tip != DUGUM_YOL) {
+        return NULL;
+    }
+    const Dugum *yol = d->veri.cagri.hedef;
+    const Dugum *cd = yol_cesit_coz(tk, yol->veri.yol.sol);
+    if (!cd) return NULL;  /* sol çeşit değil → modül fonksiyon çağrısı */
+    int vi = cesit_varyant_index(cd, yol->veri.yol.sag_ad,
+                                 yol->veri.yol.sag_ad_uzunluk);
+    if (vi < 0) {
+        tip_hata(tk, d, "M002", "cesit varyanti bulunamadi");
+        return t_hata(tk);
+    }
+    int beklenen_n = cesit_varyant_payload_sayi(cd, vi);
+    int verilen_n = d->veri.cagri.sayi;
+    if (verilen_n != beklenen_n) {
+        tip_hata(tk, d, "M003",
+                 "cesit varyant payload alan sayisi uyumsuz");
+        return tip_olustur_yapi(tk->arena, cd->veri.cesit.ad,
+                                cd->veri.cesit.ad_uzunluk, NULL, 0);
+    }
+    for (int i = 0; i < beklenen_n; i++) {
+        const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[vi][i];
+        TipBilgisi *bt = ast_tip_to_bilgi(tk, pt);
+        TipBilgisi *at = tip_belirle_beklenen(tk,
+            d->veri.cagri.argumanlar[i], bt);
+        if (at->kategori != TIP_HATA && bt->kategori != TIP_HATA &&
+            !tip_esit(at, bt)) {
+            tip_hata(tk, d->veri.cagri.argumanlar[i], "M004",
+                     "cesit varyant payload tipi uyumsuz");
+        }
+    }
+    return tip_olustur_yapi(tk->arena, cd->veri.cesit.ad,
+                            cd->veri.cesit.ad_uzunluk, NULL, 0);
+}
+
 /* Ana visitor */
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
     if (!d) return t_hata(tk);
@@ -2031,6 +2089,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — modül-fonksiyon
+             * çağrısından ÖNCE dene (sol bir çeşit ise yapıcı). */
+            {
+                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d);
+                if (cy) return cy;
+            }
             /* Yerlesik konstrüktörler: değer(x), tamam(x), hata(x) */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
@@ -3479,6 +3543,12 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         }
 
         case DUGUM_CAGRI: {
+            /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — beklenen-bağlam
+             * yolunda da modül-fonksiyon çağrısından ÖNCE dene. */
+            {
+                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d);
+                if (cy) return cy;
+            }
             /* Madde B: dizi_olustur<T>(N) beklenen Dizi<T> ise T'yi kullan.
              * Context-driven instantiation. */
             if (d->veri.cagri.hedef &&
@@ -4402,6 +4472,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         case DUGUM_ESLES: {
             /* Eşleş'in deger tipini belirle (secimlik<T> veya sonuc<T,H>) */
             TipBilgisi *dt = tip_belirle(tk, d->veri.esles.deger);
+            /* C3: &Cesit referansı üzerinde eşleş — otomatik dereference
+             * (recursive AST: çeşit ağacı referansla gezilir). */
+            if (dt && dt->kategori == TIP_REFERANS && dt->veri.referans.hedef) {
+                dt = dt->veri.referans.hedef;
+            }
             /* Sabitsüre Spec V1 CT001 SABITSURE_MATCH: scrutinee sabitsure
              * olamaz — kol seçimi gizli bilgiyle dallanır. */
             if (tip_sabitsure_mi(dt)) {
@@ -4464,16 +4539,49 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                             }
                         }
                     } else if (desen->tip == DUGUM_DESEN_YOL) {
-                        /* C2.7: Cesit::Varyant deseni — payloadsuz, binding yok;
-                         * yalnız varyantın çeşit'e ait olduğunu doğrula. */
+                        /* C2.7/C3: Cesit::Varyant[(a,b)] deseni — varyantı
+                         * doğrula + payload alt-desenlerini varyant tiplerine
+                         * bağla (X::V(a, b) => a,b payload tiplerinde). */
                         const Dugum *cd = (dt && dt->kategori == TIP_YAPI)
                             ? cesit_ara(tk, dt->veri.yapi.ad,
                                         dt->veri.yapi.ad_uzunluk) : NULL;
-                        if (cd && !cesit_varyant_var(cd,
+                        if (cd) {
+                            int vi = cesit_varyant_index(cd,
                                 desen->veri.desen_yol.varyant_ad,
-                                desen->veri.desen_yol.varyant_uz)) {
-                            tip_hata(tk, desen, "M002",
-                                     "cesit varyanti bulunamadi");
+                                desen->veri.desen_yol.varyant_uz);
+                            if (vi < 0) {
+                                tip_hata(tk, desen, "M002",
+                                         "cesit varyanti bulunamadi");
+                            } else {
+                                int pn = cesit_varyant_payload_sayi(cd, vi);
+                                int an = desen->veri.desen_yol.alt_sayi;
+                                if (an > 0 && an != pn) {
+                                    tip_hata(tk, desen, "M003",
+                                        "cesit varyant payload desen sayisi "
+                                        "uyumsuz");
+                                }
+                                for (int j = 0; j < an && j < pn; j++) {
+                                    const Dugum *alt =
+                                        desen->veri.desen_yol.alt_desenler[j];
+                                    if (!alt ||
+                                        alt->tip != DUGUM_DESEN_TANIMLAYICI) {
+                                        continue;  /* joker vb. bind yok */
+                                    }
+                                    const Dugum *pt =
+                                        cd->veri.cesit.varyant_payload_tipleri
+                                            [vi][j];
+                                    TipBilgisi *ptip = ast_tip_to_bilgi(tk, pt);
+                                    Sembol s;
+                                    memset(&s, 0, sizeof(s));
+                                    s.ad = alt->veri.desen_tanimlayici.ad;
+                                    s.ad_uzunluk =
+                                        alt->veri.desen_tanimlayici.ad_uzunluk;
+                                    s.kategori = SEMBOL_DEGISKEN;
+                                    s.tip = ptip;
+                                    s.ast_dugumu = alt;
+                                    sembol_ekle(tk->scope, tk->arena, &s);
+                                }
+                            }
                         }
                     }
                     /* DESEN_LITERAL, DESEN_JOKER: binding yok */

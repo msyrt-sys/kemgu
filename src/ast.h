@@ -254,8 +254,10 @@ struct Dugum {
             int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
         } yapi;
 
-        /* C2.7: çeşit Ad { A, B, C } — payloadsuz isimli varyant kümesi (sum type).
-         * Varyant indeksi = bildirim sırası (0'dan); discriminant tag. */
+        /* C2.7: çeşit Ad { A, B(t1,t2), C } — isimli varyant kümesi (sum type).
+         * Varyant indeksi = bildirim sırası (0'dan); discriminant tag.
+         * Payload (C3): her varyant tipli alanlar taşıyabilir — V(t1, t2).
+         * Paralel diziler (bound deseni gibi): payloadsuz varyant sayı 0. */
         struct {
             const char *ad;
             int ad_uzunluk;
@@ -263,6 +265,10 @@ struct Dugum {
             int *varyant_uzunluklar;    /* her varyantın byte uzunluğu */
             int varyant_sayi;
             int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
+            /* C3 payload: [varyant][alan] tip düğümü; [varyant] alan sayısı.
+             * NULL/0 (payloadsuz çeşit) eski davranışla aynı (bare iN disc). */
+            Dugum ***varyant_payload_tipleri; /* [i] = i. varyantın tip düğüm dizisi */
+            int *varyant_payload_sayilari;    /* [i] = i. varyantın alan sayısı (0=yok) */
         } cesit;
 
         struct {
@@ -560,10 +566,12 @@ struct Dugum {
             int sayi;
         } desen_yapici;
 
-        /* C2.7: Cesit::Varyant deseni (payloadsuz). */
+        /* C2.7: Cesit::Varyant deseni; C3: payload bağlama Cesit::V(a, b). */
         struct {
             const char *cesit_ad; int cesit_uz;
             const char *varyant_ad; int varyant_uz;
+            Dugum **alt_desenler;   /* C3: payload alt-desenleri (NULL=payloadsuz) */
+            int alt_sayi;           /* alt-desen sayısı (0=payloadsuz) */
         } desen_yol;
 
         /* DUGUM_DESEN_JOKER — veri yok */
