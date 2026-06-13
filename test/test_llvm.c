@@ -327,6 +327,18 @@ static void test_aritmetik(void) {
     test_sonuc("1 + 2*3 + 35 -> exit 42", rc == 42);
 }
 
+static void test_tam64_literal_baglam(void) {
+    /* Sayı literal bağlam-bağımlı: tam64 + literal artık T001 vermez
+     * (literal karşı tarafın tipinde çıkar). x:tam64; x+1, x>8, x*1 ... */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam64 = 20; "
+        "de\xc4\x9fi\xc5\x9fken y: tam64 = x + 1; "      /* 21 */
+        "e\xc4\x9f" "er y > 10 { y = y * 2; } "          /* 42 */
+        "ver y olarak tam32; }");
+    test_sonuc("tam64 + literal baglam (x+1, y>10, y*2) -> exit 42", rc == 42);
+}
+
 static void test_tekli_neg(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 100 + (0 - 58); }");
@@ -2278,6 +2290,7 @@ int main(void) {
     printf("\n--- Literaller + aritmetik ---\n");
     test_lit_42();
     test_aritmetik();
+    test_tam64_literal_baglam();
     test_tekli_neg();
 
     printf("\n--- Karsilastirma ---\n");
