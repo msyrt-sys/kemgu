@@ -1,0 +1,20 @@
+işlev a() -> tam32 {
+    değişken a: Dizi<tam32> = x;
+    değişken b: Dizi<seçimlik<tam32>> = y;
+    değişken c: sonuç<tam32, Hata> = z;
+    değişken d: &değişken Nokta = w;
+    değişken e: &Nokta = w;
+    değişken f: *tam8 = q;
+    değişken g: işlev(tam32, metin) -> mantıksal = h;
+    değişken i: tekkez<Dosya> = j;
+    değişken k: vektör<kesirli32, 4> = m;
+    değişken n: paket::alt::Tip = o;
+    değişken r: Kutu<tam32, metin> = s;
+    değişken u: seçimlik<sonuç<Dizi<tam64>, Hata>> = v;
+    değişken w: sabitsüre<tam32> = x;
+    değişken y: yetki<Dosya> = z;
+    değişken aa: görev<tam32> = bb;
+    değişken cc: kanal<metin> = dd;
+    değişken ee: Dizi<Dizi<Dizi<tam8>>> = ff;
+    ver 0;
+}
