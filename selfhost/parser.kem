@@ -519,10 +519,15 @@ işlev tamsayi_deger(lex: metin) -> tam64 {
         eğer (c1 == 111) veya (c1 == 79) { taban = 8; i = 2; }
     }
     değişken sonuc: tam64 = 0;
+    değişken maks: tam64 = 9223372036854775807;   // int64 max (strtoll clamp)
+    değişken tasti: mantıksal = yanlış;
     iken i < n {
         değişken c: tam32 = bayt(lex, i);
         eğer c != 95 {                              // '_' atla
-            sonuc = sonuc * taban + (hane_deger(c) olarak tam64);
+            değişken h: tam64 = hane_deger(c) olarak tam64;
+            eğer sonuc > (maks - h) / taban { tasti = doğru; }  // taşma → LLONG_MAX
+            eğer tasti { sonuc = maks; }
+            değilse { sonuc = sonuc * taban + h; }
         }
         i = i + 1;
     }
@@ -933,6 +938,24 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
         değişken e: tam32 = parse_ifade(p);
         bekle(p, "SAG_PAREN");
         ver dugum1(p, "IMHA_IFADE", "", s, u, e);
+    }
+    // delege(y, izin) / geri_al(y) → DUGUM_CAGRI (hedef = TANIMLAYICI "delege"/"geri_al")
+    eğer metin_esit(t, "DELEGE") veya metin_esit(t, "GERI_AL") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken kids: Dizi<tam32> = [];
+        dizi_ekle(kids, dugum0(p, "TANIMLAYICI", ad, s, u));  // hedef
+        eğer sim_mi(p, "SAG_PAREN") == yanlış {
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                dizi_ekle(kids, parse_ifade(p));
+                eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                değilse { devam = yanlış; }
+            }
+        }
+        bekle(p, "SAG_PAREN");
+        ver dugum_n(p, "CAGRI", "", s, u, kids);
     }
     eğer metin_esit(t, "SOL_PAREN") {
         ilerle(p);
@@ -1386,6 +1409,72 @@ işlev parse_sabit(p: &değişken Ayr) -> tam32 {
     bekle(p, "NOKTALI_VIRGUL");
     ver dugum2(p, "SABIT", ad, s, u, tip, dg);
 }
+// ---- P5: modül / kullan / dışa / genel ----
+// kullan m[::seg...][::{a,b}][olarak d];  → KULLAN (deger=yol; seçili/alias dump'ta yok).
+işlev parse_kullan(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // kullan
+    değişken yol: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    değişken devam: mantıksal = doğru;
+    iken devam ve sim_mi(p, "CIFT_IKI_NOKTA") {
+        ilerle(p);
+        eğer sim_mi(p, "SOL_SUSLU") {      // ::{a, b} seçili import
+            ilerle(p);
+            değişken d2: mantıksal = doğru;
+            iken d2 {
+                bekle(p, "TANIMLAYICI");
+                eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                değilse { d2 = yanlış; }
+            }
+            bekle(p, "SAG_SUSLU");
+            devam = yanlış;
+        } değilse {
+            değişken seg: metin = sim_lex(p);
+            bekle(p, "TANIMLAYICI");
+            yol = metin_birlestir(metin_birlestir(yol, "::"), seg);
+        }
+    }
+    eğer sim_mi(p, "OLARAK") { ilerle(p); bekle(p, "TANIMLAYICI"); }  // alias
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum0(p, "KULLAN", yol, s, u);
+}
+// genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).
+işlev parse_disa_govde(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
+    eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
+    eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+işlev parse_disa(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // dışa
+    ver dugum1(p, "DISA", "", s, u, parse_disa_govde(p));
+}
+// genel SARMALAMAZ — iç tanımı doğrudan döner (genel_mi bayrağı dump'ta yok).
+işlev parse_genel(p: &değişken Ayr) -> tam32 {
+    ilerle(p);  // genel
+    ver parse_disa_govde(p);
+}
+işlev parse_modul(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // modül
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_ust_oge(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "MODUL", ad, s, u, kids);
+}
 işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
@@ -1393,7 +1482,11 @@ işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
     eğer sim_mi(p, "UYGULA") { ver parse_uygula(p); }
     eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
-    // P5: KULLAN / DISA / GENEL / MODUL
+    eğer sim_mi(p, "KULLAN") { ver parse_kullan(p); }
+    eğer sim_mi(p, "DISA") { ver parse_disa(p); }
+    eğer sim_mi(p, "GENEL") { ver parse_genel(p); }
+    eğer sim_mi(p, "MODUL") { ver parse_modul(p); }
+    // P5: satıriçi_asm (üst düzey değil; deyim) — kalan
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     p.hata_say = p.hata_say + 1;
     ilerle(p);
