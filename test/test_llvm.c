@@ -1988,6 +1988,30 @@ static void test_c_capraz_generic_transitif_e2e(void) {
                rc == 42);
 }
 
+static void test_c_capraz_generic_struct_check(void) {
+    int ok = kemgu_check_basarili("test/moduller/ana_kap.kem");
+    test_sonuc("C: capraz-modul generic STRUCT --check (kap::Liste<T>, infer)",
+               ok == 1);
+}
+
+static void test_c_capraz_generic_struct_e2e(void) {
+    /* HEADLINE: capraz-modul generic STRUCT Liste<T> (type-erased %Liste) +
+     * yarat/ekle/al + transitif büyü (kapasite 0->4->8, eleman-kopyali grow).
+     * Saf INFERENCE (yazili nitelikli tip YOK). 5. eleman idx4'e dusuyor
+     * (grow gerceklesmezse heap-overflow); al(0)+al(4)=10+32=42 yapisal kanit. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_kap.kem");
+    test_sonuc("C: capraz-modul generic STRUCT (yarat/ekle/al + büyü) -> 42",
+               rc == 42);
+}
+
+static void test_c_capraz_generic_struct_coklu_e2e(void) {
+    /* Coklu-tip struct mono: ayni Liste<T> hem i64 hem i32 (ayrik
+     * specialization'lar, paylasilan %Liste). 40 + 2 = 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_kap_coklu.kem");
+    test_sonuc("C: capraz-modul generic STRUCT coklu-tip (i64+i32) -> exit 42",
+               rc == 42);
+}
+
 /* --- [YUKSEK] Tek-gecis ad cozumu (feature/ad-cozum-tek-gecis) --- */
 
 static void test_ad_cozum_sapma_check(void) {
@@ -2387,6 +2411,9 @@ int main(void) {
     test_c_capraz_generic_fonk_check();
     test_c_capraz_generic_fonk_e2e();
     test_c_capraz_generic_transitif_e2e();
+    test_c_capraz_generic_struct_check();
+    test_c_capraz_generic_struct_e2e();
+    test_c_capraz_generic_struct_coklu_e2e();
 
     printf("\n--- [YUKSEK] Tek-gecis ad cozumu (binding) ---\n");
     test_ad_cozum_sapma_check();

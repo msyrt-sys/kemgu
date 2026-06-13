@@ -297,3 +297,53 @@ undefined value '@sayi.azami'` (define yalnız `@sayi.azami$i32` adında üretil
 azami$i32+$i64+dedup E2E, transitif azami3→azami E2E). Fikstürler:
 test/moduller/{sayi,ana_sayi,ana_sayi_transitif}.kem. parser 107, tip_kontrol 174
 düşmedi. In-file generic canary'ler (kimlik<T>, Liste<T>) yeşil.
+
+---
+
+## D-013 [YÜKSEK] — Çapraz-modül generic STRUCT (Liste<T>): routing-only (faz C-2) (2026-06-13)
+
+**HEADLINE bulgusu (kritik):** Çapraz-modül generic STRUCT, faz C-1'in (D-012)
+FONKSİYON routing düzeltmesi DIŞINDA **HİÇBİR ek codegen değişikliği gerektirmedi**.
+Bu, görevin temel içgörüsünü doğrular: C = instantiation'ın YÖNLENDİRİLMESİ, struct
+layout yeniden-mimarisi DEĞİL.
+
+**Neden routing yetti (struct-mono yaklaşımı [ETKİ]):**
+- Liste<T> **type-erased**: `%Liste = type { ptr, i64, i64 }` — `*T`→`ptr`, T IR
+  layout'ta yok (D-011 #8: modüller arası düz IR-ad uzayı). Tek `%Liste` tüm T'ler
+  için geçerli → struct için PER-T layout specialization GEREKMEZ (fonksiyon-mono'dan
+  *temelde farklı bir yaklaşım* değil — aynı `$`-makinesi).
+- T yalnız (a) specialized fonksiyon gövdesinde subst (T→i64 push edilir → `*T`
+  pointee, `bölge_al` sizeof doğru), (b) inference yan-kanalları (`generic_arg_ir`,
+  `pointee_llvm_tip`) ile taşınır.
+- `yarat`/`ekle`/`al`/`büyü` çapraz-modül çağrıları D-012 YOL routing'iyle
+  `@kap.yarat$i64` vb. olarak specialize+emit edilir; struct değer (`%Liste`
+  by-value dönüş) + `&Liste<T>` by-pointer param mevcut v2/v3 makinesi.
+
+**Doğrulama (saf INFERENCE — yazılı nitelikli tip YOK):**
+- HEADLINE: `kullan kap; değişken l = kap::yarat(sifir); kap::ekle(&l,10)…;
+  kap::al(&l,0)+kap::al(&l,4)` → 42. Transitif büyü<T> (kapasite 0→4→8, eleman-
+  kopyalı grow) `@"kap.büyü$i64"` olarak owning-modül bağlamında specialize edilir
+  (5. eleman idx4'e düşer — grow olmasa heap-overflow; deterministik 42 = yapısal kanıt).
+- Çoklu-tip: aynı Liste<T> i64+i32 → ayrık specialization'lar (`@kap.ekle$i64` /
+  `@kap.ekle$i32`), paylaşılan `%Liste`. 40+2=42.
+- Dedup: `ekle$i64` 2 çağrı → 1 define (yapısal: link hatası yok).
+
+**Witness-param inference [ETKİ — DUR-SOR yerine köşe dönüşü]:** Üretimdeki
+Liste<T> `yarat`'ı T'yi DÖNÜŞ-bağlamı annotasyonundan (`değişken l: Liste<tam64>`)
+çıkarır — ama nitelikli annotasyon (`kap::Liste<tam64>`) D işi + headline bunu
+YASAKLIYOR. Explicit call-site tip-arg (`yarat<i64>()`) parser'da YOK (yeni
+semantik fork → kapsam dışı). Çözüm: minimal kapsayıcıda her generic fonk bir
+**tip-tanık** value-param taşır (`yarat<T>(taban: T)`, `büyü/al` zaten T-param'lı)
+→ T arg'dan çıkarsanır, annotasyon/explicit-tip-arg GEREKMEZ. Üretim Liste<T>'nin
+TAM taşınması (yetki-disiplinli yarat'ın return-context inference'ı) follow-up;
+ilgisiz altsistem (capability-borrow) genişletilmedi.
+
+**Kapsam/sınırlar:**
+- Fikstür modülü `kap` (test/moduller/kap.kem) — `kütüphane/dizi.kem` in-file
+  canary'siyle (kendi main'i var) çakışmamak için ayrı ad.
+- Liste<T> uzunluk/sınır built-in dönüş tipi taşımaz; minimal yarat/ekle/al/büyü.
+- Yazılı nitelikli generic-tip annotasyonu (`kap::Liste<i64>`) → D (dokunulmadı).
+
+**Testler:** test_llvm 197→200 (+3 C-2: struct --check, headline yarat/ekle/al+büyü
+E2E, çoklu-tip i64+i32 E2E). Fikstürler: test/moduller/{kap,ana_kap,ana_kap_coklu}.kem.
+parser 107, tip_kontrol 174 düşmedi. In-file Liste<T> (kütüphane/dizi.kem) canary yeşil.
