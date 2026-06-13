@@ -4258,6 +4258,104 @@ static void specialize_emit(LlvmGen *g, const Dugum *islev,
     g->substler = eski_substler;
 }
 
+/* Bir IR satiri "  %<rakam> = alloca " kalibinda mi? (entry blok'a tasinacak) */
+static int alloca_satiri_mi(const char *s, int len) {
+    if (len < 4 || s[0] != ' ' || s[1] != ' ' || s[2] != '%') return 0;
+    int i = 3;
+    if (i >= len || s[i] < '0' || s[i] > '9') return 0;
+    while (i < len && s[i] >= '0' && s[i] <= '9') i++;
+    return (i + 10 <= len) && strncmp(s + i, " = alloca ", 10) == 0;
+}
+
+/* [D-041 YÜKSEK] Fonksiyon govdesini src'den oku; TÜM alloca'lari entry blok
+ * basina tasi (LLVM yalniz entry-blok alloca'sini bir kez tahsis eder; diger
+ * blok'taki alloca her CALISMADA stack ayirir -> uzun dongude stack overflow).
+ * Tasima SSA numara sirasini bozdugu icin tum numarali degerleri (%<rakam>,
+ * %bb<ad> ve %<ad> haric) ardisik yeniden numarala. dst'ye yaz. phi YOK
+ * (codegen alloca/load-store kullanir) -> ileri-referans yok -> tek-gecis guvenli. */
+static void hoist_renumber(FILE *src, FILE *dst) {
+    fseek(src, 0, SEEK_END);
+    long n = ftell(src);
+    fseek(src, 0, SEEK_SET);
+    if (n <= 0) return;
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) return;
+    size_t got = fread(buf, 1, (size_t)n, src);
+    buf[got] = '\0';
+
+    /* Satirlara ayir ('\n' her satira dahil) */
+    size_t kapasite = 64, sc = 0;
+    char **satir = (char **)malloc(sizeof(char *) * kapasite);
+    int *suz = (int *)malloc(sizeof(int) * kapasite);
+    size_t bas = 0;
+    for (size_t i = 0; i <= got; i++) {
+        if (i == got || buf[i] == '\n') {
+            if (i == got && bas == i) break;
+            if (sc + 1 >= kapasite) {
+                kapasite *= 2;
+                satir = (char **)realloc(satir, sizeof(char *) * kapasite);
+                suz = (int *)realloc(suz, sizeof(int) * kapasite);
+            }
+            satir[sc] = buf + bas;
+            suz[sc] = (int)(i - bas) + (i < got ? 1 : 0);  /* '\n' dahil */
+            sc++;
+            bas = i + 1;
+        }
+    }
+
+    /* entry: satirini bul */
+    int entry_idx = -1;
+    for (size_t i = 0; i < sc; i++)
+        if (strncmp(satir[i], "entry:", 6) == 0) { entry_idx = (int)i; break; }
+    if (entry_idx < 0) { fwrite(buf, 1, got, dst);  /* beklenmedik: oldugu gibi */
+        free(suz); free(satir); free(buf); return; }
+
+    /* Yeni sira: [0..entry] + alloca'lar + digerleri */
+    int *sira = (int *)malloc(sizeof(int) * sc);
+    size_t so = 0;
+    for (int i = 0; i <= entry_idx; i++) sira[so++] = i;
+    for (size_t i = (size_t)(entry_idx + 1); i < sc; i++)
+        if (alloca_satiri_mi(satir[i], suz[i])) sira[so++] = (int)i;
+    for (size_t i = (size_t)(entry_idx + 1); i < sc; i++)
+        if (!alloca_satiri_mi(satir[i], suz[i])) sira[so++] = (int)i;
+
+    /* En buyuk reg numarasi -> map boyutu */
+    long maxreg = -1;
+    for (size_t i = 0; i + 1 < got; ) {
+        if (buf[i] == '%' && buf[i+1] >= '0' && buf[i+1] <= '9') {
+            long v = 0; size_t j = i + 1;
+            while (j < got && buf[j] >= '0' && buf[j] <= '9') { v = v*10 + (buf[j]-'0'); j++; }
+            if (v > maxreg) maxreg = v;
+            i = j;
+        } else i++;
+    }
+    long *map = (long *)malloc(sizeof(long) * (size_t)(maxreg + 2));
+    for (long i = 0; i <= maxreg + 1; i++) map[i] = -1;
+    long sonraki = 0;
+
+    /* Yeni sirada gez; %<rakam> -> %<map>; DEF (sonrasi " = ") -> map ata */
+    for (size_t k = 0; k < so; k++) {
+        const char *s = satir[sira[k]];
+        int len = suz[sira[k]];
+        for (int i = 0; i < len; ) {
+            if (s[i] == '%' && i + 1 < len && s[i+1] >= '0' && s[i+1] <= '9') {
+                long v = 0; int j = i + 1;
+                while (j < len && s[j] >= '0' && s[j] <= '9') { v = v*10 + (s[j]-'0'); j++; }
+                int def = (j + 2 < len && s[j] == ' ' && s[j+1] == '=' && s[j+2] == ' ');
+                if (def && v <= maxreg && map[v] < 0) map[v] = sonraki++;
+                long nv = (v <= maxreg && map[v] >= 0) ? map[v] : v;
+                fprintf(dst, "%%%ld", nv);
+                i = j;
+            } else {
+                fputc(s[i], dst);
+                i++;
+            }
+        }
+    }
+
+    free(map); free(sira); free(suz); free(satir); free(buf);
+}
+
 static void islev_uret(LlvmGen *g, const Dugum *islev) {
     /* Generic islev: tek basina emit etme — instantiation'lar cagri sirasinda */
     if (islev->veri.islev.tip_param_sayi > 0) return;
@@ -4268,6 +4366,11 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     if (!donus) donus = "void";
     g_donus_tip = donus;
     g->aktif_donus_dugum = islev->veri.islev.donus_tipi;  /* C2.5: ver yapıcısı için */
+
+    /* [D-041 YÜKSEK] Govdeyi gecici buffer'a yaz; sonra alloca hoist + renumber. */
+    FILE *gercek_out = g->out;
+    FILE *govde_tmp = tmpfile();
+    if (govde_tmp) g->out = govde_tmp;
 
     /* Realtime Spec V1: gercekzamanli isleve metadata yorumu (V1 minimal;
      * V2'de gercek LLVM metadata: !realtime !N). */
@@ -4351,6 +4454,13 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         }
     }
     fputs("}\n\n", g->out);
+
+    /* [D-041] Govdeyi gercek cikti'ya alloca-hoist + renumber ile aktar. */
+    if (govde_tmp) {
+        g->out = gercek_out;
+        hoist_renumber(govde_tmp, gercek_out);
+        fclose(govde_tmp);
+    }
 }
 
 /* === Public API === */
