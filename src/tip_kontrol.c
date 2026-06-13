@@ -1896,6 +1896,25 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             if (sol->kategori == TIP_HATA || sag->kategori == TIP_HATA) {
                 return t_hata(tk);
             }
+            /* Sayı literal BAĞLAM-BAĞIMLI (CLAUDE.md): bir taraf TİPLİ tamsayı,
+             * diğer taraf TİPSİZ tamsayı LİTERALİ (DUGUM_TAM) ve tipler farklı
+             * ise — literali karşı tarafın tipinde yeniden çıkar (x: tam64;
+             * x + 1 artık T001 vermez; codegen zaten genişletiyordu). Explicit
+             * cast (… olarak tamX) DUGUM_TAM değildir → etkilenmez; tam32+1
+             * zaten eşit → etkilenmez. sabitsüre/vektör HARİÇ (taint/lane
+             * yayılımı kendi kurallarına sahip — S2/V testleri). */
+            if (!tip_sabitsure_mi(sol) && !tip_sabitsure_mi(sag) &&
+                !tip_vektor_mu(sol) && !tip_vektor_mu(sag)) {
+                if (d->veri.ikili.sol->tip == DUGUM_TAM &&
+                    tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
+                    !tip_esit(sol, sag)) {
+                    sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
+                } else if (d->veri.ikili.sag->tip == DUGUM_TAM &&
+                           tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
+                           !tip_esit(sol, sag)) {
+                    sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
+                }
+            }
             switch (d->veri.ikili.op) {
                 case OP_ARTI:  case OP_EKSI:
                 case OP_CARPI: case OP_BOLU:  case OP_MOD:

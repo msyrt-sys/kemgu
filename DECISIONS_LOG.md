@@ -676,3 +676,30 @@ desen gerekirse follow-up. Generic çeşit hâlâ ayrı.
 tip_kontrol 174, parser 107, snapshot 50, linear 57, drf 39, capability 40,
 ast/arena/sembol. 0 ASan. stdlib --check yeşil. Temiz rebuild 0 uyarı.
 Fikstür: test/moduller/{ifd,ana_ifd}.kem.
+
+---
+
+## D-021 — Sayı literal bağlam-bağımlı: tipli tamsayı + literal ikili op (ergonomi) (2026-06-13)
+
+**Sorun (çeşit edge-probe sırasında bulundu):** `değişken x: tam64; x + 1` → T001
+("ikili operator iki tarafi ayni tip"). Literal `1` varsayılan tam32, x tam64 →
+uyuşmazlık. Her non-tam32 tamsayı aritmetiğinde `(1 olarak tam64)` zorunluluğu —
+yaygın ergonomi pürüzü (çeşit/AST kodu tam64 sayaç/değer kullanır). codegen ZATEN
+genişletiyordu; yalnız tip-kontrol katıydı. CLAUDE.md zaten "Sayı literal:
+Context-dependent" diyor — IKILI op'ta uygulanmamıştı.
+
+**Çözüm [ETKİ]:** DUGUM_IKILI'de sol/sag belirlendikten sonra: bir taraf TİPSİZ
+tamsayı LİTERALİ (DUGUM_TAM) + diğer taraf TİPLİ tamsayı + tipler farklı ise,
+literali karşı tarafın tipinde yeniden çıkar (`tip_belirle_beklenen`). Yalnız
+şu anda HATA veren durumu gevşetir:
+- Explicit cast (`… olarak tamX`) DUGUM_TAM DEĞİL → etkilenmez.
+- tam32 + literal zaten eşit → etkilenmez.
+- **sabitsüre/vektör HARİÇ** (taint/lane yayılımı kendi kurallarına sahip —
+  tip_tamsayi_mi sabitsüre'yi iç tipe açtığı için ilk denemede S2 testleri
+  kırıldı; guard eklendi).
+
+**Doğrulama:** `tam64 x; x+1`, `x>8`, `x*2` artık --check geçer + doğru değer.
+Tam regresyon: test_llvm 213→214 (+tam64 literal bağlam E2E), tip_kontrol 174,
+sabitsure 39 (guard sonrası), simd 30, simd_llvm 5, wcet 35, mmio 23, lexer 103,
+parser 107, linear 57, drf 39, capability 40, snapshot 50, arena/ast/tip/sembol.
+0 ASan. stdlib --check yeşil. Temiz rebuild 0 uyarı.
