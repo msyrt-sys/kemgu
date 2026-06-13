@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-043 — SELF-HOST parser ADIM-0: AST temsili + --ast diff-oracle (2026-06-13)
+
+**Karar [ETKİ: düşük — additive C: yeni `--ast` modu + `ast_duz_yaz`; mevcut yol
+değişmedi].** Aşama 1 (parser self-host) ADIM-0. Mandate: tasarım kararları ajan
+verir + loglar + devam eder (sormaz). İki çekirdek karar:
+
+**Karar 1 — KEMGU AST temsili: İNDEKS-TABANLI DÜZ DÜĞÜM TABLOSU** (paralel `Dizi`'ler).
+Recursive `çeşit` (C3 payload) bir alternatifti ama kendine-referanslı tip
+heap-boxing gerektirir (KEMGU'da belirsiz). Toy demolar (D-033/D-034) indeks-arena'yı
+KANITLADI: düğüm = indeks; paralel diziler `dugum_tip[]`/`satir[]`/`sutun[]`/`deger[]`
++ düz çocuk-listesi (`cocuk[]` + `cocuk_basla[]`/`cocuk_sayi[]`). Recursive-descent
+doğal: alt-ifadeleri parse et (indeks al) → ebeveyn düğümü o indekslerle oluştur.
+Dump = preorder traversal (D-041 sonrası KEMGU çağrı-özyinelemesi stack-güvenli;
+AST derinliği ~onlarca).
+
+**Karar 2 — --ast diff-oracle formatı: DÜZ derinlik-etiketli preorder.**
+`<derinlik>\t<TIP_ADI>\t<deger>\t<satır>\t<sütün>` (lexer dersi: düz > iç-içe-girinti).
+Derinlik-etiketli preorder AĞACI BİREBİR belirler (benzersiz). `<deger>` = skaler yük
+(ad/literal/operatör), `\t \n \r \\` kaçışlı (alan-ayracı güvenliği). Mevcut
+`ast_yazdir` (--parse, insan-okunur) EKSİK — ~30 düğüm tipi `default`'a düşüp
+çocuklarını gezmiyor. Yeni `ast_duz_yaz` (`--ast`) TÜM 67 düğüm tipini + çocuklarını
+KANONİK sırada gezer (oracle tamlığı). KEMGU-parser aynı çıktıyı üretecek → diff = doğruluk.
+
+**Doğrulama:** Prod 0 uyarı. `--ast` 249/249 gerçek .kem'de deterministik + boş-değil.
+Öncelik doğru (`x + 1 * 2` → `x + (1*2)`). Mevcut `--parse`/test'ler etkilenmedi (additive).
+
+**Plan (P1-P6, her biri --ast sıfır-diff kapılı):**
+- **P1 ifadeler** — Pratt öncelik (veya<ve<==<karşılaştırma<+−<*/%<önek<sonek),
+  önek (−/değil/~/&/&değişken/*), sonek zinciri (.alan [i] (arg) ::yol), yapı/dizi/
+  lambda oluşturma, `olarak` cast, kullan/imha ifade. (+minimal işlev/blok/ver sarmalayıcı.)
+- **P2 deyim/kontrol** — değişken/atama/ver/eğer-değilse/iken/için/eşleş+desen/güvensiz/blok.
+- **P3 bildirim** — işlev (generic+bound), yapı, çeşit (payload), özellik, uygula, sabit, alan, parametre.
+- **P4 tip-sözdizimi** — &T/&değişken T/*T, Dizi/seçimlik/sonuç/tekkez/sabitsüre/yetki/
+  vektör/görev/kanal, işlev(...)→T, Kullanıcı<...>, `>>` generic-böl.
+- **P5 modül/import** — modül, kullan (namespaced/seçili/alias), dışa, genel.
+- **P6 tüm-korpus** — KEMGU-parser tüm .kem + KENDİ kaynağı (self-parsing) → --ast sıfır-diff.
+
+**Ön-koşul/sınır:** Sayı literal→değer dönüşümü (TAM int64, `_`/hex/bin/oct) KEMGU'da
+C parser ile birebir gerekecek (P1). KESIRLI değer formatı (`%g`) fragility riski →
+gerekirse P1/P4'te lexeme-tabanlıya geçilir (karar o noktada). Generic-param/çeşit-varyant
+ad string-metadata --ast'a P3/P4'te eklenir (şimdilik yapısal ağaç).
+
+---
+
 ## D-042 — SELF-HOST lexer M6: BOOTSTRAP kapanışı — 249/249 gerçek .kem sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yeni harness + Makefile hedefi].** M6 = self-host lexer'ın
