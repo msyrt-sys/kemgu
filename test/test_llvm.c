@@ -1819,7 +1819,7 @@ static const char *stdlib_dizi_yolu(void) {
 
 static void test_stdlib_liste_check(void) {
     /* Kutuphane modulu TEK BASINA (main yok) --check gecmeli: generic
-     * yapi Liste<T> + 7 op (yarat/kapasiteAyir/buyu/ekle/al/boy/serbest)
+     * yapi Liste<T> + 7 op (olustur/kapasiteAyir/buyu/ekle/al/boy/serbest)
      * type-erased %Liste + yetki disiplini. (UTF-8 'kütüphane' yolu icin
      * ASCII kopya — stdlib_dizi_yolu.) */
     const char *yol = stdlib_dizi_yolu();
@@ -1830,7 +1830,7 @@ static void test_stdlib_liste_check(void) {
 
 static void test_stdlib_liste_e2e(void) {
     /* CAPRAZ-DOSYA (HEADLINE): ayri entry `kullan dizi;` -> kütüphane/dizi.kem
-     * arama yolundan bulunur; yarat/ekle×5/al + transitif buyu (kapasite
+     * arama yolundan bulunur; olustur/ekle×5/al + transitif buyu (kapasite
      * 0->4->8, eleman-kopyali grow) -> 42. Saf INFERENCE (yazili nitelikli
      * tip YOK). 5. eleman idx4'e dusuyor (grow olmasa heap-overflow) ->
      * deterministik 42 = yapisal grow kaniti. @dizi.ekle$i64 owning-baglamda. */
@@ -2042,11 +2042,11 @@ static void test_c_capraz_generic_struct_check(void) {
 
 static void test_c_capraz_generic_struct_e2e(void) {
     /* HEADLINE: capraz-modul generic STRUCT Liste<T> (type-erased %Liste) +
-     * yarat/ekle/al + transitif büyü (kapasite 0->4->8, eleman-kopyali grow).
+     * olustur/ekle/al + transitif büyü (kapasite 0->4->8, eleman-kopyali grow).
      * Saf INFERENCE (yazili nitelikli tip YOK). 5. eleman idx4'e dusuyor
      * (grow gerceklesmezse heap-overflow); al(0)+al(4)=10+32=42 yapisal kanit. */
     int rc = derle_dosya_ve_calistir("test/moduller/ana_kap.kem");
-    test_sonuc("C: capraz-modul generic STRUCT (yarat/ekle/al + büyü) -> 42",
+    test_sonuc("C: capraz-modul generic STRUCT (olustur/ekle/al + büyü) -> 42",
                rc == 42);
 }
 

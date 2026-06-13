@@ -342,7 +342,7 @@ static void test_stres_1000_dugum(void) {
         Dugum *d = dugum_tam(a, i, 1, 1);
         if (!d || d->veri.tam.deger != i) { ok = 0; break; }
     }
-    test_sonuc("1000 dugum yarat (ASan sizinti yok)", ok);
+    test_sonuc("1000 dugum olustur (ASan sizinti yok)", ok);
     arena_serbest(a);
 }
 

@@ -28,7 +28,7 @@
 //   2. `kullan(t: tekkez<T>) -> T`               (Tüket + içeriği al)
 //   3. `imha(t: tekkez<T>) -> boş`               (Tüket + at)
 
-// ----- 1) En basit: yarat → kullan -----
+// ----- 1) En basit: oluştur → kullan -----
 işlev tek_kez_kullan() -> tam32 {
     değişken k: tekkez<tam32> = tekkez_olustur(42);
     ver kullan(k);                            // k tüketildi, 42 döndü

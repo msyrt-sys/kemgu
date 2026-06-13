@@ -316,7 +316,7 @@ static void test_stres(void) {
                 tip_olustur_basit(a, TIP_TAM32)));
         if (!t || t->kategori != TIP_SECIMLIK) { ok = 0; break; }
     }
-    test_sonuc("1000 ic ice tip yarat (ASan sizinti yok)", ok);
+    test_sonuc("1000 ic ice tip olustur (ASan sizinti yok)", ok);
     arena_serbest(a);
 }
 

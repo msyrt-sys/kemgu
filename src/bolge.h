@@ -71,7 +71,7 @@ BolgeBilgisi *bolge_olustur_kanal(Arena *a, int kanal_id);
 /* === Katman 2: Concurrency aksiyomlari ===
  *
  * S1 (Tekil Sahiplik): her bolge yalniz bir thread'e ait
- * S2 (Baslangic Sahipligi): yaratan thread sahiptir
+ * S2 (Baslangic Sahipligi): olusturan thread sahiptir
  * S3 (Atomik Transfer): sahiplik atomik bir adimla devreder
  *
  * R-GOREV: closure thread'e geciyor -> yakalananlar sahip degisikligi

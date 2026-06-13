@@ -12,7 +12,7 @@
 //   K2 (13-20): Karma helpers — rotr, sigma, ch, maj
 //   K3 (21-28): Şifre — chacha20 quarter round + block
 //   K4 (29-33): Rastgele — xorshift64, xoshiro256
-//   K5 (34-38): Anahtar — yarat, eşit, HKDF, OTP
+//   K5 (34-38): Anahtar — oluştur, eşit, HKDF, OTP
 //   K6 (39-42): Bundle entegrasyon — birden fazla modül çağrısı
 
 // ============================================================================

@@ -531,7 +531,7 @@ static void T39_otp_tekkez_capability(void) {
 /* Ambient authority kaldirildigi senaryo — fonksiyon hicbir yetkisi yok ise
  * yetki kullanamaz; ozellikle yetki_olustur cagrisi olmadan dosya I/O imkansiz. */
 static void T40_ambient_authority_kaldirildi(void) {
-    /* yetki_olustur YOK; fonksiyon ic yetki yaratamaz, dolayisiyla I/O yok.
+    /* yetki_olustur YOK; fonksiyon ic yetki olusturamaz, dolayisiyla I/O yok.
      * Bu boş fonksiyon ile ambient-yok semantigi sergilenir. */
     static const char prog[] =
         "// Ambient authority kaldirildi — yetki yok = I/O yok\n"

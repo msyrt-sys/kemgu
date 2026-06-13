@@ -1735,7 +1735,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *ht = ast_tip_to_bilgi(tk, d->veri.tip_donustur.hedef_tip);
             if (!ht || ht->kategori == TIP_HATA) return t_hata(tk);
 
-            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile yaratamazsin) */
+            /* E001: hedef tekkez<T> yasak (Linear Types: olarak ile olusturamazsin) */
             if (ht->kategori == TIP_TEKKEZ) {
                 tip_hata(tk, d, "E001",
                     "olarak ile tekkez<T> hedeflenemez (Linear Types kuralı)");
@@ -3605,7 +3605,7 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d);
 /* === 1. Gecis: yapi/islev/sabit sembollerini global'e ekle === */
 
 static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
-    /* Yapi scope yarat */
+    /* Yapi scope olustur */
     Scope *yapi_s = scope_olustur(tk->arena, SCOPE_YAPI, tk->global_scope);
 
     /* Generic params -> yapi scope'a ekle */
