@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-034 — Self-hosting: mini dil V3 — FONKSİYONLAR (tanım+çağrı+özyineleme) → Turing-tam (saf KEMGU) (2026-06-13)
+
+**Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-033 (kontrol akışı)
+üstüne fonksiyon soyutlaması — `islev ad(p1,p2){ … don ifade; }` + `ad(arg)` çağrısı
++ özyineleme + karşılıklı çağrı (`test/ornekler/18_fonksiyon_dili.kem`). Toy-dil
+artık **Turing-tam**. **Bounded:** fonksiyonlar — closures (yakalama) ERTELENDİ
+(DUR-SOR sınırı; ayrı çetin tasarım).
+
+**Tasarım (flat-token yürütücü + KEMGU'nun kendi özyinelemesi — AST'ye geçmeden):**
+- **Fonksiyon tablosu** (Fonksiyonlar struct): ön-geçiş `islev` tanımlarını
+  kaydeder (ad → param adları + gövde '{' konumu); normal yürütmede tanım gövdeleri
+  `islev_atla` ile atlanır.
+- **Çağrı (cagri_yap):** argümanlar ÇAĞIRANIN kapsamında değerlendirilir → YENİ
+  kapsam itilir (params bağlanır) → gövde yürütülür → dönüş yayılır.
+- **Kapsam yığını:** `Semboller.ust` = mantıksal tepe. dizi_pop YOK → slot'lar
+  yeniden kullanılır (ust kaydet/sıfırla = push/pop); arama tepeden tabana (en
+  yakın bağlama → özyinelemede her çağrının param'ı İZOLE). Global = en alttaki.
+- **don:** dondu bayrağı + donus değeri (Semboller'de 1-elemanlı Dizi); blok/döngü
+  her deyimden sonra dondu kontrolüyle erken çıkar (exception'sız erken-dönüş).
+- **İMLEÇ özyineleme-güvenli:** cagri_yap çağrı-sonrası konumu (`resume`) ve kapsam
+  tabanını (`marker`) YEREL değişkende saklar → KEMGU'nun çağrı yığını her seviyeyi
+  korur → paylaşılan imleç doğru kaydedilip geri yüklenir. **Flat-token'ın
+  çağrı/dönüş için "zorlanması" bu yerel-kaydet deseniyle çözüldü; AST rewrite
+  GEREKMEDİ.**
+- Lexer'a `,` (18), `don` (19), `islev` (20) + 2-param çağrı eklendi.
+
+**Doğrulama (adversarial, 9 program):** faktöriyel (fakt(5)=120), Fibonacci
+(fib(10)=55, fib(12)=144), çok-param (topla(40,2), carp(6,7)), KARŞILIKLI özyineleme
+(cift/tek = isEven/isOdd), fonksiyon-içi döngü (kareler(10)=45), iç içe çağrı
+(kare/iki), fonksiyondan global erişim (g=30; ekle(12)). Headline: fakt(5)-78 = 42.
+opt-verify PASS. **ASan/UBSan TEMİZ** — fib(12) derin özyineleme dahil 0 ihlal
+(kapsam-yığını slot reuse belleği sınırlar).
+
+**Testler:** test_llvm 231→**233** ([verify]+[run]). asan_e2e_denetim otomatik
+kapsar (örnek temiz). Derleyici DOKUNULMADI → diğer suite'ler etkilenmez.
+
+**Self-hosting durumu:** Mini-dil V3 = lexer + öncelikli parser + kontrol akışı +
+fonksiyonlar/özyineleme + kapsam — tam bir Turing-tam toy dil, saf KEMGU'da.
+**Bu, KEMGU'nun ifade-gücü kanıtının (D-022→D-034) son büyük yapı taşı.**
+Sıradaki gerçek faz: bu demolar self-hosting PROXY'siydi; asıl adım gerçek KEMGU
+derleyicisinin bir parçasını (doğal ilk parça: gerçek KEMGU lexer'ı) KEMGU'da
+yazmak — daha büyük, planlı bir faz (ayrı konuşulacak).
+
+---
+
 ## D-033 — Self-hosting: mini dil V2 — KONTROL AKIŞI + deyim blokları (saf KEMGU) (2026-06-13)
 
 **Karar [ETKİ: düşük — örnek + test, derleyici değişmedi]:** D-028 (atama + sembol
