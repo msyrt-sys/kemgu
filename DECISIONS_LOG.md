@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-046 — SELF-HOST parser P2: deyimler + kontrol akışı + desenler — 9/9 sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus; C tarafı 0 değişiklik].**
+Aşama 1 P2: tüm deyimler + kontrol akışı + eşleş desenleri. parser.c parse_deyim/
+parse_eger/parse_iken/parse_icin/parse_esles/parse_desen/parse_guvensiz ile birebir.
+
+**Kapsam:** değişken (`: tip` ops. + `= ifade`), atama (lvalue `=`), ver (0/1
+çocuk), ifade-deyimi, eğer/değilse/değilse-eğer (else-if zinciri = recursive),
+iken, için (`ad: koleksiyon`), eşleş + kollar, güvensiz (±`[etiket: "..."]`).
+Desenler: joker `_`, tanımlayıcı, yapıcı `Ad(...)`, çeşit-yol `Çeşit::Varyant[(payload)]`,
+literal. Kol gövdesi: ifade `;` veya `{ blok }`.
+
+**`yapi_izni` bayrağı (parser.c yapi_olusturma_izni birebir):** Koşul bağlamında
+(eğer/iken/için/eşleş değeri) `Tip { }` yapı-oluşturma KAPALI → `{` blok başı sayılır.
+`Ayr.yapi_izni` (1 default; parse_kosul 0/restore). Düğüm pozisyonları C ile birebir
+(deyim=keyword; atama/ifade-deyimi=ifade başı; eşleş-kolu=desen başı).
+
+**Doğrulama:** `make calistir_parser_diff` → **9/9 SIFIR-DİFF** (6 P1 + 3 P2:
+değişken-atama, kontrol-akışı, eşleş-güvensiz). C derleyici değişmedi → regresyon yok.
+`--check` temiz.
+
+**Sınır:** Param/generic/bildirim → P3; tam tip sözdizimi (annot Dizi/seçimlik/...)
+→ P4; KESIRLI float → ayrı. P2 sarmalayıcı yine `işlev f() -> T { deyimler }` (param yok).
+
+---
+
 ## D-045 — SELF-HOST parser P1: Pratt ifade parser — 6/6 korpus --ast sıfır-diff (2026-06-14)
 
 **Karar [ETKİ: düşük — `selfhost/parser.kem` + korpus; C tarafı yalnız additive

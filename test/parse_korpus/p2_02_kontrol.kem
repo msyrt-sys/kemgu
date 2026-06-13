@@ -1,0 +1,35 @@
+işlev a() -> tam32 {
+    eğer x < 10 {
+        ver 1;
+    }
+    eğer x ve y {
+        topla();
+    } değilse {
+        çıkar();
+    }
+    eğer a == 1 {
+        ver 1;
+    } değilse eğer a == 2 {
+        ver 2;
+    } değilse eğer a == 3 {
+        ver 3;
+    } değilse {
+        ver 0;
+    }
+    ver 0;
+}
+işlev b() -> tam32 {
+    iken x < 100 {
+        x = x + 1;
+        eğer x == 50 {
+            ver x;
+        }
+    }
+    için eleman: koleksiyon {
+        işle(eleman);
+    }
+    için i: aralik {
+        toplam = toplam + i;
+    }
+    ver 0;
+}
