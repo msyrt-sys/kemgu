@@ -307,6 +307,14 @@ static void test_cesit_capraz_modul_calistir(void) {
                rc == 42);
 }
 
+static void test_cesit_kenar_calistir(void) {
+    /* Robustness: payload çeşit struct ALANI + NESTED çeşit + metin payload +
+     * by-value fonksiyon dönüşü — hepsi tek programda. 20+7+15 = 42. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/cesit_kenar.kem");
+    test_sonuc("C3 cesit kenar (struct-alan+nested+metin+by-value) -> 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2465,6 +2473,7 @@ int main(void) {
     test_cesit_agac_calistir();
     test_turkce_tip_adi_calistir();
     test_cesit_capraz_modul_calistir();
+    test_cesit_kenar_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
