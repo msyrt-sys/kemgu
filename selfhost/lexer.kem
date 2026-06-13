@@ -6,13 +6,19 @@
 //   <TIP>\t<satır>\t<sütün>\t<offset>\t<uzunluk>
 //
 // MILESTONE M1: ASCII çekirdek (identifier + ondalık + tek-kar op + ayraç + EOF).
-// MILESTONE M2 (bu dosya): UTF-8 + TÜRKÇE anahtar kelimeler.
-//   - UTF-8 identifier: ASCII [A-Za-z_] + 2-byte Türkçe harf (0xC3/C4/C5 + 2.bayt)
-//     — utf8.c turkce_harf_2byte ile BİREBİR.
-//   - 44 anahtar kelime (15 M1 ASCII + geri_al/uygula/kanal + 27 Türkçe).
-//   - bayt-tabanlı sütün (Türkçe karakter sütünü 2 ilerletir — C ilerle deseni).
+// MILESTONE M2: UTF-8 + TÜRKÇE anahtar kelimeler (44 keyword + bayt-sütün).
+// MILESTONE M3 (bu dosya): operatörler + noktalama — MAXIMAL MUNCH.
+//   - Çatışma zincirleri (C lexer ile birebir, switch 318-375):
+//     . / .. / ...   :  / ::   <  / <= / <<   >  / >= / >>
+//     =  / == / =>    -  / -= / ->   + / +=   * / *=   / / /=   % / %=   ! / !=
+//   - Bit ops & | ^ ~ KOŞULSUZ (&& yok; &değişken lexer'da BİRLEŞMEZ — parser işi).
+//   - >> daima tek SAGA_KAYDIR (generic'i parser böler — lexer çözmez).
+//   - Tek ! → HATALI (yalnız != geçerli). Kalan ayraç [ ] : eklendi.
+//   - NOT: // ve /* trivia M5'te; M3 yalnız / ve /= verir. M3 korpusu yorum/literal
+//     içermez; özellikle `rakam.` (float) M4'e ait — M3 korpusunda `digit.` YOK
+//     (yalnız `..`/`...` aralık güvenli).
 //   - metin_bayt İŞARETLİ → bayt() helper'ı UNSIGNED (0-255) döndürür.
-//   (çok-karakter op → M3; sayı varyant/literal → M4; yorum/raw → M5.)
+//   (sayı varyant/literal → M4; yorum/raw/hata → M5; bootstrap ikame → M6.)
 //
 // Kullanım: kemgu_lexer.exe <kaynak.kem>
 // ============================================================================
@@ -135,21 +141,82 @@ işlev anahtar_tip(w: metin) -> metin {
     ver "TANIMLAYICI";
 }
 
-// Tek-karakter operatör/ayraç → token adı ("HATALI" = M1/M2 dışı).
-işlev tek_kar_tip(b: tam32) -> metin {
-    eğer b == 43 { ver "ARTI"; }
-    eğer b == 45 { ver "EKSI"; }
-    eğer b == 42 { ver "YILDIZ"; }
-    eğer b == 47 { ver "BOLU"; }
-    eğer b == 37 { ver "MOD"; }
-    eğer b == 61 { ver "ESIT"; }
-    eğer b == 40 { ver "SOL_PAREN"; }
-    eğer b == 41 { ver "SAG_PAREN"; }
-    eğer b == 123 { ver "SOL_SUSLU"; }
-    eğer b == 125 { ver "SAG_SUSLU"; }
-    eğer b == 44 { ver "VIRGUL"; }
-    eğer b == 59 { ver "NOKTALI_VIRGUL"; }
-    ver "HATALI";
+// Sınır-güvenli bayt: pos < uz ise bayt, değilse 0 (lookahead).
+işlev ikinci_bayt(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos < uz { ver bayt(kaynak, pos); }
+    ver 0;
+}
+// Operatör/noktalama token'ı emit et (MAXIMAL MUNCH) → tüketilen bayt sayısı.
+// ASCII: + 43  - 45  * 42  / 47  % 37  = 61  ! 33  < 60  > 62  & 38  | 124
+//        ^ 94  ~ 126  . 46  : 58  ( 40  ) 41  { 123  } 125  [ 91  ] 93  , 44  ; 59
+işlev op_emit(kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken b0: tam32 = bayt(kaynak, pos);
+    değişken b1: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
+    değişken b2: tam32 = ikinci_bayt(kaynak, pos + 2, uz);
+    eğer b0 == 43 {                                          // + +=
+        eğer b1 == 61 { emit("ARTI_ESIT", satir, sutun, pos, 2); ver 2; }
+        emit("ARTI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 45 {                                          // - -= ->
+        eğer b1 == 61 { emit("EKSI_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { emit("OK", satir, sutun, pos, 2); ver 2; }
+        emit("EKSI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 42 {                                          // * *=
+        eğer b1 == 61 { emit("YILDIZ_ESIT", satir, sutun, pos, 2); ver 2; }
+        emit("YILDIZ", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 47 {                                          // / /= (// /* → M5)
+        eğer b1 == 61 { emit("BOLU_ESIT", satir, sutun, pos, 2); ver 2; }
+        emit("BOLU", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 37 {                                          // % %=
+        eğer b1 == 61 { emit("MOD_ESIT", satir, sutun, pos, 2); ver 2; }
+        emit("MOD", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 61 {                                          // = == =>
+        eğer b1 == 61 { emit("ESIT_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { emit("KALIN_OK", satir, sutun, pos, 2); ver 2; }
+        emit("ESIT", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 33 {                                          // ! != (tek ! → HATALI)
+        eğer b1 == 61 { emit("ESIT_DEGIL", satir, sutun, pos, 2); ver 2; }
+        emit("HATALI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 60 {                                          // < <= <<
+        eğer b1 == 61 { emit("KUCUK_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 60 { emit("SOLA_KAYDIR", satir, sutun, pos, 2); ver 2; }
+        emit("KUCUK", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 62 {                                          // > >= >> (generic'i parser böler)
+        eğer b1 == 61 { emit("BUYUK_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { emit("SAGA_KAYDIR", satir, sutun, pos, 2); ver 2; }
+        emit("BUYUK", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 38 { emit("VE_BIT", satir, sutun, pos, 1); ver 1; }      // &
+    eğer b0 == 124 { emit("VEYA_BIT", satir, sutun, pos, 1); ver 1; }   // |
+    eğer b0 == 94 { emit("OZVEYA_BIT", satir, sutun, pos, 1); ver 1; }  // ^
+    eğer b0 == 126 { emit("DEGIL_BIT", satir, sutun, pos, 1); ver 1; }  // ~
+    eğer b0 == 46 {                                          // . .. ...
+        eğer b1 == 46 {
+            eğer b2 == 46 { emit("UC_NOKTA", satir, sutun, pos, 3); ver 3; }
+            emit("ARALIK", satir, sutun, pos, 2); ver 2;
+        }
+        emit("NOKTA", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 58 {                                          // : ::
+        eğer b1 == 58 { emit("CIFT_IKI_NOKTA", satir, sutun, pos, 2); ver 2; }
+        emit("IKI_NOKTA", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 40 { emit("SOL_PAREN", satir, sutun, pos, 1); ver 1; }       // (
+    eğer b0 == 41 { emit("SAG_PAREN", satir, sutun, pos, 1); ver 1; }       // )
+    eğer b0 == 123 { emit("SOL_SUSLU", satir, sutun, pos, 1); ver 1; }      // {
+    eğer b0 == 125 { emit("SAG_SUSLU", satir, sutun, pos, 1); ver 1; }      // }
+    eğer b0 == 91 { emit("SOL_KOSELI", satir, sutun, pos, 1); ver 1; }      // [
+    eğer b0 == 93 { emit("SAG_KOSELI", satir, sutun, pos, 1); ver 1; }      // ]
+    eğer b0 == 44 { emit("VIRGUL", satir, sutun, pos, 1); ver 1; }          // ,
+    eğer b0 == 59 { emit("NOKTALI_VIRGUL", satir, sutun, pos, 1); ver 1; }  // ;
+    emit("HATALI", satir, sutun, pos, 1); ver 1;            // default (L005)
 }
 
 işlev lex_dosya(kaynak: metin) -> tam32 {
@@ -188,9 +255,9 @@ işlev lex_dosya(kaynak: metin) -> tam32 {
                 }
                 değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
                 emit(anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
-            } değilse {                                    // tek-karakter
-                pos = pos + 1; sutun = sutun + 1;
-                emit(tek_kar_tip(tb), t_sat, t_sut, t_off, 1);
+            } değilse {                                    // operatör/noktalama (maximal munch)
+                değişken olen: tam32 = op_emit(kaynak, pos, uz, t_sat, t_sut);
+                pos = pos + olen; sutun = sutun + olen;
             }
         }
     }

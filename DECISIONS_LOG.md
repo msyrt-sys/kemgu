@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-038 — SELF-HOST lexer M3: operatörler + noktalama (maximal munch) — sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M2'nin tek-karakter
+`tek_kar_tip`'i, tüm çok-karakter operatörleri MAXIMAL MUNCH ile çözen `op_emit`
+ile değiştirildi (C lexer switch 318-375 ile birebir).
+
+**Kapsam:** Çatışma zincirleri — `.`/`..`/`...`, `:`/`::`, `<`/`<=`/`<<`,
+`>`/`>=`/`>>`, `=`/`==`/`=>`, `-`/`-=`/`->`, `+`/`+=`, `*`/`*=`, `/`/`/=`,
+`%`/`%=`, `!`/`!=`. Bit ops `& | ^ ~` KOŞULSUZ (`&&` yok; `&değişken` lexer'da
+BİRLEŞMEZ). `>>` daima tek `SAGA_KAYDIR` (generic'i parser böler). Tek `!`→HATALI.
+Kalan ayraç `[ ] :`. `op_emit` tüketilen bayt sayısını döner (sütün/pos ilerletme).
+`ikinci_bayt` sınır-güvenli lookahead (OOB→0).
+
+**Doğrulama:** `make calistir_lexer_diff` → **13/13 SIFIR-DİFF** (9 M1/M2 + 4 M3).
+Adversaryel munch spot-check: `a>>b ....x !c ===z` → C oracle ile bayt-exact
+(`>>`=tek SAGA_KAYDIR, `....`=UC_NOKTA+NOKTA, `!c`=HATALI+TANIMLAYICI,
+`===`=ESIT_ESIT+ESIT). Not: C stderr L005 mesajı token dump'ında değil → diff'i
+etkilemez; HATALI tokenı eşleşir. `--check` temiz.
+
+**Sınır (kasıtlı):** `//` `/*` trivia M5'te (M3 yalnız `/` `/=`). `digit.` (float)
+M4'e ait — M3 korpusu `digit.` içermez (yalnız `..`/`...` aralık güvenli).
+
+**Sıradaki (M4):** literaller — hex/bin/oct tamsayı, float (kesir+üs), karakter/
+metin (escape ham bırakma). Korpus literal-ağırlıklı genişler.
+
+---
+
 ## D-037 — SELF-HOST lexer M2: UTF-8 + 44 Türkçe anahtar kelime — sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus genişler; C tarafı 0
