@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-048 — SELF-HOST parser P3: bildirimler — 69/113 GERÇEK .kem --ast sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P3: tüm
+üst-düzey bildirimler. parser.c parse_islev_genel/parse_yapi/parse_cesit/
+parse_ozellik/parse_uygula/parse_sabit/parse_parametre/parse_ust_oge ile birebir.
+
+**Kapsam:** işlev (gerçekzamanlı? + generic `<T: Bound>` + param + dönüş + gövde;
+imza_yeterli özellik için), yapı (+generic + alan), çeşit (varyant + C3 payload;
+generic v1-YOK skip), özellik (imza/default), uygula (trait `için` + inherent),
+sabit, parametre (`kendin`/`&kendin`/normal). Generic params + bound'lar PARSE+
+DISCARD (dump'ta yok; bound düğümleri orphan). atla_tip_paramlar `>>` böl.
+
+**İki kök-fix:** (1) **PROGRAM pozisyonu** = ilk token (C); önce 1:1 hardcode →
+yorumla başlayan HER dosya farklıydı (0→69 sıfır-diff sıçraması). (2) **Anti-hang:**
+çeşit generic + varyant-loop non-identifier'da ilerlemiyordu → sonsuz döngü; C
+panik_sync deseni eklendi.
+
+**Doğrulama:** `make calistir_parser_diff` → **11/11 korpus** + **69/113 GERÇEK .kem**
+(ornekler/drivers/stdlib/moduller) tam --ast sıfır-diff. Kalan 44: P5 (modül/kullan/
+dışa/genel/satıriçi_asm) + KESIRLI float. C derleyici değişmedi.
+
+**Sınır:** Üst-düzey modül/kullan/dışa/genel/satıriçi_asm → P5; KESIRLI float (%g) → ayrı.
+
+---
+
 ## D-046 — SELF-HOST parser P2: deyimler + kontrol akışı + desenler — 9/9 sıfır-diff (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus; C tarafı 0 değişiklik].**
