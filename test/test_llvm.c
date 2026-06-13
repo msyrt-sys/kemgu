@@ -327,6 +327,37 @@ static void test_yorumlayici_calistir(void) {
                rc == 42);
 }
 
+static void test_metin_bayt_calistir(void) {
+    /* Madde A genişletme: metin_bayt(s, i) indeksli ham bayt erişimi. ASCII
+     * 'B' = 66. metin literali CALL argümanı + 'olarak' cast altında — pre-pass
+     * cast düğümünü taramıyordu (sessiz `add i32 0,0` miscompile), düzeltildi. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "ver (metin_bayt(\"ABC\", 1) olarak tam32); }");
+    test_sonuc("metin_bayt(\"ABC\",1)='B'=66 (literal arg+cast) -> exit 66",
+               rc == 66);
+}
+
+static void test_metin_esit_calistir(void) {
+    /* metin_esit: byte-byte eşitlik. Eşit -> 1, farklı -> dal atlanır. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "e\xc4\x9f" "er metin_esit(\"ver\", \"ver\") { "
+        "e\xc4\x9f" "er metin_esit(\"ver\", \"yap\") { ver 1; } ver 42; } "
+        "ver 2; }");
+    test_sonuc("metin_esit (anahtar kelime tanima) -> exit 42", rc == 42);
+}
+
+static void test_metin_tokenizer_calistir(void) {
+    /* SELF-HOSTING 2. ön-koşul (gerçek string işlemleri): saf KEMGU
+     * tokenizer — metin_uzunluk + metin_bayt ile "N+N+N" ifadesini bayt-bayt
+     * tarar, sayıları toplar. "10+20+12" = 42. Bir KEMGU programı kendi
+     * girdisini karakter karakter okuyabiliyor (lexer temeli). */
+    int rc = derle_dosya_ve_calistir("test/ornekler/12_metin_tokenizer.kem");
+    test_sonuc("Metin tokenizer (metin_bayt tarama, N+N+N) -> exit 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2500,6 +2531,9 @@ int main(void) {
     test_cesit_capraz_modul_calistir();
     test_cesit_kenar_calistir();
     test_yorumlayici_calistir();
+    test_metin_bayt_calistir();
+    test_metin_esit_calistir();
+    test_metin_tokenizer_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

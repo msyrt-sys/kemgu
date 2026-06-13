@@ -83,6 +83,23 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         p[0] = tip_olustur_basit(a, TIP_METIN);
         EKLE_BUILTIN("metin_uzunluk", 13, p, 1, tip_olustur_basit(a, TIP_TAM32));
     }
+    /* metin_bayt(metin, tam32) -> tam8  — i. HAM BAYT (UTF-8; ASCII'de =
+     * karakter). Sınır dışı/NULL → 0. Tokenizer döngüsünün temel taşı:
+     * metin_uzunluk ile birlikte bir metin üzerinde bayt-bayt gezinmeyi sağlar. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("metin_bayt", 10, p, 2, tip_olustur_basit(a, TIP_TAM8));
+    }
+    /* metin_esit(metin, metin) -> mantıksal  — byte-byte eşitlik (strcmp==0).
+     * Anahtar kelime/tanımlayıcı tanıma için (tokenizer). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_esit", 10, p, 2, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
     /* metin_birlestir(metin, metin) -> metin */
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
