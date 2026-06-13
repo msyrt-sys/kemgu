@@ -1,0 +1,8 @@
+// C regression-guard fikstur: arac::yardim() top-level global yardim()'i
+// GÖLGELER. capraz<T> gövdesindeki ciplak yardim() module-first çözülmeli
+// (B binding'i) — specialization yolu bunu KORUMALI (global-first sapma yok).
+genel işlev yardim() -> tam32 { ver 1; }
+
+// witness-param t yalnız capraz'ı generic yapıp çağrıyı specialization
+// yoluna sokmak için (explicit <i64> parse olmuyor); değer kullanılmaz.
+genel işlev capraz<T>(t: T) -> tam32 { ver yardim(); }
