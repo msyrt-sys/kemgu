@@ -464,6 +464,11 @@ calistir_asan_denetim: $(BUILD)/kemgu$(EXE)
 calistir_asan_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@bash test/asan_matris_calistir.sh
 
+# SELF-HOST lexer doğruluk kanıtı: KEMGU-lexer (selfhost/lexer.kem) çıktısını
+# C lexer --token oracle'ına karşı sıfır-diff'ler (D-035 ADIM-0 / M1+).
+calistir_lexer_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/lexer_diff_harness.sh
+
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."
 	@for f in stdlib/temel/*.kem stdlib/*.kem; do \
