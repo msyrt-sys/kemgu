@@ -298,6 +298,15 @@ static void test_turkce_tip_adi_calistir(void) {
                rc == 42);
 }
 
+static void test_cesit_capraz_modul_calistir(void) {
+    /* SELF-HOSTING deseni: payload + recursive çeşit MODÜLDE (ifd::Ifade) —
+     * nitelikli yapıcı ifd::Ifade::Topla(&a,&b) + nitelikli annotation +
+     * çapraz-modül recursive değerlendirme. (3+4)*6 = 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_ifd.kem");
+    test_sonuc("C3 capraz-modul payload+recursive cesit (modul AST) -> 42",
+               rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2455,6 +2464,7 @@ int main(void) {
     test_cesit_agac_verify();
     test_cesit_agac_calistir();
     test_turkce_tip_adi_calistir();
+    test_cesit_capraz_modul_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();

@@ -1180,6 +1180,16 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                     return s->tip;  /* zaten TIP_GENERIC_PARAM */
                 }
             }
+            /* C3 çapraz-modül: modül-yerel yapı/çeşit (örn. recursive çeşit'in
+             * payload tipi &Ifade, dışarıdan çözülürken) — yüklü modüllerde
+             * düz adla ara (yapi_sembol_capraz_bul; alan-erişimiyle aynı). */
+            {
+                const Sembol *cs = yapi_sembol_capraz_bul(tk, ad, uz);
+                if (cs && cs->kategori == SEMBOL_YAPI) {
+                    return tip_olustur_yapi(tk->arena, cs->ad, cs->ad_uzunluk,
+                                            NULL, 0);
+                }
+            }
             tip_hata(tk, tip_d, "T011", "bilinmeyen tip");
             return t_hata(tk);
         }
