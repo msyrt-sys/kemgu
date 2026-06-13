@@ -975,6 +975,28 @@ static Scope *yol_modul_scope_coz(TipKontrol *tk, const Dugum *d) {
     return NULL;
 }
 
+/* D dilim-1: yapı SEMBOL'ünü düz adla bul — önce görünür scope zinciri
+ * (in-file / aynı modül), bulunamazsa YÜKLÜ tüm modüllerin scope'larında
+ * düz adla ara. Çapraz-modül `geo2::Nokta` annotasyonlu bir değişkenin
+ * alan erişimi (n.x) tip kontrolde yapının ALAN listesini ister; ad
+ * codegen'in düz IR-ad uzayıyla tutarlıdır (D-011; per-modül ayrım D
+ * ileri dilim). Görünür çözüm her zaman önce gelir (gölgeleme korunur). */
+static const Sembol *yapi_sembol_capraz_bul(TipKontrol *tk,
+                                            const char *ad, int uz) {
+    const Sembol *s = sembol_bul(tk->scope, ad, uz);
+    if (s && s->kategori == SEMBOL_YAPI) return s;
+    if (tk->builtin_scope) {
+        for (const SembolLink *l = tk->builtin_scope->bas; l; l = l->sonraki) {
+            if (l->sembol.kategori == SEMBOL_MODUL && l->sembol.modul_scope) {
+                const Sembol *ys = sembol_bul_yerel(l->sembol.modul_scope,
+                                                    ad, uz);
+                if (ys && ys->kategori == SEMBOL_YAPI) return ys;
+            }
+        }
+    }
+    return s;
+}
+
 /* === Tek-gecis ad cozumu: binding yazimi (bkz. ast.h CozumKategorisi) ===
  *
  * Resolver her ad-referansinda kazanan sembolu + kategorisini AST
@@ -1313,11 +1335,41 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
         }
 
         case DUGUM_TIP_KULLANICI: {
-            /* Yol = DUGUM_TANIMLAYICI veya DUGUM_YOL */
+            /* Yol = DUGUM_TANIMLAYICI (niteliksiz: Liste<T>) veya
+             * DUGUM_YOL (nitelikli: modül::Tip<T> — D dilim-1). Her iki
+             * yolda da yapı SEMBOL_YAPI olarak çözülür; niteliksiz scope
+             * zincirinde, nitelikli hedef modülün TİP namespace'inde. */
             const Dugum *yol = tip_d->veri.tip_kullanici.yol;
+            const Sembol *s = NULL;
             if (yol && yol->tip == DUGUM_TANIMLAYICI) {
-                const char *ad = yol->veri.tanimlayici.metin;
-                int uz = yol->veri.tanimlayici.uzunluk;
+                s = sembol_bul(tk->scope, yol->veri.tanimlayici.metin,
+                               yol->veri.tanimlayici.uzunluk);
+            } else if (yol && yol->tip == DUGUM_YOL) {
+                /* Nitelikli tip: sol → hedef modül scope; sağ_ad → o
+                 * scope'taki yapı (sembol_bul_yerel: parent'a bakmaz —
+                 * value-path çözümüyle aynı kapsam zinciri). */
+                Scope *msc = yol_modul_scope_coz(tk, yol->veri.yol.sol);
+                /* Faz-1 (pre_populate: param/dönüş imzaları) `kullan`
+                 * görünür-alias'ından ÖNCE çalışır → görünür `dizi` yok,
+                 * yalnız GİZLİ kanonik dosya-modülü builtin_scope'ta var.
+                 * Tip pozisyonu modülü açıkça adlandırdığı + modül zaten
+                 * yüklü olduğu (bir yerde kullan var) için gizli kanoniğe
+                 * düş (tek-segment; iç-içe yol görünür-alias faz-3'te). */
+                if (!msc && yol->veri.yol.sol &&
+                    yol->veri.yol.sol->tip == DUGUM_TANIMLAYICI) {
+                    const Sembol *km = sembol_bul_yerel(tk->builtin_scope,
+                        yol->veri.yol.sol->veri.tanimlayici.metin,
+                        yol->veri.yol.sol->veri.tanimlayici.uzunluk);
+                    if (km && km->kategori == SEMBOL_MODUL && km->modul_scope) {
+                        msc = km->modul_scope;
+                    }
+                }
+                if (msc) {
+                    s = sembol_bul_yerel(msc, yol->veri.yol.sag_ad,
+                                         yol->veri.yol.sag_ad_uzunluk);
+                }
+            }
+            {
                 int n = tip_d->veri.tip_kullanici.tip_arg_sayi;
                 TipBilgisi **args = NULL;
                 if (n > 0) {
@@ -1328,8 +1380,6 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                             tip_d->veri.tip_kullanici.tip_arg[i]);
                     }
                 }
-                /* Sembol tablosunda yapi mi diye bak */
-                const Sembol *s = sembol_bul(tk->scope, ad, uz);
                 if (s && s->kategori == SEMBOL_YAPI) {
                     /* Bound kontrolu: yapi tanimindaki her tip_param icin,
                      * arg o param'in bound'lari karsiliyor mu? */
@@ -1385,11 +1435,16 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                     return tip_olustur_yapi(tk->arena, s->ad, s->ad_uzunluk,
                                             args, n);
                 }
-                tip_hata(tk, tip_d, "T011", "bilinmeyen kullanici tipi");
+                /* Niteliksiz çözülemedi → T011; nitelikli yol çözülemedi
+                 * (modül yok / üye yapı değil) → T016. */
+                if (yol && yol->tip == DUGUM_YOL) {
+                    tip_hata(tk, tip_d, "T016", "nitelikli tip yolu "
+                        "cozumlenemedi (modul/yapi bulunamadi)");
+                } else {
+                    tip_hata(tk, tip_d, "T011", "bilinmeyen kullanici tipi");
+                }
                 return t_hata(tk);
             }
-            tip_hata(tk, tip_d, "T016", "tip yolu cozumlenemedi");
-            return t_hata(tk);
         }
 
         default:
@@ -3039,7 +3094,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T007", "alan erisimi yapi tipi gerek");
                 return t_hata(tk);
             }
-            const Sembol *yapi_sem = sembol_bul(tk->scope,
+            const Sembol *yapi_sem = yapi_sembol_capraz_bul(tk,
                 nesne_tip->veri.yapi.ad, nesne_tip->veri.yapi.ad_uzunluk);
             if (!yapi_sem || yapi_sem->kategori != SEMBOL_YAPI) {
                 tip_hata(tk, d, "T002", "yapi tanimi bulunamadi");

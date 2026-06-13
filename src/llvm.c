@@ -362,12 +362,22 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
     }
     if (tip_d->tip == DUGUM_TIP_KULLANICI && tip_d->veri.tip_kullanici.yol) {
         const Dugum *y = tip_d->veri.tip_kullanici.yol;
+        /* Yapi adi: niteliksiz (Liste<T>) tanimlayici'dan, nitelikli
+         * (modül::Tip — D dilim-1) YOL'un sag_ad'indan. Modül-içi yapilar
+         * düz IR-ad uzayinda (type-erased %Liste, D-011) — sag_ad düz bul. */
+        const char *yad = NULL;
+        int yuz = 0;
         if (y->tip == DUGUM_TANIMLAYICI) {
+            yad = y->veri.tanimlayici.metin;
+            yuz = y->veri.tanimlayici.uzunluk;
+        } else if (y->tip == DUGUM_YOL) {
+            yad = y->veri.yol.sag_ad;
+            yuz = y->veri.yol.sag_ad_uzunluk;
+        }
+        if (yad) {
             /* Yapi tipi mi? Kayitliysa "%Ad" doner (struct-by-value),
              * degilse "ptr" (trait vb. kullanici tipi). */
-            YapiKayit *yk = yapi_bul(g,
-                y->veri.tanimlayici.metin,
-                y->veri.tanimlayici.uzunluk);
+            YapiKayit *yk = yapi_bul(g, yad, yuz);
             if (yk) {
                 if (yk->ast && yk->ast->tip == DUGUM_CESIT) {  /* C2.7 */
                     return cesit_disc_ir(yk->ast);

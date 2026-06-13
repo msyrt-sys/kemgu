@@ -1,13 +1,14 @@
-// Çapraz-dosya Liste<T> STRUCT-ELEMAN: kütüphane/dizi.kem'i Nokta (karışık
-// genişlik a:tam32 + b:tam64) elemanıyla kullanır. Type-erased %Liste, T=Nokta
-// witness ile çıkarsanır. Saf inference. n0.a + n1.a = 10 + 32 = 42.
+// D dilim-1: nitelikli annotation STRUCT-ELEMAN. dizi::Liste<Nokta> — Liste
+// nitelikli (dizi), eleman tipi Nokta entry-yerel (niteliksiz, karışık
+// genişlik a:tam32 + b:tam64). Annotation T=Nokta'yı üretim oluştur'a besler.
+// n0.a + n1.a = 10 + 32 = 42.
 kullan dizi;
 
 yapı Nokta { a: tam32; b: tam64; }
 
 işlev main() -> tam32 {
     değişken bos: Nokta = Nokta { a: 0, b: 0 };
-    değişken l = dizi::yarat(bos);
+    değişken l: dizi::Liste<Nokta> = dizi::oluştur(yetki_olustur(3, 3));
     dizi::ekle(&l, yetki_olustur(3, 3), Nokta { a: 10, b: (100 olarak tam64) });
     dizi::ekle(&l, yetki_olustur(3, 3), Nokta { a: 32, b: (200 olarak tam64) });
     eğer dizi::boy(&l) != (2 olarak tam64) { ver 60; }

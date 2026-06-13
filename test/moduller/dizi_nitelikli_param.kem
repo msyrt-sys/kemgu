@@ -1,0 +1,17 @@
+// D dilim-1: nitelikli tip PARAM/DÖNÜŞ pozisyonunda. ilk_iki param'ı
+// `&dizi::Liste<tam64>` — pre_populate (imza) fazında çözülür (kullan
+// görünür-alias'ından önce → gizli kanonik fallback). Param annotasyonu
+// generic_arg_ir yan-kanalını da besler. 10 + 32 = 42.
+kullan dizi;
+
+işlev ilk_iki(l: &dizi::Liste<tam64>) -> tam64 {
+    değişken sifir: tam64 = 0;
+    ver dizi::al(l, 0, sifir) + dizi::al(l, 1, sifir);
+}
+
+işlev main() -> tam32 {
+    değişken l: dizi::Liste<tam64> = dizi::oluştur(yetki_olustur(3, 3));
+    dizi::ekle(&l, yetki_olustur(3, 3), 10 olarak tam64);
+    dizi::ekle(&l, yetki_olustur(3, 3), 32 olarak tam64);
+    ver ilk_iki(&l) olarak tam32;
+}

@@ -1,0 +1,16 @@
+// D dilim-1: ÇAPRAZ-MODÜL STRUCT USE. sekil::Nokta nitelikli tip — hem
+// değişken (n) hem param (topla_xy) annotasyonunda; sekil::yap ile kurulur
+// (kur), alanları okunur (kullan). Alan erişimi tip kontrolde çapraz-modül
+// yapı arama ile çözülür. 20 + 22 = 42.
+// NOT: nitelikli YAPI KURMA ifadesi (sekil::Nokta { ... }) ifade-pozisyonu
+// (D ileri dilim); burada factory (sekil::yap) ile kurulur.
+kullan sekil;
+
+işlev topla_xy(n: sekil::Nokta) -> tam32 {
+    ver n.x + n.y;
+}
+
+işlev main() -> tam32 {
+    değişken n: sekil::Nokta = sekil::yap(20, 22);
+    ver topla_xy(n);
+}

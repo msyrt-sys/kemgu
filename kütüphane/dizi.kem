@@ -34,14 +34,13 @@
 //    + dönüş-T'sinin çıkarsanabilirliği.
 //  - *T indeksleme yalnız güvensiz blokta (G001).
 //
-// İNFERENCE NOTU (PROB — bkz. DECISIONS_LOG D-014):
-//  - `yarat<T>` üretim imzası `yarat(böl: yetki<Bellek>) -> Liste<T>` idi:
-//    paramlarında T YOK → T yalnız dönüş-bağlamı annotasyonundan
-//    (`değişken l: Liste<tam32> = ...`) çıkarsanırdı. Çapraz-dosya'da yazılı
-//    nitelikli annotasyon (`dizi::Liste<tam32>`) D işi + headline bunu
-//    yasaklıyor; explicit call-site tip-arg (`yarat<i64>()`) parser'da yok.
-//    DEMO için yarat'a `taban: T` TİP-TANIK param eklendi (değer kullanılmaz)
-//    → T arg'dan çıkarsanır. Bu DEMO adaptasyonu; üretim API kararı DEĞİL.
+// İNFERENCE (D dilim-1 ile çözüldü — bkz. DECISIONS_LOG D-015):
+//  - `oluştur(böl: yetki<Bellek>) -> Liste<T>` paramlarında T YOK → T yalnız
+//    dönüş-bağlamı annotasyonundan çıkarsanır. ÜRETİM imzası budur. D dilim-1
+//    nitelikli tip annotation (`değişken l: dizi::Liste<i64> = dizi::oluştur(böl)`)
+//    çapraz-dosya T'yi verir (in-file return-context inference'ın çapraz-dosya
+//    açılımı). D-014'teki DEMO witness-param (`taban: T`) KALDIRILDI — artık
+//    gerek yok. `ekle`/`al` zaten T-değer param'lı (witness'sız çıkarsanır).
 
 genel yapı Liste<T> {
     veri: *T;
@@ -49,10 +48,9 @@ genel yapı Liste<T> {
     kapasite: tam64;
 }
 
-// Boş liste (kapasite 0). taban: T yalnız tip-tanık (inference); değer
-// kullanılmaz. Yetki yalnız 0-tahsis için içeride üretilip tüketilir.
-genel işlev yarat<T>(taban: T) -> Liste<T> {
-    değişken böl: yetki<Bellek> = yetki_olustur(3, 3);
+// Boş liste (kapasite 0). Yetki yalnız 0-tahsis için ödünç alınır ve burada
+// tüketilir (lineer disiplin). T dönüş-bağlamı (nitelikli annotation) ile gelir.
+genel işlev oluştur<T>(böl: yetki<Bellek>) -> Liste<T> {
     değişken tampon: *T = bölge_al(böl, 0);
     geri_al(böl);
     ver Liste { veri: tampon, boy: 0, kapasite: 0 };
