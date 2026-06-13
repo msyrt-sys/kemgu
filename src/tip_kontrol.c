@@ -219,6 +219,13 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         p[0] = tip_olustur_basit(a, TIP_TAM64);
         EKLE_BUILTIN("yaz_tam64", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
+    /* yaz_bayt(tam32) -> bos — HAM bayt (putchar, UTF-8 ENCODE ETMEZ).
+     * Self-host parser ham UTF-8 dump için (yaz_karakter codepoint encode eder). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("yaz_bayt", 8, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
     /* yaz_metin built-in YOK — stdlib/dosya.kem 2-param yaz_metin
      * tanimlar; cakisma onlemek icin (KIRMIZI_QUEUE: dosya_yaz_metin
      * rename gelecek). */

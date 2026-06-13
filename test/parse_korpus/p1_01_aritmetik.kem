@@ -1,0 +1,5 @@
+işlev a() -> tam32 { ver x + 1 * 2 - 3 / 4 % 5; }
+işlev b() -> tam32 { ver (x + y) * (z - w); }
+işlev c() -> tam32 { ver 1 + 2 + 3 + 4 + 5; }
+işlev d() -> tam32 { ver a * b + c * d - e * f; }
+işlev e() -> tam32 { ver toplam + adim * sayac; }

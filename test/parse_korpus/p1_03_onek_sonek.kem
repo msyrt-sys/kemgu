@@ -1,0 +1,10 @@
+işlev a() -> tam32 { ver -x + değil y; }
+işlev b() -> tam32 { ver ~maske & deger; }
+işlev c() -> tam32 { ver &nesne + &değişken hedef; }
+işlev d() -> tam32 { ver *isaretci + 1; }
+işlev e() -> tam32 { ver -a.b.c; }
+işlev f() -> tam32 { ver f(1, 2, 3) + g(); }
+işlev g() -> tam32 { ver nesne.alan.derin[indeks](arg); }
+işlev h() -> tam32 { ver paket::alt::fonk + Tip::uye; }
+işlev i() -> tam32 { ver deger olarak tam64 + sayi olarak kesirli32; }
+işlev j() -> tam32 { ver -*p.x + ~y[0]; }
