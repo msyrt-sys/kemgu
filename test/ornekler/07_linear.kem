@@ -34,7 +34,7 @@ işlev tek_kez_kullan() -> tam32 {
     ver kullan(k);                            // k tüketildi, 42 döndü
 }
 
-// ----- 2) Yarat → imha -----
+// ----- 2) Oluştur → imha -----
 //
 // Değeri istemiyorsan `imha` ile at. Hala tüketim sayılır.
 işlev imha_ornegi() {

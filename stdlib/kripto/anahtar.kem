@@ -50,7 +50,7 @@ yapı HKDF_Salt {
 }
 
 // =============================================================================
-// Anahtar Yaratma — tekkez sarmalama
+// Anahtar Oluşturma — tekkez sarmalama
 // =============================================================================
 //
 // İçeride sabitsüre yapı; dışarıda tekkez (linear). Çift güvence:

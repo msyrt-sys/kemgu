@@ -128,7 +128,7 @@ Lean 4, F*, sadece-kâğıt). Karşılaştırma:
    — sebep:
    - Mathlib4 ASCII konvansiyonu izler, integration karmaşası olmaz
    - Lean error mesajları İngilizce; bug report'ta ASCII'siz isim
-     görüntüleme problemi yaratabilir
+     görüntüleme problemi oluşturabilir
    - Türkçe DNA korunur: belge/yorum/spec Türkçe, sadece mekanize ispatın
      sembol ismi transliterasyon
 

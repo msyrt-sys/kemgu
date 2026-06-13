@@ -376,13 +376,13 @@ SIMD intrinsics V1 tamamlandı (belgeler/KEMGU_SIMD_Spec_V1.md). Aşağıdaki
   |----------|--------------------|--------------|
   | 21_modul_kullan | `değişken p: grafik::Nokta` (modül-nitelikli tip) | Tip annot kaldırıldı |
   | 23_generic_constraint | `kendin` parametre tipi olarak | `tam32` ile değiştirildi |
-  | 24_nested_generic | `Kutu<T> { ... }` generic yaratım | `olustur<T>(x)` sarıcı |
+  | 24_nested_generic | `Kutu<T> { ... }` generic oluşturma | `olustur<T>(x)` sarıcı |
   | 49_generic_method | `uygula Cift<tam32, tam32>` specialization | `uygula Cift` |
 
 - **Önerilen seçenekler (gelecek görev):**
   1. parse_tip içine `::` modül-nitelikli tip referansı
   2. `kendin` parametre tipi (`baska: kendin`)
-  3. Generic yapı yaratım: `Tip<T> { alan: x }`
+  3. Generic yapı oluşturma: `Tip<T> { alan: x }`
   4. uygula specialization sözdizimi
 
 - **Engellediği iş:** Yok — basitleştirmeler test'in özünü değiştirmedi.
