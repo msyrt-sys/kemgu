@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-025 [YÜKSEK] — dizi_yaz intrinsic: in-place eleman güncelleme (mutable cursor) (2026-06-13)
+
+**Karar [YÜKSEK — yeni intrinsic]:** `dizi_yaz<T>(d: Dizi<T>, i: tam32, e: T) ->
+boş` — dinamik dizinin i. elemanını YERİNDE günceller. Koleksiyon API'sinde
+göze batan eksiklik: `dizi_ekle` (append) + `dizi_al` (oku) vardı ama eleman-SET
+yoktu. Bu, recursive-descent parser'ın paylaşılan MUTABLE KONUM İMLECİ için şart
+(tek elemanlı Dizi<tam32>, ptr → çağrılar arası paylaşılır, dizi_yaz ile ilerletilir).
+
+**Uygulama (dizi_al/dizi_ekle simetrisi):**
+- tip_kontrol.c: `dizi_yaz` özel-cased (DUGUM_CAGRI) — 3 arg, arg0 Dizi<T>, arg1
+  tam32 indeks (T028), arg2 eleman T (T001 uyumsuzluk).
+- llvm.c: element-tip varyant dispatch (i32→kdl_dizi_yaz_tam, i64→_tam64,
+  ptr→_ptr); index i32'ye, değer eleman-tipine cast. declare satırları eklendi.
+  **dizi_deger_arg:** dizi_ekle/al'da değer/indeks arg[1]; dizi_yaz'da DEĞER
+  arg[2] — `dizi_eleman_beklenen` forward'ı bu pozisyona yönlendirildi (önceki
+  sabit `i == 1` literal-eleman-tip çıkarsamasını yanlış arga verirdi).
+- runtime: kdl_dizi_yaz_tam/_tam64/_ptr — sınır dışı (i<0||i>=boyut)/NULL →
+  sessizce yok say (boyut BÜYÜTMEZ; büyütme dizi_ekle ile). dizi_al ile simetrik.
+
+**Doğrulama:** in-place (d[1]=40) + cursor (c[0]=c[0]+2) E2E; tam32 + tam64
+varyant dispatch ayrı ayrı E2E (42). Tam regresyon: test_llvm 220→**221**, +22
+suite (tip_kontrol 174, snapshot 50, parser 107, …). 0 ASan. Prod 0 uyarı.
+stdlib --check 12 OK. (Sınır: shrink/insert/remove yok — append+set+read yeterli.)
+
+---
+
 ## D-023 [YÜKSEK] — String stdlib I: metin_bayt intrinsic + metin literal pre-pass düzeltmesi (2026-06-13)
 
 **Bağlam:** Self-hosting'in 2. ön-koşulu "gerçek string işlemleri" (Mehmet: "4

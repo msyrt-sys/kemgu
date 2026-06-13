@@ -374,6 +374,18 @@ static void test_token_akisi_calistir(void) {
                rc == 42);
 }
 
+static void test_dizi_yaz_calistir(void) {
+    /* Yeni intrinsic dizi_yaz(d, i, v): i. elemanı YERİNDE günceller
+     * (dizi_al'ın yazma eşi). Mutable cursor / in-place güncelleme. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(4); "
+        "dizi_ekle(d, 1); dizi_ekle(d, 2); dizi_ekle(d, 3); "
+        "dizi_yaz(d, 2, 39); "
+        "ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2); }");
+    test_sonuc("dizi_yaz(d,2,39) in-place -> 1+2+39 = exit 42", rc == 42);
+}
+
 static void test_lit_42(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { ver 42; }");
@@ -2552,6 +2564,7 @@ int main(void) {
     test_metin_tokenizer_calistir();
     test_token_akisi_verify();
     test_token_akisi_calistir();
+    test_dizi_yaz_calistir();
 
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
