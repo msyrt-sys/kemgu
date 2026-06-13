@@ -1,0 +1,99 @@
+// ============================================================================
+// 13_token_akisi.kem — İKİ FAZLI lexer → token akışı → değerlendirici.
+//
+// Self-hosting'in gerçek mimarisi: bir metin önce TOKEN AKIŞINA çevrilir
+// (lexer), sonra ayrı bir geçiş bu akışı değerlendirir (parser/evaluator).
+// Token akışı DİNAMİK DİZİ'lerde (Dizi<tam32>, KdlDizi runtime) tutulur ve
+// fonksiyonlar arasında REFERANSLA (ptr) aktarılır — string + koleksiyon
+// stdlib'in birlikte çalıştığının kanıtı.
+//
+// Token, iki paralel dizide saklanır:  kindler[i] = tür,  degerler[i] = sayı.
+//   Tür kodları:  0 = SAYI,  1 = ARTI (+),  2 = CARPI (*),  3 = EKSI (-)
+//   ASCII:  '+'=43  '*'=42  '-'=45  '0'..'9'=48..57
+//
+// Değerlendirilen:  "2*3+36"  →  soldan sağa  ((2*3)+36)  =  42
+// ============================================================================
+
+// Bayt bir ASCII ondalık rakam mı? ('0'=48 .. '9'=57)
+işlev rakam_mi(b: tam8) -> mantıksal {
+    değişken k: tam32 = b olarak tam32;
+    ver k >= 48 ve k <= 57;
+}
+
+// FAZ 1 — LEXER: metni bayt-bayt tarar, token akışını iki paralel diziye
+// doldurur. Üretilen token sayısını döndürür.
+işlev lexle(ifade: metin, kindler: Dizi<tam32>, degerler: Dizi<tam32>) -> tam32 {
+    değişken uz: tam32 = metin_uzunluk(ifade);
+    değişken i: tam32 = 0;
+    değişken sayi: tam32 = 0;
+    değişken sayi_var: mantıksal = yanlış;
+    değişken adet: tam32 = 0;
+
+    iken i < uz {
+        değişken b: tam8 = metin_bayt(ifade, i);
+        eğer rakam_mi(b) {
+            sayi = sayi * 10 + (b olarak tam32) - 48;
+            sayi_var = doğru;
+        } değilse {
+            // sayı bittiyse SAYI token'ı üret (flush)
+            eğer sayi_var {
+                dizi_ekle(kindler, 0);
+                dizi_ekle(degerler, sayi);
+                adet = adet + 1;
+                sayi = 0;
+                sayi_var = yanlış;
+            }
+            // operatör token'ı
+            eğer b == 43 {
+                dizi_ekle(kindler, 1); dizi_ekle(degerler, 0); adet = adet + 1;
+            } değilse eğer b == 42 {
+                dizi_ekle(kindler, 2); dizi_ekle(degerler, 0); adet = adet + 1;
+            } değilse eğer b == 45 {
+                dizi_ekle(kindler, 3); dizi_ekle(degerler, 0); adet = adet + 1;
+            }
+            // tanınmayan bayt sessizce atlanır (boşluk vb.)
+        }
+        i = i + 1;
+    }
+    // dizgenin sonundaki son sayıyı flush et
+    eğer sayi_var {
+        dizi_ekle(kindler, 0);
+        dizi_ekle(degerler, sayi);
+        adet = adet + 1;
+    }
+    ver adet;
+}
+
+// Bir ikili operatörü uygula (op kodu → işlem).
+işlev op_uygula(op: tam32, a: tam32, b: tam32) -> tam32 {
+    eğer op == 1 { ver a + b; }
+    eğer op == 2 { ver a * b; }
+    eğer op == 3 { ver a - b; }
+    ver a;
+}
+
+// FAZ 2 — DEĞERLENDİRİCİ: token akışını SOLDAN SAĞA değerlendirir.
+// Akış deseni:  SAYI (op SAYI)*  →  acc'yi her op-SAYI çiftiyle güncelle.
+işlev degerlendir(kindler: Dizi<tam32>, degerler: Dizi<tam32>) -> tam32 {
+    eğer dizi_boyut(kindler) == 0 { ver 0; }
+    değişken acc: tam32 = dizi_al(degerler, 0);   // ilk operand
+    değişken i: tam32 = 1;
+    iken i < dizi_boyut(kindler) {
+        değişken op: tam32 = dizi_al(kindler, i);     // operatör token'ı
+        değişken sag: tam32 = dizi_al(degerler, i + 1); // sonraki sayı
+        acc = op_uygula(op, acc, sag);
+        i = i + 2;
+    }
+    ver acc;
+}
+
+işlev main() -> tam32 {
+    değişken kindler: Dizi<tam32> = dizi_olustur(16);
+    değişken degerler: Dizi<tam32> = dizi_olustur(16);
+
+    değişken adet: tam32 = lexle("2*3+36", kindler, degerler);
+    // beklenen: 5 token (SAYI CARPI SAYI ARTI SAYI)
+    eğer adet != 5 { ver 100 + adet; }   // teşhis: yanlış token sayısı
+
+    ver degerlendir(kindler, degerler) olarak tam32;   // → ((2*3)+36) = 42
+}

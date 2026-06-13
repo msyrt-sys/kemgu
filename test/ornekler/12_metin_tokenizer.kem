@@ -1,0 +1,46 @@
+// ============================================================================
+// 12_metin_tokenizer.kem — bir metin üzerinde BAYT-BAYT gezinen küçük
+// tokenizer + değerlendirici. Self-hosting'in ikinci ön-koşulunu (gerçek
+// string işlemleri) gösterir: metin_uzunluk + metin_bayt ile bir KEMGU
+// programı kendi girdisini karakter karakter tarayabiliyor.
+//
+// Dil:  "N+N+N..." — ondalık sayıların '+' ile toplamı.
+// Tarama:  rakam → biriken sayıya ekle;  '+' (ya da ayraç) → birikeni topla.
+//
+// Değerlendirilen:  "10+20+12"  =  10 + 20 + 12  =  42
+//
+// metin_bayt(s, i): s'in i. ham BAYT'ı (UTF-8; ASCII'de = karakter). Sınır
+// dışı → 0 (taşma imkansız). ASCII '0'..'9' = 48..57.
+// ============================================================================
+
+// Bayt bir ASCII ondalık rakam mı? ('0'=48 .. '9'=57)
+işlev rakam_mi(b: tam8) -> mantıksal {
+    değişken k: tam32 = b olarak tam32;
+    ver k >= 48 ve k <= 57;
+}
+
+// "N+N+..." ifadesini soldan sağa tarayıp sayıların toplamını döndür.
+işlev hesapla_toplam(ifade: metin) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken sayi: tam32 = 0;
+    değişken i: tam32 = 0;
+    değişken uz: tam32 = metin_uzunluk(ifade);
+    iken i < uz {
+        değişken b: tam8 = metin_bayt(ifade, i);
+        eğer rakam_mi(b) {
+            // ondalık basamak: sayi = sayi*10 + (b - '0')
+            sayi = sayi * 10 + ((b olarak tam32) - 48);
+        } değilse {
+            // ayraç ('+'): biriken sayıyı topla, sıfırla
+            toplam = toplam + sayi;
+            sayi = 0;
+        }
+        i = i + 1;
+    }
+    toplam = toplam + sayi;   // son (ayraçsız) sayıyı da ekle
+    ver toplam;
+}
+
+işlev main() -> tam32 {
+    ver hesapla_toplam("10+20+12") olarak tam32;   // → 42
+}

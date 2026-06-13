@@ -196,6 +196,23 @@ int32_t kdl_metin_uzunluk(const char *s) {
     return s ? (int32_t)strlen(s) : 0;
 }
 
+/* metin_bayt: s'in i. HAM BAYT'ı (UTF-8 byte; ASCII'de = karakter).
+ * Sınır dışı (i<0 veya i>=uzunluk) veya NULL → 0 — tokenizer döngüsü için
+ * güvenli sentinel (sınır taşması imkansız, KEMGU güvenlik hedefi). */
+int8_t kdl_metin_bayt(const char *s, int32_t i) {
+    if (!s || i < 0) return 0;
+    int32_t n = (int32_t)strlen(s);
+    if (i >= n) return 0;
+    return (int8_t)(unsigned char)s[i];
+}
+
+/* metin_esit: iki metin byte-byte aynı mı (strcmp == 0). NULL güvenli. */
+_Bool kdl_metin_esit(const char *a, const char *b) {
+    if (a == b) return 1;
+    if (!a || !b) return 0;
+    return strcmp(a, b) == 0;
+}
+
 /* === D.4 Sayisal === */
 
 int32_t kdl_mutlak(int32_t x) {
@@ -260,12 +277,6 @@ const char *kdl_tam_to_metin(int32_t n) {
     if (!buf) return NULL;
     snprintf(buf, 16, "%d", n);
     return buf;
-}
-
-/* Metin esitligi (1=esit, 0=farkli) */
-int kdl_metin_esit(const char *a, const char *b) {
-    if (!a || !b) return a == b;
-    return strcmp(a, b) == 0;
 }
 
 /* === J2: Genisletilmis metin primitifleri (Madde A) ===
@@ -533,6 +544,24 @@ int64_t kdl_dizi_al_tam64(KdlDizi *d, int32_t i) {
 void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
     if (!d || i < 0 || i >= d->boyut) return NULL;
     return ((void **)d->veri)[i];
+}
+
+/* dizi_yaz: i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi). Sınır dışı
+ * (i<0 || i>=boyut) veya NULL → sessizce yok sayılır (boyutu büyütmez —
+ * yalnız mevcut elemanı değiştirir; büyütme için dizi_ekle). */
+void kdl_dizi_yaz_tam(KdlDizi *d, int32_t i, int32_t deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((int32_t *)d->veri)[i] = deger;
+}
+
+void kdl_dizi_yaz_tam64(KdlDizi *d, int32_t i, int64_t deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((int64_t *)d->veri)[i] = deger;
+}
+
+void kdl_dizi_yaz_ptr(KdlDizi *d, int32_t i, void *deger) {
+    if (!d || i < 0 || i >= d->boyut) return;
+    ((void **)d->veri)[i] = deger;
 }
 
 int32_t kdl_dizi_boyut(KdlDizi *d) {

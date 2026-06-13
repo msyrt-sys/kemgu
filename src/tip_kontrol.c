@@ -83,6 +83,23 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         p[0] = tip_olustur_basit(a, TIP_METIN);
         EKLE_BUILTIN("metin_uzunluk", 13, p, 1, tip_olustur_basit(a, TIP_TAM32));
     }
+    /* metin_bayt(metin, tam32) -> tam8  — i. HAM BAYT (UTF-8; ASCII'de =
+     * karakter). Sınır dışı/NULL → 0. Tokenizer döngüsünün temel taşı:
+     * metin_uzunluk ile birlikte bir metin üzerinde bayt-bayt gezinmeyi sağlar. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("metin_bayt", 10, p, 2, tip_olustur_basit(a, TIP_TAM8));
+    }
+    /* metin_esit(metin, metin) -> mantıksal  — byte-byte eşitlik (strcmp==0).
+     * Anahtar kelime/tanımlayıcı tanıma için (tokenizer). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_esit", 10, p, 2, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
     /* metin_birlestir(metin, metin) -> metin */
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
@@ -2228,6 +2245,41 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     }
                     if (dt->kategori == TIP_DIZI) return dt->veri.dizi.eleman;
                     return t_hata(tk);
+                }
+
+                /* dizi_yaz<T>(d: Dizi<T>, i: tam32, e: T) -> bos
+                 * i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi).
+                 * Mutable cursor / in-place güncelleme (recursive-descent
+                 * parser konum imleci) için gerekli. */
+                if (uz_b == 8 && memcmp(ad_b, "dizi_yaz", 8) == 0) {
+                    if (d->veri.cagri.sayi != 3) {
+                        tip_hata(tk, d, "T010",
+                            "dizi_yaz uc arguman gerektirir (d, i, e)");
+                        return t_hata(tk);
+                    }
+                    TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (dt->kategori != TIP_DIZI &&
+                        dt->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
+                            "dizi_yaz ilk argumani Dizi<T> olmali");
+                    }
+                    TipBilgisi *idx = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (!tip_tamsayi_mi(idx) && idx->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
+                            "dizi_yaz indeks tamsayi olmali");
+                    }
+                    TipBilgisi *bek = (dt->kategori == TIP_DIZI)
+                        ? dt->veri.dizi.eleman : NULL;
+                    TipBilgisi *et = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[2], bek);
+                    if (bek && !tip_esit(et, bek) &&
+                        et->kategori != TIP_HATA) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[2], "T001",
+                            "dizi_yaz eleman tipi Dizi'nin eleman tipinden farkli");
+                    }
+                    return tip_olustur_basit(tk->arena, TIP_BOS);
                 }
 
                 /* dizi_boyut(d: Dizi<T>) -> tam32 */
