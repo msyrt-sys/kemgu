@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-023 [YÜKSEK] — String stdlib I: metin_bayt intrinsic + metin literal pre-pass düzeltmesi (2026-06-13)
+
+**Bağlam:** Self-hosting'in 2. ön-koşulu "gerçek string işlemleri" (Mehmet: "4
+konsolide, sonra 3"). Mevcut `kdl_metin_*` yüzeyi zaten geniş (uzunluk, birleştir,
+kes, içerir, başlar/biter, kırp, yer_değiştir, küçük/büyük±tr/ascii) AMA bir
+tokenizer'ın temel taşı eksikti: **indeksli karakter erişimi**.
+
+**Karar 1 [YÜKSEK — yeni intrinsic]:** `metin_bayt(s: metin, i: tam32) -> tam8`
+— s'in i. HAM BAYT'ı (UTF-8; ASCII'de = karakter). Sınır dışı/NULL → 0 (taşma
+imkansız, KEMGU güvenlik hedefi). `metin_uzunluk` ile birlikte bir metin üzerinde
+bayt-bayt gezinmeyi (lexer döngüsü) sağlar. Ayrıca `metin_esit(metin,metin) ->
+mantıksal` builtin olarak bağlandı (runtime'da `kdl_metin_esit` zaten vardı ama
+tip-kontrol builtin tablosuna kayıtlı değildi — anahtar kelime tanıma için).
+Runtime'daki ESKİ `int kdl_metin_esit` (ölü; ne builtin ne C çağıranı vardı)
+`_Bool` dönen tek sürümle değiştirildi (i1 declare + diğer boolean metin fn'leriyle
+tutarlı). DEĞER naming: metin_bayt/metin_esit — temiz.
+
+**Karar 2 [ORTOGONAL CORRECTNESS FIX]:** Metin literal pre-pass (`ast_taransa_
+metinleri`, @.str.N toplayıcı) **cast düğümünü taramıyordu**. `metin_uzunluk("...")
+olarak tam32` gibi — literal `DUGUM_TIP_DONUSTUR` (x olarak T) altında kalınca
+"kayitsiz" düşüp **sessizce `add i32 0,0`'a** derleniyordu (yanlış değer, hata yok).
+Eklenen case'ler: DUGUM_TIP_DONUSTUR (.kaynak), DUGUM_LAMBDA (.govde),
+DUGUM_KULLAN_IFADE/DUGUM_IMHA_IFADE (.operand). Bu, TÜM metin builtin'lerini
+literal+cast argümanıyla kullanılabilir yapar (yaygın durum). Bug sınıfı: herhangi
+bir metin literali taranmayan bir düğümün altında → sessiz miscompile.
+
+**Doğrulama:** `metin_uzunluk("hello")`=5, `metin_bayt("ABC",1)`='B'=66,
+`metin_esit("ver","ver")`=1 — hepsi literal+cast argümanla E2E. Saf-KEMGU
+tokenizer `test/ornekler/12_metin_tokenizer.kem` (metin_uzunluk + metin_bayt ile
+"N+N+N" bayt-bayt tarama): "10+20+12" = 42. Bir KEMGU programı kendi girdisini
+karakter karakter okuyabiliyor — lexer/self-hosting temeli.
+
+**Tam regresyon:** test_llvm 215→**218** (+metin_bayt/esit/tokenizer). tip_kontrol
+174, snapshot 50 (IR baseline drift YOK — fikstürlerde cast-altı metin yok),
+otp_cli 9, parser 107, lexer 103, linear 57, drf 39, capability 40, sabitsure 39,
+wcet 35, mmio 23, simd 30, simd_llvm 5, arena/ast/tip/sembol/json/lsp/bolge/escape.
+**0 ASan.** Prod temiz rebuild **0 uyarı.** stdlib --check yeşil.
+
+**Sınırlar / sıradaki:** metin_bayt BYTE döner (UTF-8 codepoint değil) — ASCII
+tokenizing için doğru; çok-baytlı codepoint iterasyonu V2. İsimle değişken arama
+hâlâ slot-id (string-key assoc V2). Koleksiyon tarafı (Liste<T>) zaten KdlDizi
+runtime'da var; tokenizer'ın token LİSTESİ üretmesi (dizi_ekle ile) doğal sonraki
+adım. Sonra: gerçek lexer → parser (self-hosting derleyici çekirdeği).
+
+---
+
 ## D-001 [YÜKSEK] — Modül ad-mangling şeması: `@<modul>.<ad>` (2026-06-11)
 
 **Karar:** Modül üyesi işlevler IR'da `@modul.ad` olarak emit edilir; iç içe modül

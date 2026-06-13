@@ -781,6 +781,18 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
                 }
             }
             break;
+        /* Madde A genişletme: 'x olarak T' cast'i + diğer ifade sarmalayan
+         * düğümler önceden taranmıyordu → altlarındaki metin literali
+         * "kayitsiz" düşüp `add i32 0,0`'a derleniyordu (sessiz hatalı
+         * codegen). En yaygın: `metin_uzunluk("...") olarak tam32`. */
+        case DUGUM_TIP_DONUSTUR:
+            ast_taransa_metinleri(g, d->veri.tip_donustur.kaynak); break;
+        case DUGUM_LAMBDA:
+            ast_taransa_metinleri(g, d->veri.lambda.govde); break;
+        case DUGUM_KULLAN_IFADE:
+            ast_taransa_metinleri(g, d->veri.kullan_ifade.operand); break;
+        case DUGUM_IMHA_IFADE:
+            ast_taransa_metinleri(g, d->veri.imha_ifade.operand); break;
         default: break;
     }
 }
@@ -2882,9 +2894,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 cagri_adi = kdl_buf; cagri_adi_uz = 4 + n;
                 if (n == 13 && memcmp(kdl_buf + 4, "metin_uzunluk", 13) == 0) {
                     kdl_donus = "i32";
+                } else if (n == 10 && memcmp(kdl_buf + 4, "metin_bayt", 10) == 0) {
+                    kdl_donus = "i8";
                 } else if ((n == 12 && memcmp(kdl_buf + 4, "metin_icerir", 12) == 0) ||
                            (n == 12 && memcmp(kdl_buf + 4, "metin_baslar", 12) == 0) ||
-                           (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0)) {
+                           (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0) ||
+                           (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0)) {
                     kdl_donus = "i1";
                 } else {
                     kdl_donus = "ptr";
@@ -4231,6 +4246,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
     /* Madde A: Metin runtime primitifleri (kdl_metin_*) */
     fputs("declare i32 @kdl_metin_uzunluk(ptr)\n", out);
+    fputs("declare i8 @kdl_metin_bayt(ptr, i32)\n", out);
+    fputs("declare i1 @kdl_metin_esit(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_birlestir(ptr, ptr)\n", out);
     fputs("declare ptr @kdl_metin_kes(ptr, i32, i32)\n", out);
     fputs("declare ptr @kdl_metin_kucuk(ptr)\n", out);
