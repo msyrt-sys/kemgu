@@ -814,14 +814,53 @@ işlev parse_dizi_olustur(p: &değişken Ayr) -> tam32 {
     bekle(p, "SAG_KOSELI");
     ver dugum_n(p, "DIZI_OLUSTUR", "", s, u, kids);
 }
-// Parametre: ad [: tip] (lambda + P3 işlev için).
+// Parametre: ad ":" tip  |  kendin  |  &kendin  |  &değişken kendin.
 işlev parse_parametre(p: &değişken Ayr) -> tam32 {
+    // & ile başlayan kendin: &kendin / &değişken kendin
+    eğer sim_mi(p, "VE_BIT") {
+        değişken nxt: metin = tip_i(p, p.imlec + 1);
+        eğer metin_esit(nxt, "KENDIN") veya metin_esit(nxt, "DEGISKEN") {
+            ilerle(p);  // &
+            eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+            değişken ks: tam32 = sim_sat(p);  değişken ku: tam32 = sim_sut(p);
+            eğer sim_mi(p, "KENDIN") {
+                ilerle(p);
+                ver dugum0(p, "PARAMETRE", "kendin", ks, ku);
+            }
+            p.hata_say = p.hata_say + 1;
+            ver dugum0(p, "HATA", "", ks, ku);
+        }
+    }
+    eğer sim_mi(p, "KENDIN") {
+        değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+        ilerle(p);
+        ver dugum0(p, "PARAMETRE", "kendin", s, u);
+    }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
-    değişken kids: Dizi<tam32> = [];
-    eğer sim_mi(p, "IKI_NOKTA") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
-    ver dugum_n(p, "PARAMETRE", ad, s, u, kids);
+    bekle(p, "IKI_NOKTA");
+    ver dugum1(p, "PARAMETRE", ad, s, u, parse_tip(p));
+}
+// Generic tip parametre listesi `<T, U: B1 + B2, ...>` — PARSE + DISCARD (dump'ta
+// yok; bound tip düğümleri orphan kalır, kök'ten erişilmez). `>>` kapanış böl.
+işlev atla_tip_paramlar(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "KUCUK") == yanlış { ver 0; }
+    bekle(p, "KUCUK");
+    değişken devam: mantıksal = doğru;
+    eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+    iken devam {
+        bekle(p, "TANIMLAYICI");          // param adı
+        eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
+            ilerle(p);
+            parse_tip(p);                 // ilk bound (orphan düğüm)
+            iken sim_mi(p, "ARTI") { ilerle(p); parse_tip(p); }
+        }
+        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+        değilse { devam = yanlış; }
+    }
+    bekle_buyuk(p);
+    ver 0;
 }
 // Lambda: |p: t, ...| ifade  veya  |...| { blok } (poz = ilk '|').
 işlev parse_lambda(p: &değişken Ayr) -> tam32 {
@@ -1194,36 +1233,181 @@ işlev parse_blok(p: &değişken Ayr) -> tam32 {
     bekle(p, "SAG_SUSLU");
     ver dugum_n(p, "BLOK", "", s, u, kids);
 }
-// İşlev (P1: ad + boş param + dönüş tipi + gövde). Param/generic → P3.
-işlev parse_islev(p: &değişken Ayr) -> tam32 {
+// ---- P3: Bildirimler (işlev/yapı/çeşit/özellik/uygula/sabit) ----
+// İşlev (gerçekzamanlı? + generic + param + dönüş + gövde). imza_yeterli=1 →
+// gövde yerine ';' (özellik imzası). Generic params PARSE+DISCARD (dump'ta yok).
+işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") {
+        ilerle(p);
+        eğer sim_mi(p, "GERCEKZAMANLI") { p.hata_say = p.hata_say + 1; ilerle(p); }
+    }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     bekle(p, "ISLEV");
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
     bekle(p, "SOL_PAREN");
-    bekle(p, "SAG_PAREN");
     değişken kids: Dizi<tam32> = [];
-    eğer sim_mi(p, "OK") {            // -> dönüş tipi
-        ilerle(p);
-        dizi_ekle(kids, parse_tip(p));
+    eğer sim_mi(p, "SAG_PAREN") == yanlış {
+        değişken devam: mantıksal = doğru;
+        iken devam {
+            dizi_ekle(kids, parse_parametre(p));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
     }
-    dizi_ekle(kids, parse_blok(p));   // gövde
+    bekle(p, "SAG_PAREN");
+    eğer sim_mi(p, "OK") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
+    eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
+    değilse {
+        eğer (imza_yeterli == 1) ve sim_mi(p, "NOKTALI_VIRGUL") { ilerle(p); }
+        değilse { p.hata_say = p.hata_say + 1; }
+    }
     ver dugum_n(p, "ISLEV", ad, s, u, kids);
 }
+işlev parse_islev(p: &değişken Ayr) -> tam32 { ver parse_islev_genel(p, 0); }
+
+işlev parse_alan(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GENEL") { ilerle(p); }   // genel öneki (dump'ta yok)
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum1(p, "ALAN", ad, s, u, tip);
+}
+işlev parse_yapi(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // yapı
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_alan(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "YAPI", ad, s, u, kids);
+}
+işlev parse_cesit(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // çeşit
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    eğer sim_mi(p, "KUCUK") {           // çeşit generic v1'de YOK → atla (C birebir)
+        p.hata_say = p.hata_say + 1;
+        iken (sim_mi(p, "BUYUK") == yanlış) ve (sim_mi(p, "SOL_SUSLU") == yanlış)
+          ve (sim_mi(p, "DOSYA_SONU") == yanlış) { ilerle(p); }
+        eğer sim_mi(p, "BUYUK") { ilerle(p); }
+    }
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];   // payload tip düğümleri (varyant-sırası düz)
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            eğer sim_mi(p, "TANIMLAYICI") == yanlış {  // anti-hang (C panik_sync+break)
+                p.hata_say = p.hata_say + 1; ilerle(p); devam = yanlış;
+            } değilse {
+            ilerle(p);   // varyant adı (dump'ta yok)
+            eğer sim_mi(p, "SOL_PAREN") {
+                ilerle(p);
+                değişken d2: mantıksal = doğru;
+                iken d2 {
+                    eğer sim_mi(p, "SAG_PAREN") { d2 = yanlış; }
+                    değilse {
+                        dizi_ekle(kids, parse_tip(p));
+                        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                        değilse { d2 = yanlış; }
+                    }
+                }
+                bekle(p, "SAG_PAREN");
+            }
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
+            }
+        }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "CESIT", ad, s, u, kids);
+}
+işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // özellik
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+            dizi_ekle(kids, parse_islev_genel(p, 1));
+        } değilse { devam = yanlış; }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "OZELLIK", ad, s, u, kids);
+}
+işlev parse_uygula(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // uygula
+    atla_tip_paramlar(p);
+    değişken birinci: tam32 = parse_tip(p);
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "ICIN") {           // trait impl: tip için hedef
+        ilerle(p);
+        dizi_ekle(kids, parse_tip(p));  // hedef tip (UYGULA.tip)
+        dizi_ekle(kids, birinci);       // özellik (UYGULA.ozellikler[0])
+    } değilse {
+        dizi_ekle(kids, birinci);       // inherent: hedef = birinci
+    }
+    bekle(p, "SOL_SUSLU");
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+            dizi_ekle(kids, parse_islev(p));
+        } değilse { devam = yanlış; }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "UYGULA", "", s, u, kids);
+}
+işlev parse_sabit(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // sabit
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "ESIT");
+    değişken dg: tam32 = parse_ifade(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum2(p, "SABIT", ad, s, u, tip, dg);
+}
+işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
+    eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
+    eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
+    eğer sim_mi(p, "UYGULA") { ver parse_uygula(p); }
+    eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
+    // P5: KULLAN / DISA / GENEL / MODUL
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
 işlev parse_program(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);  // ilk token konumu
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
-        değilse {
-            eğer sim_mi(p, "ISLEV") { dizi_ekle(kids, parse_islev(p)); }
-            değilse {                  // P3: yapı/çeşit/sabit/modül/kullan/dışa
-                p.hata_say = p.hata_say + 1;
-                ilerle(p);
-            }
-        }
+        değilse { dizi_ekle(kids, parse_ust_oge(p)); }
     }
-    ver dugum_n(p, "PROGRAM", "", 1, 1, kids);
+    ver dugum_n(p, "PROGRAM", "", s, u, kids);
 }
 
 // ---- Düz --ast dumper (preorder; C ast_duz_yaz ile birebir) ----
