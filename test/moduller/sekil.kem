@@ -1,0 +1,8 @@
+// D dilim-1 fikstur: çapraz-modül YAPI (genel) + factory. Başka dosyadan
+// `sekil::Nokta` nitelikli tip annotation + sekil::yap(...) ile kurulup
+// alanları okunur (n.x/n.y çapraz-modül alan erişimi).
+genel yapı Nokta { x: tam32; y: tam32; }
+
+genel işlev yap(a: tam32, b: tam32) -> Nokta {
+    ver Nokta { x: a, y: b };
+}

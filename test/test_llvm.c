@@ -1784,7 +1784,12 @@ static void test_modul_cesit_run(void) {
     test_sonuc("T016: modul cesit varyanti E2E -> exit 42", rc == 42);
 }
 
-/* --- Ilk stdlib: kütüphane/dizi.kem Liste<T> (in-file validasyon) --- */
+/* --- Stdlib: kütüphane/dizi.kem Liste<T> (CAPRAZ-DOSYA modul) ---
+ * v2: Liste<T> artik gercek `modul dizi` uyesi (dosya=modul, mat.kem duzeni);
+ * dogrulama ayri entry'lerden `kullan dizi;` ile (test/moduller/dizi_*.kem).
+ * Eski in-file standalone main + test_* (v1) kaldirildi — import edilince
+ * entry main'iyle cakisirdi. (B+A+C ile relocation: modul-ici struct emisyonu
+ * + capraz-modul generic routing.) Bkz. DECISIONS_LOG D-014. */
 
 /* Windows'ta system() cmd.exe ANSI codepage kullanir — UTF-8 'kütüphane'
  * yolu bozulur (bash/MSYS'te sorun yok). Dosyayi UTF-16 yolla acip
@@ -1813,20 +1818,61 @@ static const char *stdlib_dizi_yolu(void) {
 }
 
 static void test_stdlib_liste_check(void) {
-    /* Liste<T>: generic yapi + *T tampon + bolge_al + modul ici generic
-     * monomorphization — --check GECMELI. */
+    /* Kutuphane modulu TEK BASINA (main yok) --check gecmeli: generic
+     * yapi Liste<T> + 7 op (yarat/kapasiteAyir/buyu/ekle/al/boy/serbest)
+     * type-erased %Liste + yetki disiplini. (UTF-8 'kütüphane' yolu icin
+     * ASCII kopya — stdlib_dizi_yolu.) */
     const char *yol = stdlib_dizi_yolu();
     int ok = yol ? kemgu_check_basarili(yol) : 0;
-    test_sonuc("stdlib Liste<T>: kutuphane/dizi.kem --check", ok == 1);
+    test_sonuc("stdlib Liste<T>: kutuphane/dizi.kem (modul, main yok) --check",
+               ok == 1);
 }
 
 static void test_stdlib_liste_e2e(void) {
-    /* In-file validasyon: tam32 (6 ekle, 0->4->8 buyume), tam64 (2^32
-     * genislik kaniti), struct Nokta (alan butunlugu) + sinir-disi
-     * varsayilan + boy/kapasite -> tum kontroller 0, main 42. */
-    const char *yol = stdlib_dizi_yolu();
-    int rc = yol ? derle_dosya_ve_calistir(yol) : -1;
-    test_sonuc("stdlib Liste<T>: cok-tipli round-trip E2E -> exit 42",
+    /* CAPRAZ-DOSYA (HEADLINE): ayri entry `kullan dizi;` -> kütüphane/dizi.kem
+     * arama yolundan bulunur; yarat/ekle×5/al + transitif buyu (kapasite
+     * 0->4->8, eleman-kopyali grow) -> 42. Saf INFERENCE (yazili nitelikli
+     * tip YOK). 5. eleman idx4'e dusuyor (grow olmasa heap-overflow) ->
+     * deterministik 42 = yapisal grow kaniti. @dizi.ekle$i64 owning-baglamda. */
+    int rc = derle_dosya_ve_calistir("test/moduller/dizi_kullan.kem");
+    test_sonuc("stdlib Liste<T>: capraz-dosya (kullan dizi; grow) -> exit 42",
+               rc == 42);
+}
+
+static void test_stdlib_liste_coklu_e2e(void) {
+    /* Capraz-dosya COKLU-TIP: ayni kütüphane/dizi.kem'den i64 + i32 liste
+     * (ayrik specialization @dizi.ekle$i64/$i32, paylasilan %Liste). 40+2=42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/dizi_coklu.kem");
+    test_sonuc("stdlib Liste<T>: capraz-dosya coklu-tip (i64+i32) -> exit 42",
+               rc == 42);
+}
+
+static void test_stdlib_liste_yapi_e2e(void) {
+    /* Capraz-dosya STRUCT-ELEMAN: dizi::Liste<Nokta> (karisik genislik
+     * a:tam32 + b:tam64). Nitelikli annotation T=Nokta'yi besler. */
+    int rc = derle_dosya_ve_calistir("test/moduller/dizi_yapi.kem");
+    test_sonuc("stdlib Liste<T>: capraz-dosya struct-eleman (Nokta) -> exit 42",
+               rc == 42);
+}
+
+/* --- [YUKSEK] D dilim-1: nitelikli tip annotation (modül::Tip) --- */
+
+static void test_d_nitelikli_tip_param_e2e(void) {
+    /* Param/donus nitelikli tip: ilk_iki(l: &dizi::Liste<tam64>). Imza
+     * (pre_populate) kullan gorunur-alias'indan ONCE cozulur -> gizli
+     * kanonik fallback. Param annotasyonu yan-kanali da besler. -> 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/dizi_nitelikli_param.kem");
+    test_sonuc("D: nitelikli tip PARAM (&dizi::Liste<tam64>) -> exit 42",
+               rc == 42);
+}
+
+static void test_d_capraz_modul_struct_use_e2e(void) {
+    /* Capraz-modul STRUCT USE: sekil::Nokta nitelikli tip (degisken +
+     * param), sekil::yap factory ile kurulur, alanlari okunur (n.x/n.y —
+     * capraz-modul alan erisimi tip kontrolde yukle-tum-modul aramasiyla
+     * cozulur). 20+22 -> 42. */
+    int rc = derle_dosya_ve_calistir("test/moduller/sekil_kullan.kem");
+    test_sonuc("D: capraz-modul struct USE (sekil::Nokta + alan) -> exit 42",
                rc == 42);
 }
 
@@ -2400,9 +2446,15 @@ int main(void) {
     test_bolge_al_grow_copy();
     test_bolge_al_negatifler();
 
-    printf("\n--- Ilk stdlib: Liste<T> (kutuphane/dizi.kem) ---\n");
+    printf("\n--- Stdlib: capraz-dosya Liste<T> (kutuphane/dizi.kem) ---\n");
     test_stdlib_liste_check();
     test_stdlib_liste_e2e();
+    test_stdlib_liste_coklu_e2e();
+    test_stdlib_liste_yapi_e2e();
+
+    printf("\n--- [YUKSEK] D dilim-1: nitelikli tip annotation ---\n");
+    test_d_nitelikli_tip_param_e2e();
+    test_d_capraz_modul_struct_use_e2e();
 
     test_kampanya_modul_mangling();
     test_kampanya_short_circuit();

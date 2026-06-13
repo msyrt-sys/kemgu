@@ -347,3 +347,127 @@ ilgisiz altsistem (capability-borrow) genişletilmedi.
 **Testler:** test_llvm 197→200 (+3 C-2: struct --check, headline yarat/ekle/al+büyü
 E2E, çoklu-tip i64+i32 E2E). Fikstürler: test/moduller/{kap,ana_kap,ana_kap_coklu}.kem.
 parser 107, tip_kontrol 174 düşmedi. In-file Liste<T> (kütüphane/dizi.kem) canary yeşil.
+
+---
+
+## D-014 — Üretim Liste<T> gerçek çapraz-dosya modüle taşındı (relocation + PROB) (2026-06-13)
+
+**Bağlam:** D-013 minimal `kap` container'ıyla çapraz-modül struct'ı kanıtlamıştı.
+Bu adım ÜRETİM `kütüphane/dizi.kem` Liste<T>'sini gerçek importable modül yapar —
+v1'de ERTELENEN relocation (B+A+C ile mümkün): Liste o zaman top-level'a zorlanmıştı
+çünkü (a) modül-içi struct emisyonu (A) + (b) cross-module generic routing (C) yoktu.
+
+**Yapı kararı (no-src-change, stdlib + test):**
+- `kütüphane/dizi.kem` artık **mat.kem düzeni**: top-level `genel yapı Liste<T>` +
+  7 op (`genel işlev`), AÇIK `modül dizi { }` SARMALAYICISI YOK. Loader dosyayı
+  zaten `modül dizi`'ye sarar; açık sarmalayıcı `dizi.dizi` İÇ-İÇE olurdu (loader
+  `fprog.uyeler`'i sentetik DUGUM_MODUL üyesi yapar — ana.c:315). → Liste<T> artık
+  modül dizi üyesi (A modül-içi struct emisyonu → type-erased `%Liste`).
+- In-file `main` + test_* (v1 self-contained) **kaldırıldı** — import edilince entry
+  main'iyle çakışır. Doğrulama ayrı çapraz-dosya entry'lerine taşındı
+  (test/moduller/dizi_{kullan,coklu,yapi}.kem; `kullan dizi;`, kütüphane/ arama
+  yolundan bulunur). "In-file canary" → "çapraz-dosya canary" (eşdeğer kapsam yeşil).
+
+**PROB RAPORU (görevin asıl çıktısı):**
+1. **`yarat` INFERENCE-FRIENDLY DEĞİL → witness-param gerekti.** Üretim imzası
+   `yarat(böl: yetki<Bellek>) -> Liste<T>` — paramlarında T YOK → T yalnız
+   dönüş-bağlamı annotasyonundan (`değişken l: Liste<tam32> = ...`) çıkarsanırdı.
+   Çapraz-dosya'da: yazılı nitelikli annotasyon (`dizi::Liste<tam32>`) = D (yasak);
+   explicit call-site tip-arg (`yarat<i64>()`) parser'da YOK (karşılaştırma zinciri
+   olarak parse). **DEMO adaptasyonu:** `yarat<T>(taban: T)` tip-tanık param (değer
+   kullanılmaz) + yetki içeride üretilir → T arg'dan çıkarsanır. **Üretim API kararı
+   DEĞİL** — gerçek çözüm explicit-type-arg parsing (ayrı görev, syntax fork) ya da
+   return-type-driven inference. `ekle`/`al` zaten T-değer param'lı → çıkarsama sorunsuz.
+2. **Capability-borrow workaround çapraz-dosya SORUNSUZ.** `yetki<Bellek>` lineer-MOVE
+   disiplini (her op taze `yetki_olustur(3,3)`, son `geri_al`; ekle→büyü MOVE) çapraz-
+   dosya'da AYNEN çalışır — yetki built-in'leri modül çözümünden bağımsız, specialized
+   gövdede owning-bağlamda emit edilir. Runtime-link (kdl_yetki_*) sorunsuz.
+3. **Küçük inference WART (düzeltilmedi, raporlandı):** `değişken l = dizi::yarat(...)`
+   (annotasyonsuz) sonucu `l` element-tip yan-kanalı (`generic_arg_ir`) TAŞIMAZ —
+   yalnız değişken-annotasyonundan set ediliyor. Sonuç: T'nin TEK kaynağı `&Liste<T>`
+   param olan doğrudan çağrı (örn. `dizi::boy(&l)`) i32'ye default'lar → `@dizi.boy$i32`
+   emit edilir. **ZARARSIZ** burada: `boy` dönüşü somut `tam64`, gövde T'den bağımsız —
+   $i32/$i64 gövdesi ÖZDEŞ. Ama T-DÖNÜŞLÜ böyle bir op olsaydı yanlış tip verirdi.
+   Transitif çağrı (ekle→büyü, l param subst'lı) DOĞRU ($i64). Gerçek çözüm: generic
+   call sonucunu değişkene atarken instantiated-T'yi yan-kanala propagate et (küçük
+   codegen işi, kapsam dışı — mono değil, ergonomi). DUR-SOR yerine raporlandı.
+
+**Doğrulama (saf inference, hepsi exit 42):** çapraz-dosya grow headline (yarat/ekle×5/
+al + transitif büyü, kapasite 0→4→8), çoklu-tip (i64+i32 ayrık spec, paylaşılan %Liste),
+struct-eleman (Liste<Nokta> karışık genişlik). IR: `@dizi.{yarat,ekle,al,boy}$i64` +
+`@"dizi.büyü$i64"` owning-bağlamda; çoklu-tip $i64/$i32 ikiz set.
+
+**Kapsam/sınırlar:** src/ kodu DEĞİŞMEDİ (stdlib + test). Yazılı nitelikli tip (D),
+legacy flatten, proofs/, bölge/escape/wcet/lsp dokunulmadı. struct-eleman Liste<Nokta>
+çalışıyor (D-013'te denenmemişti — burada doğrulandı).
+
+**Testler:** test_llvm 201→203 (stdlib_liste_e2e in-file→çapraz-dosya güncellendi;
++çoklu-tip +struct-eleman; --check modül-alone). Fikstürler: kütüphane/dizi.kem (v2
+yeniden yazıldı), test/moduller/dizi_{kullan,coklu,yapi}.kem. parser 107, tip_kontrol
+174, drivers (uart_vtable 21) düşmedi. 0 ASan. stdlib --check yeşil.
+
+---
+
+## D-015 [YÜKSEK] — Nitelikli tip annotation (`modül::Tip<args>`): D dilim-1 (2026-06-13)
+
+**Bağlam:** D-014 relocate PROB #1: üretim `oluştur(böl: yetki<Bellek>) -> Liste<T>`
+paramlarında T YOK → çapraz-dosya T inference için ya nitelikli annotation ya
+explicit-type-arg gerekir. Bu dilim nitelikli TİP annotation'ı getirir: in-file
+return-context inference'ı çapraz-dosyaya açar; relocate'in DEMO witness-param'ını
+kaldırır (üretim imzası geri).
+
+**Karar (mekanizma):**
+1. **Parser `::`-in-type-position [ETKİ — ifade::ile karışmaz]:** `ifade.c parse_tip`
+   tanımlayıcı dalında `::` zinciri → DUGUM_YOL → `DUGUM_TIP_KULLANICI{yol:YOL, tip_arg}`.
+   `tip_kullanici.yol` ZATEN "DUGUM_TANIMLAYICI veya DUGUM_YOL" kabul ediyordu (ast.h).
+   `dizi::Liste<i64>` (args) ve `dizi::Nokta` (0-arg) → ikisi de TIP_KULLANICI.
+   AMBIGUITY YOK: `::` yalnız tip pozisyonunda (annot/param/dönüş); ifade-pozisyonu
+   `f<i64>()` (explicit-type-arg) AYRI sorun, DOKUNULMADI. "Dizi" özel-case yalnız
+   NİTELİKSİZ (`dizi::Dizi` değil).
+2. **Resolver TİP-namespace [ETKİ-YÜKSEK]:** `ast_tip_to_bilgi` DUGUM_TIP_KULLANICI
+   artık YOL yol'u çözer: `yol_modul_scope_coz(sol)` → hedef modül scope, `sembol_bul_yerel`
+   → SEMBOL_YAPI. Value-path (`dizi::ekle`) çözümünün YANINA; tip & value AYNI scope,
+   SEMBOL kategorisiyle ayrışır (SEMBOL_YAPI=tip). Çözülen TipBilgisi DÜZ adlı
+   (`Liste`) → mono key C ile AYNI (type-erased `%Liste`).
+3. **Gizli-aware fallback [ETKİ-YÜKSEK — faz ordering]:** Param/dönüş tipleri
+   `pre_populate` (faz-1, imza) içinde çözülür — `kullan_baglari_kur` (faz-2,
+   görünür alias) ÖNCE çalışmaz → görünür `dizi` yok, yalnız GİZLİ kanonik
+   builtin_scope'ta. Çözüm: nitelikli tip çözümünde görünür-alias bulunamazsa
+   builtin_scope kanonik dosya-modülüne düş (tek-segment). Gerekçe: tip pozisyonu
+   modülü açıkça adlandırır + modül zaten yüklü (loader bir `kullan` ister). Değişken
+   annotasyonu (faz-3 gövde) görünür yolu kullanır; ikisi aynı modül_scope'a varır.
+4. **Çapraz-modül yapı ALAN erişimi [ETKİ-YÜKSEK]:** `n.x` (n: sekil::Nokta)
+   tip kontrolde yapının ALAN listesini ister; `sembol_bul(scope, "Nokta")` niteliksiz
+   görünmez (Nokta sekil'de). `yapi_sembol_capraz_bul`: önce görünür scope (gölgeleme
+   korunur), bulunamazsa YÜKLÜ tüm modül scope'larında DÜZ adla ara. Codegen'in düz
+   IR-ad uzayıyla tutarlı (D-011; per-modül ayrım D ileri dilim). Yalnız DUGUM_ERISIM
+   alan-çözümünde kullanılır (struct construction değil).
+5. **Yan-kanal annotasyondan (PROB #3 by-pass) [ETKİ]:** `generic_arg_ir_al` zaten
+   `tip_kullanici.tip_arg[0]`'ı yol-tipi gözetmeksizin okur → nitelikli annotation
+   element-tip yan-kanalını besler. `değişken l: dizi::Liste<tam64>` → l.generic_arg_ir=i64
+   → `dizi::boy(&l)` artık `@dizi.boy$i64` (i32 DEĞİL). codegen değişikliği yalnız
+   `ast_tip_to_ir` YOL→`%sag_ad` (düz yapı adı).
+6. **RENAME fold:** kütüphane/dizi.kem `yarat`→`oluştur` (yetki_olustur ile tutarlı);
+   DEMO witness-param `taban: T` KALDIRILDI — üretim imzası `oluştur(böl) -> Liste<T>`.
+   T artık nitelikli annotation'dan (return-context).
+
+**Doğrulama (hepsi exit 42, ÜRETİM imzası, nitelikli annotation):**
+- HEADLINE (PROB #1 çözüldü): `değişken l: dizi::Liste<tam64> = dizi::oluştur(böl);
+  ekle×5 + transitif büyü (0→4→8 grow); al(0)+al(4)`. `@dizi.boy$i64` (PROB #3 by-pass).
+- Çoklu-tip (i64+i32 nitelikli annot, ayrık spec). struct-eleman `dizi::Liste<Nokta>`.
+- Param nitelikli tip `&dizi::Liste<tam64>` (imza fazı, gizli-aware fallback).
+- Çapraz-modül struct USE: `sekil::Nokta` (değişken+param) + factory kur + `n.x` alan.
+
+**Kapsam/sınırlar [DUR-SOR yerine raporlandı]:**
+- **Explicit call-site tip-arg (`oluştur<i64>()`) parser'da YOK** — ifade-pozisyonu,
+  ayrı görev + syntax fork. Bu dilim DEĞİL (tip-pozisyonu `::` ile karışmaz).
+- **Nitelikli yapı KURMA ifadesi (`sekil::Nokta { ... }`) parser'da YOK** (P082) —
+  ifade-pozisyonu, D ileri dilim. struct USE testi factory (`sekil::yap`) ile kurar.
+- İç-içe nitelikli tip (`a::b::Tip`) gizli-aware fallback yalnız tek-segment; çok-segment
+  görünür-alias (faz-3) yolundadır. Legacy flatten/D2, drivers, proofs/, bölge/escape/
+  wcet/lsp DOKUNULMADI.
+
+**Testler:** test_llvm 203→205 (+2 D: nitelikli param E2E, çapraz-modül struct USE E2E).
+Fikstürler: test/moduller/{dizi_nitelikli_param,sekil,sekil_kullan}.kem + dizi_{kullan,
+coklu,yapi}.kem nitelikli annotation'a güncellendi. kütüphane/dizi.kem oluştur+üretim imza.
+parser 107, tip_kontrol 174, drivers (uart_vtable 21) düşmedi. 0 ASan. stdlib --check yeşil.
