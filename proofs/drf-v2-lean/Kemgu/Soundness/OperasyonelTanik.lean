@@ -186,4 +186,41 @@ theorem eszamanli_operasyonel_tanik :
   · exact (K4_gercek_send_recv).2.1
   · decide
 
+-- ============================================================
+-- §6. Yurutme BOYUNCA guvenlik — her ZIYARET EDILEN durum guvenli
+-- (Direktif: "bu yurutme boyunca DRF + bellek-guvenliginin korundugunu
+--  goster" — yalniz son durumda degil, K0..K4 hepsinde.)
+-- ============================================================
+
+/-- Onek koşu: K1 baslangictan ulasilabilir (1 adim). -/
+theorem kosu_K1 : StepStar (baslangicKonf eszamanliProgram) K1 :=
+  step_to_starStep K0 K1 step_K0_K1
+
+/-- Onek koşu: K2 baslangictan ulasilabilir (2 adim). -/
+theorem kosu_K2 : StepStar (baslangicKonf eszamanliProgram) K2 :=
+  StepStar.step K0 K1 K2 step_K0_K1 (step_to_starStep K1 K2 step_K1_K2)
+
+/-- Onek koşu: K3 baslangictan ulasilabilir (3 adim). -/
+theorem kosu_K3 : StepStar (baslangicKonf eszamanliProgram) K3 :=
+  StepStar.step K0 K1 K3 step_K0_K1
+    (StepStar.step K1 K2 K3 step_K1_K2 (step_to_starStep K2 K3 step_K2_K3))
+
+/-- YURUTME BOYUNCA GUVENLIK: tanik yurutmenin ZIYARET ETTIGI HER durumda
+    (baslangic K0, spawn-sonrasi K1, seq-atla K2, SEND-sonrasi K3, RECV-
+    sonrasi K4) DRF + bellek-guvenligi + fault-suzluk korunur. Her biri
+    `eszamanli_soundness`in ilgili onek-koşuya uygulanmasidir — yani
+    operasyonel ilerleme guvenligi BOZMAZ; konkuran yurutme tum ara
+    durumlariyla V3 metateoreminin kapsamindadir. -/
+theorem eszamanli_yurutme_boyunca_guvenli :
+    (DrfHolds K0 ∧ MemSafe_perStep K0 ∧ K0.fault = none)
+    ∧ (DrfHolds K1 ∧ MemSafe_perStep K1 ∧ K1.fault = none)
+    ∧ (DrfHolds K2 ∧ MemSafe_perStep K2 ∧ K2.fault = none)
+    ∧ (DrfHolds K3 ∧ MemSafe_perStep K3 ∧ K3.fault = none)
+    ∧ (DrfHolds K4 ∧ MemSafe_perStep K4 ∧ K4.fault = none) :=
+  ⟨eszamanli_soundness K0 (StepStar.refl K0),
+   eszamanli_soundness K1 kosu_K1,
+   eszamanli_soundness K2 kosu_K2,
+   eszamanli_soundness K3 kosu_K3,
+   eszamanli_soundness K4 eszamanli_operasyonel_kosu⟩
+
 end Kemgu.Soundness.OperasyonelTanik
