@@ -1,0 +1,10 @@
+// EKSEN: küçük eleman tam8/tam16 × kapasite aşımı (dizi_ekle_tam i32 stride).
+işlev main() -> tam32 {
+    değişken a: Dizi<tam8> = dizi_olustur(4);
+    değişken b: Dizi<tam16> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 12 { dizi_ekle(a, 2); dizi_ekle(b, 1); i = i + 1; }
+    değişken s: tam32 = 0; i = 0;
+    iken i < dizi_boyut(a) { s = s + (dizi_al(a, i) olarak tam32) + (dizi_al(b, i) olarak tam32); i = i + 1; }
+    eğer s == 36 ve dizi_boyut(a) == 12 { ver 42; } ver s;  // 12*(2+1)=36
+}

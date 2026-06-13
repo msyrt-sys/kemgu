@@ -1,0 +1,11 @@
+// EKSEN: dizi_yaz (in-place, D-025) × tam64 (8-byte) × sınır-üstü indeks.
+işlev main() -> tam32 {
+    değişken d: Dizi<tam64> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 { dizi_ekle(d, 0); i = i + 1; }            // 10 sıfır (8-byte)
+    i = 0;
+    iken i < 10 { dizi_yaz(d, i, (i olarak tam64) + 1); i = i + 1; }  // in-place 1..10
+    değişken s: tam64 = 0; i = 0;
+    iken i < dizi_boyut(d) { s = s + dizi_al(d, i); i = i + 1; }   // 55
+    eğer s == (55 olarak tam64) { ver 42; } ver (s olarak tam32);
+}

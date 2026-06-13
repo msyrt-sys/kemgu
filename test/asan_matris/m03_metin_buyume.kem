@@ -1,0 +1,9 @@
+// EKSEN: eleman tipi metin (8-byte ptr) × olustur(4)+20 (>N/2, çok realloc).
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 20 { dizi_ekle(d, "ab"); i = i + 1; }
+    değişken s: tam32 = 0; i = 0;
+    iken i < dizi_boyut(d) { s = s + metin_uzunluk(dizi_al(d, i)); i = i + 1; }  // 20*2=40
+    eğer s == 40 ve dizi_boyut(d) == 20 { ver 42; } ver s;
+}

@@ -1,0 +1,11 @@
+// EKSEN: eleman tipi &Yapi (8-byte ptr) × olustur(4)+10 → realloc; geri-oku alan.
+yapı H { v: tam32; }
+işlev main() -> tam32 {
+    değişken h: H = H { v: 5 };
+    değişken d: Dizi<&H> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 { dizi_ekle(d, &h); i = i + 1; }
+    değişken s: tam32 = 0; i = 0;
+    iken i < dizi_boyut(d) { değişken r: &H = dizi_al(d, i); s = s + r.v; i = i + 1; }  // 10*5=50
+    eğer s == 50 { ver 42; } ver s;
+}

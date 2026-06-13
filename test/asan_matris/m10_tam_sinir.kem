@@ -1,0 +1,11 @@
+// EKSEN: tam kapasite sınırı — Dizi<metin> olustur(8) (8-byte → 8 ptr tam dolu),
+// 8 ekle (sınır) + 1 daha (realloc geçişi), son elemanı geri-oku.
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = dizi_olustur(8);
+    değişken i: tam32 = 0;
+    iken i < 8 { dizi_ekle(d, "z"); i = i + 1; }   // tam kapasite
+    dizi_ekle(d, "wxyz");                            // 9. → realloc
+    değişken s: tam32 = metin_uzunluk(dizi_al(d, 8)) + dizi_boyut(d) * 4;  // 4 + 9*4 = 40
+    değişken ilk: tam32 = metin_uzunluk(dizi_al(d, 0));                     // 1
+    eğer s + ilk == 41 { ver 42; } ver s + ilk;
+}

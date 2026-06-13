@@ -1,0 +1,9 @@
+// EKSEN: eleman tipi tam64 (8-byte) × kapasite >N/2 + aşım (D-030 tetikleyici).
+işlev main() -> tam32 {
+    değişken d: Dizi<tam64> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 { dizi_ekle(d, (i olarak tam64) + 1); i = i + 1; }
+    değişken s: tam64 = 0; i = 0;
+    iken i < dizi_boyut(d) { s = s + dizi_al(d, i); i = i + 1; }   // 1..10 = 55
+    eğer s == (55 olarak tam64) { ver 42; } ver (s olarak tam32);
+}
