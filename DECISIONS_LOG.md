@@ -614,3 +614,31 @@ verify/run). parser 107 (payload+desen sözdizimi), tip_kontrol 174, snapshot 50
 57, drf 39, lexer 103, ast 31, arena 19. 0 ASan. Temiz rebuild 0 uyarı. Fikstürler:
 test/snapshots/cesit_{payload,payload_yapi,agac}.kem + test/ornekler/10_cesit_ast.kem.
 4 izole commit (parser→tip→codegen→recursive→test).
+
+---
+
+## D-019 — Türkçe (non-ASCII) yapı/çeşit TİP ADLARI IR'da quote'lanır (2026-06-13)
+
+**Değer (Türkçe kimlik — istisnasız):** KEMGU AST düğümleri doğal Türkçe adlarla
+temsil edilebilmeli (`çeşit Düğüm`, `yapı Köşe`, `İfade`). Önceki durum: non-ASCII
+tip adı `%Düğüm` GEÇERSİZ LLVM identifier → `clang` "expected top-level entity" /
+"Cannot allocate unsized type". D-018 örneği bu yüzden ASCII (`Ifade/Agac/Olay`)
+kullanmak zorundaydı. (Pre-existing: YAPI codegen'i de quote etmiyordu.)
+
+**Çözüm [ETKİ]:** `yapi_ad_ir(g, ad, uz)` — yapı/çeşit IR tip adını üretir;
+ASCII-güvenli değilse `%"Ad"` quote'lar (yerel_ad_yaz ile aynı kural). Simetrik
+okuma `yapi_bul_ir(g, ir)` — `%"Ad"` stringinden quote'u soyup YapiKayit bulur.
+Düzeltilen emisyon noktaları (TUTARLI olmalı, yoksa LLVM ad-uyuşmazlığı):
+- ast_tip_to_ir (DUGUM_TIP_BASIT + KULLANICI struct/çeşit) → yapi_ad_ir.
+- cesit_struct_ir → yapi_ad_ir. yapi_olustur_uret alloca tipi → yapi_ad_ir.
+- yapi_tip_tanimlari_emit (yapı + çeşit tanımı `%Ad = type`) → yerel_ad_yaz.
+- erisim GEP (struct alan adresi ×2) → yerel_ad_yaz.
+Okuma noktaları → yapi_bul_ir: erisim_uret (alan erişimi), erisim_lvalue (×2).
+İşlev adları (`@"köşe_topla"`) ZATEN yerel_ad_yaz ile quote'luydu.
+
+**Doğrulama:** `yapı Köşe + çeşit Düğüm (recursive)` — Türkçe adlı yapı alan
+erişimi (k.x+k.y) + Türkçe adlı recursive çeşit ağacı → exit 42. ASCII tip adları
+DEĞİŞMEDİ (quote yok). test_llvm 210→211 (+Türkçe tip-adı E2E). Tam regresyon:
+lexer 103, parser 107, tip_kontrol 174, snapshot 50, linear 57, drf 39, capability
+40, ast/arena/sembol/tip/sabitsure. 0 ASan. Temiz rebuild 0 uyarı.
+Fikstür: test/snapshots/turkce_tip_adi.kem.
