@@ -5,6 +5,61 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-042 — SELF-HOST lexer M6: BOOTSTRAP kapanışı — 249/249 gerçek .kem sıfır-diff (2026-06-13)
+
+**Karar [ETKİ: düşük — yeni harness + Makefile hedefi].** M6 = self-host lexer'ın
+asıl ispatı: KEMGU-lexer (selfhost/lexer.kem) TÜM gerçek KEMGU korpusunu C lexer
+(oracle) ile **sıfır-diff** lex'ler.
+
+**Kapsam:** `test/lexer_bootstrap_harness.sh` — KEMGU-lexer'ı derler, `build/`
+(üretilmiş temp) hariç tüm `.kem` dosyalarını (`stdlib/`, `drivers/`, `kütüphane/`,
+`test/**`, **`selfhost/lexer.kem`'in KENDİSİ** = self-lexing) C `--token` dump'ına
+karşı diff'ler. `make calistir_lexer_bootstrap`.
+
+**Sonuç:** **249/249 SIFIR-DİFF** — KEMGU-lexer C lexer'ı gerçek dünya KEMGU
+kodunda TAM İKAME EDER. Self-lexing dahil (4566 token, kendi kaynağı). M1-M5
+korpus 22/22 regresyon kalır.
+
+**Engel + çözüm:** İlk koşuda 3 büyük dosya (lexer.kem dahil) crash etti (exit 127,
+~binlerce iterasyon sonra) → kök-neden D-041 codegen alloca bug'ı. Düzeltildi.
+
+**Bootstrap durumu:** Lexer parite TAM. Sıradaki gerçek-entegrasyon adımı
+(parser'ın KEMGU-lexer çıktısını tüketmesi / C lexer'ın emekliye ayrılması)
+mimari karar gerektirir (Token API köprüsü) → DUR-SOR (Mehmet). M6 = token-parite
++ self-lexing ispatı tamamlandı.
+
+---
+
+## D-041 [YÜKSEK] — Kök-neden fix: dongu govde alloca'sı → stack overflow (entry hoist + renumber) (2026-06-13)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Döngü
+gövdesindeki `değişken` (ve koşul/ifade temp'leri) BLOK-İÇİ `alloca` üretiyordu.
+LLVM yalnız **entry-blok** alloca'sını fonksiyon girişinde BİR KEZ tahsis eder;
+başka blok'taki alloca her ÇALIŞMADA stack ayırır → uzun döngüde **STACK
+OVERFLOW**. Latent bug — toy programlar az iterasyonla tetiklemedi; **self-host
+lexer'ın binlerce-iterasyonlu ana döngüsü açtı** (exit 127, ~3775 tokende crash,
+dosyaya göre farklı nokta = döngü-başı alloca kanıtı).
+
+**Fix:** `islev_uret` gövdeyi `tmpfile()` buffer'a yazar; `hoist_renumber` tüm
+`%N = alloca` satırlarını entry blok başına taşır. Taşıma SSA ardışık-numara
+kuralını bozduğundan (`clang`: "instruction expected to be numbered") TÜM numaralı
+değerler (`%<rakam>`; `%bb<ad>`/`%<ad>` hariç) yeniden numaralanır. **Güvenli
+çünkü:** tüm alloca'lar statik-boyut (operandsız) → erken taşıma ileri-referans
+yaratmaz; codegen **phi kullanmaz** (alloca/load-store) → tek-geçiş renumber yeterli;
+koşullu alloca'yı her zaman tahsis etmek semantik olarak zararsız (kullanılmayan
+stack).
+
+**Doğrulama:** Tüm test paketi YEŞİL — test_llvm **234/234** (yeni [160]:
+500000-iter döngü-yerel alloca, crash yok → 42), birim testleri (57/39/35/40/23/
+30/5/50/9/6/16/36/13/6/21 hepsi 0 başarısız), ASan matris 20000 iter/0 crash,
+stdlib --check temiz. Self-host lexer artık kendi kaynağını crash'sız lex'ler.
+
+**Kapsam/sınır:** Yalnız alloca yerleşimi değişti — ABI/imza/struct-layout/semantik
+DEĞİŞMEDİ (mem2reg/SROA zaten hoist ederdi; fix sadece text-IR'ı geçerli kılar).
+Tüm fonksiyonlar tek yoldan (`islev_uret`) emit → fix global.
+
+---
+
 ## D-040 — SELF-HOST lexer M5: trivia (yorum) + ham string — sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/lexer.kem` + korpus].** M5: `bosluk_atla`'ya
