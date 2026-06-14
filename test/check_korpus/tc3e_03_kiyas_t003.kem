@@ -1,0 +1,6 @@
+// TC3e: karşılaştırma operandı mantıksal → T003 (T021 değil; koşul TIP_HATA).
+işlev main() -> tam32 {
+    değişken b: mantıksal = doğru;
+    eğer b < 3 { ver 1; }   // mantıksal < tam → T003
+    ver 0;
+}

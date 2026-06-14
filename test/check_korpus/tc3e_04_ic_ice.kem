@@ -1,0 +1,7 @@
+// TC3e: iç karşılaştırma sonucu (mantıksal) dış aritmetiğe operand → T003 yalnız
+// dış '+' düğümünde (iç '<' temiz; C: iç mantıksal, dış TIP_HATA → tek T003).
+işlev main() -> tam32 {
+    değişken a: tam32 = 5;
+    değişken r: tam32 = (a < 3) + 1;
+    ver r;
+}

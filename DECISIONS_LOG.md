@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-056 — SELF-HOST checker TC3e: aritmetik/karşılaştırma sayısal operand (T003) — 20/20 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3e: ikili
+aritmetik (`+ - * / %`) ve karşılaştırma (`< > <= >=`) operandı sayısal olmalı (T003).
+C derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` IKILI post-check'i `t003_kontrol` — operand tiplerini
+`ifade_tip` ile hesaplar; aritmetik VEYA karşılaştırmada bir operand **kesinlikle
+sayısal değil** (`bilinen_sayisal_degil`: ≠"?" ve `sayisal_mi` yanlış) ise T003
+(IKILI düğüm konumunda = operatör; parser bootstrap ile C ile özdeş). Eşitlik
+(`== !=`), mantıksal (`ve veya`), bit/kaydırma → T003 YOK (ileri TC).
+
+**C `tip_belirle(IKILI)` semantiği birebir:**
+- Operand TIP_HATA ise (örn. tanımsız ad → T002) ikili **erken TIP_HATA döner →
+  T003 YOK**. KEMGU karşılığı: `ifade_tip` arit/karşılaştırmada operand "?" ise
+  "?" döner; `t003_kontrol` "?" operandı atlar → çift hata yok.
+- T003 fırlayınca C TIP_HATA döner → dış T001/T020/T021 **bastırılır**. KEMGU:
+  `ifade_tip` arit-non-sayısal → "?", karşılaştırma-non-sayısal → "?" döner;
+  böylece `değişken r: tam32 = b + 1` (b mantıksal) → yalnız T003 (T001 yok),
+  `eğer b < 3` → yalnız T003 (T021 yok). İç-içe `(a<3)+1` → yalnız dış '+' T003.
+
+**GÜVENLİ strateji:** Yalnız KESİN bilinen non-sayısal operandda T003 → geçerli
+kodda (tüm aritmetik operandlar sayısal) false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **20/20 korpus** (önceki 16 + TC3e 4:
+aritmetik-OK / aritmetik-T003 / karşılaştırma-T003 / iç-içe). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3f):** CAGRI per-arg T001 (param tip tablosu) + eşitlik/karşılaştırma
+aynı-tip T001 + mantıksal T004 + T022 (lvalue) + tekli '-' T003. Sonra struct alan
+T017 + exhaustiveness M001, generic (TC4), linear (TC5 → lineer_hata kapanır), modül.
+
+---
+
 ## D-055 — SELF-HOST checker TC3d: CAGRI dönüş çıkarsama + T010 arite — 16/16 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3d: kullanıcı
