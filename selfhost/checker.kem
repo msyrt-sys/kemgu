@@ -2180,18 +2180,25 @@ işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
     ver 0;
 }
 
+// Yerel/param tip-string filtresi: yalnız bilinen skaler VEYA bilinen yapı adı
+// saklanır; aksi (generic "T" gibi bilinmeyen ad) → "?" → kontrol atlanır.
+// C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true" → generic'te T003 yok.
+işlev yerel_tip_filtrele(p: &değişken Ayr, t: metin) -> metin {
+    eğer bilinen_skaler_mi(t) veya yapi_var_mi(p, t) { ver t; }
+    ver "?";
+}
 işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "PARAMETRE") {
         dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
         değişken tc: tam32 = son_cocuk(p, idx);   // param tip çocuğu (kendin → çocuk yok)
         eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
-            dizi_ekle(p.yerel_tip, tip_str(p, tc));
+            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, tip_str(p, tc)));
         } değilse { dizi_ekle(p.yerel_tip, "?"); }
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
-            dizi_ekle(p.yerel_tip, annot_str(p, idx));
+            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -2387,7 +2394,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
-    p.aktif_donus = donus_str(p, fn);   // T020 bağlamı
+    p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
     lin_param_topla(p, fn);              // lineer parametreler dilime
     değişken cb: tam32 = dizi_al(p.a_cb, fn);

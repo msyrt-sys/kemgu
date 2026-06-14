@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-064 — SELF-HOST checker: generic param tip "?" (full-repo parite denetimi başladı) — stdlib 3/3, 45/45 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Tüm-repo parite denetimi
+(315 .kem dosyası, ultracode workflow ile) başlatıldı → 233/315 birebir, 82 farklı. İlk
+genuine-bug düzeltildi: generic işlevlerde false T003/T020. C derleyici DOKUNULMADI.
+
+**Bağlam — full-repo parite audit:** KEMGU checker (kemcheck.exe) C oracle'a (`--checkdump`)
+karşı TÜM repo .kem dosyalarında tarandı. 82 fark kategorize edildi: çoğu feature-gap
+(parser/lexer P/L kodları, cross-file/modül TC8, bölge TC6, yetki TC7/CP005, asm, çeşit
+M001, generic-constraint) + birkaç genuine-bug (CRASH m3_04, generic-T003, yanlış-kod 26/31/50).
+
+**Genuine-bug #1 — generic param false T003/T020 (workflow agent kök-neden).** `mutlak<T>(x: T)
+-> T { eğer x < 0 { ver 0 - x; } ... }` → oracle OK, KEMGU 29 false T003 (stdlib/temel/*).
+Sebep: `yerel_topla` param/değişken tip-string'ini ham saklıyor; generic `x: T` → "T" →
+`bilinen_sayisal_degil("T")`=doğru → T003. Ayrıca dönüş tipi "T" → aktif_donus "T" → ver
+çıkarsanan "tam32" ≠ "T" → T020. C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true".
+
+**Düzeltme:** `yerel_tip_filtrele(t)` = bilinen-skaler VEYA bilinen-yapı → t, aksi "?".
+İki yerel_topla write-site'ında (param tip_str, değişken annot_str) + kontrol_govde
+aktif_donus (donus_str) uygulandı. Generic "T" → "?" → kontrol atlanır; yapı adları
+(ERISIM/TC4) KORUNUR.
+
+**Doğrulama:** stdlib/temel matematik+karsilastir+sayisal **3/3** (29 false T003+T020 kapandı);
+self-host lexer/parser/checker.kem **3/3**; `make calistir_checker_diff` **45/45** (+tc5c_01
+generic); test/ornekler **42/42** (regression yok). Workflow agent risk-analizi + empirik
+doğrulama uyumlu.
+
+**Sıradaki genuine-bug'lar:** CRASH m3_04_ayrac_hata (parser sınır-dışı/sonsuz döngü → segfault),
+yanlış-kod 26/31/50 (T022 vs T001, T020 vs T028). Feature-gap'ler TC6-9 yol haritasına.
+
+---
+
 ## D-063 — SELF-HOST checker: aynı-ad belirsiz tip → "?" (self-host kaynak paritesi) — lexer+parser+checker.kem TAM (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem`].** KEMGU checker'ı KENDİ derleyici
