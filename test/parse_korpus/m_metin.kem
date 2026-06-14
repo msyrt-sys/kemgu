@@ -1,0 +1,1 @@
+işlev a() -> tam32 { ver "merhaba" + "kaçış \" içinde" + "tab\there"; }

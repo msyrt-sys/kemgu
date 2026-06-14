@@ -1,0 +1,9 @@
+işlev a() -> tam32 { ver [1, 2, 3, 4, 5]; }
+işlev b() -> tam32 { ver [a + b, c * d, e]; }
+işlev c() -> tam32 { ver Nokta { x: 1, y: 2 }; }
+işlev d() -> tam32 { ver Kutu { eleman: deger, sonraki: hiç }; }
+işlev e() -> tam32 { ver |a: tam32, b: tam32| a + b; }
+işlev f() -> tam32 { ver |x: tam32| x * x; }
+işlev g() -> tam32 { ver kullan(kaynak) + imha(eski); }
+işlev h() -> tam32 { ver [Nokta { x: 1, y: 2 }, Nokta { x: 3, y: 4 }]; }
+işlev i() -> tam32 { ver f(g(h(x)), [1, 2], Tip { a: 1 }); }
