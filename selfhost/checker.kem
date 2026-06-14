@@ -53,6 +53,9 @@ yapı Ayr {
     alan_ad: Dizi<metin>;    // düz alan adı listesi
     alan_tip: Dizi<metin>;   // paralel: alan tipi (yalnız bilinen skaler; aksi "?")
     fn_plin: Dizi<tam32>;    // fn_ptip ile paralel: param lineer mi (1/0) — tüketim
+    // ---- TC8: cross-file/modül import (kullan → dışa sembol toplama) ----
+    giris_dizin: metin;      // giriş dosyasının dizini (import arama yolu)
+    kullan_gorulen: Dizi<metin>;  // yüklenen modül adları (döngü/elmas dedup)
     // ---- TC5b: lineer bağlama izleme (L001/L002 akış) — aktif işlev dilimi ----
     lin_ad: Dizi<metin>;     // lineer bağlama adları (param + tekkez değişken)
     lin_sat: Dizi<tam32>;    // bildirim konumu (L001 için)
@@ -1618,6 +1621,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
+        giris_dizin: "", kullan_gorulen: [],
         lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
@@ -2617,8 +2621,79 @@ işlev lr002_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
     }
     ver 0;
 }
+// ---- TC8a: cross-file/modül import — `kullan` ile dışa sembol toplama ----
+// Bir yolun dizin kısmı (son '/' öncesi); '/' yoksa "".
+işlev dizin_al(yol: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(yol);
+    değişken son: tam32 = 0 - 1;
+    değişken i: tam32 = 0;
+    iken i < n { eğer metin_bayt(yol, i) == 47 { son = i; } i = i + 1; }   // 47 = '/'
+    eğer son < 0 { ver ""; }
+    ver metin_kes(yol, 0, son);
+}
+// Modül yolu (a::b::c) → göreli dosya yolu (a/b/c.kem).
+işlev modul_path(modul_yol: metin) -> metin {
+    ver metin_birlestir(metin_yer_degistir(modul_yol, "::", "/"), ".kem");
+}
+// Modül içeriğini 3 arama yoluyla oku (C modulleri_yukle: dizin → kök → kütüphane/).
+// Bulunamazsa "" (T040 → TC8b; şimdilik atla).
+işlev modul_icerik(dizin: metin, rel: metin) -> metin {
+    eğer metin_uzunluk(dizin) > 0 {
+        değişken a0: metin = metin_birlestir(metin_birlestir(dizin, "/"), rel);
+        eğer dosya_var_mi(a0) { ver dosya_oku(a0); }
+    }
+    eğer dosya_var_mi(rel) { ver dosya_oku(rel); }
+    değişken a2: metin = metin_birlestir("kütüphane/", rel);
+    eğer dosya_var_mi(a2) { ver dosya_oku(a2); }
+    ver "";
+}
+// Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
+işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
+    değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
+    değişken gi: tam32 = 0;
+    iken gi < gn { eğer metin_esit(dizi_al(p.kullan_gorulen, gi), modul_yol) { ver 0; } gi = gi + 1; }
+    dizi_ekle(p.kullan_gorulen, modul_yol);
+    değişken rel: metin = modul_path(modul_yol);
+    değişken ic: metin = modul_icerik(importer_dizin, rel);
+    eğer metin_esit(ic, "") { ver 0; }   // bulunamadı (T040 → TC8b)
+    değişken mp: Ayr = ayr_olustur(ic);
+    lex_et(&değişken mp);
+    değişken mkok: tam32 = parse_program(&değişken mp);
+    değişken mdiz: metin = dizin_al(rel);   // transitif importer dizini
+    değişken cb: tam32 = dizi_al(mp.a_cb, mkok);
+    değişken cs: tam32 = dizi_al(mp.a_cs, mkok);
+    değişken ci: tam32 = 0;
+    iken ci < cs {
+        değişken c: tam32 = dizi_al(mp.cocuk, cb + ci);
+        değişken cad: metin = dizi_al(mp.a_ad, c);
+        eğer metin_esit(cad, "DISA") {   // dışa <tanım> → iç tanım adı flat-görünür
+            eğer dizi_al(mp.a_cs, c) > 0 {
+                değişken inner: tam32 = dizi_al(mp.cocuk, dizi_al(mp.a_cb, c));
+                g_ekle(p, dizi_al(mp.a_deg, inner));
+            }
+        }
+        eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
+        ci = ci + 1;
+    }
+    ver 0;
+}
+// Üst-düzey tüm `kullan`'ları yükle (giriş dosyasının dizininden).
+işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
+            modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     builtin_ekle(p);
+    kullan_yukle_hepsi(p, kok);   // TC8a: cross-file dışa semboller (T002'den ÖNCE)
     genel_topla(p, kok);
     dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
     lr002_kontrol(p, kok);   // TC5a: yapı lineer alan (LR002) — gövdelerden ÖNCE
@@ -2634,6 +2709,7 @@ işlev main() -> tam32 {
     değişken yol: metin = arg_al(1);
     değişken kaynak: metin = dosya_oku(yol);
     değişken p: Ayr = ayr_olustur(kaynak);
+    p.giris_dizin = dizin_al(yol);   // TC8a: import arama yolu
     lex_et(&değişken p);
     değişken kok: tam32 = parse_program(&değişken p);
     kontrol_program(&değişken p, kok);

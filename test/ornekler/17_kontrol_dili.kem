@@ -131,6 +131,7 @@ işlev sembol_ara(s: &Semboller, ad: metin) -> tam32 {
 // === İfade parser/değerlendirici (öncelik + karşılaştırma) ===
 işlev faktor(t: &Tokenler, s: &Semboller) -> tam32 {
     değişken p: tam32 = dizi_al(t.imlec, 0);
+    eğer p >= dizi_boyut(t.kind) { ver 0; }   // token bitti (EOF) — açık sınır kontrolü (D-069)
     değişken k: tam32 = dizi_al(t.kind, p);
     eğer k == 5 {                                   // '('
         dizi_yaz(t.imlec, 0, p + 1);
@@ -253,7 +254,7 @@ işlev deyim_calistir(t: &Tokenler, s: &Semboller) -> tam32 {
     değişken k: tam32 = dizi_al(t.kind, p);
     eğer k == 15 { ver eger_calistir(t, s); }
     eğer k == 17 { ver iken_calistir(t, s); }
-    eğer (k == 7) ve (dizi_al(t.kind, p + 1) == 8) {  // ATAMA: IDENT '=' ifade ';'
+    eğer (k == 7) ve (p + 1 < dizi_boyut(t.kind)) ve (dizi_al(t.kind, p + 1) == 8) {  // ATAMA: IDENT '=' ifade ';' (D-069: p+1 sınır)
         değişken ad: metin = dizi_al(t.ad, p);
         dizi_yaz(t.imlec, 0, p + 2);
         değişken v: tam32 = ifade(t, s);
@@ -288,7 +289,7 @@ işlev calistir(kaynak: metin) -> tam32 {
         eğer p >= dizi_boyut(t.kind) { ver 0; }
         değişken k: tam32 = dizi_al(t.kind, p);
         değişken deyim_mi: mantıksal = yanlış;
-        eğer (k == 7) ve (dizi_al(t.kind, p + 1) == 8) { deyim_mi = doğru; }
+        eğer (k == 7) ve (p + 1 < dizi_boyut(t.kind)) ve (dizi_al(t.kind, p + 1) == 8) { deyim_mi = doğru; }
         eğer k == 15 { deyim_mi = doğru; }
         eğer k == 17 { deyim_mi = doğru; }
         eğer deyim_mi { deyim_calistir(&t, &s); }
