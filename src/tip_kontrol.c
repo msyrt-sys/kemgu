@@ -3176,6 +3176,33 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     lineer_tuket_eger_baglamaysa(tk,
                         d->veri.cagri.argumanlar[i]);
                 }
+                /* D-070 (Sınıf A, değişken-arg): stack-array DEĞİŞKENİ Dizi<T>
+                 * parametresine geçirilemez (G003). `değişken xs = [..]`
+                 * (annotasyonsuz) STACK [N x T] üretir; Dizi<T> param dinamik
+                 * KdlDizi* bekler → callee KdlDizi sanıp stack-array okur →
+                 * misaligned UB/SEGFAULT. Compile-time reddet (çökmezlik #1);
+                 * programcı annotasyonlu heap Dizi kullansın. (Literal-arg
+                 * D-070 codegen'de heap'e route edilir — bu kural değişken yolu.) */
+                if (param_tip && param_tip->kategori == TIP_DIZI) {
+                    const Dugum *arg = d->veri.cagri.argumanlar[i];
+                    if (arg && arg->tip == DUGUM_TANIMLAYICI) {
+                        const Sembol *as = sembol_bul(tk->scope,
+                            arg->veri.tanimlayici.metin,
+                            arg->veri.tanimlayici.uzunluk);
+                        if (as && as->kategori == SEMBOL_DEGISKEN &&
+                            as->ast_dugumu &&
+                            as->ast_dugumu->tip == DUGUM_DEGISKEN &&
+                            as->ast_dugumu->veri.degisken.tip == NULL &&
+                            as->ast_dugumu->veri.degisken.deger &&
+                            as->ast_dugumu->veri.degisken.deger->tip ==
+                                DUGUM_DIZI_OLUSTUR) {
+                            tip_hata(tk, arg, "G003",
+                                "stack dizi degiskeni Dizi<T> parametresine "
+                                "gecirilemez (annotasyonlu heap Dizi kullanin: "
+                                "degisken xs: Dizi<T> = [..])");
+                        }
+                    }
+                }
             }
             /* === Adim 5: Bound-aware monomorphization check ===
              * hedef bir islev tanimlayicisi ise, tip_param_boundlari kontrol

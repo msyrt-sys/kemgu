@@ -23,10 +23,10 @@ mkdir -p "$TMP"
 # Bilinen başarısızlıklar (kök-neden + takip). Bunlar ASan-temiz DEĞİL ama
 # nedeni belgeli — denetimi kızartmasınlar diye dışlanır (bkz. DECISIONS_LOG D-031).
 #   Lambda/closure: D-004 ile V2'ye ERTELENDİ (fonksiyon-değer codegen yok).
-#   Sınıf A KISMEN kapandı (D-070): LİTERAL-arg `f([..])` → heap (03_kontrol PASS,
-#     allowlist'ten çıktı; 36_quicksort_stub silinmiş). Kalan: stack-array DEĞİŞKENİ
-#     `değişken xs=[..]; f(xs)` → Dizi<T> param (35/40) = stack↔KdlDizi temsil
-#     uyumsuzluğu, DUR-SOR (Mehmet'te — whole-program flow veya temsil kararı).
+#   Sınıf A KAPANDI (D-070): LİTERAL-arg `f([..])` → heap (03_kontrol PASS); DEĞİŞKEN-arg
+#     `değişken xs=[..]; f(xs)` artık --check'te G003 REDDİ (Mehmet kararı). 35/40 GEÇERSİZ
+#     program (checker reddediyor); --llvm bypass ederse çöker = "checker'ı atladın" →
+#     allowlist'te kalır (güvensiz-eşi). Sınıf B (lambda) = V2 (D-004).
 ALLOWLIST="04_islev 10_lambda 25_closure_capture 42_lambda_hesap \
            35_binary_search 40_dizi_islemler"
 
