@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-065 — SELF-HOST [YÜKSEK robustness]: parser token erişimi sınır-güvenli (segfault düzeltildi) (2026-06-14)
+
+**Karar [ETKİ: orta — `selfhost/checker.kem` + `selfhost/parser.kem`; robustness/çökmezlik].**
+Full-repo parite audit'inde KEMGU checker `test/lex_korpus/m3_04_ayrac_hata.kem` üzerinde
+SEGFAULT (rc=139) veriyordu. Kök neden bulundu + düzeltildi. C derleyici DOKUNULMADI.
+
+**Kök neden (bisect ile):** Çöken yapı = `yapı Nokta x y z` (süslü `{` yok). Parser bozuk
+girdide panik-sync yapmadığından `parse_alan`/`bekle` döngüsü `p.imlec`'i DOSYA_SONU
+sentinelinin ÖTESİNE ilerletiyor; sonra `tip_i`/`lex_i` → `dizi_al(p.t_ad, i)` sınır-dışı →
+segfault. KEMGU'nun "çökmezlik" (Direktif) ilkesine aykırı kritik bir robustness hatası.
+
+**Düzeltme (sınır-güvenli accessor):** `tip_i` → i sınır-dışıysa "DOSYA_SONU"; `lex_i` →
+"". Böylece imleç taşsa bile tüm parse döngülerinin `sim_mi(DOSYA_SONU)` kontrolü sonlanır;
+çökme ya da sonsuz döngü yok. C lexer'ın DOSYA_SONU sentineli + bounded-peek davranışının
+karşılığı. **Hem checker.kem hem parser.kem'e** uygulandı (paylaşılan parser kodu, aynı
+latent bug).
+
+**Doğrulama:** m3_04 artık rc=0 (çökme yok); `yapı Nokta x y z` tek başına rc=0. Parser
+bootstrap **270/270** sıfır-diff (self-parse dahil); parser diff 12/12; checker korpus 45/45;
+test/ornekler 42/42; self-host lexer/parser/checker.kem 3/3. SIFIR regresyon.
+
+**Not:** m3_04 artık "OK" basıyor (oracle P-kodları basıyor) → hâlâ DIVERGENT ama ÇÖKMÜYOR.
+m3_04 tam paritesi = parser/lexer hata-kodu raporlama (P/L kodları) feature-gap'ine bağlı
+(checker'ın parser'ı hata kurtarıyor ama P/L kodu th_kod'a yazmıyor) — ayrı iş (muhtemelen
+Aşama 1 parser-oracle kapsamı; checker-parite dışı).
+
+---
+
 ## D-064 — SELF-HOST checker: generic param tip "?" (full-repo parite denetimi başladı) — stdlib 3/3, 45/45 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Tüm-repo parite denetimi

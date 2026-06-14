@@ -594,9 +594,15 @@ işlev karakter_deger(b: tam32) -> metin {
     ver metin_birlestir(r, hex_str(b % 16));
 }
 
-// ---- Token erişim ----
-işlev tip_i(p: &değişken Ayr, i: tam32) -> metin { ver dizi_al(p.t_ad, i); }
+// ---- Token erişim (sınır-güvenli: bozuk girdide imleç DOSYA_SONU'yu aşabilir;
+//      sınır-dışı erişim → DOSYA_SONU/"" döner → tüm parse döngüleri sonlanır,
+//      çökme/sonsuz-döngü yok. C lexer DOSYA_SONU sentineli ekler, peek bounded.) ----
+işlev tip_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver "DOSYA_SONU"; }
+    ver dizi_al(p.t_ad, i);
+}
 işlev lex_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver ""; }
     ver metin_kes(p.kaynak, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
 }
 işlev simdiki(p: &değişken Ayr) -> metin {
