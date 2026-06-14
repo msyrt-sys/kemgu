@@ -809,6 +809,59 @@ static const char *kdl_al_donus_ir(const char *et) {
     return "i32";
 }
 
+/* D-087: eleman IR'i by-value YAPI mı (%Yapi)? Skaler/ptr → 0. */
+static int dizi_eleman_struct_mi(const char *et) {
+    return et && et[0] == '%';
+}
+/* kdl_dizi_olustur(eleman_byte) operandını yaz: skaler/ptr → derleme-zamanı
+ * sabit; struct → LLVM `sizeof(%Yapi)` const-expr (padding/alignment LLVM
+ * layout'uyla birebir; C tarafında elle hesaplama miscompile riski taşırdı). */
+static void kdl_eleman_byte_yaz(FILE *out, const char *et) {
+    if (dizi_eleman_struct_mi(et)) {
+        fprintf(out,
+            "ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i32)", et);
+        return;
+    }
+    int eb = 4;
+    if (et && strcmp(et, "i8") == 0) eb = 1;
+    else if (et && strcmp(et, "i16") == 0) eb = 2;
+    else if (et && (strcmp(et, "i64") == 0 || strcmp(et, "double") == 0 ||
+                    strcmp(et, "ptr") == 0)) eb = 8;
+    fprintf(out, "%d", eb);
+}
+/* D-087 struct-eleman dizi emit yardımcıları (ekle/al/yaz) — by-value yapı
+ * memcpy ile taşınır (kdl_dizi_*_yapi). */
+static void dizi_struct_ekle_emit(LlvmGen *g, int desc_reg, int val_reg,
+                                  const char *et) {
+    int tmp = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", tmp, et);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n", et, val_reg, tmp);
+    fprintf(g->out,
+        "  call void @kdl_dizi_ekle_yapi(ptr %%%d, ptr %%%d)\n",
+        desc_reg, tmp);
+}
+static IfadeSonuc dizi_struct_al_emit(LlvmGen *g, int desc_reg, int idx_i32,
+                                      const char *et) {
+    int dst = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", dst, et);
+    fprintf(g->out,
+        "  call void @kdl_dizi_al_yapi(ptr %%%d, i32 %%%d, ptr %%%d)\n",
+        desc_reg, idx_i32, dst);
+    int rr = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", rr, et, dst);
+    IfadeSonuc s = { rr, et, 0 };
+    return s;
+}
+static void dizi_struct_yaz_emit(LlvmGen *g, int desc_reg, int idx_i32,
+                                 int val_reg, const char *et) {
+    int tmp = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", tmp, et);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n", et, val_reg, tmp);
+    fprintf(g->out,
+        "  call void @kdl_dizi_yaz_yapi(ptr %%%d, i32 %%%d, ptr %%%d)\n",
+        desc_reg, idx_i32, tmp);
+}
+
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
  * Sadece basit darlatma/genisletme yardimcisi: src->dst int donusumleri. */
 static int tip_genisligi(const char *ir) {
@@ -2045,20 +2098,21 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 const Dugum *elem_d = g->beklenen_tip->veri.tip_dizi.eleman_tip;
                 const char *elem_ir = ast_tip_to_ir(g, elem_d);
                 if (!elem_ir) elem_ir = "i32";
-                int eb = 4;
-                if (strcmp(elem_ir, "i8") == 0) eb = 1;
-                else if (strcmp(elem_ir, "i16") == 0) eb = 2;
-                else if (strcmp(elem_ir, "i64") == 0) eb = 8;
-                else if (strcmp(elem_ir, "double") == 0) eb = 8;
-                else if (strcmp(elem_ir, "ptr") == 0) eb = 8;
                 int hn = d->veri.dizi_olustur.sayi;
                 int kdl_reg = yeni_reg(g);
-                fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n", kdl_reg, eb);
+                /* D-087: eleman_byte — struct ise LLVM sizeof const-expr. */
+                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(i32 ",
+                        kdl_reg);
+                kdl_eleman_byte_yaz(g->out, elem_ir);
+                fputs(")\n", g->out);
                 const Dugum *eski_bt = g->beklenen_tip;
                 g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
                 for (int i = 0; i < hn; i++) {
                     IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
+                    if (dizi_eleman_struct_mi(elem_ir)) {
+                        dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
+                        continue;
+                    }
                     int vr = int_donustur(g, v.reg, v.tip, elem_ir);
                     const char *fn = "kdl_dizi_ekle_tam";
                     if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
@@ -2135,6 +2189,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
                     const char *et = vi->eleman_llvm_tip
                         ? vi->eleman_llvm_tip : "i32";
+                    /* D-087: struct eleman → by-value kdl_dizi_al_yapi. */
+                    if (dizi_eleman_struct_mi(et)) {
+                        return dizi_struct_al_emit(g, v_load, idx_r, et);
+                    }
                     const char *fn = "kdl_dizi_al_tam";
                     if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                     else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
@@ -2156,16 +2214,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* D-085 [YÜKSEK]: TÜRETİLMİŞ heap dizi tabanı (yapı alanı k.xs /
              * işlev dönüşü yap()) → kdl_dizi_al route et. Descriptor'ı (KdlDizi*)
              * düz veri gibi GEP'leme (eski yol sessiz-yanlış/segfault'tu).
-             * Skaler/ptr eleman; struct eleman (%Yapi) D-087'de (şimdilik stack
-             * yoluna düşer — değişmemiş davranış). */
+             * Skaler/ptr + struct eleman (D-087 by-value yapı). */
             if (d->veri.indeks.nesne &&
                 d->veri.indeks.nesne->tip != DUGUM_TANIMLAYICI) {
                 const char *et = turetilmis_heap_dizi_eleman(g,
                     d->veri.indeks.nesne);
-                if (et && et[0] != '%') {
+                if (et) {
                     IfadeSonuc base = ifade_uret(g, d->veri.indeks.nesne, NULL);
                     IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i32");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
+                    if (dizi_eleman_struct_mi(et)) {
+                        return dizi_struct_al_emit(g, base.reg, idx_r, et);
+                    }
                     const char *rt = kdl_al_donus_ir(et);
                     int rr = yeni_reg(g);
                     fprintf(g->out,
@@ -3367,6 +3427,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 const char *et = dizi_eleman_beklenen
                     ? dizi_eleman_beklenen
                     : (n > 1 ? args[1].tip : "i32");
+                /* D-087: struct eleman → by-value kdl_dizi_ekle_yapi. */
+                if (dizi_eleman_struct_mi(et) && n > 1) {
+                    dizi_struct_ekle_emit(g, args[0].reg, args[1].reg, et);
+                    int rr = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
+                    IfadeSonuc s = { rr, "i32", 0 };
+                    return s;
+                }
                 const char *fn;
                 const char *cast_tip = et;
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
@@ -3390,12 +3458,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 const char *et = dizi_eleman_beklenen
                     ? dizi_eleman_beklenen
                     : ((beklenen && *beklenen) ? beklenen : "i32");
+                int idx_i32 = (n > 1) ? int_donustur(g, args[1].reg,
+                                                      args[1].tip, "i32") : 0;
+                /* D-087: struct eleman → by-value kdl_dizi_al_yapi + load. */
+                if (dizi_eleman_struct_mi(et)) {
+                    return dizi_struct_al_emit(g, args[0].reg, idx_i32, et);
+                }
                 const char *fn;
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
                 else { fn = "kdl_dizi_al_tam"; et = "i32"; }
-                int idx_i32 = (n > 1) ? int_donustur(g, args[1].reg,
-                                                      args[1].tip, "i32") : 0;
                 int rr = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
@@ -3410,13 +3482,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 const char *et = dizi_eleman_beklenen
                     ? dizi_eleman_beklenen
                     : (n > 2 ? args[2].tip : "i32");
+                int idx_i32 = (n > 1) ? int_donustur(g, args[1].reg,
+                                                      args[1].tip, "i32") : 0;
+                /* D-087: struct eleman → by-value kdl_dizi_yaz_yapi. */
+                if (dizi_eleman_struct_mi(et) && n > 2) {
+                    dizi_struct_yaz_emit(g, args[0].reg, idx_i32,
+                                         args[2].reg, et);
+                    int rr = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
+                    IfadeSonuc s = { rr, "i32", 0 };
+                    return s;
+                }
                 const char *fn;
                 const char *cast_tip = et;
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_yaz_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_yaz_ptr";
                 else { fn = "kdl_dizi_yaz_tam"; cast_tip = "i32"; }
-                int idx_i32 = (n > 1) ? int_donustur(g, args[1].reg,
-                                                      args[1].tip, "i32") : 0;
                 int ev = (n > 2) ? int_donustur(g, args[2].reg,
                                                  args[2].tip, cast_tip) : 0;
                 fprintf(g->out,
@@ -3749,22 +3830,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 eleman_tip) {
                 const Dugum *lit = d->veri.degisken.deger;
                 int n = lit->veri.dizi_olustur.sayi;
-                /* kdl_dizi_olustur(eleman_byte) */
-                int eb = 4;
-                if (strcmp(eleman_tip, "i8") == 0) eb = 1;
-                else if (strcmp(eleman_tip, "i16") == 0) eb = 2;
-                else if (strcmp(eleman_tip, "i64") == 0) eb = 8;
-                else if (strcmp(eleman_tip, "double") == 0) eb = 8;
-                else if (strcmp(eleman_tip, "ptr") == 0) eb = 8;
                 int kdl_reg = yeni_reg(g);
-                fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n",
-                    kdl_reg, eb);
+                /* kdl_dizi_olustur(eleman_byte) — D-087: struct → sizeof const-expr */
+                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(i32 ",
+                        kdl_reg);
+                kdl_eleman_byte_yaz(g->out, eleman_tip);
+                fputs(")\n", g->out);
                 (void)n;
                 /* Her elemani ekle */
                 for (int i = 0; i < n; i++) {
                     IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
                                               eleman_tip);
+                    if (dizi_eleman_struct_mi(eleman_tip)) {
+                        dizi_struct_ekle_emit(g, kdl_reg, v.reg, eleman_tip);
+                        continue;
+                    }
                     int vr = int_donustur(g, v.reg, v.tip, eleman_tip);
                     const char *fn = "kdl_dizi_ekle_tam";
                     if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
@@ -3929,29 +4009,31 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         hedef->veri.indeks.nesne);
                     if (et) { heap_dizi = 1; heap_et = et; }
                 }
-                if (heap_dizi && heap_et && heap_et[0] != '%') {
-                    /* D-085: kdl_dizi_yaz(descriptor, i32 idx, T v). Descriptor
-                     * = ifade_uret(taban) (TANIMLAYICI heap → load KdlDizi*;
-                     * ERISIM/CAGRI → KdlDizi*). Runtime OOB → PANIC. struct
-                     * eleman (%Yapi) D-087'de — şimdilik aşağıdaki dalda. */
+                if (heap_dizi && heap_et) {
+                    /* D-085/D-087: kdl_dizi_yaz(descriptor, i32 idx, T v).
+                     * Descriptor = ifade_uret(taban) (TANIMLAYICI heap → load
+                     * KdlDizi*; ERISIM/CAGRI → KdlDizi*). Runtime OOB → PANIC. */
                     IfadeSonuc base = ifade_uret(g,
                         hedef->veri.indeks.nesne, NULL);
                     IfadeSonuc idx = ifade_uret(g,
                         hedef->veri.indeks.indeks, "i32");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
-                    const char *cast =
-                        (strcmp(heap_et, "i64") == 0 ||
-                         strcmp(heap_et, "ptr") == 0) ? heap_et : "i32";
-                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, cast);
-                    int vr = int_donustur_im(g, v.reg, v.tip, cast,
-                                             v.isaretsiz);
-                    fprintf(g->out,
-                        "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
-                        kdl_yaz_fn(heap_et), base.reg, idx_r, cast, vr);
-                } else if (heap_dizi) {
-                    /* struct eleman heap dizi yazma — D-087 (by-value yapı). */
-                    fprintf(g->out,
-                        "  ; atama: heap struct-dizi eleman yazma D-087'de\n");
+                    if (dizi_eleman_struct_mi(heap_et)) {
+                        /* D-087: by-value yapı eleman — kdl_dizi_yaz_yapi. */
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                                  heap_et);
+                        dizi_struct_yaz_emit(g, base.reg, idx_r, v.reg, heap_et);
+                    } else {
+                        const char *cast =
+                            (strcmp(heap_et, "i64") == 0 ||
+                             strcmp(heap_et, "ptr") == 0) ? heap_et : "i32";
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, cast);
+                        int vr = int_donustur_im(g, v.reg, v.tip, cast,
+                                                 v.isaretsiz);
+                        fprintf(g->out,
+                            "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
+                            kdl_yaz_fn(heap_et), base.reg, idx_r, cast, vr);
+                    }
                 } else {
                     IfadeSonuc nesne = ifade_uret(g,
                         hedef->veri.indeks.nesne, NULL);
@@ -5115,6 +5197,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_dizi_yaz_tam(ptr, i32, i32)\n", out);
     fputs("declare void @kdl_dizi_yaz_tam64(ptr, i32, i64)\n", out);
     fputs("declare void @kdl_dizi_yaz_ptr(ptr, i32, ptr)\n", out);
+    /* D-087: by-value yapı (struct) elemanlı dizi — memcpy tabanlı */
+    fputs("declare void @kdl_dizi_ekle_yapi(ptr, ptr)\n", out);
+    fputs("declare void @kdl_dizi_al_yapi(ptr, i32, ptr)\n", out);
+    fputs("declare void @kdl_dizi_yaz_yapi(ptr, i32, ptr)\n", out);
     fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
     /* Adim 6: capacity API */
     fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);

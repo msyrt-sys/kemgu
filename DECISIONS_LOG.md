@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-087 — [YÜKSEK] `Dizi<Yapı>` by-value struct eleman (skaler-i32 varsayımı kaldırıldı) (2026-06-14)
+
+**Karar [ETKİ: runtime + codegen; izole commit].** `Dizi<Yapı>` (struct elemanlı
+dizi) skaler `kdl_dizi_ekle_tam`/`kdl_dizi_al_tam` (i32) + `eleman_byte=4` ile
+derleniyordu → 8+ baytlık yapı **truncation** (alanlar sessizce kaybolur,
+`ps[0].x+ps[0].y` yanlış) + `değişken p: Yapı = dizi_al(ps,i)` GEÇERSİZ IR
+(`call %Yapi @kdl_dizi_al_tam` — i32 dönüş ile uyumsuz) → **link-fail**.
+
+**Çözüm:**
+- **runtime (kdl_runtime.c):** üç by-value memcpy fonksiyonu —
+  `kdl_dizi_ekle_yapi(d, src)`, `kdl_dizi_al_yapi(d, i, dst)`,
+  `kdl_dizi_yaz_yapi(d, i, src)`. Eleman boyutu `d->eleman_byte` (descriptor'dan).
+  al/yaz OOB → PANIC (D-069 sınıfı).
+- **codegen (llvm.c):** `dizi_eleman_struct_mi(et)` (`et[0]=='%'`) tüm dizi
+  sitelerinde (literal ekle, değişken-annot heap, dizi_ekle/al/yaz built-in,
+  `[]` okuma TANIMLAYICI+türetilmiş, `[]` yazma) struct dalı:
+  ekle = store-to-temp + ekle_yapi; al = alloca dst + al_yapi + load; yaz =
+  store-to-temp + yaz_yapi. **eleman_byte** struct için `kdl_eleman_byte_yaz`
+  ile LLVM `sizeof` const-expr (`ptrtoint (getelementptr (%Yapi, null, 1))`) →
+  padding/alignment LLVM layout'uyla BİREBİR (C tarafı elle hesap miscompile riski).
+- Skaler/ptr yolları DEĞİŞMEDİ (`et[0]=='%'` guard'ı yalnız struct'ta devreye girer).
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (struct [] oku/yaz, dizi_al,
+{tam8,tam64} padding, struct OOB PANIC) → 28/28.
+`test/ornekler/dizi_yapi_eleman.kem` (exit 42, ASan auto-discovery; padding +
+by-value yazma + dizi_al-struct). Tüm suite yeşil (28 paket). `asan_e2e` PASS=94
+FAIL=0 (memcpy-tabanlı, heap-overflow yok). 0 uyarı. **Sınır:** `dizi_olustur(N)`
+explicit-builtin'i struct için eleman_byte hâlâ skaler-varsayım (literal `[...]`
+yolu doğru; explicit dizi_olustur+struct nadir — gelecekte). İç-içe
+`Dizi<Dizi<Yapı>>` türetilmiş indeks D-085 nested sınırına tabi.
+
 ## D-086 — [YÜKSEK] `&Dizi<T>` referans param: codegen deref + built-in tip-kontrol tutarlılığı (2026-06-14)
 
 **Karar [ETKİ: codegen doğruluk + tip-kontrol tutarlılık; izole commit].** İki

@@ -154,6 +154,40 @@ işlev main() -> tam32 {
     değişken r: tam32 = yaz(&değişken a);
     ver dizi_al(a, 0);
 }'
+# D-087: by-value YAPI elemanlı dizi (Dizi<Yapı>). Eskiden skaler i32 getter +
+# eleman_byte=4 (truncation/link-fail); artık kdl_dizi_*_yapi memcpy + sizeof.
+deger_bekle vaka20_struct_indeks_oku 42 'yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken ps: Dizi<Nokta> = [Nokta { x: 40, y: 2 }];
+    ver ps[0].x + ps[0].y;
+}'
+deger_bekle vaka21_struct_dizi_al 42 'yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken ps: Dizi<Nokta> = [Nokta { x: 40, y: 2 }];
+    değişken p: Nokta = dizi_al(ps, 0);
+    ver p.x + p.y;
+}'
+deger_bekle vaka22_struct_yaz 50 'yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken ps: Dizi<Nokta> = [Nokta { x: 1, y: 2 }];
+    ps[0] = Nokta { x: 20, y: 30 };
+    değişken p: Nokta = dizi_al(ps, 0);
+    ver p.x + p.y;
+}'
+# Padding doğruluğu: {tam8, tam64} struct → sizeof const-expr LLVM layout'uyla birebir.
+deger_bekle vaka23_struct_padding 42 'yapı M { a: tam8; b: tam64; }
+işlev main() -> tam32 {
+    değişken xs: Dizi<M> = [M { a: 2, b: 40 }];
+    değişken m: M = dizi_al(xs, 0);
+    ver m.b + m.a;
+}'
+# Struct dizi OOB de runtime sınır-kontrollü.
+panic_bekle vaka24_struct_oob 'yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken ps: Dizi<Nokta> = [Nokta { x: 1, y: 2 }];
+    değişken p: Nokta = dizi_al(ps, 9);
+    ver p.x;
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"
