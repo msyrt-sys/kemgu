@@ -1,0 +1,1 @@
+yapı P { x: tam32; y: tam32; } işlev main() -> tam32 { değişken q: P = P { y: 2, x: 40 }; ver q.x + q.y; }
