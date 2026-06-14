@@ -26,16 +26,18 @@ fi
 pass=0; fail=0
 for f in "$KORPUS"/*.kem; do
     [ -f "$f" ] || continue
+    # Win11'de .exe yeniden-yazımı dosya-kilidi yarışına girer → dosya-başı benzersiz ad.
+    b=$(basename "$f" .kem)
     # C codegen → exit (oracle)
-    "$KEMGU" --llvm "$f" > "$TMP/c.ll" 2>/dev/null
-    clang -x ir "$TMP/c.ll" -x none "$RT" -o "$TMP/c.exe" 2>/dev/null
-    "$TMP/c.exe" >/dev/null 2>&1; coracle=$?
+    "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null
+    clang -x ir "$TMP/$b.c.ll" -x none "$RT" -o "$TMP/$b.c.exe" 2>/dev/null
+    "$TMP/$b.c.exe" >/dev/null 2>&1; coracle=$?
     # KEMGU codegen → exit (aday)
-    "$CODEGEN" "$f" > "$TMP/k.ll" 2>/dev/null
-    if ! clang -x ir "$TMP/k.ll" -x none "$RT" -o "$TMP/k.exe" 2>/dev/null; then
+    "$CODEGEN" "$f" > "$TMP/$b.k.ll" 2>/dev/null
+    if ! clang -x ir "$TMP/$b.k.ll" -x none "$RT" -o "$TMP/$b.k.exe" 2>/dev/null; then
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
-    "$TMP/k.exe" >/dev/null 2>&1; kaday=$?
+    "$TMP/$b.k.exe" >/dev/null 2>&1; kaday=$?
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))
     else

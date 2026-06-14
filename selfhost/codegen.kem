@@ -1578,7 +1578,28 @@ işlev ll_ikili(op: metin) -> metin {
     eğer metin_esit(op, "-") { ver "sub"; }
     eğer metin_esit(op, "*") { ver "mul"; }
     eğer metin_esit(op, "/") { ver "sdiv"; }
+    eğer metin_esit(op, "ve") { ver "and"; }    // mantıksal (kısa-devresiz, C v1 ile aynı)
+    eğer metin_esit(op, "veya") { ver "or"; }
     ver "srem";   // %
+}
+işlev karsilastirma_mi(op: metin) -> mantıksal {
+    ver metin_esit(op, "==") veya metin_esit(op, "!=") veya metin_esit(op, "<")
+        veya metin_esit(op, ">") veya metin_esit(op, "<=") veya metin_esit(op, ">=");
+}
+işlev icmp_pred(op: metin) -> metin {
+    eğer metin_esit(op, "==") { ver "eq"; }
+    eğer metin_esit(op, "!=") { ver "ne"; }
+    eğer metin_esit(op, "<") { ver "slt"; }
+    eğer metin_esit(op, ">") { ver "sgt"; }
+    eğer metin_esit(op, "<=") { ver "sle"; }
+    ver "sge";   // >=
+}
+// i1 sonucu → i32 (0/1) genişlet; üretilen reg'i döndür.
+işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = zext i1 "); yaz_str(c); yaz_str(" to i32"); yb(10);
+    ver rs;
 }
 
 // İfade → operand metni ("5" veya "%3"); yan-IR yaz_str ile akıtılır.
@@ -1589,13 +1610,39 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken sol: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
         değişken sag: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        eğer karsilastirma_mi(op) {
+            değişken c: tam32 = yeni_reg(p);
+            değişken cs2: metin = reg_str(c);
+            yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp "); yaz_str(icmp_pred(op));
+            yaz_str(" i32 "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
+            ver zext_i1(p, cs2);
+        }
+        // aritmetik (+ - * / %) + mantıksal (ve/veya → and/or): tek komut
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
-        yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(ll_ikili(dizi_al(p.a_deg, idx)));
+        yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(ll_ikili(op));
         yaz_str(" i32 "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
         ver rs;
     }
-    ver "0";   // CG1 dışı düğüm (tanımlayıcı/çağrı/...) → CG2+
+    eğer metin_esit(ad, "TEKLI") {
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        değişken x: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer metin_esit(op, "neg") {
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = sub i32 0, "); yaz_str(x); yb(10);
+            ver rs;
+        }
+        eğer metin_esit(op, "degil") {
+            değişken c: tam32 = yeni_reg(p);
+            değişken cs2: metin = reg_str(c);
+            yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp eq i32 "); yaz_str(x); yaz_str(", 0"); yb(10);
+            ver zext_i1(p, cs2);
+        }
+        ver "0";   // ~ / deref* / & / &degisken → CG sonrası (pointer/güvensiz)
+    }
+    ver "0";   // CG2 dışı düğüm (tanımlayıcı/çağrı/...) → CG3+
 }
 
 // Deyim → IR.
