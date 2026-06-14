@@ -1,0 +1,5 @@
+// TC4: bilinmeyen yapı tipi → T002 (erken dönüş, alan kontrolü yok).
+işlev main() -> tam32 {
+    değişken n: tam32 = Yokyapi { x: 1 };
+    ver 0;
+}

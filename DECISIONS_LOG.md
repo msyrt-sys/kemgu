@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-060 — SELF-HOST checker TC4a: yapı oluştur (T002/T017/T012/T001) + erişim tipi — 38/38 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC4a: yapı
+oluşturma denetimi (bilinmeyen yapı T002, bilinmeyen alan T017, eksik alan T012, alan
+değer tipi T001) + alan erişim tip çıkarsama (`nesne.alan` → alan tipi). C derleyici
+DOKUNULMADI.
+
+**Mimari karar — yapı tablosu (`yapi_ad`/`yapi_abase`/`yapi_acount` + düz `alan_ad`/
+`alan_tip`).** `genel_topla` YAPI (+ dışa-YAPI) düğümlerinde `yapi_kaydet`: alan adları
++ tipleri (yalnız bilinen skaler; generic "T"/yapı/bileşik → "?"). Sorgular:
+`yapi_var_mi`, `alan_var_mi`, `alan_tip_bul`.
+
+**C `kontrol_yapi_olustur_ic` sırası birebir (--checkdump doğrulaması):**
+- Yapı tanımsız → T002 (oluştur düğümü) + **erken dönüş** (alan kontrolü yok).
+- Her alan-atama (oluşturma sırası): bilinmeyen alan → T017 (alan düğümü, **değer
+  kontrol edilmez**); bilinen → değer T002 + T001 (alan değer tipi, alan düğümü).
+- Eksik alanlar (bildirim sırası) → T012 (oluştur düğümü), per-alan döngüsünden SONRA.
+- `ifade_tip` YAPI_OLUSTUR → yapı adı; ERISIM → alan tipi (referans nesne → "?").
+
+**GÜVENLİ strateji:** Alan tipi yalnız bilinen-skaler saklanır (generic/yapı alan →
+"?" → T001 atla); referans-nesne erişimi → "?" → atla. Geçerli kodda false-positive
+YOK → test/ornekler (yapilar/hasta dâhil) 41/42 KORUNDU.
+
+**Doğrulama:** `make calistir_checker_diff` → **38/38 korpus** (önceki 32 + TC4 6:
+yapı-OK / bilinmeyen-alan / eksik-alan / alan-tip / bilinmeyen-yapı / erişim-tip).
+test/ornekler **41/42** (regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC4b):** eşleş exhaustiveness M001 + çeşit varyant (M002/M003/M004) +
+INDEKS tip/T013. Sonra linear (TC5 → lineer_hata kapanır), bölge/yetki/modül (TC6-8).
+
+---
+
 ## D-059 — SELF-HOST checker TC3h: atama lvalue (T022) + atama tip uyumu (T001) — 32/32 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3h: atama

@@ -1,0 +1,7 @@
+// TC4: erişim alan tipi (n.y mantıksal) annotation (tam32) ile uyumsuz → T001.
+yapı Nokta { x: tam32; y: mantıksal; }
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: 1, y: doğru };
+    değişken b: tam32 = n.y;
+    ver 0;
+}
