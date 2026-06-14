@@ -42,6 +42,12 @@ typedef struct LlvmIsim {
     /* Madde B: Dizi<T> tipli degiskenler icin eleman tipi (i32/i64/ptr).
      * dizi_ekle / dizi_al icin element-aware kdl_ cagrisi route etmek icin. */
     const char *eleman_llvm_tip;
+    /* İç-içe Dizi<Dizi<T>> için eleman AST tip düğümü. eleman_llvm_tip iç diziyi
+     * "ptr" (KdlDizi* descriptor) olarak gizlerken, bu alan iç dizinin GERÇEK AST
+     * tipini (Dizi<T> ya da skaler T) saklar. `m[i][j]` zincirinde `m[i]`'nin heap
+     * KdlDizi* mı olduğunu ve [j] eleman tipini recursive çözmek için
+     * (heap_dizi_eleman_ast). arena_ayir_sifir → varsayılan NULL (init-uyarısı yok). */
+    const Dugum *eleman_tip_ast;
     /* Adim 3 (B v2): heap dizi (KdlDizi*) ise 1; stack [N x T] ise 0.
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
@@ -767,7 +773,10 @@ static int yapi_alan_indeksi(const YapiKayit *y, const char *ad, int ad_uz,
  * dizi_eleman_beklenen yalniz TANIMLAYICI arg0 (duz degisken) icin set ediliyordu;
  * struct-alan tutan dizi (s.ad: Dizi<metin>) icin eleman tipi cikarsanmiyor ->
  * dizi_al kdl_dizi_al_tam (i32) route edip metin ptr'ini i32 okuyor -> SEGFAULT. */
-static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
+/* Yukarıdakinin AST-temelli kardeşi: alan Dizi<T> ise T'nin AST tip düğümünü
+ * döner (iç-içe Dizi<Dizi<T>> alanlarda iç dizi AST'sini recursive çözmek için).
+ * dizi_alan_eleman_ir bunu ast_tip_to_ir'den geçirir. */
+static const Dugum *dizi_alan_eleman_ast(LlvmGen *g, const Dugum *erisim) {
     if (!erisim || erisim->tip != DUGUM_ERISIM) return NULL;
     const Dugum *nesne = erisim->veri.erisim.nesne;
     YapiKayit *yk = NULL;
@@ -786,7 +795,11 @@ static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
     int idx = yapi_alan_indeksi(yk, erisim->veri.erisim.alan,
                                 erisim->veri.erisim.alan_uzunluk, &alan_tip);
     if (idx < 0 || !alan_tip || alan_tip->tip != DUGUM_TIP_DIZI) return NULL;
-    return ast_tip_to_ir(g, alan_tip->veri.tip_dizi.eleman_tip);
+    return alan_tip->veri.tip_dizi.eleman_tip;
+}
+static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
+    const Dugum *elem = dizi_alan_eleman_ast(g, erisim);
+    return elem ? ast_tip_to_ir(g, elem) : NULL;
 }
 
 /* D-085: heap KdlDizi eleman okuma/yazma intrinsic'i — eleman IR tipine göre
@@ -1093,44 +1106,66 @@ static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
     return m;
 }
 
-/* D-085 [YÜKSEK]: TÜRETİLMİŞ (düz TANIMLAYICI olmayan) bir indeks tabanı heap
- * KdlDizi* mı? Eğer öyleyse eleman IR tipini ("i32"/"i64"/"ptr"/"%Yapi") döner;
- * değilse NULL → stack GEP yoluna düşer.
+/* D-085 + D-088 [YÜKSEK]: Bir indeks tabanı (`nesne`) HEAP KdlDizi* üretiyorsa
+ * eleman AST tip düğümünü döner (skaler T ya da İÇ Dizi<T>); değilse NULL →
+ * stack GEP yoluna düşer. Çağıran ast_tip_to_ir ile IR'a ("i32"/"ptr"/"%Yapi")
+ * çevirir; iç Dizi<T> → "ptr" (zincir devam eder).
  *
- * Kök-neden: `[]` lowering'i yalnız `nesne->tip == DUGUM_TANIMLAYICI +
- * dinamik_dizi_mi` için heap-route ediyordu; yapı-alanı (k.xs), işlev dönüşü
- * (yap()) gibi türetilmiş heap Dizi<T> tabanlarda KdlDizi* DESKRİPTÖRÜNÜ düz
- * veri sanıp GEP yapıyordu (sessiz-yanlış / segfault). dizi_al/dizi_yaz
- * built-in'leri aynı tabanlarda DOĞRU — taban reg'i doğru, lowering yanlıştı.
+ * Kök-neden (D-085): `[]` lowering'i yalnız `nesne == DUGUM_TANIMLAYICI +
+ * dinamik_dizi_mi` için heap-route ediyordu; türetilmiş tabanlarda (yapı-alanı
+ * k.xs, işlev dönüşü yap()) KdlDizi* DESKRİPTÖRÜNÜ düz veri sanıp GEP yapıyordu.
  *
- * Kapsam: ERISIM (yapı alanı Dizi<T>) + CAGRI (Dizi<T> dönen işlev). Nested
- * INDEKS (Dizi<Dizi<T>> m[i][j]) ve &Dizi referansı bu helper'da DEĞİL (ayrı
- * yollar — nested stack-GEP korunur, &Dizi D-086). */
-static const char *turetilmis_heap_dizi_eleman(LlvmGen *g, const Dugum *nesne) {
+ * Genişletme (D-088): NESTED INDEKS (`m[i][j]`) eklendi. `m: Dizi<Dizi<T>>`
+ * iç içe literalde iç diziler artık heap (DEGISKEN heap path beklenen_tip'i
+ * iç eleman tipine ayarlıyor), dolayısıyla `m[i]` heap KdlDizi* döner →
+ * `m[i][j]` MUTLAKA kdl_dizi_al'a route edilmeli (stack-GEP iç descriptor'ı
+ * bozardı). Recursive: `base[i]`'nin elemanı = base elemanının (Dizi<T>) eleman
+ * tipi T. eleman_tip_ast iç dizi AST'sini taşır (eleman_llvm_tip="ptr" gizler).
+ *
+ * Kapsam: TANIMLAYICI (heap değişken/param) + nested INDEKS + ERISIM (yapı
+ * alanı Dizi<T>) + CAGRI (Dizi<T> dönen işlev). */
+static const Dugum *heap_dizi_eleman_ast(LlvmGen *g, const Dugum *nesne) {
     if (!nesne) return NULL;
-    if (nesne->tip == DUGUM_ERISIM) {
-        /* dizi_alan_eleman_ir: alan Dizi<T> ise eleman IR, değilse NULL. */
-        return dizi_alan_eleman_ir(g, nesne);
+    switch (nesne->tip) {
+    case DUGUM_TANIMLAYICI: {
+        LlvmIsim *vi = isim_bul(g, nesne->veri.tanimlayici.metin,
+                                nesne->veri.tanimlayici.uzunluk);
+        if (vi && vi->dinamik_dizi_mi) return vi->eleman_tip_ast;
+        return NULL;
     }
-    if (nesne->tip == DUGUM_CAGRI &&
-        nesne->veri.cagri.hedef &&
-        nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
-        const char *ad = nesne->veri.cagri.hedef->veri.tanimlayici.metin;
-        int uz = nesne->veri.cagri.hedef->veri.tanimlayici.uzunluk;
-        IslevKayit *ik = islev_bul(g, ad, uz);
-        if (!ik && g->aktif_modul_onek) {
-            int muz = 0;
-            const char *m = modul_mangle(g, g->aktif_modul_onek,
-                                         g->aktif_modul_onek_uz, ad, uz, &muz);
-            if (m) ik = islev_bul(g, m, muz);
-        }
-        if (ik && ik->ast) {
-            const Dugum *rt = ik->ast->veri.islev.donus_tipi;
-            if (rt && rt->tip == DUGUM_TIP_DIZI)
-                return ast_tip_to_ir(g, rt->veri.tip_dizi.eleman_tip);
-        }
+    case DUGUM_INDEKS: {
+        /* base[i]: base elemanı iç Dizi<T> ise base[i] de heap Dizi<T>,
+         * onun elemanı T. (Dizi<Dizi<...>> derinliği için recursive.) */
+        const Dugum *be = heap_dizi_eleman_ast(g, nesne->veri.indeks.nesne);
+        if (be && be->tip == DUGUM_TIP_DIZI)
+            return be->veri.tip_dizi.eleman_tip;
+        return NULL;
     }
-    return NULL;
+    case DUGUM_ERISIM:
+        return dizi_alan_eleman_ast(g, nesne);
+    case DUGUM_CAGRI: {
+        if (nesne->veri.cagri.hedef &&
+            nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+            const char *ad = nesne->veri.cagri.hedef->veri.tanimlayici.metin;
+            int uz = nesne->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+            IslevKayit *ik = islev_bul(g, ad, uz);
+            if (!ik && g->aktif_modul_onek) {
+                int muz = 0;
+                const char *m = modul_mangle(g, g->aktif_modul_onek,
+                                             g->aktif_modul_onek_uz, ad, uz, &muz);
+                if (m) ik = islev_bul(g, m, muz);
+            }
+            if (ik && ik->ast) {
+                const Dugum *rt = ik->ast->veri.islev.donus_tipi;
+                if (rt && rt->tip == DUGUM_TIP_DIZI)
+                    return rt->veri.tip_dizi.eleman_tip;
+            }
+        }
+        return NULL;
+    }
+    default:
+        return NULL;
+    }
 }
 
 /* mat::alt::f yol zincirini "mat.alt.f" noktali ada knit eder.
@@ -2217,9 +2252,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * Skaler/ptr + struct eleman (D-087 by-value yapı). */
             if (d->veri.indeks.nesne &&
                 d->veri.indeks.nesne->tip != DUGUM_TANIMLAYICI) {
-                const char *et = turetilmis_heap_dizi_eleman(g,
+                const Dugum *elem_ast = heap_dizi_eleman_ast(g,
                     d->veri.indeks.nesne);
-                if (et) {
+                if (elem_ast) {
+                    const char *et = ast_tip_to_ir(g, elem_ast);
+                    if (!et) et = "i32";
                     IfadeSonuc base = ifade_uret(g, d->veri.indeks.nesne, NULL);
                     IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i32");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
@@ -3811,11 +3848,15 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             const char *annot = NULL;
             /* Madde B: Dizi<T> annot ise eleman tipini de yakala */
             const char *eleman_tip = NULL;
+            /* D-088: iç-içe Dizi<Dizi<T>> için eleman AST tipi (iç dizi heap
+             * üretimi + m[i][j] recursive çözümü). */
+            const Dugum *eleman_tip_ast_d = NULL;
             if (d->veri.degisken.tip) {
                 annot = ast_tip_to_ir(g, d->veri.degisken.tip);
                 if (d->veri.degisken.tip->tip == DUGUM_TIP_DIZI) {
-                    eleman_tip = ast_tip_to_ir(g,
-                        d->veri.degisken.tip->veri.tip_dizi.eleman_tip);
+                    eleman_tip_ast_d =
+                        d->veri.degisken.tip->veri.tip_dizi.eleman_tip;
+                    eleman_tip = ast_tip_to_ir(g, eleman_tip_ast_d);
                 }
             }
             const char *tip = annot;
@@ -3837,6 +3878,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 kdl_eleman_byte_yaz(g->out, eleman_tip);
                 fputs(")\n", g->out);
                 (void)n;
+                /* D-088: iç-içe Dizi<Dizi<T>> — iç eleman (`[1,2]`) üretilirken
+                 * beklenen_tip'i İÇ dizi AST tipine (Dizi<T>) ayarla ki
+                 * DUGUM_DIZI_OLUSTUR HEAP yolunu seçsin (aksi halde stack [N x T]
+                 * düşer, dış heap dizi uzunluk-metadata'sız stack ptr tutardı). */
+                const Dugum *eski_bt = g->beklenen_tip;
+                g->beklenen_tip = eleman_tip_ast_d;
                 /* Her elemani ekle */
                 for (int i = 0; i < n; i++) {
                     IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
@@ -3853,6 +3900,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         "  call void @%s(ptr %%%d, %s %%%d)\n",
                         fn, kdl_reg, eleman_tip, vr);
                 }
+                g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
                 int alloca_reg = yeni_reg(g);
                 fprintf(g->out, "  %%%d = alloca ptr\n", alloca_reg);
@@ -3862,6 +3910,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                           d->veri.degisken.ad_uzunluk,
                           1, alloca_reg, "ptr");
                 g->isimler->eleman_llvm_tip = eleman_tip;
+                g->isimler->eleman_tip_ast = eleman_tip_ast_d;
                 g->isimler->dinamik_dizi_mi = 1;
                 return 0;
             }
@@ -3902,6 +3951,10 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         generic_arg_ir_al(g, d->veri.degisken.tip);
                     if (eleman_tip) {
                         g->isimler->eleman_llvm_tip = eleman_tip;
+                        /* D-088: iç-içe `m[i][j]` recursive çözümü için iç dizi
+                         * AST tipi. `inner: Dizi<tam32> = m[0]` gibi türetilmiş
+                         * heap dizi de buradan işaretlenir. */
+                        g->isimler->eleman_tip_ast = eleman_tip_ast_d;
                         /* D-085: Dizi<T> annotasyonlu ama değeri literal-DEĞİL
                          * (örn. `= yap()` çağrı dönüşü, `= başka_dizi`) değişken
                          * de heap KdlDizi* tutar → `xs[i]` heap-route edilmeli.
@@ -3953,6 +4006,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     generic_arg_ir_al(g, d->veri.degisken.tip);
                 if (eleman_tip) {
                     g->isimler->eleman_llvm_tip = eleman_tip;
+                    g->isimler->eleman_tip_ast = eleman_tip_ast_d;  /* D-088 */
                 }
             }
             return 0;
@@ -4004,10 +4058,16 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
                     if (vi && !heap_dizi) stack_uz = vi->dizi_uzunluk;
                 } else if (hedef->veri.indeks.nesne) {
-                    /* D-085: türetilmiş heap dizi tabanı (k.xs / yap()). */
-                    const char *et = turetilmis_heap_dizi_eleman(g,
+                    /* D-085 + D-088: türetilmiş/iç-içe heap dizi tabanı (k.xs /
+                     * yap() / m[i]). AST resolver eleman tipini verir; nested
+                     * `m[i][j] = v` için `m[i]` heap KdlDizi* → kdl_dizi_yaz. */
+                    const Dugum *elem_ast = heap_dizi_eleman_ast(g,
                         hedef->veri.indeks.nesne);
-                    if (et) { heap_dizi = 1; heap_et = et; }
+                    if (elem_ast) {
+                        const char *et = ast_tip_to_ir(g, elem_ast);
+                        if (!et) et = "i32";
+                        heap_dizi = 1; heap_et = et;
+                    }
                 }
                 if (heap_dizi && heap_et) {
                     /* D-085/D-087: kdl_dizi_yaz(descriptor, i32 idx, T v).
@@ -5013,17 +5073,21 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
          * (caller'dan gelen ptr KdlDizi*). Eleman tipi de yakala. */
         if (p->veri.parametre.tip &&
             p->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
-            const char *et = ast_tip_to_ir(g,
-                p->veri.parametre.tip->veri.tip_dizi.eleman_tip);
+            const Dugum *elem_ast =
+                p->veri.parametre.tip->veri.tip_dizi.eleman_tip;
+            const char *et = ast_tip_to_ir(g, elem_ast);
             if (et) g->isimler->eleman_llvm_tip = et;
+            g->isimler->eleman_tip_ast = elem_ast;  /* D-088: iç-içe m[i][j] */
             g->isimler->dinamik_dizi_mi = 1;
         }
         /* D-086: &Dizi<T> param girişte deref edildi → normal heap dizi gibi
          * işaretle (eleman tipi referans hedefinden). */
         if (dizi_ref) {
             const Dugum *iz = ptip->veri.tip_referans.hedef_tip;
-            const char *et = ast_tip_to_ir(g, iz->veri.tip_dizi.eleman_tip);
+            const Dugum *elem_ast = iz->veri.tip_dizi.eleman_tip;
+            const char *et = ast_tip_to_ir(g, elem_ast);
             if (et) g->isimler->eleman_llvm_tip = et;
+            g->isimler->eleman_tip_ast = elem_ast;  /* D-088: iç-içe m[i][j] */
             g->isimler->dinamik_dizi_mi = 1;
         }
         /* D-071 KARMA temsil: işlev(...)→R parametresi BARE fn-ptr (top-level fn

@@ -188,6 +188,39 @@ işlev main() -> tam32 {
     değişken p: Nokta = dizi_al(ps, 9);
     ver p.x;
 }'
+# D-088: İÇ-İÇE Dizi<Dizi<T>> — iç diziyi değişkene çıkarınca uzunluk metadata.
+# Eskiden iç literal `[1,2]` stack [N×T] (KdlDizi* değil) → dış heap dizi stack
+# ptr tutuyordu: `inner = m[0]; dizi_boyut(inner)` 1 (gerçek 2), `dizi_al` PANİK.
+# Artık iç literal heap (DEGISKEN heap path beklenen_tip'i iç tipe ayarlıyor) +
+# `m[i][j]` nested INDEKS heap-route (heap_dizi_eleman_ast). Bkz. D-085/D-087.
+# Önce: m[i][j] KORUNUR (regresyon yapma) —
+deger_bekle vaka25_icice_indeks 4 'işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
+    ver m[1][1];
+}'
+# Asıl düzeltme: iç diziyi değişkene çıkar → uzunluk DOĞRU (eskiden 1).
+deger_bekle vaka26_icice_inner_boyut 2 'işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
+    değişken inner: Dizi<tam32> = m[0];
+    ver dizi_boyut(inner);
+}'
+deger_bekle vaka27_icice_inner_al 2 'işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
+    değişken inner: Dizi<tam32> = m[0];
+    ver dizi_al(inner, 1);
+}'
+# Nested YAZMA `m[i][j] = v` da heap-route (iç KdlDizi* descriptor'ı bozmadan).
+deger_bekle vaka28_icice_yaz 99 'işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
+    m[0][1] = 99;
+    ver m[0][1];
+}'
+# İç-içe heap dış-indeks OOB de runtime sınır-kontrollü (PANIC, segfault değil).
+panic_bekle vaka29_icice_dis_oob 'işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
+    değişken inner: Dizi<tam32> = m[9];
+    ver dizi_al(inner, 0);
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"
