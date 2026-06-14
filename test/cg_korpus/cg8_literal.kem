@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken xs: Dizi<tam32> = [10, 20, 12]; ver dizi_al(xs, 0) + dizi_al(xs, 1) + dizi_al(xs, 2); }
