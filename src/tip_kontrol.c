@@ -498,6 +498,21 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
     return tip_olustur_basit(tk->arena, TIP_HATA);
 }
 
+/* D-086: dizi built-in argümanını çöz — `Dizi<T>` ya da `&Dizi<T>` /
+ * `&değişken Dizi<T>` ise altındaki Dizi tipini döner (referansı soyar),
+ * değilse NULL. Önceden tutarsızdı: `dizi_al(&Dizi)` sessiz kabul (t_hata),
+ * `dizi_boyut(&Dizi)` T001 reddi. Artık tüm dizi built-in'leri referansı
+ * otomatik soyar (çağıran &a verebilir; codegen D-086 ile deref eder). */
+static TipBilgisi *dizi_arg_coz(TipBilgisi *t) {
+    if (!t) return NULL;
+    if (t->kategori == TIP_DIZI) return t;
+    if (t->kategori == TIP_REFERANS && t->veri.referans.hedef &&
+        t->veri.referans.hedef->kategori == TIP_DIZI) {
+        return t->veri.referans.hedef;
+    }
+    return NULL;
+}
+
 /* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
  * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
  * yetki<MMIO> degilse MM002 raporlanir. */
@@ -2225,13 +2240,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
-                    if (dt->kategori != TIP_DIZI &&
-                        dt->kategori != TIP_HATA) {
+                    TipBilgisi *dz = dizi_arg_coz(dt);   /* &Dizi auto-deref */
+                    if (!dz && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_ekle ilk argumani Dizi<T> olmali");
                     }
-                    TipBilgisi *bek = (dt->kategori == TIP_DIZI)
-                        ? dt->veri.dizi.eleman : NULL;
+                    TipBilgisi *bek = dz ? dz->veri.dizi.eleman : NULL;
                     TipBilgisi *et = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1], bek);
                     if (bek && !tip_esit(et, bek) &&
@@ -2257,7 +2271,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
                             "dizi_al indeks tamsayi olmali");
                     }
-                    if (dt->kategori == TIP_DIZI) return dt->veri.dizi.eleman;
+                    TipBilgisi *dz = dizi_arg_coz(dt);   /* &Dizi auto-deref */
+                    if (dz) return dz->veri.dizi.eleman;
                     return t_hata(tk);
                 }
 
@@ -2272,8 +2287,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
-                    if (dt->kategori != TIP_DIZI &&
-                        dt->kategori != TIP_HATA) {
+                    TipBilgisi *dz = dizi_arg_coz(dt);   /* &Dizi auto-deref */
+                    if (!dz && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_yaz ilk argumani Dizi<T> olmali");
                     }
@@ -2284,8 +2299,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
                             "dizi_yaz indeks tamsayi olmali");
                     }
-                    TipBilgisi *bek = (dt->kategori == TIP_DIZI)
-                        ? dt->veri.dizi.eleman : NULL;
+                    TipBilgisi *bek = dz ? dz->veri.dizi.eleman : NULL;
                     TipBilgisi *et = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[2], bek);
                     if (bek && !tip_esit(et, bek) &&
@@ -2304,8 +2318,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
-                    if (dt->kategori != TIP_DIZI &&
-                        dt->kategori != TIP_HATA) {
+                    if (!dizi_arg_coz(dt) && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_boyut argumani Dizi<T> olmali");
                     }
@@ -2319,8 +2332,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
-                    if (dt->kategori != TIP_DIZI &&
-                        dt->kategori != TIP_HATA) {
+                    if (!dizi_arg_coz(dt) && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_kapasite argumani Dizi<T> olmali");
                     }
@@ -2339,8 +2351,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     TipBilgisi *yt = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1],
                         tip_olustur_basit(tk->arena, TIP_TAM32));
-                    if (dt->kategori != TIP_DIZI &&
-                        dt->kategori != TIP_HATA) {
+                    if (!dizi_arg_coz(dt) && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_kapasite_ayarla ilk arg Dizi<T> olmali");
                     }

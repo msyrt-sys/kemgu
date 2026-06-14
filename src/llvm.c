@@ -4887,12 +4887,30 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     for (int i = 0; i < n; i++) {
         const Dugum *p = islev->veri.islev.parametreler[i];
         const char *tip = param_tipler[i];
+        /* D-086: &Dizi<T> / &değişken Dizi<T> param. Çağıran `&a` ile dizi
+         * değişkeninin SLOT adresini (KdlDizi**) geçer; bunu girişte BİR KEZ
+         * deref edip alloca'ya KdlDizi* yazarız → sonrası normal heap dizi
+         * (dizi_al/yaz/[] ek deref gerektirmez). Önceki durum: çift-pointer
+         * descriptor gibi indekslenip çöp/PANIK. */
+        const Dugum *ptip = p->veri.parametre.tip;
+        int dizi_ref = (ptip && ptip->tip == DUGUM_TIP_REFERANS &&
+                        ptip->veri.tip_referans.hedef_tip &&
+                        ptip->veri.tip_referans.hedef_tip->tip == DUGUM_TIP_DIZI);
         int alloca_reg = yeni_reg(g);
         fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
-        fprintf(g->out, "  store %s %%", tip);
-        yerel_ad_yaz(g->out, p->veri.parametre.ad,
-                     p->veri.parametre.ad_uzunluk);
-        fprintf(g->out, ", ptr %%%d\n", alloca_reg);
+        if (dizi_ref) {
+            int deref = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load ptr, ptr %%", deref);
+            yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                         p->veri.parametre.ad_uzunluk);
+            fputs("\n", g->out);
+            fprintf(g->out, "  store ptr %%%d, ptr %%%d\n", deref, alloca_reg);
+        } else {
+            fprintf(g->out, "  store %s %%", tip);
+            yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                         p->veri.parametre.ad_uzunluk);
+            fprintf(g->out, ", ptr %%%d\n", alloca_reg);
+        }
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk,
                   0, alloca_reg, tip);
         /* D-005: dtamN parametre -> isaretsiz isim */
@@ -4915,6 +4933,14 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             p->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
             const char *et = ast_tip_to_ir(g,
                 p->veri.parametre.tip->veri.tip_dizi.eleman_tip);
+            if (et) g->isimler->eleman_llvm_tip = et;
+            g->isimler->dinamik_dizi_mi = 1;
+        }
+        /* D-086: &Dizi<T> param girişte deref edildi → normal heap dizi gibi
+         * işaretle (eleman tipi referans hedefinden). */
+        if (dizi_ref) {
+            const Dugum *iz = ptip->veri.tip_referans.hedef_tip;
+            const char *et = ast_tip_to_ir(g, iz->veri.tip_dizi.eleman_tip);
             if (et) g->isimler->eleman_llvm_tip = et;
             g->isimler->dinamik_dizi_mi = 1;
         }
