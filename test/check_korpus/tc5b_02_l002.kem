@@ -1,0 +1,7 @@
+// TC5b: move sonrası erişim → L002 (ikinci kullanım konumu).
+işlev cift() {
+    değişken k = tekkez_olustur(5);
+    değişken a = kullan(k);
+    değişken b = kullan(k);
+}
+işlev main() -> tam32 { ver 0; }

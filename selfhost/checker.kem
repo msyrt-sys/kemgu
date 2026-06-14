@@ -52,6 +52,13 @@ yapı Ayr {
     yapi_acount: Dizi<tam32>; // paralel: alan sayısı
     alan_ad: Dizi<metin>;    // düz alan adı listesi
     alan_tip: Dizi<metin>;   // paralel: alan tipi (yalnız bilinen skaler; aksi "?")
+    fn_plin: Dizi<tam32>;    // fn_ptip ile paralel: param lineer mi (1/0) — tüketim
+    // ---- TC5b: lineer bağlama izleme (L001/L002 akış) — aktif işlev dilimi ----
+    lin_ad: Dizi<metin>;     // lineer bağlama adları (param + tekkez değişken)
+    lin_sat: Dizi<tam32>;    // bildirim konumu (L001 için)
+    lin_sut: Dizi<tam32>;
+    lin_tuk: Dizi<tam32>;    // tüketim sayacı (0=tüketilmedi; >=1 sonrası L002)
+    lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -1603,8 +1610,9 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
-        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [],
+        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
+        lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1771,7 +1779,20 @@ işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
             değişken pt: metin = param_tip_str(p, c);
             eğer bilinen_skaler_mi(pt) { dizi_ekle(p.fn_ptip, pt); }
             değilse { dizi_ekle(p.fn_ptip, "?"); }
+            değişken tc: tam32 = son_cocuk(p, c);   // param tip çocuğu → tekkez mi (TC5b)
+            eğer (tc >= 0) ve tip_node_tekkez_mi(dizi_al(p.a_ad, tc)) { dizi_ekle(p.fn_plin, 1); }
+            değilse { dizi_ekle(p.fn_plin, 0); }
         }
+        i = i + 1;
+    }
+    ver 0;
+}
+// İşlev adı + param indeksi → param lineer mi (1/0; bulunamazsa 0).
+işlev fn_plin_bul(p: &değişken Ayr, ad: metin, j: tam32) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_plin, dizi_al(p.fn_pbase, i) + j); }
         i = i + 1;
     }
     ver 0;
@@ -2060,6 +2081,89 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
     }
+    // TC5b L004: lineer bağlama referansı alınamaz (& / &değişken).
+    eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {
+        eğer metin_esit(dizi_al(p.a_ad, operand), "TANIMLAYICI")
+          ve (lin_idx(p, dizi_al(p.a_deg, operand)) >= 0) {
+            dizi_ekle(p.th_kod, "L004");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        }
+    }
+    ver 0;
+}
+// ---- TC5b: lineer akış izleme yardımcıları ----
+// Linear Types Spec V1 = YALNIZ tekkez (yetki → CP005/TC7, görev → DRF/TC6 ayrı kod).
+işlev tip_node_tekkez_mi(ad: metin) -> mantıksal { ver metin_esit(ad, "TIP_TEKKEZ"); }
+// Bir değişkenin tekkez olup olmadığı: annot tekkez VEYA değer tekkez_olustur(...).
+işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    eğer dizi_al(p.a_cs, idx) >= 2 {
+        değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer tip_node_tekkez_mi(dizi_al(p.a_ad, c0)) { ver doğru; }
+    }
+    değişken vc: tam32 = son_cocuk(p, idx);
+    eğer (vc >= 0) ve metin_esit(dizi_al(p.a_ad, vc), "CAGRI") {
+        değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, vc));
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI")
+          ve metin_esit(dizi_al(p.a_deg, h), "tekkez_olustur") { ver doğru; }
+    }
+    ver yanlış;
+}
+işlev lin_ekle(p: &değişken Ayr, ad: metin, sat: tam32, sut: tam32) -> tam32 {
+    dizi_ekle(p.lin_ad, ad); dizi_ekle(p.lin_sat, sat);
+    dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0); ver 0;
+}
+// Aktif dilimde (en yeni) lineer bağlamanın indeksi; yoksa -1.
+işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = dizi_boyut(p.lin_ad) - 1;
+    iken i >= p.lin_basla {
+        eğer metin_esit(dizi_al(p.lin_ad, i), ad) { ver i; }
+        i = i - 1;
+    }
+    ver 0 - 1;
+}
+// Bir düğüm lineer bağlamaysa tüket; zaten tüketilmişse L002 (düğüm konumu).
+işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver 0; }
+    değişken idx: tam32 = lin_idx(p, dizi_al(p.a_deg, node));
+    eğer idx < 0 { ver 0; }
+    eğer dizi_al(p.lin_tuk, idx) >= 1 {
+        dizi_ekle(p.th_kod, "L002");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
+    }
+    dizi_yaz(p.lin_tuk, idx, dizi_al(p.lin_tuk, idx) + 1);
+    ver 0;
+}
+// İşlev lineer parametrelerini aktif dilime ekle (L001 + tüketim için).
+işlev lin_param_topla(p: &değişken Ayr, fn: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            değişken tc: tam32 = son_cocuk(p, c);
+            eğer (tc >= 0) ve tip_node_tekkez_mi(dizi_al(p.a_ad, tc)) {
+                lin_ekle(p, dizi_al(p.a_deg, c), dizi_al(p.a_sat, c), dizi_al(p.a_sut, c));
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// İşlev scope kapanışı: aktif dilimde tüketilmemiş lineer bağlama → L001.
+işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.lin_ad);
+    değişken i: tam32 = p.lin_basla;
+    iken i < n {
+        eğer dizi_al(p.lin_tuk, i) == 0 {
+            dizi_ekle(p.th_kod, "L001");
+            dizi_ekle(p.th_sat, dizi_al(p.lin_sat, i));
+            dizi_ekle(p.th_sut, dizi_al(p.lin_sut, i));
+        }
+        i = i + 1;
+    }
     ver 0;
 }
 
@@ -2148,6 +2252,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                             dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
                         }
                     }
+                    eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
                     a = a + 1;
                 }
                 ver 0;
@@ -2238,20 +2343,40 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         ver 0;
     }
+    // TC5b: kullan(e)/imha(e) → operand T002 sonra lineer tüketim (L002 çift-tüketim).
+    eğer metin_esit(ad, "KULLAN_IFADE") veya metin_esit(ad, "IMHA_IFADE") {
+        değişken op: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        kontrol_dugum(p, op);
+        lin_tuket_dugum(p, op);
+        ver 0;
+    }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
-    eğer metin_esit(ad, "VER") { t020_kontrol(p, idx); }
+    // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.
+    eğer metin_esit(ad, "DEGISKEN") {
+        değişken vc2: tam32 = son_cocuk(p, idx);
+        eğer vc2 >= 0 { lin_tuket_dugum(p, vc2); }   // move: değer lineer bağlamaysa tüket
+        eğer deg_lineer_mi(p, idx) {
+            lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
+        }
+    }
+    eğer metin_esit(ad, "VER") {
+        t020_kontrol(p, idx);
+        eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
+    }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); }   // TC3e/f
-    eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil
+    eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     p.aktif_donus = donus_str(p, fn);   // T020 bağlamı
+    p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
+    lin_param_topla(p, fn);              // lineer parametreler dilime
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
     değişken i: tam32 = 0;
@@ -2260,6 +2385,7 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { kontrol_dugum(p, c); }
         i = i + 1;
     }
+    lin_kapanis(p);   // TC5b: tüketilmemiş lineer bağlama → L001
     ver 0;
 }
 // Üst-düzeyleri gez: işlev gövdesi + sabit değeri kontrol; modül recurse.
