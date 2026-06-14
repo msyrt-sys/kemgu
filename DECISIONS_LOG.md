@@ -37,6 +37,30 @@ Additive — `--check`/testler etkilenmedi.
 
 ---
 
+## D-052 — SELF-HOST checker TC1: temel ad çözümü (T002) — 41/42 gerçek tek-dosya (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/checker.kem` (parser kopyası + checker) + korpus].**
+Aşama 2 TC1: KEMGU'da temel tip denetleyici — kapsam/ad çözümü (T002 tanımsız sembol).
+C `tip_kontrol.c` accept/reject + tanı paritesi (`--checkdump` oracle).
+
+**Kapsam:** `selfhost/checker.kem` = parser (kopya, AST için) + sembol kümeleri
+(`g_isim` global: 47 EKLE_BUILTIN + özel-builtin'ler [vektor_*/mmio_*/yetki_olustur/
+tekkez_olustur/delege/geri_al/görev/kanal/dur/dondur] + üst-düzey tanım adları +
+keyword-konstrüktör değer/tamam/hata/kendin/hiç; `yerel` append-only dilim: param+
+lokal+için+desen-binding). Traversal: işlev gövdesi + sabit değeri; TANIMLAYICI ref
+genel∪yerel'de değilse → T002. Tip/desen/yol alt-ağaçları atlanır (ileri TC).
+
+**Doğrulama:** `make calistir_checker_diff` → 4/4 korpus + **41/42 test/ornekler tek-dosya
+--checkdump sıfır-diff**. Tek fark `lineer_hata.kem` (kasıtlı L001/L002 → TC5; TC1
+linear yapmaz). Bulgu: keyword-konstrüktör (değer/tamam/hata) + özel-builtin'ler
+(mmio/yetki/vektor) genel'e eklenmezse false-T002.
+
+**Sınır/sıradaki:** Cross-modül import (kullan) adları henüz çözülmez (→TC8). Tip
+uyumsuzluğu (T001), arite (T010), struct alan, exhaustiveness → TC2-TC3+. checker.kem
+parser kopyası içerir (modülerleştirme Aşama 4).
+
+---
+
 ## D-050 — 🎉 SELF-HOST parser P6: BOOTSTRAP — 223/223 GERÇEK .kem + SELF-PARSE (Aşama 1 TAMAM) (2026-06-14)
 
 **Karar [ETKİ: düşük — `selfhost/parser.kem` + additive `ondalik_bicimle` intrinsic +

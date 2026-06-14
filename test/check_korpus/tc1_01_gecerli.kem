@@ -1,0 +1,10 @@
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev carp(x: tam32, y: tam32) -> tam32 {
+    değişken sonuc: tam32 = x * y;
+    ver sonuc;
+}
+işlev ana() -> tam32 {
+    değişken a: tam32 = 10;
+    değişken b: tam32 = topla(a, 5);
+    ver carp(a, b);
+}
