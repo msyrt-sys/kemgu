@@ -5,6 +5,108 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-085 — 🎉 AŞAMA 5 BOOTSTRAP FIXPOINT — codegen self-host KENDİNİ ÜRETİYOR (2026-06-14)
+
+**Karar [ETKİ: milestone — kod değişmedi, doğrulama].** KEMGU-yazılı codegen (selfhost/codegen.kem)
+gerçek bir self-host derleyici: ÜÇ bağımsız bootstrap kanıtı yeşil.
+
+**1) LEXER bootstrap (46/46):** codegen.exe ile derlenen lexer, TÜM self-host + ornekler korpusunda
+C-codegen lexer ile byte-identik token çıktısı (codegen.kem'in kendisi dahil — 26122 token).
+
+**2) PARSER bootstrap (46/46):** codegen.exe ile derlenen parser, aynı korpusta C-codegen parser ile
+byte-identik --ast (parser self-parse 9672, checker 16214, codegen 16397 AST satırı).
+
+**3) CODEGEN self-compile FIXPOINT:** codegen.exe (C-build, stage0) codegen.kem'i derler → stage1 IR
+(15114 satır) → codegen2.exe. codegen2.exe codegen.kem'i derler → stage2 IR. **stage1 == stage2,
+BYTE-IDENTİK.** = derleyici kendini sabit-nokta olarak yeniden üretiyor (self-hosting'in tanımlayıcı
+özelliği). Transitif: codegen2.exe lexer.kem IR'ı da codegen.exe ile birebir.
+
+**Bu fixpoint'i mümkün kılan son düzeltmeler:** D-072..D-084 (CG1-9: literal→ifade→deyim→kontrol→
+çağrı→multi-int→metin→yapı→dizi→hoist), önek-builtin (D-083), bool-lit MANTIKSAL fix (D-083,
+bootstrap'in yakaladığı), alloca-hoist (D-084, döngü yığın taşması). Semantik oracle (exit-kod)
++ byte-diff bootstrap oracle birlikte.
+
+**Doğrulama:** `test/codegen_bootstrap_harness.sh` (3 kanıt) Makefile `calistir_codegen_bootstrap`
+→ test_tumu. **Sınır/Sonraki:** (a) CHECKER (checker.kem) self-host ayrı iş (tip-kontrol, codegen
+değil) — checker_diff zaten 48/48 C-paritesinde; KEMGU-codegen-built checker bootstrap'i sıradaki;
+(b) codegen.kem CG9-üstü özellik kullanmıyor (çeşit/eşleş/lambda/modül yok) → o yollar korpus-test'li
+ama self-host'ta egzersiz edilmiyor; (c) AŞAMA 4 driver (tek `kemgu` binary'de lex+parse+check+codegen
+zinciri) ayrı paketleme işi.
+
+---
+
+## D-084 — AŞAMA 5 CG9a: alloca-hoist ön-pass → LEXER BOOTSTRAP TAM (46/46 birebir) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** D-083'te teşhis edilen alloca-in-loop
+yığın taşması düzeltildi. **alloca-hoist ön-pass:** `alloca_hoist_pass` işlev gövdesini gezip TÜM
+annotasyonlu DEGISKEN alloca'larını entry bloğuna çıkarır (döngü-içi `değişken` artık bir kez
+alloca → yığın sabit). `pa_node`/`pa_reg`/`pa_base` (düğüm→entry-reg eşlemi; shadow-güvenli, düğüm
+anahtarlı). DEGISKEN handler: annotasyonlu → hoist-edilmiş reg'i kullan (alloca yok), yalnız store;
+annotasyonsuz → inline (eski yol; self-host hepsi annotasyonlu, korpus nadir). C codegen D-041
+hoist_renumber ile AYNI amaç, farklı mekanizma (ön-pass vs tmpfile-buffer-renumber).
+
+**🎉🎉 LEXER BOOTSTRAP TAM — 46/46 BİREBİR (büyükler dahil):** codegen.exe ile derlenen lexer,
+parser.kem (15558 token), checker.kem (26398), **codegen.kem (26122 — kendini lex'ler)** dahil
+TÜM self-host kaynaklarında C-codegen-built lexer ile byte-identik. İlk TAM self-host fixpoint
+bileşeni: KEMGU-yazılı codegen'in ürettiği makine kodu, C derleyiciyle aynı davranan lexer veriyor.
+
+**Doğrulama:** oracle 56/56 (regresyon yok); `test/codegen_bootstrap_harness.sh` (KEMGU-codegen
+lexer vs C-codegen lexer diff) Makefile `calistir_codegen_bootstrap` → `test_tumu`. **Sonraki:**
+parser.kem bootstrap (--ast paritesi), sonra checker.kem (--checkdump), sonra codegen.kem
+self-compile (Aşama 5 tam fixpoint: codegen.exe codegen.kem'i derler → codegen2.exe → idempotent).
+
+---
+
+## D-083 — AŞAMA 3/5 CG7d + LEXER BOOTSTRAP: önek-builtin + bool-lit fix + alloca-hoist teşhisi (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** İlk gerçek bootstrap denemesi:
+codegen.exe (KEMGU-yazılı codegen) ile self-host kaynakları derle.
+
+**Builtin önek-eşleme (CG7d):** `builtin_kdl_ad` artık önek-tabanlı (`metin_`/`dosya_`/`yaz_`/
+`yazdir_`/`arg_`/`oku_karakter`/`ondalik_bicimle` → `kdl_*`), C codegen ile aynı. **Kritik gate:**
+önce `fn_var_mi` (kullanıcı işlevi mi) bakılır — `yaz_str`/`yaz_kacis` gibi `yaz_` önekli USER
+fonksiyonlarını builtin sanmamak için. `dizi_yaz` özel-case eklendi. Declare bloğu tam küme.
+
+**🔴 Bool-literal fix (bootstrap'in yakaladığı GERÇEK bug):** parser `doğru`/`yanlış` için
+`MANTIKSAL` düğümü (a_deg="1"/"0") üretir, `DOGRU`/`YANLIS` DEĞİL. CG2'deki varsayımım yanlıştı;
+hiçbir korpus testi çıplak bool literal kullanmadığından gizli kaldı. `iken doğru` → koşul "0"
+(fallthrough default) → döngü hiç girilmiyordu. ifade_uret `MANTIKSAL` → a_deg döndürür. 55/55.
+
+**🎉 LEXER BOOTSTRAP — 45/48 birebir:** codegen.exe lexer.kem'i derler → çalışan exe → C-codegen-
+built lexer ile **BYTE-IDENTİK çıktı** (test/ornekler + küçük korpus 45 dosya). İlk self-host
+fixpoint kanıtı.
+
+**🔴 TEŞHIS — alloca-in-loop yığın taşması (kalan bootstrap engeli):** 3 BÜYÜK dosya (parser/
+checker/codegen.kem) ~30KB+ girdide erken-temiz-çıkış (rc=0, çıktı capped). Kök-neden: "hoist-free"
+tasarımım `alloca`'yı DEGISKEN'in olduğu yere basar → DÖNGÜ İÇİ `değişken` her iterasyonda alloca
+→ yığın sınırsız büyür → ~binlerce iterasyonda taşma. C codegen D-041 hoist_renumber ile tam da
+bunu önler. Korpus döngüleri az iterasyon (gizli kaldı); lexer binlerce. **Düzeltme (sonraki):**
+DEGISKEN alloca'larını entry bloğuna hoist eden ön-pass (annotasyon→ll_tip; annotasyonsuz→tip_cikar).
+
+---
+
+## D-082 — AŞAMA 3 CG8: dizi (heap KdlDizi + []-literal + element-tip polimorfik builtin) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** codegen.kem'in son büyük
+bağımlılığı (dizi_al 95× / dizi_ekle 89× / dizi_boyut 20× + `[]` init). Element-tip izleme:
+`cg_aelem` (Dizi değişkeni eleman tipi) + `alan_elem` (Dizi alanı) + `beklenen_elem` (`[]` bağlamı)
++ `son_elem` (sonuç). Yardımcılar: `ll_eleman_tip` (TIP_DIZI→eleman), `dizi_eleman_byte`
+(ptr/i64→8, diğer→4), `dizi_ekle_sonek`/`dizi_al_sonek`/`dizi_arg_tip`/`dizi_al_rettip`.
+
+**`[]` (DIZI_OLUSTUR):** `call ptr @kdl_dizi_olustur(i32 <byte>)` (boş = sadece oluştur; runtime
+boyut/kapasite=0, ekle'de büyür) + non-empty için her eleman `ekle`. Eleman byte = `beklenen_elem`
+(annotasyon/alan bağlamından). **dizi_ekle:** DEĞER tipine göre route (ptr→ekle_ptr, i64→ekle_tam64,
+else→ekle_tam). **dizi_al:** DİZİNİN eleman tipine göre route (`son_elem` arg[0]'dan); ptr→al_ptr/ptr,
+i64→al_tam64/i64, else→al_tam/i32. **dizi_boyut→i32.** INDEKS (`xs[i]`) = dizi_al eşi. `metin`/`Dizi`
+alanları `ptr` (8-byte slot ptr-eleman ile tutarlı).
+
+**Doğrulama:** test/cg_korpus 54 program (+6 CG8: temel/boyut/literal/indeks/**Dizi&lt;metin&gt;**/
+**struct-ref-dizi_ekle**). 54/54 exit eşdeğer. struct-ref IR doğru (load ptr→GEP→load Dizi→ekle —
+self-host tok_ekle deseni); Dizi&lt;metin&gt; → `olustur(i32 8)`+`ekle_ptr`+`al_ptr`. **Sonraki:**
+self-compile denemesi (codegen.exe ile lexer/parser.kem derle) + CG9 (kullanılan kalan: çeşit/eşleş?).
+
+---
+
 ## D-081 — AŞAMA 3 CG7c: yapı by-reference (&Yapi param + alan mutasyonu) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Self-host'un kalbi:
