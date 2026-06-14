@@ -4478,6 +4478,23 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                          "atama hedefi lvalue olmali (tanimlayici/erisim/indeks)");
             }
             TipBilgisi *ht = tip_belirle(tk, hedef);
+            /* D-071 (Sınıf B, lambda yeniden-atama): işlev/lambda TİPLİ bir
+             * değişken YENİDEN atanamaz (G004). KARMA closure temsili değere
+             * bağlı: yakalamasız lambda/top-level fn → bare fn-ptr, yakalamalı
+             * lambda → closure {fn,env}. Çağrı yeri ise statik `closure_mu`
+             * bayrağına göre dispatch eder (bağlama anında sabitlenir). Farklı
+             * yakalama-durumlu bir değerle yeniden atama → temsil uyumsuzluğu →
+             * çağrıda bare-ptr'ı closure sanıp deref → SEGFAULT (kabul-ama-çöküyor).
+             * Compile-time reddet (çökmezlik #1); programcı yeni bir `değişken`
+             * ile bağlasın. (Tam değer-akışı desteği V2/D-072.) */
+            if (hedef->tip == DUGUM_TANIMLAYICI &&
+                ht->kategori == TIP_ISLEV) {
+                tip_hata(tk, d, "G004",
+                    "islev/lambda degiskeni yeniden atanamaz "
+                    "(V1: KARMA closure temsili deger-bagimli; "
+                    "yeni bir 'degisken' ile baglayin)");
+                break;
+            }
             /* Bidirectional: deger hedef tip context'inde */
             TipBilgisi *dt = tip_belirle_beklenen(tk, d->veri.atama.deger, ht);
             /* Sabitsüre Spec V1 CT003: sabitsure<T> → T leak */
