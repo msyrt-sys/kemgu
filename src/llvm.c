@@ -161,6 +161,10 @@ typedef struct LlvmGen {
      * islev_bul fallback'inde bu onekle mangle edilip cozulur. */
     const char *aktif_modul_onek;
     int aktif_modul_onek_uz;
+    /* D-069 Kat.2 opt-out: güvensiz blok derinliği. >0 iken stack dizi sınır-
+     * kontrolü ATLANIR (Rust modeli: varsayılan güvenli, güvensiz'de kontrolsuz —
+     * açık + işaretli + programcı sorumluluğunda). */
+    int guvensiz_derinlik;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -1974,8 +1978,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
             /* D-069 Kat.2: sabit stack dizi sınır-kontrolü (GEP'ten ÖNCE).
              * `icmp uge` unsigned → negatif (dev unsigned) + i>=N tek seferde.
-             * OOB → kdl_panik (temiz durma), aksi GEP+load (bb<ok>). */
-            if (stack_uzunluk > 0) {
+             * OOB → kdl_panik (temiz durma), aksi GEP+load (bb<ok>).
+             * güvensiz blok içinde ATLANIR (opt-out — programcı sorumluluğunda). */
+            if (stack_uzunluk > 0 && g->guvensiz_derinlik == 0) {
                 int c_r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = icmp uge i64 %%%d, %d\n",
                         c_r, idx_r, stack_uzunluk);
@@ -4046,7 +4051,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
          * Statik kapi tip kontrolunde; burada ic blok aynen uretilir. */
         case DUGUM_GUVENSIZ: {
             ScopeMarker m = scope_gir(g);
+            g->guvensiz_derinlik++;   /* D-069 Kat.2: içeride stack sınır-kontrolü atlanır */
             int term = blok_uret(g, d->veri.guvensiz.blok);
+            g->guvensiz_derinlik--;
             scope_cik(g, m);
             return term;
         }

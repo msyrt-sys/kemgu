@@ -84,6 +84,24 @@ deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
     değişken arr = [10, 20, 30];
     ver arr[0] + arr[1] + arr[2];
 }'
+# vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
+opt_out_kontrol() {
+    local ad="vaka8_guvensiz_optout"
+    printf '%s\n' 'işlev main() -> tam32 {
+    değişken arr = [10, 20, 30];
+    değişken r: tam32 = 0;
+    güvensiz { r = arr[1]; }
+    ver r;
+}' > "$TMP/$ad.kem"
+    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    local pc; pc=$(grep -c 'call void @kdl_panik' "$TMP/$ad.ll")
+    clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
+    "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
+    if [ "$pc" -eq 0 ] && [ "$rc" -eq 20 ]; then
+        echo "  ✅ $ad: sınır-kontrol IR yok + rc=20 (opt-out + geçerli)"; pass=$((pass+1));
+    else echo "  🔴 $ad: panik-IR=$pc rc=$rc (0 + 20 bekle)"; fail=$((fail+1)); fi
+}
+opt_out_kontrol
 segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
 
 echo "=== dizi sınır-güvenliği: $pass/$((pass+fail)) ==="
