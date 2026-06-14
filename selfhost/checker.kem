@@ -46,6 +46,12 @@ yapı Ayr {
     // ---- TC3g: parametre tip tablosu (CAGRI per-arg T001) ----
     fn_pbase: Dizi<tam32>; // paralel: fn_ptip'te bu işlevin param tiplerinin başı
     fn_ptip: Dizi<metin>; // düz param tip listesi (yalnız bilinen skaler; aksi "?")
+    // ---- TC4: yapı tablosu (yapı_olustur T017/T012/T001 + erişim tipi) ----
+    yapi_ad: Dizi<metin>;    // yapı adları
+    yapi_abase: Dizi<tam32>; // paralel: alan_ad/alan_tip'te alan başlangıcı
+    yapi_acount: Dizi<tam32>; // paralel: alan sayısı
+    alan_ad: Dizi<metin>;    // düz alan adı listesi
+    alan_tip: Dizi<metin>;   // paralel: alan tipi (yalnız bilinen skaler; aksi "?")
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -1598,6 +1604,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [],
+        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1670,6 +1677,7 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
             g_ekle(p, dizi_al(p.a_deg, c));
         }
         eğer metin_esit(ad, "ISLEV") { imza_kaydet(p, c); }   // TC3d imza tablosu
+        eğer metin_esit(ad, "YAPI") { yapi_kaydet(p, c); }    // TC4 yapı tablosu
         eğer metin_esit(ad, "MODUL") { g_ekle(p, dizi_al(p.a_deg, c)); genel_topla(p, c); }
         eğer metin_esit(ad, "DISA") {       // dışa <tanım> → iç tanım adı
             değişken dcb: tam32 = dizi_al(p.a_cb, c);
@@ -1677,6 +1685,7 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                 değişken ic: tam32 = dizi_al(p.cocuk, dcb);
                 g_ekle(p, dizi_al(p.a_deg, ic));
                 eğer metin_esit(dizi_al(p.a_ad, ic), "ISLEV") { imza_kaydet(p, ic); }
+                eğer metin_esit(dizi_al(p.a_ad, ic), "YAPI") { yapi_kaydet(p, ic); }
             }
         }
         i = i + 1;
@@ -1793,6 +1802,60 @@ işlev fn_ptip_bul(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
     }
     ver "?";
 }
+// ---- TC4: yapı tablosu kayıt + sorgu ----
+// Bir YAPI düğümünün alanlarını (ad + tip) tabloya kaydet.
+işlev yapi_kaydet(p: &değişken Ayr, yapi: tam32) -> tam32 {
+    dizi_ekle(p.yapi_ad, dizi_al(p.a_deg, yapi));
+    dizi_ekle(p.yapi_abase, dizi_boyut(p.alan_ad));
+    değişken cb: tam32 = dizi_al(p.a_cb, yapi);
+    değişken cs: tam32 = dizi_al(p.a_cs, yapi);
+    değişken i: tam32 = 0;  değişken n: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "ALAN") {
+            dizi_ekle(p.alan_ad, dizi_al(p.a_deg, c));
+            değişken tc: tam32 = son_cocuk(p, c);
+            değişken ft: metin = "?";
+            eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") { ft = tip_str(p, tc); }
+            eğer bilinen_skaler_mi(ft) { dizi_ekle(p.alan_tip, ft); }
+            değilse { dizi_ekle(p.alan_tip, "?"); }
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    dizi_ekle(p.yapi_acount, n);
+    ver 0;
+}
+işlev yapi_idx_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.yapi_ad);
+    değişken i: tam32 = 0;
+    iken i < n { eğer metin_esit(dizi_al(p.yapi_ad, i), ad) { ver i; } i = i + 1; }
+    ver 0 - 1;
+}
+işlev yapi_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    ver yapi_idx_bul(p, ad) >= 0;
+}
+işlev alan_var_mi(p: &değişken Ayr, yad: metin, fad: metin) -> mantıksal {
+    değişken yi: tam32 = yapi_idx_bul(p, yad);
+    eğer yi < 0 { ver yanlış; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, yi);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, yi);
+    değişken j: tam32 = 0;
+    iken j < cnt { eğer metin_esit(dizi_al(p.alan_ad, base + j), fad) { ver doğru; } j = j + 1; }
+    ver yanlış;
+}
+işlev alan_tip_bul(p: &değişken Ayr, yad: metin, fad: metin) -> metin {
+    değişken yi: tam32 = yapi_idx_bul(p, yad);
+    eğer yi < 0 { ver "?"; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, yi);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, yi);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), fad) { ver dizi_al(p.alan_tip, base + j); }
+        j = j + 1;
+    }
+    ver "?";
+}
 // Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor.
 işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
     değişken n: tam32 = dizi_boyut(p.yerel);
@@ -1865,7 +1928,17 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         }
         ver "?";   // method/dolaylı çağrı → ileri TC
     }
-    ver "?";   // ERISIM/INDEKS/YOL/... → ileri TC
+    eğer metin_esit(ad, "YAPI_OLUSTUR") {   // TC4: yapı oluştur → yapı adı (tip)
+        değişken tad: metin = dizi_al(p.a_deg, idx);
+        eğer yapi_var_mi(p, tad) { ver tad; }
+        ver "?";
+    }
+    eğer metin_esit(ad, "ERISIM") {   // TC4: nesne.alan → alan tipi (skaler; aksi "?")
+        değişken nesne: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        değişken nt: metin = ifade_tip(p, nesne, "?");   // referans → "?" → atla
+        ver alan_tip_bul(p, nt, dizi_al(p.a_deg, idx));
+    }
+    ver "?";   // INDEKS/YOL/... → ileri TC
 }
 // DEGISKEN/SABIT annotation tip-string ("?"=yok/bileşik).
 işlev annot_str(p: &değişken Ayr, idx: tam32) -> metin {
@@ -2105,6 +2178,63 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
             }
+        }
+        ver 0;
+    }
+    // YAPI_OLUSTUR: T002 (tip tanımsız → erken dön) → her alan [T017 / değer T002 +
+    // T001] → eksik alan T012. C kontrol_yapi_olustur_ic sırası + konum birebir.
+    eğer metin_esit(ad, "YAPI_OLUSTUR") {
+        değişken tad: metin = dizi_al(p.a_deg, idx);
+        eğer yapi_var_mi(p, tad) == yanlış {
+            dizi_ekle(p.th_kod, "T002");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            ver 0;   // C: yapı tanımsız → erken dönüş (alan kontrolü yok)
+        }
+        değişken ob: tam32 = dizi_al(p.a_cb, idx);
+        değişken oc: tam32 = dizi_al(p.a_cs, idx);
+        değişken i: tam32 = 0;
+        iken i < oc {
+            değişken aa: tam32 = dizi_al(p.cocuk, ob + i);   // ALAN_ATAMA
+            değişken fad: metin = dizi_al(p.a_deg, aa);
+            eğer alan_var_mi(p, tad, fad) == yanlış {
+                dizi_ekle(p.th_kod, "T017");   // C: değer kontrol edilmez
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, aa));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
+            } değilse {
+                değişken val: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, aa));
+                kontrol_dugum(p, val);
+                değişken ft: metin = alan_tip_bul(p, tad, fad);
+                eğer metin_esit(ft, "?") == yanlış {
+                    değişken vt: metin = ifade_tip(p, val, ft);
+                    eğer (metin_esit(vt, "?") == yanlış) ve (metin_esit(vt, ft) == yanlış) {
+                        dizi_ekle(p.th_kod, "T001");
+                        dizi_ekle(p.th_sat, dizi_al(p.a_sat, aa));
+                        dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        // eksik alan (T012): her yapı alanı construction'da var mı?
+        değişken yi: tam32 = yapi_idx_bul(p, tad);
+        değişken base: tam32 = dizi_al(p.yapi_abase, yi);
+        değişken cnt: tam32 = dizi_al(p.yapi_acount, yi);
+        değişken j: tam32 = 0;
+        iken j < cnt {
+            değişken fn: metin = dizi_al(p.alan_ad, base + j);
+            değişken bulundu: mantıksal = yanlış;
+            değişken k: tam32 = 0;
+            iken k < oc {
+                eğer metin_esit(dizi_al(p.a_deg, dizi_al(p.cocuk, ob + k)), fn) { bulundu = doğru; }
+                k = k + 1;
+            }
+            eğer bulundu == yanlış {
+                dizi_ekle(p.th_kod, "T012");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            }
+            j = j + 1;
         }
         ver 0;
     }

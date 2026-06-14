@@ -1,0 +1,6 @@
+// TC4: alan değer tipi (mantıksal) alan tipiyle (tam32) uyumsuz → T001 (alan konumu).
+yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: doğru, y: 2 };
+    ver 0;
+}
