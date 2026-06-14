@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-074 — AŞAMA 3 CG2: karşılaştırma + mantıksal + tekli (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e:
+karşılaştırma (`== != < > <= >=` → `icmp <pred> i32` + `zext i1→i32`), mantıksal
+(`ve`/`veya` → `and`/`or i32`, kısa-devresiz — C v1 ile aynı semantik), tekli (`neg`
+→ `sub i32 0,x`; `degil` → `icmp eq i32 x,0` + zext). `karsilastirma_mi`/`icmp_pred`/
+`zext_i1` yardımcıları eklendi.
+
+**Önemli bulgu — korpus tip-GEÇERLİ olmalı (oracle önkoşulu):** karşılaştırma `mantıksal`
+üretir; KEMGU'da `mantıksal → tam32` ÖRTÜK dönüşüm YOK (çekirdek ASLA kuralı). Yani
+`(5>3)+41` tip-GEÇERSİZ → C `--check` reddeder → C codegen çöp/0 üretir → anlamsız oracle.
+Çözüm: karşılaştırma/mantıksal/`degil` testleri `mantıksal`-dönüşlü main ile (`işlev main()
+-> mantıksal { ver 5 > 3; }` → exit 1). C codegen bunlara `define i1 @main()` basar; KEMGU
+codegen `define i32 @main()` + `ret i32 <zext 0/1>` basar — exit-kod 0/1 için eşdeğer
+(gerçek dönüş-tipi emit'i CG6 multi-int'te). `degil`: C `xor i1,true`, KEMGU `icmp eq+zext`
+— bayt farklı, **semantik aynı** (D-072 KARAR 1 oracle'ının tam da amacı).
+
+**Doğrulama:** test/cg_korpus 13 program (5 CG1 + 8 CG2), **13/13 exit eşdeğer**. Harness
+sağlamlık düzeltmesi: Win11 `.exe` yeniden-yazım dosya-kilidi yarışı → dosya-başı benzersiz
+çıktı adları (`$b.c.exe`/`$b.k.exe`). **Sonraki:** CG3 — değişken (entry alloca/store/load)
++ atama + tanımlayıcı.
+
+---
+
 ## D-073 — AŞAMA 3 CG1: codegen.kem iskeleti + ilk semantik-oracle yeşil (2026-06-14)
 
 **Karar [ETKİ: yeni self-host artefakt; C derleyici DEĞİŞMEDİ].** D-072 planının CG1 adımı:
