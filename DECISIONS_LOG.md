@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-085 — [YÜKSEK] `[]` türetilmiş heap dizi tabanı (yapı-alanı / çağrı-dönüşü) — okuma+yazma heap-route (2026-06-14)
+
+**Karar [ETKİ: codegen doğruluk; izole commit].** `[]` indeks operatörü yalnız
+düz `TANIMLAYICI + dinamik_dizi_mi` tabanlarda heap-route (kdl_dizi_al/yaz)
+ediyordu; TÜRETİLMİŞ heap `Dizi<T>` tabanları (yapı-alanı `k.xs`, `Dizi<T>` dönen
+işlev `yap()`) KdlDizi* DESKRİPTÖRÜNÜ düz veri sanıp GEP yapıyordu →
+**accept-but-silently-wrong** okuma (çöp değer) + **accept-but-crash** yazma
+(segfault). Karşıtlık: `dizi_al`/`dizi_yaz`/`dizi_boyut` built-in'leri aynı
+tabanlarda DOĞRU — taban reg'i (KdlDizi*) doğru üretiliyor, yalnız `[]`
+lowering'i onu raw buffer sanıyordu (D-083 "Sınır" notunda kapsam-dışı işaretliydi).
+
+**Çözüm (src/llvm.c):**
+- Ortak `turetilmis_heap_dizi_eleman(g, nesne)` çözümleyici: ERISIM (yapı alanı
+  `Dizi<T>` → `dizi_alan_eleman_ir`) ve CAGRI (`Dizi<T>` dönen işlev →
+  `islev_bul` + dönüş tipi AST'sinden eleman IR). Değilse NULL → stack GEP.
+- Okuma (DUGUM_INDEKS): TANIMLAYICI fast-path'in ARDINDAN türetilmiş taban
+  heap ise `kdl_dizi_al_<tip>` route (`ifade_uret(taban)` zaten KdlDizi* verir).
+- Yazma (DUGUM_ATAMA→DUGUM_INDEKS): TANIMLAYICI heap yazma artık DÜŞMÜYOR
+  (eski "kdl_dizi_yaz_eleman yok" yorumu geçersiz — runtime'da `kdl_dizi_yaz_*`
+  VAR); türetilmiş heap yazma da `kdl_dizi_yaz_<tip>` route.
+- Ortak fn-seçici `kdl_al_fn`/`kdl_yaz_fn`/`kdl_al_donus_ir` (built-in ile
+  paylaşılan eleman-IR→intrinsic eşlemesi).
+- `değişken xs: Dizi<T> = yap()` (literal-DIŞI değer, çağrı/başka-dizi) artık
+  `dinamik_dizi_mi=1` işaretlenir → `xs[i]` TANIMLAYICI fast-path'ten heap-route.
+  (Tip kontrolü Dizi<T> annotasyonunu heap garanti eder; stack → G003 reddi.)
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (erisim oku/yaz, çağrı oku, direct
+heap yaz, türetilmiş OOB PANIC) → 19/19. `test/ornekler/dizi_turetilmis_taban.kem`
+(exit 42, ASan auto-discovery). Tüm suite yeşil (29 paket, llvm 235/235).
+`asan_e2e_denetim.sh` PASS=92 FAIL=0. 0 uyarı.
+
+**Kapsam/sınır:** Skaler + ptr eleman. **Struct eleman (`Dizi<Yapı>`, `et[0]=='%'`)
+şimdilik stack/yorum yoluna düşer — D-087'de by-value yapı.** İç-içe
+`Dizi<Dizi<T>>` türetilmiş indeks (nested INDEKS tabanı) çözümleyici kapsamında
+DEĞİL → mevcut çalışan stack-GEP yolu korunur (m[i][j] regresyonsuz); iç diziyi
+değişkene çıkarınca uzunluk metadata hâlâ bozuk (nested-literal stack temsili,
+ayrı sorun — D-082 inner-heap'e bağlı, deferred). &Dizi referansı D-086.
+
 ## D-084 — [YÜKSEK] stack [N×T] dizi YAZMA OOB sınır-kontrolü (D-069 boşluğu) (2026-06-14)
 
 **Karar [ETKİ: codegen güvenlik; izole commit].** Sabit stack dizisinde (`değişken

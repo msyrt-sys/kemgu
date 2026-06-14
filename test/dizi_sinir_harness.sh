@@ -101,6 +101,35 @@ deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
     değişken arr = [10, 20, 30];
     ver arr[0] + arr[1] + arr[2];
 }'
+# D-085: TÜRETİLMİŞ heap dizi tabanı `[]` (yapı-alanı / çağrı-dönüşü) — eskiden
+# KdlDizi* descriptor'ını düz veri sanıp GEP yapıyordu (sessiz-yanlış / segfault).
+deger_bekle vaka11_erisim_oku 42 'yapı Kap { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken k: Kap = Kap { xs: [10, 20, 12] };
+    ver k.xs[0] + k.xs[1] + k.xs[2];
+}'
+deger_bekle vaka12_erisim_yaz 27 'yapı Kap { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken k: Kap = Kap { xs: [10, 20, 12] };
+    k.xs[1] = 5;
+    ver k.xs[0] + k.xs[1] + k.xs[2];
+}'
+deger_bekle vaka13_cagri_oku 42 'işlev yap() -> Dizi<tam32> { ver [10, 20, 12]; }
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = yap();
+    ver xs[0] + xs[1] + xs[2];
+}'
+deger_bekle vaka14_direct_heap_yaz 99 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2, 3];
+    xs[1] = 99;
+    ver xs[1];
+}'
+# Türetilmiş heap dizi OOB de runtime sınır-kontrollü (kdl_dizi_al/yaz PANIC).
+panic_bekle vaka15_erisim_oob 'yapı Kap { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken k: Kap = Kap { xs: [1, 2, 3] };
+    ver k.xs[9];
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"
