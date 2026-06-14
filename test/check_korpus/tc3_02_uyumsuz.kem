@@ -1,0 +1,9 @@
+işlev m() -> tam32 {
+    değişken a: mantıksal = 5;
+    değişken b: metin = 42;
+    değişken c: tam32 = doğru;
+    değişken d: tam32 = "yanlis";
+    ver 0;
+}
+sabit X: tam32 = doğru;
+sabit Y: metin = 7;

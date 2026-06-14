@@ -36,6 +36,7 @@ yapı Ayr {
     // ---- TC1: tip denetleyici durumu ----
     g_isim: Dizi<metin>;   // global isimler (builtin + üst-düzey tanım)
     yerel: Dizi<metin>;   // append-only kapsam yığını (param + lokal)
+    yerel_tip: Dizi<metin>; // yerel ile paralel: her ismin tip-string'i ("?"=bilinmiyor)
     yerel_basla: tam32;   // aktif işlevin yerel diliminin başlangıcı (slice)
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
@@ -1587,7 +1588,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_basla: 0,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1672,11 +1673,91 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     ver 0;
 }
 // Alt-ağaçtaki param/lokal/için/desen-binding adlarını yerel'e topla.
+// ---- TC3: tip çıkarsama (string-encoded; "?" = bilinmiyor → T001 atla) ----
+işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_BASIT") { ver dizi_al(p.a_deg, idx); }
+    ver "?";   // bileşik tip (Dizi/&/seçimlik/...) — ileri TC
+}
+işlev sayisal_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "tam8") veya metin_esit(t, "tam16") veya metin_esit(t, "tam32")
+      veya metin_esit(t, "tam64") veya metin_esit(t, "dtam8") veya metin_esit(t, "dtam16")
+      veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64")
+      veya metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64");
+}
+işlev kesirli_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64");
+}
+// Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor.
+işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
+    değişken n: tam32 = dizi_boyut(p.yerel);
+    değişken i: tam32 = p.yerel_basla;
+    iken i < n { eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_tip, i); } i = i + 1; }
+    ver "?";
+}
+// İfade tipi (beklenen ile bidirectional). Bilinmeyen → "?". (TC3a: literal+ident.)
+işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "TAM") {
+        eğer sayisal_mi(beklenen) { ver beklenen; }   // bidirectional sayı literal
+        ver "tam32";
+    }
+    eğer metin_esit(ad, "KESIRLI") {
+        eğer kesirli_mi(beklenen) { ver beklenen; }
+        ver "kesirli64";
+    }
+    eğer metin_esit(ad, "METIN") { ver "metin"; }
+    eğer metin_esit(ad, "KARAKTER") { ver "karakter"; }
+    eğer metin_esit(ad, "MANTIKSAL") { ver "mantıksal"; }
+    eğer metin_esit(ad, "BOS") { ver "boş"; }
+    eğer metin_esit(ad, "TANIMLAYICI") { ver var_tip(p, dizi_al(p.a_deg, idx)); }
+    ver "?";   // IKILI/CAGRI/ERISIM/... → TC3b
+}
+// DEGISKEN/SABIT annotation tip-string ("?"=yok/bileşik).
+işlev annot_str(p: &değişken Ayr, idx: tam32) -> metin {
+    eğer dizi_al(p.a_cs, idx) >= 2 {
+        değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_baslar(dizi_al(p.a_ad, c0), "TIP_") { ver tip_str(p, c0); }
+    }
+    ver "?";
+}
+işlev son_cocuk(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    eğer cs == 0 { ver 0 - 1; }
+    ver dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + cs - 1);
+}
+// T001: annotation vs değer tipi (DEGISKEN/SABIT). Güvenli — yalnız emin olunca.
+işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken annot: metin = annot_str(p, idx);
+    eğer metin_esit(annot, "?") { ver 0; }
+    değişken vc: tam32 = son_cocuk(p, idx);
+    eğer vc < 0 { ver 0; }
+    değişken vt: metin = ifade_tip(p, vc, annot);
+    eğer (metin_esit(vt, "?") == yanlış) ve (metin_esit(annot, vt) == yanlış) {
+        dizi_ekle(p.th_kod, "T001");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
+}
+
 işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
-    eğer metin_esit(ad, "PARAMETRE") veya metin_esit(ad, "DEGISKEN")
-      veya metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
+    eğer metin_esit(ad, "PARAMETRE") {
         dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
+        değişken tc: tam32 = son_cocuk(p, idx);   // param tip çocuğu (kendin → çocuk yok)
+        eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
+            dizi_ekle(p.yerel_tip, tip_str(p, tc));
+        } değilse { dizi_ekle(p.yerel_tip, "?"); }
+    } değilse {
+        eğer metin_esit(ad, "DEGISKEN") {
+            dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
+            dizi_ekle(p.yerel_tip, annot_str(p, idx));
+        } değilse {
+            eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
+                dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
+                dizi_ekle(p.yerel_tip, "?");
+            }
+        }
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
@@ -1684,12 +1765,12 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     iken i < cs { yerel_topla(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
     ver 0;
 }
-// İfade alt-ağacında TANIMLAYICI ref → T002 (tanımsız). Tip/desen/yol atla.
+// İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
-    eğer metin_baslar(ad, "TIP_") { ver 0; }      // tip alt-ağacı (TC1 dışı)
-    eğer metin_baslar(ad, "DESEN") { ver 0; }     // desen binding (TC1 dışı)
-    eğer metin_esit(ad, "YOL") { ver 0; }         // modül::yol (TC1 dışı)
+    eğer metin_baslar(ad, "TIP_") { ver 0; }
+    eğer metin_baslar(ad, "DESEN") { ver 0; }
+    eğer metin_esit(ad, "YOL") { ver 0; }
     eğer metin_esit(ad, "TANIMLAYICI") {
         değişken nm: metin = dizi_al(p.a_deg, idx);
         eğer (ad_tanimli_mi(p, nm) == yanlış) ve (metin_esit(nm, "hiç") == yanlış) {
@@ -1703,6 +1784,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+    // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001 (C sırası)
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
