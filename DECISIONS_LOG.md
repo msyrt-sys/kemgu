@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-079 — AŞAMA 3 CG7a: metin literali + runtime builtin + declare header (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** D-072 CG7 planının metin
++ runtime yarısı (yapı = CG7b). Ön-pass workflow'u (4 ajan) C-codegen ABI'sını birebir çıkardı.
+
+**Metin literali:** `Ayr.str_deg` (benzersiz literal havuzu, dedup). Ön-pass düz düğüm tablosunu
+tarar (`str_pre_pass`), tüm METIN → havuz. Global: `@.str.N = private unnamed_addr constant
+[K x i8] c"...\00"` (K=byte+1). **Escape (C ile birebir):** `\` `"` `<0x20` `>=0x7F` → `\HH`
+(BÜYÜK hex) — Türkçe UTF-8 yüksek-byte'lar tam escape (`"çay"` → `c"\C3\A7ay\00"`, uzunluk 4).
+Referans: `getelementptr [K x i8], ptr @.str.N, i32 0, i32 0`. `metin` tipi → `ptr` (ll_tip).
+
+**Runtime builtin:** `builtin_kdl_ad` (KEMGU adı → `@kdl_*`; metin_*/yaz_*/dosya_*/arg_*) +
+`builtin_ret` (dönüş tipi). CAGRI built-in tespit → `@kdl_*` çağrısı; void çağrı `%r` atamaz.
+**Kritik — i1 normalizasyonu:** runtime `metin_esit` vb. GERÇEK i1 döner ama mantıksal=i32
+invaryantı → call sonrası `zext i1→i32` (CG2/CG4 ile tutarlı, exit eşdeğer). `runtime_header_yaz`
+declare bloğu (codegen.kem alt kümesi + libc).
+
+**Doğrulama:** test/cg_korpus 39 program (+6 CG7a: uzunluk/esit/birlestir/metin-dönüş/param-bayt/
+**türkçe**). 39/39 exit eşdeğer. IR temiz (dedup, UTF-8 escape, zext). **Sınır:** dizi_* builtin
+henüz yok (CG8 — element-tip polimorfizmi). **Sonraki:** CG7b — yapı (%T type, alloca/GEP,
+erişim/oluştur, by-ref param + by-value dönüş).
+
+---
+
 ## D-078 — AŞAMA 3 CG6: multi-int (i8/16/32/64) + tip-izleme + sext/trunc (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Uniform-i32'den

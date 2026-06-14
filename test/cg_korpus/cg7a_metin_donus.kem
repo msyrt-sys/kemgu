@@ -1,0 +1,1 @@
+işlev selam() -> metin { ver "Merhaba"; } işlev main() -> tam32 { ver metin_uzunluk(selam()); }

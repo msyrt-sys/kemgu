@@ -44,6 +44,7 @@ yapı Ayr {
     fn_ret: Dizi<metin>; // CG6: işlev dönüş LLVM tipi
     son_tip: metin;      // CG6: son ifade_uret sonucunun LLVM tipi
     cur_ret: metin;      // CG6: mevcut işlevin dönüş LLVM tipi (ver için)
+    str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1638,11 +1639,12 @@ işlev cg_var_tip_bul(p: &değişken Ayr, ad: metin) -> metin {
 // CG6: KEMGU tip-düğümü → LLVM tip metni. mantıksal=i32 (CG2/CG4 bool mantığıyla tutarlı).
 işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver "i32"; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver "i32"; }  // ref/ptr/dizi → CG7+
+    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver "i32"; }  // ref/ptr/dizi → CG7b/CG8
     değişken t: metin = dizi_al(p.a_deg, tip_idx);
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
     eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver "i16"; }
     eğer metin_esit(t, "tam64") veya metin_esit(t, "dtam64") { ver "i64"; }
+    eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
     ver "i32";   // tam32/dtam32/mantıksal/karakter/boş → i32
 }
 // CG6: iki operand tipini birleştir (KEMGU örtük-dönüşüm yok → biri i32-literal-default ise diğeri).
@@ -1657,6 +1659,126 @@ işlev tip_genislik(t: metin) -> tam32 {
     eğer metin_esit(t, "i16") { ver 16; }
     eğer metin_esit(t, "i64") { ver 64; }
     ver 32;   // i32 (varsayılan)
+}
+// ============================================================================
+// CG7 — metin literali + runtime builtin + declare header (D-072).
+// ============================================================================
+işlev hex1(d: tam32) -> metin {
+    eğer d < 10 { ver hane_str(d); }
+    eğer d == 10 { ver "A"; }   eğer d == 11 { ver "B"; }
+    eğer d == 12 { ver "C"; }   eğer d == 13 { ver "D"; }
+    eğer d == 14 { ver "E"; }   ver "F";
+}
+işlev hex2(b: tam32) -> metin { ver metin_birlestir(hex1(b / 16), hex1(b % 16)); }
+// Metin literali → @.str.N id (find-or-add; dedup).
+işlev str_id(p: &değişken Ayr, val: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.str_deg) {
+        eğer metin_esit(dizi_al(p.str_deg, i), val) { ver i; }
+        i = i + 1;
+    }
+    dizi_ekle(p.str_deg, val);
+    ver dizi_boyut(p.str_deg) - 1;
+}
+// Global içeriği yaz: \ " <0x20 >=0x7F → \HH (büyük hex); diğer ham.
+işlev str_kacis_yaz(p: &değişken Ayr, s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam32 = bayt(s, i);   // 0-255
+        eğer (c == 92) veya (c == 34) veya (c < 32) veya (c >= 127) {
+            yb(92); yaz_str(hex2(c));   // \HH
+        } değilse { yb(c); }
+        i = i + 1;
+    }
+    ver 0;
+}
+// Tüm @.str.N global sabitlerini yaz.
+işlev str_globalleri_emit(p: &değişken Ayr) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.str_deg) {
+        değişken s: metin = dizi_al(p.str_deg, i);
+        değişken k: tam32 = metin_uzunluk(s) + 1;   // null sonlandırıcı dahil
+        yaz_str("@.str."); yaz_str(tam64_str(i olarak tam64));
+        yaz_str(" = private unnamed_addr constant ["); yaz_str(tam64_str(k olarak tam64));
+        yaz_str(" x i8] c"); yb(34);
+        str_kacis_yaz(p, s);
+        yb(92); yaz_str("00"); yb(34); yb(10);   // \00 + kapanış tırnak
+        i = i + 1;
+    }
+    ver 0;
+}
+// Ön-pass: düz düğüm tablosunu tara, tüm METIN literallerini topla.
+işlev str_pre_pass(p: &değişken Ayr) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.a_ad) {
+        eğer metin_esit(dizi_al(p.a_ad, i), "METIN") { str_id(p, dizi_al(p.a_deg, i)); }
+        i = i + 1;
+    }
+    ver 0;
+}
+// KEMGU built-in adı → @kdl_* adı ("" = built-in değil, kullanıcı işlevi). dizi_* → CG8.
+işlev builtin_kdl_ad(ad: metin) -> metin {
+    eğer metin_esit(ad, "yaz_bayt") { ver "kdl_yaz_bayt"; }
+    eğer metin_esit(ad, "yaz_tam") { ver "kdl_yaz_tam"; }
+    eğer metin_esit(ad, "yaz_tam64") { ver "kdl_yaz_tam64"; }
+    eğer metin_esit(ad, "yazdir_metin") { ver "kdl_yazdir_metin"; }
+    eğer metin_esit(ad, "yazdir_satir") { ver "kdl_yazdir_satir"; }
+    eğer metin_esit(ad, "oku_karakter") { ver "kdl_oku_karakter"; }
+    eğer metin_esit(ad, "metin_esit") { ver "kdl_metin_esit"; }
+    eğer metin_esit(ad, "metin_birlestir") { ver "kdl_metin_birlestir"; }
+    eğer metin_esit(ad, "metin_uzunluk") { ver "kdl_metin_uzunluk"; }
+    eğer metin_esit(ad, "metin_bayt") { ver "kdl_metin_bayt"; }
+    eğer metin_esit(ad, "metin_kes") { ver "kdl_metin_kes"; }
+    eğer metin_esit(ad, "dosya_oku") { ver "kdl_dosya_oku"; }
+    eğer metin_esit(ad, "arg_al") { ver "kdl_arg_al"; }
+    eğer metin_esit(ad, "arg_sayi") { ver "kdl_arg_sayi"; }
+    ver "";
+}
+// Built-in dönüş LLVM tipi.
+işlev builtin_ret(ad: metin) -> metin {
+    eğer metin_esit(ad, "metin_esit") { ver "i1"; }
+    eğer metin_esit(ad, "metin_uzunluk") { ver "i32"; }
+    eğer metin_esit(ad, "metin_bayt") { ver "i8"; }
+    eğer metin_esit(ad, "metin_birlestir") { ver "ptr"; }
+    eğer metin_esit(ad, "metin_kes") { ver "ptr"; }
+    eğer metin_esit(ad, "dosya_oku") { ver "ptr"; }
+    eğer metin_esit(ad, "arg_al") { ver "ptr"; }
+    eğer metin_esit(ad, "arg_sayi") { ver "i32"; }
+    eğer metin_esit(ad, "oku_karakter") { ver "i32"; }
+    ver "void";   // yaz_*/yazdir_* → void
+}
+// Runtime declare başlığı (codegen.kem'in kullandığı alt küme + libc).
+işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
+    yaz_str("declare i32 @puts(ptr)"); yb(10);
+    yaz_str("declare ptr @malloc(i64)"); yb(10);
+    yaz_str("declare void @free(ptr)"); yb(10);
+    yaz_str("declare ptr @memcpy(ptr, ptr, i64)"); yb(10);
+    yaz_str("declare i32 @kdl_metin_uzunluk(ptr)"); yb(10);
+    yaz_str("declare i8 @kdl_metin_bayt(ptr, i32)"); yb(10);
+    yaz_str("declare i1 @kdl_metin_esit(ptr, ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_metin_birlestir(ptr, ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_metin_kes(ptr, i32, i32)"); yb(10);
+    yaz_str("declare ptr @kdl_dizi_olustur(i32)"); yb(10);
+    yaz_str("declare void @kdl_dizi_ekle_tam(ptr, i32)"); yb(10);
+    yaz_str("declare void @kdl_dizi_ekle_tam64(ptr, i64)"); yb(10);
+    yaz_str("declare void @kdl_dizi_ekle_ptr(ptr, ptr)"); yb(10);
+    yaz_str("declare i32 @kdl_dizi_al_tam(ptr, i32)"); yb(10);
+    yaz_str("declare i64 @kdl_dizi_al_tam64(ptr, i32)"); yb(10);
+    yaz_str("declare ptr @kdl_dizi_al_ptr(ptr, i32)"); yb(10);
+    yaz_str("declare i32 @kdl_dizi_boyut(ptr)"); yb(10);
+    yaz_str("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)"); yb(10);
+    yaz_str("declare ptr @kdl_dosya_oku(ptr)"); yb(10);
+    yaz_str("declare i32 @kdl_arg_sayi()"); yb(10);
+    yaz_str("declare ptr @kdl_arg_al(i32)"); yb(10);
+    yaz_str("declare void @kdl_yaz_tam(i32)"); yb(10);
+    yaz_str("declare void @kdl_yaz_tam64(i64)"); yb(10);
+    yaz_str("declare void @kdl_yaz_bayt(i32)"); yb(10);
+    yaz_str("declare void @kdl_yazdir_metin(ptr)"); yb(10);
+    yaz_str("declare void @kdl_yazdir_satir()"); yb(10);
+    yaz_str("declare i32 @kdl_oku_karakter()"); yb(10);
+    yaz_str("declare void @kdl_panik(ptr)"); yb(10);
+    ver 0;
 }
 // CG6: çağrılan işlevin dönüş LLVM tipi (ön-pass tablosu).
 işlev fn_ret_bul(p: &değişken Ayr, ad: metin) -> metin {
@@ -1715,6 +1837,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     eğer metin_esit(ad, "TAM") { p.son_tip = "i32"; ver dizi_al(p.a_deg, idx); }
     eğer metin_esit(ad, "DOGRU") { p.son_tip = "i32"; ver "1"; }
     eğer metin_esit(ad, "YANLIS") { p.son_tip = "i32"; ver "0"; }
+    eğer metin_esit(ad, "METIN") {
+        değişken val: metin = dizi_al(p.a_deg, idx);
+        değişken id: tam32 = str_id(p, val);
+        değişken k: tam32 = metin_uzunluk(val) + 1;
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = getelementptr ["); yaz_str(tam64_str(k olarak tam64));
+        yaz_str(" x i8], ptr @.str."); yaz_str(tam64_str(id olarak tam64));
+        yaz_str(", i32 0, i32 0"); yb(10);
+        p.son_tip = "ptr";
+        ver rs;
+    }
     eğer metin_esit(ad, "TANIMLAYICI") {
         değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
         değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, idx));
@@ -1728,6 +1862,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
         değişken fad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, cb));  // hedef TANIMLAYICI adı
+        // Built-in mi? (metin_*/yaz_*/dosya_*/arg_*) → @kdl_* + dönüş tipi; değilse kullanıcı işlevi.
+        değişken kdl: metin = builtin_kdl_ad(fad);
+        değişken rt: metin = "";
+        değişken fname: metin = "";
+        eğer metin_esit(kdl, "") { rt = fn_ret_bul(p, fad); fname = fad; }
+        değilse { rt = builtin_ret(fad); fname = kdl; }
         // Argümanları SIRAYLA değerlendir (yan-IR akar), operand+tip biriktir.
         değişken args: Dizi<metin> = [];
         değişken argt: Dizi<metin> = [];
@@ -1737,10 +1877,22 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(argt, p.son_tip);
             i = i + 1;
         }
-        değişken rt: metin = fn_ret_bul(p, fad);
+        // void çağrı: %r = atanmaz.
+        eğer metin_esit(rt, "void") {
+            yaz_str("  call void @"); yaz_str(fname); yaz_str("(");
+            değişken jv: tam32 = 0;
+            iken jv < dizi_boyut(args) {
+                eğer jv > 0 { yaz_str(", "); }
+                yaz_str(dizi_al(argt, jv)); yaz_str(" "); yaz_str(dizi_al(args, jv));
+                jv = jv + 1;
+            }
+            yaz_str(")"); yb(10);
+            p.son_tip = "void";
+            ver "0";
+        }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
-        yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); yaz_str(fad); yaz_str("(");
+        yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); yaz_str(fname); yaz_str("(");
         değişken j: tam32 = 0;
         iken j < dizi_boyut(args) {
             eğer j > 0 { yaz_str(", "); }
@@ -1748,6 +1900,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             j = j + 1;
         }
         yaz_str(")"); yb(10);
+        // Built-in i1 dönüşü → mantıksal=i32 invaryantına normalize et (zext).
+        eğer metin_esit(rt, "i1") { değişken z: metin = zext_i1(p, rs); p.son_tip = "i32"; ver z; }
         p.son_tip = rt;
         ver rs;
     }
@@ -1980,6 +2134,10 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     imza_topla(p, kok);   // CG6: önce imzaları topla (CAGRI dönüş tipi)
     yaz_str("target triple = "); yb(34); yaz_str("x86_64-pc-windows-gnu"); yb(34); yb(10); yb(10);
+    runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
+    str_pre_pass(p);         // CG7: metin literallerini topla
+    str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
+    yb(10);
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
@@ -2003,7 +2161,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_base: 0,
         lbl: 0, bb_term: 0,
-        fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32"
+        fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32",
+        str_deg: []
     };
 }
 
