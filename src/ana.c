@@ -34,7 +34,7 @@
  * Dosya argumani yoksa stdin'den okur.
  */
 
-typedef enum { MOD_TOKEN, MOD_PARSE, MOD_AST, MOD_CHECK, MOD_LLVM, MOD_LSP } Mod;
+typedef enum { MOD_TOKEN, MOD_PARSE, MOD_AST, MOD_CHECK, MOD_CHECKDUMP, MOD_LLVM, MOD_LSP } Mod;
 
 static char *dosya_oku(const char *dosya_adi) {
     FILE *f = fopen(dosya_adi, "rb");
@@ -436,6 +436,56 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     return toplam > 0 ? 1 : 0;
 }
 
+/* --checkdump: SELF-HOST tip denetleyici diff-oracle (Aşama 2, D-051).
+ * Tip-kontrol hatalarını DÜZ formatta dök: <KOD>\t<satır>\t<sütün> (callback
+ * sırasıyla), hata yoksa "OK". KEMGU-checker aynı çıktıyı üretecek → accept/reject
+ * + tanı paritesi. (Parser/yükleme/wcet hataları da toplanır; TC korpusu temiz
+ * parse eder → yalnız T/L/M kodları.) */
+typedef struct { char kod[24]; int satir; int sutun; } CheckHata;
+static CheckHata g_check_hatalar[8192];
+static int g_check_hata_sayi = 0;
+static void check_topla_cb(int satir, int sutun, const char *kod,
+                           const char *mesaj, const char *ipucu, void *ctx) {
+    (void)mesaj; (void)ipucu; (void)ctx;
+    if (g_check_hata_sayi < 8192) {
+        CheckHata *h = &g_check_hatalar[g_check_hata_sayi++];
+        snprintf(h->kod, sizeof(h->kod), "%s", kod ? kod : "?");
+        h->satir = satir; h->sutun = sutun;
+    }
+}
+static int mode_checkdump(const char *kaynak, const char *dosya_adi) {
+    Arena *a = arena_olustur(0);
+    if (!a) { fprintf(stderr, "Arena olusturulamadi\n"); return 1; }
+    g_check_hata_sayi = 0;
+    hata_callback_ayarla(check_topla_cb, NULL);
+    Lexer l;
+    lexer_baslat(&l, kaynak, dosya_adi);
+    Parser p;
+    parser_baslat(&p, &l, a, dosya_adi, kaynak);
+    Dugum *prog = parser_calistir(&p);
+    if (p.hata_sayisi == 0 && prog) {
+        modulleri_yukle(a, prog, dosya_adi, kaynak);
+        Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
+        TipKontrol tk;
+        tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
+        tip_kontrol_program(&tk, prog);
+        WcetKontrol wk;
+        wcet_kontrol_baslat(&wk, a, g, dosya_adi, kaynak);
+        wcet_kontrol_program(&wk, prog);
+    }
+    hata_callback_ayarla(NULL, NULL);
+    if (g_check_hata_sayi == 0) {
+        fputs("OK\n", stdout);
+    } else {
+        for (int i = 0; i < g_check_hata_sayi; i++) {
+            fprintf(stdout, "%s\t%d\t%d\n", g_check_hatalar[i].kod,
+                    g_check_hatalar[i].satir, g_check_hatalar[i].sutun);
+        }
+    }
+    arena_serbest(a);
+    return 0;
+}
+
 /* C2: IR-verifier kapisi varsayilan ACIK; --no-verify ile kapatilir
  * (benchmark kacis yolu). */
 static int g_llvm_dogrula = 1;
@@ -591,6 +641,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[arg_idx], "--check") == 0) {
             mod = MOD_CHECK;
             arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--checkdump") == 0) {
+            mod = MOD_CHECKDUMP;
+            arg_idx++;
         } else if (strcmp(argv[arg_idx], "--llvm") == 0) {
             mod = MOD_LLVM;
             arg_idx++;
@@ -638,6 +691,7 @@ int main(int argc, char *argv[]) {
         case MOD_PARSE: rc = mode_parse(kaynak, dosya_adi); break;
         case MOD_AST:   rc = mode_ast(kaynak, dosya_adi); break;
         case MOD_CHECK: rc = mode_check(kaynak, dosya_adi); break;
+        case MOD_CHECKDUMP: rc = mode_checkdump(kaynak, dosya_adi); break;
         case MOD_LLVM:  rc = mode_llvm(kaynak, dosya_adi); break;
         default:        rc = 2; break;
     }
