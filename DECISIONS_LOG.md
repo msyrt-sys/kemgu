@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-058 — SELF-HOST checker TC3g: CAGRI per-arg T001 (param tip tablosu) — 28/28 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3g: kullanıcı
+işlevi çağrısında argüman tipi parametre tipiyle uyumsuz → T001 (arg konumunda).
+C derleyici DOKUNULMADI.
+
+**Mimari karar — parametre tip tablosu (`fn_pbase` + `fn_ptip` düz liste).** İmza
+tablosu genişletildi: her işlevin param tipleri `fn_ptip`'e ardışık yazılır, `fn_pbase`
+başlangıç indeksini tutar. `fn_ptip_bul(ad, j)` j. param tipini verir. CAGRI arite-OK
+yolunda her arg için `ifade_tip(arg, pt)` vs `pt` → uyumsuz ise T001 arg düğümünde.
+
+**EMPİRİK C DAVRANIŞI (--checkdump ile doğrulandı):**
+- `f(tanımsız)` → T002 **İKİ KEZ** (C iki-geçiş: pass1 unify + pass2 check, her ikisi
+  `tip_belirle` → arg-İÇİ hata çiftlenir). Per-arg **T001 yalnız pass2** → tek emisyon.
+- `f(b)` (b yanlış-tip, iç hata yok) → T001 **bir kez** (arg konumu).
+- İç-hatasız argümanlarda tek-geçiş = C ile birebir (çiftleme yalnız iç-hatalı argda).
+
+**Tasarım — tek-geçiş + per-arg T001 (GÜVENLİ):** Param tipi yalnız **bilinen skaler**
+saklanır (generic "T"/yapı → "?" → atla; generic false-positive yok). Arg "?" veya pt
+"?" → atla. Literal arg bidirectional (`byte_al(100)` param tam8 → tam8 → OK). Bilinen
+sınır: arg-İÇİ hata çiftlemesi (tanımsız-ad-arg) tek-geçişte tek kez — yalnız geçersiz
+kodda; geçerli korpusta (iç-hatasız arg) tam parite. Method/builtin → tek-geçiş (mevcut).
+
+**Doğrulama:** `make calistir_checker_diff` → **28/28 korpus** (önceki 24 + TC3g 4:
+arg-OK / arg-T001 / ikinci-arg / literal-bidir). test/ornekler **41/42** (regression yok;
+lineer_hata = TC5).
+
+**Sıradaki (TC3h):** T022 (atama lvalue) + eşitlik/karşılaştırma aynı-tip T001. Sonra
+struct alan T017 + erişim tipi (TC4), exhaustiveness M001, linear (TC5 → lineer_hata
+kapanır), bölge/yetki/modül (TC6-8), tam-korpus paritesi (TC9).
+
+---
+
 ## D-057 — SELF-HOST checker TC3f: mantıksal operand (T004) + tekli neg/değil — 24/24 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3f: ikili
