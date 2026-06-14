@@ -1,0 +1,6 @@
+işlev a() -> tam32 { ver 1 + 2; }
+işlev b() -> mantıksal { ver doğru; }
+işlev c() -> metin { ver "ok"; }
+işlev hatali1() -> tam32 { ver doğru; }
+işlev hatali2() -> mantıksal { ver 5; }
+işlev hatali3(x: tam32) -> tam32 { eğer x < 0 { ver doğru; } ver x; }

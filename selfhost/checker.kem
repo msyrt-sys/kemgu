@@ -38,6 +38,7 @@ yapı Ayr {
     yerel: Dizi<metin>;   // append-only kapsam yığını (param + lokal)
     yerel_tip: Dizi<metin>; // yerel ile paralel: her ismin tip-string'i ("?"=bilinmiyor)
     yerel_basla: tam32;   // aktif işlevin yerel diliminin başlangıcı (slice)
+    aktif_donus: metin;   // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor) — T020
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -1588,7 +1589,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1754,6 +1755,38 @@ işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
+// İşlev dönüş tipi (çocuklardaki TIP_* düğümü; yoksa "boş").
+işlev donus_str(p: &değişken Ayr, fn: tam32) -> metin {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_baslar(dizi_al(p.a_ad, c), "TIP_") { ver tip_str(p, c); }
+        i = i + 1;
+    }
+    ver "boş";
+}
+// T020: ver değeri işlev dönüş tipiyle uyumsuz (ver_idx konumu). "?"→atla.
+işlev t020_kontrol(p: &değişken Ayr, ver_idx: tam32) -> tam32 {
+    eğer metin_esit(p.aktif_donus, "?") { ver 0; }
+    eğer dizi_al(p.a_cs, ver_idx) == 0 {           // ver;  → dönüş boş olmalı
+        eğer metin_esit(p.aktif_donus, "boş") == yanlış {
+            dizi_ekle(p.th_kod, "T020");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, ver_idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, ver_idx));
+        }
+        ver 0;
+    }
+    değişken vc: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, ver_idx));
+    değişken vt: metin = ifade_tip(p, vc, p.aktif_donus);
+    eğer (metin_esit(vt, "?") == yanlış) ve (metin_esit(vt, p.aktif_donus) == yanlış) {
+        dizi_ekle(p.th_kod, "T020");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, ver_idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, ver_idx));
+    }
+    ver 0;
+}
 // T021: eğer/iken koşulu mantıksal olmalı. eger_idx konumunda. ("?"→atla)
 işlev t021_kontrol(p: &değişken Ayr, eger_idx: tam32, kosul_idx: tam32) -> tam32 {
     değişken kt: metin = ifade_tip(p, kosul_idx, "mantıksal");
@@ -1820,12 +1853,14 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
-    // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001 (C sırası)
+    // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
+    eğer metin_esit(ad, "VER") { t020_kontrol(p, idx); }
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
+    p.aktif_donus = donus_str(p, fn);   // T020 bağlamı
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
     değişken i: tam32 = 0;
