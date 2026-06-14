@@ -1,0 +1,1 @@
+işlev kare(x: tam32) -> tam32 { ver x * x; } işlev main() -> tam32 { ver kare(6) + 6; }
