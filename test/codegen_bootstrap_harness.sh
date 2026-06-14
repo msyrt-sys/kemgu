@@ -60,6 +60,11 @@ ref_derle selfhost/parser.kem "$TMP/parser_ref.exe" || { echo "🔴 ref parser";
 cg_derle  selfhost/parser.kem "$TMP/parser_cg.exe"  || { echo "🔴 cg parser link"; exit 1; }
 ciktilari_diff "$TMP/parser_ref.exe" "$TMP/parser_cg.exe" "PARSER"
 
+# 2b) CHECKER bootstrap (--checkdump)
+ref_derle selfhost/checker.kem "$TMP/checker_ref.exe" || { echo "🔴 ref checker"; exit 1; }
+cg_derle  selfhost/checker.kem "$TMP/checker_cg.exe"  || { echo "🔴 cg checker link"; exit 1; }
+ciktilari_diff "$TMP/checker_ref.exe" "$TMP/checker_cg.exe" "CHECKER"
+
 # 3) CODEGEN self-compile FIXPOINT
 #    stage1 = codegen.exe (KEMGU-codegen) codegen.kem'i derler
 #    stage2 = codegen2.exe (kendisi codegen.exe ile derlendi) codegen.kem'i derler
@@ -73,5 +78,5 @@ else
     echo "  🔴 CODEGEN FIXPOINT farkı:"; diff "$TMP/stage1.ll" "$TMP/stage2.ll" | head -4; hata=1
 fi
 
-echo "=== SELF-HOST BOOTSTRAP: $([ "$hata" -eq 0 ] && echo 'FIXPOINT ✓ (lexer+parser+codegen)' || echo 'BAŞARISIZ') ==="
+echo "=== SELF-HOST BOOTSTRAP: $([ "$hata" -eq 0 ] && echo 'FIXPOINT ✓ (lexer+parser+checker+codegen)' || echo 'BAŞARISIZ') ==="
 [ "$hata" -eq 0 ]
