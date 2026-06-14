@@ -1,0 +1,6 @@
+// TC3d: çağrı argüman sayısı uyumsuz → T010 (erken dönüş, arg tip kontrolü yok).
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev main() -> tam32 {
+    değişken z: tam32 = topla(1);   // 1 arg, 2 beklenir → T010
+    ver z;
+}

@@ -1,0 +1,6 @@
+// TC3d: kullanıcı işlevi çağrısı dönüş tipi → annotation uyumlu (OK beklenir).
+işlev kare(x: tam32) -> tam32 { ver x * x; }
+işlev main() -> tam32 {
+    değişken y: tam32 = kare(5);   // kare dönüşü tam32 = annot tam32 → OK
+    ver y;
+}
