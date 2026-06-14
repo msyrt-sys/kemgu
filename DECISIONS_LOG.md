@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-051 — SELF-HOST Aşama 2 (TİP DENETLEYİCİ) ADIM-0: --checkdump oracle + mimari (2026-06-14)
+
+**Karar [ETKİ: düşük — additive C `--checkdump` modu; mevcut yol değişmedi].** Aşama 2
+(tip denetleyici self-host) başlangıcı. Mandate: Aşama 5'e kadar otonom, faz-sınırında
+durmadan, kendi mimari kararlarımla.
+
+**Karar 1 — Oracle: `--checkdump` (accept/reject + tanı paritesi).** C `--check` insan-
+okunur (hata[KOD] blokları + özet). Yeni `--checkdump`: hata callback'i (hata.h
+`hata_callback_ayarla`) ile tip-kontrol hatalarını toplar, DÜZ basar:
+`<KOD>\t<satır>\t<sütün>` (callback/traversal sırasıyla), hata yoksa `OK`. KEMGU-checker
+aynı çıktıyı üretecek → diff = accept/reject + kod/konum paritesi. (Parser/yükleme/wcet
+hataları da toplanır ama TC korpusu TEMIZ parse eder → yalnız T/L/M kodları.)
+
+**Karar 2 — KEMGU-checker temsili: indeks-düz + STRING-encoded tipler.** Sembol tablosu =
+paralel Dizi (ad/kategori/tip-string/scope-seviye), scope = seviye-sayacı (append-only;
+toy-demo scope-stack deseni). Tipler STRING-encoded ("tam32", "Dizi<tam32>", "&Nokta") —
+nominal eşitlik `metin_esit` (C TipBilgisi struct yerine; KEMGU'da en doğal). Checker
+parser'ın düz AST tablosunu (`Ayr`) gezer. selfhost/checker.kem parser'ı İÇERİR (AST
+gerek; tek-dosya; modülerleştirme Aşama 4/entegrasyon).
+
+**Plan (TC1-TC9, her biri --checkdump paritesi):** TC1 temel (literal tip + scope +
+T002 tanımsız + T001/ifade-tip uyumsuz) · TC2 işlev/çağrı (T-arity/arg) · TC3 struct/
+çeşit (alan/exhaustiveness M001) · TC4 generic/mono · TC5 linear (tekkez L001-L008) ·
+TC6 bölge · TC7 yetki · TC8 modül · TC9 tam güvenlik + tüm-korpus paritesi.
+
+**Doğrulama:** `--checkdump` OK örnek + T001/T002 hata örneği bayt-exact. Prod 0 uyarı.
+Additive — `--check`/testler etkilenmedi.
+
+**Sıradaki:** TC1 — selfhost/checker.kem (parser AST üzerinde sembol/tip/temel kontrol).
+
+---
+
 ## D-050 — 🎉 SELF-HOST parser P6: BOOTSTRAP — 223/223 GERÇEK .kem + SELF-PARSE (Aşama 1 TAMAM) (2026-06-14)
 
 **Karar [ETKİ: düşük — `selfhost/parser.kem` + additive `ondalik_bicimle` intrinsic +
