@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-078 — AŞAMA 3 CG6: multi-int (i8/16/32/64) + tip-izleme + sext/trunc (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Uniform-i32'den
+gerçek-tip codegen'e: `Ayr.son_tip` (her ifade_uret sonucunun LLVM tipi — recursive "dönüş-tip
+register'ı"), `Ayr.cur_ret` (mevcut işlev dönüş tipi), `Ayr.cg_atip` (değişken→LLVM tip),
+`Ayr.fn_ad/fn_ret` (ön-pass imza tablosu). Yardımcılar: `ll_tip` (TIP_BASIT → i8/i16/i32/i64),
+`tip_birlestir` (operand birleştir), `tip_genislik`, `fn_ret_bul`, `islev_donus_tip`, `param_tip`.
+
+**Anahtar basitleştirme — KEMGU örtük-dönüşüm YOK → operand birleştirme tek-yönlü:** `a + b`'de
+operandlar zaten aynı tip (checker garantisi); tek istisna bağlamsız literal (i32-default).
+`tip_birlestir` = biri i32 ise diğeri. Literaller metin-agnostik ("5"), tip yalnız komut
+annotasyonunda → literali yeniden-emit gerekmez. **mantıksal = i32 tutuldu** (CG2/CG4 bool
+mantığı bozulmadı; `define i1` yerine `define i32` — exit-kod eşdeğer). **Casts (`olarak`,
+TIP_DONUSTUR):** hedef>kaynak → `sext`, hedef<kaynak → `trunc`, eşit → no-op.
+
+**Doğrulama:** test/cg_korpus 33 program (+5 CG6: tam64/tam16/tam8-sext/trunc/i64-param).
+i64 alloca/add/mul, `trunc i64→i8`, `sext i8→i32`, i64-param+call hepsi temiz IR. **33/33 exit
+eşdeğer.** **Sınırlar (v1):** (a) signed div/rem (sdiv/srem) — dtam (unsigned) için udiv/urem
+henüz yok (codegen.kem signed tam kullanır → self-host etkilenmez); (b) bağlamsız literal →
+geniş paramda i32 default (geçici: tipli yerel kullan); (c) kesirli (float) yok (CG sonrası).
+**Sonraki:** CG7 — metin literali (@.str global) + yapı (%T, alloca/gep) + runtime declare header.
+
+---
+
 ## D-077 — AŞAMA 3 CG5: çağrı + parametre + özyineleme (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `islev_uret` artık
