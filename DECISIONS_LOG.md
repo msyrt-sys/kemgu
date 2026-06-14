@@ -37,6 +37,30 @@ Additive — `--check`/testler etkilenmedi.
 
 ---
 
+## D-054 — SELF-HOST checker TC3a: tip çıkarsama temeli + annotation T001 — 9/9 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3a: tip
+çıkarsama çekirdeği (mountain'ın özü). değişken/sabit annotation-değer uyumsuzluğu (T001).
+
+**Kapsam:** STRING-encoded tip çıkarsama `ifade_tip` — literal (TAM/KESIRLI bidirectional
+beklenen sayı/kesirli tiple; METIN/KARAKTER/MANTIKSAL/BOS) + tanımlayıcı (yerel_tip
+takibi). `yerel_tip` Dizi (param: tip-çocuğundan; değişken: annotation; için/desen: "?").
+T001: değişken/sabit annotation vs değer tipi; çocuk T002'lerinden SONRA (C sırası).
+
+**GÜVENLİ strateji:** Bilinmeyen tip → "?" → T001 ATLA. ifade_tip yalnız emin olduğu
+(literal/bilinen-ident) tipleri döndürür; IKILI/CAGRI/ERISIM → "?" (TC3b). Böylece
+geçerli kodda FALSE-T001 yok → gerçek tek-dosya 41/42 KORUNDU (under-report > over-report).
+bidirectional: `değişken a: tam8 = 5` OK (5→tam8); `b: mantıksal = 7` T001.
+
+**Doğrulama:** `make calistir_checker_diff` → **9/9 korpus** (TC1 4 + TC2 2 + TC3 3).
+test/ornekler 41/42 (regression yok; lineer_hata = TC5). C derleyici değişmedi.
+
+**Sıradaki (TC3b):** IKILI operatör tipi (sayısal aritmetik → operand; karşılaştırma/
+mantıksal → mantıksal) + CAGRI dönüş tipi + T020 (ver) + T021 (koşul mantıksal) +
+T022 (lvalue) + T010 (arite). Sonra struct alan/exhaustiveness, generic, linear, modül.
+
+---
+
 ## D-053 — SELF-HOST checker TC2: üst-düzey çift-tanım (T024/T026) — 6/6 korpus, 41/42 gerçek (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC2: üst-düzey
