@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-057 — SELF-HOST checker TC3f: mantıksal operand (T004) + tekli neg/değil — 24/24 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3f: ikili
+`ve`/`veya` operandı mantıksal olmalı (T004); tekli `-` (neg) sayısal (T003); tekli
+`değil` mantıksal (T004). C derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` IKILI post-check'e `t004_kontrol` (ve/veya → her iki
+operand mantıksal); TEKLI post-check `tekli_kontrol` (neg → sayısal/T003, değil →
+mantıksal/T004). `~`/`&`/`deref*` → ileri TC. Konum: IKILI/TEKLI düğümü (= operatör;
+parser bootstrap ile C ile özdeş). `bilinen_mantiksal_degil` (≠"?" ve ≠"mantıksal").
+
+**C semantiği birebir (TIP_HATA bastırma):** `ifade_tip` artık ve/veya, neg, değil
+için operand kesin-uyumsuzsa "?" döner (C operand→TIP_HATA→ikili/tekli erken dönüş).
+Böylece `değişken c: mantıksal = x ve doğru` (x tam32) → yalnız T004 (T001 yok);
+`değişken r: tam32 = -b` (b mantıksal) → yalnız T003; `eğer değil x` (x tam32) →
+yalnız T004 (T021 yok). `==`/`!=` mantıksal döner (aynı-tip T001 ileri TC).
+
+**GÜVENLİ strateji:** Yalnız KESİN uyumsuz operandda hata → geçerli kodda
+false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **24/24 korpus** (önceki 20 + TC3f 4:
+mantık/tekli-OK / ve-T004 / neg-T003 / değil-T004). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3g):** CAGRI per-arg T001 (param tip tablosu) + eşitlik/karşılaştırma
+aynı-tip T001 + T022 (lvalue atama hedefi). Sonra struct alan T017 + exhaustiveness
+M001, generic (TC4), linear (TC5 → lineer_hata kapanır), bölge/yetki/modül (TC6-8).
+
+---
+
 ## D-056 — SELF-HOST checker TC3e: aritmetik/karşılaştırma sayısal operand (T003) — 20/20 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3e: ikili
