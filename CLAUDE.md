@@ -747,8 +747,19 @@ Belge dosyaları: Türkçe.
 
 ## Aktif Görev
 
-- **Faz:** **🎉🎉 KONSOLIDASYON — TİP + BÖLGE + LLVM + ESCAPE + CONSTRAINT + LSP + LİNEER FAZLARI TAMAMLANDI**
-- **Tamamlanan:** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server + **Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)**
+- **Faz:** **🎉🎉🎉 SELF-HOST BOOTSTRAP FIXPOINT — KEMGU derleyici KENDİNİ DERLİYOR (Aşama 5)**
+- **Self-host durumu (D-072..D-085, `feature/self-host-checker`):** `selfhost/{lexer,parser,checker,codegen}.kem`
+  KEMGU ile yazılı. KEMGU-codegen (`codegen.kem` → `codegen.exe`) ile derlenen lexer/parser/checker,
+  C-codegen ile derlenenlerle **byte-identik çıktı** (46/46 her bileşen). **CODEGEN FIXPOINT:**
+  `codegen.exe` `codegen.kem`'i derler → `codegen2.exe`; ikisi aynı IR'ı üretir (15114 satır byte-identik)
+  = derleyici kendini sabit-nokta olarak üretiyor. Gate: `make calistir_codegen_bootstrap` +
+  `calistir_codegen_diff` (semantik oracle 56/56) → `test_tumu`.
+- **Self-host codegen kapsamı (CG1-9):** literal/ifade/deyim/kontrol-akışı/çağrı-özyineleme/multi-int
+  (i8-64+sext/trunc)/metin-literali+runtime-builtin/yapı(value+ref)/dizi(heap+element-tip)/alloca-hoist.
+  Sınır: çeşit/eşleş/lambda/modül codegen.kem'de kullanılmıyor (korpus-test'li, self-host'ta egzersizsiz).
+- **Sıradaki self-host:** AŞAMA 4 driver (tek binary lex→parse→check→codegen zinciri — paketleme);
+  güvenlik chip `task_f484954c` (Dizi ATAMA dizi-literal accept-but-crash, C-derleyici).
+- **Tamamlanan (önceki):** Lexer → Parser → AST → Tip → Bölge (temel + DFA escape) → LLVM IR → native exe + LSP server + **Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)**
 - **Sıra:** ~~11.1-11.7~~ ✓ → ~~12.1-12.2~~ ✓ → ~~13.1~~ ✓ → ~~14.1-14.2~~ ✓ → ~~15.1-15.5~~ ✓ → ~~16.1-16.5~~ ✓ → ~~Linear V1~~ ✓ → **(genişletme: Katman 2, LLVM v4, LSP v3, stdlib, Linear V2, bootstrap)**
 - **Tip sistemi tasarım kararları (kullanıcı onayladı):**
   - Çıkarsama: Lokal + Bidirectional (Rust/Swift tarzı)
