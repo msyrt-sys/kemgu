@@ -1,0 +1,8 @@
+// TC5d: geçerli bit operatörleri (tüm operandlar tamsayı) → OK.
+işlev main() -> tam32 {
+    değişken a: tam32 = 5;
+    değişken b: tam32 = a & 3;
+    değişken c: tam32 = (a << 2) | 1;
+    değişken d: tam32 = ~a ^ b;
+    ver d >> 1;
+}
