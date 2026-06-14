@@ -37,6 +37,8 @@ yapı Ayr {
     cg_ad: Dizi<metin>;  // CG3: değişken adları (yalnız APPEND; işlev-bazı slice = cg_base..)
     cg_areg: Dizi<metin>;// CG3: karşılık gelen alloca operandı ("%2")
     cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
+    lbl: tam32;          // CG4: temel-blok etiket sayacı (bb0, bb1, ...)
+    bb_term: tam32;      // CG4: mevcut blok terminatör (ret/br) ile bitti mi (1=evet)
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1618,11 +1620,39 @@ işlev cg_var_bul(p: &değişken Ayr, ad: metin) -> metin {
     }
     ver "";   // bulunamadı (geçerli programda olmaz; checker garantiler)
 }
+// CG4: temel-blok etiket üret/yaz + koşullu fall-through dal.
+işlev yeni_label(p: &değişken Ayr) -> metin {
+    değişken l: tam32 = p.lbl;
+    p.lbl = p.lbl + 1;
+    ver metin_birlestir("bb", tam64_str(l olarak tam64));
+}
+işlev etiket_yaz(p: &değişken Ayr, L: metin) -> tam32 {
+    yaz_str(L); yaz_str(":"); yb(10);
+    p.bb_term = 0;   // yeni blok başladı
+    ver 0;
+}
+// Mevcut blok terminatörlü değilse L'ye dallan (fall-through).
+işlev br_to(p: &değişken Ayr, L: metin) -> tam32 {
+    eğer p.bb_term == 0 {
+        yaz_str("  br label %"); yaz_str(L); yb(10);
+        p.bb_term = 1;
+    }
+    ver 0;
+}
+// i32 (0/1) koşulu → i1 (icmp ne 0); üretilen i1 reg'i döndür.
+işlev kosul_i1(p: &değişken Ayr, c: metin) -> metin {
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = icmp ne i32 "); yaz_str(c); yaz_str(", 0"); yb(10);
+    ver rs;
+}
 
 // İfade → operand metni ("5" veya "%3"); yan-IR yaz_str ile akıtılır.
 işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") { ver dizi_al(p.a_deg, idx); }
+    eğer metin_esit(ad, "DOGRU") { ver "1"; }
+    eğer metin_esit(ad, "YANLIS") { ver "0"; }
     eğer metin_esit(ad, "TANIMLAYICI") {
         değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
         değişken r: tam32 = yeni_reg(p);
@@ -1684,6 +1714,44 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
             yaz_str("  ret i32 "); yaz_str(op); yb(10);
         } değilse { yaz_str("  ret i32 0"); yb(10); }
+        p.bb_term = 1;   // ret = terminatör
+        ver 0;
+    }
+    eğer metin_esit(ad, "EGER") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken c: metin = kosul_i1(p, ifade_uret(p, dizi_al(p.cocuk, cb)));
+        değişken Lthen: metin = yeni_label(p);
+        değişken Lend: metin = yeni_label(p);
+        değişken Lelse: metin = Lend;
+        eğer cs >= 3 { Lelse = yeni_label(p); }
+        yaz_str("  br i1 "); yaz_str(c); yaz_str(", label %"); yaz_str(Lthen);
+        yaz_str(", label %"); yaz_str(Lelse); yb(10); p.bb_term = 1;
+        etiket_yaz(p, Lthen);
+        deyim_uret(p, dizi_al(p.cocuk, cb + 1));
+        br_to(p, Lend);
+        eğer cs >= 3 {
+            etiket_yaz(p, Lelse);
+            deyim_uret(p, dizi_al(p.cocuk, cb + 2));
+            br_to(p, Lend);
+        }
+        etiket_yaz(p, Lend);
+        ver 0;
+    }
+    eğer metin_esit(ad, "IKEN") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken Lhead: metin = yeni_label(p);
+        değişken Lbody: metin = yeni_label(p);
+        değişken Lend: metin = yeni_label(p);
+        br_to(p, Lhead);
+        etiket_yaz(p, Lhead);
+        değişken c: metin = kosul_i1(p, ifade_uret(p, dizi_al(p.cocuk, cb)));
+        yaz_str("  br i1 "); yaz_str(c); yaz_str(", label %"); yaz_str(Lbody);
+        yaz_str(", label %"); yaz_str(Lend); yb(10); p.bb_term = 1;
+        etiket_yaz(p, Lbody);
+        deyim_uret(p, dizi_al(p.cocuk, cb + 1));
+        br_to(p, Lhead);   // başa dön
+        etiket_yaz(p, Lend);
         ver 0;
     }
     eğer metin_esit(ad, "DEGISKEN") {
@@ -1719,9 +1787,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İşlev → define i32 @ad() { ... }. CG1: parametresiz; gövde = BLOK çocuğu.
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
+    p.lbl = 0;
     p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
     yaz_str("define i32 @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("() {"); yb(10);
     yaz_str("entry:"); yb(10);
+    p.bb_term = 0;   // entry taze blok
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
     değişken i: tam32 = 0;
@@ -1730,6 +1800,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { deyim_uret(p, c); }
         i = i + 1;
     }
+    eğer p.bb_term == 0 { yaz_str("  ret i32 0"); yb(10); }   // açık blok → kapat (ölü ama geçerli)
     yaz_str("}"); yb(10);
     ver 0;
 }
@@ -1758,7 +1829,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         reg: 0,
-        cg_ad: [], cg_areg: [], cg_base: 0
+        cg_ad: [], cg_areg: [], cg_base: 0,
+        lbl: 0, bb_term: 0
     };
 }
 
