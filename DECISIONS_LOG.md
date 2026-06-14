@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-063 — SELF-HOST checker: aynı-ad belirsiz tip → "?" (self-host kaynak paritesi) — lexer+parser+checker.kem TAM (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem`].** KEMGU checker'ı KENDİ derleyici
+kaynakları üzerinde (lexer/parser/checker.kem) C oracle'ına karşı doğrulandı → **3/3
+self-host kaynak BİREBİR**. Bir false-positive bulundu ve düzeltildi. C derleyici
+DOKUNULMADI.
+
+**Bulgu (bağımsız doğrulama):** `parser.kem:969` `ver ic;` → KEMGU FALSE T020, oracle OK.
+Sebep: `parse_birincil`'de iki ayrı blok kapsamında iki `ic` (`metin` @935, `tam32` @967);
+düz `yerel` listesi kapsam tutmaz, `var_tip` ileri-arama İLK eşleşmeyi (`metin`) döndürdü →
+`ver ic` (tam32 fonksiyonda) metin sanıldı → T020. C blok kapsamlarıyla doğru çözer.
+
+**Düzeltme (GÜVENLİ):** `var_tip` — bir ad birden fazla FARKLI tiple bağlıysa → "?"
+(belirsiz → kontrol atla). Tek tip → o tip. Yalnız under-report (false-positive önler,
+hiç error EKLEMEZ). Hem false T020 (ver ic) hem olası false T001'i (dugum0 arg ic) kapatır.
+
+**Doğrulama:** self-host kaynaklar **lexer.kem ✅ parser.kem ✅ checker.kem ✅** (hepsi
+oracle = KEMGU). `make calistir_checker_diff` **44/44**; test/ornekler **42/42** (regression
+yok — yalnız belirsiz-ad checkleri atlanır, geçerli kodda zaten error yok).
+
+**Önemi (Aşama 5 hazırlığı):** KEMGU checker artık TÜM derleyiciyi (kendisi dâhil) C ile
+birebir tip-kontrol ediyor — bootstrap fixpoint için checker accept/reject doğruluğu
+KANITLANDI (geçerli kaynak → kabul, sahte hata yok).
+
+---
+
 ## D-062 — SELF-HOST checker TC5b: lineer akış L001/L002/L004 — 🎉 test/ornekler 42/42 TAM PARİTE (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5b (Linear
