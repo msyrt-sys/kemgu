@@ -1722,6 +1722,11 @@ işlev bilinen_sayisal_degil(t: metin) -> mantıksal {
 işlev bilinen_mantiksal_degil(t: metin) -> mantıksal {
     ver (metin_esit(t, "?") == yanlış) ve (metin_esit(t, "mantıksal") == yanlış);
 }
+// Atama hedefi lvalue mi? (C: TANIMLAYICI/ERISIM/INDEKS — aksi T022.)
+işlev lvalue_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "TANIMLAYICI") veya metin_esit(ad, "ERISIM")
+      veya metin_esit(ad, "INDEKS");
+}
 // Bir işlev düğümünün PARAMETRE çocuk sayısı (arite).
 işlev param_say(p: &değişken Ayr, fn: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
@@ -2077,6 +2082,30 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         değişken k: tam32 = 1;
         iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
+        ver 0;
+    }
+    // ATAMA: T022 (lvalue) önce → hedef T002 → değer T002 → T001 (tip uyumsuz).
+    // C DUGUM_ATAMA sırası birebir. Konum: ATAMA düğümü (sol-taraf başı).
+    eğer metin_esit(ad, "ATAMA") {
+        değişken ab: tam32 = dizi_al(p.a_cb, idx);
+        değişken hedef: tam32 = dizi_al(p.cocuk, ab);
+        değişken deger: tam32 = dizi_al(p.cocuk, ab + 1);
+        eğer lvalue_mi(dizi_al(p.a_ad, hedef)) == yanlış {
+            dizi_ekle(p.th_kod, "T022");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        }
+        kontrol_dugum(p, hedef);
+        kontrol_dugum(p, deger);
+        değişken ht: metin = ifade_tip(p, hedef, "?");   // TANIMLAYICI → var_tip; ERISIM/INDEKS → "?"
+        eğer metin_esit(ht, "?") == yanlış {
+            değişken dt: metin = ifade_tip(p, deger, ht);
+            eğer (metin_esit(dt, "?") == yanlış) ve (metin_esit(dt, ht) == yanlış) {
+                dizi_ekle(p.th_kod, "T001");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            }
+        }
         ver 0;
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);

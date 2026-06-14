@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-059 — SELF-HOST checker TC3h: atama lvalue (T022) + atama tip uyumu (T001) — 32/32 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3h: atama
+hedefi lvalue olmalı (T022); atama değeri hedef tipiyle uyumlu olmalı (T001). C
+derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` ATAMA özel-case'i. `lvalue_mi` (TANIMLAYICI/ERISIM/INDEKS).
+C DUGUM_ATAMA sırası birebir: T022 (lvalue, **erken dönüş YOK**) → hedef T002 → değer
+T002 → T001 (`ifade_tip(hedef)` vs `ifade_tip(değer, ht)`). Konum: ATAMA düğümü
+(sol-taraf başı; `--checkdump` ile doğrulandı: `x=doğru`→T001 3:5, `5=3`→T022 2:5,
+`f()=3`→T022 3:5).
+
+**GÜVENLİ strateji:** T001 yalnız hedef tipi bilinen-skaler (TANIMLAYICI → var_tip)
+iken; ERISIM/INDEKS hedef → ht "?" → T001 atla (alan/indeks tipi TC4). Değer "?" →
+atla. Geçerli kodda (lvalue + uyumlu tip) hata yok → false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **32/32 korpus** (önceki 28 + TC3h 4:
+atama-OK / atama-T001 / literal-hedef-T022 / çağrı-hedef-T022). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Aşama 2 ilerleme (T-kodları):** T001 (annot/atama/arg/IKILI-aynı-tip), T002, T003,
+T004, T010, T020, T021, T022, T024, T026 — 10 kod. Sıradaki (TC4): struct alan T017 +
+ERISIM/INDEKS tip çıkarsama + eşleş exhaustiveness M001. Sonra linear (TC5 →
+lineer_hata kapanır), bölge/yetki/modül (TC6-8), tam-korpus paritesi (TC9).
+
+---
+
 ## D-058 — SELF-HOST checker TC3g: CAGRI per-arg T001 (param tip tablosu) — 28/28 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3g: kullanıcı

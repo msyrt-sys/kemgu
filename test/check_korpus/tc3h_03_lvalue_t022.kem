@@ -1,0 +1,5 @@
+// TC3h: atama hedefi lvalue değil (literal) → T022.
+işlev main() -> tam32 {
+    5 = 3;   // T022
+    ver 0;
+}
