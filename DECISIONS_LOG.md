@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-085 — 🎉 AŞAMA 5 BOOTSTRAP FIXPOINT — codegen self-host KENDİNİ ÜRETİYOR (2026-06-14)
+
+**Karar [ETKİ: milestone — kod değişmedi, doğrulama].** KEMGU-yazılı codegen (selfhost/codegen.kem)
+gerçek bir self-host derleyici: ÜÇ bağımsız bootstrap kanıtı yeşil.
+
+**1) LEXER bootstrap (46/46):** codegen.exe ile derlenen lexer, TÜM self-host + ornekler korpusunda
+C-codegen lexer ile byte-identik token çıktısı (codegen.kem'in kendisi dahil — 26122 token).
+
+**2) PARSER bootstrap (46/46):** codegen.exe ile derlenen parser, aynı korpusta C-codegen parser ile
+byte-identik --ast (parser self-parse 9672, checker 16214, codegen 16397 AST satırı).
+
+**3) CODEGEN self-compile FIXPOINT:** codegen.exe (C-build, stage0) codegen.kem'i derler → stage1 IR
+(15114 satır) → codegen2.exe. codegen2.exe codegen.kem'i derler → stage2 IR. **stage1 == stage2,
+BYTE-IDENTİK.** = derleyici kendini sabit-nokta olarak yeniden üretiyor (self-hosting'in tanımlayıcı
+özelliği). Transitif: codegen2.exe lexer.kem IR'ı da codegen.exe ile birebir.
+
+**Bu fixpoint'i mümkün kılan son düzeltmeler:** D-072..D-084 (CG1-9: literal→ifade→deyim→kontrol→
+çağrı→multi-int→metin→yapı→dizi→hoist), önek-builtin (D-083), bool-lit MANTIKSAL fix (D-083,
+bootstrap'in yakaladığı), alloca-hoist (D-084, döngü yığın taşması). Semantik oracle (exit-kod)
++ byte-diff bootstrap oracle birlikte.
+
+**Doğrulama:** `test/codegen_bootstrap_harness.sh` (3 kanıt) Makefile `calistir_codegen_bootstrap`
+→ test_tumu. **Sınır/Sonraki:** (a) CHECKER (checker.kem) self-host ayrı iş (tip-kontrol, codegen
+değil) — checker_diff zaten 48/48 C-paritesinde; KEMGU-codegen-built checker bootstrap'i sıradaki;
+(b) codegen.kem CG9-üstü özellik kullanmıyor (çeşit/eşleş/lambda/modül yok) → o yollar korpus-test'li
+ama self-host'ta egzersiz edilmiyor; (c) AŞAMA 4 driver (tek `kemgu` binary'de lex+parse+check+codegen
+zinciri) ayrı paketleme işi.
+
+---
+
 ## D-084 — AŞAMA 5 CG9a: alloca-hoist ön-pass → LEXER BOOTSTRAP TAM (46/46 birebir) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** D-083'te teşhis edilen alloca-in-loop
