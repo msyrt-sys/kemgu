@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-081 — AŞAMA 3 CG7c: yapı by-reference (&Yapi param + alan mutasyonu) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Self-host'un kalbi:
+codegen.kem'in `Ayr`'ı her yerde `&değişken Ayr` (238 alan erişimi). Ref-izleme: `Ayr.cg_aref`
+(değişken ptr ise işaret ettiği yapı) + `Ayr.son_ref` (son ifade ref'i) + `cg_var_ref_bul` +
+`param_ref_yapi` (`&Yapi` param → yapı adı).
+
+**Adres-al (`&`/`&değişken` TANIMLAYICI):** LOAD YOK — alloca zaten adres → `cg_var_bul`'u döndür;
+son_ref = (değer-yapı `%X`→X, ya da ptr ise onun ref'i). **ERISIM ptr-yolu:** son_ref boş değilse
+`getelementptr %Ref, ptr nesne, i32 0, i32 fidx` + `load`. **ATAMA ERISIM lvalue (`p.alan = v`):**
+nesne struct-değer → alloca=adres; nesne ptr → `load ptr` ile taban; sonra GEP + `store`.
+**Çağrı:** main `f(&değişken p)` (değer-var adresi) ve nested `f(p)` (ptr param yükle) — ikisi de
+`ptr` arg üretir (mevcut & + TANIMLAYICI-load yolları).
+
+**Doğrulama:** test/cg_korpus 48 program (+4 CG7c: ref-oku/**mutasyon**/nested-bare-ptr/çoklu-
+mutasyon). 48/48 exit eşdeğer. Mutasyon IR doğru (load ptr→GEP→load/store alan). **Sınır:** tek-
+seviye ERISIM lvalue (a.b.c= nadiren; self-host p.alan= kullanır). **Sonraki:** CG8 — dizi
+(heap KdlDizi + []-literal + dizi_* element-tip polimorfik builtin + indeks + için).
+
+---
+
 ## D-080 — AŞAMA 3 CG7b: yapı (struct) by-value — tip-def + oluştur + erişim (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Yapı tablosu
