@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-070 [YÜKSEK] — Sınıf A kabul-ama-çöküyor: dizi-LİTERAL → Dizi<T> param → heap (UB kapandı) (2026-06-14)
+
+**Karar [ETKİ: orta — `src/llvm.c` CAGRI codegen; izole commit].** Güvenlik-iddiası izi
+(D-069 devamı). D-031'de teşhis edilen "8 kabul-ama-çöküyor" deliğinden Sınıf A'nın
+LİTERAL-arg kısmı kapatıldı. C derleyici codegen değişti.
+
+**Hole (D-031 Sınıf A):** `f([1,2,3])` — `f(xs: Dizi<tam32>)` KdlDizi* bekler ama array
+literal STACK `[N x T]` üretir. Callee `xs`'i KdlDizi* sanıp `için`/`[]`/`dizi_boyut` ile
+okur → **misaligned access UB / SEGFAULT** (UBSan: "member access ... requires 8 byte
+alignment"). `--check` geçer (tip sistemi stack/heap temsilini ayırmaz) → görünmez delik,
+#1 iddia "Kırılamaz Güvenlik" ihlali.
+
+**Fix:** CAGRI normal-çağrı arg döngüsünde, callee param[i] tipi `DUGUM_TIP_DIZI` ise
+`g->beklenen_tip = param.tip` (AST düğümü) verilir → `DUGUM_DIZI_OLUSTUR` HEAP `kdl_dizi_olustur`
+üretir (D-044 mekanizması A). `IslevKayit.ast` tüm işlevler için kayıtlı (line 861) → param
+tipleri çağrı yerinde erişilir. **D-044'ün açıkça belirttiği "TÜM Dizi<T> bağlamları heap"
+amacını çağrı-arg için tamamlar** (D-044 yalnız yapı-alanı setter'ını yapmıştı) → yeni DUR-SOR
+DEĞİL, settled option-b'nin tutarlı uygulaması.
+
+**Doğrulama:** 03_kontrol.kem (tek hayatta kalan literal-arg örneği; 36_quicksort silinmiş) →
+ASan/UBSan TEMİZ + rc=151 (120+30+1 doğru sonuç, eskiden UB). test_llvm 235/235; bounds 10/10;
+checker 48/48; ASan E2E denetim **PASS=88 FAIL=0** (03_kontrol allowlist'ten çıktı → korumalı
+PASS; ALLOW 8→6). 0 uyarı.
+
+**KALAN (DUR-SOR — Mehmet'te):** Sınıf A'nın DEĞİŞKEN-arg kısmı: `değişken xs=[..]; f(xs)` —
+stack-array DEĞİŞKENİ Dizi<T> param'a. xs deklarasyonda stack (annot yok); çağrıda KdlDizi
+beklenir. Literal-route uygulanamaz (arg TANIMLAYICI). Gerçek temsil kararı (whole-program
+escape-flow VEYA literal-her-zaman-heap VEYA call-site coercion VEYA checker-reddi). 35/40
+snapshot ALLOWLIST'te kalır. Sınıf B (lambda) = V2 feature (D-004), ayrı.
+
+---
+
 ## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) + 2 (stack) DONE (2026-06-14)
 
 **Bağlam (firsthand doğrulandı):** Dizi indekslemenin iki yolu da bellek-güvensizdi:
