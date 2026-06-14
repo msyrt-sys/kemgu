@@ -1,0 +1,7 @@
+// TC3g: argüman tipi (mantıksal) parametre tipi (tam32) ile uyumsuz → T001 (arg konumu).
+işlev al(x: tam32) -> tam32 { ver x; }
+işlev main() -> tam32 {
+    değişken b: mantıksal = doğru;
+    değişken r: tam32 = al(b);   // arg mantıksal ≠ param tam32 → T001
+    ver r;
+}

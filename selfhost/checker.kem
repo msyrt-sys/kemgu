@@ -43,6 +43,9 @@ yapı Ayr {
     fn_ad: Dizi<metin>;   // üst-düzey/modül işlev adları
     fn_donus: Dizi<metin>; // paralel: dönüş tipi (yalnız bilinen skaler; aksi "?")
     fn_psay: Dizi<tam32>; // paralel: parametre sayısı
+    // ---- TC3g: parametre tip tablosu (CAGRI per-arg T001) ----
+    fn_pbase: Dizi<tam32>; // paralel: fn_ptip'te bu işlevin param tiplerinin başı
+    fn_ptip: Dizi<metin>; // düz param tip listesi (yalnız bilinen skaler; aksi "?")
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -1594,7 +1597,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
-        fn_ad: [], fn_donus: [], fn_psay: [],
+        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [],
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1730,14 +1733,33 @@ işlev param_say(p: &değişken Ayr, fn: tam32) -> tam32 {
     }
     ver n;
 }
-// İşlev imzasını tabloya kaydet (CAGRI dönüş + T010). Dönüş yalnız bilinen
-// skaler ise saklanır; aksi (yapı/generic/bileşik) "?" → çıkarsama atlanır.
+// Bir PARAMETRE düğümünün tip-string'i (kendin → çocuk yok → "?"; bileşik → "?").
+işlev param_tip_str(p: &değişken Ayr, param_idx: tam32) -> metin {
+    değişken tc: tam32 = son_cocuk(p, param_idx);
+    eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") { ver tip_str(p, tc); }
+    ver "?";
+}
+// İşlev imzasını tabloya kaydet (CAGRI dönüş + T010 + per-arg T001). Dönüş/param
+// yalnız bilinen skaler ise saklanır; aksi (yapı/generic/bileşik) "?" → atlanır.
 işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, fn));
     değişken dt: metin = donus_str(p, fn);
     eğer bilinen_skaler_mi(dt) { dizi_ekle(p.fn_donus, dt); }
     değilse { dizi_ekle(p.fn_donus, "?"); }
     dizi_ekle(p.fn_psay, param_say(p, fn));
+    dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));   // param tiplerinin başlangıcı
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            değişken pt: metin = param_tip_str(p, c);
+            eğer bilinen_skaler_mi(pt) { dizi_ekle(p.fn_ptip, pt); }
+            değilse { dizi_ekle(p.fn_ptip, "?"); }
+        }
+        i = i + 1;
+    }
     ver 0;
 }
 // İşlev adı → dönüş tipi ("?" = kullanıcı işlevi değil veya bilinmeyen dönüş).
@@ -1753,6 +1775,18 @@ işlev fn_psay_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < n { eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_psay, i); } i = i + 1; }
     ver 0 - 1;
+}
+// İşlev adı + parametre indeksi → param tip-string'i ("?" = bilinmeyen/bileşik).
+işlev fn_ptip_bul(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
+    değişken n: tam32 = dizi_boyut(p.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) {
+            ver dizi_al(p.fn_ptip, dizi_al(p.fn_pbase, i) + j);
+        }
+        i = i + 1;
+    }
+    ver "?";
 }
 // Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor.
 işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
@@ -2022,6 +2056,23 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                     dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
                     ver 0;   // C: arite uyumsuz → erken dönüş (arg tip kontrolü yok)
                 }
+                // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
+                değişken a: tam32 = 1;
+                iken a < hc {
+                    değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
+                    kontrol_dugum(p, arg);
+                    değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
+                    eğer metin_esit(pt, "?") == yanlış {
+                        değişken at: metin = ifade_tip(p, arg, pt);
+                        eğer (metin_esit(at, "?") == yanlış) ve (metin_esit(at, pt) == yanlış) {
+                            dizi_ekle(p.th_kod, "T001");
+                            dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
+                            dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
+                        }
+                    }
+                    a = a + 1;
+                }
+                ver 0;
             }
         }
         değişken k: tam32 = 1;
