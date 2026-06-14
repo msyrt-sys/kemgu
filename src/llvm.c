@@ -46,6 +46,10 @@ typedef struct LlvmIsim {
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
     int dinamik_dizi_mi;
+    /* D-069 Kategori 2: sabit stack dizi [N x T] uzunluğu (derleme-zamanı N).
+     * 0 = bilinmiyor (heap/region/skaler). >0 ise arr[i] indekslemesi
+     * `icmp uge idx, N` + panic ile sınır-kontrollü (OOB → kdl_panik). */
+    int dizi_uzunluk;
     /* v1 bölge-container: *T degisken/parametrenin POINTEE IR tipi
      * (örn. "i8", "i64", "%N"). veri[i] oku/yaz eleman tipini/
      * genisligini BURADAN alir — beklenen/RHS'ten almak tam8/tam64/
@@ -157,6 +161,10 @@ typedef struct LlvmGen {
      * islev_bul fallback'inde bu onekle mangle edilip cozulur. */
     const char *aktif_modul_onek;
     int aktif_modul_onek_uz;
+    /* D-069 Kat.2 opt-out: güvensiz blok derinliği. >0 iken stack dizi sınır-
+     * kontrolü ATLANIR (Rust modeli: varsayılan güvenli, güvensiz'de kontrolsuz —
+     * açık + işaretli + programcı sorumluluğunda). */
+    int guvensiz_derinlik;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -1930,6 +1938,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* Adim 3 (B v2): heap dizi tanimlayicisi mi? Eger oyle ise
              * kdl_dizi_al route et. Aksi halde mevcut GEP yolu (stack). */
             const char *pointee_elem = NULL;
+            int stack_uzunluk = 0;   /* D-069 Kat.2: sabit stack dizi N (>0 → sınır-kontrol) */
             if (d->veri.indeks.nesne &&
                 d->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                 LlvmIsim *vi = isim_bul(g,
@@ -1960,11 +1969,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (vi && vi->pointee_llvm_tip) {
                     pointee_elem = vi->pointee_llvm_tip;
                 }
+                /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
+                if (vi) stack_uzunluk = vi->dizi_uzunluk;
             }
             /* arr[i] -> GEP ptr (T*) + load (stack) */
             IfadeSonuc nesne = ifade_uret(g, d->veri.indeks.nesne, NULL);
             IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i64");
             int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
+            /* D-069 Kat.2: sabit stack dizi sınır-kontrolü (GEP'ten ÖNCE).
+             * `icmp uge` unsigned → negatif (dev unsigned) + i>=N tek seferde.
+             * OOB → kdl_panik (temiz durma), aksi GEP+load (bb<ok>).
+             * güvensiz blok içinde ATLANIR (opt-out — programcı sorumluluğunda). */
+            if (stack_uzunluk > 0 && g->guvensiz_derinlik == 0) {
+                int c_r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = icmp uge i64 %%%d, %d\n",
+                        c_r, idx_r, stack_uzunluk);
+                int L_oob = yeni_label(g);
+                int L_ok = yeni_label(g);
+                fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        c_r, L_oob, L_ok);
+                fprintf(g->out, "bb%d:\n", L_oob);
+                fprintf(g->out,
+                    "  call void @kdl_panik(ptr @.str.dizi_sinir_panik)\n");
+                fprintf(g->out, "  unreachable\n");
+                fprintf(g->out, "bb%d:\n", L_ok);
+            }
             const char *elem_ir = pointee_elem ? pointee_elem
                                   : (beklenen ? beklenen : "i32");
             int gep_r = yeni_reg(g);
@@ -2987,7 +3016,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (!bekle && ik && ik->ast) {
                         bekle = generic_param_beklenen(g, ik->ast, i);
                     }
+                    /* D-070 (Sınıf A): arg `Dizi<T>` parametresine gidiyorsa
+                     * beklenen_tip=Dizi<T> AST düğümü ver → `[..]` literal HEAP
+                     * KdlDizi olur (stack [N x T] değil). Aksi: callee xs'i KdlDizi*
+                     * sanıp stack-array'i okur → misaligned UB/SEGFAULT. D-044'ün
+                     * "tüm Dizi<T> bağlamları heap" amacını çağrı-arg'a tamamlar. */
+                    const Dugum *cagri_eski_bt = g->beklenen_tip;
+                    if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
+                        i < ik->ast->veri.islev.param_sayi) {
+                        const Dugum *pp = ik->ast->veri.islev.parametreler[i];
+                        if (pp && pp->veri.parametre.tip &&
+                            pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
+                            g->beklenen_tip = pp->veri.parametre.tip;
+                        }
+                    }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
+                    g->beklenen_tip = cagri_eski_bt;
                     if (bekle && strcmp(args[i].tip, bekle) != 0 &&
                         (strcmp(bekle, "i64") == 0 ||
                          strcmp(bekle, "i32") == 0 ||
@@ -3478,6 +3522,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
                     g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
+                    /* D-069 Kat.2: değer sabit stack dizisi [N x T] ise N kaydet
+                     * (arr[i] sınır-kontrolü için). Annot yok → stack yolu. */
+                    if (d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR) {
+                        g->isimler->dizi_uzunluk =
+                            d->veri.degisken.deger->veri.dizi_olustur.sayi;
+                    }
                 }
             } else {
                 /* Deger yok, sadece annot ile alloca */
@@ -4016,7 +4066,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
          * Statik kapi tip kontrolunde; burada ic blok aynen uretilir. */
         case DUGUM_GUVENSIZ: {
             ScopeMarker m = scope_gir(g);
+            g->guvensiz_derinlik++;   /* D-069 Kat.2: içeride stack sınır-kontrolü atlanır */
             int term = blok_uret(g, d->veri.guvensiz.blok);
+            g->guvensiz_derinlik--;
             scope_cik(g, m);
             return term;
         }
@@ -4571,6 +4623,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Adim 6: capacity API */
     fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
     fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)\n", out);
+    /* D-069 Kategori 2: sabit stack dizi sınır-ihlali panic (OOB → temiz durma) */
+    fputs("declare void @kdl_panik(ptr)\n", out);
+    fputs("@.str.dizi_sinir_panik = private constant "
+          "[26 x i8] c\"dizi sinir ihlali (stack)\\00\"\n", out);
 
     /* Adim 1: CLI args + OTP */
     fputs("declare i32 @kdl_arg_sayi()\n", out);

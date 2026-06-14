@@ -5,7 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) DONE (2026-06-14)
+## D-070 [YÜKSEK] — Sınıf A kabul-ama-çöküyor: dizi-LİTERAL → Dizi<T> param → heap (UB kapandı) (2026-06-14)
+
+**Karar [ETKİ: orta — `src/llvm.c` CAGRI codegen; izole commit].** Güvenlik-iddiası izi
+(D-069 devamı). D-031'de teşhis edilen "8 kabul-ama-çöküyor" deliğinden Sınıf A'nın
+LİTERAL-arg kısmı kapatıldı. C derleyici codegen değişti.
+
+**Hole (D-031 Sınıf A):** `f([1,2,3])` — `f(xs: Dizi<tam32>)` KdlDizi* bekler ama array
+literal STACK `[N x T]` üretir. Callee `xs`'i KdlDizi* sanıp `için`/`[]`/`dizi_boyut` ile
+okur → **misaligned access UB / SEGFAULT** (UBSan: "member access ... requires 8 byte
+alignment"). `--check` geçer (tip sistemi stack/heap temsilini ayırmaz) → görünmez delik,
+#1 iddia "Kırılamaz Güvenlik" ihlali.
+
+**Fix:** CAGRI normal-çağrı arg döngüsünde, callee param[i] tipi `DUGUM_TIP_DIZI` ise
+`g->beklenen_tip = param.tip` (AST düğümü) verilir → `DUGUM_DIZI_OLUSTUR` HEAP `kdl_dizi_olustur`
+üretir (D-044 mekanizması A). `IslevKayit.ast` tüm işlevler için kayıtlı (line 861) → param
+tipleri çağrı yerinde erişilir. **D-044'ün açıkça belirttiği "TÜM Dizi<T> bağlamları heap"
+amacını çağrı-arg için tamamlar** (D-044 yalnız yapı-alanı setter'ını yapmıştı) → yeni DUR-SOR
+DEĞİL, settled option-b'nin tutarlı uygulaması.
+
+**Doğrulama:** 03_kontrol.kem (tek hayatta kalan literal-arg örneği; 36_quicksort silinmiş) →
+ASan/UBSan TEMİZ + rc=151 (120+30+1 doğru sonuç, eskiden UB). test_llvm 235/235; bounds 10/10;
+checker 48/48; ASan E2E denetim **PASS=88 FAIL=0** (03_kontrol allowlist'ten çıktı → korumalı
+PASS; ALLOW 8→6). 0 uyarı.
+
+**DEĞİŞKEN-arg → ÇÖZÜLDÜ (Mehmet kararı: checker reddi / G003).** `değişken xs=[..]; f(xs)` —
+stack-array DEĞİŞKENİ Dizi<T> param'a. Literal-route uygulanamaz (arg TANIMLAYICI). Mehmet
+**checker-reddi**ni seçti: C tip denetleyici (tip_kontrol.c CAGRI pas-2) — param `TIP_DIZI`
+iken arg TANIMLAYICI ve sembolün ast_dugumu annotasyonsuz `değişken x=[literal]`
+(DUGUM_DIZI_OLUSTUR) ise → **G003** ("stack dizi degiskeni Dizi<T> parametresine gecirilemez;
+annotasyonlu heap Dizi kullanin"). Çökme yerine compile-time red (çökmezlik #1). Programcı
+`değişken xs: Dizi<T> = [..]` (heap) kullanır. 35/40 artık --check'te G003 reddi (codegen'e
+ulaşmaz; --llvm bypass ederse ASan-allowlist'te kalır = "checker'ı atladın" = güvensiz-eşi).
+Doğrulama: 35/40→G003; 03_kontrol (literal)→OK; annotasyonlu→OK; ornekler 42/42; korpus 48/48;
+test_llvm 235/235; bounds harness vaka9 (G003 reddi) 11/11.
+**Self-host mirror (follow-up, TC9):** checker.kem'de G003 = Dizi-param + stack-array-var
+izleme infra'sı gerek (fn_ptip "?" bileşik tipte; ayrı flag). Gating parite kırılmıyor
+(42/42 korunur — hiç geçerli örnek G003 tetiklemiyor). Sınıf B (lambda) = V2 (D-004), ayrı.
+
+---
+
+## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) + 2 (stack) DONE (2026-06-14)
 
 **Bağlam (firsthand doğrulandı):** Dizi indekslemenin iki yolu da bellek-güvensizdi:
 - **Heap** (`kdl_dizi_al_tam/tam64/ptr`, kdl_runtime.c:557-570): sınır kontrolü VARDI ama
@@ -37,14 +77,36 @@ sanıyordu). Açık sınır kontrolü eklendi (`p>=boyut→ver 0`, `p+1<boyut ve
 kısa-devre). Davranış korundu, bellek-güvenli oldu. Bu tam da #1-iddianın yakalaması gereken
 sınıf.
 
-**KATEGORİ 2 (stack `[N×T]`) — BEKLEMEDE [YÜKSEK — codegen]:** `DUGUM_INDEKS` GEP'ten önce
-`icmp uge idx, N` (unsigned → negatif+büyük) → br→panic. Engel: `LlvmIsim` sabit-dizi
-uzunluğu (N) TAŞIMIYOR → eklenecek. Ayrı izole commit + ASan + orkestratör doğrulaması.
+**KATEGORİ 2 (stack `[N×T]`) — DONE [YÜKSEK — codegen, commit ayrı]:** `LlvmIsim.dizi_uzunluk`
+eklendi; DEGISKEN annot-yok dalı değer `DUGUM_DIZI_OLUSTUR` ise N kaydeder. `DUGUM_INDEKS`
+stack yolu GEP'ten ÖNCE: `icmp uge i64 idx, N` (unsigned → negatif=dev-unsigned + i>=N tek
+seferde) → `br`→`bb<oob>`(call @kdl_panik + unreachable) / `bb<ok>`(GEP+load). IR header'a
+`declare void @kdl_panik(ptr)` + `@.str.dizi_sinir_panik` global. Etiketler `%bbN` (hoist_renumber
+`%<digit>` dokunmaz → D-041 güvenli). **Stack OOB artık segfault DEĞİL → panic.**
+Doğrulama: vaka5/6 (stack OOB/negatif → PANIC, eskiden rc=139); test_llvm **235/235**;
+opt -passes=verify PASS; ASan temiz (panic erişimden önce → 0 OOB raporu); 0 uyarı.
+**Opt-out (perf, Rust modeli):** `LlvmGen.guvensiz_derinlik` — `güvensiz` blok içinde stack
+sınır-kontrolü ATLANIR (vaka8: güvensiz arr[i] → 0 panic-IR; dışında → kontrollü). Varsayılan
+güvenli, opt-out açık+işaretli+programcı sorumluluğunda.
 
-**KATEGORİ 3 (ham `*T` bölge-tabanı) — BEKLEMEDE [İNCELEME]:** DUGUM_INDEKS:1958 pointee_elem
-yolu uzunluk bilgisi taşımıyor. Karar: ya bölge-container uzunluğu varsa kontrol et, ya da
-raw-`*T` indekslemesini yalnız `güvensiz` bloğunda serbest bırak (tip denetleyici dışını
-reddetsin). Ajan incelemesi sürüyor.
+**KATEGORİ 3 (ham `*T` bölge-tabanı) — KARAR: güvensiz-only opt-out, ZATEN ENFORCE [inceleme
+tamam]:** Firsthand bulgu: (1) bölge-container UZUNLUK TAŞIMIYOR — `kdl_bolge_ayir(a, boyut)`
+ham `void*` taban döndürür; `*T` çıplak pointer, boyut yok → kontrol edilemez. (2) Ham `*T`
+indekslemesi ZATEN `güvensiz`-only: C checker DUGUM_INDEKS (tip_kontrol.c:3295-3305)
+`TIP_POINTER` indeksini `guvensiz_baglam==0` iken → **G001** ("*T pointer indeksleme yalniz
+guvensiz blok icinde"). Bu tam da spec'in "varsayılan güvenli + açık opt-out" modeli — ZATEN
+var. (3) Cat2 codegen'i bölge-`*T` yolunu kontrolsüz bırakır (stack_uzunluk=0 yalnız sabit
+`[N×T]` literalinde >0; region `*T` → 0 → ham GEP). Tutarlı.
+
+**Karar:** Ham `*T` region indekslemesi = `güvensiz`-only (G001 zaten enforce; opt-out açık+
+işaretli+programcı sorumluluğunda — Rust modeli). Kontrol edilemez (uzunluk yok) ama erişim
+yalnız güvensiz blokta. Uzunluk-taşıyan region handle (fat pointer) → ileri iş (D-070+).
+Kod değişikliği GEREKMEZ (model zaten doğru). Self-host checker'da G001 henüz yok = ayrı TC
+(güvensiz/pointer); bu DEĞİL — prod C checker zaten enforce ediyor.
+
+**SONUÇ:** D-069 üç kategori de kapandı (Cat1 heap + Cat2 stack implemente; Cat3 karar+zaten-
+enforce). Dizi-sınır bellek-güvenliği boyutu TAMAM. Kalan güvenlik-iddiası izi (D-070+):
+8 "kabul-ama-çöküyor" deliği + scoping false-negative + NULL-dizi (d==NULL) + region fat-pointer.
 
 **Doğrulama:** Yeni `make calistir_dizi_sinir_test` (test_tumu'ya bağlı) → **6/6** (heap-OOB-oku/
 negatif/yaz/ptr → PANIC; geçerli → rc=60; D-065 koruması → segfault yok). `test_llvm` **235/235**

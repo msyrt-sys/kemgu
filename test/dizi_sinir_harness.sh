@@ -68,10 +68,54 @@ panic_bekle vaka4_heap_ptr_oob 'işlev main() -> tam32 {
     değişken s: metin = dizi_al(d, 5);
     ver 0;
 }'
-deger_bekle vaka7_gecerli 60 'işlev main() -> tam32 {
+panic_bekle vaka5_stack_oob_oku 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    ver arr[5];
+}'
+panic_bekle vaka6_stack_negatif 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    ver arr[0 - 1];
+}'
+deger_bekle vaka7_heap_gecerli 60 'işlev main() -> tam32 {
     değişken d: Dizi<tam32> = [10, 20, 30];
     ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2);
 }'
+deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
+    değişken arr = [10, 20, 30];
+    ver arr[0] + arr[1] + arr[2];
+}'
+# vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
+opt_out_kontrol() {
+    local ad="vaka8_guvensiz_optout"
+    printf '%s\n' 'işlev main() -> tam32 {
+    değişken arr = [10, 20, 30];
+    değişken r: tam32 = 0;
+    güvensiz { r = arr[1]; }
+    ver r;
+}' > "$TMP/$ad.kem"
+    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    local pc; pc=$(grep -c 'call void @kdl_panik' "$TMP/$ad.ll")
+    clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
+    "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
+    if [ "$pc" -eq 0 ] && [ "$rc" -eq 20 ]; then
+        echo "  ✅ $ad: sınır-kontrol IR yok + rc=20 (opt-out + geçerli)"; pass=$((pass+1));
+    else echo "  🔴 $ad: panik-IR=$pc rc=$rc (0 + 20 bekle)"; fail=$((fail+1)); fi
+}
+opt_out_kontrol
+# vaka9: stack-array DEĞİŞKENİ Dizi<T> param'a → checker G003 reddi (çökmeden ÖNCE).
+g003_reddi() {
+    local ad="vaka9_g003_reddi"
+    printf '%s\n' 'işlev topla(xs: Dizi<tam32>, n: tam32) -> tam32 { ver dizi_al(xs, 0); }
+işlev main() -> tam32 {
+    değişken xs = [10, 20, 12];
+    ver topla(xs, 3);
+}' > "$TMP/$ad.kem"
+    "$KEMGU" --checkdump "$TMP/$ad.kem" 2>/dev/null > "$TMP/$ad.out"
+    if grep -q '^G003' "$TMP/$ad.out"; then
+        echo "  ✅ $ad: G003 reddi (compile-time, çökme yok)"; pass=$((pass+1));
+    else echo "  🔴 $ad: G003 bekleniyordu, çıktı: $(head -1 "$TMP/$ad.out")"; fail=$((fail+1)); fi
+}
+g003_reddi
 segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
 
 echo "=== dizi sınır-güvenliği: $pass/$((pass+fail)) ==="
