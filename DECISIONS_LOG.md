@@ -5,6 +5,28 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-084 — AŞAMA 5 CG9a: alloca-hoist ön-pass → LEXER BOOTSTRAP TAM (46/46 birebir) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** D-083'te teşhis edilen alloca-in-loop
+yığın taşması düzeltildi. **alloca-hoist ön-pass:** `alloca_hoist_pass` işlev gövdesini gezip TÜM
+annotasyonlu DEGISKEN alloca'larını entry bloğuna çıkarır (döngü-içi `değişken` artık bir kez
+alloca → yığın sabit). `pa_node`/`pa_reg`/`pa_base` (düğüm→entry-reg eşlemi; shadow-güvenli, düğüm
+anahtarlı). DEGISKEN handler: annotasyonlu → hoist-edilmiş reg'i kullan (alloca yok), yalnız store;
+annotasyonsuz → inline (eski yol; self-host hepsi annotasyonlu, korpus nadir). C codegen D-041
+hoist_renumber ile AYNI amaç, farklı mekanizma (ön-pass vs tmpfile-buffer-renumber).
+
+**🎉🎉 LEXER BOOTSTRAP TAM — 46/46 BİREBİR (büyükler dahil):** codegen.exe ile derlenen lexer,
+parser.kem (15558 token), checker.kem (26398), **codegen.kem (26122 — kendini lex'ler)** dahil
+TÜM self-host kaynaklarında C-codegen-built lexer ile byte-identik. İlk TAM self-host fixpoint
+bileşeni: KEMGU-yazılı codegen'in ürettiği makine kodu, C derleyiciyle aynı davranan lexer veriyor.
+
+**Doğrulama:** oracle 56/56 (regresyon yok); `test/codegen_bootstrap_harness.sh` (KEMGU-codegen
+lexer vs C-codegen lexer diff) Makefile `calistir_codegen_bootstrap` → `test_tumu`. **Sonraki:**
+parser.kem bootstrap (--ast paritesi), sonra checker.kem (--checkdump), sonra codegen.kem
+self-compile (Aşama 5 tam fixpoint: codegen.exe codegen.kem'i derler → codegen2.exe → idempotent).
+
+---
+
 ## D-083 — AŞAMA 3/5 CG7d + LEXER BOOTSTRAP: önek-builtin + bool-lit fix + alloca-hoist teşhisi (2026-06-14)
 
 **Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** İlk gerçek bootstrap denemesi:

@@ -47,6 +47,9 @@ yapı Ayr {
     bb_term: tam32;      // CG4: mevcut blok terminatör (ret/br) ile bitti mi (1=evet)
     fn_ad: Dizi<metin>;  // CG6: işlev adı (ön-pass imza tablosu — CAGRI dönüş tipi)
     fn_ret: Dizi<metin>; // CG6: işlev dönüş LLVM tipi
+    pa_node: Dizi<tam32>;// CG9: hoist-edilen DEGISKEN düğüm idx'i (alloca entry'de)
+    pa_reg: Dizi<metin>; // CG9: o DEGISKEN'in entry-alloca reg'i
+    pa_base: tam32;      // CG9: mevcut işlevin pa_* slice başlangıcı
     son_tip: metin;      // CG6: son ifade_uret sonucunun LLVM tipi
     cur_ret: metin;      // CG6: mevcut işlevin dönüş LLVM tipi (ver için)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
@@ -2407,9 +2410,14 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
-        değişken a: tam32 = yeni_reg(p);
-        değişken areg: metin = reg_str(a);
-        yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(vtip); yb(10);
+        // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
+        değişken areg: metin = "";
+        eğer annot == 1 { areg = pa_reg_bul(p, idx); }
+        eğer metin_esit(areg, "") {
+            değişken a: tam32 = yeni_reg(p);
+            areg = reg_str(a);
+            yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(vtip); yb(10);
+        }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
         ver 0;
@@ -2465,6 +2473,40 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
 }
 
 // İşlev → define i32 @ad() { ... }. CG1: parametresiz; gövde = BLOK çocuğu.
+// CG9: hoist-edilen DEGISKEN düğümünün entry-alloca reg'i ("" = hoist edilmedi).
+işlev pa_reg_bul(p: &değişken Ayr, node: tam32) -> metin {
+    değişken i: tam32 = dizi_boyut(p.pa_node) - 1;
+    iken i >= p.pa_base {
+        eğer dizi_al(p.pa_node, i) == node { ver dizi_al(p.pa_reg, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+// CG9: alloca-hoist ön-pass — işlev gövdesindeki TÜM annotasyonlu DEGISKEN alloca'larını
+// entry bloğuna çıkar (döngü-içi alloca → yığın taşması önlenir; C codegen D-041 ile aynı amaç).
+işlev alloca_hoist_pass(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "DEGISKEN") {
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        eğer cs >= 2 {   // annotasyonlu → hoist
+            değişken tip: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = alloca "); yaz_str(tip); yb(10);
+            dizi_ekle(p.pa_node, idx);
+            dizi_ekle(p.pa_reg, rs);
+        }
+        ver 0;   // değer alt-ifadesinde DEGISKEN olmaz
+    }
+    // konteyner deyimler: çocuklara in (BLOK/EGER/IKEN gövdeleri)
+    eğer metin_esit(ad, "BLOK") veya metin_esit(ad, "EGER") veya metin_esit(ad, "IKEN") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs2: tam32 = dizi_al(p.a_cs, idx);
+        değişken i: tam32 = 0;
+        iken i < cs2 { alloca_hoist_pass(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+    }
+    ver 0;
+}
 // CG6: PARAMETRE'nin LLVM tipi (çocuk[0]=tip; kendin/tipsiz → i32).
 işlev param_tip(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) > 0 { ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
@@ -2490,6 +2532,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
     p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
+    p.pa_base = dizi_boyut(p.pa_node); // CG9: hoist-alloca slice'ı
     p.cur_ret = islev_donus_tip(p, idx);   // CG6: dönüş tipi (ver için)
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
@@ -2526,7 +2569,14 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         i = i + 1;
     }
-    // 3) Gövde (BLOK çocuğu)
+    // 3) CG9: alloca-hoist — gövdedeki tüm annotasyonlu DEGISKEN alloca'larını entry'e çıkar
+    i = 0;
+    iken i < cs {
+        değişken hc: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, hc), "BLOK") { alloca_hoist_pass(p, hc); }
+        i = i + 1;
+    }
+    // 4) Gövde (BLOK çocuğu)
     i = 0;
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
@@ -2588,6 +2638,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cg_aelem: [], beklenen_elem: "", son_elem: "",
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32",
+        pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: []
     };
