@@ -23,10 +23,12 @@ mkdir -p "$TMP"
 # Bilinen başarısızlıklar (kök-neden + takip). Bunlar ASan-temiz DEĞİL ama
 # nedeni belgeli — denetimi kızartmasınlar diye dışlanır (bkz. DECISIONS_LOG D-031).
 #   Lambda/closure: D-004 ile V2'ye ERTELENDİ (fonksiyon-değer codegen yok).
-#   Dizi-literal→Dizi<T> param: stack [N x T] vs dinamik KdlDizi* temsil
-#     uyumsuzluğu — temsil kararı Mehmet'e açık (DUR-SOR).
+#   Sınıf A KISMEN kapandı (D-070): LİTERAL-arg `f([..])` → heap (03_kontrol PASS,
+#     allowlist'ten çıktı; 36_quicksort_stub silinmiş). Kalan: stack-array DEĞİŞKENİ
+#     `değişken xs=[..]; f(xs)` → Dizi<T> param (35/40) = stack↔KdlDizi temsil
+#     uyumsuzluğu, DUR-SOR (Mehmet'te — whole-program flow veya temsil kararı).
 ALLOWLIST="04_islev 10_lambda 25_closure_capture 42_lambda_hesap \
-           03_kontrol 35_binary_search 36_quicksort_stub 40_dizi_islemler"
+           35_binary_search 40_dizi_islemler"
 
 pass=0; fail=0; skip=0; allow=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do

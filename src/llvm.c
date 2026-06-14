@@ -3016,7 +3016,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (!bekle && ik && ik->ast) {
                         bekle = generic_param_beklenen(g, ik->ast, i);
                     }
+                    /* D-070 (Sınıf A): arg `Dizi<T>` parametresine gidiyorsa
+                     * beklenen_tip=Dizi<T> AST düğümü ver → `[..]` literal HEAP
+                     * KdlDizi olur (stack [N x T] değil). Aksi: callee xs'i KdlDizi*
+                     * sanıp stack-array'i okur → misaligned UB/SEGFAULT. D-044'ün
+                     * "tüm Dizi<T> bağlamları heap" amacını çağrı-arg'a tamamlar. */
+                    const Dugum *cagri_eski_bt = g->beklenen_tip;
+                    if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
+                        i < ik->ast->veri.islev.param_sayi) {
+                        const Dugum *pp = ik->ast->veri.islev.parametreler[i];
+                        if (pp && pp->veri.parametre.tip &&
+                            pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
+                            g->beklenen_tip = pp->veri.parametre.tip;
+                        }
+                    }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
+                    g->beklenen_tip = cagri_eski_bt;
                     if (bekle && strcmp(args[i].tip, bekle) != 0 &&
                         (strcmp(bekle, "i64") == 0 ||
                          strcmp(bekle, "i32") == 0 ||
