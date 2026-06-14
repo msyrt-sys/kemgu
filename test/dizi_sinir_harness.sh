@@ -130,6 +130,30 @@ işlev main() -> tam32 {
     değişken k: Kap = Kap { xs: [1, 2, 3] };
     ver k.xs[9];
 }'
+# D-086: &Dizi<T> referans param — girişte deref → normal heap dizi. dizi_al/
+# dizi_boyut/[] tutarlı (eskiden çift-pointer çöp/PANIK; dizi_boyut(&Dizi) T001).
+deger_bekle vaka16_ref_dizi_al 7 'işlev oku(xs: &Dizi<tam32>) -> tam32 { ver dizi_al(xs, 0); }
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [7, 8, 9];
+    ver oku(&a);
+}'
+deger_bekle vaka17_ref_dizi_boyut 3 'işlev say(xs: &Dizi<tam32>) -> tam32 { ver dizi_boyut(xs); }
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [7, 8, 9];
+    ver say(&a);
+}'
+deger_bekle vaka18_ref_indeks 8 'işlev oku(xs: &Dizi<tam32>) -> tam32 { ver xs[1]; }
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [7, 8, 9];
+    ver oku(&a);
+}'
+# &Dizi mutasyonu çağırana yansır (paylaşılan descriptor).
+deger_bekle vaka19_ref_mutasyon 99 'işlev yaz(xs: &değişken Dizi<tam32>) -> tam32 { dizi_yaz(xs, 0, 99); ver 0; }
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [7, 8, 9];
+    değişken r: tam32 = yaz(&değişken a);
+    ver dizi_al(a, 0);
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"

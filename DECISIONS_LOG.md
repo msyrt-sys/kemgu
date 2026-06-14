@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-086 — [YÜKSEK] `&Dizi<T>` referans param: codegen deref + built-in tip-kontrol tutarlılığı (2026-06-14)
+
+**Karar [ETKİ: codegen doğruluk + tip-kontrol tutarlılık; izole commit].** İki
+yüzlü `&Dizi<T>` hatası:
+1. **Codegen (çöp/PANIK):** `&a` çağrı argümanı, heap dizi değişkeninin SLOT
+   adresini (`KdlDizi**` — çift pointer) geçiyor; callee bunu doğrudan `KdlDizi*`
+   sanıp `dizi_al`/`[]` ile indeksliyordu → descriptor'ın kendisini veri okuyordu.
+2. **Tip-kontrol (tutarsız):** `dizi_al(&Dizi)` SESSİZCE kabul (t_hata, rapor yok),
+   `dizi_boyut(&Dizi)` T001 reddi — aynı argüman biçimi iki built-in'de farklı.
+
+**Çözüm:**
+- **llvm.c (param girişi):** `&Dizi<T>` / `&değişken Dizi<T>` param girişte BİR KEZ
+  deref edilir (`load ptr` → `KdlDizi*`) ve alloca'ya o yazılır → sonrası NORMAL
+  heap dizi (dinamik_dizi_mi=1, eleman tipi referans hedefinden). `dizi_al`/
+  `dizi_yaz`/`dizi_boyut`/`[]` ek deref gerektirmez. Mutasyon (`dizi_yaz`) paylaşılan
+  descriptor üzerinden çağırana yansır (referans semantiği korunur).
+- **tip_kontrol.c:** ortak `dizi_arg_coz(t)` — `Dizi<T>` ya da `&Dizi<T>` →
+  altındaki Dizi tipini (referansı soyarak) döner. Tüm dizi built-in'leri
+  (ekle/al/yaz/boyut/kapasite/kapasite_ayarla) bunu kullanır → `&Dizi` tutarlı kabul.
+
+**Doğrulama:** `dizi_sinir_harness.sh` +4 vaka (ref dizi_al / dizi_boyut / [] /
+mutasyon-çağırana-yansır) → 23/23. `test/ornekler/dizi_referans_param.kem`
+(exit 42, ASan auto-discovery). Tüm suite yeşil (tip_kontrol dahil). `asan_e2e`
+PASS=93 FAIL=0. 0 uyarı. **Sınır:** `&Dizi` param girişte deref edildiği için
+`xs = başka_dizi` (referansı yeniden bağlama) callee-yerel kalır (çağıranın slot'u
+değişmez) — KEMGU referans semantiğinde nadir; içerik mutasyonu (asıl sözleşme)
+çalışır. Lokal `değişken r: &Dizi = &a` (param olmayan) bu commit'te kapsam dışı.
+
 ## D-085 — [YÜKSEK] `[]` türetilmiş heap dizi tabanı (yapı-alanı / çağrı-dönüşü) — okuma+yazma heap-route (2026-06-14)
 
 **Karar [ETKİ: codegen doğruluk; izole commit].** `[]` indeks operatörü yalnız
