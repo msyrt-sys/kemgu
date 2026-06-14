@@ -45,6 +45,11 @@ yapı Ayr {
     son_tip: metin;      // CG6: son ifade_uret sonucunun LLVM tipi
     cur_ret: metin;      // CG6: mevcut işlevin dönüş LLVM tipi (ver için)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
+    yapi_ad: Dizi<metin>;    // CG7b: yapı adları
+    yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
+    yapi_acount: Dizi<tam32>;// CG7b: alan sayısı
+    alan_ad: Dizi<metin>;    // CG7b: alan adları (düz, yapı-bazlı gruplu)
+    alan_tip: Dizi<metin>;   // CG7b: alan LLVM tipleri (düz)
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1639,12 +1644,17 @@ işlev cg_var_tip_bul(p: &değişken Ayr, ad: metin) -> metin {
 // CG6: KEMGU tip-düğümü → LLVM tip metni. mantıksal=i32 (CG2/CG4 bool mantığıyla tutarlı).
 işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver "i32"; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver "i32"; }  // ref/ptr/dizi → CG7b/CG8
+    değişken ta: metin = dizi_al(p.a_ad, tip_idx);
+    // Referans/pointer/dizi → ptr (CG7b: &Yapi=ptr, Dizi<T>=heap ptr)
+    eğer metin_esit(ta, "TIP_REFERANS") veya metin_esit(ta, "TIP_POINTER")
+         veya metin_esit(ta, "TIP_DIZI") { ver "ptr"; }
+    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver "i32"; }  // TIP_KULLANICI (generic/qualified) → CG sonrası
     değişken t: metin = dizi_al(p.a_deg, tip_idx);
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
     eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver "i16"; }
     eğer metin_esit(t, "tam64") veya metin_esit(t, "dtam64") { ver "i64"; }
     eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
+    eğer yapi_var_mi(p, t) { ver metin_birlestir("%", t); }   // CG7b: yapı → %Ad
     ver "i32";   // tam32/dtam32/mantıksal/karakter/boş → i32
 }
 // CG6: iki operand tipini birleştir (KEMGU örtük-dönüşüm yok → biri i32-literal-default ise diğeri).
@@ -1778,6 +1788,98 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_yazdir_satir()"); yb(10);
     yaz_str("declare i32 @kdl_oku_karakter()"); yb(10);
     yaz_str("declare void @kdl_panik(ptr)"); yb(10);
+    ver 0;
+}
+// ============================================================================
+// CG7b — yapı (struct): tablo + tip-def + oluştur/erişim.
+// ============================================================================
+işlev yapi_idx(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.yapi_ad) {
+        eğer metin_esit(dizi_al(p.yapi_ad, i), ad) { ver i; }
+        i = i + 1;
+    }
+    ver -1;
+}
+işlev yapi_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal { ver yapi_idx(p, ad) >= 0; }
+// Alan adı → yapı içi 0-tabanlı indeks (-1 yok).
+işlev yapi_alan_idx(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver -1; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) { ver j; }
+        j = j + 1;
+    }
+    ver -1;
+}
+// Alan adı → LLVM tipi.
+işlev yapi_alan_tip(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver "i32"; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) { ver dizi_al(p.alan_tip, base + j); }
+        j = j + 1;
+    }
+    ver "i32";
+}
+// Ön-pass: üst-düzey YAPI tanımları → tablo (önce adlar, sonra alanlar — iç içe yapı ref'i için).
+işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    // Pass A: adlar
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "YAPI") { dizi_ekle(p.yapi_ad, dizi_al(p.a_deg, c)); }
+        i = i + 1;
+    }
+    // Pass B: alanlar (abase/acount + alan_ad/alan_tip)
+    i = 0;
+    iken i < cs {
+        değişken c2: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c2), "YAPI") {
+            dizi_ekle(p.yapi_abase, dizi_boyut(p.alan_ad));
+            değişken ccb: tam32 = dizi_al(p.a_cb, c2);
+            değişken ccs: tam32 = dizi_al(p.a_cs, c2);
+            değişken say: tam32 = 0;
+            değişken j: tam32 = 0;
+            iken j < ccs {
+                değişken ac: tam32 = dizi_al(p.cocuk, ccb + j);
+                eğer metin_esit(dizi_al(p.a_ad, ac), "ALAN") {
+                    dizi_ekle(p.alan_ad, dizi_al(p.a_deg, ac));
+                    dizi_ekle(p.alan_tip, ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ac))));
+                    say = say + 1;
+                }
+                j = j + 1;
+            }
+            dizi_ekle(p.yapi_acount, say);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// Yapı tip tanımlarını yaz: %Ad = type { t0, t1, ... }
+işlev yapi_tip_emit(p: &değişken Ayr) -> tam32 {
+    değişken k: tam32 = 0;
+    iken k < dizi_boyut(p.yapi_ad) {
+        yaz_str("%"); yaz_str(dizi_al(p.yapi_ad, k)); yaz_str(" = type { ");
+        değişken base: tam32 = dizi_al(p.yapi_abase, k);
+        değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+        değişken j: tam32 = 0;
+        iken j < cnt {
+            eğer j > 0 { yaz_str(", "); }
+            yaz_str(dizi_al(p.alan_tip, base + j));
+            j = j + 1;
+        }
+        yaz_str(" }"); yb(10);
+        k = k + 1;
+    }
     ver 0;
 }
 // CG6: çağrılan işlevin dönüş LLVM tipi (ön-pass tablosu).
@@ -1947,6 +2049,54 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         p.son_tip = "i32";
         ver "0";   // ~ / deref* / & / &degisken → CG sonrası (pointer/güvensiz)
+    }
+    eğer metin_esit(ad, "YAPI_OLUSTUR") {
+        değişken yad: metin = dizi_al(p.a_deg, idx);
+        değişken lltip: metin = metin_birlestir("%", yad);
+        değişken ap: tam32 = yeni_reg(p);
+        değişken apr: metin = reg_str(ap);
+        yaz_str("  "); yaz_str(apr); yaz_str(" = alloca "); yaz_str(lltip); yb(10);
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken i: tam32 = 0;
+        iken i < cs {
+            değişken an: tam32 = dizi_al(p.cocuk, cb + i);   // ALAN_ATAMA
+            değişken alan_ad_s: metin = dizi_al(p.a_deg, an);
+            değişken fidx: tam32 = yapi_alan_idx(p, yad, alan_ad_s);
+            değişken ftip: metin = yapi_alan_tip(p, yad, alan_ad_s);
+            değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, an)));
+            değişken g: tam32 = yeni_reg(p);
+            değişken gr: metin = reg_str(g);
+            yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr "); yaz_str(lltip); yaz_str(", ptr ");
+            yaz_str(apr); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
+            yaz_str("  store "); yaz_str(ftip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(gr); yb(10);
+            i = i + 1;
+        }
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = load "); yaz_str(lltip); yaz_str(", ptr "); yaz_str(apr); yb(10);
+        p.son_tip = lltip;
+        ver rs;
+    }
+    eğer metin_esit(ad, "ERISIM") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken alan_ad_s: metin = dizi_al(p.a_deg, idx);
+        değişken nesne: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
+        değişken ntip: metin = p.son_tip;
+        // CG7b: struct VALUE ("%..." ile başlar) → extractvalue. ptr (referans) → CG7c.
+        eğer bayt(ntip, 0) == 37 {   // '%'
+            değişken yad: metin = metin_kes(ntip, 1, metin_uzunluk(ntip) - 1);
+            değişken fidx: tam32 = yapi_alan_idx(p, yad, alan_ad_s);
+            değişken ftip: metin = yapi_alan_tip(p, yad, alan_ad_s);
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = extractvalue "); yaz_str(ntip); yaz_str(" "); yaz_str(nesne);
+            yaz_str(", "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
+            p.son_tip = ftip;
+            ver rs;
+        }
+        p.son_tip = "i32";   // ptr erişimi → CG7c
+        ver "0";
     }
     eğer metin_esit(ad, "TIP_DONUSTUR") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -2132,8 +2282,10 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 }
 // Program → IR başlık + her üst-düzey ISLEV.
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
-    imza_topla(p, kok);   // CG6: önce imzaları topla (CAGRI dönüş tipi)
+    yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
+    imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
     yaz_str("target triple = "); yb(34); yaz_str("x86_64-pc-windows-gnu"); yb(34); yb(10); yb(10);
+    yapi_tip_emit(p);        // CG7b: %Ad = type { ... }
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
@@ -2162,7 +2314,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cg_ad: [], cg_areg: [], cg_atip: [], cg_base: 0,
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32",
-        str_deg: []
+        str_deg: [],
+        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: []
     };
 }
 

@@ -1,0 +1,1 @@
+yapı N { x: tam32; } işlev yap() -> N { ver N { x: 42 }; } işlev main() -> tam32 { değişken n: N = yap(); ver n.x; }

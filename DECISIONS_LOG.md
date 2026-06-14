@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-080 — AŞAMA 3 CG7b: yapı (struct) by-value — tip-def + oluştur + erişim (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Yapı tablosu
+(`yapi_ad/yapi_abase/yapi_acount/alan_ad/alan_tip` — checker.kem deseni) + ön-pass `yapi_topla`
+(iki sub-pass: önce adlar, sonra alanlar → iç içe yapı ref'i çözülür) + `yapi_tip_emit`
+(`%Ad = type { t0, ... }`).
+
+**Bulgu:** sade yapı tipi (`Nokta`) parser'da **TIP_BASIT** (a_deg="Nokta"), TIP_KULLANICI DEĞİL
+(o yalnız generic/qualified). ll_tip: TIP_BASIT + `yapi_var_mi` → `%Ad`; TIP_REFERANS/POINTER/DIZI
+→ `ptr`. **YAPI_OLUSTUR (by-value):** `alloca %T` + her ALAN_ATAMA için `getelementptr+store`
+(alan indeksi ADLA bulunur → alan-sırası bağımsız) + `load %T` (by-value akış). **ERISIM (value):**
+nesne tipi `%...` ile başlıyorsa `extractvalue` (ptr/referans erişimi → CG7c). Yapı değişkeni/
+dönüşü generic CG3/CG6 makinesiyle çalışır (vtip=%Ad, cur_ret=%Ad).
+
+**Doğrulama:** test/cg_korpus 44 program (+5 CG7b: nokta/3-alan/by-value-dönüş/karışık-tip-tam64/
+alan-sıra-bağımsız). 44/44 exit eşdeğer. **Sınır:** by-REFERANS (`&Yapi` param + alan mutasyonu)
+→ CG7c (self-host'un Ayr'ı her yerde `&değişken Ayr` — kritik). **Sonraki:** CG7c — &T param +
+adres-al (&var) + ptr erişim/atama (GEP+load/store).
+
+---
+
 ## D-079 — AŞAMA 3 CG7a: metin literali + runtime builtin + declare header (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** D-072 CG7 planının metin
