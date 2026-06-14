@@ -3813,17 +3813,22 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 const Dugum *hedef = d->veri.atama.hedef;
                 int heap_dizi = 0;
                 const char *pointee_elem = NULL;
+                int stack_uzunluk = 0;   /* D-069 Kat.2: sabit stack dizi N (>0 → sınır-kontrol) */
                 if (hedef->veri.indeks.nesne &&
                     hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                     LlvmIsim *vi = isim_bul(g,
                         hedef->veri.indeks.nesne->veri.tanimlayici.metin,
                         hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
                     if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
-                    /* v1 bölge-container: *T tabani — eleman tipi
-                     * POINTEE'den (RHS tipi tam8/tam64 hedefte yanlis
-                     * genislik uretirdi). */
-                    else if (vi && vi->pointee_llvm_tip) {
-                        pointee_elem = vi->pointee_llvm_tip;
+                    else if (vi) {
+                        /* v1 bölge-container: *T tabani — eleman tipi
+                         * POINTEE'den (RHS tipi tam8/tam64 hedefte yanlis
+                         * genislik uretirdi). */
+                        if (vi->pointee_llvm_tip) {
+                            pointee_elem = vi->pointee_llvm_tip;
+                        }
+                        /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
+                        stack_uzunluk = vi->dizi_uzunluk;
                     }
                 }
                 if (heap_dizi) {
@@ -3836,6 +3841,27 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     IfadeSonuc idx = ifade_uret(g,
                         hedef->veri.indeks.indeks, "i64");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
+                    /* D-069 Kat.2 (yazma aynası): sabit stack dizi sınır-kontrolü
+                     * GEP+store'dan ÖNCE (okuma yolunun aynısı — yazma sessiz
+                     * stack taşmasına izin veriyordu). `icmp uge` unsigned →
+                     * negatif (dev unsigned) + i>=N tek seferde. OOB → kdl_panik
+                     * (temiz durma). güvensiz blok içinde ATLANIR (programcı
+                     * sorumluluğunda). */
+                    if (stack_uzunluk > 0 && g->guvensiz_derinlik == 0) {
+                        int c_r = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = icmp uge i64 %%%d, %d\n",
+                                c_r, idx_r, stack_uzunluk);
+                        int L_oob = yeni_label(g);
+                        int L_ok = yeni_label(g);
+                        fprintf(g->out,
+                            "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                            c_r, L_oob, L_ok);
+                        fprintf(g->out, "bb%d:\n", L_oob);
+                        fprintf(g->out,
+                            "  call void @kdl_panik(ptr @.str.dizi_sinir_panik)\n");
+                        fprintf(g->out, "  unreachable\n");
+                        fprintf(g->out, "bb%d:\n", L_ok);
+                    }
                     IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                               pointee_elem);
                     const char *elem_ir = pointee_elem ? pointee_elem

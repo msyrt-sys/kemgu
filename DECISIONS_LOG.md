@@ -374,6 +374,19 @@ opt -passes=verify PASS; ASan temiz (panic erişimden önce → 0 OOB raporu); 0
 sınır-kontrolü ATLANIR (vaka8: güvensiz arr[i] → 0 panic-IR; dışında → kontrollü). Varsayılan
 güvenli, opt-out açık+işaretli+programcı sorumluluğunda.
 
+**FOLLOW-UP — Cat2 stack YAZMA deliği kapandı (2026-06-14):** İlk Cat2 implementasyonu yalnız
+**OKUMA** yolunu (`DUGUM_INDEKS` → GEP+load) sınır-kontrol etti; **YAZMA** yolu (`DUGUM_ATAMA`
+hedefi `DUGUM_INDEKS`, `arr[i]=v`, src/llvm.c) kontrolsüz GEP+store yapıyordu → sessiz stack
+taşması (kabul-ama-sessizce-yanlış: `arr[10]=9` rc=0). Heap yazma (D-083 `kdl_dizi_yaz_*`)
+zaten runtime'da kontrollüydü; delik yalnız stack yazma codegen'ineydi. **Fix:** yazma dalında
+`LlvmIsim.dizi_uzunluk` ile okuma yolunun aynısı GEP+store'dan ÖNCE (`icmp uge i64 idx, N` →
+`@kdl_panik(@.str.dizi_sinir_panik)` + unreachable). `güvensiz` opt-out yazmada da geçerli
+(`guvensiz_derinlik==0` gate). Bölge-`*T` yolu (`pointee_elem`) `dizi_uzunluk=0` → kontrolsüz
+(uzunluk yok, Cat3 ile tutarlı). **Doğrulama:** harness'a vaka5b/6b (OOB/negatif yazma →
+PANIC), vaka7c (geçerli yazma → rc=9), vaka8b (güvensiz yazma → 0 panic-IR) eklendi →
+`calistir_dizi_sinir_test` **15/15**; test_llvm **235/235**; codegen korpus 48/48; test_tumu
+yeşil; 0 uyarı.
+
 **KATEGORİ 3 (ham `*T` bölge-tabanı) — KARAR: güvensiz-only opt-out, ZATEN ENFORCE [inceleme
 tamam]:** Firsthand bulgu: (1) bölge-container UZUNLUK TAŞIMIYOR — `kdl_bolge_ayir(a, boyut)`
 ham `void*` taban döndürür; `*T` çıplak pointer, boyut yok → kontrol edilemez. (2) Ham `*T`
