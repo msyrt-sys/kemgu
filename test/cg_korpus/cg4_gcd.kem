@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken a: tam32 = 48; değişken b: tam32 = 36; iken b != 0 { değişken t: tam32 = b; b = a % b; a = t; } ver a + 30; }

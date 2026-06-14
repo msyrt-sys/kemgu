@@ -1,0 +1,1 @@
+işlev fib(n: tam32) -> tam32 { eğer n < 2 { ver n; } ver fib(n - 1) + fib(n - 2); } işlev main() -> tam32 { ver fib(10); }

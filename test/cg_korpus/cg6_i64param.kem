@@ -1,0 +1,1 @@
+işlev iki_kat(n: tam64) -> tam64 { ver n * 2; } işlev main() -> tam32 { değişken v: tam64 = 21; ver iki_kat(v) olarak tam32; }

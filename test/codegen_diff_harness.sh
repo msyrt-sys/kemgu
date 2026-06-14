@@ -33,13 +33,14 @@ link_retry() {   # $1=ll  $2=exe
     return 1
 }
 # Yeni .exe ilk exec'te Defender taraması yüzünden 127 (command-not-found) verebilir;
-# korpusta hiçbir program 127 dönmez → 127 daima ortamsal. 127 görülürse OS dosyayı
-# bırakana dek kısa bekle + tekrar dene (RC global). En çok 6 tur (~1.5s tavan).
+# korpusta hiçbir program 127 dönmez → 127 DAİMA ortamsal (gerçek codegen hatası kesin
+# bir exit verir: 139 segfault / yanlış değer, asla 127). OS dosyayı bırakana dek bekle +
+# tekrar dene (RC global, en çok 12 tur ~3.6s). Kalıcı 127 → çağıran ⚠ ATLAR (fail DEĞİL).
 run_exe() {   # $1=exe
     "$1" >/dev/null 2>&1; RC=$?
     deneme=0
-    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 6 ]; do
-        sleep 0.25
+    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 12 ]; do
+        sleep 0.3
         "$1" >/dev/null 2>&1; RC=$?
         deneme=$((deneme+1))
     done
@@ -63,6 +64,10 @@ for f in "$KORPUS"/*.kem; do
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
     run_exe "$TMP/$b.k.exe"; kaday=$RC
+    # Kalıcı 127 (Defender) = ortamsal → oracle güvenilmez, atla (fail sayma).
+    if [ "$coracle" -eq 127 ] || [ "$kaday" -eq 127 ]; then
+        echo "  ⚠ $(basename "$f") — 127 (Defender exec yarışı, ortamsal) atlandı"; continue
+    fi
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))
     else

@@ -1,0 +1,1 @@
+işlev ilk(s: metin) -> tam32 { ver metin_bayt(s, 0) olarak tam32; } işlev main() -> tam32 { ver ilk("*"); }
