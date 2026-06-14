@@ -789,6 +789,26 @@ static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
     return ast_tip_to_ir(g, alan_tip->veri.tip_dizi.eleman_tip);
 }
 
+/* D-085: heap KdlDizi eleman okuma/yazma intrinsic'i — eleman IR tipine göre
+ * (i64/ptr ayrı; i8/i16/i32 → tam varyantı, i32 genişlikte taşınır). dizi_al/
+ * dizi_yaz built-in'leri ile `[]` lowering'i AYNI seçimi paylaşsın diye ortak. */
+static const char *kdl_al_fn(const char *et) {
+    if (et && strcmp(et, "i64") == 0) return "kdl_dizi_al_tam64";
+    if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_al_ptr";
+    return "kdl_dizi_al_tam";
+}
+static const char *kdl_yaz_fn(const char *et) {
+    if (et && strcmp(et, "i64") == 0) return "kdl_dizi_yaz_tam64";
+    if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_yaz_ptr";
+    return "kdl_dizi_yaz_tam";
+}
+/* kdl_dizi_al_tam i32 döner; i8/i16 eleman da i32 olarak taşınır (sonra
+ * int_donustur daraltır). i64/ptr kendi genişliğinde. */
+static const char *kdl_al_donus_ir(const char *et) {
+    if (et && (strcmp(et, "i64") == 0 || strcmp(et, "ptr") == 0)) return et;
+    return "i32";
+}
+
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
  * Sadece basit darlatma/genisletme yardimcisi: src->dst int donusumleri. */
 static int tip_genisligi(const char *ir) {
@@ -1018,6 +1038,46 @@ static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
     m[onek_uz + 1 + ad_uz] = '\0';
     if (out_uz) *out_uz = onek_uz + 1 + ad_uz;
     return m;
+}
+
+/* D-085 [YÜKSEK]: TÜRETİLMİŞ (düz TANIMLAYICI olmayan) bir indeks tabanı heap
+ * KdlDizi* mı? Eğer öyleyse eleman IR tipini ("i32"/"i64"/"ptr"/"%Yapi") döner;
+ * değilse NULL → stack GEP yoluna düşer.
+ *
+ * Kök-neden: `[]` lowering'i yalnız `nesne->tip == DUGUM_TANIMLAYICI +
+ * dinamik_dizi_mi` için heap-route ediyordu; yapı-alanı (k.xs), işlev dönüşü
+ * (yap()) gibi türetilmiş heap Dizi<T> tabanlarda KdlDizi* DESKRİPTÖRÜNÜ düz
+ * veri sanıp GEP yapıyordu (sessiz-yanlış / segfault). dizi_al/dizi_yaz
+ * built-in'leri aynı tabanlarda DOĞRU — taban reg'i doğru, lowering yanlıştı.
+ *
+ * Kapsam: ERISIM (yapı alanı Dizi<T>) + CAGRI (Dizi<T> dönen işlev). Nested
+ * INDEKS (Dizi<Dizi<T>> m[i][j]) ve &Dizi referansı bu helper'da DEĞİL (ayrı
+ * yollar — nested stack-GEP korunur, &Dizi D-086). */
+static const char *turetilmis_heap_dizi_eleman(LlvmGen *g, const Dugum *nesne) {
+    if (!nesne) return NULL;
+    if (nesne->tip == DUGUM_ERISIM) {
+        /* dizi_alan_eleman_ir: alan Dizi<T> ise eleman IR, değilse NULL. */
+        return dizi_alan_eleman_ir(g, nesne);
+    }
+    if (nesne->tip == DUGUM_CAGRI &&
+        nesne->veri.cagri.hedef &&
+        nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+        const char *ad = nesne->veri.cagri.hedef->veri.tanimlayici.metin;
+        int uz = nesne->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+        IslevKayit *ik = islev_bul(g, ad, uz);
+        if (!ik && g->aktif_modul_onek) {
+            int muz = 0;
+            const char *m = modul_mangle(g, g->aktif_modul_onek,
+                                         g->aktif_modul_onek_uz, ad, uz, &muz);
+            if (m) ik = islev_bul(g, m, muz);
+        }
+        if (ik && ik->ast) {
+            const Dugum *rt = ik->ast->veri.islev.donus_tipi;
+            if (rt && rt->tip == DUGUM_TIP_DIZI)
+                return ast_tip_to_ir(g, rt->veri.tip_dizi.eleman_tip);
+        }
+    }
+    return NULL;
 }
 
 /* mat::alt::f yol zincirini "mat.alt.f" noktali ada knit eder.
@@ -2092,6 +2152,28 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
                 /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
                 if (vi) stack_uzunluk = vi->dizi_uzunluk;
+            }
+            /* D-085 [YÜKSEK]: TÜRETİLMİŞ heap dizi tabanı (yapı alanı k.xs /
+             * işlev dönüşü yap()) → kdl_dizi_al route et. Descriptor'ı (KdlDizi*)
+             * düz veri gibi GEP'leme (eski yol sessiz-yanlış/segfault'tu).
+             * Skaler/ptr eleman; struct eleman (%Yapi) D-087'de (şimdilik stack
+             * yoluna düşer — değişmemiş davranış). */
+            if (d->veri.indeks.nesne &&
+                d->veri.indeks.nesne->tip != DUGUM_TANIMLAYICI) {
+                const char *et = turetilmis_heap_dizi_eleman(g,
+                    d->veri.indeks.nesne);
+                if (et && et[0] != '%') {
+                    IfadeSonuc base = ifade_uret(g, d->veri.indeks.nesne, NULL);
+                    IfadeSonuc idx = ifade_uret(g, d->veri.indeks.indeks, "i32");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
+                    const char *rt = kdl_al_donus_ir(et);
+                    int rr = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        rr, rt, kdl_al_fn(et), base.reg, idx_r);
+                    IfadeSonuc s = { rr, rt, 0 };
+                    return s;
+                }
             }
             /* arr[i] -> GEP ptr (T*) + load (stack) */
             IfadeSonuc nesne = ifade_uret(g, d->veri.indeks.nesne, NULL);
@@ -3740,6 +3822,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         generic_arg_ir_al(g, d->veri.degisken.tip);
                     if (eleman_tip) {
                         g->isimler->eleman_llvm_tip = eleman_tip;
+                        /* D-085: Dizi<T> annotasyonlu ama değeri literal-DEĞİL
+                         * (örn. `= yap()` çağrı dönüşü, `= başka_dizi`) değişken
+                         * de heap KdlDizi* tutar → `xs[i]` heap-route edilmeli.
+                         * (Literal değer ayrı dedicated heap path'te işaretlenir.)
+                         * Tip kontrolü Dizi<T> annotasyonunu zaten heap garanti
+                         * eder (stack dizi → G003 reddi). */
+                        g->isimler->dinamik_dizi_mi = 1;
                     }
                 } else {
                     /* Annot yok: deger once, sonra alloca */
@@ -3804,14 +3893,16 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_INDEKS) {
-                /* Audit fix #2: arr[i] = v — onceden SESSIZCE dusurulurdu
-                 * (hedef yalniz tanimlayici/erisim taniyordu).
-                 * Stack dizi: INDEKS okuma yolunun GEP aynasi + store.
-                 * Heap dizi (KdlDizi): runtime'da eleman-yazma setter'i
-                 * YOK (kdl_dizi_yaz_eleman) — runtime/ bu görevin scope
-                 * disinda; gorunur yorum + DUR-SOR raporu (sessiz degil). */
+                /* Audit fix #2: arr[i] = v — onceden SESSIZCE dusurulurdu.
+                 * D-085 [YÜKSEK]: heap dizi (TANIMLAYICI heap VEYA türetilmiş
+                 * yapı-alanı/işlev-dönüşü) → kdl_dizi_yaz (runtime sınır-kontrollü).
+                 * Önceki durum: TANIMLAYICI heap yazma SESSİZCE DÜŞÜRÜLÜYORDU
+                 * (yorum, kdl_dizi_yaz_eleman yok varsayımı — artık var); türetilmiş
+                 * heap yazma KdlDizi*'ı düz veri sanıp GEP+store → SEGFAULT.
+                 * Stack dizi: GEP aynası + store + D-069 sınır-kontrol. */
                 const Dugum *hedef = d->veri.atama.hedef;
                 int heap_dizi = 0;
+                const char *heap_et = NULL;   /* heap ise eleman IR tipi */
                 const char *pointee_elem = NULL;
                 int stack_uz = 0;   /* D-069 Kat.2: sabit stack dizi N (>0 → sınır-kontrol) */
                 if (hedef->veri.indeks.nesne &&
@@ -3819,7 +3910,11 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     LlvmIsim *vi = isim_bul(g,
                         hedef->veri.indeks.nesne->veri.tanimlayici.metin,
                         hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
-                    if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
+                    if (vi && vi->dinamik_dizi_mi) {
+                        heap_dizi = 1;
+                        heap_et = vi->eleman_llvm_tip
+                            ? vi->eleman_llvm_tip : "i32";
+                    }
                     /* v1 bölge-container: *T tabani — eleman tipi
                      * POINTEE'den (RHS tipi tam8/tam64 hedefte yanlis
                      * genislik uretirdi). */
@@ -3828,11 +3923,35 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     }
                     /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
                     if (vi && !heap_dizi) stack_uz = vi->dizi_uzunluk;
+                } else if (hedef->veri.indeks.nesne) {
+                    /* D-085: türetilmiş heap dizi tabanı (k.xs / yap()). */
+                    const char *et = turetilmis_heap_dizi_eleman(g,
+                        hedef->veri.indeks.nesne);
+                    if (et) { heap_dizi = 1; heap_et = et; }
                 }
-                if (heap_dizi) {
+                if (heap_dizi && heap_et && heap_et[0] != '%') {
+                    /* D-085: kdl_dizi_yaz(descriptor, i32 idx, T v). Descriptor
+                     * = ifade_uret(taban) (TANIMLAYICI heap → load KdlDizi*;
+                     * ERISIM/CAGRI → KdlDizi*). Runtime OOB → PANIC. struct
+                     * eleman (%Yapi) D-087'de — şimdilik aşağıdaki dalda. */
+                    IfadeSonuc base = ifade_uret(g,
+                        hedef->veri.indeks.nesne, NULL);
+                    IfadeSonuc idx = ifade_uret(g,
+                        hedef->veri.indeks.indeks, "i32");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
+                    const char *cast =
+                        (strcmp(heap_et, "i64") == 0 ||
+                         strcmp(heap_et, "ptr") == 0) ? heap_et : "i32";
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, cast);
+                    int vr = int_donustur_im(g, v.reg, v.tip, cast,
+                                             v.isaretsiz);
                     fprintf(g->out,
-                        "  ; atama: heap dizi eleman atamasi runtime "
-                        "setter bekliyor (kdl_dizi_yaz_eleman yok)\n");
+                        "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
+                        kdl_yaz_fn(heap_et), base.reg, idx_r, cast, vr);
+                } else if (heap_dizi) {
+                    /* struct eleman heap dizi yazma — D-087 (by-value yapı). */
+                    fprintf(g->out,
+                        "  ; atama: heap struct-dizi eleman yazma D-087'de\n");
                 } else {
                     IfadeSonuc nesne = ifade_uret(g,
                         hedef->veri.indeks.nesne, NULL);
