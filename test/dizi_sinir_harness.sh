@@ -102,6 +102,20 @@ opt_out_kontrol() {
     else echo "  🔴 $ad: panik-IR=$pc rc=$rc (0 + 20 bekle)"; fail=$((fail+1)); fi
 }
 opt_out_kontrol
+# vaka9: stack-array DEĞİŞKENİ Dizi<T> param'a → checker G003 reddi (çökmeden ÖNCE).
+g003_reddi() {
+    local ad="vaka9_g003_reddi"
+    printf '%s\n' 'işlev topla(xs: Dizi<tam32>, n: tam32) -> tam32 { ver dizi_al(xs, 0); }
+işlev main() -> tam32 {
+    değişken xs = [10, 20, 12];
+    ver topla(xs, 3);
+}' > "$TMP/$ad.kem"
+    "$KEMGU" --checkdump "$TMP/$ad.kem" 2>/dev/null > "$TMP/$ad.out"
+    if grep -q '^G003' "$TMP/$ad.out"; then
+        echo "  ✅ $ad: G003 reddi (compile-time, çökme yok)"; pass=$((pass+1));
+    else echo "  🔴 $ad: G003 bekleniyordu, çıktı: $(head -1 "$TMP/$ad.out")"; fail=$((fail+1)); fi
+}
+g003_reddi
 segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
 
 echo "=== dizi sınır-güvenliği: $pass/$((pass+fail)) ==="

@@ -29,11 +29,19 @@ ASan/UBSan TEMİZ + rc=151 (120+30+1 doğru sonuç, eskiden UB). test_llvm 235/2
 checker 48/48; ASan E2E denetim **PASS=88 FAIL=0** (03_kontrol allowlist'ten çıktı → korumalı
 PASS; ALLOW 8→6). 0 uyarı.
 
-**KALAN (DUR-SOR — Mehmet'te):** Sınıf A'nın DEĞİŞKEN-arg kısmı: `değişken xs=[..]; f(xs)` —
-stack-array DEĞİŞKENİ Dizi<T> param'a. xs deklarasyonda stack (annot yok); çağrıda KdlDizi
-beklenir. Literal-route uygulanamaz (arg TANIMLAYICI). Gerçek temsil kararı (whole-program
-escape-flow VEYA literal-her-zaman-heap VEYA call-site coercion VEYA checker-reddi). 35/40
-snapshot ALLOWLIST'te kalır. Sınıf B (lambda) = V2 feature (D-004), ayrı.
+**DEĞİŞKEN-arg → ÇÖZÜLDÜ (Mehmet kararı: checker reddi / G003).** `değişken xs=[..]; f(xs)` —
+stack-array DEĞİŞKENİ Dizi<T> param'a. Literal-route uygulanamaz (arg TANIMLAYICI). Mehmet
+**checker-reddi**ni seçti: C tip denetleyici (tip_kontrol.c CAGRI pas-2) — param `TIP_DIZI`
+iken arg TANIMLAYICI ve sembolün ast_dugumu annotasyonsuz `değişken x=[literal]`
+(DUGUM_DIZI_OLUSTUR) ise → **G003** ("stack dizi degiskeni Dizi<T> parametresine gecirilemez;
+annotasyonlu heap Dizi kullanin"). Çökme yerine compile-time red (çökmezlik #1). Programcı
+`değişken xs: Dizi<T> = [..]` (heap) kullanır. 35/40 artık --check'te G003 reddi (codegen'e
+ulaşmaz; --llvm bypass ederse ASan-allowlist'te kalır = "checker'ı atladın" = güvensiz-eşi).
+Doğrulama: 35/40→G003; 03_kontrol (literal)→OK; annotasyonlu→OK; ornekler 42/42; korpus 48/48;
+test_llvm 235/235; bounds harness vaka9 (G003 reddi) 11/11.
+**Self-host mirror (follow-up, TC9):** checker.kem'de G003 = Dizi-param + stack-array-var
+izleme infra'sı gerek (fn_ptip "?" bileşik tipte; ayrı flag). Gating parite kırılmıyor
+(42/42 korunur — hiç geçerli örnek G003 tetiklemiyor). Sınıf B (lambda) = V2 (D-004), ayrı.
 
 ---
 
