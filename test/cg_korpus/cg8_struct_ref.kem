@@ -1,0 +1,1 @@
+yapı Kutu { xs: Dizi<tam32>; } işlev doldur(k: &değişken Kutu) -> tam32 { dizi_ekle(k.xs, 42); ver 0; } işlev main() -> tam32 { değişken k: Kutu = Kutu { xs: [] }; doldur(&değişken k); ver dizi_al(k.xs, 0); }
