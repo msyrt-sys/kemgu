@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-068 — SELF-HOST checker TC8a: cross-file/modül import (kullan → dışa toplama) — 246/319 (2026-06-14)
+
+**Karar [ETKİ: orta — `selfhost/checker.kem`; cross-file altyapı].** TC8 başlangıcı: `kullan`
+ile içe aktarılan modüllerin `dışa`-export adlarını (transitif) toplayıp false-T002'yi kapat.
+C derleyici DOKUNULMADI.
+
+**Mimari:** `kullan_yukle_hepsi` (üst-düzey `kullan`'lar, giriş dizininden) → `modul_yukle`
+(dedup `kullan_gorulen` → yol çöz → 3 arama yolu → taze `Ayr`'a lex+parse → `dışa` iç-adları
+`g_isim`'e ekle → modülün `kullan`'ını transitif izle). Yol: `modul_path` (a::b::c → a/b/c.kem
+via `metin_yer_degistir`); `modul_icerik` (C 3-yol: importer-dizin → kök → kütüphane/);
+`dizin_al` (son '/'). builtin_ekle'den SONRA, genel_topla'dan ÖNCE (T002 öncesi g_isim hazır).
+
+**Kapsam (TC8a):** YALNIZ `dışa` ADLARI toplanır (flat-görünür; çok-segment çıplak yol
+düzleştirme — C legacy davranışı). İmza/param tipleri TC8b (cross-file fonksiyon
+return/arity — şimdilik ad-only → false-pos yok, under-report). T040 (bulunamadı)/T041
+(private)/T042 (ambiguous) modül-edge → TC8b. Modül gövdeleri tip-kontrol EDİLMEZ (yalnız
+importer için ad toplama).
+
+**Doğrulama:** test/crossfile transitif/sonuc_cagri/lib_islem/lib_sonuc **4/4** (transitif
+zincir: transitif→lib_islem→lib_sayi `iki_kat` çözülür). Full audit **246/319** (önceki 243;
++3 crossfile, SIFIR yeni regresyon). korpus 48/48; ornekler 42/42; self-host 3/3.
+
+**Kalan 73 farklı:** lex_korpus (22) + parse_korpus (12) = parser/lexer P/L kodu (~23);
+snapshots (16: bölge/asm/çeşit/constraint/referans); virtio (12: yetki TC7+bölge TC6 — cross-
+file kısmı çözüldü ama yetki/bölge kaldı); moduller (5: T040/41/42 edge); stdlib (3); eski (2).
+
+---
+
 ## D-067 — SELF-HOST checker: full-repo parite audit SONUÇ + TC6-9 yol haritası (2026-06-14)
 
 **Karar [ETKİ: yok — dokümantasyon; ultracode workflow audit sonucu].** 319 .kem dosyası
