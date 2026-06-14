@@ -1,0 +1,6 @@
+// TC3f: tekli '-' (neg) operandı mantıksal → T003 (T001 değil; TIP_HATA).
+işlev main() -> tam32 {
+    değişken b: mantıksal = doğru;
+    değişken r: tam32 = -b;   // -mantıksal → T003
+    ver r;
+}
