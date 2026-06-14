@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-082 — [YÜKSEK] C codegen accept-but-crash kapatma: Dizi<T> ATAMA dizi-literal heap-promote (2026-06-14)
+
+> **Numara notu:** Bu iş başlangıçta D-076 olarak işaretlendi (görev verildiğinde main'de
+> en son D-075'ti). Paralel **self-host** oturumu (`feature/self-host-checker`) bu sırada
+> D-076..D-081'i (CG4..CG7c) aldığı için çakışmayı önlemek üzere **D-082'ye** yeniden
+> numaralandırıldı. self-host yalnız DECISIONS_LOG.md'ye dokunuyor; src/llvm.c + test
+> dosyaları çakışmasız.
+
+**Karar [ETKİ: C derleyici src/llvm.c codegen — bellek güvenliği].** D-075'in **🔴 KEŞİF**
+notunda belgelenen accept-but-crash deliği kapatıldı. `--check` KABUL eden ama üretilen kodu
+ÇÖKERTEN (segfault, exit 139) iki tetik:
+```
+işlev main() -> tam32 { değişken xs: Dizi<tam32> = []; xs = [1]; dizi_ekle(xs, 7); ver dizi_boyut(xs); }
+yapı K { xs: Dizi<tam32>; } işlev main() -> tam32 { değişken k: K = K { xs: [] }; k.xs = [1]; dizi_ekle(k.xs, 7); ver dizi_boyut(k.xs); }
+```
+
+**Kök-neden.** `değişken xs: Dizi<T> = [..]` (DEGISKEN init) yolu dizi-literalini HEAP KdlDizi'ye
+promote eder (kdl_dizi_olustur + dizi_ekle). ATAMA yolu (`xs = [..]` / `k.xs = [..]`) ise
+dizi-literalini stack `[N×T]` olarak üretip o pointer'ı Dizi<T> (heap KdlDizi*) slot'una `store`
+ediyordu. Sonradan `dizi_ekle`/`dizi_boyut` KdlDizi* beklerken stack-array görüyor → SEGFAULT.
+D-070 ailesi (dizi-literal temsil uyuşmazlığı), ATAMA analoğu.
+
+**Çözüm — ortak heap-promote yardımcısı.** `dizi_literal_heap_uret(g, lit, eleman_ir)` çıkarıldı
+(init kodundan refactor); hem DEGISKEN init hem DUGUM_ATAMA çağırır. ATAMA NORMAL işlemdir
+(reddetme DEĞİL — D-070'teki G003 parametre-reddinden farklı). İki ATAMA hedefi kapsandı:
+- **Yerel değişken** (`xs = [..]`): `i->dinamik_dizi_mi` + RHS DUGUM_DIZI_OLUSTUR → heap-promote,
+  KdlDizi* slot'a store. Eleman tipi `i->eleman_llvm_tip`'ten.
+- **Yapı alanı** (`k.xs = [..]`): `dizi_alan_eleman_ir(g, hedef)` alanın Dizi<T> olup olmadığını
+  + eleman IR tipini verir; non-NULL ise heap-promote, alan adresine (erisim_lvalue GEP) store.
+  Hem yerel struct hem `&Struct` referans param hedefi kapsanır.
+
+**Doğrulama.** 2 repro artık exit=**2** (segfault 139 değil; init []→[1] boyut 1 + ekle 7 = boyut 2).
+ASan+UBSan temiz. `mingw32-make test_tumu` tam yeşil; `bash test/asan_e2e_denetim.sh` PASS=92 FAIL=0.
+Regresyon: `test/dizi_sinir_harness.sh` vaka11/12 (yerel + alan ATAMA, rc=2) + `test/ornekler/dizi_atama.kem`
+(asan_e2e_denetim.sh auto-discovery, ASan-temiz). Sıfır derleyici uyarısı.
+
+**Sınır.** ATAMA ile reassignment eski heap KdlDizi'yi serbest bırakmaz (leak); bölge-tabanlı
+model + GC-siz olduğu için init yolu da aynı (mevcut davranış korundu, ASan-Win'de LSan yok).
+
+---
+
 ## D-075 — AŞAMA 3 CG3: değişken + atama + tanımlayıcı (entry alloca/store/load) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e

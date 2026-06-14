@@ -84,6 +84,23 @@ deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
     değişken arr = [10, 20, 30];
     ver arr[0] + arr[1] + arr[2];
 }'
+# vaka11/12 (D-082): Dizi<T> slotuna dizi-literal ATAMA → heap-promote (init ile
+# aynı yol). ÖNCEDEN stack [N×T] pointer'ı slot'a yazılıp dizi_ekle/dizi_boyut'ta
+# SEGFAULT (rc=139) verirdi (accept-but-crash). Şimdi çalışmalı: []→[1] (boyut 1)
+# + ekle 7 (boyut 2) = rc 2. deger_bekle rc≠2 (139 dahil) ise kızarır.
+deger_bekle vaka11_dizi_atama_yerel 2 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [];
+    xs = [1];
+    dizi_ekle(xs, 7);
+    ver dizi_boyut(xs);
+}'
+deger_bekle vaka12_dizi_atama_alan 2 'yapı K { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken k: K = K { xs: [] };
+    k.xs = [1];
+    dizi_ekle(k.xs, 7);
+    ver dizi_boyut(k.xs);
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"

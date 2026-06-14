@@ -789,6 +789,44 @@ static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
     return ast_tip_to_ir(g, alan_tip->veri.tip_dizi.eleman_tip);
 }
 
+/* [D-082] Dizi<T> literali HEAP KdlDizi olarak üret (kdl_dizi_olustur +
+ * dizi_ekle), stack [N x T] DEĞİL. Dönüş: KdlDizi* tutan SSA register no.
+ *
+ * Ortak yardımcı: hem değişken-init (DUGUM_DEGISKEN) hem ATAMA (DUGUM_ATAMA)
+ * bu yolu çağırır. Bir dizi-literali Dizi<T> slotuna (yerel değişken veya
+ * yapı alanı) yazılırken AYNI heap-promote uygulanmalı — aksi halde slot'a
+ * stack pointer'ı store edilir, sonraki dizi_ekle/dizi_boyut KdlDizi*
+ * beklerken stack-array görür → SEGFAULT (accept-but-crash; D-070'in ATAMA
+ * analoğu, bkz. D-075 🔴 KEŞİF notu).
+ *
+ * lit       — DUGUM_DIZI_OLUSTUR düğümü
+ * eleman_ir — eleman IR tipi ("i8"/"i16"/"i32"/"i64"/"double"/"ptr") */
+static int dizi_literal_heap_uret(LlvmGen *g, const Dugum *lit,
+                                  const char *eleman_ir) {
+    int eb = 4;
+    if (strcmp(eleman_ir, "i8") == 0) eb = 1;
+    else if (strcmp(eleman_ir, "i16") == 0) eb = 2;
+    else if (strcmp(eleman_ir, "i64") == 0) eb = 8;
+    else if (strcmp(eleman_ir, "double") == 0) eb = 8;
+    else if (strcmp(eleman_ir, "ptr") == 0) eb = 8;
+    int n = lit->veri.dizi_olustur.sayi;
+    int kdl_reg = yeni_reg(g);
+    fprintf(g->out,
+        "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n", kdl_reg, eb);
+    for (int i = 0; i < n; i++) {
+        IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
+                                  eleman_ir);
+        int vr = int_donustur(g, v.reg, v.tip, eleman_ir);
+        const char *fn = "kdl_dizi_ekle_tam";
+        if (strcmp(eleman_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+        else if (strcmp(eleman_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        fprintf(g->out,
+            "  call void @%s(ptr %%%d, %s %%%d)\n",
+            fn, kdl_reg, eleman_ir, vr);
+    }
+    return kdl_reg;
+}
+
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
  * Sadece basit darlatma/genisletme yardimcisi: src->dst int donusumleri. */
 static int tip_genisligi(const char *ir) {
@@ -3665,32 +3703,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 d->veri.degisken.tip->tip == DUGUM_TIP_DIZI &&
                 d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR &&
                 eleman_tip) {
-                const Dugum *lit = d->veri.degisken.deger;
-                int n = lit->veri.dizi_olustur.sayi;
-                /* kdl_dizi_olustur(eleman_byte) */
-                int eb = 4;
-                if (strcmp(eleman_tip, "i8") == 0) eb = 1;
-                else if (strcmp(eleman_tip, "i16") == 0) eb = 2;
-                else if (strcmp(eleman_tip, "i64") == 0) eb = 8;
-                else if (strcmp(eleman_tip, "double") == 0) eb = 8;
-                else if (strcmp(eleman_tip, "ptr") == 0) eb = 8;
-                int kdl_reg = yeni_reg(g);
-                fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n",
-                    kdl_reg, eb);
-                (void)n;
-                /* Her elemani ekle */
-                for (int i = 0; i < n; i++) {
-                    IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
-                                              eleman_tip);
-                    int vr = int_donustur(g, v.reg, v.tip, eleman_tip);
-                    const char *fn = "kdl_dizi_ekle_tam";
-                    if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-                    else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
-                    fprintf(g->out,
-                        "  call void @%s(ptr %%%d, %s %%%d)\n",
-                        fn, kdl_reg, eleman_tip, vr);
-                }
+                /* [D-082] ortak heap-promote yardımcısı (init + ATAMA aynı yol) */
+                int kdl_reg = dizi_literal_heap_uret(g,
+                    d->veri.degisken.deger, eleman_tip);
                 /* alloca ptr + store kdl_reg */
                 int alloca_reg = yeni_reg(g);
                 fprintf(g->out, "  %%%d = alloca ptr\n", alloca_reg);
@@ -3796,11 +3811,25 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     d->veri.atama.hedef->veri.tanimlayici.metin,
                     d->veri.atama.hedef->veri.tanimlayici.uzunluk);
                 if (i) {
-                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
-                                               i->llvm_tip);
-                    int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
-                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            i->llvm_tip, rr, i->reg_no);
+                    /* [D-082] xs = [..]  (xs: Dizi<T> heap dinamik) — init
+                     * yoluyla AYNI heap-promote; KdlDizi* slot'a store.
+                     * Aksi halde stack [N x T] pointer'ı slot'a yazılır →
+                     * dizi_ekle/dizi_boyut SEGFAULT (accept-but-crash). */
+                    if (i->dinamik_dizi_mi &&
+                        d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
+                        const char *et = i->eleman_llvm_tip
+                            ? i->eleman_llvm_tip : "i32";
+                        int kdl_reg = dizi_literal_heap_uret(g,
+                            d->veri.atama.deger, et);
+                        fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
+                                kdl_reg, i->reg_no);
+                    } else {
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                                   i->llvm_tip);
+                        int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
+                        fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                                i->llvm_tip, rr, i->reg_no);
+                    }
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_INDEKS) {
@@ -3860,9 +3889,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * cfg alanlari hep 0 kaldi (D4/D5 config testinin exit 1
                  * nedeni). Simdi: alan adresi (GEP) + store — hem lokal
                  * struct hem &Struct referans param hedefi calisir. */
+                /* [D-082] k.xs = [..]  (xs alanı Dizi<T> heap) —
+                 * TANIMLAYICI hedefiyle aynı delik: dizi-literali stack
+                 * ÜRETME, heap KdlDizi yap ve alan adresine KdlDizi* store
+                 * et. dizi_alan_eleman_ir alanın Dizi<T> olup olmadığını
+                 * (ve eleman IR tipini) verir; NULL ise normal alan. */
+                const char *dizi_et = NULL;
+                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
+                    dizi_et = dizi_alan_eleman_ir(g, d->veri.atama.hedef);
+                }
                 const char *alan_ir = NULL;
                 int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir);
-                if (adr >= 0 && alan_ir) {
+                if (adr >= 0 && dizi_et) {
+                    int kdl_reg = dizi_literal_heap_uret(g,
+                        d->veri.atama.deger, dizi_et);
+                    fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
+                            kdl_reg, adr);
+                } else if (adr >= 0 && alan_ir) {
                     IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                alan_ir);
                     int rr = int_donustur(g, v.reg, v.tip, alan_ir);

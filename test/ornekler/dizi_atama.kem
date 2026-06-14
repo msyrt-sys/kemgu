@@ -1,0 +1,26 @@
+// dizi_atama.kem — Dizi<T> ATAMA dizi-literal heap-promote regresyonu (D-082).
+//
+// Bir dizi-literali (`[..]`) Dizi<T> slotuna ATAMA ile yazıldığında, init
+// yolundaki AYNI heap-promote uygulanmalı: stack [N x T] DEĞİL, heap KdlDizi.
+// Aksi halde slot'a stack pointer'ı store edilir; sonraki dizi_ekle/dizi_boyut
+// KdlDizi* beklerken stack-array görür → SEGFAULT (accept-but-crash deliği,
+// D-070'in ATAMA analoğu). Bu örnek hem yerel değişken hem yapı-alanı ATAMA
+// hedefini sınar; --check geçer ve ASan-temiz çalışmalı (bkz. asan_e2e_denetim.sh).
+
+yapı Kutu {
+    sayilar: Dizi<tam32>;
+}
+
+işlev main() -> tam32 {
+    // 1) yerel değişken ATAMA hedefi
+    değişken xs: Dizi<tam32> = [];
+    xs = [1, 2];
+    dizi_ekle(xs, 3);              // xs = [1, 2, 3] -> boyut 3
+
+    // 2) yapı alanı ATAMA hedefi (erisim lvalue)
+    değişken k: Kutu = Kutu { sayilar: [] };
+    k.sayilar = [10];
+    dizi_ekle(k.sayilar, 20);     // k.sayilar = [10, 20] -> boyut 2
+
+    ver dizi_boyut(xs) + dizi_boyut(k.sayilar);   // 3 + 2 = 5
+}
