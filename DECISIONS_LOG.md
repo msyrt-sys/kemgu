@@ -5,6 +5,126 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-067 — SELF-HOST checker: full-repo parite audit SONUÇ + TC6-9 yol haritası (2026-06-14)
+
+**Karar [ETKİ: yok — dokümantasyon; ultracode workflow audit sonucu].** 319 .kem dosyası
+üzerinde KEMGU checker vs C oracle (`--checkdump`) tam tarama. Genuine-bug'lar kapatıldıktan
+sonra durum + kalan feature-gap yol haritası.
+
+**Audit sonucu:** **243/319 birebir, 76 farklı, 0 çökme** (başlangıç: 233/315, 82 farklı,
+1 çökme). Kapatılan genuine-bug'lar: D-064 generic-T003 (stdlib 3), D-065 segfault (m3_04),
+D-066 bit-T028 (snapshots 2). Geçerli kodda checker artık SAHTE-HATA üretmiyor; self-host
+kaynaklar (lexer/parser/checker.kem) **3/3 birebir** → **checker bootstrap-HAZIR**
+(geçerli derleyici kaynakları sahte-hatasız kabul ediliyor; çökmüyor).
+
+**Kalan 76 farkın kategorizasyonu (oracle ilk-kod + dizin):**
+1. **Parser/lexer hata-kodu raporlama (~23 dosya):** P001×15, P031×4, P015×3, L009×1.
+   test/lex_korpus (22) + test/parse_korpus (12) — token/parça testleri; geçersiz program →
+   C parser P-kodu basar, KEMGU checker'ın parser'ı kurtarıp OK/farklı basar. KEMGU parser
+   hata kurtarıyor ama P/L kodunu th_kod'a YAZMIYOR. (Muhtemelen Aşama-1 parser-oracle
+   kapsamı; checker-parite için P/L emit gerekli.)
+2. **Cross-file/modül TC8 (~28 dosya):** oracle-OK×16 (false-T002) + T002×11 + T011×8 +
+   T040/41/42×3. drivers/virtio (12), test/moduller (5), test/crossfile (3), test/stdlib (3),
+   kütüphane (1), snapshots/21_modul_kullan. `kullan` import + cross-file sembol çözümü yok →
+   KEMGU T002. Mimari: diğer .kem yükle + sembol birleştir.
+3. **Misc feature-gaps (~10 dosya):** referans/deref T001×6 (26_referans_aktarim — T022 birebir
+   ama `*r`/`&T` tip çıkarsama eksik), bölge BL001 (TC6), asm AS001/G002, çeşit M001
+   (exhaustiveness), constraint T007 (TC bound), cast E002.
+
+**Değerlendirme — Aşama 5 için:** Kalan 76 = TC9 GENİŞLİK (breadth); bootstrap-kritik DEĞİL
+(self-host kaynaklar zaten 3/3). Bootstrap'a en büyük kaldıraç = Aşama 3 codegen self-host
+(llvm.c → KEMGU, IR-diff oracle), checker breadth değil. Öncelik kullanıcı kararı: (a) TC8
+cross-file (en çok dosya, drivers/stdlib değeri) · (b) parser P/L emit · (c) Aşama 3 codegen.
+
+---
+
+## D-066 — SELF-HOST checker TC5d: bit operatörü tamsayı kontrolü (T028) — 48/48 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Full-repo audit genuine-bug
+#3: bit operatörü (`& | ^ << >>` + tekli `~`) operandı tamsayı olmalı (T028). C derleyici
+DOKUNULMADI.
+
+**Bulgu (audit):** test/snapshots/31_bit_komb.kem + 50_kompleks_program.kem → oracle T028,
+KEMGU YANLIŞ T020. Örn `(deger >> pozisyon) & 1 == 1` → öncelik gereği `& (1==1)` → bit op
+sağ operandı mantıksal. C: T028 (& operatör konumu). KEMGU bit op'u kontrol etmiyordu →
+ifade_tip(&) sol tipini (tam32) döndürüyor → ver dönüşü (mantıksal) ile T020 → YANLIŞ KOD.
+
+**Düzeltme (T003/T004 ile simetrik):** `tamsayi_mi` (tam/dtam; kesirli/mantıksal HARİÇ) +
+`bit_op_mi` + `bilinen_tamsayi_degil`. `t028_kontrol` (IKILI bit op operandı kesin
+tamsayı-değil → T028) + tekli_kontrol `~` dalı. `ifade_tip` bit op/`~` non-tamsayı operandda
+"?" döndürür (C TIP_HATA bastırma) → dış T020/T001 bastırılır → iç-içe tek T028.
+
+**Doğrulama:** 31_bit_komb ✅ + 50_kompleks ✅ (artık T028 birebir, T020 değil).
+`make calistir_checker_diff` **48/48** (+tc5d: bit-OK / bit-T028 / tekli-~-T028).
+test/ornekler 42/42; self-host 3/3; SIFIR regresyon (geçerli bit kodu tam-integer → T028 yok).
+
+**Audit ilerleme:** 3 genuine-bug kapandı (generic-T003, segfault, bit-T028). Kalan farklar
+büyük oranda feature-gap: parser/lexer P/L kodu raporlama (lex/parse_korpus), cross-file/modül
+TC8 (virtio/crossfile/moduller), bölge TC6 (bolge_al), referans/deref tip (26_referans_aktarim
+— T022 birebir ama deref T001 eksik), asm/çeşit/constraint. → TC6-9 yol haritası.
+
+---
+
+## D-065 — SELF-HOST [YÜKSEK robustness]: parser token erişimi sınır-güvenli (segfault düzeltildi) (2026-06-14)
+
+**Karar [ETKİ: orta — `selfhost/checker.kem` + `selfhost/parser.kem`; robustness/çökmezlik].**
+Full-repo parite audit'inde KEMGU checker `test/lex_korpus/m3_04_ayrac_hata.kem` üzerinde
+SEGFAULT (rc=139) veriyordu. Kök neden bulundu + düzeltildi. C derleyici DOKUNULMADI.
+
+**Kök neden (bisect ile):** Çöken yapı = `yapı Nokta x y z` (süslü `{` yok). Parser bozuk
+girdide panik-sync yapmadığından `parse_alan`/`bekle` döngüsü `p.imlec`'i DOSYA_SONU
+sentinelinin ÖTESİNE ilerletiyor; sonra `tip_i`/`lex_i` → `dizi_al(p.t_ad, i)` sınır-dışı →
+segfault. KEMGU'nun "çökmezlik" (Direktif) ilkesine aykırı kritik bir robustness hatası.
+
+**Düzeltme (sınır-güvenli accessor):** `tip_i` → i sınır-dışıysa "DOSYA_SONU"; `lex_i` →
+"". Böylece imleç taşsa bile tüm parse döngülerinin `sim_mi(DOSYA_SONU)` kontrolü sonlanır;
+çökme ya da sonsuz döngü yok. C lexer'ın DOSYA_SONU sentineli + bounded-peek davranışının
+karşılığı. **Hem checker.kem hem parser.kem'e** uygulandı (paylaşılan parser kodu, aynı
+latent bug).
+
+**Doğrulama:** m3_04 artık rc=0 (çökme yok); `yapı Nokta x y z` tek başına rc=0. Parser
+bootstrap **270/270** sıfır-diff (self-parse dahil); parser diff 12/12; checker korpus 45/45;
+test/ornekler 42/42; self-host lexer/parser/checker.kem 3/3. SIFIR regresyon.
+
+**Not:** m3_04 artık "OK" basıyor (oracle P-kodları basıyor) → hâlâ DIVERGENT ama ÇÖKMÜYOR.
+m3_04 tam paritesi = parser/lexer hata-kodu raporlama (P/L kodları) feature-gap'ine bağlı
+(checker'ın parser'ı hata kurtarıyor ama P/L kodu th_kod'a yazmıyor) — ayrı iş (muhtemelen
+Aşama 1 parser-oracle kapsamı; checker-parite dışı).
+
+---
+
+## D-064 — SELF-HOST checker: generic param tip "?" (full-repo parite denetimi başladı) — stdlib 3/3, 45/45 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Tüm-repo parite denetimi
+(315 .kem dosyası, ultracode workflow ile) başlatıldı → 233/315 birebir, 82 farklı. İlk
+genuine-bug düzeltildi: generic işlevlerde false T003/T020. C derleyici DOKUNULMADI.
+
+**Bağlam — full-repo parite audit:** KEMGU checker (kemcheck.exe) C oracle'a (`--checkdump`)
+karşı TÜM repo .kem dosyalarında tarandı. 82 fark kategorize edildi: çoğu feature-gap
+(parser/lexer P/L kodları, cross-file/modül TC8, bölge TC6, yetki TC7/CP005, asm, çeşit
+M001, generic-constraint) + birkaç genuine-bug (CRASH m3_04, generic-T003, yanlış-kod 26/31/50).
+
+**Genuine-bug #1 — generic param false T003/T020 (workflow agent kök-neden).** `mutlak<T>(x: T)
+-> T { eğer x < 0 { ver 0 - x; } ... }` → oracle OK, KEMGU 29 false T003 (stdlib/temel/*).
+Sebep: `yerel_topla` param/değişken tip-string'ini ham saklıyor; generic `x: T` → "T" →
+`bilinen_sayisal_degil("T")`=doğru → T003. Ayrıca dönüş tipi "T" → aktif_donus "T" → ver
+çıkarsanan "tam32" ≠ "T" → T020. C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true".
+
+**Düzeltme:** `yerel_tip_filtrele(t)` = bilinen-skaler VEYA bilinen-yapı → t, aksi "?".
+İki yerel_topla write-site'ında (param tip_str, değişken annot_str) + kontrol_govde
+aktif_donus (donus_str) uygulandı. Generic "T" → "?" → kontrol atlanır; yapı adları
+(ERISIM/TC4) KORUNUR.
+
+**Doğrulama:** stdlib/temel matematik+karsilastir+sayisal **3/3** (29 false T003+T020 kapandı);
+self-host lexer/parser/checker.kem **3/3**; `make calistir_checker_diff` **45/45** (+tc5c_01
+generic); test/ornekler **42/42** (regression yok). Workflow agent risk-analizi + empirik
+doğrulama uyumlu.
+
+**Sıradaki genuine-bug'lar:** CRASH m3_04_ayrac_hata (parser sınır-dışı/sonsuz döngü → segfault),
+yanlış-kod 26/31/50 (T022 vs T001, T020 vs T028). Feature-gap'ler TC6-9 yol haritasına.
+
+---
+
 ## D-063 — SELF-HOST checker: aynı-ad belirsiz tip → "?" (self-host kaynak paritesi) — lexer+parser+checker.kem TAM (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem`].** KEMGU checker'ı KENDİ derleyici
