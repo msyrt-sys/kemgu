@@ -1,0 +1,3 @@
+// TC5a: lineer-olmayan alanlı yapı → OK (LR002 yok).
+yapı Nokta { x: tam32; y: tam32; }
+işlev main() -> tam32 { ver 0; }

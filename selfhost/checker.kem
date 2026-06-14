@@ -2374,10 +2374,54 @@ işlev dup_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
     }
     ver 0;
 }
+// TC5a: yapı lineer alan içeremez (LR002). Lineer tip = tekkez/yetki/görev.
+işlev tip_node_lineer_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI")
+      veya metin_esit(ad, "TIP_GOREV");
+}
+işlev lr002_yapi(p: &değişken Ayr, yapi: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, yapi);
+    değişken cs: tam32 = dizi_al(p.a_cs, yapi);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "ALAN") {
+            değişken tc: tam32 = son_cocuk(p, c);
+            eğer (tc >= 0) ve tip_node_lineer_mi(dizi_al(p.a_ad, tc)) {
+                dizi_ekle(p.th_kod, "LR002");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, c));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, c));
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// Üst-düzey + modül + dışa YAPI'lar üzerinde LR002 (pre-pass — gövdelerden ÖNCE).
+işlev lr002_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ad: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ad, "YAPI") { lr002_yapi(p, c); }
+        eğer metin_esit(ad, "MODUL") { lr002_kontrol(p, c); }
+        eğer metin_esit(ad, "DISA") {
+            eğer dizi_al(p.a_cs, c) > 0 {
+                değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+                eğer metin_esit(dizi_al(p.a_ad, ic), "YAPI") { lr002_yapi(p, ic); }
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     builtin_ekle(p);
     genel_topla(p, kok);
     dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
+    lr002_kontrol(p, kok);   // TC5a: yapı lineer alan (LR002) — gövdelerden ÖNCE
     kontrol_ust(p, kok);
     ver 0;
 }
