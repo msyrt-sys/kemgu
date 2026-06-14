@@ -1,0 +1,11 @@
+// TC5c: generic işlev — tip param T sayısal/karşılaştırma/dönüşte "?" (deferred) → OK.
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev mutlak<T>(x: T) -> T {
+    eğer x < 0 { ver 0 - x; }   // x:T generic → T003 YOK (C deferred)
+    ver x;                       // ver T → aktif_donus "T"→"?" → T020 YOK
+}
+işlev en_kucuk<T>(a: T, b: T) -> T {
+    eğer a < b { ver a; }
+    ver b;
+}
+işlev main() -> tam32 { ver 0; }
