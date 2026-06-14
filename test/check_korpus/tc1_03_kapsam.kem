@@ -1,0 +1,10 @@
+işlev dongu() -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 10 { toplam = toplam + i; i = i + 1; }
+    için e: koleksiyon { toplam = toplam + e; }
+    ver toplam;
+}
+işlev kosul(x: tam32) -> tam32 {
+    eğer x < 0 { ver 0; } değilse { değişken y: tam32 = x * 2; ver y; }
+}

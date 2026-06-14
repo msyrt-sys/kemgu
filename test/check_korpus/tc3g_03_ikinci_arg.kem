@@ -1,0 +1,7 @@
+// TC3g: ikinci argüman uyumsuz (multi-arg) → T001 yalnız 2. arg konumunda.
+işlev ikis(a: tam32, b: mantıksal) -> tam32 { ver a; }
+işlev main() -> tam32 {
+    değişken x: tam32 = 5;
+    değişken r: tam32 = ikis(x, x);   // arg1 OK; arg2 tam32 ≠ mantıksal → T001
+    ver r;
+}

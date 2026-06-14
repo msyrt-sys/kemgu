@@ -1,0 +1,9 @@
+işlev m(x: tam32, y: tam32) -> tam32 {
+    eğer x < y ve x > 0 { ver x; }
+    eğer x == 0 veya y != 0 { ver y; }
+    iken x < 100 { x = x + 1; }
+    değişken b: mantıksal = x <= y;
+    değişken n: tam32 = x + y * 2 - 1;
+    değişken t: mantıksal = değil b;
+    ver n;
+}

@@ -1,0 +1,9 @@
+işlev f() -> tam32 { ver 1; }
+işlev f() -> tam32 { ver 2; }
+yapı Nokta { x: tam32; }
+yapı Nokta { y: tam32; }
+çeşit Renk { A, B }
+çeşit Renk { C }
+sabit S: tam32 = 1;
+sabit S: tam32 = 2;
+işlev temiz() -> tam32 { ver 0; }

@@ -1,0 +1,9 @@
+// TC3f: geçerli mantıksal (ve/değil) + tekli neg → OK beklenir.
+işlev main() -> tam32 {
+    değişken a: mantıksal = doğru;
+    değişken b: mantıksal = yanlış;
+    değişken c: mantıksal = a ve b;
+    değişken d: mantıksal = değil a;
+    değişken e: tam32 = 0 - 5;
+    ver e;
+}

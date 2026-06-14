@@ -1,0 +1,6 @@
+// TC3g: çok argümanlı çağrı, tüm argüman tipleri uyumlu → OK beklenir.
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev main() -> tam32 {
+    değişken x: tam32 = topla(3, 4);   // iki arg tam32 → OK
+    ver x;
+}

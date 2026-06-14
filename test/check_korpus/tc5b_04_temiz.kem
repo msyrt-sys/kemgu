@@ -1,0 +1,7 @@
+// TC5b: doğru tüketim (kullan/imha/param-move) → OK.
+işlev tuket(t: tekkez<tam32>) { imha(t); }
+işlev dogru() {
+    değişken k = tekkez_olustur(9);
+    tuket(k);
+}
+işlev main() -> tam32 { ver 0; }

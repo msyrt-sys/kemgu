@@ -1,0 +1,6 @@
+// TC4: iki eksik alan (b, c) → iki T012.
+yapı Uc { a: tam32; b: tam32; c: tam32; }
+işlev main() -> tam32 {
+    değişken u: Uc = Uc { a: 1 };
+    ver 0;
+}

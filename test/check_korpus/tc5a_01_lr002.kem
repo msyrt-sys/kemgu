@@ -1,0 +1,5 @@
+// TC5a: yapı lineer (tekkez) alan içeremez → LR002 (alan konumu).
+yapı YasakSahip {
+    sahip: tekkez<tam32>;
+}
+işlev main() -> tam32 { ver 0; }
