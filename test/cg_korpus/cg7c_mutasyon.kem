@@ -1,0 +1,1 @@
+yapı S { v: tam32; } işlev artir(s: &değişken S) -> tam32 { s.v = s.v + 1; ver 0; } işlev main() -> tam32 { değişken s: S = S { v: 41 }; artir(&değişken s); ver s.v; }

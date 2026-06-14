@@ -1,0 +1,1 @@
+yapı Uc { a: tam32; b: tam32; c: tam32; } işlev main() -> tam32 { değişken u: Uc = Uc { a: 10, b: 20, c: 12 }; ver u.a + u.b + u.c; }

@@ -1,0 +1,1 @@
+yapı K { a: tam64; b: tam32; } işlev main() -> tam32 { değişken k: K = K { a: 40, b: 2 }; ver (k.a olarak tam32) + k.b; }
