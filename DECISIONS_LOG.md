@@ -45,11 +45,28 @@ seferde) → `br`→`bb<oob>`(call @kdl_panik + unreachable) / `bb<ok>`(GEP+load
 `%<digit>` dokunmaz → D-041 güvenli). **Stack OOB artık segfault DEĞİL → panic.**
 Doğrulama: vaka5/6 (stack OOB/negatif → PANIC, eskiden rc=139); test_llvm **235/235**;
 opt -passes=verify PASS; ASan temiz (panic erişimden önce → 0 OOB raporu); 0 uyarı.
+**Opt-out (perf, Rust modeli):** `LlvmGen.guvensiz_derinlik` — `güvensiz` blok içinde stack
+sınır-kontrolü ATLANIR (vaka8: güvensiz arr[i] → 0 panic-IR; dışında → kontrollü). Varsayılan
+güvenli, opt-out açık+işaretli+programcı sorumluluğunda.
 
-**KATEGORİ 3 (ham `*T` bölge-tabanı) — BEKLEMEDE [İNCELEME]:** DUGUM_INDEKS:1958 pointee_elem
-yolu uzunluk bilgisi taşımıyor. Karar: ya bölge-container uzunluğu varsa kontrol et, ya da
-raw-`*T` indekslemesini yalnız `güvensiz` bloğunda serbest bırak (tip denetleyici dışını
-reddetsin). Ajan incelemesi sürüyor.
+**KATEGORİ 3 (ham `*T` bölge-tabanı) — KARAR: güvensiz-only opt-out, ZATEN ENFORCE [inceleme
+tamam]:** Firsthand bulgu: (1) bölge-container UZUNLUK TAŞIMIYOR — `kdl_bolge_ayir(a, boyut)`
+ham `void*` taban döndürür; `*T` çıplak pointer, boyut yok → kontrol edilemez. (2) Ham `*T`
+indekslemesi ZATEN `güvensiz`-only: C checker DUGUM_INDEKS (tip_kontrol.c:3295-3305)
+`TIP_POINTER` indeksini `guvensiz_baglam==0` iken → **G001** ("*T pointer indeksleme yalniz
+guvensiz blok icinde"). Bu tam da spec'in "varsayılan güvenli + açık opt-out" modeli — ZATEN
+var. (3) Cat2 codegen'i bölge-`*T` yolunu kontrolsüz bırakır (stack_uzunluk=0 yalnız sabit
+`[N×T]` literalinde >0; region `*T` → 0 → ham GEP). Tutarlı.
+
+**Karar:** Ham `*T` region indekslemesi = `güvensiz`-only (G001 zaten enforce; opt-out açık+
+işaretli+programcı sorumluluğunda — Rust modeli). Kontrol edilemez (uzunluk yok) ama erişim
+yalnız güvensiz blokta. Uzunluk-taşıyan region handle (fat pointer) → ileri iş (D-070+).
+Kod değişikliği GEREKMEZ (model zaten doğru). Self-host checker'da G001 henüz yok = ayrı TC
+(güvensiz/pointer); bu DEĞİL — prod C checker zaten enforce ediyor.
+
+**SONUÇ:** D-069 üç kategori de kapandı (Cat1 heap + Cat2 stack implemente; Cat3 karar+zaten-
+enforce). Dizi-sınır bellek-güvenliği boyutu TAMAM. Kalan güvenlik-iddiası izi (D-070+):
+8 "kabul-ama-çöküyor" deliği + scoping false-negative + NULL-dizi (d==NULL) + region fat-pointer.
 
 **Doğrulama:** Yeni `make calistir_dizi_sinir_test` (test_tumu'ya bağlı) → **6/6** (heap-OOB-oku/
 negatif/yaz/ptr → PANIC; geçerli → rc=60; D-065 koruması → segfault yok). `test_llvm` **235/235**
