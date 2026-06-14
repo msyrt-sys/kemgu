@@ -152,6 +152,29 @@ void kdl_yaz_tam(int32_t n) {
     printf("%d", n);
 }
 
+/* yaz_bayt: HAM bayt (düşük 8 bit) — putchar. yaz_karakter UTF-8 codepoint
+ * encode eder; bu ise ham byte yazar (self-host parser UTF-8 değer dump'ı). */
+void kdl_yaz_bayt(int32_t b) {
+    putchar(b & 0xFF);
+}
+
+/* ondalik_bicimle: float lexeme'i ('_' ayraçlı) C parser gibi strtod + "%g"
+ * ile biçimle (self-host parser KESIRLI dump'ı ast_duz_yaz ile birebir). */
+const char *kdl_ondalik_bicimle(const char *lex) {
+    if (!lex) return "0";
+    char buf[64];
+    int j = 0;
+    for (int i = 0; lex[i] && j < 63; i++) {
+        if (lex[i] != '_') buf[j++] = lex[i];
+    }
+    buf[j] = '\0';
+    double d = strtod(buf, NULL);
+    char *out = (char *)malloc(64);
+    if (!out) return "0";
+    snprintf(out, 64, "%g", d);
+    return out;
+}
+
 void kdl_yaz_karakter(int32_t cp) {
     unsigned char buf[5];
     int n = 0;

@@ -1,0 +1,22 @@
+sabit PI: kesirli32 = 3;
+sabit MAKS: tam32 = 1_000_000;
+yapı Nokta { x: tam32; y: tam32; }
+yapı Kutu<T> { eleman: T; sonraki: seçimlik<Kutu<T>>; }
+yapı Çift<A, B> { ilk: A; ikinci: B; }
+çeşit Renk { Kırmızı, Yeşil, Mavi }
+çeşit Sonuç { Tamam(tam32), Hata(metin), Boş }
+özellik Çizilebilir { işlev çiz() -> boş; işlev alan() -> tam32; }
+özellik Sayılabilir<T> { işlev say() -> tam32; }
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev sınırla<T: Sayılabilir>(x: T) -> T { ver x; }
+gerçekzamanlı işlev kontrol(s: &değişken Sistem) -> boş { dur(); }
+işlev boşdönüş() { yazdır(bir); }
+uygula Çizilebilir için Nokta {
+    işlev çiz() -> boş { yazdır(nesne); }
+    işlev alan() -> tam32 { ver en * boy; }
+}
+uygula Nokta {
+    işlev uzaklık(kendin) -> tam32 { ver 0; }
+    işlev taşı(kendin, dx: tam32) -> boş { hareket(dx); }
+}

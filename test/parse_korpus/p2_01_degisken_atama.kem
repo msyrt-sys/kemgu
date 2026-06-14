@@ -1,0 +1,16 @@
+işlev a() -> tam32 {
+    değişken x: tam32 = 5;
+    değişken y = 10;
+    değişken z: tam64 = x + y;
+    x = y;
+    y = x + z * 2;
+    topla(x, y);
+    hesapla();
+    ver x;
+}
+işlev b() -> tam32 {
+    değişken toplam = 0;
+    değişken sayac: tam32 = 100;
+    toplam = toplam + sayac;
+    ver toplam;
+}

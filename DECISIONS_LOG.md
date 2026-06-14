@@ -5,6 +5,254 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-051 — SELF-HOST Aşama 2 (TİP DENETLEYİCİ) ADIM-0: --checkdump oracle + mimari (2026-06-14)
+
+**Karar [ETKİ: düşük — additive C `--checkdump` modu; mevcut yol değişmedi].** Aşama 2
+(tip denetleyici self-host) başlangıcı. Mandate: Aşama 5'e kadar otonom, faz-sınırında
+durmadan, kendi mimari kararlarımla.
+
+**Karar 1 — Oracle: `--checkdump` (accept/reject + tanı paritesi).** C `--check` insan-
+okunur (hata[KOD] blokları + özet). Yeni `--checkdump`: hata callback'i (hata.h
+`hata_callback_ayarla`) ile tip-kontrol hatalarını toplar, DÜZ basar:
+`<KOD>\t<satır>\t<sütün>` (callback/traversal sırasıyla), hata yoksa `OK`. KEMGU-checker
+aynı çıktıyı üretecek → diff = accept/reject + kod/konum paritesi. (Parser/yükleme/wcet
+hataları da toplanır ama TC korpusu TEMIZ parse eder → yalnız T/L/M kodları.)
+
+**Karar 2 — KEMGU-checker temsili: indeks-düz + STRING-encoded tipler.** Sembol tablosu =
+paralel Dizi (ad/kategori/tip-string/scope-seviye), scope = seviye-sayacı (append-only;
+toy-demo scope-stack deseni). Tipler STRING-encoded ("tam32", "Dizi<tam32>", "&Nokta") —
+nominal eşitlik `metin_esit` (C TipBilgisi struct yerine; KEMGU'da en doğal). Checker
+parser'ın düz AST tablosunu (`Ayr`) gezer. selfhost/checker.kem parser'ı İÇERİR (AST
+gerek; tek-dosya; modülerleştirme Aşama 4/entegrasyon).
+
+**Plan (TC1-TC9, her biri --checkdump paritesi):** TC1 temel (literal tip + scope +
+T002 tanımsız + T001/ifade-tip uyumsuz) · TC2 işlev/çağrı (T-arity/arg) · TC3 struct/
+çeşit (alan/exhaustiveness M001) · TC4 generic/mono · TC5 linear (tekkez L001-L008) ·
+TC6 bölge · TC7 yetki · TC8 modül · TC9 tam güvenlik + tüm-korpus paritesi.
+
+**Doğrulama:** `--checkdump` OK örnek + T001/T002 hata örneği bayt-exact. Prod 0 uyarı.
+Additive — `--check`/testler etkilenmedi.
+
+**Sıradaki:** TC1 — selfhost/checker.kem (parser AST üzerinde sembol/tip/temel kontrol).
+
+---
+
+## D-050 — 🎉 SELF-HOST parser P6: BOOTSTRAP — 223/223 GERÇEK .kem + SELF-PARSE (Aşama 1 TAMAM) (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/parser.kem` + additive `ondalik_bicimle` intrinsic +
+harness].** Aşama 1 (PARSER self-host) KAPANIŞI. KEMGU'da yazılı parser, C parser'ın
+`--ast` oracle'ına karşı TÜM gerçek korpusta sıfır-diff — **kendi kaynağı dahil**.
+
+**Son iki kapatma:** (1) **KESIRLI float:** `ondalik_bicimle(metin)->metin` intrinsic
+(runtime strtod + `%g`, C ast_duz_yaz birebir) — `yaz_karakter` gibi float-format
+runtime primitifi. `metin_`/`dosya_` dışı → açık dispatch (tip_kontrol+llvm+runtime).
+(2) **satıriçi_asm:** deyim parse (mimari/şablon/çevrim/çıktı/girdi/bozulan clause);
+yalnız `girdi` ifadeleri AST çocuğu (C ast_duz_yaz), gerisi tüketilir.
+
+**Doğrulama:** `make calistir_parser_bootstrap` → **223/223 SIFIR-DİFF** (build/lex_korpus/
+ornekler-eski hariç TÜM .kem) — **selfhost/parser.kem SELF-PARSE dahil**. test_llvm
+235/235 + lexer bootstrap 261/261 (ondalik_bicimle regresyonsuz). `make
+calistir_parser_diff` 12/12 korpus.
+
+**eski/ hariç:** `test/ornekler/eski/tip_alias.kem` `tip Ad = T;` kullanır; `tip`
+v1'de anahtar kelime DEĞİL → C parser DA P001 hata verir (geçersiz). Hata-kurtarma
+diverjansı (gerçek boşluk değil) → bootstrap'tan çıkarıldı.
+
+**Aşama 1 ÖZET (D-035→D-050):** ADIM-0 (--ast oracle + index-AST kararı) → P1 ifade →
+P2 deyim → P3 bildirim → P4 tip → P5 modül/import → P6 bootstrap. İndeks-tabanlı düz
+AST tablosu, &değişken struct threading (D-044), düz preorder dumper. Üç additive
+intrinsic: yaz_bayt, ondalik_bicimle (+ D-041/D-044 codegen fix'leri parser'ı sağladı).
+
+**Sıradaki (Aşama 2 — TİP DENETLEYİCİ):** DAĞ. C checker accept/reject paritesi.
+TC1 temel → TC9 tam güvenlik. Mimari: KEMGU'da sembol tablosu + scope + tip temsili.
+
+---
+
+## D-049 — SELF-HOST parser P5: modül/kullan/dışa/genel + geri_al/delege + TAM-clamp — 115/118 GERÇEK .kem (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P5: üst-düzey
+modül/kullan/dışa/genel + iki ifade-builtin'i + tamsayı taşma davranışı. parser.c
+parse_kullan/parse_disa/parse_genel/parse_modul + parse_birincil DELEGE/GERI_AL birebir.
+
+**Kapsam:** `kullan m::seg::{a,b} olarak d;` (KULLAN deger=`::`-yol; seçili/alias
+dump'ta yok). `dışa <tanım>` (DISA sarmalar). `genel <tanım>` (SARMALAMAZ — iç tanımı
+döner; genel_mi dump'ta yok). `modül Ad { üyeler }` (recursive parse_ust_oge). İfade:
+`delege(...)`/`geri_al(...)` → DUGUM_CAGRI (hedef TANIMLAYICI). **TAM taşma:**
+`tamsayi_deger` artık strtoll gibi int64-max'a CLAMP eder (`0xFFFF...FFFF` → LLONG_MAX,
+önce wrap → -1).
+
+**Doğrulama:** `make calistir_parser_diff` → 11/11 korpus + **115/118 GERÇEK .kem**
+(ornekler/drivers/stdlib/moduller/crossfile). Kalan 3: KESIRLI float (drone_kontrol,
+matris_carpim) + tip_alias (ayrı). C derleyici değişmedi.
+
+**Sınır:** KESIRLI float (%g dump) → sıradaki (runtime float-format intrinsic gerek).
+satıriçi_asm deyimi henüz yok (korpusta nadirse sonra).
+
+---
+
+## D-048 — SELF-HOST parser P3: bildirimler — 69/113 GERÇEK .kem --ast sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P3: tüm
+üst-düzey bildirimler. parser.c parse_islev_genel/parse_yapi/parse_cesit/
+parse_ozellik/parse_uygula/parse_sabit/parse_parametre/parse_ust_oge ile birebir.
+
+**Kapsam:** işlev (gerçekzamanlı? + generic `<T: Bound>` + param + dönüş + gövde;
+imza_yeterli özellik için), yapı (+generic + alan), çeşit (varyant + C3 payload;
+generic v1-YOK skip), özellik (imza/default), uygula (trait `için` + inherent),
+sabit, parametre (`kendin`/`&kendin`/normal). Generic params + bound'lar PARSE+
+DISCARD (dump'ta yok; bound düğümleri orphan). atla_tip_paramlar `>>` böl.
+
+**İki kök-fix:** (1) **PROGRAM pozisyonu** = ilk token (C); önce 1:1 hardcode →
+yorumla başlayan HER dosya farklıydı (0→69 sıfır-diff sıçraması). (2) **Anti-hang:**
+çeşit generic + varyant-loop non-identifier'da ilerlemiyordu → sonsuz döngü; C
+panik_sync deseni eklendi.
+
+**Doğrulama:** `make calistir_parser_diff` → **11/11 korpus** + **69/113 GERÇEK .kem**
+(ornekler/drivers/stdlib/moduller) tam --ast sıfır-diff. Kalan 44: P5 (modül/kullan/
+dışa/genel/satıriçi_asm) + KESIRLI float. C derleyici değişmedi.
+
+**Sınır:** Üst-düzey modül/kullan/dışa/genel/satıriçi_asm → P5; KESIRLI float (%g) → ayrı.
+
+---
+
+## D-046 — SELF-HOST parser P2: deyimler + kontrol akışı + desenler — 9/9 sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus; C tarafı 0 değişiklik].**
+Aşama 1 P2: tüm deyimler + kontrol akışı + eşleş desenleri. parser.c parse_deyim/
+parse_eger/parse_iken/parse_icin/parse_esles/parse_desen/parse_guvensiz ile birebir.
+
+**Kapsam:** değişken (`: tip` ops. + `= ifade`), atama (lvalue `=`), ver (0/1
+çocuk), ifade-deyimi, eğer/değilse/değilse-eğer (else-if zinciri = recursive),
+iken, için (`ad: koleksiyon`), eşleş + kollar, güvensiz (±`[etiket: "..."]`).
+Desenler: joker `_`, tanımlayıcı, yapıcı `Ad(...)`, çeşit-yol `Çeşit::Varyant[(payload)]`,
+literal. Kol gövdesi: ifade `;` veya `{ blok }`.
+
+**`yapi_izni` bayrağı (parser.c yapi_olusturma_izni birebir):** Koşul bağlamında
+(eğer/iken/için/eşleş değeri) `Tip { }` yapı-oluşturma KAPALI → `{` blok başı sayılır.
+`Ayr.yapi_izni` (1 default; parse_kosul 0/restore). Düğüm pozisyonları C ile birebir
+(deyim=keyword; atama/ifade-deyimi=ifade başı; eşleş-kolu=desen başı).
+
+**Doğrulama:** `make calistir_parser_diff` → **9/9 SIFIR-DİFF** (6 P1 + 3 P2:
+değişken-atama, kontrol-akışı, eşleş-güvensiz). C derleyici değişmedi → regresyon yok.
+`--check` temiz.
+
+**Sınır:** Param/generic/bildirim → P3; tam tip sözdizimi (annot Dizi/seçimlik/...)
+→ P4; KESIRLI float → ayrı. P2 sarmalayıcı yine `işlev f() -> T { deyimler }` (param yok).
+
+---
+
+## D-045 — SELF-HOST parser P1: Pratt ifade parser — 6/6 korpus --ast sıfır-diff (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/parser.kem` + korpus; C tarafı yalnız additive
+`yaz_bayt` intrinsic].** Aşama 1 P1: KEMGU'da tam Pratt ifade parser. C `--ast`
+oracle'ına karşı sıfır-diff.
+
+**P1a — token-tablo temeli:** Lexer scanning REUSE (emit sink'i print→`dizi_ekle`),
+token tablosu `Ayr` struct'ta (paralel Dizi). 250/250 gerçek .kem'de re-emit
+`--token` sıfır-diff (foundation kanıtı). State threading: `&değişken Ayr`
+(D-044'e dayanır; scalar+Dizi alan mutasyonu + ref-param passthrough de-risk edildi).
+
+**P1b — Pratt ifade:** ifade.c ile birebir öncelik (VEYA=1…CARPMA=10, ÖNEK=11,
+SONEK=12). Birincil (TAM/TANIMLAYICI/MANTIKSAL/BOS/METIN/KARAKTER + paren), önek
+(neg/değil/~/&/&değişken/deref*), sonek zinciri (.alan/[i]/(args)/::yol/olarak),
+yapı/dizi/lambda oluşturma, kullan/imha. Düğüm pozisyonları C ile birebir
+(ikili/tekli=operatör tokenı; sonek=sonek tokenı; literal=kendi tokenı). Sayı
+değeri (`_` temizle + 0x/0b/0o taban → int64 → ondalık string) ifade.c parse ile
+aynı. AST = düz düğüm tablosu (append-on-create flat çocuk listesi). Düz dumper
+preorder, `\t\n\r\\` kaçışlı (`yaz_kacis`).
+
+**Yeni intrinsic `yaz_bayt(tam32)` (additive):** `yaz_karakter` argümanını
+codepoint sayıp UTF-8 ENCODE eder → METIN değer dump'ında Türkçe bayt mojibake
+(`ç`→`Ã§`). `yaz_bayt` HAM bayt yazar (putchar & 0xFF). 3 yer: tip_kontrol.c
+builtin registry, llvm.c dispatch+declare, runtime. Lexer ASCII-only olduğu için
+bunu hiç tetiklemedi; parser ham UTF-8 yazar → gerekli.
+
+**Doğrulama:** `make calistir_parser_diff` → **6/6 SIFIR-DİFF** (aritmetik/mantık-bit/
+önek-sonek/literal/bileşik/metin — Türkçe METIN + KARAKTER U+XXXX dahil). test_tumu
+29 suite + ASan YEŞİL (yaz_bayt regresyonsuz). lexer bootstrap 256/256. `--check` temiz.
+
+**Sınır (P1 dışı, sonraki adımlar):** KESIRLI float (%g formatı — ayrı adım); diğer
+deyimler (P2); param/generic/bildirim (P3); tam tip sözdizimi (P4). P1 sarmalayıcı:
+`işlev f() -> T { ver İFADE; }` (param yok, tek `ver` deyimi).
+
+---
+
+## D-044 [YÜKSEK] — Kök-neden fix: yapı Dizi<T> alanı boş/[...] literal → STACK [0xi8] → SEGFAULT (2026-06-13)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Parser
+self-host P1 de-risk'inde ortaya çıktı (virtio track'teki "&Struct-param+Dizi"
+segfault'unun kök-nedeni). `Yapı { d: [] }` veya `{ d: [e,...] }` — alan tipi
+`Dizi<T>` iken — `DUGUM_DIZI_OLUSTUR` codegen'i **her zaman STACK `[N x i8]`**
+üretiyordu (boş `[]` → `alloca [0 x i8]`). Alan KdlDizi* yerine 0-byte STACK
+buffer'a işaret eder; `dizi_ekle(t.d, ..)` onu KdlDizi* sanıp `.veri/.boyut/...`
+erişince **SEGFAULT**. `--check` geçiyordu (tip sistemi `[]`'i geçerli Dizi<T>
+sayar) → latent codegen miscompile.
+
+**Neden gizliydi:** `değişken d: Dizi<T> = []` ZATEN çalışıyordu — ama AYRI bir
+özel-yol (DUGUM_DEGISKEN handler'ı, llvm.c:3341) heap'e dönüştürüyordu. Diğer TÜM
+bağlamlar (yapı alanı, çağrı argümanı, `ver`) bu yoldan geçmiyordu → stack.
+
+**Fix (kök, genel):** (A) `DUGUM_DIZI_OLUSTUR` artık `g->beklenen_tip` `Dizi<T>`
+ise HEAP `kdl_dizi_olustur` + eleman başına `dizi_ekle` üretir (eleman_byte
+eleman IR tipinden; iç içe için beklenen_tip elemana inilir). (B) `yapi_olustur_uret`
+alan değerini değerlendirmeden ÖNCE `g->beklenen_tip = alan_tip_d` koyar. Böylece
+TÜM Dizi<T> bağlamları (sadece değişken değil) doğru heap üretir.
+
+**Doğrulama:** De-risk (`yapı Tablo{adlar:Dizi<metin>; sayilar:Dizi<tam32>}` +
+`&değişken Tablo` param field-append) → exit 42 (segfault yok). test_llvm yeni
+[161] regresyon. Tüm test paketi + ASan + lexer bootstrap YEŞİL (aşağıda).
+
+**Kapsam/sınır:** Yalnız `[]`/`[...]` literalin heap-Dizi yönlendirmesi eklendi —
+stack-dizi yolu (annot yok / index'lenen sabit dizi) korunur. `t.d[i]` index
+sintaksı struct-field heap-dizi için ayrı (builtin `dizi_al/ekle/boyut` çalışır;
+INDEX düğümü gerekirse sonra).
+
+---
+
+## D-043 — SELF-HOST parser ADIM-0: AST temsili + --ast diff-oracle (2026-06-13)
+
+**Karar [ETKİ: düşük — additive C: yeni `--ast` modu + `ast_duz_yaz`; mevcut yol
+değişmedi].** Aşama 1 (parser self-host) ADIM-0. Mandate: tasarım kararları ajan
+verir + loglar + devam eder (sormaz). İki çekirdek karar:
+
+**Karar 1 — KEMGU AST temsili: İNDEKS-TABANLI DÜZ DÜĞÜM TABLOSU** (paralel `Dizi`'ler).
+Recursive `çeşit` (C3 payload) bir alternatifti ama kendine-referanslı tip
+heap-boxing gerektirir (KEMGU'da belirsiz). Toy demolar (D-033/D-034) indeks-arena'yı
+KANITLADI: düğüm = indeks; paralel diziler `dugum_tip[]`/`satir[]`/`sutun[]`/`deger[]`
++ düz çocuk-listesi (`cocuk[]` + `cocuk_basla[]`/`cocuk_sayi[]`). Recursive-descent
+doğal: alt-ifadeleri parse et (indeks al) → ebeveyn düğümü o indekslerle oluştur.
+Dump = preorder traversal (D-041 sonrası KEMGU çağrı-özyinelemesi stack-güvenli;
+AST derinliği ~onlarca).
+
+**Karar 2 — --ast diff-oracle formatı: DÜZ derinlik-etiketli preorder.**
+`<derinlik>\t<TIP_ADI>\t<deger>\t<satır>\t<sütün>` (lexer dersi: düz > iç-içe-girinti).
+Derinlik-etiketli preorder AĞACI BİREBİR belirler (benzersiz). `<deger>` = skaler yük
+(ad/literal/operatör), `\t \n \r \\` kaçışlı (alan-ayracı güvenliği). Mevcut
+`ast_yazdir` (--parse, insan-okunur) EKSİK — ~30 düğüm tipi `default`'a düşüp
+çocuklarını gezmiyor. Yeni `ast_duz_yaz` (`--ast`) TÜM 67 düğüm tipini + çocuklarını
+KANONİK sırada gezer (oracle tamlığı). KEMGU-parser aynı çıktıyı üretecek → diff = doğruluk.
+
+**Doğrulama:** Prod 0 uyarı. `--ast` 249/249 gerçek .kem'de deterministik + boş-değil.
+Öncelik doğru (`x + 1 * 2` → `x + (1*2)`). Mevcut `--parse`/test'ler etkilenmedi (additive).
+
+**Plan (P1-P6, her biri --ast sıfır-diff kapılı):**
+- **P1 ifadeler** — Pratt öncelik (veya<ve<==<karşılaştırma<+−<*/%<önek<sonek),
+  önek (−/değil/~/&/&değişken/*), sonek zinciri (.alan [i] (arg) ::yol), yapı/dizi/
+  lambda oluşturma, `olarak` cast, kullan/imha ifade. (+minimal işlev/blok/ver sarmalayıcı.)
+- **P2 deyim/kontrol** — değişken/atama/ver/eğer-değilse/iken/için/eşleş+desen/güvensiz/blok.
+- **P3 bildirim** — işlev (generic+bound), yapı, çeşit (payload), özellik, uygula, sabit, alan, parametre.
+- **P4 tip-sözdizimi** — &T/&değişken T/*T, Dizi/seçimlik/sonuç/tekkez/sabitsüre/yetki/
+  vektör/görev/kanal, işlev(...)→T, Kullanıcı<...>, `>>` generic-böl.
+- **P5 modül/import** — modül, kullan (namespaced/seçili/alias), dışa, genel.
+- **P6 tüm-korpus** — KEMGU-parser tüm .kem + KENDİ kaynağı (self-parsing) → --ast sıfır-diff.
+
+**Ön-koşul/sınır:** Sayı literal→değer dönüşümü (TAM int64, `_`/hex/bin/oct) KEMGU'da
+C parser ile birebir gerekecek (P1). KESIRLI değer formatı (`%g`) fragility riski →
+gerekirse P1/P4'te lexeme-tabanlıya geçilir (karar o noktada). Generic-param/çeşit-varyant
+ad string-metadata --ast'a P3/P4'te eklenir (şimdilik yapısal ağaç).
+
+---
+
 ## D-042 — SELF-HOST lexer M6: BOOTSTRAP kapanışı — 249/249 gerçek .kem sıfır-diff (2026-06-13)
 
 **Karar [ETKİ: düşük — yeni harness + Makefile hedefi].** M6 = self-host lexer'ın
