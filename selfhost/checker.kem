@@ -594,9 +594,15 @@ işlev karakter_deger(b: tam32) -> metin {
     ver metin_birlestir(r, hex_str(b % 16));
 }
 
-// ---- Token erişim ----
-işlev tip_i(p: &değişken Ayr, i: tam32) -> metin { ver dizi_al(p.t_ad, i); }
+// ---- Token erişim (sınır-güvenli: bozuk girdide imleç DOSYA_SONU'yu aşabilir;
+//      sınır-dışı erişim → DOSYA_SONU/"" döner → tüm parse döngüleri sonlanır,
+//      çökme/sonsuz-döngü yok. C lexer DOSYA_SONU sentineli ekler, peek bounded.) ----
+işlev tip_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver "DOSYA_SONU"; }
+    ver dizi_al(p.t_ad, i);
+}
 işlev lex_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver ""; }
     ver metin_kes(p.kaynak, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
 }
 işlev simdiki(p: &değişken Ayr) -> metin {
@@ -1715,6 +1721,12 @@ işlev sayisal_mi(t: metin) -> mantıksal {
 işlev kesirli_mi(t: metin) -> mantıksal {
     ver metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64");
 }
+// Tamsayı tipi mi? (bit operatörleri tamsayı ister — kesirli/mantıksal HARİÇ.)
+işlev tamsayi_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "tam8") veya metin_esit(t, "tam16") veya metin_esit(t, "tam32")
+      veya metin_esit(t, "tam64") veya metin_esit(t, "dtam8") veya metin_esit(t, "dtam16")
+      veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64");
+}
 // Bilinen skaler tip mi? (CAGRI dönüş çıkarsamasında güvenli alt küme — generic
 // param/yapı/bileşik dönüşler "?" kalır, böylece T001 false-positive yok.)
 işlev bilinen_skaler_mi(t: metin) -> mantıksal {
@@ -1738,6 +1750,15 @@ işlev bilinen_sayisal_degil(t: metin) -> mantıksal {
 // "Kesinlikle mantıksal değil" — bilinen (≠"?") ama mantıksal olmayan tip.
 işlev bilinen_mantiksal_degil(t: metin) -> mantıksal {
     ver (metin_esit(t, "?") == yanlış) ve (metin_esit(t, "mantıksal") == yanlış);
+}
+// Bit/kaydırma ikili op mu? (& | ^ << >> — C: operandlar tamsayı, aksi T028.)
+işlev bit_op_mi(op: metin) -> mantıksal {
+    ver metin_esit(op, "&") veya metin_esit(op, "|") veya metin_esit(op, "^")
+      veya metin_esit(op, "<<") veya metin_esit(op, ">>");
+}
+// "Kesinlikle tamsayı değil" — bilinen (≠"?") ama tamsayı olmayan tip.
+işlev bilinen_tamsayi_degil(t: metin) -> mantıksal {
+    ver (metin_esit(t, "?") == yanlış) ve (tamsayi_mi(t) == yanlış);
 }
 // Atama hedefi lvalue mi? (C: TANIMLAYICI/ERISIM/INDEKS — aksi T022.)
 işlev lvalue_mi(ad: metin) -> mantıksal {
@@ -1937,7 +1958,13 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             ver "mantıksal";
         }
         eğer metin_esit(op, "==") veya metin_esit(op, "!=") { ver "mantıksal"; }
-        ver ifade_tip(p, sol, beklenen);  // bit/kaydırma → sol tipi (T003 yok — ileri TC)
+        eğer bit_op_mi(op) {   // tamsayı operand → sol tipi; tamsayı değilse "?" (C: TIP_HATA)
+            değişken st: metin = ifade_tip(p, sol, beklenen);
+            değişken gt: metin = ifade_tip(p, sag, "?");
+            eğer bilinen_tamsayi_degil(st) veya bilinen_tamsayi_degil(gt) { ver "?"; }
+            ver st;
+        }
+        ver ifade_tip(p, sol, beklenen);  // bilinmeyen op → sol tipi
     }
     eğer metin_esit(ad, "TEKLI") {
         değişken op: metin = dizi_al(p.a_deg, idx);
@@ -1952,7 +1979,11 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             eğer bilinen_sayisal_degil(t) { ver "?"; }
             ver t;
         }
-        eğer metin_esit(op, "~") { ver ifade_tip(p, operand, beklenen); }
+        eğer metin_esit(op, "~") {   // bit değil: tamsayı → operand tipi; aksi "?" (T028)
+            değişken t: metin = ifade_tip(p, operand, beklenen);
+            eğer bilinen_tamsayi_degil(t) { ver "?"; }
+            ver t;
+        }
         ver "?";   // & (ref) / deref* → ileri TC
     }
     eğer metin_esit(ad, "CAGRI") {   // TC3d: kullanıcı işlevi çağrısı → dönüş tipi
@@ -2072,8 +2103,22 @@ işlev t004_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
-// Tekli operatör kontrolü: neg → T003 (sayısal), degil → T004 (mantıksal).
-// ~ (bit değil) → T028 ileri TC; & / deref* → ileri TC. "?"→atla.
+// T028: bit/kaydırma ikili operandı tamsayı olmalı (IKILI düğümünde). "?"→atla.
+işlev t028_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken op: metin = dizi_al(p.a_deg, idx);
+    eğer bit_op_mi(op) == yanlış { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken st: metin = ifade_tip(p, dizi_al(p.cocuk, cb), "?");
+    değişken gt: metin = ifade_tip(p, dizi_al(p.cocuk, cb + 1), "?");
+    eğer bilinen_tamsayi_degil(st) veya bilinen_tamsayi_degil(gt) {
+        dizi_ekle(p.th_kod, "T028");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
+}
+// Tekli operatör kontrolü: neg → T003 (sayısal), degil → T004 (mantıksal),
+// ~ (bit değil) → T028 (tamsayı); & / deref* → ileri TC. "?"→atla.
 işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken op: metin = dizi_al(p.a_deg, idx);
     değişken operand: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
@@ -2081,6 +2126,15 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken t: metin = ifade_tip(p, operand, "?");
         eğer bilinen_sayisal_degil(t) {
             dizi_ekle(p.th_kod, "T003");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        }
+        ver 0;
+    }
+    eğer metin_esit(op, "~") {
+        değişken tt: metin = ifade_tip(p, operand, "?");
+        eğer bilinen_tamsayi_degil(tt) {
+            dizi_ekle(p.th_kod, "T028");
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
@@ -2180,18 +2234,25 @@ işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
     ver 0;
 }
 
+// Yerel/param tip-string filtresi: yalnız bilinen skaler VEYA bilinen yapı adı
+// saklanır; aksi (generic "T" gibi bilinmeyen ad) → "?" → kontrol atlanır.
+// C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true" → generic'te T003 yok.
+işlev yerel_tip_filtrele(p: &değişken Ayr, t: metin) -> metin {
+    eğer bilinen_skaler_mi(t) veya yapi_var_mi(p, t) { ver t; }
+    ver "?";
+}
 işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "PARAMETRE") {
         dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
         değişken tc: tam32 = son_cocuk(p, idx);   // param tip çocuğu (kendin → çocuk yok)
         eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
-            dizi_ekle(p.yerel_tip, tip_str(p, tc));
+            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, tip_str(p, tc)));
         } değilse { dizi_ekle(p.yerel_tip, "?"); }
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
-            dizi_ekle(p.yerel_tip, annot_str(p, idx));
+            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -2381,13 +2442,13 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         t020_kontrol(p, idx);
         eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
     }
-    eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); }   // TC3e/f
+    eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
-    p.aktif_donus = donus_str(p, fn);   // T020 bağlamı
+    p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
     lin_param_topla(p, fn);              // lineer parametreler dilime
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
