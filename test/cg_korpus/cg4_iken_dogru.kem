@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken i: tam32 = 0; değişken s: tam32 = 0; iken doğru { eğer i >= 6 { ver s; } s = s + 7; i = i + 1; } ver 99; }

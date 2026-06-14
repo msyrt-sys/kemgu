@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-083 — AŞAMA 3/5 CG7d + LEXER BOOTSTRAP: önek-builtin + bool-lit fix + alloca-hoist teşhisi (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** İlk gerçek bootstrap denemesi:
+codegen.exe (KEMGU-yazılı codegen) ile self-host kaynakları derle.
+
+**Builtin önek-eşleme (CG7d):** `builtin_kdl_ad` artık önek-tabanlı (`metin_`/`dosya_`/`yaz_`/
+`yazdir_`/`arg_`/`oku_karakter`/`ondalik_bicimle` → `kdl_*`), C codegen ile aynı. **Kritik gate:**
+önce `fn_var_mi` (kullanıcı işlevi mi) bakılır — `yaz_str`/`yaz_kacis` gibi `yaz_` önekli USER
+fonksiyonlarını builtin sanmamak için. `dizi_yaz` özel-case eklendi. Declare bloğu tam küme.
+
+**🔴 Bool-literal fix (bootstrap'in yakaladığı GERÇEK bug):** parser `doğru`/`yanlış` için
+`MANTIKSAL` düğümü (a_deg="1"/"0") üretir, `DOGRU`/`YANLIS` DEĞİL. CG2'deki varsayımım yanlıştı;
+hiçbir korpus testi çıplak bool literal kullanmadığından gizli kaldı. `iken doğru` → koşul "0"
+(fallthrough default) → döngü hiç girilmiyordu. ifade_uret `MANTIKSAL` → a_deg döndürür. 55/55.
+
+**🎉 LEXER BOOTSTRAP — 45/48 birebir:** codegen.exe lexer.kem'i derler → çalışan exe → C-codegen-
+built lexer ile **BYTE-IDENTİK çıktı** (test/ornekler + küçük korpus 45 dosya). İlk self-host
+fixpoint kanıtı.
+
+**🔴 TEŞHIS — alloca-in-loop yığın taşması (kalan bootstrap engeli):** 3 BÜYÜK dosya (parser/
+checker/codegen.kem) ~30KB+ girdide erken-temiz-çıkış (rc=0, çıktı capped). Kök-neden: "hoist-free"
+tasarımım `alloca`'yı DEGISKEN'in olduğu yere basar → DÖNGÜ İÇİ `değişken` her iterasyonda alloca
+→ yığın sınırsız büyür → ~binlerce iterasyonda taşma. C codegen D-041 hoist_renumber ile tam da
+bunu önler. Korpus döngüleri az iterasyon (gizli kaldı); lexer binlerce. **Düzeltme (sonraki):**
+DEGISKEN alloca'larını entry bloğuna hoist eden ön-pass (annotasyon→ll_tip; annotasyonsuz→tip_cikar).
+
+---
+
 ## D-082 — AŞAMA 3 CG8: dizi (heap KdlDizi + []-literal + element-tip polimorfik builtin) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** codegen.kem'in son büyük
