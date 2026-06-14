@@ -5,7 +5,7 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) DONE (2026-06-14)
+## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) + 2 (stack) DONE (2026-06-14)
 
 **Bağlam (firsthand doğrulandı):** Dizi indekslemenin iki yolu da bellek-güvensizdi:
 - **Heap** (`kdl_dizi_al_tam/tam64/ptr`, kdl_runtime.c:557-570): sınır kontrolü VARDI ama
@@ -37,9 +37,14 @@ sanıyordu). Açık sınır kontrolü eklendi (`p>=boyut→ver 0`, `p+1<boyut ve
 kısa-devre). Davranış korundu, bellek-güvenli oldu. Bu tam da #1-iddianın yakalaması gereken
 sınıf.
 
-**KATEGORİ 2 (stack `[N×T]`) — BEKLEMEDE [YÜKSEK — codegen]:** `DUGUM_INDEKS` GEP'ten önce
-`icmp uge idx, N` (unsigned → negatif+büyük) → br→panic. Engel: `LlvmIsim` sabit-dizi
-uzunluğu (N) TAŞIMIYOR → eklenecek. Ayrı izole commit + ASan + orkestratör doğrulaması.
+**KATEGORİ 2 (stack `[N×T]`) — DONE [YÜKSEK — codegen, commit ayrı]:** `LlvmIsim.dizi_uzunluk`
+eklendi; DEGISKEN annot-yok dalı değer `DUGUM_DIZI_OLUSTUR` ise N kaydeder. `DUGUM_INDEKS`
+stack yolu GEP'ten ÖNCE: `icmp uge i64 idx, N` (unsigned → negatif=dev-unsigned + i>=N tek
+seferde) → `br`→`bb<oob>`(call @kdl_panik + unreachable) / `bb<ok>`(GEP+load). IR header'a
+`declare void @kdl_panik(ptr)` + `@.str.dizi_sinir_panik` global. Etiketler `%bbN` (hoist_renumber
+`%<digit>` dokunmaz → D-041 güvenli). **Stack OOB artık segfault DEĞİL → panic.**
+Doğrulama: vaka5/6 (stack OOB/negatif → PANIC, eskiden rc=139); test_llvm **235/235**;
+opt -passes=verify PASS; ASan temiz (panic erişimden önce → 0 OOB raporu); 0 uyarı.
 
 **KATEGORİ 3 (ham `*T` bölge-tabanı) — BEKLEMEDE [İNCELEME]:** DUGUM_INDEKS:1958 pointee_elem
 yolu uzunluk bilgisi taşımıyor. Karar: ya bölge-container uzunluğu varsa kontrol et, ya da
