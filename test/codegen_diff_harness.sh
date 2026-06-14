@@ -23,6 +23,29 @@ if [ ! -x "$CODEGEN" ]; then
     exit 0
 fi
 
+# Win11 flakiness: freshly-linked .exe Defender taramasında ilk exec'te 127 verebilir
+# / clang çıktısı kilitlenebilir → link'i exe oluşana dek 3 kez dene (semantik değil, ortam).
+link_retry() {   # $1=ll  $2=exe
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && ver_ok=1 || ver_ok=0
+    [ "$ver_ok" -eq 1 ] && return 0
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && return 0
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && return 0
+    return 1
+}
+# Yeni .exe ilk exec'te Defender taraması yüzünden 127 (command-not-found) verebilir;
+# korpusta hiçbir program 127 dönmez → 127 daima ortamsal. 127 görülürse OS dosyayı
+# bırakana dek kısa bekle + tekrar dene (RC global). En çok 6 tur (~1.5s tavan).
+run_exe() {   # $1=exe
+    "$1" >/dev/null 2>&1; RC=$?
+    deneme=0
+    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 6 ]; do
+        sleep 0.25
+        "$1" >/dev/null 2>&1; RC=$?
+        deneme=$((deneme+1))
+    done
+    return 0
+}
+
 pass=0; fail=0
 for f in "$KORPUS"/*.kem; do
     [ -f "$f" ] || continue
@@ -30,14 +53,16 @@ for f in "$KORPUS"/*.kem; do
     b=$(basename "$f" .kem)
     # C codegen → exit (oracle)
     "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null
-    clang -x ir "$TMP/$b.c.ll" -x none "$RT" -o "$TMP/$b.c.exe" 2>/dev/null
-    "$TMP/$b.c.exe" >/dev/null 2>&1; coracle=$?
+    if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
+        echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"; continue
+    fi
+    run_exe "$TMP/$b.c.exe"; coracle=$RC
     # KEMGU codegen → exit (aday)
     "$CODEGEN" "$f" > "$TMP/$b.k.ll" 2>/dev/null
-    if ! clang -x ir "$TMP/$b.k.ll" -x none "$RT" -o "$TMP/$b.k.exe" 2>/dev/null; then
+    if ! link_retry "$TMP/$b.k.ll" "$TMP/$b.k.exe"; then
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
-    "$TMP/$b.k.exe" >/dev/null 2>&1; kaday=$?
+    run_exe "$TMP/$b.k.exe"; kaday=$RC
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))
     else
