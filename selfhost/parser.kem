@@ -895,6 +895,11 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
         ilerle(p);
         ver dugum0(p, "TAM", tam64_str(v), s, u);
     }
+    eğer metin_esit(t, "ONDALIK") {
+        değişken lx: metin = sim_lex(p);
+        ilerle(p);
+        ver dugum0(p, "KESIRLI", ondalik_bicimle(lx), s, u);
+    }
     eğer metin_esit(t, "DOGRU") { ilerle(p); ver dugum0(p, "MANTIKSAL", "1", s, u); }
     eğer metin_esit(t, "YANLIS") { ilerle(p); ver dugum0(p, "MANTIKSAL", "0", s, u); }
     eğer metin_esit(t, "BOS") { ilerle(p); ver dugum0(p, "BOS", "", s, u); }
@@ -1233,6 +1238,51 @@ işlev parse_esles(p: &değişken Ayr) -> tam32 {
     bekle(p, "SAG_SUSLU");
     ver dugum_n(p, "ESLES", "", s, u, kids);
 }
+// satıriçi_asm { mimari: X  şablon: r#".."#  çıktı("k",&v) girdi("k",e) bozulan("k") çevrim: N }
+// Yalnız `girdi` ifadeleri AST çocuğu (C ast_duz_yaz); gerisi tüketilir.
+işlev asm_kisit_atla(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") { ilerle(p); ver 1; }
+    p.hata_say = p.hata_say + 1; ver 0;
+}
+işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // satıriçi_asm
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            değişken lx: metin = sim_lex(p);
+            eğer metin_esit(lx, "mimari") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); bekle(p, "TANIMLAYICI");
+            } değilse {
+            eğer metin_esit(lx, "şablon") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); asm_kisit_atla(p);
+            } değilse {
+            eğer metin_esit(lx, "çevrim") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p);
+            } değilse {
+            eğer metin_esit(lx, "çıktı") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
+                eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+                bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
+            } değilse {
+            eğer metin_esit(lx, "girdi") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                bekle(p, "VIRGUL"); dizi_ekle(kids, parse_ifade(p)); bekle(p, "SAG_PAREN");
+            } değilse {
+            eğer metin_esit(lx, "bozulan") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p); bekle(p, "SAG_PAREN");
+            } değilse {
+                p.hata_say = p.hata_say + 1; ilerle(p);   // bilinmeyen clause
+            } } } } } }
+        }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
+}
 işlev parse_deyim(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "DEGISKEN") { ver parse_degisken(p); }
     eğer sim_mi(p, "VER") { ver parse_ver(p); }
@@ -1242,6 +1292,7 @@ işlev parse_deyim(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "ICIN") { ver parse_icin(p); }
     eğer sim_mi(p, "ESLES") { ver parse_esles(p); }
     eğer sim_mi(p, "GUVENSIZ") { ver parse_guvensiz(p); }
+    eğer sim_mi(p, "SATIRICI_ASM") { ver parse_satirici_asm(p); }
     ver parse_ifade_veya_atama(p);
 }
 işlev parse_blok(p: &değişken Ayr) -> tam32 {

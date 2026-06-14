@@ -1,0 +1,22 @@
+işlev a() -> kesirli32 {
+    değişken pi: kesirli32 = 3.14;
+    değişken e: kesirli64 = 2.718281828;
+    değişken k: kesirli64 = 1.6e-19;
+    değişken b: kesirli32 = 100.0;
+    değişken c: kesirli64 = 0.5;
+    değişken d: kesirli64 = 9.99e2;
+    ver pi + b;
+}
+işlev b() -> tam32 {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov {0}, {1}"#
+            çıktı("=r", &hedef)
+            girdi("r", kaynak)
+            bozulan("~{cc}")
+            çevrim: 3
+        }
+    }
+    ver 0;
+}
