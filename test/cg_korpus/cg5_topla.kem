@@ -1,0 +1,1 @@
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; } işlev main() -> tam32 { ver topla(40, 2); }

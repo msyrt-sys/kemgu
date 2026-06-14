@@ -1,0 +1,1 @@
+işlev gcd(a: tam32, b: tam32) -> tam32 { iken b != 0 { değişken t: tam32 = b; b = a % b; a = t; } ver a; } işlev main() -> tam32 { ver gcd(48, 36) + 30; }

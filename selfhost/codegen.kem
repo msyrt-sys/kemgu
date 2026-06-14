@@ -1660,6 +1660,29 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         yaz_str("  "); yaz_str(rs); yaz_str(" = load i32, ptr "); yaz_str(areg); yb(10);
         ver rs;
     }
+    eğer metin_esit(ad, "CAGRI") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken fad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, cb));  // hedef TANIMLAYICI adı
+        // Argümanları SIRAYLA değerlendir (yan-IR akar), operandları biriktir.
+        değişken args: Dizi<metin> = [];
+        değişken i: tam32 = 1;
+        iken i < cs {
+            dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, cb + i)));
+            i = i + 1;
+        }
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = call i32 @"); yaz_str(fad); yaz_str("(");
+        değişken j: tam32 = 0;
+        iken j < dizi_boyut(args) {
+            eğer j > 0 { yaz_str(", "); }
+            yaz_str("i32 "); yaz_str(dizi_al(args, j));
+            j = j + 1;
+        }
+        yaz_str(")"); yb(10);
+        ver rs;
+    }
     eğer metin_esit(ad, "IKILI") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken sol: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
@@ -1789,12 +1812,42 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
     p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
-    yaz_str("define i32 @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("() {"); yb(10);
-    yaz_str("entry:"); yb(10);
-    p.bb_term = 0;   // entry taze blok
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
+    yaz_str("define i32 @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("(");
+    değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer pn > 0 { yaz_str(", "); }
+            yaz_str("i32 %a"); yaz_str(tam64_str(pn olarak tam64));
+            pn = pn + 1;
+        }
+        i = i + 1;
+    }
+    yaz_str(") {"); yb(10);
+    yaz_str("entry:"); yb(10);
+    p.bb_term = 0;   // entry taze blok
+    // 2) Parametreler: alloca + store %aN + ad→reg kaydı (CG3 yerel deseni; mutable param)
+    değişken pj: tam32 = 0;
+    i = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            değişken a: tam32 = yeni_reg(p);
+            değişken areg: metin = reg_str(a);
+            yaz_str("  "); yaz_str(areg); yaz_str(" = alloca i32"); yb(10);
+            yaz_str("  store i32 %a"); yaz_str(tam64_str(pj olarak tam64));
+            yaz_str(", ptr "); yaz_str(areg); yb(10);
+            cg_var_ekle(p, dizi_al(p.a_deg, c), areg);
+            pj = pj + 1;
+        }
+        i = i + 1;
+    }
+    // 3) Gövde (BLOK çocuğu)
+    i = 0;
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { deyim_uret(p, c); }

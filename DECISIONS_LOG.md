@@ -5,6 +5,25 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-077 — AŞAMA 3 CG5: çağrı + parametre + özyineleme (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `islev_uret` artık
+parametreleri emit eder; `ifade_uret`'e CAGRI (call) eklendi.
+
+**Parametre:** İmzada ADLI param (`%a0, %a1...` — adlı olduğundan `%N` reg sayacını tüketmez,
+entry alloca'ları %0'dan başlar). Entry'de her param için `alloca i32` + `store %aN` + ad→reg
+kaydı (CG3 yerel deseni; param mutable). **CAGRI:** hedef = çocuk[0] TANIMLAYICI adı; argümanlar
+SIRAYLA `ifade_uret` ile değerlendirilip operandlar yerel `Dizi<metin>`'e biriktirilir (init+append
+— güvenli desen, ATAMA-reassignment DEĞİL), sonra tek `call i32 @ad(i32 a0, ...)`. Aynı-modül
+ileri-referans (özyineleme + forward-call) LLVM'de declare gerektirmez.
+
+**Doğrulama:** test/cg_korpus 28 program (+5 CG5: topla/kare/fib/fakt/gcd-işlev). fib(10)=55,
+fakt(5)=120, gcd(48,36)+30=42 — **28/28 exit eşdeğer**. **Sınır:** runtime/builtin çağrıları
+(yaz_tam, dizi_*) CG7+ (declare header gerek). **Sonraki:** CG6 — multi-int (i8/16/64, dtam) +
+sext/trunc + işaretsiz + gerçek dönüş-tipi emit (mantıksal→i1 main).
+
+---
+
 ## D-076 — AŞAMA 3 CG4: kontrol akışı (eğer/iken → br + %bbN blok) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `deyim_uret`'e EGER
