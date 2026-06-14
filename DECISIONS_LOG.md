@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-071 [YÜKSEK] — Sınıf B lambda/closure codegen V2: KARMA temsil (kabul-ama-çöküyor kapandı) (2026-06-14)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Güvenlik-iddiası izi
+(D-070 devamı). D-031 Sınıf B'nin 4 lambda örneği (`04_islev`, `10_lambda`, `42_lambda_hesap`,
+`25_closure_capture`) lambda codegen YOKLUĞUNDAN çöp fn-ptr çağrısı → SEGFAULT yapıyordu
+(D-004 ertelemesi). Lambda/closure codegen sıfırdan yazıldı. C derleyici codegen değişti.
+
+**Tasarım (5-ajan workflow ile doğrulandı, opt -passes=verify):** KARMA temsil —
+- **Yakalamasız lambda → BARE fn-ptr** (`bitcast @lambda_N to ptr`; top-level fn ile aynı ABI;
+  bare-call). `işlev(T)→R` param da bare-call → top-level fn VE yakalamasız lambda ikisi de geçer.
+- **Yakalamalı lambda → CLOSURE** stack `{ ptr fn, ptr env }`; lifted `@lambda_N(ptr env, params)`
+  capture'ları env'den load. Lokal değişken `closure_mu=1` → çağrıda env-unpack.
+- Lifted fn'ler DEFERRED emit (BekleyenLambda kuyruğu, generic mono deseni; çevre fn gövdesi
+  bitince — INLINE emit IR'ı bozardı). Capture analizi (`lambda_serbest_tara`) OLUŞTURMA anında
+  (scope canlı) yapılıp kayda konur. D-041 hoist_renumber `%bbN`/`%env` (named) korur.
+
+**Neden karma (uniform değil):** İlk deneme tüm lambda'ları closure + işlev-param closure_mu=1
+yaptı → stdlib map/filtre/indirgeme (top-level fn'i işlev param'a geçiyor: `harita(xs, iki_kat)`)
+KIRILDI (closure-unpack ham fn-ptr'da → çöp). Karma temsilde yakalamasız lambda = top-level fn
+= bare fn-ptr → işlev param bare-call → ikisi de çalışır + yakalamalı (25) closure ile.
+
+**Doğrulama:** 4 örnek → exit 42 (closure capture dahil); ASan/UBSan TEMİZ (4/4); opt verify
+PASS; **test_llvm 235/235** (stdlib higher-order regresyonu çözüldü); bounds 11/11; checker
+48/48; self-host 3/3; ASan E2E **PASS=91 FAIL=0** (4 lambda allowlist'ten çıktı → korumalı PASS;
+ALLOW 6→2, yalnız G003-red 35/40). Yeni `make calistir_lambda_test` (test_tumu'da) 4/4. 0 uyarı.
+
+**KAPSAM-DIŞI (V2/D-072):** yakalamalı lambda'yı işlev param'a geçirme (call-site trampolin
+gerek); blok-form gövde son-ver çıkarsama (`||{...}` — lineer_closure/29_linear_closure);
+dönüş tipi i32-dışı (call-site/lifted-fn senkronu — IR "ptr" tip taşımıyor); yapı/dizi/&T
+capture; lambda escape (env stack — şu an non-escaping KEMGU v1 garantisi). **Sınıf B kapandı;
+8 kabul-ama-çöküyor deliğinin tümü artık ya düzeltildi (D-070 literal, D-071 lambda) ya da
+checker-reddi (D-070 G003 değişken-arg).**
+
+---
+
 ## D-070 [YÜKSEK] — Sınıf A kabul-ama-çöküyor: dizi-LİTERAL → Dizi<T> param → heap (UB kapandı) (2026-06-14)
 
 **Karar [ETKİ: orta — `src/llvm.c` CAGRI codegen; izole commit].** Güvenlik-iddiası izi
