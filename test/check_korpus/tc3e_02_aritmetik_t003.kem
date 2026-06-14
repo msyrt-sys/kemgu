@@ -1,0 +1,6 @@
+// TC3e: aritmetik operandı mantıksal → T003 (operand sayısal değil; T001 değil).
+işlev main() -> tam32 {
+    değişken b: mantıksal = doğru;
+    değişken r: tam32 = b + 1;   // mantıksal + tam → T003
+    ver r;
+}
