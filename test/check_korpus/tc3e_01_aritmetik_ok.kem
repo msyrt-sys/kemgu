@@ -1,0 +1,6 @@
+// TC3e: geçerli aritmetik (tüm operandlar sayısal) → OK beklenir.
+işlev main() -> tam32 {
+    değişken a: tam32 = 3;
+    değişken b: tam32 = a + 4 * 2;
+    ver b;
+}

@@ -1,0 +1,11 @@
+işlev m() -> tam32 {
+    değişken a: tam8 = 5;
+    değişken b: tam64 = 100;
+    değişken c: kesirli32 = 3.14;
+    değişken d: metin = "merhaba";
+    değişken e: mantıksal = doğru;
+    değişken f: tam32 = a;
+    ver 0;
+}
+sabit PI: kesirli64 = 3.14159;
+sabit AD: metin = "kemgu";

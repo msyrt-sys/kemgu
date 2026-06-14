@@ -1,0 +1,6 @@
+// TC3f: ve/veya operandı sayısal → T004 (T001 değil; ikili TIP_HATA).
+işlev main() -> tam32 {
+    değişken x: tam32 = 3;
+    değişken c: mantıksal = x ve doğru;   // tam32 ve mantıksal → T004
+    ver 0;
+}

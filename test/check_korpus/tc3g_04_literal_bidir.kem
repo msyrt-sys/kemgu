@@ -1,0 +1,6 @@
+// TC3g: literal argüman parametre tipine bidirectional çıkarsanır → OK (T001 yok).
+işlev byte_al(x: tam8) -> tam8 { ver x; }
+işlev main() -> tam32 {
+    değişken r: tam8 = byte_al(100);   // 100 → tam8 (param) → OK
+    ver 0;
+}

@@ -1,0 +1,7 @@
+işlev kullanim() -> tam32 {
+    değişken xs: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(xs, 10);
+    yazdir_tam(dizi_al(xs, 0));
+    değişken s: metin = "merhaba";
+    ver metin_uzunluk(s);
+}

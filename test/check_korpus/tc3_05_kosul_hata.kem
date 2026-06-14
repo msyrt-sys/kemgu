@@ -1,0 +1,7 @@
+işlev m() -> tam32 {
+    eğer 5 { ver 1; }
+    iken 3 { ver 2; }
+    değişken b: tam32 = 1 < 2;
+    eğer "metin" { ver 0; }
+    ver 0;
+}

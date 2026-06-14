@@ -1,0 +1,6 @@
+// TC3f: tekli 'değil' operandı sayısal → T004 (T021 değil; koşul TIP_HATA).
+işlev main() -> tam32 {
+    değişken x: tam32 = 3;
+    eğer değil x { ver 1; }   // değil tam32 → T004
+    ver 0;
+}

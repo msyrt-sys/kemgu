@@ -1,0 +1,5 @@
+// TC5b: lineer bağlama scope sonunda tüketilmedi → L001 (bildirim konumu).
+işlev sizinti() {
+    değişken k = tekkez_olustur(5);
+}
+işlev main() -> tam32 { ver 0; }

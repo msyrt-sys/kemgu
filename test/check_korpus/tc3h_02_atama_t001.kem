@@ -1,0 +1,6 @@
+// TC3h: atama değeri (mantıksal) hedef tipiyle (tam32) uyumsuz → T001 (atama konumu).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    x = doğru;   // tam32 = mantıksal → T001
+    ver x;
+}

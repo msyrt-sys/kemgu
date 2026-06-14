@@ -5,6 +5,281 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-063 — SELF-HOST checker: aynı-ad belirsiz tip → "?" (self-host kaynak paritesi) — lexer+parser+checker.kem TAM (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem`].** KEMGU checker'ı KENDİ derleyici
+kaynakları üzerinde (lexer/parser/checker.kem) C oracle'ına karşı doğrulandı → **3/3
+self-host kaynak BİREBİR**. Bir false-positive bulundu ve düzeltildi. C derleyici
+DOKUNULMADI.
+
+**Bulgu (bağımsız doğrulama):** `parser.kem:969` `ver ic;` → KEMGU FALSE T020, oracle OK.
+Sebep: `parse_birincil`'de iki ayrı blok kapsamında iki `ic` (`metin` @935, `tam32` @967);
+düz `yerel` listesi kapsam tutmaz, `var_tip` ileri-arama İLK eşleşmeyi (`metin`) döndürdü →
+`ver ic` (tam32 fonksiyonda) metin sanıldı → T020. C blok kapsamlarıyla doğru çözer.
+
+**Düzeltme (GÜVENLİ):** `var_tip` — bir ad birden fazla FARKLI tiple bağlıysa → "?"
+(belirsiz → kontrol atla). Tek tip → o tip. Yalnız under-report (false-positive önler,
+hiç error EKLEMEZ). Hem false T020 (ver ic) hem olası false T001'i (dugum0 arg ic) kapatır.
+
+**Doğrulama:** self-host kaynaklar **lexer.kem ✅ parser.kem ✅ checker.kem ✅** (hepsi
+oracle = KEMGU). `make calistir_checker_diff` **44/44**; test/ornekler **42/42** (regression
+yok — yalnız belirsiz-ad checkleri atlanır, geçerli kodda zaten error yok).
+
+**Önemi (Aşama 5 hazırlığı):** KEMGU checker artık TÜM derleyiciyi (kendisi dâhil) C ile
+birebir tip-kontrol ediyor — bootstrap fixpoint için checker accept/reject doğruluğu
+KANITLANDI (geçerli kaynak → kabul, sahte hata yok).
+
+---
+
+## D-062 — SELF-HOST checker TC5b: lineer akış L001/L002/L004 — 🎉 test/ornekler 42/42 TAM PARİTE (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5b (Linear
+Types Spec V1 akış denetimi): L001 (scope sonu tüketilmedi), L002 (move sonrası erişim),
+L004 (lineer referans). **lineer_hata.kem kapandı → test/ornekler 42/42 TAM accept/reject
++ tanı paritesi.** C derleyici DOKUNULMADI.
+
+**Mimari — lineer bağlama izleme (aktif işlev dilimi).** `Ayr`'a lin_ad/lin_sat/lin_sut/
+lin_tuk (paralel Dizi) + lin_basla (dilim başı; `yerel` deseni). `kontrol_govde`: girişte
+lin_basla + lineer parametreler (`lin_param_topla`); çıkışta `lin_kapanis` (tüketilmemiş →
+L001 bildirim konumunda). Tüketim noktaları (`lin_tuket_dugum`, tekrar → L002 düğüm
+konumunda): kullan/imha (KULLAN_IFADE/IMHA_IFADE), çağrı-arg→lineer-param (fn_plin), ver
+değeri, değişken move. L004: `&`/`&değişken` lineer bağlama → tekli_kontrol'da.
+
+**KRİTİK karar — Linear V1 = YALNIZ tekkez (`tip_node_tekkez_mi`).** C `tip_lineer_mi`
+tekkez+yetki+görev kapsar AMA tüketilmemiş yetki→CP005, görev→DRF (L001 DEĞİL). Bu yüzden
+L001/L002/L004 izleme TEKKEZ'e kısıtlandı → mmio_smoke (yetki<MMIO>) FALSE-L001 vermez.
+**LR002 GENİŞ kalır** (tekkez+yetki+görev) — geçerli yapıda hiç lineer alan yok →
+false-positive yok. (yetki CP005 = TC7, görev DRF = TC6.)
+
+**Doğrulama:** lineer_hata.kem KEMGU = oracle BİREBİR: LR002 24:5, L001 7:5, L002 13:28,
+L004 18:20. `make calistir_checker_diff` → **44/44 korpus** (önceki 40 + TC5b 4: L001/L002/
+L004/temiz). **test/ornekler 42/42** (lineer_temel/closure OK; mmio_smoke OK; regression yok).
+
+**Bilinen sınır (TC5 kalan):** L007/L008 (consume operand tekkez değil / tekkez_olustur
+arity); kapsam blok-düzeyi değil işlev-düzeyi (lineer_hata/temel/closure'da fark yok);
+closure LC-2/LC-3 (yakalama → consume-at-traversal modeliyle örtüşüyor). Sıradaki: yetki
+CP005 (TC7), bölge (TC6), modül (TC8), tam-korpus (TC9) → Aşama 3 codegen.
+
+---
+
+## D-061 — SELF-HOST checker TC5a: yapı lineer alan yasağı (LR002) — 40/40 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5a (Linear
+Types Spec V1 başlangıcı): yapı lineer-tipli alan içeremez (LR002). C derleyici
+DOKUNULMADI.
+
+**Kapsam:** `lr002_kontrol` pre-pass (gövdelerden ÖNCE, `kontrol_ust`'tan önce) —
+üst-düzey/modül/dışa YAPI'ların alanlarını gezer; alan tipi lineer ise (`tip_node_lineer_mi`:
+TIP_TEKKEZ/TIP_YETKI/TIP_GOREV) → LR002 alan düğümünde. C `tip_lineer_mi` (tekkez+yetki+
+görev; kanal/sabitsüre HARİÇ) birebir; konum ALAN düğümü (--checkdump: lineer_hata
+LR002 24:5).
+
+**Sıra kararı:** LR002 pre_populate'te (gövdelerden önce) → çok-hatalı dosyada (lineer_hata)
+LR002 İLK çıkar (L001/L002/L004 gövde hatalarından önce). Bu yüzden ayrı pre-pass.
+
+**Doğrulama:** `make calistir_checker_diff` → **40/40 korpus** (önceki 38 + TC5a 2:
+lineer-alan-LR002 / lineer-olmayan-OK). test/ornekler **41/42** (lineer_hata hâlâ
+diff — L001/L002/L004 TC5b'de; geçerli yapılarda false-LR002 YOK).
+
+**Sıradaki (TC5b):** lineer akış — L001 (scope sonu tüketilmedi), L002 (move sonrası
+erişim), L004 (lineer referans). Lineer bağlama izleme (tekkez_olustur değer / tekkez
+annotasyon / lineer param) + tüketim noktaları (kullan/imha/çağrı-arg/ver). lineer_hata
+→ 42/42 kapanır.
+
+---
+
+## D-060 — SELF-HOST checker TC4a: yapı oluştur (T002/T017/T012/T001) + erişim tipi — 38/38 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC4a: yapı
+oluşturma denetimi (bilinmeyen yapı T002, bilinmeyen alan T017, eksik alan T012, alan
+değer tipi T001) + alan erişim tip çıkarsama (`nesne.alan` → alan tipi). C derleyici
+DOKUNULMADI.
+
+**Mimari karar — yapı tablosu (`yapi_ad`/`yapi_abase`/`yapi_acount` + düz `alan_ad`/
+`alan_tip`).** `genel_topla` YAPI (+ dışa-YAPI) düğümlerinde `yapi_kaydet`: alan adları
++ tipleri (yalnız bilinen skaler; generic "T"/yapı/bileşik → "?"). Sorgular:
+`yapi_var_mi`, `alan_var_mi`, `alan_tip_bul`.
+
+**C `kontrol_yapi_olustur_ic` sırası birebir (--checkdump doğrulaması):**
+- Yapı tanımsız → T002 (oluştur düğümü) + **erken dönüş** (alan kontrolü yok).
+- Her alan-atama (oluşturma sırası): bilinmeyen alan → T017 (alan düğümü, **değer
+  kontrol edilmez**); bilinen → değer T002 + T001 (alan değer tipi, alan düğümü).
+- Eksik alanlar (bildirim sırası) → T012 (oluştur düğümü), per-alan döngüsünden SONRA.
+- `ifade_tip` YAPI_OLUSTUR → yapı adı; ERISIM → alan tipi (referans nesne → "?").
+
+**GÜVENLİ strateji:** Alan tipi yalnız bilinen-skaler saklanır (generic/yapı alan →
+"?" → T001 atla); referans-nesne erişimi → "?" → atla. Geçerli kodda false-positive
+YOK → test/ornekler (yapilar/hasta dâhil) 41/42 KORUNDU.
+
+**Doğrulama:** `make calistir_checker_diff` → **38/38 korpus** (önceki 32 + TC4 6:
+yapı-OK / bilinmeyen-alan / eksik-alan / alan-tip / bilinmeyen-yapı / erişim-tip).
+test/ornekler **41/42** (regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC4b):** eşleş exhaustiveness M001 + çeşit varyant (M002/M003/M004) +
+INDEKS tip/T013. Sonra linear (TC5 → lineer_hata kapanır), bölge/yetki/modül (TC6-8).
+
+---
+
+## D-059 — SELF-HOST checker TC3h: atama lvalue (T022) + atama tip uyumu (T001) — 32/32 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3h: atama
+hedefi lvalue olmalı (T022); atama değeri hedef tipiyle uyumlu olmalı (T001). C
+derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` ATAMA özel-case'i. `lvalue_mi` (TANIMLAYICI/ERISIM/INDEKS).
+C DUGUM_ATAMA sırası birebir: T022 (lvalue, **erken dönüş YOK**) → hedef T002 → değer
+T002 → T001 (`ifade_tip(hedef)` vs `ifade_tip(değer, ht)`). Konum: ATAMA düğümü
+(sol-taraf başı; `--checkdump` ile doğrulandı: `x=doğru`→T001 3:5, `5=3`→T022 2:5,
+`f()=3`→T022 3:5).
+
+**GÜVENLİ strateji:** T001 yalnız hedef tipi bilinen-skaler (TANIMLAYICI → var_tip)
+iken; ERISIM/INDEKS hedef → ht "?" → T001 atla (alan/indeks tipi TC4). Değer "?" →
+atla. Geçerli kodda (lvalue + uyumlu tip) hata yok → false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **32/32 korpus** (önceki 28 + TC3h 4:
+atama-OK / atama-T001 / literal-hedef-T022 / çağrı-hedef-T022). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Aşama 2 ilerleme (T-kodları):** T001 (annot/atama/arg/IKILI-aynı-tip), T002, T003,
+T004, T010, T020, T021, T022, T024, T026 — 10 kod. Sıradaki (TC4): struct alan T017 +
+ERISIM/INDEKS tip çıkarsama + eşleş exhaustiveness M001. Sonra linear (TC5 →
+lineer_hata kapanır), bölge/yetki/modül (TC6-8), tam-korpus paritesi (TC9).
+
+---
+
+## D-058 — SELF-HOST checker TC3g: CAGRI per-arg T001 (param tip tablosu) — 28/28 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3g: kullanıcı
+işlevi çağrısında argüman tipi parametre tipiyle uyumsuz → T001 (arg konumunda).
+C derleyici DOKUNULMADI.
+
+**Mimari karar — parametre tip tablosu (`fn_pbase` + `fn_ptip` düz liste).** İmza
+tablosu genişletildi: her işlevin param tipleri `fn_ptip`'e ardışık yazılır, `fn_pbase`
+başlangıç indeksini tutar. `fn_ptip_bul(ad, j)` j. param tipini verir. CAGRI arite-OK
+yolunda her arg için `ifade_tip(arg, pt)` vs `pt` → uyumsuz ise T001 arg düğümünde.
+
+**EMPİRİK C DAVRANIŞI (--checkdump ile doğrulandı):**
+- `f(tanımsız)` → T002 **İKİ KEZ** (C iki-geçiş: pass1 unify + pass2 check, her ikisi
+  `tip_belirle` → arg-İÇİ hata çiftlenir). Per-arg **T001 yalnız pass2** → tek emisyon.
+- `f(b)` (b yanlış-tip, iç hata yok) → T001 **bir kez** (arg konumu).
+- İç-hatasız argümanlarda tek-geçiş = C ile birebir (çiftleme yalnız iç-hatalı argda).
+
+**Tasarım — tek-geçiş + per-arg T001 (GÜVENLİ):** Param tipi yalnız **bilinen skaler**
+saklanır (generic "T"/yapı → "?" → atla; generic false-positive yok). Arg "?" veya pt
+"?" → atla. Literal arg bidirectional (`byte_al(100)` param tam8 → tam8 → OK). Bilinen
+sınır: arg-İÇİ hata çiftlemesi (tanımsız-ad-arg) tek-geçişte tek kez — yalnız geçersiz
+kodda; geçerli korpusta (iç-hatasız arg) tam parite. Method/builtin → tek-geçiş (mevcut).
+
+**Doğrulama:** `make calistir_checker_diff` → **28/28 korpus** (önceki 24 + TC3g 4:
+arg-OK / arg-T001 / ikinci-arg / literal-bidir). test/ornekler **41/42** (regression yok;
+lineer_hata = TC5).
+
+**Sıradaki (TC3h):** T022 (atama lvalue) + eşitlik/karşılaştırma aynı-tip T001. Sonra
+struct alan T017 + erişim tipi (TC4), exhaustiveness M001, linear (TC5 → lineer_hata
+kapanır), bölge/yetki/modül (TC6-8), tam-korpus paritesi (TC9).
+
+---
+
+## D-057 — SELF-HOST checker TC3f: mantıksal operand (T004) + tekli neg/değil — 24/24 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3f: ikili
+`ve`/`veya` operandı mantıksal olmalı (T004); tekli `-` (neg) sayısal (T003); tekli
+`değil` mantıksal (T004). C derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` IKILI post-check'e `t004_kontrol` (ve/veya → her iki
+operand mantıksal); TEKLI post-check `tekli_kontrol` (neg → sayısal/T003, değil →
+mantıksal/T004). `~`/`&`/`deref*` → ileri TC. Konum: IKILI/TEKLI düğümü (= operatör;
+parser bootstrap ile C ile özdeş). `bilinen_mantiksal_degil` (≠"?" ve ≠"mantıksal").
+
+**C semantiği birebir (TIP_HATA bastırma):** `ifade_tip` artık ve/veya, neg, değil
+için operand kesin-uyumsuzsa "?" döner (C operand→TIP_HATA→ikili/tekli erken dönüş).
+Böylece `değişken c: mantıksal = x ve doğru` (x tam32) → yalnız T004 (T001 yok);
+`değişken r: tam32 = -b` (b mantıksal) → yalnız T003; `eğer değil x` (x tam32) →
+yalnız T004 (T021 yok). `==`/`!=` mantıksal döner (aynı-tip T001 ileri TC).
+
+**GÜVENLİ strateji:** Yalnız KESİN uyumsuz operandda hata → geçerli kodda
+false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **24/24 korpus** (önceki 20 + TC3f 4:
+mantık/tekli-OK / ve-T004 / neg-T003 / değil-T004). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3g):** CAGRI per-arg T001 (param tip tablosu) + eşitlik/karşılaştırma
+aynı-tip T001 + T022 (lvalue atama hedefi). Sonra struct alan T017 + exhaustiveness
+M001, generic (TC4), linear (TC5 → lineer_hata kapanır), bölge/yetki/modül (TC6-8).
+
+---
+
+## D-056 — SELF-HOST checker TC3e: aritmetik/karşılaştırma sayısal operand (T003) — 20/20 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3e: ikili
+aritmetik (`+ - * / %`) ve karşılaştırma (`< > <= >=`) operandı sayısal olmalı (T003).
+C derleyici DOKUNULMADI.
+
+**Kapsam:** `kontrol_dugum` IKILI post-check'i `t003_kontrol` — operand tiplerini
+`ifade_tip` ile hesaplar; aritmetik VEYA karşılaştırmada bir operand **kesinlikle
+sayısal değil** (`bilinen_sayisal_degil`: ≠"?" ve `sayisal_mi` yanlış) ise T003
+(IKILI düğüm konumunda = operatör; parser bootstrap ile C ile özdeş). Eşitlik
+(`== !=`), mantıksal (`ve veya`), bit/kaydırma → T003 YOK (ileri TC).
+
+**C `tip_belirle(IKILI)` semantiği birebir:**
+- Operand TIP_HATA ise (örn. tanımsız ad → T002) ikili **erken TIP_HATA döner →
+  T003 YOK**. KEMGU karşılığı: `ifade_tip` arit/karşılaştırmada operand "?" ise
+  "?" döner; `t003_kontrol` "?" operandı atlar → çift hata yok.
+- T003 fırlayınca C TIP_HATA döner → dış T001/T020/T021 **bastırılır**. KEMGU:
+  `ifade_tip` arit-non-sayısal → "?", karşılaştırma-non-sayısal → "?" döner;
+  böylece `değişken r: tam32 = b + 1` (b mantıksal) → yalnız T003 (T001 yok),
+  `eğer b < 3` → yalnız T003 (T021 yok). İç-içe `(a<3)+1` → yalnız dış '+' T003.
+
+**GÜVENLİ strateji:** Yalnız KESİN bilinen non-sayısal operandda T003 → geçerli
+kodda (tüm aritmetik operandlar sayısal) false-positive YOK.
+
+**Doğrulama:** `make calistir_checker_diff` → **20/20 korpus** (önceki 16 + TC3e 4:
+aritmetik-OK / aritmetik-T003 / karşılaştırma-T003 / iç-içe). test/ornekler **41/42**
+(regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3f):** CAGRI per-arg T001 (param tip tablosu) + eşitlik/karşılaştırma
+aynı-tip T001 + mantıksal T004 + T022 (lvalue) + tekli '-' T003. Sonra struct alan
+T017 + exhaustiveness M001, generic (TC4), linear (TC5 → lineer_hata kapanır), modül.
+
+---
+
+## D-055 — SELF-HOST checker TC3d: CAGRI dönüş çıkarsama + T010 arite — 16/16 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3d: kullanıcı
+işlevi çağrısının dönüş tipini çıkarsama (T001/T020'yi besler) + çağrı argüman sayısı
+uyumsuzluğu (T010). C derleyici DOKUNULMADI.
+
+**Mimari karar — işlev imza tablosu (`fn_ad`/`fn_donus`/`fn_psay` paralel Dizi).**
+`genel_topla` sırasında her üst-düzey/modül/`dışa` ISLEV için imza kaydedilir: ad,
+dönüş tipi, parametre sayısı. CAGRI `ifade_tip` hedef TANIMLAYICI ise `fn_donus_bul`
+ile dönüş tipini verir; `kontrol_dugum` CAGRI özel-case'i `fn_psay_bul` ile arite
+karşılaştırır.
+
+**GÜVENLİ strateji (false-positive YOK):**
+- Dönüş tipi YALNIZ **bilinen skaler** (`bilinen_skaler_mi`: sayısal/mantıksal/metin/
+  karakter/boş) ise saklanır; yapı/generic-param/bileşik dönüş → "?". Böylece generic
+  `kimlik<T>() -> T` dönüşü "T" gibi sahte tiplerle T001 üretmez (parser tip-paramları
+  AST'te yok → generic tespit edilemez; skaler-whitelist bunu kapsar).
+- Arite YALNIZ kullanıcı işlevleri için (`fn_psay_bul >= 0`); builtin'ler → atla
+  (builtin arite'leri C'de özel; geçerli kodda doğru çağrılır → diff yok).
+- Method (`x.m()` = ERISIM hedef) ve dolaylı çağrı → atla (TANIMLAYICI değil).
+
+**C `tip_belirle(CAGRI)` sırası birebir:** hedef T002 → (tanımsız hedef →
+TIP_HATA → **erken dönüş**, arg atlanır) → T010 arite (uyumsuz → **erken dönüş**,
+arg tip kontrolü yok) → argümanlar. Pozisyon: T010 CAGRI düğümünde (= `(` konumu;
+parser bootstrap 224/224 ile C ile özdeş).
+
+**Doğrulama:** `make calistir_checker_diff` → **16/16 korpus** (önceki 12 + TC3d 4:
+çağrı-dönüş OK / T010 arite / dönüş-uyumsuz T001 / ver-çağrı T020). test/ornekler
+**41/42** (regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3e):** CAGRI per-arg T001 (param tip tablosu) + T022 (lvalue) + T003
+(sayısal beklenen). Sonra struct alan T017 + exhaustiveness M001, generic (TC4),
+linear (TC5 → lineer_hata kapanır), bölge/yetki/modül, tam-korpus paritesi (TC9).
+
+---
+
 ## D-051 — SELF-HOST Aşama 2 (TİP DENETLEYİCİ) ADIM-0: --checkdump oracle + mimari (2026-06-14)
 
 **Karar [ETKİ: düşük — additive C `--checkdump` modu; mevcut yol değişmedi].** Aşama 2
@@ -34,6 +309,77 @@ TC6 bölge · TC7 yetki · TC8 modül · TC9 tam güvenlik + tüm-korpus parites
 Additive — `--check`/testler etkilenmedi.
 
 **Sıradaki:** TC1 — selfhost/checker.kem (parser AST üzerinde sembol/tip/temel kontrol).
+
+---
+
+## D-054 — SELF-HOST checker TC3a: tip çıkarsama temeli + annotation T001 — 9/9 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3a: tip
+çıkarsama çekirdeği (mountain'ın özü). değişken/sabit annotation-değer uyumsuzluğu (T001).
+
+**Kapsam:** STRING-encoded tip çıkarsama `ifade_tip` — literal (TAM/KESIRLI bidirectional
+beklenen sayı/kesirli tiple; METIN/KARAKTER/MANTIKSAL/BOS) + tanımlayıcı (yerel_tip
+takibi). `yerel_tip` Dizi (param: tip-çocuğundan; değişken: annotation; için/desen: "?").
+T001: değişken/sabit annotation vs değer tipi; çocuk T002'lerinden SONRA (C sırası).
+
+**GÜVENLİ strateji:** Bilinmeyen tip → "?" → T001 ATLA. ifade_tip yalnız emin olduğu
+(literal/bilinen-ident) tipleri döndürür; IKILI/CAGRI/ERISIM → "?" (TC3b). Böylece
+geçerli kodda FALSE-T001 yok → gerçek tek-dosya 41/42 KORUNDU (under-report > over-report).
+bidirectional: `değişken a: tam8 = 5` OK (5→tam8); `b: mantıksal = 7` T001.
+
+**Doğrulama:** `make calistir_checker_diff` → **9/9 korpus** (TC1 4 + TC2 2 + TC3 3).
+test/ornekler 41/42 (regression yok; lineer_hata = TC5). C derleyici değişmedi.
+
+**Sıradaki (TC3b):** IKILI operatör tipi (sayısal aritmetik → operand; karşılaştırma/
+mantıksal → mantıksal) + CAGRI dönüş tipi + T020 (ver) + T021 (koşul mantıksal) +
+T022 (lvalue) + T010 (arite). Sonra struct alan/exhaustiveness, generic, linear, modül.
+
+---
+
+## D-053 — SELF-HOST checker TC2: üst-düzey çift-tanım (T024/T026) — 6/6 korpus, 41/42 gerçek (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC2: üst-düzey
+çift-tanım denetimi. C `pre_populate` accept/reject + sıra paritesi.
+
+**Kapsam:** PROGRAM doğrudan çocuklarında çift-tanım. Kod kind'e göre: yapı/çeşit →
+**T026**, işlev/sabit/özellik/modül → **T024**. İkinci tanımın konumunda. C pre_populate
+**4-geçiş sırası BİREBİR**: özellik → yapı/çeşit → (uygula: ad yok) → işlev/sabit/modül,
+her geçiş kaynak-sırası, PAYLAŞILAN global kapsam (gor). dışa-sarmalı açılır.
+
+**Bulgu (sıra kritik):** Naif kaynak-sırası dup-tarama yanlış sıra üretti — C iki-geçişli
+(yapı/çeşit önce, işlev/sabit sonra) → T026'lar T024'lerden önce. 4-geçiş replikasyonu
+düzeltti. GÜVENLİ kapsam: yalnız top-level (modül-içi/cross-modül → false-T024 riski,
+TC8'e ertelendi) — gerçek tek-dosya 41/42 korundu.
+
+**Doğrulama:** `make calistir_checker_diff` → **6/6 korpus** (TC1 4 + TC2 2). test/ornekler
+tek-dosya 41/42 (tek fark lineer_hata = TC5). C derleyici değişmedi.
+
+**Sıradaki:** TC3 = tip çıkarsama (T001 uyumsuzluk — 22× en sık; TipBilgisi modeli) +
+arite (T010). Bu "DAĞ"ın çekirdeği. Sonra struct alan/exhaustiveness, generic, linear, modül.
+
+---
+
+## D-052 — SELF-HOST checker TC1: temel ad çözümü (T002) — 41/42 gerçek tek-dosya (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/checker.kem` (parser kopyası + checker) + korpus].**
+Aşama 2 TC1: KEMGU'da temel tip denetleyici — kapsam/ad çözümü (T002 tanımsız sembol).
+C `tip_kontrol.c` accept/reject + tanı paritesi (`--checkdump` oracle).
+
+**Kapsam:** `selfhost/checker.kem` = parser (kopya, AST için) + sembol kümeleri
+(`g_isim` global: 47 EKLE_BUILTIN + özel-builtin'ler [vektor_*/mmio_*/yetki_olustur/
+tekkez_olustur/delege/geri_al/görev/kanal/dur/dondur] + üst-düzey tanım adları +
+keyword-konstrüktör değer/tamam/hata/kendin/hiç; `yerel` append-only dilim: param+
+lokal+için+desen-binding). Traversal: işlev gövdesi + sabit değeri; TANIMLAYICI ref
+genel∪yerel'de değilse → T002. Tip/desen/yol alt-ağaçları atlanır (ileri TC).
+
+**Doğrulama:** `make calistir_checker_diff` → 4/4 korpus + **41/42 test/ornekler tek-dosya
+--checkdump sıfır-diff**. Tek fark `lineer_hata.kem` (kasıtlı L001/L002 → TC5; TC1
+linear yapmaz). Bulgu: keyword-konstrüktör (değer/tamam/hata) + özel-builtin'ler
+(mmio/yetki/vektor) genel'e eklenmezse false-T002.
+
+**Sınır/sıradaki:** Cross-modül import (kullan) adları henüz çözülmez (→TC8). Tip
+uyumsuzluğu (T001), arite (T010), struct alan, exhaustiveness → TC2-TC3+. checker.kem
+parser kopyası içerir (modülerleştirme Aşama 4).
 
 ---
 
