@@ -76,6 +76,23 @@ panic_bekle vaka6_stack_negatif 'işlev main() -> tam32 {
     değişken arr = [1, 2, 3];
     ver arr[0 - 1];
 }'
+# D-084: stack [N×T] YAZMA OOB — okuma yolu (vaka5/6) korumalıydı ama yazma
+# yolu kontrolsüzdü → `arr[10]=9` SESSİZ buffer-overflow (rc=0). Artık PANIC.
+panic_bekle vaka5w_stack_oob_yaz 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    arr[5] = 9;
+    ver 0;
+}'
+panic_bekle vaka6w_stack_negatif_yaz 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    arr[0 - 1] = 9;
+    ver 0;
+}'
+deger_bekle vaka7w_stack_yaz_gecerli 9 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    arr[1] = 9;
+    ver arr[1];
+}'
 deger_bekle vaka7_heap_gecerli 60 'işlev main() -> tam32 {
     değişken d: Dizi<tam32> = [10, 20, 30];
     ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2);
