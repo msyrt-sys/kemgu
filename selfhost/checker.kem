@@ -1877,12 +1877,25 @@ işlev alan_tip_bul(p: &değişken Ayr, yad: metin, fad: metin) -> metin {
     }
     ver "?";
 }
-// Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor.
+// Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor/belirsiz.
+// GÜVENLİ: aynı ad birden fazla FARKLI tiple bağlanmışsa (ayrı blok kapsamları —
+// düz yerel listesinde kapsam yok) → "?" (belirsiz). Tek tip → o tip. (False
+// T020/T001 önler: parse_birincil'de iki `ic` (metin + tam32) gibi durumlar.)
 işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
     değişken n: tam32 = dizi_boyut(p.yerel);
     değişken i: tam32 = p.yerel_basla;
-    iken i < n { eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_tip, i); } i = i + 1; }
-    ver "?";
+    değişken bulunan: metin = "?";
+    değişken sayi: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) {
+            değişken t: metin = dizi_al(p.yerel_tip, i);
+            eğer sayi == 0 { bulunan = t; }
+            değilse { eğer metin_esit(bulunan, t) == yanlış { ver "?"; } }
+            sayi = sayi + 1;
+        }
+        i = i + 1;
+    }
+    ver bulunan;
 }
 // İfade tipi (beklenen ile bidirectional). Bilinmeyen → "?". (TC3a: literal+ident.)
 işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
