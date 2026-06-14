@@ -1,0 +1,33 @@
+// dizi_yapi_eleman.kem — by-value YAPI (struct) elemanlı dizi (D-087).
+// Dizi<Yapı> eskiden skaler i32 getter (kdl_dizi_al_tam) + eleman_byte=4 ile
+// derleniyordu → struct truncation (alanlar kayboluyor) + `değişken p = dizi_al(...)`
+// GEÇERSİZ IR (i32 → %Yapi) link-fail. Artık memcpy tabanlı kdl_dizi_*_yapi +
+// LLVM sizeof const-expr (padding/alignment doğru).
+//
+// Beklenen çıktı (exit kodu): 42.
+
+yapı Nokta {
+    x: tam32;
+    y: tam32;
+}
+
+işlev main() -> tam32 {
+    değişken noktalar: Dizi<Nokta> = [
+        Nokta { x: 10, y: 5 },
+        Nokta { x: 1, y: 2 },
+    ];
+
+    // [] indeks ile alan erişimi (by-value yapı eleman)
+    değişken ilk_top: tam32 = noktalar[0].x + noktalar[0].y;  // 15
+
+    // dizi_al ile struct'ı değişkene çıkar (eskiden link-fail)
+    değişken n: Nokta = dizi_al(noktalar, 1);
+    değişken iki_top: tam32 = n.x + n.y;  // 3
+
+    // by-value yazma: ps[i] = Yapı{...}
+    noktalar[1] = Nokta { x: 20, y: 4 };
+    değişken son: Nokta = dizi_al(noktalar, 1);  // 24
+
+    // 15 + 3 + 24 = 42
+    ver ilk_top + iki_top + son.x + son.y;
+}
