@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-069 — Dizi sınır-güvenliği: OOB → panic (sessiz-0 / segfault DEĞİL) — Kategori 1 (heap) DONE (2026-06-14)
+
+**Bağlam (firsthand doğrulandı):** Dizi indekslemenin iki yolu da bellek-güvensizdi:
+- **Heap** (`kdl_dizi_al_tam/tam64/ptr`, kdl_runtime.c:557-570): sınır kontrolü VARDI ama
+  OOB'da `return 0`/`NULL` → sessiz yanlış değer / downstream NULL-deref (D-065 segfault'unun
+  asıl nedeni: OOB→NULL→`metin_esit(NULL,…)`).
+- **Heap yazma** (`kdl_dizi_yaz_*`, :575-588): OOB'da sessizce yok sayılıyordu.
+- **Stack/GEP** (`src/llvm.c` DUGUM_INDEKS:1964): ham GEP+load, kontrol YOK → OOB=segfault.
+
+Parite-audit'ine GÖRÜNMEZ delik (C de aynı şekilde güvensiz → divergence çıkmaz). #1 iddia
+("Kırılamaz Güvenlik") ile çelişiyor. Güvenlik-iddiası izinin ilk kalemi.
+
+**Karar:** Dizi indeksleme varsayılan güvenli — OOB (`i<0` veya `i>=boyut`) → **panic**
+(temiz, yakalanabilir durma); asla segfault, asla sessiz-0/noop. Üç kategori; perf gerilimi
+`güvensiz` opt-out ile çözülür (Rust modeli: varsayılan güvenli, açık+işaretli opt-out).
+
+**Panic mekanizması (eklendi):** `kdl_panik(const char *)` (kdl_runtime.c, hosted): stderr'e
+`"PANIK: <mesaj>"` + `abort()` (`__attribute__((noreturn))`). Mevcut `kdl_panik_dur` yalnız
+bare-metal/mock'tu (`#error` ile hosted'ta yoktu) → hosted runtime artık panic edebiliyor.
+
+**KATEGORİ 1 (heap) — DONE [maliyet SIFIR: karşılaştırma zaten vardı]:** `kdl_dizi_al_*` ve
+`kdl_dizi_yaz_*` OOB-dalı `return 0`/noop → `kdl_dizi_oob(i, boyut)` (mesaj "dizi sınır ihlali
+(i=…, boyut=…)", noreturn). NULL-dizi (d==NULL) ayrı durum → şimdilik return 0/NULL korunur
+(D-070+). Koşulsuz, varsayılan güvenli.
+
+**LATENT BUG yakalandı (güvenliğin değeri kanıtı):** Kategori 1 açar açmaz `test_llvm [155]`
+(17_kontrol_dili.kem mini-yorumlayıcı) PANIC verdi → `faktor`/`deyim_calistir`/`calistir`
+EOF'ta `dizi_al(t.kind, p)` ve `dizi_al(t.kind, p+1)` OKUYOR (sessiz-0'ı EOF-sentineli
+sanıyordu). Açık sınır kontrolü eklendi (`p>=boyut→ver 0`, `p+1<boyut ve …` — `ve`
+kısa-devre). Davranış korundu, bellek-güvenli oldu. Bu tam da #1-iddianın yakalaması gereken
+sınıf.
+
+**KATEGORİ 2 (stack `[N×T]`) — BEKLEMEDE [YÜKSEK — codegen]:** `DUGUM_INDEKS` GEP'ten önce
+`icmp uge idx, N` (unsigned → negatif+büyük) → br→panic. Engel: `LlvmIsim` sabit-dizi
+uzunluğu (N) TAŞIMIYOR → eklenecek. Ayrı izole commit + ASan + orkestratör doğrulaması.
+
+**KATEGORİ 3 (ham `*T` bölge-tabanı) — BEKLEMEDE [İNCELEME]:** DUGUM_INDEKS:1958 pointee_elem
+yolu uzunluk bilgisi taşımıyor. Karar: ya bölge-container uzunluğu varsa kontrol et, ya da
+raw-`*T` indekslemesini yalnız `güvensiz` bloğunda serbest bırak (tip denetleyici dışını
+reddetsin). Ajan incelemesi sürüyor.
+
+**Doğrulama:** Yeni `make calistir_dizi_sinir_test` (test_tumu'ya bağlı) → **6/6** (heap-OOB-oku/
+negatif/yaz/ptr → PANIC; geçerli → rc=60; D-065 koruması → segfault yok). `test_llvm` **235/235**
+(latent bug fix sonrası). checker korpus 48/48; test/ornekler 42/42; self-host 3/3 (0 panik).
+Hosted runtime 0 uyarı (`-Wall -Wextra -Wpedantic`).
+
+**Kapsam-dışı (güvenlik-iddiası boşluk izi, D-070+):** Kategori 2/3 (yukarıda); 8 "kabul-ama-
+çöküyor" deliği (Sınıf A dizi-literal-param, Sınıf B lambda); scoping false-negative (gölgeleme).
+
+---
+
 ## D-068 — SELF-HOST checker TC8a: cross-file/modül import (kullan → dışa toplama) — 246/319 (2026-06-14)
 
 **Karar [ETKİ: orta — `selfhost/checker.kem`; cross-file altyapı].** TC8 başlangıcı: `kullan`

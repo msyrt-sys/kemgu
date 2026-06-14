@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# ============================================================================
+# dizi_sinir_harness.sh — Dizi sınır-güvenliği KALICI invaryant testi (D-069).
+# ----------------------------------------------------------------------------
+# Her OOB (sınır-dışı) dizi erişimi PANIC vermeli (temiz durma): rc≠0 + stderr
+# "PANIK" içerir. ASLA segfault (rc=139) ve ASLA sessiz-başarı (rc=0+yanlış).
+# Geçerli erişim BOZULMAMALI (rc=doğru). Bkz. DECISIONS_LOG D-069.
+#
+# Kapsam (şimdilik): Kategori 1 (heap dizi_al/yaz OOB) + D-065 koruması.
+# Kategori 2 (stack [N×T]) + 3 (güvensiz opt-out) eklendikçe vaka 5/6/8/9 açılır.
+#
+# Kullanım: bash test/dizi_sinir_harness.sh  (veya make calistir_dizi_sinir_test)
+# ============================================================================
+set -u
+KEMGU=${KEMGU:-build/kemgu.exe}
+RT=${RT:-build/kdl_runtime.o}
+TMP=$(mktemp -d 2>/dev/null || echo /tmp/dizisinir); mkdir -p "$TMP"
+pass=0; fail=0
+
+# panic_bekle <ad> <kaynak>: OOB → PANIC (rc≠0, rc≠139, stderr PANIK) doğrula.
+panic_bekle() {
+    local ad="$1" src="$2"
+    printf '%s\n' "$src" > "$TMP/$ad.kem"
+    if ! "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null; then
+        echo "  🔴 $ad: --llvm üretemedi"; fail=$((fail+1)); return; fi
+    if ! clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null; then
+        echo "  🔴 $ad: link edilemedi"; fail=$((fail+1)); return; fi
+    "$TMP/$ad.exe" > "$TMP/$ad.out" 2>"$TMP/$ad.err"; local rc=$?
+    if [ "$rc" -eq 139 ]; then echo "  🔴 $ad: SEGFAULT (rc=139) — güvensiz!"; fail=$((fail+1)); return; fi
+    if [ "$rc" -eq 0 ]; then echo "  🔴 $ad: sessiz-başarı (rc=0) — OOB yakalanmadı!"; fail=$((fail+1)); return; fi
+    if grep -q PANIK "$TMP/$ad.err"; then echo "  ✅ $ad: PANIC (rc=$rc)"; pass=$((pass+1));
+    else echo "  🔴 $ad: rc=$rc ama stderr'de PANIK yok"; fail=$((fail+1)); fi
+}
+# deger_bekle <ad> <beklenen_rc> <kaynak>: geçerli erişim doğru sonuç + rc.
+deger_bekle() {
+    local ad="$1" brc="$2" src="$3"
+    printf '%s\n' "$src" > "$TMP/$ad.kem"
+    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
+    "$TMP/$ad.exe" > "$TMP/$ad.out" 2>"$TMP/$ad.err"; local rc=$?
+    if [ "$rc" -eq "$brc" ]; then echo "  ✅ $ad: rc=$rc (doğru)"; pass=$((pass+1));
+    else echo "  🔴 $ad: rc=$rc (beklenen $brc) — geçerli erişim bozuldu!"; fail=$((fail+1)); fi
+}
+# segfault_yok <ad> <dosya>: D-065 koruması — bozuk girdi parse-hatası, segfault DEĞİL.
+segfault_yok() {
+    local ad="$1" dosya="$2"
+    "$KEMGU" --check "$dosya" > "$TMP/$ad.out" 2>"$TMP/$ad.err"; local rc=$?
+    if [ "$rc" -eq 139 ]; then echo "  🔴 $ad: SEGFAULT (rc=139)"; fail=$((fail+1));
+    else echo "  ✅ $ad: çökme yok (rc=$rc)"; pass=$((pass+1)); fi
+}
+
+echo "=== Dizi sınır-güvenliği (D-069) ==="
+panic_bekle vaka1_heap_oob_oku 'işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver dizi_al(d, 5);
+}'
+panic_bekle vaka2_heap_negatif 'işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver dizi_al(d, 0 - 1);
+}'
+panic_bekle vaka3_heap_oob_yaz 'işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    dizi_yaz(d, 5, 9);
+    ver 0;
+}'
+panic_bekle vaka4_heap_ptr_oob 'işlev main() -> tam32 {
+    değişken d: Dizi<metin> = ["a", "b", "c"];
+    değişken s: metin = dizi_al(d, 5);
+    ver 0;
+}'
+deger_bekle vaka7_gecerli 60 'işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2);
+}'
+segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
+
+echo "=== dizi sınır-güvenliği: $pass/$((pass+fail)) ==="
+[ "$fail" -eq 0 ]

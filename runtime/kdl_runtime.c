@@ -554,36 +554,59 @@ void kdl_dizi_ekle_ptr(KdlDizi *d, void *deger) {
     ((void **)d->veri)[d->boyut++] = deger;
 }
 
+/* ===================================================================
+ * Dizi sınır-güvenliği (D-069): OOB erişim → temiz PANIC, asla segfault
+ * / sessiz-0 / sessiz-noop. Hosted runtime: stderr + abort() (rc=134).
+ * Bare-metal panic ayrı (kdl_runtime_panik.c → kdl_panik_dur, halt).
+ * =================================================================== */
+__attribute__((noreturn)) void kdl_panik(const char *mesaj) {
+    fprintf(stderr, "PANIK: %s\n", mesaj ? mesaj : "(bilinmiyor)");
+    fflush(stderr);
+    abort();
+}
+/* Dizi sınır ihlali yardımcısı — mesajı (i, boyut) ile biçimler, panic eder. */
+static __attribute__((noreturn)) void kdl_dizi_oob(int32_t i, int32_t boyut) {
+    char buf[96];
+    snprintf(buf, sizeof(buf),
+             "dizi s\xc4\xb1n\xc4\xb1r ihlali (i=%d, boyut=%d)", i, boyut);
+    kdl_panik(buf);
+}
+
 int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
-    if (!d || i < 0 || i >= d->boyut) return 0;
+    if (!d) return 0;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     return ((int32_t *)d->veri)[i];
 }
 
 int64_t kdl_dizi_al_tam64(KdlDizi *d, int32_t i) {
-    if (!d || i < 0 || i >= d->boyut) return 0;
+    if (!d) return 0;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     return ((int64_t *)d->veri)[i];
 }
 
 void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
-    if (!d || i < 0 || i >= d->boyut) return NULL;
+    if (!d) return NULL;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     return ((void **)d->veri)[i];
 }
 
 /* dizi_yaz: i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi). Sınır dışı
- * (i<0 || i>=boyut) veya NULL → sessizce yok sayılır (boyutu büyütmez —
- * yalnız mevcut elemanı değiştirir; büyütme için dizi_ekle). */
+ * (i<0 || i>=boyut) → PANIC (D-069; eskiden sessiz-noop). NULL → atla. */
 void kdl_dizi_yaz_tam(KdlDizi *d, int32_t i, int32_t deger) {
-    if (!d || i < 0 || i >= d->boyut) return;
+    if (!d) return;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     ((int32_t *)d->veri)[i] = deger;
 }
 
 void kdl_dizi_yaz_tam64(KdlDizi *d, int32_t i, int64_t deger) {
-    if (!d || i < 0 || i >= d->boyut) return;
+    if (!d) return;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     ((int64_t *)d->veri)[i] = deger;
 }
 
 void kdl_dizi_yaz_ptr(KdlDizi *d, int32_t i, void *deger) {
-    if (!d || i < 0 || i >= d->boyut) return;
+    if (!d) return;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
     ((void **)d->veri)[i] = deger;
 }
 
