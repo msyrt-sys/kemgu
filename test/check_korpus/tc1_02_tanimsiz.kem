@@ -1,0 +1,3 @@
+işlev f() -> tam32 { ver tanimsiz_ad; }
+işlev g() -> tam32 { değişken x: tam32 = 5; ver x + baska_yok; }
+işlev h() -> tam32 { ver birinci + ikinci; }
