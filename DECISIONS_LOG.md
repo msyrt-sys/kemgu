@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-061 — SELF-HOST checker TC5a: yapı lineer alan yasağı (LR002) — 40/40 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5a (Linear
+Types Spec V1 başlangıcı): yapı lineer-tipli alan içeremez (LR002). C derleyici
+DOKUNULMADI.
+
+**Kapsam:** `lr002_kontrol` pre-pass (gövdelerden ÖNCE, `kontrol_ust`'tan önce) —
+üst-düzey/modül/dışa YAPI'ların alanlarını gezer; alan tipi lineer ise (`tip_node_lineer_mi`:
+TIP_TEKKEZ/TIP_YETKI/TIP_GOREV) → LR002 alan düğümünde. C `tip_lineer_mi` (tekkez+yetki+
+görev; kanal/sabitsüre HARİÇ) birebir; konum ALAN düğümü (--checkdump: lineer_hata
+LR002 24:5).
+
+**Sıra kararı:** LR002 pre_populate'te (gövdelerden önce) → çok-hatalı dosyada (lineer_hata)
+LR002 İLK çıkar (L001/L002/L004 gövde hatalarından önce). Bu yüzden ayrı pre-pass.
+
+**Doğrulama:** `make calistir_checker_diff` → **40/40 korpus** (önceki 38 + TC5a 2:
+lineer-alan-LR002 / lineer-olmayan-OK). test/ornekler **41/42** (lineer_hata hâlâ
+diff — L001/L002/L004 TC5b'de; geçerli yapılarda false-LR002 YOK).
+
+**Sıradaki (TC5b):** lineer akış — L001 (scope sonu tüketilmedi), L002 (move sonrası
+erişim), L004 (lineer referans). Lineer bağlama izleme (tekkez_olustur değer / tekkez
+annotasyon / lineer param) + tüketim noktaları (kullan/imha/çağrı-arg/ver). lineer_hata
+→ 42/42 kapanır.
+
+---
+
 ## D-060 — SELF-HOST checker TC4a: yapı oluştur (T002/T017/T012/T001) + erişim tipi — 38/38 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC4a: yapı
