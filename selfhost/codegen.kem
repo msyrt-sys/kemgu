@@ -1,0 +1,1777 @@
+// ============================================================================
+// selfhost/parser.kem — KEMGU parser'ı KEMGU'da (SELF-HOST bootstrap, Aşama 1).
+//
+// HEDEF: C parser'ının (src/parser.c + ifade.c) TAM İKAMESİ. Doğruluk: C
+// `--ast` düz-dump oracle'ına karşı SIFIR-DİFF (D-043).
+//   Format: <derinlik>\t<TIP_ADI>\t<deger>\t<satır>\t<sütün>
+//
+// MİMARİ (D-043): indeks-tabanlı DÜZ düğüm tablosu (paralel Dizi). Lexer scanning
+// REUSE edilir → token tablosu (emit sink'i print yerine dizi_ekle). State =
+// `Ayr` struct, &değişken ile geçirilir (D-044 fix'i Dizi-alanlı struct'ı sağlar).
+//
+// İLERLEME: P1a (token tablo + re-emit doğrulama) → P1b (Pratt ifade) → ...
+// ============================================================================
+
+yapı Ayr {
+    kaynak: metin;
+    // Token tablosu (lex çıktısı)
+    t_ad: Dizi<metin>;
+    t_sat: Dizi<tam32>;
+    t_sut: Dizi<tam32>;
+    t_off: Dizi<tam32>;
+    t_uz: Dizi<tam32>;
+    // Parser imleci
+    imlec: tam32;
+    // AST düğüm tablosu (paralel)
+    a_ad: Dizi<metin>;
+    a_deg: Dizi<metin>;
+    a_sat: Dizi<tam32>;
+    a_sut: Dizi<tam32>;
+    a_cb: Dizi<tam32>;    // çocuk listesi başlangıç indeksi
+    a_cs: Dizi<tam32>;    // çocuk sayısı
+    cocuk: Dizi<tam32>;   // düz çocuk indeks listesi
+    hata_say: tam32;     // parser hata sayısı
+    yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
+    sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
+    reg: tam32;          // CG (D-072): işlev-içi sıralı SSA sayacı (%0, %1, ...)
+    cg_ad: Dizi<metin>;  // CG3: değişken adları (yalnız APPEND; işlev-bazı slice = cg_base..)
+    cg_areg: Dizi<metin>;// CG3: karşılık gelen alloca operandı ("%2")
+    cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
+}
+
+// ---- Çıktı yardımcıları ----
+// HAM bayt yaz (yaz_karakter UTF-8 encode eder → Türkçe bayt mojibake;
+// yaz_bayt ham byte yazar — METIN değer dump'ında UTF-8 korunur).
+işlev yb(c: tam32) -> tam32 { yaz_bayt(c); ver 0; }
+işlev yaz_str(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { yb(metin_bayt(s, i) olarak tam32); i = i + 1; }
+    ver 0;
+}
+// --ast deger alanı: \t \n \r \\ kaçışlı (C duz_kacis_yaz ile birebir).
+işlev yaz_kacis(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer c < 0 { c = c + 256; }
+        eğer c == 9 { yb(92); yb(116); }
+        değilse { eğer c == 10 { yb(92); yb(110); }
+        değilse { eğer c == 13 { yb(92); yb(114); }
+        değilse { eğer c == 92 { yb(92); yb(92); }
+        değilse { yb(c); } } } }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// ---- Token tablosuna ekle (lexer emit sink) ----
+işlev tok_ekle(p: &değişken Ayr, ad: metin, satir: tam32, sutun: tam32, offset: tam32, uzunluk: tam32) -> tam32 {
+    dizi_ekle(p.t_ad, ad);
+    dizi_ekle(p.t_sat, satir);
+    dizi_ekle(p.t_sut, sutun);
+    dizi_ekle(p.t_off, offset);
+    dizi_ekle(p.t_uz, uzunluk);
+    ver 0;
+}
+
+// ---- Lexer çekirdeği (selfhost/lexer.kem ile BİREBİR; emit→tok_ekle) ----
+işlev bayt(s: metin, i: tam32) -> tam32 {
+    değişken b: tam32 = metin_bayt(s, i) olarak tam32;
+    eğer b < 0 { ver b + 256; }
+    ver b;
+}
+işlev rakam_mi(b: tam32) -> mantıksal { ver b >= 48 ve b <= 57; }
+işlev harf_mi(b: tam32) -> mantıksal {
+    ver (b >= 97 ve b <= 122) veya (b >= 65 ve b <= 90);
+}
+işlev bosluk_mu(b: tam32) -> mantıksal {
+    ver (b == 32) veya (b == 9) veya (b == 13) veya (b == 10);
+}
+işlev turkce_2byte_mi(b0: tam32, b1: tam32) -> mantıksal {
+    eğer b0 == 195 {
+        ver (b1 == 167) veya (b1 == 135) veya (b1 == 182)
+          veya (b1 == 150) veya (b1 == 188) veya (b1 == 156);
+    }
+    eğer b0 == 196 {
+        ver (b1 == 159) veya (b1 == 158) veya (b1 == 177) veya (b1 == 176);
+    }
+    eğer b0 == 197 { ver (b1 == 159) veya (b1 == 158); }
+    ver yanlış;
+}
+işlev kimlik_basi_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos >= uz { ver 0; }
+    değişken b0: tam32 = bayt(kaynak, pos);
+    eğer harf_mi(b0) veya (b0 == 95) { ver 1; }
+    eğer pos + 1 < uz {
+        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+    }
+    ver 0;
+}
+işlev kimlik_devam_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos >= uz { ver 0; }
+    değişken b0: tam32 = bayt(kaynak, pos);
+    eğer harf_mi(b0) veya rakam_mi(b0) veya (b0 == 95) { ver 1; }
+    eğer pos + 1 < uz {
+        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+    }
+    ver 0;
+}
+işlev anahtar_tip(w: metin) -> metin {
+    eğer metin_esit(w, "iken") { ver "IKEN"; }
+    eğer metin_esit(w, "ve") { ver "VE"; }
+    eğer metin_esit(w, "veya") { ver "VEYA"; }
+    eğer metin_esit(w, "ver") { ver "VER"; }
+    eğer metin_esit(w, "delege") { ver "DELEGE"; }
+    eğer metin_esit(w, "hata") { ver "HATA"; }
+    eğer metin_esit(w, "imha") { ver "IMHA"; }
+    eğer metin_esit(w, "kendin") { ver "KENDIN"; }
+    eğer metin_esit(w, "kullan") { ver "KULLAN"; }
+    eğer metin_esit(w, "olarak") { ver "OLARAK"; }
+    eğer metin_esit(w, "sabit") { ver "SABIT"; }
+    eğer metin_esit(w, "tamam") { ver "TAMAM"; }
+    eğer metin_esit(w, "tekkez") { ver "TEKKEZ"; }
+    eğer metin_esit(w, "yetki") { ver "YETKI"; }
+    eğer metin_esit(w, "genel") { ver "GENEL"; }
+    eğer metin_esit(w, "geri_al") { ver "GERI_AL"; }
+    eğer metin_esit(w, "uygula") { ver "UYGULA"; }
+    eğer metin_esit(w, "kanal") { ver "KANAL"; }
+    eğer metin_esit(w, "eğer") { ver "EGER"; }
+    eğer metin_esit(w, "değilse") { ver "DEGILSE"; }
+    eğer metin_esit(w, "için") { ver "ICIN"; }
+    eğer metin_esit(w, "eşleş") { ver "ESLES"; }
+    eğer metin_esit(w, "işlev") { ver "ISLEV"; }
+    eğer metin_esit(w, "yapı") { ver "YAPI"; }
+    eğer metin_esit(w, "çeşit") { ver "CESIT"; }
+    eğer metin_esit(w, "özellik") { ver "OZELLIK"; }
+    eğer metin_esit(w, "modül") { ver "MODUL"; }
+    eğer metin_esit(w, "değişken") { ver "DEGISKEN"; }
+    eğer metin_esit(w, "doğru") { ver "DOGRU"; }
+    eğer metin_esit(w, "yanlış") { ver "YANLIS"; }
+    eğer metin_esit(w, "boş") { ver "BOS"; }
+    eğer metin_esit(w, "değil") { ver "DEGIL"; }
+    eğer metin_esit(w, "dışa") { ver "DISA"; }
+    eğer metin_esit(w, "bölge") { ver "BOLGE"; }
+    eğer metin_esit(w, "seçimlik") { ver "SECIMLIK"; }
+    eğer metin_esit(w, "sonuç") { ver "SONUC"; }
+    eğer metin_esit(w, "değer") { ver "DEGER"; }
+    eğer metin_esit(w, "hiç") { ver "HIC"; }
+    eğer metin_esit(w, "güvensiz") { ver "GUVENSIZ"; }
+    eğer metin_esit(w, "sabitsüre") { ver "SABITSURE"; }
+    eğer metin_esit(w, "gerçekzamanlı") { ver "GERCEKZAMANLI"; }
+    eğer metin_esit(w, "vektör") { ver "VEKTOR"; }
+    eğer metin_esit(w, "görev") { ver "GOREV"; }
+    eğer metin_esit(w, "satıriçi_asm") { ver "SATIRICI_ASM"; }
+    ver "TANIMLAYICI";
+}
+işlev ikinci_bayt(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos < uz { ver bayt(kaynak, pos); }
+    ver 0;
+}
+işlev hex_rakam_mi(b: tam32) -> mantıksal {
+    ver rakam_mi(b) veya (b >= 97 ve b <= 102) veya (b >= 65 ve b <= 70);
+}
+işlev utf8_uz(b: tam32) -> tam32 {
+    eğer b < 128 { ver 1; }
+    eğer (b >= 192) ve (b <= 223) { ver 2; }
+    eğer (b >= 224) ve (b <= 239) { ver 3; }
+    eğer (b >= 240) ve (b <= 247) { ver 4; }
+    ver 0;
+}
+işlev ham_basi_mi(kaynak: metin, pos: tam32, uz: tam32) -> mantıksal {
+    değişken s: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
+    eğer s == 34 { ver doğru; }
+    eğer s == 35 {
+        değişken b: tam32 = pos + 1;
+        iken (b < uz) ve (bayt(kaynak, b) == 35) { b = b + 1; }
+        eğer (b < uz) ve (bayt(kaynak, b) == 34) { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// Operatör (maximal munch) — tüketilen bayt; tok_ekle ile tabloya yazar.
+işlev op_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken b0: tam32 = bayt(kaynak, pos);
+    değişken b1: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
+    değişken b2: tam32 = ikinci_bayt(kaynak, pos + 2, uz);
+    eğer b0 == 43 {
+        eğer b1 == 61 { tok_ekle(p, "ARTI_ESIT", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "ARTI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 45 {
+        eğer b1 == 61 { tok_ekle(p, "EKSI_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { tok_ekle(p, "OK", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "EKSI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 42 {
+        eğer b1 == 61 { tok_ekle(p, "YILDIZ_ESIT", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "YILDIZ", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 47 {
+        eğer b1 == 61 { tok_ekle(p, "BOLU_ESIT", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "BOLU", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 37 {
+        eğer b1 == 61 { tok_ekle(p, "MOD_ESIT", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "MOD", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 61 {
+        eğer b1 == 61 { tok_ekle(p, "ESIT_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { tok_ekle(p, "KALIN_OK", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "ESIT", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 33 {
+        eğer b1 == 61 { tok_ekle(p, "ESIT_DEGIL", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "HATALI", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 60 {
+        eğer b1 == 61 { tok_ekle(p, "KUCUK_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 60 { tok_ekle(p, "SOLA_KAYDIR", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "KUCUK", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 62 {
+        eğer b1 == 61 { tok_ekle(p, "BUYUK_ESIT", satir, sutun, pos, 2); ver 2; }
+        eğer b1 == 62 { tok_ekle(p, "SAGA_KAYDIR", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "BUYUK", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 38 { tok_ekle(p, "VE_BIT", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 124 { tok_ekle(p, "VEYA_BIT", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 94 { tok_ekle(p, "OZVEYA_BIT", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 126 { tok_ekle(p, "DEGIL_BIT", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 46 {
+        eğer b1 == 46 {
+            eğer b2 == 46 { tok_ekle(p, "UC_NOKTA", satir, sutun, pos, 3); ver 3; }
+            tok_ekle(p, "ARALIK", satir, sutun, pos, 2); ver 2;
+        }
+        tok_ekle(p, "NOKTA", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 58 {
+        eğer b1 == 58 { tok_ekle(p, "CIFT_IKI_NOKTA", satir, sutun, pos, 2); ver 2; }
+        tok_ekle(p, "IKI_NOKTA", satir, sutun, pos, 1); ver 1;
+    }
+    eğer b0 == 40 { tok_ekle(p, "SOL_PAREN", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 41 { tok_ekle(p, "SAG_PAREN", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 123 { tok_ekle(p, "SOL_SUSLU", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 125 { tok_ekle(p, "SAG_SUSLU", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 91 { tok_ekle(p, "SOL_KOSELI", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 93 { tok_ekle(p, "SAG_KOSELI", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 44 { tok_ekle(p, "VIRGUL", satir, sutun, pos, 1); ver 1; }
+    eğer b0 == 59 { tok_ekle(p, "NOKTALI_VIRGUL", satir, sutun, pos, 1); ver 1; }
+    tok_ekle(p, "HATALI", satir, sutun, pos, 1); ver 1;
+}
+işlev sayi_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken pp: tam32 = pos;
+    değişken ondalik: tam32 = 0;
+    eğer bayt(kaynak, pp) == 48 {
+        değişken s: tam32 = ikinci_bayt(kaynak, pp + 1, uz);
+        eğer (s == 120) veya (s == 88) {
+            pp = pp + 2;
+            iken (pp < uz) ve (hex_rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
+        }
+        eğer (s == 98) veya (s == 66) {
+            pp = pp + 2;
+            iken (pp < uz) ve ((bayt(kaynak, pp) == 48) veya (bayt(kaynak, pp) == 49) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
+        }
+        eğer (s == 111) veya (s == 79) {
+            pp = pp + 2;
+            iken (pp < uz) ve (((bayt(kaynak, pp) >= 48) ve (bayt(kaynak, pp) <= 55)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
+        }
+    }
+    iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+    eğer (pp < uz) ve (bayt(kaynak, pp) == 46) {
+        eğer ikinci_bayt(kaynak, pp + 1, uz) != 46 {
+            ondalik = 1;
+            pp = pp + 1;
+            iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+        }
+    }
+    eğer (pp < uz) ve ((bayt(kaynak, pp) == 101) veya (bayt(kaynak, pp) == 69)) {
+        ondalik = 1;
+        pp = pp + 1;
+        eğer (pp < uz) ve ((bayt(kaynak, pp) == 43) veya (bayt(kaynak, pp) == 45)) { pp = pp + 1; }
+        iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+    }
+    eğer ondalik == 1 { tok_ekle(p, "ONDALIK", satir, sutun, pos, pp - pos); }
+    değilse { tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); }
+    ver pp - pos;
+}
+işlev dize_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken pp: tam32 = pos + 1;
+    değişken durum: tam32 = 0;
+    iken (pp < uz) ve (durum == 0) {
+        değişken c: tam32 = bayt(kaynak, pp);
+        eğer c == 34 { durum = 1; }
+        değilse {
+            eğer c == 92 { pp = pp + 1; eğer pp < uz { pp = pp + 1; } }
+            değilse {
+                eğer c == 10 { durum = 2; }
+                değilse { pp = pp + 1; }
+            }
+        }
+    }
+    eğer durum == 1 { pp = pp + 1; tok_ekle(p, "METIN", satir, sutun, pos, pp - pos); ver pp - pos; }
+    tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
+}
+işlev karakter_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken pp: tam32 = pos + 1;
+    eğer (pp >= uz) veya (bayt(kaynak, pp) == 39) {
+        eğer pp < uz { pp = pp + 1; }
+        tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
+    }
+    eğer bayt(kaynak, pp) == 92 {
+        pp = pp + 1;
+        eğer pp < uz { pp = pp + 1; }
+    } değilse {
+        değişken cl: tam32 = utf8_uz(bayt(kaynak, pp));
+        eğer cl == 0 { cl = 1; }
+        değişken i: tam32 = 0;
+        iken i < cl { eğer pp < uz { pp = pp + 1; } i = i + 1; }
+    }
+    eğer (pp >= uz) veya (bayt(kaynak, pp) != 39) {
+        iken (pp < uz) ve (bayt(kaynak, pp) != 39) ve (bayt(kaynak, pp) != 10) { pp = pp + 1; }
+        eğer (pp < uz) ve (bayt(kaynak, pp) == 39) { pp = pp + 1; }
+        tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
+    }
+    pp = pp + 1;
+    tok_ekle(p, "KARAKTER", satir, sutun, pos, pp - pos); ver pp - pos;
+}
+işlev ham_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken pp: tam32 = pos + 1;
+    değişken hash_sayisi: tam32 = 0;
+    iken (pp < uz) ve (bayt(kaynak, pp) == 35) { hash_sayisi = hash_sayisi + 1; pp = pp + 1; }
+    eğer (pp >= uz) veya (bayt(kaynak, pp) != 34) {
+        tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
+    }
+    pp = pp + 1;
+    değişken bitti: tam32 = 0;
+    iken (pp < uz) ve (bitti == 0) {
+        eğer bayt(kaynak, pp) == 34 {
+            pp = pp + 1;
+            değişken kapanan: tam32 = 0;
+            iken (pp < uz) ve (bayt(kaynak, pp) == 35) ve (kapanan < hash_sayisi) {
+                kapanan = kapanan + 1; pp = pp + 1;
+            }
+            eğer kapanan == hash_sayisi { bitti = 1; }
+        } değilse {
+            pp = pp + 1;
+        }
+    }
+    eğer bitti == 1 { tok_ekle(p, "HAM_METIN", satir, sutun, pos, pp - pos); ver pp - pos; }
+    tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
+}
+
+// Kaynağı token tablosuna lex et (C lexer ile birebir; DOSYA_SONU dahil).
+işlev lex_et(p: &değişken Ayr) -> tam32 {
+    değişken kaynak: metin = p.kaynak;
+    değişken uz: tam32 = metin_uzunluk(kaynak);
+    değişken pos: tam32 = 0;
+    değişken satir: tam32 = 1;
+    değişken sutun: tam32 = 1;
+    iken doğru {
+        değişken trivia: mantıksal = doğru;
+        iken trivia {
+            eğer (pos < uz) ve bosluk_mu(bayt(kaynak, pos)) {
+                eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+                değilse { sutun = sutun + 1; }
+                pos = pos + 1;
+            } değilse {
+                eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                    pos = pos + 2; sutun = sutun + 2;
+                    iken (pos < uz) ve (bayt(kaynak, pos) != 10) { pos = pos + 1; sutun = sutun + 1; }
+                } değilse {
+                    eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                        pos = pos + 2; sutun = sutun + 2;
+                        değişken derinlik: tam32 = 1;
+                        iken (pos < uz) ve (derinlik > 0) {
+                            eğer (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                                pos = pos + 2; sutun = sutun + 2; derinlik = derinlik + 1;
+                            } değilse {
+                                eğer (bayt(kaynak, pos) == 42) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                                    pos = pos + 2; sutun = sutun + 2; derinlik = derinlik - 1;
+                                } değilse {
+                                    eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+                                    değilse { sutun = sutun + 1; }
+                                    pos = pos + 1;
+                                }
+                            }
+                        }
+                    } değilse {
+                        trivia = yanlış;
+                    }
+                }
+            }
+        }
+        eğer pos >= uz { tok_ekle(p, "DOSYA_SONU", satir, sutun, pos, 0); ver 0; }
+
+        değişken tb: tam32 = bayt(kaynak, pos);
+        değişken t_off: tam32 = pos;
+        değişken t_sat: tam32 = satir;
+        değişken t_sut: tam32 = sutun;
+
+        eğer rakam_mi(tb) {
+            değişken slen: tam32 = sayi_emit(p, kaynak, pos, uz, t_sat, t_sut);
+            pos = pos + slen; sutun = sutun + slen;
+        } değilse {
+            değişken bu: tam32 = kimlik_basi_uz(kaynak, pos, uz);
+            eğer bu > 0 {
+                eğer (tb == 114) ve ham_basi_mi(kaynak, pos, uz) {
+                    değişken hlen: tam32 = ham_emit(p, kaynak, pos, uz, t_sat, t_sut);
+                    değişken k: tam32 = 0;
+                    iken k < hlen {
+                        eğer bayt(kaynak, pos + k) == 10 { satir = satir + 1; sutun = 1; }
+                        değilse { sutun = sutun + 1; }
+                        k = k + 1;
+                    }
+                    pos = pos + hlen;
+                } değilse {
+                    pos = pos + bu; sutun = sutun + bu;
+                    değişken devam: mantıksal = doğru;
+                    iken devam {
+                        değişken du: tam32 = kimlik_devam_uz(kaynak, pos, uz);
+                        eğer du == 0 { devam = yanlış; }
+                        değilse { pos = pos + du; sutun = sutun + du; }
+                    }
+                    değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
+                    tok_ekle(p, anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
+                }
+            } değilse {
+                eğer tb == 34 {
+                    değişken mlen: tam32 = dize_emit(p, kaynak, pos, uz, t_sat, t_sut);
+                    pos = pos + mlen; sutun = sutun + mlen;
+                } değilse {
+                    eğer tb == 39 {
+                        değişken klen: tam32 = karakter_emit(p, kaynak, pos, uz, t_sat, t_sut);
+                        pos = pos + klen; sutun = sutun + klen;
+                    } değilse {
+                        değişken olen: tam32 = op_emit(p, kaynak, pos, uz, t_sat, t_sut);
+                        pos = pos + olen; sutun = sutun + olen;
+                    }
+                }
+            }
+        }
+    }
+    ver 0;
+}
+
+// ===========================================================================
+// P1b: AST düğüm tablosu + Pratt ifade parser + düz --ast dumper.
+// ===========================================================================
+
+// ---- AST düğüm oluşturucular (append-on-create; düz çocuk listesi) ----
+işlev dugum0(p: &değişken Ayr, ad: metin, deger: metin, satir: tam32, sutun: tam32) -> tam32 {
+    değişken idx: tam32 = dizi_boyut(p.a_ad);
+    dizi_ekle(p.a_ad, ad);  dizi_ekle(p.a_deg, deger);
+    dizi_ekle(p.a_sat, satir);  dizi_ekle(p.a_sut, sutun);
+    dizi_ekle(p.a_cb, 0);  dizi_ekle(p.a_cs, 0);
+    ver idx;
+}
+işlev dugum1(p: &değişken Ayr, ad: metin, deger: metin, satir: tam32, sutun: tam32, c1: tam32) -> tam32 {
+    değişken idx: tam32 = dizi_boyut(p.a_ad);
+    dizi_ekle(p.a_ad, ad);  dizi_ekle(p.a_deg, deger);
+    dizi_ekle(p.a_sat, satir);  dizi_ekle(p.a_sut, sutun);
+    dizi_ekle(p.a_cb, dizi_boyut(p.cocuk));  dizi_ekle(p.a_cs, 1);
+    dizi_ekle(p.cocuk, c1);
+    ver idx;
+}
+işlev dugum2(p: &değişken Ayr, ad: metin, deger: metin, satir: tam32, sutun: tam32, c1: tam32, c2: tam32) -> tam32 {
+    değişken idx: tam32 = dizi_boyut(p.a_ad);
+    dizi_ekle(p.a_ad, ad);  dizi_ekle(p.a_deg, deger);
+    dizi_ekle(p.a_sat, satir);  dizi_ekle(p.a_sut, sutun);
+    dizi_ekle(p.a_cb, dizi_boyut(p.cocuk));  dizi_ekle(p.a_cs, 2);
+    dizi_ekle(p.cocuk, c1);  dizi_ekle(p.cocuk, c2);
+    ver idx;
+}
+işlev dugum3(p: &değişken Ayr, ad: metin, deger: metin, satir: tam32, sutun: tam32, c1: tam32, c2: tam32, c3: tam32) -> tam32 {
+    değişken idx: tam32 = dizi_boyut(p.a_ad);
+    dizi_ekle(p.a_ad, ad);  dizi_ekle(p.a_deg, deger);
+    dizi_ekle(p.a_sat, satir);  dizi_ekle(p.a_sut, sutun);
+    dizi_ekle(p.a_cb, dizi_boyut(p.cocuk));  dizi_ekle(p.a_cs, 3);
+    dizi_ekle(p.cocuk, c1);  dizi_ekle(p.cocuk, c2);  dizi_ekle(p.cocuk, c3);
+    ver idx;
+}
+// Çocuk listesi (Dizi<tam32>) ile düğüm — değişken arite (blok/çağrı/program).
+işlev dugum_n(p: &değişken Ayr, ad: metin, deger: metin, satir: tam32, sutun: tam32, kids: Dizi<tam32>) -> tam32 {
+    değişken idx: tam32 = dizi_boyut(p.a_ad);
+    dizi_ekle(p.a_ad, ad);  dizi_ekle(p.a_deg, deger);
+    dizi_ekle(p.a_sat, satir);  dizi_ekle(p.a_sut, sutun);
+    dizi_ekle(p.a_cb, dizi_boyut(p.cocuk));  dizi_ekle(p.a_cs, dizi_boyut(kids));
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kids) { dizi_ekle(p.cocuk, dizi_al(kids, i)); i = i + 1; }
+    ver idx;
+}
+
+// ---- Sayı değeri (C parse: '_' temizle + 0x/0b/0o taban) ----
+işlev hane_deger(c: tam32) -> tam32 {
+    eğer c >= 48 ve c <= 57 { ver c - 48; }       // 0-9
+    eğer c >= 97 ve c <= 102 { ver c - 97 + 10; }  // a-f
+    eğer c >= 65 ve c <= 70 { ver c - 65 + 10; }   // A-F
+    ver 0;
+}
+işlev tamsayi_deger(lex: metin) -> tam64 {
+    değişken n: tam32 = metin_uzunluk(lex);
+    değişken taban: tam64 = 10;
+    değişken i: tam32 = 0;
+    // 0x / 0b / 0o prefix
+    eğer n >= 2 ve bayt(lex, 0) == 48 {
+        değişken c1: tam32 = bayt(lex, 1);
+        eğer (c1 == 120) veya (c1 == 88) { taban = 16; i = 2; }
+        eğer (c1 == 98) veya (c1 == 66) { taban = 2; i = 2; }
+        eğer (c1 == 111) veya (c1 == 79) { taban = 8; i = 2; }
+    }
+    değişken sonuc: tam64 = 0;
+    değişken maks: tam64 = 9223372036854775807;   // int64 max (strtoll clamp)
+    değişken tasti: mantıksal = yanlış;
+    iken i < n {
+        değişken c: tam32 = bayt(lex, i);
+        eğer c != 95 {                              // '_' atla
+            değişken h: tam64 = hane_deger(c) olarak tam64;
+            eğer sonuc > (maks - h) / taban { tasti = doğru; }  // taşma → LLONG_MAX
+            eğer tasti { sonuc = maks; }
+            değilse { sonuc = sonuc * taban + h; }
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+işlev hane_str(d: tam32) -> metin {
+    eğer d == 0 { ver "0"; }   eğer d == 1 { ver "1"; }
+    eğer d == 2 { ver "2"; }   eğer d == 3 { ver "3"; }
+    eğer d == 4 { ver "4"; }   eğer d == 5 { ver "5"; }
+    eğer d == 6 { ver "6"; }   eğer d == 7 { ver "7"; }
+    eğer d == 8 { ver "8"; }   ver "9";
+}
+işlev tam64_str(v: tam64) -> metin {
+    eğer v == 0 { ver "0"; }
+    eğer v < 0 { ver metin_birlestir("-", tam64_str(0 - v)); }
+    eğer v < 10 { ver hane_str(v olarak tam32); }
+    ver metin_birlestir(tam64_str(v / 10), hane_str((v % 10) olarak tam32));
+}
+// Hex hane string'i (KARAKTER U+XXXX için).
+işlev hex_str(d: tam32) -> metin {
+    eğer d == 0 { ver "0"; }   eğer d == 1 { ver "1"; }
+    eğer d == 2 { ver "2"; }   eğer d == 3 { ver "3"; }
+    eğer d == 4 { ver "4"; }   eğer d == 5 { ver "5"; }
+    eğer d == 6 { ver "6"; }   eğer d == 7 { ver "7"; }
+    eğer d == 8 { ver "8"; }   eğer d == 9 { ver "9"; }
+    eğer d == 10 { ver "A"; }  eğer d == 11 { ver "B"; }
+    eğer d == 12 { ver "C"; }  eğer d == 13 { ver "D"; }
+    eğer d == 14 { ver "E"; }  ver "F";
+}
+// KARAKTER deger = "U+%04X" (C ast_duz_yaz ile birebir).
+işlev karakter_deger(b: tam32) -> metin {
+    değişken r: metin = metin_birlestir("U+", hex_str((b / 4096) % 16));
+    r = metin_birlestir(r, hex_str((b / 256) % 16));
+    r = metin_birlestir(r, hex_str((b / 16) % 16));
+    ver metin_birlestir(r, hex_str(b % 16));
+}
+
+// ---- Token erişim (sınır-güvenli: bozuk girdide imleç DOSYA_SONU'yu aşabilir;
+//      sınır-dışı erişim → DOSYA_SONU/"" → parse döngüleri sonlanır, çökme yok) ----
+işlev tip_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver "DOSYA_SONU"; }
+    ver dizi_al(p.t_ad, i);
+}
+işlev lex_i(p: &değişken Ayr, i: tam32) -> metin {
+    eğer i >= dizi_boyut(p.t_ad) { ver ""; }
+    ver metin_kes(p.kaynak, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
+}
+işlev simdiki(p: &değişken Ayr) -> metin {
+    değişken t: metin = tip_i(p, p.imlec);
+    eğer (p.sk_pending == 1) ve metin_esit(t, "SAGA_KAYDIR") { ver "BUYUK"; }
+    ver t;
+}
+// Generic kapanışı `>` bekle; `>>` (SAGA_KAYDIR) iki `>`'a böl (parser_buyuk_ayir).
+işlev bekle_buyuk(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = tip_i(p, p.imlec);  // RAW (sk_pending atla)
+    eğer metin_esit(t, "BUYUK") { ilerle(p); ver 1; }
+    eğer metin_esit(t, "SAGA_KAYDIR") {
+        eğer p.sk_pending == 1 { p.sk_pending = 0; p.imlec = p.imlec + 1; ver 1; }
+        p.sk_pending = 1;  // ilk > tüketildi (ilerleme yok)
+        ver 1;
+    }
+    p.hata_say = p.hata_say + 1;
+    ver 0;
+}
+işlev simdiki_buyuk_mu(p: &değişken Ayr) -> mantıksal { ver metin_esit(simdiki(p), "BUYUK"); }
+işlev sim_mi(p: &değişken Ayr, t: metin) -> mantıksal { ver metin_esit(simdiki(p), t); }
+işlev sim_lex(p: &değişken Ayr) -> metin { ver lex_i(p, p.imlec); }
+işlev sim_sat(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sat, p.imlec); }
+işlev sim_sut(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sut, p.imlec); }
+işlev ilerle(p: &değişken Ayr) -> tam32 { p.imlec = p.imlec + 1; ver 0; }
+// Beklenen token'ı tüket; değilse hata say + ilerleme yok.
+işlev bekle(p: &değişken Ayr, t: metin) -> tam32 {
+    eğer sim_mi(p, t) { ilerle(p); ver 1; }
+    p.hata_say = p.hata_say + 1;
+    ver 0;
+}
+
+// ---- Öncelik tabloları (ifade.c ile birebir) ----
+işlev ikili_onc(t: metin) -> tam32 {
+    eğer metin_esit(t, "VEYA") { ver 1; }
+    eğer metin_esit(t, "VE") { ver 2; }
+    eğer metin_esit(t, "VEYA_BIT") { ver 3; }
+    eğer metin_esit(t, "OZVEYA_BIT") { ver 4; }
+    eğer metin_esit(t, "VE_BIT") { ver 5; }
+    eğer metin_esit(t, "ESIT_ESIT") veya metin_esit(t, "ESIT_DEGIL") { ver 6; }
+    eğer metin_esit(t, "KUCUK") veya metin_esit(t, "BUYUK")
+      veya metin_esit(t, "KUCUK_ESIT") veya metin_esit(t, "BUYUK_ESIT") { ver 7; }
+    eğer metin_esit(t, "SOLA_KAYDIR") veya metin_esit(t, "SAGA_KAYDIR") { ver 8; }
+    eğer metin_esit(t, "ARTI") veya metin_esit(t, "EKSI") { ver 9; }
+    eğer metin_esit(t, "YILDIZ") veya metin_esit(t, "BOLU") veya metin_esit(t, "MOD") { ver 10; }
+    ver 0;
+}
+işlev sonek_onc(t: metin) -> tam32 {
+    eğer metin_esit(t, "NOKTA") veya metin_esit(t, "SOL_KOSELI")
+      veya metin_esit(t, "SOL_PAREN") veya metin_esit(t, "CIFT_IKI_NOKTA")
+      veya metin_esit(t, "OLARAK") { ver 12; }
+    ver 0;
+}
+işlev ikili_op_ad(t: metin) -> metin {
+    eğer metin_esit(t, "VEYA") { ver "veya"; }
+    eğer metin_esit(t, "VE") { ver "ve"; }
+    eğer metin_esit(t, "VEYA_BIT") { ver "|"; }
+    eğer metin_esit(t, "OZVEYA_BIT") { ver "^"; }
+    eğer metin_esit(t, "VE_BIT") { ver "&"; }
+    eğer metin_esit(t, "ESIT_ESIT") { ver "=="; }
+    eğer metin_esit(t, "ESIT_DEGIL") { ver "!="; }
+    eğer metin_esit(t, "KUCUK") { ver "<"; }
+    eğer metin_esit(t, "BUYUK") { ver ">"; }
+    eğer metin_esit(t, "KUCUK_ESIT") { ver "<="; }
+    eğer metin_esit(t, "BUYUK_ESIT") { ver ">="; }
+    eğer metin_esit(t, "SOLA_KAYDIR") { ver "<<"; }
+    eğer metin_esit(t, "SAGA_KAYDIR") { ver ">>"; }
+    eğer metin_esit(t, "ARTI") { ver "+"; }
+    eğer metin_esit(t, "EKSI") { ver "-"; }
+    eğer metin_esit(t, "YILDIZ") { ver "*"; }
+    eğer metin_esit(t, "BOLU") { ver "/"; }
+    ver "%";
+}
+
+// ---- İleri bildirimler (özyineleme) parser'da gerek yok; KEMGU tek-geçiş
+//      değil ama çağrı sırası: parse_oncelik <-> parse_onek <-> parse_birincil
+//      <-> parse_sonek hepsi aşağıda; KEMGU forward-ref destekler. ----
+
+// Generic argüman listesi `< T1, T2, ... >` → çocuk Dizi (>> kapanış böl).
+işlev parse_generic_args(p: &değişken Ayr) -> Dizi<tam32> {
+    bekle(p, "KUCUK");
+    değişken args: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+    iken devam {
+        dizi_ekle(args, parse_tip(p));
+        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+        değilse { devam = yanlış; }
+    }
+    bekle_buyuk(p);
+    ver args;
+}
+// Tek-argümanlı generic tip (seçimlik/tekkez/sabitsüre/görev/kanal/yetki).
+işlev parse_tek_arg(p: &değişken Ayr, dad: metin, s: tam32, u: tam32) -> tam32 {
+    bekle(p, "KUCUK");
+    değişken ic: tam32 = parse_tip(p);
+    bekle_buyuk(p);
+    ver dugum1(p, dad, "", s, u, ic);
+}
+
+// Tam tip sözdizimi (ifade.c parse_tip ile birebir) — P4.
+işlev parse_tip(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = simdiki(p);
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    // &T / &değişken T
+    eğer metin_esit(t, "VE_BIT") {
+        ilerle(p);
+        değişken dv: metin = "";
+        eğer sim_mi(p, "DEGISKEN") { ilerle(p); dv = "degisken"; }
+        ver dugum1(p, "TIP_REFERANS", dv, s, u, parse_tip(p));
+    }
+    // *T
+    eğer metin_esit(t, "YILDIZ") {
+        ilerle(p);
+        ver dugum1(p, "TIP_POINTER", "", s, u, parse_tip(p));
+    }
+    eğer metin_esit(t, "TEKKEZ") { ilerle(p); ver parse_tek_arg(p, "TIP_TEKKEZ", s, u); }
+    eğer metin_esit(t, "SABITSURE") { ilerle(p); ver parse_tek_arg(p, "TIP_SABITSURE", s, u); }
+    eğer metin_esit(t, "GOREV") { ilerle(p); ver parse_tek_arg(p, "TIP_GOREV", s, u); }
+    eğer metin_esit(t, "KANAL") { ilerle(p); ver parse_tek_arg(p, "TIP_KANAL", s, u); }
+    eğer metin_esit(t, "YETKI") { ilerle(p); ver parse_tek_arg(p, "TIP_YETKI", s, u); }
+    eğer metin_esit(t, "SECIMLIK") { ilerle(p); ver parse_tek_arg(p, "TIP_SECIMLIK", s, u); }
+    // sonuç<T,H>
+    eğer metin_esit(t, "SONUC") {
+        ilerle(p);
+        bekle(p, "KUCUK");
+        değişken dt: tam32 = parse_tip(p);
+        bekle(p, "VIRGUL");
+        değişken ht: tam32 = parse_tip(p);
+        bekle_buyuk(p);
+        ver dugum2(p, "TIP_SONUC", "", s, u, dt, ht);
+    }
+    // vektör<T, N> (N = compile-time tamsayı)
+    eğer metin_esit(t, "VEKTOR") {
+        ilerle(p);
+        bekle(p, "KUCUK");
+        değişken et: tam32 = parse_tip(p);
+        bekle(p, "VIRGUL");
+        değişken lane: metin = sim_lex(p);
+        bekle(p, "TAMSAYI");
+        bekle_buyuk(p);
+        ver dugum1(p, "TIP_VEKTOR", lane, s, u, et);
+    }
+    // işlev(T1, ...) -> T
+    eğer metin_esit(t, "ISLEV") {
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken kids: Dizi<tam32> = [];
+        eğer sim_mi(p, "SAG_PAREN") == yanlış {
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                eğer sim_mi(p, "SAG_PAREN") { devam = yanlış; }
+                değilse {
+                    dizi_ekle(kids, parse_tip(p));
+                    eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                    değilse { devam = yanlış; }
+                }
+            }
+        }
+        bekle(p, "SAG_PAREN");
+        bekle(p, "OK");
+        dizi_ekle(kids, parse_tip(p));   // dönüş tipi (çocukların SONU)
+        ver dugum_n(p, "TIP_ISLEV", "", s, u, kids);
+    }
+    // boş → birim tip (TIP_BASIT "boş")
+    eğer metin_esit(t, "BOS") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        ver dugum0(p, "TIP_BASIT", ad, s, u);
+    }
+    // Tanımlayıcı: basit / kullanıcı / Dizi / nitelikli yol / generic
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        // nitelikli yol: modül::Tip[::Tip...]
+        değişken yol: tam32 = 0;
+        değişken nitelikli: mantıksal = yanlış;
+        eğer sim_mi(p, "CIFT_IKI_NOKTA") {
+            yol = dugum0(p, "TANIMLAYICI", ad, s, u);
+            iken sim_mi(p, "CIFT_IKI_NOKTA") {
+                ilerle(p);
+                değişken sag: metin = sim_lex(p);
+                bekle(p, "TANIMLAYICI");
+                yol = dugum1(p, "YOL", sag, s, u, yol);
+            }
+            nitelikli = doğru;
+        }
+        // generic argümanlar?
+        eğer sim_mi(p, "KUCUK") {
+            değişken args: Dizi<tam32> = parse_generic_args(p);
+            // Dizi<T> özel (yalnız niteliksiz)
+            eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") ve (dizi_boyut(args) == 1) {
+                ver dugum1(p, "TIP_DIZI", "", s, u, dizi_al(args, 0));
+            }
+            değişken yk: tam32 = yol;
+            eğer nitelikli == yanlış { yk = dugum0(p, "TANIMLAYICI", ad, s, u); }
+            değişken kids: Dizi<tam32> = [];
+            dizi_ekle(kids, yk);
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(args) { dizi_ekle(kids, dizi_al(args, i)); i = i + 1; }
+            ver dugum_n(p, "TIP_KULLANICI", "", s, u, kids);
+        }
+        // niteliksiz generic-siz: nitelikli yol → KULLANICI, değilse BASIT
+        eğer nitelikli {
+            ver dugum1(p, "TIP_KULLANICI", "", s, u, yol);
+        }
+        ver dugum0(p, "TIP_BASIT", ad, s, u);
+    }
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+
+// Yapı oluşturma: Tip { alan: ifade, ... } (poz = tip_id).
+işlev parse_yapi_olustur(p: &değişken Ayr, tip_ad: metin, s: tam32, u: tam32) -> tam32 {
+    ilerle(p);  // '{'
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            değişken as: tam32 = sim_sat(p);  değişken au: tam32 = sim_sut(p);
+            değişken alan: metin = sim_lex(p);
+            bekle(p, "TANIMLAYICI");
+            bekle(p, "IKI_NOKTA");
+            değişken dg: tam32 = parse_ifade(p);
+            dizi_ekle(kids, dugum1(p, "ALAN_ATAMA", alan, as, au, dg));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "YAPI_OLUSTUR", tip_ad, s, u, kids);
+}
+// Dizi oluşturma: [e1, e2, ...] (poz = '[').
+işlev parse_dizi_olustur(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // '['
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_KOSELI") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            dizi_ekle(kids, parse_ifade(p));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
+    }
+    bekle(p, "SAG_KOSELI");
+    ver dugum_n(p, "DIZI_OLUSTUR", "", s, u, kids);
+}
+// Parametre: ad ":" tip  |  kendin  |  &kendin  |  &değişken kendin.
+işlev parse_parametre(p: &değişken Ayr) -> tam32 {
+    // & ile başlayan kendin: &kendin / &değişken kendin
+    eğer sim_mi(p, "VE_BIT") {
+        değişken nxt: metin = tip_i(p, p.imlec + 1);
+        eğer metin_esit(nxt, "KENDIN") veya metin_esit(nxt, "DEGISKEN") {
+            ilerle(p);  // &
+            eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+            değişken ks: tam32 = sim_sat(p);  değişken ku: tam32 = sim_sut(p);
+            eğer sim_mi(p, "KENDIN") {
+                ilerle(p);
+                ver dugum0(p, "PARAMETRE", "kendin", ks, ku);
+            }
+            p.hata_say = p.hata_say + 1;
+            ver dugum0(p, "HATA", "", ks, ku);
+        }
+    }
+    eğer sim_mi(p, "KENDIN") {
+        değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+        ilerle(p);
+        ver dugum0(p, "PARAMETRE", "kendin", s, u);
+    }
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    ver dugum1(p, "PARAMETRE", ad, s, u, parse_tip(p));
+}
+// Generic tip parametre listesi `<T, U: B1 + B2, ...>` — PARSE + DISCARD (dump'ta
+// yok; bound tip düğümleri orphan kalır, kök'ten erişilmez). `>>` kapanış böl.
+işlev atla_tip_paramlar(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "KUCUK") == yanlış { ver 0; }
+    bekle(p, "KUCUK");
+    değişken devam: mantıksal = doğru;
+    eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+    iken devam {
+        bekle(p, "TANIMLAYICI");          // param adı
+        eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
+            ilerle(p);
+            parse_tip(p);                 // ilk bound (orphan düğüm)
+            iken sim_mi(p, "ARTI") { ilerle(p); parse_tip(p); }
+        }
+        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+        değilse { devam = yanlış; }
+    }
+    bekle_buyuk(p);
+    ver 0;
+}
+// Lambda: |p: t, ...| ifade  veya  |...| { blok } (poz = ilk '|').
+işlev parse_lambda(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // ilk '|' (VEYA_BIT)
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "VEYA_BIT") == yanlış {
+        değişken devam: mantıksal = doğru;
+        iken devam {
+            dizi_ekle(kids, parse_parametre(p));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
+    }
+    bekle(p, "VEYA_BIT");  // kapanış '|'
+    eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
+    değilse { dizi_ekle(kids, parse_ifade(p)); }
+    ver dugum_n(p, "LAMBDA", "", s, u, kids);
+}
+
+// Birincil ifade.
+işlev parse_birincil(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = simdiki(p);
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    eğer metin_esit(t, "TAMSAYI") {
+        değişken v: tam64 = tamsayi_deger(sim_lex(p));
+        ilerle(p);
+        ver dugum0(p, "TAM", tam64_str(v), s, u);
+    }
+    eğer metin_esit(t, "ONDALIK") {
+        değişken lx: metin = sim_lex(p);
+        ilerle(p);
+        ver dugum0(p, "KESIRLI", ondalik_bicimle(lx), s, u);
+    }
+    eğer metin_esit(t, "DOGRU") { ilerle(p); ver dugum0(p, "MANTIKSAL", "1", s, u); }
+    eğer metin_esit(t, "YANLIS") { ilerle(p); ver dugum0(p, "MANTIKSAL", "0", s, u); }
+    eğer metin_esit(t, "BOS") { ilerle(p); ver dugum0(p, "BOS", "", s, u); }
+    eğer metin_esit(t, "TANIMLAYICI") veya metin_esit(t, "KENDIN")
+      veya metin_esit(t, "HIC") veya metin_esit(t, "DEGER")
+      veya metin_esit(t, "TAMAM") veya metin_esit(t, "HATA") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        eğer (p.yapi_izni == 1) ve sim_mi(p, "SOL_SUSLU") { ver parse_yapi_olustur(p, ad, s, u); }
+        ver dugum0(p, "TANIMLAYICI", ad, s, u);
+    }
+    eğer metin_esit(t, "METIN") {
+        değişken off: tam32 = dizi_al(p.t_off, p.imlec);
+        değişken ln: tam32 = dizi_al(p.t_uz, p.imlec);
+        değişken icuz: tam32 = ln - 2;
+        eğer icuz < 0 { icuz = 0; }
+        değişken ic: metin = metin_kes(p.kaynak, off + 1, icuz);
+        ilerle(p);
+        ver dugum0(p, "METIN", ic, s, u);
+    }
+    eğer metin_esit(t, "KARAKTER") {
+        değişken off: tam32 = dizi_al(p.t_off, p.imlec);
+        değişken ln: tam32 = dizi_al(p.t_uz, p.imlec);
+        değişken kp: tam32 = 0;
+        eğer ln >= 3 { kp = bayt(p.kaynak, off + 1); }
+        ilerle(p);
+        ver dugum0(p, "KARAKTER", karakter_deger(kp), s, u);
+    }
+    eğer metin_esit(t, "SOL_KOSELI") { ver parse_dizi_olustur(p); }
+    eğer metin_esit(t, "VEYA_BIT") { ver parse_lambda(p); }
+    eğer metin_esit(t, "KULLAN") {
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken e: tam32 = parse_ifade(p);
+        bekle(p, "SAG_PAREN");
+        ver dugum1(p, "KULLAN_IFADE", "", s, u, e);
+    }
+    eğer metin_esit(t, "IMHA") {
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken e: tam32 = parse_ifade(p);
+        bekle(p, "SAG_PAREN");
+        ver dugum1(p, "IMHA_IFADE", "", s, u, e);
+    }
+    // delege(y, izin) / geri_al(y) → DUGUM_CAGRI (hedef = TANIMLAYICI "delege"/"geri_al")
+    eğer metin_esit(t, "DELEGE") veya metin_esit(t, "GERI_AL") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        bekle(p, "SOL_PAREN");
+        değişken kids: Dizi<tam32> = [];
+        dizi_ekle(kids, dugum0(p, "TANIMLAYICI", ad, s, u));  // hedef
+        eğer sim_mi(p, "SAG_PAREN") == yanlış {
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                dizi_ekle(kids, parse_ifade(p));
+                eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                değilse { devam = yanlış; }
+            }
+        }
+        bekle(p, "SAG_PAREN");
+        ver dugum_n(p, "CAGRI", "", s, u, kids);
+    }
+    eğer metin_esit(t, "SOL_PAREN") {
+        ilerle(p);
+        değişken ic: tam32 = parse_ifade(p);
+        bekle(p, "SAG_PAREN");
+        ver ic;
+    }
+    // P1 dışı (KESIRLI float → sonraki adım): hata düğümü
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+
+// Önek operatörler (operand = parse_oncelik(ONC_ONEK=11)).
+işlev parse_onek(p: &değişken Ayr) -> tam32 {
+    değişken t: metin = simdiki(p);
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    eğer metin_esit(t, "EKSI") {
+        ilerle(p);
+        ver dugum1(p, "TEKLI", "neg", s, u, parse_oncelik(p, 11));
+    }
+    eğer metin_esit(t, "DEGIL") {
+        ilerle(p);
+        ver dugum1(p, "TEKLI", "degil", s, u, parse_oncelik(p, 11));
+    }
+    eğer metin_esit(t, "DEGIL_BIT") {
+        ilerle(p);
+        ver dugum1(p, "TEKLI", "~", s, u, parse_oncelik(p, 11));
+    }
+    eğer metin_esit(t, "YILDIZ") {
+        ilerle(p);
+        ver dugum1(p, "TEKLI", "deref*", s, u, parse_oncelik(p, 11));
+    }
+    eğer metin_esit(t, "VE_BIT") {
+        ilerle(p);
+        değişken opad: metin = "&";
+        eğer sim_mi(p, "DEGISKEN") { ilerle(p); opad = "&degisken"; }
+        ver dugum1(p, "TEKLI", opad, s, u, parse_oncelik(p, 11));
+    }
+    ver parse_birincil(p);
+}
+
+// Sonek operatör (. [] () :: olarak). Pozisyon = sonek token'ı.
+işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
+    değişken t: metin = simdiki(p);
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    eğer metin_esit(t, "NOKTA") {
+        ilerle(p);
+        değişken alan: metin = sim_lex(p);
+        bekle(p, "TANIMLAYICI");
+        ver dugum1(p, "ERISIM", alan, s, u, sol);
+    }
+    eğer metin_esit(t, "SOL_KOSELI") {
+        ilerle(p);
+        değişken idx: tam32 = parse_ifade(p);
+        bekle(p, "SAG_KOSELI");
+        ver dugum2(p, "INDEKS", "", s, u, sol, idx);
+    }
+    eğer metin_esit(t, "SOL_PAREN") {
+        ilerle(p);
+        değişken kids: Dizi<tam32> = [];
+        dizi_ekle(kids, sol);  // çocuk[0] = hedef
+        eğer sim_mi(p, "SAG_PAREN") == yanlış {
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                eğer sim_mi(p, "SAG_PAREN") { devam = yanlış; }
+                değilse {
+                    dizi_ekle(kids, parse_ifade(p));
+                    eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                    değilse { devam = yanlış; }
+                }
+            }
+        }
+        bekle(p, "SAG_PAREN");
+        ver dugum_n(p, "CAGRI", "", s, u, kids);
+    }
+    eğer metin_esit(t, "CIFT_IKI_NOKTA") {
+        ilerle(p);
+        değişken sag: metin = sim_lex(p);
+        bekle(p, "TANIMLAYICI");
+        ver dugum1(p, "YOL", sag, s, u, sol);
+    }
+    eğer metin_esit(t, "OLARAK") {
+        ilerle(p);
+        değişken ht: tam32 = parse_tip(p);
+        ver dugum2(p, "TIP_DONUSTUR", "", s, u, sol, ht);
+    }
+    ver sol;
+}
+
+// Pratt ana döngüsü (ifade.c parse_oncelik ile birebir).
+işlev parse_oncelik(p: &değişken Ayr, min_onc: tam32) -> tam32 {
+    değişken sol: tam32 = parse_onek(p);
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        değişken t: metin = simdiki(p);
+        eğer sonek_onc(t) > min_onc {
+            sol = parse_sonek(p, sol);
+        } değilse {
+            değişken oo: tam32 = ikili_onc(t);
+            eğer oo <= min_onc { devam = yanlış; }
+            değilse {
+                değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+                değişken opad: metin = ikili_op_ad(t);
+                ilerle(p);
+                değişken sag: tam32 = parse_oncelik(p, oo);
+                sol = dugum2(p, "IKILI", opad, s, u, sol, sag);
+            }
+        }
+    }
+    ver sol;
+}
+işlev parse_ifade(p: &değişken Ayr) -> tam32 { ver parse_oncelik(p, 0); }
+
+// ---- P2: Deyimler / kontrol akışı ----
+// Koşul ifadesi (yapı-oluştur izni KAPALI → `eğer x {` → '{' blok başı).
+işlev parse_kosul(p: &değişken Ayr) -> tam32 {
+    değişken eski: tam32 = p.yapi_izni;
+    p.yapi_izni = 0;
+    değişken d: tam32 = parse_ifade(p);
+    p.yapi_izni = eski;
+    ver d;
+}
+işlev parse_ver(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // ver
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "NOKTALI_VIRGUL") == yanlış { dizi_ekle(kids, parse_ifade(p)); }
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum_n(p, "VER", "", s, u, kids);
+}
+işlev parse_degisken(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // değişken
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "IKI_NOKTA") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
+    bekle(p, "ESIT");
+    dizi_ekle(kids, parse_ifade(p));
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum_n(p, "DEGISKEN", ad, s, u, kids);
+}
+işlev parse_ifade_veya_atama(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    değişken e: tam32 = parse_ifade(p);
+    eğer sim_mi(p, "ESIT") {
+        ilerle(p);
+        değişken dg: tam32 = parse_ifade(p);
+        bekle(p, "NOKTALI_VIRGUL");
+        ver dugum2(p, "ATAMA", "", s, u, e, dg);
+    }
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum1(p, "IFADE_DEYIMI", "", s, u, e);
+}
+işlev parse_eger(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // eğer
+    değişken kids: Dizi<tam32> = [];
+    dizi_ekle(kids, parse_kosul(p));   // koşul
+    dizi_ekle(kids, parse_blok(p));    // eğer dalı
+    eğer sim_mi(p, "DEGILSE") {
+        ilerle(p);
+        eğer sim_mi(p, "EGER") { dizi_ekle(kids, parse_eger(p)); }  // else-if zinciri
+        değilse { dizi_ekle(kids, parse_blok(p)); }
+    }
+    ver dugum_n(p, "EGER", "", s, u, kids);
+}
+işlev parse_iken(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // iken
+    değişken kosul: tam32 = parse_kosul(p);
+    değişken govde: tam32 = parse_blok(p);
+    ver dugum2(p, "IKEN", "", s, u, kosul, govde);
+}
+işlev parse_icin(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // için
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken kol: tam32 = parse_kosul(p);
+    değişken govde: tam32 = parse_blok(p);
+    ver dugum2(p, "ICIN", ad, s, u, kol, govde);
+}
+işlev parse_guvensiz(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // güvensiz
+    eğer sim_mi(p, "SOL_KOSELI") {     // [etiket: "..."] (dump'ta yok, tüket)
+        ilerle(p);
+        bekle(p, "TANIMLAYICI");
+        bekle(p, "IKI_NOKTA");
+        bekle(p, "METIN");
+        bekle(p, "SAG_KOSELI");
+    }
+    ver dugum1(p, "GUVENSIZ", "", s, u, parse_blok(p));
+}
+// Desen (eşleş kolları için).
+işlev parse_desen(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    eğer sim_mi(p, "TANIMLAYICI") ve metin_esit(sim_lex(p), "_") {
+        ilerle(p);
+        ver dugum0(p, "DESEN_JOKER", "", s, u);
+    }
+    eğer sim_mi(p, "TANIMLAYICI") veya sim_mi(p, "HIC") veya sim_mi(p, "DEGER")
+      veya sim_mi(p, "TAMAM") veya sim_mi(p, "HATA") {
+        değişken ad: metin = sim_lex(p);
+        ilerle(p);
+        eğer sim_mi(p, "CIFT_IKI_NOKTA") {        // Çeşit::Varyant [(payload)]
+            ilerle(p);
+            değişken vad: metin = sim_lex(p);
+            bekle(p, "TANIMLAYICI");
+            değişken kids: Dizi<tam32> = [];
+            eğer sim_mi(p, "SOL_PAREN") {
+                ilerle(p);
+                değişken devam: mantıksal = doğru;
+                iken devam {
+                    eğer sim_mi(p, "SAG_PAREN") { devam = yanlış; }
+                    değilse {
+                        dizi_ekle(kids, parse_desen(p));
+                        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                        değilse { devam = yanlış; }
+                    }
+                }
+                bekle(p, "SAG_PAREN");
+            }
+            ver dugum_n(p, "DESEN_YOL", metin_birlestir(metin_birlestir(ad, "::"), vad), s, u, kids);
+        }
+        eğer sim_mi(p, "SOL_PAREN") {             // Yapıcı(alt, ...)
+            ilerle(p);
+            değişken kids: Dizi<tam32> = [];
+            değişken devam: mantıksal = doğru;
+            iken devam {
+                eğer sim_mi(p, "SAG_PAREN") { devam = yanlış; }
+                değilse {
+                    dizi_ekle(kids, parse_desen(p));
+                    eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                    değilse { devam = yanlış; }
+                }
+            }
+            bekle(p, "SAG_PAREN");
+            ver dugum_n(p, "DESEN_YAPICI", ad, s, u, kids);
+        }
+        ver dugum0(p, "DESEN_TANIMLAYICI", ad, s, u);
+    }
+    eğer sim_mi(p, "TAMSAYI") veya sim_mi(p, "ONDALIK") veya sim_mi(p, "METIN")
+      veya sim_mi(p, "KARAKTER") veya sim_mi(p, "DOGRU") veya sim_mi(p, "YANLIS")
+      veya sim_mi(p, "BOS") {
+        ver dugum1(p, "DESEN_LITERAL", "", s, u, parse_ifade(p));
+    }
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+işlev parse_esles_kolu(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    değişken desen: tam32 = parse_desen(p);
+    bekle(p, "KALIN_OK");
+    değişken govde: tam32 = 0;
+    eğer sim_mi(p, "SOL_SUSLU") { govde = parse_blok(p); }
+    değilse { govde = parse_ifade(p); bekle(p, "NOKTALI_VIRGUL"); }
+    ver dugum2(p, "ESLES_KOLU", "", s, u, desen, govde);
+}
+işlev parse_esles(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // eşleş
+    değişken kids: Dizi<tam32> = [];
+    dizi_ekle(kids, parse_kosul(p));   // eşleşen değer
+    bekle(p, "SOL_SUSLU");
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_esles_kolu(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "ESLES", "", s, u, kids);
+}
+// satıriçi_asm { mimari: X  şablon: r#".."#  çıktı("k",&v) girdi("k",e) bozulan("k") çevrim: N }
+// Yalnız `girdi` ifadeleri AST çocuğu (C ast_duz_yaz); gerisi tüketilir.
+işlev asm_kisit_atla(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") { ilerle(p); ver 1; }
+    p.hata_say = p.hata_say + 1; ver 0;
+}
+işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // satıriçi_asm
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            değişken lx: metin = sim_lex(p);
+            eğer metin_esit(lx, "mimari") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); bekle(p, "TANIMLAYICI");
+            } değilse {
+            eğer metin_esit(lx, "şablon") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); asm_kisit_atla(p);
+            } değilse {
+            eğer metin_esit(lx, "çevrim") {
+                ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p);
+            } değilse {
+            eğer metin_esit(lx, "çıktı") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
+                eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+                bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
+            } değilse {
+            eğer metin_esit(lx, "girdi") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                bekle(p, "VIRGUL"); dizi_ekle(kids, parse_ifade(p)); bekle(p, "SAG_PAREN");
+            } değilse {
+            eğer metin_esit(lx, "bozulan") {
+                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p); bekle(p, "SAG_PAREN");
+            } değilse {
+                p.hata_say = p.hata_say + 1; ilerle(p);   // bilinmeyen clause
+            } } } } } }
+        }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
+}
+işlev parse_deyim(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "DEGISKEN") { ver parse_degisken(p); }
+    eğer sim_mi(p, "VER") { ver parse_ver(p); }
+    eğer sim_mi(p, "SOL_SUSLU") { ver parse_blok(p); }
+    eğer sim_mi(p, "EGER") { ver parse_eger(p); }
+    eğer sim_mi(p, "IKEN") { ver parse_iken(p); }
+    eğer sim_mi(p, "ICIN") { ver parse_icin(p); }
+    eğer sim_mi(p, "ESLES") { ver parse_esles(p); }
+    eğer sim_mi(p, "GUVENSIZ") { ver parse_guvensiz(p); }
+    eğer sim_mi(p, "SATIRICI_ASM") { ver parse_satirici_asm(p); }
+    ver parse_ifade_veya_atama(p);
+}
+işlev parse_blok(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_deyim(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "BLOK", "", s, u, kids);
+}
+// ---- P3: Bildirimler (işlev/yapı/çeşit/özellik/uygula/sabit) ----
+// İşlev (gerçekzamanlı? + generic + param + dönüş + gövde). imza_yeterli=1 →
+// gövde yerine ';' (özellik imzası). Generic params PARSE+DISCARD (dump'ta yok).
+işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") {
+        ilerle(p);
+        eğer sim_mi(p, "GERCEKZAMANLI") { p.hata_say = p.hata_say + 1; ilerle(p); }
+    }
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    bekle(p, "ISLEV");
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
+    bekle(p, "SOL_PAREN");
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "SAG_PAREN") == yanlış {
+        değişken devam: mantıksal = doğru;
+        iken devam {
+            dizi_ekle(kids, parse_parametre(p));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
+    }
+    bekle(p, "SAG_PAREN");
+    eğer sim_mi(p, "OK") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
+    eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
+    değilse {
+        eğer (imza_yeterli == 1) ve sim_mi(p, "NOKTALI_VIRGUL") { ilerle(p); }
+        değilse { p.hata_say = p.hata_say + 1; }
+    }
+    ver dugum_n(p, "ISLEV", ad, s, u, kids);
+}
+işlev parse_islev(p: &değişken Ayr) -> tam32 { ver parse_islev_genel(p, 0); }
+
+işlev parse_alan(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GENEL") { ilerle(p); }   // genel öneki (dump'ta yok)
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum1(p, "ALAN", ad, s, u, tip);
+}
+işlev parse_yapi(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // yapı
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_alan(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "YAPI", ad, s, u, kids);
+}
+işlev parse_cesit(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // çeşit
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    eğer sim_mi(p, "KUCUK") {           // çeşit generic v1'de YOK → atla (C birebir)
+        p.hata_say = p.hata_say + 1;
+        iken (sim_mi(p, "BUYUK") == yanlış) ve (sim_mi(p, "SOL_SUSLU") == yanlış)
+          ve (sim_mi(p, "DOSYA_SONU") == yanlış) { ilerle(p); }
+        eğer sim_mi(p, "BUYUK") { ilerle(p); }
+    }
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];   // payload tip düğümleri (varyant-sırası düz)
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse {
+            eğer sim_mi(p, "TANIMLAYICI") == yanlış {  // anti-hang (C panik_sync+break)
+                p.hata_say = p.hata_say + 1; ilerle(p); devam = yanlış;
+            } değilse {
+            ilerle(p);   // varyant adı (dump'ta yok)
+            eğer sim_mi(p, "SOL_PAREN") {
+                ilerle(p);
+                değişken d2: mantıksal = doğru;
+                iken d2 {
+                    eğer sim_mi(p, "SAG_PAREN") { d2 = yanlış; }
+                    değilse {
+                        dizi_ekle(kids, parse_tip(p));
+                        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                        değilse { d2 = yanlış; }
+                    }
+                }
+                bekle(p, "SAG_PAREN");
+            }
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
+            }
+        }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "CESIT", ad, s, u, kids);
+}
+işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // özellik
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    atla_tip_paramlar(p);
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+            dizi_ekle(kids, parse_islev_genel(p, 1));
+        } değilse { devam = yanlış; }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "OZELLIK", ad, s, u, kids);
+}
+işlev parse_uygula(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // uygula
+    atla_tip_paramlar(p);
+    değişken birinci: tam32 = parse_tip(p);
+    değişken kids: Dizi<tam32> = [];
+    eğer sim_mi(p, "ICIN") {           // trait impl: tip için hedef
+        ilerle(p);
+        dizi_ekle(kids, parse_tip(p));  // hedef tip (UYGULA.tip)
+        dizi_ekle(kids, birinci);       // özellik (UYGULA.ozellikler[0])
+    } değilse {
+        dizi_ekle(kids, birinci);       // inherent: hedef = birinci
+    }
+    bekle(p, "SOL_SUSLU");
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+            dizi_ekle(kids, parse_islev(p));
+        } değilse { devam = yanlış; }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "UYGULA", "", s, u, kids);
+}
+işlev parse_sabit(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // sabit
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "ESIT");
+    değişken dg: tam32 = parse_ifade(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum2(p, "SABIT", ad, s, u, tip, dg);
+}
+// ---- P5: modül / kullan / dışa / genel ----
+// kullan m[::seg...][::{a,b}][olarak d];  → KULLAN (deger=yol; seçili/alias dump'ta yok).
+işlev parse_kullan(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // kullan
+    değişken yol: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    değişken devam: mantıksal = doğru;
+    iken devam ve sim_mi(p, "CIFT_IKI_NOKTA") {
+        ilerle(p);
+        eğer sim_mi(p, "SOL_SUSLU") {      // ::{a, b} seçili import
+            ilerle(p);
+            değişken d2: mantıksal = doğru;
+            iken d2 {
+                bekle(p, "TANIMLAYICI");
+                eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                değilse { d2 = yanlış; }
+            }
+            bekle(p, "SAG_SUSLU");
+            devam = yanlış;
+        } değilse {
+            değişken seg: metin = sim_lex(p);
+            bekle(p, "TANIMLAYICI");
+            yol = metin_birlestir(metin_birlestir(yol, "::"), seg);
+        }
+    }
+    eğer sim_mi(p, "OLARAK") { ilerle(p); bekle(p, "TANIMLAYICI"); }  // alias
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum0(p, "KULLAN", yol, s, u);
+}
+// genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).
+işlev parse_disa_govde(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
+    eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
+    eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+işlev parse_disa(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // dışa
+    ver dugum1(p, "DISA", "", s, u, parse_disa_govde(p));
+}
+// genel SARMALAMAZ — iç tanımı doğrudan döner (genel_mi bayrağı dump'ta yok).
+işlev parse_genel(p: &değişken Ayr) -> tam32 {
+    ilerle(p);  // genel
+    ver parse_disa_govde(p);
+}
+işlev parse_modul(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // modül
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "SOL_SUSLU");
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_ust_oge(p)); }
+    }
+    bekle(p, "SAG_SUSLU");
+    ver dugum_n(p, "MODUL", ad, s, u, kids);
+}
+işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
+    eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
+    eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
+    eğer sim_mi(p, "UYGULA") { ver parse_uygula(p); }
+    eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
+    eğer sim_mi(p, "KULLAN") { ver parse_kullan(p); }
+    eğer sim_mi(p, "DISA") { ver parse_disa(p); }
+    eğer sim_mi(p, "GENEL") { ver parse_genel(p); }
+    eğer sim_mi(p, "MODUL") { ver parse_modul(p); }
+    // P5: satıriçi_asm (üst düzey değil; deyim) — kalan
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    p.hata_say = p.hata_say + 1;
+    ilerle(p);
+    ver dugum0(p, "HATA", "", s, u);
+}
+işlev parse_program(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);  // ilk token konumu
+    değişken kids: Dizi<tam32> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        değilse { dizi_ekle(kids, parse_ust_oge(p)); }
+    }
+    ver dugum_n(p, "PROGRAM", "", s, u, kids);
+}
+
+// ---- Düz --ast dumper (preorder; C ast_duz_yaz ile birebir) ----
+// ============================================================================
+// AŞAMA 3 (D-072) — CG1 codegen: AST-yürüten LLVM IR text emitter.
+//   Oracle: SEMANTİK (exit-kod) eşdeğerlik (byte-identik IR DEĞİL — bkz. D-072).
+//   CG1 kapsamı: işlev (parametresiz) + ver + tam literal + ikili aritmetik
+//   (+ - * / %). Hoist-free: tek blok (entry:), SSA sıralı %N (p.reg).
+// ============================================================================
+işlev yeni_reg(p: &değişken Ayr) -> tam32 {
+    değişken r: tam32 = p.reg;
+    p.reg = p.reg + 1;
+    ver r;
+}
+işlev reg_str(r: tam32) -> metin { ver metin_birlestir("%", tam64_str(r olarak tam64)); }
+işlev ll_ikili(op: metin) -> metin {
+    eğer metin_esit(op, "+") { ver "add"; }
+    eğer metin_esit(op, "-") { ver "sub"; }
+    eğer metin_esit(op, "*") { ver "mul"; }
+    eğer metin_esit(op, "/") { ver "sdiv"; }
+    eğer metin_esit(op, "ve") { ver "and"; }    // mantıksal (kısa-devresiz, C v1 ile aynı)
+    eğer metin_esit(op, "veya") { ver "or"; }
+    ver "srem";   // %
+}
+işlev karsilastirma_mi(op: metin) -> mantıksal {
+    ver metin_esit(op, "==") veya metin_esit(op, "!=") veya metin_esit(op, "<")
+        veya metin_esit(op, ">") veya metin_esit(op, "<=") veya metin_esit(op, ">=");
+}
+işlev icmp_pred(op: metin) -> metin {
+    eğer metin_esit(op, "==") { ver "eq"; }
+    eğer metin_esit(op, "!=") { ver "ne"; }
+    eğer metin_esit(op, "<") { ver "slt"; }
+    eğer metin_esit(op, ">") { ver "sgt"; }
+    eğer metin_esit(op, "<=") { ver "sle"; }
+    ver "sge";   // >=
+}
+// i1 sonucu → i32 (0/1) genişlet; üretilen reg'i döndür.
+işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = zext i1 "); yaz_str(c); yaz_str(" to i32"); yb(10);
+    ver rs;
+}
+// CG3: işlev-içi değişken adı → alloca operandı (append-on-create; sondan ara = shadow).
+işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin) -> tam32 {
+    dizi_ekle(p.cg_ad, ad);
+    dizi_ekle(p.cg_areg, areg);
+    ver 0;
+}
+işlev cg_var_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_areg, i); }
+        i = i - 1;
+    }
+    ver "";   // bulunamadı (geçerli programda olmaz; checker garantiler)
+}
+
+// İfade → operand metni ("5" veya "%3"); yan-IR yaz_str ile akıtılır.
+işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "TAM") { ver dizi_al(p.a_deg, idx); }
+    eğer metin_esit(ad, "TANIMLAYICI") {
+        değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = load i32, ptr "); yaz_str(areg); yb(10);
+        ver rs;
+    }
+    eğer metin_esit(ad, "IKILI") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken sol: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
+        değişken sag: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        eğer karsilastirma_mi(op) {
+            değişken c: tam32 = yeni_reg(p);
+            değişken cs2: metin = reg_str(c);
+            yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp "); yaz_str(icmp_pred(op));
+            yaz_str(" i32 "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
+            ver zext_i1(p, cs2);
+        }
+        // aritmetik (+ - * / %) + mantıksal (ve/veya → and/or): tek komut
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(ll_ikili(op));
+        yaz_str(" i32 "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
+        ver rs;
+    }
+    eğer metin_esit(ad, "TEKLI") {
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        değişken x: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer metin_esit(op, "neg") {
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = sub i32 0, "); yaz_str(x); yb(10);
+            ver rs;
+        }
+        eğer metin_esit(op, "degil") {
+            değişken c: tam32 = yeni_reg(p);
+            değişken cs2: metin = reg_str(c);
+            yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp eq i32 "); yaz_str(x); yaz_str(", 0"); yb(10);
+            ver zext_i1(p, cs2);
+        }
+        ver "0";   // ~ / deref* / & / &degisken → CG sonrası (pointer/güvensiz)
+    }
+    ver "0";   // CG2 dışı düğüm (tanımlayıcı/çağrı/...) → CG3+
+}
+
+// Deyim → IR.
+işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "BLOK") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken i: tam32 = 0;
+        iken i < cs { deyim_uret(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+        ver 0;
+    }
+    eğer metin_esit(ad, "VER") {
+        eğer dizi_al(p.a_cs, idx) > 0 {
+            değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+            yaz_str("  ret i32 "); yaz_str(op); yb(10);
+        } değilse { yaz_str("  ret i32 0"); yb(10); }
+        ver 0;
+    }
+    eğer metin_esit(ad, "DEGISKEN") {
+        // değer = SON çocuk (tip-annot opsiyonel ilk çocuk olabilir)
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        değişken a: tam32 = yeni_reg(p);
+        değişken areg: metin = reg_str(a);
+        yaz_str("  "); yaz_str(areg); yaz_str(" = alloca i32"); yb(10);
+        yaz_str("  store i32 "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
+        cg_var_ekle(p, dizi_al(p.a_deg, idx), areg);
+        ver 0;
+    }
+    eğer metin_esit(ad, "ATAMA") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken lhs: tam32 = dizi_al(p.cocuk, cb);
+        değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        // CG3: lhs yalnız TANIMLAYICI (alan/indeks atama CG7/CG8)
+        eğer metin_esit(dizi_al(p.a_ad, lhs), "TANIMLAYICI") {
+            yaz_str("  store i32 "); yaz_str(v); yaz_str(", ptr ");
+            yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
+        }
+        ver 0;
+    }
+    eğer metin_esit(ad, "IFADE_DEYIMI") {
+        ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));   // yan etki için değerlendir
+        ver 0;
+    }
+    ver 0;   // CG3 dışı deyim → CG4+ (eğer/iken/...)
+}
+
+// İşlev → define i32 @ad() { ... }. CG1: parametresiz; gövde = BLOK çocuğu.
+işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
+    p.reg = 0;
+    p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
+    yaz_str("define i32 @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("() {"); yb(10);
+    yaz_str("entry:"); yb(10);
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { deyim_uret(p, c); }
+        i = i + 1;
+    }
+    yaz_str("}"); yb(10);
+    ver 0;
+}
+
+// Program → IR başlık + her üst-düzey ISLEV.
+işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
+    yaz_str("target triple = "); yb(34); yaz_str("x86_64-pc-windows-gnu"); yb(34); yb(10); yb(10);
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev ayr_olustur(kaynak: metin) -> Ayr {
+    ver Ayr {
+        kaynak: kaynak,
+        t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
+        imlec: 0,
+        a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
+        hata_say: 0,
+        yapi_izni: 1,
+        sk_pending: 0,
+        reg: 0,
+        cg_ad: [], cg_areg: [], cg_base: 0
+    };
+}
+
+işlev main() -> tam32 {
+    eğer arg_sayi() < 2 {
+        yaz_str("kullanim: kemgu_parser <kaynak.kem>"); yb(10);
+        ver 1;
+    }
+    değişken yol: metin = arg_al(1);
+    değişken kaynak: metin = dosya_oku(yol);
+    değişken p: Ayr = ayr_olustur(kaynak);
+    lex_et(&değişken p);
+    değişken kok: tam32 = parse_program(&değişken p);
+    program_uret(&değişken p, kok);
+    ver 0;
+}

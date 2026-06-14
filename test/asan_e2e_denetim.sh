@@ -22,13 +22,13 @@ mkdir -p "$TMP"
 
 # Bilinen başarısızlıklar (kök-neden + takip). Bunlar ASan-temiz DEĞİL ama
 # nedeni belgeli — denetimi kızartmasınlar diye dışlanır (bkz. DECISIONS_LOG D-031).
-#   Lambda/closure: D-004 ile V2'ye ERTELENDİ (fonksiyon-değer codegen yok).
 #   Sınıf A KAPANDI (D-070): LİTERAL-arg `f([..])` → heap (03_kontrol PASS); DEĞİŞKEN-arg
 #     `değişken xs=[..]; f(xs)` artık --check'te G003 REDDİ (Mehmet kararı). 35/40 GEÇERSİZ
 #     program (checker reddediyor); --llvm bypass ederse çöker = "checker'ı atladın" →
-#     allowlist'te kalır (güvensiz-eşi). Sınıf B (lambda) = V2 (D-004).
-ALLOWLIST="04_islev 10_lambda 25_closure_capture 42_lambda_hesap \
-           35_binary_search 40_dizi_islemler"
+#     allowlist'te kalır (güvensiz-eşi).
+#   Sınıf B (lambda/closure) KAPANDI (D-071): karma temsil (yakalamasız→bare fn-ptr,
+#     yakalamalı→closure). 04_islev/10_lambda/25_closure_capture/42_lambda_hesap artık PASS.
+ALLOWLIST="35_binary_search 40_dizi_islemler"
 
 pass=0; fail=0; skip=0; allow=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do
