@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-083 — [YÜKSEK] C codegen accept-but-silently-wrong kapatma: heap Dizi<T> `xs[i] = v` eleman-yazma (2026-06-14)
+
+**Karar [ETKİ: C derleyici src/llvm.c codegen — bellek/anlam güvenliği].** D-082 sırasında
+fark edilen ikinci delik: heap dizi elemanına indeksle yazma (`xs[i] = v`) `--check` KABUL
+ediyor ama codegen yazmayı **SESSİZCE düşürüyordu** — yalnız bir yorum (`; atama: heap dizi
+... setter yok`) emit edilip değer hiç güncellenmiyordu:
+```
+işlev main() -> tam32 { değişken xs: Dizi<tam32> = [10,20,30]; xs[1] = 99; ver dizi_al(xs,1); }
+// ÖNCE: 20 (yazma kayboldu)   SONRA: 99
+```
+
+**Kök-neden.** DUGUM_ATAMA INDEKS hedefi `heap_dizi` dalı, runtime setter'ı YOK varsayıp
+(`kdl_dizi_yaz_eleman yok`) yalnız yorum yazıyordu. Oysa runtime'da `kdl_dizi_yaz_tam`/
+`_tam64`/`_ptr` (D-069'dan beri, bounds-checked) MEVCUT ve `dizi_yaz` intrinsic'i zaten
+kullanıyor. Yorum eskimişti; accept-but-crash değil **accept-but-silently-wrong** (görünmez
+veri bozulması — çökmeden daha sinsi).
+
+**Çözüm.** `heap_dizi` dalı INDEKS okuma yolunun (`kdl_dizi_al`) yazma aynası yapıldı:
+KdlDizi* load + indeks(i32) + değer → `kdl_dizi_yaz_<tip>`. Eleman tipi `eleman_llvm_tip`'ten;
+`dizi_yaz` intrinsic'iyle aynı `cast_tip` mantığı (i8/i16/i32 depo i32 genişliğinde —
+kdl_dizi_olustur element_byte=4; yalnız i64/ptr ayrı setter). Runtime setter bounds-checked:
+OOB / negatif indeks → PANIC (sessiz/segfault DEĞİL).
+
+**Doğrulama.** `xs[i]=v` artık doğru değeri yazar (write+read round-trip), i32/i64/ptr(metin)
+eleman tipleri çalışır, OOB+negatif → PANIC. ASan+UBSan temiz. test_tumu yeşil; asan_e2e_denetim.sh
+temiz. Regresyon: dizi_sinir_harness.sh vaka13 (round-trip rc=99) + vaka14 (OOB→PANIC) +
+test/ornekler/dizi_eleman_yaz.kem (write toplamı 42; silent-drop olsaydı 60).
+
+**Sınır (bu görevin dışında — gelecek).** D-083 yalnız **TANIMLAYICI tabanlı** heap dizi
+`xs[i] = v` yazmayı kapsar. Düşmanca doğrulama (4 paralel ajan, 120+ vaka) D-082/D-083'te
+**0 regresyon, 0 yeni delik** buldu; ANCAK kapsam DIŞINDA, ortak kök-nedenli bir aile
+ortaya çıkardı: **türetilmiş/dolaylı dizilerde `[]` indeks operatörü deskriptörü düz veri
+gibi indeksliyor** (KdlDizi* taban yerine), `dizi_al`/`dizi_yaz`/`dizi_boyut` built-in'leri
+ise DOĞRU çalışıyor. Doğrulanan delikler (hepsi pre-existing, `--check` KABUL):
+- `k.xs[i]` (ERISIM tabanlı yapı-alanı heap dizi) — hem YAZMA (segfault) hem OKUMA (sessiz
+  yanlış: çöp değer ≠ beklenen) bozuk; `dizi_al(k.xs,i)` doğru.
+- fonksiyon-dönüşü `Dizi<T>` + `[]` okuma — kararsız (sessiz yanlış / IR link-fail).
+- iç-içe `Dizi<Dizi<T>>`'den DEĞİŞKENE çıkarılan iç dizinin uzunluk metadata'sı bozuk
+  (`dizi_boyut` 1 raporluyor); `m[i][j]` doğrudan indeks OKUMA/YAZMA çalışıyor.
+- `&Dizi<T>` referans parametresi — çift-dolaylılık deskriptörü yanlış; ayrıca
+  `dizi_al(&Dizi)` KABUL ama `dizi_boyut(&Dizi)` T001 RED (built-in arg tip-kontrol tutarsız).
+- `Dizi<Yapı>` (dizi-of-struct): `ps[i].alan` sessiz yanlış GEP; `dizi_al(ps,i)`→struct
+  değişkene atama IR link-fail (eleman skaler i32 varsayılıyor).
+- Ayrıca **D-069 boşluğu**: STACK dizi `xs[i] = v` (annotsuz `değişken xs=[..]`) OOB yazma
+  sınır-kontrolü EMİT ETMİYOR → sessizce başarılı (okuma yolu korumalı, yazma değil).
+  (D-083 HEAP yazma yolu OOB'da düzgün PANIK ediyor; bu yalnız stack-write yolu.)
+Bunlar `[]` lowering'inin türev-dizi köküne odaklı AYRI bir izole [YÜKSEK] görev olarak
+takip edilecek. Bu işte düzeltilmedi (isolated-commit disiplini).
+
+---
+
 ## D-082 — [YÜKSEK] C codegen accept-but-crash kapatma: Dizi<T> ATAMA dizi-literal heap-promote (2026-06-14)
 
 > **Numara notu:** Bu iş başlangıçta D-076 olarak işaretlendi (görev verildiğinde main'de

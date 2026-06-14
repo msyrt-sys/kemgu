@@ -1,0 +1,17 @@
+// dizi_eleman_yaz.kem — heap Dizi<T> `xs[i] = v` eleman-yazma regresyonu (D-083).
+//
+// Heap dizi (KdlDizi) elemanına indeksle yazma (`xs[i] = v`) ÖNCEDEN codegen'de
+// yalnız bir yorum emit edip yazmayı SESSİZCE düşürürdü (accept-but-silently-wrong:
+// değer hiç güncellenmez, eski değer okunur). Şimdi INDEKS okuma yolunun yazma
+// aynası kdl_dizi_yaz_<tip> ile route edilir (runtime'da mevcut, bounds-checked:
+// OOB → PANIC, D-069). Bu örnek --check geçer ve ASan-temiz çalışmalı
+// (bkz. asan_e2e_denetim.sh auto-discovery).
+
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [10, 20, 30];
+    xs[0] = 5;
+    xs[1] = 15;
+    xs[2] = 22;
+    // 5 + 15 + 22 = 42 (write'lar uygulandıysa; silent-drop ise 10+20+30=60)
+    ver xs[0] + xs[1] + xs[2];
+}

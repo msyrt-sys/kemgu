@@ -3836,18 +3836,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 /* Audit fix #2: arr[i] = v — onceden SESSIZCE dusurulurdu
                  * (hedef yalniz tanimlayici/erisim taniyordu).
                  * Stack dizi: INDEKS okuma yolunun GEP aynasi + store.
-                 * Heap dizi (KdlDizi): runtime'da eleman-yazma setter'i
-                 * YOK (kdl_dizi_yaz_eleman) — runtime/ bu görevin scope
-                 * disinda; gorunur yorum + DUR-SOR raporu (sessiz degil). */
+                 * Heap dizi (KdlDizi): [D-083] INDEKS okuma yolunun
+                 * (kdl_dizi_al) yazma aynasi — kdl_dizi_yaz_<tip> (runtime'da
+                 * MEVCUT; eski "setter yok" yorumu yanlisti). Bounds-checked
+                 * (OOB → PANIC, D-069). Onceden yalniz yorum emit edilip yazma
+                 * SESSIZCE kaybolurdu (accept-but-silently-wrong). */
                 const Dugum *hedef = d->veri.atama.hedef;
                 int heap_dizi = 0;
+                LlvmIsim *heap_vi = NULL;
                 const char *pointee_elem = NULL;
                 if (hedef->veri.indeks.nesne &&
                     hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                     LlvmIsim *vi = isim_bul(g,
                         hedef->veri.indeks.nesne->veri.tanimlayici.metin,
                         hedef->veri.indeks.nesne->veri.tanimlayici.uzunluk);
-                    if (vi && vi->dinamik_dizi_mi) heap_dizi = 1;
+                    if (vi && vi->dinamik_dizi_mi) { heap_dizi = 1; heap_vi = vi; }
                     /* v1 bölge-container: *T tabani — eleman tipi
                      * POINTEE'den (RHS tipi tam8/tam64 hedefte yanlis
                      * genislik uretirdi). */
@@ -3856,9 +3859,29 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     }
                 }
                 if (heap_dizi) {
+                    /* xs[i] = v: load KdlDizi* + idx(i32) + değer → setter.
+                     * dizi_yaz intrinsic'iyle aynı cast_tip mantığı: i8/i16/i32
+                     * depo i32 genişliğinde (kdl_dizi_olustur element_byte=4),
+                     * yalnız i64/ptr ayrı setter. */
+                    const char *et = (heap_vi && heap_vi->eleman_llvm_tip)
+                        ? heap_vi->eleman_llvm_tip : "i32";
+                    const char *fn;
+                    const char *cast_tip = et;
+                    if (strcmp(et, "i64") == 0) fn = "kdl_dizi_yaz_tam64";
+                    else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_yaz_ptr";
+                    else { fn = "kdl_dizi_yaz_tam"; cast_tip = "i32"; }
+                    int v_load = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
+                            v_load, heap_vi->reg_no);
+                    IfadeSonuc idx = ifade_uret(g,
+                        hedef->veri.indeks.indeks, "i32");
+                    int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                              cast_tip);
+                    int vr = int_donustur(g, v.reg, v.tip, cast_tip);
                     fprintf(g->out,
-                        "  ; atama: heap dizi eleman atamasi runtime "
-                        "setter bekliyor (kdl_dizi_yaz_eleman yok)\n");
+                        "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
+                        fn, v_load, idx_r, cast_tip, vr);
                 } else {
                     IfadeSonuc nesne = ifade_uret(g,
                         hedef->veri.indeks.nesne, NULL);

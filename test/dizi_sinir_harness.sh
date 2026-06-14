@@ -101,6 +101,20 @@ işlev main() -> tam32 {
     dizi_ekle(k.xs, 7);
     ver dizi_boyut(k.xs);
 }'
+# vaka13/14 (D-083): heap dizi `xs[i] = v` eleman-yazma. ÖNCEDEN codegen yalnız
+# yorum emit edip yazmayı SESSİZCE düşürürdü (accept-but-silently-wrong: değer
+# kaybolur). Şimdi kdl_dizi_yaz_<tip> (bounds-checked). vaka13: write+read
+# round-trip (yaz 99, oku 99). vaka14: OOB yaz → PANIC (segfault/sessiz DEĞİL).
+deger_bekle vaka13_heap_eleman_yaz 99 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [10, 20, 30];
+    xs[1] = 99;
+    ver xs[1];
+}'
+panic_bekle vaka14_heap_eleman_yaz_oob 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2, 3];
+    xs[5] = 9;
+    ver 0;
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"
