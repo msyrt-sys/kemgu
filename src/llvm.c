@@ -67,6 +67,10 @@ typedef struct LlvmIsim {
      * yapiyi cozmek icin — onceki "ptr ise global alan-adi ara" fallback'i
      * iki yapi ayni alan adini paylasinca YANLIS yapiya cozuyordu. */
     const char *ref_yapi_ir;
+    /* D-071 (Sınıf B lambda V2): bu isim bir closure değeri (lambda lokali VEYA
+     * işlev(...)→R parametresi) ise 1. Çağrı yerinde indirect-call'ı closure-deref
+     * (gep0=fn, gep1=env → call fn(env,args)) yapar; 0 = düz fn-ptr (geriye uyum). */
+    int closure_mu;
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -136,6 +140,20 @@ typedef struct BekleyenSpec {
     struct BekleyenSpec *sonraki;
 } BekleyenSpec;
 
+/* D-071 (Sınıf B lambda V2): lambda OLUŞTURMA anında kaydedilir, çevre fonksiyon
+ * gövdesi bitince (deferred) lifted `@lambda_N(ptr env, params)` olarak emit edilir.
+ * Capture listesi OLUŞTURMA anında (scope canlıyken) hesaplanıp burada saklanır —
+ * deferred emit'te enclosing scope artık yok. */
+typedef struct BekleyenLambda {
+    const Dugum *dugum;          /* DUGUM_LAMBDA */
+    const char *mangled;         /* @lambda_N */
+    const char **capture_adlar;  /* yakalanan serbest değişken adları (ilk-görülme sıralı) */
+    int *capture_uzlar;          /* paralel: ad uzunlukları */
+    const char **capture_irler;  /* paralel: IR tipleri (env struct alanı + load) */
+    int capture_sayi;
+    struct BekleyenLambda *sonraki;
+} BekleyenLambda;
+
 typedef struct LlvmGen {
     FILE *out;
     Arena *arena;
@@ -165,6 +183,12 @@ typedef struct LlvmGen {
      * kontrolü ATLANIR (Rust modeli: varsayılan güvenli, güvensiz'de kontrolsuz —
      * açık + işaretli + programcı sorumluluğunda). */
     int guvensiz_derinlik;
+    /* D-071 (Sınıf B lambda V2): lifted lambda emisyon kuyruğu + benzersiz sayaç. */
+    BekleyenLambda *bekleyen_lambdalar;
+    int lambda_sayaci;
+    /* En son üretilen lambda değeri CAPTURE'lı (closure) mı? DEGISKEN, lokal
+     * değişkenin closure_mu'sunu buradan okur. Yakalama yok → bare fn-ptr (0). */
+    int son_closure;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -216,6 +240,103 @@ static LlvmIsim *isim_bul(LlvmGen *g, const char *ad, int ad_uz) {
         }
     }
     return NULL;
+}
+
+/* === D-071 (Sınıf B lambda V2): capture (serbest değişken) analizi === */
+#define LAMBDA_MAX_CAPTURE 32
+typedef struct {
+    LlvmGen *g;
+    const char **param_adlar; const int *param_uzlar; int param_sayi;
+    const char *adlar[LAMBDA_MAX_CAPTURE];
+    int uzlar[LAMBDA_MAX_CAPTURE];
+    const char *irler[LAMBDA_MAX_CAPTURE];
+    int sayi;
+} CaptureCtx;
+
+static int capture_param_mi(CaptureCtx *c, const char *ad, int uz) {
+    for (int i = 0; i < c->param_sayi; i++)
+        if (c->param_uzlar[i] == uz &&
+            memcmp(c->param_adlar[i], ad, (size_t)uz) == 0) return 1;
+    return 0;
+}
+static void lambda_serbest_tara(CaptureCtx *c, const Dugum *d);
+static void lambda_serbest_liste(CaptureCtx *c, Dugum **l, int n) {
+    for (int i = 0; i < n; i++) lambda_serbest_tara(c, l[i]);
+}
+/* Lambda gövdesindeki serbest değişkenleri topla: lambda paramı DEĞİL +
+ * isim_bul ile çevre lokal/param ise capture. İç lambda'ya GİRME (kendi yönetir). */
+static void lambda_serbest_tara(CaptureCtx *c, const Dugum *d) {
+    if (!d) return;
+    switch (d->tip) {
+        case DUGUM_TANIMLAYICI: {
+            const char *ad = d->veri.tanimlayici.metin;
+            int uz = d->veri.tanimlayici.uzunluk;
+            if (capture_param_mi(c, ad, uz)) return;
+            for (int i = 0; i < c->sayi; i++)         /* dedup */
+                if (c->uzlar[i] == uz &&
+                    memcmp(c->adlar[i], ad, (size_t)uz) == 0) return;
+            LlvmIsim *vi = isim_bul(c->g, ad, uz);    /* çevre lokal/param? */
+            if (vi && c->sayi < LAMBDA_MAX_CAPTURE) {
+                c->adlar[c->sayi] = ad; c->uzlar[c->sayi] = uz;
+                c->irler[c->sayi] = vi->llvm_tip ? vi->llvm_tip : "i32";
+                c->sayi++;
+            }
+            return;
+        }
+        case DUGUM_LAMBDA: return;   /* iç lambda kendi capture'ını yönetir (v1: yok) */
+        case DUGUM_BLOK:
+            lambda_serbest_liste(c, d->veri.blok.deyimler, d->veri.blok.sayi); return;
+        case DUGUM_DEGISKEN: lambda_serbest_tara(c, d->veri.degisken.deger); return;
+        case DUGUM_ATAMA:
+            lambda_serbest_tara(c, d->veri.atama.hedef);
+            lambda_serbest_tara(c, d->veri.atama.deger); return;
+        case DUGUM_VER: lambda_serbest_tara(c, d->veri.ver.deger); return;
+        case DUGUM_EGER:
+            lambda_serbest_tara(c, d->veri.eger.kosul);
+            lambda_serbest_tara(c, d->veri.eger.gozdoldur);
+            lambda_serbest_tara(c, d->veri.eger.yan); return;
+        case DUGUM_IKEN:
+            lambda_serbest_tara(c, d->veri.iken.kosul);
+            lambda_serbest_tara(c, d->veri.iken.govde); return;
+        case DUGUM_ICIN:
+            lambda_serbest_tara(c, d->veri.icin.koleksiyon);
+            lambda_serbest_tara(c, d->veri.icin.govde); return;
+        case DUGUM_IFADE_DEYIMI:
+            lambda_serbest_tara(c, d->veri.ifade_deyimi.ifade); return;
+        case DUGUM_IKILI:
+            lambda_serbest_tara(c, d->veri.ikili.sol);
+            lambda_serbest_tara(c, d->veri.ikili.sag); return;
+        case DUGUM_TEKLI: lambda_serbest_tara(c, d->veri.tekli.operand); return;
+        case DUGUM_CAGRI:
+            lambda_serbest_tara(c, d->veri.cagri.hedef);
+            lambda_serbest_liste(c, d->veri.cagri.argumanlar, d->veri.cagri.sayi); return;
+        case DUGUM_ERISIM: lambda_serbest_tara(c, d->veri.erisim.nesne); return;
+        case DUGUM_INDEKS:
+            lambda_serbest_tara(c, d->veri.indeks.nesne);
+            lambda_serbest_tara(c, d->veri.indeks.indeks); return;
+        case DUGUM_DIZI_OLUSTUR:
+            lambda_serbest_liste(c, d->veri.dizi_olustur.elemanlar,
+                                 d->veri.dizi_olustur.sayi); return;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA)
+                    lambda_serbest_tara(c, aa->veri.alan_atama.deger);
+            }
+            return;
+        case DUGUM_TIP_DONUSTUR: lambda_serbest_tara(c, d->veri.tip_donustur.kaynak); return;
+        case DUGUM_KULLAN_IFADE: lambda_serbest_tara(c, d->veri.kullan_ifade.operand); return;
+        case DUGUM_IMHA_IFADE: lambda_serbest_tara(c, d->veri.imha_ifade.operand); return;
+        case DUGUM_ESLES:
+            lambda_serbest_tara(c, d->veri.esles.deger);
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *kol = d->veri.esles.kollar[i];
+                if (kol && kol->tip == DUGUM_ESLES_KOLU)
+                    lambda_serbest_tara(c, kol->veri.esles_kolu.govde);
+            }
+            return;
+        default: return;
+    }
 }
 
 /* === Ust duzey sabit tablosu === */
@@ -2884,18 +3005,39 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                 d->veri.cagri.argumanlar[i], ab);
                         }
                     }
-                    int fn_reg = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
-                            fn_reg, vi->reg_no);
                     const char *donus_indirect = beklenen ? beklenen : "i32";
                     int rr = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = call %s %%%d(",
-                            rr, donus_indirect, fn_reg);
-                    for (int i = 0; i < n; i++) {
-                        if (i > 0) fputs(", ", g->out);
-                        fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
+                    if (vi->closure_mu) {
+                        /* D-071: closure çağrısı — {ptr fn, ptr env} aç, fn(env,args) */
+                        int clo = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", clo, vi->reg_no);
+                        int fg = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 0\n", fg, clo);
+                        int fn_reg = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", fn_reg, fg);
+                        int eg = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 1\n", eg, clo);
+                        int env_reg = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", env_reg, eg);
+                        fprintf(g->out, "  %%%d = call %s %%%d(ptr %%%d",
+                                rr, donus_indirect, fn_reg, env_reg);
+                        for (int i = 0; i < n; i++)
+                            fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+                        fputs(")\n", g->out);
+                    } else {
+                        /* Düz fn-ptr (closure değil) — geriye uyum (env yok) */
+                        int fn_reg = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", fn_reg, vi->reg_no);
+                        fprintf(g->out, "  %%%d = call %s %%%d(",
+                                rr, donus_indirect, fn_reg);
+                        for (int i = 0; i < n; i++) {
+                            if (i > 0) fputs(", ", g->out);
+                            fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
+                        }
+                        fputs(")\n", g->out);
                     }
-                    fputs(")\n", g->out);
                     IfadeSonuc s = { rr, donus_indirect, 0 };
                     return s;
                 }
@@ -3364,6 +3506,95 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             return s;
         }
 
+        case DUGUM_LAMBDA: {
+            /* D-071 (Sınıf B lambda V2): closure değeri = stack { ptr fn, ptr env }
+             * → ptr. Capture by-value (non-escaping). Lifted @lambda_N(ptr env,
+             * params) DEFERRED emit (bekleyen_lambdalar). */
+            int np = d->veri.lambda.param_sayi;
+            const char **p_ad = (const char **)arena_ayir(g->arena,
+                sizeof(char *) * (size_t)(np > 0 ? np : 1));
+            int *p_uz = (int *)arena_ayir(g->arena,
+                sizeof(int) * (size_t)(np > 0 ? np : 1));
+            for (int i = 0; i < np; i++) {
+                p_ad[i] = d->veri.lambda.parametreler[i]->veri.parametre.ad;
+                p_uz[i] = d->veri.lambda.parametreler[i]->veri.parametre.ad_uzunluk;
+            }
+            CaptureCtx cc;
+            cc.g = g; cc.param_adlar = p_ad; cc.param_uzlar = p_uz;
+            cc.param_sayi = np; cc.sayi = 0;
+            lambda_serbest_tara(&cc, d->veri.lambda.govde);
+            char *mang = (char *)arena_ayir(g->arena, 24);
+            snprintf(mang, 24, "lambda_%d", g->lambda_sayaci++);
+            /* env struct tip string: { ir0, ir1, ... } (capture yoksa kullanılmaz) */
+            char envtip[512]; int eo = 0;
+            eo += snprintf(envtip + eo, sizeof(envtip) - eo, "{ ");
+            for (int i = 0; i < cc.sayi; i++)
+                eo += snprintf(envtip + eo, sizeof(envtip) - eo, "%s%s",
+                               i ? ", " : "", cc.irler[i]);
+            snprintf(envtip + eo, sizeof(envtip) - eo, " }");
+            int env_reg = -1;
+            if (cc.sayi > 0) {
+                env_reg = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca %s\n", env_reg, envtip);
+                for (int i = 0; i < cc.sayi; i++) {
+                    LlvmIsim *vi = isim_bul(g, cc.adlar[i], cc.uzlar[i]);
+                    int lv = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+                            lv, cc.irler[i], vi ? vi->reg_no : 0);
+                    int gp = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 %d\n",
+                        gp, envtip, env_reg, i);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            cc.irler[i], lv, gp);
+                }
+            }
+            /* Lifted fn'i her durumda kuyruğa al (deferred emit). */
+            BekleyenLambda *bl = (BekleyenLambda *)arena_ayir(g->arena,
+                sizeof(BekleyenLambda));
+            bl->dugum = d; bl->mangled = mang; bl->capture_sayi = cc.sayi;
+            if (cc.sayi > 0) {
+                bl->capture_adlar = (const char **)arena_ayir(g->arena,
+                    sizeof(char *) * (size_t)cc.sayi);
+                bl->capture_uzlar = (int *)arena_ayir(g->arena,
+                    sizeof(int) * (size_t)cc.sayi);
+                bl->capture_irler = (const char **)arena_ayir(g->arena,
+                    sizeof(char *) * (size_t)cc.sayi);
+                for (int i = 0; i < cc.sayi; i++) {
+                    bl->capture_adlar[i] = cc.adlar[i];
+                    bl->capture_uzlar[i] = cc.uzlar[i];
+                    bl->capture_irler[i] = cc.irler[i];
+                }
+            } else {
+                bl->capture_adlar = NULL; bl->capture_uzlar = NULL;
+                bl->capture_irler = NULL;
+            }
+            bl->sonraki = g->bekleyen_lambdalar;
+            g->bekleyen_lambdalar = bl;
+            /* KARMA temsil: yakalama YOK → bare fn-ptr (top-level fn gibi; işlev
+             * param'a/yerele bare-call ile uyumlu). Yakalama VAR → closure {fn,env}. */
+            if (cc.sayi == 0) {
+                g->son_closure = 0;
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = bitcast ptr @%s to ptr\n", r, mang);
+                IfadeSonuc s = { r, "ptr", 0 };
+                return s;
+            }
+            g->son_closure = 1;
+            int clo = yeni_reg(g);
+            fprintf(g->out, "  %%%d = alloca { ptr, ptr }\n", clo);
+            int fg = yeni_reg(g);
+            fprintf(g->out,
+                "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 0\n", fg, clo);
+            fprintf(g->out, "  store ptr @%s, ptr %%%d\n", mang, fg);
+            int eg = yeni_reg(g);
+            fprintf(g->out,
+                "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 1\n", eg, clo);
+            fprintf(g->out, "  store ptr %%%d, ptr %%%d\n", env_reg, eg);
+            IfadeSonuc s = { clo, "ptr", 0 };
+            return s;
+        }
+
         default: {
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
@@ -3527,6 +3758,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     if (d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR) {
                         g->isimler->dizi_uzunluk =
                             d->veri.degisken.deger->veri.dizi_olustur.sayi;
+                    }
+                    /* D-071 KARMA: lambda değeri YAKALAMALI ise closure (closure_mu=1
+                     * → çağrıda env-unpack); yakalamasız ise bare fn-ptr (closure_mu=0
+                     * → bare-call). son_closure DUGUM_LAMBDA case'inde set edildi. */
+                    if (d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
+                        g->isimler->closure_mu = g->son_closure;
                     }
                 }
             } else {
@@ -4539,6 +4776,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             if (et) g->isimler->eleman_llvm_tip = et;
             g->isimler->dinamik_dizi_mi = 1;
         }
+        /* D-071 KARMA temsil: işlev(...)→R parametresi BARE fn-ptr (top-level fn
+         * VEYA yakalamasız lambda) → bare-call (closure_mu=0). Yakalamalı lambda'yı
+         * param'a geçmek V2 (D-072). */
     }
 
     int term = 0;
@@ -4555,6 +4795,94 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     fputs("}\n\n", g->out);
 
     /* [D-041] Govdeyi gercek cikti'ya alloca-hoist + renumber ile aktar. */
+    if (govde_tmp) {
+        g->out = gercek_out;
+        hoist_renumber(govde_tmp, gercek_out);
+        fclose(govde_tmp);
+    }
+}
+
+/* D-071 (Sınıf B lambda V2): lifted lambda — `define <ret> @lambda_N(ptr %env,
+ * <params>)`. islev_uret deseni + (a) env ilk param, (b) capture'lar %env'den
+ * load → lokal. DEFERRED çağrılır (çevre fn gövdesi emit edildikten sonra).
+ * v1: ifade-form gövde, dönüş i32 (4 örnek). */
+static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
+    const Dugum *d = bl->dugum;
+    int np = d->veri.lambda.param_sayi;
+    char envtip[512]; int eo = 0;
+    eo += snprintf(envtip + eo, sizeof(envtip) - eo, "{ ");
+    for (int i = 0; i < bl->capture_sayi; i++)
+        eo += snprintf(envtip + eo, sizeof(envtip) - eo, "%s%s",
+                       i ? ", " : "", bl->capture_irler[i]);
+    snprintf(envtip + eo, sizeof(envtip) - eo, " }");
+
+    const char *donus = "i32";   /* v1: tek-ifade gövde i32 (V2: gövde/checker'dan) */
+    g_donus_tip = donus;
+    g->aktif_donus_dugum = NULL;
+
+    FILE *gercek_out = g->out;
+    FILE *govde_tmp = tmpfile();
+    if (govde_tmp) g->out = govde_tmp;
+
+    /* KARMA temsil: yakalama varsa env ilk param; yoksa env YOK (bare fn). */
+    int has_env = bl->capture_sayi > 0;
+    fprintf(g->out, "define %s @%s(", donus, bl->mangled);
+    if (has_env) fputs("ptr %env", g->out);
+    const char **ptip = NULL;
+    if (np > 0) ptip = (const char **)arena_ayir(g->arena,
+        sizeof(const char *) * (size_t)np);
+    for (int i = 0; i < np; i++) {
+        const Dugum *p = d->veri.lambda.parametreler[i];
+        const char *t = ast_tip_to_ir(g, p->veri.parametre.tip);
+        if (!t) t = "i32";
+        ptip[i] = t;
+        if (i > 0 || has_env) fputs(", ", g->out);
+        fprintf(g->out, "%s %%", t);
+        yerel_ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+    }
+    fputs(") {\nentry:\n", g->out);
+
+    g->reg = 0; g->label = 0; g->isimler = NULL;
+
+    for (int i = 0; i < np; i++) {
+        const Dugum *p = d->veri.lambda.parametreler[i];
+        const char *t = ptip[i];
+        int ar = yeni_reg(g);
+        fprintf(g->out, "  %%%d = alloca %s\n", ar, t);
+        fprintf(g->out, "  store %s %%", t);
+        yerel_ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+        fprintf(g->out, ", ptr %%%d\n", ar);
+        isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk, 0, ar, t);
+        g->isimler->isaretsiz = ast_tip_isaretsiz_mi(p->veri.parametre.tip);
+        /* D-071 KARMA: işlev param BARE fn-ptr → bare-call (closure_mu=0). */
+    }
+    for (int i = 0; i < bl->capture_sayi; i++) {
+        const char *t = bl->capture_irler[i];
+        int gp = yeni_reg(g);
+        fprintf(g->out,
+            "  %%%d = getelementptr %s, ptr %%env, i32 0, i32 %d\n", gp, envtip, i);
+        int lv = yeni_reg(g);
+        fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lv, t, gp);
+        int ar = yeni_reg(g);
+        fprintf(g->out, "  %%%d = alloca %s\n", ar, t);
+        fprintf(g->out, "  store %s %%%d, ptr %%%d\n", t, lv, ar);
+        isim_ekle(g, bl->capture_adlar[i], bl->capture_uzlar[i], 1, ar, t);
+    }
+
+    const Dugum *govde = d->veri.lambda.govde;
+    int term = 0;
+    if (govde && govde->tip == DUGUM_BLOK) {
+        /* v1: blok-form gövde son-ver çıkarsama yok (V2/D-072) — güvenli fallback */
+        term = blok_uret(g, govde);
+    } else if (govde) {
+        IfadeSonuc r = ifade_uret(g, govde, donus);
+        int rr = int_donustur(g, r.reg, r.tip, donus);
+        fprintf(g->out, "  ret %s %%%d\n", donus, rr);
+        term = 1;
+    }
+    if (!term) fprintf(g->out, "  ret %s 0\n", donus);
+    fputs("}\n\n", g->out);
+
     if (govde_tmp) {
         g->out = gercek_out;
         hoist_renumber(govde_tmp, gercek_out);
@@ -4926,6 +5254,15 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         g.bekleyenler = bs->sonraki;
         specialize_emit(&g, bs->ast, bs->tip_args, bs->tip_arg_sayi,
                         bs->mangled);
+    }
+
+    /* D-071 (Sınıf B lambda V2): bekleyen lifted lambda'ları emit et (deferred —
+     * çevre fn gövdeleri bittikten sonra; iç-içe lambda kuyruğu büyütebilir). */
+    int lambda_iter = 256;
+    while (g.bekleyen_lambdalar && lambda_iter-- > 0) {
+        BekleyenLambda *bl = g.bekleyen_lambdalar;
+        g.bekleyen_lambdalar = bl->sonraki;
+        lambda_emit(&g, bl);
     }
 
     int hatalar = g.hata_sayisi;

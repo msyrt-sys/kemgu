@@ -5,6 +5,160 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-075 — AŞAMA 3 CG3: değişken + atama + tanımlayıcı (entry alloca/store/load) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e
+TANIMLAYICI (`load i32, ptr %a`); `deyim_uret`'e DEGISKEN (`alloca i32` + `store` + ad→reg
+kaydı), ATAMA (lvalue TANIMLAYICI → `store`), IFADE_DEYIMI (yan etki için değerlendir).
+
+**Tasarım — işlev-içi değişken haritası APPEND-only + cg_base (reassignment YOK):** ilk
+denemede `p.cg_ad = []` (işlev başında haritayı sıfırla) **codegen.exe'yi SEGFAULT ettirdi.**
+Kök-neden ↓. Çözüm: `Ayr.cg_base` = işlev-başı slice indeksi; `cg_var_ekle` yalnız append,
+`cg_var_bul` `cg_base..son` arar (önceki işlevlerin değişkenleri görünmez). Parser zaten Dizi
+alanlarını yalnız append eder (t_ad vb.) — aynı güvenli desen.
+
+**🔴 KEŞİF — C derleyici accept-but-crash deliği (ATAMA ile dizi-literal):** `--check` KABUL
+eder ama codegen ÇÖKER (segfault, exit 139):
+```
+değişken xs: Dizi<tam32> = []; xs = [1]; dizi_ekle(xs, 7);   // SEGFAULT
+yapı K { xs: Dizi<tam32>; } ... k.xs = [1]; dizi_ekle(k.xs,7); // SEGFAULT
+```
+Tetik: **`Dizi<T>` lvalue'ya ATAMA ile dizi-literal RHS** (`xs = [...]`). `değişken`-init
+yolu (`değişken xs: Dizi<T> = [...]`) ve yalnız-append ÇALIŞIR — init yolu heap KdlDizi
+promote eder; ATAMA yolu stack `[N×T]` pointer'ını Dizi-slot'a yazar → `dizi_ekle` çöker.
+D-070 ailesi (dizi-literal temsil uyuşmazlığı), ATAMA analoğu. **Self-host bundan etkilenmez**
+(cg_base ile reassignment yok). Odaklı [YÜKSEK] düzeltme için işaretlendi (codegen ATAMA
+yolunda init ile aynı heap-promote; G-kodu reddi DEĞİL — reassignment normal işlem).
+
+**Doğrulama:** test/cg_korpus 18 program (5 CG1 + 8 CG2 + 5 CG3), **18/18 exit eşdeğer**
+(5 ardışık koşu kararlı). Harness sağlamlık: 127 (Defender ilk-exec taraması) → bekle+tekrar
+(6 tur). **Sonraki:** CG4 — eğer/iken (br + %bbN blok) kontrol akışı.
+
+---
+
+## D-074 — AŞAMA 3 CG2: karşılaştırma + mantıksal + tekli (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e:
+karşılaştırma (`== != < > <= >=` → `icmp <pred> i32` + `zext i1→i32`), mantıksal
+(`ve`/`veya` → `and`/`or i32`, kısa-devresiz — C v1 ile aynı semantik), tekli (`neg`
+→ `sub i32 0,x`; `degil` → `icmp eq i32 x,0` + zext). `karsilastirma_mi`/`icmp_pred`/
+`zext_i1` yardımcıları eklendi.
+
+**Önemli bulgu — korpus tip-GEÇERLİ olmalı (oracle önkoşulu):** karşılaştırma `mantıksal`
+üretir; KEMGU'da `mantıksal → tam32` ÖRTÜK dönüşüm YOK (çekirdek ASLA kuralı). Yani
+`(5>3)+41` tip-GEÇERSİZ → C `--check` reddeder → C codegen çöp/0 üretir → anlamsız oracle.
+Çözüm: karşılaştırma/mantıksal/`degil` testleri `mantıksal`-dönüşlü main ile (`işlev main()
+-> mantıksal { ver 5 > 3; }` → exit 1). C codegen bunlara `define i1 @main()` basar; KEMGU
+codegen `define i32 @main()` + `ret i32 <zext 0/1>` basar — exit-kod 0/1 için eşdeğer
+(gerçek dönüş-tipi emit'i CG6 multi-int'te). `degil`: C `xor i1,true`, KEMGU `icmp eq+zext`
+— bayt farklı, **semantik aynı** (D-072 KARAR 1 oracle'ının tam da amacı).
+
+**Doğrulama:** test/cg_korpus 13 program (5 CG1 + 8 CG2), **13/13 exit eşdeğer**. Harness
+sağlamlık düzeltmesi: Win11 `.exe` yeniden-yazım dosya-kilidi yarışı → dosya-başı benzersiz
+çıktı adları (`$b.c.exe`/`$b.k.exe`). **Sonraki:** CG3 — değişken (entry alloca/store/load)
++ atama + tanımlayıcı.
+
+---
+
+## D-073 — AŞAMA 3 CG1: codegen.kem iskeleti + ilk semantik-oracle yeşil (2026-06-14)
+
+**Karar [ETKİ: yeni self-host artefakt; C derleyici DEĞİŞMEDİ].** D-072 planının CG1 adımı:
+`selfhost/codegen.kem` oluşturuldu = `selfhost/parser.kem` kopyası (lexer+parser REUSE) +
+AST-yürüten LLVM IR text emitter. `duz_yaz` (--ast dumper) → `program_uret`/`islev_uret`/
+`deyim_uret`/`ifade_uret` ile değiştirildi; `main` artık IR basar.
+
+**Kapsam (CG1):** işlev (parametresiz) + `ver` + tam literal + ikili aritmetik (`+ - * / %`).
+Üretilen IR: `target triple` + `define i32 @ad() { entry: ... ret i32 <op> }`. **Hoist-FREE:**
+tek blok `entry:`, SSA sıralı `%N` sayacı (`Ayr.reg`, işlev başında 0'a reset). C codegen'in
+`entry:`+`%0`-başlangıç deseni doğrulandı; KEMGU emitter TAM literallerini doğrudan immediate
+basar (C'nin `add i32 0, N`'inden daha sıkı ama semantik aynı).
+
+**Doğrulama:** `test/codegen_diff_harness.sh` (SEMANTİK exit-kod oracle, D-072 KARAR 1) —
+`test/cg_korpus/` 5 program (sabit/aritmetik/çıkarma/bölme/mod), **5/5 C-codegen ile exit
+eşdeğer**. Makefile `calistir_codegen_diff` hedefi `test_tumu`'ya bağlandı (codegen.exe yokken
+harness graceful → geriye uyumlu).
+
+**Sınır/Sonraki:** CG1 dışı düğümler (tanımlayıcı/çağrı/değişken/eğer/...) henüz `0` üretir
+(placeholder; korpus onları içermez). Sonraki: **CG2** — ikili karşılaştırma/mantıksal
+kısa-devre + tekli (neg/değil); ardından CG3 değişken/atama/tanımlayıcı (entry alloca).
+
+---
+
+## D-072 — AŞAMA 3 (codegen self-host) ADIM-0: oracle + temsil + CG plan (2026-06-14)
+
+**Karar [ETKİ: yok — dokümantasyon/plan; kod yok].** Bootstrap fixpoint'in (Aşama 5) asıl
+darboğazı = codegen self-host: `src/llvm.c` (5271 satır, 34 düğüm tipi) → KEMGU'da yeniden
+yazım (`selfhost/codegen.kem`). Lexer/parser/checker self-host'larındaki gibi ADIM-0 = envanter
++ oracle kararı + temsil + milestone planı.
+
+**KARAR 1 — Oracle: SEMANTİK (exit-kod) eşdeğerliği, byte-identik IR-DİFF DEĞİL.** Parser/checker
+oracle'ları düz-dump diff'iydi; codegen IR'ı için byte-identik diff ÇOK KIRILGAN: C codegen'in
+SSA reg numaralandırması, D-041 hoist_renumber, formatlama = uygulama detayı (KEMGU codegen aynı
+byte'ı üretmek zorunda kalmamalı). Bunun yerine: korpus programını HEM C codegen (`kemgu --llvm |
+clang | run → exit`) HEM KEMGU codegen (`codegen.exe in.kem | clang | run → exit`) ile derle,
+EXIT KODLARINI karşılaştır. Semantik eşdeğerlik = doğru oracle (metinsel değil). Korpus: test/
+ornekler (main'li) + test_llvm gömülü programları (~199).
+
+**KARAR 2 — Temsil: codegen.kem = selfhost parser (REUSE) + AST-yürüten IR text emitter.**
+checker.kem deseni (parser + checker) gibi codegen.kem = parser + codegen. Düz AST tablosunu
+(a_ad/a_deg/cocuk...) gezer; LLVM IR'ı yaz_str/yb ile basar. **Hoist-FREE tasarım:** alloca'lar
+DOĞRUDAN entry bloğuna emit edilir (C'nin inline-alloca+hoist_renumber'ı YENİDEN YAZILMAZ —
+D-041 sorunu baştan önlenir). SSA reg sıralı sayaç (LLVM unnamed value zorunluluğu); etiketler
+%bbN. Runtime intrinsic declare'ları sabit header (llvm.c'deki gibi).
+
+**KARAR 3 — CG milestone planı (her biri semantik-oracle kapılı, küçük korpus):**
+- CG1: tam literal + işlev(main) + ver → `define i32 @main(){ret i32 N}`.
+- CG2: ikili (aritmetik/karşılaştırma/mantıksal kısa-devre) + tekli.
+- CG3: değişken (entry alloca/store/load) + atama + tanımlayıcı.
+- CG4: eğer/iken (br + %bbN bloklar) — kontrol akışı.
+- CG5: çağrı (call) + parametre alloca + özyineleme (fib/faktöriyel).
+- CG6: multi-int (i8/16/64, dtam) + sext/trunc dönüşüm + işaretsiz.
+- CG7: metin literali (@.str global) + yapı (%T type, alloca, gep) + erişim.
+- CG8: dizi (heap KdlDizi + stack [N×T] + sınır-kontrol D-069) + indeks + için.
+- CG9: çeşit/eşleş + generic mono + lambda/closure (D-071) + modül + cross-file.
+
+**Riskler:** (a) 34 düğüm tipi = geniş yüzey, çok-pencere iş; (b) SSA sıralı numaralandırma
+(KEMGU'da sayaç + dikkatli emit); (c) runtime ABI (yetki sret, yapı by-value) birebir; (d)
+korpus seçimi (yalnız main'li + codegen-tam programlar; --check-only/parse-only hariç).
+**Sonraki:** CG1 — codegen.kem (parser kopyası + minimal emitter) + codegen_diff_harness.sh.
+
+---
+
+## D-071 [YÜKSEK] — Sınıf B lambda/closure codegen V2: KARMA temsil (kabul-ama-çöküyor kapandı) (2026-06-14)
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Güvenlik-iddiası izi
+(D-070 devamı). D-031 Sınıf B'nin 4 lambda örneği (`04_islev`, `10_lambda`, `42_lambda_hesap`,
+`25_closure_capture`) lambda codegen YOKLUĞUNDAN çöp fn-ptr çağrısı → SEGFAULT yapıyordu
+(D-004 ertelemesi). Lambda/closure codegen sıfırdan yazıldı. C derleyici codegen değişti.
+
+**Tasarım (5-ajan workflow ile doğrulandı, opt -passes=verify):** KARMA temsil —
+- **Yakalamasız lambda → BARE fn-ptr** (`bitcast @lambda_N to ptr`; top-level fn ile aynı ABI;
+  bare-call). `işlev(T)→R` param da bare-call → top-level fn VE yakalamasız lambda ikisi de geçer.
+- **Yakalamalı lambda → CLOSURE** stack `{ ptr fn, ptr env }`; lifted `@lambda_N(ptr env, params)`
+  capture'ları env'den load. Lokal değişken `closure_mu=1` → çağrıda env-unpack.
+- Lifted fn'ler DEFERRED emit (BekleyenLambda kuyruğu, generic mono deseni; çevre fn gövdesi
+  bitince — INLINE emit IR'ı bozardı). Capture analizi (`lambda_serbest_tara`) OLUŞTURMA anında
+  (scope canlı) yapılıp kayda konur. D-041 hoist_renumber `%bbN`/`%env` (named) korur.
+
+**Neden karma (uniform değil):** İlk deneme tüm lambda'ları closure + işlev-param closure_mu=1
+yaptı → stdlib map/filtre/indirgeme (top-level fn'i işlev param'a geçiyor: `harita(xs, iki_kat)`)
+KIRILDI (closure-unpack ham fn-ptr'da → çöp). Karma temsilde yakalamasız lambda = top-level fn
+= bare fn-ptr → işlev param bare-call → ikisi de çalışır + yakalamalı (25) closure ile.
+
+**Doğrulama:** 4 örnek → exit 42 (closure capture dahil); ASan/UBSan TEMİZ (4/4); opt verify
+PASS; **test_llvm 235/235** (stdlib higher-order regresyonu çözüldü); bounds 11/11; checker
+48/48; self-host 3/3; ASan E2E **PASS=91 FAIL=0** (4 lambda allowlist'ten çıktı → korumalı PASS;
+ALLOW 6→2, yalnız G003-red 35/40). Yeni `make calistir_lambda_test` (test_tumu'da) 4/4. 0 uyarı.
+
+**KAPSAM-DIŞI (V2/D-072):** yakalamalı lambda'yı işlev param'a geçirme (call-site trampolin
+gerek); blok-form gövde son-ver çıkarsama (`||{...}` — lineer_closure/29_linear_closure);
+dönüş tipi i32-dışı (call-site/lifted-fn senkronu — IR "ptr" tip taşımıyor); yapı/dizi/&T
+capture; lambda escape (env stack — şu an non-escaping KEMGU v1 garantisi). **Sınıf B kapandı;
+8 kabul-ama-çöküyor deliğinin tümü artık ya düzeltildi (D-070 literal, D-071 lambda) ya da
+checker-reddi (D-070 G003 değişken-arg).**
+
+---
+
 ## D-070 [YÜKSEK] — Sınıf A kabul-ama-çöküyor: dizi-LİTERAL → Dizi<T> param → heap (UB kapandı) (2026-06-14)
 
 **Karar [ETKİ: orta — `src/llvm.c` CAGRI codegen; izole commit].** Güvenlik-iddiası izi

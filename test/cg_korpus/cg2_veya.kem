@@ -1,0 +1,1 @@
+işlev main() -> mantıksal { ver (5 > 3) veya (1 > 2); }
