@@ -3813,6 +3813,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 const Dugum *hedef = d->veri.atama.hedef;
                 int heap_dizi = 0;
                 const char *pointee_elem = NULL;
+                int stack_uz = 0;   /* D-069 Kat.2: sabit stack dizi N (>0 → sınır-kontrol) */
                 if (hedef->veri.indeks.nesne &&
                     hedef->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                     LlvmIsim *vi = isim_bul(g,
@@ -3825,6 +3826,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     else if (vi && vi->pointee_llvm_tip) {
                         pointee_elem = vi->pointee_llvm_tip;
                     }
+                    /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
+                    if (vi && !heap_dizi) stack_uz = vi->dizi_uzunluk;
                 }
                 if (heap_dizi) {
                     fprintf(g->out,
@@ -3836,6 +3839,26 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     IfadeSonuc idx = ifade_uret(g,
                         hedef->veri.indeks.indeks, "i64");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i64");
+                    /* D-069 Kat.2: sabit stack dizi sınır-kontrolü (GEP/store'dan
+                     * ÖNCE). Okuma yolunun (DUGUM_INDEKS) aynası — yazma yolu
+                     * eskiden kontrolsüzdü: `xs[10]=9` SESSİZ buffer-overflow
+                     * (exit 0). `icmp uge` unsigned → negatif + i>=N tek seferde.
+                     * OOB → kdl_panik. güvensiz blok içinde ATLANIR (opt-out). */
+                    if (stack_uz > 0 && g->guvensiz_derinlik == 0) {
+                        int c_r = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = icmp uge i64 %%%d, %d\n",
+                                c_r, idx_r, stack_uz);
+                        int L_oob = yeni_label(g);
+                        int L_ok = yeni_label(g);
+                        fprintf(g->out,
+                            "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                            c_r, L_oob, L_ok);
+                        fprintf(g->out, "bb%d:\n", L_oob);
+                        fprintf(g->out,
+                            "  call void @kdl_panik(ptr @.str.dizi_sinir_panik)\n");
+                        fprintf(g->out, "  unreachable\n");
+                        fprintf(g->out, "bb%d:\n", L_ok);
+                    }
                     IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                               pointee_elem);
                     const char *elem_ir = pointee_elem ? pointee_elem

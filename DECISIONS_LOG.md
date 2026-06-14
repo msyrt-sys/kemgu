@@ -5,6 +5,25 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-084 — [YÜKSEK] stack [N×T] dizi YAZMA OOB sınır-kontrolü (D-069 boşluğu) (2026-06-14)
+
+**Karar [ETKİ: codegen güvenlik; izole commit].** Sabit stack dizisinde (`değişken
+xs = [1,2,3]`) eleman YAZMA (`xs[i] = v`) OOB sınır-kontrolü EMİT EDİLMİYORDU →
+`xs[10] = 9` SESSİZ heap/stack buffer-overflow (exit 0). OKUMA yolu (DUGUM_INDEKS,
+`src/llvm.c:2104`) D-069 Kat.2 ile `icmp uge` + `kdl_panik` korumalıydı; YAZMA yolu
+(DUGUM_ATAMA→DUGUM_INDEKS stack `else` dalı) değildi.
+
+**Çözüm:** Okuma yolunun aynası — yazma `else` dalında GEP+store'dan ÖNCE
+`stack_uz = vi->dizi_uzunluk` (TANIMLAYICI taban) ise `icmp uge i64 idx, N` +
+`kdl_panik`/`unreachable` + `bb_ok`. `güvensiz` blokta (`g->guvensiz_derinlik > 0`)
+ATLANIR (Rust opt-out modeli — okuma yoluyla simetrik).
+
+**Doğrulama:** `test/dizi_sinir_harness.sh` +3 vaka (vaka5w stack-yaz-OOB,
+vaka6w negatif-yaz, vaka7w geçerli-yaz) → 14/14. Tüm suite yeşil (llvm 235/235,
+tip_kontrol 174/174, parser 107/107). `asan_e2e_denetim.sh` PASS=91 FAIL=0.
+0 uyarı. **Sınır:** yalnız derleme-zamanı boyutu bilinen stack dizi (`dizi_uzunluk
+> 0`); heap KdlDizi yazma zaten runtime'da sınır-kontrollü (D-069 Kat.1, vaka3).
+
 ## D-081 — AŞAMA 3 CG7c: yapı by-reference (&Yapi param + alan mutasyonu) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Self-host'un kalbi:
