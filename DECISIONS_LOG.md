@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-072 — AŞAMA 3 (codegen self-host) ADIM-0: oracle + temsil + CG plan (2026-06-14)
+
+**Karar [ETKİ: yok — dokümantasyon/plan; kod yok].** Bootstrap fixpoint'in (Aşama 5) asıl
+darboğazı = codegen self-host: `src/llvm.c` (5271 satır, 34 düğüm tipi) → KEMGU'da yeniden
+yazım (`selfhost/codegen.kem`). Lexer/parser/checker self-host'larındaki gibi ADIM-0 = envanter
++ oracle kararı + temsil + milestone planı.
+
+**KARAR 1 — Oracle: SEMANTİK (exit-kod) eşdeğerliği, byte-identik IR-DİFF DEĞİL.** Parser/checker
+oracle'ları düz-dump diff'iydi; codegen IR'ı için byte-identik diff ÇOK KIRILGAN: C codegen'in
+SSA reg numaralandırması, D-041 hoist_renumber, formatlama = uygulama detayı (KEMGU codegen aynı
+byte'ı üretmek zorunda kalmamalı). Bunun yerine: korpus programını HEM C codegen (`kemgu --llvm |
+clang | run → exit`) HEM KEMGU codegen (`codegen.exe in.kem | clang | run → exit`) ile derle,
+EXIT KODLARINI karşılaştır. Semantik eşdeğerlik = doğru oracle (metinsel değil). Korpus: test/
+ornekler (main'li) + test_llvm gömülü programları (~199).
+
+**KARAR 2 — Temsil: codegen.kem = selfhost parser (REUSE) + AST-yürüten IR text emitter.**
+checker.kem deseni (parser + checker) gibi codegen.kem = parser + codegen. Düz AST tablosunu
+(a_ad/a_deg/cocuk...) gezer; LLVM IR'ı yaz_str/yb ile basar. **Hoist-FREE tasarım:** alloca'lar
+DOĞRUDAN entry bloğuna emit edilir (C'nin inline-alloca+hoist_renumber'ı YENİDEN YAZILMAZ —
+D-041 sorunu baştan önlenir). SSA reg sıralı sayaç (LLVM unnamed value zorunluluğu); etiketler
+%bbN. Runtime intrinsic declare'ları sabit header (llvm.c'deki gibi).
+
+**KARAR 3 — CG milestone planı (her biri semantik-oracle kapılı, küçük korpus):**
+- CG1: tam literal + işlev(main) + ver → `define i32 @main(){ret i32 N}`.
+- CG2: ikili (aritmetik/karşılaştırma/mantıksal kısa-devre) + tekli.
+- CG3: değişken (entry alloca/store/load) + atama + tanımlayıcı.
+- CG4: eğer/iken (br + %bbN bloklar) — kontrol akışı.
+- CG5: çağrı (call) + parametre alloca + özyineleme (fib/faktöriyel).
+- CG6: multi-int (i8/16/64, dtam) + sext/trunc dönüşüm + işaretsiz.
+- CG7: metin literali (@.str global) + yapı (%T type, alloca, gep) + erişim.
+- CG8: dizi (heap KdlDizi + stack [N×T] + sınır-kontrol D-069) + indeks + için.
+- CG9: çeşit/eşleş + generic mono + lambda/closure (D-071) + modül + cross-file.
+
+**Riskler:** (a) 34 düğüm tipi = geniş yüzey, çok-pencere iş; (b) SSA sıralı numaralandırma
+(KEMGU'da sayaç + dikkatli emit); (c) runtime ABI (yetki sret, yapı by-value) birebir; (d)
+korpus seçimi (yalnız main'li + codegen-tam programlar; --check-only/parse-only hariç).
+**Sonraki:** CG1 — codegen.kem (parser kopyası + minimal emitter) + codegen_diff_harness.sh.
+
+---
+
 ## D-071 [YÜKSEK] — Sınıf B lambda/closure codegen V2: KARMA temsil (kabul-ama-çöküyor kapandı) (2026-06-14)
 
 **Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit].** Güvenlik-iddiası izi
