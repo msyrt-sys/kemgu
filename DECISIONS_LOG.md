@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-075 — AŞAMA 3 CG3: değişken + atama + tanımlayıcı (entry alloca/store/load) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e
+TANIMLAYICI (`load i32, ptr %a`); `deyim_uret`'e DEGISKEN (`alloca i32` + `store` + ad→reg
+kaydı), ATAMA (lvalue TANIMLAYICI → `store`), IFADE_DEYIMI (yan etki için değerlendir).
+
+**Tasarım — işlev-içi değişken haritası APPEND-only + cg_base (reassignment YOK):** ilk
+denemede `p.cg_ad = []` (işlev başında haritayı sıfırla) **codegen.exe'yi SEGFAULT ettirdi.**
+Kök-neden ↓. Çözüm: `Ayr.cg_base` = işlev-başı slice indeksi; `cg_var_ekle` yalnız append,
+`cg_var_bul` `cg_base..son` arar (önceki işlevlerin değişkenleri görünmez). Parser zaten Dizi
+alanlarını yalnız append eder (t_ad vb.) — aynı güvenli desen.
+
+**🔴 KEŞİF — C derleyici accept-but-crash deliği (ATAMA ile dizi-literal):** `--check` KABUL
+eder ama codegen ÇÖKER (segfault, exit 139):
+```
+değişken xs: Dizi<tam32> = []; xs = [1]; dizi_ekle(xs, 7);   // SEGFAULT
+yapı K { xs: Dizi<tam32>; } ... k.xs = [1]; dizi_ekle(k.xs,7); // SEGFAULT
+```
+Tetik: **`Dizi<T>` lvalue'ya ATAMA ile dizi-literal RHS** (`xs = [...]`). `değişken`-init
+yolu (`değişken xs: Dizi<T> = [...]`) ve yalnız-append ÇALIŞIR — init yolu heap KdlDizi
+promote eder; ATAMA yolu stack `[N×T]` pointer'ını Dizi-slot'a yazar → `dizi_ekle` çöker.
+D-070 ailesi (dizi-literal temsil uyuşmazlığı), ATAMA analoğu. **Self-host bundan etkilenmez**
+(cg_base ile reassignment yok). Odaklı [YÜKSEK] düzeltme için işaretlendi (codegen ATAMA
+yolunda init ile aynı heap-promote; G-kodu reddi DEĞİL — reassignment normal işlem).
+
+**Doğrulama:** test/cg_korpus 18 program (5 CG1 + 8 CG2 + 5 CG3), **18/18 exit eşdeğer**
+(5 ardışık koşu kararlı). Harness sağlamlık: 127 (Defender ilk-exec taraması) → bekle+tekrar
+(6 tur). **Sonraki:** CG4 — eğer/iken (br + %bbN blok) kontrol akışı.
+
+---
+
 ## D-074 — AŞAMA 3 CG2: karşılaştırma + mantıksal + tekli (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e:

@@ -34,6 +34,9 @@ yapı Ayr {
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
     sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
     reg: tam32;          // CG (D-072): işlev-içi sıralı SSA sayacı (%0, %1, ...)
+    cg_ad: Dizi<metin>;  // CG3: değişken adları (yalnız APPEND; işlev-bazı slice = cg_base..)
+    cg_areg: Dizi<metin>;// CG3: karşılık gelen alloca operandı ("%2")
+    cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1601,11 +1604,32 @@ işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
     yaz_str("  "); yaz_str(rs); yaz_str(" = zext i1 "); yaz_str(c); yaz_str(" to i32"); yb(10);
     ver rs;
 }
+// CG3: işlev-içi değişken adı → alloca operandı (append-on-create; sondan ara = shadow).
+işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin) -> tam32 {
+    dizi_ekle(p.cg_ad, ad);
+    dizi_ekle(p.cg_areg, areg);
+    ver 0;
+}
+işlev cg_var_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_areg, i); }
+        i = i - 1;
+    }
+    ver "";   // bulunamadı (geçerli programda olmaz; checker garantiler)
+}
 
 // İfade → operand metni ("5" veya "%3"); yan-IR yaz_str ile akıtılır.
 işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") { ver dizi_al(p.a_deg, idx); }
+    eğer metin_esit(ad, "TANIMLAYICI") {
+        değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
+        değişken r: tam32 = yeni_reg(p);
+        değişken rs: metin = reg_str(r);
+        yaz_str("  "); yaz_str(rs); yaz_str(" = load i32, ptr "); yaz_str(areg); yb(10);
+        ver rs;
+    }
     eğer metin_esit(ad, "IKILI") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken sol: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
@@ -1662,12 +1686,40 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         } değilse { yaz_str("  ret i32 0"); yb(10); }
         ver 0;
     }
-    ver 0;   // CG1 dışı deyim → CG2+
+    eğer metin_esit(ad, "DEGISKEN") {
+        // değer = SON çocuk (tip-annot opsiyonel ilk çocuk olabilir)
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        değişken a: tam32 = yeni_reg(p);
+        değişken areg: metin = reg_str(a);
+        yaz_str("  "); yaz_str(areg); yaz_str(" = alloca i32"); yb(10);
+        yaz_str("  store i32 "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
+        cg_var_ekle(p, dizi_al(p.a_deg, idx), areg);
+        ver 0;
+    }
+    eğer metin_esit(ad, "ATAMA") {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken lhs: tam32 = dizi_al(p.cocuk, cb);
+        değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        // CG3: lhs yalnız TANIMLAYICI (alan/indeks atama CG7/CG8)
+        eğer metin_esit(dizi_al(p.a_ad, lhs), "TANIMLAYICI") {
+            yaz_str("  store i32 "); yaz_str(v); yaz_str(", ptr ");
+            yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
+        }
+        ver 0;
+    }
+    eğer metin_esit(ad, "IFADE_DEYIMI") {
+        ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));   // yan etki için değerlendir
+        ver 0;
+    }
+    ver 0;   // CG3 dışı deyim → CG4+ (eğer/iken/...)
 }
 
 // İşlev → define i32 @ad() { ... }. CG1: parametresiz; gövde = BLOK çocuğu.
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
+    p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
     yaz_str("define i32 @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("() {"); yb(10);
     yaz_str("entry:"); yb(10);
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -1705,7 +1757,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        reg: 0
+        reg: 0,
+        cg_ad: [], cg_areg: [], cg_base: 0
     };
 }
 
