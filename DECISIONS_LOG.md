@@ -5,6 +5,28 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-082 — AŞAMA 3 CG8: dizi (heap KdlDizi + []-literal + element-tip polimorfik builtin) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** codegen.kem'in son büyük
+bağımlılığı (dizi_al 95× / dizi_ekle 89× / dizi_boyut 20× + `[]` init). Element-tip izleme:
+`cg_aelem` (Dizi değişkeni eleman tipi) + `alan_elem` (Dizi alanı) + `beklenen_elem` (`[]` bağlamı)
++ `son_elem` (sonuç). Yardımcılar: `ll_eleman_tip` (TIP_DIZI→eleman), `dizi_eleman_byte`
+(ptr/i64→8, diğer→4), `dizi_ekle_sonek`/`dizi_al_sonek`/`dizi_arg_tip`/`dizi_al_rettip`.
+
+**`[]` (DIZI_OLUSTUR):** `call ptr @kdl_dizi_olustur(i32 <byte>)` (boş = sadece oluştur; runtime
+boyut/kapasite=0, ekle'de büyür) + non-empty için her eleman `ekle`. Eleman byte = `beklenen_elem`
+(annotasyon/alan bağlamından). **dizi_ekle:** DEĞER tipine göre route (ptr→ekle_ptr, i64→ekle_tam64,
+else→ekle_tam). **dizi_al:** DİZİNİN eleman tipine göre route (`son_elem` arg[0]'dan); ptr→al_ptr/ptr,
+i64→al_tam64/i64, else→al_tam/i32. **dizi_boyut→i32.** INDEKS (`xs[i]`) = dizi_al eşi. `metin`/`Dizi`
+alanları `ptr` (8-byte slot ptr-eleman ile tutarlı).
+
+**Doğrulama:** test/cg_korpus 54 program (+6 CG8: temel/boyut/literal/indeks/**Dizi&lt;metin&gt;**/
+**struct-ref-dizi_ekle**). 54/54 exit eşdeğer. struct-ref IR doğru (load ptr→GEP→load Dizi→ekle —
+self-host tok_ekle deseni); Dizi&lt;metin&gt; → `olustur(i32 8)`+`ekle_ptr`+`al_ptr`. **Sonraki:**
+self-compile denemesi (codegen.exe ile lexer/parser.kem derle) + CG9 (kullanılan kalan: çeşit/eşleş?).
+
+---
+
 ## D-081 — AŞAMA 3 CG7c: yapı by-reference (&Yapi param + alan mutasyonu) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Self-host'un kalbi:
