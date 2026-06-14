@@ -68,9 +68,21 @@ panic_bekle vaka4_heap_ptr_oob 'işlev main() -> tam32 {
     değişken s: metin = dizi_al(d, 5);
     ver 0;
 }'
-deger_bekle vaka7_gecerli 60 'işlev main() -> tam32 {
+panic_bekle vaka5_stack_oob_oku 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    ver arr[5];
+}'
+panic_bekle vaka6_stack_negatif 'işlev main() -> tam32 {
+    değişken arr = [1, 2, 3];
+    ver arr[0 - 1];
+}'
+deger_bekle vaka7_heap_gecerli 60 'işlev main() -> tam32 {
     değişken d: Dizi<tam32> = [10, 20, 30];
     ver dizi_al(d, 0) + dizi_al(d, 1) + dizi_al(d, 2);
+}'
+deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
+    değişken arr = [10, 20, 30];
+    ver arr[0] + arr[1] + arr[2];
 }'
 segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
 
