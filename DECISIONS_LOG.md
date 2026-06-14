@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-067 — SELF-HOST checker: full-repo parite audit SONUÇ + TC6-9 yol haritası (2026-06-14)
+
+**Karar [ETKİ: yok — dokümantasyon; ultracode workflow audit sonucu].** 319 .kem dosyası
+üzerinde KEMGU checker vs C oracle (`--checkdump`) tam tarama. Genuine-bug'lar kapatıldıktan
+sonra durum + kalan feature-gap yol haritası.
+
+**Audit sonucu:** **243/319 birebir, 76 farklı, 0 çökme** (başlangıç: 233/315, 82 farklı,
+1 çökme). Kapatılan genuine-bug'lar: D-064 generic-T003 (stdlib 3), D-065 segfault (m3_04),
+D-066 bit-T028 (snapshots 2). Geçerli kodda checker artık SAHTE-HATA üretmiyor; self-host
+kaynaklar (lexer/parser/checker.kem) **3/3 birebir** → **checker bootstrap-HAZIR**
+(geçerli derleyici kaynakları sahte-hatasız kabul ediliyor; çökmüyor).
+
+**Kalan 76 farkın kategorizasyonu (oracle ilk-kod + dizin):**
+1. **Parser/lexer hata-kodu raporlama (~23 dosya):** P001×15, P031×4, P015×3, L009×1.
+   test/lex_korpus (22) + test/parse_korpus (12) — token/parça testleri; geçersiz program →
+   C parser P-kodu basar, KEMGU checker'ın parser'ı kurtarıp OK/farklı basar. KEMGU parser
+   hata kurtarıyor ama P/L kodunu th_kod'a YAZMIYOR. (Muhtemelen Aşama-1 parser-oracle
+   kapsamı; checker-parite için P/L emit gerekli.)
+2. **Cross-file/modül TC8 (~28 dosya):** oracle-OK×16 (false-T002) + T002×11 + T011×8 +
+   T040/41/42×3. drivers/virtio (12), test/moduller (5), test/crossfile (3), test/stdlib (3),
+   kütüphane (1), snapshots/21_modul_kullan. `kullan` import + cross-file sembol çözümü yok →
+   KEMGU T002. Mimari: diğer .kem yükle + sembol birleştir.
+3. **Misc feature-gaps (~10 dosya):** referans/deref T001×6 (26_referans_aktarim — T022 birebir
+   ama `*r`/`&T` tip çıkarsama eksik), bölge BL001 (TC6), asm AS001/G002, çeşit M001
+   (exhaustiveness), constraint T007 (TC bound), cast E002.
+
+**Değerlendirme — Aşama 5 için:** Kalan 76 = TC9 GENİŞLİK (breadth); bootstrap-kritik DEĞİL
+(self-host kaynaklar zaten 3/3). Bootstrap'a en büyük kaldıraç = Aşama 3 codegen self-host
+(llvm.c → KEMGU, IR-diff oracle), checker breadth değil. Öncelik kullanıcı kararı: (a) TC8
+cross-file (en çok dosya, drivers/stdlib değeri) · (b) parser P/L emit · (c) Aşama 3 codegen.
+
+---
+
 ## D-066 — SELF-HOST checker TC5d: bit operatörü tamsayı kontrolü (T028) — 48/48 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Full-repo audit genuine-bug
