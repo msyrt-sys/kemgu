@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-050 — 🎉 SELF-HOST parser P6: BOOTSTRAP — 223/223 GERÇEK .kem + SELF-PARSE (Aşama 1 TAMAM) (2026-06-14)
+
+**Karar [ETKİ: düşük — `selfhost/parser.kem` + additive `ondalik_bicimle` intrinsic +
+harness].** Aşama 1 (PARSER self-host) KAPANIŞI. KEMGU'da yazılı parser, C parser'ın
+`--ast` oracle'ına karşı TÜM gerçek korpusta sıfır-diff — **kendi kaynağı dahil**.
+
+**Son iki kapatma:** (1) **KESIRLI float:** `ondalik_bicimle(metin)->metin` intrinsic
+(runtime strtod + `%g`, C ast_duz_yaz birebir) — `yaz_karakter` gibi float-format
+runtime primitifi. `metin_`/`dosya_` dışı → açık dispatch (tip_kontrol+llvm+runtime).
+(2) **satıriçi_asm:** deyim parse (mimari/şablon/çevrim/çıktı/girdi/bozulan clause);
+yalnız `girdi` ifadeleri AST çocuğu (C ast_duz_yaz), gerisi tüketilir.
+
+**Doğrulama:** `make calistir_parser_bootstrap` → **223/223 SIFIR-DİFF** (build/lex_korpus/
+ornekler-eski hariç TÜM .kem) — **selfhost/parser.kem SELF-PARSE dahil**. test_llvm
+235/235 + lexer bootstrap 261/261 (ondalik_bicimle regresyonsuz). `make
+calistir_parser_diff` 12/12 korpus.
+
+**eski/ hariç:** `test/ornekler/eski/tip_alias.kem` `tip Ad = T;` kullanır; `tip`
+v1'de anahtar kelime DEĞİL → C parser DA P001 hata verir (geçersiz). Hata-kurtarma
+diverjansı (gerçek boşluk değil) → bootstrap'tan çıkarıldı.
+
+**Aşama 1 ÖZET (D-035→D-050):** ADIM-0 (--ast oracle + index-AST kararı) → P1 ifade →
+P2 deyim → P3 bildirim → P4 tip → P5 modül/import → P6 bootstrap. İndeks-tabanlı düz
+AST tablosu, &değişken struct threading (D-044), düz preorder dumper. Üç additive
+intrinsic: yaz_bayt, ondalik_bicimle (+ D-041/D-044 codegen fix'leri parser'ı sağladı).
+
+**Sıradaki (Aşama 2 — TİP DENETLEYİCİ):** DAĞ. C checker accept/reject paritesi.
+TC1 temel → TC9 tam güvenlik. Mimari: KEMGU'da sembol tablosu + scope + tip temsili.
+
+---
+
 ## D-049 — SELF-HOST parser P5: modül/kullan/dışa/genel + geri_al/delege + TAM-clamp — 115/118 GERÇEK .kem (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/parser.kem` + korpus].** Aşama 1 P5: üst-düzey
