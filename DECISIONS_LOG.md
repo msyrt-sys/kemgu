@@ -5,6 +5,28 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-076 — AŞAMA 3 CG4: kontrol akışı (eğer/iken → br + %bbN blok) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `deyim_uret`'e EGER
+(if/else/else-if zinciri) ve IKEN (while). `ifade_uret`'e DOGRU/YANLIS literali (→ "1"/"0").
+
+**Blok yönetimi:** `Ayr.lbl` (etiket sayacı, `bb0/bb1/...` ADLI bloklar — LLVM unnamed-temp
+sayacını TÜKETMEZ, `%N` reg sayacı bağımsız kalır) + `Ayr.bb_term` (mevcut blok terminatörlü
+mü). Yardımcılar: `yeni_label`, `etiket_yaz` (bb_term=0), `br_to` (yalnız bb_term==0 iken
+fall-through dal — çift terminatör önlenir), `kosul_i1` (i32 0/1 koşulu → i1 `icmp ne 0`).
+İşlev sonunda blok açıksa `ret i32 0` (ölü ama geçerli — iki dal da `ver`'lediğinde end bloğu).
+
+**EGER:** else-yok → Lelse=Lend; else var → ayrı Lelse; else child BLOK veya iç EGER (her ikisi
+de `deyim_uret` ile). **IKEN:** Lhead (koşul) → Lbody → Lhead geri-dal / Lend. SSA sayacı
+işlev-geneli (blok-başı değil), etiketler adlı → numaralama çakışması yok.
+
+**Doğrulama:** test/cg_korpus 23 program (+5 CG4: if/if-else/else-if/while/gcd). gcd(48,36)+30=42
+(while + iç değişken + `%`). **23/23 exit eşdeğer** (ardışık koşu kararlı). Üretilen IR temiz:
+bb0=head, bb1=body, bb2=end; sıralı `%0..%10`. **Sonraki:** CG5 — çağrı (call) + parametre
+(alloca/store) + özyineleme (fib/faktöriyel).
+
+---
+
 ## D-075 — AŞAMA 3 CG3: değişken + atama + tanımlayıcı (entry alloca/store/load) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e
