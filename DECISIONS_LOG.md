@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-073 — AŞAMA 3 CG1: codegen.kem iskeleti + ilk semantik-oracle yeşil (2026-06-14)
+
+**Karar [ETKİ: yeni self-host artefakt; C derleyici DEĞİŞMEDİ].** D-072 planının CG1 adımı:
+`selfhost/codegen.kem` oluşturuldu = `selfhost/parser.kem` kopyası (lexer+parser REUSE) +
+AST-yürüten LLVM IR text emitter. `duz_yaz` (--ast dumper) → `program_uret`/`islev_uret`/
+`deyim_uret`/`ifade_uret` ile değiştirildi; `main` artık IR basar.
+
+**Kapsam (CG1):** işlev (parametresiz) + `ver` + tam literal + ikili aritmetik (`+ - * / %`).
+Üretilen IR: `target triple` + `define i32 @ad() { entry: ... ret i32 <op> }`. **Hoist-FREE:**
+tek blok `entry:`, SSA sıralı `%N` sayacı (`Ayr.reg`, işlev başında 0'a reset). C codegen'in
+`entry:`+`%0`-başlangıç deseni doğrulandı; KEMGU emitter TAM literallerini doğrudan immediate
+basar (C'nin `add i32 0, N`'inden daha sıkı ama semantik aynı).
+
+**Doğrulama:** `test/codegen_diff_harness.sh` (SEMANTİK exit-kod oracle, D-072 KARAR 1) —
+`test/cg_korpus/` 5 program (sabit/aritmetik/çıkarma/bölme/mod), **5/5 C-codegen ile exit
+eşdeğer**. Makefile `calistir_codegen_diff` hedefi `test_tumu`'ya bağlandı (codegen.exe yokken
+harness graceful → geriye uyumlu).
+
+**Sınır/Sonraki:** CG1 dışı düğümler (tanımlayıcı/çağrı/değişken/eğer/...) henüz `0` üretir
+(placeholder; korpus onları içermez). Sonraki: **CG2** — ikili karşılaştırma/mantıksal
+kısa-devre + tekli (neg/değil); ardından CG3 değişken/atama/tanımlayıcı (entry alloca).
+
+---
+
 ## D-072 — AŞAMA 3 (codegen self-host) ADIM-0: oracle + temsil + CG plan (2026-06-14)
 
 **Karar [ETKİ: yok — dokümantasyon/plan; kod yok].** Bootstrap fixpoint'in (Aşama 5) asıl
