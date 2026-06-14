@@ -1,0 +1,7 @@
+// TC5b: lineer bağlamaya referans → L004; sonra imha tüketir.
+işlev refal() {
+    değişken k = tekkez_olustur(5);
+    değişken r = &k;
+    imha(k);
+}
+işlev main() -> tam32 { ver 0; }

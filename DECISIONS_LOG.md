@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-062 — SELF-HOST checker TC5b: lineer akış L001/L002/L004 — 🎉 test/ornekler 42/42 TAM PARİTE (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5b (Linear
+Types Spec V1 akış denetimi): L001 (scope sonu tüketilmedi), L002 (move sonrası erişim),
+L004 (lineer referans). **lineer_hata.kem kapandı → test/ornekler 42/42 TAM accept/reject
++ tanı paritesi.** C derleyici DOKUNULMADI.
+
+**Mimari — lineer bağlama izleme (aktif işlev dilimi).** `Ayr`'a lin_ad/lin_sat/lin_sut/
+lin_tuk (paralel Dizi) + lin_basla (dilim başı; `yerel` deseni). `kontrol_govde`: girişte
+lin_basla + lineer parametreler (`lin_param_topla`); çıkışta `lin_kapanis` (tüketilmemiş →
+L001 bildirim konumunda). Tüketim noktaları (`lin_tuket_dugum`, tekrar → L002 düğüm
+konumunda): kullan/imha (KULLAN_IFADE/IMHA_IFADE), çağrı-arg→lineer-param (fn_plin), ver
+değeri, değişken move. L004: `&`/`&değişken` lineer bağlama → tekli_kontrol'da.
+
+**KRİTİK karar — Linear V1 = YALNIZ tekkez (`tip_node_tekkez_mi`).** C `tip_lineer_mi`
+tekkez+yetki+görev kapsar AMA tüketilmemiş yetki→CP005, görev→DRF (L001 DEĞİL). Bu yüzden
+L001/L002/L004 izleme TEKKEZ'e kısıtlandı → mmio_smoke (yetki<MMIO>) FALSE-L001 vermez.
+**LR002 GENİŞ kalır** (tekkez+yetki+görev) — geçerli yapıda hiç lineer alan yok →
+false-positive yok. (yetki CP005 = TC7, görev DRF = TC6.)
+
+**Doğrulama:** lineer_hata.kem KEMGU = oracle BİREBİR: LR002 24:5, L001 7:5, L002 13:28,
+L004 18:20. `make calistir_checker_diff` → **44/44 korpus** (önceki 40 + TC5b 4: L001/L002/
+L004/temiz). **test/ornekler 42/42** (lineer_temel/closure OK; mmio_smoke OK; regression yok).
+
+**Bilinen sınır (TC5 kalan):** L007/L008 (consume operand tekkez değil / tekkez_olustur
+arity); kapsam blok-düzeyi değil işlev-düzeyi (lineer_hata/temel/closure'da fark yok);
+closure LC-2/LC-3 (yakalama → consume-at-traversal modeliyle örtüşüyor). Sıradaki: yetki
+CP005 (TC7), bölge (TC6), modül (TC8), tam-korpus (TC9) → Aşama 3 codegen.
+
+---
+
 ## D-061 — SELF-HOST checker TC5a: yapı lineer alan yasağı (LR002) — 40/40 korpus (2026-06-14)
 
 **Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC5a (Linear
