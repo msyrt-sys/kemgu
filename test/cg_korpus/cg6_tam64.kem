@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken x: tam64 = 40; değişken y: tam64 = 2; ver (x + y) olarak tam32; }

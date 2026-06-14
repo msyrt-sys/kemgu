@@ -1,0 +1,1 @@
+işlev fakt(n: tam32) -> tam32 { eğer n <= 1 { ver 1; } ver n * fakt(n - 1); } işlev main() -> tam32 { ver fakt(5); }

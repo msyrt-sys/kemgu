@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken x: tam32 = 5; eğer x > 3 { ver 42; } ver 0; }

@@ -5,6 +5,95 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-079 — AŞAMA 3 CG7a: metin literali + runtime builtin + declare header (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** D-072 CG7 planının metin
++ runtime yarısı (yapı = CG7b). Ön-pass workflow'u (4 ajan) C-codegen ABI'sını birebir çıkardı.
+
+**Metin literali:** `Ayr.str_deg` (benzersiz literal havuzu, dedup). Ön-pass düz düğüm tablosunu
+tarar (`str_pre_pass`), tüm METIN → havuz. Global: `@.str.N = private unnamed_addr constant
+[K x i8] c"...\00"` (K=byte+1). **Escape (C ile birebir):** `\` `"` `<0x20` `>=0x7F` → `\HH`
+(BÜYÜK hex) — Türkçe UTF-8 yüksek-byte'lar tam escape (`"çay"` → `c"\C3\A7ay\00"`, uzunluk 4).
+Referans: `getelementptr [K x i8], ptr @.str.N, i32 0, i32 0`. `metin` tipi → `ptr` (ll_tip).
+
+**Runtime builtin:** `builtin_kdl_ad` (KEMGU adı → `@kdl_*`; metin_*/yaz_*/dosya_*/arg_*) +
+`builtin_ret` (dönüş tipi). CAGRI built-in tespit → `@kdl_*` çağrısı; void çağrı `%r` atamaz.
+**Kritik — i1 normalizasyonu:** runtime `metin_esit` vb. GERÇEK i1 döner ama mantıksal=i32
+invaryantı → call sonrası `zext i1→i32` (CG2/CG4 ile tutarlı, exit eşdeğer). `runtime_header_yaz`
+declare bloğu (codegen.kem alt kümesi + libc).
+
+**Doğrulama:** test/cg_korpus 39 program (+6 CG7a: uzunluk/esit/birlestir/metin-dönüş/param-bayt/
+**türkçe**). 39/39 exit eşdeğer. IR temiz (dedup, UTF-8 escape, zext). **Sınır:** dizi_* builtin
+henüz yok (CG8 — element-tip polimorfizmi). **Sonraki:** CG7b — yapı (%T type, alloca/GEP,
+erişim/oluştur, by-ref param + by-value dönüş).
+
+---
+
+## D-078 — AŞAMA 3 CG6: multi-int (i8/16/32/64) + tip-izleme + sext/trunc (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** Uniform-i32'den
+gerçek-tip codegen'e: `Ayr.son_tip` (her ifade_uret sonucunun LLVM tipi — recursive "dönüş-tip
+register'ı"), `Ayr.cur_ret` (mevcut işlev dönüş tipi), `Ayr.cg_atip` (değişken→LLVM tip),
+`Ayr.fn_ad/fn_ret` (ön-pass imza tablosu). Yardımcılar: `ll_tip` (TIP_BASIT → i8/i16/i32/i64),
+`tip_birlestir` (operand birleştir), `tip_genislik`, `fn_ret_bul`, `islev_donus_tip`, `param_tip`.
+
+**Anahtar basitleştirme — KEMGU örtük-dönüşüm YOK → operand birleştirme tek-yönlü:** `a + b`'de
+operandlar zaten aynı tip (checker garantisi); tek istisna bağlamsız literal (i32-default).
+`tip_birlestir` = biri i32 ise diğeri. Literaller metin-agnostik ("5"), tip yalnız komut
+annotasyonunda → literali yeniden-emit gerekmez. **mantıksal = i32 tutuldu** (CG2/CG4 bool
+mantığı bozulmadı; `define i1` yerine `define i32` — exit-kod eşdeğer). **Casts (`olarak`,
+TIP_DONUSTUR):** hedef>kaynak → `sext`, hedef<kaynak → `trunc`, eşit → no-op.
+
+**Doğrulama:** test/cg_korpus 33 program (+5 CG6: tam64/tam16/tam8-sext/trunc/i64-param).
+i64 alloca/add/mul, `trunc i64→i8`, `sext i8→i32`, i64-param+call hepsi temiz IR. **33/33 exit
+eşdeğer.** **Sınırlar (v1):** (a) signed div/rem (sdiv/srem) — dtam (unsigned) için udiv/urem
+henüz yok (codegen.kem signed tam kullanır → self-host etkilenmez); (b) bağlamsız literal →
+geniş paramda i32 default (geçici: tipli yerel kullan); (c) kesirli (float) yok (CG sonrası).
+**Sonraki:** CG7 — metin literali (@.str global) + yapı (%T, alloca/gep) + runtime declare header.
+
+---
+
+## D-077 — AŞAMA 3 CG5: çağrı + parametre + özyineleme (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `islev_uret` artık
+parametreleri emit eder; `ifade_uret`'e CAGRI (call) eklendi.
+
+**Parametre:** İmzada ADLI param (`%a0, %a1...` — adlı olduğundan `%N` reg sayacını tüketmez,
+entry alloca'ları %0'dan başlar). Entry'de her param için `alloca i32` + `store %aN` + ad→reg
+kaydı (CG3 yerel deseni; param mutable). **CAGRI:** hedef = çocuk[0] TANIMLAYICI adı; argümanlar
+SIRAYLA `ifade_uret` ile değerlendirilip operandlar yerel `Dizi<metin>`'e biriktirilir (init+append
+— güvenli desen, ATAMA-reassignment DEĞİL), sonra tek `call i32 @ad(i32 a0, ...)`. Aynı-modül
+ileri-referans (özyineleme + forward-call) LLVM'de declare gerektirmez.
+
+**Doğrulama:** test/cg_korpus 28 program (+5 CG5: topla/kare/fib/fakt/gcd-işlev). fib(10)=55,
+fakt(5)=120, gcd(48,36)+30=42 — **28/28 exit eşdeğer**. **Sınır:** runtime/builtin çağrıları
+(yaz_tam, dizi_*) CG7+ (declare header gerek). **Sonraki:** CG6 — multi-int (i8/16/64, dtam) +
+sext/trunc + işaretsiz + gerçek dönüş-tipi emit (mantıksal→i1 main).
+
+---
+
+## D-076 — AŞAMA 3 CG4: kontrol akışı (eğer/iken → br + %bbN blok) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `deyim_uret`'e EGER
+(if/else/else-if zinciri) ve IKEN (while). `ifade_uret`'e DOGRU/YANLIS literali (→ "1"/"0").
+
+**Blok yönetimi:** `Ayr.lbl` (etiket sayacı, `bb0/bb1/...` ADLI bloklar — LLVM unnamed-temp
+sayacını TÜKETMEZ, `%N` reg sayacı bağımsız kalır) + `Ayr.bb_term` (mevcut blok terminatörlü
+mü). Yardımcılar: `yeni_label`, `etiket_yaz` (bb_term=0), `br_to` (yalnız bb_term==0 iken
+fall-through dal — çift terminatör önlenir), `kosul_i1` (i32 0/1 koşulu → i1 `icmp ne 0`).
+İşlev sonunda blok açıksa `ret i32 0` (ölü ama geçerli — iki dal da `ver`'lediğinde end bloğu).
+
+**EGER:** else-yok → Lelse=Lend; else var → ayrı Lelse; else child BLOK veya iç EGER (her ikisi
+de `deyim_uret` ile). **IKEN:** Lhead (koşul) → Lbody → Lhead geri-dal / Lend. SSA sayacı
+işlev-geneli (blok-başı değil), etiketler adlı → numaralama çakışması yok.
+
+**Doğrulama:** test/cg_korpus 23 program (+5 CG4: if/if-else/else-if/while/gcd). gcd(48,36)+30=42
+(while + iç değişken + `%`). **23/23 exit eşdeğer** (ardışık koşu kararlı). Üretilen IR temiz:
+bb0=head, bb1=body, bb2=end; sıralı `%0..%10`. **Sonraki:** CG5 — çağrı (call) + parametre
+(alloca/store) + özyineleme (fib/faktöriyel).
+
+---
+
 ## D-075 — AŞAMA 3 CG3: değişken + atama + tanımlayıcı (entry alloca/store/load) (2026-06-14)
 
 **Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** `ifade_uret`'e

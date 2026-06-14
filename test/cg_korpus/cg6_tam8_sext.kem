@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken x: tam8 = 42; ver x olarak tam32; }
