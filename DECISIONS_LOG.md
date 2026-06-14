@@ -37,6 +37,29 @@ Additive — `--check`/testler etkilenmedi.
 
 ---
 
+## D-053 — SELF-HOST checker TC2: üst-düzey çift-tanım (T024/T026) — 6/6 korpus, 41/42 gerçek (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC2: üst-düzey
+çift-tanım denetimi. C `pre_populate` accept/reject + sıra paritesi.
+
+**Kapsam:** PROGRAM doğrudan çocuklarında çift-tanım. Kod kind'e göre: yapı/çeşit →
+**T026**, işlev/sabit/özellik/modül → **T024**. İkinci tanımın konumunda. C pre_populate
+**4-geçiş sırası BİREBİR**: özellik → yapı/çeşit → (uygula: ad yok) → işlev/sabit/modül,
+her geçiş kaynak-sırası, PAYLAŞILAN global kapsam (gor). dışa-sarmalı açılır.
+
+**Bulgu (sıra kritik):** Naif kaynak-sırası dup-tarama yanlış sıra üretti — C iki-geçişli
+(yapı/çeşit önce, işlev/sabit sonra) → T026'lar T024'lerden önce. 4-geçiş replikasyonu
+düzeltti. GÜVENLİ kapsam: yalnız top-level (modül-içi/cross-modül → false-T024 riski,
+TC8'e ertelendi) — gerçek tek-dosya 41/42 korundu.
+
+**Doğrulama:** `make calistir_checker_diff` → **6/6 korpus** (TC1 4 + TC2 2). test/ornekler
+tek-dosya 41/42 (tek fark lineer_hata = TC5). C derleyici değişmedi.
+
+**Sıradaki:** TC3 = tip çıkarsama (T001 uyumsuzluk — 22× en sık; TipBilgisi modeli) +
+arite (T010). Bu "DAĞ"ın çekirdeği. Sonra struct alan/exhaustiveness, generic, linear, modül.
+
+---
+
 ## D-052 — SELF-HOST checker TC1: temel ad çözümü (T002) — 41/42 gerçek tek-dosya (2026-06-14)
 
 **Karar [ETKİ: düşük — `selfhost/checker.kem` (parser kopyası + checker) + korpus].**

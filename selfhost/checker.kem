@@ -1753,9 +1753,86 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
     }
     ver 0;
 }
+// TC2: üst-düzey tanım adı (işlev/yapı/çeşit/sabit/özellik/modül; dışa içini aç).
+işlev tanim_adi(p: &değişken Ayr, c: tam32) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, c);
+    eğer metin_esit(ad, "ISLEV") veya metin_esit(ad, "YAPI") veya metin_esit(ad, "CESIT")
+      veya metin_esit(ad, "SABIT") veya metin_esit(ad, "OZELLIK") veya metin_esit(ad, "MODUL") {
+        ver dizi_al(p.a_deg, c);
+    }
+    eğer metin_esit(ad, "DISA") {
+        eğer dizi_al(p.a_cs, c) > 0 { ver dizi_al(p.a_deg, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
+    }
+    ver "";   // UYGULA (ad yok) / KULLAN / HATA → dup-muaf
+}
+// Çift-tanım kodu: yapı/çeşit → T026, diğer (işlev/sabit/özellik/modül) → T024.
+işlev dup_kod(p: &değişken Ayr, c: tam32) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, c);
+    eğer metin_esit(ad, "DISA") {
+        eğer dizi_al(p.a_cs, c) > 0 { ad = dizi_al(p.a_ad, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
+    }
+    eğer metin_esit(ad, "YAPI") veya metin_esit(ad, "CESIT") { ver "T026"; }
+    ver "T024";
+}
+// Etkin tür (dışa-sarmalını aç): YAPI/CESIT/ISLEV/SABIT/MODUL/OZELLIK/UYGULA/...
+işlev etkin_kind(p: &değişken Ayr, c: tam32) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, c);
+    eğer metin_esit(ad, "DISA") {
+        eğer dizi_al(p.a_cs, c) > 0 { ver dizi_al(p.a_ad, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
+    }
+    ver ad;
+}
+// Bir tanımı paylaşılan `gor` kümesine göre çift-tanım kontrol et + ekle.
+işlev dup_isle(p: &değişken Ayr, gor: Dizi<metin>, c: tam32) -> tam32 {
+    değişken nm: metin = tanim_adi(p, c);
+    eğer metin_esit(nm, "") { ver 0; }
+    değişken j: tam32 = 0;  değişken bulundu: mantıksal = yanlış;
+    iken j < dizi_boyut(gor) {
+        eğer metin_esit(dizi_al(gor, j), nm) { bulundu = doğru; }
+        j = j + 1;
+    }
+    eğer bulundu {
+        dizi_ekle(p.th_kod, dup_kod(p, c));
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, c));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, c));
+    } değilse { dizi_ekle(gor, nm); }
+    ver 0;
+}
+// TC2: ÜST-DÜZEY çift tanım (T024/T026). C pre_populate 4-geçiş sırası birebir:
+// özellik → yapı/çeşit → (uygula: ad yok) → işlev/sabit/modül. Paylaşılan global
+// kapsam (gor). İkinci tanımın konumunda hata. (Modül-içi/lokal → ileri TC.)
+işlev dup_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken gor: Dizi<metin> = [];
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {       // Geçiş 1: özellik
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(etkin_kind(p, c), "OZELLIK") { dup_isle(p, gor, c); }
+        i = i + 1;
+    }
+    i = 0;
+    iken i < cs {       // Geçiş 2: yapı + çeşit
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken k: metin = etkin_kind(p, c);
+        eğer metin_esit(k, "YAPI") veya metin_esit(k, "CESIT") { dup_isle(p, gor, c); }
+        i = i + 1;
+    }
+    i = 0;
+    iken i < cs {       // Geçiş 3 (uygula: ad yok) atlanır; Geçiş 4: işlev+sabit+modül
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken k: metin = etkin_kind(p, c);
+        eğer metin_esit(k, "ISLEV") veya metin_esit(k, "SABIT") veya metin_esit(k, "MODUL") {
+            dup_isle(p, gor, c);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     builtin_ekle(p);
     genel_topla(p, kok);
+    dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
     kontrol_ust(p, kok);
     ver 0;
 }

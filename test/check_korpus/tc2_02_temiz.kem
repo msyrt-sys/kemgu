@@ -1,0 +1,6 @@
+yapı A { x: tam32; }
+yapı B { y: tam32; }
+çeşit C { X, Y }
+işlev birinci() -> tam32 { ver 1; }
+işlev ikinci() -> tam32 { ver 2; }
+sabit SABIT: tam32 = 42;
