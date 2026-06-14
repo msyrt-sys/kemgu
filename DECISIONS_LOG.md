@@ -390,6 +390,29 @@ capture; lambda escape (env stack — şu an non-escaping KEMGU v1 garantisi). *
 8 kabul-ama-çöküyor deliğinin tümü artık ya düzeltildi (D-070 literal, D-071 lambda) ya da
 checker-reddi (D-070 G003 değişken-arg).**
 
+**BAĞIMSIZ DOĞRULAMA ADDENDUM (2026-06-14) — 9. delik bulundu + kapatıldı (G004).** D-071'in
+birinci-elden doğrulamasında committed kapsam TEMİZ çıktı (4 örnek exit 42, ASan/UBSan temiz,
+opt verify PASS, test_llvm 235/235, bounds 11/11, checker 48/48, ASan E2E PASS=91 FAIL=0 ALLOW=2).
+ANCAK belgelenmemiş 9. "kabul-ama-çöküyor" deliği saptandı: **işlev/lambda TİPLİ lokali yeniden
+atamak.** `değişken f = |x| x + a; f = |y| y * 2; ver f(21);` — `--check` KABUL eder (rc=0), `opt
+verify` GEÇER, ama çalışınca **ASan access-violation**. Kök neden: `closure_mu` isim-başına STATİK
+bir bayrak (yalnız `DUGUM_DEGISKEN`'de bağlama anında set), KARMA temsil ise DEĞERE bağlı (bare-ptr
+↔ closure-struct-ptr); yeniden atama yakalama-durumunu değiştirince çağrı yeri bare-ptr'ı closure
+sanıp deref eder. Sınır: yakalama-durumu DİVERGENT (capturing↔captureless) → çöker; aynı durum
+(both-captureless / both-capturing) → çalışır. Testlerde hiç yeniden-atama yoktu (kör nokta).
+
+**Karar (Mehmet) — checker reddi (G004),** G003 emsaliyle tutarlı (çökmezlik #1: varsayılan
+güvenli, derleme-zamanı reddet). `src/tip_kontrol.c` DUGUM_ATAMA: hedef `DUGUM_TANIMLAYICI` ve
+tipi `TIP_ISLEV` ise **G004** ("işlev/lambda değişkeni yeniden atanamaz; yeni bir `değişken` ile
+bağlayın"). SAĞLAM + konservatif (both-captureless/both-capturing yeniden atama da reddedilir —
+çalışsa bile temsil-riskli; programcı rebind eder). Tam değer-akışı desteği (yeniden-atamayı
+güvenli kılma) **V2/D-072**. Doğrulama: 3 yeni G004 unit testi (test_tip_kontrol 177/177, ASan
+temiz); regresyon korundu (test_llvm 235/235, checker 48/48, lambda 4/4, stdlib --check). 0 uyarı.
+
+**AYRI GÖZLEM (D-071 dışı, ön-mevcut):** lambda'yı YAPI ALANINA koyma (`yapı K { f: işlev(...)→R }`)
+codegen'i tanımsız `@f` çağrısı üretir (`opt verify` FAIL) — yeniden-atamadan bağımsız; lambda-in-
+struct hiç desteklenmemiş. G004 kapsamı dışı (ayrı eksik özellik, D-072 adayı).
+
 ---
 
 ## D-070 [YÜKSEK] — Sınıf A kabul-ama-çöküyor: dizi-LİTERAL → Dizi<T> param → heap (UB kapandı) (2026-06-14)
