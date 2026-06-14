@@ -1,0 +1,4 @@
+// TC3d: ver içinde çağrı dönüşü işlev dönüşüyle uyumsuz → T020.
+işlev bayrak() -> mantıksal { ver doğru; }
+işlev hesap() -> tam32 { ver bayrak(); }   // mantıksal ≠ tam32 → T020
+işlev main() -> tam32 { ver 0; }

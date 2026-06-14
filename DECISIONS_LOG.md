@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-055 — SELF-HOST checker TC3d: CAGRI dönüş çıkarsama + T010 arite — 16/16 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Aşama 2 TC3d: kullanıcı
+işlevi çağrısının dönüş tipini çıkarsama (T001/T020'yi besler) + çağrı argüman sayısı
+uyumsuzluğu (T010). C derleyici DOKUNULMADI.
+
+**Mimari karar — işlev imza tablosu (`fn_ad`/`fn_donus`/`fn_psay` paralel Dizi).**
+`genel_topla` sırasında her üst-düzey/modül/`dışa` ISLEV için imza kaydedilir: ad,
+dönüş tipi, parametre sayısı. CAGRI `ifade_tip` hedef TANIMLAYICI ise `fn_donus_bul`
+ile dönüş tipini verir; `kontrol_dugum` CAGRI özel-case'i `fn_psay_bul` ile arite
+karşılaştırır.
+
+**GÜVENLİ strateji (false-positive YOK):**
+- Dönüş tipi YALNIZ **bilinen skaler** (`bilinen_skaler_mi`: sayısal/mantıksal/metin/
+  karakter/boş) ise saklanır; yapı/generic-param/bileşik dönüş → "?". Böylece generic
+  `kimlik<T>() -> T` dönüşü "T" gibi sahte tiplerle T001 üretmez (parser tip-paramları
+  AST'te yok → generic tespit edilemez; skaler-whitelist bunu kapsar).
+- Arite YALNIZ kullanıcı işlevleri için (`fn_psay_bul >= 0`); builtin'ler → atla
+  (builtin arite'leri C'de özel; geçerli kodda doğru çağrılır → diff yok).
+- Method (`x.m()` = ERISIM hedef) ve dolaylı çağrı → atla (TANIMLAYICI değil).
+
+**C `tip_belirle(CAGRI)` sırası birebir:** hedef T002 → (tanımsız hedef →
+TIP_HATA → **erken dönüş**, arg atlanır) → T010 arite (uyumsuz → **erken dönüş**,
+arg tip kontrolü yok) → argümanlar. Pozisyon: T010 CAGRI düğümünde (= `(` konumu;
+parser bootstrap 224/224 ile C ile özdeş).
+
+**Doğrulama:** `make calistir_checker_diff` → **16/16 korpus** (önceki 12 + TC3d 4:
+çağrı-dönüş OK / T010 arite / dönüş-uyumsuz T001 / ver-çağrı T020). test/ornekler
+**41/42** (regression yok; lineer_hata = TC5).
+
+**Sıradaki (TC3e):** CAGRI per-arg T001 (param tip tablosu) + T022 (lvalue) + T003
+(sayısal beklenen). Sonra struct alan T017 + exhaustiveness M001, generic (TC4),
+linear (TC5 → lineer_hata kapanır), bölge/yetki/modül, tam-korpus paritesi (TC9).
+
+---
+
 ## D-051 — SELF-HOST Aşama 2 (TİP DENETLEYİCİ) ADIM-0: --checkdump oracle + mimari (2026-06-14)
 
 **Karar [ETKİ: düşük — additive C `--checkdump` modu; mevcut yol değişmedi].** Aşama 2

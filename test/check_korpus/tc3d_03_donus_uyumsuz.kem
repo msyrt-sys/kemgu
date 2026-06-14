@@ -1,0 +1,6 @@
+// TC3d: çağrı dönüş tipi (mantıksal) annotation (tam32) ile uyumsuz → T001.
+işlev bayrak() -> mantıksal { ver doğru; }
+işlev main() -> tam32 {
+    değişken n: tam32 = bayrak();   // mantıksal ≠ tam32 → T001
+    ver n;
+}

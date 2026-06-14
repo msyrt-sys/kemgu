@@ -39,6 +39,10 @@ yapı Ayr {
     yerel_tip: Dizi<metin>; // yerel ile paralel: her ismin tip-string'i ("?"=bilinmiyor)
     yerel_basla: tam32;   // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;   // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor) — T020
+    // ---- TC3d: işlev imza tablosu (CAGRI dönüş çıkarsama + T010 arite) ----
+    fn_ad: Dizi<metin>;   // üst-düzey/modül işlev adları
+    fn_donus: Dizi<metin>; // paralel: dönüş tipi (yalnız bilinen skaler; aksi "?")
+    fn_psay: Dizi<tam32>; // paralel: parametre sayısı
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -1590,6 +1594,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
+        fn_ad: [], fn_donus: [], fn_psay: [],
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1661,12 +1666,14 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
           veya metin_esit(ad, "CESIT") veya metin_esit(ad, "SABIT") {
             g_ekle(p, dizi_al(p.a_deg, c));
         }
+        eğer metin_esit(ad, "ISLEV") { imza_kaydet(p, c); }   // TC3d imza tablosu
         eğer metin_esit(ad, "MODUL") { g_ekle(p, dizi_al(p.a_deg, c)); genel_topla(p, c); }
         eğer metin_esit(ad, "DISA") {       // dışa <tanım> → iç tanım adı
             değişken dcb: tam32 = dizi_al(p.a_cb, c);
             eğer dizi_al(p.a_cs, c) > 0 {
                 değişken ic: tam32 = dizi_al(p.cocuk, dcb);
                 g_ekle(p, dizi_al(p.a_deg, ic));
+                eğer metin_esit(dizi_al(p.a_ad, ic), "ISLEV") { imza_kaydet(p, ic); }
             }
         }
         i = i + 1;
@@ -1687,6 +1694,47 @@ işlev sayisal_mi(t: metin) -> mantıksal {
 }
 işlev kesirli_mi(t: metin) -> mantıksal {
     ver metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64");
+}
+// Bilinen skaler tip mi? (CAGRI dönüş çıkarsamasında güvenli alt küme — generic
+// param/yapı/bileşik dönüşler "?" kalır, böylece T001 false-positive yok.)
+işlev bilinen_skaler_mi(t: metin) -> mantıksal {
+    ver sayisal_mi(t) veya metin_esit(t, "mantıksal") veya metin_esit(t, "metin")
+      veya metin_esit(t, "karakter") veya metin_esit(t, "boş");
+}
+// Bir işlev düğümünün PARAMETRE çocuk sayısı (arite).
+işlev param_say(p: &değişken Ayr, fn: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;  değişken n: tam32 = 0;
+    iken i < cs {
+        eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb + i)), "PARAMETRE") { n = n + 1; }
+        i = i + 1;
+    }
+    ver n;
+}
+// İşlev imzasını tabloya kaydet (CAGRI dönüş + T010). Dönüş yalnız bilinen
+// skaler ise saklanır; aksi (yapı/generic/bileşik) "?" → çıkarsama atlanır.
+işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
+    dizi_ekle(p.fn_ad, dizi_al(p.a_deg, fn));
+    değişken dt: metin = donus_str(p, fn);
+    eğer bilinen_skaler_mi(dt) { dizi_ekle(p.fn_donus, dt); }
+    değilse { dizi_ekle(p.fn_donus, "?"); }
+    dizi_ekle(p.fn_psay, param_say(p, fn));
+    ver 0;
+}
+// İşlev adı → dönüş tipi ("?" = kullanıcı işlevi değil veya bilinmeyen dönüş).
+işlev fn_donus_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken n: tam32 = dizi_boyut(p.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < n { eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_donus, i); } i = i + 1; }
+    ver "?";
+}
+// İşlev adı → parametre sayısı (-1 = kullanıcı işlevi değil).
+işlev fn_psay_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < n { eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_psay, i); } i = i + 1; }
+    ver 0 - 1;
 }
 // Bir ismin tipi (aktif işlev yerel dilimi). "?" = bilinmiyor.
 işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
@@ -1726,7 +1774,14 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         }
         ver "?";   // & (ref) / deref* → ileri TC
     }
-    ver "?";   // CAGRI/ERISIM/INDEKS/... → TC3c
+    eğer metin_esit(ad, "CAGRI") {   // TC3d: kullanıcı işlevi çağrısı → dönüş tipi
+        değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));   // çocuk[0]=hedef
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") {
+            ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
+        }
+        ver "?";   // method/dolaylı çağrı → ileri TC
+    }
+    ver "?";   // ERISIM/INDEKS/YOL/... → ileri TC
 }
 // DEGISKEN/SABIT annotation tip-string ("?"=yok/bileşik).
 işlev annot_str(p: &değişken Ayr, idx: tam32) -> metin {
@@ -1847,6 +1902,32 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         t021_kontrol(p, idx, kosul);
         değişken j: tam32 = 1;
         iken j < kc { kontrol_dugum(p, dizi_al(p.cocuk, kb + j)); j = j + 1; }
+        ver 0;
+    }
+    // CAGRI: hedef T002 → (tanımsız → erken dön) → T010 arite (uyumsuz → erken dön)
+    // → argümanlar. C tip_belirle(CAGRI) sırası: hedef, arite, sonra arg kontrolü.
+    eğer metin_esit(ad, "CAGRI") {
+        değişken hb: tam32 = dizi_al(p.a_cb, idx);
+        değişken hc: tam32 = dizi_al(p.a_cs, idx);
+        değişken hedef: tam32 = dizi_al(p.cocuk, hb);
+        kontrol_dugum(p, hedef);                 // hedef T002 (C: tip_belirle(hedef))
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
+            değişken fad: metin = dizi_al(p.a_deg, hedef);
+            eğer ad_tanimli_mi(p, fad) == yanlış {
+                ver 0;   // C: tanımsız hedef → TIP_HATA → erken dönüş (arg atlanır)
+            }
+            değişken ps: tam32 = fn_psay_bul(p, fad);
+            eğer ps >= 0 {                        // kullanıcı işlevi → arite bilinir
+                eğer (hc - 1) != ps {             // çocuk[0]=hedef → arg sayısı = hc-1
+                    dizi_ekle(p.th_kod, "T010");
+                    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+                    ver 0;   // C: arite uyumsuz → erken dönüş (arg tip kontrolü yok)
+                }
+            }
+        }
+        değişken k: tam32 = 1;
+        iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
         ver 0;
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
