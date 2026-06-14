@@ -1,0 +1,1 @@
+yapı Nokta { x: tam32; y: tam32; } işlev topla(n: & Nokta) -> tam32 { ver n.x + n.y; } işlev main() -> tam32 { değişken n: Nokta = Nokta { x: 40, y: 2 }; ver topla(& n); }

@@ -1,0 +1,1 @@
+yapı N { x: tam32; } işlev oku(n: & N) -> tam32 { ver n.x; } işlev ara(n: & N) -> tam32 { ver oku(n); } işlev main() -> tam32 { değişken n: N = N { x: 42 }; ver ara(& n); }

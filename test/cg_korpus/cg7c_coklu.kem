@@ -1,0 +1,1 @@
+yapı K { a: tam32; b: tam32; } işlev kur(k: &değişken K) -> tam32 { k.a = 40; k.b = 2; ver 0; } işlev main() -> tam32 { değişken k: K = K { a: 0, b: 0 }; kur(&değişken k); ver k.a + k.b; }
