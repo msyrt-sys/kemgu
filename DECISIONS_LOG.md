@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-066 — SELF-HOST checker TC5d: bit operatörü tamsayı kontrolü (T028) — 48/48 korpus (2026-06-14)
+
+**Karar [ETKİ: düşük — yalnız `selfhost/checker.kem` + korpus].** Full-repo audit genuine-bug
+#3: bit operatörü (`& | ^ << >>` + tekli `~`) operandı tamsayı olmalı (T028). C derleyici
+DOKUNULMADI.
+
+**Bulgu (audit):** test/snapshots/31_bit_komb.kem + 50_kompleks_program.kem → oracle T028,
+KEMGU YANLIŞ T020. Örn `(deger >> pozisyon) & 1 == 1` → öncelik gereği `& (1==1)` → bit op
+sağ operandı mantıksal. C: T028 (& operatör konumu). KEMGU bit op'u kontrol etmiyordu →
+ifade_tip(&) sol tipini (tam32) döndürüyor → ver dönüşü (mantıksal) ile T020 → YANLIŞ KOD.
+
+**Düzeltme (T003/T004 ile simetrik):** `tamsayi_mi` (tam/dtam; kesirli/mantıksal HARİÇ) +
+`bit_op_mi` + `bilinen_tamsayi_degil`. `t028_kontrol` (IKILI bit op operandı kesin
+tamsayı-değil → T028) + tekli_kontrol `~` dalı. `ifade_tip` bit op/`~` non-tamsayı operandda
+"?" döndürür (C TIP_HATA bastırma) → dış T020/T001 bastırılır → iç-içe tek T028.
+
+**Doğrulama:** 31_bit_komb ✅ + 50_kompleks ✅ (artık T028 birebir, T020 değil).
+`make calistir_checker_diff` **48/48** (+tc5d: bit-OK / bit-T028 / tekli-~-T028).
+test/ornekler 42/42; self-host 3/3; SIFIR regresyon (geçerli bit kodu tam-integer → T028 yok).
+
+**Audit ilerleme:** 3 genuine-bug kapandı (generic-T003, segfault, bit-T028). Kalan farklar
+büyük oranda feature-gap: parser/lexer P/L kodu raporlama (lex/parse_korpus), cross-file/modül
+TC8 (virtio/crossfile/moduller), bölge TC6 (bolge_al), referans/deref tip (26_referans_aktarim
+— T022 birebir ama deref T001 eksik), asm/çeşit/constraint. → TC6-9 yol haritası.
+
+---
+
 ## D-065 — SELF-HOST [YÜKSEK robustness]: parser token erişimi sınır-güvenli (segfault düzeltildi) (2026-06-14)
 
 **Karar [ETKİ: orta — `selfhost/checker.kem` + `selfhost/parser.kem`; robustness/çökmezlik].**
