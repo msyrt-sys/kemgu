@@ -1,0 +1,34 @@
+// dizi_turetilmis_taban.kem — TÜRETİLMİŞ heap Dizi<T> tabanlarında `[]` indeks
+// operatörü (D-085). Yapı-alanı (k.xs[i]) ve çağrı-dönüşü tabanlı diziler
+// eskiden KdlDizi* descriptor'ını düz veri sanıp yanlış GEP yapıyordu
+// (sessiz-yanlış okuma / segfault yazma). Artık kdl_dizi_al/kdl_dizi_yaz route.
+//
+// Beklenen çıktı (exit kodu): 42.
+
+yapı Sepet {
+    ogeler: Dizi<tam32>;
+}
+
+// İşlev dönüşü Dizi<T>: çağrı sonucu KdlDizi* — `[]` heap-route edilmeli.
+işlev tohum() -> Dizi<tam32> {
+    ver [10, 20, 30];
+}
+
+işlev main() -> tam32 {
+    // 1) Yapı-alanı dizisi: okuma + yazma (D-085 hole 1a/1b)
+    değişken s: Sepet = Sepet { ogeler: [1, 2, 3] };
+    s.ogeler[0] = 5;            // yazma → kdl_dizi_yaz (eskiden segfault)
+    s.ogeler[2] = 7;
+    değişken alan_top: tam32 = s.ogeler[0] + s.ogeler[1] + s.ogeler[2];  // 5+2+7 = 14
+
+    // 2) Çağrı dönüşü dizisi değişkene bağlı: okuma (D-085 hole 2)
+    değişken d: Dizi<tam32> = tohum();
+    d[1] = 6;                   // 10, 6, 30
+    değişken cagri_top: tam32 = d[0] + d[1] + d[2];  // 10+6+30 = 46
+
+    // 3) Doğrudan çağrı-dönüşü indeksleme (ara değişkensiz)
+    değişken dogrudan: tam32 = tohum()[0];  // 10
+
+    // 14 + 46 - 10 - 8 = 42
+    ver alan_top + cagri_top - dogrudan - 8;
+}

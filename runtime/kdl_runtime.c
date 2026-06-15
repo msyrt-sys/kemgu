@@ -610,6 +610,44 @@ void kdl_dizi_yaz_ptr(KdlDizi *d, int32_t i, void *deger) {
     ((void **)d->veri)[i] = deger;
 }
 
+/* === D-087: by-value YAPI (struct) elemanlı dizi ===
+ *
+ * Skaler/ptr getter'lar (tam/tam64/ptr) struct elemanı taşıyamaz; eleman
+ * d->eleman_byte boyutunda RASTGELE veri (yapı LLVM layout'u, padding dahil).
+ * Bu üç fonksiyon eleman_byte byte'ı memcpy ile kopyalar — codegen
+ * eleman_byte'ı `sizeof(%Yapi)` (LLVM ptrtoint-getelementptr const-expr) ile
+ * geçirir, böylece padding/alignment LLVM ile birebir tutar. */
+void kdl_dizi_ekle_yapi(KdlDizi *d, const void *kaynak) {
+    if (!d || !kaynak) return;
+    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
+    if (d->boyut == d->kapasite) {
+        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
+        d->veri = realloc(d->veri, (size_t)yk * (size_t)eb);
+        d->kapasite = yk;
+    }
+    memcpy((char *)d->veri + (size_t)d->boyut * (size_t)eb,
+           kaynak, (size_t)eb);
+    d->boyut++;
+}
+
+/* i. yapı elemanını dst'ye kopyalar. OOB → PANIC (D-069 sınıfı). */
+void kdl_dizi_al_yapi(KdlDizi *d, int32_t i, void *dst) {
+    if (!d || !dst) return;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
+    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
+    memcpy(dst, (const char *)d->veri + (size_t)i * (size_t)eb,
+           (size_t)eb);
+}
+
+/* i. yapı elemanını YERİNDE günceller. OOB → PANIC. */
+void kdl_dizi_yaz_yapi(KdlDizi *d, int32_t i, const void *kaynak) {
+    if (!d || !kaynak) return;
+    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
+    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
+    memcpy((char *)d->veri + (size_t)i * (size_t)eb,
+           kaynak, (size_t)eb);
+}
+
 int32_t kdl_dizi_boyut(KdlDizi *d) {
     return d ? d->boyut : 0;
 }

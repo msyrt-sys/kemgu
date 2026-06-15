@@ -1,0 +1,24 @@
+// icice_dizi.kem — İç-içe Dizi<Dizi<T>> (matris) örneği.
+//
+// D-088: iç dizi literali (`[4, 5, 6]`) artık heap KdlDizi* olarak üretilir
+// (DEGISKEN heap path beklenen_tip'i iç eleman tipine ayarlar). Böylece iç
+// satırı bir değişkene çıkarınca uzunluk metadata KORUNUR — eskiden iç literal
+// stack [N×T] idi, `dizi_boyut(satir)` yanlış (1) dönüyor, `dizi_al` panikliyordu.
+// Ayrıca `m[i][j]` nested INDEKS heap-route edilir (heap_dizi_eleman_ast).
+// Bkz. DECISIONS_LOG D-085 (türetilmiş taban) ve D-087 (by-value yapı eleman).
+
+işlev main() -> tam32 {
+    değişken m: Dizi<Dizi<tam32>> = [[1, 2, 3], [4, 5, 6]];
+
+    // İç satırı değişkene çıkar: satir = [4, 5, 6] (heap, uzunluk = 3).
+    değişken satir: Dizi<tam32> = m[1];
+
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(satir) {       // dizi_boyut(satir) = 3 (D-088 öncesi 1 idi)
+        toplam = toplam + dizi_al(satir, i);
+        i = i + 1;
+    }
+    // toplam = 4 + 5 + 6 = 15; m[0][2] = 3 → 15 + 3 * 9 = 42.
+    ver toplam + m[0][2] * 9;
+}
