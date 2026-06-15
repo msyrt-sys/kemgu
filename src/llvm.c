@@ -802,6 +802,26 @@ static const char *dizi_alan_eleman_ir(LlvmGen *g, const Dugum *erisim) {
     return elem ? ast_tip_to_ir(g, elem) : NULL;
 }
 
+/* [D-092] Verilen eleman AST'sini saran sentetik DUGUM_TIP_DIZI üret. ATAMA
+ * (`xs = [..]` / `k.xs = [..]`) yolunda beklenen_tip kanalına konur; böylece
+ * DUGUM_DIZI_OLUSTUR (DIZI_OLUSTUR heap-path, ~2132) dizi-literalini HEAP
+ * KdlDizi* olarak üretir — değişken-init (`değişken xs: Dizi<T> = [..]`) ile
+ * AYNI yol. Aksi halde stack [N x T] pointer'ı Dizi<T> (KdlDizi*) slot'una
+ * store edilir; sonraki dizi_ekle/dizi_boyut KdlDizi* beklerken stack-array
+ * görür → SEGFAULT (accept-but-crash; D-070 ailesinin ATAMA analoğu, D-075
+ * 🔴 KEŞİF notunda belgelenmişti).
+ *
+ * Heap-path Dizi düğümünden YALNIZ `tip` + `veri.tip_dizi.eleman_tip` okur;
+ * arena_ayir_sifir gerisini sıfırlar. eleman_ast NULL ise NULL döner. */
+static const Dugum *dizi_tip_sar(LlvmGen *g, const Dugum *eleman_ast) {
+    if (!eleman_ast) return NULL;
+    Dugum *d = (Dugum *)arena_ayir_sifir(g->arena, sizeof(Dugum));
+    if (!d) return NULL;
+    d->tip = DUGUM_TIP_DIZI;
+    d->veri.tip_dizi.eleman_tip = (Dugum *)eleman_ast;
+    return d;
+}
+
 /* D-085: heap KdlDizi eleman okuma/yazma intrinsic'i — eleman IR tipine göre
  * (i64/ptr ayrı; i8/i16/i32 → tam varyantı, i32 genişlikte taşınır). dizi_al/
  * dizi_yaz built-in'leri ile `[]` lowering'i AYNI seçimi paylaşsın diye ortak. */
@@ -4019,11 +4039,26 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     d->veri.atama.hedef->veri.tanimlayici.metin,
                     d->veri.atama.hedef->veri.tanimlayici.uzunluk);
                 if (i) {
-                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
-                                               i->llvm_tip);
-                    int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
-                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            i->llvm_tip, rr, i->reg_no);
+                    /* [D-092] xs = [..]  (xs: Dizi<T> heap) — init yoluyla AYNI
+                     * heap-promote. beklenen_tip'i hedefin Dizi<T> AST'sine
+                     * ayarla → DUGUM_DIZI_OLUSTUR heap KdlDizi* üretir; aksi
+                     * halde stack [N x T] ptr KdlDizi* slot'a store edilir →
+                     * dizi_ekle/dizi_boyut SEGFAULT (accept-but-crash). */
+                    if (i->dinamik_dizi_mi && i->eleman_tip_ast &&
+                        d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
+                        const Dugum *eski_bt = g->beklenen_tip;
+                        g->beklenen_tip = dizi_tip_sar(g, i->eleman_tip_ast);
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, "ptr");
+                        g->beklenen_tip = eski_bt;
+                        fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
+                                v.reg, i->reg_no);
+                    } else {
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
+                                                   i->llvm_tip);
+                        int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
+                        fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                                i->llvm_tip, rr, i->reg_no);
+                    }
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_INDEKS) {
@@ -4146,7 +4181,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * struct hem &Struct referans param hedefi calisir. */
                 const char *alan_ir = NULL;
                 int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir);
-                if (adr >= 0 && alan_ir) {
+                /* [D-092] k.xs = [..]  (alan Dizi<T> heap) — TANIMLAYICI ile
+                 * aynı delik: dizi-literali stack ÜRETME, heap KdlDizi yap ve
+                 * alan adresine KdlDizi* store et. dizi_alan_eleman_ast alanın
+                 * Dizi<T> eleman AST'sini verir (NULL → normal skaler alan). */
+                const Dugum *alan_eleman_ast = NULL;
+                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
+                    alan_eleman_ast =
+                        dizi_alan_eleman_ast(g, d->veri.atama.hedef);
+                }
+                if (adr >= 0 && alan_eleman_ast) {
+                    const Dugum *eski_bt = g->beklenen_tip;
+                    g->beklenen_tip = dizi_tip_sar(g, alan_eleman_ast);
+                    IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, "ptr");
+                    g->beklenen_tip = eski_bt;
+                    fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
+                            v.reg, adr);
+                } else if (adr >= 0 && alan_ir) {
                     IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                alan_ir);
                     int rr = int_donustur(g, v.reg, v.tip, alan_ir);

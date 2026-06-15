@@ -1,0 +1,25 @@
+// dizi_atama.kem — [D-092] Dizi<T> ATAMA dizi-literal heap-promote regresyon örneği.
+//
+// `xs = [..]` (yerel değişken) ve `k.xs = [..]` (yapı alanı) ATAMA hedefleri,
+// init (`değişken xs: Dizi<T> = [..]`) ile AYNI şekilde HEAP KdlDizi* üretmeli.
+// Eskiden ATAMA yolu stack [N×T] pointer'ını Dizi<T> (KdlDizi*) slot'una store
+// ediyordu; sonraki dizi_ekle/dizi_boyut KdlDizi* beklerken stack-array görüp
+// SEGFAULT veriyordu (accept-but-crash: --check KABUL ediyordu, üretilen kod
+// çöküyordu). Bu örnek ASan auto-discovery ile (asan_e2e_denetim.sh) bellek
+// temizliğini de doğrular. Bkz. DECISIONS_LOG D-092 (ve D-075 🔴 KEŞİF notu).
+
+yapı Kap { xs: Dizi<tam32>; }
+
+işlev main() -> tam32 {
+    // Yerel Dizi<T> değişkene ATAMA ile dizi-literal — heap promote.
+    değişken xs: Dizi<tam32> = [];
+    xs = [1, 2, 3];
+    dizi_ekle(xs, 4);          // boyut = 4
+
+    // Yapı alanı Dizi<T>'ye ATAMA ile dizi-literal — heap promote.
+    değişken k: Kap = Kap { xs: [] };
+    k.xs = [10, 20];
+    dizi_ekle(k.xs, 30);       // boyut = 3
+
+    ver dizi_boyut(xs) + dizi_boyut(k.xs);   // 4 + 3 = 7
+}
