@@ -5,6 +5,25 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-087 — Bootstrap CHECKER kanıtı: 4 bileşenin TAMAMI self-host codegen ile doğru derlenir (2026-06-14)
+
+**Karar [ETKİ: yalnız test/codegen_bootstrap_harness.sh; kaynak DEĞİŞMEDİ].** D-086'da codegen.kem
+DRIVER oldu (checker dâhil) ve self-host-codegen ile FIXPOINT'e derlendi — ama fixpoint yalnız
+DETERMİNİZM (stage1==stage2) kanıtlar, self-host-codegen-derlenmiş checker'ın DOĞRULUĞUNU değil.
+Bootstrap harness'a CHECKER bileşeni eklendi (lexer/parser ile aynı desen): self-host-codegen ile
+derlenen checker.kem'in `--checkdump` çıktısı, C-codegen ile derlenenle korpus üzerinde diff'lenir.
+
+**Sonuç:** `make calistir_codegen_bootstrap` artık LEXER 46 + PARSER 46 + **CHECKER 46** +
+CODEGEN FIXPOINT (stage1==stage2, 21728 satır) — **4 self-host bileşeninin TAMAMI** (lexer, parser,
+checker, codegen) self-host codegen tarafından DOĞRU derlenir (korpus: selfhost/*.kem + ornekler;
+3815-satır driver ve checker.kem'in kendisi dâhil). Bu, D-086 driver fixpoint'inin korelatif
+doğruluk kanıtı (yalnız determinizm değil). `make test_tumu` YEŞİL, 0 regresyon, 0 uyarı.
+
+**Not:** Bu, origin/feature/self-host-checker'daki 62dd7e8 (öksüz; main'e hiç merge olmadı) ile aynı
+amacı main hattında bağımsız gerçekler — D-086 driver state'i üzerine (checker artık driver'da).
+
+---
+
 ## D-086 — 🎉 AŞAMA 4 driver: tek self-host kemgu binary (checker + 4-mod dispatch) + driver FIXPOINT (2026-06-14)
 
 **Karar [ETKİ: self-host birleştirme; C derleyici DEĞİŞMEDİ].** Aşama 1-3'te lexer/parser/checker/
