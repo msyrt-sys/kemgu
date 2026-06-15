@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-092 — [YÜKSEK] `Dizi<T>` ATAMA dizi-literal heap-promote — accept-but-crash kapatma (2026-06-15)
+
+**Karar [ETKİ: codegen bellek-güvenliği; izole commit].** `D-075`'in 🔴 KEŞİF
+notunda işaretlenen accept-but-crash deliği kapatıldı: `--check` KABUL eden ama
+üretilen kodu ÇÖKERTEN (segfault, exit 139) iki tetik düzeltildi:
+```
+değişken xs: Dizi<tam32> = []; xs = [1]; dizi_ekle(xs, 7);      // eskiden SEGFAULT
+yapı K { xs: Dizi<tam32>; } ... k.xs = [1]; dizi_ekle(k.xs, 7); // eskiden SEGFAULT
+```
+
+**Kök-neden (D-075 KEŞİF + IR doğrulaması):** `değişken xs: Dizi<T> = [..]` (init)
+yolu dizi-literalini HEAP `KdlDizi*`'a promote ederken, **ATAMA** yolu (`xs = [..]`
+/ `k.xs = [..]`) stack `[N×T]` pointer'ını `Dizi<T>` (heap `KdlDizi*`) slot'una
+store ediyordu. Üretilen IR'da görüldü: `%1 = alloca [1 x i32]; ... store ptr %1,
+ptr %0` (`%0` = KdlDizi* slot). Sonraki `dizi_ekle`/`dizi_boyut` `KdlDizi*`
+beklerken stack-array görünce çöküyordu. D-070 ailesinin (dizi-literal temsil
+uyuşmazlığı) ATAMA analoğu.
+
+**Çözüm (`src/llvm.c`) — main'in `beklenen_tip` kanalı (ayrı helper DEĞİL):**
+`DUGUM_DIZI_OLUSTUR` codegen'i zaten `g->beklenen_tip` `Dizi<T>` ise heap
+`KdlDizi*` üretir (D-044/D-088 yolu, ~satır 2132). ATAMA hedefi `Dizi<T>` heap +
+RHS dizi-literal iken, `ifade_uret(RHS)`'den ÖNCE `g->beklenen_tip`'i hedefin
+`Dizi<T>` AST tipine SET edip (sonra restore) bu heap-path'i devreye sokuyoruz —
+init ile **AYNI** mekanizma. Reddetme DEĞİL; reassignment normal işlem.
+- **Yerel değişken (`xs = [..]`):** `i->dinamik_dizi_mi` + RHS literal → küçük
+  `dizi_tip_sar(g, i->eleman_tip_ast)` yardımcısı eleman AST'sini sentetik
+  `DUGUM_TIP_DIZI`'ye sarar (heap-path yalnız `tip` + `eleman_tip` okur),
+  `beklenen_tip`'e konur, heap `KdlDizi*` slot'a store edilir.
+- **Yapı alanı (`k.xs = [..]`):** `dizi_alan_eleman_ast` alanın `Dizi<T>` eleman
+  AST'sini verir (NULL → normal skaler alan); aynı `dizi_tip_sar` + heap store.
+
+**Doğrulama:** 2 repro fix öncesi exit 139 → fix sonrası exit 2 (boyut doğru),
+IR'da stack `[N×T]` yok (yalnız `kdl_dizi_olustur`+`kdl_dizi_ekle`). `make
+test_tumu` tam yeşil — **self-host FIXPOINT korundu** (stage1 IR == stage2 IR,
+21728 satır birebir). `asan_e2e_denetim.sh` PASS=96 FAIL=0 (yeni
+`test/ornekler/dizi_atama.kem` auto-discovery). `dizi_sinir_harness.sh` 37/37
+(yeni vaka30/31/32: ATAMA dizi-literal → çalışır). Sıfır derleyici uyarısı
+(`-Wall -Wextra -Wpedantic`).
+
+**Sınır/Not:** Numara D-092 (orchestrator) — main self-host serisi D-082..D-091'i
+aldığı için PR #60'ın eski D-082 numarası kullanılmadı. PR #60 D-083 (heap
+`xs[i]=v`) ARTIK main'de (PR #63 / D-088 ailesi) → bu kararın kapsamı DIŞINDA,
+düşürüldü. Türetilmiş olmayan basit (nesne TANIMLAYICI olmayan, örn. `a.b.xs`)
+alan zincirleri `dizi_alan_eleman_ast` kapsamı dışı (D-088 ile aynı sınır).
+
+---
+
 ## D-091 — [YÜKSEK] İç-içe `Dizi<Dizi<T>>` — iç dizi literali heap + nested `m[i][j]` heap-route (2026-06-14)
 *(eski D-088; main self-host serisi D-082..D-087 ile çakışan dizi-indeks ailesi yeniden numaralandığından kaydırıldı)*
 

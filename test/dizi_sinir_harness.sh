@@ -222,6 +222,31 @@ panic_bekle vaka29_icice_dis_oob 'işlev main() -> tam32 {
     değişken inner: Dizi<tam32> = m[9];
     ver dizi_al(inner, 0);
 }'
+# D-092: Dizi<T> ATAMA dizi-literal heap-promote — `xs = [..]` / `k.xs = [..]`.
+# Eskiden ATAMA stack [N×T] pointer'ını Dizi<T> (KdlDizi*) slot'una store
+# ediyordu → sonraki dizi_ekle/dizi_boyut KdlDizi* beklerken stack-array görüp
+# SEGFAULT (accept-but-crash: --check KABUL, üretilen kod çöküyordu). Artık init
+# ile AYNI heap-promote (beklenen_tip → DUGUM_DIZI_OLUSTUR heap KdlDizi*).
+# Bkz. DECISIONS_LOG D-092 (ve D-075 🔴 KEŞİF notu). Önce: SEGFAULT'tu (rc=139).
+deger_bekle vaka30_atama_tanimlayici 2 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [];
+    xs = [1];
+    dizi_ekle(xs, 7);
+    ver dizi_boyut(xs);
+}'
+deger_bekle vaka31_atama_erisim 2 'yapı K { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken k: K = K { xs: [] };
+    k.xs = [1];
+    dizi_ekle(k.xs, 7);
+    ver dizi_boyut(k.xs);
+}'
+# ATAMA sonrası eleman değerleri de doğru (heap dizi [] indeksleme).
+deger_bekle vaka32_atama_deger 42 'işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [];
+    xs = [10, 20, 12];
+    ver xs[0] + xs[1] + xs[2];
+}'
 # vaka8: güvensiz opt-out — stack indeks güvensiz blokta sınır-kontrolsüz (panic IR yok).
 opt_out_kontrol() {
     local ad="vaka8_guvensiz_optout"
