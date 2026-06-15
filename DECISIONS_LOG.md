@@ -5,7 +5,8 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-088 — [YÜKSEK] İç-içe `Dizi<Dizi<T>>` — iç dizi literali heap + nested `m[i][j]` heap-route (2026-06-14)
+## D-091 — [YÜKSEK] İç-içe `Dizi<Dizi<T>>` — iç dizi literali heap + nested `m[i][j]` heap-route (2026-06-14)
+*(eski D-088; main self-host serisi D-082..D-087 ile çakışan dizi-indeks ailesi yeniden numaralandığından kaydırıldı)*
 
 **Karar [ETKİ: codegen doğruluk; izole commit].** İç-içe dizi literali
 `[[1,2],[3,4]]`'in İÇ dizileri (`[1,2]`, `[3,4]`) heap `KdlDizi*` değil, STACK
@@ -56,7 +57,8 @@ tek-indeks ERISIM/CAGRI. İç-içe dizinin yapı ALANI olduğu zincirler (`k.m[i
 `heap_dizi_eleman_ast` ile çözülür ancak iç literal heap'liği yapı-oluştur yoluna
 bağlı olduğundan ayrıca test edilmedi (gelecek).
 
-## D-087 — [YÜKSEK] `Dizi<Yapı>` by-value struct eleman (skaler-i32 varsayımı kaldırıldı) (2026-06-14)
+## D-090 — [YÜKSEK] `Dizi<Yapı>` by-value struct eleman (skaler-i32 varsayımı kaldırıldı) (2026-06-14)
+*(eski D-087; main self-host D-087 ile çakıştığından yeniden numaralandı)*
 
 **Karar [ETKİ: runtime + codegen; izole commit].** `Dizi<Yapı>` (struct elemanlı
 dizi) skaler `kdl_dizi_ekle_tam`/`kdl_dizi_al_tam` (i32) + `eleman_byte=4` ile
@@ -87,7 +89,8 @@ explicit-builtin'i struct için eleman_byte hâlâ skaler-varsayım (literal `[.
 yolu doğru; explicit dizi_olustur+struct nadir — gelecekte). İç-içe
 `Dizi<Dizi<Yapı>>` türetilmiş indeks D-085 nested sınırına tabi.
 
-## D-086 — [YÜKSEK] `&Dizi<T>` referans param: codegen deref + built-in tip-kontrol tutarlılığı (2026-06-14)
+## D-089 — [YÜKSEK] `&Dizi<T>` referans param: codegen deref + built-in tip-kontrol tutarlılığı (2026-06-14)
+*(eski D-086; main self-host D-086 ile çakıştığından yeniden numaralandı)*
 
 **Karar [ETKİ: codegen doğruluk + tip-kontrol tutarlılık; izole commit].** İki
 yüzlü `&Dizi<T>` hatası:
@@ -115,7 +118,8 @@ PASS=93 FAIL=0. 0 uyarı. **Sınır:** `&Dizi` param girişte deref edildiği i�
 değişmez) — KEMGU referans semantiğinde nadir; içerik mutasyonu (asıl sözleşme)
 çalışır. Lokal `değişken r: &Dizi = &a` (param olmayan) bu commit'te kapsam dışı.
 
-## D-085 — [YÜKSEK] `[]` türetilmiş heap dizi tabanı (yapı-alanı / çağrı-dönüşü) — okuma+yazma heap-route (2026-06-14)
+## D-088 — [YÜKSEK] `[]` türetilmiş heap dizi tabanı (yapı-alanı / çağrı-dönüşü) — okuma+yazma heap-route (2026-06-14)
+*(eski D-085; main self-host D-085 ile çakıştığından yeniden numaralandı)*
 
 **Karar [ETKİ: codegen doğruluk; izole commit].** `[]` indeks operatörü yalnız
 düz `TANIMLAYICI + dinamik_dizi_mi` tabanlarda heap-route (kdl_dizi_al/yaz)
@@ -153,24 +157,178 @@ DEĞİL → mevcut çalışan stack-GEP yolu korunur (m[i][j] regresyonsuz); iç
 değişkene çıkarınca uzunluk metadata hâlâ bozuk (nested-literal stack temsili,
 ayrı sorun — D-082 inner-heap'e bağlı, deferred). &Dizi referansı D-086.
 
-## D-084 — [YÜKSEK] stack [N×T] dizi YAZMA OOB sınır-kontrolü (D-069 boşluğu) (2026-06-14)
+> **Not (merge):** PR #63'ün eski D-084'ü (stack `[N×T]` YAZMA OOB sınır-kontrolü)
+> bu main-merge'inde DÜŞÜRÜLDÜ — birebir aynı düzeltme main'de `a6d690d` / D-069
+> (Kategori 2) olarak zaten mevcut (`stack_uz` sınır-kontrolü, `src/llvm.c`). Kod
+> kaybı yok; yalnız çift kayıt önlendi. Düzeltmenin kendisi PR #63'ün
+> `src/llvm.c`'sinde KORUNUYOR.
 
-**Karar [ETKİ: codegen güvenlik; izole commit].** Sabit stack dizisinde (`değişken
-xs = [1,2,3]`) eleman YAZMA (`xs[i] = v`) OOB sınır-kontrolü EMİT EDİLMİYORDU →
-`xs[10] = 9` SESSİZ heap/stack buffer-overflow (exit 0). OKUMA yolu (DUGUM_INDEKS,
-`src/llvm.c:2104`) D-069 Kat.2 ile `icmp uge` + `kdl_panik` korumalıydı; YAZMA yolu
-(DUGUM_ATAMA→DUGUM_INDEKS stack `else` dalı) değildi.
+---
 
-**Çözüm:** Okuma yolunun aynası — yazma `else` dalında GEP+store'dan ÖNCE
-`stack_uz = vi->dizi_uzunluk` (TANIMLAYICI taban) ise `icmp uge i64 idx, N` +
-`kdl_panik`/`unreachable` + `bb_ok`. `güvensiz` blokta (`g->guvensiz_derinlik > 0`)
-ATLANIR (Rust opt-out modeli — okuma yoluyla simetrik).
+## D-087 — Bootstrap CHECKER kanıtı: 4 bileşenin TAMAMI self-host codegen ile doğru derlenir (2026-06-14)
 
-**Doğrulama:** `test/dizi_sinir_harness.sh` +3 vaka (vaka5w stack-yaz-OOB,
-vaka6w negatif-yaz, vaka7w geçerli-yaz) → 14/14. Tüm suite yeşil (llvm 235/235,
-tip_kontrol 174/174, parser 107/107). `asan_e2e_denetim.sh` PASS=91 FAIL=0.
-0 uyarı. **Sınır:** yalnız derleme-zamanı boyutu bilinen stack dizi (`dizi_uzunluk
-> 0`); heap KdlDizi yazma zaten runtime'da sınır-kontrollü (D-069 Kat.1, vaka3).
+**Karar [ETKİ: yalnız test/codegen_bootstrap_harness.sh; kaynak DEĞİŞMEDİ].** D-086'da codegen.kem
+DRIVER oldu (checker dâhil) ve self-host-codegen ile FIXPOINT'e derlendi — ama fixpoint yalnız
+DETERMİNİZM (stage1==stage2) kanıtlar, self-host-codegen-derlenmiş checker'ın DOĞRULUĞUNU değil.
+Bootstrap harness'a CHECKER bileşeni eklendi (lexer/parser ile aynı desen): self-host-codegen ile
+derlenen checker.kem'in `--checkdump` çıktısı, C-codegen ile derlenenle korpus üzerinde diff'lenir.
+
+**Sonuç:** `make calistir_codegen_bootstrap` artık LEXER 46 + PARSER 46 + **CHECKER 46** +
+CODEGEN FIXPOINT (stage1==stage2, 21728 satır) — **4 self-host bileşeninin TAMAMI** (lexer, parser,
+checker, codegen) self-host codegen tarafından DOĞRU derlenir (korpus: selfhost/*.kem + ornekler;
+3815-satır driver ve checker.kem'in kendisi dâhil). Bu, D-086 driver fixpoint'inin korelatif
+doğruluk kanıtı (yalnız determinizm değil). `make test_tumu` YEŞİL, 0 regresyon, 0 uyarı.
+
+**Not:** Bu, origin/feature/self-host-checker'daki 62dd7e8 (öksüz; main'e hiç merge olmadı) ile aynı
+amacı main hattında bağımsız gerçekler — D-086 driver state'i üzerine (checker artık driver'da).
+
+---
+
+## D-086 — 🎉 AŞAMA 4 driver: tek self-host kemgu binary (checker + 4-mod dispatch) + driver FIXPOINT (2026-06-14)
+
+**Karar [ETKİ: self-host birleştirme; C derleyici DEĞİŞMEDİ].** Aşama 1-3'te lexer/parser/checker/
+codegen AYRI self-host binary'lerdi; D-085 codegen self-compile fixpoint'i kanıtladı. Aşama 4 =
+`selfhost/codegen.kem`'i TEK birleşik KEMGU derleyici driver'ına dönüştürmek: checker mantığı +
+`--token/--parse/--check/--llvm` dispatch eklendi → `build/kemgu_self.exe`. **Sonuç D-085'i aşar:**
+birleşik driver da KENDİNİ fixpoint olarak üretir (self-host derleyici, checker dâhil).
+
+**Süreç notu (şeffaflık):** Bu iş ilk olarak bayat D-081 tabanı üzerinde [D-082] etiketiyle yapıldı
+(commit 20b5408, tag `asama4-d082-backup`) — ama gerçek D-082 = CG8 dizi (origin/main). Branch
+origin/main'e (9f66dc9; D-082..D-085 dahil) sıfırlandı ve driver **yeni** codegen.kem (2659 satır;
+CG8 dizi + CG7d + CG9a alloca-hoist + fixpoint) üzerine **yeniden** uygulandı, doğru D-086 ile.
+
+**KARAR 1 — Yer: codegen.kem YERİNDE.** `checker.kem`/`lexer.kem`/`parser.kem` DOKUNULMADI (Aşama 1-2
+referans; harness'ları yeşil). codegen.kem 2659→3820 satır. no-flag→--llvm varsayılan → mevcut
+`calistir_codegen_diff` VE `calistir_codegen_bootstrap` (`<file>`→IR çağrıları) bozulmaz.
+
+**KARAR 2 — Merge: front-end birebir, back-end union.** İki `Ayr` struct'ı lexer+parser+AST
+tablosunda ÖZDEŞ. Ortak-isimli alanlar (`yapi_ad/alan_tip/fn_ad`) PAYLAŞILIR (—check KEMGU tipiyle,
+—llvm LLVM tipiyle; ayrı invocation). Çatışma = tam 4: `ayr_olustur` (union init), `main` (dispatch),
+`karsilastirma_mi` (checker yalnız sıralı `<>` → **`sirali_kars_mi`** rename, codegen'in `==/!=`
+dahil olanıyla çakışmasın), `yapi_var_mi` (checker dup DROP — codegen `yapi_idx` ≡ checker
+`yapi_idx_bul`). 64 checker fonksiyonu (`duz_yaz` + `g_ekle`..`kontrol_program`) programatik port;
+sıfır duplicate (C checker T024 doğrular). CG8/CG9a'nın +12 fonksiyonu da çakışmaz.
+
+**KARAR 3 — `--token` lexer.kem'den PORT EDİLMEDİ.** lexer.kem `lex_dosya`/`emit` streaming;
+helper'ları (`sayi_emit`/`op_emit`) codegen'in tablo-tabanlı eşadlılarından divergent. Yeni
+`token_dump` codegen'in mevcut `lex_et` tablolarını (t_ad/t_sat/t_sut/t_off/t_uz) C `--token`
+formatında döker (lex_et isimleri C `token_tipi_adi` ile ampirik birebir).
+
+**Doğrulama (`make calistir_self_driver`):** HEM C-derlenmiş HEM **self-host-derlenmiş** driver
+(driver kendini derler → kemgu_self2) 4 modda da C oracle ile eşleşir: TOKEN 22/22, PARSE 12/12,
+CHECK 48/48, LLVM 56/56 (her iki driver). **FIXPOINT:** kemgu_self2'nin codegen.kem IR'ı kararlı
+(21728 satır). `make calistir_codegen_bootstrap` driver-ify codegen.kem ile: lexer 46 + parser 46 +
+codegen stage1==stage2 (21728 satır) ✓ — **birleşik derleyici self-hosting fixpoint.** `make
+test_tumu` YEŞİL (sıfır regresyon). 0 uyarı.
+
+**Sınırlamalar / sonraki:** (a) checker mantığı artık iki yerde (checker.kem Aşama 2 referansı +
+codegen.kem driver) — kasıtlı; tek-kaynağa indirgeme ileride. (b) `--check` checkdump formatı
+(test edilebilirlik); insan-okunur "OK/HATA" ayrımı ileride. (c) origin/feature/self-host-checker'ın
+D-071 lambda G004 + D-085 checker-bootstrap-proof commit'leri ayrı; bu iş onlardan bağımsız.
+
+---
+
+## D-085 — 🎉 AŞAMA 5 BOOTSTRAP FIXPOINT — codegen self-host KENDİNİ ÜRETİYOR (2026-06-14)
+
+**Karar [ETKİ: milestone — kod değişmedi, doğrulama].** KEMGU-yazılı codegen (selfhost/codegen.kem)
+gerçek bir self-host derleyici: ÜÇ bağımsız bootstrap kanıtı yeşil.
+
+**1) LEXER bootstrap (46/46):** codegen.exe ile derlenen lexer, TÜM self-host + ornekler korpusunda
+C-codegen lexer ile byte-identik token çıktısı (codegen.kem'in kendisi dahil — 26122 token).
+
+**2) PARSER bootstrap (46/46):** codegen.exe ile derlenen parser, aynı korpusta C-codegen parser ile
+byte-identik --ast (parser self-parse 9672, checker 16214, codegen 16397 AST satırı).
+
+**3) CODEGEN self-compile FIXPOINT:** codegen.exe (C-build, stage0) codegen.kem'i derler → stage1 IR
+(15114 satır) → codegen2.exe. codegen2.exe codegen.kem'i derler → stage2 IR. **stage1 == stage2,
+BYTE-IDENTİK.** = derleyici kendini sabit-nokta olarak yeniden üretiyor (self-hosting'in tanımlayıcı
+özelliği). Transitif: codegen2.exe lexer.kem IR'ı da codegen.exe ile birebir.
+
+**Bu fixpoint'i mümkün kılan son düzeltmeler:** D-072..D-084 (CG1-9: literal→ifade→deyim→kontrol→
+çağrı→multi-int→metin→yapı→dizi→hoist), önek-builtin (D-083), bool-lit MANTIKSAL fix (D-083,
+bootstrap'in yakaladığı), alloca-hoist (D-084, döngü yığın taşması). Semantik oracle (exit-kod)
++ byte-diff bootstrap oracle birlikte.
+
+**Doğrulama:** `test/codegen_bootstrap_harness.sh` (3 kanıt) Makefile `calistir_codegen_bootstrap`
+→ test_tumu. **Sınır/Sonraki:** (a) CHECKER (checker.kem) self-host ayrı iş (tip-kontrol, codegen
+değil) — checker_diff zaten 48/48 C-paritesinde; KEMGU-codegen-built checker bootstrap'i sıradaki;
+(b) codegen.kem CG9-üstü özellik kullanmıyor (çeşit/eşleş/lambda/modül yok) → o yollar korpus-test'li
+ama self-host'ta egzersiz edilmiyor; (c) AŞAMA 4 driver (tek `kemgu` binary'de lex+parse+check+codegen
+zinciri) ayrı paketleme işi.
+
+---
+
+## D-084 — AŞAMA 5 CG9a: alloca-hoist ön-pass → LEXER BOOTSTRAP TAM (46/46 birebir) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** D-083'te teşhis edilen alloca-in-loop
+yığın taşması düzeltildi. **alloca-hoist ön-pass:** `alloca_hoist_pass` işlev gövdesini gezip TÜM
+annotasyonlu DEGISKEN alloca'larını entry bloğuna çıkarır (döngü-içi `değişken` artık bir kez
+alloca → yığın sabit). `pa_node`/`pa_reg`/`pa_base` (düğüm→entry-reg eşlemi; shadow-güvenli, düğüm
+anahtarlı). DEGISKEN handler: annotasyonlu → hoist-edilmiş reg'i kullan (alloca yok), yalnız store;
+annotasyonsuz → inline (eski yol; self-host hepsi annotasyonlu, korpus nadir). C codegen D-041
+hoist_renumber ile AYNI amaç, farklı mekanizma (ön-pass vs tmpfile-buffer-renumber).
+
+**🎉🎉 LEXER BOOTSTRAP TAM — 46/46 BİREBİR (büyükler dahil):** codegen.exe ile derlenen lexer,
+parser.kem (15558 token), checker.kem (26398), **codegen.kem (26122 — kendini lex'ler)** dahil
+TÜM self-host kaynaklarında C-codegen-built lexer ile byte-identik. İlk TAM self-host fixpoint
+bileşeni: KEMGU-yazılı codegen'in ürettiği makine kodu, C derleyiciyle aynı davranan lexer veriyor.
+
+**Doğrulama:** oracle 56/56 (regresyon yok); `test/codegen_bootstrap_harness.sh` (KEMGU-codegen
+lexer vs C-codegen lexer diff) Makefile `calistir_codegen_bootstrap` → `test_tumu`. **Sonraki:**
+parser.kem bootstrap (--ast paritesi), sonra checker.kem (--checkdump), sonra codegen.kem
+self-compile (Aşama 5 tam fixpoint: codegen.exe codegen.kem'i derler → codegen2.exe → idempotent).
+
+---
+
+## D-083 — AŞAMA 3/5 CG7d + LEXER BOOTSTRAP: önek-builtin + bool-lit fix + alloca-hoist teşhisi (2026-06-14)
+
+**Karar [ETKİ: self-host codegen; C derleyici DEĞİŞMEDİ].** İlk gerçek bootstrap denemesi:
+codegen.exe (KEMGU-yazılı codegen) ile self-host kaynakları derle.
+
+**Builtin önek-eşleme (CG7d):** `builtin_kdl_ad` artık önek-tabanlı (`metin_`/`dosya_`/`yaz_`/
+`yazdir_`/`arg_`/`oku_karakter`/`ondalik_bicimle` → `kdl_*`), C codegen ile aynı. **Kritik gate:**
+önce `fn_var_mi` (kullanıcı işlevi mi) bakılır — `yaz_str`/`yaz_kacis` gibi `yaz_` önekli USER
+fonksiyonlarını builtin sanmamak için. `dizi_yaz` özel-case eklendi. Declare bloğu tam küme.
+
+**🔴 Bool-literal fix (bootstrap'in yakaladığı GERÇEK bug):** parser `doğru`/`yanlış` için
+`MANTIKSAL` düğümü (a_deg="1"/"0") üretir, `DOGRU`/`YANLIS` DEĞİL. CG2'deki varsayımım yanlıştı;
+hiçbir korpus testi çıplak bool literal kullanmadığından gizli kaldı. `iken doğru` → koşul "0"
+(fallthrough default) → döngü hiç girilmiyordu. ifade_uret `MANTIKSAL` → a_deg döndürür. 55/55.
+
+**🎉 LEXER BOOTSTRAP — 45/48 birebir:** codegen.exe lexer.kem'i derler → çalışan exe → C-codegen-
+built lexer ile **BYTE-IDENTİK çıktı** (test/ornekler + küçük korpus 45 dosya). İlk self-host
+fixpoint kanıtı.
+
+**🔴 TEŞHIS — alloca-in-loop yığın taşması (kalan bootstrap engeli):** 3 BÜYÜK dosya (parser/
+checker/codegen.kem) ~30KB+ girdide erken-temiz-çıkış (rc=0, çıktı capped). Kök-neden: "hoist-free"
+tasarımım `alloca`'yı DEGISKEN'in olduğu yere basar → DÖNGÜ İÇİ `değişken` her iterasyonda alloca
+→ yığın sınırsız büyür → ~binlerce iterasyonda taşma. C codegen D-041 hoist_renumber ile tam da
+bunu önler. Korpus döngüleri az iterasyon (gizli kaldı); lexer binlerce. **Düzeltme (sonraki):**
+DEGISKEN alloca'larını entry bloğuna hoist eden ön-pass (annotasyon→ll_tip; annotasyonsuz→tip_cikar).
+
+---
+
+## D-082 — AŞAMA 3 CG8: dizi (heap KdlDizi + []-literal + element-tip polimorfik builtin) (2026-06-14)
+
+**Karar [ETKİ: self-host codegen genişletme; C derleyici DEĞİŞMEDİ].** codegen.kem'in son büyük
+bağımlılığı (dizi_al 95× / dizi_ekle 89× / dizi_boyut 20× + `[]` init). Element-tip izleme:
+`cg_aelem` (Dizi değişkeni eleman tipi) + `alan_elem` (Dizi alanı) + `beklenen_elem` (`[]` bağlamı)
++ `son_elem` (sonuç). Yardımcılar: `ll_eleman_tip` (TIP_DIZI→eleman), `dizi_eleman_byte`
+(ptr/i64→8, diğer→4), `dizi_ekle_sonek`/`dizi_al_sonek`/`dizi_arg_tip`/`dizi_al_rettip`.
+
+**`[]` (DIZI_OLUSTUR):** `call ptr @kdl_dizi_olustur(i32 <byte>)` (boş = sadece oluştur; runtime
+boyut/kapasite=0, ekle'de büyür) + non-empty için her eleman `ekle`. Eleman byte = `beklenen_elem`
+(annotasyon/alan bağlamından). **dizi_ekle:** DEĞER tipine göre route (ptr→ekle_ptr, i64→ekle_tam64,
+else→ekle_tam). **dizi_al:** DİZİNİN eleman tipine göre route (`son_elem` arg[0]'dan); ptr→al_ptr/ptr,
+i64→al_tam64/i64, else→al_tam/i32. **dizi_boyut→i32.** INDEKS (`xs[i]`) = dizi_al eşi. `metin`/`Dizi`
+alanları `ptr` (8-byte slot ptr-eleman ile tutarlı).
+
+**Doğrulama:** test/cg_korpus 54 program (+6 CG8: temel/boyut/literal/indeks/**Dizi&lt;metin&gt;**/
+**struct-ref-dizi_ekle**). 54/54 exit eşdeğer. struct-ref IR doğru (load ptr→GEP→load Dizi→ekle —
+self-host tok_ekle deseni); Dizi&lt;metin&gt; → `olustur(i32 8)`+`ekle_ptr`+`al_ptr`. **Sonraki:**
+self-compile denemesi (codegen.exe ile lexer/parser.kem derle) + CG9 (kullanılan kalan: çeşit/eşleş?).
+
+---
 
 ## D-081 — AŞAMA 3 CG7c: yapı by-reference (&Yapi param + alan mutasyonu) (2026-06-14)
 
@@ -540,6 +698,19 @@ opt -passes=verify PASS; ASan temiz (panic erişimden önce → 0 OOB raporu); 0
 **Opt-out (perf, Rust modeli):** `LlvmGen.guvensiz_derinlik` — `güvensiz` blok içinde stack
 sınır-kontrolü ATLANIR (vaka8: güvensiz arr[i] → 0 panic-IR; dışında → kontrollü). Varsayılan
 güvenli, opt-out açık+işaretli+programcı sorumluluğunda.
+
+**FOLLOW-UP — Cat2 stack YAZMA deliği kapandı (2026-06-14):** İlk Cat2 implementasyonu yalnız
+**OKUMA** yolunu (`DUGUM_INDEKS` → GEP+load) sınır-kontrol etti; **YAZMA** yolu (`DUGUM_ATAMA`
+hedefi `DUGUM_INDEKS`, `arr[i]=v`, src/llvm.c) kontrolsüz GEP+store yapıyordu → sessiz stack
+taşması (kabul-ama-sessizce-yanlış: `arr[10]=9` rc=0). Heap yazma (D-083 `kdl_dizi_yaz_*`)
+zaten runtime'da kontrollüydü; delik yalnız stack yazma codegen'ineydi. **Fix:** yazma dalında
+`LlvmIsim.dizi_uzunluk` ile okuma yolunun aynısı GEP+store'dan ÖNCE (`icmp uge i64 idx, N` →
+`@kdl_panik(@.str.dizi_sinir_panik)` + unreachable). `güvensiz` opt-out yazmada da geçerli
+(`guvensiz_derinlik==0` gate). Bölge-`*T` yolu (`pointee_elem`) `dizi_uzunluk=0` → kontrolsüz
+(uzunluk yok, Cat3 ile tutarlı). **Doğrulama:** harness'a vaka5b/6b (OOB/negatif yazma →
+PANIC), vaka7c (geçerli yazma → rc=9), vaka8b (güvensiz yazma → 0 panic-IR) eklendi →
+`calistir_dizi_sinir_test` **15/15**; test_llvm **235/235**; codegen korpus 48/48; test_tumu
+yeşil; 0 uyarı.
 
 **KATEGORİ 3 (ham `*T` bölge-tabanı) — KARAR: güvensiz-only opt-out, ZATEN ENFORCE [inceleme
 tamam]:** Firsthand bulgu: (1) bölge-container UZUNLUK TAŞIMIYOR — `kdl_bolge_ayir(a, boyut)`

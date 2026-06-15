@@ -76,8 +76,9 @@ panic_bekle vaka6_stack_negatif 'işlev main() -> tam32 {
     değişken arr = [1, 2, 3];
     ver arr[0 - 1];
 }'
-# D-084: stack [N×T] YAZMA OOB — okuma yolu (vaka5/6) korumalıydı ama yazma
-# yolu kontrolsüzdü → `arr[10]=9` SESSİZ buffer-overflow (rc=0). Artık PANIC.
+# D-069 Kat.2: stack [N×T] YAZMA OOB — okuma yolu (vaka5/6) korumalıydı ama yazma
+# yolu kontrolsüzdü → `arr[5]=9` SESSİZ buffer-overflow (rc=0). Artık PANIC.
+# (Düzeltme main'de D-069/a6d690d; PR #63'te `stack_uz` olarak özdeş — merge notu.)
 panic_bekle vaka5w_stack_oob_yaz 'işlev main() -> tam32 {
     değişken arr = [1, 2, 3];
     arr[5] = 9;
@@ -101,7 +102,7 @@ deger_bekle vaka7b_stack_gecerli 60 'işlev main() -> tam32 {
     değişken arr = [10, 20, 30];
     ver arr[0] + arr[1] + arr[2];
 }'
-# D-085: TÜRETİLMİŞ heap dizi tabanı `[]` (yapı-alanı / çağrı-dönüşü) — eskiden
+# D-088: TÜRETİLMİŞ heap dizi tabanı `[]` (yapı-alanı / çağrı-dönüşü) — eskiden
 # KdlDizi* descriptor'ını düz veri sanıp GEP yapıyordu (sessiz-yanlış / segfault).
 deger_bekle vaka11_erisim_oku 42 'yapı Kap { xs: Dizi<tam32>; }
 işlev main() -> tam32 {
@@ -130,7 +131,7 @@ işlev main() -> tam32 {
     değişken k: Kap = Kap { xs: [1, 2, 3] };
     ver k.xs[9];
 }'
-# D-086: &Dizi<T> referans param — girişte deref → normal heap dizi. dizi_al/
+# D-089: &Dizi<T> referans param — girişte deref → normal heap dizi. dizi_al/
 # dizi_boyut/[] tutarlı (eskiden çift-pointer çöp/PANIK; dizi_boyut(&Dizi) T001).
 deger_bekle vaka16_ref_dizi_al 7 'işlev oku(xs: &Dizi<tam32>) -> tam32 { ver dizi_al(xs, 0); }
 işlev main() -> tam32 {
@@ -154,7 +155,7 @@ işlev main() -> tam32 {
     değişken r: tam32 = yaz(&değişken a);
     ver dizi_al(a, 0);
 }'
-# D-087: by-value YAPI elemanlı dizi (Dizi<Yapı>). Eskiden skaler i32 getter +
+# D-090: by-value YAPI elemanlı dizi (Dizi<Yapı>). Eskiden skaler i32 getter +
 # eleman_byte=4 (truncation/link-fail); artık kdl_dizi_*_yapi memcpy + sizeof.
 deger_bekle vaka20_struct_indeks_oku 42 'yapı Nokta { x: tam32; y: tam32; }
 işlev main() -> tam32 {
@@ -188,11 +189,11 @@ işlev main() -> tam32 {
     değişken p: Nokta = dizi_al(ps, 9);
     ver p.x;
 }'
-# D-088: İÇ-İÇE Dizi<Dizi<T>> — iç diziyi değişkene çıkarınca uzunluk metadata.
+# D-091: İÇ-İÇE Dizi<Dizi<T>> — iç diziyi değişkene çıkarınca uzunluk metadata.
 # Eskiden iç literal `[1,2]` stack [N×T] (KdlDizi* değil) → dış heap dizi stack
 # ptr tutuyordu: `inner = m[0]; dizi_boyut(inner)` 1 (gerçek 2), `dizi_al` PANİK.
 # Artık iç literal heap (DEGISKEN heap path beklenen_tip'i iç tipe ayarlıyor) +
-# `m[i][j]` nested INDEKS heap-route (heap_dizi_eleman_ast). Bkz. D-085/D-087.
+# `m[i][j]` nested INDEKS heap-route (heap_dizi_eleman_ast). Bkz. D-088/D-090.
 # Önce: m[i][j] KORUNUR (regresyon yapma) —
 deger_bekle vaka25_icice_indeks 4 'işlev main() -> tam32 {
     değişken m: Dizi<Dizi<tam32>> = [[1, 2], [3, 4]];
@@ -239,6 +240,23 @@ opt_out_kontrol() {
     else echo "  🔴 $ad: panik-IR=$pc rc=$rc (0 + 20 bekle)"; fail=$((fail+1)); fi
 }
 opt_out_kontrol
+# vaka8b: güvensiz YAZMA opt-out — stack indeks-yazma güvensiz blokta sınır-kontrolsüz.
+opt_out_yazma_kontrol() {
+    local ad="vaka8b_guvensiz_yaz_optout"
+    printf '%s\n' 'işlev main() -> tam32 {
+    değişken arr = [10, 20, 30];
+    güvensiz { arr[1] = 5; }
+    ver 0;
+}' > "$TMP/$ad.kem"
+    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    local pc; pc=$(grep -c 'call void @kdl_panik' "$TMP/$ad.ll")
+    clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
+    "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
+    if [ "$pc" -eq 0 ] && [ "$rc" -eq 0 ]; then
+        echo "  ✅ $ad: sınır-kontrol IR yok + rc=0 (yazma opt-out + geçerli)"; pass=$((pass+1));
+    else echo "  🔴 $ad: panik-IR=$pc rc=$rc (0 + 0 bekle)"; fail=$((fail+1)); fi
+}
+opt_out_yazma_kontrol
 # vaka9: stack-array DEĞİŞKENİ Dizi<T> param'a → checker G003 reddi (çökmeden ÖNCE).
 g003_reddi() {
     local ad="vaka9_g003_reddi"

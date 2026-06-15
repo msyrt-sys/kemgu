@@ -1,0 +1,1 @@
+işlev main() -> tam32 { değişken ss: Dizi<metin> = []; dizi_ekle(ss, "ab"); dizi_ekle(ss, "cde"); ver metin_uzunluk(dizi_al(ss, 0)) + metin_uzunluk(dizi_al(ss, 1)) + 37; }
