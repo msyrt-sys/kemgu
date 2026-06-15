@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-088 — [YÜKSEK] İç-içe `Dizi<Dizi<T>>` — iç dizi literali heap + nested `m[i][j]` heap-route (2026-06-14)
+
+**Karar [ETKİ: codegen doğruluk; izole commit].** İç-içe dizi literali
+`[[1,2],[3,4]]`'in İÇ dizileri (`[1,2]`, `[3,4]`) heap `KdlDizi*` değil, STACK
+`[N×T]` olarak depolanıyordu (dış heap dizi onlara düz ptr tutuyor). Sonuç:
+- `m[1][1]` ÇALIŞIYORDU (iç stack `[2×i32]` üzerinde düz GEP doğru) — bu yüzden
+  hata gizliydi.
+- İç diziyi değişkene çıkarınca uzunluk metadata BOZUK: `inner = m[0];
+  dizi_boyut(inner)` → 1 (gerçek 2); `dizi_al(inner, i)` → PANİK (`boyut=1`).
+  Çünkü `m[0]` stack `[2×i32]` ptr (KdlDizi* descriptor değil); `kdl_dizi_boyut`
+  descriptor'ın ilk alanı sanıp `inner[0]` = 1 okuyor.
+
+**Kök-neden:** DEGISKEN dedicated heap path (`değişken d: Dizi<T> = [..]`) iç
+elemanları üretirken `g->beklenen_tip`'i AST eleman tipine SET ETMİYORDU (yalnız
+IR string `eleman_tip` geçiyor) → iç `[1,2]` `DUGUM_DIZI_OLUSTUR`'da beklenen_tip
+`DUGUM_TIP_DIZI` görmeyip stack dalına düşüyordu. D-085/D-087 dizi-indeks
+serisinin BİLEREK ERTELENMİŞ son parçası (D-085 ve D-087 "Sınır" notları).
+
+**Çözüm (llvm.c) — `m[i][j]`'yi BOZMADAN:**
+1. **İç literal heap:** DEGISKEN heap literal path'te eleman döngüsünü
+   `g->beklenen_tip = <iç dizi AST tipi>` ile sarmala → iç `[1,2]`
+   `DUGUM_DIZI_OLUSTUR` heap yolunu seçer (heap `KdlDizi*`). Dış dizi artık iç
+   descriptor'ları (`ptr`) tutar.
+2. **AST eleman tipi izleme:** `LlvmIsim`'e `const Dugum *eleman_tip_ast`
+   (`eleman_llvm_tip="ptr"` iç diziyi gizlerken gerçek AST'yi saklar). DEGISKEN
+   (literal + annot heap) ve param (`Dizi` + `&Dizi`) sitelerinde set.
+3. **Nested INDEKS heap-route:** `turetilmis_heap_dizi_eleman` (IR döndüren,
+   ERISIM/CAGRI) → `heap_dizi_eleman_ast` (AST döndüren ortak çözümleyici:
+   TANIMLAYICI + nested INDEKS + ERISIM + CAGRI). `m[i][j]`: `m[i]` artık heap
+   `KdlDizi*` → `[j]` recursive olarak `kdl_dizi_al`'a route edilir (eski
+   stack-GEP iç descriptor'ı i32 okuyup BOZARDI → regresyon olurdu). `[]`
+   okuma+yazma her ikisi.
+4. **Struct iç eleman:** `Dizi<Dizi<Yapı>>` by-value yolu (D-087
+   `dizi_struct_al_emit` / `kdl_dizi_*_yapi`) `heap_dizi_eleman_ast` üzerinden
+   kapsanır (`et[0]=='%'`).
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (iç-içe oku KORUNUR `m[1][1]=4`,
+inner boyut=2, inner dizi_al=2, nested yazma `m[0][1]=99`, dış-indeks OOB PANIC)
+→ 33/33. `test/ornekler/icice_dizi.kem` (matris satır çıkarma + döngü, exit 42,
+ASan auto-discovery). Tüm suite yeşil; `asan_e2e` PASS=95 FAIL=0; 0 uyarı
+(-Wall -Wextra -Wpedantic). Üçlü iç-içe (`Dizi<Dizi<Dizi<T>>>`), `tam64` iç
+eleman, `Dizi<Dizi<Yapı>>` by-value elle doğrulandı. ERISIM/CAGRI tek-indeks
+(D-085) regresyonsuz (`heap_dizi_eleman_ast` aynı IR'i üretir).
+
+**Sınır:** `dizi_olustur(N)` explicit-builtin iç-içe için kapsam-dışı (literal
+`[...]` yolu doğru; D-087'deki gibi explicit dizi_olustur nadir). Test edilen
+heap tabanlar: düz değişken/param `Dizi<Dizi<...>>` (üçlü derinliğe kadar) +
+tek-indeks ERISIM/CAGRI. İç-içe dizinin yapı ALANI olduğu zincirler (`k.m[i][j]`)
+`heap_dizi_eleman_ast` ile çözülür ancak iç literal heap'liği yapı-oluştur yoluna
+bağlı olduğundan ayrıca test edilmedi (gelecek).
+
 ## D-087 — [YÜKSEK] `Dizi<Yapı>` by-value struct eleman (skaler-i32 varsayımı kaldırıldı) (2026-06-14)
 
 **Karar [ETKİ: runtime + codegen; izole commit].** `Dizi<Yapı>` (struct elemanlı
