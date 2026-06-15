@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-094 — [YÜKSEK] C checker G004 — işlev/lambda-tipli değişken YENİDEN-ATANAMAZ (accept-but-crash kapatma; öksüz fix backport) (2026-06-15)
+
+**Karar [ETKİ: C checker doğruluk/bellek-güvenliği; izole commit].** `src/tip_kontrol.c`
+`DUGUM_ATAMA` handler'ına (T022 lvalue kontrolünden hemen sonra, ~satır 4491) G004
+reddi eklendi: hedef **TANIMLAYICI** ve tipi **TIP_ISLEV** (işlev/lambda) ise atama
+**reddedilir**. Bu, `feature/self-host-checker` dalında ZATEN var olan ama `main`'in C
+checker'ında BULUNMAYAN bir **öksüz fix**'in birebir backport'udur (kaynak:
+`origin/feature/self-host-checker:src/tip_kontrol.c` ~satır 4490-4496).
+
+**Kök-neden (KARMA closure temsili — değere bağlı):** Bir işlev/lambda değerinin runtime
+temsili **yakalama-durumuna** bağlı: yakalamasız lambda / top-level fn → bare fn-ptr;
+yakalamalı lambda → closure `{fn, env}`. Çağrı yeri statik `closure_mu` bayrağına göre
+dispatch eder (bağlama anında sabitlenir). İşlev-tipli bir değişken **farklı**
+yakalama-durumlu bir değerle YENİDEN atanırsa → temsil uyumsuzluğu → çağrıda bare-ptr'ı
+closure sanıp deref → **access-violation / SEGFAULT** (accept-but-crash, **[YÜKSEK]**).
+Mehmet'in seçtiği V1 ucuz-güvenli çözüm: compile-time reddet (çökmezlik #1); programcı
+yeni bir `değişken` ile bağlasın.
+
+**Çözüm (`src/tip_kontrol.c`, DUGUM_ATAMA — T022'den sonra, T001/bidirectional'dan önce):**
+`TipBilgisi *ht = tip_belirle(tk, hedef);` ardından `hedef->tip == DUGUM_TANIMLAYICI &&
+ht->kategori == TIP_ISLEV` ise `tip_hata(tk, d, "G004", ...)` + `break`. Hata mesajı
+ASCII-güvenli (Türkçe `\x` hex-escape kuralı gereği string literal'de Türkçe karakter
+yok). ERISIM/INDEKS hedefler (`o.alan = v`, `arr[i] = v`) ETKİLENMEZ — yalnız çıplak
+TANIMLAYICI yeniden-bağlaması reddedilir.
+
+**Doğrulama:** `test/test_tip_kontrol.c`'ye 4 yeni vaka (175-178): (1) lambda lokali
+yeniden atama → hata, (2) yakalama-durumu divergent yeniden atama → hata, (3) tek-atama
+lambda bildirimi → 0 hata (yanlış-pozitif yok), (4) lambda-OLMAYAN yeniden atama
+(`x = 7`) → 0 hata (over-reject yok). `tip_kontrol` harness 178/178 yeşil. E2E
+(`kemgu.exe --check`): lambda yeniden-atama programı → `hata[G004]` (exit 1); `tam32`
+yeniden-atama programı → `OK` (exit 0). `make test_tumu` → "Tum testler gecti!" (tam
+yeşil). Sıfır derleyici uyarısı (`-Wall -Wextra -Wpedantic`).
+
+**Sınır/Not:** Kapsam **YALNIZ C checker** (`src/tip_kontrol.c`). Self-host
+`selfhost/checker.kem` lambda kullanmıyor → self-host port ŞİMDİLİK GEREKMEZ (mirror-gap
+yok). V1 ucuz-güvenli reddetme; tam değer-akışı / yakalama-durumu izlemeyle koşullu izin
+V2'ye ertelendi (D-072 ailesi). Öksüz fix backport — main'de eşi yoktu. İzole commit;
+base `main`, **MERGE EDİLMEDİ** (orchestrator denetler, Mehmet merge eder).
+
+---
+
 ## D-093 — [YÜKSEK] Self-host codegen INDEKS-atama (`arr[i] = v`) — sessiz düşme (accept-but-miscompile) kapatma (2026-06-15)
 
 **Karar [ETKİ: self-host codegen doğruluk; izole commit].** `selfhost/codegen.kem`
