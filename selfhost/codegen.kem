@@ -2486,6 +2486,19 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             ver 0;
         }
+        // CG8b: lhs INDEKS (arr[i] = v) — heap KdlDizi yazma; dizi_yaz built-in'iyle AYNI emisyon.
+        // (HEAP-uniform: her dizi KdlDizi* → kdl_dizi_yaz_* route; sınır kontrolü runtime'da.)
+        eğer metin_esit(dizi_al(p.a_ad, lhs), "INDEKS") {
+            değişken lcb: tam32 = dizi_al(p.a_cb, lhs);
+            değişken taban: metin = ifade_uret(p, dizi_al(p.cocuk, lcb));       // dizi → ptr
+            değişken iy2: metin = ifade_uret(p, dizi_al(p.cocuk, lcb + 1));     // indeks → i32
+            değişken vy2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));      // değer
+            değişken vty2: metin = p.son_tip;                                  // değer LLVM tipi
+            yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty2)); yaz_str("(ptr ");
+            yaz_str(taban); yaz_str(", i32 "); yaz_str(iy2); yaz_str(", "); yaz_str(dizi_arg_tip(vty2));
+            yaz_str(" "); yaz_str(vy2); yaz_str(")"); yb(10);
+            ver 0;
+        }
         ver 0;
     }
     eğer metin_esit(ad, "IFADE_DEYIMI") {
