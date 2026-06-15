@@ -5,6 +5,166 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-091 — [YÜKSEK] İç-içe `Dizi<Dizi<T>>` — iç dizi literali heap + nested `m[i][j]` heap-route (2026-06-14)
+*(eski D-088; main self-host serisi D-082..D-087 ile çakışan dizi-indeks ailesi yeniden numaralandığından kaydırıldı)*
+
+**Karar [ETKİ: codegen doğruluk; izole commit].** İç-içe dizi literali
+`[[1,2],[3,4]]`'in İÇ dizileri (`[1,2]`, `[3,4]`) heap `KdlDizi*` değil, STACK
+`[N×T]` olarak depolanıyordu (dış heap dizi onlara düz ptr tutuyor). Sonuç:
+- `m[1][1]` ÇALIŞIYORDU (iç stack `[2×i32]` üzerinde düz GEP doğru) — bu yüzden
+  hata gizliydi.
+- İç diziyi değişkene çıkarınca uzunluk metadata BOZUK: `inner = m[0];
+  dizi_boyut(inner)` → 1 (gerçek 2); `dizi_al(inner, i)` → PANİK (`boyut=1`).
+  Çünkü `m[0]` stack `[2×i32]` ptr (KdlDizi* descriptor değil); `kdl_dizi_boyut`
+  descriptor'ın ilk alanı sanıp `inner[0]` = 1 okuyor.
+
+**Kök-neden:** DEGISKEN dedicated heap path (`değişken d: Dizi<T> = [..]`) iç
+elemanları üretirken `g->beklenen_tip`'i AST eleman tipine SET ETMİYORDU (yalnız
+IR string `eleman_tip` geçiyor) → iç `[1,2]` `DUGUM_DIZI_OLUSTUR`'da beklenen_tip
+`DUGUM_TIP_DIZI` görmeyip stack dalına düşüyordu. D-085/D-087 dizi-indeks
+serisinin BİLEREK ERTELENMİŞ son parçası (D-085 ve D-087 "Sınır" notları).
+
+**Çözüm (llvm.c) — `m[i][j]`'yi BOZMADAN:**
+1. **İç literal heap:** DEGISKEN heap literal path'te eleman döngüsünü
+   `g->beklenen_tip = <iç dizi AST tipi>` ile sarmala → iç `[1,2]`
+   `DUGUM_DIZI_OLUSTUR` heap yolunu seçer (heap `KdlDizi*`). Dış dizi artık iç
+   descriptor'ları (`ptr`) tutar.
+2. **AST eleman tipi izleme:** `LlvmIsim`'e `const Dugum *eleman_tip_ast`
+   (`eleman_llvm_tip="ptr"` iç diziyi gizlerken gerçek AST'yi saklar). DEGISKEN
+   (literal + annot heap) ve param (`Dizi` + `&Dizi`) sitelerinde set.
+3. **Nested INDEKS heap-route:** `turetilmis_heap_dizi_eleman` (IR döndüren,
+   ERISIM/CAGRI) → `heap_dizi_eleman_ast` (AST döndüren ortak çözümleyici:
+   TANIMLAYICI + nested INDEKS + ERISIM + CAGRI). `m[i][j]`: `m[i]` artık heap
+   `KdlDizi*` → `[j]` recursive olarak `kdl_dizi_al`'a route edilir (eski
+   stack-GEP iç descriptor'ı i32 okuyup BOZARDI → regresyon olurdu). `[]`
+   okuma+yazma her ikisi.
+4. **Struct iç eleman:** `Dizi<Dizi<Yapı>>` by-value yolu (D-087
+   `dizi_struct_al_emit` / `kdl_dizi_*_yapi`) `heap_dizi_eleman_ast` üzerinden
+   kapsanır (`et[0]=='%'`).
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (iç-içe oku KORUNUR `m[1][1]=4`,
+inner boyut=2, inner dizi_al=2, nested yazma `m[0][1]=99`, dış-indeks OOB PANIC)
+→ 33/33. `test/ornekler/icice_dizi.kem` (matris satır çıkarma + döngü, exit 42,
+ASan auto-discovery). Tüm suite yeşil; `asan_e2e` PASS=95 FAIL=0; 0 uyarı
+(-Wall -Wextra -Wpedantic). Üçlü iç-içe (`Dizi<Dizi<Dizi<T>>>`), `tam64` iç
+eleman, `Dizi<Dizi<Yapı>>` by-value elle doğrulandı. ERISIM/CAGRI tek-indeks
+(D-085) regresyonsuz (`heap_dizi_eleman_ast` aynı IR'i üretir).
+
+**Sınır:** `dizi_olustur(N)` explicit-builtin iç-içe için kapsam-dışı (literal
+`[...]` yolu doğru; D-087'deki gibi explicit dizi_olustur nadir). Test edilen
+heap tabanlar: düz değişken/param `Dizi<Dizi<...>>` (üçlü derinliğe kadar) +
+tek-indeks ERISIM/CAGRI. İç-içe dizinin yapı ALANI olduğu zincirler (`k.m[i][j]`)
+`heap_dizi_eleman_ast` ile çözülür ancak iç literal heap'liği yapı-oluştur yoluna
+bağlı olduğundan ayrıca test edilmedi (gelecek).
+
+## D-090 — [YÜKSEK] `Dizi<Yapı>` by-value struct eleman (skaler-i32 varsayımı kaldırıldı) (2026-06-14)
+*(eski D-087; main self-host D-087 ile çakıştığından yeniden numaralandı)*
+
+**Karar [ETKİ: runtime + codegen; izole commit].** `Dizi<Yapı>` (struct elemanlı
+dizi) skaler `kdl_dizi_ekle_tam`/`kdl_dizi_al_tam` (i32) + `eleman_byte=4` ile
+derleniyordu → 8+ baytlık yapı **truncation** (alanlar sessizce kaybolur,
+`ps[0].x+ps[0].y` yanlış) + `değişken p: Yapı = dizi_al(ps,i)` GEÇERSİZ IR
+(`call %Yapi @kdl_dizi_al_tam` — i32 dönüş ile uyumsuz) → **link-fail**.
+
+**Çözüm:**
+- **runtime (kdl_runtime.c):** üç by-value memcpy fonksiyonu —
+  `kdl_dizi_ekle_yapi(d, src)`, `kdl_dizi_al_yapi(d, i, dst)`,
+  `kdl_dizi_yaz_yapi(d, i, src)`. Eleman boyutu `d->eleman_byte` (descriptor'dan).
+  al/yaz OOB → PANIC (D-069 sınıfı).
+- **codegen (llvm.c):** `dizi_eleman_struct_mi(et)` (`et[0]=='%'`) tüm dizi
+  sitelerinde (literal ekle, değişken-annot heap, dizi_ekle/al/yaz built-in,
+  `[]` okuma TANIMLAYICI+türetilmiş, `[]` yazma) struct dalı:
+  ekle = store-to-temp + ekle_yapi; al = alloca dst + al_yapi + load; yaz =
+  store-to-temp + yaz_yapi. **eleman_byte** struct için `kdl_eleman_byte_yaz`
+  ile LLVM `sizeof` const-expr (`ptrtoint (getelementptr (%Yapi, null, 1))`) →
+  padding/alignment LLVM layout'uyla BİREBİR (C tarafı elle hesap miscompile riski).
+- Skaler/ptr yolları DEĞİŞMEDİ (`et[0]=='%'` guard'ı yalnız struct'ta devreye girer).
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (struct [] oku/yaz, dizi_al,
+{tam8,tam64} padding, struct OOB PANIC) → 28/28.
+`test/ornekler/dizi_yapi_eleman.kem` (exit 42, ASan auto-discovery; padding +
+by-value yazma + dizi_al-struct). Tüm suite yeşil (28 paket). `asan_e2e` PASS=94
+FAIL=0 (memcpy-tabanlı, heap-overflow yok). 0 uyarı. **Sınır:** `dizi_olustur(N)`
+explicit-builtin'i struct için eleman_byte hâlâ skaler-varsayım (literal `[...]`
+yolu doğru; explicit dizi_olustur+struct nadir — gelecekte). İç-içe
+`Dizi<Dizi<Yapı>>` türetilmiş indeks D-085 nested sınırına tabi.
+
+## D-089 — [YÜKSEK] `&Dizi<T>` referans param: codegen deref + built-in tip-kontrol tutarlılığı (2026-06-14)
+*(eski D-086; main self-host D-086 ile çakıştığından yeniden numaralandı)*
+
+**Karar [ETKİ: codegen doğruluk + tip-kontrol tutarlılık; izole commit].** İki
+yüzlü `&Dizi<T>` hatası:
+1. **Codegen (çöp/PANIK):** `&a` çağrı argümanı, heap dizi değişkeninin SLOT
+   adresini (`KdlDizi**` — çift pointer) geçiyor; callee bunu doğrudan `KdlDizi*`
+   sanıp `dizi_al`/`[]` ile indeksliyordu → descriptor'ın kendisini veri okuyordu.
+2. **Tip-kontrol (tutarsız):** `dizi_al(&Dizi)` SESSİZCE kabul (t_hata, rapor yok),
+   `dizi_boyut(&Dizi)` T001 reddi — aynı argüman biçimi iki built-in'de farklı.
+
+**Çözüm:**
+- **llvm.c (param girişi):** `&Dizi<T>` / `&değişken Dizi<T>` param girişte BİR KEZ
+  deref edilir (`load ptr` → `KdlDizi*`) ve alloca'ya o yazılır → sonrası NORMAL
+  heap dizi (dinamik_dizi_mi=1, eleman tipi referans hedefinden). `dizi_al`/
+  `dizi_yaz`/`dizi_boyut`/`[]` ek deref gerektirmez. Mutasyon (`dizi_yaz`) paylaşılan
+  descriptor üzerinden çağırana yansır (referans semantiği korunur).
+- **tip_kontrol.c:** ortak `dizi_arg_coz(t)` — `Dizi<T>` ya da `&Dizi<T>` →
+  altındaki Dizi tipini (referansı soyarak) döner. Tüm dizi built-in'leri
+  (ekle/al/yaz/boyut/kapasite/kapasite_ayarla) bunu kullanır → `&Dizi` tutarlı kabul.
+
+**Doğrulama:** `dizi_sinir_harness.sh` +4 vaka (ref dizi_al / dizi_boyut / [] /
+mutasyon-çağırana-yansır) → 23/23. `test/ornekler/dizi_referans_param.kem`
+(exit 42, ASan auto-discovery). Tüm suite yeşil (tip_kontrol dahil). `asan_e2e`
+PASS=93 FAIL=0. 0 uyarı. **Sınır:** `&Dizi` param girişte deref edildiği için
+`xs = başka_dizi` (referansı yeniden bağlama) callee-yerel kalır (çağıranın slot'u
+değişmez) — KEMGU referans semantiğinde nadir; içerik mutasyonu (asıl sözleşme)
+çalışır. Lokal `değişken r: &Dizi = &a` (param olmayan) bu commit'te kapsam dışı.
+
+## D-088 — [YÜKSEK] `[]` türetilmiş heap dizi tabanı (yapı-alanı / çağrı-dönüşü) — okuma+yazma heap-route (2026-06-14)
+*(eski D-085; main self-host D-085 ile çakıştığından yeniden numaralandı)*
+
+**Karar [ETKİ: codegen doğruluk; izole commit].** `[]` indeks operatörü yalnız
+düz `TANIMLAYICI + dinamik_dizi_mi` tabanlarda heap-route (kdl_dizi_al/yaz)
+ediyordu; TÜRETİLMİŞ heap `Dizi<T>` tabanları (yapı-alanı `k.xs`, `Dizi<T>` dönen
+işlev `yap()`) KdlDizi* DESKRİPTÖRÜNÜ düz veri sanıp GEP yapıyordu →
+**accept-but-silently-wrong** okuma (çöp değer) + **accept-but-crash** yazma
+(segfault). Karşıtlık: `dizi_al`/`dizi_yaz`/`dizi_boyut` built-in'leri aynı
+tabanlarda DOĞRU — taban reg'i (KdlDizi*) doğru üretiliyor, yalnız `[]`
+lowering'i onu raw buffer sanıyordu (D-083 "Sınır" notunda kapsam-dışı işaretliydi).
+
+**Çözüm (src/llvm.c):**
+- Ortak `turetilmis_heap_dizi_eleman(g, nesne)` çözümleyici: ERISIM (yapı alanı
+  `Dizi<T>` → `dizi_alan_eleman_ir`) ve CAGRI (`Dizi<T>` dönen işlev →
+  `islev_bul` + dönüş tipi AST'sinden eleman IR). Değilse NULL → stack GEP.
+- Okuma (DUGUM_INDEKS): TANIMLAYICI fast-path'in ARDINDAN türetilmiş taban
+  heap ise `kdl_dizi_al_<tip>` route (`ifade_uret(taban)` zaten KdlDizi* verir).
+- Yazma (DUGUM_ATAMA→DUGUM_INDEKS): TANIMLAYICI heap yazma artık DÜŞMÜYOR
+  (eski "kdl_dizi_yaz_eleman yok" yorumu geçersiz — runtime'da `kdl_dizi_yaz_*`
+  VAR); türetilmiş heap yazma da `kdl_dizi_yaz_<tip>` route.
+- Ortak fn-seçici `kdl_al_fn`/`kdl_yaz_fn`/`kdl_al_donus_ir` (built-in ile
+  paylaşılan eleman-IR→intrinsic eşlemesi).
+- `değişken xs: Dizi<T> = yap()` (literal-DIŞI değer, çağrı/başka-dizi) artık
+  `dinamik_dizi_mi=1` işaretlenir → `xs[i]` TANIMLAYICI fast-path'ten heap-route.
+  (Tip kontrolü Dizi<T> annotasyonunu heap garanti eder; stack → G003 reddi.)
+
+**Doğrulama:** `dizi_sinir_harness.sh` +5 vaka (erisim oku/yaz, çağrı oku, direct
+heap yaz, türetilmiş OOB PANIC) → 19/19. `test/ornekler/dizi_turetilmis_taban.kem`
+(exit 42, ASan auto-discovery). Tüm suite yeşil (29 paket, llvm 235/235).
+`asan_e2e_denetim.sh` PASS=92 FAIL=0. 0 uyarı.
+
+**Kapsam/sınır:** Skaler + ptr eleman. **Struct eleman (`Dizi<Yapı>`, `et[0]=='%'`)
+şimdilik stack/yorum yoluna düşer — D-087'de by-value yapı.** İç-içe
+`Dizi<Dizi<T>>` türetilmiş indeks (nested INDEKS tabanı) çözümleyici kapsamında
+DEĞİL → mevcut çalışan stack-GEP yolu korunur (m[i][j] regresyonsuz); iç diziyi
+değişkene çıkarınca uzunluk metadata hâlâ bozuk (nested-literal stack temsili,
+ayrı sorun — D-082 inner-heap'e bağlı, deferred). &Dizi referansı D-086.
+
+> **Not (merge):** PR #63'ün eski D-084'ü (stack `[N×T]` YAZMA OOB sınır-kontrolü)
+> bu main-merge'inde DÜŞÜRÜLDÜ — birebir aynı düzeltme main'de `a6d690d` / D-069
+> (Kategori 2) olarak zaten mevcut (`stack_uz` sınır-kontrolü, `src/llvm.c`). Kod
+> kaybı yok; yalnız çift kayıt önlendi. Düzeltmenin kendisi PR #63'ün
+> `src/llvm.c`'sinde KORUNUYOR.
+
+---
+
 ## D-087 — Bootstrap CHECKER kanıtı: 4 bileşenin TAMAMI self-host codegen ile doğru derlenir (2026-06-14)
 
 **Karar [ETKİ: yalnız test/codegen_bootstrap_harness.sh; kaynak DEĞİŞMEDİ].** D-086'da codegen.kem

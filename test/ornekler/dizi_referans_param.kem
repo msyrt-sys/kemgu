@@ -1,0 +1,36 @@
+// dizi_referans_param.kem — &Dizi<T> referans parametresi (D-086). Çağıran
+// `&a` ile dizi değişkeninin slot adresini (KdlDizi**) geçer; girişte BİR KEZ
+// deref edilip alloca KdlDizi* tutar → dizi_al/dizi_boyut/[] tutarlı çalışır.
+// Eskiden çift-pointer descriptor gibi indekslenip çöp/PANIK üretiyordu; ayrıca
+// dizi_boyut(&Dizi) tip-kontrolde T001 reddiyle dizi_al(&Dizi) kabulü tutarsızdı.
+//
+// Beklenen çıktı (exit kodu): 42.
+
+// Salt-okuma referans: ödünç alıp toplar.
+işlev topla(xs: &Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = dizi_boyut(xs);   // &Dizi → dizi_boyut tutarlı
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        toplam = toplam + xs[i];           // &Dizi → [] indeks (deref'li)
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// Değiştirilebilir referans: paylaşılan descriptor üzerinden yazar.
+işlev ilk_ata(xs: &değişken Dizi<tam32>, v: tam32) -> tam32 {
+    dizi_yaz(xs, 0, v);
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [10, 20, 6];
+    değişken t: tam32 = topla(&a);          // 10+20+6 = 36
+
+    değişken r: tam32 = ilk_ata(&değişken a, 6);  // a[0] = 6 (çağırana yansır)
+    değişken ilk: tam32 = dizi_al(a, 0);    // 6
+
+    // 36 + 6 = 42
+    ver t + ilk;
+}
