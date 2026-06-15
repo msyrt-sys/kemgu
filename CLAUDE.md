@@ -675,6 +675,19 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
+### Self-host AŞAMA durumu (D-035..D-086)
+- ~~AŞAMA 1: lexer self-host~~ ✓ (sıfır-diff bootstrap)
+- ~~AŞAMA 2: parser + checker self-host~~ ✓ (`--ast`/`--checkdump` sıfır-diff)
+- ~~AŞAMA 3: codegen self-host (CG1-CG9a)~~ ✓ (semantik exit-kod eşdeğerlik; CG8 dizi dâhil)
+- ~~AŞAMA 5: codegen self-compile FIXPOINT~~ ✓ **D-085** (stage1==stage2; lexer46+parser46)
+- ~~**AŞAMA 4: tek self-host kemgu binary (driver)**~~ ✓ **D-086** — `selfhost/codegen.kem`
+  artık birleşik driver: checker + `--token/--parse/--check/--llvm` dispatch →
+  `build/kemgu_self.exe` (no-flag→--llvm geri uyum). `make calistir_self_driver`:
+  HEM C-derlenmiş HEM **self-host-derlenmiş** driver 4 modda C oracle ile eşleşir
+  (TOKEN 22/22, PARSE 12/12, CHECK 48/48, LLVM 56/56) + driver kendini fixpoint olarak
+  üretir (21728 satır IR kararlı). `calistir_codegen_bootstrap` driver-ify codegen.kem ile yeşil.
+- **SIRADA:** tek-kaynak konsolidasyon (checker.kem ↔ driver) + Aşama 5 checker-bootstrap proof.
+
 ### İlerideki Fazlar
 - ~~Tip sistemi (tip çıkarsama, tip kontrolü)~~ ✓ ADIM 11
 - ~~Linear types (Spec V1)~~ ✓ (konsolidasyon)

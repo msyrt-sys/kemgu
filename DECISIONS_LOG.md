@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-086 — 🎉 AŞAMA 4 driver: tek self-host kemgu binary (checker + 4-mod dispatch) + driver FIXPOINT (2026-06-14)
+
+**Karar [ETKİ: self-host birleştirme; C derleyici DEĞİŞMEDİ].** Aşama 1-3'te lexer/parser/checker/
+codegen AYRI self-host binary'lerdi; D-085 codegen self-compile fixpoint'i kanıtladı. Aşama 4 =
+`selfhost/codegen.kem`'i TEK birleşik KEMGU derleyici driver'ına dönüştürmek: checker mantığı +
+`--token/--parse/--check/--llvm` dispatch eklendi → `build/kemgu_self.exe`. **Sonuç D-085'i aşar:**
+birleşik driver da KENDİNİ fixpoint olarak üretir (self-host derleyici, checker dâhil).
+
+**Süreç notu (şeffaflık):** Bu iş ilk olarak bayat D-081 tabanı üzerinde [D-082] etiketiyle yapıldı
+(commit 20b5408, tag `asama4-d082-backup`) — ama gerçek D-082 = CG8 dizi (origin/main). Branch
+origin/main'e (9f66dc9; D-082..D-085 dahil) sıfırlandı ve driver **yeni** codegen.kem (2659 satır;
+CG8 dizi + CG7d + CG9a alloca-hoist + fixpoint) üzerine **yeniden** uygulandı, doğru D-086 ile.
+
+**KARAR 1 — Yer: codegen.kem YERİNDE.** `checker.kem`/`lexer.kem`/`parser.kem` DOKUNULMADI (Aşama 1-2
+referans; harness'ları yeşil). codegen.kem 2659→3820 satır. no-flag→--llvm varsayılan → mevcut
+`calistir_codegen_diff` VE `calistir_codegen_bootstrap` (`<file>`→IR çağrıları) bozulmaz.
+
+**KARAR 2 — Merge: front-end birebir, back-end union.** İki `Ayr` struct'ı lexer+parser+AST
+tablosunda ÖZDEŞ. Ortak-isimli alanlar (`yapi_ad/alan_tip/fn_ad`) PAYLAŞILIR (—check KEMGU tipiyle,
+—llvm LLVM tipiyle; ayrı invocation). Çatışma = tam 4: `ayr_olustur` (union init), `main` (dispatch),
+`karsilastirma_mi` (checker yalnız sıralı `<>` → **`sirali_kars_mi`** rename, codegen'in `==/!=`
+dahil olanıyla çakışmasın), `yapi_var_mi` (checker dup DROP — codegen `yapi_idx` ≡ checker
+`yapi_idx_bul`). 64 checker fonksiyonu (`duz_yaz` + `g_ekle`..`kontrol_program`) programatik port;
+sıfır duplicate (C checker T024 doğrular). CG8/CG9a'nın +12 fonksiyonu da çakışmaz.
+
+**KARAR 3 — `--token` lexer.kem'den PORT EDİLMEDİ.** lexer.kem `lex_dosya`/`emit` streaming;
+helper'ları (`sayi_emit`/`op_emit`) codegen'in tablo-tabanlı eşadlılarından divergent. Yeni
+`token_dump` codegen'in mevcut `lex_et` tablolarını (t_ad/t_sat/t_sut/t_off/t_uz) C `--token`
+formatında döker (lex_et isimleri C `token_tipi_adi` ile ampirik birebir).
+
+**Doğrulama (`make calistir_self_driver`):** HEM C-derlenmiş HEM **self-host-derlenmiş** driver
+(driver kendini derler → kemgu_self2) 4 modda da C oracle ile eşleşir: TOKEN 22/22, PARSE 12/12,
+CHECK 48/48, LLVM 56/56 (her iki driver). **FIXPOINT:** kemgu_self2'nin codegen.kem IR'ı kararlı
+(21728 satır). `make calistir_codegen_bootstrap` driver-ify codegen.kem ile: lexer 46 + parser 46 +
+codegen stage1==stage2 (21728 satır) ✓ — **birleşik derleyici self-hosting fixpoint.** `make
+test_tumu` YEŞİL (sıfır regresyon). 0 uyarı.
+
+**Sınırlamalar / sonraki:** (a) checker mantığı artık iki yerde (checker.kem Aşama 2 referansı +
+codegen.kem driver) — kasıtlı; tek-kaynağa indirgeme ileride. (b) `--check` checkdump formatı
+(test edilebilirlik); insan-okunur "OK/HATA" ayrımı ileride. (c) origin/feature/self-host-checker'ın
+D-071 lambda G004 + D-085 checker-bootstrap-proof commit'leri ayrı; bu iş onlardan bağımsız.
+
+---
+
 ## D-085 — 🎉 AŞAMA 5 BOOTSTRAP FIXPOINT — codegen self-host KENDİNİ ÜRETİYOR (2026-06-14)
 
 **Karar [ETKİ: milestone — kod değişmedi, doğrulama].** KEMGU-yazılı codegen (selfhost/codegen.kem)
