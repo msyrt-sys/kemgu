@@ -1857,6 +1857,55 @@ static void test_lambda_govde(void) {
     arena_serbest(a);
 }
 
+/* === D-071: islev/lambda degiskeni yeniden-atama yasagi (G004) === */
+
+static void test_lambda_yeniden_atama_g004(void) {
+    Arena *a = arena_olustur(0);
+    /* Lambda lokali yeniden atanirsa -> G004 (KARMA closure temsili deger-bagimli;
+     * yakalama-durumu degisirse cagri yerinde bare-ptr<->closure uyumsuzlugu =
+     * kabul-ama-cokuyor). En az 1 hata bekleniyor. */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = |x: tam32| x * 2; "
+        "f = |y: tam32| y + 21; ver f(21); }", a);
+    test_sonuc("G004: lambda lokali yeniden atama -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+static void test_lambda_yakalama_divergens_g004(void) {
+    Arena *a = arena_olustur(0);
+    /* Yakalamali -> yakalamasiz yeniden atama: codegen'de SEGFAULT olurdu;
+     * checker artik reddediyor. */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: tam32 = 5; "
+        "de\xc4\x9fi\xc5\x9fken f = |x: tam32| x + a; "
+        "f = |y: tam32| y * 2; ver f(21); }", a);
+    test_sonuc("G004: yakalama-durumu divergent yeniden atama -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+static void test_lambda_decl_tek_atama_temiz(void) {
+    Arena *a = arena_olustur(0);
+    /* Yeniden atama YOK: lambda bildirimi + cagri -> 0 hata (yanlis-pozitif yok) */
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = |x: tam32| x * 2; ver f(21); }", a);
+    test_sonuc("G004: tek-atama lambda lokali -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* G004 negatif: lambda OLMAYAN yeniden-atama (tam32) hala gecmeli (over-reject yok) */
+static void test_nonlambda_yeniden_atama_temiz(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 5; "
+        "x = 7; ver x; }", a);
+    test_sonuc("G004: lambda-olmayan yeniden atama (x=7) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback tip cikarsamasi === */
 
 /* D-1: Dizi<T> param -> T arg'dan cikarsanir */
@@ -2447,6 +2496,12 @@ int main(void) {
     test_asm_arm64_as001();
     test_asm_tekkez_girdi_as002();
     test_asm_yapi_girdi_as002();
+
+    printf("\n--- D-071: lambda yeniden-atama yasagi (G004) ---\n");
+    test_lambda_yeniden_atama_g004();
+    test_lambda_yakalama_divergens_g004();
+    test_lambda_decl_tek_atama_temiz();
+    test_nonlambda_yeniden_atama_temiz();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
