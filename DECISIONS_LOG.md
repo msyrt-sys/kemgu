@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-093 — [YÜKSEK] Self-host codegen INDEKS-atama (`arr[i] = v`) — sessiz düşme (accept-but-miscompile) kapatma (2026-06-15)
+
+**Karar [ETKİ: self-host codegen doğruluk; izole commit].** `selfhost/codegen.kem`
+ATAMA handler'ı (`deyim_uret`, ~satır 2448) yalnız **TANIMLAYICI** (`x = v`) ve
+**ERISIM** (`o.alan = v`) dallarına sahipti; **INDEKS** hedef (`arr[i] = v`) dalı
+YOKTU. Checker (`selfhost/checker.kem` lvalue T022, ~satır 2806) INDEKS'i geçerli
+lvalue olarak KABUL ediyor, codegen ise sessizce DÜŞÜRÜYORDU → yazma kayboluyor
+(`ver 0` fall-through). Accept-but-miscompile, **[YÜKSEK]**. C derleyici
+(`kemgu.exe`, oracle) AYNI programı doğru derliyordu — yani saf self-host mirror-gap.
+
+**Kök-neden (mirror-gap; reprodüksiyon + IR-teyit):** Test programı
+```
+işlev main() -> tam32 { değişken xs: Dizi<tam32> = []; dizi_ekle(xs,5); xs[0]=42; ver dizi_al(xs,0); }
+```
+C-codegen `main` gövdesi `call void @kdl_dizi_yaz_tam(ptr %5, i32 0, i32 42)` emit
+ediyor → **exit 42**. Self-host gövdesi bu çağrıyı HİÇ emit etmiyordu (ATAMA INDEKS
+dalı yok) → **exit 5** (`dizi_ekle` değeri kalıyor). Bug birebir teyit edildi.
+
+**Çözüm (`selfhost/codegen.kem`, ATAMA handler — ERISIM dalından sonra):** INDEKS
+hedef dalı eklendi. HEAP-uniform model (her dizi heap `KdlDizi*`; stack `[N×T]` yok)
+→ inline sınır kontrolü GEREKMEZ; yalnız `kdl_dizi_yaz_*` route yeterli (runtime
+`i<0` + `i>=boyut` denetler, `runtime/kdl_runtime.c`). Emisyon `dizi_yaz` built-in'iyle
+(~satır 2121) BİREBİR aynı: taban dizi → `ptr`, indeks → `i32`, değer → `vty`
+(`p.son_tip`); `call void @kdl_dizi_yaz_<dizi_ekle_sonek(vty)>(ptr taban, i32 idx,
+<dizi_arg_tip(vty)> v)`. Sonek seçimi değer-tipinden: `i64`→`tam64`, `ptr`→`ptr`,
+diğer→`tam` — `dizi_yaz` ile AYNI seçici/cast (tutarlılık + iyi-tipli IR garantisi).
+
+**Doğrulama:** Repro fix sonrası **exit 42** (C oracle ile eşit). OOB (`xs[10]=9`,
+boyut 1) → runtime **PANİK** (`dizi sınır ihlali (i=10, boyut=1)`, hem C hem self-host
+özdeş). İç-içe `m[i][j]=v` → **99**, yapı-alanı `k.xs[i]=v` → **55** (her ikisi de C
+oracle ile eşit; eleman-tip propagasyonu nested + struct-field için ÇALIŞIYOR — analizin
+"kısmi" şüphesi bu vakalarda gerçekleşmedi). `selfhost_driver_harness.sh`: 4 mod
+(token 22/22, parse 12/12, check 48/48) byte-diff TEMİZ; LLVM eşdeğerlik self 56/56 +
+self2 57/57; **FIXPOINT KORUNDU** (kemgu_self2 codegen.kem IR kararlı, stage1==stage2
+birebir, 21807 satır). `make test_tumu` → "Tum testler gecti!" (tam yeşil).
+`asan_e2e_denetim.sh` **PASS=96 FAIL=0**. Yeni korpus: `test/cg_korpus/cg8_indeks_yaz.kem`
+(yazma düşerse 11, doğruysa 42 → C oracle ile auto-diff yakalar). Sıfır derleyici
+uyarısı (`-Wall -Wextra -Wpedantic`).
+
+**Sınır/Not:** Kapsam YALNIZ self-host codegen. C `src/llvm.c`'nin `xs[i]=v`'si ZATEN
+main'de (D-088 ailesi) — bu kararın DIŞINDA. `codegen.kem`'in KENDİSİ `arr[i]=v`
+sözdizimi kullanmıyor (yalnız `dizi_yaz` built-in) → yeni dal self-derlemede
+tetiklenmiyor; FIXPOINT yapısal olarak güvenli. İndeks `i32` varsayılır (`dizi_yaz` +
+INDEKS-okuma ile AYNI sözleşme); `i64` indeks bu kararın dışında. İzole commit;
+şu an paralel dal yok.
+
+---
+
 ## D-092 — [YÜKSEK] `Dizi<T>` ATAMA dizi-literal heap-promote — accept-but-crash kapatma (2026-06-15)
 
 **Karar [ETKİ: codegen bellek-güvenliği; izole commit].** `D-075`'in 🔴 KEŞİF
