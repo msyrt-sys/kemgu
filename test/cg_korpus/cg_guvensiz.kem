@@ -1,0 +1,13 @@
+// güvensiz blok — codegen açısından düz blok (D-069 / C llvm.c DUGUM_GUVENSIZ).
+// Gövde: değişken tanımı + atama + fonksiyon çağrısı (POINTER YOK). Self-host codegen
+// güvensiz kolu yokken gövde SESSİZCE DÜŞER → exit 0; doğru emisyonla exit 42.
+işlev yardimci(x: tam32) -> tam32 { ver x + 1; }
+işlev main() -> tam32 {
+    değişken toplam: tam32 = 0;
+    güvensiz {
+        değişken a: tam32 = 40;   // alloca-hoist: girişe çıkmalı
+        a = a + 1;                // atama (a = 41)
+        toplam = yardimci(a);     // çağrı → 42
+    }
+    ver toplam;
+}
