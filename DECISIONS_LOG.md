@@ -5,6 +5,76 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-095 — [YÜKSEK] Self-host codegen `güvensiz { }` bloğu — sessiz düşme (accept-but-miscompile) kapatma (2026-06-16)
+
+**Karar [ETKİ: self-host codegen doğruluk; izole commit].** `selfhost/codegen.kem`
+lexer (`güvensiz`→`GUVENSIZ`, ~satır 205) ve parser (`parse_guvensiz`, ~satır 1203 →
+`dugum1("GUVENSIZ", ..., parse_blok)` = TEK çocuk, o da BLOK) `güvensiz` bloğunu
+tanıyordu; ancak codegen `deyim_uret` (~satır 2367) içinde **GUVENSIZ emisyon dalı
+YOKTU** → düğüm hiçbir kola düşmüyor, fonksiyon sonundaki `ver 0` fall-through ile
+**gövde TAMAMEN düşürülüyordu** (latent miscompile). Checker bloğu kabul ediyor,
+codegen sessizce atıyor → accept-but-miscompile, **[YÜKSEK]**. C derleyici
+(`kemgu.exe`, oracle; `src/llvm.c:4639` `DUGUM_GUVENSIZ`) AYNI programı doğru
+derliyordu — saf self-host mirror-gap (D-093 ile aynı sınıf).
+
+**Kök-neden (mirror-gap; reprodüksiyon + IR-teyit):** Test programı
+```
+işlev yardimci(x: tam32) -> tam32 { ver x + 1; }
+işlev main() -> tam32 {
+    değişken toplam: tam32 = 0;
+    güvensiz { değişken a: tam32 = 40; a = a + 1; toplam = yardimci(a); }
+    ver toplam;
+}
+```
+C-codegen `main` gövdesi alloca+store+`call i32 @yardimci` emit ediyor → **exit 42**.
+Self-host gövdesi GUVENSIZ kolu yokken bu deyimleri HİÇ emit etmiyordu → `toplam` 0
+kalır → **exit 0**. Bug birebir teyit edildi.
+
+**Çözüm (`selfhost/codegen.kem`, iki nokta — DESCENT denetimi):**
+1. `deyim_uret` — BLOK kolunun hemen yanına **GUVENSIZ kolu** eklendi: tek çocuğu
+   (`cocuk[a_cb+0]` = BLOK gövde) `deyim_uret` ile aynen emit, `ver 0`. C llvm.c
+   `DUGUM_GUVENSIZ` ile aynı: güvensiz = codegen açısından DÜZ BLOK, gövde aynen
+   üretilir. C'de ayrıca `guvensiz_derinlik` ile inline stack sınır-kontrolü atlanır;
+   self-host **HEAP-uniform** (her dizi heap `KdlDizi*`, stack `[N×T]` yok → inline
+   stack kontrolü zaten yok) → o makine GEREKMEZ; heap erişimleri runtime-kontrollü
+   kalır = güvenli.
+2. `alloca_hoist_pass` (~satır 2538) konteyner listesine **GUVENSIZ** eklendi
+   (`BLOK/EGER/IKEN` yanına). GUVENSIZ'in tek çocuğu BLOK → mevcut döngü gövdeyi
+   içeri indirir → güvensiz içindeki annotasyonlu `değişken` alloca'ları girişe
+   hoist edilir (döngü-içi güvensiz'de yığın taşması önlenir; `pa_reg_bul` idx-eşli,
+   sıra-bağımsız → güvenli).
+
+   **Checker:** gömülü `kontrol_dugum` (~satır 3478) zaten GENEL çocuk-rekürsiyonu
+   yapıyor (özel kol gerektirmeyen düğümler için tüm çocuklara iner) → GUVENSIZ'in
+   çocuğu (BLOK) ZATEN denetleniyor; ek kol GEREKMEDİ (teyit: güvensiz içindeki
+   tanımsız ad T002 veriyor; tanımlı `değişken` ad-çözümleniyor). Fonksiyon-seviyesi
+   döngüler (emisyon ~2619, hoist çağrısı ~2612, `kontrol_govde` ~3510) GUVENSIZ'i
+   doğrudan çocuk olarak GÖRMEZ (güvensiz gövde-içi, ISLEV'in BLOK çocuğunun altında)
+   → dokunulmadı.
+
+**Doğrulama:** Repro fix sonrası **exit 42** (C oracle ile eşit). Self-host IR
+`main`: iki alloca girişe HOIST (`toplam` + güvensiz-içi `a`), `store 40` /
+`a=a+1` / `call i32 @yardimci` gövdede EMIT (önceden hiçbiri yoktu). Yeni korpus
+`test/cg_korpus/cg_guvensiz.kem` (gövde düşerse exit 0, doğruysa 42 → C oracle ile
+auto-diff yakalar). `codegen_diff_harness`: **58/58** semantik eşdeğer. `make test_tumu`
+→ **"Tum testler gecti!"**. `selfhost_driver_harness`: 4 mod (token 22/22, parse 12/12,
+**check 48/48** = `--check`↔C `--checkdump` byte-diff TEMİZ) hem C-derlenmiş hem
+self-host; **CODEGEN FIXPOINT stage1 IR == stage2 IR BİREBİR (21835 satır)**;
+bootstrap lexer/parser/checker 51 birebir 0 fark. `asan_e2e_denetim.sh` →
+**PASS=96 FAIL=0** (SKIP/ALLOW belgeli-ortamsal). Sıfır derleyici uyarısı
+(`kemgu.exe` `-Wall -Wextra -Wpedantic` değişmedi; değişiklik `.kem`).
+
+**Sınır/Not:** Kapsam YALNIZ self-host codegen — **POINTER-SİZ** güvensiz blokları
+(düz blok gövdesi). Güvensiz içindeki pointer işlemleri (deref `*`, adres-al `&`;
+`codegen.kem:2244` "CG sonrası") self-host'ta HENÜZ codegen edilmiyor → bu kararın
+DIŞINDA (ayrı açık iş); bu fix pointer-siz güvensizi çalıştırır + silent-drop'u kaldırır.
+`codegen.kem`'in KENDİSİ (ve lexer/parser/checker.kem) `güvensiz` bloğu KULLANMIYOR
+(yalnız anahtar-kelime tanıma + `parse_guvensiz`) → yeni dal self-derlemede
+tetiklenmiyor; **FIXPOINT yapısal olarak güvenli**. İzole commit; D-NNN merge-anı
+güncel main'den tahsis (branch'te D-095 sabitlendi; main D-094 = G004 / PR #68).
+
+---
+
 ## D-094 — [YÜKSEK] C checker G004 — işlev/lambda-tipli değişken YENİDEN-ATANAMAZ (accept-but-crash kapatma; öksüz fix backport) (2026-06-15)
 
 **Karar [ETKİ: C checker doğruluk/bellek-güvenliği; izole commit].** `src/tip_kontrol.c`
