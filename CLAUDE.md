@@ -221,6 +221,12 @@ Exception: YOK — sonuç<T,H> ile tamam/hata
 - Concurrency: bölge sahipliği modeli (her bölge tek thread'e ait)
 ```
 
+### Self-host dizi temsili — KRİTİK güvenlik invaryantı
+- Self-host derleyici (`selfhost/*.kem`) **heap-uniform**: diziler **her zaman** heap'te (`KdlDizi*`), stack `[N×T]` yolu YOK.
+- Sonuç: heap dizi erişimi **runtime'da** sınır-kontrollü (`kdl_runtime.c` — hem `i < 0` hem `i >= boyut`) → self-host codegen'de **inline stack-OOB kontrolü hiç gerekmez**. `codegen.kem`'de `icmp uge = 0` olması "eksik kontrol" değil, "stack dizi yok" demektir.
+- C derleyici (bootstrap) hem stack hem heap diziyi destekler → orada inline stack sınır-kontrolü gereklidir (D-069; `güvensiz` blokta opt-out).
+- **KURAL:** Self-host yoluna ileride stack dizi (`[N×T]`) EKLENİRSE, inline stack-OOB kontrolü **aynı commit'te** zorunludur. Kontrolsüz stack dizisi = bellek-güvenliği regresyonu.
+
 ---
 
 ## Parser Tasarımı
@@ -788,3 +794,5 @@ Belge dosyaları: Türkçe.
 - Bellek alan modüller için her test çalıştırmasında ASan aktif olmalı; `ERROR: AddressSanitizer` çıkarsa adım onaylanmaz
 - Her mantıksal birim bitince Türkçe küçük git commit
 - Türkçe UTF-8 hex escape kuralı: ayrıntı için yukarıdaki **"Türkçe UTF-8 Dikkat Noktası"** bölümüne bak (kural: her Türkçe karakter escape'inden sonra 0-9 / a-f / A-F geliyorsa concatenation şart)
+- **D-numara tahsisi (DECISIONS_LOG):** D-NNN'i **merge anında, güncel `origin/main`'deki en yüksek D'ye bakıp** ver — branch açarken DEĞİL. Paralel oturumlar eski main'den dallanıp aynı numarayı kapar (yaşandı: D-076→082→086→088→092 zinciri + D-094 G004/güvensiz çakışması). PR açarken main ilerlemişse numarayı güncelle.
+- **Seri ilerleme (dizi/codegen güvenlik işi):** Aynı dosyaya dokunan (özellikle `src/llvm.c`, `selfhost/codegen.kem`) dizi/bellek-güvenliği işini **tek daldan, seri** yürüt; main'e sık merge et. Paralel dallar aynı handler'da çakışır.
