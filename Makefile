@@ -122,6 +122,7 @@ $(BUILD)/test_tip_kontrol$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                   $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                   $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                                   $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                                  $(SRCDIR)/escape.c \
                                   $(TESTDIR)/test_tip_kontrol.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -167,6 +168,7 @@ $(BUILD)/test_lsp$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                         $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                         $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
                         $(SRCDIR)/json.c $(SRCDIR)/lsp.c \
+                        $(SRCDIR)/escape.c \
                         $(TESTDIR)/test_lsp.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -192,6 +194,7 @@ $(BUILD)/test_linear$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                             $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                             $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                             $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                            $(SRCDIR)/escape.c \
                             $(TESTDIR)/test_linear.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -203,6 +206,7 @@ $(BUILD)/test_sabitsure$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                                $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                               $(SRCDIR)/escape.c \
                                $(TESTDIR)/test_sabitsure.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -214,7 +218,7 @@ $(BUILD)/test_wcet$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                           $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                           $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
-                          $(SRCDIR)/wcet.c \
+                          $(SRCDIR)/wcet.c $(SRCDIR)/escape.c \
                           $(TESTDIR)/test_wcet.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -226,6 +230,7 @@ $(BUILD)/test_capability$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                                 $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                                 $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                                 $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                                $(SRCDIR)/escape.c \
                                 $(TESTDIR)/test_capability.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -237,6 +242,7 @@ $(BUILD)/test_mmio$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                           $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                           $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                          $(SRCDIR)/escape.c \
                           $(TESTDIR)/test_mmio.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -248,6 +254,7 @@ $(BUILD)/test_drf$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                          $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                          $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                          $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                         $(SRCDIR)/escape.c \
                          $(TESTDIR)/test_drf.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
@@ -259,6 +266,7 @@ $(BUILD)/test_simd$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
                           $(SRCDIR)/ast_yazdir.c $(SRCDIR)/parser.c \
                           $(SRCDIR)/ifade.c $(SRCDIR)/tip.c \
                           $(SRCDIR)/sembol.c $(SRCDIR)/tip_kontrol.c \
+                          $(SRCDIR)/escape.c \
                           $(TESTDIR)/test_simd.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 

@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "llvm.h"   /* C5 AS001: KEMGU_HEDEF_MIMARI (tek kaynak) */
+#include "escape.h" /* G005: kacan-closure tespiti (forward DFA escape analizi) */
 
 #include <string.h>
 #include <stdio.h>
@@ -411,7 +412,9 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->scope_seviyesi = 0;
     tk->lambda_govdesi_icinde = 0;
     tk->lambda_lineer_yakalama = 0;
+    tk->lambda_yakalama = 0;
     tk->lambda_baslangic_scope = NULL;
+    tk->aktif_escape = NULL;
 }
 
 /* === Linear Types Spec V1: yardimci fonksiyonlar === */
@@ -456,6 +459,42 @@ static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
 
     /* SADECE flag — closure-itself-linear (LC-2) tip isaretlemesi icin */
     tk->lambda_lineer_yakalama = 1;
+}
+
+/* G005 (V1 kacan-closure reddi) yardimci: lambda govdesindeki bir tanimlayici
+ * KAPSAYAN bir fonksiyon/blok scope'undaki DEGISKEN/PARAMETRE'ye cozuluyorsa
+ * = YAKALAMA. Lambda-ic (param/govde-yereli, golgeleme dahil) ve global/modul/
+ * yapi (islev, sabit, tip) referanslari yakalama DEGIL. Codegen'in
+ * lambda_serbest_tara'si ile birebir: yalniz cevre lokal/param capture edilir
+ * (isim_bul g->isimler'de bulur), top-level isim/sabit capture edilmez.
+ *
+ * lambda_baslangic_scope = lambda sinirini isaretler: tk->scope'tan yukari
+ * yururken bu scope'a ULASMADAN bulunan isim lambda-ictir (yakalama degil);
+ * bu scope'tan ITIBAREN bulunan lokal/param yakalamadir. */
+static int lambda_yakalama_yereli_mi(TipKontrol *tk, const char *ad, int uz) {
+    int lambda_ici = 1;
+    for (Scope *s = tk->scope; s; s = s->parent) {
+        if (s == tk->lambda_baslangic_scope) lambda_ici = 0;
+        const Sembol *sem = sembol_bul_yerel(s, ad, uz);
+        if (sem) {
+            if (lambda_ici) return 0;   /* lambda-ic (golgeleme dahil) */
+            return (s->kategori == SCOPE_ISLEV || s->kategori == SCOPE_BLOK)
+                   && (sem->kategori == SEMBOL_DEGISKEN
+                       || sem->kategori == SEMBOL_PARAMETRE);
+        }
+    }
+    return 0;
+}
+
+/* G005: lambda govdesi icinde HERHANGI bir cevre lokal/param yakalamasini
+ * isaretle (lineer + lineer-olmayan). lineer_yakalama_kontrol'un yaninda cagrilir. */
+static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
+    if (!d || d->tip != DUGUM_TANIMLAYICI) return;
+    if (!tk->lambda_govdesi_icinde) return;
+    if (!tk->lambda_baslangic_scope) return;
+    if (lambda_yakalama_yereli_mi(tk, d->veri.tanimlayici.metin,
+                                  d->veri.tanimlayici.uzunluk))
+        tk->lambda_yakalama = 1;
 }
 
 /* Scope kapanisi: o scope'taki lineer baglamalar tuketilmis mi check.
@@ -1808,6 +1847,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * baglamalar otomatik 'yakalama' sayilir → consume + closure
              * tipi tekkez<...> olarak isaretlenir (LC-2). */
             lineer_yakalama_kontrol(tk, d);
+            /* G005: genel yakalama (lineer + lineer-olmayan) izle. */
+            genel_yakalama_kontrol(tk, d);
             return s->tip ? s->tip : t_hata(tk);
         }
 
@@ -3491,9 +3532,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             /* Closure-itself-linear takip: lambda govdesi flag'leri */
             int eski_lambda = tk->lambda_govdesi_icinde;
             int eski_yakalama = tk->lambda_lineer_yakalama;
+            int eski_genel = tk->lambda_yakalama;   /* G005: ic-ice lambda korumasi */
             Scope *eski_baslangic = tk->lambda_baslangic_scope;
             tk->lambda_govdesi_icinde = 1;
             tk->lambda_lineer_yakalama = 0;
+            tk->lambda_yakalama = 0;
             tk->lambda_baslangic_scope = eski_scope;
 
             /* Govde icin lambda_scope uzerinde yeni gövde scope (ADIM 29:
@@ -3516,14 +3559,33 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             tk->scope = gov_eski;
 
             int yakaladi = tk->lambda_lineer_yakalama;
+            int yakaladi_genel = tk->lambda_yakalama;   /* G005 */
 
             /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
             scope_lineer_kapanis_check(tk, lambda_scope);
 
             tk->lambda_govdesi_icinde = eski_lambda;
             tk->lambda_lineer_yakalama = eski_yakalama;
+            tk->lambda_yakalama = eski_genel;
             tk->lambda_baslangic_scope = eski_baslangic;
             tk->scope = eski_scope;
+
+            /* === G005 (V1): YAKALAYAN ∧ KAÇAN closure reddi ===
+             * Kaçan yakalayan closure'ın env'i (+ {fn,env} cifti) alloca ile
+             * STACK-omurlu (src/llvm.c) → frame'i asinca dangling/UAF; ayrica
+             * closure_mu kaçışta kaybolup cagri yerinde mis-dispatch. Bu yuzden
+             * derleme-zamaninda reddet. Kosul: (a) lambda cevre lokal/param
+             * YAKALIYOR (yakaladi_genel — codegen capture'i ile birebir) VE
+             * (b) lambda KAÇIYOR (escape.c forward DFA: ESC_CAGIRAN = `ver` /
+             * transitif atama zinciri). Yakalamayan lambda (bare fn-ptr, env yok)
+             * ve fonksiyon-ici kalan yakalayan closure REDDEDILMEZ (over-reject yok).
+             * Bkz. D-071 KAPSAM-DISI "lambda escape ... non-escaping v1 garantisi". */
+            if (yakaladi_genel && tk->aktif_escape &&
+                escape_kategori(tk->aktif_escape, d) == ESC_CAGIRAN) {
+                tip_hata(tk, d, "G005",
+                    "yakalayan closure frame'i asamaz (env stack-omurlu, V1): "
+                    "yakalama yerine degeri parametre olarak gecirin ya da V2'yi bekleyin");
+            }
 
             TipBilgisi *islev_t =
                 tip_olustur_islev(tk->arena, params, n, donus);
@@ -4932,10 +4994,25 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                 }
             }
 
+            /* G005: bu islev govdesi icin forward DFA escape analizi calistir.
+             * Lambda case (DUGUM_LAMBDA) ESC_CAGIRAN sorgulayip kacan yakalayan
+             * closure'i reddedebilsin. Per-islev: alloc/serbest dengeli (ASan
+             * temiz); ic-ice islev tanimi yok (lambda ifade-duzeyinde) ama
+             * aktif_escape yine de save/restore edilir. escape.c'nin mevcut hatti
+             * (ana.c'de cagrilmiyordu) burada ilk kez tuketilir. */
+            EscapeAnaliz ea;
+            const struct EscapeAnaliz *eski_escape = tk->aktif_escape;
+            escape_baslat(&ea, tk->arena);
+            escape_analiz_islev(&ea, d);
+            tk->aktif_escape = &ea;
+
             /* Govdeyi kontrol et */
             if (d->veri.islev.govde) {
                 tip_kontrol_deyim(tk, d->veri.islev.govde);
             }
+
+            tk->aktif_escape = eski_escape;
+            escape_serbest(&ea);
 
             /* Linear Types Spec V1: lineer parametreler govdede tuketilmeli */
             scope_lineer_kapanis_check(tk, tk->scope);

@@ -5,6 +5,63 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-096 — [YÜKSEK] V1 kaçan-closure UAF reddi (G005): YAKALAYAN ∧ KAÇAN closure compile-time reddedilir (2026-06-16)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: origin/main 68f1fb0 → en yüksek D-095, dolayısıyla D-096 ayrıldı).
+
+**Karar [ETKİ: `src/tip_kontrol.c` checker — yeni redd kodu G005; izole commit; C derleyici
+codegen DEĞİŞMEDİ].** Güvenlik-iddiası izi (D-071 devamı). Kaçan yakalayan closure açığı
+(`kacan_closure_kapsam.md` kapsam analizi) **"tehlikeli kodu derleyemezsin"** diyerek kapatıldı.
+
+**Açık (D-071'de belgeli ama ZORLANMAYAN boşluk):** Yakalayan lambda → closure `{ptr fn, ptr env}`;
+hem `env` (alloca `src/llvm.c:3758`) hem `{fn,env}` çifti (alloca `src/llvm.c:3805`) **STACK**'te.
+Closure frame'i aşarsa (`ver` ile dönüş / frame-aşırı saklama) → env dangling = **UAF**; ayrıca
+`closure_mu` tek yerde set edildiğinden (`src/llvm.c:4008`) kaçışta kaybolup çağrı yerinde
+mis-dispatch. D-071 KAPSAM-DIŞI listesi bunu *"lambda escape (env stack — şu an non-escaping KEMGU
+v1 garantisi)"* diye işaretlemişti — yani checker'la **zorlanmayan** bir yorum-garantisi. #1
+"Kırılamaz Güvenlik" ihlali (analog dizi-deliği D-070'te koşulsuz heap-promote ile düzeltilmişti).
+
+**Mekanizma — escape.c yeniden kullanımı (hedefli kontrol yerine):**
+- `src/escape.c` (forward DFA fixed-point escape analizi) ZATEN `DUGUM_LAMBDA`'yı alloc-site izliyor
+  ve `ver` (+ transitif atama zinciri + koşullu dal) ile dönen lambda'yı **`ESC_CAGIRAN`**
+  işaretliyor. `escape.o` ZATEN ana ikiliye linkli (Makefile SRCS) ama `ana.c`'de çağrılmıyordu →
+  **ÖLÜ ALTYAPI**. Bu commit onu ilk kez tüketir.
+- **Bağlama:** `tip_kontrol_tanim` `DUGUM_ISLEV` kolu, gövde kontrolünden önce `escape_analiz_islev`
+  çalıştırır (per-işlev; `escape_baslat`/`escape_serbest` dengeli → ASan temiz), sonucu
+  `tk->aktif_escape`'e koyar.
+- **Yakalama bilgisi** checker'da hesaplanır: `genel_yakalama_kontrol` (codegen'in
+  `lambda_serbest_tara`'sı ile birebir — yalnız ÇEVRE lokal/param yakalama sayılır; global
+  işlev/sabit/tip ve lambda-içi/gölgeleme sayılmaz). Lineer (LC-2) + lineer-olmayan yakalamayı kapsar.
+- **Redd (G005):** lambda case'te `(yakaladi_genel ∧ escape_kategori(d)==ESC_CAGIRAN)` → `tip_hata`.
+  Sadece (yakalıyor ∧ kaçıyor) reddedilir.
+
+**Over-reject guard (testli — reddedilMEZ):** yakalamayan lambda return (bare fn-ptr, env yok);
+yakalayan closure fonksiyon-içi çağrı (`ver arttir(10)` = `25_closure_capture.kem` deseni);
+yakalayan closure çağrılır + sonuç saklanır, kaçmaz. **Pozitif:** `ver ||cap` / transitif
+`f=||cap; ver f` / lineer `ver c` → G005.
+
+**KAPSAM:** C-checker only — self-host lambda yapmıyor → port **moot** (G004 ile aynı; iki self-host
+checker lambda görmez, fixpoint tetiklenmez). Korpus etkisi: **0 program G005 tetiklemez** (firsthand
+doğrulandı: 25/10/42 lambda örnekleri yakalayan-closure KAÇIRMAZ; `p1_05` lambdaları yakalamasız +
+parse-only; `lineer_closure.kem` fonksiyon-içi) → `--check`/`--checkdump` divergens YOK.
+
+**RESIDUAL (V1 kapsamı dışı — bilinen kalan, follow-up):**
+1. **Agregat gömme:** yakalayan closure'ı DÖNEN dizi/yapı içine gömme (`ver [|| b]`) — escape.c
+   `ifadeyi_yukselt` agregat ELEMAN/ALAN alt-escape'ini izlemiyor (escape.h v1 sınırı) → **GERÇEK
+   UAF, yakalanmıyor.** Yapı-alanı function-tip ayrıca parse etmiyor (P020) → o yol bugün erişilemez;
+   dizi yolu erişilebilir + açık. Follow-up: escape.c v2 agregat alt-escape recursion'u VEYA V2 heap-env.
+2. **Param-geçişi:** `al(|| b)` — escape.c interprocedural değil → yakalanmıyor. Ancak senkron
+   çağrıda çevre frame canlı kaldığından **temiz UAF DEĞİL**; asıl risk callee'nin saklaması (interproc)
+   + D-071 mis-dispatch (closure_mu kaybı). D-071'de zaten V2'ye ertelenmiş.
+
+Kalıcı/tam çözüm: **V2** (heap/uniform env + bölge runtime + uniform self-describing closure temsili) —
+ayrı kampanya (bkz. `belgeler/KEMGU_Bellek_Modeli.md` R-YAKALAMA-ESCAPE/THREAD).
+
+**Doğrulama:** `test_tip_kontrol` 184/184 (6 yeni G005: 3 pozitif + 3 guard), ASan/UBSan TEMİZ.
+`mingw32-make test_tumu` → "Tum testler gecti!" (fixpoint stage1==stage2 korunur; `--check`/`--checkdump`
+korpus divergens yok; 4 lambda E2E korunur). 0 uyarı.
+
 ## D-095 — [YÜKSEK] Self-host codegen `güvensiz { }` bloğu — sessiz düşme (accept-but-miscompile) kapatma (2026-06-16)
 
 **Karar [ETKİ: self-host codegen doğruluk; izole commit].** `selfhost/codegen.kem`
