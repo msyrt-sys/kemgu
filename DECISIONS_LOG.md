@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-098 — [YÜKSEK] V2 FAZ 2: yakalayan closure env'i stack→HEAP (@malloc) — kaçışta yaşar (2026-06-16)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `099cd5e` → en yüksek D-097 → D-098 ayrıldı).
+
+**Karar [ETKİ: ORTA — `src/llvm.c` lambda env allokasyonu; izole commit; C-codegen-only].**
+V2 yol haritası 2. fazı (F1 üzerine). Yakalayan closure'ın **env ALLOKASYONUNU** stack `alloca`'dan
+**heap `@malloc`**'a çevirir → env, oluşturan frame'i aşsa bile yaşar (kaçış UAF'inin KÖKÜ kapanır).
+F1'in fat-value temsili ve env-null dispatch'i DEĞİŞMEZ.
+
+**Değişiklik (tek nokta — lambda materyalizasyonu, DUGUM_LAMBDA):**
+- Yakalayan lambda env'i: `%env = alloca %envtip` → `%env = call ptr @malloc(i64 ptrtoint
+  (ptr getelementptr (%envtip, ptr null, i32 1) to i64))`. Boyut = LLVM constexpr sizeof
+  (D-087 GEP-null idiomu; padding/alignment LLVM layout'uyla birebir).
+- Capture store'ları (GEP+store) ve `{@lambda_N, %env}` insertvalue'su DEĞİŞMEDİ — %env artık heap
+  ptr; GEP/store/insertvalue ptr üzerinde stack/heap-agnostik.
+- **Allokatör seçimi:** `@malloc` (dizi/metin runtime'ının nihai allokatörü). Tutarlı + F4
+  region-dealloc tek noktadan (env+dizi+metin) bağlanabilir.
+
+**DOKUNULMAYAN:** çağrı dispatch (env-null; stack/heap fark etmez), lifted @lambda_N (env'i ptr okur),
+yakalamayan closure ({@lambda_N, null}), top-level fn ({@f, null}).
+
+**KAPSAM / SINIR:**
+- **SERBEST BIRAKMA YOK** — env malloc'u hiç free edilmez (LEAK). Bilinçli: dizi/metin
+  (`runtime/kdl_runtime.c` "leak OK") ile AYNI sınıf status-quo; deterministik region-dealloc = F4.
+- **UNCONDITIONAL heap:** non-escaping dahil tüm capturing closure env'i heap. Escape-driven
+  stack/region optimizasyonu (kaçmayan → yerel bölge) F4/region işi.
+- **KAÇIŞ HÂLÂ G005 ile REDDEDİLİR** (F5'e dek). F2 env'i güvenli kılar ama özelliği AÇMAZ;
+  davranış-eşdeğer (non-escaping closure'lar AYNI sonuç). UAF-fix LATENT (F5'te G005 kalkınca aktif).
+- Yan not: capturing lambda DÖNGÜ içindeyse her iterasyon artık taze env malloc'lar (önceki
+  hoist'lu stack alloca iterasyonlar arası PAYLAŞILIYORDU → closure-per-iteration için daha doğru).
+  Korpusta döngü-içi capturing lambda yok → korpus davranışı birebir.
+
+**FIXPOINT güvenliği:** self-host `.kem` fn-değer/lambda kullanmıyor → codegen.kem IR'ı etkilenmez →
+bootstrap byte-identik korunur (F1 ön-kontrolüyle aynı).
+
+**Doğrulama:** lambda E2E 5/5 (10_lambda, 04_islev, 42_lambda_hesap, 25_closure_capture,
+43_closure_param) → exit 42 (artık HEAP env ile); IR teyidi: env = `@malloc(... sizeof envtip ...)`.
+`mingw32-make test_tumu` → "Tum testler gecti!" (FIXPOINT korunur; --check/G005 değişmedi).
+ASan E2E PASS=97 FAIL=0 (env leak'i dizi/metin leak'iyle aynı sınıf; leak-detection kapalı). 0 uyarı.
+
 ## D-097 — [YÜKSEK] V2 FAZ 1: fat-value closure ABI iskeleti — fn değeri {ptr fn, ptr env} + runtime env-null dispatch (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir

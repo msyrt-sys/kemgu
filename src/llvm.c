@@ -3756,9 +3756,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_LAMBDA: {
-            /* D-071 (Sınıf B lambda V2): closure değeri = stack { ptr fn, ptr env }
-             * → ptr. Capture by-value (non-escaping). Lifted @lambda_N(ptr env,
-             * params) DEFERRED emit (bekleyen_lambdalar). */
+            /* D-071 + V2-F1/F2: closure değeri = fat value { ptr fn, ptr env }
+             * (by-value). Capture by-value. env F2'den itibaren HEAP (@malloc) →
+             * closure kaçabilir (env yaşar). Lifted @lambda_N(ptr env, params)
+             * DEFERRED emit (bekleyen_lambdalar). */
             int np = d->veri.lambda.param_sayi;
             const char **p_ad = (const char **)arena_ayir(g->arena,
                 sizeof(char *) * (size_t)(np > 0 ? np : 1));
@@ -3784,7 +3785,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int env_reg = -1;
             if (cc.sayi > 0) {
                 env_reg = yeni_reg(g);
-                fprintf(g->out, "  %%%d = alloca %s\n", env_reg, envtip);
+                /* V2-F2: env STACK alloca yerine HEAP (@malloc — dizi/metin ile
+                 * AYNI allokatör; F4 region-dealloc buraya bağlanır). Closure
+                 * frame'i aşsa bile env yaşar → kaçış UAF'i ortadan kalkar.
+                 * SERBEST BIRAKMA YOK (leak — dizi/metin status-quo; F4 sonra).
+                 * Boyut = sizeof(envtip): LLVM constexpr GEP-null idiomu (D-087);
+                 * padding/alignment LLVM layout'uyla birebir. */
+                fprintf(g->out,
+                    "  %%%d = call ptr @malloc(i64 ptrtoint "
+                    "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                    env_reg, envtip);
                 for (int i = 0; i < cc.sayi; i++) {
                     LlvmIsim *vi = isim_bul(g, cc.adlar[i], cc.uzlar[i]);
                     int lv = yeni_reg(g);
@@ -3820,11 +3830,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             bl->sonraki = g->bekleyen_lambdalar;
             g->bekleyen_lambdalar = bl;
-            /* V2-F1 fat-value temsil: fn değeri = { ptr fn, ptr env } (by-value
+            /* V2-F1/F2 fat-value temsil: fn değeri = { ptr fn, ptr env } (by-value
              * SSA aggregate). Yakalama YOK → {@lambda_N, null} (bare; env yok).
-             * Yakalama VAR → {@lambda_N, %env} (env F1'de HÂLÂ STACK alloca —
-             * heap = F2). closure_mu/son_closure derleme-zamanı tag'i kalktı:
-             * çağrı yerinde env==null runtime dispatch. */
+             * Yakalama VAR → {@lambda_N, %env} (env F2'den itibaren HEAP malloc).
+             * closure_mu/son_closure derleme-zamanı tag'i kalktı: çağrı yerinde
+             * env==null runtime dispatch (stack/heap fark etmez). */
             if (cc.sayi == 0) {
                 int t0 = yeni_reg(g);
                 fprintf(g->out,
