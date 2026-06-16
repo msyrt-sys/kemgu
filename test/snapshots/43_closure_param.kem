@@ -1,0 +1,16 @@
+// V2-F1 (fat-value closure ABI): yakalayan closure'ı işlev-param'a geçir.
+// D-071'de KAPSAM-DIŞI idi (param closure_mu=0 → bare-call → env'siz mis-dispatch).
+// F1: fn değeri {ptr fn, ptr env}; param da fat value; çağrı yerinde env!=null
+// runtime dispatch → closure doğru (env ile) çağrılır.
+//   c, x'i (=32) yakalar → {@lambda, env}; cagir içinde f(10) = 32 + 10 = 42.
+// (Çağrı senkron + caller frame canlı → kaçış DEĞİL → G005 tetiklenmez.)
+
+işlev cagir(f: işlev(tam32) -> tam32) -> tam32 {
+    ver f(10);
+}
+
+işlev main() -> tam32 {
+    değişken x: tam32 = 32;
+    değişken c = |n: tam32| x + n;
+    ver cagir(c);
+}

@@ -73,10 +73,9 @@ typedef struct LlvmIsim {
      * yapiyi cozmek icin — onceki "ptr ise global alan-adi ara" fallback'i
      * iki yapi ayni alan adini paylasinca YANLIS yapiya cozuyordu. */
     const char *ref_yapi_ir;
-    /* D-071 (Sınıf B lambda V2): bu isim bir closure değeri (lambda lokali VEYA
-     * işlev(...)→R parametresi) ise 1. Çağrı yerinde indirect-call'ı closure-deref
-     * (gep0=fn, gep1=env → call fn(env,args)) yapar; 0 = düz fn-ptr (geriye uyum). */
-    int closure_mu;
+    /* V2-F1 (fat-value closure ABI): "closure mu?" artık derleme-zamanı tag
+     * DEĞİL — fn değeri {ptr fn, ptr env} fat value; çağrı yerinde env==null
+     * runtime kontrolü bare/closure'ı ayırır (closure_mu kaldırıldı). */
     struct LlvmIsim *sonraki;
 } LlvmIsim;
 
@@ -192,9 +191,8 @@ typedef struct LlvmGen {
     /* D-071 (Sınıf B lambda V2): lifted lambda emisyon kuyruğu + benzersiz sayaç. */
     BekleyenLambda *bekleyen_lambdalar;
     int lambda_sayaci;
-    /* En son üretilen lambda değeri CAPTURE'lı (closure) mı? DEGISKEN, lokal
-     * değişkenin closure_mu'sunu buradan okur. Yakalama yok → bare fn-ptr (0). */
-    int son_closure;
+    /* V2-F1: son_closure (derleme-zamanı closure tag'i) kaldırıldı — fn değeri
+     * artık {ptr fn, ptr env} fat value; closure'luk env!=null ile runtime'da. */
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -681,8 +679,11 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
         return "ptr";
     }
     if (tip_d->tip == DUGUM_TIP_DIZI) return "ptr";
-    /* Adim 7: islev tipi -> ptr (function pointer) */
-    if (tip_d->tip == DUGUM_TIP_ISLEV) return "ptr";
+    /* V2-F1 (fat-value closure ABI): işlev(...)→R = 2-word fat value
+     * { ptr fn, ptr env }. env==null → bare fn; env!=null → closure. Önceki
+     * `ptr` (bare fn-ptr) D-071'de closure ile çağrı-sınırında uyumsuzdu;
+     * fat value + runtime env-null dispatch o tuzağı yapısal olarak eler. */
+    if (tip_d->tip == DUGUM_TIP_ISLEV) return "{ ptr, ptr }";
     /* Sabitsüre Spec V1: sabitsüre<T> runtime'da T (zero-overhead) */
     if (tip_d->tip == DUGUM_TIP_SABITSURE) {
         return ast_tip_to_ir(g, tip_d->veri.tip_sabitsure.ic_tip);
@@ -1417,13 +1418,18 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             d->veri.tanimlayici.metin,
             d->veri.tanimlayici.uzunluk);
         if (ik) {
-            int r = yeni_reg(g);
-            fprintf(g->out, "  %%%d = bitcast ptr ", r);
+            /* V2-F1: top-level fn DEĞERİ → fat value {@f, null} (bare fn; env
+             * yok). Çağrı yerinde env==null → doğal imzayla @f(args). */
+            int t0 = yeni_reg(g);
+            fprintf(g->out, "  %%%d = insertvalue { ptr, ptr } undef, ptr ", t0);
             ad_yaz(g->out, "@", 1);
             yerel_ad_yaz(g->out, d->veri.tanimlayici.metin,
                    d->veri.tanimlayici.uzunluk);
-            fputs(" to ptr\n", g->out);
-            IfadeSonuc s = { r, "ptr", 0 };
+            fputs(", 0\n", g->out);
+            int r = yeni_reg(g);
+            fprintf(g->out,
+                "  %%%d = insertvalue { ptr, ptr } %%%d, ptr null, 1\n", r, t0);
+            IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
             return s;
         }
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
@@ -3205,38 +3211,61 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         }
                     }
                     const char *donus_indirect = beklenen ? beklenen : "i32";
-                    int rr = yeni_reg(g);
-                    if (vi->closure_mu) {
-                        /* D-071: closure çağrısı — {ptr fn, ptr env} aç, fn(env,args) */
-                        int clo = yeni_reg(g);
-                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", clo, vi->reg_no);
-                        int fg = yeni_reg(g);
-                        fprintf(g->out,
-                            "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 0\n", fg, clo);
-                        int fn_reg = yeni_reg(g);
-                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", fn_reg, fg);
-                        int eg = yeni_reg(g);
-                        fprintf(g->out,
-                            "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 1\n", eg, clo);
-                        int env_reg = yeni_reg(g);
-                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", env_reg, eg);
-                        fprintf(g->out, "  %%%d = call %s %%%d(ptr %%%d",
-                                rr, donus_indirect, fn_reg, env_reg);
-                        for (int i = 0; i < n; i++)
-                            fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
-                        fputs(")\n", g->out);
-                    } else {
-                        /* Düz fn-ptr (closure değil) — geriye uyum (env yok) */
-                        int fn_reg = yeni_reg(g);
-                        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", fn_reg, vi->reg_no);
-                        fprintf(g->out, "  %%%d = call %s %%%d(",
-                                rr, donus_indirect, fn_reg);
-                        for (int i = 0; i < n; i++) {
-                            if (i > 0) fputs(", ", g->out);
-                            fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
-                        }
-                        fputs(")\n", g->out);
+                    /* === V2-F1 fat-value dispatch ===
+                     * vi fat değer { ptr fn, ptr env } tutar. env==null → bare
+                     * fn(args); env!=null → closure fn(env,args). "Closure mu"
+                     * runtime'da (env-null) belirlenir → derleme-zamanı closure_mu
+                     * tag'i KALKTI: kaçışta kaybolmaz, D-071 (bare-ptr'ı closure
+                     * sanma) tuzağı yapısal olarak imkânsız. phi yerine slot deseni. */
+                    int fv = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = load { ptr, ptr }, ptr %%%d\n", fv, vi->reg_no);
+                    int fn_reg = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fn_reg, fv);
+                    int env_reg = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", env_reg, fv);
+                    int slot = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = alloca %s\n", slot, donus_indirect);
+                    int isnull = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = icmp eq ptr %%%d, null\n", isnull, env_reg);
+                    int L_bare = yeni_label(g);
+                    int L_clo = yeni_label(g);
+                    int L_join = yeni_label(g);
+                    fprintf(g->out,
+                        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        isnull, L_bare, L_clo);
+                    /* bare: env yok → doğal imza fn(args) */
+                    fprintf(g->out, "bb%d:\n", L_bare);
+                    int rb = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call %s %%%d(",
+                            rb, donus_indirect, fn_reg);
+                    for (int i = 0; i < n; i++) {
+                        if (i > 0) fputs(", ", g->out);
+                        fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
                     }
+                    fputs(")\n", g->out);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            donus_indirect, rb, slot);
+                    fprintf(g->out, "  br label %%bb%d\n", L_join);
+                    /* closure: env ilk arg → fn(env,args) */
+                    fprintf(g->out, "bb%d:\n", L_clo);
+                    int rc = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %%%d",
+                            rc, donus_indirect, fn_reg, env_reg);
+                    for (int i = 0; i < n; i++)
+                        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+                    fputs(")\n", g->out);
+                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                            donus_indirect, rc, slot);
+                    fprintf(g->out, "  br label %%bb%d\n", L_join);
+                    /* join */
+                    fprintf(g->out, "bb%d:\n", L_join);
+                    int rr = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+                            rr, donus_indirect, slot);
                     IfadeSonuc s = { rr, donus_indirect, 0 };
                     return s;
                 }
@@ -3791,27 +3820,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             bl->sonraki = g->bekleyen_lambdalar;
             g->bekleyen_lambdalar = bl;
-            /* KARMA temsil: yakalama YOK → bare fn-ptr (top-level fn gibi; işlev
-             * param'a/yerele bare-call ile uyumlu). Yakalama VAR → closure {fn,env}. */
+            /* V2-F1 fat-value temsil: fn değeri = { ptr fn, ptr env } (by-value
+             * SSA aggregate). Yakalama YOK → {@lambda_N, null} (bare; env yok).
+             * Yakalama VAR → {@lambda_N, %env} (env F1'de HÂLÂ STACK alloca —
+             * heap = F2). closure_mu/son_closure derleme-zamanı tag'i kalktı:
+             * çağrı yerinde env==null runtime dispatch. */
             if (cc.sayi == 0) {
-                g->son_closure = 0;
+                int t0 = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = insertvalue { ptr, ptr } undef, ptr @%s, 0\n",
+                    t0, mang);
                 int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = bitcast ptr @%s to ptr\n", r, mang);
-                IfadeSonuc s = { r, "ptr", 0 };
+                fprintf(g->out,
+                    "  %%%d = insertvalue { ptr, ptr } %%%d, ptr null, 1\n",
+                    r, t0);
+                IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
                 return s;
             }
-            g->son_closure = 1;
-            int clo = yeni_reg(g);
-            fprintf(g->out, "  %%%d = alloca { ptr, ptr }\n", clo);
-            int fg = yeni_reg(g);
+            int t0 = yeni_reg(g);
             fprintf(g->out,
-                "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 0\n", fg, clo);
-            fprintf(g->out, "  store ptr @%s, ptr %%%d\n", mang, fg);
-            int eg = yeni_reg(g);
+                "  %%%d = insertvalue { ptr, ptr } undef, ptr @%s, 0\n", t0, mang);
+            int r = yeni_reg(g);
             fprintf(g->out,
-                "  %%%d = getelementptr { ptr, ptr }, ptr %%%d, i32 0, i32 1\n", eg, clo);
-            fprintf(g->out, "  store ptr %%%d, ptr %%%d\n", env_reg, eg);
-            IfadeSonuc s = { clo, "ptr", 0 };
+                "  %%%d = insertvalue { ptr, ptr } %%%d, ptr %%%d, 1\n",
+                r, t0, env_reg);
+            IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
             return s;
         }
 
@@ -4001,12 +4034,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         g->isimler->dizi_uzunluk =
                             d->veri.degisken.deger->veri.dizi_olustur.sayi;
                     }
-                    /* D-071 KARMA: lambda değeri YAKALAMALI ise closure (closure_mu=1
-                     * → çağrıda env-unpack); yakalamasız ise bare fn-ptr (closure_mu=0
-                     * → bare-call). son_closure DUGUM_LAMBDA case'inde set edildi. */
-                    if (d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
-                        g->isimler->closure_mu = g->son_closure;
-                    }
+                    /* V2-F1: lambda değeri artık fat value { ptr, ptr } (dv.tip)
+                     * → alloca/store/load yukarıda jenerik. closure_mu set'i KALKTI
+                     * (closure'luk env!=null ile, değerin parçası). */
                 }
             } else {
                 /* Deger yok, sadece annot ile alloca */
@@ -5141,9 +5171,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             g->isimler->eleman_tip_ast = elem_ast;  /* D-088: iç-içe m[i][j] */
             g->isimler->dinamik_dizi_mi = 1;
         }
-        /* D-071 KARMA temsil: işlev(...)→R parametresi BARE fn-ptr (top-level fn
-         * VEYA yakalamasız lambda) → bare-call (closure_mu=0). Yakalamalı lambda'yı
-         * param'a geçmek V2 (D-072). */
+        /* V2-F1: işlev(...)→R parametresi artık fat value { ptr, ptr } (tip
+         * ast_tip_to_ir'den jenerik). Çağrı yerinde env==null runtime dispatch
+         * → bare fn(args) / closure fn(env,args). Yakalamalı lambda'yı param'a
+         * geçmek de çalışır (D-071 KAPSAM-DIŞI item kapandı). */
     }
 
     int term = 0;
@@ -5219,7 +5250,8 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         fprintf(g->out, ", ptr %%%d\n", ar);
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk, 0, ar, t);
         g->isimler->isaretsiz = ast_tip_isaretsiz_mi(p->veri.parametre.tip);
-        /* D-071 KARMA: işlev param BARE fn-ptr → bare-call (closure_mu=0). */
+        /* V2-F1: lifted lambda'nın işlev-tipli paramı da fat value { ptr, ptr }
+         * (ast_tip_to_ir jenerik) → çağrıda env==null runtime dispatch. */
     }
     for (int i = 0; i < bl->capture_sayi; i++) {
         const char *t = bl->capture_irler[i];
