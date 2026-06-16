@@ -1906,6 +1906,78 @@ static void test_nonlambda_yeniden_atama_temiz(void) {
     arena_serbest(a);
 }
 
+/* === G005 (V1): kacan-closure reddi ===
+ * YAKALAYAN ∧ KAÇAN closure compile-time reddedilir (env stack-omurlu → UAF).
+ * Pozitif: yakalayan closure `ver` ile kacar -> G005.
+ * Over-reject guard: yakalamayan return / fonksiyon-ici yakalayan kullanim -> 0 hata. */
+
+/* G005 POZITIF 1: yakalayan (lineer-olmayan) closure dogrudan `ver` ile doner. */
+static void test_kacan_closure_ver_lambda_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev sayac_yap(b: tam32) -> i\xc5\x9flev() -> tam32 { "
+        "ver || b; }", a);
+    test_sonuc("G005: yakalayan closure `ver ||cap` -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+/* G005 POZITIF 2: transitif — degisken f = ||cap; ver f. (escape.c transitif zincir) */
+static void test_kacan_closure_transitif_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev g(b: tam32) -> i\xc5\x9flev() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = || b; ver f; }", a);
+    test_sonuc("G005: transitif `degisken f=||cap; ver f` -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+/* G005 POZITIF 3: lineer yakalayan closure da `ver` ile kacar (LR002/L004 `ver`'i
+ * engellemez — `ver` gecerli tek-tuketim; env yine stack -> UAF). */
+static void test_kacan_closure_lineer_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev h() -> tekkez<i\xc5\x9flev() -> tam32> { "
+        "de\xc4\x9fi\xc5\x9fken anahtar: tekkez<tam32> = tekkez_olustur(123); "
+        "de\xc4\x9fi\xc5\x9fken c = || kullan(anahtar); ver c; }", a);
+    test_sonuc("G005: lineer yakalayan closure `ver c` -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+/* G005 GUARD 1: yakalamayan lambda return (bare fn-ptr, env yok -> guvenli) -> 0 hata. */
+static void test_kacan_yakalamasiz_return_temiz_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev mk() -> i\xc5\x9flev(tam32) -> tam32 { "
+        "ver |x: tam32| x * 2; }", a);
+    test_sonuc("G005: yakalamayan lambda return -> 0 hata (over-reject yok)", h == 0);
+    arena_serbest(a);
+}
+
+/* G005 GUARD 2: yakalayan closure FONKSIYON-ICI cagrilir (kacis yok) -> 0 hata.
+ * (test/snapshots/25_closure_capture.kem deseni: `ver arttir(10)` cagri sonucu doner.) */
+static void test_kacan_closure_ici_cagri_temiz_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev kullan_ici() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 32; "
+        "de\xc4\x9fi\xc5\x9fken arttir = |n: tam32| x + n; "
+        "ver arttir(10); }", a);
+    test_sonuc("G005: yakalayan closure fonksiyon-ici cagri -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* G005 GUARD 3: yakalayan closure tanimli + cagrilir, sonuc saklanir, KACMAZ -> 0 hata. */
+static void test_kacan_closure_kacmaz_temiz_g005(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev sadece_cagri() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 5; "
+        "de\xc4\x9fi\xc5\x9fken f = |n: tam32| x + n; "
+        "de\xc4\x9fi\xc5\x9fken r: tam32 = f(3); ver r; }", a);
+    test_sonuc("G005: yakalayan closure kacmaz (sonuc saklanir) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback tip cikarsamasi === */
 
 /* D-1: Dizi<T> param -> T arg'dan cikarsanir */
@@ -2502,6 +2574,14 @@ int main(void) {
     test_lambda_yakalama_divergens_g004();
     test_lambda_decl_tek_atama_temiz();
     test_nonlambda_yeniden_atama_temiz();
+
+    printf("\n--- G005: kacan-closure reddi (V1) ---\n");
+    test_kacan_closure_ver_lambda_g005();
+    test_kacan_closure_transitif_g005();
+    test_kacan_closure_lineer_g005();
+    test_kacan_yakalamasiz_return_temiz_g005();
+    test_kacan_closure_ici_cagri_temiz_g005();
+    test_kacan_closure_kacmaz_temiz_g005();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
