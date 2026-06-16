@@ -34,6 +34,11 @@
  *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *   G001: *T dereferans guvensiz blok disinda (C5 on-kosul #2)
  *   G002: satiriçi_asm guvensiz blok disinda (C5)
+ *   G005: yakalayan (capturing) closure frame'i asiyor (return / frame-asiri
+ *          saklama). env alloca ile stack-omurlu (llvm.c) → kaçinca dangling/UAF
+ *          + closure_mu kaçışta kaybolup mis-dispatch. V1 redd: tehlikeli kodu
+ *          derleyemezsin (D-071 "non-escaping" garantisini ZORLAR). C-checker only
+ *          (self-host lambda yapmiyor → port moot, G004 gibi).
  *   AS001: asm mimari etiketi hedef mimariyle uyusmuyor (C5 arch-tag;
  *          hedef KEMGU_HEDEF_MIMARI — llvm.h, hedefe-duyarli C8'de)
  *   AS002: asm operandi uygunsuz tip — yalniz kopyalanabilir primitif
@@ -47,6 +52,9 @@
  * Hatalar 'hata_raporla' ile stderr'e yazilir, hata_sayisi artirilir.
  * Ifade tipi belirlenemezse TIP_HATA doner — caller bu tipi gormezden gelmeli.
  */
+
+/* G005: escape analizi (src/escape.h) — tam tanim tip_kontrol.c'de include edilir. */
+struct EscapeAnaliz;
 
 /* Yüklenmiş modül izleme (cycle + duplicate detection) */
 typedef struct YuklenmisModul {
@@ -74,7 +82,14 @@ typedef struct TipKontrol {
     int lambda_govdesi_icinde;     /* >0 = lambda govdesi visit ediyoruz */
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */
+    int lambda_yakalama;           /* G005: >0 = lambda HERHANGI bir cevre
+                                      lokal/param yakaladi (lineer + lineer-olmayan).
+                                      codegen lambda_serbest_tara ile birebir. */
     Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
+    /* G005: aktif islev govdesinin escape analizi (forward DFA, src/escape.c).
+     * DUGUM_ISLEV govde kontrolu sirasinda kurulur; lambda case ESC_CAGIRAN
+     * sorgular. NULL = islev disi baglam (escape bilgisi yok). */
+    const struct EscapeAnaliz *aktif_escape;
     /* === C5: unsafe-context bayragi === */
     int guvensiz_baglam;           /* >0 = guvensiz blok icindeyiz (derinlik).
                                       *T dereferans (G001) ve satiriçi_asm (G002)
