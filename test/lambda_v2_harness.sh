@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Sınıf B lambda/closure codegen V2 (D-071) — E2E doğrulama.
-# 4 örnek: derle (--llvm) + link + çalıştır → beklenen exit. ASan ile UB/leak yok.
+# 4 örnek (D-071) + 1 (V2-F1, D-097): derle (--llvm) + link + çalıştır → beklenen
+# exit. ASan ile UB/leak yok.
 set -u
 KEMGU=${KEMGU:-build/kemgu.exe}; RT=${RT:-build/kdl_runtime.o}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/lambdav2); mkdir -p "$TMP"
@@ -17,5 +18,7 @@ calistir lambda10    test/snapshots/10_lambda.kem        42
 calistir islev04     test/ornekler/04_islev.kem          42
 calistir hesap42     test/snapshots/42_lambda_hesap.kem  42
 calistir capture25   test/snapshots/25_closure_capture.kem 42
+# V2-F1 (D-097): yakalayan closure işlev-param'a geçer + doğru env!=null dispatch.
+calistir cloparam43  test/snapshots/43_closure_param.kem 42
 echo "=== lambda V2: $pass/$((pass+fail)) ==="
 [ "$fail" -eq 0 ]
