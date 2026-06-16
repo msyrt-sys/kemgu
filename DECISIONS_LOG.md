@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-097 — [YÜKSEK] V2 FAZ 1: fat-value closure ABI iskeleti — fn değeri {ptr fn, ptr env} + runtime env-null dispatch (2026-06-16)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `f938741` → en yüksek D-096 → D-097 ayrıldı).
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit; DAVRANIŞ-EŞDEĞER;
+C-codegen-only].** V2 (escaping-closure desteği) yol haritasının 1. fazı. Fonksiyon-değeri
+temsilini tek-tipleştirir; D-071'in deneyip-bozduğu uniform-ABI tuzağını **yapısal olarak** eler.
+KAÇIŞ HENÜZ GÜVENLİ DEĞİL (env hâlâ STACK → heap F2); G005 reddi KALIR (F5'te kalkar).
+
+**Tasarım (B-i, v2_tasarim_plani.md onaylı):**
+- `işlev(...)→R` IR lowering: `ptr` → **`{ ptr, ptr }`** (2-word first-class fat value).
+  `ast_tip_to_ir` TIP_ISLEV → `{ ptr, ptr }` → değişken/param/dönüş/alan/dizi-eleman hepsi jenerik
+  olarak fat value taşır.
+- **Materyalizasyon:** top-level fn değeri → `{@f, null}` (insertvalue); yakalamayan lambda →
+  `{@lambda_N, null}`; yakalayan lambda → `{@lambda_N, %env}` (env F1'de HÂLÂ STACK alloca).
+- **Çağrı dispatch:** fat değerden `extractvalue` fn+env → `icmp eq ptr %env, null` → dallan:
+  bare `call R %fn(args)` / closure `call R %fn(ptr %env, args)` → slot-deseniyle birleştir
+  (phi yerine mevcut bellek-slot idiomu). **Compile-time `closure_mu`/`son_closure` tag'leri
+  KALDIRILDI** — "closure mu?" artık DEĞERİN PARÇASI (env-null), kaçışta kaybolmaz.
+
+**D-071 tuzağı neden artık imkânsız:** D-071'in uniform denemesi çağrı yerini "daima closure-unpack"
+yapıp bare fn-ptr'ı `{fn,env}` sanıyordu (→ `harita(xs, iki_kat)` çöp). Burada bare ve closure AYNI
+fat-value şeklini paylaşır; çağrı yeri env==null ile runtime'da ayrışır → bare fn doğal imzayla
+çağrılır, sarma/thunk gerekmez. Temsil-uyumsuzluğu yapısal olarak ortadan kalkar.
+
+**FIXPOINT güvenliği (ÖN-KONTROL):** self-host `.kem` kaynakları (lexer/parser/checker/codegen)
+**fn-DEĞER kullanmıyor** (fn-tipli param/dönüş/alan YOK; lambda literal YOK — yalnız yorumlarda).
+→ C compiler bu kaynakları derlerken TIP_ISLEV yolu hiç tetiklenmez → kemgu_self IR'ı DEĞİŞMEZ →
+self-host bootstrap byte-identik (stage1==stage2 korunur). Salt C-codegen değişikliği.
+
+**KAPSAM (F1 = yalnız iskelet):**
+- env HÂLÂ STACK alloca (heap promosyonu = F2); kaçan yakalayan closure HÂLÂ UAF olur → G005
+  reddi bu yüzden KALIR (F5'e dek kaldırılmaz; savunma derinliği).
+- Davranış-eşdeğer: korpus AYNI çıktı/exit. Yeni özellik (kaçış) AÇILMAZ.
+- Yakalamalı lambda'yı işlev-param'a geçirme (D-071 KAPSAM-DIŞI) artık ÇALIŞIR (fat value + runtime
+  dispatch) — F1'in yan kazanımı; ama escape G005 ile sınırlı.
+
+**Doğrulama:** lambda E2E **5/5** → exit 42, ASan temiz: 10_lambda, 04_islev,
+42_lambda_hesap (D-071-kritik: top-level/yerel-lambda → işlev-param, env==null yolu),
+25_closure_capture (yakalayan, env!=null yerel), **43_closure_param (YENİ: yakalayan closure →
+işlev-param, env!=null param yolu — D-071 KAPSAM-DIŞI item)**. SELF-HOST bootstrap: lexer 51/51,
+parser 51/51, **CODEGEN FIXPOINT stage1==stage2 byte-identik**. `mingw32-make test_tumu` →
+"Tum testler gecti!"; ASan E2E PASS=96 FAIL=0; --check/--checkdump 48/48. 0 uyarı.
+> Not: test makinesinde `mktemp`/`/tmp` MSYS mount'u ara sıra bozuk → bootstrap harness'ı flaky
+> (kod-dışı). TMPDIR yazılabilir dizine ayarlanınca geçer; fixpoint byte-identik ayrıca elle kanıtlandı.
+
 ## D-096 — [YÜKSEK] V1 kaçan-closure UAF reddi (G005): YAKALAYAN ∧ KAÇAN closure compile-time reddedilir (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
