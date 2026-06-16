@@ -2373,6 +2373,16 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         iken i < cs { deyim_uret(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
         ver 0;
     }
+    eğer metin_esit(ad, "GUVENSIZ") {
+        // CG: güvensiz = codegen açısından DÜZ BLOK → tek çocuğu (BLOK gövde) aynen emit et.
+        // Önceki durum: bu kol yoktu → gövde sessizce DÜŞERDİ (latent miscompile).
+        // C llvm.c DUGUM_GUVENSIZ ile aynı amaç: gövde aynen üretilir. C'de ayrıca
+        // guvensiz_derinlik ile inline stack sınır-kontrolü atlanır; self-host HEAP-uniform
+        // (dizi erişimi runtime-kontrollü) → inline stack kontrolü zaten yok, o makine GEREKMEZ.
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        deyim_uret(p, dizi_al(p.cocuk, cb));   // gövde bloğunu emit et
+        ver 0;
+    }
     eğer metin_esit(ad, "VER") {
         eğer dizi_al(p.a_cs, idx) > 0 {
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
@@ -2534,8 +2544,8 @@ işlev alloca_hoist_pass(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         ver 0;   // değer alt-ifadesinde DEGISKEN olmaz
     }
-    // konteyner deyimler: çocuklara in (BLOK/EGER/IKEN gövdeleri)
-    eğer metin_esit(ad, "BLOK") veya metin_esit(ad, "EGER") veya metin_esit(ad, "IKEN") {
+    // konteyner deyimler: çocuklara in (BLOK/EGER/IKEN gövdeleri + GUVENSIZ tek çocuğu BLOK)
+    eğer metin_esit(ad, "BLOK") veya metin_esit(ad, "EGER") veya metin_esit(ad, "IKEN") veya metin_esit(ad, "GUVENSIZ") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs2: tam32 = dizi_al(p.a_cs, idx);
         değişken i: tam32 = 0;
