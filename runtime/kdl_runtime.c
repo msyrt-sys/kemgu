@@ -25,6 +25,25 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include "kdl_bolge.h"   /* V2-F4.1: bölge (region) arena allokatörü (F4.0/D-099) */
+
+/* === V2-F4.1 (D-100): sızan tahsisleri global bölgeye yönlendir ===
+ * array (KdlDizi descriptor + büyüme) ve yeni-metin döndüren kdl_metin_*
+ * tahsisleri ÇAĞIRANA döner ve hiç free EDİLMEZ (sızar). Bunları global
+ * bölgeye al → program ömrü boyunca canlı, çağıran güvenle kullanır. Bölge
+ * HİÇ serbest bırakılmaz (status-quo leak — dizi/metin zaten sızıyordu;
+ * deterministik toplu serbest = F4.4). Codegen DEĞİŞMEZ → IR/FIXPOINT
+ * byte-identik. F4.0 allokatörü kdl_runtime.o içine GÖMÜLÜR (dosya sonundaki
+ * `#include "kdl_bolge.c"`) → harness link satırları DEĞİŞMEZ. */
+static KdlBolge *kdl_global_bolge = NULL;
+KdlBolge *kdl_global_bolge_al(void) {
+    if (!kdl_global_bolge) kdl_global_bolge = kdl_bolge_olustur();
+    return kdl_global_bolge;
+}
+/* Sızan tahsis kısayolu (global bölgeden n bayt). */
+static void *kdl_sizan_al(uint64_t n) {
+    return kdl_bolge_ayir(kdl_global_bolge_al(), n);
+}
 
 /* B2 (genisletilmis): Gercek thread bind — Windows + POSIX (Linux/macOS/ARM64) */
 #ifdef _WIN32
@@ -169,7 +188,7 @@ const char *kdl_ondalik_bicimle(const char *lex) {
     }
     buf[j] = '\0';
     double d = strtod(buf, NULL);
-    char *out = (char *)malloc(64);
+    char *out = (char *)kdl_sizan_al(64);  /* V2-F4.1: sızan → bölge */
     if (!out) return "0";
     snprintf(out, 64, "%g", d);
     return out;
@@ -268,7 +287,7 @@ int64_t kdl_maks64(int64_t a, int64_t b) {
 const char *kdl_metin_kopya(const char *s) {
     if (!s) return NULL;
     size_t n = strlen(s);
-    char *yeni = (char *)malloc(n + 1);
+    char *yeni = (char *)kdl_sizan_al(n + 1);  /* V2-F4.1: sızan → bölge */
     if (!yeni) return NULL;
     memcpy(yeni, s, n + 1);
     return yeni;
@@ -280,7 +299,7 @@ const char *kdl_metin_birlestir(const char *a, const char *b) {
     if (!b) b = "";
     size_t na = strlen(a);
     size_t nb = strlen(b);
-    char *yeni = (char *)malloc(na + nb + 1);
+    char *yeni = (char *)kdl_sizan_al(na + nb + 1);  /* V2-F4.1: sızan → bölge */
     if (!yeni) return NULL;
     memcpy(yeni, a, na);
     memcpy(yeni + na, b, nb);
@@ -296,7 +315,7 @@ int32_t kdl_metin_to_tam(const char *s) {
 
 /* tam32 -> metin (heap, format "%d") */
 const char *kdl_tam_to_metin(int32_t n) {
-    char *buf = (char *)malloc(16);
+    char *buf = (char *)kdl_sizan_al(16);  /* V2-F4.1: sızan → bölge */
     if (!buf) return NULL;
     snprintf(buf, 16, "%d", n);
     return buf;
@@ -316,7 +335,7 @@ const char *kdl_metin_kes(const char *s, int32_t baslangic, int32_t uzunluk) {
     if (baslangic > n) baslangic = n;
     int32_t kalan = n - baslangic;
     if (uzunluk < 0 || uzunluk > kalan) uzunluk = kalan;
-    char *r = (char *)malloc((size_t)uzunluk + 1);
+    char *r = (char *)kdl_sizan_al((size_t)uzunluk + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     memcpy(r, s + baslangic, (size_t)uzunluk);
     r[uzunluk] = '\0';
@@ -329,7 +348,7 @@ const char *kdl_metin_kucuk(const char *s) {
     if (!s) return NULL;
     size_t n = strlen(s);
     /* Worst case her ASCII 'I' -> ı (1->2 byte) */
-    char *r = (char *)malloc(n * 2 + 1);
+    char *r = (char *)kdl_sizan_al(n * 2 + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     size_t w = 0;
     for (size_t i = 0; i < n; i++) {
@@ -354,7 +373,7 @@ const char *kdl_metin_kucuk(const char *s) {
 const char *kdl_metin_buyuk(const char *s) {
     if (!s) return NULL;
     size_t n = strlen(s);
-    char *r = (char *)malloc(n * 2 + 1);
+    char *r = (char *)kdl_sizan_al(n * 2 + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     size_t w = 0;
     for (size_t i = 0; i < n; i++) {
@@ -393,7 +412,7 @@ const char *kdl_metin_buyuk_tr(const char *s) {
 const char *kdl_metin_kucuk_ascii(const char *s) {
     if (!s) return NULL;
     size_t n = strlen(s);
-    char *r = (char *)malloc(n + 1);
+    char *r = (char *)kdl_sizan_al(n + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     for (size_t i = 0; i < n; i++) {
         char c = s[i];
@@ -407,7 +426,7 @@ const char *kdl_metin_kucuk_ascii(const char *s) {
 const char *kdl_metin_buyuk_ascii(const char *s) {
     if (!s) return NULL;
     size_t n = strlen(s);
-    char *r = (char *)malloc(n + 1);
+    char *r = (char *)kdl_sizan_al(n + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     for (size_t i = 0; i < n; i++) {
         char c = s[i];
@@ -448,7 +467,7 @@ const char *kdl_metin_kirp(const char *s) {
     while (son > bas && (son[-1] == ' ' || son[-1] == '\t' ||
                           son[-1] == '\n' || son[-1] == '\r')) son--;
     size_t n = (size_t)(son - bas);
-    char *r = (char *)malloc(n + 1);
+    char *r = (char *)kdl_sizan_al(n + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     memcpy(r, bas, n);
     r[n] = '\0';
@@ -466,7 +485,7 @@ const char *kdl_metin_yer_degistir(const char *s, const char *eski_p,
     size_t ne = strlen(eski_p);
     size_t ny = strlen(yeni_p);
     if (ne == 0) {
-        char *r = (char *)malloc(ns + 1);
+        char *r = (char *)kdl_sizan_al(ns + 1);  /* V2-F4.1: sızan → bölge */
         if (!r) return NULL;
         memcpy(r, s, ns + 1);
         return r;
@@ -479,7 +498,7 @@ const char *kdl_metin_yer_degistir(const char *s, const char *eski_p,
     size_t nr = (ny >= ne)
               ? ns + sayi * (ny - ne)
               : ns - sayi * (ne - ny);
-    char *r = (char *)malloc(nr + 1);
+    char *r = (char *)kdl_sizan_al(nr + 1);  /* V2-F4.1: sızan → bölge */
     if (!r) return NULL;
     char *dst = r;
     const char *src = s;
@@ -514,8 +533,22 @@ typedef struct {
     int32_t eleman_byte;
 } KdlDizi;
 
+/* V2-F4.1: dizi büyümesi — realloc YOK (d->veri artık bölge-sahipli; realloc'a
+ * bölge işaretçisi geçmek UB/çökme olurdu). Yeni bölge tamponu ayır, CANLI
+ * (boyut*eb) baytı kopyala, d->veri'yi güncelle. Eski tampon bölgede sızar —
+ * status-quo (F4.4 bölge-free toplu geri kazanır). OOM'da orijinal davranış
+ * korunur (d->veri=NULL → çağıran yazımında çökme; eskiden realloc-NULL aynısı). */
+static void kdl_dizi_buyut(KdlDizi *d, int32_t yeni_kap, size_t eb) {
+    void *yeni = kdl_sizan_al((uint64_t)yeni_kap * (uint64_t)eb);
+    if (yeni && d->veri && d->boyut > 0)
+        memcpy(yeni, d->veri, (size_t)d->boyut * eb);
+    d->veri = yeni;
+    d->kapasite = yeni_kap;
+}
+
 KdlDizi *kdl_dizi_olustur(int32_t eleman_byte) {
-    KdlDizi *d = (KdlDizi *)malloc(sizeof(KdlDizi));
+    /* V2-F4.1: descriptor sızar (dizi_serbest no-op) → global bölgeden. */
+    KdlDizi *d = (KdlDizi *)kdl_sizan_al(sizeof(KdlDizi));
     if (!d) return NULL;
     d->veri = NULL;
     d->boyut = 0;
@@ -528,8 +561,7 @@ void kdl_dizi_ekle_tam(KdlDizi *d, int32_t deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * sizeof(int32_t));
-        d->kapasite = yk;
+        kdl_dizi_buyut(d, yk, sizeof(int32_t));   /* V2-F4.1: realloc→bölge */
     }
     ((int32_t *)d->veri)[d->boyut++] = deger;
 }
@@ -538,8 +570,7 @@ void kdl_dizi_ekle_tam64(KdlDizi *d, int64_t deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * sizeof(int64_t));
-        d->kapasite = yk;
+        kdl_dizi_buyut(d, yk, sizeof(int64_t));   /* V2-F4.1: realloc→bölge */
     }
     ((int64_t *)d->veri)[d->boyut++] = deger;
 }
@@ -548,8 +579,7 @@ void kdl_dizi_ekle_ptr(KdlDizi *d, void *deger) {
     if (!d) return;
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * sizeof(void *));
-        d->kapasite = yk;
+        kdl_dizi_buyut(d, yk, sizeof(void *));   /* V2-F4.1: realloc→bölge */
     }
     ((void **)d->veri)[d->boyut++] = deger;
 }
@@ -622,8 +652,7 @@ void kdl_dizi_ekle_yapi(KdlDizi *d, const void *kaynak) {
     int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        d->veri = realloc(d->veri, (size_t)yk * (size_t)eb);
-        d->kapasite = yk;
+        kdl_dizi_buyut(d, yk, (size_t)eb);   /* V2-F4.1: realloc→bölge */
     }
     memcpy((char *)d->veri + (size_t)d->boyut * (size_t)eb,
            kaynak, (size_t)eb);
@@ -664,16 +693,23 @@ void kdl_dizi_kapasite_ayarla(KdlDizi *d, int32_t yeni_kapasite) {
     if (!d || yeni_kapasite <= d->kapasite) return;
     /* Eleman byte'i bilinmiyor — d->eleman_byte kullan */
     int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 4;
-    void *yeni = realloc(d->veri, (size_t)yeni_kapasite * (size_t)eb);
+    /* V2-F4.1: realloc YOK (d->veri bölge-sahipli). Bölge tamponu + canlı
+     * (boyut*eb) kopya; eski tampon bölgede sızar. OOM'da eski veri korunur. */
+    void *yeni = kdl_sizan_al((uint64_t)yeni_kapasite * (uint64_t)eb);
     if (!yeni) return;
+    if (d->veri && d->boyut > 0)
+        memcpy(yeni, d->veri, (size_t)d->boyut * (size_t)eb);
     d->veri = yeni;
     d->kapasite = yeni_kapasite;
 }
 
+/* V2-F4.1: NÖTR (no-op). d->veri ve d artık global bölge-sahipli → free()
+ * YANLIŞ olur (bölge belleğini libc free'ye vermek = çökme). Bölge program
+ * sonunda topluca serbest kalır (şimdilik hiç — status-quo leak; F4.4). Bu
+ * fonksiyon codegen tarafından zaten emit EDİLMİYOR (dizi hep sızıyordu → ölü);
+ * geriye-uyum için imza korunur. */
 void kdl_dizi_serbest(KdlDizi *d) {
-    if (!d) return;
-    free(d->veri);
-    free(d);
+    (void)d;
 }
 
 /* === B2: Concurrency minimal API ===
@@ -862,87 +898,19 @@ void kdl_kanal_serbest(KdlKanal *k) {
     free(k);
 }
 
-/* === Arena bellek modeli (Bolge-tabanli, GC-yok) ===
+/* === Arena/bölge bellek modeli ===
  *
- * KEMGU'nun temel ozelligi: bolge (region) tabanli bellek. Bir bolgenin
- * omru biter -> tum tahsisleri tek seferde serbest. KEMGU compiler arena'si
- * (src/arena.c) compile-time icin; bu runtime arena'si KEMGU programlari
- * icindir.
+ * V2-F4.1 (D-100): buradaki ESKİ KdlArena (kdl_bolge_olustur/ayir/serbest/
+ * toplam_byte + KdlArenaChunk) SİLİNDİ. Ölüydü — `bölge_al` codegen'i inline
+ * @malloc kullanıyor (llvm.c:2726), KdlArena'yı HİÇ çağırmıyordu (sıfır çağıran
+ * derlemeyle doğrulandı). Ayrıca F4.0'ın kdl_bolge.c'siyle aynı kdl_bolge_*
+ * isimlerini farklı imzayla taşıyıp gizli çakışma yaratıyordu.
  *
- * Implementasyon: bump allocator (linked chunks). Chunk dolarsa yeni
- * chunk ayirilir; arena_serbest tum chunklari free eder.
- */
-
-typedef struct KdlArenaChunk {
-    char *buf;
-    size_t kullanildi;
-    size_t kapasite;
-    struct KdlArenaChunk *sonraki;
-} KdlArenaChunk;
-
-typedef struct {
-    KdlArenaChunk *bas;
-    KdlArenaChunk *aktif;
-    size_t toplam_tahsis;   /* istatistik: ayrilan toplam byte */
-} KdlArena;
-
-#define KDL_ARENA_CHUNK_VARSAYILAN 4096
-
-static KdlArenaChunk *kdl_chunk_olustur(size_t kapasite) {
-    KdlArenaChunk *ch = (KdlArenaChunk *)malloc(sizeof(KdlArenaChunk));
-    if (!ch) return NULL;
-    ch->buf = (char *)malloc(kapasite);
-    if (!ch->buf) { free(ch); return NULL; }
-    ch->kullanildi = 0;
-    ch->kapasite = kapasite;
-    ch->sonraki = NULL;
-    return ch;
-}
-
-KdlArena *kdl_bolge_olustur(void) {
-    KdlArena *a = (KdlArena *)malloc(sizeof(KdlArena));
-    if (!a) return NULL;
-    a->bas = kdl_chunk_olustur(KDL_ARENA_CHUNK_VARSAYILAN);
-    if (!a->bas) { free(a); return NULL; }
-    a->aktif = a->bas;
-    a->toplam_tahsis = 0;
-    return a;
-}
-
-/* boyut byte ayir, hizalama 8-byte */
-void *kdl_bolge_ayir(KdlArena *a, int32_t boyut) {
-    if (!a || boyut <= 0) return NULL;
-    size_t hizalanmis = (size_t)((boyut + 7) & ~7);
-    /* Aktif chunkta yer var mi? */
-    if (a->aktif->kullanildi + hizalanmis > a->aktif->kapasite) {
-        size_t yeni_kap = hizalanmis > KDL_ARENA_CHUNK_VARSAYILAN
-                          ? hizalanmis * 2 : KDL_ARENA_CHUNK_VARSAYILAN;
-        KdlArenaChunk *yeni = kdl_chunk_olustur(yeni_kap);
-        if (!yeni) return NULL;
-        a->aktif->sonraki = yeni;
-        a->aktif = yeni;
-    }
-    void *p = a->aktif->buf + a->aktif->kullanildi;
-    a->aktif->kullanildi += hizalanmis;
-    a->toplam_tahsis += hizalanmis;
-    return p;
-}
-
-void kdl_bolge_serbest(KdlArena *a) {
-    if (!a) return;
-    KdlArenaChunk *c = a->bas;
-    while (c) {
-        KdlArenaChunk *s = c->sonraki;
-        free(c->buf);
-        free(c);
-        c = s;
-    }
-    free(a);
-}
-
-int32_t kdl_bolge_toplam_byte(KdlArena *a) {
-    return a ? (int32_t)a->toplam_tahsis : 0;
-}
+ * Kanonik bölge allokatörü artık F4.0 (`runtime/kdl_bolge.c`, KdlBolge): blok-
+ * listesi + bump, 16-hizalı, sızıntı-tanığı. Bu dosyaya SONDA `#include
+ * "kdl_bolge.c"` ile GÖMÜLÜR → kdl_runtime.o kendi içinde taşır, harness link
+ * satırları değişmez. Standalone kdl_bolge.o yalnız birim testi linkler (hiçbir
+ * hedef ikisini birden linklemez → çakışma yok). */
 
 /* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) === */
 
@@ -1049,20 +1017,8 @@ int64_t kdl_dosya_boyut(const char *yol) {
     return n < 0 ? -1 : (int64_t)n;
 }
 
-/* Arena-aware metin birlestirme (verilen bolgeye yerlestirir) */
-const char *kdl_bolge_metin_birlestir(KdlArena *a,
-                                       const char *x, const char *y) {
-    if (!x) x = "";
-    if (!y) y = "";
-    size_t nx = strlen(x);
-    size_t ny = strlen(y);
-    char *r = (char *)kdl_bolge_ayir(a, (int32_t)(nx + ny + 1));
-    if (!r) return NULL;
-    memcpy(r, x, nx);
-    memcpy(r + nx, y, ny);
-    r[nx + ny] = '\0';
-    return r;
-}
+/* V2-F4.1: kdl_bolge_metin_birlestir(KdlArena*) SİLİNDİ — ölü KdlArena
+ * kümesinin parçasıydı (sıfır çağıran; codegen kullanmıyor). */
 
 /* === CLI args (OTP CLI demo icin) ===
  *
@@ -1500,3 +1456,11 @@ void kdl_bellek_hizali_serbest(void *p) {
     free(p);
 #endif
 }
+
+/* === V2-F4.1 (D-100): F4.0 bölge allokatörünü GÖM ===
+ * kdl_bolge.c'yi bu çeviri birimine dahil et → kdl_bolge_olustur/ayir/serbest
+ * + sayaçlar kdl_runtime.o içinde tanımlı olur (ayrı kdl_bolge.o link'i GEREKMEZ
+ * → harness link satırları değişmez). quote-include kdl_runtime.c'nin dizinini
+ * (runtime/) arar. Standalone kdl_bolge.o yalnız birim testinde linklenir;
+ * hiçbir hedef kdl_runtime.o + kdl_bolge.o'yu birlikte linklemez → çift-sembol yok. */
+#include "kdl_bolge.c"
