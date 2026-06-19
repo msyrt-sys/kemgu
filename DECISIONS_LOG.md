@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-100 — [YÜKSEK] V2 F4 FAZ 1: sızan array/metin tahsisini global bölgeye yönlendir + sembol-çakışması temizliği (2026-06-17)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `75912a2` → en yüksek D-099 → D-100 ayrıldı).
+
+**Karar [ETKİ: ORTA — yalnız `runtime/kdl_runtime.c`; codegen/checker/IR DEĞİŞMEZ; izole commit].**
+Sızan (çağırana dönen + hiç free edilmeyen) array ve yeni-metin tahsislerini F4.0 global bölgesine
+(`kdl_bolge`) yönlendirir. Codegen helper imzaları DEĞİŞMEDİĞİ için IR aynı → **FIXPOINT byte-identik**;
+mirror yok (saf C runtime). Bölge HİÇ serbest bırakılmaz (status-quo leak; deterministik toplu serbest = F4.4).
+
+**Sembol-çakışması temizliği (ön-blokör — orchestrator onayıyla çözüldü):** `kdl_runtime.c` ZATEN
+`kdl_bolge_olustur/ayir/serbest(+toplam_byte)` tanımlıyordu = `bölge_al` için ESKİ `KdlArena`
+(chunk-bump, int32). AMA `bölge_al` codegen'i inline `@malloc` kullanıyor (llvm.c:2726) → KdlArena
+**TAMAMEN ÖLÜ** (sıfır çağıran, derlemeyle doğrulandı). F4.0 aynı isimleri farklı imzayla almıştı →
+gizli çakışma (`#include "kdl_bolge.h"` → `conflicting types` derleme hatası). **Çözüm:** ölü KdlArena
+kümesi (KdlArena/KdlArenaChunk + kdl_bolge_olustur/ayir/serbest/toplam_byte + kdl_bolge_metin_birlestir,
+hepsi sıfır-çağıran) SİLİNDİ; F4.0'ın `kdl_bolge.c`'si dosya sonuna `#include "kdl_bolge.c"` ile GÖMÜLDÜ
+→ `kdl_runtime.o` allokatörü kendi içinde taşır, **harness link satırları DEĞİŞMEZ**. Standalone
+`kdl_bolge.o` yalnız F4.0 birim testinde linklenir; hiçbir hedef ikisini birden linklemez → çift-sembol yok.
+
+**Yönlendirilen sızan tahsisler:**
+- `kdl_dizi_olustur` descriptor → bölge.
+- `kdl_dizi_ekle_{tam,tam64,ptr,yapi}` büyüme: `realloc` → `kdl_dizi_buyut()` (bölgeden yeni tampon +
+  CANLI `boyut*eb` memcpy; eski tampon bölgede sızar). **`kdl_dizi_kapasite_ayarla` DE** dönüştürüldü
+  (zorunlu invaryant: d->veri bölge-sahipli → realloc'a geçmek UB/çökme olurdu).
+- Yeni-metin döndüren `kdl_metin_*` + `kdl_ondalik_bicimle` + `kdl_tam_to_metin` (12 nokta) → bölge.
+- `kdl_dizi_serbest` NÖTR (no-op) — d artık bölge-sahibi, `free()` çökme olurdu; codegen zaten emit
+  etmiyordu (ölü, dizi hep sızıyordu).
+
+**DOKUNULMAYAN:** dosya/kripto geçici tamponları (malloc…free çiftli — bölgeye alınsa sızıntı YARATIRDI),
+eşzamanlılık (kdl_gorev/kanal — D-008, çağrılmıyor), `kdl_bellek_hizali_*`, derleyicinin kendi
+`src/arena.c`'si (ayrı, compile-time). bölge_al / closure-env / intrinsic inline `@malloc`'ları = F4.2.
+
+**Doğrulama:** ASan/UBSan smoke (1000-eleman geometrik büyüme değerleri doğru → büyüme-memcpy doğru;
+kapasite_ayarla reserve; metin birleştirme; bakiye=1). `mingw32-make test_tumu` → "Tum testler gecti!"
++ **FIXPOINT byte-identik** (self-host kendini bölge-tahsisiyle derleyip aynı IR üretiyor = allokatör +
+büyüme deseni gerçek yük altında doğru). ASan E2E ~97/0 (büyüme memcpy + d->veri güncelleme bellek-temiz;
+eski tampon bölgede serbest değil → UAF yok). `kdl_bolge_bakiye()` çıkışta 1 (global bölge, kasıtlı
+hiç-serbest — beklenen). 0 uyarı.
+
 ## D-099 — V2 F4 FAZ 0: bölge (region) arena allokatörü runtime (`kdl_bolge`) (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
