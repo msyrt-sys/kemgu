@@ -5,6 +5,55 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-099 — V2 F4 FAZ 0: bölge (region) arena allokatörü runtime (`kdl_bolge`) (2026-06-16)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `7166880` → en yüksek D-098 → D-099 ayrıldı).
+
+**Karar [ETKİ: DÜŞÜK — saf runtime; codegen/checker/IR DEĞİŞMEZ; izole commit].** Bölge tabanlı
+bellek modelinin (`belgeler/KEMGU_Bellek_Modeli.md`, Katman 1) runtime tabanı. Bir BÖLGE = bir
+ARENA: malloc'lu blok tek-yönlü listesi + blok-içi bump pointer. Tahsis O(1) bump; bölge
+kapanışında TÜM bloklar tek seferde free (O(blok)). GC yok — deterministik serbest. **Bu fonksiyonları
+henüz kimse çağırmaz** (F4.1'de lambda env + dizi/metin tahsisi buraya bağlanır; F4.2'de
+region-passing ABI — bölge `ptr` parametresi). Soundness + FIXPOINT'ten tamamen bağımsız.
+
+**API (`runtime/kdl_bolge.h` + `.c`):**
+- `KdlBolge *kdl_bolge_olustur(void)` — handle + ilk blok (64 KB) malloc'la; OPAK ptr döner
+  (F4.2 region-passing'de `ptr` param).
+- `void *kdl_bolge_ayir(KdlBolge *b, uint64_t n)` — 16-bayt hizalı bump; aktif blokta yer yoksa
+  yeni blok (boyut = max(64KB, n+16) → oversized'a adanmış blok).
+- `void kdl_bolge_serbest(KdlBolge *b)` — tüm bloklar + handle free (O(blok)).
+- Sızıntı-tanığı (Windows'ta LSan yok): `kdl_bolge_olustur_sayisi`/`kdl_bolge_serbest_sayisi`
+  global sayaçları + `int kdl_bolge_bakiye(void)` (oluştur−serbest; 0 = sızıntı yok).
+
+**Tasarım inceliği — hizalama:** esnek dizi (FAM `veri[]`) ofseti platforma göre 16-hizalı
+OLMAYABİLİR (64-bit'te header 24 bayt → veri 8-hizalı). Bu yüzden hizalama derleme-zamanı ofsetine
+değil ÇALIŞMA-ZAMANI ADRESİNE (uintptr_t) göre yapılır → her platform/header düzeninde 16-hizalı.
+Yeni blok kapasitesi `hn + 16` ile en kötü hizalama payını garanti eder. Tüm aritmetik taşma-korumalı
+(hiza_yukari wrap guard, `kap < hn` guard, `SIZE_MAX - sizeof(header)` malloc guard).
+
+**KAPSAM / SINIR:**
+- Tahsisler TEK TEK serbest EDİLMEZ — yalnız bölge topluca (dizi/metin "leak OK" status-quo ile
+  aynı sınıf; bölge modeli deterministik serbest'i ZATEN sağlıyor: bölge kapanınca hepsi gider).
+- Bare-metal: host malloc/free üstüne; `KEMGU_BARE_METAL` altında kdl page-allocator'a bağlanması
+  TODO (bloklamaz — bare-metal bu dosyayı henüz derlemiyor).
+- Tek-thread host; sayaçlar atomik değil (concurrency Katman 2).
+- Makefile: `kdl_bolge.o` (plain, F4.1 link'i için) + `test_kdl_bolge` (ASan/UBSan birim test);
+  codegen/test emit hedeflerine DOKUNULMADI.
+
+**Adversarial inceleme:** çok-ajanlı (alignment · overflow · memsafety · caplogic · UB/port ·
+test-gaps; her bulgu ayrıca doğrulandı) → **0 doğrulanmış correctness/safety açığı**. Doğrulayıcılar
+tüm korumaları (runtime-adres hizalaması, `hn<n`/`kap<hn`/`SIZE_MAX` taşma guard'ları, free-all
+zincir-yürüyüşü, NULL guard'ları) izleyip teyit etti. İnceleme önerileriyle SERTLEŞTİRME:
+`kdl_bolge_blok_sayisi()` teşhis erişimcisi eklendi (büyümeyi blok-sayısıyla KESİN doğrula; eski
+write-only alan artık kullanılıyor) + NULL-handle ve taşma-reddi (UINT64_MAX → NULL) testleri.
+
+**Doğrulama:** birim test **33/33**, ASan/UBSan TEMİZ (blok-içi · büyüme [blok sayısı 1→2] ·
+oversized 128KB [adanmış blok] · free-all · bakiye=0 · hizalama 1..33 bayt + uint64/16-bayt tür ·
+1000 yoğun tahsis örtüşmez · NULL-handle no-op · UINT64_MAX taşma reddi). `mingw32-make test_tumu`
+→ "Tum testler gecti!" (codegen değişmedi → IR/FIXPOINT trivial korunur; yeni fonksiyonlar
+referanssız ölü kod). ASan E2E 97/0 (yeni runtime'ı kullanan yok). 0 uyarı.
+
 ## D-098 — [YÜKSEK] V2 FAZ 2: yakalayan closure env'i stack→HEAP (@malloc) — kaçışta yaşar (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
