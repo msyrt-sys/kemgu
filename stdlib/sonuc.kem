@@ -19,14 +19,16 @@
 // `tamam(v)` / `hata(m)` da yazılabilir, ama generic context'te bazen
 // wrapper isabetli olur.
 //
-// CODEGEN KISITI (mevcut, bu modülün tamamını etkiler — tip kontrolünden geçer
-// ama --llvm codegen'inde): `sonuç<T, E>` DÖNDÜREN generic fonksiyonlar
-// (tamam_yap, hata_yap, harita, harita_hata, bagla, opsiyonel_to_sonuc),
-// E i32'ye inmeyen bir tiple (ör. `metin` -> ptr) instantiate edilince yanlış IR
-// üretir (dönüş struct'ında E i32 varsayılır). E tamsayı olduğunda doğru çalışır.
-// Geçici çözüm: hata tipi olarak tamsayı kod kullanın, ya da doğrudan
-// `tamam(v)`/`hata(m)` yazıp sonucu hemen `eşleş` ile tüketin (struct'ı
-// fonksiyon sınırından geçirmeyin). Bu codegen sınırı stdlib dışıdır.
+// CODEGEN NOTU (D1 düzeltmesi sonrası daraltıldı): `sonuç<T, E>` DÖNDÜREN
+// generic fonksiyonlarda E ptr-tipli (ör. `metin`) instantiate edilince
+// CALL/DEFINE struct layout eşleşmesi artık DOĞRU — E bir ARGÜMANDAN
+// çıkarsanabildiği sürece (ör. `hata_yap`'ın `h: E` parametresi, `harita_hata`).
+// Kalan sınır: E yalnız DÖNÜŞ tipinde görünüp argümanlardan çıkarsanamadığında
+// (ör. `tamam_yap<T,E>(d: T) -> sonuç<T,E>` — E hiçbir argümanda yok),
+// monomorphization E'yi i32'ye düşürür ve değişken anotasyonundaki ptr ile
+// çelişir. Bu, dönüş-tipi güdümlü tip-arg çıkarsaması gerektiren AYRI bir sınır
+// (D1 kapsamı dışı). Geçici çözüm o durumda: doğrudan `tamam(v)`/`hata(m)` yazıp
+// sonucu hemen `eşleş` ile tüketin.
 
 işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
     ver tamam(d);

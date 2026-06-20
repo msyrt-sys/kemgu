@@ -1,0 +1,22 @@
+// Bug #3 (D2) regresyon: kullanici-tanimli `metin_*` / `dosya_*` ON-EK'li
+// islevler builtin greedy-prefix kacirmasini EZMELI.
+// Onceki bug: codegen `metin_`/`dosya_` ile baslayan HER cagriyi kosulsuz
+// @kdl_metin_*/@kdl_dosya_*'a yeniden yazardi -> kullanici islevi (var olmayan
+// builtin'e) kacirilir, yanlis hedef/donus tipi -> clang red veya segfault.
+// Fix: builtin ad-zinciri yalniz kullanici islevi COZULMEDIYSE (ik==NULL) calisir.
+//
+// NOT: `dizi_boyut`/`dizi_al`/`dizi_ekle`/`dizi_yaz` AYRI bir konu — bunlar
+// checker tarafindan da taninan REZERVE dizi intrinsic'leri (tip_kontrol.c),
+// `Dizi<T>` argumani ister; kullanici-golgeleme bir DIL-anlambilim karari
+// (Mehmet'e birakildi), bu testin kapsami DISINDA.
+işlev metin_es(a: tam32) -> tam32 {
+    ver a + 5;
+}
+
+işlev metin_ozel_yardim(a: tam32) -> tam32 {
+    ver a + 30;
+}
+
+işlev main() -> tam32 {
+    ver metin_es(2) + metin_ozel_yardim(5);   // (2+5) + (5+30) = 7 + 35 = 42
+}

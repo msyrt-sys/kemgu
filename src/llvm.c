@@ -2010,21 +2010,30 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         }
     }
 
-    /* Liste<T> BUG-1 fix: donus tipi T substitusyonu CALL emisyonundan ONCE
-     * hesaplanmali (imza-uyumlu IR). Struct donus (%Nokta) dahil. */
+    /* Liste<T> BUG-1 + D1 fix: donus tipi T substitusyonu CALL emisyonundan
+     * ONCE hesaplanmali (imza-uyumlu IR). Onceki kod yalniz `-> T` (ciplak
+     * DUGUM_TIP_BASIT) durumunu yamiyordu; `-> sonuç<T,E>` / `-> seçimlik<T>`
+     * gibi BILESIK generic donusler yamasiz kaliyor ve registered donus_tip'in
+     * generic-fallback i32'siyle CALL ediliyor, define ise dogru ptr ile
+     * emit edildigi icin clang "result type mismatch" verir. Cozum: donus tipi
+     * AST'sini, CALL'in tip_args'i gecici subst baglami olarak push edilmis
+     * halde ast_tip_to_ir ile yeniden lower et (DUGUM_TIP_SONUC/SECIMLIK/
+     * KULLANICI dallari E=ptr'yi gorur). specialize_emit ile ayni push/pop. */
     const char *donus_t = donus;
-    if (gislev->veri.islev.donus_tipi &&
-        gislev->veri.islev.donus_tipi->tip == DUGUM_TIP_BASIT) {
-        const char *dad = gislev->veri.islev.donus_tipi->veri.tip_basit.ad;
-        int duz = gislev->veri.islev.donus_tipi->veri.tip_basit.ad_uzunluk;
+    if (gislev->veri.islev.donus_tipi && tps > 0) {
+        TipSubst *eski_substler = g->substler;
         for (int ti = 0; ti < tps; ti++) {
-            const char *tp = gislev->veri.islev.tip_paramlar[ti];
-            int tp_uz = (int)strlen(tp);
-            if (duz == tp_uz && memcmp(dad, tp, (size_t)tp_uz) == 0) {
-                donus_t = tip_args[ti];
-                break;
-            }
+            TipSubst *s = (TipSubst *)arena_ayir(g->arena, sizeof(TipSubst));
+            if (!s) continue;
+            s->ad = gislev->veri.islev.tip_paramlar[ti];
+            s->ad_uz = (int)strlen(s->ad);
+            s->ir = tip_args[ti];
+            s->sonraki = g->substler;
+            g->substler = s;
         }
+        const char *yeniden = ast_tip_to_ir(g, gislev->veri.islev.donus_tipi);
+        g->substler = eski_substler;
+        if (yeniden) donus_t = yeniden;
     }
     if (strcmp(donus_t, "void") == 0) {
         /* donussuz generic (or. buyu<T>) — void call */
@@ -3297,7 +3306,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                               NULL, NULL, NULL, NULL };
             const char *builtin_donus = NULL;
             (void)param_beklenen; (void)builtin_donus;
-            if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
+            /* D2 (bug #3): builtin ad-eslestirme zinciri yalniz KULLANICI islevi
+             * COZULMEDIYSE (ik==NULL) calismali. Aksi halde kullanici-tanimli
+             * `yazdir`/`yaz_*`/`metin_*`/`dizi_*` islevleri builtin'e kacirilir
+             * (hijack). `!ik` zincirin BASINDAKI `if`e konur — sonraki `else if`
+             * dallari otomatik atlanir, akis alttaki generic/normal kullanici-fn
+             * emisyonuna duser. */
+            if (!ik && cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
             } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
                 cagri_adi = "malloc"; cagri_adi_uz = 6;
@@ -3428,8 +3443,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             /* Konsolidasyon: args sonrasi mapping ve intrinsicler.
              * `if/else if` chain artik bağimsiz, args alloc'tan sonra. */
-            if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
-                /* Madde A: metin_* built-in -> kdl_metin_* */
+            if (!ik && cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+                /* Madde A: metin_* built-in -> kdl_metin_* (D2: !ik — kullanici
+                 * islevi cozulmusse builtin'e kacirma; tum else-if ladder atlanir) */
                 static char kdl_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
                 memcpy(kdl_buf, "kdl_", 4);

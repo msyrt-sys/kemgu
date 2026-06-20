@@ -1,0 +1,17 @@
+// D1 (bug #2) regresyon: generic islev `-> sonuç<T,E>` E=ptr (metin) ile
+// instantiate edilince CALL ve DEFINE struct layout AYNI olmali ({i8,i32,ptr}).
+// Onceki bug: CALL {i8,i32,i32} (kayit-aninda bos subst -> generic-fallback i32)
+// vs DEFINE {i8,i32,ptr} -> clang "result type mismatch" red.
+// E, `e: E` argumanindan cikarsanir (metin -> ptr).
+işlev hata_yap<T, E>(e: E) -> sonuç<T, E> {
+    ver hata(e);
+}
+
+işlev main() -> tam32 {
+    değişken r: sonuç<tam32, metin> = hata_yap("oops");
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(e) => { ver 7; }
+    }
+    ver 0;
+}
