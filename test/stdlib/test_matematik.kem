@@ -153,8 +153,25 @@ işlev test_palindrom_0() -> mantıksal { ver palindrom_mu(0); }
 işlev test_palindrom_1221() -> mantıksal { ver palindrom_mu(1221); }
 işlev test_palindrom_negatif() -> mantıksal { ver palindrom_mu(0 - 5); }
 
-// Sentinel sürücü: tüm genişletme kontrolleri geçerse 42, aksi halde ilk
-// başarısız kontrolün indeksi (--llvm | clang | run ile execution-test).
+// =============================================================================
+// Kenar-durum testleri — sınır/büyük girdiler (taşma öncesi + tam64 ara değer)
+// =============================================================================
+
+işlev test_asal_0() -> mantıksal { ver asal_mi(0); }              // yanlış
+işlev test_asal_1() -> mantıksal { ver asal_mi(1); }              // yanlış
+işlev test_fibonacci_20() -> tam32 { ver fibonacci(20); }         // 6765
+işlev test_faktoriyel_12() -> tam32 { ver faktoriyel(12); }       // 479001600 (tam32'ye sığar)
+işlev test_mutlak_buyuk() -> tam32 { ver mutlak(0 - 1000000); }   // 1000000
+işlev test_kombinasyon_20_10() -> tam32 { ver kombinasyon(20, 10) olarak tam32; }  // 184756
+işlev test_us_mod_buyuk() -> tam32 { ver us_mod(2, 20, 1000000); } // 1048576 % 1e6 = 48576
+işlev test_palindrom_12321() -> mantıksal { ver palindrom_mu(12321); }  // doğru
+işlev test_obeb_dizi_buyuk() -> tam32 {
+    değişken d: Dizi<tam32> = [100, 75, 50];
+    ver obeb_dizi(d);                                              // 25
+}
+
+// Sentinel sürücü: tüm genişletme + kenar-durum kontrolleri geçerse 42, aksi
+// halde ilk başarısız kontrolün indeksi (--llvm | clang | run).
 işlev main() -> tam32 {
     eğer test_obeb_dizi() != 6 { ver 1; }
     eğer test_obeb_dizi_tek() != 7 { ver 2; }
@@ -181,5 +198,14 @@ işlev main() -> tam32 {
     eğer değil test_palindrom_0() { ver 23; }
     eğer değil test_palindrom_1221() { ver 24; }
     eğer test_palindrom_negatif() { ver 25; }
+    eğer test_asal_0() { ver 26; }
+    eğer test_asal_1() { ver 27; }
+    eğer test_fibonacci_20() != 6765 { ver 28; }
+    eğer test_faktoriyel_12() != 479001600 { ver 29; }
+    eğer test_mutlak_buyuk() != 1000000 { ver 30; }
+    eğer test_kombinasyon_20_10() != 184756 { ver 31; }
+    eğer test_us_mod_buyuk() != 48576 { ver 32; }
+    eğer değil test_palindrom_12321() { ver 33; }
+    eğer test_obeb_dizi_buyuk() != 25 { ver 34; }
     ver 42;
 }
