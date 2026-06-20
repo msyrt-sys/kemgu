@@ -2506,6 +2506,28 @@ static void test_yapi_dizi_alani_heap(void) {
     test_sonuc("yapı Dizi<T> alanı boş-literal -> heap (segfault yok) -> exit 42", rc == 42);
 }
 
+/* --- D1 (bug #2): generic `-> sonuç<T,E>` E=ptr monomorphizasyon layout --- */
+static void test_d1_generic_sonuc_ptr(void) {
+    /* generic islev `-> sonuç<T,E>` E=ptr (metin) ile instantiate edilince
+     * CALL ve DEFINE struct layout AYNI olmali ({i8,i32,ptr}). Onceki bug:
+     * CALL {i8,i32,i32} (kayit-aninda bos subst) vs DEFINE {i8,i32,ptr}
+     * -> clang "result type mismatch". hata kolu -> exit 7. */
+    int rc = derle_dosya_ve_calistir("test/snapshots/d1_generic_sonuc_ptr.kem");
+    test_sonuc("D1: generic -> sonuc<T,metin> CALL/DEFINE layout esit -> exit 7",
+               rc == 7);
+}
+
+/* --- D2 (bug #3): kullanici metin_* islevi builtin greedy-prefix'i ezer --- */
+static void test_d2_kullanici_prefix_oncelik(void) {
+    /* kullanici-tanimli `metin_*` islevleri builtin ad-zincirini ezmeli
+     * (ik!=NULL -> builtin zinciri atlanir). Onceki bug: metin_ prefix'li
+     * her cagri @kdl_metin_*'a kacirilirdi -> yanlis hedef. -> exit 42. */
+    int rc = derle_dosya_ve_calistir(
+        "test/ornekler/codegen_kullanici_dizi_oncelik.kem");
+    test_sonuc("D2: kullanici metin_* prefix builtin'i ezer -> exit 42",
+               rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2842,6 +2864,10 @@ int main(void) {
     test_matris_f_capability_lineer_capraz();
     test_matris_f_yetki_mmio_gate();
     test_stretch_tek_varyant_cesit();
+
+    printf("\n--- Codegen borc regresyonu (D1 + D2) ---\n");
+    test_d1_generic_sonuc_ptr();
+    test_d2_kullanici_prefix_oncelik();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
