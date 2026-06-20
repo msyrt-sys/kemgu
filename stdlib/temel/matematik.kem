@@ -164,3 +164,115 @@ işlev iki_kat<T>(x: T) -> T {
 işlev yarisi<T>(x: T) -> T {
     ver x / 2;
 }
+
+// =============================================================================
+// Genişletme — dizi OBEB/EKOK + modüler üs + kombinatorik + sayı palindromu
+// =============================================================================
+//
+// Saf KEMGU; yeni runtime/primitif yok. Modül self-contained (import yok) →
+// OBEB/EKOK için yerel Öklid yardımcıları (sayisal.kem'deki obe/ekok'tan
+// bağımsız). Taşma riski olan hesaplar (modüler üs, kombinatorik) ara
+// değerleri tam64'te tutar.
+
+// İki tamsayının OBEB'i (GCD) — Öklid; ikili_obeb(0, x) = x.
+işlev ikili_obeb(a: tam32, b: tam32) -> tam32 {
+    değişken x: tam32 = a;
+    değişken y: tam32 = b;
+    iken y != 0 {
+        değişken t: tam32 = y;
+        y = x % y;
+        x = t;
+    }
+    ver x;
+}
+
+// İki tamsayının EKOK'u (LCM). a veya b sıfırsa 0 (taşmayı önlemek için
+// önce böl: a / obeb * b).
+işlev ikili_ekok(a: tam32, b: tam32) -> tam32 {
+    eğer a == 0 { ver 0; }
+    eğer b == 0 { ver 0; }
+    ver (a / ikili_obeb(a, b)) * b;
+}
+
+// OBEB_dizi — dizideki tüm sayıların OBEB'i. Boş dizi -> 0; negatifler
+// mutlak değere indirgenir; tek eleman -> |o eleman|.
+işlev obeb_dizi(xs: Dizi<tam32>) -> tam32 {
+    değişken g: tam32 = 0;
+    için x: xs {
+        g = ikili_obeb(g, mutlak(x));
+    }
+    ver g;
+}
+
+// EKOK_dizi — dizideki tüm sayıların EKOK'u. Boş dizi -> 1 (çarpımsal birim);
+// herhangi bir eleman 0 ise 0; negatifler mutlak değere indirgenir.
+işlev ekok_dizi(xs: Dizi<tam32>) -> tam32 {
+    değişken l: tam32 = 1;
+    için x: xs {
+        l = ikili_ekok(l, mutlak(x));
+    }
+    ver l;
+}
+
+// Modüler üs — (taban^us) mod m, hızlı üs (kareleme yöntemi). Ara çarpımlar
+// tam64'te hesaplanır → tam32 taşması önlenir. us >= 0, m >= 1 varsayılır;
+// m == 1 -> 0. Negatif taban normalleştirilir.
+işlev us_mod(taban: tam32, us: tam32, m: tam32) -> tam32 {
+    değişken mm: tam64 = m olarak tam64;
+    eğer mm == 1 { ver 0; }
+    değişken sonuc: tam64 = 1;
+    değişken t: tam64 = (taban olarak tam64) % mm;
+    eğer t < 0 { t = t + mm; }
+    değişken e: tam32 = us;
+    iken e > 0 {
+        eğer e % 2 == 1 { sonuc = (sonuc * t) % mm; }
+        t = (t * t) % mm;
+        e = e / 2;
+    }
+    ver sonuc olarak tam32;
+}
+
+// Kombinasyon — C(n, k) binom katsayısı. Çarpımsal formül (her adımda tam
+// bölünme garantili) + tam64 ara değer. k < 0 veya k > n -> 0; simetri ile
+// k = min(k, n-k) alınarak iterasyon azaltılır.
+işlev kombinasyon(n: tam32, k: tam32) -> tam64 {
+    eğer k < 0 { ver 0; }
+    eğer k > n { ver 0; }
+    değişken kk: tam32 = k;
+    eğer kk > n - kk { kk = n - kk; }
+    değişken sonuc: tam64 = 1;
+    değişken i: tam32 = 0;
+    iken i < kk {
+        sonuc = sonuc * ((n - i) olarak tam64);
+        sonuc = sonuc / ((i + 1) olarak tam64);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Permütasyon — P(n, k) = n!/(n-k)! = n·(n-1)···(n-k+1). tam64 ara değer.
+// k < 0 veya k > n -> 0; k = 0 -> 1.
+işlev permutasyon(n: tam32, k: tam32) -> tam64 {
+    eğer k < 0 { ver 0; }
+    eğer k > n { ver 0; }
+    değişken sonuc: tam64 = 1;
+    değişken i: tam32 = 0;
+    iken i < k {
+        sonuc = sonuc * ((n - i) olarak tam64);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Palindrom_mu — sayının ondalık basamakları simetrik mi. Negatif -> yanlış;
+// 0 -> doğru. Ters çevirme tam64'te (tam32 ters çevirme taşabilir).
+işlev palindrom_mu(n: tam32) -> mantıksal {
+    eğer n < 0 { ver yanlış; }
+    değişken ters: tam64 = 0;
+    değişken kalan: tam32 = n;
+    iken kalan > 0 {
+        ters = ters * 10 + ((kalan % 10) olarak tam64);
+        kalan = kalan / 10;
+    }
+    ver ters == (n olarak tam64);
+}
