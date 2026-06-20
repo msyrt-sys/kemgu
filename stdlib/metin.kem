@@ -72,13 +72,14 @@ işlev kes(s: metin, baslangic: tam32, uzunluk: tam32) -> metin {
     ver metin_kes(s, baslangic, uzunluk);
 }
 
-// Bol (split) — ayirac karakterine gore.
-// SINIRLAMA: KEMGU dosya seviyesinde dizi_olustur runtime intrinsic;
-//   gercek bol icin char-by-char tarama + dizi_ekle gerek. v1: tek
-//   elemanli dizi (kendisi) doner — KIRMIZI_QUEUE'da takip edilebilir.
+// Bol (split) — ayirac KARAKTERine gore.
+// SINIRLAMA: `karakter` tipi tamsayi ile karsilastirilamaz (T001) ve metinden
+//   karakter cikaran primitif yok; bu yuzden byte-tabanli gercek bolme bu imzayla
+//   yapilamaz. v1: tek elemanli dizi (kendisi) doner. GERCEK bolme icin metin
+//   ayirac alan `bol_metin` kullan (asagida) — tam islevsel.
 işlev bol(s: metin, ayirac: karakter) -> Dizi<metin> {
     eğer bos_mu(s) { ver []; }
-    ver [s];   // STUB: bol islemi icin char iteration runtime gerek
+    ver [s];   // STUB: karakter ayirac ile bayt karsilastirma mumkun degil
 }
 
 // Kucuk harfe donustur — Turkce I->ı, İ->i (ASCII + UTF-8 farkindali).
@@ -128,15 +129,188 @@ işlev tekrarla(s: metin, n: tam32) -> metin {
     ver r;
 }
 
-// Karakter sayisi — uzunluk byte sayisi; codepoint sayisi icin
-// UTF-8 leading byte sayma gerek (0xxxxxxx + 11xxxxxx). v1 byte = char.
-işlev karakter_sayisi(s: metin) -> tam32 {
-    ver uzunluk(s);
+// Bir UTF-8 codepoint'in kac bayttan olustugu — lead (oncu) byte degerinden
+// (0..255 isaretsiz) cikarilir. Devam baytlari (128..191) icin guvenli 1 doner.
+//   0xxxxxxx (0..127)   -> 1   ASCII
+//   110xxxxx (192..223) -> 2
+//   1110xxxx (224..239) -> 3
+//   11110xxx (240..255) -> 4
+işlev cp_bayt_sayisi(lead: tam32) -> tam32 {
+    eğer lead >= 240 { ver 4; }
+    eğer lead >= 224 { ver 3; }
+    eğer lead >= 192 { ver 2; }
+    ver 1;
 }
 
-// Yansitma (reverse) — byte bazli ters cevirir. UTF-8 multi-byte
-// sequence ters cevrilirse bozulur — codepoint-aware reverse v2.
-// v1: stub.
+// Karakter sayisi — UTF-8 codepoint sayisi (byte degil). Devam baytlari
+// (10xxxxxx) sayilmaz; her oncu byte bir karakter. Turkce metinde dogru
+// sonuc verir (ornek: "çığ" -> 6 byte ama 3 karakter).
+işlev karakter_sayisi(s: metin) -> tam32 {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken sayi: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }   // tam8 isaretli -> isaretsiz 0..255   // tam8 isaretli -> isaretsiz 0..255
+        eğer u < 128 {
+            sayi = sayi + 1;          // ASCII
+        } değilse eğer u >= 192 {
+            sayi = sayi + 1;          // multibyte oncu byte
+        }
+        // 128..191: devam byte -> sayilmaz
+        i = i + 1;
+    }
+    ver sayi;
+}
+
+// Yansitma (reverse) — codepoint-aware ters cevirme. Her UTF-8 codepoint'i
+// bir butun olarak one ekler; multi-byte Turkce karakterler bozulmaz
+// (ornek: "açb" -> "bça"). Byte tabanli ters cevirmenin aksine UTF-8 guvenli.
 işlev yansit(s: metin) -> metin {
-    ver s;   // STUB: codepoint-aware reverse v2'de
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken r: metin = "";
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }   // tam8 isaretli -> isaretsiz 0..255
+        değişken cu: tam32 = cp_bayt_sayisi(u);
+        // i'den baslayan codepoint'i mevcut sonucun ONUNE ekle
+        r = birlestir(metin_kes(s, i, cu), r);
+        i = i + cu;
+    }
+    ver r;
+}
+
+// =============================================================================
+// Genişletme — gerçek bölme/birleştirme/arama (metin_bayt + metin_kes tabanlı)
+// =============================================================================
+//
+// Hepsi byte-indeksli runtime primitifleri (metin_uzunluk, metin_bayt,
+// metin_kes, metin_esit, metin_birlestir) üzerine; yeni runtime gerekmez.
+// `metin` ayraç alan sürümler `karakter` tipindeki kısıtlamayı aşar
+// (karakter tamsayı ile karşılaştırılamaz).
+
+// Bol_metin (split) — `ayrac` alt metnine göre böl, Dizi<metin> ver.
+// `bol`'un (karakter ayraç) gerçek işlevsel eşi. Ardışık ayraçlar boş parça
+// üretir ("a,,b" -> ["a","","b"]). Boş kaynak -> boş dizi.
+// Boş ayrac -> tek parça (kaynağın kendisi).
+işlev bol_metin(s: metin, ayrac: metin) -> Dizi<metin> {
+    değişken sonuc: Dizi<metin> = dizi_olustur(0);
+    eğer bos_mu(s) { ver sonuc; }
+    değişken M: tam32 = metin_uzunluk(ayrac);
+    eğer M == 0 {
+        dizi_ekle(sonuc, s);
+        ver sonuc;
+    }
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken parca_bas: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i <= L - M {
+        eğer metin_esit(metin_kes(s, i, M), ayrac) {
+            dizi_ekle(sonuc, metin_kes(s, parca_bas, i - parca_bas));
+            i = i + M;
+            parca_bas = i;
+        } değilse {
+            i = i + 1;
+        }
+    }
+    // Son parçayı ekle (son ayraçtan sonu).
+    dizi_ekle(sonuc, metin_kes(s, parca_bas, L - parca_bas));
+    ver sonuc;
+}
+
+// Birleştir_liste (join) — parçaları ayraç ile birleştir. bol_metin'in tersi.
+// Boş dizi -> "". Tek eleman -> o eleman (ayraç eklenmez).
+işlev birlestir_liste(parcalar: Dizi<metin>, ayrac: metin) -> metin {
+    değişken r: metin = "";
+    değişken ilk_mi: mantıksal = doğru;
+    için p: parcalar {
+        eğer ilk_mi {
+            r = p;
+            ilk_mi = yanlış;
+        } değilse {
+            r = birlestir(birlestir(r, ayrac), p);
+        }
+    }
+    ver r;
+}
+
+// İndeks — `alt` alt metninin `s` içindeki ilk BYTE konumu (yoksa hiç).
+// Boş alt -> değer(0). Byte-indeksli (codepoint değil).
+işlev indeks(s: metin, alt: metin) -> seçimlik<tam32> {
+    değişken M: tam32 = metin_uzunluk(alt);
+    eğer M == 0 { ver değer(0); }
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer M > L { ver hiç; }
+    değişken i: tam32 = 0;
+    iken i <= L - M {
+        eğer metin_esit(metin_kes(s, i, M), alt) { ver değer(i); }
+        i = i + 1;
+    }
+    ver hiç;
+}
+
+// Say — `alt` alt metninin örtüşmeyen geçiş sayısı. Boş alt -> 0.
+işlev say(s: metin, alt: metin) -> tam32 {
+    değişken M: tam32 = metin_uzunluk(alt);
+    eğer M == 0 { ver 0; }
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer M > L { ver 0; }
+    değişken n: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i <= L - M {
+        eğer metin_esit(metin_kes(s, i, M), alt) {
+            n = n + 1;
+            i = i + M;   // örtüşmeyen
+        } değilse {
+            i = i + 1;
+        }
+    }
+    ver n;
+}
+
+// Ön_ek_kaldir — `on` ile başlıyorsa o ön eki sil; değilse aynen ver.
+işlev on_ek_kaldir(s: metin, on: metin) -> metin {
+    eğer baslar_ile(s, on) {
+        değişken n: tam32 = metin_uzunluk(on);
+        ver metin_kes(s, n, metin_uzunluk(s) - n);
+    }
+    ver s;
+}
+
+// Son_ek_kaldir — `son` ile bitiyorsa o son eki sil; değilse aynen ver.
+işlev son_ek_kaldir(s: metin, son: metin) -> metin {
+    eğer biter_ile(s, son) {
+        değişken n: tam32 = metin_uzunluk(s) - metin_uzunluk(son);
+        ver metin_kes(s, 0, n);
+    }
+    ver s;
+}
+
+// Doldur_sol (left pad) — `s`'yi soluna `dolgu` ekleyerek hedef KARAKTER
+// uzunluğuna getir. Mevcut uzunluk >= hedef ise aynen ver. `dolgu` tek karakter
+// varsayılır (codepoint sayısı bazlı). Sayı hizalama için tipik kullanım.
+işlev doldur_sol(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
+    değişken mevcut: tam32 = karakter_sayisi(s);
+    eğer mevcut >= hedef_uz { ver s; }
+    ver birlestir(tekrarla(dolgu, hedef_uz - mevcut), s);
+}
+
+// Doldur_sag (right pad) — sağına `dolgu` ekleyerek hedef uzunluğa getir.
+işlev doldur_sag(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
+    değişken mevcut: tam32 = karakter_sayisi(s);
+    eğer mevcut >= hedef_uz { ver s; }
+    ver birlestir(s, tekrarla(dolgu, hedef_uz - mevcut));
+}
+
+// Başharf_büyüt — ilk codepoint'i büyük harfe çevir, kalanı aynen bırak.
+// buyukharf Türkçe-farkında (i->İ). Boş metin -> "".
+işlev basharf_buyut(s: metin) -> metin {
+    eğer bos_mu(s) { ver s; }
+    değişken u: tam32 = metin_bayt(s, 0) olarak tam32;
+    eğer u < 0 { u = u + 256; }
+    değişken cu: tam32 = cp_bayt_sayisi(u);
+    değişken bas: metin = buyukharf(metin_kes(s, 0, cu));
+    değişken kalan: metin = metin_kes(s, cu, metin_uzunluk(s) - cu);
+    ver birlestir(bas, kalan);
 }
