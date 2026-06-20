@@ -438,3 +438,103 @@ işlev bir_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
     }
     ver yanlış;
 }
+
+
+// =============================================================================
+// Genişletme — skaler küme işlemleri + konum/sayım sorguları
+// =============================================================================
+//
+// Tümü `==` destekli T tipler için generic. Küme işlemleri (kesisim/birlesim/
+// fark) sonuç dizisini **tekrarsız** (set semantiği) üretir: aynı değer en
+// fazla bir kez. Yeni Dizi döndürenler mevcut allocator (dizi_olustur/
+// dizi_ekle) üzerine kuruludur — `filtre`/`harita` ile aynı desen, yeni
+// primitif gerekmez.
+//
+// NOT: Fonksiyon-dönüşü bir diziyi ÇAĞIRAN scope'ta doğrudan indekslemek
+// yerine (`s = kesisim(a,b); s[0]` — codegen F4 sınırı) sonucu `uzunluk`/
+// `toplam_tam` gibi parametre-üzerinden-indirgeyen bir işleve geçir.
+
+// Kesişim — hem a'da hem b'de bulunan elemanlar (tekrarsız).
+işlev kesisim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    için x: a {
+        eğer icerir(b, x) ve değil icerir(sonuc, x) {
+            dizi_ekle(sonuc, x);
+        }
+    }
+    ver sonuc;
+}
+
+// Birleşim — a veya b'de bulunan tüm elemanlar (tekrarsız, a önce).
+işlev birlesim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    için x: a {
+        eğer değil icerir(sonuc, x) { dizi_ekle(sonuc, x); }
+    }
+    için y: b {
+        eğer değil icerir(sonuc, y) { dizi_ekle(sonuc, y); }
+    }
+    ver sonuc;
+}
+
+// Fark — a'da olup b'de olmayan elemanlar (tekrarsız).
+işlev fark<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    için x: a {
+        eğer değil icerir(b, x) ve değil icerir(sonuc, x) {
+            dizi_ekle(sonuc, x);
+        }
+    }
+    ver sonuc;
+}
+
+// Pozisyonlar — hedef değere eşit elemanların TÜM indeksleri (yoksa boş dizi).
+işlev pozisyonlar<T>(xs: Dizi<T>, hedef: T) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer x == hedef { dizi_ekle(sonuc, i); }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Son_n — son n elemanı yeni dizide ver. n <= 0 -> boş; n >= uzunluk ->
+// tüm elemanların kopyası.
+işlev son_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    eğer n <= 0 { ver sonuc; }
+    değişken toplam: tam32 = uzunluk(xs);
+    değişken bas: tam32 = toplam - n;
+    eğer bas < 0 { bas = 0; }
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer i >= bas { dizi_ekle(sonuc, x); }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Say_eşit — hedef değere eşit eleman sayısı.
+işlev say_esit<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        eğer x == hedef { n = n + 1; }
+    }
+    ver n;
+}
+
+// Tekrar_eden_mi — herhangi bir eleman birden fazla kez geçiyor mu (O(n²)).
+işlev tekrar_eden_mi<T>(xs: Dizi<T>) -> mantıksal {
+    değişken n: tam32 = uzunluk(xs);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = i + 1;
+        iken j < n {
+            eğer xs[i] == xs[j] { ver doğru; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver yanlış;
+}

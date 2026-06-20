@@ -418,6 +418,233 @@ işlev test_bir_mu_generic_hayir() -> mantıksal {
     ver bir_mu([1, 3, 5], cift_filtre);
 }
 
+// Genişletme testleri — küme işlemleri + konum/sayım (reduce-through-parameter)
+// =============================================================================
+//
+// Fonksiyon-dönüşü diziler doğrudan `toplam_tam`/`uzunluk` parametresine
+// geçirilerek skalere indirgenir (F4 caller-scope indeksleme tuzağından kaçış).
+
+// --- kesisim ---
+işlev test_kesisim_toplam() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver toplam_tam(kesisim(a, b));        // {2,4} -> 6
+}
+işlev test_kesisim_uzunluk() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver uzunluk(kesisim(a, b));           // 2
+}
+işlev test_kesisim_dedup() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 1, 2, 2];
+    değişken b: Dizi<tam32> = [1, 2];
+    ver uzunluk(kesisim(a, b));           // 2 (tekrarsız)
+}
+işlev test_kesisim_bos() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    değişken b: Dizi<tam32> = [7, 8, 9];
+    ver uzunluk(kesisim(a, b));           // 0
+}
+
+// --- birlesim ---
+işlev test_birlesim_toplam() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver toplam_tam(birlesim(a, b));       // {1,2,3,4,6} -> 16
+}
+işlev test_birlesim_uzunluk() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver uzunluk(birlesim(a, b));          // 5
+}
+işlev test_birlesim_dedup() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 1, 2];
+    değişken b: Dizi<tam32> = [2, 2, 3];
+    ver uzunluk(birlesim(a, b));          // {1,2,3} -> 3
+}
+
+// --- fark ---
+işlev test_fark_toplam() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver toplam_tam(fark(a, b));           // {1,3} -> 4
+}
+işlev test_fark_uzunluk() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [2, 4, 6];
+    ver uzunluk(fark(a, b));              // 2
+}
+işlev test_fark_hepsi() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    değişken b: Dizi<tam32> = [1, 2, 3];
+    ver uzunluk(fark(a, b));              // 0
+}
+
+// --- pozisyonlar ---
+işlev test_pozisyonlar_toplam() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 5, 1, 5];
+    ver toplam_tam(pozisyonlar(d, 5));    // indeks 0+2+4 = 6
+}
+işlev test_pozisyonlar_uzunluk() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 5, 1, 5];
+    ver uzunluk(pozisyonlar(d, 5));       // 3
+}
+işlev test_pozisyonlar_yok() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver uzunluk(pozisyonlar(d, 9));       // 0
+}
+
+// --- son_n ---
+işlev test_son_n_iki() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30, 40, 50];
+    ver toplam_tam(son_n(d, 2));          // {40,50} -> 90
+}
+işlev test_son_n_asiri() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver toplam_tam(son_n(d, 9));          // tüm -> 60
+}
+işlev test_son_n_sifir() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver uzunluk(son_n(d, 0));             // 0
+}
+
+// --- say_esit ---
+işlev test_say_esit_uc() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 5, 1, 5];
+    ver say_esit(d, 5);                   // 3
+}
+işlev test_say_esit_yok() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver say_esit(d, 9);                   // 0
+}
+
+// --- tekrar_eden_mi ---
+işlev test_tekrar_var() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3, 2];
+    ver tekrar_eden_mi(d);                // doğru
+}
+işlev test_tekrar_yok() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    ver tekrar_eden_mi(d);                // yanlış
+}
+
+// =============================================================================
+// Kenar-durum testleri — boş / tek-eleman / büyük girdiler (mevcut çekirdek
+// işlevler dahil). Hepsi parametre-üzerinden indirgenir (F4-güvenli).
+// =============================================================================
+
+işlev test_toplam_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver toplam_tam(d);                    // 0 (boş toplam)
+}
+işlev test_carpim_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver carpim_tam(d);                    // 1 (boş çarpım birimi)
+}
+işlev test_sirala_bos_uz() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver uzunluk(sirala(d));               // 0 (boş sıralama çökmesin)
+}
+işlev test_sirala_tek_uz() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    ver uzunluk(sirala(d));               // 1
+}
+işlev test_min_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş min_tam(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }             // boş -> hiç
+    }
+    ver yanlış;
+}
+işlev test_icerir_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver icerir(d, 5);                     // yanlış
+}
+işlev test_say_esit_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver say_esit(d, 5);                   // 0
+}
+işlev test_pozisyonlar_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver uzunluk(pozisyonlar(d, 5));       // 0
+}
+işlev test_tekrar_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver tekrar_eden_mi(d);                // yanlış (boşta tekrar yok)
+}
+işlev test_kesisim_buyuk() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    değişken b: Dizi<tam32> = [2, 4, 6, 8, 10, 12, 14];
+    ver toplam_tam(kesisim(a, b));        // {2,4,6,8,10} -> 30
+}
+
+// Sentinel sürücü: tüm genişletme + kenar-durum kontrolleri geçerse 42, aksi
+// halde ilk başarısız kontrolün indeksi (--llvm | clang | run).
 işlev main() -> tam32 {
-    ver test_uzunluk_3();
+    eğer test_kesisim_toplam() != 6 { ver 1; }
+    eğer test_kesisim_uzunluk() != 2 { ver 2; }
+    eğer test_kesisim_dedup() != 2 { ver 3; }
+    eğer test_kesisim_bos() != 0 { ver 4; }
+    eğer test_birlesim_toplam() != 16 { ver 5; }
+    eğer test_birlesim_uzunluk() != 5 { ver 6; }
+    eğer test_birlesim_dedup() != 3 { ver 7; }
+    eğer test_fark_toplam() != 4 { ver 8; }
+    eğer test_fark_uzunluk() != 2 { ver 9; }
+    eğer test_fark_hepsi() != 0 { ver 10; }
+    eğer test_pozisyonlar_toplam() != 6 { ver 11; }
+    eğer test_pozisyonlar_uzunluk() != 3 { ver 12; }
+    eğer test_pozisyonlar_yok() != 0 { ver 13; }
+    eğer test_son_n_iki() != 90 { ver 14; }
+    eğer test_son_n_asiri() != 60 { ver 15; }
+    eğer test_son_n_sifir() != 0 { ver 16; }
+    eğer test_say_esit_uc() != 3 { ver 17; }
+    eğer test_say_esit_yok() != 0 { ver 18; }
+    eğer değil test_tekrar_var() { ver 19; }
+    eğer test_tekrar_yok() { ver 20; }
+    eğer test_toplam_bos() != 0 { ver 21; }
+    eğer test_carpim_bos() != 1 { ver 22; }
+    eğer test_sirala_bos_uz() != 0 { ver 23; }
+    eğer test_sirala_tek_uz() != 1 { ver 24; }
+    eğer değil test_min_bos() { ver 25; }
+    eğer test_icerir_bos() { ver 26; }
+    eğer test_say_esit_bos() != 0 { ver 27; }
+    eğer test_pozisyonlar_bos() != 0 { ver 28; }
+    eğer test_tekrar_bos() { ver 29; }
+    eğer test_kesisim_buyuk() != 30 { ver 30; }
+    // --- origin/main genişletme işlevleri (kopyala/birlestir_iki/benzersiz/
+    //     dilimle/al_ilk_n/atla_n/tekrarla/aralik/katla_sag/generic predicate) ---
+    eğer test_kopyala_toplam() != 42 { ver 31; }
+    eğer test_kopyala_uzunluk() != 4 { ver 32; }
+    eğer test_birlestir_iki_toplam() != 42 { ver 33; }
+    eğer test_birlestir_iki_uzunluk() != 5 { ver 34; }
+    eğer test_birlestir_iki_bos_sol() != 42 { ver 35; }
+    eğer test_benzersiz_uzunluk() != 3 { ver 36; }
+    eğer test_benzersiz_toplam() != 5 { ver 37; }
+    eğer test_benzersiz_metin() != 3 { ver 38; }
+    eğer test_dilimle_toplam() != 50 { ver 39; }
+    eğer test_dilimle_uzunluk() != 2 { ver 40; }
+    eğer test_dilimle_kirpma() != 2 { ver 41; }
+    eğer test_dilimle_ters_aralik() != 0 { ver 43; }
+    eğer test_al_ilk_n() != 30 { ver 44; }
+    eğer test_al_ilk_n_fazla() != 3 { ver 45; }
+    eğer test_atla_n() != 50 { ver 46; }
+    eğer test_atla_n_fazla() != 0 { ver 47; }
+    eğer test_tekrarla_toplam() != 9 { ver 48; }
+    eğer test_tekrarla_uzunluk() != 6 { ver 49; }
+    eğer test_tekrarla_sifir() != 0 { ver 50; }
+    eğer test_aralik_toplam() != 10 { ver 51; }
+    eğer test_aralik_uzunluk() != 4 { ver 52; }
+    eğer test_aralik_bos() != 0 { ver 53; }
+    eğer test_aralik_adim_toplam() != 20 { ver 54; }
+    eğer test_aralik_adim_uzunluk() != 5 { ver 55; }
+    eğer test_aralik_adim_sifir() != 0 { ver 56; }
+    eğer test_katla_sag_toplam() != 10 { ver 57; }
+    eğer test_katla_sag_sira() != 2 { ver 58; }
+    eğer test_say_generic() != 3 { ver 59; }
+    eğer değil test_tum_mu_generic_evet() { ver 60; }
+    eğer test_tum_mu_generic_hayir() { ver 61; }
+    eğer değil test_bir_mu_generic_evet() { ver 62; }
+    eğer test_bir_mu_generic_hayir() { ver 63; }
+    ver 42;
 }
