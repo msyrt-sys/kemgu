@@ -170,8 +170,31 @@ işlev test_filtre_metin() -> mantıksal {
     ver var_mi(r);
 }
 
+// --- harita_ya_da / say / diziye (yeni) ---
+işlev iki_kat_opt(x: tam32) -> tam32 { ver x * 2; }
+
+işlev test_harita_ya_da_deger() -> mantıksal {
+    değişken o: seçimlik<tam32> = değer(21);
+    ver harita_ya_da(o, 0, iki_kat_opt) == 42;
+}
+
+işlev test_harita_ya_da_hic() -> mantıksal {
+    değişken o: seçimlik<tam32> = hiç;
+    ver harita_ya_da(o, 99, iki_kat_opt) == 99;
+}
+
+işlev test_say_deger() -> mantıksal {
+    değişken o: seçimlik<tam32> = değer(5);
+    ver say(o) == 1;
+}
+
+işlev test_say_hic() -> mantıksal {
+    değişken o: seçimlik<tam32> = hiç;
+    ver say(o) == 0;
+}
+
 işlev main() -> tam32 {
-    // 25+ test fonksiyonu yukarıda; main yalnız bir tanesi çağırıp
+    // 30+ test fonksiyonu yukarıda; main yalnız bir tanesi çağırıp
     // --check için entry sağlar.
     ver test_ya_da_var();
 }
