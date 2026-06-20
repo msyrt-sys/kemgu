@@ -1,0 +1,84 @@
+// KEMGU Örnek Program: Sıralama + Seçim
+// =======================================
+//
+// stdlib `dizi` modülü stilinde, kendi-kendine yeten (import yok) küçük demo.
+// Kabarcık sıralama (in-place), güvenli erişim (seçimlik), ve min/maks/aralık
+// hesabını gösterir. Fonksiyon-dönüşü diziyi ÇAĞIRAN scope'ta indekslemek
+// yerine in-place mutasyon + LOKAL dizi indeksleme kullanılır (F4-güvenli).
+
+// Kabarcık sıralama — diziyi yerinde artan sıraya koyar, aynı diziyi döner.
+işlev sirala_yerinde(xs: Dizi<tam32>) -> Dizi<tam32> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n < 2 { ver xs; }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            eğer xs[j] > xs[j + 1] {
+                değişken t: tam32 = xs[j];
+                xs[j] = xs[j + 1];
+                xs[j + 1] = t;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver xs;
+}
+
+// Eleman sayısı.
+işlev uzunluk(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs { n = n + 1; }
+    ver n;
+}
+
+// En küçük (boş ise hiç) — seçimlik ile güvenli sonuç.
+işlev en_kucuk(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver hiç; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x < m { m = x; }
+    }
+    ver değer(m);
+}
+
+// En büyük (boş ise hiç).
+işlev en_buyuk(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver hiç; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x > m { m = x; }
+    }
+    ver değer(m);
+}
+
+// Aralık (maks - min). Boş ise 0.
+işlev aralik(xs: Dizi<tam32>) -> tam32 {
+    eşleş en_kucuk(xs) {
+        değer(mn) => {
+            eşleş en_buyuk(xs) {
+                değer(mx) => { ver mx - mn; }
+                hiç => { ver 0; }
+            }
+        }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken veri: Dizi<tam32> = [5, 2, 8, 1, 9, 3];
+
+    // In-place sırala; dönüş değerini bağlamadan LOKAL diziyi indeksle.
+    sirala_yerinde(veri);
+    // veri artık: [1, 2, 3, 5, 8, 9]
+
+    değişken en_kucuk_eleman: tam32 = veri[0];   // 1 (sıralı dizinin başı)
+    değişken acik: tam32 = aralik(veri);          // 9 - 1 = 8
+
+    // en_kucuk_eleman + acik = 1 + 8 = 9 ... +33 = 42 (demo sonucu)
+    ver en_kucuk_eleman + acik + 33;
+}
