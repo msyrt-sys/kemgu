@@ -1,0 +1,107 @@
+// KEMGU Stdlib Testi — Karşılaştırma
+// =========================================
+//
+// Bu dosya `stdlib/temel/karsilastir.kem` ile birleştirilerek --check edilir.
+// Dizi karşılaştırma fonksiyonları sayısal T içindir (metin sıralaması yok).
+
+// seçimlik<tam32> -> tam32 (hiç ise varsayılan).
+işlev coz(o: seçimlik<tam32>, varsayilan: tam32) -> tam32 {
+    eşleş o {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// --- mevcut (regresyon) ---
+işlev test_esit_mi() -> mantıksal {
+    ver esit_mi(5, 5);
+}
+
+işlev test_karsilastir_kucuk() -> tam32 {
+    ver karsilastir(3, 5);          // -1
+}
+
+işlev test_en_kucuk_uc() -> tam32 {
+    ver en_kucuk_uc(5, 2, 8);       // 2
+}
+
+// --- karsilastir_ters ---
+işlev test_karsilastir_ters_artan() -> tam32 {
+    ver karsilastir_ters(3, 5);     // +1
+}
+
+işlev test_karsilastir_ters_azalan() -> tam32 {
+    ver karsilastir_ters(5, 3);     // -1
+}
+
+// --- sirali_mi / ters_sirali_mi ---
+işlev test_sirali_mi_evet() -> mantıksal {
+    ver sirali_mi([1, 2, 2, 5]);
+}
+
+işlev test_sirali_mi_hayir() -> mantıksal {
+    ver sirali_mi([1, 3, 2]);
+}
+
+işlev test_sirali_mi_tek() -> mantıksal {
+    değişken d: Dizi<tam32> = [9];
+    ver sirali_mi(d);
+}
+
+işlev test_sirali_mi_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver sirali_mi(d);
+}
+
+işlev test_ters_sirali_mi_evet() -> mantıksal {
+    ver ters_sirali_mi([5, 3, 3, 1]);
+}
+
+işlev test_ters_sirali_mi_hayir() -> mantıksal {
+    ver ters_sirali_mi([5, 1, 3]);
+}
+
+// --- dizi_karsilastir (lexicographic) ---
+işlev test_dizi_karsilastir_kucuk() -> tam32 {
+    ver dizi_karsilastir([1, 2, 3], [1, 2, 4]);   // -1
+}
+
+işlev test_dizi_karsilastir_buyuk() -> tam32 {
+    ver dizi_karsilastir([1, 2, 5], [1, 2, 4]);   // +1
+}
+
+işlev test_dizi_karsilastir_prefix() -> tam32 {
+    ver dizi_karsilastir([1, 2], [1, 2, 3]);      // -1 (kısa olan küçük)
+}
+
+işlev test_dizi_karsilastir_esit() -> tam32 {
+    ver dizi_karsilastir([1, 2, 3], [1, 2, 3]);   // 0
+}
+
+// --- dizi_esit_mi ---
+işlev test_dizi_esit_evet() -> mantıksal {
+    ver dizi_esit_mi([1, 2, 3], [1, 2, 3]);
+}
+
+işlev test_dizi_esit_hayir() -> mantıksal {
+    ver dizi_esit_mi([1, 2, 3], [1, 9, 3]);
+}
+
+// --- en_kucuk_dizi / en_buyuk_dizi (generic) ---
+işlev test_en_kucuk_dizi() -> tam32 {
+    ver coz(en_kucuk_dizi([5, 2, 8, 1, 9]), 0 - 1);   // 1
+}
+
+işlev test_en_buyuk_dizi() -> tam32 {
+    ver coz(en_buyuk_dizi([5, 2, 8, 1, 9]), 0 - 1);   // 9
+}
+
+işlev test_en_kucuk_dizi_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver coz(en_kucuk_dizi(d), 7);                      // hiç -> 7
+}
+
+işlev main() -> tam32 {
+    ver test_karsilastir_kucuk();
+}
