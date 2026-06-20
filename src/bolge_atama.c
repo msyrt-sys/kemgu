@@ -25,6 +25,9 @@ static BolgeBilgisi *escape_to_bolge(BolgeAtama *ba, EscapeKategorisi ek) {
             return bolge_olustur_cagiran(ba->arena,
                 ba->islev_adi, ba->islev_adi_uz);
         case ESC_ITERASYON:
+            /* SU AN ULASILMAZ: escape.c D-101 geri-cekilmesiyle ESC_ITERASYON
+             * URETMEZ. Esleme dogru-eger-gelirse korunur (F4.3 per-iterasyon
+             * optimizasyonu saglamca eklerse). */
             if (ba->aktif_iterasyon) return ba->aktif_iterasyon;
             return bolge_olustur_iterasyon(ba->arena, 0);
         case ESC_YEREL:
@@ -50,13 +53,16 @@ static BolgeBilgisi *varsayilan_tahsis_dugum(BolgeAtama *ba, const Dugum *d) {
         }
         return escape_to_bolge(ba, ek);
     }
-    /* Syntax tabanli fallback (eski davranis) */
+    /* Syntax tabanli fallback (escape analizi YOK).
+     * SAGLAMLIK: syntax-only mod, bir tahsisin iterasyonu asip asmadigini
+     * KANITLAYAMAZ (bag/scape takibi yapmaz). Bu yuzden dongu icindeki tahsisi
+     * KOSULSUZ ITERASYON'a koymak loop-carried UAF deligiydi (D-101). Artik
+     * fallback dongu tahsisini YEREL'e dusurur (daha uzun omurlu = guvenli);
+     * ITERASYON yalnizca escape-tabanli mod (escape_to_bolge) tarafindan,
+     * iterasyon-yerellik KANITLANDIGINDA uretilir. */
     if (ba->ver_baglaminda) {
         return bolge_olustur_cagiran(ba->arena,
             ba->islev_adi, ba->islev_adi_uz);
-    }
-    if (ba->dongu_derinligi > 0 && ba->aktif_iterasyon) {
-        return ba->aktif_iterasyon;
     }
     return bolge_olustur_yerel(ba->arena,
         ba->islev_adi, ba->islev_adi_uz);

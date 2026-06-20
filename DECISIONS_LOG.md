@@ -5,6 +5,77 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-101 — [YÜKSEK] Loop-carried soundness: escape/bölge ESC_ITERASYON ÜRETMEZ (güvenli geri-çekilme) (2026-06-20)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `1994a88` → en yüksek D-100 → D-101 ayrıldı).
+
+**Karar [ETKİ: ORTA — yalnız `src/escape.c` + `src/bolge_atama.c` + testler; codegen/checker/IR
+DEĞİŞMEZ; izole commit; PR, merge edilmedi].** Escape analizi ARTIK **hiçbir** tahsisi `ESC_ITERASYON`
+(= bölge sisteminde `BOLGE_ITERASYON`, **EN KISA** ömürlü bölge: F4.3'te iterasyon-başına serbest
+bırakılacak) işaretlemez; döngü içindekiler dahil **tüm tahsisler `ESC_YEREL`** (daha uzun ömürlü =
+güvenli). F4.2a/codegen'den tamamen bağımsız.
+
+**Delik (loop-carried UAF):** Eski kod, bir döngü gövdesinde oluşan HER tahsisi **koşulsuz**
+`ESC_ITERASYON` işaretliyordu (escape.c join'inde + bolge_atama.c syntax-fallback'inde). Tahsis
+iterasyonu AŞIYORSA (döngü-dışı bir yere bağlanıp sonra kullanılıyorsa) ama `ver`'lemiyorsa →
+`ITERASYON` kalıyordu. F4.3'te ρ_iterasyon iterasyon-başına serbest bırakılınca **canlıyken serbest =
+UAF**. Şu an BOXED (F4.3 yok) ama F4.3'ten ÖNCE kapatılmalıydı.
+
+**Neden DETECTION değil GERİ-ÇEKİLME (önemli — orijinal plan değişti):** İlk yaklaşım "iyimser default'u
+tersine çevir + kanıtlanmış iterasyon-yerelleri ITERASYON'a indir" (iterasyon-kaçtı bayrağı + post-pass)
+idi. Bu yaklaşımın sağlamlığı, kaçış rotalarını KAPATAN **kapılara KOŞULLUYDU**: D-007 (diziler
+skaler-eleman → dış agregaya referans saklanamaz) ve R-GÖMME (kaçan agregaya gömülü heap-ref yok).
+**Çok-ajanlı adversarial review (4 bağımsız lens + adjudikasyon, uçtan uca `--check`/`--llvm`/ASan ile
+doğrulandı) bu kapıların ENFORCE EDİLMEDİĞİNİ kanıtladı:**
+- `Dizi<Dizi<T>>`, `Dizi<metin>` ve `Dizi` alanlı yapı tipleri tip-kontrolden GEÇER ve codegen'de
+  **by-ref `KdlDizi*`/`ptr` eleman** olarak lower edilir (D-007 yalnız STRUCT-VALUED dizi-elemanı
+  codegen ertelemesi; skaler/ptr eleman çalışır).
+- Tip sistemi `nesne.alan = x` (`DUGUM_ERISIM`) ve `dizi[i] = x` (`DUGUM_INDEKS`) lvalue'lerini kabul
+  eder (`tip_kontrol.c:4545-4549`). Bir döngü-tahsisini `dış[i] = tahsis` / `nesne.alan = tahsis` ile
+  dış (iterasyonu aşan) bir agregaya **by-ref** koymak gerçek bir kaçış rotasıdır; sentaktik tespit
+  bunu (`DUGUM_TANIMLAYICI` dışı lvalue) kaçırınca **under-approximation = gizli UAF** olur.
+Bu rotaları (ve gömme/closure varyantlarını) sağlamca kapsamak, her kaçırılan rotanın UAF olduğu bir
+analizde sınırsız "tüm rotaları yakaladım mı?" riski taşır. Üstelik per-iterasyon optimizasyonunun
+ŞU AN HİÇ tüketicisi yok (F4.3 yok; analiz codegen'e unwired). Bu yüzden direktifin AÇIKÇA izin verdiği
+**güvenli geri-çekilme** seçildi: ITERASYON'u hiç üretme. Bu, herhangi bir kapıya bakılmaksızın
+**trivially sağlam** (ITERASYON hiç üretilmezse iterasyon-başına serbest hiç olmaz → loop-carried UAF
+**imkânsız**). Per-iterasyon optimizasyonu F4.3'e (gerçek bölge-serbest semantiği + kapılar enforce
+edilince ya da tüm rotalar kapsanınca) ertelenir.
+
+**Değişiklik:**
+- `escape.c`: alloca-literal visit'inde **koşulsuz loop→ITERASYON marking'i KALDIRILDI**; yalnız kayıt
+  oluşturulur (default `ESC_YEREL`). Analiz `ESC_ITERASYON` ÜRETMEZ. `ver`→`ESC_CAGIRAN` yolu DEĞİŞMEDİ
+  → `ESC_CAGIRAN` seti **byte-identik** (G005 closure tespiti `== ESC_CAGIRAN`'a bağlı, etkilenmez).
+- `bolge_atama.c`: syntax-fallback'teki koşulsuz `dongu_derinligi>0 → aktif_iterasyon` KALDIRILDI →
+  döngü tahsisi `BOLGE_YEREL`. `escape_to_bolge`'daki `ESC_ITERASYON → aktif_iterasyon` eşlemesi KORUNUR
+  ama **şu an ULAŞILMAZ** (escape ITERASYON üretmez); F4.3 yeniden etkinleştirirse doğru kalır.
+- `escape.h`/`bolge.h`: `ESC_ITERASYON`/`BOLGE_ITERASYON` enum'ları API/gelecek için KORUNUR.
+
+**Sağlamlık modeli:** Şüphede DAİMA uzun ömürlü. Under-approximation (yanlış ITERASYON) = gizli UAF =
+KABUL EDİLEMEZ. Over-approximation (tüm döngü tahsisleri YEREL = kaçırılan per-iterasyon optimizasyonu)
+= SORUN DEĞİL. Soundness argümanı artık TEK CÜMLE: *escape analizi ESC_ITERASYON üretmez.*
+
+**🔗 F4.3 İÇİN NOT (per-iterasyon optimizasyonu geri açılırken):** ITERASYON'u tekrar üretmeden ÖNCE,
+bir döngü-tahsisinin iterasyonu aşma rotalarının TAMAMI kapsanmalı: (a) `ver`→CAGIRAN; (b) daha-sığ
+değişkene bağlanma; (b2) **agrega-lvalue store** (`dış[i]=x` / `nesne.alan=x`); (b3) **agregaya gömme**
+sonra agrega kaçışı (`dış = Yapı{f: x}`, `ver Yapı{f: x}`); (c) çağrı argümanı/sonucu; (d) closure
+yakalama (G005 kaçan closure'ı reddeder — enforce EDİLİR). VEYA kapıları (D-007 referans-eleman reddi,
+R-GÖMME) önce enforce et. **loop-carried per-iterasyon optimizasyonu, D-007 + R-GÖMME enforcement'ına
+bağımlıdır.**
+
+**Doğrulama:** `test_escape` 17→22 (T8 ITERASYON→YEREL; +5 geri-çekilme testi: dış-skaler-store,
+**dış-dizi-eleman-store [b2 DELİK]**, **dış-yapı-alan-store [b2 DELİK]**, döngü-ver→CAGIRAN, umbrella
+"hiçbir tahsis ITERASYON değil" invariant'ı). `test_bolge_atama` 13→15 (döngü→BOLGE_YEREL, b2
+dış-dizi-eleman→BOLGE_YEREL [DELİK], syntax-fallback→YEREL). **Teeth kanıtlandı:** eski koşulsuz
+loop→ITERASYON geri enjekte edilince tam 5 geri-çekilme assertion'ı (b2 delik testleri dahil)
+BAŞARISIZ. `tip_kontrol` 184/184 (G005 değişmedi), `llvm` 235/235, **test_tumu yeşil ("Tum testler
+gecti!")** + self-host FIXPOINT korundu. 0 ASan, 0 uyarı (clang+gcc strict). Geri-çekilme kararı,
+çok-ajanlı adversarial review'in (uçtan uca `--check`/`--llvm`/ASan ile) gerçek b2/b3 UAF rotalarını
+doğrulaması üzerine alındı — direktifin "güvenli geri-çekilme: ITERASYON'u hiç üretme" yolu.
+
+---
+
 ## D-100 — [YÜKSEK] V2 F4 FAZ 1: sızan array/metin tahsisini global bölgeye yönlendir + sembol-çakışması temizliği (2026-06-17)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir

@@ -211,14 +211,25 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
         case DUGUM_DIZI_OLUSTUR:
         case DUGUM_YAPI_OLUSTUR:
         case DUGUM_LAMBDA: {
-            EscapeKayit *k = kayit_bul_veya_ekle(ea, d);
-            if (k && ea->dongu_derinligi > 0 && k->kategori == ESC_YEREL) {
-                /* Dongu icinde olusturulan tahsis: ITERASYON (escape ekleme degisikligi sayilir) */
-                if ((int)ESC_ITERASYON > (int)k->kategori) {
-                    k->kategori = ESC_ITERASYON;
-                    ea->degisti = 1;
-                }
-            }
+            /* SAGLAMLIK (D-101): dongu icindeki tahsis ARTIK ESC_ITERASYON
+             * ISARETLENMEZ — yalnizca kayit olustur (default ESC_YEREL).
+             *
+             * Eski kod burada kosulsuz ITERASYON isaretliyordu. ITERASYON omru EN
+             * KISA bolgedir (F4.3'te iterasyon-basina serbest); iterasyonu ASAN bir
+             * tahsisi ITERASYON saymak = canliyken serbest = UAF. Iterasyon-yerelligi
+             * SAGLAM tespit etmek, kaccis rotalarini KAPATAN kapilara (D-007 skaler-
+             * dizi, R-GOMME gomme-yok) bagliydi; bu kapilar su an ENFORCE EDILMIYOR:
+             * Dizi<Dizi<T>>, Dizi<metin>, Dizi-alanli yapi tipe gecer ve by-ref
+             * KdlDizi* olarak lower edilir -> `dis[i] = tahsis` / `nesne.alan = tahsis`
+             * gibi rotalar tahsisi iterasyondan kaccirir ve sentaktik tespit yetersiz
+             * kalirdi (under-approximation = gizli UAF).
+             *
+             * Bu yuzden GUVENLI GERI-CEKILME: escape analizi HICBIR tahsisi
+             * ESC_ITERASYON uretmez (hepsi YEREL — daha uzun omurlu, guvenli). Per-
+             * iterasyon optimizasyonu, gercek bolge-serbest semantigi (F4.3) geldiginde
+             * -- kapilar enforce edilince ya da TUM kaccis rotalari kapsaninca --
+             * saglamca eklenecek. Su an UAF imkansiz (ITERASYON hic uretilmez). */
+            kayit_bul_veya_ekle(ea, d);
             /* Recurse alt-ifadelere */
             if (d->tip == DUGUM_DIZI_OLUSTUR) {
                 visit_list(ea, d->veri.dizi_olustur.elemanlar, d->veri.dizi_olustur.sayi);
