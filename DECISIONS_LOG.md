@@ -5,6 +5,67 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-101 — [YÜKSEK] V2 F4 FAZ 2a: region-passing ABI (ρ) — kullanıcı-fn + dizi helper'ları (re-scoped) (2026-06-17)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı origin/main `1994a88` → en yüksek D-100 → D-101 ayrıldı).
+
+**Karar [ETKİ: YÜKSEK — `src/llvm.c` + `selfhost/codegen.kem` (İKİ-DERLEYİCİ MİRROR) + `kdl_runtime.c`;
+izole commit].** Region-passing ABI'nin İLK adımı: her KULLANICI fonksiyonu ilk param `ptr %rho`
+(bölge) alır, her kullanıcı-fn çağrısı ρ geçirir, DİZİ allokasyon helper'ları ρ alır, tüm dizi
+tahsisi → geçirilen ρ_caller. AMAÇ: uniform ρ ABI iskeleti + iki-derleyici mirror + YENİ
+self-host FIXPOINT'i kararlılaştırmak. Serbest + gerçek YEREL/CAGIRAN ayrımı = F4.2b/F4.4.
+
+**RE-SCOPE (orchestrator kararı):** İlk tasarım (her şey ρ: metin + closure-env-malloc + bölge_al +
+tüm helper'lar) ~50 byte-kritik edit + çok-iterasyonlu konverjans gerektiriyordu. Mirror yüzeyini
+küçültmek için **kullanıcı-fn + DİZİ helper'ları + lambda imzaları + fat-value dispatch** ρ-threaded
+edildi; **metin (kdl_metin_*), closure-env-malloc, bölge_al inline-malloc global'de KALDI** (F4.1
+davranışı — `kdl_global_bolge_al` fallback). **Lambda/dispatch ρ yalnız `src/llvm.c`'de** —
+`codegen.kem`'de fat-value/lambda YOK (`parse_lambda` salt parser-fn), dolayısıyla mirror edilmedi
+ve fixpoint etkilenmedi.
+
+**Tasarım:**
+- ρ = adlı param `%rho`, LİTERAL geçirilir (alloca YOK) → gövde reg numaraları DEĞİŞMEZ.
+- main HARİÇ her kullanıcı-fn: `define <ret> @f(ptr %rho, ...)`. Kullanıcı-fn çağrısı `f(%rho, ...)`.
+- **main:** ρ param almaz (libc çağırır); gövde başında `%r = call ptr @kdl_global_bolge_al()` seed +
+  `rho_ref` ile çağrılara geçer.
+- **lambda (fat-value hedefi):** ρ İLK param: yakalamasız `@l(ptr %rho, args)`, yakalamalı
+  `@l(ptr %rho, ptr %env, args)`. Gövdesi geçirilen ρ'yu kullanır. Böylece üst-düzey-fn (ρ-ABI) ile
+  lambda fat-value dispatch'te ABI-uniform.
+- **fat-value indirect dispatch:** her iki dal ρ geçirir — bare `fn(ρ, args)` (üst-düzey-fn-değer
+  ya da yakalamasız-lambda), closure `fn(ρ, env, args)`. ρ = çağıranın `rho_ref`'i. Bu, stdlib
+  yüksek-mertebe fn'lerini (harita/filtre/indirgeme — fn'i DEĞER geçirip indirect çağırır) ρ-doğru
+  kılar; aksi halde üst-düzey-fn ρ-ABI iken dispatch ρ'suz → ABI uyumsuz (test_llvm 59/60/61 ✗).
+- Dizi helper'ları (`kdl_dizi_olustur/ekle_{tam,tam64,ptr,yapi}/kapasite_ayarla`) ρ ilk param +
+  `kdl_bolge_ayir(ρ,...)`. Non-alloc (al/yaz/boyut) + metin + yazdir ρ ALMAZ.
+- Sınıflandırma: çağrı yerinde "kullanıcı-fn mı?" (`ik!=NULL` / codegen.kem `kdl==""`) → ρ; built-in → ρ yok.
+
+**FIXPOINT'in DOĞASI (kritik anlayış):** bootstrap "fixpoint" = **stage1 == stage2** ve İKİSİ DE
+SELF-HOST çıktısı (codegen.exe vs codegen2.exe) → self-host İDEMPOTANSI. llvm.c↔codegen.kem
+BYTE-eşitliği DEĞİL. codegen_diff ise SEMANTİK (exit-kod) eşdeğerlik. Dolayısıyla codegen.kem'in
+ρ-emit'i llvm.c ile byte-eşleşmek zorunda DEĞİL — yalnız DOĞRU + deterministik olmalı (stage1==stage2
+otomatik). Bu, mirror'ı çok daha tractable yaptı (reg-numara eşleştirme kaygısı moot).
+
+**KAPSAM / RESIDUAL:**
+- Bölge HİÇ serbest bırakılmaz (status-quo leak; deterministik serbest = F4.4).
+- ρ_yerel YOK — her tahsis ρ_caller (global'den seed). Gerçek YEREL/CAGIRAN escape ayrımı = F4.2b.
+- metin (kdl_metin_*), closure-env-malloc, bölge_al inline-malloc ρ ALMAZ (global; F4.1) — bunlar
+  TAHSİS noktaları, ρ-threading'den ayrı; F4.2b/F4.4 ele alır.
+- Fat-value indirect ABI uyumsuzluğu (top-level-fn-değer ρ-ABI iken dispatch ρ'suz) ÇÖZÜLDÜ:
+  lambda imzası + dispatch'in iki dalı da ρ alır (yalnız llvm.c; codegen.kem'de fat-value yok).
+
+**Doğrulama (hepsi YEŞİL):** `test_tumu` → **"Tum testler gecti!"** (rc=0). test_llvm **235/235**
+(stdlib harita/filtre/indirgeme dahil — fat-value ρ-dispatch düzeltmesiyle). Bootstrap:
+LEXER/PARSER/CHECKER **51/51/51 birebir, 0 fark**; **CODEGEN FIXPOINT stage1==stage2 (21967 satır)
+BİREBİR ✓** (ρ-threaded). self-host --parse 12/12, --check 48/48; codegen semantik eşdeğerlik
+**58/58** (kemgu_self + kemgu_self2). ASan E2E: **PASS=97 FAIL=0** (serbest yok → UAF yok; leak F4.1
+ile aynı). 0 derleyici uyarısı.
+
+**Build-env notu (reviewer):** bootstrap/codegen harness'ları `mktemp -d` kullanır. MSYS2 `mktemp`
+`/tmp`'i `C:\msys64\tmp`'e, git-bash ise `AppData\Local\Temp`'e çözer; PATH karışırsa harness
+"stage1.ll No such file" ile YANLIŞ-NEGATİF verir (kod sorunu DEĞİL). Çözüm: testleri tutarlı bir
+MSYS2 kabuğunda çalıştır veya `TMPDIR`'i `/c/`-köklü bir yola sabitle (her iki kabuk aynı çözer).
+
 ## D-100 — [YÜKSEK] V2 F4 FAZ 1: sızan array/metin tahsisini global bölgeye yönlendir + sembol-çakışması temizliği (2026-06-17)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
