@@ -1,0 +1,117 @@
+// KEMGU Stdlib Testi — Sayısal (istatistik)
+// =================================================
+//
+// Bu dosya `stdlib/temel/sayisal.kem` ile birleştirilerek --check edilir.
+// İstatistik fonksiyonları Dizi<tam32> üzerinde; seçimlik dönüşler eşleş ile
+// açılır.
+
+// seçimlik<tam32> -> tam32 (yardımcı; hiç ise varsayılan).
+işlev coz(o: seçimlik<tam32>, varsayilan: tam32) -> tam32 {
+    eşleş o {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// --- mevcut generic ortalama/us/obe/ekok (regresyon) ---
+işlev test_ortalama_iki() -> tam32 {
+    ver ortalama(10, 20);   // 15
+}
+
+işlev test_obe() -> tam32 {
+    ver obe(48, 36);        // 12
+}
+
+işlev test_ekok() -> tam32 {
+    ver ekok(4, 6);         // 12
+}
+
+// --- dizi_toplam / dizi_say / dizi_ortalama ---
+işlev test_dizi_toplam() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 6, 8];
+    ver dizi_toplam(d);     // 20
+}
+
+işlev test_dizi_say() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    ver dizi_say(d);        // 3
+}
+
+işlev test_dizi_ortalama() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 6];
+    ver dizi_ortalama(d);   // 4
+}
+
+işlev test_dizi_ortalama_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver dizi_ortalama(d);   // 0 (boş)
+}
+
+// --- dizi_min / dizi_maks ---
+işlev test_dizi_min() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1, 9];
+    ver coz(dizi_min(d), 0 - 1);   // 1
+}
+
+işlev test_dizi_maks() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1, 9];
+    ver coz(dizi_maks(d), 0 - 1);  // 9
+}
+
+işlev test_dizi_min_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver coz(dizi_min(d), 7);       // hiç -> 7
+}
+
+// --- varyans / std_sapma / karekok / dizi_aralik ---
+işlev test_varyans() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 6];
+    ver varyans(d);                // 8/3 = 2
+}
+
+işlev test_std_sapma() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 6];
+    ver std_sapma(d);              // karekok(2) = 1
+}
+
+işlev test_karekok() -> tam32 {
+    ver karekok(144);              // 12
+}
+
+işlev test_karekok_kucuk() -> tam32 {
+    ver karekok(1);                // 1
+}
+
+işlev test_dizi_aralik() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 3, 8, 1, 9];
+    ver dizi_aralik(d);            // 9 - 1 = 8
+}
+
+// --- medyan ---
+işlev test_medyan_tek() -> tam32 {
+    ver coz(medyan([3, 1, 2, 5, 4]), 0 - 1);   // 3
+}
+
+işlev test_medyan_cift() -> tam32 {
+    ver coz(medyan([1, 2, 3, 4]), 0 - 1);       // (2+3)/2 = 2
+}
+
+işlev test_medyan_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver coz(medyan(d), 7);                       // hiç -> 7
+}
+
+// --- en_sik (mod / tepe değer) ---
+işlev test_en_sik() -> tam32 {
+    ver coz(en_sik([1, 2, 2, 3, 2, 1]), 0 - 1); // 2
+}
+
+işlev test_en_sik_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver coz(en_sik(d), 7);                       // hiç -> 7
+}
+
+işlev main() -> tam32 {
+    ver test_dizi_toplam();
+}
