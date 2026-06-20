@@ -158,6 +158,30 @@ işlev ya_da_cagir<T>(opt: seçimlik<T>, f: işlev() -> T) -> T {
     ver f();
 }
 
+// Harita-ya-da<T,U> — deger ise f(v) uygula, hic ise varsayilan U doner.
+// `harita` + `ya_da_varsayilan` birlesimi; tek geciste U uretir.
+işlev harita_ya_da<T, U>(opt: seçimlik<T>, varsayilan: U,
+                          f: işlev(T) -> U) -> U {
+    eşleş opt {
+        değer(v) => { ver f(v); }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// Say<T> — deger varsa 1, hic ise 0 (opsiyoneli sayilabilir gibi gor).
+işlev say<T>(opt: seçimlik<T>) -> tam32 {
+    eşleş opt {
+        değer(v) => { ver 1; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+
+// NOT: `diziye<T>(opt) -> Dizi<T>` (deger->[v], hic->[]) eklenmek istendi ama
+// generic dönüş konumunda dizi-literal (`[v]`/`[]`) Dizi<T>'ye çıkarsanamıyor
+// (T020). Dönüş-tipi güdümlü literal çıkarsaması gelince eklenebilir.
+
 // --- Harita / Filtre / Bagla (tam32 — concrete, geri uyumluluk) ---
 
 // Harita — deger ise f uygula, hic ise hic doner.
