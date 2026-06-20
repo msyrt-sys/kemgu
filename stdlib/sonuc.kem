@@ -18,6 +18,15 @@
 // Bu fonksiyonlar derleyici tip çıkarsamasını netleştirir; doğrudan
 // `tamam(v)` / `hata(m)` da yazılabilir, ama generic context'te bazen
 // wrapper isabetli olur.
+//
+// CODEGEN KISITI (mevcut, bu modülün tamamını etkiler — tip kontrolünden geçer
+// ama --llvm codegen'inde): `sonuç<T, E>` DÖNDÜREN generic fonksiyonlar
+// (tamam_yap, hata_yap, harita, harita_hata, bagla, opsiyonel_to_sonuc),
+// E i32'ye inmeyen bir tiple (ör. `metin` -> ptr) instantiate edilince yanlış IR
+// üretir (dönüş struct'ında E i32 varsayılır). E tamsayı olduğunda doğru çalışır.
+// Geçici çözüm: hata tipi olarak tamsayı kod kullanın, ya da doğrudan
+// `tamam(v)`/`hata(m)` yazıp sonucu hemen `eşleş` ile tüketin (struct'ı
+// fonksiyon sınırından geçirmeyin). Bu codegen sınırı stdlib dışıdır.
 
 işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
     ver tamam(d);
@@ -80,6 +89,39 @@ işlev bagla<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> sonuç<U, E>) -> sonuç<U
         tamam(v) => { ver f(v); }
         hata(e) => { ver hata(e); }
     }
+}
+
+// --- Dönüşümler: native seçimlik <-> sonuç ---
+// (KSonuc için k_secimlik / k_hata_secimlik var; bunlar native sonuç içindir.)
+
+// Sonuç -> seçimlik — başarılıysa değer, hatada hiç (hata bilgisi atılır).
+işlev sonuc_to_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<T> {
+    eşleş r {
+        tamam(v) => { ver değer(v); }
+        hata(e) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Sonuç -> seçimlik (hata tarafı) — hatada değer, başarılıda hiç.
+işlev sonuc_hata_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<E> {
+    eşleş r {
+        tamam(v) => { ver hiç; }
+        hata(e) => { ver değer(e); }
+    }
+    ver hiç;
+}
+
+// Seçimlik -> sonuç — değer varsa tamam, yoksa verilen hata değeriyle hata.
+// Bir Option'a "neden boş" bilgisi eklemenin standart yolu.
+// NOT: `sonuç<T, E>` döndürür — yukarıdaki CODEGEN KISITI burada da geçerli
+// (E tamsayı olmalı; metin hata kodu için şimdilik tamsayı kullanın).
+işlev opsiyonel_to_sonuc<T, E>(opt: seçimlik<T>, hata_degeri: E) -> sonuç<T, E> {
+    eşleş opt {
+        değer(v) => { ver tamam(v); }
+        hiç => { ver hata(hata_degeri); }
+    }
+    ver hata(hata_degeri);
 }
 
 // =============================================================================
