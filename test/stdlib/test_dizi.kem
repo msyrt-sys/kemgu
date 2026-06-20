@@ -268,6 +268,156 @@ işlev test_dizi_metin() -> mantıksal {
     ver icerir(d, "asma");
 }
 
+// =============================================================================
+// Genişletme testleri — yeni-dizi dönen ops + katla_sag + generic predicate
+// =============================================================================
+//
+// Sonuç dizileri toplam_tam / uzunluk ile skalere indirgenerek doğrulanır
+// (fonksiyon dönüşü -> fonksiyon argümanı yolu; çağıran scope'ta indekslemek
+// yerine indirgeyerek). Bu hem güvenli hem stil olarak tutarlı.
+
+// --- kopyala ---
+işlev test_kopyala_toplam() -> tam32 {
+    ver toplam_tam(kopyala([10, 20, 12]));   // 42
+}
+
+işlev test_kopyala_uzunluk() -> tam32 {
+    ver uzunluk(kopyala([1, 2, 3, 4]));      // 4
+}
+
+// --- birlestir_iki ---
+işlev test_birlestir_iki_toplam() -> tam32 {
+    ver toplam_tam(birlestir_iki([10, 20], [12]));   // 42
+}
+
+işlev test_birlestir_iki_uzunluk() -> tam32 {
+    ver uzunluk(birlestir_iki([1, 2], [3, 4, 5]));   // 5
+}
+
+işlev test_birlestir_iki_bos_sol() -> tam32 {
+    değişken bos: Dizi<tam32> = [];
+    ver toplam_tam(birlestir_iki(bos, [42]));        // 42
+}
+
+// --- benzersiz ---
+işlev test_benzersiz_uzunluk() -> tam32 {
+    ver uzunluk(benzersiz([1, 1, 2, 2, 3, 3]));      // 3
+}
+
+işlev test_benzersiz_toplam() -> tam32 {
+    ver toplam_tam(benzersiz([5, 5, 5, 5]));         // 5
+}
+
+işlev test_benzersiz_metin() -> tam32 {
+    değişken d: Dizi<metin> = ["a", "b", "a", "c", "b"];
+    ver uzunluk(benzersiz(d));                        // 3
+}
+
+// --- dilimle ---
+işlev test_dilimle_toplam() -> tam32 {
+    ver toplam_tam(dilimle([10, 20, 30, 40], 1, 3)); // 20+30 = 50
+}
+
+işlev test_dilimle_uzunluk() -> tam32 {
+    ver uzunluk(dilimle([10, 20, 30, 40], 1, 3));    // 2
+}
+
+işlev test_dilimle_kirpma() -> tam32 {
+    ver uzunluk(dilimle([10, 20], 0 - 5, 99));       // tüm dizi -> 2
+}
+
+işlev test_dilimle_ters_aralik() -> tam32 {
+    ver uzunluk(dilimle([10, 20, 30], 2, 1));        // boş -> 0
+}
+
+// --- al_ilk_n / atla_n ---
+işlev test_al_ilk_n() -> tam32 {
+    ver toplam_tam(al_ilk_n([10, 20, 30], 2));       // 30
+}
+
+işlev test_al_ilk_n_fazla() -> tam32 {
+    ver uzunluk(al_ilk_n([1, 2, 3], 99));            // 3
+}
+
+işlev test_atla_n() -> tam32 {
+    ver toplam_tam(atla_n([10, 20, 30], 1));         // 50
+}
+
+işlev test_atla_n_fazla() -> tam32 {
+    ver uzunluk(atla_n([1, 2, 3], 99));              // 0
+}
+
+// --- tekrarla ---
+işlev test_tekrarla_toplam() -> tam32 {
+    ver toplam_tam(tekrarla([1, 2], 3));             // (1+2)*3 = 9
+}
+
+işlev test_tekrarla_uzunluk() -> tam32 {
+    ver uzunluk(tekrarla([1, 2], 3));                // 6
+}
+
+işlev test_tekrarla_sifir() -> tam32 {
+    ver uzunluk(tekrarla([1, 2], 0));                // 0
+}
+
+// --- aralik / aralik_adim ---
+işlev test_aralik_toplam() -> tam32 {
+    ver toplam_tam(aralik(1, 5));                    // 1+2+3+4 = 10
+}
+
+işlev test_aralik_uzunluk() -> tam32 {
+    ver uzunluk(aralik(1, 5));                       // 4
+}
+
+işlev test_aralik_bos() -> tam32 {
+    ver uzunluk(aralik(5, 1));                       // 0
+}
+
+işlev test_aralik_adim_toplam() -> tam32 {
+    ver toplam_tam(aralik_adim(0, 10, 2));           // 0+2+4+6+8 = 20
+}
+
+işlev test_aralik_adim_uzunluk() -> tam32 {
+    ver uzunluk(aralik_adim(0, 10, 2));              // 5
+}
+
+işlev test_aralik_adim_sifir() -> tam32 {
+    ver uzunluk(aralik_adim(0, 10, 0));              // 0 (sonsuz döngü koruması)
+}
+
+// --- katla_sag (sıra önemli) ---
+işlev op_cikar(a: tam32, acc: tam32) -> tam32 { ver a - acc; }
+
+işlev test_katla_sag_toplam() -> tam32 {
+    ver katla_sag([1, 2, 3, 4], 0, op_topla);        // 10
+}
+
+işlev test_katla_sag_sira() -> tam32 {
+    // 1-(2-(3-0)) = 1-(2-3) = 1-(0-1) = 2
+    ver katla_sag([1, 2, 3], 0, op_cikar);           // 2
+}
+
+// --- say / tum_mu / bir_mu (generic) ---
+işlev test_say_generic() -> tam32 {
+    ver say([1, 2, 3, 4, 5, 6], cift_filtre);        // 3
+}
+
+işlev test_tum_mu_generic_evet() -> mantıksal {
+    ver tum_mu([2, 4, 6], cift_filtre);
+}
+
+işlev test_tum_mu_generic_hayir() -> mantıksal {
+    ver tum_mu([2, 3], cift_filtre);
+}
+
+işlev test_bir_mu_generic_evet() -> mantıksal {
+    ver bir_mu([1, 3, 4], cift_filtre);
+}
+
+işlev test_bir_mu_generic_hayir() -> mantıksal {
+    ver bir_mu([1, 3, 5], cift_filtre);
+}
+
 işlev main() -> tam32 {
     ver test_uzunluk_3();
 }
