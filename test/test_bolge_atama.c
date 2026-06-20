@@ -203,6 +203,8 @@ static const Dugum *literali_bul(const Dugum *d, DugumTipi tip, int *sayac) {
             return NULL;
         case DUGUM_DEGISKEN:
             return literali_bul(d->veri.degisken.deger, tip, sayac);
+        case DUGUM_ATAMA:
+            return literali_bul(d->veri.atama.deger, tip, sayac);
         case DUGUM_VER:
             return literali_bul(d->veri.ver.deger, tip, sayac);
         case DUGUM_ICIN: {
@@ -268,8 +270,10 @@ static void test_escape_kapali_geriye_uyum(void) {
     arena_serbest(a);
 }
 
-/* Dongu icindeki tahsis: escape ile ITERASYON */
-static void test_escape_dongu_iterasyon(void) {
+/* Dongu icindeki tahsis: D-101 geri-cekilmesi -> BOLGE_YEREL (ITERASYON degil).
+ * Escape ESC_ITERASYON URETMEDIGI icin escape_to_bolge BOLGE_YEREL doner. Eski
+ * kod BOLGE_ITERASYON dondururdu = loop-carried UAF (F4.3). */
+static void test_escape_dongu_yerel(void) {
     Arena *a = arena_olustur(0);
     const char *kaynak =
         "i\xc5\x9f" "lev f() -> tam32 { "
@@ -290,10 +294,61 @@ static void test_escape_dongu_iterasyon(void) {
     bolge_atama_escape_bagla(&ba, &ea);
 
     BolgeBilgisi *b = bolge_belirle(&ba, dizi_ic);
-    int ok = b && b->kategori == BOLGE_ITERASYON;
-    test_sonuc("entegrasyon: dongu ici DIZI -> ITERASYON", ok);
+    int ok = b && b->kategori == BOLGE_YEREL && b->kategori != BOLGE_ITERASYON;
+    test_sonuc("entegrasyon: dongu ici DIZI -> BOLGE_YEREL (D-101, UAF kapali)", ok);
 
     escape_serbest(&ea);
+    arena_serbest(a);
+}
+
+/* DELIK (review verisi): dongu-tahsisi DIS DIZI ELEMANINA store -> BOLGE_YEREL.
+ * Eski kod ITERASYON; D-007/R-GOMME enforce edilmedigi icin gercek UAF rotasi. */
+static void test_escape_dongu_b2_yerel(void) {
+    Arena *a = arena_olustur(0);
+    const char *kaynak =
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken dis = [\"a\", \"b\"]; "
+        "i\xc3\xa7" "in i : [1] { dis[i] = \"leak\"; } "
+        "ver \"x\"; }";
+    Lexer l; lexer_baslat(&l, kaynak, "test");
+    Parser p; parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    /* literali_bul DIZI_OLUSTUR elemanlarina inmez -> ["a","b"] icindeki METIN'ler
+     * sayilmaz; ilk ULASILAN METIN dogrudan "leak" (atama RHS'i). sayac=0. */
+    int sayac = 0;
+    const Dugum *m_leak = literali_bul(prog, DUGUM_METIN, &sayac);
+
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    BolgeAtama ba; bolge_atama_baslat(&ba, a, "f", 1);
+    bolge_atama_escape_bagla(&ba, &ea);
+
+    BolgeBilgisi *b = bolge_belirle(&ba, m_leak);
+    int ok = b && b->kategori == BOLGE_YEREL && b->kategori != BOLGE_ITERASYON;
+    test_sonuc("entegrasyon DELIK: dis[i]=tahsis -> BOLGE_YEREL (ASLA ITERASYON)", ok);
+
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
+/* Syntax-fallback (escape baglanmamis): dongu tahsisi artik KOSULSUZ ITERASYON
+ * degil -> YEREL. Kanit olmadan en uzun omur. */
+static void test_syntax_fallback_dongu_yerel(void) {
+    Arena *a = arena_olustur(0);
+    const char *kaynak = "sabit _X: tam32 = [1, 2, 3];";
+    Lexer l; lexer_baslat(&l, kaynak, "test");
+    Parser p; parser_baslat(&p, &l, a, "test", kaynak);
+    Dugum *prog = parser_calistir(&p);
+    Dugum *ifade = prog->veri.program.uyeler[0]->veri.sabit.deger;
+
+    /* Escape BAGLANMADI -> syntax fallback. Dongu icindeymis gibi davran. */
+    BolgeAtama ba; bolge_atama_baslat(&ba, a, "f", 1);
+    ba.dongu_derinligi = 1;
+    ba.aktif_iterasyon = bolge_olustur_iterasyon(a, 0);
+    BolgeBilgisi *b = bolge_belirle(&ba, ifade);
+    int ok = b && b->kategori == BOLGE_YEREL && b->kategori != BOLGE_ITERASYON;
+    test_sonuc("syntax-fallback: dongu ici DIZI -> YEREL (escape yok, UAF kapali)", ok);
+
     arena_serbest(a);
 }
 
@@ -326,7 +381,11 @@ int main(void) {
     printf("\n--- Escape Analiz Entegrasyonu ---\n");
     test_escape_transitif();
     test_escape_kapali_geriye_uyum();
-    test_escape_dongu_iterasyon();
+
+    printf("\n--- Loop-carried saglamlik (D-101: ITERASYON uretilmez) ---\n");
+    test_escape_dongu_yerel();
+    test_escape_dongu_b2_yerel();
+    test_syntax_fallback_dongu_yerel();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
