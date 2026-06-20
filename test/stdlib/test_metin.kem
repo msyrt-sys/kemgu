@@ -183,6 +183,158 @@ işlev test_bilesik() -> mantıksal {
     ver dolu_mu(s);
 }
 
+// =============================================================================
+// Genişletme testleri — gerçek bol_metin/yansit/karakter_sayisi + arama/dolgu
+// =============================================================================
+//
+// Runtime ile hesaplanan metinler `metin_esit` (byte karşılaştırma) ile
+// doğrulanır — `==`/`esit_mi` literal/pointer eşitliği olduğundan hesaplanan
+// metinlerde güvenilmez. Dizi<metin> elemanları sayılır (modülün `uzunluk`'u
+// metin byte uzunluğudur, dizi uzunluğu değil).
+
+işlev metin_es(a: metin, b: metin) -> mantıksal { ver metin_esit(a, b); }
+
+işlev dizi_metin_say(xs: Dizi<metin>) -> tam32 {
+    değişken n: tam32 = 0;
+    için p: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// --- yansit (codepoint-aware reverse) ---
+işlev test_yansit_ascii() -> mantıksal {
+    ver metin_es(yansit("abc"), "cba");
+}
+
+işlev test_yansit_utf8() -> mantıksal {
+    ver metin_es(yansit("açb"), "bça");   // UTF-8 codepoint güvenli
+}
+
+işlev test_yansit_bos() -> mantıksal {
+    ver metin_es(yansit(""), "");
+}
+
+// --- karakter_sayisi (codepoint count) ---
+işlev test_karakter_sayisi_ascii() -> tam32 {
+    ver karakter_sayisi("merhaba");        // 7
+}
+
+işlev test_karakter_sayisi_utf8() -> tam32 {
+    ver karakter_sayisi("çığ");            // 6 byte ama 3 karakter
+}
+
+işlev test_cp_bayt_sayisi_ascii() -> tam32 {
+    ver cp_bayt_sayisi(65);                // 1
+}
+
+işlev test_cp_bayt_sayisi_iki() -> tam32 {
+    ver cp_bayt_sayisi(195);               // 0xC3 -> 2
+}
+
+// --- bol_metin (split) + birlestir_liste (join) ---
+işlev test_bol_metin_uc() -> tam32 {
+    ver dizi_metin_say(bol_metin("a,b,c", ","));      // 3
+}
+
+işlev test_bol_metin_bos_parca() -> tam32 {
+    ver dizi_metin_say(bol_metin("a,,b", ","));       // 3 (orta boş)
+}
+
+işlev test_bol_metin_ayrac_yok() -> tam32 {
+    ver dizi_metin_say(bol_metin("xyz", ","));        // 1
+}
+
+işlev test_bol_metin_bos_kaynak() -> tam32 {
+    ver dizi_metin_say(bol_metin("", ","));           // 0
+}
+
+işlev test_bol_join_round_trip() -> mantıksal {
+    ver metin_es(birlestir_liste(bol_metin("a,b,c", ","), "-"), "a-b-c");
+}
+
+işlev test_birlestir_liste_bos() -> mantıksal {
+    değişken bos: Dizi<metin> = dizi_olustur(0);
+    ver metin_es(birlestir_liste(bos, ","), "");
+}
+
+// --- indeks (substring konumu, seçimlik) ---
+işlev test_indeks_var() -> tam32 {
+    eşleş indeks("merhaba", "hab") {
+        değer(v) => { ver v; }            // 3
+        hiç => { ver 0 - 1; }
+    }
+    ver 0 - 1;
+}
+
+işlev test_indeks_yok() -> mantıksal {
+    eşleş indeks("merhaba", "xyz") {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_indeks_bos_alt() -> tam32 {
+    eşleş indeks("merhaba", "") {
+        değer(v) => { ver v; }            // 0
+        hiç => { ver 0 - 1; }
+    }
+    ver 0 - 1;
+}
+
+// --- say (geçiş sayısı) ---
+işlev test_say_uc() -> tam32 {
+    ver say("aXbXcX", "X");               // 3
+}
+
+işlev test_say_ortusmeyen() -> tam32 {
+    ver say("aaaa", "aa");                // 2 (örtüşmeyen)
+}
+
+işlev test_say_yok() -> tam32 {
+    ver say("abc", "z");                  // 0
+}
+
+// --- on_ek_kaldir / son_ek_kaldir ---
+işlev test_on_ek_kaldir() -> mantıksal {
+    ver metin_es(on_ek_kaldir("merhaba", "mer"), "haba");
+}
+
+işlev test_on_ek_yok() -> mantıksal {
+    ver metin_es(on_ek_kaldir("merhaba", "xyz"), "merhaba");
+}
+
+işlev test_son_ek_kaldir() -> mantıksal {
+    ver metin_es(son_ek_kaldir("merhaba", "aba"), "merh");
+}
+
+işlev test_son_ek_yok() -> mantıksal {
+    ver metin_es(son_ek_kaldir("merhaba", "xyz"), "merhaba");
+}
+
+// --- doldur_sol / doldur_sag ---
+işlev test_doldur_sol() -> mantıksal {
+    ver metin_es(doldur_sol("42", 5, "0"), "00042");
+}
+
+işlev test_doldur_sol_kisa() -> mantıksal {
+    ver metin_es(doldur_sol("12345", 3, "0"), "12345");   // zaten uzun
+}
+
+işlev test_doldur_sag() -> mantıksal {
+    ver metin_es(doldur_sag("ab", 5, "."), "ab...");
+}
+
+// --- basharf_buyut ---
+işlev test_basharf_buyut() -> mantıksal {
+    ver metin_es(basharf_buyut("merhaba"), "Merhaba");
+}
+
+işlev test_basharf_buyut_bos() -> mantıksal {
+    ver metin_es(basharf_buyut(""), "");
+}
+
 işlev main() -> tam32 {
     eğer test_esit_evet() { ver 0; }
     ver 1;
