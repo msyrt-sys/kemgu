@@ -193,6 +193,11 @@ typedef struct LlvmGen {
     int lambda_sayaci;
     /* V2-F1: son_closure (derleme-zamanı closure tag'i) kaldırıldı — fn değeri
      * artık {ptr fn, ptr env} fat value; closure'luk env!=null ile runtime'da. */
+    /* V2-F4.2a: aktif fonksiyonun bölge (ρ) referansı (IR string). Normal fn →
+     * "%rho" (ilk param); main + lambda → seed reg (global bölge). Kullanıcı-fn
+     * çağrıları + DİZİ allokasyon helper'ları bunu ilk arg geçirir. Bu fazda
+     * metin/closure/bölge_al ρ ALMAZ (global; F4.1 davranışı korunur). */
+    const char *rho_ref;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -871,8 +876,8 @@ static void dizi_struct_ekle_emit(LlvmGen *g, int desc_reg, int val_reg,
     fprintf(g->out, "  %%%d = alloca %s\n", tmp, et);
     fprintf(g->out, "  store %s %%%d, ptr %%%d\n", et, val_reg, tmp);
     fprintf(g->out,
-        "  call void @kdl_dizi_ekle_yapi(ptr %%%d, ptr %%%d)\n",
-        desc_reg, tmp);
+        "  call void @kdl_dizi_ekle_yapi(ptr %s, ptr %%%d, ptr %%%d)\n",
+        g->rho_ref, desc_reg, tmp);   /* V2-F4.2a: ρ */
 }
 static IfadeSonuc dizi_struct_al_emit(LlvmGen *g, int desc_reg, int idx_i32,
                                       const char *et) {
@@ -2026,8 +2031,9 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         fputs("  call void @", g->out);
         yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
         fputs("(", g->out);
+        fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
         for (int i = 0; i < n; i++) {
-            if (i > 0) fputs(", ", g->out);
+            fputs(", ", g->out);
             fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
         }
         fputs(")\n", g->out);
@@ -2040,8 +2046,9 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
     fprintf(g->out, "  %%%d = call %s @", r, donus_t);
     yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
     fputs("(", g->out);
+    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
     for (int i = 0; i < n; i++) {
-        if (i > 0) fputs(", ", g->out);
+        fputs(", ", g->out);
         fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
     }
     fputs(")\n", g->out);
@@ -2162,8 +2169,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int hn = d->veri.dizi_olustur.sayi;
                 int kdl_reg = yeni_reg(g);
                 /* D-087: eleman_byte — struct ise LLVM sizeof const-expr. */
-                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(i32 ",
-                        kdl_reg);
+                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
                 kdl_eleman_byte_yaz(g->out, elem_ir);
                 fputs(")\n", g->out);
                 const Dugum *eski_bt = g->beklenen_tip;
@@ -2178,8 +2185,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     const char *fn = "kdl_dizi_ekle_tam";
                     if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                     else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
-                    fprintf(g->out, "  call void @%s(ptr %%%d, %s %%%d)\n",
-                            fn, kdl_reg, elem_ir, vr);
+                    fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
+                            fn, g->rho_ref, kdl_reg, elem_ir, vr);   /* V2-F4.2a: ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 IfadeSonuc s = { kdl_reg, "ptr", 0 };
@@ -2548,8 +2555,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = call %s @", r, donus);
                 yerel_ad_yaz(g->out, m_ad, m_ad_uz);
                 fputs("(", g->out);
+                fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (metot=kullanıcı-fn) */
                 for (int i = 0; i < n + 1; i++) {
-                    if (i > 0) fputs(", ", g->out);
+                    fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -2652,8 +2660,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     }
                     yerel_ad_yaz(g->out, mik->ad, mik->ad_uz);
                     fputs("(", g->out);
+                    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (modül-fn) */
                     for (int i = 0; i < n; i++) {
-                        if (i > 0) fputs(", ", g->out);
+                        fputs(", ", g->out);
                         fprintf(g->out, "%s %%%d",
                                 args[i].tip, args[i].reg);
                     }
@@ -3237,24 +3246,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                         isnull, L_bare, L_clo);
-                    /* bare: env yok → doğal imza fn(args) */
+                    /* bare: env yok → ρ-ABI imza fn(ρ, args). V2-F4.2a: hedef
+                     * üst-düzey-fn (ρ-ABI) ya da yakalamasız-lambda (ρ-ABI) →
+                     * ikisi de ρ ilk param. ρ = çağıranın ρ_ref'i. */
                     fprintf(g->out, "bb%d:\n", L_bare);
                     int rb = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = call %s %%%d(",
-                            rb, donus_indirect, fn_reg);
-                    for (int i = 0; i < n; i++) {
-                        if (i > 0) fputs(", ", g->out);
-                        fprintf(g->out, "%s %%%d", iargs[i].tip, iargs[i].reg);
-                    }
+                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s",
+                            rb, donus_indirect, fn_reg, g->rho_ref);
+                    for (int i = 0; i < n; i++)
+                        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
                     fputs(")\n", g->out);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             donus_indirect, rb, slot);
                     fprintf(g->out, "  br label %%bb%d\n", L_join);
-                    /* closure: env ilk arg → fn(env,args) */
+                    /* closure: ρ + env → fn(ρ, env, args) */
                     fprintf(g->out, "bb%d:\n", L_clo);
                     int rc = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %%%d",
-                            rc, donus_indirect, fn_reg, env_reg);
+                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s, ptr %%%d",
+                            rc, donus_indirect, fn_reg, g->rho_ref, env_reg);
                     for (int i = 0; i < n; i++)
                         fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
                     fputs(")\n", g->out);
@@ -3498,11 +3507,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int kap = args[0].reg;
                 int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
                 fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(i32 %d)\n", rr, eb);
+                    "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",
+                    rr, g->rho_ref, eb);   /* V2-F4.2a: ρ */
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
-                    "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
-                    rr, kap_i32);
+                    "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
+                    g->rho_ref, rr, kap_i32);   /* V2-F4.2a: ρ */
                 IfadeSonuc s = { rr, "ptr", 0 };
                 return s;
             }
@@ -3530,8 +3540,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                                  args[1].tip, cast_tip)
                                  : 0;
                 fprintf(g->out,
-                    "  call void @%s(ptr %%%d, %s %%%d)\n",
-                    fn, args[0].reg, cast_tip, ev);
+                    "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
+                    fn, g->rho_ref, args[0].reg, cast_tip, ev);   /* V2-F4.2a: ρ */
                 /* void donus — placeholder i32 0 */
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
@@ -3618,8 +3628,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int yk = (n > 1) ? int_donustur(g, args[1].reg,
                                                  args[1].tip, "i32") : 0;
                 fprintf(g->out,
-                    "  call void @kdl_dizi_kapasite_ayarla(ptr %%%d, i32 %%%d)\n",
-                    args[0].reg, yk);
+                    "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
+                    g->rho_ref, args[0].reg, yk);   /* V2-F4.2a: ρ */
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
                 IfadeSonuc s = { rr, "i32", 0 };
@@ -3663,8 +3673,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fputs("  call void @", g->out);
                 yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
+                /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in
+                 * (ik==NULL: yazdir/metin/dosya/...) ρ ALMAZ (bu faz). */
+                if (ik) fprintf(g->out, "ptr %s", g->rho_ref);
                 for (int i = 0; i < n; i++) {
-                    if (i > 0) fputs(", ", g->out);
+                    if (i > 0 || ik) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -3678,8 +3691,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
+            if (ik) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
             for (int i = 0; i < n; i++) {
-                if (i > 0) fputs(", ", g->out);
+                if (i > 0 || ik) fputs(", ", g->out);
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
@@ -3936,8 +3950,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 int n = lit->veri.dizi_olustur.sayi;
                 int kdl_reg = yeni_reg(g);
                 /* kdl_dizi_olustur(eleman_byte) — D-087: struct → sizeof const-expr */
-                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(i32 ",
-                        kdl_reg);
+                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
                 kdl_eleman_byte_yaz(g->out, eleman_tip);
                 fputs(")\n", g->out);
                 (void)n;
@@ -3960,8 +3974,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                     else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                     fprintf(g->out,
-                        "  call void @%s(ptr %%%d, %s %%%d)\n",
-                        fn, kdl_reg, eleman_tip, vr);
+                        "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
+                        fn, g->rho_ref, kdl_reg, eleman_tip, vr);   /* V2-F4.2a: ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
@@ -5089,9 +5103,16 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         fputs("; @kemgu.realtime\n", g->out);
     }
 
+    /* V2-F4.2a: region-passing ABI. main HARİÇ her fonksiyon ilk param `ptr %rho`.
+     * main'in çağıranı (libc) ρ geçirmez → main ρ param ALMAZ; gövde başında
+     * global bölgeden seed eder. */
+    int main_mi = (islev->veri.islev.ad_uzunluk == 4 &&
+                   memcmp(islev->veri.islev.ad, "main", 4) == 0);
+
     fprintf(g->out, "define %s @", donus);
     yerel_ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
+    if (!main_mi) fputs("ptr %rho", g->out);   /* V2-F4.2a: ρ ilk param */
 
     /* Parametre listesi */
     int n = islev->veri.islev.param_sayi;
@@ -5105,7 +5126,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         const char *tip = ast_tip_to_ir(g, p->veri.parametre.tip);
         if (!tip) tip = "i32";
         param_tipler[i] = tip;
-        if (i > 0) fputs(", ", g->out);
+        if (i > 0 || !main_mi) fputs(", ", g->out);   /* ρ'dan sonra virgül */
         fprintf(g->out, "%s %%", tip);
         yerel_ad_yaz(g->out, p->veri.parametre.ad,
                      p->veri.parametre.ad_uzunluk);
@@ -5115,6 +5136,18 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->reg = 0;
     g->label = 0;
     g->isimler = NULL;
+
+    /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge
+     * seed (gövdenin İLK komutu; provizyonel reg, hoist_renumber tutarlı yeniler). */
+    if (main_mi) {
+        int rr = yeni_reg(g);
+        fprintf(g->out, "  %%%d = call ptr @kdl_global_bolge_al()\n", rr);
+        char *rs = (char *)arena_ayir(g->arena, 16);
+        snprintf(rs, 16, "%%%d", rr);
+        g->rho_ref = rs;
+    } else {
+        g->rho_ref = "%rho";
+    }
 
     /* Parametreleri alloca'ya kopyala */
     for (int i = 0; i < n; i++) {
@@ -5231,9 +5264,13 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     if (govde_tmp) g->out = govde_tmp;
 
     /* KARMA temsil: yakalama varsa env ilk param; yoksa env YOK (bare fn). */
+    /* V2-F4.2a: ρ HER fat-value hedefinde ilk param (dispatch uniform ρ geçirir):
+     * bare  → @lambda(ptr %rho, args)
+     * closure → @lambda(ptr %rho, ptr %env, args)
+     * Böylece üst-düzey-fn (ρ-ABI) ile lambda fat-value dispatch'te ABI-uyumlu. */
     int has_env = bl->capture_sayi > 0;
-    fprintf(g->out, "define %s @%s(", donus, bl->mangled);
-    if (has_env) fputs("ptr %env", g->out);
+    fprintf(g->out, "define %s @%s(ptr %%rho", donus, bl->mangled);
+    if (has_env) fputs(", ptr %env", g->out);
     const char **ptip = NULL;
     if (np > 0) ptip = (const char **)arena_ayir(g->arena,
         sizeof(const char *) * (size_t)np);
@@ -5242,13 +5279,16 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         const char *t = ast_tip_to_ir(g, p->veri.parametre.tip);
         if (!t) t = "i32";
         ptip[i] = t;
-        if (i > 0 || has_env) fputs(", ", g->out);
+        fputs(", ", g->out);
         fprintf(g->out, "%s %%", t);
         yerel_ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
     }
     fputs(") {\nentry:\n", g->out);
 
     g->reg = 0; g->label = 0; g->isimler = NULL;
+    /* V2-F4.2a: lambda ρ'yu param olarak alır (dispatch geçirir) → gövde
+     * tahsis/kullanıcı-fn-çağrısı geçirilen ρ_caller'ı kullanır. */
+    g->rho_ref = "%rho";
 
     for (int i = 0; i < np; i++) {
         const Dugum *p = d->veri.lambda.parametreler[i];
@@ -5343,11 +5383,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
 
-    /* Madde B: Dinamik dizi (KdlDizi*) */
-    fputs("declare ptr @kdl_dizi_olustur(i32)\n", out);
-    fputs("declare void @kdl_dizi_ekle_tam(ptr, i32)\n", out);
-    fputs("declare void @kdl_dizi_ekle_tam64(ptr, i64)\n", out);
-    fputs("declare void @kdl_dizi_ekle_ptr(ptr, ptr)\n", out);
+    /* V2-F4.2a: region-passing — main/lambda ρ-seed bu global bölgeyi kullanır. */
+    fputs("declare ptr @kdl_global_bolge_al()\n", out);
+    /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
+    fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_ekle_tam64(ptr, ptr, i64)\n", out);
+    fputs("declare void @kdl_dizi_ekle_ptr(ptr, ptr, ptr)\n", out);
     fputs("declare i32 @kdl_dizi_al_tam(ptr, i32)\n", out);
     fputs("declare i64 @kdl_dizi_al_tam64(ptr, i32)\n", out);
     fputs("declare ptr @kdl_dizi_al_ptr(ptr, i32)\n", out);
@@ -5355,13 +5397,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_dizi_yaz_tam64(ptr, i32, i64)\n", out);
     fputs("declare void @kdl_dizi_yaz_ptr(ptr, i32, ptr)\n", out);
     /* D-087: by-value yapı (struct) elemanlı dizi — memcpy tabanlı */
-    fputs("declare void @kdl_dizi_ekle_yapi(ptr, ptr)\n", out);
+    fputs("declare void @kdl_dizi_ekle_yapi(ptr, ptr, ptr)\n", out);  /* V2-F4.2a: ρ */
     fputs("declare void @kdl_dizi_al_yapi(ptr, i32, ptr)\n", out);
     fputs("declare void @kdl_dizi_yaz_yapi(ptr, i32, ptr)\n", out);
     fputs("declare i32 @kdl_dizi_boyut(ptr)\n", out);
     /* Adim 6: capacity API */
     fputs("declare i32 @kdl_dizi_kapasite(ptr)\n", out);
-    fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)\n", out);
+    fputs("declare void @kdl_dizi_kapasite_ayarla(ptr, ptr, i32)\n", out);  /* V2-F4.2a: ρ */
     /* D-069 Kategori 2: sabit stack dizi sınır-ihlali panic (OOB → temiz durma) */
     fputs("declare void @kdl_panik(ptr)\n", out);
     fputs("@.str.dizi_sinir_panik = private constant "
