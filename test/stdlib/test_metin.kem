@@ -417,6 +417,26 @@ işlev test_harf_karisik() -> mantıksal { ver sadece_harf_mi("abc123"); }
 işlev test_harf_bos() -> mantıksal { ver sadece_harf_mi(""); }
 işlev test_harf_bosluk() -> mantıksal { ver sadece_harf_mi("ab cd"); }
 
+// --- Kenar-durumlar: boş kaynak / boş ayraç / tek karakter / boş içerik ---
+işlev test_bul_tum_bos_kaynak() -> tam32 {
+    ver dizi_tam_say(bul_tum("", "x"));            // 0
+}
+işlev test_bul_tum_bos_alt() -> tam32 {
+    ver dizi_tam_say(bul_tum("abc", ""));          // 0 (boş alt -> boş)
+}
+işlev test_degistir_ilk_bos_hedef() -> mantıksal {
+    ver metin_esit(degistir_ilk("abc", "", "-"), "abc");   // boş hedef -> değişmez
+}
+işlev test_sadece_rakam_tek() -> mantıksal { ver sadece_rakam_mi("5"); }       // doğru
+işlev test_sadece_harf_tek_turkce() -> mantıksal { ver sadece_harf_mi("ş"); }  // doğru
+işlev test_kes_arasi_bos_icerik() -> mantıksal {
+    eşleş kes_arasi("<>", "<", ">") {
+        değer(v) => { ver metin_esit(v, ""); }      // boş içerik -> değer("")
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
 // NOT (execution): bu dosya `metin_es` (metin_-önekli kullanıcı işlevi)
 // kullanan eski testler içerdiği için bütün olarak `--llvm` ile çalıştırılamaz
 // (codegen `metin_*` çağrılarını `kdl_metin_*` built-in'e yönlendirir). Bu

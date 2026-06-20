@@ -379,8 +379,59 @@ işlev test_tekrar_yok() -> mantıksal {
     ver tekrar_eden_mi(d);                // yanlış
 }
 
-// Sentinel sürücü: tüm genişletme kontrolleri geçerse 42, aksi halde ilk
-// başarısız kontrolün indeksi (--llvm | clang | run ile execution-test).
+// =============================================================================
+// Kenar-durum testleri — boş / tek-eleman / büyük girdiler (mevcut çekirdek
+// işlevler dahil). Hepsi parametre-üzerinden indirgenir (F4-güvenli).
+// =============================================================================
+
+işlev test_toplam_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver toplam_tam(d);                    // 0 (boş toplam)
+}
+işlev test_carpim_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver carpim_tam(d);                    // 1 (boş çarpım birimi)
+}
+işlev test_sirala_bos_uz() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver uzunluk(sirala(d));               // 0 (boş sıralama çökmesin)
+}
+işlev test_sirala_tek_uz() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    ver uzunluk(sirala(d));               // 1
+}
+işlev test_min_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş min_tam(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }             // boş -> hiç
+    }
+    ver yanlış;
+}
+işlev test_icerir_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver icerir(d, 5);                     // yanlış
+}
+işlev test_say_esit_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver say_esit(d, 5);                   // 0
+}
+işlev test_pozisyonlar_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver uzunluk(pozisyonlar(d, 5));       // 0
+}
+işlev test_tekrar_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver tekrar_eden_mi(d);                // yanlış (boşta tekrar yok)
+}
+işlev test_kesisim_buyuk() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    değişken b: Dizi<tam32> = [2, 4, 6, 8, 10, 12, 14];
+    ver toplam_tam(kesisim(a, b));        // {2,4,6,8,10} -> 30
+}
+
+// Sentinel sürücü: tüm genişletme + kenar-durum kontrolleri geçerse 42, aksi
+// halde ilk başarısız kontrolün indeksi (--llvm | clang | run).
 işlev main() -> tam32 {
     eğer test_kesisim_toplam() != 6 { ver 1; }
     eğer test_kesisim_uzunluk() != 2 { ver 2; }
@@ -402,5 +453,15 @@ işlev main() -> tam32 {
     eğer test_say_esit_yok() != 0 { ver 18; }
     eğer değil test_tekrar_var() { ver 19; }
     eğer test_tekrar_yok() { ver 20; }
+    eğer test_toplam_bos() != 0 { ver 21; }
+    eğer test_carpim_bos() != 1 { ver 22; }
+    eğer test_sirala_bos_uz() != 0 { ver 23; }
+    eğer test_sirala_tek_uz() != 1 { ver 24; }
+    eğer değil test_min_bos() { ver 25; }
+    eğer test_icerir_bos() { ver 26; }
+    eğer test_say_esit_bos() != 0 { ver 27; }
+    eğer test_pozisyonlar_bos() != 0 { ver 28; }
+    eğer test_tekrar_bos() { ver 29; }
+    eğer test_kesisim_buyuk() != 30 { ver 30; }
     ver 42;
 }
