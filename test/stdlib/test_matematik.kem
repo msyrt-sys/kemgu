@@ -94,8 +94,118 @@ işlev test_bilesik_c() -> mantıksal {
     ver asal_mi(faktoriyel(4) - 1);            // 24 - 1 = 23, asal
 }
 
+// =============================================================================
+// Genişletme testleri — obeb_dizi/ekok_dizi/us_mod/kombinasyon/permutasyon/
+// palindrom_mu. Hepsi skaler döner → bütün dosya --llvm | clang | run edilebilir.
+// =============================================================================
+
+// --- obeb_dizi / ekok_dizi ---
+işlev test_obeb_dizi() -> tam32 {
+    değişken d: Dizi<tam32> = [12, 18, 24];
+    ver obeb_dizi(d);                  // 6
+}
+işlev test_obeb_dizi_tek() -> tam32 {
+    değişken d: Dizi<tam32> = [7];
+    ver obeb_dizi(d);                  // 7
+}
+işlev test_obeb_dizi_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver obeb_dizi(d);                  // 0
+}
+işlev test_obeb_dizi_sifirli() -> tam32 {
+    değişken d: Dizi<tam32> = [0, 5, 10];
+    ver obeb_dizi(d);                  // 5
+}
+işlev test_ekok_dizi() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 3, 4];
+    ver ekok_dizi(d);                  // 12
+}
+işlev test_ekok_dizi_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver ekok_dizi(d);                  // 1
+}
+işlev test_ekok_dizi_sifirli() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 0, 3];
+    ver ekok_dizi(d);                  // 0
+}
+
+// --- us_mod ---
+işlev test_us_mod_2_10_1000() -> tam32 { ver us_mod(2, 10, 1000); }   // 1024 % 1000 = 24
+işlev test_us_mod_3_4_5() -> tam32 { ver us_mod(3, 4, 5); }            // 81 % 5 = 1
+işlev test_us_mod_7_2_10() -> tam32 { ver us_mod(7, 2, 10); }          // 49 % 10 = 9
+işlev test_us_mod_sifir_us() -> tam32 { ver us_mod(5, 0, 7); }         // 1
+işlev test_us_mod_mod1() -> tam32 { ver us_mod(2, 10, 1); }            // 0
+
+// --- kombinasyon / permutasyon (tam64 -> tam32 cast) ---
+işlev test_kombinasyon_10_3() -> tam32 { ver kombinasyon(10, 3) olarak tam32; }    // 120
+işlev test_kombinasyon_5_2() -> tam32 { ver kombinasyon(5, 2) olarak tam32; }      // 10
+işlev test_kombinasyon_n_0() -> tam32 { ver kombinasyon(6, 0) olarak tam32; }      // 1
+işlev test_kombinasyon_n_n() -> tam32 { ver kombinasyon(5, 5) olarak tam32; }      // 1
+işlev test_kombinasyon_k_buyuk() -> tam32 { ver kombinasyon(5, 6) olarak tam32; }  // 0
+işlev test_permutasyon_5_2() -> tam32 { ver permutasyon(5, 2) olarak tam32; }      // 20
+işlev test_permutasyon_6_3() -> tam32 { ver permutasyon(6, 3) olarak tam32; }      // 120
+işlev test_permutasyon_n_0() -> tam32 { ver permutasyon(5, 0) olarak tam32; }      // 1
+
+// --- palindrom_mu ---
+işlev test_palindrom_121() -> mantıksal { ver palindrom_mu(121); }
+işlev test_palindrom_123() -> mantıksal { ver palindrom_mu(123); }
+işlev test_palindrom_0() -> mantıksal { ver palindrom_mu(0); }
+işlev test_palindrom_1221() -> mantıksal { ver palindrom_mu(1221); }
+işlev test_palindrom_negatif() -> mantıksal { ver palindrom_mu(0 - 5); }
+
+// =============================================================================
+// Kenar-durum testleri — sınır/büyük girdiler (taşma öncesi + tam64 ara değer)
+// =============================================================================
+
+işlev test_asal_0() -> mantıksal { ver asal_mi(0); }              // yanlış
+işlev test_asal_1() -> mantıksal { ver asal_mi(1); }              // yanlış
+işlev test_fibonacci_20() -> tam32 { ver fibonacci(20); }         // 6765
+işlev test_faktoriyel_12() -> tam32 { ver faktoriyel(12); }       // 479001600 (tam32'ye sığar)
+işlev test_mutlak_buyuk() -> tam32 { ver mutlak(0 - 1000000); }   // 1000000
+işlev test_kombinasyon_20_10() -> tam32 { ver kombinasyon(20, 10) olarak tam32; }  // 184756
+işlev test_us_mod_buyuk() -> tam32 { ver us_mod(2, 20, 1000000); } // 1048576 % 1e6 = 48576
+işlev test_palindrom_12321() -> mantıksal { ver palindrom_mu(12321); }  // doğru
+işlev test_obeb_dizi_buyuk() -> tam32 {
+    değişken d: Dizi<tam32> = [100, 75, 50];
+    ver obeb_dizi(d);                                              // 25
+}
+
+// Sentinel sürücü: tüm genişletme + kenar-durum kontrolleri geçerse 42, aksi
+// halde ilk başarısız kontrolün indeksi (--llvm | clang | run).
 işlev main() -> tam32 {
-    // 30+ test fonksiyonu yukarıda tanımlandı; main yalnızca bir tanesi
-    // çağırıp --check için entry point sağlar.
-    ver test_mutlak_pozitif();
+    eğer test_obeb_dizi() != 6 { ver 1; }
+    eğer test_obeb_dizi_tek() != 7 { ver 2; }
+    eğer test_obeb_dizi_bos() != 0 { ver 3; }
+    eğer test_obeb_dizi_sifirli() != 5 { ver 4; }
+    eğer test_ekok_dizi() != 12 { ver 5; }
+    eğer test_ekok_dizi_bos() != 1 { ver 6; }
+    eğer test_ekok_dizi_sifirli() != 0 { ver 7; }
+    eğer test_us_mod_2_10_1000() != 24 { ver 8; }
+    eğer test_us_mod_3_4_5() != 1 { ver 9; }
+    eğer test_us_mod_7_2_10() != 9 { ver 10; }
+    eğer test_us_mod_sifir_us() != 1 { ver 11; }
+    eğer test_us_mod_mod1() != 0 { ver 12; }
+    eğer test_kombinasyon_10_3() != 120 { ver 13; }
+    eğer test_kombinasyon_5_2() != 10 { ver 14; }
+    eğer test_kombinasyon_n_0() != 1 { ver 15; }
+    eğer test_kombinasyon_n_n() != 1 { ver 16; }
+    eğer test_kombinasyon_k_buyuk() != 0 { ver 17; }
+    eğer test_permutasyon_5_2() != 20 { ver 18; }
+    eğer test_permutasyon_6_3() != 120 { ver 19; }
+    eğer test_permutasyon_n_0() != 1 { ver 20; }
+    eğer değil test_palindrom_121() { ver 21; }
+    eğer test_palindrom_123() { ver 22; }
+    eğer değil test_palindrom_0() { ver 23; }
+    eğer değil test_palindrom_1221() { ver 24; }
+    eğer test_palindrom_negatif() { ver 25; }
+    eğer test_asal_0() { ver 26; }
+    eğer test_asal_1() { ver 27; }
+    eğer test_fibonacci_20() != 6765 { ver 28; }
+    eğer test_faktoriyel_12() != 479001600 { ver 29; }
+    eğer test_mutlak_buyuk() != 1000000 { ver 30; }
+    eğer test_kombinasyon_20_10() != 184756 { ver 31; }
+    eğer test_us_mod_buyuk() != 48576 { ver 32; }
+    eğer değil test_palindrom_12321() { ver 33; }
+    eğer test_obeb_dizi_buyuk() != 25 { ver 34; }
+    ver 42;
 }
