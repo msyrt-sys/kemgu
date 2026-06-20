@@ -335,6 +335,95 @@ işlev test_basharf_buyut_bos() -> mantıksal {
     ver metin_es(basharf_buyut(""), "");
 }
 
+// =============================================================================
+// Genişletme 2 testleri — bul_tum / degistir_ilk / kes_arasi / sınıflama
+// =============================================================================
+//
+// bul_tum (Dizi<tam32>) sonucu parametre-üzerinden indirgenir (F4-güvenli).
+
+işlev dizi_tam_toplam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 0;
+    için x: xs { s = s + x; }
+    ver s;
+}
+
+işlev dizi_tam_say(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs { n = n + 1; }
+    ver n;
+}
+
+// --- bul_tum ---
+işlev test_bul_tum_toplam() -> tam32 {
+    ver dizi_tam_toplam(bul_tum("aXbXcX", "X"));   // indeks 1+3+5 = 9
+}
+işlev test_bul_tum_say() -> tam32 {
+    ver dizi_tam_say(bul_tum("aXbXcX", "X"));       // 3
+}
+işlev test_bul_tum_ortusmeyen() -> tam32 {
+    ver dizi_tam_say(bul_tum("aaaa", "aa"));        // 2 (örtüşmeyen: 0,2)
+}
+işlev test_bul_tum_yok() -> tam32 {
+    ver dizi_tam_say(bul_tum("abc", "z"));          // 0
+}
+
+// --- degistir_ilk ---
+// NOT: hesaplanan metinleri runtime `metin_esit` (byte karşılaştırma) ile
+// doğrula — `metin_es` gibi `metin_`-önekli kullanıcı işlevi codegen'de
+// `kdl_metin_*` built-in olarak yönlendirilir (--llvm shadow); `metin_esit`
+// gerçek primitiftir.
+işlev test_degistir_ilk_var() -> mantıksal {
+    ver metin_esit(degistir_ilk("aXbXc", "X", "-"), "a-bXc");   // yalnız ilk
+}
+işlev test_degistir_ilk_yok() -> mantıksal {
+    ver metin_esit(degistir_ilk("abc", "X", "-"), "abc");
+}
+işlev test_degistir_ilk_genis() -> mantıksal {
+    ver metin_esit(degistir_ilk("merhaba dünya", "dünya", "evren"), "merhaba evren");
+}
+
+// --- kes_arasi ---
+işlev test_kes_arasi_var() -> mantıksal {
+    eşleş kes_arasi("[ad]Ali[/ad]", "[ad]", "[/ad]") {
+        değer(v) => { ver metin_esit(v, "Ali"); }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+işlev test_kes_arasi_son_yok() -> mantıksal {
+    eşleş kes_arasi("(merhaba", "(", ")") {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+işlev test_kes_arasi_bas_yok() -> mantıksal {
+    eşleş kes_arasi("merhaba", "<", ">") {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- sadece_rakam_mi ---
+işlev test_rakam_evet() -> mantıksal { ver sadece_rakam_mi("12345"); }
+işlev test_rakam_hayir() -> mantıksal { ver sadece_rakam_mi("12a45"); }
+işlev test_rakam_bos() -> mantıksal { ver sadece_rakam_mi(""); }
+
+// --- sadece_harf_mi (ASCII + Türkçe) ---
+işlev test_harf_ascii() -> mantıksal { ver sadece_harf_mi("merhaba"); }
+işlev test_harf_turkce() -> mantıksal { ver sadece_harf_mi("çığşöü"); }
+işlev test_harf_karisik() -> mantıksal { ver sadece_harf_mi("abc123"); }
+işlev test_harf_bos() -> mantıksal { ver sadece_harf_mi(""); }
+işlev test_harf_bosluk() -> mantıksal { ver sadece_harf_mi("ab cd"); }
+
+// NOT (execution): bu dosya `metin_es` (metin_-önekli kullanıcı işlevi)
+// kullanan eski testler içerdiği için bütün olarak `--llvm` ile çalıştırılamaz
+// (codegen `metin_*` çağrılarını `kdl_metin_*` built-in'e yönlendirir). Bu
+// dosya gerçek gate olan `--check`'ten geçer; yeni işlevlerin runtime
+// doğrulaması `metin_esit` (gerçek primitif) ile bağımsız sürücü üzerinden
+// yapılır (PASS exit=42). Yukarıdaki yeni testler bu yüzden `metin_esit`
+// kullanır.
 işlev main() -> tam32 {
     eğer test_esit_evet() { ver 0; }
     ver 1;
