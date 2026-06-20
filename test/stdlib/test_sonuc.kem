@@ -188,6 +188,68 @@ işlev test_pipeline() -> tam32 {
     ver k_ya_da(r2, 0);
 }
 
+// --- Dönüşümler: native seçimlik <-> sonuç ---
+
+işlev test_sonuc_to_opsiyonel_tamam() -> tam32 {
+    değişken r: sonuç<tam32, metin> = tamam(42);
+    eşleş sonuc_to_opsiyonel(r) {
+        değer(v) => { ver v; }       // 42
+        hiç => { ver 0 - 1; }
+    }
+    ver 0 - 1;
+}
+
+işlev test_sonuc_to_opsiyonel_hata() -> mantıksal {
+    değişken r: sonuç<tam32, metin> = hata("yok");
+    eşleş sonuc_to_opsiyonel(r) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_sonuc_hata_opsiyonel_var() -> mantıksal {
+    değişken r: sonuç<tam32, metin> = hata("bozuk");
+    değişken h: seçimlik<metin> = sonuc_hata_opsiyonel(r);
+    eşleş h {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_sonuc_hata_opsiyonel_yok() -> mantıksal {
+    değişken r: sonuç<tam32, metin> = tamam(5);
+    değişken h: seçimlik<metin> = sonuc_hata_opsiyonel(r);
+    eşleş h {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_opsiyonel_to_sonuc_deger() -> tam32 {
+    değişken o: seçimlik<tam32> = değer(42);
+    ver ya_da(opsiyonel_to_sonuc(o, 0 - 1), 7);   // 42
+}
+
+// NOT: opsiyonel_to_sonuc `sonuç<T, E>` döndürdüğü için (modül başlığındaki
+// CODEGEN KISITI) hata tipi tamsayı (E = tam32) ile test edilir — bu yol
+// --llvm'de doğru derlenir ve çalışır.
+işlev test_opsiyonel_to_sonuc_hic() -> mantıksal {
+    değişken o: seçimlik<tam32> = hiç;
+    değişken r: sonuç<tam32, tam32> = opsiyonel_to_sonuc(o, 0 - 1);
+    ver basarisiz_mi(r);                            // hiç -> hata
+}
+
+// Round-trip: sonuç -> seçimlik -> sonuç (başarılı değer korunur).
+işlev test_donusum_round_trip() -> tam32 {
+    değişken r: sonuç<tam32, tam32> = tamam(42);
+    değişken o: seçimlik<tam32> = sonuc_to_opsiyonel(r);
+    değişken geri: sonuç<tam32, tam32> = opsiyonel_to_sonuc(o, 0 - 1);
+    ver ya_da(geri, 0 - 1);                         // 42
+}
+
 işlev main() -> tam32 {
     eğer test_basarili_evet() { ver 0; }
     ver 1;
