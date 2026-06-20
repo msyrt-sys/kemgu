@@ -52,6 +52,7 @@ yapı Ayr {
     pa_base: tam32;      // CG9: mevcut işlevin pa_* slice başlangıcı
     son_tip: metin;      // CG6: son ifade_uret sonucunun LLVM tipi
     cur_ret: metin;      // CG6: mevcut işlevin dönüş LLVM tipi (ver için)
+    rho_ref: metin;      // V2-F4.2a: aktif fonksiyonun bölge (ρ) IR ref ("%rho" / main seed)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -1843,6 +1844,7 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare i32 @puts(ptr)"); yb(10);
     yaz_str("declare ptr @malloc(i64)"); yb(10);
     yaz_str("declare void @free(ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_global_bolge_al()"); yb(10);   // V2-F4.2a: main/ρ-seed
     yaz_str("declare ptr @memcpy(ptr, ptr, i64)"); yb(10);
     yaz_str("declare i32 @kdl_metin_uzunluk(ptr)"); yb(10);
     yaz_str("declare i8 @kdl_metin_bayt(ptr, i32)"); yb(10);
@@ -1880,15 +1882,15 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_yaz_onaltilik(i64)"); yb(10);
     yaz_str("declare void @kdl_yazdir_karakter(i32)"); yb(10);
     yaz_str("declare void @kdl_yaz_karakter(i32)"); yb(10);
-    yaz_str("declare ptr @kdl_dizi_olustur(i32)"); yb(10);
-    yaz_str("declare void @kdl_dizi_ekle_tam(ptr, i32)"); yb(10);
-    yaz_str("declare void @kdl_dizi_ekle_tam64(ptr, i64)"); yb(10);
-    yaz_str("declare void @kdl_dizi_ekle_ptr(ptr, ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_dizi_olustur(ptr, i32)"); yb(10);   // V2-F4.2a: ρ
+    yaz_str("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)"); yb(10);
+    yaz_str("declare void @kdl_dizi_ekle_tam64(ptr, ptr, i64)"); yb(10);
+    yaz_str("declare void @kdl_dizi_ekle_ptr(ptr, ptr, ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dizi_al_tam(ptr, i32)"); yb(10);
     yaz_str("declare i64 @kdl_dizi_al_tam64(ptr, i32)"); yb(10);
     yaz_str("declare ptr @kdl_dizi_al_ptr(ptr, i32)"); yb(10);
     yaz_str("declare i32 @kdl_dizi_boyut(ptr)"); yb(10);
-    yaz_str("declare void @kdl_dizi_kapasite_ayarla(ptr, i32)"); yb(10);
+    yaz_str("declare void @kdl_dizi_kapasite_ayarla(ptr, ptr, i32)"); yb(10);   // V2-F4.2a: ρ
     yaz_str("declare ptr @kdl_dosya_oku(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_arg_sayi()"); yb(10);
     yaz_str("declare ptr @kdl_arg_al(i32)"); yb(10);
@@ -2114,6 +2116,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
             yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
+            yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
             yaz_str(d2); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = "";
             ver "0";
@@ -2148,7 +2151,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer fn_var_mi(p, fad) == yanlış { kdl = builtin_kdl_ad(fad); }
         değişken rt: metin = "";
         değişken fname: metin = "";
-        eğer metin_esit(kdl, "") { rt = fn_ret_bul(p, fad); fname = fad; }
+        değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
+        eğer metin_esit(kdl, "") { rt = fn_ret_bul(p, fad); fname = fad; kullanici = 1; }
         değilse { rt = builtin_ret(fad); fname = kdl; }
         // Argümanları SIRAYLA değerlendir (yan-IR akar), operand+tip biriktir.
         değişken args: Dizi<metin> = [];
@@ -2162,9 +2166,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // void çağrı: %r = atanmaz.
         eğer metin_esit(rt, "void") {
             yaz_str("  call void @"); yaz_str(fname); yaz_str("(");
+            eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
             değişken jv: tam32 = 0;
             iken jv < dizi_boyut(args) {
-                eğer jv > 0 { yaz_str(", "); }
+                eğer jv > 0 veya kullanici == 1 { yaz_str(", "); }
                 yaz_str(dizi_al(argt, jv)); yaz_str(" "); yaz_str(dizi_al(args, jv));
                 jv = jv + 1;
             }
@@ -2175,9 +2180,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
         yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); yaz_str(fname); yaz_str("(");
+        eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
         değişken j: tam32 = 0;
         iken j < dizi_boyut(args) {
-            eğer j > 0 { yaz_str(", "); }
+            eğer j > 0 veya kullanici == 1 { yaz_str(", "); }
             yaz_str(dizi_al(argt, j)); yaz_str(" "); yaz_str(dizi_al(args, j));
             j = j + 1;
         }
@@ -2314,7 +2320,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer metin_esit(elem, "") { elem = "i32"; }
         değişken d: tam32 = yeni_reg(p);
         değişken dr: metin = reg_str(d);
-        yaz_str("  "); yaz_str(dr); yaz_str(" = call ptr @kdl_dizi_olustur(i32 ");
+        yaz_str("  "); yaz_str(dr); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");
+        yaz_str(p.rho_ref); yaz_str(", i32 ");   // V2-F4.2a: ρ
         yaz_str(dizi_eleman_byte(elem)); yaz_str(")"); yb(10);
         // elemanları ekle (boş [] → atla)
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -2324,6 +2331,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + i));
             değişken et: metin = p.son_tip;
             yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
+            yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
             yaz_str(dr); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
             i = i + 1;
         }
@@ -2582,14 +2590,18 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.cur_ret = islev_donus_tip(p, idx);   // CG6: dönüş tipi (ver için)
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    // V2-F4.2a: region-passing ABI. main HARİÇ her fonksiyon ilk param `ptr %rho`.
+    değişken main_mi: tam32 = 0;
+    eğer metin_esit(dizi_al(p.a_deg, idx), "main") { main_mi = 1; }
     // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
     yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("(");
+    eğer main_mi == 0 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param
     değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
-            eğer pn > 0 { yaz_str(", "); }
+            eğer pn > 0 veya main_mi == 0 { yaz_str(", "); }   // ρ'dan sonra virgül
             yaz_str(param_tip(p, c)); yaz_str(" %a"); yaz_str(tam64_str(pn olarak tam64));
             pn = pn + 1;
         }
@@ -2621,6 +2633,16 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hc: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, hc), "BLOK") { alloca_hoist_pass(p, hc); }
         i = i + 1;
+    }
+    // V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge seed
+    // (alloca-hoist'tan SONRA → seed reg, hoist-edilen alloca'lardan sonra; C llvm.c
+    // ile birebir). Seed gövdeden önce gelir → kullanıcı-fn/dizi çağrıları ρ'yı kullanır.
+    eğer main_mi == 1 {
+        değişken rr: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(rr)); yaz_str(" = call ptr @kdl_global_bolge_al()"); yb(10);
+        p.rho_ref = reg_str(rr);
+    } değilse {
+        p.rho_ref = "%rho";
     }
     // 4) Gövde (BLOK çocuğu)
     i = 0;
@@ -3771,7 +3793,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
         cg_aelem: [], beklenen_elem: "", son_elem: "",
         lbl: 0, bb_term: 0,
-        fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32",
+        fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
