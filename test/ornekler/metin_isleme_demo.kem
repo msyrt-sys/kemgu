@@ -1,0 +1,62 @@
+// KEMGU Örnek Program: Metin İşleme
+// ===================================
+//
+// stdlib `metin` modülü stilinde, kendi-kendine yeten demo. Runtime metin
+// primitiflerini (metin_uzunluk, metin_bayt, metin_birlestir, metin_kes)
+// doğrudan kullanır — bunlar derleyici-bilinen built-in'lerdir, tanım
+// gerektirmez. UTF-8 byte tabanlı işleme + ASCII sınıflama gösterir.
+
+// Bir baytın ASCII sesli harf olup olmadığı (a,e,i,o,u + büyükleri).
+işlev sesli_mi(u: tam32) -> mantıksal {
+    eğer u == 97 { ver doğru; }    // a
+    eğer u == 101 { ver doğru; }   // e
+    eğer u == 105 { ver doğru; }   // i
+    eğer u == 111 { ver doğru; }   // o
+    eğer u == 117 { ver doğru; }   // u
+    eğer u == 65 { ver doğru; }    // A
+    eğer u == 69 { ver doğru; }    // E
+    eğer u == 73 { ver doğru; }    // I
+    eğer u == 79 { ver doğru; }    // O
+    eğer u == 85 { ver doğru; }    // U
+    ver yanlış;
+}
+
+// Metindeki ASCII sesli harf sayısı (byte tabanlı).
+işlev sesli_say(s: metin) -> tam32 {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken n: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer sesli_mi(u) { n = n + 1; }
+        i = i + 1;
+    }
+    ver n;
+}
+
+// Verilen ASCII baytının metinde kaç kez geçtiği.
+işlev bayt_say(s: metin, hedef: tam32) -> tam32 {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken n: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer u == hedef { n = n + 1; }
+        i = i + 1;
+    }
+    ver n;
+}
+
+işlev main() -> tam32 {
+    değişken cumle: metin = metin_birlestir("merhaba ", "dunya");
+    // "merhaba dunya" — 13 bayt
+
+    değişken uz: tam32 = metin_uzunluk(cumle);        // 13
+    değişken sesli: tam32 = sesli_say(cumle);          // e,a,a,u,a = 5
+    değişken bosluk: tam32 = bayt_say(cumle, 32);      // 1 boşluk
+
+    // 13 + 5 + 1 = 19 ... + 23 = 42 (demo sonucu)
+    ver uz + sesli + bosluk + 23;
+}
