@@ -314,3 +314,148 @@ işlev basharf_buyut(s: metin) -> metin {
     değişken kalan: metin = metin_kes(s, cu, metin_uzunluk(s) - cu);
     ver birlestir(bas, kalan);
 }
+
+// =============================================================================
+// Genişletme 2 — tüm-geçiş indeksleri + tek değiştirme + arası-kes + sınıflama
+// =============================================================================
+//
+// Hepsi mevcut byte-indeksli runtime primitifleri (metin_uzunluk, metin_bayt,
+// metin_kes, metin_esit, metin_birlestir) + modül-içi indeks/cp_bayt_sayisi
+// üzerine; yeni runtime gerekmez.
+//
+// NOT: alt-metin sayımı için zaten `say(s, alt)` (örtüşmeyen geçiş sayısı)
+// vardır — ayrı bir `say_alt` eklenmedi (tekrar olurdu).
+
+// Bul_tüm — `alt` alt metninin TÜM (örtüşmeyen) başlangıç byte indeksleri.
+// `say` ile tutarlı: eşleşince M kadar atlar. Boş alt -> boş dizi.
+işlev bul_tum(s: metin, alt: metin) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken M: tam32 = metin_uzunluk(alt);
+    eğer M == 0 { ver sonuc; }
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer M > L { ver sonuc; }
+    değişken i: tam32 = 0;
+    iken i <= L - M {
+        eğer metin_esit(metin_kes(s, i, M), alt) {
+            dizi_ekle(sonuc, i);
+            i = i + M;   // örtüşmeyen
+        } değilse {
+            i = i + 1;
+        }
+    }
+    ver sonuc;
+}
+
+// Değiştir_ilk — `hedef`in YALNIZ ilk geçişini `yeni` ile değiştir. `yer_degistir`
+// tümünü değiştirir; bu yalnız ilkini. Bulunamaz/boş hedef -> aynen ver.
+işlev degistir_ilk(s: metin, hedef: metin, yeni: metin) -> metin {
+    değişken M: tam32 = metin_uzunluk(hedef);
+    eğer M == 0 { ver s; }
+    eşleş indeks(s, hedef) {
+        değer(i) => {
+            değişken L: tam32 = metin_uzunluk(s);
+            değişken on: metin = metin_kes(s, 0, i);
+            değişken arka: metin = metin_kes(s, i + M, L - i - M);
+            ver birlestir(birlestir(on, yeni), arka);
+        }
+        hiç => { ver s; }
+    }
+    ver s;
+}
+
+// Kes_arası — `bas` ve `son` ayraçları arasındaki metin (seçimlik). `bas`
+// bulunamaz veya `bas`tan sonra `son` bulunamazsa hiç. `son`, `bas`ın bittiği
+// konumdan sonra aranır (örtüşme yok). Ayraçlar sonuca dahil değildir.
+işlev kes_arasi(s: metin, bas: metin, son: metin) -> seçimlik<metin> {
+    eşleş indeks(s, bas) {
+        değer(ib) => {
+            değişken L: tam32 = metin_uzunluk(s);
+            değişken ic_bas: tam32 = ib + metin_uzunluk(bas);
+            değişken kuyruk: metin = metin_kes(s, ic_bas, L - ic_bas);
+            eşleş indeks(kuyruk, son) {
+                değer(rel) => { ver değer(metin_kes(kuyruk, 0, rel)); }
+                hiç => { ver hiç; }
+            }
+        }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// ASCII harf mi (A-Z / a-z).
+işlev ascii_harf_mi(u: tam32) -> mantıksal {
+    eğer u >= 65 ve u <= 90 { ver doğru; }
+    eğer u >= 97 ve u <= 122 { ver doğru; }
+    ver yanlış;
+}
+
+// İki baytlık UTF-8 dizisi (b0, b1) Türkçe'ye özgü bir harf mi:
+//   ç Ç ö Ö ü Ü (lead 0xC3) | ğ Ğ ı İ (lead 0xC4) | ş Ş (lead 0xC5).
+// Türkçe alfabe dışındaki Latin-1 işaretlileri (é, à, ñ ...) kapsamaz.
+işlev tr_harf_2byte(b0: tam32, b1: tam32) -> mantıksal {
+    eğer b0 == 195 {                 // 0xC3
+        eğer b1 == 167 { ver doğru; }   // ç
+        eğer b1 == 135 { ver doğru; }   // Ç
+        eğer b1 == 182 { ver doğru; }   // ö
+        eğer b1 == 150 { ver doğru; }   // Ö
+        eğer b1 == 188 { ver doğru; }   // ü
+        eğer b1 == 156 { ver doğru; }   // Ü
+        ver yanlış;
+    }
+    eğer b0 == 196 {                 // 0xC4
+        eğer b1 == 159 { ver doğru; }   // ğ
+        eğer b1 == 158 { ver doğru; }   // Ğ
+        eğer b1 == 177 { ver doğru; }   // ı
+        eğer b1 == 176 { ver doğru; }   // İ
+        ver yanlış;
+    }
+    eğer b0 == 197 {                 // 0xC5
+        eğer b1 == 159 { ver doğru; }   // ş
+        eğer b1 == 158 { ver doğru; }   // Ş
+        ver yanlış;
+    }
+    ver yanlış;
+}
+
+// Sadece_rakam_mı — boş olmayan metnin TÜM baytları ASCII rakam ('0'..'9') mı.
+// Boş metin -> yanlış.
+işlev sadece_rakam_mi(s: metin) -> mantıksal {
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer L == 0 { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer u < 48 { ver yanlış; }
+        eğer u > 57 { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// Sadece_harf_mı — boş olmayan metnin TÜM karakterleri harf mi: ASCII A-Z/a-z
+// + Türkçe (ç ğ ı i ö ş ü ve büyükleri). UTF-8 codepoint-aware; rakam, boşluk,
+// noktalama ve 3+ baytlık codepoint'ler -> yanlış. Boş metin -> yanlış.
+işlev sadece_harf_mi(s: metin) -> mantıksal {
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer L == 0 { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        değişken cu: tam32 = cp_bayt_sayisi(u);
+        eğer cu == 1 {
+            eğer değil ascii_harf_mi(u) { ver yanlış; }
+            i = i + 1;
+        } değilse eğer cu == 2 {
+            eğer i + 1 >= L { ver yanlış; }
+            değişken b1: tam32 = metin_bayt(s, i + 1) olarak tam32;
+            eğer b1 < 0 { b1 = b1 + 256; }
+            eğer değil tr_harf_2byte(u, b1) { ver yanlış; }
+            i = i + 2;
+        } değilse {
+            ver yanlış;
+        }
+    }
+    ver doğru;
+}

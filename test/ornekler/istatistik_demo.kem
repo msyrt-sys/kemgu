@@ -1,0 +1,72 @@
+// KEMGU Örnek Program: İstatistik
+// =================================
+//
+// stdlib `dizi` + `sayisal` modülleri stilinde, kendi-kendine yeten demo.
+// Bir veri kümesi üzerinde toplam / ortalama / min / maks / varyans hesabını
+// `için` döngüsü (fold) deseniyle gösterir. Tüm sonuçlar skalerdir →
+// fonksiyon-dönüşü dizi indekslemesi yok (F4-güvenli).
+
+işlev uzunluk(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs { n = n + 1; }
+    ver n;
+}
+
+işlev toplam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 0;
+    için x: xs { s = s + x; }
+    ver s;
+}
+
+// Tamsayı ortalama (taban bölme). Boş dizi -> 0.
+işlev ortalama(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver 0; }
+    ver toplam(xs) / n;
+}
+
+işlev en_kucuk(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver 0; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x < m { m = x; }
+    }
+    ver m;
+}
+
+işlev en_buyuk(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver 0; }
+    değişken m: tam32 = xs[0];
+    için x: xs {
+        eğer x > m { m = x; }
+    }
+    ver m;
+}
+
+// Popülasyon varyansı (tamsayı yaklaşık): ortalama farkların karelerinin
+// ortalaması. Demo amaçlı tamsayı aritmetiği.
+işlev varyans(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = uzunluk(xs);
+    eğer n == 0 { ver 0; }
+    değişken ort: tam32 = ortalama(xs);
+    değişken kare_toplam: tam32 = 0;
+    için x: xs {
+        değişken d: tam32 = x - ort;
+        kare_toplam = kare_toplam + d * d;
+    }
+    ver kare_toplam / n;
+}
+
+işlev main() -> tam32 {
+    değişken veri: Dizi<tam32> = [4, 8, 6, 10, 12];
+
+    değişken ort: tam32 = ortalama(veri);     // 40 / 5 = 8
+    değişken mn: tam32 = en_kucuk(veri);       // 4
+    değişken mx: tam32 = en_buyuk(veri);       // 12
+    değişken vr: tam32 = varyans(veri);        // ((16+0+4+4+16)/5) = 8
+
+    // 8 + 4 + 12 + 8 = 32 ... + 10 = 42 (demo sonucu)
+    ver ort + mn + mx + vr + 10;
+}
