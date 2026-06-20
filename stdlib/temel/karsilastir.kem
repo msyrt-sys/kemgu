@@ -39,3 +39,99 @@ işlev en_buyuk_uc<T>(a: T, b: T, c: T) -> T {
     eğer c > m { m = c; }
     ver m;
 }
+
+// Ters karşılaştırıcı — karsilastir'ın işaretini çevirir (azalan sıralama için).
+// a < b -> +1, a > b -> -1. (b, a) ile çağırmaya eşdeğer.
+işlev karsilastir_ters<T>(a: T, b: T) -> tam32 {
+    ver karsilastir(b, a);
+}
+
+// =============================================================================
+// Dizi karşılaştırma yardımcıları (generic; sıralanabilir T)
+// =============================================================================
+//
+// Saf KEMGU; `için` sayımı + indeksleme. Modül kendi kendine yeterli (import
+// yok), bu yüzden yerel `dizi_uzunluk` helper'ı.
+//
+// KISIT: `<` / `>` gerektiren fonksiyonlar (sirali_mi, dizi_karsilastir,
+// en_kucuk_dizi, en_buyuk_dizi) sayısal T içindir; `metin` sıralaması codegen'de
+// yok (yalnız `metin_esit` ile `==`), o yüzden Dizi<metin> ile çağrılmamalı.
+// (Mevcut `karsilastir<T>` de aynı kısıtı taşır.)
+
+// Dizi eleman sayısı (yerel helper).
+işlev dizi_uzunluk<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Sıralı mı — azalmayan (non-decreasing) sırada mı. Boş/tek -> doğru.
+işlev sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
+    değişken n: tam32 = dizi_uzunluk(xs);
+    eğer n < 2 { ver doğru; }
+    değişken i: tam32 = 1;
+    iken i < n {
+        eğer xs[i - 1] > xs[i] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// Ters sıralı mı — artmayan (non-increasing) sırada mı. Boş/tek -> doğru.
+işlev ters_sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
+    değişken n: tam32 = dizi_uzunluk(xs);
+    eğer n < 2 { ver doğru; }
+    değişken i: tam32 = 1;
+    iken i < n {
+        eğer xs[i - 1] < xs[i] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// Lexicographic dizi karşılaştırma — sözlük sırası. -1: a < b, 0: eşit, +1: a > b.
+// Eleman eşitse daha kısa olan küçük (prefix kuralı). karsilastir<T> kullanır.
+işlev dizi_karsilastir<T>(a: Dizi<T>, b: Dizi<T>) -> tam32 {
+    değişken na: tam32 = dizi_uzunluk(a);
+    değişken nb: tam32 = dizi_uzunluk(b);
+    değişken i: tam32 = 0;
+    iken i < na {
+        eğer i >= nb { ver 1; }   // a daha uzun, ortak prefix eşit -> a büyük
+        değişken c: tam32 = karsilastir(a[i], b[i]);
+        eğer c != 0 { ver c; }
+        i = i + 1;
+    }
+    eğer nb > na { ver 0 - 1; }    // b daha uzun -> a küçük
+    ver 0;
+}
+
+// Dizi eşit mi — lexicographic karşılaştırma 0 ise eşit (< > destekli T;
+// dizi_karsilastir üzerinden).
+işlev dizi_esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
+    ver dizi_karsilastir(a, b) == 0;
+}
+
+// En küçük eleman (generic; boş ise hiç). sayisal'ın tam32 dizi_min'inin
+// generic eşi.
+işlev en_kucuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
+    değişken n: tam32 = dizi_uzunluk(xs);
+    eğer n == 0 { ver hiç; }
+    değişken m: T = xs[0];
+    için x: xs {
+        eğer x < m { m = x; }
+    }
+    ver değer(m);
+}
+
+// En büyük eleman (generic; boş ise hiç).
+işlev en_buyuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
+    değişken n: tam32 = dizi_uzunluk(xs);
+    eğer n == 0 { ver hiç; }
+    değişken m: T = xs[0];
+    için x: xs {
+        eğer x > m { m = x; }
+    }
+    ver değer(m);
+}
