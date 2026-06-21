@@ -1,0 +1,15 @@
+// D3 Öncelik-1 (kısmi): tamsayı eşleş — literal + joker catch-all.
+// codegen.kem ESLES handler artık skaler scrutinee için icmp eq zinciri emit eder.
+// Tagged-union (sonuç/seçimlik) destructuring sonraki rung. C-codegen == self-host.
+işlev g(x: tam32) -> tam32 {
+    eşleş x {
+        5 => { ver 50; }
+        _ => { ver 77; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    eğer g(5) != 50 { ver 1; }
+    eğer g(99) != 77 { ver 2; }
+    ver 42;
+}
