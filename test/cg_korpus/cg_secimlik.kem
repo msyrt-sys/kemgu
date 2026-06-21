@@ -1,0 +1,15 @@
+// D3 Öncelik-1: seçimlik<T> tagged-union — yapıcı (değer/hiç) + eşleş destructuring.
+// codegen.kem ll_tip {i8,T} + beklenen_ll bağlamı + extractvalue tag/payload bind.
+işlev kutula(x: tam32) -> seçimlik<tam32> { ver değer(x); }
+işlev coz(o: seçimlik<tam32>) -> tam32 {
+    eşleş o {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken a: seçimlik<tam32> = kutula(42);
+    değişken b: seçimlik<tam32> = hiç;
+    ver coz(a) + coz(b);   // 42 + 0 = 42
+}

@@ -41,6 +41,7 @@ yapı Ayr {
     son_ref: metin;      // CG7c: son ifade sonucu ptr ise işaret ettiği yapı adı
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
+    beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
     son_elem: metin;     // CG8: son ifade Dizi ise eleman tipi
     cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
     lbl: tam32;          // CG4: temel-blok etiket sayacı (bb0, bb1, ...)
@@ -1683,6 +1684,32 @@ işlev kesirli_lit(s: metin) -> metin {
     }
     ver metin_birlestir(s, ".0");
 }
+// D3: "{i8, i32, ptr}" → n. alanın LLVM tipi (0="i8" tag, 1/2=payload). virgül-böl.
+işlev agg_alan(s: metin, n: tam32) -> metin {
+    değişken uz: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 1;            // '{' atla
+    değişken alan: tam32 = 0;
+    değişken bas: tam32 = 1;
+    değişken sonuc: metin = "i32";
+    değişken bitti: mantıksal = yanlış;
+    iken i < uz ve bitti == yanlış {
+        değişken c: tam32 = bayt(s, i);
+        eğer c == 44 veya c == 125 {     // ',' veya '}'
+            eğer alan == n { sonuc = metin_kes(s, bas, i - bas); bitti = doğru; }
+            alan = alan + 1;
+            i = i + 1;
+            eğer c == 44 { eğer i < uz { eğer bayt(s, i) == 32 { i = i + 1; } } }
+            bas = i;
+            eğer c == 125 { bitti = doğru; }
+        }
+        değilse { i = i + 1; }
+    }
+    ver sonuc;
+}
+// D3: tagged-union yapıcı adı mı? (değer/tamam/hata)
+işlev tagunion_yapici_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "değer") veya metin_esit(ad, "tamam") veya metin_esit(ad, "hata");
+}
 // i1 sonucu → i32 (0/1) genişlet; üretilen reg'i döndür.
 işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
     değişken r: tam32 = yeni_reg(p);
@@ -1741,6 +1768,19 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // Referans/pointer/dizi → ptr (CG7b: &Yapi=ptr, Dizi<T>=heap ptr)
     eğer metin_esit(ta, "TIP_REFERANS") veya metin_esit(ta, "TIP_POINTER")
          veya metin_esit(ta, "TIP_DIZI") { ver "ptr"; }
+    eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
+        değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+        ver metin_birlestir(metin_birlestir("{i8, ", tt), "}");
+    }
+    eğer metin_esit(ta, "TIP_SONUC") {   // D3: sonuç<T,H> → {i8 tag, T, H}
+        değişken sc: tam32 = dizi_al(p.a_cb, tip_idx);
+        değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, sc));
+        değişken hh: metin = ll_tip(p, dizi_al(p.cocuk, sc + 1));
+        değişken r1: metin = metin_birlestir("{i8, ", tt);
+        değişken r2: metin = metin_birlestir(r1, ", ");
+        değişken r3: metin = metin_birlestir(r2, hh);
+        ver metin_birlestir(r3, "}");
+    }
     eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver "i32"; }  // TIP_KULLANICI (generic/qualified) → CG sonrası
     değişken t: metin = dizi_al(p.a_deg, tip_idx);
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
@@ -2134,6 +2174,25 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         ver rs;
     }
     eğer metin_esit(ad, "TANIMLAYICI") {
+        // D3: `hiç` yapıcısı — seçimlik {i8 1} (payload yok). beklenen_ll bağlamı şart.
+        eğer metin_esit(dizi_al(p.a_deg, idx), "hiç") {
+            eğer metin_uzunluk(p.beklenen_ll) > 0 {
+                eğer bayt(p.beklenen_ll, 0) == 123 {
+                    değişken agg: metin = p.beklenen_ll;
+                    değişken ar: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(ar); yaz_str(" = alloca "); yaz_str(agg); yb(10);
+                    değişken g0: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(g0); yaz_str(" = getelementptr "); yaz_str(agg);
+                    yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 0"); yb(10);
+                    yaz_str("  store i8 1, ptr "); yaz_str(g0); yb(10);
+                    değişken lr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(lr); yaz_str(" = load "); yaz_str(agg);
+                    yaz_str(", ptr "); yaz_str(ar); yb(10);
+                    p.son_tip = agg; p.son_ref = ""; p.son_elem = "";
+                    ver lr;
+                }
+            }
+        }
         değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
         değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, idx));
         değişken r: tam32 = yeni_reg(p);
@@ -2148,6 +2207,42 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
         değişken fad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, cb));  // hedef TANIMLAYICI adı
+        // D3: tagged-union yapıcı (değer/tamam/hata) — beklenen_ll bağlamı varsa
+        // {i8,..} inşa et (C llvm.c yapici_uret: alloca+store tag+payload+load).
+        eğer tagunion_yapici_mi(fad) {
+            eğer metin_uzunluk(p.beklenen_ll) > 0 {
+                eğer bayt(p.beklenen_ll, 0) == 123 {
+                    değişken agg: metin = p.beklenen_ll;
+                    değişken tag: tam32 = 0;
+                    değişken pf: tam32 = 1;
+                    eğer metin_esit(fad, "hata") { tag = 1; pf = 2; }
+                    değişken pt: metin = agg_alan(agg, pf);
+                    değişken ar: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(ar); yaz_str(" = alloca "); yaz_str(agg); yb(10);
+                    değişken g0: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(g0); yaz_str(" = getelementptr "); yaz_str(agg);
+                    yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 0"); yb(10);
+                    yaz_str("  store i8 "); yaz_str(tam64_str(tag olarak tam64));
+                    yaz_str(", ptr "); yaz_str(g0); yb(10);
+                    // payload = child[cb+1]; iç içe yapıcı için beklenen_ll ayarla
+                    değişken esk: metin = p.beklenen_ll; p.beklenen_ll = "";
+                    eğer bayt(pt, 0) == 123 { p.beklenen_ll = pt; }
+                    değişken pv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                    p.beklenen_ll = esk;
+                    değişken gp: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(gp); yaz_str(" = getelementptr "); yaz_str(agg);
+                    yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 ");
+                    yaz_str(tam64_str(pf olarak tam64)); yb(10);
+                    yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
+                    yaz_str(", ptr "); yaz_str(gp); yb(10);
+                    değişken lr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(lr); yaz_str(" = load "); yaz_str(agg);
+                    yaz_str(", ptr "); yaz_str(ar); yb(10);
+                    p.son_tip = agg; p.son_ref = ""; p.son_elem = "";
+                    ver lr;
+                }
+            }
+        }
         // CG8: dizi_* element-tip polimorfik built-in'leri (özel — arg sırasına bağlı).
         eğer metin_esit(fad, "dizi_boyut") {
             değişken d: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
@@ -2470,7 +2565,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "VER") {
         eğer dizi_al(p.a_cs, idx) > 0 {
+            // D3: dönüş tipi tagged-union ({i8,..}) ise yapıcı bağlamı (ver tamam(x))
+            değişken eski_bll: metin = p.beklenen_ll;
+            eğer bayt(p.cur_ret, 0) == 123 { p.beklenen_ll = p.cur_ret; }
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+            p.beklenen_ll = eski_bll;
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
         } değilse { yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" 0"); yb(10); }
         p.bb_term = 1;   // ret = terminatör
@@ -2525,7 +2624,76 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken skaler: mantıksal = metin_esit(sty, "i8") veya metin_esit(sty, "i16")
             veya metin_esit(sty, "i32") veya metin_esit(sty, "i64")
             veya metin_esit(sty, "float") veya metin_esit(sty, "double");
-        eğer skaler == yanlış { ver 0; }   // tagged-union eşleş → sonraki iş
+        eğer skaler == yanlış {
+            // D3: tagged-union ({i8,..}) destructuring — değilse atla (çeşit ileride)
+            değişken tagged: mantıksal = yanlış;
+            eğer metin_uzunluk(sty) > 0 { eğer bayt(sty, 0) == 123 { tagged = doğru; } }
+            eğer tagged == yanlış { ver 0; }
+            değişken tagr: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(tagr); yaz_str(" = extractvalue "); yaz_str(sty);
+            yaz_str(" "); yaz_str(sval); yaz_str(", 0"); yb(10);
+            değişken Lend: metin = yeni_label(p);
+            değişken acik: mantıksal = doğru;
+            değişken i: tam32 = 1;
+            iken i < cs ve acik {
+                değişken kol: tam32 = dizi_al(p.cocuk, cb + i);
+                değişken kcb: tam32 = dizi_al(p.a_cb, kol);
+                değişken desen: tam32 = dizi_al(p.cocuk, kcb);
+                değişken govde: tam32 = dizi_al(p.cocuk, kcb + 1);
+                değişken dad: metin = dizi_al(p.a_ad, desen);
+                değişken pad: metin = dizi_al(p.a_deg, desen);
+                değişken variant: mantıksal = metin_esit(pad, "değer")
+                    veya metin_esit(pad, "tamam") veya metin_esit(pad, "hata")
+                    veya metin_esit(pad, "hiç");
+                değişken Lbody: metin = yeni_label(p);
+                değişken katch: mantıksal = metin_esit(dad, "DESEN_JOKER")
+                    veya (metin_esit(dad, "DESEN_TANIMLAYICI") ve variant == yanlış);
+                eğer katch {
+                    br_to(p, Lbody);
+                    etiket_yaz(p, Lbody);
+                    deyim_uret(p, govde);
+                    br_to(p, Lend);
+                    acik = yanlış;
+                }
+                değilse {
+                    değişken tag: tam32 = 0;
+                    değişken pf: tam32 = 1;
+                    eğer metin_esit(pad, "hata") { tag = 1; pf = 2; }
+                    eğer metin_esit(pad, "hiç") { tag = 1; }
+                    değişken Lnext: metin = yeni_label(p);
+                    değişken cr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(cr); yaz_str(" = icmp eq i8 "); yaz_str(tagr);
+                    yaz_str(", "); yaz_str(tam64_str(tag olarak tam64)); yb(10);
+                    yaz_str("  br i1 "); yaz_str(cr); yaz_str(", label %"); yaz_str(Lbody);
+                    yaz_str(", label %"); yaz_str(Lnext); yb(10); p.bb_term = 1;
+                    etiket_yaz(p, Lbody);
+                    // DESEN_YAPICI (değer(v)/tamam(v)/hata(e)) → payload'ı ada bağla
+                    eğer metin_esit(dad, "DESEN_YAPICI") {
+                        değişken dcs: tam32 = dizi_al(p.a_cs, desen);
+                        eğer dcs > 0 {
+                            değişken alt: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, desen));
+                            değişken bad: metin = dizi_al(p.a_deg, alt);
+                            değişken pt: metin = agg_alan(sty, pf);
+                            değişken pv: metin = reg_str(yeni_reg(p));
+                            yaz_str("  "); yaz_str(pv); yaz_str(" = extractvalue "); yaz_str(sty);
+                            yaz_str(" "); yaz_str(sval); yaz_str(", "); yaz_str(tam64_str(pf olarak tam64)); yb(10);
+                            değişken ba: metin = reg_str(yeni_reg(p));
+                            yaz_str("  "); yaz_str(ba); yaz_str(" = alloca "); yaz_str(pt); yb(10);
+                            yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
+                            yaz_str(", ptr "); yaz_str(ba); yb(10);
+                            cg_var_ekle(p, bad, ba, pt, "", "");
+                        }
+                    }
+                    deyim_uret(p, govde);
+                    br_to(p, Lend);
+                    etiket_yaz(p, Lnext);
+                }
+                i = i + 1;
+            }
+            br_to(p, Lend);
+            etiket_yaz(p, Lend);
+            ver 0;
+        }
         değişken kesirli: mantıksal = kesirli_ll_mi(sty);
         değişken Lend: metin = yeni_label(p);
         değişken acik: mantıksal = doğru;
@@ -2582,7 +2750,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             velem = ll_eleman_tip(p, dizi_al(p.cocuk, cb));   // Dizi<T> → eleman
             p.beklenen_elem = velem;                          // CG8: [] için bağlam
         }
+        // D3: annotasyon tagged-union ({i8,..}) ise yapıcı bağlamı kur (değer/tamam/...)
+        değişken eski_bll: metin = p.beklenen_ll;
+        eğer annot == 1 { eğer bayt(vtip, 0) == 123 { p.beklenen_ll = vtip; } }
         değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        p.beklenen_ll = eski_bll;   // RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
         // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
@@ -3925,7 +4097,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], beklenen_elem: "", son_elem: "",
+        cg_aelem: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         pa_node: [], pa_reg: [], pa_base: 0,

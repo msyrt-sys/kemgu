@@ -1,0 +1,19 @@
+// D3 Öncelik-1: sonuç<T,H> tagged-union — tamam/hata yapıcı + eşleş (iki payload).
+// NOT: ASCII işlev adı (bol) — non-ASCII @ad quoting self-host'ta AYRI gap.
+işlev bol(a: tam32, b: tam32) -> sonuç<tam32, tam32> {
+    eğer b == 0 { ver hata(1); }
+    ver tamam(a / b);
+}
+işlev coz_s(r: sonuç<tam32, tam32>) -> tam32 {
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(e) => { ver 100 + e; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken r1: sonuç<tam32, tam32> = bol(84, 2);   // tamam(42)
+    değişken r2: sonuç<tam32, tam32> = bol(5, 0);    // hata(1) → 101
+    eğer coz_s(r2) != 101 { ver 1; }
+    ver coz_s(r1);                                    // 42
+}
