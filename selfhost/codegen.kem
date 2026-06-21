@@ -2197,6 +2197,13 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         }
         i = i + 1;
     }
+    // Pass C: nested modül üyelerini recursive topla (flat model) — D3
+    i = 0;
+    iken i < cs {
+        değişken c3: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
+        eğer metin_esit(dizi_al(p.a_ad, c3), "MODUL") { yapi_topla(p, c3); }
+        i = i + 1;
+    }
     ver 0;
 }
 // Yapı tip tanımlarını yaz: %Ad = type { t0, t1, ... }
@@ -3262,11 +3269,25 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
             dizi_ekle(p.fn_ad, dizi_al(p.a_deg, c));
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
         }
+        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { imza_topla(p, c); }  // D3: modül üyeleri (flat)
         i = i + 1;
     }
     ver 0;
 }
 // Program → IR başlık + her üst-düzey ISLEV.
+// D3: tanımları emit et — DISA aç + MODUL üyelerine recurse (flat) + ISLEV emit.
+işlev emit_tanimlar(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
+        eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { emit_tanimlar(p, c); }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
@@ -3276,14 +3297,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
     yb(10);
-    değişken cb: tam32 = dizi_al(p.a_cb, kok);
-    değişken cs: tam32 = dizi_al(p.a_cs, kok);
-    değişken i: tam32 = 0;
-    iken i < cs {
-        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
-        eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
-        i = i + 1;
-    }
+    emit_tanimlar(p, kok);   // D3: DISA-aç + MODUL-recurse + ISLEV emit
     ver 0;
 }
 

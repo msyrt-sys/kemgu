@@ -1,0 +1,9 @@
+// D3 P2: modül üye emisyonu + nitelikli çağrı (mat::f) + kardeş bare-çağrı.
+// codegen.kem flat model: üyeler global ada düşer; collection pass'ler MODUL'a recurse.
+modül mat {
+    işlev kare(x: tam32) -> tam32 { ver x * x; }
+    işlev arti_alti(x: tam32) -> tam32 { ver kare(x) + 6; }   // kardeş bare çağrı
+}
+işlev main() -> tam32 {
+    ver mat::arti_alti(6);   // kare(6)=36 + 6 = 42
+}
