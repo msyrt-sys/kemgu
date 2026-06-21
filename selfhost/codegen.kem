@@ -2513,6 +2513,63 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         etiket_yaz(p, Lend);
         ver 0;
     }
+    eğer metin_esit(ad, "ESLES") {
+        // D3 Öncelik-1 (kısmi): tamsayı/float eşleş — literal + joker/tanımlayıcı
+        // catch-all (icmp eq zinciri, C llvm.c:4441 skaler altkümesi). Tagged-union
+        // (sonuç/seçimlik/çeşit) destructuring AYRI iş (beklenen-tip plumbing +
+        // payload extract) → struct/ptr scrutinee'de atla (sonraki rung).
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        değişken sval: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
+        değişken sty: metin = p.son_tip;
+        değişken skaler: mantıksal = metin_esit(sty, "i8") veya metin_esit(sty, "i16")
+            veya metin_esit(sty, "i32") veya metin_esit(sty, "i64")
+            veya metin_esit(sty, "float") veya metin_esit(sty, "double");
+        eğer skaler == yanlış { ver 0; }   // tagged-union eşleş → sonraki iş
+        değişken kesirli: mantıksal = kesirli_ll_mi(sty);
+        değişken Lend: metin = yeni_label(p);
+        değişken acik: mantıksal = doğru;
+        değişken i: tam32 = 1;
+        iken i < cs ve acik {
+            değişken kol: tam32 = dizi_al(p.cocuk, cb + i);
+            değişken kcb: tam32 = dizi_al(p.a_cb, kol);
+            değişken desen: tam32 = dizi_al(p.cocuk, kcb);
+            değişken govde: tam32 = dizi_al(p.cocuk, kcb + 1);
+            değişken dad: metin = dizi_al(p.a_ad, desen);
+            değişken Lbody: metin = yeni_label(p);
+            değişken katch: mantıksal = metin_esit(dad, "DESEN_JOKER")
+                veya metin_esit(dad, "DESEN_TANIMLAYICI");
+            eğer katch {
+                br_to(p, Lbody);
+                etiket_yaz(p, Lbody);
+                deyim_uret(p, govde);
+                br_to(p, Lend);
+                acik = yanlış;   // catch-all sonrası kollar erişilemez
+            }
+            değilse {
+                // DESEN_LITERAL: child[0] = literal ifade
+                değişken Lnext: metin = yeni_label(p);
+                değişken dcb: tam32 = dizi_al(p.a_cb, desen);
+                değişken lit: metin = ifade_uret(p, dizi_al(p.cocuk, dcb));
+                değişken cr: tam32 = yeni_reg(p);
+                değişken crs: metin = reg_str(cr);
+                değişken cmpk: metin = "icmp eq ";
+                eğer kesirli { cmpk = "fcmp oeq "; }
+                yaz_str("  "); yaz_str(crs); yaz_str(" = "); yaz_str(cmpk); yaz_str(sty);
+                yaz_str(" "); yaz_str(sval); yaz_str(", "); yaz_str(lit); yb(10);
+                yaz_str("  br i1 "); yaz_str(crs); yaz_str(", label %"); yaz_str(Lbody);
+                yaz_str(", label %"); yaz_str(Lnext); yb(10); p.bb_term = 1;
+                etiket_yaz(p, Lbody);
+                deyim_uret(p, govde);
+                br_to(p, Lend);
+                etiket_yaz(p, Lnext);
+            }
+            i = i + 1;
+        }
+        br_to(p, Lend);   // hiçbiri eşleşmedi → end
+        etiket_yaz(p, Lend);
+        ver 0;
+    }
     eğer metin_esit(ad, "DEGISKEN") {
         // değer = SON çocuk; tip-annot opsiyonel İLK çocuk (TIP_*)
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
