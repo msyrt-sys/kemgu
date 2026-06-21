@@ -1,0 +1,8 @@
+// D3 P2 (modül girişi): dışa (DISA) tanımlar codegen'de emit edilmeli (önceden
+// sessizce düşüyordu). dis_ac yan-unwrap: işlev imza+emit, yapı registry+tip emit.
+dışa işlev kare(x: tam32) -> tam32 { ver x * x; }
+dışa yapı Nokta { a: tam32; b: tam32; }
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { a: 6, b: 0 };
+    ver kare(n.a) + 6;   // kare(6)=36 + 6 = 42
+}
