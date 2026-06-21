@@ -204,6 +204,10 @@ typedef struct LlvmGen {
      * oracle'ı). (a) IR-NÖTR: çalışır + saklanır, (c-d) tahsis sitelerinde okunur. */
     EscapeAnaliz *aktif_escape;
     BolgeAtama *aktif_bolge;
+    /* F4.2b (c-d): scope-yerel bölge IR ref'i ("%rho_yerel" reg) — fn girişinde
+     * kdl_bolge_olustur ile açılır, TÜM ret'lerden önce kdl_bolge_serbest. Kaçmayan
+     * (BOLGE_YEREL) tahsisler buraya; kaçanlar rho_ref'e (ρ_caller). NULL → yok. */
+    const char *rho_yerel;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -393,6 +397,14 @@ static void scope_cik(LlvmGen *g, ScopeMarker m) {
 
 static int yeni_reg(LlvmGen *g) { return g->reg++; }
 static int yeni_label(LlvmGen *g) { return g->label++; }
+
+/* F4.2b (d): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
+ * zaten materyalize/ρ_caller'da). NULL ρ_yerel → no-op. */
+static void rho_yerel_serbest_emit(LlvmGen *g) {
+    if (g->rho_yerel) {
+        fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_yerel);
+    }
+}
 
 static void ad_yaz(FILE *out, const char *ad, int ad_uz) {
     fwrite(ad, 1, (size_t)ad_uz, out);
@@ -3931,8 +3943,10 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
                 g->beklenen_tip = eski_bt;
                 int rr = int_donustur(g, s.reg, s.tip, donus_tip);
+                rho_yerel_serbest_emit(g);   /* F4.2b (d): dönüş değeri (rr) materyalize sonrası */
                 fprintf(g->out, "  ret %s %%%d\n", donus_tip, rr);
             } else {
+                rho_yerel_serbest_emit(g);   /* F4.2b (d) */
                 if (donus_tip && strcmp(donus_tip, "void") == 0) {
                     fputs("  ret void\n", g->out);
                 } else {
@@ -5112,6 +5126,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
      * IR DEĞİŞMEZ, fixpoint yeşil kalır. (c-d) ρ_yerel'i bolge_belirle ile yönlendirir. */
     g->aktif_escape = NULL;
     g->aktif_bolge = NULL;
+    g->rho_yerel = NULL;
     {
         EscapeAnaliz *ea = (EscapeAnaliz *)arena_ayir_sifir(g->arena, sizeof(EscapeAnaliz));
         BolgeAtama *ba = (BolgeAtama *)arena_ayir_sifir(g->arena, sizeof(BolgeAtama));
@@ -5190,6 +5205,19 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->rho_ref = "%rho";
     }
 
+    /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
+     * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
+     * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
+     * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
+     * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
+    {
+        int yr = yeni_reg(g);
+        fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", yr);
+        char *ys = (char *)arena_ayir(g->arena, 16);
+        snprintf(ys, 16, "%%%d", yr);
+        g->rho_yerel = ys;
+    }
+
     /* Parametreleri alloca'ya kopyala */
     for (int i = 0; i < n; i++) {
         const Dugum *p = islev->veri.islev.parametreler[i];
@@ -5266,6 +5294,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         term = blok_uret(g, islev->veri.islev.govde);
     }
     if (!term) {
+        rho_yerel_serbest_emit(g);   /* F4.2b (d): örtük fn-sonu dönüşünden önce */
         if (strcmp(donus, "void") == 0) {
             fputs("  ret void\n", g->out);
         } else {
@@ -5287,6 +5316,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->aktif_escape = NULL;
         g->aktif_bolge = NULL;
     }
+    g->rho_yerel = NULL;   /* F4.2b: sonraki fn'e sızmasın */
 }
 
 /* D-071 (Sınıf B lambda V2): lifted lambda — `define <ret> @lambda_N(ptr %env,
@@ -5295,6 +5325,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
  * v1: ifade-form gövde, dönüş i32 (4 örnek). */
 static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     const Dugum *d = bl->dugum;
+    /* F4.2b: lambda bu fazda ρ_yerel ALMAZ (yönlendirme yok) → VER ret'leri
+     * serbest emit etmesin (NULL). Kuşatan fn'in ρ_yerel'ini serbest etme. */
+    g->rho_yerel = NULL;
     int np = d->veri.lambda.param_sayi;
     char envtip[512]; int eo = 0;
     eo += snprintf(envtip + eo, sizeof(envtip) - eo, "{ ");
@@ -5433,6 +5466,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
     /* V2-F4.2a: region-passing — main/lambda ρ-seed bu global bölgeyi kullanır. */
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
+    fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
+    fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
     /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
     fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);
