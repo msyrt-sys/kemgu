@@ -2532,8 +2532,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer metin_esit(kaynak, hedef) { p.son_tip = hedef; ver x; }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
+        // D3: float↔int + float↔float cast (C llvm.c:3763-3781). int↔int = sext/trunc.
+        değişken ksf: mantıksal = kesirli_ll_mi(kaynak);
+        değişken hdf: mantıksal = kesirli_ll_mi(hedef);
         değişken islem: metin = "sext";
-        eğer tip_genislik(hedef) < tip_genislik(kaynak) { islem = "trunc"; }
+        eğer ksf == yanlış ve hdf == yanlış {
+            eğer tip_genislik(hedef) < tip_genislik(kaynak) { islem = "trunc"; }
+        }
+        eğer ksf == yanlış ve hdf { islem = "sitofp"; }      // int → float
+        eğer ksf ve hdf == yanlış { islem = "fptosi"; }      // float → int
+        eğer ksf ve hdf {                                     // float ↔ float
+            islem = "fpext";
+            eğer metin_esit(kaynak, "double") { islem = "fptrunc"; }
+        }
         yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" "); yaz_str(kaynak);
         yaz_str(" "); yaz_str(x); yaz_str(" to "); yaz_str(hedef); yb(10);
         p.son_tip = hedef;
