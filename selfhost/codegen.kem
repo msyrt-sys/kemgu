@@ -1651,6 +1651,38 @@ işlev icmp_pred(op: metin) -> metin {
     eğer metin_esit(op, "<=") { ver "sle"; }
     ver "sge";   // >=
 }
+// D3 Öncelik-1: float/double — operand LLVM tipi float/double mu?
+işlev kesirli_ll_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "float") veya metin_esit(t, "double");
+}
+// Float aritmetik mnemonik (C llvm.c:2426-2432 ile birebir).
+işlev ll_ikili_f(op: metin) -> metin {
+    eğer metin_esit(op, "+") { ver "fadd"; }
+    eğer metin_esit(op, "-") { ver "fsub"; }
+    eğer metin_esit(op, "*") { ver "fmul"; }
+    eğer metin_esit(op, "/") { ver "fdiv"; }
+    ver "frem";   // %
+}
+// Float karşılaştırma — ordered yüklemler (C llvm.c oeq/one/olt/ogt/ole/oge).
+işlev fcmp_pred(op: metin) -> metin {
+    eğer metin_esit(op, "==") { ver "oeq"; }
+    eğer metin_esit(op, "!=") { ver "one"; }
+    eğer metin_esit(op, "<") { ver "olt"; }
+    eğer metin_esit(op, ">") { ver "ogt"; }
+    eğer metin_esit(op, "<=") { ver "ole"; }
+    ver "oge";   // >=
+}
+// LLVM float-sabiti nokta gerektirir (`2` geçersiz; `2.0` geçerli). ondalik_bicimle
+// trailing `.0`'ı düşürebiliyor → KESIRLI emit'inde noktayı garanti et.
+işlev kesirli_lit(s: metin) -> metin {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        eğer bayt(s, i) == 46 { ver s; }   // '.' var → olduğu gibi geçerli
+        i = i + 1;
+    }
+    ver metin_birlestir(s, ".0");
+}
 // i1 sonucu → i32 (0/1) genişlet; üretilen reg'i döndür.
 işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
     değişken r: tam32 = yeni_reg(p);
@@ -1714,6 +1746,8 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
     eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver "i16"; }
     eğer metin_esit(t, "tam64") veya metin_esit(t, "dtam64") { ver "i64"; }
+    eğer metin_esit(t, "kesirli32") { ver "float"; }    // D3 Öncelik-1: float
+    eğer metin_esit(t, "kesirli64") { ver "double"; }   // D3 Öncelik-1: double
     eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
     eğer yapi_var_mi(p, t) { ver metin_birlestir("%", t); }   // CG7b: yapı → %Ad
     ver "i32";   // tam32/dtam32/mantıksal/karakter/boş → i32
@@ -2082,6 +2116,10 @@ işlev kosul_i1(p: &değişken Ayr, c: metin) -> metin {
 işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") { p.son_tip = "i32"; ver dizi_al(p.a_deg, idx); }
+    // D3 Öncelik-1: kesirli literal — immediate (TAM gibi), son_tip double (kesirli64
+    // varsayılan). Değer parse'ta ondalik_bicimle ile noktalı (LLVM float-sabit) format.
+    // kesirli32/float bağlamı bidirectional çıkarsama gerektirir (ayrı iş — şimdilik double).
+    eğer metin_esit(ad, "KESIRLI") { p.son_tip = "double"; ver kesirli_lit(dizi_al(p.a_deg, idx)); }
     eğer metin_esit(ad, "MANTIKSAL") { p.son_tip = "i32"; ver dizi_al(p.a_deg, idx); }   // a_deg="1"/"0"
     eğer metin_esit(ad, "METIN") {
         değişken val: metin = dizi_al(p.a_deg, idx);
@@ -2212,14 +2250,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);
-            yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp "); yaz_str(icmp_pred(op));
+            // D3 Öncelik-1: float/double → fcmp + ordered yüklem; aksi icmp.
+            değişken cmpk: metin = "icmp ";
+            değişken pred: metin = icmp_pred(op);
+            eğer kesirli_ll_mi(optip) { cmpk = "fcmp "; pred = fcmp_pred(op); }
+            yaz_str("  "); yaz_str(cs2); yaz_str(" = "); yaz_str(cmpk); yaz_str(pred);
             yaz_str(" "); yaz_str(optip); yaz_str(" "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
             değişken z: metin = zext_i1(p, cs2); p.son_tip = "i32"; ver z;
         }
-        // aritmetik (+ - * / %) + mantıksal (ve/veya → and/or): tek komut
+        // aritmetik (+ - * / %) + mantıksal (ve/veya → and/or): tek komut.
+        // D3 Öncelik-1: float/double → f-varyant (fadd/...); aksi tamsayı.
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
-        yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(ll_ikili(op));
+        değişken mnem: metin = ll_ikili(op);
+        eğer kesirli_ll_mi(optip) { mnem = ll_ikili_f(op); }
+        yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(mnem);
         yaz_str(" "); yaz_str(optip); yaz_str(" "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
         p.son_tip = optip;
         ver rs;
