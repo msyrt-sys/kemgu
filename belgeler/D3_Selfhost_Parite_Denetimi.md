@@ -4,6 +4,18 @@
 > feature-coverage farkı. Amaç: tam self-hosting (gate #1) önündeki **gerçek**
 > boşlukları, tasarımsal-kasıtlı eksiklerden ve bölge/F4 işinden ayırmak.
 
+> **DURUM GÜNCELLEMESİ (2026-06-21, branch `claude/laughing-jackson-9f2295`):** Aşağıdaki
+> Öncelik-1 + bazı Öncelik-2 boşlukları **codegen.kem'e PORTLANDI** (her biri codegen_diff +
+> bootstrap fixpoint birebir; korpus 58→66/66; self_driver 4-mod yeşil):
+> - ✅ bit/kaydırma (& \| ^ << >> ~) · ✅ pointer deref `*x` · ✅ float/double aritmetik +
+>   karşılaştırma + **cast (sitofp/fptosi/fpext/fptrunc)** · ✅ eşleş (skaler **+ tagged-union
+>   sonuç/seçimlik** yapıcı+destructuring+bind) · ✅ için (for-loop, heap dizi).
+>
+> **Kalan (her biri ayrı dedicated pas):** çeşit ADT (parse_cesit varyant-adı düşürüyor → ÖNCE
+> parser değişikliği gerek), MODUL/DISA/UYGULA/YOL (mangling+dispatch), ve/veya short-circuit
+> (hot-path, codegen.kem ağır kullanır → büyük IR diff), non-ASCII işlev adı `@"böl"`
+> (codegen.kem'de `\"` hiç yok → self-host `\"` lexing riski), kesirli32 bidirectional çıkarsama.
+
 ## 1. Özet
 
 Self-host `codegen.kem`, C `llvm.c`'nin **çekirdek imperatif altkümesini** parite
