@@ -1,0 +1,9 @@
+// D3 P2: için (for-loop) — heap Dizi<T> iterasyonu (kdl_dizi_boyut/al döngüsü).
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [10, 20, 12];
+    değişken toplam: tam32 = 0;
+    için x: xs {
+        toplam = toplam + x;
+    }
+    ver toplam;   // 10+20+12 = 42
+}
