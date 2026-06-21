@@ -1,0 +1,13 @@
+// D3 P2: payloadsuz enum çeşit codegen — i8 disc + Çeşit::Varyant yapıcı + eşleş.
+çeşit Renk { Kırmızı, Yeşil, Mavi }
+işlev kod(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kırmızı => { ver 10; }
+        Renk::Yeşil => { ver 20; }
+        Renk::Mavi => { ver 12; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver kod(Renk::Kırmızı) + kod(Renk::Yeşil) + kod(Renk::Mavi);   // 10+20+12 = 42
+}
