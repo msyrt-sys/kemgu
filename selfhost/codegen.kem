@@ -1629,6 +1629,14 @@ işlev ll_ikili(op: metin) -> metin {
     eğer metin_esit(op, "/") { ver "sdiv"; }
     eğer metin_esit(op, "ve") { ver "and"; }    // mantıksal (kısa-devresiz, C v1 ile aynı)
     eğer metin_esit(op, "veya") { ver "or"; }
+    // Bit/kaydırma (D3 parite — C llvm.c:2436-2442 ile birebir). Not: codegen.kem
+    // imzasızlık (dtam) izlemiyor — sdiv/srem'de olduğu gibi DAİMA imzalı varyant;
+    // `>>` → ashr (C imzalıda ashr, yalnız dtam'da lshr — kapsam dışı, izlenmiyor).
+    eğer metin_esit(op, "&") { ver "and"; }
+    eğer metin_esit(op, "|") { ver "or"; }
+    eğer metin_esit(op, "^") { ver "xor"; }
+    eğer metin_esit(op, "<<") { ver "shl"; }
+    eğer metin_esit(op, ">>") { ver "ashr"; }
     ver "srem";   // %
 }
 işlev karsilastirma_mi(op: metin) -> mantıksal {
