@@ -10,14 +10,14 @@
 > - ✅ bit/kaydırma (& \| ^ << >> ~) · ✅ pointer deref `*x` · ✅ float/double aritmetik +
 >   karşılaştırma + **cast (sitofp/fptosi/fpext/fptrunc)** · ✅ eşleş (skaler **+ tagged-union
 >   sonuç/seçimlik** yapıcı+destructuring+bind) · ✅ için (for-loop, heap dizi) ·
->   ✅ **enum çeşit** (payloadsuz ADT: parser yan-kanal cv_* + ll_tip→i8 + YOL disc yapıcı +
->   eşleş DESEN_YOL; --ast parite korundu). korpus 58→67/67.
+>   ✅ **çeşit ADT TAM** (enum: cv_* yan-kanal + ll_tip→i8 + YOL disc + eşleş DESEN_YOL;
+>   **payload**: cc_* node-registry + {i8,payloadlar} anonim struct + CAGRI-YOL yapıcı +
+>   eşleş payload-extract+ofset, tek/çoklu/payloadsuz varyant; --ast parite korundu). korpus 58→68/68.
 >
-> **Kalan (her biri ayrı dedicated pas):** **payload çeşit** (Çeşit::V(x) — çeşit-node registry +
-> {i8,payloads} struct + CAGRI-YOL yapıcı + eşleş payload-extract+offset; parser yan-kanal cv_*
-> hazır), MODUL/DISA/UYGULA/YOL (mangling+dispatch), ve/veya short-circuit (hot-path, codegen.kem
-> ağır kullanır → büyük IR diff, düşük fayda), non-ASCII işlev adı `@"böl"` (codegen.kem'de `\"`
-> hiç yok → self-host `\"` lexing riski), kesirli32 bidirectional çıkarsama.
+> **Kalan (her biri ayrı dedicated pas):** MODUL/DISA/UYGULA/YOL (modül mangling + method dispatch),
+> ve/veya short-circuit (hot-path, codegen.kem ağır kullanır → büyük IR diff, düşük fayda),
+> non-ASCII işlev adı `@"böl"` (codegen.kem'de `\"` hiç yok → self-host `\"` lexing riski),
+> kesirli32 bidirectional çıkarsama.
 
 ## 1. Özet
 
