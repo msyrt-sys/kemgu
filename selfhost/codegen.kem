@@ -61,6 +61,11 @@ yapı Ayr {
     alan_ad: Dizi<metin>;    // CG7b: alan adları (düz, yapı-bazlı gruplu)
     alan_tip: Dizi<metin>;   // CG7b: alan LLVM tipleri (düz; --check modunda KEMGU tipleri)
     alan_elem: Dizi<metin>;  // CG8: Dizi alanı ise eleman tipi; değilse ""
+    // D3 çeşit yan-kanal (parse_cesit'te doldurulur; --ast dump'a DOKUNMAZ — düğüm/a_deg
+    // değişmez → parite korunur). varyant disc sırası = cv_* içindeki çeşit-bazlı pozisyon.
+    cv_cesit: Dizi<metin>;   // sahip çeşit adı (her varyant için)
+    cv_ad: Dizi<metin>;      // varyant adı
+    cv_pc: Dizi<tam32>;      // varyant payload alan sayısı (enum=0)
     // ---- AŞAMA 4 (driver): tip denetleyici durumu (checker.kem'den; D-086) ----
     // NOT: yapi_ad/yapi_abase/yapi_acount/alan_ad/alan_tip/fn_ad ZATEN yukarıda (paylaşılan;
     //      --check geçişi KEMGU tipiyle, --llvm geçişi LLVM tipiyle doldurur — ayrı invocation).
@@ -1443,7 +1448,9 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
             eğer sim_mi(p, "TANIMLAYICI") == yanlış {  // anti-hang (C panik_sync+break)
                 p.hata_say = p.hata_say + 1; ilerle(p); devam = yanlış;
             } değilse {
-            ilerle(p);   // varyant adı (dump'ta yok)
+            değişken vad: metin = sim_lex(p);   // varyant adı (dump'a girmez)
+            ilerle(p);
+            değişken pc: tam32 = 0;
             eğer sim_mi(p, "SOL_PAREN") {
                 ilerle(p);
                 değişken d2: mantıksal = doğru;
@@ -1451,18 +1458,66 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
                     eğer sim_mi(p, "SAG_PAREN") { d2 = yanlış; }
                     değilse {
                         dizi_ekle(kids, parse_tip(p));
+                        pc = pc + 1;
                         eğer sim_mi(p, "VIRGUL") { ilerle(p); }
                         değilse { d2 = yanlış; }
                     }
                 }
                 bekle(p, "SAG_PAREN");
             }
+            // D3 yan-kanal: varyant disc=cv_* pozisyonu; çeşit-bazlı sıra korunur.
+            dizi_ekle(p.cv_cesit, ad);
+            dizi_ekle(p.cv_ad, vad);
+            dizi_ekle(p.cv_pc, pc);
             eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
             }
         }
     }
     bekle(p, "SAG_SUSLU");
     ver dugum_n(p, "CESIT", ad, s, u, kids);
+}
+
+// D3 çeşit yan-kanal sorguları (cv_* üzerinde).
+işlev cesit_enum_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken bulundu: mantıksal = yanlış;
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.cv_cesit);
+    iken i < n {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), ad) {
+            bulundu = doğru;
+            eğer dizi_al(p.cv_pc, i) > 0 { ver yanlış; }   // payload var → enum değil
+        }
+        i = i + 1;
+    }
+    ver bulundu;
+}
+// (çeşit, varyant) → disc indeksi (çeşit içindeki bildirim sırası). Bulunmazsa 0.
+işlev cesit_disc(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
+    değişken d: tam32 = 0;
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.cv_cesit);
+    iken i < n {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad) {
+            eğer metin_esit(dizi_al(p.cv_ad, i), vad) { ver d; }
+            d = d + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// "Çeşit::Varyant" yolunu "::" üzerinde bölüp disc döndür (DESEN_YOL deseni için).
+işlev yol_disc(p: &değişken Ayr, s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i + 1 < n {
+        eğer bayt(s, i) == 58 ve bayt(s, i + 1) == 58 {   // "::"
+            değişken cad: metin = metin_kes(s, 0, i);
+            değişken vad: metin = metin_kes(s, i + 2, n - i - 2);
+            ver cesit_disc(p, cad, vad);
+        }
+        i = i + 1;
+    }
+    ver 0;
 }
 işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
@@ -1790,6 +1845,7 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(t, "kesirli64") { ver "double"; }   // D3 Öncelik-1: double
     eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
     eğer yapi_var_mi(p, t) { ver metin_birlestir("%", t); }   // CG7b: yapı → %Ad
+    eğer cesit_enum_mi(p, t) { ver "i8"; }   // D3: payloadsuz çeşit → bare disc (iN)
     ver "i32";   // tam32/dtam32/mantıksal/karakter/boş → i32
 }
 // CG6: iki operand tipini birleştir (KEMGU örtük-dönüşüm yok → biri i32-literal-default ise diğeri).
@@ -2550,6 +2606,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         p.son_tip = hedef;
         ver rs;
     }
+    eğer metin_esit(ad, "YOL") {
+        // D3 çeşit: Çeşit::Varyant (payloadsuz enum) → i8 disc sabiti (immediate).
+        // Payload varyant (Çeşit::V(x)) + modül YOL → sonraki iş.
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken sol: tam32 = dizi_al(p.cocuk, cb);
+        değişken vary: metin = dizi_al(p.a_deg, idx);   // sağ segment = varyant adı
+        eğer metin_esit(dizi_al(p.a_ad, sol), "TANIMLAYICI") {
+            değişken cad: metin = dizi_al(p.a_deg, sol);
+            eğer cesit_enum_mi(p, cad) {
+                p.son_tip = "i8";
+                ver tam64_str(cesit_disc(p, cad, vary) olarak tam64);
+            }
+        }
+        p.son_tip = "i32"; ver "0";   // diğer YOL → sonraki iş
+    }
     p.son_tip = "i32";
     ver "0";   // CG6 dışı düğüm → CG7+
 }
@@ -2780,10 +2851,17 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 acik = yanlış;   // catch-all sonrası kollar erişilemez
             }
             değilse {
-                // DESEN_LITERAL: child[0] = literal ifade
+                // DESEN_LITERAL: child[0] = literal ifade; DESEN_YOL: enum çeşit disc.
                 değişken Lnext: metin = yeni_label(p);
-                değişken dcb: tam32 = dizi_al(p.a_cb, desen);
-                değişken lit: metin = ifade_uret(p, dizi_al(p.cocuk, dcb));
+                değişken lit: metin = "";
+                eğer metin_esit(dad, "DESEN_YOL") {
+                    // D3 çeşit: Çeşit::Varyant deseni → disc sabiti (i8 scrutinee)
+                    lit = tam64_str(yol_disc(p, dizi_al(p.a_deg, desen)) olarak tam64);
+                }
+                değilse {
+                    değişken dcb: tam32 = dizi_al(p.a_cb, desen);
+                    lit = ifade_uret(p, dizi_al(p.cocuk, dcb));
+                }
                 değişken cr: tam32 = yeni_reg(p);
                 değişken crs: metin = reg_str(cr);
                 değişken cmpk: metin = "icmp eq ";
@@ -4163,6 +4241,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
         cg_aelem: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
+        cv_cesit: [], cv_ad: [], cv_pc: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         pa_node: [], pa_reg: [], pa_base: 0,
