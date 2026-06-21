@@ -2254,8 +2254,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str("  "); yaz_str(cs2); yaz_str(" = icmp eq "); yaz_str(xt); yaz_str(" "); yaz_str(x); yaz_str(", 0"); yb(10);
             değişken z: metin = zext_i1(p, cs2); p.son_tip = "i32"; ver z;
         }
+        eğer metin_esit(op, "~") {   // bit-değil: ~x = xor TYPE x, -1 (C llvm.c:2530)
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = xor "); yaz_str(xt); yaz_str(" "); yaz_str(x); yaz_str(", -1"); yb(10);
+            p.son_tip = xt;
+            ver rs;
+        }
         p.son_tip = "i32";
-        ver "0";   // ~ / deref* / & / &degisken → CG sonrası (pointer/güvensiz)
+        ver "0";   // deref* / & / &degisken → CG sonrası (pointer/güvensiz)
     }
     eğer metin_esit(ad, "YAPI_OLUSTUR") {
         değişken yad: metin = dizi_al(p.a_deg, idx);

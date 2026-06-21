@@ -1,6 +1,6 @@
-// D3 Öncelik-1: bit/kaydırma operatörleri self-host codegen paritesi.
-// & | ^ << >> — codegen.kem ll_ikili artık and/or/xor/shl/ashr emit eder
-// (C llvm.c:2436-2442 ile birebir, imzalı varyant). C-codegen ve self-host
+// D3 Öncelik-1: bit/kaydırma operatörleri + bit-değil self-host codegen paritesi.
+// & | ^ << >> ~ — codegen.kem ll_ikili and/or/xor/shl/ashr; TEKLI ~ → xor x,-1
+// (C llvm.c:2436-2442 + 2530 ile birebir, imzalı). C-codegen ve self-host
 // codegen.exe AYNI exit kodunu üretmeli (codegen_diff oracle).
 işlev main() -> tam32 {
     değişken a: tam32 = 12;
@@ -10,5 +10,6 @@ işlev main() -> tam32 {
     değişken bxor: tam32 = a ^ b;      // 1100 ^ 1010 = 0110 = 6
     değişken sol: tam32 = a << 1;      // 12 << 1 = 24
     değişken sag: tam32 = a >> 2;      // 12 >> 2 = 3
-    ver bve + bveya + bxor + sol + sag - 13;   // 55 - 13 = 42
+    değişken bn: tam32 = ~a;           // ~12 = -13
+    ver bve + bveya + bxor + sol + sag + bn;   // 55 + (-13) = 42
 }
