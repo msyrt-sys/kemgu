@@ -257,8 +257,10 @@ static void test_kosullu_iki_dal(void) {
     arena_serbest(a);
 }
 
-/* T8: Dongu icinde tahsis — for loop'taki dizi ITERASYON */
-static void test_dongu_iterasyon(void) {
+/* T8: Dongu icinde tahsis — D-101 geri-cekilmesi: ITERASYON URETILMEZ, YEREL.
+ * (Eski kod burada dongu ici diziyi ITERASYON isaretliyordu = loop-carried UAF
+ * riski; artik tum dongu tahsisleri YEREL.) */
+static void test_dongu_yerel(void) {
     Arena *a = arena_olustur(0);
     Dugum *prog = kaynaktan_ayrist(a,
         "i\xc5\x9f" "lev f() -> tam32 { "
@@ -273,9 +275,10 @@ static void test_dongu_iterasyon(void) {
     escape_baslat(&ea, a);
     escape_analiz_program(&ea, prog);
     int ok_dis = d_dis && escape_kategori(&ea, d_dis) == ESC_YEREL;
-    int ok_ic = d_ic && escape_kategori(&ea, d_ic) == ESC_ITERASYON;
+    int ok_ic = d_ic && escape_kategori(&ea, d_ic) == ESC_YEREL
+             && escape_kategori(&ea, d_ic) != ESC_ITERASYON;
     test_sonuc("dongu disi DIZI YEREL", ok_dis);
-    test_sonuc("dongu ici DIZI ITERASYON", ok_ic);
+    test_sonuc("dongu ici DIZI YEREL (D-101: ITERASYON ertelendi, UAF kapali)", ok_ic);
     escape_serbest(&ea);
     arena_serbest(a);
 }
@@ -398,6 +401,121 @@ static void test_null_girdiler(void) {
     arena_serbest(a);
 }
 
+/* ====================================================================
+ * LOOP-CARRIED SAGLAMLIK (D-101) — escape analizi ESC_ITERASYON URETMEZ
+ * ====================================================================
+ *
+ * GUVENLI GERI-CEKILME: dongu icindeki HER tahsis YEREL (daha uzun omurlu =
+ * guvenli). ESC_ITERASYON omru EN KISA bolgedir; bir dongu-tahsisini ITERASYON
+ * saymak ANCAK iterasyonu asmadigi KANITLANIRSA guvenli olurdu, fakat bunu saglam
+ * tespit, kaccis rotalarini kapatan kapilara (D-007 skaler-dizi, R-GOMME) bagliydi
+ * ve bu kapilar ENFORCE EDILMIYOR (`Dizi<Dizi<T>>`, `Dizi<metin>`, Dizi-alanli yapi
+ * by-ref lower edilir). Asagidaki testler, ESKI kodun ITERASYON isaretledigi (ve
+ * dolayisiyla F4.3'te GIZLI UAF olusturacak) rotalari pinler — HEPSI artik YEREL,
+ * ve invariant olarak HICBIR tahsis ITERASYON olamaz. (Bu testler eski iyimser
+ * davranista BASARISIZ olurdu = teeth.) */
+
+/* LC-b: dongu icinde olusur, dongu-DISI skaler degiskene atanir -> YEREL */
+static void test_lc_dis_skaler(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken acc = [0]; "
+        "i\xc3\xa7" "in i : [1, 2] { acc = [9, 9]; } "
+        "ver 0; }");
+    /* DIZI: 0=[0] acc-init, 1=[1,2] kol, 2=[9,9] dongu-ici (acc'ye atanir) */
+    const Dugum *d = bul(prog, DUGUM_DIZI_OLUSTUR, 2);
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int ok = d && escape_kategori(&ea, d) == ESC_YEREL
+          && escape_kategori(&ea, d) != ESC_ITERASYON;
+    test_sonuc("LC-b: dongu->dis skaler atama -> YEREL (ASLA ITERASYON)", ok);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
+/* LC-b2 (DELIK — adversarial review verisi): dongu-tahsisi DIS DIZI ELEMANINA store
+ * (dis[i] = tahsis; DUGUM_INDEKS lvalue). D-007 enforce edilmedigi icin `Dizi<metin>`
+ * by-ref ptr (KdlDizi eleman) lower eder -> tahsis iterasyonu asar. Eski kod
+ * ITERASYON isaretliyordu = UAF; artik YEREL. */
+static void test_lc_dis_dizi_eleman(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken dis = [\"a\", \"b\"]; "
+        "i\xc3\xa7" "in i : [1] { dis[i] = \"leak\"; } "
+        "ver \"x\"; }");
+    /* METIN: 0=\"a\", 1=\"b\", 2=\"leak\" (dongu-ici, dis[i]'ye), 3=\"x\" */
+    const Dugum *d = bul(prog, DUGUM_METIN, 2);
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int ok = d && escape_kategori(&ea, d) == ESC_YEREL
+          && escape_kategori(&ea, d) != ESC_ITERASYON;
+    test_sonuc("LC-b2 (DELIK): dis[i]=tahsis -> YEREL (ASLA ITERASYON, UAF kapali)", ok);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
+/* LC-b2 (DELIK — adversarial review verisi): dongu-tahsisi DIS YAPI ALANINA store
+ * (nesne.alan = tahsis; DUGUM_ERISIM lvalue). R-GOMME enforce edilmedigi icin Dizi
+ * alanli yapi by-ref tutar -> tahsis iterasyonu asar. Eski kod ITERASYON = UAF;
+ * artik YEREL. */
+static void test_lc_dis_yapi_alan(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "yap\xc4\xb1 N { alan: Dizi<tam32>; } "
+        "i\xc5\x9f" "lev f() -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken o = N { alan: [0] }; "
+        "i\xc3\xa7" "in i : [1] { o.alan = [9]; } "
+        "ver 0; }");
+    /* DIZI: 0=[0] (o.alan init), 1=[1] kol, 2=[9] (dongu-ici, o.alan'a) */
+    const Dugum *d = bul(prog, DUGUM_DIZI_OLUSTUR, 2);
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int ok = d && escape_kategori(&ea, d) == ESC_YEREL
+          && escape_kategori(&ea, d) != ESC_ITERASYON;
+    test_sonuc("LC-b2 (DELIK): nesne.alan=tahsis -> YEREL (ASLA ITERASYON, UAF kapali)", ok);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
+/* LC-a: dongu icinde ver -> CAGIRAN (ITERASYON degil; rota (a) korunur) */
+static void test_lc_dongu_ver(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> Dizi<tam32> { "
+        "i\xc3\xa7" "in i : [1, 2] { ver [9, 9]; } "
+        "ver [0]; }");
+    const Dugum *d = bul(prog, DUGUM_DIZI_OLUSTUR, 1);  /* [9,9] dongu-ici ver */
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int ok = d && escape_kategori(&ea, d) == ESC_CAGIRAN;
+    test_sonuc("LC-a: dongu ici ver -> CAGIRAN", ok);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
+/* LC-umbrella (INVARIANT): cesitli sekillerde dongu tahsisleri (yerel temp,
+ * dis-skaler-store, dis-yapi-alan-store) -> HICBIRI ESC_ITERASYON olamaz.
+ * Saglamlik cekirdegi: escape analizi ITERASYON URETMEZ. */
+static void test_lc_hicbiri_iterasyon(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "yap\xc4\xb1 N { alan: Dizi<tam32>; } "
+        "i\xc5\x9f" "lev f() -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken acc = [0]; "
+        "de\xc4\x9f" "i\xc5\x9f" "ken o = N { alan: [0] }; "
+        "i\xc3\xa7" "in i : [1, 2] { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken yerel = [5, 5]; "
+        "acc = [7]; "
+        "o.alan = [8]; "
+        "} ver 0; }");
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int hic_iterasyon = 0;
+    for (int i = 0; i < ea.kayit_sayi; i++) {
+        if (ea.kayitlar[i].kategori == ESC_ITERASYON) hic_iterasyon = 1;
+    }
+    test_sonuc("LC-umbrella: HICBIR tahsis ESC_ITERASYON degil (invariant)", !hic_iterasyon);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -420,7 +538,14 @@ int main(void) {
 
     printf("\n--- Kontrol akisi ---\n");
     test_kosullu_iki_dal();
-    test_dongu_iterasyon();
+    test_dongu_yerel();
+
+    printf("\n--- Loop-carried saglamlik (D-101: ITERASYON uretilmez) ---\n");
+    test_lc_dis_skaler();
+    test_lc_dis_dizi_eleman();
+    test_lc_dis_yapi_alan();
+    test_lc_dongu_ver();
+    test_lc_hicbiri_iterasyon();
 
     printf("\n--- Konservatif (alt-tahsis) ---\n");
     test_indeks_konservatif();

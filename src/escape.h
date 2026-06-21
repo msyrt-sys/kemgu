@@ -32,16 +32,40 @@
  *   degisken y = [1,2,3]; ver y[0];      // y -> YEREL (ic eleman basit kopya)
  *   eger k { ver x; } degilse { ... }    // x -> CAGIRAN (kosullu yol)
  *
+ * === ESC_ITERASYON SAGLAMLIK GERI-CEKILMESI (loop-carried; D-101) ===
+ *
+ * ESC_ITERASYON omru EN KISA bolgedir (rho_iterasyon <= rho_yerel). Gelecekte
+ * (F4.3) iterasyon-basina serbest birakilacagi icin, iterasyonu ASAN bir tahsisi
+ * ITERASYON saymak = canliyken serbest = UAF. Iterasyon-yerelligi SAGLAM tespit
+ * etmek, kaccis rotalarini kapatan kapilara KOSULLUYDU:
+ *   - D-007 (diziler skaler-eleman) -> dis agregaya REFERANS saklanamaz,
+ *   - R-GOMME (gomme yok) -> kaccan agregada gomulu heap-ref yok.
+ * ANCAK bu kapilar su an ENFORCE EDILMIYOR: `Dizi<Dizi<T>>`, `Dizi<metin>` ve Dizi
+ * alanli yapi tip-kontrolden gecer ve by-ref `KdlDizi*` olarak lower edilir. Boylece
+ * `dis[i] = tahsis` (DUGUM_INDEKS lvalue) ve `nesne.alan = tahsis` (DUGUM_ERISIM
+ * lvalue) bir dongu-tahsisini iterasyondan kaccirir; sentaktik tespit bunu kaccirinca
+ * under-approximation = gizli UAF olurdu.
+ *
+ * KARAR (guvenli geri-cekilme): escape analizi HICBIR tahsisi ESC_ITERASYON
+ * URETMEZ; dongu icindeki tahsisler dahil HEPSI ESC_YEREL (daha uzun omurlu =
+ * guvenli). ESC_ITERASYON enum'u API/gelecek icin KORUNUR ama bu analiz tarafindan
+ * atanmaz. Per-iterasyon optimizasyonu, gercek bolge-serbest semantigi (F4.3)
+ * geldiginde -- kapilar enforce edilince ya da TUM kaccis rotalari (ver / daha-sig
+ * degisken / agrega-lvalue store / agrega-gomme / cagri / closure) kapsaninca --
+ * saglamca eklenecek. Bu sayede UAF su an IMKANSIZ ve soundness arguman'i TRIVIAL.
+ *
  * Mevcut sinirlamalar (v1):
+ *   - ESC_ITERASYON uretilmez (yukaridaki geri-cekilme; F4.3'te saglamca eklenir)
  *   - Inter-procedural yok (cagri sonuclari konservatif: yerel)
- *   - Closure yakalama henuz islenmiyor
+ *   - Closure yakalama henuz islenmiyor (G005 kaccan closure'i ayrica reddeder)
  *   - Yapi/dizi elemanlarinin alt-escape'i takip edilmiyor (alanin escape'i
  *     parent allocation'a yansir, ama tersine yansima yok)
  */
 
 typedef enum {
-    ESC_YEREL,        /* lokal (escape etmez) — default */
-    ESC_ITERASYON,    /* dongu iterasyonunda olusur, fonksiyondan escape etmez */
+    ESC_YEREL,        /* lokal (escape etmez) — default; dongu tahsisleri DAHIL (D-101) */
+    ESC_ITERASYON,    /* iterasyon-yerel; rho_iterasyon (EN KISA omur). API/gelecek icin
+                       * KORUNUR; D-101 geri-cekilmesiyle bu analiz tarafindan URETILMEZ. */
     ESC_CAGIRAN,      /* ver ile cagirana escape eder */
 } EscapeKategorisi;
 
