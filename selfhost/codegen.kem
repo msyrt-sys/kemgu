@@ -2168,14 +2168,14 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     // Pass A: adlar
     değişken i: tam32 = 0;
     iken i < cs {
-        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c), "YAPI") { dizi_ekle(p.yapi_ad, dizi_al(p.a_deg, c)); }
         i = i + 1;
     }
     // Pass B: alanlar (abase/acount + alan_ad/alan_tip)
     i = 0;
     iken i < cs {
-        değişken c2: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken c2: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c2), "YAPI") {
             dizi_ekle(p.yapi_abase, dizi_boyut(p.alan_ad));
             değişken ccb: tam32 = dizi_al(p.a_cb, c2);
@@ -3245,12 +3245,19 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
 }
 
 // CG6: ön-pass — üst-düzey işlev imza tablosu (ad → dönüş LLVM tipi); CAGRI için.
+// D3: `dışa <tanım>` → iç tanımı aç (DISA child[0]); değilse düğümün kendisi.
+işlev dis_ac(p: &değişken Ayr, c: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, c), "DISA") {
+        ver dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+    }
+    ver c;
+}
 işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
     iken i < cs {
-        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") {
             dizi_ekle(p.fn_ad, dizi_al(p.a_deg, c));
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
@@ -3273,7 +3280,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
     iken i < cs {
-        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
         i = i + 1;
     }
