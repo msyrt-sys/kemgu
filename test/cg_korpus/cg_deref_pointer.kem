@@ -1,0 +1,18 @@
+// D3 Öncelik-1: ham pointer deref `*p` self-host codegen paritesi.
+// codegen.kem TEKLI deref* artık `load <pointee>, ptr <x>` emit eder
+// (C llvm.c:2490 ile aynı semantik; skaler pointee i32 fallback).
+// C-codegen ve self-host codegen.exe AYNI exit kodunu üretmeli (codegen_diff).
+//
+// NOT: bu program --check'te T001 verir (`&x` → `*tam32` arg uyumsuz; dil raw
+// pointer için temiz &→* coercion sunmuyor) — C kanonik testi (test_audit_deref_
+// okuma) de aynı; --llvm toleransına dayanır. cg_korpus bir --llvm/codegen
+// korpusu (harness yalnız --llvm koşar), --check kapısı yok → uygun yer.
+işlev oku(p: *tam32) -> tam32 {
+    güvensiz { ver *p; }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken x: tam32 = 42;
+    ver oku(&x);
+}
