@@ -1,0 +1,13 @@
+// D3 Öncelik-1: kesirli64 (double) self-host codegen paritesi.
+// ll_tip kesirli64→double; KESIRLI literal immediate; fadd + fcmp ogt.
+// Float→int cast (fptosi) henüz yok → sonuç float KARŞILAŞTIRMASIyla (i1→i32)
+// alınır, exit kodu cast gerektirmez. C-codegen == self-host codegen.exe.
+işlev main() -> tam32 {
+    değişken a: kesirli64 = 3.5;
+    değişken b: kesirli64 = 2.0;
+    değişken c: kesirli64 = a + b;     // fadd double → 5.5
+    eğer c > 5.0 {                      // fcmp ogt double → i1 → i32
+        ver 42;
+    }
+    ver 0;
+}
