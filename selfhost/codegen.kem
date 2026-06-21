@@ -2261,8 +2261,25 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_tip = xt;
             ver rs;
         }
+        eğer metin_esit(op, "deref*") {   // *x — ptr'den yükle (C llvm.c:2490)
+            // C: yuk_tip = beklenen!="ptr" ? beklenen : "i32". codegen.kem'de
+            // skaler beklenen-tip plumbing yok → skaler pointee i32 (C fallback
+            // ile aynı; canonical güvensiz `*p:*tam32` → i32). Yapı pointee'si
+            // operand ref'inden çözülür. i64/diğer skaler pointee beklenen-tip
+            // bağlamı gerektirir (ayrı iş, deref'in i32 dışı genişlemesi).
+            değişken yuk: metin = "i32";
+            eğer metin_esit(dizi_al(p.a_ad, opnode), "TANIMLAYICI") {
+                değişken pref: metin = cg_var_ref_bul(p, dizi_al(p.a_deg, opnode));
+                eğer metin_uzunluk(pref) > 0 { yuk = metin_birlestir("%", pref); }
+            }
+            değişken r: tam32 = yeni_reg(p);
+            değişken rs: metin = reg_str(r);
+            yaz_str("  "); yaz_str(rs); yaz_str(" = load "); yaz_str(yuk); yaz_str(", ptr "); yaz_str(x); yb(10);
+            p.son_tip = yuk;
+            ver rs;
+        }
         p.son_tip = "i32";
-        ver "0";   // deref* / & / &degisken → CG sonrası (pointer/güvensiz)
+        ver "0";   // & / &degisken (TANIMLAYICI dışı) → CG sonrası
     }
     eğer metin_esit(ad, "YAPI_OLUSTUR") {
         değişken yad: metin = dizi_al(p.a_deg, idx);
