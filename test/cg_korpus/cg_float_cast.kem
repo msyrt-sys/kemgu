@@ -1,0 +1,7 @@
+// D3: float↔int cast — sitofp (int→double) + fmul + fptosi (double→int).
+işlev main() -> tam32 {
+    değişken n: tam32 = 21;
+    değişken f: kesirli64 = n olarak kesirli64;   // sitofp 21 → 21.0
+    değişken g: kesirli64 = f * 2.0;               // fmul → 42.0
+    ver g olarak tam32;                            // fptosi → 42
+}
