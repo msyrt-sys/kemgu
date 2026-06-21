@@ -2612,6 +2612,60 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         etiket_yaz(p, Lend);
         ver 0;
     }
+    eğer metin_esit(ad, "ICIN") {
+        // D3 P2: için x: dizi { gövde } — heap KdlDizi* iterasyonu (C llvm.c:4350).
+        // koleksiyon TANIMLAYICI + heap dizi (eleman tipi "" değil) olmalı; aksi atla.
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken col: tam32 = dizi_al(p.cocuk, cb);
+        değişken govde: tam32 = dizi_al(p.cocuk, cb + 1);
+        değişken dvar: metin = dizi_al(p.a_deg, idx);   // döngü değişkeni adı
+        eğer metin_esit(dizi_al(p.a_ad, col), "TANIMLAYICI") == yanlış {
+            yaz_str("  ; icin: koleksiyon tanimlayici degil"); yb(10); ver 0;
+        }
+        değişken kp: metin = ifade_uret(p, col);   // KdlDizi* ptr
+        değişken et: metin = p.son_elem;
+        eğer metin_esit(et, "") {
+            yaz_str("  ; icin: heap dizi degil (v1 sinir)"); yb(10); ver 0;
+        }
+        // n = kdl_dizi_boyut(kp)
+        değişken nr: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(nr); yaz_str(" = call i32 @kdl_dizi_boyut(ptr "); yaz_str(kp); yaz_str(")"); yb(10);
+        // i alloca = 0
+        değişken ia: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(ia); yaz_str(" = alloca i32"); yb(10);
+        yaz_str("  store i32 0, ptr "); yaz_str(ia); yb(10);
+        // x alloca (eleman) + döngü değişkenini bağla
+        değişken xa: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(xa); yaz_str(" = alloca "); yaz_str(et); yb(10);
+        cg_var_ekle(p, dvar, xa, et, "", "");
+        değişken Lhead: metin = yeni_label(p);
+        değişken Lbody: metin = yeni_label(p);
+        değişken Ldone: metin = yeni_label(p);
+        br_to(p, Lhead);
+        etiket_yaz(p, Lhead);
+        değişken il: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(il); yaz_str(" = load i32, ptr "); yaz_str(ia); yb(10);
+        değişken cmp: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(cmp); yaz_str(" = icmp slt i32 "); yaz_str(il); yaz_str(", "); yaz_str(nr); yb(10);
+        yaz_str("  br i1 "); yaz_str(cmp); yaz_str(", label %"); yaz_str(Lbody);
+        yaz_str(", label %"); yaz_str(Ldone); yb(10); p.bb_term = 1;
+        etiket_yaz(p, Lbody);
+        // x = kdl_dizi_al_<sonek>(kp, i)
+        değişken elr: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(elr); yaz_str(" = call "); yaz_str(dizi_al_rettip(et));
+        yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(et)); yaz_str("(ptr "); yaz_str(kp);
+        yaz_str(", i32 "); yaz_str(il); yaz_str(")"); yb(10);
+        yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(elr); yaz_str(", ptr "); yaz_str(xa); yb(10);
+        deyim_uret(p, govde);
+        eğer p.bb_term == 0 {
+            değişken ni: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(ni); yaz_str(" = add i32 "); yaz_str(il); yaz_str(", 1"); yb(10);
+            yaz_str("  store i32 "); yaz_str(ni); yaz_str(", ptr "); yaz_str(ia); yb(10);
+            br_to(p, Lhead);
+        }
+        etiket_yaz(p, Ldone);
+        ver 0;
+    }
     eğer metin_esit(ad, "ESLES") {
         // D3 Öncelik-1 (kısmi): tamsayı/float eşleş — literal + joker/tanımlayıcı
         // catch-all (icmp eq zinciri, C llvm.c:4441 skaler altkümesi). Tagged-union
