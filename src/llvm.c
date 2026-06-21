@@ -2,6 +2,8 @@
 #include "arena.h"
 #include "lexer.h"
 #include "parser.h"
+#include "escape.h"        /* F4.2b: escape analizi (bölge yönlendirme oracle'ı) */
+#include "bolge_atama.h"   /* F4.2b: R-* bölge atama (escape-driven) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -198,6 +200,10 @@ typedef struct LlvmGen {
      * çağrıları + DİZİ allokasyon helper'ları bunu ilk arg geçirir. Bu fazda
      * metin/closure/bölge_al ρ ALMAZ (global; F4.1 davranışı korunur). */
     const char *rho_ref;
+    /* F4.2b: aktif işlevin escape + bölge analizi (per-fn; ρ_yerel yönlendirme
+     * oracle'ı). (a) IR-NÖTR: çalışır + saklanır, (c-d) tahsis sitelerinde okunur. */
+    EscapeAnaliz *aktif_escape;
+    BolgeAtama *aktif_bolge;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -5101,6 +5107,25 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     /* Generic islev: tek basina emit etme — instantiation'lar cagri sirasinda */
     if (islev->veri.islev.tip_param_sayi > 0) return;
 
+    /* F4.2b (a): C-tarafı escape + bölge analizi — IR-NÖTR (R2). Per-fn çalışır,
+     * g->aktif_*'da saklanır. Bu adımda tahsis siteleri HÂLÂ rho_ref kullanır →
+     * IR DEĞİŞMEZ, fixpoint yeşil kalır. (c-d) ρ_yerel'i bolge_belirle ile yönlendirir. */
+    g->aktif_escape = NULL;
+    g->aktif_bolge = NULL;
+    {
+        EscapeAnaliz *ea = (EscapeAnaliz *)arena_ayir_sifir(g->arena, sizeof(EscapeAnaliz));
+        BolgeAtama *ba = (BolgeAtama *)arena_ayir_sifir(g->arena, sizeof(BolgeAtama));
+        if (ea && ba) {
+            escape_baslat(ea, g->arena);
+            escape_analiz_islev(ea, islev);
+            bolge_atama_baslat(ba, g->arena, islev->veri.islev.ad,
+                               islev->veri.islev.ad_uzunluk);
+            bolge_atama_escape_bagla(ba, ea);
+            g->aktif_escape = ea;
+            g->aktif_bolge = ba;
+        }
+    }
+
     const char *donus = islev->veri.islev.donus_tipi
         ? ast_tip_to_ir(g, islev->veri.islev.donus_tipi)
         : "void";
@@ -5254,6 +5279,13 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->out = gercek_out;
         hoist_renumber(govde_tmp, gercek_out);
         fclose(govde_tmp);
+    }
+
+    /* F4.2b (a): escape malloc tablolarını serbest bırak (per-fn temizlik). */
+    if (g->aktif_escape) {
+        escape_serbest(g->aktif_escape);
+        g->aktif_escape = NULL;
+        g->aktif_bolge = NULL;
     }
 }
 
