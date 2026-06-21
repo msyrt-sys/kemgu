@@ -1,0 +1,14 @@
+// D3 P2: payload çeşit ADT — {i8 disc, payloadlar} struct + Çeşit::V(x) yapıcı +
+// eşleş payload bind (tek + çoklu payload + payloadsuz varyant).
+çeşit Şekil { Daire(tam32), Kare(tam32, tam32), Nokta }
+işlev alan(s: Şekil) -> tam32 {
+    eşleş s {
+        Şekil::Daire(r) => { ver r; }
+        Şekil::Kare(a, b) => { ver a + b; }
+        Şekil::Nokta => { ver 0; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver alan(Şekil::Daire(10)) + alan(Şekil::Kare(20, 12)) + alan(Şekil::Nokta);  // 10+32+0=42
+}

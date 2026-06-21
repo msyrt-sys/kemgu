@@ -66,6 +66,8 @@ yapı Ayr {
     cv_cesit: Dizi<metin>;   // sahip çeşit adı (her varyant için)
     cv_ad: Dizi<metin>;      // varyant adı
     cv_pc: Dizi<tam32>;      // varyant payload alan sayısı (enum=0)
+    cc_ad: Dizi<metin>;      // çeşit adı (her çeşit için bir kez) — payload struct için
+    cc_node: Dizi<tam32>;    // CESIT düğüm idx (payload tipleri = düğümün kids'i)
     // ---- AŞAMA 4 (driver): tip denetleyici durumu (checker.kem'den; D-086) ----
     // NOT: yapi_ad/yapi_abase/yapi_acount/alan_ad/alan_tip/fn_ad ZATEN yukarıda (paylaşılan;
     //      --check geçişi KEMGU tipiyle, --llvm geçişi LLVM tipiyle doldurur — ayrı invocation).
@@ -1474,7 +1476,10 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
         }
     }
     bekle(p, "SAG_SUSLU");
-    ver dugum_n(p, "CESIT", ad, s, u, kids);
+    değişken cn: tam32 = dugum_n(p, "CESIT", ad, s, u, kids);
+    dizi_ekle(p.cc_ad, ad);       // D3: çeşit-node registry (payload struct için)
+    dizi_ekle(p.cc_node, cn);
+    ver cn;
 }
 
 // D3 çeşit yan-kanal sorguları (cv_* üzerinde).
@@ -1518,6 +1523,67 @@ işlev yol_disc(p: &değişken Ayr, s: metin) -> tam32 {
         i = i + 1;
     }
     ver 0;
+}
+// "Çeşit::Varyant" yolundan çeşit adını (sol) çıkar.
+işlev yol_cesit(s: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i + 1 < n {
+        eğer bayt(s, i) == 58 ve bayt(s, i + 1) == 58 { ver metin_kes(s, 0, i); }
+        i = i + 1;
+    }
+    ver s;
+}
+// D3 payload çeşit: ad çeşit mi (cc_ registry)?
+işlev cesit_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.cc_ad);
+    iken i < n {
+        eğer metin_esit(dizi_al(p.cc_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// ad → CESIT düğüm idx (yok → -1).
+işlev cesit_node_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.cc_ad);
+    iken i < n {
+        eğer metin_esit(dizi_al(p.cc_ad, i), ad) { ver dizi_al(p.cc_node, i); }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// payload çeşit struct: {i8, <tüm varyant payload tipleri düz>} (kids = payloadlar).
+işlev cesit_struct_ir(p: &değişken Ayr, ad: metin) -> metin {
+    değişken cn: tam32 = cesit_node_bul(p, ad);
+    eğer cn < 0 { ver "{i8}"; }
+    değişken cb: tam32 = dizi_al(p.a_cb, cn);
+    değişken cs: tam32 = dizi_al(p.a_cs, cn);
+    değişken r: metin = "{i8";
+    değişken i: tam32 = 0;
+    iken i < cs {
+        r = metin_birlestir(r, ", ");
+        r = metin_birlestir(r, ll_tip(p, dizi_al(p.cocuk, cb + i)));
+        i = i + 1;
+    }
+    ver metin_birlestir(r, "}");
+}
+// disc varyantının ilk payload alanının struct ofseti (1 + önceki payload sayıları).
+işlev cesit_var_ofset(p: &değişken Ayr, cad: metin, disc: tam32) -> tam32 {
+    değişken ofs: tam32 = 1;
+    değişken vd: tam32 = 0;
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.cv_cesit);
+    iken i < n {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad) {
+            eğer vd >= disc { ver ofs; }
+            ofs = ofs + dizi_al(p.cv_pc, i);
+            vd = vd + 1;
+        }
+        i = i + 1;
+    }
+    ver ofs;
 }
 işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
@@ -1845,7 +1911,10 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(t, "kesirli64") { ver "double"; }   // D3 Öncelik-1: double
     eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
     eğer yapi_var_mi(p, t) { ver metin_birlestir("%", t); }   // CG7b: yapı → %Ad
-    eğer cesit_enum_mi(p, t) { ver "i8"; }   // D3: payloadsuz çeşit → bare disc (iN)
+    eğer cesit_var_mi(p, t) {                 // D3: çeşit (ADT)
+        eğer cesit_enum_mi(p, t) { ver "i8"; }     // payloadsuz → bare disc
+        ver cesit_struct_ir(p, t);                 // payload → {i8, <payloadlar>}
+    }
     ver "i32";   // tam32/dtam32/mantıksal/karakter/boş → i32
 }
 // CG6: iki operand tipini birleştir (KEMGU örtük-dönüşüm yok → biri i32-literal-default ise diğeri).
@@ -2262,6 +2331,39 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     eğer metin_esit(ad, "CAGRI") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        // D3 payload çeşit: Çeşit::Varyant(args) → {i8 disc, payload@ofset} (hedef=YOL).
+        değişken hed: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, hed), "YOL") {
+            değişken hsol: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hed));
+            değişken hvary: metin = dizi_al(p.a_deg, hed);   // varyant adı (sağ)
+            eğer metin_esit(dizi_al(p.a_ad, hsol), "TANIMLAYICI") {
+                değişken hcad: metin = dizi_al(p.a_deg, hsol);
+                eğer cesit_var_mi(p, hcad) {
+                    değişken agg: metin = cesit_struct_ir(p, hcad);
+                    değişken disc: tam32 = cesit_disc(p, hcad, hvary);
+                    değişken ofs: tam32 = cesit_var_ofset(p, hcad, disc);
+                    değişken ar: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(ar); yaz_str(" = alloca "); yaz_str(agg); yb(10);
+                    değişken g0: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(g0); yaz_str(" = getelementptr "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 0"); yb(10);
+                    yaz_str("  store i8 "); yaz_str(tam64_str(disc olarak tam64)); yaz_str(", ptr "); yaz_str(g0); yb(10);
+                    değişken ai: tam32 = 1;
+                    iken ai < cs {
+                        değişken pf: tam32 = ofs + ai - 1;
+                        değişken pt: metin = agg_alan(agg, pf);
+                        değişken pv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + ai));
+                        değişken gp: metin = reg_str(yeni_reg(p));
+                        yaz_str("  "); yaz_str(gp); yaz_str(" = getelementptr "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(pf olarak tam64)); yb(10);
+                        yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv); yaz_str(", ptr "); yaz_str(gp); yb(10);
+                        ai = ai + 1;
+                    }
+                    değişken lr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(lr); yaz_str(" = load "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yb(10);
+                    p.son_tip = agg; p.son_ref = ""; p.son_elem = "";
+                    ver lr;
+                }
+            }
+        }
         değişken fad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, cb));  // hedef TANIMLAYICI adı
         // D3: tagged-union yapıcı (değer/tamam/hata) — beklenen_ll bağlamı varsa
         // {i8,..} inşa et (C llvm.c yapici_uret: alloca+store tag+payload+load).
@@ -2618,6 +2720,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 p.son_tip = "i8";
                 ver tam64_str(cesit_disc(p, cad, vary) olarak tam64);
             }
+            eğer cesit_var_mi(p, cad) {
+                // payload çeşit, payloadsuz varyant (Çeşit::Nokta) → {i8 disc, undef}
+                değişken agg: metin = cesit_struct_ir(p, cad);
+                değişken ar: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(ar); yaz_str(" = alloca "); yaz_str(agg); yb(10);
+                değişken g0: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(g0); yaz_str(" = getelementptr "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 0"); yb(10);
+                yaz_str("  store i8 "); yaz_str(tam64_str(cesit_disc(p, cad, vary) olarak tam64)); yaz_str(", ptr "); yaz_str(g0); yb(10);
+                değişken lr: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(lr); yaz_str(" = load "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yb(10);
+                p.son_tip = agg; p.son_ref = ""; p.son_elem = "";
+                ver lr;
+            }
         }
         p.son_tip = "i32"; ver "0";   // diğer YOL → sonraki iş
     }
@@ -2796,6 +2911,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                     değişken pf: tam32 = 1;
                     eğer metin_esit(pad, "hata") { tag = 1; pf = 2; }
                     eğer metin_esit(pad, "hiç") { tag = 1; }
+                    eğer metin_esit(dad, "DESEN_YOL") { tag = yol_disc(p, pad); }  // çeşit disc
                     değişken Lnext: metin = yeni_label(p);
                     değişken cr: metin = reg_str(yeni_reg(p));
                     yaz_str("  "); yaz_str(cr); yaz_str(" = icmp eq i8 "); yaz_str(tagr);
@@ -2818,6 +2934,29 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                             yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
                             yaz_str(", ptr "); yaz_str(ba); yb(10);
                             cg_var_ekle(p, bad, ba, pt, "", "");
+                        }
+                    }
+                    eğer metin_esit(dad, "DESEN_YOL") {
+                        // D3 çeşit payload bind: alt-desenler struct ofsetinden extract
+                        değişken ccad: metin = yol_cesit(pad);
+                        değişken ofs: tam32 = cesit_var_ofset(p, ccad, tag);
+                        değişken dcs2: tam32 = dizi_al(p.a_cs, desen);
+                        değişken dcb2: tam32 = dizi_al(p.a_cb, desen);
+                        değişken k: tam32 = 0;
+                        iken k < dcs2 {
+                            değişken sub: tam32 = dizi_al(p.cocuk, dcb2 + k);
+                            değişken bad2: metin = dizi_al(p.a_deg, sub);
+                            değişken pf3: tam32 = ofs + k;
+                            değişken pt2: metin = agg_alan(sty, pf3);
+                            değişken pv2: metin = reg_str(yeni_reg(p));
+                            yaz_str("  "); yaz_str(pv2); yaz_str(" = extractvalue "); yaz_str(sty);
+                            yaz_str(" "); yaz_str(sval); yaz_str(", "); yaz_str(tam64_str(pf3 olarak tam64)); yb(10);
+                            değişken ba2: metin = reg_str(yeni_reg(p));
+                            yaz_str("  "); yaz_str(ba2); yaz_str(" = alloca "); yaz_str(pt2); yb(10);
+                            yaz_str("  store "); yaz_str(pt2); yaz_str(" "); yaz_str(pv2);
+                            yaz_str(", ptr "); yaz_str(ba2); yb(10);
+                            cg_var_ekle(p, bad2, ba2, pt2, "", "");
+                            k = k + 1;
                         }
                     }
                     deyim_uret(p, govde);
@@ -4241,7 +4380,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
         cg_aelem: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
-        cv_cesit: [], cv_ad: [], cv_pc: [],
+        cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         pa_node: [], pa_reg: [], pa_base: 0,
