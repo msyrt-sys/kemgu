@@ -870,6 +870,32 @@ static const char *kdl_al_donus_ir(const char *et) {
 static int dizi_eleman_struct_mi(const char *et) {
     return et && et[0] == '%';
 }
+
+/* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
+ * ρ_yerel'e (serbest edilecek) SADECE: escape analizinde AÇIKÇA KAYITLI
+ * (escape_kayitli_mi) VE BOLGE_YEREL (kaçmaz) VE skaler-eleman dizisi gider.
+ * Kayıtsız/belirsiz/CAGIRAN/struct-eleman → g->rho_ref (ρ_caller, serbest EDİLMEZ).
+ * principle 1: bolge_belirle'nin default-YEREL'ine GÜVENME — kayıt zorunlu.
+ * Hem doğrudan dizi-literali (ifade) hem `değişken xs = [...]` yolu bunu kullanır. */
+static const char *bolge_yerel_yonlendir(LlvmGen *g, const Dugum *dizi_d,
+                                          const char *elem_ir) {
+    /* F4.2b SOUND free-routing — İKİ koşul (her ikisi de POZİTİF + inşa-gereği sound):
+     * (1) SKALER-ELEMAN dizisi: elem ne struct (%Y) ne ptr. Skaler eleman → dizi_al
+     *     KOPYA döndürür (iç-ptr kaçışı YOK). Dizi<Dizi<T>>/Dizi<metin>/Dizi<yapı>
+     *     → ptr/struct eleman → iç heap-ref dizi_al ile kaçabilir → ρ_caller.
+     * (2) KESİN-YEREL kanıtı: escape_kesin_yerel (confined değişken — tüm kullanımları
+     *     yerinde okuma/yazma + retain-etmeyen dizi-builtin). Escape DFA'nın "kaçış
+     *     bulamadım"ına GÜVENMEZ; POZİTİF yerellik kanıtı arar (alias/yeniden-atama/
+     *     loop-carried/closure/nested hepsi confined-DENY → ρ_caller; escape hunt 18
+     *     UAF bu koşulla kapanır). */
+    if (g->aktif_escape && g->rho_yerel
+        && !dizi_eleman_struct_mi(elem_ir)
+        && strcmp(elem_ir, "ptr") != 0
+        && escape_kesin_yerel(g->aktif_escape, dizi_d)) {
+        return g->rho_yerel;
+    }
+    return g->rho_ref;
+}
 /* kdl_dizi_olustur(eleman_byte) operandını yaz: skaler/ptr → derleme-zamanı
  * sabit; struct → LLVM `sizeof(%Yapi)` const-expr (padding/alignment LLVM
  * layout'uyla birebir; C tarafında elle hesaplama miscompile riski taşırdı). */
@@ -2194,10 +2220,18 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 const char *elem_ir = ast_tip_to_ir(g, elem_d);
                 if (!elem_ir) elem_ir = "i32";
                 int hn = d->veri.dizi_olustur.sayi;
+                /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): ρ_yerel = LOKALLİK KANITI.
+                 * ρ_yerel'e SADECE escape analizinde AÇIKÇA KAYITLI (escape_kayitli_mi)
+                 * VE BOLGE_YEREL olan dizi gider; kayıtsız/belirsiz/CAGIRAN → rho_ref
+                 * (ρ_caller, serbest EDİLMEZ). Çağrı-argümanı/ver'lenen artık CAGIRAN
+                 * (escape.c arg-promotion) → ρ_caller'da kalır = finding-#1 + retain
+                 * sound. Yalnız skaler-eleman dizisinde route (struct-eleman:
+                 * dizi_struct_ekle_emit g->rho_ref kullanır → tutarlılık). DAR tut. */
+                const char *dizi_rho = bolge_yerel_yonlendir(g, d, elem_ir);
                 int kdl_reg = yeni_reg(g);
                 /* D-087: eleman_byte — struct ise LLVM sizeof const-expr. */
                 fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
-                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
+                        kdl_reg, dizi_rho);   /* F4.2b: yönlendirilmiş ρ */
                 kdl_eleman_byte_yaz(g->out, elem_ir);
                 fputs(")\n", g->out);
                 const Dugum *eski_bt = g->beklenen_tip;
@@ -2213,7 +2247,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                     else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                     fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                            fn, g->rho_ref, kdl_reg, elem_ir, vr);   /* V2-F4.2a: ρ */
+                            fn, dizi_rho, kdl_reg, elem_ir, vr);   /* F4.2b: aynı ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 IfadeSonuc s = { kdl_reg, "ptr", 0 };
@@ -3984,10 +4018,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 eleman_tip) {
                 const Dugum *lit = d->veri.degisken.deger;
                 int n = lit->veri.dizi_olustur.sayi;
+                /* F4.2b: `değişken xs: Dizi<T> = [...]` — dizi-literali `lit`
+                 * escape'te kayıtlı; kaçmıyorsa ρ_yerel'e yönlendir (ret'te serbest). */
+                const char *dizi_rho = bolge_yerel_yonlendir(g, lit, eleman_tip);
                 int kdl_reg = yeni_reg(g);
                 /* kdl_dizi_olustur(eleman_byte) — D-087: struct → sizeof const-expr */
                 fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
-                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
+                        kdl_reg, dizi_rho);   /* F4.2b: yönlendirilmiş ρ */
                 kdl_eleman_byte_yaz(g->out, eleman_tip);
                 fputs(")\n", g->out);
                 (void)n;
@@ -4011,7 +4048,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                     fprintf(g->out,
                         "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                        fn, g->rho_ref, kdl_reg, eleman_tip, vr);   /* V2-F4.2a: ρ */
+                        fn, dizi_rho, kdl_reg, eleman_tip, vr);   /* F4.2b: aynı ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */

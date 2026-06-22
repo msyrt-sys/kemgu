@@ -301,8 +301,11 @@ static void test_escape_dongu_yerel(void) {
     arena_serbest(a);
 }
 
-/* DELIK (review verisi): dongu-tahsisi DIS DIZI ELEMANINA store -> BOLGE_YEREL.
- * Eski kod ITERASYON; D-007/R-GOMME enforce edilmedigi icin gercek UAF rotasi. */
+/* DELIK (review verisi): dongu-tahsisi DIS DIZI ELEMANINA store.
+ * [F4.2b GUNCELLEME] ρ_yerel free-routing geldi; escape.c ATAMA INDEKS/ERISIM guard
+ * agregat-store RHS'ini ESC_CAGIRAN'a yukseltir -> escape-driven bolge_atama BOLGE_CAGIRAN
+ * verir. Bu DELIK'i KAPATIR: kacabilen dis diziye saklanan tahsis ρ_caller'da kalir
+ * (serbest EDILMEZ) = UAF imkansiz. ASLA ITERASYON invaryanti korunur. */
 static void test_escape_dongu_b2_yerel(void) {
     Arena *a = arena_olustur(0);
     const char *kaynak =
@@ -324,8 +327,8 @@ static void test_escape_dongu_b2_yerel(void) {
     bolge_atama_escape_bagla(&ba, &ea);
 
     BolgeBilgisi *b = bolge_belirle(&ba, m_leak);
-    int ok = b && b->kategori == BOLGE_YEREL && b->kategori != BOLGE_ITERASYON;
-    test_sonuc("entegrasyon DELIK: dis[i]=tahsis -> BOLGE_YEREL (ASLA ITERASYON)", ok);
+    int ok = b && b->kategori == BOLGE_CAGIRAN && b->kategori != BOLGE_ITERASYON;
+    test_sonuc("entegrasyon DELIK(F4.2b): dis[i]=tahsis -> BOLGE_CAGIRAN (DELIK kapali, ASLA ITERASYON)", ok);
 
     escape_serbest(&ea);
     arena_serbest(a);
