@@ -435,8 +435,14 @@ static void test_lc_dis_skaler(void) {
 
 /* LC-b2 (DELIK — adversarial review verisi): dongu-tahsisi DIS DIZI ELEMANINA store
  * (dis[i] = tahsis; DUGUM_INDEKS lvalue). D-007 enforce edilmedigi icin `Dizi<metin>`
- * by-ref ptr (KdlDizi eleman) lower eder -> tahsis iterasyonu asar. Eski kod
- * ITERASYON isaretliyordu = UAF; artik YEREL. */
+ * by-ref ptr (KdlDizi eleman) lower eder -> tahsis iterasyonu asar.
+ *
+ * [F4.2b GUNCELLEME] ρ_yerel free-routing geldi: bu DELIK artik CAGIRAN ile kapali.
+ * Agregat-store (`dis[i] = tahsis`) RHS'i ESC_CAGIRAN'a yukseltir (escape.c ATAMA
+ * INDEKS/ERISIM guard) — cunku tahsis kacabilen dis diziye saklanir. A1'in ESAS
+ * invaryanti (ASLA ITERASYON -> UAF yok) KORUNUR; siniflandirma YEREL'den daha-uzun-
+ * omurlu CAGIRAN'a cikti = free-routing icin de sound (ρ_caller'da kalir, serbest
+ * EDILMEZ). Eski "== ESC_YEREL" beklentisi A1-ozeldi; F4.2b onu siklastirdi. */
 static void test_lc_dis_dizi_eleman(void) {
     Arena *a = arena_olustur(0);
     Dugum *prog = kaynaktan_ayrist(a,
@@ -448,16 +454,19 @@ static void test_lc_dis_dizi_eleman(void) {
     const Dugum *d = bul(prog, DUGUM_METIN, 2);
     EscapeAnaliz ea; escape_baslat(&ea, a);
     escape_analiz_program(&ea, prog);
-    int ok = d && escape_kategori(&ea, d) == ESC_YEREL
+    int ok = d && escape_kategori(&ea, d) == ESC_CAGIRAN
           && escape_kategori(&ea, d) != ESC_ITERASYON;
-    test_sonuc("LC-b2 (DELIK): dis[i]=tahsis -> YEREL (ASLA ITERASYON, UAF kapali)", ok);
+    test_sonuc("LC-b2 (F4.2b): dis[i]=tahsis -> CAGIRAN (kacan-yapida store; ASLA ITERASYON)", ok);
     escape_serbest(&ea); arena_serbest(a);
 }
 
 /* LC-b2 (DELIK — adversarial review verisi): dongu-tahsisi DIS YAPI ALANINA store
  * (nesne.alan = tahsis; DUGUM_ERISIM lvalue). R-GOMME enforce edilmedigi icin Dizi
- * alanli yapi by-ref tutar -> tahsis iterasyonu asar. Eski kod ITERASYON = UAF;
- * artik YEREL. */
+ * alanli yapi by-ref tutar -> tahsis iterasyonu asar.
+ *
+ * [F4.2b GUNCELLEME] Yukaridaki gibi: agregat-alan store ([9] -> o.alan) RHS'i
+ * ESC_CAGIRAN'a yukselir (ATAMA ERISIM guard). ASLA ITERASYON invaryanti korunur;
+ * free-routing icin sound (ρ_caller, serbest edilmez). */
 static void test_lc_dis_yapi_alan(void) {
     Arena *a = arena_olustur(0);
     Dugum *prog = kaynaktan_ayrist(a,
@@ -470,9 +479,9 @@ static void test_lc_dis_yapi_alan(void) {
     const Dugum *d = bul(prog, DUGUM_DIZI_OLUSTUR, 2);
     EscapeAnaliz ea; escape_baslat(&ea, a);
     escape_analiz_program(&ea, prog);
-    int ok = d && escape_kategori(&ea, d) == ESC_YEREL
+    int ok = d && escape_kategori(&ea, d) == ESC_CAGIRAN
           && escape_kategori(&ea, d) != ESC_ITERASYON;
-    test_sonuc("LC-b2 (DELIK): nesne.alan=tahsis -> YEREL (ASLA ITERASYON, UAF kapali)", ok);
+    test_sonuc("LC-b2 (F4.2b): nesne.alan=tahsis -> CAGIRAN (kacan-yapida store; ASLA ITERASYON)", ok);
     escape_serbest(&ea); arena_serbest(a);
 }
 
