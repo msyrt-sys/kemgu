@@ -901,6 +901,50 @@ static void dizi_struct_yaz_emit(LlvmGen *g, int desc_reg, int idx_i32,
         desc_reg, idx_i32, tmp);
 }
 
+/* [F-dizi-arg] DUGUM_DIZI_OLUSTUR literalini HEAP KdlDizi* olarak emit eder
+ * (kdl_dizi_olustur + kdl_dizi_ekle_*). DUGUM_DIZI_OLUSTUR'un D-044 heap-yolu
+ * ile BİREBİR aynı IR'i üretir; tek fark bağlamın g->beklenen_tip yerine
+ * parametreyle gelmesi → çıplak `[..]` literali doğrudan bir dizi_* built-in'e
+ * (dizi_al/dizi_ekle/...) argüman olarak geçince de heap yoluna girebilir.
+ * Aksi halde literal stack [N x T] alloca olur, runtime onu KdlDizi*
+ * descriptor sanıp stack çöpünü `boyut`/`veri` olarak okur → ASan misaligned /
+ * access-violation (repro: dizi_al([5,6,7],1), dizi_ekle(dis,[40,50,60])).
+ *
+ * elem_d  : eleman AST tipi (iç-içe Dizi<Dizi<T>> / yapıcı elemanları için
+ *           recursive bağlam; NULL → skaler eleman).
+ * elem_ir : eleman IR tipi. NULL ise elem_d'den (ast_tip_to_ir) hesaplanır;
+ *           o da yoksa "i32" (literal varsayılan tamsayı genişliği). */
+static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
+                                          const char *elem_ir,
+                                          const Dugum *elem_d) {
+    if (!elem_ir && elem_d) elem_ir = ast_tip_to_ir(g, elem_d);
+    if (!elem_ir) elem_ir = "i32";
+    int hn = d->veri.dizi_olustur.sayi;
+    int kdl_reg = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+            kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
+    kdl_eleman_byte_yaz(g->out, elem_ir);
+    fputs(")\n", g->out);
+    const Dugum *eski_bt = g->beklenen_tip;
+    g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
+    for (int i = 0; i < hn; i++) {
+        IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
+        if (dizi_eleman_struct_mi(elem_ir)) {
+            dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
+            continue;
+        }
+        int vr = int_donustur(g, v.reg, v.tip, elem_ir);
+        const char *fn = "kdl_dizi_ekle_tam";
+        if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+        else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
+                fn, g->rho_ref, kdl_reg, elem_ir, vr);   /* V2-F4.2a: ρ */
+    }
+    g->beklenen_tip = eski_bt;
+    IfadeSonuc s = { kdl_reg, "ptr", 0 };
+    return s;
+}
+
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
  * Sadece basit darlatma/genisletme yardimcisi: src->dst int donusumleri. */
 static int tip_genisligi(const char *ir) {
@@ -2172,34 +2216,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * (yapı alanı, çağrı argümanı, ver) için kök-fix: önceden bu yol yoktu
              * → struct-field `[]` 0-byte stack alloca olur, dizi_ekle SEGFAULT. */
             if (g->beklenen_tip && g->beklenen_tip->tip == DUGUM_TIP_DIZI) {
-                const Dugum *elem_d = g->beklenen_tip->veri.tip_dizi.eleman_tip;
-                const char *elem_ir = ast_tip_to_ir(g, elem_d);
-                if (!elem_ir) elem_ir = "i32";
-                int hn = d->veri.dizi_olustur.sayi;
-                int kdl_reg = yeni_reg(g);
-                /* D-087: eleman_byte — struct ise LLVM sizeof const-expr. */
-                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
-                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
-                kdl_eleman_byte_yaz(g->out, elem_ir);
-                fputs(")\n", g->out);
-                const Dugum *eski_bt = g->beklenen_tip;
-                g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
-                for (int i = 0; i < hn; i++) {
-                    IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
-                    if (dizi_eleman_struct_mi(elem_ir)) {
-                        dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
-                        continue;
-                    }
-                    int vr = int_donustur(g, v.reg, v.tip, elem_ir);
-                    const char *fn = "kdl_dizi_ekle_tam";
-                    if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-                    else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
-                    fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                            fn, g->rho_ref, kdl_reg, elem_ir, vr);   /* V2-F4.2a: ρ */
-                }
-                g->beklenen_tip = eski_bt;
-                IfadeSonuc s = { kdl_reg, "ptr", 0 };
-                return s;
+                /* D-044 heap-yolu artık ortak helper'da (dizi_* built-in arg'ı
+                 * da aynı yolu kullansın diye); IR birebir aynı. */
+                return dizi_literal_heap_emit(g, d, NULL,
+                    g->beklenen_tip->veri.tip_dizi.eleman_tip);
             }
 
             /* [e1, e2, ...] -> alloca [N x T] + store + return ptr (stack)
@@ -3135,15 +3155,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * →1 (indeks), dizi_yaz(d,i,e)→2 (değer). dizi_eleman_beklenen bu
              * argümana forward edilir (literal eleman tip çıkarsaması). */
             int dizi_deger_arg = 1;
+            /* [F-dizi-arg] Çıplak `[..]` literali doğrudan bir dizi_* built-in'e
+             * argüman olunca HEAP zorlamak için (args döngüsünde kullanılır):
+             *   dizi_built_in      — eleman-değeri arg'ı olan (ekle/al/yaz)
+             *   dizi_desc_built_in — arg0'ı KdlDizi* descriptor olan tüm dizi_*
+             *   dizi_al_mi         — dizi_al (arg0 eleman tipi = dönüş beklenen)
+             *   dizi_deger_eleman_ast — iç-içe Dizi<Dizi<T>>'de değer-arg'ın
+             *                            tam AST tipi (Dizi<T>); nested literal
+             *                            heap çözümü için. */
+            int dizi_built_in = 0;
+            int dizi_desc_built_in = 0;
+            int dizi_al_mi = 0;
+            const Dugum *dizi_deger_eleman_ast = NULL;
             {
                 const char *adi = d->veri.cagri.hedef
                     ? d->veri.cagri.hedef->veri.tanimlayici.metin : NULL;
                 int adi_uz = d->veri.cagri.hedef
                     ? d->veri.cagri.hedef->veri.tanimlayici.uzunluk : 0;
-                int dizi_built_in =
+                dizi_built_in =
                     (adi_uz == 9 && memcmp(adi, "dizi_ekle", 9) == 0) ||
                     (adi_uz == 7 && memcmp(adi, "dizi_al", 7) == 0) ||
                     (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0);
+                dizi_al_mi = (adi_uz == 7 && memcmp(adi, "dizi_al", 7) == 0);
+                /* arg0 = descriptor olan tüm dizi_* (dizi_olustur HARİÇ — onun
+                 * arg0'ı eleman sayısı N, descriptor değil). */
+                dizi_desc_built_in = dizi_built_in ||
+                    (adi_uz == 10 && memcmp(adi, "dizi_boyut", 10) == 0) ||
+                    (adi_uz == 13 && memcmp(adi, "dizi_kapasite", 13) == 0) ||
+                    (adi_uz == 20 &&
+                     memcmp(adi, "dizi_kapasite_ayarla", 20) == 0);
                 if (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0) {
                     dizi_deger_arg = 2;  /* dizi_yaz: değer = arg[2] */
                 }
@@ -3156,12 +3196,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         if (vi && vi->eleman_llvm_tip) {
                             dizi_eleman_beklenen = vi->eleman_llvm_tip;
                         }
+                        if (vi) dizi_deger_eleman_ast = vi->eleman_tip_ast;
                     } else if (arg0 && arg0->tip == DUGUM_ERISIM) {
                         /* D-029 fix (2): dizi struct-alani (s.ad) -> alan
                          * tipinden eleman IR cikar (yoksa metin ptr i32
                          * okunup SEGFAULT). */
                         const char *et = dizi_alan_eleman_ir(g, arg0);
                         if (et) dizi_eleman_beklenen = et;
+                        dizi_deger_eleman_ast = dizi_alan_eleman_ast(g, arg0);
                     }
                 }
             }
@@ -3394,6 +3436,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 args = (IfadeSonuc *)arena_ayir(g->arena,
                     sizeof(IfadeSonuc) * (size_t)n);
                 for (int i = 0; i < n; i++) {
+                    /* [F-dizi-arg] Çıplak `[..]` literali doğrudan bir dizi_*
+                     * built-in'e descriptor (arg0) ya da iç-içe değer argümanı
+                     * olarak geçiyorsa HEAP KdlDizi* zorla — aksi halde stack
+                     * [N×T] alloca runtime'da KdlDizi* sanılıp stack çöpü
+                     * okunur (ASan misaligned / access-violation; repro:
+                     * dizi_al([5,6,7],1) ve dizi_ekle(dis,[40,50,60])). Yalnız
+                     * built-in'de (!ik); kullanıcı `Dizi<T>` paramı aşağıdaki
+                     * D-070 yolundan geçer. */
+                    const Dugum *argi = d->veri.cagri.argumanlar[i];
+                    if (!ik && argi && argi->tip == DUGUM_DIZI_OLUSTUR) {
+                        if (i == 0 && dizi_desc_built_in) {
+                            /* descriptor arg0: dizi_al'da eleman tipi = dönüş
+                             * beklenen; diğerlerinde (boyut/kapasite/temp ekle)
+                             * eleman tipi işlemi etkilemez → i32 varsayılan. */
+                            const char *eb = (dizi_al_mi && beklenen && *beklenen)
+                                ? beklenen : "i32";
+                            args[i] = dizi_literal_heap_emit(g, argi, eb, NULL);
+                            continue;
+                        }
+                        if (i == dizi_deger_arg && dizi_built_in &&
+                            dizi_deger_eleman_ast &&
+                            dizi_deger_eleman_ast->tip == DUGUM_TIP_DIZI) {
+                            /* iç-içe Dizi<Dizi<T>>: değer-arg literali Dizi<T>;
+                             * elemanı (T) recursive bağlam olarak ver. */
+                            args[i] = dizi_literal_heap_emit(g, argi, NULL,
+                                dizi_deger_eleman_ast->veri.tip_dizi.eleman_tip);
+                            continue;
+                        }
+                    }
                     /* HEAD: dizi_ekle/al icin arg[1] dizi_eleman_beklenen.
                      * src-bugfix: I/O built-in icin param_beklenen[i]. */
                     const char *bekle = (i < 8) ? param_beklenen[i] : NULL;
