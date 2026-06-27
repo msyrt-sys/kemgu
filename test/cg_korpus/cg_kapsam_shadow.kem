@@ -1,0 +1,15 @@
+// CG-SCOPE regresyon: iç blok'ta DIŞ değişkeni gölgeleyen (shadow) `değişken v`
+// blok bittikten sonra DIŞ v'ye geri dönmeli. Eski hata: codegen değişken tablosu
+// append-only (pop yok) → blok-sonrası `v` lookup'ı İÇ (kapsam-dışı) slot'a çözülürdü.
+//   ver dizi_al(v, 2) → DIŞ v[2] = 300 olmalı (İÇ v[2]=9 DEĞİL).
+// C llvm.c scope_gir/scope_cik ile aynı disiplin; self-host cg_kapsam_kapat ile.
+// Beklenen exit = 300 % 256 = 44. (Hatalı codegen 9 verirdi.)
+işlev main() -> tam32 {
+    değişken v: Dizi<tam32> = [100, 200, 300];
+    değişken r: tam32 = 0;
+    eğer dizi_al(v, 0) > 0 {
+        değişken v: Dizi<tam32> = [7, 8, 9];
+        r = dizi_al(v, 1);
+    }
+    ver dizi_al(v, 2);   // DIŞ v → 300
+}
