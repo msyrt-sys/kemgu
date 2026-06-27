@@ -66,6 +66,7 @@ static EscapeKayit *kayit_ekle(EscapeAnaliz *ea, const Dugum *d) {
     k->dugum = d;
     k->kategori = ESC_YEREL;
     k->dongu_derinligi = ea->dongu_derinligi;
+    k->kesin_yerel = 0;   /* F4.2b: ky_isaretle sonradan KANITLARSA 1 yapar (uninit garbage = UAF). */
     return k;
 }
 
@@ -147,10 +148,39 @@ static void ifadeyi_yukselt(EscapeAnaliz *ea, const Dugum *ifade, EscapeKategori
     if (!ifade) return;
     switch (ifade->tip) {
         case DUGUM_METIN:
+            escape_yukselt(ea, ifade, yeni);
+            return;
+        /* [F4.2b SOUNDNESS — DERİN TRANSİTİF TERFİ] Bir agregat (dizi/yapı) kaçınca
+         * GÖMÜLÜ heap-ref alt-tahsisleri de transitif kaçar (R-GÖMME). Eski sığ kod
+         * yalnız düğümün KENDİSİNİ yükseltiyordu → `[[1,2],[3,4]]` / `K{f:[...]}` iç
+         * dizileri ESC_YEREL kalıp ρ_yerel'de serbest ediliyordu = SESSİZ UAF (escape
+         * hunt: 18 doğrulanmış UAF'ın kök sebebi). Artık elemanlara/alanlara recurse. */
         case DUGUM_DIZI_OLUSTUR:
+            escape_yukselt(ea, ifade, yeni);
+            for (int i = 0; i < ifade->veri.dizi_olustur.sayi; i++)
+                ifadeyi_yukselt(ea, ifade->veri.dizi_olustur.elemanlar[i], yeni);
+            return;
         case DUGUM_YAPI_OLUSTUR:
+            escape_yukselt(ea, ifade, yeni);
+            for (int i = 0; i < ifade->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = ifade->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA)
+                    ifadeyi_yukselt(ea, aa->veri.alan_atama.deger, yeni);
+            }
+            return;
         case DUGUM_LAMBDA:
+            /* Lambda'nın KENDİSİ kaçar (G005 için). YAKALADIĞI bağlamalar için
+             * free-routing GUARD'ı (islev_lambda_icerir → o fn'de routing YOK) sound
+             * backstop'tur: lexical scope gereği yalnız BU fn'in lambda'sı BU fn'in
+             * lokalini yakalayabilir; block-form gövde value-path'i eksik kalabilir →
+             * guard şart (bkz. bolge_yerel_yonlendir). */
+            escape_yukselt(ea, ifade, yeni);
+            return;
         case DUGUM_CAGRI:
+            /* Çağrı SONUCU'nu yükselt (node-self). Argümanlar AYRICA visit'in CAGRI
+             * kolunda KOŞULSUZ ESC_CAGIRAN'a yükseltiliyor (passthrough `gecir(arr)`
+             * dâhil) → burada arg-recurse'a GEREK YOK + RİSKLİ (büyük kaynakta derin
+             * çağrı-zinciri + bağ-takibi yığın taşmasına yol açıyordu — codegen.kem). */
             escape_yukselt(ea, ifade, yeni);
             return;
         case DUGUM_TANIMLAYICI: {
@@ -230,7 +260,10 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
              * -- kapilar enforce edilince ya da TUM kaccis rotalari kapsaninca --
              * saglamca eklenecek. Su an UAF imkansiz (ITERASYON hic uretilmez). */
             kayit_bul_veya_ekle(ea, d);
-            /* Recurse alt-ifadelere */
+            /* Recurse alt-ifadelere. NOT: gömülü heap-ref alt-tahsislerin (iç dizi,
+             * alan değeri) ESC_CAGIRAN'a transitif terfisi BURADA koşulsuz YAPILMAZ;
+             * agregat KAÇTIĞINDA ifadeyi_yukselt (artık DERİN) hallediyor → yerel
+             * agregatın gömülü dizisi gereksiz yere ρ_caller'a sürülmez (daha keskin). */
             if (d->tip == DUGUM_DIZI_OLUSTUR) {
                 visit_list(ea, d->veri.dizi_olustur.elemanlar, d->veri.dizi_olustur.sayi);
             } else if (d->tip == DUGUM_YAPI_OLUSTUR) {
@@ -241,6 +274,9 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
                     }
                 }
             } else if (d->tip == DUGUM_LAMBDA) {
+                /* F4.2b GUARD: bu islev bir lambda iceriyor → free-routing'i bu
+                 * islevde KAPAT (closure-capture sound backstop; lexical scope). */
+                ea->islev_lambda_icerir = 1;
                 scope_gir(ea);
                 visit(ea, d->veri.lambda.govde);
                 scope_cik(ea);
@@ -253,6 +289,28 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
             kayit_bul_veya_ekle(ea, d);
             visit(ea, d->veri.cagri.hedef);
             visit_list(ea, d->veri.cagri.argumanlar, d->veri.cagri.sayi);
+            /* [F4.2b SOUNDNESS] Çağrı ARGÜMANI callee tarafından RETAIN edilebilir
+             * (örn. `dugum_n(p, ..., kids)` → kids'i AST'de saklar; `dizi_ekle(d, e)`).
+             * Interprocedural özet yok → KONSERVATİF: her argümanı (ve bağlı olduğu
+             * tahsisleri) ESC_CAGIRAN'a yükselt. Aksi halde arg ESC_YEREL kalır →
+             * ρ_yerel'de serbest edilir → callee retain ettiyse UAF (bu fazın
+             * routing'ini düşüren gerçek bug — escape.c kaçış-yolu boşluğu, A1-bitişik).
+             * Over-approx: dizi_al/dizi_boyut gibi RETAIN-ETMEYEN builtin'lerde de
+             * yükseltir (kabul: sızıntı bir hata, UAF bir felaket).
+             *
+             * İSTİSNA — LAMBDA argümanı: free-routing YALNIZ dizileri (DUGUM_DIZI_OLUSTUR)
+             * ρ_yerel'de serbest eder; lambda HİÇBİR ZAMAN serbest edilmez → lambda arg'ı
+             * CAGIRAN'a yükseltmek free-routing için GEREKSİZ. Üstelik ZARARLI: G005
+             * (tip_kontrol.c, D-071) `escape_kategori==ESC_CAGIRAN` ile KAÇAN+yakalayan
+             * closure'ı reddeder; `görev_başlat(|| ...)` deseni lambda'yı arg olarak verir
+             * ve görev'in KENDİ sahiplik modeli (R-YAKALAMA-THREAD) vardır → CAGIRAN
+             * yükseltme G005'i yanlış-pozitif tetikler (DRF T34/T37/T38). Lambda'yı
+             * ATLA: G005-ilgili kategorisi (ver'lenmedikçe YEREL) korunur. */
+            for (int ai = 0; ai < d->veri.cagri.sayi; ai++) {
+                Dugum *arg = d->veri.cagri.argumanlar[ai];
+                if (arg && arg->tip == DUGUM_LAMBDA) continue;
+                ifadeyi_yukselt(ea, arg, ESC_CAGIRAN);
+            }
             return;
 
         /* === Ver: escape kaynagi === */
@@ -294,6 +352,17 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
                     d->veri.atama.hedef->veri.tanimlayici.metin,
                     d->veri.atama.hedef->veri.tanimlayici.uzunluk,
                     d->veri.atama.deger);
+            } else if (d->veri.atama.hedef
+                       && (d->veri.atama.hedef->tip == DUGUM_ERISIM
+                           || d->veri.atama.hedef->tip == DUGUM_INDEKS)) {
+                /* [F4.2b SOUNDNESS] Agregat-eleman/alan ataması (`dis[i] = arr`,
+                 * `s.alan = arr`): RHS, kaçabilen bir yapı/diziye SAKLANIR → kaçar.
+                 * KONSERVATİF: RHS'i ESC_CAGIRAN'a yükselt. Aksi halde YEREL kalır →
+                 * ρ_yerel'de serbest → agregat onu tutarken UAF (R3'ün "kaçan-yapıda
+                 * saklama" yolu; A1 testleri bunu YEREL bırakır — A1 için sound, free
+                 * için DEĞİL). Transitif R-GÖMME terfisi F4.4'e ertelenir; bu guard
+                 * ile düz desenler sound. */
+                ifadeyi_yukselt(ea, d->veri.atama.deger, ESC_CAGIRAN);
             }
             return;
         }
@@ -413,10 +482,251 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
     }
 }
 
+/* ====================================================================
+ * F4.2b — KESİN-YEREL (confined) KANITI: POZİTİF, DEFAULT-DENY local-proof
+ * ====================================================================
+ * Escape DFA bir MAY-yaklaşımıdır (alias/yeniden-atama/loop-carried kaçışları
+ * KAÇIRIR → "DFA escape bulamadı" free için GÜVENİLMEZ; her kaçırılan yol = UAF,
+ * D-102 uyarısı). Bunun yerine: bir diziyi ρ_yerel'de serbest ETMEDEN ÖNCE
+ * yerelliğini KANITLA. Bir dizi-değişkeni "confined" (kesin-yerel) sayılır ANCAK
+ * VE ANCAK govdedeki HER kullanımı şunlardan biriyse:
+ *   - `var[i]` okuma (DUGUM_INDEKS, nesne=var),
+ *   - `var[i] = ...` yerinde yazma (ATAMA hedef=INDEKS(var)),
+ *   - retain-ETMEYEN dizi-builtin'inin İLK argümanı (dizi_al/boyut/yaz/ekle/kapasite).
+ * Başka HER konum (ver, b=var alias, [..,var,..]/yapı alanı, çağrı argümanı,
+ * lambda yakalama, &var, var yeniden-atama) → DENY (ρ_caller). Default-deny =
+ * inşa-gereği sound (principle 1+3). Skaler-eleman kısıtı llvm tarafında. */
+
+static int ky_ad_esit(const Dugum *d, const char *ad, int uz) {
+    return d && d->tip == DUGUM_TANIMLAYICI
+        && d->veri.tanimlayici.uzunluk == uz
+        && memcmp(d->veri.tanimlayici.metin, ad, (size_t)uz) == 0;
+}
+
+static int ky_dizi_builtin_confined(const char *ad, int uz) {
+    /* Diziyi RETAIN ETMEYEN, yalnız oku/yerinde-değiştir builtin'leri. */
+    return (uz == 7  && memcmp(ad, "dizi_al", 7) == 0)
+        || (uz == 10 && memcmp(ad, "dizi_boyut", 10) == 0)
+        || (uz == 8  && memcmp(ad, "dizi_yaz", 8) == 0)
+        || (uz == 9  && memcmp(ad, "dizi_ekle", 9) == 0)
+        || (uz == 13 && memcmp(ad, "dizi_kapasite", 13) == 0);
+}
+
+/* var subtree'de HERHANGİ bir yerde geçiyor mu? Bilinmeyen düğüm → 1 (konservatif). */
+static int ky_var_gecer(const Dugum *d, const char *ad, int uz) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_TANIMLAYICI: return ky_ad_esit(d, ad, uz);
+        case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_KARAKTER:
+        case DUGUM_MANTIKSAL: case DUGUM_BOS: case DUGUM_METIN:
+        case DUGUM_YOL: case DUGUM_PARAMETRE:
+            return 0;
+        case DUGUM_INDEKS:
+            return ky_var_gecer(d->veri.indeks.nesne, ad, uz)
+                || ky_var_gecer(d->veri.indeks.indeks, ad, uz);
+        case DUGUM_ATAMA:
+            return ky_var_gecer(d->veri.atama.hedef, ad, uz)
+                || ky_var_gecer(d->veri.atama.deger, ad, uz);
+        case DUGUM_CAGRI: {
+            if (ky_var_gecer(d->veri.cagri.hedef, ad, uz)) return 1;
+            for (int i = 0; i < d->veri.cagri.sayi; i++)
+                if (ky_var_gecer(d->veri.cagri.argumanlar[i], ad, uz)) return 1;
+            return 0;
+        }
+        case DUGUM_DIZI_OLUSTUR:
+            for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
+                if (ky_var_gecer(d->veri.dizi_olustur.elemanlar[i], ad, uz)) return 1;
+            return 0;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA
+                    && ky_var_gecer(aa->veri.alan_atama.deger, ad, uz)) return 1;
+            }
+            return 0;
+        case DUGUM_LAMBDA: return ky_var_gecer(d->veri.lambda.govde, ad, uz);
+        case DUGUM_VER: return ky_var_gecer(d->veri.ver.deger, ad, uz);
+        case DUGUM_DEGISKEN: return ky_var_gecer(d->veri.degisken.deger, ad, uz);
+        case DUGUM_SABIT: return ky_var_gecer(d->veri.sabit.deger, ad, uz);
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (ky_var_gecer(d->veri.blok.deyimler[i], ad, uz)) return 1;
+            return 0;
+        case DUGUM_IFADE_DEYIMI: return ky_var_gecer(d->veri.ifade_deyimi.ifade, ad, uz);
+        case DUGUM_EGER:
+            return ky_var_gecer(d->veri.eger.kosul, ad, uz)
+                || ky_var_gecer(d->veri.eger.gozdoldur, ad, uz)
+                || ky_var_gecer(d->veri.eger.yan, ad, uz);
+        case DUGUM_IKEN:
+            return ky_var_gecer(d->veri.iken.kosul, ad, uz)
+                || ky_var_gecer(d->veri.iken.govde, ad, uz);
+        case DUGUM_ICIN:
+            return ky_var_gecer(d->veri.icin.koleksiyon, ad, uz)
+                || ky_var_gecer(d->veri.icin.govde, ad, uz);
+        case DUGUM_ESLES: {
+            if (ky_var_gecer(d->veri.esles.deger, ad, uz)) return 1;
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU
+                    && ky_var_gecer(k->veri.esles_kolu.govde, ad, uz)) return 1;
+            }
+            return 0;
+        }
+        case DUGUM_GUVENSIZ: return ky_var_gecer(d->veri.guvensiz.blok, ad, uz);
+        case DUGUM_IKILI:
+            return ky_var_gecer(d->veri.ikili.sol, ad, uz)
+                || ky_var_gecer(d->veri.ikili.sag, ad, uz);
+        case DUGUM_TEKLI: return ky_var_gecer(d->veri.tekli.operand, ad, uz);
+        case DUGUM_ERISIM: return ky_var_gecer(d->veri.erisim.nesne, ad, uz);
+        default: return 1;  /* bilinmeyen → konservatif "geçiyor" */
+    }
+}
+
+/* var'in TÜM kullanimlari confined mi? Bare var ulasirsa (parent tuketmediyse) = 0. */
+static int ky_confined(const Dugum *d, const char *ad, int uz) {
+    if (!d) return 1;
+    switch (d->tip) {
+        case DUGUM_TANIMLAYICI:
+            return ky_ad_esit(d, ad, uz) ? 0 : 1;  /* bare var = guvensiz */
+        case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_KARAKTER:
+        case DUGUM_MANTIKSAL: case DUGUM_BOS: case DUGUM_METIN:
+        case DUGUM_YOL: case DUGUM_PARAMETRE:
+            return 1;
+        case DUGUM_INDEKS:
+            if (ky_ad_esit(d->veri.indeks.nesne, ad, uz))   /* var[i] okuma OK */
+                return ky_confined(d->veri.indeks.indeks, ad, uz);
+            return ky_confined(d->veri.indeks.nesne, ad, uz)
+                && ky_confined(d->veri.indeks.indeks, ad, uz);
+        case DUGUM_ATAMA:
+            if (d->veri.atama.hedef && d->veri.atama.hedef->tip == DUGUM_INDEKS
+                && ky_ad_esit(d->veri.atama.hedef->veri.indeks.nesne, ad, uz)) {
+                /* var[i] = RHS : yerinde yazma OK */
+                return ky_confined(d->veri.atama.hedef->veri.indeks.indeks, ad, uz)
+                    && ky_confined(d->veri.atama.deger, ad, uz);
+            }
+            if (ky_ad_esit(d->veri.atama.hedef, ad, uz))
+                return 0;  /* var = ... : yeniden-atama → guvensiz (eski deger alias olabilir) */
+            return ky_confined(d->veri.atama.hedef, ad, uz)
+                && ky_confined(d->veri.atama.deger, ad, uz);
+        case DUGUM_CAGRI: {
+            const Dugum *h = d->veri.cagri.hedef;
+            int safe0 = (h && h->tip == DUGUM_TANIMLAYICI
+                && ky_dizi_builtin_confined(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk)
+                && d->veri.cagri.sayi >= 1
+                && ky_ad_esit(d->veri.cagri.argumanlar[0], ad, uz));
+            if (!ky_confined(h, ad, uz)) return 0;
+            for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                if (i == 0 && safe0) continue;  /* dizi_*(var, ...) ilk arg tuketildi */
+                if (!ky_confined(d->veri.cagri.argumanlar[i], ad, uz)) return 0;
+            }
+            return 1;
+        }
+        case DUGUM_LAMBDA:
+            return ky_var_gecer(d->veri.lambda.govde, ad, uz) ? 0 : 1;  /* yakalama = guvensiz */
+        case DUGUM_VER: return ky_confined(d->veri.ver.deger, ad, uz);
+        case DUGUM_DEGISKEN: return ky_confined(d->veri.degisken.deger, ad, uz);
+        case DUGUM_SABIT: return ky_confined(d->veri.sabit.deger, ad, uz);
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (!ky_confined(d->veri.blok.deyimler[i], ad, uz)) return 0;
+            return 1;
+        case DUGUM_IFADE_DEYIMI: return ky_confined(d->veri.ifade_deyimi.ifade, ad, uz);
+        case DUGUM_EGER:
+            return ky_confined(d->veri.eger.kosul, ad, uz)
+                && ky_confined(d->veri.eger.gozdoldur, ad, uz)
+                && ky_confined(d->veri.eger.yan, ad, uz);
+        case DUGUM_IKEN:
+            return ky_confined(d->veri.iken.kosul, ad, uz)
+                && ky_confined(d->veri.iken.govde, ad, uz);
+        case DUGUM_ICIN:
+            return ky_confined(d->veri.icin.koleksiyon, ad, uz)
+                && ky_confined(d->veri.icin.govde, ad, uz);
+        case DUGUM_ESLES: {
+            if (!ky_confined(d->veri.esles.deger, ad, uz)) return 0;
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU
+                    && !ky_confined(k->veri.esles_kolu.govde, ad, uz)) return 0;
+            }
+            return 1;
+        }
+        case DUGUM_GUVENSIZ: return ky_confined(d->veri.guvensiz.blok, ad, uz);
+        case DUGUM_IKILI:
+            return ky_confined(d->veri.ikili.sol, ad, uz)
+                && ky_confined(d->veri.ikili.sag, ad, uz);
+        case DUGUM_TEKLI: return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
+        case DUGUM_ERISIM: return ky_confined(d->veri.erisim.nesne, ad, uz);
+        case DUGUM_DIZI_OLUSTUR:
+            for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
+                if (!ky_confined(d->veri.dizi_olustur.elemanlar[i], ad, uz)) return 0;
+            return 1;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA
+                    && !ky_confined(aa->veri.alan_atama.deger, ad, uz)) return 0;
+            }
+            return 1;
+        default:
+            return ky_var_gecer(d, ad, uz) ? 0 : 1;  /* bilinmeyen + var geçiyor → guvensiz */
+    }
+}
+
+static void ky_set(EscapeAnaliz *ea, const Dugum *d) {
+    for (int i = 0; i < ea->kayit_sayi; i++)
+        if (ea->kayitlar[i].dugum == d) { ea->kayitlar[i].kesin_yerel = 1; return; }
+}
+
+/* Govdeyi gez; her `değişken V: Dizi<...> = [literal]` icin V confined ise
+ * literal-dugumunu kesin_yerel isaretle. */
+static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde) {
+    if (!d) return;
+    switch (d->tip) {
+        case DUGUM_DEGISKEN:
+            if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
+                && d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0
+                && ky_confined(fn_govde, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk)) {
+                ky_set(ea, d->veri.degisken.deger);
+            }
+            return;
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                ky_isaretle(ea, d->veri.blok.deyimler[i], fn_govde);
+            return;
+        case DUGUM_EGER:
+            ky_isaretle(ea, d->veri.eger.gozdoldur, fn_govde);
+            ky_isaretle(ea, d->veri.eger.yan, fn_govde);
+            return;
+        case DUGUM_IKEN: ky_isaretle(ea, d->veri.iken.govde, fn_govde); return;
+        case DUGUM_ICIN: ky_isaretle(ea, d->veri.icin.govde, fn_govde); return;
+        case DUGUM_ESLES:
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU)
+                    ky_isaretle(ea, k->veri.esles_kolu.govde, fn_govde);
+            }
+            return;
+        case DUGUM_GUVENSIZ: ky_isaretle(ea, d->veri.guvensiz.blok, fn_govde); return;
+        default: return;
+    }
+}
+
+int escape_kesin_yerel(const EscapeAnaliz *ea, const Dugum *d) {
+    if (!ea || !d) return 0;
+    for (int i = 0; i < ea->kayit_sayi; i++)
+        if (ea->kayitlar[i].dugum == d) return ea->kayitlar[i].kesin_yerel;
+    return 0;
+}
+
 void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
     if (!islev || islev->tip != DUGUM_ISLEV) return;
     const Dugum *govde = islev->veri.islev.govde;
     if (!govde) return;
+
+    /* F4.2b: per-islev lambda-guard bayragini sifirla (visit LAMBDA set eder). */
+    ea->islev_lambda_icerir = 0;
 
     /* Fixed-point: tum kategori degisiklikleri durana kadar tekrar. */
     int max_iter = 16;  /* guvenlik: sonsuz dongu engelleyici (pratikte 2-3 yeter) */
@@ -443,6 +753,11 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
 
         if (!ea->degisti) break;
     }
+
+    /* F4.2b: fixed-point bitti → POZİTİF kesin-yerel kanıtı (confined dizi-değişkenleri
+     * isaretle). free-routing YALNIZ bu işaretli + skaler-eleman dizileri ρ_yerel'e
+     * yönlendirir (bolge_yerel_yonlendir). */
+    ky_isaretle(ea, govde, govde);
 }
 
 void escape_analiz_program(EscapeAnaliz *ea, const Dugum *program) {
@@ -478,6 +793,16 @@ EscapeKategorisi escape_kategori(const EscapeAnaliz *ea, const Dugum *d) {
         if (ea->kayitlar[i].dugum == d) return ea->kayitlar[i].kategori;
     }
     return ESC_YEREL;
+}
+
+/* F4.2b (principle 1): düğüm escape analizinde AÇIKÇA kayıtlı mı? Free-routing
+ * yalnız KAYITLI-VE-YEREL'e güvenir; kayıtsız düğüm escape_kategori'de default
+ * ESC_YEREL döner ama bu free için GÜVENİLMEZ → kayıtsız → ρ_caller. */
+int escape_kayitli_mi(const EscapeAnaliz *ea, const Dugum *d) {
+    for (int i = 0; i < ea->kayit_sayi; i++) {
+        if (ea->kayitlar[i].dugum == d) return 1;
+    }
+    return 0;
 }
 
 int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d) {

@@ -5,6 +5,65 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-103 — [YÜKSEK] F4.2b: ρ_yerel GERÇEK-serbest + escape kaçış-yolu sağlamlaştırma (SOUND) (2026-06-22)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: D-102 KONSOLİDASYON sonrası; merge'de origin/main ilerlemişse güncelle).
+
+**Karar [ETKİ: YÜKSEK — `src/escape.c` + `src/escape.h` + `src/llvm.c` + testler; bölge-serbest
+semantiği ilk kez GERÇEKTEN ETKİN; izole commit].** F4.2b'nin başlık işi: **ilk gerçek bölge-serbest.**
+Kaçmayan yerel diziler `ρ_yerel`'e (fonksiyon-yerel KdlBolge) tahsis edilir ve fonksiyon çıkışında
+`kdl_bolge_serbest` ile serbest bırakılır. **Kaçan TÜM tahsisler `ρ_caller`'da kalır (serbest EDİLMEZ)
+→ UAF imkânsız.**
+
+**Yük taşıyan invaryant:** *kaçan → ρ_caller, kaçmayan → ρ_yerel, ρ_yerel ret'te serbest. Bunu kır →
+sessiz UAF. Şüphede konservatif (ρ_caller).*
+
+**KÖKLÜ KARAR — POZİTİF KANIT, escape DFA'ya GÜVENME (default-deny):** İlk iki routing girişimi escape
+DFA'sının yargısına güvendi (önce `bolge_belirle` default-YEREL; sonra `escape_kayitli_mi`+`BOLGE_YEREL`).
+**Çok-ajanlı adversarial hunt (8 aile × repro + bağımsız ASan-doğrulama, `sanitize_address` enjekte ederek
+IR-fonksiyon load/store'ları da denetlendi) bu yaklaşımda 18 DOĞRULANMIŞ UAF buldu:** iç-içe agregat
+(`Dizi<Dizi<T>>`, yapı-içi-dizi, ara-değişken), closure yakalama, alias/yeniden-atama, loop-carried.
+**Kök sebep:** escape DFA bir **MAY-yaklaşımı** — kaçış yollarını KAÇIRIR; "DFA escape bulamadı" free için
+GÜVENİLMEZ (her kaçırılan yol = UAF; D-102'nin "sınırsız 'tüm rotaları yakaladım mı?' riski" tam da bu).
+Kaçırılan-yolu-tek-tek-yamamak (deep `ifadeyi_yukselt`, lambda-guard...) sonsuz whack-a-mole.
+
+**ÇÖZÜM (principle 1+3 — "lokallik KANITI" + "DAR, inşa-gereği sound"):** Routing artık escape DFA'ya
+DEĞİL, **POZİTİF + default-deny CONFINEMENT kanıtına** dayanır. Bir dizi-değişkeni `ρ_yerel`'e SADECE şu
+İKİ koşulda yönlenir:
+1. **SKALER-ELEMAN** (`elem_ir` ne `ptr` ne `%struct`): skaler eleman → `dizi_al` KOPYA döndürür, iç-ptr
+   kaçışı YOK. `Dizi<Dizi>/Dizi<metin>/Dizi<yapı>` → ptr/struct eleman → iç heap-ref kaçabilir → ρ_caller.
+2. **`escape_kesin_yerel` (confined kanıtı, `escape.c`):** bağlı değişkenin govdedeki **HER** kullanımı
+   şunlardan biri olmalı: `var[i]` okuma, `var[i]=...` yerinde-yazma, retain-ETMEYEN dizi-builtin'in
+   İLK argümanı (`dizi_al/boyut/yaz/ekle/kapasite`). **Başka HER konum** (ver, `b=var` alias, `[..,var,..]`
+   /yapı alanı, çağrı argümanı, lambda yakalama, `&var`, `var` yeniden-atama) → **DENY → ρ_caller.**
+   Default-deny = inşa-gereği sound (bir tek yamadan değil, kapalı-form pozitif kanıttan). Tüm AST düğüm
+   tipleri kapsanır; bilinmeyen düğüm → konservatif deny.
+
+**Yan-sağlamlaştırma (`ifadeyi_yukselt` DERİN yapıldı):** Escape DFA'nın DİĞER tüketicileri (G005 closure,
+bolge_atama) için transitif terfi sığdı → agregat kaçınca gömülü dizi/alan da `ESC_CAGIRAN`. Routing artık
+bu DFA'ya bağlı OLMASA da DFA'nın kendi soundness'ı için tutuldu. Agregat-store (`dış[i]=arr`) ve A1 DELIK
+testleri CAGIRAN'a güncellendi (ASLA ITERASYON invaryantı korunur).
+
+**Yakalanan bug (init):** `EscapeKayit.kesin_yerel` `kayit_ekle`'de sıfırlanmıyordu → garbage truthy →
+HER dizi yönlendi (batch 43 UAF). `k->kesin_yerel = 0` ile düzeldi. (Adversarial gate + uninit-init
+disiplini yakaladı.)
+
+**C ve self-host SOUND (R1 gevşedi):** C-tarafı confined dizileri serbest eder; self-host `codegen.kem`
+ρ_yerel ÜRETMEZ (her şey ρ_caller = konservatif-sound). İkisi de hiçbir kaçanı serbest etmez.
+
+**DOĞRULAMA:** `parser.kem` bootstrap FIXPOINT ✓ + `codegen_diff` 70/70 ✓ + **48/48 routable repro
+ASan-temiz (18 orijinal UAF'ın TAMAMI kapandı)** + confined `dizi_al` döngüsü GERÇEK free + ASan temiz
+(exit 42) + `test_tumu` YEŞİL + DRF 39/39 + escape 22/22 + bolge_atama 15/15. Kalan 2 repro UAF
+(`probe_bare`, `probe_p1_ekle_inline`) F4.2b'den BAĞIMSIZ PRE-EXISTING bug (bare-literal→`dizi_*`
+stack/heap descriptor uyuşmazlığı; machinery commit `f9ad67a`'da da çöküyor) → ayrı task'a flaglendi.
+
+**Sınırlar (v1):** Gerçek-serbest yalnız C-tarafı + skaler-eleman + confined-değişken. Geniş ama sound
+desenler (kaçan dizi, ptr-eleman, alias, capture) ρ_caller'da kalır (free kaçırılır ama UAF imkânsız).
+Genişletme (ptr-eleman transitif free, daha keskin alias, self-host port) sonraki iş.
+
+---
+
 ## D-102 — [YÜKSEK] Loop-carried soundness: escape/bölge ESC_ITERASYON ÜRETMEZ (güvenli geri-çekilme) (2026-06-20)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
