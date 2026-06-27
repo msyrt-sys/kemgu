@@ -2664,10 +2664,13 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken elem: metin = p.beklenen_elem;
         p.beklenen_elem = "";   // tek seferlik tüket
         eğer metin_esit(elem, "") { elem = "i32"; }
+        // V2-F4.2b (b3): YÖNLENDİRME — confined+skaler dizi → ρ_yerel (ret'te serbest);
+        // aksi → rho_ref (ρ_caller). Hem olustur hem ekle AYNI ρ'yu kullanır (tutarlılık).
+        değişken drho: metin = bolge_yerel_yonlendir(p, idx, elem);
         değişken d: tam32 = yeni_reg(p);
         değişken dr: metin = reg_str(d);
         yaz_str("  "); yaz_str(dr); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");
-        yaz_str(p.rho_ref); yaz_str(", i32 ");   // V2-F4.2a: ρ
+        yaz_str(drho); yaz_str(", i32 ");   // V2-F4.2b: yönlendirilmiş ρ
         yaz_str(dizi_eleman_byte(elem)); yaz_str(")"); yb(10);
         // elemanları ekle (boş [] → atla)
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -2677,7 +2680,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + i));
             değişken et: metin = p.son_tip;
             yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
-            yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
+            yaz_str(drho); yaz_str(", ptr ");   // V2-F4.2b: aynı yönlendirilmiş ρ
             yaz_str(dr); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
             i = i + 1;
         }
@@ -3326,6 +3329,31 @@ işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32) -> tam32 {
     değişken i: tam32 = 0;
     iken i < cs2 { ky_isaretle(p, dizi_al(p.cocuk, cb2 + i), govde); i = i + 1; }
     ver 0;
+}
+
+// V2-F4.2b (b3): dizi-tahsis düğümü kesin-yerel (confined) işaretli mi? (ky_node fn-dilim taraması)
+işlev ky_kesin_yerel(p: &değişken Ayr, node: tam32) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.ky_node);
+    değişken i: tam32 = p.ky_base;
+    iken i < n {
+        eğer dizi_al(p.ky_node, i) == node { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+
+// V2-F4.2b (b3): dizi-tahsis düğümü `idx` için ρ seç. ρ_yerel'e (ret'te serbest) SADECE:
+// kesin-yerel (confined) işaretli VE SKALER-eleman (ne "ptr" ne "%struct") VE fn'de
+// lambda-guard yok VE ρ_yerel mevcut. Aksi → rho_ref (ρ_caller, serbest EDİLMEZ).
+// C-tarafı src/llvm.c bolge_yerel_yonlendir AYNASI: POZİTİF ky_confined + skaler-eleman
+// (ptr/struct eleman → iç heap-ref dizi_al ile kaçabilir → ρ_caller). DAR tut = sound.
+işlev bolge_yerel_yonlendir(p: &değişken Ayr, idx: tam32, elem: metin) -> metin {
+    eğer p.ky_lambda == 1 { ver p.rho_ref; }            // closure-capture sound backstop
+    eğer metin_esit(p.rho_yerel, "") { ver p.rho_ref; } // ρ_yerel yok
+    eğer ky_kesin_yerel(p, idx) == yanlış { ver p.rho_ref; }  // confined kanıtı yok
+    eğer metin_esit(elem, "ptr") { ver p.rho_ref; }     // ptr-eleman → iç-ptr kaçabilir
+    eğer bayt(elem, 0) == 37 { ver p.rho_ref; }         // '%' = struct-eleman → ρ_caller
+    ver p.rho_yerel;
 }
 
 // V2-F4.2b (b2): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
