@@ -1,0 +1,18 @@
+// B1 regresyon: iç-içe agregat payload — çeşit varyantı seçimlik<tam32> taşır.
+// Agregat tipi {i8, {i8, i32}} olur; agg_alan(agg, 1) iç payload alanını
+// "{i8, i32}" olarak ÇIKARMALI (naif virgül-bölme "{i8" budar → miscompile).
+// C-oracle ile self-host exit-eşdeğer olmalı (her ikisi 7).
+çeşit Kutu { Dolu(seçimlik<tam32>), Boş }
+işlev main() -> tam32 {
+    değişken s: seçimlik<tam32> = değer(7);
+    değişken k: Kutu = Kutu::Dolu(s);
+    eşleş k {
+        Kutu::Dolu(ic) => {
+            eşleş ic {
+                değer(v) => { ver v; }
+                hiç => { ver 100; }
+            }
+        }
+        Kutu::Boş => { ver 200; }
+    }
+}
