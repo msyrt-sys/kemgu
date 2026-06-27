@@ -1854,6 +1854,22 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
     ver 0;
 }
+// CG-SCOPE: leksik kapsam kapanışı. Blok/döngü/eşleş-kolu girişinde alınan
+// `kapsam_bas = dizi_boyut(p.cg_ad)` ile çağrılır; [kapsam_bas, son) aralığındaki
+// iç-kapsam bağlamalarının ADINI "" yapar → cg_var_bul (sondan→cg_base arar) boş
+// adı atlar, shadow'lanan dış bağlamaya geri döner. C llvm.c scope_gir/scope_cik
+// ile aynı disiplin; dizi-shrink built-in'i olmadığından truncate yerine ad-blank
+// (slot kalır ama isim-eşleşmesi ölür; emit edilmiş IR değişmez). Eski hata:
+// append-only tablo iç `değişken v`'yi dış `v`'den sonra bulur → yanlış slot.
+işlev cg_kapsam_kapat(p: &değişken Ayr, kapsam_bas: tam32) -> tam32 {
+    değişken i: tam32 = kapsam_bas;
+    değişken n: tam32 = dizi_boyut(p.cg_ad);
+    iken i < n {
+        dizi_yaz(p.cg_ad, i, "");   // ad-blank → lookup'ta görünmez (slot canlı kalır)
+        i = i + 1;
+    }
+    ver 0;
+}
 // CG7c: değişkenin işaret ettiği yapı adı (ptr ise; değilse "").
 işlev cg_var_ref_bul(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
@@ -2765,8 +2781,12 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "BLOK") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        // CG-SCOPE: blok = leksik kapsam. Giriş slice'ını al; çıkışta iç bağlamaları
+        // kapat (shadow geri-al). eğer/iken/güvensiz gövdeleri de BLOK → bu yoldan kapsamlanır.
+        değişken kapsam_bas: tam32 = dizi_boyut(p.cg_ad);
         değişken i: tam32 = 0;
         iken i < cs { deyim_uret(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+        cg_kapsam_kapat(p, kapsam_bas);
         ver 0;
     }
     eğer metin_esit(ad, "GUVENSIZ") {
@@ -2854,6 +2874,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // x alloca (eleman) + döngü değişkenini bağla
         değişken xa: metin = reg_str(yeni_reg(p));
         yaz_str("  "); yaz_str(xa); yaz_str(" = alloca "); yaz_str(et); yb(10);
+        // CG-SCOPE: döngü değişkeni `dvar` yalnız gövdede görünür. Bağlamadan önce
+        // slice'ı al; döngü çıkışında kapat (dış aynı-ad bağlamasını shadow'lamasın).
+        değişken kapsam_bas: tam32 = dizi_boyut(p.cg_ad);
         cg_var_ekle(p, dvar, xa, et, "", "");
         değişken Lhead: metin = yeni_label(p);
         değişken Lbody: metin = yeni_label(p);
@@ -2881,6 +2904,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             br_to(p, Lhead);
         }
         etiket_yaz(p, Ldone);
+        cg_kapsam_kapat(p, kapsam_bas);   // CG-SCOPE: döngü değişkeni kapsamını kapat
         ver 0;
     }
     eğer metin_esit(ad, "ESLES") {
@@ -2911,6 +2935,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken kcb: tam32 = dizi_al(p.a_cb, kol);
                 değişken desen: tam32 = dizi_al(p.cocuk, kcb);
                 değişken govde: tam32 = dizi_al(p.cocuk, kcb + 1);
+                // CG-SCOPE: kol payload bağlamaları (değer(v)/hata(e)/Çeşit::V(a,b))
+                // yalnız bu kolun gövdesinde görünür. Bağlamalardan önce slice'ı al.
+                değişken kapsam_bas: tam32 = dizi_boyut(p.cg_ad);
                 değişken dad: metin = dizi_al(p.a_ad, desen);
                 değişken pad: metin = dizi_al(p.a_deg, desen);
                 değişken variant: mantıksal = metin_esit(pad, "değer")
@@ -2923,6 +2950,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                     br_to(p, Lbody);
                     etiket_yaz(p, Lbody);
                     deyim_uret(p, govde);
+                    cg_kapsam_kapat(p, kapsam_bas);   // CG-SCOPE: kol kapsamını kapat
                     br_to(p, Lend);
                     acik = yanlış;
                 }
@@ -2980,6 +3008,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                         }
                     }
                     deyim_uret(p, govde);
+                    cg_kapsam_kapat(p, kapsam_bas);   // CG-SCOPE: kol kapsamını kapat
                     br_to(p, Lend);
                     etiket_yaz(p, Lnext);
                 }
@@ -3174,10 +3203,17 @@ işlev param_tip(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) > 0 { ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
     ver "i32";
 }
-// CG8: PARAMETRE Dizi<T> ise eleman tipi; değilse "".
+// CG8: PARAMETRE Dizi<T> ise eleman tipi; &Dizi<T> ise referans-hedefinin
+// eleman tipi (D-086: param girişte deref → normal heap dizi gibi indekslenir);
+// değilse "".
 işlev param_elem(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) == 0 { ver ""; }
-    ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
+    // D-086: &Dizi<T> → iç TIP_DIZI'nin eleman tipini al (deref sonrası KdlDizi*).
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") {
+        ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));
+    }
+    ver ll_eleman_tip(p, tn);
 }
 // CG7c: PARAMETRE &Yapi ise işaret edilen yapı adı; değilse "".
 işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
@@ -3365,6 +3401,17 @@ işlev rho_yerel_serbest_emit(p: &değişken Ayr) -> tam32 {
     ver 0;
 }
 
+// D-086: PARAMETRE &Dizi<T> / &değişken Dizi<T> mi? (TIP_REFERANS → TIP_DIZI).
+// Çağıran dizi değişkeninin SLOT adresini (KdlDizi**) geçer; girişte BİR KEZ
+// deref edilip alloca KdlDizi* tutar → dizi_al/dizi_boyut/dizi_yaz/[] ek deref
+// gerektirmez (C llvm.c:5341 `dizi_ref` ile birebir).
+işlev param_dizi_ref_mi(p: &değişken Ayr, c: tam32) -> mantıksal {
+    eğer dizi_al(p.a_cs, c) == 0 { ver yanlış; }
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") == yanlış { ver yanlış; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));  // iç tip
+    ver metin_esit(dizi_al(p.a_ad, ic), "TIP_DIZI");
+}
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
@@ -3403,8 +3450,20 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken a: tam32 = yeni_reg(p);
             değişken areg: metin = reg_str(a);
             yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(pt); yb(10);
-            yaz_str("  store "); yaz_str(pt); yaz_str(" %a"); yaz_str(tam64_str(pj olarak tam64));
-            yaz_str(", ptr "); yaz_str(areg); yb(10);
+            // D-086: &Dizi<T> param → girişte BİR KEZ deref (KdlDizi** → KdlDizi*),
+            // alloca KdlDizi* tutsun (C llvm.c:5346 ile birebir). Aksi: çift-pointer
+            // descriptor gibi indekslenip çöp/PANIK (ASan stack-buffer-overflow).
+            eğer param_dizi_ref_mi(p, c) {
+                değişken dr: tam32 = yeni_reg(p);
+                değişken drs: metin = reg_str(dr);
+                yaz_str("  "); yaz_str(drs); yaz_str(" = load ptr, ptr %a");
+                yaz_str(tam64_str(pj olarak tam64)); yb(10);
+                yaz_str("  store ptr "); yaz_str(drs); yaz_str(", ptr "); yaz_str(areg); yb(10);
+            }
+            değilse {
+                yaz_str("  store "); yaz_str(pt); yaz_str(" %a"); yaz_str(tam64_str(pj olarak tam64));
+                yaz_str(", ptr "); yaz_str(areg); yb(10);
+            }
             cg_var_ekle(p, dizi_al(p.a_deg, c), areg, pt, param_ref_yapi(p, c), param_elem(p, c));
             pj = pj + 1;
         }

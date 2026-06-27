@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-104 — düzelt(self-host codegen): blok-leksik-kapsam shadowing → değişken tablosu push/pop (2026-06-27)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: D-103 sonrası; merge'de origin/main ilerlemişse güncelle).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (KEMGU kaynağı; C derleyici DEĞİŞMEDİ) + 2 yeni
+`test/cg_korpus` regresyon testi].** Self-host codegen'in işlev-içi değişken tablosu
+(`cg_ad`/`cg_areg`/… paralel diziler) **append-only** idi (`cg_base..son` sondan-ara =
+shadow). İç blokta DIŞ değişkeni gölgeleyen `değişken v` blok bittikten sonra **pop
+EDİLMİYORDU** → blok-sonrası `v` lookup'ı İÇ (kapsam-dışı) slot'a çözülürdü = **leksik
+kapsam MISCOMPILE** (bellek-güvenliği değil; dizi fonksiyon-dönüşüne kadar canlı, UAF yok).
+
+**Repro (`cg_kapsam_shadow.kem`):** `değişken v=[100,200,300]; eğer …>0 { değişken v=[7,8,9]; … }
+ver dizi_al(v,2)` → DIŞ v[2]=300 olmalı; hata İÇ v slot'una `load ptr %2` emit edip **9**
+döndürürdü (koşul yanlışsa İÇ slot hiç store edilmez → D-069 sınır-kontrolü PANIC; yine de
+yanlış-kapsam çözümü). C `src/llvm.c` AYRI kod yolu, `scope_gir`/`scope_cik` (bağlı-liste
+başı kaydet/geri-yükle) ile DOĞRU idi (300 döner).
+
+**Çözüm — C disiplinini yansıt (`cg_kapsam_kapat`):** Dizi-shrink built-in'i olmadığından
+truncate yerine **ad-blank**: blok/döngü/eşleş-kolu girişinde `kapsam_bas = dizi_boyut(cg_ad)`;
+çıkışta `[kapsam_bas, son)` aralığındaki bağlamaların `cg_ad` adını `""` yap → `cg_var_bul`
+(non-empty `ad` arar) boş slot'u atlar, dış bağlamaya geri döner. Slot canlı kalır, **emit
+edilmiş IR DEĞİŞMEZ** (yalnız derleme-zamanı isim çözümü). Kapsamlanan yollar: `BLOK` (eğer/
+iken/güvensiz gövdeleri de BLOK → transitif), `ICIN` döngü değişkeni, `ESLES` kol payload
+bağlamaları. ESLES skaler kol (literal/joker) bağlama yapmaz → dokunulmadı.
+
+**Soundness (fixpoint güvenliği):** `--check` zaten iç-kapsam değişkenine blok-sonrası erişimi
+reddeder; gölgeleme yoksa üretilen IR bayt-aynı kalır. Bu yüzden lexer/parser/checker.kem
+bootstrap'ı etkilenmez (zaten gölge-sızıntıya bel bağlamıyorlardı).
+
+**Doğrulama:** cg_korpus **72/72** semantik (C-oracle ≡ self-host; +2 yeni: shadow=44≡300%256,
+döngü-shadow=120). Bootstrap **FIXPOINT** ✓ (lexer/parser/checker 55/55 bayt-aynı + codegen
+stage1==stage2, 25290 satır). Driver 4-mod **TÜM GEÇTİ** (token 22 + parse 12 + check 48,
+C-built & self-host). Manuel kenar: iç-içe üçlü-shadow=173, kardeş-blok ad-yeniden-kullanım=45,
+koşul-yanlış→DIŞ-oku=300 — hepsi C ile eşleşir. **Sınır:** C kapsam yolu zaten doğruydu (bu
+commit yalnız self-host'u hizalar); lokal-değişken-tablosu hâlâ append (truncate yok), ad-blank
+yeterli.
+
+---
+
 ## D-103 — [YÜKSEK] F4.2b: ρ_yerel GERÇEK-serbest + escape kaçış-yolu sağlamlaştırma (SOUND) (2026-06-22)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
