@@ -1818,19 +1818,37 @@ işlev agg_alan(s: metin, n: tam32) -> metin {
     değişken i: tam32 = 1;            // '{' atla
     değişken alan: tam32 = 0;
     değişken bas: tam32 = 1;
+    değişken derinlik: tam32 = 0;     // B1: iç-içe agregat brace/bracket/angle derinliği
     değişken sonuc: metin = "i32";
     değişken bitti: mantıksal = yanlış;
+    // B1 (C llvm.c agg_alan_ir AYNASI): ',' / '}' yalnız derinlik==0'da alan sınırı.
+    // İç-içe agregat alanı ({i8,{i8,i32}} gibi) → iç virgül ATLANIR (eski naif kod
+    // iç virgülde bölüp "{i8" gibi BUDANMIŞ tip döndürürdü → tagged-union/payload
+    // çeşit miscompile). Açıcı {[< derinlik++, kapayıcı }]> derinlik--.
     iken i < uz ve bitti == yanlış {
         değişken c: tam32 = bayt(s, i);
-        eğer c == 44 veya c == 125 {     // ',' veya '}'
-            eğer alan == n { sonuc = metin_kes(s, bas, i - bas); bitti = doğru; }
-            alan = alan + 1;
-            i = i + 1;
-            eğer c == 44 { eğer i < uz { eğer bayt(s, i) == 32 { i = i + 1; } } }
-            bas = i;
-            eğer c == 125 { bitti = doğru; }
+        eğer c == 123 veya c == 91 veya c == 60 {        // '{' '[' '<'
+            derinlik = derinlik + 1; i = i + 1;
+        } değilse {
+            eğer (c == 125 veya c == 93 veya c == 62) ve derinlik > 0 {   // iç kapanış }])>
+                derinlik = derinlik - 1; i = i + 1;
+            } değilse {
+                eğer derinlik == 0 ve (c == 44 veya c == 125) {   // depth-0 alan sınırı
+                    eğer alan == n {
+                        değişken son: tam32 = i;
+                        iken son > bas ve bayt(s, son - 1) == 32 { son = son - 1; }
+                        sonuc = metin_kes(s, bas, son - bas); bitti = doğru;
+                    }
+                    eğer c == 125 { bitti = doğru; }   // agregat sonu
+                    değilse {
+                        alan = alan + 1;
+                        i = i + 1;
+                        iken i < uz ve bayt(s, i) == 32 { i = i + 1; }   // ', ' sonrası boşluk atla
+                        bas = i;
+                    }
+                } değilse { i = i + 1; }
+            }
         }
-        değilse { i = i + 1; }
     }
     ver sonuc;
 }
