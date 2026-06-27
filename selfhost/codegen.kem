@@ -54,6 +54,12 @@ yapı Ayr {
     son_tip: metin;      // CG6: son ifade_uret sonucunun LLVM tipi
     cur_ret: metin;      // CG6: mevcut işlevin dönüş LLVM tipi (ver için)
     rho_ref: metin;      // V2-F4.2a: aktif fonksiyonun bölge (ρ) IR ref ("%rho" / main seed)
+    // V2-F4.2b: confinement (ρ_yerel gerçek-serbest) — C-tarafı escape.c/llvm.c AYNASI.
+    // POZİTİF kanıt: bir dizi-değişken literali ρ_yerel'e SADECE govdedeki HER kullanımı
+    // confined (var[i] oku/yaz + retain-etmeyen dizi-builtin ilk-arg) ise yönlenir.
+    ky_node: Dizi<tam32>;  // kesin-yerel kanıtlanmış DIZI_OLUSTUR düğüm idx'leri (confined dizi-değişken literali)
+    ky_base: tam32;        // aktif işlevin ky_node dilim başı (fn-bazlı izolasyon)
+    ky_lambda: tam32;      // aktif işlev gövdesinde LAMBDA var mı (1 → routing GUARD: ρ_yerel kapalı)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -3177,6 +3183,147 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     eğer yapi_var_mi(p, nm) { ver nm; }
     ver "";
 }
+// ============================================================================
+// V2-F4.2b — KESİN-YEREL (confined) KANITI: POZİTİF, default-deny local-proof.
+// C-tarafı src/escape.c (ky_confined / ky_dizi_builtin_confined / kesin_yerel)
+// AYNASI — self-host indeks-tabanlı düz düğüm tablosuna uyarlandı. Escape DFA'ya
+// GÜVENMEZ; bir diziyi ρ_yerel'de serbest etmeden ÖNCE yerelliğini KANITLA.
+// Bir dizi-değişken "confined" SADECE govdedeki HER kullanımı şunlardan biriyse:
+//   - var[i] okuma (INDEKS, nesne=var),
+//   - var[i] = ... yerinde yazma (ATAMA hedef=INDEKS(var)),
+//   - retain-ETMEYEN dizi-builtin'in İLK argümanı (dizi_al/boyut/yaz/ekle/kapasite).
+// Başka HER konum (ver, b=var alias, [..,var,..]/yapı alanı, çağrı-argı,
+// lambda-yakalama, &var, var=... yeniden-atama) → DENY (ρ_caller). Sound.
+// ============================================================================
+
+// Düğüm TANIMLAYICI ve adı `ad` mı?
+işlev ky_ad_esit(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver yanlış; }
+    ver metin_esit(dizi_al(p.a_deg, node), ad);
+}
+
+// Diziyi RETAIN ETMEYEN (yalnız oku/yerinde-değiştir) builtin'ler.
+işlev ky_dizi_builtin_confined(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "dizi_al") veya metin_esit(ad, "dizi_boyut")
+        veya metin_esit(ad, "dizi_yaz") veya metin_esit(ad, "dizi_ekle")
+        veya metin_esit(ad, "dizi_kapasite");
+}
+
+// `ad` alt-ağaçta HERHANGİ bir yerde TANIMLAYICI olarak geçiyor mu? (lambda-yakalama için)
+işlev ky_var_gecer(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    eğer ky_ad_esit(p, node, ad) { ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer ky_var_gecer(p, dizi_al(p.cocuk, cb + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+
+// `ad`in govdedeki TÜM kullanımları confined mi? Bare var (parent tüketmediyse) = yanlış.
+işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver doğru; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    // bare var = güvensiz (parent INDEKS/dizi-builtin tüketmediyse buraya düşer)
+    eğer metin_esit(t, "TANIMLAYICI") {
+        eğer metin_esit(dizi_al(p.a_deg, node), ad) { ver yanlış; }
+        ver doğru;
+    }
+    // INDEKS: var[i] okuma OK (indeks alt-ifadesi de confined olmalı)
+    eğer metin_esit(t, "INDEKS") {
+        değişken nesne: tam32 = dizi_al(p.cocuk, cb);
+        değişken indeks: tam32 = dizi_al(p.cocuk, cb + 1);
+        eğer ky_ad_esit(p, nesne, ad) { ver ky_confined(p, indeks, ad); }
+        ver ky_confined(p, nesne, ad) ve ky_confined(p, indeks, ad);
+    }
+    // ATAMA: var[i] = rhs yerinde yazma OK; var = ... yeniden-atama güvensiz
+    eğer metin_esit(t, "ATAMA") {
+        değişken hedef: tam32 = dizi_al(p.cocuk, cb);
+        değişken deger: tam32 = dizi_al(p.cocuk, cb + 1);
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "INDEKS") {
+            değişken hnesne: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hedef));
+            eğer ky_ad_esit(p, hnesne, ad) {
+                değişken hindeks: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hedef) + 1);
+                ver ky_confined(p, hindeks, ad) ve ky_confined(p, deger, ad);
+            }
+        }
+        eğer ky_ad_esit(p, hedef, ad) { ver yanlış; }   // var = ... yeniden-atama
+        ver ky_confined(p, hedef, ad) ve ky_confined(p, deger, ad);
+    }
+    // CAGRI: dizi_*(var, ...) ilk-arg tüketilir; callee=child0, arg0=child1.
+    eğer metin_esit(t, "CAGRI") {
+        değişken callee: tam32 = dizi_al(p.cocuk, cb);
+        değişken safe0: mantıksal = yanlış;
+        eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
+            eğer ky_dizi_builtin_confined(dizi_al(p.a_deg, callee)) {
+                eğer cs >= 2 {
+                    eğer ky_ad_esit(p, dizi_al(p.cocuk, cb + 1), ad) { safe0 = doğru; }
+                }
+            }
+        }
+        eğer ky_confined(p, callee, ad) == yanlış { ver yanlış; }
+        değişken i: tam32 = 1;
+        iken i < cs {
+            eğer i == 1 ve safe0 {
+                // dizi_*(var, ...) ilk arg tüketildi — atla
+            } değilse {
+                eğer ky_confined(p, dizi_al(p.cocuk, cb + i), ad) == yanlış { ver yanlış; }
+            }
+            i = i + 1;
+        }
+        ver doğru;
+    }
+    // LAMBDA: govdesi var'ı yakalıyorsa güvensiz.
+    eğer metin_esit(t, "LAMBDA") {
+        eğer ky_var_gecer(p, node, ad) { ver yanlış; }
+        ver doğru;
+    }
+    // Diğer HER düğüm: tüm çocuklar confined olmalı. TEKLI &var / VER var / b=var /
+    // [..,var,..] / {f:var} → çocuk bare-var TANIMLAYICI'ya iner → DENY (sound).
+    değişken j: tam32 = 0;
+    iken j < cs {
+        eğer ky_confined(p, dizi_al(p.cocuk, cb + j), ad) == yanlış { ver yanlış; }
+        j = j + 1;
+    }
+    ver doğru;
+}
+
+// Gövdeyi gez: her `değişken V: Dizi<...> = [literal]` için V confined ise literal
+// DIZI_OLUSTUR düğümünü ky_node'a işaretle. LAMBDA görülürse fn-routing GUARD'ı aç.
+işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32) -> tam32 {
+    eğer node < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "LAMBDA") { p.ky_lambda = 1; }
+    eğer metin_esit(t, "DEGISKEN") {
+        değişken cs: tam32 = dizi_al(p.a_cs, node);
+        eğer cs >= 2 {
+            değişken cb: tam32 = dizi_al(p.a_cb, node);
+            değişken annot: tam32 = dizi_al(p.cocuk, cb);
+            değişken deger: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+            eğer metin_esit(dizi_al(p.a_ad, annot), "TIP_DIZI") {
+                eğer metin_esit(dizi_al(p.a_ad, deger), "DIZI_OLUSTUR") {
+                    eğer ky_confined(p, govde, dizi_al(p.a_deg, node)) {
+                        dizi_ekle(p.ky_node, deger);
+                    }
+                }
+            }
+        }
+    }
+    // Tüm çocuklara recurse (LAMBDA'yı her yerde yakala; DEGISKEN value'da nested
+    // DEGISKEN olmaz → zararsız). Konteyner deyimler + ifade alt-ağaçları kapsanır.
+    değişken cb2: tam32 = dizi_al(p.a_cb, node);
+    değişken cs2: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs2 { ky_isaretle(p, dizi_al(p.cocuk, cb2 + i), govde); i = i + 1; }
+    ver 0;
+}
+
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
@@ -3238,6 +3385,17 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         p.rho_ref = reg_str(rr);
     } değilse {
         p.rho_ref = "%rho";
+    }
+    // V2-F4.2b (b1): confinement ön-pass — gövdedeki confined dizi-değişken literallerini
+    // ky_node'a işaretle (POZİTİF kanıt). Bu adımda EMİSYON DEĞİŞMEZ (IR-NÖTR); routing
+    // (b3) ky_kesin_yerel'i okuyup ρ_yerel'e yönlendirir. ky_base = fn-bazlı dilim başı.
+    p.ky_base = dizi_boyut(p.ky_node);
+    p.ky_lambda = 0;
+    i = 0;
+    iken i < cs {
+        değişken kc: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, kc), "BLOK") { ky_isaretle(p, kc, kc); }
+        i = i + 1;
     }
     // 4) Gövde (BLOK çocuğu)
     i = 0;
@@ -4404,6 +4562,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
+        ky_node: [], ky_base: 0, ky_lambda: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
