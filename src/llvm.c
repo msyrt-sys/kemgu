@@ -2,6 +2,8 @@
 #include "arena.h"
 #include "lexer.h"
 #include "parser.h"
+#include "escape.h"        /* F4.2b: escape analizi (bölge yönlendirme oracle'ı) */
+#include "bolge_atama.h"   /* F4.2b: R-* bölge atama (escape-driven) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -198,6 +200,14 @@ typedef struct LlvmGen {
      * çağrıları + DİZİ allokasyon helper'ları bunu ilk arg geçirir. Bu fazda
      * metin/closure/bölge_al ρ ALMAZ (global; F4.1 davranışı korunur). */
     const char *rho_ref;
+    /* F4.2b: aktif işlevin escape + bölge analizi (per-fn; ρ_yerel yönlendirme
+     * oracle'ı). (a) IR-NÖTR: çalışır + saklanır, (c-d) tahsis sitelerinde okunur. */
+    EscapeAnaliz *aktif_escape;
+    BolgeAtama *aktif_bolge;
+    /* F4.2b (c-d): scope-yerel bölge IR ref'i ("%rho_yerel" reg) — fn girişinde
+     * kdl_bolge_olustur ile açılır, TÜM ret'lerden önce kdl_bolge_serbest. Kaçmayan
+     * (BOLGE_YEREL) tahsisler buraya; kaçanlar rho_ref'e (ρ_caller). NULL → yok. */
+    const char *rho_yerel;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -387,6 +397,14 @@ static void scope_cik(LlvmGen *g, ScopeMarker m) {
 
 static int yeni_reg(LlvmGen *g) { return g->reg++; }
 static int yeni_label(LlvmGen *g) { return g->label++; }
+
+/* F4.2b (d): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
+ * zaten materyalize/ρ_caller'da). NULL ρ_yerel → no-op. */
+static void rho_yerel_serbest_emit(LlvmGen *g) {
+    if (g->rho_yerel) {
+        fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_yerel);
+    }
+}
 
 static void ad_yaz(FILE *out, const char *ad, int ad_uz) {
     fwrite(ad, 1, (size_t)ad_uz, out);
@@ -852,6 +870,32 @@ static const char *kdl_al_donus_ir(const char *et) {
 static int dizi_eleman_struct_mi(const char *et) {
     return et && et[0] == '%';
 }
+
+/* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
+ * ρ_yerel'e (serbest edilecek) SADECE: escape analizinde AÇIKÇA KAYITLI
+ * (escape_kayitli_mi) VE BOLGE_YEREL (kaçmaz) VE skaler-eleman dizisi gider.
+ * Kayıtsız/belirsiz/CAGIRAN/struct-eleman → g->rho_ref (ρ_caller, serbest EDİLMEZ).
+ * principle 1: bolge_belirle'nin default-YEREL'ine GÜVENME — kayıt zorunlu.
+ * Hem doğrudan dizi-literali (ifade) hem `değişken xs = [...]` yolu bunu kullanır. */
+static const char *bolge_yerel_yonlendir(LlvmGen *g, const Dugum *dizi_d,
+                                          const char *elem_ir) {
+    /* F4.2b SOUND free-routing — İKİ koşul (her ikisi de POZİTİF + inşa-gereği sound):
+     * (1) SKALER-ELEMAN dizisi: elem ne struct (%Y) ne ptr. Skaler eleman → dizi_al
+     *     KOPYA döndürür (iç-ptr kaçışı YOK). Dizi<Dizi<T>>/Dizi<metin>/Dizi<yapı>
+     *     → ptr/struct eleman → iç heap-ref dizi_al ile kaçabilir → ρ_caller.
+     * (2) KESİN-YEREL kanıtı: escape_kesin_yerel (confined değişken — tüm kullanımları
+     *     yerinde okuma/yazma + retain-etmeyen dizi-builtin). Escape DFA'nın "kaçış
+     *     bulamadım"ına GÜVENMEZ; POZİTİF yerellik kanıtı arar (alias/yeniden-atama/
+     *     loop-carried/closure/nested hepsi confined-DENY → ρ_caller; escape hunt 18
+     *     UAF bu koşulla kapanır). */
+    if (g->aktif_escape && g->rho_yerel
+        && !dizi_eleman_struct_mi(elem_ir)
+        && strcmp(elem_ir, "ptr") != 0
+        && escape_kesin_yerel(g->aktif_escape, dizi_d)) {
+        return g->rho_yerel;
+    }
+    return g->rho_ref;
+}
 /* kdl_dizi_olustur(eleman_byte) operandını yaz: skaler/ptr → derleme-zamanı
  * sabit; struct → LLVM `sizeof(%Yapi)` const-expr (padding/alignment LLVM
  * layout'uyla birebir; C tarafında elle hesaplama miscompile riski taşırdı). */
@@ -899,6 +943,55 @@ static void dizi_struct_yaz_emit(LlvmGen *g, int desc_reg, int idx_i32,
     fprintf(g->out,
         "  call void @kdl_dizi_yaz_yapi(ptr %%%d, i32 %%%d, ptr %%%d)\n",
         desc_reg, idx_i32, tmp);
+}
+
+/* [F-dizi-arg] DUGUM_DIZI_OLUSTUR literalini HEAP KdlDizi* olarak emit eder
+ * (kdl_dizi_olustur + kdl_dizi_ekle_*). DUGUM_DIZI_OLUSTUR'un D-044 heap-yolu
+ * ile BİREBİR aynı IR'i üretir; tek fark bağlamın g->beklenen_tip yerine
+ * parametreyle gelmesi → çıplak `[..]` literali doğrudan bir dizi_* built-in'e
+ * (dizi_al/dizi_ekle/...) argüman olarak geçince de heap yoluna girebilir.
+ * Aksi halde literal stack [N x T] alloca olur, runtime onu KdlDizi*
+ * descriptor sanıp stack çöpünü `boyut`/`veri` olarak okur → ASan misaligned /
+ * access-violation (repro: dizi_al([5,6,7],1), dizi_ekle(dis,[40,50,60])).
+ *
+ * elem_d  : eleman AST tipi (iç-içe Dizi<Dizi<T>> / yapıcı elemanları için
+ *           recursive bağlam; NULL → skaler eleman).
+ * elem_ir : eleman IR tipi. NULL ise elem_d'den (ast_tip_to_ir) hesaplanır;
+ *           o da yoksa "i32" (literal varsayılan tamsayı genişliği). */
+static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
+                                          const char *elem_ir,
+                                          const Dugum *elem_d) {
+    if (!elem_ir && elem_d) elem_ir = ast_tip_to_ir(g, elem_d);
+    if (!elem_ir) elem_ir = "i32";
+    int hn = d->veri.dizi_olustur.sayi;
+    /* [KONSOLIDASYON F4.2b × doc17] Heap-zorlanan literalin ρ'sunu da yönlendir:
+     * kesin-yerel (confined) → ρ_yerel (ret'te serbest), değilse → ρ_caller. Çıplak
+     * dizi_* arg literali / temp kayıtsız → escape_kesin_yerel=0 → ρ_caller (serbest
+     * EDİLMEZ) = güvenli. değişken-bağlı confined literal ρ_yerel'e gider. */
+    const char *dizi_rho = bolge_yerel_yonlendir(g, d, elem_ir);
+    int kdl_reg = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+            kdl_reg, dizi_rho);   /* F4.2b: yönlendirilmiş ρ */
+    kdl_eleman_byte_yaz(g->out, elem_ir);
+    fputs(")\n", g->out);
+    const Dugum *eski_bt = g->beklenen_tip;
+    g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
+    for (int i = 0; i < hn; i++) {
+        IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
+        if (dizi_eleman_struct_mi(elem_ir)) {
+            dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
+            continue;
+        }
+        int vr = int_donustur(g, v.reg, v.tip, elem_ir);
+        const char *fn = "kdl_dizi_ekle_tam";
+        if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+        else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
+                fn, dizi_rho, kdl_reg, elem_ir, vr);   /* F4.2b: aynı ρ */
+    }
+    g->beklenen_tip = eski_bt;
+    IfadeSonuc s = { kdl_reg, "ptr", 0 };
+    return s;
 }
 
 /* Tip kategorisi: ayni tipler arasinda dogrudan donusum yok.
@@ -2172,34 +2265,15 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * (yapı alanı, çağrı argümanı, ver) için kök-fix: önceden bu yol yoktu
              * → struct-field `[]` 0-byte stack alloca olur, dizi_ekle SEGFAULT. */
             if (g->beklenen_tip && g->beklenen_tip->tip == DUGUM_TIP_DIZI) {
-                const Dugum *elem_d = g->beklenen_tip->veri.tip_dizi.eleman_tip;
-                const char *elem_ir = ast_tip_to_ir(g, elem_d);
-                if (!elem_ir) elem_ir = "i32";
-                int hn = d->veri.dizi_olustur.sayi;
-                int kdl_reg = yeni_reg(g);
-                /* D-087: eleman_byte — struct ise LLVM sizeof const-expr. */
-                fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
-                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
-                kdl_eleman_byte_yaz(g->out, elem_ir);
-                fputs(")\n", g->out);
-                const Dugum *eski_bt = g->beklenen_tip;
-                g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
-                for (int i = 0; i < hn; i++) {
-                    IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
-                    if (dizi_eleman_struct_mi(elem_ir)) {
-                        dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
-                        continue;
-                    }
-                    int vr = int_donustur(g, v.reg, v.tip, elem_ir);
-                    const char *fn = "kdl_dizi_ekle_tam";
-                    if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-                    else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
-                    fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                            fn, g->rho_ref, kdl_reg, elem_ir, vr);   /* V2-F4.2a: ρ */
-                }
-                g->beklenen_tip = eski_bt;
-                IfadeSonuc s = { kdl_reg, "ptr", 0 };
-                return s;
+                /* [KONSOLIDASYON doc17 × F4.2b] D-044 heap-yolu ortak helper'da
+                 * (dizi_literal_heap_emit) — çıplak `[..]` literali dizi_* built-in
+                 * arg'ı olarak da aynı heap-yoluna girsin (doc17). F4.2b ρ-yönlendirmesi
+                 * helper'ın İÇİNDE (bolge_yerel_yonlendir): heap-zorlama "heap olsun" +
+                 * confinement "hangi bölge" = KOMPOZE (anlamca dik). Bu beklenen-tip
+                 * DIZI yolunda d kesin-yerel ise ρ_yerel, değilse ρ_caller — eski
+                 * inline davranışla IR birebir aynı. */
+                return dizi_literal_heap_emit(g, d, NULL,
+                    g->beklenen_tip->veri.tip_dizi.eleman_tip);
             }
 
             /* [e1, e2, ...] -> alloca [N x T] + store + return ptr (stack)
@@ -3135,15 +3209,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * →1 (indeks), dizi_yaz(d,i,e)→2 (değer). dizi_eleman_beklenen bu
              * argümana forward edilir (literal eleman tip çıkarsaması). */
             int dizi_deger_arg = 1;
+            /* [F-dizi-arg] Çıplak `[..]` literali doğrudan bir dizi_* built-in'e
+             * argüman olunca HEAP zorlamak için (args döngüsünde kullanılır):
+             *   dizi_built_in      — eleman-değeri arg'ı olan (ekle/al/yaz)
+             *   dizi_desc_built_in — arg0'ı KdlDizi* descriptor olan tüm dizi_*
+             *   dizi_al_mi         — dizi_al (arg0 eleman tipi = dönüş beklenen)
+             *   dizi_deger_eleman_ast — iç-içe Dizi<Dizi<T>>'de değer-arg'ın
+             *                            tam AST tipi (Dizi<T>); nested literal
+             *                            heap çözümü için. */
+            int dizi_built_in = 0;
+            int dizi_desc_built_in = 0;
+            int dizi_al_mi = 0;
+            const Dugum *dizi_deger_eleman_ast = NULL;
             {
                 const char *adi = d->veri.cagri.hedef
                     ? d->veri.cagri.hedef->veri.tanimlayici.metin : NULL;
                 int adi_uz = d->veri.cagri.hedef
                     ? d->veri.cagri.hedef->veri.tanimlayici.uzunluk : 0;
-                int dizi_built_in =
+                dizi_built_in =
                     (adi_uz == 9 && memcmp(adi, "dizi_ekle", 9) == 0) ||
                     (adi_uz == 7 && memcmp(adi, "dizi_al", 7) == 0) ||
                     (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0);
+                dizi_al_mi = (adi_uz == 7 && memcmp(adi, "dizi_al", 7) == 0);
+                /* arg0 = descriptor olan tüm dizi_* (dizi_olustur HARİÇ — onun
+                 * arg0'ı eleman sayısı N, descriptor değil). */
+                dizi_desc_built_in = dizi_built_in ||
+                    (adi_uz == 10 && memcmp(adi, "dizi_boyut", 10) == 0) ||
+                    (adi_uz == 13 && memcmp(adi, "dizi_kapasite", 13) == 0) ||
+                    (adi_uz == 20 &&
+                     memcmp(adi, "dizi_kapasite_ayarla", 20) == 0);
                 if (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0) {
                     dizi_deger_arg = 2;  /* dizi_yaz: değer = arg[2] */
                 }
@@ -3156,12 +3250,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         if (vi && vi->eleman_llvm_tip) {
                             dizi_eleman_beklenen = vi->eleman_llvm_tip;
                         }
+                        if (vi) dizi_deger_eleman_ast = vi->eleman_tip_ast;
                     } else if (arg0 && arg0->tip == DUGUM_ERISIM) {
                         /* D-029 fix (2): dizi struct-alani (s.ad) -> alan
                          * tipinden eleman IR cikar (yoksa metin ptr i32
                          * okunup SEGFAULT). */
                         const char *et = dizi_alan_eleman_ir(g, arg0);
                         if (et) dizi_eleman_beklenen = et;
+                        dizi_deger_eleman_ast = dizi_alan_eleman_ast(g, arg0);
                     }
                 }
             }
@@ -3394,6 +3490,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 args = (IfadeSonuc *)arena_ayir(g->arena,
                     sizeof(IfadeSonuc) * (size_t)n);
                 for (int i = 0; i < n; i++) {
+                    /* [F-dizi-arg] Çıplak `[..]` literali doğrudan bir dizi_*
+                     * built-in'e descriptor (arg0) ya da iç-içe değer argümanı
+                     * olarak geçiyorsa HEAP KdlDizi* zorla — aksi halde stack
+                     * [N×T] alloca runtime'da KdlDizi* sanılıp stack çöpü
+                     * okunur (ASan misaligned / access-violation; repro:
+                     * dizi_al([5,6,7],1) ve dizi_ekle(dis,[40,50,60])). Yalnız
+                     * built-in'de (!ik); kullanıcı `Dizi<T>` paramı aşağıdaki
+                     * D-070 yolundan geçer. */
+                    const Dugum *argi = d->veri.cagri.argumanlar[i];
+                    if (!ik && argi && argi->tip == DUGUM_DIZI_OLUSTUR) {
+                        if (i == 0 && dizi_desc_built_in) {
+                            /* descriptor arg0: dizi_al'da eleman tipi = dönüş
+                             * beklenen; diğerlerinde (boyut/kapasite/temp ekle)
+                             * eleman tipi işlemi etkilemez → i32 varsayılan. */
+                            const char *eb = (dizi_al_mi && beklenen && *beklenen)
+                                ? beklenen : "i32";
+                            args[i] = dizi_literal_heap_emit(g, argi, eb, NULL);
+                            continue;
+                        }
+                        if (i == dizi_deger_arg && dizi_built_in &&
+                            dizi_deger_eleman_ast &&
+                            dizi_deger_eleman_ast->tip == DUGUM_TIP_DIZI) {
+                            /* iç-içe Dizi<Dizi<T>>: değer-arg literali Dizi<T>;
+                             * elemanı (T) recursive bağlam olarak ver. */
+                            args[i] = dizi_literal_heap_emit(g, argi, NULL,
+                                dizi_deger_eleman_ast->veri.tip_dizi.eleman_tip);
+                            continue;
+                        }
+                    }
                     /* HEAD: dizi_ekle/al icin arg[1] dizi_eleman_beklenen.
                      * src-bugfix: I/O built-in icin param_beklenen[i]. */
                     const char *bekle = (i < 8) ? param_beklenen[i] : NULL;
@@ -3925,8 +4050,10 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
                 g->beklenen_tip = eski_bt;
                 int rr = int_donustur(g, s.reg, s.tip, donus_tip);
+                rho_yerel_serbest_emit(g);   /* F4.2b (d): dönüş değeri (rr) materyalize sonrası */
                 fprintf(g->out, "  ret %s %%%d\n", donus_tip, rr);
             } else {
+                rho_yerel_serbest_emit(g);   /* F4.2b (d) */
                 if (donus_tip && strcmp(donus_tip, "void") == 0) {
                     fputs("  ret void\n", g->out);
                 } else {
@@ -3964,10 +4091,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 eleman_tip) {
                 const Dugum *lit = d->veri.degisken.deger;
                 int n = lit->veri.dizi_olustur.sayi;
+                /* F4.2b: `değişken xs: Dizi<T> = [...]` — dizi-literali `lit`
+                 * escape'te kayıtlı; kaçmıyorsa ρ_yerel'e yönlendir (ret'te serbest). */
+                const char *dizi_rho = bolge_yerel_yonlendir(g, lit, eleman_tip);
                 int kdl_reg = yeni_reg(g);
                 /* kdl_dizi_olustur(eleman_byte) — D-087: struct → sizeof const-expr */
                 fprintf(g->out, "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
-                        kdl_reg, g->rho_ref);   /* V2-F4.2a: ρ */
+                        kdl_reg, dizi_rho);   /* F4.2b: yönlendirilmiş ρ */
                 kdl_eleman_byte_yaz(g->out, eleman_tip);
                 fputs(")\n", g->out);
                 (void)n;
@@ -3991,7 +4121,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                     fprintf(g->out,
                         "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                        fn, g->rho_ref, kdl_reg, eleman_tip, vr);   /* V2-F4.2a: ρ */
+                        fn, dizi_rho, kdl_reg, eleman_tip, vr);   /* F4.2b: aynı ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
@@ -5101,6 +5231,26 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     /* Generic islev: tek basina emit etme — instantiation'lar cagri sirasinda */
     if (islev->veri.islev.tip_param_sayi > 0) return;
 
+    /* F4.2b (a): C-tarafı escape + bölge analizi — IR-NÖTR (R2). Per-fn çalışır,
+     * g->aktif_*'da saklanır. Bu adımda tahsis siteleri HÂLÂ rho_ref kullanır →
+     * IR DEĞİŞMEZ, fixpoint yeşil kalır. (c-d) ρ_yerel'i bolge_belirle ile yönlendirir. */
+    g->aktif_escape = NULL;
+    g->aktif_bolge = NULL;
+    g->rho_yerel = NULL;
+    {
+        EscapeAnaliz *ea = (EscapeAnaliz *)arena_ayir_sifir(g->arena, sizeof(EscapeAnaliz));
+        BolgeAtama *ba = (BolgeAtama *)arena_ayir_sifir(g->arena, sizeof(BolgeAtama));
+        if (ea && ba) {
+            escape_baslat(ea, g->arena);
+            escape_analiz_islev(ea, islev);
+            bolge_atama_baslat(ba, g->arena, islev->veri.islev.ad,
+                               islev->veri.islev.ad_uzunluk);
+            bolge_atama_escape_bagla(ba, ea);
+            g->aktif_escape = ea;
+            g->aktif_bolge = ba;
+        }
+    }
+
     const char *donus = islev->veri.islev.donus_tipi
         ? ast_tip_to_ir(g, islev->veri.islev.donus_tipi)
         : "void";
@@ -5163,6 +5313,19 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->rho_ref = rs;
     } else {
         g->rho_ref = "%rho";
+    }
+
+    /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
+     * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
+     * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
+     * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
+     * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
+    {
+        int yr = yeni_reg(g);
+        fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", yr);
+        char *ys = (char *)arena_ayir(g->arena, 16);
+        snprintf(ys, 16, "%%%d", yr);
+        g->rho_yerel = ys;
     }
 
     /* Parametreleri alloca'ya kopyala */
@@ -5241,6 +5404,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         term = blok_uret(g, islev->veri.islev.govde);
     }
     if (!term) {
+        rho_yerel_serbest_emit(g);   /* F4.2b (d): örtük fn-sonu dönüşünden önce */
         if (strcmp(donus, "void") == 0) {
             fputs("  ret void\n", g->out);
         } else {
@@ -5255,6 +5419,14 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         hoist_renumber(govde_tmp, gercek_out);
         fclose(govde_tmp);
     }
+
+    /* F4.2b (a): escape malloc tablolarını serbest bırak (per-fn temizlik). */
+    if (g->aktif_escape) {
+        escape_serbest(g->aktif_escape);
+        g->aktif_escape = NULL;
+        g->aktif_bolge = NULL;
+    }
+    g->rho_yerel = NULL;   /* F4.2b: sonraki fn'e sızmasın */
 }
 
 /* D-071 (Sınıf B lambda V2): lifted lambda — `define <ret> @lambda_N(ptr %env,
@@ -5263,6 +5435,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
  * v1: ifade-form gövde, dönüş i32 (4 örnek). */
 static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     const Dugum *d = bl->dugum;
+    /* F4.2b: lambda bu fazda ρ_yerel ALMAZ (yönlendirme yok) → VER ret'leri
+     * serbest emit etmesin (NULL). Kuşatan fn'in ρ_yerel'ini serbest etme. */
+    g->rho_yerel = NULL;
     int np = d->veri.lambda.param_sayi;
     char envtip[512]; int eo = 0;
     eo += snprintf(envtip + eo, sizeof(envtip) - eo, "{ ");
@@ -5401,6 +5576,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
     /* V2-F4.2a: region-passing — main/lambda ρ-seed bu global bölgeyi kullanır. */
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
+    fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
+    fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
     /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
     fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);

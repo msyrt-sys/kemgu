@@ -73,6 +73,9 @@ typedef struct EscapeKayit {
     const Dugum *dugum;        /* AST dugumu (tahsis bolgesi) */
     EscapeKategorisi kategori;
     int dongu_derinligi;       /* tahsis edildigi dongu derinligi (0 = islev seviyesi) */
+    int kesin_yerel;           /* F4.2b: POZİTİF kanıt — bağlı değişken "confined"
+                                * (tüm kullanımları yerinde okuma/yazma + retain-etmeyen
+                                * dizi-builtin); ρ_yerel free-routing YALNIZ bunu kullanır. */
 } EscapeKayit;
 
 typedef struct EscapeBag {
@@ -100,6 +103,12 @@ typedef struct EscapeAnaliz {
     int dongu_derinligi;
     int ver_baglaminda;
     int degisti;               /* bu pass'ta kategori degisti mi? */
+
+    /* F4.2b: analiz edilen islev govdesinde EN AZ BIR lambda var mi? Varsa
+     * free-routing GUARD'i o islevde ρ_yerel yonlendirmeyi KAPATIR (closure
+     * capture sound backstop — lexical scope: yalniz bu fn'in lambda'si bu fn'in
+     * lokalini yakalar; block-form capture takibi v1'de yok). */
+    int islev_lambda_icerir;
 } EscapeAnaliz;
 
 void escape_baslat(EscapeAnaliz *ea, Arena *a);
@@ -116,6 +125,15 @@ void escape_analiz_program(EscapeAnaliz *ea, const Dugum *program);
 /* Bir AST dugumunun escape kategorisini sorgula.
  * Kayitsiz dugumler icin ESC_YEREL doner. */
 EscapeKategorisi escape_kategori(const EscapeAnaliz *ea, const Dugum *d);
+
+/* F4.2b: dugum escape kaydinda ACIKCA var mi? (free-routing principle 1:
+ * kayitsiz -> default-YEREL'e GUVENME -> ρ_caller). */
+int escape_kayitli_mi(const EscapeAnaliz *ea, const Dugum *d);
+
+/* F4.2b: dizi-tahsis dugumu KESİN-YEREL (confined) kanıtlandı mı? POZİTİF default-deny
+ * local-proof — bağlı değişkenin TÜM kullanımları yerinde okuma/yazma + retain-etmeyen
+ * dizi-builtin ise 1. ρ_yerel free-routing'in TEK sound koşulu (escape DFA'ya GÜVENME). */
+int escape_kesin_yerel(const EscapeAnaliz *ea, const Dugum *d);
 
 /* Tahsis bolgesinin dongu derinligi (0 = islev seviyesi). */
 int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d);
