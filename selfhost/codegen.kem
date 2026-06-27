@@ -3161,10 +3161,17 @@ işlev param_tip(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) > 0 { ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
     ver "i32";
 }
-// CG8: PARAMETRE Dizi<T> ise eleman tipi; değilse "".
+// CG8: PARAMETRE Dizi<T> ise eleman tipi; &Dizi<T> ise referans-hedefinin
+// eleman tipi (D-086: param girişte deref → normal heap dizi gibi indekslenir);
+// değilse "".
 işlev param_elem(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) == 0 { ver ""; }
-    ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
+    // D-086: &Dizi<T> → iç TIP_DIZI'nin eleman tipini al (deref sonrası KdlDizi*).
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") {
+        ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));
+    }
+    ver ll_eleman_tip(p, tn);
 }
 // CG7c: PARAMETRE &Yapi ise işaret edilen yapı adı; değilse "".
 işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
@@ -3176,6 +3183,17 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     değişken nm: metin = dizi_al(p.a_deg, ic);
     eğer yapi_var_mi(p, nm) { ver nm; }
     ver "";
+}
+// D-086: PARAMETRE &Dizi<T> / &değişken Dizi<T> mi? (TIP_REFERANS → TIP_DIZI).
+// Çağıran dizi değişkeninin SLOT adresini (KdlDizi**) geçer; girişte BİR KEZ
+// deref edilip alloca KdlDizi* tutar → dizi_al/dizi_boyut/dizi_yaz/[] ek deref
+// gerektirmez (C llvm.c:5341 `dizi_ref` ile birebir).
+işlev param_dizi_ref_mi(p: &değişken Ayr, c: tam32) -> mantıksal {
+    eğer dizi_al(p.a_cs, c) == 0 { ver yanlış; }
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") == yanlış { ver yanlış; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));  // iç tip
+    ver metin_esit(dizi_al(p.a_ad, ic), "TIP_DIZI");
 }
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
@@ -3215,8 +3233,20 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken a: tam32 = yeni_reg(p);
             değişken areg: metin = reg_str(a);
             yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(pt); yb(10);
-            yaz_str("  store "); yaz_str(pt); yaz_str(" %a"); yaz_str(tam64_str(pj olarak tam64));
-            yaz_str(", ptr "); yaz_str(areg); yb(10);
+            // D-086: &Dizi<T> param → girişte BİR KEZ deref (KdlDizi** → KdlDizi*),
+            // alloca KdlDizi* tutsun (C llvm.c:5346 ile birebir). Aksi: çift-pointer
+            // descriptor gibi indekslenip çöp/PANIK (ASan stack-buffer-overflow).
+            eğer param_dizi_ref_mi(p, c) {
+                değişken dr: tam32 = yeni_reg(p);
+                değişken drs: metin = reg_str(dr);
+                yaz_str("  "); yaz_str(drs); yaz_str(" = load ptr, ptr %a");
+                yaz_str(tam64_str(pj olarak tam64)); yb(10);
+                yaz_str("  store ptr "); yaz_str(drs); yaz_str(", ptr "); yaz_str(areg); yb(10);
+            }
+            değilse {
+                yaz_str("  store "); yaz_str(pt); yaz_str(" %a"); yaz_str(tam64_str(pj olarak tam64));
+                yaz_str(", ptr "); yaz_str(areg); yb(10);
+            }
             cg_var_ekle(p, dizi_al(p.a_deg, c), areg, pt, param_ref_yapi(p, c), param_elem(p, c));
             pj = pj + 1;
         }
