@@ -1,0 +1,12 @@
+// EKSEN: çıplak [..] literali DOĞRUDAN dizi_al descriptor argümanı (arg0).
+// Eskiden bu literal stack [N×T] alloca olur, kdl_dizi_al onu KdlDizi*
+// descriptor sanıp stack çöpünü boyut/veri olarak okurdu (ASan misaligned /
+// access-violation). Artık dizi_* built-in'e geçen çıplak literal HEAP
+// KdlDizi* olarak üretilir (DUGUM_DIZI_OLUSTUR heap-yolu, dizi_literal_heap_emit).
+işlev main() -> tam32 {
+    değişken a: tam32 = dizi_al([10, 20, 30], 2);   // 30
+    değişken b: tam32 = dizi_al([5, 7], 1);          // 7
+    değişken c: tam32 = dizi_al([1, 2, 3, 5], 3);    // 5
+    eğer a + b + c == 42 { ver 42; }                 // 30+7+5 = 42
+    ver a + b + c;
+}

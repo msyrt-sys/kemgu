@@ -1,0 +1,16 @@
+// EKSEN: çıplak [..] literali iç-içe Dizi<Dizi<T>>'de dizi_ekle DEĞER argümanı.
+// Eskiden iç literal stack [N×T] alloca olur, dış dizinin elemanı (KdlDizi*)
+// olarak bu stack pointer'ı saklanırdı; sonra d[i][j] erişimi stack çöpünü
+// KdlDizi* descriptor sanıp okurdu (ASan misaligned / access-violation).
+// Artık değer-arg'ın iç Dizi<T> AST'si bağlam olarak verilir → iç literal de
+// HEAP KdlDizi* olur (dizi_literal_heap_emit, recursive eleman bağlamı).
+işlev kur() -> Dizi<Dizi<tam32>> {
+    değişken dis: Dizi<Dizi<tam32>> = [[10, 20, 30]];
+    dizi_ekle(dis, [40, 50, 60]);
+    dizi_ekle(dis, [1, 2, 3]);
+    ver dis;
+}
+işlev main() -> tam32 {
+    değişken d: Dizi<Dizi<tam32>> = kur();
+    ver d[0][0] + d[0][2] + d[2][1];   // 10 + 30 + 2 = 42
+}
