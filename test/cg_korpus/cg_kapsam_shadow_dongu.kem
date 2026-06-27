@@ -1,0 +1,21 @@
+// CG-SCOPE regresyon (döngüler): leksik kapsam disiplini `için` döngü değişkenini
+// ve `iken` gövdesindeki gölgelemeyi de kapsamalı (C llvm.c scope_gir/cik ile aynı).
+//   1) `için x: xs` — döngü değişkeni `x` yalnız gövdede görünür; döngüden sonra
+//      DIŞ `x` (90) korunur. Eski hata: loop-var tabloya eklenip pop edilmezdi → 7.
+//   2) `iken` gövdesinde `değişken v` DIŞ v'yi gölgeler; döngüden sonra DIŞ v[2]=30.
+//      Eski hata: iç v slot'u sızar → 3.
+// ver x + dizi_al(v, 2) = 90 + 30 = 120. (Sızıntı kombinasyonları 37/93/10 verirdi.)
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [5, 6, 7];
+    değişken x: tam32 = 90;
+    için x: xs {
+        x = x + 1;
+    }
+    değişken v: Dizi<tam32> = [10, 20, 30];
+    değişken i: tam32 = 0;
+    iken i < 1 {
+        değişken v: Dizi<tam32> = [1, 2, 3];
+        i = i + dizi_al(v, 0);
+    }
+    ver x + dizi_al(v, 2);   // 90 + 30 = 120
+}
