@@ -1847,6 +1847,24 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
     ver 0;
 }
+// CG3 kapsam: blok girişinde değişken-tablosu işareti (C llvm.c scope_gir eşi).
+// Dönen değer = o anki cg_ad uzunluğu; blok çıkışında cg_kapsam_cik'e verilir.
+işlev cg_kapsam_gir(p: &değişken Ayr) -> tam32 {
+    ver dizi_boyut(p.cg_ad);
+}
+// CG3 kapsam: blok çıkışında [wm, son) aralığındaki blok-yerel adları geçersiz kıl
+// (C llvm.c scope_cik eşi — iç-içe shadow sızıntısını önler). Runtime'da dizi-kes
+// built-in yok; fiziksel kısaltma yerine adı "" yapıyoruz. Tüm cg_var_* aramaları
+// (areg/tip/ref/elem) ada göre indekslenir → "" hiçbir gerçek adla eşleşmez, yani
+// blok-yerel slot artık görünmez. cg_areg/cg_atip/... olduğu gibi kalır (ulaşılamaz).
+işlev cg_kapsam_cik(p: &değişken Ayr, wm: tam32) -> tam32 {
+    değişken i: tam32 = wm;
+    iken i < dizi_boyut(p.cg_ad) {
+        dizi_yaz(p.cg_ad, i, "");
+        i = i + 1;
+    }
+    ver 0;
+}
 // CG7c: değişkenin işaret ettiği yapı adı (ptr ise; değilse "").
 işlev cg_var_ref_bul(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
@@ -2753,8 +2771,16 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "BLOK") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
+        // CG3 kapsam: blok-yerel `değişken` adları bloğa hapsedilir. İşaret al → emit →
+        // çıkışta geçersiz kıl. Aksi halde iç blok `değişken v` dış `v`'yi gölgeleyip
+        // blok sonrası `v` aramasını iç (kapsam-dışı) slota düşürürdü (shadow sızıntısı).
+        // C llvm.c scope_gir/scope_cik ile birebir. Her DEGISKEN ayrı alloca'ya
+        // hoist edildiğinden (pa_node düğüm-bazlı, çakışmasız) düzeltme yalnız ad→reg
+        // tablosunda; pa_node kısaltması gerekmez (emisyon öncesi tam dolu, no-op).
+        değişken wm: tam32 = cg_kapsam_gir(p);
         değişken i: tam32 = 0;
         iken i < cs { deyim_uret(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+        cg_kapsam_cik(p, wm);
         ver 0;
     }
     eğer metin_esit(ad, "GUVENSIZ") {
