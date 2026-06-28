@@ -40,6 +40,7 @@ yapı Ayr {
     cg_aref: Dizi<metin>;// CG7c: ptr ise işaret ettiği yapı adı ("Ayr"); değilse ""
     son_ref: metin;      // CG7c: son ifade sonucu ptr ise işaret ettiği yapı adı
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
+    cg_aiter: Dizi<metin>;// F4.3: dizi-değişken iterasyon-confined ise BÜYÜME bölgesi (ρ_iter reg "%N"); değilse "" (dizi_ekle ρ_caller)
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
     beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
     son_elem: metin;     // CG8: son ifade Dizi ise eleman tipi
@@ -1899,6 +1900,7 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_atip, tip);   // CG6: LLVM tipi
     dizi_ekle(p.cg_aref, ref);   // CG7c: ptr → işaret edilen yapı
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
+    dizi_ekle(p.cg_aiter, "");   // F4.3: varsayılan "" (iter-confined değil); DEGISKEN gerekirse üzerine yazar
     ver 0;
 }
 // CG-SCOPE: leksik kapsam kapanışı. Blok/döngü/eşleş-kolu girişinde alınan
@@ -1942,6 +1944,16 @@ işlev cg_var_bul(p: &değişken Ayr, ad: metin) -> metin {
         i = i - 1;
     }
     ver "";   // bulunamadı (geçerli programda olmaz; checker garantiler)
+}
+// F4.3: dizi değişkeninin iterasyon-confined BÜYÜME bölgesi (ρ_iter "%N"); değilse "".
+// Shadow-doğru (sondan→cg_base ara, blank-ad atla) → cg_var_tip_bul ile aynı disiplin.
+işlev cg_var_aiter_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_aiter, i); }
+        i = i - 1;
+    }
+    ver "";
 }
 // CG6: değişkenin LLVM tipi (sondan ara).
 işlev cg_var_tip_bul(p: &değişken Ayr, ad: metin) -> metin {
@@ -2490,11 +2502,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             ver rs;
         }
         eğer metin_esit(fad, "dizi_ekle") {
-            değişken d2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken arg0n: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken d2: metin = ifade_uret(p, arg0n);
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
+            // F4.3: hedef dizi iterasyon-confined (descriptor ρ_iter'da) ise BÜYÜME (kdl_dizi_buyut)
+            // bölgesi de ρ_iter — realloc'lu tampon descriptor ile AYNI iterasyon-sonu noktasında serbest
+            // (sonsuz kernel-loop'ta sınırlı bellek). Aksi → ρ_caller (rho_ref): F4.2b davranışı (sızıntı-değil-UAF).
+            // SOUND: ky_iter_kesin = no-escape ∧ no-loop-carry → dizi (büyümüş tamponu dâhil) YALNIZ kendi iterasyonunda.
+            değişken grho: metin = p.rho_ref;
+            eğer metin_esit(dizi_al(p.a_ad, arg0n), "TANIMLAYICI") {
+                değişken ar: metin = cg_var_aiter_bul(p, dizi_al(p.a_deg, arg0n));
+                eğer metin_esit(ar, "") == yanlış { grho = ar; }
+            }
             yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
-            yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
+            yaz_str(grho); yaz_str(", ptr ");   // V2-F4.2a: ρ (F4.3: iter-confined → ρ_iter)
             yaz_str(d2); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = "";
             ver "0";
@@ -3211,6 +3233,20 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
+        // F4.3: değer DIZI_OLUSTUR + ρ_iter'a yönlendiyse (descriptor + literal ρ_iter'da) → bu
+        // bağlamanın BÜYÜME bölgesini ρ_iter'a sabitle; sonraki dizi_ekle(V,..) realloc'u da ρ_iter'a
+        // gider → büyüyen tampon DESCRIPTOR ile aynı iterasyon-sonu noktasında serbest. bolge_yerel_yonlendir
+        // değer-düğümünde YENİDEN sorgulanır (descriptor emisyonuyla BİREBİR aynı karar; nested-emit'ten bağımsız).
+        eğer annot == 1 {
+            eğer metin_esit(p.rho_iter, "") == yanlış {
+                değişken dnode: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+                eğer metin_esit(dizi_al(p.a_ad, dnode), "DIZI_OLUSTUR") {
+                    eğer metin_esit(bolge_yerel_yonlendir(p, dnode, velem), p.rho_iter) {
+                        dizi_yaz(p.cg_aiter, dizi_boyut(p.cg_aiter) - 1, p.rho_iter);
+                    }
+                }
+            }
+        }
         ver 0;
     }
     eğer metin_esit(ad, "ATAMA") {
@@ -4854,7 +4890,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
+        cg_aelem: [], cg_aiter: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",

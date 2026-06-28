@@ -1,0 +1,20 @@
+// F4.3 (grow-routing): iterasyon-confined dizi dizi_ekle ile LİTERAL kapasitesinin ötesine
+// büyürse (kdl_dizi_buyut realloc), büyüyen tampon da ρ_iter'a yönlenir → descriptor ile AYNI
+// iterasyon-sonu noktasında serbest (sonsuz kernel-loop'ta sınırlı bellek). Sonuç-nötr (exit 42):
+// her iterasyonda xs=[1,2]+ekle(3..7) → [1,2,3,4,5,6,7]; dizi_al(xs,6)=7; 6 iterasyon × 7 = 42.
+işlev test() -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 6 {
+        değişken xs: Dizi<tam32> = [1, 2];
+        dizi_ekle(xs, 3);
+        dizi_ekle(xs, 4);
+        dizi_ekle(xs, 5);
+        dizi_ekle(xs, 6);
+        dizi_ekle(xs, 7);
+        toplam = toplam + dizi_al(xs, 6);
+        i = i + 1;
+    }
+    ver toplam;
+}
+işlev main() -> tam32 { ver test(); }
