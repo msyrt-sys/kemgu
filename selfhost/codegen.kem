@@ -65,6 +65,8 @@ yapı Ayr {
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
     uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
     sc_slot: metin;        // B4: ve/veya kısa-devre i32 slot reg'i — fn girişinde (entry) BİR KEZ alloca, tüm ve/veya tekrar kullanır (döngü-içi alloca yığın taşmasını önler)
+    rho_iter: metin;       // F4.3: en-dış döngü ρ_iter IR reg ("%N") — gövde-girişinde yarat, her gövde-çıkışında serbest; ""=döngü-dışı
+    dongu_d: tam32;        // F4.3: emisyon döngü-derinliği (0=döngü-dışı; 1=en-dış → ρ_iter sahibi; >1=iç, ρ_iter'a dokunmaz)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -2893,9 +2895,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer bayt(p.cur_ret, 0) == 123 { p.beklenen_ll = p.cur_ret; }
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
             p.beklenen_ll = eski_bll;
-            rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): dönüş değeri (op) materyalize sonrası
+            rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
+            rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
-        } değilse { rho_yerel_serbest_emit(p); yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" 0"); yb(10); }
+        } değilse { rho_iter_serbest_emit(p); rho_yerel_serbest_emit(p); yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" 0"); yb(10); }
         p.bb_term = 1;   // ret = terminatör
         ver 0;
     }
@@ -2931,7 +2934,20 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         yaz_str("  br i1 "); yaz_str(c); yaz_str(", label %"); yaz_str(Lbody);
         yaz_str(", label %"); yaz_str(Lend); yb(10); p.bb_term = 1;
         etiket_yaz(p, Lbody);
+        // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter YARAT (per-iterasyon;
+        // Lbody re-entry → %ri her iter yeniden). İç döngü (dongu_d>1) ρ_iter'a dokunmaz.
+        p.dongu_d = p.dongu_d + 1;
+        eğer p.dongu_d == 1 {
+            değişken ri: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(ri)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
+            p.rho_iter = reg_str(ri);
+        }
         deyim_uret(p, dizi_al(p.cocuk, cb + 1));
+        // F4.3 a2: gövde fall-through (bb_term==0) → back-edge ÖNCESİ ρ_iter serbest.
+        // ver-yolu VER handler'da serbest etti (bb_term==1 → atla, çift-serbest yok).
+        eğer p.dongu_d == 1 { eğer p.bb_term == 0 { rho_iter_serbest_emit(p); } }
+        p.dongu_d = p.dongu_d - 1;
+        eğer p.dongu_d == 0 { p.rho_iter = ""; }
         br_to(p, Lhead);   // başa dön
         etiket_yaz(p, Lend);
         ver 0;
@@ -2983,13 +2999,23 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(et)); yaz_str("(ptr "); yaz_str(kp);
         yaz_str(", i32 "); yaz_str(il); yaz_str(")"); yb(10);
         yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(elr); yaz_str(", ptr "); yaz_str(xa); yb(10);
+        // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter yarat (per-iterasyon).
+        p.dongu_d = p.dongu_d + 1;
+        eğer p.dongu_d == 1 {
+            değişken ri2: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(ri2)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
+            p.rho_iter = reg_str(ri2);
+        }
         deyim_uret(p, govde);
         eğer p.bb_term == 0 {
+            eğer p.dongu_d == 1 { rho_iter_serbest_emit(p); }   // F4.3 a2: back-edge öncesi serbest
             değişken ni: metin = reg_str(yeni_reg(p));
             yaz_str("  "); yaz_str(ni); yaz_str(" = add i32 "); yaz_str(il); yaz_str(", 1"); yb(10);
             yaz_str("  store i32 "); yaz_str(ni); yaz_str(", ptr "); yaz_str(ia); yb(10);
             br_to(p, Lhead);
         }
+        p.dongu_d = p.dongu_d - 1;
+        eğer p.dongu_d == 0 { p.rho_iter = ""; }   // F4.3 a2: döngü-dışına çıktı
         etiket_yaz(p, Ldone);
         cg_kapsam_kapat(p, kapsam_bas);   // CG-SCOPE: döngü değişkeni kapsamını kapat
         ver 0;
@@ -3490,6 +3516,13 @@ işlev bolge_yerel_yonlendir(p: &değişken Ayr, idx: tam32, elem: metin) -> met
     ver p.rho_yerel;
 }
 
+// F4.3 a2: ρ_iter'i serbest bırak — HER gövde-çıkışında (back-edge + ver). Boş ("") → no-op.
+işlev rho_iter_serbest_emit(p: &değişken Ayr) -> tam32 {
+    eğer metin_esit(p.rho_iter, "") == yanlış {
+        yaz_str("  call void @kdl_bolge_serbest(ptr "); yaz_str(p.rho_iter); yaz_str(")"); yb(10);
+    }
+    ver 0;
+}
 // V2-F4.2b (b2): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
 // zaten materyalize/ρ_caller'da). Boş ρ_yerel ("") → no-op. C-tarafı rho_yerel_serbest_emit aynası.
 işlev rho_yerel_serbest_emit(p: &değişken Ayr) -> tam32 {
@@ -3513,6 +3546,8 @@ işlev param_dizi_ref_mi(p: &değişken Ayr, c: tam32) -> mantıksal {
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
+    p.rho_iter = "";   // F4.3: fn başında döngü-dışı
+    p.dongu_d = 0;
     p.cg_base = dizi_boyut(p.cg_ad);   // CG3: bu işlevin değişken-slice'ı buradan başlar
     p.pa_base = dizi_boyut(p.pa_node); // CG9: hoist-alloca slice'ı
     p.cur_ret = islev_donus_tip(p, idx);   // CG6: dönüş tipi (ver için)
@@ -4804,7 +4839,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "",
+        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
