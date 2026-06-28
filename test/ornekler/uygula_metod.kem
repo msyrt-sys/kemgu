@@ -1,0 +1,11 @@
+// B2+B3 regresyon: UYGULA method dispatch — kendin receiver + argümanlı metod.
+// x.metod() → @metod(ptr %rho, %Yapi kendin, args). kendin param %Yapi (by-value).
+yapı Nokta { x: tam32; y: tam32; }
+uygula Nokta {
+    işlev topla(kendin) -> tam32 { ver kendin.x + kendin.y; }
+    işlev olcek(kendin, k: tam32) -> tam32 { ver (kendin.x + kendin.y) * k; }
+}
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: 10, y: 11 };
+    ver n.topla() + n.olcek(1);   // 21 + 21 = 42
+}
