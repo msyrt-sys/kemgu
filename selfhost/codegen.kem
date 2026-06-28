@@ -62,6 +62,7 @@ yapı Ayr {
     ky_lambda: tam32;      // aktif işlev gövdesinde LAMBDA var mı (1 → routing GUARD: ρ_yerel kapalı)
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
     uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
+    sc_slot: metin;        // B4: ve/veya kısa-devre i32 slot reg'i — fn girişinde (entry) BİR KEZ alloca, tüm ve/veya tekrar kullanır (döngü-içi alloca yığın taşmasını önler)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -2576,12 +2577,46 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     }
     eğer metin_esit(ad, "IKILI") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        // B4 (C llvm.c D-002 aynası): ve/veya KISA-DEVRE — sol yeterliyse sag HİÇ
+        // değerlendirilmez (yan-etkili/sıfıra-bölme sag güvenli). mantıksal=i32
+        // invaryantı: C i1-slot + ver'de dönüştürür; biz İ32-slot + sonuç i32 tutarız
+        // (self-host VER tip dönüşümü YAPMAZ). phi yerine bellek-slot (predecessor yok).
+        eğer metin_esit(op, "ve") veya metin_esit(op, "veya") {
+            değişken ve_mi: mantıksal = metin_esit(op, "ve");
+            // B4: slot ENTRY'de hoist edildi (p.sc_slot) — döngü-içi alloca YOK.
+            değişken slot: metin = p.sc_slot;
+            değişken soli1: metin = kosul_i1(p, ifade_uret(p, dizi_al(p.cocuk, cb)));
+            değişken Lsag: metin = yeni_label(p);
+            değişken Lkisa: metin = yeni_label(p);
+            değişken Lson: metin = yeni_label(p);
+            yaz_str("  br i1 "); yaz_str(soli1); yaz_str(", label %");
+            eğer ve_mi { yaz_str(Lsag); yaz_str(", label %"); yaz_str(Lkisa); }
+            değilse { yaz_str(Lkisa); yaz_str(", label %"); yaz_str(Lsag); }
+            yb(10); p.bb_term = 1;
+            // Lsag: sag belirler → (sag != 0) i32
+            etiket_yaz(p, Lsag);
+            değişken sagz: metin = zext_i1(p, kosul_i1(p, ifade_uret(p, dizi_al(p.cocuk, cb + 1))));
+            yaz_str("  store i32 "); yaz_str(sagz); yaz_str(", ptr "); yaz_str(slot); yb(10);
+            br_to(p, Lson);
+            // Lkisa: kısa-devre sabiti (ve→0, veya→1)
+            etiket_yaz(p, Lkisa);
+            değişken sbt: metin = "1";
+            eğer ve_mi { sbt = "0"; }
+            yaz_str("  store i32 "); yaz_str(sbt); yaz_str(", ptr "); yaz_str(slot); yb(10);
+            br_to(p, Lson);
+            // Lson: sonuç yükle
+            etiket_yaz(p, Lson);
+            değişken rr: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(rr); yaz_str(" = load i32, ptr "); yaz_str(slot); yb(10);
+            p.son_tip = "i32"; p.son_ref = ""; p.son_elem = "";
+            ver rr;
+        }
         değişken sol: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
         değişken st: metin = p.son_tip;
         değişken sag: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         değişken gt: metin = p.son_tip;
         değişken optip: metin = tip_birlestir(st, gt);
-        değişken op: metin = dizi_al(p.a_deg, idx);
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);
@@ -3548,6 +3583,13 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken yr_yerel: tam32 = yeni_reg(p);
     yaz_str("  "); yaz_str(reg_str(yr_yerel)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
     p.rho_yerel = reg_str(yr_yerel);
+    // B4: ve/veya kısa-devre slot'u ENTRY bloğunda BİR KEZ (C hoist davranışı aynası).
+    // Tüm ve/veya tekrar kullanır → döngü-içi alloca yığın taşması YOK. Kullanılmasa da
+    // zararsız (entry alloca). Reuse sound: her ve/veya load'u sonraki store'dan önce
+    // materyalize olur (iç-içe/ardışık ve/veya çakışmaz).
+    değişken sc: tam32 = yeni_reg(p);
+    yaz_str("  "); yaz_str(reg_str(sc)); yaz_str(" = alloca i32"); yb(10);
+    p.sc_slot = reg_str(sc);
     // V2-F4.2b (b1): confinement ön-pass — gövdedeki confined dizi-değişken literallerini
     // ky_node'a işaretle (POZİTİF kanıt). Bu adımda EMİSYON DEĞİŞMEZ (IR-NÖTR); routing
     // (b3) ky_kesin_yerel'i okuyup ρ_yerel'e yönlendirir. ky_base = fn-bazlı dilim başı.
@@ -4753,7 +4795,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "",
+        ky_node: [], ky_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "",
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
