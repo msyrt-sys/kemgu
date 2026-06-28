@@ -111,6 +111,29 @@ işlev yaz_str(s: metin) -> tam32 {
     iken i < n { yb(metin_bayt(s, i) olarak tam32); i = i + 1; }
     ver 0;
 }
+// B5: LLVM sembol-adı yaz — ASCII-güvenli ([a-zA-Z0-9_.$-]) ise ham; aksi (Türkçe
+// karakter vb.) çift-tırnakla sar → @"böl" (LLVM gereği). C llvm.c yerel_ad_yaz aynası.
+// Tırnak yb(34) HAM bayt ile yazılır (codegen.kem'e \" string literali sokmaz →
+// self-host \" lexing'i tetiklenmez → fixpoint güvenli).
+işlev ir_ad_yaz(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken guvenli: mantıksal = doğru;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer c < 0 { c = c + 256; }
+        değişken ok: mantıksal = yanlış;
+        eğer c >= 97 ve c <= 122 { ok = doğru; }   // a-z
+        eğer c >= 65 ve c <= 90 { ok = doğru; }    // A-Z
+        eğer c >= 48 ve c <= 57 { ok = doğru; }    // 0-9
+        eğer c == 95 veya c == 46 veya c == 36 veya c == 45 { ok = doğru; }  // _ . $ -
+        eğer ok == yanlış { guvenli = yanlış; }
+        i = i + 1;
+    }
+    eğer guvenli { yaz_str(s); }
+    değilse { yb(34); yaz_str(s); yb(34); }   // 34 = '"'
+    ver 0;
+}
 // --ast deger alanı: \t \n \r \\ kaçışlı (C duz_kacis_yaz ile birebir).
 işlev yaz_kacis(s: metin) -> tam32 {
     değişken n: tam32 = metin_uzunluk(s);
@@ -2523,7 +2546,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         // void çağrı: %r = atanmaz.
         eğer metin_esit(rt, "void") {
-            yaz_str("  call void @"); yaz_str(fname); yaz_str("(");
+            yaz_str("  call void @"); ir_ad_yaz(fname); yaz_str("(");
             eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
             değişken jv: tam32 = 0;
             iken jv < dizi_boyut(args) {
@@ -2537,7 +2560,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
-        yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); yaz_str(fname); yaz_str("(");
+        yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); ir_ad_yaz(fname); yaz_str("(");
         eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
         değişken j: tam32 = 0;
         iken j < dizi_boyut(args) {
@@ -3456,7 +3479,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken main_mi: tam32 = 0;
     eğer metin_esit(dizi_al(p.a_deg, idx), "main") { main_mi = 1; }
     // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
-    yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @"); yaz_str(dizi_al(p.a_deg, idx)); yaz_str("(");
+    yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @"); ir_ad_yaz(dizi_al(p.a_deg, idx)); yaz_str("(");
     eğer main_mi == 0 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param
     değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
