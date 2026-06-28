@@ -1,0 +1,5 @@
+// B5 regresyon: Türkçe işlev adı → @"böl" (LLVM quoted symbol). C ile self-host
+// exit-eşdeğer olmalı; eski self-host @böl (tırnaksız) → LLVM parse hatası verirdi.
+işlev böl(a: tam32, b: tam32) -> tam32 { ver a / b; }
+işlev çarp(a: tam32, b: tam32) -> tam32 { ver a * b; }
+işlev main() -> tam32 { ver böl(84, 2) + çarp(0, 5); }   // 42 + 0 = 42
