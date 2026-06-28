@@ -61,6 +61,7 @@ yapı Ayr {
     ky_base: tam32;        // aktif işlevin ky_node dilim başı (fn-bazlı izolasyon)
     ky_lambda: tam32;      // aktif işlev gövdesinde LAMBDA var mı (1 → routing GUARD: ρ_yerel kapalı)
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
+    uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -2506,6 +2507,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // Argümanları SIRAYLA değerlendir (yan-IR akar), operand+tip biriktir.
         değişken args: Dizi<metin> = [];
         değişken argt: Dizi<metin> = [];
+        // B3: metod dispatch — hed ERISIM ise (x.metod(...)) receiver'ı `kendin`
+        // olarak İLK argüman geç. fad zaten a_deg[hed]=metod adı; imza_topla UYGULA
+        // dalı metodu fn_ad'a kaydetti → kullanici=1, %rho sonra receiver. C llvm.c
+        // :2616-2648 (ERISIM-hedef dispatch) aynası.
+        eğer metin_esit(dizi_al(p.a_ad, hed), "ERISIM") {
+            dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, hed))));
+            dizi_ekle(argt, p.son_tip);
+        }
         değişken i: tam32 = 1;
         iken i < cs {
             dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, cb + i)));
@@ -3219,6 +3228,11 @@ işlev alloca_hoist_pass(p: &değişken Ayr, idx: tam32) -> tam32 {
 // CG6: PARAMETRE'nin LLVM tipi (çocuk[0]=tip; kendin/tipsiz → i32).
 işlev param_tip(p: &değişken Ayr, c: tam32) -> metin {
     eğer dizi_al(p.a_cs, c) > 0 { ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c))); }
+    // B2: childless `kendin` param → aktif uygula bloğunun hedef yapı tipi (by-value
+    // receiver, C llvm.c:5881 + tip_kontrol.c:5122 aynası). uygula_hedef "" ise i32.
+    eğer metin_esit(dizi_al(p.a_deg, c), "kendin") {
+        eğer metin_esit(p.uygula_hedef, "") == yanlış { ver p.uygula_hedef; }
+    }
     ver "i32";
 }
 // CG8: PARAMETRE Dizi<T> ise eleman tipi; &Dizi<T> ise referans-hedefinin
@@ -3553,6 +3567,19 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
         }
         eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { imza_topla(p, c); }  // D3: modül üyeleri (flat)
+        eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metod imzaları (CAGRI dispatch için)
+            değişken ucb: tam32 = dizi_al(p.a_cb, c);
+            değişken ucs: tam32 = dizi_al(p.a_cs, c);
+            değişken ui: tam32 = 0;
+            iken ui < ucs {
+                değişken m: tam32 = dizi_al(p.cocuk, ucb + ui);
+                eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") {
+                    dizi_ekle(p.fn_ad, dizi_al(p.a_deg, m));
+                    dizi_ekle(p.fn_ret, islev_donus_tip(p, m));
+                }
+                ui = ui + 1;
+            }
+        }
         i = i + 1;
     }
     ver 0;
@@ -3567,6 +3594,22 @@ işlev emit_tanimlar(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
         eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { emit_tanimlar(p, c); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metodlarını emit et
+            // kids[0] = hedef yapı tipi → kendin'in by-value tipi (uygula_hedef).
+            // Metod ISLEV'leri normal fn gibi emit; kendin PARAMETRE'si param_tip ile
+            // %Yapi alır. C llvm.c:5870-5892 (DUGUM_UYGULA döngüsü) aynası.
+            değişken ucb: tam32 = dizi_al(p.a_cb, c);
+            değişken ucs: tam32 = dizi_al(p.a_cs, c);
+            değişken eski_uh: metin = p.uygula_hedef;
+            p.uygula_hedef = ll_tip(p, dizi_al(p.cocuk, ucb));
+            değişken ui: tam32 = 0;
+            iken ui < ucs {
+                değişken m: tam32 = dizi_al(p.cocuk, ucb + ui);
+                eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") { islev_uret(p, m); }
+                ui = ui + 1;
+            }
+            p.uygula_hedef = eski_uh;
+        }
         i = i + 1;
     }
     ver 0;
@@ -4687,7 +4730,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_lambda: 0, rho_yerel: "",
+        ky_node: [], ky_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "",
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
