@@ -3501,6 +3501,16 @@ işlev ky_kesin_yerel(p: &değişken Ayr, node: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// F4.3: dizi-tahsis düğümü iterasyon-confined işaretli mi? (ky_iter_node fn-dilim taraması)
+işlev ky_iter_kesin(p: &değişken Ayr, node: tam32) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.ky_iter_node);
+    değişken i: tam32 = p.ky_iter_base;
+    iken i < n {
+        eğer dizi_al(p.ky_iter_node, i) == node { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 
 // V2-F4.2b (b3): dizi-tahsis düğümü `idx` için ρ seç. ρ_yerel'e (ret'te serbest) SADECE:
 // kesin-yerel (confined) işaretli VE SKALER-eleman (ne "ptr" ne "%struct") VE fn'de
@@ -3509,10 +3519,19 @@ işlev ky_kesin_yerel(p: &değişken Ayr, node: tam32) -> mantıksal {
 // (ptr/struct eleman → iç heap-ref dizi_al ile kaçabilir → ρ_caller). DAR tut = sound.
 işlev bolge_yerel_yonlendir(p: &değişken Ayr, idx: tam32, elem: metin) -> metin {
     eğer p.ky_lambda == 1 { ver p.rho_ref; }            // closure-capture sound backstop
+    // SKALER-eleman (ρ_iter + ρ_yerel ortak ön-koşul): ptr/struct eleman → iç-ptr
+    // dizi_al ile kaçabilir → ρ_caller (serbest edilmez).
+    eğer metin_esit(elem, "ptr") { ver p.rho_ref; }
+    eğer bayt(elem, 0) == 37 { ver p.rho_ref; }         // '%' = struct-eleman
+    // F4.3 a3: iterasyon-confined (ky_confined ∧ döngü-gövde-bildirimi) + en-dış ρ_iter
+    // mevcut → ρ_iter (HER İTERASYONDA serbest). no-escape ∧ no-loop-carry → SOUND.
+    // OS kernel-loop'unu bunun için yaşatır (sonsuz döngüde per-iter free = sınırlı bellek).
+    eğer metin_esit(p.rho_iter, "") == yanlış {
+        eğer ky_iter_kesin(p, idx) { ver p.rho_iter; }
+    }
+    // F4.2b: kesin-yerel + ρ_yerel mevcut → ρ_yerel (fn-dönüşünde serbest); aksi → ρ_caller.
     eğer metin_esit(p.rho_yerel, "") { ver p.rho_ref; } // ρ_yerel yok
     eğer ky_kesin_yerel(p, idx) == yanlış { ver p.rho_ref; }  // confined kanıtı yok
-    eğer metin_esit(elem, "ptr") { ver p.rho_ref; }     // ptr-eleman → iç-ptr kaçabilir
-    eğer bayt(elem, 0) == 37 { ver p.rho_ref; }         // '%' = struct-eleman → ρ_caller
     ver p.rho_yerel;
 }
 
