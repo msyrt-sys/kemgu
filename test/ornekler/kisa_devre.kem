@@ -1,0 +1,11 @@
+// B4 regresyon: ve/veya KISA-DEVRE. i=0 iken (100/i) HİÇ değerlendirilmemeli
+// (kısa-devre yoksa SIGFPE / kısa-devresiz and → çökme).
+işlev guvenli(i: tam32) -> tam32 {
+    eğer i != 0 ve (100 / i) > 0 { ver 1; }
+    ver 7;
+}
+işlev veya_test(i: tam32) -> tam32 {
+    eğer i == 0 veya (100 / i) > 99 { ver 35; }   // i=0 → sol doğru → sag SKIP
+    ver 0;
+}
+işlev main() -> tam32 { ver guvenli(0) + veya_test(0); }   // 7 + 35 = 42
