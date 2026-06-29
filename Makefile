@@ -823,6 +823,97 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — dizi kernel boot testi atlandi (pacman -S mingw-w64-clang-x86_64-qemu)."; \
 	fi
 
+# === Bare-Metal ortak runtime objeleri (x86_64) — C1-x86 ===
+# PVH boot (boot/start_x86_64.S) → long mode → C. UART = 16550 (COM1 0x3F8 port
+# I/O). Region backing aarch64 ile AYNI (kdl_bolge + kdl_bare_heap arch-bağımsız).
+# -mgeneral-regs-only: SSE emit etme (boot'ta SSE enable gerekmez).
+BM_X86      = clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only
+BM_X86_CF   = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime
+BM_X86_UART = -DKDL_UART_PUTC=kdl_uart_16550_putc -DKDL_UART_OKU_KARAKTER=kdl_uart_16550_oku_karakter
+
+$(BUILD)/bm_x86_uart.o: runtime/kdl_runtime_uart_16550.c runtime/kdl_uart.h | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+$(BUILD)/bm_x86_yazdir.o: runtime/kdl_runtime_yazdir_bare.c | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
+$(BUILD)/bm_x86_bolge.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+$(BUILD)/bm_x86_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+$(BUILD)/bm_x86_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
+$(BUILD)/bm_x86_start.o: boot/start_x86_64.S | $(BUILD)
+	$(BM_X86) -c $< -o $@
+
+BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+              $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o
+
+# === Bare-Metal Hello World x86_64 (C1-x86) — PVH boot smoke ===
+calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "Bare-metal hello (x86_64 PVH): uart_merhaba.kem -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba_x86.ll
+	$(BM_X86) -O2 -Wno-override-module \
+		-x ir $(BUILD)/uart_merhaba_x86.ll -c -o $(BUILD)/uart_merhaba_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/kernel_x86.elf $(BUILD)/uart_merhaba_x86.o $(BM_X86_OBJS)
+	@file $(BUILD)/kernel_x86.elf
+	@if llvm-nm --undefined-only $(BUILD)/kernel_x86.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; exit 1; \
+	fi
+	@echo "  (libc yok — temiz)"
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/qemu_smoke_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kernel_x86.elf -display none \
+			-serial file:$(BUILD)/qemu_smoke_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/qemu_smoke_x86.out; echo "--- son ---"; \
+		if grep -q "Merhaba KEMGU" $(BUILD)/qemu_smoke_x86.out && grep -q "42" $(BUILD)/qemu_smoke_x86.out; then \
+			echo "x86_64 hello QEMU testi gecti."; \
+		else echo "FAIL: Merhaba KEMGU + 42 yok"; exit 1; fi; \
+	else echo "QEMU yok — x86 hello atlandi."; fi
+
+# === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
+# aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de
+# boot + toplam=55. Region backing'in arch-bağımsızlığının kanıtı.
+calistir_kernel_dizi_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "Bare-metal dizi kernel (x86_64 PVH): kernel_dizi.kem -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kernel_dizi.kem > $(BUILD)/kernel_dizi_x86.ll
+	$(BM_X86) -O2 -Wno-override-module \
+		-x ir $(BUILD)/kernel_dizi_x86.ll -c -o $(BUILD)/kernel_dizi_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/kernel_dizi_x86.elf $(BUILD)/kernel_dizi_x86.o $(BM_X86_OBJS)
+	@file $(BUILD)/kernel_dizi_x86.elf
+	@echo "Libc sembol referansi kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kernel_dizi_x86.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kernel_dizi_x86.elf; \
+		exit 1; \
+	fi
+	@echo "  (libc yok — temiz)"
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kernel_dizi_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kernel_dizi_x86.elf -display none \
+			-serial file:$(BUILD)/kernel_dizi_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/kernel_dizi_x86.out; echo "--- son ---"; \
+		if grep -q "KERNEL DIZI OK" $(BUILD)/kernel_dizi_x86.out && grep -q "55" $(BUILD)/kernel_dizi_x86.out; then \
+			echo "x86_64 dizi kernel QEMU testi gecti: region-alloc heap dizi dogru (toplam=55)."; \
+		else \
+			echo "FAIL: beklenen 'KERNEL DIZI OK' + '55' yok"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 dizi kernel boot testi atlandi."; \
+	fi
+
+# === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hello + dizi) ===
+# OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef 4 kernel'i de
+# boot edip doğrular (QEMU yoksa graceful skip). C1 region-backing'in iki
+# mimaride de çalıştığının uçtan-uca kanıtı.
+calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
+                     calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal
+	@echo ""
+	@echo "=== TUM OS kernel boot kanitlari gecti (aarch64 + x86_64 x hello + dizi) ==="
+
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
                                   runtime/kdl_runtime_uart_16550.c \
