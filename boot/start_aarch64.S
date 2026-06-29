@@ -43,6 +43,21 @@ _start:
     msr     cpacr_el1, x0
     isb
 
+    /* 1c. Exception vektör tablosu kur (VBAR) — C3a. Aksi halde fault → 0x0
+     * (vektör yok) → sessiz çöküş; kurulduğunda kdl_istisna_isle "ISTISNA" basar.
+     * EL'e göre VBAR_EL2 (QEMU virt) veya VBAR_EL1 (ham board). */
+    adrp    x0, kdl_vektor_tablosu
+    add     x0, x0, :lo12:kdl_vektor_tablosu
+    mrs     x1, CurrentEL
+    cmp     x1, #8
+    b.ne    4f
+    msr     vbar_el2, x0
+    b       5f
+4:
+    msr     vbar_el1, x0
+5:
+    isb
+
     /* 2. .bss bölümünü sıfırla */
     adrp    x0, __bss_start
     add     x0, x0, :lo12:__bss_start
@@ -65,3 +80,54 @@ _halt:
     b       _halt
 
 .size _start, . - _start
+
+/* === Exception vektör tablosu (C3a) ===
+ * ARMv8: 16 giriş × 0x80 bayt, 2KB-hizalı (VBAR gereği). 4 grup (Cur-SP0,
+ * Cur-SPx, Lower-a64, Lower-a32) × 4 tip (sync/IRQ/FIQ/SError). Her giriş tipi
+ * x0'a koyup ortak işleyiciye dallanır. IRQ (tip 5/9/...) C3b'de ayrılacak;
+ * şimdilik hepsi istisna-işleyiciye (yazdır+halt) gider. */
+.section .text
+.balign 0x800
+.global kdl_vektor_tablosu
+kdl_vektor_tablosu:
+.macro VEKTOR tip
+    .balign 0x80
+    mov     x0, #\tip
+    b       kdl_exc_ortak
+.endm
+    VEKTOR 0        /* 0x000 Cur EL SP0   : sync   */
+    VEKTOR 1        /* 0x080              : IRQ    */
+    VEKTOR 2        /* 0x100              : FIQ    */
+    VEKTOR 3        /* 0x180              : SError */
+    VEKTOR 4        /* 0x200 Cur EL SPx   : sync   */
+    VEKTOR 5        /* 0x280              : IRQ    */
+    VEKTOR 6        /* 0x300              : FIQ    */
+    VEKTOR 7        /* 0x380              : SError */
+    VEKTOR 8        /* 0x400 Lower EL a64 : sync   */
+    VEKTOR 9        /* 0x480              : IRQ    */
+    VEKTOR 10       /* 0x500              : FIQ    */
+    VEKTOR 11       /* 0x580              : SError */
+    VEKTOR 12       /* 0x600 Lower EL a32 : sync   */
+    VEKTOR 13       /* 0x680              : IRQ    */
+    VEKTOR 14       /* 0x700              : FIQ    */
+    VEKTOR 15       /* 0x780              : SError */
+
+/* Ortak istisna işleyici: ESR/ELR oku (current EL'e göre — QEMU virt EL1'de
+ * koşar; ham board EL2 olabilir), C işleyiciye geç (yazdır + halt).
+ * KRİTİK: yanlış-EL sistem register'ı (esr_el2 @ EL1) UNDEF → işleyici kendini
+ * sonsuz fault'lar. Bu yüzden EL-duyarlı. */
+kdl_exc_ortak:
+    mrs     x3, CurrentEL
+    cmp     x3, #8
+    b.ne    7f
+    mrs     x1, esr_el2         /* EL2 */
+    mrs     x2, elr_el2
+    b       8f
+7:
+    mrs     x1, esr_el1         /* EL1 (QEMU virt) */
+    mrs     x2, elr_el1
+8:
+    bl      kdl_istisna_isle    /* noreturn (yazdır + halt) */
+6:
+    wfe
+    b       6b

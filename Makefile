@@ -753,11 +753,14 @@ $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
 BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
-              $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o
+              $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
+              $(BUILD)/bm_a64_kesme.o
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
@@ -823,6 +826,31 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — dizi kernel boot testi atlandi (pacman -S mingw-w64-clang-x86_64-qemu)."; \
 	fi
 
+# === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
+# Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
+# kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
+calistir_istisna_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "C3a aarch64 istisna testi: istisna_arm.c -> ELF (deliberate fault)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/istisna_arm.c -o $(BUILD)/istisna_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/istisna_arm.elf $(BUILD)/istisna_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/istisna_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/istisna_arm.out -kernel $(BUILD)/istisna_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/istisna_arm.out; echo "--- son ---"; \
+		if grep -q "FAULT TETIKLE" $(BUILD)/istisna_arm.out && \
+		   grep -q "ISTISNA" $(BUILD)/istisna_arm.out && \
+		   ! grep -q "GORUNMEMELI" $(BUILD)/istisna_arm.out; then \
+			echo "C3a aarch64 istisna testi gecti: fault yakalandi (ISTISNA), ileri gidilmedi."; \
+		else \
+			echo "FAIL: 'FAULT TETIKLE'+'ISTISNA' bekleniyor, 'GORUNMEMELI' olmamali"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — istisna testi atlandi."; \
+	fi
+
 # === Bare-Metal ortak runtime objeleri (x86_64) — C1-x86 ===
 # PVH boot (boot/start_x86_64.S) → long mode → C. UART = 16550 (COM1 0x3F8 port
 # I/O). Region backing aarch64 ile AYNI (kdl_bolge + kdl_bare_heap arch-bağımsız).
@@ -841,11 +869,14 @@ $(BUILD)/bm_x86_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
+$(BUILD)/bm_x86_kesme.o: runtime/kdl_kesme.c | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_start.o: boot/start_x86_64.S | $(BUILD)
 	$(BM_X86) -c $< -o $@
 
 BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
-              $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o
+              $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o \
+              $(BUILD)/bm_x86_kesme.o
 
 # === Bare-Metal Hello World x86_64 (C1-x86) — PVH boot smoke ===
 calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
@@ -903,6 +934,29 @@ calistir_kernel_dizi_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — x86 dizi kernel boot testi atlandi."; \
+	fi
+
+# === C3a: x86_64 exception/IDT testi (ud2 geçersiz-opcode → "ISTISNA") ===
+calistir_istisna_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "C3a x86_64 istisna testi: istisna_x86.c -> ELF (ud2 fault)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/istisna_x86.c -o $(BUILD)/istisna_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/istisna_x86.elf $(BUILD)/istisna_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/istisna_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/istisna_x86.elf -display none \
+			-serial file:$(BUILD)/istisna_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/istisna_x86.out; echo "--- son ---"; \
+		if grep -q "FAULT TETIKLE" $(BUILD)/istisna_x86.out && \
+		   grep -q "ISTISNA" $(BUILD)/istisna_x86.out && \
+		   ! grep -q "GORUNMEMELI" $(BUILD)/istisna_x86.out; then \
+			echo "C3a x86_64 istisna testi gecti: fault yakalandi (ISTISNA), ileri gidilmedi."; \
+		else \
+			echo "FAIL: 'FAULT TETIKLE'+'ISTISNA' bekleniyor, 'GORUNMEMELI' olmamali"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 istisna testi atlandi."; \
 	fi
 
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hello + dizi) ===
