@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-108 — OS C3a: bare-metal exception vektörleri (aarch64 VBAR + x86 IDT) — fault→teşhis+halt (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-107).
+
+**Karar [ETKİ: yeni `runtime/kdl_kesme.c` (istisna işleyici + x86 IDT kur); `boot/start_aarch64.S`
+(VBAR + 16-giriş vektör tablosu + EL-duyarlı ortak işleyici); `boot/start_x86_64.S` (32 ISR stub +
+isr_ortak + kdl_idt_kur çağrısı); yeni `test/bare_metal/istisna_{arm,x86}.c`; `Makefile`
+(bm_*_kesme.o + 2 istisna test hedefi). Runtime/codegen/host DEĞİŞMEDİ.]** C3 ilk adım: CPU
+istisnaları artık vektör tablosuyla yakalanır → sessiz çöküş yerine "ISTISNA tip/synd/PC" + halt.
+
+**aarch64 (VBAR):** boot 16-giriş (×0x80, 2KB-hizalı) vektör tablosu kurar, VBAR_ELx=tablo
+(EL-duyarlı). Ortak işleyici ESR/ELR okur — **KRİTİK EL-duyarlı:** QEMU virt **EL1**'de koşar
+(`-d int` "from EL1 to EL1"); EL1'de `esr_el2` okumak UNDEF → işleyici kendini sonsuz fault'lar
+(58683× gözlendi). Düzeltme: CurrentEL kontrolü → esr_el1/elr_el1.
+
+**x86_64 (IDT):** 32 ISR stub (hata-kodlu 8/10/11/12/13/14/17/21 ISR_ERR, diğerleri ISR_NOERR +
+dummy 0). Long mode same-privilege exception SS:RSP:RFLAGS:CS:RIP push eder → ortak yığın
+[vektör][hata][RIP] → isr_ortak → kdl_istisna_isle(rdi,rsi,rdx). boot long_entry'de `kdl_idt_kur()`
+(C; gate-tablosu 256×16B + lidt) main'den ÖNCE. ud2 → vektör 6.
+
+**KISIT:** işleyiciler bölge/frame allocator KULLANMAZ (tek-thread, IRQ-safe değil) → yalnız UART
+yazımı + register oku.
+
+**Doğrulama (QEMU 11.0.1):**
+- `calistir_istisna_test_arm`: eşlenmemiş erişim → ESR=0x96000000 (EC 0x25 Data Abort) →
+  "ISTISNA tip=0x4" + halt; "GORUNMEMELI" yok.
+- `calistir_istisna_test_x86`: ud2 → "ISTISNA tip=0x6" (invalid opcode) + halt; "GORUNMEMELI" yok.
+- 4 normal kernel (aarch64+x86 × hello+dizi) regresyonsuz. test_tumu YEŞİL (host değişmedi).
+
+**DÜZELTME (D-105/107 notları):** QEMU virt -cpu cortex-a72 **EL1**'de boot eder (EL2 DEĞİL).
+FP-enable kodu EL-duyarlı olduğu için EL1'de CPACR_EL1 yolu çalışıyordu (CPTR_EL2 dalı ölü, zararsız).
+D-105/107'deki "EL2" ifadeleri bu yönde okunmalı.
+
+**Sıradaki:** C3b IRQ altyapısı (GICv2 aarch64 / PIC 8259 x86) — C4 timer için.
+
+---
+
 ## D-107 — OS C1-x86: x86_64 bare-metal parite — PVH→long-mode boot, AYNI region kernel (2026-06-29)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-106).
