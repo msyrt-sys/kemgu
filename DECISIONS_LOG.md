@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-107 — OS C1-x86: x86_64 bare-metal parite — PVH→long-mode boot, AYNI region kernel (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-106).
+
+**Karar [ETKİ: yeni `boot/start_x86_64.S` (PVH→long mode); yeni `linker/bare-metal-x86_64.ld`;
+`Makefile` (BM_X86_OBJS + 2 x86 kernel hedefi + `calistir_os_kernels` toplu gate). Runtime/
+codegen/host DEĞİŞMEDİ.]** Mehmet kararı (aarch64+x86_64 paralel): AYNI region-backed kernel'i
+x86_64'te de boot et.
+
+**PVH boot (multiboot1 yerine):** QEMU `-kernel` multiboot1 için 32-bit ELF ister, 64-bit'i
+reddeder ("Cannot load x86-64 image, give a 32bit one"). Çözüm = PVH: `.note.Xen` içinde
+XEN_ELFNOTE_PHYS32_ENTRY (tip 18) → QEMU 64-bit ELF'i 32-bit `pvh_entry`'den boot eder
+(ELFCLASS64 korunur). Minimal PVH stub'la (COM1'e 'OK') önce doğrulandı.
+
+**32-bit → long mode trampoline (boot/start_x86_64.S):**
+1. (32-bit) BSS sıfırla (sayfa tabloları .bss'te → temizlenir, sonra kurulur).
+2. Identity sayfa tabloları: PD 512×2MB huge page = 0..1GB (kernel+stack+16MB heap < 1GB);
+   PDPT[0]→PD; PML4[0]→PDPT.
+3. CR3=PML4 → CR4.PAE → EFER.LME (MSR 0xC0000080) → CR0.PG|PE → long mode.
+4. GDT (null + 64-bit code L-bit + data); `ljmp $0x08,$long_entry` → 64-bit.
+5. (64-bit) segment'ler + RSP=__stack_top + `call main`; main dönerse hlt döngüsü.
+
+**Region backing ARCH-BAĞIMSIZ (C0 mimarisinin öngörüsü doğrulandı):** kdl_bolge.c +
+kdl_bare_heap.c (frame allocator) + kdl_dizi.inc DEĞİŞMEDEN x86_64'te derlenir/çalışır. Tek
+arch-spesifik fark: UART=16550 (COM1 0x3F8 port I/O, KDL_UART_PUTC=kdl_uart_16550_putc), boot
+stub, linker. `-mgeneral-regs-only` (x86: SSE emit etme → boot'ta CR4.OSFXSR enable gerekmez;
+aarch64'teki Device-memory q-register sorununun simetrik çözümü).
+
+**Doğrulama (qemu-system-x86_64 11.0.1) — `calistir_os_kernels` toplu gate 4/4:**
+- `calistir_kernel_dizi_x86_bare_metal`: AYNI kernel_dizi.kem → BOOT + "KERNEL DIZI OK" + "55"
+  (libc-yok temiz). aarch64 ile bit-bit aynı .kem + aynı region runtime.
+- `calistir_uart_merhaba_x86_bare_metal`: "Merhaba KEMGU" + "42".
+- aarch64 hedefleri (qemu_smoke + dizi) regresyonsuz. `test_tumu` YEŞİL (host değişmedi).
+
+**Sonuç — C1 keystone TAM (her iki mimaride):** aynı KEMGU kaynağı (kernel_dizi.kem) + aynı
+region-confinement runtime (F4.2b/F4.3 backing) hem aarch64 (QEMU virt) hem x86_64 (QEMU PVH)
+üzerinde boot eder + doğru hesaplar. Region modeli OS'in bellek temelini iki platforma da bedavaya verir.
+
+**Kapsam/sınır:** PVH 32-bit entry → long mode minimal (identity 1GB, tek-çekirdek, IDT/exception
+yok — aarch64 ile simetrik). 16550 init V1-no-op (QEMU yeterli; ham donanım board-init sonra).
+Sıradaki: C3 exception/interrupt (DESIGN-STOP), C4 timer.
+
+---
+
 ## D-106 — OS C1b: bare-metal dizi runtime — heap Dizi<tam32> kernel boot (kdl_dizi.inc tek-kaynak) (2026-06-29)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-105).
