@@ -64,17 +64,23 @@ struct KdlIdtKapi {
 static struct KdlIdtKapi kdl_idt[256];
 extern void *kdl_isr_tablo[32];   /* asm: isr0..isr31 adresleri */
 
+extern void kdl_irq0_stub(void);   /* boot/start_x86_64.S — IRQ0 (timer) */
+
+static void kdl_idt_gate(int i, uint64_t adr) {
+    kdl_idt[i].offset_dusuk  = (uint16_t)(adr & 0xFFFF);
+    kdl_idt[i].segment       = 0x08;       /* 64-bit kod segmenti */
+    kdl_idt[i].ist           = 0;
+    kdl_idt[i].tip_oz        = 0x8E;       /* present, DPL0, interrupt gate */
+    kdl_idt[i].offset_orta   = (uint16_t)((adr >> 16) & 0xFFFF);
+    kdl_idt[i].offset_yuksek = (uint32_t)((adr >> 32) & 0xFFFFFFFF);
+    kdl_idt[i].rezerve       = 0;
+}
+
 void kdl_idt_kur(void) {
-    for (int i = 0; i < 32; i++) {
-        uint64_t adr = (uint64_t)kdl_isr_tablo[i];
-        kdl_idt[i].offset_dusuk  = (uint16_t)(adr & 0xFFFF);
-        kdl_idt[i].segment       = 0x08;
-        kdl_idt[i].ist           = 0;
-        kdl_idt[i].tip_oz        = 0x8E;
-        kdl_idt[i].offset_orta   = (uint16_t)((adr >> 16) & 0xFFFF);
-        kdl_idt[i].offset_yuksek = (uint32_t)((adr >> 32) & 0xFFFFFFFF);
-        kdl_idt[i].rezerve       = 0;
-    }
+    for (int i = 0; i < 32; i++)
+        kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i]);   /* istisnalar 0-31 */
+    kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub);        /* IRQ0 → vektör 32 */
+
     struct {
         uint16_t limit;
         uint64_t taban;

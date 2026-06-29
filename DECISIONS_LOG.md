@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-109 — OS C3b/C4: bare-metal IRQ + periyodik timer (GICv2/CNTV + PIC/PIT) — tick kanıtı (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-108).
+
+**Karar [ETKİ: yeni `runtime/kdl_zaman.c` (IRQ dispatch + timer, iki arch ortak API);
+`boot/start_aarch64.S` (IRQ vektör routing + kdl_irq_ortak bağlam-kaydet/eret);
+`boot/start_x86_64.S` (kdl_irq0_stub + EOI/iretq); `runtime/kdl_kesme.c` (IDT[32]→IRQ0); yeni
+`test/bare_metal/timer_test.c` (portable, iki arch); `Makefile` (bm_*_zaman.o + 2 timer hedef +
+os_kernels 8 teste genişledi). Codegen/host DEĞİŞMEDİ.]** C3b IRQ altyapısı + C4 timer birleşik:
+periyodik donanım kesmesi → handler → tick (C4 timer'ı C3b IRQ altyapısı olmadan kanıtlanamaz).
+
+**Ortak API (arch-bağımsız kernel):** `kdl_kesme_kur()` (GIC/PIC init) + `kdl_timer_baslat()`
+(CNTV/PIT + IRQ aç) + `kdl_kesme_isle(irq)` (dispatch, tik say) + `kdl_idle()` (wfi/hlt). AYNI
+timer_test.c iki mimaride (kernel arch-bağımsız, runtime arch-spesifik).
+
+**aarch64 (GICv2 + sanal generic timer):** GICD@0x08000000 + GICC@0x08010000 enable + ISENABLER0
+bit27 (timer PPI 27). CNTV ~10ms (CNTFRQ/100). IRQ vektör (0x280, entry5 → kdl_irq_ortak):
+bağlamı kaydet (x0-x18,x30; x19-x29 C korur) → GICC_IAR oku → kdl_kesme_isle → re-arm (CNTV_TVAL,
+ISTATUS temizler) → GICC_EOIR ack → **ERET** (kesilen wfi-döngüsüne dön). DAIF.I temizle.
+
+**x86_64 (PIC 8259 + PIT 8254):** PIC remap IRQ0-15→vektör32-47 (ICW1-4), mask=yalnız IRQ0. PIT
+ch0 mode3 ~100Hz (bölen 11932). IDT[32]→kdl_irq0_stub: caller-saved kaydet → kdl_kesme_isle →
+PIC EOI (port 0x20) → **IRETQ**. sti.
+
+**KISIT:** kesme bağlamı bölge/frame allocator KULLANMAZ (tek-thread, IRQ-safe değil) → yalnız UART
+yazımı + register.
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 8/8:**
+- `calistir_timer_test_arm`: GICv2+CNTV → "TIMER BASLA" + 5 tik → "TIMER OK tik=5".
+- `calistir_timer_test_x86`: PIC+PIT → "TIMER OK tik=5".
+- 4 boot + 2 istisna regresyonsuz (IRQ vektör routing sync exception'ları etkilemedi). Sıfır
+  uyarı (iki arch). test_tumu YEŞİL (host değişmedi).
+
+**Sıradaki:** C5 virtio sürücü codegen fix (&Struct param+sonuç<> segfault — virtio_blk_init/bind),
+C6 minimal syscall (SVC/int).
+
+---
+
 ## D-108 — OS C3a: bare-metal exception vektörleri (aarch64 VBAR + x86 IDT) — fault→teşhis+halt (2026-06-29)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-107).

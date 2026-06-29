@@ -90,27 +90,32 @@ _halt:
 .balign 0x800
 .global kdl_vektor_tablosu
 kdl_vektor_tablosu:
-.macro VEKTOR tip
+.macro VEKTOR_EXC tip
     .balign 0x80
     mov     x0, #\tip
     b       kdl_exc_ortak
 .endm
-    VEKTOR 0        /* 0x000 Cur EL SP0   : sync   */
-    VEKTOR 1        /* 0x080              : IRQ    */
-    VEKTOR 2        /* 0x100              : FIQ    */
-    VEKTOR 3        /* 0x180              : SError */
-    VEKTOR 4        /* 0x200 Cur EL SPx   : sync   */
-    VEKTOR 5        /* 0x280              : IRQ    */
-    VEKTOR 6        /* 0x300              : FIQ    */
-    VEKTOR 7        /* 0x380              : SError */
-    VEKTOR 8        /* 0x400 Lower EL a64 : sync   */
-    VEKTOR 9        /* 0x480              : IRQ    */
-    VEKTOR 10       /* 0x500              : FIQ    */
-    VEKTOR 11       /* 0x580              : SError */
-    VEKTOR 12       /* 0x600 Lower EL a32 : sync   */
-    VEKTOR 13       /* 0x680              : IRQ    */
-    VEKTOR 14       /* 0x700              : FIQ    */
-    VEKTOR 15       /* 0x780              : SError */
+.macro VEKTOR_IRQ tip
+    .balign 0x80
+    mov     x0, #\tip
+    b       kdl_irq_ortak
+.endm
+    VEKTOR_EXC 0    /* 0x000 Cur EL SP0   : sync   */
+    VEKTOR_IRQ 1    /* 0x080              : IRQ    */
+    VEKTOR_EXC 2    /* 0x100              : FIQ    */
+    VEKTOR_EXC 3    /* 0x180              : SError */
+    VEKTOR_EXC 4    /* 0x200 Cur EL SPx   : sync   */
+    VEKTOR_IRQ 5    /* 0x280              : IRQ  ← timer buraya */
+    VEKTOR_EXC 6    /* 0x300              : FIQ    */
+    VEKTOR_EXC 7    /* 0x380              : SError */
+    VEKTOR_EXC 8    /* 0x400 Lower EL a64 : sync   */
+    VEKTOR_IRQ 9    /* 0x480              : IRQ    */
+    VEKTOR_EXC 10   /* 0x500              : FIQ    */
+    VEKTOR_EXC 11   /* 0x580              : SError */
+    VEKTOR_EXC 12   /* 0x600 Lower EL a32 : sync   */
+    VEKTOR_IRQ 13   /* 0x680              : IRQ    */
+    VEKTOR_EXC 14   /* 0x700              : FIQ    */
+    VEKTOR_EXC 15   /* 0x780              : SError */
 
 /* Ortak istisna işleyici: ESR/ELR oku (current EL'e göre — QEMU virt EL1'de
  * koşar; ham board EL2 olabilir), C işleyiciye geç (yazdır + halt).
@@ -131,3 +136,42 @@ kdl_exc_ortak:
 6:
     wfe
     b       6b
+
+/* === IRQ işleyici (C3b) — bağlamı kaydet, GICC_IAR oku, dispatch, EOIR, eret ===
+ * İstisnadan farkı: KURTARILIR (eret) → kesilen koda dönülür, caller-saved
+ * register'lar korunur. C kdl_kesme_isle x0-x18,x30 clobber eder; x19-x29
+ * callee-saved (C korur), kaydetmeye gerek yok. */
+kdl_irq_ortak:
+    sub     sp, sp, #(16*10)
+    stp     x0, x1,   [sp, #16*0]
+    stp     x2, x3,   [sp, #16*1]
+    stp     x4, x5,   [sp, #16*2]
+    stp     x6, x7,   [sp, #16*3]
+    stp     x8, x9,   [sp, #16*4]
+    stp     x10, x11, [sp, #16*5]
+    stp     x12, x13, [sp, #16*6]
+    stp     x14, x15, [sp, #16*7]
+    stp     x16, x17, [sp, #16*8]
+    stp     x18, x30, [sp, #16*9]
+
+    movz    x9, #0x0801, lsl #16     /* GICC base 0x08010000 */
+    ldr     w0, [x9, #0x0C]          /* GICC_IAR */
+    str     x0, [sp, #-16]!          /* IAR'ı stash (EOIR için; 16-align) */
+    and     w0, w0, #0x3FF           /* IRQ no = IAR[9:0] */
+    bl      kdl_kesme_isle           /* C dispatch (timer → tik + re-arm) */
+    ldr     x1, [sp], #16            /* IAR geri */
+    movz    x9, #0x0801, lsl #16
+    str     w1, [x9, #0x10]          /* GICC_EOIR = IAR (ack) */
+
+    ldp     x0, x1,   [sp, #16*0]
+    ldp     x2, x3,   [sp, #16*1]
+    ldp     x4, x5,   [sp, #16*2]
+    ldp     x6, x7,   [sp, #16*3]
+    ldp     x8, x9,   [sp, #16*4]
+    ldp     x10, x11, [sp, #16*5]
+    ldp     x12, x13, [sp, #16*6]
+    ldp     x14, x15, [sp, #16*7]
+    ldp     x16, x17, [sp, #16*8]
+    ldp     x18, x30, [sp, #16*9]
+    add     sp, sp, #(16*10)
+    eret
