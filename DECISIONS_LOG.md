@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-106 — OS C1b: bare-metal dizi runtime — heap Dizi<tam32> kernel boot (kdl_dizi.inc tek-kaynak) (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-105).
+
+**Karar [ETKİ: yeni `runtime/kdl_dizi.inc` (paylaşımlı dizi impl); `runtime/kdl_runtime.c`
+(dizi bloğu → `#include`); `runtime/kdl_bare_heap.c` (kdl_panik seam + `#include`); yeni
+`test/ornekler/kernel_dizi.kem`; `Makefile` (aarch64 bare-metal shared-objects refactor +
+`calistir_kernel_dizi_bare_metal`). Codegen DEĞİŞMEDİ; host davranışı DEĞİŞMEDİ.]** C1a
+region-backing'i diziye genişlet: heap `Dizi<tam32>` (kdl_dizi_* runtime) bare-metal'de boot.
+
+**Tek-kaynak carve (duplikasyon YASAK — D-069 sınır-kontrolü iki yerde olamaz):**
+- `kdl_dizi.inc`: KdlDizi + kdl_dizi_buyut/olustur/ekle/al/yaz/yapi/boyut/kapasite/serbest +
+  kdl_dizi_oob. Host (kdl_runtime.c) VE bare-metal (kdl_bare_heap.c) `#include` eder → her TU
+  KENDİ kopyasını derler, ASLA birlikte linklenmez (duplicate-symbol yok) = tek kaynak.
+- Panik seam `kdl_panik`: host kdl_runtime.c (stderr+abort); bare-metal kdl_bare_heap.c
+  (→ kdl_panik_dur, UART+halt). kdl_dizi_oob FREESTANDING biçimlenir (snprintf YOK; "(i,boyut)"
+  detayı korunur) → host çıktısı bayt-özdeş, bare-metal'de libc'siz çalışır. kdl_panik codegen
+  inline-OOB (src/llvm.c) tarafından da çağrılır → evrensel panik girişi.
+
+**Makefile shared-objects refactor (zorunluydu):** aarch64 kernel'leri artık `BM_A64_OBJS`
+paylaşır (start+uart+yazdir+bolge+heap+panik). kdl_bare_heap.o artık `.inc` yüzünden
+kdl_panik→kdl_panik_dur referansı verdiğinden HER kernel kdl_runtime_panik.o linklemeli (merhaba
+dahil) → inline-compile yerine ortak obje kuralları.
+
+**Doğrulama:**
+- `calistir_kernel_dizi_bare_metal` (QEMU, qemu-system-aarch64 11.0.1): kernel BOOT →
+  "KERNEL DIZI OK" + "55" (1..10 toplam; dizi_olustur→ekle [kapasite 0→4→8→16: kdl_dizi_buyut +
+  bölge realloc + memcpy] → al [D-069 sınır-kontrollü]). libc-yok kapısı temiz. IR'de
+  kdl_dizi_olustur/ekle_tam/al_tam/boyut/kapasite_ayarla = heap path (stack değil).
+- `calistir_qemu_smoke` (merhaba shared-objects refactor sonrası): boot + "Merhaba KEMGU"+"42" ✓
+  (regresyon yok).
+- Host: kdl_runtime.c (`.inc` ile) sıfır-uyarı; `calistir_llvm_test` (30 array programı) yeşil;
+  `test_tumu` YEŞİL (self-host fixpoint 32157 satır + tüm array/OOB testleri — `.inc` host
+  davranışını değiştirmedi). Yeni bare-metal objeleri sıfır-uyarı.
+
+**Kapsam/sınır:** (1) dizi-OOB → kdl_panik (D-069) bare-metal'de geçerli (kernel UART "PANIK:"+halt).
+(2) Büyüyen-dizi grow-leak (F4.3 flag, task_dc5b969f) bare-metal'de de var (sabit-kapasiteli
+kernel-loop için yeterli). (3) x86_64 dizi paritesi C1-x86 (x86_64 long-mode boot bring-up gerekir).
+
+---
+
 ## D-105 — OS C1a: bare-metal bölge-backing — ilk boot-eden region-alloc KEMGU kernel (aarch64/QEMU) (2026-06-29)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir

@@ -112,3 +112,18 @@ KdlBolge *kdl_global_bolge_al(void) {
     if (!kdl_global_bolge) kdl_global_bolge = kdl_bolge_olustur();
     return kdl_global_bolge;
 }
+
+/* === Evrensel panik (seam) — kdl_dizi_oob (kdl_dizi.inc) + codegen inline-OOB
+ * (src/llvm.c) buraya çağırır. Bare-metal: UART "PANIK:" + CPU halt
+ * (runtime/kdl_runtime_panik.c → kdl_panik_dur). Host eşi kdl_runtime.c
+ * (stderr+abort). === */
+__attribute__((noreturn)) void kdl_panik_dur(const char *);
+
+__attribute__((noreturn)) void kdl_panik(const char *mesaj) {
+    kdl_panik_dur(mesaj);
+}
+
+/* === Dizi runtime (KdlDizi + kdl_dizi_*) — host (kdl_runtime.c) ile TEK KAYNAK.
+ * Bağımlılıklar yukarıda hazır: memcpy, kdl_global_bolge_al, kdl_panik;
+ * kdl_bolge_ayir kdl_bolge.h'den. === */
+#include "kdl_dizi.inc"
