@@ -5,6 +5,56 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-105 — OS C1a: bare-metal bölge-backing — ilk boot-eden region-alloc KEMGU kernel (aarch64/QEMU) (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: D-104 sonrası; merge'de origin/main ilerlemişse güncelle).
+
+**Karar [ETKİ: yeni `runtime/kdl_bare_heap.c`; `runtime/kdl_bolge.c` (#ifdef köprü);
+`boot/start_aarch64.S`; `linker/bare-metal-aarch64.ld`; `Makefile` (uart_merhaba + qemu_smoke).
+C derleyici/codegen DEĞİŞMEDİ; host yolu DEĞİŞMEDİ.]** OS gösterici-kernel FAZ C keystone'u:
+bölge runtime'ını bare-metal'e bağla — **codegen'e dokunmadan**, yalnız RUNTIME backing.
+
+**Kök bulgu (regresyon — readiness-envanteri "reçete-tam" dediği yer KIRIKTI):** Region codegen
+(F4.x) main dâhil HER fonksiyona koşulsuz `@kdl_global_bolge_al`/`@kdl_bolge_olustur`/
+`@kdl_bolge_serbest` emit eder (declare'da attribute yok → -O2 DCE EDEMEZ). Bare-metal link bu
+sembolleri sağlamıyordu → `calistir_uart_merhaba_bare_metal` HEAD'de `ld.lld: undefined symbol`
+ile KIRIK (hello-world dâhil TÜM kernel'ler). Ampirik kanıt: `kemgu --llvm uart_merhaba.kem`
+main'inde 3 canlı region çağrısı + mevcut link denemesi 3 undefined-symbol.
+
+**Çözüm (4 parça, codegen-nötr):**
+1. `kdl_bare_heap.c` (freestanding, yalnız <stdint/stddef>): linker heap bölgesinden
+   (`__heap_start..__heap_end`) bump + serbest-liste `malloc`/`free` + `memcpy`/`memset` +
+   `kdl_global_bolge_al`. Region 64KB blokları serbest-listede geri kazanılır → F4.3 per-iter
+   region-free → kernel-loop sınırlı-bellek temeli.
+2. `kdl_bolge.c`: `#ifdef KEMGU_BARE_METAL` → <stdlib.h> yerine malloc/free prototip (<stdlib.h>
+   aarch64-unknown-none'da YOK). Host (#else) AYNEN — `calistir_kdl_bolge_test` 33/33 ASan-temiz.
+3. `boot/start_aarch64.S`: FP/SIMD trap kapat — EL-duyarlı (QEMU virt EL2 → CPTR_EL2.TFP[10]=0;
+   ham EL1 → CPACR_EL1.FPEN=0b11).
+4. `linker`: stack üstüne 16 MB heap (`__heap_start/__heap_end`, NOBITS).
++ `Makefile`: bare-metal compile'lara `-mgeneral-regs-only` + region runtime'ı link'e ekle +
+   `calistir_qemu_smoke` `-serial file:` (Windows stdio-redirect bypass).
+
+**İki kritik bare-metal gotcha (QEMU `-d in_asm` trace ile teşhis edildi):**
+- **FP/SIMD trap:** clang -O2 16-baytlık struct move'u `ldr/stur q0` ile yapar → EL2 reset'te
+  trap → vektör 0x200 (vektör tablosu yok) → çöküş. (FP-enable + GPR-only.)
+- **Device-memory alignment:** MMU kapalıyken RAM = Device-nGnRnE → 16-baytlık q-erişimi
+  8-hizalı adreste **alignment-fault**. `-mgeneral-regs-only` q-register'ı tümden eler
+  (≤8-bayt hizalı erişim = Device-memory'de güvenli; Linux çekirdek deseni).
+
+**Doğrulama:** `calistir_qemu_smoke` (gerçek qemu-system-aarch64 11.0.1) → kernel BOOT +
+"Merhaba KEMGU - Bare Metal" + "42" ✓. kernel.elf q-register sayısı=0, libc-yok kapısı temiz,
+sıfır derleme uyarısı. `test_tumu` YEŞİL (self-host fixpoint 32157 satır kararlı; 72/72 codegen;
+4-mod driver; ASan-temiz — regresyon yok).
+
+**Kapsam/sınır:** (1) MMU kapalı → `-mgeneral-regs-only` kernel-geneli FP-yasağı (gösterici için
+yeterli; FP-li kernel = MMU+Normal-memory sonraki milestone). (2) Dizi (`kdl_dizi_*`) bare-metal'de
+HENÜZ yok → C1b (kdl_dizi.c carve + allocate-eden dizi kernel). (3) x86_64 boot stub/linker yok →
+C1-x86 (Mehmet kararı: aarch64+x86_64 paralel). (4) Üretici C-bootstrap kemgu; self-host bare-metal
+kapsam-dışı v1.
+
+---
+
 ## D-104 — düzelt(self-host codegen): blok-leksik-kapsam shadowing → değişken tablosu push/pop (2026-06-27)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
