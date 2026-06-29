@@ -755,12 +755,14 @@ $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUI
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
 BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
-              $(BUILD)/bm_a64_kesme.o
+              $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
@@ -851,6 +853,29 @@ calistir_istisna_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — istisna testi atlandi."; \
 	fi
 
+# === C3b/C4: aarch64 timer/IRQ testi (GICv2 + sanal timer → "TIMER OK") ===
+# IRQ teslimini kanıtlar: GIC+timer kur → sanal timer ~10ms kesme → kdl_irq_ortak
+# → kdl_kesme_isle (tik++ + re-arm) → 5. tikte "TIMER OK".
+calistir_timer_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "C3b aarch64 timer testi: timer_test.c -> ELF (GICv2 + CNTV)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/timer_test.c -o $(BUILD)/timer_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/timer_arm.elf $(BUILD)/timer_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/timer_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/timer_arm.out -kernel $(BUILD)/timer_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/timer_arm.out; echo "--- son ---"; \
+		if grep -q "TIMER OK" $(BUILD)/timer_arm.out; then \
+			echo "C3b aarch64 timer testi gecti: IRQ teslimi + timer calisiyor (TIMER OK)."; \
+		else \
+			echo "FAIL: 'TIMER OK' yok (timer IRQ teslim edilmedi)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — timer testi atlandi."; \
+	fi
+
 # === Bare-Metal ortak runtime objeleri (x86_64) — C1-x86 ===
 # PVH boot (boot/start_x86_64.S) → long mode → C. UART = 16550 (COM1 0x3F8 port
 # I/O). Region backing aarch64 ile AYNI (kdl_bolge + kdl_bare_heap arch-bağımsız).
@@ -871,12 +896,14 @@ $(BUILD)/bm_x86_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUI
 	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
 $(BUILD)/bm_x86_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+$(BUILD)/bm_x86_zaman.o: runtime/kdl_zaman.c | $(BUILD)
+	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_start.o: boot/start_x86_64.S | $(BUILD)
 	$(BM_X86) -c $< -o $@
 
 BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
               $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o \
-              $(BUILD)/bm_x86_kesme.o
+              $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o
 
 # === Bare-Metal Hello World x86_64 (C1-x86) — PVH boot smoke ===
 calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
@@ -959,14 +986,37 @@ calistir_istisna_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 istisna testi atlandi."; \
 	fi
 
+# === C3b/C4: x86_64 timer/IRQ testi (PIC 8259 + PIT 8254 → "TIMER OK") ===
+calistir_timer_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "C3b x86_64 timer testi: timer_test.c -> ELF (PIC + PIT)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/timer_test.c -o $(BUILD)/timer_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/timer_x86.elf $(BUILD)/timer_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/timer_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/timer_x86.elf -display none \
+			-serial file:$(BUILD)/timer_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/timer_x86.out; echo "--- son ---"; \
+		if grep -q "TIMER OK" $(BUILD)/timer_x86.out; then \
+			echo "C3b x86_64 timer testi gecti: IRQ teslimi + timer calisiyor (TIMER OK)."; \
+		else \
+			echo "FAIL: 'TIMER OK' yok (timer IRQ teslim edilmedi)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 timer testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hello + dizi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef 4 kernel'i de
 # boot edip doğrular (QEMU yoksa graceful skip). C1 region-backing'in iki
 # mimaride de çalıştığının uçtan-uca kanıtı.
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
-                     calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal
+                     calistir_istisna_test_arm calistir_timer_test_arm \
+                     calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
+                     calistir_istisna_test_x86 calistir_timer_test_x86
 	@echo ""
-	@echo "=== TUM OS kernel boot kanitlari gecti (aarch64 + x86_64 x hello + dizi) ==="
+	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer (aarch64 + x86_64) ==="
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \

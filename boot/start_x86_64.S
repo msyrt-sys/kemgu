@@ -191,6 +191,35 @@ isr_ortak:
     hlt
     jmp     1b
 
+/* === IRQ0 (timer) stub (C3b) — bağlamı kaydet, dispatch, EOI, iretq ===
+ * İstisnadan farkı: KURTARILIR (iretq) → kesilen koda dönülür. SysV caller-saved
+ * kaydedilir (callee-saved'i C korur). PIC EOI = port 0x20'ye 0x20. */
+.global kdl_irq0_stub
+kdl_irq0_stub:
+    pushq   %rax
+    pushq   %rcx
+    pushq   %rdx
+    pushq   %rsi
+    pushq   %rdi
+    pushq   %r8
+    pushq   %r9
+    pushq   %r10
+    pushq   %r11
+    movq    $0, %rdi          /* IRQ no = 0 (timer) */
+    call    kdl_kesme_isle
+    movb    $0x20, %al        /* PIC EOI (master) */
+    outb    %al, $0x20
+    popq    %r11
+    popq    %r10
+    popq    %r9
+    popq    %r8
+    popq    %rdi
+    popq    %rsi
+    popq    %rdx
+    popq    %rcx
+    popq    %rax
+    iretq
+
 .section .rodata
 .align 8
 .global kdl_isr_tablo
