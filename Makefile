@@ -735,42 +735,40 @@ calistir_qemu_smoke: $(BUILD)/kernel.elf
 $(BUILD)/kernel.elf:
 	@$(MAKE) calistir_uart_merhaba_bare_metal > /dev/null
 
+# === Bare-Metal ortak runtime objeleri (aarch64) — C1 ===
+# Tüm aarch64 kernel'leri paylaşır: region backing (kdl_bolge + kdl_bare_heap =
+# frame allocator/malloc/memcpy + dizi runtime) + UART + libc'siz yazdır + panik.
+# -mgeneral-regs-only: MMU kapalı = Device-memory → 16-bayt q-register erişimi
+# alignment-fault verir; GPR-only güvenli (Linux çekirdek deseni).
+BM_A64    = clang -target aarch64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only
+BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime
+
+$(BUILD)/bm_a64_uart.o: runtime/kdl_runtime_uart_pl011.c runtime/kdl_uart.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_yazdir.o: runtime/kdl_runtime_yazdir_bare.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_bolge.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
+	$(BM_A64) -c $< -o $@
+
+BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
+              $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o
+
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
 # Pipeline: kemgu --llvm | clang -target aarch64-unknown-none -> kernel.elf
-calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
+calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "Bare-metal hello world: uart_merhaba.kem -> ARM64 ELF..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba.ll
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
-		-mgeneral-regs-only -Wno-override-module \
+	$(BM_A64) -O2 -Wno-override-module \
 		-x ir $(BUILD)/uart_merhaba.ll -c -o $(BUILD)/uart_merhaba.o
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_runtime_uart_pl011.c \
-		-o $(BUILD)/uart_pl011_bm.o
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_runtime_yazdir_bare.c \
-		-o $(BUILD)/yazdir_bare_bm.o
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_bolge.c \
-		-o $(BUILD)/kdl_bolge_bm.o
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_bare_heap.c \
-		-o $(BUILD)/kdl_bare_heap_bm.o
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-c boot/start_aarch64.S -o $(BUILD)/start_aarch64.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/kernel.elf \
-		$(BUILD)/start_aarch64.o $(BUILD)/uart_merhaba.o \
-		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o \
-		$(BUILD)/kdl_bolge_bm.o $(BUILD)/kdl_bare_heap_bm.o
+		-o $(BUILD)/kernel.elf $(BUILD)/uart_merhaba.o $(BM_A64_OBJS)
 	@echo ""
 	@echo "Uretilen kernel:"
 	@file $(BUILD)/kernel.elf
@@ -790,6 +788,40 @@ calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
 	fi
 	@echo "  (yok — temiz)"
 	@echo "Bare-metal hello world basarili!"
+
+# === Bare-Metal Dizi Kernel (C1b) — heap Dizi<tam32> region-alloc + boot kanıtı ===
+# Make-or-break: kdl_dizi_* (kdl_dizi.inc carve) bare-metal frame allocator
+# üzerinde boot + doğru toplam (1..10 = 55). QEMU boot ile uçtan-uca doğrulanır.
+calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "Bare-metal dizi kernel: kernel_dizi.kem -> ARM64 ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kernel_dizi.kem > $(BUILD)/kernel_dizi.ll
+	$(BM_A64) -O2 -Wno-override-module \
+		-x ir $(BUILD)/kernel_dizi.ll -c -o $(BUILD)/kernel_dizi.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kernel_dizi.elf $(BUILD)/kernel_dizi.o $(BM_A64_OBJS)
+	@file $(BUILD)/kernel_dizi.elf
+	@echo "Libc sembol referansi kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kernel_dizi.elf | \
+		grep -E 'malloc|free|memcpy|memset|printf|fputs|fopen|puts|snprintf|__chkstk' > /dev/null; then \
+		echo "FAIL: libc/CRT referansi bulundu"; \
+		llvm-nm --undefined-only $(BUILD)/kernel_dizi.elf; \
+		exit 1; \
+	fi
+	@echo "  (libc yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kernel_dizi.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kernel_dizi.out -kernel $(BUILD)/kernel_dizi.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kernel_dizi.out; echo "--- son ---"; \
+		if grep -q "KERNEL DIZI OK" $(BUILD)/kernel_dizi.out && grep -q "55" $(BUILD)/kernel_dizi.out; then \
+			echo "Dizi kernel QEMU testi gecti: region-alloc heap dizi dogru (toplam=55)."; \
+		else \
+			echo "FAIL: beklenen 'KERNEL DIZI OK' + '55' yok"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — dizi kernel boot testi atlandi (pacman -S mingw-w64-clang-x86_64-qemu)."; \
+	fi
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \

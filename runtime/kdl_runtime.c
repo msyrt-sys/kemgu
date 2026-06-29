@@ -519,203 +519,26 @@ const char *kdl_metin_yer_degistir(const char *s, const char *eski_p,
     return r;
 }
 
-/* === I: Dinamik Dizi (heap) ===
+/* === I: Dinamik Dizi (heap) — PAYLAŞIMLI implementasyon kdl_dizi.inc'te ===
  *
- * KDL DinamikDizi temsili: { ptr veri, i32 boyut, i32 kapasite } yapisi.
- * Alanlar: tam32 indexlenir; eleman tipi runtime-bilinmez (eleman_byte verilir).
- * Bu KEMGU tarafindan kullanilan basit C-tarafi runtime yapilari.
+ * KdlDizi + kdl_dizi_* (büyüme + sınır-kontrollü erişim) artık tek-kaynak
+ * `kdl_dizi.inc` dosyasında; host (burada) ve bare-metal (kdl_bare_heap.c)
+ * onu include eder. Bu TU'nun sağladığı bağımlılıklar (include'tan ÖNCE):
+ * memcpy (<string.h>, yukarıda), kdl_global_bolge_al (yukarıda), kdl_bolge_ayir
+ * (kdl_bolge.h), ve kdl_panik (hemen aşağıda — panik seam'i).
+ *
+ * Dizi sınır-güvenliği (D-069): OOB → temiz PANIC, asla segfault/sessiz-0.
+ * Host kdl_panik: stderr + abort() (rc=134). Bare-metal eşi kdl_bare_heap.c
+ * (→ kdl_panik_dur, UART+halt). kdl_panik codegen inline-OOB (src/llvm.c)
+ * tarafından da çağrılır → evrensel panik girişi.
  */
-
-typedef struct {
-    void *veri;
-    int32_t boyut;
-    int32_t kapasite;
-    int32_t eleman_byte;
-} KdlDizi;
-
-/* V2-F4.1: dizi büyümesi — realloc YOK (d->veri artık bölge-sahipli; realloc'a
- * bölge işaretçisi geçmek UB/çökme olurdu). Yeni bölge tamponu ayır, CANLI
- * (boyut*eb) baytı kopyala, d->veri'yi güncelle. Eski tampon bölgede sızar —
- * status-quo (F4.4 bölge-free toplu geri kazanır). OOM'da orijinal davranış
- * korunur (d->veri=NULL → çağıran yazımında çökme; eskiden realloc-NULL aynısı). */
-/* V2-F4.2a: ρ EKLENDİ (region-passing — yalnız DİZİ helper'ları bu fazda).
- * Büyüme çağıranın bölgesinden (ρ). ρ NULL ise global bölge (geriye-uyum). */
-static void kdl_dizi_buyut(KdlBolge *rho, KdlDizi *d, int32_t yeni_kap, size_t eb) {
-    void *yeni = kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
-                               (uint64_t)yeni_kap * (uint64_t)eb);
-    if (yeni && d->veri && d->boyut > 0)
-        memcpy(yeni, d->veri, (size_t)d->boyut * eb);
-    d->veri = yeni;
-    d->kapasite = yeni_kap;
-}
-
-KdlDizi *kdl_dizi_olustur(KdlBolge *rho, int32_t eleman_byte) {
-    /* V2-F4.2a: descriptor çağıranın bölgesinden (ρ). */
-    KdlDizi *d = (KdlDizi *)kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
-                                          sizeof(KdlDizi));
-    if (!d) return NULL;
-    d->veri = NULL;
-    d->boyut = 0;
-    d->kapasite = 0;
-    d->eleman_byte = eleman_byte;
-    return d;
-}
-
-void kdl_dizi_ekle_tam(KdlBolge *rho, KdlDizi *d, int32_t deger) {
-    if (!d) return;
-    if (d->boyut == d->kapasite) {
-        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        kdl_dizi_buyut(rho, d, yk, sizeof(int32_t));   /* V2-F4.2a: ρ */
-    }
-    ((int32_t *)d->veri)[d->boyut++] = deger;
-}
-
-void kdl_dizi_ekle_tam64(KdlBolge *rho, KdlDizi *d, int64_t deger) {
-    if (!d) return;
-    if (d->boyut == d->kapasite) {
-        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        kdl_dizi_buyut(rho, d, yk, sizeof(int64_t));   /* V2-F4.2a: ρ */
-    }
-    ((int64_t *)d->veri)[d->boyut++] = deger;
-}
-
-void kdl_dizi_ekle_ptr(KdlBolge *rho, KdlDizi *d, void *deger) {
-    if (!d) return;
-    if (d->boyut == d->kapasite) {
-        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        kdl_dizi_buyut(rho, d, yk, sizeof(void *));   /* V2-F4.2a: ρ */
-    }
-    ((void **)d->veri)[d->boyut++] = deger;
-}
-
-/* ===================================================================
- * Dizi sınır-güvenliği (D-069): OOB erişim → temiz PANIC, asla segfault
- * / sessiz-0 / sessiz-noop. Hosted runtime: stderr + abort() (rc=134).
- * Bare-metal panic ayrı (kdl_runtime_panik.c → kdl_panik_dur, halt).
- * =================================================================== */
 __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
     fprintf(stderr, "PANIK: %s\n", mesaj ? mesaj : "(bilinmiyor)");
     fflush(stderr);
     abort();
 }
-/* Dizi sınır ihlali yardımcısı — mesajı (i, boyut) ile biçimler, panic eder. */
-static __attribute__((noreturn)) void kdl_dizi_oob(int32_t i, int32_t boyut) {
-    char buf[96];
-    snprintf(buf, sizeof(buf),
-             "dizi s\xc4\xb1n\xc4\xb1r ihlali (i=%d, boyut=%d)", i, boyut);
-    kdl_panik(buf);
-}
 
-int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
-    if (!d) return 0;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    return ((int32_t *)d->veri)[i];
-}
-
-int64_t kdl_dizi_al_tam64(KdlDizi *d, int32_t i) {
-    if (!d) return 0;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    return ((int64_t *)d->veri)[i];
-}
-
-void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
-    if (!d) return NULL;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    return ((void **)d->veri)[i];
-}
-
-/* dizi_yaz: i. elemanı YERİNDE günceller (dizi_al'ın yazma eşi). Sınır dışı
- * (i<0 || i>=boyut) → PANIC (D-069; eskiden sessiz-noop). NULL → atla. */
-void kdl_dizi_yaz_tam(KdlDizi *d, int32_t i, int32_t deger) {
-    if (!d) return;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    ((int32_t *)d->veri)[i] = deger;
-}
-
-void kdl_dizi_yaz_tam64(KdlDizi *d, int32_t i, int64_t deger) {
-    if (!d) return;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    ((int64_t *)d->veri)[i] = deger;
-}
-
-void kdl_dizi_yaz_ptr(KdlDizi *d, int32_t i, void *deger) {
-    if (!d) return;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    ((void **)d->veri)[i] = deger;
-}
-
-/* === D-087: by-value YAPI (struct) elemanlı dizi ===
- *
- * Skaler/ptr getter'lar (tam/tam64/ptr) struct elemanı taşıyamaz; eleman
- * d->eleman_byte boyutunda RASTGELE veri (yapı LLVM layout'u, padding dahil).
- * Bu üç fonksiyon eleman_byte byte'ı memcpy ile kopyalar — codegen
- * eleman_byte'ı `sizeof(%Yapi)` (LLVM ptrtoint-getelementptr const-expr) ile
- * geçirir, böylece padding/alignment LLVM ile birebir tutar. */
-void kdl_dizi_ekle_yapi(KdlBolge *rho, KdlDizi *d, const void *kaynak) {
-    if (!d || !kaynak) return;
-    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
-    if (d->boyut == d->kapasite) {
-        int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        kdl_dizi_buyut(rho, d, yk, (size_t)eb);   /* V2-F4.2a: ρ */
-    }
-    memcpy((char *)d->veri + (size_t)d->boyut * (size_t)eb,
-           kaynak, (size_t)eb);
-    d->boyut++;
-}
-
-/* i. yapı elemanını dst'ye kopyalar. OOB → PANIC (D-069 sınıfı). */
-void kdl_dizi_al_yapi(KdlDizi *d, int32_t i, void *dst) {
-    if (!d || !dst) return;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
-    memcpy(dst, (const char *)d->veri + (size_t)i * (size_t)eb,
-           (size_t)eb);
-}
-
-/* i. yapı elemanını YERİNDE günceller. OOB → PANIC. */
-void kdl_dizi_yaz_yapi(KdlDizi *d, int32_t i, const void *kaynak) {
-    if (!d || !kaynak) return;
-    if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 1;
-    memcpy((char *)d->veri + (size_t)i * (size_t)eb,
-           kaynak, (size_t)eb);
-}
-
-int32_t kdl_dizi_boyut(KdlDizi *d) {
-    return d ? d->boyut : 0;
-}
-
-/* Adim 6: capacity (allocate edilmis alan) — boyut <= kapasite. */
-int32_t kdl_dizi_kapasite(KdlDizi *d) {
-    return d ? d->kapasite : 0;
-}
-
-/* Adim 6: önceden kapasite ayarla. Yeni kapasite mevcut kapasiteden
- * kucukse hicbir sey yapma (shrink yok v1). Realloc bir kez yapilir,
- * sonraki dizi_ekle cagrilari realloc'tan kacar. */
-void kdl_dizi_kapasite_ayarla(KdlBolge *rho, KdlDizi *d, int32_t yeni_kapasite) {
-    if (!d || yeni_kapasite <= d->kapasite) return;
-    /* Eleman byte'i bilinmiyor — d->eleman_byte kullan */
-    int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 4;
-    /* V2-F4.2a: realloc YOK (d->veri bölge-sahipli). Bölge (ρ) tamponu + canlı
-     * (boyut*eb) kopya; eski tampon bölgede sızar. OOM'da eski veri korunur. */
-    void *yeni = kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
-                               (uint64_t)yeni_kapasite * (uint64_t)eb);
-    if (!yeni) return;
-    if (d->veri && d->boyut > 0)
-        memcpy(yeni, d->veri, (size_t)d->boyut * (size_t)eb);
-    d->veri = yeni;
-    d->kapasite = yeni_kapasite;
-}
-
-/* V2-F4.1: NÖTR (no-op). d->veri ve d artık global bölge-sahipli → free()
- * YANLIŞ olur (bölge belleğini libc free'ye vermek = çökme). Bölge program
- * sonunda topluca serbest kalır (şimdilik hiç — status-quo leak; F4.4). Bu
- * fonksiyon codegen tarafından zaten emit EDİLMİYOR (dizi hep sızıyordu → ölü);
- * geriye-uyum için imza korunur. */
-void kdl_dizi_serbest(KdlDizi *d) {
-    (void)d;
-}
+#include "kdl_dizi.inc"
 
 /* === B2: Concurrency minimal API ===
  *

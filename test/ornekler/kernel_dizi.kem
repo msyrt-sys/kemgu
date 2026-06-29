@@ -1,0 +1,29 @@
+// KEMGU bare-metal dizi kernel — C1b make-or-break (D-105 ardılı).
+//
+// Heap Dizi<tam32> (kdl_dizi_* region runtime) bare-metal'de boot + doğru hesap.
+// Zincir: dizi_olustur → ekle (kapasite aşımı → kdl_dizi_buyut + bölge realloc +
+// memcpy) → al (D-069 sınır-kontrollü) → toplam. Tüm bölge tahsisleri
+// kdl_bare_heap.c frame allocator'ından beslenir (host malloc YOK).
+//
+// Beklenen çıktı: "DIZI TOPLAM: 55"  (1 + 2 + ... + 10).
+
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(4);
+
+    değişken i: tam32 = 0;
+    iken i < 10 {
+        dizi_ekle(d, i + 1);     // kapasite 0→4→8→16: kdl_dizi_buyut + memcpy
+        i = i + 1;
+    }
+
+    değişken toplam: tam32 = 0;
+    i = 0;
+    iken i < dizi_boyut(d) {
+        toplam = toplam + dizi_al(d, i);   // sınır-kontrollü heap erişimi
+        i = i + 1;
+    }
+
+    yazdir_metin("KERNEL DIZI OK");   // marker satırı (yazdir_* = newline ekler)
+    yazdir_tam(toplam);               // ardından toplam satırı: 55
+    ver 0;
+}
