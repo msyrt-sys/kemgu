@@ -27,6 +27,22 @@ _start:
     add     x0, x0, :lo12:__stack_top
     mov     sp, x0
 
+    /* 1b. FP/SIMD trap'ini kapat — clang -O2 C runtime'da 128-bit q-register
+     * (örn. 16-baytlık struct move → `ldr q0`) emit eder; trap'liyse senkron
+     * exception → vektör tablosu yok → çöküş. Başladığımız EL'e göre doğru
+     * register: QEMU virt EL2'de başlatır (CPTR_EL2.TFP); ham EL1 board ise
+     * CPACR_EL1.FPEN. İkisini de uygun şekilde ayarla. (Zorunlu bring-up.) */
+    mrs     x1, CurrentEL           /* CurrentEL[3:2] = EL; EL2 → 0b1000 = 8 */
+    cmp     x1, #8
+    b.ne    3f
+    mrs     x0, cptr_el2            /* EL2: CPTR_EL2.TFP (bit10) = 0 → trap kapalı */
+    bic     x0, x0, #(1 << 10)
+    msr     cptr_el2, x0
+3:
+    mov     x0, #(3 << 20)          /* EL1: CPACR_EL1.FPEN = 0b11 (bit[21:20]) */
+    msr     cpacr_el1, x0
+    isb
+
     /* 2. .bss bölümünü sıfırla */
     adrp    x0, __bss_start
     add     x0, x0, :lo12:__bss_start

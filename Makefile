@@ -712,10 +712,11 @@ calistir_uart_echo_bare_metal: $(BUILD)/kemgu$(EXE)
 calistir_qemu_smoke: $(BUILD)/kernel.elf
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		echo "QEMU bulundu, ARM64 smoke test calistiriliyor..."; \
-		timeout 5 qemu-system-aarch64 -M virt -cpu cortex-a72 \
-			-nographic -kernel $(BUILD)/kernel.elf < /dev/null \
-			2>/dev/null > $(BUILD)/qemu_smoke.out || true; \
-		echo "--- QEMU stdout ---"; \
+		rm -f $(BUILD)/qemu_smoke.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 \
+			-display none -serial file:$(BUILD)/qemu_smoke.out \
+			-kernel $(BUILD)/kernel.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; \
 		cat $(BUILD)/qemu_smoke.out; \
 		echo "--- son ---"; \
 		if grep -q "Merhaba KEMGU" $(BUILD)/qemu_smoke.out && \
@@ -741,23 +742,35 @@ calistir_uart_merhaba_bare_metal: $(BUILD)/kemgu$(EXE)
 	@echo "Bare-metal hello world: uart_merhaba.kem -> ARM64 ELF..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba.ll
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+		-mgeneral-regs-only -Wno-override-module \
 		-x ir $(BUILD)/uart_merhaba.ll -c -o $(BUILD)/uart_merhaba.o
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
 		-DKEMGU_BARE_METAL -Iruntime \
 		-c runtime/kdl_runtime_uart_pl011.c \
 		-o $(BUILD)/uart_pl011_bm.o
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
 		-DKEMGU_BARE_METAL -Iruntime \
 		-c runtime/kdl_runtime_yazdir_bare.c \
 		-o $(BUILD)/yazdir_bare_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_bolge.c \
+		-o $(BUILD)/kdl_bolge_bm.o
+	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
+		-Wall -Wextra -Wpedantic -std=c11 -O2 -mgeneral-regs-only \
+		-DKEMGU_BARE_METAL -Iruntime \
+		-c runtime/kdl_bare_heap.c \
+		-o $(BUILD)/kdl_bare_heap_bm.o
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
 		-c boot/start_aarch64.S -o $(BUILD)/start_aarch64.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/kernel.elf \
 		$(BUILD)/start_aarch64.o $(BUILD)/uart_merhaba.o \
-		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o
+		$(BUILD)/yazdir_bare_bm.o $(BUILD)/uart_pl011_bm.o \
+		$(BUILD)/kdl_bolge_bm.o $(BUILD)/kdl_bare_heap_bm.o
 	@echo ""
 	@echo "Uretilen kernel:"
 	@file $(BUILD)/kernel.elf
