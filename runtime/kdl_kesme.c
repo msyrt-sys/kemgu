@@ -27,12 +27,23 @@ void kdl_yazdir_onaltilik(uint64_t);
  *   x86_64 : (vektör_no, hata_kodu, RIP) */
 __attribute__((noreturn))
 void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
+    /* C8c: fault adresi — data/instruction abort hangi adrese erişti.
+     * aarch64 FAR_EL1, x86 CR2 (#PF lineer adresi). Abort-dışı için stale ama
+     * zararsız teşhis. */
+    uint64_t adr = 0;
+#if defined(__aarch64__)
+    __asm__ volatile("mrs %0, far_el1" : "=r"(adr));
+#elif defined(__x86_64__)
+    __asm__ volatile("mov %%cr2, %0" : "=r"(adr));
+#endif
     kdl_yazdir_metin("ISTISNA tip=0x");
     kdl_yazdir_onaltilik(tip);
     kdl_yazdir_metin(" a=0x");
     kdl_yazdir_onaltilik(a);
     kdl_yazdir_metin(" b=0x");
     kdl_yazdir_onaltilik(b);
+    kdl_yazdir_metin(" adr=0x");
+    kdl_yazdir_onaltilik(adr);
     kdl_yazdir_satir();
     for (;;) {
 #if defined(__aarch64__)

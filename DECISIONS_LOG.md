@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-114 — OS C8c: fault-adresi teşhisi (FAR_EL1 / CR2) + D2 ertelendi (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-113).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_istisna_isle). Sadece teşhis; davranış-nötr.]** İstisna
+(fault) işleyicisi artık fault ADRESİNİ de basar: aarch64 FAR_EL1, x86 CR2 (#PF lineer adresi).
+Data/instruction abort'ta hangi adrese erişildiği görünür → teşhis. Abort-dışı için stale ama
+zararsız.
+
+**Doğrulama:** istisna testleri (aarch64 data-abort + x86 ud2) hala geçer + "adr=0x<FAR>" basar.
+Sıfır-uyarı (iki arch). Diğer kernel'ler regresyonsuz (yalnız fault yolunda çalışır).
+
+**NOT — D2 (EL0/ring3 privilege ayrımı) ERTELENDİ:** EL0 user/kernel ayrımı denendi. ARMv8
+mimari kuralı: **EL0-writable RAM → EL1'de non-executable** (Prefetch Abort EC=0x21 ile
+kanıtlandı). Tek-region identity-map (L1 1GB blok) kernel-kodu + EL0-user-region'ı aynı sayfa
+permission'a zorluyor → çakışma. Minimal D2 AYRI user-region (finer L2/L3 sayfa tablosu +
+linker section yerleşimi) gerektirir = D1 per-process adres-uzayı ile birlikte yapılacak D-fazı
+paging işi. Tasarım (kdl_el0_calistir eret→EL0 + syscall SPSR_EL1 kaynak-EL raporu) hazır,
+revert edildi.
+
+**Sıradaki seçenekler:** D-fazı (finer page tables → per-process adres uzayı + privilege ayrımı);
+C5 (virtio-blk, import+codegen C-track fix gerek); C7b (preemptive — IRQ-handler full-context
+trap-frame rework).
+
+---
+
 ## D-113 — OS C7a: cooperative scheduling — bağlam-değiştirme (görev kuyruğu) (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-112).
