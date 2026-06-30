@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-115 — OS D2: aarch64 finer paging (L2 2MB) → user/kernel privilege ayrımı (EL0) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-114).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (L1[1] RAM → L2 2MB tablo); `linker/bare-metal-aarch64.ld`
+(.user section @0x42000000); `boot/start_aarch64.S` (kdl_el0_calistir); `runtime/kdl_kesme.c`
+(syscall num2/3); yeni `test/bare_metal/d2_arm.c`; `Makefile` (calistir_d2_test_arm + os_kernels
+gate). x86/host/codegen DEĞİŞMEDİ.]** FAZ D opener: gerçek EL0/EL1 (user/kernel) privilege ayrımı.
+
+**Finer paging (D2 ön-koşulu):** C8a'nın L1[1] 1GB Normal bloğu → L2 tablo (512 × 2MB identity
+sayfa). Per-region izin artık mümkün: kernel sayfaları AP=00 (EL1-only); user 2MB sayfası
+(0x42000000) AP=01 (EL0+EL1 RW). Bu, D-114'teki D2-wall'u (EL0-writable RAM → EL1-non-executable)
+ayrı user-page ile çözer (kernel kodu hâlâ AP=00 EL1-exec).
+
+**D2 mekanizması:** `kdl_el0_calistir` (boot asm): SP_EL0 + ELR_EL1 + SPSR_EL1(EL0t) kur, eret →
+EL0. EL0 kodu (d2_arm.c `el0_kod`, `.user` section @0x42000000, SELF-CONTAINED pure-SVC) kernel/
+device sayfalarına (AP=00) DOĞRUDAN erişemez → yalnız SVC ile EL1 kernel'e geçer. Handler
+SPSR_EL1.M[3:2] okur → kaynak-EL.
+
+**Doğrulama (QEMU 11.0.1):** d2_arm → "D2 BASLA (EL1)" + "EL0 SYSCALL kaynak-EL=" + "0x0"
+(=EL0, privilege ayrımı KANITI) + "D2 OK". 6 aarch64 kernel (dizi/sched/timer/syscall/istisna/
+capstone) regresyonsuz (L2 finer granülarite + boş .user zararsız). sıfır-uyarı. test_tumu YEŞİL.
+
+**Kapsam/sınır:** tek user-page (kod+stack aynı AP=01 sayfada → EL0 kendi kodunu yazabilir; tam
+izolasyon = kod AP=11-RO + data AP=01 ayrı sayfa + D1 per-process sayfa tablosu). x86 ring3 (TSS
+gerekir) = D2-x86 ayrı. IRQ EL0'da maskeli (D2 testi basitliği).
+
+**Sıradaki:** D1 per-process adres-uzayı (TTBR0 swap, per-process L1/L2); C7b preemptive; C5
+(virtio-blk, import+codegen C-track).
+
+---
+
 ## D-114 — OS C8c: fault-adresi teşhisi (FAR_EL1 / CR2) + D2 ertelendi (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-113).

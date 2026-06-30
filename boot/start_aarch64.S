@@ -238,3 +238,15 @@ kdl_baglam_degis:
     ldr     x2, [x1, #96]
     mov     sp, x2
     ret
+
+/* === EL0'a düş + kullanıcı kodu çalıştır (D2) — kdl_el0_calistir(x0=fn, x1=sp) ===
+ * SP_EL0 = EL0 yığını, ELR_EL1 = fn, SPSR_EL1 = EL0t (M[3:0]=0; DAIF maskeli).
+ * eret → EL0. fn yalnız SVC ile EL1'e geçebilir (device + kernel sayfaları
+ * EL1-only → doğrudan erişim permission-fault). Privilege sınırı. */
+.global kdl_el0_calistir
+kdl_el0_calistir:
+    msr     sp_el0, x1
+    msr     elr_el1, x0
+    mov     x2, #0x3C0          /* SPSR: M=EL0t, DAIF=1111 (IRQ maskeli) */
+    msr     spsr_el1, x2
+    eret

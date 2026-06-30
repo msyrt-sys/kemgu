@@ -66,6 +66,29 @@ void kdl_syscall_isle(uint64_t num, uint64_t arg) {
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");
         kdl_yazdir_satir();
+    } else if (num == 2) {
+        /* D2: çağrının kaynak ayrıcalık-seviyesini bildir (privilege ayrımı kanıtı).
+         * EL0'dan gelen syscall → kaynak-EL=0; EL1'den → 1. */
+        kdl_yazdir_metin("EL0 SYSCALL kaynak-EL=");
+#if defined(__aarch64__)
+        uint64_t spsr;
+        __asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
+        kdl_yazdir_onaltilik((spsr >> 2) & 0x3);   /* SPSR.M[3:2] = kaynak EL */
+#else
+        kdl_yazdir_onaltilik(3);                    /* x86: ring3 (D2-x86 ayrı) */
+#endif
+        kdl_yazdir_satir();
+    } else if (num == 3) {
+        /* D2 çıkış: EL0'a dönme, kernel'de dur (eret yok). */
+        kdl_yazdir_metin("D2 OK");
+        kdl_yazdir_satir();
+        for (;;) {
+#if defined(__aarch64__)
+            __asm__ volatile("wfe");
+#elif defined(__x86_64__)
+            __asm__ volatile("hlt");
+#endif
+        }
     }
 }
 

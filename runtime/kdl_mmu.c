@@ -20,18 +20,34 @@
 
 #if defined(__aarch64__)
 
-/* L1 çeviri tablosu: 512 giriş × 1GB blok, 4KB-hizalı (TTBR0 gereği). */
+/* L1 çeviri tablosu: 512 giriş × 1GB, 4KB-hizalı (TTBR0 gereği).
+ * L2 tablosu: RAM 1GB bloğu (0x40000000-0x7FFFFFFF) için 512 × 2MB sayfa —
+ * per-region izin (D2 privilege ayrımı: kernel AP=00, user sayfası AP=01). */
 static uint64_t kdl_l1_tablo[512] __attribute__((aligned(4096)));
+static uint64_t kdl_l2_tablo[512] __attribute__((aligned(4096)));
 
-/* L1 blok tanımlayıcı (1GB): bit0=geçerli, bit1=0(blok), bit[4:2]=AttrIdx,
- * bit[9:8]=SH, bit10=AF, bit[47:30]=çıkış adresi. */
-#define KDL_BLOK_DEVICE  0x0000000000000401UL  /* PA=0, AttrIdx0(Device), AF */
-#define KDL_BLOK_NORMAL  0x0000000040000705UL  /* PA=0x40000000, AttrIdx1(Normal), SH=inner, AF */
+/* L1[0] Device (1GB blok): bit0=geçerli, bit1=0(blok), AttrIdx0, AF. */
+#define KDL_BLOK_DEVICE  0x0000000000000401UL  /* PA=0, Device, AF, AP=00(EL1) */
+/* L2 2MB blok düşük-bit'leri: AttrIdx1(Normal), SH=inner, AF, AP=00 (EL1 RW). */
+#define KDL_L2_NORMAL    0x0000000000000705UL
+/* EL0 user-region: 1 adet 2MB sayfa (D2). AP=01 (EL0+EL1 RW). EL0-writable →
+ * EL1'de non-exec (ARMv8) ama EL0'da çalıştırılabilir (UXN=0) → EL0 kodu burada. */
+#define KDL_USER_VA      0x0000000042000000UL
 
 void kdl_mmu_kur(void) {
     for (int i = 0; i < 512; i++) kdl_l1_tablo[i] = 0;
-    kdl_l1_tablo[0] = KDL_BLOK_DEVICE;        /* 0-1GB Device (MMIO) */
-    kdl_l1_tablo[1] = KDL_BLOK_NORMAL;        /* 1-2GB Normal-WB (RAM) */
+
+    /* RAM 1GB → L2 (512 × 2MB identity). Çoğu sayfa kernel (AP=00); yalnız
+     * user sayfası (0x42000000) AP=01 → EL0 erişimi (privilege ayrımı). */
+    for (int n = 0; n < 512; n++) {
+        uint64_t pa = 0x40000000UL + (uint64_t)n * 0x200000UL;
+        uint64_t desc = pa | KDL_L2_NORMAL;
+        if (pa == KDL_USER_VA) desc |= (1UL << 6);   /* AP=01: EL0+EL1 RW */
+        kdl_l2_tablo[n] = desc;
+    }
+
+    kdl_l1_tablo[0] = KDL_BLOK_DEVICE;                            /* 0-1GB Device (MMIO) */
+    kdl_l1_tablo[1] = (uint64_t)(uintptr_t)kdl_l2_tablo | 0x3UL;  /* 1-2GB → L2 tablo (2MB sayfalar) */
 
     /* MAIR: attr0 = Device-nGnRnE (0x00), attr1 = Normal WB cacheable (0xFF). */
     uint64_t mair = 0x000000000000FF00UL;
