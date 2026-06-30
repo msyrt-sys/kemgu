@@ -64,6 +64,21 @@ SECTIONS
     . = . + 0x1000000;       /* 16 MB heap */
     __heap_end = .;
 
+    /* === EL0 user-region (D2) ===
+     * 0x42000000 = kdl_mmu.c'nin AP=01 (EL0-erişimli) işaretlediği 2MB sayfa.
+     * EL0 kodu (.user) + 8KB EL0 yığını burada. Kernel'in geri kalanı (AP=00)
+     * EL0'a kapalı → privilege ayrımı. heap_end (~0x41xxxxxx) < 0x42000000. */
+    . = 0x42000000;
+    .user : ALIGN(16) {
+        __user_start = .;
+        *(.user)
+        *(.user.*)
+        . = ALIGN(16);
+        . = . + 0x2000;      /* 8 KB EL0 user yığını */
+        __user_stack_top = .;
+        __user_end = .;
+    }
+
     /DISCARD/ : {
         *(.note*)
         *(.comment*)

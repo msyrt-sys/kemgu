@@ -1142,12 +1142,35 @@ calistir_sched_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 sched testi atlandi."; \
 	fi
 
+# === D2: aarch64 user/kernel privilege ayrımı (EL0 kod + syscall → "D2 OK") ===
+# Finer paging (L2 2MB): user 2MB sayfası AP=01 (EL0), kernel AP=00. EL0 kodu
+# device'a doğrudan erişemez → yalnız SVC ile EL1'e. Handler SPSR_EL1'den kaynak-EL=0.
+calistir_d2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D2 aarch64 user/kernel testi: d2_arm.c -> ELF (EL0 + syscall)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/d2_arm.c -o $(BUILD)/d2_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/d2_arm.elf $(BUILD)/d2_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/d2_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/d2_arm.out -kernel $(BUILD)/d2_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/d2_arm.out; echo "--- son ---"; \
+		if grep -q "D2 BASLA" $(BUILD)/d2_arm.out && grep -q "EL0 SYSCALL" $(BUILD)/d2_arm.out && grep -q "D2 OK" $(BUILD)/d2_arm.out; then \
+			echo "D2 aarch64 testi gecti: EL0 kod çalıştı + syscall ile EL1'e geçti (kaynak-EL=0)."; \
+		else \
+			echo "FAIL: 'D2 BASLA'+'EL0 SYSCALL'+'D2 OK' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — D2 testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
-                     calistir_sched_test_arm calistir_capstone_arm \
+                     calistir_sched_test_arm calistir_d2_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
