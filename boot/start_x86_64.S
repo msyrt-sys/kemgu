@@ -220,6 +220,31 @@ kdl_irq0_stub:
     popq    %rax
     iretq
 
+/* === Sistem çağrısı stub (C6) — int 0x80; num=rax, arg=rdi. KURTARILIR (iretq). ===
+ * kdl_syscall_isle(rdi=num, rsi=arg). rax = dönüş (void demo → kullanılmaz). */
+.global kdl_syscall_stub
+kdl_syscall_stub:
+    pushq   %rcx
+    pushq   %rdx
+    pushq   %rsi
+    pushq   %rdi
+    pushq   %r8
+    pushq   %r9
+    pushq   %r10
+    pushq   %r11
+    movq    %rdi, %rsi        /* arg → 2. param */
+    movq    %rax, %rdi        /* num → 1. param */
+    call    kdl_syscall_isle
+    popq    %r11
+    popq    %r10
+    popq    %r9
+    popq    %r8
+    popq    %rdi
+    popq    %rsi
+    popq    %rdx
+    popq    %rcx
+    iretq
+
 .section .rodata
 .align 8
 .global kdl_isr_tablo

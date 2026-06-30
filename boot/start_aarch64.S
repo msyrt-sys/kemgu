@@ -132,10 +132,45 @@ kdl_exc_ortak:
     mrs     x1, esr_el1         /* EL1 (QEMU virt) */
     mrs     x2, elr_el1
 8:
-    bl      kdl_istisna_isle    /* noreturn (yazdır + halt) */
+    lsr     x9, x1, #26         /* EC = ESR[31:26] */
+    cmp     x9, #0x15           /* SVC (aarch64 same-EL) → sistem çağrısı (C6) */
+    b.eq    kdl_svc_ortak
+    bl      kdl_istisna_isle    /* fault: noreturn (yazdır + halt) */
 6:
     wfe
     b       6b
+
+/* === SVC (sistem çağrısı) işleyici (C6) — bağlam kaydet, dispatch, eret ===
+ * num = x8 (kernel konvansiyonu), arg = x0. İstisnadan farkı: KURTARILIR (eret). */
+kdl_svc_ortak:
+    sub     sp, sp, #(16*10)
+    stp     x0, x1,   [sp, #16*0]
+    stp     x2, x3,   [sp, #16*1]
+    stp     x4, x5,   [sp, #16*2]
+    stp     x6, x7,   [sp, #16*3]
+    stp     x8, x9,   [sp, #16*4]
+    stp     x10, x11, [sp, #16*5]
+    stp     x12, x13, [sp, #16*6]
+    stp     x14, x15, [sp, #16*7]
+    stp     x16, x17, [sp, #16*8]
+    stp     x18, x30, [sp, #16*9]
+
+    ldr     x1, [sp, #16*0]     /* arg0 = kaydedilen x0 */
+    mov     x0, x8              /* num = x8 */
+    bl      kdl_syscall_isle    /* (num, arg) */
+
+    ldp     x0, x1,   [sp, #16*0]
+    ldp     x2, x3,   [sp, #16*1]
+    ldp     x4, x5,   [sp, #16*2]
+    ldp     x6, x7,   [sp, #16*3]
+    ldp     x8, x9,   [sp, #16*4]
+    ldp     x10, x11, [sp, #16*5]
+    ldp     x12, x13, [sp, #16*6]
+    ldp     x14, x15, [sp, #16*7]
+    ldp     x16, x17, [sp, #16*8]
+    ldp     x18, x30, [sp, #16*9]
+    add     sp, sp, #(16*10)
+    eret
 
 /* === IRQ işleyici (C3b) — bağlamı kaydet, GICC_IAR oku, dispatch, EOIR, eret ===
  * İstisnadan farkı: KURTARILIR (eret) → kesilen koda dönülür, caller-saved

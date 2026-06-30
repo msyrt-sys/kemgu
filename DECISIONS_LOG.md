@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-110 — OS C6: bare-metal sistem çağrısı (aarch64 SVC + x86 int 0x80) — dispatch+dönüş; MİNİMAL GÖSTERİCİ TAM (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-109).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_syscall_isle + IDT[0x80] gate); `boot/start_aarch64.S`
+(kdl_exc_ortak ESR.EC kontrolü → kdl_svc_ortak); `boot/start_x86_64.S` (kdl_syscall_stub); yeni
+`test/bare_metal/syscall_test.c` (portable); `Makefile` (2 syscall hedef + os_kernels 10 teste).
+Codegen/host DEĞİŞMEDİ.]** C6: minimal sistem çağrısı → **MİNİMAL OS GÖSTERİCİ TAMAMLANDI**.
+
+**aarch64 (SVC):** sync exception handler (kdl_exc_ortak) artık ESR.EC ayrımı yapar: 0x15 (SVC) →
+kdl_svc_ortak (bağlam kaydet, num=x8/arg=x0, kdl_syscall_isle, **ERET**); diğer EC → kdl_istisna_isle
+(fault, halt). İstisna ve syscall AYNI sync vektörde (0x200), EC ile ayrılır.
+
+**x86_64 (int 0x80):** IDT[0x80] → kdl_syscall_stub (caller-saved kaydet, num=rax/arg=rdi,
+kdl_syscall_isle, **IRETQ**).
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 10/10:** syscall_test (iki arch ortak): "BEFORE
+SYSCALL" → "SYSCALL OK num=1" (kernel dispatch) → "AFTER SYSCALL" (eret/iretq dönüş kanıtı).
+test_tumu YEŞİL (host değişmedi).
+
+**🎉 MİNİMAL OS GÖSTERİCİ TAM (her iki mimaride QEMU-kanıtlı):**
+boot + region-bellek + sürücü(UART) + exception + IRQ + timer + syscall — aarch64 (QEMU virt) +
+x86_64 (QEMU PVH). AYNI KEMGU region-confinement runtime (F4.2b/F4.3 backing) iki platformda.
+`make calistir_os_kernels` = 4 boot + 2 istisna + 2 timer + 2 syscall (D-105..D-110).
+
+**Kapsam-dışı (Mehmet kararı: minimal-gösterici):** scheduling/multitasking (C7); virtio-blk
+codegen fix (C5 — &Struct param+sonuç<> segfault; UART sürücü zaten "bir sürücü" gereğini karşılar,
+virtio beyond-minimal); MMU/sayfalama; self-host bare-metal.
+
+---
+
 ## D-109 — OS C3b/C4: bare-metal IRQ + periyodik timer (GICv2/CNTV + PIC/PIT) — tick kanıtı (2026-06-29)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-108).
