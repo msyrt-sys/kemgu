@@ -897,6 +897,28 @@ calistir_syscall_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — syscall testi atlandi."; \
 	fi
 
+# === Capstone: aarch64 — tam OS yığını tek boot'ta (dizi+timer+IRQ+syscall) ===
+calistir_capstone_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "Capstone aarch64: capstone.c -> ELF (dizi+timer+syscall birlikte)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/capstone.c -o $(BUILD)/capstone_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/capstone_arm.elf $(BUILD)/capstone_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/capstone_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/capstone_arm.out -kernel $(BUILD)/capstone_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/capstone_arm.out; echo "--- son ---"; \
+		if grep -q "55" $(BUILD)/capstone_arm.out && grep -q "99" $(BUILD)/capstone_arm.out && \
+		   grep -q "CAPSTONE OK" $(BUILD)/capstone_arm.out && grep -q "TIMER OK" $(BUILD)/capstone_arm.out; then \
+			echo "Capstone aarch64 gecti: dizi(55)+post-irq(99)+syscall+timer BIRLIKTE."; \
+		else \
+			echo "FAIL: 55+99+CAPSTONE OK+TIMER OK hepsi bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — capstone atlandi."; \
+	fi
+
 # === Bare-Metal ortak runtime objeleri (x86_64) — C1-x86 ===
 # PVH boot (boot/start_x86_64.S) → long mode → C. UART = 16550 (COM1 0x3F8 port
 # I/O). Region backing aarch64 ile AYNI (kdl_bolge + kdl_bare_heap arch-bağımsız).
@@ -1049,16 +1071,40 @@ calistir_syscall_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 syscall testi atlandi."; \
 	fi
 
+# === Capstone: x86_64 — tam OS yığını tek boot'ta (dizi+timer+IRQ+syscall) ===
+calistir_capstone_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "Capstone x86_64: capstone.c -> ELF (dizi+timer+syscall birlikte)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/capstone.c -o $(BUILD)/capstone_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/capstone_x86.elf $(BUILD)/capstone_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/capstone_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/capstone_x86.elf -display none \
+			-serial file:$(BUILD)/capstone_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/capstone_x86.out; echo "--- son ---"; \
+		if grep -q "55" $(BUILD)/capstone_x86.out && grep -q "99" $(BUILD)/capstone_x86.out && \
+		   grep -q "CAPSTONE OK" $(BUILD)/capstone_x86.out && grep -q "TIMER OK" $(BUILD)/capstone_x86.out; then \
+			echo "Capstone x86_64 gecti: dizi(55)+post-irq(99)+syscall+timer BIRLIKTE."; \
+		else \
+			echo "FAIL: 55+99+CAPSTONE OK+TIMER OK hepsi bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 capstone atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hello + dizi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef 4 kernel'i de
 # boot edip doğrular (QEMU yoksa graceful skip). C1 region-backing'in iki
 # mimaride de çalıştığının uçtan-uca kanıtı.
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
+                     calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
-                     calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86
+                     calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
+                     calistir_capstone_x86
 	@echo ""
-	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall (aarch64 + x86_64) ==="
+	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone (aarch64 + x86_64) ==="
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \

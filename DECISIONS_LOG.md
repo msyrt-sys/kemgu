@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-111 — OS Capstone: tam yığın tek boot'ta kompoze (region+timer+IRQ+syscall) — entegrasyon kanıtı (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-110).
+
+**Karar [ETKİ: yeni `test/bare_metal/capstone.c`; `Makefile` (2 capstone hedef + os_kernels 12 teste).
+Runtime/codegen/host/boot DEĞİŞMEDİ.]** Minimal gösterici parçalarını (her biri ayrı kanıtlı) TEK
+boot'ta birlikte koşturur → izole birim testlerin ötesinde **entegrasyon/kompozisyon kanıtı**.
+
+**Capstone kernel (iki arch ortak C kernel):** (1) region dizi 1..10=55 (frame allocator);
+(2) timer+IRQ aç (kdl_kesme_kur + kdl_timer_baslat); (3) region tahsis IRQ AÇIKKEN → "POST-IRQ=99"
+(**allocator IRQ-safe** — kesme handler'ları allocation-free olduğundan heap bozulmuyor; D-108/109
+KISIT'ı pratikte doğrulanır); (4) syscall → "CAPSTONE OK"; (5) idle (timer arka planda → "TIMER OK
+tik=5").
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 12/12:** capstone (aarch64 virt + x86_64 PVH) →
+"55" + "99" + "CAPSTONE OK" + "TIMER OK" hepsi. 10 birim test + 2 capstone.
+
+**🎉 MİNİMAL OS GÖSTERİCİ + ENTEGRASYON TAM (her iki mimaride):** os/c1-region-backing branch —
+C1a/b/x86 (region) + C3a (exception) + C3b/C4 (IRQ+timer) + C6 (syscall) + Capstone (7 commit).
+`make calistir_os_kernels` = **12 QEMU boot kanıtı**. Beyond-minimal (flag'li): C5 virtio codegen
+(task_09d48d31 — &Struct+sonuç deep multi-subsystem), C7 scheduling, MMU, self-host bare-metal.
+
+---
+
 ## D-110 — OS C6: bare-metal sistem çağrısı (aarch64 SVC + x86 int 0x80) — dispatch+dönüş; MİNİMAL GÖSTERİCİ TAM (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-109).
