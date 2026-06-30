@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-118 — OS C7c: blocking scheduler (sleep/wake) — preemptive üstüne (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-117).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_block[] + kdl_uyu + kdl_preempt blocking dalı); yeni
+`test/bare_metal/sleep_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]** FAZ C: blocking
+(sleep/wake) — görev N tick uyur, scheduler atlar, uyanınca kaldığı yerden sürer. Gerçek
+zaman/I-O bekleme temeli (sleep(), bloklu I/O).
+
+**Mekanizma:** her görevin tick geri-sayımı (kdl_block[]). kdl_uyu(N) → block=N + spin (scheduler
+bloklu süresince ATLAR, görev koşmaz). kdl_preempt her tick tüm block'ları azaltır + yalnız READY
+(block==0) göreve geçer; hepsi bloklu → idle (mevcutta kal).
+
+**Doğrulama (QEMU 11.0.1):** sleep_arm — görev B kdl_uyu(8) ile bloklanır, A (main) o sırada koşar
+(a_sayac artar), 8 tick sonra B READY → uyanır → "B WOKE a_kostu=VAR" (A uyku sırasında koştu).
+Diğer scheduler testleri (sched/preempt) regresyonsuz. sıfır-uyarı.
+
+**Sıradaki:** öncelikli scheduling; D1+D2+C7 birleşik gerçek user-process; D2-x86; C5 (virtio-blk).
+
+---
+
 ## D-117 — OS C7b: preemptive scheduling (timer-IRQ → zorunlu bağlam-değiştirme) (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-116).
