@@ -70,6 +70,10 @@ _start:
     b       1b
 2:
 
+    /* 2b. MMU'yu aç (C8a) — identity map, RAM Normal-WB cacheable. SIMD + cache
+     * + sanal-bellek/process-izolasyon temeli. main MMU-on koşar. */
+    bl      kdl_mmu_kur
+
     /* 3. main() çağır — ABI gereği X0 dönüşü */
     bl      main
 
