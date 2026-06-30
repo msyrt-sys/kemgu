@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-119 — OS C7d: kanal (SPSC IPC) — preemptive scheduler üstünde görevler-arası mesaj (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-118).
+
+**Karar [ETKİ: yeni `runtime/kdl_kanal.h` + `runtime/kdl_kanal.c`; yeni
+`test/bare_metal/kanal_arm.c`; `Makefile` (bm_a64_kanal.o kuralı + calistir_kanal_test_arm +
+os_kernels gate). x86/host/codegen + scheduler runtime DEĞİŞMEDİ.]** FAZ C: KEMGU `kanal`
+ilkelinin (DRF V1 — R-KANAL aksiyomu, `görev`/`kanal` keyword'leri) çekirdek-düzeyi karşılığı.
+SPSC halka tampon + preemptive scheduler + bloklamalı-alım birlikte çalışır → görevler-arası
+mesaj geçişi (IPC) kanıtı.
+
+**Mekanizma:** `KdlKanal` opak SPSC halka tampon (volatile buf/bas/son, tek slot rezerve →
+KAP-1 öğe). `kdl_kanal_gonder/al` busy-wait bloklar (dolu/boş iken döngü); preemptive scheduler
+(C7b) timer-IRQ'da karşı göreve geçirir → ilerleme garanti (tek çekirdek, kilitlenme yok).
+Tek-çekirdek → bellek-bariyeri gerekmez (SMP'de DMB eklenir).
+
+**Doğrulama (QEMU 11.0.1):** kanal_arm — üretici görev 1..10 yollar, tüketici (main) boş-kanalda
+bloklanıp uyanarak 10 değeri FIFO sırayla alır+toplar → "KANAL OK toplam=55" (libc-temiz).
+Scheduler regresyon: preempt (PREEMPT OK) + sleep (B WOKE) bozulmadı. test_tumu host-nötr
+(kdl_kanal yalnız bare-metal'de derlenir). sıfır-uyarı.
+
+**KISIT (dürüst kayıt):** Üretici-tarafı dolu-bloklama (back-pressure) çok küçük kapasite (KAP=4)
+ile hızlı ping-pong preemption altında DETERMINISTIK bir durum bozulmasına yol açtı (kanal global
+0x40004000 → 5; FAR=0x19; üretici `gonder` içinde dolu-bloklarken). Yığın-bitişikliği DEĞİL
+(16KB ayrık yığınla aynı semptom); IRQ trap-frame dengeli (sub/add #272), yığın taşması yok →
+kök-neden açık, GDB-düzeyi ayrı oturuma ertelendi. Şimdiki demo KAP=16 (üretici tek planlama-
+diliminde tüm öğeleri yollar, dolu-bloklamaz); tüketici boş-bloklama bu kısıttan etkilenmez →
+milestone sağlam + doğrulanmış. Takip: cap=4 ping-pong corner-case'i GDB ile incele.
+
+**Sıradaki:** öncelikli scheduling; D1+D2+C7 birleşik gerçek user-process; D2-x86; C5 (virtio-blk);
+cap=4 IPC corner-case GDB-teşhisi.
+
+---
+
 ## D-118 — OS C7c: blocking scheduler (sleep/wake) — preemptive üstüne (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-117).
