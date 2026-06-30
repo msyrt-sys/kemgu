@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-116 — OS D1: per-process adres-uzayı izolasyonu (TTBR0 swap) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-115).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (kdl_surec_kur + kdl_ttbr_degis — yeni fonksiyonlar); yeni
+`test/bare_metal/d1_arm.c`; `Makefile` (calistir_d1_test_arm + os_kernels gate). Diğer kernel'ler
+için dormant. x86/host/codegen DEĞİŞMEDİ.]** FAZ D: per-process adres-uzayı — her sürece ayrı
+sayfa tablosu, geçişte TTBR0 swap → process bellek izolasyonu (D2 privilege ayrımının tamamlayıcısı).
+
+**Mekanizma:** `kdl_surec_kur(L1, L2, user_pa)` — kernel identity (paylaşılan, AP=00) + user VA
+(0x42000000) → sürece-özel `user_pa`. `kdl_ttbr_degis(L1)` — TTBR0_EL1 swap + dsb/tlbi/isb (TLB
+flush) → adres-uzayı geçişi.
+
+**Doğrulama (QEMU 11.0.1):** d1_arm — 2 süreç (A: user→PA 0x44000000, B: user→PA 0x46000000),
+AYNI sanal adres 0x42000000'a A 0xAA / B 0xBB yazar; TTBR geçişlerinden sonra A hâlâ 0xAA, B hâlâ
+0xBB → "SUREC A uva=0xaa" + "SUREC B uva=0xbb" = birbirini ETKİLEMEZ = **izolasyon kanıtı**. Diğer
+kernel'ler regresyonsuz (yeni fonksiyonlar dormant). sıfır-uyarı.
+
+**Kapsam/sınır:** demo EL1'de (VA→PA izolasyonunu izole gösterir; tam EL0-user-process = D1+D2
+birleşimi); scheduler-entegrasyonu (context switch'te TTBR swap) sonra; kernel-identity aliasing
+(PA_A/B aynı zamanda identity-VA'da görünür) — demo user-VA'dan eriştiği için zararsız.
+
+**Sıradaki:** D1+D2 birleşik EL0 user-process (ayrı adres-uzayı + EL0); C7b preemptive; D3
+process oluşturma (fork/exec-eşdeğeri).
+
+---
+
 ## D-115 — OS D2: aarch64 finer paging (L2 2MB) → user/kernel privilege ayrımı (EL0) (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-114).
