@@ -253,3 +253,26 @@ kdl_isr_tablo:
     .quad   isr8, isr9, isr10, isr11, isr12, isr13, isr14, isr15
     .quad   isr16, isr17, isr18, isr19, isr20, isr21, isr22, isr23
     .quad   isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
+
+/* === Cooperative bağlam-değiştirme (C7a) — kdl_baglam_degis(rdi=eski, rsi=yeni) ===
+ * Callee-saved (rbx,rbp,r12-r15) + rsp kaydet/yükle. ret → yeni görev sürer.
+ * TCB: [0]=rbx,[1]=rbp,[2..5]=r12-r15,[6]=rsp (×8 bayt). */
+.section .text
+.code64
+.global kdl_baglam_degis
+kdl_baglam_degis:
+    movq    %rbx, 0(%rdi)
+    movq    %rbp, 8(%rdi)
+    movq    %r12, 16(%rdi)
+    movq    %r13, 24(%rdi)
+    movq    %r14, 32(%rdi)
+    movq    %r15, 40(%rdi)
+    movq    %rsp, 48(%rdi)
+    movq    0(%rsi), %rbx
+    movq    8(%rsi), %rbp
+    movq    16(%rsi), %r12
+    movq    24(%rsi), %r13
+    movq    32(%rsi), %r14
+    movq    40(%rsi), %r15
+    movq    48(%rsi), %rsp
+    ret

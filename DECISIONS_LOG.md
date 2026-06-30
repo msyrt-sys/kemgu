@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-113 — OS C7a: cooperative scheduling — bağlam-değiştirme (görev kuyruğu) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-112).
+
+**Karar [ETKİ: yeni `runtime/kdl_gorev.c`; `boot/start_aarch64.S` + `boot/start_x86_64.S`
+(kdl_baglam_degis asm); yeni `test/bare_metal/sched_test.c`; `Makefile` (bm_*_gorev.o + 2 sched
+hedefi + os_kernels gate). x86 IR/host/codegen DEĞİŞMEDİ.]** FAZ C: işbirlikçi çok-görevlilik.
+Görevler kdl_gorev_ver() (yield) ile gönüllü CPU bırakır → round-robin bağlam-değiştir.
+MMU/preemption gerektirmez (C7b preemptive = timer-IRQ quantum, sonra).
+
+**Tasarım:** TCB = callee-saved register'lar + SP. kdl_baglam_degis (asm): mevcut görevin
+callee-saved'ını TCB'ye kaydet, sonrakinin kinden yükle, `ret` → sonraki görev kaldığı yerden
+sürer (caller-saved yield çağrı-noktasında C ABI'siyle korunur, kaydetmeye gerek yok). Görev 0 =
+main bağlamı (init gerektirmez; ilk yield'de TCB'ye kaydedilir). Yeni görev: TCB dönüş-adresi =
+giriş, TCB.sp = yığın-tepe.
+- aarch64: x19-x28+x29+x30+sp (TCB[0..12], ×8 bayt; x30=giriş, ret oraya).
+- x86: rbx/rbp/r12-r15+rsp (TCB[0..6]); giriş yığına push (switch ret'i pop eder).
+
+**Doğrulama (QEMU 11.0.1):** sched_test.c (AYNI kernel iki mimaride): main+gorev1 round-robin →
+"SCHED BASLA / [main] / [gorev1] / [main] / [gorev1] / [main] / [gorev1] / SCHED OK" — interleave
+= bağlam-değiştirme çalışıyor. aarch64 + x86 ikisi de geçti. kdl_gorev.c sıfır-uyarı. Diğer
+kernel'ler regresyonsuz (kdl_baglam_degis dormant). os_kernels gate artık **14** (7 yetenek × 2 arch).
+
+**KEMGU bağı:** region-ownership + `görev` (D-008 concurrency) ileride gerçek thread'le buluşur —
+statik tip-kontrollü `görev`/`kanal`'ın runtime temeli.
+
+**Kapsam/sınır:** cooperative (preemption yok = C7b timer-IRQ quantum); tek adres-uzayı (TCB ortak
+bellek; per-process MMU-izolasyon = D1); SIMD-context yok (-mgeneral-regs-only, C8b).
+
+**Sıradaki:** C7b preemptive (timer-IRQ → zorunlu yield) / C5 (import+codegen) / D1 (per-process).
+
+---
+
 ## D-112 — OS C8a: aarch64 MMU-on (identity map) — RAM Normal-WB, sanal-bellek temeli (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-111).
