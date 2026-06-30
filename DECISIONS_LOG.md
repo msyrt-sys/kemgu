@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-112 — OS C8a: aarch64 MMU-on (identity map) — RAM Normal-WB, sanal-bellek temeli (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-111).
+
+**Karar [ETKİ: yeni `runtime/kdl_mmu.c`; `boot/start_aarch64.S` (`bl kdl_mmu_kur` main'den önce);
+`Makefile` (bm_a64_mmu.o). x86/host/codegen DEĞİŞMEDİ.]** FAZ C keystone: aarch64 MMU'yu
+identity-map ile aç → RAM Device-nGnRnE'den **Normal-WB cacheable**'a → cache + SIMD-uyumlu
+bellek + sanal-bellek/process-izolasyon (D fazı) temeli.
+
+**Identity harita (4KB granül, 39-bit VA, L1 1GB blok):**
+- L1[0] 0-1GB → Device (GICv2 0x08000000, UART 0x09000000).
+- L1[1] 1-2GB → Normal-WB (kernel + 16MB heap @ 0x40000000).
+- MAIR (attr0=Device, attr1=Normal-WB), TCR (T0SZ=25, 4KB, WB, inner-sh, EPD1, IPS=36bit),
+  TTBR0=L1, SCTLR.M|C|I. dsb/tlbi/isb sıralı.
+
+**x86_64:** long mode ZATEN paging gerektirir → `boot/start_x86_64.S` identity sayfa
+tablolarıyla zaten MMU-on (PVH→long mode). Ek MMU kurulumu gerekmez; kdl_mmu.c yalnız aarch64.
+
+**Doğrulama (QEMU 11.0.1):** 4 aarch64 kernel MMU-on boot eder — hello, region+heap-dizi (memcpy
+Normal-cached bellekte), timer (IRQ MMU üstünden), syscall. x86 regresyonsuz. test_tumu YEŞİL
+(host değişmedi). kdl_mmu.c sıfır-uyarı.
+
+**Kapsam/sınır:** identity-only (VA==PA), tek adres-uzayı (per-process = D1). **-mgeneral-regs-only
+KORUNUYOR (C8b ertelendi):** MMU Normal-memory'yi açtı ama kernel-geneli SIMD, IRQ/exception
+handler'larında SIMD-bağlam kaydı gerektirir (handler'lar şu an yalnız GPR kaydeder, q0-q31
+değil) → kesme anında SIMD-state bozulur. Linux-benzeri sound kernel-FP-yasağı politikası sürüyor;
+SIMD'i global açmak ayrı refinement (handler SIMD-save). C8c sayfa-hata: data abort zaten
+kdl_exc_ortak'ta yakalanıyor (C3a) → ESR+ELR teşhis+halt; demand-paging D-fazı.
+
+**Sıradaki:** C7a cooperative scheduling (görev kuyruğu + context switch, MMU-bağımsız).
+
+---
+
 ## D-111 — OS Capstone: tam yığın tek boot'ta kompoze (region+timer+IRQ+syscall) — entegrasyon kanıtı (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-110).

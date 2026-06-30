@@ -757,12 +757,14 @@ $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_mmu.o: runtime/kdl_mmu.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
 BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
-              $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o
+              $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o $(BUILD)/bm_a64_mmu.o
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
