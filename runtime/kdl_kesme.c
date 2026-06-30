@@ -45,6 +45,19 @@ void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
     }
 }
 
+/* === Sistem çağrısı dispatch (C6) ===
+ * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
+ * stub'ı bağlamı kaydeder, num + arg ile buraya gelir, dönüşte eret/iretq.
+ * Minimal demonstrasyon: çağrı #1 = mesaj yazdır. Gerçek kernel'de bu tablo
+ * dosya/bellek/görev syscall'larına genişler. */
+void kdl_syscall_isle(uint64_t num, uint64_t arg) {
+    (void)arg;
+    if (num == 1) {
+        kdl_yazdir_metin("SYSCALL OK num=1");
+        kdl_yazdir_satir();
+    }
+}
+
 #if defined(__x86_64__)
 /* === x86_64 IDT kurulumu (C3a) ===
  * aarch64 vektörleri VBAR ile asm'de kurulur; x86 IDT'si gate-tablosu gerektirir
@@ -64,7 +77,8 @@ struct KdlIdtKapi {
 static struct KdlIdtKapi kdl_idt[256];
 extern void *kdl_isr_tablo[32];   /* asm: isr0..isr31 adresleri */
 
-extern void kdl_irq0_stub(void);   /* boot/start_x86_64.S — IRQ0 (timer) */
+extern void kdl_irq0_stub(void);     /* boot/start_x86_64.S — IRQ0 (timer) */
+extern void kdl_syscall_stub(void);  /* boot/start_x86_64.S — int 0x80 syscall */
 
 static void kdl_idt_gate(int i, uint64_t adr) {
     kdl_idt[i].offset_dusuk  = (uint16_t)(adr & 0xFFFF);
@@ -80,6 +94,7 @@ void kdl_idt_kur(void) {
     for (int i = 0; i < 32; i++)
         kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i]);   /* istisnalar 0-31 */
     kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub);        /* IRQ0 → vektör 32 */
+    kdl_idt_gate(0x80, (uint64_t)(uintptr_t)&kdl_syscall_stub);   /* int 0x80 → syscall */
 
     struct {
         uint16_t limit;

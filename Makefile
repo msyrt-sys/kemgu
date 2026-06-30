@@ -876,6 +876,27 @@ calistir_timer_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — timer testi atlandi."; \
 	fi
 
+# === C6: aarch64 sistem çağrısı testi (SVC → dispatch → eret → "AFTER SYSCALL") ===
+calistir_syscall_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "C6 aarch64 syscall testi: syscall_test.c -> ELF (SVC)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/syscall_test.c -o $(BUILD)/syscall_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/syscall_arm.elf $(BUILD)/syscall_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/syscall_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/syscall_arm.out -kernel $(BUILD)/syscall_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/syscall_arm.out; echo "--- son ---"; \
+		if grep -q "SYSCALL OK" $(BUILD)/syscall_arm.out && grep -q "AFTER SYSCALL" $(BUILD)/syscall_arm.out; then \
+			echo "C6 aarch64 syscall testi gecti: cagri islendi + dondu (AFTER SYSCALL)."; \
+		else \
+			echo "FAIL: 'SYSCALL OK' + 'AFTER SYSCALL' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — syscall testi atlandi."; \
+	fi
+
 # === Bare-Metal ortak runtime objeleri (x86_64) — C1-x86 ===
 # PVH boot (boot/start_x86_64.S) → long mode → C. UART = 16550 (COM1 0x3F8 port
 # I/O). Region backing aarch64 ile AYNI (kdl_bolge + kdl_bare_heap arch-bağımsız).
@@ -1007,16 +1028,37 @@ calistir_timer_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 timer testi atlandi."; \
 	fi
 
+# === C6: x86_64 sistem çağrısı testi (int 0x80 → dispatch → iretq → "AFTER SYSCALL") ===
+calistir_syscall_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "C6 x86_64 syscall testi: syscall_test.c -> ELF (int 0x80)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/syscall_test.c -o $(BUILD)/syscall_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/syscall_x86.elf $(BUILD)/syscall_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/syscall_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/syscall_x86.elf -display none \
+			-serial file:$(BUILD)/syscall_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/syscall_x86.out; echo "--- son ---"; \
+		if grep -q "SYSCALL OK" $(BUILD)/syscall_x86.out && grep -q "AFTER SYSCALL" $(BUILD)/syscall_x86.out; then \
+			echo "C6 x86_64 syscall testi gecti: cagri islendi + dondu (AFTER SYSCALL)."; \
+		else \
+			echo "FAIL: 'SYSCALL OK' + 'AFTER SYSCALL' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 syscall testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hello + dizi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef 4 kernel'i de
 # boot edip doğrular (QEMU yoksa graceful skip). C1 region-backing'in iki
 # mimaride de çalıştığının uçtan-uca kanıtı.
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
-                     calistir_istisna_test_arm calistir_timer_test_arm \
+                     calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
-                     calistir_istisna_test_x86 calistir_timer_test_x86
+                     calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86
 	@echo ""
-	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer (aarch64 + x86_64) ==="
+	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall (aarch64 + x86_64) ==="
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
