@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-122 — OS: SVC arg0 (x0) vektör-stub tarafından eziliyordu — syscall argüman geçişi onarımı (2026-06-30) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-121).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (VEKTOR_EXC macro — `mov x0,#\tip` kaldırıldı; kdl_exc_ortak
+fault-yolu `mov x0,x9` ile EC'yi tip yapar); `runtime/kdl_kesme.c` (kdl_syscall_isle num=4 arg
+kontrolü); yeni `test/bare_metal/syscall_arg_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]**
+D-121'de keşfedilen ikincil latent bug'ın onarımı — IRQ ile aynı sınıf, EXC yolunda.
+
+**KÖK-NEDEN:** `VEKTOR_EXC \tip` → `mov x0,#\tip ; b kdl_exc_ortak`. Same-EL SVC slot 4 →
+`mov x0,#4`, kdl_svc_ortak x0'ı (syscall arg0) kaydetmeden ÖNCE 4 ile eziyordu → her syscall'ın
+arg0'ı sessizce vektör-indeksine (4) dönüşüyordu. Latentti (mevcut syscall testleri arg0
+kontrol etmiyordu) ama userspace syscall'ları arg geçince bozulurdu.
+
+**ONARIM:** VEKTOR_EXC artık doğrudan `b kdl_exc_ortak` (x0 dokunulmaz). SVC dalında x0=arg0
+korunur → kdl_svc_ortak doğru kaydeder/geçer. Fault dalında (b.eq kdl_svc_ortak alınmazsa)
+`mov x0, x9` ile tip = ESR.EC (teşhis; x0 artık arg0 değil, fault noreturn). istisna gösterimi
+"tip=0x<vektör>" yerine "tip=0x<EC>" (daha bilgilendirici; test "ISTISNA" arar, etkilenmez).
+
+**Doğrulama (QEMU 11.0.1):** syscall_arg — SVC num=4 arg=42 → kernel arg==42 görür →
+"SYSCALL ARG OK" (+ "SYSCALL ARG SONRA" = eret kurtarma çalışıyor). Onarımdan önce arg=4 →
+"HATA" olurdu. Regresyon yeşil: syscall (AFTER SYSCALL) + istisna (EC display) + d2 (EL0 SVC
+kaynak-EL). sıfır-uyarı. **Vektör-stub register-bozma bug sınıfı (IRQ D-121 + EXC D-122) artık
+tamamen kapalı** — preemption x0 + syscall arg0 ikisi de güvenli.
+
+**Sıradaki:** D1+D2+C7 birleşik gerçek EL0 user-process (artık syscall-arg + x0-koruma hazır);
+D2-x86; C5 (virtio-blk).
+
+---
+
 ## D-121 — OS: IRQ vektör stub'u preempt edilen görevin x0'ını bozuyordu (KÖK-NEDEN onarımı) + C7d cap=4 IPC restore (2026-06-30) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-120).

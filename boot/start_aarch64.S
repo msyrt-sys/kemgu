@@ -94,9 +94,12 @@ _halt:
 .balign 0x800
 .global kdl_vektor_tablosu
 kdl_vektor_tablosu:
+/* D-121/D-122: EXC vektör stub'u da x0'ı bozmamalı. SVC'de x0 = syscall arg0;
+ * eski `mov x0,#\tip` onu (vektör-indeksiyle) yok ediyordu → userspace syscall
+ * argümanları kaybolurdu. Doğrudan dallan; kdl_exc_ortak fault-yolu için "tip"i
+ * ESR.EC'den türetir (kdl_istisna_isle'a x9=EC geçer), SVC-yolu x0'ı korur. */
 .macro VEKTOR_EXC tip
     .balign 0x80
-    mov     x0, #\tip
     b       kdl_exc_ortak
 .endm
 /* C7b/D-121 KRİTİK: IRQ vektör stub'u x0'ı KESİNLİKLE bozmamalı. kdl_irq_ortak
@@ -143,8 +146,9 @@ kdl_exc_ortak:
 8:
     lsr     x9, x1, #26         /* EC = ESR[31:26] */
     cmp     x9, #0x15           /* SVC (aarch64 same-EL) → sistem çağrısı (C6) */
-    b.eq    kdl_svc_ortak
-    bl      kdl_istisna_isle    /* fault: noreturn (yazdır + halt) */
+    b.eq    kdl_svc_ortak       /* SVC: x0 = arg0 KORUNDU (vektör artık ezmiyor) */
+    mov     x0, x9              /* fault: tip = EC (x0 artık arg0 değil; teşhis için EC) */
+    bl      kdl_istisna_isle    /* fault: noreturn (yazdır + halt) — (EC, ESR, ELR) */
 6:
     wfe
     b       6b
