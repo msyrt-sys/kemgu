@@ -45,14 +45,19 @@ drivers_test: $(addprefix calistir_,$(VIRTIO_TESTS))
 onkosul:
 	$(MAKE) -f Makefile $(KEMGU) build/kdl_runtime.o build/kdl_runtime_mmio.o
 
-# Her test için tek tip recipe: kemgu --llvm | clang -x ir | çalıştır (exit 0 = geçti).
+# Her test için tek tip recipe:
+#   1) kemgu --check  (cross-file kullan import + tip kontrol — exit 0)
+#   2) kemgu --llvm | clang -x ir | çalıştır  (codegen + runtime — exit 0)
 # Herhangi bir adım başarısızsa make hata ile durur (gate kırmızı olur).
+# --check adımı, legacy cok-segment 'kullan a::b::c;' import çözümünün (ana.c
+# legacy_kullan_yukle) regresyona girmemesini garanti eder.
 define RUN_DTEST
 calistir_$(1): onkosul
 	@echo "--- $(1) ---"
+	$$(KEMGU) --check $$(DTESTS)/$(1).kem
 	$$(KEMGU) --llvm $$(DTESTS)/$(1).kem > build/_d_$(1).ll 2>build/_d_$(1).err
 	clang -x ir build/_d_$(1).ll -x none $$(RT) -o build/_d_$(1)$$(EXE) 2>build/_d_$(1).cerr
 	./build/_d_$(1)$$(EXE)
-	@echo "  $(1): GECTI (exit 0)"
+	@echo "  $(1): GECTI (--check + --llvm exit 0)"
 endef
 $(foreach t,$(VIRTIO_TESTS),$(eval $(call RUN_DTEST,$(t))))

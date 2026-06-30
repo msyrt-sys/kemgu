@@ -384,6 +384,103 @@ static int modulleri_yukle(Arena *a, Dugum *prog,
     return hata;
 }
 
+/* Legacy cok-segment ciplak 'kullan a::b::c;' duzlestirme — yalniz --check /
+ * --checkdump yolu. llvm_ir_uret icindeki worklist ile AYNI davranis: yol
+ * "a/b/c.kem" (CWD-goreli), import edilen dosyanin uyeleri program'a DUZ
+ * (namespace'siz) eklenir, transitif legacy kullan'lar islenir, path-bazli
+ * dedup cycle/diamond'i sonlandirir. mode_llvm bunu kendi worklist'inde
+ * yaptigi icin BURASI yalniz check yollarinda cagrilir (cift yukleme yok).
+ * Acilamayan dosya --llvm paritesi geregi SESSIZ atlanir (tip_kontrol
+ * cozulemeyen adi zaten T002 ile raporlar). Doner: import parse hata sayisi.
+ * SIRA: bu pass modulleri_yukle'den ONCE kosar — legacy import'lar
+ * duzlestirilince, import edilen dosyadaki YENI-bicim 'kullan'lar program
+ * uyelerine yukselir ve ardindan modulleri_yukle onlari cozer (aksi halde
+ * legacy->yeni-bicim zinciri cozulmeden kalir, sahte T040 verirdi). Ters
+ * yon (yeni-bicim DUGUM_MODUL icindeki legacy kullan) hala cozulmez —
+ * llvm.c worklist'i ile ayni sinir; driver dosyalari saf legacy oldugundan
+ * tetiklenmez. Korpus (test/check_korpus/) cok-segment kullan icermez ->
+ * checker_diff/self-host FIXPOINT degismez. */
+static int legacy_kullan_yukle(Arena *a, Dugum *prog) {
+    if (!prog || prog->tip != DUGUM_PROGRAM) return 0;
+
+    Dugum **is_l = NULL; int is_sayi = 0, is_kap = 0;   /* worklist */
+    Dugum **cik = NULL;  int cik_sayi = 0, cik_kap = 0; /* cikti */
+    YukluAd *yuklu = NULL;
+    int hata = 0;
+
+    /* arena-doubling ekleme (modulleri_yukle idiomu; malloc/free yok) */
+    #define LK_PUSH(arr, sayi, kap, val) do { \
+        if ((sayi) == (kap)) { \
+            int yenikap = (kap) == 0 ? 16 : (kap) * 2; \
+            Dugum **nr = (Dugum **)arena_ayir(a, \
+                sizeof(Dugum *) * (size_t)yenikap); \
+            if (!nr) break; \
+            if (arr) memcpy(nr, (arr), sizeof(Dugum *) * (size_t)(sayi)); \
+            (arr) = nr; (kap) = yenikap; \
+        } \
+        (arr)[(sayi)++] = (val); \
+    } while (0)
+
+    for (int i = 0; i < prog->veri.program.sayi; i++)
+        LK_PUSH(is_l, is_sayi, is_kap, prog->veri.program.uyeler[i]);
+
+    for (int wi = 0; wi < is_sayi; wi++) {
+        Dugum *uye = is_l[wi];
+        if (!uye) continue;
+        if (uye->tip != DUGUM_KULLAN || kullan_yeni_bicim(uye)) {
+            LK_PUSH(cik, cik_sayi, cik_kap, uye);
+            continue;
+        }
+        /* legacy a::b::c -> a/b/c.kem */
+        const char *y = uye->veri.kullan.yol;
+        int yu = uye->veri.kullan.yol_uzunluk;
+        if (!y || yu <= 0) continue;
+        char dy[1024]; int o = 0;
+        for (int k = 0; k < yu && o + 6 < (int)sizeof(dy); k++) {
+            if (k + 1 < yu && y[k] == ':' && y[k + 1] == ':') {
+                dy[o++] = '/'; k++;
+            } else {
+                dy[o++] = y[k];
+            }
+        }
+        const char *ext = ".kem";
+        for (int k = 0; k < 4 && o + 1 < (int)sizeof(dy); k++) dy[o++] = ext[k];
+        dy[o] = '\0';
+        /* path dedup */
+        int zaten = 0;
+        for (YukluAd *yd = yuklu; yd; yd = yd->sonraki) {
+            if (yd->uz == o && memcmp(yd->ad, dy, (size_t)o) == 0) {
+                zaten = 1; break;
+            }
+        }
+        if (zaten) continue;
+        char *icerik = dosya_icerik_oku(a, dy);
+        if (!icerik) continue;   /* --llvm paritesi: sessiz atla */
+        char *yk = (char *)arena_ayir(a, (size_t)o + 1);
+        if (!yk) continue;
+        memcpy(yk, dy, (size_t)o + 1);
+        YukluAd *ya = (YukluAd *)arena_ayir_sifir(a, sizeof(YukluAd));
+        if (ya) { ya->ad = yk; ya->uz = o; ya->sonraki = yuklu; yuklu = ya; }
+        Lexer ml; lexer_baslat(&ml, icerik, yk);
+        Parser mp; parser_baslat(&mp, &ml, a, yk, icerik);
+        Dugum *mprog = parser_calistir(&mp);
+        if (mprog && mp.hata_sayisi == 0) {
+            for (int k = 0; k < mprog->veri.program.sayi; k++)
+                LK_PUSH(is_l, is_sayi, is_kap,
+                        mprog->veri.program.uyeler[k]);
+        } else {
+            hata += mp.hata_sayisi > 0 ? mp.hata_sayisi : 1;
+        }
+    }
+    #undef LK_PUSH
+
+    if (cik) {
+        prog->veri.program.uyeler = cik;
+        prog->veri.program.sayi = cik_sayi;
+    }
+    return hata;
+}
+
 static int mode_check(const char *kaynak, const char *dosya_adi) {
     Arena *a = arena_olustur(0);
     if (!a) {
@@ -403,9 +500,13 @@ static int mode_check(const char *kaynak, const char *dosya_adi) {
     int rt_hata = 0;
 
     if (parser_hata == 0 && prog) {
-        /* A: cok-dosya modul yukleme (kesfet + parse + splice) —
-         * tip kontrolu tum modulleri tek tabloda gorur. */
-        yukleme_hata = modulleri_yukle(a, prog, dosya_adi, kaynak);
+        /* A: legacy cok-segment ciplak 'kullan a::b::c;' duzlestir
+         * (--llvm worklist paritesi — driver dosyalari bu formu kullanir).
+         * ONCE kosar: legacy import'taki yeni-bicim kullan'lari yukseltir. */
+        yukleme_hata = legacy_kullan_yukle(a, prog);
+        /* B: cok-dosya modul yukleme (kesfet + parse + splice) — yukselen
+         * yeni-bicim kullan'lar dahil tum modulleri tek tabloda gorur. */
+        yukleme_hata += modulleri_yukle(a, prog, dosya_adi, kaynak);
 
         Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
         TipKontrol tk;
@@ -464,6 +565,7 @@ static int mode_checkdump(const char *kaynak, const char *dosya_adi) {
     parser_baslat(&p, &l, a, dosya_adi, kaynak);
     Dugum *prog = parser_calistir(&p);
     if (p.hata_sayisi == 0 && prog) {
+        legacy_kullan_yukle(a, prog);
         modulleri_yukle(a, prog, dosya_adi, kaynak);
         Scope *g = scope_olustur(a, SCOPE_GLOBAL, NULL);
         TipKontrol tk;
