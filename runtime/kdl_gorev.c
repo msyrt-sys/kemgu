@@ -74,6 +74,7 @@ void kdl_gorev_ver(void) {
 
 static int      kdl_preempt_aktif = 0;
 static uint64_t kdl_psp[KDL_MAX_GOREV];   /* her görevin trap-frame SP'si */
+static int      kdl_block[KDL_MAX_GOREV]; /* >0 = bloklu (tick geri-sayım) — C7c */
 static int      kdl_psayi = 0;
 static int      kdl_paktif = 0;
 
@@ -99,11 +100,26 @@ int kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe) {
 
 void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
 
-/* IRQ trap-frame'inden (sp) çağrılır. Preempt aktifse round-robin sonraki
- * görevin trap-frame SP'sini döner; değilse sp (switch yok → timer testi nötr). */
+/* IRQ trap-frame'inden (sp) çağrılır. Preempt aktifse: bloklu görevlerin tick
+ * sayacını azalt, sonraki READY (bloklu-olmayan) göreve geç (trap-frame SP swap);
+ * değilse sp (switch yok → timer testi nötr). C7c: bloklu görev atlanır. */
 uint64_t kdl_preempt(uint64_t sp) {
     if (!kdl_preempt_aktif || kdl_psayi < 2) return sp;
     kdl_psp[kdl_paktif] = sp;
-    kdl_paktif = (kdl_paktif + 1) % kdl_psayi;
-    return kdl_psp[kdl_paktif];
+    for (int i = 0; i < kdl_psayi; i++)          /* C7c: uyku geri-sayımı */
+        if (kdl_block[i] > 0) kdl_block[i]--;
+    int n = kdl_paktif;
+    for (int t = 0; t < kdl_psayi; t++) {        /* sonraki READY görev */
+        n = (n + 1) % kdl_psayi;
+        if (kdl_block[n] == 0) { kdl_paktif = n; return kdl_psp[n]; }
+    }
+    return kdl_psp[kdl_paktif];                   /* hepsi bloklu → idle */
+}
+
+/* C7c: çağıran görevi N timer-tick blokla (uyut). Scheduler bloklu süresince
+ * atlar; sayaç 0'a inince READY → kaldığı yerden sürer. */
+void kdl_uyu(int tikler) {
+    int self = kdl_paktif;
+    kdl_block[self] = tikler;
+    while (kdl_block[self] > 0) { __asm__ volatile("" ::: "memory"); }
 }
