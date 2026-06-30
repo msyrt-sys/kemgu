@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-117 — OS C7b: preemptive scheduling (timer-IRQ → zorunlu bağlam-değiştirme) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-116).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_irq_ortak → FULL trap-frame + kdl_irq_isle);
+`runtime/kdl_zaman.c` (kdl_irq_isle); `runtime/kdl_gorev.c` (kdl_preempt + preemptive scheduler);
+yeni `test/bare_metal/preempt_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]** FAZ C:
+preemptive multitasking — timer-IRQ görevi ZORLA switch eder (görev yield etmez).
+
+**Mimari (full trap-frame IRQ):** kdl_irq_ortak artık FULL bağlam (x0-x30 + ELR_EL1 + SPSR_EL1 =
+272 bayt, x30@240/ELR@248/SPSR@256) kaydeder → kdl_irq_isle(sp) [GICC_IAR + tik/re-arm +
+EOI(switch-ÖNCESİ) + kdl_preempt] devam SP'sini döner → SP swap (preempt'te sonraki görevin
+trap-frame'i) → restore → eret. Preempt kapalıysa SP aynı → eski davranış (timer/sched testleri
+NÖTR, regresyonsuz).
+
+**Preemptive scheduler (kdl_gorev.c):** kdl_preempt(sp) round-robin görev trap-frame SP swap.
+kdl_preempt_gorev_olustur sentetik trap-frame kurar (ELR=giriş, SPSR=EL1h+IRQ-açık) → ilk switch
+eret ile göreve atlar. **EOI switch-ÖNCESİ KRİTİK:** GIC serbest kalır → sonraki timer-IRQ
+sonraki görevi preempt eder; aksi halde IRQ27 active kalır → deadlock.
+
+**Doğrulama (QEMU 11.0.1):** preempt_arm — 2 görev (A=main, B) busy-loop, ASLA yield ETMEZ.
+B **1071 kez** koştu (yalnız timer preemption ile!), A 4 kez → "PREEMPT OK". Timer/sched/capstone
+regresyonsuz (Stage-1 doğrulandı: full-trap-frame, preempt-off = eski davranış). sıfır-uyarı.
+
+**Kapsam/sınır:** round-robin (öncelik/quantum-ayarı yok = C7c TCB-durum); tek adres-uzayı
+(görevler bellek paylaşır; D1 ile birleşik per-process preemptive sonra); aarch64 (x86 IRQ0-stub
+trap-frame rework = sonra).
+
+**Sıradaki:** D1+D2+C7b birleşik gerçek user-process; C7c (öncelik/durum); D2-x86; C5 (virtio-blk).
+
+---
+
 ## D-116 — OS D1: per-process adres-uzayı izolasyonu (TTBR0 swap) (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-115).

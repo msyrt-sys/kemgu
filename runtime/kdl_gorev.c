@@ -65,3 +65,45 @@ void kdl_gorev_ver(void) {
     if (kdl_aktif != eski)
         kdl_baglam_degis(&kdl_tcb[eski], &kdl_tcb[kdl_aktif]);
 }
+
+/* ================= Preemptive scheduling (C7b) ================= */
+/* Cooperative'den farkı: timer-IRQ zorunlu switch yapar (görev yield etmez).
+ * kdl_irq_isle (boot full trap-frame'den) her timer IRQ'da kdl_preempt(sp)
+ * çağırır → mevcut görevin trap-frame SP'sini kaydet, sonrakine geç (round-robin).
+ * Görev trap-frame'i yığında (x0-x30 + ELR + SPSR), SP swap ile geçiş. */
+
+static int      kdl_preempt_aktif = 0;
+static uint64_t kdl_psp[KDL_MAX_GOREV];   /* her görevin trap-frame SP'si */
+static int      kdl_psayi = 0;
+static int      kdl_paktif = 0;
+
+/* Görev 0 = main (ilk preempt'te trap-frame SP'si kaydedilir). */
+void kdl_preempt_baslat(void) {
+    kdl_psayi = 1;
+    kdl_paktif = 0;
+}
+
+/* Yeni preemptive görev: yığın tepesinde sentetik trap-frame (272 bayt) kur →
+ * ilk switch eret ile `giris`'e EL1h + IRQ-açık atlar. */
+int kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe) {
+    if (kdl_psayi >= KDL_MAX_GOREV) return -1;
+    int i = kdl_psayi++;
+    uint64_t sp = ((uint64_t)(uintptr_t)yigin_tepe - 272) & ~0xFUL;
+    uint64_t *tf = (uint64_t *)(uintptr_t)sp;
+    for (int k = 0; k < 34; k++) tf[k] = 0;
+    tf[31] = (uint64_t)(uintptr_t)giris;   /* ELR_EL1 @ offset 248 → eret hedefi */
+    tf[32] = 0x5;                          /* SPSR: M=EL1h, DAIF=0 (IRQ açık) */
+    kdl_psp[i] = sp;
+    return i;
+}
+
+void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
+
+/* IRQ trap-frame'inden (sp) çağrılır. Preempt aktifse round-robin sonraki
+ * görevin trap-frame SP'sini döner; değilse sp (switch yok → timer testi nötr). */
+uint64_t kdl_preempt(uint64_t sp) {
+    if (!kdl_preempt_aktif || kdl_psayi < 2) return sp;
+    kdl_psp[kdl_paktif] = sp;
+    kdl_paktif = (kdl_paktif + 1) % kdl_psayi;
+    return kdl_psp[kdl_paktif];
+}
