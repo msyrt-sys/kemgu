@@ -75,6 +75,7 @@ void kdl_gorev_ver(void) {
 static int      kdl_preempt_aktif = 0;
 static uint64_t kdl_psp[KDL_MAX_GOREV];   /* her görevin trap-frame SP'si */
 static int      kdl_block[KDL_MAX_GOREV]; /* >0 = bloklu (tick geri-sayım) — C7c */
+static int      kdl_pri[KDL_MAX_GOREV];   /* öncelik (büyük=yüksek; varsayılan 0) — C7e */
 static int      kdl_psayi = 0;
 static int      kdl_paktif = 0;
 
@@ -100,20 +101,35 @@ int kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe) {
 
 void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
 
+/* C7e: göreve öncelik ata (büyük = yüksek; varsayılan 0). Yüksek-öncelikli
+ * READY görev her zaman seçilir; eşit öncelikler round-robin döner. */
+void kdl_preempt_oncelik(int gorev, int oncelik) {
+    if (gorev >= 0 && gorev < KDL_MAX_GOREV) kdl_pri[gorev] = oncelik;
+}
+
 /* IRQ trap-frame'inden (sp) çağrılır. Preempt aktifse: bloklu görevlerin tick
- * sayacını azalt, sonraki READY (bloklu-olmayan) göreve geç (trap-frame SP swap);
- * değilse sp (switch yok → timer testi nötr). C7c: bloklu görev atlanır. */
+ * sayacını azalt, EN YÜKSEK ÖNCELİKLİ READY göreve geç (trap-frame SP swap);
+ * değilse sp (switch yok → timer testi nötr). C7c: bloklu görev atlanır.
+ * C7e: round-robin sırada tarayıp en yüksek öncelikliyi seç → eşit öncelikte
+ * round-robin korunur (kdl_paktif sonrası ilk eşit-en-yüksek kazanır). */
 uint64_t kdl_preempt(uint64_t sp) {
     if (!kdl_preempt_aktif || kdl_psayi < 2) return sp;
     kdl_psp[kdl_paktif] = sp;
     for (int i = 0; i < kdl_psayi; i++)          /* C7c: uyku geri-sayımı */
         if (kdl_block[i] > 0) kdl_block[i]--;
+    int en_iyi = -1, en_iyi_pri = -1;
     int n = kdl_paktif;
-    for (int t = 0; t < kdl_psayi; t++) {        /* sonraki READY görev */
+    for (int t = 0; t < kdl_psayi; t++) {        /* round-robin sırada tara */
         n = (n + 1) % kdl_psayi;
-        if (kdl_block[n] == 0) { kdl_paktif = n; return kdl_psp[n]; }
+        if (kdl_block[n] != 0) continue;         /* READY değil (bloklu) */
+        if (kdl_pri[n] > en_iyi_pri) {           /* en yüksek öncelik (eşitte ilk) */
+            en_iyi = n;
+            en_iyi_pri = kdl_pri[n];
+        }
     }
-    return kdl_psp[kdl_paktif];                   /* hepsi bloklu → idle */
+    if (en_iyi < 0) return kdl_psp[kdl_paktif];  /* hepsi bloklu → idle */
+    kdl_paktif = en_iyi;
+    return kdl_psp[en_iyi];
 }
 
 /* C7c: çağıran görevi N timer-tick blokla (uyut). Scheduler bloklu süresince
