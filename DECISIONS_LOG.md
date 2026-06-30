@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-121 — OS: IRQ vektör stub'u preempt edilen görevin x0'ını bozuyordu (KÖK-NEDEN onarımı) + C7d cap=4 IPC restore (2026-06-30) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-120).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (VEKTOR_IRQ macro — `mov x0,#\tip` kaldırıldı);
+`runtime/kdl_kanal.{c,h}` + `test/bare_metal/kanal_arm.c` (KAP 16→4 restore + yorum). x86/host/
+codegen DEĞİŞMEDİ.]** D-119'da bayraklı cap=4 "deterministik bozulma" — çok-ajanlı adversarial
+workflow (5 bağımsız lens + sentez, gdb HW-watchpoint + QEMU `-d in_asm,cpu` trace ile) KÖK-NEDENİ
+EMPİRİK buldu.
+
+**KÖK-NEDEN (gerçek + ciddi, latent scheduler bug):** aarch64 IRQ vektör stub'u
+`VEKTOR_IRQ \tip` → `mov x0,#\tip ; b kdl_irq_ortak`. Timer her zaman slot 5 (Cur-EL-SPx IRQ) →
+`mov x0,#0x5`. Bu, **trap-frame KAYDEDİLMEDEN ÖNCE** preempt edilen görevin CANLI x0'ını 5 ile
+eziyor. kdl_irq_ortak x0'ı [sp,#0]'a kaydedince bozuk x0=5 frame'e yazılıyor; eret'te görev x0=5
+ile sürüyor. kdl_irq_ortak tip'i HİÇ kullanmaz (`mov x0,sp` ile ezer) → `mov x0,#\tip` saf
+tahripti. "5 = 5. değer" RASTLANTI (5 = vektör indeksi). Global kanal ASLA bozulmadı (yanlış
+teşhisti). cap=4 spesifik: yalnız o, ÜRETİCİYİ `gonder` spin'inde (pointer x0'da canlı, reload
+yok) preempt eder; tüketici `al` pointer'ı x8'de tutar → bağışık. **preempt/sleep/priority sadece
+şanstan geçmişti** (preempt sonrası x0-deref-reloadsız desen yoktu).
+
+**ONARIM:** VEKTOR_IRQ artık doğrudan `b kdl_irq_ortak` (x0 dokunulmaz → görev x0'ı bozulmadan
+kaydedilir/geri yüklenir). Cerrahi, EXC yolu değişmedi. cap=4 IPC restore edildi (D-119 cap=16
+work-around kaldırıldı) → çift-yönlü back-pressure ping-pong artık sağlam.
+
+**Doğrulama (QEMU 11.0.1):** kanal cap=4 → "KANAL OK toplam=55" (eski: Data Abort). TÜM aarch64
+regresyon yeşil: preempt/sleep/priority/sched + istisna(EXC) + timer(IRQ) + syscall(SVC) + d2(EL0)
++ d1. sıfır-uyarı.
+
+**KEŞFEDİLEN İKİNCİL LATENT BUG (ayrı iş):** Aynı sınıf EXC yolunda — `VEKTOR_EXC 4` → `mov x0,#4`
+SVC arg0'ı (x0) kdl_svc_ortak kaydetmeden önce yok ediyor. Şu an latent (syscall testleri x0-arg
+kontrol etmiyor) ama userspace syscall'lar arg geçince ısıracak. Takip: EXC vektörlerini de
+register-bozmaz yap + kdl_exc_ortak tip'i ESR EC'den türetsin (istisna gösterimi + kdl_istisna_isle
+imza dokunuşu → ayrı commit + arg-geçen syscall testi).
+
+**Sıradaki:** SVC arg0 onarımı (yukarıda); D1+D2+C7 birleşik gerçek EL0 user-process; D2-x86.
+
+---
+
 ## D-120 — OS C7e: öncelikli (priority) scheduling — strict priority + round-robin koruma (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-119).

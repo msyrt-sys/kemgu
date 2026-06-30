@@ -99,9 +99,14 @@ kdl_vektor_tablosu:
     mov     x0, #\tip
     b       kdl_exc_ortak
 .endm
+/* C7b/D-121 KRİTİK: IRQ vektör stub'u x0'ı KESİNLİKLE bozmamalı. kdl_irq_ortak
+ * trap-frame'i kaydetmeden ÖNCE çalışır ve kesilen görevin x0'ı henüz kaydedilmedi.
+ * Eski `mov x0,#\tip` (tip = vektör indeksi, ör. Cur-EL-SPx IRQ=5) preempt edilen
+ * görevin canlı x0'ını yok ediyordu → görev x0=5 ile sürüyor → ham-pointer'lı kod
+ * (ör. kanal `gonder` spin'i) çöküyordu. kdl_irq_ortak tip'i KULLANMAZ (IRQ id'yi
+ * GICC_IAR'dan okur, x0'ı `mov x0,sp` ile ezer) → tip gereksiz. Doğrudan dallan. */
 .macro VEKTOR_IRQ tip
     .balign 0x80
-    mov     x0, #\tip
     b       kdl_irq_ortak
 .endm
     VEKTOR_EXC 0    /* 0x000 Cur EL SP0   : sync   */

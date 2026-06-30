@@ -3,12 +3,13 @@
  * görevler-arası iletişim.
  *
  * Üretici görev 1..10 değerlerini kanala SIRAYLA gönderir; tüketici (main) 10
- * değer alıp toplar + FIFO sırayı doğrular. Tüketici kanal boşken bloklanır
- * (alım bekleme): timer-IRQ preemption üreticiye geçirir → üretici doldurur →
- * tüketici uyanıp okur. toplam=55 + sıra=1..10 → "KANAL OK toplam=55".
+ * değer alıp toplar + FIFO sırayı doğrular. Kanal kapasitesi küçük (4) → üretici
+ * dolu-bloklar, tüketici boş-bloklar; timer-IRQ preemption karşı göreve geçirir
+ * (çift yönlü ping-pong akış denetimi). toplam=55 + sıra=1..10 → "KANAL OK toplam=55".
  *
  * Bu, KEMGU `kanal` ilkelinin (DRF V1) çekirdek-düzeyi kanıtı: iki preemptive
- * görev + bloklamalı-alım + FIFO mesaj geçişi birlikte çalışır.
+ * görev + çift-yönlü bloklama + FIFO mesaj geçişi birlikte çalışır. (D-121 IRQ
+ * x0-koruma onarımı bu cap=4 ping-pong yolunu sağlamlaştırdı.)
  */
 #include "kdl_kanal.h"
 
