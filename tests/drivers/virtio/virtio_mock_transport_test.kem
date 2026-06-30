@@ -1,5 +1,9 @@
 // VirtIO mock transport testi: status, feature ve queue saf modellerini birlestirir.
 
+kullan drivers::virtio::mock_transport;    // VirtioMockCihaz, virtio_mock_*
+kullan drivers::virtio::features;          // VIRTIO_BLK_F_*, virtio_feature_sifir
+kullan drivers::virtio::status;            // virtio_status_ekle
+
 işlev virtio_mock_test_cihaz(
     magic: tam32,
     version: tam32,

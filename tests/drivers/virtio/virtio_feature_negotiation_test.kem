@@ -1,5 +1,7 @@
 // VirtIO feature negotiation testi: saf model, FEATURES_OK register'i yok.
 
+kullan drivers::virtio::features;
+
 işlev test_ortak_feature_accepted_icinde() -> mantıksal {
     değişken feature: dtam64 = VIRTIO_BLK_F_BLK_SIZE();
     değişken accepted: dtam64 = virtio_feature_kabul_maskesi(feature, feature);

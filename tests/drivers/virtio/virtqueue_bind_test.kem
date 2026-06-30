@@ -1,5 +1,8 @@
 // Virtqueue binding host-mock testi: register etkileri gercek MMIO primitive'leriyle okunur.
 
+kullan drivers::virtio::virtqueue_bind;    // Virtqueue, virtqueue_bagla, BagHatasi, virtqueue_adres_low/high
+kullan drivers::virtio::virtio_mmio;       // virtio_mmio_adres, VIRTIO_MMIO_TABAN, VIRTIO_MMIO_QUEUE_*
+
 sabit TEST_MMIO_OKU: tam32 = 1;
 sabit TEST_MMIO_YAZ: tam32 = 2;
 sabit TEST_MMIO_OKU_YAZ: tam32 = TEST_MMIO_OKU | TEST_MMIO_YAZ;
