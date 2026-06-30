@@ -68,4 +68,29 @@ void kdl_mmu_kur(void) {
     __asm__ volatile("msr sctlr_el1, %0; isb" :: "r"(sctlr));
 }
 
+/* === D1: per-process adres-uzayı ===
+ * Bir sürecin sayfa tablolarını kur: kernel identity (paylaşılan) + user VA
+ * (0x42000000) → sürece-özel user_pa. l1/l2 çağıran-sağlanan 4KB-hizalı tablolar.
+ * Süreçler kernel'i aynı (identity) görür ama user VA'ları FARKLI fiziksel
+ * sayfalara gider → izolasyon. */
+void kdl_surec_kur(uint64_t *l1, uint64_t *l2, uint64_t user_pa) {
+    for (int n = 0; n < 512; n++) {
+        uint64_t pa = 0x40000000UL + (uint64_t)n * 0x200000UL;
+        l2[n] = pa | KDL_L2_NORMAL;                  /* kernel identity (AP=00) */
+    }
+    /* user VA (L2[16]) → sürece-özel fiziksel sayfa */
+    l2[(KDL_USER_VA - 0x40000000UL) / 0x200000UL] = user_pa | KDL_L2_NORMAL;
+
+    for (int i = 0; i < 512; i++) l1[i] = 0;
+    l1[0] = KDL_BLOK_DEVICE;
+    l1[1] = (uint64_t)(uintptr_t)l2 | 0x3UL;          /* 1-2GB → bu sürecin L2'si */
+    __asm__ volatile("dsb ish");                      /* tablo yazımları görünür olsun */
+}
+
+/* TTBR0_EL1'i değiştir + TLB temizle → adres-uzayı geçişi (per-process). */
+void kdl_ttbr_degis(uint64_t *l1) {
+    __asm__ volatile("msr ttbr0_el1, %0" :: "r"((uint64_t)(uintptr_t)l1));
+    __asm__ volatile("dsb ish; tlbi vmalle1; dsb ish; isb");
+}
+
 #endif /* __aarch64__ */
