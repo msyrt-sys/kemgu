@@ -1,14 +1,13 @@
 // VirtIO-blk sektör okuma (blk_oku): 3-descriptor zinciri + host-mock tamamlanma.
 //
 // Handle modeli NOTU: D1/D3/D6 deseni bileşik veriyi `&Struct` ile geçirir.
-// blk_oku BY-VALUE struct alır (Virtqueue/BlkAygit/Tampon512) — Mehmet onayı.
-// Sebep: `&Struct` referans-parametreli + `sonuç<>` dönüşlü fonksiyon mevcut
-// codegen'de (src/llvm.c) host-mock'ta segfault ediyor (latent bug; aynısı
-// virtqueue_bagla'yı ve dolayısıyla blk_baslat init testini de etkiliyor).
-// KEMGU "bileşik tipler otomatik referansla aktarılır" (CLAUDE.md) olduğundan
-// read-only input'lar için by-value semantik aynıdır (kopya yok). Çıktı tamponu
-// Tampon512={adres} adres-indireksiyonu ile yazılır (zero-copy DMA). Codegen
-// bug'ı C-track'te düzeltilince `&`-imzasına mekanik geri dönülebilir.
+// blk_oku da `&Virtqueue`/`&BlkAygit`/`&Tampon512` referans-parametre alır —
+// sürücü genelinde tek tip handle modeli. (Geçmiş: by-value workaround, çünkü
+// `&Struct` referans-parametre + `sonuç<>` dönüş eski codegen'de host-mock'ta
+// segfault ediyordu. O bug C-track'te kapandı — D-086 `&ref param deref` + D1
+// generic `sonuç<T,E>` ptr layout — ve `&`-imzasına mekanik geri dönüldü.
+// virtqueue_bagla aynı `&Virtqueue` + `sonuç` desenini zaten kullanıyor.)
+// Çıktı tamponu Tampon512={adres} adres-indireksiyonu ile yazılır (zero-copy DMA).
 
 kullan drivers::virtio::virtqueue_bind;   // Virtqueue
 kullan drivers::virtio::virtio_blk;       // BlkAygit
@@ -70,10 +69,10 @@ yapı Tampon512 {
 işlev blk_oku_cekirdek(
     // MMIO yetkisi descriptor/avail/used ring ve scratch tampon erişimlerini yetkilendirir.
     y: yetki<MMIO>,
-    vq: Virtqueue,
-    aygit: BlkAygit,
+    vq: &Virtqueue,
+    aygit: &BlkAygit,
     sektor: tam64,
-    tampon: Tampon512,
+    tampon: &Tampon512,
     host_mock_status: tam16
 ) -> sonuç<boş, IOHatasi> {
     // hata_kodu: 0=OK 1=GecersizSektor 2=DescriptorTukendi 3=AygitHatasi
@@ -183,10 +182,10 @@ işlev blk_oku_cekirdek(
 işlev blk_oku(
     // MMIO yetkisi sektör okuma dizisi için caller'dan devralınır ve iade edilir.
     y: yetki<MMIO>,
-    vq: Virtqueue,
-    aygit: BlkAygit,
+    vq: &Virtqueue,
+    aygit: &BlkAygit,
     sektor: tam64,
-    tampon: Tampon512
+    tampon: &Tampon512
 ) -> sonuç<boş, IOHatasi> {
     ver blk_oku_cekirdek(y, vq, aygit, sektor, tampon, VIRTIO_BLK_S_OK);
 }

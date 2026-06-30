@@ -47,12 +47,19 @@ işlev test_tampon() -> Tampon512 {
 işlev kosu(sektor: tam64, hms: tam16) -> sonuç<boş, IOHatasi> {
     // MMIO yetkisi tek sektör okuma için üretilir; cekirdek iade eder.
     değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
-    ver blk_oku_cekirdek(y, test_vq(), test_aygit(), sektor, test_tampon(), hms);
+    // &Struct handle modeli: temporary'ler bağlamaya alınıp referansla geçilir.
+    değişken vq: Virtqueue = test_vq();
+    değişken aygit: BlkAygit = test_aygit();
+    değişken tampon: Tampon512 = test_tampon();
+    ver blk_oku_cekirdek(y, &vq, &aygit, sektor, &tampon, hms);
 }
 
 işlev kosu_kucuk(sektor: tam64, hms: tam16) -> sonuç<boş, IOHatasi> {
     değişken y: yetki<MMIO> = yetki_olustur(6, TEST_MMIO_OKU_YAZ);
-    ver blk_oku_cekirdek(y, test_vq_kucuk(), test_aygit(), sektor, test_tampon(), hms);
+    değişken vq: Virtqueue = test_vq_kucuk();
+    değişken aygit: BlkAygit = test_aygit();
+    değişken tampon: Tampon512 = test_tampon();
+    ver blk_oku_cekirdek(y, &vq, &aygit, sektor, &tampon, hms);
 }
 
 // Başarı + tampon içerik doğrulaması (sektöre bağlı 512B desen).

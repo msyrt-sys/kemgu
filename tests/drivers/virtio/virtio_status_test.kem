@@ -1,5 +1,7 @@
 // VirtIO status testi: saf state machine, donanim veya MMIO yok.
 
+kullan drivers::virtio::status;
+
 işlev test_reset_to_ack() -> mantıksal {
     ver virtio_status_gecis_gecerli_mi(
         VIRTIO_STATUS_RESET,

@@ -1,5 +1,9 @@
 // VirtIO mock transport: saf init modeli, gercek MMIO register erisimi yok.
 
+kullan drivers::virtio::status;            // virtio_status_gecis_gecerli_mi, virtio_status_ekle
+kullan drivers::virtio::features;          // virtio_feature_negotiation_gecerli_mi, virtio_feature_kabul_maskesi
+kullan drivers::virtio::virtqueue_layout;  // virtqueue_layout_gecerli_mi
+
 yapı VirtioMockCihaz {
     magic: tam32;
     version: tam32;

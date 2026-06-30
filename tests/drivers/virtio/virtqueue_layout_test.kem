@@ -1,5 +1,7 @@
 // Virtqueue layout testi: saf model, donanim register'i yok.
 
+kullan drivers::virtio::virtqueue_layout;
+
 işlev test_queue_num_max_sifir_gecersiz() -> mantıksal {
     ver virtqueue_queue_boyutu_gecerli_mi(0, 1) == yanlış;
 }
