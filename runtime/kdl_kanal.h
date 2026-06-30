@@ -2,10 +2,10 @@
  * KEMGU Bare-Metal Kanal (SPSC mesaj kanalı) — kdl_kanal.h
  * ========================================================
  * KEMGU `kanal` ilkelinin çekirdek-düzeyi gerçeklemesi. Tek-üretici /
- * tek-tüketici (SPSC) halka tampon. Tüketici boş kanala (alım bekleme),
- * üretici dolu kanala preemptive scheduler (C7b) altında bloklanır: timer-IRQ
- * karşı göreve geçer → karşı taraf ilerler → koşul eninde sonunda çözülür (tek
- * çekirdekte kilitlenme yok). Gönüllü yield GEREKTİRMEZ (cooperative değil).
+ * tek-tüketici (SPSC) halka tampon. Üretici dolu kanala, tüketici boş kanala
+ * preemptive scheduler (C7b) altında bloklanır (çift yönlü akış denetimi):
+ * timer-IRQ karşı göreve geçer → karşı taraf ilerler → koşul eninde sonunda
+ * çözülür (tek çekirdekte kilitlenme yok). Gönüllü yield GEREKTİRMEZ.
  *
  * KEMGU bağı: R-KANAL bölge aksiyomu + `görev`/`kanal` keyword'leri (DRF V1) —
  * dilin eşzamanlılık ilkesinin gerçek çekirdek karşılığı.

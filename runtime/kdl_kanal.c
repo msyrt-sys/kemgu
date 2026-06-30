@@ -11,17 +11,17 @@
  * Tek slot rezerve edilir (klasik halka): en çok KAP-1 öğe tutulur → `dolu`/
  * `boş` ayrımı indeks eşitliğiyle yapılır.
  *
- * NOT (C7d kısıt): KAP, tipik mesaj sayısından büyük seçilir (üretici tek
- * planlama-diliminde tüm öğeleri yollar, dolu-bloklamaz). Çok küçük KAP ile
- * üretici `gonder` içinde dolu-bloklarken hızlı ping-pong preemption altında
- * deterministik bir durum bozulması gözlendi (kök-neden GDB ile ayrı oturuma
- * ertelendi). Tüketici tarafı boş-bloklama (alım bekleme) bu kısıttan etkilenmez.
+ * Düşük kapasite (KAP=4) bilinçli: üretici sık dolu-bloklar, tüketici sık
+ * boş-bloklar → ÇİFT YÖNLÜ akış denetimi (flow control / ping-pong) gerçekten
+ * sınanır. (D-119 not: küçük KAP ile gözlenen bozulma, IRQ vektör stub'unun
+ * preempt edilen görevin x0'ını ezmesiydi — D-121'de kök-neden onarıldı, cap=4
+ * artık sağlam.)
  */
 #include <stdint.h>
 
 #include "kdl_kanal.h"
 
-#define KDL_KANAL_KAP    16  /* halka kapasitesi (en çok KAP-1=15 öğe dolu) */
+#define KDL_KANAL_KAP    4   /* halka kapasitesi (en çok KAP-1=3 öğe dolu) */
 #define KDL_KANAL_HAVUZ  4   /* eşzamanlı kanal sayısı */
 
 struct KdlKanal {
