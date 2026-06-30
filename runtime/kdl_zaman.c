@@ -66,12 +66,25 @@ void kdl_timer_baslat(void) {
     __asm__ volatile("msr daifclr, #2");             /* IRQ aç */
 }
 
-/* IRQ dispatch — boot kdl_irq_ortak'tan (irq = IAR & 0x3FF). */
+/* IRQ dispatch — irq = IAR & 0x3FF. timer → re-arm + tik. */
 void kdl_kesme_isle(uint64_t irq) {
     if (irq == KDL_TIMER_IRQ) {
         cntv_tval(kdl_timer_aralik);                 /* re-arm (ISTATUS temizler) */
         kdl_tik();
     }
+}
+
+/* Full trap-frame IRQ dispatch (C7b) — boot kdl_irq_ortak'tan; sp = trap-frame
+ * ptr. GICC_IAR → tik/re-arm → EOI (switch'ten ÖNCE, GIC'i serbest bırak) →
+ * kdl_preempt (scheduler; kapalıysa sp). Devam edilecek SP'yi döner. */
+extern uint64_t kdl_preempt(uint64_t sp);
+
+uint64_t kdl_irq_isle(uint64_t sp) {
+    uint32_t iar = *(volatile uint32_t *)(KDL_GICC_BASE + 0x0C);
+    uint32_t irq = (uint32_t)(iar & 0x3FF);
+    kdl_kesme_isle(irq);                                    /* tik + re-arm */
+    *(volatile uint32_t *)(KDL_GICC_BASE + 0x10) = iar;     /* EOI — switch ÖNCESİ */
+    return kdl_preempt(sp);
 }
 
 void kdl_idle(void) { __asm__ volatile("wfi"); }

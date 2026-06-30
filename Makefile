@@ -1188,12 +1188,35 @@ calistir_d1_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — D1 testi atlandi."; \
 	fi
 
+# === C7b: aarch64 preemptive scheduling (timer-IRQ zorunlu switch → "PREEMPT OK") ===
+# İki görev yield ETMEZ; B'nin koşması SADECE timer-IRQ preemption ile mümkün
+# (kdl_irq_ortak full trap-frame → kdl_preempt → SP swap).
+calistir_preempt_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "C7b aarch64 preemptive testi: preempt_arm.c -> ELF (timer-IRQ switch)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/preempt_arm.c -o $(BUILD)/preempt_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/preempt_arm.elf $(BUILD)/preempt_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/preempt_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/preempt_arm.out -kernel $(BUILD)/preempt_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/preempt_arm.out; echo "--- son ---"; \
+		if grep -q "PREEMPT OK" $(BUILD)/preempt_arm.out; then \
+			echo "C7b aarch64 preemptive testi gecti: timer-IRQ zorunlu switch (B yield'siz koştu)."; \
+		else \
+			echo "FAIL: 'PREEMPT OK' yok (preemption olmadı)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — preemptive testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
-                     calistir_sched_test_arm calistir_d2_test_arm calistir_d1_test_arm calistir_capstone_arm \
+                     calistir_sched_test_arm calistir_preempt_test_arm calistir_d2_test_arm calistir_d1_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

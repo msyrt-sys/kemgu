@@ -180,8 +180,12 @@ kdl_svc_ortak:
  * İstisnadan farkı: KURTARILIR (eret) → kesilen koda dönülür, caller-saved
  * register'lar korunur. C kdl_kesme_isle x0-x18,x30 clobber eder; x19-x29
  * callee-saved (C korur), kaydetmeye gerek yok. */
+/* C7b: FULL trap frame (x0-x30 + ELR + SPSR = 272 bayt) kaydet → kdl_irq_isle
+ * (IAR/tik/EOI + preempt) DEVAM SP'sini döner → SP swap (preempt'te sonraki
+ * görevin trap-frame'i) → restore → eret. Preempt kapalıysa SP aynı → eski
+ * davranış (timer testi nötr). Görev trap-frame'i: x30@240, ELR@248, SPSR@256. */
 kdl_irq_ortak:
-    sub     sp, sp, #(16*10)
+    sub     sp, sp, #272
     stp     x0, x1,   [sp, #16*0]
     stp     x2, x3,   [sp, #16*1]
     stp     x4, x5,   [sp, #16*2]
@@ -191,17 +195,25 @@ kdl_irq_ortak:
     stp     x12, x13, [sp, #16*6]
     stp     x14, x15, [sp, #16*7]
     stp     x16, x17, [sp, #16*8]
-    stp     x18, x30, [sp, #16*9]
+    stp     x18, x19, [sp, #16*9]
+    stp     x20, x21, [sp, #16*10]
+    stp     x22, x23, [sp, #16*11]
+    stp     x24, x25, [sp, #16*12]
+    stp     x26, x27, [sp, #16*13]
+    stp     x28, x29, [sp, #16*14]
+    mrs     x9, elr_el1
+    mrs     x10, spsr_el1
+    stp     x30, x9,  [sp, #16*15]    /* x30 @240, ELR @248 */
+    str     x10,      [sp, #256]      /* SPSR @256 */
 
-    movz    x9, #0x0801, lsl #16     /* GICC base 0x08010000 */
-    ldr     w0, [x9, #0x0C]          /* GICC_IAR */
-    str     x0, [sp, #-16]!          /* IAR'ı stash (EOIR için; 16-align) */
-    and     w0, w0, #0x3FF           /* IRQ no = IAR[9:0] */
-    bl      kdl_kesme_isle           /* C dispatch (timer → tik + re-arm) */
-    ldr     x1, [sp], #16            /* IAR geri */
-    movz    x9, #0x0801, lsl #16
-    str     w1, [x9, #0x10]          /* GICC_EOIR = IAR (ack) */
+    mov     x0, sp                   /* arg0 = trap-frame ptr */
+    bl      kdl_irq_isle             /* devam SP'si → x0 (preempt veya aynı) */
+    mov     sp, x0
 
+    ldr     x10,      [sp, #256]      /* SPSR */
+    ldp     x30, x9,  [sp, #16*15]    /* x30, ELR */
+    msr     spsr_el1, x10
+    msr     elr_el1,  x9
     ldp     x0, x1,   [sp, #16*0]
     ldp     x2, x3,   [sp, #16*1]
     ldp     x4, x5,   [sp, #16*2]
@@ -211,8 +223,13 @@ kdl_irq_ortak:
     ldp     x12, x13, [sp, #16*6]
     ldp     x14, x15, [sp, #16*7]
     ldp     x16, x17, [sp, #16*8]
-    ldp     x18, x30, [sp, #16*9]
-    add     sp, sp, #(16*10)
+    ldp     x18, x19, [sp, #16*9]
+    ldp     x20, x21, [sp, #16*10]
+    ldp     x22, x23, [sp, #16*11]
+    ldp     x24, x25, [sp, #16*12]
+    ldp     x26, x27, [sp, #16*13]
+    ldp     x28, x29, [sp, #16*14]
+    add     sp, sp, #272
     eret
 
 /* === Cooperative bağlam-değiştirme (C7a) — kdl_baglam_degis(x0=eski, x1=yeni) ===
