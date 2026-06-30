@@ -1235,6 +1235,29 @@ calistir_sleep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — sleep testi atlandi."; \
 	fi
 
+# === C7e Öncelikli (priority) scheduling testi (aarch64) ===
+# main yüksek öncelik → B (düşük) aç kalır (Faz1: b_sayac=0). main uyuyunca B
+# koşar (Faz2: b_sayac>0). Strict priority + kurtarma → "PRIORITY OK ac-faz1=0".
+calistir_priority_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "C7e aarch64 oncelikli scheduling testi: priority_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/priority_arm.c -o $(BUILD)/priority_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/priority_arm.elf $(BUILD)/priority_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/priority_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/priority_arm.out -kernel $(BUILD)/priority_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/priority_arm.out; echo "--- son ---"; \
+		if grep -q "PRIORITY OK ac-faz1=0" $(BUILD)/priority_arm.out; then \
+			echo "C7e aarch64 oncelikli scheduling testi gecti: yuksek-oncelik B'yi ac biraktti, uyuyunca B kostu."; \
+		else \
+			echo "FAIL: 'PRIORITY OK ac-faz1=0' bekleniyor (strict priority + kurtarma)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — priority testi atlandi."; \
+	fi
+
 # === C7d Kanal (SPSC IPC) testi (aarch64) — preemptive scheduler + mesaj geçişi ===
 # Üretici görev 1..10 gönderir, tüketici (main) FIFO sırayla alır+toplar (=55).
 # Küçük kanal (kap=4) → çift yönlü bloklama (dolu/boş) preemption altında ping-pong.
@@ -1273,7 +1296,7 @@ calistir_kanal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_kan
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
                      calistir_sched_test_arm calistir_preempt_test_arm calistir_sleep_test_arm \
-                     calistir_kanal_test_arm \
+                     calistir_priority_test_arm calistir_kanal_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \

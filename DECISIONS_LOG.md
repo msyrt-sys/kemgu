@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-120 — OS C7e: öncelikli (priority) scheduling — strict priority + round-robin koruma (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-119).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_pri[] + kdl_preempt_oncelik + kdl_preempt seçim
+mantığı); yeni `test/bare_metal/priority_arm.c`; `Makefile`. x86/host/codegen + trap-frame
+asm DEĞİŞMEDİ.]** FAZ C: öncelikli zamanlama — scheduler en yüksek öncelikli READY görevi
+seçer (eşit öncelikte round-robin korunur). Gerçek-zaman/QoS temeli.
+
+**Mekanizma:** kdl_pri[] (büyük=yüksek, varsayılan 0). kdl_preempt round-robin sırada
+(kdl_paktif sonrası) tarar, en yüksek öncelikli READY'yi seçer; eşit öncelikte ilk-bulunan
+(round-robin döner) kazanır. Tümü-eşit (pri=0) → eski round-robin ile BİREBİR aynı (regresyon
+yok). kdl_preempt_oncelik(gorev, pri) ile atanır.
+
+**Doğrulama (QEMU 11.0.1):** priority_arm — main yüksek (1), B düşük (0). Faz1: main meşgul-
+döner, timer tikler ama main tekelde → B aç kalır (b_sayac=0). Faz2: main kdl_uyu(10) bloklanır
+→ tek READY=B → B koşar (b_sayac>0). b1==0 && b2>0 → "PRIORITY OK ac-faz1=0". **Tüm scheduler
+regresyon yeşil:** sched(coop) + preempt + sleep + kanal bozulmadı (eşit-öncelik round-robin
+korundu). sıfır-uyarı; libc-temiz; test_tumu host-nötr.
+
+**Sıradaki:** D1+D2+C7 birleşik gerçek user-process; D2-x86 (ring3+TSS); C5 (virtio-blk);
+cap=4 IPC corner-case GDB-teşhisi (D-119).
+
+---
+
 ## D-119 — OS C7d: kanal (SPSC IPC) — preemptive scheduler üstünde görevler-arası mesaj (2026-06-30)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-118).
