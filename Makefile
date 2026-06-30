@@ -1235,6 +1235,29 @@ calistir_sleep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — sleep testi atlandi."; \
 	fi
 
+# === D-122 Syscall argüman geçişi testi (aarch64) — SVC arg0 (x0) korunuyor mu ===
+# SVC num=4 arg=42 → kernel arg==42 görmeli → "SYSCALL ARG OK". Vektör-stub
+# x0-koruma onarımının (D-121) regresyon-bekçisi; userspace syscall ön-koşulu.
+calistir_syscall_arg_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-122 aarch64 syscall argüman testi: syscall_arg_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/syscall_arg_arm.c -o $(BUILD)/syscall_arg_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/syscall_arg_arm.elf $(BUILD)/syscall_arg_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/syscall_arg_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/syscall_arg_arm.out -kernel $(BUILD)/syscall_arg_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/syscall_arg_arm.out; echo "--- son ---"; \
+		if grep -q "SYSCALL ARG OK" $(BUILD)/syscall_arg_arm.out; then \
+			echo "D-122 aarch64 syscall argüman testi gecti: arg0=42 kernel'e dogru ulasti."; \
+		else \
+			echo "FAIL: 'SYSCALL ARG OK' bekleniyor (SVC arg0 korunmali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — syscall arg testi atlandi."; \
+	fi
+
 # === C7e Öncelikli (priority) scheduling testi (aarch64) ===
 # main yüksek öncelik → B (düşük) aç kalır (Faz1: b_sayac=0). main uyuyunca B
 # koşar (Faz2: b_sayac>0). Strict priority + kurtarma → "PRIORITY OK ac-faz1=0".
@@ -1296,7 +1319,7 @@ calistir_kanal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_kan
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
                      calistir_sched_test_arm calistir_preempt_test_arm calistir_sleep_test_arm \
-                     calistir_priority_test_arm calistir_kanal_test_arm \
+                     calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \

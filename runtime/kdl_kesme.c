@@ -62,7 +62,6 @@ void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
  * Minimal demonstrasyon: çağrı #1 = mesaj yazdır. Gerçek kernel'de bu tablo
  * dosya/bellek/görev syscall'larına genişler. */
 void kdl_syscall_isle(uint64_t num, uint64_t arg) {
-    (void)arg;
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");
         kdl_yazdir_satir();
@@ -89,6 +88,13 @@ void kdl_syscall_isle(uint64_t num, uint64_t arg) {
             __asm__ volatile("hlt");
 #endif
         }
+    } else if (num == 4) {
+        /* D-122: syscall ARGÜMAN geçişi kanıtı. arg (x0) çağırandan doğru ulaştı mı?
+         * Vektör-stub x0-koruma onarımından (D-121) ÖNCE arg = vektör-tip (bozuk)
+         * olurdu → "HATA". Onarımla gerçek arg=42 ulaşır → "OK". Userspace
+         * syscall'larının (arg geçen) ön-koşulu. */
+        kdl_yazdir_metin(arg == 42 ? "SYSCALL ARG OK" : "SYSCALL ARG HATA");
+        kdl_yazdir_satir();
     }
 }
 
