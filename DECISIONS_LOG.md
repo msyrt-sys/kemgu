@@ -57,6 +57,27 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-147 — OS: DNS round-trip — UDP request-response (OS internet'le konuşuyor) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-146).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_arm.c`; `Makefile`. Yalnız test — net driver + IP/UDP
+(D-144/145/146) kullanılır.]** TÜM AĞ YIĞINI bir arada: gerçek istek-yanıt döngüsü (OS internet
+servisiyle konuşuyor).
+
+**Mekanizma:** (1) ARP ile DNS sunucusunun (SLIRP 10.0.2.3) MAC'ini çöz (sha çıkar). (2) DNS sorgusu
+inşa et: eth(dst=dns_mac)+IPv4(dst=10.0.2.3)+UDP(dst=53)+DNS(header id/RD/qdcount=1 + qname "a.com" +
+qtype=A + qclass=IN), IP checksum. (3) Gönder. (4) Yanıtı RX ile al + doğrula (IPv4+UDP, src=10.0.2.3,
+src-port=53).
+
+**Doğrulama (QEMU 11.0.1):** dns_arm — "DNS BASLA" + "DNS REPLY OK" (DNS sunucusundan UDP yanıtı
+alındı). **İLK DENEMEDE.** Full gate GATE=0 (43 hedef). sıfır-uyarı. **OS gerçek bir internet
+servisiyle (DNS) request-response yapıyor = internet-katmanı round-trip. Ağ yığını: ARP+IP+UDP+DNS.**
+
+**Sıradaki:** ICMP ping; TCP handshake; DNS yanıtından IP çıkar (tam resolver); UART RX; D2-x86.
+
+---
+
 ## D-146 — OS: IP/UDP paket gönderme — internet katmanı (Faz G derinleşme) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-145).
