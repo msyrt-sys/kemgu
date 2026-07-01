@@ -57,6 +57,29 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-149 — OS: SELF-HOST virtio init — KEMGU'da tarama + MMIO yazma (status handshake) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-148).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_selfhost_rw.kem` (KEMGU!); `Makefile` (self-host-rw target).
+Mevcut mmio/yetki runtime (D-148) kullanıldı.]** D-148 OKUMA'yı gerçek DRIVER INIT'e taşır: KEMGU
+dilinde cihaz TARAMA + status durum-makinesi YAZMA.
+
+**Mekanizma:** virtio_selfhost_rw.kem — (1) TARA: `iken i<32` döngüsünde her slot'un DeviceID'sini
+mmio_oku32 ile oku (yetki ÖDÜNÇ → döngüde thread YOK), DeviceID!=0 ilk slotu bul. (2) HANDSHAKE:
+status register'a mmio_yaz32 ile reset→ACK→ACK|DRIVER yaz — yetki LİNEAR olduğundan her yazmada
+THREAD edilir (y→y1→y2→y3). (3) status geri oku = 3. **KEMGU dil özellikleri gerçek driver kodunu
+kaldırıyor:** tam64 adres aritmetiği (i*512), döngü, linear-capability (borrow-in-loop + thread-in-chain).
+
+**Doğrulama (QEMU 11.0.1):** virtio_selfhost_rw + virtio-blk device → KEMGU sürücüsü cihazı buldu,
+handshake yaptı, status=3 okudu → "KEM VIRTIO RW OK". Full gate GATE=0 (45 hedef). libc-temiz.
+sıfır-uyarı. **KEMGU tam bir virtio init sekansını (tarama+oku+yaz, capability-güvenli) kendi
+dilinde çalıştırıyor — self-host OS sürücüsü.**
+
+**Sıradaki:** .kem userspace program (EL0); TCP; UART RX; sürücüyü virtqueue'ya kadar genişlet.
+
+---
+
 ## D-148 — OS: SELF-HOST virtio sürücüsü — KEMGU dilinde bare-metal OS sürücüsü (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-147).
