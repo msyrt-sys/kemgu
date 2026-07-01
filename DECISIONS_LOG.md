@@ -32,6 +32,27 @@ komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden 
 
 ---
 
+## D-137 — OS: program çalıştırma iş akışı — spawn→hesap→dosya→join→oku (uçtan-uca) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-136).
+
+**Karar [ETKİ: yeni `test/bare_metal/calis_arm.c`; `Makefile`. Yalnız test — mevcut syscall'lar.]**
+Süreç + FS + IPC yığınının uçtan-uca entegrasyonu: bir program başka bir programı çalıştırır, o
+hesap yapıp sonucu dosyaya yazar, başlatan program sonucu geri okur ("bir programı çalıştır,
+çıktısını al" — gerçek OS iş akışı).
+
+**Akış:** launcher spawn(worker)→join; worker 1..10 topla(=55)→dosya_yaz("sonuc",55)→exit; launcher
+dosya_oku("sonuc")→bas. Global FS worker çıktısını launcher'a taşır (süreçler-arası).
+
+**Doğrulama (QEMU 11.0.1):** calis_arm — "CALIS BASLA" + "RESULT=55" (worker hesabı dosya üzerinden
+launcher'a ulaştı). Full gate GATE=0 (34 hedef). sıfır-uyarı. **KEMGU-OS: kernel + izole userspace
+süreçler + preemptive multitask + syscall ABI + RAM-FS + kabuk + program-çalıştır-çıktı-al akışı —
+çalışan çok-programlı bir OS.**
+
+**Sıradaki:** UART RX (interaktif kabuk); kaynak geri-alma (slot reuse); D2-x86; C5 virtio-blk.
+
+---
+
 ## D-136 — OS: kabuk komut genişletme — say + sil (shell tam CRUD komut seti) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-135).
