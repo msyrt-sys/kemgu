@@ -57,6 +57,29 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-144 — OS: VirtIO-Net paket gönderme — ağ TX (Faz G başlangıcı) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-143).
+
+**Karar [ETKİ: yeni `runtime/kdl_virtio_net.c` (bare-metal virtio-net TX sürücüsü); yeni
+`test/bare_metal/net_arm.c`; `Makefile` (bm_a64_virtio_net.o + QEMU netdev + filter-dump pcap gate).
+Sadece ekleme — net driver yalnız net testine linklenir (BM_A64_OBJS'e DEĞİL, kimse referans etmiyor).]**
+İlk AĞ yeteneği: gerçek Ethernet çerçevesi gönderme. Faz G açılışı.
+
+**Sürücü:** virtio-blk (D-141) virtqueue makinesi yeniden kullanıldı; fark: DeviceID=1 (net), transmit
+queue=1, buffer=virtio-net başlığı(12,sıfır)+çerçeve, tek desc (cihaz OKUR/TX). kdl_virtio_net_bul/
+kur/gonder.
+
+**Doğrulama (QEMU 11.0.1):** net_arm — broadcast Ethernet çerçevesi (ethertype 0x88b5, payload
+"KEMGUNET-PAKET") gönder. QEMU `-netdev user -device virtio-net-device -object filter-dump,file=pcap`
+→ paket pcap'e yakalandı. Gate: seri "NET GONDERILDI" + `grep -a "KEMGUNET-PAKET" net.pcap`. **İLK
+DENEMEDE** (virtqueue makinesi taşındı). Full gate GATE=0 (40 hedef). sıfır-uyarı. **OS gerçek ağ
+paketi gönderebiliyor — pcap ile kanıtlandı.**
+
+**Sıradaki:** virtio-net RX (paket AL); ARP/IP/UDP stack (Faz G derinleşme); UART RX; D2-x86.
+
+---
+
 ## D-143 — OS: KALICI dosya sistemi — disk-backed persistence (boot'lar arası) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-142).

@@ -765,6 +765,8 @@ $(BUILD)/bm_a64_kanal.o: runtime/kdl_kanal.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_virtio.o: runtime/kdl_virtio.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_virtio_net.o: runtime/kdl_virtio_net.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
@@ -1766,6 +1768,32 @@ calistir_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_vi
 		echo "QEMU yok — kalıcı FS testi atlandi."; \
 	fi
 
+# === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
+# Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
+# payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
+calistir_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "D-144 aarch64 virtio-net paket testi: net_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/net_arm.c -o $(BUILD)/net_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/net_arm.elf $(BUILD)/net_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/net_arm.out $(BUILD)/net.pcap; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/net.pcap \
+			-serial file:$(BUILD)/net_arm.out -kernel $(BUILD)/net_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/net_arm.out; echo "--- son ---"; \
+		if grep -q "NET GONDERILDI" $(BUILD)/net_arm.out && grep -a -q "KEMGUNET-PAKET" $(BUILD)/net.pcap; then \
+			echo "D-144 aarch64 virtio-net testi gecti: paket gönderildi + pcap'te yakalandi."; \
+		else \
+			echo "FAIL: seri 'NET GONDERILDI' + pcap'te 'KEMGUNET-PAKET' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — net testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1781,7 +1809,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
-                     calistir_capstone_arm \
+                     calistir_net_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
