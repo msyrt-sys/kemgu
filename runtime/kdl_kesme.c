@@ -166,6 +166,20 @@ int kdl_dosya_yukle(uint64_t base) {
 }
 #endif /* __aarch64__ */
 
+/* === D-150 GÜVENLİK: kullanıcı-pointer doğrulama ===
+ * EL0 syscall'ları kernel'e pointer geçirir; kernel (EL1) o adrese YAZARSA ve adres
+ * doğrulanmazsa, kötü/hatalı bir EL0 süreç KERNEL BELLEĞİNE yazdırabilir (bellek
+ * bozulması / privilege escalation). Bu yüzden kernel'in YAZDIĞI user-tampon'lar
+ * EL0 user VA aralığında [0x42000000, 0x42400000) olmalı (kod+veri sayfaları, AP=01).
+ * Kernel-okuduğu string'ler (.rodata çıktı) bu kontrolden MUAF (yalnız yazma). */
+static int kdl_user_yaz_ptr_gecerli(uint64_t p, uint64_t len) {
+    if (p < 0x42000000UL) return 0;              /* kernel/aşağı bölge → RED */
+    if (len > 0x400000UL) return 0;              /* aşırı boy */
+    if (p + len < p) return 0;                   /* taşma */
+    if (p + len > 0x42400000UL) return 0;        /* user sayfaları dışı → RED */
+    return 1;
+}
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
@@ -267,6 +281,10 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
          * tamponuna (buf) kopyala (bulk oku). Dönen = kopyalanan byte sayısı (-1 yok). */
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
+        /* D-150: kernel user-tampona YAZAR → adres user aralığında olmalı (kernel
+         * belleğine yazmayı engelle). +1 = sonlandırıcı null. */
+        if (!kdl_user_yaz_ptr_gecerli(arg2, (uint64_t)kdl_dosyalar[i].boyut + 1))
+            return (uint64_t)(int64_t)-1;
         char *buf = (char *)(uintptr_t)arg2;
         int n = 0;
         while (n < kdl_dosyalar[i].boyut) { buf[n] = kdl_dosyalar[i].icerik[n]; n++; }
@@ -282,6 +300,8 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
          * tamponuna kopyala (ls). D-134: sil sonrası boşluk atla → kullanılan-index
          * (raw index değil) → sil edilmiş slotlar sıralamayı bozmaz. Dönen = uzunluk. */
         int idx = (int)arg, seen = 0;
+        /* D-150: kernel user-tampona YAZAR → adres user aralığında olmalı. */
+        if (!kdl_user_yaz_ptr_gecerli(arg2, KDL_AD_MAX)) return (uint64_t)(int64_t)-1;
         for (int i = 0; i < KDL_DOSYA_MAX; i++) {
             if (!kdl_dosyalar[i].kullanildi) continue;
             if (seen == idx) {

@@ -1929,6 +1929,28 @@ calistir_virtio_selfhost_rw_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm
 		echo "QEMU yok — self-host virtio init testi atlandi."; \
 	fi
 
+# === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
+# EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
+calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-150 aarch64 syscall güvenlik testi: guvenlik_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_arm.c -o $(BUILD)/guvenlik_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/guvenlik_arm.elf $(BUILD)/guvenlik_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/guvenlik_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/guvenlik_arm.out -kernel $(BUILD)/guvenlik_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/guvenlik_arm.out; echo "--- son ---"; \
+		if grep -q "GUVENLIK OK" $(BUILD)/guvenlik_arm.out; then \
+			echo "D-150 aarch64 güvenlik testi gecti: kernel-adres yazma reddedildi (user-ptr doğrulama)."; \
+		else \
+			echo "FAIL: 'GUVENLIK OK' bekleniyor (user-pointer doğrulama)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — güvenlik testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1946,7 +1968,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
                      calistir_dns_test_arm calistir_virtio_selfhost_arm \
-                     calistir_virtio_selfhost_rw_arm calistir_capstone_arm \
+                     calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
