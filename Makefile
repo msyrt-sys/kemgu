@@ -1794,6 +1794,30 @@ calistir_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — net testi atlandi."; \
 	fi
 
+# === D-145 ARP round-trip testi (aarch64) — 2-yönlü ağ (TX+RX) ===
+# Kernel gateway'e (SLIRP 10.0.2.2) ARP isteği yollar, ARP yanıtını RX ile alır.
+calistir_arp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "D-145 aarch64 ARP round-trip testi: arp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/arp_arm.c -o $(BUILD)/arp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/arp_arm.elf $(BUILD)/arp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/arp_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/arp_arm.out -kernel $(BUILD)/arp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/arp_arm.out; echo "--- son ---"; \
+		if grep -q "ARP REPLY OK" $(BUILD)/arp_arm.out; then \
+			echo "D-145 aarch64 ARP testi gecti: gateway'den ARP yanıtı alındı (2-yönlü ağ)."; \
+		else \
+			echo "FAIL: 'ARP REPLY OK' bekleniyor (ARP round-trip TX+RX)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — ARP testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1809,7 +1833,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
-                     calistir_net_test_arm calistir_capstone_arm \
+                     calistir_net_test_arm calistir_arp_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
