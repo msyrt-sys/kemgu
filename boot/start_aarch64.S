@@ -133,29 +133,13 @@ kdl_vektor_tablosu:
  * koşar; ham board EL2 olabilir), C işleyiciye geç (yazdır + halt).
  * KRİTİK: yanlış-EL sistem register'ı (esr_el2 @ EL1) UNDEF → işleyici kendini
  * sonsuz fault'lar. Bu yüzden EL-duyarlı. */
+/* D-126 KRİTİK: FRAME'İ ÖNCE KAYDET, SONRA ESR oku/dispatch et. Eski sıra (önce
+ * ESR oku → x1/x2/x3/x9 klobber → sonra kdl_svc_ortak frame kaydet) SVC çağıranın
+ * x1/x2/x3/x9'unu YOK EDİYORDU: kdl_exc_ortak EC'yi x9'a yazıyor (`lsr x9,x1,#26`;
+ * SVC için EC=0x15), kaydetmeden önce → syscall ABI register-şeffaf DEĞİLDİ (canlı
+ * pointer x9'da hayatta kalamaz; çok-argümanlı syscall x1'i kaybederdi). Şimdi frame
+ * PRISTINE kaydedilir → tüm çağıran register'ları korunur (yalnız x0=dönüş değişir). */
 kdl_exc_ortak:
-    mrs     x3, CurrentEL
-    cmp     x3, #8
-    b.ne    7f
-    mrs     x1, esr_el2         /* EL2 */
-    mrs     x2, elr_el2
-    b       8f
-7:
-    mrs     x1, esr_el1         /* EL1 (QEMU virt) */
-    mrs     x2, elr_el1
-8:
-    lsr     x9, x1, #26         /* EC = ESR[31:26] */
-    cmp     x9, #0x15           /* SVC (aarch64 same-EL) → sistem çağrısı (C6) */
-    b.eq    kdl_svc_ortak       /* SVC: x0 = arg0 KORUNDU (vektör artık ezmiyor) */
-    mov     x0, x9              /* fault: tip = EC (x0 artık arg0 değil; teşhis için EC) */
-    bl      kdl_istisna_isle    /* fault: noreturn (yazdır + halt) — (EC, ESR, ELR) */
-6:
-    wfe
-    b       6b
-
-/* === SVC (sistem çağrısı) işleyici (C6) — bağlam kaydet, dispatch, eret ===
- * num = x8 (kernel konvansiyonu), arg = x0. İstisnadan farkı: KURTARILIR (eret). */
-kdl_svc_ortak:
     sub     sp, sp, #(16*10)
     stp     x0, x1,   [sp, #16*0]
     stp     x2, x3,   [sp, #16*1]
@@ -168,9 +152,34 @@ kdl_svc_ortak:
     stp     x16, x17, [sp, #16*8]
     stp     x18, x30, [sp, #16*9]
 
-    ldr     x1, [sp, #16*0]     /* arg0 = kaydedilen x0 */
-    mov     x0, x8              /* num = x8 */
-    bl      kdl_syscall_isle    /* (num, arg) */
+    /* ESR/ELR oku (EL-duyarlı — QEMU virt EL1; ham board EL2). Frame kaydedildi →
+     * x1/x2/x3/x9 klobber artık güvenli (orijinaller yığında). */
+    mrs     x3, CurrentEL
+    cmp     x3, #8
+    b.ne    7f
+    mrs     x1, esr_el2         /* EL2 */
+    mrs     x2, elr_el2
+    b       8f
+7:
+    mrs     x1, esr_el1         /* EL1 (QEMU virt) */
+    mrs     x2, elr_el1
+8:
+    lsr     x9, x1, #26         /* EC = ESR[31:26] */
+    cmp     x9, #0x15           /* SVC (aarch64 same-EL) → sistem çağrısı (C6) */
+    b.eq    9f
+    /* --- Fault: kurtarma YOK (yazdır + halt). tip=EC(x9→x0), esr=x1, elr=x2. --- */
+    mov     x0, x9
+    bl      kdl_istisna_isle    /* noreturn (yazdır + halt) */
+6:
+    wfe
+    b       6b
+9:
+    /* --- SVC: frame kaydedildi; dispatch. num/arg SAKLANANDAN oku (canlı reg
+     * ESR-okuma sırasında klobber edilmiş olabilir → yığından pristine al). --- */
+    ldr     x1, [sp, #16*0]     /* arg0 = saklanan x0 */
+    ldr     x0, [sp, #16*4]     /* num  = saklanan x8 (offset 16*4 = x8 slotu) */
+    bl      kdl_syscall_isle    /* (num, arg) → dönüş x0 */
+    str     x0, [sp, #16*0]     /* dönüş değeri → saklanan x0 slotu (EL0 x0'da alır) */
 
     ldp     x0, x1,   [sp, #16*0]
     ldp     x2, x3,   [sp, #16*1]

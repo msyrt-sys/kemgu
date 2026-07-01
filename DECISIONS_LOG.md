@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-126 — OS: syscall dönüş-değeri ABI + kdl_exc_ortak register-şeffaflık onarımı (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-125).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_exc_ortak+kdl_svc_ortak → tek "frame-önce-kaydet"
+işleyici; str x0 dönüş); `runtime/kdl_kesme.c` (kdl_syscall_isle → uint64_t; +num 9 artir);
+yeni `test/bare_metal/syscall_ret_arm.c`; `Makefile`. x86/host/codegen dokunulmadı.]** Userspace
+ABI'nin eksik yarısı (syscall DEĞER döndürür) + bunu yaparken keşfedilen gerçek register-şeffaflık
+bug'ının onarımı.
+
+**Dönüş-değeri ABI:** kdl_svc_ortak `bl kdl_syscall_isle` sonrası `str x0, [saved-x0]` → restore
+ile EL0 çağıran x0'da sonucu alır. kdl_syscall_isle artık uint64_t döner (num=9 'artir': arg+1).
+
+**KEŞFEDİLEN + ONARILAN BUG (register-şeffaflık):** Eski kdl_exc_ortak, frame kaydetmeden ÖNCE
+`lsr x9, x1, #26` (EC) + `mrs x1/x2/x3` ile çağıranın x1/x2/x3/x9'unu klobber ediyordu; SVC için
+EC=0x15 → x9=0x15. syscall_ret testi (dönüş-değerine bağlı dallı string-ptr'yi x9'da tutan)
+BUNU tetikledi: OK-string ptr'si (0x40003570) x9'da → syscall sonrası x9=0x15 → sys(yaz, 0x15) →
+çöp → hiçbir şey basılmadı. Empirik teşhis: QEMU `-d in_asm,cpu` (x9: 0x40003570 → 0x15 svc'de).
+**ONARIM:** işleyici FRAME'İ ÖNCE kaydeder, SONRA ESR okur/dispatch eder → tüm çağıran register'ları
+korunur (yalnız x0=dönüş değişir). num/arg saklanandan okunur. **Çok-argümanlı syscall'ları da
+mümkün kıldı (x1+ artık korunuyor — eski bug x1'i eziyordu).**
+
+**Doğrulama (QEMU 11.0.1):** syscall_ret "SYSCALL RET OK" (41→42 EL0'a döndü). Tüm SVC/fault
+regresyon yeşil: syscall/syscall_arg/istisna(fault)/d2(EL0+SVC)/proc(D3)/userspace. Full gate GATE=0
+(24 hedef). sıfır-uyarı. **Öğrenilen: `-MMD -MP` header-dep var ama .c değişince .o rebuild
+timing — rm+make ile force gerekebildi (staleness teşhisi).**
+
+**Sıradaki:** çoklu EL0 süreç (scheduler TTBR-swap); gettick/getpid/read syscall'ları (artık dönüş +
+çok-arg hazır); D2-x86; C5 (virtio-blk).
+
+---
+
 ## D-125 — OS: preemptive EL0 (userspace) görev — userspace multitasking (process modeli tamam) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-124).
