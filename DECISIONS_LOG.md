@@ -28,8 +28,26 @@ DÜZELTME: komut adları .user_data'ya (AP=01, EL0-okunur). NOT: sys(5,literal) 
 "  KEMGU-OS" / "SHELL> ls" / "  gunluk". Full gate GATE=0 (33 hedef). sıfır-uyarı. **KEMGU-OS artık
 komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden çalışan-OS'a.**
 
-**Sıradaki:** UART RX (klavye → interaktif kabuk; gate zor); kabuk komut genişletme (sil/yaz-değer);
-kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
+**Sıradaki:** UART RX (klavye → interaktif kabuk; gate zor); kaynak geri-alma; D2-x86; C5 virtio-blk.
+
+---
+
+## D-136 — OS: kabuk komut genişletme — say + sil (shell tam CRUD komut seti) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-135).
+
+**Karar [ETKİ: `test/bare_metal/kabuk_arm.c` (+CMD_SAY/CMD_SIL + branch + script satırları);
+`Makefile` (gate say/sil kontrolü). Yalnız test.]** D-135 kabuğunu tam CRUD komut setine genişletir.
+
+**Kabuk komutları:** yaz/oku/ls (D-135) + say (dosya sayısı) + sil (dosya_sil). Script:
+yaz gunluk → oku → ls → say(COUNT=1) → sil gunluk → say(COUNT=0). Silme öncesi/sonrası sayaç
+(1→0) sil'in çalıştığını kanıtlar.
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> say"/"COUNT=1"/"SHELL> sil gunluk"/"SHELL> say"/
+"COUNT=0". Full gate GATE=0 (33 hedef). sıfır-uyarı. **Userspace kabuk artık tam FS CRUD komut
+seti yorumluyor (yaz/oku/ls/say/sil).**
+
+**Sıradaki:** UART RX (interaktif kabuk); kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
 
 ---
 

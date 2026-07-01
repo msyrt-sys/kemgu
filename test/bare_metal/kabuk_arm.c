@@ -33,13 +33,18 @@ __attribute__((section(".user_data")))
 static char script[] =
     "yaz gunluk KEMGU-OS\n"
     "oku gunluk\n"
-    "ls\n";
+    "ls\n"
+    "say\n"
+    "sil gunluk\n"
+    "say\n";
 
 /* Komut adları — .user_data'da OLMALI: str_esit bunları EL0'da OKUR. Normal string
  * literalleri .rodata'da (AP=00, EL0'a kapalı) → EL0 okuyunca permission-fault. */
 __attribute__((section(".user_data"))) static char CMD_YAZ[] = "yaz";
 __attribute__((section(".user_data"))) static char CMD_OKU[] = "oku";
 __attribute__((section(".user_data"))) static char CMD_LS[]  = "ls";
+__attribute__((section(".user_data"))) static char CMD_SAY[] = "say";
+__attribute__((section(".user_data"))) static char CMD_SIL[] = "sil";
 
 __attribute__((always_inline)) static inline unsigned long sys(unsigned long num, unsigned long arg) {
     register unsigned long x8 __asm__("x8") = num;
@@ -108,6 +113,12 @@ static void kabuk(void) {
                 sys(5, (unsigned long)(uintptr_t)buf);
                 sys(7, 0);
             }
+        } else if (nt >= 1 && str_esit(tok[0], CMD_SAY)) {
+            sys(5, (unsigned long)(uintptr_t)"COUNT=");
+            sys(6, sys(19, 0));                            /* dosya_sayisi */
+            sys(7, 0);
+        } else if (nt >= 2 && str_esit(tok[0], CMD_SIL)) {
+            sys(21, (unsigned long)(uintptr_t)tok[1]);     /* dosya_sil */
         }
         satir = devam ? son + 1 : son;
     }
