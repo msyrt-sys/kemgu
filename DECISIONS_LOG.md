@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-151 — OS: syscall OKUMA-pointer doğrulama — kernel DoS + info-leak koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-150).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (read-guard + num=5/15/16/17/18/21); `linker/bare-metal-aarch64.ld`
++ `bare-metal-x86_64.ld` (__rodata_start/end); yeni `test/bare_metal/guvenlik_oku_arm.c`, `Makefile`
+hedefi.]** D-150'nin YAZMA-tarafı korumasının OKUMA-tarafı ikizi. Çekirdek, EL0-kontrollü bir string
+pointer'ını **deref ederek OKURKEN** de doğrulamalı; aksi halde kötü/hatalı bir EL0 süreç:
+- **DoS:** unmapped adres geçirir → kernel EL1'de data-abort → `kdl_istisna_isle` sonsuz halt (**tek
+  SVC ile tüm kernel ölür**);
+- **info-leak:** kernel adresi geçirir → kernel belleği UART'a yazılır (num=5) veya bir dosyaya
+  kopyalanıp num=18 ile geri okunur (num=17→18 exfiltrasyon zinciri).
+
+**Çok-ajanlı adversarial audit (23 ajan, 2.07M token) bu sınıfı üretti** — 14 confirmed EL0-reachable
+bulgu, hepsi read-ptr; num=18 ad-okuması D-150 sonrası hâlâ açıktı (D-150 yalnız arg2 write-hedefini
+koruyordu). Refuted: spawn-havuz int-bounds (zaten korumalı).
+
+**Read-guard:** `kdl_user_oku_str_gecerli(p)` — izinli okuma bölgeleri `[user VA 0x42000000,0x42400000)
+∪ kernel .rodata [__rodata_start,__rodata_end)`. `.data/.bss` (dosya tablosu burada!) / stack / heap /
+Device MMIO / unmapped → RED. **Null-sonlandırıcı İZİNLİ bölge içinde bulunmalı** (yalnız mapped-izinli
+byte taranır → tarama fault üretemez; straddle-over-read imkânsız; 4KB tarama tavanı). num=5 (yaz-string),
+15/16/18/21 (dosya adı), 17 (ad + içerik arg2) → hepsi guard'lı, geçersiz→RED (-1).
+
+**.rodata neden izinli:** mevcut testler çıktı/ad string LİTERALLERİNİ (.rodata, kernel adresi) syscall'a
+geçirir (sys(5,"GUVENLIK OK"), dosya adı "mesaj"/"f"). Bunlar const, sır değil; izin vermek tüm testleri
+korur. Sızıntı-hedefleri (.data/.bss/stack/heap) reddedilir.
+
+**Kanıt (aarch64 QEMU):** `guvenlik_oku_arm.c` EL0 launcher: (2) num=5'e UNMAPPED 0x80000000 → RED,
+kernel HALT ETMEZ; (3) num=16'ya kernel-RAM 0x40100000 → RED; (4) buraya ulaşmak = kernel sağ →
+"GUVENLIK OKU OK". Fix öncesi (2) kerneli sonsuza halt ederdi. FS regresyonları (dosya/metin/ls/sil/
+kabuk/kalıcı — .rodata ad + user-VA token) + D-150 bozulmadan geçer. x86_64 de __rodata sembolleriyle
+linklenir (arch paritesi).
+
+**Kapsam/sınır:** Read-guard string-deref eden syscall'ları kapsar. Kalan audit bulguları (ayrı D):
+num=12 spawn-entry DoS (medium), persistence deserialize boyut-clamp (defense-in-depth), num=14 durum
+ownership (low). **KURAL: kernel→user OKUYAN/YAZAN her yeni syscall ilgili guard'ı (oku_str / yaz_ptr)
+kullanmalı.**
+
 ## D-150 — OS: syscall kullanıcı-pointer doğrulama — kernel bellek-yazma koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-149).

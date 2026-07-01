@@ -31,9 +31,11 @@ SECTIONS
     }
 
     .rodata : ALIGN(16) {
+        __rodata_start = .;      /* D-151: syscall okuma-pointer doğrulama sınırı */
         *(.rodata*)
         *(.rodata.*)
         *(.srodata*)
+        __rodata_end = .;
     }
 
     .data : ALIGN(16) {

@@ -180,6 +180,35 @@ static int kdl_user_yaz_ptr_gecerli(uint64_t p, uint64_t len) {
     return 1;
 }
 
+/* === D-151 GÜVENLİK: kullanıcı-OKUMA-pointer doğrulama ===
+ * D-150 kernel'in YAZDIĞI pointer'ları doğruladı. Bu, kernel'in OKUDUĞU (deref
+ * ettiği) EL0-kontrollü null-sonlu string pointer'larını doğrular. Doğrulanmazsa:
+ *   - unmapped adres → EL1 data-abort → kdl_istisna_isle sonsuz halt (DoS: tek SVC)
+ *   - kernel adresi  → kernel belleği UART'a/dosyaya sızar (info-leak)
+ * İzin verilen okuma bölgeleri: [user VA 0x42000000,0x42400000) ∪ kernel .rodata
+ * (çıktı/ad string literalleri — testler .rodata pointer geçirir). .data/.bss (dosya
+ * tablosu burada!) / stack / heap / Device MMIO / unmapped → RED (info-leak kesilir).
+ * Null-sonlandırıcı İZİNLİ bölge içinde bulunmalı → straddle-over-read imkânsız.
+ * Yalnız mapped-izinli bölge byte'ları taranır → tarama fault üretemez. */
+extern char __rodata_start[];
+extern char __rodata_end[];
+static int kdl_user_oku_str_gecerli(uint64_t p) {
+    uint64_t son;
+    if (p >= 0x42000000UL && p < 0x42400000UL) {
+        son = 0x42400000UL;                      /* EL0 user VA sayfaları (mapped) */
+    } else {
+        uint64_t rs = (uint64_t)(uintptr_t)__rodata_start;
+        uint64_t re = (uint64_t)(uintptr_t)__rodata_end;
+        if (p >= rs && p < re) son = re;         /* kernel .rodata (mapped, const, sır değil) */
+        else return 0;                           /* izinsiz bölge → RED */
+    }
+    uint64_t tavan = p + 4096UL;                 /* tarama tavanı (scan maliyeti sınırla) */
+    if (tavan > p && tavan < son) son = tavan;   /* taşma-korumalı min */
+    for (uint64_t a = p; a < son; a++)
+        if (*(const char *)(uintptr_t)a == 0) return 1;   /* bölge-içi null → string güvenli */
+    return 0;                                    /* null yok → straddle riski → RED */
+}
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
@@ -222,7 +251,8 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     } else if (num == 5) {
         /* D-124 userspace ABI 'yaz': arg = kullanıcı bellek string ptr. Kernel
          * kullanıcı adına yazar (newline yok → parçalı çıktı birleştirilebilir).
-         * NOT: gerçek OS'te ptr doğrulanır (user adres-uzayında mı?); burada demo. */
+         * D-151: ptr doğrulanır (user VA ∪ .rodata) — unmapped→halt / kernel-sızıntı engeli. */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;
         kdl_yaz_metin((const char *)(uintptr_t)arg);
     } else if (num == 6) {
         /* D-124 'yaz_sayi': arg = yazılacak tamsayı (newline yok). */
@@ -256,20 +286,24 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     } else if (num == 15) {
         /* D-131 dosya_yaz(ad=arg, deger=arg2): isimli dosyaya değer yaz (oluştur).
          * 2-argümanlı syscall (D-126 x1-koruma + D-131 SVC arg2 geçişi). 0=ok, -1=dolu. */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;   /* D-151: ad okuma */
         int i = kdl_dosya_ac((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
         kdl_dosyalar[i].deger = (int64_t)arg2;
         return 0;
     } else if (num == 16) {
         /* D-131 dosya_oku(ad=arg): isimli dosyanın değerini döner (yoksa -1). */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;   /* D-151: ad okuma */
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
         return (uint64_t)kdl_dosyalar[i].deger;
     } else if (num == 17) {
         /* D-132 dosya_yaz_metin(ad=arg, str=arg2): kullanıcı belleğinden string'i
          * dosyanın içeriğine kopyala (bulk yaz). Dönen = yazılan byte sayısı. */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;    /* D-151: ad okuma */
         int i = kdl_dosya_ac((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
+        if (!kdl_user_oku_str_gecerli(arg2)) return (uint64_t)(int64_t)-1;   /* D-151: içerik okuma */
         const char *s = (const char *)(uintptr_t)arg2;
         int n = 0;
         while (n < KDL_ICERIK_MAX - 1 && s[n]) { kdl_dosyalar[i].icerik[n] = s[n]; n++; }
@@ -279,6 +313,7 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     } else if (num == 18) {
         /* D-132 dosya_oku_metin(ad=arg, buf=arg2): dosya içeriğini kullanıcı
          * tamponuna (buf) kopyala (bulk oku). Dönen = kopyalanan byte sayısı (-1 yok). */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;   /* D-151: ad okuma */
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
         /* D-150: kernel user-tampona YAZAR → adres user aralığında olmalı (kernel
@@ -316,6 +351,7 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         return (uint64_t)(int64_t)-1;
     } else if (num == 21) {
         /* D-134 dosya_sil(ad=arg): isimli dosyayı sil (slot serbest). 0=ok, -1=yok. */
+        if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;   /* D-151: ad okuma */
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
         kdl_dosyalar[i].kullanildi = 0;
