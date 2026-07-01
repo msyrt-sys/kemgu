@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-125 — OS: preemptive EL0 (userspace) görev — userspace multitasking (process modeli tamam) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-124).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_irq_ortak SP_EL0 save/restore @264 — Stage 1);
+`runtime/kdl_gorev.c` (+kdl_preempt_gorev_olustur_el0 — Stage 2); `linker/bare-metal-aarch64.ld`
+(.user output'a .user_data eklendi); yeni `test/bare_metal/preempt_el0_arm.c`; `Makefile`.
+x86/host/codegen dokunulmadı.]** Process modelinin son parçası: userspace (EL0) görevler
+PREEMPTIVELY multitask edilir.
+
+**Stage 1 (non-regressing):** kdl_irq_ortak trap-frame'e SP_EL0'ı @264 ekler (mrs/msr sp_el0).
+EL1 görevlerde SP_EL0 kullanılmaz → zararsız; 6 EL1 preemptive testi (preempt/sleep/priority/kanal/
+sched/timer) hâlâ yeşil (doğrulandı).
+
+**Stage 2:** kdl_preempt_gorev_olustur_el0(giris, kernel_yigin, user_yigin) — sentetik trap-frame
+SPSR=0x0 (EL0t, IRQ-açık) + SP_EL0=user yığını. İlk switch eret ile EL0'a atlar; timer-IRQ EL0'dan
+EL1'e alır, kdl_irq_ortak SP_EL0 dâhil tüm bağlamı kaydeder → EL0 görev preempt edilip sürdürülür.
+İKİ yığın: kernel (trap-frame/SP_EL1, AP=00) + user (SP_EL0, .user AP=01).
+
+**Linker:** .user output section artık .user_data (EL0-yazılabilir veri) de toplar — kod (.user, X)
+ve veri (.user_data, W) ayrı input-section → derleyici section-tip çakışması yok, ikisi de aynı
+0x42000000 AP=01 sayfasında. (İleride process code/data ayrımı temeli.)
+
+**Doğrulama (QEMU 11.0.1):** "PREEMPT EL0 BASLA" + "PREEMPT EL0 OK" (el0_sayac>0 = EL0 userspace
+görev timer-IRQ ile preempt edilerek koştu, main EL1 de koştu). Full gate GATE=0. sıfır-uyarı.
+
+**Önem:** Process modeli ARTIK TAM — kernel(EL1) + userspace(EL0) görevler timer-IRQ ile
+preemptively dönüşümlü koşar, banked SP_EL0 korunur. Gerçek OS multitasking'inin çekirdeği.
+
+**Sıradaki:** çoklu EL0 süreç + per-process TTBR swap scheduler'da (D3+D-125 birleşik); userspace
+ABI (exit-kod/oku); D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E fs).
+
+---
+
 ## D-124 — OS: ilk userspace programı — EL0 hesap + syscall ABI ile I/O (Faz F temeli) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-123).

@@ -214,6 +214,8 @@ kdl_irq_ortak:
     mrs     x10, spsr_el1
     stp     x30, x9,  [sp, #16*15]    /* x30 @240, ELR @248 */
     str     x10,      [sp, #256]      /* SPSR @256 */
+    mrs     x11, sp_el0              /* D-125: EL0 görev banked user-SP'si */
+    str     x11,      [sp, #264]      /* SP_EL0 @264 (EL1 görevde kullanılmaz — zararsız) */
 
     mov     x0, sp                   /* arg0 = trap-frame ptr */
     bl      kdl_irq_isle             /* devam SP'si → x0 (preempt veya aynı) */
@@ -223,6 +225,8 @@ kdl_irq_ortak:
     ldp     x30, x9,  [sp, #16*15]    /* x30, ELR */
     msr     spsr_el1, x10
     msr     elr_el1,  x9
+    ldr     x9,       [sp, #264]      /* D-125: SP_EL0 (EL0 görev user-SP restore) */
+    msr     sp_el0,   x9             /* x9 aşağıda ldp ile yeniden yüklenir — scratch */
     ldp     x0, x1,   [sp, #16*0]
     ldp     x2, x3,   [sp, #16*1]
     ldp     x4, x5,   [sp, #16*2]

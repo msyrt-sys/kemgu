@@ -71,8 +71,11 @@ SECTIONS
     . = 0x42000000;
     .user : ALIGN(16) {
         __user_start = .;
-        *(.user)
+        *(.user)             /* EL0 kod (çalıştırılabilir) */
         *(.user.*)
+        . = ALIGN(16);
+        *(.user_data)        /* D-125: EL0-yazılabilir veri (aynı AP=01 sayfası) */
+        *(.user_data.*)
         . = ALIGN(16);
         . = . + 0x2000;      /* 8 KB EL0 user yığını */
         __user_stack_top = .;
