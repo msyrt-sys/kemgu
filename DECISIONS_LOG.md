@@ -32,6 +32,26 @@ komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden 
 
 ---
 
+## D-140 — OS: userspace mesaj kanalı (IPC) — süreçler-arası mesajlaşma (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-139).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (global kdl_msg[] ring buffer + num 22 kanal_gonder, 23 kanal_al);
+yeni `test/bare_metal/kanal_ipc_arm.c`; `Makefile`. Sadece ekleme.]** İki userspace süreç çekirdek-
+aracılı mesaj kanalıyla DOĞRUDAN haberleşir (dosya-IPC ötesinde; KEMGU `kanal` ilkelinin userspace
+düzeyi).
+
+**Mekanizma:** global int ring buffer (16). num=22 kanal_gonder(deger) enqueue (dolu=-1); num=23
+kanal_al() dequeue (boş=-1). Bloklamasız → alıcı EL0'da yoklar (deadlock yok).
+
+**Doğrulama (QEMU 11.0.1):** kanal_ipc_arm — launcher(alıcı) spawn(sender); sender kanal_gonder
+(100/200/300)+exit; launcher kanal_al ile 3 değer alıp toplar → "KANAL SUM=600". Full gate GATE=0
+(36 hedef). sıfır-uyarı. **Userspace IPC iki yolla: dosya (paylaşılan depo) + kanal (mesaj geçişi).**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86 (ring3); C5 virtio-blk (kalıcı disk).
+
+---
+
 ## D-139 — OS: kabuğa aritmetik — topla komutu (shell hesap makinesi) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-138).
