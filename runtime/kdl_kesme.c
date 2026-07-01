@@ -217,6 +217,22 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         while (n < kdl_dosyalar[i].boyut) { buf[n] = kdl_dosyalar[i].icerik[n]; n++; }
         buf[n] = 0;
         return (uint64_t)(int64_t)n;
+    } else if (num == 19) {
+        /* D-133 dosya_sayisi(): kullanımdaki dosya sayısı (ls için). */
+        int c = 0;
+        for (int i = 0; i < KDL_DOSYA_MAX; i++) if (kdl_dosyalar[i].kullanildi) c++;
+        return (uint64_t)(int64_t)c;
+    } else if (num == 20) {
+        /* D-133 dosya_ad(idx=arg, buf=arg2): idx'inci dosyanın adını user tamponuna
+         * kopyala (ls: dosya adı listeleme). Dönen = ad uzunluğu (-1 geçersiz idx). */
+        int idx = (int)arg;
+        if (idx < 0 || idx >= KDL_DOSYA_MAX || !kdl_dosyalar[idx].kullanildi)
+            return (uint64_t)(int64_t)-1;
+        char *buf = (char *)(uintptr_t)arg2;
+        int n = 0;
+        while (n < KDL_AD_MAX - 1 && kdl_dosyalar[idx].ad[n]) { buf[n] = kdl_dosyalar[idx].ad[n]; n++; }
+        buf[n] = 0;
+        return (uint64_t)(int64_t)n;
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }
