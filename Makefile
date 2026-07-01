@@ -1453,6 +1453,29 @@ calistir_tick_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — introspection testi atlandi."; \
 	fi
 
+# === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
+# launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
+# Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
+calistir_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-129 aarch64 dinamik süreç (spawn) testi: spawn_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/spawn_arm.c -o $(BUILD)/spawn_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/spawn_arm.elf $(BUILD)/spawn_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/spawn_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/spawn_arm.out -kernel $(BUILD)/spawn_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/spawn_arm.out; echo "--- son ---"; \
+		if grep -q "WORKER OK" $(BUILD)/spawn_arm.out && grep -q "LAUNCHER spawned pid=" $(BUILD)/spawn_arm.out; then \
+			echo "D-129 aarch64 spawn testi gecti: launcher runtime'da izole süreç yaratti, worker kostu."; \
+		else \
+			echo "FAIL: 'WORKER OK' + 'LAUNCHER spawned pid=' bekleniyor (dinamik spawn)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — spawn testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1463,7 +1486,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_capstone_arm \
+                     calistir_tick_test_arm calistir_spawn_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

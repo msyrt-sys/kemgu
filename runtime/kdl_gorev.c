@@ -85,6 +85,7 @@ static int      kdl_paktif = 0;
  * testler) davranış AYNI (swap yok → regresyon yok). */
 #if defined(__aarch64__)
 extern void kdl_ttbr_degis(uint64_t *l1);
+extern void kdl_surec_kur_el0_veri(uint64_t *l1, uint64_t *l2, uint64_t kod_pa, uint64_t veri_pa);
 static uint64_t *kdl_task_l1[KDL_MAX_GOREV];
 #endif
 
@@ -145,6 +146,30 @@ void kdl_preempt_oncelik(int gorev, int oncelik) {
  * geçerken TTBR0'ı bu tabloya çevirir (userspace süreç izolasyonu). */
 void kdl_preempt_gorev_ttbr(int gorev, uint64_t *l1) {
     if (gorev >= 0 && gorev < KDL_MAX_GOREV) kdl_task_l1[gorev] = l1;
+}
+
+/* D-129: DİNAMİK SÜREÇ OLUŞTURMA (spawn). Runtime'da (syscall'dan) yeni izole EL0
+ * süreç yaratır — statik main kurulumu değil. Havuzdan sayfa-tabloları + kernel
+ * yığını + sürece-özel veri sayfası (0x46000000 + i*2MB) alır, preemptive EL0
+ * görevi kurar + TTBR bağlar. entry = EL0 giriş adresi (.user, paylaşılan kod).
+ * Yeni görev id'sini (pid) döner; havuz doluysa -1. */
+#define KDL_SPAWN_MAX 4
+static uint64_t kdl_spawn_l1[KDL_SPAWN_MAX][512] __attribute__((aligned(4096)));
+static uint64_t kdl_spawn_l2[KDL_SPAWN_MAX][512] __attribute__((aligned(4096)));
+static unsigned char kdl_spawn_kstack[KDL_SPAWN_MAX][8192] __attribute__((aligned(16)));
+static int kdl_spawn_sayi = 0;
+
+int kdl_surec_spawn(uint64_t entry) {
+    if (kdl_spawn_sayi >= KDL_SPAWN_MAX) return -1;
+    int i = kdl_spawn_sayi++;
+    uint64_t veri_pa = 0x46000000UL + (uint64_t)i * 0x200000UL;   /* sürece-özel veri (RAM içi) */
+    kdl_surec_kur_el0_veri(kdl_spawn_l1[i], kdl_spawn_l2[i], 0x42000000UL, veri_pa);
+    int t = kdl_preempt_gorev_olustur_el0((void (*)(void))(uintptr_t)entry,
+                                          kdl_spawn_kstack[i] + 8192,
+                                          (void *)(uintptr_t)0x42380000UL);  /* USTACK (özel veri sayfasında) */
+    if (t < 0) { kdl_spawn_sayi--; return -1; }
+    kdl_task_l1[t] = kdl_spawn_l1[i];        /* yeni sürecin adres-uzayı */
+    return t;
 }
 #endif
 
