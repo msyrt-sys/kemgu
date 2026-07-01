@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-150 — OS: syscall kullanıcı-pointer doğrulama — kernel bellek-yazma koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-149).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (guard + num=18/20); yeni `test/bare_metal/guvenlik_arm.c`,
+`Makefile` hedefi.]** KEMGU-OS'un çekirdek güvenlik invaryantını (bellek-güvenli OS) syscall
+sınırında zorunlu kıl: kernel (EL1), kullanıcı-kontrollü bir pointer'a **user VA aralığı dışında**
+YAZMAMALI. Aksi halde kötü/hatalı bir EL0 süreç, kernel'in yazdığı bir syscall'a kernel adresi
+geçirip çekirdek belleğini bozabilir (privilege escalation vektörü).
+
+**Guard:** `kdl_user_yaz_ptr_gecerli(p, len)` — yalnız `[0x42000000, 0x42400000)` (EL0 user VA)
+içindeki, `len<=4MB` ve toplama-taşması olmayan yazma-hedeflerini kabul eder. Kernel'in
+kullanıcı-tampona YAZDIĞI iki syscall'a eklendi: num=18 (dosya_oku_metin → buf'a içerik) ve
+num=20 (dosya_ad → buf'a ad). Geçersizse RED (-1), yazma yapılmaz. Okuma-syscall'ları (.rodata
+kernel çıktı stringleri) muaf — yalnız user-tampona YAZAN yollar denetlenir.
+
+**Kanıt (aarch64 QEMU):** `guvenlik_arm.c` bir EL0 launcher olarak: dosya oluşturur, sonra
+num=18'e (a) kernel-adresi 0x40000000 → **RED (-1)**, (b) geçerli user-tampon 0x42210000 →
+**OK (>=0)** verir. İkisi de beklendiği gibiyse EL0 `yaz` syscall'ı ile "GUVENLIK OK" basar. Seri
+çıktı: `GUVENLIK BASLA` → `GUVENLIK OK`. FS regresyonları (metin/ls/sil/kabuk — hepsi geçerli
+user-tampon 0x42210000 kullanır) guard'la bozulmadan geçer.
+
+**Kapsam/sınır:** Guard yalnız num=18/20 (mevcut write-to-user yollar). İleride kernel→user yazan
+her yeni syscall aynı guard'ı kullanmalı (kural). Read-güvenliği (user'ın kernel .rodata OKUması)
+zaten MMU AP=00 ile engelli — bu guard yazma-tarafı savunma-derinliği. Test-only bug (EL0'ın
+kernel fonksiyonunu doğrudan çağırması) fix'te `yaz` syscall'ına çevrildi; guard mantığı değişmedi.
+
 ## D-135 — OS: basit userspace kabuk (shell) — komut ayrıştırma + FS dağıtım (Faz E/F DORUĞU) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-134).
