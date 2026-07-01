@@ -119,6 +119,53 @@ static int kdl_dosya_ac(const char *ad) {   /* bul veya oluştur; -1 = depo dolu
 static int kdl_msg[KDL_MSG_MAX];
 static int kdl_msg_bas = 0, kdl_msg_son = 0;
 
+/* Kernel-içi dosya yardımcıları (persistence + test için). */
+int kdl_dosya_olustur_deger(const char *ad, int64_t deger) {
+    int i = kdl_dosya_ac(ad);
+    if (i < 0) return -1;
+    kdl_dosyalar[i].deger = deger;
+    return i;
+}
+int64_t kdl_dosya_deger(const char *ad) {
+    int i = kdl_dosya_bul(ad);
+    if (i < 0) return (int64_t)-1;
+    return kdl_dosyalar[i].deger;
+}
+
+#if defined(__aarch64__)
+/* === D-143: KALICI dosya sistemi (disk-backed persistence) ===
+ * kdl_dosyalar tablosunu virtio-blk diske serialize eder → dosyalar BOOT'LAR ARASI
+ * yaşar. Blok 0-1: [magic "KEMG"(4)][pad(12)][kdl_dosyalar bytes]. */
+extern uint64_t kdl_virtio_blk_bul(void);
+extern int kdl_virtio_blk_kur(uint64_t base);
+extern int kdl_virtio_blk_oku(uint64_t base, uint64_t sektor, uint8_t *hedef);
+extern int kdl_virtio_blk_yaz(uint64_t base, uint64_t sektor, const uint8_t *kaynak);
+
+static uint8_t kdl_fs_buf[1024] __attribute__((aligned(16)));
+
+int kdl_dosya_kaydet(uint64_t base) {
+    for (int i = 0; i < 1024; i++) kdl_fs_buf[i] = 0;
+    kdl_fs_buf[0] = 'K'; kdl_fs_buf[1] = 'E'; kdl_fs_buf[2] = 'M'; kdl_fs_buf[3] = 'G';   /* magic */
+    const unsigned char *src = (const unsigned char *)(const void *)kdl_dosyalar;
+    unsigned long n = sizeof(kdl_dosyalar);                 /* <= 784-16 sığar (2 blok) */
+    for (unsigned long i = 0; i < n && (16 + i) < 1024; i++) kdl_fs_buf[16 + i] = src[i];
+    if (kdl_virtio_blk_yaz(base, 0, kdl_fs_buf) != 0) return -1;
+    if (kdl_virtio_blk_yaz(base, 1, kdl_fs_buf + 512) != 0) return -1;
+    return 0;
+}
+
+int kdl_dosya_yukle(uint64_t base) {
+    if (kdl_virtio_blk_oku(base, 0, kdl_fs_buf) != 0) return -1;
+    if (kdl_virtio_blk_oku(base, 1, kdl_fs_buf + 512) != 0) return -1;
+    if (!(kdl_fs_buf[0] == 'K' && kdl_fs_buf[1] == 'E' &&
+          kdl_fs_buf[2] == 'M' && kdl_fs_buf[3] == 'G')) return -1;   /* diskte FS yok */
+    unsigned char *dst = (unsigned char *)(void *)kdl_dosyalar;
+    unsigned long n = sizeof(kdl_dosyalar);
+    for (unsigned long i = 0; i < n && (16 + i) < 1024; i++) dst[i] = kdl_fs_buf[16 + i];
+    return 0;
+}
+#endif /* __aarch64__ */
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte

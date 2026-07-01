@@ -771,7 +771,9 @@ $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
               $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o $(BUILD)/bm_a64_mmu.o \
-              $(BUILD)/bm_a64_gorev.o
+              $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o
+#              ^ virtio: kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143) →
+#                tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
@@ -1686,7 +1688,7 @@ calistir_virtio_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_vi
 	@echo "D-141 aarch64 virtio-blk disk testi: virtio_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/virtio_arm.c -o $(BUILD)/virtio_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_arm.elf $(BUILD)/virtio_arm.o $(BUILD)/bm_a64_virtio.o $(BM_A64_OBJS)
+		-o $(BUILD)/virtio_arm.elf $(BUILD)/virtio_arm.o $(BM_A64_OBJS)
 	@# Disk imajı oluştur: 32KB sıfır + blok 0'a "KEMGU-DISK-BLOK0" yaz.
 	@dd if=/dev/zero of=$(BUILD)/disk.img bs=512 count=64 2>/dev/null
 	@printf 'KEMGU-DISK-BLOK0' | dd of=$(BUILD)/disk.img bs=1 conv=notrunc 2>/dev/null
@@ -1714,7 +1716,7 @@ calistir_virtio_rw_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64
 	@echo "D-142 aarch64 virtio-blk yaz+oku testi: virtio_rw_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/virtio_rw_arm.c -o $(BUILD)/virtio_rw_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_rw_arm.elf $(BUILD)/virtio_rw_arm.o $(BUILD)/bm_a64_virtio.o $(BM_A64_OBJS)
+		-o $(BUILD)/virtio_rw_arm.elf $(BUILD)/virtio_rw_arm.o $(BM_A64_OBJS)
 	@dd if=/dev/zero of=$(BUILD)/disk_rw.img bs=512 count=64 2>/dev/null
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/virtio_rw_arm.out; \
@@ -1734,6 +1736,36 @@ calistir_virtio_rw_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64
 		echo "QEMU yok — virtio rw testi atlandi."; \
 	fi
 
+# === D-143 Kalıcı dosya sistemi testi (aarch64) — disk-backed persistence ===
+# Aynı kernel AYNI diskle iki kez boot: boot1 kaydeder, boot2 yükler → dosya
+# boot'lar arası yaşar (gerçek kalıcılık: RAM-FS + virtio-blk).
+calistir_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "D-143 aarch64 kalıcı dosya sistemi testi: kalici_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kalici_arm.c -o $(BUILD)/kalici_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kalici_arm.elf $(BUILD)/kalici_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_kalici.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kalici_b1.out $(BUILD)/kalici_b2.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_kalici.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/kalici_b1.out -kernel $(BUILD)/kalici_arm.elf 2>/dev/null || true; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_kalici.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/kalici_b2.out -kernel $(BUILD)/kalici_arm.elf 2>/dev/null || true; \
+		echo "--- BOOT 1 ---"; cat $(BUILD)/kalici_b1.out; echo "--- BOOT 2 ---"; cat $(BUILD)/kalici_b2.out; echo "--- son ---"; \
+		if grep -q "FIRST BOOT saved" $(BUILD)/kalici_b1.out && grep -q "SECOND BOOT kalici=777" $(BUILD)/kalici_b2.out; then \
+			echo "D-143 aarch64 kalıcı FS testi gecti: dosya boot'lar arası diskte yaşadı (777)."; \
+		else \
+			echo "FAIL: boot1 'FIRST BOOT saved' + boot2 'SECOND BOOT kalici=777' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — kalıcı FS testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1748,7 +1780,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
-                     calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_capstone_arm \
+                     calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
+                     calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

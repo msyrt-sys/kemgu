@@ -57,6 +57,29 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-143 — OS: KALICI dosya sistemi — disk-backed persistence (boot'lar arası) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-142).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+kdl_dosya_kaydet/yukle disk serialize/deserialize +
+kdl_dosya_olustur_deger/deger kernel helper'ları); yeni `test/bare_metal/kalici_arm.c`; `Makefile`
+(iki-boot gate). virtio (aarch64) guard'lı. Sadece ekleme.]** RAM dosya sistemini (D-131) virtio-blk
+diske (D-141/142) bağlar → dosyalar BOOT'LAR ARASI yaşar (gerçek kalıcılık).
+
+**Mekanizma:** kdl_dosya_kaydet(base) — kdl_dosyalar tablosunu blok 0-1'e serialize (magic "KEMG" +
+bytes). kdl_dosya_yukle(base) — blok 0-1 oku, magic varsa tabloyu geri yükle (-1 diskte FS yok).
+Byte-kopya (aliasing yok). 2 blok (768 bayt tablo + 16 header < 1024).
+
+**Doğrulama (QEMU 11.0.1):** kalici_arm — AYNI kernel AYNI diskle İKİ KEZ boot. Boot 1: FS yok →
+"kalici"=777 oluştur+kaydet → "FIRST BOOT saved". Boot 2: magic var → yükle → "SECOND BOOT
+kalici=777". **Dosya kernel yeniden başlayınca diskten geri geldi = GERÇEK KALICILIK.** Full gate
+GATE=0 (39 hedef). sıfır-uyarı.
+
+**Sıradaki:** FS'i syscall'la kaydet/yükle (userspace tetikler); UART RX (interaktif kabuk); D2-x86;
+networking (Faz G).
+
+---
+
 ## D-142 — OS: VirtIO-Blk yaz+oku round-trip — gerçek kalıcı depolama (C5 tamam) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-141).
