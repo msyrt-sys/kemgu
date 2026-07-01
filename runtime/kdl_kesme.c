@@ -25,6 +25,9 @@ void kdl_yaz_metin(const char *);   /* newline'sız — userspace 'yaz' syscall 
 void kdl_yaz_tam(int32_t);          /* newline'sız sayı — userspace 'yaz_sayi' için */
 uint64_t kdl_tik_al(void);          /* timer tik sayısı — userspace gettick için (D-128) */
 int      kdl_aktif_gorev(void);     /* aktif preemptive görev id — userspace getpid için */
+#if defined(__aarch64__)
+int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — userspace spawn (D-129) */
+#endif
 
 /* CPU istisnası — kurtarma yok. Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
@@ -121,6 +124,12 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
     } else if (num == 11) {
         /* D-128 getpid: o an koşan sürecin (preemptive görev) id'si. */
         return (uint64_t)(int64_t)kdl_aktif_gorev();
+#if defined(__aarch64__)
+    } else if (num == 12) {
+        /* D-129 spawn: arg = EL0 giriş adresi → runtime'da yeni izole süreç oluştur.
+         * Yeni sürecin id'sini (pid) döner (-1 havuz dolu). Dinamik process yaratma. */
+        return (uint64_t)(int64_t)kdl_surec_spawn(arg);
+#endif
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }

@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-129 — OS: dinamik süreç oluşturma — spawn syscall'ı (fork/spawn yeteneği) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-128).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (+kdl_surec_spawn — havuz-tabanlı runtime süreç); `runtime/
+kdl_kesme.c` (kdl_syscall_isle +num 12 spawn, #if __aarch64__); yeni `test/bare_metal/spawn_arm.c`;
+`Makefile`. x86/host/codegen/linker dokunulmadı.]** D-127 (statik çok-süreç) → runtime dinamik
+süreç: bir userspace süreç RUNTIME'da yeni izole süreç yaratır (gerçek OS fork/spawn).
+
+**Mekanizma:** kdl_surec_spawn(entry) — havuzdan (KDL_SPAWN_MAX=4) L1/L2 tabloları + kernel yığını
++ sürece-özel veri PA'sı (0x46000000+i*2MB, RAM içi) alır → kdl_surec_kur_el0_veri (paylaşılan kod
++ özel veri) → kdl_preempt_gorev_olustur_el0 (preemptive EL0 görev, entry'de) → kdl_task_l1[t]=yeni
+tablo. num=12 spawn(entry_va) syscall bunu çağırır, yeni pid döner. Syscall IRQ-masked → kdl_psayi++
+scheduler ile yarışmaz (güvenli); yeni görev eret sonrası ilk timer-IRQ'da schedulable.
+
+**Doğrulama (QEMU 11.0.1):** spawn_arm — launcher (EL0 süreç, kendi TTBR) spawn(worker) çağırır →
+"LAUNCHER spawned pid=2"; worker DİNAMİK yaratılan izole adres-uzayında EL0'da koşar → "WORKER OK".
+Full gate GATE=0 (27 hedef). sıfır-uyarı. **Programlar artık yeni süreç başlatabiliyor —
+gerçek çok-görevli OS'un temel yeteneği.**
+
+**Sıradaki:** süreç bitişi/join (worker exit → launcher öğrenir); read/write dosya syscall'ları;
+D2-x86; C5 virtio-blk → Faz E fs.
+
+---
+
 ## D-128 — OS: userspace introspection syscall'ları — gettick + getpid (userspace ABI genişleme) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-127).
