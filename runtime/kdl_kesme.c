@@ -63,7 +63,7 @@ void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
  * stub'ı bağlamı kaydeder, num + arg ile buraya gelir, dönüşte eret/iretq.
  * Minimal demonstrasyon: çağrı #1 = mesaj yazdır. Gerçek kernel'de bu tablo
  * dosya/bellek/görev syscall'larına genişler. */
-void kdl_syscall_isle(uint64_t num, uint64_t arg) {
+uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");
         kdl_yazdir_satir();
@@ -108,7 +108,13 @@ void kdl_syscall_isle(uint64_t num, uint64_t arg) {
     } else if (num == 7) {
         /* D-124 'satir': satır sonu. */
         kdl_yazdir_satir();
+    } else if (num == 9) {
+        /* D-126 syscall DÖNÜŞ değeri ABI kanıtı: kernel bir sonuç hesaplar +
+         * EL0 çağırana x0'da döndürür (kdl_svc_ortak str x0 → saved-x0 → restore).
+         * 'artir': arg+1 döner. read/getpid/gettick ailesinin mekanizma temeli. */
+        return arg + 1;
     }
+    return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }
 
 #if defined(__x86_64__)
