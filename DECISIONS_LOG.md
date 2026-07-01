@@ -57,6 +57,34 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-148 — OS: SELF-HOST virtio sürücüsü — KEMGU dilinde bare-metal OS sürücüsü (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-147).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_selfhost.kem` (KEMGU!); yeni `runtime/kdl_yetki_bare.c`
+(freestanding capability runtime); `Makefile` (bm_a64_mmio.o + bm_a64_yetki.o + self-host target).
+Mevcut mmio codegen (src/llvm.c) + kdl_runtime_mmio.c bare-metal modu kullanıldı.]** Projenin
+ÖZGÜN DNA'sı OS düzeyinde: bir OS sürücüsü KEMGU DİLİNDE yazıldı, KEMGU derleyicisiyle bare-metal
+derlendi, gerçek donanım register'ı okudu.
+
+**Mekanizma:** virtio_selfhost.kem — `yetki<MMIO>` (object-capability, DERLEME-ZAMANI donanım-erişim
+ispatı, sıfır runtime yük) + `mmio_oku32(y, adres)` intrinsic'i ile virtio-mmio magic (0x0A000000)
++ version register'larını okur. kemgu --llvm → clang aarch64 (-x ir) → ld.lld → QEMU virt. mmio_oku32
+codegen'de `kdl_mmio_oku32(adres)` volatile load'a iner (yetki runtime'a geçmez → WCET sıfır ek).
+kdl_yetki_bare.c: KdlYetki (16B, codegen %kdl_yetki ile birebir) + olustur/geri_al (PRNG yerine sayaç,
+libc yok). sret ABI aarch64'te x8 kullanır ama yetki MMIO'da kullanılmadığından benign.
+
+**Doğrulama (QEMU 11.0.1):** virtio_selfhost — QEMU virt boş slot 0 virtio-mmio transport'u magic
+(0x74726976) her zaman sunar → KEMGU sürücüsü okur+doğrular → "KEM VIRTIO OK" + version(1). **LİBC-TEMİZ**
+(malloc/printf yok — capability-güvenli donanım erişimi). Full gate GATE=0 (44 hedef). sıfır-uyarı.
+**KEMGU (memory-safe dil) kendi OS sürücüsünü kendi dilinde yazıyor — capability ile donanım erişimi
+compile-time güvenli. Projenin özgün değer önerisi OS düzeyinde kanıtlandı.**
+
+**Sıradaki:** self-host sürücüyü genişlet (yaz + tam virtio init .kem'de); .kem userspace program;
+TCP; UART RX.
+
+---
+
 ## D-147 — OS: DNS round-trip — UDP request-response (OS internet'le konuşuyor) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-146).
