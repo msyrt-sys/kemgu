@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-123 — OS D3: korumalı EL0 user-process (D1⊕D2⊕D-122 birleşik) — gerçek OS sürecinin dört özelliği bir arada (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-122).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (+kdl_surec_kur_el0 — user sayfası AP=01); yeni
+`test/bare_metal/proc_arm.c`; `Makefile`. Mevcut kod DEĞİŞMEDİ (yalnız ekleme). x86/host/codegen
+dokunulmadı.]** D-121/D-122 ön-koşulları (preemption-x0 + syscall-arg) hazır olunca, gerçek bir
+işletim sistemi sürecinin dört tanımlayıcı özelliğini BİR ARADA gösteren keystone.
+
+**Birleşen özellikler (tek süreçte):**
+1. **Kendi adres-uzayı** — süreç kendi L1/L2 tablolarına sahip (kernel global tablolarından ayrı),
+   `kdl_ttbr_degis` ile TTBR0 swap (D1 makinesi).
+2. **Kullanıcı ayrıcalığı** — kod EL0'da, kendi TTBR'ı altında (`kdl_el0_calistir`, D2).
+3. **Syscall arayüzü** — EL0 kod SVC ile argüman geçer (num=4 arg=42) → "SYSCALL ARG OK" (D-122).
+4. **Bellek koruması / HAPİS** — süreç kernel-only sayfaya (0x40000000, AP=00) erişince EL0
+   **permission-fault** → kernel yakalar. Kendi adres-uzayına hapsedilmiş.
+
+**Yeni API:** `kdl_surec_kur_el0(l1,l2,user_pa)` — kdl_surec_kur (D1, AP=00) gibi ama user sayfası
+`| (1<<6)` (AP=01, EL0+EL1 RW; UXN=0 → EL0-exec). user_pa=0x42000000 (identity — .user section
+fiziksel yeri). el0_kod `.user` section'da, self-contained pure-SVC.
+
+**Doğrulama (QEMU 11.0.1):** "PROC BASLA (EL1)" + "SYSCALL ARG OK" + "ISTISNA tip=0x24
+a=0x9200000e b=0x42000010 adr=0x40000000". ESR decode: EC=0x24 (data abort, lower-EL/EL0),
+**DFSC=0x0E = PERMISSION fault** (sayfa VAR ama EL0 reddedildi → gerçek koruma, translation değil),
+ELR=0x42000010 (fault eden EL0 komutu), FAR=0x40000000 (erişilmeye çalışılan kernel adresi). Full
+gate GATE=0 (22 hedef). sıfır-uyarı, libc-temiz.
+
+**Sınır (bilinçli):** süreç henüz PREEMPTIVE değil (SPSR=EL0t DAIF-masked → timer maskeli). Preemptive
+EL0 süreç = per-task KERNEL stack (trap-frame SP_EL1 ≠ run SP_EL0) + SP_EL0 trap-frame'de kaydet →
+ayrı milestone. İzolasyon (private DATA) = ayrı .user_code/.user_data sayfaları (shared-code+
+private-data) → follow-up.
+
+**Sıradaki:** preemptive EL0 süreç (per-task kernel stack); D2-x86 (ring3+TSS); C5 (virtio-blk).
+
+---
+
 ## D-122 — OS: SVC arg0 (x0) vektör-stub tarafından eziliyordu — syscall argüman geçişi onarımı (2026-06-30) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-121).

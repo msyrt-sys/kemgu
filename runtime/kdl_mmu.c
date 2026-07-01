@@ -87,6 +87,25 @@ void kdl_surec_kur(uint64_t *l1, uint64_t *l2, uint64_t user_pa) {
     __asm__ volatile("dsb ish");                      /* tablo yazımları görünür olsun */
 }
 
+/* === D3: EL0 (korumalı user-process) adres-uzayı ===
+ * kdl_surec_kur gibi ama user VA sayfası AP=01 (EL0+EL1 RW) → süreç kodu KENDİ
+ * TTBR'ı altında EL0'da koşabilir. Kernel identity (AP=00) EL0'a KAPALI kalır →
+ * süreç kernel belleğine erişince permission-fault (bellek koruması / hapis).
+ * user_pa = user kodun fiziksel yeri (D3'te .user section = 0x42000000 identity). */
+void kdl_surec_kur_el0(uint64_t *l1, uint64_t *l2, uint64_t user_pa) {
+    for (int n = 0; n < 512; n++) {
+        uint64_t pa = 0x40000000UL + (uint64_t)n * 0x200000UL;
+        l2[n] = pa | KDL_L2_NORMAL;                  /* kernel identity (AP=00, EL1-only) */
+    }
+    /* user VA (L2[16]) → user_pa, AP=01 (EL0 erişimi + UXN=0 → EL0-exec) */
+    l2[(KDL_USER_VA - 0x40000000UL) / 0x200000UL] = user_pa | KDL_L2_NORMAL | (1UL << 6);
+
+    for (int i = 0; i < 512; i++) l1[i] = 0;
+    l1[0] = KDL_BLOK_DEVICE;
+    l1[1] = (uint64_t)(uintptr_t)l2 | 0x3UL;
+    __asm__ volatile("dsb ish");
+}
+
 /* TTBR0_EL1'i değiştir + TLB temizle → adres-uzayı geçişi (per-process). */
 void kdl_ttbr_degis(uint64_t *l1) {
     __asm__ volatile("msr ttbr0_el1, %0" :: "r"((uint64_t)(uintptr_t)l1));
