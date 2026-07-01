@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-135 — OS: basit userspace kabuk (shell) — komut ayrıştırma + FS dağıtım (Faz E/F DORUĞU) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-134).
+
+**Karar [ETKİ: yeni `test/bare_metal/kabuk_arm.c`; `Makefile`. Yalnız test — mevcut syscall/kernel
+kullanılır, kod değişmedi.]** Tüm userspace + FS + süreç yığınını tanınabilir bir OS artefaktına
+bağlayan doruk: bir userspace program komut SCRIPT'ini ayrıştırıp (tokenize) FS syscall'larına
+dağıtır — gerçek kabuk/komut yorumlayıcısı.
+
+**Kabuk:** .user_data'daki script (yaz/oku/ls komutları) EL0'da in-place tokenize edilir (str_esit
++ tokenize helper'ları .user section'da, EL0-exec). yaz→dosya_yaz_metin, oku→dosya_oku_metin+bas,
+ls→listele. Kernel çağırmaz; yalnız syscall.
+
+**Öğrenilen (bellek koruması KANITI):** İlk deneme ISTISNA tip=0x24 DFSC=0x0E (permission fault,
+FAR=0x40003fd3) — komut adı literalleri ("yaz"/"oku"/"ls") .rodata'da (AP=00); EL0 str_esit OKUYUNCA
+fault. Bu, D3 bellek-korumasının GERÇEKTEN çalıştığının kanıtı (EL0 kernel belleğini okuyamaz).
+DÜZELTME: komut adları .user_data'ya (AP=01, EL0-okunur). NOT: sys(5,literal) çıktı stringleri
+.rodata'da KALIR (kernel EL1 okur, sorun yok) — yalnız EL0'ın DOĞRUDAN okuduğu stringler .user_data.
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> yaz gunluk KEMGU-OS" / "SHELL> oku gunluk" /
+"  KEMGU-OS" / "SHELL> ls" / "  gunluk". Full gate GATE=0 (33 hedef). sıfır-uyarı. **KEMGU-OS artık
+komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden çalışan-OS'a.**
+
+**Sıradaki:** UART RX (klavye → interaktif kabuk; gate zor); kabuk komut genişletme (sil/yaz-değer);
+kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
+
+---
+
 ## D-134 — OS: dosya sil — FS CRUD tamamlandı (oluştur/oku/güncelle/listele/sil) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-133).
