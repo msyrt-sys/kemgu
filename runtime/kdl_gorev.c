@@ -119,8 +119,15 @@ int kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe) {
  * preempt edilip sürdürülebilir. giris .user sayfasında (AP=01, EL0-exec) olmalı. */
 int kdl_preempt_gorev_olustur_el0(void (*giris)(void), void *kernel_yigin_tepe,
                                   void *user_yigin_tepe) {
-    if (kdl_psayi >= KDL_MAX_GOREV) return -1;
-    int i = kdl_psayi++;
+    /* D-138: önce ÖLÜ (exit etmiş) görev slotunu yeniden kullan → sınırsız spawn.
+     * Yoksa yeni slot (max'a kadar). main (0) asla yeniden kullanılmaz. */
+    int i = -1;
+    for (int k = 1; k < kdl_psayi; k++) if (kdl_olu[k]) { i = k; break; }
+    if (i < 0) {
+        if (kdl_psayi >= KDL_MAX_GOREV) return -1;
+        i = kdl_psayi++;
+    }
+    kdl_olu[i] = 0; kdl_block[i] = 0; kdl_pri[i] = 0;   /* slot durumunu sıfırla */
     uint64_t sp = ((uint64_t)(uintptr_t)kernel_yigin_tepe - 272) & ~0xFUL;
     uint64_t *tf = (uint64_t *)(uintptr_t)sp;
     for (int k = 0; k < 34; k++) tf[k] = 0;
@@ -170,18 +177,27 @@ void kdl_preempt_gorev_ttbr(int gorev, uint64_t *l1) {
 static uint64_t kdl_spawn_l1[KDL_SPAWN_MAX][512] __attribute__((aligned(4096)));
 static uint64_t kdl_spawn_l2[KDL_SPAWN_MAX][512] __attribute__((aligned(4096)));
 static unsigned char kdl_spawn_kstack[KDL_SPAWN_MAX][8192] __attribute__((aligned(16)));
-static int kdl_spawn_sayi = 0;
+static int kdl_spawn_kullanildi[KDL_SPAWN_MAX];   /* D-138: 1 = slot kullanımda */
+static int kdl_spawn_task[KDL_SPAWN_MAX];         /* slot → görev id (geri-alma için) */
 
 int kdl_surec_spawn(uint64_t entry) {
-    if (kdl_spawn_sayi >= KDL_SPAWN_MAX) return -1;
-    int i = kdl_spawn_sayi++;
+    /* D-138: boş VEYA görevi ölmüş (exit) havuz slotunu yeniden kullan → sınırsız
+     * spawn (eski: monoton sayaç, 4 spawn'da tükeniyordu). */
+    int i = -1;
+    for (int k = 0; k < KDL_SPAWN_MAX; k++) {
+        if (!kdl_spawn_kullanildi[k]) { i = k; break; }
+        if (kdl_olu[kdl_spawn_task[k]]) { i = k; break; }   /* slotun görevi öldü → geri al */
+    }
+    if (i < 0) return -1;                                    /* tüm slotlar canlı */
     uint64_t veri_pa = 0x46000000UL + (uint64_t)i * 0x200000UL;   /* sürece-özel veri (RAM içi) */
     kdl_surec_kur_el0_veri(kdl_spawn_l1[i], kdl_spawn_l2[i], 0x42000000UL, veri_pa);
     int t = kdl_preempt_gorev_olustur_el0((void (*)(void))(uintptr_t)entry,
                                           kdl_spawn_kstack[i] + 8192,
                                           (void *)(uintptr_t)0x42380000UL);  /* USTACK (özel veri sayfasında) */
-    if (t < 0) { kdl_spawn_sayi--; return -1; }
+    if (t < 0) return -1;
     kdl_task_l1[t] = kdl_spawn_l1[i];        /* yeni sürecin adres-uzayı */
+    kdl_spawn_kullanildi[i] = 1;
+    kdl_spawn_task[i] = t;
     return t;
 }
 #endif
