@@ -1655,6 +1655,28 @@ calistir_geri_al_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — geri-alma testi atlandi."; \
 	fi
 
+# === D-140 Userspace mesaj kanalı (IPC) testi (aarch64) — süreçler-arası mesajlaşma ===
+# sender kanal_gonder(100/200/300); launcher kanal_al ile alıp toplar → 600.
+calistir_kanal_ipc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-140 aarch64 userspace mesaj kanalı testi: kanal_ipc_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kanal_ipc_arm.c -o $(BUILD)/kanal_ipc_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kanal_ipc_arm.elf $(BUILD)/kanal_ipc_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kanal_ipc_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kanal_ipc_arm.out -kernel $(BUILD)/kanal_ipc_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kanal_ipc_arm.out; echo "--- son ---"; \
+		if grep -q "KANAL SUM=600" $(BUILD)/kanal_ipc_arm.out; then \
+			echo "D-140 aarch64 mesaj kanalı testi gecti: süreçler-arası userspace IPC (600)."; \
+		else \
+			echo "FAIL: 'KANAL SUM=600' bekleniyor (userspace kanal IPC)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — mesaj kanalı testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1668,7 +1690,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tick_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
-                     calistir_geri_al_test_arm calistir_capstone_arm \
+                     calistir_geri_al_test_arm calistir_kanal_ipc_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

@@ -111,6 +111,14 @@ static int kdl_dosya_ac(const char *ad) {   /* bul veya oluştur; -1 = depo dolu
     return -1;
 }
 
+/* === D-140: userspace mesaj kanalı (IPC) ===
+ * Global çekirdek mesaj kuyruğu (int ring buffer) — userspace süreçler DOĞRUDAN
+ * mesajla haberleşir (dosya-IPC'nin ötesinde; KEMGU `kanal` ilkeli userspace düzeyi).
+ * Bloklamasız: gonder dolu ise -1, al boş ise -1 (test negatif-olmayan değer yollar). */
+#define KDL_MSG_MAX 16
+static int kdl_msg[KDL_MSG_MAX];
+static int kdl_msg_bas = 0, kdl_msg_son = 0;
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
@@ -246,6 +254,19 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         kdl_dosyalar[i].kullanildi = 0;
         kdl_dosyalar[i].boyut = 0;
         return 0;
+    } else if (num == 22) {
+        /* D-140 kanal_gonder(deger=arg): mesaj kuyruğuna yaz (0=ok, -1=dolu). */
+        int yeni = (kdl_msg_son + 1) % KDL_MSG_MAX;
+        if (yeni == kdl_msg_bas) return (uint64_t)(int64_t)-1;
+        kdl_msg[kdl_msg_son] = (int)arg;
+        kdl_msg_son = yeni;
+        return 0;
+    } else if (num == 23) {
+        /* D-140 kanal_al(): mesaj kuyruğundan oku (değer veya boşsa -1). */
+        if (kdl_msg_bas == kdl_msg_son) return (uint64_t)(int64_t)-1;
+        int v = kdl_msg[kdl_msg_bas];
+        kdl_msg_bas = (kdl_msg_bas + 1) % KDL_MSG_MAX;
+        return (uint64_t)(int64_t)v;
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }
