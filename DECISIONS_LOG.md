@@ -5,6 +5,55 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-154 — OS: düşman-userspace bombardıman regresyon testi — syscall-ptr güvenlik yüzeyi (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-153).
+
+**Karar [ETKİ: yeni `test/bare_metal/guvenlik_bombardiman_arm.c`; `Makefile`. Yalnız test — kaynak
+değişmedi.]** D-150+D-151 sertleştirilmiş syscall-pointer yüzeyinin KALICI regresyon bekçisi. Bir EL0
+launcher, 8 kötü-niyetli syscall'lık bir BATARYA ateşler (unmapped/kernel-adres/MMIO okuma+yazma
+hedefleri: num=5 yaz×2, 16 dosya_oku, 15 dosya_yaz, 17 dosya_yaz_metin, 18 dosya_oku_metin write-hedef,
+20 dosya_ad write-hedef, 21 dosya_sil); her biri -1 dönmeli VE kernel HALT ETMEMELİ. Bataryadan sonra
+geçerli iş akışı (dosya oluştur+oku) kernel'in tam canlılığını kanıtlar → "HOSTILE SURVIVED OK". Vaka #6'nın
+"not-found değil gerçek D-150 write-guard reddi" olduğu, dosyanın önceden kurulup sonra geçerli tampona
+okunabilmesiyle ayrıştırılır. Bir syscall halt ettirirse test FAIL → o guard eksik demektir (bisect talimatı).
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + doğrulandı; cherry-pick ile entegre.
+
+## D-153 — OS: kalıcı FS deserialize sertleştirme — poisoned boyut clamp (savunma-derinliği) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-152).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_dosya_yukle + num=18); yeni `test/bare_metal/guvenlik_kalici_arm.c`,
+`Makefile`.]** Audit defense-in-depth bulgusu (EL0-erişilebilir DEĞİL — kötü niyetli disk gerekir):
+kdl_dosya_yukle diskteki kdl_dosyalar[] tablosunu VERBATIM yükler. Kötü niyetli disk aşırı büyük `boyut`
+içerirse → num=18 kdl_dosyalar[i].boyut byte kopyalar → 64-byte icerik[] tamponunu aşan OOB okuma →
+kernel belleği user'a sızar. **İki katman:** (A) kdl_dosya_yukle deserialize sonrası sanitize — kullanildi
+0/1, ad/icerik null-term, boyut `[0,64)` dışıysa 0. (B) num=18'de ham boyut yerine clamp'li `lim` (hem
+`kdl_user_yaz_ptr_gecerli(arg2, lim+1)` hem kopya sınırı `n<lim`). **Kanıt:** guvenlik_kalici_arm.c — EL1
+main elle "KEMG" magic + boyut=9999 ZEHİR disk image üretir, kdl_dosya_yukle, EL0 num=18 → dönen uzunluk
+≤63 (9999 değil) + kernel sağ → "KALICI GUARD OK". **Negatif kanıt:** fix stash'lenince test doğru FAIL
+eder ("KALICI GUARD HATA uz=9999") → zafiyet gerçek + test false-positive değil. Kalıcı regresyon (777) geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + negatif-kanıtla doğrulandı; cherry-pick ile entegre.
+
+## D-152 — OS: spawn-entry doğrulama — num=12 DoS koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-151).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_surec_spawn); yeni `test/bare_metal/guvenlik_spawn_arm.c`,
+`Makefile`.]** Audit confirmed bulgusu (medium DoS): num=12 spawn'da EL0, yeni sürecin GİRİŞ adresini
+(arg=entry) tam kontrol eder. kdl_surec_spawn(entry) bu entry'yi yeni EL0 sürecinin ELR_EL1'ine koyar;
+entry kernel/unmapped/hizasız ise EL0 komut-fetch'i fault → lower-EL sync exception → kdl_istisna_isle
+sonsuz halt (**tek SVC ile tüm kernel ölür**). **Fix:** kdl_surec_spawn EN BAŞINA guard — entry paylaşılan
+EL0 .user kod sayfası `[0x42000000, 0x42200000)` içinde VE 4-byte hizalı olmalı; değilse -1 (süreç
+yaratılmaz, slot tüketilmez). Başka fonksiyona dokunulmadı. **Kanıt:** guvenlik_spawn_arm.c — EL0 launcher
+sys(12, 0x40080000)[kernel] + sys(12, 0)[null] → ikisi de -1, kernel SAĞ; sys(12, &worker)[geçerli .user]
+→ ≥0, worker koştu → "SPAWN GUARD OK" + "WORKER OK". spawn/yasam/calis/geri_al regresyonları (worker'lar
+.user'da = geçerli) bozulmadan geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + doğrulandı; cherry-pick ile entegre.
+
 ## D-151 — OS: syscall OKUMA-pointer doğrulama — kernel DoS + info-leak koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-150).
