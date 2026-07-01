@@ -25,6 +25,8 @@ void kdl_yaz_metin(const char *);   /* newline'sız — userspace 'yaz' syscall 
 void kdl_yaz_tam(int32_t);          /* newline'sız sayı — userspace 'yaz_sayi' için */
 uint64_t kdl_tik_al(void);          /* timer tik sayısı — userspace gettick için (D-128) */
 int      kdl_aktif_gorev(void);     /* aktif preemptive görev id — userspace getpid için */
+void     kdl_gorev_bitir(void);     /* o an koşan görevi bitir — userspace exit (D-130) */
+int      kdl_gorev_durum(int pid);  /* görev pid bitti mi? — userspace join/wait (D-130) */
 #if defined(__aarch64__)
 int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — userspace spawn (D-129) */
 #endif
@@ -130,6 +132,12 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
          * Yeni sürecin id'sini (pid) döner (-1 havuz dolu). Dinamik process yaratma. */
         return (uint64_t)(int64_t)kdl_surec_spawn(arg);
 #endif
+    } else if (num == 13) {
+        /* D-130 exit: o an koşan süreci bitir (scheduler bir daha seçmez). */
+        kdl_gorev_bitir();
+    } else if (num == 14) {
+        /* D-130 durum: süreç `arg` (pid) bitti mi? → join/wait (ebeveyn yoklar). */
+        return (uint64_t)(int64_t)kdl_gorev_durum((int)arg);
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }

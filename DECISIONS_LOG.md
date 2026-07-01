@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-130 — OS: süreç yaşam döngüsü — exit + join (spawn→çalış→exit→join tam döngü) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-129).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (+kdl_olu[] state + kdl_gorev_bitir/kdl_gorev_durum +
+kdl_preempt'te ölü-görev atla); `runtime/kdl_kesme.c` (+num 13 exit, 14 durum); yeni
+`test/bare_metal/yasam_arm.c`; `Makefile`. x86/host/codegen dokunulmadı (exit/durum arch-generic).]**
+D-129 spawn'ı tam yaşam döngüsüne tamamlar: süreç bitişi + ebeveyn join.
+
+**Mekanizma:** kdl_olu[görev] (1=bitmiş). num=13 exit → kdl_gorev_bitir() (kdl_olu[kdl_paktif]=1);
+kdl_preempt ölü görevi ATLAR (bloklu gibi) → süreç bir daha koşmaz. num=14 durum(pid) →
+kdl_gorev_durum(pid) (bitti mi?). **Bloklamalı join YERİNE EL0-yoklama:** ebeveyn preemptive
+olduğundan `while(!durum(pid))` yoklarken çocuk koşar→exit eder→durum=1 (deadlock yok; blocking-in-
+syscall / IRQ-masked sorununu bypass eder). Kaynak geri-alma v1'de yok (havuz slotu serbest değil).
+
+**Doğrulama (QEMU 11.0.1):** yasam_arm — launcher spawn(worker)→worker iş+exit→launcher join
+(durum yokla)→"WORKER done"+"JOINED worker exited". Full gate GATE=0 (28 hedef). Scheduler
+regresyon (kdl_olu skip additive) yeşil. sıfır-uyarı. **Tam süreç yaşam döngüsü: yarat→koş→bitir→
+bekle. Userspace ABI: yaz/yaz_sayi/satir/cik/artir/gettick/getpid/spawn/exit/durum.**
+
+**Sıradaki:** read/write dosya syscall'ları (C5 storage sonrası); kaynak geri-alma (exit'te havuz
+free); D2-x86; C5 virtio-blk → Faz E fs.
+
+---
+
 ## D-129 — OS: dinamik süreç oluşturma — spawn syscall'ı (fork/spawn yeteneği) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-128).
