@@ -181,6 +181,11 @@ static int kdl_spawn_kullanildi[KDL_SPAWN_MAX];   /* D-138: 1 = slot kullanımda
 static int kdl_spawn_task[KDL_SPAWN_MAX];         /* slot → görev id (geri-alma için) */
 
 int kdl_surec_spawn(uint64_t entry) {
+    /* D-152 güvenlik: EL0 spawn giriş adresini kontrol eder. Geçersiz entry
+     * (kernel/unmapped/hizasız) → yeni EL0 süreç fetch-fault → kernel halt (DoS).
+     * .user kod sayfası [0x42000000,0x42200000) + 4-byte hizalı olmalı. */
+    if (entry < 0x42000000UL || entry >= 0x42200000UL || (entry & 0x3UL) != 0UL)
+        return -1;
     /* D-138: boş VEYA görevi ölmüş (exit) havuz slotunu yeniden kullan → sınırsız
      * spawn (eski: monoton sayaç, 4 spawn'da tükeniyordu). */
     int i = -1;
