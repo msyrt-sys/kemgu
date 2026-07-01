@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-133 — OS: dosya listeleme (ls) — userspace dosya enumerasyonu (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-132).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+num 19 dosya_sayisi, 20 dosya_ad); yeni
+`test/bare_metal/ls_arm.c`; `Makefile`. Sadece ekleme.]** D-131/132 dosya sistemi üstünde ilk
+"shell primitifi": userspace program dosya deposunu enumere eder (ls).
+
+**Mekanizma:** num=19 dosya_sayisi() → kullanımdaki dosya sayısı. num=20 dosya_ad(idx=arg, buf=arg2)
+→ idx'inci dosyanın adını user tamponuna kopyala. Userspace program dosya_sayisi() kez döngüyle
+her adı okuyup basar (ls).
+
+**Doğrulama (QEMU 11.0.1):** ls_arm — launcher dosya_yaz("alfa",1)+dosya_yaz("beta",2) → listele →
+"LS count=2" + "  alfa" + "  beta". Full gate GATE=0 (31 hedef). sıfır-uyarı. **Userspace ABI 20+
+syscall: process (spawn/exit/durum/getpid) + zaman (gettick) + I/O (yaz*) + dosya (yaz/oku/metin/
+sayisi/ad). Basit bir kabuk (shell) yazmaya yetecek temel.**
+
+**Sıradaki:** basit userspace kabuk (komut → dosya işlemi); dosya sil; kaynak geri-alma; D2-x86; C5.
+
+---
+
 ## D-132 — OS: metin içerikli dosya — bulk read/write (kernel↔user bellek kopyası) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-131).
