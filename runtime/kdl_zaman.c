@@ -29,6 +29,11 @@ static void kdl_tik(void) {
     }
 }
 
+/* D-128: mevcut timer tik sayısı (userspace gettick syscall'ı için). */
+uint64_t kdl_tik_al(void) {
+    return kdl_tik_sayisi;
+}
+
 /* ================= aarch64 (GICv2 + sanal generic timer) ================= */
 #if defined(__aarch64__)
 

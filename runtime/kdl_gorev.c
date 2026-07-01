@@ -131,6 +131,9 @@ int kdl_preempt_gorev_olustur_el0(void (*giris)(void), void *kernel_yigin_tepe,
 
 void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
 
+/* D-128: o an koşan preemptive görevin id'si (userspace getpid syscall'ı için). */
+int kdl_aktif_gorev(void) { return kdl_paktif; }
+
 /* C7e: göreve öncelik ata (büyük = yüksek; varsayılan 0). Yüksek-öncelikli
  * READY görev her zaman seçilir; eşit öncelikler round-robin döner. */
 void kdl_preempt_oncelik(int gorev, int oncelik) {
