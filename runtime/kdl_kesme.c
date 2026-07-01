@@ -21,6 +21,8 @@
 void kdl_yazdir_metin(const char *);
 void kdl_yazdir_satir(void);
 void kdl_yazdir_onaltilik(uint64_t);
+void kdl_yaz_metin(const char *);   /* newline'sız — userspace 'yaz' syscall için */
+void kdl_yaz_tam(int32_t);          /* newline'sız sayı — userspace 'yaz_sayi' için */
 
 /* CPU istisnası — kurtarma yok. Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
@@ -94,6 +96,17 @@ void kdl_syscall_isle(uint64_t num, uint64_t arg) {
          * olurdu → "HATA". Onarımla gerçek arg=42 ulaşır → "OK". Userspace
          * syscall'larının (arg geçen) ön-koşulu. */
         kdl_yazdir_metin(arg == 42 ? "SYSCALL ARG OK" : "SYSCALL ARG HATA");
+        kdl_yazdir_satir();
+    } else if (num == 5) {
+        /* D-124 userspace ABI 'yaz': arg = kullanıcı bellek string ptr. Kernel
+         * kullanıcı adına yazar (newline yok → parçalı çıktı birleştirilebilir).
+         * NOT: gerçek OS'te ptr doğrulanır (user adres-uzayında mı?); burada demo. */
+        kdl_yaz_metin((const char *)(uintptr_t)arg);
+    } else if (num == 6) {
+        /* D-124 'yaz_sayi': arg = yazılacak tamsayı (newline yok). */
+        kdl_yaz_tam((int32_t)arg);
+    } else if (num == 7) {
+        /* D-124 'satir': satır sonu. */
         kdl_yazdir_satir();
     }
 }
