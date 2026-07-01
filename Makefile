@@ -1521,6 +1521,29 @@ calistir_dosya_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — dosya testi atlandi."; \
 	fi
 
+# === D-132 Metin içerikli dosya testi (aarch64) — bulk read/write ===
+# launcher dosya_yaz_metin("mesaj","MERHABA DOSYA"); worker dosya_oku_metin ile
+# metni kendi tamponuna okur+basar → gerçek dosya içeriği + kernel↔user kopya.
+calistir_metin_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-132 aarch64 metin dosyası testi: metin_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/metin_arm.c -o $(BUILD)/metin_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/metin_arm.elf $(BUILD)/metin_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/metin_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/metin_arm.out -kernel $(BUILD)/metin_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/metin_arm.out; echo "--- son ---"; \
+		if grep -q "FILE TEXT: MERHABA DOSYA" $(BUILD)/metin_arm.out; then \
+			echo "D-132 aarch64 metin dosyası testi gecti: dosya metin içeriği süreçler-arası aktarildi."; \
+		else \
+			echo "FAIL: 'FILE TEXT: MERHABA DOSYA' bekleniyor (metin dosya read/write)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — metin dosyası testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1532,7 +1555,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
                      calistir_tick_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
-                     calistir_dosya_test_arm calistir_capstone_arm \
+                     calistir_dosya_test_arm calistir_metin_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
