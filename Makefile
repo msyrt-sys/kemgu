@@ -1708,6 +1708,32 @@ calistir_virtio_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_vi
 		echo "QEMU yok — virtio testi atlandi."; \
 	fi
 
+# === D-142 VirtIO-Blk yaz+oku round-trip testi (aarch64) — kalıcı depolama ===
+# Diske blok yaz → geri oku → eşleşme. Disk gerçekten veri saklıyor (kalıcılık).
+calistir_virtio_rw_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "D-142 aarch64 virtio-blk yaz+oku testi: virtio_rw_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/virtio_rw_arm.c -o $(BUILD)/virtio_rw_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/virtio_rw_arm.elf $(BUILD)/virtio_rw_arm.o $(BUILD)/bm_a64_virtio.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_rw.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/virtio_rw_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_rw.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/virtio_rw_arm.out -kernel $(BUILD)/virtio_rw_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_rw_arm.out; echo "--- son ---"; \
+		if grep -q "DISK RW OK" $(BUILD)/virtio_rw_arm.out; then \
+			echo "D-142 aarch64 virtio-blk yaz+oku testi gecti: disk kalıcı (yazılan geri okundu)."; \
+		else \
+			echo "FAIL: 'DISK RW OK' bekleniyor (virtio-blk yaz+oku round-trip)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — virtio rw testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1722,7 +1748,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
-                     calistir_virtio_test_arm calistir_capstone_arm \
+                     calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

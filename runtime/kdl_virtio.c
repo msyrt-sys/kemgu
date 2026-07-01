@@ -152,4 +152,33 @@ int kdl_virtio_blk_oku(uint64_t base, uint64_t sektor, uint8_t *hedef) {
     return 0;
 }
 
+/* `sektor` numaralı bloğa `kaynak`taki 512 baytı YAZ (kalıcı). 0 = ok; negatif = hata.
+ * Okumadan farkı: type=1 (OUT); veri descriptor'ı cihaz-OKUR (WRITE flag YOK). */
+int kdl_virtio_blk_yaz(uint64_t base, uint64_t sektor, const uint8_t *kaynak) {
+    vq_req.type = 1;           /* VIRTIO_BLK_T_OUT = yaz */
+    vq_req.reserved = 0;
+    vq_req.sector = sektor;
+    for (int i = 0; i < 512; i++) vq_data[i] = kaynak[i];
+    vq_status = 0xff;
+
+    vq_desc[0].addr = (uint64_t)(uintptr_t)&vq_req;    vq_desc[0].len = 16;  vq_desc[0].flags = VRING_DESC_F_NEXT; vq_desc[0].next = 1;
+    vq_desc[1].addr = (uint64_t)(uintptr_t)vq_data;    vq_desc[1].len = 512; vq_desc[1].flags = VRING_DESC_F_NEXT; vq_desc[1].next = 2;   /* cihaz OKUR → WRITE flag yok */
+    vq_desc[2].addr = (uint64_t)(uintptr_t)&vq_status; vq_desc[2].len = 1;   vq_desc[2].flags = VRING_DESC_F_WRITE; vq_desc[2].next = 0;
+
+    uint16_t onceki = vq_used.idx;
+    vq_avail.ring[vq_avail.idx % VQ_N] = 0;
+    __asm__ volatile("dsb sy" ::: "memory");
+    vq_avail.idx++;
+    __asm__ volatile("dsb sy" ::: "memory");
+
+    mmio_w32(base, VMMIO_QUEUE_NOTIFY, 0);
+
+    for (int spin = 0; vq_used.idx == onceki; spin++) {
+        __asm__ volatile("dsb sy" ::: "memory");
+        if (spin > 200000000) return -4;
+    }
+    if (vq_status != 0) return -5;
+    return 0;
+}
+
 #endif /* __aarch64__ */
