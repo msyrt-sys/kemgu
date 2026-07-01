@@ -1843,6 +1843,30 @@ calistir_udp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — UDP testi atlandi."; \
 	fi
 
+# === D-147 DNS round-trip testi (aarch64) — UDP request-response (OS internet'le konuşuyor) ===
+# ARP ile DNS MAC çöz → IP/UDP DNS sorgusu gönder → yanıtı RX ile al + doğrula.
+calistir_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "D-147 aarch64 DNS round-trip testi: dns_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_arm.c -o $(BUILD)/dns_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/dns_arm.elf $(BUILD)/dns_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/dns_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dns_arm.out -kernel $(BUILD)/dns_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/dns_arm.out; echo "--- son ---"; \
+		if grep -q "DNS REPLY OK" $(BUILD)/dns_arm.out; then \
+			echo "D-147 aarch64 DNS testi gecti: DNS sunucusundan yanıt alındı (internet round-trip)."; \
+		else \
+			echo "FAIL: 'DNS REPLY OK' bekleniyor (DNS UDP round-trip)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — DNS testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1859,7 +1883,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
-                     calistir_capstone_arm \
+                     calistir_dns_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
