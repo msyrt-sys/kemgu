@@ -1818,6 +1818,31 @@ calistir_arp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — ARP testi atlandi."; \
 	fi
 
+# === D-146 IP/UDP paket gönderme testi (aarch64) — internet katmanı (Faz G) ===
+# Kernel geçerli IPv4/UDP paketi (checksum'lı) inşa+gönderir; pcap'te payload aranır.
+calistir_udp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "D-146 aarch64 IP/UDP paket testi: udp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/udp_arm.c -o $(BUILD)/udp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/udp_arm.elf $(BUILD)/udp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/udp_arm.out $(BUILD)/udp.pcap; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/udp.pcap \
+			-serial file:$(BUILD)/udp_arm.out -kernel $(BUILD)/udp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/udp_arm.out; echo "--- son ---"; \
+		if grep -q "UDP GONDERILDI" $(BUILD)/udp_arm.out && grep -a -q "KEMGU-UDP-DATA" $(BUILD)/udp.pcap; then \
+			echo "D-146 aarch64 IP/UDP testi gecti: geçerli IPv4/UDP paketi gönderildi (pcap)."; \
+		else \
+			echo "FAIL: seri 'UDP GONDERILDI' + pcap'te 'KEMGU-UDP-DATA' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — UDP testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1833,7 +1858,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
-                     calistir_net_test_arm calistir_arp_test_arm calistir_capstone_arm \
+                     calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
+                     calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

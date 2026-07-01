@@ -57,6 +57,26 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-146 — OS: IP/UDP paket gönderme — internet katmanı (Faz G derinleşme) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-145).
+
+**Karar [ETKİ: yeni `test/bare_metal/udp_arm.c`; `Makefile`. Yalnız test — net driver (D-144/145)
+kullanılır.]** ARP (L2) üstüne İNTERNET KATMANI: geçerli IPv4 + UDP paketi (IP header checksum
+dâhil) inşa + gönder.
+
+**Mekanizma:** ip_checksum (RFC 1071, 16-bit tümleyen toplamı). Frame: eth(IPv4) + IPv4(20:
+v4/IHL5, total_len, TTL, proto=17, checksum, src=10.0.2.15, dst=10.0.2.3) + UDP(8: src=5000,
+dst=53, len, checksum=0) + payload "KEMGU-UDP-DATA". virtio-net TX ile gönder.
+
+**Doğrulama (QEMU 11.0.1):** udp_arm — paket gönder → filter-dump pcap → "UDP GONDERILDI" +
+`grep -a "KEMGU-UDP-DATA" udp.pcap`. Full gate GATE=0 (42 hedef). sıfır-uyarı. **OS geçerli IPv4/UDP
+paketi oluşturuyor (checksum'lı) — gerçek internet-protokol yığını temeli.**
+
+**Sıradaki:** DNS/UDP round-trip (10.0.2.3:53'e sor, yanıt al); ICMP; TCP handshake; UART RX; D2-x86.
+
+---
+
 ## D-145 — OS: ARP round-trip — 2-yönlü ağ (virtio-net RX + ARP protokolü) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-144).
