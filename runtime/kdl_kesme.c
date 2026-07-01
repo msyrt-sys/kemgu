@@ -71,7 +71,14 @@ void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
  * sisteminin ilk adımı. Freestanding (libc yok). */
 #define KDL_DOSYA_MAX 8
 #define KDL_AD_MAX    16
-static struct { char ad[KDL_AD_MAX]; int64_t deger; int kullanildi; } kdl_dosyalar[KDL_DOSYA_MAX];
+#define KDL_ICERIK_MAX 64   /* D-132: dosya metin içeriği (byte tampon) */
+static struct {
+    char ad[KDL_AD_MAX];
+    int64_t deger;                    /* tek-değer (D-131) */
+    char icerik[KDL_ICERIK_MAX];      /* metin içerik (D-132) */
+    int boyut;                        /* içerik uzunluğu */
+    int kullanildi;
+} kdl_dosyalar[KDL_DOSYA_MAX];
 
 static int kdl_ad_esit(const char *a, const char *b) {
     for (int i = 0; i < KDL_AD_MAX; i++) {
@@ -189,6 +196,27 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
         return (uint64_t)kdl_dosyalar[i].deger;
+    } else if (num == 17) {
+        /* D-132 dosya_yaz_metin(ad=arg, str=arg2): kullanıcı belleğinden string'i
+         * dosyanın içeriğine kopyala (bulk yaz). Dönen = yazılan byte sayısı. */
+        int i = kdl_dosya_ac((const char *)(uintptr_t)arg);
+        if (i < 0) return (uint64_t)(int64_t)-1;
+        const char *s = (const char *)(uintptr_t)arg2;
+        int n = 0;
+        while (n < KDL_ICERIK_MAX - 1 && s[n]) { kdl_dosyalar[i].icerik[n] = s[n]; n++; }
+        kdl_dosyalar[i].icerik[n] = 0;
+        kdl_dosyalar[i].boyut = n;
+        return (uint64_t)(int64_t)n;
+    } else if (num == 18) {
+        /* D-132 dosya_oku_metin(ad=arg, buf=arg2): dosya içeriğini kullanıcı
+         * tamponuna (buf) kopyala (bulk oku). Dönen = kopyalanan byte sayısı (-1 yok). */
+        int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
+        if (i < 0) return (uint64_t)(int64_t)-1;
+        char *buf = (char *)(uintptr_t)arg2;
+        int n = 0;
+        while (n < kdl_dosyalar[i].boyut) { buf[n] = kdl_dosyalar[i].icerik[n]; n++; }
+        buf[n] = 0;
+        return (uint64_t)(int64_t)n;
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }

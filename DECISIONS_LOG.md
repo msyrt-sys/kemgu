@@ -5,6 +5,29 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-132 — OS: metin içerikli dosya — bulk read/write (kernel↔user bellek kopyası) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-131).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_dosyalar +icerik[64]+boyut; +num 17 dosya_yaz_metin,
+18 dosya_oku_metin); yeni `test/bare_metal/metin_arm.c`; `Makefile`. Sadece ekleme.]** D-131 tek-değer
+dosyasını GERÇEK byte-içeriğe genişletir — kernel↔userspace çift-yönlü bellek kopyası (gerçek
+read/write syscall ailesinin temeli).
+
+**Mekanizma:** num=17 dosya_yaz_metin(ad=arg, str=arg2) — kernel kullanıcı belleğinden (arg2) string'i
+dosya içeriğine kopyalar (yazılan byte döner). num=18 dosya_oku_metin(ad=arg, buf=arg2) — dosya
+içeriğini kullanıcı tamponuna (arg2) kopyalar (okunan byte döner). Kernel EL1'den AP=01 user
+sayfasını okur/yazar (buf worker'ın veri sayfasında). 2-arg syscall (D-131).
+
+**Doğrulama (QEMU 11.0.1):** metin_arm — launcher dosya_yaz_metin("mesaj","MERHABA DOSYA")+spawn;
+worker dosya_oku_metin ile metni kendi tamponuna okur+basar → "FILE TEXT: MERHABA DOSYA" (dosya
+metin içeriği süreçler-arası aktarıldı). Full gate GATE=0 (30 hedef). D-131 regresyon yeşil. sıfır-uyarı.
+
+**Sıradaki:** dosya offset'li read/write (kısmi); dizin/listeleme; kaynak geri-alma; D2-x86; C5
+virtio-blk (RAM-FS'i kalıcı disk'e).
+
+---
+
 ## D-131 — OS: RAM dosya sistemi + 2-argümanlı syscall (Faz E ilk adım) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-130).
