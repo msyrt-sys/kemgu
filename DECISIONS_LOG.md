@@ -53,8 +53,27 @@ virtio-blk-device` → kernel blok 0'ı okur, "KEMGU" doğrular → "DISK OK KEM
 (virtqueue doğru). Full gate GATE=0 (37 hedef; diğer kernel'ler disk'siz — virtio target kendi
 disk'ini kurar). sıfır-uyarı.
 
-**Sıradaki:** virtio-blk YAZMA (blok yaz → RAM-FS'i disk'e kalıcı); dosya sistemini disk-backed yap;
-UART RX; D2-x86.
+**Sıradaki:** virtio-blk YAZMA (D-142); dosya sistemini disk-backed yap; UART RX; D2-x86.
+
+---
+
+## D-142 — OS: VirtIO-Blk yaz+oku round-trip — gerçek kalıcı depolama (C5 tamam) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-141).
+
+**Karar [ETKİ: `runtime/kdl_virtio.c` (+kdl_virtio_blk_yaz); yeni `test/bare_metal/virtio_rw_arm.c`;
+`Makefile`. Sadece ekleme.]** D-141 okumasını YAZMA ile tamamlar → çift-yönlü disk I/O = gerçek
+kalıcılık.
+
+**Mekanizma:** kdl_virtio_blk_yaz(base, sektor, kaynak) — okumadan farkı: type=1 (VIRTIO_BLK_T_OUT);
+veri descriptor'ı cihaz-OKUR (WRITE flag YOK, cihaz veriyi diske yazar). Aynı virtqueue makinesi.
+
+**Doğrulama (QEMU 11.0.1):** virtio_rw_arm — blok 7'ye "KEMGU-YAZDI-42" yaz → geri oku → eşleşme →
+"DISK RW OK". Full gate GATE=0 (38 hedef). sıfır-uyarı. **C5 TAMAM: OS gerçek diske veri yazıp
+okuyabiliyor (kalıcı depolama). virtio-blk sürücüsü: bul/kur/oku/yaz.**
+
+**Sıradaki:** dosya sistemini disk-backed yap (RAM-FS'i blok'lara serialize); UART RX (interaktif
+kabuk); D2-x86; networking (Faz G).
 
 ---
 
