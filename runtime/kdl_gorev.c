@@ -79,6 +79,15 @@ static int      kdl_pri[KDL_MAX_GOREV];   /* öncelik (büyük=yüksek; varsayı
 static int      kdl_psayi = 0;
 static int      kdl_paktif = 0;
 
+/* D3-çoklu: sürece-özel L1 sayfa-tablosu (0=swap yok, kernel/main tablosunda kal).
+ * Set edilmişse kdl_preempt o göreve geçerken TTBR0'ı bu tabloya çevirir → her
+ * userspace süreç KENDİ adres-uzayında koşar. Guard'lı: hiç set edilmezse (mevcut
+ * testler) davranış AYNI (swap yok → regresyon yok). */
+#if defined(__aarch64__)
+extern void kdl_ttbr_degis(uint64_t *l1);
+static uint64_t *kdl_task_l1[KDL_MAX_GOREV];
+#endif
+
 /* Görev 0 = main (ilk preempt'te trap-frame SP'si kaydedilir). */
 void kdl_preempt_baslat(void) {
     kdl_psayi = 1;
@@ -128,6 +137,14 @@ void kdl_preempt_oncelik(int gorev, int oncelik) {
     if (gorev >= 0 && gorev < KDL_MAX_GOREV) kdl_pri[gorev] = oncelik;
 }
 
+#if defined(__aarch64__)
+/* D3-çoklu: göreve sürece-özel L1 sayfa-tablosu ata → kdl_preempt o göreve
+ * geçerken TTBR0'ı bu tabloya çevirir (userspace süreç izolasyonu). */
+void kdl_preempt_gorev_ttbr(int gorev, uint64_t *l1) {
+    if (gorev >= 0 && gorev < KDL_MAX_GOREV) kdl_task_l1[gorev] = l1;
+}
+#endif
+
 /* IRQ trap-frame'inden (sp) çağrılır. Preempt aktifse: bloklu görevlerin tick
  * sayacını azalt, EN YÜKSEK ÖNCELİKLİ READY göreve geç (trap-frame SP swap);
  * değilse sp (switch yok → timer testi nötr). C7c: bloklu görev atlanır.
@@ -150,6 +167,11 @@ uint64_t kdl_preempt(uint64_t sp) {
     }
     if (en_iyi < 0) return kdl_psp[kdl_paktif];  /* hepsi bloklu → idle */
     kdl_paktif = en_iyi;
+#if defined(__aarch64__)
+    /* D3-çoklu: seçilen görevin sürece-özel adres-uzayına geç (varsa). Kernel
+     * identity her tabloda → IRQ handler + trap-frame restore güvenli. */
+    if (kdl_task_l1[en_iyi]) kdl_ttbr_degis(kdl_task_l1[en_iyi]);
+#endif
     return kdl_psp[en_iyi];
 }
 

@@ -106,6 +106,31 @@ void kdl_surec_kur_el0(uint64_t *l1, uint64_t *l2, uint64_t user_pa) {
     __asm__ volatile("dsb ish");
 }
 
+/* D3-çoklu: sürece-özel EL0 veri sayfası VA'sı (L2[17]). Kod (0x42000000) SÜREÇLER
+ * ARASI PAYLAŞILIR (aynı fiziksel .user), veri (0x42200000) SÜRECE ÖZELdir → izolasyon. */
+#define KDL_USER_VERI_VA 0x0000000042200000UL
+
+/* D3-çoklu: EL0 süreç adres-uzayı — PAYLAŞILAN kod + ÖZEL veri sayfası.
+ *   kod_pa  = paylaşılan EL0 kod (.user) fiziksel yeri (tüm süreçlerde aynı = 0x42000000).
+ *   veri_pa = sürece-özel veri sayfası (farklı PA/süreç) → aynı VA 0x42200000 farklı PA.
+ * Scheduler TTBR-swap ile birlikte: birden çok userspace süreç, her biri KENDİ
+ * adres-uzayında, preemptively multitask. Kernel identity her tabloda (swap güvenli). */
+void kdl_surec_kur_el0_veri(uint64_t *l1, uint64_t *l2, uint64_t kod_pa, uint64_t veri_pa) {
+    for (int n = 0; n < 512; n++) {
+        uint64_t pa = 0x40000000UL + (uint64_t)n * 0x200000UL;
+        l2[n] = pa | KDL_L2_NORMAL;                  /* kernel identity (AP=00) */
+    }
+    /* paylaşılan kod sayfası (0x42000000, L2[16]) → kod_pa, AP=01 (EL0-exec) */
+    l2[(KDL_USER_VA - 0x40000000UL) / 0x200000UL] = kod_pa | KDL_L2_NORMAL | (1UL << 6);
+    /* sürece-özel veri sayfası (0x42200000, L2[17]) → veri_pa, AP=01 (EL0-RW) */
+    l2[(KDL_USER_VERI_VA - 0x40000000UL) / 0x200000UL] = veri_pa | KDL_L2_NORMAL | (1UL << 6);
+
+    for (int i = 0; i < 512; i++) l1[i] = 0;
+    l1[0] = KDL_BLOK_DEVICE;
+    l1[1] = (uint64_t)(uintptr_t)l2 | 0x3UL;
+    __asm__ volatile("dsb ish");
+}
+
 /* TTBR0_EL1'i değiştir + TLB temizle → adres-uzayı geçişi (per-process). */
 void kdl_ttbr_degis(uint64_t *l1) {
     __asm__ volatile("msr ttbr0_el1, %0" :: "r"((uint64_t)(uintptr_t)l1));

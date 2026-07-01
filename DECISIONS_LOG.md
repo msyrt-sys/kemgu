@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-127 — OS: çoklu EL0 süreç — izole userspace multitasking (gerçek multi-process OS DORUĞU) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-126).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (+kdl_surec_kur_el0_veri — paylaşılan kod + özel veri sayfası);
+`runtime/kdl_gorev.c` (+kdl_task_l1[] + kdl_preempt_gorev_ttbr + kdl_preempt'te guard'lı TTBR-swap);
+yeni `test/bare_metal/multiproc_arm.c`; `Makefile`. x86/host/codegen/linker dokunulmadı.]** D3
+(per-process TTBR) ⊕ D-125 (preemptive EL0) birleşimi: BİRDEN ÇOK userspace süreç, her biri KENDİ
+izole adres-uzayında, preemptively multitask.
+
+**Mekanizma:**
+- **kdl_surec_kur_el0_veri(l1,l2,kod_pa,veri_pa):** L2[16] (0x42000000) → kod_pa (PAYLAŞILAN .user
+  kod, tüm süreçlerde aynı, AP=01); L2[17] (0x42200000) → veri_pa (SÜRECE-ÖZEL, AP=01); kernel
+  identity her tabloda (swap güvenli). Paylaşılan-kod/özel-veri deseni (klasik OS).
+- **Scheduler TTBR-swap:** kdl_task_l1[görev] (kdl_preempt_gorev_ttbr ile set). kdl_preempt seçilen
+  göreve geçerken `if (kdl_task_l1[en_iyi]) kdl_ttbr_degis(...)` → o sürecin adres-uzayına çevir.
+  **GUARD'LI:** set edilmemişse (mevcut EL1 testleri) swap YOK → regresyon YOK (6 scheduler testi
+  doğrulandı). `#if defined(__aarch64__)` (x86 cooperative-only).
+
+**İZOLASYON KANITI (multiproc_arm):** A markörü 0xAA'yı bir kez yazar, sonra 40000-iter döngüde
+sürekli 0xAA doğrular; B simetrik 0xBB. İkisi AYNI VA'yı (0x42200000) kullanır ama FARKLI PA
+(A→0x44000000, B→0x46000000). Timer-IRQ defalarca aralarında geçer; izole olduğundan A hep 0xAA
+(B'nin 0xBB'si A'nın PA'sına DOKUNMAZ) → "A OK" + "B OK". Paylaşsalardı çapraz-bozulma → "CORRUPT".
+
+**Doğrulama (QEMU 11.0.1):** "MULTIPROC BASLA" + "A OK" + "B OK". Full gate GATE=0 (25 hedef).
+sıfır-uyarı. **Process modeli TAM DORUK: kernel + N izole userspace süreç, her biri kendi
+adres-uzayında, preemptively multitask + syscall (arg+dönüş+çok-arg) + bellek-koruması.**
+
+**Sıradaki:** userspace ABI genişletme (gettick/getpid/read); dinamik süreç oluşturma (fork-benzeri);
+D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E dosya sistemi).
+
+---
+
 ## D-126 — OS: syscall dönüş-değeri ABI + kdl_exc_ortak register-şeffaflık onarımı (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-125).
