@@ -32,6 +32,32 @@ komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden 
 
 ---
 
+## D-141 — OS: VirtIO-Blk gerçek disk okuma (C5 — kalıcı depolama, Faz E) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-140).
+
+**Karar [ETKİ: yeni `runtime/kdl_virtio.c` (bare-metal virtio-mmio v2 blk sürücüsü); yeni
+`test/bare_metal/virtio_arm.c`; `Makefile` (bm_a64_virtio.o + disk-imaj + QEMU virtio-blk). C/host
+runtime — .kem driver'lardan (drivers/virtio/*.kem) yalnız register-offset bilgisi alındı, kod C.]**
+İlk GERÇEK DONANIM depolama: QEMU virtio-blk diskinden blok okuma (RAM-FS'i kalıcı yapmanın temeli).
+
+**Sürücü (kdl_virtio.c, aarch64):** virtio-mmio slot tara (0x0a000000+i*0x200, DeviceID=2) →
+kdl_virtio_blk_bul. Init (kdl_virtio_blk_kur): reset→ACK→DRIVER→feature(VERSION_1 bit32)→FEATURES_OK
+→virtqueue 0 (split: desc[8]+avail+used ayrı hizalı DMA tamponları, QueueDesc/Driver/Device Lo/Hi)
+→DRIVER_OK. Oku (kdl_virtio_blk_oku): 3-desc zinciri (başlık RO + veri WR + durum WR) → avail.idx++
+→ QueueNotify → used.idx poll → status==0 → 512 bayt kopya. DMA tamponları RAM identity-map (VA=PA);
+QEMU coherent DMA (dsb ordering yeter, cache-flush yok). Register offsetleri constants.kem ile aynı.
+
+**Doğrulama (QEMU 11.0.1):** virtio_arm — disk.img (blok 0'da "KEMGU-DISK-BLOK0") + `-device
+virtio-blk-device` → kernel blok 0'ı okur, "KEMGU" doğrular → "DISK OK KEMGU". **İLK DENEMEDE geçti**
+(virtqueue doğru). Full gate GATE=0 (37 hedef; diğer kernel'ler disk'siz — virtio target kendi
+disk'ini kurar). sıfır-uyarı.
+
+**Sıradaki:** virtio-blk YAZMA (blok yaz → RAM-FS'i disk'e kalıcı); dosya sistemini disk-backed yap;
+UART RX; D2-x86.
+
+---
+
 ## D-140 — OS: userspace mesaj kanalı (IPC) — süreçler-arası mesajlaşma (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-139).
