@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-131 — OS: RAM dosya sistemi + 2-argümanlı syscall (Faz E ilk adım) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-130).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (SVC path arg2=saklanan-x1 geçirir); `runtime/kdl_kesme.c`
+(kdl_syscall_isle 3-param (num,arg,arg2) + RAM dosya deposu + num 15 dosya_yaz, 16 dosya_oku); yeni
+`test/bare_metal/dosya_arm.c`; `Makefile`. x86 stub değişmedi (nums 1/2/3 arg2 kullanmaz — gate'te
+doğrulandı). linker/host/codegen dokunulmadı.]** İki yenilik: 2-argümanlı syscall ABI + çekirdek-
+aracılı isimli depolama (Faz E dosya sisteminin ilk adımı, virtio-blk GEREKTİRMEZ).
+
+**2-arg syscall:** D-126 x1-koruma (register-şeffaflık) bunu mümkün kıldı; şimdi SVC path saklanan-x1'i
+3. C param (arg2) olarak geçirir. `ldr x2,[sp,#8]` eklendi. dosya_yaz(ad, değer) gibi 2-arg syscall'lar.
+
+**RAM dosya deposu:** kdl_dosyalar[8] (ad[16]+deger+kullanildi); kdl_dosya_ac (bul/oluştur) + kdl_dosya_bul
++ kdl_ad_esit (freestanding strcmp). num=15 dosya_yaz(ad=arg, deger=arg2); num=16 dosya_oku(ad=arg)→değer.
+Süreçler-arası paylaşılır (çekirdek durumu).
+
+**Doğrulama (QEMU 11.0.1):** dosya_arm — launcher dosya_yaz("sayac",1234)+spawn(worker); worker
+dosya_oku("sayac")=1234 → "FILE OK deger=1234" (BAŞKA süreç, launcher'ın yazdığını okudu). Full gate
+GATE=0 (29 hedef). x86 syscall + tüm SVC regresyon (syscall_arg/ret/d2/userspace) yeşil. sıfır-uyarı.
+**Userspace ABI: yaz/yaz_sayi/satir/cik/artir/gettick/getpid/spawn/exit/durum/dosya_yaz/dosya_oku.**
+
+**Sıradaki:** dosya read/write byte-buffer (tek-değer değil); kaynak geri-alma; D2-x86; C5 virtio-blk
+(gerçek disk → RAM-FS'i kalıcı yap).
+
+---
+
 ## D-130 — OS: süreç yaşam döngüsü — exit + join (spawn→çalış→exit→join tam döngü) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-129).

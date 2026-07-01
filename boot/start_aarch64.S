@@ -176,9 +176,10 @@ kdl_exc_ortak:
 9:
     /* --- SVC: frame kaydedildi; dispatch. num/arg SAKLANANDAN oku (canlı reg
      * ESR-okuma sırasında klobber edilmiş olabilir → yığından pristine al). --- */
-    ldr     x1, [sp, #16*0]     /* arg0 = saklanan x0 */
-    ldr     x0, [sp, #16*4]     /* num  = saklanan x8 (offset 16*4 = x8 slotu) */
-    bl      kdl_syscall_isle    /* (num, arg) → dönüş x0 */
+    ldr     x1, [sp, #16*0]     /* arg0 = saklanan x0 (2. C param) */
+    ldr     x2, [sp, #8]        /* arg1 = saklanan x1 (3. C param) — D-131 2-arg syscall */
+    ldr     x0, [sp, #16*4]     /* num  = saklanan x8 (offset 16*4 = x8 slotu; 1. C param) */
+    bl      kdl_syscall_isle    /* (num, arg0, arg1) → dönüş x0 */
     str     x0, [sp, #16*0]     /* dönüş değeri → saklanan x0 slotu (EL0 x0'da alır) */
 
     ldp     x0, x1,   [sp, #16*0]

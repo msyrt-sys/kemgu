@@ -65,12 +65,51 @@ void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
     }
 }
 
+/* === D-131: minimal RAM dosya deposu ===
+ * İsimli, tek-değerli dosyalar — çekirdek-aracılı depolama, SÜREÇLER ARASI paylaşılır
+ * (bir süreç yazar, diğeri okur). virtio-blk GEREKTİRMEZ (RAM-backed). Faz E dosya
+ * sisteminin ilk adımı. Freestanding (libc yok). */
+#define KDL_DOSYA_MAX 8
+#define KDL_AD_MAX    16
+static struct { char ad[KDL_AD_MAX]; int64_t deger; int kullanildi; } kdl_dosyalar[KDL_DOSYA_MAX];
+
+static int kdl_ad_esit(const char *a, const char *b) {
+    for (int i = 0; i < KDL_AD_MAX; i++) {
+        if (a[i] != b[i]) return 0;
+        if (a[i] == 0) return 1;
+    }
+    return 1;
+}
+
+static int kdl_dosya_bul(const char *ad) {
+    for (int i = 0; i < KDL_DOSYA_MAX; i++)
+        if (kdl_dosyalar[i].kullanildi && kdl_ad_esit(kdl_dosyalar[i].ad, ad))
+            return i;
+    return -1;
+}
+
+static int kdl_dosya_ac(const char *ad) {   /* bul veya oluştur; -1 = depo dolu */
+    int i = kdl_dosya_bul(ad);
+    if (i >= 0) return i;
+    for (i = 0; i < KDL_DOSYA_MAX; i++) {
+        if (!kdl_dosyalar[i].kullanildi) {
+            int j = 0;
+            for (; j < KDL_AD_MAX - 1 && ad[j]; j++) kdl_dosyalar[i].ad[j] = ad[j];
+            kdl_dosyalar[i].ad[j] = 0;
+            kdl_dosyalar[i].deger = 0;
+            kdl_dosyalar[i].kullanildi = 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
- * stub'ı bağlamı kaydeder, num + arg ile buraya gelir, dönüşte eret/iretq.
- * Minimal demonstrasyon: çağrı #1 = mesaj yazdır. Gerçek kernel'de bu tablo
- * dosya/bellek/görev syscall'larına genişler. */
-uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
+ * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
+ * eret/iretq. NOT: arg2 (2. argüman) yalnız aarch64'te dolu (SVC path geçirir);
+ * x86 nums 1/2/3 arg2 kullanmaz (zararsız). */
+uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");
         kdl_yazdir_satir();
@@ -138,6 +177,18 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
     } else if (num == 14) {
         /* D-130 durum: süreç `arg` (pid) bitti mi? → join/wait (ebeveyn yoklar). */
         return (uint64_t)(int64_t)kdl_gorev_durum((int)arg);
+    } else if (num == 15) {
+        /* D-131 dosya_yaz(ad=arg, deger=arg2): isimli dosyaya değer yaz (oluştur).
+         * 2-argümanlı syscall (D-126 x1-koruma + D-131 SVC arg2 geçişi). 0=ok, -1=dolu. */
+        int i = kdl_dosya_ac((const char *)(uintptr_t)arg);
+        if (i < 0) return (uint64_t)(int64_t)-1;
+        kdl_dosyalar[i].deger = (int64_t)arg2;
+        return 0;
+    } else if (num == 16) {
+        /* D-131 dosya_oku(ad=arg): isimli dosyanın değerini döner (yoksa -1). */
+        int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
+        if (i < 0) return (uint64_t)(int64_t)-1;
+        return (uint64_t)kdl_dosyalar[i].deger;
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }
