@@ -76,6 +76,7 @@ static int      kdl_preempt_aktif = 0;
 static uint64_t kdl_psp[KDL_MAX_GOREV];   /* her görevin trap-frame SP'si */
 static int      kdl_block[KDL_MAX_GOREV]; /* >0 = bloklu (tick geri-sayım) — C7c */
 static int      kdl_pri[KDL_MAX_GOREV];   /* öncelik (büyük=yüksek; varsayılan 0) — C7e */
+static int      kdl_olu[KDL_MAX_GOREV];   /* 1 = bitmiş (exit); scheduler atlar — D-130 */
 static int      kdl_psayi = 0;
 static int      kdl_paktif = 0;
 
@@ -135,6 +136,18 @@ void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
 /* D-128: o an koşan preemptive görevin id'si (userspace getpid syscall'ı için). */
 int kdl_aktif_gorev(void) { return kdl_paktif; }
 
+/* D-130: o an koşan görevi BİTİR (exit). scheduler bir daha seçmez → süreç durur.
+ * (Kaynaklar geri alınmaz — v1; havuz slotu serbest bırakılmaz.) */
+void kdl_gorev_bitir(void) {
+    if (kdl_paktif >= 0 && kdl_paktif < KDL_MAX_GOREV) kdl_olu[kdl_paktif] = 1;
+}
+
+/* D-130: görev `pid` bitti mi? (join/wait için — ebeveyn EL0'da yoklar). */
+int kdl_gorev_durum(int pid) {
+    if (pid >= 0 && pid < KDL_MAX_GOREV) return kdl_olu[pid];
+    return 1;   /* geçersiz pid → "bitmiş" say (sonsuz bekleme olmasın) */
+}
+
 /* C7e: göreve öncelik ata (büyük = yüksek; varsayılan 0). Yüksek-öncelikli
  * READY görev her zaman seçilir; eşit öncelikler round-robin döner. */
 void kdl_preempt_oncelik(int gorev, int oncelik) {
@@ -187,6 +200,7 @@ uint64_t kdl_preempt(uint64_t sp) {
     int n = kdl_paktif;
     for (int t = 0; t < kdl_psayi; t++) {        /* round-robin sırada tara */
         n = (n + 1) % kdl_psayi;
+        if (kdl_olu[n]) continue;                /* bitmiş (exit) — asla seçme (D-130) */
         if (kdl_block[n] != 0) continue;         /* READY değil (bloklu) */
         if (kdl_pri[n] > en_iyi_pri) {           /* en yüksek öncelik (eşitte ilk) */
             en_iyi = n;
