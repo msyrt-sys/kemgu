@@ -767,6 +767,10 @@ $(BUILD)/bm_a64_virtio.o: runtime/kdl_virtio.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_virtio_net.o: runtime/kdl_virtio_net.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_mmio.o: runtime/kdl_runtime_mmio.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_yetki.o: runtime/kdl_yetki_bare.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
@@ -1867,6 +1871,37 @@ calistir_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — DNS testi atlandi."; \
 	fi
 
+# === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
+# virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
+# (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
+calistir_virtio_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+	@echo "D-148 aarch64 SELF-HOST virtio sürücüsü: virtio_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_selfhost.kem > $(BUILD)/virtio_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_selfhost.ll -c -o $(BUILD)/virtio_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/virtio_selfhost.elf $(BUILD)/virtio_selfhost.o \
+		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/virtio_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/virtio_selfhost.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/virtio_selfhost.out -kernel $(BUILD)/virtio_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM VIRTIO OK" $(BUILD)/virtio_selfhost.out; then \
+			echo "D-148 aarch64 self-host virtio testi gecti: KEMGU sürücüsü virtio-mmio okudu."; \
+		else \
+			echo "FAIL: 'KEM VIRTIO OK' bekleniyor (KEMGU self-host MMIO sürücüsü)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host virtio testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1883,7 +1918,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
-                     calistir_dns_test_arm calistir_capstone_arm \
+                     calistir_dns_test_arm calistir_virtio_selfhost_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
