@@ -1337,6 +1337,29 @@ calistir_proc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — proc testi atlandi."; \
 	fi
 
+# === D-124 İlk userspace programı (aarch64) — EL0 hesap + syscall ABI I/O ===
+# el0_program EL0'da 1..10 toplar + yaz/yaz_sayi/satir/cik syscall'larıyla yazar.
+# Userspace ABI (pointer/veri geçişi + userspace hesap) çekirdek kanıtı. Faz F temeli.
+calistir_userspace_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-124 aarch64 userspace programı testi: userspace_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_arm.c -o $(BUILD)/userspace_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_arm.elf $(BUILD)/userspace_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_arm.out -kernel $(BUILD)/userspace_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_arm.out; echo "--- son ---"; \
+		if grep -q "USERSPACE OK toplam=55" $(BUILD)/userspace_arm.out; then \
+			echo "D-124 aarch64 userspace testi gecti: EL0 program hesap+syscall I/O (toplam=55)."; \
+		else \
+			echo "FAIL: 'USERSPACE OK toplam=55' bekleniyor (EL0 hesap + syscall ABI)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1344,7 +1367,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
                      calistir_sched_test_arm calistir_preempt_test_arm calistir_sleep_test_arm \
                      calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
-                     calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm calistir_capstone_arm \
+                     calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
+                     calistir_userspace_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86

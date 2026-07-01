@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-124 — OS: ilk userspace programı — EL0 hesap + syscall ABI ile I/O (Faz F temeli) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-123).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_syscall_isle +num 5/6/7 = yaz/yaz_sayi/satir; +kdl_yaz_metin/
+kdl_yaz_tam decl); yeni `test/bare_metal/userspace_arm.c`; `Makefile`. x86/host/codegen dokunulmadı
+(syscall_isle paylaşılan — x86 yaz_* referansı gate'te doğrulandı).]** D3'ün (korumalı süreç) üstüne
+userspace ABI'nin ilk gerçek kullanımı: bir userspace programı EL0'da HESAP yapar + kernel
+hizmetlerini SYSCALL ile kullanır (Faz F userspace temeli).
+
+**Userspace syscall ABI (v0):** num=5 yaz(ptr) — string yaz (kernel kullanıcı belleğinden ptr OKUR —
+pointer/veri geçişi ABI'si); num=6 yaz_sayi(n); num=7 satir; num=3 cik (bitir/dur). Sarmalayıcı
+`always_inline` → SVC .user section'a gömülü (ayrı fonksiyon .text/AP=00'da kalır, EL0
+çalıştıramaz). String literalleri .rodata'da (kernel EL1 okur; EL0 yalnız adres geçer, dereference
+etmez → AP=00 sorunu yok).
+
+**Doğrulama (QEMU 11.0.1):** "MERHABA userspace" + "USERSPACE OK toplam=55" — EL0 program 1..10
+topladı (userspace hesap) + syscall I/O ile yazdı. Full gate GATE=0 (23 hedef). sıfır-uyarı.
+
+**Önem:** userspace program artık HESAP + I/O yapabiliyor (syscall ABI ile) — gerçek program
+çalıştırmanın (Faz F) çekirdek yapıtaşı. Kernel kullanıcı pointer'ından veri okuyor (read/write
+syscall ailesinin temeli). NOT: ptr doğrulaması yok (gerçek OS'te user-adres-uzayı kontrolü gerek).
+
+**Sıradaki:** preemptive EL0 süreç (per-task kernel stack); userspace ABI genişletme (oku/exit-kod);
+D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E fs).
+
+---
+
 ## D-123 — OS D3: korumalı EL0 user-process (D1⊕D2⊕D-122 birleşik) — gerçek OS sürecinin dört özelliği bir arada (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-122).
