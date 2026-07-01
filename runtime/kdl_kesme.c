@@ -223,16 +223,29 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         for (int i = 0; i < KDL_DOSYA_MAX; i++) if (kdl_dosyalar[i].kullanildi) c++;
         return (uint64_t)(int64_t)c;
     } else if (num == 20) {
-        /* D-133 dosya_ad(idx=arg, buf=arg2): idx'inci dosyanın adını user tamponuna
-         * kopyala (ls: dosya adı listeleme). Dönen = ad uzunluğu (-1 geçersiz idx). */
-        int idx = (int)arg;
-        if (idx < 0 || idx >= KDL_DOSYA_MAX || !kdl_dosyalar[idx].kullanildi)
-            return (uint64_t)(int64_t)-1;
-        char *buf = (char *)(uintptr_t)arg2;
-        int n = 0;
-        while (n < KDL_AD_MAX - 1 && kdl_dosyalar[idx].ad[n]) { buf[n] = kdl_dosyalar[idx].ad[n]; n++; }
-        buf[n] = 0;
-        return (uint64_t)(int64_t)n;
+        /* D-133 dosya_ad(idx=arg, buf=arg2): idx'inci KULLANILAN dosyanın adını user
+         * tamponuna kopyala (ls). D-134: sil sonrası boşluk atla → kullanılan-index
+         * (raw index değil) → sil edilmiş slotlar sıralamayı bozmaz. Dönen = uzunluk. */
+        int idx = (int)arg, seen = 0;
+        for (int i = 0; i < KDL_DOSYA_MAX; i++) {
+            if (!kdl_dosyalar[i].kullanildi) continue;
+            if (seen == idx) {
+                char *buf = (char *)(uintptr_t)arg2;
+                int n = 0;
+                while (n < KDL_AD_MAX - 1 && kdl_dosyalar[i].ad[n]) { buf[n] = kdl_dosyalar[i].ad[n]; n++; }
+                buf[n] = 0;
+                return (uint64_t)(int64_t)n;
+            }
+            seen++;
+        }
+        return (uint64_t)(int64_t)-1;
+    } else if (num == 21) {
+        /* D-134 dosya_sil(ad=arg): isimli dosyayı sil (slot serbest). 0=ok, -1=yok. */
+        int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
+        if (i < 0) return (uint64_t)(int64_t)-1;
+        kdl_dosyalar[i].kullanildi = 0;
+        kdl_dosyalar[i].boyut = 0;
+        return 0;
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }

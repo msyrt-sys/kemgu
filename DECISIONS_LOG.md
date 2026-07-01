@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-134 — OS: dosya sil — FS CRUD tamamlandı (oluştur/oku/güncelle/listele/sil) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-133).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+num 21 dosya_sil; num 20 dosya_ad → kullanılan-index);
+yeni `test/bare_metal/sil_arm.c`; `Makefile`. Sadece ekleme + dosya_ad iyileştirme.]** RAM dosya
+sistemi artık tam CRUD.
+
+**Mekanizma:** num=21 dosya_sil(ad=arg) → slot serbest (kullanildi=0). num=20 dosya_ad artık
+KULLANILAN-index (raw değil) → silinmiş slotlar sıralamayı bozmaz (boşluk atlanır). D-133 ls
+regresyonsuz (silme yoksa kullanılan==raw).
+
+**Doğrulama (QEMU 11.0.1):** sil_arm — alfa+beta+gama oluştur → dosya_sil("beta") → listele →
+"AFTER count=2" + alfa + gama (beta YOK). Full gate GATE=0 (32 hedef). D-133 ls regresyon yeşil.
+sıfır-uyarı. **RAM-FS tam CRUD: oluştur(15)/oku(16)/metin(17,18)/listele(19,20)/sil(21).**
+
+**Sıradaki:** scripted userspace kabuk (komut dizisi → FS işlemleri); UART RX (klavye, gate zor);
+kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
+
+---
+
 ## D-133 — OS: dosya listeleme (ls) — userspace dosya enumerasyonu (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-132).
