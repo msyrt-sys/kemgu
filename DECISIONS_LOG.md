@@ -5,6 +5,30 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-128 — OS: userspace introspection syscall'ları — gettick + getpid (userspace ABI genişleme) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-127).
+
+**Karar [ETKİ: `runtime/kdl_zaman.c` (+kdl_tik_al getter); `runtime/kdl_gorev.c` (+kdl_aktif_gorev
+getter); `runtime/kdl_kesme.c` (kdl_syscall_isle +num 10 gettick, 11 getpid); yeni
+`test/bare_metal/tick_arm.c`; `Makefile`. x86/host/codegen dokunulmadı (getter'lar iki arch'ta;
+x86 syscall kernel gate'te doğrulandı).]** D-126 dönüş-değeri ABI'si üstünde ilk gerçek "kernel
+durumu okuyan" userspace syscall'ları.
+
+**Yeni syscall'lar (dönüş-değerli):** num=10 gettick → kdl_tik_al() (timer tik sayısı, userspace
+zamanı okur); num=11 getpid → kdl_aktif_gorev() (o an koşan preemptive görev id'si). Getter'lar:
+kdl_tik_al (kdl_zaman.c, static kdl_tik_sayisi'ni açar), kdl_aktif_gorev (kdl_gorev.c, kdl_paktif).
+
+**Doğrulama (QEMU 11.0.1):** tick_arm — preemptive EL0 görev gettick(t1)→zaman-geçir→gettick(t2)→
+getpid; t2>t1 (timer preemptive görevde IRQ-açık → tikler) + pid=1 → "TICK OK pid=1". Full gate
+GATE=0 (26 hedef). sıfır-uyarı. **Userspace artık çekirdek durumunu (zaman/kimlik) syscall ile
+okuyabiliyor — gerçek programların temel ihtiyacı.**
+
+**Sıradaki:** read/write dosya syscall'ları (C5 storage sonrası); dinamik süreç spawn; D2-x86; C5
+virtio-blk → Faz E fs.
+
+---
+
 ## D-127 — OS: çoklu EL0 süreç — izole userspace multitasking (gerçek multi-process OS DORUĞU) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-126).

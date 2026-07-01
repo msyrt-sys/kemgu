@@ -23,6 +23,8 @@ void kdl_yazdir_satir(void);
 void kdl_yazdir_onaltilik(uint64_t);
 void kdl_yaz_metin(const char *);   /* newline'sız — userspace 'yaz' syscall için */
 void kdl_yaz_tam(int32_t);          /* newline'sız sayı — userspace 'yaz_sayi' için */
+uint64_t kdl_tik_al(void);          /* timer tik sayısı — userspace gettick için (D-128) */
+int      kdl_aktif_gorev(void);     /* aktif preemptive görev id — userspace getpid için */
 
 /* CPU istisnası — kurtarma yok. Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
@@ -113,6 +115,12 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg) {
          * EL0 çağırana x0'da döndürür (kdl_svc_ortak str x0 → saved-x0 → restore).
          * 'artir': arg+1 döner. read/getpid/gettick ailesinin mekanizma temeli. */
         return arg + 1;
+    } else if (num == 10) {
+        /* D-128 gettick: mevcut timer tik sayısı → userspace zamanı okuyabilir. */
+        return kdl_tik_al();
+    } else if (num == 11) {
+        /* D-128 getpid: o an koşan sürecin (preemptive görev) id'si. */
+        return (uint64_t)(int64_t)kdl_aktif_gorev();
     }
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }

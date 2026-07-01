@@ -1430,6 +1430,29 @@ calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — çoklu süreç testi atlandi."; \
 	fi
 
+# === D-128 Userspace introspection syscall testi (aarch64) — gettick + getpid ===
+# Preemptive EL0 görev gettick/getpid ile çekirdek durumunu (zaman/kimlik) okur.
+# Syscall dönüş-değeri ABI (D-126) üstünde. t2>t1 + pid → "TICK OK pid=1".
+calistir_tick_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-128 aarch64 userspace introspection testi: tick_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tick_arm.c -o $(BUILD)/tick_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/tick_arm.elf $(BUILD)/tick_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/tick_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/tick_arm.out -kernel $(BUILD)/tick_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/tick_arm.out; echo "--- son ---"; \
+		if grep -q "TICK OK pid=1" $(BUILD)/tick_arm.out; then \
+			echo "D-128 aarch64 introspection testi gecti: userspace gettick(zaman ilerledi)+getpid."; \
+		else \
+			echo "FAIL: 'TICK OK pid=1' bekleniyor (gettick + getpid)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — introspection testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1439,7 +1462,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
-                     calistir_syscall_ret_test_arm calistir_multiproc_test_arm calistir_capstone_arm \
+                     calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
+                     calistir_tick_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
