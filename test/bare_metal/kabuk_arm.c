@@ -36,7 +36,8 @@ static char script[] =
     "ls\n"
     "say\n"
     "sil gunluk\n"
-    "say\n";
+    "say\n"
+    "topla 12 30\n";
 
 /* Komut adları — .user_data'da OLMALI: str_esit bunları EL0'da OKUR. Normal string
  * literalleri .rodata'da (AP=00, EL0'a kapalı) → EL0 okuyunca permission-fault. */
@@ -45,6 +46,7 @@ __attribute__((section(".user_data"))) static char CMD_OKU[] = "oku";
 __attribute__((section(".user_data"))) static char CMD_LS[]  = "ls";
 __attribute__((section(".user_data"))) static char CMD_SAY[] = "say";
 __attribute__((section(".user_data"))) static char CMD_SIL[] = "sil";
+__attribute__((section(".user_data"))) static char CMD_TOPLA[] = "topla";
 
 __attribute__((always_inline)) static inline unsigned long sys(unsigned long num, unsigned long arg) {
     register unsigned long x8 __asm__("x8") = num;
@@ -65,6 +67,14 @@ __attribute__((section(".user"), noinline))
 static int str_esit(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return *a == *b;
+}
+
+/* Metin → sayı (basit atoi; EL0, .user). */
+__attribute__((section(".user"), noinline))
+static int str_sayi(const char *s) {
+    int n = 0;
+    while (*s >= '0' && *s <= '9') { n = n * 10 + (*s - '0'); s++; }
+    return n;
 }
 
 /* Satırı boşluklara böl (in-place null-term), en çok 3 token; token sayısı döner. */
@@ -119,6 +129,11 @@ static void kabuk(void) {
             sys(7, 0);
         } else if (nt >= 2 && str_esit(tok[0], CMD_SIL)) {
             sys(21, (unsigned long)(uintptr_t)tok[1]);     /* dosya_sil */
+        } else if (nt >= 3 && str_esit(tok[0], CMD_TOPLA)) {
+            int a = str_sayi(tok[1]), b = str_sayi(tok[2]);   /* aritmetik: hesap */
+            sys(5, (unsigned long)(uintptr_t)"= ");
+            sys(6, (unsigned long)(a + b));
+            sys(7, 0);
         }
         satir = devam ? son + 1 : son;
     }

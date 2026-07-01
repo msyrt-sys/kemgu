@@ -32,6 +32,24 @@ komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden 
 
 ---
 
+## D-139 — OS: kabuğa aritmetik — topla komutu (shell hesap makinesi) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-138).
+
+**Karar [ETKİ: `test/bare_metal/kabuk_arm.c` (+CMD_TOPLA + str_sayi (atoi) + branch + script satırı);
+`Makefile` (gate "= 42"). Yalnız test.]** Kabuk artık sayı ayrıştırıp aritmetik yapıyor — FS komut
+yorumlayıcısı + hesap makinesi.
+
+**Mekanizma:** str_sayi (EL0 atoi, .user) + "topla A B" komutu → str_sayi(tok[1])+str_sayi(tok[2])
+→ "= toplam". Kabuk metin→sayı ayrıştırma + hesap (userspace'de).
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> topla 12 30" / "= 42". Full gate GATE=0 (35 hedef).
+sıfır-uyarı. **Kabuk komut seti: yaz/oku/ls/say/sil (FS CRUD) + topla (aritmetik).**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86; C5 virtio-blk.
+
+---
+
 ## D-138 — OS: kaynak geri-alma (slot reuse) — sınırsız spawn (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-137).

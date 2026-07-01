@@ -1601,10 +1601,10 @@ calistir_kabuk_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
 			-serial file:$(BUILD)/kabuk_arm.out -kernel $(BUILD)/kabuk_arm.elf 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kabuk_arm.out; echo "--- son ---"; \
-		if grep -q "SHELL> oku gunluk" $(BUILD)/kabuk_arm.out && grep -q "KEMGU-OS" $(BUILD)/kabuk_arm.out && grep -q "COUNT=1" $(BUILD)/kabuk_arm.out && grep -q "COUNT=0" $(BUILD)/kabuk_arm.out; then \
-			echo "D-135/136 aarch64 kabuk testi gecti: shell yaz/oku/ls/say/sil komutları (CRUD)."; \
+		if grep -q "SHELL> oku gunluk" $(BUILD)/kabuk_arm.out && grep -q "KEMGU-OS" $(BUILD)/kabuk_arm.out && grep -q "COUNT=1" $(BUILD)/kabuk_arm.out && grep -q "COUNT=0" $(BUILD)/kabuk_arm.out && grep -q "= 42" $(BUILD)/kabuk_arm.out; then \
+			echo "D-135/136/139 aarch64 kabuk testi gecti: shell yaz/oku/ls/say/sil/topla (CRUD+aritmetik)."; \
 		else \
-			echo "FAIL: kabuk yaz/oku + say(COUNT=1) + sil + say(COUNT=0) bekleniyor"; \
+			echo "FAIL: kabuk CRUD + topla(= 42) bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \
