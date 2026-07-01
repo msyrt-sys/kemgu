@@ -99,6 +99,27 @@ int kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe) {
     return i;
 }
 
+/* D-125: PREEMPTIVE EL0 (userspace) görev. Preemptive EL1 görev gibi ama sentetik
+ * trap-frame SPSR=EL0t (IRQ-açık) + SP_EL0 = user yığını → ilk switch eret ile
+ * `giris`'e EL0'da atlar. İKİ yığın gerekir:
+ *   kernel_yigin_tepe — trap-frame (preempt sırasında SP_EL1) burada, kernel bellek.
+ *   user_yigin_tepe   — EL0 çalışma yığını (.user sayfası, AP=01), SP_EL0.
+ * kdl_irq_ortak SP_EL0'ı @264'te kaydeder/geri yükler (Stage 1) → EL0 görev
+ * preempt edilip sürdürülebilir. giris .user sayfasında (AP=01, EL0-exec) olmalı. */
+int kdl_preempt_gorev_olustur_el0(void (*giris)(void), void *kernel_yigin_tepe,
+                                  void *user_yigin_tepe) {
+    if (kdl_psayi >= KDL_MAX_GOREV) return -1;
+    int i = kdl_psayi++;
+    uint64_t sp = ((uint64_t)(uintptr_t)kernel_yigin_tepe - 272) & ~0xFUL;
+    uint64_t *tf = (uint64_t *)(uintptr_t)sp;
+    for (int k = 0; k < 34; k++) tf[k] = 0;
+    tf[31] = (uint64_t)(uintptr_t)giris;               /* ELR_EL1 = EL0 giriş */
+    tf[32] = 0x0;                                      /* SPSR: M=EL0t, DAIF=0 (IRQ açık) */
+    tf[33] = (uint64_t)(uintptr_t)user_yigin_tepe;     /* SP_EL0 @264 = user yığını */
+    kdl_psp[i] = sp;
+    return i;
+}
+
 void kdl_preempt_ac(void) { kdl_preempt_aktif = 1; }
 
 /* C7e: göreve öncelik ata (büyük = yüksek; varsayılan 0). Yüksek-öncelikli

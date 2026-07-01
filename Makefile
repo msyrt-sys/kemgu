@@ -1360,6 +1360,30 @@ calistir_userspace_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace testi atlandi."; \
 	fi
 
+# === D-125 Preemptive EL0 (userspace) görev testi (aarch64) ===
+# main (EL1) + EL0 userspace görev preemptive scheduler'da; timer-IRQ ile EL0
+# görev zorunlu preempt edilir (SP_EL0 trap-frame'de korunur). Tam OS'un son
+# parçası: userspace görevler preemptively multitask.
+calistir_preempt_el0_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-125 aarch64 preemptive EL0 testi: preempt_el0_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/preempt_el0_arm.c -o $(BUILD)/preempt_el0_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/preempt_el0_arm.elf $(BUILD)/preempt_el0_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/preempt_el0_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/preempt_el0_arm.out -kernel $(BUILD)/preempt_el0_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/preempt_el0_arm.out; echo "--- son ---"; \
+		if grep -q "PREEMPT EL0 OK" $(BUILD)/preempt_el0_arm.out; then \
+			echo "D-125 aarch64 preemptive EL0 testi gecti: EL0 userspace görev timer-IRQ ile preempt edildi."; \
+		else \
+			echo "FAIL: 'PREEMPT EL0 OK' bekleniyor (EL0 görev preempt + SP_EL0 korunmalı)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — preempt EL0 testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1368,7 +1392,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sched_test_arm calistir_preempt_test_arm calistir_sleep_test_arm \
                      calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
-                     calistir_userspace_test_arm calistir_capstone_arm \
+                     calistir_userspace_test_arm calistir_preempt_el0_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
