@@ -162,6 +162,17 @@ int kdl_dosya_yukle(uint64_t base) {
     unsigned char *dst = (unsigned char *)(void *)kdl_dosyalar;
     unsigned long n = sizeof(kdl_dosyalar);
     for (unsigned long i = 0; i < n && (16 + i) < 1024; i++) dst[i] = kdl_fs_buf[16 + i];
+    /* D-153: poisoned-disk boyut clamp (savunma katmanı). Diskteki tablo verbatim
+     * yüklendi; kötü niyetli bir disk taşkın alanlar içerebilir. Deserialize sonrası
+     * her girişi güvenli sınırlara normalize et — böylece num=18 gibi okuyucular
+     * asla icerik[] tamponunu aşan boyut GÜVENMEZ (OOB okuma / kernel-sızıntı engeli). */
+    for (int i = 0; i < KDL_DOSYA_MAX; i++) {
+        kdl_dosyalar[i].kullanildi = kdl_dosyalar[i].kullanildi ? 1 : 0;
+        kdl_dosyalar[i].ad[KDL_AD_MAX - 1] = 0;
+        kdl_dosyalar[i].icerik[KDL_ICERIK_MAX - 1] = 0;
+        if (kdl_dosyalar[i].boyut < 0 || kdl_dosyalar[i].boyut >= KDL_ICERIK_MAX)
+            kdl_dosyalar[i].boyut = 0;
+    }
     return 0;
 }
 #endif /* __aarch64__ */
@@ -316,13 +327,18 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         if (!kdl_user_oku_str_gecerli(arg)) return (uint64_t)(int64_t)-1;   /* D-151: ad okuma */
         int i = kdl_dosya_bul((const char *)(uintptr_t)arg);
         if (i < 0) return (uint64_t)(int64_t)-1;
+        /* D-153: stale/poisoned boyut clamp (savunma katmanı). kdl_dosya_yukle
+         * artık deserialize'te clamp'lasa da, okumayı burada da 64-byte icerik[]
+         * tamponuyla sınırla → aşırı boyut asla OOB okuma tetikleyemez. */
+        int lim = kdl_dosyalar[i].boyut;
+        if (lim < 0 || lim >= KDL_ICERIK_MAX) lim = 0;
         /* D-150: kernel user-tampona YAZAR → adres user aralığında olmalı (kernel
          * belleğine yazmayı engelle). +1 = sonlandırıcı null. */
-        if (!kdl_user_yaz_ptr_gecerli(arg2, (uint64_t)kdl_dosyalar[i].boyut + 1))
+        if (!kdl_user_yaz_ptr_gecerli(arg2, (uint64_t)lim + 1))
             return (uint64_t)(int64_t)-1;
         char *buf = (char *)(uintptr_t)arg2;
         int n = 0;
-        while (n < kdl_dosyalar[i].boyut) { buf[n] = kdl_dosyalar[i].icerik[n]; n++; }
+        while (n < lim) { buf[n] = kdl_dosyalar[i].icerik[n]; n++; }
         buf[n] = 0;
         return (uint64_t)(int64_t)n;
     } else if (num == 19) {
