@@ -1991,6 +1991,32 @@ calistir_guvenlik_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — spawn-entry güvenlik testi atlandi."; \
 	fi
 
+# === D-153 Kalıcı FS deserialize güvenlik testi (aarch64) — poisoned-disk boyut clamp ===
+# Elle üretilmiş ZEHİRLİ disk image (boyut=9999) yüklenir; EL0 süreç num=18 ile okur;
+# clamp devrede ise dönen uzunluk <=63 + kernel sağ kalır → "KALICI GUARD OK".
+calistir_guvenlik_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "D-153 aarch64 kalıcı FS deserialize güvenlik testi: guvenlik_kalici_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_kalici_arm.c -o $(BUILD)/guvenlik_kalici_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/guvenlik_kalici_arm.elf $(BUILD)/guvenlik_kalici_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_guvenlik_kalici.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/guvenlik_kalici_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_guvenlik_kalici.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/guvenlik_kalici_arm.out -kernel $(BUILD)/guvenlik_kalici_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/guvenlik_kalici_arm.out; echo "--- son ---"; \
+		if grep -q "KALICI GUARD OK" $(BUILD)/guvenlik_kalici_arm.out; then \
+			echo "D-153 aarch64 kalıcı FS deserialize güvenlik testi gecti: poisoned boyut clamp'lendi, kernel sağ."; \
+		else \
+			echo "FAIL: 'KALICI GUARD OK' bekleniyor (poisoned boyut clamp; OOB okuma/kernel-halt regresyonu)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — kalıcı FS deserialize güvenlik testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -2010,6 +2036,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dns_test_arm calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
+                     calistir_guvenlik_kalici_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
