@@ -32,6 +32,29 @@ komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden 
 
 ---
 
+## D-138 — OS: kaynak geri-alma (slot reuse) — sınırsız spawn (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-137).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_preempt_gorev_olustur_el0 ölü görev-slotu reuse;
+kdl_surec_spawn ölü havuz-slotu reuse + kdl_spawn_kullanildi/task[]); yeni
+`test/bare_metal/geri_al_arm.c`; `Makefile`. Sadece ekleme/iyileştirme.]** Süreç bitince (exit) hem
+scheduler görev-slotu hem spawn-havuz-slotu geri alınır → OS programları SINIRSIZ çalıştırabilir
+(eski: monoton sayaç, 4 spawn'da tükeniyordu).
+
+**Mekanizma:** kdl_preempt_gorev_olustur_el0 önce ÖLÜ (kdl_olu) görev slotu arar, yoksa yeni
+(kdl_psayi++). kdl_surec_spawn boş VEYA görevi ölmüş havuz slotunu yeniden kullanır
+(kdl_spawn_kullanildi[]+kdl_spawn_task[]). Güvenli: ölü görev scheduler'da atlanır + spawn eden
+canlı görevden çağrılır (kdl_paktif != geri-alınan slot).
+
+**Doğrulama (QEMU 11.0.1):** geri_al_arm — launcher 6× spawn+join (havuz=4'ten fazla) → "SPAWNS=6"
+(hepsi başarılı; geri-alma olmasaydı 5.'te -1 → SPAWNS=4). Full gate GATE=0 (35 hedef). spawn/yasam/
+multiproc/calis regresyon yeşil. sıfır-uyarı. **OS artık sınırsız süreç yaratıp bitirebilir.**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86 (ring3 parite); C5 virtio-blk (kalıcı disk).
+
+---
+
 ## D-137 — OS: program çalıştırma iş akışı — spawn→hesap→dosya→join→oku (uçtan-uca) (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-136).
