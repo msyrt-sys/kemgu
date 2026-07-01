@@ -1407,6 +1407,29 @@ calistir_syscall_ret_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — syscall dönüş testi atlandi."; \
 	fi
 
+# === D-127 Çoklu EL0 süreç testi (aarch64) — izole userspace multitasking (DORUK) ===
+# İki userspace süreç, paylaşılan kod + özel veri (aynı VA→farklı PA), scheduler
+# TTBR-swap ile preemptively izole. Çapraz-bozulma yok → "A OK" + "B OK".
+calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-127 aarch64 çoklu EL0 süreç testi: multiproc_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/multiproc_arm.c -o $(BUILD)/multiproc_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/multiproc_arm.elf $(BUILD)/multiproc_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/multiproc_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/multiproc_arm.out -kernel $(BUILD)/multiproc_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/multiproc_arm.out; echo "--- son ---"; \
+		if grep -q "A OK" $(BUILD)/multiproc_arm.out && grep -q "B OK" $(BUILD)/multiproc_arm.out; then \
+			echo "D-127 aarch64 çoklu süreç testi gecti: 2 izole userspace süreç preemptively kostu."; \
+		else \
+			echo "FAIL: 'A OK' + 'B OK' bekleniyor (izole çok-süreç + TTBR swap)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — çoklu süreç testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -1416,7 +1439,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
-                     calistir_syscall_ret_test_arm calistir_capstone_arm \
+                     calistir_syscall_ret_test_arm calistir_multiproc_test_arm calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_capstone_x86
