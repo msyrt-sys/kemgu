@@ -45,10 +45,18 @@ struct nvq_avail { uint16_t flags; uint16_t idx; uint16_t ring[NVQ_N]; uint16_t 
 struct nvq_used_elem { uint32_t id; uint32_t len; };
 struct nvq_used { uint16_t flags; uint16_t idx; struct nvq_used_elem ring[NVQ_N]; uint16_t avail_event; };
 
+/* Transmit queue (1) tamponları. */
 static struct nvq_desc  net_desc[NVQ_N] __attribute__((aligned(16)));
 static struct nvq_avail net_avail       __attribute__((aligned(16)));
 static struct nvq_used  net_used        __attribute__((aligned(16)));
 static uint8_t          net_txbuf[2048] __attribute__((aligned(16)));   /* net-hdr(12) + çerçeve */
+
+/* Receive queue (0) tamponları — cihaz gelen paketleri bunlara yazar (D-145). */
+static struct nvq_desc  rx_desc[NVQ_N]  __attribute__((aligned(16)));
+static struct nvq_avail rx_avail        __attribute__((aligned(16)));
+static struct nvq_used  rx_used         __attribute__((aligned(16)));
+static uint8_t          rx_buf[NVQ_N][2048] __attribute__((aligned(16)));
+static uint16_t         rx_gorulen = 0;   /* işlenen used indeksi */
 
 static inline uint32_t nm_r32(uint64_t b, uint64_t o) { return *(volatile uint32_t *)(uintptr_t)(b + o); }
 static inline void nm_w32(uint64_t b, uint64_t o, uint32_t v) { *(volatile uint32_t *)(uintptr_t)(b + o) = v; }
@@ -81,10 +89,33 @@ int kdl_virtio_net_kur(uint64_t base) {
     nm_w32(base, VMMIO_STATUS, ST_ACK | ST_DRIVER | ST_FEAT_OK);
     if (!(nm_r32(base, VMMIO_STATUS) & ST_FEAT_OK)) return -2;
 
-    nm_w32(base, VMMIO_QUEUE_SEL, 1);       /* transmit queue = 1 */
+    /* --- Receive queue (0): tüm tamponları cihaza AÇIK ver (device yazar). --- */
+    nm_w32(base, VMMIO_QUEUE_SEL, 0);
     if (nm_r32(base, VMMIO_QUEUE_NUM_MAX) < NVQ_N) return -3;
     nm_w32(base, VMMIO_QUEUE_NUM, NVQ_N);
+    for (int i = 0; i < NVQ_N; i++) {
+        rx_desc[i].addr = (uint64_t)(uintptr_t)rx_buf[i];
+        rx_desc[i].len = 2048;
+        rx_desc[i].flags = 2;              /* WRITE — cihaz buraya yazar */
+        rx_desc[i].next = 0;
+        rx_avail.ring[i] = (uint16_t)i;
+    }
+    __asm__ volatile("dsb sy" ::: "memory");
+    rx_avail.idx = NVQ_N;                  /* tüm tamponlar hazır */
+    {
+        uint64_t rda = (uint64_t)(uintptr_t)rx_desc;
+        uint64_t rav = (uint64_t)(uintptr_t)&rx_avail;
+        uint64_t rus = (uint64_t)(uintptr_t)&rx_used;
+        nm_w32(base, VMMIO_Q_DESC_LO, (uint32_t)rda); nm_w32(base, VMMIO_Q_DESC_HI, (uint32_t)(rda >> 32));
+        nm_w32(base, VMMIO_Q_DRV_LO,  (uint32_t)rav); nm_w32(base, VMMIO_Q_DRV_HI,  (uint32_t)(rav >> 32));
+        nm_w32(base, VMMIO_Q_DEV_LO,  (uint32_t)rus); nm_w32(base, VMMIO_Q_DEV_HI,  (uint32_t)(rus >> 32));
+        nm_w32(base, VMMIO_QUEUE_READY, 1);
+    }
 
+    /* --- Transmit queue (1). --- */
+    nm_w32(base, VMMIO_QUEUE_SEL, 1);
+    if (nm_r32(base, VMMIO_QUEUE_NUM_MAX) < NVQ_N) return -3;
+    nm_w32(base, VMMIO_QUEUE_NUM, NVQ_N);
     uint64_t da = (uint64_t)(uintptr_t)net_desc;
     uint64_t av = (uint64_t)(uintptr_t)&net_avail;
     uint64_t us = (uint64_t)(uintptr_t)&net_used;
@@ -93,8 +124,31 @@ int kdl_virtio_net_kur(uint64_t base) {
     nm_w32(base, VMMIO_Q_DEV_LO,  (uint32_t)us); nm_w32(base, VMMIO_Q_DEV_HI,  (uint32_t)(us >> 32));
 
     nm_w32(base, VMMIO_QUEUE_READY, 1);
+
+    nm_w32(base, VMMIO_QUEUE_NOTIFY, 0);   /* RX tamponları hazır → cihaza bildir */
     nm_w32(base, VMMIO_STATUS, ST_ACK | ST_DRIVER | ST_FEAT_OK | ST_DRIVER_OK);
+    rx_gorulen = 0;
     return 0;
+}
+
+/* Bir paket AL (RX). Gelen çerçeveyi (net-başlığı 12 bayt ATLANMIŞ) `hedef`e kopyala,
+ * uzunluğu (bayt) döner. Paket yoksa `tikler` poll denemesi sonra 0. Negatif = hata. */
+int kdl_virtio_net_al(uint64_t base, uint8_t *hedef, int max, long tikler) {
+    (void)base;
+    for (long spin = 0; rx_used.idx == rx_gorulen; spin++) {
+        __asm__ volatile("dsb sy" ::: "memory");
+        if (spin > tikler) return 0;    /* zaman aşımı — paket yok */
+    }
+    uint16_t slot = rx_gorulen % NVQ_N;
+    uint32_t id  = rx_used.ring[slot].id;
+    uint32_t len = rx_used.ring[slot].len;   /* net-başlığı(12) dâhil */
+    rx_gorulen++;
+    if (id >= NVQ_N) return -1;
+    int govde = (int)len - 12;               /* net-başlığını atla */
+    if (govde < 0) govde = 0;
+    if (govde > max) govde = max;
+    for (int i = 0; i < govde; i++) hedef[i] = rx_buf[id][12 + i];
+    return govde;
 }
 
 /* `cerceve`deki `uzun` baytlık Ethernet çerçevesini gönder (TX). 0 = ok. */

@@ -57,6 +57,29 @@ disk'ini kurar). sıfır-uyarı.
 
 ---
 
+## D-145 — OS: ARP round-trip — 2-yönlü ağ (virtio-net RX + ARP protokolü) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-144).
+
+**Karar [ETKİ: `runtime/kdl_virtio_net.c` (+RX queue (0) kurulumu + kdl_virtio_net_al); yeni
+`test/bare_metal/arp_arm.c`; `Makefile`. Sadece ekleme — net TX (D-144) regresyonsuz.]** D-144
+gönderme'yi ALMA ile tamamlar → gerçek 2-yönlü ağ + ilk protokol (ARP).
+
+**Mekanizma:** kdl_virtio_net_kur artık RX queue 0'ı da kurar (NVQ_N tampon avail'e AÇIK verilir,
+cihaz gelen paketleri yazar, QueueNotify 0 ile bildirilir). kdl_virtio_net_al: rx_used poll → gelen
+çerçeveyi (net-başlığı 12 bayt atlanmış) kopyala + uzunluk döner. ARP protokol mantığı testte
+(request/reply parse).
+
+**Doğrulama (QEMU 11.0.1):** arp_arm — kernel gateway (SLIRP 10.0.2.2) için ARP isteği yollar; SLIRP
+ARP yanıtı verir; kernel RX ile alır + doğrular (ethertype 0x0806 + oper=2 + spa=10.0.2.2) →
+"ARP REPLY OK". **İLK DENEMEDE.** Full gate GATE=0 (41 hedef). sıfır-uyarı. **OS 2-yönlü ağ: paket
+gönder + al + ARP round-trip. Faz G derinleşti.**
+
+**Sıradaki:** IP/UDP paketi (ping/DNS); ARP tablosu; UART RX; D2-x86. TÜM ROADMAP FAZLARI (C-G)
+temel formda çalışıyor.
+
+---
+
 ## D-144 — OS: VirtIO-Net paket gönderme — ağ TX (Faz G başlangıcı) (2026-07-01) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-143).
