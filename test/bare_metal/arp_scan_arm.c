@@ -73,10 +73,19 @@ int main(void) {
         arp_istegi_gonder(base, (uint8_t)son);
     }
 
-    /* --- 2) Gelen ARP-reply'leri topla (poll, birkaç iterasyon). --- */
-    for (int deneme = 0; deneme < 60; deneme++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
-        if (n < 42) continue;
+    /* --- 2) Gelen ARP-reply'leri topla (poll). --- */
+    /* Yük-duyarlı timeout onarımı: kısa per-poll timeout (500K tik) + reply'ler
+     * toplandıktan sonra ardışık-boş erken-çıkış. Eski 60×20M tik busy-wait
+     * (~1.2 milyar dsb) yüklü makinede QEMU 12s timeout'unu aşıyordu. */
+    int bos_ardisik = 0;
+    for (int deneme = 0; deneme < 120; deneme++) {
+        int n = kdl_virtio_net_al(base, rx, 2048, 500000);
+        if (n < 42) {
+            bos_ardisik++;
+            if (bulunan_sayi >= 1 && bos_ardisik > 12) break;  /* yanıtlar toplandı */
+            continue;
+        }
+        bos_ardisik = 0;
         /* ARP + oper=reply mı? */
         if (rx[12] != 0x08 || rx[13] != 0x06) continue;   /* ethertype ARP */
         if (rx[20] != 0x00 || rx[21] != 0x02) continue;   /* oper = reply */
