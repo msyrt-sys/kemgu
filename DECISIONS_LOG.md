@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-169 — OS: SMP 2. çekirdek bring-up — PSCI CPU_ON (çok-çekirdek) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-168).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi, tüm SMP
+mantığı smp_arm.c inline asm.]** YENİ PILAR: çok-çekirdek (performans/ölçek). Şimdiye kadar tek-çekirdek.
+QEMU virt `-smp 2` ile ikincil çekirdek PSCI CPU_ON (fn_id=0xC4000003) ile başlatılır. **GERÇEK CPU_ON**
+(fallback PSCI_VERSION değil): conduit=**HVC** (QEMU virt EL2-firmware'siz → HVC), ret=0x0 (SUCCESS), hedef
+CPU MPIDR affinity=0x1, entry=cekirdek1_giris fiziksel adresi (identity-map). **Çekirdek 1 GERÇEKTEN koştu:**
+paylaşılan `cekirdek1_canli` bayrağını YALNIZ çekirdek 1 giriş fn'si yazar; çekirdek 0 onu görünce "SMP OK".
+**Cache coherency ele alındı:** çekirdek 1 MMU-OFF (non-cacheable) → RAM'e yaz + `dsb sy`; çekirdek 0 MMU-ON
+(WB-cacheable) → poll'da `dc ivac`+`dsb sy` (invalidate-to-PoC, taze oku); bayrak 64-byte hizalı. Çekirdek 1
+kendi 8KB stack'ini kurar (PSCI SP kurmaz). **Kanıt:** "SMP OK 2 cekirdek (HVC, ret=0x0)".
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst teknik notlarla); cherry-pick ile entegre.
+
+## D-168 — OS: SELF-HOST CRC32 — KEMGU saf-hesaplama algoritması (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-167).
+
+**Karar [ETKİ: yeni `test/ornekler/crc32_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — mmio ÖTESİNDE saf compute: KEMGU dilinin gerçek algoritma kaldırdığını kanıtlar.
+Standart IEEE 802.3/zlib CRC-32 (polinom 0xEDB88320, tablosuz bit-bit), cihazsız. **Kanıt:** CRC-32("123456789")
+= **0xCBF43926** (standart test vektörü, birebir). **KRİTİK dil-doğrulaması:** tüm bitwise op'lar çalışıyor
+(`^`→xor, `&`→and, `|`→or, `<<`→shl, `>>`→ashr/lshr). **`>>` işlenen-tipine göre kod üretir:** tam32(işaretli)→
+`ashr`, dtam32(işaretsiz)→`lshr` → CRC crc değişkeni `dtam32` OLMALI (MSB sık 1; ashr algoritmayı bozar).
+Doğru işaretlilik semantiği. `yazdir_isaretsiz_tam(dtam32)` işaretsiz gösterim. Cihazsız gate (net/drive yok).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-167 — OS: NTP istemcisi — internetten zaman senkronizasyonu (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-166).
+
+**Karar [ETKİ: yeni `test/bare_metal/ntp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** OS açılışta
+internetten doğru saati öğrenir. DNS-çöz(time.google.com→216.239.35.8) → Ethernet+IPv4(UDP)+UDP(123→123)+
+SNTP(48 byte, LI/VN/Mode=0x1B client) gönder → response RX → Transmit Timestamp (offset 40, 1900'den beri
+saniye) çıkar → Unix = ntp_sn - 2208988800. **Kanıt:** ntp_sn=3992001928 → Unix=**1783013128 = 2026-07-02
+17:25:28 UTC** (bugünün tarihiyle uyumlu). **GERÇEK RX** (fallback değil). **Sınır:** host-internet-bağımlı
+(offline → TX-pcap "NTP SENT OK", pcap'te UDP 123↔123). SLIRP dış-UDP proxy.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
 ## D-166 — OS: reverse DNS (PTR) — IP → isim çözümleme (recon) (2026-07-02)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-165).
