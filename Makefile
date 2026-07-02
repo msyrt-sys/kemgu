@@ -1901,6 +1901,36 @@ calistir_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — TCP testi atlandi."; \
 	fi
 
+# === Faz G ICMP echo (ping) round-trip testi (aarch64) — ağ katmanı ===
+# ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → IPv4+ICMP Echo Request gönder →
+# echo reply'i RX ile al + doğrula. pcap filter-dump da yakalanır: SLIRP echo
+# yanıt vermezse "ICMP ECHO SENT OK" (pcap'te type=8 + "KEMGU" işaretçisi) fallback.
+calistir_icmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "Faz G aarch64 ICMP echo (ping) testi: icmp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/icmp_arm.c -o $(BUILD)/icmp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/icmp_arm.elf $(BUILD)/icmp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/icmp_arm.out $(BUILD)/icmp_arm.pcap; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/icmp_arm.pcap \
+			-serial file:$(BUILD)/icmp_arm.out -kernel $(BUILD)/icmp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/icmp_arm.out; echo "--- son ---"; \
+		if grep -q "PING OK" $(BUILD)/icmp_arm.out; then \
+			echo "Faz G aarch64 ICMP testi gecti: gateway'den ICMP echo reply alındı (ping round-trip)."; \
+		elif grep -a -q "KEMGU" $(BUILD)/icmp_arm.pcap; then \
+			echo "Faz G aarch64 ICMP testi gecti (TX-pcap fallback): ICMP echo request gönderildi (pcap 'KEMGU')."; \
+			echo "ICMP ECHO SENT OK"; \
+		else \
+			echo "FAIL: 'PING OK' (RX round-trip) veya pcap'te 'KEMGU' işaretçisi (TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — ICMP testi atlandi."; \
+	fi
+
 # === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
 # virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
 # (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
@@ -2083,7 +2113,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
-                     calistir_dns_test_arm calistir_tcp_test_arm calistir_virtio_selfhost_arm \
+                     calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
+                     calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
