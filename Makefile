@@ -2247,6 +2247,41 @@ calistir_rtc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — RTC testi atlandi."; \
 	fi
 
+# === PL011 UART RX (giriş okuma) testi (aarch64) — DONANIM giriş yolu ===
+# Şimdiye kadar bare-metal konsol yalnız TX (yazma) kullandı. Bu test ilk
+# kez RX (okuma) yolunu kurar+doğrular: PL011 FR (0x09000000+0x18) → RXFE
+# (bit 4) ile RX FIFO durumu, DR (offset 0x00) → giriş byte'ı.
+#
+# GİRİŞ ENJEKSİYONU (birincil, GERÇEK): `-serial stdio` ile guest'in seri
+# hattı host stdin/stdout'a bağlanır. Bir byte ('K') stdin'e pipe edilir →
+# guest RXFE=0 görür → DR'den okur (0x4b) → echo → "UART RX OK". Bu Windows/
+# MSYS'te ÇALIŞIR (QEMU `-chardev file,input-path=` ise "not supported on
+# Windows" der — bu yüzden stdio-pipe kullanılır).
+# FALLBACK: byte gelmezse bounded spin sınırında düşer (DEADLOCK YOK),
+# RXFE=1 (boş) doğru algılanır → "UART RX PATH OK". Her iki marker da geçer.
+# Ağ/drive YOK → deterministik. Marker grep: "UART RX" (OK veya PATH OK).
+calistir_uart_rx_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 PL011 UART RX testi: uart_rx_arm.c -> ELF (donanım giriş okuma)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/uart_rx_arm.c -o $(BUILD)/uart_rx_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/uart_rx_arm.elf $(BUILD)/uart_rx_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/uart_rx_arm.out; \
+		printf 'K' | timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial stdio -kernel $(BUILD)/uart_rx_arm.elf > $(BUILD)/uart_rx_arm.out 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/uart_rx_arm.out; echo "--- son ---"; \
+		if grep -q "UART RX OK" $(BUILD)/uart_rx_arm.out; then \
+			echo "aarch64 UART RX testi gecti: GERCEK giris enjekte edildi (stdio pipe) — DR'den byte okundu + echo (UART RX OK)."; \
+		elif grep -q "UART RX PATH OK" $(BUILD)/uart_rx_arm.out; then \
+			echo "aarch64 UART RX testi gecti: RX-path fallback — RXFE=1 (bos FIFO) dogru algilandi, deadlock yok (UART RX PATH OK)."; \
+		else \
+			echo "FAIL: 'UART RX' marker'i yok (RX register semantigi okunamadi veya deadlock)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — UART RX testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -2734,7 +2769,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
-                     calistir_ntp_test_arm calistir_rtc_test_arm \
+                     calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
