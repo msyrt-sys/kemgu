@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-160 — OS: SELF-HOST virtio-net tanıma — KEMGU dilinde ağ-cihaz sürücüsü (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-159).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_net_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — OS kendi dilinde (KEMGU) yazılıyor. D-148/149 (virtio-blk, DeviceID=2) desenini
+virtio-NET'e (DeviceID=1) taşır: `.kem` sürücüsü virtio-mmio slot aralığını (`iken` döngüsü) tarar, her
+slotta `mmio_oku32(y, adres)` ile MAGIC (0x74726976 "virt") + DEVICE_ID okur, DeviceID=1'i bulunca tanır.
+`yetki<MMIO>` object-capability (derleme-zamanı ispat, sıfır runtime) her okumada ödünç alınır. **Kanıt:**
+`kemgu --llvm` → clang aarch64 → QEMU (`-device virtio-net-device`) → magic=1953655158 (0x74726976) + id=1
+→ "KEM NET OK". **Codegen kısıtına takılmadı** (yetki/mmio_oku32/iken/eğer+ve/tam64 hepsi mevcut). KEMGU
+dili gerçek ağ-cihaz tanıma sürücüsü kaldırıyor.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-159 — OS: TCP gerçek üç-yönlü handshake — SYN-ACK alımı (Faz H) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-158).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_connect_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-155 (yalnız SYN emisyonu) TAM handshake'e tamamlanır — SLIRP'in dış-TCP proxy'si üzerinden GERÇEK bir
+internet host'una. Adımlar: virtio-net kur → ARP gateway MAC → **DNS ile "example.com" A-kaydı çöz** (D-157
+mantığı) → çözülen IP:80'e TCP SYN (pseudo-header checksum, D-155 inşası) → **SYN-ACK al** (RX; flags=0x12
+doğrula + ack_num=seq+1) → ACK gönder → ESTABLISHED → nazik RST/ACK kapanış. **GERÇEK SYN-ACK RX** (fallback
+DEĞİL). **Kanıt:** hedef 104.20.23.154:80 → SYN-ACK → "TCP CONNECT OK". Ağ yığını artık L2(ARP)+L3(IP)+
+L4(TCP-established)+DNS tam zincir.
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** HOST İNTERNET'ine bağlı (SLIRP dış-TCP'yi host'a proxy'ler). Offline
+ortamda SYN-ACK gelmez → test TX-pcap fallback'ine ("TCP CONNECT SENT OK", pcap'te SYN) düşer; Makefile ikisini
+de kabul eder. Timeout 20s (DNS+TCP iki round-trip). Geliştirme makinesi internetli → gerçek handshake geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-158 — OS: ARP host-keşfi — subnet taraması (pentest recon) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-157).
+
+**Karar [ETKİ: yeni `test/bare_metal/arp_scan_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+temel keşif primitifi (L2 canlı-host bulma). D-145 tek-hedef ARP round-trip'ini SUBNET TARAMASINA genişletir:
+10.0.2.1–10.0.2.15 aralığına ARP request broadcast → RX ile reply'leri topla (60 poll) → her reply'den spa
+(sender IP) + sha (sender MAC) çıkar, dedup. **Kanıt:** SLIRP gateway (10.0.2.2) + DNS (10.0.2.3) → **2 canlı
+host** deterministik keşfedildi → "ARP SCAN OK". Gateway ARP'a her zaman yanıt verir → ≥1 host garanti.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
 ## D-157 — OS: DNS A-kaydı çözümleme — isim → IPv4 (Faz G ağ derinleşme) (2026-07-02)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-156).
