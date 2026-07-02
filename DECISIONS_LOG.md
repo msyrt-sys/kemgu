@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-172 — OS: PL031 RTC okuma — donanım gerçek-zaman saati (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-171).
+
+**Karar [ETKİ: yeni `test/bare_metal/rtc_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** NTP (D-167)
+zamanı AĞDAN aldı; bu DONANIMDAN alır (deterministik, ağsız). QEMU virt PL031 RTC 0x09010000'de (ilk 1GB
+Device-map, MMU-on erişilebilir). DR register (offset 0x00) = Unix epoch saniyesi (u32). `*(volatile
+uint32_t*)0x09010000` ile oku → makul-kontrol (>1.6G, <2.0G). **Kanıt:** DR=0x6a46a824=**1783015460 =
+2026-07-02 18:04 UTC** (bugünle uyumlu) → "RTC OK". Host wall-clock yansıması (her koşuda 1-2s değişir ama
+makul-pencere hep geçer → deterministik-pass). Donanım-zaman = NTP'nin ağsız ikizi.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-171 — OS: SELF-HOST sıralama — KEMGU dizi in-place mutasyon (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-170).
+
+**Karar [ETKİ: yeni `test/ornekler/sort_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — D-168 (CRC32 saf-compute) ötesi: KEMGU DİZİ + in-place mutasyon + fonksiyon-geçişi
+olgunluğu. Bubble sort ([5,2,8,1,9,3,7,4,6,0]→[0..9]), iç içe `iken` + `>` + geçici-değişken swap. **KRİTİK
+dil-doğrulaması:** (1) **in-place dizi mutasyonu `d[i]=x` codegen'de ÇALIŞIR** (→ `kdl_dizi_yaz_tam`,
+runtime bounds-checked — heap-uniform, self-host invaryantı). (2) **`Dizi<tam32>` FONKSİYON PARAMETRESİ
+çalışır** (referansla geçer, mutasyon çağırana yansır — eski "LLVM v3 dizi param yok" notu GÜNCEL DEĞİL,
+codegen artık destekliyor). Cihazsız gate. **Kanıt:** sıralama + `d[i]<=d[i+1]` doğrulama → "KEM SORT OK".
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-170 — OS: SMP paralel hesaplama + spinlock — iki çekirdek gerçek iş (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-169).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_compute_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi,
+tüm SMP mantığı inline asm.]** D-169 (ikincil çekirdek bir bayrak set etti) → GERÇEK PARALEL HESAPLAMA:
+çekirdek 0 dizinin ilk yarısını (Σ0..99=4950), çekirdek 1 ikinci yarısını (Σ100..199=14950) topladı →
+toplam 19900 (yalnız İKİSİ de payını doğru hesaplarsa çıkar). **İKİ birleştirme yolu:** (A) 64-byte-hizalı
+ayrı-slot (yarışsız), (B) **SPINLOCK** — aarch64 `LDAXR`/`STXR` atomik test-and-set + `STLR` release, ortak
+akümülatöre iki çekirdek de güvenli ekledi (yarış-koşulu serialize). Cache-coherency (MMU-off çekirdek1 /
+MMU-on çekirdek0): `dc civac`/`dc ivac`+`dsb sy` bariyerleri, kilit satırı her denemede tazelenir. DETERMİNİSTİK
+(bounded bekleme 40M tik + 64-yield backoff; 5/5). **Kanıt:** "SMP COMPUTE OK toplam=19900". **Dürüst sınır:**
+MMU-off/on coherency manuel bariyerlere dayanır (D-169 sınıf riski); test coherency bozulursa "SMP COMPUTE
+KISMI/FAIL" basar (sessiz-gizlemez). Çok-çekirdek pilarının gerçek-iş adımı.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst teknik notlarla); cherry-pick ile entegre.
+
 ## D-169 — OS: SMP 2. çekirdek bring-up — PSCI CPU_ON (çok-çekirdek) (2026-07-02) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-168).
