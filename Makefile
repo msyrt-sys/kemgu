@@ -1871,6 +1871,33 @@ calistir_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — DNS testi atlandi."; \
 	fi
 
+# === DHCP DISCOVER/OFFER testi (aarch64) — ağ oto-konfigürasyon (OS ilk açılış adımı) ===
+# Kernel DHCP DISCOVER (broadcast, src=0.0.0.0, UDP 68->67) yayınlar; SLIRP dahili DHCP
+# sunucusu (10.0.2.2:67) deterministik OFFER döner (yiaddr=10.0.2.15). Kernel OFFER'ı RX
+# ile alır + doğrular (op=BOOTREPLY, xid eşleşir, yiaddr non-zero, option 53=OFFER) →
+# önerilen IP'yi bas. Internet GEREKMEZ. Gate: "DHCP OK" + yiaddr (10.0.2.15).
+calistir_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 DHCP DISCOVER/OFFER testi: dhcp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dhcp_arm.c -o $(BUILD)/dhcp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/dhcp_arm.elf $(BUILD)/dhcp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/dhcp_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dhcp_arm.out -kernel $(BUILD)/dhcp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/dhcp_arm.out; echo "--- son ---"; \
+		if grep -q "DHCP OK" $(BUILD)/dhcp_arm.out; then \
+			echo "aarch64 DHCP testi gecti: SLIRP DHCP sunucusundan OFFER alındı (ağ oto-konfig)."; \
+		else \
+			echo "FAIL: 'DHCP OK' bekleniyor (DHCP DISCOVER->OFFER round-trip)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — DHCP testi atlandi."; \
+	fi
+
 # === ARP host-keşfi testi (aarch64) — subnet taraması (pentest recon) ===
 # Kernel 10.0.2.1..10.0.2.15 subnet'ine ARP istekleri yayınlar; gelen ARP-reply'lerden
 # canlı host'ları (spa + sha) toplar. SLIRP gateway (10.0.2.2) her zaman yanıt verir →
@@ -2231,7 +2258,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
-                     calistir_udp_test_arm \
+                     calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
                      calistir_virtio_selfhost_arm \
