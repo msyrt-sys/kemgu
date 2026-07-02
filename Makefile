@@ -2107,6 +2107,32 @@ calistir_dns_resolver_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_
 		echo "QEMU yok — DNS çözümleme testi atlandi."; \
 	fi
 
+# === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
+# ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
+# gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
+# dizisi + isim sıkıştırma 0xC0 dâhil) → hostname çıkar (örn "dns.google").
+calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 reverse DNS (PTR) testi: dns_ptr_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_ptr_arm.c -o $(BUILD)/dns_ptr_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/dns_ptr_arm.elf $(BUILD)/dns_ptr_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/dns_ptr_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dns_ptr_arm.out -kernel $(BUILD)/dns_ptr_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/dns_ptr_arm.out; echo "--- son ---"; \
+		if grep -q "PTR OK" $(BUILD)/dns_ptr_arm.out; then \
+			echo "aarch64 reverse DNS testi gecti: IP → geçerli PTR hostname çıkarıldı."; \
+		else \
+			echo "FAIL: 'PTR OK' bekleniyor (reverse DNS PTR çözümleme)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
+	fi
+
 # === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
 # virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
 # (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
@@ -2400,8 +2426,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
-                     calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
-                     calistir_port_scan_test_arm \
+                     calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
+                     calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
