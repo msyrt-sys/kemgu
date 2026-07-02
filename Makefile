@@ -2480,6 +2480,43 @@ calistir_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host SIRALAMA testi atlandi."; \
 	fi
 
+# === SELF-HOST SHA-256 kripto hash (aarch64) — KEMGU'da kriptografik algoritma ===
+# sha256_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde NIST FIPS
+# 180-4 SHA-256 hesaplar. Test vektörü SHA-256("abc") = ba7816bf 8f01cfea ...
+# f20015ad. KEMGU'nun CRC/checksum'ın ÖTESİNDE gerçek KRİPTO hash kaldırdığını
+# kanıtlar: dtam32 mod-2^32 toplama (add i32 wrap) + rotate-right (lshr | shl) +
+# XOR/AND/NOT(^0xFFFFFFFF)/shift + 64 tur. CİHAZSIZ: QEMU'da -netdev/-drive YOK,
+# BM_A64_OBJS (heap dâhil — Dizi<dtam32> W/K tahsisi için). Marker: "KEM SHA OK".
+# NOT (codegen deseni): dizi-eleman doğrudan `>>` operandı ashr (işaretli) üretir;
+# bu yüzden tüm bit-karıştırma skaler dtam32 parametreli yardımcı işlevlere taşındı
+# (dizi elemanı argüman geçince kaydırma lshr olur). runtime/codegen DEĞİŞMEDİ.
+calistir_sha256_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST SHA-256 kripto hash: sha256_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/sha256_selfhost.kem > $(BUILD)/sha256_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/sha256_selfhost.ll -c -o $(BUILD)/sha256_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/sha256_selfhost.elf $(BUILD)/sha256_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/sha256_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/sha256_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/sha256_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/sha256_selfhost.out -kernel $(BUILD)/sha256_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/sha256_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM SHA OK" $(BUILD)/sha256_selfhost.out; then \
+			echo "aarch64 self-host SHA-256 testi gecti: KEMGU cihazsiz kripto hash SHA-256('abc')=ba7816bf...f20015ad dogruladi."; \
+		else \
+			echo "FAIL: 'KEM SHA OK' bekleniyor (KEMGU self-host SHA-256 kripto hash)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host SHA-256 testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2616,6 +2653,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_blk_config_selfhost_arm \
                      calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
+                     calistir_sha256_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
