@@ -5,6 +5,71 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-182 — OS: x86_64 CMOS RTC okuma — donanım saati (D-172 x86 paritesi) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-181).
+
+**Karar [ETKİ: yeni `test/bare_metal/rtc_x86.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-172 (aarch64
+PL031 RTC)'nin x86 paritesi (universal-OS piları). PC uyumlu MC146818 CMOS RTC: port 0x70 (index)/0x71 (data),
+inline asm `outb/inb`. BCD register'lar (0=sn,2=dk,4=saat,7=gün,8=ay,9=yıl); UIP (Status-A bit7) beklenip
+tutarlı okuma. **Kanıt:** 2026-07-02 20:13:05 (host wall-clock, `-rtc base=utc`) → "RTC X86 OK". Deterministik
+makul-pencere (yıl 24-99, ay 1-12, gün 1-31). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-181 — OS: PL011 UART RX giriş yolu — donanım okuma (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-180).
+
+**Karar [ETKİ: yeni `test/bare_metal/uart_rx_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İlk kez
+konsol RX (giriş) yolu — interaktif kabuğun ön-koşulu. PL011 FR (0x09000000+0x18) RXFE(bit4)+DR(0x00). **GERÇEK
+giriş enjeksiyonu ÇÖZÜLDÜ (Windows gate zorluğu):** `-chardev file,input-path=` Windows'ta "not supported",
+AMA **`-serial stdio` + stdin'e byte pipe** (`printf 'K' | qemu ... -serial stdio`) çalışır → guest RXFE=0
+görür, DR'den 0x4b='K' okur, echo → "UART RX OK". Fallback: byte gelmezse bounded-spin → RXFE=1 (boş) doğru →
+"UART RX PATH OK" (deadlock yok). **Kanıt:** giriş-enjeksiyon 3/3 "UART RX OK". **Ders:** QEMU-Windows seri-giriş
+= `-serial stdio` + pipe. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-180 — OS: SMP atomik sayaç çekişmesi — LDXR/STXR lost-update yok (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-179).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_atomic_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+İki çekirdek AYNI paylaşımlı sayacı N=10000 kez ATOMİK artırır — aarch64 exclusive-monitor RMW: `dmb ish;
+ldxr; add; stxr; cbnz-retry`. Rakip STXR fail → taze değerle retry → hiçbir artırım düşmez. **Kanıt:** sayac=
+**20000** (=2N), 9/9 deterministik → atomik doğruluk (atomik olmasa <20000 lost-update). Cache-coherency (dc
+ivac/civac + dsb, RMW-öncesi/sonrası), rendezvous ile eşzamanlı çekişme, naked trampoline (D-174). **Not:**
+Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-179 — OS: SMP bariyer senkronizasyonu — iki çekirdek lockstep (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-178).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_barrier_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170/174 SMP üstünde LOCKSTEP senkron: iki çekirdek K=5 tur, her turda **sense-reversing bariyer**'de buluşur
+(spinlock'lu varan-sayacı + nesil/generation; son gelen sayacı sıfırlar + nesli artırır; erken gelenler nesil
+değişene kadar bounded poll). Nesil izleme ABA-problemini önler. **Kanıt:** cekirdek0_tur=5, cekirdek1_tur=5,
+nesil=5, 3/3 deterministik → "SMP BARRIER OK". Cache-coherency (dc ivac/civac+dsb, 64-byte hizalı), naked
+trampoline SP (D-174 dersi). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-178 — OS: userspace ICMP ping — EL0 syscall ile L3 protokol (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-177).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_ping_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 raw-frame syscall'larının (net_gonder=24/net_al=25) MEYVESİ: EL0 (yetkisiz) süreç TAM protokol yığınını
+kendi çalıştırır (çekirdekte değil). ARP-çöz + IPv4+ICMP Echo (payload "KEMGU") inşa → sys2(24) yolla →
+sys2(25) poll ile echo reply doğrula. **Kanıt:** SLIRP gateway echo → "USERPING OK" (gerçek RX, pcap KEMGU
+TX+RX), DETERMİNİSTİK. Protokol EL0'da, yalnız 2 syscall aracılık. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-177 — OS: userspace DNS — EL0 syscall ile tam protokol çözümleme (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-176).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_dns_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176'nın MEYVESİ: EL0 süreç TAM L2-L7 DNS yığınını userspace'te çalıştırır — ARP-çöz → Eth+IPv4+UDP+DNS
+("example.com" A) inşa → sys2(24) yolla → sys2(25) poll ile yanıt al → ANSWER parse (isim-sıkıştırma 0xC0) →
+IPv4 çıkar. **Kanıt:** example.com → 172.66.147.243 → "USERDNS OK" (gerçek RX, internet+fallback). **Bellek
+güvenliği:** EL0 `.rodata` (AP=00) dereference EDEMEZ → hex-yazımı aritmetik (nibble_hex), disassembly ile
+doğrulandı; tüm tampon EL0 user-yığınında (D-150 guard geçer). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
 ## D-176 — OS: USERSPACE NETWORKING — EL0 süreç syscall ile ağ (süreç+ağ birleşimi) (2026-07-02) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-175).
