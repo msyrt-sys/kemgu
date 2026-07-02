@@ -1931,6 +1931,31 @@ calistir_icmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virt
 		echo "QEMU yok — ICMP testi atlandi."; \
 	fi
 
+# === DNS A-kaydı çözümleme testi (aarch64) — isim → IPv4 (Faz G derinleşme) ===
+# ARP → DNS MAC → DNS sorgusu ("example.com" A) gönder → yanıtı RX ile al →
+# ANSWER bölümünü parse et (isim sıkıştırma 0xC0 dâhil) → IPv4 A-kaydını çıkar.
+calistir_dns_resolver_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 DNS A-kaydı çözümleme testi: dns_resolver_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_resolver_arm.c -o $(BUILD)/dns_resolver_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/dns_resolver_arm.elf $(BUILD)/dns_resolver_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/dns_resolver_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dns_resolver_arm.out -kernel $(BUILD)/dns_resolver_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/dns_resolver_arm.out; echo "--- son ---"; \
+		if grep -q "RESOLVE OK" $(BUILD)/dns_resolver_arm.out; then \
+			echo "aarch64 DNS çözümleme testi gecti: isim → geçerli IPv4 A-kaydı çıkarıldı."; \
+		else \
+			echo "FAIL: 'RESOLVE OK' bekleniyor (DNS A-kaydı çözümleme)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — DNS çözümleme testi atlandi."; \
+	fi
+
 # === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
 # virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
 # (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
@@ -2114,6 +2139,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
+                     calistir_dns_resolver_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
