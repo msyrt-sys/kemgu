@@ -2107,6 +2107,43 @@ calistir_virtio_net_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 		echo "QEMU yok — self-host virtio-net testi atlandi."; \
 	fi
 
+# === SELF-HOST virtio-NET MAC okuma (aarch64) — KEMGU'da config-space erişimi ===
+# virtio_net_mac_selfhost.kem: D-160'ın ötesinde — virtio-net slotunu bulur ve
+# cihaza-özel config space'ten (offset 0x100) MAC adresini (mac[6]) okur.
+# QEMU varsayılan MAC'i (52:54:00:12:34:56) config-space'te sunar → 6 byte basılır.
+# Marker: "KEM MAC OK" (MAC-config yolu) veya fallback "KEM NET REG OK".
+calistir_virtio_net_mac_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+	@echo "aarch64 SELF-HOST virtio-net MAC okuma: virtio_net_mac_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_net_mac_selfhost.kem > $(BUILD)/virtio_net_mac_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_net_mac_selfhost.ll -c -o $(BUILD)/virtio_net_mac_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/virtio_net_mac_selfhost.elf $(BUILD)/virtio_net_mac_selfhost.o \
+		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/virtio_net_mac_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_net_mac_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/virtio_net_mac_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/virtio_net_mac_selfhost.out -kernel $(BUILD)/virtio_net_mac_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_net_mac_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM MAC OK" $(BUILD)/virtio_net_mac_selfhost.out; then \
+			echo "aarch64 self-host virtio-net MAC testi gecti: KEMGU sürücüsü config-space'ten MAC okudu."; \
+		elif grep -q "KEM NET REG OK" $(BUILD)/virtio_net_mac_selfhost.out; then \
+			echo "aarch64 self-host virtio-net register testi gecti (fallback): KEMGU sürücüsü config-öncesi register okudu."; \
+		else \
+			echo "FAIL: 'KEM MAC OK' (veya fallback 'KEM NET REG OK') bekleniyor (KEMGU self-host virtio-net config okuma)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host virtio-net MAC testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2236,6 +2273,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
+                     calistir_virtio_net_mac_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
