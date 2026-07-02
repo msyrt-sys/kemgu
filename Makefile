@@ -1960,6 +1960,37 @@ calistir_tcp_connect_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a
 		echo "QEMU yok — TCP handshake testi atlandi."; \
 	fi
 
+# === UYGULAMA KATMANI: TCP üzerinden HTTP GET (aarch64) — OS bir web sayfası çeker ===
+# tcp_connect_arm.c TAM handshake'ini temel al → ESTABLISHED sonrası HTTP GET isteğini
+# TCP DATA segmenti (PSH+ACK) olarak gönder → sunucu HTTP yanıtını (durum satırı) döner.
+# RX gate: "HTTP GET OK" (yanıtta HTTP/1.x 200/3xx durum satırı). SLIRP dış-TCP yanıt
+# vermezse pcap TX fallback: GET isteği dış-IP'ye gönderildi (pcap 'GET /') → "HTTP GET SENT OK".
+calistir_http_get_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "Uygulama katmanı aarch64 HTTP GET testi: http_get_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/http_get_arm.c -o $(BUILD)/http_get_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/http_get_arm.elf $(BUILD)/http_get_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/http_get_arm.out $(BUILD)/http_get_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/http_get_arm.pcap \
+			-serial file:$(BUILD)/http_get_arm.out -kernel $(BUILD)/http_get_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/http_get_arm.out; echo "--- son ---"; \
+		if grep -q "HTTP GET OK" $(BUILD)/http_get_arm.out; then \
+			echo "Uygulama katmanı aarch64 HTTP GET testi gecti: gerçek web sunucusundan HTTP durum satırı alındı (RX)."; \
+		elif grep -a -q "GET /" $(BUILD)/http_get_arm.pcap; then \
+			echo "Uygulama katmanı aarch64 HTTP GET testi gecti (TX-pcap fallback): GET isteği dış-IP'ye gönderildi (pcap'te 'GET /')."; \
+			echo "HTTP GET SENT OK"; \
+		else \
+			echo "FAIL: seri 'HTTP GET OK' (RX durum satırı) veya pcap'te 'GET /' (TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — HTTP GET testi atlandi."; \
+	fi
+
 # === Faz G ICMP echo (ping) round-trip testi (aarch64) — ağ katmanı ===
 # ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → IPv4+ICMP Echo Request gönder →
 # echo reply'i RX ile al + doğrula. pcap filter-dump da yakalanır: SLIRP echo
@@ -2234,6 +2265,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_udp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
+                     calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
                      calistir_guvenlik_test_arm \
