@@ -2392,6 +2392,41 @@ calistir_crc32_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host CRC32 testi atlandi."; \
 	fi
 
+# === SELF-HOST SIRALAMA (aarch64) — KEMGU'da dizi in-place mutasyon algoritması ===
+# sort_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bubble sort ile
+# 10 elemanlı sırasız diziyi YERİNDE (in-place) sıralar. İç içe döngü + eleman
+# karşılaştırma (>) + geçici değişkenle swap (t=d[j]; d[j]=d[j+1]; d[j+1]=t).
+# KEMGU dizileri heap-uniform (KdlDizi*): d[i]=x -> kdl_dizi_yaz_tam (runtime
+# sınır-kontrollü). KEMGU'nun gerçek dizi-mutasyon algoritması kaldırdığını
+# kanıtlar. CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil —
+# dizi tahsisi için). Marker: "KEM SORT OK".
+calistir_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST SIRALAMA dizi in-place: sort_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/sort_selfhost.kem > $(BUILD)/sort_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/sort_selfhost.ll -c -o $(BUILD)/sort_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/sort_selfhost.elf $(BUILD)/sort_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/sort_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/sort_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/sort_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/sort_selfhost.out -kernel $(BUILD)/sort_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/sort_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM SORT OK" $(BUILD)/sort_selfhost.out; then \
+			echo "aarch64 self-host SIRALAMA testi gecti: KEMGU cihazsiz dizi in-place bubble sort ([5,2,8,1,9,3,7,4,6,0] -> [0..9]) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM SORT OK' bekleniyor (KEMGU self-host siralama dizi in-place mutasyon)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host SIRALAMA testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2527,6 +2562,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_net_mac_selfhost_arm \
                      calistir_virtio_blk_config_selfhost_arm \
                      calistir_crc32_selfhost_arm \
+                     calistir_sort_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
