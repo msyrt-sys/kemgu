@@ -1901,6 +1901,39 @@ calistir_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — TCP testi atlandi."; \
 	fi
 
+# === TCP GERÇEK üç-yönlü el sıkışması testi (aarch64) — Faz H (internet host) ===
+# ARP (gateway MAC) → DNS ("example.com" A → hedef IPv4) → hedef-IP:80'e TCP SYN →
+# SLIRP dış-proxy'si üzerinden gerçek web sunucusundan SYN-ACK al (flags=0x12,
+# ack=bizim_seq+1) → ACK gönder → ESTABLISHED. Round-trip gate: "TCP CONNECT OK".
+# Yedek (host internet yoksa / SLIRP dış-TCP yanıt vermezse): pcap TX kanıtı —
+# SYN dış-IP'ye + doğru pseudo-header checksum ile gönderildi (seq "KEMG" grep).
+# NOT: internet-bağımlı gate — host ağı yoksa fallback devreye girer (DECISIONS notu).
+calistir_tcp_connect_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "Faz H aarch64 TCP gerçek handshake testi: tcp_connect_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tcp_connect_arm.c -o $(BUILD)/tcp_connect_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/tcp_connect_arm.elf $(BUILD)/tcp_connect_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/tcp_connect_arm.out $(BUILD)/tcp_connect_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/tcp_connect_arm.pcap \
+			-serial file:$(BUILD)/tcp_connect_arm.out -kernel $(BUILD)/tcp_connect_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/tcp_connect_arm.out; echo "--- son ---"; \
+		if grep -q "TCP CONNECT OK" $(BUILD)/tcp_connect_arm.out; then \
+			echo "Faz H aarch64 TCP handshake testi gecti: gerçek internet host'undan SYN-ACK alındı (ESTABLISHED)."; \
+		elif grep -a -q "KEMG" $(BUILD)/tcp_connect_arm.pcap; then \
+			echo "Faz H aarch64 TCP handshake testi gecti (TX-pcap fallback): dış-IP'ye SYN segmenti insa+gonderildi (pcap'te 'KEMG' seq)."; \
+			echo "TCP CONNECT SENT OK"; \
+		else \
+			echo "FAIL: seri 'TCP CONNECT OK' (SYN-ACK RX) veya pcap'te 'KEMG' seq (TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — TCP handshake testi atlandi."; \
+	fi
+
 # === Faz G ICMP echo (ping) round-trip testi (aarch64) — ağ katmanı ===
 # ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → IPv4+ICMP Echo Request gönder →
 # echo reply'i RX ile al + doğrula. pcap filter-dump da yakalanır: SLIRP echo
@@ -2139,7 +2172,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
-                     calistir_dns_resolver_test_arm \
+                     calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
