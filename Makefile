@@ -2165,6 +2165,33 @@ calistir_ntp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — NTP testi atlandi."; \
 	fi
 
+# === PL031 RTC (donanım gerçek-zaman saati) testi (aarch64) — ağsız/deterministik ===
+# NTP (D-167) zamanı AĞDAN aldı; bu test DONANIMDAN alır: QEMU virt PL031 RTC
+# cihazı 0x09010000'de memory-mapped. DR (offset 0x00) = Unix epoch saniyesi (u32).
+# MMU-ON (main öncesi kdl_mmu_kur): 0x09010000 Device-map (L1[0]) → doğrudan MMIO
+# oku. Makul kontrol: non-zero + 2020-2033 penceresi (~1.78 milyar, 2026) → "RTC OK".
+# Ağ/drive YOK → deterministik (host wall-clock yansır).
+calistir_rtc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 PL031 RTC testi: rtc_arm.c -> ELF (donanım gerçek-zaman saati)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/rtc_arm.c -o $(BUILD)/rtc_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/rtc_arm.elf $(BUILD)/rtc_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/rtc_arm.out; \
+		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-rtc base=utc \
+			-serial file:$(BUILD)/rtc_arm.out -kernel $(BUILD)/rtc_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/rtc_arm.out; echo "--- son ---"; \
+		if grep -q "RTC OK" $(BUILD)/rtc_arm.out; then \
+			echo "aarch64 RTC testi gecti: PL031 DR'den makul Unix zaman okundu (RTC OK)."; \
+		else \
+			echo "FAIL: 'RTC OK' yok (PL031 DR okunamadi veya makul zaman araligi disinda)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — RTC testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -2519,7 +2546,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
-                     calistir_ntp_test_arm \
+                     calistir_ntp_test_arm calistir_rtc_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
