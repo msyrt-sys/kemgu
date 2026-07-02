@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-175 — OS: SELF-HOST Base64 kodlama/çözme — KEMGU payload codec (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-174).
+
+**Karar [ETKİ: yeni `test/ornekler/base64_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Pentest OS payload-kodlama yardımcısı, saf KEMGU. RFC 4648 Base64 encode+decode round-trip:
+`Dizi<karakter>` 64-karakter alfabe tablosu, hesaplanan 6-bit index ile erişim, bit ops (`>> << & |`), ham
+karakter çıktısı (`yaz_karakter`, newline'sız). **Kanıt:** "KEMGU"→"S0VNR1U="→"KEMGU" → "KEM B64 OK" +
+"KEM B64 DECODE OK". **Dil gözlemi (kısıt değil):** `karakter` tipi sayısal DEĞİL — `s[0]-'A'` → T003
+(KEMGU no-implicit-conversion felsefesiyle tutarlı); decode'da karakter-aritmetiği yerine alfabede lineer
+arama (64 karşılaştırma). Cihazsız deterministik gate.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-174 — OS: SMP iş-kuyruğu — iki çekirdek dinamik work-stealing (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-173).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_queue_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170 (statik yarı-yarıya bölme) → DİNAMİK work-stealing: 40 iş öğesi, paylaşımlı `sonraki_is` indeksi
+SPINLOCK korumalı; iki çekirdek de kilit-al→indeks-çek→işle döngüsü koşar (i*i topla). **Kanıt:** toplam=
+20540 (Σi², i=0..39) — **5/5 deterministik** (her öğe tam bir kez → spinlock doğru serialize); per-çekirdek
+işlenen sayıları timing'e göre DEĞİŞİR (22/18, 17/23, 23/17…) → gerçek yarış = gerçek work-stealing → "SMP
+QUEUE OK". **KRİTİK bare-metal bulgu (dürüst):** çekirdek 1 ilk versiyonlarda çöküyordu — C prologue
+`stp x29,x30,[sp,#-0x20]!` PSCI CPU_ON'dan gelen **undefined SP** ile garbage adrese yazıyordu (D-170'te iş
+basit→spill yok→gizli kalmış). **Çözüm:** `naked` trampoline giriş — asm ilk iş SP kur, sonra C'ye dallan.
+**Kural: PSCI CPU_ON ile başlayan ikincil çekirdek, spill üretebilecek HERHANGİ bir C kodundan ÖNCE SP kurmalı.**
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst debug notlarıyla); cherry-pick ile entegre.
+
+## D-173 — OS: SELF-HOST SHA-256 — KEMGU kripto hash (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-172).
+
+**Karar [ETKİ: yeni `test/ornekler/sha256_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA + güvenlik piları — CRC/checksum ÖTESİNDE gerçek KRİPTO hash: NIST FIPS 180-4 SHA-256
+saf KEMGU'da. K[64]+H[8] diziler, W[64] mesaj çizelgesi, 64 tur (rotr, ch, maj, sigma), mod-2^32 toplama.
+**Kanıt:** SHA-256("abc") = `ba7816bf 8f01cfea 414140de 5dae2223 b00361a3 96177a9c b410ff61 f20015ad` (NIST
+vektörü, TAM eşit) → "KEM SHA OK". **Dil-doğrulaması:** dtam32 mod-2^32 wrap (`0xFFFFFFFF+1==0`) + rotate-
+right (dtam32 `>>`→lshr) ÇALIŞIR. **CODEGEN BULGU (spawn_task ile ayrı fix'e flag'lendi):** dtam32 DİZİ-ELEMANI
+doğrudan `>>` operandı olunca codegen `ashr` (İŞARETLİ) üretir → unsignedness kaybolur. **Workaround (dil-
+seviyesi, codegen değişmeden):** bit-karıştırmayı skaler-dtam32-parametreli yardımcı işlevlere taşı → argüman
+geçince kaydırma skaler üstünde → `lshr` (doğru). IR: 0 ashr, 3 lshr. Cihazsız deterministik gate.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; codegen-bulgu spawn_task ile flag'lendi; cherry-pick ile entegre.
+
 ## D-172 — OS: PL031 RTC okuma — donanım gerçek-zaman saati (2026-07-02)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-171).
