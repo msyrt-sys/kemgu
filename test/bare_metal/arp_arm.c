@@ -48,7 +48,7 @@ int main(void) {
     /* Yanıtı AL: ARP-reply (oper=2) ve spa=10.0.2.2 arayan birkaç paket dinle. */
     int bulundu = 0;
     for (int deneme = 0; deneme < 30 && !bulundu; deneme++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 3000000);
         if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 &&        /* ARP */
             rx[20] == 0x00 && rx[21] == 0x02 &&                   /* oper = reply */
             rx[28] == 10 && rx[29] == 0 && rx[30] == 2 && rx[31] == 2) {   /* spa = gateway */
