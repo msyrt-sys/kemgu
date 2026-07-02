@@ -150,7 +150,7 @@ static int arp_coz(uint64_t base, uint8_t a, uint8_t b, uint8_t c, uint8_t d,
     kdl_virtio_net_gonder(base, frame, 60);
 
     for (int t = 0; t < 30; t++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 3000000);
         if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 && rx[20] == 0x00 && rx[21] == 0x02 &&
             rx[28] == a && rx[29] == b && rx[30] == c && rx[31] == d) {
             for (int i = 0; i < 6; i++) mac_cikti[i] = rx[22 + i];   /* sha = hedef MAC */
@@ -216,7 +216,7 @@ int main(void) {
     int resolve_ok = 0;
     int dns_baz = 42;
     for (int d = 0; d < 40 && !resolve_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 30000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 5000000);
         if (n < 54) continue;
         if (!(rx[12] == 0x08 && rx[13] == 0x00 && rx[23] == 17)) continue;   /* IPv4+UDP */
         if (!(rx[26] == 10 && rx[27] == 0 && rx[28] == 2 && rx[29] == 3)) continue; /* src 10.0.2.3 */
@@ -278,7 +278,7 @@ int main(void) {
         /* Yaniti bekle (kisa poll ~30 iter): SYN-ACK / RST / timeout. */
         int durum = DURUM_FILTRELI;
         for (int d = 0; d < 30 && durum == DURUM_FILTRELI; d++) {
-            int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
+            int n = kdl_virtio_net_al(base, rx, 2048, 3000000);
             if (n < 54) continue;
             if (rx[12] != 0x08 || rx[13] != 0x00) continue;       /* IPv4 */
             if (rx[23] != 6) continue;                            /* proto = TCP */

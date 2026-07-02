@@ -59,7 +59,7 @@ int main(void) {
 
     int arp_ok = 0;
     for (int d = 0; d < 30 && !arp_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 3000000);
         if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 && rx[20] == 0x00 && rx[21] == 0x02 &&
             rx[28] == 10 && rx[29] == 0 && rx[30] == 2 && rx[31] == 2) {
             for (int i = 0; i < 6; i++) gw_mac[i] = rx[22 + i];   /* sha = gateway MAC */
@@ -106,7 +106,7 @@ int main(void) {
     /* --- 4) ICMP Echo Reply'i AL (IPv4 proto=1, type=0, id/seq eşleşir) --- */
     int ping_ok = 0;
     for (int d = 0; d < 40 && !ping_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 30000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 5000000);
         if (n < 42) continue;
         if (rx[12] != 0x08 || rx[13] != 0x00) continue;            /* IPv4 mı */
         if (rx[23] != 1) continue;                                 /* proto = ICMP */

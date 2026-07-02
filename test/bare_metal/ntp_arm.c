@@ -115,7 +115,7 @@ static int dns_coz(uint64_t base, const uint8_t *qname, int qname_uzun, uint8_t 
     int dns_uzun = 0;
     int yanit_ok = 0;
     for (int d = 0; d < 40 && !yanit_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 30000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 5000000);
         if (n >= 54 && rx[12] == 0x08 && rx[13] == 0x00 && rx[23] == 17 &&
             rx[26] == 10 && rx[27] == 0 && rx[28] == 2 && rx[29] == 3 &&
             rx[34] == 0x00 && rx[35] == 53) {
@@ -181,7 +181,7 @@ int main(void) {
 
     int arp_ok = 0;
     for (int d = 0; d < 30 && !arp_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 20000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 3000000);
         if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 && rx[20] == 0x00 && rx[21] == 0x02 &&
             rx[28] == 10 && rx[29] == 0 && rx[30] == 2 && rx[31] == 3) {
             for (int i = 0; i < 6; i++) dns_mac[i] = rx[22 + i];
@@ -255,7 +255,7 @@ int main(void) {
     uint32_t ntp_saniye = 0;
     int yanit_ok = 0;
     for (int d = 0; d < 60 && !yanit_ok; d++) {
-        int n = kdl_virtio_net_al(base, rx, 2048, 30000000);
+        int n = kdl_virtio_net_al(base, rx, 2048, 5000000);
         if (n >= 90 && rx[12] == 0x08 && rx[13] == 0x00 && rx[23] == 17 &&   /* IPv4 + UDP */
             rx[34] == 0x00 && rx[35] == 123) {                               /* src port 123 */
             int ntp_baz = 42;
