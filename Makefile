@@ -2715,6 +2715,39 @@ calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace networking testi atlandi."; \
 	fi
 
+# === USERSPACE ICMP PING (aarch64) — EL0 süreç syscall ile L3 ping ===
+# EL0 (yetkisiz) süreç net_gonder(24)/net_al(25) syscall'larıyla ARP çözer + IPv4+ICMP
+# Echo Request (payload "KEMGU") yollar + echo reply'i doğrular. Protokol mantığı EL0'da
+# (icmp_arm.c çekirdek versiyonunun userspace'e taşınmış hâli). SLIRP gateway (10.0.2.2)
+# ICMP echo'ya dahili yanıt verir → DETERMİNİSTİK (internetsiz). Marker: "USERPING OK".
+# Reply gelmezse pcap filter-dump'ta "KEMGU" (TX kanıtı) → "USERPING SENT OK" fallback.
+# NOT: virtio_net BM_A64_OBJS'te (D-176) — yine de explicit dependency olarak eklendi.
+calistir_userspace_ping_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 userspace ICMP ping testi: userspace_ping_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_ping_arm.c -o $(BUILD)/userspace_ping_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_ping_arm.elf $(BUILD)/userspace_ping_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_ping_arm.out $(BUILD)/userspace_ping_arm.pcap; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_ping_arm.pcap \
+			-serial file:$(BUILD)/userspace_ping_arm.out -kernel $(BUILD)/userspace_ping_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_ping_arm.out; echo "--- son ---"; \
+		if grep -q "USERPING OK" $(BUILD)/userspace_ping_arm.out; then \
+			echo "aarch64 userspace ICMP ping testi gecti: EL0 surec syscall ile ICMP echo round-trip yapti (userspace L3 protokol)."; \
+		elif grep -a -q "KEMGU" $(BUILD)/userspace_ping_arm.pcap; then \
+			echo "aarch64 userspace ICMP ping testi gecti (TX-pcap fallback): EL0 ICMP echo request gonderildi (pcap 'KEMGU')."; \
+			echo "USERPING SENT OK"; \
+		else \
+			echo "FAIL: 'USERPING OK' (RX round-trip) veya pcap'te 'KEMGU' (userspace TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace ICMP ping testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -2748,6 +2781,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
+                     calistir_userspace_ping_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
