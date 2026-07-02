@@ -5,6 +5,56 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-157 — OS: DNS A-kaydı çözümleme — isim → IPv4 (Faz G ağ derinleşme) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-156).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_resolver_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-147 DNS round-trip'i (yanıt ALINIR ama parse EDİLMEZ) tam çözümleyiciye genişletir: DNS yanıtının
+ANSWER bölümünü parse edip çözümlenen IPv4 A-kaydını çıkarır. **İsim sıkıştırma (0xC0 pointer) ele
+alınır** (`isim_atla` helper — hem compression-pointer hem düz-label; Question + answer NAME atlama),
+sınır kontrolleri (paket taşması, RDLENGTH). **Kanıt:** "example.com" A sorgusu → SLIRP host resolver'a
+forward → yanıt RX → ANCOUNT=2, ilk A-kaydı çıkarıldı → 172.66.147.243 → "RESOLVE OK". Reprodüsibl (2
+koşu birebir).
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** Bu test HOST İNTERNET'ine bağlı (SLIRP sorguyu host DNS'e forward
+eder; gerçek A-kaydı gerekir). Offline ortamda ANCOUNT=0 → "A-KAYDI YOK" → gate FAIL olabilir. Parser
+DETERMİNİSTİK; yalnız gerçek-çözümleme internet-bağımlı. (D-147 aksine yalnız "yanıt geldi" kontrol eder,
+internet gerektirmez.) Geliştirme makinesi internetli → gate geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-156 — OS: ICMP echo (ping) round-trip — ağ katmanı (Faz G) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-155).
+
+**Karar [ETKİ: yeni `test/bare_metal/icmp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+keşif primitifi (ping-sweep temeli). ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → Ethernet+IPv4(proto=1)+
+ICMP Echo Request (type=8, id=0xBEEF, seq=1, ICMP checksum RFC1071, payload "KEMGU") gönder → **echo
+reply'i RX ile al** (SLIRP gateway ping'lerini host-ayrıcalığı gerektirmeden DAHİLİ yanıtlar) → doğrula
+(type=0/code=0, id/seq eşleşir, payload geri döner) → "PING OK". **GERÇEK RX round-trip** (TX-pcap fallback
+değil; fallback Makefile'da mevcut ama tetiklenmedi). virtio-net TX+RX + ARP + IP üstüne kurulu.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-155 — OS: TCP SYN paket emisyonu — ağ katmanı (Faz H) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-154).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+keşif primitifi (port-tarama temeli). ARP ile gateway MAC çöz → Ethernet+IPv4(proto=6)+TCP SYN segmenti
+inşa (src 40000, dst 9999, SYN=0x02, **TCP checksum PSEUDO-HEADER dahil** = src/dst IP + proto + TCP-len)
+→ gönder. **Kanıt: TX-pcap** (D-144/146 deseni) — pcap'te SYN segmenti "KEMG" seq marker'ı ile doğrulandı;
+TCP checksum 0x1bf6 + full-segment-verify 0x0000 (RFC1071) + IP checksum 0x22c0 bağımsız Python ile teyit.
+
+**Kapsam/sınır (DÜRÜST):** TAM handshake DEĞİL — yalnız SYN inşa+checksum+emisyon. SLIRP kapalı gateway
+portuna (10.0.2.2:9999) SYN'i SESSİZCE DÜŞÜRÜR (user-mode TCP yığını RST dönmez) → RX round-trip bu
+ortamda olmadı. Emisyon (pseudo-header checksum dahil) gerçek yapı taşı; tam handshake gerçek TCP peer
+(internet-out veya listener) gerektirir → gelecek iş. Makefile hem RX ("TCP HANDSHAKE OK") hem TX-pcap
+("KEMG") kontrol eder — listener'lı ortamda RX yolu otomatik geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
 ## D-154 — OS: düşman-userspace bombardıman regresyon testi — syscall-ptr güvenlik yüzeyi (2026-07-01)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-153).
