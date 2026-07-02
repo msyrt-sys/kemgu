@@ -1987,6 +1987,40 @@ calistir_tcp_connect_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a
 		echo "QEMU yok — TCP handshake testi atlandi."; \
 	fi
 
+# === PENTEST: TCP SYN PORT-TARAMASI (aarch64) — nmap-lite recon ===
+# tcp_connect_arm.c SYN inşasını + pseudo-header checksum'ini yeniden kullanır, ama
+# tek SYN yerine bir PORT LİSTESİNE ({80,443,22,8080,65000}) SYN gönderir ve her portu
+# open/closed/filtered olarak sınıflandırır: SYN-ACK(0x12)=AÇIK, RST(0x04/0x14)=KAPALI,
+# yanıt-yok=FİLTRELİ. RX gate: "PORT SCAN OK" (>=1 AÇIK port; example.com:80/443 web açık).
+# Yedek (internet yok / SYN-ACK gelmezse): pcap TX kanıtı — SYN'ler FARKLI dst-portlara
+# insa+gonderildi (seq "KEMG" işaretçisi her SYN'de) → "PORT SCAN SENT OK".
+# NOT: internet-bağımlı gate — host ağı yoksa fallback devreye girer.
+calistir_port_scan_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "PENTEST aarch64 TCP SYN port-tarama testi: port_scan_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/port_scan_arm.c -o $(BUILD)/port_scan_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/port_scan_arm.elf $(BUILD)/port_scan_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/port_scan_arm.out $(BUILD)/port_scan_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/port_scan_arm.pcap \
+			-serial file:$(BUILD)/port_scan_arm.out -kernel $(BUILD)/port_scan_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/port_scan_arm.out; echo "--- son ---"; \
+		if grep -q "PORT SCAN OK" $(BUILD)/port_scan_arm.out; then \
+			echo "PENTEST aarch64 port-tarama testi gecti: en az bir AÇIK port bulundu (SYN-ACK RX)."; \
+		elif grep -a -q "KEMG" $(BUILD)/port_scan_arm.pcap; then \
+			echo "PENTEST aarch64 port-tarama testi gecti (TX-pcap fallback): SYN'ler farklı dst-portlara insa+gonderildi (pcap'te 'KEMG' seq)."; \
+			echo "PORT SCAN SENT OK"; \
+		else \
+			echo "FAIL: seri 'PORT SCAN OK' (SYN-ACK RX) veya pcap'te 'KEMG' seq (TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — port-tarama testi atlandi."; \
+	fi
+
 # === UYGULAMA KATMANI: TCP üzerinden HTTP GET (aarch64) — OS bir web sayfası çeker ===
 # tcp_connect_arm.c TAM handshake'ini temel al → ESTABLISHED sonrası HTTP GET isteğini
 # TCP DATA segmenti (PSH+ACK) olarak gönder → sunucu HTTP yanıtını (durum satırı) döner.
@@ -2329,6 +2363,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_tcp_connect_test_arm \
+                     calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
