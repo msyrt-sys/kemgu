@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-166 — OS: reverse DNS (PTR) — IP → isim çözümleme (recon) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-165).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_ptr_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest
+recon: bir IP'nin hangi isme ait olduğunu bul (hedef tanıma). D-157 DNS A-çözümlemesini PTR'ye uyarlar:
+IP oktetlerini TERS sırada + ".in-addr.arpa" QNAME, QTYPE=12 (PTR). Yanıtın ANSWER RDATA'sındaki domain-name'i
+`isim_oku` ile PARSE eder (isim_atla'nın tersi — label biriktir + 0xC0 compression pointer takip, ≤32-atlama
+sonsuz-döngü koruması). **Kanıt:** 8.8.8.8 → **dns.google** → "PTR OK". ANCOUNT=1, gerçek internet (SLIRP→host
+DNS). **Sınır:** host-DNS-bağımlı (PTR yoksa "KISMI" kısmi kanıt; "PTR OK" yalnız gerçek isimde). L2-L4+DNS-A/PTR.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-165 — OS: SELF-HOST virtio-blk kapasite okuma — KEMGU disk config-space (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-164).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_blk_config_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/
+codegen değişmedi.]** Özgün DNA — D-163 (virtio-net MAC) desenini virtio-blk'a taşır: `.kem` sürücüsü disk
+KAPASİTESİNİ config-space'ten okur. Slot tara → DeviceID=2 (virtio-blk) → config offset 0x100+0x104 (mmio_oku32
+×2) → u64 capacity (sektör sayısı). **Kanıt:** `dd bs=512 count=64` disk → capacity=**64** → "KEM BLK OK".
+mmio_oku8 yok → 32-bit×2 word. `değilse eğer`/`ve`/shift/mask codegen'de sorunsuz. DETERMİNİSTİK (disk boyutu
+bilinir). KEMGU dili disk-cihaz config erişimi de kaldırıyor (net+blk self-host okuma tam).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-164 — OS: TCP SYN port-tarayıcı — pentest recon (nmap-lite) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-163).
+
+**Karar [ETKİ: yeni `test/bare_metal/port_scan_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İkonik
+pentest aracı — bir host'un açık portlarını bul. D-159 SYN-inşasını (`tcp_syn_kur`, src-port parametrik) çok-port
+taramaya genişletir: DNS-çöz(example.com) → port listesi {80,443,22,8080,65000} için SYN gönder → yanıt sınıflandır:
+SYN-ACK(0x12)=AÇIK, RST(0x04/0x14)=KAPALI, timeout=FİLTRELİ. Yarım-açık bağlantılar RST ile kapatılır; src-port
+per-port (gecikmiş yanıt eşleme). **Kanıt:** example.com → 80/443/8080 AÇIK, 22/65000 FİLTRELİ → "PORT SCAN OK"
+(gerçek SYN-ACK RX). **Sınır:** host-internet-bağımlı (offline → TX-pcap fallback "PORT SCAN SENT OK", pcap'te
+5 farklı dst-port SYN). nmap-lite recon primitifi.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
 ## D-163 — OS: SELF-HOST virtio-net MAC okuma — KEMGU config-space erişimi (2026-07-02) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-162).
