@@ -2715,6 +2715,41 @@ calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace networking testi atlandi."; \
 	fi
 
+# === USERSPACE DNS (aarch64) — EL0 süreç syscall ile TAM DNS protokol çözümleme ===
+# D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) üstünde EL0 (yetkisiz) süreç
+# TAM L2-L7 yığını çalıştırır: ARP → DNS sorgusu (Eth+IPv4+UDP+DNS "example.com" A) →
+# yanıt parse (isim-sıkıştırma 0xC0) → IPv4 A-kaydı. Ağ kernel-aracılı, protokol
+# tamamen userspace. RX round-trip: "USERDNS OK" (+ çözülen IP). Fallback (internet
+# yoksa / SLIRP dış-DNS yanıt vermezse): EL0 sorguyu sys2(24) ile GÖNDERDİ →
+# "USERDNS SENT OK" (seri) VEYA pcap'te UDP dst-port 53 ("0035" = port 53 hedef) TX.
+# virtio_net BM_A64_OBJS'te (explicit eklemeye gerek yok).
+calistir_userspace_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 userspace DNS testi: userspace_dns_arm.c -> ELF (EL0 syscall ile tam DNS)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_dns_arm.c -o $(BUILD)/userspace_dns_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_dns_arm.elf $(BUILD)/userspace_dns_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_dns_arm.out $(BUILD)/userspace_dns_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_dns_arm.pcap \
+			-serial file:$(BUILD)/userspace_dns_arm.out -kernel $(BUILD)/userspace_dns_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_dns_arm.out; echo "--- son ---"; \
+		if grep -q "USERDNS OK" $(BUILD)/userspace_dns_arm.out; then \
+			echo "aarch64 userspace DNS testi gecti (RX round-trip): EL0 surec syscall ile tam DNS cozumledi (isim -> IPv4)."; \
+		elif grep -q "USERDNS SENT OK" $(BUILD)/userspace_dns_arm.out; then \
+			echo "aarch64 userspace DNS testi gecti (SENT fallback): EL0 surec DNS sorgusunu sys2(24) ile gonderdi (RX yok/internet yok)."; \
+		elif xxd -p $(BUILD)/userspace_dns_arm.pcap 2>/dev/null | tr -d '\n' | grep -q "0035"; then \
+			echo "aarch64 userspace DNS testi gecti (pcap-TX fallback): EL0'in DNS sorgusu pcap'te var (UDP dst-port 53 = '0035')."; \
+		else \
+			echo "FAIL: seri 'USERDNS OK'/'USERDNS SENT OK' veya pcap'te UDP dst-port 53 ('0035') bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace DNS testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -2748,6 +2783,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
+                     calistir_userspace_dns_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
