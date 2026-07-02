@@ -2300,6 +2300,40 @@ calistir_virtio_blk_config_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(B
 		echo "QEMU yok — self-host virtio-blk kapasite testi atlandi."; \
 	fi
 
+# === SELF-HOST CRC32 saf-hesaplama (aarch64) — KEMGU'da cihazsız algoritma ===
+# crc32_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
+# IEEE 802.3 / zlib CRC-32 (polinom 0xEDB88320, tablosuz bit-bit) hesaplar.
+# Test verisi "123456789" -> beklenen CRC-32 = 0xCBF43926 (3421780262).
+# KEMGU dilinin MMIO ÖTESİNDE gerçek algoritma kaldırdığını kanıtlar (XOR/AND/
+# işaretsiz-sağa-kaydırma bit işlemleri). CİHAZSIZ: QEMU'da -netdev/-drive YOK,
+# link'te mmio/yetki obj GEREKMEZ (sade BM_A64_OBJS). Marker: "KEM CRC OK".
+calistir_crc32_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST CRC32 saf-hesaplama: crc32_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/crc32_selfhost.kem > $(BUILD)/crc32_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/crc32_selfhost.ll -c -o $(BUILD)/crc32_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/crc32_selfhost.elf $(BUILD)/crc32_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/crc32_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/crc32_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/crc32_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/crc32_selfhost.out -kernel $(BUILD)/crc32_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/crc32_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM CRC OK" $(BUILD)/crc32_selfhost.out; then \
+			echo "aarch64 self-host CRC32 testi gecti: KEMGU cihazsiz algoritma CRC-32('123456789')=0xCBF43926 dogruladi."; \
+		else \
+			echo "FAIL: 'KEM CRC OK' bekleniyor (KEMGU self-host CRC32 saf-hesaplama)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host CRC32 testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2433,6 +2467,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
                      calistir_virtio_net_mac_selfhost_arm \
                      calistir_virtio_blk_config_selfhost_arm \
+                     calistir_crc32_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \

@@ -1,0 +1,75 @@
+// KEMGU SELF-HOST CRC32 — saf-hesaplama (cihazsız) doğrulama milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinin MMIO/cihaz-erişiminin ÖTESİNDE gerçek bir ALGORİTMA
+// kaldırdığını kanıtlar: standart IEEE 802.3 / zlib CRC-32 (polinom 0xEDB88320,
+// yansıtılmış), tablosuz (bit-bit), saf KEMGU dilinde yazılmış.
+//
+// Cihazsız: yetki<MMIO> / mmio yok — yalnızca aritmetik + bit işlemleri
+// (XOR ^, AND &, sağa-kaydırma >>). Sonuç UART'a yazdir_* ile basılır.
+//
+// KRİTİK dil gözlemi (codegen doğrulaması):
+//   - `dtam32` (işaretsiz 32-bit) sağa-kaydırma → LLVM `lshr` (mantıksal).
+//   - `tam32` (işaretli) sağa-kaydırma → LLVM `ashr` (aritmetik, işaret-uzatan).
+//   CRC-32'de crc'nin en-anlamlı biti sık sık 1 olur; işaret-uzatan kaydırma
+//   algoritmayı bozar. Bu yüzden crc değişkeni ZORUNLU `dtam32` olmalıdır.
+//
+// Test verisi: "123456789" (ASCII 0x31..0x39). Standart CRC-32 test vektörü:
+//   beklenen CRC-32 = 0xCBF43926 = 3421780262 (ondalık).
+//
+// Beklenen çıktı: "KEM CRC BASLA" + hesaplanan crc + "KEM CRC OK".
+
+sabit CRC_POLINOM: dtam32   = 3988292384;  // 0xEDB88320 (yansıtılmış CRC-32 polinomu)
+sabit CRC_BASLANGIC: dtam32 = 4294967295;  // 0xFFFFFFFF (crc ilk değeri)
+sabit CRC_SON_MASKE: dtam32 = 4294967295;  // 0xFFFFFFFF (sonda XOR — bit tersleme)
+sabit CRC_BEKLENEN: dtam32  = 3421780262;  // 0xCBF43926 ("123456789" test vektörü)
+sabit VERI_UZUNLUK: dtam32  = 9;           // "123456789" byte sayısı
+
+// "123456789" verisinin i. byte'ını döndürür (ASCII '1'..'9' = 49..57).
+// Dizi/bellek gerekmeden, saf indeks → byte eşlemesi.
+işlev veri_byte(i: dtam32) -> dtam32 {
+    ver 49 + i;   // '1' (49) + ofset → '1'..'9'
+}
+
+// Tek bir byte'ı mevcut crc'ye karıştırır (bit-bit, tablosuz).
+// Branchless (dallanmasız) maske hilesi:
+//   mask = 0 - (crc & 1)   → alt bit 1 ise 0xFFFFFFFF, değilse 0x00000000
+//   crc  = (crc >> 1) ^ (POLINOM & mask)
+// Bu, XOR / AND / işaretsiz-sağa-kaydırma / çıkarma işlemlerinin hepsini kullanır.
+işlev crc32_byte(crc_giris: dtam32, byte: dtam32) -> dtam32 {
+    değişken crc: dtam32 = crc_giris ^ byte;
+    değişken j: tam32 = 0;
+    iken j < 8 {
+        değişken maske: dtam32 = 0 - (crc & 1);
+        crc = (crc >> 1) ^ (CRC_POLINOM & maske);
+        j = j + 1;
+    }
+    ver crc;
+}
+
+// "123456789" için CRC-32 hesabı (tüm veri üzerinde döngü).
+işlev crc32_hesapla() -> dtam32 {
+    değişken crc: dtam32 = CRC_BASLANGIC;
+    değişken i: dtam32 = 0;
+    iken i < VERI_UZUNLUK {
+        crc = crc32_byte(crc, veri_byte(i));
+        i = i + 1;
+    }
+    ver crc ^ CRC_SON_MASKE;   // sonda bit-tersleme → nihai CRC-32
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM CRC BASLA");
+
+    değişken crc: dtam32 = crc32_hesapla();
+
+    // Hesaplanan CRC-32 değeri (işaretsiz — 0xCBF43926 int32 aralığı dışında).
+    yazdir_metin("KEM CRC deger=");
+    yazdir_isaretsiz_tam(crc);
+
+    eğer crc == CRC_BEKLENEN {
+        yazdir_metin("KEM CRC OK");
+    } değilse {
+        yazdir_metin("KEM CRC FAIL");
+    }
+    ver 0;
+}
