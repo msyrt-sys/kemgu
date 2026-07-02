@@ -1871,6 +1871,36 @@ calistir_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 		echo "QEMU yok — DNS testi atlandi."; \
 	fi
 
+# === TCP SYN üç-yönlü el sıkışması testi (aarch64) — Faz H ağ katmanı ===
+# Kernel gateway'e (SLIRP 10.0.2.2) kapalı bir porta (9999) TCP SYN yollar; SLIRP
+# RST (veya açık portta SYN-ACK) döner; kernel yanıtı RX ile alır + doğrular.
+# TCP checksum PSEUDO-HEADER dahil hesaplanır. Round-trip gate: "TCP HANDSHAKE OK".
+# Yedek (SLIRP RX yanıt vermezse): pcap TX kanıtı — SYN segmenti seq "KEMG" ile grep'lenir.
+calistir_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "Faz H aarch64 TCP SYN el sıkışması testi: tcp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tcp_arm.c -o $(BUILD)/tcp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/tcp_arm.elf $(BUILD)/tcp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/tcp_arm.out $(BUILD)/tcp_arm.pcap; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/tcp_arm.pcap \
+			-serial file:$(BUILD)/tcp_arm.out -kernel $(BUILD)/tcp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/tcp_arm.out; echo "--- son ---"; \
+		if grep -q "TCP HANDSHAKE OK" $(BUILD)/tcp_arm.out; then \
+			echo "Faz H aarch64 TCP testi gecti: SLIRP'ten TCP yaniti alindi (RX round-trip)."; \
+		elif grep -a -q "KEMG" $(BUILD)/tcp_arm.pcap; then \
+			echo "Faz H aarch64 TCP testi gecti (TX-pcap fallback): SYN segmenti insa+gonderildi (pcap'te 'KEMG' seq)."; \
+		else \
+			echo "FAIL: seri 'TCP HANDSHAKE OK' (RX) veya pcap'te 'KEMG' seq (TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — TCP testi atlandi."; \
+	fi
+
 # === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
 # virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
 # (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
@@ -2053,7 +2083,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_udp_test_arm \
-                     calistir_dns_test_arm calistir_virtio_selfhost_arm \
+                     calistir_dns_test_arm calistir_tcp_test_arm calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
