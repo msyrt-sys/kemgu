@@ -777,9 +777,10 @@ $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
               $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o $(BUILD)/bm_a64_mmu.o \
-              $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o
-#              ^ virtio: kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143) →
-#                tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
+              $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o $(BUILD)/bm_a64_virtio_net.o
+#              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
+#                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
+#                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
 
 # === Bare-Metal Hello World (Track B Kalem 3) ===
 # uart_merhaba.kem -> ARM64 ELF + libc-yok dogrulamasi.
@@ -1859,7 +1860,7 @@ calistir_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "D-144 aarch64 virtio-net paket testi: net_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/net_arm.c -o $(BUILD)/net_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/net_arm.elf $(BUILD)/net_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/net_arm.elf $(BUILD)/net_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/net_arm.out $(BUILD)/net.pcap; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -1884,7 +1885,7 @@ calistir_arp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "D-145 aarch64 ARP round-trip testi: arp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/arp_arm.c -o $(BUILD)/arp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/arp_arm.elf $(BUILD)/arp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/arp_arm.elf $(BUILD)/arp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/arp_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -1908,7 +1909,7 @@ calistir_udp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "D-146 aarch64 IP/UDP paket testi: udp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/udp_arm.c -o $(BUILD)/udp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/udp_arm.elf $(BUILD)/udp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/udp_arm.elf $(BUILD)/udp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/udp_arm.out $(BUILD)/udp.pcap; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -1933,7 +1934,7 @@ calistir_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "D-147 aarch64 DNS round-trip testi: dns_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_arm.c -o $(BUILD)/dns_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/dns_arm.elf $(BUILD)/dns_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/dns_arm.elf $(BUILD)/dns_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/dns_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -1960,7 +1961,7 @@ calistir_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virt
 	@echo "aarch64 DHCP DISCOVER/OFFER testi: dhcp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dhcp_arm.c -o $(BUILD)/dhcp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/dhcp_arm.elf $(BUILD)/dhcp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/dhcp_arm.elf $(BUILD)/dhcp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/dhcp_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -1986,7 +1987,7 @@ calistir_arp_scan_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_
 	@echo "aarch64 ARP host-keşfi (subnet taraması) testi: arp_scan_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/arp_scan_arm.c -o $(BUILD)/arp_scan_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/arp_scan_arm.elf $(BUILD)/arp_scan_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/arp_scan_arm.elf $(BUILD)/arp_scan_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/arp_scan_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2013,7 +2014,7 @@ calistir_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "Faz H aarch64 TCP SYN el sıkışması testi: tcp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tcp_arm.c -o $(BUILD)/tcp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/tcp_arm.elf $(BUILD)/tcp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/tcp_arm.elf $(BUILD)/tcp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/tcp_arm.out $(BUILD)/tcp_arm.pcap; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2045,7 +2046,7 @@ calistir_tcp_connect_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a
 	@echo "Faz H aarch64 TCP gerçek handshake testi: tcp_connect_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tcp_connect_arm.c -o $(BUILD)/tcp_connect_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/tcp_connect_arm.elf $(BUILD)/tcp_connect_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/tcp_connect_arm.elf $(BUILD)/tcp_connect_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/tcp_connect_arm.out $(BUILD)/tcp_connect_arm.pcap; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2079,7 +2080,7 @@ calistir_port_scan_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64
 	@echo "PENTEST aarch64 TCP SYN port-tarama testi: port_scan_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/port_scan_arm.c -o $(BUILD)/port_scan_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/port_scan_arm.elf $(BUILD)/port_scan_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/port_scan_arm.elf $(BUILD)/port_scan_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/port_scan_arm.out $(BUILD)/port_scan_arm.pcap; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2110,7 +2111,7 @@ calistir_http_get_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_
 	@echo "Uygulama katmanı aarch64 HTTP GET testi: http_get_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/http_get_arm.c -o $(BUILD)/http_get_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/http_get_arm.elf $(BUILD)/http_get_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/http_get_arm.elf $(BUILD)/http_get_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/http_get_arm.out $(BUILD)/http_get_arm.pcap; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2140,7 +2141,7 @@ calistir_icmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virt
 	@echo "Faz G aarch64 ICMP echo (ping) testi: icmp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/icmp_arm.c -o $(BUILD)/icmp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/icmp_arm.elf $(BUILD)/icmp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/icmp_arm.elf $(BUILD)/icmp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/icmp_arm.out $(BUILD)/icmp_arm.pcap; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2169,7 +2170,7 @@ calistir_dns_resolver_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_
 	@echo "aarch64 DNS A-kaydı çözümleme testi: dns_resolver_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_resolver_arm.c -o $(BUILD)/dns_resolver_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/dns_resolver_arm.elf $(BUILD)/dns_resolver_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/dns_resolver_arm.elf $(BUILD)/dns_resolver_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/dns_resolver_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2198,7 +2199,7 @@ calistir_ntp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virti
 	@echo "aarch64 NTP istemci testi: ntp_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/ntp_arm.c -o $(BUILD)/ntp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/ntp_arm.elf $(BUILD)/ntp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/ntp_arm.elf $(BUILD)/ntp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/ntp_arm.out $(BUILD)/ntp_arm.pcap; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2254,7 +2255,7 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 	@echo "aarch64 reverse DNS (PTR) testi: dns_ptr_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dns_ptr_arm.c -o $(BUILD)/dns_ptr_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/dns_ptr_arm.elf $(BUILD)/dns_ptr_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+		-o $(BUILD)/dns_ptr_arm.elf $(BUILD)/dns_ptr_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/dns_ptr_arm.out; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -2688,6 +2689,32 @@ calistir_guvenlik_bombardiman_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — bombardıman testi atlandi."; \
 	fi
 
+# === D-176 USERSPACE NETWORKING (aarch64) — EL0 süreç syscall ile ağ yapar ===
+# EL0 (yetkisiz) süreç net_gonder(24)/net_al(25) syscall'larıyla ARP round-trip yapar;
+# virtio-net'e doğrudan erişmez. Süreç modeli + ağ yığını birleşimi. Kötü-pointer net_al
+# reddedilir (D-150/151 guard). Marker: "USERNET OK".
+calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-176 aarch64 userspace networking testi: userspace_net_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_net_arm.c -o $(BUILD)/userspace_net_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_net_arm.elf $(BUILD)/userspace_net_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_net_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/userspace_net_arm.out -kernel $(BUILD)/userspace_net_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_net_arm.out; echo "--- son ---"; \
+		if grep -q "USERNET OK" $(BUILD)/userspace_net_arm.out; then \
+			echo "D-176 aarch64 userspace networking testi gecti: EL0 surec syscall ile ARP round-trip yapti (surec+ag birlesimi)."; \
+		else \
+			echo "FAIL: 'USERNET OK' bekleniyor (userspace net_gonder/net_al syscall + guard)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace networking testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -2720,6 +2747,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
+                     calistir_userspace_net_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \

@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-176 — OS: USERSPACE NETWORKING — EL0 süreç syscall ile ağ (süreç+ağ birleşimi) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-175).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (num=24/25 net syscall + externs); `Makefile` (BM_A64_OBJS'e
+bm_a64_virtio_net.o + 14 net-test link satırından redundant explicit kaldırıldı); yeni
+`test/bare_metal/userspace_net_arm.c`, Makefile hedefi.]** İKİ BÜYÜK ALT-SİSTEMİ BİRLEŞTİRİR: süreç/syscall
+modeli (D-124..140) + ağ yığını (D-144..167). Şimdiye kadar ağ hep KERNEL (EL1) kodundan yapılıyordu; artık
+bir EL0 (yetkisiz) süreç virtio-net'e DOĞRUDAN erişmeden, yalnız SYSCALL ile ham ethernet çerçevesi
+gönderir/alır: **num=24 net_gonder(cerceve, uzun)** (kernel frame'i OKUR + virtio-net'e yollar; driver frame'i
+kendi TX DMA buffer'ına kopyalar) + **num=25 net_al(buf, maxlen)** (kernel gelen frame'i user buffer'a YAZAR).
+
+**GÜVENLİK (D-150/151 disiplini):** net_gonder frame'i user VA'da + mantıklı ethernet boyu (≤1514) olmalı
+(kdl_user_yaz_ptr_gecerli okuma-length-bound); net_al hedef user VA'da olmalı (write-guard). Kötü pointer →
+-1 (kernel belleği korunur). net_al kısa per-çağrı timeout (2M tik) → EL0 kendi poll döngüsünde tekrar
+çağırır (D-158 yük-duyarlılık dersi). Net syscall'ları `#if __aarch64__` (x86'da yok).
+
+**Link:** kdl_kesme.c artık kdl_virtio_net_* referans eder → bm_a64_virtio_net.o BM_A64_OBJS'e eklendi (D-143
+blk deseni; tüm aarch64 kernel linkler, kullanılmasa dead-code, net+blk sürücü aynı anda link — clash yok,
+net testleri zaten ikisini de linkliyordu). Net-test link satırlarından redundant explicit ref kaldırıldı.
+
+**Kanıt (aarch64 QEMU + -netdev user):** userspace_net_arm.c — EL1 main net sürücüsünü kurar; EL0 launcher
+ARP isteği (gateway 10.0.2.2) inşa eder → **sys2(24, frame, 42)** ile yollar → **sys2(25, rx, 128)** poll
+ile SLIRP'in ARP yanıtını alır+doğrular → ayrıca kötü-pointer net_al(0x40000000)→-1 (guard) → "USERNET OK".
+**Bir userspace program çekirdek-aracılı ağ syscall'larıyla ARP round-trip yaptı.**
+
 ## D-175 — OS: SELF-HOST Base64 kodlama/çözme — KEMGU payload codec (2026-07-02)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-174).

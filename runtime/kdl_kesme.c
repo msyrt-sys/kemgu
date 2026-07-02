@@ -220,6 +220,18 @@ static int kdl_user_oku_str_gecerli(uint64_t p) {
     return 0;                                    /* null yok → straddle riski → RED */
 }
 
+#if defined(__aarch64__)
+/* === D-176: userspace ağ syscall'ları (net_gonder/net_al) ===
+ * EL0 süreçleri ham ethernet çerçevesi gönderip alır (virtio-net kernel-aracılı) —
+ * süreç modeli + ağ yığını birleşimi. GÜVENLİK (D-150/151 disiplini): net_gonder
+ * user buffer'ı OKUR → frame user VA'da + len bounded olmalı; net_al user buffer'a
+ * YAZAR → user VA'da olmalı. kdl_virtio_net_gonder frame'i kendi TX DMA buffer'ına
+ * KOPYALAR → doğrulanmış user pointer'ı geçirmek güvenli. */
+extern uint64_t kdl_virtio_net_bul(void);
+extern int kdl_virtio_net_gonder(uint64_t base, const uint8_t *cerceve, int uzun);
+extern int kdl_virtio_net_al(uint64_t base, uint8_t *hedef, int max, long tikler);
+#endif
+
 /* === Sistem çağrısı dispatch (C6) ===
  * Kullanıcı/kernel kodu SVC (aarch64) / int 0x80 (x86) ile çağırır. Boot asm
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
@@ -387,6 +399,28 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         kdl_msg_bas = (kdl_msg_bas + 1) % KDL_MSG_MAX;
         return (uint64_t)(int64_t)v;
     }
+#if defined(__aarch64__)
+    else if (num == 24) {
+        /* D-176 net_gonder(cerceve=arg, uzun=arg2): EL0 ham ethernet çerçevesi yollar.
+         * GÜVENLİK: frame user VA'da + mantıklı ethernet boyu (kernel OKUR); driver
+         * frame'i kendi TX buffer'ına kopyalar. Dönen = gönderilen byte veya -1. */
+        if (arg2 == 0 || arg2 > 1514) return (uint64_t)(int64_t)-1;
+        if (!kdl_user_yaz_ptr_gecerli(arg, arg2)) return (uint64_t)(int64_t)-1;  /* frame user VA */
+        uint64_t nb = kdl_virtio_net_bul();
+        if (!nb) return (uint64_t)(int64_t)-1;   /* net cihazı yok */
+        return (uint64_t)(int64_t)kdl_virtio_net_gonder(nb, (const uint8_t *)(uintptr_t)arg, (int)arg2);
+    } else if (num == 25) {
+        /* D-176 net_al(buf=arg, maxlen=arg2): EL0 gelen çerçeveyi alır. GÜVENLİK: kernel
+         * user-buffer'a YAZAR → user VA'da olmalı (D-150). Dönen = alınan byte veya 0/-1.
+         * Kısa per-çağrı timeout (2M tik) → EL0 kendi poll döngüsünde tekrar çağırır
+         * (yük-duyarlı uzun busy-wait YOK — D-158 dersi). */
+        if (arg2 == 0 || arg2 > 2048) return (uint64_t)(int64_t)-1;
+        if (!kdl_user_yaz_ptr_gecerli(arg, arg2)) return (uint64_t)(int64_t)-1;  /* buf user VA */
+        uint64_t nb = kdl_virtio_net_bul();
+        if (!nb) return (uint64_t)(int64_t)-1;
+        return (uint64_t)(int64_t)kdl_virtio_net_al(nb, (uint8_t *)(uintptr_t)arg, (int)arg2, 2000000);
+    }
+#endif
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */
 }
 
