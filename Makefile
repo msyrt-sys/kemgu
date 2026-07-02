@@ -2480,6 +2480,41 @@ calistir_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host SIRALAMA testi atlandi."; \
 	fi
 
+# === SELF-HOST BASE64 kodlama/çözme (aarch64) — KEMGU payload codec ===
+# base64_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
+# RFC 4648 Base64 encode + decode (round-trip). "KEMGU" (5 byte) -> "S0VNR1U="
+# (bilinen doğru vektör) -> tekrar "KEMGU". Karakter-tablosu (Dizi<karakter>)
+# 6-bit index ile erişim + bit işlemleri (>> << & |) + ham karakter çıktısı
+# (yaz_karakter — newline'sız, tek satır). Pentest OS payload-kodlama yardımcısı.
+# CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil — dizi
+# tahsisi için). Marker: "KEM B64 OK" (encode) + "KEM B64 DECODE OK" (round-trip).
+calistir_base64_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST BASE64 payload codec: base64_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/base64_selfhost.kem > $(BUILD)/base64_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/base64_selfhost.ll -c -o $(BUILD)/base64_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/base64_selfhost.elf $(BUILD)/base64_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/base64_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/base64_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/base64_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/base64_selfhost.out -kernel $(BUILD)/base64_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/base64_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM B64 OK" $(BUILD)/base64_selfhost.out; then \
+			echo "aarch64 self-host BASE64 testi gecti: KEMGU cihazsiz payload codec ('KEMGU' -> 'S0VNR1U=' + decode round-trip) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM B64 OK' bekleniyor (KEMGU self-host Base64 kodlama)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host BASE64 testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2616,6 +2651,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_blk_config_selfhost_arm \
                      calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
+                     calistir_base64_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \

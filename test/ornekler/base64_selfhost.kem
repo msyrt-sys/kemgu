@@ -1,0 +1,207 @@
+// KEMGU SELF-HOST BASE64 — payload kodlama/çözme (cihazsız) milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinde standart Base64 (RFC 4648) encode + decode
+// (round-trip) — yani karakter-tablosu indeksleme + bit shift/mask
+// (>> << & |) + karakter çıktısı — kaldırdığını kanıtlar. Saf KEMGU,
+// cihazsız (MMIO / yetki<MMIO> yok). Pentest OS'ta payload kodlama yardımcısı:
+// ikili veriyi ASCII-güvenli Base64'e çevirir, tersine döndürür.
+//
+// KRİTİK dil gözlemi (codegen doğrulaması):
+//   - Base64 alfabesi `Dizi<karakter>` (64 ASCII karakter) → runtime KdlDizi*.
+//     6-bit index (0..63) ile erişim (`tablo[i]`) → kdl_dizi (sınır-kontrollü).
+//   - `yaz_karakter(karakter)` → ham UART çıktısı (newline YOK) → Base64 string
+//     tek satırda basılır. (`yazdir_karakter` her karakterden sonra '\n' basar.)
+//   - Bit işlemleri: sağa-kaydırma `>>`, sola-kaydırma `<<`, AND `&`, OR `|`
+//     — 24-bit'lik 3-byte grubu 4×6-bit Base64 indeksine böler.
+//   - Decode: karakter → 6-bit index, `karakter` aritmetik-dışı olduğundan
+//     alfabede LİNEER ARAMA (`==` karşılaştırma) ile bulunur; ardından
+//     4×6-bit → 3-byte yeniden birleştirme.
+//
+// Test verisi: "KEMGU" = 5 byte (0x4B,0x45,0x4D,0x47,0x55).
+//   5 byte = 1 tam 3-byte grup + 2 kalan byte → son grup '=' padding'li.
+//   Bilinen doğru Base64: "KEMGU" -> "S0VNR1U=" (8 karakter, 1 padding).
+//
+// Beklenen çıktı: "KEM B64 BASLA" + Base64 string (S0VNR1U=) +
+//   encode doğrulanınca "KEM B64 OK" + decode round-trip doğrulanınca
+//   "KEM B64 DECODE OK".
+
+sabit VERI_UZUNLUK: tam32 = 5;   // "KEMGU" byte sayısı
+sabit B64_UZUNLUK:  tam32 = 8;   // "S0VNR1U=" karakter sayısı
+
+// 6-bit Base64 indeksini (0..63) ilgili alfabe karakterine eşler.
+// Standart RFC 4648 alfabesi: A-Z (0-25), a-z (26-51), 0-9 (52-61), + /.
+işlev b64_alfabe(i: tam32) -> karakter {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    ver tablo[i];
+}
+
+// Base64 karakterini 6-bit indeksine (0..63) çevirir. `karakter` tipi
+// sayısal olmadığından (aritmetik yapılamaz) alfabede LİNEER ARAMA ile
+// (`==` karşılaştırma) bulunur. Bulunamazsa (padding '=' veya bozuk) -1.
+işlev b64_index(c: karakter) -> tam32 {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    değişken k: tam32 = 0;
+    iken k < 64 {
+        eğer tablo[k] == c {
+            ver k;   // eşleşme: 6-bit değer
+        }
+        k = k + 1;
+    }
+    ver 0 - 1;   // bulunamadı (-1): padding veya geçersiz
+}
+
+// `veri` dizisini Base64 kodlar; sonucu `cikti` dizisine yazar (karakter
+// karakter) ve üretilen karakter sayısını döner. Her 3 byte → 4 karakter;
+// eksik gruplar '=' ile doldurulur.
+//   b0,b1,b2 (24 bit) → 4×6-bit indeks:
+//     (b0>>2), ((b0&3)<<4)|(b1>>4), ((b1&15)<<2)|(b2>>6), (b2&63)
+işlev b64_encode(veri: Dizi<tam32>, n: tam32, cikti: Dizi<karakter>) -> tam32 {
+    değişken i: tam32 = 0;   // veri okuma indeksi (3'er artar)
+    değişken o: tam32 = 0;   // çıktı yazma indeksi (4'er artar)
+    iken i < n {
+        değişken kalan: tam32 = n - i;   // bu gruptaki byte sayısı (1..3)
+        değişken b0: tam32 = veri[i];
+        değişken b1: tam32 = 0;
+        değişken b2: tam32 = 0;
+        eğer kalan > 1 { b1 = veri[i + 1]; }
+        eğer kalan > 2 { b2 = veri[i + 2]; }
+
+        // İlk iki Base64 karakteri her zaman üretilir (en az 1 byte var).
+        cikti[o]     = b64_alfabe(b0 >> 2);
+        cikti[o + 1] = b64_alfabe(((b0 & 3) << 4) | (b1 >> 4));
+        // Üçüncü karakter: 2+ byte varsa gerçek, yoksa padding.
+        eğer kalan > 1 {
+            cikti[o + 2] = b64_alfabe(((b1 & 15) << 2) | (b2 >> 6));
+        } değilse {
+            cikti[o + 2] = '=';
+        }
+        // Dördüncü karakter: 3 byte varsa gerçek, yoksa padding.
+        eğer kalan > 2 {
+            cikti[o + 3] = b64_alfabe(b2 & 63);
+        } değilse {
+            cikti[o + 3] = '=';
+        }
+
+        i = i + 3;
+        o = o + 4;
+    }
+    ver o;   // üretilen toplam karakter sayısı
+}
+
+// Base64 string'i (padding '=' dâhil) çözer; byte'ları `cikti` dizisine
+// yazar ve byte sayısını döner. Her 4 karakter → 3 byte (padding'e göre
+// 1-3 byte). 4×6-bit index → 24 bit → b0,b1,b2:
+//   b0 = (i0<<2) | (i1>>4)
+//   b1 = ((i1&15)<<4) | (i2>>2)
+//   b2 = ((i2&3)<<6) | i3
+işlev b64_decode(giris: Dizi<karakter>, len: tam32, cikti: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;   // giriş okuma indeksi (4'er artar)
+    değişken o: tam32 = 0;   // çıktı byte indeksi
+    iken i < len {
+        // 4 karakter oku; padding '=' -> b64_index -1 döner.
+        değişken i0: tam32 = b64_index(giris[i]);
+        değişken i1: tam32 = b64_index(giris[i + 1]);
+        değişken i2: tam32 = b64_index(giris[i + 2]);
+        değişken i3: tam32 = b64_index(giris[i + 3]);
+
+        // İlk byte her zaman var (i0, i1 geçerli).
+        cikti[o] = (i0 << 2) | (i1 >> 4);
+        o = o + 1;
+        // İkinci byte: i2 padding değilse (>= 0).
+        eğer i2 > 0 - 1 {
+            cikti[o] = ((i1 & 15) << 4) | (i2 >> 2);
+            o = o + 1;
+        }
+        // Üçüncü byte: i3 padding değilse (>= 0).
+        eğer i3 > 0 - 1 {
+            cikti[o] = ((i2 & 3) << 6) | i3;
+            o = o + 1;
+        }
+        i = i + 4;
+    }
+    ver o;   // çözülen toplam byte sayısı
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM B64 BASLA");
+
+    // "KEMGU" = 0x4B,0x45,0x4D,0x47,0x55 (5 byte).
+    değişken veri: Dizi<tam32> = [75, 69, 77, 71, 85];
+
+    // Beklenen doğru Base64: "S0VNR1U=" (8 karakter).
+    değişken beklenen: Dizi<karakter> = ['S','0','V','N','R','1','U','='];
+
+    // --- ENCODE ---
+    // Çıktı tamponu: 8 karakter (başlangıç değerleri, encode üzerine yazar).
+    değişken cikti: Dizi<karakter> = ['A','A','A','A','A','A','A','A'];
+    değişken uzunluk: tam32 = b64_encode(veri, VERI_UZUNLUK, cikti);
+
+    // Üretilen Base64 string'i ham (newline'sız) bas → tek satır.
+    değişken p: tam32 = 0;
+    iken p < uzunluk {
+        yaz_karakter(cikti[p]);
+        p = p + 1;
+    }
+    yazdir_metin("");   // satır sonu
+
+    // Encode doğrulaması: üretilen her karakter beklenenle aynı mı?
+    değişken encode_dogru: tam32 = 1;
+    eğer uzunluk == B64_UZUNLUK {
+        değişken q: tam32 = 0;
+        iken q < uzunluk {
+            eğer cikti[q] == beklenen[q] {
+                // eşleşti, devam
+            } değilse {
+                encode_dogru = 0;   // farklı karakter → başarısız
+            }
+            q = q + 1;
+        }
+    } değilse {
+        encode_dogru = 0;   // uzunluk uyuşmadı
+    }
+
+    eğer encode_dogru == 1 {
+        yazdir_metin("KEM B64 OK");
+    } değilse {
+        yazdir_metin("KEM B64 FAIL");
+        ver 1;
+    }
+
+    // --- DECODE (round-trip bonus) ---
+    // "S0VNR1U=" → tekrar byte'lara çöz, orijinal "KEMGU" ile karşılaştır.
+    değişken cozulen: Dizi<tam32> = [0, 0, 0, 0, 0];
+    değişken byte_sayisi: tam32 = b64_decode(cikti, uzunluk, cozulen);
+
+    değişken decode_dogru: tam32 = 1;
+    eğer byte_sayisi == VERI_UZUNLUK {
+        değişken r: tam32 = 0;
+        iken r < VERI_UZUNLUK {
+            eğer cozulen[r] == veri[r] {
+                // eşleşti
+            } değilse {
+                decode_dogru = 0;   // byte farklı → round-trip bozuk
+            }
+            r = r + 1;
+        }
+    } değilse {
+        decode_dogru = 0;   // byte sayısı uyuşmadı
+    }
+
+    eğer decode_dogru == 1 {
+        yazdir_metin("KEM B64 DECODE OK");
+    } değilse {
+        yazdir_metin("KEM B64 DECODE FAIL");
+    }
+
+    ver 0;
+}
