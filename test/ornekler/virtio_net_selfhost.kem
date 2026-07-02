@@ -1,0 +1,61 @@
+// KEMGU SELF-HOST virtio-NET cihaz tanıma sürücüsü — bare-metal (D-158).
+// =========================================================================
+// D-148 (magic okuma) + D-149 (tarama + status handshake) üstüne: KEMGU DİLİNDE
+// yazılmış bir AĞ-cihaz tanıma sürücüsü. virtio-mmio transport slot aralığını
+// (0x0A000000 + i*0x200, i=0..31) tarar; her slotta MAGIC ("virt" = 0x74726976)
+// doğrular; eşleşen slotta DeviceID okur; DeviceID == 1 (virtio-net) olan slotu
+// bulur. KEMGU kendi OS'unun ağ-katmanını kendi dilinde tanıyor (özgün DNA).
+//
+// yetki<MMIO> = derleme-zamanı object-capability (donanım erişim ispatı, sıfır
+// runtime yükü). Her mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez) → tarama döngüsünde
+// aynı scope'ta kalır, thread gerekmez. Sonda geri_al ile linear tüketilir.
+//
+// QEMU: -netdev user + -device virtio-net-device → slot'ta DeviceID=1 sunar.
+// Beklenen çıktı: "KEM NET magic=..." + "id=1" + "KEM NET OK".
+
+sabit VIRTIO_TABAN: tam64      = 167772160;   // 0x0A000000 (QEMU virt slot 0)
+sabit VIRTIO_ADIM: tam64       = 512;         // 0x200 slot aralığı
+sabit VIRTIO_MAGIC_OFF: tam64  = 0;           // 0x000 MagicValue
+sabit VIRTIO_DEVID_OFF: tam64  = 8;           // 0x008 DeviceID
+sabit MAGIC_BEKLENEN: tam32    = 1953655158;  // 0x74726976 = "virt"
+sabit VIRTIO_NET_ID: tam32     = 1;           // virtio-net DeviceID
+sabit MMIO_OKU_YAZ: tam32      = 3;           // OKU|YAZ
+
+işlev main() -> tam32 {
+    // Donanım erişim yetkisi (kaynak tipi 6 = MMIO, izin OKU|YAZ).
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // --- Tara: MAGIC doğru + DeviceID == 1 (virtio-net) olan ilk slotu bul. ---
+    // mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez) → döngüde aynı scope'ta kalır.
+    değişken net_slot: tam64 = 0;
+    değişken net_magic: tam32 = 0;
+    değişken net_id: tam32 = 0;
+    değişken i: tam64 = 0;
+    iken i < 32 {
+        değişken taban: tam64 = VIRTIO_TABAN + i * VIRTIO_ADIM;
+        değişken magic: tam32 = mmio_oku32(y, taban + VIRTIO_MAGIC_OFF);
+        eğer magic == MAGIC_BEKLENEN {
+            değişken devid: tam32 = mmio_oku32(y, taban + VIRTIO_DEVID_OFF);
+            eğer devid == VIRTIO_NET_ID ve net_slot == 0 {
+                net_slot = taban;
+                net_magic = magic;
+                net_id = devid;
+            }
+        }
+        i = i + 1;
+    }
+
+    geri_al(y);   // linear tüketim — capability iade edilir
+
+    eğer net_slot != 0 ve net_id == VIRTIO_NET_ID {
+        yazdir_metin("KEM NET magic=");
+        yazdir_tam(net_magic);
+        yazdir_metin("KEM NET id=");
+        yazdir_tam(net_id);
+        yazdir_metin("KEM NET OK");
+    } değilse {
+        yazdir_metin("KEM NET HATA id=");
+        yazdir_tam(net_id);
+    }
+    ver 0;
+}
