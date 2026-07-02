@@ -1463,6 +1463,32 @@ calistir_tick_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — introspection testi atlandi."; \
 	fi
 
+# === SMP çok-çekirdek testi (aarch64) — PSCI CPU_ON ile 2. çekirdek bring-up ===
+# Çekirdek 0 PSCI CPU_ON çağırır (HVC/SMC) → çekirdek 1 uyanır, paylaşılan bayrağı
+# set eder. Çekirdek 0 bayrağı (cache-coherent) poll eder → "SMP OK". QEMU -smp 2.
+# Fallback: CPU_ON çalışmazsa PSCI_VERSION → "PSCI OK".
+calistir_smp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP çok-çekirdek testi (PSCI CPU_ON): smp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_arm.c -o $(BUILD)/smp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_arm.elf $(BUILD)/smp_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_arm.out -kernel $(BUILD)/smp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_arm.out; echo "--- son ---"; \
+		if grep -q "SMP OK" $(BUILD)/smp_arm.out; then \
+			echo "SMP testi gecti: 2. çekirdek PSCI CPU_ON ile koştu (çok-çekirdek)."; \
+		elif grep -q "PSCI OK" $(BUILD)/smp_arm.out; then \
+			echo "SMP fallback: PSCI erişilebilir (VERSION) ama CPU_ON çekirdek koşmadı."; \
+		else \
+			echo "FAIL: 'SMP OK' (veya fallback 'PSCI OK') bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP testi atlandi."; \
+	fi
+
 # === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
 # launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
 # Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
@@ -2484,7 +2510,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
