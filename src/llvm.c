@@ -2325,6 +2325,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * kdl_dizi_al route et. Aksi halde mevcut GEP yolu (stack). */
             const char *pointee_elem = NULL;
             int stack_uzunluk = 0;   /* D-069 Kat.2: sabit stack dizi N (>0 → sınır-kontrol) */
+            /* D-173 fix: eleman dtamN (işaretsiz) ise sonuç isaretsiz olmalı —
+             * aksi halde `w[i] >> k` yanlışlıkla ashr (işaretli) üretir. Skaler
+             * dtam32 değişken lshr üretirken dizi elemanı ashr üretiyordu. */
+            int elem_isaretsiz = 0;
             if (d->veri.indeks.nesne &&
                 d->veri.indeks.nesne->tip == DUGUM_TANIMLAYICI) {
                 LlvmIsim *vi = isim_bul(g,
@@ -2351,7 +2355,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         rr, et, fn, v_load, idx_r);
-                    IfadeSonuc s = { rr, et, 0 };
+                    /* D-173: eleman AST tipinden işaretsizliği taşı (dtamN → lshr) */
+                    IfadeSonuc s = { rr, et, ast_tip_isaretsiz_mi(vi->eleman_tip_ast) };
                     return s;
                 }
                 /* v1 bölge-container: *T tabani — eleman tipi POINTEE'den
@@ -2361,6 +2366,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
                 /* D-069 Kat.2: sabit stack dizi [N x T] → sınır-kontrol için N */
                 if (vi) stack_uzunluk = vi->dizi_uzunluk;
+                /* D-173: GEP (stack/region) yolu için eleman işaretsizliği */
+                if (vi) elem_isaretsiz = ast_tip_isaretsiz_mi(vi->eleman_tip_ast);
             }
             /* D-085 [YÜKSEK]: TÜRETİLMİŞ heap dizi tabanı (yapı alanı k.xs /
              * işlev dönüşü yap()) → kdl_dizi_al route et. Descriptor'ı (KdlDizi*)
@@ -2384,7 +2391,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         rr, rt, kdl_al_fn(et), base.reg, idx_r);
-                    IfadeSonuc s = { rr, rt, 0 };
+                    /* D-173: türetilmiş heap dizi elemanı da işaretsizliği taşır */
+                    IfadeSonuc s = { rr, rt, ast_tip_isaretsiz_mi(elem_ast) };
                     return s;
                 }
             }
@@ -2420,7 +2428,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int load_r = yeni_reg(g);
             fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
                     load_r, elem_ir, gep_r);
-            IfadeSonuc s = { load_r, elem_ir, 0 };
+            IfadeSonuc s = { load_r, elem_ir, elem_isaretsiz };
             return s;
         }
 

@@ -1750,6 +1750,21 @@ static void test_matris_a_dtam_bolme_kaydir(void) {
     test_sonuc("matris-A: dtam8 udiv+lshr -> exit 42", rc == 42);
 }
 
+static void test_dtam_dizi_eleman_lshr(void) {
+    /* D-173: dtam32 DIZI ELEMANI saga kaydirma -> lshr (isaretsiz), ashr degil.
+     * SHA-256 self-host (test/ornekler/sha256_selfhost.kem) sirasinda yakalandi:
+     * skaler dtam32 dogru lshr uretirken, `w[i] >> k` dizi elemani signedness'i
+     * kaybedip ashr uretiyordu (eleman okumasi isaretli varsayiliyordu).
+     * 0x80000000 >> 1 = 0x40000000 (1073741824) mantiksal; ashr olsa
+     * 0xC0000000 (isaretli -1073741824) -> karsilastirma yanlis. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken w: Dizi<dtam32> = [2147483648, 0, 0]; "
+        "e\xc4\x9f" "er (w[0] >> 1) olarak tam32 == 1073741824 { ver 42; } "
+        "ver 1; }");
+    test_sonuc("D-173: dtam32 dizi eleman >> -> lshr (exit 42)", rc == 42);
+}
+
 static void test_matris_a_i1_zext(void) {
     /* D-005 (en yaygin gap): dogru olarak tam32 == 1 (sext olsa -1). */
     int rc = derle_ve_calistir(
@@ -2840,6 +2855,7 @@ int main(void) {
     printf("\n--- Matris A: tipler x operatorler (signedness) ---\n");
     test_matris_a_dtam_kiyas();
     test_matris_a_dtam_bolme_kaydir();
+    test_dtam_dizi_eleman_lshr();
     test_matris_a_i1_zext();
     test_matris_a_dtam_param_donus();
 
