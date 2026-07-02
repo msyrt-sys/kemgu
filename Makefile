@@ -2202,6 +2202,44 @@ calistir_virtio_net_mac_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUIL
 		echo "QEMU yok — self-host virtio-net MAC testi atlandi."; \
 	fi
 
+# === SELF-HOST virtio-BLK kapasite okuma (aarch64) — KEMGU'da disk config-space ===
+# virtio_blk_config_selfhost.kem: virtio-blk (DeviceID=2) slotunu bulur ve
+# cihaza-özel config space'ten (offset 0x100) kapasiteyi (u64, sektör sayısı)
+# okur. QEMU'ya 64-sektör (32 KiB) raw disk verilir → capacity == 64.
+# Marker: "KEM BLK OK" (capacity yolu) veya fallback "KEM BLK REG OK".
+calistir_virtio_blk_config_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+	@echo "aarch64 SELF-HOST virtio-blk kapasite okuma: virtio_blk_config_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_blk_config_selfhost.kem > $(BUILD)/virtio_blk_config_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_blk_config_selfhost.ll -c -o $(BUILD)/virtio_blk_config_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/virtio_blk_config_selfhost.elf $(BUILD)/virtio_blk_config_selfhost.o \
+		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/virtio_blk_config_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_blk_config_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@dd if=/dev/zero of=$(BUILD)/disk_blk_selfhost.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/virtio_blk_config_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_blk_selfhost.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/virtio_blk_config_selfhost.out -kernel $(BUILD)/virtio_blk_config_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_blk_config_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM BLK OK" $(BUILD)/virtio_blk_config_selfhost.out; then \
+			echo "aarch64 self-host virtio-blk testi gecti: KEMGU sürücüsü config-space'ten kapasite okudu."; \
+		elif grep -q "KEM BLK REG OK" $(BUILD)/virtio_blk_config_selfhost.out; then \
+			echo "aarch64 self-host virtio-blk register testi gecti (fallback): KEMGU sürücüsü DEVICE_FEATURES register okudu."; \
+		else \
+			echo "FAIL: 'KEM BLK OK' (veya fallback 'KEM BLK REG OK') bekleniyor (KEMGU self-host virtio-blk config okuma)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host virtio-blk kapasite testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2333,6 +2371,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
                      calistir_virtio_net_mac_selfhost_arm \
+                     calistir_virtio_blk_config_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
