@@ -2334,6 +2334,31 @@ calistir_uart_rx_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — UART RX testi atlandi."; \
 	fi
 
+# === CMOS RTC testi (x86_64) — donanım gerçek-zaman saati (D-172 x86 paritesi) ===
+# PC uyumlu MC146818 CMOS RTC: port 0x70 (index) / 0x71 (data). BCD register'lar
+# (saniye/dakika/saat/gün/ay/yıl). UIP (Status A bit 7) beklenip tutarlı okunur.
+# `-rtc base=utc` host wall-clock'unu yansıtır → deterministik makul-pencere geçer.
+calistir_rtc_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 CMOS RTC testi: rtc_x86.c -> ELF (port 0x70/0x71 donanım saati)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/rtc_x86.c -o $(BUILD)/rtc_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/rtc_x86.elf $(BUILD)/rtc_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/rtc_x86.out; \
+		timeout 8 qemu-system-x86_64 -kernel $(BUILD)/rtc_x86.elf -display none \
+			-rtc base=utc \
+			-serial file:$(BUILD)/rtc_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/rtc_x86.out; echo "--- son ---"; \
+		if grep -q "RTC X86 OK" $(BUILD)/rtc_x86.out; then \
+			echo "x86_64 CMOS RTC testi gecti: CMOS port 0x70/0x71'den makul tarih/saat okundu (RTC X86 OK)."; \
+		else \
+			echo "FAIL: 'RTC X86 OK' yok (CMOS okunamadi veya makul tarih araligi disinda)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 RTC testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -2907,7 +2932,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
-                     calistir_sched_test_x86 calistir_capstone_x86
+                     calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone (aarch64 + x86_64) ==="
 
