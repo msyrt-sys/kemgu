@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-163 — OS: SELF-HOST virtio-net MAC okuma — KEMGU config-space erişimi (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-162).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_net_mac_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/
+codegen değişmedi.]** Özgün DNA — D-160'ı (virtio-net TANIMA) bir adım ileri taşır: `.kem` sürücüsü cihazın
+MAC adresini CONFIG-SPACE'ten okur. virtio-mmio cihaza-özel config offset 0x100'de; virtio-net için ilk 6
+byte MAC. `.kem`: slot tara → DeviceID=1 bul → `mmio_oku32(y, taban+0x100)` + `+0x104` (2 word) → MAC
+byte'larını little-endian çıkar (`(w >> (8*k)) & 0xFF` — `ashr`+mask codegen'de tam destekli). **Kanıt:**
+QEMU virtio-net varsayılan MAC **52:54:00:12:34:56** okundu → "KEM MAC OK". mmio_oku8 dilde YOK (oku16/32/64
+var) → 32-bit oku + shift/mask. Codegen kısıtı yok. **KEMGU dili gerçek cihaz config-space erişimi kaldırıyor.**
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-162 — OS: DHCP DISCOVER/OFFER — ağ oto-konfigürasyon (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-161).
+
+**Karar [ETKİ: yeni `test/bare_metal/dhcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Bir bare-metal
+OS'un ilk açılış adımı: DHCP ile ağ config al. Ethernet(broadcast)+IPv4(0.0.0.0→255.255.255.255,UDP)+UDP(68→67)
++BOOTP/DHCP(op=1, xid, chaddr, magic 0x63825363, option 53=1 DISCOVER) gönder → SLIRP OFFER'ı RX ile al.
+**7 alan doğrulandı:** ethertype/proto, UDP portları (67→68), op=2 (BOOTREPLY), xid eşleşme, yiaddr non-zero,
+magic cookie, option 53=2 (OFFER, TLV yürüyüşü). **Kanıt:** yiaddr=**10.0.2.15** → "DHCP OK". **DETERMİNİSTİK**
+— SLIRP dahili DHCP sunucusu (internet gerekmez). OS artık kendi IP'sini otomatik öğreniyor.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-161 — OS: HTTP GET over TCP — uygulama katmanı (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-160).
+
+**Karar [ETKİ: yeni `test/bare_metal/http_get_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İLK UYGULAMA
+KATMANI — OS bir web sayfası çekiyor. D-159 TCP handshake'i üstüne TCP DATA exchange: ARP→DNS(example.com)→
+SYN/SYN-ACK/ACK ESTABLISHED → HTTP GET isteği (`GET / HTTP/1.1\r\nHost:...\r\nConnection: close\r\n\r\n`) PSH+ACK
+(flags=0x18) DATA segmenti olarak gönder (seq/ack takibi, pseudo-header checksum payload dâhil) → HTTP yanıtını
+RX ile al → durum satırında "HTTP/1." ara. **Kanıt:** hedef 104.20.23.154:80 → **HTTP/1.1 200 OK** → "HTTP GET
+OK". **GERÇEK RX** (fallback değil). L2+L3+L4+DNS+HTTP tam ağ yığını.
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** HOST İNTERNET'ine bağlı (D-159 gibi). Offline → TX-pcap fallback ("GET /"
+pcap'te → "HTTP GET SENT OK"). Timeout 20s. Tek-segment yanıt (multi-segment reassembly yok — kanıta yeter).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
 ## D-160 — OS: SELF-HOST virtio-net tanıma — KEMGU dilinde ağ-cihaz sürücüsü (2026-07-02) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-159).
