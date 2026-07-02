@@ -2107,6 +2107,38 @@ calistir_dns_resolver_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_
 		echo "QEMU yok — DNS çözümleme testi atlandi."; \
 	fi
 
+# === NTP (SNTP) istemcisi testi (aarch64) — internetten zaman senkronizasyonu ===
+# ARP → DNS ("time.google.com" A → NTP sunucu IPv4) → NTP request (UDP src/dst 123,
+# LI/VN/Mode 0x1B) inşa+gönder → SLIRP dış-proxy'si üzerinden gerçek NTP sunucudan
+# response al (RX) → Transmit Timestamp (offset 40) çıkar → Unix zamana çevir.
+# Round-trip gate: "NTP OK". Yedek (internet yoksa / SLIRP dış-UDP yanıt vermezse):
+# pcap TX kanıtı — NTP request'in gönderildiğini pcap'te (UDP src+dst port 123 =
+# hex "007b007b" + NTP payload LI/VN/Mode 0x1B) doğrula → "NTP SENT OK".
+calistir_ntp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 NTP istemci testi: ntp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/ntp_arm.c -o $(BUILD)/ntp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/ntp_arm.elf $(BUILD)/ntp_arm.o $(BUILD)/bm_a64_virtio_net.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/ntp_arm.out $(BUILD)/ntp_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/ntp_arm.pcap \
+			-serial file:$(BUILD)/ntp_arm.out -kernel $(BUILD)/ntp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/ntp_arm.out; echo "--- son ---"; \
+		if grep -q "NTP OK" $(BUILD)/ntp_arm.out; then \
+			echo "aarch64 NTP testi gecti: internetten gerçek zaman alindi (RX round-trip, Transmit Timestamp)."; \
+		elif xxd -p $(BUILD)/ntp_arm.pcap 2>/dev/null | tr -d '\n' | grep -q "007b007b"; then \
+			echo "aarch64 NTP testi gecti (TX-pcap fallback): NTP request insa+gonderildi (pcap'te UDP port 123 = '007b007b')."; \
+		else \
+			echo "FAIL: seri 'NTP OK' (RX) veya pcap'te '007b007b' (UDP port 123 TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — NTP testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -2427,6 +2459,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
+                     calistir_ntp_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
