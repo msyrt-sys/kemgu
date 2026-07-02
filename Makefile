@@ -1489,6 +1489,32 @@ calistir_smp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP testi atlandi."; \
 	fi
 
+# === SMP GERÇEK PARALEL HESAPLAMA + SPINLOCK testi (aarch64) ===
+# D-169 SMP bring-up üstünde: iki çekirdek 200-elemanlı diziyi (0..199) İKİYE
+# bölüp paralel toplar (çekirdek 0: [0,100), çekirdek 1: [100,200)). İki paralel-
+# güvenlik yolu birlikte: (A) ayrı slot (yarışsız) + (B) LDAXR/STXR spinlock ile
+# korunan ortak akümülatör. Her ikisi de 19900 ise "SMP COMPUTE OK". QEMU -smp 2.
+# DETERMİNİSTİK: tüm bekleme döngüleri bounded (yük-bağımsız).
+calistir_smp_compute_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP paralel hesaplama + spinlock testi: smp_compute_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_compute_arm.c -o $(BUILD)/smp_compute_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_compute_arm.elf $(BUILD)/smp_compute_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_compute_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_compute_arm.out -kernel $(BUILD)/smp_compute_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_compute_arm.out; echo "--- son ---"; \
+		if grep -q "SMP COMPUTE OK" $(BUILD)/smp_compute_arm.out; then \
+			echo "SMP compute testi gecti: iki cekirdek diziyi paralel topladi (spinlock + ayri-slot), toplam=19900."; \
+		else \
+			echo "FAIL: 'SMP COMPUTE OK' bekleniyor (iki cekirdek paralel toplam = 19900)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP compute testi atlandi."; \
+	fi
+
 # === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
 # launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
 # Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
@@ -2510,7 +2536,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
