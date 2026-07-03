@@ -2760,6 +2760,45 @@ calistir_sha256_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host SHA-256 testi atlandi."; \
 	fi
 
+# === SELF-HOST 128-BIT BIGNUM TOPLAMA (aarch64) — KEMGU çok-word aritmetiği ===
+# bignum_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde 128-bit
+# tamsayı toplaması (2×dtam64 word: yuksek+dusuk) carry (elde) yayılımıyla hesaplar.
+# KEMGU'nun tek 64-bit makine-word'ünün ÖTESİNDE gerçek çok-word aritmetiği
+# kaldırdığını kanıtlar: dtam64 mod-2^64 toplama (add i64 wrap) + İŞARETSİZ taşma
+# tespiti (icmp ult i64 — toplam operanddan küçükse elde 1) + word'ler arası elde
+# yayılımı. Test vektörleri: V1 (0,2^64-1)+(0,1)=(1,0); V2 (2^64-1,2^64-1)+(0,1)=
+# (0,0); V3 (1,2^64-1)+(0,2)=(2,1) — hepsi bilinen doğru sonuçlarla. CİHAZSIZ:
+# QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS. Marker: "KEM BIGNUM OK".
+# NOT (literal kısıtı): 0xFFFFFFFFFFFFFFFF doğrudan yazılamaz (lexer strtoll →
+# INT64_MAX'a satüre); maksimum word aritmetikle kurulur (INT64_MAX+INT64_MAX+1).
+# runtime/codegen DEĞİŞMEDİ; bu bir dil-seviyesi kullanım desenidir.
+calistir_bignum_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST 128-bit BIGNUM toplama: bignum_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/bignum_selfhost.kem > $(BUILD)/bignum_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/bignum_selfhost.ll -c -o $(BUILD)/bignum_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/bignum_selfhost.elf $(BUILD)/bignum_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/bignum_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/bignum_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/bignum_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/bignum_selfhost.out -kernel $(BUILD)/bignum_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/bignum_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM BIGNUM OK" $(BUILD)/bignum_selfhost.out; then \
+			echo "aarch64 self-host BIGNUM testi gecti: KEMGU cihazsiz 128-bit toplama (carry yayilimi, 3 vektor) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM BIGNUM OK' bekleniyor (KEMGU self-host 128-bit bignum carry propagation)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host BIGNUM testi atlandi."; \
+	fi
+
 # === SELF-HOST BASE64 kodlama/çözme (aarch64) — KEMGU payload codec ===
 # base64_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
 # RFC 4648 Base64 encode + decode (round-trip). "KEMGU" (5 byte) -> "S0VNR1U="
@@ -3136,6 +3175,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
                      calistir_sha256_selfhost_arm calistir_base64_selfhost_arm \
+                     calistir_bignum_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
