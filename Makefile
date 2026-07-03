@@ -2265,6 +2265,33 @@ calistir_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virt
 		echo "QEMU yok — DHCP testi atlandi."; \
 	fi
 
+# === DHCP TAM LEASE (DORA) testi (aarch64) — 4-yönlü lease edinimi ===
+# D-162 yalnız DISCOVER->OFFER idi; bu test onu TAM lease'e tamamlar:
+# DISCOVER -> OFFER (yiaddr öğren) -> REQUEST (opt50=yiaddr, opt54=server-id)
+# -> ACK (opt53=5) → lease EDİNİLDİ. SLIRP dahili DHCP → deterministik, internet YOK.
+# Gate: "DHCP LEASE OK" (ACK yiaddr=10.0.2.15 + opt53=5 doğrulandı).
+calistir_dhcp_lease_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 DHCP TAM LEASE (DORA) testi: dhcp_lease_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dhcp_lease_arm.c -o $(BUILD)/dhcp_lease_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/dhcp_lease_arm.elf $(BUILD)/dhcp_lease_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/dhcp_lease_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dhcp_lease_arm.out -kernel $(BUILD)/dhcp_lease_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/dhcp_lease_arm.out; echo "--- son ---"; \
+		if grep -q "DHCP LEASE OK" $(BUILD)/dhcp_lease_arm.out; then \
+			echo "aarch64 DHCP LEASE testi gecti: tam DORA (DISCOVER/OFFER/REQUEST/ACK) → lease edinildi."; \
+		else \
+			echo "FAIL: 'DHCP LEASE OK' bekleniyor (tam 4-yönlü DORA lease edinimi)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — DHCP LEASE testi atlandi."; \
+	fi
+
 # === ARP host-keşfi testi (aarch64) — subnet taraması (pentest recon) ===
 # Kernel 10.0.2.1..10.0.2.15 subnet'ine ARP istekleri yayınlar; gelen ARP-reply'lerden
 # canlı host'ları (spa + sha) toplar. SLIRP gateway (10.0.2.2) her zaman yanıt verir →
@@ -3993,7 +4020,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_fs_journal_test_arm calistir_minifs_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
-                     calistir_udp_test_arm calistir_dhcp_test_arm \
+                     calistir_udp_test_arm calistir_dhcp_test_arm calistir_dhcp_lease_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_traceroute_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
