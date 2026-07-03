@@ -3561,6 +3561,48 @@ calistir_base64_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host BASE64 testi atlandi."; \
 	fi
 
+# === SELF-HOST TÜRKÇE büyük/küçük harf dönüşümü (aarch64) — TÜRKÇE-I problemi ===
+# turkce_case_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde ünlü
+# "Türkçe-I problemini" DOĞRU çözer. Kod-noktası (Unicode ondalık) üstünde harf
+# büyütme/küçültme: Türkçe-özel i<->İ (105<->304, nokta KORUNUR — ASCII yanlış
+# 73='I' verir) + ı<->I (305<->73, noktasız) + ç ğ ö ş ü <-> Ç Ğ Ö Ş Ü + ASCII
+# a-z<->A-Z (i/I hariç). Kanıt: "istanbul" -> büyüt -> "İSTANBUL" (i->İ=304, ASCII
+# tuzağı 73 DEĞİL) + "IRMAK" -> küçült -> "ırmak" (I->ı=305, noktasız) kod-nokta
+# dizileriyle doğrulanır + round-trip özdeşlik + ASCII-tuzağı negatif kontrol.
+# Marker: "KEM TR CASE OK". CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade
+# BM_A64_OBJS (heap dâhil — Dizi<dtam32> kod-nokta tahsisi için).
+# NOT (codegen deseni): kod-noktaları dtam32 (D-211 UTF-8 çözücü deseni); dizi
+# elemanı önce SKALER dtam32'ye alınır (D-173 ashr tuzağı); `karakter` sayısal
+# değil (T003, D-175) → kod-noktalar dtam32 sabitleriyle karşılaştırılır; implicit
+# tam32<->dtam32 YASAK (D-200) → sayaçlar tam32, kod-nokta dtam32 ayrı tutuldu;
+# switch yok → `değilse eğer` zinciri ile harf-eşleme. runtime/codegen DEĞİŞMEDİ.
+calistir_turkce_case_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST TURKCE case-fold (Turkce-I): turkce_case_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/turkce_case_selfhost.kem > $(BUILD)/turkce_case_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/turkce_case_selfhost.ll -c -o $(BUILD)/turkce_case_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/turkce_case_selfhost.elf $(BUILD)/turkce_case_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/turkce_case_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/turkce_case_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/turkce_case_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/turkce_case_selfhost.out -kernel $(BUILD)/turkce_case_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/turkce_case_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM TR CASE OK" $(BUILD)/turkce_case_selfhost.out; then \
+			echo "aarch64 self-host TURKCE case-fold testi gecti: KEMGU cihazsiz 'istanbul' -> 'ISTANBUL' (i->I=304, ASCII 73 DEGIL) + 'IRMAK' -> 'irmak' (I->i=305) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM TR CASE OK' bekleniyor (KEMGU self-host Turkce case-fold)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host TURKCE case-fold testi atlandi."; \
+	fi
+
 # === D-150 Syscall güvenlik testi (aarch64) — kullanıcı-pointer doğrulama ===
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -4069,6 +4111,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sha256_selfhost_arm calistir_rc4_selfhost_arm \
                      calistir_utf8_selfhost_arm \
                      calistir_base64_selfhost_arm \
+                     calistir_turkce_case_selfhost_arm \
                      calistir_bignum_selfhost_arm \
                      calistir_vm_selfhost_arm \
                      calistir_asm_selfhost_arm \

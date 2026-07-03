@@ -1,0 +1,328 @@
+// KEMGU SELF-HOST TÜRKÇE BÜYÜK/KÜÇÜK HARF DÖNÜŞÜMÜ — TÜRKÇE DNA ZİRVESİ.
+// =========================================================================
+// Bu örnek, KEMGU dilinin — Türkçe syntax'lı bir sistem programlama dili —
+// ünlü "Türkçe-I problemini" saf KEMGU'da, cihazsız (MMIO / yetki<MMIO> yok),
+// yalnızca aritmetik + karşılaştırma ile DOĞRU çözebildiğini kanıtlar.
+//
+// TÜRKÇE-I PROBLEMİ (neden hiçbir dil varsayılan doğru yapmaz):
+//   İngilizce/ASCII case-fold: 'i' (U+0069) büyütülünce 'I' (U+0049) olur.
+//   Türkçe'de ise 'i' NOKTALI kalır: 'i' → 'İ' (U+0130, nokta-üstü büyük İ),
+//   ve NOKTASIZ 'ı' (U+0131) büyütülünce NOKTASIZ 'I' (U+0049) olur.
+//   Yani Türkçe'de İKİ ayrı 'i' vardır:
+//     i (noktalı küçük, U+0069) <-> İ (noktalı büyük, U+0130)
+//     ı (noktasız küçük, U+0131) <-> I (noktasız büyük, U+0049)
+//   ASCII kuralı "istanbul" -> "ISTANBUL" verir (YANLIŞ — nokta kaybolur).
+//   Türkçe kuralı "istanbul" -> "İSTANBUL" verir (DOĞRU — i noktalı İ olur).
+//
+// Bu örnek kod-noktaları üstünde çalışır (U+.. Unicode ondalık değerleri);
+// UTF-8 byte çözümü utf8_selfhost.kem'de kanıtlandı, burada kod-nokta katmanı.
+//
+// KRİTİK codegen dersleri (utf8_selfhost.kem + base64_selfhost.kem'den):
+//   (1) Kod-noktaları `dtam32` (D-211 UTF-8 çözücü deseni); döngü sayaçları
+//       tam32. implicit tam32<->dtam32 YASAK (D-200) → köprüde `olarak` cast.
+//   (2) `karakter` tipi sayısal DEĞİL (T003, D-175) → harfleri/kod-noktaları
+//       `dtam32` sabitleri ve dizileriyle temsil edip `==`/`<` ile karşılaştır.
+//   (3) `<<`/`>>` skaler-dtam32'de doğru (D-173 dizi-eleman-ashr tuzağı: dizi
+//       elemanını önce SKALER değişkene al) — burada kaydırma yok, yalnız
+//       aritmetik fark (ASCII a-z<->A-Z için sabit 32 = 'a'-'A' ofseti).
+//   (4) switch YOK → `değilse eğer` zinciri ile harf-eşleme.
+
+// --- Türkçe-özel küçük harf kod-noktaları (ondalık) ---
+sabit KK_i:  dtam32 = 105;   // i  U+0069 (noktalı küçük i)
+sabit KK_ic: dtam32 = 305;   // ı  U+0131 (noktasız küçük ı)
+sabit KK_c:  dtam32 = 231;   // ç  U+00E7
+sabit KK_g:  dtam32 = 287;   // ğ  U+011F
+sabit KK_o:  dtam32 = 246;   // ö  U+00F6
+sabit KK_s:  dtam32 = 351;   // ş  U+015F
+sabit KK_u:  dtam32 = 252;   // ü  U+00FC
+
+// --- Türkçe-özel büyük harf kod-noktaları (ondalık) ---
+sabit BK_I:  dtam32 = 304;   // İ  U+0130 (nokta-üstü büyük İ — Türkçe-özel!)
+sabit BK_Ic: dtam32 = 73;    // I  U+0049 (noktasız büyük I = ASCII 'I')
+sabit BK_C:  dtam32 = 199;   // Ç  U+00C7
+sabit BK_G:  dtam32 = 286;   // Ğ  U+011E
+sabit BK_O:  dtam32 = 214;   // Ö  U+00D6
+sabit BK_S:  dtam32 = 350;   // Ş  U+015E
+sabit BK_U:  dtam32 = 220;   // Ü  U+00DC
+
+// ASCII harf sınırları + a-z<->A-Z ofseti (0x20 = 32).
+sabit ASCII_a: dtam32 = 97;    // 'a'  U+0061
+sabit ASCII_z: dtam32 = 122;   // 'z'  U+007A
+sabit ASCII_A: dtam32 = 65;    // 'A'  U+0041
+sabit ASCII_Z: dtam32 = 90;    // 'Z'  U+005A
+sabit CASE_OFSET: dtam32 = 32; // 'a' - 'A' = 97 - 65
+
+// =========================================================================
+// TÜRKÇE kod-noktası BÜYÜTME (küçük -> büyük). Türkçe-I kuralı uygulanır:
+//   i (105) -> İ (304)   [Türkçe-özel: noktalı büyük İ, ASCII 'I' DEĞİL]
+//   ı (305) -> I (73)    [Türkçe-özel: noktasız büyük I]
+//   ç ğ ö ş ü -> Ç Ğ Ö Ş Ü  (Türkçe eklenmiş Latin harfleri)
+//   a-z (i hariç) -> A-Z  (standart ASCII, ofset -32)
+//   diğer -> değişmeden (rakam, boşluk, noktalama, zaten büyük)
+// switch yok → `değilse eğer` zinciri.
+// =========================================================================
+işlev buyut(cp: dtam32) -> dtam32 {
+    // Türkçe-özel: i -> İ (nokta KORUNUR; ASCII yanlış 'I' verir)
+    eğer cp == KK_i {
+        ver BK_I;
+    } değilse {
+        // Türkçe-özel: ı -> I (noktasız)
+        eğer cp == KK_ic {
+            ver BK_Ic;
+        } değilse {
+            eğer cp == KK_c {
+                ver BK_C;
+            } değilse {
+                eğer cp == KK_g {
+                    ver BK_G;
+                } değilse {
+                    eğer cp == KK_o {
+                        ver BK_O;
+                    } değilse {
+                        eğer cp == KK_s {
+                            ver BK_S;
+                        } değilse {
+                            eğer cp == KK_u {
+                                ver BK_U;
+                            } değilse {
+                                // ASCII a-z (i HARİÇ; i yukarıda ele alındı)
+                                eğer cp < ASCII_a {
+                                    ver cp;
+                                } değilse {
+                                    eğer cp > ASCII_z {
+                                        ver cp;
+                                    } değilse {
+                                        ver cp - CASE_OFSET;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// TÜRKÇE kod-noktası KÜÇÜLTME (büyük -> küçük). buyut'un tersi:
+//   İ (304) -> i (105)   [Türkçe-özel]
+//   I (73)  -> ı (305)   [Türkçe-özel: noktasız I küçülünce noktasız ı]
+//   Ç Ğ Ö Ş Ü -> ç ğ ö ş ü
+//   A-Z (I hariç) -> a-z  (ofset +32)
+//   diğer -> değişmeden
+// =========================================================================
+işlev kucult(cp: dtam32) -> dtam32 {
+    // Türkçe-özel: İ -> i
+    eğer cp == BK_I {
+        ver KK_i;
+    } değilse {
+        // Türkçe-özel: I -> ı (noktasız)
+        eğer cp == BK_Ic {
+            ver KK_ic;
+        } değilse {
+            eğer cp == BK_C {
+                ver KK_c;
+            } değilse {
+                eğer cp == BK_G {
+                    ver KK_g;
+                } değilse {
+                    eğer cp == BK_O {
+                        ver KK_o;
+                    } değilse {
+                        eğer cp == BK_S {
+                            ver KK_s;
+                        } değilse {
+                            eğer cp == BK_U {
+                                ver KK_u;
+                            } değilse {
+                                // ASCII A-Z (I HARİÇ; I yukarıda ele alındı)
+                                eğer cp < ASCII_A {
+                                    ver cp;
+                                } değilse {
+                                    eğer cp > ASCII_Z {
+                                        ver cp;
+                                    } değilse {
+                                        ver cp + CASE_OFSET;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// Bir kod-nokta dizisini yerinde büyütür (uzunluk n). Her eleman SKALER
+// değişkene alınıp buyut() ile dönüştürülür (D-173: dizi elemanı doğrudan
+// işleme sokulmaz, önce skaler).
+// =========================================================================
+işlev dizi_buyut(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken e: dtam32 = cp[i];   // SKALER kopya
+        cp[i] = buyut(e);
+        i = i + 1;
+    }
+    ver n;
+}
+
+// =========================================================================
+// Bir kod-nokta dizisini yerinde küçültür (uzunluk n).
+// =========================================================================
+işlev dizi_kucult(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken e: dtam32 = cp[i];   // SKALER kopya
+        cp[i] = kucult(e);
+        i = i + 1;
+    }
+    ver n;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM TR CASE BASLA");
+
+    // =====================================================================
+    // KANIT 1: "istanbul" -> BÜYÜT -> "İSTANBUL" (Türkçe-DOĞRU).
+    // i (105) İngilizce 'I' (73) verir → YANLIŞ; Türkçe 'İ' (304) → DOĞRU.
+    // "istanbul" kod-noktaları: i=105 s=115 t=116 a=97 n=110 b=98 u=117 l=108
+    // =====================================================================
+    değişken istanbul: Dizi<dtam32> = [105, 115, 116, 97, 110, 98, 117, 108];
+    değişken n1: tam32 = 8;
+    değişken r1: tam32 = dizi_buyut(istanbul, n1);
+
+    yazdir_metin("istanbul -> buyut (kod-nokta):");
+    değişken p: tam32 = 0;
+    iken p < n1 {
+        yazdir_isaretsiz_tam(istanbul[p]);
+        p = p + 1;
+    }
+
+    // Beklenen "İSTANBUL": İ=304 S=83 T=84 A=65 N=78 B=66 U=85 L=76
+    değişken bek_ist: Dizi<dtam32> = [304, 83, 84, 65, 78, 66, 85, 76];
+    değişken dogru: tam32 = 1;
+    değişken q: tam32 = 0;
+    iken q < n1 {
+        eğer istanbul[q] == bek_ist[q] {
+            // eşleşti
+        } değilse {
+            dogru = 0;
+        }
+        q = q + 1;
+    }
+
+    // İSPAT vurgusu: ilk harf 304 (İ, noktalı) OLMALI — 73 (ASCII I) DEĞİL.
+    eğer istanbul[0] == BK_I {
+        // Türkçe-DOĞRU: i -> İ (nokta korundu)
+    } değilse {
+        dogru = 0;   // ASCII tuzağına düştü (73 = yanlış)
+    }
+
+    // =====================================================================
+    // KANIT 2: "IRMAK" -> KÜÇÜLT -> "ırmak" (noktasız ı, Türkçe-DOĞRU).
+    // I (73) İngilizce 'i' (105) verir → YANLIŞ; Türkçe 'ı' (305) → DOĞRU.
+    // "IRMAK" kod-noktaları: I=73 R=82 M=77 A=65 K=75
+    // =====================================================================
+    değişken irmak: Dizi<dtam32> = [73, 82, 77, 65, 75];
+    değişken n2: tam32 = 5;
+    değişken r2: tam32 = dizi_kucult(irmak, n2);
+
+    yazdir_metin("IRMAK -> kucult (kod-nokta):");
+    değişken p2: tam32 = 0;
+    iken p2 < n2 {
+        yazdir_isaretsiz_tam(irmak[p2]);
+        p2 = p2 + 1;
+    }
+
+    // Beklenen "ırmak": ı=305 r=114 m=109 a=97 k=107
+    değişken bek_irm: Dizi<dtam32> = [305, 114, 109, 97, 107];
+    değişken q2: tam32 = 0;
+    iken q2 < n2 {
+        eğer irmak[q2] == bek_irm[q2] {
+            // eşleşti
+        } değilse {
+            dogru = 0;
+        }
+        q2 = q2 + 1;
+    }
+
+    // İSPAT vurgusu: ilk harf 305 (ı, noktasız) OLMALI — 105 (i noktalı) DEĞİL.
+    eğer irmak[0] == KK_ic {
+        // Türkçe-DOĞRU: I -> ı (noktasız)
+    } değilse {
+        dogru = 0;   // ASCII tuzağına düştü (105 = yanlış)
+    }
+
+    // =====================================================================
+    // KANIT 3: Türkçe-özel çift dönüşüm kod-nokta değerleriyle doğrudan.
+    //   i (105) -> buyut -> İ (304)     [i->İ, ASCII 'I'=73 DEĞİL]
+    //   ı (305) -> buyut -> I  (73)     [ı->I noktasız]
+    //   Round-trip: buyut sonra kucult özdeşlik olmalı.
+    // =====================================================================
+    değişken buyut_i: dtam32 = buyut(KK_i);      // 105 -> ?
+    değişken buyut_ic: dtam32 = buyut(KK_ic);    // 305 -> ?
+    eğer buyut_i == BK_I {
+        // i -> İ (304) DOĞRU
+    } değilse {
+        dogru = 0;
+    }
+    eğer buyut_ic == BK_Ic {
+        // ı -> I (73) DOĞRU
+    } değilse {
+        dogru = 0;
+    }
+
+    // Round-trip özdeşlik: i -> İ -> i ve ı -> I -> ı
+    eğer kucult(buyut_i) == KK_i {
+        // i -> İ -> i özdeş
+    } değilse {
+        dogru = 0;
+    }
+    eğer kucult(buyut_ic) == KK_ic {
+        // ı -> I -> ı özdeş
+    } değilse {
+        dogru = 0;
+    }
+
+    // ASCII-tuzağı NEGATİF kontrol: buyut(i) ASLA 73 (ASCII 'I') OLMAMALI.
+    eğer buyut_i == BK_Ic {
+        dogru = 0;   // 304 yerine 73 çıktıysa ASCII kuralına düşmüş → hata
+    } değilse {
+        // 73 değil, DOĞRU (304 = İ)
+    }
+
+    // =====================================================================
+    // KANIT 4: Türkçe Latin harfleri (ç ğ ö ş ü) çift-yönlü.
+    //   küçük -> büyük -> küçük özdeşlik.
+    // =====================================================================
+    değişken kucukler: Dizi<dtam32> = [231, 287, 246, 351, 252];  // ç ğ ö ş ü
+    değişken buyukler: Dizi<dtam32> = [199, 286, 214, 350, 220];  // Ç Ğ Ö Ş Ü
+    değişken j: tam32 = 0;
+    iken j < 5 {
+        değişken kk: dtam32 = kucukler[j];    // SKALER
+        değişken bb: dtam32 = buyukler[j];    // SKALER
+        eğer buyut(kk) == bb {
+            // küçük -> büyük DOĞRU
+        } değilse {
+            dogru = 0;
+        }
+        eğer kucult(bb) == kk {
+            // büyük -> küçük DOĞRU
+        } değilse {
+            dogru = 0;
+        }
+        j = j + 1;
+    }
+
+    eğer dogru == 1 {
+        yazdir_metin("KEM TR CASE OK");
+    } değilse {
+        yazdir_metin("KEM TR CASE FAIL");
+    }
+
+    ver 0;
+}
