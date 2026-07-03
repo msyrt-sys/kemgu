@@ -1,0 +1,407 @@
+// KEMGU SELF-HOST TÜRKÇE ALFABETİK SIRALAMA (collation) — TÜRKÇE DNA'nın DEVAMI.
+// =========================================================================
+// Bu örnek, KEMGU dilinin — Türkçe syntax'lı bir sistem programlama dili —
+// TÜRKÇE ALFABETİK SIRALAMAYI (Türkçe collation) saf KEMGU'da, cihazsız
+// (MMIO / yetki<MMIO> yok), yalnızca aritmetik + karşılaştırma + dizi
+// mutasyonu ile DOĞRU yapabildiğini kanıtlar.
+//
+// TÜRKÇE COLLATION PROBLEMİ (neden mainstream diller yanlış yapar):
+//   Çoğu dilin varsayılan string karşılaştırması Unicode KOD-NOKTA sırasını
+//   kullanır. Ama Türkçe alfabe sırası kod-nokta sırasıyla ÖRTÜŞMEZ:
+//     Türkçe alfabe: a b c ç d e f g ğ h ı i j k l m n o ö p r s ş t u ü v y z
+//   İki KRİTİK ayrışma:
+//     (1) ç (U+00E7 = 231) Türkçe'de c'den (99) HEMEN SONRA gelir. Ama Unicode
+//         kod-noktasında 231 >> 100 ('d'), yani Unicode-sıralama ç'yi z'den
+//         bile SONRAYA atar (YANLIŞ). Türkçe: c < ç < d.
+//     (2) ı (U+0131 = 305) Türkçe'de i'den (105) ÖNCE gelir (ı < i!). Ama
+//         Unicode kod-noktasında 305 > 105, yani Unicode-sıralama ı'yı i'den
+//         SONRAYA atar (YANLIŞ). Türkçe: h < ı < i < j.
+//   Benzer şekilde ğ (287) g'den sonra, ö (246) o'dan sonra, ş (351) s'den
+//   sonra, ü (252) u'dan sonra — hepsi Unicode kod-noktasında yanlış yere düşer.
+//
+// ÇÖZÜM: Her Türkçe harfe bir TÜRKÇE-SIRA-İNDEKSİ ata (a=0, b=1, c=2, ç=3,
+// d=4, ..., z=28). İki kelimeyi bu indeksle karakter-karakter karşılaştır
+// (Türkçe collation). Böylece "ç > c" ve "ı < i" DOĞRU kararlanır.
+//
+// KRİTİK codegen dersleri (turkce_case + utf8 + sort selfhost'tan):
+//   (1) Kod-noktaları `dtam32` (D-211 UTF-8 çözücü deseni); döngü sayaçları
+//       tam32. implicit tam32<->dtam32 YASAK (D-200) → köprüde `olarak` cast.
+//   (2) `karakter` tipi sayısal DEĞİL (T003, D-175) → harfleri kod-nokta
+//       dtam32 sabitleriyle temsil edip `==`/`<` ile karşılaştır.
+//   (3) Dizi elemanı önce SKALER dtam32'ye alınır (D-173 ashr tuzağı); dizi
+//       in-place swap (D-171 sort deseni) çağırana yansır.
+//   (4) switch YOK → `değilse eğer` zinciri ile harf→sıra-indeks eşleme.
+
+// --- Türkçe harflerin kod-noktaları (ondalık) ---
+sabit KN_a: dtam32 = 97;    // a  U+0061
+sabit KN_b: dtam32 = 98;    // b  U+0062
+sabit KN_c: dtam32 = 99;    // c  U+0063
+sabit KN_cc: dtam32 = 231;  // ç  U+00E7 (Unicode 231 — c'den ÇOK sonra ama Türkçe'de c+1)
+sabit KN_d: dtam32 = 100;   // d  U+0064
+sabit KN_e: dtam32 = 101;   // e  U+0065
+sabit KN_f: dtam32 = 102;   // f  U+0066
+sabit KN_g: dtam32 = 103;   // g  U+0067
+sabit KN_gg: dtam32 = 287;  // ğ  U+011F
+sabit KN_h: dtam32 = 104;   // h  U+0068
+sabit KN_ii: dtam32 = 305;  // ı  U+0131 (Unicode 305 — i'den sonra ama Türkçe'de i'den ÖNCE)
+sabit KN_i: dtam32 = 105;   // i  U+0069
+sabit KN_j: dtam32 = 106;   // j  U+006A
+sabit KN_k: dtam32 = 107;   // k  U+006B
+sabit KN_l: dtam32 = 108;   // l  U+006C
+sabit KN_m: dtam32 = 109;   // m  U+006D
+sabit KN_n: dtam32 = 110;   // n  U+006E
+sabit KN_o: dtam32 = 111;   // o  U+006F
+sabit KN_oo: dtam32 = 246;  // ö  U+00F6
+sabit KN_p: dtam32 = 112;   // p  U+0070
+sabit KN_r: dtam32 = 114;   // r  U+0072
+sabit KN_s: dtam32 = 115;   // s  U+0073
+sabit KN_ss: dtam32 = 351;  // ş  U+015F
+sabit KN_t: dtam32 = 116;   // t  U+0074
+sabit KN_u: dtam32 = 117;   // u  U+0075
+sabit KN_uu: dtam32 = 252;  // ü  U+00FC
+sabit KN_v: dtam32 = 118;   // v  U+0076
+sabit KN_y: dtam32 = 121;   // y  U+0079
+sabit KN_z: dtam32 = 122;   // z  U+007A
+
+// Bilinmeyen harf için nöbetçi (sınır dışı) sıra-indeksi — Türkçe alfabe
+// dışı bir karakter (rakam, boşluk vb.) en sona düşer.
+sabit SIRA_BILINMEYEN: tam32 = 99;
+
+// Dizi bitişi işaretçisi (string sonu). Kelimeler eşit uzunlukta değilse
+// kısa olan önce gelir; bunu -1 sıra-indeksiyle temsil ediyoruz.
+sabit SIRA_SON: tam32 = 0 - 1;   // -1: kelime bitti → daima daha küçük
+
+// =========================================================================
+// Bir Türkçe harfin kod-noktasını (dtam32) TÜRKÇE ALFABE SIRA-İNDEKSİNE
+// (tam32, 0..28) eşler. switch yok → `değilse eğer` zinciri.
+//   a=0 b=1 c=2 ç=3 d=4 e=5 f=6 g=7 ğ=8 h=9 ı=10 i=11 j=12 k=13 l=14 m=15
+//   n=16 o=17 ö=18 p=19 r=20 s=21 ş=22 t=23 u=24 ü=25 v=26 y=27 z=28
+// KRİTİK: ç=3 (c=2'den hemen sonra, Unicode 231 DEĞİL); ı=10 i=11 (ı<i!).
+// =========================================================================
+işlev sira_indeksi(cp: dtam32) -> tam32 {
+    eğer cp == KN_a {
+        ver 0;
+    } değilse { eğer cp == KN_b {
+        ver 1;
+    } değilse { eğer cp == KN_c {
+        ver 2;
+    } değilse { eğer cp == KN_cc {
+        ver 3;    // ç — c'den HEMEN sonra (Türkçe collation kararı)
+    } değilse { eğer cp == KN_d {
+        ver 4;
+    } değilse { eğer cp == KN_e {
+        ver 5;
+    } değilse { eğer cp == KN_f {
+        ver 6;
+    } değilse { eğer cp == KN_g {
+        ver 7;
+    } değilse { eğer cp == KN_gg {
+        ver 8;    // ğ — g'den sonra
+    } değilse { eğer cp == KN_h {
+        ver 9;
+    } değilse { eğer cp == KN_ii {
+        ver 10;   // ı — h'den sonra, i'den ÖNCE (Türkçe collation kararı)
+    } değilse { eğer cp == KN_i {
+        ver 11;   // i — ı'dan SONRA
+    } değilse { eğer cp == KN_j {
+        ver 12;
+    } değilse { eğer cp == KN_k {
+        ver 13;
+    } değilse { eğer cp == KN_l {
+        ver 14;
+    } değilse { eğer cp == KN_m {
+        ver 15;
+    } değilse { eğer cp == KN_n {
+        ver 16;
+    } değilse { eğer cp == KN_o {
+        ver 17;
+    } değilse { eğer cp == KN_oo {
+        ver 18;   // ö — o'dan sonra
+    } değilse { eğer cp == KN_p {
+        ver 19;
+    } değilse { eğer cp == KN_r {
+        ver 20;
+    } değilse { eğer cp == KN_s {
+        ver 21;
+    } değilse { eğer cp == KN_ss {
+        ver 22;   // ş — s'den sonra
+    } değilse { eğer cp == KN_t {
+        ver 23;
+    } değilse { eğer cp == KN_u {
+        ver 24;
+    } değilse { eğer cp == KN_uu {
+        ver 25;   // ü — u'dan sonra
+    } değilse { eğer cp == KN_v {
+        ver 26;
+    } değilse { eğer cp == KN_y {
+        ver 27;
+    } değilse { eğer cp == KN_z {
+        ver 28;
+    } değilse {
+        ver SIRA_BILINMEYEN;   // Türkçe alfabe dışı → en sona
+    } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
+}
+
+// =========================================================================
+// İki Türkçe kelimeyi (kod-nokta dizileri) TÜRKÇE COLLATION ile karşılaştırır.
+// Kelimeler `a`/`b` dizileri, uzunlukları `na`/`nb`. Kelimeler tek boyutlu
+// düz bir kod-nokta havuzunda (`havuz`) saklanır; her kelime `bas` ofsetiyle
+// ve `uzunluk` ile verilir. Karşılaştırma: her pozisyondaki harfin TÜRKÇE
+// SIRA-İNDEKSİNİ al, ilk farklı pozisyonda küçük indeksli kelime önce gelir.
+// Döner:
+//   -1  → a, b'den önce (a < b Türkçe collation)
+//    0  → a == b
+//    1  → a, b'den sonra (a > b)
+// =========================================================================
+işlev tr_karsilastir(havuz: Dizi<dtam32>, a_bas: tam32, a_uz: tam32,
+                     b_bas: tam32, b_uz: tam32) -> tam32 {
+    değişken k: tam32 = 0;   // pozisyon (her iki kelimede ortak)
+    değişken sonuc: tam32 = 0;
+    değişken bitti: tam32 = 0;
+    iken bitti == 0 {
+        // Her iki kelimenin k'ıncı harfinin TÜRKÇE sıra-indeksini bul.
+        // Kelime bittiyse SIRA_SON (-1) → kısa kelime önce gelir.
+        değişken sa: tam32 = SIRA_SON;
+        değişken sb: tam32 = SIRA_SON;
+        eğer k < a_uz {
+            değişken ea: dtam32 = havuz[a_bas + k];   // SKALER kopya (D-173)
+            sa = sira_indeksi(ea);
+        } değilse {
+            // a kelimesi bitti; sa = SIRA_SON kalır
+        }
+        eğer k < b_uz {
+            değişken eb: dtam32 = havuz[b_bas + k];   // SKALER kopya (D-173)
+            sb = sira_indeksi(eb);
+        } değilse {
+            // b kelimesi bitti; sb = SIRA_SON kalır
+        }
+
+        eğer sa == SIRA_SON {
+            eğer sb == SIRA_SON {
+                // İkisi de bitti, tüm harfler eşit → eşit kelime.
+                sonuc = 0;
+                bitti = 1;
+            } değilse {
+                // a bitti, b devam ediyor → a daha kısa → a < b.
+                sonuc = 0 - 1;
+                bitti = 1;
+            }
+        } değilse {
+            eğer sb == SIRA_SON {
+                // b bitti, a devam → a > b.
+                sonuc = 1;
+                bitti = 1;
+            } değilse {
+                // İki harf de var: TÜRKÇE sıra-indeksleriyle karşılaştır.
+                eğer sa < sb {
+                    sonuc = 0 - 1;
+                    bitti = 1;
+                } değilse {
+                    eğer sa > sb {
+                        sonuc = 1;
+                        bitti = 1;
+                    } değilse {
+                        // Eşit harf → sonraki pozisyona geç.
+                        k = k + 1;
+                    }
+                }
+            }
+        }
+    }
+    ver sonuc;
+}
+
+// =========================================================================
+// Kelime tablosunu TÜRKÇE COLLATION ile YERİNDE (in-place) sıralar (bubble
+// sort, D-171 deseni). Her kelime düz `havuz` dizisinde saklanır; `baslar`
+// ofsetlerini ve `uzunluklar` uzunluklarını tutar. Sıralama sırasında yalnız
+// `baslar`/`uzunluklar` dizilerindeki ikili SWAP yapılır (havuz sabit kalır)
+// — böylece kelimelerin fiziksel kopyası gerekmez, sadece işaretçiler takas.
+// Diziler referansla aktarıldığından mutasyon çağırana yansır.
+// =========================================================================
+işlev tr_sirala(havuz: Dizi<dtam32>, baslar: Dizi<tam32>,
+                uzunluklar: Dizi<tam32>, kelime_sayisi: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < kelime_sayisi {
+        değişken j: tam32 = 0;
+        iken j < kelime_sayisi - i - 1 {
+            // Komşu iki kelimeyi TÜRKÇE collation ile karşılaştır.
+            değişken ba: tam32 = baslar[j];      // SKALER
+            değişken ua: tam32 = uzunluklar[j];  // SKALER
+            değişken bb: tam32 = baslar[j + 1];      // SKALER
+            değişken ub: tam32 = uzunluklar[j + 1];  // SKALER
+            değişken cmp: tam32 = tr_karsilastir(havuz, ba, ua, bb, ub);
+            eğer cmp > 0 {
+                // j > j+1 (Türkçe collation) → takas (baslar + uzunluklar).
+                baslar[j] = bb;
+                baslar[j + 1] = ba;
+                uzunluklar[j] = ub;
+                uzunluklar[j + 1] = ua;
+            } değilse {
+                // sıralı, takas yok
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM TR SORT BASLA");
+
+    // =====================================================================
+    // Karışık Türkçe kelime dizisi (5 kelime), düz kod-nokta havuzunda:
+    //   0: "çam"      → ç a m      = 231, 97, 109      (bas 0,  uz 3)
+    //   1: "can"      → c a n      = 99, 97, 110       (bas 3,  uz 3)
+    //   2: "ada"      → a d a      = 97, 100, 97       (bas 6,  uz 3)
+    //   3: "ıhlamur"  → ı h l a m u r = 305,104,108,97,109,117,114 (bas 9, uz 7)
+    //   4: "irmak"    → i r m a k  = 105, 114, 109, 97, 107 (bas 16, uz 5)
+    //
+    // TÜRKÇE-DOĞRU beklenen sıra:
+    //   ada < can < çam < ıhlamur < irmak
+    //   (DİKKAT: ç c'den SONRA → çam, can'dan sonra; ı i'den ÖNCE → ıhlamur,
+    //    irmak'tan önce. Unicode kod-nokta sıralaması İKİSİNİ DE yanlış verir:
+    //    çam'ı en sona atar (231 büyük), ıhlamur'u irmak'tan sonraya atar.)
+    // =====================================================================
+    değişken havuz: Dizi<dtam32> = [
+        231, 97, 109,                         // çam      (bas 0,  uz 3)
+        99, 97, 110,                          // can      (bas 3,  uz 3)
+        97, 100, 97,                          // ada      (bas 6,  uz 3)
+        305, 104, 108, 97, 109, 117, 114,     // ıhlamur  (bas 9,  uz 7)
+        105, 114, 109, 97, 107                // irmak    (bas 16, uz 5)
+    ];
+    // Kelime işaretçileri (başlangıç ofsetleri) ve uzunlukları.
+    değişken baslar: Dizi<tam32> = [0, 3, 6, 9, 16];
+    değişken uzunluklar: Dizi<tam32> = [3, 3, 3, 7, 5];
+    değişken kelime_sayisi: tam32 = 5;
+
+    // =====================================================================
+    // KANIT 1 (collation-kararı ÖNCE, sıralamadan bağımsız):
+    //   "ç > c": tr_karsilastir("çam", "can") = +1 OLMALI (çam, can'dan sonra).
+    //   Unicode kod-nokta karşılaştırması da 231 > 99 verir ama SEBEP farklı;
+    //   asıl kritik test aşağıda ("ç" ile "d" arası). Yine de collation-tutarlı.
+    //   ç sıra-indeksi 3, c sıra-indeksi 2 → ç > c → +1. DOĞRU.
+    // =====================================================================
+    değişken dogru: tam32 = 1;
+
+    // çam (bas 0, uz 3) vs can (bas 3, uz 3): ilk harf ç(3) vs c(2) → +1.
+    değişken cmp_c: tam32 = tr_karsilastir(havuz, 0, 3, 3, 3);
+    eğer cmp_c == 1 {
+        // "çam" > "can" (ç > c) DOĞRU
+    } değilse {
+        dogru = 0;
+    }
+
+    // KRİTİK "ç < d" testi: Unicode YANLIŞ verir (ç=231 > d=100), Türkçe DOĞRU
+    // (ç sıra-indeksi 3 < d sıra-indeksi 4). "çam" vs "dam" karşılaştır.
+    // "dam" havuzda yok → geçici olarak tek-harf indeksleriyle doğrudan kontrol.
+    değişken si_cc: tam32 = sira_indeksi(KN_cc);   // ç → 3
+    değişken si_d: tam32 = sira_indeksi(KN_d);     // d → 4
+    eğer si_cc < si_d {
+        // ç(3) < d(4) → Türkçe collation DOĞRU (Unicode 231>100 tuzağına düşmedi)
+    } değilse {
+        dogru = 0;
+    }
+    // NEGATİF kontrol: Unicode-tuzağı olsaydı si_cc (231-tabanlı) > si_d olurdu.
+    // Sıra-indeksi kod-noktadan bağımsız olduğu için ç ASLA d'den sonra gelmez.
+    eğer si_cc > si_d {
+        dogru = 0;   // Unicode tuzağına düşüldü (231 > 100) → HATA
+    } değilse {
+        // DOĞRU: 3 < 4
+    }
+
+    // =====================================================================
+    // KANIT 2 (collation-kararı "ı < i"): Türkçe'de ı, i'den ÖNCE gelir.
+    //   Unicode YANLIŞ verir (ı=305 > i=105), Türkçe DOĞRU (ı=10 < i=11).
+    //   "ıhlamur" (bas 9, uz 7) vs "irmak" (bas 16, uz 5): ilk harf ı vs i.
+    //   ı sıra-indeksi 10 < i sıra-indeksi 11 → -1 (ıhlamur önce). DOĞRU.
+    // =====================================================================
+    değişken cmp_i: tam32 = tr_karsilastir(havuz, 9, 7, 16, 5);
+    eğer cmp_i == 0 - 1 {
+        // "ıhlamur" < "irmak" (ı < i) DOĞRU
+    } değilse {
+        dogru = 0;
+    }
+    // NEGATİF kontrol: Unicode-tuzağı olsaydı 305 > 105 → +1 (ıhlamur sonra).
+    değişken si_ii: tam32 = sira_indeksi(KN_ii);   // ı → 10
+    değişken si_i: tam32 = sira_indeksi(KN_i);     // i → 11
+    eğer si_ii < si_i {
+        // ı(10) < i(11) → Türkçe collation DOĞRU (Unicode 305>105 tuzağı yok)
+    } değilse {
+        dogru = 0;
+    }
+    eğer si_ii > si_i {
+        dogru = 0;   // Unicode tuzağına düşüldü (305 > 105) → HATA
+    } değilse {
+        // DOĞRU: 10 < 11
+    }
+
+    // =====================================================================
+    // ANA KANIT: 5 kelimeyi TÜRKÇE collation ile YERİNDE sırala, sonucu
+    // beklenen Türkçe-alfabetik sırayla doğrula.
+    //   Girdi indeks sırası: [çam, can, ada, ıhlamur, irmak]
+    //   TÜRKÇE-DOĞRU çıktı:  [ada, can, çam, ıhlamur, irmak]
+    // baslar başlangıçta [0,3,6,9,16] (çam,can,ada,ıhlamur,irmak).
+    // Sıralama sonrası beklenen baslar: [6,3,0,9,16] (ada,can,çam,ıhlamur,irmak).
+    // =====================================================================
+    tr_sirala(havuz, baslar, uzunluklar, kelime_sayisi);
+
+    // Sıralı kelimelerin kod-noktalarını bas (Türkçe-alfabetik sırada).
+    yazdir_metin("Turkce collation sirali (kod-nokta):");
+    değişken w: tam32 = 0;
+    iken w < kelime_sayisi {
+        değişken bas: tam32 = baslar[w];      // SKALER
+        değişken uz: tam32 = uzunluklar[w];   // SKALER
+        değişken c: tam32 = 0;
+        iken c < uz {
+            değişken cp: dtam32 = havuz[bas + c];   // SKALER
+            yazdir_isaretsiz_tam(cp);
+            c = c + 1;
+        }
+        w = w + 1;
+    }
+
+    // Beklenen sıra (ofsetler): ada(6) can(3) çam(0) ıhlamur(9) irmak(16).
+    değişken bek_bas: Dizi<tam32> = [6, 3, 0, 9, 16];
+    değişken v: tam32 = 0;
+    iken v < kelime_sayisi {
+        değişken gerçek: tam32 = baslar[v];     // SKALER
+        değişken beklenen: tam32 = bek_bas[v];  // SKALER
+        eğer gerçek == beklenen {
+            // eşleşti
+        } değilse {
+            dogru = 0;
+        }
+        v = v + 1;
+    }
+
+    // VURGU: sıralamadan sonra ilk kelime "ada" (bas 6) OLMALI; son iki kelime
+    // ıhlamur(9) sonra irmak(16) — Unicode olsaydı çam en sona, ıhlamur
+    // irmak'tan SONRA düşerdi. Ayrı ayrı kritik pozisyonları doğrula.
+    eğer baslar[0] == 6 {
+        // ilk = ada (Türkçe collation) DOĞRU
+    } değilse {
+        dogru = 0;
+    }
+    // çam (bas 0) 3. sırada (indeks 2) OLMALI — Unicode olsaydı en sonda (indeks 4).
+    eğer baslar[2] == 0 {
+        // çam 3. sırada (can'dan sonra, d'den önce) DOĞRU
+    } değilse {
+        dogru = 0;   // Unicode tuzağı: çam en sona atıldı → HATA
+    }
+    // ıhlamur (bas 9) 4. sırada (indeks 3), irmak'tan (bas 16, indeks 4) ÖNCE.
+    eğer baslar[3] == 9 {
+        // ıhlamur, irmak'tan önce (ı < i) DOĞRU
+    } değilse {
+        dogru = 0;   // Unicode tuzağı: ıhlamur irmak'tan sonraya → HATA
+    }
+
+    eğer dogru == 1 {
+        yazdir_metin("KEM TR SORT OK");
+    } değilse {
+        yazdir_metin("KEM TR SORT FAIL");
+    }
+
+    ver 0;
+}
