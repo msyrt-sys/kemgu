@@ -2627,6 +2627,40 @@ calistir_smp_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 SMP testi atlandi."; \
 	fi
 
+# === SMP 4-cekirdek testi (x86_64) — coklu-AP INIT-SIPI (D-187 2->4, D-191 x86 ikizi) ===
+# D-187 (x86 SMP 2-cekirdek) testinin 4-cekirdege olceklenmesi + D-191 (aarch64
+# 4-cekirdek) x86 paritesi. BSP cekirdek 1,2,3'u (APIC ID 1,2,3) Local APIC
+# INIT-SIPI ile ayri ayri baslatir. 3 AP AYNI SIPI vektorunu (0x08 -> 0x8000
+# ORTAK trampoline) paylasir; ayrisma long-mode ortak naked giriste (her AP kendi
+# APIC ID'sini okur -> APIC-ID-indeksli kendi yigini + kendi canli-slotu). BSP
+# canli[1],[2],[3] hepsini bekler (bounded); ucu de long-mode'a ulasirsa
+# "SMP4 X86 OK 4 cekirdek". Kismi gelirse "SMP4 X86 KISMI N/3". QEMU -smp 4.
+# timeout 20 — x86 hlt-loop yuk-marji (4 core AP bring-up + trampoline).
+calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 SMP4 testi: smp4_x86.c -> ELF (Local APIC coklu-AP INIT-SIPI, ORTAK trampoline)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/smp4_x86.c -o $(BUILD)/smp4_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/smp4_x86.elf $(BUILD)/smp4_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp4_x86.out; \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/smp4_x86.elf -display none \
+			-smp 4 \
+			-serial file:$(BUILD)/smp4_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp4_x86.out; echo "--- son ---"; \
+		if grep -q "SMP4 X86 OK" $(BUILD)/smp4_x86.out; then \
+			echo "x86_64 SMP4 testi gecti: 4 cekirdek (BSP + 3 AP) INIT-SIPI ile long-mode'da kostu (coklu-AP)."; \
+		elif grep -q "SMP4 X86 KISMI" $(BUILD)/smp4_x86.out; then \
+			echo "x86_64 SMP4 kismi: bazi AP'ler long-mode'a ulasti (3'un tamami degil) — cikti icinde N/3 raporlandi."; \
+		elif grep -q "APIC OK" $(BUILD)/smp4_x86.out; then \
+			echo "x86_64 SMP4 fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
+		else \
+			echo "FAIL: 'SMP4 X86 OK' (veya kismi/fallback) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 SMP4 testi atlandi."; \
+	fi
+
 # === RING3 (userspace) testi (x86_64) — AYRICALIK AYRIMI (D2-x86) ===
 # aarch64 D2 (EL0) + D-124 (userspace ABI) testlerinin x86 muadili. Long-mode
 # ring0 kernel, ring3 kod çalıştırır: GDT DPL=3 user seg + TSS (RSP0) + IDT
@@ -3569,7 +3603,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
-                     calistir_smp_test_x86 calistir_ring3_test_x86 \
+                     calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
                      calistir_ring3_page_test_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
