@@ -3477,6 +3477,33 @@ calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace fiber testi atlandi."; \
 	fi
 
+# === USERSPACE MALLOC (aarch64) — EL0 süreç KENDİ heap allocator'ını çalıştırır ===
+# MİLESTONE B: bir EL0 (yetkisiz) süreç, çekirdek yardımı OLMADAN kendi dinamik bellek
+# ayırıcısını (u_malloc/u_free — bump + serbest-liste) yalnız kendi EL0-erişimli veri
+# sayfasında (0x42000000 bölgesi, .user_data) sürer. Senaryo: A/B/C ayır → B serbest →
+# D ayır → D, B'nin yerini alır (free-list reuse kanıtı) + yaz/oku round-trip. Kernel
+# yalnız I/O syscall (num=5/6/7 yaz, num=3 cik) verir. userspace_arm/userspace_fiber
+# modeli (kdl_el0_calistir, -smp yok). Kanıt: "USERMALLOC OK".
+calistir_userspace_malloc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "MILESTONE-B aarch64 userspace heap allocator testi: userspace_malloc_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_malloc_arm.c -o $(BUILD)/userspace_malloc_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_malloc_arm.elf $(BUILD)/userspace_malloc_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_malloc_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_malloc_arm.out -kernel $(BUILD)/userspace_malloc_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_malloc_arm.out; echo "--- son ---"; \
+		if grep -q "USERMALLOC OK" $(BUILD)/userspace_malloc_arm.out; then \
+			echo "MILESTONE-B aarch64 userspace malloc testi gecti: EL0 kendi heap allocator (bump+free-list reuse + round-trip), kernel yardimi yok."; \
+		else \
+			echo "FAIL: 'USERMALLOC OK' bekleniyor (EL0 u_malloc/u_free bump+serbest-liste reuse + round-trip)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace malloc testi atlandi."; \
+	fi
+
 # === USERSPACE DNS (aarch64) — EL0 süreç syscall ile TAM DNS protokol çözümleme ===
 # D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) üstünde EL0 (yetkisiz) süreç
 # TAM L2-L7 yığını çalıştırır: ARP → DNS sorgusu (Eth+IPv4+UDP+DNS "example.com" A) →
@@ -3773,6 +3800,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_fiber_test_arm \
+                     calistir_userspace_malloc_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
                      calistir_userspace_dhcp_test_arm \
                      calistir_userspace_tftp_test_arm \
