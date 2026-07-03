@@ -2874,6 +2874,35 @@ calistir_ring3_page_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 tam sayfa-izolasyon testi atlandi."; \
 	fi
 
+# === PREEMPTIVE scheduler testi (x86_64) — PIT timer-IRQ context-switch (Milestone F) ===
+# C7b (aarch64 preempt_arm) testinin x86 ikizi/paritesi. x86'da simdiye kadar
+# yalniz COOPERATIVE (C7a sched) vardi; bu test gercek PREEMPTIVE round-robin
+# getirir. Kendi-kurulumlu IDT + PIC(8259) remap + PIT(8254) ~100Hz -> IRQ0.
+# IRQ0 asm stub tam GP trap-frame kaydeder -> C scheduler round-robin RSP swap
+# -> PIC EOI -> iretq. Iki kernel-gorev busy-loop yapar, ASLA yield ETMEZ;
+# yalnizca timer-IRQ onlari preempt eder. Gorev B'nin sayaci>0 = preemption
+# calisti kaniti. Marker "PREEMPT X86 OK". timeout 20 (hlt-loop timeout ile
+# oludur = beklenen, || true). Deterministik (bounded donguler).
+calistir_preempt_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 preemptive sched testi: preempt_x86.c -> ELF (IDT+PIC+PIT IRQ0 context-switch)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/preempt_x86.c -o $(BUILD)/preempt_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/preempt_x86.elf $(BUILD)/preempt_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/preempt_x86.out; \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/preempt_x86.elf -display none \
+			-serial file:$(BUILD)/preempt_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/preempt_x86.out; echo "--- son ---"; \
+		if grep -q "PREEMPT X86 OK" $(BUILD)/preempt_x86.out; then \
+			echo "x86_64 preemptive sched testi gecti: gorev B YIELD cagirmadan timer-IRQ ile kostu (zorunlu baglam-degistirme)."; \
+		else \
+			echo "FAIL: 'PREEMPT X86 OK' bekleniyor (PIT IRQ0 preemption calismali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 preemptive sched testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -3948,7 +3977,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
                      calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
-                     calistir_ring3_page_test_x86
+                     calistir_ring3_page_test_x86 calistir_preempt_test_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
