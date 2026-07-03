@@ -1661,6 +1661,38 @@ calistir_smp_prodcons_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # set eder. BSP 1/2/3 hepsinin canlı olmasını + doğru MPIDR okumasını bekler →
 # "SMP4 OK 4 cekirdek". Eksik varsa "SMP4 EKSIK cekirdek=N".
 # smp_queue modeli AMA -smp 4, net/drive yok. DETERMİNİSTİK.
+# === SMP READER-WRITER LOCK (çoklu-okuyucu / tek-yazıcı) testi (aarch64) ===
+# D-170/174/180/192 SMP + kilit üstünde: D-192 ticket-lock FIFO adil kilit verdi
+# ama HÂLÂ karşılıklı-dışlamalı (bir anda kritik bölgede TEK çekirdek). Bu test
+# RW-lock kurar: birden çok OKUYUCU AYNI ANDA okuyabilir, YAZICI ise EXCLUSIVE.
+# `okuyucu_sayisi` (atomik LDXR/STXR) + `yazici_aktif` (atomik CAS) ile: oku_kilitle
+# yazıcı yokken okuyucu_sayisi++ (yarış-geri-çekme kapısıyla), yaz_kilitle
+# yazici_aktif'i 0→1 CAS + okuyucu_sayisi==0 bekler. Korunan "tutarlı çift"
+# (veri_a, veri_b; invaryant veri_b==veri_a*2): yazıcı (çekirdek 0) N=1000 kez
+# tutarlı yazar; okuyucu (çekirdek 1) her okumada invaryantı doğrular (torn-read
+# tespiti). RW-lock doğruysa torn_read==0 VE veri_a==1000, veri_b==2000 →
+# "SMP RWLOCK OK". Torn sızarsa "SMP RWLOCK FAIL torn=N" (sessiz-gizleme yok).
+# smp_ticket modeli: -smp 2, net/drive yok. DETERMİNİSTİK (torn=0, veri=N/2N her koşuda).
+calistir_smp_rwlock_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP reader-writer lock (coklu-okuyucu/tek-yazici) testi: smp_rwlock_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_rwlock_arm.c -o $(BUILD)/smp_rwlock_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_rwlock_arm.elf $(BUILD)/smp_rwlock_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_rwlock_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_rwlock_arm.out -kernel $(BUILD)/smp_rwlock_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_rwlock_arm.out; echo "--- son ---"; \
+		if grep -q "SMP RWLOCK OK" $(BUILD)/smp_rwlock_arm.out; then \
+			echo "SMP rwlock testi gecti: coklu-okuyucu/tek-yazici kilit, torn-read=0 (yazici tutarli cifti okuyucudan gizledi), veri_a=1000 veri_b=2000."; \
+		else \
+			echo "FAIL: 'SMP RWLOCK OK' bekleniyor (RW-lock, torn-read=0, veri_a=1000 veri_b=2000)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP rwlock testi atlandi."; \
+	fi
+
 calistir_smp4_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "SMP 4-cekirdek bring-up (coklu-AP PSCI) testi: smp4_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp4_arm.c -o $(BUILD)/smp4_arm.o
@@ -3462,7 +3494,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_prodcons_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
