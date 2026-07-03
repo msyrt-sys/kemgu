@@ -5,6 +5,76 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-194 — OS: SELF-HOST 128-bit bignum toplama — KEMGU carry propagation (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-193).
+
+**Karar [ETKİ: yeni `test/ornekler/bignum_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Çok-word aritmetiği (carry propagation) saf KEMGU'da: 128-bit = 2×dtam64 (yuksek,dusuk).
+`dusuk_top = a_dusuk+b_dusuk` (mod-2^64 wrap), **carry = (dusuk_top < a_dusuk)?1:0** (unsigned overflow), `yuksek
+= a_yuksek+b_yuksek+carry`. **Dil-doğrulaması:** dtam64 `<` → **`icmp ult`** (unsigned, slt DEĞİL) + `add i64`
+wrap. 3 vektör (V1 carry, V2 çift-wrap, V3) bilinen sonuçla eşleşti → "KEM BIGNUM OK". **LEXER BULGU (spawn_task
+task_6184e549 ile flag'lendi):** integer literal SIGNED (strtoll) parse → yüksek-bitli 64-bit hex sabitler
+(0xFFFFFFFFFFFFFFFF) INT64_MAX'a KIRPILIR → aritmetikle (INT64_MAX+INT64_MAX+1) kuruldu. `yazdir_isaretsiz_tam64`
+(i64). **Not:** Paralel mini-agent üretti; lexer-bulgu spawn_task ile flag'lendi; cherry-pick ile entegre.
+
+## D-193 — OS: userspace TFTP GET — EL0 syscall ile dosya transferi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-192).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_tftp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+EL0 süreç ağdan DOSYA çeker — D-176 net-syscall (24/25) üstünde TFTP. SLIRP dahili TFTP sunucusu (`-netdev
+user,tftp=DIR`) 10.0.2.2:69. EL0: RRQ (opcode 1, "dosya.txt\0octet\0") sys2(24) → DATA (opcode 3) sys2(25) →
+içerik çıkar. **Kanıt:** "KEMGU-TFTP-DATA" (15 byte) çekildi → "USERTFTP OK" (gerçek RX). DETERMİNİSTİK. **BULGU:**
+SLIRP, DATA'yı bize yollamadan ÖNCE ARP ile MAC'imizi sorar (çift-yönlü) → EL0 poll'a ARP-reply eklendi (SLIRP'e
+MAC öğret). ACK (opcode 4) da gönderilir. EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-192 — OS: SMP ticket-lock — adil FIFO kilit (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-191).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_ticket_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170 spinlock ADİL DEĞİL (açlık mümkün); ticket-lock FIFO adalet: `bilet_al` (LDXR/STXR atomik fetch-add) +
+`kilitle` (simdi_hizmet==bilet bekle) + `ac` (simdi_hizmet++). İki çekirdek N=5000 kez ortak sayacı (kritik
+bölgede DÜZ artırım) artırır. **Kanıt:** sayac=10000 (mutual-exclusion, lost-update yok) + **her çekirdek TAM
+5000** (FIFO adalet, açlık yok — spinlock'un vermediği garanti), 6/6 det → "SMP TICKET OK". Naked trampoline
+(D-174), dc ivac/civac+dsb. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-191 — OS: SMP 4-çekirdek bring-up — PSCI çoklu-AP (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-190).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp4_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]** Çok-
+çekirdek 2→4 ölçekleme. QEMU -smp 4, BSP 3 AP'yi PSCI CPU_ON ile başlatır (3 çağrı, target MPIDR affinity=1/2/3).
+ORTAK naked-trampoline giriş: her AP `mrs mpidr_el1 & 0xFF` ile hangi çekirdek olduğunu bulur → MPIDR-indeksli
+KENDİ 8KB stack'ini kurar (ap_yiginlar[no+1]*8192) → cekirdek_durum[no].canli set (64-byte hizalı, false-sharing
+yok). **Kanıt:** 3×"CPU_ON ret=0" + 3×MPIDR-Aff0=1/2/3 → "SMP4 OK 4 cekirdek", 5/5 det. QEMU virt MPIDR-Aff0=
+çekirdek-no. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-190 — OS: x86 userspace ring3 + syscall — privilege ayrımı (D2-x86) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-189).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+aarch64 D2/D3 (EL0 privilege ayrımı)'nın x86 muadili — **çift-mimari userspace paritesi**. GDT'ye ring3
+segmentleri (DPL=3: user-kod 0x1b, user-veri 0x23) + TSS (RSP0 ring0 stack) + IDT int-0x80 gate (DPL=3). iretq
+ile ring3'e geç → ring3 kod CPL=3'te koşar. **Kanıt:** CS.RPL=3 + int 0x80 (rax=1)→ring0 handler + `cli`@ring3→
+**#GP yakalandı** → "RING3 X86 OK", 5/5 det. **2 bug çözüldü:** (1) boot page-table supervisor-only → ring3
+sayfalarına runtime U/S-bit (smp_x86 harita deseni); (2) monitor-stdio seri karışması. **Dürüst sınır:** CPL+
+privileged-instruction-#GP ayrımı kanıtlar; tam sayfa-tabanlı user/kernel izolasyonu (D-124 x86 muadili) ayrı
+milestone. **Not:** Paralel mini-agent üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-189 — OS: ağ-recon kabuğu — canlı ping/dns komutları (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-188).
+
+**Karar [ETKİ: yeni `test/bare_metal/recon_shell_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-
+OS kabuk kapstonu: D-188 (interaktif kabuk) + D-177/178 (EL0 net) BİRLEŞİMİ. EL1 kabuk UART RX'ten CANLI komut
+okur → ağ recon: `ping <oktet>` (ARP+ICMP echo, net syscall) → "PING: CANLI"/yanit-yok; `dns` (DNS A çöz) →
+"DNS: <IP>". **Kanıt:** `printf 'ping 2\ndns\n' | qemu -serial stdio` → "PING: CANLI" (SLIRP gateway det) +
+"DNS: <ip>" → "RECON SHELL OK", 3/3. Ağ EL1'e taşındı (SVC EL1'den çalışır), tampon user-VA (D-150). Giriş
+karakter-karakter pace (D-188 PL011 1-byte-holding dersi). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
 ## D-188 — OS: interaktif UART kabuk — canlı komut oku + çalıştır (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-187).
