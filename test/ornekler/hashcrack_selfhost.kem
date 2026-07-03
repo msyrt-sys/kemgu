@@ -1,0 +1,383 @@
+// KEMGU SELF-HOST SHA-256 PAROLA KIRICI — LAB-KAPSAMLI pentest aracı (cihazsız).
+// =========================================================================
+// Bu örnek, KEMGU dilinin gerçek bir OFANSİF-GÜVENLİK aracı — Kali/Pentest-OS
+// tarzı (john the ripper / hashcat) SÖZLÜK SALDIRISI (dictionary attack) ile
+// SHA-256 parola kırıcı — kaldırdığını kanıtlar. Saf KEMGU dilinde, cihazsız
+// (MMIO / yetki<MMIO> yok): yalnızca aritmetik + bit işlemleri + dizi.
+//
+// LAB-KAPSAM (etik): Bu araç KENDİ ürettiği bir hedef hash'i kırar — dışarıdan
+// gelen gerçek bir parola-hash HEDEFİ YOKTUR. Test, sözlükteki BİLİNEN bir
+// parolanın ("kemgu") SHA-256'sını kendisi hesaplar, sonra bu hash'i bilmiyormuş
+// gibi tüm sözlük adaylarını tarayarak geri bulur. Klasik güvenlik-eğitimi /
+// CTF laboratuvar senaryosu. Hiçbir dış sisteme dokunulmaz (cihazsız QEMU).
+//
+// SÖZLÜK SALDIRISI: Küçük gömülü sözlük (8 aday parola). Kırıcı her adayın
+// SHA-256'sını hesaplar, hedef hash'in 8 word'ü ile karşılaştırır. Eşleşen
+// aday = kırılan parola. Eşleşmeyen adaylar atlanır (hash farklı → devam).
+//
+// KRİTİK dil gözlemleri (codegen doğrulaması — D-173 SHA-256 dersleri):
+//   (1) `dtam32` (işaretsiz 32-bit) toplama LLVM `add i32` → mod-2^32 WRAP.
+//       SHA-256 mod-2^32 toplama gerektirir; KEMGU dtam32 bunu SAĞLAR.
+//   (2) `dtam32` sağa-kaydırma → LLVM `lshr` (MANTIKSAL). rotr doğru çalışır.
+//   (3) KRİTİK: bir DİZİ elemanının doğrudan `>>` operandı olması `ashr`
+//       (İŞARETLİ) üretir → işaretsizliği KAYBEDER. ÇÖZÜM (D-173): tüm
+//       bit-karıştırma SKALER `dtam32` PARAMETRELİ yardımcılara taşındı;
+//       dizi elemanı bunlara ARGÜMAN geçer → işlev içinde skaler kaydırma →
+//       `lshr` (doğru). (runtime/codegen DEĞİŞMEDİ; dil-seviyesi desen.)
+//   (4) `karakter` sayısal değil (D-175) → parola byte'ları tam32/dtam32
+//       dizisi olarak tutulur, karakter tipi HİÇ kullanılmaz.
+//   (5) `olarak` cast (D-200) → tam32 <-> dtam32 sınırlarında explicit dönüşüm.
+//
+// Beklenen çıktı: "KEM CRACK BASLA" + hedef digest + aday tarama + "KEM CRACK OK".
+
+// --- SHA-256 başlangıç durumu H[0..7] (ilk 8 asalın karekökü kesirleri) ---
+sabit H0_ILK: dtam32 = 1779033703;  // 0x6a09e667
+sabit H1_ILK: dtam32 = 3144134277;  // 0xbb67ae85
+sabit H2_ILK: dtam32 = 1013904242;  // 0x3c6ef372
+sabit H3_ILK: dtam32 = 2773480762;  // 0xa54ff53a
+sabit H4_ILK: dtam32 = 1359893119;  // 0x510e527f
+sabit H5_ILK: dtam32 = 2600822924;  // 0x9b05688c
+sabit H6_ILK: dtam32 = 528734635;   // 0x1f83d9ab
+sabit H7_ILK: dtam32 = 1541459225;  // 0x5be0cd19
+
+// =========================================================================
+// Bit-karıştırma yardımcıları — HEPSİ SKALER dtam32 PARAMETRELİ (D-173 deseni).
+// Dizi elemanları bunlara ARGÜMAN geçilir → kaydırmalar skaler üstünde → `lshr`.
+// =========================================================================
+
+// Rotate-right: (x >> n) | (x << (32 - n)). x/n skaler dtam32.
+işlev rotr(x: dtam32, n: dtam32) -> dtam32 {
+    ver (x >> n) | (x << (32 - n));
+}
+
+// Mesaj çizelgesi küçük-sigma0: rotr(x,7) ^ rotr(x,18) ^ (x >> 3)
+işlev kucuk_sigma0(x: dtam32) -> dtam32 {
+    ver rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
+}
+
+// Mesaj çizelgesi küçük-sigma1: rotr(x,17) ^ rotr(x,19) ^ (x >> 10)
+işlev kucuk_sigma1(x: dtam32) -> dtam32 {
+    ver rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
+}
+
+// Sıkıştırma büyük-sigma0: rotr(x,2) ^ rotr(x,13) ^ rotr(x,22)
+işlev buyuk_sigma0(x: dtam32) -> dtam32 {
+    ver rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22);
+}
+
+// Sıkıştırma büyük-sigma1: rotr(x,6) ^ rotr(x,11) ^ rotr(x,25)
+işlev buyuk_sigma1(x: dtam32) -> dtam32 {
+    ver rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25);
+}
+
+// Ch (choose): (x & y) ^ ((^x) & z). KEMGU'da bit-NOT = x ^ 0xFFFFFFFF.
+işlev ch(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    değişken x_ters: dtam32 = x ^ 4294967295;   // ~x  (0xFFFFFFFF)
+    ver (x & y) ^ (x_ters & z);
+}
+
+// Maj (majority): (x & y) ^ (x & z) ^ (y & z).
+işlev maj(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    ver (x & y) ^ (x & z) ^ (y & z);
+}
+
+// =========================================================================
+// K[t]: SHA-256 tur sabitleri (ilk 64 asalın küpkökü kesirleri).
+// =========================================================================
+işlev k_dizisi() -> Dizi<dtam32> {
+    ver [
+        1116352408, 1899447441, 3049323471, 3921009573,  961987163,
+        1508970993, 2453635748, 2870763221, 3624381080,  310598401,
+         607225278, 1426881987, 1925078388, 2162078206, 2614888103,
+        3248222580, 3835390401, 4022224774,  264347078,  604807628,
+         770255983, 1249150122, 1555081692, 1996064986, 2554220882,
+        2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+         113926993,  338241895,  666307205,  773529912, 1294757372,
+        1396182291, 1695183700, 1986661051, 2177026350, 2456956037,
+        2730485921, 2820302411, 3259730800, 3345764771, 3516065817,
+        3600352804, 4094571909,  275423344,  430227734,  506948616,
+         659060556,  883997877,  958139571, 1322822218, 1537002063,
+        1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+        2428436474, 2756734187, 3204031479, 3329325298
+    ];
+}
+
+// =========================================================================
+// GENEL mesaj çizelgesi — KISA parola (<= 8 byte, tek 512-bit blok yeterli).
+// Parola byte'ları `bayt` dizisinde (tam32 0..255), uzunluk `uzunluk` (byte).
+// SHA-256 padding: mesaj byte'ları büyük-endian 32-bit word'lere paketlenir,
+// mesaj sonuna 0x80 padding biti, son word'de bit-uzunluk (uzunluk*8).
+// Sonra t=16..63 genişletme: W[t]=sigma1(W[t-2])+W[t-7]+sigma0(W[t-15])+W[t-16].
+//
+// Byte-paketleme: mesaj = bayt[0..uzunluk-1] ++ 0x80 ++ 0x00... Her 4 byte bir
+// big-endian word. Padding'li mesaj (uzunluk+1 byte veri, sonra bit-uzunluk
+// son 8 byte'ta) — kısa mesajda tek blok. word[i] için 4 byte:
+//   byte konum j = i*4 + k (k=0..3); değer = (j < uzunluk) ? bayt[j]
+//     : (j == uzunluk) ? 0x80 : 0. Son word (W[15]) bit-uzunluğu taşır.
+// =========================================================================
+işlev mesaj_cizelgesi(bayt: Dizi<tam32>, uzunluk: tam32) -> Dizi<dtam32> {
+    değişken w: Dizi<dtam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    // W[0..13]'ü byte'lardan big-endian paketle (14*4 = 56 byte kapasite;
+    // kısa parola + 0x80 padding bunun içinde kalır; W[14]=0, W[15]=bit-uzunluk).
+    değişken i: tam32 = 0;
+    iken i < 14 {
+        değişken word: dtam32 = 0;
+        değişken k: tam32 = 0;
+        iken k < 4 {
+            değişken j: tam32 = i * 4 + k;         // mutlak byte konumu
+            değişken bd: dtam32 = 0;               // bu konumun byte değeri
+            eğer j < uzunluk {
+                bd = bayt[j] olarak dtam32;         // gerçek mesaj byte'ı (0..255)
+            } değilse {
+                eğer j == uzunluk {
+                    bd = 128;                       // 0x80 padding biti (tek 1-bit)
+                } değilse {
+                    bd = 0;                         // padding sıfırları
+                }
+            }
+            // Big-endian: en anlamlı byte önce → word = (word << 8) | bd.
+            word = (word << 8) | bd;
+            k = k + 1;
+        }
+        w[i] = word;                                // dizi in-place yaz (sınır-kontrollü)
+        i = i + 1;
+    }
+
+    // W[15] = mesaj bit-uzunluğu (uzunluk * 8), big-endian son word.
+    // (Kısa parola < 56 byte olduğundan üst word W[14]=0 yeterli.)
+    değişken bit_uz: dtam32 = (uzunluk olarak dtam32) * 8;
+    w[15] = bit_uz;
+
+    // Genişletme t=16..63 (D-173 skaler-param deseni).
+    değişken t: tam32 = 16;
+    iken t < 64 {
+        değişken w2: dtam32  = w[t - 2];
+        değişken w7: dtam32  = w[t - 7];
+        değişken w15: dtam32 = w[t - 15];
+        değişken w16: dtam32 = w[t - 16];
+        değişken yeni: dtam32 = kucuk_sigma1(w2) + w7 + kucuk_sigma0(w15) + w16;
+        w[t] = yeni;
+        t = t + 1;
+    }
+    ver w;
+}
+
+// =========================================================================
+// 64 turluk SHA-256 sıkıştırma. Tek blok (kısa parola). 8 durum word'ünden
+// `hangi` (0..7) ile istenen döner (KEMGU'da çoklu dönüş yok — D-173 deseni).
+// =========================================================================
+işlev sikistir(w: Dizi<dtam32>, k: Dizi<dtam32>, hangi: tam32) -> dtam32 {
+    değişken a: dtam32 = H0_ILK;
+    değişken b: dtam32 = H1_ILK;
+    değişken c: dtam32 = H2_ILK;
+    değişken d: dtam32 = H3_ILK;
+    değişken e: dtam32 = H4_ILK;
+    değişken f: dtam32 = H5_ILK;
+    değişken g: dtam32 = H6_ILK;
+    değişken h: dtam32 = H7_ILK;
+
+    değişken t: tam32 = 0;
+    iken t < 64 {
+        değişken wt: dtam32 = w[t];   // dizi → skaler
+        değişken kt: dtam32 = k[t];   // dizi → skaler
+
+        değişken t1: dtam32 = h + buyuk_sigma1(e) + ch(e, f, g) + kt + wt;
+        değişken t2: dtam32 = buyuk_sigma0(a) + maj(a, b, c);
+
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;   // dtam32 toplama → mod-2^32 wrap
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
+
+        t = t + 1;
+    }
+
+    değişken h0: dtam32 = H0_ILK + a;
+    değişken h1: dtam32 = H1_ILK + b;
+    değişken h2: dtam32 = H2_ILK + c;
+    değişken h3: dtam32 = H3_ILK + d;
+    değişken h4: dtam32 = H4_ILK + e;
+    değişken h5: dtam32 = H5_ILK + f;
+    değişken h6: dtam32 = H6_ILK + g;
+    değişken h7: dtam32 = H7_ILK + h;
+
+    eğer hangi == 0 { ver h0; }
+    eğer hangi == 1 { ver h1; }
+    eğer hangi == 2 { ver h2; }
+    eğer hangi == 3 { ver h3; }
+    eğer hangi == 4 { ver h4; }
+    eğer hangi == 5 { ver h5; }
+    eğer hangi == 6 { ver h6; }
+    ver h7;
+}
+
+// Bir parola (byte dizisi + uzunluk) için SHA-256'nın `hangi`. word'ünü hesaplar.
+// mesaj_cizelgesi + sikistir birleşimi — tek çağrıda tam digest word'ü.
+işlev sha256_word(bayt: Dizi<tam32>, uzunluk: tam32, k: Dizi<dtam32>,
+                  hangi: tam32) -> dtam32 {
+    değişken w: Dizi<dtam32> = mesaj_cizelgesi(bayt, uzunluk);
+    ver sikistir(w, k, hangi);
+}
+
+// =========================================================================
+// SÖZLÜK — her aday parola: 8-byte kapasiteli byte dizisi (kullanılmayan
+// baytlar 0) + gerçek uzunluk. `karakter` YOK (D-175) → ASCII değerleri
+// doğrudan tam32 literal. Sözlük (8 aday):
+//   0: "abc"     (0x61,0x62,0x63)                          uz=3
+//   1: "test"    (0x74,0x65,0x73,0x74)                     uz=4
+//   2: "kemgu"   (0x6b,0x65,0x6d,0x67,0x75)  <-- HEDEF     uz=5
+//   3: "parola"  (0x70,0x61,0x72,0x6f,0x6c,0x61)           uz=6
+//   4: "admin"   (0x61,0x64,0x6d,0x69,0x6e)                uz=5
+//   5: "1234"    (0x31,0x32,0x33,0x34)                     uz=4
+//   6: "root"    (0x72,0x6f,0x6f,0x74)                     uz=4
+//   7: "sifre"   (0x73,0x69,0x66,0x72,0x65)                uz=5
+// Sözlük paralel dizilerle tutulur; aday `idx` için byte dizisi seçici işlevler.
+// =========================================================================
+
+// Aday parola sayısı.
+sabit SOZLUK_BOYUT: tam32 = 8;
+
+// idx'inci adayın byte dizisini döndürür (8 kapasiteli, kullanılmayan = 0).
+// KEMGU'da 2B dizi/dizi-dizisi yok → indeks-seçici (switch benzeri) desen.
+işlev aday_baytlar(idx: tam32) -> Dizi<tam32> {
+    eğer idx == 0 { ver [97, 98, 99, 0, 0, 0, 0, 0]; }              // "abc"
+    eğer idx == 1 { ver [116, 101, 115, 116, 0, 0, 0, 0]; }        // "test"
+    eğer idx == 2 { ver [107, 101, 109, 103, 117, 0, 0, 0]; }      // "kemgu"
+    eğer idx == 3 { ver [112, 97, 114, 111, 108, 97, 0, 0]; }      // "parola"
+    eğer idx == 4 { ver [97, 100, 109, 105, 110, 0, 0, 0]; }       // "admin"
+    eğer idx == 5 { ver [49, 50, 51, 52, 0, 0, 0, 0]; }            // "1234"
+    eğer idx == 6 { ver [114, 111, 111, 116, 0, 0, 0, 0]; }        // "root"
+    ver [115, 105, 102, 114, 101, 0, 0, 0];                        // "sifre"
+}
+
+// idx'inci adayın uzunluğu (byte).
+işlev aday_uzunluk(idx: tam32) -> tam32 {
+    eğer idx == 0 { ver 3; }   // "abc"
+    eğer idx == 1 { ver 4; }   // "test"
+    eğer idx == 2 { ver 5; }   // "kemgu"
+    eğer idx == 3 { ver 6; }   // "parola"
+    eğer idx == 4 { ver 5; }   // "admin"
+    eğer idx == 5 { ver 4; }   // "1234"
+    eğer idx == 6 { ver 4; }   // "root"
+    ver 5;                     // "sifre"
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM CRACK BASLA");
+
+    değişken k: Dizi<dtam32> = k_dizisi();
+
+    // --- HEDEF üretimi (LAB): sözlükteki BİLİNEN parola "kemgu" (idx=2)'nin
+    //     SHA-256'sı. Kırıcı bu 8 word'ü hedef kabul eder; parolanın kendisini
+    //     bilmiyormuş gibi tüm adayları tarar. ---
+    değişken hedef_idx: tam32 = 2;   // "kemgu" — laboratuvarda üretilen hedef
+    değişken hb: Dizi<tam32> = aday_baytlar(hedef_idx);
+    değişken hu: tam32 = aday_uzunluk(hedef_idx);
+
+    değişken hedef0: dtam32 = sha256_word(hb, hu, k, 0);
+    değişken hedef1: dtam32 = sha256_word(hb, hu, k, 1);
+    değişken hedef2: dtam32 = sha256_word(hb, hu, k, 2);
+    değişken hedef3: dtam32 = sha256_word(hb, hu, k, 3);
+    değişken hedef4: dtam32 = sha256_word(hb, hu, k, 4);
+    değişken hedef5: dtam32 = sha256_word(hb, hu, k, 5);
+    değişken hedef6: dtam32 = sha256_word(hb, hu, k, 6);
+    değişken hedef7: dtam32 = sha256_word(hb, hu, k, 7);
+
+    yazdir_metin("Hedef SHA-256 (ondalik word 0..7):");
+    yazdir_isaretsiz_tam(hedef0);
+    yazdir_isaretsiz_tam(hedef1);
+    yazdir_isaretsiz_tam(hedef2);
+    yazdir_isaretsiz_tam(hedef3);
+    yazdir_isaretsiz_tam(hedef4);
+    yazdir_isaretsiz_tam(hedef5);
+    yazdir_isaretsiz_tam(hedef6);
+    yazdir_isaretsiz_tam(hedef7);
+
+    // --- SÖZLÜK SALDIRISI: her adayın SHA-256'sını hesapla, hedefle karşılaştır.
+    //     Eşleşen aday indeksi = kırılan parola. -1 = kırılamadı. ---
+    yazdir_metin("Sozluk taramasi basladi (8 aday):");
+    değişken kirilan_idx: tam32 = 0 - 1;   // -1 = henüz kırılmadı
+    değişken atlanan: tam32 = 0;           // eşleşmeyip atlanan aday sayısı
+
+    değişken idx: tam32 = 0;
+    iken idx < SOZLUK_BOYUT {
+        değişken ab: Dizi<tam32> = aday_baytlar(idx);
+        değişken au: tam32 = aday_uzunluk(idx);
+
+        // Adayın 8 digest word'ünü hesapla.
+        değişken c0: dtam32 = sha256_word(ab, au, k, 0);
+        değişken c1: dtam32 = sha256_word(ab, au, k, 1);
+        değişken c2: dtam32 = sha256_word(ab, au, k, 2);
+        değişken c3: dtam32 = sha256_word(ab, au, k, 3);
+        değişken c4: dtam32 = sha256_word(ab, au, k, 4);
+        değişken c5: dtam32 = sha256_word(ab, au, k, 5);
+        değişken c6: dtam32 = sha256_word(ab, au, k, 6);
+        değişken c7: dtam32 = sha256_word(ab, au, k, 7);
+
+        // Tüm 8 word hedefle eşleşiyor mu?
+        değişken eslesti: tam32 = 1;
+        eğer c0 == hedef0 { } değilse { eslesti = 0; }
+        eğer c1 == hedef1 { } değilse { eslesti = 0; }
+        eğer c2 == hedef2 { } değilse { eslesti = 0; }
+        eğer c3 == hedef3 { } değilse { eslesti = 0; }
+        eğer c4 == hedef4 { } değilse { eslesti = 0; }
+        eğer c5 == hedef5 { } değilse { eslesti = 0; }
+        eğer c6 == hedef6 { } değilse { eslesti = 0; }
+        eğer c7 == hedef7 { } değilse { eslesti = 0; }
+
+        eğer eslesti == 1 {
+            // İlk eşleşme = kırılan parola. Sonrakileri geçmiyoruz (det. tarama
+            // yine de tamamlanır ama ilk indeks korunur).
+            eğer kirilan_idx == (0 - 1) {
+                kirilan_idx = idx;
+                yazdir_metin("KIRILDI aday idx=");
+                yazdir_tam(idx);
+            }
+        } değilse {
+            atlanan = atlanan + 1;   // hash eşleşmedi → aday atlandı
+        }
+
+        idx = idx + 1;
+    }
+
+    yazdir_metin("Atlanan (eslesmeyen) aday sayisi:");
+    yazdir_tam(atlanan);
+    yazdir_metin("Kirilan parola indeksi:");
+    yazdir_tam(kirilan_idx);
+
+    // --- DOĞRULAMA: kırılan indeks tam olarak hedef (2 = "kemgu") olmalı VE
+    //     eşleşmeyen 7 aday atlanmış olmalı (8 aday - 1 eşleşen = 7). ---
+    değişken basarili: tam32 = 1;
+    eğer kirilan_idx == hedef_idx {
+        // doğru: kırıcı hedefi doğru indekste buldu
+    } değilse {
+        basarili = 0;
+    }
+    eğer atlanan == 7 {
+        // doğru: 7 aday hash-eşleşmesiz atlandı
+    } değilse {
+        basarili = 0;
+    }
+
+    eğer basarili == 1 {
+        yazdir_metin("KEM CRACK OK");
+    } değilse {
+        yazdir_metin("KEM CRACK FAIL");
+    }
+
+    ver 0;
+}
