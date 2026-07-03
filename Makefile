@@ -2862,6 +2862,40 @@ calistir_userspace_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace DNS testi atlandi."; \
 	fi
 
+# === USERSPACE DHCP (aarch64) — EL0 süreç syscall ile ağ OTO-KONFİGÜRASYON ===
+# D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) üstünde EL0 (yetkisiz) süreç
+# KENDİ IP'sini DHCP ile öğrenir: DISCOVER inşa (Eth broadcast + IPv4 0.0.0.0->
+# 255.255.255.255 + UDP 68->67 + BOOTP op=1 + magic cookie + option 53=1) → sys2(24)
+# ile yolla → sys2(25) poll ile OFFER'ı al → doğrula (op=2 BOOTREPLY, xid eşleşir,
+# yiaddr non-zero, option 53=2). SLIRP dahili DHCP sunucusu (10.0.2.2:67) yiaddr=
+# 10.0.2.15 döner — DETERMİNİSTİK (internetsiz). RX round-trip: "USERDHCP OK" (+yiaddr).
+# Fallback (RX gelmezse): pcap'te DHCP DISCOVER TX kanıtı — magic cookie "63825363".
+# virtio_net BM_A64_OBJS'te (explicit eklemeye gerek yok).
+calistir_userspace_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 userspace DHCP testi: userspace_dhcp_arm.c -> ELF (EL0 syscall ile ag oto-konfig)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_dhcp_arm.c -o $(BUILD)/userspace_dhcp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_dhcp_arm.elf $(BUILD)/userspace_dhcp_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_dhcp_arm.out $(BUILD)/userspace_dhcp_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_dhcp_arm.pcap \
+			-serial file:$(BUILD)/userspace_dhcp_arm.out -kernel $(BUILD)/userspace_dhcp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_dhcp_arm.out; echo "--- son ---"; \
+		if grep -q "USERDHCP OK" $(BUILD)/userspace_dhcp_arm.out; then \
+			echo "aarch64 userspace DHCP testi gecti (RX round-trip): EL0 surec syscall ile DHCP DISCOVER->OFFER yapti (kendi IP'sini ogrendi)."; \
+		elif xxd -p $(BUILD)/userspace_dhcp_arm.pcap 2>/dev/null | tr -d '\n' | grep -q "63825363"; then \
+			echo "aarch64 userspace DHCP testi gecti (pcap-TX fallback): EL0'in DHCP DISCOVER'i pcap'te var (magic cookie '63825363')."; \
+		else \
+			echo "FAIL: seri 'USERDHCP OK' veya pcap'te DHCP magic cookie ('63825363') bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace DHCP testi atlandi."; \
+	fi
+
 # === USERSPACE ICMP PING (aarch64) — EL0 süreç syscall ile L3 ping ===
 # EL0 (yetkisiz) süreç net_gonder(24)/net_al(25) syscall'larıyla ARP çözer + IPv4+ICMP
 # Echo Request (payload "KEMGU") yollar + echo reply'i doğrular. Protokol mantığı EL0'da
@@ -2928,7 +2962,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
-                     calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
+                     calistir_userspace_dns_test_arm calistir_userspace_dhcp_test_arm \
+                     calistir_userspace_ping_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
