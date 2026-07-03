@@ -5,6 +5,77 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-188 — OS: interaktif UART kabuk — canlı komut oku + çalıştır (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-187).
+
+**Karar [ETKİ: yeni `test/bare_metal/shell_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-181 (UART RX
+gerçek stdio-giriş) + D-135 (komut parse) BİRLEŞİMİ = GERÇEK interaktif kabuk. EL1 kabuk döngüsü: "KABUK> "
+prompt → UART RX'ten CANLI satır oku (RXFE poll + DR, byte-echo, '\n'e kadar) → tokenize → FS syscall çalıştır
+(yaz num=17/oku num=18/ls num=19-20). SABİT script DEĞİL. **Kanıt:** `printf 'yaz gunluk MERHABA\noku
+gunluk\nls\n' | qemu -serial stdio` → prompt+echo + "MERHABA" (oku) + "gunluk" (ls) → "SHELL OK". **KRİTİK
+bulgu:** QEMU virt PL011 reset RX = **1-byte holding register** (FIFO değil) → burst-pipe overrun (kararsız);
+fix = Makefile girişi KARAKTER-KARAKTER ~30ms pacing → 8/8 deterministik. Tamponlar user-VA (D-150 guard).
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-187 — OS: x86 SMP AP başlatma — Local APIC INIT-SIPI (D-169 x86 paritesi) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-186).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+D-169 (aarch64 PSCI CPU_ON)'un x86 muadili — çok-çekirdek universal-OS paritesi. BSP, Local APIC (0xFEE00000)
+ICR (0x300/0x310) ile AP'ye INIT IPI + SIPI×2 (vektör=trampolin>>12) gönderir. **AP GERÇEKTEN KOŞTU (fallback
+DEĞİL):** real-mode (SIPI 0x8000) → protected → **long-mode** (CS64, EFER.LMA, PG+PAE, kendi stack) → C fn →
+kendi APIC ID (0x1, BSP'nin 0'ından FARKLI) okudu + paylaşımlı bayrak set etti. **2 zor bug çözüldü (ham QEMU
+log):** (1) #PF @0xFEE00020 — LAPIC boot page-table'da harita-dışı → test-içinde runtime 2MB uncacheable
+huge-page map (PDPT[3]); (2) triple-fault — trampolin 64-bit kodu GDT verisiyle çakışıyordu → veri 0x100'e
+kaydırıldı + kod-sığdı invaryantı. Trampolin elle-derlenmiş makine-kodu blob (clang 16-bit üretemez, linker
+kısıt-dışı). 5/5 det. **Not:** Paralel mini-agent üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-186 — OS: SMP çekirdekler-arası üretici-tüketici — lock-free SPSC ring (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-185).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_prodcons_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-174/180/179 SMP üstünde: çekirdek 0 ÜRETİR, çekirdek 1 TÜKETİR — **lock-free SPSC** halka tampon (üretici
+yalnız bas, tüketici yalnız son yazar → lock GEREKMEZ, bariyerler yeter). **Kanıt:** 1000 öğe FIFO sırada
+(sira_bozuldu=0), toplam=499500 (Σ0..999), 5/5 det → "SMP PRODCONS OK". **2 gerçek SMP bug çözüldü:** (1)
+ring-overrun — bas/son serbest-akan ama dolu-testi maskeli-karışık → serbest-akan konvansiyon (dolu=(bas-son)
+==KAP); (2) false-sharing — bitişik slotlar aynı cache-satırında → dc civac/ivac komşuyu bozuyordu → her slot
+64-byte padded RingSlot. Naked trampoline (D-174), dc civac/ivac+dsb bariyerler. **Not:** Paralel mini-agent
+üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-185 — OS: userspace DHCP — EL0 syscall ile ağ oto-konfig (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-184).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_dhcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall (24/25) üstünde EL0 süreç KENDİ IP'sini DHCP ile öğrenir — DISCOVER inşa (Eth-broadcast+
+IPv4 0.0.0.0→255.255.255.255+UDP 68→67+BOOTP+magic+opt53=1) sys2(24) → OFFER sys2(25) → 7 alan doğrula
+(op=2,xid,yiaddr,magic,opt53=2,portlar,ethertype). **Kanıt:** yiaddr=10.0.2.15 → "USERDHCP OK". DETERMİNİSTİK
+(SLIRP DHCP, internetsiz). EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-184 — OS: userspace HTTP GET — EL0 syscall ile uygulama katmanı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-183).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_http_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall üstünde EL0 süreç bir web sayfası çeker — DNS(example.com)→TCP handshake(sys2 24/25)→HTTP
+GET(PSH+ACK)→yanıt "HTTP/1." ara. **Kanıt:** 104.20.23.154:80 → **HTTP/1.1 200 OK** → "USERHTTP OK" (gerçek
+RX). HTTP request byte'ları EL0 tamponuna elle yazıldı (.rodata-deref-etmez, D-177). host-internet+fallback.
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-183 — OS: userspace TCP handshake — EL0 syscall ile soket (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-182).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_tcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall (24/25) üstünde EL0 süreç TAM TCP üç-yönlü handshake yapar (çekirdekte TCP durum-makinesi
+YOK): ARP→DNS(example.com)→SYN(pseudo-header checksum)→**SYN-ACK al**(flags=0x12,ack=seq+1 doğrula)→ACK→
+ESTABLISHED. **Kanıt:** 172.66.147.243:80 → "USERTCP OK" (gerçek RX, 3/3 stabil). **Userspace soket katmanı
+tam (D-183 TCP + D-184 HTTP + D-185 DHCP): EL0 süreç raw-frame syscall'larıyla L2-L7 protokol yığını çalıştırır.**
+host-internet+fallback. EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
 ## D-182 — OS: x86_64 CMOS RTC okuma — donanım saati (D-172 x86 paritesi) (2026-07-02)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-181).
