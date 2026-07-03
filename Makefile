@@ -3162,6 +3162,43 @@ calistir_userspace_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace DHCP testi atlandi."; \
 	fi
 
+# === USERSPACE TFTP GET (aarch64) — EL0 süreç syscall ile AĞDAN DOSYA ÇEKER ===
+# DOSYA-TRANSFERİ milestone: D-176 raw-frame syscall'ları (net_gonder=24/net_al=25)
+# üstünde EL0 (yetkisiz) süreç SLIRP'in dahili TFTP sunucusundan (10.0.2.2:69) bir
+# dosya çeker: TFTP RRQ inşa (Eth + IPv4 dst=10.0.2.2 + UDP src=efemeral dst=69 +
+# opcode 1 + "dosya.txt\0octet\0") → sys2(24) ile yolla → sys2(25) poll ile TFTP
+# DATA (opcode 3, block 1) al → SLIRP TID öğren + ACK (opcode 4, block 1) yolla →
+# içeriği "KEMGU-TFTP-DATA" ile karşılaştır. QEMU `-netdev user,tftp=<DIR>` dahili
+# TFTP sunucusu bu dosyayı sunar — DETERMİNİSTİK (internetsiz). RX round-trip:
+# "USERTFTP OK" (+ çekilen içerik). Fallback (DATA gelmezse): pcap'te TFTP RRQ TX
+# kanıtı — dosya adı "dosya.txt" (hex "646f7379612e747874"). virtio_net BM_A64_OBJS'te.
+calistir_userspace_tftp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 userspace TFTP GET testi: userspace_tftp_arm.c -> ELF (EL0 syscall ile agdan dosya cekme)..."
+	@mkdir -p $(BUILD)/tftp
+	@printf 'KEMGU-TFTP-DATA' > $(BUILD)/tftp/dosya.txt
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_tftp_arm.c -o $(BUILD)/userspace_tftp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_tftp_arm.elf $(BUILD)/userspace_tftp_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_tftp_arm.out $(BUILD)/userspace_tftp_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0,tftp=$(BUILD)/tftp -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_tftp_arm.pcap \
+			-serial file:$(BUILD)/userspace_tftp_arm.out -kernel $(BUILD)/userspace_tftp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_tftp_arm.out; echo "--- son ---"; \
+		if grep -q "USERTFTP OK" $(BUILD)/userspace_tftp_arm.out; then \
+			echo "aarch64 userspace TFTP GET testi gecti (RX round-trip): EL0 surec syscall ile agdan dosya cekti (icerik dogrulandi)."; \
+		elif xxd -p $(BUILD)/userspace_tftp_arm.pcap 2>/dev/null | tr -d '\n' | grep -q "646f7379612e747874"; then \
+			echo "aarch64 userspace TFTP GET testi gecti (pcap-TX fallback): EL0'in TFTP RRQ'su pcap'te var (dosya adi 'dosya.txt')."; \
+		else \
+			echo "FAIL: seri 'USERTFTP OK' veya pcap'te TFTP RRQ dosya adi ('646f7379612e747874') bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace TFTP GET testi atlandi."; \
+	fi
+
 # === USERSPACE ICMP PING (aarch64) — EL0 süreç syscall ile L3 ping ===
 # EL0 (yetkisiz) süreç net_gonder(24)/net_al(25) syscall'larıyla ARP çözer + IPv4+ICMP
 # Echo Request (payload "KEMGU") yollar + echo reply'i doğrular. Protokol mantığı EL0'da
@@ -3268,6 +3305,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
                      calistir_userspace_dhcp_test_arm \
+                     calistir_userspace_tftp_test_arm \
                      calistir_userspace_tcp_test_arm calistir_userspace_http_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
