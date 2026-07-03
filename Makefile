@@ -3269,6 +3269,33 @@ calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace networking testi atlandi."; \
 	fi
 
+# === USERSPACE KOOPERATİF FİBER (aarch64) — EL0-içi yeşil-thread context-switch ===
+# D-201: TEK EL0 süreç İÇİNDE 2 kooperatif fiber, fiber_yield() (callee-saved x19-x30
+# + sp save/restore, saf EL0 asm) ile birbirine geçer — KERNEL YARDIMI OLMADAN
+# (timer/IRQ/preemption/syscall-switch yok). Kernel'in kdl_baglam_degis primitifinin
+# userspace muadili. Fiber yığınları + bağlamları EL0 user-VA'da (.user_data, 0x42xxxxxx).
+# DETERMİNİSTİK: ping-pong interleave A1,B1,A2,B2,A3,B3 → "USERFIBER OK". net/drive YOK,
+# sade QEMU (userspace_test_arm modeli). virtio* BM_A64_OBJS'te (dead-code, libc-temiz).
+calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-201 aarch64 userspace kooperatif fiber testi: userspace_fiber_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_fiber_arm.c -o $(BUILD)/userspace_fiber_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_fiber_arm.elf $(BUILD)/userspace_fiber_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_fiber_arm.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_fiber_arm.out -kernel $(BUILD)/userspace_fiber_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_fiber_arm.out; echo "--- son ---"; \
+		if grep -q "USERFIBER OK" $(BUILD)/userspace_fiber_arm.out; then \
+			echo "D-201 aarch64 userspace fiber testi gecti: EL0-ici kooperatif fiber context-switch (yesil-thread ping-pong)."; \
+		else \
+			echo "FAIL: 'USERFIBER OK' bekleniyor (EL0 fiber_gec callee-saved+sp switch + deterministik interleave)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace fiber testi atlandi."; \
+	fi
+
 # === USERSPACE DNS (aarch64) — EL0 süreç syscall ile TAM DNS protokol çözümleme ===
 # D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) üstünde EL0 (yetkisiz) süreç
 # TAM L2-L7 yığını çalıştırır: ARP → DNS sorgusu (Eth+IPv4+UDP+DNS "example.com" A) →
@@ -3560,6 +3587,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
+                     calistir_userspace_fiber_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
                      calistir_userspace_dhcp_test_arm \
                      calistir_userspace_tftp_test_arm \
