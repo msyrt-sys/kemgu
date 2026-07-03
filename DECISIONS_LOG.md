@@ -5,6 +5,76 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-218 — OS: TAM x86 syscall ABI — int 0x80 çok-argüman + dönüş + register-şeffaflık (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-217).
+
+**Karar [ETKİ: yeni `test/bare_metal/syscall_x86.c` (hedef `calistir_syscall_abi_test_x86`); `Makefile`. Yalnız test — boot/runtime değişmedi.]**
+aarch64'ün zengin syscall ABI'si (D-126 arg/dönüş/çok-arg/register-şeffaf) x86'da yoktu (yalnız C6/D-110 int0x80
+demo). TAM x86 ABI: kendi IDT[0x80] gate + handler; num=rax, arg0=rdi, arg1=rsi, dönüş=rax (System-V benzeri). 3
+syscall: num=1 yaz(ptr), num=2 topla(a,b)→a+b (çok-arg+dönüş), num=3 tick/echo(dönüş), + geçersiz-num sınır-kontrolü.
+**Kanıt:** topla(40,2)=42 (0x2a) + rbx_korundu (register-şeffaflık: handler frame'i-ÖNCE-kaydeder, D-126 dersi) +
+yaz + tick + hata_sınır → 5 kanıt → "SYSCALL X86 OK". Det. x86 PVH long-mode (D-107 start_x86_64.S linklenir-dokunulmaz),
+-mgeneral-regs-only, `-serial file:`. **Syscall ABI artık çift-arch tam (aarch64 D-126 + x86).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-217 — OS: SELF-HOST Türkçe büyük/küçük harf — "Türkçe-I problemi" (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-216).
+
+**Karar [ETKİ: yeni `test/ornekler/turkce_case_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+KEMGU Türkçe-DNA'sının ZİRVE gösterisi: hiçbir ana-akım dil varsayılan DOĞRU yapmaz. Türkçe harf-dönüşümü kod-noktası
+üstünde: **i→İ (U+0069→U+0130=304), ı→I (U+0131→U+0049), İ→i, I→ı** + ç↔Ç/ğ↔Ğ/ö↔Ö/ş↔Ş/ü↔Ü + ASCII a-z (i HARİÇ).
+**Kanıt:** "istanbul"→büyüt→"İSTANBUL" (i→**304=İ**, ASCII 73=I DEĞİL — İngilizce yanlış "ISTANBUL" verir) +
+"IRMAK"→küçült→"ırmak" (I→**305=ı** noktasız) kod-noktalarıyla doğrulandı → "KEM TR CASE OK". Saf KEMGU, dtam32
+kod-nokta aritmetiği (D-211 UTF-8 çözücü üstüne), `değilse eğer` harf-eşleme, `olarak` cast. Cihazsız det. **Türkçe-syntax
+dil, dünyanın hiçbir dilinin doğru yapamadığı Türkçe-I'yı kendi diliyle çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-216 — OS: mini-FS tam CRUD + blok geri-kazanım (sil→yeniden-kullan) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-215).
+
+**Karar [ETKİ: yeni `test/bare_metal/minifs_crud_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-210 mini-FS'i
+(superblock+bitmap+inode) TAM CRUD'a taşır: `mfs_sil(ad)` (inode boşalt + veri bloklarını bitmap'te SERBEST bırak) +
+`mfs_guncelle`. KRİTİK kanıt = blok geri-kazanım: 3 dosya oluştur (bitmap dolu) → ortadaki sil (bloklar serbest) →
+yeni dosya oluştur → **serbest-bırakılan blokları GERİ KULLANIR** (delta-blok=4 aynı bölge) + içerik round-trip →
+"MINIFS CRUD OK". virtio-blk, det. **Gerçek FS artık tam yaşam-döngüsü: oluştur/oku/güncelle/sil + blok-reclaim.**
+**Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-215 — OS: DHCP tam lease (DORA) — 4-yönlü IP edinimi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-214).
+
+**Karar [ETKİ: yeni `test/bare_metal/dhcp_lease_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-162 yalnız
+DISCOVER→OFFER idi; bunu TAM lease edinimine tamamlar (DORA): DISCOVER→OFFER(yiaddr öğren)→REQUEST(opt53=3, opt50=
+istenen-IP, opt54=server-id)→ACK(opt53=5)→lease EDİNİLDİ. DISCOVER+REQUEST aynı xid. **Kanıt:** 4-yönlü tamam, ACK
+yiaddr=10.0.2.15 + opt53=5 doğrulandı → "DHCP LEASE OK". SLIRP-DAHİLİ DHCP (internet gerekmez) → DETERMİNİSTİK. D-158
+küçük-tik. **OS artık kendi IP'sini TAM protokolle ediniyor** (D-162 kısmi→D-215 tam). Sınır: renewal/rebind (T1/T2)
+yok, yalnız ilk edinim. **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-214 — OS: userspace çok-fiber kooperatif scheduler — N yeşil-thread (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-213).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_sched_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-203
+iki-fiber ping-pong'unu GERÇEK round-robin çok-fiber scheduler'a taşır — TAMAMEN EL0'da. N=3 fiber, merkezi scheduler
+döngüsü: her fiber `u_yield()` ile scheduler'a döner, scheduler bir sonraki READY fiber'ı round-robin seçer +
+context-switch (D-203 naked `.user` fiber_gec, always_inline OLAMAZ — `ret` gerekli). Fiber biterse DURUM_BITTI, artık
+seçilmez. **Kanıt:** 3 fiber × 3 tur → interleave A1 B1 C1 A2 B2 C2 A3 B3 C3 (round-robin) → hepsi bitti → "USERSCHED
+OK". Ayrı EL0 yığınları. 2× det. **Userspace M:1 yeşil-thread runtime çekirdeği** (kooperatif, preemption yok).
+**Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-213 — OS: SMP 4-çekirdek paralel merge-sort — böl-ve-yönet (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-212).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_sort_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** SMP kilit
+primitiflerinin ötesinde GERÇEK paralel iş yükü: böl-ve-yönet merge-sort. Paylaşımlı 32-elemanlı dizi (dizi[i]=
+(i*7+13)%97, toplam=1366) 4 çeyreğe bölünür; her çekirdek KENDİ ayrık çeyreğini insertion-sort ile sıralar (çeyrekler
+örtüşmez → kilit gerekmez) → sense-reversing bariyer → çekirdek0 4 sıralı çeyreği 2'li merge ile birleştirir. **Kanıt:**
+-smp 4, tam sıralı (her a[i]≤a[i+1]) + toplam korundu (1366==1366 permütasyon kontrolü) → "SMP SORT OK", 5/5 det. PSCI
+naked-trampoline (D-174), MPIDR-stack (D-191), bariyer (D-179), 64-byte state (D-186), dc civac/ivac coherency.
+**Çok-çekirdek artık paralel-algoritma yürütüyor** (kilit-primitiflerinden gerçek-iş yüküne). **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
 ## D-212 — OS: x86 preemptive scheduler — PIT timer-IRQ context-switch (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-211).
