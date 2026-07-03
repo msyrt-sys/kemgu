@@ -3115,6 +3115,36 @@ calistir_syscall_abi_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 tam syscall ABI testi atlandi."; \
 	fi
 
+# === x86 KULLANICI-SÜRECİ keystone testi (ring3 ⊕ sayfa-izolasyon ⊕ syscall) — Milestone F ===
+# aarch64 D3 (proc_arm.c — KORUMALI EL0 user-process: kendi-adres-uzayi ⊕ EL0 ⊕
+# SVC) testinin x86 IKIZI. Uc mevcut x86 parcayi BIRLESTIR: (1) ring3 (D-190 GDT
+# DPL=3 seg + TSS + iret->CPL=3), (2) sayfa-izolasyon (D-195 kernel sayfasi U/S=0
+# -> ring3 erisince #PF), (3) syscall (D-218 int 0x80 num/arg/donus). Ring3 user-
+# kodu KENDI kullanici-sayfasinda kosar (U/S=1) + int 0x80 ile syscall yapar
+# (num=2 topla(40,2)=42 HESAP + num=1 yaz I/O) + kernel-sayfasina erisince #PF
+# (err=P|U, CR2=kernel-adr) -> HAPIS. Dort x86-OS ozelligi bir arada. Marker
+# "RING3 PROC X86 OK". timeout 20 (hlt-loop timeout ile oludur = beklenen,
+# || true). Deterministik (sabit arglar/sihir/2MB-hizali sir).
+calistir_ring3_proc_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 kullanici-sureci keystone: ring3_proc_x86.c -> ELF (ring3 + sayfa-izolasyon + syscall)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/ring3_proc_x86.c -o $(BUILD)/ring3_proc_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/ring3_proc_x86.elf $(BUILD)/ring3_proc_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/ring3_proc_x86.out; \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/ring3_proc_x86.elf -display none \
+			-serial file:$(BUILD)/ring3_proc_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_proc_x86.out; echo "--- son ---"; \
+		if grep -q "RING3 PROC X86 OK" $(BUILD)/ring3_proc_x86.out; then \
+			echo "x86_64 kullanici-sureci keystone gecti: ring3 sureci kendi sayfasinda kostu (CPL=3) + syscall ile hesap+I/O yapti + kernel-sayfa okumasi #PF ile reddedildi (aarch64 proc_arm.c paritesi)."; \
+		else \
+			echo "FAIL: 'RING3 PROC X86 OK' bekleniyor (ring3 + syscall + kernel-sayfa #PF birlesimi calismali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 kullanici-sureci keystone atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -4313,7 +4343,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
                      calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
                      calistir_ring3_page_test_x86 calistir_preempt_test_x86 \
-                     calistir_syscall_abi_test_x86
+                     calistir_syscall_abi_test_x86 calistir_ring3_proc_test_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
