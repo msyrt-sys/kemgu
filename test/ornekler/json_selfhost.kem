@@ -1,0 +1,227 @@
+// KEMGU SELF-HOST JSON AYRIŞTIRICI — veri-format işleme milestone (cihazsız).
+// =========================================================================
+// Bu örnek, KEMGU dilinin — Türkçe syntax'lı bir sistem programlama dili —
+// gerçek bir VERİ-FORMAT (JSON) metnini saf KEMGU'da ayrıştırabildiğini
+// kanıtlar. Bir metin serileştirme formatını token'layıp anlamlandırmak
+// (skip-whitespace, string-oku, sayı-oku, anahtar→değer eşle) bir dilin
+// pratik olgunluk kanıtıdır: byte-akışını durum-makinesiyle gezmek + ardışık
+// karakter sınıflandırması + sayısal biriktirme bir araya gelir.
+//
+// Saf KEMGU, cihazsız (MMIO / yetki<MMIO> yok): yalnızca aritmetik + dizi
+// indeksleme (OKUMA d[i] ve YAZMA d[i]=x) + iken/eğer/değilse eğer kontrol
+// akışı. Girdi bir byte-dizisi sabiti olarak GÖMÜLÜ — dosya-okuma yok.
+//
+// KRİTİK codegen dersleri (bu örneğin dayandığı invaryantlar):
+//   (1) `karakter` tipi sayısal DEĞİL (T003, D-175) → JSON byte'larını `tam32`
+//       dizisi olarak tutuyoruz; ASCII karşılaştırma SABİT-INT ile yapılır
+//       ('{'=123, '}'=125, '"'=34, ':'=58, ','=44, '0'-'9'=48-57, boşluk=32).
+//   (2) Diziler HEAP-UNIFORM: `Dizi<tam32>` → runtime `KdlDizi*`; indeks OKUMA
+//       (`json[i]`) → `kdl_dizi_al_tam` (runtime sınır-kontrollü, hem i<0 hem
+//       i>=boyut). Yani parse boyunca dizi erişimi bellek-güvenli (D-196/D-171).
+//   (3) `değilse eğer` zinciri → durum-makinesi DISPATCH: `iken` parse-döngüsü
+//       içinde ardışık eğer/değilse-eğer ile karakter sınıfına göre ayrılır
+//       (switch yok → değilse-eğer deseni, D-168 crc32 ile kanıtlı).
+//   (4) Sayı-oku birikimi: `n = n*10 + (byte-48)` — ASCII rakamın sayısal
+//       değere dönüşümü ('0'=48 → 0, '9'=57 → 9). Salt tam32 aritmetiği.
+//   (5) `Dizi<tam32>` fn-param: JSON metni ayrıştırıcıya referansla aktarılır;
+//       değer-dizisi in-place YAZILIR (kdl_dizi_yaz_tam) → çağırana yansır
+//       (D-171 fn-param + in-place mutasyon deseni).
+//
+// AYRIŞTIRICI MİMARİSİ (basit JSON alt-kümesi — nesne + sayı değerleri):
+//   Girdi:  {"anahtar": sayı, "anahtar": sayı, ...}
+//   Ana döngü (iken i < uzun) durum-makinesi:
+//     - boşluk / '{' / '}' / ':' / ',' → atla (whitespace + yapısal ayraç)
+//     - '"' → anahtar-string oku (kapanan '"' e kadar). Bu alt-kümede anahtar
+//             METNİ tutulmaz; string yalnız geçilir. Değerler yalnız SAYI
+//             olduğundan string daima ANAHTAR'dır; her sayı sırayla bir sonraki
+//             çift-slotuna yazılır (ilk sayı→slot0, ikinci→slot1, ...).
+//     - '0'..'9' → sayı oku (ardışık rakamları biriktir) → o anki çift slotuna
+//             yaz, çift sayacını artır.
+//   Böylece {"x": 42, "y": 100} → deger[0]=42 (x), deger[1]=100 (y).
+//
+// DETERMİNİSTİK doğrulama: ayrıştırılan değerler ayrı bir "beklenen" değerle
+// (x=42, y=100) karşılaştırılır. İkisi de eşleşir VE tam olarak 2 anahtar-değer
+// çifti bulunursa "KEM JSON OK", aksi halde "KEM JSON FAIL".
+//
+// Beklenen çıktı: "KEM JSON BASLA" + 42 + 100 + "KEM JSON OK".
+
+// --- ASCII sabitleri (byte kodları — `karakter` sayısal değil, D-175) ---
+sabit CH_KUME_AC: tam32   = 123;  // '{'
+sabit CH_KUME_KAPA: tam32 = 125;  // '}'
+sabit CH_TIRNAK: tam32    = 34;   // '"'
+sabit CH_IKINOKTA: tam32  = 58;   // ':'
+sabit CH_VIRGUL: tam32    = 44;   // ','
+sabit CH_BOSLUK: tam32    = 32;   // ' '
+sabit CH_SIFIR: tam32     = 48;   // '0'
+sabit CH_DOKUZ: tam32     = 57;   // '9'
+
+sabit MAKS_CIFT: tam32 = 8;   // en fazla anahtar-değer çifti (fazlasıyla yeter)
+
+// --- Beklenen değerler (deterministik doğrulama için) ---
+sabit BEKLENEN_X: tam32 = 42;    // "x" değeri
+sabit BEKLENEN_Y: tam32 = 100;   // "y" değeri
+sabit BEKLENEN_CIFT: tam32 = 2;  // beklenen anahtar-değer çifti sayısı
+
+// =========================================================================
+// Bir byte'ın ASCII rakam ('0'..'9') olup olmadığını sınıflandırır.
+//   1 → rakam, 0 → değil. (SKALER tam32 karşılaştırma — sınır kontrolü.)
+// =========================================================================
+işlev rakam_mi(b: tam32) -> tam32 {
+    eğer b < CH_SIFIR {
+        ver 0;   // '0' altı → rakam değil
+    }
+    eğer b > CH_DOKUZ {
+        ver 0;   // '9' üstü → rakam değil
+    }
+    ver 1;       // '0'..'9' → rakam
+}
+
+// =========================================================================
+// String'in kapanan tırnağından SONRAKİ indeksi bulur (string'i atlar).
+// json[baslangic] açan '"' den SONRAKİ ilk karakter olmalıdır. Kapanan '"'
+// bulununca ONDAN SONRAKİ indeksi döner. Bulunamazsa (bozuk) uzun'u döner
+// (savunmacı — sonsuz döngü yok, ana döngü düşer).
+// =========================================================================
+işlev string_atla(json: Dizi<tam32>, baslangic: tam32, uzun: tam32) -> tam32 {
+    değişken j: tam32 = baslangic;
+    iken j < uzun {
+        değişken s: tam32 = json[j];
+        eğer s == CH_TIRNAK {
+            ver j + 1;   // kapanan tırnaktan SONRAKİ indeks
+        } değilse {
+            j = j + 1;   // string içi karakter → devam
+        }
+    }
+    ver uzun;   // kapanan tırnak yok (bozuk) → sonuna götür
+}
+
+// =========================================================================
+// json[baslangic] den başlayan ardışık rakamları okuyup sayısal değere çevirir.
+// SAYI değerini `sonuc` dizisinin 0. slotuna yazar (tek-elemanlı out-param)
+// ve sayının BİTTİĞİ (ilk rakam-olmayan) indeksi DÖNER.
+//   n = n*10 + (byte - '0')  →  ASCII rakam → sayısal biriktirme.
+// =========================================================================
+işlev sayi_oku(json: Dizi<tam32>, baslangic: tam32, uzun: tam32, sonuc: Dizi<tam32>) -> tam32 {
+    değişken j: tam32 = baslangic;
+    değişken n: tam32 = 0;
+    değişken devam: tam32 = 1;   // 1 iken rakam okumaya devam
+    iken devam == 1 {
+        eğer j < uzun {
+            değişken d: tam32 = json[j];
+            eğer rakam_mi(d) == 1 {
+                n = n * 10 + (d - CH_SIFIR);   // ASCII rakam → sayısal
+                j = j + 1;                     // bitiş indeksini ilerlet
+            } değilse {
+                devam = 0;   // ilk rakam-olmayan → sayı bitti (j gerçek bitiş)
+            }
+        } değilse {
+            devam = 0;       // metin sonu → sayı bitti (j == uzun)
+        }
+    }
+    sonuc[0] = n;   // ayrıştırılan sayı (tek-slot out-param)
+    ver j;          // sayının BİTTİĞİ (ilk rakam-olmayan) indeks
+}
+
+// =========================================================================
+// JSON AYRIŞTIRICI ÇEKİRDEĞİ — token'la + anahtar→değer eşle.
+// json: JSON metni (tam32 byte dizisi); uzun: byte sayısı;
+// degerler: çıkarılan sayı değerlerinin yazılacağı dizi (sıralı slotlar).
+// Dönüş: bulunan anahtar-değer çifti sayısı.
+// =========================================================================
+işlev json_ayristir(json: Dizi<tam32>, uzun: tam32, degerler: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;         // okuma indeksi
+    değişken cift_sayi: tam32 = 0; // bulunan anahtar-değer çifti sayısı
+    değişken tek: Dizi<tam32> = [0];   // sayi_oku için tek-slot out-param
+
+    iken i < uzun {
+        değişken c: tam32 = json[i];   // o anki byte
+
+        // --- Durum-makinesi: karakter sınıfına göre dispatch ---
+        eğer c == CH_BOSLUK {
+            i = i + 1;                 // whitespace → atla
+        } değilse eğer c == CH_KUME_AC {
+            i = i + 1;                 // '{' → atla
+        } değilse eğer c == CH_KUME_KAPA {
+            i = i + 1;                 // '}' → atla
+        } değilse eğer c == CH_IKINOKTA {
+            i = i + 1;                 // ':' → atla
+        } değilse eğer c == CH_VIRGUL {
+            i = i + 1;                 // ',' → atla
+        } değilse eğer c == CH_TIRNAK {
+            // String başı '"' → kapanan '"' e kadar geç (anahtar metni tutulmaz).
+            i = string_atla(json, i + 1, uzun);   // açan tırnaktan sonrasını geç
+        } değilse {
+            eğer rakam_mi(c) == 1 {
+                // Sayı başı → ardışık rakamları oku, çift slotuna yaz.
+                i = sayi_oku(json, i, uzun, tek);
+                eğer cift_sayi < MAKS_CIFT {
+                    degerler[cift_sayi] = tek[0];   // dizi in-place YAZMA (sınır-kontrollü)
+                    cift_sayi = cift_sayi + 1;
+                }
+            } değilse {
+                i = i + 1;             // bilinmeyen karakter → savunmacı atla
+            }
+        }
+    }
+
+    ver cift_sayi;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM JSON BASLA");
+
+    // JSON metni {"x": 42, "y": 100} — byte (ASCII) dizisi olarak GÖMÜLÜ.
+    // '{'=123 '"'=34 'x'=120 '"'=34 ':'=58 ' '=32 '4'=52 '2'=50 ','=44 ' '=32
+    // '"'=34 'y'=121 '"'=34 ':'=58 ' '=32 '1'=49 '0'=48 '0'=48 '}'=125
+    değişken json: Dizi<tam32> = [
+        123,             // {
+        34, 120, 34,     // "x"
+        58, 32,          // :(space)
+        52, 50,          // 42
+        44, 32,          // ,(space)
+        34, 121, 34,     // "y"
+        58, 32,          // :(space)
+        49, 48, 48,      // 100
+        125              // }
+    ];
+    değişken json_uzun: tam32 = 19;   // {"x": 42, "y": 100} = 19 byte
+
+    // Çıkarılan değer slotları (sırayla: x→slot0, y→slot1).
+    değişken degerler: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0];
+
+    değişken sayi: tam32 = json_ayristir(json, json_uzun, degerler);
+
+    // Çıkarılan değerleri bas (ondalık).
+    yazdir_metin("Cikarilan degerler (ondalik):");
+    yazdir_tam(degerler[0]);   // x
+    yazdir_tam(degerler[1]);   // y
+
+    // --- Doğrulama: çift sayısı = 2 VE x=42 VE y=100 ---
+    değişken dogru: tam32 = 1;
+
+    eğer sayi == BEKLENEN_CIFT {
+        // çift sayısı doğru
+    } değilse {
+        dogru = 0;
+    }
+
+    eğer degerler[0] == BEKLENEN_X {
+        // x doğru
+    } değilse {
+        dogru = 0;
+    }
+
+    eğer degerler[1] == BEKLENEN_Y {
+        // y doğru
+    } değilse {
+        dogru = 0;
+    }
+
+    eğer dogru == 1 {
+        yazdir_metin("KEM JSON OK");
+    } değilse {
+        yazdir_metin("KEM JSON FAIL");
+    }
+
+    ver 0;
+}

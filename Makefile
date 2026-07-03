@@ -3744,6 +3744,49 @@ calistir_vm_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host YIGIN-VM testi atlandi."; \
 	fi
 
+# === SELF-HOST JSON AYRIŞTIRICI (aarch64) — KEMGU veri-format işleme ===
+# json_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bir JSON
+# AYRIŞTIRICI (veri-format token'layıcı + durum-makinesi) yazar ve çalıştırır.
+# KEMGU'nun gerçek bir SERİLEŞTİRME formatını (JSON nesnesi) ayrıştırabildiğini
+# kanıtlar — pratik bir dil-yeteneği. Girdi bir byte-dizisi sabiti olarak GÖMÜLÜ
+# ({"x": 42, "y": 100} = 19 byte ASCII); dosya-okuma YOK. Ayrıştırıcı: skip-
+# whitespace + '{' '}' ':' ',' yapısal ayraç atla, '"' string-oku (kapanan tırnağa
+# kadar), '0'-'9' sayı-oku (n = n*10 + (byte-48)). Anahtar→değer eşle: her sayı
+# sırayla bir sonraki slota yazılır (x→slot0, y→slot1). Byte'lar tam32 dizisi
+# (karakter sayısal DEĞİL, D-175); ASCII karşılaştırma SABİT-INT; opcode/durum
+# dispatch `değilse eğer` zinciriyle (switch yok, D-168). Dizi in-place YAZMA
+# (kdl_dizi_yaz_tam, runtime sınır-kontrollü, D-171); Dizi<tam32> fn-param
+# (D-196 VM deseni). DETERMİNİSTİK: çıkarılan x=42 VE y=100 VE tam 2 çift ayrı
+# beklenen değerlerle karşılaştırılır. CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade
+# BM_A64_OBJS (heap dâhil — Dizi<tam32> tahsisi için). Marker: "KEM JSON OK".
+# runtime/codegen DEĞİŞMEDİ.
+calistir_json_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST JSON ayristirici: json_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/json_selfhost.kem > $(BUILD)/json_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/json_selfhost.ll -c -o $(BUILD)/json_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/json_selfhost.elf $(BUILD)/json_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/json_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/json_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/json_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/json_selfhost.out -kernel $(BUILD)/json_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/json_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM JSON OK" $(BUILD)/json_selfhost.out; then \
+			echo "aarch64 self-host JSON ayristirici testi gecti: KEMGU cihazsiz veri-format ayristirma ({\"x\": 42, \"y\": 100} -> x=42, y=100) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM JSON OK' bekleniyor (KEMGU self-host JSON ayristirici)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host JSON ayristirici testi atlandi."; \
+	fi
+
 # === SELF-HOST MİNİ-ASSEMBLER (aarch64) — KEMGU mnemonic → bytecode → VM ===
 # asm_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bir MİNİ-
 # ASSEMBLER (kod üretici) yazar ve ürettiği bytecode'u D-196 yığın-VM ile
@@ -4453,6 +4496,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_turkce_sort_selfhost_arm \
                      calistir_bignum_selfhost_arm \
                      calistir_vm_selfhost_arm \
+                     calistir_json_selfhost_arm \
                      calistir_asm_selfhost_arm \
                      calistir_guvenlik_test_arm \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
