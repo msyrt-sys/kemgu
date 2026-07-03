@@ -1626,6 +1626,41 @@ calistir_smp_ticket_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP ticket testi atlandi."; \
 	fi
 
+# === SMP MCS QUEUE-LOCK (ölçeklenebilir kuyruk-kilidi) testi (aarch64) ===
+# D-170/174/180/192 SMP + kilit üstünde: spinlock (D-170) ve ticket-lock (D-192)
+# HER İKİSİ de TEK global adreste döner → her unlock o satırı değiştirir → tüm
+# bekleyen çekirdeklerin cache kopyaları geçersizleşir (cache-line "bouncing"),
+# N çekirdekte O(N) coherency trafiği → kilit darboğaz. MCS queue-lock (Mellor-
+# Crummey & Scott 1991) bunu çözer: her çekirdek KENDİ node'unun `locked`
+# bayrağında döner (global adreste DEĞİL) → serbest kalınca sahibi YALNIZ tek
+# halefinin node'unu yazar → sadece o çekirdeğin satırı geçersizleşir, diğerleri
+# dokunulmaz (bouncing YOK, N'e doğrusal ölçeklenir). Node: {locked, next*};
+# global tail. kilitle: SWAP(tail, my_node) ile kuyruğa gir, seleften yerel-spin;
+# ac: halef varsa onun locked=0, yoksa CAS(tail, my_node, NULL). MCS doğal FIFO
+# (kuyruk sırasıyla). İki çekirdek N=5000 kez: MCS-kilitle → sayac++ (düz, kilit
+# koruduğu için yarış yok) → aç. son sayac == 2*N == 10000 (karşılıklı-dışlama →
+# lost-update yok) VE her çekirdek > 0 işledi (FIFO adalet, açlık yok) → "SMP MCS OK".
+# smp_ticket modeli: -smp 2, net/drive yok. DETERMİNİSTİK (sayac her koşuda 10000).
+calistir_smp_mcs_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP MCS queue-lock (olceklenebilir kuyruk-kilidi) testi: smp_mcs_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_mcs_arm.c -o $(BUILD)/smp_mcs_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_mcs_arm.elf $(BUILD)/smp_mcs_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_mcs_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_mcs_arm.out -kernel $(BUILD)/smp_mcs_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_mcs_arm.out; echo "--- son ---"; \
+		if grep -q "SMP MCS OK" $(BUILD)/smp_mcs_arm.out; then \
+			echo "SMP MCS testi gecti: iki cekirdek MCS queue-lock (yerel-spin, cache-line bouncing yok) ile sayaci serialize etti, sayac=10000 (lost-update yok, FIFO aclik yok)."; \
+		else \
+			echo "FAIL: 'SMP MCS OK' bekleniyor (iki cekirdek MCS queue-lock, sayac=10000, FIFO adalet)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP MCS testi atlandi."; \
+	fi
+
 # === SMP çekirdekler-arası üretici-tüketici testi (aarch64) — SPSC ring buffer ===
 # Çekirdek 0 ÜRETİR, çekirdek 1 TÜKETİR; aralarında paylaşımlı kilitsiz halka
 # tampon (single-producer single-consumer) akar. N=1000 öğe (0..999); tüketici
@@ -3740,7 +3775,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
