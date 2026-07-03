@@ -2504,6 +2504,34 @@ calistir_icmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virt
 		echo "QEMU yok — ICMP testi atlandi."; \
 	fi
 
+# === MİLESTONE C: PING-SWEEP testi (aarch64) — nmap-tarzı L3 HOST KEŞFİ ===
+# D-156 tek-ping (icmp_arm.c) + D-158 subnet-iterasyon (arp_scan_arm.c) BİRLEŞİMİ.
+# 10.0.2.1..5 aralığındaki her IP'ye ICMP Echo Request yolla → echo reply gelen =
+# CANLI host. SLIRP geçit (10.0.2.2) + DNS (10.0.2.3) ICMP echo'ya dahili yanıt
+# verir → en az 2 canlı host DETERMİNİSTİK. Marker: "PING SWEEP OK N" (N>=2).
+# Yük-duyarlı: KISA per-IP timeout (2.5M tik) + erken-çıkış (D-158 dersi).
+calistir_ping_sweep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 ICMP ping-sweep (host keşfi) testi: ping_sweep_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/ping_sweep_arm.c -o $(BUILD)/ping_sweep_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/ping_sweep_arm.elf $(BUILD)/ping_sweep_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/ping_sweep_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/ping_sweep_arm.out -kernel $(BUILD)/ping_sweep_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/ping_sweep_arm.out; echo "--- son ---"; \
+		if grep -q "PING SWEEP OK" $(BUILD)/ping_sweep_arm.out; then \
+			echo "aarch64 ping-sweep testi gecti: ICMP host keşfiyle >=2 canlı host bulundu (nmap-tarzı L3 recon)."; \
+		else \
+			echo "FAIL: 'PING SWEEP OK' bekleniyor (>=2 canlı host keşfi)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — ping-sweep testi atlandi."; \
+	fi
+
 # === MİLESTONE C: TRACEROUTE testi (aarch64) — IP TTL manipülasyonu + ICMP Time-Exceeded ===
 # ARP → gateway MAC → TTL=1,2,3 ile UDP probe (hedef 8.8.8.8, geçit ötesi) yolla →
 # ICMP Time-Exceeded (type=11) VEYA Dest-Unreachable RX ile hop keşfet. SLIRP
@@ -4122,6 +4150,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm calistir_dhcp_lease_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
+                     calistir_ping_sweep_test_arm \
                      calistir_traceroute_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
                      calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
