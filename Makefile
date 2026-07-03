@@ -2895,6 +2895,43 @@ calistir_userspace_ping_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 		echo "QEMU yok — userspace ICMP ping testi atlandi."; \
 	fi
 
+# === USERSPACE HTTP GET (aarch64) — EL0 süreç syscall ile UYGULAMA KATMANI ===
+# D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) + D-177 EL0 DNS üstünde
+# bir EL0 (yetkisiz) süreç TAM HTTP/1.1 istemcisi çalıştırır: ARP → DNS
+# ("example.com" A) → hedef-IP:80'e TAM TCP handshake (SYN/SYN-ACK/ACK) → HTTP GET
+# PSH+ACK DATA segmenti → yanıt durum satırı ("HTTP/1." + 200/3xx). Ağ kernel-
+# aracılı (sys2 24/25); TCP state makinesi + HTTP tamamen userspace. HTTP request
+# byte'ları EL0 user tamponuna elle yazılır (D-177 .rodata deref yasağı). RX gate:
+# "USERHTTP OK". SLIRP dış-TCP yanıt vermezse (internet yok): EL0 GET isteğini
+# sys2(24) ile gönderdi → "USERHTTP SENT OK" (seri) VEYA pcap'te "GET /" TX kanıtı.
+# virtio_net BM_A64_OBJS'te — yine de explicit dependency olarak eklendi.
+calistir_userspace_http_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 userspace HTTP GET testi: userspace_http_arm.c -> ELF (EL0 syscall ile tam HTTP istemcisi)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_http_arm.c -o $(BUILD)/userspace_http_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_http_arm.elf $(BUILD)/userspace_http_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_http_arm.out $(BUILD)/userspace_http_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_http_arm.pcap \
+			-serial file:$(BUILD)/userspace_http_arm.out -kernel $(BUILD)/userspace_http_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_http_arm.out; echo "--- son ---"; \
+		if grep -q "USERHTTP OK" $(BUILD)/userspace_http_arm.out; then \
+			echo "aarch64 userspace HTTP GET testi gecti (RX round-trip): EL0 surec syscall ile gercek web sunucusundan HTTP durum satiri aldi (uygulama katmani)."; \
+		elif grep -q "USERHTTP SENT OK" $(BUILD)/userspace_http_arm.out; then \
+			echo "aarch64 userspace HTTP GET testi gecti (SENT fallback): EL0 surec HTTP GET istegini sys2(24) ile gonderdi (RX yok/internet yok)."; \
+		elif grep -a -q "GET /" $(BUILD)/userspace_http_arm.pcap; then \
+			echo "aarch64 userspace HTTP GET testi gecti (pcap-TX fallback): EL0'in HTTP GET istegi pcap'te var ('GET /')."; \
+		else \
+			echo "FAIL: seri 'USERHTTP OK'/'USERHTTP SENT OK' veya pcap'te 'GET /' bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace HTTP GET testi atlandi."; \
+	fi
+
 # === OS kernel boot kanıtları — toplu gate (aarch64 + x86_64 × hepsi) ===
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
@@ -2929,6 +2966,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
+                     calistir_userspace_http_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
