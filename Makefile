@@ -2139,6 +2139,34 @@ calistir_minifs_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_vi
 		echo "QEMU yok — mini-FS testi atlandi."; \
 	fi
 
+# === MİLESTONE D: mini-FS TAM CRUD + blok geri-kazanim (aarch64) ===
+# D-210 uzerine Update + Delete + blok-reclaim. 3 dosya olustur (blok 3,4,5),
+# ORTADAKI dosyayi sil (blok 4 SERBEST), yeni dosya olustur → serbest blok 4'u
+# GERI KULLANIR (bitmap-reclaim) + icerik round-trip. Marker "MINIFS CRUD OK".
+calistir_minifs_crud_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "MİLESTONE D aarch64 mini-FS CRUD testi (sil→reclaim): minifs_crud_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/minifs_crud_arm.c -o $(BUILD)/minifs_crud_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/minifs_crud_arm.elf $(BUILD)/minifs_crud_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_minifs_crud.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/minifs_crud_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_minifs_crud.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/minifs_crud_arm.out -kernel $(BUILD)/minifs_crud_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/minifs_crud_arm.out; echo "--- son ---"; \
+		if grep -q "MINIFS CRUD OK" $(BUILD)/minifs_crud_arm.out; then \
+			echo "MİLESTONE D aarch64 mini-FS CRUD testi gecti: sil→blok-serbest→yeni-dosya reclaim + round-trip."; \
+		else \
+			echo "FAIL: 'MINIFS CRUD OK' bekleniyor (sil + bitmap-reclaim + round-trip)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — mini-FS CRUD testi atlandi."; \
+	fi
+
 # === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
 # Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
 # payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
@@ -4019,6 +4047,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_fs_journal_test_arm calistir_minifs_test_arm \
+                     calistir_minifs_crud_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm calistir_dhcp_lease_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
