@@ -2587,6 +2587,34 @@ calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 ring3 testi atlandi."; \
 	fi
 
+# === TAM SAYFA-İZOLASYON testi (x86_64) — ring3 kernel-sayfa #PF (D-124 x86) ===
+# aarch64 D-124/D3 (EL0 kod kernel-belleğe erişince permission-fault) testinin
+# x86 muadili. D-190 (ring3_x86) yalnız CPL + #GP ile ayrıcalık ayrımı kanıtladı;
+# bu test SAYFA-tabanlı izolasyonu kanıtlar: ring3 kod bir kernel-only (U/S=0)
+# sayfayı OKUYUNCA CPU #PF (vektör 14, hata kodu = present|user) üretir → kernel
+# handler yakalar. Kernel-sır tamponu 2MB-hizalı+2MB-boyutlu → kendi PD girişi
+# (supervisor-only); yalnız ring3 sayfalarına U/S eklenir → TAM izolasyon.
+# Marker "PAGE ISO OK" (ring3 kernel belleğini okuyamadı, #PF err=P|U).
+calistir_ring3_page_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 tam sayfa-izolasyon testi: ring3_page_x86.c -> ELF (ring3 kernel-sayfa okuma -> #PF)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/ring3_page_x86.c -o $(BUILD)/ring3_page_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/ring3_page_x86.elf $(BUILD)/ring3_page_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/ring3_page_x86.out; \
+		timeout 12 qemu-system-x86_64 -kernel $(BUILD)/ring3_page_x86.elf -display none \
+			-serial file:$(BUILD)/ring3_page_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_page_x86.out; echo "--- son ---"; \
+		if grep -q "PAGE ISO OK" $(BUILD)/ring3_page_x86.out; then \
+			echo "x86_64 tam sayfa-izolasyon testi gecti: ring3 kernel-only sayfayi OKUYAMADI (#PF v=14, err=P|U) — donanim-zorlamali sayfa-duzeyi izolasyon."; \
+		else \
+			echo "FAIL: 'PAGE ISO OK' bekleniyor (ring3 kernel-sayfa okumasi #PF ile reddedilmeli)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 tam sayfa-izolasyon testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -3351,9 +3379,10 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
-                     calistir_smp_test_x86 calistir_ring3_test_x86
+                     calistir_smp_test_x86 calistir_ring3_test_x86 \
+                     calistir_ring3_page_test_x86
 	@echo ""
-	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) ==="
+	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
