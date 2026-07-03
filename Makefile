@@ -3970,6 +3970,35 @@ calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace fiber testi atlandi."; \
 	fi
 
+# === USERSPACE setjmp/longjmp (aarch64) — EL0 YEREL-OLMAYAN atlama (C exception-benzeri) ===
+# MİLESTONE-C: D-203 naked fiber_gec (callee-saved x19-x30 + sp save/restore) desenini
+# setjmp/longjmp'e taşır. TEK EL0 akış İÇİNDE yerel-olmayan kontrol akışı: u_setjmp(buf)
+# callee-saved+sp+lr kaydeder + 0 döner; derin çağrı zinciri (kat1→kat2→kat3); en derin
+# katman u_longjmp(buf,42) → kontrol u_setjmp'e GERİ SIÇRAR (bu sefer 42) → ara stack
+# frame'leri ATLANIR. TAMAMEN userspace (kernel yardımı yok: timer/IRQ/syscall-switch yok).
+# jmp_buf EL0 user-VA'da (.user_data, 0x42xxxxxx). Yalnız I/O syscall (5/6/7 yaz, 3 cik).
+# DETERMİNİSTİK: SETJMP0 → K1 K2 K3 → LONGJMP42 → "USERJMP OK". net/drive YOK, sade QEMU
+# (userspace_fiber_test_arm modeli). virtio* BM_A64_OBJS'te (dead-code, libc-temiz).
+calistir_userspace_jmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "MILESTONE-C aarch64 userspace setjmp/longjmp testi: userspace_jmp_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_jmp_arm.c -o $(BUILD)/userspace_jmp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_jmp_arm.elf $(BUILD)/userspace_jmp_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_jmp_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_jmp_arm.out -kernel $(BUILD)/userspace_jmp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_jmp_arm.out; echo "--- son ---"; \
+		if grep -q "USERJMP OK" $(BUILD)/userspace_jmp_arm.out; then \
+			echo "MILESTONE-C aarch64 userspace setjmp/longjmp testi gecti: EL0 yerel-olmayan atlama (derin zincirden tek sicrayisla geri donus)."; \
+		else \
+			echo "FAIL: 'USERJMP OK' bekleniyor (EL0 u_setjmp/u_longjmp callee-saved+sp+lr restore + yerel-olmayan sicrama)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace setjmp/longjmp testi atlandi."; \
+	fi
+
 # === USERSPACE ÇOK-FİBER SCHEDULER (aarch64) — EL0-içi round-robin N yeşil-thread ===
 # MİLESTONE-B: D-203 iki-fiber ping-pong'unu GERÇEK scheduler'a taşır. TEK EL0 süreç
 # İÇİNDE N>=3 kooperatif fiber (A/B/C) + merkezi round-robin scheduler döngüsü. Fiber'lar
@@ -4330,6 +4359,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_shm_test_arm \
                      calistir_userspace_fiber_test_arm \
+                     calistir_userspace_jmp_test_arm \
                      calistir_userspace_sched_test_arm \
                      calistir_userspace_malloc_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
