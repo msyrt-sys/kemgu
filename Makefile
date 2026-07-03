@@ -2210,6 +2210,37 @@ calistir_minifs_crud_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a
 		echo "QEMU yok — mini-FS CRUD testi atlandi."; \
 	fi
 
+# === MİLESTONE D: crash-guvenli FS (WAL journaling + inode-FS SENTEZİ, aarch64) ===
+# D-206 (WAL commit-flag) + D-210 (inode-FS) sentezi: ATOMİK dosya-yazimi. Dosya
+# once journal'a (meta+veri+commit-flag) yazilir, sonra FS bloklarina UYGULANIR.
+# Crash commit ORTASINDA (commit=0) → kurtarma ATLAR (FS eski-tutarli); crash
+# commit SONRASI (flag=1) → kurtarma REPLAY eder (FS yeni-tutarli). Torn durum
+# ASLA gorunmez. Uc senaryo tek-boot: (1) temiz yazim, (2) crash-replay,
+# (3) crash-oncesi torn-atla. Marker "CRASHFS OK".
+calistir_crashfs_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "MİLESTONE D aarch64 crash-guvenli FS testi (WAL+inode sentez): crashfs_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/crashfs_arm.c -o $(BUILD)/crashfs_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/crashfs_arm.elf $(BUILD)/crashfs_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_crashfs.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/crashfs_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_crashfs.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/crashfs_arm.out -kernel $(BUILD)/crashfs_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/crashfs_arm.out; echo "--- son ---"; \
+		if grep -q "CRASHFS OK" $(BUILD)/crashfs_arm.out; then \
+			echo "MİLESTONE D aarch64 crash-guvenli FS testi gecti: WAL journal + commit-flag → atomik yazim + crash-replay + torn-atla."; \
+		else \
+			echo "FAIL: 'CRASHFS OK' bekleniyor (atomik WAL yazim + crash-replay + torn-atla)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — crash-guvenli FS testi atlandi."; \
+	fi
+
 # === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
 # Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
 # payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
@@ -4190,6 +4221,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
                      calistir_fs_journal_test_arm calistir_minifs_test_arm \
                      calistir_minifs_crud_test_arm \
+                     calistir_crashfs_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm calistir_dhcp_lease_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
