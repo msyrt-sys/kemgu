@@ -1596,6 +1596,36 @@ calistir_smp_atomic_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP atomic testi atlandi."; \
 	fi
 
+# === SMP TICKET-LOCK (adil FIFO kilit) testi (aarch64) — açlık yok ===
+# D-170/174/180 SMP üstünde: D-170 spinlock (test-and-set) karşılıklı-dışlama
+# verdi ama ADİL DEĞİLdi (herhangi bekleyen kilidi kapabilir → teorik açlık).
+# Bu test ticket-lock ile FIFO ADALET kanıtlar: `sonraki_bilet` (atomik fetch-add
+# LDXR/STXR) benzersiz artan bilet dağıtır; `simdi_hizmet` artan sırada hizmet
+# eder → kilit her zaman EN ESKİ bekleyene gider. İki çekirdek N=5000 kez: bilet
+# al → kilitle → paylaşımlı sayacı DÜZ (atomik-olmayan) artır (kilit koruduğu
+# için yarış yok) → aç. son sayac == 2*N == 10000 (kilit serialize → lost-update
+# yok) VE her çekirdek > 0 işledi (FIFO adalet, açlık yok) → "SMP TICKET OK".
+# smp_atomic modeli: -smp 2, net/drive yok. DETERMİNİSTİK.
+calistir_smp_ticket_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP ticket-lock (adil FIFO kilit) testi: smp_ticket_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_ticket_arm.c -o $(BUILD)/smp_ticket_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_ticket_arm.elf $(BUILD)/smp_ticket_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_ticket_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_ticket_arm.out -kernel $(BUILD)/smp_ticket_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_ticket_arm.out; echo "--- son ---"; \
+		if grep -q "SMP TICKET OK" $(BUILD)/smp_ticket_arm.out; then \
+			echo "SMP ticket-lock testi gecti: iki cekirdek FIFO adil kilit ile sayaci serialize etti, sayac=10000 (lost-update yok, aclik yok)."; \
+		else \
+			echo "FAIL: 'SMP TICKET OK' bekleniyor (iki cekirdek ticket-lock FIFO, sayac=10000, adalet)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP ticket testi atlandi."; \
+	fi
+
 # === SMP çekirdekler-arası üretici-tüketici testi (aarch64) — SPSC ring buffer ===
 # Çekirdek 0 ÜRETİR, çekirdek 1 TÜKETİR; aralarında paylaşımlı kilitsiz halka
 # tampon (single-producer single-consumer) akar. N=1000 öğe (0..999); tüketici
@@ -3212,7 +3242,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_prodcons_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_prodcons_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
