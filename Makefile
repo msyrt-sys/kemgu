@@ -2334,6 +2334,54 @@ calistir_uart_rx_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — UART RX testi atlandi."; \
 	fi
 
+# === İNTERAKTİF KABUK (shell) testi (aarch64) — DONANIM + OS DORUĞU ===
+# D-181 (UART RX) + D-135 (komut kabuk) BİRLEŞİMİ: kabuk komut satırlarını PL011
+# UART RX'ten CANLI okur (sabit script DEĞİL) → gerçek interaktiflik. Kabuk EL1'de
+# koşar; UART RX MMIO doğrudan EL1'den okunur, FS komutları `svc #0` ile çağrılır.
+#
+# GİRİŞ (D-181 dersi): `-serial stdio` ile guest seri hattı host stdin/stdout'a
+# bağlanır; komut dizisi stdin'e PIPE edilir (Windows/MSYS'te ÇALIŞAN yol; QEMU
+# `-chardev input-path=` Windows'ta desteklenmez). Kabuk her satırı RXFE-poll +
+# DR ile byte-byte CANLI okur, '\n'de tokenize + çalıştırır (sabit script DEĞİL).
+#
+# PER-KARAKTER PACE (KRİTİK deterministiklik): QEMU virt PL011 reset'te RX = 1-byte
+# holding register. Tüm akışı burst pipe'lamak → guest TX'te (echo/oku çıktısı/
+# prompt) meşgulken gelen bytelar 1-byte reg'i OVERRUN eder → RUN'lar arası KARARSIZ
+# (yaşandı: "yl MHABA", "MERHABoku" birleşme, satır-pace bile ara sıra flake). ÇÖZÜM:
+# girişi KARAKTER-KARAKTER, her byte arası ~30ms gecikme ile besle. 1-byte reg
+# hiçbir zaman taşmaz (guest bir sonraki byte'tan çok önce okur), guest TX-latency'si
+# önemsiz → HER byte iner. LİDER sleep 1 boot yarışını absorbe eder. Bu yol tam
+# deterministik (4× RUN byte-identik doğrulandı). Kabuk-içi pl011_fifo_ac (FEN)
+# ikinci savunma. /bin/sh = bash 5.x (MSYS) → ${s:i:1} substring desteklenir.
+# Komutlar: `yaz gunluk MERHABA` (num 17) → `oku gunluk` (num 18, "MERHABA" basar)
+# → `ls` (num 19/20, "gunluk" basar). Sonra EOF → "SHELL OK".
+# DEADLOCK YOK: RXFE poll bounded → giriş bitince kabuk EOF sayar, durur.
+# Ağ/drive YOK → deterministik. Marker grep: "SHELL OK" + "MERHABA" + "gunluk".
+calistir_shell_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 interaktif kabuk testi: shell_arm.c -> ELF (canlı UART RX komut)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/shell_arm.c -o $(BUILD)/shell_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/shell_arm.elf $(BUILD)/shell_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/shell_arm.out; \
+		s='yaz gunluk MERHABA\noku gunluk\nls\n'; \
+		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
+			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
+		done; sleep 1; } \
+			| timeout 20 qemu-system-aarch64 \
+			-M virt -cpu cortex-a72 -display none \
+			-serial stdio -kernel $(BUILD)/shell_arm.elf > $(BUILD)/shell_arm.out 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/shell_arm.out; echo "--- son ---"; \
+		if grep -q "SHELL OK" $(BUILD)/shell_arm.out && grep -q "MERHABA" $(BUILD)/shell_arm.out && grep -q "gunluk" $(BUILD)/shell_arm.out; then \
+			echo "aarch64 interaktif kabuk testi gecti: CANLI UART RX komut okundu (stdio pipe) — yaz/oku/ls calisti, oku=MERHABA + ls=gunluk (SHELL OK)."; \
+		else \
+			echo "FAIL: 'SHELL OK' + 'MERHABA' + 'gunluk' bekleniyor (interaktif kabuk)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — interaktif kabuk testi atlandi."; \
+	fi
+
 # === CMOS RTC testi (x86_64) — donanım gerçek-zaman saati (D-172 x86 paritesi) ===
 # PC uyumlu MC146818 CMOS RTC: port 0x70 (index) / 0x71 (data). BCD register'lar
 # (saniye/dakika/saat/gün/ay/yıl). UIP (Status A bit 7) beklenip tutarlı okunur.
@@ -2915,6 +2963,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
                      calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
+                     calistir_shell_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
