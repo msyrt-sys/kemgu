@@ -2499,6 +2499,41 @@ calistir_shell_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — interaktif kabuk testi atlandi."; \
 	fi
 
+# === KABUK SCRIPT RUNNER (aarch64) — CANLI UART betik → degisken + echo/yaz/oku ===
+# D-188 (shell_arm.c EL1 interaktif UART kabuk) TEMEL. shell_arm.c tek KOMUT okur;
+# shell_script_arm.c bir BETIK YORUMLAYICISI: degisken tablosu (set) + degisken
+# yerine gecme (echo $ad) + sayi<->metin cevrimi + basit dongu (tekrar). Kabuk EL1'de
+# kosar; FS komutlari `svc #0` ile. GIRIS: shell_arm.c gibi `-serial stdio` +
+# KARAKTER-KARAKTER ~30ms pace (PL011 reset RX=1-byte holding → burst overrun, D-188).
+# Ag/drive YOK → deterministik. Betik: `set x 42` (sessiz) → `echo x` ("42") →
+# `yaz gunluk x` (num 17, degeri metne cevirip dosyaya yazar) → `oku gunluk` (num 18,
+# "42" basar). Sonra EOF → "SCRIPT OK". DEADLOCK YOK (RXFE poll bounded → EOF → dur).
+# Marker grep: "SCRIPT OK" + echo/oku ciktisi "42".
+calistir_shell_script_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 kabuk script runner testi: shell_script_arm.c -> ELF (canli UART betik)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/shell_script_arm.c -o $(BUILD)/shell_script_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/shell_script_arm.elf $(BUILD)/shell_script_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/shell_script_arm.out; \
+		s='set x 42\necho x\nyaz gunluk x\noku gunluk\n'; \
+		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
+			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
+		done; sleep 1; } \
+			| timeout 20 qemu-system-aarch64 \
+			-M virt -cpu cortex-a72 -display none \
+			-serial stdio -kernel $(BUILD)/shell_script_arm.elf > $(BUILD)/shell_script_arm.out 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/shell_script_arm.out; echo "--- son ---"; \
+		if grep -q "SCRIPT OK" $(BUILD)/shell_script_arm.out && grep -q "42" $(BUILD)/shell_script_arm.out; then \
+			echo "aarch64 kabuk script runner testi gecti: CANLI UART betik okundu — set/echo/yaz/oku calisti, echo x=42 + oku gunluk=42 (SCRIPT OK)."; \
+		else \
+			echo "FAIL: 'SCRIPT OK' + echo/oku ciktisi '42' bekleniyor (kabuk script runner)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — kabuk script runner testi atlandi."; \
+	fi
+
 # === AG-RECON KABUGU (aarch64) — CANLI UART komut → ICMP ping / DNS recon ===
 # D-188 (shell_arm.c EL1 interaktif UART kabuk) + D-176/177/178 (userspace net:
 # net_gonder=24/net_al=25 syscall, ICMP ping + DNS) BIRLESIMI. Bir "pentest OS"
@@ -3645,7 +3680,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
                      calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
-                     calistir_shell_test_arm calistir_recon_shell_test_arm \
+                     calistir_shell_test_arm calistir_shell_script_test_arm \
+                     calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
