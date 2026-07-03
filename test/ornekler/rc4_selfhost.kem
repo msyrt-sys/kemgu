@@ -1,0 +1,241 @@
+// KEMGU SELF-HOST RC4 — simetrik akış şifresi (cihazsız) güvenlik milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinin SHA-256 (tek-yönlü hash) ÖTESİNDE gerçek bir
+// SİMETRİK AKIŞ ŞİFRESİ (RC4 — Rivest Cipher 4) kaldırdığını kanıtlar. Saf
+// KEMGU dilinde, cihazsız (yetki<MMIO> / mmio yok): yalnızca aritmetik +
+// bit işlemleri (`&`, `^`) + DİZİ in-place permütasyon (S-box takası).
+//
+// RC4 iki fazdan oluşur:
+//   (1) KSA (Key Scheduling Algorithm): 256-byte S dizisi (S[i]=i) anahtara
+//       göre permüte edilir. j=0; her i (0..255):
+//         j = (j + S[i] + anahtar[i % anahtar_uzun]) & 255; swap(S[i], S[j]).
+//   (2) PRGA (Pseudo-Random Generation): S üzerinden keystream üretilir.
+//       i=0,j=0; her çıktı byte için:
+//         i=(i+1)&255; j=(j+S[i])&255; swap(S[i],S[j]);
+//         K = S[(S[i]+S[j])&255].
+//       Şifreli byte = düz byte XOR K.
+//   RC4 SİMETRİKTİR: keystream YALNIZCA anahtara bağlı (düz metne değil).
+//   Aynı keystream ile şifreli metni tekrar XOR'lamak düz metni geri verir
+//   (decrypt round-trip → şifrelemenin doğruluğunun bağımsız kanıtı).
+//
+// KRİTİK codegen deseni (SHA-256 / sort örneklerinden dersler):
+//   - Diziler HEAP-UNIFORM: `Dizi<dtam32>` → runtime `KdlDizi*`. İndeks OKUMA
+//     (`S[i]`) `kdl_dizi_al` (runtime sınır-kontrollü), YAZMA (`S[i]=x`)
+//     `kdl_dizi_yaz` (hem i<0 hem i>=boyut). In-place swap gerçek bellek
+//     mutasyonuna derlenir (D-171 sort deseni — AYNEN gerekli).
+//   - Byte değerleri `dtam32` (işaretsiz) olarak tutulur; `& 255` maskesi
+//     tüm ara toplamları 0..255'e sıkıştırır. RC4'te SAĞA-KAYDIRMA YOK →
+//     dizi-eleman-ashr tuzağı (D-173) hiç oluşmaz.
+//   - XOR (`^`): dizi elemanı ÖNCE skaler dtam32 değişkene alınır, XOR skaler
+//     üstünde yapılır (D-173 dersi — dizi-eleman değil, skaler operand).
+//   - `olarak` cast'e gerek yok: tüm byte'lar zaten dtam32 (D-200 dersi tam32↔
+//     dtam32 implicit yasağını hatırlatır; burada tek tip dtam32 kullanılır).
+//   runtime/codegen DEĞİŞTİRİLMEDİ; bu bir dil-seviyesi kullanım desenidir.
+//
+// Test vektörü (bilinen — Wikipedia RC4 test vektörü):
+//   anahtar "Key" (0x4B,0x65,0x79), düz metin "Plaintext"
+//     (0x50,0x6C,0x61,0x69,0x6E,0x74,0x65,0x78,0x74) →
+//   RC4 şifreli = BB F3 16 E8 D9 40 AF 0A D3  (hex, 9 byte).
+//   Keystream    = EB 9F 77 81 B7 34 CA 72 A7.
+//
+// Beklenen çıktı: "KEM RC4 BASLA" + 9 şifreli byte (ondalık) + "KEM RC4 OK".
+
+sabit S_BOYUT: tam32 = 256;         // S-box (256 byte permütasyon)
+sabit ANAHTAR_UZUN: tam32 = 3;      // "Key" = 3 byte
+sabit MESAJ_UZUN: tam32 = 9;        // "Plaintext" = 9 byte
+
+// --- Anahtar "Key" byte'ları (0x4B, 0x65, 0x79) ---
+işlev anahtar_dizisi() -> Dizi<dtam32> {
+    ver [75, 101, 121];   // 'K'=0x4B, 'e'=0x65, 'y'=0x79
+}
+
+// --- Düz metin "Plaintext" byte'ları ---
+işlev duz_metin() -> Dizi<dtam32> {
+    // 'P','l','a','i','n','t','e','x','t' = 0x50 6C 61 69 6E 74 65 78 74
+    ver [80, 108, 97, 105, 110, 116, 101, 120, 116];
+}
+
+// --- Beklenen RC4("Key","Plaintext") şifreli byte'ları (ondalık) ---
+// hex BB F3 16 E8 D9 40 AF 0A D3
+işlev beklenen_sifreli() -> Dizi<dtam32> {
+    ver [187, 243, 22, 232, 217, 64, 175, 10, 211];
+}
+
+// =========================================================================
+// KSA — Key Scheduling Algorithm.
+// S dizisini (S[i]=i ile başlar) anahtara göre YERİNDE (in-place) permüte
+// eder. j birikimli indeks; her adımda S[i] ile S[j] takas edilir (D-171
+// swap deseni: geçici skaler değişkenle). Tüm ara toplamlar `& 255` ile
+// 0..255'e maskelenir → dtam32 üstünde, kaydırma YOK.
+// =========================================================================
+işlev ksa(s: Dizi<dtam32>, anahtar: Dizi<dtam32>) -> tam32 {
+    // S[i] = i başlangıç kimlik permütasyonu.
+    değişken i: tam32 = 0;
+    iken i < S_BOYUT {
+        s[i] = i olarak dtam32;   // tam32 indeks → dtam32 hücre (implicit yasak, D-200)
+        i = i + 1;
+    }
+
+    // Anahtara göre karıştır.
+    değişken j: dtam32 = 0;
+    i = 0;
+    iken i < S_BOYUT {
+        // Dizi elemanlarını skaler dtam32'ye al (aritmetik skaler üstünde).
+        değişken si: dtam32 = s[i];
+        değişken ak: dtam32 = anahtar[i % ANAHTAR_UZUN];
+        j = (j + si + ak) & 255;
+
+        // swap(S[i], S[j]) — in-place, geçici skaler ile (D-171 deseni).
+        değişken jj: tam32 = j olarak tam32;
+        değişken gecici: dtam32 = s[i];
+        s[i] = s[jj];
+        s[jj] = gecici;
+
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// =========================================================================
+// PRGA — Pseudo-Random Generation Algorithm.
+// Permüte edilmiş S üzerinden `uzunluk` byte keystream üretir; her keystream
+// byte'ı KARŞILIK gelen düz-metin byte'ıyla XOR'lanıp çıktı dizisine yazılır.
+// XOR skaler dtam32 üstünde (D-173 dersi). RC4 simetrik olduğundan bu işlev
+// hem şifreleme hem çözme için kullanılır (aynı anahtar → aynı keystream).
+// =========================================================================
+işlev prga(s: Dizi<dtam32>, girdi: Dizi<dtam32>, cikti: Dizi<dtam32>, uzunluk: tam32) -> tam32 {
+    değişken i: dtam32 = 0;
+    değişken j: dtam32 = 0;
+    değişken n: tam32 = 0;
+    iken n < uzunluk {
+        // i=(i+1)&255; j=(j+S[i])&255
+        i = (i + 1) & 255;
+        değişken ii: tam32 = i olarak tam32;
+        değişken si: dtam32 = s[ii];
+        j = (j + si) & 255;
+        değişken jj: tam32 = j olarak tam32;
+
+        // swap(S[i], S[j]) — in-place (D-171 deseni).
+        değişken gecici: dtam32 = s[ii];
+        s[ii] = s[jj];
+        s[jj] = gecici;
+
+        // K = S[(S[i] + S[j]) & 255]  (takas SONRASI S[i], S[j] değerleri).
+        değişken si2: dtam32 = s[ii];
+        değişken sj2: dtam32 = s[jj];
+        değişken kidx: dtam32 = (si2 + sj2) & 255;
+        değişken kidxi: tam32 = kidx olarak tam32;
+        değişken keystream: dtam32 = s[kidxi];
+
+        // Şifreli/çözülü byte = girdi XOR keystream (XOR skaler üstünde, D-173).
+        değişken g: dtam32 = girdi[n];
+        değişken cout: dtam32 = g ^ keystream;
+        cikti[n] = cout;
+
+        n = n + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM RC4 BASLA");
+
+    değişken anahtar: Dizi<dtam32> = anahtar_dizisi();
+    değişken duz: Dizi<dtam32> = duz_metin();
+    değişken beklenen: Dizi<dtam32> = beklenen_sifreli();
+
+    // --- ŞİFRELE: KSA + PRGA(düz → şifreli) ---
+    // S-box'u 256 sıfırla başlat (KSA içinde S[i]=i ile yeniden doldurulur).
+    değişken s: Dizi<dtam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    // Şifreli çıktı dizisi (9 byte).
+    değişken sifreli: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    ksa(s, anahtar);
+    prga(s, duz, sifreli, MESAJ_UZUN);
+
+    // Şifreli byte'ları bas (ondalık).
+    yazdir_metin("RC4 sifreli (ondalik byte 0..8):");
+    değişken p: tam32 = 0;
+    iken p < MESAJ_UZUN {
+        yazdir_isaretsiz_tam(sifreli[p]);
+        p = p + 1;
+    }
+
+    // --- Şifreli metin beklenen ile eşleşiyor mu? ---
+    değişken eslesti: tam32 = 1;
+    değişken q: tam32 = 0;
+    iken q < MESAJ_UZUN {
+        değişken gercek: dtam32 = sifreli[q];
+        değişken bekle: dtam32 = beklenen[q];
+        eğer gercek == bekle { } değilse { eslesti = 0; }
+        q = q + 1;
+    }
+
+    // --- ÇÖZ (decrypt round-trip): şifreli → aynı keystream → düz geri gel mi? ---
+    // RC4 simetrik: S-box'u SIFIRDAN yeniden kur (KSA aynı anahtarla → aynı
+    // keystream), sonra PRGA(şifreli → çözülü). Çözülü, orijinal düz metne
+    // eşit olmalı — şifrelemenin bağımsız doğruluk kanıtı.
+    değişken s2: Dizi<dtam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    ];
+    değişken cozulu: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    ksa(s2, anahtar);
+    prga(s2, sifreli, cozulu, MESAJ_UZUN);
+
+    // Çözülü == orijinal düz metin mi? (round-trip kanıtı)
+    değişken rt_ok: tam32 = 1;
+    değişken r: tam32 = 0;
+    iken r < MESAJ_UZUN {
+        değişken c: dtam32 = cozulu[r];
+        değişken d: dtam32 = duz[r];
+        eğer c == d { } değilse { rt_ok = 0; }
+        r = r + 1;
+    }
+
+    // Hem beklenen-hex eşleşmesi HEM round-trip → tam kanıt.
+    eğer eslesti == 1 {
+        eğer rt_ok == 1 {
+            yazdir_metin("KEM RC4 OK");
+        } değilse {
+            yazdir_metin("KEM RC4 FAIL");
+        }
+    } değilse {
+        yazdir_metin("KEM RC4 FAIL");
+    }
+
+    ver 0;
+}
