@@ -2022,6 +2022,35 @@ calistir_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_vi
 		echo "QEMU yok — kalıcı FS testi atlandi."; \
 	fi
 
+# === KALICI-FS milestone: Write-Ahead Journaling (WAL) + crash kurtarma (aarch64) ===
+# Crash-tutarli yazma: veri blogu (blok 10) degismeden ONCE yazim niyeti journal
+# blogua (blok 0) kaydedilir. Yazim yarida kesilse bile commit=1 ise kurtarma
+# journal'dan replay eder. Tek-boot icinde iki senaryo (temiz-commit + crash-replay)
+# deterministik olarak test edilir. Marker: "FS JOURNAL OK".
+calistir_fs_journal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "KALICI-FS aarch64 journaling testi (WAL + crash kurtarma): fs_journal_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/fs_journal_arm.c -o $(BUILD)/fs_journal_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/fs_journal_arm.elf $(BUILD)/fs_journal_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_fs_journal.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/fs_journal_arm.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_fs_journal.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/fs_journal_arm.out -kernel $(BUILD)/fs_journal_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/fs_journal_arm.out; echo "--- son ---"; \
+		if grep -q "FS JOURNAL OK" $(BUILD)/fs_journal_arm.out; then \
+			echo "KALICI-FS aarch64 journaling testi gecti: WAL crash-tutarli (temiz-commit + crash-replay)."; \
+		else \
+			echo "FAIL: 'FS JOURNAL OK' bekleniyor (WAL journaling + crash kurtarma)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — FS journaling testi atlandi."; \
+	fi
+
 # === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
 # Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
 # payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
@@ -3716,6 +3745,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
+                     calistir_fs_journal_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
