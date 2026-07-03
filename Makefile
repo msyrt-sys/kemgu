@@ -3113,6 +3113,38 @@ calistir_preempt_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 preemptive sched testi atlandi."; \
 	fi
 
+# === x86 KOOPERATİF scheduler testi (yield tabanlı context-switch) — Milestone F ===
+# C7a (aarch64 kooperatif sched_test.c) testinin x86 İKİZİ. preempt_x86.c (D-212)
+# PREEMPTIVE (timer-IRQ) idi; bu test KOOPERATİF: gorevler gonullu sched_yield()
+# cagirarak CPU birakir (IRQ YOK). TCB (callee-saved rbx/rbp/r12-r15 uzerinden RSP)
+# + sched_yield() naked-asm (push callee-saved -> RSP eski-TCB'ye kaydet -> sonraki
+# READY gorev sec -> RSP yeni-TCB'den yukle -> pop callee-saved -> ret). 3 gorev
+# (A/B/C) round-robin yield ile donusumlu kosar → interleave [A][B][C]... → hepsi
+# bitti → "SCHED X86 OK". Kendi-kurulumlu (runtime/boot/linker'a dokunmaz; yalniz
+# kdl_yaz*/kdl_yazdir* extern). Marker "SCHED X86 OK". timeout 15 (hlt-loop timeout
+# ile oludur = beklenen, || true). Deterministik (sabit round-robin + bounded turlar).
+# BENZERSİZ ad (mevcut calistir_sched_test_x86 paylasilan sched_test.c'yi, bu ise
+# self-contained sched_x86.c'yi kullanir).
+calistir_sched_x86_test: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 kooperatif sched testi: sched_x86.c -> ELF (yield tabanli RSP-swap context-switch)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/sched_x86.c -o $(BUILD)/sched_x86_coop.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/sched_x86_coop.elf $(BUILD)/sched_x86_coop.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/sched_x86_coop.out; \
+		timeout 15 qemu-system-x86_64 -kernel $(BUILD)/sched_x86_coop.elf -display none \
+			-serial file:$(BUILD)/sched_x86_coop.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/sched_x86_coop.out; echo "--- son ---"; \
+		if grep -q "SCHED X86 OK" $(BUILD)/sched_x86_coop.out; then \
+			echo "x86_64 kooperatif sched testi gecti: gorev A/B/C yield ile donusumlu kostu (RSP-swap context-switch)."; \
+		else \
+			echo "FAIL: 'SCHED X86 OK' bekleniyor (yield tabanli kooperatif context-switch calismali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 kooperatif sched testi atlandi."; \
+	fi
+
 # === TAM x86 syscall ABI testi (int 0x80 çok-argüman + dönüş-değeri) — Milestone F ===
 # aarch64 D-122 (arg gecisi) + D-126 (donus-degeri + cok-arg + register-seffaflik)
 # syscall ABI'sinin x86 ikizi. Simdiye kadar x86'da yalniz D-190 ring3 int 0x80
@@ -4401,7 +4433,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
                      calistir_ring3_page_test_x86 calistir_preempt_test_x86 \
                      calistir_syscall_abi_test_x86 calistir_ring3_proc_test_x86 \
-                     calistir_pci_enum_test_x86
+                     calistir_pci_enum_test_x86 calistir_sched_x86_test
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
