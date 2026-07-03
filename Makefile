@@ -1441,6 +1441,29 @@ calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — çoklu süreç testi atlandi."; \
 	fi
 
+# === MİLESTONE B: Userspace paylaşımlı-bellek IPC testi (aarch64) ===
+# İki EL0 süreç AYNI fiziksel veri sayfasını PAYLAŞIR (D-127 izolasyonunun tersi):
+# üretici 1..10 + bayrak yazar, tüketici bayrağı bekleyip toplar → 55 → "USERSHM OK".
+calistir_userspace_shm_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "MİLESTONE B aarch64 paylaşımlı-bellek IPC testi: userspace_shm_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_shm_arm.c -o $(BUILD)/userspace_shm_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_shm_arm.elf $(BUILD)/userspace_shm_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_shm_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_shm_arm.out -kernel $(BUILD)/userspace_shm_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_shm_arm.out; echo "--- son ---"; \
+		if grep -q "USERSHM OK" $(BUILD)/userspace_shm_arm.out; then \
+			echo "MİLESTONE B paylaşımlı-bellek IPC testi gecti: 2 EL0 süreç aynı sayfayı paylaştı (toplam=55)."; \
+		else \
+			echo "FAIL: 'USERSHM OK' bekleniyor (paylaşımlı-bellek IPC + preemptive scheduler)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — paylaşımlı-bellek IPC testi atlandi."; \
+	fi
+
 # === D-128 Userspace introspection syscall testi (aarch64) — gettick + getpid ===
 # Preemptive EL0 görev gettick/getpid ile çekirdek durumunu (zaman/kimlik) okur.
 # Syscall dönüş-değeri ABI (D-126) üstünde. t2>t1 + pid → "TICK OK pid=1".
@@ -4148,6 +4171,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_oku_test_arm calistir_guvenlik_spawn_test_arm \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
+                     calistir_userspace_shm_test_arm \
                      calistir_userspace_fiber_test_arm \
                      calistir_userspace_sched_test_arm \
                      calistir_userspace_malloc_test_arm \
