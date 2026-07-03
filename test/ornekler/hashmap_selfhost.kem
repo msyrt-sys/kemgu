@@ -1,0 +1,169 @@
+// KEMGU SELF-HOST HASH-MAP — sözlük (dictionary) veri yapısı (cihazsız) milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinin gerçek bir HASH-MAP (sözlük) veri yapısı —
+// open addressing (açık adresleme) + linear probing (doğrusal sondalama) ile
+// ÇAKIŞMA ÇÖZÜMÜ + arama — kaldırdığını kanıtlar. Saf KEMGU, cihazsız
+// (MMIO / yetki<MMIO> yok), yalnızca aritmetik + dizi indeksleme/mutasyon +
+// döngü + bit maskesi. UART'a yazdir_* ile sonuç basılır.
+//
+// KRİTİK dil gözlemi (codegen doğrulaması):
+//   - Hash-map durumu ÜÇ paralel dizi ile tutulur (KdlDizi*):
+//       anahtarlar: Dizi<tam32>   — slot'taki anahtar
+//       degerler:   Dizi<tam32>   — slot'taki değer
+//       dolu:       Dizi<tam32>   — slot dolu mu (0 = boş, 1 = dolu)
+//     Diziler referansla aktarıldığından `ekle`nin slot yazması çağırana
+//     yansır (base64/sort ile aynı Dizi<T> fn-param mutasyon deseni).
+//   - Slot yazma (`dolu[s] = 1`, `anahtarlar[s] = k`) → kdl_dizi_yaz_tam
+//     (runtime sınır-kontrollü, hem s < 0 hem s >= boyut).
+//   - Slot okuma (`dolu[s]`, `anahtarlar[s]`) → kdl_dizi_al_tam (sınır-kontrollü).
+//   - Hash çarpımı (Knuth 2654435761) tam32 aralığını AŞAR → `dtam32` (mod-2^32
+//     wrap; sha256/crc32/bignum'da doğrulandı). Sonra `& (KAP - 1)` maskesi
+//     0..15 küçük değer verir; bu SKALER `dtam32` yardımcıda hesaplanıp `tam32`
+//     slot indeksine köprülenir (dizi-eleman `>>` ashr tuzağı YOK — sadece &
+//     ve * kullanılır, kaydırma yalnız skaler değil hiç yoktur).
+//
+// KAP = 16 (2'nin kuvveti) → maske = KAP - 1 = 15 = 0xF.
+//
+// ÇAKIŞMA SENARYOSU (probing gerçekten test edilir — DETERMİNİSTİK):
+//   Knuth hash h(k) = (k * 2654435761) & 15 için:
+//     h(5)  = 5,  h(21) = 5,  h(37) = 5   → ÜÇÜ DE aynı slota (5) düşer!
+//   ekle sırası (5,50) → slot 5; (21,210) → slot 5 dolu → probe → slot 6;
+//   (37,370) → slot 5,6 dolu → probe → slot 7. Linear probing zinciri kurulur.
+//   bul(99): h(99) = 3 (boş slot) → probing zinciri hemen kopar → -1 (yok).
+//
+// Test: ekle(5,50), ekle(21,210), ekle(37,370); sonra
+//   bul(5)=50, bul(21)=210, bul(37)=370, bul(99)=-1 (yok) doğrulanır.
+//
+// Beklenen çıktı: "KEM HASHMAP BASLA" + her bul() sonucu + "KEM HASHMAP OK".
+
+sabit KAP: tam32       = 16;          // hash tablosu kapasitesi (2'nin kuvveti)
+sabit MASKE: dtam32    = 15;          // KAP - 1 = 0xF (bit maskesi)
+sabit KNUTH: dtam32    = 2654435761;  // Knuth çarpımsal hash sabiti (0x9E3779B1)
+sabit YOK: tam32       = 0 - 1;       // arama başarısız işareti (-1)
+
+// Knuth çarpımsal hash: (anahtar * 2654435761) & (KAP - 1).
+// Çarpım tam32 aralığını aşar → dtam32 (mod-2^32 wrap). Maske sonucu 0..15.
+// SKALER dtam32 hesap; sonuç küçük (0..15) olduğu için EXPLICIT cast
+// (`olarak tam32`) ile slot indeksine köprülenir. KEMGU implicit dönüşüm
+// YASAKLAR (T001) → tam32/dtam32 sınırlarında `olarak` şart. Yalnız * ve &
+// kullanılır (dizi-eleman kaydırma ashr tuzağı yok — hiç kaydırma yok).
+işlev hash(anahtar: tam32) -> tam32 {
+    değişken a: dtam32 = anahtar olarak dtam32;   // tam32 → dtam32 (küçük pozitif anahtar)
+    değişken karisim: dtam32 = a * KNUTH;          // mod-2^32 çarpım (overflow wrap)
+    değişken slot: dtam32 = karisim & MASKE;        // 0..15
+    ver slot olarak tam32;                         // dtam32 (0..15) → tam32 slot
+}
+
+// (anahtar, deger) çiftini tabloya ekler. hash → slot; slot doluysa ve
+// anahtar farklıysa linear probing ile bir sonraki slota geçer (& maske ile
+// sarmalanır). Boş slot bulununca yazar; aynı anahtar bulununca değeri
+// günceller. Başarı = 1, tablo doluysa 0. Diziler referansla mutasyona uğrar.
+işlev ekle(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+           anahtar: tam32, deger: tam32) -> tam32 {
+    değişken temel: tam32 = hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KAP {
+        // Linear probing: (temel + adim) & maske ile slot sarmalanır.
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & MASKE) olarak tam32;   // 0..15
+        eğer dolu[slot] == 0 {
+            dolu[slot] = 1;                        // slot işaretle (in-place yaz)
+            anahtarlar[slot] = anahtar;            // anahtar yaz
+            degerler[slot] = deger;                // değer yaz
+            ver 1;                                 // eklendi
+        }
+        eğer anahtarlar[slot] == anahtar {
+            degerler[slot] = deger;                // aynı anahtar → güncelle
+            ver 1;
+        }
+        adim = adim + 1;
+    }
+    ver 0;   // tablo dolu (16 slot da doldu) — bu testte olmaz
+}
+
+// Anahtara karşılık gelen değeri arar. hash → slot; probing zincirini takip
+// eder. Anahtar eşleşen dolu slot → değeri döner. Boş slot görülürse zincir
+// kopmuştur → anahtar yok (-1). base64 b64_index'teki lineer-arama deseninin
+// hash-tabanlı (O(1) beklenen) sürümü.
+işlev bul(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+          anahtar: tam32) -> tam32 {
+    değişken temel: tam32 = hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KAP {
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & MASKE) olarak tam32;
+        eğer dolu[slot] == 0 {
+            ver YOK;                               // boş slot → probing koptu → yok
+        }
+        eğer anahtarlar[slot] == anahtar {
+            ver degerler[slot];                    // eşleşme → değer
+        }
+        adim = adim + 1;
+    }
+    ver YOK;   // tüm tablo tarandı, bulunamadı
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM HASHMAP BASLA");
+
+    // Üç paralel dizi: KAP = 16 slot. dolu[] hepsi 0 (boş) ile başlar.
+    değişken anahtarlar: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0];
+    değişken degerler:   Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0];
+    değişken dolu:       Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0, 0, 0, 0, 0];
+
+    // ÇAKIŞMA SENARYOSU: 5, 21, 37 hepsi slot 5'e hash'lenir → linear probing
+    // ile 5, 6, 7 slotlarına yerleşir. Probing gerçekten devreye girer.
+    ekle(anahtarlar, degerler, dolu, 5, 50);
+    ekle(anahtarlar, degerler, dolu, 21, 210);
+    ekle(anahtarlar, degerler, dolu, 37, 370);
+
+    // Aramalar — her biri probing zincirini takip eder.
+    değişken v5: tam32  = bul(anahtarlar, degerler, dolu, 5);
+    değişken v21: tam32 = bul(anahtarlar, degerler, dolu, 21);
+    değişken v37: tam32 = bul(anahtarlar, degerler, dolu, 37);
+    değişken v99: tam32 = bul(anahtarlar, degerler, dolu, 99);   // yok → -1
+
+    // Sonuçları bas (deterministik doğrulama için).
+    yazdir_metin("bul(5)=");
+    yazdir_tam(v5);
+    yazdir_metin("bul(21)=");
+    yazdir_tam(v21);
+    yazdir_metin("bul(37)=");
+    yazdir_tam(v37);
+    yazdir_metin("bul(99)=");
+    yazdir_tam(v99);
+
+    // Tüm sonuçlar beklenen mi? 50 / 210 / 370 / -1 (yok).
+    değişken hepsi_dogru: tam32 = 1;
+    eğer v5 == 50 {
+        // doğru
+    } değilse {
+        hepsi_dogru = 0;
+    }
+    eğer v21 == 210 {
+        // doğru
+    } değilse {
+        hepsi_dogru = 0;
+    }
+    eğer v37 == 370 {
+        // doğru
+    } değilse {
+        hepsi_dogru = 0;
+    }
+    eğer v99 == YOK {
+        // doğru (anahtar 99 yok)
+    } değilse {
+        hepsi_dogru = 0;
+    }
+
+    eğer hepsi_dogru == 1 {
+        yazdir_metin("KEM HASHMAP OK");
+    } değilse {
+        yazdir_metin("KEM HASHMAP FAIL");
+    }
+
+    ver 0;
+}

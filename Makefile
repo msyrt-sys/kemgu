@@ -2945,6 +2945,44 @@ calistir_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host SIRALAMA testi atlandi."; \
 	fi
 
+# === SELF-HOST HASH-MAP sözlük (aarch64) — KEMGU'da dictionary veri yapısı ===
+# hashmap_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde open
+# addressing (açık adresleme) + linear probing (doğrusal sondalama) hash-map.
+# Üç paralel dizi (anahtarlar/degerler/dolu: Dizi<tam32>) → KdlDizi*; slot
+# yazma d[s]=x → kdl_dizi_yaz_tam (runtime sınır-kontrollü). Knuth çarpımsal
+# hash (dtam32 mod-2^32 wrap) + `& (KAP-1)` maske + `olarak` explicit cast
+# ile tam32 slot köprüsü. ÇAKIŞMA senaryosu: anahtar 5/21/37 hepsi slot 5'e
+# hash'lenir → probing slot 5/6/7'ye yerleştirir; bul(99) boş-slot'ta koparak
+# -1 döner. KEMGU'nun gerçek HASH-MAP + çakışma çözümü + arama kaldırdığını
+# kanıtlar. CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil —
+# dizi tahsisi için). Marker: "KEM HASHMAP OK".
+calistir_hashmap_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST HASH-MAP linear probing: hashmap_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/hashmap_selfhost.kem > $(BUILD)/hashmap_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/hashmap_selfhost.ll -c -o $(BUILD)/hashmap_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/hashmap_selfhost.elf $(BUILD)/hashmap_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/hashmap_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/hashmap_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/hashmap_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/hashmap_selfhost.out -kernel $(BUILD)/hashmap_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/hashmap_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM HASHMAP OK" $(BUILD)/hashmap_selfhost.out; then \
+			echo "aarch64 self-host HASH-MAP testi gecti: KEMGU cihazsiz open-addressing + linear probing sozluk (anahtar 5/21/37 ayni slota hash -> probe; bul 50/210/370, bul(99)=-1) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM HASHMAP OK' bekleniyor (KEMGU self-host hash-map linear probing)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host HASH-MAP testi atlandi."; \
+	fi
+
 # === SELF-HOST SHA-256 kripto hash (aarch64) — KEMGU'da kriptografik algoritma ===
 # sha256_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde NIST FIPS
 # 180-4 SHA-256 hesaplar. Test vektörü SHA-256("abc") = ba7816bf 8f01cfea ...
@@ -3514,6 +3552,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_virtio_blk_config_selfhost_arm \
                      calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
+                     calistir_hashmap_selfhost_arm \
                      calistir_sha256_selfhost_arm calistir_base64_selfhost_arm \
                      calistir_bignum_selfhost_arm \
                      calistir_vm_selfhost_arm \
