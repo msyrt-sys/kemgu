@@ -1728,6 +1728,26 @@ calistir_smp_rwlock_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP rwlock testi atlandi."; \
 	fi
 
+calistir_smp_seqlock_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP seqlock (optimistik kilitsiz-okuma) testi: smp_seqlock_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_seqlock_arm.c -o $(BUILD)/smp_seqlock_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_seqlock_arm.elf $(BUILD)/smp_seqlock_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_seqlock_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 2 -display none \
+			-serial file:$(BUILD)/smp_seqlock_arm.out -kernel $(BUILD)/smp_seqlock_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_seqlock_arm.out; echo "--- son ---"; \
+		if grep -q "SMP SEQLOCK OK" $(BUILD)/smp_seqlock_arm.out; then \
+			echo "SMP seqlock testi gecti: yazici okuyucuyu beklemez, okuyucu optimistik kilitsiz okur, torn-read=0 (araya-giren yazim seq ile yakalanip retry edildi), veri_a=2000 veri_b=4000 seq=4000."; \
+		else \
+			echo "FAIL: 'SMP SEQLOCK OK' bekleniyor (seqlock, torn-read=0, veri_a=2000 veri_b=4000 seq=4000)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP seqlock testi atlandi."; \
+	fi
+
 calistir_smp4_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "SMP 4-cekirdek bring-up (coklu-AP PSCI) testi: smp4_arm.c -> ELF..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp4_arm.c -o $(BUILD)/smp4_arm.o
@@ -4112,7 +4132,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp_seqlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
