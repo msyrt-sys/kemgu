@@ -5,6 +5,73 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-200 — OS: SELF-HOST hash-map — KEMGU dictionary (linear probing) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-199).
+
+**Karar [ETKİ: yeni `test/ornekler/hashmap_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** KEMGU'da HASH-MAP veri yapısı (dizi ötesi): open-addressing + linear probing. Knuth çarpımsal
+hash `(anahtar * 2654435761) & (KAP-1)` (dtam32, KAP=16); çakışmada bir sonraki slot. **Kanıt:** anahtar
+5/21/37 HEPSİ slot 5'e hash → probing 5/6/7'ye yerleşir (gerçek çakışma) → bul(5)=50,bul(21)=210,bul(37)=370,
+bul(99)=-1 → "KEM HASHMAP OK". **Dil-doğrulaması:** implicit tam32↔dtam32 YASAK (T001) → `x olarak dtam32`
+explicit-cast (i32 no-op); kaydırma yok (D-173 ashr tuzağından kaçın). Cihazsız det. **Not:** Paralel mini-agent
+üretti; cherry-pick ile entegre.
+
+## D-199 — OS: SMP reader-writer lock — çoklu-okuyucu/tek-yazıcı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-198).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_rwlock_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+RW-lock: çoklu-okuyucu eşzamanlı / yazıcı exclusive. `okuyucu_sayisi` (atomik LDXR/STXR) + `yazici_aktif`
+(atomik CAS 0→1) + yarış-geri-çekme kapısı (okuyucu artırırken yazıcı kaparsa geri-çek+retry). Korunan tutarlı
+çift (invaryant b==a*2): yazıcı (çekirdek 0) N=1000 kez a++;b=a*2; okuyucu (çekirdek 1) her okumada b==a*2
+doğrular. **Kanıt:** torn_read=0 (yarım-yazılmış çift asla görülmedi → mutual-exclusion doğru), 5/5 det →
+"SMP RWLOCK OK". okuma_sayisi zamanlama-varyanslı (PASS koşulu değil, dürüst raporlandı). Naked trampoline
+(D-174), coherency. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-198 — OS: recon kabuk v2 — TCP-scan + arp-scan komutları (2026-07-03)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-197).
+
+**Karar [ETKİ: yeni `test/bare_metal/recon_shell2_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-189
+recon kabuğu genişletme: `ping`/`dns`'e EK `scan <oktet>` (TCP SYN 80/443/22 → ACIK/KAPALI/FILTRELI, port_scan
+mantığı) + `arpscan` (subnet 10.0.2.1-5 ARP tarama → "ARPSCAN: N host"). **Kanıt:** `ping 2`→PING:CANLI +
+`arpscan`→2 host → "RECON2 SHELL OK", ping/arpscan det. Net-poll KÜÇÜK tik (cde6d00), char-pace giriş (D-188),
+tampon user-VA. Nmap-benzeri komut-satırı pentest kabuğu. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-197 — OS: userspace HTTP POST — EL0 syscall ile veri gönderme (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-196).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_post_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-184
+(GET)'i POST'a genişletir — EL0 süreç VERİ gönderir. DNS→TCP handshake→HTTP POST (body "KEMGU-POST", Content-
+Length) PSH+ACK (sys2 24) → yanıt (sys2 25). **Kanıt:** example.com → **HTTP/1.1 405 Method Not Allowed**
+(bağlantı+POST çalıştı; 200/3xx/405 kabul) → "USERPOST OK". host-internet+fallback (SENT/pcap "POST /"). POST
+byte'ları EL0 tamponuna elle (.rodata-deref-etmez, D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-196 — OS: SELF-HOST yığın-VM — KEMGU bytecode yorumlayıcı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-195).
+
+**Karar [ETKİ: yeni `test/ornekler/vm_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+DİL KAPSTONU — KEMGU bir YORUMLAYICI çalıştırır. Yığın-makinesi: 7 opcode (PUSH/ADD/SUB/MUL/DUP/PRINT/HALT),
+bytecode Dizi<tam32>, yığın Dizi<tam32>+SP, `iken pc<uzun` fetch-decode-execute döngüsü, `değilse eğer` opcode-
+dispatch (switch yok). **Kanıt:** program [PUSH 6,PUSH 7,MUL,PRINT, PUSH 100,PUSH 58,ADD,PRINT,HALT] → 42, 158
+→ "KEM VM OK", 3/3 det. YENİ dil-özelliği gerekmedi (dizi in-place mutasyon + Dizi<T> fn-param + kontrol-akışı
+yeterli = tam yorumlayıcı). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-195 — OS: x86 tam sayfa-izolasyon — ring3 kernel-sayfa #PF (D-124 x86) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-194).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_page_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+D-190 (x86 ring3)'ü TAM sayfa-izolasyona sıkılaştırır — aarch64 D-124/D3 (EL0 kernel-belleğe erişince permission-
+fault)'ün x86 muadili. Kernel-sır 2MB-hizalı/2MB-boyut (kendi PD-girişini işgal) → U/S=0 (supervisor-only);
+yalnız ring3-erişilen sayfalar (kod/stack) U/S=1. Ring3 kernel-sır OKUMA dener → **#PF v=14, err=0x5 (P|U-read),
+CR2=kernel-sır**. **Kanıt:** ring3 kernel belleğini OKUYAMADI (sır register'a ulaşmadı) → "PAGE ISO OK", 3/3 det,
+ilk-deneme (fallback yok). **Çift-mimari userspace izolasyon TAM: EL0(aarch64 sayfa-perm) + ring3(x86 U/S-sayfa).**
+Gate-marj: x86 hlt-loop timeout 12→20 (9039dd1, yük-flake). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
 ## D-194 — OS: SELF-HOST 128-bit bignum toplama — KEMGU carry propagation (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-193).
