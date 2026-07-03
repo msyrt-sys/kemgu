@@ -1621,6 +1621,36 @@ calistir_smp_prodcons_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP prodcons testi atlandi."; \
 	fi
 
+# === SMP 4-ÇEKİRDEK BRING-UP testi (aarch64) — çoklu-AP PSCI CPU_ON ===
+# D-169/174/186 SMP üstünde: şimdiye kadar tüm SMP testleri YALNIZ 2 çekirdek
+# (BSP + tek AP). Bu test SMP'yi 4 çekirdeğe ÖLÇEKLER: BSP (çekirdek 0) çekirdek
+# 1,2,3'ü PSCI CPU_ON ile başlatır (target MPIDR affinity 1,2,3). 3 AP ORTAK giriş
+# fonksiyonundan geçer; her AP mpidr_el1 & 0xFF ile kendi çekirdek numarasını okur,
+# MPIDR-indeksli kendi 8 KB yığınını kurar (naked trampoline), paylaşımlı
+# cekirdek_durum[4] dizisinde kendi slotunu (64-byte hizalı, false-sharing yok)
+# set eder. BSP 1/2/3 hepsinin canlı olmasını + doğru MPIDR okumasını bekler →
+# "SMP4 OK 4 cekirdek". Eksik varsa "SMP4 EKSIK cekirdek=N".
+# smp_queue modeli AMA -smp 4, net/drive yok. DETERMİNİSTİK.
+calistir_smp4_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP 4-cekirdek bring-up (coklu-AP PSCI) testi: smp4_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp4_arm.c -o $(BUILD)/smp4_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp4_arm.elf $(BUILD)/smp4_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp4_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 4 -display none \
+			-serial file:$(BUILD)/smp4_arm.out -kernel $(BUILD)/smp4_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp4_arm.out; echo "--- son ---"; \
+		if grep -q "SMP4 OK" $(BUILD)/smp4_arm.out; then \
+			echo "SMP4 testi gecti: BSP + 3 AP (cekirdek 1,2,3) PSCI CPU_ON ile canli, her AP kendi MPIDR-indeksli yigininda, 4 cekirdek."; \
+		else \
+			echo "FAIL: 'SMP4 OK' bekleniyor (BSP + 3 AP = 4 cekirdek canli, MPIDR 1,2,3)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP4 testi atlandi."; \
+	fi
+
 # === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
 # launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
 # Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
@@ -3182,7 +3212,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_prodcons_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_prodcons_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
