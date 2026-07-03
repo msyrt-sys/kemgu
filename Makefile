@@ -1748,6 +1748,32 @@ calistir_smp4_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP4 testi atlandi."; \
 	fi
 
+# === SMP 4-cekirdek paralel bol-ve-yonet siralama testi (aarch64) ===
+# Paylasimli 32-elemanli karisik dizi 4 ceyrege bolunur; her cekirdek KENDI
+# ceyregini siralar (insertion sort, ceyrekler ayrik → kilit gerekmez); BARIYER;
+# sonra cekirdek 0 dort sirali ceyregi ardisik 2'li merge ile birlestirir → TAM
+# sirali dizi. Dogrulama: (1) her a[i]<=a[i+1] (tam sirali) + (2) toplam korunur
+# (permutasyon). smp4/smp_barrier modeli: -smp 4, net/drive yok. DETERMINISTIK.
+calistir_smp_sort_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "SMP 4-cekirdek paralel bol-ve-yonet siralama testi: smp_sort_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/smp_sort_arm.c -o $(BUILD)/smp_sort_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/smp_sort_arm.elf $(BUILD)/smp_sort_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_sort_arm.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 4 -display none \
+			-serial file:$(BUILD)/smp_sort_arm.out -kernel $(BUILD)/smp_sort_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_sort_arm.out; echo "--- son ---"; \
+		if grep -q "SMP SORT OK" $(BUILD)/smp_sort_arm.out; then \
+			echo "SMP sort testi gecti: 4 cekirdek 4 ceyregi paralel siraladi, bariyer, cekirdek 0 merge etti → TAM sirali + toplam korundu."; \
+		else \
+			echo "FAIL: 'SMP SORT OK' bekleniyor (4 cekirdek ceyrek-sirala + merge → tam sirali, permutasyon)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — SMP sort testi atlandi."; \
+	fi
+
 # === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
 # launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
 # Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
@@ -3931,7 +3957,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm calistir_preempt_el0_test_arm \
                      calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
