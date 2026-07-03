@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-226 — OS: EL0 setjmp/longjmp — userspace yerel-olmayan atlama (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-225).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_jmp_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** EL0'da
+setjmp/longjmp — yerel-olmayan kontrol akışı (C exception-benzeri), TAMAMEN userspace. `u_setjmp(buf)` (naked `.user`):
+callee-saved x19-x30 + sp + lr'yi buf'a kaydet, 0 döndür; `u_longjmp(buf,val)`: buf'tan geri yükle, yüklenen x30'a `ret`
+→ u_setjmp'in dönüş-noktasına atlar ama x0=val (POSIX: val=0→1). jmp_buf düzeni fiber TCB ailesiyle tutarlı. **Kanıt:**
+u_setjmp→0 → derin 3-katman zincir (K1/K2/K3) → en derin katman u_longjmp(buf,42) → kontrol u_setjmp'e 42 ile geri
+sıçradı (LONGJMP42), ara katmanların normal dönüşü HİÇ çalışmadı (yerel-olmayan) → "USERJMP OK". D-203 naked-fiber deseni.
+3× det. **Not:** Paralel mini-agent (Workflow fan-out, batch-17) üretti; cherry-pick ile entegre.
+
+## D-225 — OS: x86 PCI veri-yolu numaralandırma — cihaz keşfi (YENİ ALT-SİSTEM) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-224).
+
+**Karar [ETKİ: yeni `test/bare_metal/pci_enum_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** YENİ ALT-SİSTEM:
+PCI cihaz keşfi (gerçek donanım sürücülerinin temeli). Legacy PCI config-space port I/O: `outl(0xCF8, 0x80000000|
+bus<<16|slot<<11|func<<8|offset)` + `inl(0xCFC)`. bus 0 slot 0..31 tara: vendor:device (offset 0), class-code (offset
+0x08). **Kanıt:** QEMU i440fx sabit topolojisinde 4 cihaz — 8086:1237 (host-bridge), 8086:7000 (ISA-bridge), 1234:1111
+(stdvga), 8086:100e (e1000 NIC) → vendor:device:class listelendi → "PCI ENUM OK 4 cihaz". 2× det. x86 PVH long-mode
+(D-107). **OS artık PCI cihazlarını keşfediyor** (gerçek virtio/NIC sürücüleri için ön-koşul). Sınır (v1): yalnız bus 0 +
+func 0 (bridge-recursion + multi-func yok). **Not:** Paralel mini-agent (Workflow fan-out, batch-17 — 2/6 tamam; A/D/E/F
+oturum-limiti nedeniyle re-run bekliyor) üretti; cherry-pick ile entegre.
+
 ## D-224 — OS: x86 TAM kullanıcı-süreç keystone — ring3 ⊕ sayfa-izolasyon ⊕ syscall (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-223).
