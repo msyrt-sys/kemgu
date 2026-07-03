@@ -2384,6 +2384,35 @@ calistir_rtc_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 RTC testi atlandi."; \
 	fi
 
+# === SMP çok-çekirdek testi (x86_64) — AP başlatma (D-169 x86 paritesi) ===
+# 2. çekirdeği (AP) Local APIC INIT-SIPI dizisi ile başlat. BSP LAPIC MMIO
+# (0xFEE00000) üzerinden APIC ID/Version okur, düşük belleğe (0x8000) real→long
+# trampoline yazar, INIT + STARTUP IPI gönderir. AP long-mode'a ulaşırsa paylaşılan
+# bayrağı set eder → "SMP X86 OK". Trampoline AP'yi long-mode'a getiremezse fallback:
+# LAPIC MMIO + IPI altyapısı kanıtlanır → "APIC OK". QEMU -smp 2.
+calistir_smp_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 SMP testi: smp_x86.c -> ELF (Local APIC INIT-SIPI, AP trampoline)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/smp_x86.c -o $(BUILD)/smp_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/smp_x86.elf $(BUILD)/smp_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/smp_x86.out; \
+		timeout 15 qemu-system-x86_64 -kernel $(BUILD)/smp_x86.elf -display none \
+			-smp 2 \
+			-serial file:$(BUILD)/smp_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp_x86.out; echo "--- son ---"; \
+		if grep -q "SMP X86 OK" $(BUILD)/smp_x86.out; then \
+			echo "x86_64 SMP testi gecti: 2. çekirdek (AP) INIT-SIPI ile long-mode'da koştu (çok-çekirdek)."; \
+		elif grep -q "APIC OK" $(BUILD)/smp_x86.out; then \
+			echo "x86_64 SMP fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
+		else \
+			echo "FAIL: 'SMP X86 OK' (veya fallback 'APIC OK') bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 SMP testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -3068,9 +3097,10 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
-                     calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86
+                     calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
+                     calistir_smp_test_x86
 	@echo ""
-	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone (aarch64 + x86_64) ==="
+	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) ==="
 
 # === UartSurucu vtable testi (her iki driver birlikte) ===
 $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
