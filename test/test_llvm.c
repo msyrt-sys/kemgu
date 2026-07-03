@@ -114,6 +114,54 @@ static int derle_dosya_ve_calistir(const char *kem_yol) {
     return system(komut);
 }
 
+/* Mevcut bir .kem dosyasini --llvm | clang ile derle + calistir ve
+ * programin STDOUT ciktisini yakala. Yakalanan cikti (CR temizlenmis)
+ * `beklenen` ile birebir eslesirse 1, aksi halde 0 doner.
+ * Derleme/link/calistirma basarisiz olursa 0 doner. */
+static int derle_dosya_cikti_karsilastir(const char *kem_yol,
+                                          const char *beklenen) {
+    char komut[1024];
+    snprintf(komut, sizeof(komut),
+             "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return 0;
+#ifdef _WIN32
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build\\kdl_runtime.o "
+             "build\\kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#else
+    snprintf(komut, sizeof(komut),
+             "clang -x ir %s -x none build/kdl_runtime.o "
+             "build/kdl_runtime_mmio.o -o %s 2>%s",
+             LL_PATH, EXE_PATH, DEV_NULL);
+#endif
+    if (system(komut) != 0) return 0;
+
+    /* Programi calistir ve stdout'u yakala */
+#ifdef _WIN32
+    FILE *p = _popen(EXE_PATH, "r");
+#else
+    FILE *p = popen(EXE_PATH, "r");
+#endif
+    if (!p) return 0;
+    char tampon[1024];
+    size_t n = fread(tampon, 1, sizeof(tampon) - 1, p);
+    tampon[n] = '\0';
+#ifdef _WIN32
+    _pclose(p);
+#else
+    pclose(p);
+#endif
+    /* CRLF -> LF normalize: Windows metin-modu \r ekleyebilir */
+    char temiz[1024];
+    size_t j = 0;
+    for (size_t i = 0; i < n && j < sizeof(temiz) - 1; i++) {
+        if (tampon[i] != '\r') temiz[j++] = tampon[i];
+    }
+    temiz[j] = '\0';
+    return strcmp(temiz, beklenen) == 0;
+}
+
 /* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
  * 1 = IR gecerli (her BB terminator'lu, dominance vs.), 0 = reddedildi.
  * C1/C2 kabul kriteri: emit edilen modul opt verifier'dan gecmeli. */
@@ -2528,6 +2576,22 @@ static void test_d2_kullanici_prefix_oncelik(void) {
                rc == 42);
 }
 
+/* --- D-194: INT64_MAX ustu tamsayi literalleri tam 64-bit bit-desenini
+ * korumali (lexer/parser strtoull) — INT64_MAX'a CLAMP OLMAMALI. Onceki
+ * strtoll bug'inda 0xFFFFFFFFFFFFFFFF -> 0x7FFFFFFFFFFFFFFF olurdu, boylece
+ * beklenen 18446744073709551615 yerine 9223372036854775807 basilirdi. --- */
+static void test_dtam64_bit_deseni_calistir(void) {
+    int esitmi = derle_dosya_cikti_karsilastir(
+        "test/ornekler/dtam64_bit_deseni.kem",
+        "18446744073709551615\n"   /* 0xFFFFFFFFFFFFFFFF (isaretsiz) */
+        "9223372036854775808\n"    /* 0x8000000000000000 (yuksek bit)  */
+        "18446744073709551615\n"   /* ondalik 2^64-1                    */
+        "0xffffffffffffffff\n"     /* onaltilik bit-deseni dogrulama    */
+        "0x8000000000000000\n");
+    test_sonuc("D-194: dtam64 0xFFFF..FF/0x8000..00 clamp yok -> tam bit-deseni",
+               esitmi);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2868,6 +2932,9 @@ int main(void) {
     printf("\n--- Codegen borc regresyonu (D1 + D2) ---\n");
     test_d1_generic_sonuc_ptr();
     test_d2_kullanici_prefix_oncelik();
+
+    printf("\n--- D-194: dtam64 bit-deseni (strtoull, INT64_MAX clamp yok) ---\n");
+    test_dtam64_bit_deseni_calistir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

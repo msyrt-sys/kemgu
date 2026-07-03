@@ -244,19 +244,27 @@ static Dugum *parse_birincil(Parser *p) {
             char tampon[64];
             int j = sayi_tokeni_temizle(t.baslangic, t.uzunluk,
                                          tampon, sizeof(tampon));
-            int64_t deger = 0;
+            /* Tamsayi literalleri ISARETSIZ 64-bit semantikle cozulur
+             * (strtoull). Boylece INT64_MAX ustu degerler (orn.
+             * 0xFFFFFFFFFFFFFFFF, 0x8000000000000000, 18446744073709551615)
+             * INT64_MAX'a CLAMP edilmeden tam 64-bit bit-desenini korur.
+             * uint64_t -> int64_t donusumu 2's-complement bit-desenini
+             * degistirmez; dtam64 (isaretsiz) sabitleri yuksek bit set
+             * halde temsil edilebilir. Isaret (unary '-') ayri OP_NEG. */
+            uint64_t ham = 0;
             if (j >= 2 && tampon[0] == '0' &&
                 (tampon[1] == 'x' || tampon[1] == 'X')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 16);
+                ham = strtoull(tampon + 2, NULL, 16);
             } else if (j >= 2 && tampon[0] == '0' &&
                        (tampon[1] == 'b' || tampon[1] == 'B')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 2);
+                ham = strtoull(tampon + 2, NULL, 2);
             } else if (j >= 2 && tampon[0] == '0' &&
                        (tampon[1] == 'o' || tampon[1] == 'O')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 8);
+                ham = strtoull(tampon + 2, NULL, 8);
             } else {
-                deger = (int64_t)strtoll(tampon, NULL, 10);
+                ham = strtoull(tampon, NULL, 10);
             }
+            int64_t deger = (int64_t)ham;
             d = dugum_tam(p->arena, deger, t.satir, t.sutun);
             parser_ilerle(p);
             return d;
