@@ -2086,6 +2086,33 @@ calistir_fs_journal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a6
 		echo "QEMU yok — FS journaling testi atlandi."; \
 	fi
 
+# === MİLESTONE D: Mini dosya-sistemi testi (aarch64) — superblock+inode+bitmap ===
+# Gercek FS yapisi virtio-blk uzerinde: 2 dosya olustur (biri cok-bloklu), diskten
+# geri oku, icerik+boyut esleir; bitmap dogru blolari dolu gosterir. Marker "MINIFS OK".
+calistir_minifs_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
+	@echo "MİLESTONE D aarch64 mini-FS testi (superblock+inode+bitmap): minifs_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/minifs_arm.c -o $(BUILD)/minifs_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/minifs_arm.elf $(BUILD)/minifs_arm.o $(BM_A64_OBJS)
+	@dd if=/dev/zero of=$(BUILD)/disk_minifs.img bs=512 count=64 2>/dev/null
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/minifs_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/disk_minifs.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/minifs_arm.out -kernel $(BUILD)/minifs_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/minifs_arm.out; echo "--- son ---"; \
+		if grep -q "MINIFS OK" $(BUILD)/minifs_arm.out; then \
+			echo "MİLESTONE D aarch64 mini-FS testi gecti: cok-dosya cok-blok round-trip + bitmap tutarli."; \
+		else \
+			echo "FAIL: 'MINIFS OK' bekleniyor (superblock+inode+bitmap, cok-blok tahsis)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — mini-FS testi atlandi."; \
+	fi
+
 # === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
 # Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
 # payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
@@ -3838,7 +3865,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
                      calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
-                     calistir_fs_journal_test_arm \
+                     calistir_fs_journal_test_arm calistir_minifs_test_arm \
                      calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm \
                      calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
