@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-230 — OS: x86 kooperatif scheduler — yield tabanlı context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-229).
+
+**Karar [ETKİ: yeni `test/bare_metal/sched_x86.c` (hedef `calistir_sched_x86_test`); `Makefile`. Yalnız test — boot/runtime değişmedi.]**
+C7a (aarch64 kooperatif scheduler) x86 İKİZİ — D-212 preemptive'in AKSİNE KOOPERATİF (yield tabanlı, IRQ yok). x86 TCB
+(callee-saved rbx/rbp/r12-r15 + rsp), `sched_yield()` naked RSP-swap: push callee-saved → RSP eski-TCB'ye → round-robin
+sonraki READY → RSP yeni-TCB'den → pop → ret. **Kanıt:** 3 görev A/B/C yield ile dönüşümlü koştu → [A][B][C]×3 →
+"SCHED X86 OK". Det. Hedef adı `calistir_sched_x86_test` (mevcut C7a `calistir_sched_test_x86` paylaşılan sched_test.c'yi
+kullanır; bu self-contained sched_x86.c → AYRI object sched_x86_coop.*, çakışma yok). **Scheduler artık ÇİFT-ARCH TAM:
+aarch64 coop(C7a)+preempt(C7b) + x86 coop(D-230)+preempt(D-212).** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-229 — OS: SELF-HOST JSON ayrıştırıcı — saf KEMGU veri-format işleme (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-228).
+
+**Karar [ETKİ: yeni `test/ornekler/json_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]** Saf
+KEMGU JSON ayrıştırıcı — self-host dilin GERÇEK veri-format işleme yeteneği (VM/hashmap/kripto ötesi). Basit alt-küme:
+nesne + sayı değerleri. Girdi `{"x": 42, "y": 100}` (gömülü byte dizisi). Durum-makinesi: skip-ws + yapısal-ayraç-atla +
+string-oku + sayı-oku (`n=n*10+(byte-48)`). **Kanıt:** ayrıştır → x=42 VE y=100 (beklenen sabitlerle) → "KEM JSON OK".
+Cihazsız det. **Dil-doğrulaması:** `karakter` sayısal DEĞİL (T003, D-175) → byte'lar tam32 dizisi + ASCII sabit-int
+karşılaştırma; `değilse eğer` durum-makinesi (D-168); Dizi<tam32> fn-param + in-place yaz (D-171/196). Sınır: sayı
+değerleri + pozitif tam32 (nested/string-değer/dizi/bool YOK). **Self-host dil gerçek programlar için veri ayrıştırıyor.**
+**Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-228 — OS: TCP zarif kapanış — FIN 4-yönlü teardown (tam TCP yaşam-döngüsü) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-227).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_close_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-159 SYN handshake
+TCP FSM'in AÇILIŞI idi; bunu KAPANIŞLA tamamlar = tam yaşam-döngüsü. ESTABLISHED sonrası zarif kapanış: bizim FIN|ACK →
+peer FIN-ACK RX (FIN_WAIT_2) → peer FIN RX → bizim son ACK → CLOSED (4-yönlü, active close). FIN'in 1 seq tükettiği doğru
+işlendi (ISS+2). **Kanıt:** DNS-çöz(example.com→104.20.23.154 Cloudflare) → SYN→SYN-ACK→ACK → FIN → FIN-ACK RX → peer FIN
+→ son ACK → "TCP CLOSE OK", GERÇEK internet peer 4-yönlü (fallback DEĞİL). host-internet-bağımlı + pcap-TX/yarı-kapanış
+fallback. D-158 küçük-tik. **Tam TCP FSM: open(D-159)+data(D-161)+close(D-228).** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-227 — OS: SELF-HOST SHA-256 parola kırıcı — LAB-kapsamlı sözlük saldırısı (Pentest-OS) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-226).
+
+**Karar [ETKİ: yeni `test/ornekler/hashcrack_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+Pentest-OS (Kali=john/hashcat) tarzı LAB-KAPSAMLI parola kırıcı: KENDİ ürettiği bir SHA-256 hash'i sözlükle geri bulur.
+Gömülü sözlük (8 aday); hedef = bilinen "kemgu"nun SHA-256'sı (test kendi üretir); kırıcı her adayın SHA-256'sını hesaplar,
+hedefle karşılaştırır. **Kanıt:** hedef-hash → sözlük tara → "kemgu" idx=2'de KIRILDI + 7 eşleşmeyen atlandı → "KEM CRACK
+OK". LAB-scoped (kendi-üretilen hash, gerçek hedef YOK — QEMU/eğitim). D-173 SHA-256 çekirdeğini (dtam32 wrap/rotate,
+skaler-param ashr-workaround) yeniden kullanır. Cihazsız det. **KEMGU kripto artık ofansif-güvenlik bağlamında (hash
+kırma) — pentest-OS aracı.** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
 ## D-226 — OS: EL0 setjmp/longjmp — userspace yerel-olmayan atlama (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-225).
