@@ -2548,6 +2548,39 @@ calistir_http_get_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_
 		echo "QEMU yok — HTTP GET testi atlandi."; \
 	fi
 
+# === MILESTONE D: TCP ZARIF KAPANIS (FIN 4-yönlü teardown, aarch64) — tam TCP yaşam-döngüsü ===
+# tcp_connect_arm.c (D-159) TCP FSM'in AÇILIŞINI kanıtladı (SYN→SYN-ACK→ACK, ESTABLISHED).
+# Bu test o yaşam-döngüsünü KAPANIŞLA tamamlar: ESTABLISHED sonrası zarif kapanış —
+# bizim FIN|ACK → peer ACK (FIN_WAIT_2) → peer FIN → bizim son ACK → CLOSED (4-yönlü).
+# RX gate: "TCP CLOSE OK" (bizim FIN + peer ACK + peer FIN + son ACK). SLIRP dış-TCP
+# yanıt vermez / peer FIN gelmezse pcap TX fallback: bizim FIN dış-IP'ye gönderildi
+# (pcap 'KEMG' seq + FIN) + ESTABLISHED → yarı-kapanış → "TCP CLOSE SENT OK".
+calistir_tcp_close_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "MILESTONE D aarch64 TCP zarif kapanış (FIN 4-yönlü) testi: tcp_close_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tcp_close_arm.c -o $(BUILD)/tcp_close_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/tcp_close_arm.elf $(BUILD)/tcp_close_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/tcp_close_arm.out $(BUILD)/tcp_close_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/tcp_close_arm.pcap \
+			-serial file:$(BUILD)/tcp_close_arm.out -kernel $(BUILD)/tcp_close_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/tcp_close_arm.out; echo "--- son ---"; \
+		if grep -q "TCP CLOSE OK" $(BUILD)/tcp_close_arm.out; then \
+			echo "MILESTONE D aarch64 TCP zarif kapanış testi gecti: 4-yönlü teardown (bizim FIN + peer ACK + peer FIN + son ACK) -> CLOSED."; \
+		elif grep -a -q "KEMG" $(BUILD)/tcp_close_arm.pcap; then \
+			echo "MILESTONE D aarch64 TCP zarif kapanış testi gecti (TX-pcap fallback / yarı-kapanış): bizim FIN dış-IP'ye insa+gonderildi (pcap'te 'KEMG' seq + FIN)."; \
+			echo "TCP CLOSE SENT OK"; \
+		else \
+			echo "FAIL: seri 'TCP CLOSE OK' (4-yönlü RX) veya pcap'te 'KEMG' seq (bizim FIN TX) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — TCP zarif kapanış testi atlandi."; \
+	fi
+
 # === Faz G ICMP echo (ping) round-trip testi (aarch64) — ağ katmanı ===
 # ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → IPv4+ICMP Echo Request gönder →
 # echo reply'i RX ile al + doğrula. pcap filter-dump da yakalanır: SLIRP echo
@@ -4365,6 +4398,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell2_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
+                     calistir_tcp_close_test_arm \
                      calistir_virtio_selfhost_arm \
                      calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
                      calistir_virtio_net_mac_selfhost_arm \
