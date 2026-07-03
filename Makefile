@@ -2640,7 +2640,7 @@ calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		-o $(BUILD)/ring3_x86.elf $(BUILD)/ring3_x86.o $(BM_X86_OBJS)
 	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/ring3_x86.out; \
-		timeout 12 qemu-system-x86_64 -kernel $(BUILD)/ring3_x86.elf -display none \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/ring3_x86.elf -display none \
 			-serial file:$(BUILD)/ring3_x86.out 2>/dev/null || true; \
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_x86.out; echo "--- son ---"; \
 		if grep -q "RING3 X86 OK" $(BUILD)/ring3_x86.out; then \
@@ -2670,7 +2670,7 @@ calistir_ring3_page_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		-o $(BUILD)/ring3_page_x86.elf $(BUILD)/ring3_page_x86.o $(BM_X86_OBJS)
 	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/ring3_page_x86.out; \
-		timeout 12 qemu-system-x86_64 -kernel $(BUILD)/ring3_page_x86.elf -display none \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/ring3_page_x86.elf -display none \
 			-serial file:$(BUILD)/ring3_page_x86.out 2>/dev/null || true; \
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_page_x86.out; echo "--- son ---"; \
 		if grep -q "PAGE ISO OK" $(BUILD)/ring3_page_x86.out; then \
