@@ -3667,6 +3667,35 @@ calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace fiber testi atlandi."; \
 	fi
 
+# === USERSPACE ÇOK-FİBER SCHEDULER (aarch64) — EL0-içi round-robin N yeşil-thread ===
+# MİLESTONE-B: D-203 iki-fiber ping-pong'unu GERÇEK scheduler'a taşır. TEK EL0 süreç
+# İÇİNDE N>=3 kooperatif fiber (A/B/C) + merkezi round-robin scheduler döngüsü. Fiber'lar
+# birbirine doğrudan geçmez; her fiber u_yield() ile SCHEDULER'A döner, scheduler bir
+# sonraki READY fiber'ı round-robin seçip context-switch (D-203 naked fiber_gec,
+# callee-saved x19-x30 + sp) yapar — KERNEL YARDIMI OLMADAN (timer/IRQ/preemption yok).
+# Her fiber ayrı EL0 yığını (.user_data, 0x42xxxxxx, AP=01). M:1 kooperatif runtime çekirdeği.
+# DETERMİNİSTİK: round-robin interleave A1 B1 C1 A2 B2 C2 A3 B3 C3 → "USERSCHED OK".
+# net/drive YOK, sade QEMU (userspace_fiber_test_arm modeli). virtio* BM_A64_OBJS'te.
+calistir_userspace_sched_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "MILESTONE-B aarch64 userspace cok-fiber scheduler testi: userspace_sched_arm.c -> ELF..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_sched_arm.c -o $(BUILD)/userspace_sched_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_sched_arm.elf $(BUILD)/userspace_sched_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_sched_arm.out; \
+		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/userspace_sched_arm.out -kernel $(BUILD)/userspace_sched_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_sched_arm.out; echo "--- son ---"; \
+		if grep -q "USERSCHED OK" $(BUILD)/userspace_sched_arm.out; then \
+			echo "MILESTONE-B aarch64 userspace scheduler testi gecti: EL0-ici round-robin cok-fiber (3 yesil-thread) kooperatif scheduler."; \
+		else \
+			echo "FAIL: 'USERSCHED OK' bekleniyor (EL0 round-robin scheduler + u_yield + deterministik interleave A1 B1 C1 ...)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace scheduler testi atlandi."; \
+	fi
+
 # === USERSPACE MALLOC (aarch64) — EL0 süreç KENDİ heap allocator'ını çalıştırır ===
 # MİLESTONE B: bir EL0 (yetkisiz) süreç, çekirdek yardımı OLMADAN kendi dinamik bellek
 # ayırıcısını (u_malloc/u_free — bump + serbest-liste) yalnız kendi EL0-erişimli veri
@@ -3992,6 +4021,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_fiber_test_arm \
+                     calistir_userspace_sched_test_arm \
                      calistir_userspace_malloc_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
                      calistir_userspace_dhcp_test_arm \
