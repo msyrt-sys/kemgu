@@ -5,6 +5,79 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-212 — OS: x86 preemptive scheduler — PIT timer-IRQ context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-211).
+
+**Karar [ETKİ: yeni `test/bare_metal/preempt_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi (yalnız start_x86_64.S linklenir).]**
+C7b (aarch64 preemptive) x86 İKİZİ — preemption artık HER İKİ mimaride. Kendi-içinde (self-contained): x86_64 long-mode
+kernelde kendi IDT + PIC(8259) remap + PIT(8254) ~100Hz → IRQ0 → tam trap-frame kaydet → round-robin 2 kernel-görev
+arası RSP-swap → PIC EOI → iretq. Görev B, YIELD ÇAĞIRMADAN timer-IRQ ile preemptively koştu (sayac_b>0 = zorunlu
+bağlam-değiştirme kanıtı). **Kanıt:** "PREEMPT X86 OK" (B yield-siz koştu). x86 PVH long-mode (D-107, start_x86_64.S
+linklenir-dokunulmaz), -mgeneral-regs-only, `-serial file:` (D-105 Windows-stdio gotcha), hlt-loop timeout=beklenen.
+**Scheduler artık çift-arch (aarch64 C7b + x86 PIT-IRQ).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-211 — OS: SELF-HOST UTF-8 kod-çözücü — KEMGU Türkçe DNA (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-210).
+
+**Karar [ETKİ: yeni `test/ornekler/utf8_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+KEMGU'nun TÜRKÇE DNA'sına doğrudan hizmet eden self-host milestone: saf KEMGU UTF-8 kod-çözücü. 1-byte (0xxxxxxx) +
+2-byte (110xxxxx 10xxxxxx) dizileri çöz: kod-noktası = `((b0 & 0x1F) << 6) | (b1 & 0x3F)`. **Kanıt:** "çğışöü"
+UTF-8 byte'ları (ç=C3A7, ğ=C49F, ı=C4B1, ş=C59F, ö=C3B6, ü=C3BC) → kod-noktaları **[231,287,305,351,246,252]** +
+kod-nokta SAYISI=6 (byte 12 değil) → "KEM UTF8 OK". **Dil-doğrulaması:** `<<`/`>>` tip-duyarlı → değer önce SKALER
+dtam32'ye alınıp kaydırılır (D-173 dizi-eleman-ashr tuzağı); `karakter` sayısal değil (T003, D-175) → byte'lar
+dtam32 dizisi; implicit tam32↔dtam32 YASAK → `olarak` cast (D-200). Cihazsız det. **Türkçe-syntax dil kendi
+karakter-kodlamasını kendi diliyle çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-210 — OS: mini dosya-sistemi — superblock + inode + blok-bitmap (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-209).
+
+**Karar [ETKİ: yeni `test/bare_metal/minifs_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_virtio_blk_* extern).]**
+D-143/D-206 düz-serialize'in ÖTESİNDE GERÇEK dosya-sistemi yapısı virtio-blk üstünde. Disk düzeni: blok0=SUPERBLOCK
+(magic "MFS1"+sayaçlar), blok1=BLOK-BİTMAP, blok2=INODE-TABLO (ad[16]/boyut/ilk_blok/blok_sayısı), blok3+=VERİ.
+`mfs_olustur(ad,veri,uzun)` bitmap'ten boş blok(lar) ayırır + inode + veri-blokları yazar; `mfs_oku(ad,tampon)` inode'u
+ad ile bulup blokları okur. **Kanıt:** 2 dosya ("gunluk" kısa + "veri" BLOK-SINIRINI AŞAN çok-blok) oluştur → diskten
+geri oku → içerik+boyut eşleşti + bitmap tutarlı → "MINIFS OK". Det. **Gerçek FS: blok-tahsis + inode-indeksleme +
+çok-blok dosya.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-209 — OS: traceroute — IP TTL manipülasyonu + ICMP Time-Exceeded (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-208).
+
+**Karar [ETKİ: yeni `test/bare_metal/traceroute_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Ağ-recon aracı:
+traceroute mekanizması. IP başlığındaki TTL'i artırarak probe yolla; her hop TTL=0'da ICMP Time-Exceeded (type=11)
+döndürür → hop IP'si öğrenilir. ARP ile geçit MAC'i çöz → TTL=1 UDP probe (dst 8.8.8.8, port 33435, "KMGTRACE") →
+gateway (10.0.2.2) **ICMP type=11** döndü → hop 1 keşfedildi. **Kanıt:** "HOP KESFEDILDI TTL=1" + "TRACEROUTE OK",
+**PRIMARY RX yolu başarılı — fallback GEREKMEDİ** (pcap: TX-probe TTL=01 + RX ICMP type=0x0b gateway'den). D-158
+küçük-tik (2.5M) yük-dersi. **Pentest recon: port-scan(D-164) + arp-scan(D-158) + reverse-DNS(D-166) + traceroute
+= yol/topoloji keşfi.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-208 — OS: userspace EL0 heap allocator — malloc/free (kernel-yardımsız) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-207).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_malloc_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** EL0
+(yetkisiz) süreç ÇEKİRDEK YARDIMI OLMADAN kendi dinamik bellek ayırıcısını sürer — yalnız kendi EL0-erişimli veri
+sayfasında (.user_data, 4KB havuz). `u_malloc` (bump + serbest-liste first-fit) / `u_free` (LIFO push). **Kanıt:**
+A/B/C malloc → u_free(B) → D=malloc → **D==B (B'nin yeri geri kullanıldı = free-list çalıştı)** + yaz/oku round-trip
++ tüm pointer'lar user-VA aralığında → "USERMALLOC OK". 2× byte-identik det. Süreç kernel-belleğine yazmaz (güvenli).
+**Userspace dinamik bellek = daha zengin EL0 programların temeli.** Sınır (v1): coalescing yok, first-fit. **Not:**
+Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-207 — OS: SMP MCS queue-lock — ölçeklenebilir kuyruk-kilidi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-206).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_mcs_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** Mellor-Crummey
+& Scott (1991) queue-lock — spinlock(D-170)/ticket(D-192)/rwlock(D-199)'tan FARKLI, ÖLÇEKLENEBİLİR: her çekirdek KENDİ
+node'unda döner (yerel-spin) → global adreste dönmez → cache-line bouncing yok, N'e doğrusal ölçeklenir. LDAXR/STLXR
+SWAP(tail, my_node) ile kuyruğa gir; selef varsa onun next'ini bağla + kendi node'unda locked==0 bekle; unlock: next
+varsa YALNIZ onu uyandır, yoksa tail-CAS. **Kanıt:** -smp 2, iki çekirdek MCS-kilit altında düz sayacı 5000'er artırır
+→ sayac=10000 TAM (lost-update yok) + c0=c1=5000 (FIFO adalet, açlık yok), 5/5 det → "SMP MCS OK". PSCI CPU_ON HVC +
+naked trampoline SP-önce (D-174) + 64-byte node (D-186) + dc civac/ivac coherency. **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
 ## D-206 — OS: FS journaling — write-ahead log + crash kurtarma (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-205).
