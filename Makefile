@@ -2505,6 +2505,42 @@ calistir_recon_shell_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — ag-recon kabuk testi atlandi."; \
 	fi
 
+# === AG-RECON KABUGU v2 (aarch64) — CANLI UART komut → TCP-scan / arp-scan recon ===
+# recon_shell_arm.c (D-189: EL1 interaktif UART kabuk + ping/dns) TEMEL, IKI YENI
+# recon komutu: `scan <oktet>` (port_scan_arm.c/D-164 mantigi — TCP SYN 80/443/22 →
+# ACIK/KAPALI/FILTRELI) + `arpscan` (arp_scan_arm.c/D-158 mantigi — subnet 10.0.2.1..5
+# ARP tarama, KUCUK poll-tik butcesi). Mevcut ping korunur. Ag EL1'den net_gonder(24)/
+# net_al(25) syscall'lariyla; frame tamponlari user-VA blogunda (D-150 guard). GIRIS:
+# `-serial stdio` + KARAKTER-KARAKTER ~30ms pace (D-188 PL011 1-byte holding → burst
+# overrun, KRITIK). AG: -netdev user + virtio-net-device. `ping 2`+`arpscan` SLIRP
+# gateway/DNS host ile DETERMINISTIK. Marker: "RECON2 SHELL OK" + "PING: CANLI".
+calistir_recon_shell2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 ag-recon kabuk v2 testi: recon_shell2_arm.c -> ELF (canli UART komut -> scan/arpscan)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/recon_shell2_arm.c -o $(BUILD)/recon_shell2_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/recon_shell2_arm.elf $(BUILD)/recon_shell2_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/recon_shell2_arm.out; \
+		s='ping 2\narpscan\n'; \
+		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
+			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
+		done; sleep 2; } \
+			| timeout 30 qemu-system-aarch64 \
+			-M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial stdio -kernel $(BUILD)/recon_shell2_arm.elf > $(BUILD)/recon_shell2_arm.out 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/recon_shell2_arm.out; echo "--- son ---"; \
+		if grep -q "RECON2 SHELL OK" $(BUILD)/recon_shell2_arm.out && grep -q "PING: CANLI" $(BUILD)/recon_shell2_arm.out; then \
+			echo "aarch64 ag-recon kabuk v2 testi gecti: CANLI UART komut okundu (stdio pipe) — ICMP ping deterministik echo (PING: CANLI) + arpscan/scan denendi (RECON2 SHELL OK)."; \
+		else \
+			echo "FAIL: 'RECON2 SHELL OK' + 'PING: CANLI' bekleniyor (ag-recon kabuk v2)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — ag-recon kabuk v2 testi atlandi."; \
+	fi
+
 # === CMOS RTC testi (x86_64) — donanım gerçek-zaman saati (D-172 x86 paritesi) ===
 # PC uyumlu MC146818 CMOS RTC: port 0x70 (index) / 0x71 (data). BCD register'lar
 # (saniye/dakika/saat/gün/ay/yıl). UIP (Status A bit 7) beklenip tutarlı okunur.
@@ -3437,6 +3473,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
                      calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
                      calistir_shell_test_arm calistir_recon_shell_test_arm \
+                     calistir_recon_shell2_test_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_virtio_selfhost_arm \
