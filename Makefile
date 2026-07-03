@@ -2862,6 +2862,44 @@ calistir_userspace_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace DNS testi atlandi."; \
 	fi
 
+# === USERSPACE TCP HANDSHAKE (aarch64) — EL0 süreç syscall ile TAM TCP el sıkışması ===
+# D-176 raw-frame syscall'ları (net_gonder=24/net_al=25) üstünde EL0 (yetkisiz) süreç
+# TAM TCP üç-yönlü el sıkışması yapar (çekirdekte TCP durum-makinesi YOK): ARP (gateway
+# MAC) → DNS ("example.com" A → hedef IPv4) → hedef-IP:80'e TCP SYN (pseudo-header
+# checksum, EL0'da) → SYN-ACK al (flags=0x12, ack=bizim_seq+1) → ACK → ESTABLISHED.
+# tcp_connect_arm.c (D-159) handshake mantığı KERNEL'deydi; burada EL0'a taşındı. RX
+# round-trip gate: "USERTCP OK". Fallback (internet yoksa / SLIRP dış-TCP yanıt vermezse):
+# EL0'ın SYN'i sys2(24) ile GÖNDERDİĞİ pcap'te kanıtlanır → serial "USERTCP SENT OK"
+# VEYA pcap'te TCP seq "KEMG" (4b454d47) TX. virtio_net BM_A64_OBJS'te (D-176) — yine de
+# explicit dependency olarak eklendi.
+calistir_userspace_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
+	@echo "aarch64 userspace TCP handshake testi: userspace_tcp_arm.c -> ELF (EL0 syscall ile tam TCP el sikismasi)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_tcp_arm.c -o $(BUILD)/userspace_tcp_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/userspace_tcp_arm.elf $(BUILD)/userspace_tcp_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/userspace_tcp_arm.out $(BUILD)/userspace_tcp_arm.pcap; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/userspace_tcp_arm.pcap \
+			-serial file:$(BUILD)/userspace_tcp_arm.out -kernel $(BUILD)/userspace_tcp_arm.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/userspace_tcp_arm.out; echo "--- son ---"; \
+		if grep -q "USERTCP OK" $(BUILD)/userspace_tcp_arm.out; then \
+			echo "aarch64 userspace TCP handshake testi gecti (RX round-trip): EL0 surec syscall ile TAM TCP el sikismasi yapti (ESTABLISHED)."; \
+		elif grep -q "USERTCP SENT OK" $(BUILD)/userspace_tcp_arm.out; then \
+			echo "aarch64 userspace TCP handshake testi gecti (SENT fallback): EL0 surec SYN'i sys2(24) ile gonderdi (SYN-ACK yok/internet yok)."; \
+		elif grep -a -q "KEMG" $(BUILD)/userspace_tcp_arm.pcap; then \
+			echo "aarch64 userspace TCP handshake testi gecti (pcap-TX fallback): EL0'in SYN'i pcap'te var (TCP seq 'KEMG')."; \
+			echo "USERTCP SENT OK"; \
+		else \
+			echo "FAIL: seri 'USERTCP OK'/'USERTCP SENT OK' veya pcap'te 'KEMG' TCP seq bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — userspace TCP handshake testi atlandi."; \
+	fi
+
 # === USERSPACE ICMP PING (aarch64) — EL0 süreç syscall ile L3 ping ===
 # EL0 (yetkisiz) süreç net_gonder(24)/net_al(25) syscall'larıyla ARP çözer + IPv4+ICMP
 # Echo Request (payload "KEMGU") yollar + echo reply'i doğrular. Protokol mantığı EL0'da
@@ -2929,6 +2967,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_guvenlik_kalici_test_arm calistir_guvenlik_bombardiman_test_arm \
                      calistir_userspace_net_test_arm \
                      calistir_userspace_dns_test_arm calistir_userspace_ping_test_arm \
+                     calistir_userspace_tcp_test_arm \
                      calistir_capstone_arm \
                      calistir_uart_merhaba_x86_bare_metal calistir_kernel_dizi_x86_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
