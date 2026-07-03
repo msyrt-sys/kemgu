@@ -3211,6 +3211,48 @@ calistir_sha256_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host SHA-256 testi atlandi."; \
 	fi
 
+# === SELF-HOST UTF-8 kod-çözücü (aarch64) — KEMGU TÜRKÇE DNA milestone ===
+# utf8_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde UTF-8 (RFC
+# 3629) kod-çözücü. KEMGU'nun KENDİ kaynak-kodlaması olan UTF-8'i çözebildiğini
+# kanıtlar — Türkçe syntax'lı dilin özü. 1-byte (0xxxxxxx) + 2-byte (110xxxxx
+# 10xxxxxx) dizileri: kod-noktası = ((b0 & 0x1F) << 6) | (b1 & 0x3F). Test:
+# "çğışöü" 12 byte -> 6 kod-noktası [231,287,305,351,246,252] (byte 12 DEĞİL,
+# kod-nokta 6). Türkçe kod-noktaları (ç ğ ı ö ş ü) beklenenle karşılaştırılır +
+# geçersiz devam-byte tespiti (bonus, sonsuz döngü YOK). CİHAZSIZ: QEMU'da
+# -netdev/-drive YOK, BM_A64_OBJS (heap dâhil — Dizi<dtam32> byte/kod-nokta
+# tahsisi için). Marker: "KEM UTF8 OK".
+# NOT (codegen deseni): dizi-eleman doğrudan `>>` operandı ashr (işaretli)
+# üretir (D-173); bu yüzden byte'lar önce SKALER dtam32'ye alınır, mask/kaydırma
+# skaler üstünde (lshr/shl doğru). `karakter` sayısal değil (T003) → byte'lar
+# dtam32 dizisi. implicit tam32<->dtam32 YASAK (D-200) → `olarak` gerekmedi
+# (sayaçlar tam32, byte/kod-nokta dtam32 ayrı tutuldu). runtime/codegen DEĞİŞMEDİ.
+calistir_utf8_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 SELF-HOST UTF-8 kod-cozucu: utf8_selfhost.kem -> IR -> ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/utf8_selfhost.kem > $(BUILD)/utf8_selfhost.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/utf8_selfhost.ll -c -o $(BUILD)/utf8_selfhost.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/utf8_selfhost.elf $(BUILD)/utf8_selfhost.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/utf8_selfhost.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/utf8_selfhost.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/utf8_selfhost.out; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/utf8_selfhost.out -kernel $(BUILD)/utf8_selfhost.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/utf8_selfhost.out; echo "--- son ---"; \
+		if grep -q "KEM UTF8 OK" $(BUILD)/utf8_selfhost.out; then \
+			echo "aarch64 self-host UTF-8 testi gecti: KEMGU cihazsiz UTF-8 kod-cozucu 'cgisou' -> [231,287,305,351,246,252] (6 kod-nokta) dogruladi."; \
+		else \
+			echo "FAIL: 'KEM UTF8 OK' bekleniyor (KEMGU self-host UTF-8 kod-cozucu)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host UTF-8 testi atlandi."; \
+	fi
+
 # === SELF-HOST RC4 akış şifresi (aarch64) — KEMGU'da simetrik kripto ===
 # rc4_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde RC4 (Rivest
 # Cipher 4) SİMETRİK AKIŞ ŞİFRESİ hesaplar. SHA-256'nın (tek-yönlü hash)
@@ -3885,6 +3927,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sort_selfhost_arm \
                      calistir_hashmap_selfhost_arm \
                      calistir_sha256_selfhost_arm calistir_rc4_selfhost_arm \
+                     calistir_utf8_selfhost_arm \
                      calistir_base64_selfhost_arm \
                      calistir_bignum_selfhost_arm \
                      calistir_vm_selfhost_arm \
