@@ -5,6 +5,78 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-224 — OS: x86 TAM kullanıcı-süreç keystone — ring3 ⊕ sayfa-izolasyon ⊕ syscall (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-223).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_proc_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** aarch64 D3
+(korumalı EL0 user-process) x86 İKİZİ = x86 user-process KEYSTONE'u. Üç mevcut x86 parçayı BİRLEŞTİRİR: (1) ring3
+(D-190 GDT DPL=3 + TSS + iretq→CPL=3), (2) sayfa-izolasyon (D-195 kernel sayfası U/S=0), (3) syscall (D-218 int0x80).
+**Kanıt:** ring3 user-kodu KENDİ sayfasında (U/S=1) koştu (CPL=3) + int0x80 ile hesap+I/O yaptı + kernel-sır sayfasına
+erişince **#PF (v=14, err=P|U, CR2=kernel-sır) → HAPİS** → "RING3 PROC X86 OK". TAM başarı, fallback GEREKMEDİ. x86 PVH
+long-mode (D-107). **Korumalı user-process artık ÇİFT-ARCH tam (aarch64 D3 + x86 keystone).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-223 — OS: SELF-HOST Türkçe alfabetik sıralama (collation) — Türkçe DNA (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-222).
+
+**Karar [ETKİ: yeni `test/ornekler/turkce_sort_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-217 case-fold'un Türkçe-DNA DEVAMI: TÜRKÇE ALFABETİK SIRALAMA (collation) — mainstream diller yanlış yapar (Unicode
+kod-nokta sırası ≠ Türkçe alfabe). Türkçe: a b c ç d e f g ğ h ı i ... KRİTİK: **ç, c'den SONRA** (Unicode 231 çok
+ileride) + **ı, i'den ÖNCE** (Türkçe'de ı<i, Unicode'da ı=305>i=105 TERS). Her harfe Türkçe-sıra-indeksi ata, o indeksle
+karşılaştır. **Kanıt:** karışık Türkçe kelime dizisi → Türkçe collation ile sırala → beklenen Türkçe-alfabetik sıra
+(ç>c VE ı<i kararlarıyla; Unicode-sıralama YANLIŞ verir) → "KEM TR SORT OK", Unicode-tuzağına düşmedi. Saf KEMGU, dtam32
+kod-nokta + dizi in-place swap (D-171/211/217). Cihazsız det. **Türkçe-syntax dil Türkçe collation'ı kendi diliyle
+çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-222 — OS: crash-güvenli FS — WAL journaling ⊕ inode-FS sentezi (atomik yazım) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-221).
+
+**Karar [ETKİ: yeni `test/bare_metal/crashfs_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-206 WAL +
+D-210 inode-FS SENTEZİ: atomik dosya-yazımı olan crash-güvenli FS. Dosya yazarken önce JOURNAL'a (inode-güncellemesi +
+veri-blokları + commit-flag) yaz, sonra gerçek FS bloklarına uygula. Crash yazım ORTASINDA (flag=0) → kurtarma atlar →
+FS eski-tutarlı; crash commit SONRASI (flag=1) → kurtarma REPLAY eder → yeni-tutarlı. Torn FS ASLA görünmez. **Kanıt:**
+(1) temiz yazım → FS tutarlı; (2) crash-replay: B journal+commit=1 ama apply-atla → kurtarma replay (kurtarma=1,
+replay-sonrası=0x10) → FS'te B tutarlı → "CRASHFS OK". virtio-blk, det. **FS artık atomik+crash-güvenli** (D-206 WAL
+kavramı + D-210 gerçek-FS birleşti). **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-221 — OS: ICMP ping-sweep — nmap-tarzı L3 host keşfi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-220).
+
+**Karar [ETKİ: yeni `test/bare_metal/ping_sweep_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-156 tek-ping +
+D-158 subnet-iterasyon BİRLEŞİMİ = host-discovery (pentest recon). 10.0.2.1..5 her IP'ye ICMP echo request; reply =
+CANLI host. SLIRP: gateway 10.0.2.2 + DNS 10.0.2.3 echo'ya yanıt (deterministik) → 2 canlı. Reply doğrulama: src-IP +
+id/seq + payload "KEMGU". **Kanıt:** 10.0.2.2/.3 CANLI, .1/.4/.5 YANITSIZ → "PING SWEEP OK 2" (N≥2), RX round-trip
+(pcap fallback GEREKMEDİ). D-158 küçük-tik (2.5M). **Pentest recon aracı seti: port-scan(D-164)+arp-scan(D-158)+
+traceroute(D-209)+ping-sweep = tam host/topoloji keşfi.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-220 — OS: userspace paylaşımlı-bellek IPC — 2 EL0 süreç aynı sayfayı paylaşır (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-219).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_shm_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-127
+per-process İZOLASYONUN TERSİ: iki EL0 süreç KASITLI olarak aynı fiziksel veri sayfasını PAYLAŞIR (kdl_surec_kur_el0_veri
+AYNI veri_pa=0x44000000 ile iki süreç → her ikisi L2[17]→VA 0x42200000). Üretici 1..10 + bayrak(0x600D) yazar (dmb ish);
+tüketici bayrağı bounded spin-poll ile bekleyip toplar. Doğrudan-bellek IPC (kanal/dosya syscall DEĞİL). **Kanıt:** üretici
+yazar → tüketici toplam=55 okur → "USERSHM OK"; ayrı-PA (D-127 izolasyon) olsaydı 0 görürdü. İki süreç preemptively
+(D-127 scheduler). Ayrı user-yığın VA (0x42380000/0x42300000) paylaşılan PA'da çakışmasın diye. Det. **Userspace IPC üç
+yolla: dosya(D-131)+kanal(D-140)+paylaşımlı-bellek.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-219 — OS: SMP seqlock — optimistik kilitsiz-okuma (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-218).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_seqlock_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** Seqlock —
+rwlock(D-199)'tan FARKLI: yazıcı okuyucuyu ASLA beklemez, okuyucu KİLİT ALMAZ (sıfır atomik-RMW, sıfır yazma) →
+OPTİMİSTİK okur. Global seq (çift=stabil, tek=yazım-sürüyor): yazıcı seq++/veri-yaz/seq++; okuyucu s0-oku(tek→retry)→
+a,b-oku→s1-oku→(s0≠s1 veya tek→retry). İki `dmb ish` (seq-tek'ten önce, seq-çift'ten sonra) seqlock'un KALBİ — yanlış
+bariyer=torn. **Kanıt:** -smp 2, yazıcı N=2000 (a++;b=a*2), okuyucu optimistik → **torn_read=0** (yarım-yazılmış çift asla
+kabul edilmedi; araya-giren yazım seq ile yakalanıp retry) + retry=5331 (gerçek çekişme), 5/5 det → "SMP SEQLOCK OK".
+retry/kabul sayısı zamanlama-varyanslı (dürüst, PASS-koşulu değil). **SMP eşzamanlılık: spinlock/ticket/rwlock/atomik/
+bariyer/SPSC/MCS/seqlock = tam kilit-primitif seti.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
 ## D-218 — OS: TAM x86 syscall ABI — int 0x80 çok-argüman + dönüş + register-şeffaflık (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-217).
