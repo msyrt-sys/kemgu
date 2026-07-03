@@ -5,6 +5,81 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-206 — OS: FS journaling — write-ahead log + crash kurtarma (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-205).
+
+**Karar [ETKİ: yeni `test/bare_metal/fs_journal_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_virtio_blk_* extern).]**
+D-143 kalıcı-FS'i CRASH-TUTARLILIĞA taşır: write-ahead log (WAL). Disk düzeni blok 0 = JOURNAL
+`[magic "JRNL"|hedef_sektor|veri|commit@511]`, blok 10 = VERİ. Protokol: (a) journal commit=0 yaz → (b) flush →
+(c) commit=1+flush (journal geçerli) → (d) veri bloğu yaz → (e) journal temizle. Kurtarma (her boot): journal
+commit==1 ise veriyi hedefe **replay**. **Kanıt:** S1 temiz-commit → veri=0xCAFE, kurtarma no-op (commit=0);
+S2 crash-sim (adım d atlanır, journal commit=1 kalır) → crash öncesi veri 0xCAFE (yeni 0xBEEF diske ulaşmadı =
+tutarlılık) → kurtarma commit=1 görür → 0xBEEF replay → veri=0xBEEF journal ile eşleşti → "FS JOURNAL OK". Tek-boot
+iki senaryo, det. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-205 — OS: SELF-HOST RC4 akış şifresi — KEMGU simetrik kripto (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-204).
+
+**Karar [ETKİ: yeni `test/ornekler/rc4_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-173 SHA-256'nın ötesinde SİMETRİK ŞİFRE: KEMGU'da RC4 (KSA S-box permütasyon + PRGA keystream + XOR). KSA:
+`j=(j+S[i]+anahtar[i%uzun])&255; swap(S[i],S[j])`. PRGA: `i=(i+1)&255; j=(j+S[i])&255; swap; K=S[(S[i]+S[j])&255]`.
+**Kanıt:** Wikipedia test-vektörü anahtar "Key" + düz "Plaintext" → şifreli **BBF316E8D940AF0AD3** (ondalık
+187,243,22,232,217,64,175,10,211) → beklenen hex eşleşti + round-trip (simetrik decrypt = orijinal) → "KEM RC4 OK"
+(çift kanıt: hem hex hem round-trip). **Dil-doğrulaması:** S-box in-place swap (D-171), `&255` maske (kaydırma
+YOK → D-173 dizi-ashr tuzağı hiç oluşmaz), XOR skaler-üstünde (dizi-eleman değil), `olarak` cast (D-200). Cihazsız
+det. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-204 — OS: kabuk script runner — değişken + echo/yaz/oku betik (2026-07-03)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-203).
+
+**Karar [ETKİ: yeni `test/bare_metal/shell_script_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-189 recon
+kabuğunu BETİK-YORUMLAYICIYA taşır: değişken tablosu (`var_adlar[16][16]`+lineer arama) + komutlar `set <ad> <deg>`
+/ `echo <ad>` (`$` toleranslı) / `yaz <dosya> <ad>` (num=17) / `oku <dosya>` (num=18) / `tekrar <n> <komut>`
+(bounded 32). **Kanıt:** betik `set x 42 / echo x / yaz gunluk x / oku gunluk` → echo=42 (değişken tablosu) +
+oku=42 (FS round-trip: değer itoa→dosya→geri) → "SCRIPT OK", 3× byte-identik det. Char-pace UART giriş (D-188),
+user-VA tampon (D-150/151). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-203 — OS: userspace kooperatif fiber'lar — EL0 yeşil-thread context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-202).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_fiber_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Kernel
+context-switch'i (C7a) EL0'a taşır: userspace GERÇEK stack-switch (state-machine DEĞİL). İki fiber ayrı EL0 yığını
+(0x42xxxxxx user-VA, AP=01). `fiber_gec(eski,yeni)` = **naked `.user` fonksiyonu**: `stp/ldp` ile callee-saved
+x19–x30 + sp → eski'ye kaydet/yeni'den yükle/`ret`. Bağlam düzeni kernel `KdlTCB` ile aynı ([12]=sp). **Kanıt:**
+ping-pong A1,B1,A2,B2,A3,B3 (3 tur, bounded), 2× byte-identik det → "USERFIBER OK". **Kritik ders:** `fiber_gec`
+`always_inline` OLAMAZ (`ret` gerekli) → naked gerçek fonksiyon zorunlu. **Not:** Paralel mini-agent üretti;
+cherry-pick ile entegre.
+
+## D-202 — OS: SELF-HOST mini-assembler — KEMGU mnemonic→bytecode→VM (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-201).
+
+**Karar [ETKİ: yeni `test/ornekler/asm_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-196 yığın-VM'in üstüne DERLEME katmanı: KEMGU'da cihazsız mini-assembler. `assemble()` `(mnemonic,operand)`
+çiftlerini VM bytecode'una ÇEVİRİR (`değilse eğer` dispatch): `KOD_PUSH→[OP_PUSH,değer]` (1→2 hücre), diğerleri
+tek OP_* hücresi. Çeviri KİMLİK DEĞİL (KOD_PRINT=5→OP_PRINT=6, KOD_HALT=6→OP_HALT=0 gerçekten farklı) → sonra
+D-196 VM döngüsü bytecode'u koşturur. **Kanıt:** program → 42 (6×7) + 158 (100+58) → "KEM ASM OK", 3× det.
+**Codegen bulgusu (FLAGGED):** çıplak `x = x;` self-assignment C bootstrap tip-kontrolörünü exit 127 ile çökertiyor
+→ boş dal kaldırılarak aşıldı (ayrı oturuma flag edildi: derleyici düzeltmesi). **Not:** Paralel mini-agent üretti;
+cherry-pick ile entegre.
+
+## D-201 — OS: x86 SMP 4-çekirdek — Local APIC çoklu-AP INIT-SIPI (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-200).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp4_x86.c`; `Makefile`. Yalnız test — boot/linker/runtime değişmedi.]** D-187
+x86 SMP (2-çekirdek) → 4-çekirdek: BSP + 3 AP long-mode'da INIT-SIPI ile. **ORTAK trampoline** (tek SIPI vektörü,
+3 AP aynı blob'dan geçer); kritik değişiklik: trampoline'in 64-bit adımı RSP KURMAZ (3 AP paylaşımlı yığını
+yarıştırırdı) → naked ortak long-mode girişe atlar; giriş kendi APIC ID'sini LAPIC MMIO'dan okur
+(`0xFEE00020>>24`) → `RSP = ap_yiginlar + (id+1)*16KB` (APIC-ID-indeksli izole yığın) → `ap_isi(id)`. aarch64
+MPIDR-indeksli desenin (D-191) x86 ikizi. Per-core state 64-byte satır (false-sharing paritesi; x86 MESI otomatik).
+**Kanıt:** 3/3 AP canlı, APIC ID 1/2/3 her biri kendi kimliğini okudu, canli_ap=0x3, 3× det → "SMP4 X86 OK".
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
 ## D-200 — OS: SELF-HOST hash-map — KEMGU dictionary (linear probing) (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-199).
