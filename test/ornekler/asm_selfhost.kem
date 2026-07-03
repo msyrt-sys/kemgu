@@ -1,0 +1,273 @@
+// KEMGU SELF-HOST MİNİ-ASSEMBLER — mnemonic → bytecode → VM (cihazsız) DİL KAPSTONU.
+// =========================================================================
+// Bu örnek, KEMGU dilinin gerçek bir DERLEYİCİ — yani bir KOD ÜRETİCİ
+// (yüksek-seviye temsili düşük-seviye bytecode'a ÇEVİREN assemble adımı) —
+// ARTI bunu ÇALIŞTIRAN bir yorumlayıcı barındırdığını kanıtlar. Assembler +
+// VM birlikte, bir dilin gerçek bir "compile-then-run" hattını (parse →
+// codegen → execute) kaldırabildiğinin kanıtıdır. D-196 yığın-VM'in üstüne
+// bir ASSEMBLE katmanı ekler: yüksek-seviye (mnemonic, operand) çiftlerinden
+// ham bytecode üretir, sonra o bytecode'u VM döngüsüyle koşturur.
+//
+// Saf KEMGU, cihazsız (MMIO / yetki<MMIO> yok): yalnızca aritmetik + dizi
+// indeksleme (OKUMA d[i] ve YAZMA d[i]=x) + iken/eğer/değilse eğer kontrol akışı.
+//
+// KRİTİK dil gözlemleri (codegen doğrulaması — dayanılan invaryantlar):
+//   (1) Diziler HEAP-UNIFORM: `Dizi<tam32>` → runtime `KdlDizi*`. İndeks OKUMA
+//       (`kaynak[i]`, `bytecode[bc_uz]`) → `kdl_dizi_al_tam` (runtime sınır-kontrollü);
+//       İndeks YAZMA (`bytecode[bc_uz] = x`) → `kdl_dizi_yaz_tam` (runtime sınır-
+//       kontrollü, hem i<0 hem i>=boyut). Yani ASSEMBLE gerçek bellek mutasyonuna
+//       derlenir — bytecode dizisine hücre hücre yazılır. (D-171 sort ile kanıtlı.)
+//   (2) `değilse eğer` zinciri → mnemonic DISPATCH: assemble döngüsünde mnemonic
+//       kodu okunup ardışık eğer/değilse-eğer ile ayrılır (switch yok → değilse-
+//       eğer zinciri; D-196 vm ile kanıtlı dil-seviyesi desen).
+//   (3) `Dizi<tam32>` fn-param: hem kaynak hem bytecode hem yığın işlevlere
+//       referansla aktarılır; assemble'ın bytecode'a yazması çağırana yansır
+//       (D-171 ile kanıtlı). assemble() ürettiği bytecode uzunluğunu döner.
+//
+// ÖNEMLİ AYRIM — MNEMONIC KODU vs VM OPCODE:
+//   Yüksek-seviye kaynak, VM'in ham opcode'larından FARKLI mnemonic kodları
+//   kullanır (KOD_*). Assemble adımı bir ÇEVİRİ tablosudur: her mnemonic'i
+//   ilgili VM opcode'una (OP_*) eşler. Böylece "assemble" gerçek bir dönüşümdür
+//   (kimlik değil): KOD_PUSH → OP_PUSH + operand hücresi; KOD_MUL → OP_MUL; vb.
+//
+// MNEMONIC TABLOSU (yüksek-seviye — kaynak temsili):
+//   KOD_PUSH  (1): 1 mnemonic, operand ANLAMLI → assemble 2 bytecode hücresi üretir
+//                  [OP_PUSH, deger].
+//   KOD_ADD   (2): operand yok → 1 bytecode hücresi [OP_ADD].
+//   KOD_SUB   (3): operand yok → 1 bytecode hücresi [OP_SUB].
+//   KOD_MUL   (4): operand yok → 1 bytecode hücresi [OP_MUL].
+//   KOD_PRINT (5): operand yok → 1 bytecode hücresi [OP_PRINT].
+//   KOD_HALT  (6): operand yok → 1 bytecode hücresi [OP_HALT].
+//
+// VM OPCODE TABLOSU (düşük-seviye — D-196 yığın-makinesi bytecode'u):
+//   OP_PUSH  (1): 2 hücre [opcode, deger] — deger'i yığına iter.
+//   OP_ADD   (2): b=pop; a=pop; push(a+b).
+//   OP_SUB   (3): b=pop; a=pop; push(a-b).
+//   OP_MUL   (4): b=pop; a=pop; push(a*b).
+//   OP_DUP   (5): yığının tepesini çoğaltır (VM'de tam; bu assembler üretmiyor).
+//   OP_PRINT (6): yığının tepesini bas (POP etmeden).
+//   OP_HALT  (0): döngüyü durdur.
+//
+// KAYNAK "PROGRAM" (yüksek-seviye — (mnemonic, operand) çiftleri, düz Dizi<tam32>):
+//   [(PUSH,6),(PUSH,7),(MUL,0),(PRINT,0),(PUSH,100),(PUSH,58),(ADD,0),(PRINT,0),(HALT,0)]
+//   → assemble → bytecode → VM çalıştır → 42 ve 158 basar.
+//     6*7 = 42, sonra 100+58 = 158.
+//
+// DETERMİNİSTİK doğrulama: VM'in her PRINT'te bastığı değer, ayrı bir "beklenen"
+// dizisiyle (bd = [42, 158]) karşılaştırılır. Tüm PRINT'ler beklenenle eşleşir VE
+// PRINT sayısı beklenen sayıya (2) eşitse "KEM ASM OK", aksi halde "KEM ASM FAIL".
+//
+// Beklenen çıktı: "KEM ASM BASLA" + 42 + 158 + "KEM ASM OK".
+
+// --- VM opcode sabitleri (düşük-seviye bytecode) ---
+sabit OP_HALT: tam32  = 0;
+sabit OP_PUSH: tam32  = 1;
+sabit OP_ADD: tam32   = 2;
+sabit OP_SUB: tam32   = 3;
+sabit OP_MUL: tam32   = 4;
+sabit OP_DUP: tam32   = 5;
+sabit OP_PRINT: tam32 = 6;
+
+// --- Mnemonic kodları (yüksek-seviye kaynak — VM opcode'larından FARKLI) ---
+sabit KOD_PUSH: tam32  = 1;
+sabit KOD_ADD: tam32   = 2;
+sabit KOD_SUB: tam32   = 3;
+sabit KOD_MUL: tam32   = 4;
+sabit KOD_PRINT: tam32 = 5;
+sabit KOD_HALT: tam32  = 6;
+
+sabit KAYNAK_CIFT: tam32 = 9;    // kaynaktaki (mnemonic, operand) çift sayısı
+sabit BYTECODE_KAP: tam32 = 32;  // üretilen bytecode dizisi kapasitesi (fazlasıyla yeter)
+sabit YIGIN_KAP: tam32 = 16;     // VM yığını kapasitesi
+sabit BEKLENEN_PRINT: tam32 = 2; // beklenen toplam PRINT sayısı (42, 158)
+
+// ============================================================================
+// ASSEMBLE — yüksek-seviye (mnemonic, operand) çiftlerini düşük-seviye VM
+// bytecode'una ÇEVİRİR (codegen adımı). kaynak düz Dizi<tam32>: her çift iki
+// ardışık hücre [mnemonic, operand]. bytecode'a hücre hücre yazar (in-place
+// YAZMA → kdl_dizi_yaz_tam, çağırana yansır). Ürettiği bytecode hücre sayısını
+// döner (VM döngüsü bu uzunluğa kadar okur).
+//
+// ÇEVİRİ (mnemonic DISPATCH — değilse eğer zinciri):
+//   KOD_PUSH → OP_PUSH + operand (2 hücre); diğerleri → tek OP_* hücresi.
+// ============================================================================
+işlev assemble(kaynak: Dizi<tam32>, cift_sayi: tam32, bytecode: Dizi<tam32>) -> tam32 {
+    değişken bc_uz: tam32 = 0;   // üretilen bytecode uzunluğu (yazma imleci)
+    değişken i: tam32 = 0;       // kaynak çift indeksi
+
+    iken i < cift_sayi {
+        // Her çift iki ardışık hücrede: [mnemonic, operand].
+        değişken mnemonik: tam32 = kaynak[i * 2];
+        değişken operand: tam32 = kaynak[i * 2 + 1];
+
+        // DISPATCH: mnemonic'i VM opcode'una çevir (değilse-eğer zinciri).
+        eğer mnemonik == KOD_PUSH {
+            // PUSH → iki bytecode hücresi: [OP_PUSH, deger].
+            bytecode[bc_uz] = OP_PUSH;
+            bc_uz = bc_uz + 1;
+            bytecode[bc_uz] = operand;   // operand ANLAMLI
+            bc_uz = bc_uz + 1;
+        } değilse eğer mnemonik == KOD_ADD {
+            bytecode[bc_uz] = OP_ADD;
+            bc_uz = bc_uz + 1;
+        } değilse eğer mnemonik == KOD_SUB {
+            bytecode[bc_uz] = OP_SUB;
+            bc_uz = bc_uz + 1;
+        } değilse eğer mnemonik == KOD_MUL {
+            bytecode[bc_uz] = OP_MUL;
+            bc_uz = bc_uz + 1;
+        } değilse eğer mnemonik == KOD_PRINT {
+            bytecode[bc_uz] = OP_PRINT;
+            bc_uz = bc_uz + 1;
+        } değilse eğer mnemonik == KOD_HALT {
+            bytecode[bc_uz] = OP_HALT;
+            bc_uz = bc_uz + 1;
+        }
+        // Tanımsız mnemonic → hiçbir dal eşleşmez → bytecode'a hiçbir şey
+        // yazılmaz (güvenli taraf: yoksay). Boş `değilse` gerekmez.
+
+        i = i + 1;
+    }
+
+    ver bc_uz;   // üretilen bytecode hücre sayısı
+}
+
+// --- VM yardımcıları (D-196 vm_selfhost.kem'den — yeniden kullanılır) ---
+
+// Yığına değer iter: yigin[sp] = deger; yeni SP döner (sp + 1).
+işlev it(yigin: Dizi<tam32>, sp: tam32, deger: tam32) -> tam32 {
+    yigin[sp] = deger;   // dizi in-place mutasyon (çağırana yansır)
+    ver sp + 1;
+}
+
+// Yığının tepesindeki değeri OKUR (sp bir sonraki boş slot).
+işlev tepe(yigin: Dizi<tam32>, sp: tam32) -> tam32 {
+    ver yigin[sp - 1];
+}
+
+// ============================================================================
+// VM ÇEKİRDEĞİ — fetch-decode-execute döngüsü (D-196 vm_selfhost.kem'den).
+// prog: assemble'ın ürettiği bytecode; bd: beklenen-PRINT dizisi.
+// Dönüş: tüm PRINT'ler beklenenle eşleştiyse VE sayı doğruysa 1, aksi halde 0.
+// ============================================================================
+işlev vm_calistir(prog: Dizi<tam32>, prog_uzun: tam32,
+                  yigin: Dizi<tam32>, bd: Dizi<tam32>, bek_sayi: tam32) -> tam32 {
+    değişken sp: tam32 = 0;          // stack pointer (bir sonraki boş slot)
+    değişken pc: tam32 = 0;          // program counter
+    değişken print_sayi: tam32 = 0;  // şimdiye dek yapılan PRINT sayısı
+    değişken tumu_dogru: tam32 = 1;  // her PRINT beklenenle eşleşti mi?
+
+    iken pc < prog_uzun {
+        // FETCH: opcode oku, PC'yi ilerlet.
+        değişken opcode: tam32 = prog[pc];
+        pc = pc + 1;
+
+        // DECODE + EXECUTE: opcode dispatch (değilse eğer zinciri).
+        eğer opcode == OP_PUSH {
+            değişken deger: tam32 = prog[pc];
+            pc = pc + 1;
+            sp = it(yigin, sp, deger);
+        } değilse eğer opcode == OP_ADD {
+            değişken b: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            sp = it(yigin, sp, a + b);
+        } değilse eğer opcode == OP_SUB {
+            değişken b: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            sp = it(yigin, sp, a - b);
+        } değilse eğer opcode == OP_MUL {
+            değişken b: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            sp = it(yigin, sp, a * b);
+        } değilse eğer opcode == OP_DUP {
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = it(yigin, sp, a);
+        } değilse eğer opcode == OP_PRINT {
+            değişken v: tam32 = tepe(yigin, sp);
+            yazdir_tam(v);
+
+            // DETERMİNİSTİK doğrulama: bu PRINT beklenenle eşleşiyor mu?
+            eğer print_sayi < bek_sayi {
+                eğer v == bd[print_sayi] {
+                    tumu_dogru = tumu_dogru;   // eşleşti — durumu koru
+                } değilse {
+                    tumu_dogru = 0;            // beklenenden sapma
+                }
+            } değilse {
+                tumu_dogru = 0;               // beklenenden FAZLA PRINT
+            }
+            print_sayi = print_sayi + 1;
+        } değilse eğer opcode == OP_HALT {
+            pc = prog_uzun;   // döngüyü durdur
+        } değilse {
+            tumu_dogru = 0;   // tanımsız opcode
+        }
+    }
+
+    // Tüm PRINT'ler eşleşti VE tam olarak beklenen sayıda PRINT olduysa 1.
+    eğer tumu_dogru == 1 {
+        eğer print_sayi == bek_sayi {
+            ver 1;
+        }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM ASM BASLA");
+
+    // YÜKSEK-SEVİYE KAYNAK PROGRAM — (mnemonic, operand) çiftleri (düz dizi).
+    //   (PUSH,6) (PUSH,7) (MUL,0) (PRINT,0)     → 6*7 = 42
+    //   (PUSH,100) (PUSH,58) (ADD,0) (PRINT,0)  → 100+58 = 158
+    //   (HALT,0)
+    // Not: operand yalnız PUSH için anlamlı; diğerlerinde 0 dolgu.
+    değişken kaynak: Dizi<tam32> = [
+        KOD_PUSH, 6,
+        KOD_PUSH, 7,
+        KOD_MUL, 0,
+        KOD_PRINT, 0,
+        KOD_PUSH, 100,
+        KOD_PUSH, 58,
+        KOD_ADD, 0,
+        KOD_PRINT, 0,
+        KOD_HALT, 0
+    ];
+
+    // ASSEMBLE hedefi — üretilen bytecode buraya yazılır (başta hepsi 0).
+    değişken bytecode: Dizi<tam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    // ASSEMBLE ADIMI (yüksek-seviye → düşük-seviye bytecode). Ürettiği hücre
+    // sayısı VM'in okuyacağı program uzunluğudur.
+    değişken bc_uzun: tam32 = assemble(kaynak, KAYNAK_CIFT, bytecode);
+
+    // VM yığını (in-place mutasyonla push/pop edilir).
+    değişken yigin: Dizi<tam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    // Beklenen PRINT çıktıları (deterministik doğrulama için).
+    değişken beklenen: Dizi<tam32> = [42, 158];
+
+    // ÜRETİLEN bytecode'u VM ile çalıştır.
+    değişken sonuc: tam32 = vm_calistir(bytecode, bc_uzun, yigin, beklenen, BEKLENEN_PRINT);
+
+    eğer sonuc == 1 {
+        yazdir_metin("KEM ASM OK");
+    } değilse {
+        yazdir_metin("KEM ASM FAIL");
+    }
+
+    ver 0;
+}
