@@ -2984,6 +2984,35 @@ calistir_preempt_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 preemptive sched testi atlandi."; \
 	fi
 
+# === TAM x86 syscall ABI testi (int 0x80 çok-argüman + dönüş-değeri) — Milestone F ===
+# aarch64 D-122 (arg gecisi) + D-126 (donus-degeri + cok-arg + register-seffaflik)
+# syscall ABI'sinin x86 ikizi. Simdiye kadar x86'da yalniz D-190 ring3 int 0x80
+# demo'su vardi (tek num, arg/donus yok). Bu test TAM ABI getirir: kendi-kurulumlu
+# IDT[0x80] gate + handler; num=rax, arg0=rdi, arg1=rsi, donus=rax (SysV benzeri).
+# Handler tum cagiran register'lari korur (D-126 register-seffaflik dersi: frame-
+# ONCE-kaydet, sonra dispatch). 3 syscall: num=1 yaz(ptr), num=2 topla(a,b)->a+b
+# (cok-arg+donus), num=3 gettick(x)->x+ofset (donus). Marker "SYSCALL X86 OK".
+# timeout 20 (hlt-loop timeout ile oludur = beklenen, || true). Deterministik.
+calistir_syscall_abi_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 tam syscall ABI testi: syscall_x86.c -> ELF (IDT[0x80] gate + num/arg0/arg1/donus)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/syscall_x86.c -o $(BUILD)/syscall_abi_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/syscall_abi_x86.elf $(BUILD)/syscall_abi_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/syscall_abi_x86.out; \
+		timeout 20 qemu-system-x86_64 -kernel $(BUILD)/syscall_abi_x86.elf -display none \
+			-serial file:$(BUILD)/syscall_abi_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/syscall_abi_x86.out; echo "--- son ---"; \
+		if grep -q "SYSCALL X86 OK" $(BUILD)/syscall_abi_x86.out; then \
+			echo "x86_64 tam syscall ABI testi gecti: int 0x80 num/arg0/arg1/donus + register-seffaflik (aarch64 D-126 paritesi)."; \
+		else \
+			echo "FAIL: 'SYSCALL X86 OK' bekleniyor (int 0x80 cok-arg + donus ABI calismali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 tam syscall ABI testi atlandi."; \
+	fi
+
 # === REVERSE DNS (PTR kaydı) testi (aarch64) — IP → hostname (recon) ===
 # ARP → DNS MAC → PTR sorgusu (8.8.8.8 → "8.8.8.8.in-addr.arpa", QTYPE=12)
 # gönder → yanıtı RX ile al → ANSWER RDATA domain-name'i parse et (label
@@ -4132,7 +4161,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_istisna_test_x86 calistir_timer_test_x86 calistir_syscall_test_x86 \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
                      calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
-                     calistir_ring3_page_test_x86 calistir_preempt_test_x86
+                     calistir_ring3_page_test_x86 calistir_preempt_test_x86 \
+                     calistir_syscall_abi_test_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
