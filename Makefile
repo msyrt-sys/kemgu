@@ -3057,6 +3057,33 @@ calistir_ring3_page_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 tam sayfa-izolasyon testi atlandi."; \
 	fi
 
+# === PCI veri yolu numaralandirma testi (x86_64) — CIHAZ KESFI (Milestone B) ===
+# Gercek aygit surucularinin (virtio/NIC/disk) temeli olan PCI cihaz kesfi.
+# Legacy config-space port I/O (mekanizma #1): outl(0xCF8, enable|bus|slot|func|
+# offset) + inl(0xCFC). bus 0'i slot 0..31 tara: her slot'ta vendor:device
+# (offset 0) oku, 0xFFFF=cihaz-yok. Bulunan her cihazin class-code'unu (offset
+# 0x08) da oku + listele. QEMU i440FX her zaman slot 0'da Intel host-bridge
+# (8086:1237) sunar -> deterministik. Marker "PCI ENUM OK" (N>=1 cihaz).
+calistir_pci_enum_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
+	@echo "x86_64 PCI numaralandirma testi: pci_enum_x86.c -> ELF (legacy config-space 0xCF8/0xCFC, bus 0 tarama)..."
+	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/pci_enum_x86.c -o $(BUILD)/pci_enum_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
+		-o $(BUILD)/pci_enum_x86.elf $(BUILD)/pci_enum_x86.o $(BM_X86_OBJS)
+	@if command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/pci_enum_x86.out; \
+		timeout 15 qemu-system-x86_64 -kernel $(BUILD)/pci_enum_x86.elf -display none \
+			-serial file:$(BUILD)/pci_enum_x86.out 2>/dev/null || true; \
+		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/pci_enum_x86.out; echo "--- son ---"; \
+		if grep -q "PCI ENUM OK" $(BUILD)/pci_enum_x86.out; then \
+			echo "x86_64 PCI numaralandirma testi gecti: bus 0'da PCI cihaz(lar) kesfedildi (Intel host-bridge dahil, vendor:device:class listelendi)."; \
+		else \
+			echo "FAIL: 'PCI ENUM OK' bekleniyor (bus 0'da en az 1 PCI cihaz numaralandirilmali)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — x86 PCI numaralandirma testi atlandi."; \
+	fi
+
 # === PREEMPTIVE scheduler testi (x86_64) — PIT timer-IRQ context-switch (Milestone F) ===
 # C7b (aarch64 preempt_arm) testinin x86 ikizi/paritesi. x86'da simdiye kadar
 # yalniz COOPERATIVE (C7a sched) vardi; bu test gercek PREEMPTIVE round-robin
@@ -4343,7 +4370,8 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sched_test_x86 calistir_rtc_test_x86 calistir_capstone_x86 \
                      calistir_smp_test_x86 calistir_smp4_test_x86 calistir_ring3_test_x86 \
                      calistir_ring3_page_test_x86 calistir_preempt_test_x86 \
-                     calistir_syscall_abi_test_x86 calistir_ring3_proc_test_x86
+                     calistir_syscall_abi_test_x86 calistir_ring3_proc_test_x86 \
+                     calistir_pci_enum_test_x86
 	@echo ""
 	@echo "=== TUM OS kanitlari gecti: 4 boot + 2 istisna + 2 timer + 2 syscall + 2 capstone + SMP (aarch64 + x86_64) + ring3 (x86) + tam sayfa-izolasyon (x86) ==="
 
