@@ -33,16 +33,22 @@ void escape_baslat(EscapeAnaliz *ea, Arena *a) {
     ea->dongu_derinligi = 0;
     ea->ver_baglaminda = 0;
     ea->degisti = 0;
+    ea->bag_takip = NULL;
+    ea->bag_takip_sayi = 0;
+    ea->bag_takip_kap = 0;
 }
 
 void escape_serbest(EscapeAnaliz *ea) {
     if (!ea) return;
     free(ea->kayitlar);
     free(ea->baglamalar);
+    free(ea->bag_takip);
     ea->kayitlar = NULL;
     ea->baglamalar = NULL;
+    ea->bag_takip = NULL;
     ea->kayit_sayi = ea->kayit_kapasite = 0;
     ea->bag_sayi = ea->bag_kapasite = 0;
+    ea->bag_takip_sayi = ea->bag_takip_kap = 0;
 }
 
 /* === Dahili: kayit yonetimi === */
@@ -140,6 +146,33 @@ static void scope_cik(EscapeAnaliz *ea) {
     ea->scope_seviye--;
 }
 
+/* === Binding-takip cevrim guard'i (bkz. EscapeAnaliz.bag_takip) ===
+ * ifadeyi_yukselt bir tanimlayicinin baglamasini takip ederken (transitif
+ * escape) donguleri (`x = x`, `x = y; y = x`) kirar. */
+static int bag_takip_icinde(EscapeAnaliz *ea, const Dugum *d) {
+    for (int i = 0; i < ea->bag_takip_sayi; i++) {
+        if (ea->bag_takip[i] == d) return 1;
+    }
+    return 0;
+}
+
+static int bag_takip_it(EscapeAnaliz *ea, const Dugum *d) {
+    if (ea->bag_takip_sayi == ea->bag_takip_kap) {
+        int yeni_kap = ea->bag_takip_kap == 0 ? 16 : ea->bag_takip_kap * 2;
+        const Dugum **yeni = realloc(ea->bag_takip,
+                                     (size_t)yeni_kap * sizeof(const Dugum *));
+        if (!yeni) return 0;  /* tahsis basarisiz: guard'siz devam etme, iptal */
+        ea->bag_takip = yeni;
+        ea->bag_takip_kap = yeni_kap;
+    }
+    ea->bag_takip[ea->bag_takip_sayi++] = d;
+    return 1;
+}
+
+static void bag_takip_cikar(EscapeAnaliz *ea) {
+    if (ea->bag_takip_sayi > 0) ea->bag_takip_sayi--;
+}
+
 /* Ifade icindeki tum tahsisleri belirli kategoriye yukselt (kosullu dallar icin).
  * Recursive: eger ifadesinde her iki dali da islemek icin. */
 static void ifadeyi_yukselt(EscapeAnaliz *ea, const Dugum *ifade, EscapeKategorisi yeni);
@@ -187,7 +220,14 @@ static void ifadeyi_yukselt(EscapeAnaliz *ea, const Dugum *ifade, EscapeKategori
             const Dugum *bag = bag_cozumle(ea,
                 ifade->veri.tanimlayici.metin,
                 ifade->veri.tanimlayici.uzunluk);
-            if (bag) ifadeyi_yukselt(ea, bag, yeni);
+            /* CEVRIM GUARD: `x = x` / `x = y; y = x` gibi oz-gonderimli veya
+             * donguselleşen baglamalar zincir uzerinde ayni node'a geri doner.
+             * Aktif takip zincirinde ise takip etme (yigin tasmasini onler;
+             * transitif terfi idempotent oldugundan escape kaybi yok). */
+            if (bag && !bag_takip_icinde(ea, bag) && bag_takip_it(ea, bag)) {
+                ifadeyi_yukselt(ea, bag, yeni);
+                bag_takip_cikar(ea);
+            }
             return;
         }
         case DUGUM_EGER:
@@ -348,10 +388,28 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
             visit(ea, d->veri.atama.hedef);
             if (d->veri.atama.hedef
                 && d->veri.atama.hedef->tip == DUGUM_TANIMLAYICI) {
-                bag_guncelle(ea,
-                    d->veri.atama.hedef->veri.tanimlayici.metin,
-                    d->veri.atama.hedef->veri.tanimlayici.uzunluk,
-                    d->veri.atama.deger);
+                const Dugum *hd = d->veri.atama.hedef;
+                const Dugum *dg = d->veri.atama.deger;
+                /* OZ-ATAMA no-op'u (`x = x`): bagi KENDINE gonderen bir
+                 * baglama olusturma. Aksi halde bag_cozumle(x) ayni tanimlayici
+                 * node'una geri doner -> ifadeyi_yukselt sonsuz ozyineleme
+                 * (yigin tasmasi; --check/--llvm exit 127). Ayrica bag_guncelle
+                 * x'in GERCEK tahsisine olan baglantisini ezerdi -> transitif
+                 * escape kaybi. x = x anlamsal olarak no-op: baglamayi degistirme.
+                 * (Dolayli dongu `x = y; y = x` icin ifadeyi_yukselt'teki
+                 * bag_takip cevrim guard'i backstop'tur.) */
+                int oz_atama = dg && dg->tip == DUGUM_TANIMLAYICI
+                    && dg->veri.tanimlayici.uzunluk
+                           == hd->veri.tanimlayici.uzunluk
+                    && memcmp(dg->veri.tanimlayici.metin,
+                              hd->veri.tanimlayici.metin,
+                              (size_t)hd->veri.tanimlayici.uzunluk) == 0;
+                if (!oz_atama) {
+                    bag_guncelle(ea,
+                        hd->veri.tanimlayici.metin,
+                        hd->veri.tanimlayici.uzunluk,
+                        dg);
+                }
             } else if (d->veri.atama.hedef
                        && (d->veri.atama.hedef->tip == DUGUM_ERISIM
                            || d->veri.atama.hedef->tip == DUGUM_INDEKS)) {

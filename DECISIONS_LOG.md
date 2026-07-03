@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-105 — düzelt(escape): çıplak öz-atama `x = x` → tip-kontrolör yığın taşması (crash) (2026-07-03)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: D-104 sonrası; merge'de origin/main ilerlemişse güncelle).
+
+**Karar [ETKİ: `src/escape.c` + `src/escape.h` (C bootstrap escape DFA); +6 regresyon
+testi: 3× `test_escape.c`, 3× `test_tip_kontrol.c`].** D-202 self-host assembler çalışması
+sırasında izole edildi: çıplak öz-atama deyimi `x = x` (aynı tanımlayıcı hem lvalue hem
+rvalue) C bootstrap derleyicisini (`--check` VE `--llvm`) **exit 127** (yığın taşması) ile
+çökertiyordu.
+
+**Kök neden (mekanizma):** Escape DFA'nın `ifadeyi_yukselt` transitif-terfi yolu, değişken
+bağlamalarını *isim* üzerinden takip eder (`x` → bağlı ifade → ...). `DUGUM_ATAMA` için
+`bag_guncelle(x, <rvalue>)` çağrılır; `x = x`'te rvalue *yine* `TANIMLAYICI x`'tir → `x`'in
+bağlaması KENDİNE gönderir. Sonra `ver x` (veya herhangi bir terfi) `ifadeyi_yukselt(x)` →
+`bag_cozumle(x)` = aynı node → `ifadeyi_yukselt` → ... **cevrim guard'ı olmadan sonsuz
+özyineleme**. Dolaylı `x = y; y = x` alias-cevrimi de aynı sınıfta (2-cevrim). `--check` ve
+`--llvm` ikisi de tip_kontrol → `escape_analiz_islev` çağırdığı için ortak çökme.
+(`-finstrument-functions` ile `bag_cozumle`↔`ifadeyi_yukselt` cevrimi olarak lokalize edildi.)
+
+**Çözüm — iki katman (kök + backstop):**
+1. **Öz-atama no-op (kök):** `DUGUM_ATAMA`'da hedef==değer (aynı ad TANIMLAYICI) ise
+   `bag_guncelle` ÇAĞRILMAZ. `x = x` gerçek no-op — `x`'in GERÇEK tahsisine olan bağlaması
+   KORUNUR → transitif escape SOUND kalır (`x="m"; x=x; ver x` → METIN CAGIRAN, altında
+   YEREL değil). Öz-göndermeli bağlama hiç oluşmaz → o cevrim kaynağında elenir.
+2. **Bağ-takip cevrim guard'ı (backstop):** `ifadeyi_yukselt`'in tanımlayıcı-takibi artık
+   aktif takip zincirindeki node'ları tutar (`EscapeAnaliz.bag_takip`); aynı node tekrar
+   gelirse takip DURUR. Dolaylı alias-cevrimlerini (`x=y; y=x`) çökmeden sonlandırır.
+
+**Soundness:** Öz-atama artık doğru terfi (kanıt: `test_escape.c` R1 CAGIRAN, R2 YEREL).
+Alias-cevrim backstop'ı konservatif *under-promote* edebilir AMA UAF üretmez: F4.2b
+ρ_yerel free-routing escape DFA'nın YEREL'ine GÜVENMEZ — yalnız POZİTİF `kesin_yerel`
+kanıtıyla serbest eder ve `ky_confined` HERHANGI yeniden-atama `V = ...` için 0 döner
+(`escape.c:665`) → öz-atanmış/alias'lı/`ver`'li değişken asla confined kanıtlanmaz →
+asla erken-serbest. Bkz. [D-103] (F4.2b pozitif-confinement).
+
+**Doğrulama:** `test_escape` 25/25 (+3), `test_tip_kontrol` 187/187 (+3), `test_llvm`
+237/237, `make test_tumu` sıfır regresyon, ASan temiz. End-to-end: `dene(42)` (öz-atamalı)
+→ exit 42. **Sınır:** self-host codegen'e (`selfhost/codegen.kem`) çıplak stack diziye
+paralel bir escape yolu YOK; bu düzeltme yalnız C bootstrap escape DFA'sını hizalar.
+
+---
+
 ## D-104 — düzelt(self-host codegen): blok-leksik-kapsam shadowing → değişken tablosu push/pop (2026-06-27)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir

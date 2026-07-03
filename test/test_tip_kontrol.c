@@ -724,6 +724,45 @@ static void test_prog_islev_ver_bos(void) {
     arena_serbest(a);
 }
 
+/* D-202 turevi regresyon: cıplak oz-atama `x = x` C bootstrap tip-kontroloru
+ * (tip_kontrol_program -> escape_analiz_islev) yigin tasmasiyla cokertiyordu
+ * (--check exit 127). Kok neden: escape DFA `x = x` icin bagi kendine gonderiyor,
+ * ifadeyi_yukselt binding-takibi sonsuz ozyineleme. x = x gecerli bir no-op:
+ * temiz gecmeli (hata DEGIL, crash DEGIL). */
+static void test_prog_oz_atama(void) {
+    Arena *a = arena_olustur(0);
+    /* islev f(a: tam32) -> tam32 { degisken b = a; b = b; ver b; } */
+    int h = program_kontrol(
+        "i\xc5\x9f" "lev f(a: tam32) -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken b: tam32 = a; "
+        "b = b; "
+        "ver b; }", a);
+    test_sonuc("program: oz-atama b=b (no-op) -> 0 hata, crash yok", h == 0);
+    arena_serbest(a);
+}
+
+/* Parametrenin dogrudan oz-atamasi (a = a) da tetikliyordu. */
+static void test_prog_oz_atama_param(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9f" "lev f(a: tam32) -> tam32 { a = a; ver a; }", a);
+    test_sonuc("program: oz-atama param a=a (no-op) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* Dolayli alias-cevrim (b=d; d=b) da crash ediyordu — bag_takip guard'i backstop. */
+static void test_prog_alias_cevrim(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9f" "lev f(a: tam32, c: tam32) -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken b: tam32 = a; "
+        "de\xc4\x9f" "i\xc5\x9f" "ken d: tam32 = c; "
+        "b = d; d = b; "
+        "ver b; }", a);
+    test_sonuc("program: alias-cevrim b=d;d=b -> 0 hata, crash yok", h == 0);
+    arena_serbest(a);
+}
+
 static void test_prog_islev_donus_var_ver_yok(void) {
     Arena *a = arena_olustur(0);
     /* islev f() -> tam32 { ver; } — uyumsuz */
@@ -2418,6 +2457,9 @@ int main(void) {
     test_prog_atama_uyumlu();
     test_prog_atama_uyumsuz();
     test_prog_atama_lvalue_yok();
+    test_prog_oz_atama();
+    test_prog_oz_atama_param();
+    test_prog_alias_cevrim();
 
     printf("\n--- Program: Kontrol Akisi ---\n");
     test_prog_eger_mantiksal();

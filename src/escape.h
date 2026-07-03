@@ -109,6 +109,16 @@ typedef struct EscapeAnaliz {
      * capture sound backstop — lexical scope: yalniz bu fn'in lambda'si bu fn'in
      * lokalini yakalar; block-form capture takibi v1'de yok). */
     int islev_lambda_icerir;
+
+    /* ifadeyi_yukselt binding-takip CEVRIM GUARD'i: transitif escape terfisi
+     * degisken baglamalarini isim uzerinden takip eder (x -> bagli ifade). Oz-
+     * gonderimli (`x = x`) veya donguselleşen (`x = y; y = x`) baglamalar
+     * bag_cozumle'yi ayni node'a sonsuz geri dondururdu -> yigin tasmasi.
+     * Aktif takip zincirindeki node'lari tutar; ayni node tekrar gelirse
+     * takip durur (transitif terfi zaten idempotent, kayip yok). */
+    const Dugum **bag_takip;
+    int bag_takip_sayi;
+    int bag_takip_kap;
 } EscapeAnaliz;
 
 void escape_baslat(EscapeAnaliz *ea, Arena *a);

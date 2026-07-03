@@ -525,6 +525,72 @@ static void test_lc_hicbiri_iterasyon(void) {
     escape_serbest(&ea); arena_serbest(a);
 }
 
+/* === Oz-atama / alias-cevrim regresyonu (D-202 turevi crash) ===
+ *
+ * `x = x` (oz-atama) escape DFA'da x'in baglamasini KENDINE gonderirdi;
+ * ifadeyi_yukselt binding-takibi bag_cozumle(x)->ayni node->... sonsuz
+ * ozyineleme (yigin tasmasi; C bootstrap --check/--llvm exit 127). Duzeltme:
+ * (1) DUGUM_ATAMA'da oz-atama bagi guncellemez (gercek no-op, gercek tahsis
+ *     baglantisi korunur -> transitif escape SOUND kalir),
+ * (2) ifadeyi_yukselt bag_takip cevrim guard'i (dolayli `x=y; y=x` backstop). */
+
+/* R1: oz-atama SONLANIR + transitif escape korunur: x="m"; x=x; ver x -> CAGIRAN.
+ * (Crash oncesi program hic derlenmezdi; simdi terminate + dogru kategori.) */
+static void test_oz_atama_transitif(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"merhaba\"; "
+        "x = x; "
+        "ver x; }");
+    const Dugum *metin = bul(prog, DUGUM_METIN, 0);
+    EscapeAnaliz ea;
+    escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);  /* sonsuz ozyineleme YOK */
+    int ok = metin && escape_kategori(&ea, metin) == ESC_CAGIRAN;
+    test_sonuc("oz-atama: x=\"m\"; x=x; ver x -> METIN CAGIRAN (sound)", ok);
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
+/* R2: oz-atama, deger DONMEZ -> YEREL (yanlis terfi olmamali). */
+static void test_oz_atama_yerel(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> tam32 { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"merhaba\"; "
+        "x = x; "
+        "ver 0; }");
+    const Dugum *metin = bul(prog, DUGUM_METIN, 0);
+    EscapeAnaliz ea;
+    escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);
+    int ok = metin && escape_kategori(&ea, metin) == ESC_YEREL;
+    test_sonuc("oz-atama: x=\"m\"; x=x; ver 0 -> METIN YEREL", ok);
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
+/* R3: dolayli alias-cevrim (x=y; y=x) yigin tasmasi olmadan SONLANIR
+ * (bag_takip cevrim guard'i). Kategori konservatif; onemli olan: crash yok. */
+static void test_alias_cevrim_sonlanir(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f() -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"aaa\"; "
+        "de\xc4\x9f" "i\xc5\x9f" "ken y = \"bbb\"; "
+        "x = y; y = x; "
+        "ver x; }");
+    EscapeAnaliz ea;
+    escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);  /* MUTLAKA terminate (guard) */
+    /* Buraya ulasmak = sonsuz ozyineleme yok. Kayit tablosu tutarli olmali. */
+    int ok = ea.kayit_sayi >= 0;
+    test_sonuc("alias-cevrim: x=y; y=x; ver x -> SONLANIR (crash yok)", ok);
+    escape_serbest(&ea);
+    arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -566,6 +632,11 @@ int main(void) {
     test_kategori_adi();
     test_bos_govde();
     test_null_girdiler();
+
+    printf("\n--- Oz-atama / alias-cevrim regresyonu (crash guard) ---\n");
+    test_oz_atama_transitif();
+    test_oz_atama_yerel();
+    test_alias_cevrim_sonlanir();
 
     printf("\n=================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
