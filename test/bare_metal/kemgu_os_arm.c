@@ -52,6 +52,12 @@ extern void kdl_yaz_tam(int32_t);              /* newline'siz ondalik sayi */
 extern uint64_t kdl_virtio_net_bul(void);
 extern int      kdl_virtio_net_kur(uint64_t base);
 
+/* virtio-blk kalıcı depolama (D-141/142/143) — RAM-FS'i diske kaydet/yükle. */
+extern uint64_t kdl_virtio_blk_bul(void);
+extern int      kdl_virtio_blk_kur(uint64_t base);
+extern int      kdl_dosya_kaydet(uint64_t base);   /* kdl_dosyalar -> blok 0-1 (magic KEMG) */
+extern int      kdl_dosya_yukle(uint64_t base);    /* blok 0-1 -> kdl_dosyalar (0=ok, -1=yok) */
+
 /* --- PL011 UART0 RX (recon_shell2_arm.c ile aynı harita) --- */
 #define KDL_PL011_BASE    0x09000000UL
 #define KDL_PL011_DR      0x00u
@@ -426,11 +432,28 @@ static void komut_sil(const char *ad) {
 
 /* Kabuk durum bilgisi. */
 static int g_net_hazir = 0;
+static int g_disk_hazir = 0;
+static uint64_t g_blk_base = 0;
 static int g_komut_sayaci = 0;
+
+/* kaydet: RAM-FS'i diske yaz (kalıcılık). */
+static void komut_kaydet(void) {
+    if (!g_disk_hazir) { kdl_yazdir_metin("DISK: yok"); return; }
+    kdl_yazdir_metin(kdl_dosya_kaydet(g_blk_base) == 0 ? "KAYDET OK (FS diske yazildi)"
+                                                       : "KAYDET HATA");
+}
+/* yukle: diskten RAM-FS'e oku. */
+static void komut_yukle(void) {
+    if (!g_disk_hazir) { kdl_yazdir_metin("DISK: yok"); return; }
+    kdl_yazdir_metin(kdl_dosya_yukle(g_blk_base) == 0 ? "YUKLE OK (FS diskten okundu)"
+                                                      : "YUKLE HATA (diskte FS yok)");
+}
 
 static void komut_sysinfo(void) {
     kdl_yaz_metin("SYSINFO net=");
     kdl_yaz_metin(g_net_hazir ? "hazir" : "yok");
+    kdl_yaz_metin(" disk=");
+    kdl_yaz_metin(g_disk_hazir ? "hazir" : "yok");
     kdl_yaz_metin(" fs=");
     kdl_yaz_tam((int32_t)(long)sys1(19, 0));       /* dosya sayısı */
     kdl_yaz_metin("dosya komut=");
@@ -439,7 +462,7 @@ static void komut_sysinfo(void) {
 }
 
 static void komut_yardim(void) {
-    kdl_yazdir_metin("KOMUTLAR: yardim sysinfo ls yaz oku sil ping pingsweep scan arpscan");
+    kdl_yazdir_metin("KOMUTLAR: yardim sysinfo ls yaz oku sil kaydet yukle ping pingsweep scan arpscan");
 }
 
 /* UART RX'ten BIR SATIR CANLI oku. Dönüş: byte (>=0) veya -1 = EOF. */
@@ -479,6 +502,10 @@ static void komut_calistir(char *satir) {
     } else if (str_esit(tok[0], "sil")) {
         if (nt >= 2) komut_sil(tok[1]);
         else kdl_yazdir_metin("KULLANIM: sil <ad>");
+    } else if (str_esit(tok[0], "kaydet")) {
+        komut_kaydet();
+    } else if (str_esit(tok[0], "yukle")) {
+        komut_yukle();
     } else if (str_esit(tok[0], "ping")) {
         int oktet = (nt >= 2) ? str_to_int(tok[1]) : 2;
         if (oktet <= 0 || oktet > 255) oktet = 2;
@@ -511,14 +538,28 @@ static void init_betik(void) {
     komut_ls();
     komut_oku("surum");     /* boot-seed → OKU: KEMGU-OS-v0.1 */
     komut_oku("proje");     /* yeni yazılan → OKU: KEMGU */
-    /* 2) AĞ: ICMP ping (SLIRP gateway, deterministik echo) + ARP subnet tarama. */
+    /* 2) DEPOLAMA: RAM-FS'i diske kaydet -> diskten yükle round-trip (kalıcılık kanıtı).
+     * kaydet FS'i blok 0-1'e yazar; yukle geri okur (kdl_dosyalar üzerine). Sonra
+     * "proje" hâlâ okunabiliyorsa disk yaz+oku yolu çalışıyor. */
+    if (g_disk_hazir) {
+        int k = kdl_dosya_kaydet(g_blk_base);
+        int y = kdl_dosya_yukle(g_blk_base);
+        char *buf = (char *)(uintptr_t)KDL_CIKTI_BUF;
+        long r = (long)sys2(18, (uint64_t)(uintptr_t)"proje", (uint64_t)(uintptr_t)buf);
+        int korundu = (k == 0 && y == 0 && r == 5 &&
+                       buf[0] == 'K' && buf[1] == 'E' && buf[2] == 'M' &&
+                       buf[3] == 'G' && buf[4] == 'U');
+        kdl_yazdir_metin(korundu ? "DISK RW OK (kaydet->yukle round-trip, proje korundu)"
+                                 : "DISK RW HATA");
+    }
+    /* 3) AĞ: ICMP ping (SLIRP gateway, deterministik echo) + ARP subnet tarama. */
     if (g_net_hazir) {
         kdl_yazdir_metin(komut_ping(2) ? "PING: CANLI" : "PING: yanit yok");
         int host = komut_arpscan();
         kdl_yaz_metin("ARPSCAN: "); kdl_yaz_tam((int32_t)host);
         kdl_yaz_metin(" host"); kdl_yazdir_satir();
     }
-    /* 3) Sistem durumu. */
+    /* 4) Sistem durumu. */
     komut_sysinfo();
     kdl_yazdir_metin("[init] betik bitti");
 }
@@ -538,7 +579,18 @@ int main(void) {
         kdl_yazdir_metin("[boot] ag: virtio-net YOK");
     }
 
-    /* --- Alt-sistem 2: DOSYA SİSTEMİ (RAM-FS) — boot seed --- */
+    /* --- Alt-sistem 2: DEPOLAMA (virtio-blk) — kalıcı FS backing (D-143) --- */
+    g_blk_base = kdl_virtio_blk_bul();
+    if (g_blk_base && kdl_virtio_blk_kur(g_blk_base) == 0) {
+        g_disk_hazir = 1;
+        int y = kdl_dosya_yukle(g_blk_base);   /* diskte kalıcı FS varsa yükle */
+        kdl_yaz_metin("[boot] disk: virtio-blk HAZIR");
+        kdl_yazdir_metin(y == 0 ? " (kalici FS yuklendi)" : " (bos disk)");
+    } else {
+        kdl_yazdir_metin("[boot] disk: virtio-blk YOK");
+    }
+
+    /* --- Alt-sistem 3: DOSYA SİSTEMİ (RAM-FS) — boot seed --- */
     /* Sürüm dosyasını yaz (kernel .rodata string'leri kdl_user_oku_str_gecerli izinli). */
     sys2(17, (uint64_t)(uintptr_t)"surum", (uint64_t)(uintptr_t)"KEMGU-OS-v0.1");
     kdl_yazdir_metin("[boot] fs: RAM-FS HAZIR (surum dosyasi tohumlandi)");

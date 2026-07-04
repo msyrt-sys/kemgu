@@ -2959,7 +2959,8 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kemgu_os_arm.out; \
-		s='yardim\nyaz proje KEMGU\nls\noku surum\noku proje\nsysinfo\nping 2\narpscan\n'; \
+		dd if=/dev/zero of=$(BUILD)/kemgu_os_disk.img bs=512 count=128 2>/dev/null; \
+		s='yardim\nyaz proje KEMGU\nls\noku surum\noku proje\nsysinfo\nkaydet\nping 2\narpscan\n'; \
 		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
 			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
 		done; sleep 2; } \
@@ -2967,15 +2968,17 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 			-M virt -cpu cortex-a72 -display none \
 			-global virtio-mmio.force-legacy=false \
 			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-drive file=$(BUILD)/kemgu_os_disk.img,if=none,id=d0 -device virtio-blk-device,drive=d0 \
 			-serial stdio -kernel $(BUILD)/kemgu_os_arm.elf > $(BUILD)/kemgu_os_arm.out 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kemgu_os_arm.out; echo "--- son ---"; \
 		if grep -q "KEMGU-OS OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
-			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS round-trip + kabuk (FS yaz->oku 'KEMGU' + ICMP 'PING: CANLI' + 'KEMGU-OS OK')."; \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS + DEPOLAMA + kabuk (FS 'KEMGU' + 'DISK RW OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
 		else \
-			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
 			exit 1; \
 		fi; \
 	else \
