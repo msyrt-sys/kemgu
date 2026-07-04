@@ -68,6 +68,28 @@ extern uint64_t kdl_tik_al(void);
 extern volatile uint64_t kdl_fault_bekleniyor;   /* 1 → sonraki data-abort kurtarılır */
 extern volatile uint64_t kdl_fault_yakalanan;    /* yakalanan FAR (fault adresi) */
 
+/* PART 2/3: preemptive scheduler (C7b/D-117) — TCB + bağlam-değiştirme + timer-IRQ
+ * ZORUNLU switch. main=görev 0; ek görevler timer-IRQ ile preempt edilir (gönüllü
+ * yield GEREKMEZ). Ham malzeme kdl_gorev.c'de; entegre çekirdeğe wire ediliyor. */
+extern void kdl_preempt_baslat(void);                                  /* main = görev 0 */
+extern int  kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe);
+extern void kdl_preempt_ac(void);                                      /* preemption AÇ */
+
+/* İki ARKA-PLAN görevi — sonsuz busy-loop, KENDİ sayacını artırır, ASLA yield ETMEZ.
+ * Sayaçların ilerlemesi YALNIZ timer-IRQ preemption ile mümkün (main de yield etmez).
+ * Falsifiye-edilemez: preemption yoksa arka-plan görevleri HİÇ koşmaz → sayaç=0 kalır. */
+static unsigned char yigin_arka_b[8192] __attribute__((aligned(16)));
+static unsigned char yigin_arka_c[8192] __attribute__((aligned(16)));
+static volatile uint64_t arka_sayac_b = 0;
+static volatile uint64_t arka_sayac_c = 0;
+
+static void arka_gorev_b(void) {
+    for (;;) { for (volatile int i = 0; i < 100000; i++) { } arka_sayac_b++; }
+}
+static void arka_gorev_c(void) {
+    for (;;) { for (volatile int i = 0; i < 100000; i++) { } arka_sayac_c++; }
+}
+
 /* --- PL011 UART0 RX (recon_shell2_arm.c ile aynı harita) --- */
 #define KDL_PL011_BASE    0x09000000UL
 #define KDL_PL011_DR      0x00u
@@ -485,7 +507,10 @@ static void komut_sysinfo(void) {
     kdl_yaz_tam((int32_t)g_komut_sayaci);
     kdl_yaz_metin(" uptime=");
     kdl_yaz_tam((int32_t)kdl_tik_al());            /* canlı timer tik sayısı */
-    kdl_yaz_metin("tik");
+    kdl_yaz_metin("tik arka_b=");
+    kdl_yaz_tam((int32_t)arka_sayac_b);            /* PART 2: arka-plan görev B sayacı (canlı) */
+    kdl_yaz_metin(" arka_c=");
+    kdl_yaz_tam((int32_t)arka_sayac_c);            /* arka-plan görev C sayacı — kabuk çalışırken artar */
     kdl_yazdir_satir();
 }
 
@@ -580,7 +605,9 @@ static void mmu_zorlama_testi(void) {
 }
 
 static void init_betik(void) {
-    uint64_t t0 = kdl_tik_al();   /* uptime başlangıcı (timer IRQ canlı) */
+    uint64_t t0 = kdl_tik_al();       /* uptime başlangıcı (timer IRQ canlı) */
+    uint64_t sb0 = arka_sayac_b;      /* PART 2: arka-plan görev sayaçları (başlangıç) */
+    uint64_t sc0 = arka_sayac_c;
     kdl_yazdir_metin("[init] betik: FS + ag entegrasyon sinamasi (deterministik)");
     /* 0) MMU ZORLAMA: haritasız sayfa → fault yakalanır+kurtarılır (OS devam). */
     mmu_zorlama_testi();
@@ -613,6 +640,19 @@ static void init_betik(void) {
     /* 4) ZAMAN: uptime ilerledi mi? (timer IRQ arka planda çalışıyor → canlı çekirdek). */
     if (kdl_tik_al() > t0) kdl_yazdir_metin("UPTIME: timer canli (tik ilerledi)");
     else                   kdl_yazdir_metin("UPTIME: timer durdu");
+    /* 4b) PART 2 SCHEDULER: main (görev 0) yukarıdaki init işini yaparken (net/FS/disk —
+     * ve ASLA gönüllü yield etmeden), İKİ arka-plan görevi (yield-etmeyen busy-loop)
+     * timer-IRQ preemption ile GERÇEKTEN koştu mu? Her iki sayaç da BAŞLANGIÇTAN büyükse
+     * → zorunlu bağlam-değiştirme çalışıyor (gerçek multitasking; timer-sayaç DEĞİL).
+     * FALSİFİYE-EDİLEMEZ: preemption yoksa arka-plan görevleri hiç seçilmez → sayaç=0. */
+    uint64_t db = arka_sayac_b - sb0, dc = arka_sayac_c - sc0;
+    if (db > 0 && dc > 0) {
+        kdl_yaz_metin("SCHEDULER OK (2 yield-etmeyen arka-plan gorev preempt kostu: +");
+        kdl_yaz_tam((int32_t)db); kdl_yaz_metin("B +");
+        kdl_yaz_tam((int32_t)dc); kdl_yaz_metin("C)"); kdl_yazdir_satir();
+    } else {
+        kdl_yazdir_metin("SCHEDULER HATA (arka-plan gorev preempt kosmadi)");
+    }
     /* 5) SAAT: donanım RTC (gerçek-zaman saati). */
     komut_saat();
     /* 6) Sistem durumu. */
@@ -651,12 +691,18 @@ int main(void) {
     sys2(17, (uint64_t)(uintptr_t)"surum", (uint64_t)(uintptr_t)"KEMGU-OS-v0.1");
     kdl_yazdir_metin("[boot] fs: RAM-FS HAZIR (surum dosyasi tohumlandi)");
 
-    /* --- Alt-sistem 4: ZAMAN (timer IRQ + canlı uptime) --- */
-    /* GIC + sanal timer kur; preempt guard'lı-kapalı → IRQ yalnız tik sayar. Kabuk
-     * çalışırken arka planda uptime ilerler (canlı çekirdek kanıtı). */
+    /* --- Alt-sistem 4: PREEMPTIVE SCHEDULER (PART 2 — gerçek multitasking) --- */
+    /* main = görev 0 (kabuk). İki ARKA-PLAN görevi (busy-loop, yield ETMEZ) kaydet;
+     * timer-IRQ ZORUNLU switch ile hepsini dönüşümlü koştur. Görev switch YOK iken
+     * (D-233 uptime) yalnız tik sayılırdı = multitasking DEĞİLdi; şimdi GERÇEK preempt.
+     * Sıra (preempt_arm.c/D-117): baslat → görev-olustur → kesme/timer → ac. */
+    kdl_preempt_baslat();                                               /* main = görev 0 */
+    kdl_preempt_gorev_olustur(arka_gorev_b, yigin_arka_b + sizeof(yigin_arka_b));
+    kdl_preempt_gorev_olustur(arka_gorev_c, yigin_arka_c + sizeof(yigin_arka_c));
     kdl_kesme_kur();
     kdl_timer_baslat();
-    kdl_yazdir_metin("[boot] zaman: timer IRQ HAZIR (uptime canli)");
+    kdl_preempt_ac();                                                   /* preemption AÇ */
+    kdl_yazdir_metin("[boot] scheduler: preemptive HAZIR (main=gorev0 + 2 arka-plan gorev)");
     kdl_yazdir_metin("KEMGU-OS BASLA");
 
     /* --- DETERMİNİSTİK entegrasyon kanıtı (boot init betiği) --- */

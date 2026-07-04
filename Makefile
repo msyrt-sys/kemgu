@@ -2982,15 +2982,15 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kemgu_os_arm.out; echo "--- son ---"; \
 		if grep -q "KEMGU-OS OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PAGEFAULT OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "SCHEDULER OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
-		   && grep -q "UPTIME: timer canli" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
-			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta MMU-zorlama(PAGEFAULT OK) + net + FS + DEPOLAMA + ZAMAN + RTC + kabuk (MMU 'PAGEFAULT OK' + 'DISK RW OK' + 'UPTIME' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta MMU(PAGEFAULT OK) + PREEMPTIVE-SCHED(SCHEDULER OK, 2 arka-plan gorev) + net + FS + DEPOLAMA + RTC + kabuk (+ 'DISK RW OK' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
 		else \
-			echo "FAIL: 'KEMGU-OS OK' + 'PAGEFAULT OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'UPTIME: timer canli' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			echo "FAIL: 'KEMGU-OS OK' + 'PAGEFAULT OK' + 'SCHEDULER OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
 			exit 1; \
 		fi; \
 	else \

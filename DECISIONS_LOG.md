@@ -5,6 +5,25 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-236 — OS: KEMGU-OS PART 2/3 — PREEMPTIVE SCHEDULER (gerçek multitasking) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-235).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_preempt_* extern).]**
+Mehmet direktifi (OS = MMU→scheduler→userspace) PART 2/3 = preemptive scheduler. [[feedback-os-tanim-mmu-sched-userspace]].
+Ham malzeme (C7b/D-117: kdl_baglam_degis + IRQ 272-byte trap-frame + kdl_preempt/kdl_gorev.c) VARDI ama entegre
+çekirdeğe wire EDİLMEMİŞTİ — D-233 timer yalnız TİK sayıyordu (multitasking DEĞİL; dürüstçe "timer canli" demiştim).
+**Wire:** kdl_preempt_baslat (main=görev0) + 2 ARKA-PLAN görev (sonsuz busy-loop, sayaç++, ASLA yield ETMEZ) +
+kdl_preempt_ac → timer-IRQ ZORUNLU switch. **PROOF(a) [falsifiye-edilemez]:** 2 yield-etmeyen arka-plan görev, İKİSİNİN
+de sayacı ilerler (+77B +75C, main init_betik'te net/FS yaparken, o da yield etmez). Preemption yoksa arka-plan HİÇ
+seçilmez → sayaç=0 kalır → cooperative/sayaç-bump TAKLİT EDEMEZ. **PROOF(b):** shell KENDİSİ görev 0; arka-plan sayaçları
+shell komut-işlerken BÜYÜR (77→1403, 6 interaktif komut boyunca) → concurrent (shell zamanlanmış görev + arka-plan koşar).
+**PROOF(c):** tüm OS (MMU-PAGEFAULT+net+FS+disk+RTC+shell) scheduler altında çalışır → "KEMGU-OS OK". **Determinizm:**
+preemptive → tam byte-çıktı değişken (sayaç değerleri timing-bağlı) AMA PASS markerları (SCHEDULER OK = db>0&&dc>0,
+PAGEFAULT/PING/vs) deterministik (2× gecti). Full gate + unit-suite yeşil. **ETİKET DÜRÜSTLÜĞÜ:** bu GERÇEK
+multitasking (zorunlu context-switch), D-233 timer-sayaç DEĞİL. **Uygulama→OS 2. ayak. SIRADA PART 3: userspace (EL0
++ ayrı-derlenen program + izolasyon).** **Not:** Seri; ben yazdım.
+
 ## D-235 — OS: KEMGU-OS PART 1/3 — GERÇEK MMU (C8b flag-kaldırma + C8c page-fault kurtarma) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-234).
