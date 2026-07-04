@@ -32,8 +32,14 @@ __attribute__((always_inline)) static inline unsigned long sys(unsigned long num
 __attribute__((section(".user"), noinline))
 static void el0_kod(void) {
     unsigned long t1 = sys(10, 0);                    /* gettick */
-    for (volatile long i = 0; i < 4000000; i++) { }   /* zaman geçir (timer tikler) */
-    unsigned long t2 = sys(10, 0);                    /* gettick */
+    /* Zaman geçir — timer birçok kez tiklesin. Sabit 4M döngü MARGİNALdi (≈1 timer
+     * periyodu → yüklü gate'te bazen tek tik bile geçmeden t2 okunur = TICK HATA flake).
+     * BOUNDED-poll: t2>t1 olana kadar bekle (en çok ~64M iter güvenlik). Deterministik. */
+    unsigned long t2 = t1;
+    for (long g = 0; g < 16 && t2 <= t1; g++) {
+        for (volatile long i = 0; i < 4000000; i++) { }
+        t2 = sys(10, 0);                              /* gettick tekrar */
+    }
     unsigned long pid = sys(11, 0);                   /* getpid */
 
     if (t2 > t1) {

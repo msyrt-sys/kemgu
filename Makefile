@@ -738,10 +738,19 @@ $(BUILD)/kernel.elf:
 # === Bare-Metal ortak runtime objeleri (aarch64) — C1 ===
 # Tüm aarch64 kernel'leri paylaşır: region backing (kdl_bolge + kdl_bare_heap =
 # frame allocator/malloc/memcpy + dizi runtime) + UART + libc'siz yazdır + panik.
-# -mgeneral-regs-only: MMU kapalı = Device-memory → 16-bayt q-register erişimi
-# alignment-fault verir; GPR-only güvenli (Linux çekirdek deseni).
-BM_A64    = clang -target aarch64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only
+# C8b (D-235): KERNEL derlemesi -mgeneral-regs-only OLMADAN. Artık gerekli DEĞİL çünkü
+# (1) MMU AÇIK + RAM Normal-WB cacheable (kdl_mmu_kur/C8a → 16-bayt q-register erişimi
+# alignment-fault vermez) + (2) FP/SIMD trap KAPALI (start_aarch64.S CPACR_EL1.FPEN=0b11).
+# Clang artık SERBEST SIMD/q-register emit eder + donanımda çalışır → GERÇEK sanal-bellek
+# kanıtı (taklit edilemez: MMU+Normal yoksa SIMD store alignment/trap-fault ederdi = C1 bug).
+BM_A64    = clang -target aarch64-unknown-none -ffreestanding -nostdlib
 BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime
+# EL0-KOD içeren testler (.user section'lı userspace demoları) -mgeneral-regs-only İLE
+# derlenir. Sebep (D-235): flag'siz clang, EL0 fonksiyonun sabit-havuzunu (frame-init NEON
+# constant) kernel .rodata'ya (0x40005ec0 = AP=00) koyar + EL0'dan `ldr q0,[kernel_addr]`
+# ile okur → EL0 permission-fault (izolasyon ihlali). GPR-only = sabit-havuz yok = EL0 kendi
+# sayfasında kalır. KALICI ÇÖZÜM PART 3'te (EL0 program .rodata'sını user sayfaya yerleştir).
+BM_A64_EL0 = clang -target aarch64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only
 
 $(BUILD)/bm_a64_uart.o: runtime/kdl_runtime_uart_pl011.c runtime/kdl_uart.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
@@ -1160,7 +1169,7 @@ calistir_sched_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # device'a doğrudan erişemez → yalnız SVC ile EL1'e. Handler SPSR_EL1'den kaynak-EL=0.
 calistir_d2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D2 aarch64 user/kernel testi: d2_arm.c -> ELF (EL0 + syscall)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/d2_arm.c -o $(BUILD)/d2_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/d2_arm.c -o $(BUILD)/d2_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/d2_arm.elf $(BUILD)/d2_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1330,7 +1339,7 @@ calistir_kanal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_kan
 # Gerçek OS sürecinin dört tanımlayıcı özelliği bir arada.
 calistir_proc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D3 aarch64 korumalı user-process testi: proc_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/proc_arm.c -o $(BUILD)/proc_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/proc_arm.c -o $(BUILD)/proc_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/proc_arm.elf $(BUILD)/proc_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1353,7 +1362,7 @@ calistir_proc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # Userspace ABI (pointer/veri geçişi + userspace hesap) çekirdek kanıtı. Faz F temeli.
 calistir_userspace_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-124 aarch64 userspace programı testi: userspace_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_arm.c -o $(BUILD)/userspace_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_arm.c -o $(BUILD)/userspace_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_arm.elf $(BUILD)/userspace_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1377,7 +1386,7 @@ calistir_userspace_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # parçası: userspace görevler preemptively multitask.
 calistir_preempt_el0_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-125 aarch64 preemptive EL0 testi: preempt_el0_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/preempt_el0_arm.c -o $(BUILD)/preempt_el0_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/preempt_el0_arm.c -o $(BUILD)/preempt_el0_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/preempt_el0_arm.elf $(BUILD)/preempt_el0_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1400,7 +1409,7 @@ calistir_preempt_el0_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # kernel→EL0 değer döndürme yolu (read/getpid/gettick ailesinin mekanizması).
 calistir_syscall_ret_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-126 aarch64 syscall dönüş değeri testi: syscall_ret_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/syscall_ret_arm.c -o $(BUILD)/syscall_ret_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/syscall_ret_arm.c -o $(BUILD)/syscall_ret_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/syscall_ret_arm.elf $(BUILD)/syscall_ret_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1423,7 +1432,7 @@ calistir_syscall_ret_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # TTBR-swap ile preemptively izole. Çapraz-bozulma yok → "A OK" + "B OK".
 calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-127 aarch64 çoklu EL0 süreç testi: multiproc_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/multiproc_arm.c -o $(BUILD)/multiproc_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/multiproc_arm.c -o $(BUILD)/multiproc_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/multiproc_arm.elf $(BUILD)/multiproc_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1446,7 +1455,7 @@ calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # üretici 1..10 + bayrak yazar, tüketici bayrağı bekleyip toplar → 55 → "USERSHM OK".
 calistir_userspace_shm_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "MİLESTONE B aarch64 paylaşımlı-bellek IPC testi: userspace_shm_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_shm_arm.c -o $(BUILD)/userspace_shm_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_shm_arm.c -o $(BUILD)/userspace_shm_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_shm_arm.elf $(BUILD)/userspace_shm_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1469,7 +1478,7 @@ calistir_userspace_shm_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # Syscall dönüş-değeri ABI (D-126) üstünde. t2>t1 + pid → "TICK OK pid=1".
 calistir_tick_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-128 aarch64 userspace introspection testi: tick_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/tick_arm.c -o $(BUILD)/tick_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/tick_arm.c -o $(BUILD)/tick_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/tick_arm.elf $(BUILD)/tick_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1822,7 +1831,7 @@ calistir_smp_sort_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
 calistir_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-129 aarch64 dinamik süreç (spawn) testi: spawn_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/spawn_arm.c -o $(BUILD)/spawn_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/spawn_arm.c -o $(BUILD)/spawn_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/spawn_arm.elf $(BUILD)/spawn_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1844,7 +1853,7 @@ calistir_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # launcher spawn(worker); worker exit; launcher join (durum yokla) → tam yaşam döngüsü.
 calistir_yasam_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-130 aarch64 süreç yaşam döngüsü testi: yasam_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/yasam_arm.c -o $(BUILD)/yasam_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/yasam_arm.c -o $(BUILD)/yasam_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/yasam_arm.elf $(BUILD)/yasam_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1867,7 +1876,7 @@ calistir_yasam_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # arası paylaşılan isimli depolama (Faz E ilk adım). 2-arg syscall (dosya_yaz).
 calistir_dosya_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-131 aarch64 RAM dosya sistemi testi: dosya_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/dosya_arm.c -o $(BUILD)/dosya_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/dosya_arm.c -o $(BUILD)/dosya_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/dosya_arm.elf $(BUILD)/dosya_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1890,7 +1899,7 @@ calistir_dosya_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # metni kendi tamponuna okur+basar → gerçek dosya içeriği + kernel↔user kopya.
 calistir_metin_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-132 aarch64 metin dosyası testi: metin_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/metin_arm.c -o $(BUILD)/metin_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/metin_arm.c -o $(BUILD)/metin_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/metin_arm.elf $(BUILD)/metin_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1912,7 +1921,7 @@ calistir_metin_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # launcher 2 dosya oluşturur + dosya_sayisi/dosya_ad ile listeler → "ls" primitifi.
 calistir_ls_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-133 aarch64 dosya listeleme (ls) testi: ls_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/ls_arm.c -o $(BUILD)/ls_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/ls_arm.c -o $(BUILD)/ls_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/ls_arm.elf $(BUILD)/ls_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1934,7 +1943,7 @@ calistir_ls_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # launcher 3 dosya oluşturur, "beta"yı siler, listeler → alfa+gama kalır (boşluk atlanir).
 calistir_sil_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-134 aarch64 dosya sil testi: sil_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/sil_arm.c -o $(BUILD)/sil_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/sil_arm.c -o $(BUILD)/sil_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/sil_arm.elf $(BUILD)/sil_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1957,7 +1966,7 @@ calistir_sil_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # yaz/oku/ls komutları → gerçek kabuk. Tüm yığın (süreç+EL0+syscall+FS) bir arada.
 calistir_kabuk_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-135 aarch64 kabuk (shell) testi: kabuk_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kabuk_arm.c -o $(BUILD)/kabuk_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kabuk_arm.c -o $(BUILD)/kabuk_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/kabuk_arm.elf $(BUILD)/kabuk_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -1979,7 +1988,7 @@ calistir_kabuk_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # launcher worker'ı çalıştırır; worker hesap yapıp dosyaya yazar; launcher sonucu okur.
 calistir_calis_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-137 aarch64 program çalıştırma iş akışı testi: calis_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/calis_arm.c -o $(BUILD)/calis_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/calis_arm.c -o $(BUILD)/calis_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/calis_arm.elf $(BUILD)/calis_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -2001,7 +2010,7 @@ calistir_calis_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # launcher 6 kez spawn+join (havuz=4'ten fazla); slotlar geri-alınırsa hepsi başarılı.
 calistir_geri_al_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-138 aarch64 kaynak geri-alma testi: geri_al_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/geri_al_arm.c -o $(BUILD)/geri_al_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/geri_al_arm.c -o $(BUILD)/geri_al_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/geri_al_arm.elf $(BUILD)/geri_al_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -2023,7 +2032,7 @@ calistir_geri_al_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # sender kanal_gonder(100/200/300); launcher kanal_al ile alıp toplar → 600.
 calistir_kanal_ipc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-140 aarch64 userspace mesaj kanalı testi: kanal_ipc_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kanal_ipc_arm.c -o $(BUILD)/kanal_ipc_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kanal_ipc_arm.c -o $(BUILD)/kanal_ipc_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/kanal_ipc_arm.elf $(BUILD)/kanal_ipc_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -2972,15 +2981,16 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 			-serial stdio -kernel $(BUILD)/kemgu_os_arm.elf > $(BUILD)/kemgu_os_arm.out 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kemgu_os_arm.out; echo "--- son ---"; \
 		if grep -q "KEMGU-OS OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "PAGEFAULT OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "UPTIME: timer canli" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
-			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS + DEPOLAMA + ZAMAN + RTC + kabuk (FS 'KEMGU' + 'DISK RW OK' + 'UPTIME' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta MMU-zorlama(PAGEFAULT OK) + net + FS + DEPOLAMA + ZAMAN + RTC + kabuk (MMU 'PAGEFAULT OK' + 'DISK RW OK' + 'UPTIME' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
 		else \
-			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'UPTIME: timer canli' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			echo "FAIL: 'KEMGU-OS OK' + 'PAGEFAULT OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'UPTIME: timer canli' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -4028,7 +4038,7 @@ calistir_turkce_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # EL0 süreç kernel-adresine yazdırmayı dener → guard RED (-1); user-tampon → OK.
 calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-150 aarch64 syscall güvenlik testi: guvenlik_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_arm.c -o $(BUILD)/guvenlik_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/guvenlik_arm.c -o $(BUILD)/guvenlik_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/guvenlik_arm.elf $(BUILD)/guvenlik_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4048,7 +4058,7 @@ calistir_guvenlik_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 
 calistir_guvenlik_oku_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-151 aarch64 syscall OKUMA-güvenlik testi: guvenlik_oku_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_oku_arm.c -o $(BUILD)/guvenlik_oku_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/guvenlik_oku_arm.c -o $(BUILD)/guvenlik_oku_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/guvenlik_oku_arm.elf $(BUILD)/guvenlik_oku_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4068,7 +4078,7 @@ calistir_guvenlik_oku_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 
 calistir_guvenlik_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-152 aarch64 spawn-entry güvenlik testi: guvenlik_spawn_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_spawn_arm.c -o $(BUILD)/guvenlik_spawn_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/guvenlik_spawn_arm.c -o $(BUILD)/guvenlik_spawn_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/guvenlik_spawn_arm.elf $(BUILD)/guvenlik_spawn_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4091,7 +4101,7 @@ calistir_guvenlik_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # clamp devrede ise dönen uzunluk <=63 + kernel sağ kalır → "KALICI GUARD OK".
 calistir_guvenlik_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
 	@echo "D-153 aarch64 kalıcı FS deserialize güvenlik testi: guvenlik_kalici_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_kalici_arm.c -o $(BUILD)/guvenlik_kalici_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/guvenlik_kalici_arm.c -o $(BUILD)/guvenlik_kalici_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/guvenlik_kalici_arm.elf $(BUILD)/guvenlik_kalici_arm.o $(BM_A64_OBJS)
 	@dd if=/dev/zero of=$(BUILD)/disk_guvenlik_kalici.img bs=512 count=64 2>/dev/null
@@ -4114,7 +4124,7 @@ calistir_guvenlik_kalici_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/
 
 calistir_guvenlik_bombardiman_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-154 aarch64 düşman-userspace BOMBARDIMAN testi: guvenlik_bombardiman_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/guvenlik_bombardiman_arm.c -o $(BUILD)/guvenlik_bombardiman_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/guvenlik_bombardiman_arm.c -o $(BUILD)/guvenlik_bombardiman_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/guvenlik_bombardiman_arm.elf $(BUILD)/guvenlik_bombardiman_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4138,7 +4148,7 @@ calistir_guvenlik_bombardiman_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # reddedilir (D-150/151 guard). Marker: "USERNET OK".
 calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-176 aarch64 userspace networking testi: userspace_net_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_net_arm.c -o $(BUILD)/userspace_net_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_net_arm.c -o $(BUILD)/userspace_net_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_net_arm.elf $(BUILD)/userspace_net_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4167,7 +4177,7 @@ calistir_userspace_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # sade QEMU (userspace_test_arm modeli). virtio* BM_A64_OBJS'te (dead-code, libc-temiz).
 calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "D-201 aarch64 userspace kooperatif fiber testi: userspace_fiber_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_fiber_arm.c -o $(BUILD)/userspace_fiber_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_fiber_arm.c -o $(BUILD)/userspace_fiber_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_fiber_arm.elf $(BUILD)/userspace_fiber_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4196,7 +4206,7 @@ calistir_userspace_fiber_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # (userspace_fiber_test_arm modeli). virtio* BM_A64_OBJS'te (dead-code, libc-temiz).
 calistir_userspace_jmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "MILESTONE-C aarch64 userspace setjmp/longjmp testi: userspace_jmp_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_jmp_arm.c -o $(BUILD)/userspace_jmp_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_jmp_arm.c -o $(BUILD)/userspace_jmp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_jmp_arm.elf $(BUILD)/userspace_jmp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4225,7 +4235,7 @@ calistir_userspace_jmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # net/drive YOK, sade QEMU (userspace_fiber_test_arm modeli). virtio* BM_A64_OBJS'te.
 calistir_userspace_sched_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "MILESTONE-B aarch64 userspace cok-fiber scheduler testi: userspace_sched_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_sched_arm.c -o $(BUILD)/userspace_sched_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_sched_arm.c -o $(BUILD)/userspace_sched_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_sched_arm.elf $(BUILD)/userspace_sched_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4252,7 +4262,7 @@ calistir_userspace_sched_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # modeli (kdl_el0_calistir, -smp yok). Kanıt: "USERMALLOC OK".
 calistir_userspace_malloc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "MILESTONE-B aarch64 userspace heap allocator testi: userspace_malloc_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_malloc_arm.c -o $(BUILD)/userspace_malloc_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_malloc_arm.c -o $(BUILD)/userspace_malloc_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_malloc_arm.elf $(BUILD)/userspace_malloc_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4280,7 +4290,7 @@ calistir_userspace_malloc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # virtio_net BM_A64_OBJS'te (explicit eklemeye gerek yok).
 calistir_userspace_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "aarch64 userspace DNS testi: userspace_dns_arm.c -> ELF (EL0 syscall ile tam DNS)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_dns_arm.c -o $(BUILD)/userspace_dns_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_dns_arm.c -o $(BUILD)/userspace_dns_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_dns_arm.elf $(BUILD)/userspace_dns_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4317,7 +4327,7 @@ calistir_userspace_dns_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # explicit dependency olarak eklendi.
 calistir_userspace_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
 	@echo "aarch64 userspace TCP handshake testi: userspace_tcp_arm.c -> ELF (EL0 syscall ile tam TCP el sikismasi)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_tcp_arm.c -o $(BUILD)/userspace_tcp_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_tcp_arm.c -o $(BUILD)/userspace_tcp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_tcp_arm.elf $(BUILD)/userspace_tcp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4354,7 +4364,7 @@ calistir_userspace_tcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm
 # virtio_net BM_A64_OBJS'te (explicit eklemeye gerek yok).
 calistir_userspace_dhcp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "aarch64 userspace DHCP testi: userspace_dhcp_arm.c -> ELF (EL0 syscall ile ag oto-konfig)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_dhcp_arm.c -o $(BUILD)/userspace_dhcp_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_dhcp_arm.c -o $(BUILD)/userspace_dhcp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_dhcp_arm.elf $(BUILD)/userspace_dhcp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4391,7 +4401,7 @@ calistir_userspace_tftp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "aarch64 userspace TFTP GET testi: userspace_tftp_arm.c -> ELF (EL0 syscall ile agdan dosya cekme)..."
 	@mkdir -p $(BUILD)/tftp
 	@printf 'KEMGU-TFTP-DATA' > $(BUILD)/tftp/dosya.txt
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_tftp_arm.c -o $(BUILD)/userspace_tftp_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_tftp_arm.c -o $(BUILD)/userspace_tftp_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_tftp_arm.elf $(BUILD)/userspace_tftp_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4423,7 +4433,7 @@ calistir_userspace_tftp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # NOT: virtio_net BM_A64_OBJS'te (D-176) — yine de explicit dependency olarak eklendi.
 calistir_userspace_ping_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
 	@echo "aarch64 userspace ICMP ping testi: userspace_ping_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_ping_arm.c -o $(BUILD)/userspace_ping_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_ping_arm.c -o $(BUILD)/userspace_ping_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_ping_arm.elf $(BUILD)/userspace_ping_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4459,7 +4469,7 @@ calistir_userspace_ping_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 # virtio_net BM_A64_OBJS'te — yine de explicit dependency olarak eklendi.
 calistir_userspace_http_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
 	@echo "aarch64 userspace HTTP GET testi: userspace_http_arm.c -> ELF (EL0 syscall ile tam HTTP istemcisi)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_http_arm.c -o $(BUILD)/userspace_http_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_http_arm.c -o $(BUILD)/userspace_http_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_http_arm.elf $(BUILD)/userspace_http_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
@@ -4498,7 +4508,7 @@ calistir_userspace_http_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 # virtio_net BM_A64_OBJS'te — yine de explicit dependency olarak eklendi.
 calistir_userspace_post_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
 	@echo "aarch64 userspace HTTP POST testi: userspace_post_arm.c -> ELF (EL0 syscall ile veri gonderme)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/userspace_post_arm.c -o $(BUILD)/userspace_post_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/userspace_post_arm.c -o $(BUILD)/userspace_post_arm.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
 		-o $(BUILD)/userspace_post_arm.elf $(BUILD)/userspace_post_arm.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \

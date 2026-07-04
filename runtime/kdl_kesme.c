@@ -31,7 +31,19 @@ int      kdl_gorev_durum(int pid);  /* görev pid bitti mi? — userspace join/w
 int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — userspace spawn (D-129) */
 #endif
 
-/* CPU istisnası — kurtarma yok. Parametreler mimari-spesifik:
+#if defined(__aarch64__)
+/* === PART 1(b) / C8c: KONTROLLÜ page-fault kurtarma (demand-paging temeli) ===
+ * kdl_fault_bekleniyor != 0 iken bir data-abort olursa, start_aarch64.S fault-yolu
+ * (kdl_exc_ortak) HALT ETMEZ; bunun yerine: FAR'ı kdl_fault_yakalanan'a yazar, bayrağı
+ * temizler, faulting instr'ı ATLAR (ELR+=4), frame restore + eret → OS DEVAM eder.
+ * Bu, "MMU gerçekten zorluyor (haritasız erişim fault eder) + kernel fault'u yönetip
+ * ilerliyor" kanıtını TEK boot'ta verir (izole demo değil). Bayrak yoksa → eski
+ * davranış (yazdır + halt). volatile: asm ile paylaşılan durum. */
+volatile uint64_t kdl_fault_bekleniyor = 0;
+volatile uint64_t kdl_fault_yakalanan = 0;
+#endif
+
+/* CPU istisnası — kurtarma yok (bayrak-kapalı yol). Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
  *   x86_64 : (vektör_no, hata_kodu, RIP) */
 __attribute__((noreturn))

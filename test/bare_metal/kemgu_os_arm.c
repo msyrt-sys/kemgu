@@ -64,6 +64,10 @@ extern void     kdl_kesme_kur(void);
 extern void     kdl_timer_baslat(void);
 extern uint64_t kdl_tik_al(void);
 
+/* PART 1(b) / C8c: kontrollü page-fault kurtarma (kdl_kesme.c + start_aarch64.S). */
+extern volatile uint64_t kdl_fault_bekleniyor;   /* 1 → sonraki data-abort kurtarılır */
+extern volatile uint64_t kdl_fault_yakalanan;    /* yakalanan FAR (fault adresi) */
+
 /* --- PL011 UART0 RX (recon_shell2_arm.c ile aynı harita) --- */
 #define KDL_PL011_BASE    0x09000000UL
 #define KDL_PL011_DR      0x00u
@@ -557,9 +561,29 @@ static void komut_calistir(char *satir) {
  * Gerçek OS init-script'i gibi: UART girişine BAĞLI DEĞİL (input-timing yarışı yok).
  * FS yaz->ls->oku round-trip + ağ ICMP/ARP — hepsi aynı koşan çekirdekte, birlikte.
  * (İnteraktif kabuk bundan SONRA gelir; init entegrasyon kanıtıdır.) */
+/* PART 1(b): MMU gerçekten ZORLUYOR mu? Haritalanmamış sayfaya (0x80000000 =
+ * L1[2], kdl_mmu'da geçersiz) KASITLI eriş → translation-fault. Fault handler
+ * (bayrak-kontrollü) FAR'ı yakalar, faulting instr'ı atlar, OS DEVAM eder. Bu,
+ * "MMU her-şeyi-map-etmiyor, gerçekten koruyor" + "kernel fault'u yönetip ilerliyor"
+ * kanıtı. Taklit edilemez: MMU zorlamıyorsa 0x80000000 okuması sessizce geçerdi. */
+static void mmu_zorlama_testi(void) {
+    kdl_fault_yakalanan = 0;
+    kdl_fault_bekleniyor = 1;
+    __asm__ volatile("dsb sy; isb");
+    volatile uint64_t v = *(volatile uint64_t *)(uintptr_t)0x80000000UL;  /* haritasız → fault */
+    (void)v;
+    __asm__ volatile("dsb sy; isb");
+    if (kdl_fault_bekleniyor == 0 && kdl_fault_yakalanan == 0x80000000UL)
+        kdl_yazdir_metin("PAGEFAULT OK (haritasiz 0x80000000 -> fault yakalandi+kurtarildi, FAR dogru)");
+    else
+        kdl_yazdir_metin("PAGEFAULT HATA (MMU zorlamiyor veya kurtarma calismadi)");
+}
+
 static void init_betik(void) {
     uint64_t t0 = kdl_tik_al();   /* uptime başlangıcı (timer IRQ canlı) */
     kdl_yazdir_metin("[init] betik: FS + ag entegrasyon sinamasi (deterministik)");
+    /* 0) MMU ZORLAMA: haritasız sayfa → fault yakalanır+kurtarılır (OS devam). */
+    mmu_zorlama_testi();
     /* 1) FS: yaz -> ls -> oku round-trip (proje=KEMGU + boot-seed surum). */
     komut_yaz("proje", "KEMGU");
     komut_ls();
