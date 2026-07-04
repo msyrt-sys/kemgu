@@ -5,6 +5,18 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-232 — OS: KEMGU-OS entegre çekirdek — DEPOLAMA alt-sistemi canlı (virtio-blk kalıcılık) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-231).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-231 entegre çekirdeğe
+SERİ genişleme (yeni izole demo DEĞİL — [[feedback-entegre-kernel-not-demolar]] kuralı): 4. canlı alt-sistem = DEPOLAMA.
+Boot'ta virtio-blk kurulur (kdl_virtio_blk_bul/kur) + diskteki kalıcı FS yüklenir (kdl_dosya_yukle/D-143). init betiği
+kaydet→yükle round-trip ile disk yaz+oku yolunu deterministik sınar ("proje" korundu). Yeni kabuk komutları: `kaydet`
+(RAM-FS→disk), `yukle` (disk→RAM-FS). sysinfo artık disk durumu gösterir. **Kanıt:** TEK boot'ta net + **disk (DISK RW
+OK: kaydet→yukle, proje korundu)** + FS + kabuk hepsi canlı → "KEMGU-OS OK". Gate `-drive` + dd disk.img (128 sektör),
+det. **Entegre çekirdek artık 4 canlı alt-sistem: ağ + depolama + FS + interaktif kabuk.** **Not:** Seri; ben yazdım.
+
 ## D-231 — OS: KEMGU-OS v0.1 — TEK ENTEGRE ÇEKİRDEK (izole demo → tek canlı OS) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-230).
