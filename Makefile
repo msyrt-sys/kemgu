@@ -2965,16 +2965,17 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "aarch64 KEMGU-OS v0.1 ENTEGRE cekirdek: kemgu_os_arm.c + kemgu_init_el0.c -> ELF (MMU+sched+userspace)..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kemgu_os_arm.c -o $(BUILD)/kemgu_os_arm.o
 	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kemgu_init_el0.c -o $(BUILD)/kemgu_init_el0.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kemgu_shell_el0.c -o $(BUILD)/kemgu_shell_el0.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BUILD)/kemgu_init_el0.o $(BM_A64_OBJS)
+		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BUILD)/kemgu_init_el0.o $(BUILD)/kemgu_shell_el0.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kemgu_os_arm.out; \
 		dd if=/dev/zero of=$(BUILD)/kemgu_os_disk.img bs=512 count=128 2>/dev/null; \
-		s='yardim\nyaz proje KEMGU\nls\noku surum\noku proje\nsysinfo\nkaydet\nping 2\narpscan\n'; \
+		s='yardim\necho MERHABA-EL0\nyaz canli EL0DATA\noku canli\nls\nsaat\ncik\n'; \
 		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
 			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
 		done; sleep 2; } \
-			| timeout 40 qemu-system-aarch64 \
+			| timeout 60 qemu-system-aarch64 \
 			-M virt -cpu cortex-a72 -display none \
 			-global virtio-mmio.force-legacy=false \
 			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
@@ -2986,6 +2987,8 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		   && grep -q "SCHEDULER OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "USERSPACE INIT EL0" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "IZOLASYON OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "SHELL EL0 OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "OKU: KABUK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \

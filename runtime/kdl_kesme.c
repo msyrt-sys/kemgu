@@ -453,6 +453,29 @@ uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
         uint64_t nb = kdl_virtio_net_bul();
         if (!nb) return (uint64_t)(int64_t)-1;
         return (uint64_t)(int64_t)kdl_virtio_net_al(nb, (uint8_t *)(uintptr_t)arg, (int)arg2, 2000000);
+    } else if (num == 26) {
+        /* PART 3(d) read_satir(buf=arg, max=arg2): EL0 shell için UART satır oku. Kernel
+         * (EL1) PL011 RX yapar (EL0 Device-MMIO erişemez!) + user-buffer'a kopyalar. Dönen
+         * = okunan byte (>=0) veya -1 (EOF). Bounded per-byte poll (deadlock-guard). GÜVENLİK:
+         * kernel user-buffer'a YAZAR → user-VA olmalı (D-150). */
+        if (arg2 == 0 || arg2 > 4096) return (uint64_t)(int64_t)-1;
+        if (!kdl_user_yaz_ptr_gecerli(arg, arg2)) return (uint64_t)(int64_t)-1;
+        char *ubuf = (char *)(uintptr_t)arg;
+        int umax = (int)arg2, un = 0;
+        for (;;) {
+            unsigned int geldi = 0;
+            for (uint64_t i = 0; i < 8000000UL; i++) {
+                if (!(*(volatile uint32_t *)(uintptr_t)(0x09000000UL + 0x18u) & (1u << 4))) { geldi = 1; break; }
+            }
+            if (!geldi) { ubuf[un] = 0; return (uint64_t)(int64_t)(un > 0 ? un : -1); }  /* EOF */
+            char c = (char)(*(volatile uint32_t *)(uintptr_t)(0x09000000UL + 0x00u) & 0xFFu);
+            if (c == '\n' || c == '\r') { ubuf[un] = 0; return (uint64_t)(int64_t)un; }
+            if (un < umax - 1) ubuf[un++] = c;
+        }
+    } else if (num == 27) {
+        /* PART 3(d) saat(): PL031 RTC Unix epoch saniye (EL0 shell 'saat' komutu için —
+         * EL0 Device-MMIO erişemez, kernel okur). */
+        return (uint64_t)(*(volatile uint32_t *)(uintptr_t)0x09010000UL);
     }
 #endif
     return 0;   /* dönüş değeri olmayan syscall'lar için 0 */

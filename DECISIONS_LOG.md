@@ -5,6 +5,27 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-238 — OS: KEMGU-OS PART 3(d) — SHELL EL0 PROCESS (interaktif kabuk userspace) — OS TESLİMATI TAM (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-237).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_shell_el0.c`; `test/bare_metal/kemgu_os_arm.c`; `runtime/kdl_kesme.c`;
+`Makefile`. SERİ.]** PART 3 proof(d) = "shell userspace PROCESS'e döner". İnteraktif kabuk EL1 kernel-fonksiyonundan
+EL0 userspace process'e TAŞINDI. `kemgu_shell_el0.c` (BM_A64_EL0/GPR-only, .user+.user_data) = AYRI-derlenen EL0 kabuk;
+kemgu_os_arm.c'nin EL1 kabuk-döngüsünün YERİNE geçer. **Yeni syscall'lar:** num=26 `read_satir` (kernel PL011 RX → user
+buffer; EL0 Device-MMIO ERİŞEMEZ), num=27 `saat` (PL031 RTC). Kabuk HER ŞEYİ syscall ile yapar: read_satir(26)/yaz(5-7)/
+FS(17-21)/RTC(27). Komut adları .user_data'da (EL0 okur; .rodata=AP=00 olsa fault, D-135/235). **PROOF(d):** kabuk sys(2)→
+"kaynak-EL=0x0" (kabuk GERÇEKTEN EL0) + "SHELL EL0 BASLADI (userspace process)" + gömülü dizi (yaz/oku/ls/saat) EL0'dan
+syscall'la işlenir ("OKU: KABUK" = EL0 FS round-trip) + canlı UART girişi + "SHELL EL0 OK". main(görev0) kabuğun exit'ini
+bekler (kdl_gorev_durum) → "KEMGU-OS OK". **BUG DÜZELTME:** kabuk exit=num=13 (kdl_gorev_bitir=görevi-öldür); num=3 kernel'i
+for(;;)-halt ederdi (D2 non-preempt) → main asla resume etmez + 3e9-spin flake. num=13 = görev ölü → main hızlı-detect.
+boot-tablo altında (TTBR-swap yok), user-yığın 0x42160000 (.user AP=01), FS tamponları .user_data (validator-izinli).
+**KALAN:** net recon (ping/scan/arpscan) EL0 kabuğa HENÜZ taşınmadı (EL1 komut kütüphanesi korundu, init_betik ping/arpscan
+kullanır) — EL0-net-frame port takip işi.
+**🎯 TÜM OS TESLİMATI TAM (uygulama→gerçek OS):** PART1 MMU(D-235) + PART2 preemptive-scheduler(D-236) + PART3 userspace
+[mekanizma(D-237) + **shell-EL0-process(D-238)**] = kemgu_os_arm.c TEK boot'ta, kümülatif, falsifiye-edilemez. Mehmet'in
+"OS = MMU+scheduler+userspace" tanımının ÜÇÜ DE canlı+entegre; kabuk artık userspace process. **Not:** Seri; ben yazdım.
+
 ## D-237 — OS: KEMGU-OS PART 3/3 — USERSPACE (EL0 program + syscall + izolasyon) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-236).

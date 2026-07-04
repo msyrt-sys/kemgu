@@ -84,6 +84,12 @@ extern volatile uint64_t kdl_izolasyon_ihlal_sayisi;                   /* EL0 iz
 extern volatile uint64_t kdl_el0_kill_aktif;                          /* 1 → EL0 izolasyon-fault=süreç-öldür */
 static unsigned char el0_kstack[8192] __attribute__((aligned(16)));    /* EL0 görev kernel-yığını */
 
+/* PART 3(d): INTERAKTİF KABUK = EL0 userspace process (kemgu_shell_el0.c). EL1 kabuk
+ * döngüsünün yerine geçer → kabuk EL0'da koşar, her şeyi syscall ile yapar. */
+extern void kemgu_el0_shell(void);                                     /* .user EL0 kabuk process */
+extern int  kdl_gorev_durum(int pid);                                  /* görev bitti mi (1=bitti) */
+static unsigned char shell_kstack[8192] __attribute__((aligned(16)));  /* EL0 kabuk kernel-yığını */
+
 /* İki ARKA-PLAN görevi — sonsuz busy-loop, KENDİ sayacını artırır, ASLA yield ETMEZ.
  * Sayaçların ilerlemesi YALNIZ timer-IRQ preemption ile mümkün (main de yield etmez).
  * Falsifiye-edilemez: preemption yoksa arka-plan görevleri HİÇ koşmaz → sayaç=0 kalır. */
@@ -527,7 +533,10 @@ static void komut_yardim(void) {
     kdl_yazdir_metin("KOMUTLAR: yardim sysinfo saat ls yaz oku sil kaydet yukle ping pingsweep scan arpscan");
 }
 
-/* UART RX'ten BIR SATIR CANLI oku. Dönüş: byte (>=0) veya -1 = EOF. */
+/* UART RX'ten BIR SATIR CANLI oku. Dönüş: byte (>=0) veya -1 = EOF.
+ * PART 3(d): interaktif kabuk EL0 process'e taşındı → bu EL1-input yolu ARTIK KULLANILMAZ
+ * (EL0 kabuk sys(26) read_satir kullanır). Referans olarak korunur. */
+__attribute__((unused))
 static int satir_oku(char *buf) {
     int n = 0;
     for (;;) {
@@ -542,7 +551,12 @@ static int satir_oku(char *buf) {
     }
 }
 
-/* Bir komut satırını çalıştır (entegre dağıtım: FS + recon). */
+/* Bir komut satırını çalıştır (EL1 komut kütüphanesi + recon dağıtımı).
+ * PART 3(d): interaktif kabuk EL0 process'e taşındı → bu EL1-dağıtım ARTIK KULLANILMAZ
+ * (EL0 kabuk komut_calistir'in EL0-syscall karşılığını yapar). Recon implementasyonları
+ * (ping/scan/arpscan/pingsweep) burada korunur — init_betik ping/arpscan kullanır; tamamı
+ * EL0 kabuğa taşıma (net-frame EL0'da) takip işi. */
+__attribute__((unused))
 static void komut_calistir(char *satir) {
     char *tok[3];
     int nt = tokenize(satir, tok);
@@ -724,21 +738,24 @@ int main(void) {
     /* --- DETERMİNİSTİK entegrasyon kanıtı (boot init betiği) --- */
     init_betik();
 
-    /* --- İnteraktif kabuk döngüsü (canlı UART RX, gerçek kullanım) ---
-     * Giriş varsa canlı komut işler; yoksa satir_oku bounded EOF ile döner. Gate
-     * PASS'ı init_betik'e dayanır → burası input-timing'e bağlı DEĞİL. */
-    kdl_yazdir_metin("[kabuk] interaktif kabuk (canli UART) — yardim = komut listesi");
-    char *satir = (char *)(uintptr_t)KDL_SATIR_BUF;
-    for (int k = 0; k < KDL_MAX_KOMUT; k++) {
-        kdl_yaz_metin("kemgu> ");
-        int r = satir_oku(satir);
-        if (r < 0) { kdl_yazdir_satir(); break; }   /* EOF: giriş bitti */
-        kdl_yaz_metin(satir);                        /* echo */
-        kdl_yazdir_satir();
-        komut_calistir(satir);
+    /* --- PART 3(d): İNTERAKTİF KABUK = EL0 USERSPACE PROCESS ---
+     * EL1 kabuk-döngüsünün YERİNE: kabuğu EL0 GÖREV olarak yükle. Kabuk artık kernel-içi
+     * fonksiyon DEĞİL — EL0'da koşar, her şeyi syscall ile yapar (sys 26 read_satir /
+     * 5-7 yaz / 17-21 FS / 27 RTC). main (görev 0) kabuğun bitmesini bekler (bounded,
+     * preempt edilir → kabuk + arka-plan görevler koşar). = proof(d): kernel init-process
+     * EL0'da shell'i koşturur. Kabuk user-yığını 0x42160000 (.user AP=01 sayfası). */
+    kdl_yazdir_metin("[kabuk] interaktif kabuk EL0 userspace-process olarak yukleniyor");
+    int shell_id = kdl_preempt_gorev_olustur_el0(kemgu_el0_shell,
+                                                 shell_kstack + sizeof(shell_kstack),
+                                                 (void *)(uintptr_t)0x42160000UL);
+    /* Kabuk (görev shell_id) exit edene kadar bekle. main spin-poll → timer-IRQ preempt →
+     * kabuk + arka-plan koşar. Kabuk sys(3) → kdl_gorev_durum=1 → main devam. Büyük
+     * deadlock-guard (normalde kabuk giriş-EOF'ta exit eder). */
+    for (volatile uint64_t w = 0; w < 3000000000UL; w++) {
+        if (shell_id < 0 || kdl_gorev_durum(shell_id)) break;
     }
 
-    kdl_yazdir_metin("KEMGU-OS OK");   /* entegre çekirdek kanıtı */
+    kdl_yazdir_metin("KEMGU-OS OK");   /* entegre çekirdek: MMU + scheduler + userspace(kabuk EL0) */
     dur();
     return 0;
 }
