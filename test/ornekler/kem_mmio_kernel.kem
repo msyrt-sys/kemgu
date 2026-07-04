@@ -1,0 +1,44 @@
+// KEMGU-OS Faz-1 keşif — Agent C: DOĞRUDAN MMIO donanım register okuma.
+// =====================================================================
+// SORU: .kem düşük-seviye donanım register okuyabilir mi?
+// CEVAP (bu dosya): EVET — mmio_oku32(yetki<MMIO>, adres) intrinsic'i ile.
+//
+// yetki<MMIO> = derleme-zamanı object-capability (donanım erişim ispatı).
+// mmio_oku32 → bare-metal'de volatile load'a iner (kdl_mmio_oku32).
+//
+// Bu çekirdek QEMU `virt` makinesinde VirtIO-MMIO slot 0'ın MagicValue
+// register'ını (0x0A000000, offset 0x000) GERÇEKTEN okur. Donanım bu
+// register'a sabit "virt" (LE = 0x74726976) döndürür. Değeri doğrular,
+// sonra ASCII marker + okunan ham değeri seri porta basar.
+//
+// Beklenen QEMU seri çıktı:
+//   KEM MMIO OK
+//   1953655158     (= 0x74726976 = "virt")
+
+sabit VIRTIO_TABAN: tam64     = 167772160;   // 0x0A000000 (QEMU virt slot 0)
+sabit VIRTIO_MAGIC_OFF: tam64 = 0;           // 0x000 MagicValue register offset
+sabit MAGIC_BEKLENEN: tam32   = 1953655158;  // 0x74726976 = "virt" (LE)
+sabit MMIO_OKU_YAZ: tam32     = 3;           // izin: OKU|YAZ
+
+işlev main() -> tam32 {
+    // Donanım erişim yetkisi üret (kaynak tipi 6 = MMIO, izin OKU|YAZ).
+    // Gerçek sürücüde bu yetki çekirdek/init tarafından sağlanır ve
+    // MMIO penceresiyle (taban+uzunluk) bölge-daraltılır.
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // GERÇEK REGISTER OKUMA — mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez).
+    // Bu satır bare-metal'de MagicValue register'ından volatile 32-bit load.
+    değişken magic: tam32 = mmio_oku32(y, VIRTIO_TABAN + VIRTIO_MAGIC_OFF);
+
+    geri_al(y);   // linear tüketim — capability iade edilir
+
+    // Okunan değeri donanım-beklenen ile doğrula.
+    eğer magic == MAGIC_BEKLENEN {
+        yazdir_metin("KEM MMIO OK");
+        yazdir_tam(magic);
+    } değilse {
+        yazdir_metin("KEM MMIO HATA");
+        yazdir_tam(magic);
+    }
+    ver 0;
+}

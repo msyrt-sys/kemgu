@@ -1,0 +1,12 @@
+// =====================================================================
+// kem_cekirdek_min.kem — EN MİNİMAL .kem bare-metal çekirdek (Faz-1 A)
+// ---------------------------------------------------------------------
+// ASIL SORU: .kem-yazılı bir şey gerçekten bare-metal boot ediyor mu?
+// Bu çekirdek TEK iş yapar: UART'a "KEM KERNEL OK" basar ve döner.
+// libc yok, heap yok, stack-yalnız. Kanıt = QEMU seri çıktısı.
+// =====================================================================
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM KERNEL OK");
+    ver 0;
+}

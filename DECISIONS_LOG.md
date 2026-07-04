@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-242 — OS: KEMGU-OS Faz-1 KEŞİF — .kem-yazılı bare-metal kernel MÜMKÜN (4/5 QEMU-boot) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-241).
+
+**Karar [ETKİ: `test/ornekler/kem_*.kem` (5 YENİ keşif dosyası). Yalnız test/örnek; Makefile-target YOK — entegrasyon
+Faz-2 seri iş.]** Mehmet: "6 paralel agent, her biri AYRI .kem, uydurulamaz QEMU-boot kanıtı — .kem bare-metal OS
+MÜMKÜN mü + parçaları keşfet." 6-agent Workflow (wf_3c22af1c-230). **CEVAP: .kem bare-metal MÜMKÜN — 4/5 kernel
+QEMU'da GERÇEKTEN boot etti (libc-temiz, hepsi bağımsız doğrulandı).**
+
+**BOOT EDEN (build/kem_*.out marker'ları doğrulandı):**
+- **A `kem_cekirdek_min.kem`** → "KEM KERNEL OK" — .kem bare-metal ÇEKİRDEK kanıtı (minimal boot+UART, stack-yalnız).
+- **B `kem_dizi_kernel.kem`** → "KEM DIZI OK"+55 — heap Dizi<tam32> (kdl_bare_heap region runtime + kapasite-aşımı
+  realloc/memcpy + D-069 sınır-kontrollü erişim) .kem'den bare-metal çalışıyor.
+- **C `kem_mmio_kernel.kem`** → "KEM MMIO OK"+1953655158 — `yetki<MMIO>` capability + `mmio_oku32` ile VirtIO-MMIO
+  MagicValue register'ı (0x0A000000) GERÇEKTEN okundu (=0x74726976 "virt"), linear `geri_al` ile tüketildi. .kem
+  düşük-seviye donanım erişimi capability-güvenli yapabiliyor.
+- **E `kem_hesap_kernel.kem`** → "KEM HESAP OK"+230+3+"KEM PM OK" — özyinelemeli faktoriyel(5)=120 + fib(10)=55 +
+  `iken` döngü(55)=230, `eşleş` pattern-match (literal 0/1/2 + joker), `eğer/değilse` zincir. Kontrol-akışı +
+  fonksiyon + pattern-match bare-metal aarch64'te SAĞLAM.
+
+**TAKILAN — TEK GERÇEK GAP (D `kem_asm_kernel.kem`, precisely-located):** `satıriçi_asm` (inline-asm) ARM64'te ifade
+EDİLEMİYOR. C-bootstrap satıriçi_asm'i AST+tip-kontrol+LLVM-lowering'de TAM destekler (`src/llvm.c:4848` doğru `call
+asm sideeffect` üretir) AMA hedef mimari `src/llvm.h:38` `#define KEMGU_HEDEF_MIMARI "x86_64"` **sabit-kodlu** (yorum:
+"Hedefe-duyarli triple secimi C8'in isi"). arm64-tag → AS001/0-satır-IR; x86_64-tag → IR çıkar ama aarch64 backend x86
+mnemonic reddeder. **Eksik: hedefe-duyarlı triple/mimari CLI seçimi (C8).** NOT: aarch64 bare-metal .kem inline-asm
+GEREKTİRMEZ (A/B/C/E asm'siz boot etti; düşük-seviye erişim MMIO intrinsic ile) → gap kritik-yol DEĞİL.
+
+**F FIXPOINT TEŞHİS — KRİTİK DÜZELTME:** codegen_bootstrap "KIRIK/79-84 fark" GERÇEK regresyonu DEĞİL, **PATH
+artefaktı.** İki-yönlü kanıt (aynı HEAD/exe): PATH=clang64/ucrt64-önce (CLAUDE.md standart) → **exit=0, FIXPOINT ✓,
+stage1==stage2 BİREBİR (32157 satır), lexer/parser/checker 84/84 birebir**; PATH=/c/msys64/usr/bin-önce →
+harness `mktemp` tmp-yazımı bozulur → stage.ll eksik → "84 fark" → exit=2. **D-235 "codegen_bootstrap pre-existing
+kırık" flag'i YANLIŞTI** (aynı artefakt; kemgu.exe bayat değil, hiçbir commit fixpoint'i kırmadı). `test_tumu` exit=2
+de yalnız bu — tüm birim testleri Basarisiz:0; doğru PATH ile test_tumu tam yeşil.
+
+**SONUÇ (Mehmet'in stratejik sorusu "pivot haftalar mı?"):** HAYIR — dil+codegen+runtime bare-metal için HAZIR
+(boot/heap/MMIO/kontrol-akışı/eşleş hepsi .kem'den çalışıyor). Faz-2 = SERİ entegrasyon (keşif kernel'lerini tek
+.kem-OS'e birleştir + Makefile-gate). **Reprodüksiyon:** `./build/kemgu.exe --llvm test/ornekler/kem_<X>.kem >
+build/<X>.ll` → `clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 -Wno-override-module -x ir ... -c` →
+`ld.lld -T linker/bare-metal-aarch64.ld ... $(BM_A64_OBJS)` (C: +bm_a64_mmio.o+bm_a64_yetki.o) → `qemu-system-aarch64
+-M virt -cpu cortex-a72`.
+
 ## D-241 — OS: KEMGU-OS — kabuktan ÇOKLU-PROCESS spawn (concurrent + kanal IPC) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-240).
