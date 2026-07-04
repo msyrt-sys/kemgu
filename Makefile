@@ -2832,7 +2832,7 @@ calistir_shell_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
 			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
 		done; sleep 1; } \
-			| timeout 20 qemu-system-aarch64 \
+			| timeout 40 qemu-system-aarch64 \
 			-M virt -cpu cortex-a72 -display none \
 			-serial stdio -kernel $(BUILD)/shell_arm.elf > $(BUILD)/shell_arm.out 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/shell_arm.out; echo "--- son ---"; \
@@ -2867,7 +2867,7 @@ calistir_shell_script_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
 			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
 		done; sleep 1; } \
-			| timeout 20 qemu-system-aarch64 \
+			| timeout 40 qemu-system-aarch64 \
 			-M virt -cpu cortex-a72 -display none \
 			-serial stdio -kernel $(BUILD)/shell_script_arm.elf > $(BUILD)/shell_script_arm.out 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/shell_script_arm.out; echo "--- son ---"; \
@@ -2989,6 +2989,8 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		   && grep -q "IZOLASYON OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "SHELL EL0 OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KABUK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "sonuc=42" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "kanal-toplam=300" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \

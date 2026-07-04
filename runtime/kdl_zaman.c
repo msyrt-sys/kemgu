@@ -21,9 +21,17 @@ void kdl_yazdir_satir(void);
 
 static volatile uint64_t kdl_tik_sayisi = 0;
 
+/* "TIMER OK tik=5" TEK-SEFERLİK tanılaması yalnız bağımsız C4 timer testinindir
+ * (calistir_timer_test_arm). Varsayılan AÇIK → o test yeşil kalır. Entegre çekirdek
+ * (kemgu_os_arm.c) bunu KAPATIR: preemption init_betik sırasında açık olduğundan
+ * timer-IRQ bağlamındaki bu konsol yazımı deterministik init çıktısını (ör. "PAGEFAULT
+ * OK") ORTASINDAN bölerdi. Üretim timer-tick'i konsola yazmamalı; entegre çekirdek
+ * timer-canlılığını "UPTIME: timer canli" + SCHEDULER OK sayaç-kanıtı ile ispatlar. */
+volatile int kdl_timer_diag_aktif = 1;
+
 static void kdl_tik(void) {
     kdl_tik_sayisi++;
-    if (kdl_tik_sayisi == 5) {
+    if (kdl_tik_sayisi == 5 && kdl_timer_diag_aktif) {
         kdl_yazdir_metin("TIMER OK tik=5");
         kdl_yazdir_satir();
     }
