@@ -2946,6 +2946,42 @@ calistir_recon_shell2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — ag-recon kabuk v2 testi atlandi."; \
 	fi
 
+# === KEMGU-OS v0.1 — TEK ENTEGRE ÇEKİRDEK (aarch64 canlı pentest-OS) ===
+# 100 izole demo yerine TEK çalışan çekirdek: boot -> canlı alt-sistem kurulumu
+# (virtio-net + RAM-FS) -> interaktif pentest kabuğu. Kabuk komut dizisi TEK boot'ta
+# canlı çalışır: FS yaz->ls->oku round-trip + ICMP ping + ARP tarama, hepsi aynı
+# koşan çekirdekte. Giriş -serial stdio + karakter-karakter PACE (D-188). Kanıt:
+# entegrasyon = FS round-trip (OKU: KEMGU) + net (PING: CANLI) + marker (KEMGU-OS OK).
+calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "aarch64 KEMGU-OS v0.1 ENTEGRE cekirdek: kemgu_os_arm.c -> ELF (net + FS + canli kabuk)..."
+	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kemgu_os_arm.c -o $(BUILD)/kemgu_os_arm.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
+		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BM_A64_OBJS)
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kemgu_os_arm.out; \
+		s='yardim\nyaz proje KEMGU\nls\noku surum\noku proje\nsysinfo\nping 2\narpscan\n'; \
+		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
+			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
+		done; sleep 2; } \
+			| timeout 40 qemu-system-aarch64 \
+			-M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial stdio -kernel $(BUILD)/kemgu_os_arm.elf > $(BUILD)/kemgu_os_arm.out 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kemgu_os_arm.out; echo "--- son ---"; \
+		if grep -q "KEMGU-OS OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS round-trip + kabuk (FS yaz->oku 'KEMGU' + ICMP 'PING: CANLI' + 'KEMGU-OS OK')."; \
+		else \
+			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — KEMGU-OS entegre cekirdek testi atlandi."; \
+	fi
+
 # === CMOS RTC testi (x86_64) — donanım gerçek-zaman saati (D-172 x86 paritesi) ===
 # PC uyumlu MC146818 CMOS RTC: port 0x70 (index) / 0x71 (data). BCD register'lar
 # (saniye/dakika/saat/gün/ay/yıl). UIP (Status A bit 7) beklenip tutarlı okunur.
@@ -4510,6 +4546,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_shell_test_arm calistir_shell_script_test_arm \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
+                     calistir_kemgu_os_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \

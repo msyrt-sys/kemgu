@@ -5,6 +5,22 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-231 — OS: KEMGU-OS v0.1 — TEK ENTEGRE ÇEKİRDEK (izole demo → tek canlı OS) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-230).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.] — FAZ DÖNÜŞÜ.**
+Mehmet düzeltti: KEMGU-OS TEK ENTEGRE bootable çekirdek olmalı, 100+ izole per-feature demo değil (`test/bare_metal/*.c`
+her biri kendi main()'i olan ayrı ELF idi; `runtime/` paylaşılıyordu ama boot→hepsi-canlı imaj YOKtu). **KEMGU-OS v0.1**
+= tek main() → boot → CANLI alt-sistem kurulumu (virtio-net + RAM-FS) → deterministik init betiği → interaktif pentest
+kabuğu. Demolar artık **kanıtlanmış-rutin KÜTÜPHANESİ** (buradan çekildi: recon_shell2/D-198 ARP/ICMP/TCP rutinleri +
+FS syscall 17-21 + PL011 canlı-RX/D-188). **10 kabuk komutu** (yardim/sysinfo/ls/yaz/oku/sil/ping/pingsweep/scan/arpscan)
+TEK koşan çekirdekte. **init betiği DETERMİNİSTİK** (UART input-timing yarışı YOK → gate PASS temeli); interaktif kabuk
+gerçek kullanım için (canlı komutlar da çalıştı — 8/8 komut yanıt verdi). **Kanıt:** TEK boot'ta → FS yaz→ls→oku
+round-trip ("OKU: KEMGU" + "OKU: KEMGU-OS-v0.1") + ağ ("PING: CANLI" + "ARPSCAN: 2 host") + interaktif kabuk → "KEMGU-OS
+OK", 2× det, sıfır uyarı. **Bundan sonra genişlemeler bu ÇEKİRDEĞE seri eklenir (yeni izole demo DEĞİL).** İlgili:
+[[feedback-entegre-kernel-not-demolar]]. **Not:** Seri (paylaşılan kabuk-çekirdek — paralelleştirilmez); ben yazdım.
+
 ## D-230 — OS: x86 kooperatif scheduler — yield tabanlı context-switch (2026-07-03) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-229).
