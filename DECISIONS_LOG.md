@@ -5,6 +5,19 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-233 — OS: KEMGU-OS entegre çekirdek — ZAMAN alt-sistemi canlı (timer IRQ + uptime, concurrent) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-232).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Entegre çekirdeğe
+5. canlı alt-sistem = ZAMAN (timer IRQ). Boot'ta kdl_kesme_kur (GIC) + kdl_timer_baslat (sanal timer, D-109) → timer IRQ
+CANLI; preempt guard'lı-kapalı (D-125/127) → IRQ yalnız tik sayar (görev-switch YOK, kabuğa müdahale etmez). **Kanıt =
+CONCURRENT background activity:** uptime kabuk çalışırken arka planda İLERLER — init betiğinde 8 tik, interaktif kabuk
+sysinfo'da 436 tik (timer IRQ kullanıcı komut yazarken sürüyor → gerçek eşzamanlı canlı çekirdek, statik yetenek değil).
+"UPTIME: timer canli (tik ilerledi)" deterministik (sayı değişken, mesaj sabit); sysinfo `uptime=Ntik` gösterir. TEK boot,
+sıfır uyarı, 2× det. **Entegre çekirdek artık 5 CANLI alt-sistem: ağ + depolama + FS + ZAMAN + interaktif kabuk.**
+**Not:** Seri; ben yazdım. Timer IRQ + net-busy-wait + SVC-syscall birlikte stabil (IRQ preempt-guard'lı → non-disruptive).
+
 ## D-232 — OS: KEMGU-OS entegre çekirdek — DEPOLAMA alt-sistemi canlı (virtio-blk kalıcılık) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-231).

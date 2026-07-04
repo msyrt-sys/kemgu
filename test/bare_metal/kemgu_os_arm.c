@@ -58,6 +58,12 @@ extern int      kdl_virtio_blk_kur(uint64_t base);
 extern int      kdl_dosya_kaydet(uint64_t base);   /* kdl_dosyalar -> blok 0-1 (magic KEMG) */
 extern int      kdl_dosya_yukle(uint64_t base);    /* blok 0-1 -> kdl_dosyalar (0=ok, -1=yok) */
 
+/* Zaman/kesme alt-sistemi (D-109 timer IRQ + D-128 tik). Preempt guard'lı-kapalı →
+ * timer IRQ yalnız tik sayar (görev switch YOK), kabuğa müdahale etmez. */
+extern void     kdl_kesme_kur(void);
+extern void     kdl_timer_baslat(void);
+extern uint64_t kdl_tik_al(void);
+
 /* --- PL011 UART0 RX (recon_shell2_arm.c ile aynı harita) --- */
 #define KDL_PL011_BASE    0x09000000UL
 #define KDL_PL011_DR      0x00u
@@ -458,6 +464,9 @@ static void komut_sysinfo(void) {
     kdl_yaz_tam((int32_t)(long)sys1(19, 0));       /* dosya sayısı */
     kdl_yaz_metin("dosya komut=");
     kdl_yaz_tam((int32_t)g_komut_sayaci);
+    kdl_yaz_metin(" uptime=");
+    kdl_yaz_tam((int32_t)kdl_tik_al());            /* canlı timer tik sayısı */
+    kdl_yaz_metin("tik");
     kdl_yazdir_satir();
 }
 
@@ -532,6 +541,7 @@ static void komut_calistir(char *satir) {
  * FS yaz->ls->oku round-trip + ağ ICMP/ARP — hepsi aynı koşan çekirdekte, birlikte.
  * (İnteraktif kabuk bundan SONRA gelir; init entegrasyon kanıtıdır.) */
 static void init_betik(void) {
+    uint64_t t0 = kdl_tik_al();   /* uptime başlangıcı (timer IRQ canlı) */
     kdl_yazdir_metin("[init] betik: FS + ag entegrasyon sinamasi (deterministik)");
     /* 1) FS: yaz -> ls -> oku round-trip (proje=KEMGU + boot-seed surum). */
     komut_yaz("proje", "KEMGU");
@@ -559,7 +569,10 @@ static void init_betik(void) {
         kdl_yaz_metin("ARPSCAN: "); kdl_yaz_tam((int32_t)host);
         kdl_yaz_metin(" host"); kdl_yazdir_satir();
     }
-    /* 4) Sistem durumu. */
+    /* 4) ZAMAN: uptime ilerledi mi? (timer IRQ arka planda çalışıyor → canlı çekirdek). */
+    if (kdl_tik_al() > t0) kdl_yazdir_metin("UPTIME: timer canli (tik ilerledi)");
+    else                   kdl_yazdir_metin("UPTIME: timer durdu");
+    /* 5) Sistem durumu. */
     komut_sysinfo();
     kdl_yazdir_metin("[init] betik bitti");
 }
@@ -594,6 +607,13 @@ int main(void) {
     /* Sürüm dosyasını yaz (kernel .rodata string'leri kdl_user_oku_str_gecerli izinli). */
     sys2(17, (uint64_t)(uintptr_t)"surum", (uint64_t)(uintptr_t)"KEMGU-OS-v0.1");
     kdl_yazdir_metin("[boot] fs: RAM-FS HAZIR (surum dosyasi tohumlandi)");
+
+    /* --- Alt-sistem 4: ZAMAN (timer IRQ + canlı uptime) --- */
+    /* GIC + sanal timer kur; preempt guard'lı-kapalı → IRQ yalnız tik sayar. Kabuk
+     * çalışırken arka planda uptime ilerler (canlı çekirdek kanıtı). */
+    kdl_kesme_kur();
+    kdl_timer_baslat();
+    kdl_yazdir_metin("[boot] zaman: timer IRQ HAZIR (uptime canli)");
     kdl_yazdir_metin("KEMGU-OS BASLA");
 
     /* --- DETERMİNİSTİK entegrasyon kanıtı (boot init betiği) --- */
