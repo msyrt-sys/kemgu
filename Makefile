@@ -855,6 +855,43 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — dizi kernel boot testi atlandi (pacman -S mingw-w64-clang-x86_64-qemu)."; \
 	fi
 
+# === Faz-2: TEK .kem-native bare-metal OS iskeleti (D-243) — A+B+C+E entegrasyonu ===
+# kem_os.kem: [1]BOOT + [2]heap Dizi + [3]MMIO(yetki<MMIO>) + [4]hesap(özyineleme/iken/eşleş)
+# DÖRT alt-sistem TEK .kem imajında, TEK boot'ta. C-yazılı kemgu_os_arm.c'nin .kem-native
+# ikizinin İSKELETİ (Faz-1 keşif kernel'leri A/B/C/E → seri entegrasyon). MMIO nedeniyle
+# link'e +bm_a64_mmio.o +bm_a64_yetki.o (D-148 virtio_selfhost deseni). Entegrasyon kanıtı:
+# dört alt-sistem de doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
+		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali):"
+	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|memcpy|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/kem_os.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kem_os.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_os.out; echo "--- son ---"; \
+		if grep -q "KEMGU KEM-OS OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[1\] BOOT OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[2\] HEAP DIZI OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-2 .kem-native OS iskeleti gecti: A+B+C+E DORT alt-sistem TEK .kem boot'ta (KEMGU KEM-OS OK)."; \
+		else \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..4] alt-sistem markerlari bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — .kem-OS iskelet testi atlandi."; \
+	fi
+
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
 # Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
 # kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
@@ -4569,6 +4606,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
+                     calistir_kem_os_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \

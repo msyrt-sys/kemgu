@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-243 — OS: KEMGU-OS Faz-2 SERİ ENTEGRASYON — tek .kem-native OS iskeleti (A⊕B⊕C⊕E) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-242).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (YENİ); `Makefile` (`calistir_kem_os_arm` target + OS-gate aggregate). Yalnız
+test/örnek.]** Faz-1 keşif kernel'leri (A/B/C/E — D-242) SERİ entegre edildi: **TEK `.kem` imajı, TEK boot, DÖRT
+alt-sistem canlı.** Bu, C-yazılı entegre çekirdeğin (`test/bare_metal/kemgu_os_arm.c`) **`.kem`-native ikizinin
+İSKELETİ.** Serial hand-work (mini-agent YOK), CLAUDE.md serial-kuralı.
+
+**`kem_os.kem` — dört alt-sistem TEK main'de:**
+- **[1] BOOT** — .kem bare-metal boot + UART banner ("=== KEMGU .kem-OS iskelet (Faz-2 A+B+C+E) ===" + "[1] BOOT OK").
+- **[2] HEAP** — `heap_dizi_topla()`: Dizi<tam32> (region runtime + kapasite-aşımı realloc + sınır-kontrol) → 55.
+- **[3] MMIO** — `mmio_magic_oku()`: `yetki<MMIO>` capability + `mmio_oku32` VirtIO MagicValue (0x0A000000) → 0x74726976, linear `geri_al`.
+- **[4] HESAP** — faktoriyel(5)+fib(10)+dongu_toplam(10)=230 (özyineleme+`iken`), `eşleş` pattern-match, `eğer/değilse`.
+
+**Entegrasyon kanıtı (uydurulamaz):** dört alt-sistem de doğru sonuç verirse (5/5 iç-kontrol: dt==55 ∧ magic==virt ∧
+h==230 ∧ kat==3 ∧ pm==300; `gecti` sayacı — 5-yollu `ve` yerine sayaç, codegen de-risk) TEK **"KEMGU KEM-OS OK"**
+marker'ı basılır. QEMU boot (ilk-deneme): `[1] BOOT OK / [2] HEAP DIZI OK / 55 / [3] MMIO OK / 1953655158 / [4] HESAP
+OK / 230 / 3 / KEMGU KEM-OS OK`. libc-temiz. **Gate:** `calistir_kem_os_arm` (build `./kemgu --llvm kem_os.kem` → clang
+-x ir → ld.lld +bm_a64_mmio.o+bm_a64_yetki.o+$(BM_A64_OBJS) → QEMU → "KEMGU KEM-OS OK" + [1..4] marker grep);
+OS-gate aggregate'e (`calistir_kemgu_os_arm`'ın yanına, .kem-native ikizi) eklendi.
+
+**Bu iskelet Faz-1'in KANITLANMIŞ syntax'larını birleştirdi (ilk-deneme boot).** Faz-2 devamı (seri): tek-marker OS'ten
+→ gerçek entegre çekirdek (kernel main döngüsü, alt-sistem init sırası, .kem-native UART/heap/MMIO sürücü katmanı).
+İlgili: [[project-os-faz1-kem-baremetal]], [[project-os-c1-region-backing-track]].
+
 ## D-242 — OS: KEMGU-OS Faz-1 KEŞİF — .kem-yazılı bare-metal kernel MÜMKÜN (4/5 QEMU-boot) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-241).
