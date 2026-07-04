@@ -72,6 +72,9 @@ extern uint64_t kdl_tik_al(void);
 #define KDL_PL011_FR_RXFE (1u << 4)
 #define KDL_PL011_LCRH_FEN (1u << 4)
 
+/* PL031 RTC (QEMU virt donanım gerçek-zaman saati, D-172). DR = Unix epoch saniye. */
+#define KDL_PL031_DR   0x09010000UL
+
 #define KDL_RX_BAYT_SINIR  8000000UL
 #define KDL_MAX_KOMUT      16                  /* entegre kabuk: daha çok komut dizisi */
 
@@ -442,6 +445,18 @@ static int g_disk_hazir = 0;
 static uint64_t g_blk_base = 0;
 static int g_komut_sayaci = 0;
 
+/* saat: PL031 donanım RTC'sini oku (Unix epoch saniye). Makul (>1.5e9) ise canlı. */
+static uint32_t rtc_oku(void) {
+    return *(volatile uint32_t *)(uintptr_t)KDL_PL031_DR;
+}
+static void komut_saat(void) {
+    uint32_t t = rtc_oku();
+    kdl_yaz_metin("SAAT: ");
+    kdl_yaz_tam((int32_t)t);
+    kdl_yaz_metin(" (unix saniye) ");
+    kdl_yazdir_metin(t > 1500000000u ? "RTC OK" : "RTC SUPHELI");
+}
+
 /* kaydet: RAM-FS'i diske yaz (kalıcılık). */
 static void komut_kaydet(void) {
     if (!g_disk_hazir) { kdl_yazdir_metin("DISK: yok"); return; }
@@ -471,7 +486,7 @@ static void komut_sysinfo(void) {
 }
 
 static void komut_yardim(void) {
-    kdl_yazdir_metin("KOMUTLAR: yardim sysinfo ls yaz oku sil kaydet yukle ping pingsweep scan arpscan");
+    kdl_yazdir_metin("KOMUTLAR: yardim sysinfo saat ls yaz oku sil kaydet yukle ping pingsweep scan arpscan");
 }
 
 /* UART RX'ten BIR SATIR CANLI oku. Dönüş: byte (>=0) veya -1 = EOF. */
@@ -515,6 +530,8 @@ static void komut_calistir(char *satir) {
         komut_kaydet();
     } else if (str_esit(tok[0], "yukle")) {
         komut_yukle();
+    } else if (str_esit(tok[0], "saat")) {
+        komut_saat();
     } else if (str_esit(tok[0], "ping")) {
         int oktet = (nt >= 2) ? str_to_int(tok[1]) : 2;
         if (oktet <= 0 || oktet > 255) oktet = 2;
@@ -572,7 +589,9 @@ static void init_betik(void) {
     /* 4) ZAMAN: uptime ilerledi mi? (timer IRQ arka planda çalışıyor → canlı çekirdek). */
     if (kdl_tik_al() > t0) kdl_yazdir_metin("UPTIME: timer canli (tik ilerledi)");
     else                   kdl_yazdir_metin("UPTIME: timer durdu");
-    /* 5) Sistem durumu. */
+    /* 5) SAAT: donanım RTC (gerçek-zaman saati). */
+    komut_saat();
+    /* 6) Sistem durumu. */
     komut_sysinfo();
     kdl_yazdir_metin("[init] betik bitti");
 }

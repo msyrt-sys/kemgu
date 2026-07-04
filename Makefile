@@ -2976,10 +2976,11 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "UPTIME: timer canli" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
-			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS + DEPOLAMA + ZAMAN + kabuk (FS 'KEMGU' + 'DISK RW OK' + 'UPTIME timer canli' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta canli net + FS + DEPOLAMA + ZAMAN + RTC + kabuk (FS 'KEMGU' + 'DISK RW OK' + 'UPTIME' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
 		else \
-			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'UPTIME: timer canli' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			echo "FAIL: 'KEMGU-OS OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'UPTIME: timer canli' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
 			exit 1; \
 		fi; \
 	else \
