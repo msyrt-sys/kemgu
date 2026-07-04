@@ -45,7 +45,7 @@ __attribute__((section(".user_data"))) static char CMD_SAAT[]   = "saat";
 __attribute__((section(".user_data"))) static char CMD_CIK[]    = "cik";
 /* Gömülü deterministik komut dizisi (gate kanıtı — canlı girişe bağlı DEĞİL). */
 __attribute__((section(".user_data"))) static char INIT_BETIK[] =
-    "yaz nesne KABUK\noku nesne\nls\nsaat\nping 2\narpscan\n";
+    "yaz nesne KABUK\noku nesne\nls\nsaat\nping 2\narpscan\ncalistir hesap\ncoklu\n";
 /* Kabuk tamponları — .user_data (0x42000000 sayfası, EL0-erişimli + FS-validator izinli). */
 __attribute__((section(".user_data"))) static char satir_buf[256];
 __attribute__((section(".user_data"))) static char cikti_buf[128];
@@ -54,6 +54,11 @@ __attribute__((section(".user_data"))) static char cikti_buf[128];
 __attribute__((section(".user_data"))) static char CMD_PING[]    = "ping";
 __attribute__((section(".user_data"))) static char CMD_ARPSCAN[] = "arpscan";
 __attribute__((section(".user_data"))) static char CMD_SCAN[]    = "scan";
+__attribute__((section(".user_data"))) static char CMD_CALISTIR[] = "calistir";
+__attribute__((section(".user_data"))) static char CMD_COKLU[]   = "coklu";
+__attribute__((section(".user_data"))) static char PROG_HESAP[]  = "hesap";
+__attribute__((section(".user_data"))) static char PROG_SELAM[]  = "selam";
+__attribute__((section(".user_data"))) static char FILE_SONUC[]  = "sonuc";
 __attribute__((section(".user_data"))) static unsigned char tx_frame[256];
 __attribute__((section(".user_data"))) static unsigned char rx_frame[256];
 __attribute__((section(".user_data"))) static unsigned char BIZIM_MAC[6]   = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
@@ -245,6 +250,37 @@ static void u_scan(int oktet) {
     u_sys(7, 0);
 }
 
+/* --- SPAWN edilebilir userspace PROGRAMLAR (.user, EL0) ---
+ * Kabuk bunları sys(12)=spawn ile AYRI EL0 PROCESS olarak başlatır. Her biri kendi
+ * süreç adres-uzayında (kdl_surec_spawn) EL0'da koşar, syscall ile iş yapar, exit eder.
+ * Bu = gerçek OS spawn/exec: bir userspace program başka bir userspace programı çalıştırır. */
+__attribute__((section(".user"), noinline))
+static void prog_hesap(void) {
+    int t = 6 * 7;                                                       /* = 42 (hesap) */
+    u_sys2(15, (unsigned long)(uintptr_t)FILE_SONUC, (unsigned long)t);  /* dosya_yaz(sonuc=42) — IPC */
+    u_sys(5, (unsigned long)(uintptr_t)"[prog hesap] 6*7=42 -> sonuc dosyasi"); u_sys(7, 0);
+    u_sys(13, 0);                                                        /* exit (görev-öldür) */
+    for (;;) { }
+}
+__attribute__((section(".user"), noinline))
+static void prog_selam(void) {
+    u_sys(5, (unsigned long)(uintptr_t)"[prog selam] merhaba, ben ayri bir userspace process"); u_sys(7, 0);
+    u_sys(13, 0);
+    for (;;) { }
+}
+/* Üretici program — 'coklu' ile EŞZAMANLI çok-kopya spawn edilir. Her kopya getpid ile
+ * kendi kimliğini alır (ayrı process kanıtı) + paylaşımlı kanala SABİT 100 yazar (IPC,
+ * sys 22=kanal_gonder) + exit. Kabuk hepsini join edip kanaldan toplar (det: N*100). */
+__attribute__((section(".user"), noinline))
+static void prog_uretici(void) {
+    unsigned long pid = u_sys(11, 0);            /* getpid — ayrı process kimliği */
+    u_sys(5, (unsigned long)(uintptr_t)"[prog uretici] pid="); u_sys(6, pid);
+    u_sys(5, (unsigned long)(uintptr_t)" kanala 100 yaziyor"); u_sys(7, 0);
+    u_sys(22, 100);                              /* kanal_gonder(100) — paylaşımlı IPC */
+    u_sys(13, 0);                                /* exit */
+    for (;;) { }
+}
+
 /* Bir komut satırını EL0'dan syscall'larla çalıştır. */
 __attribute__((section(".user"), noinline))
 static void komut_calistir(char *satir) {
@@ -252,7 +288,7 @@ static void komut_calistir(char *satir) {
     int nt = tokenize(satir, tok);
     if (nt == 0) return;
     if (str_esit(tok[0], CMD_YARDIM)) {
-        u_sys(5, (unsigned long)(uintptr_t)"KOMUTLAR: yardim echo ls yaz oku sil saat ping arpscan scan cik"); u_sys(7, 0);
+        u_sys(5, (unsigned long)(uintptr_t)"KOMUTLAR: yardim echo ls yaz oku sil saat ping arpscan scan calistir coklu cik"); u_sys(7, 0);
     } else if (str_esit(tok[0], CMD_ECHO)) {
         if (nt >= 2) { u_sys(5, (unsigned long)(uintptr_t)tok[1]); u_sys(7, 0); }
     } else if (str_esit(tok[0], CMD_LS)) {
@@ -292,6 +328,55 @@ static void komut_calistir(char *satir) {
         int oktet = (nt >= 2) ? u_str_to_int(tok[1]) : 2;
         if (oktet <= 0 || oktet > 255) oktet = 2;
         u_scan(oktet);
+    } else if (str_esit(tok[0], CMD_CALISTIR) && nt >= 2) {
+        /* calistir <program> — SPAWN/EXEC: kabuk (EL0 process) sys(12) ile AYRI userspace
+         * program başlatır → sys(14) join → sonucu (IPC dosyası) okur. Gerçek OS spawn/exec. */
+        void (*prog)(void) = 0;
+        if (str_esit(tok[1], PROG_HESAP)) prog = prog_hesap;
+        else if (str_esit(tok[1], PROG_SELAM)) prog = prog_selam;
+        if (!prog) { u_sys(5, (unsigned long)(uintptr_t)"CALISTIR: bilinmeyen program"); u_sys(7, 0); }
+        else {
+            u_sys(5, (unsigned long)(uintptr_t)"CALISTIR spawn: "); u_sys(5, (unsigned long)(uintptr_t)tok[1]); u_sys(7, 0);
+            long pid = (long)u_sys(12, (unsigned long)(uintptr_t)prog);        /* spawn → pid */
+            if (pid < 0) { u_sys(5, (unsigned long)(uintptr_t)"SPAWN HATA"); u_sys(7, 0); }
+            else {
+                for (int w = 0; w < 60000000 && !u_sys(14, (unsigned long)pid); w++) { }  /* join (bounded) */
+                if (str_esit(tok[1], PROG_HESAP)) {                            /* hesap → sonuç dosyası oku (IPC) */
+                    long r = (long)u_sys(16, (unsigned long)(uintptr_t)FILE_SONUC);
+                    u_sys(5, (unsigned long)(uintptr_t)"CALISTIR bitti (pid="); u_sys(6, (unsigned long)pid);
+                    u_sys(5, (unsigned long)(uintptr_t)") sonuc="); u_sys(6, (unsigned long)r); u_sys(7, 0);
+                } else {
+                    u_sys(5, (unsigned long)(uintptr_t)"CALISTIR bitti (pid="); u_sys(6, (unsigned long)pid);
+                    u_sys(5, (unsigned long)(uintptr_t)")"); u_sys(7, 0);
+                }
+            }
+        }
+    } else if (str_esit(tok[0], CMD_COKLU)) {
+        /* coklu — 3 userspace worker'ı EŞZAMANLI spawn et (concurrent multi-process).
+         * Hepsi kendi pid'iyle koşar + paylaşımlı kanala 100 yazar (IPC). Kabuk hepsini
+         * join eder + kanaldan toplar → 3*100=300 (det). = çoklu-process yönetimi. */
+        long pids[3]; int spawn_ok = 0;
+        for (int i = 0; i < 3; i++) {
+            pids[i] = (long)u_sys(12, (unsigned long)(uintptr_t)prog_uretici);   /* spawn */
+            if (pids[i] >= 0) {
+                spawn_ok++;
+                u_sys(5, (unsigned long)(uintptr_t)"COKLU spawn pid="); u_sys(6, (unsigned long)pids[i]); u_sys(7, 0);
+            }
+        }
+        for (int i = 0; i < 3; i++) {                                            /* hepsini join */
+            if (pids[i] < 0) continue;
+            for (int w = 0; w < 60000000 && !u_sys(14, (unsigned long)pids[i]); w++) { }
+        }
+        int toplam = 0, alindi = 0;                                              /* kanaldan topla (IPC) */
+        for (int i = 0; i < 8; i++) {
+            long v = (long)u_sys(23, 0);                                         /* kanal_al (-1=boş) */
+            if (v < 0) break;
+            toplam += (int)v; alindi++;
+        }
+        u_sys(5, (unsigned long)(uintptr_t)"COKLU BITTI: ");
+        u_sys(6, (unsigned long)spawn_ok); u_sys(5, (unsigned long)(uintptr_t)" process, kanal-toplam=");
+        u_sys(6, (unsigned long)toplam); u_sys(5, (unsigned long)(uintptr_t)" ("); u_sys(6, (unsigned long)alindi);
+        u_sys(5, (unsigned long)(uintptr_t)" mesaj)"); u_sys(7, 0);
     } else {
         u_sys(5, (unsigned long)(uintptr_t)"? (yardim)"); u_sys(7, 0);
     }

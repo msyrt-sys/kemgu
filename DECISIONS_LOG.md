@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-241 — OS: KEMGU-OS — kabuktan ÇOKLU-PROCESS spawn (concurrent + kanal IPC) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-240).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`; `Makefile`. Yalnız test.]** EL0 kabuğa `coklu` komutu: kabuk 3
+userspace worker'ı EŞZAMANLI spawn eder (concurrent multi-process). `prog_uretici` (.user, EL0): getpid (sys 11 — ayrı
+process kimliği) + kanal_gonder(100) (sys 22 — paylaşımlı IPC) + exit. `coklu`: 3× spawn(sys 12)→pid + hepsini join
+(sys 14) + kanaldan topla (sys 23 kanal_al) + rapor. **Kanıt:** "COKLU spawn pid=4/5/6" (3 AYRI process) +
+"[prog uretici] pid=4/5/6 kanala 100 yaziyor" (3 CONCURRENT EL0 process, her biri KENDİ pid'iyle, kendi süreç
+adres-uzayında) + **"COKLU BITTI: 3 process, kanal-toplam=300 (3 mesaj)"** (kabuk hepsini join etti + paylaşımlı
+kanaldan 3 mesaj [3×100=300] topladı). = GERÇEK çoklu-process OS: bir userspace program BİRDEN ÇOK eşzamanlı userspace
+process YÖNETİR + kanal(IPC) ile toplar. Slot-reuse (D-138) ölü init+calistir slotlarını geri kullandı (pid 4/5/6;
+KDL_MAX_GOREV=8). **Userspace process modeli TAM:** kabuk → tek-program(calistir/D-240) + çoklu-eşzamanlı-program(coklu)
++ join + kanal-IPC. Full gate gecti, sıfır uyarı/regresyon. **Not:** Seri; ben yazdım.
+
+**Ek düzeltme 1 — TIMER-IRQ/init ÇIKTI-ÇAKIŞMASI (pre-existing race, gate-verify sırasında bulundu) [ETKİ:
+`runtime/kdl_zaman.c`; `test/bare_metal/kemgu_os_arm.c`]:** Entegre çekirdekte preemption `init_betik()` boyunca AÇIK.
+`kdl_zaman.c` `kdl_tik()` tek-seferlik "TIMER OK tik=5" tanılamasını TIMER-IRQ bağlamından konsola yazıyordu → main'in
+deterministik "PAGEFAULT OK" yazımını ORTASINDAN böldü ("PAG"+"TIMER OK tik=5"+"EFAULT OK") → gate grep FAIL. Bu D-241'e
+BAĞLI DEĞİL (tik-5 vs init, coklu çok sonra kabukta); latent race yalnız bu koşuda tetiklendi. **Düzeltme:** `volatile int
+kdl_timer_diag_aktif=1` (varsayılan AÇIK → bağımsız `calistir_timer_test_arm` yeşil kalır); entegre çekirdek preemption'dan
+ÖNCE `=0` set eder (üretim timer-tick'i konsola yazmaz; timer-canlılık zaten UPTIME + SCHEDULER OK sayaç-kanıtı ile ispatlı).
+Kanıt: kemgu_os_arm 5/5 tekrar-koşu deterministik ("PAGEFAULT OK" bütün, sıfır çakışma-artığı); timer_test hâlâ "TIMER OK".
+**Ek düzeltme 2 — interaktif kabuk demo yük-duyarlı flake [ETKİ: `Makefile`]:** `calistir_shell_test_arm` +
+`calistir_shell_script_test_arm` (char-paced stdio UART-RX) full-gate yükü altında QEMU yavaşlayınca bounded-RX-spin'i
+`timeout 20`'de bitiremiyor → son komut düşer, "SHELL OK" yazılmaz (standalone geçer). `timeout 20→40` (recon-shell'lerin
+`30`/entegre çekirdeğin `60` yük-marjıyla aynı sınıf). D-155 net-test yük-dersinin ikizi.
+
+## D-240 — OS: KEMGU-OS — kabuktan SPAWN/EXEC (userspace program başlatma + join + IPC) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-239).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`; `Makefile`. Yalnız test.]** EL0 kabuğa `calistir <program>` komutu:
+kabuk (bir userspace PROCESS) sys(12)=spawn ile BAŞKA bir userspace programı AYRI PROCESS olarak başlatır. Gömülü
+spawnable programlar (.user, EL0): `prog_hesap` (6*7=42 → dosya_yaz(sonuc) IPC → exit), `prog_selam` (yaz → exit).
+`calistir`: spawn(sys 12)→pid + join(sys 14, bounded)→bekle + sonuç(sys 16 dosya_oku, IPC)→oku + rapor. **Kanıt:**
+"el0$ calistir hesap" → "CALISTIR spawn: hesap" + **"[prog hesap] 6*7=42 -> sonuc dosyasi"** (SPAWN edilen program
+kendi EL0 süreç adres-uzayında koştu) + **"CALISTIR bitti (pid=4) sonuc=42"** (kabuk join etti + IPC dosyasından sonuç=42
+okudu). = GERÇEK OS **spawn/exec/wait**: userspace program başka userspace programı başlatır, o kendi izole süreç
+adres-uzayında (kdl_surec_spawn TTBR-swap) EL0'da koşar, IPC(dosya) ile haberleşir. D-137 (calis_arm launcher/worker)
+deseni entegre kabuğa taşındı — AMA başlatan artık EL0 KABUK (kernel main DEĞİL). **TTBR-swap** (spawned process own
+address-space) entegre çekirdekte çalıştı (shell/main L2[16] identity, worker L2[17]→per-proc veri_pa). Full gate 123
+gecti, sıfır uyarı/regresyon. **Not:** Seri; ben yazdım.
+
 ## D-239 — OS: KEMGU-OS — net-recon EL0 kabuğa taşındı (pentest shell = TAM userspace process) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-238).

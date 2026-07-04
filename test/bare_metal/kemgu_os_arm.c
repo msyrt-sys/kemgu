@@ -74,6 +74,7 @@ extern volatile uint64_t kdl_fault_yakalanan;    /* yakalanan FAR (fault adresi)
 extern void kdl_preempt_baslat(void);                                  /* main = görev 0 */
 extern int  kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe);
 extern void kdl_preempt_ac(void);                                      /* preemption AÇ */
+extern volatile int kdl_timer_diag_aktif;   /* 0 → timer-IRQ "TIMER OK tik=5" yazma (init çıktısını bölmez) */
 
 /* PART 3: AYRI-derlenen EL0 userspace init programı (kemgu_init_el0.c, .user section
  * 0x42000000 AP=01, boot tablo altında EL0'da koşar) + preemptive EL0 görev kurucu. */
@@ -730,6 +731,11 @@ int main(void) {
     kdl_preempt_gorev_olustur_el0(kemgu_el0_init, el0_kstack + sizeof(el0_kstack),
                                   (void *)(uintptr_t)0x42180000UL);
     kdl_kesme_kur();
+    /* Timer-IRQ'nun tek-seferlik "TIMER OK tik=5" tanılamasını KAPAT: preemption
+     * init_betik boyunca açık; o konsol-yazımı deterministik init çıktısını (PAGEFAULT
+     * OK vb.) IRQ bağlamından ortasından bölerdi. Timer-canlılık zaten UPTIME + SCHEDULER
+     * OK ile kanıtlanır. (Üretim timer-tick'i konsola yazmaz.) */
+    kdl_timer_diag_aktif = 0;
     kdl_timer_baslat();
     kdl_preempt_ac();                                                   /* preemption AÇ */
     kdl_yazdir_metin("[boot] scheduler: preemptive HAZIR (main=gorev0 + 2 arka-plan + EL0-init)");
