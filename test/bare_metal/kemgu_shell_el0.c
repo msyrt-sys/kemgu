@@ -45,10 +45,20 @@ __attribute__((section(".user_data"))) static char CMD_SAAT[]   = "saat";
 __attribute__((section(".user_data"))) static char CMD_CIK[]    = "cik";
 /* Gömülü deterministik komut dizisi (gate kanıtı — canlı girişe bağlı DEĞİL). */
 __attribute__((section(".user_data"))) static char INIT_BETIK[] =
-    "yaz nesne KABUK\noku nesne\nls\nsaat\n";
+    "yaz nesne KABUK\noku nesne\nls\nsaat\nping 2\narpscan\n";
 /* Kabuk tamponları — .user_data (0x42000000 sayfası, EL0-erişimli + FS-validator izinli). */
 __attribute__((section(".user_data"))) static char satir_buf[256];
 __attribute__((section(".user_data"))) static char cikti_buf[128];
+/* Net recon komut adları + TX/RX çerçeve tamponları (.user_data, EL0-erişimli +
+ * net-syscall validator [0x42000000,0x42400000) izinli). */
+__attribute__((section(".user_data"))) static char CMD_PING[]    = "ping";
+__attribute__((section(".user_data"))) static char CMD_ARPSCAN[] = "arpscan";
+__attribute__((section(".user_data"))) static char CMD_SCAN[]    = "scan";
+__attribute__((section(".user_data"))) static unsigned char tx_frame[256];
+__attribute__((section(".user_data"))) static unsigned char rx_frame[256];
+__attribute__((section(".user_data"))) static unsigned char BIZIM_MAC[6]   = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
+__attribute__((section(".user_data"))) static unsigned char SLIRP_GW_MAC[6] = { 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
+__attribute__((section(".user_data"))) static unsigned char BIZIM_IP[4]     = { 10, 0, 2, 15 };
 
 __attribute__((section(".user"), noinline))
 static int str_esit(const char *a, const char *b) {
@@ -68,6 +78,173 @@ static int tokenize(char *satir, char **tok) {
     return nt;
 }
 
+/* --- NET RECON (EL0'DAN, sys2(24)=net_gonder / sys2(25)=net_al ile) ---
+ * Tüm çerçeve-kurma EL0'da, .user_data tamponlarında (net-syscall validator izinli).
+ * userspace_net_arm.c/D-176 deseni: EL0 süreç virtio-net'e DOKUNMADAN syscall ile ağ yapar. */
+__attribute__((section(".user"), noinline))
+static int u_str_to_int(const char *s) {
+    int v = 0;
+    while (*s >= '0' && *s <= '9') { v = v * 10 + (*s - '0'); s++; }
+    return v;
+}
+__attribute__((section(".user"), noinline))
+static unsigned int u_ip_checksum(const unsigned char *veri, int uzun) {
+    unsigned int t = 0;
+    for (int i = 0; i + 1 < uzun; i += 2) t += ((unsigned int)veri[i] << 8) | veri[i + 1];
+    if (uzun & 1) t += (unsigned int)veri[uzun - 1] << 8;
+    while (t >> 16) t = (t & 0xffff) + (t >> 16);
+    return (~t) & 0xffff;
+}
+/* Gateway 10.0.2.<oktet> MAC'ini ARP ile çöz (çözülemezse SLIRP sabit MAC). */
+__attribute__((section(".user"), noinline))
+static void u_arp_coz(unsigned char *mac_out, int oktet) {
+    int i;
+    for (i = 0; i < 42; i++) tx_frame[i] = 0;
+    for (i = 0; i < 6; i++) tx_frame[i] = 0xff;
+    for (i = 0; i < 6; i++) tx_frame[6 + i] = BIZIM_MAC[i];
+    tx_frame[12] = 0x08; tx_frame[13] = 0x06; tx_frame[14] = 0x00; tx_frame[15] = 0x01;
+    tx_frame[16] = 0x08; tx_frame[17] = 0x00; tx_frame[18] = 6; tx_frame[19] = 4;
+    tx_frame[20] = 0x00; tx_frame[21] = 0x01;
+    for (i = 0; i < 6; i++) tx_frame[22 + i] = BIZIM_MAC[i];
+    tx_frame[28] = 10; tx_frame[29] = 0; tx_frame[30] = 2; tx_frame[31] = 15;
+    tx_frame[38] = 10; tx_frame[39] = 0; tx_frame[40] = 2; tx_frame[41] = (unsigned char)oktet;
+    u_sys2(24, (unsigned long)(uintptr_t)tx_frame, 42);
+    for (i = 0; i < 6; i++) mac_out[i] = SLIRP_GW_MAC[i];   /* fallback */
+    for (int d = 0; d < 200; d++) {
+        long n = (long)u_sys2(25, (unsigned long)(uintptr_t)rx_frame, 128);
+        if (n < 42) continue;
+        if (rx_frame[12] != 0x08 || rx_frame[13] != 0x06) continue;
+        if (rx_frame[20] != 0x00 || rx_frame[21] != 0x02) continue;
+        if (rx_frame[28] == 10 && rx_frame[29] == 0 && rx_frame[30] == 2 &&
+            rx_frame[31] == (unsigned char)oktet) {
+            for (i = 0; i < 6; i++) mac_out[i] = rx_frame[22 + i];
+            return;
+        }
+    }
+}
+/* ping <oktet>: ICMP echo → 1=canlı, 0=yanıt yok. */
+__attribute__((section(".user"), noinline))
+static int u_ping(int oktet) {
+    unsigned char gw[6]; int i;
+    u_arp_coz(gw, oktet);
+    unsigned char icmp[13];
+    for (i = 0; i < 13; i++) icmp[i] = 0;
+    icmp[0] = 8; icmp[4] = 0xBE; icmp[5] = 0xEF; icmp[7] = 0x01;
+    icmp[8] = 'K'; icmp[9] = 'E'; icmp[10] = 'M'; icmp[11] = 'G'; icmp[12] = 'U';
+    unsigned int ics = u_ip_checksum(icmp, 13);
+    icmp[2] = (unsigned char)(ics >> 8); icmp[3] = (unsigned char)ics;
+    for (i = 0; i < 128; i++) tx_frame[i] = 0;
+    for (i = 0; i < 6; i++) tx_frame[i] = gw[i];
+    for (i = 0; i < 6; i++) tx_frame[6 + i] = BIZIM_MAC[i];
+    tx_frame[12] = 0x08; tx_frame[13] = 0x00;
+    int ip_total = 20 + 13;
+    tx_frame[14] = 0x45; tx_frame[16] = (unsigned char)(ip_total >> 8); tx_frame[17] = (unsigned char)ip_total;
+    tx_frame[20] = 0x40; tx_frame[22] = 64; tx_frame[23] = 1;
+    tx_frame[26] = 10; tx_frame[27] = 0; tx_frame[28] = 2; tx_frame[29] = 15;
+    tx_frame[30] = 10; tx_frame[31] = 0; tx_frame[32] = 2; tx_frame[33] = (unsigned char)oktet;
+    unsigned int ihs = u_ip_checksum(&tx_frame[14], 20);
+    tx_frame[24] = (unsigned char)(ihs >> 8); tx_frame[25] = (unsigned char)ihs;
+    for (i = 0; i < 13; i++) tx_frame[34 + i] = icmp[i];
+    if ((long)u_sys2(24, (unsigned long)(uintptr_t)tx_frame, 34 + 13) < 0) return 0;
+    for (int d = 0; d < 400; d++) {
+        long n = (long)u_sys2(25, (unsigned long)(uintptr_t)rx_frame, 128);
+        if (n < 42) continue;
+        if (rx_frame[12] != 0x08 || rx_frame[13] != 0x00 || rx_frame[23] != 1) continue;
+        if (!(rx_frame[26] == 10 && rx_frame[27] == 0 && rx_frame[28] == 2 &&
+              rx_frame[29] == (unsigned char)oktet)) continue;
+        int io = 14 + (rx_frame[14] & 0x0f) * 4;
+        if (n < io + 8) continue;
+        if (rx_frame[io] == 0 && rx_frame[io + 1] == 0) return 1;   /* echo reply */
+    }
+    return 0;
+}
+/* arpscan: 10.0.2.1..5 ARP tara → canlı host sayısı. */
+__attribute__((section(".user"), noinline))
+static int u_arpscan(void) {
+    unsigned int bulunan[5]; int say = 0, i;
+    for (int son = 1; son <= 5; son++) {
+        for (i = 0; i < 42; i++) tx_frame[i] = 0;
+        for (i = 0; i < 6; i++) tx_frame[i] = 0xff;
+        for (i = 0; i < 6; i++) tx_frame[6 + i] = BIZIM_MAC[i];
+        tx_frame[12] = 0x08; tx_frame[13] = 0x06; tx_frame[14] = 0x00; tx_frame[15] = 0x01;
+        tx_frame[16] = 0x08; tx_frame[17] = 0x00; tx_frame[18] = 6; tx_frame[19] = 4;
+        tx_frame[20] = 0x00; tx_frame[21] = 0x01;
+        for (i = 0; i < 6; i++) tx_frame[22 + i] = BIZIM_MAC[i];
+        tx_frame[28] = 10; tx_frame[29] = 0; tx_frame[30] = 2; tx_frame[31] = 15;
+        tx_frame[38] = 10; tx_frame[39] = 0; tx_frame[40] = 2; tx_frame[41] = (unsigned char)son;
+        u_sys2(24, (unsigned long)(uintptr_t)tx_frame, 42);
+    }
+    int bos = 0;
+    for (int d = 0; d < 40; d++) {
+        long n = (long)u_sys2(25, (unsigned long)(uintptr_t)rx_frame, 128);
+        if (n < 42) { bos++; if (say >= 1 && bos > 6) break; continue; }
+        bos = 0;
+        if (rx_frame[12] != 0x08 || rx_frame[13] != 0x06) continue;
+        if (rx_frame[20] != 0x00 || rx_frame[21] != 0x02) continue;
+        unsigned int spa = ((unsigned int)rx_frame[28] << 24) | ((unsigned int)rx_frame[29] << 16) |
+                           ((unsigned int)rx_frame[30] << 8) | rx_frame[31];
+        int var = 0;
+        for (i = 0; i < say; i++) if (bulunan[i] == spa) { var = 1; break; }
+        if (!var && say < 5) bulunan[say++] = spa;
+    }
+    return say;
+}
+/* TCP SYN segmenti (veri yok) inşa → tx_frame; toplam uzunluk döner. */
+__attribute__((section(".user"), noinline))
+static int u_tcp_syn(const unsigned char *gw, const unsigned char *dip, int sport, int dport,
+                     unsigned int seq, unsigned char flags) {
+    int i;
+    for (i = 0; i < 128; i++) tx_frame[i] = 0;
+    for (i = 0; i < 6; i++) tx_frame[i] = gw[i];
+    for (i = 0; i < 6; i++) tx_frame[6 + i] = BIZIM_MAC[i];
+    tx_frame[12] = 0x08; tx_frame[13] = 0x00;
+    tx_frame[14] = 0x45; tx_frame[16] = 0; tx_frame[17] = 40;
+    tx_frame[20] = 0x40; tx_frame[22] = 64; tx_frame[23] = 6;
+    for (i = 0; i < 4; i++) tx_frame[26 + i] = BIZIM_IP[i];
+    for (i = 0; i < 4; i++) tx_frame[30 + i] = dip[i];
+    unsigned int ipcs = u_ip_checksum(&tx_frame[14], 20);
+    tx_frame[24] = (unsigned char)(ipcs >> 8); tx_frame[25] = (unsigned char)ipcs;
+    tx_frame[34] = (unsigned char)(sport >> 8); tx_frame[35] = (unsigned char)sport;
+    tx_frame[36] = (unsigned char)(dport >> 8); tx_frame[37] = (unsigned char)dport;
+    tx_frame[38] = (unsigned char)(seq >> 24); tx_frame[39] = (unsigned char)(seq >> 16);
+    tx_frame[40] = (unsigned char)(seq >> 8); tx_frame[41] = (unsigned char)seq;
+    tx_frame[46] = 0x50; tx_frame[47] = flags; tx_frame[48] = 0x20;
+    unsigned char ps[32];
+    for (i = 0; i < 32; i++) ps[i] = 0;
+    for (i = 0; i < 4; i++) ps[i] = BIZIM_IP[i];
+    for (i = 0; i < 4; i++) ps[4 + i] = dip[i];
+    ps[9] = 6; ps[11] = 20;
+    for (i = 0; i < 20; i++) ps[12 + i] = tx_frame[34 + i];
+    unsigned int tcs = u_ip_checksum(ps, 32);
+    tx_frame[50] = (unsigned char)(tcs >> 8); tx_frame[51] = (unsigned char)tcs;
+    return 54;
+}
+/* scan <oktet>: 10.0.2.<oktet>:80/443/22 TCP SYN → ACIK/KAPALI/FILTRELI. */
+__attribute__((section(".user"), noinline))
+static void u_scan(int oktet) {
+    unsigned char gw[6]; unsigned char dip[4] = { 10, 0, 2, (unsigned char)oktet };
+    static const int portlar[3] = { 80, 443, 22 };
+    u_arp_coz(gw, oktet);
+    u_sys(5, (unsigned long)(uintptr_t)"SCAN "); u_sys(6, (unsigned long)oktet); u_sys(5, (unsigned long)(uintptr_t)":");
+    for (int p = 0; p < 3; p++) {
+        int durum = 0;   /* 0=filtreli 1=acik 2=kapali */
+        u_tcp_syn(gw, dip, 40000 + p, portlar[p], 0x4B454D47u, 0x02);
+        u_sys2(24, (unsigned long)(uintptr_t)tx_frame, 54);
+        for (int d = 0; d < 30 && durum == 0; d++) {
+            long n = (long)u_sys2(25, (unsigned long)(uintptr_t)rx_frame, 128);
+            if (n < 54) continue;
+            if (rx_frame[12] != 0x08 || rx_frame[13] != 0x00 || rx_frame[23] != 6) continue;
+            if (!(rx_frame[26] == dip[0] && rx_frame[27] == dip[1] &&
+                  rx_frame[28] == dip[2] && rx_frame[29] == dip[3])) continue;
+            unsigned char fl = rx_frame[47];
+            if ((fl & 0x12) == 0x12) durum = 1; else if (fl & 0x04) durum = 2;
+        }
+        u_sys(5, (unsigned long)(uintptr_t)" "); u_sys(6, (unsigned long)portlar[p]); u_sys(5, (unsigned long)(uintptr_t)":");
+        u_sys(5, (unsigned long)(uintptr_t)(durum == 1 ? "ACIK" : durum == 2 ? "KAPALI" : "FILTRELI"));
+    }
+    u_sys(7, 0);
+}
+
 /* Bir komut satırını EL0'dan syscall'larla çalıştır. */
 __attribute__((section(".user"), noinline))
 static void komut_calistir(char *satir) {
@@ -75,7 +252,7 @@ static void komut_calistir(char *satir) {
     int nt = tokenize(satir, tok);
     if (nt == 0) return;
     if (str_esit(tok[0], CMD_YARDIM)) {
-        u_sys(5, (unsigned long)(uintptr_t)"KOMUTLAR: yardim echo ls yaz oku sil saat cik"); u_sys(7, 0);
+        u_sys(5, (unsigned long)(uintptr_t)"KOMUTLAR: yardim echo ls yaz oku sil saat ping arpscan scan cik"); u_sys(7, 0);
     } else if (str_esit(tok[0], CMD_ECHO)) {
         if (nt >= 2) { u_sys(5, (unsigned long)(uintptr_t)tok[1]); u_sys(7, 0); }
     } else if (str_esit(tok[0], CMD_LS)) {
@@ -100,6 +277,21 @@ static void komut_calistir(char *satir) {
         u_sys(5, (unsigned long)(uintptr_t)"SAAT: ");
         u_sys(6, u_sys(27, 0));   /* RTC syscall → Unix saniye */
         u_sys(7, 0);
+    } else if (str_esit(tok[0], CMD_PING)) {
+        /* ping <oktet> — EL0'dan ICMP echo (net syscall). Yoksa 2 = SLIRP gateway (det). */
+        int oktet = (nt >= 2) ? u_str_to_int(tok[1]) : 2;
+        if (oktet <= 0 || oktet > 255) oktet = 2;
+        u_sys(5, (unsigned long)(uintptr_t)(u_ping(oktet) ? "PING: CANLI" : "PING: yanit yok"));
+        u_sys(7, 0);
+    } else if (str_esit(tok[0], CMD_ARPSCAN)) {
+        /* arpscan — EL0'dan subnet ARP tarama (net syscall). */
+        u_sys(5, (unsigned long)(uintptr_t)"ARPSCAN: ");
+        u_sys(6, (unsigned long)u_arpscan()); u_sys(5, (unsigned long)(uintptr_t)" host"); u_sys(7, 0);
+    } else if (str_esit(tok[0], CMD_SCAN)) {
+        /* scan <oktet> — EL0'dan TCP SYN port tarama (net syscall). */
+        int oktet = (nt >= 2) ? u_str_to_int(tok[1]) : 2;
+        if (oktet <= 0 || oktet > 255) oktet = 2;
+        u_scan(oktet);
     } else {
         u_sys(5, (unsigned long)(uintptr_t)"? (yardim)"); u_sys(7, 0);
     }

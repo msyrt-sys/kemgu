@@ -5,6 +5,21 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-239 — OS: KEMGU-OS — net-recon EL0 kabuğa taşındı (pentest shell = TAM userspace process) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-238).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`. Yalnız test.]** D-238 EL0 kabuğuna (FS+utility) NET-RECON eklendi
+→ D-238'in "KALAN" işi tamam. EL0 net yardımcıları (u_ip_checksum, u_arp_coz, u_ping, u_arpscan, u_tcp_syn, u_scan) —
+HEPSİ EL0'da, .user_data TX/RX tamponlarında, **net syscall (24=net_gonder / 25=net_al) ile** (userspace_net/D-176
+deseni: EL0 süreç virtio-net'e DOKUNMADAN syscall ile ağ yapar). MAC/IP sabitleri .user_data (EL0 okur; .rodata=fault).
+Komutlar: `ping <oktet>` (ICMP echo), `arpscan` (subnet ARP tara), `scan <oktet>` (TCP SYN 80/443/22 → ACIK/KAPALI/
+FILTRELI, pseudo-header checksum). **Kanıt:** "el0$ ping 2"→"PING: CANLI" + "el0$ arpscan"→"ARPSCAN: 2 host" — EL0 kabuk
+GERÇEK net recon yaptı (kernel-fn çağırmadan, yalnız SVC). Canlı-yazılan input FS round-trip da çalıştı
+("oku canli"→"OKU: EL0DATA"). **Pentest kabuğu ARTIK TAM userspace process:** FS + net-recon(ping/arpscan/scan) + RTC +
+utility, hepsi EL0'dan syscall'la. Sıfır uyarı, full gate. init_betik EL1-net (driver-proof) korundu; EL0-kabuk-net =
+userspace-recon proof. **Not:** Seri; ben yazdım.
+
 ## D-238 — OS: KEMGU-OS PART 3(d) — SHELL EL0 PROCESS (interaktif kabuk userspace) — OS TESLİMATI TAM (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-237).
