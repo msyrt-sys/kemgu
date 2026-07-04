@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-235 — OS: KEMGU-OS PART 1/3 — GERÇEK MMU (C8b flag-kaldırma + C8c page-fault kurtarma) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-234).
+
+**Karar [ETKİ: `Makefile` (BM_A64), `boot/start_aarch64.S`, `runtime/kdl_kesme.c`, `test/bare_metal/kemgu_os_arm.c`.
+SERİ, paylaşılan çekirdek.] — Mehmet direktifi: OS = MMU + preemptive scheduler + userspace (SIRAYLA). Bu PART 1/3 = MMU.**
+[[feedback-os-tanim-mmu-sched-userspace]]. **Bulgu:** MMU-on Normal-memory (C8a/kdl_mmu.c: L1[0] Device MMIO, L1[1]
+Normal-WB RAM, SCTLR.M) + FP-enable (start CPACR_EL1.FPEN) ZATEN vardı, AMA falsifiye-edilemez kanıt hiç yapılmamıştı
+(`-mgeneral-regs-only` hâlâ flag'deydi = C8b pending).
+**PROOF (a) [C8b — MMU+Normal gerçek]:** KERNEL (integrated kernel kemgu_os_arm.o + runtime bm_a64_*.o) `-mgeneral-regs-only`
+OLMADAN derlenir. Clang serbest SIMD emit eder: `kemgu_os_arm.o` **`stp q0, q0, [mem]`** (128-bit NEON store →
+`frame[128]=0` vektörize) emit eder + Normal-cacheable RAM'e yazar + BOOT EDER. Device-memory'de bu store alignment-fault
+ederdi + FP-trap'liyse trap ederdi (= C1 bug'ı) → **boot = MMU+Normal+FP GERÇEK, taklit EDİLEMEZ.**
+**DÜRÜST SINIR (yeni BM_A64_EL0):** flag'i GLOBAL kaldırınca 35 EL0-kod demosu (userspace_*/.user-section) KIRILDI —
+flag'siz clang, EL0 fonksiyonun NEON sabit-havuzunu (frame-init) kernel .rodata'ya (0x40005ec0 = AP=00) koyar + EL0'dan
+`ldr q0,[kernel_addr]` okur → EL0 permission-fault (DFSC=0x0e, izolasyon ihlali). Bu, uygulama→OS'te "demoların gizlediği
+EL-geçiş edge'i" (Mehmet'in öngördüğü). ÇÖZÜM: 35 EL0 demosu `BM_A64_EL0` (flag İLE, GPR-only=sabit-havuz yok) derlenir;
+KERNEL flag'siz kalır (MMU kanıtı geçerli). KALICI çözüm PART 3'te (EL0 program .rodata'sını user sayfaya yerleştir).
+Kümülatif: full gate 0-regresyon (kernel flag'siz + EL0 demoları flag'li).
+**PROOF (b) [C8c — MMU zorluyor + fault kurtarma]:** kontrollü page-fault kurtarma. `kdl_fault_bekleniyor` bayrağı
+(kdl_kesme.c) + start_aarch64.S SAF-ASM kurtarma yolu (bl-YOK → EL-correct ESR/ELR klobber edilmez): FAR yakala →
+`kdl_fault_yakalanan`, faulting instr ATLA (ELR+=4), frame restore, eret. Entegre kernel init'te haritasız **0x80000000**
+(L1[2] geçersiz) OKU → translation-fault → YAKALANDI (FAR=0x80000000 doğru) + KURTARILDI → "PAGEFAULT OK". MMU
+her-şeyi-map-etmiyor, gerçekten zorluyor + kernel fault'u yönetip ilerliyor (demand-paging temeli).
+**PROOF (c) [kümülatif]:** fault kurtarıldıktan SONRA tüm OS (net+FS+disk+timer+RTC+kabuk) AYNI boot'ta çalışır →
+"KEMGU-OS OK". **Full OS gate YEŞİL (123 gecti, 0 regresyon)** + host unit suite'leri yeşil (10/10 + 39/39).
+**Uygulama→OS geçişinin İLK ayağı: gerçek sanal-bellek + kernel fault-yönetimi.**
+**EK DÜZELTME:** `tick_arm` (D-128) marjinal timer-gecikme flake'i (sabit 4M döngü ≈1 tik; yüklü gate'te t2==t1) →
+bounded-poll (t2>t1 olana kadar, ≤16 tur) ile sağlamlaştırıldı — deterministik.
+**PRE-EXISTING (PART 1 DIŞI, FLAG'lendi):** `calistir_codegen_bootstrap` (self-host fixpoint) test_tumu'da KIRIK —
+checker 79-fark. KANIT ile PART 1'den bağımsız: `build/kemgu.exe` 7 gün önceden (2026-06-27, bu oturumda rebuild YOK),
+son 30 commit'te src/ veya selfhost/ değişikliği YOK, PART 1 yalnız bare-metal. Self-host drift'i ayrı iş (MMU teslimatı
+değil) — Mehmet'in "ilgisiz kolay-işe kaçma" kuralı gereği detaya girilmedi, dürüstçe flag'lendi.
+**Not:** Seri; ben yazdım. Ders: gate koşarken runtime/ düzenleme = stale-obje link-hatası (temiz-rebuild gerekti).
+
 ## D-234 — OS: KEMGU-OS entegre çekirdek — RTC gerçek-zaman saati (saat komutu, 6. alt-sistem) (2026-07-04)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-233).

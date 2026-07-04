@@ -167,12 +167,54 @@ kdl_exc_ortak:
     lsr     x9, x1, #26         /* EC = ESR[31:26] */
     cmp     x9, #0x15           /* SVC (aarch64 same-EL) → sistem çağrısı (C6) */
     b.eq    9f
-    /* --- Fault: kurtarma YOK (yazdır + halt). tip=EC(x9→x0), esr=x1, elr=x2. --- */
+    /* --- Fault (PART 1b / C8c): KONTROLLÜ KURTARMA. kdl_fault_bekleniyor set ise
+     * FAR yakala + faulting instr'ı ATLA (ELR+4) + frame restore + eret → OS DEVAM.
+     * Bayrak yoksa → yazdır + halt (eski davranış). x1=ESR, x2=ELR(EL-correct), x9=EC.
+     * Saf asm (bl YOK) → EL-correct x1/x2 klobber edilmez. --- */
+    adrp    x3, kdl_fault_bekleniyor
+    add     x3, x3, :lo12:kdl_fault_bekleniyor
+    ldr     x4, [x3]
+    cbz     x4, 6f              /* beklenmiyor → normal fault (halt) */
+    /* Kurtar: FAR yakala (EL-duyarlı) → kdl_fault_yakalanan. */
+    mrs     x5, CurrentEL
+    cmp     x5, #8
+    b.ne    16f
+    mrs     x7, far_el2
+    b       17f
+16:
+    mrs     x7, far_el1
+17:
+    adrp    x6, kdl_fault_yakalanan
+    add     x6, x6, :lo12:kdl_fault_yakalanan
+    str     x7, [x6]            /* kdl_fault_yakalanan = FAR */
+    str     xzr, [x3]           /* kdl_fault_bekleniyor = 0 */
+    add     x2, x2, #4          /* faulting instr'ı atla (ELR += 4) */
+    mrs     x5, CurrentEL
+    cmp     x5, #8
+    b.ne    18f
+    msr     elr_el2, x2
+    b       19f
+18:
+    msr     elr_el1, x2
+19:
+    /* frame restore (SVC yolu ile aynı) + eret → kesilen kod bir-sonraki instr'dan sürer */
+    ldp     x0, x1,   [sp, #16*0]
+    ldp     x2, x3,   [sp, #16*1]
+    ldp     x4, x5,   [sp, #16*2]
+    ldp     x6, x7,   [sp, #16*3]
+    ldp     x8, x9,   [sp, #16*4]
+    ldp     x10, x11, [sp, #16*5]
+    ldp     x12, x13, [sp, #16*6]
+    ldp     x14, x15, [sp, #16*7]
+    ldp     x16, x17, [sp, #16*8]
+    ldp     x18, x30, [sp, #16*9]
+    add     sp, sp, #(16*10)
+    eret
+6:
+    /* --- Kurtarma yok: teşhis + halt. tip=EC(x9→x0), esr=x1, elr=x2. --- */
     mov     x0, x9
     bl      kdl_istisna_isle    /* noreturn (yazdır + halt) */
-6:
-    wfe
-    b       6b
+    b       6b                  /* güvenlik: noreturn ihlal edilirse geri dön */
 9:
     /* --- SVC: frame kaydedildi; dispatch. num/arg SAKLANANDAN oku (canlı reg
      * ESR-okuma sırasında klobber edilmiş olabilir → yığından pristine al). --- */
