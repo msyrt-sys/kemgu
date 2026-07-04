@@ -780,6 +780,8 @@ $(BUILD)/bm_a64_mmio.o: runtime/kdl_runtime_mmio.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_yetki.o: runtime/kdl_yetki_bare.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+$(BUILD)/bm_a64_metin.o: runtime/kdl_metin_bare.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_start.o: boot/start_aarch64.S | $(BUILD)
 	$(BM_A64) -c $< -o $@
 
@@ -890,6 +892,46 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 		fi; \
 	else \
 		echo "QEMU yok — .kem-OS iskelet testi atlandi."; \
+	fi
+
+# === Faz-2 adım 2: .kem-NATIVE PL011 UART SÜRÜCÜSÜ (D-244) ===
+# kem_surucu.kem: konsol çıktısı C kdl_yazdir_metin DEĞİL — .kem'de MMIO ile PL011.
+# uart_bayt (FR.TXFF poll + DR yaz, yetki<MMIO> linear: üret/oku-ödünç/yaz-ödünç/geri_al)
+# + uart_metin (metin_bayt bare-metal, kdl_metin_bare.c/bm_a64_metin.o) + uart_tam
+# (özyinelemeli basamak). Link: +bm_a64_metin.o +bm_a64_mmio.o +bm_a64_yetki.o. Kanıt:
+# IR'da kdl_yazdir ÇAĞRISI 0 (yalnız declare boilerplate); tüm çıktı kdl_mmio_yaz32'den.
+calistir_kem_surucu_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_metin.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+	@echo "Faz-2 .kem-native UART surucu: kem_surucu.kem -> ARM64 ELF..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_surucu.kem > $(BUILD)/kem_surucu.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_surucu.ll -c -o $(BUILD)/kem_surucu.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_surucu.elf \
+		$(BUILD)/kem_surucu.o $(BUILD)/bm_a64_metin.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
+	@echo "Libc sembol kontrol (olmamali — kdl_metin_bare.c freestanding, strlen dahil):"
+	@if llvm-nm --undefined-only $(BUILD)/kem_surucu.elf | \
+		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|strcmp|__chkstk' > /dev/null; then \
+		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/kem_surucu.elf; exit 1; \
+	fi
+	@echo "  (yok — temiz)"
+	@echo "C yazdir_metin CAGRISI kontrol (0 olmali — cikti saf .kem MMIO):"
+	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_surucu.ll; then \
+		echo "FAIL: IR'da kdl_yazdir CAGRISI var (cikti C runtime'a iniyor)"; exit 1; \
+	fi
+	@echo "  (kdl_yazdir cagrisi yok — konsol cikti tamamen .kem MMIO surucusunden)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kem_surucu.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kem_surucu.out -kernel $(BUILD)/kem_surucu.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_surucu.out; echo "--- son ---"; \
+		if grep -q "KEM SURUCU OK" $(BUILD)/kem_surucu.out \
+		   && grep -q "42" $(BUILD)/kem_surucu.out \
+		   && grep -q "1953655158" $(BUILD)/kem_surucu.out; then \
+			echo "Faz-2 .kem-native UART surucu gecti: konsol cikti .kem MMIO surucusunden (KEM SURUCU OK, C yazdir CAGRISI yok)."; \
+		else \
+			echo "FAIL: 'KEM SURUCU OK' + sayilar (42, 1953655158) bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — .kem UART surucu testi atlandi."; \
 	fi
 
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
@@ -4606,7 +4648,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
-                     calistir_kem_os_arm \
+                     calistir_kem_os_arm calistir_kem_surucu_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
