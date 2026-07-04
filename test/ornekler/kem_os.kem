@@ -1,0 +1,165 @@
+// =====================================================================
+// kem_os.kem — KEMGU-OS Faz-2: TEK .kem-native bare-metal OS iskeleti
+// ---------------------------------------------------------------------
+// Faz-1 keşif kernel'leri A⊕B⊕C⊕E'nin SERİ ENTEGRASYONU: dört alt-sistem
+// TEK boot'ta, TEK .kem imajında canlı. Bu, C-yazılı entegre çekirdeğin
+// (test/bare_metal/kemgu_os_arm.c) .kem-native ikizinin İSKELETİdir.
+//
+//   [1] BOOT     — .kem bare-metal boot + UART (A: kem_cekirdek_min)
+//   [2] HEAP     — region-runtime heap Dizi<tam32> (B: kem_dizi_kernel)
+//   [3] MMIO     — yetki<MMIO> capability + donanım register (C: kem_mmio_kernel)
+//   [4] HESAP    — özyineleme + iken + eşleş + eğer/değilse (E: kem_hesap_kernel)
+//
+// Entegrasyon kanıtı: dört alt-sistem de doğru sonucu verirse (5/5 kontrol)
+// TEK marker "KEMGU KEM-OS OK" basılır. Herhangi biri bozuksa "... HATA".
+//
+// Derleme (MMIO nedeniyle +bm_a64_mmio.o +bm_a64_yetki.o):
+//   ./build/kemgu --llvm test/ornekler/kem_os.kem > build/kem_os.ll
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+//         -Wno-override-module -x ir build/kem_os.ll -c -o build/kem_os.o
+//   ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o build/kem_os.elf \
+//         build/kem_os.o build/bm_a64_mmio.o build/bm_a64_yetki.o $(BM_A64_OBJS)
+//   qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -kernel build/kem_os.elf
+// =====================================================================
+
+// ---- Alt-sistem 3 sabitleri: MMIO (VirtIO-MMIO slot 0, QEMU virt) ----
+sabit VIRTIO_TABAN: tam64     = 167772160;   // 0x0A000000 (slot 0 taban)
+sabit VIRTIO_MAGIC_OFF: tam64 = 0;           // 0x000 MagicValue register offset
+sabit MAGIC_BEKLENEN: tam32   = 1953655158;  // 0x74726976 = "virt" (LE)
+sabit MMIO_OKU_YAZ: tam32     = 3;           // izin: OKU|YAZ
+
+// ========================= [2] HEAP alt-sistemi =========================
+// Heap Dizi<tam32>: 1..10 ekle (kapasite 4→8→16 aşımı → region realloc +
+// memcpy) → sınır-kontrollü topla. Beklenen: 55.
+işlev heap_dizi_topla() -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 {
+        dizi_ekle(d, i + 1);
+        i = i + 1;
+    }
+    değişken toplam: tam32 = 0;
+    i = 0;
+    iken i < dizi_boyut(d) {
+        toplam = toplam + dizi_al(d, i);
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// ========================= [3] MMIO alt-sistemi =========================
+// yetki<MMIO> capability üret → VirtIO MagicValue register'ı GERÇEKTEN oku
+// → linear geri_al ile tüket. Beklenen: 0x74726976.
+işlev mmio_magic_oku() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    değişken magic: tam32 = mmio_oku32(y, VIRTIO_TABAN + VIRTIO_MAGIC_OFF);
+    geri_al(y);
+    ver magic;
+}
+
+// ========================= [4] HESAP alt-sistemi ========================
+// (a) özyinelemeli faktoriyel
+işlev faktoriyel(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver 1;
+    }
+    ver n * faktoriyel(n - 1);
+}
+
+// (b) özyinelemeli fibonacci (çift özyineleme + if)
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+// (c) iken döngüsü
+işlev dongu_toplam(n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        toplam = toplam + i;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// (d) eşleş pattern-match — literal desen + joker
+işlev basamak_adi(d: tam32) -> tam32 {
+    eşleş d {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        2 => { ver 300; }
+        _ => { ver 999; }
+    }
+    ver 0;
+}
+
+// (e) eğer/değilse zinciri — büyüklük kategorisi
+işlev kategori(n: tam32) -> tam32 {
+    eğer n < 0 {
+        ver 0;
+    } değilse eğer n < 10 {
+        ver 1;
+    } değilse eğer n < 100 {
+        ver 2;
+    } değilse {
+        ver 3;
+    }
+}
+
+// ============================== ÇEKİRDEK ===============================
+işlev main() -> tam32 {
+    yazdir_metin("=== KEMGU .kem-OS iskelet (Faz-2 A+B+C+E) ===");
+
+    // [1] BOOT — buraya ulaştıysak .kem bare-metal boot etti.
+    yazdir_metin("[1] BOOT OK");
+
+    // [2] HEAP — region-runtime dizi.
+    değişken dt: tam32 = heap_dizi_topla();
+    yazdir_metin("[2] HEAP DIZI OK");
+    yazdir_tam(dt);
+
+    // [3] MMIO — donanım register.
+    değişken magic: tam32 = mmio_magic_oku();
+    eğer magic == MAGIC_BEKLENEN {
+        yazdir_metin("[3] MMIO OK");
+    } değilse {
+        yazdir_metin("[3] MMIO HATA");
+    }
+    yazdir_tam(magic);
+
+    // [4] HESAP — kontrol-akışı + fonksiyon + pattern-match.
+    değişken h: tam32 = faktoriyel(5) + fib(10) + dongu_toplam(10);   // 230
+    değişken kat: tam32 = kategori(h);                                // 3
+    değişken pm: tam32 = basamak_adi(2);                              // 300
+    yazdir_metin("[4] HESAP OK");
+    yazdir_tam(h);
+    yazdir_tam(kat);
+
+    // Entegrasyon doğrulaması — dört alt-sistem de doğru mu (5 kontrol)?
+    değişken gecti: tam32 = 0;
+    eğer dt == 55 {
+        gecti = gecti + 1;
+    }
+    eğer magic == MAGIC_BEKLENEN {
+        gecti = gecti + 1;
+    }
+    eğer h == 230 {
+        gecti = gecti + 1;
+    }
+    eğer kat == 3 {
+        gecti = gecti + 1;
+    }
+    eğer pm == 300 {
+        gecti = gecti + 1;
+    }
+
+    eğer gecti == 5 {
+        yazdir_metin("KEMGU KEM-OS OK");
+    } değilse {
+        yazdir_metin("KEMGU KEM-OS HATA");
+    }
+    ver 0;
+}
