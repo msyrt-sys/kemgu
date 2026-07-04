@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-244 — OS: KEMGU-OS Faz-2 adım 2 — .kem-NATIVE PL011 UART SÜRÜCÜSÜ (konsol çıktısı artık .kem) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-243).
+
+**Karar [ETKİ: `test/ornekler/kem_surucu.kem` (YENİ); `runtime/kdl_metin_bare.c` (YENİ); `Makefile` (bm_a64_metin.o
+kuralı + `calistir_kem_surucu_arm` target + OS-gate aggregate). Yalnız test/örnek + YENİ freestanding runtime dosyası;
+host runtime'a DOKUNULMADI.]** Faz-2 adım 2 (Mehmet seçimi ".kem-native sürücü katmanı"): **konsol çıktı yolu artık C
+runtime (`kdl_yazdir_metin`) DEĞİL — TAMAMEN .kem'de, doğrudan MMIO ile PL011 UART.** "Kendi dilinde OS" DNA'sının ilk
+gerçek sürücü katmanı. Serial hand-work.
+
+**`.kem`-native UART sürücüsü (`kem_surucu.kem`):**
+- **`uart_bayt(b)`** — FR.TXFF `iken (mmio_oku32(y, FR) & TXFF) != 0 {}` poll (bitwise `&`, `!=`-önce-bağlanmasın diye
+  parantez ZORUNLU) → `mmio_yaz32(y, DR, b)`. `yetki<MMIO>` LİNEAR: her çağrı üret/oku-ödünç(döngüde)/yaz-ödünç/geri_al
+  (loop-içi threading gerekmez — mmio_oku/yaz ÖDÜNÇ alır).
+- **`uart_metin(s)`** — `metin_uzunluk`+`metin_bayt` ile bayt-bayt (String iterasyonu).
+- **`uart_tam_satir(n)`** — özyinelemeli basamak çıkarımı (`n/10`+`n%10`+48), sıfır özel-durum.
+
+**KAPATILAN GERÇEK GAP:** `metin_bayt`/`metin_uzunluk` bare-metal'de YOKTU — host `kdl_runtime.c`'de strlen/strcmp'e
+bağlı (libc), bare-metal link'te **undefined symbol** (probe ile kanıtlandı). Yeni `runtime/kdl_metin_bare.c`:
+freestanding `kdl_metin_uzunluk`+`kdl_metin_bayt` (manuel uzunluk döngüsü, strlen-siz), `bm_a64_metin.o` olarak
+DERLENİR, yalnız gereken hedeflere EXPLICIT eklenir (bm_a64_mmio.o deseni; host kdl_runtime.c'ye DOKUNULMADI → host suite
+etkilenmez; asla birlikte linklenmez = çift-tanım yok). **Kanıt (uydurulamaz):** (a) IR'da `call.*kdl_yazdir` = **0**
+(yalnız 8 declare boilerplate; gate bunu grep'le enforce eder); tüm konsol çıktı tek `kdl_mmio_yaz32` çağrısından. (b)
+libc-temiz (strlen/strcmp dahil grep). (c) QEMU boot: banner + "[test] sayi = 42 / 1953655158 / 0" + "KEM SURUCU OK" —
+hepsi .kem MMIO sürücüsünden. **Gate:** `calistir_kem_surucu_arm` (link +metin+mmio+yetki; IR-kdl_yazdir-call=0 kontrol +
+QEMU marker); OS-aggregate'te (`calistir_kem_os_arm`'ın yanına). İlk-deneme boot.
+
+**Faz-2 ilerleme:** D-243 iskelet (A+B+C+E, C-yazdir'la) → **D-244 konsol yolu .kem'e portlandı.** Kalan .kem-native
+sürücü katmanı: heap-runtime zaten .kem'den çağrılıyor (kdl_dizi region), MMIO zaten .kem intrinsic. Sıradaki: UART init
+(baud/CR) .kem'e, VEYA kem_os.kem'i bu .kem UART sürücüsünü kullanacak şekilde güncelle (tam .kem-native OS iskeleti).
+İlgili: [[project-os-faz1-kem-baremetal]].
+
 ## D-243 — OS: KEMGU-OS Faz-2 SERİ ENTEGRASYON — tek .kem-native OS iskeleti (A⊕B⊕C⊕E) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-242).
