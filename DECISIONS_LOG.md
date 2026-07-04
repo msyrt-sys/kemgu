@@ -5,6 +5,16 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-234 — OS: KEMGU-OS entegre çekirdek — RTC gerçek-zaman saati (saat komutu, 6. alt-sistem) (2026-07-04)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-233).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Entegre çekirdeğe
+6. canlı alt-sistem = RTC (donanım gerçek-zaman saati). PL031 (0x09010000 DR, D-172) Unix epoch saniye okur (passive MMIO,
+IRQ gerekmez). Yeni `saat` komutu + init betiği RTC sanity check (>1.5e9 → "RTC OK"). **Kanıt:** "SAAT: 1783150833
+(unix saniye) RTC OK" (= 2026-07-04, makul). TEK boot, det, sıfır uyarı. **Entegre çekirdek artık 6 CANLI alt-sistem:
+ağ + depolama + FS + timer(uptime) + RTC + interaktif kabuk (13 komut).** **Not:** Seri; ben yazdım.
+
 ## D-233 — OS: KEMGU-OS entegre çekirdek — ZAMAN alt-sistemi canlı (timer IRQ + uptime, concurrent) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-232).
