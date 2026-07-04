@@ -2962,10 +2962,11 @@ calistir_recon_shell2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # koşan çekirdekte. Giriş -serial stdio + karakter-karakter PACE (D-188). Kanıt:
 # entegrasyon = FS round-trip (OKU: KEMGU) + net (PING: CANLI) + marker (KEMGU-OS OK).
 calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 KEMGU-OS v0.1 ENTEGRE cekirdek: kemgu_os_arm.c -> ELF (net + FS + canli kabuk)..."
+	@echo "aarch64 KEMGU-OS v0.1 ENTEGRE cekirdek: kemgu_os_arm.c + kemgu_init_el0.c -> ELF (MMU+sched+userspace)..."
 	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/kemgu_os_arm.c -o $(BUILD)/kemgu_os_arm.o
+	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kemgu_init_el0.c -o $(BUILD)/kemgu_init_el0.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BM_A64_OBJS)
+		-o $(BUILD)/kemgu_os_arm.elf $(BUILD)/kemgu_os_arm.o $(BUILD)/kemgu_init_el0.o $(BM_A64_OBJS)
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kemgu_os_arm.out; \
 		dd if=/dev/zero of=$(BUILD)/kemgu_os_disk.img bs=512 count=128 2>/dev/null; \
@@ -2983,14 +2984,15 @@ calistir_kemgu_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		if grep -q "KEMGU-OS OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PAGEFAULT OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "SCHEDULER OK" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "USERSPACE INIT EL0" $(BUILD)/kemgu_os_arm.out \
+		   && grep -q "IZOLASYON OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "OKU: KEMGU-OS-v0.1" $(BUILD)/kemgu_os_arm.out \
-		   && grep -q "OKU: KEMGU" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "RTC OK" $(BUILD)/kemgu_os_arm.out \
 		   && grep -q "PING: CANLI" $(BUILD)/kemgu_os_arm.out; then \
-			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta MMU(PAGEFAULT OK) + PREEMPTIVE-SCHED(SCHEDULER OK, 2 arka-plan gorev) + net + FS + DEPOLAMA + RTC + kabuk (+ 'DISK RW OK' + 'RTC OK' + 'PING: CANLI' + 'KEMGU-OS OK')."; \
+			echo "aarch64 KEMGU-OS ENTEGRE cekirdek gecti: TEK boot'ta MMU(PAGEFAULT OK)+SCHED(SCHEDULER OK)+USERSPACE(EL0 program+IZOLASYON OK)+net+FS+DEPOLAMA+RTC+kabuk = MMU+scheduler+userspace ENTEGRE ('KEMGU-OS OK')."; \
 		else \
-			echo "FAIL: 'KEMGU-OS OK' + 'PAGEFAULT OK' + 'SCHEDULER OK' + 'OKU: KEMGU-OS-v0.1' + 'OKU: KEMGU' + 'DISK RW OK' + 'RTC OK' + 'PING: CANLI' bekleniyor (entegre cekirdek)"; \
+			echo "FAIL: 'KEMGU-OS OK'+'PAGEFAULT OK'+'SCHEDULER OK'+'USERSPACE INIT EL0'+'IZOLASYON OK'+'DISK RW OK'+'RTC OK'+'PING: CANLI' bekleniyor (entegre cekirdek)"; \
 			exit 1; \
 		fi; \
 	else \

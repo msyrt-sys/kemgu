@@ -211,10 +211,43 @@ kdl_exc_ortak:
     add     sp, sp, #(16*10)
     eret
 6:
-    /* --- Kurtarma yok: teşhis + halt. tip=EC(x9→x0), esr=x1, elr=x2. --- */
+    /* --- PART 3(c): EL0 izolasyon-ihlali mi? Fault EL0'dan geldiyse (SPSR.M[3:2]=0)
+     * → ihlal eden SÜRECİ ÖLDÜR + OS DEVAM (gerçek process izolasyonu). EL1 fault ise
+     * → teşhis + halt (eski). Kernel EL1'de → spsr/far/elr_el1. --- */
+    mrs     x5, spsr_el1
+    ubfx    x6, x5, #2, #2      /* SPSR.M[3:2] = kaynak istisna-öncesi EL */
+    cbnz    x6, 21f             /* kaynak EL != 0 → EL1 fault → halt (normal) */
+    /* EL0 fault. OPT-IN: kdl_el0_kill_aktif set DEĞİLSE eski davranış (halt/ISTISNA) —
+     * mevcut EL0 demoları REGRESSION YAŞAMAZ. Set ise → süreç-öldürme (entegre çekirdek). */
+    adrp    x5, kdl_el0_kill_aktif
+    add     x5, x5, :lo12:kdl_el0_kill_aktif
+    ldr     x6, [x5]
+    cbz     x6, 21f             /* kill kapalı → halt (eski ISTISNA davranışı) */
+    /* EL0 fault + kill AÇIK = izolasyon ihlali: FAR'ı arg0'a al, öldür-işleyiciyi çağır. */
+    mrs     x0, far_el1
+    bl      kdl_el0_izolasyon_isle   /* rapor + kdl_gorev_bitir (görevi ölü işaretle) */
+    /* Faulting instr'ı atla + frame restore + eret → ölü EL0 görev kısa sürer,
+     * sonraki timer-IRQ'da scheduler onu ATLAR → OS (kabuk + diğer görevler) devam. */
+    mrs     x2, elr_el1
+    add     x2, x2, #4
+    msr     elr_el1, x2
+    ldp     x0, x1,   [sp, #16*0]
+    ldp     x2, x3,   [sp, #16*1]
+    ldp     x4, x5,   [sp, #16*2]
+    ldp     x6, x7,   [sp, #16*3]
+    ldp     x8, x9,   [sp, #16*4]
+    ldp     x10, x11, [sp, #16*5]
+    ldp     x12, x13, [sp, #16*6]
+    ldp     x14, x15, [sp, #16*7]
+    ldp     x16, x17, [sp, #16*8]
+    ldp     x18, x30, [sp, #16*9]
+    add     sp, sp, #(16*10)
+    eret
+21:
+    /* --- EL1 fault (kaynak EL != 0): kurtarma yok → teşhis + halt. tip=EC(x9→x0). --- */
     mov     x0, x9
     bl      kdl_istisna_isle    /* noreturn (yazdır + halt) */
-    b       6b                  /* güvenlik: noreturn ihlal edilirse geri dön */
+    b       21b                 /* güvenlik: noreturn ihlal edilirse geri dön */
 9:
     /* --- SVC: frame kaydedildi; dispatch. num/arg SAKLANANDAN oku (canlı reg
      * ESR-okuma sırasında klobber edilmiş olabilir → yığından pristine al). --- */

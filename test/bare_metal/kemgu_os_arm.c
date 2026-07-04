@@ -75,6 +75,15 @@ extern void kdl_preempt_baslat(void);                                  /* main =
 extern int  kdl_preempt_gorev_olustur(void (*giris)(void), void *yigin_tepe);
 extern void kdl_preempt_ac(void);                                      /* preemption AÇ */
 
+/* PART 3: AYRI-derlenen EL0 userspace init programı (kemgu_init_el0.c, .user section
+ * 0x42000000 AP=01, boot tablo altında EL0'da koşar) + preemptive EL0 görev kurucu. */
+extern void kemgu_el0_init(void);                                      /* .user EL0 programı */
+extern int  kdl_preempt_gorev_olustur_el0(void (*giris)(void), void *kernel_yigin_tepe,
+                                          void *user_yigin_tepe);
+extern volatile uint64_t kdl_izolasyon_ihlal_sayisi;                   /* EL0 izolasyon-kill sayacı */
+extern volatile uint64_t kdl_el0_kill_aktif;                          /* 1 → EL0 izolasyon-fault=süreç-öldür */
+static unsigned char el0_kstack[8192] __attribute__((aligned(16)));    /* EL0 görev kernel-yığını */
+
 /* İki ARKA-PLAN görevi — sonsuz busy-loop, KENDİ sayacını artırır, ASLA yield ETMEZ.
  * Sayaçların ilerlemesi YALNIZ timer-IRQ preemption ile mümkün (main de yield etmez).
  * Falsifiye-edilemez: preemption yoksa arka-plan görevleri HİÇ koşmaz → sayaç=0 kalır. */
@@ -699,10 +708,17 @@ int main(void) {
     kdl_preempt_baslat();                                               /* main = görev 0 */
     kdl_preempt_gorev_olustur(arka_gorev_b, yigin_arka_b + sizeof(yigin_arka_b));
     kdl_preempt_gorev_olustur(arka_gorev_c, yigin_arka_c + sizeof(yigin_arka_c));
+    /* PART 3: AYRI-derlenen EL0 userspace init programını GÖREV olarak kaydet. Boot
+     * sayfa-tablosu altında koşar (0x42000000 AP=01=EL0-erişimli; kernel AP=00=izole).
+     * TTBR-swap YOK → kabuk user-VA tamponları (0x42210000, L2[17] AP=00) bozulmaz. EL0
+     * user-yığını 0x42180000 (L2[16] AP=01 sayfasında, .user koddan uzak). */
+    kdl_el0_kill_aktif = 1;   /* EL0 izolasyon-ihlali → süreç öldür (process izolasyonu) */
+    kdl_preempt_gorev_olustur_el0(kemgu_el0_init, el0_kstack + sizeof(el0_kstack),
+                                  (void *)(uintptr_t)0x42180000UL);
     kdl_kesme_kur();
     kdl_timer_baslat();
     kdl_preempt_ac();                                                   /* preemption AÇ */
-    kdl_yazdir_metin("[boot] scheduler: preemptive HAZIR (main=gorev0 + 2 arka-plan gorev)");
+    kdl_yazdir_metin("[boot] scheduler: preemptive HAZIR (main=gorev0 + 2 arka-plan + EL0-init)");
     kdl_yazdir_metin("KEMGU-OS BASLA");
 
     /* --- DETERMİNİSTİK entegrasyon kanıtı (boot init betiği) --- */

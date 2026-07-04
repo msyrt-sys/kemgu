@@ -41,6 +41,28 @@ int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — user
  * davranış (yazdır + halt). volatile: asm ile paylaşılan durum. */
 volatile uint64_t kdl_fault_bekleniyor = 0;
 volatile uint64_t kdl_fault_yakalanan = 0;
+
+/* === PART 3(c): EL0 izolasyon-ihlali → SÜRECİ ÖLDÜR (gerçek OS semantiği) ===
+ * Bir EL0 (userspace) görev kernel-only sayfaya (AP=00) erişince permission-fault
+ * → start_aarch64.S fault-yolu (SPSR kaynak-EL=0 ise) BUNU çağırır: ihlali raporlar +
+ * o an koşan görevi ÖLÜ işaretler (scheduler bir daha seçmez) → OS DEVAM eder (kabuk +
+ * diğer görevler koşar). Bu, "process izolasyonu: ihlal eden süreç öldürülür, çekirdek
+ * hayatta kalır" kanıtı. kernel-mode fonksiyon her-şeye erişebilirdi → izolasyon-yok
+ * demekti; EL0 erişemez = GERÇEK izolasyon. */
+void kdl_gorev_bitir(void);   /* o an koşan preemptive görevi bitir (ölü işaretle) */
+volatile uint64_t kdl_izolasyon_ihlal_sayisi = 0;
+/* OPT-IN: yalnız kdl_el0_kill_aktif != 0 ise EL0 izolasyon-faultu süreç-öldürme yapar.
+ * Varsayılan 0 → eski davranış (EL0 fault → kdl_istisna_isle "ISTISNA" + halt) KORUNUR
+ * → mevcut EL0 demoları (proc_arm/D3 vb. "ISTISNA" bekleyen) REGRESSION YAŞAMAZ.
+ * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği. */
+volatile uint64_t kdl_el0_kill_aktif = 0;
+void kdl_el0_izolasyon_isle(uint64_t far) {
+    kdl_izolasyon_ihlal_sayisi++;
+    kdl_yazdir_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");
+    kdl_yazdir_onaltilik(far);
+    kdl_yazdir_satir();
+    kdl_gorev_bitir();            /* ihlal eden EL0 görevi → ölü; scheduler atlar */
+}
 #endif
 
 /* CPU istisnası — kurtarma yok (bayrak-kapalı yol). Parametreler mimari-spesifik:

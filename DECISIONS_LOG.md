@@ -5,6 +5,29 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-237 — OS: KEMGU-OS PART 3/3 — USERSPACE (EL0 program + syscall + izolasyon) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-236).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_init_el0.c`; `test/bare_metal/kemgu_os_arm.c`; `runtime/kdl_kesme.c`;
+`boot/start_aarch64.S`; `Makefile`. SERİ, paylaşılan çekirdek.]** Mehmet direktifi (OS=MMU→sched→userspace) PART 3/3 =
+userspace. [[feedback-os-tanim-mmu-sched-userspace]]. **AYRI-derlenen EL0 program** (`kemgu_init_el0.c`, BM_A64_EL0=
+GPR-only, `.user` section 0x42000000 AP=01) çekirdeğe LİNKLENİR + preemptive EL0 GÖREV olarak koşturulur (boot sayfa-tablo
+altında — TTBR-swap YOK → kabuğun 0x42210000 user-VA tamponları [L2[17] AP=00] bozulmaz). Bu = "kernel programı yükler +
+EL0'da koşturur" (kernel-içi C-fn DEĞİL). **PROOF(a):** sys(2) → kernel "EL0 SYSCALL kaynak-EL=**0x0**" (SPSR.M[3:2]
+donanım register = 0 → GERÇEKTEN EL0; kernel-fn olsaydı EL1=1). Taklit edilemez. **PROOF(b):** sys(5,str) → EL0'dan SVC →
+kernel string basar + EL0'a döner (syscall arayüzü çalışır). **PROOF(c):** EL0 kernel-belleğe (0x40000000 AP=00) KASITLI
+eriş → EL0 permission-fault → kernel SÜRECİ ÖLDÜR ("IZOLASYON OK ... FAR=0x40000000") + OS DEVAM → gerçek process
+izolasyonu (kernel-fn her yere erişebilirdi = izolasyon-yok). **KOMPOZİSYON:** PART1(MMU/PAGEFAULT) ⊕ PART2(SCHEDULER,
+arka-plan görevler +19B+67C) ⊕ PART3(EL0-userspace) ⊕ net/FS/disk/RTC/kabuk HEPSİ TEK boot'ta canlı → "KEMGU-OS OK".
+**Runtime:** kdl_el0_izolasyon_isle (kill=kdl_gorev_bitir) + start_aarch64.S EL0-fault-dispatch; **OPT-IN kdl_el0_kill_aktif**
+(varsayılan 0 → demolar eski "ISTISNA"-halt KORUNUR, sıfır regresyon — proc_arm/D3 doğrulandı; entegre çekirdek 1 yapar).
+**Codegen dersi:** EL0 program AYRI dosya+GPR-only ŞART — kernel flag'siz (D-235) olduğu için aynı dosyada olsaydı NEON
+sabit-havuz kernel .rodata'ya düşerdi (D-235 EL0 bug). Ayrı-derleme = "AYRI derlenen program"(proof a) + bug'dan kaçınır.
+**KALAN — PROOF(d) DÜRÜST:** shell KENDİSİ EL0 process DEĞİL (hâlâ EL1). userspace MEKANIZMASI (a/b/c) kanıtlandı + entegre;
+(d) shell→EL0 = büyük refactor (kabuk UART-RX/net/FS/output HEPSİ syscall olmalı) → son entegrasyon adımı, ayrı yapılacak.
+**Not:** Seri; ben yazdım.
+
 ## D-236 — OS: KEMGU-OS PART 2/3 — PREEMPTIVE SCHEDULER (gerçek multitasking) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-235).
