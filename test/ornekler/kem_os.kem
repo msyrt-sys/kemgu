@@ -13,12 +13,17 @@
 // Entegrasyon kanıtı: dört alt-sistem de doğru sonucu verirse (5/5 kontrol)
 // TEK marker "KEMGU KEM-OS OK" basılır. Herhangi biri bozuksa "... HATA".
 //
-// Derleme (MMIO nedeniyle +bm_a64_mmio.o +bm_a64_yetki.o):
+// D-245 (Faz-2a): KONSOL ÇIKTI YOLU C runtime DEĞİL — .kem-native UART sürücüsü
+// (uart_satir/uart_tam_satir, aşağıda) ENTEGRE edildi + C kdl_yazdir yolu SİLİNDİ.
+// Kanıt: bu dosyanın derlenmiş IR'ında `call @kdl_yazdir*` = 0 (yalnız declare).
+//
+// Derleme (MMIO+metin nedeniyle +bm_a64_mmio.o +bm_a64_yetki.o +bm_a64_metin.o):
 //   ./build/kemgu --llvm test/ornekler/kem_os.kem > build/kem_os.ll
 //   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
 //         -Wno-override-module -x ir build/kem_os.ll -c -o build/kem_os.o
 //   ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o build/kem_os.elf \
-//         build/kem_os.o build/bm_a64_mmio.o build/bm_a64_yetki.o $(BM_A64_OBJS)
+//         build/kem_os.o build/bm_a64_mmio.o build/bm_a64_yetki.o \
+//         build/bm_a64_metin.o $(BM_A64_OBJS)
 //   qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -kernel build/kem_os.elf
 // =====================================================================
 
@@ -27,6 +32,58 @@ sabit VIRTIO_TABAN: tam64     = 167772160;   // 0x0A000000 (slot 0 taban)
 sabit VIRTIO_MAGIC_OFF: tam64 = 0;           // 0x000 MagicValue register offset
 sabit MAGIC_BEKLENEN: tam32   = 1953655158;  // 0x74726976 = "virt" (LE)
 sabit MMIO_OKU_YAZ: tam32     = 3;           // izin: OKU|YAZ
+
+// ==================== [0] .kem-native PL011 UART SÜRÜCÜSÜ ====================
+// D-244'te ayrı kem_surucu.kem'de kanıtlandı → D-245'te BU çekirdeğe ENTEGRE +
+// C kdl_yazdir yolu SİLİNDİ (Faz-2a, YASA-2: mevcut kernel kullanır, eski yol yok).
+// Konsol çıktısı artık TAMAMEN .kem: MMIO ile PL011 (0x09000000). uart_satir =
+// yazdir_metin'in, uart_tam_satir = yazdir_tam'ın .kem-native karşılığı.
+sabit UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (QEMU virt)
+sabit UART_DR: tam64    = 0;           // 0x00 veri register
+sabit UART_FR: tam64    = 24;          // 0x18 flag register
+sabit UART_TXFF: tam32  = 32;          // bit5 = TX FIFO dolu
+
+// Tek bayt yaz: FR.TXFF temizlenene kadar bekle → DR'ye yaz. yetki<MMIO> linear
+// (üret/oku-ödünç/yaz-ödünç/geri_al; & bitwise, != öncelik için parantez ZORUNLU).
+işlev uart_bayt(b: tam32) {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    iken (mmio_oku32(y, UART_TABAN + UART_FR) & UART_TXFF) != 0 {
+    }
+    mmio_yaz32(y, UART_TABAN + UART_DR, b);
+    geri_al(y);
+}
+
+// Metni bayt-bayt yaz (metin_bayt bare-metal, kdl_metin_bare.c/bm_a64_metin.o).
+işlev uart_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        uart_bayt(metin_bayt(s, i) olarak tam32);
+        i = i + 1;
+    }
+}
+
+// Satır (metin + newline) — yazdir_metin yerine.
+işlev uart_satir(s: metin) {
+    uart_metin(s);
+    uart_bayt(10);
+}
+
+// Sayı (decimal, özyinelemeli basamak) — yazdir_tam yerine.
+işlev uart_tam_yardim(n: tam32) {
+    eğer n > 0 {
+        uart_tam_yardim(n / 10);
+        uart_bayt((n % 10) + 48);
+    }
+}
+işlev uart_tam_satir(n: tam32) {
+    eğer n == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_tam_yardim(n);
+    }
+    uart_bayt(10);
+}
 
 // ========================= [2] HEAP alt-sistemi =========================
 // Heap Dizi<tam32>: 1..10 ekle (kapasite 4→8→16 aşımı → region realloc +
@@ -111,32 +168,34 @@ işlev kategori(n: tam32) -> tam32 {
 
 // ============================== ÇEKİRDEK ===============================
 işlev main() -> tam32 {
-    yazdir_metin("=== KEMGU .kem-OS iskelet (Faz-2 A+B+C+E) ===");
+    // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
+    // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
+    uart_satir("=== KEMGU .kem-OS (Faz-2a: konsol cikti .kem-native UART) ===");
 
     // [1] BOOT — buraya ulaştıysak .kem bare-metal boot etti.
-    yazdir_metin("[1] BOOT OK");
+    uart_satir("[1] BOOT OK");
 
     // [2] HEAP — region-runtime dizi.
     değişken dt: tam32 = heap_dizi_topla();
-    yazdir_metin("[2] HEAP DIZI OK");
-    yazdir_tam(dt);
+    uart_satir("[2] HEAP DIZI OK");
+    uart_tam_satir(dt);
 
     // [3] MMIO — donanım register.
     değişken magic: tam32 = mmio_magic_oku();
     eğer magic == MAGIC_BEKLENEN {
-        yazdir_metin("[3] MMIO OK");
+        uart_satir("[3] MMIO OK");
     } değilse {
-        yazdir_metin("[3] MMIO HATA");
+        uart_satir("[3] MMIO HATA");
     }
-    yazdir_tam(magic);
+    uart_tam_satir(magic);
 
     // [4] HESAP — kontrol-akışı + fonksiyon + pattern-match.
     değişken h: tam32 = faktoriyel(5) + fib(10) + dongu_toplam(10);   // 230
     değişken kat: tam32 = kategori(h);                                // 3
     değişken pm: tam32 = basamak_adi(2);                              // 300
-    yazdir_metin("[4] HESAP OK");
-    yazdir_tam(h);
-    yazdir_tam(kat);
+    uart_satir("[4] HESAP OK");
+    uart_tam_satir(h);
+    uart_tam_satir(kat);
 
     // Entegrasyon doğrulaması — dört alt-sistem de doğru mu (5 kontrol)?
     değişken gecti: tam32 = 0;
@@ -157,9 +216,9 @@ işlev main() -> tam32 {
     }
 
     eğer gecti == 5 {
-        yazdir_metin("KEMGU KEM-OS OK");
+        uart_satir("KEMGU KEM-OS OK");
     } değilse {
-        yazdir_metin("KEMGU KEM-OS HATA");
+        uart_satir("KEMGU KEM-OS HATA");
     }
     ver 0;
 }

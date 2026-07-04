@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-245 — OS: KEMGU-OS Faz-2a SERİ ENTEGRASYON — .kem-UART kem_os.kem'e entegre, C-yazdir SİLİNDİ (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-244).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (UART sürücü embed + main yazdir→uart); `test/ornekler/kem_surucu.kem`
+SİLİNDİ; `Makefile` (kem_os target +bm_a64_metin.o + IR-kdl_yazdir-call=0 kanıtı; calistir_kem_surucu_arm target +
+aggregate KALDIRILDI). Yalnız test/örnek + Makefile.]** KEMGU-OS Anayasası Faz-2a (SERİ, tek-el, agent YOK): D-244'te
+ayrı `kem_surucu.kem`'de kanıtlanan .kem-native UART sürücüsü, MEVCUT çekirdek `kem_os.kem`'e ENTEGRE edildi; 12 C-yazdir
+çağrısı (8 `yazdir_metin` + 4 `yazdir_tam`) `.kem` UART'la (`uart_satir`/`uart_tam_satir`) DEĞİŞTİRİLDİ; C-yazdir yolu
+SİLİNDİ. Bu Faz-2'nin **İLK GERÇEK TUĞLASI** (Anayasa): kem_os.kem C-runtime'dan arınmaya başladı (KEMGU-in-KEMGU
+yüzeyi büyüdü — YASA-5).
+
+**FALSİFİYE-KANIT (YASA-3, ayrı demoya DEĞİL kem_os.kem'in KENDİSİNE):** `kem_os.ll` (derlenmiş IR) içinde
+`call.*kdl_yazdir` = **0** (Makefile gate grep-ENFORCE eder; 1+ çağrı → FAIL "konsol hala C runtime'a iniyor"). Boot
+kanıtı: TEK QEMU boot'ta `=== KEMGU .kem-OS (Faz-2a: konsol cikti .kem-native UART) === / [1] BOOT OK / [2] HEAP DIZI OK
+/ 55 / [3] MMIO OK / 1953655158 / [4] HESAP OK / 230 / 3 / KEMGU KEM-OS OK` — DÖRT alt-sistemin TAMAMININ çıktısı .kem
+UART sürücüsünden (tek `kdl_mmio_yaz32` yolu). libc-temiz. UART sürücüsü kem_os'a embed: uart_bayt(FR.TXFF poll + DR yaz,
+yetki<MMIO> linear) + uart_metin(metin_bayt) + uart_tam_satir(özyinelemeli). metin_bayt bare-metal = `bm_a64_metin.o`
+(D-244, kdl_metin_bare.c) kem_os link'inde.
+
+**YASA-2 (izole-demo biriktirme YOK):** standalone `kem_surucu.kem` + `calistir_kem_surucu_arm` target + aggregate girişi
+SİLİNDİ — UART sürücüsü artık kem_os.kem'in İÇİNDE (D-244 = keşif-prototip → D-245 = entegrasyon + prototip kaldır;
+Anayasa'nın KEŞİF→ENTEGRASYON akışı). `kdl_metin_bare.c` + build kuralı korundu (kem_os kullanıyor). Full OS gate 130
+(kem_surucu düştü, kem_os güçlendi), sıfır regresyon. **Anayasa PATH kuralı:** gate'ler clang64/ucrt64-önce PATH ile
+(codegen_bootstrap PATH-artefaktı = [[project-codegen-bootstrap-path-gotcha]]).
+
 ## D-244 — OS: KEMGU-OS Faz-2 adım 2 — .kem-NATIVE PL011 UART SÜRÜCÜSÜ (konsol çıktısı artık .kem) (2026-07-04) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-243).
