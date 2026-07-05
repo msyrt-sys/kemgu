@@ -1,0 +1,22 @@
+// Dizi indeks-yazma teshisi: stack Dizi<tam64>, alan[i] = v.
+
+işlev main() -> tam32 {
+    değişken ilk: tam64 = 11;
+    değişken orta: tam64 = 22;
+    değişken son: tam64 = 33;
+    değişken yazilan: tam64 = 18838586676582;
+    değişken i: tam32 = 1;
+    değişken alan = [ilk, orta, son];
+
+    alan[i] = yazilan;
+    değişken okunan: tam64 = alan[i];
+
+    eğer okunan == yazilan {
+        yazdir_metin("DIAG tam64 EVET / yaz=18838586676582 / oku=18838586676582");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG tam64 HAYIR / yaz=18838586676582 / oku:");
+    yazdir_tam64(okunan);
+    ver 1;
+}

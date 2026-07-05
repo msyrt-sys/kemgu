@@ -1,0 +1,22 @@
+// Dizi indeks-yazma teshisi: stack Dizi<tam8>, alan[i] = v.
+
+işlev main() -> tam32 {
+    değişken ilk: tam8 = 11;
+    değişken orta: tam8 = 22;
+    değişken son: tam8 = 33;
+    değişken yazilan: tam8 = 65;
+    değişken i: tam32 = 1;
+    değişken alan = [ilk, orta, son];
+
+    alan[i] = yazilan;
+    değişken okunan: tam8 = alan[i];
+
+    eğer okunan == yazilan {
+        yazdir_metin("DIAG tam8 EVET / yaz=65 / oku=65");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG tam8 HAYIR / yaz=65 / oku:");
+    yazdir_tam(okunan olarak tam32);
+    ver 1;
+}

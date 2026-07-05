@@ -1,0 +1,19 @@
+// Dizi kaynagi teshisi: yerel/literal stack dizi + alan[i] = v.
+
+işlev main() -> tam32 {
+    değişken alan = [7, 8, 9];
+    değişken i: tam32 = 1;
+    değişken yazilan: tam32 = 4444;
+
+    alan[i] = yazilan;
+    değişken okunan: tam32 = alan[i];
+
+    eğer okunan == yazilan {
+        yazdir_metin("DIAG stack_dizi EVET / yaz=4444 / oku=4444");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG stack_dizi HAYIR / yaz=4444 / oku:");
+    yazdir_tam(okunan);
+    ver 1;
+}

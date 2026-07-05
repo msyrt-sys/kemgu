@@ -1,0 +1,16 @@
+// Kontrol teshisi: hardcoded/init dizi, yazma yok, sadece oku.
+
+işlev main() -> tam32 {
+    değişken alan = [7, 4444, 9];
+    değişken i: tam32 = 1;
+    değişken okunan: tam32 = alan[i];
+
+    eğer okunan == 4444 {
+        yazdir_metin("DIAG sadece_oku EVET / beklenen=4444 / oku=4444");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG sadece_oku HAYIR / beklenen=4444 / oku:");
+    yazdir_tam(okunan);
+    ver 1;
+}
