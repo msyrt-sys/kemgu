@@ -1,0 +1,64 @@
+// =====================================================================
+// kem_pointer.kem — KEMGU-OS Adım-2 (D-248): CODEGEN POINTER GAP kanıtı
+// ---------------------------------------------------------------------
+// Faz-2b keşif 3 codegen gap buldu (inttoptr / deref-write / volatile) →
+// bu 3 gap düzeltildi (src/llvm.c + src/tip_kontrol.c). Bu kernel HEPSİNİ
+// uçtan-uca bare-metal'de kanıtlar (saf .kem raw pointer, C-intrinsic YOK):
+//
+//   GAP-1 int→ptr cast (inttoptr):  `adres olarak *tam32`
+//   GAP-2 deref-write (store):        `*p = deger`
+//   GAP-3 volatile:                   güvensiz load/store `volatile` (MMIO korunur)
+//
+// NOT: marker string'leri güvensiz-BLOK DIŞINDA basılır (mevcut ayrı bir bug:
+// güvensiz içinde yazdir_metin string arg'ı i32'ye düşüyor — D-248 kapsamı DIŞI,
+// pre-existing, ayrı flag). Raw-pointer işlemleri güvensiz işlevlerde; değerler
+// dışarı döner, marker'lar main'de düz basılır.
+//
+// Beklenen QEMU çıktı:
+//   KEM PTR MMIO OK
+//   1953655158            (0x74726976 "virt" — raw-ptr volatile MMIO okuma)
+//   KEM PTR RAM OK
+//   12345                 (raw-ptr deref-write + geri okuma round-trip)
+// =====================================================================
+
+// GAP-1 + GAP-3: raw pointer ile VOLATILE MMIO okuma (mmio_oku32 C-intrinsic YOK).
+// `adres olarak *tam32` → inttoptr; `*p` güvensizde → load volatile.
+işlev raw_mmio_oku(adres: tam64) -> tam32 {
+    güvensiz {
+        değişken p: *tam32 = adres olarak *tam32;
+        ver *p;
+    }
+    ver 0;
+}
+
+// GAP-1 + GAP-2 + GAP-3: raw pointer ile RAM'e YAZ + geri OKU (deref-write round-trip).
+işlev raw_ram_yaz_oku(adres: tam64, deger: tam32) -> tam32 {
+    güvensiz {
+        değişken p: *tam32 = adres olarak *tam32;   // inttoptr
+        *p = deger;                                  // store volatile (deref-write)
+        ver *p;                                      // load volatile (deref-read)
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    // GAP-1/3: VirtIO-MMIO MagicValue (0x0A000000) raw-ptr volatile okuma.
+    değişken magic: tam32 = raw_mmio_oku(167772160);        // 0x0A000000
+    eğer magic == 1953655158 {
+        yazdir_metin("KEM PTR MMIO OK");
+    } değilse {
+        yazdir_metin("KEM PTR MMIO HATA");
+    }
+    yazdir_tam(magic);
+
+    // GAP-2: 0x41000000 (RAM içi) raw-ptr yaz 12345 + geri oku.
+    değişken ram: tam32 = raw_ram_yaz_oku(1090519040, 12345);   // 0x41000000
+    eğer ram == 12345 {
+        yazdir_metin("KEM PTR RAM OK");
+    } değilse {
+        yazdir_metin("KEM PTR RAM HATA");
+    }
+    yazdir_tam(ram);
+
+    ver 0;
+}

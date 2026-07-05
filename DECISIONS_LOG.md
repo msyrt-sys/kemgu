@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-248 — CODEGEN: 3 pointer gap onarıldı — güvensiz int↔ptr + deref-write + volatile (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-247).
+
+**Karar [ETKİ: `src/llvm.c` (cast handler + DUGUM_ATAMA + OP_DEREFERANS); `src/tip_kontrol.c` (E002 + T022);
+`test/ornekler/kem_pointer.kem` (YENİ gate); `test/snapshots/deref_atama_t022.kem` + `deref_atama_disi.kem` +
+`test/test_llvm.c` (test güncelleme); `Makefile` (calistir_kem_pointer_arm + aggregate). DERLEYİCİ değişikliği —
+Mehmet 3-adım planı adım-2 direktifi.]** Faz-2b keşif (D-246) 3 codegen gap buldu (heap+MMIO'yu saf-.kem'de imkansız
+kılıyordu). ONARILDI, **HEPSİ GÜVENSİZ-SCOPED** (safe .kem etkilenmez):
+
+- **GAP-1 int↔ptr cast:** `src/llvm.c` DUGUM_TIP_DONUSTUR — hedef ptr ise kaynağı i64 üret + `inttoptr` emit;
+  kaynak ptr + hedef int ise `ptrtoint`. `src/tip_kontrol.c` E002 — `tk->guvensiz_baglam != 0` ise int↔*T cast izinli.
+- **GAP-2 deref-write:** `src/llvm.c` DUGUM_ATAMA — OP_DEREFERANS lvalue kolu (p'yi ptr üret + `store <T> <v>, ptr`).
+  `src/tip_kontrol.c` T022 — güvensizde `*p` lvalue izinli.
+- **GAP-3 volatile:** `src/llvm.c` OP_DEREFERANS load + deref-store — `g->guvensiz_derinlik > 0` ise `volatile`
+  (MMIO okuma/yazma clang -O2'de elenmez/sıralanmaz).
+
+**FALSİFİYE-KANIT:** (a) `kem_mmio_ham.kem` (D-246'da BLOKLU — clang "i32 but expected ptr") artık **boot ediyor**
+(raw-ptr VirtIO magic okuma 1953655158, saf .kem, 0 kdl_mmio-intrinsic). (b) YENİ `calistir_kem_pointer_arm` gate:
+IR'da inttoptr>0 + store/load volatile + kdl_mmio-call=0 (grep-ENFORCE) + QEMU "KEM PTR MMIO OK"/1953655158 (raw-ptr
+volatile MMIO) + "KEM PTR RAM OK"/12345 (raw-ptr deref-write round-trip). **GÜVENSİZ-SCOPE:** güvensiz İÇİNDE `*p=v`
+compile eder, DIŞINDA hâlâ T022-red (deref_atama_disi.kem doğrular).
+
+**Test güncelleme (spec değişimi):** matris-B (test_llvm.c [223]) eski spec (`*p=v` → T022-red) YENİ spec'e
+(güvensiz OK + dışı red) güncellendi; +`deref_atama_disi.kem` snapshot. Bu güvensiz-deref-write'ı ENGELLEYEN eski test
+= kasıtlı davranış değişimi (GAP-2 fix). **Regresyon:** llvm 237/237; full host suite + self-host FIXPOINT + OS gate.
+
+**KEŞFEDİLEN PRE-EXISTING BUG (D-248 DIŞI, [[project-kem-codegen-pointer-gaps]]; [[task_49d4c3ab]] flag):** güvensiz
+blokta `yazdir_metin("...")` string arg'ı `i32`'ye düşüyor (`call @kdl_yazdir_metin(i32 %2)`, ptr yerine) → runtime
+"(bos)". `git stash` ile pre-existing teyit (D-248 değil). kem_pointer.kem marker'ları bu yüzden güvensiz-DIŞINDA basar.
+
+**TASARIM KARARI (Mehmet onayına, YASA-5 KEMGU-in-KEMGU büyütür):** üç yetenek de güvensiz-scoped (raw pointer zaten
+güvensiz-only). volatile güvensiz-wide (mevcut güvensiz kod ör. kütüphane/dizi.kem volatile load alır — davranış-korur,
+micro-perf trade-off; MMIO doğruluğu için gerekli). Alternatif=ayrı volatile-qualifier (daha büyük dil değişimi).
+**SIRADAKİ (adım-3):** heap+MMIO'yu kem_os.kem'e entegre (artık saf-.kem mümkün).
+
 ## D-247 — OS: KEMGU-OS Faz-2c SERİ ENTEGRASYON — .kem panik + exc-handler kem_os.kem'e entegre (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-246).

@@ -2567,8 +2567,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     (beklenen && strcmp(beklenen, "ptr") != 0)
                         ? beklenen : "i32";
                 int r = yeni_reg(g);
-                fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
-                        r, yuk_tip, p.reg);
+                /* D-248 (GAP-3): güvensiz blokta VOLATILE load (MMIO okuması
+                 * clang -O2 tarafından elenmez/yeniden-sıralanmaz). */
+                const char *vol = (g->guvensiz_derinlik > 0) ? "volatile " : "";
+                fprintf(g->out, "  %%%d = load %s%s, ptr %%%d\n",
+                        r, vol, yuk_tip, p.reg);
                 IfadeSonuc s = { r, yuk_tip, 0 };
                 return s;
             }
@@ -3867,11 +3870,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* D-005: hedef tip isaretsizligi sonuca tasinir */
             int hedef_isz = ast_tip_isaretsiz_mi(
                 d->veri.tip_donustur.hedef_tip);
+            /* D-248 (GAP-1): int <-> ptr cast. hedef ptr ise kaynağı i64 (adres
+             * genişliği) olarak üret; inttoptr/ptrtoint emit. tip_kontrol
+             * güvensiz-scope garanti eder (raw pointer güvensiz-only). */
+            int hedef_ptr = (strcmp(hedef, "ptr") == 0);
+            const char *kaynak_bekle = hedef_ptr ? "i64" : hedef;
             IfadeSonuc kaynak = ifade_uret(g, d->veri.tip_donustur.kaynak,
-                                            hedef);
+                                            kaynak_bekle);
             if (strcmp(kaynak.tip, hedef) == 0) {
                 kaynak.isaretsiz = hedef_isz;
                 return kaynak;
+            }
+            int kaynak_ptr = (strcmp(kaynak.tip, "ptr") == 0);
+            if (hedef_ptr && !kaynak_ptr) {
+                int rp = yeni_reg(g);
+                fprintf(g->out, "  %%%d = inttoptr %s %%%d to ptr\n",
+                        rp, kaynak.tip, kaynak.reg);
+                IfadeSonuc s = { rp, "ptr", 0 };
+                return s;
+            }
+            if (kaynak_ptr && !hedef_ptr) {
+                int rp = yeni_reg(g);
+                fprintf(g->out, "  %%%d = ptrtoint ptr %%%d to %s\n",
+                        rp, kaynak.reg, hedef);
+                IfadeSonuc s = { rp, hedef, hedef_isz };
+                return s;
             }
             int k_kesirli = tip_kesirli_mi(kaynak.tip);
             int h_kesirli = tip_kesirli_mi(hedef);
@@ -4407,6 +4430,19 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  ; atama: erisim hedefi cozulemedi\n");
                 }
+            } else if (d->veri.atama.hedef &&
+                       d->veri.atama.hedef->tip == DUGUM_TEKLI &&
+                       d->veri.atama.hedef->veri.tekli.op == OP_DEREFERANS) {
+                /* D-248 (GAP-2): *p = v — güvensiz ham pointer üzerinden yazma.
+                 * tip_kontrol güvensiz-scope kontrol etti. p'yi ptr üret, değeri
+                 * doğal tipinde store et. güvensiz blokta VOLATILE (MMIO
+                 * side-effect korunur; clang elemez/sıralamaz). */
+                IfadeSonuc p = ifade_uret(g,
+                    d->veri.atama.hedef->veri.tekli.operand, "ptr");
+                IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, NULL);
+                const char *vol = (g->guvensiz_derinlik > 0) ? "volatile " : "";
+                fprintf(g->out, "  store %s%s %%%d, ptr %%%d\n",
+                        vol, v.tip, v.reg, p.reg);
             }
             return 0;
         }
