@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-247 — OS: KEMGU-OS Faz-2c SERİ ENTEGRASYON — .kem panik + exc-handler kem_os.kem'e entegre (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-246).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (panik + exc-handler + uart_onaltilik embed + [5] SİSTEM); `test/ornekler/
+kem_panik.kem` + `kem_exc.kem` SİLİNDİ; `Makefile` (kem_os gate + panik/exc .kem-define + [5] EXC OK kanıtı). Yalnız
+test/örnek + Makefile.]** Anayasa Faz-2c (Mehmet 3-adım planı adım-1, SERİ tek-el): Faz-2b keşif prototipleri (panik +
+exc-handler-mantığı, D-246) MEVCUT çekirdek kem_os.kem'e ENTEGRE. **[5] SİSTEM alt-sistemi** eklendi: exc-handler 3
+sentetik fault ile SELF-TEST (data-abort+translation→KURTAR / permission→OLDUR / instr-abort→HALT decode); panik
+entegrasyon-arıza branch'ine WIRE (gecti != 6 → `panik(...)`). Konsol .kem-UART korundu — panik/exc `uart_*` kullanır
+(C yazdir DEĞİL) + yeni `uart_onaltilik` (hex printer, dtam64) eklendi.
+
+**FALSİFİYE-KANIT (YASA-3, kem_os.kem'in KENDİSİNE):** kem_os.ll IR'ında (a) `define @panik` + `define @kem_istisna_isle`
+(+esr_ec/fault_sinifi/abort_alt_tur/handler_karari) = **.kem-DEFINE** (C `kdl_panik`/`kdl_istisna_isle` DEĞİL; Makefile
+grep-ENFORCE); (b) `call @panik` = panik arıza-branch'ine WIRE (grep-ENFORCE); (c) `call kdl_yazdir` = **0** (2a korundu);
+(d) QEMU boot: `[5] SISTEM: exc-handler self-test` + 3 fault satırı (`EXC FAR=0x40000000 ESR=0x96000004 karar=KURTAR` vb.,
+hex çıktı .kem uart_onaltilik'ten) + `[5] EXC OK kararlar=1,2,3` + `KEMGU KEM-OS OK`. 6-kontrol (heap+mmio+hesap×3+exc).
+
+**YASA-2:** standalone `kem_panik.kem` + `kem_exc.kem` SİLİNDİ (keşif-prototip → entegre → kaldır; kem_surucu deseni).
+`kem_heap.kem` + `kem_mmio_ham.kem` KALDI (bloklu; adım-2 codegen fix + adım-3 entegrasyon bekliyor).
+
+**DÜRÜST SINIR (YASA-4, etiket=öz):** exc handler MANTIĞI (.kem ESR→EC decode + fault-türü + karar) kem_os'ta canlı +
+self-test edildi; **GERÇEK fault-yönlendirmesi (asm-vektör VBAR → .kem handler hook) SONRAKİ adım** — `start_aarch64.S`
+vektör tablosu + trap-frame asm KALIR (C8 sınıfı, .kem inline-asm yok), fault-bilgisi asm-stub'dan param geçer. panik
+happy-path'te TETİKLENMEZ (arıza-yolu handler'ı; .kem-define + wire kanıtlı, standalone D-246'da halt kanıtlandı). Full OS
+gate 130, sıfır regresyon, C-twin yeşil. **SIRADAKİ (Mehmet planı adım-2):** 3 codegen gap onar (inttoptr/deref-write/
+volatile → [[project-kem-codegen-pointer-gaps]]) → adım-3 heap+MMIO entegre.
+
 ## D-246 — OS: KEMGU-OS Faz-2b KEŞİF — .kem-runtime-katman prototipleri + 3 codegen gap teşhisi (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-245).

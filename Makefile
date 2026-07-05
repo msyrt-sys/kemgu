@@ -883,6 +883,14 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 		grep -nE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; exit 1; \
 	fi
 	@echo "  (0 kdl_yazdir cagrisi — kem_os konsol ciktisi TAMAMEN .kem-native UART surucusunden)"
+	@echo "FALSIFIYE-KANIT (YASA-3, D-247): panik + exc-handler .kem-DEFINE (C kdl_panik/kdl_istisna_isle DEGIL):"
+	@if ! grep -qE "define[^@]*@panik\b" $(BUILD)/kem_os.ll || ! grep -qE "define[^@]*@kem_istisna_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem panik/kem_istisna_isle define YOK (Faz-2c entegrasyon eksik)"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@panik\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: panik ariza-yoluna WIRE edilmemis (call @panik yok)"; exit 1; \
+	fi
+	@echo "  (panik+exc .kem-define + panik ariza-branch'ine wire — .kem sistem-katmani)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
 		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
@@ -892,10 +900,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 		   && grep -q "\[1\] BOOT OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[2\] HEAP DIZI OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-2 .kem-native OS iskeleti gecti: A+B+C+E DORT alt-sistem TEK .kem boot'ta (KEMGU KEM-OS OK)."; \
+		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-2c .kem-native OS gecti: A+B+C+E + .kem panik/exc-handler TEK boot'ta (KEMGU KEM-OS OK)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..4] alt-sistem markerlari bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] alt-sistem markerlari bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \
