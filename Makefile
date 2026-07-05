@@ -992,6 +992,38 @@ calistir_kem_pointer_self_arm: kemgu_self $(BM_A64_OBJS)
 		echo "QEMU yok — self-host pointer parite testi atlandi."; \
 	fi
 
+# === D-250 DIAG: HEAP Dizi<T> INDEKS-YAZMA bare-metal (codegen-bug mu link-sorunu mu?) ===
+# TEK SORU: heap-runtime DÜZGÜN linkli (bm_a64_heap.o = kdl_dizi.inc) iken d[i]=v
+# (kdl_dizi_yaz yolu) ARM64 QEMU'da çalışıyor mu? ŞABLON = calistir_kernel_dizi_bare_metal
+# (BM_A64_OBJS linkler, bm_a64_heap.o dahil). Kanıt: QEMU "HEAP YAZ: yaz=48879 oku=48879 => EVET".
+# EVET → codegen SAĞLAM, "bug" LİNK-artefaktıydı. HAYIR → linkli-ama-bozuk (gerçek runtime bug).
+calistir_diag_heap_yaz_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-250 heap indeks-yazma diag: diag_heap_yaz_linkli.kem -> ARM64 ELF (heap-runtime linkli)..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/diag_heap_yaz_linkli.kem > $(BUILD)/diag_heap.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/diag_heap.ll -c -o $(BUILD)/diag_heap.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/diag_heap.elf \
+		$(BUILD)/diag_heap.o $(BM_A64_OBJS)
+	@echo "LINK-DURUMU: kdl_dizi_yaz (d[i]=v yolu) cozuldu mu (bm_a64_heap.o):"
+	@if llvm-nm --undefined-only $(BUILD)/diag_heap.elf | grep -qE "kdl_dizi"; then \
+		echo "FAIL: kdl_dizi_* UNDEFINED (heap-runtime linklenmedi — link-sorunu SÜRÜYOR)"; \
+		llvm-nm --undefined-only $(BUILD)/diag_heap.elf | grep kdl_dizi; exit 1; \
+	fi
+	@echo "  (kdl_dizi_* undefined YOK — heap-runtime bm_a64_heap.o'dan cozuldu)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/diag_heap.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/diag_heap.out -kernel $(BUILD)/diag_heap.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/diag_heap.out; echo "--- son ---"; \
+		if grep -q "=> EVET" $(BUILD)/diag_heap.out && grep -q "48879" $(BUILD)/diag_heap.out; then \
+			echo "D-250 heap indeks-yazma diag GECTI: d[i]=v heap-runtime linkli iken calisiyor (yaz=oku=48879) => codegen SAGLAM, sorun LINK-artefaktiydi."; \
+		else \
+			echo "FAIL: 'HEAP YAZ ... => EVET' + 48879 bekleniyor (heap indeks-yazma bozuk)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — heap indeks-yazma diag atlandi."; \
+	fi
+
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
 # Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
 # kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
@@ -4707,6 +4739,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
                      calistir_kem_os_arm calistir_kem_pointer_arm calistir_kem_pointer_self_arm \
+                     calistir_diag_heap_yaz_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \

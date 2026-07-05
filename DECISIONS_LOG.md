@@ -5,6 +5,24 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-250 — DIAG: HEAP Dizi<T> indeks-yazma bare-metal — "codegen-bug mu link-sorunu mu" NET cevap: LİNK (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-249).
+
+**Karar [ETKİ: `test/ornekler/diag_heap_yaz_linkli.kem` (YENİ); `Makefile` (`calistir_diag_heap_yaz_arm` + OS-aggregate).
+Yalnız test + target; src/selfhost/runtime DEĞİŞMEDİ.]** Tanı görevi: heap Dizi<T> INDEKS-YAZMA (`d[i]=v` →
+`kdl_dizi_yaz` yolu) heap-runtime DÜZGÜN linkli iken ARM64 QEMU'da çalışıyor mu? (Codex'in önceki teşhisi
+heap-runtime'ı LİNKLEMEMİŞTİ.) **SONUÇ: LİNK-SORUNUYDU, CODEGEN SAĞLAM.**
+
+**UYDURULAMAZ-KANIT (QEMU):** `HEAP KONTROL oku0=10` (heap-oku çalışıyor) + `HEAP YAZ: yaz=48879 oku=48879 =>
+EVET` (0xBEEF yazıldı, 0xBEEF geri okundu). **LINK-DURUMU:** `d[i]=v` codegen `call void @kdl_dizi_yaz_tam` emit
+eder; `kdl_dizi_*` undefined YOK (bm_a64_heap.o'dan çözüldü — bm_a64_heap.o kdl_dizi_yaz'ın 4 varyantını tanımlar,
+kdl_dizi.inc). Şablon = calistir_kernel_dizi_bare_metal (BM_A64_OBJS = bm_a64_heap.o dahil linkler). **KEMGU'da
+saf-stack-dizi YOK — her Dizi<T> heap-uniform (kdl_dizi.inc); stack [N×T] yolu yok → ikinci (stack) diag ATLANDI
+(bu da bulgu).** **Sonuç:** `d[i]=v` heap-yazma codegen'i (llvm.c INDEKS→kdl_dizi_yaz) DOĞRU; önceki "bug" =
+bm_a64_heap.o linklenmeme artefaktı. Gerçek fix küçük: diag/kernel'leri BM_A64_OBJS'e linkle (zaten kem_os/kernel_dizi
+öyle yapıyor). Düzeltmeyi orchestrator yapacak. OS-gate'e eklendi.
+
 ## D-249 — SELF-HOST: codegen.kem POINTER PARİTE — C↔self-host divergence fix (saf-.kem-OS adım-1) (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-248).
