@@ -1,5 +1,6 @@
-// Matris B: *p = v — spec gereği T022 ile REDDEDİLMELİ.
-// Lvalue yalnız tanımlayıcı/erişim/indeks; ham pointer-deref hedefi değil.
+// Matris B (D-248 GAP-2): *p = v — GÜVENSİZ blokta ARTIK İZİNLİ (deref-write).
+// Ham pointer üzerinden yazma yalnız güvensiz (MMIO/heap); güvensiz DIŞINDA hâlâ
+// T022-red (bkz deref_atama_disi.kem). Bu dosya --check GEÇMELİ.
 işlev kur(p: *tam32) -> tam32 {
     güvensiz { *p = 42; }
     ver 0;

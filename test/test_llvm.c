@@ -1782,10 +1782,13 @@ static void test_matris_c_deref_ref_round_trip(void) {
 }
 
 static void test_matris_b_deref_atama_t022(void) {
-    /* Matris B: *p = v spec geregi T022-RED (DOGRULA). Lvalue yalniz
-     * tanimlayici/erisim/indeks; ham pointer-deref hedefi degil. */
-    int ok = kemgu_check_basarili("test/snapshots/deref_atama_t022.kem");
-    test_sonuc("matris-B: *p=v -> T022 reddi (spec-dogru)", ok == 0);
+    /* Matris B (D-248 GAP-2): güvensiz *p = v ARTIK İZİNLİ (ham pointer
+     * deref-write; MMIO/heap). Güvensiz-scope: güvensiz İÇİNDE compile eder,
+     * DIŞINDA hâlâ T022-red (güvenli .kem ham pointer üzerinden yazamaz). */
+    int ic  = kemgu_check_basarili("test/snapshots/deref_atama_t022.kem");
+    int dis = kemgu_check_basarili("test/snapshots/deref_atama_disi.kem");
+    test_sonuc("matris-B: guvensiz *p=v OK + disi T022-red (D-248)",
+               ic == 1 && dis == 0);
 }
 
 static void test_matris_de_karsilikli_ozyineleme(void) {

@@ -1,0 +1,11 @@
+// Matris B negatif (D-248 GAP-2 güvensiz-scope): *p = v GÜVENSİZ BLOK DIŞINDA
+// hâlâ REDDEDİLMELİ (T022 + deref-güvensiz kuralı). Güvenli .kem ham pointer
+// üzerinden yazamaz — deref-write yalnız güvensiz. Bu dosya --check BAŞARISIZ olmalı.
+işlev kur(p: *tam32) -> tam32 {
+    *p = 42;
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    ver 0;
+}

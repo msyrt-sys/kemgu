@@ -1913,6 +1913,17 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             if (kt->kategori == TIP_POINTER && ht->kategori == TIP_METIN) {
                 return ht;
             }
+            /* D-248 (GAP-1): güvensiz blokta int <-> *T cast — integer-adres ->
+             * ham pointer (MMIO/heap ham-bellek). YALNIZ güvensiz (raw pointer
+             * güvensiz-scope; safe .kem etkilenmez). codegen inttoptr/ptrtoint. */
+            if (tk->guvensiz_baglam != 0) {
+                if (tip_tamsayi_mi(kt) && ht->kategori == TIP_POINTER) {
+                    return ht;   /* int -> *T (inttoptr) */
+                }
+                if (kt->kategori == TIP_POINTER && tip_tamsayi_mi(ht)) {
+                    return ht;   /* *T -> int (ptrtoint) */
+                }
+            }
             int kaynak_sayisal = tip_sayisal_mi(kt);
             int hedef_sayisal = tip_sayisal_mi(ht);
             if (!kaynak_sayisal || !hedef_sayisal) {
@@ -4542,13 +4553,20 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_ATAMA: {
-            /* Hedef lvalue mi? (TANIMLAYICI, ERISIM, INDEKS) */
+            /* Hedef lvalue mi? (TANIMLAYICI, ERISIM, INDEKS) — D-248 (GAP-2):
+             * güvensiz blokta *p (OP_DEREFERANS) da lvalue (ham pointer üzerinden
+             * yazma; MMIO/heap). YALNIZ güvensiz (safe .kem etkilenmez). */
             const Dugum *hedef = d->veri.atama.hedef;
+            int deref_lvalue = (hedef->tip == DUGUM_TEKLI &&
+                                hedef->veri.tekli.op == OP_DEREFERANS &&
+                                tk->guvensiz_baglam != 0);
             if (hedef->tip != DUGUM_TANIMLAYICI &&
                 hedef->tip != DUGUM_ERISIM &&
-                hedef->tip != DUGUM_INDEKS) {
+                hedef->tip != DUGUM_INDEKS &&
+                !deref_lvalue) {
                 tip_hata(tk, d, "T022",
-                         "atama hedefi lvalue olmali (tanimlayici/erisim/indeks)");
+                         "atama hedefi lvalue olmali (tanimlayici/erisim/indeks"
+                         "; *p yalniz guvensiz)");
             }
             TipBilgisi *ht = tip_belirle(tk, hedef);
             /* D-071 (Sınıf B, lambda yeniden-atama): işlev/lambda TİPLİ bir

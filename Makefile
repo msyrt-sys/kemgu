@@ -916,6 +916,44 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 # biriktirme yok — UART sürücüsü artık kem_os.kem'in içinde, IR'da 0 kdl_yazdir kanıtıyla).
 # Freestanding metin runtime (kdl_metin_bare.c/bm_a64_metin.o) kem_os link'inde yaşamaya devam.
 
+# === Adım-2 (D-248): CODEGEN POINTER GAP kanıtı — inttoptr + deref-write + volatile ===
+# Faz-2b keşif 3 codegen gap buldu; src/llvm.c + tip_kontrol.c'de düzeltildi. kem_pointer.kem
+# saf .kem raw pointer ile (C mmio-intrinsic YOK) hepsini uçtan-uca kanıtlar: VirtIO MagicValue
+# raw-ptr volatile okuma (GAP-1 inttoptr + GAP-3 volatile) + RAM deref-write round-trip (GAP-2).
+# FALSİFİYE-KANIT: IR'da inttoptr>0 + store/load volatile + kdl_mmio ÇAĞRISI = 0 (saf .kem).
+calistir_kem_pointer_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "Adım-2 codegen pointer gap: kem_pointer.kem -> ARM64 ELF (saf .kem raw pointer)..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_pointer.kem > $(BUILD)/kem_pointer.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_pointer.ll -c -o $(BUILD)/kem_pointer.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_pointer.elf \
+		$(BUILD)/kem_pointer.o $(BM_A64_OBJS)
+	@echo "FALSIFIYE-KANIT: raw-ptr codegen (inttoptr + volatile) + 0 C mmio-intrinsic:"
+	@if ! grep -q "inttoptr" $(BUILD)/kem_pointer.ll || ! grep -q "load volatile" $(BUILD)/kem_pointer.ll \
+	    || ! grep -q "store volatile" $(BUILD)/kem_pointer.ll; then \
+		echo "FAIL: inttoptr / load volatile / store volatile IR'da YOK (codegen gap fix eksik)"; exit 1; \
+	fi
+	@if grep -qE "call.*kdl_mmio" $(BUILD)/kem_pointer.ll; then \
+		echo "FAIL: C kdl_mmio ÇAĞRISI var (saf .kem raw pointer degil)"; exit 1; \
+	fi
+	@echo "  (inttoptr + store/load volatile IR'da + 0 kdl_mmio cagrisi — saf .kem raw pointer)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kem_pointer.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kem_pointer.out -kernel $(BUILD)/kem_pointer.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_pointer.out; echo "--- son ---"; \
+		if grep -q "KEM PTR MMIO OK" $(BUILD)/kem_pointer.out \
+		   && grep -q "1953655158" $(BUILD)/kem_pointer.out \
+		   && grep -q "KEM PTR RAM OK" $(BUILD)/kem_pointer.out \
+		   && grep -q "12345" $(BUILD)/kem_pointer.out; then \
+			echo "Adım-2 codegen pointer gap testi gecti: saf .kem raw-ptr MMIO(volatile) + deref-write RAM round-trip."; \
+		else \
+			echo "FAIL: 'KEM PTR MMIO OK'+1953655158+'KEM PTR RAM OK'+12345 bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — codegen pointer gap testi atlandi."; \
+	fi
+
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
 # Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
 # kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
@@ -4630,7 +4668,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
-                     calistir_kem_os_arm \
+                     calistir_kem_os_arm calistir_kem_pointer_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
