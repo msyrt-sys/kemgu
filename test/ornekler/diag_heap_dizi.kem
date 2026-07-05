@@ -1,0 +1,22 @@
+// Dizi kaynagi teshisi: dizi_olustur ile heap dizi + runtime dizi_ekle/dizi_al.
+// Bare-metal linkte kdl_dizi_* runtime sembolleri olmadigi icin QEMU oncesi takilir.
+
+işlev main() -> tam32 {
+    değişken alan: Dizi<tam32> = dizi_olustur(4);
+    değişken yazilan: tam32 = 57005;
+
+    dizi_ekle(alan, 11);
+    dizi_ekle(alan, yazilan);
+    dizi_ekle(alan, 33);
+
+    değişken okunan: tam32 = dizi_al(alan, 1);
+
+    eğer okunan == yazilan {
+        yazdir_metin("DIAG heap_dizi EVET / yaz=57005 / oku=57005");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG heap_dizi HAYIR / yaz=57005 / oku:");
+    yazdir_tam(okunan);
+    ver 1;
+}

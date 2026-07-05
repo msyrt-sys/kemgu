@@ -1,0 +1,20 @@
+// Sozdizim/runtime teshisi: dizi_yaz(alan, i, v).
+// Beklenen sonuc: bu repo halinde dizi_yaz intrinsic'i yok; --check basarisiz olmali.
+
+işlev main() -> tam32 {
+    değişken alan = [100, 200, 300];
+    değişken i: tam32 = 1;
+    değişken yazilan: tam32 = 9001;
+
+    dizi_yaz(alan, i, yazilan);
+    değişken okunan: tam32 = alan[i];
+
+    eğer okunan == yazilan {
+        yazdir_metin("DIAG syntax_dizi_yaz EVET / yaz=9001 / oku=9001");
+        ver 0;
+    }
+
+    yazdir_metin("DIAG syntax_dizi_yaz HAYIR / yaz=9001 / oku:");
+    yazdir_tam(okunan);
+    ver 1;
+}
