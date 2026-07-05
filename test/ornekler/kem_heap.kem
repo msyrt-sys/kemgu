@@ -1,0 +1,124 @@
+// ============================================================================
+// kem_heap.kem — Faz-2b KEŞİF prototipi (bare-metal bump-allocator)
+// prototipler: kdl_bare_heap.c (malloc / region backing) + ham-adres pointer
+//
+// SORU: Saf-.kem, C kdl_bare_heap.c malloc yerine ham belleği yönetebilir mi?
+//
+// KEŞİF SONUCU (iki kanıt yolu bu dosyada):
+//   YOL-A (saf-.kem cast):  `değişken p: *tam32 = adres olarak *tam32; *p = v;`
+//        → CODEGEN ÇÖKÜYOR (2 gap: int->ptr `inttoptr` YOK + store-to-deref YOK).
+//        Bu, kdl_bare_heap.c'nin ve MMIO katmanının neden C olduğunu açıklar.
+//        Kanıt: build/probe_cast.ll → clang "i64 but expected ptr" reddi.
+//   YOL-B (C-intrinsic delege): mmio_yaz32/mmio_oku32 = C'de `*(volatile
+//        uint32_t*)(uintptr_t)adres` — tam olarak eksik iki IR (inttoptr +
+//        deref-store/load) C'de yapılır. .kem bump-allocator BUNUNLA boot eder.
+//        Bu dosya YOL-B'yi bare-metal'de KANITLAR (gerçek RAM yaz/oku/topla).
+//
+// Marker: "KEM HEAP OK" + toplam (10+20+12 = 42)
+// ============================================================================
+
+// ---- Alt-sistem sabitleri ----
+sabit MMIO_OKU_YAZ: tam32 = 3;           // yetki<MMIO>: OKU|YAZ
+
+// Bare-metal Normal RAM scratch tabanı. QEMU virt default RAM = 128 MiB @
+// 0x40000000 → geçerli aralık 0x40000000..0x47FFFFFF. 0x48000000 RAM SINIRININ
+// TAM ÜSTÜ (data abort — keşifte doğrulandı). 0x46000000 = +96 MiB: RAM içi,
+// kernel (~0x41xxxxxx) ve user (0x42000000) bölgelerinin çok ilerisi → güvenli
+// scratch. MMU identity map (0x40000000-0x7FFFFFFF, Normal-WB) bunu kapsar.
+sabit HEAP_TABAN: tam64 = 0x46000000;
+
+// PL011 UART (QEMU virt konsol) — kem_os.kem native çıktı deseni.
+sabit UART_TABAN: tam64 = 150994944;     // 0x09000000 PL011
+sabit UART_DR: tam64    = 0;             // 0x00 veri register
+sabit UART_FR: tam64    = 24;            // 0x18 flag register
+sabit UART_TXFF: tam32  = 32;            // bit5 = TX FIFO dolu
+
+// ==================== NATIVE UART ÇIKTI (saf-.kem, MMIO) ====================
+işlev uart_bayt(b: tam32) {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    iken (mmio_oku32(y, UART_TABAN + UART_FR) & UART_TXFF) != 0 {
+    }
+    mmio_yaz32(y, UART_TABAN + UART_DR, b);
+    geri_al(y);
+}
+
+işlev uart_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        uart_bayt(metin_bayt(s, i) olarak tam32);
+        i = i + 1;
+    }
+}
+
+işlev uart_satir(s: metin) {
+    uart_metin(s);
+    uart_bayt(10);
+}
+
+işlev uart_tam_yardim(n: tam32) {
+    eğer n > 0 {
+        uart_tam_yardim(n / 10);
+        uart_bayt((n % 10) + 48);
+    }
+}
+
+işlev uart_tam_satir(n: tam32) {
+    eğer n == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_tam_yardim(n);
+    }
+    uart_bayt(10);
+}
+
+// ==================== BUMP-ALLOCATOR (ham bellek, YOL-B) ====================
+// Cast gap'i etrafından: sabit RAM adresine 32-bit yaz/oku C-intrinsic
+// mmio_yaz32/mmio_oku32 ile (bunlar C'de int->ptr cast + volatile deref yapar).
+//
+// bump_tahsis: taban+ofset adresini döndürür (adres = tam64, pointer DEĞİL —
+// dil ham *tam32'yi ifade edemediği için adresi integer olarak taşırız).
+işlev bump_tahsis(taban: tam64, ofset: tam64) -> tam64 {
+    ver taban + ofset;
+}
+
+// Adrese yaz (mmio_yaz32 = *(volatile u32*)adres = deger).
+işlev bellek_yaz(adres: tam64, deger: tam32) {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    mmio_yaz32(y, adres, deger);
+    geri_al(y);
+}
+
+// Adresten oku (mmio_oku32 = return *(volatile u32*)adres).
+işlev bellek_oku(adres: tam64) -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    değişken v: tam32 = mmio_oku32(y, adres);
+    geri_al(y);
+    ver v;
+}
+
+işlev main() -> tam32 {
+    uart_satir("KEM HEAP: bump-allocator baslatiliyor");
+
+    // 3 blok "tahsis et" (base+0, base+4, base+8)
+    değişken a0: tam64 = bump_tahsis(HEAP_TABAN, 0 olarak tam64);
+    değişken a1: tam64 = bump_tahsis(HEAP_TABAN, 4 olarak tam64);
+    değişken a2: tam64 = bump_tahsis(HEAP_TABAN, 8 olarak tam64);
+
+    // Her bloğa DEĞER YAZ (ham RAM)
+    bellek_yaz(a0, 10);
+    bellek_yaz(a1, 20);
+    bellek_yaz(a2, 12);
+
+    // GERİ OKU + topla → belleği yönettiğini kanıtla
+    değişken b0: tam32 = bellek_oku(a0);
+    değişken b1: tam32 = bellek_oku(a1);
+    değişken b2: tam32 = bellek_oku(a2);
+    değişken toplam: tam32 = b0 + b1 + b2;
+
+    uart_satir("KEM HEAP OK");
+    uart_metin("toplam: ");
+    uart_tam_satir(toplam);
+
+    ver toplam;
+}

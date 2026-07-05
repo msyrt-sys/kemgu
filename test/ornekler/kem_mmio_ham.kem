@@ -1,0 +1,82 @@
+// ============================================================================
+// FAZ-2b KEŞİF — HAM MMIO katmanı (mmio_oku32 C-intrinsic'ine BAĞIMSIZ)
+// ----------------------------------------------------------------------------
+// SORU: .kem güvensiz *tam32 raw-pointer ile DOĞRUDAN donanım register okuyabilir
+//       mi (mmio_oku32 C-builtin'ine bağlı OLMADAN)?
+// Hedef register: VirtIO-MMIO slot 0 MagicValue @ 0x0A000000. Beklenen 0x74726976.
+//
+// Çıktı yolu (uart_*) kem_os.kem'in .kem-native PL011 sürücüsünden birebir alındı
+// — çıktı-yolu 2a'da portlandı; bu dosya YALNIZ kendi MMIO OKUMA katmanını
+// prototipler. mmio_oku32 / mmio_yaz32 / yetki<MMIO> KULLANILMAZ.
+// ============================================================================
+
+// ---- .kem-native PL011 UART çıktı (kem_os.kem [0]'dan, çıktı-yolu) ----
+sabit UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (QEMU virt)
+sabit UART_DR: tam64    = 0;           // veri register
+sabit UART_FR: tam64    = 24;          // flag register
+sabit UART_TXFF: tam32  = 32;          // bit5 = TX FIFO dolu
+
+// Çıktı için de HAM pointer kullanıyoruz (mmio_oku32/yaz32 YOK) — böylece
+// TÜM MMIO yolu C-intrinsic'siz. UART FR oku + DR yaz ham *tam32 ile.
+işlev uart_bayt(b: tam32) {
+    güvensiz {
+        değişken fr_p: *tam32 = (UART_TABAN + UART_FR) olarak *tam32;
+        iken (*fr_p & UART_TXFF) != 0 {
+        }
+        değişken dr_p: *tam32 = (UART_TABAN + UART_DR) olarak *tam32;
+        *dr_p = b;
+    }
+}
+
+işlev uart_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        uart_bayt(metin_bayt(s, i) olarak tam32);
+        i = i + 1;
+    }
+}
+
+işlev uart_satir(s: metin) {
+    uart_metin(s);
+    uart_bayt(10);
+}
+
+işlev uart_tam_yardim(n: tam32) {
+    eğer n > 0 {
+        uart_tam_yardim(n / 10);
+        uart_bayt((n % 10) + 48);
+    }
+}
+işlev uart_tam_satir(n: tam32) {
+    eğer n == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_tam_yardim(n);
+    }
+    uart_bayt(10);
+}
+
+// ---- HAM MMIO OKUMA katmanı (bu keşfin ASIL prototipi) ----
+// integer-adres 0x0A000000 → *tam32 cast + deref. mmio_oku32 YOK.
+sabit VIRTIO_TABAN: tam64  = 167772160;   // 0x0A000000
+sabit VIRTIO_MAGIC: tam64  = 0;           // MagicValue offset
+
+işlev mmio_ham_oku(adres: tam64) -> tam32 {
+    güvensiz {
+        değişken p: *tam32 = adres olarak *tam32;
+        ver *p;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken magic: tam32 = mmio_ham_oku(VIRTIO_TABAN + VIRTIO_MAGIC);
+    uart_tam_satir(magic);
+    eğer magic == 1953655158 {     // 0x74726976
+        uart_satir("KEM MMIO HAM OK");
+    } değilse {
+        uart_satir("KEM MMIO HAM FAIL");
+    }
+    ver 0;
+}

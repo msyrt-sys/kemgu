@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-246 — OS: KEMGU-OS Faz-2b KEŞİF — .kem-runtime-katman prototipleri + 3 codegen gap teşhisi (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-245).
+
+**Karar [ETKİ: `test/ornekler/kem_{heap,panik,exc,mmio_ham}.kem` (4 YENİ keşif dosyası). Yalnız test/örnek; Makefile-target
+YOK — entegrasyon 2c seri.]** Anayasa Faz-2b = KEŞİF (paralel, 4-agent Workflow wf_353dddf0-c79): kem_os.kem'in C-runtime
+katmanlarını (.kem-heap/MMIO/panik/exception) .kem'de İFADE EDİLEBİLİR Mİ diye prototiple. kem_os.kem'e DOKUNULMADI.
+**Sonuç: 2 katman saf-.kem READY, 2 katman codegen-gap BLOKLU (hepsi bağımsız DOĞRULANDI).**
+
+**2c-ENTEGRASYONA HAZIR (saf-.kem, gap yok):**
+- **panik** (`kem_panik.kem`) → "KEM PANIK OK" + panik mesajı + `iken doğru` halt (inline-asm YOK). `kdl_panik.c` yerine. libc-temiz, boot ✓.
+- **exc** (`kem_exc.kem`) → "KEM EXC OK kararlar=1,2,3 son-FAR=0x80000000". ESR→EC decode (>>26) + DFSC + fault-türü kararı,
+  TAMAMEN .kem (--check temiz, boot ✓). `kdl_kesme.c` HANDLER-mantığı yerine. **MİMARİ SINIR (gap değil):** vektör tablosu
+  + bağlam-kaydetme `start_aarch64.S` asm'de KALIR (VBAR asm giriş + trap-frame; .kem inline-asm yok = C8 sınıfı); yalnız
+  handler-mantığı .kem'e taşınabilir, FAR/ESR'i asm-stub okuyup param geçer.
+
+**BLOKLU — 3 GERÇEK CODEGEN GAP (→ [[project-kem-codegen-pointer-gaps]], Mehmet DESIGN-STOP):**
+- **heap** (`kem_heap.kem`) → "KEM HEAP OK" AMA yalnız YOL-B ile (C `kdl_mmio_oku32/yaz32`'ye DELEGE ederek; kem_heap.ll'de
+  4 C-mem çağrısı DOĞRULANDI) — saf-.kem ham-bellek BLOKLU. `kdl_bare_heap.c` yerine geçemez.
+- **mmio** (`kem_mmio_ham.kem`) → BOOT ETMEDİ. `kemgu --llvm` geçer ama `clang -x ir` REDDEDER: "'%6' defined with type
+  'i32' but expected 'ptr'" (REPRODÜKSİYON DOĞRULANDI). `kdl_runtime_mmio.c` yerine geçemez.
+- **GAP-1 int→ptr cast:** `adres olarak *tam32` → codegen `inttoptr` EMIT ETMEZ (kod tabanında `inttoptr` grep=0 DOĞRULANDI);
+  llvm.c:~3868 cast handler yalnız int↔int/float; tip_kontrol E002 pointer-cast'ı dışlar.
+- **GAP-2 deref-write:** `*p = v` codegen'de DÜŞER (llvm.c:~4235 DUGUM_ATAMA yalnız TANIMLAYICI/INDEKS/ERISIM dalları
+  DOĞRULANDI, OP_DEREFERANS yok; read `*p` çalışır — asimetri); T022 deref'i lvalue saymaz.
+- **GAP-3 volatile:** OP_DEREFERANS düz load/store, `volatile` değil → -O2 MMIO'yu eler/sıralar.
+- **Kritik:** Bunlar DİL SEMANTİĞİ değil C-bootstrap codegen EMIT eksikliği (mmio agenti IR'ı elle yamalayıp clang'ı geçirip
+  host'ta exit 42 aldı → tasarım sağlam). Düzeltme src/llvm.c + tip_kontrol.c = Mehmet kararı.
+
+**KEŞİF METODU:** 4 worktree-paylaşımlı agent, ayrı .kem, önce-derlenmiş bm_a64 objelerine link, QEMU-boot kanıtı +
+gap-flag. Ben firsthand DOĞRULADIM (4 dosya+boot, mmio clang-repro, llvm.c/tip_kontrol satır-teyidi, heap YOL-B grep,
+exc --check). **SIRADAKİ (Mehmet):** DESIGN-STOP — (A) 3 codegen gap'i onar (heap+MMIO .kem-native olur, YASA-5) vs
+(B) heap/MMIO'yu kalıcı C-intrinsic kabul et + 2c'de yalnız panik+exc entegre et.
+
 ## D-245 — OS: KEMGU-OS Faz-2a SERİ ENTEGRASYON — .kem-UART kem_os.kem'e entegre, C-yazdir SİLİNDİ (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-244).
