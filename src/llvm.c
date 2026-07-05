@@ -1173,6 +1173,13 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             ast_taransa_metinleri(g, d->veri.kullan_ifade.operand); break;
         case DUGUM_IMHA_IFADE:
             ast_taransa_metinleri(g, d->veri.imha_ifade.operand); break;
+        /* güvensiz blok gövdesi de taranmalı — önceden atlanıyordu →
+         * blok içindeki metin literalleri @.str.N olarak toplanmıyordu →
+         * codegen "metin literal kayitsiz" HATASI verip `add i32 0,0`
+         * (i32) emit ediyordu → çağrı argümanı ptr yerine i32 oluyordu
+         * (kdl_yazdir_metin runtime'da "(bos)" basıyordu). */
+        case DUGUM_GUVENSIZ:
+            ast_taransa_metinleri(g, d->veri.guvensiz.blok); break;
         default: break;
     }
 }

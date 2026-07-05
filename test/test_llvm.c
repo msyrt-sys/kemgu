@@ -2460,6 +2460,23 @@ static void test_guvensiz_icinde_ver(void) {
     test_sonuc("guvensiz icinde 'ver' terminator -> exit 42", rc == 42);
 }
 
+static void test_guvensiz_metin_literal(void) {
+    /* Regresyon: guvensiz blogu icindeki metin literali onceden
+     * ast_taransa_metinleri pre-pass'inde ATLANIYORDU (DUGUM_GUVENSIZ
+     * case yoktu) -> @.str.N olarak toplanmaz -> metin_lit_uret
+     * "metin literal kayitsiz" HATASI verip `add i32 0,0` (i32) emit
+     * ederdi -> cagri argumani ptr yerine i32 olur (yazdir_metin
+     * runtime'da "(bos)" basardi, metin_uzunluk 0 donerdi).
+     * metin_uzunluk("HELLO") == 5 olmali; bozuk yolda 0 -> exit 1. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = 0; "
+        "g\xc3\xbcvensiz { n = metin_uzunluk(\"HELLO\") olarak tam32; } "
+        "e\xc4\x9f" "er n == 5 { ver 42; } ver 1; }");
+    test_sonuc("guvensiz icinde metin literali ptr korunur -> exit 42",
+               rc == 42);
+}
+
 /* --- D-041: dongu-yerel alloca hoist (stack overflow regresyonu) --- */
 
 static void test_dongu_yerel_alloca_hoist(void) {
@@ -2755,6 +2772,7 @@ int main(void) {
     printf("\n--- C5 on-kosul #1: guvensiz blok lowering ---\n");
     test_guvensiz_blok_emit();
     test_guvensiz_icinde_ver();
+    test_guvensiz_metin_literal();
 
     printf("\n--- D-041: dongu-yerel alloca hoist ---\n");
     test_dongu_yerel_alloca_hoist();
