@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-249 — SELF-HOST: codegen.kem POINTER PARİTE — C↔self-host divergence fix (saf-.kem-OS adım-1) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-248).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (cast+deref-load+deref-store codegen + T022 checker); `test/cg_korpus/
+cg_ham_pointer.kem` (YENİ codegen_diff parite); `Makefile` (calistir_kem_pointer_self_arm + OS-aggregate). SELF-HOST
+ÇEKİRDEĞİ — soundness-kritik. Mehmet "KEMGU-OS SAF .kem, C substrat YOK" vizyonu, adım-1.]** D-248 ham-pointer'ı
+`src/llvm.c`'ye (C-codegen) ekledi ama `selfhost/codegen.kem`'e (self-host) EKLEMEDİ → **C↔self-host DIVERGENCE**
+(C derler, self-host T022-red + inttoptr-yok). Saf-.kem-OS self-host'ta derlenemezdi. D-248'in 3 emisyonu codegen.kem'e
+AYNALANDI (oracle=llvm.c), + 1 checker parite:
+
+- **GAP-1 cast** (TIP_DONUSTUR codegen ~2809): hedef ptr → `inttoptr`; kaynak ptr → `ptrtoint`.
+- **GAP-2 deref-write** (ATAMA deyim_uret ~3216): TEKLI `deref*` lvalue kolu → `store volatile`.
+- **GAP-3 volatile** (deref* load ~2683): `load volatile`.
+- **Checker T022** (ATAMA kontrol_dugum ~4487): TEKLI `deref*` da lvalue (C tip_kontrol D-248 aynası).
+- güvensiz-scoped: deref checker-gereği güvensiz-only → volatile KOŞULSUZ = llvm.c'nin `guvensiz_derinlik>0` koşulu
+  daima-doğru hali (parite).
+
+**FALSİFİYE-KANITLAR (3'ü de kalıcı gate):** **(a) codegen_diff** — YENİ `cg_ham_pointer.kem` (host-güvenli
+inttoptr/ptrtoint round-trip, deref-yok): C-codegen exit=42 == self-host exit=42 (korpus 73/73, test_tumu'da). D-249
+öncesi self-host bunu DERLEYEMEZDİ = divergence kanıtı. **(b) FIXPOINT** — stage1 IR == stage2 IR BİREBİR (32379 satır;
++222 = eklenen handler kodu; codegen.kem raw-pointer KULLANMIYOR → emit yolu fixpoint'te değil ama self-compile kararlı;
+fix fixpoint'i KIRMADI). **(c) self-host bare-metal** — YENİ `calistir_kem_pointer_self_arm`: `kemgu_self.exe`
+kem_pointer.kem'i derler → QEMU boot (self-host IR inttoptr+volatile+0 kdl_mmio + "KEM PTR MMIO OK"/1953655158 +
+"KEM PTR RAM OK"/12345), OS-gate'te. = self-host codegen ham-pointer'ı GERÇEKTEN destekliyor.
+
+**DÜRÜST FLAG (soundness, pre-existing):** self-host checker güvensiz-scoping'i deref için ENFORCE ETMİYOR — `*p`
+deref-read güvensiz-DIŞINDA da kabul (C reddeder; teyit: `oku(x:*tam32){ver *x}` → self-host OK, C HATA). PRE-EXISTING
+(deref-read'de zaten vardı, D-249 değil). T022 gevşetmem deref-write'ta SİMETRİK. Kırılmazlık PRATİKTE korunur (safe .kem
+ham pointer üretmez — `&` referans kullanır; ham `*T` yalnız int→ptr güvensiz cast'tan). **Hardening (ayrı iş):**
+self-host checker'a güvensiz-derinlik-tracking + deref read/write'ı güvensiz-scope'a al. **PATH:** fixpoint/bootstrap
+`TMPDIR=/c/tmp` + clang64/ucrt64-önce ([[project-codegen-bootstrap-path-gotcha]]).
+
+**SIRADAKİ (Mehmet adım-2):** saf-.kem HEAP allocator (ham-pointer artık iki derleyicide de çalışıyor) → kem_os.kem'e
+entegre → C `kdl_bare_heap` çağrılarını .kem-heap ile değiştir → C-yolu sil (kem_os IR'da @kdl_bare_heap/@malloc=0).
+
 ## D-248 — CODEGEN: 3 pointer gap onarıldı — güvensiz int↔ptr + deref-write + volatile (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-247).

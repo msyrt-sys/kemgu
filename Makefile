@@ -954,6 +954,44 @@ calistir_kem_pointer_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — codegen pointer gap testi atlandi."; \
 	fi
 
+# === Adım-1 (D-249): SELF-HOST codegen POINTER PARİTE — kem_pointer.kem'i kemgu_self.exe ile derle ===
+# D-248 llvm.c'ye (C-codegen) ham-pointer ekledi; D-249 codegen.kem'e (self-host) AYNALADI.
+# Bu hedef PROOF (c): SELF-HOST derleyici (kemgu_self.exe) kem_pointer.kem'i derler +
+# bare-metal boot → C-codegen ile AYNI (inttoptr + volatile + 0 kdl_mmio + doğru marker).
+# C↔self-host DIVERGENCE kapandığının kalıcı kanıtı (D-249 öncesi self-host derleyemezdi).
+calistir_kem_pointer_self_arm: kemgu_self $(BM_A64_OBJS)
+	@echo "Adım-1 self-host pointer parite: kem_pointer.kem -> ARM64 ELF (kemgu_self.exe ile)..."
+	./$(BUILD)/kemgu_self$(EXE) --llvm test/ornekler/kem_pointer.kem > $(BUILD)/kem_pointer_self.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_pointer_self.ll -c -o $(BUILD)/kem_pointer_self.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_pointer_self.elf \
+		$(BUILD)/kem_pointer_self.o $(BM_A64_OBJS)
+	@echo "FALSIFIYE-KANIT: SELF-HOST codegen raw-ptr (inttoptr + volatile) + 0 C mmio-intrinsic:"
+	@if ! grep -q "inttoptr" $(BUILD)/kem_pointer_self.ll || ! grep -q "load volatile" $(BUILD)/kem_pointer_self.ll \
+	    || ! grep -q "store volatile" $(BUILD)/kem_pointer_self.ll; then \
+		echo "FAIL: self-host IR'da inttoptr/volatile YOK (codegen.kem parite eksik)"; exit 1; \
+	fi
+	@if grep -qE "call.*kdl_mmio" $(BUILD)/kem_pointer_self.ll; then \
+		echo "FAIL: self-host IR'da C kdl_mmio ÇAĞRISI var"; exit 1; \
+	fi
+	@echo "  (self-host codegen inttoptr + store/load volatile + 0 kdl_mmio — C-codegen ile parite)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/kem_pointer_self.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/kem_pointer_self.out -kernel $(BUILD)/kem_pointer_self.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_pointer_self.out; echo "--- son ---"; \
+		if grep -q "KEM PTR MMIO OK" $(BUILD)/kem_pointer_self.out \
+		   && grep -q "1953655158" $(BUILD)/kem_pointer_self.out \
+		   && grep -q "KEM PTR RAM OK" $(BUILD)/kem_pointer_self.out \
+		   && grep -q "12345" $(BUILD)/kem_pointer_self.out; then \
+			echo "Adım-1 self-host pointer parite gecti: SELF-HOST codegen raw-ptr MMIO+deref-write bare-metal (C ile parite)."; \
+		else \
+			echo "FAIL: self-host-derlenmis kem_pointer 'KEM PTR MMIO OK'+1953655158+'KEM PTR RAM OK'+12345 bekleniyor"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — self-host pointer parite testi atlandi."; \
+	fi
+
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
 # Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
 # kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
@@ -4668,7 +4706,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
-                     calistir_kem_os_arm calistir_kem_pointer_arm \
+                     calistir_kem_os_arm calistir_kem_pointer_arm calistir_kem_pointer_self_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
