@@ -1,0 +1,89 @@
+// KEMGU SELF-HOST virtio-NET MAC adresi okuma sürücüsü — bare-metal.
+// =========================================================================
+// D-160 (virtio-net DeviceID=1 tanıma) üstüne BİR ADIM İLERİ: cihazın MAC
+// adresini config-space'ten okur. KEMGU DİLİNDE yazılmış ağ-cihaz sürücüsü:
+// slot tara → MAGIC doğrula → DeviceID==1 (virtio-net) bul → cihaza-özel
+// config space'ten (offset 0x100) VIRTIO_NET_CONFIG.mac[6] alanını çıkar.
+//
+// virtio-mmio v2: cihaza-özel config space taban+0x100'de başlar. virtio-net
+// için config'in ilk 6 byte'ı MAC adresidir (mac[0..5], little-endian byte
+// dizisi). config'i iki 32-bit word ile okuruz:
+//   word0 = mmio_oku32(taban + 0x100)  → mac[0..3] (LE: b0 en düşük byte)
+//   word1 = mmio_oku32(taban + 0x104)  → mac[4..5] (+ config sonrası alanlar)
+// Her word'den byte'lar shift+mask ile çıkarılır: (w >> (8*k)) & 255.
+//
+// yetki<MMIO> = derleme-zamanı object-capability (donanım erişim ispatı, sıfır
+// runtime yükü). Her mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez). Sonda geri_al
+// ile linear tüketilir.
+//
+// QEMU: -netdev user + -device virtio-net-device → slot'ta DeviceID=1 +
+// varsayılan MAC (52:54:00:12:34:56 gibi) config-space'te sunar.
+// Beklenen çıktı: "KEM MAC BASLA" + 6 MAC byte'ı (yazdir_tam ondalık) + "KEM MAC OK".
+
+sabit VIRTIO_TABAN: tam64      = 167772160;   // 0x0A000000 (QEMU virt slot 0)
+sabit VIRTIO_ADIM: tam64       = 512;         // 0x200 slot aralığı
+sabit VIRTIO_MAGIC_OFF: tam64  = 0;           // 0x000 MagicValue
+sabit VIRTIO_DEVID_OFF: tam64  = 8;           // 0x008 DeviceID
+sabit VIRTIO_CONFIG_OFF: tam64 = 256;         // 0x100 cihaza-özel config (v2)
+sabit MAGIC_BEKLENEN: tam32    = 1953655158;  // 0x74726976 = "virt"
+sabit VIRTIO_NET_ID: tam32     = 1;           // virtio-net DeviceID
+sabit MMIO_OKU_YAZ: tam32      = 3;           // OKU|YAZ
+sabit BYTE_MASKE: tam32        = 255;         // 0xFF byte çıkarma maskesi
+
+işlev main() -> tam32 {
+    // Donanım erişim yetkisi (kaynak tipi 6 = MMIO, izin OKU|YAZ).
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // --- Tara: MAGIC doğru + DeviceID == 1 (virtio-net) olan ilk slotu bul. ---
+    değişken net_slot: tam64 = 0;
+    değişken net_id: tam32 = 0;
+    değişken i: tam64 = 0;
+    iken i < 32 {
+        değişken taban: tam64 = VIRTIO_TABAN + i * VIRTIO_ADIM;
+        değişken magic: tam32 = mmio_oku32(y, taban + VIRTIO_MAGIC_OFF);
+        eğer magic == MAGIC_BEKLENEN {
+            değişken devid: tam32 = mmio_oku32(y, taban + VIRTIO_DEVID_OFF);
+            eğer devid == VIRTIO_NET_ID ve net_slot == 0 {
+                net_slot = taban;
+                net_id = devid;
+            }
+        }
+        i = i + 1;
+    }
+
+    // --- MAC adresini config-space'ten oku (offset 0x100). ---
+    // İki 32-bit word: word0 = mac[0..3], word1 = mac[4..5] (LE byte dizisi).
+    değişken mac_word0: tam32 = 0;
+    değişken mac_word1: tam32 = 0;
+    eğer net_slot != 0 {
+        mac_word0 = mmio_oku32(y, net_slot + VIRTIO_CONFIG_OFF);
+        mac_word1 = mmio_oku32(y, net_slot + VIRTIO_CONFIG_OFF + 4);
+    }
+
+    geri_al(y);   // linear tüketim — capability iade edilir
+
+    // Byte çıkarma (little-endian): mac[k] = (word >> (8*k)) & 0xFF.
+    değişken mac0: tam32 = mac_word0 & BYTE_MASKE;
+    değişken mac1: tam32 = (mac_word0 >> 8) & BYTE_MASKE;
+    değişken mac2: tam32 = (mac_word0 >> 16) & BYTE_MASKE;
+    değişken mac3: tam32 = (mac_word0 >> 24) & BYTE_MASKE;
+    değişken mac4: tam32 = mac_word1 & BYTE_MASKE;
+    değişken mac5: tam32 = (mac_word1 >> 8) & BYTE_MASKE;
+
+    // Geçerlilik: virtio-net slotu bulundu VE config ilk word'ü non-zero
+    // (sıfır MAC = config okunmadı / geçersiz). QEMU varsayılan MAC non-zero.
+    eğer net_slot != 0 ve net_id == VIRTIO_NET_ID ve mac_word0 != 0 {
+        yazdir_metin("KEM MAC BASLA");
+        yazdir_tam(mac0);
+        yazdir_tam(mac1);
+        yazdir_tam(mac2);
+        yazdir_tam(mac3);
+        yazdir_tam(mac4);
+        yazdir_tam(mac5);
+        yazdir_metin("KEM MAC OK");
+    } değilse {
+        yazdir_metin("KEM MAC HATA id=");
+        yazdir_tam(net_id);
+    }
+    ver 0;
+}

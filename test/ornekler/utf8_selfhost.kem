@@ -1,0 +1,216 @@
+// KEMGU SELF-HOST UTF-8 kod-çözücü — TÜRKÇE DNA milestone (cihazsız).
+// =========================================================================
+// Bu örnek, KEMGU dilinin — Türkçe syntax'lı bir sistem programlama dili —
+// kendi kaynak-kodlaması olan UTF-8'i saf KEMGU'da çözebildiğini kanıtlar.
+// KEMGU DNA'sı: Türkçe karakterler (ç ğ ı ö ş ü) dilin özüdür; bu örnek
+// o karakterlerin UTF-8 byte dizisinden Unicode kod-noktasına dönüşümünü
+// cihazsız (MMIO / yetki<MMIO> yok), yalnızca aritmetik + bit işlemleriyle
+// yapar.
+//
+// UTF-8 kodlama kuralı (RFC 3629, bu örnekte 1 ve 2 byte):
+//   1-byte (ASCII):   0xxxxxxx                       → kod-noktası = b0
+//   2-byte:           110xxxxx 10xxxxxx              → kod-noktası =
+//                     ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+// Türkçe karakterlerin tamamı U+0080..U+07FF aralığında → 2-byte kodlanır.
+//
+// KRİTİK codegen dersleri (bu örneğin dayandığı invaryantlar):
+//   (1) `dtam32` sağa/sola-kaydırma → LLVM lshr/shl (D-173). ANCAK bir DİZİ
+//       elemanının DOĞRUDAN `>>` operandı olması `ashr` (işaretli) üretir →
+//       yanlış. ÇÖZÜM: byte'ı önce SKALER dtam32 değişkene al, kaydırma/mask
+//       skaler üstünde yapılır (sha256_selfhost.kem deseni).
+//   (2) `karakter` tipi sayısal DEĞİL (T003, base64_selfhost.kem dersi) →
+//       byte'ları ve kod-noktalarını `dtam32` dizisi olarak tutuyoruz.
+//   (3) implicit tam32↔dtam32 YASAK (D-200) → köprü gereken yerde `olarak`
+//       cast kullanılır (döngü sayaçları tam32, byte/kod-noktası dtam32).
+//
+// Test senaryosu: "çğışöü" (6 Türkçe karakter, hepsi 2-byte UTF-8):
+//   ç = 0xC3 0xA7  → U+00E7 = 231
+//   ğ = 0xC4 0x9F  → U+011F = 287
+//   ı = 0xC4 0xB1  → U+0131 = 305
+//   ş = 0xC5 0x9F  → U+015F = 351
+//   ö = 0xC3 0xB6  → U+00F6 = 246
+//   ü = 0xC3 0xBC  → U+00FC = 252
+// 12 byte girdi → 6 kod-noktası (byte sayısı DEĞİL, kod-nokta sayısı = 6).
+//
+// Beklenen çıktı: "KEM UTF8 BASLA" + 6 çözülmüş kod-noktası (ondalık) +
+//   kod-nokta sayısı = 6 VE her kod-nokta beklenenle eşleşti → "KEM UTF8 OK".
+
+// --- Beklenen kod-noktaları (Türkçe karakterler, ondalık) ---
+sabit CP_C_CEDILLA: dtam32 = 231;   // ç  U+00E7
+sabit CP_G_BREVE:   dtam32 = 287;   // ğ  U+011F
+sabit CP_I_NOKTASIZ: dtam32 = 305;  // ı  U+0131
+sabit CP_S_SEDILLA: dtam32 = 351;   // ş  U+015F
+sabit CP_O_UMLAUT:  dtam32 = 246;   // ö  U+00F6
+sabit CP_U_UMLAUT:  dtam32 = 252;   // ü  U+00FC
+
+sabit BEKLENEN_SAYI: tam32 = 6;     // kod-nokta sayısı (byte 12 DEĞİL)
+
+// =========================================================================
+// 2-byte UTF-8 dizisini kod-noktasına birleştirir.
+// b0/b1 SKALER dtam32 parametreleri (dizi elemanı ARGÜMAN geçilir → mask ve
+// kaydırma skaler üstünde → lshr/shl doğru; D-173 dizi-eleman-ashr tuzağı yok).
+//   kod-noktası = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+// 0x1F = 31 (alt 5 bit), 0x3F = 63 (alt 6 bit).
+// =========================================================================
+işlev cozumle_iki_byte(b0: dtam32, b1: dtam32) -> dtam32 {
+    değişken yuksek: dtam32 = (b0 & 31) << 6;   // ilk byte'ın 5 anlamlı biti
+    değişken dusuk: dtam32 = b1 & 63;           // ikinci byte'ın 6 biti
+    ver yuksek | dusuk;
+}
+
+// =========================================================================
+// Bir byte'ın UTF-8 öncül-byte türünü belirler (SKALER dtam32 parametre):
+//   0  → 1-byte dizi başı (0xxxxxxx, üst bit 0 → byte < 0x80 = 128)
+//   2  → 2-byte dizi başı (110xxxxx → byte 0xC0..0xDF = 192..223)
+//   1  → devam byte'ı (10xxxxxx → byte 0x80..0xBF = 128..191)
+//  -1  → bu örnekte desteklenmeyen/geçersiz (0xE0+ veya bozuk)
+// Not: `karakter` sayısal olmadığından byte'lar dtam32; karşılaştırma
+// aritmetik değil, sınır kontrolüdür.
+// =========================================================================
+işlev byte_turu(b: dtam32) -> tam32 {
+    eğer b < 128 {
+        ver 0;   // 1-byte ASCII (0xxxxxxx)
+    }
+    eğer b < 192 {
+        ver 1;   // devam byte'ı (10xxxxxx) — tek başına öncül olamaz
+    }
+    eğer b < 224 {
+        ver 2;   // 2-byte öncül (110xxxxx)
+    }
+    ver 0 - 1;   // 3/4-byte veya geçersiz (bu örnek kapsamı dışı)
+}
+
+// =========================================================================
+// Bir byte'ın geçerli devam byte'ı olup olmadığını kontrol eder
+// (10xxxxxx → 0x80..0xBF = 128..191). Geçersiz devam-byte tespiti (BONUS).
+//   1 → geçerli devam byte'ı, 0 → değil.
+// =========================================================================
+işlev devam_byte_mu(b: dtam32) -> tam32 {
+    eğer b < 128 {
+        ver 0;   // üst bit 0 → devam byte değil
+    }
+    eğer b < 192 {
+        ver 1;   // 10xxxxxx → geçerli devam byte
+    }
+    ver 0;       // 0xC0+ → devam byte değil
+}
+
+// =========================================================================
+// UTF-8 byte dizisini (her eleman 0..255) çözer; kod-noktalarını `cikti`
+// dizisine yazar ve kod-nokta SAYISINI döner. 1-byte ve 2-byte dizileri
+// destekler. Geçersiz devam-byte bulunursa çözümü durdurup o ana kadarki
+// sayıyı döner (savunmacı — sonsuz döngü yok).
+// =========================================================================
+işlev utf8_coz(bytelar: Dizi<dtam32>, n: tam32, cikti: Dizi<dtam32>) -> tam32 {
+    değişken i: tam32 = 0;   // byte okuma indeksi
+    değişken o: tam32 = 0;   // kod-nokta yazma indeksi
+    iken i < n {
+        // Byte'ı SKALER dtam32'ye kopyala (D-173: mask/shift skaler üstünde).
+        değişken b0: dtam32 = bytelar[i];
+        değişken tur: tam32 = byte_turu(b0);
+
+        eğer tur == 0 {
+            // 1-byte ASCII: kod-noktası doğrudan byte değeri.
+            cikti[o] = b0;
+            o = o + 1;
+            i = i + 1;
+        } değilse {
+            eğer tur == 2 {
+                // 2-byte dizi: ikinci byte'ın var + geçerli devam olduğunu
+                // doğrula (savunmacı — kısa/bozuk dizi tespiti).
+                eğer i + 1 < n {
+                    değişken b1: dtam32 = bytelar[i + 1];
+                    eğer devam_byte_mu(b1) == 1 {
+                        cikti[o] = cozumle_iki_byte(b0, b1);
+                        o = o + 1;
+                        i = i + 2;
+                    } değilse {
+                        // Geçersiz devam-byte → dur (BONUS tespiti).
+                        ver o;
+                    }
+                } değilse {
+                    // Truncated: 2-byte öncül ama devam byte yok → dur.
+                    ver o;
+                }
+            } değilse {
+                // Devam-byte öncül konumunda veya 3/4-byte (kapsam dışı) → dur.
+                ver o;
+            }
+        }
+    }
+    ver o;   // toplam kod-nokta sayısı
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM UTF8 BASLA");
+
+    // "çğışöü" UTF-8 byte dizisi (12 byte, hepsi 2-byte kodlanmış):
+    //   ç=0xC3,0xA7  ğ=0xC4,0x9F  ı=0xC4,0xB1  ş=0xC5,0x9F  ö=0xC3,0xB6  ü=0xC3,0xBC
+    // 0xC3=195 0xA7=167 0xC4=196 0x9F=159 0xB1=177 0xC5=197 0xB6=182 0xBC=188
+    değişken bytelar: Dizi<dtam32> = [
+        195, 167,   // ç
+        196, 159,   // ğ
+        196, 177,   // ı
+        197, 159,   // ş
+        195, 182,   // ö
+        195, 188    // ü
+    ];
+    değişken byte_sayisi: tam32 = 12;
+
+    // Çıktı tamponu: en fazla 6 kod-noktası (üzerine yazılır).
+    değişken kod_noktalari: Dizi<dtam32> = [0, 0, 0, 0, 0, 0];
+
+    değişken sayi: tam32 = utf8_coz(bytelar, byte_sayisi, kod_noktalari);
+
+    // Çözülen kod-noktalarını bas (ondalık).
+    yazdir_metin("Kod-noktalari (ondalik):");
+    değişken p: tam32 = 0;
+    iken p < sayi {
+        yazdir_isaretsiz_tam(kod_noktalari[p]);
+        p = p + 1;
+    }
+
+    // --- Doğrulama 1: kod-nokta SAYISI = 6 (byte 12 DEĞİL) ---
+    değişken dogru: tam32 = 1;
+    eğer sayi == BEKLENEN_SAYI {
+        // sayı doğru
+    } değilse {
+        dogru = 0;
+    }
+
+    // --- Doğrulama 2: HER kod-noktayı beklenen Türkçe değerle karşılaştır ---
+    // (Sadece "en az bir" değil, altısının tamamı doğrulanır — daha güçlü kanıt.)
+    eğer kod_noktalari[0] == CP_C_CEDILLA {
+    } değilse { dogru = 0; }
+    eğer kod_noktalari[1] == CP_G_BREVE {
+    } değilse { dogru = 0; }
+    eğer kod_noktalari[2] == CP_I_NOKTASIZ {
+    } değilse { dogru = 0; }
+    eğer kod_noktalari[3] == CP_S_SEDILLA {
+    } değilse { dogru = 0; }
+    eğer kod_noktalari[4] == CP_O_UMLAUT {
+    } değilse { dogru = 0; }
+    eğer kod_noktalari[5] == CP_U_UMLAUT {
+    } değilse { dogru = 0; }
+
+    // --- BONUS: geçersiz devam-byte tespiti ---
+    // İkinci byte'ı bozuk (0x41='A', devam byte değil) bir 2-byte dizi:
+    // 0xC3 0x41 → cozer i=0'da 2-byte öncül görür, devam_byte_mu(0x41)=0 →
+    // çözüm 0 kod-noktayla durur (sonsuz döngü YOK, savunmacı davranış).
+    değişken bozuk: Dizi<dtam32> = [195, 65];   // 0xC3 0x41
+    değişken bozuk_cikti: Dizi<dtam32> = [0, 0];
+    değişken bozuk_sayi: tam32 = utf8_coz(bozuk, 2, bozuk_cikti);
+    eğer bozuk_sayi == 0 {
+        // beklenen: bozuk devam-byte → 0 kod-nokta çözüldü
+    } değilse {
+        dogru = 0;   // bozuk dizi yanlışlıkla kabul edildi
+    }
+
+    eğer dogru == 1 {
+        yazdir_metin("KEM UTF8 OK");
+    } değilse {
+        yazdir_metin("KEM UTF8 FAIL");
+    }
+
+    ver 0;
+}

@@ -1,0 +1,20 @@
+// KEMGU-OS Faz-1 keşif — Agent D: satıriçi_asm bare-metal ARM64 çalışıyor mu?
+// Amaç: aarch64 `mrs` ile CurrentEL oku, marker + değer bas.
+işlev el_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mrs $0, CurrentEL"#
+            çıktı("=r", &x)
+        }
+    }
+    ver x;
+}
+
+işlev main() -> tam32 {
+    değişken sonuc: tam64 = el_oku();
+    yazdir_metin("KEM ASM OK");
+    yazdir_tam(sonuc);
+    ver 0;
+}

@@ -1,0 +1,118 @@
+// KEMGU SELF-HOST 128-BIT BIGNUM TOPLAMA — çok-word aritmetik (cihazsız) milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinin tek makine-word'ünün (64 bit) ÖTESİNDE gerçek
+// ÇOK-WORD ARİTMETİĞİ — 128-bit tamsayı toplaması — carry (elde) yayılımıyla
+// kaldırdığını kanıtlar. Saf KEMGU dilinde, cihazsız (yetki<MMIO> / mmio yok):
+// yalnızca dtam64 aritmetik + işaretsiz karşılaştırma.
+//
+// 128-bit sayı = 2 adet dtam64 word:  (yuksek, dusuk)  — little-endian word düzeni.
+// Toplama algoritması (elde yayılımı):
+//   dusuk_top = a_dusuk + b_dusuk          (mod-2^64 WRAP)
+//   carry     = (dusuk_top < a_dusuk) ? 1 : 0   — İŞARETSİZ taşma tespiti:
+//               toplam operanddan KÜÇÜKSE mod-2^64 sarması olmuştur → elde 1
+//   yuksek_top = a_yuksek + b_yuksek + carry    (mod-2^64 WRAP)
+//
+// KRİTİK dil gözlemleri (codegen doğrulaması — bu örneğin dayandığı invaryantlar):
+//   (1) `dtam64` toplama LLVM `add i64` → iki'nin-tümleyeni WRAP semantiği:
+//       0xFFFFFFFFFFFFFFFF + 1 == 0. Çok-word toplama tam olarak bunu gerektirir
+//       (alt word taşınca üst word'e +1 taşınır). KEMGU dtam64 bunu SAĞLAR.
+//   (2) `dtam64` karşılaştırma `a < b` → LLVM `icmp ult i64` (İŞARETSİZ / unsigned).
+//       Elde tespiti (dusuk_top < a_dusuk) İŞARETSİZ karşılaştırma ŞART; işaretli
+//       (slt) olsaydı yüksek bit'li word'lerde yanlış sonuç verirdi. dtam64 doğru
+//       `ult` üretir (IR'de doğrulandı: `%N = icmp ult i64 ...`).
+//
+// KRİTİK literal kısıtı + çözüm (ÖNEMLİ — runtime/codegen DEĞİŞMEDİ):
+//   Lexer/parser tamsayı literalini İŞARETLİ int64 (`strtoll`) olarak okur; yüksek
+//   biti 1 olan sabitler (> 0x7FFFFFFFFFFFFFFF) INT64_MAX'a satüre olur. Yani
+//   `0xFFFFFFFFFFFFFFFF` doğrudan YAZILAMAZ (0x7FFF...F'e kırpılır). ÇÖZÜM:
+//   maksimum word değeri ARİTMETİK OLARAK kurulur:
+//       tum_bir = INT64_MAX + INT64_MAX + 1  → 0xFFFFFFFFFFFFFFFF (mod-2^64)
+//   (0x7FFF...F + 0x7FFF...F = 0xFFFF...E; +1 = 0xFFFF...F). Bu, dtam64 wrap
+//   toplamının kendisini de sınar. Bu bir DİL-SEVİYESİ kullanım desenidir.
+//
+// Test vektörleri (128-bit, bilinen doğru sonuçlarla):
+//   V1: a=(0, 2^64-1) + b=(0, 1)          = (1, 0)   ← elde alt→üst word'e yayıldı
+//   V2: a=(2^64-1, 2^64-1) + b=(0, 1)     = (0, 0)   ← elde üst word'e; üst de wrap
+//   V3: a=(1, 2^64-1) + b=(0, 2)          = (2, 1)   ← alt wrap + elde, üst 1+1=2
+//
+// Beklenen çıktı: "KEM BIGNUM BASLA" + her vektörün (yuksek, dusuk) word'leri
+// (ondalık) + "KEM BIGNUM OK" (üç vektör de doğruysa).
+
+// 0xFFFFFFFFFFFFFFFF (2^64 - 1) — literal olarak yazılamaz, aritmetikle kurulur.
+işlev tum_bir() -> dtam64 {
+    değişken yari: dtam64 = 9223372036854775807;  // 0x7FFFFFFFFFFFFFFF (INT64_MAX — doğru okunur)
+    ver yari + yari + 1;   // 0xFFFF...E + 1 = 0xFFFFFFFFFFFFFFFF (mod-2^64 wrap)
+}
+
+// İki dtam64 word'ün toplamındaki eldeyi (carry) döndürür.
+// İşaretsiz taşma tespiti: toplam operanddan küçükse mod-2^64 sarması olmuştur.
+// dusuk_top skaler dtam64 parametresi → karşılaştırma `icmp ult i64` (işaretsiz).
+işlev elde_hesapla(dusuk_top: dtam64, a_dusuk: dtam64) -> dtam64 {
+    eğer dusuk_top < a_dusuk {
+        ver 1;
+    }
+    ver 0;
+}
+
+// 128-bit toplamın DÜŞÜK word'ü: (a_dusuk + b_dusuk) mod 2^64.
+işlev topla_dusuk(a_dusuk: dtam64, b_dusuk: dtam64) -> dtam64 {
+    ver a_dusuk + b_dusuk;   // dtam64 → add i64 (mod-2^64 wrap)
+}
+
+// 128-bit toplamın YÜKSEK word'ü: (a_yuksek + b_yuksek + carry) mod 2^64.
+işlev topla_yuksek(a_yuksek: dtam64, b_yuksek: dtam64, carry: dtam64) -> dtam64 {
+    ver a_yuksek + b_yuksek + carry;   // elde dâhil, mod-2^64 wrap
+}
+
+// Bir 128-bit toplama vektörünü hesaplar, (yuksek, dusuk) basar, beklenenle
+// karşılaştırır. Eşitse 1, değilse 0 döndürür (skaler dönüş → tek word).
+işlev vektor_dogrula(a_yuksek: dtam64, a_dusuk: dtam64,
+                     b_yuksek: dtam64, b_dusuk: dtam64,
+                     bek_yuksek: dtam64, bek_dusuk: dtam64) -> tam32 {
+    değişken s_dusuk: dtam64  = topla_dusuk(a_dusuk, b_dusuk);
+    değişken carry: dtam64    = elde_hesapla(s_dusuk, a_dusuk);
+    değişken s_yuksek: dtam64 = topla_yuksek(a_yuksek, b_yuksek, carry);
+
+    yazdir_metin("  toplam yuksek=");
+    yazdir_isaretsiz_tam64(s_yuksek);   // dtam64 → kdl_yazdir_isaretsiz_tam64 (i64)
+    yazdir_metin("  toplam dusuk=");
+    yazdir_isaretsiz_tam64(s_dusuk);
+
+    eğer s_yuksek == bek_yuksek {
+        eğer s_dusuk == bek_dusuk {
+            ver 1;
+        }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM BIGNUM BASLA");
+
+    değişken maks: dtam64 = tum_bir();   // 0xFFFFFFFFFFFFFFFF
+
+    değişken hepsi: tam32 = 1;
+
+    // --- V1: a=(0, 2^64-1) + b=(0, 1) = (1, 0)  — elde alt→üst yayıldı ---
+    yazdir_metin("V1 (0,MAX)+(0,1) bek (1,0):");
+    değişken v1: tam32 = vektor_dogrula(0, maks, 0, 1, 1, 0);
+    eğer v1 == 1 { yazdir_metin("  V1 OK"); } değilse { yazdir_metin("  V1 FAIL"); hepsi = 0; }
+
+    // --- V2: a=(2^64-1, 2^64-1) + b=(0, 1) = (0, 0)  — elde üst word'e; üst de wrap ---
+    yazdir_metin("V2 (MAX,MAX)+(0,1) bek (0,0):");
+    değişken v2: tam32 = vektor_dogrula(maks, maks, 0, 1, 0, 0);
+    eğer v2 == 1 { yazdir_metin("  V2 OK"); } değilse { yazdir_metin("  V2 FAIL"); hepsi = 0; }
+
+    // --- V3: a=(1, 2^64-1) + b=(0, 2) = (2, 1)  — alt wrap + elde, üst 1+1=2 ---
+    yazdir_metin("V3 (1,MAX)+(0,2) bek (2,1):");
+    değişken v3: tam32 = vektor_dogrula(1, maks, 0, 2, 2, 1);
+    eğer v3 == 1 { yazdir_metin("  V3 OK"); } değilse { yazdir_metin("  V3 FAIL"); hepsi = 0; }
+
+    eğer hepsi == 1 {
+        yazdir_metin("KEM BIGNUM OK");
+    } değilse {
+        yazdir_metin("KEM BIGNUM FAIL");
+    }
+
+    ver 0;
+}

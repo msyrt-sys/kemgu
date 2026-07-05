@@ -5,6 +5,2819 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-249 — SELF-HOST: codegen.kem POINTER PARİTE — C↔self-host divergence fix (saf-.kem-OS adım-1) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-248).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (cast+deref-load+deref-store codegen + T022 checker); `test/cg_korpus/
+cg_ham_pointer.kem` (YENİ codegen_diff parite); `Makefile` (calistir_kem_pointer_self_arm + OS-aggregate). SELF-HOST
+ÇEKİRDEĞİ — soundness-kritik. Mehmet "KEMGU-OS SAF .kem, C substrat YOK" vizyonu, adım-1.]** D-248 ham-pointer'ı
+`src/llvm.c`'ye (C-codegen) ekledi ama `selfhost/codegen.kem`'e (self-host) EKLEMEDİ → **C↔self-host DIVERGENCE**
+(C derler, self-host T022-red + inttoptr-yok). Saf-.kem-OS self-host'ta derlenemezdi. D-248'in 3 emisyonu codegen.kem'e
+AYNALANDI (oracle=llvm.c), + 1 checker parite:
+
+- **GAP-1 cast** (TIP_DONUSTUR codegen ~2809): hedef ptr → `inttoptr`; kaynak ptr → `ptrtoint`.
+- **GAP-2 deref-write** (ATAMA deyim_uret ~3216): TEKLI `deref*` lvalue kolu → `store volatile`.
+- **GAP-3 volatile** (deref* load ~2683): `load volatile`.
+- **Checker T022** (ATAMA kontrol_dugum ~4487): TEKLI `deref*` da lvalue (C tip_kontrol D-248 aynası).
+- güvensiz-scoped: deref checker-gereği güvensiz-only → volatile KOŞULSUZ = llvm.c'nin `guvensiz_derinlik>0` koşulu
+  daima-doğru hali (parite).
+
+**FALSİFİYE-KANITLAR (3'ü de kalıcı gate):** **(a) codegen_diff** — YENİ `cg_ham_pointer.kem` (host-güvenli
+inttoptr/ptrtoint round-trip, deref-yok): C-codegen exit=42 == self-host exit=42 (korpus 73/73, test_tumu'da). D-249
+öncesi self-host bunu DERLEYEMEZDİ = divergence kanıtı. **(b) FIXPOINT** — stage1 IR == stage2 IR BİREBİR (32379 satır;
++222 = eklenen handler kodu; codegen.kem raw-pointer KULLANMIYOR → emit yolu fixpoint'te değil ama self-compile kararlı;
+fix fixpoint'i KIRMADI). **(c) self-host bare-metal** — YENİ `calistir_kem_pointer_self_arm`: `kemgu_self.exe`
+kem_pointer.kem'i derler → QEMU boot (self-host IR inttoptr+volatile+0 kdl_mmio + "KEM PTR MMIO OK"/1953655158 +
+"KEM PTR RAM OK"/12345), OS-gate'te. = self-host codegen ham-pointer'ı GERÇEKTEN destekliyor.
+
+**DÜRÜST FLAG (soundness, pre-existing):** self-host checker güvensiz-scoping'i deref için ENFORCE ETMİYOR — `*p`
+deref-read güvensiz-DIŞINDA da kabul (C reddeder; teyit: `oku(x:*tam32){ver *x}` → self-host OK, C HATA). PRE-EXISTING
+(deref-read'de zaten vardı, D-249 değil). T022 gevşetmem deref-write'ta SİMETRİK. Kırılmazlık PRATİKTE korunur (safe .kem
+ham pointer üretmez — `&` referans kullanır; ham `*T` yalnız int→ptr güvensiz cast'tan). **Hardening (ayrı iş):**
+self-host checker'a güvensiz-derinlik-tracking + deref read/write'ı güvensiz-scope'a al. **PATH:** fixpoint/bootstrap
+`TMPDIR=/c/tmp` + clang64/ucrt64-önce ([[project-codegen-bootstrap-path-gotcha]]).
+
+**SIRADAKİ (Mehmet adım-2):** saf-.kem HEAP allocator (ham-pointer artık iki derleyicide de çalışıyor) → kem_os.kem'e
+entegre → C `kdl_bare_heap` çağrılarını .kem-heap ile değiştir → C-yolu sil (kem_os IR'da @kdl_bare_heap/@malloc=0).
+
+## D-248 — CODEGEN: 3 pointer gap onarıldı — güvensiz int↔ptr + deref-write + volatile (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-247).
+
+**Karar [ETKİ: `src/llvm.c` (cast handler + DUGUM_ATAMA + OP_DEREFERANS); `src/tip_kontrol.c` (E002 + T022);
+`test/ornekler/kem_pointer.kem` (YENİ gate); `test/snapshots/deref_atama_t022.kem` + `deref_atama_disi.kem` +
+`test/test_llvm.c` (test güncelleme); `Makefile` (calistir_kem_pointer_arm + aggregate). DERLEYİCİ değişikliği —
+Mehmet 3-adım planı adım-2 direktifi.]** Faz-2b keşif (D-246) 3 codegen gap buldu (heap+MMIO'yu saf-.kem'de imkansız
+kılıyordu). ONARILDI, **HEPSİ GÜVENSİZ-SCOPED** (safe .kem etkilenmez):
+
+- **GAP-1 int↔ptr cast:** `src/llvm.c` DUGUM_TIP_DONUSTUR — hedef ptr ise kaynağı i64 üret + `inttoptr` emit;
+  kaynak ptr + hedef int ise `ptrtoint`. `src/tip_kontrol.c` E002 — `tk->guvensiz_baglam != 0` ise int↔*T cast izinli.
+- **GAP-2 deref-write:** `src/llvm.c` DUGUM_ATAMA — OP_DEREFERANS lvalue kolu (p'yi ptr üret + `store <T> <v>, ptr`).
+  `src/tip_kontrol.c` T022 — güvensizde `*p` lvalue izinli.
+- **GAP-3 volatile:** `src/llvm.c` OP_DEREFERANS load + deref-store — `g->guvensiz_derinlik > 0` ise `volatile`
+  (MMIO okuma/yazma clang -O2'de elenmez/sıralanmaz).
+
+**FALSİFİYE-KANIT:** (a) `kem_mmio_ham.kem` (D-246'da BLOKLU — clang "i32 but expected ptr") artık **boot ediyor**
+(raw-ptr VirtIO magic okuma 1953655158, saf .kem, 0 kdl_mmio-intrinsic). (b) YENİ `calistir_kem_pointer_arm` gate:
+IR'da inttoptr>0 + store/load volatile + kdl_mmio-call=0 (grep-ENFORCE) + QEMU "KEM PTR MMIO OK"/1953655158 (raw-ptr
+volatile MMIO) + "KEM PTR RAM OK"/12345 (raw-ptr deref-write round-trip). **GÜVENSİZ-SCOPE:** güvensiz İÇİNDE `*p=v`
+compile eder, DIŞINDA hâlâ T022-red (deref_atama_disi.kem doğrular).
+
+**Test güncelleme (spec değişimi):** matris-B (test_llvm.c [223]) eski spec (`*p=v` → T022-red) YENİ spec'e
+(güvensiz OK + dışı red) güncellendi; +`deref_atama_disi.kem` snapshot. Bu güvensiz-deref-write'ı ENGELLEYEN eski test
+= kasıtlı davranış değişimi (GAP-2 fix). **Regresyon:** llvm 237/237; full host suite + self-host FIXPOINT + OS gate.
+
+**KEŞFEDİLEN PRE-EXISTING BUG (D-248 DIŞI, [[project-kem-codegen-pointer-gaps]]; [[task_49d4c3ab]] flag):** güvensiz
+blokta `yazdir_metin("...")` string arg'ı `i32`'ye düşüyor (`call @kdl_yazdir_metin(i32 %2)`, ptr yerine) → runtime
+"(bos)". `git stash` ile pre-existing teyit (D-248 değil). kem_pointer.kem marker'ları bu yüzden güvensiz-DIŞINDA basar.
+
+**TASARIM KARARI (Mehmet onayına, YASA-5 KEMGU-in-KEMGU büyütür):** üç yetenek de güvensiz-scoped (raw pointer zaten
+güvensiz-only). volatile güvensiz-wide (mevcut güvensiz kod ör. kütüphane/dizi.kem volatile load alır — davranış-korur,
+micro-perf trade-off; MMIO doğruluğu için gerekli). Alternatif=ayrı volatile-qualifier (daha büyük dil değişimi).
+**SIRADAKİ (adım-3):** heap+MMIO'yu kem_os.kem'e entegre (artık saf-.kem mümkün).
+
+## D-247 — OS: KEMGU-OS Faz-2c SERİ ENTEGRASYON — .kem panik + exc-handler kem_os.kem'e entegre (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-246).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (panik + exc-handler + uart_onaltilik embed + [5] SİSTEM); `test/ornekler/
+kem_panik.kem` + `kem_exc.kem` SİLİNDİ; `Makefile` (kem_os gate + panik/exc .kem-define + [5] EXC OK kanıtı). Yalnız
+test/örnek + Makefile.]** Anayasa Faz-2c (Mehmet 3-adım planı adım-1, SERİ tek-el): Faz-2b keşif prototipleri (panik +
+exc-handler-mantığı, D-246) MEVCUT çekirdek kem_os.kem'e ENTEGRE. **[5] SİSTEM alt-sistemi** eklendi: exc-handler 3
+sentetik fault ile SELF-TEST (data-abort+translation→KURTAR / permission→OLDUR / instr-abort→HALT decode); panik
+entegrasyon-arıza branch'ine WIRE (gecti != 6 → `panik(...)`). Konsol .kem-UART korundu — panik/exc `uart_*` kullanır
+(C yazdir DEĞİL) + yeni `uart_onaltilik` (hex printer, dtam64) eklendi.
+
+**FALSİFİYE-KANIT (YASA-3, kem_os.kem'in KENDİSİNE):** kem_os.ll IR'ında (a) `define @panik` + `define @kem_istisna_isle`
+(+esr_ec/fault_sinifi/abort_alt_tur/handler_karari) = **.kem-DEFINE** (C `kdl_panik`/`kdl_istisna_isle` DEĞİL; Makefile
+grep-ENFORCE); (b) `call @panik` = panik arıza-branch'ine WIRE (grep-ENFORCE); (c) `call kdl_yazdir` = **0** (2a korundu);
+(d) QEMU boot: `[5] SISTEM: exc-handler self-test` + 3 fault satırı (`EXC FAR=0x40000000 ESR=0x96000004 karar=KURTAR` vb.,
+hex çıktı .kem uart_onaltilik'ten) + `[5] EXC OK kararlar=1,2,3` + `KEMGU KEM-OS OK`. 6-kontrol (heap+mmio+hesap×3+exc).
+
+**YASA-2:** standalone `kem_panik.kem` + `kem_exc.kem` SİLİNDİ (keşif-prototip → entegre → kaldır; kem_surucu deseni).
+`kem_heap.kem` + `kem_mmio_ham.kem` KALDI (bloklu; adım-2 codegen fix + adım-3 entegrasyon bekliyor).
+
+**DÜRÜST SINIR (YASA-4, etiket=öz):** exc handler MANTIĞI (.kem ESR→EC decode + fault-türü + karar) kem_os'ta canlı +
+self-test edildi; **GERÇEK fault-yönlendirmesi (asm-vektör VBAR → .kem handler hook) SONRAKİ adım** — `start_aarch64.S`
+vektör tablosu + trap-frame asm KALIR (C8 sınıfı, .kem inline-asm yok), fault-bilgisi asm-stub'dan param geçer. panik
+happy-path'te TETİKLENMEZ (arıza-yolu handler'ı; .kem-define + wire kanıtlı, standalone D-246'da halt kanıtlandı). Full OS
+gate 130, sıfır regresyon, C-twin yeşil. **SIRADAKİ (Mehmet planı adım-2):** 3 codegen gap onar (inttoptr/deref-write/
+volatile → [[project-kem-codegen-pointer-gaps]]) → adım-3 heap+MMIO entegre.
+
+## D-246 — OS: KEMGU-OS Faz-2b KEŞİF — .kem-runtime-katman prototipleri + 3 codegen gap teşhisi (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-245).
+
+**Karar [ETKİ: `test/ornekler/kem_{heap,panik,exc,mmio_ham}.kem` (4 YENİ keşif dosyası). Yalnız test/örnek; Makefile-target
+YOK — entegrasyon 2c seri.]** Anayasa Faz-2b = KEŞİF (paralel, 4-agent Workflow wf_353dddf0-c79): kem_os.kem'in C-runtime
+katmanlarını (.kem-heap/MMIO/panik/exception) .kem'de İFADE EDİLEBİLİR Mİ diye prototiple. kem_os.kem'e DOKUNULMADI.
+**Sonuç: 2 katman saf-.kem READY, 2 katman codegen-gap BLOKLU (hepsi bağımsız DOĞRULANDI).**
+
+**2c-ENTEGRASYONA HAZIR (saf-.kem, gap yok):**
+- **panik** (`kem_panik.kem`) → "KEM PANIK OK" + panik mesajı + `iken doğru` halt (inline-asm YOK). `kdl_panik.c` yerine. libc-temiz, boot ✓.
+- **exc** (`kem_exc.kem`) → "KEM EXC OK kararlar=1,2,3 son-FAR=0x80000000". ESR→EC decode (>>26) + DFSC + fault-türü kararı,
+  TAMAMEN .kem (--check temiz, boot ✓). `kdl_kesme.c` HANDLER-mantığı yerine. **MİMARİ SINIR (gap değil):** vektör tablosu
+  + bağlam-kaydetme `start_aarch64.S` asm'de KALIR (VBAR asm giriş + trap-frame; .kem inline-asm yok = C8 sınıfı); yalnız
+  handler-mantığı .kem'e taşınabilir, FAR/ESR'i asm-stub okuyup param geçer.
+
+**BLOKLU — 3 GERÇEK CODEGEN GAP (→ [[project-kem-codegen-pointer-gaps]], Mehmet DESIGN-STOP):**
+- **heap** (`kem_heap.kem`) → "KEM HEAP OK" AMA yalnız YOL-B ile (C `kdl_mmio_oku32/yaz32`'ye DELEGE ederek; kem_heap.ll'de
+  4 C-mem çağrısı DOĞRULANDI) — saf-.kem ham-bellek BLOKLU. `kdl_bare_heap.c` yerine geçemez.
+- **mmio** (`kem_mmio_ham.kem`) → BOOT ETMEDİ. `kemgu --llvm` geçer ama `clang -x ir` REDDEDER: "'%6' defined with type
+  'i32' but expected 'ptr'" (REPRODÜKSİYON DOĞRULANDI). `kdl_runtime_mmio.c` yerine geçemez.
+- **GAP-1 int→ptr cast:** `adres olarak *tam32` → codegen `inttoptr` EMIT ETMEZ (kod tabanında `inttoptr` grep=0 DOĞRULANDI);
+  llvm.c:~3868 cast handler yalnız int↔int/float; tip_kontrol E002 pointer-cast'ı dışlar.
+- **GAP-2 deref-write:** `*p = v` codegen'de DÜŞER (llvm.c:~4235 DUGUM_ATAMA yalnız TANIMLAYICI/INDEKS/ERISIM dalları
+  DOĞRULANDI, OP_DEREFERANS yok; read `*p` çalışır — asimetri); T022 deref'i lvalue saymaz.
+- **GAP-3 volatile:** OP_DEREFERANS düz load/store, `volatile` değil → -O2 MMIO'yu eler/sıralar.
+- **Kritik:** Bunlar DİL SEMANTİĞİ değil C-bootstrap codegen EMIT eksikliği (mmio agenti IR'ı elle yamalayıp clang'ı geçirip
+  host'ta exit 42 aldı → tasarım sağlam). Düzeltme src/llvm.c + tip_kontrol.c = Mehmet kararı.
+
+**KEŞİF METODU:** 4 worktree-paylaşımlı agent, ayrı .kem, önce-derlenmiş bm_a64 objelerine link, QEMU-boot kanıtı +
+gap-flag. Ben firsthand DOĞRULADIM (4 dosya+boot, mmio clang-repro, llvm.c/tip_kontrol satır-teyidi, heap YOL-B grep,
+exc --check). **SIRADAKİ (Mehmet):** DESIGN-STOP — (A) 3 codegen gap'i onar (heap+MMIO .kem-native olur, YASA-5) vs
+(B) heap/MMIO'yu kalıcı C-intrinsic kabul et + 2c'de yalnız panik+exc entegre et.
+
+## D-245 — OS: KEMGU-OS Faz-2a SERİ ENTEGRASYON — .kem-UART kem_os.kem'e entegre, C-yazdir SİLİNDİ (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-244).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (UART sürücü embed + main yazdir→uart); `test/ornekler/kem_surucu.kem`
+SİLİNDİ; `Makefile` (kem_os target +bm_a64_metin.o + IR-kdl_yazdir-call=0 kanıtı; calistir_kem_surucu_arm target +
+aggregate KALDIRILDI). Yalnız test/örnek + Makefile.]** KEMGU-OS Anayasası Faz-2a (SERİ, tek-el, agent YOK): D-244'te
+ayrı `kem_surucu.kem`'de kanıtlanan .kem-native UART sürücüsü, MEVCUT çekirdek `kem_os.kem`'e ENTEGRE edildi; 12 C-yazdir
+çağrısı (8 `yazdir_metin` + 4 `yazdir_tam`) `.kem` UART'la (`uart_satir`/`uart_tam_satir`) DEĞİŞTİRİLDİ; C-yazdir yolu
+SİLİNDİ. Bu Faz-2'nin **İLK GERÇEK TUĞLASI** (Anayasa): kem_os.kem C-runtime'dan arınmaya başladı (KEMGU-in-KEMGU
+yüzeyi büyüdü — YASA-5).
+
+**FALSİFİYE-KANIT (YASA-3, ayrı demoya DEĞİL kem_os.kem'in KENDİSİNE):** `kem_os.ll` (derlenmiş IR) içinde
+`call.*kdl_yazdir` = **0** (Makefile gate grep-ENFORCE eder; 1+ çağrı → FAIL "konsol hala C runtime'a iniyor"). Boot
+kanıtı: TEK QEMU boot'ta `=== KEMGU .kem-OS (Faz-2a: konsol cikti .kem-native UART) === / [1] BOOT OK / [2] HEAP DIZI OK
+/ 55 / [3] MMIO OK / 1953655158 / [4] HESAP OK / 230 / 3 / KEMGU KEM-OS OK` — DÖRT alt-sistemin TAMAMININ çıktısı .kem
+UART sürücüsünden (tek `kdl_mmio_yaz32` yolu). libc-temiz. UART sürücüsü kem_os'a embed: uart_bayt(FR.TXFF poll + DR yaz,
+yetki<MMIO> linear) + uart_metin(metin_bayt) + uart_tam_satir(özyinelemeli). metin_bayt bare-metal = `bm_a64_metin.o`
+(D-244, kdl_metin_bare.c) kem_os link'inde.
+
+**YASA-2 (izole-demo biriktirme YOK):** standalone `kem_surucu.kem` + `calistir_kem_surucu_arm` target + aggregate girişi
+SİLİNDİ — UART sürücüsü artık kem_os.kem'in İÇİNDE (D-244 = keşif-prototip → D-245 = entegrasyon + prototip kaldır;
+Anayasa'nın KEŞİF→ENTEGRASYON akışı). `kdl_metin_bare.c` + build kuralı korundu (kem_os kullanıyor). Full OS gate 130
+(kem_surucu düştü, kem_os güçlendi), sıfır regresyon. **Anayasa PATH kuralı:** gate'ler clang64/ucrt64-önce PATH ile
+(codegen_bootstrap PATH-artefaktı = [[project-codegen-bootstrap-path-gotcha]]).
+
+## D-244 — OS: KEMGU-OS Faz-2 adım 2 — .kem-NATIVE PL011 UART SÜRÜCÜSÜ (konsol çıktısı artık .kem) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-243).
+
+**Karar [ETKİ: `test/ornekler/kem_surucu.kem` (YENİ); `runtime/kdl_metin_bare.c` (YENİ); `Makefile` (bm_a64_metin.o
+kuralı + `calistir_kem_surucu_arm` target + OS-gate aggregate). Yalnız test/örnek + YENİ freestanding runtime dosyası;
+host runtime'a DOKUNULMADI.]** Faz-2 adım 2 (Mehmet seçimi ".kem-native sürücü katmanı"): **konsol çıktı yolu artık C
+runtime (`kdl_yazdir_metin`) DEĞİL — TAMAMEN .kem'de, doğrudan MMIO ile PL011 UART.** "Kendi dilinde OS" DNA'sının ilk
+gerçek sürücü katmanı. Serial hand-work.
+
+**`.kem`-native UART sürücüsü (`kem_surucu.kem`):**
+- **`uart_bayt(b)`** — FR.TXFF `iken (mmio_oku32(y, FR) & TXFF) != 0 {}` poll (bitwise `&`, `!=`-önce-bağlanmasın diye
+  parantez ZORUNLU) → `mmio_yaz32(y, DR, b)`. `yetki<MMIO>` LİNEAR: her çağrı üret/oku-ödünç(döngüde)/yaz-ödünç/geri_al
+  (loop-içi threading gerekmez — mmio_oku/yaz ÖDÜNÇ alır).
+- **`uart_metin(s)`** — `metin_uzunluk`+`metin_bayt` ile bayt-bayt (String iterasyonu).
+- **`uart_tam_satir(n)`** — özyinelemeli basamak çıkarımı (`n/10`+`n%10`+48), sıfır özel-durum.
+
+**KAPATILAN GERÇEK GAP:** `metin_bayt`/`metin_uzunluk` bare-metal'de YOKTU — host `kdl_runtime.c`'de strlen/strcmp'e
+bağlı (libc), bare-metal link'te **undefined symbol** (probe ile kanıtlandı). Yeni `runtime/kdl_metin_bare.c`:
+freestanding `kdl_metin_uzunluk`+`kdl_metin_bayt` (manuel uzunluk döngüsü, strlen-siz), `bm_a64_metin.o` olarak
+DERLENİR, yalnız gereken hedeflere EXPLICIT eklenir (bm_a64_mmio.o deseni; host kdl_runtime.c'ye DOKUNULMADI → host suite
+etkilenmez; asla birlikte linklenmez = çift-tanım yok). **Kanıt (uydurulamaz):** (a) IR'da `call.*kdl_yazdir` = **0**
+(yalnız 8 declare boilerplate; gate bunu grep'le enforce eder); tüm konsol çıktı tek `kdl_mmio_yaz32` çağrısından. (b)
+libc-temiz (strlen/strcmp dahil grep). (c) QEMU boot: banner + "[test] sayi = 42 / 1953655158 / 0" + "KEM SURUCU OK" —
+hepsi .kem MMIO sürücüsünden. **Gate:** `calistir_kem_surucu_arm` (link +metin+mmio+yetki; IR-kdl_yazdir-call=0 kontrol +
+QEMU marker); OS-aggregate'te (`calistir_kem_os_arm`'ın yanına). İlk-deneme boot.
+
+**Faz-2 ilerleme:** D-243 iskelet (A+B+C+E, C-yazdir'la) → **D-244 konsol yolu .kem'e portlandı.** Kalan .kem-native
+sürücü katmanı: heap-runtime zaten .kem'den çağrılıyor (kdl_dizi region), MMIO zaten .kem intrinsic. Sıradaki: UART init
+(baud/CR) .kem'e, VEYA kem_os.kem'i bu .kem UART sürücüsünü kullanacak şekilde güncelle (tam .kem-native OS iskeleti).
+İlgili: [[project-os-faz1-kem-baremetal]].
+
+## D-243 — OS: KEMGU-OS Faz-2 SERİ ENTEGRASYON — tek .kem-native OS iskeleti (A⊕B⊕C⊕E) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-242).
+
+**Karar [ETKİ: `test/ornekler/kem_os.kem` (YENİ); `Makefile` (`calistir_kem_os_arm` target + OS-gate aggregate). Yalnız
+test/örnek.]** Faz-1 keşif kernel'leri (A/B/C/E — D-242) SERİ entegre edildi: **TEK `.kem` imajı, TEK boot, DÖRT
+alt-sistem canlı.** Bu, C-yazılı entegre çekirdeğin (`test/bare_metal/kemgu_os_arm.c`) **`.kem`-native ikizinin
+İSKELETİ.** Serial hand-work (mini-agent YOK), CLAUDE.md serial-kuralı.
+
+**`kem_os.kem` — dört alt-sistem TEK main'de:**
+- **[1] BOOT** — .kem bare-metal boot + UART banner ("=== KEMGU .kem-OS iskelet (Faz-2 A+B+C+E) ===" + "[1] BOOT OK").
+- **[2] HEAP** — `heap_dizi_topla()`: Dizi<tam32> (region runtime + kapasite-aşımı realloc + sınır-kontrol) → 55.
+- **[3] MMIO** — `mmio_magic_oku()`: `yetki<MMIO>` capability + `mmio_oku32` VirtIO MagicValue (0x0A000000) → 0x74726976, linear `geri_al`.
+- **[4] HESAP** — faktoriyel(5)+fib(10)+dongu_toplam(10)=230 (özyineleme+`iken`), `eşleş` pattern-match, `eğer/değilse`.
+
+**Entegrasyon kanıtı (uydurulamaz):** dört alt-sistem de doğru sonuç verirse (5/5 iç-kontrol: dt==55 ∧ magic==virt ∧
+h==230 ∧ kat==3 ∧ pm==300; `gecti` sayacı — 5-yollu `ve` yerine sayaç, codegen de-risk) TEK **"KEMGU KEM-OS OK"**
+marker'ı basılır. QEMU boot (ilk-deneme): `[1] BOOT OK / [2] HEAP DIZI OK / 55 / [3] MMIO OK / 1953655158 / [4] HESAP
+OK / 230 / 3 / KEMGU KEM-OS OK`. libc-temiz. **Gate:** `calistir_kem_os_arm` (build `./kemgu --llvm kem_os.kem` → clang
+-x ir → ld.lld +bm_a64_mmio.o+bm_a64_yetki.o+$(BM_A64_OBJS) → QEMU → "KEMGU KEM-OS OK" + [1..4] marker grep);
+OS-gate aggregate'e (`calistir_kemgu_os_arm`'ın yanına, .kem-native ikizi) eklendi.
+
+**Bu iskelet Faz-1'in KANITLANMIŞ syntax'larını birleştirdi (ilk-deneme boot).** Faz-2 devamı (seri): tek-marker OS'ten
+→ gerçek entegre çekirdek (kernel main döngüsü, alt-sistem init sırası, .kem-native UART/heap/MMIO sürücü katmanı).
+İlgili: [[project-os-faz1-kem-baremetal]], [[project-os-c1-region-backing-track]].
+
+## D-242 — OS: KEMGU-OS Faz-1 KEŞİF — .kem-yazılı bare-metal kernel MÜMKÜN (4/5 QEMU-boot) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-241).
+
+**Karar [ETKİ: `test/ornekler/kem_*.kem` (5 YENİ keşif dosyası). Yalnız test/örnek; Makefile-target YOK — entegrasyon
+Faz-2 seri iş.]** Mehmet: "6 paralel agent, her biri AYRI .kem, uydurulamaz QEMU-boot kanıtı — .kem bare-metal OS
+MÜMKÜN mü + parçaları keşfet." 6-agent Workflow (wf_3c22af1c-230). **CEVAP: .kem bare-metal MÜMKÜN — 4/5 kernel
+QEMU'da GERÇEKTEN boot etti (libc-temiz, hepsi bağımsız doğrulandı).**
+
+**BOOT EDEN (build/kem_*.out marker'ları doğrulandı):**
+- **A `kem_cekirdek_min.kem`** → "KEM KERNEL OK" — .kem bare-metal ÇEKİRDEK kanıtı (minimal boot+UART, stack-yalnız).
+- **B `kem_dizi_kernel.kem`** → "KEM DIZI OK"+55 — heap Dizi<tam32> (kdl_bare_heap region runtime + kapasite-aşımı
+  realloc/memcpy + D-069 sınır-kontrollü erişim) .kem'den bare-metal çalışıyor.
+- **C `kem_mmio_kernel.kem`** → "KEM MMIO OK"+1953655158 — `yetki<MMIO>` capability + `mmio_oku32` ile VirtIO-MMIO
+  MagicValue register'ı (0x0A000000) GERÇEKTEN okundu (=0x74726976 "virt"), linear `geri_al` ile tüketildi. .kem
+  düşük-seviye donanım erişimi capability-güvenli yapabiliyor.
+- **E `kem_hesap_kernel.kem`** → "KEM HESAP OK"+230+3+"KEM PM OK" — özyinelemeli faktoriyel(5)=120 + fib(10)=55 +
+  `iken` döngü(55)=230, `eşleş` pattern-match (literal 0/1/2 + joker), `eğer/değilse` zincir. Kontrol-akışı +
+  fonksiyon + pattern-match bare-metal aarch64'te SAĞLAM.
+
+**TAKILAN — TEK GERÇEK GAP (D `kem_asm_kernel.kem`, precisely-located):** `satıriçi_asm` (inline-asm) ARM64'te ifade
+EDİLEMİYOR. C-bootstrap satıriçi_asm'i AST+tip-kontrol+LLVM-lowering'de TAM destekler (`src/llvm.c:4848` doğru `call
+asm sideeffect` üretir) AMA hedef mimari `src/llvm.h:38` `#define KEMGU_HEDEF_MIMARI "x86_64"` **sabit-kodlu** (yorum:
+"Hedefe-duyarli triple secimi C8'in isi"). arm64-tag → AS001/0-satır-IR; x86_64-tag → IR çıkar ama aarch64 backend x86
+mnemonic reddeder. **Eksik: hedefe-duyarlı triple/mimari CLI seçimi (C8).** NOT: aarch64 bare-metal .kem inline-asm
+GEREKTİRMEZ (A/B/C/E asm'siz boot etti; düşük-seviye erişim MMIO intrinsic ile) → gap kritik-yol DEĞİL.
+
+**F FIXPOINT TEŞHİS — KRİTİK DÜZELTME:** codegen_bootstrap "KIRIK/79-84 fark" GERÇEK regresyonu DEĞİL, **PATH
+artefaktı.** İki-yönlü kanıt (aynı HEAD/exe): PATH=clang64/ucrt64-önce (CLAUDE.md standart) → **exit=0, FIXPOINT ✓,
+stage1==stage2 BİREBİR (32157 satır), lexer/parser/checker 84/84 birebir**; PATH=/c/msys64/usr/bin-önce →
+harness `mktemp` tmp-yazımı bozulur → stage.ll eksik → "84 fark" → exit=2. **D-235 "codegen_bootstrap pre-existing
+kırık" flag'i YANLIŞTI** (aynı artefakt; kemgu.exe bayat değil, hiçbir commit fixpoint'i kırmadı). `test_tumu` exit=2
+de yalnız bu — tüm birim testleri Basarisiz:0; doğru PATH ile test_tumu tam yeşil.
+
+**SONUÇ (Mehmet'in stratejik sorusu "pivot haftalar mı?"):** HAYIR — dil+codegen+runtime bare-metal için HAZIR
+(boot/heap/MMIO/kontrol-akışı/eşleş hepsi .kem'den çalışıyor). Faz-2 = SERİ entegrasyon (keşif kernel'lerini tek
+.kem-OS'e birleştir + Makefile-gate). **Reprodüksiyon:** `./build/kemgu.exe --llvm test/ornekler/kem_<X>.kem >
+build/<X>.ll` → `clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 -Wno-override-module -x ir ... -c` →
+`ld.lld -T linker/bare-metal-aarch64.ld ... $(BM_A64_OBJS)` (C: +bm_a64_mmio.o+bm_a64_yetki.o) → `qemu-system-aarch64
+-M virt -cpu cortex-a72`.
+
+## D-241 — OS: KEMGU-OS — kabuktan ÇOKLU-PROCESS spawn (concurrent + kanal IPC) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-240).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`; `Makefile`. Yalnız test.]** EL0 kabuğa `coklu` komutu: kabuk 3
+userspace worker'ı EŞZAMANLI spawn eder (concurrent multi-process). `prog_uretici` (.user, EL0): getpid (sys 11 — ayrı
+process kimliği) + kanal_gonder(100) (sys 22 — paylaşımlı IPC) + exit. `coklu`: 3× spawn(sys 12)→pid + hepsini join
+(sys 14) + kanaldan topla (sys 23 kanal_al) + rapor. **Kanıt:** "COKLU spawn pid=4/5/6" (3 AYRI process) +
+"[prog uretici] pid=4/5/6 kanala 100 yaziyor" (3 CONCURRENT EL0 process, her biri KENDİ pid'iyle, kendi süreç
+adres-uzayında) + **"COKLU BITTI: 3 process, kanal-toplam=300 (3 mesaj)"** (kabuk hepsini join etti + paylaşımlı
+kanaldan 3 mesaj [3×100=300] topladı). = GERÇEK çoklu-process OS: bir userspace program BİRDEN ÇOK eşzamanlı userspace
+process YÖNETİR + kanal(IPC) ile toplar. Slot-reuse (D-138) ölü init+calistir slotlarını geri kullandı (pid 4/5/6;
+KDL_MAX_GOREV=8). **Userspace process modeli TAM:** kabuk → tek-program(calistir/D-240) + çoklu-eşzamanlı-program(coklu)
++ join + kanal-IPC. Full gate gecti, sıfır uyarı/regresyon. **Not:** Seri; ben yazdım.
+
+**Ek düzeltme 1 — TIMER-IRQ/init ÇIKTI-ÇAKIŞMASI (pre-existing race, gate-verify sırasında bulundu) [ETKİ:
+`runtime/kdl_zaman.c`; `test/bare_metal/kemgu_os_arm.c`]:** Entegre çekirdekte preemption `init_betik()` boyunca AÇIK.
+`kdl_zaman.c` `kdl_tik()` tek-seferlik "TIMER OK tik=5" tanılamasını TIMER-IRQ bağlamından konsola yazıyordu → main'in
+deterministik "PAGEFAULT OK" yazımını ORTASINDAN böldü ("PAG"+"TIMER OK tik=5"+"EFAULT OK") → gate grep FAIL. Bu D-241'e
+BAĞLI DEĞİL (tik-5 vs init, coklu çok sonra kabukta); latent race yalnız bu koşuda tetiklendi. **Düzeltme:** `volatile int
+kdl_timer_diag_aktif=1` (varsayılan AÇIK → bağımsız `calistir_timer_test_arm` yeşil kalır); entegre çekirdek preemption'dan
+ÖNCE `=0` set eder (üretim timer-tick'i konsola yazmaz; timer-canlılık zaten UPTIME + SCHEDULER OK sayaç-kanıtı ile ispatlı).
+Kanıt: kemgu_os_arm 5/5 tekrar-koşu deterministik ("PAGEFAULT OK" bütün, sıfır çakışma-artığı); timer_test hâlâ "TIMER OK".
+**Ek düzeltme 2 — interaktif kabuk demo yük-duyarlı flake [ETKİ: `Makefile`]:** `calistir_shell_test_arm` +
+`calistir_shell_script_test_arm` (char-paced stdio UART-RX) full-gate yükü altında QEMU yavaşlayınca bounded-RX-spin'i
+`timeout 20`'de bitiremiyor → son komut düşer, "SHELL OK" yazılmaz (standalone geçer). `timeout 20→40` (recon-shell'lerin
+`30`/entegre çekirdeğin `60` yük-marjıyla aynı sınıf). D-155 net-test yük-dersinin ikizi.
+
+## D-240 — OS: KEMGU-OS — kabuktan SPAWN/EXEC (userspace program başlatma + join + IPC) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-239).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`; `Makefile`. Yalnız test.]** EL0 kabuğa `calistir <program>` komutu:
+kabuk (bir userspace PROCESS) sys(12)=spawn ile BAŞKA bir userspace programı AYRI PROCESS olarak başlatır. Gömülü
+spawnable programlar (.user, EL0): `prog_hesap` (6*7=42 → dosya_yaz(sonuc) IPC → exit), `prog_selam` (yaz → exit).
+`calistir`: spawn(sys 12)→pid + join(sys 14, bounded)→bekle + sonuç(sys 16 dosya_oku, IPC)→oku + rapor. **Kanıt:**
+"el0$ calistir hesap" → "CALISTIR spawn: hesap" + **"[prog hesap] 6*7=42 -> sonuc dosyasi"** (SPAWN edilen program
+kendi EL0 süreç adres-uzayında koştu) + **"CALISTIR bitti (pid=4) sonuc=42"** (kabuk join etti + IPC dosyasından sonuç=42
+okudu). = GERÇEK OS **spawn/exec/wait**: userspace program başka userspace programı başlatır, o kendi izole süreç
+adres-uzayında (kdl_surec_spawn TTBR-swap) EL0'da koşar, IPC(dosya) ile haberleşir. D-137 (calis_arm launcher/worker)
+deseni entegre kabuğa taşındı — AMA başlatan artık EL0 KABUK (kernel main DEĞİL). **TTBR-swap** (spawned process own
+address-space) entegre çekirdekte çalıştı (shell/main L2[16] identity, worker L2[17]→per-proc veri_pa). Full gate 123
+gecti, sıfır uyarı/regresyon. **Not:** Seri; ben yazdım.
+
+## D-239 — OS: KEMGU-OS — net-recon EL0 kabuğa taşındı (pentest shell = TAM userspace process) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-238).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_shell_el0.c`. Yalnız test.]** D-238 EL0 kabuğuna (FS+utility) NET-RECON eklendi
+→ D-238'in "KALAN" işi tamam. EL0 net yardımcıları (u_ip_checksum, u_arp_coz, u_ping, u_arpscan, u_tcp_syn, u_scan) —
+HEPSİ EL0'da, .user_data TX/RX tamponlarında, **net syscall (24=net_gonder / 25=net_al) ile** (userspace_net/D-176
+deseni: EL0 süreç virtio-net'e DOKUNMADAN syscall ile ağ yapar). MAC/IP sabitleri .user_data (EL0 okur; .rodata=fault).
+Komutlar: `ping <oktet>` (ICMP echo), `arpscan` (subnet ARP tara), `scan <oktet>` (TCP SYN 80/443/22 → ACIK/KAPALI/
+FILTRELI, pseudo-header checksum). **Kanıt:** "el0$ ping 2"→"PING: CANLI" + "el0$ arpscan"→"ARPSCAN: 2 host" — EL0 kabuk
+GERÇEK net recon yaptı (kernel-fn çağırmadan, yalnız SVC). Canlı-yazılan input FS round-trip da çalıştı
+("oku canli"→"OKU: EL0DATA"). **Pentest kabuğu ARTIK TAM userspace process:** FS + net-recon(ping/arpscan/scan) + RTC +
+utility, hepsi EL0'dan syscall'la. Sıfır uyarı, full gate. init_betik EL1-net (driver-proof) korundu; EL0-kabuk-net =
+userspace-recon proof. **Not:** Seri; ben yazdım.
+
+## D-238 — OS: KEMGU-OS PART 3(d) — SHELL EL0 PROCESS (interaktif kabuk userspace) — OS TESLİMATI TAM (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-237).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_shell_el0.c`; `test/bare_metal/kemgu_os_arm.c`; `runtime/kdl_kesme.c`;
+`Makefile`. SERİ.]** PART 3 proof(d) = "shell userspace PROCESS'e döner". İnteraktif kabuk EL1 kernel-fonksiyonundan
+EL0 userspace process'e TAŞINDI. `kemgu_shell_el0.c` (BM_A64_EL0/GPR-only, .user+.user_data) = AYRI-derlenen EL0 kabuk;
+kemgu_os_arm.c'nin EL1 kabuk-döngüsünün YERİNE geçer. **Yeni syscall'lar:** num=26 `read_satir` (kernel PL011 RX → user
+buffer; EL0 Device-MMIO ERİŞEMEZ), num=27 `saat` (PL031 RTC). Kabuk HER ŞEYİ syscall ile yapar: read_satir(26)/yaz(5-7)/
+FS(17-21)/RTC(27). Komut adları .user_data'da (EL0 okur; .rodata=AP=00 olsa fault, D-135/235). **PROOF(d):** kabuk sys(2)→
+"kaynak-EL=0x0" (kabuk GERÇEKTEN EL0) + "SHELL EL0 BASLADI (userspace process)" + gömülü dizi (yaz/oku/ls/saat) EL0'dan
+syscall'la işlenir ("OKU: KABUK" = EL0 FS round-trip) + canlı UART girişi + "SHELL EL0 OK". main(görev0) kabuğun exit'ini
+bekler (kdl_gorev_durum) → "KEMGU-OS OK". **BUG DÜZELTME:** kabuk exit=num=13 (kdl_gorev_bitir=görevi-öldür); num=3 kernel'i
+for(;;)-halt ederdi (D2 non-preempt) → main asla resume etmez + 3e9-spin flake. num=13 = görev ölü → main hızlı-detect.
+boot-tablo altında (TTBR-swap yok), user-yığın 0x42160000 (.user AP=01), FS tamponları .user_data (validator-izinli).
+**KALAN:** net recon (ping/scan/arpscan) EL0 kabuğa HENÜZ taşınmadı (EL1 komut kütüphanesi korundu, init_betik ping/arpscan
+kullanır) — EL0-net-frame port takip işi.
+**🎯 TÜM OS TESLİMATI TAM (uygulama→gerçek OS):** PART1 MMU(D-235) + PART2 preemptive-scheduler(D-236) + PART3 userspace
+[mekanizma(D-237) + **shell-EL0-process(D-238)**] = kemgu_os_arm.c TEK boot'ta, kümülatif, falsifiye-edilemez. Mehmet'in
+"OS = MMU+scheduler+userspace" tanımının ÜÇÜ DE canlı+entegre; kabuk artık userspace process. **Not:** Seri; ben yazdım.
+
+## D-237 — OS: KEMGU-OS PART 3/3 — USERSPACE (EL0 program + syscall + izolasyon) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-236).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_init_el0.c`; `test/bare_metal/kemgu_os_arm.c`; `runtime/kdl_kesme.c`;
+`boot/start_aarch64.S`; `Makefile`. SERİ, paylaşılan çekirdek.]** Mehmet direktifi (OS=MMU→sched→userspace) PART 3/3 =
+userspace. [[feedback-os-tanim-mmu-sched-userspace]]. **AYRI-derlenen EL0 program** (`kemgu_init_el0.c`, BM_A64_EL0=
+GPR-only, `.user` section 0x42000000 AP=01) çekirdeğe LİNKLENİR + preemptive EL0 GÖREV olarak koşturulur (boot sayfa-tablo
+altında — TTBR-swap YOK → kabuğun 0x42210000 user-VA tamponları [L2[17] AP=00] bozulmaz). Bu = "kernel programı yükler +
+EL0'da koşturur" (kernel-içi C-fn DEĞİL). **PROOF(a):** sys(2) → kernel "EL0 SYSCALL kaynak-EL=**0x0**" (SPSR.M[3:2]
+donanım register = 0 → GERÇEKTEN EL0; kernel-fn olsaydı EL1=1). Taklit edilemez. **PROOF(b):** sys(5,str) → EL0'dan SVC →
+kernel string basar + EL0'a döner (syscall arayüzü çalışır). **PROOF(c):** EL0 kernel-belleğe (0x40000000 AP=00) KASITLI
+eriş → EL0 permission-fault → kernel SÜRECİ ÖLDÜR ("IZOLASYON OK ... FAR=0x40000000") + OS DEVAM → gerçek process
+izolasyonu (kernel-fn her yere erişebilirdi = izolasyon-yok). **KOMPOZİSYON:** PART1(MMU/PAGEFAULT) ⊕ PART2(SCHEDULER,
+arka-plan görevler +19B+67C) ⊕ PART3(EL0-userspace) ⊕ net/FS/disk/RTC/kabuk HEPSİ TEK boot'ta canlı → "KEMGU-OS OK".
+**Runtime:** kdl_el0_izolasyon_isle (kill=kdl_gorev_bitir) + start_aarch64.S EL0-fault-dispatch; **OPT-IN kdl_el0_kill_aktif**
+(varsayılan 0 → demolar eski "ISTISNA"-halt KORUNUR, sıfır regresyon — proc_arm/D3 doğrulandı; entegre çekirdek 1 yapar).
+**Codegen dersi:** EL0 program AYRI dosya+GPR-only ŞART — kernel flag'siz (D-235) olduğu için aynı dosyada olsaydı NEON
+sabit-havuz kernel .rodata'ya düşerdi (D-235 EL0 bug). Ayrı-derleme = "AYRI derlenen program"(proof a) + bug'dan kaçınır.
+**KALAN — PROOF(d) DÜRÜST:** shell KENDİSİ EL0 process DEĞİL (hâlâ EL1). userspace MEKANIZMASI (a/b/c) kanıtlandı + entegre;
+(d) shell→EL0 = büyük refactor (kabuk UART-RX/net/FS/output HEPSİ syscall olmalı) → son entegrasyon adımı, ayrı yapılacak.
+**Not:** Seri; ben yazdım.
+
+## D-236 — OS: KEMGU-OS PART 2/3 — PREEMPTIVE SCHEDULER (gerçek multitasking) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-235).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_preempt_* extern).]**
+Mehmet direktifi (OS = MMU→scheduler→userspace) PART 2/3 = preemptive scheduler. [[feedback-os-tanim-mmu-sched-userspace]].
+Ham malzeme (C7b/D-117: kdl_baglam_degis + IRQ 272-byte trap-frame + kdl_preempt/kdl_gorev.c) VARDI ama entegre
+çekirdeğe wire EDİLMEMİŞTİ — D-233 timer yalnız TİK sayıyordu (multitasking DEĞİL; dürüstçe "timer canli" demiştim).
+**Wire:** kdl_preempt_baslat (main=görev0) + 2 ARKA-PLAN görev (sonsuz busy-loop, sayaç++, ASLA yield ETMEZ) +
+kdl_preempt_ac → timer-IRQ ZORUNLU switch. **PROOF(a) [falsifiye-edilemez]:** 2 yield-etmeyen arka-plan görev, İKİSİNİN
+de sayacı ilerler (+77B +75C, main init_betik'te net/FS yaparken, o da yield etmez). Preemption yoksa arka-plan HİÇ
+seçilmez → sayaç=0 kalır → cooperative/sayaç-bump TAKLİT EDEMEZ. **PROOF(b):** shell KENDİSİ görev 0; arka-plan sayaçları
+shell komut-işlerken BÜYÜR (77→1403, 6 interaktif komut boyunca) → concurrent (shell zamanlanmış görev + arka-plan koşar).
+**PROOF(c):** tüm OS (MMU-PAGEFAULT+net+FS+disk+RTC+shell) scheduler altında çalışır → "KEMGU-OS OK". **Determinizm:**
+preemptive → tam byte-çıktı değişken (sayaç değerleri timing-bağlı) AMA PASS markerları (SCHEDULER OK = db>0&&dc>0,
+PAGEFAULT/PING/vs) deterministik (2× gecti). Full gate + unit-suite yeşil. **ETİKET DÜRÜSTLÜĞÜ:** bu GERÇEK
+multitasking (zorunlu context-switch), D-233 timer-sayaç DEĞİL. **Uygulama→OS 2. ayak. SIRADA PART 3: userspace (EL0
++ ayrı-derlenen program + izolasyon).** **Not:** Seri; ben yazdım.
+
+## D-235 — OS: KEMGU-OS PART 1/3 — GERÇEK MMU (C8b flag-kaldırma + C8c page-fault kurtarma) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-234).
+
+**Karar [ETKİ: `Makefile` (BM_A64), `boot/start_aarch64.S`, `runtime/kdl_kesme.c`, `test/bare_metal/kemgu_os_arm.c`.
+SERİ, paylaşılan çekirdek.] — Mehmet direktifi: OS = MMU + preemptive scheduler + userspace (SIRAYLA). Bu PART 1/3 = MMU.**
+[[feedback-os-tanim-mmu-sched-userspace]]. **Bulgu:** MMU-on Normal-memory (C8a/kdl_mmu.c: L1[0] Device MMIO, L1[1]
+Normal-WB RAM, SCTLR.M) + FP-enable (start CPACR_EL1.FPEN) ZATEN vardı, AMA falsifiye-edilemez kanıt hiç yapılmamıştı
+(`-mgeneral-regs-only` hâlâ flag'deydi = C8b pending).
+**PROOF (a) [C8b — MMU+Normal gerçek]:** KERNEL (integrated kernel kemgu_os_arm.o + runtime bm_a64_*.o) `-mgeneral-regs-only`
+OLMADAN derlenir. Clang serbest SIMD emit eder: `kemgu_os_arm.o` **`stp q0, q0, [mem]`** (128-bit NEON store →
+`frame[128]=0` vektörize) emit eder + Normal-cacheable RAM'e yazar + BOOT EDER. Device-memory'de bu store alignment-fault
+ederdi + FP-trap'liyse trap ederdi (= C1 bug'ı) → **boot = MMU+Normal+FP GERÇEK, taklit EDİLEMEZ.**
+**DÜRÜST SINIR (yeni BM_A64_EL0):** flag'i GLOBAL kaldırınca 35 EL0-kod demosu (userspace_*/.user-section) KIRILDI —
+flag'siz clang, EL0 fonksiyonun NEON sabit-havuzunu (frame-init) kernel .rodata'ya (0x40005ec0 = AP=00) koyar + EL0'dan
+`ldr q0,[kernel_addr]` okur → EL0 permission-fault (DFSC=0x0e, izolasyon ihlali). Bu, uygulama→OS'te "demoların gizlediği
+EL-geçiş edge'i" (Mehmet'in öngördüğü). ÇÖZÜM: 35 EL0 demosu `BM_A64_EL0` (flag İLE, GPR-only=sabit-havuz yok) derlenir;
+KERNEL flag'siz kalır (MMU kanıtı geçerli). KALICI çözüm PART 3'te (EL0 program .rodata'sını user sayfaya yerleştir).
+Kümülatif: full gate 0-regresyon (kernel flag'siz + EL0 demoları flag'li).
+**PROOF (b) [C8c — MMU zorluyor + fault kurtarma]:** kontrollü page-fault kurtarma. `kdl_fault_bekleniyor` bayrağı
+(kdl_kesme.c) + start_aarch64.S SAF-ASM kurtarma yolu (bl-YOK → EL-correct ESR/ELR klobber edilmez): FAR yakala →
+`kdl_fault_yakalanan`, faulting instr ATLA (ELR+=4), frame restore, eret. Entegre kernel init'te haritasız **0x80000000**
+(L1[2] geçersiz) OKU → translation-fault → YAKALANDI (FAR=0x80000000 doğru) + KURTARILDI → "PAGEFAULT OK". MMU
+her-şeyi-map-etmiyor, gerçekten zorluyor + kernel fault'u yönetip ilerliyor (demand-paging temeli).
+**PROOF (c) [kümülatif]:** fault kurtarıldıktan SONRA tüm OS (net+FS+disk+timer+RTC+kabuk) AYNI boot'ta çalışır →
+"KEMGU-OS OK". **Full OS gate YEŞİL (123 gecti, 0 regresyon)** + host unit suite'leri yeşil (10/10 + 39/39).
+**Uygulama→OS geçişinin İLK ayağı: gerçek sanal-bellek + kernel fault-yönetimi.**
+**EK DÜZELTME:** `tick_arm` (D-128) marjinal timer-gecikme flake'i (sabit 4M döngü ≈1 tik; yüklü gate'te t2==t1) →
+bounded-poll (t2>t1 olana kadar, ≤16 tur) ile sağlamlaştırıldı — deterministik.
+**PRE-EXISTING (PART 1 DIŞI, FLAG'lendi):** `calistir_codegen_bootstrap` (self-host fixpoint) test_tumu'da KIRIK —
+checker 79-fark. KANIT ile PART 1'den bağımsız: `build/kemgu.exe` 7 gün önceden (2026-06-27, bu oturumda rebuild YOK),
+son 30 commit'te src/ veya selfhost/ değişikliği YOK, PART 1 yalnız bare-metal. Self-host drift'i ayrı iş (MMU teslimatı
+değil) — Mehmet'in "ilgisiz kolay-işe kaçma" kuralı gereği detaya girilmedi, dürüstçe flag'lendi.
+**Not:** Seri; ben yazdım. Ders: gate koşarken runtime/ düzenleme = stale-obje link-hatası (temiz-rebuild gerekti).
+
+## D-234 — OS: KEMGU-OS entegre çekirdek — RTC gerçek-zaman saati (saat komutu, 6. alt-sistem) (2026-07-04)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-233).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Entegre çekirdeğe
+6. canlı alt-sistem = RTC (donanım gerçek-zaman saati). PL031 (0x09010000 DR, D-172) Unix epoch saniye okur (passive MMIO,
+IRQ gerekmez). Yeni `saat` komutu + init betiği RTC sanity check (>1.5e9 → "RTC OK"). **Kanıt:** "SAAT: 1783150833
+(unix saniye) RTC OK" (= 2026-07-04, makul). TEK boot, det, sıfır uyarı. **Entegre çekirdek artık 6 CANLI alt-sistem:
+ağ + depolama + FS + timer(uptime) + RTC + interaktif kabuk (13 komut).** **Not:** Seri; ben yazdım.
+
+## D-233 — OS: KEMGU-OS entegre çekirdek — ZAMAN alt-sistemi canlı (timer IRQ + uptime, concurrent) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-232).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Entegre çekirdeğe
+5. canlı alt-sistem = ZAMAN (timer IRQ). Boot'ta kdl_kesme_kur (GIC) + kdl_timer_baslat (sanal timer, D-109) → timer IRQ
+CANLI; preempt guard'lı-kapalı (D-125/127) → IRQ yalnız tik sayar (görev-switch YOK, kabuğa müdahale etmez). **Kanıt =
+CONCURRENT background activity:** uptime kabuk çalışırken arka planda İLERLER — init betiğinde 8 tik, interaktif kabuk
+sysinfo'da 436 tik (timer IRQ kullanıcı komut yazarken sürüyor → gerçek eşzamanlı canlı çekirdek, statik yetenek değil).
+"UPTIME: timer canli (tik ilerledi)" deterministik (sayı değişken, mesaj sabit); sysinfo `uptime=Ntik` gösterir. TEK boot,
+sıfır uyarı, 2× det. **Entegre çekirdek artık 5 CANLI alt-sistem: ağ + depolama + FS + ZAMAN + interaktif kabuk.**
+**Not:** Seri; ben yazdım. Timer IRQ + net-busy-wait + SVC-syscall birlikte stabil (IRQ preempt-guard'lı → non-disruptive).
+
+## D-232 — OS: KEMGU-OS entegre çekirdek — DEPOLAMA alt-sistemi canlı (virtio-blk kalıcılık) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-231).
+
+**Karar [ETKİ: `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-231 entegre çekirdeğe
+SERİ genişleme (yeni izole demo DEĞİL — [[feedback-entegre-kernel-not-demolar]] kuralı): 4. canlı alt-sistem = DEPOLAMA.
+Boot'ta virtio-blk kurulur (kdl_virtio_blk_bul/kur) + diskteki kalıcı FS yüklenir (kdl_dosya_yukle/D-143). init betiği
+kaydet→yükle round-trip ile disk yaz+oku yolunu deterministik sınar ("proje" korundu). Yeni kabuk komutları: `kaydet`
+(RAM-FS→disk), `yukle` (disk→RAM-FS). sysinfo artık disk durumu gösterir. **Kanıt:** TEK boot'ta net + **disk (DISK RW
+OK: kaydet→yukle, proje korundu)** + FS + kabuk hepsi canlı → "KEMGU-OS OK". Gate `-drive` + dd disk.img (128 sektör),
+det. **Entegre çekirdek artık 4 canlı alt-sistem: ağ + depolama + FS + interaktif kabuk.** **Not:** Seri; ben yazdım.
+
+## D-231 — OS: KEMGU-OS v0.1 — TEK ENTEGRE ÇEKİRDEK (izole demo → tek canlı OS) (2026-07-04) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-230).
+
+**Karar [ETKİ: yeni `test/bare_metal/kemgu_os_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.] — FAZ DÖNÜŞÜ.**
+Mehmet düzeltti: KEMGU-OS TEK ENTEGRE bootable çekirdek olmalı, 100+ izole per-feature demo değil (`test/bare_metal/*.c`
+her biri kendi main()'i olan ayrı ELF idi; `runtime/` paylaşılıyordu ama boot→hepsi-canlı imaj YOKtu). **KEMGU-OS v0.1**
+= tek main() → boot → CANLI alt-sistem kurulumu (virtio-net + RAM-FS) → deterministik init betiği → interaktif pentest
+kabuğu. Demolar artık **kanıtlanmış-rutin KÜTÜPHANESİ** (buradan çekildi: recon_shell2/D-198 ARP/ICMP/TCP rutinleri +
+FS syscall 17-21 + PL011 canlı-RX/D-188). **10 kabuk komutu** (yardim/sysinfo/ls/yaz/oku/sil/ping/pingsweep/scan/arpscan)
+TEK koşan çekirdekte. **init betiği DETERMİNİSTİK** (UART input-timing yarışı YOK → gate PASS temeli); interaktif kabuk
+gerçek kullanım için (canlı komutlar da çalıştı — 8/8 komut yanıt verdi). **Kanıt:** TEK boot'ta → FS yaz→ls→oku
+round-trip ("OKU: KEMGU" + "OKU: KEMGU-OS-v0.1") + ağ ("PING: CANLI" + "ARPSCAN: 2 host") + interaktif kabuk → "KEMGU-OS
+OK", 2× det, sıfır uyarı. **Bundan sonra genişlemeler bu ÇEKİRDEĞE seri eklenir (yeni izole demo DEĞİL).** İlgili:
+[[feedback-entegre-kernel-not-demolar]]. **Not:** Seri (paylaşılan kabuk-çekirdek — paralelleştirilmez); ben yazdım.
+
+## D-230 — OS: x86 kooperatif scheduler — yield tabanlı context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-229).
+
+**Karar [ETKİ: yeni `test/bare_metal/sched_x86.c` (hedef `calistir_sched_x86_test`); `Makefile`. Yalnız test — boot/runtime değişmedi.]**
+C7a (aarch64 kooperatif scheduler) x86 İKİZİ — D-212 preemptive'in AKSİNE KOOPERATİF (yield tabanlı, IRQ yok). x86 TCB
+(callee-saved rbx/rbp/r12-r15 + rsp), `sched_yield()` naked RSP-swap: push callee-saved → RSP eski-TCB'ye → round-robin
+sonraki READY → RSP yeni-TCB'den → pop → ret. **Kanıt:** 3 görev A/B/C yield ile dönüşümlü koştu → [A][B][C]×3 →
+"SCHED X86 OK". Det. Hedef adı `calistir_sched_x86_test` (mevcut C7a `calistir_sched_test_x86` paylaşılan sched_test.c'yi
+kullanır; bu self-contained sched_x86.c → AYRI object sched_x86_coop.*, çakışma yok). **Scheduler artık ÇİFT-ARCH TAM:
+aarch64 coop(C7a)+preempt(C7b) + x86 coop(D-230)+preempt(D-212).** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-229 — OS: SELF-HOST JSON ayrıştırıcı — saf KEMGU veri-format işleme (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-228).
+
+**Karar [ETKİ: yeni `test/ornekler/json_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]** Saf
+KEMGU JSON ayrıştırıcı — self-host dilin GERÇEK veri-format işleme yeteneği (VM/hashmap/kripto ötesi). Basit alt-küme:
+nesne + sayı değerleri. Girdi `{"x": 42, "y": 100}` (gömülü byte dizisi). Durum-makinesi: skip-ws + yapısal-ayraç-atla +
+string-oku + sayı-oku (`n=n*10+(byte-48)`). **Kanıt:** ayrıştır → x=42 VE y=100 (beklenen sabitlerle) → "KEM JSON OK".
+Cihazsız det. **Dil-doğrulaması:** `karakter` sayısal DEĞİL (T003, D-175) → byte'lar tam32 dizisi + ASCII sabit-int
+karşılaştırma; `değilse eğer` durum-makinesi (D-168); Dizi<tam32> fn-param + in-place yaz (D-171/196). Sınır: sayı
+değerleri + pozitif tam32 (nested/string-değer/dizi/bool YOK). **Self-host dil gerçek programlar için veri ayrıştırıyor.**
+**Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-228 — OS: TCP zarif kapanış — FIN 4-yönlü teardown (tam TCP yaşam-döngüsü) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-227).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_close_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-159 SYN handshake
+TCP FSM'in AÇILIŞI idi; bunu KAPANIŞLA tamamlar = tam yaşam-döngüsü. ESTABLISHED sonrası zarif kapanış: bizim FIN|ACK →
+peer FIN-ACK RX (FIN_WAIT_2) → peer FIN RX → bizim son ACK → CLOSED (4-yönlü, active close). FIN'in 1 seq tükettiği doğru
+işlendi (ISS+2). **Kanıt:** DNS-çöz(example.com→104.20.23.154 Cloudflare) → SYN→SYN-ACK→ACK → FIN → FIN-ACK RX → peer FIN
+→ son ACK → "TCP CLOSE OK", GERÇEK internet peer 4-yönlü (fallback DEĞİL). host-internet-bağımlı + pcap-TX/yarı-kapanış
+fallback. D-158 küçük-tik. **Tam TCP FSM: open(D-159)+data(D-161)+close(D-228).** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-227 — OS: SELF-HOST SHA-256 parola kırıcı — LAB-kapsamlı sözlük saldırısı (Pentest-OS) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-226).
+
+**Karar [ETKİ: yeni `test/ornekler/hashcrack_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+Pentest-OS (Kali=john/hashcat) tarzı LAB-KAPSAMLI parola kırıcı: KENDİ ürettiği bir SHA-256 hash'i sözlükle geri bulur.
+Gömülü sözlük (8 aday); hedef = bilinen "kemgu"nun SHA-256'sı (test kendi üretir); kırıcı her adayın SHA-256'sını hesaplar,
+hedefle karşılaştırır. **Kanıt:** hedef-hash → sözlük tara → "kemgu" idx=2'de KIRILDI + 7 eşleşmeyen atlandı → "KEM CRACK
+OK". LAB-scoped (kendi-üretilen hash, gerçek hedef YOK — QEMU/eğitim). D-173 SHA-256 çekirdeğini (dtam32 wrap/rotate,
+skaler-param ashr-workaround) yeniden kullanır. Cihazsız det. **KEMGU kripto artık ofansif-güvenlik bağlamında (hash
+kırma) — pentest-OS aracı.** **Not:** Paralel mini-agent (Workflow batch-17b re-run) üretti; cherry-pick ile entegre.
+
+## D-226 — OS: EL0 setjmp/longjmp — userspace yerel-olmayan atlama (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-225).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_jmp_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** EL0'da
+setjmp/longjmp — yerel-olmayan kontrol akışı (C exception-benzeri), TAMAMEN userspace. `u_setjmp(buf)` (naked `.user`):
+callee-saved x19-x30 + sp + lr'yi buf'a kaydet, 0 döndür; `u_longjmp(buf,val)`: buf'tan geri yükle, yüklenen x30'a `ret`
+→ u_setjmp'in dönüş-noktasına atlar ama x0=val (POSIX: val=0→1). jmp_buf düzeni fiber TCB ailesiyle tutarlı. **Kanıt:**
+u_setjmp→0 → derin 3-katman zincir (K1/K2/K3) → en derin katman u_longjmp(buf,42) → kontrol u_setjmp'e 42 ile geri
+sıçradı (LONGJMP42), ara katmanların normal dönüşü HİÇ çalışmadı (yerel-olmayan) → "USERJMP OK". D-203 naked-fiber deseni.
+3× det. **Not:** Paralel mini-agent (Workflow fan-out, batch-17) üretti; cherry-pick ile entegre.
+
+## D-225 — OS: x86 PCI veri-yolu numaralandırma — cihaz keşfi (YENİ ALT-SİSTEM) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-224).
+
+**Karar [ETKİ: yeni `test/bare_metal/pci_enum_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** YENİ ALT-SİSTEM:
+PCI cihaz keşfi (gerçek donanım sürücülerinin temeli). Legacy PCI config-space port I/O: `outl(0xCF8, 0x80000000|
+bus<<16|slot<<11|func<<8|offset)` + `inl(0xCFC)`. bus 0 slot 0..31 tara: vendor:device (offset 0), class-code (offset
+0x08). **Kanıt:** QEMU i440fx sabit topolojisinde 4 cihaz — 8086:1237 (host-bridge), 8086:7000 (ISA-bridge), 1234:1111
+(stdvga), 8086:100e (e1000 NIC) → vendor:device:class listelendi → "PCI ENUM OK 4 cihaz". 2× det. x86 PVH long-mode
+(D-107). **OS artık PCI cihazlarını keşfediyor** (gerçek virtio/NIC sürücüleri için ön-koşul). Sınır (v1): yalnız bus 0 +
+func 0 (bridge-recursion + multi-func yok). **Not:** Paralel mini-agent (Workflow fan-out, batch-17 — 2/6 tamam; A/D/E/F
+oturum-limiti nedeniyle re-run bekliyor) üretti; cherry-pick ile entegre.
+
+## D-224 — OS: x86 TAM kullanıcı-süreç keystone — ring3 ⊕ sayfa-izolasyon ⊕ syscall (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-223).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_proc_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** aarch64 D3
+(korumalı EL0 user-process) x86 İKİZİ = x86 user-process KEYSTONE'u. Üç mevcut x86 parçayı BİRLEŞTİRİR: (1) ring3
+(D-190 GDT DPL=3 + TSS + iretq→CPL=3), (2) sayfa-izolasyon (D-195 kernel sayfası U/S=0), (3) syscall (D-218 int0x80).
+**Kanıt:** ring3 user-kodu KENDİ sayfasında (U/S=1) koştu (CPL=3) + int0x80 ile hesap+I/O yaptı + kernel-sır sayfasına
+erişince **#PF (v=14, err=P|U, CR2=kernel-sır) → HAPİS** → "RING3 PROC X86 OK". TAM başarı, fallback GEREKMEDİ. x86 PVH
+long-mode (D-107). **Korumalı user-process artık ÇİFT-ARCH tam (aarch64 D3 + x86 keystone).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-223 — OS: SELF-HOST Türkçe alfabetik sıralama (collation) — Türkçe DNA (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-222).
+
+**Karar [ETKİ: yeni `test/ornekler/turkce_sort_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-217 case-fold'un Türkçe-DNA DEVAMI: TÜRKÇE ALFABETİK SIRALAMA (collation) — mainstream diller yanlış yapar (Unicode
+kod-nokta sırası ≠ Türkçe alfabe). Türkçe: a b c ç d e f g ğ h ı i ... KRİTİK: **ç, c'den SONRA** (Unicode 231 çok
+ileride) + **ı, i'den ÖNCE** (Türkçe'de ı<i, Unicode'da ı=305>i=105 TERS). Her harfe Türkçe-sıra-indeksi ata, o indeksle
+karşılaştır. **Kanıt:** karışık Türkçe kelime dizisi → Türkçe collation ile sırala → beklenen Türkçe-alfabetik sıra
+(ç>c VE ı<i kararlarıyla; Unicode-sıralama YANLIŞ verir) → "KEM TR SORT OK", Unicode-tuzağına düşmedi. Saf KEMGU, dtam32
+kod-nokta + dizi in-place swap (D-171/211/217). Cihazsız det. **Türkçe-syntax dil Türkçe collation'ı kendi diliyle
+çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-222 — OS: crash-güvenli FS — WAL journaling ⊕ inode-FS sentezi (atomik yazım) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-221).
+
+**Karar [ETKİ: yeni `test/bare_metal/crashfs_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-206 WAL +
+D-210 inode-FS SENTEZİ: atomik dosya-yazımı olan crash-güvenli FS. Dosya yazarken önce JOURNAL'a (inode-güncellemesi +
+veri-blokları + commit-flag) yaz, sonra gerçek FS bloklarına uygula. Crash yazım ORTASINDA (flag=0) → kurtarma atlar →
+FS eski-tutarlı; crash commit SONRASI (flag=1) → kurtarma REPLAY eder → yeni-tutarlı. Torn FS ASLA görünmez. **Kanıt:**
+(1) temiz yazım → FS tutarlı; (2) crash-replay: B journal+commit=1 ama apply-atla → kurtarma replay (kurtarma=1,
+replay-sonrası=0x10) → FS'te B tutarlı → "CRASHFS OK". virtio-blk, det. **FS artık atomik+crash-güvenli** (D-206 WAL
+kavramı + D-210 gerçek-FS birleşti). **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-221 — OS: ICMP ping-sweep — nmap-tarzı L3 host keşfi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-220).
+
+**Karar [ETKİ: yeni `test/bare_metal/ping_sweep_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-156 tek-ping +
+D-158 subnet-iterasyon BİRLEŞİMİ = host-discovery (pentest recon). 10.0.2.1..5 her IP'ye ICMP echo request; reply =
+CANLI host. SLIRP: gateway 10.0.2.2 + DNS 10.0.2.3 echo'ya yanıt (deterministik) → 2 canlı. Reply doğrulama: src-IP +
+id/seq + payload "KEMGU". **Kanıt:** 10.0.2.2/.3 CANLI, .1/.4/.5 YANITSIZ → "PING SWEEP OK 2" (N≥2), RX round-trip
+(pcap fallback GEREKMEDİ). D-158 küçük-tik (2.5M). **Pentest recon aracı seti: port-scan(D-164)+arp-scan(D-158)+
+traceroute(D-209)+ping-sweep = tam host/topoloji keşfi.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-220 — OS: userspace paylaşımlı-bellek IPC — 2 EL0 süreç aynı sayfayı paylaşır (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-219).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_shm_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-127
+per-process İZOLASYONUN TERSİ: iki EL0 süreç KASITLI olarak aynı fiziksel veri sayfasını PAYLAŞIR (kdl_surec_kur_el0_veri
+AYNI veri_pa=0x44000000 ile iki süreç → her ikisi L2[17]→VA 0x42200000). Üretici 1..10 + bayrak(0x600D) yazar (dmb ish);
+tüketici bayrağı bounded spin-poll ile bekleyip toplar. Doğrudan-bellek IPC (kanal/dosya syscall DEĞİL). **Kanıt:** üretici
+yazar → tüketici toplam=55 okur → "USERSHM OK"; ayrı-PA (D-127 izolasyon) olsaydı 0 görürdü. İki süreç preemptively
+(D-127 scheduler). Ayrı user-yığın VA (0x42380000/0x42300000) paylaşılan PA'da çakışmasın diye. Det. **Userspace IPC üç
+yolla: dosya(D-131)+kanal(D-140)+paylaşımlı-bellek.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-219 — OS: SMP seqlock — optimistik kilitsiz-okuma (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-218).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_seqlock_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** Seqlock —
+rwlock(D-199)'tan FARKLI: yazıcı okuyucuyu ASLA beklemez, okuyucu KİLİT ALMAZ (sıfır atomik-RMW, sıfır yazma) →
+OPTİMİSTİK okur. Global seq (çift=stabil, tek=yazım-sürüyor): yazıcı seq++/veri-yaz/seq++; okuyucu s0-oku(tek→retry)→
+a,b-oku→s1-oku→(s0≠s1 veya tek→retry). İki `dmb ish` (seq-tek'ten önce, seq-çift'ten sonra) seqlock'un KALBİ — yanlış
+bariyer=torn. **Kanıt:** -smp 2, yazıcı N=2000 (a++;b=a*2), okuyucu optimistik → **torn_read=0** (yarım-yazılmış çift asla
+kabul edilmedi; araya-giren yazım seq ile yakalanıp retry) + retry=5331 (gerçek çekişme), 5/5 det → "SMP SEQLOCK OK".
+retry/kabul sayısı zamanlama-varyanslı (dürüst, PASS-koşulu değil). **SMP eşzamanlılık: spinlock/ticket/rwlock/atomik/
+bariyer/SPSC/MCS/seqlock = tam kilit-primitif seti.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-218 — OS: TAM x86 syscall ABI — int 0x80 çok-argüman + dönüş + register-şeffaflık (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-217).
+
+**Karar [ETKİ: yeni `test/bare_metal/syscall_x86.c` (hedef `calistir_syscall_abi_test_x86`); `Makefile`. Yalnız test — boot/runtime değişmedi.]**
+aarch64'ün zengin syscall ABI'si (D-126 arg/dönüş/çok-arg/register-şeffaf) x86'da yoktu (yalnız C6/D-110 int0x80
+demo). TAM x86 ABI: kendi IDT[0x80] gate + handler; num=rax, arg0=rdi, arg1=rsi, dönüş=rax (System-V benzeri). 3
+syscall: num=1 yaz(ptr), num=2 topla(a,b)→a+b (çok-arg+dönüş), num=3 tick/echo(dönüş), + geçersiz-num sınır-kontrolü.
+**Kanıt:** topla(40,2)=42 (0x2a) + rbx_korundu (register-şeffaflık: handler frame'i-ÖNCE-kaydeder, D-126 dersi) +
+yaz + tick + hata_sınır → 5 kanıt → "SYSCALL X86 OK". Det. x86 PVH long-mode (D-107 start_x86_64.S linklenir-dokunulmaz),
+-mgeneral-regs-only, `-serial file:`. **Syscall ABI artık çift-arch tam (aarch64 D-126 + x86).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-217 — OS: SELF-HOST Türkçe büyük/küçük harf — "Türkçe-I problemi" (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-216).
+
+**Karar [ETKİ: yeni `test/ornekler/turkce_case_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+KEMGU Türkçe-DNA'sının ZİRVE gösterisi: hiçbir ana-akım dil varsayılan DOĞRU yapmaz. Türkçe harf-dönüşümü kod-noktası
+üstünde: **i→İ (U+0069→U+0130=304), ı→I (U+0131→U+0049), İ→i, I→ı** + ç↔Ç/ğ↔Ğ/ö↔Ö/ş↔Ş/ü↔Ü + ASCII a-z (i HARİÇ).
+**Kanıt:** "istanbul"→büyüt→"İSTANBUL" (i→**304=İ**, ASCII 73=I DEĞİL — İngilizce yanlış "ISTANBUL" verir) +
+"IRMAK"→küçült→"ırmak" (I→**305=ı** noktasız) kod-noktalarıyla doğrulandı → "KEM TR CASE OK". Saf KEMGU, dtam32
+kod-nokta aritmetiği (D-211 UTF-8 çözücü üstüne), `değilse eğer` harf-eşleme, `olarak` cast. Cihazsız det. **Türkçe-syntax
+dil, dünyanın hiçbir dilinin doğru yapamadığı Türkçe-I'yı kendi diliyle çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-216 — OS: mini-FS tam CRUD + blok geri-kazanım (sil→yeniden-kullan) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-215).
+
+**Karar [ETKİ: yeni `test/bare_metal/minifs_crud_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-210 mini-FS'i
+(superblock+bitmap+inode) TAM CRUD'a taşır: `mfs_sil(ad)` (inode boşalt + veri bloklarını bitmap'te SERBEST bırak) +
+`mfs_guncelle`. KRİTİK kanıt = blok geri-kazanım: 3 dosya oluştur (bitmap dolu) → ortadaki sil (bloklar serbest) →
+yeni dosya oluştur → **serbest-bırakılan blokları GERİ KULLANIR** (delta-blok=4 aynı bölge) + içerik round-trip →
+"MINIFS CRUD OK". virtio-blk, det. **Gerçek FS artık tam yaşam-döngüsü: oluştur/oku/güncelle/sil + blok-reclaim.**
+**Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-215 — OS: DHCP tam lease (DORA) — 4-yönlü IP edinimi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-214).
+
+**Karar [ETKİ: yeni `test/bare_metal/dhcp_lease_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-162 yalnız
+DISCOVER→OFFER idi; bunu TAM lease edinimine tamamlar (DORA): DISCOVER→OFFER(yiaddr öğren)→REQUEST(opt53=3, opt50=
+istenen-IP, opt54=server-id)→ACK(opt53=5)→lease EDİNİLDİ. DISCOVER+REQUEST aynı xid. **Kanıt:** 4-yönlü tamam, ACK
+yiaddr=10.0.2.15 + opt53=5 doğrulandı → "DHCP LEASE OK". SLIRP-DAHİLİ DHCP (internet gerekmez) → DETERMİNİSTİK. D-158
+küçük-tik. **OS artık kendi IP'sini TAM protokolle ediniyor** (D-162 kısmi→D-215 tam). Sınır: renewal/rebind (T1/T2)
+yok, yalnız ilk edinim. **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-214 — OS: userspace çok-fiber kooperatif scheduler — N yeşil-thread (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-213).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_sched_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** D-203
+iki-fiber ping-pong'unu GERÇEK round-robin çok-fiber scheduler'a taşır — TAMAMEN EL0'da. N=3 fiber, merkezi scheduler
+döngüsü: her fiber `u_yield()` ile scheduler'a döner, scheduler bir sonraki READY fiber'ı round-robin seçer +
+context-switch (D-203 naked `.user` fiber_gec, always_inline OLAMAZ — `ret` gerekli). Fiber biterse DURUM_BITTI, artık
+seçilmez. **Kanıt:** 3 fiber × 3 tur → interleave A1 B1 C1 A2 B2 C2 A3 B3 C3 (round-robin) → hepsi bitti → "USERSCHED
+OK". Ayrı EL0 yığınları. 2× det. **Userspace M:1 yeşil-thread runtime çekirdeği** (kooperatif, preemption yok).
+**Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-213 — OS: SMP 4-çekirdek paralel merge-sort — böl-ve-yönet (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-212).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_sort_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** SMP kilit
+primitiflerinin ötesinde GERÇEK paralel iş yükü: böl-ve-yönet merge-sort. Paylaşımlı 32-elemanlı dizi (dizi[i]=
+(i*7+13)%97, toplam=1366) 4 çeyreğe bölünür; her çekirdek KENDİ ayrık çeyreğini insertion-sort ile sıralar (çeyrekler
+örtüşmez → kilit gerekmez) → sense-reversing bariyer → çekirdek0 4 sıralı çeyreği 2'li merge ile birleştirir. **Kanıt:**
+-smp 4, tam sıralı (her a[i]≤a[i+1]) + toplam korundu (1366==1366 permütasyon kontrolü) → "SMP SORT OK", 5/5 det. PSCI
+naked-trampoline (D-174), MPIDR-stack (D-191), bariyer (D-179), 64-byte state (D-186), dc civac/ivac coherency.
+**Çok-çekirdek artık paralel-algoritma yürütüyor** (kilit-primitiflerinden gerçek-iş yüküne). **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-212 — OS: x86 preemptive scheduler — PIT timer-IRQ context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-211).
+
+**Karar [ETKİ: yeni `test/bare_metal/preempt_x86.c`; `Makefile`. Yalnız test — boot/runtime değişmedi (yalnız start_x86_64.S linklenir).]**
+C7b (aarch64 preemptive) x86 İKİZİ — preemption artık HER İKİ mimaride. Kendi-içinde (self-contained): x86_64 long-mode
+kernelde kendi IDT + PIC(8259) remap + PIT(8254) ~100Hz → IRQ0 → tam trap-frame kaydet → round-robin 2 kernel-görev
+arası RSP-swap → PIC EOI → iretq. Görev B, YIELD ÇAĞIRMADAN timer-IRQ ile preemptively koştu (sayac_b>0 = zorunlu
+bağlam-değiştirme kanıtı). **Kanıt:** "PREEMPT X86 OK" (B yield-siz koştu). x86 PVH long-mode (D-107, start_x86_64.S
+linklenir-dokunulmaz), -mgeneral-regs-only, `-serial file:` (D-105 Windows-stdio gotcha), hlt-loop timeout=beklenen.
+**Scheduler artık çift-arch (aarch64 C7b + x86 PIT-IRQ).** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-211 — OS: SELF-HOST UTF-8 kod-çözücü — KEMGU Türkçe DNA (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-210).
+
+**Karar [ETKİ: yeni `test/ornekler/utf8_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+KEMGU'nun TÜRKÇE DNA'sına doğrudan hizmet eden self-host milestone: saf KEMGU UTF-8 kod-çözücü. 1-byte (0xxxxxxx) +
+2-byte (110xxxxx 10xxxxxx) dizileri çöz: kod-noktası = `((b0 & 0x1F) << 6) | (b1 & 0x3F)`. **Kanıt:** "çğışöü"
+UTF-8 byte'ları (ç=C3A7, ğ=C49F, ı=C4B1, ş=C59F, ö=C3B6, ü=C3BC) → kod-noktaları **[231,287,305,351,246,252]** +
+kod-nokta SAYISI=6 (byte 12 değil) → "KEM UTF8 OK". **Dil-doğrulaması:** `<<`/`>>` tip-duyarlı → değer önce SKALER
+dtam32'ye alınıp kaydırılır (D-173 dizi-eleman-ashr tuzağı); `karakter` sayısal değil (T003, D-175) → byte'lar
+dtam32 dizisi; implicit tam32↔dtam32 YASAK → `olarak` cast (D-200). Cihazsız det. **Türkçe-syntax dil kendi
+karakter-kodlamasını kendi diliyle çözüyor.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-210 — OS: mini dosya-sistemi — superblock + inode + blok-bitmap (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-209).
+
+**Karar [ETKİ: yeni `test/bare_metal/minifs_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_virtio_blk_* extern).]**
+D-143/D-206 düz-serialize'in ÖTESİNDE GERÇEK dosya-sistemi yapısı virtio-blk üstünde. Disk düzeni: blok0=SUPERBLOCK
+(magic "MFS1"+sayaçlar), blok1=BLOK-BİTMAP, blok2=INODE-TABLO (ad[16]/boyut/ilk_blok/blok_sayısı), blok3+=VERİ.
+`mfs_olustur(ad,veri,uzun)` bitmap'ten boş blok(lar) ayırır + inode + veri-blokları yazar; `mfs_oku(ad,tampon)` inode'u
+ad ile bulup blokları okur. **Kanıt:** 2 dosya ("gunluk" kısa + "veri" BLOK-SINIRINI AŞAN çok-blok) oluştur → diskten
+geri oku → içerik+boyut eşleşti + bitmap tutarlı → "MINIFS OK". Det. **Gerçek FS: blok-tahsis + inode-indeksleme +
+çok-blok dosya.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-209 — OS: traceroute — IP TTL manipülasyonu + ICMP Time-Exceeded (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-208).
+
+**Karar [ETKİ: yeni `test/bare_metal/traceroute_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Ağ-recon aracı:
+traceroute mekanizması. IP başlığındaki TTL'i artırarak probe yolla; her hop TTL=0'da ICMP Time-Exceeded (type=11)
+döndürür → hop IP'si öğrenilir. ARP ile geçit MAC'i çöz → TTL=1 UDP probe (dst 8.8.8.8, port 33435, "KMGTRACE") →
+gateway (10.0.2.2) **ICMP type=11** döndü → hop 1 keşfedildi. **Kanıt:** "HOP KESFEDILDI TTL=1" + "TRACEROUTE OK",
+**PRIMARY RX yolu başarılı — fallback GEREKMEDİ** (pcap: TX-probe TTL=01 + RX ICMP type=0x0b gateway'den). D-158
+küçük-tik (2.5M) yük-dersi. **Pentest recon: port-scan(D-164) + arp-scan(D-158) + reverse-DNS(D-166) + traceroute
+= yol/topoloji keşfi.** **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-208 — OS: userspace EL0 heap allocator — malloc/free (kernel-yardımsız) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-207).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_malloc_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** EL0
+(yetkisiz) süreç ÇEKİRDEK YARDIMI OLMADAN kendi dinamik bellek ayırıcısını sürer — yalnız kendi EL0-erişimli veri
+sayfasında (.user_data, 4KB havuz). `u_malloc` (bump + serbest-liste first-fit) / `u_free` (LIFO push). **Kanıt:**
+A/B/C malloc → u_free(B) → D=malloc → **D==B (B'nin yeri geri kullanıldı = free-list çalıştı)** + yaz/oku round-trip
++ tüm pointer'lar user-VA aralığında → "USERMALLOC OK". 2× byte-identik det. Süreç kernel-belleğine yazmaz (güvenli).
+**Userspace dinamik bellek = daha zengin EL0 programların temeli.** Sınır (v1): coalescing yok, first-fit. **Not:**
+Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-207 — OS: SMP MCS queue-lock — ölçeklenebilir kuyruk-kilidi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-206).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_mcs_arm.c`; `Makefile`. Yalnız test — boot/runtime değişmedi.]** Mellor-Crummey
+& Scott (1991) queue-lock — spinlock(D-170)/ticket(D-192)/rwlock(D-199)'tan FARKLI, ÖLÇEKLENEBİLİR: her çekirdek KENDİ
+node'unda döner (yerel-spin) → global adreste dönmez → cache-line bouncing yok, N'e doğrusal ölçeklenir. LDAXR/STLXR
+SWAP(tail, my_node) ile kuyruğa gir; selef varsa onun next'ini bağla + kendi node'unda locked==0 bekle; unlock: next
+varsa YALNIZ onu uyandır, yoksa tail-CAS. **Kanıt:** -smp 2, iki çekirdek MCS-kilit altında düz sayacı 5000'er artırır
+→ sayac=10000 TAM (lost-update yok) + c0=c1=5000 (FIFO adalet, açlık yok), 5/5 det → "SMP MCS OK". PSCI CPU_ON HVC +
+naked trampoline SP-önce (D-174) + 64-byte node (D-186) + dc civac/ivac coherency. **Not:** Paralel mini-agent (Workflow fan-out) üretti; cherry-pick ile entegre.
+
+## D-206 — OS: FS journaling — write-ahead log + crash kurtarma (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-205).
+
+**Karar [ETKİ: yeni `test/bare_metal/fs_journal_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur (kdl_virtio_blk_* extern).]**
+D-143 kalıcı-FS'i CRASH-TUTARLILIĞA taşır: write-ahead log (WAL). Disk düzeni blok 0 = JOURNAL
+`[magic "JRNL"|hedef_sektor|veri|commit@511]`, blok 10 = VERİ. Protokol: (a) journal commit=0 yaz → (b) flush →
+(c) commit=1+flush (journal geçerli) → (d) veri bloğu yaz → (e) journal temizle. Kurtarma (her boot): journal
+commit==1 ise veriyi hedefe **replay**. **Kanıt:** S1 temiz-commit → veri=0xCAFE, kurtarma no-op (commit=0);
+S2 crash-sim (adım d atlanır, journal commit=1 kalır) → crash öncesi veri 0xCAFE (yeni 0xBEEF diske ulaşmadı =
+tutarlılık) → kurtarma commit=1 görür → 0xBEEF replay → veri=0xBEEF journal ile eşleşti → "FS JOURNAL OK". Tek-boot
+iki senaryo, det. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-205 — OS: SELF-HOST RC4 akış şifresi — KEMGU simetrik kripto (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-204).
+
+**Karar [ETKİ: yeni `test/ornekler/rc4_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-173 SHA-256'nın ötesinde SİMETRİK ŞİFRE: KEMGU'da RC4 (KSA S-box permütasyon + PRGA keystream + XOR). KSA:
+`j=(j+S[i]+anahtar[i%uzun])&255; swap(S[i],S[j])`. PRGA: `i=(i+1)&255; j=(j+S[i])&255; swap; K=S[(S[i]+S[j])&255]`.
+**Kanıt:** Wikipedia test-vektörü anahtar "Key" + düz "Plaintext" → şifreli **BBF316E8D940AF0AD3** (ondalık
+187,243,22,232,217,64,175,10,211) → beklenen hex eşleşti + round-trip (simetrik decrypt = orijinal) → "KEM RC4 OK"
+(çift kanıt: hem hex hem round-trip). **Dil-doğrulaması:** S-box in-place swap (D-171), `&255` maske (kaydırma
+YOK → D-173 dizi-ashr tuzağı hiç oluşmaz), XOR skaler-üstünde (dizi-eleman değil), `olarak` cast (D-200). Cihazsız
+det. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-204 — OS: kabuk script runner — değişken + echo/yaz/oku betik (2026-07-03)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-203).
+
+**Karar [ETKİ: yeni `test/bare_metal/shell_script_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-189 recon
+kabuğunu BETİK-YORUMLAYICIYA taşır: değişken tablosu (`var_adlar[16][16]`+lineer arama) + komutlar `set <ad> <deg>`
+/ `echo <ad>` (`$` toleranslı) / `yaz <dosya> <ad>` (num=17) / `oku <dosya>` (num=18) / `tekrar <n> <komut>`
+(bounded 32). **Kanıt:** betik `set x 42 / echo x / yaz gunluk x / oku gunluk` → echo=42 (değişken tablosu) +
+oku=42 (FS round-trip: değer itoa→dosya→geri) → "SCRIPT OK", 3× byte-identik det. Char-pace UART giriş (D-188),
+user-VA tampon (D-150/151). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-203 — OS: userspace kooperatif fiber'lar — EL0 yeşil-thread context-switch (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-202).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_fiber_arm.c`; `Makefile`. Yalnız test — runtime salt-okunur.]** Kernel
+context-switch'i (C7a) EL0'a taşır: userspace GERÇEK stack-switch (state-machine DEĞİL). İki fiber ayrı EL0 yığını
+(0x42xxxxxx user-VA, AP=01). `fiber_gec(eski,yeni)` = **naked `.user` fonksiyonu**: `stp/ldp` ile callee-saved
+x19–x30 + sp → eski'ye kaydet/yeni'den yükle/`ret`. Bağlam düzeni kernel `KdlTCB` ile aynı ([12]=sp). **Kanıt:**
+ping-pong A1,B1,A2,B2,A3,B3 (3 tur, bounded), 2× byte-identik det → "USERFIBER OK". **Kritik ders:** `fiber_gec`
+`always_inline` OLAMAZ (`ret` gerekli) → naked gerçek fonksiyon zorunlu. **Not:** Paralel mini-agent üretti;
+cherry-pick ile entegre.
+
+## D-202 — OS: SELF-HOST mini-assembler — KEMGU mnemonic→bytecode→VM (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-201).
+
+**Karar [ETKİ: yeni `test/ornekler/asm_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+D-196 yığın-VM'in üstüne DERLEME katmanı: KEMGU'da cihazsız mini-assembler. `assemble()` `(mnemonic,operand)`
+çiftlerini VM bytecode'una ÇEVİRİR (`değilse eğer` dispatch): `KOD_PUSH→[OP_PUSH,değer]` (1→2 hücre), diğerleri
+tek OP_* hücresi. Çeviri KİMLİK DEĞİL (KOD_PRINT=5→OP_PRINT=6, KOD_HALT=6→OP_HALT=0 gerçekten farklı) → sonra
+D-196 VM döngüsü bytecode'u koşturur. **Kanıt:** program → 42 (6×7) + 158 (100+58) → "KEM ASM OK", 3× det.
+**Codegen bulgusu (FLAGGED):** çıplak `x = x;` self-assignment C bootstrap tip-kontrolörünü exit 127 ile çökertiyor
+→ boş dal kaldırılarak aşıldı (ayrı oturuma flag edildi: derleyici düzeltmesi). **Not:** Paralel mini-agent üretti;
+cherry-pick ile entegre.
+
+## D-201 — OS: x86 SMP 4-çekirdek — Local APIC çoklu-AP INIT-SIPI (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-200).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp4_x86.c`; `Makefile`. Yalnız test — boot/linker/runtime değişmedi.]** D-187
+x86 SMP (2-çekirdek) → 4-çekirdek: BSP + 3 AP long-mode'da INIT-SIPI ile. **ORTAK trampoline** (tek SIPI vektörü,
+3 AP aynı blob'dan geçer); kritik değişiklik: trampoline'in 64-bit adımı RSP KURMAZ (3 AP paylaşımlı yığını
+yarıştırırdı) → naked ortak long-mode girişe atlar; giriş kendi APIC ID'sini LAPIC MMIO'dan okur
+(`0xFEE00020>>24`) → `RSP = ap_yiginlar + (id+1)*16KB` (APIC-ID-indeksli izole yığın) → `ap_isi(id)`. aarch64
+MPIDR-indeksli desenin (D-191) x86 ikizi. Per-core state 64-byte satır (false-sharing paritesi; x86 MESI otomatik).
+**Kanıt:** 3/3 AP canlı, APIC ID 1/2/3 her biri kendi kimliğini okudu, canli_ap=0x3, 3× det → "SMP4 X86 OK".
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-200 — OS: SELF-HOST hash-map — KEMGU dictionary (linear probing) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-199).
+
+**Karar [ETKİ: yeni `test/ornekler/hashmap_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** KEMGU'da HASH-MAP veri yapısı (dizi ötesi): open-addressing + linear probing. Knuth çarpımsal
+hash `(anahtar * 2654435761) & (KAP-1)` (dtam32, KAP=16); çakışmada bir sonraki slot. **Kanıt:** anahtar
+5/21/37 HEPSİ slot 5'e hash → probing 5/6/7'ye yerleşir (gerçek çakışma) → bul(5)=50,bul(21)=210,bul(37)=370,
+bul(99)=-1 → "KEM HASHMAP OK". **Dil-doğrulaması:** implicit tam32↔dtam32 YASAK (T001) → `x olarak dtam32`
+explicit-cast (i32 no-op); kaydırma yok (D-173 ashr tuzağından kaçın). Cihazsız det. **Not:** Paralel mini-agent
+üretti; cherry-pick ile entegre.
+
+## D-199 — OS: SMP reader-writer lock — çoklu-okuyucu/tek-yazıcı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-198).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_rwlock_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+RW-lock: çoklu-okuyucu eşzamanlı / yazıcı exclusive. `okuyucu_sayisi` (atomik LDXR/STXR) + `yazici_aktif`
+(atomik CAS 0→1) + yarış-geri-çekme kapısı (okuyucu artırırken yazıcı kaparsa geri-çek+retry). Korunan tutarlı
+çift (invaryant b==a*2): yazıcı (çekirdek 0) N=1000 kez a++;b=a*2; okuyucu (çekirdek 1) her okumada b==a*2
+doğrular. **Kanıt:** torn_read=0 (yarım-yazılmış çift asla görülmedi → mutual-exclusion doğru), 5/5 det →
+"SMP RWLOCK OK". okuma_sayisi zamanlama-varyanslı (PASS koşulu değil, dürüst raporlandı). Naked trampoline
+(D-174), coherency. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-198 — OS: recon kabuk v2 — TCP-scan + arp-scan komutları (2026-07-03)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-197).
+
+**Karar [ETKİ: yeni `test/bare_metal/recon_shell2_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-189
+recon kabuğu genişletme: `ping`/`dns`'e EK `scan <oktet>` (TCP SYN 80/443/22 → ACIK/KAPALI/FILTRELI, port_scan
+mantığı) + `arpscan` (subnet 10.0.2.1-5 ARP tarama → "ARPSCAN: N host"). **Kanıt:** `ping 2`→PING:CANLI +
+`arpscan`→2 host → "RECON2 SHELL OK", ping/arpscan det. Net-poll KÜÇÜK tik (cde6d00), char-pace giriş (D-188),
+tampon user-VA. Nmap-benzeri komut-satırı pentest kabuğu. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-197 — OS: userspace HTTP POST — EL0 syscall ile veri gönderme (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-196).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_post_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-184
+(GET)'i POST'a genişletir — EL0 süreç VERİ gönderir. DNS→TCP handshake→HTTP POST (body "KEMGU-POST", Content-
+Length) PSH+ACK (sys2 24) → yanıt (sys2 25). **Kanıt:** example.com → **HTTP/1.1 405 Method Not Allowed**
+(bağlantı+POST çalıştı; 200/3xx/405 kabul) → "USERPOST OK". host-internet+fallback (SENT/pcap "POST /"). POST
+byte'ları EL0 tamponuna elle (.rodata-deref-etmez, D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-196 — OS: SELF-HOST yığın-VM — KEMGU bytecode yorumlayıcı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-195).
+
+**Karar [ETKİ: yeni `test/ornekler/vm_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen değişmedi.]**
+DİL KAPSTONU — KEMGU bir YORUMLAYICI çalıştırır. Yığın-makinesi: 7 opcode (PUSH/ADD/SUB/MUL/DUP/PRINT/HALT),
+bytecode Dizi<tam32>, yığın Dizi<tam32>+SP, `iken pc<uzun` fetch-decode-execute döngüsü, `değilse eğer` opcode-
+dispatch (switch yok). **Kanıt:** program [PUSH 6,PUSH 7,MUL,PRINT, PUSH 100,PUSH 58,ADD,PRINT,HALT] → 42, 158
+→ "KEM VM OK", 3/3 det. YENİ dil-özelliği gerekmedi (dizi in-place mutasyon + Dizi<T> fn-param + kontrol-akışı
+yeterli = tam yorumlayıcı). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-195 — OS: x86 tam sayfa-izolasyon — ring3 kernel-sayfa #PF (D-124 x86) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-194).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_page_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+D-190 (x86 ring3)'ü TAM sayfa-izolasyona sıkılaştırır — aarch64 D-124/D3 (EL0 kernel-belleğe erişince permission-
+fault)'ün x86 muadili. Kernel-sır 2MB-hizalı/2MB-boyut (kendi PD-girişini işgal) → U/S=0 (supervisor-only);
+yalnız ring3-erişilen sayfalar (kod/stack) U/S=1. Ring3 kernel-sır OKUMA dener → **#PF v=14, err=0x5 (P|U-read),
+CR2=kernel-sır**. **Kanıt:** ring3 kernel belleğini OKUYAMADI (sır register'a ulaşmadı) → "PAGE ISO OK", 3/3 det,
+ilk-deneme (fallback yok). **Çift-mimari userspace izolasyon TAM: EL0(aarch64 sayfa-perm) + ring3(x86 U/S-sayfa).**
+Gate-marj: x86 hlt-loop timeout 12→20 (9039dd1, yük-flake). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-194 — OS: SELF-HOST 128-bit bignum toplama — KEMGU carry propagation (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-193).
+
+**Karar [ETKİ: yeni `test/ornekler/bignum_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Çok-word aritmetiği (carry propagation) saf KEMGU'da: 128-bit = 2×dtam64 (yuksek,dusuk).
+`dusuk_top = a_dusuk+b_dusuk` (mod-2^64 wrap), **carry = (dusuk_top < a_dusuk)?1:0** (unsigned overflow), `yuksek
+= a_yuksek+b_yuksek+carry`. **Dil-doğrulaması:** dtam64 `<` → **`icmp ult`** (unsigned, slt DEĞİL) + `add i64`
+wrap. 3 vektör (V1 carry, V2 çift-wrap, V3) bilinen sonuçla eşleşti → "KEM BIGNUM OK". **LEXER BULGU (spawn_task
+task_6184e549 ile flag'lendi):** integer literal SIGNED (strtoll) parse → yüksek-bitli 64-bit hex sabitler
+(0xFFFFFFFFFFFFFFFF) INT64_MAX'a KIRPILIR → aritmetikle (INT64_MAX+INT64_MAX+1) kuruldu. `yazdir_isaretsiz_tam64`
+(i64). **Not:** Paralel mini-agent üretti; lexer-bulgu spawn_task ile flag'lendi; cherry-pick ile entegre.
+
+## D-193 — OS: userspace TFTP GET — EL0 syscall ile dosya transferi (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-192).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_tftp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+EL0 süreç ağdan DOSYA çeker — D-176 net-syscall (24/25) üstünde TFTP. SLIRP dahili TFTP sunucusu (`-netdev
+user,tftp=DIR`) 10.0.2.2:69. EL0: RRQ (opcode 1, "dosya.txt\0octet\0") sys2(24) → DATA (opcode 3) sys2(25) →
+içerik çıkar. **Kanıt:** "KEMGU-TFTP-DATA" (15 byte) çekildi → "USERTFTP OK" (gerçek RX). DETERMİNİSTİK. **BULGU:**
+SLIRP, DATA'yı bize yollamadan ÖNCE ARP ile MAC'imizi sorar (çift-yönlü) → EL0 poll'a ARP-reply eklendi (SLIRP'e
+MAC öğret). ACK (opcode 4) da gönderilir. EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-192 — OS: SMP ticket-lock — adil FIFO kilit (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-191).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_ticket_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170 spinlock ADİL DEĞİL (açlık mümkün); ticket-lock FIFO adalet: `bilet_al` (LDXR/STXR atomik fetch-add) +
+`kilitle` (simdi_hizmet==bilet bekle) + `ac` (simdi_hizmet++). İki çekirdek N=5000 kez ortak sayacı (kritik
+bölgede DÜZ artırım) artırır. **Kanıt:** sayac=10000 (mutual-exclusion, lost-update yok) + **her çekirdek TAM
+5000** (FIFO adalet, açlık yok — spinlock'un vermediği garanti), 6/6 det → "SMP TICKET OK". Naked trampoline
+(D-174), dc ivac/civac+dsb. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-191 — OS: SMP 4-çekirdek bring-up — PSCI çoklu-AP (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-190).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp4_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]** Çok-
+çekirdek 2→4 ölçekleme. QEMU -smp 4, BSP 3 AP'yi PSCI CPU_ON ile başlatır (3 çağrı, target MPIDR affinity=1/2/3).
+ORTAK naked-trampoline giriş: her AP `mrs mpidr_el1 & 0xFF` ile hangi çekirdek olduğunu bulur → MPIDR-indeksli
+KENDİ 8KB stack'ini kurar (ap_yiginlar[no+1]*8192) → cekirdek_durum[no].canli set (64-byte hizalı, false-sharing
+yok). **Kanıt:** 3×"CPU_ON ret=0" + 3×MPIDR-Aff0=1/2/3 → "SMP4 OK 4 cekirdek", 5/5 det. QEMU virt MPIDR-Aff0=
+çekirdek-no. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-190 — OS: x86 userspace ring3 + syscall — privilege ayrımı (D2-x86) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-189).
+
+**Karar [ETKİ: yeni `test/bare_metal/ring3_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+aarch64 D2/D3 (EL0 privilege ayrımı)'nın x86 muadili — **çift-mimari userspace paritesi**. GDT'ye ring3
+segmentleri (DPL=3: user-kod 0x1b, user-veri 0x23) + TSS (RSP0 ring0 stack) + IDT int-0x80 gate (DPL=3). iretq
+ile ring3'e geç → ring3 kod CPL=3'te koşar. **Kanıt:** CS.RPL=3 + int 0x80 (rax=1)→ring0 handler + `cli`@ring3→
+**#GP yakalandı** → "RING3 X86 OK", 5/5 det. **2 bug çözüldü:** (1) boot page-table supervisor-only → ring3
+sayfalarına runtime U/S-bit (smp_x86 harita deseni); (2) monitor-stdio seri karışması. **Dürüst sınır:** CPL+
+privileged-instruction-#GP ayrımı kanıtlar; tam sayfa-tabanlı user/kernel izolasyonu (D-124 x86 muadili) ayrı
+milestone. **Not:** Paralel mini-agent üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-189 — OS: ağ-recon kabuğu — canlı ping/dns komutları (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-188).
+
+**Karar [ETKİ: yeni `test/bare_metal/recon_shell_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-
+OS kabuk kapstonu: D-188 (interaktif kabuk) + D-177/178 (EL0 net) BİRLEŞİMİ. EL1 kabuk UART RX'ten CANLI komut
+okur → ağ recon: `ping <oktet>` (ARP+ICMP echo, net syscall) → "PING: CANLI"/yanit-yok; `dns` (DNS A çöz) →
+"DNS: <IP>". **Kanıt:** `printf 'ping 2\ndns\n' | qemu -serial stdio` → "PING: CANLI" (SLIRP gateway det) +
+"DNS: <ip>" → "RECON SHELL OK", 3/3. Ağ EL1'e taşındı (SVC EL1'den çalışır), tampon user-VA (D-150). Giriş
+karakter-karakter pace (D-188 PL011 1-byte-holding dersi). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-188 — OS: interaktif UART kabuk — canlı komut oku + çalıştır (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-187).
+
+**Karar [ETKİ: yeni `test/bare_metal/shell_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-181 (UART RX
+gerçek stdio-giriş) + D-135 (komut parse) BİRLEŞİMİ = GERÇEK interaktif kabuk. EL1 kabuk döngüsü: "KABUK> "
+prompt → UART RX'ten CANLI satır oku (RXFE poll + DR, byte-echo, '\n'e kadar) → tokenize → FS syscall çalıştır
+(yaz num=17/oku num=18/ls num=19-20). SABİT script DEĞİL. **Kanıt:** `printf 'yaz gunluk MERHABA\noku
+gunluk\nls\n' | qemu -serial stdio` → prompt+echo + "MERHABA" (oku) + "gunluk" (ls) → "SHELL OK". **KRİTİK
+bulgu:** QEMU virt PL011 reset RX = **1-byte holding register** (FIFO değil) → burst-pipe overrun (kararsız);
+fix = Makefile girişi KARAKTER-KARAKTER ~30ms pacing → 8/8 deterministik. Tamponlar user-VA (D-150 guard).
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-187 — OS: x86 SMP AP başlatma — Local APIC INIT-SIPI (D-169 x86 paritesi) (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-186).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_x86.c`; `Makefile`. Yalnız test — runtime/boot/linker değişmedi.]**
+D-169 (aarch64 PSCI CPU_ON)'un x86 muadili — çok-çekirdek universal-OS paritesi. BSP, Local APIC (0xFEE00000)
+ICR (0x300/0x310) ile AP'ye INIT IPI + SIPI×2 (vektör=trampolin>>12) gönderir. **AP GERÇEKTEN KOŞTU (fallback
+DEĞİL):** real-mode (SIPI 0x8000) → protected → **long-mode** (CS64, EFER.LMA, PG+PAE, kendi stack) → C fn →
+kendi APIC ID (0x1, BSP'nin 0'ından FARKLI) okudu + paylaşımlı bayrak set etti. **2 zor bug çözüldü (ham QEMU
+log):** (1) #PF @0xFEE00020 — LAPIC boot page-table'da harita-dışı → test-içinde runtime 2MB uncacheable
+huge-page map (PDPT[3]); (2) triple-fault — trampolin 64-bit kodu GDT verisiyle çakışıyordu → veri 0x100'e
+kaydırıldı + kod-sığdı invaryantı. Trampolin elle-derlenmiş makine-kodu blob (clang 16-bit üretemez, linker
+kısıt-dışı). 5/5 det. **Not:** Paralel mini-agent üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-186 — OS: SMP çekirdekler-arası üretici-tüketici — lock-free SPSC ring (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-185).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_prodcons_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-174/180/179 SMP üstünde: çekirdek 0 ÜRETİR, çekirdek 1 TÜKETİR — **lock-free SPSC** halka tampon (üretici
+yalnız bas, tüketici yalnız son yazar → lock GEREKMEZ, bariyerler yeter). **Kanıt:** 1000 öğe FIFO sırada
+(sira_bozuldu=0), toplam=499500 (Σ0..999), 5/5 det → "SMP PRODCONS OK". **2 gerçek SMP bug çözüldü:** (1)
+ring-overrun — bas/son serbest-akan ama dolu-testi maskeli-karışık → serbest-akan konvansiyon (dolu=(bas-son)
+==KAP); (2) false-sharing — bitişik slotlar aynı cache-satırında → dc civac/ivac komşuyu bozuyordu → her slot
+64-byte padded RingSlot. Naked trampoline (D-174), dc civac/ivac+dsb bariyerler. **Not:** Paralel mini-agent
+üretti (dürüst debug); cherry-pick ile entegre.
+
+## D-185 — OS: userspace DHCP — EL0 syscall ile ağ oto-konfig (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-184).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_dhcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall (24/25) üstünde EL0 süreç KENDİ IP'sini DHCP ile öğrenir — DISCOVER inşa (Eth-broadcast+
+IPv4 0.0.0.0→255.255.255.255+UDP 68→67+BOOTP+magic+opt53=1) sys2(24) → OFFER sys2(25) → 7 alan doğrula
+(op=2,xid,yiaddr,magic,opt53=2,portlar,ethertype). **Kanıt:** yiaddr=10.0.2.15 → "USERDHCP OK". DETERMİNİSTİK
+(SLIRP DHCP, internetsiz). EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-184 — OS: userspace HTTP GET — EL0 syscall ile uygulama katmanı (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-183).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_http_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall üstünde EL0 süreç bir web sayfası çeker — DNS(example.com)→TCP handshake(sys2 24/25)→HTTP
+GET(PSH+ACK)→yanıt "HTTP/1." ara. **Kanıt:** 104.20.23.154:80 → **HTTP/1.1 200 OK** → "USERHTTP OK" (gerçek
+RX). HTTP request byte'ları EL0 tamponuna elle yazıldı (.rodata-deref-etmez, D-177). host-internet+fallback.
+**Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-183 — OS: userspace TCP handshake — EL0 syscall ile soket (2026-07-03) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-182).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_tcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 net-syscall (24/25) üstünde EL0 süreç TAM TCP üç-yönlü handshake yapar (çekirdekte TCP durum-makinesi
+YOK): ARP→DNS(example.com)→SYN(pseudo-header checksum)→**SYN-ACK al**(flags=0x12,ack=seq+1 doğrula)→ACK→
+ESTABLISHED. **Kanıt:** 172.66.147.243:80 → "USERTCP OK" (gerçek RX, 3/3 stabil). **Userspace soket katmanı
+tam (D-183 TCP + D-184 HTTP + D-185 DHCP): EL0 süreç raw-frame syscall'larıyla L2-L7 protokol yığını çalıştırır.**
+host-internet+fallback. EL0 .rodata-deref-etmez (D-177). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-182 — OS: x86_64 CMOS RTC okuma — donanım saati (D-172 x86 paritesi) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-181).
+
+**Karar [ETKİ: yeni `test/bare_metal/rtc_x86.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-172 (aarch64
+PL031 RTC)'nin x86 paritesi (universal-OS piları). PC uyumlu MC146818 CMOS RTC: port 0x70 (index)/0x71 (data),
+inline asm `outb/inb`. BCD register'lar (0=sn,2=dk,4=saat,7=gün,8=ay,9=yıl); UIP (Status-A bit7) beklenip
+tutarlı okuma. **Kanıt:** 2026-07-02 20:13:05 (host wall-clock, `-rtc base=utc`) → "RTC X86 OK". Deterministik
+makul-pencere (yıl 24-99, ay 1-12, gün 1-31). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-181 — OS: PL011 UART RX giriş yolu — donanım okuma (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-180).
+
+**Karar [ETKİ: yeni `test/bare_metal/uart_rx_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İlk kez
+konsol RX (giriş) yolu — interaktif kabuğun ön-koşulu. PL011 FR (0x09000000+0x18) RXFE(bit4)+DR(0x00). **GERÇEK
+giriş enjeksiyonu ÇÖZÜLDÜ (Windows gate zorluğu):** `-chardev file,input-path=` Windows'ta "not supported",
+AMA **`-serial stdio` + stdin'e byte pipe** (`printf 'K' | qemu ... -serial stdio`) çalışır → guest RXFE=0
+görür, DR'den 0x4b='K' okur, echo → "UART RX OK". Fallback: byte gelmezse bounded-spin → RXFE=1 (boş) doğru →
+"UART RX PATH OK" (deadlock yok). **Kanıt:** giriş-enjeksiyon 3/3 "UART RX OK". **Ders:** QEMU-Windows seri-giriş
+= `-serial stdio` + pipe. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-180 — OS: SMP atomik sayaç çekişmesi — LDXR/STXR lost-update yok (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-179).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_atomic_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+İki çekirdek AYNI paylaşımlı sayacı N=10000 kez ATOMİK artırır — aarch64 exclusive-monitor RMW: `dmb ish;
+ldxr; add; stxr; cbnz-retry`. Rakip STXR fail → taze değerle retry → hiçbir artırım düşmez. **Kanıt:** sayac=
+**20000** (=2N), 9/9 deterministik → atomik doğruluk (atomik olmasa <20000 lost-update). Cache-coherency (dc
+ivac/civac + dsb, RMW-öncesi/sonrası), rendezvous ile eşzamanlı çekişme, naked trampoline (D-174). **Not:**
+Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-179 — OS: SMP bariyer senkronizasyonu — iki çekirdek lockstep (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-178).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_barrier_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170/174 SMP üstünde LOCKSTEP senkron: iki çekirdek K=5 tur, her turda **sense-reversing bariyer**'de buluşur
+(spinlock'lu varan-sayacı + nesil/generation; son gelen sayacı sıfırlar + nesli artırır; erken gelenler nesil
+değişene kadar bounded poll). Nesil izleme ABA-problemini önler. **Kanıt:** cekirdek0_tur=5, cekirdek1_tur=5,
+nesil=5, 3/3 deterministik → "SMP BARRIER OK". Cache-coherency (dc ivac/civac+dsb, 64-byte hizalı), naked
+trampoline SP (D-174 dersi). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-178 — OS: userspace ICMP ping — EL0 syscall ile L3 protokol (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-177).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_ping_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176 raw-frame syscall'larının (net_gonder=24/net_al=25) MEYVESİ: EL0 (yetkisiz) süreç TAM protokol yığınını
+kendi çalıştırır (çekirdekte değil). ARP-çöz + IPv4+ICMP Echo (payload "KEMGU") inşa → sys2(24) yolla →
+sys2(25) poll ile echo reply doğrula. **Kanıt:** SLIRP gateway echo → "USERPING OK" (gerçek RX, pcap KEMGU
+TX+RX), DETERMİNİSTİK. Protokol EL0'da, yalnız 2 syscall aracılık. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-177 — OS: userspace DNS — EL0 syscall ile tam protokol çözümleme (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-176).
+
+**Karar [ETKİ: yeni `test/bare_metal/userspace_dns_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-176'nın MEYVESİ: EL0 süreç TAM L2-L7 DNS yığınını userspace'te çalıştırır — ARP-çöz → Eth+IPv4+UDP+DNS
+("example.com" A) inşa → sys2(24) yolla → sys2(25) poll ile yanıt al → ANSWER parse (isim-sıkıştırma 0xC0) →
+IPv4 çıkar. **Kanıt:** example.com → 172.66.147.243 → "USERDNS OK" (gerçek RX, internet+fallback). **Bellek
+güvenliği:** EL0 `.rodata` (AP=00) dereference EDEMEZ → hex-yazımı aritmetik (nibble_hex), disassembly ile
+doğrulandı; tüm tampon EL0 user-yığınında (D-150 guard geçer). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+
+## D-176 — OS: USERSPACE NETWORKING — EL0 süreç syscall ile ağ (süreç+ağ birleşimi) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-175).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (num=24/25 net syscall + externs); `Makefile` (BM_A64_OBJS'e
+bm_a64_virtio_net.o + 14 net-test link satırından redundant explicit kaldırıldı); yeni
+`test/bare_metal/userspace_net_arm.c`, Makefile hedefi.]** İKİ BÜYÜK ALT-SİSTEMİ BİRLEŞTİRİR: süreç/syscall
+modeli (D-124..140) + ağ yığını (D-144..167). Şimdiye kadar ağ hep KERNEL (EL1) kodundan yapılıyordu; artık
+bir EL0 (yetkisiz) süreç virtio-net'e DOĞRUDAN erişmeden, yalnız SYSCALL ile ham ethernet çerçevesi
+gönderir/alır: **num=24 net_gonder(cerceve, uzun)** (kernel frame'i OKUR + virtio-net'e yollar; driver frame'i
+kendi TX DMA buffer'ına kopyalar) + **num=25 net_al(buf, maxlen)** (kernel gelen frame'i user buffer'a YAZAR).
+
+**GÜVENLİK (D-150/151 disiplini):** net_gonder frame'i user VA'da + mantıklı ethernet boyu (≤1514) olmalı
+(kdl_user_yaz_ptr_gecerli okuma-length-bound); net_al hedef user VA'da olmalı (write-guard). Kötü pointer →
+-1 (kernel belleği korunur). net_al kısa per-çağrı timeout (2M tik) → EL0 kendi poll döngüsünde tekrar
+çağırır (D-158 yük-duyarlılık dersi). Net syscall'ları `#if __aarch64__` (x86'da yok).
+
+**Link:** kdl_kesme.c artık kdl_virtio_net_* referans eder → bm_a64_virtio_net.o BM_A64_OBJS'e eklendi (D-143
+blk deseni; tüm aarch64 kernel linkler, kullanılmasa dead-code, net+blk sürücü aynı anda link — clash yok,
+net testleri zaten ikisini de linkliyordu). Net-test link satırlarından redundant explicit ref kaldırıldı.
+
+**Kanıt (aarch64 QEMU + -netdev user):** userspace_net_arm.c — EL1 main net sürücüsünü kurar; EL0 launcher
+ARP isteği (gateway 10.0.2.2) inşa eder → **sys2(24, frame, 42)** ile yollar → **sys2(25, rx, 128)** poll
+ile SLIRP'in ARP yanıtını alır+doğrular → ayrıca kötü-pointer net_al(0x40000000)→-1 (guard) → "USERNET OK".
+**Bir userspace program çekirdek-aracılı ağ syscall'larıyla ARP round-trip yaptı.**
+
+## D-175 — OS: SELF-HOST Base64 kodlama/çözme — KEMGU payload codec (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-174).
+
+**Karar [ETKİ: yeni `test/ornekler/base64_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Pentest OS payload-kodlama yardımcısı, saf KEMGU. RFC 4648 Base64 encode+decode round-trip:
+`Dizi<karakter>` 64-karakter alfabe tablosu, hesaplanan 6-bit index ile erişim, bit ops (`>> << & |`), ham
+karakter çıktısı (`yaz_karakter`, newline'sız). **Kanıt:** "KEMGU"→"S0VNR1U="→"KEMGU" → "KEM B64 OK" +
+"KEM B64 DECODE OK". **Dil gözlemi (kısıt değil):** `karakter` tipi sayısal DEĞİL — `s[0]-'A'` → T003
+(KEMGU no-implicit-conversion felsefesiyle tutarlı); decode'da karakter-aritmetiği yerine alfabede lineer
+arama (64 karşılaştırma). Cihazsız deterministik gate.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-174 — OS: SMP iş-kuyruğu — iki çekirdek dinamik work-stealing (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-173).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_queue_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi.]**
+D-170 (statik yarı-yarıya bölme) → DİNAMİK work-stealing: 40 iş öğesi, paylaşımlı `sonraki_is` indeksi
+SPINLOCK korumalı; iki çekirdek de kilit-al→indeks-çek→işle döngüsü koşar (i*i topla). **Kanıt:** toplam=
+20540 (Σi², i=0..39) — **5/5 deterministik** (her öğe tam bir kez → spinlock doğru serialize); per-çekirdek
+işlenen sayıları timing'e göre DEĞİŞİR (22/18, 17/23, 23/17…) → gerçek yarış = gerçek work-stealing → "SMP
+QUEUE OK". **KRİTİK bare-metal bulgu (dürüst):** çekirdek 1 ilk versiyonlarda çöküyordu — C prologue
+`stp x29,x30,[sp,#-0x20]!` PSCI CPU_ON'dan gelen **undefined SP** ile garbage adrese yazıyordu (D-170'te iş
+basit→spill yok→gizli kalmış). **Çözüm:** `naked` trampoline giriş — asm ilk iş SP kur, sonra C'ye dallan.
+**Kural: PSCI CPU_ON ile başlayan ikincil çekirdek, spill üretebilecek HERHANGİ bir C kodundan ÖNCE SP kurmalı.**
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst debug notlarıyla); cherry-pick ile entegre.
+
+## D-173 — OS: SELF-HOST SHA-256 — KEMGU kripto hash (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-172).
+
+**Karar [ETKİ: yeni `test/ornekler/sha256_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA + güvenlik piları — CRC/checksum ÖTESİNDE gerçek KRİPTO hash: NIST FIPS 180-4 SHA-256
+saf KEMGU'da. K[64]+H[8] diziler, W[64] mesaj çizelgesi, 64 tur (rotr, ch, maj, sigma), mod-2^32 toplama.
+**Kanıt:** SHA-256("abc") = `ba7816bf 8f01cfea 414140de 5dae2223 b00361a3 96177a9c b410ff61 f20015ad` (NIST
+vektörü, TAM eşit) → "KEM SHA OK". **Dil-doğrulaması:** dtam32 mod-2^32 wrap (`0xFFFFFFFF+1==0`) + rotate-
+right (dtam32 `>>`→lshr) ÇALIŞIR. **CODEGEN BULGU (spawn_task ile ayrı fix'e flag'lendi):** dtam32 DİZİ-ELEMANI
+doğrudan `>>` operandı olunca codegen `ashr` (İŞARETLİ) üretir → unsignedness kaybolur. **Workaround (dil-
+seviyesi, codegen değişmeden):** bit-karıştırmayı skaler-dtam32-parametreli yardımcı işlevlere taşı → argüman
+geçince kaydırma skaler üstünde → `lshr` (doğru). IR: 0 ashr, 3 lshr. Cihazsız deterministik gate.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; codegen-bulgu spawn_task ile flag'lendi; cherry-pick ile entegre.
+
+## D-172 — OS: PL031 RTC okuma — donanım gerçek-zaman saati (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-171).
+
+**Karar [ETKİ: yeni `test/bare_metal/rtc_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** NTP (D-167)
+zamanı AĞDAN aldı; bu DONANIMDAN alır (deterministik, ağsız). QEMU virt PL031 RTC 0x09010000'de (ilk 1GB
+Device-map, MMU-on erişilebilir). DR register (offset 0x00) = Unix epoch saniyesi (u32). `*(volatile
+uint32_t*)0x09010000` ile oku → makul-kontrol (>1.6G, <2.0G). **Kanıt:** DR=0x6a46a824=**1783015460 =
+2026-07-02 18:04 UTC** (bugünle uyumlu) → "RTC OK". Host wall-clock yansıması (her koşuda 1-2s değişir ama
+makul-pencere hep geçer → deterministik-pass). Donanım-zaman = NTP'nin ağsız ikizi.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-171 — OS: SELF-HOST sıralama — KEMGU dizi in-place mutasyon (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-170).
+
+**Karar [ETKİ: yeni `test/ornekler/sort_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — D-168 (CRC32 saf-compute) ötesi: KEMGU DİZİ + in-place mutasyon + fonksiyon-geçişi
+olgunluğu. Bubble sort ([5,2,8,1,9,3,7,4,6,0]→[0..9]), iç içe `iken` + `>` + geçici-değişken swap. **KRİTİK
+dil-doğrulaması:** (1) **in-place dizi mutasyonu `d[i]=x` codegen'de ÇALIŞIR** (→ `kdl_dizi_yaz_tam`,
+runtime bounds-checked — heap-uniform, self-host invaryantı). (2) **`Dizi<tam32>` FONKSİYON PARAMETRESİ
+çalışır** (referansla geçer, mutasyon çağırana yansır — eski "LLVM v3 dizi param yok" notu GÜNCEL DEĞİL,
+codegen artık destekliyor). Cihazsız gate. **Kanıt:** sıralama + `d[i]<=d[i+1]` doğrulama → "KEM SORT OK".
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-170 — OS: SMP paralel hesaplama + spinlock — iki çekirdek gerçek iş (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-169).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_compute_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi,
+tüm SMP mantığı inline asm.]** D-169 (ikincil çekirdek bir bayrak set etti) → GERÇEK PARALEL HESAPLAMA:
+çekirdek 0 dizinin ilk yarısını (Σ0..99=4950), çekirdek 1 ikinci yarısını (Σ100..199=14950) topladı →
+toplam 19900 (yalnız İKİSİ de payını doğru hesaplarsa çıkar). **İKİ birleştirme yolu:** (A) 64-byte-hizalı
+ayrı-slot (yarışsız), (B) **SPINLOCK** — aarch64 `LDAXR`/`STXR` atomik test-and-set + `STLR` release, ortak
+akümülatöre iki çekirdek de güvenli ekledi (yarış-koşulu serialize). Cache-coherency (MMU-off çekirdek1 /
+MMU-on çekirdek0): `dc civac`/`dc ivac`+`dsb sy` bariyerleri, kilit satırı her denemede tazelenir. DETERMİNİSTİK
+(bounded bekleme 40M tik + 64-yield backoff; 5/5). **Kanıt:** "SMP COMPUTE OK toplam=19900". **Dürüst sınır:**
+MMU-off/on coherency manuel bariyerlere dayanır (D-169 sınıf riski); test coherency bozulursa "SMP COMPUTE
+KISMI/FAIL" basar (sessiz-gizlemez). Çok-çekirdek pilarının gerçek-iş adımı.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst teknik notlarla); cherry-pick ile entegre.
+
+## D-169 — OS: SMP 2. çekirdek bring-up — PSCI CPU_ON (çok-çekirdek) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-168).
+
+**Karar [ETKİ: yeni `test/bare_metal/smp_arm.c`; `Makefile`. Yalnız test — runtime/boot değişmedi, tüm SMP
+mantığı smp_arm.c inline asm.]** YENİ PILAR: çok-çekirdek (performans/ölçek). Şimdiye kadar tek-çekirdek.
+QEMU virt `-smp 2` ile ikincil çekirdek PSCI CPU_ON (fn_id=0xC4000003) ile başlatılır. **GERÇEK CPU_ON**
+(fallback PSCI_VERSION değil): conduit=**HVC** (QEMU virt EL2-firmware'siz → HVC), ret=0x0 (SUCCESS), hedef
+CPU MPIDR affinity=0x1, entry=cekirdek1_giris fiziksel adresi (identity-map). **Çekirdek 1 GERÇEKTEN koştu:**
+paylaşılan `cekirdek1_canli` bayrağını YALNIZ çekirdek 1 giriş fn'si yazar; çekirdek 0 onu görünce "SMP OK".
+**Cache coherency ele alındı:** çekirdek 1 MMU-OFF (non-cacheable) → RAM'e yaz + `dsb sy`; çekirdek 0 MMU-ON
+(WB-cacheable) → poll'da `dc ivac`+`dsb sy` (invalidate-to-PoC, taze oku); bayrak 64-byte hizalı. Çekirdek 1
+kendi 8KB stack'ini kurar (PSCI SP kurmaz). **Kanıt:** "SMP OK 2 cekirdek (HVC, ret=0x0)".
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı (dürüst teknik notlarla); cherry-pick ile entegre.
+
+## D-168 — OS: SELF-HOST CRC32 — KEMGU saf-hesaplama algoritması (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-167).
+
+**Karar [ETKİ: yeni `test/ornekler/crc32_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — mmio ÖTESİNDE saf compute: KEMGU dilinin gerçek algoritma kaldırdığını kanıtlar.
+Standart IEEE 802.3/zlib CRC-32 (polinom 0xEDB88320, tablosuz bit-bit), cihazsız. **Kanıt:** CRC-32("123456789")
+= **0xCBF43926** (standart test vektörü, birebir). **KRİTİK dil-doğrulaması:** tüm bitwise op'lar çalışıyor
+(`^`→xor, `&`→and, `|`→or, `<<`→shl, `>>`→ashr/lshr). **`>>` işlenen-tipine göre kod üretir:** tam32(işaretli)→
+`ashr`, dtam32(işaretsiz)→`lshr` → CRC crc değişkeni `dtam32` OLMALI (MSB sık 1; ashr algoritmayı bozar).
+Doğru işaretlilik semantiği. `yazdir_isaretsiz_tam(dtam32)` işaretsiz gösterim. Cihazsız gate (net/drive yok).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-167 — OS: NTP istemcisi — internetten zaman senkronizasyonu (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-166).
+
+**Karar [ETKİ: yeni `test/bare_metal/ntp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** OS açılışta
+internetten doğru saati öğrenir. DNS-çöz(time.google.com→216.239.35.8) → Ethernet+IPv4(UDP)+UDP(123→123)+
+SNTP(48 byte, LI/VN/Mode=0x1B client) gönder → response RX → Transmit Timestamp (offset 40, 1900'den beri
+saniye) çıkar → Unix = ntp_sn - 2208988800. **Kanıt:** ntp_sn=3992001928 → Unix=**1783013128 = 2026-07-02
+17:25:28 UTC** (bugünün tarihiyle uyumlu). **GERÇEK RX** (fallback değil). **Sınır:** host-internet-bağımlı
+(offline → TX-pcap "NTP SENT OK", pcap'te UDP 123↔123). SLIRP dış-UDP proxy.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-166 — OS: reverse DNS (PTR) — IP → isim çözümleme (recon) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-165).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_ptr_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest
+recon: bir IP'nin hangi isme ait olduğunu bul (hedef tanıma). D-157 DNS A-çözümlemesini PTR'ye uyarlar:
+IP oktetlerini TERS sırada + ".in-addr.arpa" QNAME, QTYPE=12 (PTR). Yanıtın ANSWER RDATA'sındaki domain-name'i
+`isim_oku` ile PARSE eder (isim_atla'nın tersi — label biriktir + 0xC0 compression pointer takip, ≤32-atlama
+sonsuz-döngü koruması). **Kanıt:** 8.8.8.8 → **dns.google** → "PTR OK". ANCOUNT=1, gerçek internet (SLIRP→host
+DNS). **Sınır:** host-DNS-bağımlı (PTR yoksa "KISMI" kısmi kanıt; "PTR OK" yalnız gerçek isimde). L2-L4+DNS-A/PTR.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-165 — OS: SELF-HOST virtio-blk kapasite okuma — KEMGU disk config-space (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-164).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_blk_config_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/
+codegen değişmedi.]** Özgün DNA — D-163 (virtio-net MAC) desenini virtio-blk'a taşır: `.kem` sürücüsü disk
+KAPASİTESİNİ config-space'ten okur. Slot tara → DeviceID=2 (virtio-blk) → config offset 0x100+0x104 (mmio_oku32
+×2) → u64 capacity (sektör sayısı). **Kanıt:** `dd bs=512 count=64` disk → capacity=**64** → "KEM BLK OK".
+mmio_oku8 yok → 32-bit×2 word. `değilse eğer`/`ve`/shift/mask codegen'de sorunsuz. DETERMİNİSTİK (disk boyutu
+bilinir). KEMGU dili disk-cihaz config erişimi de kaldırıyor (net+blk self-host okuma tam).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-164 — OS: TCP SYN port-tarayıcı — pentest recon (nmap-lite) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-163).
+
+**Karar [ETKİ: yeni `test/bare_metal/port_scan_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İkonik
+pentest aracı — bir host'un açık portlarını bul. D-159 SYN-inşasını (`tcp_syn_kur`, src-port parametrik) çok-port
+taramaya genişletir: DNS-çöz(example.com) → port listesi {80,443,22,8080,65000} için SYN gönder → yanıt sınıflandır:
+SYN-ACK(0x12)=AÇIK, RST(0x04/0x14)=KAPALI, timeout=FİLTRELİ. Yarım-açık bağlantılar RST ile kapatılır; src-port
+per-port (gecikmiş yanıt eşleme). **Kanıt:** example.com → 80/443/8080 AÇIK, 22/65000 FİLTRELİ → "PORT SCAN OK"
+(gerçek SYN-ACK RX). **Sınır:** host-internet-bağımlı (offline → TX-pcap fallback "PORT SCAN SENT OK", pcap'te
+5 farklı dst-port SYN). nmap-lite recon primitifi.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-163 — OS: SELF-HOST virtio-net MAC okuma — KEMGU config-space erişimi (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-162).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_net_mac_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/
+codegen değişmedi.]** Özgün DNA — D-160'ı (virtio-net TANIMA) bir adım ileri taşır: `.kem` sürücüsü cihazın
+MAC adresini CONFIG-SPACE'ten okur. virtio-mmio cihaza-özel config offset 0x100'de; virtio-net için ilk 6
+byte MAC. `.kem`: slot tara → DeviceID=1 bul → `mmio_oku32(y, taban+0x100)` + `+0x104` (2 word) → MAC
+byte'larını little-endian çıkar (`(w >> (8*k)) & 0xFF` — `ashr`+mask codegen'de tam destekli). **Kanıt:**
+QEMU virtio-net varsayılan MAC **52:54:00:12:34:56** okundu → "KEM MAC OK". mmio_oku8 dilde YOK (oku16/32/64
+var) → 32-bit oku + shift/mask. Codegen kısıtı yok. **KEMGU dili gerçek cihaz config-space erişimi kaldırıyor.**
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-162 — OS: DHCP DISCOVER/OFFER — ağ oto-konfigürasyon (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-161).
+
+**Karar [ETKİ: yeni `test/bare_metal/dhcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Bir bare-metal
+OS'un ilk açılış adımı: DHCP ile ağ config al. Ethernet(broadcast)+IPv4(0.0.0.0→255.255.255.255,UDP)+UDP(68→67)
++BOOTP/DHCP(op=1, xid, chaddr, magic 0x63825363, option 53=1 DISCOVER) gönder → SLIRP OFFER'ı RX ile al.
+**7 alan doğrulandı:** ethertype/proto, UDP portları (67→68), op=2 (BOOTREPLY), xid eşleşme, yiaddr non-zero,
+magic cookie, option 53=2 (OFFER, TLV yürüyüşü). **Kanıt:** yiaddr=**10.0.2.15** → "DHCP OK". **DETERMİNİSTİK**
+— SLIRP dahili DHCP sunucusu (internet gerekmez). OS artık kendi IP'sini otomatik öğreniyor.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-161 — OS: HTTP GET over TCP — uygulama katmanı (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-160).
+
+**Karar [ETKİ: yeni `test/bare_metal/http_get_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** İLK UYGULAMA
+KATMANI — OS bir web sayfası çekiyor. D-159 TCP handshake'i üstüne TCP DATA exchange: ARP→DNS(example.com)→
+SYN/SYN-ACK/ACK ESTABLISHED → HTTP GET isteği (`GET / HTTP/1.1\r\nHost:...\r\nConnection: close\r\n\r\n`) PSH+ACK
+(flags=0x18) DATA segmenti olarak gönder (seq/ack takibi, pseudo-header checksum payload dâhil) → HTTP yanıtını
+RX ile al → durum satırında "HTTP/1." ara. **Kanıt:** hedef 104.20.23.154:80 → **HTTP/1.1 200 OK** → "HTTP GET
+OK". **GERÇEK RX** (fallback değil). L2+L3+L4+DNS+HTTP tam ağ yığını.
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** HOST İNTERNET'ine bağlı (D-159 gibi). Offline → TX-pcap fallback ("GET /"
+pcap'te → "HTTP GET SENT OK"). Timeout 20s. Tek-segment yanıt (multi-segment reassembly yok — kanıta yeter).
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-160 — OS: SELF-HOST virtio-net tanıma — KEMGU dilinde ağ-cihaz sürücüsü (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-159).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_net_selfhost.kem`; `Makefile`. Yalnız test/örnek — runtime/codegen
+değişmedi.]** Özgün DNA — OS kendi dilinde (KEMGU) yazılıyor. D-148/149 (virtio-blk, DeviceID=2) desenini
+virtio-NET'e (DeviceID=1) taşır: `.kem` sürücüsü virtio-mmio slot aralığını (`iken` döngüsü) tarar, her
+slotta `mmio_oku32(y, adres)` ile MAGIC (0x74726976 "virt") + DEVICE_ID okur, DeviceID=1'i bulunca tanır.
+`yetki<MMIO>` object-capability (derleme-zamanı ispat, sıfır runtime) her okumada ödünç alınır. **Kanıt:**
+`kemgu --llvm` → clang aarch64 → QEMU (`-device virtio-net-device`) → magic=1953655158 (0x74726976) + id=1
+→ "KEM NET OK". **Codegen kısıtına takılmadı** (yetki/mmio_oku32/iken/eğer+ve/tam64 hepsi mevcut). KEMGU
+dili gerçek ağ-cihaz tanıma sürücüsü kaldırıyor.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-159 — OS: TCP gerçek üç-yönlü handshake — SYN-ACK alımı (Faz H) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-158).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_connect_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-155 (yalnız SYN emisyonu) TAM handshake'e tamamlanır — SLIRP'in dış-TCP proxy'si üzerinden GERÇEK bir
+internet host'una. Adımlar: virtio-net kur → ARP gateway MAC → **DNS ile "example.com" A-kaydı çöz** (D-157
+mantığı) → çözülen IP:80'e TCP SYN (pseudo-header checksum, D-155 inşası) → **SYN-ACK al** (RX; flags=0x12
+doğrula + ack_num=seq+1) → ACK gönder → ESTABLISHED → nazik RST/ACK kapanış. **GERÇEK SYN-ACK RX** (fallback
+DEĞİL). **Kanıt:** hedef 104.20.23.154:80 → SYN-ACK → "TCP CONNECT OK". Ağ yığını artık L2(ARP)+L3(IP)+
+L4(TCP-established)+DNS tam zincir.
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** HOST İNTERNET'ine bağlı (SLIRP dış-TCP'yi host'a proxy'ler). Offline
+ortamda SYN-ACK gelmez → test TX-pcap fallback'ine ("TCP CONNECT SENT OK", pcap'te SYN) düşer; Makefile ikisini
+de kabul eder. Timeout 20s (DNS+TCP iki round-trip). Geliştirme makinesi internetli → gerçek handshake geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-158 — OS: ARP host-keşfi — subnet taraması (pentest recon) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-157).
+
+**Karar [ETKİ: yeni `test/bare_metal/arp_scan_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+temel keşif primitifi (L2 canlı-host bulma). D-145 tek-hedef ARP round-trip'ini SUBNET TARAMASINA genişletir:
+10.0.2.1–10.0.2.15 aralığına ARP request broadcast → RX ile reply'leri topla (60 poll) → her reply'den spa
+(sender IP) + sha (sender MAC) çıkar, dedup. **Kanıt:** SLIRP gateway (10.0.2.2) + DNS (10.0.2.3) → **2 canlı
+host** deterministik keşfedildi → "ARP SCAN OK". Gateway ARP'a her zaman yanıt verir → ≥1 host garanti.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-157 — OS: DNS A-kaydı çözümleme — isim → IPv4 (Faz G ağ derinleşme) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-156).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_resolver_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]**
+D-147 DNS round-trip'i (yanıt ALINIR ama parse EDİLMEZ) tam çözümleyiciye genişletir: DNS yanıtının
+ANSWER bölümünü parse edip çözümlenen IPv4 A-kaydını çıkarır. **İsim sıkıştırma (0xC0 pointer) ele
+alınır** (`isim_atla` helper — hem compression-pointer hem düz-label; Question + answer NAME atlama),
+sınır kontrolleri (paket taşması, RDLENGTH). **Kanıt:** "example.com" A sorgusu → SLIRP host resolver'a
+forward → yanıt RX → ANCOUNT=2, ilk A-kaydı çıkarıldı → 172.66.147.243 → "RESOLVE OK". Reprodüsibl (2
+koşu birebir).
+
+**Kapsam/sınır (GATE-BELİRSİZLİĞİ):** Bu test HOST İNTERNET'ine bağlı (SLIRP sorguyu host DNS'e forward
+eder; gerçek A-kaydı gerekir). Offline ortamda ANCOUNT=0 → "A-KAYDI YOK" → gate FAIL olabilir. Parser
+DETERMİNİSTİK; yalnız gerçek-çözümleme internet-bağımlı. (D-147 aksine yalnız "yanıt geldi" kontrol eder,
+internet gerektirmez.) Geliştirme makinesi internetli → gate geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-156 — OS: ICMP echo (ping) round-trip — ağ katmanı (Faz G) (2026-07-02) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-155).
+
+**Karar [ETKİ: yeni `test/bare_metal/icmp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+keşif primitifi (ping-sweep temeli). ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → Ethernet+IPv4(proto=1)+
+ICMP Echo Request (type=8, id=0xBEEF, seq=1, ICMP checksum RFC1071, payload "KEMGU") gönder → **echo
+reply'i RX ile al** (SLIRP gateway ping'lerini host-ayrıcalığı gerektirmeden DAHİLİ yanıtlar) → doğrula
+(type=0/code=0, id/seq eşleşir, payload geri döner) → "PING OK". **GERÇEK RX round-trip** (TX-pcap fallback
+değil; fallback Makefile'da mevcut ama tetiklenmedi). virtio-net TX+RX + ARP + IP üstüne kurulu.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-155 — OS: TCP SYN paket emisyonu — ağ katmanı (Faz H) (2026-07-02)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-154).
+
+**Karar [ETKİ: yeni `test/bare_metal/tcp_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** Pentest-OS
+keşif primitifi (port-tarama temeli). ARP ile gateway MAC çöz → Ethernet+IPv4(proto=6)+TCP SYN segmenti
+inşa (src 40000, dst 9999, SYN=0x02, **TCP checksum PSEUDO-HEADER dahil** = src/dst IP + proto + TCP-len)
+→ gönder. **Kanıt: TX-pcap** (D-144/146 deseni) — pcap'te SYN segmenti "KEMG" seq marker'ı ile doğrulandı;
+TCP checksum 0x1bf6 + full-segment-verify 0x0000 (RFC1071) + IP checksum 0x22c0 bağımsız Python ile teyit.
+
+**Kapsam/sınır (DÜRÜST):** TAM handshake DEĞİL — yalnız SYN inşa+checksum+emisyon. SLIRP kapalı gateway
+portuna (10.0.2.2:9999) SYN'i SESSİZCE DÜŞÜRÜR (user-mode TCP yığını RST dönmez) → RX round-trip bu
+ortamda olmadı. Emisyon (pseudo-header checksum dahil) gerçek yapı taşı; tam handshake gerçek TCP peer
+(internet-out veya listener) gerektirir → gelecek iş. Makefile hem RX ("TCP HANDSHAKE OK") hem TX-pcap
+("KEMG") kontrol eder — listener'lı ortamda RX yolu otomatik geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) üretti + doğruladı; cherry-pick ile entegre.
+
+## D-154 — OS: düşman-userspace bombardıman regresyon testi — syscall-ptr güvenlik yüzeyi (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-153).
+
+**Karar [ETKİ: yeni `test/bare_metal/guvenlik_bombardiman_arm.c`; `Makefile`. Yalnız test — kaynak
+değişmedi.]** D-150+D-151 sertleştirilmiş syscall-pointer yüzeyinin KALICI regresyon bekçisi. Bir EL0
+launcher, 8 kötü-niyetli syscall'lık bir BATARYA ateşler (unmapped/kernel-adres/MMIO okuma+yazma
+hedefleri: num=5 yaz×2, 16 dosya_oku, 15 dosya_yaz, 17 dosya_yaz_metin, 18 dosya_oku_metin write-hedef,
+20 dosya_ad write-hedef, 21 dosya_sil); her biri -1 dönmeli VE kernel HALT ETMEMELİ. Bataryadan sonra
+geçerli iş akışı (dosya oluştur+oku) kernel'in tam canlılığını kanıtlar → "HOSTILE SURVIVED OK". Vaka #6'nın
+"not-found değil gerçek D-150 write-guard reddi" olduğu, dosyanın önceden kurulup sonra geçerli tampona
+okunabilmesiyle ayrıştırılır. Bir syscall halt ettirirse test FAIL → o guard eksik demektir (bisect talimatı).
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + doğrulandı; cherry-pick ile entegre.
+
+## D-153 — OS: kalıcı FS deserialize sertleştirme — poisoned boyut clamp (savunma-derinliği) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-152).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_dosya_yukle + num=18); yeni `test/bare_metal/guvenlik_kalici_arm.c`,
+`Makefile`.]** Audit defense-in-depth bulgusu (EL0-erişilebilir DEĞİL — kötü niyetli disk gerekir):
+kdl_dosya_yukle diskteki kdl_dosyalar[] tablosunu VERBATIM yükler. Kötü niyetli disk aşırı büyük `boyut`
+içerirse → num=18 kdl_dosyalar[i].boyut byte kopyalar → 64-byte icerik[] tamponunu aşan OOB okuma →
+kernel belleği user'a sızar. **İki katman:** (A) kdl_dosya_yukle deserialize sonrası sanitize — kullanildi
+0/1, ad/icerik null-term, boyut `[0,64)` dışıysa 0. (B) num=18'de ham boyut yerine clamp'li `lim` (hem
+`kdl_user_yaz_ptr_gecerli(arg2, lim+1)` hem kopya sınırı `n<lim`). **Kanıt:** guvenlik_kalici_arm.c — EL1
+main elle "KEMG" magic + boyut=9999 ZEHİR disk image üretir, kdl_dosya_yukle, EL0 num=18 → dönen uzunluk
+≤63 (9999 değil) + kernel sağ → "KALICI GUARD OK". **Negatif kanıt:** fix stash'lenince test doğru FAIL
+eder ("KALICI GUARD HATA uz=9999") → zafiyet gerçek + test false-positive değil. Kalıcı regresyon (777) geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + negatif-kanıtla doğrulandı; cherry-pick ile entegre.
+
+## D-152 — OS: spawn-entry doğrulama — num=12 DoS koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-151).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_surec_spawn); yeni `test/bare_metal/guvenlik_spawn_arm.c`,
+`Makefile`.]** Audit confirmed bulgusu (medium DoS): num=12 spawn'da EL0, yeni sürecin GİRİŞ adresini
+(arg=entry) tam kontrol eder. kdl_surec_spawn(entry) bu entry'yi yeni EL0 sürecinin ELR_EL1'ine koyar;
+entry kernel/unmapped/hizasız ise EL0 komut-fetch'i fault → lower-EL sync exception → kdl_istisna_isle
+sonsuz halt (**tek SVC ile tüm kernel ölür**). **Fix:** kdl_surec_spawn EN BAŞINA guard — entry paylaşılan
+EL0 .user kod sayfası `[0x42000000, 0x42200000)` içinde VE 4-byte hizalı olmalı; değilse -1 (süreç
+yaratılmaz, slot tüketilmez). Başka fonksiyona dokunulmadı. **Kanıt:** guvenlik_spawn_arm.c — EL0 launcher
+sys(12, 0x40080000)[kernel] + sys(12, 0)[null] → ikisi de -1, kernel SAĞ; sys(12, &worker)[geçerli .user]
+→ ≥0, worker koştu → "SPAWN GUARD OK" + "WORKER OK". spawn/yasam/calis/geri_al regresyonları (worker'lar
+.user'da = geçerli) bozulmadan geçer.
+
+**Not:** Paralel mini-agent (worktree-izole) tarafından üretildi + doğrulandı; cherry-pick ile entegre.
+
+## D-151 — OS: syscall OKUMA-pointer doğrulama — kernel DoS + info-leak koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-150).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (read-guard + num=5/15/16/17/18/21); `linker/bare-metal-aarch64.ld`
++ `bare-metal-x86_64.ld` (__rodata_start/end); yeni `test/bare_metal/guvenlik_oku_arm.c`, `Makefile`
+hedefi.]** D-150'nin YAZMA-tarafı korumasının OKUMA-tarafı ikizi. Çekirdek, EL0-kontrollü bir string
+pointer'ını **deref ederek OKURKEN** de doğrulamalı; aksi halde kötü/hatalı bir EL0 süreç:
+- **DoS:** unmapped adres geçirir → kernel EL1'de data-abort → `kdl_istisna_isle` sonsuz halt (**tek
+  SVC ile tüm kernel ölür**);
+- **info-leak:** kernel adresi geçirir → kernel belleği UART'a yazılır (num=5) veya bir dosyaya
+  kopyalanıp num=18 ile geri okunur (num=17→18 exfiltrasyon zinciri).
+
+**Çok-ajanlı adversarial audit (23 ajan, 2.07M token) bu sınıfı üretti** — 14 confirmed EL0-reachable
+bulgu, hepsi read-ptr; num=18 ad-okuması D-150 sonrası hâlâ açıktı (D-150 yalnız arg2 write-hedefini
+koruyordu). Refuted: spawn-havuz int-bounds (zaten korumalı).
+
+**Read-guard:** `kdl_user_oku_str_gecerli(p)` — izinli okuma bölgeleri `[user VA 0x42000000,0x42400000)
+∪ kernel .rodata [__rodata_start,__rodata_end)`. `.data/.bss` (dosya tablosu burada!) / stack / heap /
+Device MMIO / unmapped → RED. **Null-sonlandırıcı İZİNLİ bölge içinde bulunmalı** (yalnız mapped-izinli
+byte taranır → tarama fault üretemez; straddle-over-read imkânsız; 4KB tarama tavanı). num=5 (yaz-string),
+15/16/18/21 (dosya adı), 17 (ad + içerik arg2) → hepsi guard'lı, geçersiz→RED (-1).
+
+**.rodata neden izinli:** mevcut testler çıktı/ad string LİTERALLERİNİ (.rodata, kernel adresi) syscall'a
+geçirir (sys(5,"GUVENLIK OK"), dosya adı "mesaj"/"f"). Bunlar const, sır değil; izin vermek tüm testleri
+korur. Sızıntı-hedefleri (.data/.bss/stack/heap) reddedilir.
+
+**Kanıt (aarch64 QEMU):** `guvenlik_oku_arm.c` EL0 launcher: (2) num=5'e UNMAPPED 0x80000000 → RED,
+kernel HALT ETMEZ; (3) num=16'ya kernel-RAM 0x40100000 → RED; (4) buraya ulaşmak = kernel sağ →
+"GUVENLIK OKU OK". Fix öncesi (2) kerneli sonsuza halt ederdi. FS regresyonları (dosya/metin/ls/sil/
+kabuk/kalıcı — .rodata ad + user-VA token) + D-150 bozulmadan geçer. x86_64 de __rodata sembolleriyle
+linklenir (arch paritesi).
+
+**Kapsam/sınır:** Read-guard string-deref eden syscall'ları kapsar. Kalan audit bulguları (ayrı D):
+num=12 spawn-entry DoS (medium), persistence deserialize boyut-clamp (defense-in-depth), num=14 durum
+ownership (low). **KURAL: kernel→user OKUYAN/YAZAN her yeni syscall ilgili guard'ı (oku_str / yaz_ptr)
+kullanmalı.**
+
+## D-150 — OS: syscall kullanıcı-pointer doğrulama — kernel bellek-yazma koruması (güvenlik sertleştirme) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-149).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (guard + num=18/20); yeni `test/bare_metal/guvenlik_arm.c`,
+`Makefile` hedefi.]** KEMGU-OS'un çekirdek güvenlik invaryantını (bellek-güvenli OS) syscall
+sınırında zorunlu kıl: kernel (EL1), kullanıcı-kontrollü bir pointer'a **user VA aralığı dışında**
+YAZMAMALI. Aksi halde kötü/hatalı bir EL0 süreç, kernel'in yazdığı bir syscall'a kernel adresi
+geçirip çekirdek belleğini bozabilir (privilege escalation vektörü).
+
+**Guard:** `kdl_user_yaz_ptr_gecerli(p, len)` — yalnız `[0x42000000, 0x42400000)` (EL0 user VA)
+içindeki, `len<=4MB` ve toplama-taşması olmayan yazma-hedeflerini kabul eder. Kernel'in
+kullanıcı-tampona YAZDIĞI iki syscall'a eklendi: num=18 (dosya_oku_metin → buf'a içerik) ve
+num=20 (dosya_ad → buf'a ad). Geçersizse RED (-1), yazma yapılmaz. Okuma-syscall'ları (.rodata
+kernel çıktı stringleri) muaf — yalnız user-tampona YAZAN yollar denetlenir.
+
+**Kanıt (aarch64 QEMU):** `guvenlik_arm.c` bir EL0 launcher olarak: dosya oluşturur, sonra
+num=18'e (a) kernel-adresi 0x40000000 → **RED (-1)**, (b) geçerli user-tampon 0x42210000 →
+**OK (>=0)** verir. İkisi de beklendiği gibiyse EL0 `yaz` syscall'ı ile "GUVENLIK OK" basar. Seri
+çıktı: `GUVENLIK BASLA` → `GUVENLIK OK`. FS regresyonları (metin/ls/sil/kabuk — hepsi geçerli
+user-tampon 0x42210000 kullanır) guard'la bozulmadan geçer.
+
+**Kapsam/sınır:** Guard yalnız num=18/20 (mevcut write-to-user yollar). İleride kernel→user yazan
+her yeni syscall aynı guard'ı kullanmalı (kural). Read-güvenliği (user'ın kernel .rodata OKUması)
+zaten MMU AP=00 ile engelli — bu guard yazma-tarafı savunma-derinliği. Test-only bug (EL0'ın
+kernel fonksiyonunu doğrudan çağırması) fix'te `yaz` syscall'ına çevrildi; guard mantığı değişmedi.
+
+## D-135 — OS: basit userspace kabuk (shell) — komut ayrıştırma + FS dağıtım (Faz E/F DORUĞU) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-134).
+
+**Karar [ETKİ: yeni `test/bare_metal/kabuk_arm.c`; `Makefile`. Yalnız test — mevcut syscall/kernel
+kullanılır, kod değişmedi.]** Tüm userspace + FS + süreç yığınını tanınabilir bir OS artefaktına
+bağlayan doruk: bir userspace program komut SCRIPT'ini ayrıştırıp (tokenize) FS syscall'larına
+dağıtır — gerçek kabuk/komut yorumlayıcısı.
+
+**Kabuk:** .user_data'daki script (yaz/oku/ls komutları) EL0'da in-place tokenize edilir (str_esit
++ tokenize helper'ları .user section'da, EL0-exec). yaz→dosya_yaz_metin, oku→dosya_oku_metin+bas,
+ls→listele. Kernel çağırmaz; yalnız syscall.
+
+**Öğrenilen (bellek koruması KANITI):** İlk deneme ISTISNA tip=0x24 DFSC=0x0E (permission fault,
+FAR=0x40003fd3) — komut adı literalleri ("yaz"/"oku"/"ls") .rodata'da (AP=00); EL0 str_esit OKUYUNCA
+fault. Bu, D3 bellek-korumasının GERÇEKTEN çalıştığının kanıtı (EL0 kernel belleğini okuyamaz).
+DÜZELTME: komut adları .user_data'ya (AP=01, EL0-okunur). NOT: sys(5,literal) çıktı stringleri
+.rodata'da KALIR (kernel EL1 okur, sorun yok) — yalnız EL0'ın DOĞRUDAN okuduğu stringler .user_data.
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> yaz gunluk KEMGU-OS" / "SHELL> oku gunluk" /
+"  KEMGU-OS" / "SHELL> ls" / "  gunluk". Full gate GATE=0 (33 hedef). sıfır-uyarı. **KEMGU-OS artık
+komut yorumlayan bir userspace kabuk çalıştırıyor — gösterici kernelden çalışan-OS'a.**
+
+**Sıradaki:** UART RX (klavye → interaktif kabuk; gate zor); kaynak geri-alma; D2-x86; C5 virtio-blk.
+
+---
+
+## D-141 — OS: VirtIO-Blk gerçek disk okuma (C5 — kalıcı depolama, Faz E) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-140).
+
+**Karar [ETKİ: yeni `runtime/kdl_virtio.c` (bare-metal virtio-mmio v2 blk sürücüsü); yeni
+`test/bare_metal/virtio_arm.c`; `Makefile` (bm_a64_virtio.o + disk-imaj + QEMU virtio-blk). C/host
+runtime — .kem driver'lardan (drivers/virtio/*.kem) yalnız register-offset bilgisi alındı, kod C.]**
+İlk GERÇEK DONANIM depolama: QEMU virtio-blk diskinden blok okuma (RAM-FS'i kalıcı yapmanın temeli).
+
+**Sürücü (kdl_virtio.c, aarch64):** virtio-mmio slot tara (0x0a000000+i*0x200, DeviceID=2) →
+kdl_virtio_blk_bul. Init (kdl_virtio_blk_kur): reset→ACK→DRIVER→feature(VERSION_1 bit32)→FEATURES_OK
+→virtqueue 0 (split: desc[8]+avail+used ayrı hizalı DMA tamponları, QueueDesc/Driver/Device Lo/Hi)
+→DRIVER_OK. Oku (kdl_virtio_blk_oku): 3-desc zinciri (başlık RO + veri WR + durum WR) → avail.idx++
+→ QueueNotify → used.idx poll → status==0 → 512 bayt kopya. DMA tamponları RAM identity-map (VA=PA);
+QEMU coherent DMA (dsb ordering yeter, cache-flush yok). Register offsetleri constants.kem ile aynı.
+
+**Doğrulama (QEMU 11.0.1):** virtio_arm — disk.img (blok 0'da "KEMGU-DISK-BLOK0") + `-device
+virtio-blk-device` → kernel blok 0'ı okur, "KEMGU" doğrular → "DISK OK KEMGU". **İLK DENEMEDE geçti**
+(virtqueue doğru). Full gate GATE=0 (37 hedef; diğer kernel'ler disk'siz — virtio target kendi
+disk'ini kurar). sıfır-uyarı.
+
+**Sıradaki:** virtio-blk YAZMA (D-142); dosya sistemini disk-backed yap; UART RX; D2-x86.
+
+---
+
+## D-149 — OS: SELF-HOST virtio init — KEMGU'da tarama + MMIO yazma (status handshake) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-148).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_selfhost_rw.kem` (KEMGU!); `Makefile` (self-host-rw target).
+Mevcut mmio/yetki runtime (D-148) kullanıldı.]** D-148 OKUMA'yı gerçek DRIVER INIT'e taşır: KEMGU
+dilinde cihaz TARAMA + status durum-makinesi YAZMA.
+
+**Mekanizma:** virtio_selfhost_rw.kem — (1) TARA: `iken i<32` döngüsünde her slot'un DeviceID'sini
+mmio_oku32 ile oku (yetki ÖDÜNÇ → döngüde thread YOK), DeviceID!=0 ilk slotu bul. (2) HANDSHAKE:
+status register'a mmio_yaz32 ile reset→ACK→ACK|DRIVER yaz — yetki LİNEAR olduğundan her yazmada
+THREAD edilir (y→y1→y2→y3). (3) status geri oku = 3. **KEMGU dil özellikleri gerçek driver kodunu
+kaldırıyor:** tam64 adres aritmetiği (i*512), döngü, linear-capability (borrow-in-loop + thread-in-chain).
+
+**Doğrulama (QEMU 11.0.1):** virtio_selfhost_rw + virtio-blk device → KEMGU sürücüsü cihazı buldu,
+handshake yaptı, status=3 okudu → "KEM VIRTIO RW OK". Full gate GATE=0 (45 hedef). libc-temiz.
+sıfır-uyarı. **KEMGU tam bir virtio init sekansını (tarama+oku+yaz, capability-güvenli) kendi
+dilinde çalıştırıyor — self-host OS sürücüsü.**
+
+**Sıradaki:** .kem userspace program (EL0); TCP; UART RX; sürücüyü virtqueue'ya kadar genişlet.
+
+---
+
+## D-148 — OS: SELF-HOST virtio sürücüsü — KEMGU dilinde bare-metal OS sürücüsü (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-147).
+
+**Karar [ETKİ: yeni `test/ornekler/virtio_selfhost.kem` (KEMGU!); yeni `runtime/kdl_yetki_bare.c`
+(freestanding capability runtime); `Makefile` (bm_a64_mmio.o + bm_a64_yetki.o + self-host target).
+Mevcut mmio codegen (src/llvm.c) + kdl_runtime_mmio.c bare-metal modu kullanıldı.]** Projenin
+ÖZGÜN DNA'sı OS düzeyinde: bir OS sürücüsü KEMGU DİLİNDE yazıldı, KEMGU derleyicisiyle bare-metal
+derlendi, gerçek donanım register'ı okudu.
+
+**Mekanizma:** virtio_selfhost.kem — `yetki<MMIO>` (object-capability, DERLEME-ZAMANI donanım-erişim
+ispatı, sıfır runtime yük) + `mmio_oku32(y, adres)` intrinsic'i ile virtio-mmio magic (0x0A000000)
++ version register'larını okur. kemgu --llvm → clang aarch64 (-x ir) → ld.lld → QEMU virt. mmio_oku32
+codegen'de `kdl_mmio_oku32(adres)` volatile load'a iner (yetki runtime'a geçmez → WCET sıfır ek).
+kdl_yetki_bare.c: KdlYetki (16B, codegen %kdl_yetki ile birebir) + olustur/geri_al (PRNG yerine sayaç,
+libc yok). sret ABI aarch64'te x8 kullanır ama yetki MMIO'da kullanılmadığından benign.
+
+**Doğrulama (QEMU 11.0.1):** virtio_selfhost — QEMU virt boş slot 0 virtio-mmio transport'u magic
+(0x74726976) her zaman sunar → KEMGU sürücüsü okur+doğrular → "KEM VIRTIO OK" + version(1). **LİBC-TEMİZ**
+(malloc/printf yok — capability-güvenli donanım erişimi). Full gate GATE=0 (44 hedef). sıfır-uyarı.
+**KEMGU (memory-safe dil) kendi OS sürücüsünü kendi dilinde yazıyor — capability ile donanım erişimi
+compile-time güvenli. Projenin özgün değer önerisi OS düzeyinde kanıtlandı.**
+
+**Sıradaki:** self-host sürücüyü genişlet (yaz + tam virtio init .kem'de); .kem userspace program;
+TCP; UART RX.
+
+---
+
+## D-147 — OS: DNS round-trip — UDP request-response (OS internet'le konuşuyor) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-146).
+
+**Karar [ETKİ: yeni `test/bare_metal/dns_arm.c`; `Makefile`. Yalnız test — net driver + IP/UDP
+(D-144/145/146) kullanılır.]** TÜM AĞ YIĞINI bir arada: gerçek istek-yanıt döngüsü (OS internet
+servisiyle konuşuyor).
+
+**Mekanizma:** (1) ARP ile DNS sunucusunun (SLIRP 10.0.2.3) MAC'ini çöz (sha çıkar). (2) DNS sorgusu
+inşa et: eth(dst=dns_mac)+IPv4(dst=10.0.2.3)+UDP(dst=53)+DNS(header id/RD/qdcount=1 + qname "a.com" +
+qtype=A + qclass=IN), IP checksum. (3) Gönder. (4) Yanıtı RX ile al + doğrula (IPv4+UDP, src=10.0.2.3,
+src-port=53).
+
+**Doğrulama (QEMU 11.0.1):** dns_arm — "DNS BASLA" + "DNS REPLY OK" (DNS sunucusundan UDP yanıtı
+alındı). **İLK DENEMEDE.** Full gate GATE=0 (43 hedef). sıfır-uyarı. **OS gerçek bir internet
+servisiyle (DNS) request-response yapıyor = internet-katmanı round-trip. Ağ yığını: ARP+IP+UDP+DNS.**
+
+**Sıradaki:** ICMP ping; TCP handshake; DNS yanıtından IP çıkar (tam resolver); UART RX; D2-x86.
+
+---
+
+## D-146 — OS: IP/UDP paket gönderme — internet katmanı (Faz G derinleşme) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-145).
+
+**Karar [ETKİ: yeni `test/bare_metal/udp_arm.c`; `Makefile`. Yalnız test — net driver (D-144/145)
+kullanılır.]** ARP (L2) üstüne İNTERNET KATMANI: geçerli IPv4 + UDP paketi (IP header checksum
+dâhil) inşa + gönder.
+
+**Mekanizma:** ip_checksum (RFC 1071, 16-bit tümleyen toplamı). Frame: eth(IPv4) + IPv4(20:
+v4/IHL5, total_len, TTL, proto=17, checksum, src=10.0.2.15, dst=10.0.2.3) + UDP(8: src=5000,
+dst=53, len, checksum=0) + payload "KEMGU-UDP-DATA". virtio-net TX ile gönder.
+
+**Doğrulama (QEMU 11.0.1):** udp_arm — paket gönder → filter-dump pcap → "UDP GONDERILDI" +
+`grep -a "KEMGU-UDP-DATA" udp.pcap`. Full gate GATE=0 (42 hedef). sıfır-uyarı. **OS geçerli IPv4/UDP
+paketi oluşturuyor (checksum'lı) — gerçek internet-protokol yığını temeli.**
+
+**Sıradaki:** DNS/UDP round-trip (10.0.2.3:53'e sor, yanıt al); ICMP; TCP handshake; UART RX; D2-x86.
+
+---
+
+## D-145 — OS: ARP round-trip — 2-yönlü ağ (virtio-net RX + ARP protokolü) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-144).
+
+**Karar [ETKİ: `runtime/kdl_virtio_net.c` (+RX queue (0) kurulumu + kdl_virtio_net_al); yeni
+`test/bare_metal/arp_arm.c`; `Makefile`. Sadece ekleme — net TX (D-144) regresyonsuz.]** D-144
+gönderme'yi ALMA ile tamamlar → gerçek 2-yönlü ağ + ilk protokol (ARP).
+
+**Mekanizma:** kdl_virtio_net_kur artık RX queue 0'ı da kurar (NVQ_N tampon avail'e AÇIK verilir,
+cihaz gelen paketleri yazar, QueueNotify 0 ile bildirilir). kdl_virtio_net_al: rx_used poll → gelen
+çerçeveyi (net-başlığı 12 bayt atlanmış) kopyala + uzunluk döner. ARP protokol mantığı testte
+(request/reply parse).
+
+**Doğrulama (QEMU 11.0.1):** arp_arm — kernel gateway (SLIRP 10.0.2.2) için ARP isteği yollar; SLIRP
+ARP yanıtı verir; kernel RX ile alır + doğrular (ethertype 0x0806 + oper=2 + spa=10.0.2.2) →
+"ARP REPLY OK". **İLK DENEMEDE.** Full gate GATE=0 (41 hedef). sıfır-uyarı. **OS 2-yönlü ağ: paket
+gönder + al + ARP round-trip. Faz G derinleşti.**
+
+**Sıradaki:** IP/UDP paketi (ping/DNS); ARP tablosu; UART RX; D2-x86. TÜM ROADMAP FAZLARI (C-G)
+temel formda çalışıyor.
+
+---
+
+## D-144 — OS: VirtIO-Net paket gönderme — ağ TX (Faz G başlangıcı) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-143).
+
+**Karar [ETKİ: yeni `runtime/kdl_virtio_net.c` (bare-metal virtio-net TX sürücüsü); yeni
+`test/bare_metal/net_arm.c`; `Makefile` (bm_a64_virtio_net.o + QEMU netdev + filter-dump pcap gate).
+Sadece ekleme — net driver yalnız net testine linklenir (BM_A64_OBJS'e DEĞİL, kimse referans etmiyor).]**
+İlk AĞ yeteneği: gerçek Ethernet çerçevesi gönderme. Faz G açılışı.
+
+**Sürücü:** virtio-blk (D-141) virtqueue makinesi yeniden kullanıldı; fark: DeviceID=1 (net), transmit
+queue=1, buffer=virtio-net başlığı(12,sıfır)+çerçeve, tek desc (cihaz OKUR/TX). kdl_virtio_net_bul/
+kur/gonder.
+
+**Doğrulama (QEMU 11.0.1):** net_arm — broadcast Ethernet çerçevesi (ethertype 0x88b5, payload
+"KEMGUNET-PAKET") gönder. QEMU `-netdev user -device virtio-net-device -object filter-dump,file=pcap`
+→ paket pcap'e yakalandı. Gate: seri "NET GONDERILDI" + `grep -a "KEMGUNET-PAKET" net.pcap`. **İLK
+DENEMEDE** (virtqueue makinesi taşındı). Full gate GATE=0 (40 hedef). sıfır-uyarı. **OS gerçek ağ
+paketi gönderebiliyor — pcap ile kanıtlandı.**
+
+**Sıradaki:** virtio-net RX (paket AL); ARP/IP/UDP stack (Faz G derinleşme); UART RX; D2-x86.
+
+---
+
+## D-143 — OS: KALICI dosya sistemi — disk-backed persistence (boot'lar arası) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-142).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+kdl_dosya_kaydet/yukle disk serialize/deserialize +
+kdl_dosya_olustur_deger/deger kernel helper'ları); yeni `test/bare_metal/kalici_arm.c`; `Makefile`
+(iki-boot gate). virtio (aarch64) guard'lı. Sadece ekleme.]** RAM dosya sistemini (D-131) virtio-blk
+diske (D-141/142) bağlar → dosyalar BOOT'LAR ARASI yaşar (gerçek kalıcılık).
+
+**Mekanizma:** kdl_dosya_kaydet(base) — kdl_dosyalar tablosunu blok 0-1'e serialize (magic "KEMG" +
+bytes). kdl_dosya_yukle(base) — blok 0-1 oku, magic varsa tabloyu geri yükle (-1 diskte FS yok).
+Byte-kopya (aliasing yok). 2 blok (768 bayt tablo + 16 header < 1024).
+
+**Doğrulama (QEMU 11.0.1):** kalici_arm — AYNI kernel AYNI diskle İKİ KEZ boot. Boot 1: FS yok →
+"kalici"=777 oluştur+kaydet → "FIRST BOOT saved". Boot 2: magic var → yükle → "SECOND BOOT
+kalici=777". **Dosya kernel yeniden başlayınca diskten geri geldi = GERÇEK KALICILIK.** Full gate
+GATE=0 (39 hedef). sıfır-uyarı.
+
+**Sıradaki:** FS'i syscall'la kaydet/yükle (userspace tetikler); UART RX (interaktif kabuk); D2-x86;
+networking (Faz G).
+
+---
+
+## D-142 — OS: VirtIO-Blk yaz+oku round-trip — gerçek kalıcı depolama (C5 tamam) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-141).
+
+**Karar [ETKİ: `runtime/kdl_virtio.c` (+kdl_virtio_blk_yaz); yeni `test/bare_metal/virtio_rw_arm.c`;
+`Makefile`. Sadece ekleme.]** D-141 okumasını YAZMA ile tamamlar → çift-yönlü disk I/O = gerçek
+kalıcılık.
+
+**Mekanizma:** kdl_virtio_blk_yaz(base, sektor, kaynak) — okumadan farkı: type=1 (VIRTIO_BLK_T_OUT);
+veri descriptor'ı cihaz-OKUR (WRITE flag YOK, cihaz veriyi diske yazar). Aynı virtqueue makinesi.
+
+**Doğrulama (QEMU 11.0.1):** virtio_rw_arm — blok 7'ye "KEMGU-YAZDI-42" yaz → geri oku → eşleşme →
+"DISK RW OK". Full gate GATE=0 (38 hedef). sıfır-uyarı. **C5 TAMAM: OS gerçek diske veri yazıp
+okuyabiliyor (kalıcı depolama). virtio-blk sürücüsü: bul/kur/oku/yaz.**
+
+**Sıradaki:** dosya sistemini disk-backed yap (RAM-FS'i blok'lara serialize); UART RX (interaktif
+kabuk); D2-x86; networking (Faz G).
+
+---
+
+## D-140 — OS: userspace mesaj kanalı (IPC) — süreçler-arası mesajlaşma (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-139).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (global kdl_msg[] ring buffer + num 22 kanal_gonder, 23 kanal_al);
+yeni `test/bare_metal/kanal_ipc_arm.c`; `Makefile`. Sadece ekleme.]** İki userspace süreç çekirdek-
+aracılı mesaj kanalıyla DOĞRUDAN haberleşir (dosya-IPC ötesinde; KEMGU `kanal` ilkelinin userspace
+düzeyi).
+
+**Mekanizma:** global int ring buffer (16). num=22 kanal_gonder(deger) enqueue (dolu=-1); num=23
+kanal_al() dequeue (boş=-1). Bloklamasız → alıcı EL0'da yoklar (deadlock yok).
+
+**Doğrulama (QEMU 11.0.1):** kanal_ipc_arm — launcher(alıcı) spawn(sender); sender kanal_gonder
+(100/200/300)+exit; launcher kanal_al ile 3 değer alıp toplar → "KANAL SUM=600". Full gate GATE=0
+(36 hedef). sıfır-uyarı. **Userspace IPC iki yolla: dosya (paylaşılan depo) + kanal (mesaj geçişi).**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86 (ring3); C5 virtio-blk (kalıcı disk).
+
+---
+
+## D-139 — OS: kabuğa aritmetik — topla komutu (shell hesap makinesi) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-138).
+
+**Karar [ETKİ: `test/bare_metal/kabuk_arm.c` (+CMD_TOPLA + str_sayi (atoi) + branch + script satırı);
+`Makefile` (gate "= 42"). Yalnız test.]** Kabuk artık sayı ayrıştırıp aritmetik yapıyor — FS komut
+yorumlayıcısı + hesap makinesi.
+
+**Mekanizma:** str_sayi (EL0 atoi, .user) + "topla A B" komutu → str_sayi(tok[1])+str_sayi(tok[2])
+→ "= toplam". Kabuk metin→sayı ayrıştırma + hesap (userspace'de).
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> topla 12 30" / "= 42". Full gate GATE=0 (35 hedef).
+sıfır-uyarı. **Kabuk komut seti: yaz/oku/ls/say/sil (FS CRUD) + topla (aritmetik).**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86; C5 virtio-blk.
+
+---
+
+## D-138 — OS: kaynak geri-alma (slot reuse) — sınırsız spawn (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-137).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_preempt_gorev_olustur_el0 ölü görev-slotu reuse;
+kdl_surec_spawn ölü havuz-slotu reuse + kdl_spawn_kullanildi/task[]); yeni
+`test/bare_metal/geri_al_arm.c`; `Makefile`. Sadece ekleme/iyileştirme.]** Süreç bitince (exit) hem
+scheduler görev-slotu hem spawn-havuz-slotu geri alınır → OS programları SINIRSIZ çalıştırabilir
+(eski: monoton sayaç, 4 spawn'da tükeniyordu).
+
+**Mekanizma:** kdl_preempt_gorev_olustur_el0 önce ÖLÜ (kdl_olu) görev slotu arar, yoksa yeni
+(kdl_psayi++). kdl_surec_spawn boş VEYA görevi ölmüş havuz slotunu yeniden kullanır
+(kdl_spawn_kullanildi[]+kdl_spawn_task[]). Güvenli: ölü görev scheduler'da atlanır + spawn eden
+canlı görevden çağrılır (kdl_paktif != geri-alınan slot).
+
+**Doğrulama (QEMU 11.0.1):** geri_al_arm — launcher 6× spawn+join (havuz=4'ten fazla) → "SPAWNS=6"
+(hepsi başarılı; geri-alma olmasaydı 5.'te -1 → SPAWNS=4). Full gate GATE=0 (35 hedef). spawn/yasam/
+multiproc/calis regresyon yeşil. sıfır-uyarı. **OS artık sınırsız süreç yaratıp bitirebilir.**
+
+**Sıradaki:** UART RX (interaktif kabuk); D2-x86 (ring3 parite); C5 virtio-blk (kalıcı disk).
+
+---
+
+## D-137 — OS: program çalıştırma iş akışı — spawn→hesap→dosya→join→oku (uçtan-uca) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-136).
+
+**Karar [ETKİ: yeni `test/bare_metal/calis_arm.c`; `Makefile`. Yalnız test — mevcut syscall'lar.]**
+Süreç + FS + IPC yığınının uçtan-uca entegrasyonu: bir program başka bir programı çalıştırır, o
+hesap yapıp sonucu dosyaya yazar, başlatan program sonucu geri okur ("bir programı çalıştır,
+çıktısını al" — gerçek OS iş akışı).
+
+**Akış:** launcher spawn(worker)→join; worker 1..10 topla(=55)→dosya_yaz("sonuc",55)→exit; launcher
+dosya_oku("sonuc")→bas. Global FS worker çıktısını launcher'a taşır (süreçler-arası).
+
+**Doğrulama (QEMU 11.0.1):** calis_arm — "CALIS BASLA" + "RESULT=55" (worker hesabı dosya üzerinden
+launcher'a ulaştı). Full gate GATE=0 (34 hedef). sıfır-uyarı. **KEMGU-OS: kernel + izole userspace
+süreçler + preemptive multitask + syscall ABI + RAM-FS + kabuk + program-çalıştır-çıktı-al akışı —
+çalışan çok-programlı bir OS.**
+
+**Sıradaki:** UART RX (interaktif kabuk); kaynak geri-alma (slot reuse); D2-x86; C5 virtio-blk.
+
+---
+
+## D-136 — OS: kabuk komut genişletme — say + sil (shell tam CRUD komut seti) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-135).
+
+**Karar [ETKİ: `test/bare_metal/kabuk_arm.c` (+CMD_SAY/CMD_SIL + branch + script satırları);
+`Makefile` (gate say/sil kontrolü). Yalnız test.]** D-135 kabuğunu tam CRUD komut setine genişletir.
+
+**Kabuk komutları:** yaz/oku/ls (D-135) + say (dosya sayısı) + sil (dosya_sil). Script:
+yaz gunluk → oku → ls → say(COUNT=1) → sil gunluk → say(COUNT=0). Silme öncesi/sonrası sayaç
+(1→0) sil'in çalıştığını kanıtlar.
+
+**Doğrulama (QEMU 11.0.1):** kabuk_arm — "SHELL> say"/"COUNT=1"/"SHELL> sil gunluk"/"SHELL> say"/
+"COUNT=0". Full gate GATE=0 (33 hedef). sıfır-uyarı. **Userspace kabuk artık tam FS CRUD komut
+seti yorumluyor (yaz/oku/ls/say/sil).**
+
+**Sıradaki:** UART RX (interaktif kabuk); kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
+
+---
+
+## D-134 — OS: dosya sil — FS CRUD tamamlandı (oluştur/oku/güncelle/listele/sil) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-133).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+num 21 dosya_sil; num 20 dosya_ad → kullanılan-index);
+yeni `test/bare_metal/sil_arm.c`; `Makefile`. Sadece ekleme + dosya_ad iyileştirme.]** RAM dosya
+sistemi artık tam CRUD.
+
+**Mekanizma:** num=21 dosya_sil(ad=arg) → slot serbest (kullanildi=0). num=20 dosya_ad artık
+KULLANILAN-index (raw değil) → silinmiş slotlar sıralamayı bozmaz (boşluk atlanır). D-133 ls
+regresyonsuz (silme yoksa kullanılan==raw).
+
+**Doğrulama (QEMU 11.0.1):** sil_arm — alfa+beta+gama oluştur → dosya_sil("beta") → listele →
+"AFTER count=2" + alfa + gama (beta YOK). Full gate GATE=0 (32 hedef). D-133 ls regresyon yeşil.
+sıfır-uyarı. **RAM-FS tam CRUD: oluştur(15)/oku(16)/metin(17,18)/listele(19,20)/sil(21).**
+
+**Sıradaki:** scripted userspace kabuk (komut dizisi → FS işlemleri); UART RX (klavye, gate zor);
+kaynak geri-alma; D2-x86; C5 virtio-blk (kalıcı disk).
+
+---
+
+## D-133 — OS: dosya listeleme (ls) — userspace dosya enumerasyonu (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-132).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (+num 19 dosya_sayisi, 20 dosya_ad); yeni
+`test/bare_metal/ls_arm.c`; `Makefile`. Sadece ekleme.]** D-131/132 dosya sistemi üstünde ilk
+"shell primitifi": userspace program dosya deposunu enumere eder (ls).
+
+**Mekanizma:** num=19 dosya_sayisi() → kullanımdaki dosya sayısı. num=20 dosya_ad(idx=arg, buf=arg2)
+→ idx'inci dosyanın adını user tamponuna kopyala. Userspace program dosya_sayisi() kez döngüyle
+her adı okuyup basar (ls).
+
+**Doğrulama (QEMU 11.0.1):** ls_arm — launcher dosya_yaz("alfa",1)+dosya_yaz("beta",2) → listele →
+"LS count=2" + "  alfa" + "  beta". Full gate GATE=0 (31 hedef). sıfır-uyarı. **Userspace ABI 20+
+syscall: process (spawn/exit/durum/getpid) + zaman (gettick) + I/O (yaz*) + dosya (yaz/oku/metin/
+sayisi/ad). Basit bir kabuk (shell) yazmaya yetecek temel.**
+
+**Sıradaki:** basit userspace kabuk (komut → dosya işlemi); dosya sil; kaynak geri-alma; D2-x86; C5.
+
+---
+
+## D-132 — OS: metin içerikli dosya — bulk read/write (kernel↔user bellek kopyası) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-131).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_dosyalar +icerik[64]+boyut; +num 17 dosya_yaz_metin,
+18 dosya_oku_metin); yeni `test/bare_metal/metin_arm.c`; `Makefile`. Sadece ekleme.]** D-131 tek-değer
+dosyasını GERÇEK byte-içeriğe genişletir — kernel↔userspace çift-yönlü bellek kopyası (gerçek
+read/write syscall ailesinin temeli).
+
+**Mekanizma:** num=17 dosya_yaz_metin(ad=arg, str=arg2) — kernel kullanıcı belleğinden (arg2) string'i
+dosya içeriğine kopyalar (yazılan byte döner). num=18 dosya_oku_metin(ad=arg, buf=arg2) — dosya
+içeriğini kullanıcı tamponuna (arg2) kopyalar (okunan byte döner). Kernel EL1'den AP=01 user
+sayfasını okur/yazar (buf worker'ın veri sayfasında). 2-arg syscall (D-131).
+
+**Doğrulama (QEMU 11.0.1):** metin_arm — launcher dosya_yaz_metin("mesaj","MERHABA DOSYA")+spawn;
+worker dosya_oku_metin ile metni kendi tamponuna okur+basar → "FILE TEXT: MERHABA DOSYA" (dosya
+metin içeriği süreçler-arası aktarıldı). Full gate GATE=0 (30 hedef). D-131 regresyon yeşil. sıfır-uyarı.
+
+**Sıradaki:** dosya offset'li read/write (kısmi); dizin/listeleme; kaynak geri-alma; D2-x86; C5
+virtio-blk (RAM-FS'i kalıcı disk'e).
+
+---
+
+## D-131 — OS: RAM dosya sistemi + 2-argümanlı syscall (Faz E ilk adım) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-130).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (SVC path arg2=saklanan-x1 geçirir); `runtime/kdl_kesme.c`
+(kdl_syscall_isle 3-param (num,arg,arg2) + RAM dosya deposu + num 15 dosya_yaz, 16 dosya_oku); yeni
+`test/bare_metal/dosya_arm.c`; `Makefile`. x86 stub değişmedi (nums 1/2/3 arg2 kullanmaz — gate'te
+doğrulandı). linker/host/codegen dokunulmadı.]** İki yenilik: 2-argümanlı syscall ABI + çekirdek-
+aracılı isimli depolama (Faz E dosya sisteminin ilk adımı, virtio-blk GEREKTİRMEZ).
+
+**2-arg syscall:** D-126 x1-koruma (register-şeffaflık) bunu mümkün kıldı; şimdi SVC path saklanan-x1'i
+3. C param (arg2) olarak geçirir. `ldr x2,[sp,#8]` eklendi. dosya_yaz(ad, değer) gibi 2-arg syscall'lar.
+
+**RAM dosya deposu:** kdl_dosyalar[8] (ad[16]+deger+kullanildi); kdl_dosya_ac (bul/oluştur) + kdl_dosya_bul
++ kdl_ad_esit (freestanding strcmp). num=15 dosya_yaz(ad=arg, deger=arg2); num=16 dosya_oku(ad=arg)→değer.
+Süreçler-arası paylaşılır (çekirdek durumu).
+
+**Doğrulama (QEMU 11.0.1):** dosya_arm — launcher dosya_yaz("sayac",1234)+spawn(worker); worker
+dosya_oku("sayac")=1234 → "FILE OK deger=1234" (BAŞKA süreç, launcher'ın yazdığını okudu). Full gate
+GATE=0 (29 hedef). x86 syscall + tüm SVC regresyon (syscall_arg/ret/d2/userspace) yeşil. sıfır-uyarı.
+**Userspace ABI: yaz/yaz_sayi/satir/cik/artir/gettick/getpid/spawn/exit/durum/dosya_yaz/dosya_oku.**
+
+**Sıradaki:** dosya read/write byte-buffer (tek-değer değil); kaynak geri-alma; D2-x86; C5 virtio-blk
+(gerçek disk → RAM-FS'i kalıcı yap).
+
+---
+
+## D-130 — OS: süreç yaşam döngüsü — exit + join (spawn→çalış→exit→join tam döngü) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-129).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (+kdl_olu[] state + kdl_gorev_bitir/kdl_gorev_durum +
+kdl_preempt'te ölü-görev atla); `runtime/kdl_kesme.c` (+num 13 exit, 14 durum); yeni
+`test/bare_metal/yasam_arm.c`; `Makefile`. x86/host/codegen dokunulmadı (exit/durum arch-generic).]**
+D-129 spawn'ı tam yaşam döngüsüne tamamlar: süreç bitişi + ebeveyn join.
+
+**Mekanizma:** kdl_olu[görev] (1=bitmiş). num=13 exit → kdl_gorev_bitir() (kdl_olu[kdl_paktif]=1);
+kdl_preempt ölü görevi ATLAR (bloklu gibi) → süreç bir daha koşmaz. num=14 durum(pid) →
+kdl_gorev_durum(pid) (bitti mi?). **Bloklamalı join YERİNE EL0-yoklama:** ebeveyn preemptive
+olduğundan `while(!durum(pid))` yoklarken çocuk koşar→exit eder→durum=1 (deadlock yok; blocking-in-
+syscall / IRQ-masked sorununu bypass eder). Kaynak geri-alma v1'de yok (havuz slotu serbest değil).
+
+**Doğrulama (QEMU 11.0.1):** yasam_arm — launcher spawn(worker)→worker iş+exit→launcher join
+(durum yokla)→"WORKER done"+"JOINED worker exited". Full gate GATE=0 (28 hedef). Scheduler
+regresyon (kdl_olu skip additive) yeşil. sıfır-uyarı. **Tam süreç yaşam döngüsü: yarat→koş→bitir→
+bekle. Userspace ABI: yaz/yaz_sayi/satir/cik/artir/gettick/getpid/spawn/exit/durum.**
+
+**Sıradaki:** read/write dosya syscall'ları (C5 storage sonrası); kaynak geri-alma (exit'te havuz
+free); D2-x86; C5 virtio-blk → Faz E fs.
+
+---
+
+## D-129 — OS: dinamik süreç oluşturma — spawn syscall'ı (fork/spawn yeteneği) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-128).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (+kdl_surec_spawn — havuz-tabanlı runtime süreç); `runtime/
+kdl_kesme.c` (kdl_syscall_isle +num 12 spawn, #if __aarch64__); yeni `test/bare_metal/spawn_arm.c`;
+`Makefile`. x86/host/codegen/linker dokunulmadı.]** D-127 (statik çok-süreç) → runtime dinamik
+süreç: bir userspace süreç RUNTIME'da yeni izole süreç yaratır (gerçek OS fork/spawn).
+
+**Mekanizma:** kdl_surec_spawn(entry) — havuzdan (KDL_SPAWN_MAX=4) L1/L2 tabloları + kernel yığını
++ sürece-özel veri PA'sı (0x46000000+i*2MB, RAM içi) alır → kdl_surec_kur_el0_veri (paylaşılan kod
++ özel veri) → kdl_preempt_gorev_olustur_el0 (preemptive EL0 görev, entry'de) → kdl_task_l1[t]=yeni
+tablo. num=12 spawn(entry_va) syscall bunu çağırır, yeni pid döner. Syscall IRQ-masked → kdl_psayi++
+scheduler ile yarışmaz (güvenli); yeni görev eret sonrası ilk timer-IRQ'da schedulable.
+
+**Doğrulama (QEMU 11.0.1):** spawn_arm — launcher (EL0 süreç, kendi TTBR) spawn(worker) çağırır →
+"LAUNCHER spawned pid=2"; worker DİNAMİK yaratılan izole adres-uzayında EL0'da koşar → "WORKER OK".
+Full gate GATE=0 (27 hedef). sıfır-uyarı. **Programlar artık yeni süreç başlatabiliyor —
+gerçek çok-görevli OS'un temel yeteneği.**
+
+**Sıradaki:** süreç bitişi/join (worker exit → launcher öğrenir); read/write dosya syscall'ları;
+D2-x86; C5 virtio-blk → Faz E fs.
+
+---
+
+## D-128 — OS: userspace introspection syscall'ları — gettick + getpid (userspace ABI genişleme) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-127).
+
+**Karar [ETKİ: `runtime/kdl_zaman.c` (+kdl_tik_al getter); `runtime/kdl_gorev.c` (+kdl_aktif_gorev
+getter); `runtime/kdl_kesme.c` (kdl_syscall_isle +num 10 gettick, 11 getpid); yeni
+`test/bare_metal/tick_arm.c`; `Makefile`. x86/host/codegen dokunulmadı (getter'lar iki arch'ta;
+x86 syscall kernel gate'te doğrulandı).]** D-126 dönüş-değeri ABI'si üstünde ilk gerçek "kernel
+durumu okuyan" userspace syscall'ları.
+
+**Yeni syscall'lar (dönüş-değerli):** num=10 gettick → kdl_tik_al() (timer tik sayısı, userspace
+zamanı okur); num=11 getpid → kdl_aktif_gorev() (o an koşan preemptive görev id'si). Getter'lar:
+kdl_tik_al (kdl_zaman.c, static kdl_tik_sayisi'ni açar), kdl_aktif_gorev (kdl_gorev.c, kdl_paktif).
+
+**Doğrulama (QEMU 11.0.1):** tick_arm — preemptive EL0 görev gettick(t1)→zaman-geçir→gettick(t2)→
+getpid; t2>t1 (timer preemptive görevde IRQ-açık → tikler) + pid=1 → "TICK OK pid=1". Full gate
+GATE=0 (26 hedef). sıfır-uyarı. **Userspace artık çekirdek durumunu (zaman/kimlik) syscall ile
+okuyabiliyor — gerçek programların temel ihtiyacı.**
+
+**Sıradaki:** read/write dosya syscall'ları (C5 storage sonrası); dinamik süreç spawn; D2-x86; C5
+virtio-blk → Faz E fs.
+
+---
+
+## D-127 — OS: çoklu EL0 süreç — izole userspace multitasking (gerçek multi-process OS DORUĞU) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-126).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (+kdl_surec_kur_el0_veri — paylaşılan kod + özel veri sayfası);
+`runtime/kdl_gorev.c` (+kdl_task_l1[] + kdl_preempt_gorev_ttbr + kdl_preempt'te guard'lı TTBR-swap);
+yeni `test/bare_metal/multiproc_arm.c`; `Makefile`. x86/host/codegen/linker dokunulmadı.]** D3
+(per-process TTBR) ⊕ D-125 (preemptive EL0) birleşimi: BİRDEN ÇOK userspace süreç, her biri KENDİ
+izole adres-uzayında, preemptively multitask.
+
+**Mekanizma:**
+- **kdl_surec_kur_el0_veri(l1,l2,kod_pa,veri_pa):** L2[16] (0x42000000) → kod_pa (PAYLAŞILAN .user
+  kod, tüm süreçlerde aynı, AP=01); L2[17] (0x42200000) → veri_pa (SÜRECE-ÖZEL, AP=01); kernel
+  identity her tabloda (swap güvenli). Paylaşılan-kod/özel-veri deseni (klasik OS).
+- **Scheduler TTBR-swap:** kdl_task_l1[görev] (kdl_preempt_gorev_ttbr ile set). kdl_preempt seçilen
+  göreve geçerken `if (kdl_task_l1[en_iyi]) kdl_ttbr_degis(...)` → o sürecin adres-uzayına çevir.
+  **GUARD'LI:** set edilmemişse (mevcut EL1 testleri) swap YOK → regresyon YOK (6 scheduler testi
+  doğrulandı). `#if defined(__aarch64__)` (x86 cooperative-only).
+
+**İZOLASYON KANITI (multiproc_arm):** A markörü 0xAA'yı bir kez yazar, sonra 40000-iter döngüde
+sürekli 0xAA doğrular; B simetrik 0xBB. İkisi AYNI VA'yı (0x42200000) kullanır ama FARKLI PA
+(A→0x44000000, B→0x46000000). Timer-IRQ defalarca aralarında geçer; izole olduğundan A hep 0xAA
+(B'nin 0xBB'si A'nın PA'sına DOKUNMAZ) → "A OK" + "B OK". Paylaşsalardı çapraz-bozulma → "CORRUPT".
+
+**Doğrulama (QEMU 11.0.1):** "MULTIPROC BASLA" + "A OK" + "B OK". Full gate GATE=0 (25 hedef).
+sıfır-uyarı. **Process modeli TAM DORUK: kernel + N izole userspace süreç, her biri kendi
+adres-uzayında, preemptively multitask + syscall (arg+dönüş+çok-arg) + bellek-koruması.**
+
+**Sıradaki:** userspace ABI genişletme (gettick/getpid/read); dinamik süreç oluşturma (fork-benzeri);
+D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E dosya sistemi).
+
+---
+
+## D-126 — OS: syscall dönüş-değeri ABI + kdl_exc_ortak register-şeffaflık onarımı (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-125).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_exc_ortak+kdl_svc_ortak → tek "frame-önce-kaydet"
+işleyici; str x0 dönüş); `runtime/kdl_kesme.c` (kdl_syscall_isle → uint64_t; +num 9 artir);
+yeni `test/bare_metal/syscall_ret_arm.c`; `Makefile`. x86/host/codegen dokunulmadı.]** Userspace
+ABI'nin eksik yarısı (syscall DEĞER döndürür) + bunu yaparken keşfedilen gerçek register-şeffaflık
+bug'ının onarımı.
+
+**Dönüş-değeri ABI:** kdl_svc_ortak `bl kdl_syscall_isle` sonrası `str x0, [saved-x0]` → restore
+ile EL0 çağıran x0'da sonucu alır. kdl_syscall_isle artık uint64_t döner (num=9 'artir': arg+1).
+
+**KEŞFEDİLEN + ONARILAN BUG (register-şeffaflık):** Eski kdl_exc_ortak, frame kaydetmeden ÖNCE
+`lsr x9, x1, #26` (EC) + `mrs x1/x2/x3` ile çağıranın x1/x2/x3/x9'unu klobber ediyordu; SVC için
+EC=0x15 → x9=0x15. syscall_ret testi (dönüş-değerine bağlı dallı string-ptr'yi x9'da tutan)
+BUNU tetikledi: OK-string ptr'si (0x40003570) x9'da → syscall sonrası x9=0x15 → sys(yaz, 0x15) →
+çöp → hiçbir şey basılmadı. Empirik teşhis: QEMU `-d in_asm,cpu` (x9: 0x40003570 → 0x15 svc'de).
+**ONARIM:** işleyici FRAME'İ ÖNCE kaydeder, SONRA ESR okur/dispatch eder → tüm çağıran register'ları
+korunur (yalnız x0=dönüş değişir). num/arg saklanandan okunur. **Çok-argümanlı syscall'ları da
+mümkün kıldı (x1+ artık korunuyor — eski bug x1'i eziyordu).**
+
+**Doğrulama (QEMU 11.0.1):** syscall_ret "SYSCALL RET OK" (41→42 EL0'a döndü). Tüm SVC/fault
+regresyon yeşil: syscall/syscall_arg/istisna(fault)/d2(EL0+SVC)/proc(D3)/userspace. Full gate GATE=0
+(24 hedef). sıfır-uyarı. **Öğrenilen: `-MMD -MP` header-dep var ama .c değişince .o rebuild
+timing — rm+make ile force gerekebildi (staleness teşhisi).**
+
+**Sıradaki:** çoklu EL0 süreç (scheduler TTBR-swap); gettick/getpid/read syscall'ları (artık dönüş +
+çok-arg hazır); D2-x86; C5 (virtio-blk).
+
+---
+
+## D-125 — OS: preemptive EL0 (userspace) görev — userspace multitasking (process modeli tamam) (2026-07-01) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-124).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_irq_ortak SP_EL0 save/restore @264 — Stage 1);
+`runtime/kdl_gorev.c` (+kdl_preempt_gorev_olustur_el0 — Stage 2); `linker/bare-metal-aarch64.ld`
+(.user output'a .user_data eklendi); yeni `test/bare_metal/preempt_el0_arm.c`; `Makefile`.
+x86/host/codegen dokunulmadı.]** Process modelinin son parçası: userspace (EL0) görevler
+PREEMPTIVELY multitask edilir.
+
+**Stage 1 (non-regressing):** kdl_irq_ortak trap-frame'e SP_EL0'ı @264 ekler (mrs/msr sp_el0).
+EL1 görevlerde SP_EL0 kullanılmaz → zararsız; 6 EL1 preemptive testi (preempt/sleep/priority/kanal/
+sched/timer) hâlâ yeşil (doğrulandı).
+
+**Stage 2:** kdl_preempt_gorev_olustur_el0(giris, kernel_yigin, user_yigin) — sentetik trap-frame
+SPSR=0x0 (EL0t, IRQ-açık) + SP_EL0=user yığını. İlk switch eret ile EL0'a atlar; timer-IRQ EL0'dan
+EL1'e alır, kdl_irq_ortak SP_EL0 dâhil tüm bağlamı kaydeder → EL0 görev preempt edilip sürdürülür.
+İKİ yığın: kernel (trap-frame/SP_EL1, AP=00) + user (SP_EL0, .user AP=01).
+
+**Linker:** .user output section artık .user_data (EL0-yazılabilir veri) de toplar — kod (.user, X)
+ve veri (.user_data, W) ayrı input-section → derleyici section-tip çakışması yok, ikisi de aynı
+0x42000000 AP=01 sayfasında. (İleride process code/data ayrımı temeli.)
+
+**Doğrulama (QEMU 11.0.1):** "PREEMPT EL0 BASLA" + "PREEMPT EL0 OK" (el0_sayac>0 = EL0 userspace
+görev timer-IRQ ile preempt edilerek koştu, main EL1 de koştu). Full gate GATE=0. sıfır-uyarı.
+
+**Önem:** Process modeli ARTIK TAM — kernel(EL1) + userspace(EL0) görevler timer-IRQ ile
+preemptively dönüşümlü koşar, banked SP_EL0 korunur. Gerçek OS multitasking'inin çekirdeği.
+
+**Sıradaki:** çoklu EL0 süreç + per-process TTBR swap scheduler'da (D3+D-125 birleşik); userspace
+ABI (exit-kod/oku); D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E fs).
+
+---
+
+## D-124 — OS: ilk userspace programı — EL0 hesap + syscall ABI ile I/O (Faz F temeli) (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-123).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_syscall_isle +num 5/6/7 = yaz/yaz_sayi/satir; +kdl_yaz_metin/
+kdl_yaz_tam decl); yeni `test/bare_metal/userspace_arm.c`; `Makefile`. x86/host/codegen dokunulmadı
+(syscall_isle paylaşılan — x86 yaz_* referansı gate'te doğrulandı).]** D3'ün (korumalı süreç) üstüne
+userspace ABI'nin ilk gerçek kullanımı: bir userspace programı EL0'da HESAP yapar + kernel
+hizmetlerini SYSCALL ile kullanır (Faz F userspace temeli).
+
+**Userspace syscall ABI (v0):** num=5 yaz(ptr) — string yaz (kernel kullanıcı belleğinden ptr OKUR —
+pointer/veri geçişi ABI'si); num=6 yaz_sayi(n); num=7 satir; num=3 cik (bitir/dur). Sarmalayıcı
+`always_inline` → SVC .user section'a gömülü (ayrı fonksiyon .text/AP=00'da kalır, EL0
+çalıştıramaz). String literalleri .rodata'da (kernel EL1 okur; EL0 yalnız adres geçer, dereference
+etmez → AP=00 sorunu yok).
+
+**Doğrulama (QEMU 11.0.1):** "MERHABA userspace" + "USERSPACE OK toplam=55" — EL0 program 1..10
+topladı (userspace hesap) + syscall I/O ile yazdı. Full gate GATE=0 (23 hedef). sıfır-uyarı.
+
+**Önem:** userspace program artık HESAP + I/O yapabiliyor (syscall ABI ile) — gerçek program
+çalıştırmanın (Faz F) çekirdek yapıtaşı. Kernel kullanıcı pointer'ından veri okuyor (read/write
+syscall ailesinin temeli). NOT: ptr doğrulaması yok (gerçek OS'te user-adres-uzayı kontrolü gerek).
+
+**Sıradaki:** preemptive EL0 süreç (per-task kernel stack); userspace ABI genişletme (oku/exit-kod);
+D2-x86 (ring3+TSS); C5 (virtio-blk → Faz E fs).
+
+---
+
+## D-123 — OS D3: korumalı EL0 user-process (D1⊕D2⊕D-122 birleşik) — gerçek OS sürecinin dört özelliği bir arada (2026-07-01)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-122).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (+kdl_surec_kur_el0 — user sayfası AP=01); yeni
+`test/bare_metal/proc_arm.c`; `Makefile`. Mevcut kod DEĞİŞMEDİ (yalnız ekleme). x86/host/codegen
+dokunulmadı.]** D-121/D-122 ön-koşulları (preemption-x0 + syscall-arg) hazır olunca, gerçek bir
+işletim sistemi sürecinin dört tanımlayıcı özelliğini BİR ARADA gösteren keystone.
+
+**Birleşen özellikler (tek süreçte):**
+1. **Kendi adres-uzayı** — süreç kendi L1/L2 tablolarına sahip (kernel global tablolarından ayrı),
+   `kdl_ttbr_degis` ile TTBR0 swap (D1 makinesi).
+2. **Kullanıcı ayrıcalığı** — kod EL0'da, kendi TTBR'ı altında (`kdl_el0_calistir`, D2).
+3. **Syscall arayüzü** — EL0 kod SVC ile argüman geçer (num=4 arg=42) → "SYSCALL ARG OK" (D-122).
+4. **Bellek koruması / HAPİS** — süreç kernel-only sayfaya (0x40000000, AP=00) erişince EL0
+   **permission-fault** → kernel yakalar. Kendi adres-uzayına hapsedilmiş.
+
+**Yeni API:** `kdl_surec_kur_el0(l1,l2,user_pa)` — kdl_surec_kur (D1, AP=00) gibi ama user sayfası
+`| (1<<6)` (AP=01, EL0+EL1 RW; UXN=0 → EL0-exec). user_pa=0x42000000 (identity — .user section
+fiziksel yeri). el0_kod `.user` section'da, self-contained pure-SVC.
+
+**Doğrulama (QEMU 11.0.1):** "PROC BASLA (EL1)" + "SYSCALL ARG OK" + "ISTISNA tip=0x24
+a=0x9200000e b=0x42000010 adr=0x40000000". ESR decode: EC=0x24 (data abort, lower-EL/EL0),
+**DFSC=0x0E = PERMISSION fault** (sayfa VAR ama EL0 reddedildi → gerçek koruma, translation değil),
+ELR=0x42000010 (fault eden EL0 komutu), FAR=0x40000000 (erişilmeye çalışılan kernel adresi). Full
+gate GATE=0 (22 hedef). sıfır-uyarı, libc-temiz.
+
+**Sınır (bilinçli):** süreç henüz PREEMPTIVE değil (SPSR=EL0t DAIF-masked → timer maskeli). Preemptive
+EL0 süreç = per-task KERNEL stack (trap-frame SP_EL1 ≠ run SP_EL0) + SP_EL0 trap-frame'de kaydet →
+ayrı milestone. İzolasyon (private DATA) = ayrı .user_code/.user_data sayfaları (shared-code+
+private-data) → follow-up.
+
+**Sıradaki:** preemptive EL0 süreç (per-task kernel stack); D2-x86 (ring3+TSS); C5 (virtio-blk).
+
+---
+
+## D-122 — OS: SVC arg0 (x0) vektör-stub tarafından eziliyordu — syscall argüman geçişi onarımı (2026-06-30) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-121).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (VEKTOR_EXC macro — `mov x0,#\tip` kaldırıldı; kdl_exc_ortak
+fault-yolu `mov x0,x9` ile EC'yi tip yapar); `runtime/kdl_kesme.c` (kdl_syscall_isle num=4 arg
+kontrolü); yeni `test/bare_metal/syscall_arg_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]**
+D-121'de keşfedilen ikincil latent bug'ın onarımı — IRQ ile aynı sınıf, EXC yolunda.
+
+**KÖK-NEDEN:** `VEKTOR_EXC \tip` → `mov x0,#\tip ; b kdl_exc_ortak`. Same-EL SVC slot 4 →
+`mov x0,#4`, kdl_svc_ortak x0'ı (syscall arg0) kaydetmeden ÖNCE 4 ile eziyordu → her syscall'ın
+arg0'ı sessizce vektör-indeksine (4) dönüşüyordu. Latentti (mevcut syscall testleri arg0
+kontrol etmiyordu) ama userspace syscall'ları arg geçince bozulurdu.
+
+**ONARIM:** VEKTOR_EXC artık doğrudan `b kdl_exc_ortak` (x0 dokunulmaz). SVC dalında x0=arg0
+korunur → kdl_svc_ortak doğru kaydeder/geçer. Fault dalında (b.eq kdl_svc_ortak alınmazsa)
+`mov x0, x9` ile tip = ESR.EC (teşhis; x0 artık arg0 değil, fault noreturn). istisna gösterimi
+"tip=0x<vektör>" yerine "tip=0x<EC>" (daha bilgilendirici; test "ISTISNA" arar, etkilenmez).
+
+**Doğrulama (QEMU 11.0.1):** syscall_arg — SVC num=4 arg=42 → kernel arg==42 görür →
+"SYSCALL ARG OK" (+ "SYSCALL ARG SONRA" = eret kurtarma çalışıyor). Onarımdan önce arg=4 →
+"HATA" olurdu. Regresyon yeşil: syscall (AFTER SYSCALL) + istisna (EC display) + d2 (EL0 SVC
+kaynak-EL). sıfır-uyarı. **Vektör-stub register-bozma bug sınıfı (IRQ D-121 + EXC D-122) artık
+tamamen kapalı** — preemption x0 + syscall arg0 ikisi de güvenli.
+
+**Sıradaki:** D1+D2+C7 birleşik gerçek EL0 user-process (artık syscall-arg + x0-koruma hazır);
+D2-x86; C5 (virtio-blk).
+
+---
+
+## D-121 — OS: IRQ vektör stub'u preempt edilen görevin x0'ını bozuyordu (KÖK-NEDEN onarımı) + C7d cap=4 IPC restore (2026-06-30) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-120).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (VEKTOR_IRQ macro — `mov x0,#\tip` kaldırıldı);
+`runtime/kdl_kanal.{c,h}` + `test/bare_metal/kanal_arm.c` (KAP 16→4 restore + yorum). x86/host/
+codegen DEĞİŞMEDİ.]** D-119'da bayraklı cap=4 "deterministik bozulma" — çok-ajanlı adversarial
+workflow (5 bağımsız lens + sentez, gdb HW-watchpoint + QEMU `-d in_asm,cpu` trace ile) KÖK-NEDENİ
+EMPİRİK buldu.
+
+**KÖK-NEDEN (gerçek + ciddi, latent scheduler bug):** aarch64 IRQ vektör stub'u
+`VEKTOR_IRQ \tip` → `mov x0,#\tip ; b kdl_irq_ortak`. Timer her zaman slot 5 (Cur-EL-SPx IRQ) →
+`mov x0,#0x5`. Bu, **trap-frame KAYDEDİLMEDEN ÖNCE** preempt edilen görevin CANLI x0'ını 5 ile
+eziyor. kdl_irq_ortak x0'ı [sp,#0]'a kaydedince bozuk x0=5 frame'e yazılıyor; eret'te görev x0=5
+ile sürüyor. kdl_irq_ortak tip'i HİÇ kullanmaz (`mov x0,sp` ile ezer) → `mov x0,#\tip` saf
+tahripti. "5 = 5. değer" RASTLANTI (5 = vektör indeksi). Global kanal ASLA bozulmadı (yanlış
+teşhisti). cap=4 spesifik: yalnız o, ÜRETİCİYİ `gonder` spin'inde (pointer x0'da canlı, reload
+yok) preempt eder; tüketici `al` pointer'ı x8'de tutar → bağışık. **preempt/sleep/priority sadece
+şanstan geçmişti** (preempt sonrası x0-deref-reloadsız desen yoktu).
+
+**ONARIM:** VEKTOR_IRQ artık doğrudan `b kdl_irq_ortak` (x0 dokunulmaz → görev x0'ı bozulmadan
+kaydedilir/geri yüklenir). Cerrahi, EXC yolu değişmedi. cap=4 IPC restore edildi (D-119 cap=16
+work-around kaldırıldı) → çift-yönlü back-pressure ping-pong artık sağlam.
+
+**Doğrulama (QEMU 11.0.1):** kanal cap=4 → "KANAL OK toplam=55" (eski: Data Abort). TÜM aarch64
+regresyon yeşil: preempt/sleep/priority/sched + istisna(EXC) + timer(IRQ) + syscall(SVC) + d2(EL0)
++ d1. sıfır-uyarı.
+
+**KEŞFEDİLEN İKİNCİL LATENT BUG (ayrı iş):** Aynı sınıf EXC yolunda — `VEKTOR_EXC 4` → `mov x0,#4`
+SVC arg0'ı (x0) kdl_svc_ortak kaydetmeden önce yok ediyor. Şu an latent (syscall testleri x0-arg
+kontrol etmiyor) ama userspace syscall'lar arg geçince ısıracak. Takip: EXC vektörlerini de
+register-bozmaz yap + kdl_exc_ortak tip'i ESR EC'den türetsin (istisna gösterimi + kdl_istisna_isle
+imza dokunuşu → ayrı commit + arg-geçen syscall testi).
+
+**Sıradaki:** SVC arg0 onarımı (yukarıda); D1+D2+C7 birleşik gerçek EL0 user-process; D2-x86.
+
+---
+
+## D-120 — OS C7e: öncelikli (priority) scheduling — strict priority + round-robin koruma (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-119).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_pri[] + kdl_preempt_oncelik + kdl_preempt seçim
+mantığı); yeni `test/bare_metal/priority_arm.c`; `Makefile`. x86/host/codegen + trap-frame
+asm DEĞİŞMEDİ.]** FAZ C: öncelikli zamanlama — scheduler en yüksek öncelikli READY görevi
+seçer (eşit öncelikte round-robin korunur). Gerçek-zaman/QoS temeli.
+
+**Mekanizma:** kdl_pri[] (büyük=yüksek, varsayılan 0). kdl_preempt round-robin sırada
+(kdl_paktif sonrası) tarar, en yüksek öncelikli READY'yi seçer; eşit öncelikte ilk-bulunan
+(round-robin döner) kazanır. Tümü-eşit (pri=0) → eski round-robin ile BİREBİR aynı (regresyon
+yok). kdl_preempt_oncelik(gorev, pri) ile atanır.
+
+**Doğrulama (QEMU 11.0.1):** priority_arm — main yüksek (1), B düşük (0). Faz1: main meşgul-
+döner, timer tikler ama main tekelde → B aç kalır (b_sayac=0). Faz2: main kdl_uyu(10) bloklanır
+→ tek READY=B → B koşar (b_sayac>0). b1==0 && b2>0 → "PRIORITY OK ac-faz1=0". **Tüm scheduler
+regresyon yeşil:** sched(coop) + preempt + sleep + kanal bozulmadı (eşit-öncelik round-robin
+korundu). sıfır-uyarı; libc-temiz; test_tumu host-nötr.
+
+**Sıradaki:** D1+D2+C7 birleşik gerçek user-process; D2-x86 (ring3+TSS); C5 (virtio-blk);
+cap=4 IPC corner-case GDB-teşhisi (D-119).
+
+---
+
+## D-119 — OS C7d: kanal (SPSC IPC) — preemptive scheduler üstünde görevler-arası mesaj (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-118).
+
+**Karar [ETKİ: yeni `runtime/kdl_kanal.h` + `runtime/kdl_kanal.c`; yeni
+`test/bare_metal/kanal_arm.c`; `Makefile` (bm_a64_kanal.o kuralı + calistir_kanal_test_arm +
+os_kernels gate). x86/host/codegen + scheduler runtime DEĞİŞMEDİ.]** FAZ C: KEMGU `kanal`
+ilkelinin (DRF V1 — R-KANAL aksiyomu, `görev`/`kanal` keyword'leri) çekirdek-düzeyi karşılığı.
+SPSC halka tampon + preemptive scheduler + bloklamalı-alım birlikte çalışır → görevler-arası
+mesaj geçişi (IPC) kanıtı.
+
+**Mekanizma:** `KdlKanal` opak SPSC halka tampon (volatile buf/bas/son, tek slot rezerve →
+KAP-1 öğe). `kdl_kanal_gonder/al` busy-wait bloklar (dolu/boş iken döngü); preemptive scheduler
+(C7b) timer-IRQ'da karşı göreve geçirir → ilerleme garanti (tek çekirdek, kilitlenme yok).
+Tek-çekirdek → bellek-bariyeri gerekmez (SMP'de DMB eklenir).
+
+**Doğrulama (QEMU 11.0.1):** kanal_arm — üretici görev 1..10 yollar, tüketici (main) boş-kanalda
+bloklanıp uyanarak 10 değeri FIFO sırayla alır+toplar → "KANAL OK toplam=55" (libc-temiz).
+Scheduler regresyon: preempt (PREEMPT OK) + sleep (B WOKE) bozulmadı. test_tumu host-nötr
+(kdl_kanal yalnız bare-metal'de derlenir). sıfır-uyarı.
+
+**KISIT (dürüst kayıt):** Üretici-tarafı dolu-bloklama (back-pressure) çok küçük kapasite (KAP=4)
+ile hızlı ping-pong preemption altında DETERMINISTIK bir durum bozulmasına yol açtı (kanal global
+0x40004000 → 5; FAR=0x19; üretici `gonder` içinde dolu-bloklarken). Yığın-bitişikliği DEĞİL
+(16KB ayrık yığınla aynı semptom); IRQ trap-frame dengeli (sub/add #272), yığın taşması yok →
+kök-neden açık, GDB-düzeyi ayrı oturuma ertelendi. Şimdiki demo KAP=16 (üretici tek planlama-
+diliminde tüm öğeleri yollar, dolu-bloklamaz); tüketici boş-bloklama bu kısıttan etkilenmez →
+milestone sağlam + doğrulanmış. Takip: cap=4 ping-pong corner-case'i GDB ile incele.
+
+**Sıradaki:** öncelikli scheduling; D1+D2+C7 birleşik gerçek user-process; D2-x86; C5 (virtio-blk);
+cap=4 IPC corner-case GDB-teşhisi.
+
+---
+
+## D-118 — OS C7c: blocking scheduler (sleep/wake) — preemptive üstüne (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-117).
+
+**Karar [ETKİ: `runtime/kdl_gorev.c` (kdl_block[] + kdl_uyu + kdl_preempt blocking dalı); yeni
+`test/bare_metal/sleep_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]** FAZ C: blocking
+(sleep/wake) — görev N tick uyur, scheduler atlar, uyanınca kaldığı yerden sürer. Gerçek
+zaman/I-O bekleme temeli (sleep(), bloklu I/O).
+
+**Mekanizma:** her görevin tick geri-sayımı (kdl_block[]). kdl_uyu(N) → block=N + spin (scheduler
+bloklu süresince ATLAR, görev koşmaz). kdl_preempt her tick tüm block'ları azaltır + yalnız READY
+(block==0) göreve geçer; hepsi bloklu → idle (mevcutta kal).
+
+**Doğrulama (QEMU 11.0.1):** sleep_arm — görev B kdl_uyu(8) ile bloklanır, A (main) o sırada koşar
+(a_sayac artar), 8 tick sonra B READY → uyanır → "B WOKE a_kostu=VAR" (A uyku sırasında koştu).
+Diğer scheduler testleri (sched/preempt) regresyonsuz. sıfır-uyarı.
+
+**Sıradaki:** öncelikli scheduling; D1+D2+C7 birleşik gerçek user-process; D2-x86; C5 (virtio-blk).
+
+---
+
+## D-117 — OS C7b: preemptive scheduling (timer-IRQ → zorunlu bağlam-değiştirme) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-116).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (kdl_irq_ortak → FULL trap-frame + kdl_irq_isle);
+`runtime/kdl_zaman.c` (kdl_irq_isle); `runtime/kdl_gorev.c` (kdl_preempt + preemptive scheduler);
+yeni `test/bare_metal/preempt_arm.c`; `Makefile`. x86/host/codegen DEĞİŞMEDİ.]** FAZ C:
+preemptive multitasking — timer-IRQ görevi ZORLA switch eder (görev yield etmez).
+
+**Mimari (full trap-frame IRQ):** kdl_irq_ortak artık FULL bağlam (x0-x30 + ELR_EL1 + SPSR_EL1 =
+272 bayt, x30@240/ELR@248/SPSR@256) kaydeder → kdl_irq_isle(sp) [GICC_IAR + tik/re-arm +
+EOI(switch-ÖNCESİ) + kdl_preempt] devam SP'sini döner → SP swap (preempt'te sonraki görevin
+trap-frame'i) → restore → eret. Preempt kapalıysa SP aynı → eski davranış (timer/sched testleri
+NÖTR, regresyonsuz).
+
+**Preemptive scheduler (kdl_gorev.c):** kdl_preempt(sp) round-robin görev trap-frame SP swap.
+kdl_preempt_gorev_olustur sentetik trap-frame kurar (ELR=giriş, SPSR=EL1h+IRQ-açık) → ilk switch
+eret ile göreve atlar. **EOI switch-ÖNCESİ KRİTİK:** GIC serbest kalır → sonraki timer-IRQ
+sonraki görevi preempt eder; aksi halde IRQ27 active kalır → deadlock.
+
+**Doğrulama (QEMU 11.0.1):** preempt_arm — 2 görev (A=main, B) busy-loop, ASLA yield ETMEZ.
+B **1071 kez** koştu (yalnız timer preemption ile!), A 4 kez → "PREEMPT OK". Timer/sched/capstone
+regresyonsuz (Stage-1 doğrulandı: full-trap-frame, preempt-off = eski davranış). sıfır-uyarı.
+
+**Kapsam/sınır:** round-robin (öncelik/quantum-ayarı yok = C7c TCB-durum); tek adres-uzayı
+(görevler bellek paylaşır; D1 ile birleşik per-process preemptive sonra); aarch64 (x86 IRQ0-stub
+trap-frame rework = sonra).
+
+**Sıradaki:** D1+D2+C7b birleşik gerçek user-process; C7c (öncelik/durum); D2-x86; C5 (virtio-blk).
+
+---
+
+## D-116 — OS D1: per-process adres-uzayı izolasyonu (TTBR0 swap) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-115).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (kdl_surec_kur + kdl_ttbr_degis — yeni fonksiyonlar); yeni
+`test/bare_metal/d1_arm.c`; `Makefile` (calistir_d1_test_arm + os_kernels gate). Diğer kernel'ler
+için dormant. x86/host/codegen DEĞİŞMEDİ.]** FAZ D: per-process adres-uzayı — her sürece ayrı
+sayfa tablosu, geçişte TTBR0 swap → process bellek izolasyonu (D2 privilege ayrımının tamamlayıcısı).
+
+**Mekanizma:** `kdl_surec_kur(L1, L2, user_pa)` — kernel identity (paylaşılan, AP=00) + user VA
+(0x42000000) → sürece-özel `user_pa`. `kdl_ttbr_degis(L1)` — TTBR0_EL1 swap + dsb/tlbi/isb (TLB
+flush) → adres-uzayı geçişi.
+
+**Doğrulama (QEMU 11.0.1):** d1_arm — 2 süreç (A: user→PA 0x44000000, B: user→PA 0x46000000),
+AYNI sanal adres 0x42000000'a A 0xAA / B 0xBB yazar; TTBR geçişlerinden sonra A hâlâ 0xAA, B hâlâ
+0xBB → "SUREC A uva=0xaa" + "SUREC B uva=0xbb" = birbirini ETKİLEMEZ = **izolasyon kanıtı**. Diğer
+kernel'ler regresyonsuz (yeni fonksiyonlar dormant). sıfır-uyarı.
+
+**Kapsam/sınır:** demo EL1'de (VA→PA izolasyonunu izole gösterir; tam EL0-user-process = D1+D2
+birleşimi); scheduler-entegrasyonu (context switch'te TTBR swap) sonra; kernel-identity aliasing
+(PA_A/B aynı zamanda identity-VA'da görünür) — demo user-VA'dan eriştiği için zararsız.
+
+**Sıradaki:** D1+D2 birleşik EL0 user-process (ayrı adres-uzayı + EL0); C7b preemptive; D3
+process oluşturma (fork/exec-eşdeğeri).
+
+---
+
+## D-115 — OS D2: aarch64 finer paging (L2 2MB) → user/kernel privilege ayrımı (EL0) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-114).
+
+**Karar [ETKİ: `runtime/kdl_mmu.c` (L1[1] RAM → L2 2MB tablo); `linker/bare-metal-aarch64.ld`
+(.user section @0x42000000); `boot/start_aarch64.S` (kdl_el0_calistir); `runtime/kdl_kesme.c`
+(syscall num2/3); yeni `test/bare_metal/d2_arm.c`; `Makefile` (calistir_d2_test_arm + os_kernels
+gate). x86/host/codegen DEĞİŞMEDİ.]** FAZ D opener: gerçek EL0/EL1 (user/kernel) privilege ayrımı.
+
+**Finer paging (D2 ön-koşulu):** C8a'nın L1[1] 1GB Normal bloğu → L2 tablo (512 × 2MB identity
+sayfa). Per-region izin artık mümkün: kernel sayfaları AP=00 (EL1-only); user 2MB sayfası
+(0x42000000) AP=01 (EL0+EL1 RW). Bu, D-114'teki D2-wall'u (EL0-writable RAM → EL1-non-executable)
+ayrı user-page ile çözer (kernel kodu hâlâ AP=00 EL1-exec).
+
+**D2 mekanizması:** `kdl_el0_calistir` (boot asm): SP_EL0 + ELR_EL1 + SPSR_EL1(EL0t) kur, eret →
+EL0. EL0 kodu (d2_arm.c `el0_kod`, `.user` section @0x42000000, SELF-CONTAINED pure-SVC) kernel/
+device sayfalarına (AP=00) DOĞRUDAN erişemez → yalnız SVC ile EL1 kernel'e geçer. Handler
+SPSR_EL1.M[3:2] okur → kaynak-EL.
+
+**Doğrulama (QEMU 11.0.1):** d2_arm → "D2 BASLA (EL1)" + "EL0 SYSCALL kaynak-EL=" + "0x0"
+(=EL0, privilege ayrımı KANITI) + "D2 OK". 6 aarch64 kernel (dizi/sched/timer/syscall/istisna/
+capstone) regresyonsuz (L2 finer granülarite + boş .user zararsız). sıfır-uyarı. test_tumu YEŞİL.
+
+**Kapsam/sınır:** tek user-page (kod+stack aynı AP=01 sayfada → EL0 kendi kodunu yazabilir; tam
+izolasyon = kod AP=11-RO + data AP=01 ayrı sayfa + D1 per-process sayfa tablosu). x86 ring3 (TSS
+gerekir) = D2-x86 ayrı. IRQ EL0'da maskeli (D2 testi basitliği).
+
+**Sıradaki:** D1 per-process adres-uzayı (TTBR0 swap, per-process L1/L2); C7b preemptive; C5
+(virtio-blk, import+codegen C-track).
+
+---
+
+## D-114 — OS C8c: fault-adresi teşhisi (FAR_EL1 / CR2) + D2 ertelendi (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-113).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_istisna_isle). Sadece teşhis; davranış-nötr.]** İstisna
+(fault) işleyicisi artık fault ADRESİNİ de basar: aarch64 FAR_EL1, x86 CR2 (#PF lineer adresi).
+Data/instruction abort'ta hangi adrese erişildiği görünür → teşhis. Abort-dışı için stale ama
+zararsız.
+
+**Doğrulama:** istisna testleri (aarch64 data-abort + x86 ud2) hala geçer + "adr=0x<FAR>" basar.
+Sıfır-uyarı (iki arch). Diğer kernel'ler regresyonsuz (yalnız fault yolunda çalışır).
+
+**NOT — D2 (EL0/ring3 privilege ayrımı) ERTELENDİ:** EL0 user/kernel ayrımı denendi. ARMv8
+mimari kuralı: **EL0-writable RAM → EL1'de non-executable** (Prefetch Abort EC=0x21 ile
+kanıtlandı). Tek-region identity-map (L1 1GB blok) kernel-kodu + EL0-user-region'ı aynı sayfa
+permission'a zorluyor → çakışma. Minimal D2 AYRI user-region (finer L2/L3 sayfa tablosu +
+linker section yerleşimi) gerektirir = D1 per-process adres-uzayı ile birlikte yapılacak D-fazı
+paging işi. Tasarım (kdl_el0_calistir eret→EL0 + syscall SPSR_EL1 kaynak-EL raporu) hazır,
+revert edildi.
+
+**Sıradaki seçenekler:** D-fazı (finer page tables → per-process adres uzayı + privilege ayrımı);
+C5 (virtio-blk, import+codegen C-track fix gerek); C7b (preemptive — IRQ-handler full-context
+trap-frame rework).
+
+---
+
+## D-113 — OS C7a: cooperative scheduling — bağlam-değiştirme (görev kuyruğu) (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-112).
+
+**Karar [ETKİ: yeni `runtime/kdl_gorev.c`; `boot/start_aarch64.S` + `boot/start_x86_64.S`
+(kdl_baglam_degis asm); yeni `test/bare_metal/sched_test.c`; `Makefile` (bm_*_gorev.o + 2 sched
+hedefi + os_kernels gate). x86 IR/host/codegen DEĞİŞMEDİ.]** FAZ C: işbirlikçi çok-görevlilik.
+Görevler kdl_gorev_ver() (yield) ile gönüllü CPU bırakır → round-robin bağlam-değiştir.
+MMU/preemption gerektirmez (C7b preemptive = timer-IRQ quantum, sonra).
+
+**Tasarım:** TCB = callee-saved register'lar + SP. kdl_baglam_degis (asm): mevcut görevin
+callee-saved'ını TCB'ye kaydet, sonrakinin kinden yükle, `ret` → sonraki görev kaldığı yerden
+sürer (caller-saved yield çağrı-noktasında C ABI'siyle korunur, kaydetmeye gerek yok). Görev 0 =
+main bağlamı (init gerektirmez; ilk yield'de TCB'ye kaydedilir). Yeni görev: TCB dönüş-adresi =
+giriş, TCB.sp = yığın-tepe.
+- aarch64: x19-x28+x29+x30+sp (TCB[0..12], ×8 bayt; x30=giriş, ret oraya).
+- x86: rbx/rbp/r12-r15+rsp (TCB[0..6]); giriş yığına push (switch ret'i pop eder).
+
+**Doğrulama (QEMU 11.0.1):** sched_test.c (AYNI kernel iki mimaride): main+gorev1 round-robin →
+"SCHED BASLA / [main] / [gorev1] / [main] / [gorev1] / [main] / [gorev1] / SCHED OK" — interleave
+= bağlam-değiştirme çalışıyor. aarch64 + x86 ikisi de geçti. kdl_gorev.c sıfır-uyarı. Diğer
+kernel'ler regresyonsuz (kdl_baglam_degis dormant). os_kernels gate artık **14** (7 yetenek × 2 arch).
+
+**KEMGU bağı:** region-ownership + `görev` (D-008 concurrency) ileride gerçek thread'le buluşur —
+statik tip-kontrollü `görev`/`kanal`'ın runtime temeli.
+
+**Kapsam/sınır:** cooperative (preemption yok = C7b timer-IRQ quantum); tek adres-uzayı (TCB ortak
+bellek; per-process MMU-izolasyon = D1); SIMD-context yok (-mgeneral-regs-only, C8b).
+
+**Sıradaki:** C7b preemptive (timer-IRQ → zorunlu yield) / C5 (import+codegen) / D1 (per-process).
+
+---
+
+## D-112 — OS C8a: aarch64 MMU-on (identity map) — RAM Normal-WB, sanal-bellek temeli (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-111).
+
+**Karar [ETKİ: yeni `runtime/kdl_mmu.c`; `boot/start_aarch64.S` (`bl kdl_mmu_kur` main'den önce);
+`Makefile` (bm_a64_mmu.o). x86/host/codegen DEĞİŞMEDİ.]** FAZ C keystone: aarch64 MMU'yu
+identity-map ile aç → RAM Device-nGnRnE'den **Normal-WB cacheable**'a → cache + SIMD-uyumlu
+bellek + sanal-bellek/process-izolasyon (D fazı) temeli.
+
+**Identity harita (4KB granül, 39-bit VA, L1 1GB blok):**
+- L1[0] 0-1GB → Device (GICv2 0x08000000, UART 0x09000000).
+- L1[1] 1-2GB → Normal-WB (kernel + 16MB heap @ 0x40000000).
+- MAIR (attr0=Device, attr1=Normal-WB), TCR (T0SZ=25, 4KB, WB, inner-sh, EPD1, IPS=36bit),
+  TTBR0=L1, SCTLR.M|C|I. dsb/tlbi/isb sıralı.
+
+**x86_64:** long mode ZATEN paging gerektirir → `boot/start_x86_64.S` identity sayfa
+tablolarıyla zaten MMU-on (PVH→long mode). Ek MMU kurulumu gerekmez; kdl_mmu.c yalnız aarch64.
+
+**Doğrulama (QEMU 11.0.1):** 4 aarch64 kernel MMU-on boot eder — hello, region+heap-dizi (memcpy
+Normal-cached bellekte), timer (IRQ MMU üstünden), syscall. x86 regresyonsuz. test_tumu YEŞİL
+(host değişmedi). kdl_mmu.c sıfır-uyarı.
+
+**Kapsam/sınır:** identity-only (VA==PA), tek adres-uzayı (per-process = D1). **-mgeneral-regs-only
+KORUNUYOR (C8b ertelendi):** MMU Normal-memory'yi açtı ama kernel-geneli SIMD, IRQ/exception
+handler'larında SIMD-bağlam kaydı gerektirir (handler'lar şu an yalnız GPR kaydeder, q0-q31
+değil) → kesme anında SIMD-state bozulur. Linux-benzeri sound kernel-FP-yasağı politikası sürüyor;
+SIMD'i global açmak ayrı refinement (handler SIMD-save). C8c sayfa-hata: data abort zaten
+kdl_exc_ortak'ta yakalanıyor (C3a) → ESR+ELR teşhis+halt; demand-paging D-fazı.
+
+**Sıradaki:** C7a cooperative scheduling (görev kuyruğu + context switch, MMU-bağımsız).
+
+---
+
+## D-111 — OS Capstone: tam yığın tek boot'ta kompoze (region+timer+IRQ+syscall) — entegrasyon kanıtı (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-110).
+
+**Karar [ETKİ: yeni `test/bare_metal/capstone.c`; `Makefile` (2 capstone hedef + os_kernels 12 teste).
+Runtime/codegen/host/boot DEĞİŞMEDİ.]** Minimal gösterici parçalarını (her biri ayrı kanıtlı) TEK
+boot'ta birlikte koşturur → izole birim testlerin ötesinde **entegrasyon/kompozisyon kanıtı**.
+
+**Capstone kernel (iki arch ortak C kernel):** (1) region dizi 1..10=55 (frame allocator);
+(2) timer+IRQ aç (kdl_kesme_kur + kdl_timer_baslat); (3) region tahsis IRQ AÇIKKEN → "POST-IRQ=99"
+(**allocator IRQ-safe** — kesme handler'ları allocation-free olduğundan heap bozulmuyor; D-108/109
+KISIT'ı pratikte doğrulanır); (4) syscall → "CAPSTONE OK"; (5) idle (timer arka planda → "TIMER OK
+tik=5").
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 12/12:** capstone (aarch64 virt + x86_64 PVH) →
+"55" + "99" + "CAPSTONE OK" + "TIMER OK" hepsi. 10 birim test + 2 capstone.
+
+**🎉 MİNİMAL OS GÖSTERİCİ + ENTEGRASYON TAM (her iki mimaride):** os/c1-region-backing branch —
+C1a/b/x86 (region) + C3a (exception) + C3b/C4 (IRQ+timer) + C6 (syscall) + Capstone (7 commit).
+`make calistir_os_kernels` = **12 QEMU boot kanıtı**. Beyond-minimal (flag'li): C5 virtio codegen
+(task_09d48d31 — &Struct+sonuç deep multi-subsystem), C7 scheduling, MMU, self-host bare-metal.
+
+---
+
+## D-110 — OS C6: bare-metal sistem çağrısı (aarch64 SVC + x86 int 0x80) — dispatch+dönüş; MİNİMAL GÖSTERİCİ TAM (2026-06-30)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-109).
+
+**Karar [ETKİ: `runtime/kdl_kesme.c` (kdl_syscall_isle + IDT[0x80] gate); `boot/start_aarch64.S`
+(kdl_exc_ortak ESR.EC kontrolü → kdl_svc_ortak); `boot/start_x86_64.S` (kdl_syscall_stub); yeni
+`test/bare_metal/syscall_test.c` (portable); `Makefile` (2 syscall hedef + os_kernels 10 teste).
+Codegen/host DEĞİŞMEDİ.]** C6: minimal sistem çağrısı → **MİNİMAL OS GÖSTERİCİ TAMAMLANDI**.
+
+**aarch64 (SVC):** sync exception handler (kdl_exc_ortak) artık ESR.EC ayrımı yapar: 0x15 (SVC) →
+kdl_svc_ortak (bağlam kaydet, num=x8/arg=x0, kdl_syscall_isle, **ERET**); diğer EC → kdl_istisna_isle
+(fault, halt). İstisna ve syscall AYNI sync vektörde (0x200), EC ile ayrılır.
+
+**x86_64 (int 0x80):** IDT[0x80] → kdl_syscall_stub (caller-saved kaydet, num=rax/arg=rdi,
+kdl_syscall_isle, **IRETQ**).
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 10/10:** syscall_test (iki arch ortak): "BEFORE
+SYSCALL" → "SYSCALL OK num=1" (kernel dispatch) → "AFTER SYSCALL" (eret/iretq dönüş kanıtı).
+test_tumu YEŞİL (host değişmedi).
+
+**🎉 MİNİMAL OS GÖSTERİCİ TAM (her iki mimaride QEMU-kanıtlı):**
+boot + region-bellek + sürücü(UART) + exception + IRQ + timer + syscall — aarch64 (QEMU virt) +
+x86_64 (QEMU PVH). AYNI KEMGU region-confinement runtime (F4.2b/F4.3 backing) iki platformda.
+`make calistir_os_kernels` = 4 boot + 2 istisna + 2 timer + 2 syscall (D-105..D-110).
+
+**Kapsam-dışı (Mehmet kararı: minimal-gösterici):** scheduling/multitasking (C7); virtio-blk
+codegen fix (C5 — &Struct param+sonuç<> segfault; UART sürücü zaten "bir sürücü" gereğini karşılar,
+virtio beyond-minimal); MMU/sayfalama; self-host bare-metal.
+
+---
+
+## D-109 — OS C3b/C4: bare-metal IRQ + periyodik timer (GICv2/CNTV + PIC/PIT) — tick kanıtı (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-108).
+
+**Karar [ETKİ: yeni `runtime/kdl_zaman.c` (IRQ dispatch + timer, iki arch ortak API);
+`boot/start_aarch64.S` (IRQ vektör routing + kdl_irq_ortak bağlam-kaydet/eret);
+`boot/start_x86_64.S` (kdl_irq0_stub + EOI/iretq); `runtime/kdl_kesme.c` (IDT[32]→IRQ0); yeni
+`test/bare_metal/timer_test.c` (portable, iki arch); `Makefile` (bm_*_zaman.o + 2 timer hedef +
+os_kernels 8 teste genişledi). Codegen/host DEĞİŞMEDİ.]** C3b IRQ altyapısı + C4 timer birleşik:
+periyodik donanım kesmesi → handler → tick (C4 timer'ı C3b IRQ altyapısı olmadan kanıtlanamaz).
+
+**Ortak API (arch-bağımsız kernel):** `kdl_kesme_kur()` (GIC/PIC init) + `kdl_timer_baslat()`
+(CNTV/PIT + IRQ aç) + `kdl_kesme_isle(irq)` (dispatch, tik say) + `kdl_idle()` (wfi/hlt). AYNI
+timer_test.c iki mimaride (kernel arch-bağımsız, runtime arch-spesifik).
+
+**aarch64 (GICv2 + sanal generic timer):** GICD@0x08000000 + GICC@0x08010000 enable + ISENABLER0
+bit27 (timer PPI 27). CNTV ~10ms (CNTFRQ/100). IRQ vektör (0x280, entry5 → kdl_irq_ortak):
+bağlamı kaydet (x0-x18,x30; x19-x29 C korur) → GICC_IAR oku → kdl_kesme_isle → re-arm (CNTV_TVAL,
+ISTATUS temizler) → GICC_EOIR ack → **ERET** (kesilen wfi-döngüsüne dön). DAIF.I temizle.
+
+**x86_64 (PIC 8259 + PIT 8254):** PIC remap IRQ0-15→vektör32-47 (ICW1-4), mask=yalnız IRQ0. PIT
+ch0 mode3 ~100Hz (bölen 11932). IDT[32]→kdl_irq0_stub: caller-saved kaydet → kdl_kesme_isle →
+PIC EOI (port 0x20) → **IRETQ**. sti.
+
+**KISIT:** kesme bağlamı bölge/frame allocator KULLANMAZ (tek-thread, IRQ-safe değil) → yalnız UART
+yazımı + register.
+
+**Doğrulama (QEMU 11.0.1) — `calistir_os_kernels` 8/8:**
+- `calistir_timer_test_arm`: GICv2+CNTV → "TIMER BASLA" + 5 tik → "TIMER OK tik=5".
+- `calistir_timer_test_x86`: PIC+PIT → "TIMER OK tik=5".
+- 4 boot + 2 istisna regresyonsuz (IRQ vektör routing sync exception'ları etkilemedi). Sıfır
+  uyarı (iki arch). test_tumu YEŞİL (host değişmedi).
+
+**Sıradaki:** C5 virtio sürücü codegen fix (&Struct param+sonuç<> segfault — virtio_blk_init/bind),
+C6 minimal syscall (SVC/int).
+
+---
+
+## D-108 — OS C3a: bare-metal exception vektörleri (aarch64 VBAR + x86 IDT) — fault→teşhis+halt (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-107).
+
+**Karar [ETKİ: yeni `runtime/kdl_kesme.c` (istisna işleyici + x86 IDT kur); `boot/start_aarch64.S`
+(VBAR + 16-giriş vektör tablosu + EL-duyarlı ortak işleyici); `boot/start_x86_64.S` (32 ISR stub +
+isr_ortak + kdl_idt_kur çağrısı); yeni `test/bare_metal/istisna_{arm,x86}.c`; `Makefile`
+(bm_*_kesme.o + 2 istisna test hedefi). Runtime/codegen/host DEĞİŞMEDİ.]** C3 ilk adım: CPU
+istisnaları artık vektör tablosuyla yakalanır → sessiz çöküş yerine "ISTISNA tip/synd/PC" + halt.
+
+**aarch64 (VBAR):** boot 16-giriş (×0x80, 2KB-hizalı) vektör tablosu kurar, VBAR_ELx=tablo
+(EL-duyarlı). Ortak işleyici ESR/ELR okur — **KRİTİK EL-duyarlı:** QEMU virt **EL1**'de koşar
+(`-d int` "from EL1 to EL1"); EL1'de `esr_el2` okumak UNDEF → işleyici kendini sonsuz fault'lar
+(58683× gözlendi). Düzeltme: CurrentEL kontrolü → esr_el1/elr_el1.
+
+**x86_64 (IDT):** 32 ISR stub (hata-kodlu 8/10/11/12/13/14/17/21 ISR_ERR, diğerleri ISR_NOERR +
+dummy 0). Long mode same-privilege exception SS:RSP:RFLAGS:CS:RIP push eder → ortak yığın
+[vektör][hata][RIP] → isr_ortak → kdl_istisna_isle(rdi,rsi,rdx). boot long_entry'de `kdl_idt_kur()`
+(C; gate-tablosu 256×16B + lidt) main'den ÖNCE. ud2 → vektör 6.
+
+**KISIT:** işleyiciler bölge/frame allocator KULLANMAZ (tek-thread, IRQ-safe değil) → yalnız UART
+yazımı + register oku.
+
+**Doğrulama (QEMU 11.0.1):**
+- `calistir_istisna_test_arm`: eşlenmemiş erişim → ESR=0x96000000 (EC 0x25 Data Abort) →
+  "ISTISNA tip=0x4" + halt; "GORUNMEMELI" yok.
+- `calistir_istisna_test_x86`: ud2 → "ISTISNA tip=0x6" (invalid opcode) + halt; "GORUNMEMELI" yok.
+- 4 normal kernel (aarch64+x86 × hello+dizi) regresyonsuz. test_tumu YEŞİL (host değişmedi).
+
+**DÜZELTME (D-105/107 notları):** QEMU virt -cpu cortex-a72 **EL1**'de boot eder (EL2 DEĞİL).
+FP-enable kodu EL-duyarlı olduğu için EL1'de CPACR_EL1 yolu çalışıyordu (CPTR_EL2 dalı ölü, zararsız).
+D-105/107'deki "EL2" ifadeleri bu yönde okunmalı.
+
+**Sıradaki:** C3b IRQ altyapısı (GICv2 aarch64 / PIC 8259 x86) — C4 timer için.
+
+---
+
+## D-107 — OS C1-x86: x86_64 bare-metal parite — PVH→long-mode boot, AYNI region kernel (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-106).
+
+**Karar [ETKİ: yeni `boot/start_x86_64.S` (PVH→long mode); yeni `linker/bare-metal-x86_64.ld`;
+`Makefile` (BM_X86_OBJS + 2 x86 kernel hedefi + `calistir_os_kernels` toplu gate). Runtime/
+codegen/host DEĞİŞMEDİ.]** Mehmet kararı (aarch64+x86_64 paralel): AYNI region-backed kernel'i
+x86_64'te de boot et.
+
+**PVH boot (multiboot1 yerine):** QEMU `-kernel` multiboot1 için 32-bit ELF ister, 64-bit'i
+reddeder ("Cannot load x86-64 image, give a 32bit one"). Çözüm = PVH: `.note.Xen` içinde
+XEN_ELFNOTE_PHYS32_ENTRY (tip 18) → QEMU 64-bit ELF'i 32-bit `pvh_entry`'den boot eder
+(ELFCLASS64 korunur). Minimal PVH stub'la (COM1'e 'OK') önce doğrulandı.
+
+**32-bit → long mode trampoline (boot/start_x86_64.S):**
+1. (32-bit) BSS sıfırla (sayfa tabloları .bss'te → temizlenir, sonra kurulur).
+2. Identity sayfa tabloları: PD 512×2MB huge page = 0..1GB (kernel+stack+16MB heap < 1GB);
+   PDPT[0]→PD; PML4[0]→PDPT.
+3. CR3=PML4 → CR4.PAE → EFER.LME (MSR 0xC0000080) → CR0.PG|PE → long mode.
+4. GDT (null + 64-bit code L-bit + data); `ljmp $0x08,$long_entry` → 64-bit.
+5. (64-bit) segment'ler + RSP=__stack_top + `call main`; main dönerse hlt döngüsü.
+
+**Region backing ARCH-BAĞIMSIZ (C0 mimarisinin öngörüsü doğrulandı):** kdl_bolge.c +
+kdl_bare_heap.c (frame allocator) + kdl_dizi.inc DEĞİŞMEDEN x86_64'te derlenir/çalışır. Tek
+arch-spesifik fark: UART=16550 (COM1 0x3F8 port I/O, KDL_UART_PUTC=kdl_uart_16550_putc), boot
+stub, linker. `-mgeneral-regs-only` (x86: SSE emit etme → boot'ta CR4.OSFXSR enable gerekmez;
+aarch64'teki Device-memory q-register sorununun simetrik çözümü).
+
+**Doğrulama (qemu-system-x86_64 11.0.1) — `calistir_os_kernels` toplu gate 4/4:**
+- `calistir_kernel_dizi_x86_bare_metal`: AYNI kernel_dizi.kem → BOOT + "KERNEL DIZI OK" + "55"
+  (libc-yok temiz). aarch64 ile bit-bit aynı .kem + aynı region runtime.
+- `calistir_uart_merhaba_x86_bare_metal`: "Merhaba KEMGU" + "42".
+- aarch64 hedefleri (qemu_smoke + dizi) regresyonsuz. `test_tumu` YEŞİL (host değişmedi).
+
+**Sonuç — C1 keystone TAM (her iki mimaride):** aynı KEMGU kaynağı (kernel_dizi.kem) + aynı
+region-confinement runtime (F4.2b/F4.3 backing) hem aarch64 (QEMU virt) hem x86_64 (QEMU PVH)
+üzerinde boot eder + doğru hesaplar. Region modeli OS'in bellek temelini iki platforma da bedavaya verir.
+
+**Kapsam/sınır:** PVH 32-bit entry → long mode minimal (identity 1GB, tek-çekirdek, IDT/exception
+yok — aarch64 ile simetrik). 16550 init V1-no-op (QEMU yeterli; ham donanım board-init sonra).
+Sıradaki: C3 exception/interrupt (DESIGN-STOP), C4 timer.
+
+---
+
+## D-106 — OS C1b: bare-metal dizi runtime — heap Dizi<tam32> kernel boot (kdl_dizi.inc tek-kaynak) (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-105).
+
+**Karar [ETKİ: yeni `runtime/kdl_dizi.inc` (paylaşımlı dizi impl); `runtime/kdl_runtime.c`
+(dizi bloğu → `#include`); `runtime/kdl_bare_heap.c` (kdl_panik seam + `#include`); yeni
+`test/ornekler/kernel_dizi.kem`; `Makefile` (aarch64 bare-metal shared-objects refactor +
+`calistir_kernel_dizi_bare_metal`). Codegen DEĞİŞMEDİ; host davranışı DEĞİŞMEDİ.]** C1a
+region-backing'i diziye genişlet: heap `Dizi<tam32>` (kdl_dizi_* runtime) bare-metal'de boot.
+
+**Tek-kaynak carve (duplikasyon YASAK — D-069 sınır-kontrolü iki yerde olamaz):**
+- `kdl_dizi.inc`: KdlDizi + kdl_dizi_buyut/olustur/ekle/al/yaz/yapi/boyut/kapasite/serbest +
+  kdl_dizi_oob. Host (kdl_runtime.c) VE bare-metal (kdl_bare_heap.c) `#include` eder → her TU
+  KENDİ kopyasını derler, ASLA birlikte linklenmez (duplicate-symbol yok) = tek kaynak.
+- Panik seam `kdl_panik`: host kdl_runtime.c (stderr+abort); bare-metal kdl_bare_heap.c
+  (→ kdl_panik_dur, UART+halt). kdl_dizi_oob FREESTANDING biçimlenir (snprintf YOK; "(i,boyut)"
+  detayı korunur) → host çıktısı bayt-özdeş, bare-metal'de libc'siz çalışır. kdl_panik codegen
+  inline-OOB (src/llvm.c) tarafından da çağrılır → evrensel panik girişi.
+
+**Makefile shared-objects refactor (zorunluydu):** aarch64 kernel'leri artık `BM_A64_OBJS`
+paylaşır (start+uart+yazdir+bolge+heap+panik). kdl_bare_heap.o artık `.inc` yüzünden
+kdl_panik→kdl_panik_dur referansı verdiğinden HER kernel kdl_runtime_panik.o linklemeli (merhaba
+dahil) → inline-compile yerine ortak obje kuralları.
+
+**Doğrulama:**
+- `calistir_kernel_dizi_bare_metal` (QEMU, qemu-system-aarch64 11.0.1): kernel BOOT →
+  "KERNEL DIZI OK" + "55" (1..10 toplam; dizi_olustur→ekle [kapasite 0→4→8→16: kdl_dizi_buyut +
+  bölge realloc + memcpy] → al [D-069 sınır-kontrollü]). libc-yok kapısı temiz. IR'de
+  kdl_dizi_olustur/ekle_tam/al_tam/boyut/kapasite_ayarla = heap path (stack değil).
+- `calistir_qemu_smoke` (merhaba shared-objects refactor sonrası): boot + "Merhaba KEMGU"+"42" ✓
+  (regresyon yok).
+- Host: kdl_runtime.c (`.inc` ile) sıfır-uyarı; `calistir_llvm_test` (30 array programı) yeşil;
+  `test_tumu` YEŞİL (self-host fixpoint 32157 satır + tüm array/OOB testleri — `.inc` host
+  davranışını değiştirmedi). Yeni bare-metal objeleri sıfır-uyarı.
+
+**Kapsam/sınır:** (1) dizi-OOB → kdl_panik (D-069) bare-metal'de geçerli (kernel UART "PANIK:"+halt).
+(2) Büyüyen-dizi grow-leak (F4.3 flag, task_dc5b969f) bare-metal'de de var (sabit-kapasiteli
+kernel-loop için yeterli). (3) x86_64 dizi paritesi C1-x86 (x86_64 long-mode boot bring-up gerekir).
+
+---
+
+## D-105 — OS C1a: bare-metal bölge-backing — ilk boot-eden region-alloc KEMGU kernel (aarch64/QEMU) (2026-06-29)
+
+> **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
+> (branch tabanı: D-104 sonrası; merge'de origin/main ilerlemişse güncelle).
+
+**Karar [ETKİ: yeni `runtime/kdl_bare_heap.c`; `runtime/kdl_bolge.c` (#ifdef köprü);
+`boot/start_aarch64.S`; `linker/bare-metal-aarch64.ld`; `Makefile` (uart_merhaba + qemu_smoke).
+C derleyici/codegen DEĞİŞMEDİ; host yolu DEĞİŞMEDİ.]** OS gösterici-kernel FAZ C keystone'u:
+bölge runtime'ını bare-metal'e bağla — **codegen'e dokunmadan**, yalnız RUNTIME backing.
+
+**Kök bulgu (regresyon — readiness-envanteri "reçete-tam" dediği yer KIRIKTI):** Region codegen
+(F4.x) main dâhil HER fonksiyona koşulsuz `@kdl_global_bolge_al`/`@kdl_bolge_olustur`/
+`@kdl_bolge_serbest` emit eder (declare'da attribute yok → -O2 DCE EDEMEZ). Bare-metal link bu
+sembolleri sağlamıyordu → `calistir_uart_merhaba_bare_metal` HEAD'de `ld.lld: undefined symbol`
+ile KIRIK (hello-world dâhil TÜM kernel'ler). Ampirik kanıt: `kemgu --llvm uart_merhaba.kem`
+main'inde 3 canlı region çağrısı + mevcut link denemesi 3 undefined-symbol.
+
+**Çözüm (4 parça, codegen-nötr):**
+1. `kdl_bare_heap.c` (freestanding, yalnız <stdint/stddef>): linker heap bölgesinden
+   (`__heap_start..__heap_end`) bump + serbest-liste `malloc`/`free` + `memcpy`/`memset` +
+   `kdl_global_bolge_al`. Region 64KB blokları serbest-listede geri kazanılır → F4.3 per-iter
+   region-free → kernel-loop sınırlı-bellek temeli.
+2. `kdl_bolge.c`: `#ifdef KEMGU_BARE_METAL` → <stdlib.h> yerine malloc/free prototip (<stdlib.h>
+   aarch64-unknown-none'da YOK). Host (#else) AYNEN — `calistir_kdl_bolge_test` 33/33 ASan-temiz.
+3. `boot/start_aarch64.S`: FP/SIMD trap kapat — EL-duyarlı (QEMU virt EL2 → CPTR_EL2.TFP[10]=0;
+   ham EL1 → CPACR_EL1.FPEN=0b11).
+4. `linker`: stack üstüne 16 MB heap (`__heap_start/__heap_end`, NOBITS).
++ `Makefile`: bare-metal compile'lara `-mgeneral-regs-only` + region runtime'ı link'e ekle +
+   `calistir_qemu_smoke` `-serial file:` (Windows stdio-redirect bypass).
+
+**İki kritik bare-metal gotcha (QEMU `-d in_asm` trace ile teşhis edildi):**
+- **FP/SIMD trap:** clang -O2 16-baytlık struct move'u `ldr/stur q0` ile yapar → EL2 reset'te
+  trap → vektör 0x200 (vektör tablosu yok) → çöküş. (FP-enable + GPR-only.)
+- **Device-memory alignment:** MMU kapalıyken RAM = Device-nGnRnE → 16-baytlık q-erişimi
+  8-hizalı adreste **alignment-fault**. `-mgeneral-regs-only` q-register'ı tümden eler
+  (≤8-bayt hizalı erişim = Device-memory'de güvenli; Linux çekirdek deseni).
+
+**Doğrulama:** `calistir_qemu_smoke` (gerçek qemu-system-aarch64 11.0.1) → kernel BOOT +
+"Merhaba KEMGU - Bare Metal" + "42" ✓. kernel.elf q-register sayısı=0, libc-yok kapısı temiz,
+sıfır derleme uyarısı. `test_tumu` YEŞİL (self-host fixpoint 32157 satır kararlı; 72/72 codegen;
+4-mod driver; ASan-temiz — regresyon yok).
+
+**Kapsam/sınır:** (1) MMU kapalı → `-mgeneral-regs-only` kernel-geneli FP-yasağı (gösterici için
+yeterli; FP-li kernel = MMU+Normal-memory sonraki milestone). (2) Dizi (`kdl_dizi_*`) bare-metal'de
+HENÜZ yok → C1b (kdl_dizi.c carve + allocate-eden dizi kernel). (3) x86_64 boot stub/linker yok →
+C1-x86 (Mehmet kararı: aarch64+x86_64 paralel). (4) Üretici C-bootstrap kemgu; self-host bare-metal
+kapsam-dışı v1.
+
+---
+
 ## D-104 — düzelt(self-host codegen): blok-leksik-kapsam shadowing → değişken tablosu push/pop (2026-06-27)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir

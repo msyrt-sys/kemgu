@@ -1,0 +1,353 @@
+// =====================================================================
+// kem_os.kem — KEMGU-OS Faz-2: TEK .kem-native bare-metal OS iskeleti
+// ---------------------------------------------------------------------
+// Faz-1 keşif kernel'leri A⊕B⊕C⊕E'nin SERİ ENTEGRASYONU: dört alt-sistem
+// TEK boot'ta, TEK .kem imajında canlı. Bu, C-yazılı entegre çekirdeğin
+// (test/bare_metal/kemgu_os_arm.c) .kem-native ikizinin İSKELETİdir.
+//
+//   [1] BOOT     — .kem bare-metal boot + UART (A: kem_cekirdek_min)
+//   [2] HEAP     — region-runtime heap Dizi<tam32> (B: kem_dizi_kernel)
+//   [3] MMIO     — yetki<MMIO> capability + donanım register (C: kem_mmio_kernel)
+//   [4] HESAP    — özyineleme + iken + eşleş + eğer/değilse (E: kem_hesap_kernel)
+//   [5] SİSTEM   — .kem panik + exc-handler-mantığı (D-247, Faz-2c; 2b keşif entegre)
+//
+// Entegrasyon kanıtı: dört alt-sistem de doğru sonucu verirse (5/5 kontrol)
+// TEK marker "KEMGU KEM-OS OK" basılır. Herhangi biri bozuksa "... HATA".
+//
+// D-245 (Faz-2a): KONSOL ÇIKTI YOLU C runtime DEĞİL — .kem-native UART sürücüsü
+// (uart_satir/uart_tam_satir, aşağıda) ENTEGRE edildi + C kdl_yazdir yolu SİLİNDİ.
+// Kanıt: bu dosyanın derlenmiş IR'ında `call @kdl_yazdir*` = 0 (yalnız declare).
+//
+// Derleme (MMIO+metin nedeniyle +bm_a64_mmio.o +bm_a64_yetki.o +bm_a64_metin.o):
+//   ./build/kemgu --llvm test/ornekler/kem_os.kem > build/kem_os.ll
+//   clang -target aarch64-unknown-none -ffreestanding -nostdlib -O2 \
+//         -Wno-override-module -x ir build/kem_os.ll -c -o build/kem_os.o
+//   ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o build/kem_os.elf \
+//         build/kem_os.o build/bm_a64_mmio.o build/bm_a64_yetki.o \
+//         build/bm_a64_metin.o $(BM_A64_OBJS)
+//   qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -kernel build/kem_os.elf
+// =====================================================================
+
+// ---- Alt-sistem 3 sabitleri: MMIO (VirtIO-MMIO slot 0, QEMU virt) ----
+sabit VIRTIO_TABAN: tam64     = 167772160;   // 0x0A000000 (slot 0 taban)
+sabit VIRTIO_MAGIC_OFF: tam64 = 0;           // 0x000 MagicValue register offset
+sabit MAGIC_BEKLENEN: tam32   = 1953655158;  // 0x74726976 = "virt" (LE)
+sabit MMIO_OKU_YAZ: tam32     = 3;           // izin: OKU|YAZ
+
+// ==================== [0] .kem-native PL011 UART SÜRÜCÜSÜ ====================
+// D-244'te ayrı kem_surucu.kem'de kanıtlandı → D-245'te BU çekirdeğe ENTEGRE +
+// C kdl_yazdir yolu SİLİNDİ (Faz-2a, YASA-2: mevcut kernel kullanır, eski yol yok).
+// Konsol çıktısı artık TAMAMEN .kem: MMIO ile PL011 (0x09000000). uart_satir =
+// yazdir_metin'in, uart_tam_satir = yazdir_tam'ın .kem-native karşılığı.
+sabit UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (QEMU virt)
+sabit UART_DR: tam64    = 0;           // 0x00 veri register
+sabit UART_FR: tam64    = 24;          // 0x18 flag register
+sabit UART_TXFF: tam32  = 32;          // bit5 = TX FIFO dolu
+
+// Tek bayt yaz: FR.TXFF temizlenene kadar bekle → DR'ye yaz. yetki<MMIO> linear
+// (üret/oku-ödünç/yaz-ödünç/geri_al; & bitwise, != öncelik için parantez ZORUNLU).
+işlev uart_bayt(b: tam32) {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    iken (mmio_oku32(y, UART_TABAN + UART_FR) & UART_TXFF) != 0 {
+    }
+    mmio_yaz32(y, UART_TABAN + UART_DR, b);
+    geri_al(y);
+}
+
+// Metni bayt-bayt yaz (metin_bayt bare-metal, kdl_metin_bare.c/bm_a64_metin.o).
+işlev uart_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        uart_bayt(metin_bayt(s, i) olarak tam32);
+        i = i + 1;
+    }
+}
+
+// Satır (metin + newline) — yazdir_metin yerine.
+işlev uart_satir(s: metin) {
+    uart_metin(s);
+    uart_bayt(10);
+}
+
+// Sayı (decimal, özyinelemeli basamak) — yazdir_tam yerine.
+işlev uart_tam_yardim(n: tam32) {
+    eğer n > 0 {
+        uart_tam_yardim(n / 10);
+        uart_bayt((n % 10) + 48);
+    }
+}
+işlev uart_tam_satir(n: tam32) {
+    eğer n == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_tam_yardim(n);
+    }
+    uart_bayt(10);
+}
+
+// Onaltılık (hex) yaz — SATIRSIZ (mid-line; register değerleri için). dtam64 işaretsiz
+// (donanım register), >> tip-duyarlı lshr. 10-15 → 'a'-'f' (kod 87+r).
+işlev uart_hex_basamak(d: dtam64) {
+    eğer d > 0 {
+        uart_hex_basamak(d / 16);
+        değişken r: tam32 = (d - (d / 16) * 16) olarak tam32;   // d mod 16
+        eğer r < 10 {
+            uart_bayt(r + 48);        // '0'
+        } değilse {
+            uart_bayt(r + 87);        // 10 → 'a'
+        }
+    }
+}
+işlev uart_onaltilik(d: dtam64) {
+    eğer d == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_hex_basamak(d);
+    }
+}
+
+// ========================= [2] HEAP alt-sistemi =========================
+// Heap Dizi<tam32>: 1..10 ekle (kapasite 4→8→16 aşımı → region realloc +
+// memcpy) → sınır-kontrollü topla. Beklenen: 55.
+işlev heap_dizi_topla() -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(4);
+    değişken i: tam32 = 0;
+    iken i < 10 {
+        dizi_ekle(d, i + 1);
+        i = i + 1;
+    }
+    değişken toplam: tam32 = 0;
+    i = 0;
+    iken i < dizi_boyut(d) {
+        toplam = toplam + dizi_al(d, i);
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// ========================= [3] MMIO alt-sistemi =========================
+// yetki<MMIO> capability üret → VirtIO MagicValue register'ı GERÇEKTEN oku
+// → linear geri_al ile tüket. Beklenen: 0x74726976.
+işlev mmio_magic_oku() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+    değişken magic: tam32 = mmio_oku32(y, VIRTIO_TABAN + VIRTIO_MAGIC_OFF);
+    geri_al(y);
+    ver magic;
+}
+
+// ========================= [4] HESAP alt-sistemi ========================
+// (a) özyinelemeli faktoriyel
+işlev faktoriyel(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver 1;
+    }
+    ver n * faktoriyel(n - 1);
+}
+
+// (b) özyinelemeli fibonacci (çift özyineleme + if)
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+// (c) iken döngüsü
+işlev dongu_toplam(n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        toplam = toplam + i;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// (d) eşleş pattern-match — literal desen + joker
+işlev basamak_adi(d: tam32) -> tam32 {
+    eşleş d {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        2 => { ver 300; }
+        _ => { ver 999; }
+    }
+    ver 0;
+}
+
+// (e) eğer/değilse zinciri — büyüklük kategorisi
+işlev kategori(n: tam32) -> tam32 {
+    eğer n < 0 {
+        ver 0;
+    } değilse eğer n < 10 {
+        ver 1;
+    } değilse eğer n < 100 {
+        ver 2;
+    } değilse {
+        ver 3;
+    }
+}
+
+// ==================== [5] SİSTEM alt-sistemi: PANİK + EXCEPTION ====================
+// D-247 (Faz-2c): Faz-2b keşif prototipleri (kem_panik.kem + kem_exc.kem) BU çekirdeğe
+// ENTEGRE edildi + standalone'lar SİLİNDİ (YASA-2). Konsol .kem-UART olduğundan panik/exc
+// çıktısı da uart_* kullanır (C yazdir DEĞİL — 2a'nın 0-kdl_yazdir kanıtı korunur).
+
+// --- .kem PANİK (kdl_panik.c yerine): mesaj bas + sonsuz halt (dönmez). ---
+işlev panik(mesaj: metin) {
+    uart_satir("");
+    uart_metin("PANIK: ");
+    uart_satir(mesaj);
+    iken doğru {            // HALT — spin (wfe/wfi inline-asm C8'de; spin fonksiyonel yeter)
+    }
+}
+
+// --- .kem EXCEPTION HANDLER MANTIĞI (kdl_kesme.c handler yerine; vektör asm HARİÇ). ---
+// ESR_EL1 EC alanı (ESR[31:26]) sabitleri (ARMv8 D17.2.37).
+sabit EC_INSTR_ABORT_EL0: dtam64 = 32;   // 0x20
+sabit EC_INSTR_ABORT_EL1: dtam64 = 33;   // 0x21
+sabit EC_DATA_ABORT_EL0: dtam64  = 36;   // 0x24
+sabit EC_DATA_ABORT_EL1: dtam64  = 37;   // 0x25
+sabit EC_SVC64: dtam64           = 21;   // 0x15
+
+işlev esr_ec(esr: dtam64) -> dtam64 {
+    ver esr / 67108864;                  // >> 26
+}
+işlev esr_dfsc(esr: dtam64) -> dtam64 {
+    ver esr - ((esr / 64) * 64);         // esr mod 64 (alt 6 bit)
+}
+işlev fault_sinifi(esr: dtam64) -> tam32 {
+    değişken ec: dtam64 = esr_ec(esr);
+    eğer ec == EC_SVC64 {
+        ver 0;
+    } değilse eğer (ec == EC_INSTR_ABORT_EL0) veya (ec == EC_INSTR_ABORT_EL1) {
+        ver 1;                           // instruction abort
+    } değilse eğer (ec == EC_DATA_ABORT_EL0) veya (ec == EC_DATA_ABORT_EL1) {
+        ver 2;                           // data abort
+    } değilse {
+        ver 9;
+    }
+}
+işlev abort_alt_tur(esr: dtam64) -> tam32 {
+    değişken s: tam32 = fault_sinifi(esr);
+    eğer (s != 1) ve (s != 2) {
+        ver 0;
+    }
+    değişken dfsc: dtam64 = esr_dfsc(esr);
+    eğer (dfsc >= 4) ve (dfsc <= 7) {
+        ver 1;                           // translation fault
+    } değilse eğer (dfsc >= 13) ve (dfsc <= 15) {
+        ver 2;                           // permission fault
+    } değilse {
+        ver 3;
+    }
+}
+// Handler kararı: 1=KURTAR (data-abort+translation → demand-page), 2=OLDUR
+// (permission → izolasyon), 3=HALT (kurtarılamaz).
+işlev handler_karari(esr: dtam64) -> tam32 {
+    değişken s: tam32 = fault_sinifi(esr);
+    değişken alt: tam32 = abort_alt_tur(esr);
+    eğer (s == 2) ve (alt == 1) {
+        ver 1;
+    } değilse eğer alt == 2 {
+        ver 2;
+    } değilse {
+        ver 3;
+    }
+}
+// Asm-stub'un çağıracağı handler (C kdl_istisna_isle yerine). FAR/ESR alır (2c'de
+// sentetik self-test; gerçek fault-yönlendirmesi=asm-hook, sonraki adım). Kararı döner.
+işlev kem_istisna_isle(far: dtam64, esr: dtam64) -> tam32 {
+    değişken karar: tam32 = handler_karari(esr);
+    uart_metin("  EXC FAR=0x");
+    uart_onaltilik(far);
+    uart_metin(" ESR=0x");
+    uart_onaltilik(esr);
+    uart_metin(" karar=");
+    eğer karar == 1 {
+        uart_satir("KURTAR");
+    } değilse eğer karar == 2 {
+        uart_satir("OLDUR");
+    } değilse {
+        uart_satir("HALT");
+    }
+    ver karar;
+}
+
+// ============================== ÇEKİRDEK ===============================
+işlev main() -> tam32 {
+    // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
+    // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
+    uart_satir("=== KEMGU .kem-OS (Faz-2a: konsol cikti .kem-native UART) ===");
+
+    // [1] BOOT — buraya ulaştıysak .kem bare-metal boot etti.
+    uart_satir("[1] BOOT OK");
+
+    // [2] HEAP — region-runtime dizi.
+    değişken dt: tam32 = heap_dizi_topla();
+    uart_satir("[2] HEAP DIZI OK");
+    uart_tam_satir(dt);
+
+    // [3] MMIO — donanım register.
+    değişken magic: tam32 = mmio_magic_oku();
+    eğer magic == MAGIC_BEKLENEN {
+        uart_satir("[3] MMIO OK");
+    } değilse {
+        uart_satir("[3] MMIO HATA");
+    }
+    uart_tam_satir(magic);
+
+    // [4] HESAP — kontrol-akışı + fonksiyon + pattern-match.
+    değişken h: tam32 = faktoriyel(5) + fib(10) + dongu_toplam(10);   // 230
+    değişken kat: tam32 = kategori(h);                                // 3
+    değişken pm: tam32 = basamak_adi(2);                              // 300
+    uart_satir("[4] HESAP OK");
+    uart_tam_satir(h);
+    uart_tam_satir(kat);
+
+    // [5] SİSTEM — .kem panik + exc-handler-mantığı (D-247, Faz-2c entegrasyon).
+    // exc handler'ı 3 sentetik fault ile SELF-TEST: ESR→EC decode + fault-türü + karar
+    // mantığı .kem'de çalışır. Gerçek fault-yönlendirmesi (asm-vektör → .kem hook) SONRAKİ
+    // adım; burada handler MANTIĞININ kem_os içinde çalıştığı kanıtlanır.
+    uart_satir("[5] SISTEM: exc-handler self-test (3 sentetik fault)");
+    değişken k1: tam32 = kem_istisna_isle(1073741824, 2516582404);  // data-abort+translation → KURTAR(1)
+    değişken k2: tam32 = kem_istisna_isle(4096, 2449473549);        // data-abort+permission → OLDUR(2)
+    değişken k3: tam32 = kem_istisna_isle(2147483648, 2214592512);  // instr-abort → HALT(3)
+    değişken exc_ok: tam32 = 0;
+    eğer (k1 == 1) ve (k2 == 2) ve (k3 == 3) {
+        uart_satir("[5] EXC OK kararlar=1,2,3");
+        exc_ok = 1;
+    } değilse {
+        uart_satir("[5] EXC HATA");
+    }
+
+    // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
+    değişken gecti: tam32 = 0;
+    eğer dt == 55 {
+        gecti = gecti + 1;
+    }
+    eğer magic == MAGIC_BEKLENEN {
+        gecti = gecti + 1;
+    }
+    eğer h == 230 {
+        gecti = gecti + 1;
+    }
+    eğer kat == 3 {
+        gecti = gecti + 1;
+    }
+    eğer pm == 300 {
+        gecti = gecti + 1;
+    }
+    eğer exc_ok == 1 {
+        gecti = gecti + 1;
+    }
+
+    // Başarı → KEM-OS OK; herhangi bir alt-sistem arızası → .kem PANİK (halt).
+    // (Happy-path'te gecti==6 → panik TETİKLENMEZ; panik gerçek arıza-yolu handler'ı.)
+    eğer gecti == 6 {
+        uart_satir("KEMGU KEM-OS OK");
+    } değilse {
+        panik("KEM-OS ALT-SISTEM ARIZASI");
+    }
+    ver 0;
+}

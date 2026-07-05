@@ -1,0 +1,13 @@
+// cg_ham_pointer.kem — D-249: C-codegen ↔ self-host HAM POINTER paritesi.
+// GAP-1 (inttoptr/ptrtoint) host-güvenli round-trip: BELLEK DEREF YOK (keyfi
+// adres okunmaz → host'ta segfault yok). int→ptr→int aynı değeri geri verir.
+// codegen_diff: C-codegen exit == self-host exit (ikisi de 42). D-249 ÖNCESİ
+// self-host bu programı derleyemezdi (T022 + inttoptr yok) = DIVERGENCE.
+işlev main() -> tam32 {
+    güvensiz {
+        değişken p: *tam32 = 42 olarak *tam32;      // inttoptr 42 → ptr
+        değişken geri: tam64 = p olarak tam64;       // ptrtoint ptr → 42
+        ver geri olarak tam32;                        // exit 42
+    }
+    ver 0;
+}

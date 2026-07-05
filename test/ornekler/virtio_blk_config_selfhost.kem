@@ -1,0 +1,87 @@
+// KEMGU SELF-HOST virtio-BLK kapasite okuma sürücüsü — bare-metal.
+// =========================================================================
+// D-163 (virtio-net MAC config-space okuma) deseninin virtio-blk'e taşınması:
+// KEMGU DİLİNDE yazılmış blok-cihaz sürücüsü. slot tara → MAGIC doğrula →
+// DeviceID==2 (virtio-blk) bul → cihaza-özel config space'ten (offset 0x100)
+// VIRTIO_BLK_CONFIG.capacity (u64) alanını çıkar.
+//
+// virtio-blk config layout (spec 5.2.4): ilk alan `capacity` — u64, cihazın
+// kapasitesi 512-byte sektör cinsinden (disk boyutu / 512). config-space
+// taban+0x100'de başlar. u64 kapasiteyi iki 32-bit word ile okuruz:
+//   word0 = mmio_oku32(taban + 0x100)  → capacity[31:0]   (düşük word, LE)
+//   word1 = mmio_oku32(taban + 0x104)  → capacity[63:32]  (yüksek word, LE)
+// Küçük diskler için düşük word tek başına sektör sayısını verir.
+//
+// yetki<MMIO> = derleme-zamanı object-capability (donanım erişim ispatı, sıfır
+// runtime yükü). Her mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez). Sonda geri_al
+// ile linear tüketilir.
+//
+// QEMU: -drive file=disk.img,if=none,id=d0 -device virtio-blk-device,drive=d0
+// → slot'ta DeviceID=2 + config-space'te capacity = disk_boyut/512.
+// 64-sektör (32 KiB) disk → capacity == 64.
+// Beklenen çıktı: "KEM BLK BASLA" + capacity (yazdir_tam ondalık) + "KEM BLK OK".
+// FALLBACK: config capacity 0/geçersiz ise DEVICE_FEATURES (offset 0x10)
+// register'ını oku + bas → "KEM BLK REG OK".
+
+sabit VIRTIO_TABAN: tam64      = 167772160;   // 0x0A000000 (QEMU virt slot 0)
+sabit VIRTIO_ADIM: tam64       = 512;         // 0x200 slot aralığı
+sabit VIRTIO_MAGIC_OFF: tam64  = 0;           // 0x000 MagicValue
+sabit VIRTIO_DEVID_OFF: tam64  = 8;           // 0x008 DeviceID
+sabit VIRTIO_FEATURES_OFF: tam64 = 16;        // 0x010 DeviceFeatures (fallback)
+sabit VIRTIO_CONFIG_OFF: tam64 = 256;         // 0x100 cihaza-özel config (v2)
+sabit MAGIC_BEKLENEN: tam32    = 1953655158;  // 0x74726976 = "virt"
+sabit VIRTIO_BLK_ID: tam32     = 2;           // virtio-blk DeviceID
+sabit MMIO_OKU_YAZ: tam32      = 3;           // OKU|YAZ
+
+işlev main() -> tam32 {
+    // Donanım erişim yetkisi (kaynak tipi 6 = MMIO, izin OKU|YAZ).
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // --- Tara: MAGIC doğru + DeviceID == 2 (virtio-blk) olan ilk slotu bul. ---
+    değişken blk_slot: tam64 = 0;
+    değişken blk_id: tam32 = 0;
+    değişken i: tam64 = 0;
+    iken i < 32 {
+        değişken taban: tam64 = VIRTIO_TABAN + i * VIRTIO_ADIM;
+        değişken magic: tam32 = mmio_oku32(y, taban + VIRTIO_MAGIC_OFF);
+        eğer magic == MAGIC_BEKLENEN {
+            değişken devid: tam32 = mmio_oku32(y, taban + VIRTIO_DEVID_OFF);
+            eğer devid == VIRTIO_BLK_ID ve blk_slot == 0 {
+                blk_slot = taban;
+                blk_id = devid;
+            }
+        }
+        i = i + 1;
+    }
+
+    // --- Kapasiteyi config-space'ten oku (offset 0x100, u64 = 2×32-bit word). ---
+    değişken cap_lo: tam32 = 0;
+    değişken cap_hi: tam32 = 0;
+    // FALLBACK register (DEVICE_FEATURES @ 0x010) — capacity geçersizse okunur.
+    değişken feat: tam32 = 0;
+    eğer blk_slot != 0 {
+        cap_lo = mmio_oku32(y, blk_slot + VIRTIO_CONFIG_OFF);
+        cap_hi = mmio_oku32(y, blk_slot + VIRTIO_CONFIG_OFF + 4);
+        feat = mmio_oku32(y, blk_slot + VIRTIO_FEATURES_OFF);
+    }
+
+    geri_al(y);   // linear tüketim — capability iade edilir
+
+    // Geçerlilik: virtio-blk slotu bulundu VE kapasite non-zero (küçük diskte
+    // yüksek word 0 olur → düşük word sektör sayısıdır). QEMU disk_boyut/512.
+    eğer blk_slot != 0 ve blk_id == VIRTIO_BLK_ID ve cap_lo != 0 {
+        yazdir_metin("KEM BLK BASLA");
+        yazdir_tam(cap_lo);       // sektör sayısı (küçük disk: yüksek word 0)
+        yazdir_tam(cap_hi);       // yüksek word (küçük diskte 0)
+        yazdir_metin("KEM BLK OK");
+    } değilse eğer blk_slot != 0 ve blk_id == VIRTIO_BLK_ID {
+        // FALLBACK: config capacity 0 döndü → DEVICE_FEATURES register'ını bas.
+        yazdir_metin("KEM BLK BASLA");
+        yazdir_tam(feat);
+        yazdir_metin("KEM BLK REG OK");
+    } değilse {
+        yazdir_metin("KEM BLK HATA id=");
+        yazdir_tam(blk_id);
+    }
+    ver 0;
+}

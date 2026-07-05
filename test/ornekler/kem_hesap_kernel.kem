@@ -1,0 +1,99 @@
+// KEMGU bare-metal HESAP kernel — Faz-1 keşif Agent E.
+//
+// SORU: .kem kontrol-akışı (iken) + fonksiyonlar (özyinelemeli) +
+// pattern-matching (eşleş) bare-metal aarch64'te sağlam mı?
+//
+// Bu çekirdek GERÇEK İŞ yapar ve sonucu doğrulanabilir:
+//   (a) faktoriyel(5)  — ÖZYİNELEMELİ işlev  → 120
+//   (b) fib(10)        — ÖZYİNELEMELİ işlev (if dallanma) → 55
+//   (c) toplam 1..10   — iken DÖNGÜSÜ → 55
+//   (d) kategori(n)    — eğer/değilse dallanma + eşleş pattern match
+//
+// Nihai hesap:  faktoriyel(5) + fib(10) + döngü_toplam
+//             =     120       +   55    +    55        = 230
+// eşleş ile 230 sayısı sınıflandırılır: kategori kodu 3 (>=100).
+//
+// Beklenen çıktı satırları:
+//   "KEM HESAP OK"
+//   230
+//   3
+
+// (a) ÖZYİNELEMELİ faktoriyel — fonksiyon çağrısı + taban durum (if)
+işlev faktoriyel(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver 1;
+    }
+    ver n * faktoriyel(n - 1);
+}
+
+// (b) ÖZYİNELEMELİ fibonacci — çift özyineleme + if dallanma
+işlev fib(n: tam32) -> tam32 {
+    eğer n < 2 {
+        ver n;
+    }
+    ver fib(n - 1) + fib(n - 2);
+}
+
+// (c) iken DÖNGÜSÜ — 1..n toplamı
+işlev dongu_toplam(n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        toplam = toplam + i;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// (d) eşleş PATTERN MATCH — bir sınırı literal desenlerle sınıflandır,
+// joker (_) dalı ile eğer/değilse benzeri karar.
+// Küçük sabit anahtarlar (0, 1, 2) literal-desen; gerisi joker.
+işlev basamak_adi(d: tam32) -> tam32 {
+    eşleş d {
+        0 => { ver 100; }
+        1 => { ver 200; }
+        2 => { ver 300; }
+        _ => { ver 999; }
+    }
+    ver 0;   // ulaşılmaz
+}
+
+// eğer/değilse dallanma — büyüklük kategorisi (100 eşiği)
+işlev kategori(n: tam32) -> tam32 {
+    eğer n < 0 {
+        ver 0;
+    } değilse eğer n < 10 {
+        ver 1;
+    } değilse eğer n < 100 {
+        ver 2;
+    } değilse {
+        ver 3;
+    }
+}
+
+işlev main() -> tam32 {
+    değişken a: tam32 = faktoriyel(5);      // 120  (özyineleme)
+    değişken b: tam32 = fib(10);            // 55   (özyineleme + if)
+    değişken c: tam32 = dongu_toplam(10);   // 55   (iken döngüsü)
+
+    değişken sonuc: tam32 = a + b + c;      // 230
+
+    // eşleş pattern-match doğrulaması: basamak_adi(2) => 300 beklenir.
+    // Bunu bir tutarlılık kontrolü olarak kullan.
+    değişken pm: tam32 = basamak_adi(2);    // 300  (literal desen eşleşmesi)
+
+    değişken kat: tam32 = kategori(sonuc);  // 3    (eğer/değilse)
+
+    yazdir_metin("KEM HESAP OK");
+    yazdir_tam(sonuc);   // 230
+    yazdir_tam(kat);     // 3
+
+    // pm doğrulaması: 300 ise ekstra bir onay satırı bas.
+    eğer pm == 300 {
+        yazdir_metin("KEM PM OK");
+    } değilse {
+        yazdir_metin("KEM PM FAIL");
+    }
+
+    ver 0;
+}

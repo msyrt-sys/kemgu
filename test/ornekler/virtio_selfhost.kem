@@ -1,0 +1,35 @@
+// KEMGU SELF-HOST virtio-mmio sürücüsü — bare-metal (D-148).
+// =========================================================
+// KEMGU DİLİNDE yazılmış bir OS sürücüsü: virtio-mmio transport'unun magic +
+// version register'larını gerçek MMIO ile (mmio_oku32, yetki<MMIO> capability)
+// okur. Compile: kemgu --llvm → clang aarch64 → QEMU virt bare-metal boot.
+//
+// yetki<MMIO> = derleme-zamanı object-capability (donanım erişim ispatı, sıfır
+// runtime yükü). MMIO okuma volatile load'a iner (kdl_mmio_oku32, bare-metal).
+//
+// Beklenen çıktı: "KEM VIRTIO OK" + version (2).
+
+sabit VIRTIO_TABAN: tam64      = 167772160;   // 0x0A000000 (QEMU virt slot 0)
+sabit VIRTIO_MAGIC_OFF: tam64  = 0;           // 0x000 MagicValue
+sabit VIRTIO_VERSION_OFF: tam64 = 4;          // 0x004 Version
+sabit MAGIC_BEKLENEN: tam32    = 1953655158;  // 0x74726976 = "virt"
+sabit MMIO_OKU_YAZ: tam32      = 3;           // OKU|YAZ
+
+işlev main() -> tam32 {
+    // Donanım erişim yetkisi (kaynak tipi 6 = MMIO, izin OKU|YAZ).
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // mmio_oku32 yetkiyi ÖDÜNÇ alır (tüketmez) → aynı scope'ta kalır.
+    değişken magic: tam32 = mmio_oku32(y, VIRTIO_TABAN + VIRTIO_MAGIC_OFF);
+    değişken versiyon: tam32 = mmio_oku32(y, VIRTIO_TABAN + VIRTIO_VERSION_OFF);
+
+    geri_al(y);   // linear tüketim — capability iade edilir
+
+    eğer magic == MAGIC_BEKLENEN {
+        yazdir_metin("KEM VIRTIO OK");
+        yazdir_tam(versiyon);
+    } değilse {
+        yazdir_metin("KEM VIRTIO HATA");
+    }
+    ver 0;
+}

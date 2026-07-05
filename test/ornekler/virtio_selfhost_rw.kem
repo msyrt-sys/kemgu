@@ -1,0 +1,52 @@
+// KEMGU SELF-HOST virtio sürücüsü — TARAMA + MMIO YAZMA (status handshake) — D-149.
+// =============================================================================
+// D-148 (okuma) üstüne: KEMGU dilinde virtio cihazını TARA (DeviceID != 0) + status
+// durum-makinesini YAZ (reset→ACK→ACK|DRIVER) + geri oku. Tarama mmio_oku32 ile
+// (yetki ÖDÜNÇ → döngüde thread gerekmez); handshake mmio_yaz32 ile (yetki THREAD,
+// linear zincir). Gerçek bir sürücü init'inin KEMGU'daki karşılığı.
+//
+// Beklenen: "KEM VIRTIO RW OK" (cihaz bulundu + status geri-okuma = 3).
+
+sabit VIRTIO_TABAN: tam64     = 167772160;   // 0x0A000000
+sabit VIRTIO_ADIM: tam64      = 512;         // 0x200 slot aralığı
+sabit VIRTIO_DEVID_OFF: tam64 = 8;
+sabit VIRTIO_STATUS_OFF: tam64 = 112;        // 0x070
+sabit MMIO_OKU_YAZ: tam32     = 3;
+sabit ST_ACK_DRIVER: tam32    = 3;           // ACK | DRIVER
+
+işlev status_yaz(y: yetki<MMIO>, adres: tam64, deger: tam32) -> yetki<MMIO> {
+    mmio_yaz32(y, adres, deger);
+    ver y;
+}
+
+işlev main() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
+
+    // --- Tara: DeviceID != 0 olan ilk slotu bul (okuma yetkiyi ödünç alır). ---
+    değişken slot: tam64 = 0;
+    değişken i: tam64 = 0;
+    iken i < 32 {
+        değişken taban: tam64 = VIRTIO_TABAN + i * VIRTIO_ADIM;
+        değişken devid: tam32 = mmio_oku32(y, taban + VIRTIO_DEVID_OFF);
+        eğer devid != 0 ve slot == 0 {
+            slot = taban;
+        }
+        i = i + 1;
+    }
+
+    // --- Handshake: status durum-makinesi (linear yetki zinciri). ---
+    değişken y1: yetki<MMIO> = status_yaz(y, slot + VIRTIO_STATUS_OFF, 0);
+    değişken y2: yetki<MMIO> = status_yaz(y1, slot + VIRTIO_STATUS_OFF, 1);
+    değişken y3: yetki<MMIO> = status_yaz(y2, slot + VIRTIO_STATUS_OFF, ST_ACK_DRIVER);
+
+    değişken status: tam32 = mmio_oku32(y3, slot + VIRTIO_STATUS_OFF);
+    geri_al(y3);
+
+    eğer slot != 0 ve status == ST_ACK_DRIVER {
+        yazdir_metin("KEM VIRTIO RW OK");
+    } değilse {
+        yazdir_metin("KEM VIRTIO RW HATA status:");
+        yazdir_tam(status);
+    }
+    ver 0;
+}

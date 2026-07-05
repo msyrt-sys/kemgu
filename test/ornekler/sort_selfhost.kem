@@ -1,0 +1,90 @@
+// KEMGU SELF-HOST SIRALAMA — dizi in-place mutasyon (cihazsız) milestone.
+// =========================================================================
+// Bu örnek, KEMGU dilinin gerçek bir SIRALAMA ALGORİTMASI (bubble sort) — yani
+// DİZİ üzerinde in-place (yerinde) mutasyon + eleman karşılaştırma + swap
+// (geçici değişkenle takas) — kaldırdığını kanıtlar. Saf KEMGU, cihazsız
+// (MMIO / yetki<MMIO> yok), yalnızca aritmetik + dizi indeksleme + döngü.
+//
+// KRİTİK dil gözlemi (codegen doğrulaması):
+//   - KEMGU diziler HEAP-UNIFORM: `Dizi<tam32>` → runtime `KdlDizi*`.
+//   - İndeks OKUMA (`d[i]`)      → `kdl_dizi_al_tam`   (runtime sınır-kontrollü).
+//   - İndeks YAZMA (`d[i] = x`)  → `kdl_dizi_yaz_tam`  (runtime sınır-kontrollü,
+//                                   hem i < 0 hem i >= boyut).
+//   Yani in-place swap (`t = d[j]; d[j] = d[j+1]; d[j+1] = t;`) codegen'de
+//   gerçek bellek mutasyonuna derlenir; sanal/kopya değil. Sınır dışı erişim
+//   runtime'da yakalanır (self-host heap-uniform invaryantı — CLAUDE.md).
+//
+// Test verisi: sırasız 10 tamsayı [5, 2, 8, 1, 9, 3, 7, 4, 6, 0].
+// Bubble sort sonrası beklenen: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] (artan).
+//
+// Beklenen çıktı: "KEM SORT BASLA" + sıralı dizinin her elemanı + "KEM SORT OK".
+
+sabit ELEMAN_SAYISI: tam32 = 10;   // dizi uzunluğu
+
+// Sırasız diziyi bubble sort ile YERİNDE (in-place) artan sıraya sokar.
+// İç içe döngü + eleman karşılaştırma (`>`) + geçici değişkenle swap.
+// Diziler referansla aktarıldığından mutasyon çağırana yansır.
+işlev bubble_sort(d: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        // Her dış geçişte en büyük eleman sona "kabarır"; iç döngü
+        // her adımda komşu ikiliyi karşılaştırıp gerekirse takas eder.
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            eğer d[j] > d[j + 1] {
+                değişken gecici: tam32 = d[j];   // t = d[j]
+                d[j] = d[j + 1];                 // d[j] = d[j+1]
+                d[j + 1] = gecici;               // d[j+1] = t
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// Dizinin artan sıralı olup olmadığını doğrular: her ardışık çift için
+// d[i] <= d[i+1] mi? Hepsi doğruysa 1, aksi halde 0 döner.
+işlev sirali_mi(d: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken sonuc: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < n - 1 {
+        eğer d[i] > d[i + 1] {
+            sonuc = 0;   // ardışık çift ters sıralı → sıralı değil
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Sıralı diziyi eleman eleman basar (her eleman ayrı satır).
+işlev diziyi_bas(d: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        yazdir_tam(d[i]);
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM SORT BASLA");
+
+    // Sabit sırasız tamsayı dizisi (10 eleman).
+    değişken dizi: Dizi<tam32> = [5, 2, 8, 1, 9, 3, 7, 4, 6, 0];
+
+    // Yerinde (in-place) bubble sort — dizi mutasyonu.
+    bubble_sort(dizi, ELEMAN_SAYISI);
+
+    // Sıralı diziyi bas.
+    diziyi_bas(dizi, ELEMAN_SAYISI);
+
+    // Sıralamayı doğrula: her ardışık çift artan sıralı mı?
+    eğer sirali_mi(dizi, ELEMAN_SAYISI) == 1 {
+        yazdir_metin("KEM SORT OK");
+    } değilse {
+        yazdir_metin("KEM SORT FAIL");
+    }
+
+    ver 0;
+}

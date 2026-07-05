@@ -1,0 +1,194 @@
+// KEMGU SELF-HOST YIĞIN-VM — bytecode YORUMLAYICI (cihazsız) DİL KAPSTONU.
+// =========================================================================
+// Bu örnek, KEMGU dilinin gerçek bir BYTECODE YORUMLAYICI (stack-based virtual
+// machine) — yani KONTROL AKIŞI + YIĞIN (stack) + OPCODE DISPATCH döngüsü —
+// çalıştırdığını kanıtlar. Bir yorumlayıcı yazabilmek, bir dilin olgunluk
+// kanıtıdır: fetch-decode-execute döngüsü, veri yığını manipülasyonu ve
+// koşullu opcode ayrımı bir araya gelir.
+//
+// Saf KEMGU, cihazsız (MMIO / yetki<MMIO> yok): yalnızca aritmetik + dizi
+// indeksleme (OKUMA d[i] ve YAZMA d[i]=x) + iken/eğer/değilse eğer kontrol akışı.
+//
+// KRİTİK dil gözlemleri (codegen doğrulaması — dayanılan invaryantlar):
+//   (1) Diziler HEAP-UNIFORM: `Dizi<tam32>` → runtime `KdlDizi*`. İndeks OKUMA
+//       (`prog[pc]`, `yigin[sp]`) → `kdl_dizi_al_tam` (runtime sınır-kontrollü);
+//       İndeks YAZMA (`yigin[sp] = x`) → `kdl_dizi_yaz_tam` (runtime sınır-kontrollü,
+//       hem i<0 hem i>=boyut). Yani PUSH/POP gerçek bellek mutasyonuna derlenir.
+//       (D-171 sort_selfhost ile kanıtlı.)
+//   (2) `değilse eğer` zinciri → opcode DISPATCH: her turda opcode okunup ardışık
+//       eğer/değilse-eğer ile ayrılır (switch yok → değilse-eğer zinciri; bu bir
+//       dil-seviyesi kullanım desenidir, D-168 crc32 ile kanıtlı).
+//   (3) `Dizi<tam32>` fn-param: hem program hem yığın işlevlere referansla aktarılır;
+//       yığın mutasyonu (push/pop) çağırana yansır (D-171 ile kanıtlı).
+//
+// VM MİMARİSİ (klasik yığın-makinesi):
+//   - Program  = tam32 dizisi (bytecode akışı).
+//   - Yığın    = tam32 dizisi (Dizi<tam32>), SP (stack pointer) bir sonraki BOŞ slotu
+//                gösterir (sp==0 → boş yığın). PUSH: yigin[sp]=v; sp=sp+1.
+//                POP: sp=sp-1; ver yigin[sp].
+//   - PC       = program counter (bir sonraki okunacak opcode indeksi).
+//   - Döngü    = `iken pc < prog_uzun`: fetch (opcode=prog[pc]; pc=pc+1) →
+//                decode+execute (değilse-eğer dispatch) → yığını manipüle et.
+//
+// OPCODE TABLOSU:
+//   OP_PUSH  (1): 2 hücre [opcode, deger] — deger'i yığına iter (pc bir hücre daha ilerler).
+//   OP_ADD   (2): b=pop; a=pop; push(a+b).
+//   OP_SUB   (3): b=pop; a=pop; push(a-b).
+//   OP_MUL   (4): b=pop; a=pop; push(a*b).
+//   OP_DUP   (5): yığının tepesini çoğaltır (a=pop; push(a); push(a)).
+//   OP_PRINT (6): yığının tepesini bas (POP etmeden — a=pop; yazdir; push(a)).
+//   OP_HALT  (0): döngüyü durdur (pc=prog_uzun yapılır → iken koşulu düşer).
+//
+// Örnek program: [PUSH,6, PUSH,7, MUL, PRINT, PUSH,100, PUSH,58, ADD, PRINT, HALT]
+//   6*7 = 42, sonra 100+58 = 158. PRINT'ler sırayla 42 ve 158 basar.
+//
+// DETERMİNİSTİK doğrulama: VM'in her PRINT'te bastığı değer, ayrı bir "beklenen"
+// dizisiyle (bd = [42, 158]) karşılaştırılır. Tüm PRINT'ler beklenenle eşleşir VE
+// PRINT sayısı beklenen sayıya (2) eşitse "KEM VM OK", aksi halde "KEM VM FAIL".
+//
+// Beklenen çıktı: "KEM VM BASLA" + 42 + 158 + "KEM VM OK".
+
+// --- Opcode sabitleri ---
+sabit OP_HALT: tam32  = 0;
+sabit OP_PUSH: tam32  = 1;
+sabit OP_ADD: tam32   = 2;
+sabit OP_SUB: tam32   = 3;
+sabit OP_MUL: tam32   = 4;
+sabit OP_DUP: tam32   = 5;
+sabit OP_PRINT: tam32 = 6;
+
+sabit PROG_UZUN: tam32 = 13;   // örnek programın hücre sayısı
+                               // (PUSH,6 PUSH,7 MUL PRINT PUSH,100 PUSH,58 ADD PRINT HALT
+                               //  = 2+2+1+1+2+2+1+1+1 = 13 hücre)
+sabit YIGIN_KAP: tam32 = 16;   // yığın kapasitesi (fazlasıyla yeter)
+sabit BEKLENEN_PRINT: tam32 = 2;   // beklenen toplam PRINT sayısı (42, 158)
+
+// Yığına değer iter: yigin[sp] = deger; yeni SP döner (sp + 1).
+// Yığın Dizi<tam32> fn-param → in-place YAZMA (kdl_dizi_yaz_tam, sınır-kontrollü).
+işlev it(yigin: Dizi<tam32>, sp: tam32, deger: tam32) -> tam32 {
+    yigin[sp] = deger;   // dizi in-place mutasyon (çağırana yansır)
+    ver sp + 1;
+}
+
+// Yığından değer çeker: SP'yi düşürüp o slottaki değeri döndürür.
+// (SP güncellemesi çağıran tarafta yapılır — bu işlev sadece OKUMA yapar.)
+işlev tepe(yigin: Dizi<tam32>, sp: tam32) -> tam32 {
+    ver yigin[sp - 1];   // yığının tepesindeki değer (sp bir sonraki boş slot)
+}
+
+// ============================================================================
+// YORUMLAYICI ÇEKİRDEĞİ — fetch-decode-execute döngüsü.
+// prog: bytecode dizisi; bd: beklenen-PRINT dizisi; onları param olarak alır.
+// Dönüş: tüm PRINT'ler beklenenle eşleştiyse VE sayı doğruysa 1, aksi halde 0.
+// ============================================================================
+işlev vm_calistir(prog: Dizi<tam32>, prog_uzun: tam32,
+                  yigin: Dizi<tam32>, bd: Dizi<tam32>, bek_sayi: tam32) -> tam32 {
+    değişken sp: tam32 = 0;          // stack pointer (bir sonraki boş slot)
+    değişken pc: tam32 = 0;          // program counter
+    değişken print_sayi: tam32 = 0;  // şimdiye dek yapılan PRINT sayısı
+    değişken tumu_dogru: tam32 = 1;  // her PRINT beklenenle eşleşti mi?
+
+    // ---- Ana fetch-decode-execute döngüsü ----
+    iken pc < prog_uzun {
+        // FETCH: opcode oku, PC'yi ilerlet.
+        değişken opcode: tam32 = prog[pc];
+        pc = pc + 1;
+
+        // DECODE + EXECUTE: opcode dispatch (değilse eğer zinciri = switch yerine).
+        eğer opcode == OP_PUSH {
+            // Operand bir sonraki hücrede; oku, PC'yi bir daha ilerlet, yığına it.
+            değişken deger: tam32 = prog[pc];
+            pc = pc + 1;
+            sp = it(yigin, sp, deger);
+        } değilse eğer opcode == OP_ADD {
+            değişken b: tam32 = tepe(yigin, sp);      // ikinci operand (tepe)
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);      // birinci operand
+            sp = sp - 1;
+            sp = it(yigin, sp, a + b);
+        } değilse eğer opcode == OP_SUB {
+            değişken b: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            sp = it(yigin, sp, a - b);
+        } değilse eğer opcode == OP_MUL {
+            değişken b: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            değişken a: tam32 = tepe(yigin, sp);
+            sp = sp - 1;
+            sp = it(yigin, sp, a * b);
+        } değilse eğer opcode == OP_DUP {
+            değişken a: tam32 = tepe(yigin, sp);      // tepeyi POP'suz oku
+            sp = it(yigin, sp, a);                    // aynısını tekrar it (çoğalt)
+        } değilse eğer opcode == OP_PRINT {
+            değişken v: tam32 = tepe(yigin, sp);      // tepeyi POP etmeden bas
+            yazdir_tam(v);
+
+            // DETERMİNİSTİK doğrulama: bu PRINT değeri beklenenle eşleşiyor mu?
+            eğer print_sayi < bek_sayi {
+                eğer v == bd[print_sayi] {
+                    tumu_dogru = tumu_dogru;   // eşleşti — durumu koru
+                } değilse {
+                    tumu_dogru = 0;            // beklenenden sapma
+                }
+            } değilse {
+                tumu_dogru = 0;               // beklenenden FAZLA PRINT
+            }
+            print_sayi = print_sayi + 1;
+        } değilse eğer opcode == OP_HALT {
+            pc = prog_uzun;   // döngüyü durdur (iken koşulu bir sonraki turda düşer)
+        } değilse {
+            // Tanımsız opcode — güvenli taraf: durumu bozmadan yoksay.
+            tumu_dogru = 0;
+        }
+    }
+
+    // Tüm PRINT'ler eşleşti VE tam olarak beklenen sayıda PRINT olduysa 1.
+    eğer tumu_dogru == 1 {
+        eğer print_sayi == bek_sayi {
+            ver 1;
+        }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    yazdir_metin("KEM VM BASLA");
+
+    // Örnek bytecode programı:
+    //   PUSH 6; PUSH 7; MUL; PRINT;      → 6*7 = 42
+    //   PUSH 100; PUSH 58; ADD; PRINT;   → 100+58 = 158
+    //   HALT
+    değişken prog: Dizi<tam32> = [
+        OP_PUSH, 6,
+        OP_PUSH, 7,
+        OP_MUL,
+        OP_PRINT,
+        OP_PUSH, 100,
+        OP_PUSH, 58,
+        OP_ADD,
+        OP_PRINT,
+        OP_HALT
+    ];
+
+    // VM yığını (in-place mutasyonla push/pop edilir).
+    değişken yigin: Dizi<tam32> = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    // Beklenen PRINT çıktıları (deterministik doğrulama için).
+    değişken beklenen: Dizi<tam32> = [42, 158];
+
+    // Yorumlayıcıyı çalıştır.
+    değişken sonuc: tam32 = vm_calistir(prog, PROG_UZUN, yigin, beklenen, BEKLENEN_PRINT);
+
+    eğer sonuc == 1 {
+        yazdir_metin("KEM VM OK");
+    } değilse {
+        yazdir_metin("KEM VM FAIL");
+    }
+
+    ver 0;
+}

@@ -20,7 +20,17 @@
 #include "kdl_bolge.h"
 
 #include <stdint.h>
+#ifdef KEMGU_BARE_METAL
+/* Bare-metal: libc YOK. <stdlib.h> (malloc/free/size_t) aarch64/x86_64
+ * -unknown-none hedefinde bulunmaz. size_t için freestanding <stddef.h>;
+ * malloc/free sembollerini bare-metal heap (runtime/kdl_bare_heap.c) sağlar —
+ * prototipleri burada bildiririz. SIZE_MAX zaten <stdint.h>'den gelir. */
+#include <stddef.h>
+void *malloc(size_t);
+void  free(void *);
+#else
 #include <stdlib.h>
+#endif
 
 #define KDL_BOLGE_HIZA       16u               /* tahsis hizalaması (>= max_align_t) */
 #define KDL_BOLGE_VARSAYILAN (64u * 1024u)     /* varsayılan blok = 64 KB */
