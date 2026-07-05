@@ -9,6 +9,7 @@
 //   [2] HEAP     — region-runtime heap Dizi<tam32> (B: kem_dizi_kernel)
 //   [3] MMIO     — yetki<MMIO> capability + donanım register (C: kem_mmio_kernel)
 //   [4] HESAP    — özyineleme + iken + eşleş + eğer/değilse (E: kem_hesap_kernel)
+//   [5] SİSTEM   — .kem panik + exc-handler-mantığı (D-247, Faz-2c; 2b keşif entegre)
 //
 // Entegrasyon kanıtı: dört alt-sistem de doğru sonucu verirse (5/5 kontrol)
 // TEK marker "KEMGU KEM-OS OK" basılır. Herhangi biri bozuksa "... HATA".
@@ -83,6 +84,27 @@ işlev uart_tam_satir(n: tam32) {
         uart_tam_yardim(n);
     }
     uart_bayt(10);
+}
+
+// Onaltılık (hex) yaz — SATIRSIZ (mid-line; register değerleri için). dtam64 işaretsiz
+// (donanım register), >> tip-duyarlı lshr. 10-15 → 'a'-'f' (kod 87+r).
+işlev uart_hex_basamak(d: dtam64) {
+    eğer d > 0 {
+        uart_hex_basamak(d / 16);
+        değişken r: tam32 = (d - (d / 16) * 16) olarak tam32;   // d mod 16
+        eğer r < 10 {
+            uart_bayt(r + 48);        // '0'
+        } değilse {
+            uart_bayt(r + 87);        // 10 → 'a'
+        }
+    }
+}
+işlev uart_onaltilik(d: dtam64) {
+    eğer d == 0 {
+        uart_bayt(48);
+    } değilse {
+        uart_hex_basamak(d);
+    }
 }
 
 // ========================= [2] HEAP alt-sistemi =========================
@@ -166,6 +188,92 @@ işlev kategori(n: tam32) -> tam32 {
     }
 }
 
+// ==================== [5] SİSTEM alt-sistemi: PANİK + EXCEPTION ====================
+// D-247 (Faz-2c): Faz-2b keşif prototipleri (kem_panik.kem + kem_exc.kem) BU çekirdeğe
+// ENTEGRE edildi + standalone'lar SİLİNDİ (YASA-2). Konsol .kem-UART olduğundan panik/exc
+// çıktısı da uart_* kullanır (C yazdir DEĞİL — 2a'nın 0-kdl_yazdir kanıtı korunur).
+
+// --- .kem PANİK (kdl_panik.c yerine): mesaj bas + sonsuz halt (dönmez). ---
+işlev panik(mesaj: metin) {
+    uart_satir("");
+    uart_metin("PANIK: ");
+    uart_satir(mesaj);
+    iken doğru {            // HALT — spin (wfe/wfi inline-asm C8'de; spin fonksiyonel yeter)
+    }
+}
+
+// --- .kem EXCEPTION HANDLER MANTIĞI (kdl_kesme.c handler yerine; vektör asm HARİÇ). ---
+// ESR_EL1 EC alanı (ESR[31:26]) sabitleri (ARMv8 D17.2.37).
+sabit EC_INSTR_ABORT_EL0: dtam64 = 32;   // 0x20
+sabit EC_INSTR_ABORT_EL1: dtam64 = 33;   // 0x21
+sabit EC_DATA_ABORT_EL0: dtam64  = 36;   // 0x24
+sabit EC_DATA_ABORT_EL1: dtam64  = 37;   // 0x25
+sabit EC_SVC64: dtam64           = 21;   // 0x15
+
+işlev esr_ec(esr: dtam64) -> dtam64 {
+    ver esr / 67108864;                  // >> 26
+}
+işlev esr_dfsc(esr: dtam64) -> dtam64 {
+    ver esr - ((esr / 64) * 64);         // esr mod 64 (alt 6 bit)
+}
+işlev fault_sinifi(esr: dtam64) -> tam32 {
+    değişken ec: dtam64 = esr_ec(esr);
+    eğer ec == EC_SVC64 {
+        ver 0;
+    } değilse eğer (ec == EC_INSTR_ABORT_EL0) veya (ec == EC_INSTR_ABORT_EL1) {
+        ver 1;                           // instruction abort
+    } değilse eğer (ec == EC_DATA_ABORT_EL0) veya (ec == EC_DATA_ABORT_EL1) {
+        ver 2;                           // data abort
+    } değilse {
+        ver 9;
+    }
+}
+işlev abort_alt_tur(esr: dtam64) -> tam32 {
+    değişken s: tam32 = fault_sinifi(esr);
+    eğer (s != 1) ve (s != 2) {
+        ver 0;
+    }
+    değişken dfsc: dtam64 = esr_dfsc(esr);
+    eğer (dfsc >= 4) ve (dfsc <= 7) {
+        ver 1;                           // translation fault
+    } değilse eğer (dfsc >= 13) ve (dfsc <= 15) {
+        ver 2;                           // permission fault
+    } değilse {
+        ver 3;
+    }
+}
+// Handler kararı: 1=KURTAR (data-abort+translation → demand-page), 2=OLDUR
+// (permission → izolasyon), 3=HALT (kurtarılamaz).
+işlev handler_karari(esr: dtam64) -> tam32 {
+    değişken s: tam32 = fault_sinifi(esr);
+    değişken alt: tam32 = abort_alt_tur(esr);
+    eğer (s == 2) ve (alt == 1) {
+        ver 1;
+    } değilse eğer alt == 2 {
+        ver 2;
+    } değilse {
+        ver 3;
+    }
+}
+// Asm-stub'un çağıracağı handler (C kdl_istisna_isle yerine). FAR/ESR alır (2c'de
+// sentetik self-test; gerçek fault-yönlendirmesi=asm-hook, sonraki adım). Kararı döner.
+işlev kem_istisna_isle(far: dtam64, esr: dtam64) -> tam32 {
+    değişken karar: tam32 = handler_karari(esr);
+    uart_metin("  EXC FAR=0x");
+    uart_onaltilik(far);
+    uart_metin(" ESR=0x");
+    uart_onaltilik(esr);
+    uart_metin(" karar=");
+    eğer karar == 1 {
+        uart_satir("KURTAR");
+    } değilse eğer karar == 2 {
+        uart_satir("OLDUR");
+    } değilse {
+        uart_satir("HALT");
+    }
+    ver karar;
+}
+
 // ============================== ÇEKİRDEK ===============================
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
@@ -197,7 +305,23 @@ işlev main() -> tam32 {
     uart_tam_satir(h);
     uart_tam_satir(kat);
 
-    // Entegrasyon doğrulaması — dört alt-sistem de doğru mu (5 kontrol)?
+    // [5] SİSTEM — .kem panik + exc-handler-mantığı (D-247, Faz-2c entegrasyon).
+    // exc handler'ı 3 sentetik fault ile SELF-TEST: ESR→EC decode + fault-türü + karar
+    // mantığı .kem'de çalışır. Gerçek fault-yönlendirmesi (asm-vektör → .kem hook) SONRAKİ
+    // adım; burada handler MANTIĞININ kem_os içinde çalıştığı kanıtlanır.
+    uart_satir("[5] SISTEM: exc-handler self-test (3 sentetik fault)");
+    değişken k1: tam32 = kem_istisna_isle(1073741824, 2516582404);  // data-abort+translation → KURTAR(1)
+    değişken k2: tam32 = kem_istisna_isle(4096, 2449473549);        // data-abort+permission → OLDUR(2)
+    değişken k3: tam32 = kem_istisna_isle(2147483648, 2214592512);  // instr-abort → HALT(3)
+    değişken exc_ok: tam32 = 0;
+    eğer (k1 == 1) ve (k2 == 2) ve (k3 == 3) {
+        uart_satir("[5] EXC OK kararlar=1,2,3");
+        exc_ok = 1;
+    } değilse {
+        uart_satir("[5] EXC HATA");
+    }
+
+    // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {
         gecti = gecti + 1;
@@ -214,11 +338,16 @@ işlev main() -> tam32 {
     eğer pm == 300 {
         gecti = gecti + 1;
     }
+    eğer exc_ok == 1 {
+        gecti = gecti + 1;
+    }
 
-    eğer gecti == 5 {
+    // Başarı → KEM-OS OK; herhangi bir alt-sistem arızası → .kem PANİK (halt).
+    // (Happy-path'te gecti==6 → panik TETİKLENMEZ; panik gerçek arıza-yolu handler'ı.)
+    eğer gecti == 6 {
         uart_satir("KEMGU KEM-OS OK");
     } değilse {
-        uart_satir("KEMGU KEM-OS HATA");
+        panik("KEM-OS ALT-SISTEM ARIZASI");
     }
     ver 0;
 }
