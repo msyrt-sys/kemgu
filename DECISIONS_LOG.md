@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-251 — DIAG/DUR: runtime→.kem TAM GÖÇÜ K1'de BLOKLU — 2 codegen/dil gap'i (design-stop) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-250).
+
+**Karar [ETKİ: yalnız DECISIONS + memory (teşhis). KOD YAZILMADI — K1 başlamadan bloklu; sahte .kem-allocator
+yazmamak için DUR (direktif: kolay-işe/workaround KAÇMA).]** Görev: C-runtime'ı kademe kademe saf-.kem'e taşı,
+kem_os.ll'de @kdl_* = 0. **SONUÇ: İLK kademe (K1 allocator) başlamadan BLOKLU — 2 fundamental codegen/dil gap'i +
+circularity, hepsi ampirik DOĞRULANDI.** Bu gap'ler mekanik-iş değil, DİL-TASARIM kararı ([[feedback-karar-kurallari]]:
+syntax/semantik → Mehmet).
+
+**BASELINE (kem_os.ll C-runtime çağrıları):** region @kdl_bolge_olustur×22 + @kdl_bolge_serbest×39 + @kdl_global_bolge_al×1
+(=62, HER fonksiyona codegen-emit); array @kdl_dizi_*×5; @kdl_metin_*×2; @kdl_mmio_*×3; @kdl_yetki_*×4.
+
+**WALL-1 — .kem GLOBAL MUTABLE STATE YOK:** modül-düzeyi `değişken sayac: tam32 = 0;` → parser HATA. Allocator'ın
+kalıcı bump-pointer + lazy-global-region cache'i .kem global olamaz (C: `static KdlBolge *kdl_global_bolge`,
+`static` bump). Fixed-adres-depolama workaround mümkün ama tek başına WALL-2'yi çözmez.
+
+**WALL-2 — REGION-EMISSION HER FONKSİYONDA, OPT-OUT YOK:** trivial `işlev f()->tam32{ver 0}` bile IR'da
+`call @kdl_bolge_olustur()` (prologue) + `call @kdl_bolge_serbest()` (epilogue) emit eder (llvm.c:5356-5361, main
+dahil koşulsuz; grep opt-out attribute = 0). → bir .kem `kdl_bolge_olustur`/`malloc` fonksiyonu KENDİ prologue'unda
+@kdl_bolge_olustur çağırır.
+
+**CIRCULARITY (decisive, doğrulandı):** `kdl_bolge.c:72` `kdl_bolge_olustur` → `malloc()` çağırır. Yani .kem `malloc`
+→ (WALL-2 prologue) @kdl_bolge_olustur → kdl_bolge_olustur → malloc → @kdl_bolge_olustur → ... **SONSUZ RECURSION**.
+Aynısı .kem `kdl_bolge_olustur` için (kendini prologue'da çağırır). → region + allocator runtime .kem'de YAZILMAZ.
+
+**SONUÇ:** K5 (kem_os.ll'de @kdl_* = 0) MEVCUT CODEGEN'LE ULAŞILMAZ — @kdl_bolge_* (62 çağrı) her fonksiyonda +
+.kem-tanımlanamaz (self-recursion). K1 (allocator) global-state + circularity ile bloklu → K2 (array, allocator'a bağlı)
+transitif bloklu. K4 leaf-fonksiyonları (kdl_metin_bayt vb., global-state'siz + allocator-çağırmayan) muhtemelen
+migratable AMA tek başına K5'e ulaşmaz (region kalır) + direktif dependency-order (K1 önce) diyor → K4'e atlamadım.
+
+**UNBLOCK İÇİN GEREKEN (Mehmet design-stop kararı):** (1) **region-emission opt-out attribute** — bir .kem
+fonksiyonunu "region prologue/epilogue YOK" işaretle (ör. `çıplak işlev` / `runtime` attribute); llvm.c + codegen.kem
+(parite) + parser/checker = YENİ DİL ÖZELLİĞİ + bellek-güvenliği modelini değiştirir (o fn'de region-tracking yok).
+(2) **global mutable state** (modül-düzeyi mutable `değişken`) VEYA yaptırımlı fixed-adres-depolama deseni. İkisi de
+dil-tasarım kararı. Düzeltme Mehmet'in; ben DUR + flag (direktif: durdurucu gap → DUR).
+
 ## D-250 — DIAG: HEAP Dizi<T> indeks-yazma bare-metal — "codegen-bug mu link-sorunu mu" NET cevap: LİNK (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-249).
