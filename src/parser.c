@@ -1054,9 +1054,38 @@ static Dugum *parse_modul_tanimi(Parser *p) {
 
 /* === Ust oge === */
 
+/* D-252: küresel değişken ad: tip = init;  — modül-düzeyi mutable global.
+ * DUGUM_DEGISKEN(kuresel_mi=1) döner. Bootstrap-circularity çözümü (WALL-1):
+ * allocator'ın kalıcı durumunu (bump-pointer) tutar. Güvensiz-scoped erişim
+ * (checker E010 enforce); yalnız skaler/ptr tip (checker enforce). */
+static Dugum *parse_kuresel_tanimi(Parser *p) {
+    Token kuresel_tok = parser_simdiki(p);
+    parser_ilerle(p);  /* 'küresel' */
+    parser_bekle(p, TOK_DEGISKEN, "P034", "'degisken' bekleniyor (kuresel sonrasi)");
+    Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P035",
+                                "kuresel degisken adi bekleniyor");
+    parser_bekle(p, TOK_IKI_NOKTA, "P036", "':' bekleniyor (kuresel tipi)");
+    Dugum *tip = parse_tip(p);
+    parser_bekle(p, TOK_ESIT, "P037", "'=' bekleniyor (kuresel baslangic degeri)");
+    Dugum *deger = parse_ifade(p);
+    parser_bekle(p, TOK_NOKTALI_VIRGUL, "P038", "';' bekleniyor");
+
+    Dugum *d = dugum_olustur(p->arena, DUGUM_DEGISKEN,
+                             kuresel_tok.satir, kuresel_tok.sutun);
+    if (!d) return NULL;
+    d->veri.degisken.ad =
+        ast_string_kopyala(p->arena, ad_tok.baslangic, ad_tok.uzunluk);
+    d->veri.degisken.ad_uzunluk = ad_tok.uzunluk;
+    d->veri.degisken.tip = tip;
+    d->veri.degisken.deger = deger;
+    d->veri.degisken.kuresel_mi = 1;
+    return d;
+}
+
 static Dugum *parse_ust_oge(Parser *p) {
     Token t = parser_simdiki(p);
     switch (t.tip) {
+        case TOK_KURESEL: return parse_kuresel_tanimi(p);
         case TOK_GERCEKZAMANLI:   /* Realtime Spec V1: 'gerçekzamanlı işlev ...' */
         case TOK_ISLEV:   return parse_islev_tanimi(p);
         case TOK_YAPI:    return parse_yapi_tanimi(p);

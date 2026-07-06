@@ -325,6 +325,7 @@ struct Dugum {
             int ad_uzunluk;
             Dugum *tip;            /* opsiyonel */
             Dugum *deger;
+            int kuresel_mi;        /* D-252: 1 = modül-düzeyi mutable global (küresel değişken) */
         } degisken;
 
         struct {

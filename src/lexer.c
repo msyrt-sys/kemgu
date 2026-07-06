@@ -378,6 +378,7 @@ Token lexer_sonraki_token(Lexer *l) {
 const char *token_tipi_adi(TokenTipi tip) {
     switch (tip) {
         case TOK_EGER: return "EGER";
+        case TOK_KURESEL: return "KURESEL";
         case TOK_DEGILSE: return "DEGILSE";
         case TOK_ICIN: return "ICIN";
         case TOK_IKEN: return "IKEN";
