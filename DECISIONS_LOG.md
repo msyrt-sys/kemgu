@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-256 — F2/AUDIT: `çıplak işlev` adversarial soundness denetimi — 2 kusur ONARILDI (döngü-ρ_iter sızıntısı + method-grant) (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-255).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (Bulgu #1: IKEN/İÇİN ρ_iter guard); `src/tip_kontrol.c` (Bulgu #2: özellik/uygula
+method çıplak-grant); `test/ciplak_region_free_harness.sh` (YENİ IR-içerik gate) + Makefile; `test/test_tip_kontrol.c`
+(+3). SELF-HOST + CHECKER — soundness-kritik.]**
+
+F2 (D-254/D-255) sonrası, K1 inşasından ÖNCE `çıplak işlev` primitifine 4-lens adversarial denetim (safety/ABI/parity/
+analiz; 9 agent, per-bulgu bağımsız skeptik doğrulama). Parity gate'lerin (codegen_diff 75/75 + fixpoint) KAÇIRDIĞI
+2 gerçek, çıplak-özgü, belgeli-sınır-DIŞI kusur bulundu + onarıldı:
+
+- **Bulgu #1 (YÜKSEK, K1-BLOKE) — self-host çıplak-döngü ρ_iter sızıntısı:** `codegen.kem` IKEN/İÇİN handler'ı çıplak
+  fn içindeki en-dış döngüde per-iterasyon `@kdl_bolge_olustur`/`@kdl_bolge_serbest` (F4.3 ρ_iter) emit ediyordu →
+  çıplak "sıfır region-symbol" invaryantı ihlali → bootstrap-circularity döngü-içeren her çıplak fn'de geri doğuyor.
+  C-codegen'de ρ_iter kavramı HİÇ yok (grep 0) → C çıplak-döngü doğal region-free; sapma yalnız self-host. **Kanıt:**
+  çıplak+`iken` topla() → C=0, self-host=2 (fix öncesi). **Onarım:** `Ayr.ciplak_aktif` bayrağı (islev_uret'te
+  `ciplak_mi`'den set) + iki ρ_iter CREATE sitesine `ve p.ciplak_aktif == 0` guard'ı. Serbest siteleri zaten
+  `rho_iter==""` no-op. **exit-kodu codegen_diff'in GÖRMEDİĞİ kusur** (çıplak allocator host'ta linklenir → sızıntı
+  exit'te maskelenir; kusur IR/bare-metal link seviyesinde).
+- **Bulgu #2 (ORTA) — çıplak güvensiz-grant method'lara sızmıyor:** D-254 grant yalnız standalone `DUGUM_ISLEV`
+  yolundaydı (tip_kontrol.c:5077); özellik default-impl (5145) + uygula method (5207) yolları `ciplak_mi` okumuyordu
+  → geçerli çıplak-method (küresel/`*p`/asm) YANLIŞ reddediliyor (E010/G001/G002) + codegen çıplak-method'u
+  prologue-skip ile emit ettiğinden checker↔codegen SAPMASI. Wrong-**reject** (güvenli taraf; geçersiz kabul YOK) →
+  orta. **Onarım:** grant desenini (`guvensiz_baglam++/--`) iki method yoluna da ekle.
+
+**REFUTED (bilgi):** safety-lens "çıplak stack-OOB sınır-kontrolünü eler" iddiası — skeptik BİREBİR doğrulayıp
+REDDETTİ: bu `güvensiz`'in TASARIMLI opt-out'u (D-069); çıplak = güvensiz-tier olduğundan tutarlı, YENİ açık değil.
+
+**FALSİFİYE-KANIT (kalıcı gate):** (a) **YENİ `calistir_ciplak_region_free`** (test_tumu'ya eklendi) — çıplak+iken/
++için fn'de region-symbol=0 HEM C HEM self-host + normal-döngü ρ_iter korunur (F4.3 regresyon); 4/4. Bu gate
+codegen_diff'in exit-körlüğünü kapatır. (b) tip_kontrol +3: çıplak standalone/method *p deref → 0 hata, çıplak-olmayan
+method → G001. (c) llvm 241/241, tip_kontrol 187/187 yeşil. (d) fixpoint stage1==stage2 KORUNDU (codegen.kem
+çıplak-kullanmıyor → ciplak_aktif hep 0, kendi self-compile'ı etkilenmez) + codegen_diff 75/75.
+
+**SIRADA:** F2 artık denetlenmiş + sağlam → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer, döngü dâhil
+region-free, kem_os.kem entegre, C kdl_bare_heap yolu sil).
+
+---
+
 ## D-255 — SELF-HOST/F2: `çıplak işlev` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-06) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-254).

@@ -5142,7 +5142,13 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                     s.ast_dugumu = p;
                     sembol_ekle(tk->scope, tk->arena, &s);
                 }
+                /* D-256: çıplak method gövdesi = örtük güvensiz-bağlam (standalone
+                 * DUGUM_ISLEV yolundaki grant ile birebir; codegen zaten çıplak-method'u
+                 * prologue-skip ile emit eder — checker↔codegen tutarlılığı). */
+                int ciplak_m = m->veri.islev.ciplak_mi;
+                if (ciplak_m) tk->guvensiz_baglam++;
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
+                if (ciplak_m) tk->guvensiz_baglam--;
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski;
             }
@@ -5204,7 +5210,12 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                     s.ast_dugumu = p;
                     sembol_ekle(tk->scope, tk->arena, &s);
                 }
+                /* D-256: çıplak method gövdesi = örtük güvensiz-bağlam (özellik yolu +
+                 * standalone DUGUM_ISLEV ile birebir; checker↔codegen tutarlılığı). */
+                int ciplak_m = m->veri.islev.ciplak_mi;
+                if (ciplak_m) tk->guvensiz_baglam++;
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
+                if (ciplak_m) tk->guvensiz_baglam--;
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski_m;
             }

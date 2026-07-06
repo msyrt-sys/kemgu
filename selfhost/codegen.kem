@@ -67,6 +67,7 @@ yapı Ayr {
     sc_slot: metin;        // B4: ve/veya kısa-devre i32 slot reg'i — fn girişinde (entry) BİR KEZ alloca, tüm ve/veya tekrar kullanır (döngü-içi alloca yığın taşmasını önler)
     rho_iter: metin;       // F4.3: en-dış döngü ρ_iter IR reg ("%N") — gövde-girişinde yarat, her gövde-çıkışında serbest; ""=döngü-dışı
     dongu_d: tam32;        // F4.3: emisyon döngü-derinliği (0=döngü-dışı; 1=en-dış → ρ_iter sahibi; >1=iç, ρ_iter'a dokunmaz)
+    ciplak_aktif: tam32;   // D-256: aktif fn çıplak mı (1) → ρ_iter (döngü region-prologue) DA bastırılır (C paritesi)
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -2989,7 +2990,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter YARAT (per-iterasyon;
         // Lbody re-entry → %ri her iter yeniden). İç döngü (dongu_d>1) ρ_iter'a dokunmaz.
         p.dongu_d = p.dongu_d + 1;
-        eğer p.dongu_d == 1 {
+        // D-256: çıplak fn'de ρ_iter (per-iterasyon region) DE bastırılır → C paritesi
+        // (C llvm.c'de rho_iter kavramı yok; çıplak "sıfır region-symbol" invaryantı döngüde de).
+        eğer p.dongu_d == 1 ve p.ciplak_aktif == 0 {
             değişken ri: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(ri)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
             p.rho_iter = reg_str(ri);
@@ -3053,7 +3056,8 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(elr); yaz_str(", ptr "); yaz_str(xa); yb(10);
         // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter yarat (per-iterasyon).
         p.dongu_d = p.dongu_d + 1;
-        eğer p.dongu_d == 1 {
+        // D-256: çıplak fn'de ρ_iter bastırılır (C paritesi; yukarı IKEN ile aynı gerekçe).
+        eğer p.dongu_d == 1 ve p.ciplak_aktif == 0 {
             değişken ri2: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(ri2)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
             p.rho_iter = reg_str(ri2);
@@ -3718,6 +3722,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     // fn yine "ptr %rho" alır, kullanılmaz); main-çıplak → "null". rho_yerel="" → serbest
     // no-op. C llvm.c islev_uret ρ-prologue aynası.
     değişken ciplak: tam32 = ciplak_mi(p, idx);
+    p.ciplak_aktif = ciplak;   // D-256: gövde-içi ρ_iter (döngü region) de bu bayrağa göre bastırılır
     eğer ciplak == 1 {
         eğer main_mi == 1 { p.rho_ref = "null"; } değilse { p.rho_ref = "%rho"; }
         p.rho_yerel = "";
@@ -4996,7 +5001,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0,
+        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
