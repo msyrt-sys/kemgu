@@ -85,6 +85,8 @@ yapı Ayr {
     // NOT: yapi_ad/yapi_abase/yapi_acount/alan_ad/alan_tip/fn_ad ZATEN yukarıda (paylaşılan;
     //      --check geçişi KEMGU tipiyle, --llvm geçişi LLVM tipiyle doldurur — ayrı invocation).
     g_isim: Dizi<metin>;     // global isimler (builtin + üst-düzey tanım)
+    g_kuresel_ad: Dizi<metin>;   // D-253: küresel değişken adları (@ad load/store)
+    g_kuresel_tip: Dizi<metin>;  // paralel: küresel LLVM ir tipi
     yerel: Dizi<metin>;      // append-only kapsam yığını (param + lokal)
     yerel_tip: Dizi<metin>;  // yerel ile paralel: tip-string ("?"=bilinmiyor)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
@@ -237,6 +239,7 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "özellik") { ver "OZELLIK"; }
     eğer metin_esit(w, "modül") { ver "MODUL"; }
     eğer metin_esit(w, "değişken") { ver "DEGISKEN"; }
+    eğer metin_esit(w, "küresel") { ver "KURESEL"; }   // D-253: modül-mutable global
     eğer metin_esit(w, "doğru") { ver "DOGRU"; }
     eğer metin_esit(w, "yanlış") { ver "YANLIS"; }
     eğer metin_esit(w, "boş") { ver "BOS"; }
@@ -1673,6 +1676,20 @@ işlev parse_sabit(p: &değişken Ayr) -> tam32 {
     bekle(p, "NOKTALI_VIRGUL");
     ver dugum2(p, "SABIT", ad, s, u, tip, dg);
 }
+// D-253: küresel değişken ad: tip = init;  → "KURESEL" düğüm (C parser.c parite).
+işlev parse_kuresel(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // küresel
+    bekle(p, "DEGISKEN");
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "ESIT");
+    değişken dg: tam32 = parse_ifade(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum2(p, "KURESEL", ad, s, u, tip, dg);
+}
 // ---- P5: modül / kullan / dışa / genel ----
 // kullan m[::seg...][::{a,b}][olarak d];  → KULLAN (deger=yol; seçili/alias dump'ta yok).
 işlev parse_kullan(p: &değişken Ayr) -> tam32 {
@@ -1746,6 +1763,7 @@ işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
     eğer sim_mi(p, "UYGULA") { ver parse_uygula(p); }
     eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
+    eğer sim_mi(p, "KURESEL") { ver parse_kuresel(p); }   // D-253
     eğer sim_mi(p, "KULLAN") { ver parse_kullan(p); }
     eğer sim_mi(p, "DISA") { ver parse_disa(p); }
     eğer sim_mi(p, "GENEL") { ver parse_genel(p); }
@@ -2396,6 +2414,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                     ver lr;
                 }
             }
+        }
+        // D-253: küresel değişken → @ad'den load (local DEĞİL; sabit gibi inline değil).
+        değişken kt: metin = kuresel_tip_bul(p, dizi_al(p.a_deg, idx));
+        eğer metin_uzunluk(kt) > 0 {
+            değişken kr: tam32 = yeni_reg(p);
+            değişken krs: metin = reg_str(kr);
+            yaz_str("  "); yaz_str(krs); yaz_str(" = load "); yaz_str(kt);
+            yaz_str(", ptr @"); yaz_str(dizi_al(p.a_deg, idx)); yb(10);
+            p.son_tip = kt;
+            ver krs;
         }
         değişken areg: metin = cg_var_bul(p, dizi_al(p.a_deg, idx));
         değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, idx));
@@ -3232,6 +3260,14 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken lhs: tam32 = dizi_al(p.cocuk, cb);
         // CG3: lhs TANIMLAYICI → doğrudan store.
         eğer metin_esit(dizi_al(p.a_ad, lhs), "TANIMLAYICI") {
+            // D-253: küresel değişken → store @ad (local DEĞİL).
+            değişken kt2: metin = kuresel_tip_bul(p, dizi_al(p.a_deg, lhs));
+            eğer metin_uzunluk(kt2) > 0 {
+                değişken vk: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                yaz_str("  store "); yaz_str(kt2); yaz_str(" "); yaz_str(vk);
+                yaz_str(", ptr @"); yaz_str(dizi_al(p.a_deg, lhs)); yb(10);
+                ver 0;
+            }
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
             yaz_str("  store "); yaz_str(vt); yaz_str(" "); yaz_str(v); yaz_str(", ptr ");
@@ -3767,6 +3803,46 @@ işlev emit_tanimlar(p: &değişken Ayr, kok: tam32) -> tam32 {
     }
     ver 0;
 }
+// D-253: küresel değişken (modül-mutable global) — C llvm.c parite.
+işlev kuresel_tip_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken n: tam32 = dizi_boyut(p.g_kuresel_ad);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.g_kuresel_ad, i), ad) { ver dizi_al(p.g_kuresel_tip, i); }
+        i = i + 1;
+    }
+    ver "";
+}
+işlev kuresel_init_yaz(p: &değişken Ayr, dv: tam32, ir: metin) -> tam32 {
+    değişken t: metin = dizi_al(p.a_ad, dv);
+    eğer metin_esit(t, "BOS") { yaz_str("null"); ver 0; }
+    eğer metin_esit(t, "TAM") { yaz_str(dizi_al(p.a_deg, dv)); ver 0; }
+    eğer metin_esit(t, "MANTIKSAL") { yaz_str(dizi_al(p.a_deg, dv)); ver 0; }
+    eğer metin_esit(ir, "ptr") { yaz_str("null"); ver 0; }
+    yaz_str("0"); ver 0;
+}
+// Üst-düzey KURESEL düğümlerini tara → kayıt + @ad = internal global <ir> <init>.
+işlev kuresel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken u: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, u), "KURESEL") {
+            değişken ad: metin = dizi_al(p.a_deg, u);
+            değişken ucb: tam32 = dizi_al(p.a_cb, u);
+            değişken ir: metin = ll_tip(p, dizi_al(p.cocuk, ucb));
+            dizi_ekle(p.g_kuresel_ad, ad);
+            dizi_ekle(p.g_kuresel_tip, ir);
+            yaz_str("@"); yaz_str(ad); yaz_str(" = internal global "); yaz_str(ir); yaz_str(" ");
+            kuresel_init_yaz(p, dizi_al(p.cocuk, ucb + 1), ir);
+            yb(10);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
@@ -3775,6 +3851,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
+    kuresel_topla(p, kok);   // D-253: küresel değişken module-globalleri
     yb(10);
     emit_tanimlar(p, kok);   // D3: DISA-aç + MODUL-recurse + ISLEV emit
     ver 0;
@@ -3861,7 +3938,8 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ad: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ad, "ISLEV") veya metin_esit(ad, "YAPI")
-          veya metin_esit(ad, "CESIT") veya metin_esit(ad, "SABIT") {
+          veya metin_esit(ad, "CESIT") veya metin_esit(ad, "SABIT")
+          veya metin_esit(ad, "KURESEL") {   // D-253 küresel değişken → global ad
             g_ekle(p, dizi_al(p.a_deg, c));
         }
         eğer metin_esit(ad, "ISLEV") { imza_kaydet(p, c); }   // TC3d imza tablosu
@@ -4891,7 +4969,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
-        g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_basla: 0,

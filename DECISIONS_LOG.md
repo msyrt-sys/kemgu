@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-253 — SELF-HOST/F1: `küresel değişken` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-252).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lexer+parser+codegen+g_isim pre-pass); `test/cg_korpus/cg_kuresel.kem` (YENİ
+codegen_diff parite). SELF-HOST ÇEKİRDEĞİ — soundness-kritik.]** D-252 `küresel değişken`'i C-derleyiciye ekledi ama
+`codegen.kem`'e (self-host) EKLEMEDİ → C↔self-host DIVERGENCE (D-249 dersi). Bu commit codegen.kem'e AYNALADI
+(oracle=C llvm.c):
+
+- **Lexer:** "küresel" → "KURESEL" token.
+- **Parser:** `parse_kuresel` ("KURESEL" düğüm: dugum2 ad + tip + init) + `parse_ust_oge` dispatch.
+- **Checker/pre-pass:** KURESEL adı `g_isim`'e (üst-düzey global ad çözümü — sabit/işlev gibi).
+- **Codegen:** `g_kuresel_ad`/`g_kuresel_tip` tracking + `kuresel_topla` (module `@ad = internal global <ir> <init>`
+  emit) + TANIMLAYICI → `load @ad` + ATAMA → `store @ad` (sabit gibi inline değil — mutable).
+
+**FALSİFİYE-KANIT (hepsi kalıcı gate):** (a) **cg_kuresel.kem codegen_diff** — persistence (yaz 42, oku ayrı-fn → 42),
+C-codegen exit=42 == self-host exit=42 (korpus **74/74**, HEM C-codegen HEM self-host geçer). (b) self-host --llvm IR =
+C IR (`@g_val = internal global i32 0` + store/load). (c) **FIXPOINT stage1==stage2 BİREBİR (32833 satır**; codegen.kem
+küresel-kullanmıyor ama eklenen handler kodu self-compile kararlı; KIRILMADI). test_tumu tam yeşil.
+
+**DÜRÜST SINIR (pre-existing, D-249 sınıfı):** self-host checker E010/E011/E012 (güvensiz-gate / tip-kısıt / const-init)
+ENFORCE ETMİYOR — self-host'ta güvensiz-derinlik-tracking yok (deref için de yoktu, D-249 flag). Geçerli program parity
+ÇALIŞIR (--check+--llvm+exit); INVALID program (küresel güvensiz-dışı) self-host KABUL eder, C REDDEDER = divergence
+yalnız invalid-programda. Safe .kem küresel üretmez → Kırılmazlık pratikte korunur. Hardening (ayrı): self-host checker
+güvensiz-tracking + E010/E011/E012. **F1 TAM (C + self-host codegen parite). SIRADAKİ: F2 çıplak işlev.**
+
 ## D-252 — DİL/F1: `küresel değişken` (modül-mutable global, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-251).
