@@ -5070,10 +5070,19 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             escape_analiz_islev(&ea, d);
             tk->aktif_escape = &ea;
 
+            /* D-254 çıplak işlev: gövde örtük güvensiz-bağlam. Çıplak = güvensiz-tier
+             * primitive (region-prologue'suz, ham pointer + küresel ile allocator
+             * yazımı için) → gövdesi explicit `güvensiz {}` gerektirmez. Kırılmazlık
+             * korunur: normal güvenli kod çıplak'ı kazara kullanamaz (opt-in keyword). */
+            int ciplak_govde = d->veri.islev.ciplak_mi;
+            if (ciplak_govde) tk->guvensiz_baglam++;
+
             /* Govdeyi kontrol et */
             if (d->veri.islev.govde) {
                 tip_kontrol_deyim(tk, d->veri.islev.govde);
             }
+
+            if (ciplak_govde) tk->guvensiz_baglam--;
 
             tk->aktif_escape = eski_escape;
             escape_serbest(&ea);

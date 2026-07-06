@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-254 — DİL/F2: `çıplak işlev` (no-region-prologue fonksiyon, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-253).
+
+**Karar [ETKİ: `src/lexer.h/c` + `src/anahtar_kelime.c` (TOK_CIPLAK); `src/ast.h` (islev.ciplak_mi); `src/parser.c`
+(modifier parse + 6 dispatch sitesi); `src/tip_kontrol.c` (çıplak gövde = örtük güvensiz-bağlam); `src/llvm.c`
+(islev_uret region-prologue SKIP + güvensiz-grant); `test/test_llvm.c` (+3 assert). WALL-2 / bootstrap-circularity
+çözümü — 2 primitiften İKİNCİSİ.]**
+
+D-251 K1 (runtime→.kem allocator göçü) `kdl_bolge_olustur→malloc→...` döngüsünde BLOKLU idi: HER .kem fonksiyonu
+girişinde `@kdl_bolge_olustur` (ρ_yerel) + main'de `@kdl_global_bolge_al` emit ediyor → malloc'u .kem'de yazan
+allocator'ın KENDİ prologue'u malloc çağırıyor = sonsuz döngü. **WALL-2 çözümü: `çıplak işlev`** — girişinde
+region-prologue EMIT EDİLMEZ.
+
+- **Lexer:** `çıplak` (`\xc3\xa7\xc4\xb1plak`, 8 bayt) → TOK_CIPLAK; binary-search tablo `çeşit`<`çıplak`<`özellik`
+  (`\xa7`<`\xb6`). Komşu keyword sağlaması: çeşit/özellik hâlâ tanınıyor.
+- **Parser:** `çıplak` opsiyonel işlev-modifier (gerçekzamanlı ile herhangi sırayla, P039 çift-yazım hatası);
+  `parse_ust_oge` + `dışa`/`genel`/`özellik`/`uygula` + `sync_token_mu` dispatch. `islev.ciplak_mi` düğümde.
+- **Checker:** çıplak gövde = örtük güvensiz-bağlam (`tk->guvensiz_baglam++`) → ham pointer deref-write + küresel
+  yazımı explicit `güvensiz {}` gerektirmez. Kırılmazlık korunur: çıplak opt-in keyword, güvensiz-tier.
+- **Codegen (llvm.c):** `islev_uret`'te ciplak → 3 emisyon ATLA: (1) main `@kdl_global_bolge_al` seed, (2)
+  `@kdl_bolge_olustur` (ρ_yerel), (3) `@kdl_bolge_serbest` epilogue (rho_yerel=NULL → serbest_emit no-op).
+  **ABI kararı:** ρ param KORUNUR (main-değil fn'ler yine `ptr %rho` alır, kullanılmaz) → çağrı yerleri DEĞİŞMEZ
+  (D-249 imza-uyumsuz-çağrı segfault riski YOK). Bu spec-uyumlu (yasak = region-YARATMA çağrıları, param değil).
+  Ayrıca çıplak gövde için `g->guvensiz_derinlik++` (deref-write doğru emit).
+
+**FALSİFİYE-KANIT (kalıcı gate, `calistir_llvm_test`):** (a) **[236] ciplak: tahsis IR'inde region-prologue = 0** —
+çıplak `tahsis` fn gövdesinde `@kdl_bolge_olustur`+`@kdl_global_bolge_al` grep-sayısı = 0 (IR-içerik denetimi
+`ir_region_prologue_sayisi`). (b) **[237] kontrast** — normal `main` prologue >= 1 (skip yalnız çıplak'a özgü).
+(c) **[238] ciplak-allocator kompozisyon** — küresel bump 2 çağrı → 2 FARKLI adres (a=0,b=8), b-a==8 → **exit 42**;
+sonsuz-recursion YOK. Ek manuel: tam-çıplak program (main de çıplak) → TÜM IR'da 0 C-runtime region sembolü →
+freestanding standalone link + exit 42 (K1 hedefinin canlı önizlemesi). Host: lexer 103/103, parser 107/107,
+tip_kontrol 184/184, llvm 241/241.
+
+**SINIR / SIRADA:** (1) **F2 self-host parite** (D-255) — `codegen.kem`'e AYNALA (D-253 dersi: divergence bırakma).
+(2) Self-host checker güvensiz-tracking yok → çıplak-güvensiz-grant self-host'ta ENFORCE edilmez (D-249/D-253 sınıfı,
+geçerli-program parity çalışır). (3) F2 bitince → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer,
+kem_os.kem'e entegre, C kdl_bare_heap yolu sil).
+
+---
+
 ## D-253 — SELF-HOST/F1: `küresel değişken` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-252).

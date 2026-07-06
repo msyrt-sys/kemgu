@@ -5403,30 +5403,46 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->label = 0;
     g->isimler = NULL;
 
-    /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge
-     * seed (gövdenin İLK komutu; provizyonel reg, hoist_renumber tutarlı yeniler). */
-    if (main_mi) {
-        int rr = yeni_reg(g);
-        fprintf(g->out, "  %%%d = call ptr @kdl_global_bolge_al()\n", rr);
-        char *rs = (char *)arena_ayir(g->arena, 16);
-        snprintf(rs, 16, "%%%d", rr);
-        g->rho_ref = rs;
+    /* D-254 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap
+     * circularity çözümü). @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK
+     * → çıplak fn'in IR'ında sıfır region-symbol referansı (K1 allocator hedefi:
+     * malloc→region→malloc döngüsü kırılır). ρ param uniform ABI için korunur
+     * (main-DEĞİL fn'ler yine "ptr %rho" alır; çağrı yerleri değişmez) ama gövdede
+     * kullanılmaz. main-çıplak'ta ρ yok → "null". rho_yerel = NULL → tüm ret'lerde
+     * kdl_bolge_serbest no-op (rho_yerel_serbest_emit NULL-korumalı). */
+    int ciplak = islev->veri.islev.ciplak_mi;
+    if (ciplak) {
+        g->rho_ref = main_mi ? "null" : "%rho";
+        g->rho_yerel = NULL;
     } else {
-        g->rho_ref = "%rho";
-    }
+        /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge
+         * seed (gövdenin İLK komutu; provizyonel reg, hoist_renumber tutarlı yeniler). */
+        if (main_mi) {
+            int rr = yeni_reg(g);
+            fprintf(g->out, "  %%%d = call ptr @kdl_global_bolge_al()\n", rr);
+            char *rs = (char *)arena_ayir(g->arena, 16);
+            snprintf(rs, 16, "%%%d", rr);
+            g->rho_ref = rs;
+        } else {
+            g->rho_ref = "%rho";
+        }
 
-    /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
-     * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
-     * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
-     * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
-     * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
-    {
+        /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
+         * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
+         * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
+         * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
+         * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
         int yr = yeni_reg(g);
         fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", yr);
         char *ys = (char *)arena_ayir(g->arena, 16);
         snprintf(ys, 16, "%%%d", yr);
         g->rho_yerel = ys;
     }
+
+    /* D-254: çıplak gövde örtük güvensiz-bağlam — ham pointer deref-write + küresel
+     * yazımı explicit `güvensiz {}` gerektirmez (çıplak = güvensiz-tier primitive). */
+    int ciplak_onceki_guvensiz = g->guvensiz_derinlik;
+    if (ciplak) g->guvensiz_derinlik++;
 
     /* Parametreleri alloca'ya kopyala */
     for (int i = 0; i < n; i++) {
@@ -5527,6 +5543,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->aktif_bolge = NULL;
     }
     g->rho_yerel = NULL;   /* F4.2b: sonraki fn'e sızmasın */
+    g->guvensiz_derinlik = ciplak_onceki_guvensiz;   /* D-254: çıplak güvensiz-grant geri al */
 }
 
 /* D-071 (Sınıf B lambda V2): lifted lambda — `define <ret> @lambda_N(ptr %env,
