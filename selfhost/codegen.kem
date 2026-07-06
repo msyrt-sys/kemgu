@@ -87,6 +87,7 @@ yapı Ayr {
     g_isim: Dizi<metin>;     // global isimler (builtin + üst-düzey tanım)
     g_kuresel_ad: Dizi<metin>;   // D-253: küresel değişken adları (@ad load/store)
     g_kuresel_tip: Dizi<metin>;  // paralel: küresel LLVM ir tipi
+    g_ciplak: Dizi<tam32>;       // D-255: çıplak işlev düğüm idx'leri (region-prologue SKIP)
     yerel: Dizi<metin>;      // append-only kapsam yığını (param + lokal)
     yerel_tip: Dizi<metin>;  // yerel ile paralel: tip-string ("?"=bilinmiyor)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
@@ -240,6 +241,7 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "modül") { ver "MODUL"; }
     eğer metin_esit(w, "değişken") { ver "DEGISKEN"; }
     eğer metin_esit(w, "küresel") { ver "KURESEL"; }   // D-253: modül-mutable global
+    eğer metin_esit(w, "çıplak") { ver "CIPLAK"; }     // D-255: no-region-prologue işlev
     eğer metin_esit(w, "doğru") { ver "DOGRU"; }
     eğer metin_esit(w, "yanlış") { ver "YANLIS"; }
     eğer metin_esit(w, "boş") { ver "BOS"; }
@@ -1413,9 +1415,15 @@ işlev parse_blok(p: &değişken Ayr) -> tam32 {
 // İşlev (gerçekzamanlı? + generic + param + dönüş + gövde). imza_yeterli=1 →
 // gövde yerine ';' (özellik imzası). Generic params PARSE+DISCARD (dump'ta yok).
 işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") {
-        ilerle(p);
-        eğer sim_mi(p, "GERCEKZAMANLI") { p.hata_say = p.hata_say + 1; ilerle(p); }
+    // D-255: çıplak / gerçekzamanlı işlev-modifier (herhangi sıra). C parser.c aynası.
+    değişken ciplak: tam32 = 0;
+    değişken devam_mod: mantıksal = doğru;
+    iken devam_mod {
+        eğer sim_mi(p, "GERCEKZAMANLI") { ilerle(p); }
+        değilse {
+            eğer sim_mi(p, "CIPLAK") { ciplak = 1; ilerle(p); }
+            değilse { devam_mod = yanlış; }
+        }
     }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     bekle(p, "ISLEV");
@@ -1439,7 +1447,9 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
         eğer (imza_yeterli == 1) ve sim_mi(p, "NOKTALI_VIRGUL") { ilerle(p); }
         değilse { p.hata_say = p.hata_say + 1; }
     }
-    ver dugum_n(p, "ISLEV", ad, s, u, kids);
+    değişken ni: tam32 = dugum_n(p, "ISLEV", ad, s, u, kids);
+    eğer ciplak == 1 { dizi_ekle(p.g_ciplak, ni); }   // D-255: region-prologue SKIP işareti
+    ver ni;
 }
 işlev parse_islev(p: &değişken Ayr) -> tam32 { ver parse_islev_genel(p, 0); }
 
@@ -1634,7 +1644,7 @@ işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
-        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev_genel(p, 1));
         } değilse { devam = yanlış; }
     }
@@ -1657,7 +1667,7 @@ işlev parse_uygula(p: &değişken Ayr) -> tam32 {
     bekle(p, "SOL_SUSLU");
     değişken devam: mantıksal = doğru;
     iken devam {
-        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev(p));
         } değilse { devam = yanlış; }
     }
@@ -1722,7 +1732,7 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
 }
 // genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).
 işlev parse_disa_govde(p: &değişken Ayr) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") veya sim_mi(p, "CIPLAK") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
     eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
@@ -1757,7 +1767,7 @@ işlev parse_modul(p: &değişken Ayr) -> tam32 {
     ver dugum_n(p, "MODUL", ad, s, u, kids);
 }
 işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") veya sim_mi(p, "CIPLAK") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
     eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
@@ -3623,6 +3633,16 @@ işlev param_dizi_ref_mi(p: &değişken Ayr, c: tam32) -> mantıksal {
     değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));  // iç tip
     ver metin_esit(dizi_al(p.a_ad, ic), "TIP_DIZI");
 }
+// D-255: idx çıplak işlev mi? (g_ciplak listesi). Çıplak → region-prologue SKIP.
+işlev ciplak_mi(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.g_ciplak);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer dizi_al(p.g_ciplak, i) == idx { ver 1; }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
@@ -3692,20 +3712,31 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     // V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge seed
     // (alloca-hoist'tan SONRA → seed reg, hoist-edilen alloca'lardan sonra; C llvm.c
     // ile birebir). Seed gövdeden önce gelir → kullanıcı-fn/dizi çağrıları ρ'yı kullanır.
-    eğer main_mi == 1 {
-        değişken rr: tam32 = yeni_reg(p);
-        yaz_str("  "); yaz_str(reg_str(rr)); yaz_str(" = call ptr @kdl_global_bolge_al()"); yb(10);
-        p.rho_ref = reg_str(rr);
+    // D-255 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap circularity).
+    // @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK → çıplak fn IR'inde sıfır
+    // region-symbol (K1 allocator hedefi). ρ param uniform-ABI için korunur (main-değil
+    // fn yine "ptr %rho" alır, kullanılmaz); main-çıplak → "null". rho_yerel="" → serbest
+    // no-op. C llvm.c islev_uret ρ-prologue aynası.
+    değişken ciplak: tam32 = ciplak_mi(p, idx);
+    eğer ciplak == 1 {
+        eğer main_mi == 1 { p.rho_ref = "null"; } değilse { p.rho_ref = "%rho"; }
+        p.rho_yerel = "";
     } değilse {
-        p.rho_ref = "%rho";
+        // V2-F4.2a: ρ referansı. Normal fn → "%rho". main → global bölge seed.
+        eğer main_mi == 1 {
+            değişken rr: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(rr)); yaz_str(" = call ptr @kdl_global_bolge_al()"); yb(10);
+            p.rho_ref = reg_str(rr);
+        } değilse {
+            p.rho_ref = "%rho";
+        }
+        // V2-F4.2b (b2): ρ_yerel — scope-yerel bölge aç (gövdeden ÖNCE). Kaçmayan (confined)
+        // diziler buraya yönlenir (b3), her ret öncesi kdl_bolge_serbest. main dahil HER fn
+        // (main'in GLOBAL %rho'su serbest EDİLMEZ; ρ_yerel ayrı + serbest). C llvm.c aynası.
+        değişken yr_yerel: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(yr_yerel)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
+        p.rho_yerel = reg_str(yr_yerel);
     }
-    // V2-F4.2b (b2): ρ_yerel — scope-yerel bölge aç (gövdeden ÖNCE). Kaçmayan (confined)
-    // diziler buraya yönlenir (b3), her ret öncesi kdl_bolge_serbest. main dahil HER fn
-    // (main'in GLOBAL %rho'su serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu adımda BOŞ
-    // (routing yok) → serbest no-op = sound. C-tarafı llvm.c ρ_yerel makinesi aynası.
-    değişken yr_yerel: tam32 = yeni_reg(p);
-    yaz_str("  "); yaz_str(reg_str(yr_yerel)); yaz_str(" = call ptr @kdl_bolge_olustur()"); yb(10);
-    p.rho_yerel = reg_str(yr_yerel);
     // B4: ve/veya kısa-devre slot'u ENTRY bloğunda BİR KEZ (C hoist davranışı aynası).
     // Tüm ve/veya tekrar kullanır → döngü-içi alloca yığın taşması YOK. Kullanılmasa da
     // zararsız (entry alloca). Reuse sound: her ve/veya load'u sonraki store'dan önce
@@ -4969,7 +5000,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         pa_node: [], pa_reg: [], pa_base: 0,
         str_deg: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_basla: 0,

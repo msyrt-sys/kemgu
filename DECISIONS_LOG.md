@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-255 — SELF-HOST/F2: `çıplak işlev` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-254).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lexer + Ayr.g_ciplak + parser modifier/dispatch + ciplak_mi + islev_uret
+prologue-skip); `test/cg_korpus/cg_ciplak.kem` (YENİ codegen_diff parite). SELF-HOST ÇEKİRDEĞİ — soundness-kritik.]**
+D-254 `çıplak işlev`'i C-derleyiciye ekledi ama `codegen.kem`'e (self-host) EKLEMEDİ → C↔self-host DIVERGENCE
+(D-249/D-253 dersi). Bu commit codegen.kem'e AYNALADI (oracle = C llvm.c):
+
+- **Lexer:** "çıplak" → "CIPLAK" token.
+- **Parser:** `parse_islev_genel` çıplak/gerçekzamanlı modifier (herhangi sıra, nested eğer — `değilse eğer`
+  codegen.kem'de yok, fixpoint-güvenli); node idx `p.g_ciplak`'a kaydedilir. Dispatch: `parse_disa_govde` +
+  `parse_ust_oge` + özellik/uygula gövde (`sim_mi CIPLAK` 6 sitede).
+- **Ayr struct:** `g_ciplak: Dizi<tam32>` (çıplak işlev düğüm idx listesi) + init `[]`.
+- **Codegen:** `ciplak_mi(p, idx)` (g_ciplak üyelik) + `islev_uret`'te ciplak → region-prologue 3-emisyon ATLA
+  (main `@kdl_global_bolge_al` seed, `@kdl_bolge_olustur` ρ_yerel; rho_yerel="" → serbest no-op). ρ param uniform-ABI
+  için korunur (çağrı yerleri değişmez). C llvm.c ρ-prologue aynası.
+
+**FALSİFİYE-KANIT (hepsi kalıcı gate):** (a) **cg_ciplak.kem codegen_diff** — çıplak-allocator (küresel bump, 2 çağrı
+→ farklı adres, b-a==8), C-codegen exit=42 == self-host exit=42; **tahsis imzası BİREBİR** (`define i64 @tahsis(ptr
+%rho)`) + HER İKİ codegen'de tahsis IR'inde region-prologue=0. Korpus **75/75** (HEM C-codegen HEM self-host geçer).
+(b) **FIXPOINT stage1==stage2 BİREBİR** (codegen.kem çıplak-kullanmıyor ama eklenen handler self-compile kararlı;
+KIRILMADI). test_tumu tam yeşil.
+
+**DÜRÜST SINIR (pre-existing, D-249/D-253 sınıfı):** self-host checker güvensiz-tracking yok → D-254 çıplak-güvensiz-grant
+(ham pointer + küresel explicit `güvensiz` gerektirmez) self-host'ta ENFORCE edilmez. Geçerli-program parity ÇALIŞIR
+(codegen_diff exit-eşitlik); invalid-program reddi (çıplak-dışı küresel/deref) C'de var, self-host'ta yok = bilinen gap.
+**SIRADA:** F2 tamam → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer → kem_os.kem entegre → C
+kdl_bare_heap yolu sil).
+
+---
+
 ## D-254 — DİL/F2: `çıplak işlev` (no-region-prologue fonksiyon, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-06) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-253).

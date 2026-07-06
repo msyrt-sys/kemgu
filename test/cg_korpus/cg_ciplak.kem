@@ -1,0 +1,18 @@
+// cg_ciplak.kem — D-255: çıplak işlev C↔self-host paritesi.
+// Çıplak allocator (küresel bump): girişinde region-prologue EMIT EDİLMEZ
+// (@kdl_bolge_olustur / @kdl_global_bolge_al YOK) → WALL-2 / bootstrap
+// circularity çözümü. 2 çağrı → 2 FARKLI adres (0, 8) → b-a==8 → exit 42.
+// Çıplak gövde = örtük güvensiz (küresel erişimi explicit `güvensiz {}`
+// gerektirmez). Host-güvenli (geçerli global belleğe yazar). exit 42.
+küresel değişken g_next: tam64 = 0;
+çıplak işlev tahsis() -> tam64 {
+    değişken p: tam64 = g_next;
+    g_next = g_next + 8;
+    ver p;
+}
+işlev main() -> tam32 {
+    değişken a: tam64 = tahsis();
+    değişken b: tam64 = tahsis();
+    eğer b - a == 8 { ver 42; }
+    ver 1;
+}
