@@ -1791,6 +1791,18 @@ static void test_matris_b_deref_atama_t022(void) {
                ic == 1 && dis == 0);
 }
 
+static void test_kuresel_persistence(void) {
+    /* D-252 F1: küresel değişken cross-call PERSISTENCE. yaz() 42 yazar, oku()
+     * (AYRI fn) okur → 42 (local olsa yaz'ın yazması oku'da görünmez, 0 gelirdi).
+     * = modül-mutable global @g doğru emit + load/store. Erişim güvensiz-scoped. */
+    int rc = derle_ve_calistir(
+        "k\xc3\xbcresel de\xc4\x9f" "i\xc5\x9fken g: tam32 = 0; "
+        "i\xc5\x9flev yaz() -> tam32 { g\xc3\xbcvensiz { g = 42; ver 0; } ver 0; } "
+        "i\xc5\x9flev oku() -> tam32 { g\xc3\xbcvensiz { ver g; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { g\xc3\xbcvensiz { yaz(); ver oku(); } ver 0; }");
+    test_sonuc("kuresel: cross-call persistence -> exit 42 (D-252 F1)", rc == 42);
+}
+
 static void test_matris_de_karsilikli_ozyineleme(void) {
     /* Matris D/E: karsilikli ozyineleme (cift_mi <-> tek_mi). */
     int rc = derle_ve_calistir(
@@ -2849,6 +2861,7 @@ int main(void) {
     printf("\n--- Matris B+C: erisim/isaretci (in-scope green + DUR-SOR) ---\n");
     test_matris_c_deref_ref_round_trip();
     test_matris_b_deref_atama_t022();
+    test_kuresel_persistence();
 
     printf("\n--- Matris D+E: kontrol akisi + fonksiyon siniri ---\n");
     test_matris_de_karsilikli_ozyineleme();

@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-252 — DİL/F1: `küresel değişken` (modül-mutable global, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-251).
+
+**Karar [ETKİ: `src/lexer.h/lexer.c/anahtar_kelime.c` (keyword); `src/ast.h` (kuresel_mi); `src/parser.c`
+(parse_kuresel_tanimi); `src/sembol.h` (kuresel flag); `src/tip_kontrol.c` (pre_populate_kuresel + E010/E011/E012);
+`src/llvm.c` (global emit + load/store); `test/test_llvm.c` (persistence testi). Yalnız C-derleyici + test.]** Mehmet
+design-stop (D-251 bootstrap-circularity çözümü, 2 primitiften İLKİ). WALL-1 çözümü: allocator kalıcı durumu
+(bump-pointer) modül-global tutabilir. **Bu commit F1'in (küresel değişken) C-DERLEYİCİSİ TAM — self-host parite AYRI
+adım (aşağıda).**
+
+- **Lexer:** TOK_KURESEL + "küresel" keyword. KRİTİK: keyword tablosu BİNARY-SEARCH → memcmp-sıralı; `k\xc3` (küresel)
+  `ku` (kullan)'dan büyük (0xc3>0x75) → kullan SONRASINA (ilk yanlış-poz kullan/ust-öğe parser testlerini kırdı).
+- **Parser:** `parse_kuresel_tanimi` ('küresel değişken ad: tip = init;' → DUGUM_DEGISKEN kuresel_mi=1), üst-düzey.
+- **Checker:** pre_populate_kuresel (global sembol, kuresel=1) + **E011 tip-kısıt** (yalnız skaler/ham-pointer;
+  Dizi/yapı/metin YASAK — allocator'a bağlanamaz) + **E012 const-init** (sabit-literal) + **E010 güvensiz-only-erişim**
+  (Kırılmazlık: paylaşılan-mutable-durum = confinement'ın kaçındığı aliasing → güvensize hapis; safe .kem erişemez).
+- **Codegen:** `kureseller` registry + module `@ad = internal global <ir> <init>` + okuma→`load @ad` + atama→`store @ad`
+  (sabit gibi inline DEĞİL — MUTABLE). Non-küresel program bu yolları tetiklemez → mevcut IR değişmez.
+
+**FALSİFİYE-KANIT (uydurulamaz):** **persistence** — `yaz()` küresel'e 42 yazar, `oku()` (AYRI fn) okur → **exit 42**
+(local olsa yaz'ın yazması oku'da görünmez, 0 gelirdi). IR: `@g = internal global i32 0` + store + load.
+`test_llvm.c` test_kuresel_persistence [224] KALICI GATE (llvm 238/238). --check: güvensiz OK / dışı E010 / Dizi E011.
+Host suite + **FIXPOINT birebir (32379 satır, KIRILMADI** — küresel-kullanmayan program yolu değişmez) + codegen_diff.
+
+**KALAN (bu commit'te YOK):** (1) **F1 self-host parite** — parser.kem + checker.kem + codegen.kem (D-249 dersi).
+Divergence şu an LATENT (codegen.kem küresel kullanmıyor → fixpoint korunur; ama bir .kem küresel kullanır + self-host
+derlerse diverge). (2) **F2 çıplak işlev** (no-region-prologue, ayrı feature). İkisi bitince D-251 K1 (saf-.kem allocator)
+mümkün → runtime→.kem göçü akar. İlgili: [[project-kem-codegen-pointer-gaps]].
+
 ## D-251 — DIAG/DUR: runtime→.kem TAM GÖÇÜ K1'de BLOKLU — 2 codegen/dil gap'i (design-stop) (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-250).

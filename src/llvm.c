@@ -176,6 +176,7 @@ typedef struct LlvmGen {
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
     YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
+    SabitKayit *kureseller; /* D-252: küresel değişken (mutable global @ad, load/store) */
     /* C2.5: sonuç/seçimlik value codegen — yapısal beklenen tip kanalı.
      * tamam/hata/değer/hiç yapıcıları tam tipi (T, H) buradan okur. */
     const Dugum *beklenen_tip;       /* yapıcının inşa edeceği sonuç/seçimlik tip düğümü */
@@ -379,6 +380,37 @@ static SabitKayit *sabit_bul(LlvmGen *g, const char *ad, int ad_uz) {
         }
     }
     return NULL;
+}
+
+/* === D-252: küresel değişken (modül-mutable global) tablosu === */
+static void kuresel_kayit(LlvmGen *g, const Dugum *d) {
+    if (!d || d->tip != DUGUM_DEGISKEN || !d->veri.degisken.kuresel_mi) return;
+    SabitKayit *s = (SabitKayit *)arena_ayir_sifir(g->arena, sizeof(SabitKayit));
+    if (!s) return;
+    s->ad = d->veri.degisken.ad;
+    s->ad_uz = d->veri.degisken.ad_uzunluk;
+    s->deger = d->veri.degisken.deger;   /* init sabit-literal */
+    s->tip = d->veri.degisken.tip;
+    s->sonraki = g->kureseller;
+    g->kureseller = s;
+}
+
+static SabitKayit *kuresel_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (SabitKayit *s = g->kureseller; s; s = s->sonraki) {
+        if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
+            return s;
+        }
+    }
+    return NULL;
+}
+
+/* Init sabit-literal → LLVM module-global constant string. */
+static void kuresel_init_yaz(FILE *out, const Dugum *dv, const char *ir) {
+    if (dv && dv->tip == DUGUM_BOS)       { fputs("null", out); return; }
+    if (dv && dv->tip == DUGUM_MANTIKSAL) { fprintf(out, "%d", dv->veri.mantiksal.deger ? 1 : 0); return; }
+    if (dv && dv->tip == DUGUM_KARAKTER)  { fprintf(out, "%d", dv->veri.karakter.kod_noktasi); return; }
+    if (dv && dv->tip == DUGUM_TAM)       { fprintf(out, "%lld", (long long)dv->veri.tam.deger); return; }
+    fputs((ir && strcmp(ir, "ptr") == 0) ? "null" : "0", out);   /* fallback */
 }
 
 typedef struct ScopeMarker { LlvmIsim *eski_bas; } ScopeMarker;
@@ -1528,6 +1560,21 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             fprintf(g->out,
                 "  %%%d = insertvalue { ptr, ptr } %%%d, ptr null, 1\n", r, t0);
             IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
+            return s;
+        }
+        /* D-252: küresel değişken → @ad'den load (mutable global; sabit gibi
+         * inline DEĞİL). Erişim güvensiz-only (checker E010 enforce etti). */
+        SabitKayit *ku = kuresel_bul(g, d->veri.tanimlayici.metin,
+                                     d->veri.tanimlayici.uzunluk);
+        if (ku) {
+            const char *ir = ku->tip ? ast_tip_to_ir(g, ku->tip) : "i32";
+            if (!ir) ir = "i32";
+            int r = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load %s, ptr @", r, ir);
+            yerel_ad_yaz(g->out, d->veri.tanimlayici.metin,
+                         d->veri.tanimlayici.uzunluk);
+            fputc('\n', g->out);
+            IfadeSonuc s = { r, ir, 0 };
             return s;
         }
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
@@ -4282,6 +4329,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                                 i->llvm_tip, rr, i->reg_no);
                     }
+                } else {
+                    /* D-252: küresel değişken atama → store @ad (local DEĞİL;
+                     * checker güvensiz-only enforce etti). */
+                    SabitKayit *ku = kuresel_bul(g,
+                        d->veri.atama.hedef->veri.tanimlayici.metin,
+                        d->veri.atama.hedef->veri.tanimlayici.uzunluk);
+                    if (ku) {
+                        const char *ir = ku->tip ? ast_tip_to_ir(g, ku->tip) : "i32";
+                        if (!ir) ir = "i32";
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, ir);
+                        int rr = int_donustur(g, v.reg, v.tip, ir);
+                        fprintf(g->out, "  store %s %%%d, ptr @", ir, rr);
+                        yerel_ad_yaz(g->out,
+                            d->veri.atama.hedef->veri.tanimlayici.metin,
+                            d->veri.atama.hedef->veri.tanimlayici.uzunluk);
+                        fputc('\n', g->out);
+                    }
                 }
             } else if (d->veri.atama.hedef &&
                        d->veri.atama.hedef->tip == DUGUM_INDEKS) {
@@ -5877,6 +5941,9 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
                  uye->veri.disa.tanim->tip == DUGUM_SABIT) {
             sabit_kayit(&g, uye->veri.disa.tanim);
         }
+        else if (uye->tip == DUGUM_DEGISKEN && uye->veri.degisken.kuresel_mi) {
+            kuresel_kayit(&g, uye);   /* D-252 küresel değişken */
+        }
     }
 
     /* Pre-pass: metinleri topla */
@@ -5885,6 +5952,16 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Emit module-basi: yapi tip tanimlari + string globalleri */
     yapi_tip_tanimlari_emit(&g);
     str_globalleri_emit(&g);
+    /* D-252: küresel değişken module-globalleri (@ad = internal global <ir> <init>). */
+    for (SabitKayit *ku = g.kureseller; ku; ku = ku->sonraki) {
+        const char *ir = ku->tip ? ast_tip_to_ir(&g, ku->tip) : "i32";
+        if (!ir) ir = "i32";
+        ad_yaz(g.out, "@", 1);
+        yerel_ad_yaz(g.out, ku->ad, ku->ad_uz);
+        fprintf(g.out, " = internal global %s ", ir);
+        kuresel_init_yaz(g.out, ku->deger, ir);
+        fputc('\n', g.out);
+    }
 
     /* Islevleri emit et (generic olanlar atlanir; instantiation'lar sonra) */
     for (int i = 0; i < program->veri.program.sayi; i++) {

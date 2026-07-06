@@ -1843,6 +1843,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
                 return t_hata(tk);
             }
+            /* D-252: küresel değişken erişimi (okuma+yazma) YALNIZ güvensiz blokta
+             * (Kırılmazlık: paylaşılan-mutable-durum = confinement'ın kaçındığı
+             * aliasing → güvensize hapis). Safe .kem'de → E010. */
+            if (s->kuresel && tk->guvensiz_baglam == 0) {
+                tip_hata(tk, d, "E010",
+                    "kuresel degiskene erisim yalniz guvensiz blokta");
+            }
             /* Linear Types Spec V1: lambda govdesi icindeki lineer
              * baglamalar otomatik 'yakalama' sayilir → consume + closure
              * tipi tekkez<...> olarak isaretlenir (LC-2). */
@@ -4036,6 +4043,42 @@ static void pre_populate_sabit(TipKontrol *tk, const Dugum *sabit) {
     }
 }
 
+/* D-252: küresel değişken → global sembol. Tip-kısıt: yalnız skaler + ham-pointer
+ * (Dizi/yapı allocator'a bağlı → circular; yasak). Init sabit-literal olmalı. Erişim
+ * güvensiz-only (DUGUM_TANIMLAYICI'de E010 enforce). Bootstrap-circularity çözümü. */
+static void pre_populate_kuresel(TipKontrol *tk, const Dugum *kd) {
+    TipBilgisi *t = ast_tip_to_bilgi(tk, kd->veri.degisken.tip);
+    int izinli = (t && (tip_sayisal_mi(t) || t->kategori == TIP_POINTER ||
+                        t->kategori == TIP_MANTIKSAL || t->kategori == TIP_KARAKTER));
+    if (!izinli) {
+        tip_hata(tk, kd, "E011",
+            "kuresel degisken tipi yalniz skaler/ham-pointer olabilir "
+            "(Dizi/yapi/metin yasak — allocator'a baglanamaz)");
+    }
+    const Dugum *dv = kd->veri.degisken.deger;
+    int sabit_init = (dv && (dv->tip == DUGUM_TAM || dv->tip == DUGUM_KESIRLI ||
+                             dv->tip == DUGUM_MANTIKSAL || dv->tip == DUGUM_BOS ||
+                             dv->tip == DUGUM_KARAKTER));
+    if (!sabit_init) {
+        tip_hata(tk, kd, "E012",
+            "kuresel degisken baslangic degeri sabit-literal olmali "
+            "(sayi/mantik/karakter/bos)");
+    }
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = kd->veri.degisken.ad;
+    s.ad_uzunluk = kd->veri.degisken.ad_uzunluk;
+    s.kategori = SEMBOL_DEGISKEN;
+    s.tip = t;
+    s.ast_dugumu = kd;
+    s.satir = kd->satir;
+    s.sutun = kd->sutun;
+    s.kuresel = 1;
+    if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
+        tip_hata(tk, kd, "T024", "kuresel tanimi cakismasi");
+    }
+}
+
 static void pre_populate_ozellik(TipKontrol *tk, const Dugum *oz) {
     /* Ozellik sembolunu global'e ekle (bound olarak referans gerekli) */
     Sembol s;
@@ -4137,6 +4180,9 @@ static void pre_populate_uyeler(TipKontrol *tk, Dugum *const *uyeler,
         if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
         else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
         else if (gercek->tip == DUGUM_MODUL) pre_populate_modul(tk, gercek);
+        else if (gercek->tip == DUGUM_DEGISKEN &&
+                 gercek->veri.degisken.kuresel_mi)   /* D-252 küresel değişken */
+            pre_populate_kuresel(tk, gercek);
     }
 }
 
