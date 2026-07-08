@@ -5,6 +5,31 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-258 — SELF-HOST/F2→K1: `çıplak işlev` ρ-drop codegen.kem PARİTE (C↔self-host ABI divergence kapatıldı) (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-257).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (fn_ciplak_ad_mi + islev_uret imza rho_var + 2 çağrı-sitesi callee_rho);
+`test/ciplak_region_free_harness.sh` (+2 ρ-drop imza parite). SELF-HOST ÇEKİRDEĞİ.]**
+
+D-257 çıplak ρ-drop'u C-derleyiciye ekledi; codegen.kem'e AYNALADI (audit dersi: divergence bırakma). Oracle = C llvm.c.
+
+- **İmza:** `rho_var = (main_mi==0 ve ciplak==0)` → çıplak fn imzasında `ptr %rho` YOK; virgül-mantığı rho_var'a bağlı.
+- **Çağrı-sitesi (2):** `fn_ciplak_ad_mi(p, fad)` (g_ciplak node adları) → çıplak-callee ise `callee_rho=0` → ρ arg
+  ATLA (void + value yolu). C llvm.c'nin `callee_rho`/`u_rho` aynası.
+- **rho_ref:** çıplak fn'de "null" (call-rule gereği kullanılmaz).
+
+**FALSİFİYE-KANIT:** (a) çıplak `tahsis`: C ve self-host BİREBİR — `define i64 @tahsis()` + `call i64 @tahsis()`
+(ikisi de ρ-suz). self-host çıplak allocator exit 42. (b) **ciplak_region_free harness 6/6** — çıplak+iken/için
+region-symbol=0 + imza ρ-suz HER İKİ derleyici + normal-döngü ρ_iter korundu. (c) cg_ciplak codegen_diff + FIXPOINT
+(codegen.kem çıplak-kullanmıyor → self-compile etkilenmez, stage1==stage2 korunur).
+
+**SINIR:** self-host E013 yok (güvensiz/çıplak-tracking yok — D-249/D-253/D-257 sınıfı; geçerli-program parity çalışır,
+invalid-program reddi yalnız C). **SIRADA: K1** — saf-.kem çıplak `malloc` (küresel bump + inttoptr; artık @malloc(i64)
+C-ABI ifade edilebilir) → kem_os.kem entegre → C kdl_bare_heap malloc yolu sil.
+
+---
+
 ## D-257 — DİL/F2→K1: `çıplak işlev` ρ param DÜŞÜR (true C-ABI) + çıplak-call-rule (E013) — C-DERLEYİCİ (2026-07-08) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-256). Mehmet ABI-kararı: Option-1.

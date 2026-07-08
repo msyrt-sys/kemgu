@@ -2588,13 +2588,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(argt, p.son_tip);
             i = i + 1;
         }
+        // D-258: çıplak callee → C-ABI (ρ YOK). kullanıcı-fn ama çıplak ise ρ atla.
+        değişken callee_rho: tam32 = kullanici;
+        eğer kullanici == 1 { eğer fn_ciplak_ad_mi(p, fad) == 1 { callee_rho = 0; } }
         // void çağrı: %r = atanmaz.
         eğer metin_esit(rt, "void") {
             yaz_str("  call void @"); ir_ad_yaz(fname); yaz_str("(");
-            eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
+            eğer callee_rho == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
             değişken jv: tam32 = 0;
             iken jv < dizi_boyut(args) {
-                eğer jv > 0 veya kullanici == 1 { yaz_str(", "); }
+                eğer jv > 0 veya callee_rho == 1 { yaz_str(", "); }
                 yaz_str(dizi_al(argt, jv)); yaz_str(" "); yaz_str(dizi_al(args, jv));
                 jv = jv + 1;
             }
@@ -2605,10 +2608,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
         yaz_str("  "); yaz_str(rs); yaz_str(" = call "); yaz_str(rt); yaz_str(" @"); ir_ad_yaz(fname); yaz_str("(");
-        eğer kullanici == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
+        eğer callee_rho == 1 { yaz_str("ptr "); yaz_str(p.rho_ref); }   // V2-F4.2a: ρ
         değişken j: tam32 = 0;
         iken j < dizi_boyut(args) {
-            eğer j > 0 veya kullanici == 1 { yaz_str(", "); }
+            eğer j > 0 veya callee_rho == 1 { yaz_str(", "); }
             yaz_str(dizi_al(argt, j)); yaz_str(" "); yaz_str(dizi_al(args, j));
             j = j + 1;
         }
@@ -3647,6 +3650,18 @@ işlev ciplak_mi(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
+// D-258: çağrılan işlev ADIYLA çıplak mı? (g_ciplak node'larının a_deg adları).
+// Çağrı yerinde yalnız callee adı bilinir → çıplak-callee'ye ρ geçme (C-ABI).
+işlev fn_ciplak_ad_mi(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.g_ciplak);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken idx: tam32 = dizi_al(p.g_ciplak, i);
+        eğer metin_esit(dizi_al(p.a_deg, idx), ad) { ver 1; }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.reg = 0;
     p.lbl = 0;
@@ -3658,17 +3673,22 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
     // V2-F4.2a: region-passing ABI. main HARİÇ her fonksiyon ilk param `ptr %rho`.
+    // D-258 çıplak: true C-ABI → ρ param HİÇ almaz (main gibi). rho_var = bu fn ρ alır mı.
     değişken main_mi: tam32 = 0;
     eğer metin_esit(dizi_al(p.a_deg, idx), "main") { main_mi = 1; }
+    değişken ciplak: tam32 = ciplak_mi(p, idx);
+    değişken rho_var: tam32 = 1;
+    eğer main_mi == 1 { rho_var = 0; }
+    eğer ciplak == 1 { rho_var = 0; }
     // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
     yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @"); ir_ad_yaz(dizi_al(p.a_deg, idx)); yaz_str("(");
-    eğer main_mi == 0 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param
+    eğer rho_var == 1 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param (çıplak/main hariç)
     değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
-            eğer pn > 0 veya main_mi == 0 { yaz_str(", "); }   // ρ'dan sonra virgül
+            eğer pn > 0 veya rho_var == 1 { yaz_str(", "); }   // ρ'dan sonra virgül
             yaz_str(param_tip(p, c)); yaz_str(" %a"); yaz_str(tam64_str(pn olarak tam64));
             pn = pn + 1;
         }
@@ -3716,15 +3736,13 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     // V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge seed
     // (alloca-hoist'tan SONRA → seed reg, hoist-edilen alloca'lardan sonra; C llvm.c
     // ile birebir). Seed gövdeden önce gelir → kullanıcı-fn/dizi çağrıları ρ'yı kullanır.
-    // D-255 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap circularity).
-    // @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK → çıplak fn IR'inde sıfır
-    // region-symbol (K1 allocator hedefi). ρ param uniform-ABI için korunur (main-değil
-    // fn yine "ptr %rho" alır, kullanılmaz); main-çıplak → "null". rho_yerel="" → serbest
-    // no-op. C llvm.c islev_uret ρ-prologue aynası.
-    değişken ciplak: tam32 = ciplak_mi(p, idx);
+    // D-255/D-258 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2). D-258: ρ param
+    // HİÇ alınmaz (true C-ABI, üstte rho_var=0) → rho_ref = "null" (çıplak-call-rule
+    // gereği kullanılmaz; çıplak yalnız çıplak/extern çağırır). rho_yerel="" → serbest
+    // no-op. C llvm.c islev_uret ρ-prologue/ρ-drop aynası.
     p.ciplak_aktif = ciplak;   // D-256: gövde-içi ρ_iter (döngü region) de bu bayrağa göre bastırılır
     eğer ciplak == 1 {
-        eğer main_mi == 1 { p.rho_ref = "null"; } değilse { p.rho_ref = "%rho"; }
+        p.rho_ref = "null";
         p.rho_yerel = "";
     } değilse {
         // V2-F4.2a: ρ referansı. Normal fn → "%rho". main → global bölge seed.

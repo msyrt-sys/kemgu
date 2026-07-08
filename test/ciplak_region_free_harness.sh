@@ -56,6 +56,9 @@ EOF
 "$SELF"  --llvm "$TMP/dongu.kem" > "$TMP/s_dongu.ll" 2>/dev/null
 kontrol "çıplak+iken: C-codegen region-symbol"    0 "$(region_say "$TMP/c_dongu.ll" '@topla[(]')"
 kontrol "çıplak+iken: self-host region-symbol"     0 "$(region_say "$TMP/s_dongu.ll" '@topla[(]')"
+# D-258: çıplak fn imzası ρ-SUZ (true C-ABI) — define satırında `ptr %rho` YOK, HER İKİ derleyici.
+kontrol "çıplak+iken: C-codegen imza ρ-suz"        0 "$(grep 'define .*@topla(' "$TMP/c_dongu.ll" | grep -c 'ptr %rho')"
+kontrol "çıplak+iken: self-host imza ρ-suz"         0 "$(grep 'define .*@topla(' "$TMP/s_dongu.ll" | grep -c 'ptr %rho')"
 
 # --- Test 2: çıplak + İÇİN (for) döngü → 0 region-symbol (self-host) ---
 cat > "$TMP/icin.kem" <<'EOF'
