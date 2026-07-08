@@ -94,6 +94,10 @@ typedef struct TipKontrol {
     int guvensiz_baglam;           /* >0 = guvensiz blok icindeyiz (derinlik).
                                       *T dereferans (G001) ve satiriçi_asm (G002)
                                       yalniz guvensiz baglamda gecerli. */
+    int ciplak_baglam;             /* D-257: >0 = çıplak işlev gövdesindeyiz.
+                                      Çıplak (ρ-suz C-ABI) yalnız çıplak/extern
+                                      çağırır; normal (ρ-alan) fn çağrısı → E013
+                                      (verilecek ρ yok → ABI uyumsuz segfault). */
 } TipKontrol;
 
 void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,

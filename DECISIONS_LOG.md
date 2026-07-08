@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-257 — DİL/F2→K1: `çıplak işlev` ρ param DÜŞÜR (true C-ABI) + çıplak-call-rule (E013) — C-DERLEYİCİ (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-256). Mehmet ABI-kararı: Option-1.
+
+**Karar [ETKİ: `src/llvm.c` (islev_uret imza + 4 çağrı-sitesi); `src/tip_kontrol.h/c` (ciplak_baglam + E013);
+`test/test_tip_kontrol.c` (+2). ABI-SEMANTİK — soundness-kritik. K1 ön-koşulu.]**
+
+K1 (saf-.kem allocator) somut bir ABI çatalı açığa çıkardı: D-254'te çıplak fn ρ param'ı "uniform-ABI + çağrı-yeri
+basitliği" için TUTUYORDU → çıplak `malloc` `@malloc(ptr %rho, i64)` üretiyor, ama codegen region-backing
+`@malloc(i64)` (C-ABI) çağırıyor → UYUŞMAZ → çıplak fn bir C-ABI sembolü (malloc/interrupt/syscall) OLAMIYOR.
+**Mehmet kararı (Option-1): ρ'yu DÜŞÜR** → çıplak = true C-ABI bare fonksiyon.
+
+- **Codegen (llvm.c):** `rho_var = !main_mi && !ciplak` → çıplak fn imzasında `ptr %rho` YOK (main gibi). rho_ref =
+  "null" (çıplak-call-rule gereği kullanılmaz). **4 çağrı-sitesi** (generic 2178, method 2691, modül 2796, ana user-fn
+  3868) callee çıplak ise ρ arg'ını ATLAR (`callee_rho`/`m_rho`/`mf_rho`/`u_rho` + virgül-mantığı). Sonuç: çıplak
+  `malloc` → `define i64 @malloc(i64 %n)` = codegen'in `declare @malloc(i64)` beklentisiyle BİREBİR.
+- **Çıplak-call-rule (E013, tip_kontrol):** `tk->ciplak_baglam` sayacı (çıplak gövde/method'ta ++; güvensiz-grant ile
+  aynı 3 site). Çıplak içinden normal (ρ-alan) user-fn çağrısı → E013 (verilecek ρ yok → codegen `ptr null` → callee
+  null-region tahsis → segfault). Çıplak→çıplak + çıplak→extern/builtin İZİNLİ. Normal→çıplak İZİNLİ (kısıt yalnız
+  çıplak-içinden).
+
+**FALSİFİYE-KANIT:** (a) çıplak `tahsis`/`malloc`: define + call ikisi de ρ-SUZ, exit 42 (ABI uyumlu; ρ uyumsuz olsa
+segfault). (b) `@malloc(i64)` == codegen `declare @malloc(i64)`. (c) E013: çıplak→normal RED (1 hata), çıplak→çıplak OK
+(0), normal→çıplak OK. (d) çıplak+döngü hâlâ region-free (D-256 korundu). (e) llvm 241/241, tip_kontrol 189/189,
+parser 107/107 — non-çıplak yolu DEĞİŞMEDİ (rho_var normal fn'de = eski `!main_mi`).
+
+**SINIR / SIRADA:** (1) **D-258 self-host parite** — codegen.kem çıplak ρ-drop AYNALA (şu an self-host çıplak hâlâ
+ρ-carrying → exit-görünmez ABI divergence; audit dersi: kapat). (2) lambda-indirect (llvm.c:3410) + generic-instantiation
+çağrı yolları çıplak-callee için henüz ρ-atlamıyor (K1 kapsamı-dışı: allocator standalone çıplak). (3) self-host E013
+yok (güvensiz-tracking yok, D-249/D-253 sınıfı). → **K1** (saf-.kem çıplak `malloc` = küresel bump + inttoptr).
+
+---
+
 ## D-256 — F2/AUDIT: `çıplak işlev` adversarial soundness denetimi — 2 kusur ONARILDI (döngü-ρ_iter sızıntısı + method-grant) (2026-07-06) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-255).

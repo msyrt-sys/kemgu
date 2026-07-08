@@ -2175,14 +2175,16 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         g->substler = eski_substler;
         if (yeniden) donus_t = yeniden;
     }
+    /* D-257: çıplak callee → C-ABI (ρ param YOK). Çağrıda ρ geçme. */
+    int callee_rho = !gislev->veri.islev.ciplak_mi;
     if (strcmp(donus_t, "void") == 0) {
         /* donussuz generic (or. buyu<T>) — void call */
         fputs("  call void @", g->out);
         yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
         fputs("(", g->out);
-        fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+        if (callee_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
         for (int i = 0; i < n; i++) {
-            fputs(", ", g->out);
+            if (i > 0 || callee_rho) fputs(", ", g->out);
             fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
         }
         fputs(")\n", g->out);
@@ -2195,9 +2197,9 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
     fprintf(g->out, "  %%%d = call %s @", r, donus_t);
     yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
     fputs("(", g->out);
-    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+    if (callee_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
     for (int i = 0; i < n; i++) {
-        fputs(", ", g->out);
+        if (i > 0 || callee_rho) fputs(", ", g->out);
         fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
     }
     fputs(")\n", g->out);
@@ -2684,13 +2686,15 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IslevKayit *mik = islev_bul(g, m_ad, m_ad_uz);
                 const char *donus = mik ? mik->donus_tip : "i32";
                 if (strcmp(donus, "void") == 0) donus = "i32";
+                /* D-257: çıplak method → C-ABI (ρ YOK). */
+                int m_rho = !(mik && mik->ast && mik->ast->veri.islev.ciplak_mi);
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @", r, donus);
                 yerel_ad_yaz(g->out, m_ad, m_ad_uz);
                 fputs("(", g->out);
-                fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (metot=kullanıcı-fn) */
+                if (m_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (metot=kullanıcı-fn) */
                 for (int i = 0; i < n + 1; i++) {
-                    fputs(", ", g->out);
+                    if (i > 0 || m_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -2791,11 +2795,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         r = yeni_reg(g);
                         fprintf(g->out, "  %%%d = call %s @", r, donus);
                     }
+                    /* D-257: çıplak modül-fn → C-ABI (ρ YOK). */
+                    int mf_rho = !(mik->ast && mik->ast->veri.islev.ciplak_mi);
                     yerel_ad_yaz(g->out, mik->ad, mik->ad_uz);
                     fputs("(", g->out);
-                    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (modül-fn) */
+                    if (mf_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (modül-fn) */
                     for (int i = 0; i < n; i++) {
-                        fputs(", ", g->out);
+                        if (i > 0 || mf_rho) fputs(", ", g->out);
                         fprintf(g->out, "%s %%%d",
                                 args[i].tip, args[i].reg);
                     }
@@ -3859,16 +3865,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 return generic_islev_cagri_uret(g, d, ik->ast, args, n, donus);
             }
 
+            /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in (ik==NULL:
+             * yazdir/metin/dosya/...) ρ ALMAZ. D-257: çıplak user-fn → C-ABI, ρ YOK. */
+            int u_rho = (ik != NULL) && !(ik->ast && ik->ast->veri.islev.ciplak_mi);
             if (strcmp(donus, "void") == 0) {
                 /* void-returning call: register atama yok */
                 fputs("  call void @", g->out);
                 yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
-                /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in
-                 * (ik==NULL: yazdir/metin/dosya/...) ρ ALMAZ (bu faz). */
-                if (ik) fprintf(g->out, "ptr %s", g->rho_ref);
+                if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);
                 for (int i = 0; i < n; i++) {
-                    if (i > 0 || ik) fputs(", ", g->out);
+                    if (i > 0 || u_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -3882,9 +3889,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
-            if (ik) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+            if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
             for (int i = 0; i < n; i++) {
-                if (i > 0 || ik) fputs(", ", g->out);
+                if (i > 0 || u_rho) fputs(", ", g->out);
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
@@ -5375,10 +5382,18 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     int main_mi = (islev->veri.islev.ad_uzunluk == 4 &&
                    memcmp(islev->veri.islev.ad, "main", 4) == 0);
 
+    /* D-257 çıplak işlev: TRUE C-ABI bare fonksiyon — ρ param ALMAZ (main gibi).
+     * Böylece @malloc(i64) / interrupt / syscall gibi C-ABI sembolleri .kem'de
+     * çıplak fn olarak ifade edilebilir. Çağrı yerleri de çıplak-callee'ye ρ
+     * geçmez (aşağıda cagrilan_ciplak_mi). Sonuç: çıplak yalnız çıplak/extern
+     * çağırabilir (verilecek ρ yok → çıplak-call-rule, checker E013). */
+    int ciplak = islev->veri.islev.ciplak_mi;
+    int rho_var = (!main_mi && !ciplak);   /* bu fn `ptr %rho` param alır mı */
+
     fprintf(g->out, "define %s @", donus);
     yerel_ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
-    if (!main_mi) fputs("ptr %rho", g->out);   /* V2-F4.2a: ρ ilk param */
+    if (rho_var) fputs("ptr %rho", g->out);   /* V2-F4.2a: ρ ilk param (çıplak/main hariç) */
 
     /* Parametre listesi */
     int n = islev->veri.islev.param_sayi;
@@ -5392,7 +5407,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         const char *tip = ast_tip_to_ir(g, p->veri.parametre.tip);
         if (!tip) tip = "i32";
         param_tipler[i] = tip;
-        if (i > 0 || !main_mi) fputs(", ", g->out);   /* ρ'dan sonra virgül */
+        if (i > 0 || rho_var) fputs(", ", g->out);   /* ρ'dan sonra virgül */
         fprintf(g->out, "%s %%", tip);
         yerel_ad_yaz(g->out, p->veri.parametre.ad,
                      p->veri.parametre.ad_uzunluk);
@@ -5403,16 +5418,14 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->label = 0;
     g->isimler = NULL;
 
-    /* D-254 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap
+    /* D-254/D-257 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap
      * circularity çözümü). @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK
      * → çıplak fn'in IR'ında sıfır region-symbol referansı (K1 allocator hedefi:
-     * malloc→region→malloc döngüsü kırılır). ρ param uniform ABI için korunur
-     * (main-DEĞİL fn'ler yine "ptr %rho" alır; çağrı yerleri değişmez) ama gövdede
-     * kullanılmaz. main-çıplak'ta ρ yok → "null". rho_yerel = NULL → tüm ret'lerde
-     * kdl_bolge_serbest no-op (rho_yerel_serbest_emit NULL-korumalı). */
-    int ciplak = islev->veri.islev.ciplak_mi;
+     * malloc→region→malloc döngüsü kırılır). D-257: ρ param HİÇ alınmaz (true C-ABI)
+     * → gövdede ρ yok, rho_ref = "null" (çıplak-call-rule gereği zaten kullanılmaz;
+     * çıplak yalnız çıplak/extern çağırır). rho_yerel = NULL → ret'lerde serbest no-op. */
     if (ciplak) {
-        g->rho_ref = main_mi ? "null" : "%rho";
+        g->rho_ref = "null";
         g->rho_yerel = NULL;
     } else {
         /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge

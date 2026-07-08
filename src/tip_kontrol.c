@@ -21,6 +21,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
+    tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
      * kayitlari) global'in PARENT'i olan ayri bir scope'ta yasar. Dosya-modul
@@ -3203,6 +3204,23 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
+            /* D-257 çıplak-call-rule: çıplak fn (ρ-suz C-ABI) yalnız çıplak/extern
+             * çağırır. Normal (ρ-alan) user-fn çağrısı → verilecek ρ yok → codegen
+             * `ptr null` geçer → callee null-region'a tahsis → segfault. Statik reddet.
+             * Built-in/extern (ast_dugumu yok/ISLEV değil) ρ almaz → izinli. */
+            if (tk->ciplak_baglam > 0 &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const Sembol *cs = sembol_bul(tk->scope,
+                    d->veri.cagri.hedef->veri.tanimlayici.metin,
+                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+                if (cs && cs->ast_dugumu &&
+                    cs->ast_dugumu->tip == DUGUM_ISLEV &&
+                    !cs->ast_dugumu->veri.islev.ciplak_mi) {
+                    tip_hata(tk, d, "E013",
+                        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev yaln\xc4\xb1z \xc3\xa7\xc4\xb1plak/extern "
+                        "\xc3\xa7" "a\xc4\x9f\xc4\xb1rabilir (\xcf\x81-suz C-ABI)");
+                }
+            }
             /* Madde D: Multi-param + compound type generic inference.
              * GenBaglamalar ile her arg/param ciftinde unify, donus
              * tipini substitue et. */
@@ -5075,14 +5093,14 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
              * yazımı için) → gövdesi explicit `güvensiz {}` gerektirmez. Kırılmazlık
              * korunur: normal güvenli kod çıplak'ı kazara kullanamaz (opt-in keyword). */
             int ciplak_govde = d->veri.islev.ciplak_mi;
-            if (ciplak_govde) tk->guvensiz_baglam++;
+            if (ciplak_govde) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257: call-rule */
 
             /* Govdeyi kontrol et */
             if (d->veri.islev.govde) {
                 tip_kontrol_deyim(tk, d->veri.islev.govde);
             }
 
-            if (ciplak_govde) tk->guvensiz_baglam--;
+            if (ciplak_govde) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
 
             tk->aktif_escape = eski_escape;
             escape_serbest(&ea);
@@ -5146,9 +5164,9 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                  * DUGUM_ISLEV yolundaki grant ile birebir; codegen zaten çıplak-method'u
                  * prologue-skip ile emit eder — checker↔codegen tutarlılığı). */
                 int ciplak_m = m->veri.islev.ciplak_mi;
-                if (ciplak_m) tk->guvensiz_baglam++;
+                if (ciplak_m) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257 */
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
-                if (ciplak_m) tk->guvensiz_baglam--;
+                if (ciplak_m) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski;
             }
@@ -5213,9 +5231,9 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                 /* D-256: çıplak method gövdesi = örtük güvensiz-bağlam (özellik yolu +
                  * standalone DUGUM_ISLEV ile birebir; checker↔codegen tutarlılığı). */
                 int ciplak_m = m->veri.islev.ciplak_mi;
-                if (ciplak_m) tk->guvensiz_baglam++;
+                if (ciplak_m) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257 */
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
-                if (ciplak_m) tk->guvensiz_baglam--;
+                if (ciplak_m) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski_m;
             }
