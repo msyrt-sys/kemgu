@@ -538,6 +538,13 @@ calistir_codegen_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/ciplak_region_free_harness.sh
 
+# F3 (D-259): SAF-.kem çıplak+küresel allocator KOMPOZİSYON gate'i — iki primitif
+# (küresel + çıplak) bir arada çalışan allocator verir + bootstrap-circularity kırar.
+# HER İKİ codegen (C + self-host): kem_malloc IR'inde circularity-sembol=0 + C-harness
+# 2-çağrı→2-farklı-adres+yazılabilir→exit 42. "circularity kırıldı → saf-.kem runtime açık".
+calistir_kem_malloc_kompozisyon: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/kem_malloc_kompozisyon_harness.sh
+
 # AŞAMA 4 (driver) — TEK self-host KEMGU binary (selfhost/codegen.kem → kemgu_self.exe).
 # checker mantığı + --token/--parse/--check/--llvm dispatch birleşik (D-086).
 kemgu_self: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
@@ -4896,7 +4903,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_codegen_bootstrap calistir_self_driver
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver
 	@echo "Tum testler gecti!"
 
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===

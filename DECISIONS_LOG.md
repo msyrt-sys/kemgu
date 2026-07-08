@@ -5,6 +5,35 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-259 — F3/KOMPOZİSYON: saf-.kem çıplak+küresel `kem_malloc` — bootstrap-circularity KIRILDI (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-258).
+
+**Karar [ETKİ: `test/ornekler/kem_malloc.kem` (YENİ saf-.kem allocator); `test/kem_malloc_kompozisyon.c` (YENİ
+C-harness); `test/kem_malloc_kompozisyon_harness.sh` + Makefile (`calistir_kem_malloc_kompozisyon`, test_tumu).
+KOMPOZİSYON KANITI — dil-genişletmenin meyvesi.]**
+
+İki bootstrap-primitifinin (D-252 `küresel değişken` + D-254/257 `çıplak işlev`) BİR ARADA çalışan bir allocator
+verdiğini ve **bootstrap-circularity'yi kırdığını** falsifiye-kanıtla gösterir. `kem_malloc.kem`: küresel bump-state +
+çıplak (region-prologue'suz, C-ABI) `kem_heap_kur`/`kem_malloc`/`kem_yaz32`/`kem_oku32` (ham-pointer inttoptr+deref).
+
+**CIRCULARITY NEDEN KIRILDI:** normal .kem fn'i girişinde `@kdl_bolge_olustur→malloc` çağırır; malloc'u .kem'de
+yazarsan `malloc→(prologue)@kdl_bolge_olustur→malloc` = SONSUZ DÖNGÜ. Çıplak fn prologue EMIT ETMEZ →
+`kem_malloc` IR'inde `@kdl_bolge_olustur` = 0 VE `@malloc` self-call = 0 → tahsis kendini tetiklemez.
+
+**FALSİFİYE-KANIT (`calistir_kem_malloc_kompozisyon`, HER İKİ codegen 6/6):** (A) IR-KANIT: kem_malloc modülünde
+`@kdl_bolge_olustur/@kdl_global_bolge_al/@malloc`-self = 0 (grep). (B) KOMPOZİSYON: C-harness (çıplak C-ABI olduğu için
+.kem malloc'u doğrudan çağırır) → 2 çağrı → **2 FARKLI adres** (`ALLOC: p1=<A> p2=<B> A!=B EVET`), dönen adresler
+YAZILABİLİR (inttoptr+deref: v1=111 v2=222), bitişik (p2-p1==8) → **exit 42**. C-codegen == self-host (parite).
+test_tumu tam yeşil (fixpoint + codegen_diff 75/75 + region-free 6/6 dâhil).
+
+**KAPSAM/SINIR:** Host-kanıt (havuz = statik C tamponu; bare-metal'de taban __heap_start'tan gelir — K1b). Minimal bump
+(hizalama+serbest-liste K1'de). Heap-TABANI çağırandan (kem_heap_kur) — .kem'de extern linker sembolü ifade edilemez
+(satıriçi_asm arch-x86_64-sabit). **SIRADA K1:** kem_malloc'u kem_os.kem'e entegre + heap-taban'ı boot-glue küreselinden
+al + C `kdl_bare_heap` malloc yolunu sil → **kem_os.kem IR'inde @kdl_bare_heap/@malloc(C) = 0** (Mehmet firsthand doğrular).
+
+---
+
 ## D-258 — SELF-HOST/F2→K1: `çıplak işlev` ρ-drop codegen.kem PARİTE (C↔self-host ABI divergence kapatıldı) (2026-07-08) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-257).
