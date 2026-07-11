@@ -74,6 +74,17 @@ _start:
      * + sanal-bellek/process-izolasyon temeli. main MMU-on koşar. */
     bl      kdl_mmu_kur
 
+    /* 2c. K1 (D-260): allocator heap penceresini kur — main'in İLK malloc'undan
+     * ÖNCE (her .kem fn prologue'u kdl_bolge_olustur→malloc çağırır). kem_heap_kur
+     * çıplak (region-prologue'suz) → malloc TETİKLEMEZ, taban-öncesi çağrı güvenli.
+     * C-malloc kernel'lerinde weak no-op (lazy kdl_heap_init yeterli); kem_os'ta
+     * kem_heap.o'daki saf-.kem STRONG @kem_heap_kur override eder → kem_bump=__heap_start. */
+    adrp    x0, __heap_start
+    add     x0, x0, :lo12:__heap_start
+    adrp    x1, __heap_end
+    add     x1, x1, :lo12:__heap_end
+    bl      kem_heap_kur
+
     /* 3. main() çağır — ABI gereği X0 dönüşü */
     bl      main
 

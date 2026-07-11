@@ -774,6 +774,18 @@ $(BUILD)/bm_a64_bolge.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# K1 (D-260): kem_os-özel heap — C malloc/free ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC).
+# memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALIR; malloc/free → kem_heap.o (.kem).
+$(BUILD)/bm_a64_heap_kemmalloc.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
+# K1 (D-260): SAF-.kem çıplak allocator → @malloc(i64)/@free(ptr)/@kem_heap_kur(i64,i64).
+# kemgu --llvm → boilerplate `declare @malloc/@free` (define ile çakışır, LLVM redef hatası)
+# STRIP + bare-metal target'a derle. Circularity yok (çıplak = region-prologue'suz).
+$(BUILD)/bm_a64_kem_heap.o: runtime/kem_heap.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
+	./$(BUILD)/kemgu$(EXE) --llvm runtime/kem_heap.kem 2>/dev/null \
+	  | sed -E '/^declare ptr @malloc\(i64\)$$/d; /^declare void @free\(ptr\)$$/d' \
+	  > $(BUILD)/kem_heap.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_heap.ll -c -o $@
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
@@ -803,6 +815,14 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
               $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o $(BUILD)/bm_a64_mmu.o \
               $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o $(BUILD)/bm_a64_virtio_net.o
+# K1 (D-260): kem_os obj listesi — bm_a64_heap.o (C malloc) YERİNE heap_kemmalloc.o
+# (C malloc çıkarılmış) + kem_heap.o (saf-.kem malloc/free). Diğer kernel'ler BM_A64_OBJS'i
+# (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
+KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
+              $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
+              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o \
+              $(BUILD)/bm_a64_mmu.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
+              $(BUILD)/bm_a64_virtio_net.o
 #              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
 #                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
 #                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
@@ -879,18 +899,27 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o
 	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o $(BM_A64_OBJS)
+		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
 		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/kem_os.elf; exit 1; \
 	fi
 	@echo "  (yok — temiz)"
+	@echo "FALSIFIYE-KANIT (K1/D-260): C bump-allocator (kdl_bare_heap) malloc/free SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (malloc|free)$$'; then \
+		echo "FAIL: C kdl_bare_heap hala malloc/free TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
+		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (malloc|free)$$'; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T malloc$$'; then \
+		echo "FAIL: saf-.kem kem_heap malloc TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; bm_a64_kem_heap.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \

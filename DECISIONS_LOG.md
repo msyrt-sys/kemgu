@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-260 — K1: saf-.kem çıplak `malloc`/`free` kem_os'a ENTEGRE — C bump-allocator SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-259).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (YENİ saf-.kem allocator); `runtime/kdl_bare_heap.c` (`#ifndef KEMGU_KEM_MALLOC`
+guard + weak kem_heap_kur); `boot/start_aarch64.S` (bl kem_heap_kur); `Makefile` (kemmalloc obj + kem_heap obj +
+KEM_OS_A64_OBJS + @kdl_bare_heap=0 gate). OS-ÇEKİRDEK, YASA-1 seri — runtime→.kem göçü K1.]**
+
+F3 (D-259) circularity-kırıldı'yı kem_os bare-metal'e ENTEGRE eder: kem_os'un `malloc`/`free`'si artık SAF-.kem
+(çıplak allocator), C `kdl_bare_heap` bump-allocator'ı DEĞİL. runtime→.kem göçünün İLK kademesi (K1) TAMAM.
+
+- **`kem_heap.kem`:** çıplak (C-ABI, ρ-suz) `malloc(i64)->ptr` / `free(ptr)` / `kem_heap_kur(i64,i64)`. Bump + 16-hizalı
+  {boyut,sonraki} header + LIFO serbest-liste (C kdl_bare_heap ile birebir algoritma). küresel bump-state (WALL-1) +
+  ham-pointer inttoptr/deref (D-248). Region-prologue YOK → circularity YOK.
+- **`kdl_bare_heap.c`:** malloc/free/typedef/statics `#ifndef KEMGU_KEM_MALLOC` ile sarıldı; weak `kem_heap_kur` no-op
+  (C-malloc kernel'leri için). memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALDI (K4).
+- **Boot (`start_aarch64.S`):** `bl main`'den ÖNCE `bl kem_heap_kur(__heap_start,__heap_end)` — main'in ilk malloc'undan
+  önce heap penceresi kurulur. Çıplak → malloc tetiklemez (taban-öncesi güvenli). PAYLAŞILAN boot; C-malloc kernel'de
+  weak no-op (lazy kdl_heap_init yeterli), kem_os'ta kem_heap.o STRONG override → kem_bump=__heap_start.
+- **Makefile:** `bm_a64_heap_kemmalloc.o` (-DKEMGU_KEM_MALLOC, C malloc çıkarılmış), `bm_a64_kem_heap.o` (kem_heap.kem
+  → boilerplate `declare @malloc/@free` STRIP [LLVM redef hatası] → aarch64 obj), `KEM_OS_A64_OBJS` (heap→kemmalloc+kem_heap).
+  **Sadece kem_os** bu obj setini kullanır → diğer ~15 aarch64 kernel BM_A64_OBJS (C malloc) ile DEVAM (regresyon yok).
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU-boot):** (a) **@kdl_bare_heap=0** — `llvm-nm bm_a64_heap_kemmalloc.o`
+malloc/free C-tanımı = 0 (guard çalıştı); `bm_a64_kem_heap.o` T malloc/free/kem_heap_kur (saf-.kem sağlıyor). (b)
+**QEMU boot** — kem_os.elf boot eder + **[1]BOOT [2]HEAP DIZI OK→55 [3]MMIO [4]HESAP [5]EXC OK + KEMGU KEM-OS OK**;
+[2] HEAP DIZI (1..10 toplam=55) .kem malloc'un region-runtime + Dizi tahsisini DOĞRU yaptığının kanıtı. (c)
+**Regresyon yok** — kernel_dizi (C-malloc region kernel) hâlâ "KERNEL DIZI OK"+55 boot eder (weak kem_heap_kur no-op +
+boot değişikliği C-malloc kernel'leri kırmadı). (d) Host: kem_heap.kem çıplak IR circularity-sembol=0 (F3 harness),
+allocator LOGIC host-test (bump+free-list reuse+100 tahsis exit 42). Fixpoint ETKİLENMEZ (codegen.kem/derleyici
+dokunulmadı).
+
+**KAPSAM/SINIR:** aarch64 (x86_64 kem_os gate yok). free-list split/coalesce yok (C ile aynı; kem_os döngü OOM'u
+yeterli). **SIRADA K2-K5:** dizi runtime (K2), region (K3 — kdl_bolge.c→.kem, circularity F3 çözdü), helpers (K4:
+memcpy/memset/global_bolge), K5 (kem_os IR'ında C-runtime sembolü = 0 nihai hedef).
+
+---
+
 ## D-259 — F3/KOMPOZİSYON: saf-.kem çıplak+küresel `kem_malloc` — bootstrap-circularity KIRILDI (2026-07-08) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-258).

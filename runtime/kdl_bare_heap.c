@@ -28,6 +28,14 @@
 extern unsigned char __heap_start[];
 extern unsigned char __heap_end[];
 
+/* K1 (D-260): KEMGU_KEM_MALLOC tanımlıysa malloc/free/kem_heap_kur SAF-.kem'den
+ * gelir (runtime/kem_heap.kem → çıplak C-ABI @malloc/@free/@kem_heap_kur). Bu dosya
+ * o zaman yalnız memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi sağlar. kem_os
+ * bu varyantı (-DKEMGU_KEM_MALLOC) + kem_heap.o ile linkler → C bump-allocator = 0.
+ * Diğer bare-metal kernel'ler bayrağı SET ETMEZ → C malloc/free + weak kem_heap_kur
+ * no-op (boot `bl kem_heap_kur` çağırır; C-malloc lazy kdl_heap_init'le kendini kurar). */
+#ifndef KEMGU_KEM_MALLOC
+
 typedef struct KdlHeapBlok {
     size_t boyut;                 /* header dahil toplam blok boyutu (bayt) */
     struct KdlHeapBlok *sonraki;  /* serbest-liste bağlantısı */
@@ -44,6 +52,13 @@ static void kdl_heap_init(void) {
         kdl_heap_bump = __heap_start;
         kdl_heap_son  = __heap_end;
     }
+}
+
+/* Boot _start `bl kem_heap_kur(taban, son)` çağırır. C-malloc kernel'lerinde no-op
+ * (lazy kdl_heap_init yeterli); .kem-malloc kem_os'ta kem_heap.o'daki STRONG
+ * @kem_heap_kur bu weak'i override eder (linker: strong > weak). */
+__attribute__((weak)) void kem_heap_kur(long taban, long son) {
+    (void)taban; (void)son;
 }
 
 void *malloc(size_t n) {
@@ -86,6 +101,8 @@ void free(void *p) {
     h->sonraki = kdl_heap_bos;               /* LIFO serbest-listeye it */
     kdl_heap_bos = h;
 }
+
+#endif  /* !KEMGU_KEM_MALLOC — malloc/free/kem_heap_kur .kem'den (kem_os) */
 
 /* Freestanding memcpy/memset — libc yok; clang struct-kopya / kdl_dizi_buyut
  * bunları çağırır. Defined sembol → libc-yok kontrolü (--undefined-only) geçer. */

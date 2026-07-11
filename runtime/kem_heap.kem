@@ -1,0 +1,74 @@
+// kem_heap.kem — K1 (D-260): SAF-.kem çıplak `malloc`/`free` — C kdl_bare_heap YERİNE.
+// ============================================================================
+// Bootstrap-circularity F3'te (D-259) kırıldı; K1 bunu kem_os'a ENTEGRE eder:
+// runtime malloc/free artık SAF-.kem. Çıplak (region-prologue'suz, C-ABI) →
+// @malloc(i64)->ptr / @free(ptr) sembollerini kdl_bolge.c'nin beklediği C-ABI
+// ile sağlar. kdl_bare_heap.c'de bu ikisi `#ifndef KEMGU_KEM_MALLOC` ile devre
+// dışı (memcpy/memset/kdl_global_bolge_al/kdl_dizi orada KALIR — K4).
+//
+// Model (C kdl_bare_heap ile birebir): her tahsis 16-hizalı, {boyut, sonraki}
+// 16-baytlık header. free() bloğu LIFO serbest-listeye iter; malloc() önce
+// ilk-uyan serbest bloğu arar (F4.3 per-iter region-free frame'lerini geri
+// kazanır → sınırlı 64KB heap'te döngü OOM'unu önler), yoksa bump'lar.
+// Çıplak = güvensiz-tier → ham-pointer (inttoptr/ptrtoint/deref) + küresel
+// erişimi explicit `güvensiz {}` gerektirmez.
+
+küresel değişken kem_bump: tam64 = 0;   // bir sonraki bump adresi (16-hizalı)
+küresel değişken kem_son: tam64  = 0;   // heap üst sınırı (dışlayıcı)
+küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi; 0=boş)
+
+// Boot-glue çağırır (main'in ilk malloc'undan ÖNCE): heap penceresini kur.
+çıplak işlev kem_heap_kur(taban: tam64, son: tam64) {
+    kem_bump = ((taban + 15) / 16) * 16;   // 16-hizala
+    kem_son = son;
+    kem_bos = 0;
+}
+
+// C-ABI malloc: void* malloc(size_t) → @malloc(i64)->ptr.
+çıplak işlev malloc(n: tam64) -> *tam8 {
+    değişken istek: tam64 = n;
+    eğer istek == 0 { istek = 1; }               // 0-bayt → benzersiz geçerli ptr
+    değişken toplam: tam64 = ((istek + 31) / 16) * 16;   // header(16)+istek, 16-hizalı
+
+    // 1) Serbest-liste ilk-uyum (header'ı KORU → böl/küçült yok, bloğu bütün ver).
+    değişken onceki: tam64 = 0;
+    değişken cur: tam64 = kem_bos;
+    iken cur != 0 {
+        değişken hsize_p: *tam64 = cur olarak *tam64;             // header.boyut @ +0
+        değişken bsize: tam64 = *hsize_p;
+        değişken hnext_p: *tam64 = (cur + 8) olarak *tam64;       // header.sonraki @ +8
+        değişken bnext: tam64 = *hnext_p;
+        eğer bsize >= toplam {
+            eğer onceki == 0 {
+                kem_bos = bnext;                                  // liste başından çıkar
+            }
+            değilse {
+                değişken op_p: *tam64 = (onceki + 8) olarak *tam64;
+                *op_p = bnext;                                    // önceki.sonraki = bnext
+            }
+            ver (cur + 16) olarak *tam8;                          // blok + header
+        }
+        onceki = cur;
+        cur = bnext;
+    }
+
+    // 2) Bump tahsis (sınır + OOM korumalı; bump zaten 16-hizalı, toplam 16-katı).
+    değişken p: tam64 = kem_bump;
+    eğer p + toplam > kem_son { ver 0 olarak *tam8; }             // OOM → null
+    kem_bump = p + toplam;
+    değişken hs_p: *tam64 = p olarak *tam64;
+    *hs_p = toplam;                                               // header.boyut
+    değişken hn_p: *tam64 = (p + 8) olarak *tam64;
+    *hn_p = 0;                                                    // header.sonraki
+    ver (p + 16) olarak *tam8;
+}
+
+// C-ABI free: void free(void*) → @free(ptr).
+çıplak işlev free(p: *tam8) {
+    değişken pa: tam64 = p olarak tam64;         // ptrtoint
+    eğer pa == 0 { ver; }
+    değişken h: tam64 = pa - 16;                 // header
+    değişken hn_p: *tam64 = (h + 8) olarak *tam64;
+    *hn_p = kem_bos;                             // header.sonraki = eski baş (LIFO it)
+    kem_bos = h;
+}
