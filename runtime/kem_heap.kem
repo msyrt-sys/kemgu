@@ -169,3 +169,132 @@ küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi;
     }
     free(b);
 }
+
+// ============================================================================
+// K4a helpers (D-262): SAF-.kem çıplak memcpy/memset — C kdl_bare_heap YERİNE.
+// inttoptr byte-loop → clang -O2 loop-idiom'a YAKALANMAZ (self-recurse yok,
+// disasm-doğrulandı). clang struct-kopya/zero + K2 dizi bunları çağırır.
+// ============================================================================
+çıplak işlev memcpy(d: *tam8, s: *tam8, n: tam64) -> *tam8 {
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken sp: *tam8 = ((s olarak tam64) + i) olarak *tam8;
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = *sp;
+        i = i + 1;
+    }
+    ver d;
+}
+çıplak işlev memset(d: *tam8, c: tam32, n: tam64) -> *tam8 {
+    değişken cb: tam8 = c olarak tam8;             // düşük bayt
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = cb;
+        i = i + 1;
+    }
+    ver d;
+}
+
+// ============================================================================
+// K2 (D-262): SAF-.kem çıplak DİZİ runtime — C kdl_dizi.inc YERİNE (kem_os yüzeyi:
+// olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç buyut/oob). KdlDizi düzeni:
+//   { veri@0(ptr), boyut@8(i32), kapasite@12(i32), eleman_byte@16(i32) }  ayır 24.
+// Bölge-sahipli (kdl_bolge_ayir[.kem] büyüme; realloc yok, eski bölgede sızar →
+// bölge kapanışında topluca serbest). Sınır-kontrol (D-069) → oob spin-halt.
+// AYNI dosyada kdl_bolge_ayir + memcpy (çıplak→çıplak resolve). tam64/ptr/yapi
+// varyantları kem_os KULLANMADIĞI için atlandı (diğer kernel'ler C dizi'de).
+// ============================================================================
+
+// OOB (bellek-güvenliği ihlali) → temiz halt. kem_os'ta erişilmez (correct kod);
+// cross-file panik/UART yok (leaf) → spin. Güvenlik: OOB asla belleği bozmaz.
+çıplak işlev kdl_dizi_oob(i: tam32, boyut: tam32) {
+    iken doğru { değişken x: tam32 = 0; }
+}
+
+// kdl_dizi_olustur(bolge, eleman_byte) -> KdlDizi* : boş dizi (veri=NULL).
+çıplak işlev kdl_dizi_olustur(bolge: *tam8, eleman_byte: tam32) -> *tam8 {
+    değişken d: *tam8 = kdl_bolge_ayir(bolge, 24);
+    eğer (d olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;         *vp = 0;            // veri = NULL
+    değişken bp: *tam32 = (da + 8) olarak *tam32;   *bp = 0;            // boyut
+    değişken kp: *tam32 = (da + 12) olarak *tam32;  *kp = 0;            // kapasite
+    değişken ep: *tam32 = (da + 16) olarak *tam32;  *ep = eleman_byte;  // eleman_byte
+    ver d;
+}
+
+// İç: yeni_kap*eb kapasiteli tampon (bölgeden), canlı kopyala, d->veri/kapasite güncelle.
+çıplak işlev kem_dizi_buyut(bolge: *tam8, d: *tam8, yeni_kap: tam32, eb: tam64) {
+    değişken yeni: *tam8 = kdl_bolge_ayir(bolge, (yeni_kap olarak tam64) * eb);
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken eski_veri: tam64 = *vp;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer (yeni olarak tam64) != 0 {
+        eğer eski_veri != 0 {
+            eğer boyut > 0 {
+                memcpy(yeni, eski_veri olarak *tam8, (boyut olarak tam64) * eb);
+            }
+        }
+    }
+    *vp = yeni olarak tam64;                         // d->veri = yeni
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    *kp = yeni_kap;                                  // d->kapasite = yeni_kap
+}
+
+// kdl_dizi_ekle_tam(bolge, d, deger) : dolu ise büyüt, sonra ((i32*)veri)[boyut++]=deger.
+çıplak işlev kdl_dizi_ekle_tam(bolge: *tam8, d: *tam8, deger: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer boyut == kapasite {
+        değişken yk: tam32 = 4;
+        eğer kapasite != 0 { yk = kapasite * 2; }
+        kem_dizi_buyut(bolge, d, yk, 4);
+    }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;                      // büyüme sonrası TAZE oku
+    değişken elem: *tam32 = (veri + (boyut olarak tam64) * 4) olarak *tam32;
+    *elem = deger;
+    *bp = boyut + 1;                                 // boyut++
+}
+
+// kdl_dizi_al_tam(d, i) -> i32 : sınır-kontrollü oku (i<0 || i>=boyut → oob).
+çıplak işlev kdl_dizi_al_tam(d: *tam8, i: tam32) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;
+    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
+    ver *elem;
+}
+
+// kdl_dizi_boyut(d) -> i32.
+çıplak işlev kdl_dizi_boyut(d: *tam8) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    ver *bp;
+}
+
+// kdl_dizi_kapasite_ayarla(bolge, d, yeni_kapasite) : kapasiteyi (gerekiyorsa) büyüt.
+çıplak işlev kdl_dizi_kapasite_ayarla(bolge: *tam8, d: *tam8, yeni_kapasite: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer yeni_kapasite <= kapasite { ver; }
+    değişken ep: *tam32 = (da + 16) olarak *tam32;
+    değişken eb: tam32 = *ep;
+    eğer eb <= 0 { eb = 4; }
+    kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
+}

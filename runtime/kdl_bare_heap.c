@@ -102,10 +102,9 @@ void free(void *p) {
     kdl_heap_bos = h;
 }
 
-#endif  /* !KEMGU_KEM_MALLOC — malloc/free/kem_heap_kur .kem'den (kem_os) */
-
 /* Freestanding memcpy/memset — libc yok; clang struct-kopya / kdl_dizi_buyut
- * bunları çağırır. Defined sembol → libc-yok kontrolü (--undefined-only) geçer. */
+ * bunları çağırır. K2 (D-262): kem_os'ta .kem çıplak memcpy/memset (kem_heap.o)
+ * sağlar → burada guard-içi (diğer kernel'ler C sürümünü kullanır). */
 void *memcpy(void *dst, const void *src, size_t n) {
     unsigned char *d = (unsigned char *)dst;
     const unsigned char *s = (const unsigned char *)src;
@@ -118,6 +117,8 @@ void *memset(void *dst, int c, size_t n) {
     while (n--) *d++ = (unsigned char)c;
     return dst;
 }
+
+#endif  /* !KEMGU_KEM_MALLOC — malloc/free/memcpy/memset/kem_heap_kur .kem'den (kem_os) */
 
 /* === Global bölge — kdl_runtime.c host eşinin bare-metal freestanding kopyası.
  * main() @kdl_global_bolge_al çağırır (her program). Tek lazy global bölge,
@@ -142,5 +143,8 @@ __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
 
 /* === Dizi runtime (KdlDizi + kdl_dizi_*) — host (kdl_runtime.c) ile TEK KAYNAK.
  * Bağımlılıklar yukarıda hazır: memcpy, kdl_global_bolge_al, kdl_panik;
- * kdl_bolge_ayir kdl_bolge.h'den. === */
+ * kdl_bolge_ayir kdl_bolge.h'den. K2 (D-262): kem_os'ta .kem çıplak dizi runtime
+ * (kem_heap.o) sağlar → guard-içi (diğer kernel'ler C kdl_dizi.inc kullanır). === */
+#ifndef KEMGU_KEM_MALLOC
 #include "kdl_dizi.inc"
+#endif

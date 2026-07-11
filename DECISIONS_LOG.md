@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-262 — K2+K4a: saf-.kem çıplak DİZİ + memcpy/memset kem_os'a ENTEGRE — C kdl_dizi/memcpy SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-261).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+dizi: olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç buyut/oob; +memcpy/memset);
+`runtime/kdl_bare_heap.c` (memcpy/memset + kdl_dizi.inc `#ifndef KEMGU_KEM_MALLOC` guard); `test/strip_defined_declares.awk`
+(YENİ robust declare-strip); `Makefile` (awk strip + K2 gate-proof). OS-ÇEKİRDEK YASA-1 seri — runtime→.kem göçü K2+K4a.]**
+
+runtime→.kem göçünün 3. kademesi. K2 (dizi) memcpy'ye bağlı → K4a (memcpy/memset) ile bundle. kem_os'un DİZİ + bayt-kopya
+katmanı artık SAF-.kem. Böylece **kem_os'un tüm tahsis+dizi yığını (.kem malloc→region→dizi→memcpy) SAF-.kem**.
+
+- **`kem_heap.kem` (+dizi/memcpy):** çıplak memcpy/memset (inttoptr byte-loop, -O2 loop-idiom'a yakalanmaz→self-recurse yok,
+  disasm-doğrulandı) + kdl_dizi_olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç kem_dizi_buyut/kdl_dizi_oob. KdlDizi
+  {veri@0,boyut@8,kapasite@12,eleman_byte@16} raw-ptr; bölge-sahipli büyüme (kdl_bolge_ayir[.kem] + memcpy[.kem], AYNI dosya
+  çıplak→çıplak). Sınır-kontrol D-069 → oob spin-halt (cross-file panik yok; kem_os'ta erişilmez). tam64/ptr/yapi varyantları
+  kem_os KULLANMADIĞI için atlandı.
+- **`kdl_bare_heap.c`:** memcpy/memset K1-guard'ına alındı; kdl_dizi.inc include `#ifndef KEMGU_KEM_MALLOC` sarıldı.
+- **`strip_defined_declares.awk`:** kemgu --llvm boilerplate declare'ları define ile çakışır (LLVM redef) → bir fn hem
+  define hem declare ediliyorsa declare'ı DÜŞÜR (robust; elle strip-listesi bakımı yok). K1/K2/K3 hepsi kullanır.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **@kdl_dizi/memcpy/memset=0** — `bm_a64_heap_kemmalloc.o` bunların
+C-tanımı=0; `bm_a64_kem_heap.o` T kdl_dizi_olustur+memcpy (saf-.kem). (b) **QEMU boot** — [1..5]+KEM-OS OK, **[2] HEAP DIZI=55**
+(.kem dizi 1..10 ekle+büyüme[4→8→16]+al_tam, .kem region+malloc+memcpy üstünde DOĞRU). (c) **Regresyon yok** — kernel_dizi
+(C dizi) KERNEL DIZI OK+55; bm_a64_heap.o C dizi/memcpy intact. (d) Host: dizi LOGIC test (boyut=10, sum=55). Fixpoint ETKİLENMEZ.
+
+**KALAN C (kem_os) → K4b/K5:** kdl_global_bolge_al (lazy global bölge — kdl_bolge_olustur[.kem] çağırır), kdl_panik/
+kdl_panik_dur (panik seam → UART halt), yetki/mmio/metin subsystem'leri. K5 nihai: kem_os IR + link'te C-runtime sembolü=0.
+
+---
+
 ## D-261 — K3: saf-.kem çıplak REGION (bölge arena) kem_os'a ENTEGRE — C kdl_bolge SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-260).
