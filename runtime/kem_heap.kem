@@ -72,3 +72,100 @@ küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi;
     *hn_p = kem_bos;                             // header.sonraki = eski baş (LIFO it)
     kem_bos = h;
 }
+
+// ============================================================================
+// K3 (D-261): SAF-.kem çıplak REGION (bölge) runtime — C kdl_bolge.c YERİNE.
+// Bölge = malloc'lu blok tek-yönlü listesi + blok-içi bump. malloc/free AYNI
+// dosyada (yukarıda, çıplak) → çıplak→çıplak call resolve (islev_bul). Region
+// memcpy GEREKMEZ. Sızıntı-sayaçları YOK (kem_os leak-check etmez; C tarafı
+// tests için tutar). Struct düzenleri (C kdl_bolge.c ile birebir):
+//   KdlBolge     { bas@0(ptr), blok_sayisi@8(i32) }        malloc 16
+//   KdlBolgeBlok { sonraki@0, kapasite@8, kullanilan@16, veri@24 }  malloc 24+kap
+// Hizalama ÇALIŞMA-ZAMANI adresine göre (((x+15)/16)*16), bitwise gerekmez.
+
+// Yeni blok: 24-bayt header + kap bayt veri malloc'la (NULL → 0).
+çıplak işlev kem_blok_olustur(kap: tam64) -> *tam8 {
+    değişken blk: *tam8 = malloc(24 + kap);
+    eğer (blk olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ba: tam64 = blk olarak tam64;
+    değişken sp: *tam64 = ba olarak *tam64;
+    *sp = 0;                                       // sonraki = NULL
+    değişken kp: *tam64 = (ba + 8) olarak *tam64;
+    *kp = kap;                                     // kapasite
+    değişken up: *tam64 = (ba + 16) olarak *tam64;
+    *up = 0;                                       // kullanilan
+    ver blk;
+}
+
+// kdl_bolge_olustur() -> KdlBolge* : yeni bölge (KdlBolge + ilk 64KB blok).
+çıplak işlev kdl_bolge_olustur() -> *tam8 {
+    değişken b: *tam8 = malloc(16);
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken blk: *tam8 = kem_blok_olustur(65536);
+    eğer (blk olarak tam64) == 0 { free(b); ver 0 olarak *tam8; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    *basp = blk olarak tam64;                      // bas = ilk blok
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = 1;                                      // blok_sayisi = 1
+    ver b;
+}
+
+// kdl_bolge_ayir(b, n) -> void* : aktif bloktan 16-hizalı bump; taşarsa yeni blok.
+çıplak işlev kdl_bolge_ayir(b: *tam8, n: tam64) -> *tam8 {
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken nn: tam64 = n;
+    eğer nn == 0 { nn = 1; }
+    değişken hn: tam64 = ((nn + 15) / 16) * 16;    // hiza_yukari
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;                  // b->bas
+    eğer blok != 0 {
+        değişken kp: *tam64 = (blok + 8) olarak *tam64;
+        değişken kapasite: tam64 = *kp;
+        değişken up: *tam64 = (blok + 16) olarak *tam64;
+        değişken kullanilan: tam64 = *up;
+        değişken cur: tam64 = (blok + 24) + kullanilan;   // veri + kullanilan
+        değişken ahiz: tam64 = ((cur + 15) / 16) * 16;
+        değişken pad: tam64 = ahiz - cur;
+        değişken kalan: tam64 = kapasite - kullanilan;
+        eğer pad <= kalan {
+            eğer hn <= (kalan - pad) {
+                *up = kullanilan + pad + hn;
+                ver ahiz olarak *tam8;
+            }
+        }
+    }
+    // yeni blok (hn + en kötü hiza payı; en az 64KB)
+    değişken kap: tam64 = hn + 16;
+    eğer kap < 65536 { kap = 65536; }
+    değişken yeni: *tam8 = kem_blok_olustur(kap);
+    eğer (yeni olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ya: tam64 = yeni olarak tam64;
+    değişken ysp: *tam64 = ya olarak *tam64;
+    *ysp = blok;                                   // yeni->sonraki = eski bas
+    *basp = ya;                                    // b->bas = yeni
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = *bsp + 1;                               // blok_sayisi++
+    değişken veri: tam64 = ya + 24;
+    değişken ahiz2: tam64 = ((veri + 15) / 16) * 16;
+    değişken pad2: tam64 = ahiz2 - veri;
+    değişken yup: *tam64 = (ya + 16) olarak *tam64;
+    *yup = pad2 + hn;                              // yeni->kullanilan
+    ver ahiz2 olarak *tam8;
+}
+
+// kdl_bolge_serbest(b) : tüm blokları + KdlBolge'yi free et.
+çıplak işlev kdl_bolge_serbest(b: *tam8) {
+    eğer (b olarak tam64) == 0 { ver; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;
+    iken blok != 0 {
+        değişken sp: *tam64 = blok olarak *tam64;
+        değişken eski: tam64 = *sp;               // blok->sonraki
+        free(blok olarak *tam8);
+        blok = eski;
+    }
+    free(b);
+}

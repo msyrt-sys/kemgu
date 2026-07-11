@@ -772,18 +772,23 @@ $(BUILD)/bm_a64_yazdir.o: runtime/kdl_runtime_yazdir_bare.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_bolge.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# K3 (D-261): kem_os-özel region — C kdl_bolge_olustur/ayir/serbest ÇIKARILMIŞ
+# (-DKEMGU_KEM_MALLOC). Yalnız sayaç+bakiye+blok_sayisi diagnostikleri KALIR;
+# region primitifleri → kem_heap.o (.kem çıplak, .kem malloc/free ile).
+$(BUILD)/bm_a64_bolge_kemregion.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 # K1 (D-260): kem_os-özel heap — C malloc/free ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC).
 # memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALIR; malloc/free → kem_heap.o (.kem).
 $(BUILD)/bm_a64_heap_kemmalloc.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
-# K1 (D-260): SAF-.kem çıplak allocator → @malloc(i64)/@free(ptr)/@kem_heap_kur(i64,i64).
-# kemgu --llvm → boilerplate `declare @malloc/@free` (define ile çakışır, LLVM redef hatası)
-# STRIP + bare-metal target'a derle. Circularity yok (çıplak = region-prologue'suz).
+# K1/K3 (D-260/261): SAF-.kem çıplak runtime → @malloc/@free/@kem_heap_kur (K1) +
+# @kdl_bolge_olustur/ayir/serbest (K3). kemgu --llvm boilerplate `declare`ları define
+# ile çakışır (LLVM redef) → STRIP + bare-metal target. Circularity yok (çıplak).
 $(BUILD)/bm_a64_kem_heap.o: runtime/kem_heap.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
 	./$(BUILD)/kemgu$(EXE) --llvm runtime/kem_heap.kem 2>/dev/null \
-	  | sed -E '/^declare ptr @malloc\(i64\)$$/d; /^declare void @free\(ptr\)$$/d' \
+	  | sed -E '/^declare ptr @malloc\(i64\)$$/d; /^declare void @free\(ptr\)$$/d; /^declare ptr @kdl_bolge_olustur\(\)$$/d; /^declare ptr @kdl_bolge_ayir\(ptr, i64\)$$/d; /^declare void @kdl_bolge_serbest\(ptr\)$$/d' \
 	  > $(BUILD)/kem_heap.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_heap.ll -c -o $@
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
@@ -819,7 +824,7 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # (C malloc çıkarılmış) + kem_heap.o (saf-.kem malloc/free). Diğer kernel'ler BM_A64_OBJS'i
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
 KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
-              $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
+              $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
               $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o \
               $(BUILD)/bm_a64_mmu.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
@@ -920,6 +925,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: saf-.kem kem_heap malloc TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; bm_a64_kem_heap.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
+	@echo "FALSIFIYE-KANIT (K3/D-261): C region (kdl_bolge) olustur/ayir/serbest SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -qE ' T kdl_bolge_(olustur|ayir|serbest)$$'; then \
+		echo "FAIL: C kdl_bolge hala region primitifi TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
+		llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T kdl_bolge_(olustur|ayir|serbest)$$'; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_bolge_olustur$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_bolge_olustur TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_bolge_kemregion.o: 0 region C-tanımı; bm_a64_kem_heap.o: T kdl_bolge_olustur — kem_os region'u SAF-.kem çıplak arena'dan)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \

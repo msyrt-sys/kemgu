@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-261 — K3: saf-.kem çıplak REGION (bölge arena) kem_os'a ENTEGRE — C kdl_bolge SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-260).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+region: kem_blok_olustur/kdl_bolge_olustur/ayir/serbest); `runtime/kdl_bolge.c`
+(`#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (bm_a64_bolge_kemregion.o + KEM_OS_A64_OBJS swap + kem_heap strip +
+K3 gate-proof). OS-ÇEKİRDEK YASA-1 seri — runtime→.kem göçü K3.]**
+
+runtime→.kem göçünün İKİNCİ kademesi (K3 region). K2(dizi)'nin ÖNKOŞULU (dizi kdl_bolge_ayir çağırır + .kem extern-C
+çağıramaz → region .kem OLMALI önce; stated K2→K3 sırası TEKNİK infeasible, tractable sıra K3→K2). Region EN BÜYÜK
+yüzey (kem_os.ll'de kdl_bolge_olustur 22 + serbest 39 = **61 çağrı**).
+
+- **`kem_heap.kem` (+region):** çıplak `kdl_bolge_olustur()->ptr` / `kdl_bolge_ayir(ptr,i64)->ptr` / `kdl_bolge_serbest(ptr)`
+  + helper `kem_blok_olustur`. Bölge = malloc'lu blok tek-yönlü listesi + blok-içi bump (C kdl_bolge.c ile birebir
+  algoritma). **AYNI dosyada malloc/free (K1)** → çıplak→çıplak call resolve (islev_bul; ρ-suz doğru C-ABI). Struct
+  düzenleri raw-pointer offset (KdlBolge{bas@0,blok_sayisi@8}; KdlBolgeBlok{sonraki@0,kapasite@8,kullanilan@16,veri@24}).
+  Hizalama `((x+15)/16)*16` (bitwise gerekmez). memcpy GEREKMEZ. Sayaç YOK.
+- **`kdl_bolge.c`:** hiza_yukari/blok_olustur/olustur/ayir/serbest `#ifndef KEMGU_KEM_MALLOC` guard; sayaç+bakiye+
+  blok_sayisi diagnostikleri KALIR. Diğer kernel'ler C region (guard etkisiz) ile DEVAM.
+- **Makefile:** `bm_a64_bolge_kemregion.o` (-DKEMGU_KEM_MALLOC, region çıkarılmış); `KEM_OS_A64_OBJS` bm_a64_bolge.o →
+  kemregion; kem_heap strip'e region declare'ları eklendi. Sadece kem_os.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **@kdl_bolge=0** — `bm_a64_bolge_kemregion.o` region C-tanımı=0;
+`bm_a64_kem_heap.o` T kdl_bolge_olustur (saf-.kem). (b) **QEMU boot** — kem_os.elf [1..5]+KEM-OS OK, **[2] HEAP DIZI=55**
+(.kem region + .kem malloc birlikte heap Dizi tahsisini DOĞRU yaptı; her kem_os fn'in region-prologue'u = .kem region →
+.kem malloc). (c) **Regresyon yok** — kernel_dizi (C region) KERNEL DIZI OK+55; bm_a64_bolge.o C region intact. (d)
+Host: region LOGIC test (1000 tahsis 16-hizalı+distinct+yazılabilir + 100KB yeni-blok → exit 42). Fixpoint ETKİLENMEZ.
+
+**SIRADA K2 (dizi):** kdl_dizi_* → .kem çıplak (kem_heap.kem'e; kdl_bolge_ayir[.kem] + memcpy[.kem çıplak leaf, self-recurse
+yok] çağırır). Sonra K4 (memcpy/memset/global_bolge/panik) → K5 (kem_os IR C-runtime=0).
+
+---
+
 ## D-260 — K1: saf-.kem çıplak `malloc`/`free` kem_os'a ENTEGRE — C bump-allocator SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-259).

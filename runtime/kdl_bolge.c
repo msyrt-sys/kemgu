@@ -51,6 +51,13 @@ struct KdlBolge {
 uint64_t kdl_bolge_olustur_sayisi = 0;
 uint64_t kdl_bolge_serbest_sayisi = 0;
 
+/* K3 (D-261): KEMGU_KEM_MALLOC (kem_os pure-.kem runtime) tanımlıysa region
+ * primitifleri (olustur/ayir/serbest + helpers) SAF-.kem'den gelir (kem_heap.kem
+ * → çıplak @kdl_bolge_olustur/ayir/serbest, .kem malloc/free ile). Bu dosya o zaman
+ * yalnız sızıntı-sayaçları + bakiye/blok_sayisi diagnostiklerini tutar. Diğer
+ * kernel'ler bayrağı SET ETMEZ → C region (bu bloğu derler). */
+#ifndef KEMGU_KEM_MALLOC
+
 /* x'i 16'ya yukarı yuvarla. Taşarsa 0'dan küçük (wrap) döner → çağıran kontrol. */
 static uint64_t hiza_yukari(uint64_t x) {
     return (x + (KDL_BOLGE_HIZA - 1)) & ~(uint64_t)(KDL_BOLGE_HIZA - 1);
@@ -126,6 +133,8 @@ void kdl_bolge_serbest(KdlBolge *b) {
     free(b);
     kdl_bolge_serbest_sayisi++;
 }
+
+#endif  /* !KEMGU_KEM_MALLOC — region primitifleri .kem'den (kem_os) */
 
 int kdl_bolge_bakiye(void) {
     return (int)(kdl_bolge_olustur_sayisi - kdl_bolge_serbest_sayisi);
