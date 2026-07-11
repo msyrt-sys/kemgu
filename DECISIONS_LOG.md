@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-265 — CODEGEN FIX: deref-READ `*p` yük-tipi POINTEE'den (bağlam-varsayılan i32 gap) — C-derleyici (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-264).
+
+**Karar [ETKİ: `src/llvm.c` (OP_DEREFERANS read handler); `runtime/kem_heap.kem` (metin workaround KALDIRILDI).
+CODEGEN CORRECTNESS.]** D-264'te keşfedilen gap'in KALICI onarımı: `*p` deref-READ, yüklenecek tipi pointer'ın
+pointee-tipinden DEĞİL kullanım-bağlamından (`beklenen`) alıyordu; `beklenen` yoksa (ör. `*bp == 0` karşılaştırma)
+i32-varsayılan → DAR pointee'lerde (`*tam8` → i32, 4 bayt oku) YANLIŞ genişlik → null-check bozuldu → kdl_metin_uzunluk
+sınır-aştı → garbled UART (D-264).
+
+- **Fix (llvm.c OP_DEREFERANS):** operand DUGUM_TANIMLAYICI ise `isim_bul→pointee_llvm_tip` ile pointee-tipi çöz; `beklenen`
+  verilmezse i32 yerine POINTEE kullan. **Altyapı zaten vardı** (`pointee_llvm_tip` alanı + indeks/deref-WRITE handler'ları
+  onu kullanıyordu — yalnız deref-READ handler'ı kaçırmıştı; llvm.c:2408 yorumu bunu belgeliyordu). `beklenen` VERİLİRSE
+  korunur (regresyon yok).
+- **metin workaround kaldırıldı:** `değişken b: tam8 = *bp` → saf `*bp == 0` (fix doğru i8-yük emit ediyor).
+
+**FALSİFİYE-KANIT:** (a) `*bp == 0` IR artık `load volatile i8` + `icmp eq i8` (i32 değil). (b) host metin
+uzunluk('KURTAR')=6→exit 42 (workaround'suz). (c) **kem_os QEMU TEMİZ boot** — EXC satırları garbling YOK (fix öncesi
+garbled'dı). (d) **Regresyon YOK:** llvm 241/241, codegen_diff 75/75, **FIXPOINT stage1==stage2 BİREBİR (33150)**,
+self_driver TÜM MODLAR (C-built==self-host → codegen.kem etkilenmedi). (test_tumu'da 1 kez 18-llvm-flake görüldü, standalone
++ tekrar 241/241 → geçici temp-race, fix DEĞİL.)
+
+**DÜRÜST SINIR (D-249/D-253 sınıfı LATENT parite):** self-host `codegen.kem` deref handler'ı skaler pointee için hâlâ i32
+(satır 2731; "skaler beklenen-tip plumbing yok"). C artık pointee kullanıyor → `*tam8/*tam16/*tam64` beklenen-NULL deref'te
+C↔self-host DIVERGE eder. **AMA LATENT:** hiçbir mevcut program (cg_korpus/codegen.kem/self_driver) böyle deref
+kullanmıyor → fixpoint+parite YEŞİL. kem_heap.kem (*tam8 kullanan) C-derlenir, self-host derlemez → bare-metal etkilenmez.
+**Gerçek parite fix (gelecek):** codegen.kem'e skaler-pointee plumbing (cg_var tablosu + deref handler). İlgili
+[[project-kem-codegen-pointer-gaps]].
+
+---
+
 ## D-264 — SUBSYSTEM/metin: saf-.kem kdl_metin_uzunluk/bayt kem_os'a ENTEGRE (allocator-sonrası ilk subsystem) (2026-07-11) [ORTA]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-263).

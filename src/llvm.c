@@ -2612,9 +2612,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * baglamindan forward edilir), yoksa i32 varsayilan. */
             if (d->veri.tekli.op == OP_DEREFERANS) {
                 IfadeSonuc p = ifade_uret(g, d->veri.tekli.operand, NULL);
+                /* D-265: yük tipi POINTEE'den (operand *tamN → tamN). beklenen
+                 * VERİLMEZSE (ör. `*bp == 0` karşılaştırma bağlamı) eski i32
+                 * varsayılanı DAR tiplerde YANLIŞ genişlik yüklüyordu (*tam8 → i32,
+                 * 4 bayt oku → null-check bozulur; D-264 metin garbling). indeks +
+                 * deref-write handler'ları zaten pointee_llvm_tip kullanıyordu; bu
+                 * deref-READ gap'iydi. beklenen VERİLİRSE korunur (çağıran o tipi bekler). */
+                const char *deref_pointee = NULL;
+                if (d->veri.tekli.operand->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *dvi = isim_bul(g,
+                        d->veri.tekli.operand->veri.tanimlayici.metin,
+                        d->veri.tekli.operand->veri.tanimlayici.uzunluk);
+                    if (dvi && dvi->pointee_llvm_tip) deref_pointee = dvi->pointee_llvm_tip;
+                }
                 const char *yuk_tip =
-                    (beklenen && strcmp(beklenen, "ptr") != 0)
-                        ? beklenen : "i32";
+                    (beklenen && strcmp(beklenen, "ptr") != 0) ? beklenen
+                        : (deref_pointee ? deref_pointee : "i32");
                 int r = yeni_reg(g);
                 /* D-248 (GAP-3): güvensiz blokta VOLATILE load (MMIO okuması
                  * clang -O2 tarafından elenmez/yeniden-sıralanmaz). */

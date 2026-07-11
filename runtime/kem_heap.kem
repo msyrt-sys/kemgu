@@ -321,10 +321,8 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken n: tam32 = 0;
     iken doğru {
         değişken bp: *tam8 = ((s olarak tam64) + (n olarak tam64)) olarak *tam8;
-        // NOT: `*bp` doğrudan `== 0` bağlamında i32-yük emit ediyor (deref-tip
-        // pointee yerine context'ten → codegen gap). tam8 ara-değişkenle i8-yük ZORLA.
-        değişken b: tam8 = *bp;
-        eğer b == 0 { ver n; }
+        // D-265 sonrası: `*bp == 0` doğru i8-yük emit eder (deref-read pointee-tip fix).
+        eğer *bp == 0 { ver n; }
         n = n + 1;
     }
     ver n;   // erişilmez
