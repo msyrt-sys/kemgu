@@ -16,6 +16,7 @@
 küresel değişken kem_bump: tam64 = 0;   // bir sonraki bump adresi (16-hizalı)
 küresel değişken kem_son: tam64  = 0;   // heap üst sınırı (dışlayıcı)
 küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi; 0=boş)
+küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölge (adres)
 
 // Boot-glue çağırır (main'in ilk malloc'undan ÖNCE): heap penceresini kur.
 çıplak işlev kem_heap_kur(taban: tam64, son: tam64) {
@@ -153,6 +154,17 @@ küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi;
     değişken yup: *tam64 = (ya + 16) olarak *tam64;
     *yup = pad2 + hn;                              // yeni->kullanilan
     ver ahiz2 olarak *tam8;
+}
+
+// K4b (D-263): kdl_global_bolge_al() -> KdlBolge* : lazy tek global bölge (main +
+// ρ-seed her program çağırır). C kdl_bare_heap.c kopyasının .kem çıplak eşi;
+// kdl_bolge_olustur (.kem, aynı dosya) çağırır. küresel state (WALL-1).
+çıplak işlev kdl_global_bolge_al() -> *tam8 {
+    eğer kem_global_bolge == 0 {
+        değişken b: *tam8 = kdl_bolge_olustur();
+        kem_global_bolge = b olarak tam64;
+    }
+    ver kem_global_bolge olarak *tam8;
 }
 
 // kdl_bolge_serbest(b) : tüm blokları + KdlBolge'yi free et.

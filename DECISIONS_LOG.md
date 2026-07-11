@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-263 — K4b+K5: saf-.kem kdl_global_bolge_al + ALLOCATOR-YIĞINI GÖÇÜ TAMAM — kem_os allocator C-runtime=0, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-262).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_global_bolge_al + kem_global_bolge küresel); `runtime/kdl_bare_heap.c`
+(kdl_global_bolge_al `#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (K4b+K5 gate-proof). OS-ÇEKİRDEK YASA-1 seri —
+runtime→.kem göçü SON allocator kademesi + K5 milestone.]**
+
+**runtime→.kem ALLOCATOR-YIĞINI GÖÇÜ TAMAM (K1→K4b).** K4b son parça: kdl_global_bolge_al (kem_os.ll'de kalan TEK
+allocator C-çağrısı) → .kem çıplak (küresel lazy global bölge + kdl_bolge_olustur[.kem]). Böylece kem_os'un TÜM
+allocator yığını — **malloc (K1) → region (K3) → dizi (K2) → memcpy/memset (K4a) → global-bölge (K4b)** — SAF-.kem.
+
+- **`kem_heap.kem` (+global_bolge):** çıplak `kdl_global_bolge_al()->ptr`; `kem_global_bolge` küresel (WALL-1) lazy;
+  kdl_bolge_olustur (.kem, aynı dosya) çağırır. kem_heap.kem artık TAM allocator runtime (18 çıplak fn).
+- **`kdl_bare_heap.c`:** kdl_global_bolge_al KEMGU_KEM_MALLOC guard'ına alındı.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **K4b** — kemmalloc.o 0 kdl_global_bolge_al; kem_heap.o T
+kdl_global_bolge_al. (b) **K5 milestone** — `bm_a64_heap_kemmalloc.o` + `bm_a64_bolge_kemregion.o` (kem_os'un TÜM C
+allocator objeleri) = **0 allocator-yığını C-tanımı** (malloc/free/memcpy/memset/kdl_bolge_*/kdl_dizi_*/kdl_global_bolge_al
+grep=0) → kem_os allocator/region/dizi/kopya/global-bölge TAMAMEN bm_a64_kem_heap.o SAF-.kem'den. (c) **QEMU boot** —
+[1..5]+KEM-OS OK, [2] HEAP DIZI=55. (d) Regresyon yok (diğer kernel'ler C allocator).
+
+**KAPSAM/SINIR:** Bu K5 = **ALLOCATOR-yığını** C-runtime=0 (orijinal K1-K5 direktif hedefi). kem_os'ta KALAN C =
+AYRI SUBSYSTEM'ler (panik/UART/yetki/mmio/metin/kesme/zaman/mmu/görev/virtio) — allocator değil, ayrı göç fazı (gelecek).
+aarch64 (x86_64 kem_os yok). dizi tam64/ptr/yapi varyantları + free-list split/coalesce yok (kem_os kullanmıyor).
+
+---
+
 ## D-262 — K2+K4a: saf-.kem çıplak DİZİ + memcpy/memset kem_os'a ENTEGRE — C kdl_dizi/memcpy SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-261).

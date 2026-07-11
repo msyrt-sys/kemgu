@@ -942,6 +942,21 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: saf-.kem kem_heap kdl_dizi_olustur TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_heap_kemmalloc.o: 0 dizi/memcpy/memset C-tanımı; bm_a64_kem_heap.o: T kdl_dizi_olustur+memcpy — kem_os dizi/kopya SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (K4b/D-263): C kdl_global_bolge_al SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T kdl_global_bolge_al$$'; then \
+		echo "FAIL: C kdl_bare_heap hala kdl_global_bolge_al TANIMLIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_global_bolge_al$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_global_bolge_al TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (kem_os global-bölge de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (K5/D-263): kem_os ALLOCATOR-YIĞINI (malloc→region→dizi→helpers) TAMAMEN SAF-.kem:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o \
+		| grep -qE ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; then \
+		echo "FAIL: C allocator objeleri hala allocator-yığını sembolü TANIMLIYOR (K1-K4b guard eksik)"; \
+		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; exit 1; \
+	fi
+	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ bm_a64_kem_heap.o SAF-.kem'den. K1→K4b TAMAM.)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \

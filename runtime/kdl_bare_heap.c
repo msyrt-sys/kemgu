@@ -122,14 +122,16 @@ void *memset(void *dst, int c, size_t n) {
 
 /* === Global bölge — kdl_runtime.c host eşinin bare-metal freestanding kopyası.
  * main() @kdl_global_bolge_al çağırır (her program). Tek lazy global bölge,
- * program ömrü boyu (status-quo leak; F4.4 dışı). 6 satır → kdl_runtime.c'yi
- * (host-monolitik, stdio bağımlı) bare-metal'e taşımak yerine küçük kopya. */
+ * program ömrü boyu (status-quo leak; F4.4 dışı). K4b (D-263): kem_os'ta .kem
+ * çıplak kdl_global_bolge_al (kem_heap.o) → guard-içi (diğer kernel'ler C). */
+#ifndef KEMGU_KEM_MALLOC
 static KdlBolge *kdl_global_bolge = 0;
 
 KdlBolge *kdl_global_bolge_al(void) {
     if (!kdl_global_bolge) kdl_global_bolge = kdl_bolge_olustur();
     return kdl_global_bolge;
 }
+#endif  /* !KEMGU_KEM_MALLOC — kdl_global_bolge_al .kem'den (kem_os) */
 
 /* === Evrensel panik (seam) — kdl_dizi_oob (kdl_dizi.inc) + codegen inline-OOB
  * (src/llvm.c) buraya çağırır. Bare-metal: UART "PANIK:" + CPU halt
