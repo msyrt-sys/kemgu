@@ -808,6 +808,10 @@ $(BUILD)/bm_a64_virtio_net.o: runtime/kdl_virtio_net.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_mmio.o: runtime/kdl_runtime_mmio.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# D-266: kem_os-özel mmio — oku32/yaz32 ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC), saf-.kem'den.
+# 16/64 widthler KALIR (virtio dead-code dep). Diğer kernel'ler bm_a64_mmio.o (C).
+$(BUILD)/bm_a64_mmio_kem.o: runtime/kdl_runtime_mmio.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_yetki.o: runtime/kdl_yetki_bare.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_metin.o: runtime/kdl_metin_bare.c | $(BUILD)
@@ -903,12 +907,12 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/bm_a64_yetki.o
 	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(KEM_OS_A64_OBJS)
+		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/bm_a64_yetki.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
@@ -962,6 +966,17 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: saf-.kem kem_heap kdl_metin_uzunluk TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_metin.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_metin_uzunluk/bayt — metin de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/mmio, D-266): C mmio oku32/yaz32 SIFIR, saf-.kem VOLATILE sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_mmio_kem.o | grep -qE ' T kdl_mmio_(oku32|yaz32)$$'; then \
+		echo "FAIL: C kdl_runtime_mmio hala oku32/yaz32 TANIMLIYOR (guard etkisiz)"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_mmio_oku32$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_mmio_oku32 TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! grep -qE "load volatile i32.*|store volatile i32" $(BUILD)/kem_heap.ll; then \
+		echo "FAIL: .kem mmio VOLATILE değil (MMIO -O2 elenebilir)"; exit 1; \
+	fi
+	@echo "  (bm_a64_mmio_kem.o: 0 oku32/yaz32 C-tanımı; bm_a64_kem_heap.o: T kdl_mmio_oku32 + VOLATILE — mmio32 de SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \

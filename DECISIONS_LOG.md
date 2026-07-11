@@ -5,6 +5,29 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-266 — SUBSYSTEM/mmio: saf-.kem çıplak VOLATILE mmio oku32/yaz32 kem_os'a ENTEGRE (2026-07-11) [ORTA]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-265).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_mmio_oku32/yaz32); `runtime/kdl_runtime_mmio.c` (oku32/yaz32
+`#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (bm_a64_mmio_kem.o + kem_os link swap + mmio gate-proof). OS-ÇEKİRDEK.]**
+İkinci subsystem: MMIO (donanım register) volatile erişimi saf-.kem. D-265 deref-fix'in ilk meyvesi (doğru i32-volatile).
+
+- **`kem_heap.kem` (+mmio):** çıplak `kdl_mmio_oku32(i64)->i32` (volatile load) + `kdl_mmio_yaz32(i64,i32)` (volatile store).
+  Çıplak=güvensiz-tier → deref VOLATILE (D-248; clang -O2 elemez). D-265: `*p` (p:*tam32) → i32-pointee yük. kem_os.kem
+  YALNIZ oku32/yaz32 çağırır → yalnız onlar migrate; 16/64 widthler C'de kalır (virtio dead-code dep).
+- **`kdl_runtime_mmio.c`:** oku32/yaz32 (bare-metal blok) #ifndef KEMGU_KEM_MALLOC guard. Diğer widthler + host korunur.
+- **Makefile:** bm_a64_mmio_kem.o (-DKEMGU_KEM_MALLOC, oku32/yaz32 çıkarılmış); kem_os link bm_a64_mmio.o → kem variant.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) bm_a64_mmio_kem.o 0 oku32/yaz32 C-def; bm_a64_kem_heap.o T
+kdl_mmio_oku32 + kem_heap.ll `store/load volatile i32` içerir (gate grep). (b) **QEMU: [3] MMIO OK + 1953655158** —
+.kem VOLATILE oku32 donanım register'ından DOĞRU değeri okudu (migrasyon-öncesi ile birebir; volatile çalışıyor). (c)
+Regresyon yok — bm_a64_mmio.o (non-kem) oku32/yaz32 intact → virtio/mmio_bare_metal/kem_pointer kernel'leri etkilenmez.
+
+**SIRADA:** yetki (kdl_yetki_olustur/geri_al, capability — struct/semantik) → panik/UART/kesme/zaman/mmu/görev/virtio (büyük).
+
+---
+
 ## D-265 — CODEGEN FIX: deref-READ `*p` yük-tipi POINTEE'den (bağlam-varsayılan i32 gap) — C-derleyici (2026-07-11) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-264).

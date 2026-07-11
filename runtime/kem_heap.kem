@@ -335,3 +335,18 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken bp: *tam8 = ((s olarak tam64) + (i olarak tam64)) olarak *tam8;
     ver *bp;
 }
+
+// ============================================================================
+// SUBSYSTEM/mmio (D-266): SAF-.kem çıplak VOLATILE MMIO oku32/yaz32 — kem_os'un
+// kullandığı widthler (donanım register erişimi). Çıplak = güvensiz-tier → deref
+// VOLATILE emit (D-248; clang -O2 MMIO'yu elemez/yeniden-sıralamaz). D-265 pointee-tip:
+// *p (p:*tam32) → i32-yük. Diğer widthler (16/64) virtio-dep, C'de kalır (kem_os.kem
+// yalnız oku32/yaz32 çağırır). @kdl_mmio_oku32(i64)->i32, @kdl_mmio_yaz32(i64,i32).
+çıplak işlev kdl_mmio_oku32(adres: tam64) -> tam32 {
+    değişken p: *tam32 = adres olarak *tam32;
+    ver *p;                       // volatile load i32
+}
+çıplak işlev kdl_mmio_yaz32(adres: tam64, deger: tam32) {
+    değişken p: *tam32 = adres olarak *tam32;
+    *p = deger;                   // volatile store i32
+}

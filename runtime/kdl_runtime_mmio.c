@@ -44,6 +44,9 @@ void kdl_mmio_yaz16(uint64_t adres, uint16_t deger) {
     *(volatile uint16_t *)(uintptr_t)adres = deger;
 }
 
+/* K-göç/D-266: kem_os -DKEMGU_KEM_MALLOC ile oku32/yaz32'yi SAF-.kem'den alır
+ * (kem_heap.o çıplak volatile). Diğer widthler (16/64) burada kalır (virtio dep). */
+#ifndef KEMGU_KEM_MALLOC
 uint32_t kdl_mmio_oku32(uint64_t adres) {
     return *(volatile uint32_t *)(uintptr_t)adres;
 }
@@ -51,6 +54,7 @@ uint32_t kdl_mmio_oku32(uint64_t adres) {
 void kdl_mmio_yaz32(uint64_t adres, uint32_t deger) {
     *(volatile uint32_t *)(uintptr_t)adres = deger;
 }
+#endif  /* !KEMGU_KEM_MALLOC — mmio oku32/yaz32 .kem'den (kem_os) */
 
 uint64_t kdl_mmio_oku64(uint64_t adres) {
     return *(volatile uint64_t *)(uintptr_t)adres;
