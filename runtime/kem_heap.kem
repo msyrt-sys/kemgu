@@ -310,3 +310,30 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     eğer eb <= 0 { eb = 4; }
     kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
 }
+
+// ============================================================================
+// SUBSYSTEM/metin (D-264): SAF-.kem çıplak metin ilkeleri — C kdl_metin_bare.c
+// YERİNE. Freestanding strlen/byte-at (allocation yok, leaf). Sınır-güvenli
+// (NULL/OOB → 0 sentinel). @kdl_metin_uzunluk(ptr)->i32, @kdl_metin_bayt(ptr,i32)->i8.
+// ============================================================================
+çıplak işlev kdl_metin_uzunluk(s: *tam8) -> tam32 {
+    eğer (s olarak tam64) == 0 { ver 0; }
+    değişken n: tam32 = 0;
+    iken doğru {
+        değişken bp: *tam8 = ((s olarak tam64) + (n olarak tam64)) olarak *tam8;
+        // NOT: `*bp` doğrudan `== 0` bağlamında i32-yük emit ediyor (deref-tip
+        // pointee yerine context'ten → codegen gap). tam8 ara-değişkenle i8-yük ZORLA.
+        değişken b: tam8 = *bp;
+        eğer b == 0 { ver n; }
+        n = n + 1;
+    }
+    ver n;   // erişilmez
+}
+çıplak işlev kdl_metin_bayt(s: *tam8, i: tam32) -> tam8 {
+    eğer (s olarak tam64) == 0 { ver 0 olarak tam8; }
+    eğer i < 0 { ver 0 olarak tam8; }
+    değişken n: tam32 = kdl_metin_uzunluk(s);
+    eğer i >= n { ver 0 olarak tam8; }
+    değişken bp: *tam8 = ((s olarak tam64) + (i olarak tam64)) olarak *tam8;
+    ver *bp;
+}

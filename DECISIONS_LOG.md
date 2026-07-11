@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-264 — SUBSYSTEM/metin: saf-.kem kdl_metin_uzunluk/bayt kem_os'a ENTEGRE (allocator-sonrası ilk subsystem) (2026-07-11) [ORTA]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-263).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_metin_uzunluk/bayt); `Makefile` (kem_os link'inden bm_a64_metin.o ÇIKAR +
+metin gate-proof). OS-ÇEKİRDEK.]** Allocator göçü (K1-K5) sonrası İLK subsystem: metin (string) ilkeleri saf-.kem.
+kem_os'ta kalan C-runtime azaltma fazının başlangıcı.
+
+- **`kem_heap.kem` (+metin):** çıplak kdl_metin_uzunluk(ptr)->i32 (freestanding strlen) + kdl_metin_bayt(ptr,i32)->i8
+  (sınır-güvenli byte-at; NULL/OOB→0). Leaf (allocation yok). bm_a64_metin.o kem_os link'inden çıkarıldı (kem_os-özel
+  obje, guard gerekmedi).
+
+**🐛 KEŞFEDİLEN CODEGEN GAP (workaround'lu):** `*ptr` deref, YÜK TİPİNİ pointee'den DEĞİL BAĞLAMDAN alıyor. `*bp == 0`
+(bp: *tam8) → codegen `load i32` emit etti (comparison-default i32), null-check 4-sıfır-bayt'a kadar durmadı →
+kdl_metin_uzunluk('KURTAR')=100 (6 yerine) → UART string-print sınır-aşımı → GARBLED çıktı. **DÜZELTME (workaround):**
+`değişken b: tam8 = *bp; eğer b == 0` (tam8 ara-değişken i8-yük ZORLAR). Diğer .kem-runtime fn'leri etkilenmedi (hepsi
+`değişken x: tamN = *p` tipli-yük kullanıyor). **GERÇEK FIX (gelecek, src/llvm.c):** OP_DEREFERANS yükü pointee-tipini
+kullanmalı (context değil). **DERS: gate marker-PASS ama çıktı BOZUK olabilir → gerçek QEMU çıktısını denetle (sadece
+KEM-OS OK grep'i yetmez).**
+
+**FALSİFİYE-KANIT:** (a) host metin: uzunluk('KURTAR')=6, ''=0, OOB=0 → exit 42 + IR `load i8`. (b) QEMU: kem_os TEMİZ boot
+([1..5]+KEM-OS OK, EXC satırları KURTAR/OLDUR/HALT garbling YOK — fix öncesi garbled'dı). (c) bm_a64_metin.o link-dışı;
+bm_a64_kem_heap.o T kdl_metin_uzunluk/bayt.
+
+**SIRADA:** mmio (kdl_mmio_oku/yaz, volatile) → yetki (capability) → panik/UART/kesme/... (büyük subsystem'ler).
+
+---
+
 ## D-263 — K4b+K5: saf-.kem kdl_global_bolge_al + ALLOCATOR-YIĞINI GÖÇÜ TAMAM — kem_os allocator C-runtime=0, QEMU-boot (2026-07-11) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-262).

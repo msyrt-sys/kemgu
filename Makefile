@@ -903,12 +903,12 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
 	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o $(KEM_OS_A64_OBJS)
+		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
@@ -957,6 +957,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; exit 1; \
 	fi
 	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ bm_a64_kem_heap.o SAF-.kem'den. K1→K4b TAMAM.)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/metin, D-264): C kdl_metin_bare.o (bm_a64_metin.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_metin_uzunluk$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_metin_uzunluk TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_metin.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_metin_uzunluk/bayt — metin de SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \
