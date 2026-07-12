@@ -39,6 +39,10 @@ int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — user
  * Bu, "MMU gerçekten zorluyor (haritasız erişim fault eder) + kernel fault'u yönetip
  * ilerliyor" kanıtını TEK boot'ta verir (izole demo değil). Bayrak yoksa → eski
  * davranış (yazdır + halt). volatile: asm ile paylaşılan durum. */
+/* FAZ-A1 (D-276): bu iki global .S kdl_exc_ortak ile eşleşik recovery-scratch.
+ * kem_os SAF-.kem fault-gate'i (kem_mmu.kem) bunlara inline-asm (adrp/add + ldr/str)
+ * ile erişir — .kem 'küresel' internal-linkage olduğundan .S'ye açılamaz (codegen-gap,
+ * bkz. D-276 sınır-notu). Global'ler C-tanımlı KALIR (.S substrat'ı ile birlikte). */
 volatile uint64_t kdl_fault_bekleniyor = 0;
 volatile uint64_t kdl_fault_yakalanan = 0;
 

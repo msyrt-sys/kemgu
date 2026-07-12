@@ -831,6 +831,9 @@ KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64
               $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o \
               $(BUILD)/bm_a64_mmu.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
+# FAZ-A1 (D-276): fault-global'ler (kdl_fault_bekleniyor/yakalanan) C-tanımlı KALIR
+# (.S kdl_exc_ortak substrat'ı). kem_mmu.kem inline-asm ile erişir (küresel internal-
+# linkage codegen-gap → .S'ye açılamaz; bkz. D-276 sınır-notu).
 #              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
 #                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
 #                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
@@ -911,7 +914,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
-	@cat runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_mmu.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
@@ -1005,6 +1008,17 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: panik ariza-yoluna WIRE edilmemis (call @panik yok)"; exit 1; \
 	fi
 	@echo "  (panik+exc .kem-define + panik ariza-branch'ine wire — .kem sistem-katmani)"
+	@echo "FALSIFIYE-KANIT (MMU/FAULT, D-276 FAZ-A1): kem_os GERCEK vektor-bagli fault saf-.kem'den suruluyor:"
+	@if ! grep -qE "define[^@]*@kmmu_fault_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem kmmu_fault_testi define YOK (fault-gate eksik)"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kmmu_fault_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kmmu_fault_testi WIRE edilmemis — kem_os gercek fault tetiklemiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "adrp x9, kdl_fault_bekleniyor' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: recovery-scratch inline-asm erisimi (adrp kdl_fault_bekleniyor) emit edilmedi"; exit 1; \
+	fi
+	@echo "  (kmmu_fault_testi .kem-define + wire + .S recovery-scratch'e inline-asm erisim — GERCEK data-abort saf-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1062,14 +1076,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
+		   && grep -q "MMU FAULT OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
+			echo "Faz-C .kem-native OS gecti: [1..5] + MMU FAULT OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

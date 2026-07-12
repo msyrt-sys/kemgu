@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-276 — REAL-OS FAZ-A1 (alt-hedef A): [5] EXC → GERÇEK vektör-bağlı page-fault + recovery saf-.kem — [5] MMU FAULT OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-275).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (YENİ — kmmu_fault_testi + recovery-scratch inline-asm erişimi);
+`test/ornekler/kem_os.kem` ([5b] gerçek-fault bloğu); `runtime/kdl_kesme.c` (fault-global yorum-notu);
+`Makefile` (kem_mmu CAT + MMU FAULT OK gate + falsifiye-kanıt). FAZ-A ilk rung — human+stratejist mod.]**
+[5] EXC bloğu şimdiye kadar SENTETİK'ti (kem_istisna_isle'a hardcoded ESR/FAR beslenip ESR-decode mantığı
+self-test edilirdi; gerçek fault-yönlendirmesi YOKTU). Bu adım [5]'i GERÇEK vektör-bağlı data-abort +
+donanım fault-recovery ile tamamlar — sentetik self-test KALIR (ESR-decode doğrular), buna EK gerçek kanıt.
+
+- **Ampirik faz (read-only, ZORUNLU) — hard blocker YOK:** (1a) MMU boot'ta ZATEN açık (start_aarch64.S:75
+  `bl kdl_mmu_kur`, C-MMU identity 0x40000000-0x7FFFFFFF + Device; 0x80000000+ HARİTASIZ). (1b) SYNC
+  (`kdl_exc_ortak`) ve IRQ (`kdl_irq_ortak`) AYRI vektör slotları → fault-handling kesme'ye DOKUNMADAN;
+  `.S` TAM recovery içeriyor (`kdl_fault_bekleniyor` set → FAR→`kdl_fault_yakalanan`, ELR+=4, eret → devam)
+  → **`.S` DEĞİŞMEZ**. (1c) C-MMU L1/L2 2MB-blok, MAIR/TCR/TTBR0 değerleri kayıtlı. (1d) TÜM MMU sysreg'leri
+  .kem `satıriçi_asm arm64`'te ifade ediliyor (objdump doğruladı). (1e) 4KB manuel-align çalışıyor.
+- **GERÇEK fault-gate (`kmmu_fault_testi`):** `kdl_fault_yakalanan=0` + `kdl_fault_bekleniyor=1` → haritasız
+  0x80000000 volatile oku → **gerçek data-abort** → `.S kdl_exc_ortak` recovery → `bekle==0` (kurtarıldı) +
+  `far==0x80000000` (FAR doğru) DOĞRULA. Taklit edilemez: MMU zorlamıyorsa okuma sessizce geçer = gate kırmızı.
+  Boot [6..10]'a DEVAM ediyor = recovery başarılı (hang yok).
+- **Recovery-scratch (kdl_fault_bekleniyor/yakalanan):** `.S` ile eşleşik 2 global, C-tanımlı KALIR (.S
+  substrat'ı). .kem bunlara INLINE-ASM (adrp/add + ldr/str, x9-scratch, `~{memory}` clobber = C `volatile`
+  karşılığı) ile erişir → pure-.kem raw-mem primitifi.
+
+**SINIR-NOTU (codegen-gap, FLAG — ayrı adım):** .kem `küresel` → `internal global` linkage (llvm.c:6007)
+→ `.S`'ye açılamaz (external gerekir). Tam-.kem küresel-paylaşım için `dışa küresel` → external linkage
+codegen fix'i gerekir; ANCAK `dışa küresel` parse EDİLMİYOR + codegen.kem 7 küresel (fixpoint-hassas) →
+FAZ-A1'e bundle EDİLMEDİ (task DUR: "yeni codegen gap → flag + minimal-fix ayrı adım"). Workaround
+(inline-asm C-global erişimi) fault-gate'i TAM verir; küresel-form ertelendi.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] MMU FAULT OK` — [1..10] + MMU FAULT kümülatif, garbling yok, boot
+devam. gate: kem_os.ll `define @kmmu_fault_testi` + `call @kmmu_fault_testi` + `asm sideeffect "adrp x9,
+kdl_fault_bekleniyor`. FIXPOINT birebir (33371 satır — compiler src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**KAPSAM/SINIR:** alt-hedef A (gerçek fault-gate, mevcut C-MMU'yla) TAMAM. Alt-hedef B (kdl_mmu_kur → .kem +
+non-identity çeviri gate `MMU CEVIRI OK`) AYRI adım (boot-destabilize riski; kullanıcı "önce A sonra B" seçti).
+Kesme-geçiş (FAZ-A2) hazırlığı: SYNC/IRQ ayrımı + `.S` recovery deseni yeniden-kullanılabilir.
+
+---
+
 ## D-275 — REAL-OS FAZ-C: saf-.kem TAM ağ yığını — GERÇEK ICMP ping round-trip — [10] PING CANLI (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-274).

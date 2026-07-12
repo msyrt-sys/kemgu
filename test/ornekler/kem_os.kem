@@ -520,6 +520,17 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] EXC HATA");
     }
+    // [5b] GERÇEK FAULT (FAZ-A1 alt-hedef A, D-276): sentetik self-test'e EK olarak
+    // GERÇEK vektör-bağlı data-abort. Haritasız 0x80000000 oku → .S kdl_exc_ortak
+    // recovery (FAR→kdl_fault_yakalanan, ELR+=4, eret) → OS DEVAM. FAR==VA + kurtarıldı
+    // doğrulanır. Taklit edilemez: MMU zorlamıyorsa okuma sessizce geçer → gate kırmızı.
+    // kmmu_* fonksiyonları kem_mmu.kem'den gelir (build'de CAT → tek birim, çıplak→çıplak).
+    değişken fault_ok: tam32 = kmmu_fault_testi();
+    eğer fault_ok == 1 {
+        uart_satir("[5] MMU FAULT OK");
+    } değilse {
+        uart_satir("[5] MMU FAULT HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli

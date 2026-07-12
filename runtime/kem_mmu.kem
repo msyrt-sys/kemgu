@@ -1,0 +1,96 @@
+// kem_mmu.kem — FAZ-A1 (D-276): SAF-.kem MMU/fault entegrasyonu.
+// ============================================================================
+// ALT-HEDEF A: [5] EXC'i GERÇEK vektör-bağlı fault yap (mevcut C-MMU + .S recovery).
+//   Sentetik self-test (kem_istisna_isle, hardcoded ESR/FAR) KALIR — ESR-decode
+//   mantığını doğrular. Buna EK: gerçek data-abort → FAR → recovery kanıtı.
+//
+// SAF-.kem primitifleri (hepsi kanıtlı — D-269 P1 + çıplak-tier + inline-asm):
+//   • Gerçek fault: 0x80000000 HARİTASIZ (C-MMU L1[2..511]=0 → level-1 çeviri-fault).
+//     Volatile oku → data-abort → .S kdl_exc_ortak: FAR→kdl_fault_yakalanan, bayrağı
+//     temizle, ELR+=4 (faulting ldr'yi ATLA), frame restore, eret → OS DEVAM.
+//     Taklit edilemez (MMU zorlamıyorsa 0x80000000 okuması sessizce geçer → gate kırmızı).
+//   • Recovery-scratch (kdl_fault_bekleniyor / kdl_fault_yakalanan): .S kdl_exc_ortak
+//     ile EŞLEŞİK 2 global. C-tanımlı KALIR (.S substrat'ı ile birlikte) — .kem 'küresel'
+//     internal-linkage olduğundan .S'ye açılamaz (codegen-gap; bkz. D-276 sınır-notu).
+//     .kem bunlara INLINE-ASM (adrp/add + ldr/str) ile erişir → pure-.kem raw-mem
+//     primitifi. ~{memory} clobber = C `volatile` semantiğinin asm karşılığı (store'ları
+//     fault'tan önce görünür kılar + fault sonrası zorla-reload; clang const-fold etmez).
+//   • Build'de kem_os.kem ile CAT edilir (tek birim → çıplak→çıplak, T002 YOK).
+
+// Haritasız test VA (0x80000000 = 2147483648): C-MMU L1[2..511]=0 → level-1 çeviri-fault.
+sabit KMMU_FAULT_VA: tam64 = 2147483648;
+
+// --- Recovery-scratch erişimi: C-global'lere inline-asm (adrp/add + ldr/str). x9=scratch. ---
+çıplak işlev kmmu_bekle_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_bekleniyor
+add x9, x9, :lo12:kdl_fault_bekleniyor
+str $0, [x9]"#
+            girdi("r", v)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+çıplak işlev kmmu_yakala_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_yakalanan
+add x9, x9, :lo12:kdl_fault_yakalanan
+str $0, [x9]"#
+            girdi("r", v)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+çıplak işlev kmmu_bekle_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_bekleniyor
+add x9, x9, :lo12:kdl_fault_bekleniyor
+ldr $0, [x9]"#
+            çıktı("=r", &x)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+çıplak işlev kmmu_yakala_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_yakalanan
+add x9, x9, :lo12:kdl_fault_yakalanan
+ldr $0, [x9]"#
+            çıktı("=r", &x)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// Haritasız VA'yı volatile oku → GERÇEK data-abort (tek ldr; .S ELR+=4 ile atlar).
+// Dönen değer ÇÖP (fault sırasında yakalanır) — çağıran atar.
+çıplak işlev kmmu_oku_faulting(adr: tam64) -> tam64 {
+    değişken p: *tam64 = adr olarak *tam64;
+    ver *p;
+}
+
+// GERÇEK fault-gate: haritasız VA oku → .S recovery → FAR doğru + kurtarıldı mı?
+// 1 = MMU zorluyor + gerçek fault yakalandı + FAR==VA + OS devam ediyor. Sentetik DEĞİL.
+çıplak işlev kmmu_fault_testi() -> tam32 {
+    kmmu_yakala_yaz(0);                                        // FAR sonucu temizle
+    kmmu_bekle_yaz(1);                                         // .S recovery iste (yoksa halt)
+    değişken cop: tam64 = kmmu_oku_faulting(KMMU_FAULT_VA);    // GERÇEK fault → .S recovery
+    değişken bekle: tam64 = kmmu_bekle_oku();                  // .S temizledi mi? (0 = kurtarıldı)
+    değişken far: tam64 = kmmu_yakala_oku();                   // yakalanan FAR
+    eğer bekle == 0 ve far == KMMU_FAULT_VA {
+        ver 1;
+    }
+    ver 0;
+}
