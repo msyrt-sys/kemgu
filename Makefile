@@ -907,12 +907,12 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/bm_a64_yetki.o
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o
 	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
 	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/bm_a64_yetki.o $(KEM_OS_A64_OBJS)
+		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
@@ -977,6 +977,17 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: .kem mmio VOLATILE değil (MMIO -O2 elenebilir)"; exit 1; \
 	fi
 	@echo "  (bm_a64_mmio_kem.o: 0 oku32/yaz32 C-tanımı; bm_a64_kem_heap.o: T kdl_mmio_oku32 + VOLATILE — mmio32 de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/yetki, D-268): C kdl_yetki_bare (bm_a64_yetki.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_olustur$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_yetki_olustur TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_geri_al$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_yetki_geri_al TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/kem_os.elf | grep -qE 'kem_yetki_sayac'; then \
+		echo "FAIL: kem_os.elf .kem yetki sayacı (kem_yetki_sayac) içermiyor — saf-.kem sağlayıcı linklenmemiş"; exit 1; \
+	fi
+	@echo "  (bm_a64_yetki.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_yetki_olustur/geri_al + kem_os.elf'te kem_yetki_sayac — yetki SAF-.kem, Yasa-4)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \

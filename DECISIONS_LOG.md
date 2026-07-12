@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-268 — SUBSYSTEM/yetki: yetki<R> OUT-PTR ABI + saf-.kem sağlayıcı — kem_os'un SON C bağımlılığı kalktı (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-267).
+
+**Karar [ETKİ: `src/llvm.c` (yetki_olustur/delege intrinsic call+declare: sret→out-ptr); `runtime/kem_heap.kem`
+(saf-.kem çıplak kdl_yetki_olustur/geri_al + kem_yetki_sayac); `runtime/kdl_yetki_bare.c` (olustur/delege out-ptr —
+virtio); `Makefile` (kem_os link bm_a64_yetki.o DROP + yetki gate-proof). CODEGEN ABI + OS-ÇEKİRDEK.]**
+Son subsystem: yetki (object-capability). Yasa-4 (kem_os'ta sıfır C) → yetki göç etmeli.
+
+- **EMPİRİK BULGU (görev premisi düzeltildi):** Görev "C bunu sret ile yapıyor" diyordu; GERÇEK: `%kdl_yetki` 16B
+  (≤ AAPCS64/SysV register-return eşiği) → clang bare-metal'de `[2 x i64]`/`{i64,i64}` register-return eder, **sret
+  DEĞİL**. sret yalnız (a) KEMGU llvm.c'nin kendi emisyonunda ve (b) host Win64 C-ABI'sinde vardı. llvm.c sret çağrısı
+  bare-metal register-return C provider ile ZATEN uyumsuzdu (latent) — yetki değeri runtime'da hiç okunmadığı için
+  maskeliydi (`mmio_oku32/yaz32` yalnız adresi kullanır, capability derleme-zamanı ispatı). Kullanıcı ONAYI: OUT-PTR
+  konvansiyonu (düşük risk; sret-codegen/x8 yok).
+- **OUT-PTR ABI (`src/llvm.c`):** olustur/delege çağrı+declare `ptr sret(%kdl_yetki) align 8` → düz `ptr` (out-pointer,
+  aarch64 x0). Çağıran slot ayırır, sağlayıcı struct'ı slot'a yazar, çağıran geri yükler. Host Win64: düz ptr = RCX =
+  sret ile aynı reg → mevcut by-value C provider (kdl_runtime.c) DEĞİŞMEDEN uyumlu (capability/mmio/drf 40/23/39 ✓).
+- **Saf-.kem sağlayıcı (`kem_heap.kem`):** çıplak `kdl_yetki_olustur(out:*tam8, kt, izin)` + `kdl_yetki_geri_al(y:*tam8)`
+  — alanları offset-tabanlı yazar (id@0/kaynak_tipi@8/izin@10/iptal@12; kem_heap.kem tüm-ham-pointer idiomu). küresel
+  `kem_yetki_sayac` id sayacı. codegen.kem yetki EMİT ETMEZ → FIXPOINT/codegen_diff ETKİLENMEZ.
+- **Makefile:** kem_os `bm_a64_yetki.o` link'ten TAM ÇIKARILDI (metin-stili; kem_os yalnız olustur+geri_al referans
+  eder, ikisi de .kem). Guard GEREKMEDİ — kalan-C-func olmadığından (mmio'dan farklı) tam drop Yasa-4'ü sağlar.
+
+**FALSİFİYE-KANIT:**
+- **kem_os QEMU TEMİZ boot** (gerçek seri denetlendi, D-264 dersi): `[1]BOOT [2]HEAP/55 [3]MMIO OK/1953655158
+  [4]HESAP/230/3 [5]EXC OK/1,2,3 KEMGU KEM-OS OK` — garbling YOK. **MMIO magic (1953655158) .kem yetki ile okundu**;
+  konsol (uart_bayt_yaz da yetki_olustur çağırır) temiz → .kem sağlayıcı uçtan-uca çalışıyor.
+- **yetki gate:** bm_a64_kem_heap.o `T kdl_yetki_olustur/geri_al` + kem_os.elf'te `kem_yetki_sayac` (C sürümü
+  `kdl_yetki_sayac` — ayrı sembol → .kem sağlayıcı linklendiğini kanıtlar) + link'te bm_a64_yetki.o YOK.
+- **virtio regresyon:** `KEM VIRTIO OK/1` — out-ptr C provider (kdl_yetki_bare.c) virtio-mmio okumasını sağlar.
+- **Host:** capability 40/40, mmio 23/23, drf 39/39; test_tumu TAM YEŞİL; FIXPOINT/codegen_diff etkilenmedi.
+
+**SINIR:** kontrol/kontrol_tipi hâlâ by-value-C ↔ ptr-declare (pre-existing bare-metal mismatch, kem_os kullanmıyor,
+maskeli — ayrı iş). yetki genel struct-return AAPCS64 register-packing (x0/x1 `bfxil`) hâlâ yok — out-ptr onu
+gerektirmez (çağrı+sağlayıcı self-consistent). Genel struct-return AAPCS64 uyumu ayrı ABI-epic.
+
+---
+
 ## D-267 — CODEGEN FIX: self-host `codegen.kem` skaler-pointee deref-READ paritesi (D-265 LATENT sapması kapandı) (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-266).

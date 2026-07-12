@@ -10,6 +10,13 @@
  * ile birebir. yetki<R> DERLEME-ZAMANI ispatıdır (WCET için sıfır runtime yükü) —
  * mmio_oku32/yaz32 yetkiyi kullanmaz, yalnız adresi geçer; bu yüzden runtime
  * değeri işlevsel olarak önemsizdir (ABI şeffaf). Freestanding (libc yok).
+ *
+ * D-268 OUT-PTR ABI: olustur/delege AÇIK out-pointer ile döner (`void(ptr out, ...)`),
+ * sret DEĞİL. Sebep: %kdl_yetki 16B (≤ AAPCS64/SysV register-return eşiği) → clang
+ * bare-metal'de struct'ı x0:x1'de register-return ederdi; codegen ise call-site'ta
+ * out-pointer (x0) bekliyor. Out-ptr imzası ikisini birebir eşler + saf-.kem sağlayıcı
+ * (kem_heap.kem) ile aynı konvansiyonu paylaşır. Bu dosya artık YALNIZ virtio bare-metal
+ * link'i içindir — kem_os olustur/geri_al'ı saf-.kem'den alır (Yasa-4, D-268).
  */
 #include <stdint.h>
 
@@ -23,22 +30,21 @@ typedef struct {
 
 static uint64_t kdl_yetki_sayac = 1;   /* PRNG yerine basit sayaç (id!=0 yeter) */
 
-KdlYetki kdl_yetki_olustur(uint16_t kt, uint16_t izin) {
-    KdlYetki y;
-    y.id = kdl_yetki_sayac++;
-    y.kaynak_tipi = kt;
-    y.izin = izin;
-    y.iptal = 0;
-    y.rezerv[0] = y.rezerv[1] = y.rezerv[2] = 0;
-    return y;
+/* D-268 OUT-PTR: dönüş açık out-pointer üzerinden (sret yerine) — bkz. dosya başı. */
+void kdl_yetki_olustur(KdlYetki *out, uint16_t kt, uint16_t izin) {
+    out->id = kdl_yetki_sayac++;
+    out->kaynak_tipi = kt;
+    out->izin = izin;
+    out->iptal = 0;
+    out->rezerv[0] = out->rezerv[1] = out->rezerv[2] = 0;
 }
 
-KdlYetki kdl_yetki_delege(KdlYetki y, uint16_t yeni_izin) {
-    KdlYetki y2 = y;
+void kdl_yetki_delege(KdlYetki *out, KdlYetki *y, uint16_t yeni_izin) {
+    KdlYetki y2 = *y;
     y2.id = kdl_yetki_sayac++;
-    y2.izin = (uint16_t)(yeni_izin & y.izin);
+    y2.izin = (uint16_t)(yeni_izin & y->izin);
     y2.iptal = 0;
-    return y2;
+    *out = y2;
 }
 
 void kdl_yetki_geri_al(KdlYetki *y) {

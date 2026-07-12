@@ -2948,16 +2948,19 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
-                    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de
-                     * sret pointer ile DONER — clang'in C tarafi icin
-                     * urettigi imza `void(ptr sret, i16, i16)`. Onceki
-                     * first-class-donus formu backend demotion'ina bel
-                     * bagliyordu; sret'i acikca emit ediyoruz. */
+                    /* D-268 OUT-PTR ABI: %kdl_yetki dönüşü AÇIK out-pointer ile
+                     * (düz `ptr` ilk arg, aarch64 x0 — sret DEĞİL/x8 DEĞİL). Çağıran
+                     * slot ayırır, sağlayıcı struct'ı slot'a yazar, çağıran geri yükler.
+                     * Böylece .kem sağlayıcı (`çıplak fn(out: *KdlYetki,...)`) call-site
+                     * ile BİREBİR eşleşir (Yasa-4: yetki saf-.kem'e göç edebilir).
+                     * ESKİ sret formu clang C provider'ın register-return'ü (16B ≤ eşik)
+                     * ile bare-metal'de zaten uyuşmuyordu (yetki değeri kullanılmadığı
+                     * için maskeliydi). Host Win64: düz ptr = RCX = sret ile aynı reg. */
                     int sret = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
                     fprintf(g->out,
                         "  call void @kdl_yetki_olustur("
-                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "ptr %%%d, "
                         "i16 %%%d, i16 %%%d)\n", sret, r_kt, r_izin);
                     int r = yeni_reg(g);
                     fprintf(g->out,
@@ -2980,14 +2983,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
-                    /* C-track ABI fix (init-test segfault koku #2):
-                     * Win64 C ABI 16B struct ARGUMANI pointer ile gecer
-                     * (`void(ptr sret, ptr, i16)`). Onceki first-class
-                     * `%kdl_yetki` arg formu C tarafinin bekledigi
-                     * pointer'la uyusmuyordu -> kdl_yetki_delege
-                     * prologunda copte deref, runtime SEGFAULT (opt
-                     * -verify yakalamaz: imza-uyumsuz cagri gecerli IR).
-                     * Deger temp alloca'ya yazilir, adresi gecirilir. */
+                    /* D-268 OUT-PTR ABI: dönüş out-ptr (düz `ptr`, x0) + yetki
+                     * argümanı da pointer (temp alloca'ya yaz, adresi geç). Böylece
+                     * .kem sağlayıcı `çıplak fn(out: *KdlYetki, y: *KdlYetki, izin)`
+                     * ile eşleşir. (Eski sret formu bare-metal register-return C
+                     * provider ile uyuşmuyordu — bkz. olustur açıklaması.) */
                     int y_slot = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", y_slot);
                     fprintf(g->out,
@@ -2997,7 +2997,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
                     fprintf(g->out,
                         "  call void @kdl_yetki_delege("
-                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "ptr %%%d, "
                         "ptr %%%d, i16 %%%d)\n",
                         sret, y_slot, r_izin);
                     int r = yeni_reg(g);
@@ -5770,14 +5770,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_oku_karakter()\n", out);
 
     /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
-    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de sret/pointer ile
-     * tasinir (clang -emit-llvm dogrulamasi: `void(ptr sret, ptr, i16)`).
-     * First-class %kdl_yetki arg/donus declare'lari C tarafiyla
-     * UYUSMUYORDU (runtime segfault). Tum sinir imzalari C-uyumlu. */
-    fputs("declare void @kdl_yetki_olustur(ptr sret(%kdl_yetki) align 8,"
-          " i16, i16)\n", out);
-    fputs("declare void @kdl_yetki_delege(ptr sret(%kdl_yetki) align 8,"
-          " ptr, i16)\n", out);
+    /* D-268 OUT-PTR ABI: olustur/delege dönüşü AÇIK out-pointer (düz `ptr` ilk arg,
+     * aarch64 x0). sret DEĞİL — çünkü %kdl_yetki 16B (≤ AAPCS64/SysV eşiği) ve clang
+     * bare-metal'de register-return ediyor; eski sret çağrısı o provider'la uyuşmuyordu
+     * (yetki değeri kullanılmadığı için maskeliydi). Out-ptr, saf-.kem sağlayıcının
+     * (`çıplak fn(out: *KdlYetki,...)`) emit ettiği imzayla BİREBİR eşleşir (Yasa-4). */
+    fputs("declare void @kdl_yetki_olustur(ptr, i16, i16)\n", out);
+    fputs("declare void @kdl_yetki_delege(ptr, ptr, i16)\n", out);
     fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
     fputs("declare i32 @kdl_yetki_kontrol(ptr, i16)\n", out);
     fputs("declare i32 @kdl_yetki_kontrol_tipi(ptr, i16, i16)\n", out);

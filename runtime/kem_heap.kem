@@ -350,3 +350,33 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken p: *tam32 = adres olarak *tam32;
     *p = deger;                   // volatile store i32
 }
+
+// ============================================================================
+// SUBSYSTEM/yetki (D-268): SAF-.kem çıplak yetki<R> (object-capability) sağlayıcı.
+// kdl_yetki_olustur/geri_al — kem_os'un tek kalan C-yetki bağımlılığını (kdl_yetki_bare.c)
+// kaldırır (Yasa-4: kem_os'ta sıfır C). ABI = D-268 OUT-PTR: dönüş açık out-pointer
+// (düz `ptr`, aarch64 x0 — sret DEĞİL). `%kdl_yetki` layout: {i64 id@0, i16 kaynak_tipi@8,
+// i16 izin@10, i8 iptal@12, [3 x i8] rezerv@13} = 16 bayt. yetki DERLEME-ZAMANI ispatıdır
+// (WCET sıfır runtime yükü); runtime değeri ABI-şeffaf (mmio_oku32/yaz32 yalnız adresi
+// kullanır). Alanları offset-tabanlı yaz (kem_heap.kem tüm-ham-pointer idiomu; yapı yok).
+küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter — C sürümü aynısı)
+
+çıplak işlev kdl_yetki_olustur(out: *tam8, kt: dtam16, izin: dtam16) {
+    değişken taban: tam64 = out olarak tam64;
+    değişken pid: *tam64 = taban olarak *tam64;              // id @ 0
+    *pid = kem_yetki_sayac;
+    kem_yetki_sayac = kem_yetki_sayac + 1;
+    değişken pkt: *dtam16 = (taban + 8) olarak *dtam16;      // kaynak_tipi @ 8
+    *pkt = kt;
+    değişken piz: *dtam16 = (taban + 10) olarak *dtam16;     // izin @ 10
+    *piz = izin;
+    değişken pip: *dtam8 = (taban + 12) olarak *dtam8;       // iptal @ 12
+    *pip = 0 olarak dtam8;
+}
+
+çıplak işlev kdl_yetki_geri_al(y: *tam8) {
+    eğer (y olarak tam64) != 0 {                             // R-PAYLAŞ: iptal bayrağını kur
+        değişken pip: *dtam8 = ((y olarak tam64) + 12) olarak *dtam8;
+        *pip = 1 olarak dtam8;
+    }
+}
