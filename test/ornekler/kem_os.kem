@@ -274,6 +274,22 @@ işlev kem_istisna_isle(far: dtam64, esr: dtam64) -> tam32 {
     ver karar;
 }
 
+// A2 (D-278): GERÇEK trap → .kem KARAR handler. D-276 [5b] .S recovery'ye EK: gerçek
+// data-abort'tan SONRA ESR/FAR'ı mrs ile OKU + kem_istisna_isle'a ver → .kem handler
+// GERÇEK syndrome üzerinde karar veriyor (sentetik hardcoded DEĞİL). 0x80000000 haritasız
+// → EC=0x25 (data-abort EL1) + DFSC translation → handler KURTAR(1) döner + FAR==VA.
+işlev trap_gercek_testi() -> tam32 {
+    kmmu_bekle_yaz(1);                                          // .S recovery iste (yoksa halt)
+    değişken cop: tam64 = kmmu_oku_faulting(2147483648);       // GERÇEK data-abort (0x80000000)
+    değişken resr: dtam64 = (kmmu_esr_oku()) olarak dtam64;    // GERÇEK ESR (mrs, post-trap)
+    değişken rfar: tam64 = kmmu_far_mrs();                     // GERÇEK FAR (mrs, post-trap)
+    değişken karar: tam32 = kem_istisna_isle(rfar olarak dtam64, resr);  // .kem handler GERÇEK syndrome
+    eğer (karar == 1) ve (rfar == 2147483648) {                // KURTAR + gerçek FAR
+        ver 1;
+    }
+    ver 0;
+}
+
 // ============================== ÇEKİRDEK ===============================
 // [6] DISK — saf-.kem virtio-blk GERÇEK sektör yaz→oku→byte-eşleşme (D-271, FAZ B1).
 // vblk_* sürücüsü kem_virtio_blk.kem'den gelir (build'de kem_os ile CAT edilir → tek birim,
@@ -540,6 +556,15 @@ işlev main() -> tam32 {
         uart_satir("[5] MMU CEVIRI OK");
     } değilse {
         uart_satir("[5] MMU CEVIRI HATA");
+    }
+    // [5d] GERÇEK TRAP → .kem KARAR (FAZ-A2, D-278): gerçek data-abort'un ESR/FAR'ını mrs ile
+    // oku + .kem kem_istisna_isle'a ver → handler GERÇEK syndrome'da karar veriyor (sentetik
+    // self-test'e EK; "gerçek fault-yönlendirmesi" [5] notundaki "sonraki adım" kapanıyor).
+    değişken trap_ok: tam32 = trap_gercek_testi();
+    eğer trap_ok == 1 {
+        uart_satir("[5] TRAP KARAR OK");
+    } değilse {
+        uart_satir("[5] TRAP KARAR HATA");
     }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek

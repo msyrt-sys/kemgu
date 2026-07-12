@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-278 — REAL-OS FAZ-A2: kesme gerçek-trap → .kem KARAR handler (mrs ESR/FAR) — [5] TRAP KARAR OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-277).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kmmu_esr_oku/kmmu_far_mrs — mrs helpers); `test/ornekler/kem_os.kem`
+(trap_gercek_testi + [5d] bloğu); `Makefile` (TRAP KARAR OK gate + falsifiye-kanıt). FAZ-A2 — bring-up
+roadmap A2 "kesme gerçek-trap". [5] SENTETİK gap'ini kapatır.]** [5] handler'ı (kem_istisna_isle) şimdiye
+dek yalnız hardcoded ESR/FAR ile self-test ediliyordu (D-247). D-276 gerçek fault+recovery verdi ama .kem
+KARAR-handler'ı gerçek syndrome görmüyordu. Bu adım: gerçek trap → .kem handler GERÇEK ESR/FAR'da karar verir.
+
+- **WebSearch teyit (ARM DDI0595/DDI0487):** EC=0x25 = Data Abort without EL change (kernel EL1→haritasız);
+  FAR_EL1 data-abort'ta faulting-VA tutar (FnV=0 → geçerli, translation fault FnV=0); ESR/FAR yalnız
+  istisna girişinde yazılır → eret sonrası bir-sonraki istisnaya dek DEĞERİ TUTAR (.S kdl_exc_ortak yalnız
+  mrs-OKUR → değiştirmez).
+- **trap_gercek_testi:** `kdl_fault_bekleniyor=1` → haritasız 0x80000000 oku → GERÇEK data-abort → .S
+  recovery → mrs esr_el1 + mrs far_el1 (GERÇEK syndrome, post-trap) → `kem_istisna_isle(rfar, resr)`. .kem
+  handler decode: EC=0x25 → data-abort, DFSC∈[4,7] → translation → **KURTAR(1)**. Doğrula: karar==1 +
+  rfar==0x80000000 (mrs-okunan gerçek FAR). Sentetik DEĞİL: syndrome donanımdan mrs ile geliyor.
+- **A2 vs D-276:** D-276 = gerçek fault → .S built-in recovery (kdl_fault_bekleniyor). A2 = .kem KARAR-handler
+  gerçek mrs-syndrome'da karar veriyor → roadmap A2 "gerçek fault-yönlendirmesi → .kem handler karar" TAM.
+  .S vektör/trap-frame/recovery DEĞİŞMEDİ (yalnız .kem mrs-okuma + handler-çağrısı eklendi).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] TRAP KARAR OK` (+ MMU FAULT/CEVIRI + [1..10] kümülatif). gate:
+kem_os.ll `define/call @trap_gercek_testi` + `asm "mrs $0, esr_el1"` + `call @kem_istisna_isle`.
+FIXPOINT birebir (33371 — compiler + C runtime DOKUNULMADI, yalnız .kem+Makefile); test_tumu tam yeşil.
+
+**KAPSAM/SINIR:** A2 = gerçek fault-abort'un syndrome-yönlendirmesi. Kalan FAZ-A: A3 (zaman timer-IRQ —
+CNTV+DAIF+GIC → tik canlı), A4 (görev preemptive — EN ZOR, timer→IRQ→context-switch .S), A5 (syscall/EL0).
+SVC-trap dispatch (.kem'e) A3/A5 ile gelir; bu adım yalnız data-abort karar-yolu.
+
+---
+
 ## D-277 — REAL-OS FAZ-A1 (alt-hedef B): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri — [5] MMU CEVIRI OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-276).

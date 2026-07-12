@@ -1043,6 +1043,17 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: bm_a64_mmu_kem.o hala C kdl_mmu_kur tanimliyor (guard tutmadi)"; exit 1; \
 	fi
 	@echo "  (bm_a64_mmu_kem.o: 0 C kdl_mmu_kur — kem_os MMU kurulumu TAMAMEN .kem'den)"
+	@echo "FALSIFIYE-KANIT (KESME/gercek-trap, D-278 FAZ-A2): .kem karar-handler GERCEK trap syndrome'da:"
+	@if ! grep -qE "define[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: trap_gercek_testi define/wire YOK — gercek trap-yonlendirme yok"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "mrs \$$0, esr_el1"' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: mrs esr_el1 (gercek ESR oku) emit edilmedi — syndrome hardcoded olabilir"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_istisna_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_istisna_isle .kem karar-handler'a wire YOK"; exit 1; \
+	fi
+	@echo "  (trap_gercek_testi define/wire + mrs esr_el1/far_el1 gercek-oku + kem_istisna_isle karar — sentetik DEGIL)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1102,14 +1113,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
 		   && grep -q "MMU FAULT OK" $(BUILD)/kem_os.out \
 		   && grep -q "MMU CEVIRI OK" $(BUILD)/kem_os.out \
+		   && grep -q "TRAP KARAR OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A1/C .kem-native OS gecti: [1..5] + MMU FAULT OK + MMU CEVIRI OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A1/A2/C .kem-native OS gecti: [1..5] + MMU FAULT OK + MMU CEVIRI OK + TRAP KARAR OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + MMU CEVIRI + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + MMU CEVIRI + TRAP KARAR + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

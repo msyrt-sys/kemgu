@@ -81,6 +81,20 @@ ldr $0, [x9]"#
     ver *p;
 }
 
+// A2 (D-278): GERÇEK syndrome oku — mrs ESR_EL1 / FAR_EL1. Trap SONRASI (eret sonrası)
+// bu register'lar bir-sonraki istisnaya dek fault değerlerini TUTAR (ARMv8: yalnız istisna
+// girişinde yazılır). .S kdl_exc_ortak yalnız OKUR (mrs) → değiştirmez → post-recovery geçerli.
+çıplak işlev kmmu_esr_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, esr_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kmmu_far_mrs() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, far_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+
 // ============================================================================
 // ALT-HEDEF B (D-277): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri.
 //   Kanıtlı-C kdl_mmu.c'nin BİREBİR yeniden gerçekleştirmesi (descriptor bit'leri +
