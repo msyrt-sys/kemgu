@@ -5,4 +5,5 @@ Loop harness (`bringup-loop.sh`) `🔴` veya `DUR:` görürse durur → insan/st
 FAZ-A (kesme/zaman/görev/EL0) bu loop'a DAHİL DEĞİL; `STOP-FAZ-A` görevinde loop temiz durur.
 
 ## Log
-- `{"görev":"b2-fs","durum":"YEŞİL","kanıt":"[7] FS RW OK; TAZE-CLONE gate.sh exit 0 (çekirdek+[6]+[7]+test_tumu+FIXPOINT); commit D-272 e40cd4a","sıradaki":"virtio-net"}` (executor: in-session; claude/jq yok → loop machinery yerine doğrudan)
+- `{"görev":"b2-fs","durum":"YEŞİL","kanıt":"[7] FS RW OK; TAZE-CLONE gate.sh exit 0; commit D-272 e40cd4a","sıradaki":"virtio-net"}`
+- `{"görev":"virtio-net","durum":"YEŞİL","kanıt":"[8] NET DEV OK (feature-negotiate+RX/TX queue+DRIVER_OK+device-MAC); TAZE-CLONE gate.sh exit 0 (çekirdek+[6..8]+test_tumu+FIXPOINT); commit D-273 783532d","sıradaki":"net-arp"}` (executor: in-session)

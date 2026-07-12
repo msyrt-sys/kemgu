@@ -1,7 +1,6 @@
 # KEMGU REAL-OS BRING-UP — mekanik faz kuyruğu (sıra üstten alta).
 # format: görev-id | beklenen-marker
 # Loop en üstteki görevi alır; gate yeşilse satırı siler + commit. STOP-FAZ-A'da durur.
-virtio-net   | [8] NET DEV OK
 net-arp      | [9] NET ARP OK
 net-icmp     | [10] PING CANLI
 STOP-FAZ-A   | -
