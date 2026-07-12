@@ -77,7 +77,7 @@ ldr $0, [x9]"#
         kem_tik = kem_tik + 1;
     }
     kz_mmio_yaz(KZ_GICC + 16, iar);                        // GICC_EOIR (kesme bitti)
-    ver sp;                                                // preemption yok → aynı SP
+    ver kem_preempt(sp);                                   // A4: scheduler (aktif değilse sp döner)
 }
 
 // A3 gate: timer'ı kur + IRQ'ların GERÇEKTEN tik ilerlettiğini doğrula. tik yalnız

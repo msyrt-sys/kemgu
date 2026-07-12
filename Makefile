@@ -923,7 +923,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
-	@cat runtime/kem_mmu.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
@@ -1078,6 +1078,17 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: bm_a64_zaman_kem.o hala C timer/IRQ tanimliyor (guard tutmadi)"; exit 1; \
 	fi
 	@echo "  (kdl_irq_isle/kesme_kur/timer_baslat .kem-define + cntv/daifclr asm + timer_testi wire + 0 C-tanim — GERCEK timer-IRQ SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (GOREV/preemptive, D-280 FAZ-A4): .kem kem_preempt scheduler + context-switch:"
+	@if ! grep -qE "define[^@]*@kem_preempt\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kem_preempt scheduler define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_preempt\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_preempt kdl_irq_isle'ye wire YOK — IRQ preemption tetiklemiyor"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kem_gorev_olustur\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_preempt_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_gorev_olustur/kem_preempt_testi define/wire YOK"; exit 1; \
+	fi
+	@echo "  (kem_preempt define + kdl_irq_isle'den call + gorev_olustur sentetik trap-frame + preempt_testi wire — GERCEK preemptive SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1139,14 +1150,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "MMU CEVIRI OK" $(BUILD)/kem_os.out \
 		   && grep -q "TRAP KARAR OK" $(BUILD)/kem_os.out \
 		   && grep -q "TIMER TIK OK" $(BUILD)/kem_os.out \
+		   && grep -q "PREEMPT OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A1/A2/A3/C .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + DISK/FS/NET/PING bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

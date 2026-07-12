@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-280 — REAL-OS FAZ-A4: SAF-.kem PREEMPTIVE scheduler (timer→IRQ→context-switch) — [5] PREEMPT OK (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-279).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (YENİ — SAF-.kem round-robin scheduler + sentetik trap-frame);
+`runtime/kem_zaman.kem` (kdl_irq_isle → `ver kem_preempt(sp)`); `test/ornekler/kem_os.kem` ([5f] PREEMPT
+bloğu); `Makefile` (kem_gorev CAT + PREEMPT OK gate). FAZ-A4 — roadmap'in EN ZOR entegrasyonu: gerçek
+preemptive multitasking. FAZ-A çekirdek (A1-A4) TAM.]** Kanıtlı-C kdl_gorev.c (kdl_preempt +
+kdl_preempt_gorev_olustur) BİREBİR .kem yeniden gerçekleştirmesi: timer IRQ → context-switch.
+
+- **Context-switch = SP-swap (yeni .S YOK):** timer IRQ → .S kdl_irq_ortak (full trap-frame kaydet) →
+  `bl kdl_irq_isle` (.kem) → `kem_preempt(sp)`: mevcut görevin trap-frame SP'sini kaydet + round-robin
+  sonrakinin SP'sini döner → .S `mov sp, x0` + trap-frame restore + eret → sonraki görev sürer. .S
+  kdl_baglam_degis (cooperative) GEREKMEZ — preemptive switch tamamen kdl_irq_ortak SP-swap'ıyla.
+- **Sentetik trap-frame (kem_gorev_olustur, kdl_preempt_gorev_olustur birebir):** 34 slot × 8 = 272 bayt,
+  @248=ELR=giriş, @256=SPSR=0x5 (EL1h + IRQ-açık → görev de preempt edilir), gerisi 0; SP 16-hizalı.
+- **KRİTİK BUG + çözüm (dead-store-elim):** preempt-aktif bayrağı küresel olunca clang `store 1` (ac) →
+  `store 0` (test sonu) arasını gördü, IRQ-context okumasını GÖRMEDİ → DGE `store 1`'i sildi → asla switch.
+  Bulgu: psayi=3 + görevler kuruldu ama g1=g2=0. Çözüm: aktif bayrağı + görev sayaçları FİXED RAM'de
+  (0x45003000+, volatile çıplak-deref) → store/load volatile → DGE/store-sink YOK. (Aynı ders sayaçlar
+  için de: yalnız-asm-kullanılan küresel DGE ile silinir → fixed-RAM deref.)
+- **GERÇEK preemption kanıtı:** 2 sonsuz-döngü görev; timer-IRQ round-robin ile ikisi de milyonlarca kez
+  koştu (g1≈g2≈0x21f000 INTERLEAVE) → gerçek eşzamanlı yürütme. Sonra preemption kapatıldı → main
+  [6..10]'a devam (görevler bırakıldı). guard'lı (switch bozuksa hang yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] PREEMPT OK` (+ [1..5] + [6..10] kümülatif). gate: kem_os.ll
+`define @kem_preempt` + `call @kem_preempt` (kdl_irq_isle'den) + `define @kem_gorev_olustur` +
+`call @kem_preempt_testi`. FIXPOINT birebir (33371 — compiler src/*.c DOKUNULMADI, C guard bile YOK —
+scheduler adı kem_preempt, C kdl_preempt'le çakışmaz); test_tumu tam yeşil.
+
+**MİLESTONE:** 🎉 FAZ-A ÇEKİRDEK (A1 MMU + A2 trap + A3 timer-IRQ + A4 preemptive) TAM SAF-.kem. kem_os
+artık: sanal-bellek + gerçek page-fault/recovery + kesme-trap karar + periyodik timer-IRQ + preemptive
+multitasking + disk/fs/net — hepsi saf-.kem, tek boot, .S yalnız vektör/trap-frame/eret substrat'ı.
+Kalan: A5 (syscall/EL0 userspace — SVC dispatch + EL0 izolasyon; sentetik trap-frame SPSR=EL0t + SP_EL0).
+
+---
+
 ## D-279 — REAL-OS FAZ-A3: SAF-.kem GERÇEK timer-IRQ (GICv2 + CNTV) + .kem IRQ dispatch — [5] TIMER TIK OK (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-278).

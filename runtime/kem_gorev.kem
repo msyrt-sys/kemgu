@@ -1,0 +1,105 @@
+// kem_gorev.kem — FAZ-A4 (D-280): SAF-.kem PREEMPTIVE scheduler (round-robin).
+// ============================================================================
+// Kanıtlı-C kdl_gorev.c (kdl_preempt + kdl_preempt_gorev_olustur) BİREBİR yeniden
+// gerçekleştirmesi. Timer IRQ (A3) → .kem kdl_irq_isle → kem_preempt → context-switch
+// (trap-frame SP swap). .S kdl_irq_ortak (mov sp,x0 + trap-frame restore + eret)
+// DEĞİŞMEZ; yalnız kdl_irq_isle `ver kem_preempt(sp)` çağırır.
+//
+// context-switch = SP-swap: kem_preempt mevcut görevin trap-frame SP'sini kaydeder,
+// sonrakinin SP'sini döner → .S o frame'i restore + eret → sonraki görev sürer.
+// Yeni görev = SENTETİK trap-frame (272 bayt): ELR=giriş, SPSR=0x5 (EL1h, IRQ-açık →
+// görev de preempt edilir), gerisi 0. kdl_preempt_gorev_olustur birebir.
+// Adres-uzayı TEK (kem_os EL1 görevleri) → TTBR swap YOK (v1). Öncelik/blok YOK (v1).
+
+sabit KG_PSP: tam64 = 1157636096;         // 0x45002000: psp[i] tablosu (@+i*8; page-table üstü)
+sabit KG_G1: tam64 = 1157640192;          // 0x45003000: görev1 sayacı (FİXED RAM, volatile deref)
+sabit KG_G2: tam64 = 1157640200;          // 0x45003008: görev2 sayacı
+sabit KG_AKTIF: tam64 = 1157640208;       // 0x45003010: preempt-aktif bayrağı (FİXED RAM — küresel
+                                          // olsaydı store1→store0 arası IRQ-okuması clang'a görünmez →
+                                          // dead-store-elim ile store1 silinir → asla switch olmaz)
+sabit KG_STK1: tam64 = 1192230912;        // 0x47100000: görev1 yığın tepesi (free RAM)
+sabit KG_STK2: tam64 = 1193279488;        // 0x47200000: görev2 yığın tepesi
+
+// Scheduler durumu — YALNIZ .kem okur/yazar (.S paylaşımı yok) → küresel internal OK.
+// Sayaçlar (kem_g1/g2) FİXED RAM: yalnız asm-ile-kullanılan küresel DGE ile silinir →
+// fixed-adres çıplak deref (volatile) hem stripping'i hem sonsuz-döngü store-sink'i çözer.
+küresel değişken kem_paktif: tam64 = 0;    // o an koşan görev
+küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil kem_preempt_baslat'ta 1)
+
+çıplak işlev kg_psp_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; *p = v; }
+çıplak işlev kg_psp_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; ver *p; }
+çıplak işlev kg_yaz64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
+çıplak işlev kg_oku64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+// main = görev 0; ilk preempt'te gerçek trap-frame SP'si kaydedilir.
+çıplak işlev kem_preempt_baslat() {
+    kem_paktif = 0;
+    kem_psayi = 1;
+    kg_yaz64(KG_AKTIF, 0);
+    kg_yaz64(KG_G1, 0);          // sayaçları sıfırla (fixed RAM)
+    kg_yaz64(KG_G2, 0);
+}
+çıplak işlev kem_preempt_ac() { kg_yaz64(KG_AKTIF, 1); }
+
+// Sentetik trap-frame kur (kdl_preempt_gorev_olustur birebir): 34 slot × 8 = 272 bayt,
+// tf@248=ELR=giriş, tf@256=SPSR=0x5 (EL1h IRQ-açık), gerisi 0. SP 16-hizalı. id döner.
+çıplak işlev kem_gorev_olustur(giris: tam64, yigin_tepe: tam64) -> tam64 {
+    değişken sp: tam64 = yigin_tepe - 272;
+    sp = (sp / 16) * 16;                          // 16-hizala
+    değişken k: tam64 = 0;
+    iken k < 34 { kg_yaz64(sp + k * 8, 0); k = k + 1; }   // 34 slot sıfırla
+    kg_yaz64(sp + 248, giris);                    // ELR_EL1 @248 = eret hedefi
+    kg_yaz64(sp + 256, 5);                        // SPSR @256 = 0x5 (EL1h, IRQ açık)
+    değişken i: tam64 = kem_psayi;
+    kg_psp_yaz(i, sp);
+    kem_psayi = kem_psayi + 1;
+    ver i;
+}
+
+// Round-robin scheduler — .kem kdl_irq_isle her timer IRQ'da çağırır. sp = kesilen
+// görevin trap-frame SP'si. aktif değilse/tek görevse sp (switch yok → A3 timer nötr).
+çıplak işlev kem_preempt(sp: tam64) -> tam64 {
+    eğer (kg_oku64(KG_AKTIF) == 0) veya (kem_psayi < 2) { ver sp; }
+    kg_psp_yaz(kem_paktif, sp);                   // mevcut görevin SP'sini kaydet
+    kem_paktif = kem_paktif + 1;
+    eğer kem_paktif >= kem_psayi { kem_paktif = 0; }   // round-robin (mod psayi)
+    ver kg_psp_oku(kem_paktif);                   // sonraki görevin SP'si → .S switch
+}
+
+// Görev gövdeleri — sonsuz sayaç (preemption ile kesilir; timer IRQ round-robin döndürür).
+// Fixed-RAM volatile deref (kg_yaz64/kg_oku64) → store sink EDİLMEZ, main taze görür.
+çıplak işlev kem_gorev1() { iken 1 == 1 { kg_yaz64(KG_G1, kg_oku64(KG_G1) + 1); } }
+çıplak işlev kem_gorev2() { iken 1 == 1 { kg_yaz64(KG_G2, kg_oku64(KG_G2) + 1); } }
+
+// Görev giriş adreslerini asm ile materyalize et (.kem işlev-adresi → tam64).
+çıplak işlev kg_gorev1_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev1
+add $0, $0, :lo12:kem_gorev1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kg_gorev2_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev2
+add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
+    ver x;
+}
+// A4 gate: 2 preemptive görev kur → preemption aç → main spin ederken timer-IRQ
+// round-robin ile görevlere geçer → her iki sayaç ilerler (INTERLEAVE) → preemption
+// çalışıyor. guard'lı (switch bozuksa hang yok). Sonra preemption'ı KAPAT → main
+// [6..10]'a devam eder (görevler artık seçilmez — sonsuz döngüleri terk edilir).
+çıplak işlev kem_preempt_testi() -> tam32 {
+    kem_preempt_baslat();
+    değişken t1: tam64 = kem_gorev_olustur(kg_gorev1_adr(), KG_STK1);
+    değişken t2: tam64 = kem_gorev_olustur(kg_gorev2_adr(), KG_STK2);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken ((kg_oku64(KG_G1) < 2) veya (kg_oku64(KG_G2) < 2)) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kg_yaz64(KG_AKTIF, 0);                        // preemption DURDUR → main devam
+    eğer (kg_oku64(KG_G1) >= 2) ve (kg_oku64(KG_G2) >= 2) {
+        ver 1;                                     // her iki görev de koştu → interleave
+    }
+    ver 0;
+}

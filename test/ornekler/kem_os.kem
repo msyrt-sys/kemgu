@@ -575,6 +575,16 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] TIMER TIK HATA");
     }
+    // [5f] PREEMPTIVE görev (FAZ-A4, D-280): 2 görev kur + preemption aç → timer-IRQ
+    // round-robin context-switch → her iki görev sayacı ilerler (interleave). .kem
+    // kem_preempt scheduler + sentetik trap-frame; .S kdl_irq_ortak SP-swap (değişmez).
+    // Sonra preemption kapatılır → main [6..10]'a devam. kem_gorev.kem sağlar (CAT).
+    değişken preempt_ok: tam32 = kem_preempt_testi();
+    eğer preempt_ok == 1 {
+        uart_satir("[5] PREEMPT OK");
+    } değilse {
+        uart_satir("[5] PREEMPT HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli
