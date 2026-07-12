@@ -566,6 +566,15 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] TRAP KARAR HATA");
     }
+    // [5e] TIMER-IRQ (FAZ-A3, D-279): GERÇEK periyodik timer IRQ. GIC + CNTV kur → IRQ aç →
+    // tik yalnız .S kdl_irq_ortak→.kem kdl_irq_isle handler'ında artar. tik>=3 = gerçek IRQ
+    // tetiklendi (guard'lı: timer bozuksa sonsuz-döngü yok). kem_zaman.kem sağlar (CAT).
+    değişken timer_ok: tam32 = kem_timer_testi();
+    eğer timer_ok == 1 {
+        uart_satir("[5] TIMER TIK OK");
+    } değilse {
+        uart_satir("[5] TIMER TIK HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli

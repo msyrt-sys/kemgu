@@ -796,6 +796,10 @@ $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# FAZ-A3 (D-279): kem_os-özel zaman — kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle
+# ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC); SAF-.kem kem_zaman.kem sağlar (.S bl kdl_irq_isle çözer).
+$(BUILD)/bm_a64_zaman_kem.o: runtime/kdl_zaman.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_mmu.o: runtime/kdl_mmu.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 # FAZ-A1/B (D-277): kem_os-özel mmu — kdl_mmu_kur + tablolar ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC),
@@ -832,7 +836,7 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
 KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
-              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o \
+              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman_kem.o \
               $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
 # FAZ-A1/B (D-277): bm_a64_mmu_kem.o = kdl_mmu_kur ÇIKARILMIŞ; SAF-.kem kem_mmu.kem sağlar.
@@ -919,7 +923,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
-	@cat runtime/kem_mmu.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_mmu.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
@@ -1054,6 +1058,26 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: kem_istisna_isle .kem karar-handler'a wire YOK"; exit 1; \
 	fi
 	@echo "  (trap_gercek_testi define/wire + mrs esr_el1/far_el1 gercek-oku + kem_istisna_isle karar — sentetik DEGIL)"
+	@echo "FALSIFIYE-KANIT (ZAMAN/timer-IRQ, D-279 FAZ-A3): .kem kdl_irq_isle GERCEK IRQ dispatch + tik:"
+	@if ! grep -qE "define[^@]*@kdl_irq_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_irq_isle define YOK — IRQ dispatch hala C"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kdl_kesme_kur\b" $(BUILD)/kem_os.ll || ! grep -qE "define[^@]*@kdl_timer_baslat\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_kesme_kur/kdl_timer_baslat define YOK — GIC/timer kurulumu C"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr cntv_tval_el0|asm sideeffect "mrs \$$0, cntfrq_el0' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: CNTV timer asm (cntv_tval/cntfrq) emit edilmedi"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr daifclr' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: daifclr (IRQ ac) asm emit edilmedi — IRQ hic acilmiyor"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_timer_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_timer_testi wire YOK"; exit 1; \
+	fi
+	@if llvm-nm $(BUILD)/bm_a64_zaman_kem.o | grep -qE ' T (kdl_irq_isle|kdl_kesme_kur|kdl_timer_baslat)$$'; then \
+		echo "FAIL: bm_a64_zaman_kem.o hala C timer/IRQ tanimliyor (guard tutmadi)"; exit 1; \
+	fi
+	@echo "  (kdl_irq_isle/kesme_kur/timer_baslat .kem-define + cntv/daifclr asm + timer_testi wire + 0 C-tanim — GERCEK timer-IRQ SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1114,14 +1138,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "MMU FAULT OK" $(BUILD)/kem_os.out \
 		   && grep -q "MMU CEVIRI OK" $(BUILD)/kem_os.out \
 		   && grep -q "TRAP KARAR OK" $(BUILD)/kem_os.out \
+		   && grep -q "TIMER TIK OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A1/A2/C .kem-native OS gecti: [1..5] + MMU FAULT OK + MMU CEVIRI OK + TRAP KARAR OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A1/A2/A3/C .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + MMU CEVIRI + TRAP KARAR + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-279 — REAL-OS FAZ-A3: SAF-.kem GERÇEK timer-IRQ (GICv2 + CNTV) + .kem IRQ dispatch — [5] TIMER TIK OK (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-278).
+
+**Karar [ETKİ: `runtime/kem_zaman.kem` (YENİ — SAF-.kem GIC+CNTV+kdl_irq_isle); `runtime/kdl_zaman.c`
+(kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle `#ifndef KEMGU_KEM_MALLOC` guard); `test/ornekler/kem_os.kem`
+([5e] TIMER bloğu); `Makefile` (bm_a64_zaman_kem.o variant + kem_zaman CAT + TIMER TIK OK gate). FAZ-A3 —
+GERÇEK donanım-kesmesi (IRQ) ilk kez SAF-.kem'de. Bring-up roadmap A3.]** Kanıtlı-C kdl_zaman.c'nin BİREBİR
+.kem yeniden gerçekleştirmesi: periyodik timer IRQ, .S kdl_irq_ortak `bl kdl_irq_isle` artık .kem'i çağırır.
+
+- **WebSearch/ARM teyit:** GICv2 (QEMU virt: GICD 0x08000000, GICC 0x08010000), sanal timer PPI INTID 27,
+  CNTV_CTL/TVAL_EL0 + CNTFRQ_EL0, DAIF.I (daifclr #2) IRQ mask. GICC_IAR (0x0C) oku → INTID; GICC_EOIR
+  (0x10) yaz → kesme bitir. Kesme girişinde PSTATE.I hardware-set → handler re-entran DEĞİL.
+- **SAF-.kem (`kem_zaman.kem`):** kdl_kesme_kur (GICD_CTLR/GICC_PMR/CTLR/ISENABLER0-bit27 MMIO), kdl_timer_baslat
+  (cntfrq/100 ~10ms + cntv_tval/ctl + daifclr asm), kdl_irq_isle (çıplak; .S'nin sp arg → GICC_IAR oku →
+  timer ise re-arm+tik++ → EOI → sp döner; preemption YOK → aynı bağlam). GIC=MMIO çıplak-deref; CNTV/DAIF=
+  satıriçi_asm arm64.
+- **Volatile-reader gotcha çözümü:** kem_tik IRQ-context'te yazılır, main busy-wait'te okur. .kem küresel
+  volatile-DEĞİL → main const-fold edip sonsuz-döngüye girebilir. Çözüm: kem_tik_oku inline-asm ldr @kem_tik
+  (+~{memory}) ile HER okuma taze + guard (50M) → timer bozuksa sonsuz-döngü YOK, HATA raporlar.
+- **GERÇEK IRQ kanıtı:** tik YALNIZ .kem kdl_irq_isle'da artar; kem_timer_testi tik>=3 bekler → gerçek
+  periyodik IRQ tetiklendi (busy-wait sırasında donanım IRQ handler'ı sürdü). Boot [6..10]'a IRQ'lar CANLI
+  iken devam (entegre; storm/hang yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] TIMER TIK OK` (+ [1..5] MMU/TRAP + [6..10] kümülatif, IRQ-canlı).
+gate: kem_os.ll `define @kdl_irq_isle/@kdl_kesme_kur/@kdl_timer_baslat` + `asm msr cntv_tval_el0/daifclr` +
+`call @kem_timer_testi`; `bm_a64_zaman_kem.o` C timer/IRQ tanımı = **0**. FIXPOINT birebir (33371 — compiler
+src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**MİLESTONE:** İlk GERÇEK donanım-kesmesi SAF-.kem. .S kdl_irq_ortak (trap-frame/eret) DEĞİŞMEDİ; yalnız
+`bl kdl_irq_isle` .kem'e yönlendi. Kalan FAZ-A: A4 (görev preemptive — timer→IRQ→context-switch, EN ZOR;
+kdl_irq_isle şimdi sp'yi olduğu gibi döner, A4'te kdl_preempt-benzeri context-switch SP döndürecek),
+A5 (syscall/EL0).
+
+---
+
 ## D-278 — REAL-OS FAZ-A2: kesme gerçek-trap → .kem KARAR handler (mrs ESR/FAR) — [5] TRAP KARAR OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-277).

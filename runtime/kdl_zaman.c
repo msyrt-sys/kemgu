@@ -64,6 +64,11 @@ static inline void cntv_ctl(uint64_t v) {
     __asm__ volatile("msr cntv_ctl_el0, %0" : : "r"(v));
 }
 
+/* FAZ-A3 (D-279): kem_os kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle'i SAF-.kem'de
+ * (kem_zaman.kem) sağlar → .S kdl_irq_ortak `bl kdl_irq_isle` .kem'i çözer.
+ * -DKEMGU_KEM_MALLOC (kem_os variant) ile C tanımları ÇIKARILIR (çift-sembol yok).
+ * kdl_kesme_isle/kdl_tik/kdl_tik_al C KALIR (statik'ler kullanımda; regresyon yok). */
+#ifndef KEMGU_KEM_MALLOC
 void kdl_kesme_kur(void) {
     mmio32_yaz(KDL_GICD_BASE + 0x000, 1);            /* GICD_CTLR = enable */
     mmio32_yaz(KDL_GICC_BASE + 0x004, 0xFF);         /* GICC_PMR = tüm öncelikler */
@@ -78,6 +83,7 @@ void kdl_timer_baslat(void) {
     cntv_ctl(1);                                     /* enable + unmask */
     __asm__ volatile("msr daifclr, #2");             /* IRQ aç */
 }
+#endif  /* KEMGU_KEM_MALLOC — kem_os SAF-.kem kdl_kesme_kur/kdl_timer_baslat (kem_zaman.kem) */
 
 /* IRQ dispatch — irq = IAR & 0x3FF. timer → re-arm + tik. */
 void kdl_kesme_isle(uint64_t irq) {
@@ -92,6 +98,7 @@ void kdl_kesme_isle(uint64_t irq) {
  * kdl_preempt (scheduler; kapalıysa sp). Devam edilecek SP'yi döner. */
 extern uint64_t kdl_preempt(uint64_t sp);
 
+#ifndef KEMGU_KEM_MALLOC
 uint64_t kdl_irq_isle(uint64_t sp) {
     uint32_t iar = *(volatile uint32_t *)(KDL_GICC_BASE + 0x0C);
     uint32_t irq = (uint32_t)(iar & 0x3FF);
@@ -99,6 +106,7 @@ uint64_t kdl_irq_isle(uint64_t sp) {
     *(volatile uint32_t *)(KDL_GICC_BASE + 0x10) = iar;     /* EOI — switch ÖNCESİ */
     return kdl_preempt(sp);
 }
+#endif  /* KEMGU_KEM_MALLOC — kem_os SAF-.kem kdl_irq_isle (kem_zaman.kem) */
 
 void kdl_idle(void) { __asm__ volatile("wfi"); }
 
