@@ -798,6 +798,10 @@ $(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_mmu.o: runtime/kdl_mmu.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# FAZ-A1/B (D-277): kem_os-özel mmu — kdl_mmu_kur + tablolar ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC),
+# SAF-.kem kem_mmu.kem sağlar (.S boot çözer). kdl_surec_kur vb. C kalır.
+$(BUILD)/bm_a64_mmu_kem.o: runtime/kdl_mmu.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_gorev.o: runtime/kdl_gorev.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kanal.o: runtime/kdl_kanal.c | $(BUILD)
@@ -829,8 +833,9 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
               $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o \
-              $(BUILD)/bm_a64_mmu.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
+              $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
+# FAZ-A1/B (D-277): bm_a64_mmu_kem.o = kdl_mmu_kur ÇIKARILMIŞ; SAF-.kem kem_mmu.kem sağlar.
 # FAZ-A1 (D-276): fault-global'ler (kdl_fault_bekleniyor/yakalanan) C-tanımlı KALIR
 # (.S kdl_exc_ortak substrat'ı). kem_mmu.kem inline-asm ile erişir (küresel internal-
 # linkage codegen-gap → .S'ye açılamaz; bkz. D-276 sınır-notu).
@@ -1019,6 +1024,25 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: recovery-scratch inline-asm erisimi (adrp kdl_fault_bekleniyor) emit edilmedi"; exit 1; \
 	fi
 	@echo "  (kmmu_fault_testi .kem-define + wire + .S recovery-scratch'e inline-asm erisim — GERCEK data-abort saf-.kem)"
+	@echo "FALSIFIYE-KANIT (MMU/CEVIRI, D-277 FAZ-A1/B): kdl_mmu_kur SAF-.kem (C kdl_mmu.c DEGIL) + non-identity ceviri:"
+	@if ! grep -qE "define[^@]*@kdl_mmu_kur\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem kdl_mmu_kur define YOK — MMU kurulumu hala C"; exit 1; \
+	fi
+	@if grep -qE "call[^@]*@kdl_mmu_kur\b" $(BUILD)/kem_os.ll; then \
+		echo "NOTE: kdl_mmu_kur .kem-icinden de cagriliyor (boot .S disi) — beklenmedik degil"; \
+	fi
+	@if ! grep -qE "define[^@]*@kmmu_ceviri_testi\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kmmu_ceviri_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kmmu_ceviri_testi define/wire YOK — ceviri dogrulanmiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr mair_el1' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: MMU-enable asm (msr mair_el1/tcr/ttbr0/sctlr) emit edilmedi — .kem MMU kurulumu yok"; exit 1; \
+	fi
+	@echo "  (kdl_mmu_kur .kem-define + msr mair/tcr/ttbr0/sctlr asm + ceviri-testi wire — SAF-.kem MMU setup+ceviri)"
+	@echo "FALSIFIYE-KANIT (C kdl_mmu_kur DISLANDI): bm_a64_mmu_kem.o'da kdl_mmu_kur C-tanimi 0 olmali:"
+	@if llvm-nm $(BUILD)/bm_a64_mmu_kem.o | grep -qE ' T kdl_mmu_kur$$'; then \
+		echo "FAIL: bm_a64_mmu_kem.o hala C kdl_mmu_kur tanimliyor (guard tutmadi)"; exit 1; \
+	fi
+	@echo "  (bm_a64_mmu_kem.o: 0 C kdl_mmu_kur — kem_os MMU kurulumu TAMAMEN .kem'den)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1077,14 +1101,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
 		   && grep -q "MMU FAULT OK" $(BUILD)/kem_os.out \
+		   && grep -q "MMU CEVIRI OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-C .kem-native OS gecti: [1..5] + MMU FAULT OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A1/C .kem-native OS gecti: [1..5] + MMU FAULT OK + MMU CEVIRI OK + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT + MMU CEVIRI + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

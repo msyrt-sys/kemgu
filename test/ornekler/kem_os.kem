@@ -531,6 +531,16 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] MMU FAULT HATA");
     }
+    // [5c] MMU ÇEVİRİ (FAZ-A1 alt-hedef B, D-277): kdl_mmu_kur artık SAF-.kem (kem_mmu.kem,
+    // .S boot çağırır; C guard'lı). Non-identity çeviri VA 0x50000000 → PA 0x46000000 alias
+    // doğrula (çift-yönlü). MMU zaten .kem-kurulu boot etti (bu satıra ulaşmak = .kem MMU
+    // çalışıyor); bu test çeviri-DOĞRULUĞUNU kanıtlar (identity olsaydı alias olmazdı).
+    değişken ceviri_ok: tam32 = kmmu_ceviri_testi();
+    eğer ceviri_ok == 1 {
+        uart_satir("[5] MMU CEVIRI OK");
+    } değilse {
+        uart_satir("[5] MMU CEVIRI HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli

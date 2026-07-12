@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-277 — REAL-OS FAZ-A1 (alt-hedef B): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri — [5] MMU CEVIRI OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-276).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kdl_mmu_kur SAF-.kem + kmmu_ceviri_testi); `runtime/kdl_mmu.c`
+(kdl_mmu_kur + tablolar `#ifndef KEMGU_KEM_MALLOC` guard); `test/ornekler/kem_os.kem` ([5c] MMU CEVIRI
+bloğu); `Makefile` (bm_a64_mmu_kem.o variant + MMU CEVIRI OK gate + falsifiye-kanıt). FAZ-A1 keystone —
+MMU KURULUMU artık C'de DEĞİL, SAF-.kem. Kullanıcı "önce A sonra B" → B bu adım.]** Kanıtlı-C
+kdl_mmu.c'nin BİREBİR .kem yeniden gerçekleştirmesi: boot `.S bl kdl_mmu_kur` artık SAF-.kem'i çağırır.
+
+- **SAF-.kem kdl_mmu_kur (`kem_mmu.kem`):** çıplak (region-prologue YOK — boot pre-main, heap/region henüz
+  yok; yalnız sabit-adres store + MSR). L1(512×1GB)/L2(512×2MB Normal-WB) tabloları FİXED RAM'de
+  (0x45000000/0x45001000, free, 4KB-hizalı). Descriptor bit'leri C birebir: Device=0x401, Normal-2MB=
+  pa|0x705, tablo=l2|0x3. MAIR=0xFF00, TCR=0x100803519, TTBR0=L1. Enable asm: `msr mair/tcr/ttbr0 → dsb
+  ish → tlbi vmalle1 → dsb ish → isb → sctlr|=(M|C|I) → isb` (satıriçi_asm arm64, D-269 P1).
+- **Non-identity çeviri gate (`kmmu_ceviri_testi`):** L2[128] override → VA 0x50000000 → PA 0x46000000
+  (identity DEĞİL). Çift-yönlü ALIAS doğrula: PA'ya 0xDEADBEEF yaz → non-identity VA'dan oku (=alias?);
+  non-identity VA'ya 0xCAFEBABE yaz → PA'dan oku (=alias?). Taklit edilemez: identity map olsaydı iki VA
+  aynı PA'yı GÖRMEZDİ (0x50000000 backed-değil). volatile erişim (clang alias-varsaymaz → gerçek donanım
+  çevirisi test edilir).
+- **RİSK (boot-MMU replace) BAŞARILI:** MMU kurulumu boot'ta değiştirmek = tablolar yanlışsa sessiz hang.
+  C'yi birebir yansıtarak İLK denemede boot etti ([1] BOOT OK + [5] MMU FAULT + [6..10] hepsi MMU-on
+  .kem-tablolarıyla çalışıyor). Fallback (C'ye dön) GEREKMEDİ.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] MMU CEVIRI OK` (+ MMU FAULT + [1..10] kümülatif, garbling yok).
+gate: kem_os.ll `define @kdl_mmu_kur` + `asm "msr mair_el1"` + `define/call @kmmu_ceviri_testi`;
+`bm_a64_mmu_kem.o` C kdl_mmu_kur tanımı = **0** (guard tuttu). FIXPOINT birebir (33371 — compiler
+src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**MİLESTONE:** kem_os artık TÜM MMU'yu (kurulum + sanal-bellek çevirisi + gerçek page-fault + recovery)
+SAF-.kem yapıyor. FAZ-A1 (A+B) TAM. Kalan FAZ-A: A2 (kesme/timer preemptive) — SYNC/IRQ ayrımı + .S-
+eşleşik-global inline-asm deseni (D-276) yeniden kullanılabilir. C kdl_mmu.c kem_os link'inde artık
+yalnız kdl_surec_kur/kdl_el0_surec_kur (EL0 spawn — henüz kullanılmıyor).
+
+---
+
 ## D-276 — REAL-OS FAZ-A1 (alt-hedef A): [5] EXC → GERÇEK vektör-bağlı page-fault + recovery saf-.kem — [5] MMU FAULT OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-275).

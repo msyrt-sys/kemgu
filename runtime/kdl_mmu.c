@@ -23,8 +23,14 @@
 /* L1 çeviri tablosu: 512 giriş × 1GB, 4KB-hizalı (TTBR0 gereği).
  * L2 tablosu: RAM 1GB bloğu (0x40000000-0x7FFFFFFF) için 512 × 2MB sayfa —
  * per-region izin (D2 privilege ayrımı: kernel AP=00, user sayfası AP=01). */
+/* FAZ-A1/B (D-277): kem_os kdl_mmu_kur'u SAF-.kem'de (kem_mmu.kem) sağlar → .S boot
+ * `bl kdl_mmu_kur` .kem'i çözer. -DKEMGU_KEM_MALLOC (kem_os variant) ile C tanımı +
+ * tablolar ÇIKARILIR (çift-sembol yok). Diğer kernel'ler C kdl_mmu_kur KULLANMAYA
+ * DEVAM (regresyon yok). kdl_surec_kur/kdl_el0_surec_kur (caller-tablo) guard DIŞI. */
+#ifndef KEMGU_KEM_MALLOC
 static uint64_t kdl_l1_tablo[512] __attribute__((aligned(4096)));
 static uint64_t kdl_l2_tablo[512] __attribute__((aligned(4096)));
+#endif
 
 /* L1[0] Device (1GB blok): bit0=geçerli, bit1=0(blok), AttrIdx0, AF. */
 #define KDL_BLOK_DEVICE  0x0000000000000401UL  /* PA=0, Device, AF, AP=00(EL1) */
@@ -34,6 +40,7 @@ static uint64_t kdl_l2_tablo[512] __attribute__((aligned(4096)));
  * EL1'de non-exec (ARMv8) ama EL0'da çalıştırılabilir (UXN=0) → EL0 kodu burada. */
 #define KDL_USER_VA      0x0000000042000000UL
 
+#ifndef KEMGU_KEM_MALLOC
 void kdl_mmu_kur(void) {
     for (int i = 0; i < 512; i++) kdl_l1_tablo[i] = 0;
 
@@ -67,6 +74,7 @@ void kdl_mmu_kur(void) {
     sctlr |= (1UL << 0) | (1UL << 2) | (1UL << 12);
     __asm__ volatile("msr sctlr_el1, %0; isb" :: "r"(sctlr));
 }
+#endif  /* KEMGU_KEM_MALLOC — kem_os SAF-.kem kdl_mmu_kur (kem_mmu.kem) */
 
 /* === D1: per-process adres-uzayı ===
  * Bir sürecin sayfa tablolarını kur: kernel identity (paylaşılan) + user VA

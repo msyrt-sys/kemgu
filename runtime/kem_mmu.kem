@@ -81,6 +81,76 @@ ldr $0, [x9]"#
     ver *p;
 }
 
+// ============================================================================
+// ALT-HEDEF B (D-277): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri.
+//   Kanıtlı-C kdl_mmu.c'nin BİREBİR yeniden gerçekleştirmesi (descriptor bit'leri +
+//   MAIR/TCR/TTBR0 aynı). .S boot `bl kdl_mmu_kur` artık .kem'i çağırır (C guard'lı).
+//   EK: bir non-identity çeviri (VA 0x50000000 → PA 0x46000000) → çeviri gate.
+//   Çıplak (region-prologue YOK — boot'ta pre-main, heap/region henüz yok); yalnız
+//   SABİT-adres store + MSR. MMU OFF iken tabloları yaz → MSR sctlr ile MMU ON.
+
+sabit KMMU_L1: tam64 = 1157627904;         // 0x45000000 (4KB-hizalı, free RAM)
+sabit KMMU_L2: tam64 = 1157632000;         // 0x45001000
+sabit KMMU_CEVIRI_VA: tam64 = 1342177280;  // 0x50000000 (non-identity kaynak)
+sabit KMMU_CEVIRI_PA: tam64 = 1174405120;  // 0x46000000 (backed RAM hedef, free)
+sabit KMMU_RAM: tam64 = 1073741824;        // 0x40000000
+sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
+
+çıplak işlev kmmu_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
+çıplak işlev kmmu_o64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+// SAF-.kem MMU kurulumu — .S boot'tan çağrılır. Descriptor'lar kdl_mmu.c birebir:
+//   Device blok=0x401(1025), Normal-2MB blok=pa|0x705(+1797), tablo=l2|0x3(+3).
+çıplak işlev kdl_mmu_kur() {
+    değişken i: tam64 = 0;
+    iken i < 512 { kmmu_y64(KMMU_L1 + i * 8, 0); i = i + 1; }        // L1 sıfırla
+    değişken n: tam64 = 0;
+    iken n < 512 {                                                    // L2 identity (2MB Normal)
+        değişken pa: tam64 = KMMU_RAM + n * KMMU_2MB;
+        kmmu_y64(KMMU_L2 + n * 8, pa + 1797);                        // |0x705
+        n = n + 1;
+    }
+    değişken idx: tam64 = (KMMU_CEVIRI_VA - KMMU_RAM) / KMMU_2MB;     // 128: non-identity override
+    kmmu_y64(KMMU_L2 + idx * 8, KMMU_CEVIRI_PA + 1797);              // VA 0x50000000 → PA 0x46000000
+    kmmu_y64(KMMU_L1, 1025);                                         // L1[0] Device (0x401)
+    kmmu_y64(KMMU_L1 + 8, KMMU_L2 + 3);                             // L1[1] → L2 tablo (0x3)
+    değişken mair: tam64 = 65280;                                    // 0xFF00
+    değişken tcr: tam64 = 4303369497;                              // 0x100803519
+    değişken sbit: tam64 = 4101;                                   // 0x1005 (SCTLR M|C|I)
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"msr mair_el1, $0
+msr tcr_el1, $1
+msr ttbr0_el1, $2
+dsb ish
+tlbi vmalle1
+dsb ish
+isb
+mrs x9, sctlr_el1
+orr x9, x9, $3
+msr sctlr_el1, x9
+isb"#
+            girdi("r", mair) girdi("r", tcr) girdi("r", KMMU_L1) girdi("r", sbit)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+
+// ÇEVİRİ gate: VA 0x50000000 ↔ PA 0x46000000 ALIAS doğrula (çift-yönlü, volatile).
+// 1 = non-identity çeviri donanımda çalışıyor (identity olsaydı VA→PA 0x50000000
+// backed-değil, alias olmazdı). Taklit edilemez: iki farklı VA aynı PA'yı görüyor.
+çıplak işlev kmmu_ceviri_testi() -> tam32 {
+    kmmu_y64(KMMU_CEVIRI_PA, 3735928559);            // 0xDEADBEEF → identity VA (=PA)
+    değişken a: tam64 = kmmu_o64(KMMU_CEVIRI_VA);     // non-identity VA'dan oku → alias mı?
+    kmmu_y64(KMMU_CEVIRI_VA, 3405691582);            // 0xCAFEBABE → non-identity VA (ters yön)
+    değişken b: tam64 = kmmu_o64(KMMU_CEVIRI_PA);     // identity VA'dan oku → alias mı?
+    eğer a == 3735928559 ve b == 3405691582 {
+        ver 1;
+    }
+    ver 0;
+}
+
 // GERÇEK fault-gate: haritasız VA oku → .S recovery → FAR doğru + kurtarıldı mı?
 // 1 = MMU zorluyor + gerçek fault yakalandı + FAR==VA + OS devam ediyor. Sentetik DEĞİL.
 çıplak işlev kmmu_fault_testi() -> tam32 {
