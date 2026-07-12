@@ -1039,6 +1039,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: net_arp_testi WIRE edilmemis"; exit 1; \
 	fi
 	@echo "  (vnet_gonder/al .kem-define + net_arp_testi wire — ARP round-trip SAF-.kem)"
+	@if ! grep -qE "define[^@]*@vnet_checksum\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_checksum (RFC1071) define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_icmp_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_icmp_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_checksum + net_icmp_testi wire — ICMP ping round-trip SAF-.kem)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
 		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
@@ -1058,10 +1065,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
-		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK (SAF-.kem)."; \
+		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
+		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
+			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' + 'NET DEV OK' + 'NET ARP OK' bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + DISK/FS/NET DEV/NET ARP/PING CANLI bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

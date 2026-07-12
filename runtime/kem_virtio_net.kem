@@ -147,3 +147,28 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
 
 // Alınan çerçeveden bayt oku (net-başlığı 12 atlanmış).
 çıplak işlev vnet_rx_oku(i: tam32) -> dtam8 { ver vblk_o8(vnet_dma + NO_RXBUF + (vnet_rx_id olarak tam64) * 2048 + 12 + (i olarak tam64)); }
+
+// RFC1071 internet checksum (IPv4 başlığı + ICMP mesajı — net-icmp/[10]). `adr`'den `uzun` bayt
+// (big-endian 16-bit toplam + carry fold + one's complement). ~t & 0xffff = 65535 - t (XOR yok).
+çıplak işlev vnet_checksum(adr: tam64, uzun: tam32) -> tam32 {
+    değişken t: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken (i + 1) < uzun {
+        değişken hi: tam32 = vblk_o8(adr + (i olarak tam64)) olarak tam32;
+        değişken lo: tam32 = vblk_o8(adr + ((i + 1) olarak tam64)) olarak tam32;
+        t = t + hi * 256 + lo;
+        i = i + 2;
+    }
+    eğer (uzun & 1) != 0 {
+        değişken son: tam32 = vblk_o8(adr + ((uzun - 1) olarak tam64)) olarak tam32;
+        t = t + son * 256;
+    }
+    iken (t >> 16) != 0 { t = (t & 65535) + (t >> 16); }
+    ver 65535 - (t & 65535);
+}
+
+// TX çerçevesindeki `frame_ofs`'tan `uzun` bayt üzerinde RFC1071 checksum (çıplak: vnet_dma
+// erişimi güvensiz-tier — normal işlev küresel'e dokunmadan kullanır, E010 kaçınılır).
+çıplak işlev vnet_tx_checksum(frame_ofs: tam32, uzun: tam32) -> tam32 {
+    ver vnet_checksum(vnet_dma + NO_TXBUF + 12 + (frame_ofs olarak tam64), uzun);
+}

@@ -5,6 +5,35 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-275 — REAL-OS FAZ-C: saf-.kem TAM ağ yığını — GERÇEK ICMP ping round-trip — [10] PING CANLI (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-274).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (vnet_checksum RFC1071 + vnet_tx_checksum); `test/ornekler/kem_os.kem`
+(net_icmp_testi + [10] PING bloğu); `Makefile` (checksum/icmp proof + PING CANLI gate). REAL-OS BRING-UP FAZ-C
+son rung — AKTİVASYON. bring-up loop görev net-icmp.]** Kanıtlı-C icmp_arm.c'nin saf-.kem yeniden
+gerçekleştirmesi: TAM ağ yığını (ARP + IPv4 + ICMP + RFC1071 checksum) tek boot'ta — "OS ping atıyor".
+
+- **RFC1071 checksum (`vnet_checksum`):** big-endian 16-bit toplam + carry-fold + one's complement
+  (`65535 - t`, XOR yok). `vnet_tx_checksum` çıplak wrapper (normal işlev vnet_dma'ya dokunmadan kullanır,
+  E010 kaçınılır — küresel-erişim güvensiz-tier kuralı).
+- **[10] GERÇEK fonksiyonel:** (1) ARP ile gateway (10.0.2.2) MAC çöz. (2) IPv4 (ver4/IHL5, proto=1, IP-
+  checksum) + ICMP Echo Request (type=8, id=0xBEEF, seq=1, payload "KEMGU", ICMP-checksum) kur + GÖNDER.
+  (3) SLIRP echo reply → AL + PARSE: ethertype=0x0800 + proto=1 + ICMP type=0 (reply) + payload "KEMGU"
+  geri döndü DOĞRULA. **Checksum'lar .kem'de hesaplanır ve SLIRP kabul edip yanıtlar** → sentetik-geçiş
+  imkânsız (yanlış checksum = paket düşer = reply yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[10] PING CANLI` — [1..10] kümülatif (DISK RW/FS RW/NET DEV/NET ARP/
+PING CANLI), garbling yok. gate: kem_os.ll `define @vnet_checksum` + `call @net_icmp_testi`. [6..9]
+regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**MİLESTONE:** FAZ-B (depolama: virtio-blk+minifs) + FAZ-C (ağ: virtio-net+ARP+IPv4+ICMP) SAF-.kem kem_os'ta
+CANLI. kem_os artık gerçek disk I/O + dosya sistemi + 2-yönlü ağ (ping) yapan gerçek-OS. Kalan: FAZ-A
+(kesme/zaman/görev/EL0 — preemptive scheduling + userspace; STOP-FAZ-A, insan+stratejist). C-removal
+(kesme dead-dep) FAZ-A ile açılır.
+
+---
+
 ## D-274 — REAL-OS FAZ-C: saf-.kem ağ paket TX/RX — GERÇEK ARP round-trip — [9] NET ARP OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-273).
