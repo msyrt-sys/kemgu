@@ -106,6 +106,11 @@ sabit DO_STATUS: tam64 = 784;
     vblk_y32(base + VM_Q_DESC_LO, da olarak tam32);   vblk_y32(base + VM_Q_DESC_HI, (da >> 32) olarak tam32);
     vblk_y32(base + VM_Q_DRV_LO,  av olarak tam32);   vblk_y32(base + VM_Q_DRV_HI,  (av >> 32) olarak tam32);
     vblk_y32(base + VM_Q_DEV_LO,  us olarak tam32);   vblk_y32(base + VM_Q_DEV_HI,  (us >> 32) olarak tam32);
+    // RE-INIT GÜVENLİ (D-271→B2): avail/used idx RAM'de sıfırla → device+driver taze başlar.
+    // C sürücü tek-init'ti (.bss sıfır); kem_os çok-subsystem HER birinde kur çağırır → stale
+    // idx desync olmasın (poll `once=used.idx` eski değeri beklerdi). QUEUE_READY ÖNCESİ.
+    vblk_y16(av + 2, 0 olarak dtam16);                 // avail.idx = 0
+    vblk_y16(us + 2, 0 olarak dtam16);                 // used.idx = 0
     vblk_y32(base + VM_QUEUE_READY, 1);
     vblk_y32(base + VM_STATUS, 15);         // ACK|DRIVER|FEAT_OK|DRIVER_OK
     ver 0;

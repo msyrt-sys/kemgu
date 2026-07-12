@@ -909,9 +909,9 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
 calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
-	@# D-271 FAZ-B1: virtio-blk .kem sürücüsü kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
-	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık.
-	@cat runtime/kem_virtio_blk.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
+	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
+	@cat runtime/kem_virtio_blk.kem runtime/kem_minifs.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
@@ -1016,6 +1016,14 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: dsb sy bariyeri (P1 arm64 asm) emit edilmedi — DMA siralama yok"; exit 1; \
 	fi
 	@echo "  (vblk_bul/kur/oku/yaz .kem-define + disk_rw_testi wire + dsb sy P1-asm — virtio-blk SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/fs, FAZ-B2): kem_os GERCEK dosya I/O saf-.kem minifs'ten:"
+	@if ! grep -qE "define[^@]*@mfs_(format|dosya_yaz|dosya_oku)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem mfs_* minifs define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@fs_rw_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: fs_rw_testi WIRE edilmemis — kem_os gercek dosya I/O calistirmiyor"; exit 1; \
+	fi
+	@echo "  (mfs_format/dosya_yaz/dosya_oku .kem-define + fs_rw_testi wire — minifs SAF-.kem, virtio-blk ustunde)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
 		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
@@ -1031,10 +1039,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
-		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-B1 .kem-native OS gecti: [1..5] + GERCEK virtio-blk DISK RW OK (sektor yaz->oku->eslesme, SAF-.kem)."; \
+		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
+		   && grep -q "FS RW OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-B2 .kem-native OS gecti: [1..5] + virtio-blk DISK RW OK + minifs FS RW OK (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' (gercek disk RW) bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

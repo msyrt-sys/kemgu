@@ -301,6 +301,33 @@ işlev disk_rw_testi() -> tam32 {
     ver eslesme;
 }
 
+// [7] FS — saf-.kem minifs (kem_minifs.kem, FAZ-B2) virtio-blk üstünde GERÇEK dosya I/O.
+// format → dosya "veri" oluştur+RASTGELE-pattern YAZ → vq_data BOZ → dosya OKU (inode
+// indirection: superblock magic + isim eşleşme + boyut + veri_blok pointer) → içerik+boyut
+// EŞLEŞME. Sentetik değil: içerik disk blok'larından fs-katmanı üzerinden geri okunur.
+işlev fs_rw_testi() -> tam32 {
+    değişken base: tam64 = vblk_bul();
+    eğer base == 0 { ver 0; }
+    eğer vblk_kur(base) != 0 { ver 0; }
+    eğer mfs_format(base) != 0 { ver 0; }
+    değişken boyut: tam32 = 200;
+    değişken i: tam32 = 0;
+    iken i < 512 { vblk_data_yaz(i, 0 olarak dtam8); i = i + 1; }        // vq_data temizle
+    i = 0;
+    iken i < boyut { vblk_data_yaz(i, ((i * 7 + 11) % 256) olarak dtam8); i = i + 1; }   // rastgele pattern
+    eğer mfs_dosya_yaz(base, 118, 101, 114, 105, boyut) != 0 { ver 0; } // "veri" (v,e,r,i)
+    i = 0; iken i < 512 { vblk_data_yaz(i, 255 olarak dtam8); i = i + 1; }   // vq_data BOZ (okuma diskten)
+    değişken okunan: tam32 = mfs_dosya_oku(base, 118, 101, 114, 105);
+    eğer okunan != boyut { ver 0; }                                    // boyut eşleşme
+    değişken eslesme: tam32 = 1;
+    i = 0;
+    iken i < boyut {
+        eğer vblk_data_oku(i) != ((i * 7 + 11) % 256) olarak dtam8 { eslesme = 0; }
+        i = i + 1;
+    }
+    ver eslesme;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -355,6 +382,14 @@ işlev main() -> tam32 {
         uart_satir("[6] DISK RW OK");
     } değilse {
         uart_satir("[6] DISK YOK/HATA (disksiz boot normal)");
+    }
+
+    // [7] FS — saf-.kem minifs virtio-blk üstünde (FAZ-B2). Additive: çekirdek gate'i ETKİLEMEZ.
+    değişken fs_ok: tam32 = fs_rw_testi();
+    eğer fs_ok == 1 {
+        uart_satir("[7] FS RW OK");
+    } değilse {
+        uart_satir("[7] FS YOK/HATA (disksiz boot normal)");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

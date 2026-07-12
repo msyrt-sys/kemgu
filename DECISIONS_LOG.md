@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-272 — REAL-OS FAZ-B2: saf-.kem minifs dosya sistemi kem_os'ta AKTİF — [7] FS RW OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-271).
+
+**Karar [ETKİ: `runtime/kem_minifs.kem` (YENİ, saf-.kem minifs); `runtime/kem_virtio_blk.kem` (vblk_kur re-init
+ring-idx sıfırlama); `test/ornekler/kem_os.kem` (fs_rw_testi + [7] FS bloğu); `Makefile` (CAT + minifs + FS RW OK
+gate). REAL-OS BRING-UP FAZ-B2 — AKTİVASYON. bring-up loop görev b2-fs.]** Kanıtlı-C minifs_arm.c'nin saf-.kem
+yeniden gerçekleştirmesi, virtio-blk (vblk_*, D-271) üstünde.
+
+- **Saf-.kem minifs (`kem_minifs.kem`):** disk layout blk0=superblock(magic "MFS1"+sayaç), blk1=inode(ad[4]+
+  boyut u32+veri_blok), blk2+=data. `mfs_format/dosya_yaz/dosya_oku`. GERÇEK fs katmanı: superblock-magic
+  doğrulama + **inode INDIRECTION** (oku, inode'daki veri_blok pointer'ını izler) + isim eşleşme + boyut. Transfer
+  = vblk vq_data. Ham sektör I/O DEĞİL. Cross-file: build'de kem_os ile CAT (tek birim, T002 yok); vblk_* çağırır.
+- **vblk_kur RE-INIT FIX (kritik):** kem_os çok-subsystem → [6] disk + [7] fs HER biri vblk_kur çağırır. C sürücü
+  tek-init'ti (.bss sıfır); ikinci kur RAM avail/used idx'i sıfırlamıyordu → poll `once=used.idx` STALE değeri
+  bekler → fs I/O asılırdı. Fix: vblk_kur QUEUE_READY öncesi avail.idx=0 + used.idx=0 (device+driver taze).
+
+**FALSİFİYE-KANIT (GERÇEK fonksiyonel):**
+- **kem_os QEMU: `[7] FS RW OK`** — format → dosya "veri" oluştur+RASTGELE-pattern((i*7+11)%256, 200B) YAZ →
+  vq_data BOZ(0xff) → dosya OKU (superblock magic + isim + boyut + inode veri_blok indirection) → içerik+boyut
+  BYTE-EŞLEŞME. Seri denetlendi: [1..5]+[6] DISK RW OK+[7] FS RW OK+KEM-OS OK, garbling yok. Sentetik-geçiş imkânsız.
+- **gate:** kem_os.ll `define @mfs_format/dosya_yaz/dosya_oku` + `call @fs_rw_testi`. [6] DISK RW OK regresyonsuz
+  (vblk re-init fix uyumlu).
+- **Bağımsız TAZE-CLONE gate + FIXPOINT + test_tumu:** (bkz commit doğrulaması).
+
+**SINIR:** minifs minimal (tek dosya, tek data-blok, 4-harf isim). CRUD/multi-blok/journaling (crashfs) sonraki
+rung. Yine de gerçek fs (superblock+inode+data ayrımı + indirection). virtio-blk C-removal hâlâ FAZ-A-blocked (D-271).
+
+---
+
 ## D-271 — REAL-OS FAZ-B1: saf-.kem virtio-blk GERÇEK blok I/O kem_os'ta AKTİF — [6] DISK RW OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-269; D-270 KALİBRASYON no-commit).
