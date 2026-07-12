@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-269 — CODEGEN P1: satıriçi_asm arch-gate hedefe-duyarlı (`--mimari arm64`) — aarch64 sysreg/bariyer asm .kem'de AÇILDI (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-268).
+
+**Karar [ETKİ: `src/llvm.h` (runtime hedef selector decl); `src/tip.c` (g_hedef_mimari/triple + setter/getter TANIM —
+düşük-bağımlılıklı paylaşılan TU); `src/llvm.c` (AS001 + triple emit getter'dan); `src/tip_kontrol.c` (checker AS001
+getter'dan); `src/ana.c` (`--mimari` bayrağı). ENABLING PRIMITIF — subsystem GÖÇÜ YOK.]** docs/SUBSYSTEM_SCOPE.md FAZ-0: kalan 5 subsystem'in (kesme/zaman/mmu/
+görev/virtio) irreducible asm'ini (MSR/MRS + bariyer + TLBI) açan tek baskın primitif.
+
+- **KAPSAM DOĞRULAMASI (P1 büyümedi):** satıriçi_asm arch-gate, aarch64 kem_os için TEK *fonksiyonel* target-
+  hardcode. İki hardcode var: (a) AS001 asm arch-check (llvm.c + tip_kontrol.c — HER İKİ yerde), (b) emit edilen
+  `target triple` (llvm.c). AMA (b) clang `-Wno-override-module` ile override ediliyor (kem_os bugün aarch64 boot
+  ediyor — kanıt). datalayout/pointer-size/calling-conv hardcode YOK (IR target-agnostik). → yalnız gate + triple.
+- **Değişiklik (MİNİMAL, çalışma-zamanı seçim):** `KEMGU_HEDEF_MIMARI/TRIPLE` makroları VARSAYILAN kalır; runtime
+  `g_hedef_mimari/g_hedef_triple` (default = makrolar). `llvm_hedef_ayarla/mimari/triple`. AS001 (llvm.c +
+  tip_kontrol.c) + triple emit runtime değerden. `ana.c --mimari arm64|x86_64`. **Bayrak verilmezse davranış BİREBİR
+  eski** (fixpoint/regresyon güvenli — D-268 deseni).
+- **codegen.kem paritesi:** GEREKMEDİ — self-host arm64 asm emit etmez, self_driver `--mimari` kullanmaz, default
+  değişmedi → fixpoint etkilenmez. (Self-host arm64-emit ileride ayrı iş.)
+
+**FALSİFİYE-KANIT (4 kadran + assemble):**
+- arm64 asm + `--mimari arm64`: **rc 1→0**, emit `target triple="aarch64-unknown-none-elf"` + `call i64 asm sideeffect
+  "mrs $0, CNTPCT_EL0"`. clang --target=aarch64 → **`mrs x8, CNTPCT_EL0`** (gerçek instr, d53be028) assemble oldu.
+- arm64 asm, bayraksız (x86_64 default): **rc 1** AS001 (gate KALDIRILMADI, hedefe-BAĞLI).
+- x86_64 asm, default: **rc 0** emit (regresyon yok).
+- x86_64 asm, `--mimari arm64` altında: **rc 1** AS001 (yanlış hedefe sessiz-bozuk-IR yok).
+- Regresyon: snapshot 50/50; FIXPOINT stage1==stage2 BİREBİR; test_tumu TAM YEŞİL.
+
+**SINIR:** P1 yalnız asm-gate + triple; genel target-awareness (datalayout/ABI) GEREKMEDİ (IR agnostik). Context-switch/
+vektör-stub hâlâ irreducible asm (bkz SUBSYSTEM_SCOPE §4). Self-host arm64-emit ayrı. Bu primitif subsystem göçünü
+AÇAR ama göç YAPMAZ (FAZ-1 virtio/FAZ-2 mmu sırada).
+
+---
+
 ## D-268 — SUBSYSTEM/yetki: yetki<R> OUT-PTR ABI + saf-.kem sağlayıcı — kem_os'un SON C bağımlılığı kalktı (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-267).

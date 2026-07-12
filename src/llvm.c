@@ -10,6 +10,10 @@
 #include <string.h>
 #include <inttypes.h>
 
+/* D-269 (P1): hedef mimari/triple çalışma-zamanı selector'ı tip.c'de TANIMLI
+ * (hem checker=tip_kontrol.o hem codegen=llvm.o ile linklenen düşük-bağımlılıklı TU;
+ * llvm.o'yu unit-testlere sokmadan paylaşım). Buradan getter ile erişilir. */
+
 /*
  * KEMGU LLVM IR Backend v2 (ADIM 18)
  * ===================================
@@ -4979,8 +4983,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
              * asm EMIT EDILMEZ (bozuk IR yasak) + olumcul hata sayilir;
              * cagiran (ana.c) derlemeyi hata koduyla bitirir. */
             {
-                const char *hm = KEMGU_HEDEF_MIMARI;
-                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                const char *hm = llvm_hedef_mimari();   /* D-269: çalışma-zamanı hedef */
+                int hm_uz = (int)strlen(hm);
                 if (!d->veri.satirici_asm.mimari ||
                     d->veri.satirici_asm.mimari_uz != hm_uz ||
                     memcmp(d->veri.satirici_asm.mimari, hm,
@@ -5678,8 +5682,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    /* C5/C8: triple tek kaynaktan (llvm.h) — hedefe-duyarli secim C8'de */
-    fputs("target triple = \"" KEMGU_HEDEF_TRIPLE "\"\n\n", out);
+    /* C5/D-269: triple çalışma-zamanı hedeften (varsayılan makro; --mimari ile aarch64) */
+    fprintf(out, "target triple = \"%s\"\n\n", llvm_hedef_triple());
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);

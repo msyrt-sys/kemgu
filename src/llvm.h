@@ -38,6 +38,16 @@
 #define KEMGU_HEDEF_MIMARI "x86_64"
 #define KEMGU_HEDEF_TRIPLE "x86_64-pc-windows-gnu"
 
+/* D-269 (P1): satıriçi_asm arch-gate + emit edilen triple ÇALIŞMA-ZAMANI seçilebilir.
+ * Varsayılan = yukarıdaki makrolar (x86_64) → bayrak verilmezse davranış BİREBİR eskisi
+ * (fixpoint/regresyon güvenli). `--mimari arm64` verilince asm 'mimari:' etiketi 'arm64'
+ * ile karşılaştırılır + triple aarch64 emit edilir → aarch64 sysreg/bariyer asm .kem'de
+ * açılır (kem_os subsystem göçü önkoşulu). MİNİMAL: yalnız asm-gate + triple; başka target-
+ * awareness YOK (KEMGU IR zaten target-agnostik; triple clang --target ile override edilir). */
+void llvm_hedef_ayarla(const char *mimari, const char *triple);
+const char *llvm_hedef_mimari(void);   /* geçerli asm arch-tag (AS001 karşılaştırması) */
+const char *llvm_hedef_triple(void);   /* geçerli emit triple */
+
 /* AST'den LLVM IR text uret. NULL guvenli.
  * Donus: olumcul codegen hatasi sayisi (AS001 mimari uyusmazligi).
  * >0 ise cikti IR'i KULLANILMAMALI (hatali asm bloklari emit edilmedi);
