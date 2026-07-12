@@ -1,0 +1,168 @@
+// kem_virtio_blk.kem — FAZ B1 (D-271): SAF-.kem VirtIO-Blk blok I/O sürücüsü.
+// ============================================================================
+// Kanıtlı-C kdl_virtio.c'nin saf-.kem yeniden gerçekleştirmesi (real-OS bring-up,
+// migration DEĞİL). VirtIO-MMIO v2 (modern), split virtqueue: desc[] + avail + used.
+// 512-baytlık sektör oku/yaz → gerçek disk kalıcılığı (QEMU -drive).
+//
+// SAF-.kem primitifleri (hepsi kanıtlandı, D-269 P1 + çıplak-tier):
+//   • MMIO + DMA-RAM erişimi = çıplak VOLATILE deref (kdl_mmio deseni; store/load volatile).
+//   • dsb sy bariyeri        = satıriçi_asm arm64 (--mimari arm64; DMA↔MMIO sıralama).
+//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed),
+//                              alt-tamponlar MANUEL 16-hizalı offset (P2 manuel over-align —
+//                              A1'in 4KB-align'ının 16B önkoşul-kanıtı).
+//   • Cross-file YOK          = tamamen kendi-içinde (malloc/memcpy YOK → T002 YOK). Build'de
+//                              kem_os.kem ile CAT edilir (tek birim → çıplak→çıplak çözülür).
+// Register offsetleri kdl_virtio.c / drivers/virtio/constants.kem ile birebir.
+
+// --- VirtIO-MMIO v2 register offsetleri (ondalık) ---
+sabit VM_MAGIC: tam64      = 0;
+sabit VM_VERSION: tam64    = 4;
+sabit VM_DEVICE_ID: tam64  = 8;
+sabit VM_DRV_FEAT: tam64   = 32;
+sabit VM_DRV_FEAT_SEL: tam64 = 36;
+sabit VM_QUEUE_SEL: tam64  = 48;
+sabit VM_QUEUE_NUM_MAX: tam64 = 52;
+sabit VM_QUEUE_NUM: tam64  = 56;
+sabit VM_QUEUE_READY: tam64 = 68;
+sabit VM_QUEUE_NOTIFY: tam64 = 80;
+sabit VM_STATUS: tam64     = 112;
+sabit VM_Q_DESC_LO: tam64  = 128;
+sabit VM_Q_DESC_HI: tam64  = 132;
+sabit VM_Q_DRV_LO: tam64   = 144;
+sabit VM_Q_DRV_HI: tam64   = 148;
+sabit VM_Q_DEV_LO: tam64   = 160;
+sabit VM_Q_DEV_HI: tam64   = 164;
+
+sabit VBLK_MAGIC_DEG: tam32 = 1953655158;   // 0x74726976 "virt"
+sabit VBLK_DEV_BLK: tam32   = 2;
+
+// DMA taban: SABİT identity-map RAM (0x43000000 = 1124073472). EL0 (0x42000000) üstü,
+// heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB haritalı. 16-hizalı.
+küresel değişken vblk_dma: tam64 = 1124073472;
+
+// DMA alt-tampon offsetleri (hepsi 16'nın katı — MANUEL over-align):
+//   desc  @ +0    (8×16 = 128B),  avail @ +128 (22B→16-pad),  used @ +160 (70B→16-pad),
+//   req   @ +256  (16B),          data  @ +272 (512B),        status @ +784 (1B).
+sabit DO_DESC: tam64   = 0;
+sabit DO_AVAIL: tam64  = 128;
+sabit DO_USED: tam64   = 160;
+sabit DO_REQ: tam64    = 256;
+sabit DO_DATA: tam64   = 272;
+sabit DO_STATUS: tam64 = 784;
+
+// --- Çıplak VOLATILE erişim yardımcıları (MMIO + DMA-RAM; store/load volatile) ---
+çıplak işlev vblk_y32(adr: tam64, deger: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = deger; }
+çıplak işlev vblk_o32(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
+çıplak işlev vblk_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
+çıplak işlev vblk_y16(adr: tam64, deger: dtam16) { değişken p: *dtam16 = adr olarak *dtam16; *p = deger; }
+çıplak işlev vblk_o16(adr: tam64) -> dtam16 { değişken p: *dtam16 = adr olarak *dtam16; ver *p; }
+çıplak işlev vblk_y8(adr: tam64, deger: dtam8) { değişken p: *dtam8 = adr olarak *dtam8; *p = deger; }
+çıplak işlev vblk_o8(adr: tam64) -> dtam8 { değişken p: *dtam8 = adr olarak *dtam8; ver *p; }
+
+// dsb sy — DMA descriptor yazımı ↔ MMIO notify sıralaması (P1 arm64 asm).
+çıplak işlev vblk_dsb() {
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"dsb sy"# bozulan("~{memory}") }
+    }
+}
+
+// Caller'ın data tamponunu doldurup okuması için erişimciler (vq_data = vblk_dma+DO_DATA).
+çıplak işlev vblk_data_yaz(i: tam32, deger: dtam8) { vblk_y8(vblk_dma + DO_DATA + (i olarak tam64), deger); }
+çıplak işlev vblk_data_oku(i: tam32) -> dtam8 { ver vblk_o8(vblk_dma + DO_DATA + (i olarak tam64)); }
+
+// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). 32 slot × 0x200 @ 0x0a000000.
+çıplak işlev vblk_bul() -> tam64 {
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+        eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
+            eğer vblk_o32(base + VM_DEVICE_ID) == VBLK_DEV_BLK { ver base; }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// Cihazı başlat: reset → feature(VERSION_1) → virtqueue 0 → DRIVER_OK. 0=ok, negatif=hata.
+çıplak işlev vblk_kur(base: tam64) -> tam32 {
+    eğer vblk_o32(base + VM_VERSION) != 2 { ver 0 - 1; }
+    vblk_y32(base + VM_STATUS, 0);          // reset
+    vblk_y32(base + VM_STATUS, 1);          // ACK
+    vblk_y32(base + VM_STATUS, 3);          // ACK|DRIVER
+    // Feature: yalnız bit32 (VERSION_1). düşük feature yok.
+    vblk_y32(base + VM_DRV_FEAT_SEL, 1);
+    vblk_y32(base + VM_DRV_FEAT, 1);
+    vblk_y32(base + VM_DRV_FEAT_SEL, 0);
+    vblk_y32(base + VM_DRV_FEAT, 0);
+    vblk_y32(base + VM_STATUS, 11);         // ACK|DRIVER|FEAT_OK (1|2|8)
+    eğer (vblk_o32(base + VM_STATUS) & 8) == 0 { ver 0 - 2; }
+    vblk_y32(base + VM_QUEUE_SEL, 0);
+    eğer vblk_o32(base + VM_QUEUE_NUM_MAX) < 8 { ver 0 - 3; }
+    vblk_y32(base + VM_QUEUE_NUM, 8);
+    // Ring fiziksel adresleri (identity-map → VA=PA).
+    değişken da: tam64 = vblk_dma + DO_DESC;
+    değişken av: tam64 = vblk_dma + DO_AVAIL;
+    değişken us: tam64 = vblk_dma + DO_USED;
+    vblk_y32(base + VM_Q_DESC_LO, da olarak tam32);   vblk_y32(base + VM_Q_DESC_HI, (da >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DRV_LO,  av olarak tam32);   vblk_y32(base + VM_Q_DRV_HI,  (av >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DEV_LO,  us olarak tam32);   vblk_y32(base + VM_Q_DEV_HI,  (us >> 32) olarak tam32);
+    vblk_y32(base + VM_QUEUE_READY, 1);
+    vblk_y32(base + VM_STATUS, 15);         // ACK|DRIVER|FEAT_OK|DRIVER_OK
+    ver 0;
+}
+
+// 3-descriptor zincirini kur (başlık RO → veri → durum WO). type: 0=oku(IN), 1=yaz(OUT).
+// veri descriptor'ı: oku'da cihaz-YAZAR (WRITE flag), yaz'da cihaz-OKUR (flag yok).
+çıplak işlev vblk_zincir(sektor: tam64, tip: tam32, veri_write: tam32) {
+    değişken req: tam64 = vblk_dma + DO_REQ;
+    değişken data: tam64 = vblk_dma + DO_DATA;
+    değişken st: tam64 = vblk_dma + DO_STATUS;
+    değişken d: tam64 = vblk_dma + DO_DESC;
+    // blk_req: type(u32)@0, reserved(u32)@4, sector(u64)@8
+    vblk_y32(req + 0, tip);
+    vblk_y32(req + 4, 0);
+    vblk_y64(req + 8, sektor);
+    vblk_y8(st, 255 olarak dtam8);          // status = 0xff (VIRTIO_BLK_S_OK=0 bekliyoruz)
+    // desc[0]: req, len16, NEXT(1), next=1
+    vblk_y64(d + 0, req); vblk_y32(d + 8, 16); vblk_y16(d + 12, 1 olarak dtam16); vblk_y16(d + 14, 1 olarak dtam16);
+    // desc[1]: data, len512, NEXT|(veri_write?WRITE), next=2   (flags = 1 | (veri_write?2:0))
+    değişken f1: dtam16 = (1 + veri_write * 2) olarak dtam16;
+    vblk_y64(d + 16, data); vblk_y32(d + 24, 512); vblk_y16(d + 28, f1); vblk_y16(d + 30, 2 olarak dtam16);
+    // desc[2]: status, len1, WRITE(2), next=0
+    vblk_y64(d + 32, st); vblk_y32(d + 40, 1); vblk_y16(d + 44, 2 olarak dtam16); vblk_y16(d + 46, 0 olarak dtam16);
+}
+
+// Zinciri gönder (avail bump + notify) + used ring poll + status kontrol. 0=ok, negatif=hata.
+çıplak işlev vblk_gonder(base: tam64) -> tam32 {
+    değişken av: tam64 = vblk_dma + DO_AVAIL;
+    değişken usaddr: tam64 = vblk_dma + DO_USED + 2;   // used.idx offset
+    değişken idx: dtam16 = vblk_o16(av + 2);           // avail.idx
+    değişken once: dtam16 = vblk_o16(usaddr);          // used.idx (öncesi)
+    değişken slot: tam64 = ((idx olarak tam64) % 8) * 2;
+    vblk_y16(av + 4 + slot, 0 olarak dtam16);          // ring[idx%8] = desc0 (zincir başı)
+    vblk_dsb();
+    vblk_y16(av + 2, (idx + (1 olarak dtam16)) olarak dtam16);          // avail.idx++
+    vblk_dsb();
+    vblk_y32(base + VM_QUEUE_NOTIFY, 0);               // queue 0 bildir
+    // used.idx değişene kadar poll (volatile → hoist yok). timeout ile QEMU-hang koruması.
+    değişken spin: tam32 = 0;
+    iken vblk_o16(usaddr) == once {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > 100000000 { ver 0 - 4; }
+    }
+    eğer vblk_o8(vblk_dma + DO_STATUS) != (0 olarak dtam8) { ver 0 - 5; }
+    ver 0;
+}
+
+// `sektor`ü vq_data'ya OKU (caller vblk_data_oku ile okur). 0=ok.
+çıplak işlev vblk_oku(base: tam64, sektor: tam64) -> tam32 {
+    vblk_zincir(sektor, 0, 1);              // type=IN, veri cihaz-YAZAR
+    ver vblk_gonder(base);
+}
+
+// vq_data'daki (caller vblk_data_yaz ile doldurur) 512 baytı `sektor`e YAZ (kalıcı). 0=ok.
+çıplak işlev vblk_yaz(base: tam64, sektor: tam64) -> tam32 {
+    vblk_zincir(sektor, 1, 0);              // type=OUT, veri cihaz-OKUR
+    ver vblk_gonder(base);
+}

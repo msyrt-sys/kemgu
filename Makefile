@@ -908,8 +908,11 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
 calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o
-	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
+	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
+	@# D-271 FAZ-B1: virtio-blk .kem sürücüsü kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
+	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık.
+	@cat runtime/kem_virtio_blk.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
 		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
@@ -1002,9 +1005,24 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: panik ariza-yoluna WIRE edilmemis (call @panik yok)"; exit 1; \
 	fi
 	@echo "  (panik+exc .kem-define + panik ariza-branch'ine wire — .kem sistem-katmani)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
+	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@disk_rw_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: disk_rw_testi WIRE edilmemis — kem_os gercek disk I/O calistirmiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "dsb sy"' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: dsb sy bariyeri (P1 arm64 asm) emit edilmedi — DMA siralama yok"; exit 1; \
+	fi
+	@echo "  (vblk_bul/kur/oku/yaz .kem-define + disk_rw_testi wire + dsb sy P1-asm — virtio-blk SAF-.kem)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.elf 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_os.out; echo "--- son ---"; \
 		if grep -q "KEMGU KEM-OS OK" $(BUILD)/kem_os.out \
@@ -1012,10 +1030,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[2\] HEAP DIZI OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-2c .kem-native OS gecti: A+B+C+E + .kem panik/exc-handler TEK boot'ta (KEMGU KEM-OS OK)."; \
+		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
+		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-B1 .kem-native OS gecti: [1..5] + GERCEK virtio-blk DISK RW OK (sektor yaz->oku->eslesme, SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] alt-sistem markerlari bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' (gercek disk RW) bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

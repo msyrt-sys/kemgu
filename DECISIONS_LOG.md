@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-271 — REAL-OS FAZ-B1: saf-.kem virtio-blk GERÇEK blok I/O kem_os'ta AKTİF — [6] DISK RW OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-269; D-270 KALİBRASYON no-commit).
+
+**Karar [ETKİ: `runtime/kem_virtio_blk.kem` (YENİ, saf-.kem virtqueue sürücü); `test/ornekler/kem_os.kem`
+(disk_rw_testi + [6] DISK bloğu); `Makefile` (calistir_kem_os_arm: CAT + `--mimari arm64` + virtio-blk cihaz +
+DISK RW OK gate). REAL-OS BRING-UP — migration DEĞİL, AKTİVASYON.]** BRINGUP_ROADMAP FAZ-B1: kanıtlı-C
+kdl_virtio.c'nin saf-.kem yeniden gerçekleştirmesi + kem_os'ta GERÇEK sektör I/O.
+
+- **Saf-.kem virtqueue sürücü (`kem_virtio_blk.kem`):** VirtIO-MMIO v2 feature-negotiate + queue-setup +
+  3-descriptor zincir + notify + used-ring poll. Primitifler: (a) **çıplak VOLATILE deref** (MMIO + DMA-RAM;
+  store/load volatile — çok-genişlik: i64 desc.addr / i32 len / i16 flags/idx / i8 data); (b) **dsb sy** =
+  satıriçi_asm arm64 (D-269 P1, `--mimari arm64`); (c) **DMA tampon** = SABİT identity-map RAM 0x43000000
+  (EL0 üstü, 128MB-backed, kdl_mmu Normal-WB), alt-tamponlar **MANUEL 16-hizalı offset**.
+- **Cross-file:** sürücü tamamen kendi-içinde (malloc/memcpy YOK → **T002 YOK**). Build'de kem_os.kem ile **CAT**
+  (tek birim → çıplak→çıplak çözülür; ayrı SOURCE-dosya + tek OBJ). `dış işlev` extern yok → CAT deseni.
+
+**FALSİFİYE-KANIT (GERÇEK fonksiyonel, sentetik DEĞİL — D-264/D-268 dersi):**
+- **kem_os QEMU (virtio-blk cihazı + disk.img): `[6] DISK RW OK`** — sektör 7'ye değişken pattern ((i%251)+3)
+  YAZ → data temizle → geri OKU → 512 byte-byte EŞLEŞME. Gerçek disk I/O (magic-probe DEĞİL). Seri çıktı
+  denetlendi: [1..5]+[6] DISK RW OK+KEM-OS OK, garbling YOK.
+- **gate:** kem_os.ll `define @vblk_bul/kur/oku/yaz` + `call @disk_rw_testi` + `asm sideeffect "dsb sy"`.
+- **Regresyon:** C virtio_rw kernel `DISK RW OK` (kdl_virtio.c DEĞİŞMEDİ); FIXPOINT stage1==stage2 BİREBİR
+  (codegen.kem/kemgu.exe dokunulmadı); test_tumu TAM YEŞİL.
+
+**P2 YARGISI (A1 4KB önkoşulu): MANUEL 16B over-align ÇALIŞIYOR** — sabit RAM taban + 16-katı offset'ler
+(desc@0/avail@128/used@160/req@256/data@272/status@784) gerçek DMA'da doğrulandı. **4KB'ye ÖLÇEKLENİR:**
+aynı desen ((taban+4095)&~4095 veya 4KB-hizalı sabit taban) — MMU sayfa-tablosu için A1'de kullanılabilir.
+
+**DÜRÜST SINIR (C-removal FAZ-A-blocked):** C kdl_virtio.c (bm_a64_virtio.o) kem_os link'inden ÇIKARILMADI —
+C-kesme (bm_a64_kesme.o, boot vektör tablosu → kdl_syscall_isle → kdl_dosya_* → kdl_virtio_blk_*) transitif
+referans ediyor (D-270 ters-bağımlılık). kem_os'un GERÇEK disk yolu artık .kem vblk_* (aktivasyon TAM); ölü
+C kdl_virtio_blk_* kesme-dead-dep ile kalıyor. Tam C-removal = kesme'nin .kem'e alınması (FAZ-A2/A5). Bu görev
+AKTİVASYONU tamamladı (Yasa-2 gerçek işlevsellik); C-temizlik ayrı faz.
+
+---
+
 ## D-269 — CODEGEN P1: satıriçi_asm arch-gate hedefe-duyarlı (`--mimari arm64`) — aarch64 sysreg/bariyer asm .kem'de AÇILDI (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-268).

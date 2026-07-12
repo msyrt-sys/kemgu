@@ -275,6 +275,32 @@ işlev kem_istisna_isle(far: dtam64, esr: dtam64) -> tam32 {
 }
 
 // ============================== ÇEKİRDEK ===============================
+// [6] DISK — saf-.kem virtio-blk GERÇEK sektör yaz→oku→byte-eşleşme (D-271, FAZ B1).
+// vblk_* sürücüsü kem_virtio_blk.kem'den gelir (build'de kem_os ile CAT edilir → tek birim,
+// çıplak→çıplak çözülür, T002 yok). Sektör 7'ye değişken pattern yaz → data'yı temizle →
+// geri oku → byte-byte karşılaştır. GERÇEK disk I/O (magic-probe DEĞİL); disk yoksa 0 döner.
+işlev disk_rw_testi() -> tam32 {
+    değişken base: tam64 = vblk_bul();
+    eğer base == 0 { ver 0; }                       // virtio-blk cihazı yok
+    eğer vblk_kur(base) != 0 { ver 0; }             // kurulum hatası
+    değişken i: tam32 = 0;
+    iken i < 512 {                                   // pattern: (i%251)+3 (sabit değil → gerçek round-trip)
+        vblk_data_yaz(i, ((i % 251) + 3) olarak dtam8);
+        i = i + 1;
+    }
+    eğer vblk_yaz(base, 7) != 0 { ver 0; }
+    i = 0;
+    iken i < 512 { vblk_data_yaz(i, 0 olarak dtam8); i = i + 1; }   // temizle (okuma diskten gelmeli)
+    eğer vblk_oku(base, 7) != 0 { ver 0; }
+    değişken eslesme: tam32 = 1;
+    i = 0;
+    iken i < 512 {
+        eğer vblk_data_oku(i) != ((i % 251) + 3) olarak dtam8 { eslesme = 0; }
+        i = i + 1;
+    }
+    ver eslesme;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -319,6 +345,16 @@ işlev main() -> tam32 {
         exc_ok = 1;
     } değilse {
         uart_satir("[5] EXC HATA");
+    }
+
+    // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
+    // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli
+    // gate ayrıca "DISK RW OK" bekler (gerçek sektör yaz→oku→eşleşme, sentetik değil).
+    değişken disk_ok: tam32 = disk_rw_testi();
+    eğer disk_ok == 1 {
+        uart_satir("[6] DISK RW OK");
+    } değilse {
+        uart_satir("[6] DISK YOK/HATA (disksiz boot normal)");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
