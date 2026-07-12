@@ -328,6 +328,19 @@ işlev fs_rw_testi() -> tam32 {
     ver eslesme;
 }
 
+// [8] NET DEV — saf-.kem virtio-net (kem_virtio_net.kem, FAZ-C) cihaz bringup.
+// bul(DeviceID=1) + kur(feature-negotiate + RX/TX queue + DRIVER_OK) + device-provided
+// MAC config oku (cihaz canlı kanıtı). Gerçek: FEAT_OK device onayı + MAC nonzero.
+işlev net_dev_testi() -> tam32 {
+    değişken base: tam64 = vnet_bul();
+    eğer base == 0 { ver 0; }                          // net cihazı yok
+    eğer vnet_kur(base) != 0 { ver 0; }                // negotiate/queue hatası (FEAT_OK device onayı içinde)
+    eğer (vblk_o32(base + VM_STATUS) & 4) == 0 { ver 0; }   // DRIVER_OK bit
+    değişken mac0: tam32 = vnet_mac_w0(base);
+    eğer mac0 == 0 { ver 0; }                          // MAC device-provided nonzero → cihaz canlı
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -390,6 +403,14 @@ işlev main() -> tam32 {
         uart_satir("[7] FS RW OK");
     } değilse {
         uart_satir("[7] FS YOK/HATA (disksiz boot normal)");
+    }
+
+    // [8] NET DEV — saf-.kem virtio-net cihaz bringup (FAZ-C). Additive.
+    değişken net_ok: tam32 = net_dev_testi();
+    eğer net_ok == 1 {
+        uart_satir("[8] NET DEV OK");
+    } değilse {
+        uart_satir("[8] NET YOK/HATA (netsiz boot normal)");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

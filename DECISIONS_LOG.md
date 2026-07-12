@@ -5,6 +5,32 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-273 — REAL-OS FAZ-C: saf-.kem virtio-net transport kem_os'ta AKTİF — [8] NET DEV OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-272).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (YENİ, saf-.kem virtio-net transport); `test/ornekler/kem_os.kem`
+(net_dev_testi + [8] NET bloğu); `Makefile` (CAT + net + QEMU virtio-net-device + NET DEV OK gate). REAL-OS
+BRING-UP FAZ-C — AKTİVASYON. bring-up loop görev virtio-net.]** Kanıtlı-C kdl_virtio_net.c'nin saf-.kem
+transport yeniden gerçekleştirmesi (POLLED, IRQ YOK → FAZ-A bağımsız).
+
+- **Saf-.kem virtio-net (`kem_virtio_net.kem`):** cihaz bul (DeviceID=1) + feature-negotiate + RX queue0
+  (8 device-yazar 2048B tampon) + TX queue1 + DRIVER_OK. Genel VOLATILE/dsb yardımcıları vblk_*'dan (aynı
+  CAT birimi). DMA = SABİT identity-RAM 0x44000000 (blk 0x43000000 üstü 16MB), MANUEL 16-hizalı offset (RX
+  ring + 8×2048 rx_buf + TX ring, ~19KB). Allocator YOK, IRQ YOK (used-ring poll deseni), T002 yok.
+- **[8] gerçek fonksiyonel:** vnet_kur içinde FEAT_OK read-back (device VERSION_1'i KABUL etmezse -2) +
+  DRIVER_OK + **device-PROVIDED MAC config** (base+0x100, nonzero) → cihaz canlı + config erişilir. Sentetik
+  değil (cihaz feature-negotiate'e yanıt verir + MAC sağlar).
+
+**FALSİFİYE-KANIT:** kem_os QEMU (`-netdev user -device virtio-net-device`): `[8] NET DEV OK` — [1..8]
+kümülatif (DISK RW OK + FS RW OK + NET DEV OK), garbling yok. gate: kem_os.ll `define @vnet_bul/kur` +
+`call @net_dev_testi`. [6]/[7] regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**SINIR:** [8] transport bringup (paket YOK). Paket TX/RX (ARP/[9], ICMP/[10]) sonraki rung. virtio-net
+POLLED (kesme/IRQ gerekmez → FAZ-A'dan bağımsız, roadmap doğrulandı).
+
+---
+
 ## D-272 — REAL-OS FAZ-B2: saf-.kem minifs dosya sistemi kem_os'ta AKTİF — [7] FS RW OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-271).

@@ -911,7 +911,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
-	@cat runtime/kem_virtio_blk.kem runtime/kem_minifs.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
@@ -1024,6 +1024,14 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: fs_rw_testi WIRE edilmemis — kem_os gercek dosya I/O calistirmiyor"; exit 1; \
 	fi
 	@echo "  (mfs_format/dosya_yaz/dosya_oku .kem-define + fs_rw_testi wire — minifs SAF-.kem, virtio-blk ustunde)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-net, FAZ-C): kem_os saf-.kem net cihaz bringup:"
+	@if ! grep -qE "define[^@]*@vnet_(bul|kur)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_* virtio-net define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_dev_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_dev_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_bul/kur .kem-define + net_dev_testi wire — virtio-net SAF-.kem, POLLED)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
 		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
@@ -1031,6 +1039,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 			-global virtio-mmio.force-legacy=false \
 			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
 			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.elf 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_os.out; echo "--- son ---"; \
 		if grep -q "KEMGU KEM-OS OK" $(BUILD)/kem_os.out \
@@ -1040,10 +1049,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
-		   && grep -q "FS RW OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-B2 .kem-native OS gecti: [1..5] + virtio-blk DISK RW OK + minifs FS RW OK (SAF-.kem)."; \
+		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
+		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + virtio-net NET DEV OK (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' + 'NET DEV OK' bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \
