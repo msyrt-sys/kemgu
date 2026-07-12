@@ -1,0 +1,30 @@
+// cg_skaler_deref.kem — D-267: skaler pointer deref YÜK-GENİŞLİĞİ C↔self-host parite.
+// -----------------------------------------------------------------------------
+// `*tamN` deref-READ, pointee'nin genişliğinde yük etmeli (i8/i16/i64), i32 DEĞİL.
+// C tarafı D-265'te (src/llvm.c pointee_llvm_tip) kapandı; self-host codegen.kem
+// D-266 sonrası hâlâ i32 yüklüyordu (LATENT sapma) → D-267 bunu kapatır.
+//
+// Genişlik-duyarlı falsifiye: her dal yük-genişliği yanlışsa TERS sonuç verir →
+// codegen_diff (exit-kodu) sapmayı yakalar. Host-güvenli (stack değişken adresi,
+// little-endian byte düzeni). Beklenen exit = 24 (i8+i16 sıfır dalı; i64 sıfır-değil).
+//   Fix ÖNCESİ self-host (hepsi i32): *p8=256≠0, *p16=65536≠0, *p64(low32)=0 → 32.
+//   Fix SONRASI self-host (i8/i16/i64): *p8=0, *p16=0, *p64=2^32≠0 → 24 == C. PARİTE.
+işlev main() -> tam32 {
+    güvensiz {
+        değişken toplam: tam32 = 0;
+        // *tam8: 256 = 0x0100 → byte0 = 0x00. i8-yük → 0 (eşit). i32-yük → 256.
+        değişken v8: tam64 = 256;
+        değişken p8: *tam8 = (&v8) olarak *tam8;
+        eğer *p8 == 0 { toplam = toplam + 8; }
+        // *tam16: 65536 = 0x10000 → low16 = 0x0000. i16-yük → 0. i32-yük → 65536.
+        değişken v16: tam64 = 65536;
+        değişken p16: *tam16 = (&v16) olarak *tam16;
+        eğer *p16 == 0 { toplam = toplam + 16; }
+        // *tam64: 4294967296 = 2^32 → low32 = 0, tam64 = 2^32 ≠ 0.
+        // i64-yük → ≠0 (dal alınmaz). i32-yük → low32 = 0 → dal alınır (+32).
+        değişken v64: tam64 = 4294967296;
+        değişken p64: *tam64 = (&v64) olarak *tam64;
+        eğer *p64 == 0 { toplam = toplam + 32; }
+        ver toplam;
+    }
+}

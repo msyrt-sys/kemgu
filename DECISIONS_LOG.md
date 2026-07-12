@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-267 — CODEGEN FIX: self-host `codegen.kem` skaler-pointee deref-READ paritesi (D-265 LATENT sapması kapandı) (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-266).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (Ayr.cg_apointee alanı + cg_var_ekle/initializer + cg_var_pointee_bul +
+param_pointee + DEGISKEN/PARAMETRE pointee-set + deref-READ pointee-yük); `test/cg_korpus/cg_skaler_deref.kem` (yeni
+falsifiye korpusu). CODEGEN CORRECTNESS — self-host↔C parite.]** D-265'in DÜRÜST-SINIR olarak kaydettiği latent
+sapmanın kalıcı onarımı: C-derleyici `*p` deref-READ'i pointee-tipinden (`pointee_llvm_tip`) yüklüyordu ama self-host
+`codegen.kem` skaler pointee için hâlâ i32 yüklüyordu (satır 2731). `*tam8/*tam16/*tam64` beklenen-NULL deref'te
+C↔self-host DIVERGE ediyordu. D-267 self-host'a skaler-pointee izleme ekleyerek D-265'in C'de yaptığının BİREBİR aynasını
+kurar.
+
+- **`codegen.kem` (skaler-pointee plumbing, C `pointee_llvm_tip` aynası):**
+  - `Ayr.cg_apointee: Dizi<metin>` — cg_ad/cg_areg/cg_atip/cg_aref/cg_aelem'e PARALEL yeni tablo; `*tamN` pointer
+    değişkeni ise skaler pointee LLVM tipi ("i8"/"i16"/"i64"), değilse "".
+  - `cg_var_ekle` her eklemede `""` iter (dizi paralel kalır); `cg_var_pointee_bul(ad)` ad→pointee (append-only,
+    en-son-kazanır).
+  - **DEGISKEN handler:** annot TIP_POINTER ise `vpointee = ll_tip(pointee-çocuk)`; `cg_var_ekle` sonrası
+    `dizi_yaz(cg_apointee, son, vpointee)`.
+  - **PARAMETRE (`param_pointee` yardımcısı, C llvm.c:5494 aynası):** `*tamN` param → pointee tipi; registrasyon
+    sonrası set.
+  - **deref-READ (`deref*`):** yapı-pointee (`cg_var_ref_bul`→`%Yapi`) yoksa `cg_var_pointee_bul`; ikisi de yoksa i32
+    varsayılan (kanonik `*tam32`/`mantıksal`). C OP_DEREFERANS ile birebir.
+
+**FALSİFİYE-KANIT (`cg_skaler_deref.kem`, genişlik-duyarlı — yanlış yük-genişliği TERS exit verir):**
+- **C-codegen (oracle):** `load i8/i16/i64` → **exit 24**.
+- **ESKİ self-host (HEAD 1c0c984, D-267 öncesi):** hepsi `load i32` → **exit 32 → DIVERGE** (32 ≠ 24). ✅ falsifiye görünür.
+- **YENİ self-host (D-267 fix):** `load i8/i16/i64` → **exit 24 → PARİTE**. Self-host `*tam8==0` artık `load volatile i8`.
+- **Regresyon YOK:** **FIXPOINT stage1==stage2 BİREBİR (33371 satır)** — SERT KAPI geçti; lexer+parser+checker 90/90;
+  codegen_diff **76/76** (cg_skaler_deref dâhil); test_tumu TAM YEŞİL; kem_os QEMU TEMİZ boot ([1..5]+MMIO+KEM-OS OK).
+  (fixpoint korunuyor çünkü codegen.kem kendisi raw `*tamN` skaler-deref kullanmaz — cg_apointee izleme çıktıyı yalnız
+  gerçek skaler-deref'te değiştirir.)
+
+**KAPANIŞ:** D-265'in [[project-kem-codegen-pointer-gaps]] latent-sapma maddesi ÇÖZÜLDÜ — C ve self-host codegen artık
+skaler pointer deref'te birebir. Kalan pointer-gap yok (deref-READ tam parite).
+
+---
+
 ## D-266 — SUBSYSTEM/mmio: saf-.kem çıplak VOLATILE mmio oku32/yaz32 kem_os'a ENTEGRE (2026-07-11) [ORTA]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-265).

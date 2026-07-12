@@ -40,6 +40,8 @@ yapı Ayr {
     cg_aref: Dizi<metin>;// CG7c: ptr ise işaret ettiği yapı adı ("Ayr"); değilse ""
     son_ref: metin;      // CG7c: son ifade sonucu ptr ise işaret ettiği yapı adı
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
+    cg_apointee: Dizi<metin>;// D-267: *tamN pointer değişkeni ise skaler pointee LLVM tipi
+                             // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
     beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
     son_elem: metin;     // CG8: son ifade Dizi ise eleman tipi
@@ -1928,6 +1930,7 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_atip, tip);   // CG6: LLVM tipi
     dizi_ekle(p.cg_aref, ref);   // CG7c: ptr → işaret edilen yapı
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
+    dizi_ekle(p.cg_apointee, ""); // D-267: varsayılan "" (skaler pointer decl'i dizi_yaz ile set eder)
     ver 0;
 }
 // CG-SCOPE: leksik kapsam kapanışı. Blok/döngü/eşleş-kolu girişinde alınan
@@ -1951,6 +1954,15 @@ işlev cg_var_ref_bul(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
     iken i >= p.cg_base {
         eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_aref, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+// D-267: *tamN pointer değişkeninin skaler pointee LLVM tipi ("i8"/.../"i64"); değilse "".
+işlev cg_var_pointee_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_apointee, i); }
         i = i - 1;
     }
     ver "";
@@ -2723,15 +2735,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             ver rs;
         }
         eğer metin_esit(op, "deref*") {   // *x — ptr'den yükle (C llvm.c:2490)
-            // C: yuk_tip = beklenen!="ptr" ? beklenen : "i32". codegen.kem'de
-            // skaler beklenen-tip plumbing yok → skaler pointee i32 (C fallback
-            // ile aynı; canonical güvensiz `*p:*tam32` → i32). Yapı pointee'si
-            // operand ref'inden çözülür. i64/diğer skaler pointee beklenen-tip
-            // bağlamı gerektirir (ayrı iş, deref'in i32 dışı genişlemesi).
+            // D-267: yük-tipi POINTEE'den (C llvm.c OP_DEREFERANS aynası; D-265 latent
+            // parite kapandı). Yapı pointee → operand ref'inden (%Yapi); skaler pointee
+            // (*tam8/16/64) → cg_apointee'den (i8/i16/i64). Hiçbiri yoksa i32 varsayılan
+            // (canonical *tam32 / mantıksal). Böylece self-host `*tam8==0` → i8-yük (C ile birebir).
             değişken yuk: metin = "i32";
             eğer metin_esit(dizi_al(p.a_ad, opnode), "TANIMLAYICI") {
                 değişken pref: metin = cg_var_ref_bul(p, dizi_al(p.a_deg, opnode));
                 eğer metin_uzunluk(pref) > 0 { yuk = metin_birlestir("%", pref); }
+                değilse {
+                    değişken sptr: metin = cg_var_pointee_bul(p, dizi_al(p.a_deg, opnode));
+                    eğer metin_uzunluk(sptr) > 0 { yuk = sptr; }
+                }
             }
             değişken r: tam32 = yeni_reg(p);
             değişken rs: metin = reg_str(r);
@@ -3247,11 +3262,17 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
         değişken vtip: metin = "i32";
         değişken velem: metin = "";
+        değişken vpointee: metin = "";   // D-267: *tamN ise skaler pointee LLVM tipi
         değişken annot: tam32 = 0;
         eğer cs >= 2 {
-            vtip = ll_tip(p, dizi_al(p.cocuk, cb)); annot = 1;
-            velem = ll_eleman_tip(p, dizi_al(p.cocuk, cb));   // Dizi<T> → eleman
+            değişken annot_node: tam32 = dizi_al(p.cocuk, cb);
+            vtip = ll_tip(p, annot_node); annot = 1;
+            velem = ll_eleman_tip(p, annot_node);             // Dizi<T> → eleman
             p.beklenen_elem = velem;                          // CG8: [] için bağlam
+            // D-267: *tamN pointer → skaler pointee (deref-read yük-genişliği; C pointee_llvm_tip aynası)
+            eğer metin_esit(dizi_al(p.a_ad, annot_node), "TIP_POINTER") {
+                vpointee = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, annot_node)));
+            }
         }
         // D3: annotasyon tagged-union ({i8,..}) ise yapıcı bağlamı kur (değer/tamam/...)
         değişken eski_bll: metin = p.beklenen_ll;
@@ -3270,6 +3291,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
+        eğer metin_uzunluk(vpointee) > 0 {   // D-267: skaler pointee tipi kaydet
+            dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, vpointee);
+        }
         ver 0;
     }
     eğer metin_esit(ad, "ATAMA") {
@@ -3421,6 +3445,14 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     değişken nm: metin = dizi_al(p.a_deg, ic);
     eğer yapi_var_mi(p, nm) { ver nm; }
     ver "";
+}
+// D-267: PARAMETRE *tamN (skaler pointer) ise pointee LLVM tipi ("i8"/"i16"/"i64");
+// değilse "". deref-read yük-genişliği için (C llvm.c:5494 pointee_ir_al aynası).
+işlev param_pointee(p: &değişken Ayr, c: tam32) -> metin {
+    eğer dizi_al(p.a_cs, c) == 0 { ver ""; }
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") == yanlış { ver ""; }
+    ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));        // pointee tipi
 }
 // ============================================================================
 // V2-F4.2b — KESİN-YEREL (confined) KANITI: POZİTİF, default-deny local-proof.
@@ -3722,6 +3754,10 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 yaz_str(", ptr "); yaz_str(areg); yb(10);
             }
             cg_var_ekle(p, dizi_al(p.a_deg, c), areg, pt, param_ref_yapi(p, c), param_elem(p, c));
+            değişken ppo: metin = param_pointee(p, c);   // D-267: skaler pointer pointee
+            eğer metin_uzunluk(ppo) > 0 {
+                dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, ppo);
+            }
             pj = pj + 1;
         }
         i = i + 1;
@@ -5015,7 +5051,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
+        cg_aelem: [], cg_apointee: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
