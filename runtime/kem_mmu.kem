@@ -126,6 +126,9 @@ sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
     }
     değişken idx: tam64 = (KMMU_CEVIRI_VA - KMMU_RAM) / KMMU_2MB;     // 128: non-identity override
     kmmu_y64(KMMU_L2 + idx * 8, KMMU_CEVIRI_PA + 1797);              // VA 0x50000000 → PA 0x46000000
+    // A5 (D-281): EL0 user page — 0x42000000 (L2[16]) AP=01 (EL0+EL1 RW, UXN=0 EL0-exec).
+    // desc = pa | 0x745 (0x705 Normal + bit6 AP=01). EL0 stub + user yığını burada.
+    kmmu_y64(KMMU_L2 + 16 * 8, 1107296256 + 1861);                  // 0x42000000 | 0x745
     kmmu_y64(KMMU_L1, 1025);                                         // L1[0] Device (0x401)
     kmmu_y64(KMMU_L1 + 8, KMMU_L2 + 3);                             // L1[1] → L2 tablo (0x3)
     değişken mair: tam64 = 65280;                                    // 0xFF00

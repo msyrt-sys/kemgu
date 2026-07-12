@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-281 — REAL-OS FAZ-A5: SAF-.kem SYSCALL + EL0 USERSPACE (SVC→.kem handler) — [5] EL0 SYSCALL OK — 🎉 FAZ-A TAM (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-280).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kem_gorev_olustur_el0 + EL0 stub + kdl_syscall_isle .kem);
+`runtime/kem_mmu.kem` (0x42000000 AP=01 user page); `runtime/kdl_kesme.c` (C kdl_syscall_isle → WEAK);
+`test/ornekler/kem_os.kem` ([5g] EL0 bloğu); `Makefile` (EL0 SYSCALL OK gate). FAZ-A SON batch —
+userspace/syscall. FAZ-A ÇEKİRDEK (A1-A5) TAM.]** EL0 (unprivileged) görev → SVC → SAF-.kem syscall
+handler. A4 preemptive altyapısını EL0'a genişletir.
+
+- **EL0 görev = preemptive görev (SPSR=EL0t):** kem_gorev_olustur_el0 sentetik trap-frame: @248=ELR=EL0
+  stub, @256=SPSR=0x0 (EL0t, IRQ-açık), @264=SP_EL0=user yığını (AP=01). Timer-IRQ ile EL0↔main round-robin
+  (.S kdl_irq_ortak SP_EL0'ı @264 kaydeder/geri-yükler → EL0 preempt edilebilir, D-125 mekanizması).
+- **EL0 kod = runtime makine-kodu (.kem section-attr YOK çözümü):** derlenmiş .kem işlevi kernel .text'te
+  (AP=00) → EL0 çalıştıramaz. Çözüm: EL0 stub'ı (movz x8,#7 / svc #0 / b .-8 — llvm-mc DOĞRULANMIŞ
+  0xD28000E8/0xD4000001/0x17FFFFFE) runtime'da AP=01 sayfaya (0x42000000) YAZ + I-cache maintenance
+  (dc cvau→dsb→ic ivau→dsb→isb). MMU: L2[16] = 0x42000000|0x745 (AP=01, UXN=0 EL0-exec).
+- **SVC dispatch SAF-.kem (weak-override):** SVC → .S kdl_exc_ortak (EC=0x15) → `bl kdl_syscall_isle`.
+  C kdl_syscall_isle `__attribute__((weak))` yapıldı → .kem strong (kem_gorev.kem) link'te OVERRIDE eder
+  (guard/variant/cascade YOK — kdl_kesme.c'nin büyük syscall fonksiyonunu guard'lamak riskliydi; weak temiz).
+  .kem handler: num=7 → syscall sayacı++ (fixed RAM), arg echo → EL0 x0.
+- **GERÇEK EL0-syscall kanıtı:** sayaç YALNIZ EL0 stub'ın svc'siyle artar; kem_el0_testi sayaç>=3 bekler →
+  EL0'dan (privilege sınırı geçilerek) gerçek syscall round-trip. Boot [6..10]'a devam. İLK denemede boot.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] EL0 SYSCALL OK` (+ [1..5] + [6..10]). gate: kem_os.ll
+`define @kdl_syscall_isle` (weak-override) + `define @kem_gorev_olustur_el0` + `call @kem_el0_testi` +
+`asm "dc cvau"` (I-cache). FIXPOINT birebir (33371 — compiler src/*.c DOKUNULMADI); test_tumu tam yeşil
+(kdl_kesme.c yalnız weak-attr, semantik değişmez).
+
+**🎉 MİLESTONE — FAZ-A ÇEKİRDEK TAM (A1-A5):** kem_os TEK BOOT'ta TAMAMEN SAF-.kem gerçek-OS:
+sanal-bellek (MMU kurulum+çeviri) + gerçek page-fault/recovery + kesme-trap karar + periyodik timer-IRQ +
+preemptive multitasking + **EL0 userspace + syscall** + disk (virtio-blk) + dosya-sistemi (minifs) +
+ağ (virtio-net ARP/IPv4/ICMP ping). C substrat YALNIZ: `.S` (vektör/trap-frame/eret/context-restore) +
+recovery-scratch/GIC-glue düzeyinde. **Kalan FAZ-A:** EL0 izolasyon-kill (opt-in kdl_el0_kill_aktif —
+gelecek), çok-adres-uzayı (TTBR-per-task), syscall ABI genişletme (dosya/net syscalls EL0'dan).
+
+---
+
 ## D-280 — REAL-OS FAZ-A4: SAF-.kem PREEMPTIVE scheduler (timer→IRQ→context-switch) — [5] PREEMPT OK (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-279).

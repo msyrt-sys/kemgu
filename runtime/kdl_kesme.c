@@ -275,6 +275,10 @@ extern int kdl_virtio_net_al(uint64_t base, uint8_t *hedef, int max, long tikler
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
  * eret/iretq. NOT: arg2 (2. argüman) yalnız aarch64'te dolu (SVC path geçirir);
  * x86 nums 1/2/3 arg2 kullanmaz (zararsız). */
+/* FAZ-A5 (D-281): WEAK → kem_os SAF-.kem kdl_syscall_isle (kem_gorev.kem, strong)
+ * bunu link'te override eder (guard/variant gerekmez, cascade yok). Diğer kernel'ler
+ * strong .kem sağlamaz → bu C weak tanımı kullanılır (davranış değişmez). */
+__attribute__((weak))
 uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");

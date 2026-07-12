@@ -585,6 +585,16 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] PREEMPT HATA");
     }
+    // [5g] EL0 SYSCALL (FAZ-A5, D-281): EL0 (unprivileged) görev → SVC → .kem kdl_syscall_isle.
+    // Runtime-yazılan EL0 stub (AP=01 sayfa) preemptive görev olarak koşar, svc num=7 →
+    // .S kdl_exc_ortak (EC=0x15) → .kem handler sayaç++. Sayaç ilerliyorsa GERÇEK EL0'dan
+    // syscall (privilege sınırı geçildi + saf-.kem handler). kem_gorev.kem sağlar (CAT).
+    değişken el0_ok: tam32 = kem_el0_testi();
+    eğer el0_ok == 1 {
+        uart_satir("[5] EL0 SYSCALL OK");
+    } değilse {
+        uart_satir("[5] EL0 SYSCALL HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli
