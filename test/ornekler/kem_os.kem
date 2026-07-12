@@ -341,6 +341,57 @@ işlev net_dev_testi() -> tam32 {
     ver 1;
 }
 
+// [9] NET ARP — saf-.kem GERÇEK ağ round-trip. Gateway (10.0.2.2) için ARP request GÖNDER →
+// QEMU SLIRP'ten ARP reply AL → oper=2 + spa=gateway + gateway MAC nonzero DOĞRULA. 2-yönlü ağ
+// (TX+RX). Sentetik değil: gerçek paket gönderilir + SLIRP'ten gerçek yanıt alınır+parse edilir.
+işlev net_arp_testi() -> tam32 {
+    değişken base: tam64 = vnet_bul();
+    eğer base == 0 { ver 0; }
+    eğer vnet_kur(base) != 0 { ver 0; }
+    değişken m0: dtam8 = vnet_mac_bayt(base, 0);       // bizim MAC (config'ten)
+    değişken m1: dtam8 = vnet_mac_bayt(base, 1);
+    değişken m2: dtam8 = vnet_mac_bayt(base, 2);
+    değişken m3: dtam8 = vnet_mac_bayt(base, 3);
+    değişken m4: dtam8 = vnet_mac_bayt(base, 4);
+    değişken m5: dtam8 = vnet_mac_bayt(base, 5);
+    // ARP request çerçevesi (60 bayt), önce sıfırla
+    değişken i: tam32 = 0;
+    iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
+    i = 0; iken i < 6 { vnet_tx_yaz(i, 255 olarak dtam8); i = i + 1; }   // eth dst broadcast @0..5
+    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2);         // eth src @6..11
+    vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5);
+    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 6 olarak dtam8);   // ethertype 0x0806 ARP
+    vnet_tx_yaz(14, 0 olarak dtam8); vnet_tx_yaz(15, 1 olarak dtam8);   // htype ethernet
+    vnet_tx_yaz(16, 8 olarak dtam8); vnet_tx_yaz(17, 0 olarak dtam8);   // ptype IPv4
+    vnet_tx_yaz(18, 6 olarak dtam8); vnet_tx_yaz(19, 4 olarak dtam8);   // hlen, plen
+    vnet_tx_yaz(20, 0 olarak dtam8); vnet_tx_yaz(21, 1 olarak dtam8);   // oper request
+    vnet_tx_yaz(22, m0); vnet_tx_yaz(23, m1); vnet_tx_yaz(24, m2);      // sha @22..27
+    vnet_tx_yaz(25, m3); vnet_tx_yaz(26, m4); vnet_tx_yaz(27, m5);
+    vnet_tx_yaz(28, 10 olarak dtam8); vnet_tx_yaz(29, 0 olarak dtam8);  // spa 10.0.2.15
+    vnet_tx_yaz(30, 2 olarak dtam8); vnet_tx_yaz(31, 15 olarak dtam8);
+    vnet_tx_yaz(38, 10 olarak dtam8); vnet_tx_yaz(39, 0 olarak dtam8);  // tpa 10.0.2.2 (gateway)
+    vnet_tx_yaz(40, 2 olarak dtam8); vnet_tx_yaz(41, 2 olarak dtam8);
+    eğer vnet_gonder(base, 60) != 0 { ver 0; }
+    // Yanıtı AL (birkaç paket dinle): ARP reply (oper=2) + spa=gateway.
+    değişken deneme: tam32 = 0;
+    iken deneme < 20 {
+        değişken n: tam32 = vnet_al(base, 8000000);
+        eğer n >= 42 {
+            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (6 olarak dtam8))
+                ve (vnet_rx_oku(20) == (0 olarak dtam8)) ve (vnet_rx_oku(21) == (2 olarak dtam8))
+                ve (vnet_rx_oku(28) == (10 olarak dtam8)) ve (vnet_rx_oku(30) == (2 olarak dtam8))
+                ve (vnet_rx_oku(31) == (2 olarak dtam8)) {
+                // gateway MAC (sha @22..27) nonzero mu?
+                değişken gw: tam32 = (vnet_rx_oku(22) olarak tam32) + (vnet_rx_oku(23) olarak tam32)
+                    + (vnet_rx_oku(24) olarak tam32) + (vnet_rx_oku(27) olarak tam32);
+                eğer gw != 0 { ver 1; }
+            }
+        }
+        deneme = deneme + 1;
+    }
+    ver 0;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -411,6 +462,14 @@ işlev main() -> tam32 {
         uart_satir("[8] NET DEV OK");
     } değilse {
         uart_satir("[8] NET YOK/HATA (netsiz boot normal)");
+    }
+
+    // [9] NET ARP — saf-.kem GERÇEK ağ round-trip (ARP request→SLIRP reply). Additive.
+    değişken arp_ok: tam32 = net_arp_testi();
+    eğer arp_ok == 1 {
+        uart_satir("[9] NET ARP OK");
+    } değilse {
+        uart_satir("[9] NET ARP YOK (netsiz/yanıtsız boot normal)");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

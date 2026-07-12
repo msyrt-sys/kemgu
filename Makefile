@@ -1032,6 +1032,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: net_dev_testi WIRE edilmemis"; exit 1; \
 	fi
 	@echo "  (vnet_bul/kur .kem-define + net_dev_testi wire — virtio-net SAF-.kem, POLLED)"
+	@if ! grep -qE "define[^@]*@vnet_(gonder|al)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_gonder/al (paket TX/RX) define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_arp_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_arp_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_gonder/al .kem-define + net_arp_testi wire — ARP round-trip SAF-.kem)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
 		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
@@ -1050,10 +1057,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
-		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + virtio-net NET DEV OK (SAF-.kem)."; \
+		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
+		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out; then \
+			echo "Faz-C .kem-native OS gecti: [1..5] + DISK RW OK + FS RW OK + NET DEV OK + NET ARP OK (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' + 'NET DEV OK' bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + 'DISK RW OK' + 'FS RW OK' + 'NET DEV OK' + 'NET ARP OK' bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

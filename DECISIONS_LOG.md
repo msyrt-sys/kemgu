@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-274 — REAL-OS FAZ-C: saf-.kem ağ paket TX/RX — GERÇEK ARP round-trip — [9] NET ARP OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-273).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (vnet_gonder/al + tx_yaz/rx_oku + rx_gorulen küresel);
+`test/ornekler/kem_os.kem` (net_arp_testi + [9] NET bloğu); `Makefile` (TX/RX proof + NET ARP OK gate).
+REAL-OS BRING-UP FAZ-C — AKTİVASYON. bring-up loop görev net-arp.]** Kanıtlı-C arp_arm.c'nin saf-.kem
+yeniden gerçekleştirmesi: GERÇEK 2-yönlü ağ (TX + RX).
+
+- **Paket TX/RX (`kem_virtio_net.kem`):** `vnet_gonder` (TX queue1: 12-bayt virtio-net başlığı + çerçeve,
+  tek desc device-OKUR, avail bump + notify + used poll); `vnet_al` (RX queue0: used-ring poll, slot→id/len,
+  net-başlığı 12 atla, rx_gorulen sayaç); `vnet_tx_yaz`/`vnet_rx_oku` çerçeve bayt erişimi. Hepsi çıplak
+  VOLATILE deref + dsb (POLLED, IRQ YOK). rx_gorulen kur'da sıfırlanır (re-init senkron).
+- **[9] GERÇEK fonksiyonel (D-264 dersi):** gateway (10.0.2.2) için Ethernet+ARP request (broadcast, bizim
+  MAC, oper=1, tpa=gateway) KUR + GÖNDER → QEMU SLIRP ARP reply GÖNDERİR → AL + PARSE: ethertype=0x0806 +
+  oper=0x0002 (reply) + spa=10.0.2.2 (gateway) + gateway MAC (sha) nonzero DOĞRULA. Sentetik-geçiş imkânsız:
+  gerçek paket ağ üzerinden gider + gerçek yanıt gelir + protokol-alanları eşleşir.
+
+**FALSİFİYE-KANIT:** kem_os QEMU (`-netdev user -device virtio-net-device`): `[9] NET ARP OK` — [1..9]
+kümülatif, garbling yok. gate: kem_os.ll `define @vnet_gonder/al` + `call @net_arp_testi`. [6..8]
+regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**SINIR:** ARP L2 (IP/checksum yok). ICMP ping ([10]) IPv4+RFC1071 checksum ekler (sonraki rung). POLLED
+(FAZ-A'dan bağımsız).
+
+---
+
 ## D-273 — REAL-OS FAZ-C: saf-.kem virtio-net transport kem_os'ta AKTİF — [8] NET DEV OK (2026-07-12) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-272).

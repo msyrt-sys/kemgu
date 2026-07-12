@@ -12,6 +12,8 @@
 sabit VN_DEV_NET: tam32 = 1;
 
 küresel değişken vnet_dma: tam64 = 1140850688;   // 0x44000000
+küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
+küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
 
 // DMA offsetleri (hepsi 16-katı): RX ring + 8×2048 rx_buf + TX ring + tx_buf.
 sabit NO_RXDESC: tam64  = 0;        // 8×16 = 128
@@ -64,6 +66,7 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
     vblk_dsb();
     vblk_y16(vnet_dma + NO_RXAVAIL + 2, 8 olarak dtam16);   // rx_avail.idx=8 (tüm tamponlar hazır)
     vblk_y16(vnet_dma + NO_RXUSED + 2, 0 olarak dtam16);    // rx_used.idx=0 (re-init güvenli)
+    vnet_rx_gorulen = 0;                                    // RX seen sayacı taze (ring ile senkron)
     değişken rav: tam64 = vnet_dma + NO_RXAVAIL;
     değişken rus: tam64 = vnet_dma + NO_RXUSED;
     vblk_y32(base + VM_Q_DESC_LO, rd olarak tam32);  vblk_y32(base + VM_Q_DESC_HI, (rd >> 32) olarak tam32);
@@ -90,3 +93,57 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
 
 // MAC config word0 (@ base+0x100, device-PROVIDED) — [8] gerçek-kanıt: cihaz canlı + config erişilir.
 çıplak işlev vnet_mac_w0(base: tam64) -> tam32 { ver vblk_o32(base + 256); }
+// MAC baytı oku (config @ base+0x100+i) — Ethernet src için.
+çıplak işlev vnet_mac_bayt(base: tam64, i: tam32) -> dtam8 { ver vblk_o8(base + 256 + (i olarak tam64)); }
+
+// ====================== Paket TX/RX (FAZ-C net-arp/[9], net-icmp/[10]) ======================
+// TX çerçeve tamponuna bayt yaz (12-bayt virtio-net başlığı SONRASI, ofs 12+i).
+çıplak işlev vnet_tx_yaz(i: tam32, b: dtam8) { vblk_y8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64), b); }
+
+// Ethernet çerçevesi gönder (TX queue1). uzun = çerçeve baytı (net-başlığı hariç). 0=ok.
+çıplak işlev vnet_gonder(base: tam64, uzun: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 12 { vblk_y8(vnet_dma + NO_TXBUF + (i olarak tam64), 0 olarak dtam8); i = i + 1; }   // net-başlığı sıfır
+    değişken d: tam64 = vnet_dma + NO_TXDESC;                          // tek desc, cihaz OKUR
+    vblk_y64(d + 0, vnet_dma + NO_TXBUF); vblk_y32(d + 8, (12 + uzun) olarak tam32); vblk_y16(d + 12, 0 olarak dtam16); vblk_y16(d + 14, 0 olarak dtam16);
+    değişken ta: tam64 = vnet_dma + NO_TXAVAIL;
+    değişken tu: tam64 = vnet_dma + NO_TXUSED + 2;
+    değişken idx: dtam16 = vblk_o16(ta + 2);
+    değişken once: dtam16 = vblk_o16(tu);
+    değişken slot: tam64 = ((idx olarak tam64) % 8) * 2;
+    vblk_y16(ta + 4 + slot, 0 olarak dtam16);                          // ring[idx%8]=desc0
+    vblk_dsb();
+    vblk_y16(ta + 2, (idx + (1 olarak dtam16)) olarak dtam16);
+    vblk_dsb();
+    vblk_y32(base + VM_QUEUE_NOTIFY, 1);                               // TX queue = 1
+    değişken spin: tam32 = 0;
+    iken vblk_o16(tu) == once {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > 100000000 { ver 0 - 4; }
+    }
+    ver 0;
+}
+
+// Bir paket AL (RX queue0). Gövde baytını döner (net-başlığı 12 hariç), 0=paket yok/zaman aşımı.
+çıplak işlev vnet_al(base: tam64, tikler: tam32) -> tam32 {
+    değişken ru: tam64 = vnet_dma + NO_RXUSED;
+    değişken spin: tam32 = 0;
+    iken vblk_o16(ru + 2) == (vnet_rx_gorulen olarak dtam16) {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > tikler { ver 0; }
+    }
+    değişken slot: tam32 = vnet_rx_gorulen % 8;
+    değişken id: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8);         // used.ring[slot].id
+    değişken len: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8 + 4);    // used.ring[slot].len (net-başlığı dâhil)
+    vnet_rx_gorulen = vnet_rx_gorulen + 1;
+    eğer id >= 8 { ver 0 - 1; }
+    vnet_rx_id = id;
+    değişken govde: tam32 = len - 12;
+    eğer govde < 0 { ver 0; }
+    ver govde;
+}
+
+// Alınan çerçeveden bayt oku (net-başlığı 12 atlanmış).
+çıplak işlev vnet_rx_oku(i: tam32) -> dtam8 { ver vblk_o8(vnet_dma + NO_RXBUF + (vnet_rx_id olarak tam64) * 2048 + 12 + (i olarak tam64)); }
