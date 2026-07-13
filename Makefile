@@ -758,7 +758,7 @@ $(BUILD)/kernel.elf:
 # Clang artık SERBEST SIMD/q-register emit eder + donanımda çalışır → GERÇEK sanal-bellek
 # kanıtı (taklit edilemez: MMU+Normal yoksa SIMD store alignment/trap-fault ederdi = C1 bug).
 BM_A64    = clang -target aarch64-unknown-none -ffreestanding -nostdlib
-BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime
+BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime -ffunction-sections -fdata-sections
 # EL0-KOD içeren testler (.user section'lı userspace demoları) -mgeneral-regs-only İLE
 # derlenir. Sebep (D-235): flag'siz clang, EL0 fonksiyonun sabit-havuzunu (frame-init NEON
 # constant) kernel .rodata'ya (0x40005ec0 = AP=00) koyar + EL0'dan `ldr q0,[kernel_addr]`
@@ -926,7 +926,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
 		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \

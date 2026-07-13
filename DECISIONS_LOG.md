@@ -5,6 +5,35 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-282 — ZERO-C FAZ 0: --gc-sections + function-sections → kem_os residual-C 14888→744 B (%95) (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-281).
+
+**Karar [ETKİ: `Makefile` (BM_A64_CF += `-ffunction-sections -fdata-sections`; kem_os link += `--gc-sections`);
+`docs/ZERO_C_AUDIT.md` (FAZ 0 güncelleme). ZERO-C kampanyası ilk batch — düşük-risk kazanç + re-audit
+kapısı doğrulama. Kaynak/mantık DEĞİŞMEDİ; yalnız link ölü-kod-eleme.]** ZERO_C_AUDIT bulgusu: kem_os nihai
+ELF `.text`'i %42 C (14 888 B) içeriyordu — `--gc-sections` yokluğundan tüm C nesneleri linkte kalıyordu.
+
+- **Değişiklik:** BM_A64_CF'e `-ffunction-sections -fdata-sections` (per-fn/data section granülaritesi),
+  kem_os link'ine `--gc-sections` (ENTRY(_start) kökünden ulaşılamayan section'ları at). YALNIZ kem_os
+  link'i; diğer kernel link'leri gc-sections'sız → çıktı işlevsel aynı (regresyon yok).
+- **Sonuç (re-audit, -Map+nm):** `.text` 0x8b64→0x5444 (35684→21572 B). **CANLI-C 14 888→744 B (%95↓).**
+  - 3 ölü nesne (heap_kemmalloc/bolge_kemregion/mmio_kem) düştü.
+  - Override-edilen ölü weak `kdl_syscall_isle` gövdesi düştü → onun transitif çektiği **virtio/
+    virtio_net/mmu_kem/zaman_kem/panik TAMAMEN düştü** (beklenenden büyük kazanç — dead-body zinciri kırıldı).
+  - KALAN CANLI-C = 7 fn (744 B): `.S`→`kdl_istisna_isle`+`kdl_el0_izolasyon_isle` (kesme) →
+    `kdl_yazdir_metin/satir/onaltilik` (yazdir) → `kdl_uart_pl011_putc` (uart) ; `kdl_gorev_bitir` (gorev).
+    + C-data: fault-scratch (`kdl_fault_bekleniyor/yakalanan`) + `kdl_el0_kill_aktif`.
+
+**KAPI (re-audit, 4/4):** 3 ölü nesne sembolü final ELF'te YOK (nm=0); [1..10]+[5] QEMU yeşil (gerçek
+fault/EL0, garbling yok); FIXPOINT birebir 33371 (compiler dokunulmadı); test_tumu exit 0.
+
+**KAPSAM/SINIR:** kalan CANLI-C = `.S`'in kdl_kesme.c exception/izolasyon-report ref'leri. FAZ 2 DAG:
+(B1) kdl_istisna_isle→çıplak .kem + .kem-UART ⇒ yazdir+uart; (B2) kdl_el0_izolasyon_isle+kill_aktif→.kem
+⇒ gorev; (B3) fault-scratch global→`.S`-data (`.quad`). x86_64 ayrı borç.
+
+---
+
 ## D-281 — REAL-OS FAZ-A5: SAF-.kem SYSCALL + EL0 USERSPACE (SVC→.kem handler) — [5] EL0 SYSCALL OK — 🎉 FAZ-A TAM (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-280).

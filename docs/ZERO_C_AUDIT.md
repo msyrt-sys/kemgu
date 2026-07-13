@@ -1,5 +1,25 @@
 # ZERO_C_AUDIT — kem_os "yalnız .S" iddiasının link-düzeyi denetimi (Law-4)
 
+> ## 🔄 GÜNCELLEME — ZERO-C KAMPANYASI FAZ 0 (D-282, `-ffunction-sections`+`--gc-sections`)
+> Nihai `.text`: **0x8b64 (35 684 B) → 0x5444 (21 572 B)**. **CANLI-C: 14 888 B → 744 B (%95 düşüş).**
+> `--gc-sections` (kem_os link) + `-ffunction-sections -fdata-sections` (BM_A64_CF) ile:
+> - **3 ölü nesne** (heap_kemmalloc/bolge_kemregion/mmio_kem) düştü ✅
+> - **Override-edilen ölü weak `kdl_syscall_isle` gövdesi** düştü → onun transitif çektiği
+>   **virtio, virtio_net, mmu_kem, zaman_kem, panik TAMAMEN düştü** ✅ (beklenenden fazla kazanç).
+> - **KALAN CANLI-C (7 fn, 744 B)** = `.S`→exception/izolasyon report zinciri:
+>   `kesme`: `kdl_istisna_isle`, `kdl_el0_izolasyon_isle` (.S kökleri) →
+>   `yazdir`: `kdl_yazdir_metin/satir/onaltilik` → `uart`: `kdl_uart_pl011_putc` ; `gorev`: `kdl_gorev_bitir`.
+> - **KALAN C-data:** `kdl_fault_bekleniyor/yakalanan` + `kdl_el0_kill_aktif` (kesme.o, .bss/.data).
+> - **Kapı:** [1..10]+[5] yeşil (gerçek fault/EL0), FIXPOINT birebir 33371, test_tumu exit 0. Taze-clone teyidi altta.
+> - **Sıradaki (FAZ 2 DAG):** (B1) `kdl_istisna_isle`→çıplak .kem + .kem-UART ⇒ yazdir+uart düşer.
+>   (B2) `kdl_el0_izolasyon_isle`+`kdl_el0_kill_aktif`→çıplak .kem ⇒ gorev düşer. (B3) fault-scratch
+>   global'leri → `.S`-data (`.quad`). Sonra: nihai ELF `.text` = yalnız .kem + .S → lenient-Law-4 doruk.
+>
+> _(Aşağısı FAZ 0 ÖNCESİ ilk denetim — tarihsel referans; sayılar D-281 @d2bc787 durumu.)_
+
+---
+
+
 **Mod:** READ-ONLY denetim (kaynak/build değişmedi; yalnız `-Map` inceleme re-link + `nm`).
 **Hedef:** aarch64 `kem_os.elf` nihai link'inin, indirgenemez `boot/*.S` DIŞINDA C-derlenmiş
 kod içerip içermediğini NİHAİ-ELF sembol kökeniyle kanıtla/çürüt. (`@kdl_` IR-grep DEĞİL — o
