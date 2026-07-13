@@ -72,7 +72,10 @@ void kdl_el0_izolasyon_isle(uint64_t far) {
 /* CPU istisnası — kurtarma yok (bayrak-kapalı yol). Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
  *   x86_64 : (vektör_no, hata_kodu, RIP) */
-__attribute__((noreturn))
+/* ZERO-C B1 (D-283): WEAK → kem_os SAF-.kem kdl_istisna_isle (kem_mmu.kem, strong)
+ * link'te override eder (kdl_syscall_isle deseni birebir). Diğer kernel'ler strong
+ * .kem sağlamaz → bu C tanımı kullanılır (davranış değişmez). */
+__attribute__((weak, noreturn))
 void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
     /* C8c: fault adresi — data/instruction abort hangi adrese erişti.
      * aarch64 FAR_EL1, x86 CR2 (#PF lineer adresi). Abort-dışı için stale ama

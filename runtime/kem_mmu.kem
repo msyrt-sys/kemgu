@@ -181,3 +181,61 @@ isb"#
     }
     ver 0;
 }
+
+// ============================================================================
+// ZERO-C B1 (D-283): SAF-.kem kdl_istisna_isle — EL1 kurtarılamaz-fault raporu.
+// Kanıtlı-C kdl_istisna_isle (kdl_kesme.c) BİREBİR .kem yeniden gerçekleştirmesi.
+// .S kdl_exc_ortak `bl kdl_istisna_isle(tip,a,b)` çağırır (kurtarılamaz-fault yolu —
+// D-276 recovery bayrağı SET DEĞİLSE). WEAK-OVERRIDE: C tanımı weak yapıldı, bu strong
+// .kem link'te kazanır (guard/cascade yok). Çıplak (trap-bağlamı, region yok) → mevcut
+// normal-tier uart_metin/satir/onaltilik (yetki<MMIO> capability) ÇAĞRILAMAZ (D-257
+// çıplak-call-rule, E013) → YENİ çıplak-tier ham-MMIO UART primitifi (vblk_y8 deseni:
+// doğrudan volatile-deref, capability-suz). noreturn (rapor + wfe sonsuz).
+
+sabit KIS_UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (UART_TABAN ile aynı)
+sabit KIS_UART_DR: tam64    = 150994944;   // +0x00
+sabit KIS_UART_FR: tam64    = 150995112;   // +0x18
+sabit KIS_UART_TXFF: tam32  = 32;          // bit5
+
+çıplak işlev kis_o32(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
+çıplak işlev kis_y32(adr: tam64, v: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = v; }
+
+// TXFF boşalana dek bekle + bayt yaz (çıplak, capability-suz — mevcut uart_bayt'ın ham eşleniği).
+çıplak işlev kis_bayt(b: tam32) {
+    iken (kis_o32(KIS_UART_FR) & KIS_UART_TXFF) != 0 { }
+    kis_y32(KIS_UART_DR, b);
+}
+çıplak işlev kis_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { kis_bayt(metin_bayt(s, i) olarak tam32); i = i + 1; }
+}
+çıplak işlev kis_satir() { kis_bayt(10); }
+çıplak işlev kis_hex_basamak(d: dtam64) {
+    eğer d > 0 {
+        kis_hex_basamak(d / 16);
+        değişken r: tam32 = (d - (d / 16) * 16) olarak tam32;
+        eğer r < 10 { kis_bayt(r + 48); } değilse { kis_bayt(r + 87); }
+    }
+}
+çıplak işlev kis_onaltilik(d: dtam64) {
+    eğer d == 0 { kis_bayt(48); } değilse { kis_hex_basamak(d); }
+}
+çıplak işlev kis_far_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, far_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// kdl_istisna_isle birebir: FAR oku + "ISTISNA tip=0x.. a=0x.. b=0x.. adr=0x.." + wfe sonsuz.
+çıplak işlev kdl_istisna_isle(tip: tam64, a: tam64, b: tam64) {
+    değişken adr: tam64 = kis_far_oku();
+    kis_metin("ISTISNA tip=0x"); kis_onaltilik(tip);
+    kis_metin(" a=0x"); kis_onaltilik(a);
+    kis_metin(" b=0x"); kis_onaltilik(b);
+    kis_metin(" adr=0x"); kis_onaltilik(adr);
+    kis_satir();
+    iken 1 == 1 {
+        güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"wfe"# bozulan("~{memory}") } }
+    }
+}

@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-283 — ZERO-C FAZ 2 B1: kdl_istisna_isle SAF-.kem (çıplak-tier ham-MMIO UART) — kesme.o katkısı 192→68 B (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-282).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kis_* çıplak-tier ham-MMIO UART + `kdl_istisna_isle` .kem);
+`runtime/kdl_kesme.c` (kdl_istisna_isle → WEAK). ZERO-C FAZ 2 ilk batch (DAG: B1→B2→B3).]**
+Kanıtlı-C `kdl_istisna_isle` (EL1 kurtarılamaz-fault → rapor+halt) BİREBİR .kem yeniden gerçekleştirmesi.
+
+- **Çıplak-call-rule engeli (D-257/E013):** mevcut `uart_metin`/`uart_bayt` normal-tier (`yetki<MMIO>`
+  capability struct) → çıplak fn'den çağrılamaz (statik-reddedilir). Çözüm: YENİ çıplak-tier ham-MMIO
+  UART ailesi (`kis_bayt`/`kis_metin`/`kis_satir`/`kis_onaltilik`) — doğrudan volatile-deref (vblk_y8/
+  kg_yaz32 deseni), capability-suz. `metin_uzunluk`/`metin_bayt` builtin (EKLE_BUILTIN, zaten çıplak
+  `kdl_metin_*`'e çözülüyor) → çıplak'tan izinli.
+- **Weak-override:** C `kdl_istisna_isle` → `__attribute__((weak, noreturn))`; .kem strong link'te kazanır
+  (kdl_syscall_isle deseni birebir). Diğer kernel'ler C weak'i kullanmaya devam (regresyon yok).
+- **RE-AUDIT sonucu (-Map+nm, kesin ölçüm):** kesme.o'nun final ELF'e katkısı **192→68 B**; `.text.
+  kdl_istisna_isle` section'ı final linkte **0** (düştü, C tanımı ölü-var). `kdl_istisna_isle` final
+  ELF'te `@0x40000380` — kem_os.o (.kem) aralığında (weak-override doğrulandı).
+- **Beklenmedik bulgu (DAG düzeltmesi):** yazdir/uart HÂLÂ canlı — `kdl_el0_izolasyon_isle` (B2'nin
+  hedefi) de `kdl_yazdir_*` çağırıyor ("IZOLASYON OK..." raporu). B1 tek başına yazdir/uart'ı
+  SIFIRLAMADI (öngörülenin aksine); tam sıfırlama B2 sonrasına kalır.
+
+**KAPI (re-audit 4/4):** `kdl_istisna_isle` C-section'ı final ELF'te YOK (section-count=0); [1..10]+[5]
+QEMU yeşil (garbling yok, boot fault-halt yoluna girmedi — beklenen, kem_os yalnız kurtarılabilir fault
+tetikliyor); FIXPOINT birebir 33371; test_tumu (bekleniyor — bu commit'te doğrulanacak).
+
+**KAPSAM/SINIR:** DAG sırası: B2 (`kdl_el0_izolasyon_isle`+`kdl_gorev_bitir`→.kem ⇒ yazdir+uart+gorev
+tam düşer) → B3 (fault-scratch global→`.S`-data). x86_64 ayrı borç.
+
+---
+
 ## D-282 — ZERO-C FAZ 0: --gc-sections + function-sections → kem_os residual-C 14888→744 B (%95) (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-281).
