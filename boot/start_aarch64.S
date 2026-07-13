@@ -376,3 +376,22 @@ kdl_el0_calistir:
     mov     x2, #0x3C0          /* SPSR: M=EL0t, DAIF=1111 (IRQ maskeli) */
     msr     spsr_el1, x2
     eret
+
+/* === ZERO-C B3 (D-285): fault-recovery + izolasyon scratch (.S-data) ===
+ * Öncesinde C kdl_kesme.c'de (volatile uint64_t) tanımlıydı. kem_os artık kesme.c'yi
+ * HİÇ link'lemiyor (B1/B2 tüm fonksiyonları .kem'e taşıdı) → bu 3 global de indirgenemez
+ * .S substrat'ına taşındı (Law-4: asm-data, C-DEĞİL). Diğer kernel'ler kdl_kesme.c'yi
+ * WEAK tanımlarıyla linklemeye devam eder — .S strong kazanır (çift-sembol yok, aynı
+ * ad/tip/başlangıç-değer → davranış AYNI). .kem (kem_mmu.kem) inline-asm (adrp/add) ile
+ * isim üzerinden erişir — kaynağın C mi .S mi olduğu .kem'den GÖRÜNMEZ (link-time çözüm). */
+.data
+.align 3
+.global kdl_fault_bekleniyor
+kdl_fault_bekleniyor:
+    .quad 0
+.global kdl_fault_yakalanan
+kdl_fault_yakalanan:
+    .quad 0
+.global kdl_el0_kill_aktif
+kdl_el0_kill_aktif:
+    .quad 0

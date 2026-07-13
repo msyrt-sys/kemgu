@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-285 — ZERO-C FAZ 2 B3 (SON): fault-scratch + el0-kill global'leri .S-data'ya taşındı — kem_os C=0 🎉 (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-284).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (3 global `.data` — indirgenemez-.S substrat); `runtime/kdl_kesme.c`
+(3 global → WEAK, C tanımları artık dead-var diğer kernel'lerde); `Makefile` (KEM_OS_A64_OBJS'ten
+`bm_a64_kesme.o` TAMAMEN ÇIKARILDI). ZERO-C FAZ 2 SON batch — kampanya bitiş.]** B1+B2 sonrası
+`kdl_kesme.c`'nin (kem_os linkindeki) tek canlı katkısı 3 data global'iydi (`kdl_fault_bekleniyor`,
+`kdl_fault_yakalanan`, `kdl_el0_kill_aktif` — 24 B `.bss`, sıfır kod). Bunlar `.S`-data'ya taşındı.
+
+- **`.S`-data (D-276'nın "TERCİH" notu uygulandı):** `boot/start_aarch64.S` sonuna `.data`/`.align 3` +
+  3× `.quad 0` (aynı ad, aynı tip-semantiği). İndirgenemez asm substrat'ın parçası — codegen-fix
+  (`dışa küresel`→external) GEREKMEDİ, ATLANDI (D-276/277'nin flag'lediği gap hâlâ açık ama bu iş
+  ONU beklemedi).
+- **Weak-override (C→ölü-var diğer kernel'lerde):** C 3 global `__attribute__((weak))`. `.S` artık
+  STRONG tanımlıyor → kem_os `bm_a64_kesme.o`'yu HİÇ LİNKLEMEZ (Makefile'dan çıkarıldı). Diğer kernel'ler
+  (`.S` + `kdl_kesme.c` birlikte) çift-sembol ÇAKIŞMASI YAŞAMADI (weak↔strong linker kuralı) — `.S` kazanır,
+  C weak ölü-var kalır, davranış AYNI (aynı ad/tip/başlangıç-değer=0). Ampirik doğrulandı:
+  `calistir_kernel_dizi_bare_metal` (kesme.c+.S birlikte linkli) temiz derlendi + booted.
+
+**RE-AUDIT (TAM, -Map+nm, final ELF'teki TÜM 167 tanımlı sembol tek tek sınıflandırıldı):**
+
+| Kaynak | Sembol sayısı |
+|---|---|
+| `.kem` (kem_os.o + kem_heap.o) | **147** |
+| `boot/*.S` (bm_a64_start.o) | **10** |
+| linker-script synthetic (`__bss_start` vb., `=` atamaları, hiçbir .o'dan gelmez) | **10** |
+| **C-derlenmiş** | **0** |
+
+`bm_a64_kesme.o` link satırında YOK (grep=0). `.text` = 22876 B, tamamı `.kem`+`.S` (0 C-katkı).
+
+**KAPI (re-audit 4/4 + ek doğrulama):** `[1..10]+[5]` QEMU yeşil (`[5] IZOLASYON OK` dahil — B2'nin
+9-tekrar karakteristiği burada 21-tekrar olarak gözlendi, aynı dokümante-C-davranışı, zararsız); FIXPOINT
+birebir 33371; test_tumu exit 0; **diğer kernel regresyon-yok** (kernel_dizi ampirik doğrulandı).
+
+**🎉 KARAR (lenient-Law-4 doruk):** kem_os aarch64 nihai ELF'i artık `boot/*.S` DIŞINDA C-derlenmiş sembol
+İÇERMİYOR. İndirgenemez `.S` kümesi (ZERO_C_AUDIT ADIM 4 ile aynı): `_start`, `_halt`,
+`kdl_vektor_tablosu`, `kdl_exc_ortak`, `kdl_irq_ortak`, `kdl_baglam_degis`, `kdl_el0_calistir` + 3 `.data`
+global (`kdl_fault_bekleniyor/yakalanan`, `kdl_el0_kill_aktif`). Toolchain/libc yok (`-nostdlib`).
+
+**KAPSAM/SINIR:** `.S`-strict (P4: asm → `.kem satıriçi_asm`) AYRI karar, bu kampanyada YAPILMADI —
+lenient-Law-4 (asm≠C) burada duruyor. x86_64 parite ayrı Law-4 borcu. `docs/ZERO_C_AUDIT.md` güncellendi.
+
+---
+
 ## D-284 — ZERO-C FAZ 2 B2: kdl_el0_izolasyon_isle SAF-.kem (GERÇEK permission-fault→süreç-öldür) — yazdir/uart/gorev TAMAMEN düştü (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-283).

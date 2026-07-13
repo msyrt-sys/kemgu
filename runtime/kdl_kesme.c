@@ -42,9 +42,14 @@ int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — user
 /* FAZ-A1 (D-276): bu iki global .S kdl_exc_ortak ile eşleşik recovery-scratch.
  * kem_os SAF-.kem fault-gate'i (kem_mmu.kem) bunlara inline-asm (adrp/add + ldr/str)
  * ile erişir — .kem 'küresel' internal-linkage olduğundan .S'ye açılamaz (codegen-gap,
- * bkz. D-276 sınır-notu). Global'ler C-tanımlı KALIR (.S substrat'ı ile birlikte). */
-volatile uint64_t kdl_fault_bekleniyor = 0;
-volatile uint64_t kdl_fault_yakalanan = 0;
+ * bkz. D-276 sınır-notu).
+ * ZERO-C B3 (D-285): WEAK → boot/start_aarch64.S artık BU İKİ GLOBAL'İ .data'da STRONG
+ * tanımlıyor (indirgenemez-.S substrat, Law-4). kem_os kesme.c'yi HİÇ LİNKLEMEZ (B1/B2
+ * tüm fonksiyonları .kem'e taşıdı) → bu weak tanım YALNIZ diğer kernel'ler kesme.c'yi
+ * .S ile birlikte linklediğinde çift-sembol çakışmasını önler (.S strong kazanır, aynı
+ * ad/tip/başlangıç-değer → davranış AYNI). */
+__attribute__((weak)) volatile uint64_t kdl_fault_bekleniyor = 0;
+__attribute__((weak)) volatile uint64_t kdl_fault_yakalanan = 0;
 
 /* === PART 3(c): EL0 izolasyon-ihlali → SÜRECİ ÖLDÜR (gerçek OS semantiği) ===
  * Bir EL0 (userspace) görev kernel-only sayfaya (AP=00) erişince permission-fault
@@ -58,8 +63,9 @@ volatile uint64_t kdl_izolasyon_ihlal_sayisi = 0;
 /* OPT-IN: yalnız kdl_el0_kill_aktif != 0 ise EL0 izolasyon-faultu süreç-öldürme yapar.
  * Varsayılan 0 → eski davranış (EL0 fault → kdl_istisna_isle "ISTISNA" + halt) KORUNUR
  * → mevcut EL0 demoları (proc_arm/D3 vb. "ISTISNA" bekleyen) REGRESSION YAŞAMAZ.
- * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği. */
-volatile uint64_t kdl_el0_kill_aktif = 0;
+ * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği.
+ * ZERO-C B3 (D-285): WEAK (bkz. kdl_fault_bekleniyor notu — .S artık strong tanımlıyor). */
+__attribute__((weak)) volatile uint64_t kdl_el0_kill_aktif = 0;
 /* ZERO-C B2 (D-284): WEAK → kem_os SAF-.kem kdl_el0_izolasyon_isle (kem_mmu.kem,
  * strong) link'te override eder. Diğer kernel'ler C weak'i kullanmaya devam. */
 __attribute__((weak))

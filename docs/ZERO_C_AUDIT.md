@@ -1,6 +1,42 @@
 # ZERO_C_AUDIT — kem_os "yalnız .S" iddiasının link-düzeyi denetimi (Law-4)
 
-> ## 🔄 GÜNCELLEME — ZERO-C KAMPANYASI FAZ 0 (D-282, `-ffunction-sections`+`--gc-sections`)
+> ## 🎉 GÜNCELLEME — ZERO-C KAMPANYASI TAMAMLANDI (D-283→285, FAZ 2 B1-B3) — kem_os CANLI-C = 0
+> Kampanya sonu. FAZ 0'ın 744 B canlı-C'si sıfırlandı. Nihai ELF'teki **167 tanımlı sembolün TAMAMI**
+> tek tek sınıflandırıldı (-Map+nm):
+>
+> | Kaynak | Sembol | Bayt (.text) |
+> |---|---|---|
+> | **`.kem`** (kem_os.o + kem_heap.o) | 147 | ~20 700 |
+> | **`boot/*.S`** (bm_a64_start.o) | 10 | 2 176 |
+> | linker-script synthetic (`__bss_start` vb., hiçbir `.o`'dan gelmez, `.ld` `=` ataması) | 10 | 0 |
+> | **C-derlenmiş** | **0** | **0** |
+>
+> `.text` toplam = 22 876 B, **tamamı `.kem` + `.S`**. `bm_a64_kesme.o` (son C-kaynaklı nesne) kem_os
+> link satırında artık YOK (Makefile'dan çıkarıldı).
+>
+> **B1 (D-283):** `kdl_istisna_isle` → çıplak `.kem` + yeni çıplak-tier ham-MMIO UART ailesi (`kis_*`,
+> çıplak-call-rule/E013 engelini aştı) + weak-override. yazdir/uart kısmi düştü (tam düşüş B2'de).
+> **B2 (D-284):** `kdl_el0_izolasyon_isle` → çıplak `.kem`; `kem_gorev.kem`'e YENİ dead-task tablosu
+> (`KG_OLU`) + `kem_preempt` skip-mantığı eklendi (C'nin gerçek semantiğini TAMAMLAYAN iş, salt taşıma
+> değil). GERÇEK permission-fault testi (EL0→GIC MMIO AP=00 erişimi) eklendi — `[5] IZOLASYON OK`.
+> yazdir/uart/gorev TAMAMEN düştü.
+> **B3 (D-285, SON):** kalan 3 data-global (`kdl_fault_bekleniyor/yakalanan`, `kdl_el0_kill_aktif`) C'den
+> `boot/start_aarch64.S`'e (`.data`, `.quad`) taşındı — indirgenemez-.S substrat'a katıldı, `dışa küresel`
+> codegen-fix'i (D-276/277'nin flag'lediği gap) GEREKMEDİ. C tanımları `weak` → diğer kernel'ler
+> (`kdl_kesme.c`+`.S` birlikte linkli) çift-sembol çakışması YAŞAMADI (ampirik doğrulandı:
+> `calistir_kernel_dizi_bare_metal`).
+>
+> **Kapı (her batch, 4/4):** [1..10]+[5] QEMU yeşil, FIXPOINT birebir 33371, test_tumu exit 0,
+> re-audit hedef-sembol düşüşü doğrulandı. Taze-clone teyidi B1/B2'de yapıldı (aynı sonuç).
+>
+> **Kalan sınır:** `.S`-strict (asm→`.kem satıriçi_asm`) AYRI karar, YAPILMADI (lenient-Law-4 = asm≠C
+> burada duruyor). x86_64 parite ayrı borç.
+>
+> _(Aşağısı FAZ 0 ÖNCESİ ilk denetim — tarihsel referans; sayılar D-281 @d2bc787 durumu.)_
+
+---
+
+> ## 🔄 GÜNCELLEME (tarihsel, FAZ 0) — ZERO-C KAMPANYASI FAZ 0 (D-282, `-ffunction-sections`+`--gc-sections`)
 > Nihai `.text`: **0x8b64 (35 684 B) → 0x5444 (21 572 B)**. **CANLI-C: 14 888 B → 744 B (%95 düşüş).**
 > `--gc-sections` (kem_os link) + `-ffunction-sections -fdata-sections` (BM_A64_CF) ile:
 > - **3 ölü nesne** (heap_kemmalloc/bolge_kemregion/mmio_kem) düştü ✅

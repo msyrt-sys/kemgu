@@ -836,13 +836,13 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
 KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
               $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
-              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman_kem.o \
+              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_zaman_kem.o \
               $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
+# ZERO-C B3 (D-285): bm_a64_kesme.o (kdl_kesme.c) TAMAMEN ÇIKARILDI — kem_os artık kesme.c'yi
+# hiç linklemez (B1/B2 kdl_istisna_isle/kdl_el0_izolasyon_isle .kem'e taşındı; fault-scratch
+# global'leri boot/start_aarch64.S'te .data-strong, .kem inline-asm ile isim üzerinden erişir).
 # FAZ-A1/B (D-277): bm_a64_mmu_kem.o = kdl_mmu_kur ÇIKARILMIŞ; SAF-.kem kem_mmu.kem sağlar.
-# FAZ-A1 (D-276): fault-global'ler (kdl_fault_bekleniyor/yakalanan) C-tanımlı KALIR
-# (.S kdl_exc_ortak substrat'ı). kem_mmu.kem inline-asm ile erişir (küresel internal-
-# linkage codegen-gap → .S'ye açılamaz; bkz. D-276 sınır-notu).
 #              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
 #                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
 #                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
