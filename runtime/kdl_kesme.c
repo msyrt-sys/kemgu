@@ -60,6 +60,9 @@ volatile uint64_t kdl_izolasyon_ihlal_sayisi = 0;
  * → mevcut EL0 demoları (proc_arm/D3 vb. "ISTISNA" bekleyen) REGRESSION YAŞAMAZ.
  * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği. */
 volatile uint64_t kdl_el0_kill_aktif = 0;
+/* ZERO-C B2 (D-284): WEAK → kem_os SAF-.kem kdl_el0_izolasyon_isle (kem_mmu.kem,
+ * strong) link'te override eder. Diğer kernel'ler C weak'i kullanmaya devam. */
+__attribute__((weak))
 void kdl_el0_izolasyon_isle(uint64_t far) {
     kdl_izolasyon_ihlal_sayisi++;
     kdl_yazdir_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");

@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-284 — ZERO-C FAZ 2 B2: kdl_el0_izolasyon_isle SAF-.kem (GERÇEK permission-fault→süreç-öldür) — yazdir/uart/gorev TAMAMEN düştü (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-283).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (KG_OLU dead-task tablosu + `kem_gorev_bitir` + `kem_preempt`
+skip-mantığı + `kem_el0_izolasyon_testi`); `runtime/kem_mmu.kem` (kis_el0_kill_ac + `kdl_el0_izolasyon_isle`
+.kem); `runtime/kdl_kesme.c` (kdl_el0_izolasyon_isle → WEAK). ZERO-C FAZ 2 B2.]** Kanıtlı-C
+`kdl_el0_izolasyon_isle` (EL0 izolasyon-ihlali → süreç öldür, D-130) BİREBİR .kem yeniden gerçekleştirmesi.
+
+- **kem_gorev.kem'e dead-task tablosu EKLENDİ (yeni özellik, birebir C mirror):** `KG_OLU` (fixed-RAM,
+  16 slot) + `kem_gorev_bitir()` (aktif görevi ölü işaretle) + `kem_preempt`'in round-robin taramasına
+  skip-mantığı (`kdl_preempt`'in "if kdl_olu[n] continue" birebir). Öncesinde kem_os'un `.kem` scheduler'ı
+  (A4) hiç dead-task kavramı BİLMİYORDU — bu, C'nin gerçek semantiğini tamamlayan gerçek yeni iş (sadece
+  sembol taşıma değil).
+- **GERÇEK test (kem_el0_izolasyon_testi):** EL0 stub GIC MMIO'ya (0x08000000, Device L1[0] AP=00,
+  EL0-erişimi YASAK) `ldr` ile erişir → GERÇEK permission-fault, EL0-kaynaklı. `.S` kdl_exc_ortak
+  (SPSR.M[3:2]=0 + `kdl_el0_kill_aktif` opt-in AÇIK — `kis_el0_kill_ac` .kem'den yazar) → `bl
+  kdl_el0_izolasyon_isle(far)` (.kem) → rapor (B1'in `kis_*` primitifleri) + `kem_gorev_bitir` → `KG_OLU[t]=1`.
+  Doğrulama: `KG_OLU[t]==1` (scheduler görevi işaretledi) + OS DEVAM etti (main [6..10]'a geçti).
+- **Gözlenen (dokümante-edilmiş C davranışı, bug DEĞİL):** "IZOLASYON OK" 9× tekrarlandı — aynı-görev
+  fault-recovery yalnız faulting instr'ı ATLAR (scheduler switch ZORLAMAZ), ölü görev sonraki GERÇEK
+  timer-IRQ'ya dek kendi döngüsünde tekrar tekrar fault eder. `.S` yorumu bunu açıkça belgeler: "ölü EL0
+  görev kısa sürer, sonraki timer-IRQ'da scheduler onu ATLAR". C orijinaliyle birebir aynı karakteristik.
+- **Weak-override:** C `kdl_el0_izolasyon_isle` → `weak`; .kem strong kazanır (B1/A5 deseni).
+
+**RE-AUDIT sonucu (-Map+nm):** `.text` 21572→20834 B. **yazdir/uart/gorev nesneleri final ELF'te TAMAMEN
+0 canlı sembol** (B1'in kısmi düşüşü tamamlandı — `kdl_el0_izolasyon_isle` yazdir'in son canlı referansıydı).
+`kdl_el0_izolasyon_isle` final ELF'te `@0x400005ac` (kem_os .kem aralığı).
+
+**KAPI (re-audit 4/4):** yazdir/uart/gorev sembolleri final ELF'te YOK (0/0/0); `[1..10]+[5]` QEMU yeşil
+(`[5] IZOLASYON OK` — GERÇEK permission-fault + kill + skip); FIXPOINT birebir 33371; test_tumu exit 0.
+
+**KAPSAM/SINIR:** Kalan CANLI-C = yalnız `kdl_kesme.c` veri-plumbing (~68 B kod + fault-scratch/
+`kdl_el0_kill_aktif` data). Sıradaki: B3 (fault-scratch global → `.S`-data, `.quad`) → beklenen sonuç:
+nihai ELF `.text` = yalnız `.kem` + `.S` (lenient-Law-4 doruk). x86_64 ayrı borç.
+
+---
+
 ## D-283 — ZERO-C FAZ 2 B1: kdl_istisna_isle SAF-.kem (çıplak-tier ham-MMIO UART) — kesme.o katkısı 192→68 B (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-282).

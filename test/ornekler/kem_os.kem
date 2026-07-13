@@ -595,6 +595,15 @@ işlev main() -> tam32 {
     } değilse {
         uart_satir("[5] EL0 SYSCALL HATA");
     }
+    // [5h] EL0 IZOLASYON (ZERO-C B2, D-284): EL0 görev yasak sayfaya (GIC MMIO, AP=00)
+    // erişir → GERÇEK permission-fault → .S kill-yolu → .kem kdl_el0_izolasyon_isle →
+    // kem_gorev_bitir → scheduler görevi ATLAR. Doğrula: görev ölü işaretlendi + OS devam.
+    değişken izo_ok: tam32 = kem_el0_izolasyon_testi();
+    eğer izo_ok == 1 {
+        uart_satir("[5] IZOLASYON OK");
+    } değilse {
+        uart_satir("[5] IZOLASYON HATA");
+    }
 
     // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
     // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli

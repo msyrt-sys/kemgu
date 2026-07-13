@@ -1100,6 +1100,14 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: I-cache maintenance (dc cvau/ic ivau) asm emit edilmedi — EL0 stub icache-stale olabilir"; exit 1; \
 	fi
 	@echo "  (kdl_syscall_isle .kem-define weak-override + gorev_olustur_el0 EL0t-frame + el0_testi wire + I-cache asm — EL0 syscall SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (IZOLASYON, ZERO-C B2/D-284): .kem kdl_el0_izolasyon_isle + gerçek permission-fault kill:"
+	@if ! grep -qE "define[^@]*@kdl_el0_izolasyon_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_el0_izolasyon_isle define YOK — izolasyon hala C"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kem_gorev_bitir\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_el0_izolasyon_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_gorev_bitir/kem_el0_izolasyon_testi define/wire YOK"; exit 1; \
+	fi
+	@echo "  (kdl_el0_izolasyon_isle .kem-define weak-override + kem_gorev_bitir olu[] + izolasyon_testi wire — GERCEK permission-fault kill SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1163,14 +1171,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "TIMER TIK OK" $(BUILD)/kem_os.out \
 		   && grep -q "PREEMPT OK" $(BUILD)/kem_os.out \
 		   && grep -q "EL0 SYSCALL OK" $(BUILD)/kem_os.out \
+		   && grep -q "IZOLASYON OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + DISK/FS/NET/PING bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

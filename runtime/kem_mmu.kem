@@ -239,3 +239,32 @@ sabit KIS_UART_TXFF: tam32  = 32;          // bit5
         güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"wfe"# bozulan("~{memory}") } }
     }
 }
+
+// ============================================================================
+// ZERO-C B2 (D-284): SAF-.kem kdl_el0_izolasyon_isle — EL0 izolasyon-ihlali → süreç öldür.
+// Kanıtlı-C kdl_el0_izolasyon_isle (kdl_kesme.c) BİREBİR .kem yeniden gerçekleştirmesi.
+// .S kdl_exc_ortak `bl kdl_el0_izolasyon_isle(far)` çağırır (EL0-kaynaklı fault + kill
+// AÇIK ise). Rapor (kis_* B1'den) + kem_gorev_bitir() (kem_gorev.kem — kem_paktif'i
+// KG_OLU'da işaretle; scheduler bir daha seçmez). kdl_el0_kill_aktif C-DATA KALIR (.S
+// substrat'ı okuyor, D-276 fault-scratch deseni) — .kem inline-asm YAZAR (opt-in aç).
+
+çıplak işlev kis_el0_kill_ac() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_el0_kill_aktif
+add x9, x9, :lo12:kdl_el0_kill_aktif
+mov x10, #1
+str x10, [x9]"#
+            bozulan("~{x9}") bozulan("~{x10}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_el0_izolasyon_isle birebir: rapor + kem_gorev_bitir. .S FAR'ı x0'da geçer.
+çıplak işlev kdl_el0_izolasyon_isle(far: tam64) {
+    kis_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");
+    kis_onaltilik(far);
+    kis_satir();
+    kem_gorev_bitir();
+}

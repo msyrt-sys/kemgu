@@ -12,6 +12,7 @@
 // Adres-uzayı TEK (kem_os EL1 görevleri) → TTBR swap YOK (v1). Öncelik/blok YOK (v1).
 
 sabit KG_PSP: tam64 = 1157636096;         // 0x45002000: psp[i] tablosu (@+i*8; page-table üstü)
+sabit KG_OLU: tam64 = 1157639168;         // 0x45002c00: olu[i] tablosu (kdl_olu[] birebir; 1=bitmiş)
 sabit KG_G1: tam64 = 1157640192;          // 0x45003000: görev1 sayacı (FİXED RAM, volatile deref)
 sabit KG_G2: tam64 = 1157640200;          // 0x45003008: görev2 sayacı
 sabit KG_AKTIF: tam64 = 1157640208;       // 0x45003010: preempt-aktif bayrağı (FİXED RAM — küresel
@@ -38,6 +39,8 @@ küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil k
     kg_yaz64(KG_AKTIF, 0);
     kg_yaz64(KG_G1, 0);          // sayaçları sıfırla (fixed RAM)
     kg_yaz64(KG_G2, 0);
+    değişken k: tam64 = 0;
+    iken k < 16 { kg_yaz64(KG_OLU + k * 8, 0); k = k + 1; }   // olu[] tablosu temizle
 }
 çıplak işlev kem_preempt_ac() { kg_yaz64(KG_AKTIF, 1); }
 
@@ -58,12 +61,26 @@ küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil k
 
 // Round-robin scheduler — .kem kdl_irq_isle her timer IRQ'da çağırır. sp = kesilen
 // görevin trap-frame SP'si. aktif değilse/tek görevse sp (switch yok → A3 timer nötr).
+// kdl_preempt birebir: bitmiş (kg_olu=1) görevler ATLANIR (round-robin sırada tara).
 çıplak işlev kem_preempt(sp: tam64) -> tam64 {
     eğer (kg_oku64(KG_AKTIF) == 0) veya (kem_psayi < 2) { ver sp; }
     kg_psp_yaz(kem_paktif, sp);                   // mevcut görevin SP'sini kaydet
-    kem_paktif = kem_paktif + 1;
-    eğer kem_paktif >= kem_psayi { kem_paktif = 0; }   // round-robin (mod psayi)
-    ver kg_psp_oku(kem_paktif);                   // sonraki görevin SP'si → .S switch
+    değişken n: tam64 = kem_paktif;
+    değişken t: tam64 = 0;
+    değişken bulundu: tam64 = 0;
+    iken (t < kem_psayi) ve (bulundu == 0) {      // en fazla psayi adım tara, ilk canlıda dur
+        n = n + 1;
+        eğer n >= kem_psayi { n = 0; }
+        eğer kg_oku64(KG_OLU + n * 8) == 0 { kem_paktif = n; bulundu = 1; }
+        t = t + 1;
+    }
+    ver kg_psp_oku(kem_paktif);                   // sonraki (canlı) görevin SP'si → .S switch
+}
+
+// Aktif görevi BİTİR (izolasyon-ihlali/exit) — kdl_gorev_bitir birebir. Scheduler bir
+// daha seçmez (kem_preempt yukarıdaki tarama sırasında atlar).
+çıplak işlev kem_gorev_bitir() {
+    kg_yaz64(KG_OLU + kem_paktif * 8, 1);
 }
 
 // Görev gövdeleri — sonsuz sayaç (preemption ile kesilir; timer IRQ round-robin döndürür).
@@ -177,3 +194,27 @@ isb"#
     eğer kg_oku64(KG_SYSC) >= 3 { ver 1; }
     ver 0;
 }
+
+// A5+B2 gate: GERÇEK EL0 izolasyon-ihlali. EL0 stub GIC MMIO'ya (0x08000000, Device
+// AP=00, EL0-erişimi YASAK) erişir → permission-fault, EL0-kaynaklı → .S kill AÇIKSA
+// kdl_el0_izolasyon_isle(.kem) çağırır → kem_gorev_bitir → KG_OLU[görev]=1. Doğrula:
+// görev ölü işaretlendi + scheduler onu ATLADI (bir daha koşmadı) + OS DEVAM etti.
+sabit KG_EL0_KOTU: tam64 = 1107296512;    // 0x42000100: kötü-erişim stub (syscall stub'dan uzak)
+
+çıplak işlev kem_el0_izolasyon_testi() -> tam32 {
+    kg_yaz32(KG_EL0_KOTU + 0, 3531603977 olarak tam32);   // mov x9, #0
+    kg_yaz32(KG_EL0_KOTU + 4, 4070637577 olarak tam32);   // movk x9, #0x800, lsl #16
+    kg_yaz32(KG_EL0_KOTU + 8, 4181721386 olarak tam32);   // ldr x10, [x9]  (GIC AP=00 → fault)
+    kg_yaz32(KG_EL0_KOTU + 12, 402653181 olarak tam32);   // b .-12 (fault kill'lemezse loop)
+    kg_icache_flush(KG_EL0_KOTU);
+    kis_el0_kill_ac();                                     // opt-in: EL0 fault → süreç öldür
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(KG_EL0_KOTU, KG_STK2, KG_EL0_STK + 4096);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 200000000) { guard = guard + 1; }
+    kem_preempt_aktif_kapat();                             // preemption durdur → main devam
+    eğer kg_oku64(KG_OLU + t * 8) == 1 { ver 1; }          // görev ölü işaretlendi = izolasyon çalıştı
+    ver 0;
+}
+çıplak işlev kem_preempt_aktif_kapat() { kg_yaz64(KG_AKTIF, 0); }
