@@ -647,6 +647,16 @@ işlev main() -> tam32 {
         uart_satir("[10] PING YOK (netsiz/yanıtsız boot normal)");
     }
 
+    // [11] LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): GERÇEK .kem-derlenmiş kod (kul_test,
+    // hand-assembled byte DEĞİL) `.user` section'a (Makefile objcopy-rename) yönlendirildi
+    // + EL0 görevi olarak spawn edildi + syscall yaptı. kem_gorev.kem sağlar (CAT).
+    değişken linchpin_ok: tam32 = kem_linchpin_testi();
+    eğer linchpin_ok == 1 {
+        uart_satir("[11] LINCHPIN OK");
+    } değilse {
+        uart_satir("[11] LINCHPIN HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

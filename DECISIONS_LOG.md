@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-286 — USERLAND ADIM 1: LINCHPIN — GERÇEK .kem-derlenmiş kod EL0'da (`.user` objcopy-rename routing) — [11] LINCHPIN OK 🎉 (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-285).
+
+**Karar [ETKİ: `Makefile` (kem_os `.ll→.o` derlemesine `-ffunction-sections -fdata-sections` +
+objcopy `--rename-section` post-compile adımı); `runtime/kem_gorev.kem` (`kul_test`/`kul_test_adr`/
+`kem_linchpin_testi`); `test/ornekler/kem_os.kem` ([11] LINCHPIN bloğu). USERLAND_ROADMAP (438cb00)
+ADIM 1 — enabling-primitif, Model A shell/spawn'ın önkoşulu.]** A5/B2'nin EL0 stub'ları runtime'da
+yazılan makine-koduydu (llvm-mc byte'lar) — `.kem`'de section-attribute YOK. Bu adım GERÇEK
+`.kem`-derlenmiş kodun `.user` (0x42000000, AP=01) section'ına yönlendirilip EL0'da çalıştığını kanıtlar.
+
+- **Linker-script reorder DENENDİ + BAŞARISIZ (ampirik, USERLAND_ROADMAP'te öngörülmemiş bir bulgu):**
+  `.user`'ın (VMA 0x42000000) matching-kuralını `.text`'in (VMA 0x40000000) GENEL `*(.text*)` glob'undan
+  ÖNCE koymak için script'te "geriye" adres ataması (`. = 0x42000000` sonra `. = 0x40000000`) `ld.lld`'de
+  **"output file too large: 18446744073676063576 bytes"** (unsigned wraparound) hatası verdi — hem
+  normal `. = ` ilerlemesiyle hem `SECTION ADDR :` satır-içi adres formuyla. `ld.lld`'nin düz-script
+  modeli monoton-olmayan VMA sırasını desteklemiyor (en azından bu basit script yapısında).
+- **Çözüm — post-compile objcopy rename (linker-script DEĞİŞMEDİ):** `-ffunction-sections
+  -fdata-sections` her `.kem` sembolünü kendi adıyla `.text.<isim>`/`.data.<isim>`/`.bss.<isim>`/
+  `.rodata.<isim>`'e böler (LLVM IR girdisinde bile — codegen değişmedi). Derleme sonrası `llvm-nm`
+  ile `kul_`-önekli semboller keşfedilir + `llvm-objcopy --rename-section` ile `.user`/`.user_data`'ya
+  YENİDEN ADLANDIRILIR (mevcut `*(.user) *(.user.*)` glob'u eşleştirir, linker-script HİÇ değişmedi).
+  `llvm-objcopy` var-olmayan section'ı rename etmeye çalışınca sessizce no-op (ampirik doğrulandı) →
+  4 rename-flag (text/data/bss/rodata) her sembol için güvenle üretilebilir.
+- **`kul_test` (çıplak, `.kem` kaynağından normal derlenmiş, HAND-ASSEMBLE DEĞİL):** sonsuz `mov x8,#7 /
+  svc #0` döngüsü (satıriçi_asm). `kem_linchpin_testi`: `kul_test_adr()` (adrp/lo12 ile GERÇEK sembol
+  adresi) → `kem_gorev_olustur_el0` (A5/B2'de zaten var) ile EL0 görevi spawn → `KG_SYSC` sayacı
+  (kdl_syscall_isle üzerinden) artıyor mu doğrula.
+- **Falsifiye-kanıt (routing gerçekten çalıştı mı, sentetik-geçiş imkânsız):** final ELF'te
+  `kul_test`'in adresi `.user` aralığında (`0x42000000-0x421FFFFF`) mı diye Makefile'da programatik
+  kontrol (hex→decimal karşılaştırma). Routing yanlış olsaydı `kul_test` kernel `.text`'te (0x40000000
+  civarı, AP=00) kalır → EL0'dan instruction-fetch permission-fault → `KG_SYSC` HİÇ artmaz → test
+  kırmızı. **Gerçek adres: `0x42000000`** (tam `.user` başlangıcı).
+
+**KAPI (4/4):** `[11] LINCHPIN OK` + `[1..10]` kümülatif; `kem_os.ll define @kul_test` + `call
+@kem_linchpin_testi`; final-ELF adres-aralığı programatik doğrulandı; FIXPOINT birebir 33371 (compiler
+`src/*.c` DOKUNULMADI — yalnız Makefile+`.kem`); test_tumu (bekleniyor, bu commit'te doğrulanacak).
+
+**MİLESTONE:** USERLAND_ROADMAP'in "GO/hard-blocker" kararı EMPİRİK OLARAK doğrulandı — LINCHPIN
+çalışıyor. Model A shell/spawn artık gerçek `.kem` userland kaynağı yazılabilir (routing sözleşmesi:
+`kul_` önek, çıplak-tier, `metin` literal YOK — adlandırılmış `küresel değişken` bayt-dizisi kullan).
+Kalan: USERLAND ADIM 2-6 (UART-RX syscall, syscall-ABI genişletme, shell REPL, spawn/wait wiring,
+program modeli) — roadmap'te DAG'lı, ayrı batch'ler.
+
+---
+
 ## D-285 — ZERO-C FAZ 2 B3 (SON): fault-scratch + el0-kill global'leri .S-data'ya taşındı — kem_os C=0 🎉 (2026-07-13) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-284).

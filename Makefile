@@ -925,9 +925,26 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
 	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
+	$(BM_A64) -O2 -Wno-override-module -ffunction-sections -fdata-sections -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
+	@# LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): 'kul_' önekli .kem sembolleri EL0-userland
+	@# routing sözleşmesi. -ffunction-sections/-fdata-sections her sembolü kendi .text.<isim>/
+	@# .data.<isim>/.bss.<isim>/.rodata.<isim>'ine böler (codegen değişmedi) → objcopy ile
+	@# .user/.user_data'ya YENİDEN ADLANDIR (linker-script sıralaması DEĞİŞMEZ — geriye-dönük
+	@# VMA reorder ld.lld'de "output file too large" hatası verir, ampirik doğrulandı; rename
+	@# post-compile adımı bunu atlar). Mevcut *(.user) *(.user.*) / *(.user_data) *(.user_data.*)
+	@# glob'ları (linker/bare-metal-aarch64.ld) BUNLARI eşleştirir — linker-script DEĞİŞMEDİ.
+	@KULSYMS=$$(llvm-nm $(BUILD)/kem_os.o | awk '{print $$NF}' | grep '^kul_' | sort -u); \
+	RFLAGS=""; \
+	for s in $$KULSYMS; do \
+		RFLAGS="$$RFLAGS --rename-section=.text.$$s=.user.$$s --rename-section=.data.$$s=.user_data.$$s --rename-section=.bss.$$s=.user_data.$$s --rename-section=.rodata.$$s=.user_data.$$s"; \
+	done; \
+	if [ -n "$$KULSYMS" ]; then \
+		llvm-objcopy $$RFLAGS $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
+	else \
+		cp $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
+	fi
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
+		$(BUILD)/kem_os_routed.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
@@ -1108,6 +1125,20 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: kem_gorev_bitir/kem_el0_izolasyon_testi define/wire YOK"; exit 1; \
 	fi
 	@echo "  (kdl_el0_izolasyon_isle .kem-define weak-override + kem_gorev_bitir olu[] + izolasyon_testi wire — GERCEK permission-fault kill SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (LINCHPIN, D-286 USERLAND ADIM 1): GERCEK .kem-derlenmis kod (hand-assembled DEGIL) .user'a routed + EL0'da kosuyor:"
+	@if ! grep -qE "define[^@]*@kul_test\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kul_test define YOK — .kem kaynagindan derlenmedi"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_linchpin_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_linchpin_testi wire YOK"; exit 1; \
+	fi
+	@KULADR=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_test$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR" ]; then echo "FAIL: kul_test final ELF'te tanimli degil"; exit 1; fi; \
+	KULDEC=$$((16#$$KULADR)); \
+	if [ $$KULDEC -lt $$((16#42000000)) ] || [ $$KULDEC -ge $$((16#42200000)) ]; then \
+		echo "FAIL: kul_test adresi .user araliginda DEGIL (0x$$KULADR) — routing basarisiz, hala kernel .text'te"; exit 1; \
+	fi; \
+	echo "  (kul_test .kem-define + wire + final ELF adresi 0x$$KULADR [.user araliginda 0x42000000-0x421FFFFF] — GERCEK .kem kod EL0'da routed)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1172,14 +1203,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "PREEMPT OK" $(BUILD)/kem_os.out \
 		   && grep -q "EL0 SYSCALL OK" $(BUILD)/kem_os.out \
 		   && grep -q "IZOLASYON OK" $(BUILD)/kem_os.out \
+		   && grep -q "LINCHPIN OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + DISK/FS/NET/PING bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

@@ -218,3 +218,48 @@ sabit KG_EL0_KOTU: tam64 = 1107296512;    // 0x42000100: kötü-erişim stub (sy
     ver 0;
 }
 çıplak işlev kem_preempt_aktif_kapat() { kg_yaz64(KG_AKTIF, 0); }
+
+// ============================================================================
+// LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): GERÇEK .kem-DERLENMİŞ kod EL0'da koşuyor
+// mu? A5/B2'nin EL0 stub'ları RUNTIME'DA YAZILAN makine-kodu (llvm-mc byte'lar) idi —
+// bu, `.kem` KAYNAĞINDAN normal derlenen bir çıplak fn'in (`kul_test`) `.user` section'a
+// (Makefile'daki objcopy --rename-section adımıyla, .text.kul_*→.user.kul_*) yönlendirilip
+// EL0'da GERÇEKTEN yürütüldüğünü kanıtlar. Prefix `kul_` = userland-routing sözleşmesi
+// (linker glob'u BUNU eşleştirir — Makefile'a bak). metin literal YOK (isim-öneksiz
+// @.str.N sorunu, routing'e uymaz) — yalnız satıriçi_asm syscall.
+
+// Sonsuz syscall-döngüsü (num=7 → .kem kdl_syscall_isle KG_SYSC++, A5'ten kanıtlı).
+çıplak işlev kul_test() {
+    iken 1 == 1 {
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x8, #7
+svc #0"#
+                bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+    }
+}
+çıplak işlev kul_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_test
+add $0, $0, :lo12:kul_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: kul_test'i EL0 görevi olarak spawn et → KG_SYSC GERÇEK .kem-derlenmiş koddan
+// artıyor mu? (routing yanlışsa: kul_test hâlâ kernel .text'te kalır — EL0'dan
+// koşturulmaya ÇALIŞILSA bile giriş adresi kernel .text=AP=00 olur → instruction-fetch
+// permission-fault, KG_SYSC HİÇ ARTMAZ, guard süresi dolar, testi başarısız eder.)
+çıplak işlev kem_linchpin_testi() -> tam32 {
+    kg_yaz64(KG_SYSC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kul_test_adr(), KG_STK1, KG_EL0_STK + 8192);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_SYSC) < 3) ve (guard < 200000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    eğer kg_oku64(KG_SYSC) >= 3 { ver 1; }
+    ver 0;
+}
