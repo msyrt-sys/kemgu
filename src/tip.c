@@ -1,6 +1,22 @@
 #include "tip.h"
+#include "llvm.h"   /* D-269: KEMGU_HEDEF_* makroları + llvm_hedef_* imzaları (tek kaynak) */
 
 #include <string.h>
+
+/* === D-269 (P1): hedef mimari/triple çalışma-zamanı selector'ı ===
+ * Burada TANIMLI çünkü tip.o hem checker (tip_kontrol.o) hem codegen (llvm.o) ile
+ * linklenir → llvm.o'yu unit-testlere sokmadan asm arch-gate'i her iki tarafta paylaşır.
+ * Varsayılan = makrolar (x86_64); ana.c `--mimari arm64` ile değiştirir. Bayrak yoksa
+ * davranış BİREBİR eski (fixpoint/regresyon güvenli). */
+static const char *g_hedef_mimari = KEMGU_HEDEF_MIMARI;
+static const char *g_hedef_triple = KEMGU_HEDEF_TRIPLE;
+
+void llvm_hedef_ayarla(const char *mimari, const char *triple) {
+    if (mimari) g_hedef_mimari = mimari;
+    if (triple) g_hedef_triple = triple;
+}
+const char *llvm_hedef_mimari(void) { return g_hedef_mimari; }
+const char *llvm_hedef_triple(void) { return g_hedef_triple; }
 
 /* === Olusturucular === */
 

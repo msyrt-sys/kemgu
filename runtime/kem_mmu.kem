@@ -1,0 +1,326 @@
+// kem_mmu.kem — FAZ-A1 (D-276): SAF-.kem MMU/fault entegrasyonu.
+// ============================================================================
+// ALT-HEDEF A: [5] EXC'i GERÇEK vektör-bağlı fault yap (mevcut C-MMU + .S recovery).
+//   Sentetik self-test (kem_istisna_isle, hardcoded ESR/FAR) KALIR — ESR-decode
+//   mantığını doğrular. Buna EK: gerçek data-abort → FAR → recovery kanıtı.
+//
+// SAF-.kem primitifleri (hepsi kanıtlı — D-269 P1 + çıplak-tier + inline-asm):
+//   • Gerçek fault: 0x80000000 HARİTASIZ (C-MMU L1[2..511]=0 → level-1 çeviri-fault).
+//     Volatile oku → data-abort → .S kdl_exc_ortak: FAR→kdl_fault_yakalanan, bayrağı
+//     temizle, ELR+=4 (faulting ldr'yi ATLA), frame restore, eret → OS DEVAM.
+//     Taklit edilemez (MMU zorlamıyorsa 0x80000000 okuması sessizce geçer → gate kırmızı).
+//   • Recovery-scratch (kdl_fault_bekleniyor / kdl_fault_yakalanan): .S kdl_exc_ortak
+//     ile EŞLEŞİK 2 global. C-tanımlı KALIR (.S substrat'ı ile birlikte) — .kem 'küresel'
+//     internal-linkage olduğundan .S'ye açılamaz (codegen-gap; bkz. D-276 sınır-notu).
+//     .kem bunlara INLINE-ASM (adrp/add + ldr/str) ile erişir → pure-.kem raw-mem
+//     primitifi. ~{memory} clobber = C `volatile` semantiğinin asm karşılığı (store'ları
+//     fault'tan önce görünür kılar + fault sonrası zorla-reload; clang const-fold etmez).
+//   • Build'de kem_os.kem ile CAT edilir (tek birim → çıplak→çıplak, T002 YOK).
+
+// Haritasız test VA (0x80000000 = 2147483648): C-MMU L1[2..511]=0 → level-1 çeviri-fault.
+sabit KMMU_FAULT_VA: tam64 = 2147483648;
+
+// --- Recovery-scratch erişimi: C-global'lere inline-asm (adrp/add + ldr/str). x9=scratch. ---
+çıplak işlev kmmu_bekle_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_bekleniyor
+add x9, x9, :lo12:kdl_fault_bekleniyor
+str $0, [x9]"#
+            girdi("r", v)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+çıplak işlev kmmu_yakala_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_yakalanan
+add x9, x9, :lo12:kdl_fault_yakalanan
+str $0, [x9]"#
+            girdi("r", v)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+çıplak işlev kmmu_bekle_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_bekleniyor
+add x9, x9, :lo12:kdl_fault_bekleniyor
+ldr $0, [x9]"#
+            çıktı("=r", &x)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+çıplak işlev kmmu_yakala_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_fault_yakalanan
+add x9, x9, :lo12:kdl_fault_yakalanan
+ldr $0, [x9]"#
+            çıktı("=r", &x)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// Haritasız VA'yı volatile oku → GERÇEK data-abort (tek ldr; .S ELR+=4 ile atlar).
+// Dönen değer ÇÖP (fault sırasında yakalanır) — çağıran atar.
+çıplak işlev kmmu_oku_faulting(adr: tam64) -> tam64 {
+    değişken p: *tam64 = adr olarak *tam64;
+    ver *p;
+}
+
+// A2 (D-278): GERÇEK syndrome oku — mrs ESR_EL1 / FAR_EL1. Trap SONRASI (eret sonrası)
+// bu register'lar bir-sonraki istisnaya dek fault değerlerini TUTAR (ARMv8: yalnız istisna
+// girişinde yazılır). .S kdl_exc_ortak yalnız OKUR (mrs) → değiştirmez → post-recovery geçerli.
+çıplak işlev kmmu_esr_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, esr_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kmmu_far_mrs() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, far_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// ============================================================================
+// ALT-HEDEF B (D-277): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri.
+//   Kanıtlı-C kdl_mmu.c'nin BİREBİR yeniden gerçekleştirmesi (descriptor bit'leri +
+//   MAIR/TCR/TTBR0 aynı). .S boot `bl kdl_mmu_kur` artık .kem'i çağırır (C guard'lı).
+//   EK: bir non-identity çeviri (VA 0x50000000 → PA 0x46000000) → çeviri gate.
+//   Çıplak (region-prologue YOK — boot'ta pre-main, heap/region henüz yok); yalnız
+//   SABİT-adres store + MSR. MMU OFF iken tabloları yaz → MSR sctlr ile MMU ON.
+
+sabit KMMU_L1: tam64 = 1157627904;         // 0x45000000 (4KB-hizalı, free RAM)
+sabit KMMU_L2: tam64 = 1157632000;         // 0x45001000
+sabit KMMU_CEVIRI_VA: tam64 = 1342177280;  // 0x50000000 (non-identity kaynak)
+sabit KMMU_CEVIRI_PA: tam64 = 1174405120;  // 0x46000000 (backed RAM hedef, free)
+sabit KMMU_RAM: tam64 = 1073741824;        // 0x40000000
+sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
+
+çıplak işlev kmmu_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
+çıplak işlev kmmu_o64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+// SAF-.kem MMU kurulumu — .S boot'tan çağrılır. Descriptor'lar kdl_mmu.c birebir:
+//   Device blok=0x401(1025), Normal-2MB blok=pa|0x705(+1797), tablo=l2|0x3(+3).
+çıplak işlev kdl_mmu_kur() {
+    değişken i: tam64 = 0;
+    iken i < 512 { kmmu_y64(KMMU_L1 + i * 8, 0); i = i + 1; }        // L1 sıfırla
+    değişken n: tam64 = 0;
+    iken n < 512 {                                                    // L2 identity (2MB Normal)
+        değişken pa: tam64 = KMMU_RAM + n * KMMU_2MB;
+        kmmu_y64(KMMU_L2 + n * 8, pa + 1797);                        // |0x705
+        n = n + 1;
+    }
+    değişken idx: tam64 = (KMMU_CEVIRI_VA - KMMU_RAM) / KMMU_2MB;     // 128: non-identity override
+    kmmu_y64(KMMU_L2 + idx * 8, KMMU_CEVIRI_PA + 1797);              // VA 0x50000000 → PA 0x46000000
+    // A5 (D-281): EL0 user page — 0x42000000 (L2[16]) AP=01 (EL0+EL1 RW, UXN=0 EL0-exec).
+    // desc = pa | 0x745 (0x705 Normal + bit6 AP=01). EL0 stub + user yığını burada.
+    kmmu_y64(KMMU_L2 + 16 * 8, 1107296256 + 1861);                  // 0x42000000 | 0x745
+    kmmu_y64(KMMU_L1, 1025);                                         // L1[0] Device (0x401)
+    kmmu_y64(KMMU_L1 + 8, KMMU_L2 + 3);                             // L1[1] → L2 tablo (0x3)
+    değişken mair: tam64 = 65280;                                    // 0xFF00
+    değişken tcr: tam64 = 4303369497;                              // 0x100803519
+    değişken sbit: tam64 = 4101;                                   // 0x1005 (SCTLR M|C|I)
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"msr mair_el1, $0
+msr tcr_el1, $1
+msr ttbr0_el1, $2
+dsb ish
+tlbi vmalle1
+dsb ish
+isb
+mrs x9, sctlr_el1
+orr x9, x9, $3
+msr sctlr_el1, x9
+isb"#
+            girdi("r", mair) girdi("r", tcr) girdi("r", KMMU_L1) girdi("r", sbit)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+}
+
+// ÇEVİRİ gate: VA 0x50000000 ↔ PA 0x46000000 ALIAS doğrula (çift-yönlü, volatile).
+// 1 = non-identity çeviri donanımda çalışıyor (identity olsaydı VA→PA 0x50000000
+// backed-değil, alias olmazdı). Taklit edilemez: iki farklı VA aynı PA'yı görüyor.
+çıplak işlev kmmu_ceviri_testi() -> tam32 {
+    kmmu_y64(KMMU_CEVIRI_PA, 3735928559);            // 0xDEADBEEF → identity VA (=PA)
+    değişken a: tam64 = kmmu_o64(KMMU_CEVIRI_VA);     // non-identity VA'dan oku → alias mı?
+    kmmu_y64(KMMU_CEVIRI_VA, 3405691582);            // 0xCAFEBABE → non-identity VA (ters yön)
+    değişken b: tam64 = kmmu_o64(KMMU_CEVIRI_PA);     // identity VA'dan oku → alias mı?
+    eğer a == 3735928559 ve b == 3405691582 {
+        ver 1;
+    }
+    ver 0;
+}
+
+// GERÇEK fault-gate: haritasız VA oku → .S recovery → FAR doğru + kurtarıldı mı?
+// 1 = MMU zorluyor + gerçek fault yakalandı + FAR==VA + OS devam ediyor. Sentetik DEĞİL.
+çıplak işlev kmmu_fault_testi() -> tam32 {
+    kmmu_yakala_yaz(0);                                        // FAR sonucu temizle
+    kmmu_bekle_yaz(1);                                         // .S recovery iste (yoksa halt)
+    değişken cop: tam64 = kmmu_oku_faulting(KMMU_FAULT_VA);    // GERÇEK fault → .S recovery
+    değişken bekle: tam64 = kmmu_bekle_oku();                  // .S temizledi mi? (0 = kurtarıldı)
+    değişken far: tam64 = kmmu_yakala_oku();                   // yakalanan FAR
+    eğer bekle == 0 ve far == KMMU_FAULT_VA {
+        ver 1;
+    }
+    ver 0;
+}
+
+// ============================================================================
+// ZERO-C B1 (D-283): SAF-.kem kdl_istisna_isle — EL1 kurtarılamaz-fault raporu.
+// Kanıtlı-C kdl_istisna_isle (kdl_kesme.c) BİREBİR .kem yeniden gerçekleştirmesi.
+// .S kdl_exc_ortak `bl kdl_istisna_isle(tip,a,b)` çağırır (kurtarılamaz-fault yolu —
+// D-276 recovery bayrağı SET DEĞİLSE). WEAK-OVERRIDE: C tanımı weak yapıldı, bu strong
+// .kem link'te kazanır (guard/cascade yok). Çıplak (trap-bağlamı, region yok) → mevcut
+// normal-tier uart_metin/satir/onaltilik (yetki<MMIO> capability) ÇAĞRILAMAZ (D-257
+// çıplak-call-rule, E013) → YENİ çıplak-tier ham-MMIO UART primitifi (vblk_y8 deseni:
+// doğrudan volatile-deref, capability-suz). noreturn (rapor + wfe sonsuz).
+
+sabit KIS_UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (UART_TABAN ile aynı)
+sabit KIS_UART_DR: tam64    = 150994944;   // +0x00
+// D-287 DÜZELTME: 150995112 (0x090000A8) YANLIŞ değerdi (B1'den beri, latent bug) — PL011
+// FR register GERÇEK offset'i 0x18 = 150994968 (0x09000018), NOT 0xA8. 0xA8 PL011'de
+// tanımsız/reserved alan — QEMU'da muhtemelen HER ZAMAN 0 okunuyordu. TX (kis_bayt) bu
+// yüzden hiç GERÇEKTEN TXFF beklemiyordu (her zaman "dolu değil" görüp hemen geçiyordu) —
+// sessizce çalışıyordu (yanlış ama zararsız: TX asla gerçekten bloklanmadı). RX (kis_satir_oku,
+// D-287) AYNI bug'ı MASKELEYEMEDİ — RXFE her zaman 0 (=veri var) okununca sonsuz-döngü
+// (DR'den çöp okuyup asla \n/\r bulamama) oluştu — gerçek gate (UART RX) bunu ortaya çıkardı.
+sabit KIS_UART_FR: tam64    = 150994968;   // 0x09000018 (DOĞRU — kdl_uart.c/UART_FR ile eşleşir)
+sabit KIS_UART_TXFF: tam32  = 32;          // bit5
+
+çıplak işlev kis_o32(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
+çıplak işlev kis_y32(adr: tam64, v: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = v; }
+
+// TXFF boşalana dek bekle + bayt yaz (çıplak, capability-suz — mevcut uart_bayt'ın ham eşleniği).
+çıplak işlev kis_bayt(b: tam32) {
+    iken (kis_o32(KIS_UART_FR) & KIS_UART_TXFF) != 0 { }
+    kis_y32(KIS_UART_DR, b);
+}
+çıplak işlev kis_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { kis_bayt(metin_bayt(s, i) olarak tam32); i = i + 1; }
+}
+çıplak işlev kis_satir() { kis_bayt(10); }
+çıplak işlev kis_hex_basamak(d: dtam64) {
+    eğer d > 0 {
+        kis_hex_basamak(d / 16);
+        değişken r: tam32 = (d - (d / 16) * 16) olarak tam32;
+        eğer r < 10 { kis_bayt(r + 48); } değilse { kis_bayt(r + 87); }
+    }
+}
+çıplak işlev kis_onaltilik(d: dtam64) {
+    eğer d == 0 { kis_bayt(48); } değilse { kis_hex_basamak(d); }
+}
+çıplak işlev kis_far_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, far_el1"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// kdl_istisna_isle birebir: FAR oku + "ISTISNA tip=0x.. a=0x.. b=0x.. adr=0x.." + wfe sonsuz.
+çıplak işlev kdl_istisna_isle(tip: tam64, a: tam64, b: tam64) {
+    değişken adr: tam64 = kis_far_oku();
+    kis_metin("ISTISNA tip=0x"); kis_onaltilik(tip);
+    kis_metin(" a=0x"); kis_onaltilik(a);
+    kis_metin(" b=0x"); kis_onaltilik(b);
+    kis_metin(" adr=0x"); kis_onaltilik(adr);
+    kis_satir();
+    iken 1 == 1 {
+        güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"wfe"# bozulan("~{memory}") } }
+    }
+}
+
+// ============================================================================
+// ZERO-C B2 (D-284): SAF-.kem kdl_el0_izolasyon_isle — EL0 izolasyon-ihlali → süreç öldür.
+// Kanıtlı-C kdl_el0_izolasyon_isle (kdl_kesme.c) BİREBİR .kem yeniden gerçekleştirmesi.
+// .S kdl_exc_ortak `bl kdl_el0_izolasyon_isle(far)` çağırır (EL0-kaynaklı fault + kill
+// AÇIK ise). Rapor (kis_* B1'den) + kem_gorev_bitir() (kem_gorev.kem — kem_paktif'i
+// KG_OLU'da işaretle; scheduler bir daha seçmez). kdl_el0_kill_aktif C-DATA KALIR (.S
+// substrat'ı okuyor, D-276 fault-scratch deseni) — .kem inline-asm YAZAR (opt-in aç).
+
+çıplak işlev kis_el0_kill_ac() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kdl_el0_kill_aktif
+add x9, x9, :lo12:kdl_el0_kill_aktif
+mov x10, #1
+str x10, [x9]"#
+            bozulan("~{x9}") bozulan("~{x10}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_el0_izolasyon_isle birebir: rapor + kem_gorev_bitir. .S FAR'ı x0'da geçer.
+çıplak işlev kdl_el0_izolasyon_isle(far: tam64) {
+    kis_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");
+    kis_onaltilik(far);
+    kis_satir();
+    kem_gorev_bitir();
+}
+
+// ============================================================================
+// USERLAND ADIM 2 (D-287): SAF-.kem UART-RX (sys 26 read_satir). Kanıtlı-C
+// kdl_kesme.c:478-495 BİREBİR yeniden gerçekleştirmesi: PL011 FR.RXFE=bit4 bounded-poll
+// (8M iter/bayt — deadlock-guard, D-158 dersi: yük-duyarlı sonsuz-bekleme YOK), DR&0xFF
+// oku, \n/\r'de dur, EOF'ta -1 (un==0 ise). kis_bayt (TX, B1) primitifinin ikizi.
+
+sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
+
+// DR'yi TEK sefer oku (gerçek donanımda okuma FIFO'dan tüketir — iki kez okumak FARKLI
+// bayt/bozuk değer döndürebilir; tek-okuma + yerel değişkende mod-al ile düzeltildi).
+çıplak işlev kis_rx_dr_oku() -> tam32 {
+    değişken d: tam32 = kis_o32(KIS_UART_DR);
+    ver d - ((d / 256) * 256);
+}
+çıplak işlev kis_buf_yaz8(adr: tam64, i: tam32, b: tam32) { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; *p = b olarak dtam8; }
+çıplak işlev kis_buf_oku8(adr: tam64, i: tam32) -> tam32 { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; ver (*p) olarak tam32; }
+
+// buf_adr'a satır oku (en fazla umax-1 bayt + null). Dönen: okunan bayt sayısı (>=0)
+// veya EOF/timeout'ta -1 (hiç bayt gelmediyse). \n veya \r satırı sonlandırır (atılır).
+// Poll-sınırı (bkz. KIS_RX_POLL_LIMIT): proven-C'nin 8_000_000'ı GERÇEK donanım hız
+// varsayımıyla kalibre edilmişti; QEMU'da HER MMIO okuması device-emulation trap'i
+// (mikrosaniyeler) — 8M iterasyon TÜM kem_os boot penceresini (12s) doldurup gate'i
+// TIMEOUT ile öldürüyordu (ampirik bulgu). Küçültüldü — anlam AYNI (bounded-poll→EOF),
+// sabit ortam-hızına göre kalibre edildi (kör-kopyalama DEĞİL).
+çıplak işlev kis_satir_oku(buf_adr: tam64, umax: tam32) -> tam32 {
+    değişken un: tam32 = 0;
+    iken 1 == 1 {
+        değişken geldi: tam32 = 0;
+        değişken i: tam64 = 0;
+        iken i < 20000 {
+            eğer (kis_o32(KIS_UART_FR) & KIS_UART_RXFE) == 0 { geldi = 1; i = 20000; } değilse { i = i + 1; }
+        }
+        eğer geldi == 0 {
+            kis_buf_yaz8(buf_adr, un, 0);
+            eğer un > 0 { ver un; } değilse { ver 0 - 1; }
+        }
+        değişken c: tam32 = kis_rx_dr_oku();
+        eğer (c == 10) veya (c == 13) {
+            kis_buf_yaz8(buf_adr, un, 0);
+            ver un;
+        }
+        eğer un < (umax - 1) {
+            kis_buf_yaz8(buf_adr, un, c);
+            un = un + 1;
+        }
+    }
+    ver un;
+}

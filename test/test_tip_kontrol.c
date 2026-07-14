@@ -2251,6 +2251,60 @@ static void test_guvensiz_kapaninca_deref_ret(void) {
     arena_serbest(a);
 }
 
+static void test_ciplak_standalone_grant_ok(void) {
+    /* D-254: çıplak standalone işlev gövdesi = örtük güvensiz-bağlam → *p deref
+     * explicit `güvensiz {}` gerektirmez (çıplak = güvensiz-tier primitive). */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev f(p: *tam32) -> tam32 { ver *p; }", a);
+    test_sonuc("D-254: ciplak standalone *p deref -> 0 hata (guvensiz-grant)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_ciplak_method_grant_ok(void) {
+    /* D-256 (audit Bulgu #2): çıplak uygula-method gövdesi de örtük güvensiz-bağlam
+     * — standalone yol ile birebir; codegen zaten çıplak-method'u prologue-skip ile
+     * emit ediyor → checker↔codegen tutarlılığı. */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { x: tam32; } "
+        "uygula K { \xc3\xa7\xc4\xb1plak i\xc5\x9flev f(kendin, p: *tam32) -> tam32 { ver *p; } }", a);
+    test_sonuc("D-256: ciplak uygula-method *p deref -> 0 hata (guvensiz-grant)", h == 0);
+    arena_serbest(a);
+}
+
+static void test_ciplak_method_yok_g001(void) {
+    /* Kontrast: çıplak OLMADAN aynı uygula-method → G001 (grant yalnız çıplak'a özgü,
+     * güvenli tarafta hata — geçersiz programı kabul etmiyor). */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 K { x: tam32; } "
+        "uygula K { i\xc5\x9flev f(kendin, p: *tam32) -> tam32 { ver *p; } }", a);
+    test_sonuc("D-256: ciplak-OLMAYAN uygula-method *p deref -> G001 (1 hata)", h == 1);
+    arena_serbest(a);
+}
+
+static void test_ciplak_call_rule_e013(void) {
+    /* D-257 çıplak-call-rule: çıplak fn (ρ-suz C-ABI) normal (ρ-alan) fn çağıramaz
+     * → verilecek ρ yok → codegen `ptr null` → segfault. Statik E013 reddi. */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev yardimci() -> tam32 { ver 5; } "
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev kotu() -> tam32 { ver yardimci(); }", a);
+    test_sonuc("D-257: ciplak -> normal fn cagrisi -> E013 (1 hata)", h == 1);
+    arena_serbest(a);
+}
+
+static void test_ciplak_call_rule_ciplak_ok(void) {
+    /* D-257: çıplak → çıplak çağrısı İZİNLİ (ikisi de ρ-suz, ABI uyumlu). */
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev alt() -> tam32 { ver 5; } "
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev ust() -> tam32 { ver alt(); }", a);
+    test_sonuc("D-257: ciplak -> ciplak fn cagrisi -> 0 hata (ABI uyumlu)", h == 0);
+    arena_serbest(a);
+}
+
 /* === C5: satirici_asm tip kurallari (G002 / AS001 / AS002) === */
 
 static void test_asm_temiz(void) {
@@ -2561,6 +2615,13 @@ int main(void) {
     test_guvensiz_deref_disarda_ret();
     test_guvensiz_ic_ice_deref_ok();
     test_guvensiz_kapaninca_deref_ret();
+
+    printf("\n--- D-254/D-256: ciplak islev guvensiz-grant ---\n");
+    test_ciplak_standalone_grant_ok();
+    test_ciplak_call_rule_e013();
+    test_ciplak_call_rule_ciplak_ok();
+    test_ciplak_method_grant_ok();
+    test_ciplak_method_yok_g001();
 
     printf("\n--- C5: satirici_asm (G002 / AS001 / AS002) ---\n");
     test_asm_temiz();

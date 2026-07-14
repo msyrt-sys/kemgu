@@ -1,0 +1,97 @@
+// kem_zaman.kem — FAZ-A2/A3 (D-279): SAF-.kem timer + GIC + IRQ dispatch (zaman alt-sistemi).
+// ============================================================================
+// Kanıtlı-C kdl_zaman.c'nin BİREBİR .kem yeniden gerçekleştirmesi. GERÇEK timer-IRQ:
+// CNTV (sanal generic timer) + GICv2 (QEMU virt) → periyodik IRQ → .S kdl_irq_ortak
+// `bl kdl_irq_isle` → .kem handler tik++ + re-arm + EOI. Preemption YOK (A3; A4'te gelir).
+//
+// SAF-.kem primitifleri: GIC = MMIO çıplak-deref; CNTV/DAIF = satıriçi_asm arm64 (msr/mrs).
+//   .S kdl_irq_ortak (trap-frame + eret) DEĞİŞMEZ; yalnız `bl kdl_irq_isle` .kem'i çözer
+//   (C kdl_zaman.c guard'lı, bm_a64_zaman_kem.o variant).
+// GIC MMIO (0x08000000/0x08010000) = Device — kdl_mmu L1[0] Device blok haritalı (kem_mmu.kem).
+
+sabit KZ_GICD: tam64 = 134217728;    // 0x08000000 distributor
+sabit KZ_GICC: tam64 = 134283264;    // 0x08010000 CPU interface
+sabit KZ_TIMER_IRQ: tam32 = 27;      // sanal timer PPI (INTID 27)
+
+// tik + aralık: YALNIZ .kem okur/yazar (.S paylaşımı YOK) → küresel internal-linkage yeterli.
+küresel değişken kem_tik: tam64 = 0;
+küresel değişken kem_timer_aralik: tam64 = 0;
+
+çıplak işlev kz_mmio_yaz(adr: tam64, deger: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = deger; }
+çıplak işlev kz_mmio_oku(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
+
+// CNTV / DAIF — satıriçi_asm arm64 (msr/mrs, D-269 P1).
+çıplak işlev kz_cntfrq() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mrs $0, cntfrq_el0"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kz_cntv_tval(v: tam64) {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr cntv_tval_el0, $0"# girdi("r", v) } }
+}
+çıplak işlev kz_cntv_ctl(v: tam64) {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr cntv_ctl_el0, $0"# girdi("r", v) } }
+}
+çıplak işlev kz_irq_ac() {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr daifclr, #2"# bozulan("~{memory}") } }
+}
+
+// tik'i TAZE oku (IRQ-context'te yazılıyor → cache'lenmesin): inline-asm ldr @kem_tik.
+çıplak işlev kem_tik_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"adrp x9, kem_tik
+add x9, x9, :lo12:kem_tik
+ldr $0, [x9]"#
+            çıktı("=r", &x)
+            bozulan("~{x9}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// GIC init (kdl_kesme_kur birebir). ISENABLER0 bit27 = 1<<27 = 134217728.
+çıplak işlev kdl_kesme_kur() {
+    kz_mmio_yaz(KZ_GICD + 0, 1);              // GICD_CTLR = enable
+    kz_mmio_yaz(KZ_GICC + 4, 255);            // GICC_PMR = 0xFF (tüm öncelikler)
+    kz_mmio_yaz(KZ_GICC + 0, 1);              // GICC_CTLR = enable
+    kz_mmio_yaz(KZ_GICD + 256, 134217728);    // ISENABLER0 bit27
+}
+// Timer start (kdl_timer_baslat birebir): interval ~10ms, enable, daifclr.
+çıplak işlev kdl_timer_baslat() {
+    değişken f: tam64 = kz_cntfrq();
+    kem_timer_aralik = f / 100;               // ~10ms
+    kz_cntv_tval(kem_timer_aralik);
+    kz_cntv_ctl(1);                           // enable + unmask
+    kz_irq_ac();                              // daifclr #2 → IRQ aç
+}
+// IRQ dispatch — .S kdl_irq_ortak `bl kdl_irq_isle` (sp = trap-frame ptr). timer →
+// re-arm + tik++; EOI. A3: preemption YOK → sp OLDUĞU GİBİ döner (aynı bağlam sürer).
+çıplak işlev kdl_irq_isle(sp: tam64) -> tam64 {
+    değişken iar: tam32 = kz_mmio_oku(KZ_GICC + 12);       // GICC_IAR
+    değişken irq: tam32 = iar - ((iar / 1024) * 1024);     // iar & 0x3FF
+    eğer irq == KZ_TIMER_IRQ {
+        kz_cntv_tval(kem_timer_aralik);                    // re-arm (ISTATUS temizler)
+        kem_tik = kem_tik + 1;
+    }
+    kz_mmio_yaz(KZ_GICC + 16, iar);                        // GICC_EOIR (kesme bitti)
+    ver kem_preempt(sp);                                   // A4: scheduler (aktif değilse sp döner)
+}
+
+// A3 gate: timer'ı kur + IRQ'ların GERÇEKTEN tik ilerlettiğini doğrula. tik yalnız
+// IRQ handler'da artar → tik>=hedef = gerçek periyodik IRQ tetiklendi. guard: timer
+// bozuksa (hiç IRQ yok) sonsuz-döngü YOK → HATA raporla (0 döner).
+çıplak işlev kem_timer_testi() -> tam32 {
+    kdl_kesme_kur();
+    kdl_timer_baslat();
+    değişken guard: tam64 = 0;
+    iken (kem_tik_oku() < 3) ve (guard < 50000000) {       // ~3 tik (30ms) bekle, guard'lı
+        guard = guard + 1;
+    }
+    eğer kem_tik_oku() >= 3 {
+        ver 1;                                             // GERÇEK IRQ tik ilerledi
+    }
+    ver 0;                                                 // timer tetiklemedi (guard doldu)
+}

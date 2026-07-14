@@ -1,0 +1,382 @@
+// kem_heap.kem — K1 (D-260): SAF-.kem çıplak `malloc`/`free` — C kdl_bare_heap YERİNE.
+// ============================================================================
+// Bootstrap-circularity F3'te (D-259) kırıldı; K1 bunu kem_os'a ENTEGRE eder:
+// runtime malloc/free artık SAF-.kem. Çıplak (region-prologue'suz, C-ABI) →
+// @malloc(i64)->ptr / @free(ptr) sembollerini kdl_bolge.c'nin beklediği C-ABI
+// ile sağlar. kdl_bare_heap.c'de bu ikisi `#ifndef KEMGU_KEM_MALLOC` ile devre
+// dışı (memcpy/memset/kdl_global_bolge_al/kdl_dizi orada KALIR — K4).
+//
+// Model (C kdl_bare_heap ile birebir): her tahsis 16-hizalı, {boyut, sonraki}
+// 16-baytlık header. free() bloğu LIFO serbest-listeye iter; malloc() önce
+// ilk-uyan serbest bloğu arar (F4.3 per-iter region-free frame'lerini geri
+// kazanır → sınırlı 64KB heap'te döngü OOM'unu önler), yoksa bump'lar.
+// Çıplak = güvensiz-tier → ham-pointer (inttoptr/ptrtoint/deref) + küresel
+// erişimi explicit `güvensiz {}` gerektirmez.
+
+küresel değişken kem_bump: tam64 = 0;   // bir sonraki bump adresi (16-hizalı)
+küresel değişken kem_son: tam64  = 0;   // heap üst sınırı (dışlayıcı)
+küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi; 0=boş)
+küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölge (adres)
+
+// Boot-glue çağırır (main'in ilk malloc'undan ÖNCE): heap penceresini kur.
+çıplak işlev kem_heap_kur(taban: tam64, son: tam64) {
+    kem_bump = ((taban + 15) / 16) * 16;   // 16-hizala
+    kem_son = son;
+    kem_bos = 0;
+}
+
+// C-ABI malloc: void* malloc(size_t) → @malloc(i64)->ptr.
+çıplak işlev malloc(n: tam64) -> *tam8 {
+    değişken istek: tam64 = n;
+    eğer istek == 0 { istek = 1; }               // 0-bayt → benzersiz geçerli ptr
+    değişken toplam: tam64 = ((istek + 31) / 16) * 16;   // header(16)+istek, 16-hizalı
+
+    // 1) Serbest-liste ilk-uyum (header'ı KORU → böl/küçült yok, bloğu bütün ver).
+    değişken onceki: tam64 = 0;
+    değişken cur: tam64 = kem_bos;
+    iken cur != 0 {
+        değişken hsize_p: *tam64 = cur olarak *tam64;             // header.boyut @ +0
+        değişken bsize: tam64 = *hsize_p;
+        değişken hnext_p: *tam64 = (cur + 8) olarak *tam64;       // header.sonraki @ +8
+        değişken bnext: tam64 = *hnext_p;
+        eğer bsize >= toplam {
+            eğer onceki == 0 {
+                kem_bos = bnext;                                  // liste başından çıkar
+            }
+            değilse {
+                değişken op_p: *tam64 = (onceki + 8) olarak *tam64;
+                *op_p = bnext;                                    // önceki.sonraki = bnext
+            }
+            ver (cur + 16) olarak *tam8;                          // blok + header
+        }
+        onceki = cur;
+        cur = bnext;
+    }
+
+    // 2) Bump tahsis (sınır + OOM korumalı; bump zaten 16-hizalı, toplam 16-katı).
+    değişken p: tam64 = kem_bump;
+    eğer p + toplam > kem_son { ver 0 olarak *tam8; }             // OOM → null
+    kem_bump = p + toplam;
+    değişken hs_p: *tam64 = p olarak *tam64;
+    *hs_p = toplam;                                               // header.boyut
+    değişken hn_p: *tam64 = (p + 8) olarak *tam64;
+    *hn_p = 0;                                                    // header.sonraki
+    ver (p + 16) olarak *tam8;
+}
+
+// C-ABI free: void free(void*) → @free(ptr).
+çıplak işlev free(p: *tam8) {
+    değişken pa: tam64 = p olarak tam64;         // ptrtoint
+    eğer pa == 0 { ver; }
+    değişken h: tam64 = pa - 16;                 // header
+    değişken hn_p: *tam64 = (h + 8) olarak *tam64;
+    *hn_p = kem_bos;                             // header.sonraki = eski baş (LIFO it)
+    kem_bos = h;
+}
+
+// ============================================================================
+// K3 (D-261): SAF-.kem çıplak REGION (bölge) runtime — C kdl_bolge.c YERİNE.
+// Bölge = malloc'lu blok tek-yönlü listesi + blok-içi bump. malloc/free AYNI
+// dosyada (yukarıda, çıplak) → çıplak→çıplak call resolve (islev_bul). Region
+// memcpy GEREKMEZ. Sızıntı-sayaçları YOK (kem_os leak-check etmez; C tarafı
+// tests için tutar). Struct düzenleri (C kdl_bolge.c ile birebir):
+//   KdlBolge     { bas@0(ptr), blok_sayisi@8(i32) }        malloc 16
+//   KdlBolgeBlok { sonraki@0, kapasite@8, kullanilan@16, veri@24 }  malloc 24+kap
+// Hizalama ÇALIŞMA-ZAMANI adresine göre (((x+15)/16)*16), bitwise gerekmez.
+
+// Yeni blok: 24-bayt header + kap bayt veri malloc'la (NULL → 0).
+çıplak işlev kem_blok_olustur(kap: tam64) -> *tam8 {
+    değişken blk: *tam8 = malloc(24 + kap);
+    eğer (blk olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ba: tam64 = blk olarak tam64;
+    değişken sp: *tam64 = ba olarak *tam64;
+    *sp = 0;                                       // sonraki = NULL
+    değişken kp: *tam64 = (ba + 8) olarak *tam64;
+    *kp = kap;                                     // kapasite
+    değişken up: *tam64 = (ba + 16) olarak *tam64;
+    *up = 0;                                       // kullanilan
+    ver blk;
+}
+
+// kdl_bolge_olustur() -> KdlBolge* : yeni bölge (KdlBolge + ilk 64KB blok).
+çıplak işlev kdl_bolge_olustur() -> *tam8 {
+    değişken b: *tam8 = malloc(16);
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken blk: *tam8 = kem_blok_olustur(65536);
+    eğer (blk olarak tam64) == 0 { free(b); ver 0 olarak *tam8; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    *basp = blk olarak tam64;                      // bas = ilk blok
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = 1;                                      // blok_sayisi = 1
+    ver b;
+}
+
+// kdl_bolge_ayir(b, n) -> void* : aktif bloktan 16-hizalı bump; taşarsa yeni blok.
+çıplak işlev kdl_bolge_ayir(b: *tam8, n: tam64) -> *tam8 {
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken nn: tam64 = n;
+    eğer nn == 0 { nn = 1; }
+    değişken hn: tam64 = ((nn + 15) / 16) * 16;    // hiza_yukari
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;                  // b->bas
+    eğer blok != 0 {
+        değişken kp: *tam64 = (blok + 8) olarak *tam64;
+        değişken kapasite: tam64 = *kp;
+        değişken up: *tam64 = (blok + 16) olarak *tam64;
+        değişken kullanilan: tam64 = *up;
+        değişken cur: tam64 = (blok + 24) + kullanilan;   // veri + kullanilan
+        değişken ahiz: tam64 = ((cur + 15) / 16) * 16;
+        değişken pad: tam64 = ahiz - cur;
+        değişken kalan: tam64 = kapasite - kullanilan;
+        eğer pad <= kalan {
+            eğer hn <= (kalan - pad) {
+                *up = kullanilan + pad + hn;
+                ver ahiz olarak *tam8;
+            }
+        }
+    }
+    // yeni blok (hn + en kötü hiza payı; en az 64KB)
+    değişken kap: tam64 = hn + 16;
+    eğer kap < 65536 { kap = 65536; }
+    değişken yeni: *tam8 = kem_blok_olustur(kap);
+    eğer (yeni olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ya: tam64 = yeni olarak tam64;
+    değişken ysp: *tam64 = ya olarak *tam64;
+    *ysp = blok;                                   // yeni->sonraki = eski bas
+    *basp = ya;                                    // b->bas = yeni
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = *bsp + 1;                               // blok_sayisi++
+    değişken veri: tam64 = ya + 24;
+    değişken ahiz2: tam64 = ((veri + 15) / 16) * 16;
+    değişken pad2: tam64 = ahiz2 - veri;
+    değişken yup: *tam64 = (ya + 16) olarak *tam64;
+    *yup = pad2 + hn;                              // yeni->kullanilan
+    ver ahiz2 olarak *tam8;
+}
+
+// K4b (D-263): kdl_global_bolge_al() -> KdlBolge* : lazy tek global bölge (main +
+// ρ-seed her program çağırır). C kdl_bare_heap.c kopyasının .kem çıplak eşi;
+// kdl_bolge_olustur (.kem, aynı dosya) çağırır. küresel state (WALL-1).
+çıplak işlev kdl_global_bolge_al() -> *tam8 {
+    eğer kem_global_bolge == 0 {
+        değişken b: *tam8 = kdl_bolge_olustur();
+        kem_global_bolge = b olarak tam64;
+    }
+    ver kem_global_bolge olarak *tam8;
+}
+
+// kdl_bolge_serbest(b) : tüm blokları + KdlBolge'yi free et.
+çıplak işlev kdl_bolge_serbest(b: *tam8) {
+    eğer (b olarak tam64) == 0 { ver; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;
+    iken blok != 0 {
+        değişken sp: *tam64 = blok olarak *tam64;
+        değişken eski: tam64 = *sp;               // blok->sonraki
+        free(blok olarak *tam8);
+        blok = eski;
+    }
+    free(b);
+}
+
+// ============================================================================
+// K4a helpers (D-262): SAF-.kem çıplak memcpy/memset — C kdl_bare_heap YERİNE.
+// inttoptr byte-loop → clang -O2 loop-idiom'a YAKALANMAZ (self-recurse yok,
+// disasm-doğrulandı). clang struct-kopya/zero + K2 dizi bunları çağırır.
+// ============================================================================
+çıplak işlev memcpy(d: *tam8, s: *tam8, n: tam64) -> *tam8 {
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken sp: *tam8 = ((s olarak tam64) + i) olarak *tam8;
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = *sp;
+        i = i + 1;
+    }
+    ver d;
+}
+çıplak işlev memset(d: *tam8, c: tam32, n: tam64) -> *tam8 {
+    değişken cb: tam8 = c olarak tam8;             // düşük bayt
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = cb;
+        i = i + 1;
+    }
+    ver d;
+}
+
+// ============================================================================
+// K2 (D-262): SAF-.kem çıplak DİZİ runtime — C kdl_dizi.inc YERİNE (kem_os yüzeyi:
+// olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç buyut/oob). KdlDizi düzeni:
+//   { veri@0(ptr), boyut@8(i32), kapasite@12(i32), eleman_byte@16(i32) }  ayır 24.
+// Bölge-sahipli (kdl_bolge_ayir[.kem] büyüme; realloc yok, eski bölgede sızar →
+// bölge kapanışında topluca serbest). Sınır-kontrol (D-069) → oob spin-halt.
+// AYNI dosyada kdl_bolge_ayir + memcpy (çıplak→çıplak resolve). tam64/ptr/yapi
+// varyantları kem_os KULLANMADIĞI için atlandı (diğer kernel'ler C dizi'de).
+// ============================================================================
+
+// OOB (bellek-güvenliği ihlali) → temiz halt. kem_os'ta erişilmez (correct kod);
+// cross-file panik/UART yok (leaf) → spin. Güvenlik: OOB asla belleği bozmaz.
+çıplak işlev kdl_dizi_oob(i: tam32, boyut: tam32) {
+    iken doğru { değişken x: tam32 = 0; }
+}
+
+// kdl_dizi_olustur(bolge, eleman_byte) -> KdlDizi* : boş dizi (veri=NULL).
+çıplak işlev kdl_dizi_olustur(bolge: *tam8, eleman_byte: tam32) -> *tam8 {
+    değişken d: *tam8 = kdl_bolge_ayir(bolge, 24);
+    eğer (d olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;         *vp = 0;            // veri = NULL
+    değişken bp: *tam32 = (da + 8) olarak *tam32;   *bp = 0;            // boyut
+    değişken kp: *tam32 = (da + 12) olarak *tam32;  *kp = 0;            // kapasite
+    değişken ep: *tam32 = (da + 16) olarak *tam32;  *ep = eleman_byte;  // eleman_byte
+    ver d;
+}
+
+// İç: yeni_kap*eb kapasiteli tampon (bölgeden), canlı kopyala, d->veri/kapasite güncelle.
+çıplak işlev kem_dizi_buyut(bolge: *tam8, d: *tam8, yeni_kap: tam32, eb: tam64) {
+    değişken yeni: *tam8 = kdl_bolge_ayir(bolge, (yeni_kap olarak tam64) * eb);
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken eski_veri: tam64 = *vp;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer (yeni olarak tam64) != 0 {
+        eğer eski_veri != 0 {
+            eğer boyut > 0 {
+                memcpy(yeni, eski_veri olarak *tam8, (boyut olarak tam64) * eb);
+            }
+        }
+    }
+    *vp = yeni olarak tam64;                         // d->veri = yeni
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    *kp = yeni_kap;                                  // d->kapasite = yeni_kap
+}
+
+// kdl_dizi_ekle_tam(bolge, d, deger) : dolu ise büyüt, sonra ((i32*)veri)[boyut++]=deger.
+çıplak işlev kdl_dizi_ekle_tam(bolge: *tam8, d: *tam8, deger: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer boyut == kapasite {
+        değişken yk: tam32 = 4;
+        eğer kapasite != 0 { yk = kapasite * 2; }
+        kem_dizi_buyut(bolge, d, yk, 4);
+    }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;                      // büyüme sonrası TAZE oku
+    değişken elem: *tam32 = (veri + (boyut olarak tam64) * 4) olarak *tam32;
+    *elem = deger;
+    *bp = boyut + 1;                                 // boyut++
+}
+
+// kdl_dizi_al_tam(d, i) -> i32 : sınır-kontrollü oku (i<0 || i>=boyut → oob).
+çıplak işlev kdl_dizi_al_tam(d: *tam8, i: tam32) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;
+    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
+    ver *elem;
+}
+
+// kdl_dizi_boyut(d) -> i32.
+çıplak işlev kdl_dizi_boyut(d: *tam8) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    ver *bp;
+}
+
+// kdl_dizi_kapasite_ayarla(bolge, d, yeni_kapasite) : kapasiteyi (gerekiyorsa) büyüt.
+çıplak işlev kdl_dizi_kapasite_ayarla(bolge: *tam8, d: *tam8, yeni_kapasite: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer yeni_kapasite <= kapasite { ver; }
+    değişken ep: *tam32 = (da + 16) olarak *tam32;
+    değişken eb: tam32 = *ep;
+    eğer eb <= 0 { eb = 4; }
+    kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
+}
+
+// ============================================================================
+// SUBSYSTEM/metin (D-264): SAF-.kem çıplak metin ilkeleri — C kdl_metin_bare.c
+// YERİNE. Freestanding strlen/byte-at (allocation yok, leaf). Sınır-güvenli
+// (NULL/OOB → 0 sentinel). @kdl_metin_uzunluk(ptr)->i32, @kdl_metin_bayt(ptr,i32)->i8.
+// ============================================================================
+çıplak işlev kdl_metin_uzunluk(s: *tam8) -> tam32 {
+    eğer (s olarak tam64) == 0 { ver 0; }
+    değişken n: tam32 = 0;
+    iken doğru {
+        değişken bp: *tam8 = ((s olarak tam64) + (n olarak tam64)) olarak *tam8;
+        // D-265 sonrası: `*bp == 0` doğru i8-yük emit eder (deref-read pointee-tip fix).
+        eğer *bp == 0 { ver n; }
+        n = n + 1;
+    }
+    ver n;   // erişilmez
+}
+çıplak işlev kdl_metin_bayt(s: *tam8, i: tam32) -> tam8 {
+    eğer (s olarak tam64) == 0 { ver 0 olarak tam8; }
+    eğer i < 0 { ver 0 olarak tam8; }
+    değişken n: tam32 = kdl_metin_uzunluk(s);
+    eğer i >= n { ver 0 olarak tam8; }
+    değişken bp: *tam8 = ((s olarak tam64) + (i olarak tam64)) olarak *tam8;
+    ver *bp;
+}
+
+// ============================================================================
+// SUBSYSTEM/mmio (D-266): SAF-.kem çıplak VOLATILE MMIO oku32/yaz32 — kem_os'un
+// kullandığı widthler (donanım register erişimi). Çıplak = güvensiz-tier → deref
+// VOLATILE emit (D-248; clang -O2 MMIO'yu elemez/yeniden-sıralamaz). D-265 pointee-tip:
+// *p (p:*tam32) → i32-yük. Diğer widthler (16/64) virtio-dep, C'de kalır (kem_os.kem
+// yalnız oku32/yaz32 çağırır). @kdl_mmio_oku32(i64)->i32, @kdl_mmio_yaz32(i64,i32).
+çıplak işlev kdl_mmio_oku32(adres: tam64) -> tam32 {
+    değişken p: *tam32 = adres olarak *tam32;
+    ver *p;                       // volatile load i32
+}
+çıplak işlev kdl_mmio_yaz32(adres: tam64, deger: tam32) {
+    değişken p: *tam32 = adres olarak *tam32;
+    *p = deger;                   // volatile store i32
+}
+
+// ============================================================================
+// SUBSYSTEM/yetki (D-268): SAF-.kem çıplak yetki<R> (object-capability) sağlayıcı.
+// kdl_yetki_olustur/geri_al — kem_os'un tek kalan C-yetki bağımlılığını (kdl_yetki_bare.c)
+// kaldırır (Yasa-4: kem_os'ta sıfır C). ABI = D-268 OUT-PTR: dönüş açık out-pointer
+// (düz `ptr`, aarch64 x0 — sret DEĞİL). `%kdl_yetki` layout: {i64 id@0, i16 kaynak_tipi@8,
+// i16 izin@10, i8 iptal@12, [3 x i8] rezerv@13} = 16 bayt. yetki DERLEME-ZAMANI ispatıdır
+// (WCET sıfır runtime yükü); runtime değeri ABI-şeffaf (mmio_oku32/yaz32 yalnız adresi
+// kullanır). Alanları offset-tabanlı yaz (kem_heap.kem tüm-ham-pointer idiomu; yapı yok).
+küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter — C sürümü aynısı)
+
+çıplak işlev kdl_yetki_olustur(out: *tam8, kt: dtam16, izin: dtam16) {
+    değişken taban: tam64 = out olarak tam64;
+    değişken pid: *tam64 = taban olarak *tam64;              // id @ 0
+    *pid = kem_yetki_sayac;
+    kem_yetki_sayac = kem_yetki_sayac + 1;
+    değişken pkt: *dtam16 = (taban + 8) olarak *dtam16;      // kaynak_tipi @ 8
+    *pkt = kt;
+    değişken piz: *dtam16 = (taban + 10) olarak *dtam16;     // izin @ 10
+    *piz = izin;
+    değişken pip: *dtam8 = (taban + 12) olarak *dtam8;       // iptal @ 12
+    *pip = 0 olarak dtam8;
+}
+
+çıplak işlev kdl_yetki_geri_al(y: *tam8) {
+    eğer (y olarak tam64) != 0 {                             // R-PAYLAŞ: iptal bayrağını kur
+        değişken pip: *dtam8 = ((y olarak tam64) + 12) olarak *dtam8;
+        *pip = 1 olarak dtam8;
+    }
+}

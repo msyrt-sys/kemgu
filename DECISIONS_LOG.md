@@ -5,6 +5,1354 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-290 — USERLAND ADIM 5+6 (SON): GERÇEK spawn+join (sys 12/14) + Model A program modeli teyidi — [15] SPAWN OK 🎉 (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-289).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kdl_syscall_isle num=12/14; kul_prog_selam — gömülü "program";
+kul_spawner — EL0 spawn+join görevi; kem_spawn_testi). USERLAND_ROADMAP ADIM 5 (spawn/wait wiring) + ADIM 6
+(program modeli) — SON iki adım, TEK testte birleşik.]** Kanıtlı-C `kdl_surec_spawn`/`kdl_gorev_durum`
+(D-129/D-130) birebir basitleştirmesi: proven-C'nin per-process sayfa-tablosu (TTBR-swap) YOK — kem_os'un
+A4/A5 TEK-adres-uzayı tasarımıyla UYUMLU (roadmap'in öngördüğü gibi, `kemgu_shell_el0.c`'nin kendi yorumu
+da "TTBR-swap YOK" diyor).
+
+- **num=12 spawn(entry):** SABİT 2-slot kernel/user-yığın havuzu (round-robin, fixed-RAM cursor) →
+  `kem_gorev_olustur_el0(entry, kstk, ustk)` (A4/A5/B2'de ZATEN VAR) → pid döner. **num=14 durum(pid):**
+  `kg_oku64(KG_OLU+pid*8)` — `kdl_gorev_durum` birebir (görev bitti mi, join/wait).
+- **Model A program modeli (ADIM 6) TEYİT EDİLDİ:** `kul_prog_selam` — gömülü `.user` `.kem` fonksiyonu
+  (derleme-zamanı linkli, spawn hedefi = zaten-var-olan sembolün adresi). **ELF-yükleme YOK, disk-programı
+  YOK** — proven-C'nin `prog_hesap`/`prog_selam` desenine birebir (roadmap'in Model A tanımı DOĞRULANDI).
+- **GERÇEK test:** `kul_spawner` (EL0) → `sys(12, kul_prog_selam_adr())` → pid al → `sys(14, pid)` ile
+  GERÇEK poll-join (program bitene dek EL0'dan busy-wait) → programın bıraktığı iz (`KUL_PROG_FLAG==42`)
+  doğrulanır. **İKİNCİ, BAĞIMSIZ bir EL0 süreci** (`kul_prog_selam`) `kul_spawner`'ın (kendisi de EL0'da
+  koşan) syscall'ıyla DİNAMİK OLARAK yaratıldı — 3 eşzamanlı EL0 görevi (main dahil) doğru round-robin ile
+  yönetildi.
+- **İsimlendirme dersi (D-289'dan) UYGULANDI:** `kg_spawner_adr` (EL1'den `kem_spawn_testi` çağırır) bilinçli
+  olarak `kg_` öneğiyle yazıldı, `kul_` DEĞİL — D-289'un routing-privilege bug'ı BU BATCH'TE TEKRARLANMADI.
+
+**KAPI (4/4):** `[15] SPAWN OK` (ilk denemede) + `[1..14]` kümülatif; FIXPOINT birebir 33371; test_tumu
+(bekleniyor).
+
+**🎉 MİLESTONE — USERLAND_ROADMAP TAMAMLANDI (ADIM 1-6):** LINCHPIN + UART-RX + syscall-ABI + shell REPL +
+spawn/join + Model A program modeli — hepsi GERÇEK, saf-.kem, tek boot'ta çalışıyor. kem_os artık:
+sanal-bellek + fault/recovery + kesme-trap + timer-IRQ + preemptive multitasking + EL0 userspace + **gerçek
+userland shell'e boot eden, dinamik süreç spawn edebilen bir OS**. Kalan (bu kampanyanın DIŞI): Model B
+(diskten ELF yükleme, TTBR-per-process), canlı-interaktif shell (proven-C'nin tam tokenize/çok-komut
+sürümü), çok-dosyalı minifs, `.S`-strict, x86_64 parite.
+
+---
+
+## D-289 — USERLAND ADIM 4: userland .kem SHELL — komut dispatch + GERÇEK syscall(5/7/17/18) yürütme — [14] SHELL OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-288).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (num=5 yaz + num=7 satir eklendi; kul_shell/kul_str_esit EL0
+shell; kg_ad_bayt/kg_seed_kopyala/kg_fs_seed/kg_shell_seed/kg_*_adr EL1-helper YENİDEN ADLANDIRILDI).
+USERLAND_ROADMAP ADIM 4.]** proven-C `kemgu_shell_el0.c`'nin basitleştirilmiş `.kem` karşılığı: gömülü
+DETERMİNİSTİK komut ("yaz") → `kul_str_esit` (proven-C str_esit birebir) ile DISPATCH → eşleşirse GERÇEK
+syscall dizisi (5=konsola yaz, 7=satır, 17=dosya-yaz, 18=dosya-oku) çalıştırılır → sonuç konsola basılır.
+
+**GERÇEK bug bulundu + düzeltildi — routing-prefix/privilege-seviyesi karışıklığı:** `kul_` öneği hem
+"EL0'da GERÇEKTEN çalışacak kod" (routing hedefi) hem YANLIŞLIKLA "userland-ilgili herhangi bir yardımcı
+fonksiyon" (isimlendirme kolaylığı) için kullanılmıştı. `kul_shell_seed` (EL1'den, `kem_shell_testi`
+tarafından ÇAĞRILAN bir seed-fonksiyonu) `kul_` önekine sahip olduğu için objcopy rename adımı onu da
+`.user`'a (AP=01, EL0-erişimli) TAŞIDI — ama EL1 O SAYFADAN KOD ÇALIŞTIRAMAZ (gerçek Instruction Abort,
+EC=0x21, `adr=0x42000088` = TAM `kul_shell_seed`'in adresi — `llvm-nm` ile doğrulandı). **ADIM 3'te AYNI
+BUG GİZLİYDİ**: `kul_fs_seed`/`kul_seed_kopyala`/`kul_ad_bayt`/`kul_*_test_adr` de EL1'den çağrılan
+kul_-önekli fn'lerdi, ama HEPSİ -O2 tarafından INLINE edilmişti (çağıranın .text'ine gömüldü, standalone
+sembol hiç OLUŞMADI) → objcopy hiç yakalamadı → bug MASKELENMİŞTİ. `kul_shell_seed` inline OLMADI (daha
+büyük, kendi içinde çağrı yapıyor) → bug İLK KEZ ortaya çıktı. **Çözüm:** TÜM EL1-yalnız-çağrılan yardımcı
+fn'ler `kul_` öneğinden `kg_` önekine TAŞINDI (inline-edilenler DAHİL — inlining derleyici-versiyonuna/
+optimizasyon-seviyesine bağlı KIRILGAN bir korumaydı, isim-tabanlı düzeltme kalıcı). **Prensip:** `kul_`
+öneği YALNIZ EL0'da GERÇEKTEN çalıştırılacak giriş-noktaları (spawn hedefleri) + onların ÇAĞIRDIĞI
+diğer EL0-yalnız fn'ler (örn. `kul_str_esit`) için; EL1'den çağrılan seed/helper fn'ler `kg_` (veya
+benzeri kernel-only önek) kullanmalı.
+
+**KAPI (4/4):** `[14] SHELL OK` + konsol çıktısı `"yaz"` (GERÇEK sys5/7 round-trip) + `[1..13]` kümülatif;
+FIXPOINT birebir 33371; test_tumu (bekleniyor).
+
+**KAPSAM/SINIR:** Tek gömülü komut ("yaz") dispatch edildi — proven-C'nin tam tokenize/çok-komut/canlı-
+girdi REPL'inin TAMAMI değil (roadmap'in MVP kapsamı: dispatch-mekanizması + GERÇEK syscall-yürütme
+kanıtı). Kalan: ADIM 5 (spawn/wait wiring — altyapı A4/A5/B2'de VAR), ADIM 6 (program modeli teyidi).
+
+---
+
+## D-288 — USERLAND ADIM 3: GERÇEK dosya syscall (sys 17/18, EL0→minifs→virtio-blk) + gettick/getpid — [13] FS SYSCALL OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-287).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kdl_syscall_isle num=10/11/17/18, kul_ad_bayt, kul_seed_kopyala,
+kul_fs_seed/test, kem_fs_testi); `runtime/kem_mmu.kem` (kis_buf_oku8). USERLAND_ROADMAP ADIM 3.]**
+`kem_minifs.kem` (D-272) + `kem_zaman.kem`/`kem_gorev.kem`'in mevcut primitiflerini syscall ABI'sine
+bağlar. **Kapsam-sınırı bulgusu:** minifs proven-C'nin çok-dosyalı `kdl_dosyalar[]`'ından FARKLI —
+**tek-dosyalı** (her yazma blk1/blk2'yi YENİDEN KULLANIR). num=15/16 (int-dosya) ve 19/20/21 (sayisi/ad/
+sil — çok-dosya listeleme) minifs'in ÇOK-DOSYA desteği GEREKTİRİR — AYRI özellik-genişletme, bu batch'in
+kapsamı DIŞI. Bu batch: num=17/18 (yaz_metin/oku_metin, TEK-DOSYA ile uyumlu) + num=10/11 (gettick/getpid,
+trivial — `kem_tik_oku`/`kem_paktif` zaten var).
+
+**GERÇEK bug bulundu + düzeltildi — LLVM inline-asm early-clobber eksikliği:** `kul_fs_test`'in tek
+`satıriçi_asm` bloğunda AYNI input operandı ($2=KUL_FS_AD) İKİ FARKLI syscall için TEKRAR kullanıldı
+(`mov x0,$2` iki kez, aralarında `mov $0,x0` output-yazımı var). LLVM'in register allocator'ı $0(çıktı)
+ile $2(girdi)'yi AYNI FİZİKSEL REGISTER'a (x9) atadı — `mov $0,x0` (r1'i yaz) $2'nin (KUL_FS_AD) DEĞERİNİ
+EZDİ, ikinci `mov x0,$2` YANLIŞ pointer okudu (garbage/eski-r1-değeri). Disassembly ile TAM olarak
+`mov x9,x0` (yaz) hemen ardından `mov x0,x9` (oku, artık r1'in değeri, KUL_FS_AD DEĞİL) görüldü. **Çözüm:**
+`çıktı("=&r", ...)` — LLVM'in standart early-clobber constraint modifier'ı (`&`), çıktı register'ının
+HİÇBİR girdi register'ıyla ÇAKIŞMAMASINI zorunlu kılar. `.kem` constraint string'leri LLVM IR'a HAM
+geçiyor (D-286'dan beri bilinen) → codegen değişikliği GEREKMEDİ, sözdizimsel constraint-string düzeltmesi
+yeterliydi. **Genel ders (gelecek satıriçi_asm yazımı için):** bir input operandı birden fazla syscall/
+adım için TEKRAR kullanılıyorsa VE arada bir output yazılıyorsa, `=&r` ZORUNLU.
+
+**Ampirik debug disiplini:** r1/r2 (syscall dönüşleri) + a0-a3 vs b0-b3 (isim bayt karşılaştırması) fixed-
+RAM'e yazılıp okunarak izole edildi; disassembly (`llvm-objdump`) ile KESIN register-allocation çakışması
+doğrulandı — varsayım yapılmadı.
+
+**KAPI (4/4):** `[13] FS SYSCALL OK` + `[1..12]` kümülatif (GERÇEK EL0→syscall→minifs→virtio-blk yaz+oku
+round-trip, bayt-bayt içerik doğrulaması); FIXPOINT birebir 33371; test_tumu (bekleniyor).
+
+**KAPSAM/SINIR:** num=15/16/19/20/21 (çok-dosya) minifs genişletmesi gerektirir — ayrı iş. Kalan:
+spawn/exec syscall (12/13/14 — 13 zaten kullanımda, çekirdek altyapı A4/A5/B2'de VAR), shell REPL,
+net syscall wiring (24/25, kem_virtio_net.kem zaten var).
+
+---
+
+## D-287 — USERLAND ADIM 2: GERÇEK UART-RX syscall (sys 26 read_satir, EL0 round-trip) — [12] UART RX EOF OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-286).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kis_satir_oku PL011 RXFE bounded-poll, KIS_UART_FR düzeltmesi);
+`runtime/kem_gorev.kem` (kdl_syscall_isle num=26/13, kul_rx_test, KG_EL0_KOD/KOTU/KUL_RX_BUF/SONUC
+adres düzeltmeleri). USERLAND_ROADMAP ADIM 2.]** Kanıtlı-C `kdl_kesme.c:478-495` (PL011 FR.RXFE
+bounded-poll, D-158 hang-önleme dersi) BİREBİR .kem yeniden gerçekleştirmesi + GERÇEK EL0 round-trip.
+
+**Üç GERÇEK bug bulundu + düzeltildi (bu batch'in asıl işi — salt sembol taşıma değildi):**
+
+1. **LINCHPIN adres-çakışması (D-286'nın kendi hatası):** `kul_test` (.kem-derlenmiş, D-286) `.user`
+   section'ın TAM BAŞINA (0x42000000) yerleşiyordu — AYNI adrese A5'in `kem_el0_testi`'si (ondan ÖNCE
+   koşan, HAM byte yazan eski test) yazıyordu → `kul_test`'in derlenmiş byte'larını RUNTIME'DA EZİYORDU.
+   D-286'nın LINCHPIN gate'i YANLIŞ SEBEPTEN geçmişti (ezilmiş eski stub çalışıyordu, gerçek `kul_test`
+   içeriği DEĞİL). **Düzeltme:** ham-byte test adresleri (`KG_EL0_KOD`/`KG_EL0_KOTU`) `.user` kod
+   tabanından +64KB'a taşındı — gelecekteki `.kem`-routed kod büyümesiyle asla çakışmaz.
+2. **`KIS_UART_FR` yanlış sabit (B1'den beri latent, D-283):** `150995112` (0x090000A8) — PL011'in
+   GERÇEK FR offset'i `0x18`=`150994968`. 0xA8 PL011'de tanımsız/reserved (muhtemelen her zaman 0
+   okunuyordu). TX (kis_bayt, B1) bu YÜZDEN hiç GERÇEKTEN TXFF beklemiyordu (her zaman "boş" görüp
+   hemen geçiyordu — yanlış ama zararsız, TX asla gerçek backpressure test edilmedi). RX bu bug'ı
+   MASKELEYEMEDİ: RXFE her zaman 0 (=veri var) okunup DR'den çöp okuyup asla \n/\r bulamayarak SONSUZ
+   DÖNGÜYE girdi (gerçek gate ortaya çıkardı).
+3. **EL0 kodu kernel-only (AP=00) belleğe yazmaya çalışıyordu:** `kul_rx_test` (EL0'da koşuyor) sonucu
+   `KUL_RX_SONUC`'a (0x47300100, "free RAM" — AP=00, EL0-YASAK) doğrudan `str` ile yazmaya çalıştı.
+   Gerçek permission-fault oluştu; `kis_el0_kill_aktif` B2'den beri AÇIK KALMIŞTI (hiç kapatılmıyor) →
+   fault izolasyon-öldürme yoluna gitti (görev "başarıyla bitti" GÖRÜNDÜ, `KG_OLU` set edildi) AMA
+   yazma HİÇ GERÇEKLEŞMEDİ (faulting instr atlandı) → sonuç her zaman ilk-değer (0) kaldı. **Düzeltme:**
+   `KUL_RX_BUF`/`KUL_RX_SONUC` `.user` sayfasına (0x42020000+, AP=01=EL0+EL1 RW) taşındı.
+- **Poll-sınırı kalibrasyonu:** proven-C'nin `8_000_000` sabiti GERÇEK donanım hızı varsayıyordu; QEMU'da
+  HER MMIO okuması device-emulation trap'i (mikrosaniyeler) → 8M iterasyon TÜM kem_os boot penceresini
+  (12s) dolduruyordu (ampirik). `20_000`'e küçültüldü — anlam AYNI (bounded-poll→EOF), ortam-hızına göre
+  kalibre (kör-kopyalama DEĞİL).
+- **Ampirik debug metodolojisi:** her katmanda (EL1-direkt çağrı → syscall-argüman → .kem `ret` IR →
+  `.S` register-restore → EL0 asm disassembly) izole debug ile kanıtlanmadan varsayım yapılmadı — 3 bug
+  da ancak bu katman-katman izolasyonla bulundu.
+
+**KAPI (4/4):** `[12] UART RX EOF OK` + `[1..11]` kümülatif (otomatik boot'ta girdi YOK → EOF doğru/
+beklenen sonuç, proven-C'nin kendi "best-effort" gate stratejisiyle aynı); FIXPOINT birebir 33371;
+test_tumu (bekleniyor, bu commit'te doğrulanacak).
+
+**KAPSAM/SINIR:** `kdl_user_yaz_ptr_gecerli` (D-150 user-ptr doğrulama) HENÜZ `.kem`'e taşınmadı —
+num=26 şimdilik kernel-güvenilir arg alıyor (ADIM 3 kapsamı, ayrıca not edildi). Kalan: syscall-ABI
+genişletme (dosya/spawn/net), shell REPL, spawn/wait wiring.
+
+---
+
+## D-286 — USERLAND ADIM 1: LINCHPIN — GERÇEK .kem-derlenmiş kod EL0'da (`.user` objcopy-rename routing) — [11] LINCHPIN OK 🎉 (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-285).
+
+**Karar [ETKİ: `Makefile` (kem_os `.ll→.o` derlemesine `-ffunction-sections -fdata-sections` +
+objcopy `--rename-section` post-compile adımı); `runtime/kem_gorev.kem` (`kul_test`/`kul_test_adr`/
+`kem_linchpin_testi`); `test/ornekler/kem_os.kem` ([11] LINCHPIN bloğu). USERLAND_ROADMAP (438cb00)
+ADIM 1 — enabling-primitif, Model A shell/spawn'ın önkoşulu.]** A5/B2'nin EL0 stub'ları runtime'da
+yazılan makine-koduydu (llvm-mc byte'lar) — `.kem`'de section-attribute YOK. Bu adım GERÇEK
+`.kem`-derlenmiş kodun `.user` (0x42000000, AP=01) section'ına yönlendirilip EL0'da çalıştığını kanıtlar.
+
+- **Linker-script reorder DENENDİ + BAŞARISIZ (ampirik, USERLAND_ROADMAP'te öngörülmemiş bir bulgu):**
+  `.user`'ın (VMA 0x42000000) matching-kuralını `.text`'in (VMA 0x40000000) GENEL `*(.text*)` glob'undan
+  ÖNCE koymak için script'te "geriye" adres ataması (`. = 0x42000000` sonra `. = 0x40000000`) `ld.lld`'de
+  **"output file too large: 18446744073676063576 bytes"** (unsigned wraparound) hatası verdi — hem
+  normal `. = ` ilerlemesiyle hem `SECTION ADDR :` satır-içi adres formuyla. `ld.lld`'nin düz-script
+  modeli monoton-olmayan VMA sırasını desteklemiyor (en azından bu basit script yapısında).
+- **Çözüm — post-compile objcopy rename (linker-script DEĞİŞMEDİ):** `-ffunction-sections
+  -fdata-sections` her `.kem` sembolünü kendi adıyla `.text.<isim>`/`.data.<isim>`/`.bss.<isim>`/
+  `.rodata.<isim>`'e böler (LLVM IR girdisinde bile — codegen değişmedi). Derleme sonrası `llvm-nm`
+  ile `kul_`-önekli semboller keşfedilir + `llvm-objcopy --rename-section` ile `.user`/`.user_data`'ya
+  YENİDEN ADLANDIRILIR (mevcut `*(.user) *(.user.*)` glob'u eşleştirir, linker-script HİÇ değişmedi).
+  `llvm-objcopy` var-olmayan section'ı rename etmeye çalışınca sessizce no-op (ampirik doğrulandı) →
+  4 rename-flag (text/data/bss/rodata) her sembol için güvenle üretilebilir.
+- **`kul_test` (çıplak, `.kem` kaynağından normal derlenmiş, HAND-ASSEMBLE DEĞİL):** sonsuz `mov x8,#7 /
+  svc #0` döngüsü (satıriçi_asm). `kem_linchpin_testi`: `kul_test_adr()` (adrp/lo12 ile GERÇEK sembol
+  adresi) → `kem_gorev_olustur_el0` (A5/B2'de zaten var) ile EL0 görevi spawn → `KG_SYSC` sayacı
+  (kdl_syscall_isle üzerinden) artıyor mu doğrula.
+- **Falsifiye-kanıt (routing gerçekten çalıştı mı, sentetik-geçiş imkânsız):** final ELF'te
+  `kul_test`'in adresi `.user` aralığında (`0x42000000-0x421FFFFF`) mı diye Makefile'da programatik
+  kontrol (hex→decimal karşılaştırma). Routing yanlış olsaydı `kul_test` kernel `.text`'te (0x40000000
+  civarı, AP=00) kalır → EL0'dan instruction-fetch permission-fault → `KG_SYSC` HİÇ artmaz → test
+  kırmızı. **Gerçek adres: `0x42000000`** (tam `.user` başlangıcı).
+
+**KAPI (4/4):** `[11] LINCHPIN OK` + `[1..10]` kümülatif; `kem_os.ll define @kul_test` + `call
+@kem_linchpin_testi`; final-ELF adres-aralığı programatik doğrulandı; FIXPOINT birebir 33371 (compiler
+`src/*.c` DOKUNULMADI — yalnız Makefile+`.kem`); test_tumu (bekleniyor, bu commit'te doğrulanacak).
+
+**MİLESTONE:** USERLAND_ROADMAP'in "GO/hard-blocker" kararı EMPİRİK OLARAK doğrulandı — LINCHPIN
+çalışıyor. Model A shell/spawn artık gerçek `.kem` userland kaynağı yazılabilir (routing sözleşmesi:
+`kul_` önek, çıplak-tier, `metin` literal YOK — adlandırılmış `küresel değişken` bayt-dizisi kullan).
+Kalan: USERLAND ADIM 2-6 (UART-RX syscall, syscall-ABI genişletme, shell REPL, spawn/wait wiring,
+program modeli) — roadmap'te DAG'lı, ayrı batch'ler.
+
+---
+
+## D-285 — ZERO-C FAZ 2 B3 (SON): fault-scratch + el0-kill global'leri .S-data'ya taşındı — kem_os C=0 🎉 (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-284).
+
+**Karar [ETKİ: `boot/start_aarch64.S` (3 global `.data` — indirgenemez-.S substrat); `runtime/kdl_kesme.c`
+(3 global → WEAK, C tanımları artık dead-var diğer kernel'lerde); `Makefile` (KEM_OS_A64_OBJS'ten
+`bm_a64_kesme.o` TAMAMEN ÇIKARILDI). ZERO-C FAZ 2 SON batch — kampanya bitiş.]** B1+B2 sonrası
+`kdl_kesme.c`'nin (kem_os linkindeki) tek canlı katkısı 3 data global'iydi (`kdl_fault_bekleniyor`,
+`kdl_fault_yakalanan`, `kdl_el0_kill_aktif` — 24 B `.bss`, sıfır kod). Bunlar `.S`-data'ya taşındı.
+
+- **`.S`-data (D-276'nın "TERCİH" notu uygulandı):** `boot/start_aarch64.S` sonuna `.data`/`.align 3` +
+  3× `.quad 0` (aynı ad, aynı tip-semantiği). İndirgenemez asm substrat'ın parçası — codegen-fix
+  (`dışa küresel`→external) GEREKMEDİ, ATLANDI (D-276/277'nin flag'lediği gap hâlâ açık ama bu iş
+  ONU beklemedi).
+- **Weak-override (C→ölü-var diğer kernel'lerde):** C 3 global `__attribute__((weak))`. `.S` artık
+  STRONG tanımlıyor → kem_os `bm_a64_kesme.o`'yu HİÇ LİNKLEMEZ (Makefile'dan çıkarıldı). Diğer kernel'ler
+  (`.S` + `kdl_kesme.c` birlikte) çift-sembol ÇAKIŞMASI YAŞAMADI (weak↔strong linker kuralı) — `.S` kazanır,
+  C weak ölü-var kalır, davranış AYNI (aynı ad/tip/başlangıç-değer=0). Ampirik doğrulandı:
+  `calistir_kernel_dizi_bare_metal` (kesme.c+.S birlikte linkli) temiz derlendi + booted.
+
+**RE-AUDIT (TAM, -Map+nm, final ELF'teki TÜM 167 tanımlı sembol tek tek sınıflandırıldı):**
+
+| Kaynak | Sembol sayısı |
+|---|---|
+| `.kem` (kem_os.o + kem_heap.o) | **147** |
+| `boot/*.S` (bm_a64_start.o) | **10** |
+| linker-script synthetic (`__bss_start` vb., `=` atamaları, hiçbir .o'dan gelmez) | **10** |
+| **C-derlenmiş** | **0** |
+
+`bm_a64_kesme.o` link satırında YOK (grep=0). `.text` = 22876 B, tamamı `.kem`+`.S` (0 C-katkı).
+
+**KAPI (re-audit 4/4 + ek doğrulama):** `[1..10]+[5]` QEMU yeşil (`[5] IZOLASYON OK` dahil — B2'nin
+9-tekrar karakteristiği burada 21-tekrar olarak gözlendi, aynı dokümante-C-davranışı, zararsız); FIXPOINT
+birebir 33371; test_tumu exit 0; **diğer kernel regresyon-yok** (kernel_dizi ampirik doğrulandı).
+
+**🎉 KARAR (lenient-Law-4 doruk):** kem_os aarch64 nihai ELF'i artık `boot/*.S` DIŞINDA C-derlenmiş sembol
+İÇERMİYOR. İndirgenemez `.S` kümesi (ZERO_C_AUDIT ADIM 4 ile aynı): `_start`, `_halt`,
+`kdl_vektor_tablosu`, `kdl_exc_ortak`, `kdl_irq_ortak`, `kdl_baglam_degis`, `kdl_el0_calistir` + 3 `.data`
+global (`kdl_fault_bekleniyor/yakalanan`, `kdl_el0_kill_aktif`). Toolchain/libc yok (`-nostdlib`).
+
+**KAPSAM/SINIR:** `.S`-strict (P4: asm → `.kem satıriçi_asm`) AYRI karar, bu kampanyada YAPILMADI —
+lenient-Law-4 (asm≠C) burada duruyor. x86_64 parite ayrı Law-4 borcu. `docs/ZERO_C_AUDIT.md` güncellendi.
+
+---
+
+## D-284 — ZERO-C FAZ 2 B2: kdl_el0_izolasyon_isle SAF-.kem (GERÇEK permission-fault→süreç-öldür) — yazdir/uart/gorev TAMAMEN düştü (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-283).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (KG_OLU dead-task tablosu + `kem_gorev_bitir` + `kem_preempt`
+skip-mantığı + `kem_el0_izolasyon_testi`); `runtime/kem_mmu.kem` (kis_el0_kill_ac + `kdl_el0_izolasyon_isle`
+.kem); `runtime/kdl_kesme.c` (kdl_el0_izolasyon_isle → WEAK). ZERO-C FAZ 2 B2.]** Kanıtlı-C
+`kdl_el0_izolasyon_isle` (EL0 izolasyon-ihlali → süreç öldür, D-130) BİREBİR .kem yeniden gerçekleştirmesi.
+
+- **kem_gorev.kem'e dead-task tablosu EKLENDİ (yeni özellik, birebir C mirror):** `KG_OLU` (fixed-RAM,
+  16 slot) + `kem_gorev_bitir()` (aktif görevi ölü işaretle) + `kem_preempt`'in round-robin taramasına
+  skip-mantığı (`kdl_preempt`'in "if kdl_olu[n] continue" birebir). Öncesinde kem_os'un `.kem` scheduler'ı
+  (A4) hiç dead-task kavramı BİLMİYORDU — bu, C'nin gerçek semantiğini tamamlayan gerçek yeni iş (sadece
+  sembol taşıma değil).
+- **GERÇEK test (kem_el0_izolasyon_testi):** EL0 stub GIC MMIO'ya (0x08000000, Device L1[0] AP=00,
+  EL0-erişimi YASAK) `ldr` ile erişir → GERÇEK permission-fault, EL0-kaynaklı. `.S` kdl_exc_ortak
+  (SPSR.M[3:2]=0 + `kdl_el0_kill_aktif` opt-in AÇIK — `kis_el0_kill_ac` .kem'den yazar) → `bl
+  kdl_el0_izolasyon_isle(far)` (.kem) → rapor (B1'in `kis_*` primitifleri) + `kem_gorev_bitir` → `KG_OLU[t]=1`.
+  Doğrulama: `KG_OLU[t]==1` (scheduler görevi işaretledi) + OS DEVAM etti (main [6..10]'a geçti).
+- **Gözlenen (dokümante-edilmiş C davranışı, bug DEĞİL):** "IZOLASYON OK" 9× tekrarlandı — aynı-görev
+  fault-recovery yalnız faulting instr'ı ATLAR (scheduler switch ZORLAMAZ), ölü görev sonraki GERÇEK
+  timer-IRQ'ya dek kendi döngüsünde tekrar tekrar fault eder. `.S` yorumu bunu açıkça belgeler: "ölü EL0
+  görev kısa sürer, sonraki timer-IRQ'da scheduler onu ATLAR". C orijinaliyle birebir aynı karakteristik.
+- **Weak-override:** C `kdl_el0_izolasyon_isle` → `weak`; .kem strong kazanır (B1/A5 deseni).
+
+**RE-AUDIT sonucu (-Map+nm):** `.text` 21572→20834 B. **yazdir/uart/gorev nesneleri final ELF'te TAMAMEN
+0 canlı sembol** (B1'in kısmi düşüşü tamamlandı — `kdl_el0_izolasyon_isle` yazdir'in son canlı referansıydı).
+`kdl_el0_izolasyon_isle` final ELF'te `@0x400005ac` (kem_os .kem aralığı).
+
+**KAPI (re-audit 4/4):** yazdir/uart/gorev sembolleri final ELF'te YOK (0/0/0); `[1..10]+[5]` QEMU yeşil
+(`[5] IZOLASYON OK` — GERÇEK permission-fault + kill + skip); FIXPOINT birebir 33371; test_tumu exit 0.
+
+**KAPSAM/SINIR:** Kalan CANLI-C = yalnız `kdl_kesme.c` veri-plumbing (~68 B kod + fault-scratch/
+`kdl_el0_kill_aktif` data). Sıradaki: B3 (fault-scratch global → `.S`-data, `.quad`) → beklenen sonuç:
+nihai ELF `.text` = yalnız `.kem` + `.S` (lenient-Law-4 doruk). x86_64 ayrı borç.
+
+---
+
+## D-283 — ZERO-C FAZ 2 B1: kdl_istisna_isle SAF-.kem (çıplak-tier ham-MMIO UART) — kesme.o katkısı 192→68 B (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-282).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kis_* çıplak-tier ham-MMIO UART + `kdl_istisna_isle` .kem);
+`runtime/kdl_kesme.c` (kdl_istisna_isle → WEAK). ZERO-C FAZ 2 ilk batch (DAG: B1→B2→B3).]**
+Kanıtlı-C `kdl_istisna_isle` (EL1 kurtarılamaz-fault → rapor+halt) BİREBİR .kem yeniden gerçekleştirmesi.
+
+- **Çıplak-call-rule engeli (D-257/E013):** mevcut `uart_metin`/`uart_bayt` normal-tier (`yetki<MMIO>`
+  capability struct) → çıplak fn'den çağrılamaz (statik-reddedilir). Çözüm: YENİ çıplak-tier ham-MMIO
+  UART ailesi (`kis_bayt`/`kis_metin`/`kis_satir`/`kis_onaltilik`) — doğrudan volatile-deref (vblk_y8/
+  kg_yaz32 deseni), capability-suz. `metin_uzunluk`/`metin_bayt` builtin (EKLE_BUILTIN, zaten çıplak
+  `kdl_metin_*`'e çözülüyor) → çıplak'tan izinli.
+- **Weak-override:** C `kdl_istisna_isle` → `__attribute__((weak, noreturn))`; .kem strong link'te kazanır
+  (kdl_syscall_isle deseni birebir). Diğer kernel'ler C weak'i kullanmaya devam (regresyon yok).
+- **RE-AUDIT sonucu (-Map+nm, kesin ölçüm):** kesme.o'nun final ELF'e katkısı **192→68 B**; `.text.
+  kdl_istisna_isle` section'ı final linkte **0** (düştü, C tanımı ölü-var). `kdl_istisna_isle` final
+  ELF'te `@0x40000380` — kem_os.o (.kem) aralığında (weak-override doğrulandı).
+- **Beklenmedik bulgu (DAG düzeltmesi):** yazdir/uart HÂLÂ canlı — `kdl_el0_izolasyon_isle` (B2'nin
+  hedefi) de `kdl_yazdir_*` çağırıyor ("IZOLASYON OK..." raporu). B1 tek başına yazdir/uart'ı
+  SIFIRLAMADI (öngörülenin aksine); tam sıfırlama B2 sonrasına kalır.
+
+**KAPI (re-audit 4/4):** `kdl_istisna_isle` C-section'ı final ELF'te YOK (section-count=0); [1..10]+[5]
+QEMU yeşil (garbling yok, boot fault-halt yoluna girmedi — beklenen, kem_os yalnız kurtarılabilir fault
+tetikliyor); FIXPOINT birebir 33371; test_tumu (bekleniyor — bu commit'te doğrulanacak).
+
+**KAPSAM/SINIR:** DAG sırası: B2 (`kdl_el0_izolasyon_isle`+`kdl_gorev_bitir`→.kem ⇒ yazdir+uart+gorev
+tam düşer) → B3 (fault-scratch global→`.S`-data). x86_64 ayrı borç.
+
+---
+
+## D-282 — ZERO-C FAZ 0: --gc-sections + function-sections → kem_os residual-C 14888→744 B (%95) (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-281).
+
+**Karar [ETKİ: `Makefile` (BM_A64_CF += `-ffunction-sections -fdata-sections`; kem_os link += `--gc-sections`);
+`docs/ZERO_C_AUDIT.md` (FAZ 0 güncelleme). ZERO-C kampanyası ilk batch — düşük-risk kazanç + re-audit
+kapısı doğrulama. Kaynak/mantık DEĞİŞMEDİ; yalnız link ölü-kod-eleme.]** ZERO_C_AUDIT bulgusu: kem_os nihai
+ELF `.text`'i %42 C (14 888 B) içeriyordu — `--gc-sections` yokluğundan tüm C nesneleri linkte kalıyordu.
+
+- **Değişiklik:** BM_A64_CF'e `-ffunction-sections -fdata-sections` (per-fn/data section granülaritesi),
+  kem_os link'ine `--gc-sections` (ENTRY(_start) kökünden ulaşılamayan section'ları at). YALNIZ kem_os
+  link'i; diğer kernel link'leri gc-sections'sız → çıktı işlevsel aynı (regresyon yok).
+- **Sonuç (re-audit, -Map+nm):** `.text` 0x8b64→0x5444 (35684→21572 B). **CANLI-C 14 888→744 B (%95↓).**
+  - 3 ölü nesne (heap_kemmalloc/bolge_kemregion/mmio_kem) düştü.
+  - Override-edilen ölü weak `kdl_syscall_isle` gövdesi düştü → onun transitif çektiği **virtio/
+    virtio_net/mmu_kem/zaman_kem/panik TAMAMEN düştü** (beklenenden büyük kazanç — dead-body zinciri kırıldı).
+  - KALAN CANLI-C = 7 fn (744 B): `.S`→`kdl_istisna_isle`+`kdl_el0_izolasyon_isle` (kesme) →
+    `kdl_yazdir_metin/satir/onaltilik` (yazdir) → `kdl_uart_pl011_putc` (uart) ; `kdl_gorev_bitir` (gorev).
+    + C-data: fault-scratch (`kdl_fault_bekleniyor/yakalanan`) + `kdl_el0_kill_aktif`.
+
+**KAPI (re-audit, 4/4):** 3 ölü nesne sembolü final ELF'te YOK (nm=0); [1..10]+[5] QEMU yeşil (gerçek
+fault/EL0, garbling yok); FIXPOINT birebir 33371 (compiler dokunulmadı); test_tumu exit 0.
+
+**KAPSAM/SINIR:** kalan CANLI-C = `.S`'in kdl_kesme.c exception/izolasyon-report ref'leri. FAZ 2 DAG:
+(B1) kdl_istisna_isle→çıplak .kem + .kem-UART ⇒ yazdir+uart; (B2) kdl_el0_izolasyon_isle+kill_aktif→.kem
+⇒ gorev; (B3) fault-scratch global→`.S`-data (`.quad`). x86_64 ayrı borç.
+
+---
+
+## D-281 — REAL-OS FAZ-A5: SAF-.kem SYSCALL + EL0 USERSPACE (SVC→.kem handler) — [5] EL0 SYSCALL OK — 🎉 FAZ-A TAM (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-280).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kem_gorev_olustur_el0 + EL0 stub + kdl_syscall_isle .kem);
+`runtime/kem_mmu.kem` (0x42000000 AP=01 user page); `runtime/kdl_kesme.c` (C kdl_syscall_isle → WEAK);
+`test/ornekler/kem_os.kem` ([5g] EL0 bloğu); `Makefile` (EL0 SYSCALL OK gate). FAZ-A SON batch —
+userspace/syscall. FAZ-A ÇEKİRDEK (A1-A5) TAM.]** EL0 (unprivileged) görev → SVC → SAF-.kem syscall
+handler. A4 preemptive altyapısını EL0'a genişletir.
+
+- **EL0 görev = preemptive görev (SPSR=EL0t):** kem_gorev_olustur_el0 sentetik trap-frame: @248=ELR=EL0
+  stub, @256=SPSR=0x0 (EL0t, IRQ-açık), @264=SP_EL0=user yığını (AP=01). Timer-IRQ ile EL0↔main round-robin
+  (.S kdl_irq_ortak SP_EL0'ı @264 kaydeder/geri-yükler → EL0 preempt edilebilir, D-125 mekanizması).
+- **EL0 kod = runtime makine-kodu (.kem section-attr YOK çözümü):** derlenmiş .kem işlevi kernel .text'te
+  (AP=00) → EL0 çalıştıramaz. Çözüm: EL0 stub'ı (movz x8,#7 / svc #0 / b .-8 — llvm-mc DOĞRULANMIŞ
+  0xD28000E8/0xD4000001/0x17FFFFFE) runtime'da AP=01 sayfaya (0x42000000) YAZ + I-cache maintenance
+  (dc cvau→dsb→ic ivau→dsb→isb). MMU: L2[16] = 0x42000000|0x745 (AP=01, UXN=0 EL0-exec).
+- **SVC dispatch SAF-.kem (weak-override):** SVC → .S kdl_exc_ortak (EC=0x15) → `bl kdl_syscall_isle`.
+  C kdl_syscall_isle `__attribute__((weak))` yapıldı → .kem strong (kem_gorev.kem) link'te OVERRIDE eder
+  (guard/variant/cascade YOK — kdl_kesme.c'nin büyük syscall fonksiyonunu guard'lamak riskliydi; weak temiz).
+  .kem handler: num=7 → syscall sayacı++ (fixed RAM), arg echo → EL0 x0.
+- **GERÇEK EL0-syscall kanıtı:** sayaç YALNIZ EL0 stub'ın svc'siyle artar; kem_el0_testi sayaç>=3 bekler →
+  EL0'dan (privilege sınırı geçilerek) gerçek syscall round-trip. Boot [6..10]'a devam. İLK denemede boot.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] EL0 SYSCALL OK` (+ [1..5] + [6..10]). gate: kem_os.ll
+`define @kdl_syscall_isle` (weak-override) + `define @kem_gorev_olustur_el0` + `call @kem_el0_testi` +
+`asm "dc cvau"` (I-cache). FIXPOINT birebir (33371 — compiler src/*.c DOKUNULMADI); test_tumu tam yeşil
+(kdl_kesme.c yalnız weak-attr, semantik değişmez).
+
+**🎉 MİLESTONE — FAZ-A ÇEKİRDEK TAM (A1-A5):** kem_os TEK BOOT'ta TAMAMEN SAF-.kem gerçek-OS:
+sanal-bellek (MMU kurulum+çeviri) + gerçek page-fault/recovery + kesme-trap karar + periyodik timer-IRQ +
+preemptive multitasking + **EL0 userspace + syscall** + disk (virtio-blk) + dosya-sistemi (minifs) +
+ağ (virtio-net ARP/IPv4/ICMP ping). C substrat YALNIZ: `.S` (vektör/trap-frame/eret/context-restore) +
+recovery-scratch/GIC-glue düzeyinde. **Kalan FAZ-A:** EL0 izolasyon-kill (opt-in kdl_el0_kill_aktif —
+gelecek), çok-adres-uzayı (TTBR-per-task), syscall ABI genişletme (dosya/net syscalls EL0'dan).
+
+---
+
+## D-280 — REAL-OS FAZ-A4: SAF-.kem PREEMPTIVE scheduler (timer→IRQ→context-switch) — [5] PREEMPT OK (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-279).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (YENİ — SAF-.kem round-robin scheduler + sentetik trap-frame);
+`runtime/kem_zaman.kem` (kdl_irq_isle → `ver kem_preempt(sp)`); `test/ornekler/kem_os.kem` ([5f] PREEMPT
+bloğu); `Makefile` (kem_gorev CAT + PREEMPT OK gate). FAZ-A4 — roadmap'in EN ZOR entegrasyonu: gerçek
+preemptive multitasking. FAZ-A çekirdek (A1-A4) TAM.]** Kanıtlı-C kdl_gorev.c (kdl_preempt +
+kdl_preempt_gorev_olustur) BİREBİR .kem yeniden gerçekleştirmesi: timer IRQ → context-switch.
+
+- **Context-switch = SP-swap (yeni .S YOK):** timer IRQ → .S kdl_irq_ortak (full trap-frame kaydet) →
+  `bl kdl_irq_isle` (.kem) → `kem_preempt(sp)`: mevcut görevin trap-frame SP'sini kaydet + round-robin
+  sonrakinin SP'sini döner → .S `mov sp, x0` + trap-frame restore + eret → sonraki görev sürer. .S
+  kdl_baglam_degis (cooperative) GEREKMEZ — preemptive switch tamamen kdl_irq_ortak SP-swap'ıyla.
+- **Sentetik trap-frame (kem_gorev_olustur, kdl_preempt_gorev_olustur birebir):** 34 slot × 8 = 272 bayt,
+  @248=ELR=giriş, @256=SPSR=0x5 (EL1h + IRQ-açık → görev de preempt edilir), gerisi 0; SP 16-hizalı.
+- **KRİTİK BUG + çözüm (dead-store-elim):** preempt-aktif bayrağı küresel olunca clang `store 1` (ac) →
+  `store 0` (test sonu) arasını gördü, IRQ-context okumasını GÖRMEDİ → DGE `store 1`'i sildi → asla switch.
+  Bulgu: psayi=3 + görevler kuruldu ama g1=g2=0. Çözüm: aktif bayrağı + görev sayaçları FİXED RAM'de
+  (0x45003000+, volatile çıplak-deref) → store/load volatile → DGE/store-sink YOK. (Aynı ders sayaçlar
+  için de: yalnız-asm-kullanılan küresel DGE ile silinir → fixed-RAM deref.)
+- **GERÇEK preemption kanıtı:** 2 sonsuz-döngü görev; timer-IRQ round-robin ile ikisi de milyonlarca kez
+  koştu (g1≈g2≈0x21f000 INTERLEAVE) → gerçek eşzamanlı yürütme. Sonra preemption kapatıldı → main
+  [6..10]'a devam (görevler bırakıldı). guard'lı (switch bozuksa hang yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] PREEMPT OK` (+ [1..5] + [6..10] kümülatif). gate: kem_os.ll
+`define @kem_preempt` + `call @kem_preempt` (kdl_irq_isle'den) + `define @kem_gorev_olustur` +
+`call @kem_preempt_testi`. FIXPOINT birebir (33371 — compiler src/*.c DOKUNULMADI, C guard bile YOK —
+scheduler adı kem_preempt, C kdl_preempt'le çakışmaz); test_tumu tam yeşil.
+
+**MİLESTONE:** 🎉 FAZ-A ÇEKİRDEK (A1 MMU + A2 trap + A3 timer-IRQ + A4 preemptive) TAM SAF-.kem. kem_os
+artık: sanal-bellek + gerçek page-fault/recovery + kesme-trap karar + periyodik timer-IRQ + preemptive
+multitasking + disk/fs/net — hepsi saf-.kem, tek boot, .S yalnız vektör/trap-frame/eret substrat'ı.
+Kalan: A5 (syscall/EL0 userspace — SVC dispatch + EL0 izolasyon; sentetik trap-frame SPSR=EL0t + SP_EL0).
+
+---
+
+## D-279 — REAL-OS FAZ-A3: SAF-.kem GERÇEK timer-IRQ (GICv2 + CNTV) + .kem IRQ dispatch — [5] TIMER TIK OK (2026-07-13) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-278).
+
+**Karar [ETKİ: `runtime/kem_zaman.kem` (YENİ — SAF-.kem GIC+CNTV+kdl_irq_isle); `runtime/kdl_zaman.c`
+(kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle `#ifndef KEMGU_KEM_MALLOC` guard); `test/ornekler/kem_os.kem`
+([5e] TIMER bloğu); `Makefile` (bm_a64_zaman_kem.o variant + kem_zaman CAT + TIMER TIK OK gate). FAZ-A3 —
+GERÇEK donanım-kesmesi (IRQ) ilk kez SAF-.kem'de. Bring-up roadmap A3.]** Kanıtlı-C kdl_zaman.c'nin BİREBİR
+.kem yeniden gerçekleştirmesi: periyodik timer IRQ, .S kdl_irq_ortak `bl kdl_irq_isle` artık .kem'i çağırır.
+
+- **WebSearch/ARM teyit:** GICv2 (QEMU virt: GICD 0x08000000, GICC 0x08010000), sanal timer PPI INTID 27,
+  CNTV_CTL/TVAL_EL0 + CNTFRQ_EL0, DAIF.I (daifclr #2) IRQ mask. GICC_IAR (0x0C) oku → INTID; GICC_EOIR
+  (0x10) yaz → kesme bitir. Kesme girişinde PSTATE.I hardware-set → handler re-entran DEĞİL.
+- **SAF-.kem (`kem_zaman.kem`):** kdl_kesme_kur (GICD_CTLR/GICC_PMR/CTLR/ISENABLER0-bit27 MMIO), kdl_timer_baslat
+  (cntfrq/100 ~10ms + cntv_tval/ctl + daifclr asm), kdl_irq_isle (çıplak; .S'nin sp arg → GICC_IAR oku →
+  timer ise re-arm+tik++ → EOI → sp döner; preemption YOK → aynı bağlam). GIC=MMIO çıplak-deref; CNTV/DAIF=
+  satıriçi_asm arm64.
+- **Volatile-reader gotcha çözümü:** kem_tik IRQ-context'te yazılır, main busy-wait'te okur. .kem küresel
+  volatile-DEĞİL → main const-fold edip sonsuz-döngüye girebilir. Çözüm: kem_tik_oku inline-asm ldr @kem_tik
+  (+~{memory}) ile HER okuma taze + guard (50M) → timer bozuksa sonsuz-döngü YOK, HATA raporlar.
+- **GERÇEK IRQ kanıtı:** tik YALNIZ .kem kdl_irq_isle'da artar; kem_timer_testi tik>=3 bekler → gerçek
+  periyodik IRQ tetiklendi (busy-wait sırasında donanım IRQ handler'ı sürdü). Boot [6..10]'a IRQ'lar CANLI
+  iken devam (entegre; storm/hang yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] TIMER TIK OK` (+ [1..5] MMU/TRAP + [6..10] kümülatif, IRQ-canlı).
+gate: kem_os.ll `define @kdl_irq_isle/@kdl_kesme_kur/@kdl_timer_baslat` + `asm msr cntv_tval_el0/daifclr` +
+`call @kem_timer_testi`; `bm_a64_zaman_kem.o` C timer/IRQ tanımı = **0**. FIXPOINT birebir (33371 — compiler
+src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**MİLESTONE:** İlk GERÇEK donanım-kesmesi SAF-.kem. .S kdl_irq_ortak (trap-frame/eret) DEĞİŞMEDİ; yalnız
+`bl kdl_irq_isle` .kem'e yönlendi. Kalan FAZ-A: A4 (görev preemptive — timer→IRQ→context-switch, EN ZOR;
+kdl_irq_isle şimdi sp'yi olduğu gibi döner, A4'te kdl_preempt-benzeri context-switch SP döndürecek),
+A5 (syscall/EL0).
+
+---
+
+## D-278 — REAL-OS FAZ-A2: kesme gerçek-trap → .kem KARAR handler (mrs ESR/FAR) — [5] TRAP KARAR OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-277).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kmmu_esr_oku/kmmu_far_mrs — mrs helpers); `test/ornekler/kem_os.kem`
+(trap_gercek_testi + [5d] bloğu); `Makefile` (TRAP KARAR OK gate + falsifiye-kanıt). FAZ-A2 — bring-up
+roadmap A2 "kesme gerçek-trap". [5] SENTETİK gap'ini kapatır.]** [5] handler'ı (kem_istisna_isle) şimdiye
+dek yalnız hardcoded ESR/FAR ile self-test ediliyordu (D-247). D-276 gerçek fault+recovery verdi ama .kem
+KARAR-handler'ı gerçek syndrome görmüyordu. Bu adım: gerçek trap → .kem handler GERÇEK ESR/FAR'da karar verir.
+
+- **WebSearch teyit (ARM DDI0595/DDI0487):** EC=0x25 = Data Abort without EL change (kernel EL1→haritasız);
+  FAR_EL1 data-abort'ta faulting-VA tutar (FnV=0 → geçerli, translation fault FnV=0); ESR/FAR yalnız
+  istisna girişinde yazılır → eret sonrası bir-sonraki istisnaya dek DEĞERİ TUTAR (.S kdl_exc_ortak yalnız
+  mrs-OKUR → değiştirmez).
+- **trap_gercek_testi:** `kdl_fault_bekleniyor=1` → haritasız 0x80000000 oku → GERÇEK data-abort → .S
+  recovery → mrs esr_el1 + mrs far_el1 (GERÇEK syndrome, post-trap) → `kem_istisna_isle(rfar, resr)`. .kem
+  handler decode: EC=0x25 → data-abort, DFSC∈[4,7] → translation → **KURTAR(1)**. Doğrula: karar==1 +
+  rfar==0x80000000 (mrs-okunan gerçek FAR). Sentetik DEĞİL: syndrome donanımdan mrs ile geliyor.
+- **A2 vs D-276:** D-276 = gerçek fault → .S built-in recovery (kdl_fault_bekleniyor). A2 = .kem KARAR-handler
+  gerçek mrs-syndrome'da karar veriyor → roadmap A2 "gerçek fault-yönlendirmesi → .kem handler karar" TAM.
+  .S vektör/trap-frame/recovery DEĞİŞMEDİ (yalnız .kem mrs-okuma + handler-çağrısı eklendi).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] TRAP KARAR OK` (+ MMU FAULT/CEVIRI + [1..10] kümülatif). gate:
+kem_os.ll `define/call @trap_gercek_testi` + `asm "mrs $0, esr_el1"` + `call @kem_istisna_isle`.
+FIXPOINT birebir (33371 — compiler + C runtime DOKUNULMADI, yalnız .kem+Makefile); test_tumu tam yeşil.
+
+**KAPSAM/SINIR:** A2 = gerçek fault-abort'un syndrome-yönlendirmesi. Kalan FAZ-A: A3 (zaman timer-IRQ —
+CNTV+DAIF+GIC → tik canlı), A4 (görev preemptive — EN ZOR, timer→IRQ→context-switch .S), A5 (syscall/EL0).
+SVC-trap dispatch (.kem'e) A3/A5 ile gelir; bu adım yalnız data-abort karar-yolu.
+
+---
+
+## D-277 — REAL-OS FAZ-A1 (alt-hedef B): kdl_mmu_kur SAF-.kem — page-table setup + non-identity çeviri — [5] MMU CEVIRI OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-276).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kdl_mmu_kur SAF-.kem + kmmu_ceviri_testi); `runtime/kdl_mmu.c`
+(kdl_mmu_kur + tablolar `#ifndef KEMGU_KEM_MALLOC` guard); `test/ornekler/kem_os.kem` ([5c] MMU CEVIRI
+bloğu); `Makefile` (bm_a64_mmu_kem.o variant + MMU CEVIRI OK gate + falsifiye-kanıt). FAZ-A1 keystone —
+MMU KURULUMU artık C'de DEĞİL, SAF-.kem. Kullanıcı "önce A sonra B" → B bu adım.]** Kanıtlı-C
+kdl_mmu.c'nin BİREBİR .kem yeniden gerçekleştirmesi: boot `.S bl kdl_mmu_kur` artık SAF-.kem'i çağırır.
+
+- **SAF-.kem kdl_mmu_kur (`kem_mmu.kem`):** çıplak (region-prologue YOK — boot pre-main, heap/region henüz
+  yok; yalnız sabit-adres store + MSR). L1(512×1GB)/L2(512×2MB Normal-WB) tabloları FİXED RAM'de
+  (0x45000000/0x45001000, free, 4KB-hizalı). Descriptor bit'leri C birebir: Device=0x401, Normal-2MB=
+  pa|0x705, tablo=l2|0x3. MAIR=0xFF00, TCR=0x100803519, TTBR0=L1. Enable asm: `msr mair/tcr/ttbr0 → dsb
+  ish → tlbi vmalle1 → dsb ish → isb → sctlr|=(M|C|I) → isb` (satıriçi_asm arm64, D-269 P1).
+- **Non-identity çeviri gate (`kmmu_ceviri_testi`):** L2[128] override → VA 0x50000000 → PA 0x46000000
+  (identity DEĞİL). Çift-yönlü ALIAS doğrula: PA'ya 0xDEADBEEF yaz → non-identity VA'dan oku (=alias?);
+  non-identity VA'ya 0xCAFEBABE yaz → PA'dan oku (=alias?). Taklit edilemez: identity map olsaydı iki VA
+  aynı PA'yı GÖRMEZDİ (0x50000000 backed-değil). volatile erişim (clang alias-varsaymaz → gerçek donanım
+  çevirisi test edilir).
+- **RİSK (boot-MMU replace) BAŞARILI:** MMU kurulumu boot'ta değiştirmek = tablolar yanlışsa sessiz hang.
+  C'yi birebir yansıtarak İLK denemede boot etti ([1] BOOT OK + [5] MMU FAULT + [6..10] hepsi MMU-on
+  .kem-tablolarıyla çalışıyor). Fallback (C'ye dön) GEREKMEDİ.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] MMU CEVIRI OK` (+ MMU FAULT + [1..10] kümülatif, garbling yok).
+gate: kem_os.ll `define @kdl_mmu_kur` + `asm "msr mair_el1"` + `define/call @kmmu_ceviri_testi`;
+`bm_a64_mmu_kem.o` C kdl_mmu_kur tanımı = **0** (guard tuttu). FIXPOINT birebir (33371 — compiler
+src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**MİLESTONE:** kem_os artık TÜM MMU'yu (kurulum + sanal-bellek çevirisi + gerçek page-fault + recovery)
+SAF-.kem yapıyor. FAZ-A1 (A+B) TAM. Kalan FAZ-A: A2 (kesme/timer preemptive) — SYNC/IRQ ayrımı + .S-
+eşleşik-global inline-asm deseni (D-276) yeniden kullanılabilir. C kdl_mmu.c kem_os link'inde artık
+yalnız kdl_surec_kur/kdl_el0_surec_kur (EL0 spawn — henüz kullanılmıyor).
+
+---
+
+## D-276 — REAL-OS FAZ-A1 (alt-hedef A): [5] EXC → GERÇEK vektör-bağlı page-fault + recovery saf-.kem — [5] MMU FAULT OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-275).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (YENİ — kmmu_fault_testi + recovery-scratch inline-asm erişimi);
+`test/ornekler/kem_os.kem` ([5b] gerçek-fault bloğu); `runtime/kdl_kesme.c` (fault-global yorum-notu);
+`Makefile` (kem_mmu CAT + MMU FAULT OK gate + falsifiye-kanıt). FAZ-A ilk rung — human+stratejist mod.]**
+[5] EXC bloğu şimdiye kadar SENTETİK'ti (kem_istisna_isle'a hardcoded ESR/FAR beslenip ESR-decode mantığı
+self-test edilirdi; gerçek fault-yönlendirmesi YOKTU). Bu adım [5]'i GERÇEK vektör-bağlı data-abort +
+donanım fault-recovery ile tamamlar — sentetik self-test KALIR (ESR-decode doğrular), buna EK gerçek kanıt.
+
+- **Ampirik faz (read-only, ZORUNLU) — hard blocker YOK:** (1a) MMU boot'ta ZATEN açık (start_aarch64.S:75
+  `bl kdl_mmu_kur`, C-MMU identity 0x40000000-0x7FFFFFFF + Device; 0x80000000+ HARİTASIZ). (1b) SYNC
+  (`kdl_exc_ortak`) ve IRQ (`kdl_irq_ortak`) AYRI vektör slotları → fault-handling kesme'ye DOKUNMADAN;
+  `.S` TAM recovery içeriyor (`kdl_fault_bekleniyor` set → FAR→`kdl_fault_yakalanan`, ELR+=4, eret → devam)
+  → **`.S` DEĞİŞMEZ**. (1c) C-MMU L1/L2 2MB-blok, MAIR/TCR/TTBR0 değerleri kayıtlı. (1d) TÜM MMU sysreg'leri
+  .kem `satıriçi_asm arm64`'te ifade ediliyor (objdump doğruladı). (1e) 4KB manuel-align çalışıyor.
+- **GERÇEK fault-gate (`kmmu_fault_testi`):** `kdl_fault_yakalanan=0` + `kdl_fault_bekleniyor=1` → haritasız
+  0x80000000 volatile oku → **gerçek data-abort** → `.S kdl_exc_ortak` recovery → `bekle==0` (kurtarıldı) +
+  `far==0x80000000` (FAR doğru) DOĞRULA. Taklit edilemez: MMU zorlamıyorsa okuma sessizce geçer = gate kırmızı.
+  Boot [6..10]'a DEVAM ediyor = recovery başarılı (hang yok).
+- **Recovery-scratch (kdl_fault_bekleniyor/yakalanan):** `.S` ile eşleşik 2 global, C-tanımlı KALIR (.S
+  substrat'ı). .kem bunlara INLINE-ASM (adrp/add + ldr/str, x9-scratch, `~{memory}` clobber = C `volatile`
+  karşılığı) ile erişir → pure-.kem raw-mem primitifi.
+
+**SINIR-NOTU (codegen-gap, FLAG — ayrı adım):** .kem `küresel` → `internal global` linkage (llvm.c:6007)
+→ `.S`'ye açılamaz (external gerekir). Tam-.kem küresel-paylaşım için `dışa küresel` → external linkage
+codegen fix'i gerekir; ANCAK `dışa küresel` parse EDİLMİYOR + codegen.kem 7 küresel (fixpoint-hassas) →
+FAZ-A1'e bundle EDİLMEDİ (task DUR: "yeni codegen gap → flag + minimal-fix ayrı adım"). Workaround
+(inline-asm C-global erişimi) fault-gate'i TAM verir; küresel-form ertelendi.
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[5] MMU FAULT OK` — [1..10] + MMU FAULT kümülatif, garbling yok, boot
+devam. gate: kem_os.ll `define @kmmu_fault_testi` + `call @kmmu_fault_testi` + `asm sideeffect "adrp x9,
+kdl_fault_bekleniyor`. FIXPOINT birebir (33371 satır — compiler src/*.c DOKUNULMADI); test_tumu tam yeşil.
+
+**KAPSAM/SINIR:** alt-hedef A (gerçek fault-gate, mevcut C-MMU'yla) TAMAM. Alt-hedef B (kdl_mmu_kur → .kem +
+non-identity çeviri gate `MMU CEVIRI OK`) AYRI adım (boot-destabilize riski; kullanıcı "önce A sonra B" seçti).
+Kesme-geçiş (FAZ-A2) hazırlığı: SYNC/IRQ ayrımı + `.S` recovery deseni yeniden-kullanılabilir.
+
+---
+
+## D-275 — REAL-OS FAZ-C: saf-.kem TAM ağ yığını — GERÇEK ICMP ping round-trip — [10] PING CANLI (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-274).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (vnet_checksum RFC1071 + vnet_tx_checksum); `test/ornekler/kem_os.kem`
+(net_icmp_testi + [10] PING bloğu); `Makefile` (checksum/icmp proof + PING CANLI gate). REAL-OS BRING-UP FAZ-C
+son rung — AKTİVASYON. bring-up loop görev net-icmp.]** Kanıtlı-C icmp_arm.c'nin saf-.kem yeniden
+gerçekleştirmesi: TAM ağ yığını (ARP + IPv4 + ICMP + RFC1071 checksum) tek boot'ta — "OS ping atıyor".
+
+- **RFC1071 checksum (`vnet_checksum`):** big-endian 16-bit toplam + carry-fold + one's complement
+  (`65535 - t`, XOR yok). `vnet_tx_checksum` çıplak wrapper (normal işlev vnet_dma'ya dokunmadan kullanır,
+  E010 kaçınılır — küresel-erişim güvensiz-tier kuralı).
+- **[10] GERÇEK fonksiyonel:** (1) ARP ile gateway (10.0.2.2) MAC çöz. (2) IPv4 (ver4/IHL5, proto=1, IP-
+  checksum) + ICMP Echo Request (type=8, id=0xBEEF, seq=1, payload "KEMGU", ICMP-checksum) kur + GÖNDER.
+  (3) SLIRP echo reply → AL + PARSE: ethertype=0x0800 + proto=1 + ICMP type=0 (reply) + payload "KEMGU"
+  geri döndü DOĞRULA. **Checksum'lar .kem'de hesaplanır ve SLIRP kabul edip yanıtlar** → sentetik-geçiş
+  imkânsız (yanlış checksum = paket düşer = reply yok).
+
+**FALSİFİYE-KANIT:** kem_os QEMU: `[10] PING CANLI` — [1..10] kümülatif (DISK RW/FS RW/NET DEV/NET ARP/
+PING CANLI), garbling yok. gate: kem_os.ll `define @vnet_checksum` + `call @net_icmp_testi`. [6..9]
+regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**MİLESTONE:** FAZ-B (depolama: virtio-blk+minifs) + FAZ-C (ağ: virtio-net+ARP+IPv4+ICMP) SAF-.kem kem_os'ta
+CANLI. kem_os artık gerçek disk I/O + dosya sistemi + 2-yönlü ağ (ping) yapan gerçek-OS. Kalan: FAZ-A
+(kesme/zaman/görev/EL0 — preemptive scheduling + userspace; STOP-FAZ-A, insan+stratejist). C-removal
+(kesme dead-dep) FAZ-A ile açılır.
+
+---
+
+## D-274 — REAL-OS FAZ-C: saf-.kem ağ paket TX/RX — GERÇEK ARP round-trip — [9] NET ARP OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-273).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (vnet_gonder/al + tx_yaz/rx_oku + rx_gorulen küresel);
+`test/ornekler/kem_os.kem` (net_arp_testi + [9] NET bloğu); `Makefile` (TX/RX proof + NET ARP OK gate).
+REAL-OS BRING-UP FAZ-C — AKTİVASYON. bring-up loop görev net-arp.]** Kanıtlı-C arp_arm.c'nin saf-.kem
+yeniden gerçekleştirmesi: GERÇEK 2-yönlü ağ (TX + RX).
+
+- **Paket TX/RX (`kem_virtio_net.kem`):** `vnet_gonder` (TX queue1: 12-bayt virtio-net başlığı + çerçeve,
+  tek desc device-OKUR, avail bump + notify + used poll); `vnet_al` (RX queue0: used-ring poll, slot→id/len,
+  net-başlığı 12 atla, rx_gorulen sayaç); `vnet_tx_yaz`/`vnet_rx_oku` çerçeve bayt erişimi. Hepsi çıplak
+  VOLATILE deref + dsb (POLLED, IRQ YOK). rx_gorulen kur'da sıfırlanır (re-init senkron).
+- **[9] GERÇEK fonksiyonel (D-264 dersi):** gateway (10.0.2.2) için Ethernet+ARP request (broadcast, bizim
+  MAC, oper=1, tpa=gateway) KUR + GÖNDER → QEMU SLIRP ARP reply GÖNDERİR → AL + PARSE: ethertype=0x0806 +
+  oper=0x0002 (reply) + spa=10.0.2.2 (gateway) + gateway MAC (sha) nonzero DOĞRULA. Sentetik-geçiş imkânsız:
+  gerçek paket ağ üzerinden gider + gerçek yanıt gelir + protokol-alanları eşleşir.
+
+**FALSİFİYE-KANIT:** kem_os QEMU (`-netdev user -device virtio-net-device`): `[9] NET ARP OK` — [1..9]
+kümülatif, garbling yok. gate: kem_os.ll `define @vnet_gonder/al` + `call @net_arp_testi`. [6..8]
+regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**SINIR:** ARP L2 (IP/checksum yok). ICMP ping ([10]) IPv4+RFC1071 checksum ekler (sonraki rung). POLLED
+(FAZ-A'dan bağımsız).
+
+---
+
+## D-273 — REAL-OS FAZ-C: saf-.kem virtio-net transport kem_os'ta AKTİF — [8] NET DEV OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-272).
+
+**Karar [ETKİ: `runtime/kem_virtio_net.kem` (YENİ, saf-.kem virtio-net transport); `test/ornekler/kem_os.kem`
+(net_dev_testi + [8] NET bloğu); `Makefile` (CAT + net + QEMU virtio-net-device + NET DEV OK gate). REAL-OS
+BRING-UP FAZ-C — AKTİVASYON. bring-up loop görev virtio-net.]** Kanıtlı-C kdl_virtio_net.c'nin saf-.kem
+transport yeniden gerçekleştirmesi (POLLED, IRQ YOK → FAZ-A bağımsız).
+
+- **Saf-.kem virtio-net (`kem_virtio_net.kem`):** cihaz bul (DeviceID=1) + feature-negotiate + RX queue0
+  (8 device-yazar 2048B tampon) + TX queue1 + DRIVER_OK. Genel VOLATILE/dsb yardımcıları vblk_*'dan (aynı
+  CAT birimi). DMA = SABİT identity-RAM 0x44000000 (blk 0x43000000 üstü 16MB), MANUEL 16-hizalı offset (RX
+  ring + 8×2048 rx_buf + TX ring, ~19KB). Allocator YOK, IRQ YOK (used-ring poll deseni), T002 yok.
+- **[8] gerçek fonksiyonel:** vnet_kur içinde FEAT_OK read-back (device VERSION_1'i KABUL etmezse -2) +
+  DRIVER_OK + **device-PROVIDED MAC config** (base+0x100, nonzero) → cihaz canlı + config erişilir. Sentetik
+  değil (cihaz feature-negotiate'e yanıt verir + MAC sağlar).
+
+**FALSİFİYE-KANIT:** kem_os QEMU (`-netdev user -device virtio-net-device`): `[8] NET DEV OK` — [1..8]
+kümülatif (DISK RW OK + FS RW OK + NET DEV OK), garbling yok. gate: kem_os.ll `define @vnet_bul/kur` +
+`call @net_dev_testi`. [6]/[7] regresyonsuz. FIXPOINT birebir; test_tumu tam yeşil.
+
+**SINIR:** [8] transport bringup (paket YOK). Paket TX/RX (ARP/[9], ICMP/[10]) sonraki rung. virtio-net
+POLLED (kesme/IRQ gerekmez → FAZ-A'dan bağımsız, roadmap doğrulandı).
+
+---
+
+## D-272 — REAL-OS FAZ-B2: saf-.kem minifs dosya sistemi kem_os'ta AKTİF — [7] FS RW OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-271).
+
+**Karar [ETKİ: `runtime/kem_minifs.kem` (YENİ, saf-.kem minifs); `runtime/kem_virtio_blk.kem` (vblk_kur re-init
+ring-idx sıfırlama); `test/ornekler/kem_os.kem` (fs_rw_testi + [7] FS bloğu); `Makefile` (CAT + minifs + FS RW OK
+gate). REAL-OS BRING-UP FAZ-B2 — AKTİVASYON. bring-up loop görev b2-fs.]** Kanıtlı-C minifs_arm.c'nin saf-.kem
+yeniden gerçekleştirmesi, virtio-blk (vblk_*, D-271) üstünde.
+
+- **Saf-.kem minifs (`kem_minifs.kem`):** disk layout blk0=superblock(magic "MFS1"+sayaç), blk1=inode(ad[4]+
+  boyut u32+veri_blok), blk2+=data. `mfs_format/dosya_yaz/dosya_oku`. GERÇEK fs katmanı: superblock-magic
+  doğrulama + **inode INDIRECTION** (oku, inode'daki veri_blok pointer'ını izler) + isim eşleşme + boyut. Transfer
+  = vblk vq_data. Ham sektör I/O DEĞİL. Cross-file: build'de kem_os ile CAT (tek birim, T002 yok); vblk_* çağırır.
+- **vblk_kur RE-INIT FIX (kritik):** kem_os çok-subsystem → [6] disk + [7] fs HER biri vblk_kur çağırır. C sürücü
+  tek-init'ti (.bss sıfır); ikinci kur RAM avail/used idx'i sıfırlamıyordu → poll `once=used.idx` STALE değeri
+  bekler → fs I/O asılırdı. Fix: vblk_kur QUEUE_READY öncesi avail.idx=0 + used.idx=0 (device+driver taze).
+
+**FALSİFİYE-KANIT (GERÇEK fonksiyonel):**
+- **kem_os QEMU: `[7] FS RW OK`** — format → dosya "veri" oluştur+RASTGELE-pattern((i*7+11)%256, 200B) YAZ →
+  vq_data BOZ(0xff) → dosya OKU (superblock magic + isim + boyut + inode veri_blok indirection) → içerik+boyut
+  BYTE-EŞLEŞME. Seri denetlendi: [1..5]+[6] DISK RW OK+[7] FS RW OK+KEM-OS OK, garbling yok. Sentetik-geçiş imkânsız.
+- **gate:** kem_os.ll `define @mfs_format/dosya_yaz/dosya_oku` + `call @fs_rw_testi`. [6] DISK RW OK regresyonsuz
+  (vblk re-init fix uyumlu).
+- **Bağımsız TAZE-CLONE gate + FIXPOINT + test_tumu:** (bkz commit doğrulaması).
+
+**SINIR:** minifs minimal (tek dosya, tek data-blok, 4-harf isim). CRUD/multi-blok/journaling (crashfs) sonraki
+rung. Yine de gerçek fs (superblock+inode+data ayrımı + indirection). virtio-blk C-removal hâlâ FAZ-A-blocked (D-271).
+
+---
+
+## D-271 — REAL-OS FAZ-B1: saf-.kem virtio-blk GERÇEK blok I/O kem_os'ta AKTİF — [6] DISK RW OK (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-269; D-270 KALİBRASYON no-commit).
+
+**Karar [ETKİ: `runtime/kem_virtio_blk.kem` (YENİ, saf-.kem virtqueue sürücü); `test/ornekler/kem_os.kem`
+(disk_rw_testi + [6] DISK bloğu); `Makefile` (calistir_kem_os_arm: CAT + `--mimari arm64` + virtio-blk cihaz +
+DISK RW OK gate). REAL-OS BRING-UP — migration DEĞİL, AKTİVASYON.]** BRINGUP_ROADMAP FAZ-B1: kanıtlı-C
+kdl_virtio.c'nin saf-.kem yeniden gerçekleştirmesi + kem_os'ta GERÇEK sektör I/O.
+
+- **Saf-.kem virtqueue sürücü (`kem_virtio_blk.kem`):** VirtIO-MMIO v2 feature-negotiate + queue-setup +
+  3-descriptor zincir + notify + used-ring poll. Primitifler: (a) **çıplak VOLATILE deref** (MMIO + DMA-RAM;
+  store/load volatile — çok-genişlik: i64 desc.addr / i32 len / i16 flags/idx / i8 data); (b) **dsb sy** =
+  satıriçi_asm arm64 (D-269 P1, `--mimari arm64`); (c) **DMA tampon** = SABİT identity-map RAM 0x43000000
+  (EL0 üstü, 128MB-backed, kdl_mmu Normal-WB), alt-tamponlar **MANUEL 16-hizalı offset**.
+- **Cross-file:** sürücü tamamen kendi-içinde (malloc/memcpy YOK → **T002 YOK**). Build'de kem_os.kem ile **CAT**
+  (tek birim → çıplak→çıplak çözülür; ayrı SOURCE-dosya + tek OBJ). `dış işlev` extern yok → CAT deseni.
+
+**FALSİFİYE-KANIT (GERÇEK fonksiyonel, sentetik DEĞİL — D-264/D-268 dersi):**
+- **kem_os QEMU (virtio-blk cihazı + disk.img): `[6] DISK RW OK`** — sektör 7'ye değişken pattern ((i%251)+3)
+  YAZ → data temizle → geri OKU → 512 byte-byte EŞLEŞME. Gerçek disk I/O (magic-probe DEĞİL). Seri çıktı
+  denetlendi: [1..5]+[6] DISK RW OK+KEM-OS OK, garbling YOK.
+- **gate:** kem_os.ll `define @vblk_bul/kur/oku/yaz` + `call @disk_rw_testi` + `asm sideeffect "dsb sy"`.
+- **Regresyon:** C virtio_rw kernel `DISK RW OK` (kdl_virtio.c DEĞİŞMEDİ); FIXPOINT stage1==stage2 BİREBİR
+  (codegen.kem/kemgu.exe dokunulmadı); test_tumu TAM YEŞİL.
+
+**P2 YARGISI (A1 4KB önkoşulu): MANUEL 16B over-align ÇALIŞIYOR** — sabit RAM taban + 16-katı offset'ler
+(desc@0/avail@128/used@160/req@256/data@272/status@784) gerçek DMA'da doğrulandı. **4KB'ye ÖLÇEKLENİR:**
+aynı desen ((taban+4095)&~4095 veya 4KB-hizalı sabit taban) — MMU sayfa-tablosu için A1'de kullanılabilir.
+
+**DÜRÜST SINIR (C-removal FAZ-A-blocked):** C kdl_virtio.c (bm_a64_virtio.o) kem_os link'inden ÇIKARILMADI —
+C-kesme (bm_a64_kesme.o, boot vektör tablosu → kdl_syscall_isle → kdl_dosya_* → kdl_virtio_blk_*) transitif
+referans ediyor (D-270 ters-bağımlılık). kem_os'un GERÇEK disk yolu artık .kem vblk_* (aktivasyon TAM); ölü
+C kdl_virtio_blk_* kesme-dead-dep ile kalıyor. Tam C-removal = kesme'nin .kem'e alınması (FAZ-A2/A5). Bu görev
+AKTİVASYONU tamamladı (Yasa-2 gerçek işlevsellik); C-temizlik ayrı faz.
+
+---
+
+## D-269 — CODEGEN P1: satıriçi_asm arch-gate hedefe-duyarlı (`--mimari arm64`) — aarch64 sysreg/bariyer asm .kem'de AÇILDI (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-268).
+
+**Karar [ETKİ: `src/llvm.h` (runtime hedef selector decl); `src/tip.c` (g_hedef_mimari/triple + setter/getter TANIM —
+düşük-bağımlılıklı paylaşılan TU); `src/llvm.c` (AS001 + triple emit getter'dan); `src/tip_kontrol.c` (checker AS001
+getter'dan); `src/ana.c` (`--mimari` bayrağı). ENABLING PRIMITIF — subsystem GÖÇÜ YOK.]** docs/SUBSYSTEM_SCOPE.md FAZ-0: kalan 5 subsystem'in (kesme/zaman/mmu/
+görev/virtio) irreducible asm'ini (MSR/MRS + bariyer + TLBI) açan tek baskın primitif.
+
+- **KAPSAM DOĞRULAMASI (P1 büyümedi):** satıriçi_asm arch-gate, aarch64 kem_os için TEK *fonksiyonel* target-
+  hardcode. İki hardcode var: (a) AS001 asm arch-check (llvm.c + tip_kontrol.c — HER İKİ yerde), (b) emit edilen
+  `target triple` (llvm.c). AMA (b) clang `-Wno-override-module` ile override ediliyor (kem_os bugün aarch64 boot
+  ediyor — kanıt). datalayout/pointer-size/calling-conv hardcode YOK (IR target-agnostik). → yalnız gate + triple.
+- **Değişiklik (MİNİMAL, çalışma-zamanı seçim):** `KEMGU_HEDEF_MIMARI/TRIPLE` makroları VARSAYILAN kalır; runtime
+  `g_hedef_mimari/g_hedef_triple` (default = makrolar). `llvm_hedef_ayarla/mimari/triple`. AS001 (llvm.c +
+  tip_kontrol.c) + triple emit runtime değerden. `ana.c --mimari arm64|x86_64`. **Bayrak verilmezse davranış BİREBİR
+  eski** (fixpoint/regresyon güvenli — D-268 deseni).
+- **codegen.kem paritesi:** GEREKMEDİ — self-host arm64 asm emit etmez, self_driver `--mimari` kullanmaz, default
+  değişmedi → fixpoint etkilenmez. (Self-host arm64-emit ileride ayrı iş.)
+
+**FALSİFİYE-KANIT (4 kadran + assemble):**
+- arm64 asm + `--mimari arm64`: **rc 1→0**, emit `target triple="aarch64-unknown-none-elf"` + `call i64 asm sideeffect
+  "mrs $0, CNTPCT_EL0"`. clang --target=aarch64 → **`mrs x8, CNTPCT_EL0`** (gerçek instr, d53be028) assemble oldu.
+- arm64 asm, bayraksız (x86_64 default): **rc 1** AS001 (gate KALDIRILMADI, hedefe-BAĞLI).
+- x86_64 asm, default: **rc 0** emit (regresyon yok).
+- x86_64 asm, `--mimari arm64` altında: **rc 1** AS001 (yanlış hedefe sessiz-bozuk-IR yok).
+- Regresyon: snapshot 50/50; FIXPOINT stage1==stage2 BİREBİR; test_tumu TAM YEŞİL.
+
+**SINIR:** P1 yalnız asm-gate + triple; genel target-awareness (datalayout/ABI) GEREKMEDİ (IR agnostik). Context-switch/
+vektör-stub hâlâ irreducible asm (bkz SUBSYSTEM_SCOPE §4). Self-host arm64-emit ayrı. Bu primitif subsystem göçünü
+AÇAR ama göç YAPMAZ (FAZ-1 virtio/FAZ-2 mmu sırada).
+
+---
+
+## D-268 — SUBSYSTEM/yetki: yetki<R> OUT-PTR ABI + saf-.kem sağlayıcı — kem_os'un SON C bağımlılığı kalktı (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-267).
+
+**Karar [ETKİ: `src/llvm.c` (yetki_olustur/delege intrinsic call+declare: sret→out-ptr); `runtime/kem_heap.kem`
+(saf-.kem çıplak kdl_yetki_olustur/geri_al + kem_yetki_sayac); `runtime/kdl_yetki_bare.c` (olustur/delege out-ptr —
+virtio); `Makefile` (kem_os link bm_a64_yetki.o DROP + yetki gate-proof). CODEGEN ABI + OS-ÇEKİRDEK.]**
+Son subsystem: yetki (object-capability). Yasa-4 (kem_os'ta sıfır C) → yetki göç etmeli.
+
+- **EMPİRİK BULGU (görev premisi düzeltildi):** Görev "C bunu sret ile yapıyor" diyordu; GERÇEK: `%kdl_yetki` 16B
+  (≤ AAPCS64/SysV register-return eşiği) → clang bare-metal'de `[2 x i64]`/`{i64,i64}` register-return eder, **sret
+  DEĞİL**. sret yalnız (a) KEMGU llvm.c'nin kendi emisyonunda ve (b) host Win64 C-ABI'sinde vardı. llvm.c sret çağrısı
+  bare-metal register-return C provider ile ZATEN uyumsuzdu (latent) — yetki değeri runtime'da hiç okunmadığı için
+  maskeliydi (`mmio_oku32/yaz32` yalnız adresi kullanır, capability derleme-zamanı ispatı). Kullanıcı ONAYI: OUT-PTR
+  konvansiyonu (düşük risk; sret-codegen/x8 yok).
+- **OUT-PTR ABI (`src/llvm.c`):** olustur/delege çağrı+declare `ptr sret(%kdl_yetki) align 8` → düz `ptr` (out-pointer,
+  aarch64 x0). Çağıran slot ayırır, sağlayıcı struct'ı slot'a yazar, çağıran geri yükler. Host Win64: düz ptr = RCX =
+  sret ile aynı reg → mevcut by-value C provider (kdl_runtime.c) DEĞİŞMEDEN uyumlu (capability/mmio/drf 40/23/39 ✓).
+- **Saf-.kem sağlayıcı (`kem_heap.kem`):** çıplak `kdl_yetki_olustur(out:*tam8, kt, izin)` + `kdl_yetki_geri_al(y:*tam8)`
+  — alanları offset-tabanlı yazar (id@0/kaynak_tipi@8/izin@10/iptal@12; kem_heap.kem tüm-ham-pointer idiomu). küresel
+  `kem_yetki_sayac` id sayacı. codegen.kem yetki EMİT ETMEZ → FIXPOINT/codegen_diff ETKİLENMEZ.
+- **Makefile:** kem_os `bm_a64_yetki.o` link'ten TAM ÇIKARILDI (metin-stili; kem_os yalnız olustur+geri_al referans
+  eder, ikisi de .kem). Guard GEREKMEDİ — kalan-C-func olmadığından (mmio'dan farklı) tam drop Yasa-4'ü sağlar.
+
+**FALSİFİYE-KANIT:**
+- **kem_os QEMU TEMİZ boot** (gerçek seri denetlendi, D-264 dersi): `[1]BOOT [2]HEAP/55 [3]MMIO OK/1953655158
+  [4]HESAP/230/3 [5]EXC OK/1,2,3 KEMGU KEM-OS OK` — garbling YOK. **MMIO magic (1953655158) .kem yetki ile okundu**;
+  konsol (uart_bayt_yaz da yetki_olustur çağırır) temiz → .kem sağlayıcı uçtan-uca çalışıyor.
+- **yetki gate:** bm_a64_kem_heap.o `T kdl_yetki_olustur/geri_al` + kem_os.elf'te `kem_yetki_sayac` (C sürümü
+  `kdl_yetki_sayac` — ayrı sembol → .kem sağlayıcı linklendiğini kanıtlar) + link'te bm_a64_yetki.o YOK.
+- **virtio regresyon:** `KEM VIRTIO OK/1` — out-ptr C provider (kdl_yetki_bare.c) virtio-mmio okumasını sağlar.
+- **Host:** capability 40/40, mmio 23/23, drf 39/39; test_tumu TAM YEŞİL; FIXPOINT/codegen_diff etkilenmedi.
+
+**SINIR:** kontrol/kontrol_tipi hâlâ by-value-C ↔ ptr-declare (pre-existing bare-metal mismatch, kem_os kullanmıyor,
+maskeli — ayrı iş). yetki genel struct-return AAPCS64 register-packing (x0/x1 `bfxil`) hâlâ yok — out-ptr onu
+gerektirmez (çağrı+sağlayıcı self-consistent). Genel struct-return AAPCS64 uyumu ayrı ABI-epic.
+
+---
+
+## D-267 — CODEGEN FIX: self-host `codegen.kem` skaler-pointee deref-READ paritesi (D-265 LATENT sapması kapandı) (2026-07-12) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-266).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (Ayr.cg_apointee alanı + cg_var_ekle/initializer + cg_var_pointee_bul +
+param_pointee + DEGISKEN/PARAMETRE pointee-set + deref-READ pointee-yük); `test/cg_korpus/cg_skaler_deref.kem` (yeni
+falsifiye korpusu). CODEGEN CORRECTNESS — self-host↔C parite.]** D-265'in DÜRÜST-SINIR olarak kaydettiği latent
+sapmanın kalıcı onarımı: C-derleyici `*p` deref-READ'i pointee-tipinden (`pointee_llvm_tip`) yüklüyordu ama self-host
+`codegen.kem` skaler pointee için hâlâ i32 yüklüyordu (satır 2731). `*tam8/*tam16/*tam64` beklenen-NULL deref'te
+C↔self-host DIVERGE ediyordu. D-267 self-host'a skaler-pointee izleme ekleyerek D-265'in C'de yaptığının BİREBİR aynasını
+kurar.
+
+- **`codegen.kem` (skaler-pointee plumbing, C `pointee_llvm_tip` aynası):**
+  - `Ayr.cg_apointee: Dizi<metin>` — cg_ad/cg_areg/cg_atip/cg_aref/cg_aelem'e PARALEL yeni tablo; `*tamN` pointer
+    değişkeni ise skaler pointee LLVM tipi ("i8"/"i16"/"i64"), değilse "".
+  - `cg_var_ekle` her eklemede `""` iter (dizi paralel kalır); `cg_var_pointee_bul(ad)` ad→pointee (append-only,
+    en-son-kazanır).
+  - **DEGISKEN handler:** annot TIP_POINTER ise `vpointee = ll_tip(pointee-çocuk)`; `cg_var_ekle` sonrası
+    `dizi_yaz(cg_apointee, son, vpointee)`.
+  - **PARAMETRE (`param_pointee` yardımcısı, C llvm.c:5494 aynası):** `*tamN` param → pointee tipi; registrasyon
+    sonrası set.
+  - **deref-READ (`deref*`):** yapı-pointee (`cg_var_ref_bul`→`%Yapi`) yoksa `cg_var_pointee_bul`; ikisi de yoksa i32
+    varsayılan (kanonik `*tam32`/`mantıksal`). C OP_DEREFERANS ile birebir.
+
+**FALSİFİYE-KANIT (`cg_skaler_deref.kem`, genişlik-duyarlı — yanlış yük-genişliği TERS exit verir):**
+- **C-codegen (oracle):** `load i8/i16/i64` → **exit 24**.
+- **ESKİ self-host (HEAD 1c0c984, D-267 öncesi):** hepsi `load i32` → **exit 32 → DIVERGE** (32 ≠ 24). ✅ falsifiye görünür.
+- **YENİ self-host (D-267 fix):** `load i8/i16/i64` → **exit 24 → PARİTE**. Self-host `*tam8==0` artık `load volatile i8`.
+- **Regresyon YOK:** **FIXPOINT stage1==stage2 BİREBİR (33371 satır)** — SERT KAPI geçti; lexer+parser+checker 90/90;
+  codegen_diff **76/76** (cg_skaler_deref dâhil); test_tumu TAM YEŞİL; kem_os QEMU TEMİZ boot ([1..5]+MMIO+KEM-OS OK).
+  (fixpoint korunuyor çünkü codegen.kem kendisi raw `*tamN` skaler-deref kullanmaz — cg_apointee izleme çıktıyı yalnız
+  gerçek skaler-deref'te değiştirir.)
+
+**KAPANIŞ:** D-265'in [[project-kem-codegen-pointer-gaps]] latent-sapma maddesi ÇÖZÜLDÜ — C ve self-host codegen artık
+skaler pointer deref'te birebir. Kalan pointer-gap yok (deref-READ tam parite).
+
+---
+
+## D-266 — SUBSYSTEM/mmio: saf-.kem çıplak VOLATILE mmio oku32/yaz32 kem_os'a ENTEGRE (2026-07-11) [ORTA]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-265).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_mmio_oku32/yaz32); `runtime/kdl_runtime_mmio.c` (oku32/yaz32
+`#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (bm_a64_mmio_kem.o + kem_os link swap + mmio gate-proof). OS-ÇEKİRDEK.]**
+İkinci subsystem: MMIO (donanım register) volatile erişimi saf-.kem. D-265 deref-fix'in ilk meyvesi (doğru i32-volatile).
+
+- **`kem_heap.kem` (+mmio):** çıplak `kdl_mmio_oku32(i64)->i32` (volatile load) + `kdl_mmio_yaz32(i64,i32)` (volatile store).
+  Çıplak=güvensiz-tier → deref VOLATILE (D-248; clang -O2 elemez). D-265: `*p` (p:*tam32) → i32-pointee yük. kem_os.kem
+  YALNIZ oku32/yaz32 çağırır → yalnız onlar migrate; 16/64 widthler C'de kalır (virtio dead-code dep).
+- **`kdl_runtime_mmio.c`:** oku32/yaz32 (bare-metal blok) #ifndef KEMGU_KEM_MALLOC guard. Diğer widthler + host korunur.
+- **Makefile:** bm_a64_mmio_kem.o (-DKEMGU_KEM_MALLOC, oku32/yaz32 çıkarılmış); kem_os link bm_a64_mmio.o → kem variant.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) bm_a64_mmio_kem.o 0 oku32/yaz32 C-def; bm_a64_kem_heap.o T
+kdl_mmio_oku32 + kem_heap.ll `store/load volatile i32` içerir (gate grep). (b) **QEMU: [3] MMIO OK + 1953655158** —
+.kem VOLATILE oku32 donanım register'ından DOĞRU değeri okudu (migrasyon-öncesi ile birebir; volatile çalışıyor). (c)
+Regresyon yok — bm_a64_mmio.o (non-kem) oku32/yaz32 intact → virtio/mmio_bare_metal/kem_pointer kernel'leri etkilenmez.
+
+**SIRADA:** yetki (kdl_yetki_olustur/geri_al, capability — struct/semantik) → panik/UART/kesme/zaman/mmu/görev/virtio (büyük).
+
+---
+
+## D-265 — CODEGEN FIX: deref-READ `*p` yük-tipi POINTEE'den (bağlam-varsayılan i32 gap) — C-derleyici (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-264).
+
+**Karar [ETKİ: `src/llvm.c` (OP_DEREFERANS read handler); `runtime/kem_heap.kem` (metin workaround KALDIRILDI).
+CODEGEN CORRECTNESS.]** D-264'te keşfedilen gap'in KALICI onarımı: `*p` deref-READ, yüklenecek tipi pointer'ın
+pointee-tipinden DEĞİL kullanım-bağlamından (`beklenen`) alıyordu; `beklenen` yoksa (ör. `*bp == 0` karşılaştırma)
+i32-varsayılan → DAR pointee'lerde (`*tam8` → i32, 4 bayt oku) YANLIŞ genişlik → null-check bozuldu → kdl_metin_uzunluk
+sınır-aştı → garbled UART (D-264).
+
+- **Fix (llvm.c OP_DEREFERANS):** operand DUGUM_TANIMLAYICI ise `isim_bul→pointee_llvm_tip` ile pointee-tipi çöz; `beklenen`
+  verilmezse i32 yerine POINTEE kullan. **Altyapı zaten vardı** (`pointee_llvm_tip` alanı + indeks/deref-WRITE handler'ları
+  onu kullanıyordu — yalnız deref-READ handler'ı kaçırmıştı; llvm.c:2408 yorumu bunu belgeliyordu). `beklenen` VERİLİRSE
+  korunur (regresyon yok).
+- **metin workaround kaldırıldı:** `değişken b: tam8 = *bp` → saf `*bp == 0` (fix doğru i8-yük emit ediyor).
+
+**FALSİFİYE-KANIT:** (a) `*bp == 0` IR artık `load volatile i8` + `icmp eq i8` (i32 değil). (b) host metin
+uzunluk('KURTAR')=6→exit 42 (workaround'suz). (c) **kem_os QEMU TEMİZ boot** — EXC satırları garbling YOK (fix öncesi
+garbled'dı). (d) **Regresyon YOK:** llvm 241/241, codegen_diff 75/75, **FIXPOINT stage1==stage2 BİREBİR (33150)**,
+self_driver TÜM MODLAR (C-built==self-host → codegen.kem etkilenmedi). (test_tumu'da 1 kez 18-llvm-flake görüldü, standalone
++ tekrar 241/241 → geçici temp-race, fix DEĞİL.)
+
+**DÜRÜST SINIR (D-249/D-253 sınıfı LATENT parite):** self-host `codegen.kem` deref handler'ı skaler pointee için hâlâ i32
+(satır 2731; "skaler beklenen-tip plumbing yok"). C artık pointee kullanıyor → `*tam8/*tam16/*tam64` beklenen-NULL deref'te
+C↔self-host DIVERGE eder. **AMA LATENT:** hiçbir mevcut program (cg_korpus/codegen.kem/self_driver) böyle deref
+kullanmıyor → fixpoint+parite YEŞİL. kem_heap.kem (*tam8 kullanan) C-derlenir, self-host derlemez → bare-metal etkilenmez.
+**Gerçek parite fix (gelecek):** codegen.kem'e skaler-pointee plumbing (cg_var tablosu + deref handler). İlgili
+[[project-kem-codegen-pointer-gaps]].
+
+---
+
+## D-264 — SUBSYSTEM/metin: saf-.kem kdl_metin_uzunluk/bayt kem_os'a ENTEGRE (allocator-sonrası ilk subsystem) (2026-07-11) [ORTA]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-263).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_metin_uzunluk/bayt); `Makefile` (kem_os link'inden bm_a64_metin.o ÇIKAR +
+metin gate-proof). OS-ÇEKİRDEK.]** Allocator göçü (K1-K5) sonrası İLK subsystem: metin (string) ilkeleri saf-.kem.
+kem_os'ta kalan C-runtime azaltma fazının başlangıcı.
+
+- **`kem_heap.kem` (+metin):** çıplak kdl_metin_uzunluk(ptr)->i32 (freestanding strlen) + kdl_metin_bayt(ptr,i32)->i8
+  (sınır-güvenli byte-at; NULL/OOB→0). Leaf (allocation yok). bm_a64_metin.o kem_os link'inden çıkarıldı (kem_os-özel
+  obje, guard gerekmedi).
+
+**🐛 KEŞFEDİLEN CODEGEN GAP (workaround'lu):** `*ptr` deref, YÜK TİPİNİ pointee'den DEĞİL BAĞLAMDAN alıyor. `*bp == 0`
+(bp: *tam8) → codegen `load i32` emit etti (comparison-default i32), null-check 4-sıfır-bayt'a kadar durmadı →
+kdl_metin_uzunluk('KURTAR')=100 (6 yerine) → UART string-print sınır-aşımı → GARBLED çıktı. **DÜZELTME (workaround):**
+`değişken b: tam8 = *bp; eğer b == 0` (tam8 ara-değişken i8-yük ZORLAR). Diğer .kem-runtime fn'leri etkilenmedi (hepsi
+`değişken x: tamN = *p` tipli-yük kullanıyor). **GERÇEK FIX (gelecek, src/llvm.c):** OP_DEREFERANS yükü pointee-tipini
+kullanmalı (context değil). **DERS: gate marker-PASS ama çıktı BOZUK olabilir → gerçek QEMU çıktısını denetle (sadece
+KEM-OS OK grep'i yetmez).**
+
+**FALSİFİYE-KANIT:** (a) host metin: uzunluk('KURTAR')=6, ''=0, OOB=0 → exit 42 + IR `load i8`. (b) QEMU: kem_os TEMİZ boot
+([1..5]+KEM-OS OK, EXC satırları KURTAR/OLDUR/HALT garbling YOK — fix öncesi garbled'dı). (c) bm_a64_metin.o link-dışı;
+bm_a64_kem_heap.o T kdl_metin_uzunluk/bayt.
+
+**SIRADA:** mmio (kdl_mmio_oku/yaz, volatile) → yetki (capability) → panik/UART/kesme/... (büyük subsystem'ler).
+
+---
+
+## D-263 — K4b+K5: saf-.kem kdl_global_bolge_al + ALLOCATOR-YIĞINI GÖÇÜ TAMAM — kem_os allocator C-runtime=0, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-262).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+kdl_global_bolge_al + kem_global_bolge küresel); `runtime/kdl_bare_heap.c`
+(kdl_global_bolge_al `#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (K4b+K5 gate-proof). OS-ÇEKİRDEK YASA-1 seri —
+runtime→.kem göçü SON allocator kademesi + K5 milestone.]**
+
+**runtime→.kem ALLOCATOR-YIĞINI GÖÇÜ TAMAM (K1→K4b).** K4b son parça: kdl_global_bolge_al (kem_os.ll'de kalan TEK
+allocator C-çağrısı) → .kem çıplak (küresel lazy global bölge + kdl_bolge_olustur[.kem]). Böylece kem_os'un TÜM
+allocator yığını — **malloc (K1) → region (K3) → dizi (K2) → memcpy/memset (K4a) → global-bölge (K4b)** — SAF-.kem.
+
+- **`kem_heap.kem` (+global_bolge):** çıplak `kdl_global_bolge_al()->ptr`; `kem_global_bolge` küresel (WALL-1) lazy;
+  kdl_bolge_olustur (.kem, aynı dosya) çağırır. kem_heap.kem artık TAM allocator runtime (18 çıplak fn).
+- **`kdl_bare_heap.c`:** kdl_global_bolge_al KEMGU_KEM_MALLOC guard'ına alındı.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **K4b** — kemmalloc.o 0 kdl_global_bolge_al; kem_heap.o T
+kdl_global_bolge_al. (b) **K5 milestone** — `bm_a64_heap_kemmalloc.o` + `bm_a64_bolge_kemregion.o` (kem_os'un TÜM C
+allocator objeleri) = **0 allocator-yığını C-tanımı** (malloc/free/memcpy/memset/kdl_bolge_*/kdl_dizi_*/kdl_global_bolge_al
+grep=0) → kem_os allocator/region/dizi/kopya/global-bölge TAMAMEN bm_a64_kem_heap.o SAF-.kem'den. (c) **QEMU boot** —
+[1..5]+KEM-OS OK, [2] HEAP DIZI=55. (d) Regresyon yok (diğer kernel'ler C allocator).
+
+**KAPSAM/SINIR:** Bu K5 = **ALLOCATOR-yığını** C-runtime=0 (orijinal K1-K5 direktif hedefi). kem_os'ta KALAN C =
+AYRI SUBSYSTEM'ler (panik/UART/yetki/mmio/metin/kesme/zaman/mmu/görev/virtio) — allocator değil, ayrı göç fazı (gelecek).
+aarch64 (x86_64 kem_os yok). dizi tam64/ptr/yapi varyantları + free-list split/coalesce yok (kem_os kullanmıyor).
+
+---
+
+## D-262 — K2+K4a: saf-.kem çıplak DİZİ + memcpy/memset kem_os'a ENTEGRE — C kdl_dizi/memcpy SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-261).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+dizi: olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç buyut/oob; +memcpy/memset);
+`runtime/kdl_bare_heap.c` (memcpy/memset + kdl_dizi.inc `#ifndef KEMGU_KEM_MALLOC` guard); `test/strip_defined_declares.awk`
+(YENİ robust declare-strip); `Makefile` (awk strip + K2 gate-proof). OS-ÇEKİRDEK YASA-1 seri — runtime→.kem göçü K2+K4a.]**
+
+runtime→.kem göçünün 3. kademesi. K2 (dizi) memcpy'ye bağlı → K4a (memcpy/memset) ile bundle. kem_os'un DİZİ + bayt-kopya
+katmanı artık SAF-.kem. Böylece **kem_os'un tüm tahsis+dizi yığını (.kem malloc→region→dizi→memcpy) SAF-.kem**.
+
+- **`kem_heap.kem` (+dizi/memcpy):** çıplak memcpy/memset (inttoptr byte-loop, -O2 loop-idiom'a yakalanmaz→self-recurse yok,
+  disasm-doğrulandı) + kdl_dizi_olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç kem_dizi_buyut/kdl_dizi_oob. KdlDizi
+  {veri@0,boyut@8,kapasite@12,eleman_byte@16} raw-ptr; bölge-sahipli büyüme (kdl_bolge_ayir[.kem] + memcpy[.kem], AYNI dosya
+  çıplak→çıplak). Sınır-kontrol D-069 → oob spin-halt (cross-file panik yok; kem_os'ta erişilmez). tam64/ptr/yapi varyantları
+  kem_os KULLANMADIĞI için atlandı.
+- **`kdl_bare_heap.c`:** memcpy/memset K1-guard'ına alındı; kdl_dizi.inc include `#ifndef KEMGU_KEM_MALLOC` sarıldı.
+- **`strip_defined_declares.awk`:** kemgu --llvm boilerplate declare'ları define ile çakışır (LLVM redef) → bir fn hem
+  define hem declare ediliyorsa declare'ı DÜŞÜR (robust; elle strip-listesi bakımı yok). K1/K2/K3 hepsi kullanır.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **@kdl_dizi/memcpy/memset=0** — `bm_a64_heap_kemmalloc.o` bunların
+C-tanımı=0; `bm_a64_kem_heap.o` T kdl_dizi_olustur+memcpy (saf-.kem). (b) **QEMU boot** — [1..5]+KEM-OS OK, **[2] HEAP DIZI=55**
+(.kem dizi 1..10 ekle+büyüme[4→8→16]+al_tam, .kem region+malloc+memcpy üstünde DOĞRU). (c) **Regresyon yok** — kernel_dizi
+(C dizi) KERNEL DIZI OK+55; bm_a64_heap.o C dizi/memcpy intact. (d) Host: dizi LOGIC test (boyut=10, sum=55). Fixpoint ETKİLENMEZ.
+
+**KALAN C (kem_os) → K4b/K5:** kdl_global_bolge_al (lazy global bölge — kdl_bolge_olustur[.kem] çağırır), kdl_panik/
+kdl_panik_dur (panik seam → UART halt), yetki/mmio/metin subsystem'leri. K5 nihai: kem_os IR + link'te C-runtime sembolü=0.
+
+---
+
+## D-261 — K3: saf-.kem çıplak REGION (bölge arena) kem_os'a ENTEGRE — C kdl_bolge SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-260).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (+region: kem_blok_olustur/kdl_bolge_olustur/ayir/serbest); `runtime/kdl_bolge.c`
+(`#ifndef KEMGU_KEM_MALLOC` guard); `Makefile` (bm_a64_bolge_kemregion.o + KEM_OS_A64_OBJS swap + kem_heap strip +
+K3 gate-proof). OS-ÇEKİRDEK YASA-1 seri — runtime→.kem göçü K3.]**
+
+runtime→.kem göçünün İKİNCİ kademesi (K3 region). K2(dizi)'nin ÖNKOŞULU (dizi kdl_bolge_ayir çağırır + .kem extern-C
+çağıramaz → region .kem OLMALI önce; stated K2→K3 sırası TEKNİK infeasible, tractable sıra K3→K2). Region EN BÜYÜK
+yüzey (kem_os.ll'de kdl_bolge_olustur 22 + serbest 39 = **61 çağrı**).
+
+- **`kem_heap.kem` (+region):** çıplak `kdl_bolge_olustur()->ptr` / `kdl_bolge_ayir(ptr,i64)->ptr` / `kdl_bolge_serbest(ptr)`
+  + helper `kem_blok_olustur`. Bölge = malloc'lu blok tek-yönlü listesi + blok-içi bump (C kdl_bolge.c ile birebir
+  algoritma). **AYNI dosyada malloc/free (K1)** → çıplak→çıplak call resolve (islev_bul; ρ-suz doğru C-ABI). Struct
+  düzenleri raw-pointer offset (KdlBolge{bas@0,blok_sayisi@8}; KdlBolgeBlok{sonraki@0,kapasite@8,kullanilan@16,veri@24}).
+  Hizalama `((x+15)/16)*16` (bitwise gerekmez). memcpy GEREKMEZ. Sayaç YOK.
+- **`kdl_bolge.c`:** hiza_yukari/blok_olustur/olustur/ayir/serbest `#ifndef KEMGU_KEM_MALLOC` guard; sayaç+bakiye+
+  blok_sayisi diagnostikleri KALIR. Diğer kernel'ler C region (guard etkisiz) ile DEVAM.
+- **Makefile:** `bm_a64_bolge_kemregion.o` (-DKEMGU_KEM_MALLOC, region çıkarılmış); `KEM_OS_A64_OBJS` bm_a64_bolge.o →
+  kemregion; kem_heap strip'e region declare'ları eklendi. Sadece kem_os.
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU):** (a) **@kdl_bolge=0** — `bm_a64_bolge_kemregion.o` region C-tanımı=0;
+`bm_a64_kem_heap.o` T kdl_bolge_olustur (saf-.kem). (b) **QEMU boot** — kem_os.elf [1..5]+KEM-OS OK, **[2] HEAP DIZI=55**
+(.kem region + .kem malloc birlikte heap Dizi tahsisini DOĞRU yaptı; her kem_os fn'in region-prologue'u = .kem region →
+.kem malloc). (c) **Regresyon yok** — kernel_dizi (C region) KERNEL DIZI OK+55; bm_a64_bolge.o C region intact. (d)
+Host: region LOGIC test (1000 tahsis 16-hizalı+distinct+yazılabilir + 100KB yeni-blok → exit 42). Fixpoint ETKİLENMEZ.
+
+**SIRADA K2 (dizi):** kdl_dizi_* → .kem çıplak (kem_heap.kem'e; kdl_bolge_ayir[.kem] + memcpy[.kem çıplak leaf, self-recurse
+yok] çağırır). Sonra K4 (memcpy/memset/global_bolge/panik) → K5 (kem_os IR C-runtime=0).
+
+---
+
+## D-260 — K1: saf-.kem çıplak `malloc`/`free` kem_os'a ENTEGRE — C bump-allocator SİLİNDİ, QEMU-boot (2026-07-11) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-259).
+
+**Karar [ETKİ: `runtime/kem_heap.kem` (YENİ saf-.kem allocator); `runtime/kdl_bare_heap.c` (`#ifndef KEMGU_KEM_MALLOC`
+guard + weak kem_heap_kur); `boot/start_aarch64.S` (bl kem_heap_kur); `Makefile` (kemmalloc obj + kem_heap obj +
+KEM_OS_A64_OBJS + @kdl_bare_heap=0 gate). OS-ÇEKİRDEK, YASA-1 seri — runtime→.kem göçü K1.]**
+
+F3 (D-259) circularity-kırıldı'yı kem_os bare-metal'e ENTEGRE eder: kem_os'un `malloc`/`free`'si artık SAF-.kem
+(çıplak allocator), C `kdl_bare_heap` bump-allocator'ı DEĞİL. runtime→.kem göçünün İLK kademesi (K1) TAMAM.
+
+- **`kem_heap.kem`:** çıplak (C-ABI, ρ-suz) `malloc(i64)->ptr` / `free(ptr)` / `kem_heap_kur(i64,i64)`. Bump + 16-hizalı
+  {boyut,sonraki} header + LIFO serbest-liste (C kdl_bare_heap ile birebir algoritma). küresel bump-state (WALL-1) +
+  ham-pointer inttoptr/deref (D-248). Region-prologue YOK → circularity YOK.
+- **`kdl_bare_heap.c`:** malloc/free/typedef/statics `#ifndef KEMGU_KEM_MALLOC` ile sarıldı; weak `kem_heap_kur` no-op
+  (C-malloc kernel'leri için). memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALDI (K4).
+- **Boot (`start_aarch64.S`):** `bl main`'den ÖNCE `bl kem_heap_kur(__heap_start,__heap_end)` — main'in ilk malloc'undan
+  önce heap penceresi kurulur. Çıplak → malloc tetiklemez (taban-öncesi güvenli). PAYLAŞILAN boot; C-malloc kernel'de
+  weak no-op (lazy kdl_heap_init yeterli), kem_os'ta kem_heap.o STRONG override → kem_bump=__heap_start.
+- **Makefile:** `bm_a64_heap_kemmalloc.o` (-DKEMGU_KEM_MALLOC, C malloc çıkarılmış), `bm_a64_kem_heap.o` (kem_heap.kem
+  → boilerplate `declare @malloc/@free` STRIP [LLVM redef hatası] → aarch64 obj), `KEM_OS_A64_OBJS` (heap→kemmalloc+kem_heap).
+  **Sadece kem_os** bu obj setini kullanır → diğer ~15 aarch64 kernel BM_A64_OBJS (C malloc) ile DEVAM (regresyon yok).
+
+**FALSİFİYE-KANIT (`calistir_kem_os_arm`, QEMU-boot):** (a) **@kdl_bare_heap=0** — `llvm-nm bm_a64_heap_kemmalloc.o`
+malloc/free C-tanımı = 0 (guard çalıştı); `bm_a64_kem_heap.o` T malloc/free/kem_heap_kur (saf-.kem sağlıyor). (b)
+**QEMU boot** — kem_os.elf boot eder + **[1]BOOT [2]HEAP DIZI OK→55 [3]MMIO [4]HESAP [5]EXC OK + KEMGU KEM-OS OK**;
+[2] HEAP DIZI (1..10 toplam=55) .kem malloc'un region-runtime + Dizi tahsisini DOĞRU yaptığının kanıtı. (c)
+**Regresyon yok** — kernel_dizi (C-malloc region kernel) hâlâ "KERNEL DIZI OK"+55 boot eder (weak kem_heap_kur no-op +
+boot değişikliği C-malloc kernel'leri kırmadı). (d) Host: kem_heap.kem çıplak IR circularity-sembol=0 (F3 harness),
+allocator LOGIC host-test (bump+free-list reuse+100 tahsis exit 42). Fixpoint ETKİLENMEZ (codegen.kem/derleyici
+dokunulmadı).
+
+**KAPSAM/SINIR:** aarch64 (x86_64 kem_os gate yok). free-list split/coalesce yok (C ile aynı; kem_os döngü OOM'u
+yeterli). **SIRADA K2-K5:** dizi runtime (K2), region (K3 — kdl_bolge.c→.kem, circularity F3 çözdü), helpers (K4:
+memcpy/memset/global_bolge), K5 (kem_os IR'ında C-runtime sembolü = 0 nihai hedef).
+
+---
+
+## D-259 — F3/KOMPOZİSYON: saf-.kem çıplak+küresel `kem_malloc` — bootstrap-circularity KIRILDI (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-258).
+
+**Karar [ETKİ: `test/ornekler/kem_malloc.kem` (YENİ saf-.kem allocator); `test/kem_malloc_kompozisyon.c` (YENİ
+C-harness); `test/kem_malloc_kompozisyon_harness.sh` + Makefile (`calistir_kem_malloc_kompozisyon`, test_tumu).
+KOMPOZİSYON KANITI — dil-genişletmenin meyvesi.]**
+
+İki bootstrap-primitifinin (D-252 `küresel değişken` + D-254/257 `çıplak işlev`) BİR ARADA çalışan bir allocator
+verdiğini ve **bootstrap-circularity'yi kırdığını** falsifiye-kanıtla gösterir. `kem_malloc.kem`: küresel bump-state +
+çıplak (region-prologue'suz, C-ABI) `kem_heap_kur`/`kem_malloc`/`kem_yaz32`/`kem_oku32` (ham-pointer inttoptr+deref).
+
+**CIRCULARITY NEDEN KIRILDI:** normal .kem fn'i girişinde `@kdl_bolge_olustur→malloc` çağırır; malloc'u .kem'de
+yazarsan `malloc→(prologue)@kdl_bolge_olustur→malloc` = SONSUZ DÖNGÜ. Çıplak fn prologue EMIT ETMEZ →
+`kem_malloc` IR'inde `@kdl_bolge_olustur` = 0 VE `@malloc` self-call = 0 → tahsis kendini tetiklemez.
+
+**FALSİFİYE-KANIT (`calistir_kem_malloc_kompozisyon`, HER İKİ codegen 6/6):** (A) IR-KANIT: kem_malloc modülünde
+`@kdl_bolge_olustur/@kdl_global_bolge_al/@malloc`-self = 0 (grep). (B) KOMPOZİSYON: C-harness (çıplak C-ABI olduğu için
+.kem malloc'u doğrudan çağırır) → 2 çağrı → **2 FARKLI adres** (`ALLOC: p1=<A> p2=<B> A!=B EVET`), dönen adresler
+YAZILABİLİR (inttoptr+deref: v1=111 v2=222), bitişik (p2-p1==8) → **exit 42**. C-codegen == self-host (parite).
+test_tumu tam yeşil (fixpoint + codegen_diff 75/75 + region-free 6/6 dâhil).
+
+**KAPSAM/SINIR:** Host-kanıt (havuz = statik C tamponu; bare-metal'de taban __heap_start'tan gelir — K1b). Minimal bump
+(hizalama+serbest-liste K1'de). Heap-TABANI çağırandan (kem_heap_kur) — .kem'de extern linker sembolü ifade edilemez
+(satıriçi_asm arch-x86_64-sabit). **SIRADA K1:** kem_malloc'u kem_os.kem'e entegre + heap-taban'ı boot-glue küreselinden
+al + C `kdl_bare_heap` malloc yolunu sil → **kem_os.kem IR'inde @kdl_bare_heap/@malloc(C) = 0** (Mehmet firsthand doğrular).
+
+---
+
+## D-258 — SELF-HOST/F2→K1: `çıplak işlev` ρ-drop codegen.kem PARİTE (C↔self-host ABI divergence kapatıldı) (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-257).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (fn_ciplak_ad_mi + islev_uret imza rho_var + 2 çağrı-sitesi callee_rho);
+`test/ciplak_region_free_harness.sh` (+2 ρ-drop imza parite). SELF-HOST ÇEKİRDEĞİ.]**
+
+D-257 çıplak ρ-drop'u C-derleyiciye ekledi; codegen.kem'e AYNALADI (audit dersi: divergence bırakma). Oracle = C llvm.c.
+
+- **İmza:** `rho_var = (main_mi==0 ve ciplak==0)` → çıplak fn imzasında `ptr %rho` YOK; virgül-mantığı rho_var'a bağlı.
+- **Çağrı-sitesi (2):** `fn_ciplak_ad_mi(p, fad)` (g_ciplak node adları) → çıplak-callee ise `callee_rho=0` → ρ arg
+  ATLA (void + value yolu). C llvm.c'nin `callee_rho`/`u_rho` aynası.
+- **rho_ref:** çıplak fn'de "null" (call-rule gereği kullanılmaz).
+
+**FALSİFİYE-KANIT:** (a) çıplak `tahsis`: C ve self-host BİREBİR — `define i64 @tahsis()` + `call i64 @tahsis()`
+(ikisi de ρ-suz). self-host çıplak allocator exit 42. (b) **ciplak_region_free harness 6/6** — çıplak+iken/için
+region-symbol=0 + imza ρ-suz HER İKİ derleyici + normal-döngü ρ_iter korundu. (c) cg_ciplak codegen_diff + FIXPOINT
+(codegen.kem çıplak-kullanmıyor → self-compile etkilenmez, stage1==stage2 korunur).
+
+**SINIR:** self-host E013 yok (güvensiz/çıplak-tracking yok — D-249/D-253/D-257 sınıfı; geçerli-program parity çalışır,
+invalid-program reddi yalnız C). **SIRADA: K1** — saf-.kem çıplak `malloc` (küresel bump + inttoptr; artık @malloc(i64)
+C-ABI ifade edilebilir) → kem_os.kem entegre → C kdl_bare_heap malloc yolu sil.
+
+---
+
+## D-257 — DİL/F2→K1: `çıplak işlev` ρ param DÜŞÜR (true C-ABI) + çıplak-call-rule (E013) — C-DERLEYİCİ (2026-07-08) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-256). Mehmet ABI-kararı: Option-1.
+
+**Karar [ETKİ: `src/llvm.c` (islev_uret imza + 4 çağrı-sitesi); `src/tip_kontrol.h/c` (ciplak_baglam + E013);
+`test/test_tip_kontrol.c` (+2). ABI-SEMANTİK — soundness-kritik. K1 ön-koşulu.]**
+
+K1 (saf-.kem allocator) somut bir ABI çatalı açığa çıkardı: D-254'te çıplak fn ρ param'ı "uniform-ABI + çağrı-yeri
+basitliği" için TUTUYORDU → çıplak `malloc` `@malloc(ptr %rho, i64)` üretiyor, ama codegen region-backing
+`@malloc(i64)` (C-ABI) çağırıyor → UYUŞMAZ → çıplak fn bir C-ABI sembolü (malloc/interrupt/syscall) OLAMIYOR.
+**Mehmet kararı (Option-1): ρ'yu DÜŞÜR** → çıplak = true C-ABI bare fonksiyon.
+
+- **Codegen (llvm.c):** `rho_var = !main_mi && !ciplak` → çıplak fn imzasında `ptr %rho` YOK (main gibi). rho_ref =
+  "null" (çıplak-call-rule gereği kullanılmaz). **4 çağrı-sitesi** (generic 2178, method 2691, modül 2796, ana user-fn
+  3868) callee çıplak ise ρ arg'ını ATLAR (`callee_rho`/`m_rho`/`mf_rho`/`u_rho` + virgül-mantığı). Sonuç: çıplak
+  `malloc` → `define i64 @malloc(i64 %n)` = codegen'in `declare @malloc(i64)` beklentisiyle BİREBİR.
+- **Çıplak-call-rule (E013, tip_kontrol):** `tk->ciplak_baglam` sayacı (çıplak gövde/method'ta ++; güvensiz-grant ile
+  aynı 3 site). Çıplak içinden normal (ρ-alan) user-fn çağrısı → E013 (verilecek ρ yok → codegen `ptr null` → callee
+  null-region tahsis → segfault). Çıplak→çıplak + çıplak→extern/builtin İZİNLİ. Normal→çıplak İZİNLİ (kısıt yalnız
+  çıplak-içinden).
+
+**FALSİFİYE-KANIT:** (a) çıplak `tahsis`/`malloc`: define + call ikisi de ρ-SUZ, exit 42 (ABI uyumlu; ρ uyumsuz olsa
+segfault). (b) `@malloc(i64)` == codegen `declare @malloc(i64)`. (c) E013: çıplak→normal RED (1 hata), çıplak→çıplak OK
+(0), normal→çıplak OK. (d) çıplak+döngü hâlâ region-free (D-256 korundu). (e) llvm 241/241, tip_kontrol 189/189,
+parser 107/107 — non-çıplak yolu DEĞİŞMEDİ (rho_var normal fn'de = eski `!main_mi`).
+
+**SINIR / SIRADA:** (1) **D-258 self-host parite** — codegen.kem çıplak ρ-drop AYNALA (şu an self-host çıplak hâlâ
+ρ-carrying → exit-görünmez ABI divergence; audit dersi: kapat). (2) lambda-indirect (llvm.c:3410) + generic-instantiation
+çağrı yolları çıplak-callee için henüz ρ-atlamıyor (K1 kapsamı-dışı: allocator standalone çıplak). (3) self-host E013
+yok (güvensiz-tracking yok, D-249/D-253 sınıfı). → **K1** (saf-.kem çıplak `malloc` = küresel bump + inttoptr).
+
+---
+
+## D-256 — F2/AUDIT: `çıplak işlev` adversarial soundness denetimi — 2 kusur ONARILDI (döngü-ρ_iter sızıntısı + method-grant) (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-255).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (Bulgu #1: IKEN/İÇİN ρ_iter guard); `src/tip_kontrol.c` (Bulgu #2: özellik/uygula
+method çıplak-grant); `test/ciplak_region_free_harness.sh` (YENİ IR-içerik gate) + Makefile; `test/test_tip_kontrol.c`
+(+3). SELF-HOST + CHECKER — soundness-kritik.]**
+
+F2 (D-254/D-255) sonrası, K1 inşasından ÖNCE `çıplak işlev` primitifine 4-lens adversarial denetim (safety/ABI/parity/
+analiz; 9 agent, per-bulgu bağımsız skeptik doğrulama). Parity gate'lerin (codegen_diff 75/75 + fixpoint) KAÇIRDIĞI
+2 gerçek, çıplak-özgü, belgeli-sınır-DIŞI kusur bulundu + onarıldı:
+
+- **Bulgu #1 (YÜKSEK, K1-BLOKE) — self-host çıplak-döngü ρ_iter sızıntısı:** `codegen.kem` IKEN/İÇİN handler'ı çıplak
+  fn içindeki en-dış döngüde per-iterasyon `@kdl_bolge_olustur`/`@kdl_bolge_serbest` (F4.3 ρ_iter) emit ediyordu →
+  çıplak "sıfır region-symbol" invaryantı ihlali → bootstrap-circularity döngü-içeren her çıplak fn'de geri doğuyor.
+  C-codegen'de ρ_iter kavramı HİÇ yok (grep 0) → C çıplak-döngü doğal region-free; sapma yalnız self-host. **Kanıt:**
+  çıplak+`iken` topla() → C=0, self-host=2 (fix öncesi). **Onarım:** `Ayr.ciplak_aktif` bayrağı (islev_uret'te
+  `ciplak_mi`'den set) + iki ρ_iter CREATE sitesine `ve p.ciplak_aktif == 0` guard'ı. Serbest siteleri zaten
+  `rho_iter==""` no-op. **exit-kodu codegen_diff'in GÖRMEDİĞİ kusur** (çıplak allocator host'ta linklenir → sızıntı
+  exit'te maskelenir; kusur IR/bare-metal link seviyesinde).
+- **Bulgu #2 (ORTA) — çıplak güvensiz-grant method'lara sızmıyor:** D-254 grant yalnız standalone `DUGUM_ISLEV`
+  yolundaydı (tip_kontrol.c:5077); özellik default-impl (5145) + uygula method (5207) yolları `ciplak_mi` okumuyordu
+  → geçerli çıplak-method (küresel/`*p`/asm) YANLIŞ reddediliyor (E010/G001/G002) + codegen çıplak-method'u
+  prologue-skip ile emit ettiğinden checker↔codegen SAPMASI. Wrong-**reject** (güvenli taraf; geçersiz kabul YOK) →
+  orta. **Onarım:** grant desenini (`guvensiz_baglam++/--`) iki method yoluna da ekle.
+
+**REFUTED (bilgi):** safety-lens "çıplak stack-OOB sınır-kontrolünü eler" iddiası — skeptik BİREBİR doğrulayıp
+REDDETTİ: bu `güvensiz`'in TASARIMLI opt-out'u (D-069); çıplak = güvensiz-tier olduğundan tutarlı, YENİ açık değil.
+
+**FALSİFİYE-KANIT (kalıcı gate):** (a) **YENİ `calistir_ciplak_region_free`** (test_tumu'ya eklendi) — çıplak+iken/
++için fn'de region-symbol=0 HEM C HEM self-host + normal-döngü ρ_iter korunur (F4.3 regresyon); 4/4. Bu gate
+codegen_diff'in exit-körlüğünü kapatır. (b) tip_kontrol +3: çıplak standalone/method *p deref → 0 hata, çıplak-olmayan
+method → G001. (c) llvm 241/241, tip_kontrol 187/187 yeşil. (d) fixpoint stage1==stage2 KORUNDU (codegen.kem
+çıplak-kullanmıyor → ciplak_aktif hep 0, kendi self-compile'ı etkilenmez) + codegen_diff 75/75.
+
+**SIRADA:** F2 artık denetlenmiş + sağlam → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer, döngü dâhil
+region-free, kem_os.kem entegre, C kdl_bare_heap yolu sil).
+
+---
+
+## D-255 — SELF-HOST/F2: `çıplak işlev` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-254).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lexer + Ayr.g_ciplak + parser modifier/dispatch + ciplak_mi + islev_uret
+prologue-skip); `test/cg_korpus/cg_ciplak.kem` (YENİ codegen_diff parite). SELF-HOST ÇEKİRDEĞİ — soundness-kritik.]**
+D-254 `çıplak işlev`'i C-derleyiciye ekledi ama `codegen.kem`'e (self-host) EKLEMEDİ → C↔self-host DIVERGENCE
+(D-249/D-253 dersi). Bu commit codegen.kem'e AYNALADI (oracle = C llvm.c):
+
+- **Lexer:** "çıplak" → "CIPLAK" token.
+- **Parser:** `parse_islev_genel` çıplak/gerçekzamanlı modifier (herhangi sıra, nested eğer — `değilse eğer`
+  codegen.kem'de yok, fixpoint-güvenli); node idx `p.g_ciplak`'a kaydedilir. Dispatch: `parse_disa_govde` +
+  `parse_ust_oge` + özellik/uygula gövde (`sim_mi CIPLAK` 6 sitede).
+- **Ayr struct:** `g_ciplak: Dizi<tam32>` (çıplak işlev düğüm idx listesi) + init `[]`.
+- **Codegen:** `ciplak_mi(p, idx)` (g_ciplak üyelik) + `islev_uret`'te ciplak → region-prologue 3-emisyon ATLA
+  (main `@kdl_global_bolge_al` seed, `@kdl_bolge_olustur` ρ_yerel; rho_yerel="" → serbest no-op). ρ param uniform-ABI
+  için korunur (çağrı yerleri değişmez). C llvm.c ρ-prologue aynası.
+
+**FALSİFİYE-KANIT (hepsi kalıcı gate):** (a) **cg_ciplak.kem codegen_diff** — çıplak-allocator (küresel bump, 2 çağrı
+→ farklı adres, b-a==8), C-codegen exit=42 == self-host exit=42; **tahsis imzası BİREBİR** (`define i64 @tahsis(ptr
+%rho)`) + HER İKİ codegen'de tahsis IR'inde region-prologue=0. Korpus **75/75** (HEM C-codegen HEM self-host geçer).
+(b) **FIXPOINT stage1==stage2 BİREBİR** (codegen.kem çıplak-kullanmıyor ama eklenen handler self-compile kararlı;
+KIRILMADI). test_tumu tam yeşil.
+
+**DÜRÜST SINIR (pre-existing, D-249/D-253 sınıfı):** self-host checker güvensiz-tracking yok → D-254 çıplak-güvensiz-grant
+(ham pointer + küresel explicit `güvensiz` gerektirmez) self-host'ta ENFORCE edilmez. Geçerli-program parity ÇALIŞIR
+(codegen_diff exit-eşitlik); invalid-program reddi (çıplak-dışı küresel/deref) C'de var, self-host'ta yok = bilinen gap.
+**SIRADA:** F2 tamam → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer → kem_os.kem entegre → C
+kdl_bare_heap yolu sil).
+
+---
+
+## D-254 — DİL/F2: `çıplak işlev` (no-region-prologue fonksiyon, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-06) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-253).
+
+**Karar [ETKİ: `src/lexer.h/c` + `src/anahtar_kelime.c` (TOK_CIPLAK); `src/ast.h` (islev.ciplak_mi); `src/parser.c`
+(modifier parse + 6 dispatch sitesi); `src/tip_kontrol.c` (çıplak gövde = örtük güvensiz-bağlam); `src/llvm.c`
+(islev_uret region-prologue SKIP + güvensiz-grant); `test/test_llvm.c` (+3 assert). WALL-2 / bootstrap-circularity
+çözümü — 2 primitiften İKİNCİSİ.]**
+
+D-251 K1 (runtime→.kem allocator göçü) `kdl_bolge_olustur→malloc→...` döngüsünde BLOKLU idi: HER .kem fonksiyonu
+girişinde `@kdl_bolge_olustur` (ρ_yerel) + main'de `@kdl_global_bolge_al` emit ediyor → malloc'u .kem'de yazan
+allocator'ın KENDİ prologue'u malloc çağırıyor = sonsuz döngü. **WALL-2 çözümü: `çıplak işlev`** — girişinde
+region-prologue EMIT EDİLMEZ.
+
+- **Lexer:** `çıplak` (`\xc3\xa7\xc4\xb1plak`, 8 bayt) → TOK_CIPLAK; binary-search tablo `çeşit`<`çıplak`<`özellik`
+  (`\xa7`<`\xb6`). Komşu keyword sağlaması: çeşit/özellik hâlâ tanınıyor.
+- **Parser:** `çıplak` opsiyonel işlev-modifier (gerçekzamanlı ile herhangi sırayla, P039 çift-yazım hatası);
+  `parse_ust_oge` + `dışa`/`genel`/`özellik`/`uygula` + `sync_token_mu` dispatch. `islev.ciplak_mi` düğümde.
+- **Checker:** çıplak gövde = örtük güvensiz-bağlam (`tk->guvensiz_baglam++`) → ham pointer deref-write + küresel
+  yazımı explicit `güvensiz {}` gerektirmez. Kırılmazlık korunur: çıplak opt-in keyword, güvensiz-tier.
+- **Codegen (llvm.c):** `islev_uret`'te ciplak → 3 emisyon ATLA: (1) main `@kdl_global_bolge_al` seed, (2)
+  `@kdl_bolge_olustur` (ρ_yerel), (3) `@kdl_bolge_serbest` epilogue (rho_yerel=NULL → serbest_emit no-op).
+  **ABI kararı:** ρ param KORUNUR (main-değil fn'ler yine `ptr %rho` alır, kullanılmaz) → çağrı yerleri DEĞİŞMEZ
+  (D-249 imza-uyumsuz-çağrı segfault riski YOK). Bu spec-uyumlu (yasak = region-YARATMA çağrıları, param değil).
+  Ayrıca çıplak gövde için `g->guvensiz_derinlik++` (deref-write doğru emit).
+
+**FALSİFİYE-KANIT (kalıcı gate, `calistir_llvm_test`):** (a) **[236] ciplak: tahsis IR'inde region-prologue = 0** —
+çıplak `tahsis` fn gövdesinde `@kdl_bolge_olustur`+`@kdl_global_bolge_al` grep-sayısı = 0 (IR-içerik denetimi
+`ir_region_prologue_sayisi`). (b) **[237] kontrast** — normal `main` prologue >= 1 (skip yalnız çıplak'a özgü).
+(c) **[238] ciplak-allocator kompozisyon** — küresel bump 2 çağrı → 2 FARKLI adres (a=0,b=8), b-a==8 → **exit 42**;
+sonsuz-recursion YOK. Ek manuel: tam-çıplak program (main de çıplak) → TÜM IR'da 0 C-runtime region sembolü →
+freestanding standalone link + exit 42 (K1 hedefinin canlı önizlemesi). Host: lexer 103/103, parser 107/107,
+tip_kontrol 184/184, llvm 241/241.
+
+**SINIR / SIRADA:** (1) **F2 self-host parite** (D-255) — `codegen.kem`'e AYNALA (D-253 dersi: divergence bırakma).
+(2) Self-host checker güvensiz-tracking yok → çıplak-güvensiz-grant self-host'ta ENFORCE edilmez (D-249/D-253 sınıfı,
+geçerli-program parity çalışır). (3) F2 bitince → **K1** (saf-.kem çıplak-allocator: küresel bump + ham pointer,
+kem_os.kem'e entegre, C kdl_bare_heap yolu sil).
+
+---
+
+## D-253 — SELF-HOST/F1: `küresel değişken` codegen.kem PARİTE (C↔self-host divergence kapatıldı) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-252).
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lexer+parser+codegen+g_isim pre-pass); `test/cg_korpus/cg_kuresel.kem` (YENİ
+codegen_diff parite). SELF-HOST ÇEKİRDEĞİ — soundness-kritik.]** D-252 `küresel değişken`'i C-derleyiciye ekledi ama
+`codegen.kem`'e (self-host) EKLEMEDİ → C↔self-host DIVERGENCE (D-249 dersi). Bu commit codegen.kem'e AYNALADI
+(oracle=C llvm.c):
+
+- **Lexer:** "küresel" → "KURESEL" token.
+- **Parser:** `parse_kuresel` ("KURESEL" düğüm: dugum2 ad + tip + init) + `parse_ust_oge` dispatch.
+- **Checker/pre-pass:** KURESEL adı `g_isim`'e (üst-düzey global ad çözümü — sabit/işlev gibi).
+- **Codegen:** `g_kuresel_ad`/`g_kuresel_tip` tracking + `kuresel_topla` (module `@ad = internal global <ir> <init>`
+  emit) + TANIMLAYICI → `load @ad` + ATAMA → `store @ad` (sabit gibi inline değil — mutable).
+
+**FALSİFİYE-KANIT (hepsi kalıcı gate):** (a) **cg_kuresel.kem codegen_diff** — persistence (yaz 42, oku ayrı-fn → 42),
+C-codegen exit=42 == self-host exit=42 (korpus **74/74**, HEM C-codegen HEM self-host geçer). (b) self-host --llvm IR =
+C IR (`@g_val = internal global i32 0` + store/load). (c) **FIXPOINT stage1==stage2 BİREBİR (32833 satır**; codegen.kem
+küresel-kullanmıyor ama eklenen handler kodu self-compile kararlı; KIRILMADI). test_tumu tam yeşil.
+
+**DÜRÜST SINIR (pre-existing, D-249 sınıfı):** self-host checker E010/E011/E012 (güvensiz-gate / tip-kısıt / const-init)
+ENFORCE ETMİYOR — self-host'ta güvensiz-derinlik-tracking yok (deref için de yoktu, D-249 flag). Geçerli program parity
+ÇALIŞIR (--check+--llvm+exit); INVALID program (küresel güvensiz-dışı) self-host KABUL eder, C REDDEDER = divergence
+yalnız invalid-programda. Safe .kem küresel üretmez → Kırılmazlık pratikte korunur. Hardening (ayrı): self-host checker
+güvensiz-tracking + E010/E011/E012. **F1 TAM (C + self-host codegen parite). SIRADAKİ: F2 çıplak işlev.**
+
+## D-252 — DİL/F1: `küresel değişken` (modül-mutable global, güvensiz-scoped) — C-DERLEYİCİ TAM (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-251).
+
+**Karar [ETKİ: `src/lexer.h/lexer.c/anahtar_kelime.c` (keyword); `src/ast.h` (kuresel_mi); `src/parser.c`
+(parse_kuresel_tanimi); `src/sembol.h` (kuresel flag); `src/tip_kontrol.c` (pre_populate_kuresel + E010/E011/E012);
+`src/llvm.c` (global emit + load/store); `test/test_llvm.c` (persistence testi). Yalnız C-derleyici + test.]** Mehmet
+design-stop (D-251 bootstrap-circularity çözümü, 2 primitiften İLKİ). WALL-1 çözümü: allocator kalıcı durumu
+(bump-pointer) modül-global tutabilir. **Bu commit F1'in (küresel değişken) C-DERLEYİCİSİ TAM — self-host parite AYRI
+adım (aşağıda).**
+
+- **Lexer:** TOK_KURESEL + "küresel" keyword. KRİTİK: keyword tablosu BİNARY-SEARCH → memcmp-sıralı; `k\xc3` (küresel)
+  `ku` (kullan)'dan büyük (0xc3>0x75) → kullan SONRASINA (ilk yanlış-poz kullan/ust-öğe parser testlerini kırdı).
+- **Parser:** `parse_kuresel_tanimi` ('küresel değişken ad: tip = init;' → DUGUM_DEGISKEN kuresel_mi=1), üst-düzey.
+- **Checker:** pre_populate_kuresel (global sembol, kuresel=1) + **E011 tip-kısıt** (yalnız skaler/ham-pointer;
+  Dizi/yapı/metin YASAK — allocator'a bağlanamaz) + **E012 const-init** (sabit-literal) + **E010 güvensiz-only-erişim**
+  (Kırılmazlık: paylaşılan-mutable-durum = confinement'ın kaçındığı aliasing → güvensize hapis; safe .kem erişemez).
+- **Codegen:** `kureseller` registry + module `@ad = internal global <ir> <init>` + okuma→`load @ad` + atama→`store @ad`
+  (sabit gibi inline DEĞİL — MUTABLE). Non-küresel program bu yolları tetiklemez → mevcut IR değişmez.
+
+**FALSİFİYE-KANIT (uydurulamaz):** **persistence** — `yaz()` küresel'e 42 yazar, `oku()` (AYRI fn) okur → **exit 42**
+(local olsa yaz'ın yazması oku'da görünmez, 0 gelirdi). IR: `@g = internal global i32 0` + store + load.
+`test_llvm.c` test_kuresel_persistence [224] KALICI GATE (llvm 238/238). --check: güvensiz OK / dışı E010 / Dizi E011.
+Host suite + **FIXPOINT birebir (32379 satır, KIRILMADI** — küresel-kullanmayan program yolu değişmez) + codegen_diff.
+
+**KALAN (bu commit'te YOK):** (1) **F1 self-host parite** — parser.kem + checker.kem + codegen.kem (D-249 dersi).
+Divergence şu an LATENT (codegen.kem küresel kullanmıyor → fixpoint korunur; ama bir .kem küresel kullanır + self-host
+derlerse diverge). (2) **F2 çıplak işlev** (no-region-prologue, ayrı feature). İkisi bitince D-251 K1 (saf-.kem allocator)
+mümkün → runtime→.kem göçü akar. İlgili: [[project-kem-codegen-pointer-gaps]].
+
+## D-251 — DIAG/DUR: runtime→.kem TAM GÖÇÜ K1'de BLOKLU — 2 codegen/dil gap'i (design-stop) (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-250).
+
+**Karar [ETKİ: yalnız DECISIONS + memory (teşhis). KOD YAZILMADI — K1 başlamadan bloklu; sahte .kem-allocator
+yazmamak için DUR (direktif: kolay-işe/workaround KAÇMA).]** Görev: C-runtime'ı kademe kademe saf-.kem'e taşı,
+kem_os.ll'de @kdl_* = 0. **SONUÇ: İLK kademe (K1 allocator) başlamadan BLOKLU — 2 fundamental codegen/dil gap'i +
+circularity, hepsi ampirik DOĞRULANDI.** Bu gap'ler mekanik-iş değil, DİL-TASARIM kararı ([[feedback-karar-kurallari]]:
+syntax/semantik → Mehmet).
+
+**BASELINE (kem_os.ll C-runtime çağrıları):** region @kdl_bolge_olustur×22 + @kdl_bolge_serbest×39 + @kdl_global_bolge_al×1
+(=62, HER fonksiyona codegen-emit); array @kdl_dizi_*×5; @kdl_metin_*×2; @kdl_mmio_*×3; @kdl_yetki_*×4.
+
+**WALL-1 — .kem GLOBAL MUTABLE STATE YOK:** modül-düzeyi `değişken sayac: tam32 = 0;` → parser HATA. Allocator'ın
+kalıcı bump-pointer + lazy-global-region cache'i .kem global olamaz (C: `static KdlBolge *kdl_global_bolge`,
+`static` bump). Fixed-adres-depolama workaround mümkün ama tek başına WALL-2'yi çözmez.
+
+**WALL-2 — REGION-EMISSION HER FONKSİYONDA, OPT-OUT YOK:** trivial `işlev f()->tam32{ver 0}` bile IR'da
+`call @kdl_bolge_olustur()` (prologue) + `call @kdl_bolge_serbest()` (epilogue) emit eder (llvm.c:5356-5361, main
+dahil koşulsuz; grep opt-out attribute = 0). → bir .kem `kdl_bolge_olustur`/`malloc` fonksiyonu KENDİ prologue'unda
+@kdl_bolge_olustur çağırır.
+
+**CIRCULARITY (decisive, doğrulandı):** `kdl_bolge.c:72` `kdl_bolge_olustur` → `malloc()` çağırır. Yani .kem `malloc`
+→ (WALL-2 prologue) @kdl_bolge_olustur → kdl_bolge_olustur → malloc → @kdl_bolge_olustur → ... **SONSUZ RECURSION**.
+Aynısı .kem `kdl_bolge_olustur` için (kendini prologue'da çağırır). → region + allocator runtime .kem'de YAZILMAZ.
+
+**SONUÇ:** K5 (kem_os.ll'de @kdl_* = 0) MEVCUT CODEGEN'LE ULAŞILMAZ — @kdl_bolge_* (62 çağrı) her fonksiyonda +
+.kem-tanımlanamaz (self-recursion). K1 (allocator) global-state + circularity ile bloklu → K2 (array, allocator'a bağlı)
+transitif bloklu. K4 leaf-fonksiyonları (kdl_metin_bayt vb., global-state'siz + allocator-çağırmayan) muhtemelen
+migratable AMA tek başına K5'e ulaşmaz (region kalır) + direktif dependency-order (K1 önce) diyor → K4'e atlamadım.
+
+**UNBLOCK İÇİN GEREKEN (Mehmet design-stop kararı):** (1) **region-emission opt-out attribute** — bir .kem
+fonksiyonunu "region prologue/epilogue YOK" işaretle (ör. `çıplak işlev` / `runtime` attribute); llvm.c + codegen.kem
+(parite) + parser/checker = YENİ DİL ÖZELLİĞİ + bellek-güvenliği modelini değiştirir (o fn'de region-tracking yok).
+(2) **global mutable state** (modül-düzeyi mutable `değişken`) VEYA yaptırımlı fixed-adres-depolama deseni. İkisi de
+dil-tasarım kararı. Düzeltme Mehmet'in; ben DUR + flag (direktif: durdurucu gap → DUR).
+
+## D-250 — DIAG: HEAP Dizi<T> indeks-yazma bare-metal — "codegen-bug mu link-sorunu mu" NET cevap: LİNK (2026-07-05) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-249).
+
+**Karar [ETKİ: `test/ornekler/diag_heap_yaz_linkli.kem` (YENİ); `Makefile` (`calistir_diag_heap_yaz_arm` + OS-aggregate).
+Yalnız test + target; src/selfhost/runtime DEĞİŞMEDİ.]** Tanı görevi: heap Dizi<T> INDEKS-YAZMA (`d[i]=v` →
+`kdl_dizi_yaz` yolu) heap-runtime DÜZGÜN linkli iken ARM64 QEMU'da çalışıyor mu? (Codex'in önceki teşhisi
+heap-runtime'ı LİNKLEMEMİŞTİ.) **SONUÇ: LİNK-SORUNUYDU, CODEGEN SAĞLAM.**
+
+**UYDURULAMAZ-KANIT (QEMU):** `HEAP KONTROL oku0=10` (heap-oku çalışıyor) + `HEAP YAZ: yaz=48879 oku=48879 =>
+EVET` (0xBEEF yazıldı, 0xBEEF geri okundu). **LINK-DURUMU:** `d[i]=v` codegen `call void @kdl_dizi_yaz_tam` emit
+eder; `kdl_dizi_*` undefined YOK (bm_a64_heap.o'dan çözüldü — bm_a64_heap.o kdl_dizi_yaz'ın 4 varyantını tanımlar,
+kdl_dizi.inc). Şablon = calistir_kernel_dizi_bare_metal (BM_A64_OBJS = bm_a64_heap.o dahil linkler). **KEMGU'da
+saf-stack-dizi YOK — her Dizi<T> heap-uniform (kdl_dizi.inc); stack [N×T] yolu yok → ikinci (stack) diag ATLANDI
+(bu da bulgu).** **Sonuç:** `d[i]=v` heap-yazma codegen'i (llvm.c INDEKS→kdl_dizi_yaz) DOĞRU; önceki "bug" =
+bm_a64_heap.o linklenmeme artefaktı. Gerçek fix küçük: diag/kernel'leri BM_A64_OBJS'e linkle (zaten kem_os/kernel_dizi
+öyle yapıyor). Düzeltmeyi orchestrator yapacak. OS-gate'e eklendi.
+
 ## D-249 — SELF-HOST: codegen.kem POINTER PARİTE — C↔self-host divergence fix (saf-.kem-OS adım-1) (2026-07-05) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-248).

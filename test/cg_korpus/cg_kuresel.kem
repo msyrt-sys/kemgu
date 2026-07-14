@@ -1,0 +1,7 @@
+// cg_kuresel.kem — D-253: küresel değişken C↔self-host paritesi.
+// yaz() küresel'e 42 yazar, oku() (AYRI fn) okur → 42 (cross-call persistence;
+// local olsa 0). Host-güvenli (geçerli global belleğe yazar). exit 42.
+küresel değişken g_val: tam32 = 0;
+işlev yaz() -> tam32 { güvensiz { g_val = 42; ver 0; } ver 0; }
+işlev oku() -> tam32 { güvensiz { ver g_val; } ver 0; }
+işlev main() -> tam32 { güvensiz { yaz(); ver oku(); } ver 0; }

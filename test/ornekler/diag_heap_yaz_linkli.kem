@@ -1,0 +1,47 @@
+// =====================================================================
+// diag_heap_yaz_linkli.kem — HEAP Dizi<T> INDEKS-YAZMA bare-metal doğrulama
+// ---------------------------------------------------------------------
+// TEK SORU: heap-runtime DÜZGÜN linklenince (bm_a64_heap.o = kdl_dizi.inc),
+// Dizi<T>'ye İNDEKS-YAZMA (d[i] = v → kdl_dizi_yaz yolu) ARM64 QEMU'da
+// çalışıyor mu? → "codegen-bug mu link-sorunu mu" sorusunu kesin cevaplar.
+//
+// KEMGU'da Dizi<T> ZATEN HEAP (kdl_dizi.inc; stack [N×T] dizi YOK — hepsi
+// heap-uniform). Bu test kem_os.kem/kernel_dizi.kem heap-Dizi desenini kullanır.
+//
+// d[i] = v codegen'i → `call kdl_dizi_yaz_i32(ptr, i32, i32)` (INDEKS-atama).
+// kdl_dizi_yaz kdl_dizi.inc'te → bm_a64_heap.o'ya derlenir → BM_A64_OBJS link'inde.
+//
+// UYDURULAMAZ-KANIT (UART): "HEAP YAZ: yaz=48879 oku=<X> => EVET/HAYIR"
+//   EVET (oku=48879=0xBEEF) → heap index-yazma DÜZGÜN-LİNKLİ çalışıyor.
+//   HAYIR (oku=çöp)         → heap-runtime linkli AMA bozuk (gerçek bug).
+// =====================================================================
+
+işlev main() -> tam32 {
+    // (1) HEAP Dizi<tam32> yarat (kem_os.kem deseni), boyut 4.
+    değişken d: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(d, 10);
+    dizi_ekle(d, 20);
+    dizi_ekle(d, 30);
+    dizi_ekle(d, 40);
+
+    // (2) Kontrol: bir eleman OKU (heap-oku yolu çalışıyor mu?).
+    değişken kontrol: tam32 = dizi_al(d, 0);      // beklenen 10
+    yazdir_metin("HEAP KONTROL oku0=");
+    yazdir_tam(kontrol);
+
+    // (3) ASIL TEST: heap-diziye İNDEKS-YAZMA (kdl_dizi_yaz yoluna gider).
+    d[2] = 48879;                                  // 0xBEEF
+
+    // (4) Geri OKU.
+    değişken okunan: tam32 = d[2];                 // beklenen 48879
+
+    // (5) UART: yaz == oku mu?
+    yazdir_metin("HEAP YAZ: yaz=48879 oku=");
+    yazdir_tam(okunan);
+    eğer okunan == 48879 {
+        yazdir_metin("=> EVET (heap indeks-yazma calisiyor)");
+    } değilse {
+        yazdir_metin("=> HAYIR (heap indeks-yazma bozuk)");
+    }
+    ver 0;
+}

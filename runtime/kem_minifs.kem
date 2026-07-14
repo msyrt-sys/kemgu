@@ -1,0 +1,74 @@
+// kem_minifs.kem — FAZ-B2: SAF-.kem minimal dosya sistemi, virtio-blk üstünde.
+// ============================================================================
+// Kanıtlı-C minifs_arm.c'nin saf-.kem yeniden gerçekleştirmesi (real-OS bring-up).
+// Blok aygıtı = vblk_* (kem_virtio_blk.kem, D-271; build'de CAT → tek birim, T002 yok).
+//
+// DİSK LAYOUT (512-baytlık sektörler):
+//   blk0 = superblock: magic "MFS1"(4B) + dosya_sayisi(1B @ ofs4)
+//   blk1 = inode:      ad[4](@0) + boyut(u32 LE @16) + veri_blok(u8 @20)
+//   blk2 = data:       dosya içeriği (tek blok, <=512B)
+// GERÇEK fs katmanı: superblock magic doğrulama + inode INDIRECTION (oku, inode'daki
+// veri_blok'u izler) + isim eşleşme. Transfer tamponu = vblk vq_data (vblk_data_yaz/oku).
+// Ham sektör I/O DEĞİL — superblock/inode/data ayrımı + isim + boyut + blok-pointer.
+
+sabit MFS_SB_BLK: tam64    = 0;
+sabit MFS_INODE_BLK: tam64 = 1;
+sabit MFS_DATA_BLK: tam64  = 2;
+
+// vq_data'yı sıfırla (512 bayt).
+çıplak işlev mfs_data_temizle() {
+    değişken i: tam32 = 0;
+    iken i < 512 { vblk_data_yaz(i, 0 olarak dtam8); i = i + 1; }
+}
+
+// format: superblock @ blk0 = magic "MFS1" + dosya_sayisi=0. 0=ok.
+çıplak işlev mfs_format(base: tam64) -> tam32 {
+    mfs_data_temizle();
+    vblk_data_yaz(0, 77 olarak dtam8);   // 'M'
+    vblk_data_yaz(1, 70 olarak dtam8);   // 'F'
+    vblk_data_yaz(2, 83 olarak dtam8);   // 'S'
+    vblk_data_yaz(3, 49 olarak dtam8);   // '1'
+    ver vblk_yaz(base, MFS_SB_BLK);      // dosya_sayisi=0 (temiz)
+}
+
+// dosya oluştur+yaz. İÇERİK ZATEN vq_data'da (caller doldurur, `boyut` bayt).
+// ad = 4 harf (a0..a3). Sıra: içerik→blk2, inode→blk1, superblock sayaç++.
+çıplak işlev mfs_dosya_yaz(base: tam64, a0: dtam8, a1: dtam8, a2: dtam8, a3: dtam8, boyut: tam32) -> tam32 {
+    // 1. içerik (vq_data) → data blok.
+    eğer vblk_yaz(base, MFS_DATA_BLK) != 0 { ver 0 - 1; }
+    // 2. inode kur (vq_data'yı yeniden kullan) → blk1.
+    mfs_data_temizle();
+    vblk_data_yaz(0, a0); vblk_data_yaz(1, a1); vblk_data_yaz(2, a2); vblk_data_yaz(3, a3);   // ad
+    vblk_data_yaz(16, (boyut & 255) olarak dtam8);              // boyut u32 LE @16
+    vblk_data_yaz(17, ((boyut >> 8) & 255) olarak dtam8);
+    vblk_data_yaz(18, ((boyut >> 16) & 255) olarak dtam8);
+    vblk_data_yaz(19, ((boyut >> 24) & 255) olarak dtam8);
+    vblk_data_yaz(20, 2 olarak dtam8);                          // veri_blok = 2 @20
+    eğer vblk_yaz(base, MFS_INODE_BLK) != 0 { ver 0 - 2; }
+    // 3. superblock dosya_sayisi++ (oku→art→yaz).
+    eğer vblk_oku(base, MFS_SB_BLK) != 0 { ver 0 - 3; }
+    değişken sayi: tam32 = vblk_data_oku(4) olarak tam32;
+    vblk_data_yaz(4, (sayi + 1) olarak dtam8);
+    ver vblk_yaz(base, MFS_SB_BLK);
+}
+
+// dosya oku: superblock magic doğrula → inode oku (isim eşleşme + boyut + veri_blok) →
+// veri_blok'tan içeriği vq_data'ya oku. dönüş: boyut (>=0 ok) / negatif hata.
+// İçerik caller tarafından vblk_data_oku ile okunur (INODE indirection kullanılır).
+çıplak işlev mfs_dosya_oku(base: tam64, a0: dtam8, a1: dtam8, a2: dtam8, a3: dtam8) -> tam32 {
+    eğer vblk_oku(base, MFS_SB_BLK) != 0 { ver 0 - 1; }
+    eğer vblk_data_oku(0) != (77 olarak dtam8) { ver 0 - 2; }   // 'M' magic
+    eğer vblk_data_oku(3) != (49 olarak dtam8) { ver 0 - 3; }   // '1'
+    eğer vblk_oku(base, MFS_INODE_BLK) != 0 { ver 0 - 4; }
+    eğer vblk_data_oku(0) != a0 { ver 0 - 5; }                  // isim eşleşme
+    eğer vblk_data_oku(1) != a1 { ver 0 - 5; }
+    eğer vblk_data_oku(2) != a2 { ver 0 - 5; }
+    eğer vblk_data_oku(3) != a3 { ver 0 - 5; }
+    değişken boyut: tam32 = (vblk_data_oku(16) olarak tam32)
+        + ((vblk_data_oku(17) olarak tam32) * 256)
+        + ((vblk_data_oku(18) olarak tam32) * 65536)
+        + ((vblk_data_oku(19) olarak tam32) * 16777216);
+    değişken vblok: tam64 = vblk_data_oku(20) olarak tam64;     // inode INDIRECTION
+    eğer vblk_oku(base, vblok) != 0 { ver 0 - 6; }              // veri_blok'tan içerik → vq_data
+    ver boyut;
+}

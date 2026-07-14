@@ -61,6 +61,8 @@ typedef struct Sembol {
     /* === Cok-dosya modul A: gorunurluk + ithal (import) alanlari ===
      * memset(0) ile baslatilan tum mevcut kod icin varsayilanlar guvenli. */
     int genel;                     /* 1 = 'genel' (capraz-modul export) */
+    int kuresel;                   /* D-252: 1 = 'küresel değişken' (modül-mutable global;
+                                      erişim yalnız güvensiz — E010) */
     int gizli;                     /* 1 = dosya-modul kanonik kaydi — normal
                                       ad cozumunde GORUNMEZ (yalniz 'kullan'
                                       alias'lari ve onek turetme erisir) */

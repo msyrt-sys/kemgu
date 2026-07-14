@@ -274,7 +274,223 @@ işlev kem_istisna_isle(far: dtam64, esr: dtam64) -> tam32 {
     ver karar;
 }
 
+// A2 (D-278): GERÇEK trap → .kem KARAR handler. D-276 [5b] .S recovery'ye EK: gerçek
+// data-abort'tan SONRA ESR/FAR'ı mrs ile OKU + kem_istisna_isle'a ver → .kem handler
+// GERÇEK syndrome üzerinde karar veriyor (sentetik hardcoded DEĞİL). 0x80000000 haritasız
+// → EC=0x25 (data-abort EL1) + DFSC translation → handler KURTAR(1) döner + FAR==VA.
+işlev trap_gercek_testi() -> tam32 {
+    kmmu_bekle_yaz(1);                                          // .S recovery iste (yoksa halt)
+    değişken cop: tam64 = kmmu_oku_faulting(2147483648);       // GERÇEK data-abort (0x80000000)
+    değişken resr: dtam64 = (kmmu_esr_oku()) olarak dtam64;    // GERÇEK ESR (mrs, post-trap)
+    değişken rfar: tam64 = kmmu_far_mrs();                     // GERÇEK FAR (mrs, post-trap)
+    değişken karar: tam32 = kem_istisna_isle(rfar olarak dtam64, resr);  // .kem handler GERÇEK syndrome
+    eğer (karar == 1) ve (rfar == 2147483648) {                // KURTAR + gerçek FAR
+        ver 1;
+    }
+    ver 0;
+}
+
 // ============================== ÇEKİRDEK ===============================
+// [6] DISK — saf-.kem virtio-blk GERÇEK sektör yaz→oku→byte-eşleşme (D-271, FAZ B1).
+// vblk_* sürücüsü kem_virtio_blk.kem'den gelir (build'de kem_os ile CAT edilir → tek birim,
+// çıplak→çıplak çözülür, T002 yok). Sektör 7'ye değişken pattern yaz → data'yı temizle →
+// geri oku → byte-byte karşılaştır. GERÇEK disk I/O (magic-probe DEĞİL); disk yoksa 0 döner.
+işlev disk_rw_testi() -> tam32 {
+    değişken base: tam64 = vblk_bul();
+    eğer base == 0 { ver 0; }                       // virtio-blk cihazı yok
+    eğer vblk_kur(base) != 0 { ver 0; }             // kurulum hatası
+    değişken i: tam32 = 0;
+    iken i < 512 {                                   // pattern: (i%251)+3 (sabit değil → gerçek round-trip)
+        vblk_data_yaz(i, ((i % 251) + 3) olarak dtam8);
+        i = i + 1;
+    }
+    eğer vblk_yaz(base, 7) != 0 { ver 0; }
+    i = 0;
+    iken i < 512 { vblk_data_yaz(i, 0 olarak dtam8); i = i + 1; }   // temizle (okuma diskten gelmeli)
+    eğer vblk_oku(base, 7) != 0 { ver 0; }
+    değişken eslesme: tam32 = 1;
+    i = 0;
+    iken i < 512 {
+        eğer vblk_data_oku(i) != ((i % 251) + 3) olarak dtam8 { eslesme = 0; }
+        i = i + 1;
+    }
+    ver eslesme;
+}
+
+// [7] FS — saf-.kem minifs (kem_minifs.kem, FAZ-B2) virtio-blk üstünde GERÇEK dosya I/O.
+// format → dosya "veri" oluştur+RASTGELE-pattern YAZ → vq_data BOZ → dosya OKU (inode
+// indirection: superblock magic + isim eşleşme + boyut + veri_blok pointer) → içerik+boyut
+// EŞLEŞME. Sentetik değil: içerik disk blok'larından fs-katmanı üzerinden geri okunur.
+işlev fs_rw_testi() -> tam32 {
+    değişken base: tam64 = vblk_bul();
+    eğer base == 0 { ver 0; }
+    eğer vblk_kur(base) != 0 { ver 0; }
+    eğer mfs_format(base) != 0 { ver 0; }
+    değişken boyut: tam32 = 200;
+    değişken i: tam32 = 0;
+    iken i < 512 { vblk_data_yaz(i, 0 olarak dtam8); i = i + 1; }        // vq_data temizle
+    i = 0;
+    iken i < boyut { vblk_data_yaz(i, ((i * 7 + 11) % 256) olarak dtam8); i = i + 1; }   // rastgele pattern
+    eğer mfs_dosya_yaz(base, 118, 101, 114, 105, boyut) != 0 { ver 0; } // "veri" (v,e,r,i)
+    i = 0; iken i < 512 { vblk_data_yaz(i, 255 olarak dtam8); i = i + 1; }   // vq_data BOZ (okuma diskten)
+    değişken okunan: tam32 = mfs_dosya_oku(base, 118, 101, 114, 105);
+    eğer okunan != boyut { ver 0; }                                    // boyut eşleşme
+    değişken eslesme: tam32 = 1;
+    i = 0;
+    iken i < boyut {
+        eğer vblk_data_oku(i) != ((i * 7 + 11) % 256) olarak dtam8 { eslesme = 0; }
+        i = i + 1;
+    }
+    ver eslesme;
+}
+
+// [8] NET DEV — saf-.kem virtio-net (kem_virtio_net.kem, FAZ-C) cihaz bringup.
+// bul(DeviceID=1) + kur(feature-negotiate + RX/TX queue + DRIVER_OK) + device-provided
+// MAC config oku (cihaz canlı kanıtı). Gerçek: FEAT_OK device onayı + MAC nonzero.
+işlev net_dev_testi() -> tam32 {
+    değişken base: tam64 = vnet_bul();
+    eğer base == 0 { ver 0; }                          // net cihazı yok
+    eğer vnet_kur(base) != 0 { ver 0; }                // negotiate/queue hatası (FEAT_OK device onayı içinde)
+    eğer (vblk_o32(base + VM_STATUS) & 4) == 0 { ver 0; }   // DRIVER_OK bit
+    değişken mac0: tam32 = vnet_mac_w0(base);
+    eğer mac0 == 0 { ver 0; }                          // MAC device-provided nonzero → cihaz canlı
+    ver 1;
+}
+
+// [9] NET ARP — saf-.kem GERÇEK ağ round-trip. Gateway (10.0.2.2) için ARP request GÖNDER →
+// QEMU SLIRP'ten ARP reply AL → oper=2 + spa=gateway + gateway MAC nonzero DOĞRULA. 2-yönlü ağ
+// (TX+RX). Sentetik değil: gerçek paket gönderilir + SLIRP'ten gerçek yanıt alınır+parse edilir.
+işlev net_arp_testi() -> tam32 {
+    değişken base: tam64 = vnet_bul();
+    eğer base == 0 { ver 0; }
+    eğer vnet_kur(base) != 0 { ver 0; }
+    değişken m0: dtam8 = vnet_mac_bayt(base, 0);       // bizim MAC (config'ten)
+    değişken m1: dtam8 = vnet_mac_bayt(base, 1);
+    değişken m2: dtam8 = vnet_mac_bayt(base, 2);
+    değişken m3: dtam8 = vnet_mac_bayt(base, 3);
+    değişken m4: dtam8 = vnet_mac_bayt(base, 4);
+    değişken m5: dtam8 = vnet_mac_bayt(base, 5);
+    // ARP request çerçevesi (60 bayt), önce sıfırla
+    değişken i: tam32 = 0;
+    iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
+    i = 0; iken i < 6 { vnet_tx_yaz(i, 255 olarak dtam8); i = i + 1; }   // eth dst broadcast @0..5
+    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2);         // eth src @6..11
+    vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5);
+    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 6 olarak dtam8);   // ethertype 0x0806 ARP
+    vnet_tx_yaz(14, 0 olarak dtam8); vnet_tx_yaz(15, 1 olarak dtam8);   // htype ethernet
+    vnet_tx_yaz(16, 8 olarak dtam8); vnet_tx_yaz(17, 0 olarak dtam8);   // ptype IPv4
+    vnet_tx_yaz(18, 6 olarak dtam8); vnet_tx_yaz(19, 4 olarak dtam8);   // hlen, plen
+    vnet_tx_yaz(20, 0 olarak dtam8); vnet_tx_yaz(21, 1 olarak dtam8);   // oper request
+    vnet_tx_yaz(22, m0); vnet_tx_yaz(23, m1); vnet_tx_yaz(24, m2);      // sha @22..27
+    vnet_tx_yaz(25, m3); vnet_tx_yaz(26, m4); vnet_tx_yaz(27, m5);
+    vnet_tx_yaz(28, 10 olarak dtam8); vnet_tx_yaz(29, 0 olarak dtam8);  // spa 10.0.2.15
+    vnet_tx_yaz(30, 2 olarak dtam8); vnet_tx_yaz(31, 15 olarak dtam8);
+    vnet_tx_yaz(38, 10 olarak dtam8); vnet_tx_yaz(39, 0 olarak dtam8);  // tpa 10.0.2.2 (gateway)
+    vnet_tx_yaz(40, 2 olarak dtam8); vnet_tx_yaz(41, 2 olarak dtam8);
+    eğer vnet_gonder(base, 60) != 0 { ver 0; }
+    // Yanıtı AL (birkaç paket dinle): ARP reply (oper=2) + spa=gateway.
+    değişken deneme: tam32 = 0;
+    iken deneme < 20 {
+        değişken n: tam32 = vnet_al(base, 8000000);
+        eğer n >= 42 {
+            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (6 olarak dtam8))
+                ve (vnet_rx_oku(20) == (0 olarak dtam8)) ve (vnet_rx_oku(21) == (2 olarak dtam8))
+                ve (vnet_rx_oku(28) == (10 olarak dtam8)) ve (vnet_rx_oku(30) == (2 olarak dtam8))
+                ve (vnet_rx_oku(31) == (2 olarak dtam8)) {
+                // gateway MAC (sha @22..27) nonzero mu?
+                değişken gw: tam32 = (vnet_rx_oku(22) olarak tam32) + (vnet_rx_oku(23) olarak tam32)
+                    + (vnet_rx_oku(24) olarak tam32) + (vnet_rx_oku(27) olarak tam32);
+                eğer gw != 0 { ver 1; }
+            }
+        }
+        deneme = deneme + 1;
+    }
+    ver 0;
+}
+
+// [10] PING — saf-.kem GERÇEK ICMP echo round-trip ("OS ping atıyor"). ARP ile gateway MAC çöz →
+// IPv4+ICMP Echo Request (RFC1071 checksum) GÖNDER → SLIRP echo reply AL → proto=1 + type=0 +
+// payload "KEMGU" geri döndü DOĞRULA. Tüm ağ yığını (ARP+IPv4+ICMP+checksum) saf-.kem, gerçek.
+işlev net_icmp_testi() -> tam32 {
+    değişken base: tam64 = vnet_bul();
+    eğer base == 0 { ver 0; }
+    eğer vnet_kur(base) != 0 { ver 0; }
+    değişken m0: dtam8 = vnet_mac_bayt(base, 0); değişken m1: dtam8 = vnet_mac_bayt(base, 1);
+    değişken m2: dtam8 = vnet_mac_bayt(base, 2); değişken m3: dtam8 = vnet_mac_bayt(base, 3);
+    değişken m4: dtam8 = vnet_mac_bayt(base, 4); değişken m5: dtam8 = vnet_mac_bayt(base, 5);
+    // --- 1) ARP: gateway (10.0.2.2) MAC çöz ---
+    değişken i: tam32 = 0;
+    iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
+    i = 0; iken i < 6 { vnet_tx_yaz(i, 255 olarak dtam8); i = i + 1; }
+    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2); vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5);
+    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 6 olarak dtam8);
+    vnet_tx_yaz(14, 0 olarak dtam8); vnet_tx_yaz(15, 1 olarak dtam8);
+    vnet_tx_yaz(16, 8 olarak dtam8); vnet_tx_yaz(17, 0 olarak dtam8);
+    vnet_tx_yaz(18, 6 olarak dtam8); vnet_tx_yaz(19, 4 olarak dtam8);
+    vnet_tx_yaz(20, 0 olarak dtam8); vnet_tx_yaz(21, 1 olarak dtam8);
+    vnet_tx_yaz(22, m0); vnet_tx_yaz(23, m1); vnet_tx_yaz(24, m2); vnet_tx_yaz(25, m3); vnet_tx_yaz(26, m4); vnet_tx_yaz(27, m5);
+    vnet_tx_yaz(28, 10 olarak dtam8); vnet_tx_yaz(29, 0 olarak dtam8); vnet_tx_yaz(30, 2 olarak dtam8); vnet_tx_yaz(31, 15 olarak dtam8);
+    vnet_tx_yaz(38, 10 olarak dtam8); vnet_tx_yaz(39, 0 olarak dtam8); vnet_tx_yaz(40, 2 olarak dtam8); vnet_tx_yaz(41, 2 olarak dtam8);
+    eğer vnet_gonder(base, 60) != 0 { ver 0; }
+    değişken g0: dtam8 = 0 olarak dtam8; değişken g1: dtam8 = 0 olarak dtam8; değişken g2: dtam8 = 0 olarak dtam8;
+    değişken g3: dtam8 = 0 olarak dtam8; değişken g4: dtam8 = 0 olarak dtam8; değişken g5: dtam8 = 0 olarak dtam8;
+    değişken arp_ok: tam32 = 0;
+    değişken deneme: tam32 = 0;
+    iken deneme < 20 {
+        değişken n: tam32 = vnet_al(base, 8000000);
+        eğer n >= 42 {
+            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (6 olarak dtam8))
+                ve (vnet_rx_oku(20) == (0 olarak dtam8)) ve (vnet_rx_oku(21) == (2 olarak dtam8)) {
+                g0 = vnet_rx_oku(22); g1 = vnet_rx_oku(23); g2 = vnet_rx_oku(24);
+                g3 = vnet_rx_oku(25); g4 = vnet_rx_oku(26); g5 = vnet_rx_oku(27);
+                arp_ok = 1; deneme = 20;
+            }
+        }
+        deneme = deneme + 1;
+    }
+    eğer arp_ok == 0 { ver 0; }
+    // --- 2) IPv4 + ICMP Echo Request kur ---
+    i = 0; iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
+    vnet_tx_yaz(0, g0); vnet_tx_yaz(1, g1); vnet_tx_yaz(2, g2); vnet_tx_yaz(3, g3); vnet_tx_yaz(4, g4); vnet_tx_yaz(5, g5);   // dst=gw
+    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2); vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5); // src
+    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 0 olarak dtam8);   // ethertype IPv4 0x0800
+    vnet_tx_yaz(14, 69 olarak dtam8);                                  // 0x45 ver4/IHL5
+    vnet_tx_yaz(16, 0 olarak dtam8); vnet_tx_yaz(17, 33 olarak dtam8); // total_len = 20+13
+    vnet_tx_yaz(20, 64 olarak dtam8);                                  // 0x40 flags DF
+    vnet_tx_yaz(22, 64 olarak dtam8);                                  // TTL
+    vnet_tx_yaz(23, 1 olarak dtam8);                                   // proto ICMP
+    vnet_tx_yaz(26, 10 olarak dtam8); vnet_tx_yaz(27, 0 olarak dtam8); vnet_tx_yaz(28, 2 olarak dtam8); vnet_tx_yaz(29, 15 olarak dtam8); // src IP
+    vnet_tx_yaz(30, 10 olarak dtam8); vnet_tx_yaz(31, 0 olarak dtam8); vnet_tx_yaz(32, 2 olarak dtam8); vnet_tx_yaz(33, 2 olarak dtam8);  // dst IP
+    değişken ihs: tam32 = vnet_tx_checksum(14, 20);   // IP başlık checksum
+    vnet_tx_yaz(24, ((ihs >> 8) & 255) olarak dtam8); vnet_tx_yaz(25, (ihs & 255) olarak dtam8);
+    vnet_tx_yaz(34, 8 olarak dtam8);                                   // ICMP type echo
+    vnet_tx_yaz(35, 0 olarak dtam8);                                   // code
+    vnet_tx_yaz(38, 190 olarak dtam8); vnet_tx_yaz(39, 239 olarak dtam8);   // id 0xBEEF
+    vnet_tx_yaz(40, 0 olarak dtam8); vnet_tx_yaz(41, 1 olarak dtam8);       // seq 1
+    vnet_tx_yaz(42, 75 olarak dtam8); vnet_tx_yaz(43, 69 olarak dtam8); vnet_tx_yaz(44, 77 olarak dtam8);   // "KEM"
+    vnet_tx_yaz(45, 71 olarak dtam8); vnet_tx_yaz(46, 85 olarak dtam8);                                     // "GU"
+    değişken ics: tam32 = vnet_tx_checksum(34, 13);   // ICMP checksum
+    vnet_tx_yaz(36, ((ics >> 8) & 255) olarak dtam8); vnet_tx_yaz(37, (ics & 255) olarak dtam8);
+    eğer vnet_gonder(base, 47) != 0 { ver 0; }                        // 14 eth + 20 ip + 13 icmp
+    // --- 3) ICMP Echo Reply AL: proto=1 + type=0 + payload "KEMGU" ---
+    deneme = 0;
+    iken deneme < 24 {
+        değişken n: tam32 = vnet_al(base, 8000000);
+        eğer n >= 34 {
+            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (0 olarak dtam8))
+                ve (vnet_rx_oku(23) == (1 olarak dtam8)) ve (vnet_rx_oku(34) == (0 olarak dtam8)) {
+                eğer (vnet_rx_oku(42) == (75 olarak dtam8)) ve (vnet_rx_oku(43) == (69 olarak dtam8))
+                    ve (vnet_rx_oku(44) == (77 olarak dtam8)) ve (vnet_rx_oku(45) == (71 olarak dtam8))
+                    ve (vnet_rx_oku(46) == (85 olarak dtam8)) {
+                    ver 1;
+                }
+            }
+        }
+        deneme = deneme + 1;
+    }
+    ver 0;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -319,6 +535,165 @@ işlev main() -> tam32 {
         exc_ok = 1;
     } değilse {
         uart_satir("[5] EXC HATA");
+    }
+    // [5b] GERÇEK FAULT (FAZ-A1 alt-hedef A, D-276): sentetik self-test'e EK olarak
+    // GERÇEK vektör-bağlı data-abort. Haritasız 0x80000000 oku → .S kdl_exc_ortak
+    // recovery (FAR→kdl_fault_yakalanan, ELR+=4, eret) → OS DEVAM. FAR==VA + kurtarıldı
+    // doğrulanır. Taklit edilemez: MMU zorlamıyorsa okuma sessizce geçer → gate kırmızı.
+    // kmmu_* fonksiyonları kem_mmu.kem'den gelir (build'de CAT → tek birim, çıplak→çıplak).
+    değişken fault_ok: tam32 = kmmu_fault_testi();
+    eğer fault_ok == 1 {
+        uart_satir("[5] MMU FAULT OK");
+    } değilse {
+        uart_satir("[5] MMU FAULT HATA");
+    }
+    // [5c] MMU ÇEVİRİ (FAZ-A1 alt-hedef B, D-277): kdl_mmu_kur artık SAF-.kem (kem_mmu.kem,
+    // .S boot çağırır; C guard'lı). Non-identity çeviri VA 0x50000000 → PA 0x46000000 alias
+    // doğrula (çift-yönlü). MMU zaten .kem-kurulu boot etti (bu satıra ulaşmak = .kem MMU
+    // çalışıyor); bu test çeviri-DOĞRULUĞUNU kanıtlar (identity olsaydı alias olmazdı).
+    değişken ceviri_ok: tam32 = kmmu_ceviri_testi();
+    eğer ceviri_ok == 1 {
+        uart_satir("[5] MMU CEVIRI OK");
+    } değilse {
+        uart_satir("[5] MMU CEVIRI HATA");
+    }
+    // [5d] GERÇEK TRAP → .kem KARAR (FAZ-A2, D-278): gerçek data-abort'un ESR/FAR'ını mrs ile
+    // oku + .kem kem_istisna_isle'a ver → handler GERÇEK syndrome'da karar veriyor (sentetik
+    // self-test'e EK; "gerçek fault-yönlendirmesi" [5] notundaki "sonraki adım" kapanıyor).
+    değişken trap_ok: tam32 = trap_gercek_testi();
+    eğer trap_ok == 1 {
+        uart_satir("[5] TRAP KARAR OK");
+    } değilse {
+        uart_satir("[5] TRAP KARAR HATA");
+    }
+    // [5e] TIMER-IRQ (FAZ-A3, D-279): GERÇEK periyodik timer IRQ. GIC + CNTV kur → IRQ aç →
+    // tik yalnız .S kdl_irq_ortak→.kem kdl_irq_isle handler'ında artar. tik>=3 = gerçek IRQ
+    // tetiklendi (guard'lı: timer bozuksa sonsuz-döngü yok). kem_zaman.kem sağlar (CAT).
+    değişken timer_ok: tam32 = kem_timer_testi();
+    eğer timer_ok == 1 {
+        uart_satir("[5] TIMER TIK OK");
+    } değilse {
+        uart_satir("[5] TIMER TIK HATA");
+    }
+    // [5f] PREEMPTIVE görev (FAZ-A4, D-280): 2 görev kur + preemption aç → timer-IRQ
+    // round-robin context-switch → her iki görev sayacı ilerler (interleave). .kem
+    // kem_preempt scheduler + sentetik trap-frame; .S kdl_irq_ortak SP-swap (değişmez).
+    // Sonra preemption kapatılır → main [6..10]'a devam. kem_gorev.kem sağlar (CAT).
+    değişken preempt_ok: tam32 = kem_preempt_testi();
+    eğer preempt_ok == 1 {
+        uart_satir("[5] PREEMPT OK");
+    } değilse {
+        uart_satir("[5] PREEMPT HATA");
+    }
+    // [5g] EL0 SYSCALL (FAZ-A5, D-281): EL0 (unprivileged) görev → SVC → .kem kdl_syscall_isle.
+    // Runtime-yazılan EL0 stub (AP=01 sayfa) preemptive görev olarak koşar, svc num=7 →
+    // .S kdl_exc_ortak (EC=0x15) → .kem handler sayaç++. Sayaç ilerliyorsa GERÇEK EL0'dan
+    // syscall (privilege sınırı geçildi + saf-.kem handler). kem_gorev.kem sağlar (CAT).
+    değişken el0_ok: tam32 = kem_el0_testi();
+    eğer el0_ok == 1 {
+        uart_satir("[5] EL0 SYSCALL OK");
+    } değilse {
+        uart_satir("[5] EL0 SYSCALL HATA");
+    }
+    // [5h] EL0 IZOLASYON (ZERO-C B2, D-284): EL0 görev yasak sayfaya (GIC MMIO, AP=00)
+    // erişir → GERÇEK permission-fault → .S kill-yolu → .kem kdl_el0_izolasyon_isle →
+    // kem_gorev_bitir → scheduler görevi ATLAR. Doğrula: görev ölü işaretlendi + OS devam.
+    değişken izo_ok: tam32 = kem_el0_izolasyon_testi();
+    eğer izo_ok == 1 {
+        uart_satir("[5] IZOLASYON OK");
+    } değilse {
+        uart_satir("[5] IZOLASYON HATA");
+    }
+
+    // [6] DISK — saf-.kem virtio-blk GERÇEK blok I/O (D-271, FAZ B1). Additive: çekirdek
+    // [1..5] gate'ini (gecti==6) ETKİLEMEZ → disksiz boot hâlâ KEM-OS OK verir. Diskli
+    // gate ayrıca "DISK RW OK" bekler (gerçek sektör yaz→oku→eşleşme, sentetik değil).
+    değişken disk_ok: tam32 = disk_rw_testi();
+    eğer disk_ok == 1 {
+        uart_satir("[6] DISK RW OK");
+    } değilse {
+        uart_satir("[6] DISK YOK/HATA (disksiz boot normal)");
+    }
+
+    // [7] FS — saf-.kem minifs virtio-blk üstünde (FAZ-B2). Additive: çekirdek gate'i ETKİLEMEZ.
+    değişken fs_ok: tam32 = fs_rw_testi();
+    eğer fs_ok == 1 {
+        uart_satir("[7] FS RW OK");
+    } değilse {
+        uart_satir("[7] FS YOK/HATA (disksiz boot normal)");
+    }
+
+    // [8] NET DEV — saf-.kem virtio-net cihaz bringup (FAZ-C). Additive.
+    değişken net_ok: tam32 = net_dev_testi();
+    eğer net_ok == 1 {
+        uart_satir("[8] NET DEV OK");
+    } değilse {
+        uart_satir("[8] NET YOK/HATA (netsiz boot normal)");
+    }
+
+    // [9] NET ARP — saf-.kem GERÇEK ağ round-trip (ARP request→SLIRP reply). Additive.
+    değişken arp_ok: tam32 = net_arp_testi();
+    eğer arp_ok == 1 {
+        uart_satir("[9] NET ARP OK");
+    } değilse {
+        uart_satir("[9] NET ARP YOK (netsiz/yanıtsız boot normal)");
+    }
+
+    // [10] PING — saf-.kem GERÇEK ICMP echo round-trip (ARP+IPv4+ICMP+checksum). Additive.
+    değişken ping_ok: tam32 = net_icmp_testi();
+    eğer ping_ok == 1 {
+        uart_satir("[10] PING CANLI");
+    } değilse {
+        uart_satir("[10] PING YOK (netsiz/yanıtsız boot normal)");
+    }
+
+    // [11] LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): GERÇEK .kem-derlenmiş kod (kul_test,
+    // hand-assembled byte DEĞİL) `.user` section'a (Makefile objcopy-rename) yönlendirildi
+    // + EL0 görevi olarak spawn edildi + syscall yaptı. kem_gorev.kem sağlar (CAT).
+    değişken linchpin_ok: tam32 = kem_linchpin_testi();
+    eğer linchpin_ok == 1 {
+        uart_satir("[11] LINCHPIN OK");
+    } değilse {
+        uart_satir("[11] LINCHPIN HATA");
+    }
+
+    // [12] UART RX (USERLAND ADIM 2, D-287): EL0 görevi (kul_rx_test) sys(26) read_satir
+    // çağırır → GERÇEK PL011 RX bounded-poll (RXFE bit4). Otomatik boot'ta girdi YOK →
+    // EOF(-1) beklenen/doğru sonuç (poll makinesi çalıştığını kanıtlar). kem_gorev.kem sağlar.
+    değişken rx_ok: tam32 = kem_uart_rx_testi();
+    eğer rx_ok == 1 {
+        uart_satir("[12] UART RX EOF OK");
+    } değilse {
+        uart_satir("[12] UART RX HATA");
+    }
+
+    // [13] FS SYSCALL (USERLAND ADIM 3, D-288): EL0 görevi sys(17)+sys(18) ile GERÇEK
+    // dosya yaz+oku yapar (minifs/virtio-blk üstünden) → okunan içerik yazılanla eşleşiyor
+    // mu? GERÇEK syscall ABI üzerinden (D-272'nin direkt-çağrı testinden FARKLI).
+    değişken fs_sys_ok: tam32 = kem_fs_testi();
+    eğer fs_sys_ok == 1 {
+        uart_satir("[13] FS SYSCALL OK");
+    } değilse {
+        uart_satir("[13] FS SYSCALL HATA");
+    }
+
+    // [14] SHELL (USERLAND ADIM 4, D-289): userland .kem shell — komut dispatch
+    // (kul_str_esit) + GERÇEK syscall(5/7/17/18) yürütme + konsol çıktısı. proven-C
+    // kemgu_shell_el0.c'nin basitleştirilmiş .kem karşılığı.
+    değişken shell_ok: tam32 = kem_shell_testi();
+    eğer shell_ok == 1 {
+        uart_satir("[14] SHELL OK");
+    } değilse {
+        uart_satir("[14] SHELL HATA");
+    }
+
+    // [15] SPAWN (USERLAND ADIM 5+6, D-290): GERÇEK sys(12) spawn + sys(14) join +
+    // Model A program modeli teyidi (gömülü .user .kem program, ELF-yükleme YOK).
+    değişken spawn_ok: tam32 = kem_spawn_testi();
+    eğer spawn_ok == 1 {
+        uart_satir("[15] SPAWN OK");
+    } değilse {
+        uart_satir("[15] SPAWN HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

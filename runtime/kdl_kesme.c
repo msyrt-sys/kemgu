@@ -39,8 +39,17 @@ int      kdl_surec_spawn(uint64_t entry);   /* dinamik süreç oluştur — user
  * Bu, "MMU gerçekten zorluyor (haritasız erişim fault eder) + kernel fault'u yönetip
  * ilerliyor" kanıtını TEK boot'ta verir (izole demo değil). Bayrak yoksa → eski
  * davranış (yazdır + halt). volatile: asm ile paylaşılan durum. */
-volatile uint64_t kdl_fault_bekleniyor = 0;
-volatile uint64_t kdl_fault_yakalanan = 0;
+/* FAZ-A1 (D-276): bu iki global .S kdl_exc_ortak ile eşleşik recovery-scratch.
+ * kem_os SAF-.kem fault-gate'i (kem_mmu.kem) bunlara inline-asm (adrp/add + ldr/str)
+ * ile erişir — .kem 'küresel' internal-linkage olduğundan .S'ye açılamaz (codegen-gap,
+ * bkz. D-276 sınır-notu).
+ * ZERO-C B3 (D-285): WEAK → boot/start_aarch64.S artık BU İKİ GLOBAL'İ .data'da STRONG
+ * tanımlıyor (indirgenemez-.S substrat, Law-4). kem_os kesme.c'yi HİÇ LİNKLEMEZ (B1/B2
+ * tüm fonksiyonları .kem'e taşıdı) → bu weak tanım YALNIZ diğer kernel'ler kesme.c'yi
+ * .S ile birlikte linklediğinde çift-sembol çakışmasını önler (.S strong kazanır, aynı
+ * ad/tip/başlangıç-değer → davranış AYNI). */
+__attribute__((weak)) volatile uint64_t kdl_fault_bekleniyor = 0;
+__attribute__((weak)) volatile uint64_t kdl_fault_yakalanan = 0;
 
 /* === PART 3(c): EL0 izolasyon-ihlali → SÜRECİ ÖLDÜR (gerçek OS semantiği) ===
  * Bir EL0 (userspace) görev kernel-only sayfaya (AP=00) erişince permission-fault
@@ -54,8 +63,12 @@ volatile uint64_t kdl_izolasyon_ihlal_sayisi = 0;
 /* OPT-IN: yalnız kdl_el0_kill_aktif != 0 ise EL0 izolasyon-faultu süreç-öldürme yapar.
  * Varsayılan 0 → eski davranış (EL0 fault → kdl_istisna_isle "ISTISNA" + halt) KORUNUR
  * → mevcut EL0 demoları (proc_arm/D3 vb. "ISTISNA" bekleyen) REGRESSION YAŞAMAZ.
- * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği. */
-volatile uint64_t kdl_el0_kill_aktif = 0;
+ * Entegre çekirdek (kemgu_os_arm.c) bunu 1 yapar → process-izolasyon kill semantiği.
+ * ZERO-C B3 (D-285): WEAK (bkz. kdl_fault_bekleniyor notu — .S artık strong tanımlıyor). */
+__attribute__((weak)) volatile uint64_t kdl_el0_kill_aktif = 0;
+/* ZERO-C B2 (D-284): WEAK → kem_os SAF-.kem kdl_el0_izolasyon_isle (kem_mmu.kem,
+ * strong) link'te override eder. Diğer kernel'ler C weak'i kullanmaya devam. */
+__attribute__((weak))
 void kdl_el0_izolasyon_isle(uint64_t far) {
     kdl_izolasyon_ihlal_sayisi++;
     kdl_yazdir_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");
@@ -68,7 +81,10 @@ void kdl_el0_izolasyon_isle(uint64_t far) {
 /* CPU istisnası — kurtarma yok (bayrak-kapalı yol). Parametreler mimari-spesifik:
  *   aarch64: (vektör_tipi, ESR_EL2, ELR_EL2)
  *   x86_64 : (vektör_no, hata_kodu, RIP) */
-__attribute__((noreturn))
+/* ZERO-C B1 (D-283): WEAK → kem_os SAF-.kem kdl_istisna_isle (kem_mmu.kem, strong)
+ * link'te override eder (kdl_syscall_isle deseni birebir). Diğer kernel'ler strong
+ * .kem sağlamaz → bu C tanımı kullanılır (davranış değişmez). */
+__attribute__((weak, noreturn))
 void kdl_istisna_isle(uint64_t tip, uint64_t a, uint64_t b) {
     /* C8c: fault adresi — data/instruction abort hangi adrese erişti.
      * aarch64 FAR_EL1, x86 CR2 (#PF lineer adresi). Abort-dışı için stale ama
@@ -271,6 +287,10 @@ extern int kdl_virtio_net_al(uint64_t base, uint8_t *hedef, int max, long tikler
  * stub'ı bağlamı kaydeder, num + arg (+ D-131: arg2) ile buraya gelir, dönüşte
  * eret/iretq. NOT: arg2 (2. argüman) yalnız aarch64'te dolu (SVC path geçirir);
  * x86 nums 1/2/3 arg2 kullanmaz (zararsız). */
+/* FAZ-A5 (D-281): WEAK → kem_os SAF-.kem kdl_syscall_isle (kem_gorev.kem, strong)
+ * bunu link'te override eder (guard/variant gerekmez, cascade yok). Diğer kernel'ler
+ * strong .kem sağlamaz → bu C weak tanımı kullanılır (davranış değişmez). */
+__attribute__((weak))
 uint64_t kdl_syscall_isle(uint64_t num, uint64_t arg, uint64_t arg2) {
     if (num == 1) {
         kdl_yazdir_metin("SYSCALL OK num=1");

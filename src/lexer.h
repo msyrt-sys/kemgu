@@ -15,6 +15,8 @@ typedef enum {
     TOK_OZELLIK,        /* özellik     */
     TOK_MODUL,          /* modül       */
     TOK_DEGISKEN,       /* değişken    */
+    TOK_KURESEL,        /* küresel — D-252 modül-düzeyi mutable global (güvensiz-scoped) */
+    TOK_CIPLAK,         /* çıplak — D-254 çıplak işlev (region-prologue YOK, güvensiz-scoped) */
     TOK_SABIT,          /* sabit       */
     TOK_DOGRU,          /* doğru       */
     TOK_YANLIS,         /* yanlış      */

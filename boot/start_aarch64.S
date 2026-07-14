@@ -74,6 +74,17 @@ _start:
      * + sanal-bellek/process-izolasyon temeli. main MMU-on koşar. */
     bl      kdl_mmu_kur
 
+    /* 2c. K1 (D-260): allocator heap penceresini kur — main'in İLK malloc'undan
+     * ÖNCE (her .kem fn prologue'u kdl_bolge_olustur→malloc çağırır). kem_heap_kur
+     * çıplak (region-prologue'suz) → malloc TETİKLEMEZ, taban-öncesi çağrı güvenli.
+     * C-malloc kernel'lerinde weak no-op (lazy kdl_heap_init yeterli); kem_os'ta
+     * kem_heap.o'daki saf-.kem STRONG @kem_heap_kur override eder → kem_bump=__heap_start. */
+    adrp    x0, __heap_start
+    add     x0, x0, :lo12:__heap_start
+    adrp    x1, __heap_end
+    add     x1, x1, :lo12:__heap_end
+    bl      kem_heap_kur
+
     /* 3. main() çağır — ABI gereği X0 dönüşü */
     bl      main
 
@@ -365,3 +376,22 @@ kdl_el0_calistir:
     mov     x2, #0x3C0          /* SPSR: M=EL0t, DAIF=1111 (IRQ maskeli) */
     msr     spsr_el1, x2
     eret
+
+/* === ZERO-C B3 (D-285): fault-recovery + izolasyon scratch (.S-data) ===
+ * Öncesinde C kdl_kesme.c'de (volatile uint64_t) tanımlıydı. kem_os artık kesme.c'yi
+ * HİÇ link'lemiyor (B1/B2 tüm fonksiyonları .kem'e taşıdı) → bu 3 global de indirgenemez
+ * .S substrat'ına taşındı (Law-4: asm-data, C-DEĞİL). Diğer kernel'ler kdl_kesme.c'yi
+ * WEAK tanımlarıyla linklemeye devam eder — .S strong kazanır (çift-sembol yok, aynı
+ * ad/tip/başlangıç-değer → davranış AYNI). .kem (kem_mmu.kem) inline-asm (adrp/add) ile
+ * isim üzerinden erişir — kaynağın C mi .S mi olduğu .kem'den GÖRÜNMEZ (link-time çözüm). */
+.data
+.align 3
+.global kdl_fault_bekleniyor
+kdl_fault_bekleniyor:
+    .quad 0
+.global kdl_fault_yakalanan
+kdl_fault_yakalanan:
+    .quad 0
+.global kdl_el0_kill_aktif
+kdl_el0_kill_aktif:
+    .quad 0

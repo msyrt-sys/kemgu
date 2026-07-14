@@ -531,6 +531,20 @@ calistir_codegen_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 calistir_codegen_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/codegen_bootstrap_harness.sh
 
+# D-256: çıplak işlev "sıfır region-symbol" IR-İÇERİK parite gate'i (Bulgu #1 regresyonu).
+# codegen_diff exit-kodu bunu yakalayamaz (çıplak allocator host'ta linklenir → sızıntı
+# exit'te görünmez). Çıplak+döngü fn'de @kdl_bolge_olustur/serbest/global_bolge_al = 0
+# HEM C-codegen HEM self-host için; normal döngüde ρ_iter korunur (F4.3 regresyon kontrolü).
+calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/ciplak_region_free_harness.sh
+
+# F3 (D-259): SAF-.kem çıplak+küresel allocator KOMPOZİSYON gate'i — iki primitif
+# (küresel + çıplak) bir arada çalışan allocator verir + bootstrap-circularity kırar.
+# HER İKİ codegen (C + self-host): kem_malloc IR'inde circularity-sembol=0 + C-harness
+# 2-çağrı→2-farklı-adres+yazılabilir→exit 42. "circularity kırıldı → saf-.kem runtime açık".
+calistir_kem_malloc_kompozisyon: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/kem_malloc_kompozisyon_harness.sh
+
 # AŞAMA 4 (driver) — TEK self-host KEMGU binary (selfhost/codegen.kem → kemgu_self.exe).
 # checker mantığı + --token/--parse/--check/--llvm dispatch birleşik (D-086).
 kemgu_self: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
@@ -744,7 +758,7 @@ $(BUILD)/kernel.elf:
 # Clang artık SERBEST SIMD/q-register emit eder + donanımda çalışır → GERÇEK sanal-bellek
 # kanıtı (taklit edilemez: MMU+Normal yoksa SIMD store alignment/trap-fault ederdi = C1 bug).
 BM_A64    = clang -target aarch64-unknown-none -ffreestanding -nostdlib
-BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime
+BM_A64_CF = -Wall -Wextra -Wpedantic -std=c11 -O2 -DKEMGU_BARE_METAL -Iruntime -ffunction-sections -fdata-sections
 # EL0-KOD içeren testler (.user section'lı userspace demoları) -mgeneral-regs-only İLE
 # derlenir. Sebep (D-235): flag'siz clang, EL0 fonksiyonun sabit-havuzunu (frame-init NEON
 # constant) kernel .rodata'ya (0x40005ec0 = AP=00) koyar + EL0'dan `ldr q0,[kernel_addr]`
@@ -758,16 +772,40 @@ $(BUILD)/bm_a64_yazdir.o: runtime/kdl_runtime_yazdir_bare.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_bolge.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# K3 (D-261): kem_os-özel region — C kdl_bolge_olustur/ayir/serbest ÇIKARILMIŞ
+# (-DKEMGU_KEM_MALLOC). Yalnız sayaç+bakiye+blok_sayisi diagnostikleri KALIR;
+# region primitifleri → kem_heap.o (.kem çıplak, .kem malloc/free ile).
+$(BUILD)/bm_a64_bolge_kemregion.o: runtime/kdl_bolge.c runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# K1 (D-260): kem_os-özel heap — C malloc/free ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC).
+# memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALIR; malloc/free → kem_heap.o (.kem).
+$(BUILD)/bm_a64_heap_kemmalloc.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
+# K1/K3 (D-260/261): SAF-.kem çıplak runtime → @malloc/@free/@kem_heap_kur (K1) +
+# @kdl_bolge_olustur/ayir/serbest (K3). kemgu --llvm boilerplate `declare`ları define
+# ile çakışır (LLVM redef) → STRIP + bare-metal target. Circularity yok (çıplak).
+$(BUILD)/bm_a64_kem_heap.o: runtime/kem_heap.kem test/strip_defined_declares.awk $(BUILD)/kemgu$(EXE) | $(BUILD)
+	./$(BUILD)/kemgu$(EXE) --llvm runtime/kem_heap.kem 2>/dev/null \
+	  | awk -f test/strip_defined_declares.awk > $(BUILD)/kem_heap.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_heap.ll -c -o $@
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# FAZ-A3 (D-279): kem_os-özel zaman — kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle
+# ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC); SAF-.kem kem_zaman.kem sağlar (.S bl kdl_irq_isle çözer).
+$(BUILD)/bm_a64_zaman_kem.o: runtime/kdl_zaman.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_mmu.o: runtime/kdl_mmu.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# FAZ-A1/B (D-277): kem_os-özel mmu — kdl_mmu_kur + tablolar ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC),
+# SAF-.kem kem_mmu.kem sağlar (.S boot çözer). kdl_surec_kur vb. C kalır.
+$(BUILD)/bm_a64_mmu_kem.o: runtime/kdl_mmu.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_gorev.o: runtime/kdl_gorev.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kanal.o: runtime/kdl_kanal.c | $(BUILD)
@@ -778,6 +816,10 @@ $(BUILD)/bm_a64_virtio_net.o: runtime/kdl_virtio_net.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_mmio.o: runtime/kdl_runtime_mmio.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
+# D-266: kem_os-özel mmio — oku32/yaz32 ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC), saf-.kem'den.
+# 16/64 widthler KALIR (virtio dead-code dep). Diğer kernel'ler bm_a64_mmio.o (C).
+$(BUILD)/bm_a64_mmio_kem.o: runtime/kdl_runtime_mmio.c | $(BUILD)
+	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_yetki.o: runtime/kdl_yetki_bare.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_metin.o: runtime/kdl_metin_bare.c | $(BUILD)
@@ -789,6 +831,18 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
               $(BUILD)/bm_a64_bolge.o $(BUILD)/bm_a64_heap.o $(BUILD)/bm_a64_panik.o \
               $(BUILD)/bm_a64_kesme.o $(BUILD)/bm_a64_zaman.o $(BUILD)/bm_a64_mmu.o \
               $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o $(BUILD)/bm_a64_virtio_net.o
+# K1 (D-260): kem_os obj listesi — bm_a64_heap.o (C malloc) YERİNE heap_kemmalloc.o
+# (C malloc çıkarılmış) + kem_heap.o (saf-.kem malloc/free). Diğer kernel'ler BM_A64_OBJS'i
+# (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
+KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
+              $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
+              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_zaman_kem.o \
+              $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
+              $(BUILD)/bm_a64_virtio_net.o
+# ZERO-C B3 (D-285): bm_a64_kesme.o (kdl_kesme.c) TAMAMEN ÇIKARILDI — kem_os artık kesme.c'yi
+# hiç linklemez (B1/B2 kdl_istisna_isle/kdl_el0_izolasyon_isle .kem'e taşındı; fault-scratch
+# global'leri boot/start_aarch64.S'te .data-strong, .kem inline-asm ile isim üzerinden erişir).
+# FAZ-A1/B (D-277): bm_a64_mmu_kem.o = kdl_mmu_kur ÇIKARILMIŞ; SAF-.kem kem_mmu.kem sağlar.
 #              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
 #                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
 #                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
@@ -865,18 +919,107 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o
-	@echo "Faz-2 .kem-native OS iskeleti: kem_os.kem -> ARM64 ELF (A+B+C+E entegre)..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kem_os.kem > $(BUILD)/kem_os.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os.o $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BUILD)/bm_a64_metin.o $(BM_A64_OBJS)
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o
+	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
+	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
+	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
+	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
+	$(BM_A64) -O2 -Wno-override-module -ffunction-sections -fdata-sections -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
+	@# LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): 'kul_' önekli .kem sembolleri EL0-userland
+	@# routing sözleşmesi. -ffunction-sections/-fdata-sections her sembolü kendi .text.<isim>/
+	@# .data.<isim>/.bss.<isim>/.rodata.<isim>'ine böler (codegen değişmedi) → objcopy ile
+	@# .user/.user_data'ya YENİDEN ADLANDIR (linker-script sıralaması DEĞİŞMEZ — geriye-dönük
+	@# VMA reorder ld.lld'de "output file too large" hatası verir, ampirik doğrulandı; rename
+	@# post-compile adımı bunu atlar). Mevcut *(.user) *(.user.*) / *(.user_data) *(.user_data.*)
+	@# glob'ları (linker/bare-metal-aarch64.ld) BUNLARI eşleştirir — linker-script DEĞİŞMEDİ.
+	@KULSYMS=$$(llvm-nm $(BUILD)/kem_os.o | awk '{print $$NF}' | grep '^kul_' | sort -u); \
+	RFLAGS=""; \
+	for s in $$KULSYMS; do \
+		RFLAGS="$$RFLAGS --rename-section=.text.$$s=.user.$$s --rename-section=.data.$$s=.user_data.$$s --rename-section=.bss.$$s=.user_data.$$s --rename-section=.rodata.$$s=.user_data.$$s"; \
+	done; \
+	if [ -n "$$KULSYMS" ]; then \
+		llvm-objcopy $$RFLAGS $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
+	else \
+		cp $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
+	fi
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
+		$(BUILD)/kem_os_routed.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
 		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/kem_os.elf; exit 1; \
 	fi
 	@echo "  (yok — temiz)"
+	@echo "FALSIFIYE-KANIT (K1/D-260): C bump-allocator (kdl_bare_heap) malloc/free SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (malloc|free)$$'; then \
+		echo "FAIL: C kdl_bare_heap hala malloc/free TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
+		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (malloc|free)$$'; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T malloc$$'; then \
+		echo "FAIL: saf-.kem kem_heap malloc TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; bm_a64_kem_heap.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
+	@echo "FALSIFIYE-KANIT (K3/D-261): C region (kdl_bolge) olustur/ayir/serbest SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -qE ' T kdl_bolge_(olustur|ayir|serbest)$$'; then \
+		echo "FAIL: C kdl_bolge hala region primitifi TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
+		llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T kdl_bolge_(olustur|ayir|serbest)$$'; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_bolge_olustur$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_bolge_olustur TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_bolge_kemregion.o: 0 region C-tanımı; bm_a64_kem_heap.o: T kdl_bolge_olustur — kem_os region'u SAF-.kem çıplak arena'dan)"
+	@echo "FALSIFIYE-KANIT (K2/D-262): C dizi (kdl_dizi.inc) + memcpy/memset SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (kdl_dizi_olustur|memcpy|memset)$$'; then \
+		echo "FAIL: C kdl_bare_heap hala dizi/memcpy/memset TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
+		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (kdl_dizi_olustur|memcpy|memset)$$'; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_dizi_olustur$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_dizi_olustur TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_heap_kemmalloc.o: 0 dizi/memcpy/memset C-tanımı; bm_a64_kem_heap.o: T kdl_dizi_olustur+memcpy — kem_os dizi/kopya SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (K4b/D-263): C kdl_global_bolge_al SIFIR, saf-.kem sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T kdl_global_bolge_al$$'; then \
+		echo "FAIL: C kdl_bare_heap hala kdl_global_bolge_al TANIMLIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_global_bolge_al$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_global_bolge_al TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (kem_os global-bölge de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (K5/D-263): kem_os ALLOCATOR-YIĞINI (malloc→region→dizi→helpers) TAMAMEN SAF-.kem:"
+	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o \
+		| grep -qE ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; then \
+		echo "FAIL: C allocator objeleri hala allocator-yığını sembolü TANIMLIYOR (K1-K4b guard eksik)"; \
+		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; exit 1; \
+	fi
+	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ bm_a64_kem_heap.o SAF-.kem'den. K1→K4b TAMAM.)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/metin, D-264): C kdl_metin_bare.o (bm_a64_metin.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_metin_uzunluk$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_metin_uzunluk TANIMLAMIYOR"; exit 1; \
+	fi
+	@echo "  (bm_a64_metin.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_metin_uzunluk/bayt — metin de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/mmio, D-266): C mmio oku32/yaz32 SIFIR, saf-.kem VOLATILE sağlıyor:"
+	@if llvm-nm $(BUILD)/bm_a64_mmio_kem.o | grep -qE ' T kdl_mmio_(oku32|yaz32)$$'; then \
+		echo "FAIL: C kdl_runtime_mmio hala oku32/yaz32 TANIMLIYOR (guard etkisiz)"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_mmio_oku32$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_mmio_oku32 TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! grep -qE "load volatile i32.*|store volatile i32" $(BUILD)/kem_heap.ll; then \
+		echo "FAIL: .kem mmio VOLATILE değil (MMIO -O2 elenebilir)"; exit 1; \
+	fi
+	@echo "  (bm_a64_mmio_kem.o: 0 oku32/yaz32 C-tanımı; bm_a64_kem_heap.o: T kdl_mmio_oku32 + VOLATILE — mmio32 de SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/yetki, D-268): C kdl_yetki_bare (bm_a64_yetki.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_olustur$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_yetki_olustur TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_geri_al$$'; then \
+		echo "FAIL: saf-.kem kem_heap kdl_yetki_geri_al TANIMLAMIYOR"; exit 1; \
+	fi
+	@if ! llvm-nm $(BUILD)/kem_os.elf | grep -qE 'kem_yetki_sayac'; then \
+		echo "FAIL: kem_os.elf .kem yetki sayacı (kem_yetki_sayac) içermiyor — saf-.kem sağlayıcı linklenmemiş"; exit 1; \
+	fi
+	@echo "  (bm_a64_yetki.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_yetki_olustur/geri_al + kem_os.elf'te kem_yetki_sayac — yetki SAF-.kem, Yasa-4)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \
@@ -891,9 +1034,206 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 		echo "FAIL: panik ariza-yoluna WIRE edilmemis (call @panik yok)"; exit 1; \
 	fi
 	@echo "  (panik+exc .kem-define + panik ariza-branch'ine wire — .kem sistem-katmani)"
+	@echo "FALSIFIYE-KANIT (MMU/FAULT, D-276 FAZ-A1): kem_os GERCEK vektor-bagli fault saf-.kem'den suruluyor:"
+	@if ! grep -qE "define[^@]*@kmmu_fault_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem kmmu_fault_testi define YOK (fault-gate eksik)"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kmmu_fault_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kmmu_fault_testi WIRE edilmemis — kem_os gercek fault tetiklemiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "adrp x9, kdl_fault_bekleniyor' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: recovery-scratch inline-asm erisimi (adrp kdl_fault_bekleniyor) emit edilmedi"; exit 1; \
+	fi
+	@echo "  (kmmu_fault_testi .kem-define + wire + .S recovery-scratch'e inline-asm erisim — GERCEK data-abort saf-.kem)"
+	@echo "FALSIFIYE-KANIT (MMU/CEVIRI, D-277 FAZ-A1/B): kdl_mmu_kur SAF-.kem (C kdl_mmu.c DEGIL) + non-identity ceviri:"
+	@if ! grep -qE "define[^@]*@kdl_mmu_kur\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem kdl_mmu_kur define YOK — MMU kurulumu hala C"; exit 1; \
+	fi
+	@if grep -qE "call[^@]*@kdl_mmu_kur\b" $(BUILD)/kem_os.ll; then \
+		echo "NOTE: kdl_mmu_kur .kem-icinden de cagriliyor (boot .S disi) — beklenmedik degil"; \
+	fi
+	@if ! grep -qE "define[^@]*@kmmu_ceviri_testi\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kmmu_ceviri_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kmmu_ceviri_testi define/wire YOK — ceviri dogrulanmiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr mair_el1' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: MMU-enable asm (msr mair_el1/tcr/ttbr0/sctlr) emit edilmedi — .kem MMU kurulumu yok"; exit 1; \
+	fi
+	@echo "  (kdl_mmu_kur .kem-define + msr mair/tcr/ttbr0/sctlr asm + ceviri-testi wire — SAF-.kem MMU setup+ceviri)"
+	@echo "FALSIFIYE-KANIT (C kdl_mmu_kur DISLANDI): bm_a64_mmu_kem.o'da kdl_mmu_kur C-tanimi 0 olmali:"
+	@if llvm-nm $(BUILD)/bm_a64_mmu_kem.o | grep -qE ' T kdl_mmu_kur$$'; then \
+		echo "FAIL: bm_a64_mmu_kem.o hala C kdl_mmu_kur tanimliyor (guard tutmadi)"; exit 1; \
+	fi
+	@echo "  (bm_a64_mmu_kem.o: 0 C kdl_mmu_kur — kem_os MMU kurulumu TAMAMEN .kem'den)"
+	@echo "FALSIFIYE-KANIT (KESME/gercek-trap, D-278 FAZ-A2): .kem karar-handler GERCEK trap syndrome'da:"
+	@if ! grep -qE "define[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: trap_gercek_testi define/wire YOK — gercek trap-yonlendirme yok"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "mrs \$$0, esr_el1"' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: mrs esr_el1 (gercek ESR oku) emit edilmedi — syndrome hardcoded olabilir"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_istisna_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_istisna_isle .kem karar-handler'a wire YOK"; exit 1; \
+	fi
+	@echo "  (trap_gercek_testi define/wire + mrs esr_el1/far_el1 gercek-oku + kem_istisna_isle karar — sentetik DEGIL)"
+	@echo "FALSIFIYE-KANIT (ZAMAN/timer-IRQ, D-279 FAZ-A3): .kem kdl_irq_isle GERCEK IRQ dispatch + tik:"
+	@if ! grep -qE "define[^@]*@kdl_irq_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_irq_isle define YOK — IRQ dispatch hala C"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kdl_kesme_kur\b" $(BUILD)/kem_os.ll || ! grep -qE "define[^@]*@kdl_timer_baslat\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_kesme_kur/kdl_timer_baslat define YOK — GIC/timer kurulumu C"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr cntv_tval_el0|asm sideeffect "mrs \$$0, cntfrq_el0' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: CNTV timer asm (cntv_tval/cntfrq) emit edilmedi"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "msr daifclr' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: daifclr (IRQ ac) asm emit edilmedi — IRQ hic acilmiyor"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_timer_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_timer_testi wire YOK"; exit 1; \
+	fi
+	@if llvm-nm $(BUILD)/bm_a64_zaman_kem.o | grep -qE ' T (kdl_irq_isle|kdl_kesme_kur|kdl_timer_baslat)$$'; then \
+		echo "FAIL: bm_a64_zaman_kem.o hala C timer/IRQ tanimliyor (guard tutmadi)"; exit 1; \
+	fi
+	@echo "  (kdl_irq_isle/kesme_kur/timer_baslat .kem-define + cntv/daifclr asm + timer_testi wire + 0 C-tanim — GERCEK timer-IRQ SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (GOREV/preemptive, D-280 FAZ-A4): .kem kem_preempt scheduler + context-switch:"
+	@if ! grep -qE "define[^@]*@kem_preempt\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kem_preempt scheduler define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_preempt\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_preempt kdl_irq_isle'ye wire YOK — IRQ preemption tetiklemiyor"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kem_gorev_olustur\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_preempt_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_gorev_olustur/kem_preempt_testi define/wire YOK"; exit 1; \
+	fi
+	@echo "  (kem_preempt define + kdl_irq_isle'den call + gorev_olustur sentetik trap-frame + preempt_testi wire — GERCEK preemptive SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SYSCALL/EL0, D-281 FAZ-A5): .kem kdl_syscall_isle (weak-override) + EL0 userspace:"
+	@if ! grep -qE "define[^@]*@kdl_syscall_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_syscall_isle define YOK — syscall handler hala C"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kem_gorev_olustur_el0\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_el0_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_gorev_olustur_el0/kem_el0_testi define/wire YOK"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "dc cvau' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: I-cache maintenance (dc cvau/ic ivau) asm emit edilmedi — EL0 stub icache-stale olabilir"; exit 1; \
+	fi
+	@echo "  (kdl_syscall_isle .kem-define weak-override + gorev_olustur_el0 EL0t-frame + el0_testi wire + I-cache asm — EL0 syscall SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (IZOLASYON, ZERO-C B2/D-284): .kem kdl_el0_izolasyon_isle + gerçek permission-fault kill:"
+	@if ! grep -qE "define[^@]*@kdl_el0_izolasyon_isle\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kdl_el0_izolasyon_isle define YOK — izolasyon hala C"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kem_gorev_bitir\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_el0_izolasyon_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_gorev_bitir/kem_el0_izolasyon_testi define/wire YOK"; exit 1; \
+	fi
+	@echo "  (kdl_el0_izolasyon_isle .kem-define weak-override + kem_gorev_bitir olu[] + izolasyon_testi wire — GERCEK permission-fault kill SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (LINCHPIN, D-286 USERLAND ADIM 1): GERCEK .kem-derlenmis kod (hand-assembled DEGIL) .user'a routed + EL0'da kosuyor:"
+	@if ! grep -qE "define[^@]*@kul_test\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kul_test define YOK — .kem kaynagindan derlenmedi"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_linchpin_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_linchpin_testi wire YOK"; exit 1; \
+	fi
+	@KULADR=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_test$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR" ]; then echo "FAIL: kul_test final ELF'te tanimli degil"; exit 1; fi; \
+	KULDEC=$$((16#$$KULADR)); \
+	if [ $$KULDEC -lt $$((16#42000000)) ] || [ $$KULDEC -ge $$((16#42200000)) ]; then \
+		echo "FAIL: kul_test adresi .user araliginda DEGIL (0x$$KULADR) — routing basarisiz, hala kernel .text'te"; exit 1; \
+	fi; \
+	echo "  (kul_test .kem-define + wire + final ELF adresi 0x$$KULADR [.user araliginda 0x42000000-0x421FFFFF] — GERCEK .kem kod EL0'da routed)"
+	@echo "FALSIFIYE-KANIT (UART-RX, D-287 USERLAND ADIM 2): .kem kis_satir_oku (PL011 RXFE bounded-poll) + sys(26) EL0 round-trip:"
+	@if ! grep -qE "define[^@]*@kis_satir_oku\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: .kem kis_satir_oku define YOK — UART-RX hala yok"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kis_satir_oku\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kis_satir_oku kdl_syscall_isle'dan cagrilmiyor (num=26 wire yok)"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kul_rx_test\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_uart_rx_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_rx_test/kem_uart_rx_testi define/wire YOK"; exit 1; \
+	fi
+	@KULADR2=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_rx_test$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR2" ]; then echo "FAIL: kul_rx_test final ELF'te tanimli degil"; exit 1; fi; \
+	echo "  (kis_satir_oku PL011 RXFE-poll .kem-define + syscall wire + kul_rx_test @0x$$KULADR2 [.user'da] + kem_uart_rx_testi wire — GERCEK RX bounded-poll SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (FS-SYSCALL, D-288 USERLAND ADIM 3): sys(17/18) GERCEK EL0->minifs->virtio-blk round-trip:"
+	@if ! grep -qE "define[^@]*@kul_fs_test\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_fs_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_fs_test/kem_fs_testi define/wire YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@mfs_dosya_yaz\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@mfs_dosya_oku\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kdl_syscall_isle minifs'e (mfs_dosya_yaz/oku) wire YOK"; exit 1; \
+	fi
+	@KULADR3=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_fs_test$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR3" ]; then echo "FAIL: kul_fs_test final ELF'te tanimli degil"; exit 1; fi; \
+	echo "  (kul_fs_test @0x$$KULADR3 [.user'da] + kdl_syscall_isle->mfs_dosya_yaz/oku wire — GERCEK EL0 dosya-syscall SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SHELL, D-289 USERLAND ADIM 4): userland .kem shell komut-dispatch + GERCEK syscall yurutme:"
+	@if ! grep -qE "define[^@]*@kul_shell\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@kem_shell_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_shell/kem_shell_testi define/wire YOK"; exit 1; \
+	fi
+	@if ! grep -qE "define[^@]*@kul_str_esit\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_str_esit (komut dispatch) define YOK"; exit 1; \
+	fi
+	@KULADR4=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_shell$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR4" ]; then echo "FAIL: kul_shell final ELF'te tanimli degil"; exit 1; fi; \
+	echo "  (kul_shell @0x$$KULADR4 [.user'da] + kul_str_esit dispatch + kem_shell_testi wire — GERCEK userland shell SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SPAWN, D-290 USERLAND ADIM 5+6): GERCEK sys(12) spawn + sys(14) join + Model A gomulu program:"
+	@if ! grep -qE "define[^@]*@kul_prog_selam\b" $(BUILD)/kem_os.ll || ! grep -qE "define[^@]*@kul_spawner\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_prog_selam/kul_spawner define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_spawn_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_spawn_testi wire YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_gorev_olustur_el0\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kdl_syscall_isle (num=12) kem_gorev_olustur_el0'e wire YOK"; exit 1; \
+	fi
+	@KULADR5=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_prog_selam$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR5" ]; then echo "FAIL: kul_prog_selam final ELF'te tanimli degil"; exit 1; fi; \
+	echo "  (kul_prog_selam @0x$$KULADR5 [.user'da, ELF-yukleme YOK, derleme-zamani linkli] + sys12->kem_gorev_olustur_el0 + kem_spawn_testi wire — GERCEK spawn+join SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
+	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@disk_rw_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: disk_rw_testi WIRE edilmemis — kem_os gercek disk I/O calistirmiyor"; exit 1; \
+	fi
+	@if ! grep -qE 'asm sideeffect "dsb sy"' $(BUILD)/kem_os.ll; then \
+		echo "FAIL: dsb sy bariyeri (P1 arm64 asm) emit edilmedi — DMA siralama yok"; exit 1; \
+	fi
+	@echo "  (vblk_bul/kur/oku/yaz .kem-define + disk_rw_testi wire + dsb sy P1-asm — virtio-blk SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/fs, FAZ-B2): kem_os GERCEK dosya I/O saf-.kem minifs'ten:"
+	@if ! grep -qE "define[^@]*@mfs_(format|dosya_yaz|dosya_oku)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem mfs_* minifs define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@fs_rw_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: fs_rw_testi WIRE edilmemis — kem_os gercek dosya I/O calistirmiyor"; exit 1; \
+	fi
+	@echo "  (mfs_format/dosya_yaz/dosya_oku .kem-define + fs_rw_testi wire — minifs SAF-.kem, virtio-blk ustunde)"
+	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-net, FAZ-C): kem_os saf-.kem net cihaz bringup:"
+	@if ! grep -qE "define[^@]*@vnet_(bul|kur)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_* virtio-net define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_dev_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_dev_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_bul/kur .kem-define + net_dev_testi wire — virtio-net SAF-.kem, POLLED)"
+	@if ! grep -qE "define[^@]*@vnet_(gonder|al)\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_gonder/al (paket TX/RX) define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_arp_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_arp_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_gonder/al .kem-define + net_arp_testi wire — ARP round-trip SAF-.kem)"
+	@if ! grep -qE "define[^@]*@vnet_checksum\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_os IR'inda .kem vnet_checksum (RFC1071) define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@net_icmp_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: net_icmp_testi WIRE edilmemis"; exit 1; \
+	fi
+	@echo "  (vnet_checksum + net_icmp_testi wire — ICMP ping round-trip SAF-.kem)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
+		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
 			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.elf 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_os.out; echo "--- son ---"; \
 		if grep -q "KEMGU KEM-OS OK" $(BUILD)/kem_os.out \
@@ -901,10 +1241,27 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o 
 		   && grep -q "\[2\] HEAP DIZI OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[3\] MMIO OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[4\] HESAP OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out; then \
-			echo "Faz-2c .kem-native OS gecti: A+B+C+E + .kem panik/exc-handler TEK boot'ta (KEMGU KEM-OS OK)."; \
+		   && grep -q "\[5\] EXC OK" $(BUILD)/kem_os.out \
+		   && grep -q "MMU FAULT OK" $(BUILD)/kem_os.out \
+		   && grep -q "MMU CEVIRI OK" $(BUILD)/kem_os.out \
+		   && grep -q "TRAP KARAR OK" $(BUILD)/kem_os.out \
+		   && grep -q "TIMER TIK OK" $(BUILD)/kem_os.out \
+		   && grep -q "PREEMPT OK" $(BUILD)/kem_os.out \
+		   && grep -q "EL0 SYSCALL OK" $(BUILD)/kem_os.out \
+		   && grep -q "IZOLASYON OK" $(BUILD)/kem_os.out \
+		   && grep -q "LINCHPIN OK" $(BUILD)/kem_os.out \
+		   && grep -q "UART RX EOF OK" $(BUILD)/kem_os.out \
+		   && grep -q "FS SYSCALL OK" $(BUILD)/kem_os.out \
+		   && grep -q "SHELL OK" $(BUILD)/kem_os.out \
+		   && grep -q "SPAWN OK" $(BUILD)/kem_os.out \
+		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
+		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
+		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
+		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
+		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] alt-sistem markerlari bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \
@@ -990,6 +1347,38 @@ calistir_kem_pointer_self_arm: kemgu_self $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — self-host pointer parite testi atlandi."; \
+	fi
+
+# === D-250 DIAG: HEAP Dizi<T> INDEKS-YAZMA bare-metal (codegen-bug mu link-sorunu mu?) ===
+# TEK SORU: heap-runtime DÜZGÜN linkli (bm_a64_heap.o = kdl_dizi.inc) iken d[i]=v
+# (kdl_dizi_yaz yolu) ARM64 QEMU'da çalışıyor mu? ŞABLON = calistir_kernel_dizi_bare_metal
+# (BM_A64_OBJS linkler, bm_a64_heap.o dahil). Kanıt: QEMU "HEAP YAZ: yaz=48879 oku=48879 => EVET".
+# EVET → codegen SAĞLAM, "bug" LİNK-artefaktıydı. HAYIR → linkli-ama-bozuk (gerçek runtime bug).
+calistir_diag_heap_yaz_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
+	@echo "D-250 heap indeks-yazma diag: diag_heap_yaz_linkli.kem -> ARM64 ELF (heap-runtime linkli)..."
+	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/diag_heap_yaz_linkli.kem > $(BUILD)/diag_heap.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/diag_heap.ll -c -o $(BUILD)/diag_heap.o
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld -o $(BUILD)/diag_heap.elf \
+		$(BUILD)/diag_heap.o $(BM_A64_OBJS)
+	@echo "LINK-DURUMU: kdl_dizi_yaz (d[i]=v yolu) cozuldu mu (bm_a64_heap.o):"
+	@if llvm-nm --undefined-only $(BUILD)/diag_heap.elf | grep -qE "kdl_dizi"; then \
+		echo "FAIL: kdl_dizi_* UNDEFINED (heap-runtime linklenmedi — link-sorunu SÜRÜYOR)"; \
+		llvm-nm --undefined-only $(BUILD)/diag_heap.elf | grep kdl_dizi; exit 1; \
+	fi
+	@echo "  (kdl_dizi_* undefined YOK — heap-runtime bm_a64_heap.o'dan cozuldu)"
+	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		rm -f $(BUILD)/diag_heap.out; \
+		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
+			-serial file:$(BUILD)/diag_heap.out -kernel $(BUILD)/diag_heap.elf 2>/dev/null || true; \
+		echo "--- QEMU seri cikti ---"; cat $(BUILD)/diag_heap.out; echo "--- son ---"; \
+		if grep -q "=> EVET" $(BUILD)/diag_heap.out && grep -q "48879" $(BUILD)/diag_heap.out; then \
+			echo "D-250 heap indeks-yazma diag GECTI: d[i]=v heap-runtime linkli iken calisiyor (yaz=oku=48879) => codegen SAGLAM, sorun LINK-artefaktiydi."; \
+		else \
+			echo "FAIL: 'HEAP YAZ ... => EVET' + 48879 bekleniyor (heap indeks-yazma bozuk)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "QEMU yok — heap indeks-yazma diag atlandi."; \
 	fi
 
 # === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
@@ -4707,6 +5096,7 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
                      calistir_kem_os_arm calistir_kem_pointer_arm calistir_kem_pointer_self_arm \
+                     calistir_diag_heap_yaz_arm \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
@@ -4856,7 +5246,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_bootstrap calistir_self_driver
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver
 	@echo "Tum testler gecti!"
 
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===

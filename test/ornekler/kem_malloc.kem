@@ -1,0 +1,47 @@
+// kem_malloc.kem — F3 (D-259): SAF-.kem çıplak küresel-bump allocator.
+// ============================================================================
+// KOMPOZİSYON KANITI: iki bootstrap-primitifi bir arada ÇALIŞAN allocator verir
+// ve BOOTSTRAP-CIRCULARITY'yi kırar:
+//   • WALL-1 → `küresel değişken` : bump pointer'ın kalıcı durumu (modül-global).
+//   • WALL-2 → `çıplak işlev`      : region-prologue EMIT EDİLMEZ + true C-ABI
+//                                    (ρ param YOK) → @malloc(i64) olarak linklenir.
+//
+// CIRCULARITY NEDEN KIRILDI: normal .kem fn'i girişinde @kdl_bolge_olustur→malloc
+// çağırır; malloc'u .kem'de yazarsan malloc→(prologue)@kdl_bolge_olustur→malloc =
+// SONSUZ DÖNGÜ. Çıplak fn prologue EMIT ETMEZ → kem_malloc IR'inde @kdl_bolge_olustur
+// = 0 VE @malloc self-call = 0 → tahsis kendini tetiklemez. Döngü kırık.
+//
+// Bellek: 16-hizasız minimal bump (F3 kompozisyon kanıtı; hizalama+serbest-liste
+// K1'de). Taban (heap-start) çağırandan gelir (kem_heap_kur) — .kem'de extern
+// linker sembolü ifade edilemez; bare-metal'de boot-glue küresel'i set eder (K1b).
+// Çıplak = güvensiz-tier → küresel erişimi + ham-pointer explicit `güvensiz {}`
+// gerektirmez (D-254/D-256 grant).
+
+küresel değişken kem_bump: tam64 = 0;
+
+// Heap tabanını kur (çağıran gerçek RAM bölgesinin başını verir).
+çıplak işlev kem_heap_kur(taban: tam64) -> tam32 {
+    kem_bump = taban;
+    ver 0;
+}
+
+// n bayt "tahsis et" — bump pointer'ı ilerlet, önceki değeri (adres) dön.
+// Region-prologue YOK → circularity YOK. 2 çağrı = 2 FARKLI adres.
+çıplak işlev kem_malloc(n: tam64) -> tam64 {
+    değişken p: tam64 = kem_bump;
+    kem_bump = kem_bump + n;
+    ver p;
+}
+
+// Tahsis edilen adrese yaz (ham-pointer: int→*T inttoptr + deref-write).
+çıplak işlev kem_yaz32(adres: tam64, deg: tam32) -> tam32 {
+    değişken p: *tam32 = adres olarak *tam32;
+    *p = deg;
+    ver 0;
+}
+
+// Tahsis edilen adresten oku.
+çıplak işlev kem_oku32(adres: tam64) -> tam32 {
+    değişken p: *tam32 = adres olarak *tam32;
+    ver *p;
+}

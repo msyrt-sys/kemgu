@@ -127,6 +127,44 @@ static int kemgu_llvm_opt_verify(const char *kem_yol) {
     return system(komut) == 0;
 }
 
+/* D-254: verilen KEMGU kaynağı --llvm ile derle; `fn_imza` (örn "@tahsis(")
+ * ile başlayan fonksiyon gövdesinde region-prologue çağrısı (@kdl_bolge_olustur
+ * + @kdl_global_bolge_al) toplam sayısını dön. Çıplak fn → 0 beklenir.
+ * -1 = derleme/parse hatası (fn bulunamadı dâhil). */
+static int ir_region_prologue_sayisi(const char *kaynak, const char *fn_imza) {
+    FILE *f = fopen(KEM_PATH, "w");
+    if (!f) return -1;
+    fputs(kaynak, f);
+    fclose(f);
+    char komut[1024];
+    snprintf(komut, sizeof(komut), "%s --llvm %s > %s 2>%s",
+             KEMGU_BIN, KEM_PATH, LL_PATH, DEV_NULL);
+    if (system(komut) != 0) return -1;
+    FILE *ll = fopen(LL_PATH, "r");
+    if (!ll) return -1;
+    fseek(ll, 0, SEEK_END);
+    long n = ftell(ll);
+    fseek(ll, 0, SEEK_SET);
+    if (n < 0) { fclose(ll); return -1; }
+    char *buf = (char *)malloc((size_t)n + 1);
+    if (!buf) { fclose(ll); return -1; }
+    size_t rd = fread(buf, 1, (size_t)n, ll);
+    buf[rd] = 0;
+    fclose(ll);
+
+    int say = -1;
+    char *bas = strstr(buf, fn_imza);
+    if (bas) {
+        char *son = strstr(bas, "\n}\n");   /* fn gövdesi sonu */
+        if (son) *son = 0;
+        say = 0;
+        for (char *p = bas; (p = strstr(p, "@kdl_bolge_olustur")) != NULL; p++) say++;
+        for (char *p = bas; (p = strstr(p, "@kdl_global_bolge_al")) != NULL; p++) say++;
+    }
+    free(buf);
+    return say;
+}
+
 
 /* === Testler === */
 
@@ -1791,6 +1829,51 @@ static void test_matris_b_deref_atama_t022(void) {
                ic == 1 && dis == 0);
 }
 
+static void test_kuresel_persistence(void) {
+    /* D-252 F1: küresel değişken cross-call PERSISTENCE. yaz() 42 yazar, oku()
+     * (AYRI fn) okur → 42 (local olsa yaz'ın yazması oku'da görünmez, 0 gelirdi).
+     * = modül-mutable global @g doğru emit + load/store. Erişim güvensiz-scoped. */
+    int rc = derle_ve_calistir(
+        "k\xc3\xbcresel de\xc4\x9f" "i\xc5\x9fken g: tam32 = 0; "
+        "i\xc5\x9flev yaz() -> tam32 { g\xc3\xbcvensiz { g = 42; ver 0; } ver 0; } "
+        "i\xc5\x9flev oku() -> tam32 { g\xc3\xbcvensiz { ver g; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { g\xc3\xbcvensiz { yaz(); ver oku(); } ver 0; }");
+    test_sonuc("kuresel: cross-call persistence -> exit 42 (D-252 F1)", rc == 42);
+}
+
+static void test_ciplak_prologue_yok(void) {
+    /* D-254 F2 (WALL-2): çıplak işlev IR'inde region-prologue EMIT EDİLMEZ.
+     * `tahsis` çıplak → @kdl_bolge_olustur + @kdl_global_bolge_al = 0.
+     * Kontrast: normal `main` → prologue VAR (>=1). Bu, bootstrap circularity
+     * çözümünün codegen kanıtı: allocator fn'i malloc→region→malloc döngüsünü
+     * tetiklemeden emit edilir. */
+    const char *kaynak =
+        "k\xc3\xbcresel de\xc4\x9f" "i\xc5\x9fken g_s: tam64 = 0; "
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev tahsis() -> tam64 { "
+        "de\xc4\x9fi\xc5\x9fken p: tam64 = g_s; g_s = g_s + 8; ver p; } "
+        "i\xc5\x9flev main() -> tam32 { g\xc3\xbcvensiz { tahsis(); ver 0; } ver 0; }";
+    int ciplak = ir_region_prologue_sayisi(kaynak, "@tahsis(");
+    int normal = ir_region_prologue_sayisi(kaynak, "@main(");
+    test_sonuc("ciplak: tahsis IR'inde region-prologue = 0 (D-254 F2)", ciplak == 0);
+    test_sonuc("ciplak: kontrast normal main prologue >= 1", normal >= 1);
+}
+
+static void test_ciplak_allocator(void) {
+    /* D-254 F2: çıplak-allocator kompozisyon. Küresel bump 2 kez çağrılır →
+     * 2 FARKLI adres (a=0, b=8) + sonsuz-recursion YOK → b-a==8 → exit 42.
+     * Prologue'suz fn çağrılabilir + doğru sonucu üretir (çalışma kanıtı). */
+    int rc = derle_ve_calistir(
+        "k\xc3\xbcresel de\xc4\x9f" "i\xc5\x9fken g_s: tam64 = 0; "
+        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev tahsis() -> tam64 { "
+        "de\xc4\x9fi\xc5\x9fken p: tam64 = g_s; g_s = g_s + 8; ver p; } "
+        "i\xc5\x9flev main() -> tam32 { g\xc3\xbcvensiz { "
+        "de\xc4\x9fi\xc5\x9fken a: tam64 = tahsis(); "
+        "de\xc4\x9fi\xc5\x9fken b: tam64 = tahsis(); "
+        "e\xc4\x9f" "er b - a == 8 { ver 42; } ver 1; } ver 0; }");
+    test_sonuc("ciplak: allocator 2-cagri farkli-adres -> exit 42 (D-254 F2)",
+               rc == 42);
+}
+
 static void test_matris_de_karsilikli_ozyineleme(void) {
     /* Matris D/E: karsilikli ozyineleme (cift_mi <-> tek_mi). */
     int rc = derle_ve_calistir(
@@ -2849,6 +2932,9 @@ int main(void) {
     printf("\n--- Matris B+C: erisim/isaretci (in-scope green + DUR-SOR) ---\n");
     test_matris_c_deref_ref_round_trip();
     test_matris_b_deref_atama_t022();
+    test_kuresel_persistence();
+    test_ciplak_prologue_yok();
+    test_ciplak_allocator();
 
     printf("\n--- Matris D+E: kontrol akisi + fonksiyon siniri ---\n");
     test_matris_de_karsilikli_ozyineleme();

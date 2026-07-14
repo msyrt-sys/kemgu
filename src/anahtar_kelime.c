@@ -45,6 +45,7 @@ static const AnahtarKelime tablo[] = {
     {"kanal",                             5, TOK_KANAL     },  /* kanal       */
     {"kendin",                            6, TOK_KENDIN    },  /* kendin      */
     {"kullan",                            6, TOK_KULLAN    },  /* kullan      */
+    {"k\xc3\xbcresel",                    8, TOK_KURESEL   },  /* küresel — D-252 (k\xc3 > ku, memcmp-sıra) */
     {"mod\xc3\xbcl",                     6, TOK_MODUL     },  /* modül       */
     {"olarak",                            6, TOK_OLARAK    },  /* olarak      */
     {"sabit",                             5, TOK_SABIT     },  /* sabit       */
@@ -63,6 +64,7 @@ static const AnahtarKelime tablo[] = {
     {"yap\xc4\xb1",                      5, TOK_YAPI      },  /* yapı        */
     {"yetki",                             5, TOK_YETKI     },  /* yetki       */
     {"\xc3\xa7" "e\xc5\x9fit",            7, TOK_CESIT     },  /* çeşit  (C2.7) */
+    {"\xc3\xa7\xc4\xb1plak",             8, TOK_CIPLAK    },  /* çıplak — D-254 (\xa7 < \xb6, çeşit<çıplak<özellik) */
     {"\xc3\xb6zellik",                   8, TOK_OZELLIK   },  /* özellik     */
 };
 

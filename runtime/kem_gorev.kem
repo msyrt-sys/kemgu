@@ -1,0 +1,735 @@
+// kem_gorev.kem — FAZ-A4 (D-280): SAF-.kem PREEMPTIVE scheduler (round-robin).
+// ============================================================================
+// Kanıtlı-C kdl_gorev.c (kdl_preempt + kdl_preempt_gorev_olustur) BİREBİR yeniden
+// gerçekleştirmesi. Timer IRQ (A3) → .kem kdl_irq_isle → kem_preempt → context-switch
+// (trap-frame SP swap). .S kdl_irq_ortak (mov sp,x0 + trap-frame restore + eret)
+// DEĞİŞMEZ; yalnız kdl_irq_isle `ver kem_preempt(sp)` çağırır.
+//
+// context-switch = SP-swap: kem_preempt mevcut görevin trap-frame SP'sini kaydeder,
+// sonrakinin SP'sini döner → .S o frame'i restore + eret → sonraki görev sürer.
+// Yeni görev = SENTETİK trap-frame (272 bayt): ELR=giriş, SPSR=0x5 (EL1h, IRQ-açık →
+// görev de preempt edilir), gerisi 0. kdl_preempt_gorev_olustur birebir.
+// Adres-uzayı TEK (kem_os EL1 görevleri) → TTBR swap YOK (v1). Öncelik/blok YOK (v1).
+
+sabit KG_PSP: tam64 = 1157636096;         // 0x45002000: psp[i] tablosu (@+i*8; page-table üstü)
+sabit KG_OLU: tam64 = 1157639168;         // 0x45002c00: olu[i] tablosu (kdl_olu[] birebir; 1=bitmiş)
+sabit KG_G1: tam64 = 1157640192;          // 0x45003000: görev1 sayacı (FİXED RAM, volatile deref)
+sabit KG_G2: tam64 = 1157640200;          // 0x45003008: görev2 sayacı
+sabit KG_AKTIF: tam64 = 1157640208;       // 0x45003010: preempt-aktif bayrağı (FİXED RAM — küresel
+                                          // olsaydı store1→store0 arası IRQ-okuması clang'a görünmez →
+                                          // dead-store-elim ile store1 silinir → asla switch olmaz)
+sabit KG_STK1: tam64 = 1192230912;        // 0x47100000: görev1 yığın tepesi (free RAM)
+sabit KG_STK2: tam64 = 1193279488;        // 0x47200000: görev2 yığın tepesi
+
+// Scheduler durumu — YALNIZ .kem okur/yazar (.S paylaşımı yok) → küresel internal OK.
+// Sayaçlar (kem_g1/g2) FİXED RAM: yalnız asm-ile-kullanılan küresel DGE ile silinir →
+// fixed-adres çıplak deref (volatile) hem stripping'i hem sonsuz-döngü store-sink'i çözer.
+küresel değişken kem_paktif: tam64 = 0;    // o an koşan görev
+küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil kem_preempt_baslat'ta 1)
+
+çıplak işlev kg_psp_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; *p = v; }
+çıplak işlev kg_psp_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; ver *p; }
+çıplak işlev kg_yaz64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
+çıplak işlev kg_oku64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+// main = görev 0; ilk preempt'te gerçek trap-frame SP'si kaydedilir.
+çıplak işlev kem_preempt_baslat() {
+    kem_paktif = 0;
+    kem_psayi = 1;
+    kg_yaz64(KG_AKTIF, 0);
+    kg_yaz64(KG_G1, 0);          // sayaçları sıfırla (fixed RAM)
+    kg_yaz64(KG_G2, 0);
+    değişken k: tam64 = 0;
+    iken k < 16 { kg_yaz64(KG_OLU + k * 8, 0); k = k + 1; }   // olu[] tablosu temizle
+}
+çıplak işlev kem_preempt_ac() { kg_yaz64(KG_AKTIF, 1); }
+
+// Sentetik trap-frame kur (kdl_preempt_gorev_olustur birebir): 34 slot × 8 = 272 bayt,
+// tf@248=ELR=giriş, tf@256=SPSR=0x5 (EL1h IRQ-açık), gerisi 0. SP 16-hizalı. id döner.
+çıplak işlev kem_gorev_olustur(giris: tam64, yigin_tepe: tam64) -> tam64 {
+    değişken sp: tam64 = yigin_tepe - 272;
+    sp = (sp / 16) * 16;                          // 16-hizala
+    değişken k: tam64 = 0;
+    iken k < 34 { kg_yaz64(sp + k * 8, 0); k = k + 1; }   // 34 slot sıfırla
+    kg_yaz64(sp + 248, giris);                    // ELR_EL1 @248 = eret hedefi
+    kg_yaz64(sp + 256, 5);                        // SPSR @256 = 0x5 (EL1h, IRQ açık)
+    değişken i: tam64 = kem_psayi;
+    kg_psp_yaz(i, sp);
+    kem_psayi = kem_psayi + 1;
+    ver i;
+}
+
+// Round-robin scheduler — .kem kdl_irq_isle her timer IRQ'da çağırır. sp = kesilen
+// görevin trap-frame SP'si. aktif değilse/tek görevse sp (switch yok → A3 timer nötr).
+// kdl_preempt birebir: bitmiş (kg_olu=1) görevler ATLANIR (round-robin sırada tara).
+çıplak işlev kem_preempt(sp: tam64) -> tam64 {
+    eğer (kg_oku64(KG_AKTIF) == 0) veya (kem_psayi < 2) { ver sp; }
+    kg_psp_yaz(kem_paktif, sp);                   // mevcut görevin SP'sini kaydet
+    değişken n: tam64 = kem_paktif;
+    değişken t: tam64 = 0;
+    değişken bulundu: tam64 = 0;
+    iken (t < kem_psayi) ve (bulundu == 0) {      // en fazla psayi adım tara, ilk canlıda dur
+        n = n + 1;
+        eğer n >= kem_psayi { n = 0; }
+        eğer kg_oku64(KG_OLU + n * 8) == 0 { kem_paktif = n; bulundu = 1; }
+        t = t + 1;
+    }
+    ver kg_psp_oku(kem_paktif);                   // sonraki (canlı) görevin SP'si → .S switch
+}
+
+// Aktif görevi BİTİR (izolasyon-ihlali/exit) — kdl_gorev_bitir birebir. Scheduler bir
+// daha seçmez (kem_preempt yukarıdaki tarama sırasında atlar).
+çıplak işlev kem_gorev_bitir() {
+    kg_yaz64(KG_OLU + kem_paktif * 8, 1);
+}
+
+// Görev gövdeleri — sonsuz sayaç (preemption ile kesilir; timer IRQ round-robin döndürür).
+// Fixed-RAM volatile deref (kg_yaz64/kg_oku64) → store sink EDİLMEZ, main taze görür.
+çıplak işlev kem_gorev1() { iken 1 == 1 { kg_yaz64(KG_G1, kg_oku64(KG_G1) + 1); } }
+çıplak işlev kem_gorev2() { iken 1 == 1 { kg_yaz64(KG_G2, kg_oku64(KG_G2) + 1); } }
+
+// Görev giriş adreslerini asm ile materyalize et (.kem işlev-adresi → tam64).
+çıplak işlev kg_gorev1_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev1
+add $0, $0, :lo12:kem_gorev1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kg_gorev2_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev2
+add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
+    ver x;
+}
+// A4 gate: 2 preemptive görev kur → preemption aç → main spin ederken timer-IRQ
+// round-robin ile görevlere geçer → her iki sayaç ilerler (INTERLEAVE) → preemption
+// çalışıyor. guard'lı (switch bozuksa hang yok). Sonra preemption'ı KAPAT → main
+// [6..10]'a devam eder (görevler artık seçilmez — sonsuz döngüleri terk edilir).
+çıplak işlev kem_preempt_testi() -> tam32 {
+    kem_preempt_baslat();
+    değişken t1: tam64 = kem_gorev_olustur(kg_gorev1_adr(), KG_STK1);
+    değişken t2: tam64 = kem_gorev_olustur(kg_gorev2_adr(), KG_STK2);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken ((kg_oku64(KG_G1) < 2) veya (kg_oku64(KG_G2) < 2)) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kg_yaz64(KG_AKTIF, 0);                        // preemption DURDUR → main devam
+    eğer (kg_oku64(KG_G1) >= 2) ve (kg_oku64(KG_G2) >= 2) {
+        ver 1;                                     // her iki görev de koştu → interleave
+    }
+    ver 0;
+}
+
+// ============================================================================
+// A5 (D-281): SAF-.kem SYSCALL + EL0 USERSPACE. A4 preemptive altyapısını kullanır:
+// EL0 görev = sentetik trap-frame SPSR=0x0 (EL0t, IRQ-açık) + SP_EL0=user yığını +
+// ELR=EL0 stub (0x42000000, AP=01 sayfa). Timer-IRQ preemption ile EL0↔main döner.
+// EL0 stub: movz x8,#7 / svc #0 / b .-8 (sonsuz syscall). SVC → .S kdl_exc_ortak
+// (EC=0x15) → .kem kdl_syscall_isle → sayaç++. main sayacın ilerlediğini doğrular →
+// GERÇEK EL0'dan syscall. EL0 kod DERLENMİŞ .kem değil (section yok) → runtime yazılan
+// makine-kodu (llvm-mc doğrulanmış kelimeler) AP=01 sayfaya + I-cache maintenance.
+
+sabit KG_SYSC: tam64 = 1157640216;        // 0x45003018: syscall sayacı (fixed RAM)
+// D-287 DÜZELTME: KG_EL0_KOD ESKİDEN 0x42000000'daydı — .user section'ın TAM BAŞLANGICI,
+// LINCHPIN'in (D-286) .kem-derlenmiş kul_test'inin de objcopy-rename ile TAM ORAYA
+// yerleştiği adres! kem_el0_testi (bu adrese HAM byte yazan A5 testi) kem_linchpin_testi'den
+// ÖNCE koşuyor → kul_test'in derlenmiş byte'larını RUNTIME'DA EZER → LINCHPIN gate'i
+// YANLIŞ SEBEPTEN geçiyordu (ezilmiş stub'ın kendi "mov x8,#7/svc" dizisi çalışıyordu,
+// kul_test'in GERÇEK içeriği DEĞİL). Çözüm: ham-byte test adreslerini .user KOD bölgesinden
+// (0x42000000 + büyüyen .kem-routed kod) UZAK bir ofsete (+64KB) taşı — bol pay, gelecekteki
+// userland .kem büyümesiyle asla çakışmaz.
+sabit KG_EL0_KOD: tam64 = 1107361792;     // 0x42010000: EL0 stub (AP=01, EL0-exec; .user kod tabanından +64KB)
+sabit KG_EL0_STK: tam64 = 1108344832;     // 0x42100000: EL0 user yığını (SP_EL0, AP=01)
+
+çıplak işlev kg_yaz32(adr: tam64, v: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = v; }
+
+// I-cache maintenance: yazılan kodu icache'e görünür kıl (dc cvau→dsb→ic ivau→dsb→isb).
+çıplak işlev kg_icache_flush(adr: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"dc cvau, $0
+dsb ish
+ic ivau, $0
+dsb ish
+isb"#
+            girdi("r", adr)
+            bozulan("~{memory}")
+        }
+    }
+}
+
+// EL0 preemptive görev: sentetik trap-frame SPSR=0x0 (EL0t) + SP_EL0@264=user_stk.
+// (kem_gorev_olustur EL1 sürümü gibi ama EL0t + banked user-SP.)
+çıplak işlev kem_gorev_olustur_el0(giris: tam64, kernel_tepe: tam64, user_tepe: tam64) -> tam64 {
+    değişken sp: tam64 = kernel_tepe - 272;
+    sp = (sp / 16) * 16;
+    değişken k: tam64 = 0;
+    iken k < 34 { kg_yaz64(sp + k * 8, 0); k = k + 1; }
+    kg_yaz64(sp + 248, giris);                    // ELR_EL1 @248 = EL0 giriş
+    kg_yaz64(sp + 256, 0);                        // SPSR @256 = 0x0 (EL0t, IRQ açık)
+    kg_yaz64(sp + 264, user_tepe);                // SP_EL0 @264 = user yığını
+    değişken i: tam64 = kem_psayi;
+    kg_psp_yaz(i, sp);
+    kem_psayi = kem_psayi + 1;
+    ver i;
+}
+
+// SVC handler — .S kdl_exc_ortak (EC=0x15) `bl kdl_syscall_isle(num,arg,arg2)` çağırır.
+// num=5 → yaz (USERLAND ADIM 4, D-289): arg=EL0 string ptr. kis_metin'in pointer-tabanlı
+// eşdeğeri (kis_bayt döngüsü). num=7 → satir (proven-C birebir, D-289: kis_satir EKLENDİ) +
+// syscall sayacı++ (A5'ten kanıtlı test bunu KULLANMAYA DEVAM eder — geriye-uyumlu, yalnız
+// EK olarak konsola newline basar).
+// num=13 → exit (kdl_gorev_bitir birebir, D-130) — o an koşan görevi ölü işaretle.
+// num=26 → read_satir (USERLAND ADIM 2, D-287): arg=buf (EL0 VA), arg2=umax. GERÇEK PL011
+// RX bounded-poll (kis_satir_oku). NOT: kdl_user_yaz_ptr_gecerli (D-150 user-ptr doğrulama)
+// henüz .kem'e taşınmadı — bu syscall ŞİMDİLİK kernel-güvenilir arg alır (ADIM 3 kapsamı).
+çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+    eğer num == 5 {
+        değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
+        değişken i5: tam32 = 0;
+        iken i5 < n5 { kis_bayt((kdl_metin_bayt(arg olarak *tam8, i5)) olarak tam32); i5 = i5 + 1; }
+        ver 0;
+    }
+    eğer num == 7 {
+        kis_satir();
+        kg_yaz64(KG_SYSC, kg_oku64(KG_SYSC) + 1);
+        ver arg;
+    }
+    eğer num == 13 {
+        kem_gorev_bitir();
+        ver 0;
+    }
+    // USERLAND ADIM 5 (D-290): num=12 spawn(entry), num=14 durum(pid) — kdl_surec_spawn/
+    // kdl_gorev_durum birebir (D-129/D-130), Model A basitleştirmesi: TEK adres-uzayı
+    // (proven-C'nin per-process sayfa-tablosu YOK, kem_os'un A4/A5 tasarımıyla UYUMLU) +
+    // SABİT 2-SLOT havuz (kernel/user yığın çifti, round-robin — dinamik havuz YÖNETİMİ
+    // [boş-slot-arama] proven-C'de var, burada MVP: sabit döngü, havuz TÜKENMEZ (2 eşzamanlı
+    // spawn yeter — Model A gate'i kanıtlamak için). arg=EL0 giriş adresi (.user, kul_ dışı
+    // hedef de olabilir — herhangi bir .user-routed .kem fn).
+    eğer num == 12 {
+        değişken idx: tam64 = kg_oku64(KG_SPAWN_IDX) - ((kg_oku64(KG_SPAWN_IDX) / 2) * 2);
+        kg_yaz64(KG_SPAWN_IDX, kg_oku64(KG_SPAWN_IDX) + 1);
+        değişken kstk: tam64 = KG_SPAWN_KSTK0;
+        değişken ustk: tam64 = KG_SPAWN_USTK0;
+        eğer idx == 1 { kstk = KG_SPAWN_KSTK1; ustk = KG_SPAWN_USTK1; }
+        ver kem_gorev_olustur_el0(arg, kstk + 8192, ustk + 4096);
+    }
+    eğer num == 14 {
+        eğer (arg < 0) veya (arg >= 16) { ver 1; }
+        ver kg_oku64(KG_OLU + arg * 8);
+    }
+    eğer num == 26 {
+        değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
+        ver r olarak tam64;
+    }
+    // USERLAND ADIM 3 (D-288): num=10 gettick, num=11 getpid (kdl_tik_al/kdl_aktif_gorev
+    // birebir — kem_tik_oku/kem_paktif zaten var, trivial sarmalayıcı).
+    eğer num == 10 { ver kem_tik_oku(); }
+    eğer num == 11 { ver kem_paktif; }
+    // num=17/18 dosya_yaz_metin/oku_metin — kem_minifs.kem (D-272) üzerine sarmalayıcı.
+    // NOT (kapsam-sınırı): minifs TEK-DOSYALI (proven-C'nin çok-dosyalı kdl_dosyalar[]
+    // DEĞİL) — 15/16 (int dosya) ve 19/20/21 (sayisi/ad/sil, çok-dosya-listeleme) minifs'in
+    // ÇOK-DOSYA desteği GEREKTİRİR (ayrı özellik-genişletme, bu batch'in kapsamı DIŞI).
+    eğer num == 17 {
+        değişken base: tam64 = vblk_bul();
+        eğer base == 0 { ver 0 - 1; }
+        eğer vblk_kur(base) != 0 { ver 0 - 1; }
+        değişken n: tam32 = kdl_metin_uzunluk(arg2 olarak *tam8);
+        değişken i: tam32 = 0;
+        iken i < n {
+            eğer i < 512 { vblk_data_yaz(i, (kdl_metin_bayt(arg2 olarak *tam8, i)) olarak dtam8); }
+            i = i + 1;
+        }
+        değişken a0: dtam8 = kg_ad_bayt(arg, 0);
+        değişken a1: dtam8 = kg_ad_bayt(arg, 1);
+        değişken a2: dtam8 = kg_ad_bayt(arg, 2);
+        değişken a3: dtam8 = kg_ad_bayt(arg, 3);
+        değişken r: tam32 = mfs_dosya_yaz(base, a0, a1, a2, a3, n);
+        eğer r != 0 { ver 0 - 1; }
+        ver n olarak tam64;
+    }
+    eğer num == 18 {
+        değişken base2: tam64 = vblk_bul();
+        eğer base2 == 0 { ver 0 - 1; }
+        eğer vblk_kur(base2) != 0 { ver 0 - 1; }
+        değişken b0: dtam8 = kg_ad_bayt(arg, 0);
+        değişken b1: dtam8 = kg_ad_bayt(arg, 1);
+        değişken b2: dtam8 = kg_ad_bayt(arg, 2);
+        değişken b3: dtam8 = kg_ad_bayt(arg, 3);
+        değişken boyut: tam32 = mfs_dosya_oku(base2, b0, b1, b2, b3);
+        eğer boyut < 0 { ver 0 - 1; }
+        değişken j: tam32 = 0;
+        iken j < boyut {
+            eğer j < 511 { kis_buf_yaz8(arg2, j, (vblk_data_oku(j)) olarak tam32); }
+            j = j + 1;
+        }
+        kis_buf_yaz8(arg2, boyut, 0);
+        ver boyut olarak tam64;
+    }
+    ver arg;                                       // echo arg → EL0 x0
+}
+
+// A5 gate: EL0 stub yaz → EL0 preemptive görev → syscall sayacı ilerliyor mu (>=3)?
+// Sayaç YALNIZ EL0 stub'ın svc'siyle artar → EL0'dan gerçek syscall round-trip.
+çıplak işlev kem_el0_testi() -> tam32 {
+    kg_yaz32(KG_EL0_KOD + 0, 3531604200 olarak tam32);   // movz x8, #7
+    kg_yaz32(KG_EL0_KOD + 4, 3556769793 olarak tam32);   // svc #0
+    kg_yaz32(KG_EL0_KOD + 8, 402653182 olarak tam32);    // b .-8 (loop)
+    kg_icache_flush(KG_EL0_KOD);
+    kg_yaz64(KG_SYSC, 0);
+    kem_preempt_baslat();
+    kem_gorev_olustur_el0(KG_EL0_KOD, KG_STK1, KG_EL0_STK);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_SYSC) < 3) ve (guard < 200000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);                          // preemption durdur → main devam
+    eğer kg_oku64(KG_SYSC) >= 3 { ver 1; }
+    ver 0;
+}
+
+// A5+B2 gate: GERÇEK EL0 izolasyon-ihlali. EL0 stub GIC MMIO'ya (0x08000000, Device
+// AP=00, EL0-erişimi YASAK) erişir → permission-fault, EL0-kaynaklı → .S kill AÇIKSA
+// kdl_el0_izolasyon_isle(.kem) çağırır → kem_gorev_bitir → KG_OLU[görev]=1. Doğrula:
+// görev ölü işaretlendi + scheduler onu ATLADI (bir daha koşmadı) + OS DEVAM etti.
+sabit KG_EL0_KOTU: tam64 = 1107362048;    // 0x42010100: kötü-erişim stub (D-287: KG_EL0_KOD ile birlikte taşındı)
+
+çıplak işlev kem_el0_izolasyon_testi() -> tam32 {
+    kg_yaz32(KG_EL0_KOTU + 0, 3531603977 olarak tam32);   // mov x9, #0
+    kg_yaz32(KG_EL0_KOTU + 4, 4070637577 olarak tam32);   // movk x9, #0x800, lsl #16
+    kg_yaz32(KG_EL0_KOTU + 8, 4181721386 olarak tam32);   // ldr x10, [x9]  (GIC AP=00 → fault)
+    kg_yaz32(KG_EL0_KOTU + 12, 402653181 olarak tam32);   // b .-12 (fault kill'lemezse loop)
+    kg_icache_flush(KG_EL0_KOTU);
+    kis_el0_kill_ac();                                     // opt-in: EL0 fault → süreç öldür
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(KG_EL0_KOTU, KG_STK2, KG_EL0_STK + 4096);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 200000000) { guard = guard + 1; }
+    kem_preempt_aktif_kapat();                             // preemption durdur → main devam
+    eğer kg_oku64(KG_OLU + t * 8) == 1 { ver 1; }          // görev ölü işaretlendi = izolasyon çalıştı
+    ver 0;
+}
+çıplak işlev kem_preempt_aktif_kapat() { kg_yaz64(KG_AKTIF, 0); }
+
+// ============================================================================
+// LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): GERÇEK .kem-DERLENMİŞ kod EL0'da koşuyor
+// mu? A5/B2'nin EL0 stub'ları RUNTIME'DA YAZILAN makine-kodu (llvm-mc byte'lar) idi —
+// bu, `.kem` KAYNAĞINDAN normal derlenen bir çıplak fn'in (`kul_test`) `.user` section'a
+// (Makefile'daki objcopy --rename-section adımıyla, .text.kul_*→.user.kul_*) yönlendirilip
+// EL0'da GERÇEKTEN yürütüldüğünü kanıtlar. Prefix `kul_` = userland-routing sözleşmesi
+// (linker glob'u BUNU eşleştirir — Makefile'a bak). metin literal YOK (isim-öneksiz
+// @.str.N sorunu, routing'e uymaz) — yalnız satıriçi_asm syscall.
+
+// Sonsuz syscall-döngüsü (num=7 → .kem kdl_syscall_isle KG_SYSC++, A5'ten kanıtlı).
+çıplak işlev kul_test() {
+    iken 1 == 1 {
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x8, #7
+svc #0"#
+                bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+    }
+}
+çıplak işlev kg_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_test
+add $0, $0, :lo12:kul_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: kul_test'i EL0 görevi olarak spawn et → KG_SYSC GERÇEK .kem-derlenmiş koddan
+// artıyor mu? (routing yanlışsa: kul_test hâlâ kernel .text'te kalır — EL0'dan
+// koşturulmaya ÇALIŞILSA bile giriş adresi kernel .text=AP=00 olur → instruction-fetch
+// permission-fault, KG_SYSC HİÇ ARTMAZ, guard süresi dolar, testi başarısız eder.)
+çıplak işlev kem_linchpin_testi() -> tam32 {
+    kg_yaz64(KG_SYSC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_test_adr(), KG_STK1, KG_EL0_STK + 8192);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_SYSC) < 3) ve (guard < 200000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    eğer kg_oku64(KG_SYSC) >= 3 { ver 1; }
+    ver 0;
+}
+
+// ============================================================================
+// USERLAND ADIM 2 (D-287): UART-RX syscall (num=26) gerçek EL0 round-trip testi.
+// kul_rx_test (çıplak, .user'a objcopy-rename routed — kul_test'ten SONRA, aynı 64KB
+// kod-rezervinde, D-287 düzeltmesi sayesinde raw-byte KG_EL0_KOD ile ÇAKIŞMAZ): svc(26,
+// buf, 256) çağırır → sonucu fixed-RAM'e yazar → svc(13) exit. Otomatik boot ortamında
+// GERÇEK klavye girdisi YOK → kis_satir_oku bounded-poll timeout'a düşer → EOF(-1) döner.
+// Bu, DOĞRU/beklenen davranış (proven-C'nin kendi "best-effort" gate stratejisiyle aynı —
+// kemgu_shell_el0.c: "gate PASS'ı ... deterministik ... diziye dayanır"). EOF(-1) doğru
+// dönerse: RX-poll makinesi (RXFE-check + bounded-timeout, D-158 hang-önleme dersi)
+// ÇALIŞIYOR demektir — TX'in (kis_bayt, B1, kanıtlı) doğrudan ikizi, aynı primitif ailesi.
+
+// D-287 DÜZELTME (gerçek bug, ampirik bulundu): KUL_RX_BUF/SONUC ESKİDEN "free RAM"da
+// (0x47300000) idi — kul_rx_test EL0'da KOŞUYOR ve bu adreslere DOĞRUDAN yazıyor (str x9,
+// [x8], asm içinde) — EL0 YALNIZ 0x42000000-0x421FFFFF (.user, AP=01) sayfasına yazabilir!
+// 0x47300000 kernel-only (AP=00) → EL0 yazması GERÇEK permission-fault → kis_el0_kill_aktif
+// AÇIK KALMIŞTI (B2 izolasyon testinden, hiç kapatılmıyor) → fault izolasyon-öldürme yoluna
+// gitti (görev "başarıyla bitti" GÖRÜNDÜ ama yazma HİÇ GERÇEKLEŞMEDİ — sonuc her zaman 0
+// kaldı, ilk-değer). Çözüm: her iki adresi de .user sayfasına (0x42000000+) taşı — hem EL0
+// (kul_rx_test) hem EL1 (kis_satir_oku syscall-handler, AP=01=EL0+EL1 RW) yazabilir.
+sabit KUL_RX_BUF: tam64 = 1107427328;     // 0x42020000: RX okuma tamponu (.user sayfası, 256B)
+sabit KUL_RX_SONUC: tam64 = 1107427584;   // 0x42020100: syscall(26) dönüş değeri (.user sayfası)
+
+çıplak işlev kul_rx_test() {
+    değişken buf: tam64 = KUL_RX_BUF;
+    değişken sonuc: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x1, #256
+mov x8, #26
+svc #0
+mov $0, x0"#
+            çıktı("=r", &sonuc)
+            girdi("r", buf)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    kg_yaz64(KUL_RX_SONUC, sonuc);
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x8, #13
+svc #0"#
+            bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kg_rx_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_rx_test
+add $0, $0, :lo12:kul_rx_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: EL0 görevi svc(26) yapar + exit eder (KG_OLU işaretlenir) → sonuç EOF(-1) mi?
+// (Otomatik boot'ta girdi YOK → EOF beklenen/doğru sonuç; poll GERÇEKTEN çalıştığını
+// kanıtlar — poll bozuksa ya sonsuz asılı kalır (guard yakalar) ya yanlış değer döner.)
+çıplak işlev kem_uart_rx_testi() -> tam32 {
+    kg_yaz64(KUL_RX_SONUC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_rx_test_adr(), KG_STK2, KG_EL0_STK + 12288);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    değişken bitti: tam64 = kg_oku64(KG_OLU + t * 8);
+    değişken sonuc: tam64 = kg_oku64(KUL_RX_SONUC);
+    eğer (bitti == 1) ve (sonuc == (0 - 1)) { ver 1; }
+    ver 0;
+}
+
+// ============================================================================
+// USERLAND ADIM 3 (D-288): dosya syscall (17/18) GERÇEK EL0 round-trip testi.
+// Ad ilk 4 baytı (i>=uzunluk ise 0-pad — mfs_dosya_yaz/oku 4-bayt ad sözleşmesi).
+çıplak işlev kg_ad_bayt(adr: tam64, i: tam32) -> dtam8 {
+    değişken n: tam32 = kdl_metin_uzunluk(adr olarak *tam8);
+    eğer i < n { ver (kdl_metin_bayt(adr olarak *tam8, i)) olarak dtam8; }
+    ver 0 olarak dtam8;
+}
+
+sabit KUL_FS_AD: tam64      = 1107431424;   // 0x42021000: dosya adı ("test", .user sayfası)
+sabit KUL_FS_ICERIK: tam64  = 1107431552;   // 0x42021080: yazılacak içerik ("KABUK")
+sabit KUL_FS_BUF: tam64     = 1107431680;   // 0x42021100: okuma tamponu (EL0 syscall(18) hedefi)
+
+// Metin literal DOĞRUDAN parametre olarak geçirilir (kis_metin deseni birebir — bir
+// yerel `metin` değişkenine ATAMAKTAN kaçınır; o yol kanıtlanmamış/test edilmemişti).
+çıplak işlev kg_seed_kopyala(hedef: tam64, s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { kis_buf_yaz8(hedef, i, (metin_bayt(s, i)) olarak tam32); i = i + 1; }
+    kis_buf_yaz8(hedef, n, 0);
+}
+
+// EL1'de (main, normal-tier metin literal OK) test verisini .user sayfasına kopyala —
+// EL0 kod metin literal KULLANAMAZ (D-286: isim-öneksiz @.str.N routing'e uymaz).
+çıplak işlev kg_fs_seed() {
+    kg_seed_kopyala(KUL_FS_AD, "test");
+    kg_seed_kopyala(KUL_FS_ICERIK, "KABUK");
+}
+
+// EL0 görevi: sys(17,ad,icerik) yaz + sys(18,ad,buf) oku → GERÇEK minifs/virtio-blk
+// round-trip syscall ABI üzerinden (D-272'nin fs_rw_testi'nden FARKLI — o direkt .kem
+// çağrısıydı, bu GERÇEK EL0/syscall yoluyla).
+çıplak işlev kul_fs_test() {
+    değişken r1: tam64 = 0;
+    değişken r2: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $2
+mov x1, $3
+mov x8, #17
+svc #0
+mov $0, x0
+mov x0, $2
+mov x1, $4
+mov x8, #18
+svc #0
+mov $1, x0"#
+            çıktı("=&r", &r1)
+            çıktı("=&r", &r2)
+            girdi("r", KUL_FS_AD)
+            girdi("r", KUL_FS_ICERIK)
+            girdi("r", KUL_FS_BUF)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kg_fs_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_fs_test
+add $0, $0, :lo12:kul_fs_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: EL0'dan sys(17)+sys(18) round-trip → okunan buf == yazılan icerik mi (bayt-bayt)?
+// GERÇEK disk I/O (virtio-blk) + GERÇEK syscall ABI (EL0'dan geldi) — sentetik değil.
+çıplak işlev kem_fs_testi() -> tam32 {
+    kg_fs_seed();
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_fs_test_adr(), KG_STK1, KG_EL0_STK + 16384);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    değişken bitti: tam64 = kg_oku64(KG_OLU + t * 8);
+    eğer bitti != 1 { ver 0; }
+    değişken esit: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < 5 {
+        eğer kis_buf_oku8(KUL_FS_BUF, i) != kis_buf_oku8(KUL_FS_ICERIK, i) { esit = 0; }
+        i = i + 1;
+    }
+    ver esit;
+}
+
+// ============================================================================
+// USERLAND ADIM 4 (D-289): userland .kem SHELL — komut dispatch (proven-C str_esit
+// deseni) + GERÇEK syscall(5/7/17/18) yürütme + konsol çıktısı. kemgu_shell_el0.c'nin
+// (proven-C) basitleştirilmiş .kem karşılığı: gömülü DETERMİNİSTİK komut ("yaz") →
+// tokenize/dispatch (kul_str_esit) → syscall'la işlenir → sonuç konsola basılır.
+
+sabit KUL_SH_CMD: tam64     = 1107435520;   // 0x42022000: dispatch edilecek komut adı
+sabit KUL_SH_CMDYAZ: tam64  = 1107435648;   // 0x42022080: "yaz" referans (str_esit)
+sabit KUL_SH_SONUC: tam64   = 1107436032;   // 0x42022200: dispatch+syscall sonucu (EL1 doğrular)
+
+// Bayt-bayt karşılaştırma (proven-C str_esit birebir) — null-sonlandırılmış, en fazla 8 bayt.
+çıplak işlev kul_str_esit(a: tam64, b: tam64) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        değişken ca: tam32 = kis_buf_oku8(a, i);
+        değişken cb: tam32 = kis_buf_oku8(b, i);
+        eğer ca != cb { ver 0; }
+        eğer ca == 0 { ver 1; }
+        i = i + 1;
+    }
+    ver 1;
+}
+
+// EL1'de komut adlarını .user sayfasına seed et (metin literal EL0'da kullanılamaz, D-286).
+çıplak işlev kg_shell_seed() {
+    kg_seed_kopyala(KUL_SH_CMD, "yaz");
+    kg_seed_kopyala(KUL_SH_CMDYAZ, "yaz");
+    kg_yaz64(KUL_SH_SONUC, 0);
+}
+
+// EL0 shell görevi: KUL_SH_CMD'yi (gömülü "yaz" komutu) DİSPATCH eder (str_esit) →
+// eşleşirse GERÇEK syscall dizisi (yaz + newline + dosya-yaz + dosya-oku) çalıştırır →
+// sonucu konsola basar (sys 5/7) → dispatch+syscall BAŞARISINI KUL_SH_SONUC'a yazar.
+çıplak işlev kul_shell() {
+    değişken sonuc: tam32 = 0;
+    eğer kul_str_esit(KUL_SH_CMD, KUL_SH_CMDYAZ) == 1 {
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x0, $0
+mov x8, #5
+svc #0
+mov x8, #7
+svc #0"#
+                girdi("r", KUL_SH_CMD)
+                bozulan("~{x0}") bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+        değişken r1: tam64 = 0;
+        değişken r2: tam64 = 0;
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x0, $2
+mov x1, $3
+mov x8, #17
+svc #0
+mov $0, x0
+mov x0, $2
+mov x1, $4
+mov x8, #18
+svc #0
+mov $1, x0"#
+                çıktı("=&r", &r1)
+                çıktı("=&r", &r2)
+                girdi("r", KUL_FS_AD)
+                girdi("r", KUL_FS_ICERIK)
+                girdi("r", KUL_FS_BUF)
+                bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+        eğer (r1 == 5) ve (r2 == 5) { sonuc = 1; }
+    }
+    kg_yaz64(KUL_SH_SONUC, sonuc olarak tam64);
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kg_shell_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_shell
+add $0, $0, :lo12:kul_shell"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: shell görevi dispatch + syscall dizisini GERÇEKTEN çalıştırdı mı (KUL_SH_SONUC==1)
+// + okunan içerik yazılanla eşleşiyor mu (bayt-bayt, KUL_FS_BUF vs KUL_FS_ICERIK)?
+çıplak işlev kem_shell_testi() -> tam32 {
+    kg_fs_seed();       // KUL_FS_AD="test" / KUL_FS_ICERIK="KABUK" (ADIM3'ten, yeniden kullan)
+    kg_shell_seed();
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_shell_adr(), KG_STK2, KG_EL0_STK + 20480);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    değişken bitti: tam64 = kg_oku64(KG_OLU + t * 8);
+    eğer bitti != 1 { ver 0; }
+    eğer kg_oku64(KUL_SH_SONUC) != 1 { ver 0; }
+    değişken esit: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < 5 {
+        eğer kis_buf_oku8(KUL_FS_BUF, i) != kis_buf_oku8(KUL_FS_ICERIK, i) { esit = 0; }
+        i = i + 1;
+    }
+    ver esit;
+}
+
+// ============================================================================
+// USERLAND ADIM 5+6 (D-290): GERÇEK spawn/wait + Model A program modeli teyidi.
+// "Program" = gömülü .user .kem fn (derleme-zamanı linkli, DİSKTEN ELF YÜKLEME YOK) —
+// Model A'nın tanımı bu (USERLAND_ROADMAP ADIM 6). Shell (kul_shell benzeri bir görev)
+// sys(12) ile bu programı SPAWN eder, sys(14) ile BEKLER (join), programın SONUCUNU
+// (KUL_PROG_FLAG) doğrular.
+
+sabit KG_SPAWN_IDX: tam64   = 1107439872;   // 0x42023100: havuz-döngü sayacı (fixed RAM)
+sabit KG_SPAWN_KSTK0: tam64 = 1194328064;   // 0x47300000: spawn havuzu kernel-yığın 0
+sabit KG_SPAWN_KSTK1: tam64 = 1194393600;   // 0x47310000: spawn havuzu kernel-yığın 1
+sabit KG_SPAWN_USTK0: tam64 = 1108410368;   // 0x42110000: spawn havuzu user-yığın 0 (.user)
+sabit KG_SPAWN_USTK1: tam64 = 1108475904;   // 0x42120000: spawn havuzu user-yığın 1 (.user)
+sabit KUL_PROG_FLAG: tam64  = 1107439616;   // 0x42023000: "program" görevin bıraktığı iz
+
+// Gömülü "program" — proven-C'nin prog_hesap/prog_selam'ının .kem karşılığı: kendi
+// EL0 sürecinde koşar, iz bırakır (KUL_PROG_FLAG=42), exit eder. AYRI ELF/disk YOK —
+// zaten bu ikilinin .user birimine derlenmiş, spawn hedefi = kendi sembol adresi.
+çıplak işlev kul_prog_selam() {
+    kg_yaz64(KUL_PROG_FLAG, 42);
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kul_prog_selam_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_prog_selam
+add $0, $0, :lo12:kul_prog_selam"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// EL0 "spawner" (shell benzeri) — sys(12,prog_adr) ile programı spawn eder → pid alır →
+// sys(14,pid) ile poll-bekler (GERÇEK join, busy-wait EL0'dan) → sonucu KUL_SPAWN_SONUC'a
+// yazar → kendisi exit eder.
+sabit KUL_SPAWN_SONUC: tam64 = 1107439744;  // 0x42023080: spawner'ın gözlemi (pid + bitti)
+çıplak işlev kul_spawner() {
+    değişken prog: tam64 = kul_prog_selam_adr();
+    değişken pid: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x8, #12
+svc #0
+mov $0, x0"#
+            çıktı("=&r", &pid)
+            girdi("r", prog)
+            bozulan("~{x0}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    değişken durum: tam64 = 0;
+    değişken guard: tam64 = 0;
+    iken (durum == 0) ve (guard < 20000000) {
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x0, $1
+mov x8, #14
+svc #0
+mov $0, x0"#
+                çıktı("=&r", &durum)
+                girdi("r", pid)
+                bozulan("~{x0}") bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+        guard = guard + 1;
+    }
+    kg_yaz64(KUL_SPAWN_SONUC, pid);
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kg_spawner_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_spawner
+add $0, $0, :lo12:kul_spawner"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: spawner EL0 görevi olarak koşar → sys(12) ile İKİNCİ bir EL0 görev (program)
+// spawn eder → sys(14) ile GERÇEK join yapar (poll, program bitene dek) → programın
+// bıraktığı iz (KUL_PROG_FLAG==42) doğru mu? Model A: gömülü .user program + spawn,
+// ELF-yükleme YOK — spawn hedefi zaten-linkli bir .kem sembolün adresi.
+çıplak işlev kem_spawn_testi() -> tam32 {
+    kg_yaz64(KG_SPAWN_IDX, 0);
+    kg_yaz64(KUL_PROG_FLAG, 0);
+    kg_yaz64(KUL_SPAWN_SONUC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_spawner_adr(), KG_STK1, KG_EL0_STK + 24576);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    eğer kg_oku64(KG_OLU + t * 8) != 1 { ver 0; }
+    değişken pid: tam64 = kg_oku64(KUL_SPAWN_SONUC);
+    eğer pid < 0 { ver 0; }                          // spawn havuzu/hata
+    eğer kg_oku64(KUL_PROG_FLAG) != 42 { ver 0; }     // program GERÇEKTEN koştu mu
+    ver 1;
+}

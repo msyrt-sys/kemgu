@@ -236,6 +236,9 @@ struct Dugum {
             Dugum *govde;          /* DUGUM_BLOK veya NULL (sadece imza) */
             int gercekzamanli_mi;  /* Realtime Spec V1 — hard real-time qualifier */
             int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
+            int ciplak_mi;         /* D-254: 'çıplak işlev' — region-prologue YOK
+                                    * (no @kdl_bolge_olustur/@kdl_global_bolge_al,
+                                    * no ρ param); WALL-2 bootstrap çözümü. */
         } islev;
 
         struct {
@@ -325,6 +328,7 @@ struct Dugum {
             int ad_uzunluk;
             Dugum *tip;            /* opsiyonel */
             Dugum *deger;
+            int kuresel_mi;        /* D-252: 1 = modül-düzeyi mutable global (küresel değişken) */
         } degisken;
 
         struct {

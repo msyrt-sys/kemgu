@@ -21,6 +21,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
+    tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
      * kayitlari) global'in PARENT'i olan ayri bir scope'ta yasar. Dosya-modul
@@ -1843,6 +1844,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
                 return t_hata(tk);
             }
+            /* D-252: küresel değişken erişimi (okuma+yazma) YALNIZ güvensiz blokta
+             * (Kırılmazlık: paylaşılan-mutable-durum = confinement'ın kaçındığı
+             * aliasing → güvensize hapis). Safe .kem'de → E010. */
+            if (s->kuresel && tk->guvensiz_baglam == 0) {
+                tip_hata(tk, d, "E010",
+                    "kuresel degiskene erisim yalniz guvensiz blokta");
+            }
             /* Linear Types Spec V1: lambda govdesi icindeki lineer
              * baglamalar otomatik 'yakalama' sayilir → consume + closure
              * tipi tekkez<...> olarak isaretlenir (LC-2). */
@@ -3196,6 +3204,23 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T010", "cagri arguman sayisi uyumsuz");
                 return t_hata(tk);
             }
+            /* D-257 çıplak-call-rule: çıplak fn (ρ-suz C-ABI) yalnız çıplak/extern
+             * çağırır. Normal (ρ-alan) user-fn çağrısı → verilecek ρ yok → codegen
+             * `ptr null` geçer → callee null-region'a tahsis → segfault. Statik reddet.
+             * Built-in/extern (ast_dugumu yok/ISLEV değil) ρ almaz → izinli. */
+            if (tk->ciplak_baglam > 0 &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+                const Sembol *cs = sembol_bul(tk->scope,
+                    d->veri.cagri.hedef->veri.tanimlayici.metin,
+                    d->veri.cagri.hedef->veri.tanimlayici.uzunluk);
+                if (cs && cs->ast_dugumu &&
+                    cs->ast_dugumu->tip == DUGUM_ISLEV &&
+                    !cs->ast_dugumu->veri.islev.ciplak_mi) {
+                    tip_hata(tk, d, "E013",
+                        "\xc3\xa7\xc4\xb1plak i\xc5\x9flev yaln\xc4\xb1z \xc3\xa7\xc4\xb1plak/extern "
+                        "\xc3\xa7" "a\xc4\x9f\xc4\xb1rabilir (\xcf\x81-suz C-ABI)");
+                }
+            }
             /* Madde D: Multi-param + compound type generic inference.
              * GenBaglamalar ile her arg/param ciftinde unify, donus
              * tipini substitue et. */
@@ -4036,6 +4061,42 @@ static void pre_populate_sabit(TipKontrol *tk, const Dugum *sabit) {
     }
 }
 
+/* D-252: küresel değişken → global sembol. Tip-kısıt: yalnız skaler + ham-pointer
+ * (Dizi/yapı allocator'a bağlı → circular; yasak). Init sabit-literal olmalı. Erişim
+ * güvensiz-only (DUGUM_TANIMLAYICI'de E010 enforce). Bootstrap-circularity çözümü. */
+static void pre_populate_kuresel(TipKontrol *tk, const Dugum *kd) {
+    TipBilgisi *t = ast_tip_to_bilgi(tk, kd->veri.degisken.tip);
+    int izinli = (t && (tip_sayisal_mi(t) || t->kategori == TIP_POINTER ||
+                        t->kategori == TIP_MANTIKSAL || t->kategori == TIP_KARAKTER));
+    if (!izinli) {
+        tip_hata(tk, kd, "E011",
+            "kuresel degisken tipi yalniz skaler/ham-pointer olabilir "
+            "(Dizi/yapi/metin yasak — allocator'a baglanamaz)");
+    }
+    const Dugum *dv = kd->veri.degisken.deger;
+    int sabit_init = (dv && (dv->tip == DUGUM_TAM || dv->tip == DUGUM_KESIRLI ||
+                             dv->tip == DUGUM_MANTIKSAL || dv->tip == DUGUM_BOS ||
+                             dv->tip == DUGUM_KARAKTER));
+    if (!sabit_init) {
+        tip_hata(tk, kd, "E012",
+            "kuresel degisken baslangic degeri sabit-literal olmali "
+            "(sayi/mantik/karakter/bos)");
+    }
+    Sembol s;
+    memset(&s, 0, sizeof(s));
+    s.ad = kd->veri.degisken.ad;
+    s.ad_uzunluk = kd->veri.degisken.ad_uzunluk;
+    s.kategori = SEMBOL_DEGISKEN;
+    s.tip = t;
+    s.ast_dugumu = kd;
+    s.satir = kd->satir;
+    s.sutun = kd->sutun;
+    s.kuresel = 1;
+    if (sembol_ekle(tk->global_scope, tk->arena, &s) != 0) {
+        tip_hata(tk, kd, "T024", "kuresel tanimi cakismasi");
+    }
+}
+
 static void pre_populate_ozellik(TipKontrol *tk, const Dugum *oz) {
     /* Ozellik sembolunu global'e ekle (bound olarak referans gerekli) */
     Sembol s;
@@ -4137,6 +4198,9 @@ static void pre_populate_uyeler(TipKontrol *tk, Dugum *const *uyeler,
         if (gercek->tip == DUGUM_ISLEV) pre_populate_islev(tk, gercek);
         else if (gercek->tip == DUGUM_SABIT) pre_populate_sabit(tk, gercek);
         else if (gercek->tip == DUGUM_MODUL) pre_populate_modul(tk, gercek);
+        else if (gercek->tip == DUGUM_DEGISKEN &&
+                 gercek->veri.degisken.kuresel_mi)   /* D-252 küresel değişken */
+            pre_populate_kuresel(tk, gercek);
     }
 }
 
@@ -4855,16 +4919,15 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
              * kaynak; hedefe-duyarli triple C8'de). Yanlis hedefe
              * sessizce bozuk IR uretmek yerine derleme hatasi. */
             {
-                const char *hm = KEMGU_HEDEF_MIMARI;
-                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                const char *hm = llvm_hedef_mimari();   /* D-269: çalışma-zamanı hedef */
+                int hm_uz = (int)strlen(hm);
                 if (d->veri.satirici_asm.mimari &&
                     (d->veri.satirici_asm.mimari_uz != hm_uz ||
                      memcmp(d->veri.satirici_asm.mimari, hm,
                             (size_t)hm_uz) != 0)) {
                     tip_hata(tk, d, "AS001",
                              "satirici_asm mimari etiketi hedef "
-                             "mimariyle uyusmuyor (hedef: x86_64; "
-                             "hedefe-duyarli triple C8'de)");
+                             "mimariyle uyusmuyor (--mimari ile hedef sec)");
                 }
             }
             for (int i = 0; i < d->veri.satirici_asm.cikti_sayi; i++) {
@@ -5024,10 +5087,19 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             escape_analiz_islev(&ea, d);
             tk->aktif_escape = &ea;
 
+            /* D-254 çıplak işlev: gövde örtük güvensiz-bağlam. Çıplak = güvensiz-tier
+             * primitive (region-prologue'suz, ham pointer + küresel ile allocator
+             * yazımı için) → gövdesi explicit `güvensiz {}` gerektirmez. Kırılmazlık
+             * korunur: normal güvenli kod çıplak'ı kazara kullanamaz (opt-in keyword). */
+            int ciplak_govde = d->veri.islev.ciplak_mi;
+            if (ciplak_govde) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257: call-rule */
+
             /* Govdeyi kontrol et */
             if (d->veri.islev.govde) {
                 tip_kontrol_deyim(tk, d->veri.islev.govde);
             }
+
+            if (ciplak_govde) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
 
             tk->aktif_escape = eski_escape;
             escape_serbest(&ea);
@@ -5087,7 +5159,13 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                     s.ast_dugumu = p;
                     sembol_ekle(tk->scope, tk->arena, &s);
                 }
+                /* D-256: çıplak method gövdesi = örtük güvensiz-bağlam (standalone
+                 * DUGUM_ISLEV yolundaki grant ile birebir; codegen zaten çıplak-method'u
+                 * prologue-skip ile emit eder — checker↔codegen tutarlılığı). */
+                int ciplak_m = m->veri.islev.ciplak_mi;
+                if (ciplak_m) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257 */
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
+                if (ciplak_m) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski;
             }
@@ -5149,7 +5227,12 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
                     s.ast_dugumu = p;
                     sembol_ekle(tk->scope, tk->arena, &s);
                 }
+                /* D-256: çıplak method gövdesi = örtük güvensiz-bağlam (özellik yolu +
+                 * standalone DUGUM_ISLEV ile birebir; checker↔codegen tutarlılığı). */
+                int ciplak_m = m->veri.islev.ciplak_mi;
+                if (ciplak_m) { tk->guvensiz_baglam++; tk->ciplak_baglam++; }  /* D-257 */
                 tip_kontrol_deyim(tk, m->veri.islev.govde);
+                if (ciplak_m) { tk->guvensiz_baglam--; tk->ciplak_baglam--; }
                 tk->aktif_donus_tipi = eski_donus;
                 tk->scope = eski_m;
             }

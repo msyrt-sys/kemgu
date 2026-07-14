@@ -10,6 +10,10 @@
 #include <string.h>
 #include <inttypes.h>
 
+/* D-269 (P1): hedef mimari/triple çalışma-zamanı selector'ı tip.c'de TANIMLI
+ * (hem checker=tip_kontrol.o hem codegen=llvm.o ile linklenen düşük-bağımlılıklı TU;
+ * llvm.o'yu unit-testlere sokmadan paylaşım). Buradan getter ile erişilir. */
+
 /*
  * KEMGU LLVM IR Backend v2 (ADIM 18)
  * ===================================
@@ -176,6 +180,7 @@ typedef struct LlvmGen {
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
     YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
+    SabitKayit *kureseller; /* D-252: küresel değişken (mutable global @ad, load/store) */
     /* C2.5: sonuç/seçimlik value codegen — yapısal beklenen tip kanalı.
      * tamam/hata/değer/hiç yapıcıları tam tipi (T, H) buradan okur. */
     const Dugum *beklenen_tip;       /* yapıcının inşa edeceği sonuç/seçimlik tip düğümü */
@@ -379,6 +384,37 @@ static SabitKayit *sabit_bul(LlvmGen *g, const char *ad, int ad_uz) {
         }
     }
     return NULL;
+}
+
+/* === D-252: küresel değişken (modül-mutable global) tablosu === */
+static void kuresel_kayit(LlvmGen *g, const Dugum *d) {
+    if (!d || d->tip != DUGUM_DEGISKEN || !d->veri.degisken.kuresel_mi) return;
+    SabitKayit *s = (SabitKayit *)arena_ayir_sifir(g->arena, sizeof(SabitKayit));
+    if (!s) return;
+    s->ad = d->veri.degisken.ad;
+    s->ad_uz = d->veri.degisken.ad_uzunluk;
+    s->deger = d->veri.degisken.deger;   /* init sabit-literal */
+    s->tip = d->veri.degisken.tip;
+    s->sonraki = g->kureseller;
+    g->kureseller = s;
+}
+
+static SabitKayit *kuresel_bul(LlvmGen *g, const char *ad, int ad_uz) {
+    for (SabitKayit *s = g->kureseller; s; s = s->sonraki) {
+        if (s->ad_uz == ad_uz && memcmp(s->ad, ad, (size_t)ad_uz) == 0) {
+            return s;
+        }
+    }
+    return NULL;
+}
+
+/* Init sabit-literal → LLVM module-global constant string. */
+static void kuresel_init_yaz(FILE *out, const Dugum *dv, const char *ir) {
+    if (dv && dv->tip == DUGUM_BOS)       { fputs("null", out); return; }
+    if (dv && dv->tip == DUGUM_MANTIKSAL) { fprintf(out, "%d", dv->veri.mantiksal.deger ? 1 : 0); return; }
+    if (dv && dv->tip == DUGUM_KARAKTER)  { fprintf(out, "%d", dv->veri.karakter.kod_noktasi); return; }
+    if (dv && dv->tip == DUGUM_TAM)       { fprintf(out, "%lld", (long long)dv->veri.tam.deger); return; }
+    fputs((ir && strcmp(ir, "ptr") == 0) ? "null" : "0", out);   /* fallback */
 }
 
 typedef struct ScopeMarker { LlvmIsim *eski_bas; } ScopeMarker;
@@ -1530,6 +1566,21 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
             return s;
         }
+        /* D-252: küresel değişken → @ad'den load (mutable global; sabit gibi
+         * inline DEĞİL). Erişim güvensiz-only (checker E010 enforce etti). */
+        SabitKayit *ku = kuresel_bul(g, d->veri.tanimlayici.metin,
+                                     d->veri.tanimlayici.uzunluk);
+        if (ku) {
+            const char *ir = ku->tip ? ast_tip_to_ir(g, ku->tip) : "i32";
+            if (!ir) ir = "i32";
+            int r = yeni_reg(g);
+            fprintf(g->out, "  %%%d = load %s, ptr @", r, ir);
+            yerel_ad_yaz(g->out, d->veri.tanimlayici.metin,
+                         d->veri.tanimlayici.uzunluk);
+            fputc('\n', g->out);
+            IfadeSonuc s = { r, ir, 0 };
+            return s;
+        }
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
          * dosyadaki ve `kullan` ile yuklenen sabitler codegen'de cozulur
          * (cross-file "; HATA: tanimsiz tanimlayici" sorununun kok cozumu). */
@@ -2128,14 +2179,16 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         g->substler = eski_substler;
         if (yeniden) donus_t = yeniden;
     }
+    /* D-257: çıplak callee → C-ABI (ρ param YOK). Çağrıda ρ geçme. */
+    int callee_rho = !gislev->veri.islev.ciplak_mi;
     if (strcmp(donus_t, "void") == 0) {
         /* donussuz generic (or. buyu<T>) — void call */
         fputs("  call void @", g->out);
         yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
         fputs("(", g->out);
-        fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+        if (callee_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
         for (int i = 0; i < n; i++) {
-            fputs(", ", g->out);
+            if (i > 0 || callee_rho) fputs(", ", g->out);
             fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
         }
         fputs(")\n", g->out);
@@ -2148,9 +2201,9 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
     fprintf(g->out, "  %%%d = call %s @", r, donus_t);
     yerel_ad_yaz(g->out, mangled, (int)strlen(mangled));
     fputs("(", g->out);
-    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+    if (callee_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
     for (int i = 0; i < n; i++) {
-        fputs(", ", g->out);
+        if (i > 0 || callee_rho) fputs(", ", g->out);
         fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
     }
     fputs(")\n", g->out);
@@ -2563,9 +2616,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * baglamindan forward edilir), yoksa i32 varsayilan. */
             if (d->veri.tekli.op == OP_DEREFERANS) {
                 IfadeSonuc p = ifade_uret(g, d->veri.tekli.operand, NULL);
+                /* D-265: yük tipi POINTEE'den (operand *tamN → tamN). beklenen
+                 * VERİLMEZSE (ör. `*bp == 0` karşılaştırma bağlamı) eski i32
+                 * varsayılanı DAR tiplerde YANLIŞ genişlik yüklüyordu (*tam8 → i32,
+                 * 4 bayt oku → null-check bozulur; D-264 metin garbling). indeks +
+                 * deref-write handler'ları zaten pointee_llvm_tip kullanıyordu; bu
+                 * deref-READ gap'iydi. beklenen VERİLİRSE korunur (çağıran o tipi bekler). */
+                const char *deref_pointee = NULL;
+                if (d->veri.tekli.operand->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *dvi = isim_bul(g,
+                        d->veri.tekli.operand->veri.tanimlayici.metin,
+                        d->veri.tekli.operand->veri.tanimlayici.uzunluk);
+                    if (dvi && dvi->pointee_llvm_tip) deref_pointee = dvi->pointee_llvm_tip;
+                }
                 const char *yuk_tip =
-                    (beklenen && strcmp(beklenen, "ptr") != 0)
-                        ? beklenen : "i32";
+                    (beklenen && strcmp(beklenen, "ptr") != 0) ? beklenen
+                        : (deref_pointee ? deref_pointee : "i32");
                 int r = yeni_reg(g);
                 /* D-248 (GAP-3): güvensiz blokta VOLATILE load (MMIO okuması
                  * clang -O2 tarafından elenmez/yeniden-sıralanmaz). */
@@ -2637,13 +2703,15 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IslevKayit *mik = islev_bul(g, m_ad, m_ad_uz);
                 const char *donus = mik ? mik->donus_tip : "i32";
                 if (strcmp(donus, "void") == 0) donus = "i32";
+                /* D-257: çıplak method → C-ABI (ρ YOK). */
+                int m_rho = !(mik && mik->ast && mik->ast->veri.islev.ciplak_mi);
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @", r, donus);
                 yerel_ad_yaz(g->out, m_ad, m_ad_uz);
                 fputs("(", g->out);
-                fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (metot=kullanıcı-fn) */
+                if (m_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (metot=kullanıcı-fn) */
                 for (int i = 0; i < n + 1; i++) {
-                    fputs(", ", g->out);
+                    if (i > 0 || m_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -2744,11 +2812,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         r = yeni_reg(g);
                         fprintf(g->out, "  %%%d = call %s @", r, donus);
                     }
+                    /* D-257: çıplak modül-fn → C-ABI (ρ YOK). */
+                    int mf_rho = !(mik->ast && mik->ast->veri.islev.ciplak_mi);
                     yerel_ad_yaz(g->out, mik->ad, mik->ad_uz);
                     fputs("(", g->out);
-                    fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (modül-fn) */
+                    if (mf_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (modül-fn) */
                     for (int i = 0; i < n; i++) {
-                        fputs(", ", g->out);
+                        if (i > 0 || mf_rho) fputs(", ", g->out);
                         fprintf(g->out, "%s %%%d",
                                 args[i].tip, args[i].reg);
                     }
@@ -2882,16 +2952,19 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
-                    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de
-                     * sret pointer ile DONER — clang'in C tarafi icin
-                     * urettigi imza `void(ptr sret, i16, i16)`. Onceki
-                     * first-class-donus formu backend demotion'ina bel
-                     * bagliyordu; sret'i acikca emit ediyoruz. */
+                    /* D-268 OUT-PTR ABI: %kdl_yetki dönüşü AÇIK out-pointer ile
+                     * (düz `ptr` ilk arg, aarch64 x0 — sret DEĞİL/x8 DEĞİL). Çağıran
+                     * slot ayırır, sağlayıcı struct'ı slot'a yazar, çağıran geri yükler.
+                     * Böylece .kem sağlayıcı (`çıplak fn(out: *KdlYetki,...)`) call-site
+                     * ile BİREBİR eşleşir (Yasa-4: yetki saf-.kem'e göç edebilir).
+                     * ESKİ sret formu clang C provider'ın register-return'ü (16B ≤ eşik)
+                     * ile bare-metal'de zaten uyuşmuyordu (yetki değeri kullanılmadığı
+                     * için maskeliydi). Host Win64: düz ptr = RCX = sret ile aynı reg. */
                     int sret = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
                     fprintf(g->out,
                         "  call void @kdl_yetki_olustur("
-                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "ptr %%%d, "
                         "i16 %%%d, i16 %%%d)\n", sret, r_kt, r_izin);
                     int r = yeni_reg(g);
                     fprintf(g->out,
@@ -2914,14 +2987,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             t, arg_izin.tip, r_izin);
                         r_izin = t;
                     }
-                    /* C-track ABI fix (init-test segfault koku #2):
-                     * Win64 C ABI 16B struct ARGUMANI pointer ile gecer
-                     * (`void(ptr sret, ptr, i16)`). Onceki first-class
-                     * `%kdl_yetki` arg formu C tarafinin bekledigi
-                     * pointer'la uyusmuyordu -> kdl_yetki_delege
-                     * prologunda copte deref, runtime SEGFAULT (opt
-                     * -verify yakalamaz: imza-uyumsuz cagri gecerli IR).
-                     * Deger temp alloca'ya yazilir, adresi gecirilir. */
+                    /* D-268 OUT-PTR ABI: dönüş out-ptr (düz `ptr`, x0) + yetki
+                     * argümanı da pointer (temp alloca'ya yaz, adresi geç). Böylece
+                     * .kem sağlayıcı `çıplak fn(out: *KdlYetki, y: *KdlYetki, izin)`
+                     * ile eşleşir. (Eski sret formu bare-metal register-return C
+                     * provider ile uyuşmuyordu — bkz. olustur açıklaması.) */
                     int y_slot = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", y_slot);
                     fprintf(g->out,
@@ -2931,7 +3001,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
                     fprintf(g->out,
                         "  call void @kdl_yetki_delege("
-                        "ptr sret(%%kdl_yetki) align 8 %%%d, "
+                        "ptr %%%d, "
                         "ptr %%%d, i16 %%%d)\n",
                         sret, y_slot, r_izin);
                     int r = yeni_reg(g);
@@ -3812,16 +3882,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 return generic_islev_cagri_uret(g, d, ik->ast, args, n, donus);
             }
 
+            /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in (ik==NULL:
+             * yazdir/metin/dosya/...) ρ ALMAZ. D-257: çıplak user-fn → C-ABI, ρ YOK. */
+            int u_rho = (ik != NULL) && !(ik->ast && ik->ast->veri.islev.ciplak_mi);
             if (strcmp(donus, "void") == 0) {
                 /* void-returning call: register atama yok */
                 fputs("  call void @", g->out);
                 yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
-                /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in
-                 * (ik==NULL: yazdir/metin/dosya/...) ρ ALMAZ (bu faz). */
-                if (ik) fprintf(g->out, "ptr %s", g->rho_ref);
+                if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);
                 for (int i = 0; i < n; i++) {
-                    if (i > 0 || ik) fputs(", ", g->out);
+                    if (i > 0 || u_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
@@ -3835,9 +3906,9 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
-            if (ik) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+            if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
             for (int i = 0; i < n; i++) {
-                if (i > 0 || ik) fputs(", ", g->out);
+                if (i > 0 || u_rho) fputs(", ", g->out);
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
@@ -4281,6 +4352,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
                         fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                                 i->llvm_tip, rr, i->reg_no);
+                    }
+                } else {
+                    /* D-252: küresel değişken atama → store @ad (local DEĞİL;
+                     * checker güvensiz-only enforce etti). */
+                    SabitKayit *ku = kuresel_bul(g,
+                        d->veri.atama.hedef->veri.tanimlayici.metin,
+                        d->veri.atama.hedef->veri.tanimlayici.uzunluk);
+                    if (ku) {
+                        const char *ir = ku->tip ? ast_tip_to_ir(g, ku->tip) : "i32";
+                        if (!ir) ir = "i32";
+                        IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, ir);
+                        int rr = int_donustur(g, v.reg, v.tip, ir);
+                        fprintf(g->out, "  store %s %%%d, ptr @", ir, rr);
+                        yerel_ad_yaz(g->out,
+                            d->veri.atama.hedef->veri.tanimlayici.metin,
+                            d->veri.atama.hedef->veri.tanimlayici.uzunluk);
+                        fputc('\n', g->out);
                     }
                 }
             } else if (d->veri.atama.hedef &&
@@ -4895,8 +4983,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
              * asm EMIT EDILMEZ (bozuk IR yasak) + olumcul hata sayilir;
              * cagiran (ana.c) derlemeyi hata koduyla bitirir. */
             {
-                const char *hm = KEMGU_HEDEF_MIMARI;
-                int hm_uz = (int)(sizeof(KEMGU_HEDEF_MIMARI) - 1);
+                const char *hm = llvm_hedef_mimari();   /* D-269: çalışma-zamanı hedef */
+                int hm_uz = (int)strlen(hm);
                 if (!d->veri.satirici_asm.mimari ||
                     d->veri.satirici_asm.mimari_uz != hm_uz ||
                     memcmp(d->veri.satirici_asm.mimari, hm,
@@ -5311,10 +5399,18 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     int main_mi = (islev->veri.islev.ad_uzunluk == 4 &&
                    memcmp(islev->veri.islev.ad, "main", 4) == 0);
 
+    /* D-257 çıplak işlev: TRUE C-ABI bare fonksiyon — ρ param ALMAZ (main gibi).
+     * Böylece @malloc(i64) / interrupt / syscall gibi C-ABI sembolleri .kem'de
+     * çıplak fn olarak ifade edilebilir. Çağrı yerleri de çıplak-callee'ye ρ
+     * geçmez (aşağıda cagrilan_ciplak_mi). Sonuç: çıplak yalnız çıplak/extern
+     * çağırabilir (verilecek ρ yok → çıplak-call-rule, checker E013). */
+    int ciplak = islev->veri.islev.ciplak_mi;
+    int rho_var = (!main_mi && !ciplak);   /* bu fn `ptr %rho` param alır mı */
+
     fprintf(g->out, "define %s @", donus);
     yerel_ad_yaz(g->out, islev->veri.islev.ad, islev->veri.islev.ad_uzunluk);
     fputs("(", g->out);
-    if (!main_mi) fputs("ptr %rho", g->out);   /* V2-F4.2a: ρ ilk param */
+    if (rho_var) fputs("ptr %rho", g->out);   /* V2-F4.2a: ρ ilk param (çıplak/main hariç) */
 
     /* Parametre listesi */
     int n = islev->veri.islev.param_sayi;
@@ -5328,7 +5424,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         const char *tip = ast_tip_to_ir(g, p->veri.parametre.tip);
         if (!tip) tip = "i32";
         param_tipler[i] = tip;
-        if (i > 0 || !main_mi) fputs(", ", g->out);   /* ρ'dan sonra virgül */
+        if (i > 0 || rho_var) fputs(", ", g->out);   /* ρ'dan sonra virgül */
         fprintf(g->out, "%s %%", tip);
         yerel_ad_yaz(g->out, p->veri.parametre.ad,
                      p->veri.parametre.ad_uzunluk);
@@ -5339,30 +5435,44 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->label = 0;
     g->isimler = NULL;
 
-    /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge
-     * seed (gövdenin İLK komutu; provizyonel reg, hoist_renumber tutarlı yeniler). */
-    if (main_mi) {
-        int rr = yeni_reg(g);
-        fprintf(g->out, "  %%%d = call ptr @kdl_global_bolge_al()\n", rr);
-        char *rs = (char *)arena_ayir(g->arena, 16);
-        snprintf(rs, 16, "%%%d", rr);
-        g->rho_ref = rs;
+    /* D-254/D-257 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap
+     * circularity çözümü). @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK
+     * → çıplak fn'in IR'ında sıfır region-symbol referansı (K1 allocator hedefi:
+     * malloc→region→malloc döngüsü kırılır). D-257: ρ param HİÇ alınmaz (true C-ABI)
+     * → gövdede ρ yok, rho_ref = "null" (çıplak-call-rule gereği zaten kullanılmaz;
+     * çıplak yalnız çıplak/extern çağırır). rho_yerel = NULL → ret'lerde serbest no-op. */
+    if (ciplak) {
+        g->rho_ref = "null";
+        g->rho_yerel = NULL;
     } else {
-        g->rho_ref = "%rho";
-    }
+        /* V2-F4.2a: ρ referansı. Normal fn → "%rho" (param). main → global bölge
+         * seed (gövdenin İLK komutu; provizyonel reg, hoist_renumber tutarlı yeniler). */
+        if (main_mi) {
+            int rr = yeni_reg(g);
+            fprintf(g->out, "  %%%d = call ptr @kdl_global_bolge_al()\n", rr);
+            char *rs = (char *)arena_ayir(g->arena, 16);
+            snprintf(rs, 16, "%%%d", rr);
+            g->rho_ref = rs;
+        } else {
+            g->rho_ref = "%rho";
+        }
 
-    /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
-     * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
-     * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
-     * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
-     * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
-    {
+        /* F4.2b (c): ρ_yerel — scope-yerel bölge aç (gövde ilk komutlarından; hoist
+         * reg'leri tutarlı yeniler). Kaçmayan (BOLGE_YEREL) tahsisler buraya yönlenir,
+         * her ret'ten önce kdl_bolge_serbest. main dahil her fn (main'in GLOBAL %rho'su
+         * serbest EDİLMEZ; ρ_yerel ayrı + serbest). Bu commit: makine kuruldu, yönlendirme
+         * (c-d routing) sonraki commit'te — şimdilik ρ_yerel BOŞ (sound: serbest no-op). */
         int yr = yeni_reg(g);
         fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", yr);
         char *ys = (char *)arena_ayir(g->arena, 16);
         snprintf(ys, 16, "%%%d", yr);
         g->rho_yerel = ys;
     }
+
+    /* D-254: çıplak gövde örtük güvensiz-bağlam — ham pointer deref-write + küresel
+     * yazımı explicit `güvensiz {}` gerektirmez (çıplak = güvensiz-tier primitive). */
+    int ciplak_onceki_guvensiz = g->guvensiz_derinlik;
+    if (ciplak) g->guvensiz_derinlik++;
 
     /* Parametreleri alloca'ya kopyala */
     for (int i = 0; i < n; i++) {
@@ -5463,6 +5573,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         g->aktif_bolge = NULL;
     }
     g->rho_yerel = NULL;   /* F4.2b: sonraki fn'e sızmasın */
+    g->guvensiz_derinlik = ciplak_onceki_guvensiz;   /* D-254: çıplak güvensiz-grant geri al */
 }
 
 /* D-071 (Sınıf B lambda V2): lifted lambda — `define <ret> @lambda_N(ptr %env,
@@ -5571,8 +5682,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("; KEMGU LLVM IR (text uretici, ADIM 18 v2 — yapi/metin/multi-int)\n",
           out);
     fputs("; `clang -x ir - -o cikti.exe` ile derlenebilir.\n", out);
-    /* C5/C8: triple tek kaynaktan (llvm.h) — hedefe-duyarli secim C8'de */
-    fputs("target triple = \"" KEMGU_HEDEF_TRIPLE "\"\n\n", out);
+    /* C5/D-269: triple çalışma-zamanı hedeften (varsayılan makro; --mimari ile aarch64) */
+    fprintf(out, "target triple = \"%s\"\n\n", llvm_hedef_triple());
     /* Capability Spec V1 — yetki<R> 16-byte struct (CP.6.1)
      * Layout: { i64 id, i16 kaynak_tipi, i16 izin, i8 iptal, [3 x i8] rezerv } */
     fputs("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }\n\n", out);
@@ -5663,14 +5774,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_oku_karakter()\n", out);
 
     /* Capability Spec V1 — yetki<R> runtime intrinsics (kdl_yetki_*) */
-    /* C-track ABI fix: %kdl_yetki (16B) Win64 C ABI'de sret/pointer ile
-     * tasinir (clang -emit-llvm dogrulamasi: `void(ptr sret, ptr, i16)`).
-     * First-class %kdl_yetki arg/donus declare'lari C tarafiyla
-     * UYUSMUYORDU (runtime segfault). Tum sinir imzalari C-uyumlu. */
-    fputs("declare void @kdl_yetki_olustur(ptr sret(%kdl_yetki) align 8,"
-          " i16, i16)\n", out);
-    fputs("declare void @kdl_yetki_delege(ptr sret(%kdl_yetki) align 8,"
-          " ptr, i16)\n", out);
+    /* D-268 OUT-PTR ABI: olustur/delege dönüşü AÇIK out-pointer (düz `ptr` ilk arg,
+     * aarch64 x0). sret DEĞİL — çünkü %kdl_yetki 16B (≤ AAPCS64/SysV eşiği) ve clang
+     * bare-metal'de register-return ediyor; eski sret çağrısı o provider'la uyuşmuyordu
+     * (yetki değeri kullanılmadığı için maskeliydi). Out-ptr, saf-.kem sağlayıcının
+     * (`çıplak fn(out: *KdlYetki,...)`) emit ettiği imzayla BİREBİR eşleşir (Yasa-4). */
+    fputs("declare void @kdl_yetki_olustur(ptr, i16, i16)\n", out);
+    fputs("declare void @kdl_yetki_delege(ptr, ptr, i16)\n", out);
     fputs("declare void @kdl_yetki_geri_al(ptr)\n", out);
     fputs("declare i32 @kdl_yetki_kontrol(ptr, i16)\n", out);
     fputs("declare i32 @kdl_yetki_kontrol_tipi(ptr, i16, i16)\n", out);
@@ -5877,6 +5987,9 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
                  uye->veri.disa.tanim->tip == DUGUM_SABIT) {
             sabit_kayit(&g, uye->veri.disa.tanim);
         }
+        else if (uye->tip == DUGUM_DEGISKEN && uye->veri.degisken.kuresel_mi) {
+            kuresel_kayit(&g, uye);   /* D-252 küresel değişken */
+        }
     }
 
     /* Pre-pass: metinleri topla */
@@ -5885,6 +5998,16 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Emit module-basi: yapi tip tanimlari + string globalleri */
     yapi_tip_tanimlari_emit(&g);
     str_globalleri_emit(&g);
+    /* D-252: küresel değişken module-globalleri (@ad = internal global <ir> <init>). */
+    for (SabitKayit *ku = g.kureseller; ku; ku = ku->sonraki) {
+        const char *ir = ku->tip ? ast_tip_to_ir(&g, ku->tip) : "i32";
+        if (!ir) ir = "i32";
+        ad_yaz(g.out, "@", 1);
+        yerel_ad_yaz(g.out, ku->ad, ku->ad_uz);
+        fprintf(g.out, " = internal global %s ", ir);
+        kuresel_init_yaz(g.out, ku->deger, ir);
+        fputc('\n', g.out);
+    }
 
     /* Islevleri emit et (generic olanlar atlanir; instantiation'lar sonra) */
     for (int i = 0; i < program->veri.program.sayi; i++) {
