@@ -195,6 +195,50 @@ isb"#
         değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
         ver r olarak tam64;
     }
+    // USERLAND ADIM 3 (D-288): num=10 gettick, num=11 getpid (kdl_tik_al/kdl_aktif_gorev
+    // birebir — kem_tik_oku/kem_paktif zaten var, trivial sarmalayıcı).
+    eğer num == 10 { ver kem_tik_oku(); }
+    eğer num == 11 { ver kem_paktif; }
+    // num=17/18 dosya_yaz_metin/oku_metin — kem_minifs.kem (D-272) üzerine sarmalayıcı.
+    // NOT (kapsam-sınırı): minifs TEK-DOSYALI (proven-C'nin çok-dosyalı kdl_dosyalar[]
+    // DEĞİL) — 15/16 (int dosya) ve 19/20/21 (sayisi/ad/sil, çok-dosya-listeleme) minifs'in
+    // ÇOK-DOSYA desteği GEREKTİRİR (ayrı özellik-genişletme, bu batch'in kapsamı DIŞI).
+    eğer num == 17 {
+        değişken base: tam64 = vblk_bul();
+        eğer base == 0 { ver 0 - 1; }
+        eğer vblk_kur(base) != 0 { ver 0 - 1; }
+        değişken n: tam32 = kdl_metin_uzunluk(arg2 olarak *tam8);
+        değişken i: tam32 = 0;
+        iken i < n {
+            eğer i < 512 { vblk_data_yaz(i, (kdl_metin_bayt(arg2 olarak *tam8, i)) olarak dtam8); }
+            i = i + 1;
+        }
+        değişken a0: dtam8 = kul_ad_bayt(arg, 0);
+        değişken a1: dtam8 = kul_ad_bayt(arg, 1);
+        değişken a2: dtam8 = kul_ad_bayt(arg, 2);
+        değişken a3: dtam8 = kul_ad_bayt(arg, 3);
+        değişken r: tam32 = mfs_dosya_yaz(base, a0, a1, a2, a3, n);
+        eğer r != 0 { ver 0 - 1; }
+        ver n olarak tam64;
+    }
+    eğer num == 18 {
+        değişken base2: tam64 = vblk_bul();
+        eğer base2 == 0 { ver 0 - 1; }
+        eğer vblk_kur(base2) != 0 { ver 0 - 1; }
+        değişken b0: dtam8 = kul_ad_bayt(arg, 0);
+        değişken b1: dtam8 = kul_ad_bayt(arg, 1);
+        değişken b2: dtam8 = kul_ad_bayt(arg, 2);
+        değişken b3: dtam8 = kul_ad_bayt(arg, 3);
+        değişken boyut: tam32 = mfs_dosya_oku(base2, b0, b1, b2, b3);
+        eğer boyut < 0 { ver 0 - 1; }
+        değişken j: tam32 = 0;
+        iken j < boyut {
+            eğer j < 511 { kis_buf_yaz8(arg2, j, (vblk_data_oku(j)) olarak tam32); }
+            j = j + 1;
+        }
+        kis_buf_yaz8(arg2, boyut, 0);
+        ver boyut olarak tam64;
+    }
     ver arg;                                       // echo arg → EL0 x0
 }
 
@@ -356,4 +400,94 @@ add $0, $0, :lo12:kul_rx_test"# çıktı("=r", &x) } }
     değişken sonuc: tam64 = kg_oku64(KUL_RX_SONUC);
     eğer (bitti == 1) ve (sonuc == (0 - 1)) { ver 1; }
     ver 0;
+}
+
+// ============================================================================
+// USERLAND ADIM 3 (D-288): dosya syscall (17/18) GERÇEK EL0 round-trip testi.
+// Ad ilk 4 baytı (i>=uzunluk ise 0-pad — mfs_dosya_yaz/oku 4-bayt ad sözleşmesi).
+çıplak işlev kul_ad_bayt(adr: tam64, i: tam32) -> dtam8 {
+    değişken n: tam32 = kdl_metin_uzunluk(adr olarak *tam8);
+    eğer i < n { ver (kdl_metin_bayt(adr olarak *tam8, i)) olarak dtam8; }
+    ver 0 olarak dtam8;
+}
+
+sabit KUL_FS_AD: tam64      = 1107431424;   // 0x42021000: dosya adı ("test", .user sayfası)
+sabit KUL_FS_ICERIK: tam64  = 1107431552;   // 0x42021080: yazılacak içerik ("KABUK")
+sabit KUL_FS_BUF: tam64     = 1107431680;   // 0x42021100: okuma tamponu (EL0 syscall(18) hedefi)
+
+// Metin literal DOĞRUDAN parametre olarak geçirilir (kis_metin deseni birebir — bir
+// yerel `metin` değişkenine ATAMAKTAN kaçınır; o yol kanıtlanmamış/test edilmemişti).
+çıplak işlev kul_seed_kopyala(hedef: tam64, s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { kis_buf_yaz8(hedef, i, (metin_bayt(s, i)) olarak tam32); i = i + 1; }
+    kis_buf_yaz8(hedef, n, 0);
+}
+
+// EL1'de (main, normal-tier metin literal OK) test verisini .user sayfasına kopyala —
+// EL0 kod metin literal KULLANAMAZ (D-286: isim-öneksiz @.str.N routing'e uymaz).
+çıplak işlev kul_fs_seed() {
+    kul_seed_kopyala(KUL_FS_AD, "test");
+    kul_seed_kopyala(KUL_FS_ICERIK, "KABUK");
+}
+
+// EL0 görevi: sys(17,ad,icerik) yaz + sys(18,ad,buf) oku → GERÇEK minifs/virtio-blk
+// round-trip syscall ABI üzerinden (D-272'nin fs_rw_testi'nden FARKLI — o direkt .kem
+// çağrısıydı, bu GERÇEK EL0/syscall yoluyla).
+çıplak işlev kul_fs_test() {
+    değişken r1: tam64 = 0;
+    değişken r2: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $2
+mov x1, $3
+mov x8, #17
+svc #0
+mov $0, x0
+mov x0, $2
+mov x1, $4
+mov x8, #18
+svc #0
+mov $1, x0"#
+            çıktı("=&r", &r1)
+            çıktı("=&r", &r2)
+            girdi("r", KUL_FS_AD)
+            girdi("r", KUL_FS_ICERIK)
+            girdi("r", KUL_FS_BUF)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kul_fs_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_fs_test
+add $0, $0, :lo12:kul_fs_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: EL0'dan sys(17)+sys(18) round-trip → okunan buf == yazılan icerik mi (bayt-bayt)?
+// GERÇEK disk I/O (virtio-blk) + GERÇEK syscall ABI (EL0'dan geldi) — sentetik değil.
+çıplak işlev kem_fs_testi() -> tam32 {
+    kul_fs_seed();
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kul_fs_test_adr(), KG_STK1, KG_EL0_STK + 16384);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    değişken bitti: tam64 = kg_oku64(KG_OLU + t * 8);
+    eğer bitti != 1 { ver 0; }
+    değişken esit: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < 5 {
+        eğer kis_buf_oku8(KUL_FS_BUF, i) != kis_buf_oku8(KUL_FS_ICERIK, i) { esit = 0; }
+        i = i + 1;
+    }
+    ver esit;
 }

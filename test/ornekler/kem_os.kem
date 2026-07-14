@@ -667,6 +667,16 @@ işlev main() -> tam32 {
         uart_satir("[12] UART RX HATA");
     }
 
+    // [13] FS SYSCALL (USERLAND ADIM 3, D-288): EL0 görevi sys(17)+sys(18) ile GERÇEK
+    // dosya yaz+oku yapar (minifs/virtio-blk üstünden) → okunan içerik yazılanla eşleşiyor
+    // mu? GERÇEK syscall ABI üzerinden (D-272'nin direkt-çağrı testinden FARKLI).
+    değişken fs_sys_ok: tam32 = kem_fs_testi();
+    eğer fs_sys_ok == 1 {
+        uart_satir("[13] FS SYSCALL OK");
+    } değilse {
+        uart_satir("[13] FS SYSCALL HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

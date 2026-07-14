@@ -291,6 +291,7 @@ sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
     ver d - ((d / 256) * 256);
 }
 çıplak işlev kis_buf_yaz8(adr: tam64, i: tam32, b: tam32) { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; *p = b olarak dtam8; }
+çıplak işlev kis_buf_oku8(adr: tam64, i: tam32) -> tam32 { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; ver (*p) olarak tam32; }
 
 // buf_adr'a satır oku (en fazla umax-1 bayt + null). Dönen: okunan bayt sayısı (>=0)
 // veya EOF/timeout'ta -1 (hiç bayt gelmediyse). \n veya \r satırı sonlandırır (atılır).

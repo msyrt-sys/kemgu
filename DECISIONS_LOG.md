@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-288 — USERLAND ADIM 3: GERÇEK dosya syscall (sys 17/18, EL0→minifs→virtio-blk) + gettick/getpid — [13] FS SYSCALL OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-287).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kdl_syscall_isle num=10/11/17/18, kul_ad_bayt, kul_seed_kopyala,
+kul_fs_seed/test, kem_fs_testi); `runtime/kem_mmu.kem` (kis_buf_oku8). USERLAND_ROADMAP ADIM 3.]**
+`kem_minifs.kem` (D-272) + `kem_zaman.kem`/`kem_gorev.kem`'in mevcut primitiflerini syscall ABI'sine
+bağlar. **Kapsam-sınırı bulgusu:** minifs proven-C'nin çok-dosyalı `kdl_dosyalar[]`'ından FARKLI —
+**tek-dosyalı** (her yazma blk1/blk2'yi YENİDEN KULLANIR). num=15/16 (int-dosya) ve 19/20/21 (sayisi/ad/
+sil — çok-dosya listeleme) minifs'in ÇOK-DOSYA desteği GEREKTİRİR — AYRI özellik-genişletme, bu batch'in
+kapsamı DIŞI. Bu batch: num=17/18 (yaz_metin/oku_metin, TEK-DOSYA ile uyumlu) + num=10/11 (gettick/getpid,
+trivial — `kem_tik_oku`/`kem_paktif` zaten var).
+
+**GERÇEK bug bulundu + düzeltildi — LLVM inline-asm early-clobber eksikliği:** `kul_fs_test`'in tek
+`satıriçi_asm` bloğunda AYNI input operandı ($2=KUL_FS_AD) İKİ FARKLI syscall için TEKRAR kullanıldı
+(`mov x0,$2` iki kez, aralarında `mov $0,x0` output-yazımı var). LLVM'in register allocator'ı $0(çıktı)
+ile $2(girdi)'yi AYNI FİZİKSEL REGISTER'a (x9) atadı — `mov $0,x0` (r1'i yaz) $2'nin (KUL_FS_AD) DEĞERİNİ
+EZDİ, ikinci `mov x0,$2` YANLIŞ pointer okudu (garbage/eski-r1-değeri). Disassembly ile TAM olarak
+`mov x9,x0` (yaz) hemen ardından `mov x0,x9` (oku, artık r1'in değeri, KUL_FS_AD DEĞİL) görüldü. **Çözüm:**
+`çıktı("=&r", ...)` — LLVM'in standart early-clobber constraint modifier'ı (`&`), çıktı register'ının
+HİÇBİR girdi register'ıyla ÇAKIŞMAMASINI zorunlu kılar. `.kem` constraint string'leri LLVM IR'a HAM
+geçiyor (D-286'dan beri bilinen) → codegen değişikliği GEREKMEDİ, sözdizimsel constraint-string düzeltmesi
+yeterliydi. **Genel ders (gelecek satıriçi_asm yazımı için):** bir input operandı birden fazla syscall/
+adım için TEKRAR kullanılıyorsa VE arada bir output yazılıyorsa, `=&r` ZORUNLU.
+
+**Ampirik debug disiplini:** r1/r2 (syscall dönüşleri) + a0-a3 vs b0-b3 (isim bayt karşılaştırması) fixed-
+RAM'e yazılıp okunarak izole edildi; disassembly (`llvm-objdump`) ile KESIN register-allocation çakışması
+doğrulandı — varsayım yapılmadı.
+
+**KAPI (4/4):** `[13] FS SYSCALL OK` + `[1..12]` kümülatif (GERÇEK EL0→syscall→minifs→virtio-blk yaz+oku
+round-trip, bayt-bayt içerik doğrulaması); FIXPOINT birebir 33371; test_tumu (bekleniyor).
+
+**KAPSAM/SINIR:** num=15/16/19/20/21 (çok-dosya) minifs genişletmesi gerektirir — ayrı iş. Kalan:
+spawn/exec syscall (12/13/14 — 13 zaten kullanımda, çekirdek altyapı A4/A5/B2'de VAR), shell REPL,
+net syscall wiring (24/25, kem_virtio_net.kem zaten var).
+
+---
+
 ## D-287 — USERLAND ADIM 2: GERÇEK UART-RX syscall (sys 26 read_satir, EL0 round-trip) — [12] UART RX EOF OK (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-286).
