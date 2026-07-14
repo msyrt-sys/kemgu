@@ -677,6 +677,16 @@ işlev main() -> tam32 {
         uart_satir("[13] FS SYSCALL HATA");
     }
 
+    // [14] SHELL (USERLAND ADIM 4, D-289): userland .kem shell — komut dispatch
+    // (kul_str_esit) + GERÇEK syscall(5/7/17/18) yürütme + konsol çıktısı. proven-C
+    // kemgu_shell_el0.c'nin basitleştirilmiş .kem karşılığı.
+    değişken shell_ok: tam32 = kem_shell_testi();
+    eğer shell_ok == 1 {
+        uart_satir("[14] SHELL OK");
+    } değilse {
+        uart_satir("[14] SHELL HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

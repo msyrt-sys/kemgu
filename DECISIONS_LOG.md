@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-289 — USERLAND ADIM 4: userland .kem SHELL — komut dispatch + GERÇEK syscall(5/7/17/18) yürütme — [14] SHELL OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-288).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (num=5 yaz + num=7 satir eklendi; kul_shell/kul_str_esit EL0
+shell; kg_ad_bayt/kg_seed_kopyala/kg_fs_seed/kg_shell_seed/kg_*_adr EL1-helper YENİDEN ADLANDIRILDI).
+USERLAND_ROADMAP ADIM 4.]** proven-C `kemgu_shell_el0.c`'nin basitleştirilmiş `.kem` karşılığı: gömülü
+DETERMİNİSTİK komut ("yaz") → `kul_str_esit` (proven-C str_esit birebir) ile DISPATCH → eşleşirse GERÇEK
+syscall dizisi (5=konsola yaz, 7=satır, 17=dosya-yaz, 18=dosya-oku) çalıştırılır → sonuç konsola basılır.
+
+**GERÇEK bug bulundu + düzeltildi — routing-prefix/privilege-seviyesi karışıklığı:** `kul_` öneği hem
+"EL0'da GERÇEKTEN çalışacak kod" (routing hedefi) hem YANLIŞLIKLA "userland-ilgili herhangi bir yardımcı
+fonksiyon" (isimlendirme kolaylığı) için kullanılmıştı. `kul_shell_seed` (EL1'den, `kem_shell_testi`
+tarafından ÇAĞRILAN bir seed-fonksiyonu) `kul_` önekine sahip olduğu için objcopy rename adımı onu da
+`.user`'a (AP=01, EL0-erişimli) TAŞIDI — ama EL1 O SAYFADAN KOD ÇALIŞTIRAMAZ (gerçek Instruction Abort,
+EC=0x21, `adr=0x42000088` = TAM `kul_shell_seed`'in adresi — `llvm-nm` ile doğrulandı). **ADIM 3'te AYNI
+BUG GİZLİYDİ**: `kul_fs_seed`/`kul_seed_kopyala`/`kul_ad_bayt`/`kul_*_test_adr` de EL1'den çağrılan
+kul_-önekli fn'lerdi, ama HEPSİ -O2 tarafından INLINE edilmişti (çağıranın .text'ine gömüldü, standalone
+sembol hiç OLUŞMADI) → objcopy hiç yakalamadı → bug MASKELENMİŞTİ. `kul_shell_seed` inline OLMADI (daha
+büyük, kendi içinde çağrı yapıyor) → bug İLK KEZ ortaya çıktı. **Çözüm:** TÜM EL1-yalnız-çağrılan yardımcı
+fn'ler `kul_` öneğinden `kg_` önekine TAŞINDI (inline-edilenler DAHİL — inlining derleyici-versiyonuna/
+optimizasyon-seviyesine bağlı KIRILGAN bir korumaydı, isim-tabanlı düzeltme kalıcı). **Prensip:** `kul_`
+öneği YALNIZ EL0'da GERÇEKTEN çalıştırılacak giriş-noktaları (spawn hedefleri) + onların ÇAĞIRDIĞI
+diğer EL0-yalnız fn'ler (örn. `kul_str_esit`) için; EL1'den çağrılan seed/helper fn'ler `kg_` (veya
+benzeri kernel-only önek) kullanmalı.
+
+**KAPI (4/4):** `[14] SHELL OK` + konsol çıktısı `"yaz"` (GERÇEK sys5/7 round-trip) + `[1..13]` kümülatif;
+FIXPOINT birebir 33371; test_tumu (bekleniyor).
+
+**KAPSAM/SINIR:** Tek gömülü komut ("yaz") dispatch edildi — proven-C'nin tam tokenize/çok-komut/canlı-
+girdi REPL'inin TAMAMI değil (roadmap'in MVP kapsamı: dispatch-mekanizması + GERÇEK syscall-yürütme
+kanıtı). Kalan: ADIM 5 (spawn/wait wiring — altyapı A4/A5/B2'de VAR), ADIM 6 (program modeli teyidi).
+
+---
+
 ## D-288 — USERLAND ADIM 3: GERÇEK dosya syscall (sys 17/18, EL0→minifs→virtio-blk) + gettick/getpid — [13] FS SYSCALL OK (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-287).
