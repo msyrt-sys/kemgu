@@ -657,6 +657,16 @@ işlev main() -> tam32 {
         uart_satir("[11] LINCHPIN HATA");
     }
 
+    // [12] UART RX (USERLAND ADIM 2, D-287): EL0 görevi (kul_rx_test) sys(26) read_satir
+    // çağırır → GERÇEK PL011 RX bounded-poll (RXFE bit4). Otomatik boot'ta girdi YOK →
+    // EOF(-1) beklenen/doğru sonuç (poll makinesi çalıştığını kanıtlar). kem_gorev.kem sağlar.
+    değişken rx_ok: tam32 = kem_uart_rx_testi();
+    eğer rx_ok == 1 {
+        uart_satir("[12] UART RX EOF OK");
+    } değilse {
+        uart_satir("[12] UART RX HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

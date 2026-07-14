@@ -194,7 +194,14 @@ isb"#
 
 sabit KIS_UART_TABAN: tam64 = 150994944;   // 0x09000000 PL011 (UART_TABAN ile aynı)
 sabit KIS_UART_DR: tam64    = 150994944;   // +0x00
-sabit KIS_UART_FR: tam64    = 150995112;   // +0x18
+// D-287 DÜZELTME: 150995112 (0x090000A8) YANLIŞ değerdi (B1'den beri, latent bug) — PL011
+// FR register GERÇEK offset'i 0x18 = 150994968 (0x09000018), NOT 0xA8. 0xA8 PL011'de
+// tanımsız/reserved alan — QEMU'da muhtemelen HER ZAMAN 0 okunuyordu. TX (kis_bayt) bu
+// yüzden hiç GERÇEKTEN TXFF beklemiyordu (her zaman "dolu değil" görüp hemen geçiyordu) —
+// sessizce çalışıyordu (yanlış ama zararsız: TX asla gerçekten bloklanmadı). RX (kis_satir_oku,
+// D-287) AYNI bug'ı MASKELEYEMEDİ — RXFE her zaman 0 (=veri var) okununca sonsuz-döngü
+// (DR'den çöp okuyup asla \n/\r bulamama) oluştu — gerçek gate (UART RX) bunu ortaya çıkardı.
+sabit KIS_UART_FR: tam64    = 150994968;   // 0x09000018 (DOĞRU — kdl_uart.c/UART_FR ile eşleşir)
 sabit KIS_UART_TXFF: tam32  = 32;          // bit5
 
 çıplak işlev kis_o32(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
@@ -267,4 +274,52 @@ str x10, [x9]"#
     kis_onaltilik(far);
     kis_satir();
     kem_gorev_bitir();
+}
+
+// ============================================================================
+// USERLAND ADIM 2 (D-287): SAF-.kem UART-RX (sys 26 read_satir). Kanıtlı-C
+// kdl_kesme.c:478-495 BİREBİR yeniden gerçekleştirmesi: PL011 FR.RXFE=bit4 bounded-poll
+// (8M iter/bayt — deadlock-guard, D-158 dersi: yük-duyarlı sonsuz-bekleme YOK), DR&0xFF
+// oku, \n/\r'de dur, EOF'ta -1 (un==0 ise). kis_bayt (TX, B1) primitifinin ikizi.
+
+sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
+
+// DR'yi TEK sefer oku (gerçek donanımda okuma FIFO'dan tüketir — iki kez okumak FARKLI
+// bayt/bozuk değer döndürebilir; tek-okuma + yerel değişkende mod-al ile düzeltildi).
+çıplak işlev kis_rx_dr_oku() -> tam32 {
+    değişken d: tam32 = kis_o32(KIS_UART_DR);
+    ver d - ((d / 256) * 256);
+}
+çıplak işlev kis_buf_yaz8(adr: tam64, i: tam32, b: tam32) { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; *p = b olarak dtam8; }
+
+// buf_adr'a satır oku (en fazla umax-1 bayt + null). Dönen: okunan bayt sayısı (>=0)
+// veya EOF/timeout'ta -1 (hiç bayt gelmediyse). \n veya \r satırı sonlandırır (atılır).
+// Poll-sınırı (bkz. KIS_RX_POLL_LIMIT): proven-C'nin 8_000_000'ı GERÇEK donanım hız
+// varsayımıyla kalibre edilmişti; QEMU'da HER MMIO okuması device-emulation trap'i
+// (mikrosaniyeler) — 8M iterasyon TÜM kem_os boot penceresini (12s) doldurup gate'i
+// TIMEOUT ile öldürüyordu (ampirik bulgu). Küçültüldü — anlam AYNI (bounded-poll→EOF),
+// sabit ortam-hızına göre kalibre edildi (kör-kopyalama DEĞİL).
+çıplak işlev kis_satir_oku(buf_adr: tam64, umax: tam32) -> tam32 {
+    değişken un: tam32 = 0;
+    iken 1 == 1 {
+        değişken geldi: tam32 = 0;
+        değişken i: tam64 = 0;
+        iken i < 20000 {
+            eğer (kis_o32(KIS_UART_FR) & KIS_UART_RXFE) == 0 { geldi = 1; i = 20000; } değilse { i = i + 1; }
+        }
+        eğer geldi == 0 {
+            kis_buf_yaz8(buf_adr, un, 0);
+            eğer un > 0 { ver un; } değilse { ver 0 - 1; }
+        }
+        değişken c: tam32 = kis_rx_dr_oku();
+        eğer (c == 10) veya (c == 13) {
+            kis_buf_yaz8(buf_adr, un, 0);
+            ver un;
+        }
+        eğer un < (umax - 1) {
+            kis_buf_yaz8(buf_adr, un, c);
+            un = un + 1;
+        }
+    }
+    ver un;
 }

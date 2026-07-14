@@ -131,7 +131,15 @@ add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
 // makine-kodu (llvm-mc doğrulanmış kelimeler) AP=01 sayfaya + I-cache maintenance.
 
 sabit KG_SYSC: tam64 = 1157640216;        // 0x45003018: syscall sayacı (fixed RAM)
-sabit KG_EL0_KOD: tam64 = 1107296256;     // 0x42000000: EL0 stub (AP=01, EL0-exec)
+// D-287 DÜZELTME: KG_EL0_KOD ESKİDEN 0x42000000'daydı — .user section'ın TAM BAŞLANGICI,
+// LINCHPIN'in (D-286) .kem-derlenmiş kul_test'inin de objcopy-rename ile TAM ORAYA
+// yerleştiği adres! kem_el0_testi (bu adrese HAM byte yazan A5 testi) kem_linchpin_testi'den
+// ÖNCE koşuyor → kul_test'in derlenmiş byte'larını RUNTIME'DA EZER → LINCHPIN gate'i
+// YANLIŞ SEBEPTEN geçiyordu (ezilmiş stub'ın kendi "mov x8,#7/svc" dizisi çalışıyordu,
+// kul_test'in GERÇEK içeriği DEĞİL). Çözüm: ham-byte test adreslerini .user KOD bölgesinden
+// (0x42000000 + büyüyen .kem-routed kod) UZAK bir ofsete (+64KB) taşı — bol pay, gelecekteki
+// userland .kem büyümesiyle asla çakışmaz.
+sabit KG_EL0_KOD: tam64 = 1107361792;     // 0x42010000: EL0 stub (AP=01, EL0-exec; .user kod tabanından +64KB)
 sabit KG_EL0_STK: tam64 = 1108344832;     // 0x42100000: EL0 user yığını (SP_EL0, AP=01)
 
 çıplak işlev kg_yaz32(adr: tam64, v: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = v; }
@@ -169,10 +177,23 @@ isb"#
 }
 
 // SVC handler — .S kdl_exc_ortak (EC=0x15) `bl kdl_syscall_isle(num,arg,arg2)` çağırır.
-// num=7 → syscall sayacı++ (EL0'dan gerçek syscall kanıtı). Dönüş → EL0 x0.
+// num=7 → syscall sayacı++ (EL0'dan gerçek syscall kanıtı, A5).
+// num=13 → exit (kdl_gorev_bitir birebir, D-130) — o an koşan görevi ölü işaretle.
+// num=26 → read_satir (USERLAND ADIM 2, D-287): arg=buf (EL0 VA), arg2=umax. GERÇEK PL011
+// RX bounded-poll (kis_satir_oku). NOT: kdl_user_yaz_ptr_gecerli (D-150 user-ptr doğrulama)
+// henüz .kem'e taşınmadı — bu syscall ŞİMDİLİK kernel-güvenilir arg alır (ADIM 3 kapsamı).
 çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
     eğer num == 7 {
         kg_yaz64(KG_SYSC, kg_oku64(KG_SYSC) + 1);
+        ver arg;
+    }
+    eğer num == 13 {
+        kem_gorev_bitir();
+        ver 0;
+    }
+    eğer num == 26 {
+        değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
+        ver r olarak tam64;
     }
     ver arg;                                       // echo arg → EL0 x0
 }
@@ -199,7 +220,7 @@ isb"#
 // AP=00, EL0-erişimi YASAK) erişir → permission-fault, EL0-kaynaklı → .S kill AÇIKSA
 // kdl_el0_izolasyon_isle(.kem) çağırır → kem_gorev_bitir → KG_OLU[görev]=1. Doğrula:
 // görev ölü işaretlendi + scheduler onu ATLADI (bir daha koşmadı) + OS DEVAM etti.
-sabit KG_EL0_KOTU: tam64 = 1107296512;    // 0x42000100: kötü-erişim stub (syscall stub'dan uzak)
+sabit KG_EL0_KOTU: tam64 = 1107362048;    // 0x42010100: kötü-erişim stub (D-287: KG_EL0_KOD ile birlikte taşındı)
 
 çıplak işlev kem_el0_izolasyon_testi() -> tam32 {
     kg_yaz32(KG_EL0_KOTU + 0, 3531603977 olarak tam32);   // mov x9, #0
@@ -261,5 +282,78 @@ add $0, $0, :lo12:kul_test"# çıktı("=r", &x) } }
     iken (kg_oku64(KG_SYSC) < 3) ve (guard < 200000000) { guard = guard + 1; }
     kg_yaz64(KG_AKTIF, 0);
     eğer kg_oku64(KG_SYSC) >= 3 { ver 1; }
+    ver 0;
+}
+
+// ============================================================================
+// USERLAND ADIM 2 (D-287): UART-RX syscall (num=26) gerçek EL0 round-trip testi.
+// kul_rx_test (çıplak, .user'a objcopy-rename routed — kul_test'ten SONRA, aynı 64KB
+// kod-rezervinde, D-287 düzeltmesi sayesinde raw-byte KG_EL0_KOD ile ÇAKIŞMAZ): svc(26,
+// buf, 256) çağırır → sonucu fixed-RAM'e yazar → svc(13) exit. Otomatik boot ortamında
+// GERÇEK klavye girdisi YOK → kis_satir_oku bounded-poll timeout'a düşer → EOF(-1) döner.
+// Bu, DOĞRU/beklenen davranış (proven-C'nin kendi "best-effort" gate stratejisiyle aynı —
+// kemgu_shell_el0.c: "gate PASS'ı ... deterministik ... diziye dayanır"). EOF(-1) doğru
+// dönerse: RX-poll makinesi (RXFE-check + bounded-timeout, D-158 hang-önleme dersi)
+// ÇALIŞIYOR demektir — TX'in (kis_bayt, B1, kanıtlı) doğrudan ikizi, aynı primitif ailesi.
+
+// D-287 DÜZELTME (gerçek bug, ampirik bulundu): KUL_RX_BUF/SONUC ESKİDEN "free RAM"da
+// (0x47300000) idi — kul_rx_test EL0'da KOŞUYOR ve bu adreslere DOĞRUDAN yazıyor (str x9,
+// [x8], asm içinde) — EL0 YALNIZ 0x42000000-0x421FFFFF (.user, AP=01) sayfasına yazabilir!
+// 0x47300000 kernel-only (AP=00) → EL0 yazması GERÇEK permission-fault → kis_el0_kill_aktif
+// AÇIK KALMIŞTI (B2 izolasyon testinden, hiç kapatılmıyor) → fault izolasyon-öldürme yoluna
+// gitti (görev "başarıyla bitti" GÖRÜNDÜ ama yazma HİÇ GERÇEKLEŞMEDİ — sonuc her zaman 0
+// kaldı, ilk-değer). Çözüm: her iki adresi de .user sayfasına (0x42000000+) taşı — hem EL0
+// (kul_rx_test) hem EL1 (kis_satir_oku syscall-handler, AP=01=EL0+EL1 RW) yazabilir.
+sabit KUL_RX_BUF: tam64 = 1107427328;     // 0x42020000: RX okuma tamponu (.user sayfası, 256B)
+sabit KUL_RX_SONUC: tam64 = 1107427584;   // 0x42020100: syscall(26) dönüş değeri (.user sayfası)
+
+çıplak işlev kul_rx_test() {
+    değişken buf: tam64 = KUL_RX_BUF;
+    değişken sonuc: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x1, #256
+mov x8, #26
+svc #0
+mov $0, x0"#
+            çıktı("=r", &sonuc)
+            girdi("r", buf)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    kg_yaz64(KUL_RX_SONUC, sonuc);
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x8, #13
+svc #0"#
+            bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kul_rx_test_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_rx_test
+add $0, $0, :lo12:kul_rx_test"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: EL0 görevi svc(26) yapar + exit eder (KG_OLU işaretlenir) → sonuç EOF(-1) mi?
+// (Otomatik boot'ta girdi YOK → EOF beklenen/doğru sonuç; poll GERÇEKTEN çalıştığını
+// kanıtlar — poll bozuksa ya sonsuz asılı kalır (guard yakalar) ya yanlış değer döner.)
+çıplak işlev kem_uart_rx_testi() -> tam32 {
+    kg_yaz64(KUL_RX_SONUC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kul_rx_test_adr(), KG_STK2, KG_EL0_STK + 12288);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    değişken bitti: tam64 = kg_oku64(KG_OLU + t * 8);
+    değişken sonuc: tam64 = kg_oku64(KUL_RX_SONUC);
+    eğer (bitti == 1) ve (sonuc == (0 - 1)) { ver 1; }
     ver 0;
 }

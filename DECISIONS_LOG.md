@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-287 — USERLAND ADIM 2: GERÇEK UART-RX syscall (sys 26 read_satir, EL0 round-trip) — [12] UART RX EOF OK (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-286).
+
+**Karar [ETKİ: `runtime/kem_mmu.kem` (kis_satir_oku PL011 RXFE bounded-poll, KIS_UART_FR düzeltmesi);
+`runtime/kem_gorev.kem` (kdl_syscall_isle num=26/13, kul_rx_test, KG_EL0_KOD/KOTU/KUL_RX_BUF/SONUC
+adres düzeltmeleri). USERLAND_ROADMAP ADIM 2.]** Kanıtlı-C `kdl_kesme.c:478-495` (PL011 FR.RXFE
+bounded-poll, D-158 hang-önleme dersi) BİREBİR .kem yeniden gerçekleştirmesi + GERÇEK EL0 round-trip.
+
+**Üç GERÇEK bug bulundu + düzeltildi (bu batch'in asıl işi — salt sembol taşıma değildi):**
+
+1. **LINCHPIN adres-çakışması (D-286'nın kendi hatası):** `kul_test` (.kem-derlenmiş, D-286) `.user`
+   section'ın TAM BAŞINA (0x42000000) yerleşiyordu — AYNI adrese A5'in `kem_el0_testi`'si (ondan ÖNCE
+   koşan, HAM byte yazan eski test) yazıyordu → `kul_test`'in derlenmiş byte'larını RUNTIME'DA EZİYORDU.
+   D-286'nın LINCHPIN gate'i YANLIŞ SEBEPTEN geçmişti (ezilmiş eski stub çalışıyordu, gerçek `kul_test`
+   içeriği DEĞİL). **Düzeltme:** ham-byte test adresleri (`KG_EL0_KOD`/`KG_EL0_KOTU`) `.user` kod
+   tabanından +64KB'a taşındı — gelecekteki `.kem`-routed kod büyümesiyle asla çakışmaz.
+2. **`KIS_UART_FR` yanlış sabit (B1'den beri latent, D-283):** `150995112` (0x090000A8) — PL011'in
+   GERÇEK FR offset'i `0x18`=`150994968`. 0xA8 PL011'de tanımsız/reserved (muhtemelen her zaman 0
+   okunuyordu). TX (kis_bayt, B1) bu YÜZDEN hiç GERÇEKTEN TXFF beklemiyordu (her zaman "boş" görüp
+   hemen geçiyordu — yanlış ama zararsız, TX asla gerçek backpressure test edilmedi). RX bu bug'ı
+   MASKELEYEMEDİ: RXFE her zaman 0 (=veri var) okunup DR'den çöp okuyup asla \n/\r bulamayarak SONSUZ
+   DÖNGÜYE girdi (gerçek gate ortaya çıkardı).
+3. **EL0 kodu kernel-only (AP=00) belleğe yazmaya çalışıyordu:** `kul_rx_test` (EL0'da koşuyor) sonucu
+   `KUL_RX_SONUC`'a (0x47300100, "free RAM" — AP=00, EL0-YASAK) doğrudan `str` ile yazmaya çalıştı.
+   Gerçek permission-fault oluştu; `kis_el0_kill_aktif` B2'den beri AÇIK KALMIŞTI (hiç kapatılmıyor) →
+   fault izolasyon-öldürme yoluna gitti (görev "başarıyla bitti" GÖRÜNDÜ, `KG_OLU` set edildi) AMA
+   yazma HİÇ GERÇEKLEŞMEDİ (faulting instr atlandı) → sonuç her zaman ilk-değer (0) kaldı. **Düzeltme:**
+   `KUL_RX_BUF`/`KUL_RX_SONUC` `.user` sayfasına (0x42020000+, AP=01=EL0+EL1 RW) taşındı.
+- **Poll-sınırı kalibrasyonu:** proven-C'nin `8_000_000` sabiti GERÇEK donanım hızı varsayıyordu; QEMU'da
+  HER MMIO okuması device-emulation trap'i (mikrosaniyeler) → 8M iterasyon TÜM kem_os boot penceresini
+  (12s) dolduruyordu (ampirik). `20_000`'e küçültüldü — anlam AYNI (bounded-poll→EOF), ortam-hızına göre
+  kalibre (kör-kopyalama DEĞİL).
+- **Ampirik debug metodolojisi:** her katmanda (EL1-direkt çağrı → syscall-argüman → .kem `ret` IR →
+  `.S` register-restore → EL0 asm disassembly) izole debug ile kanıtlanmadan varsayım yapılmadı — 3 bug
+  da ancak bu katman-katman izolasyonla bulundu.
+
+**KAPI (4/4):** `[12] UART RX EOF OK` + `[1..11]` kümülatif (otomatik boot'ta girdi YOK → EOF doğru/
+beklenen sonuç, proven-C'nin kendi "best-effort" gate stratejisiyle aynı); FIXPOINT birebir 33371;
+test_tumu (bekleniyor, bu commit'te doğrulanacak).
+
+**KAPSAM/SINIR:** `kdl_user_yaz_ptr_gecerli` (D-150 user-ptr doğrulama) HENÜZ `.kem`'e taşınmadı —
+num=26 şimdilik kernel-güvenilir arg alıyor (ADIM 3 kapsamı, ayrıca not edildi). Kalan: syscall-ABI
+genişletme (dosya/spawn/net), shell REPL, spawn/wait wiring.
+
+---
+
 ## D-286 — USERLAND ADIM 1: LINCHPIN — GERÇEK .kem-derlenmiş kod EL0'da (`.user` objcopy-rename routing) — [11] LINCHPIN OK 🎉 (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-285).
