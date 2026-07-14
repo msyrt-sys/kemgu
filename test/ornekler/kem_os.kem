@@ -687,6 +687,15 @@ işlev main() -> tam32 {
         uart_satir("[14] SHELL HATA");
     }
 
+    // [15] SPAWN (USERLAND ADIM 5+6, D-290): GERÇEK sys(12) spawn + sys(14) join +
+    // Model A program modeli teyidi (gömülü .user .kem program, ELF-yükleme YOK).
+    değişken spawn_ok: tam32 = kem_spawn_testi();
+    eğer spawn_ok == 1 {
+        uart_satir("[15] SPAWN OK");
+    } değilse {
+        uart_satir("[15] SPAWN HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

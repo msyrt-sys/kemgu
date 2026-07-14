@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-290 — USERLAND ADIM 5+6 (SON): GERÇEK spawn+join (sys 12/14) + Model A program modeli teyidi — [15] SPAWN OK 🎉 (2026-07-14) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-289).
+
+**Karar [ETKİ: `runtime/kem_gorev.kem` (kdl_syscall_isle num=12/14; kul_prog_selam — gömülü "program";
+kul_spawner — EL0 spawn+join görevi; kem_spawn_testi). USERLAND_ROADMAP ADIM 5 (spawn/wait wiring) + ADIM 6
+(program modeli) — SON iki adım, TEK testte birleşik.]** Kanıtlı-C `kdl_surec_spawn`/`kdl_gorev_durum`
+(D-129/D-130) birebir basitleştirmesi: proven-C'nin per-process sayfa-tablosu (TTBR-swap) YOK — kem_os'un
+A4/A5 TEK-adres-uzayı tasarımıyla UYUMLU (roadmap'in öngördüğü gibi, `kemgu_shell_el0.c`'nin kendi yorumu
+da "TTBR-swap YOK" diyor).
+
+- **num=12 spawn(entry):** SABİT 2-slot kernel/user-yığın havuzu (round-robin, fixed-RAM cursor) →
+  `kem_gorev_olustur_el0(entry, kstk, ustk)` (A4/A5/B2'de ZATEN VAR) → pid döner. **num=14 durum(pid):**
+  `kg_oku64(KG_OLU+pid*8)` — `kdl_gorev_durum` birebir (görev bitti mi, join/wait).
+- **Model A program modeli (ADIM 6) TEYİT EDİLDİ:** `kul_prog_selam` — gömülü `.user` `.kem` fonksiyonu
+  (derleme-zamanı linkli, spawn hedefi = zaten-var-olan sembolün adresi). **ELF-yükleme YOK, disk-programı
+  YOK** — proven-C'nin `prog_hesap`/`prog_selam` desenine birebir (roadmap'in Model A tanımı DOĞRULANDI).
+- **GERÇEK test:** `kul_spawner` (EL0) → `sys(12, kul_prog_selam_adr())` → pid al → `sys(14, pid)` ile
+  GERÇEK poll-join (program bitene dek EL0'dan busy-wait) → programın bıraktığı iz (`KUL_PROG_FLAG==42`)
+  doğrulanır. **İKİNCİ, BAĞIMSIZ bir EL0 süreci** (`kul_prog_selam`) `kul_spawner`'ın (kendisi de EL0'da
+  koşan) syscall'ıyla DİNAMİK OLARAK yaratıldı — 3 eşzamanlı EL0 görevi (main dahil) doğru round-robin ile
+  yönetildi.
+- **İsimlendirme dersi (D-289'dan) UYGULANDI:** `kg_spawner_adr` (EL1'den `kem_spawn_testi` çağırır) bilinçli
+  olarak `kg_` öneğiyle yazıldı, `kul_` DEĞİL — D-289'un routing-privilege bug'ı BU BATCH'TE TEKRARLANMADI.
+
+**KAPI (4/4):** `[15] SPAWN OK` (ilk denemede) + `[1..14]` kümülatif; FIXPOINT birebir 33371; test_tumu
+(bekleniyor).
+
+**🎉 MİLESTONE — USERLAND_ROADMAP TAMAMLANDI (ADIM 1-6):** LINCHPIN + UART-RX + syscall-ABI + shell REPL +
+spawn/join + Model A program modeli — hepsi GERÇEK, saf-.kem, tek boot'ta çalışıyor. kem_os artık:
+sanal-bellek + fault/recovery + kesme-trap + timer-IRQ + preemptive multitasking + EL0 userspace + **gerçek
+userland shell'e boot eden, dinamik süreç spawn edebilen bir OS**. Kalan (bu kampanyanın DIŞI): Model B
+(diskten ELF yükleme, TTBR-per-process), canlı-interaktif shell (proven-C'nin tam tokenize/çok-komut
+sürümü), çok-dosyalı minifs, `.S`-strict, x86_64 parite.
+
+---
+
 ## D-289 — USERLAND ADIM 4: userland .kem SHELL — komut dispatch + GERÇEK syscall(5/7/17/18) yürütme — [14] SHELL OK (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-288).

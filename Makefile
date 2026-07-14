@@ -1172,6 +1172,19 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@KULADR4=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_shell$$' | awk '{print $$1}'); \
 	if [ -z "$$KULADR4" ]; then echo "FAIL: kul_shell final ELF'te tanimli degil"; exit 1; fi; \
 	echo "  (kul_shell @0x$$KULADR4 [.user'da] + kul_str_esit dispatch + kem_shell_testi wire — GERCEK userland shell SAF-.kem)"
+	@echo "FALSIFIYE-KANIT (SPAWN, D-290 USERLAND ADIM 5+6): GERCEK sys(12) spawn + sys(14) join + Model A gomulu program:"
+	@if ! grep -qE "define[^@]*@kul_prog_selam\b" $(BUILD)/kem_os.ll || ! grep -qE "define[^@]*@kul_spawner\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kul_prog_selam/kul_spawner define YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_spawn_testi\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kem_spawn_testi wire YOK"; exit 1; \
+	fi
+	@if ! grep -qE "call[^@]*@kem_gorev_olustur_el0\b" $(BUILD)/kem_os.ll; then \
+		echo "FAIL: kdl_syscall_isle (num=12) kem_gorev_olustur_el0'e wire YOK"; exit 1; \
+	fi
+	@KULADR5=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_prog_selam$$' | awk '{print $$1}'); \
+	if [ -z "$$KULADR5" ]; then echo "FAIL: kul_prog_selam final ELF'te tanimli degil"; exit 1; fi; \
+	echo "  (kul_prog_selam @0x$$KULADR5 [.user'da, ELF-yukleme YOK, derleme-zamani linkli] + sys12->kem_gorev_olustur_el0 + kem_spawn_testi wire — GERCEK spawn+join SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/virtio-blk, D-271 FAZ-B1): kem_os GERCEK blok I/O saf-.kem surucuden:"
 	@if ! grep -qE "define[^@]*@vblk_(oku|yaz|kur|bul)\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda .kem vblk_* virtio-blk surucu define YOK"; exit 1; \
@@ -1240,14 +1253,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "UART RX EOF OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS SYSCALL OK" $(BUILD)/kem_os.out \
 		   && grep -q "SHELL OK" $(BUILD)/kem_os.out \
+		   && grep -q "SPAWN OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
-			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + DISK/FS/NET/PING bekleniyor"; \
+			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
 		fi; \
 	else \

@@ -201,6 +201,25 @@ isb"#
         kem_gorev_bitir();
         ver 0;
     }
+    // USERLAND ADIM 5 (D-290): num=12 spawn(entry), num=14 durum(pid) — kdl_surec_spawn/
+    // kdl_gorev_durum birebir (D-129/D-130), Model A basitleştirmesi: TEK adres-uzayı
+    // (proven-C'nin per-process sayfa-tablosu YOK, kem_os'un A4/A5 tasarımıyla UYUMLU) +
+    // SABİT 2-SLOT havuz (kernel/user yığın çifti, round-robin — dinamik havuz YÖNETİMİ
+    // [boş-slot-arama] proven-C'de var, burada MVP: sabit döngü, havuz TÜKENMEZ (2 eşzamanlı
+    // spawn yeter — Model A gate'i kanıtlamak için). arg=EL0 giriş adresi (.user, kul_ dışı
+    // hedef de olabilir — herhangi bir .user-routed .kem fn).
+    eğer num == 12 {
+        değişken idx: tam64 = kg_oku64(KG_SPAWN_IDX) - ((kg_oku64(KG_SPAWN_IDX) / 2) * 2);
+        kg_yaz64(KG_SPAWN_IDX, kg_oku64(KG_SPAWN_IDX) + 1);
+        değişken kstk: tam64 = KG_SPAWN_KSTK0;
+        değişken ustk: tam64 = KG_SPAWN_USTK0;
+        eğer idx == 1 { kstk = KG_SPAWN_KSTK1; ustk = KG_SPAWN_USTK1; }
+        ver kem_gorev_olustur_el0(arg, kstk + 8192, ustk + 4096);
+    }
+    eğer num == 14 {
+        eğer (arg < 0) veya (arg >= 16) { ver 1; }
+        ver kg_oku64(KG_OLU + arg * 8);
+    }
     eğer num == 26 {
         değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
         ver r olarak tam64;
@@ -610,4 +629,107 @@ add $0, $0, :lo12:kul_shell"# çıktı("=r", &x) } }
         i = i + 1;
     }
     ver esit;
+}
+
+// ============================================================================
+// USERLAND ADIM 5+6 (D-290): GERÇEK spawn/wait + Model A program modeli teyidi.
+// "Program" = gömülü .user .kem fn (derleme-zamanı linkli, DİSKTEN ELF YÜKLEME YOK) —
+// Model A'nın tanımı bu (USERLAND_ROADMAP ADIM 6). Shell (kul_shell benzeri bir görev)
+// sys(12) ile bu programı SPAWN eder, sys(14) ile BEKLER (join), programın SONUCUNU
+// (KUL_PROG_FLAG) doğrular.
+
+sabit KG_SPAWN_IDX: tam64   = 1107439872;   // 0x42023100: havuz-döngü sayacı (fixed RAM)
+sabit KG_SPAWN_KSTK0: tam64 = 1194328064;   // 0x47300000: spawn havuzu kernel-yığın 0
+sabit KG_SPAWN_KSTK1: tam64 = 1194393600;   // 0x47310000: spawn havuzu kernel-yığın 1
+sabit KG_SPAWN_USTK0: tam64 = 1108410368;   // 0x42110000: spawn havuzu user-yığın 0 (.user)
+sabit KG_SPAWN_USTK1: tam64 = 1108475904;   // 0x42120000: spawn havuzu user-yığın 1 (.user)
+sabit KUL_PROG_FLAG: tam64  = 1107439616;   // 0x42023000: "program" görevin bıraktığı iz
+
+// Gömülü "program" — proven-C'nin prog_hesap/prog_selam'ının .kem karşılığı: kendi
+// EL0 sürecinde koşar, iz bırakır (KUL_PROG_FLAG=42), exit eder. AYRI ELF/disk YOK —
+// zaten bu ikilinin .user birimine derlenmiş, spawn hedefi = kendi sembol adresi.
+çıplak işlev kul_prog_selam() {
+    kg_yaz64(KUL_PROG_FLAG, 42);
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kul_prog_selam_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_prog_selam
+add $0, $0, :lo12:kul_prog_selam"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// EL0 "spawner" (shell benzeri) — sys(12,prog_adr) ile programı spawn eder → pid alır →
+// sys(14,pid) ile poll-bekler (GERÇEK join, busy-wait EL0'dan) → sonucu KUL_SPAWN_SONUC'a
+// yazar → kendisi exit eder.
+sabit KUL_SPAWN_SONUC: tam64 = 1107439744;  // 0x42023080: spawner'ın gözlemi (pid + bitti)
+çıplak işlev kul_spawner() {
+    değişken prog: tam64 = kul_prog_selam_adr();
+    değişken pid: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x8, #12
+svc #0
+mov $0, x0"#
+            çıktı("=&r", &pid)
+            girdi("r", prog)
+            bozulan("~{x0}") bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+    değişken durum: tam64 = 0;
+    değişken guard: tam64 = 0;
+    iken (durum == 0) ve (guard < 20000000) {
+        güvensiz {
+            satıriçi_asm {
+                mimari: arm64
+                şablon: r#"mov x0, $1
+mov x8, #14
+svc #0
+mov $0, x0"#
+                çıktı("=&r", &durum)
+                girdi("r", pid)
+                bozulan("~{x0}") bozulan("~{x8}") bozulan("~{memory}")
+            }
+        }
+        guard = guard + 1;
+    }
+    kg_yaz64(KUL_SPAWN_SONUC, pid);
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"mov x8, #13
+svc #0"# bozulan("~{x8}") bozulan("~{memory}") }
+    }
+    iken 1 == 1 { }
+}
+çıplak işlev kg_spawner_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kul_spawner
+add $0, $0, :lo12:kul_spawner"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Gate: spawner EL0 görevi olarak koşar → sys(12) ile İKİNCİ bir EL0 görev (program)
+// spawn eder → sys(14) ile GERÇEK join yapar (poll, program bitene dek) → programın
+// bıraktığı iz (KUL_PROG_FLAG==42) doğru mu? Model A: gömülü .user program + spawn,
+// ELF-yükleme YOK — spawn hedefi zaten-linkli bir .kem sembolün adresi.
+çıplak işlev kem_spawn_testi() -> tam32 {
+    kg_yaz64(KG_SPAWN_IDX, 0);
+    kg_yaz64(KUL_PROG_FLAG, 0);
+    kg_yaz64(KUL_SPAWN_SONUC, 0);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(kg_spawner_adr(), KG_STK1, KG_EL0_STK + 24576);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 30000000) { guard = guard + 1; }
+    kg_yaz64(KG_AKTIF, 0);
+    eğer kg_oku64(KG_OLU + t * 8) != 1 { ver 0; }
+    değişken pid: tam64 = kg_oku64(KUL_SPAWN_SONUC);
+    eğer pid < 0 { ver 0; }                          // spawn havuzu/hata
+    eğer kg_oku64(KUL_PROG_FLAG) != 42 { ver 0; }     // program GERÇEKTEN koştu mu
+    ver 1;
 }
