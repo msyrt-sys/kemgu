@@ -743,6 +743,14 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
      * `ptr` (bare fn-ptr) D-071'de closure ile çağrı-sınırında uyumsuzdu;
      * fat value + runtime env-null dispatch o tuzağı yapısal olarak eler. */
     if (tip_d->tip == DUGUM_TIP_ISLEV) return "{ ptr, ptr }";
+    /* Katman 2 (Concurrency / DRF V1): görev<T> ve kanal<T> runtime'da OPAK
+     * handle (ptr) — görev<T> = KdlGorev*, kanal<T> = KdlKanal*. T yalnız
+     * tip-kontrolde yaşar (monomorfik temsil; runtime T bilgisi taşımaz).
+     * Bu dal olmadan ikisi de fonksiyon sonundaki `return "i32"` fallback'ine
+     * düşüyordu → handle 32 bite kırpılır (64-bit host'ta bozuk pointer). */
+    if (tip_d->tip == DUGUM_TIP_GOREV || tip_d->tip == DUGUM_TIP_KANAL) {
+        return "ptr";
+    }
     /* Sabitsüre Spec V1: sabitsüre<T> runtime'da T (zero-overhead) */
     if (tip_d->tip == DUGUM_TIP_SABITSURE) {
         return ast_tip_to_ir(g, tip_d->veri.tip_sabitsure.ic_tip);
@@ -3468,6 +3476,66 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 cagri_adi_uz = ik->ad_uz;
             }
 
+            /* === Katman 2 (Concurrency / DRF V1) intrinsic emisyonu ===
+             * Bu üçü aşağıdaki generic built-in şeridine SIĞMAZ: şerit yalnız
+             * ad→kdl_ad yeniden-eşlemesi yapar ve KEMGU argümanlarını birebir
+             * IR argümanına çevirir. Oysa görev_başlat'ın TEK argümanı bir fat
+             * value'dur ve ÜÇ IR argümanına açılır; dondur ise hiç talimat
+             * üretmez. Bu yüzden şeritten ÖNCE, kendi emisyonuyla erken döner.
+             *
+             * `!ik` (kullanıcı işlevi çözülmediyse) koşulu şeritteki D2/bug#3
+             * dersinin aynısı: kullanıcı aynı adda bir işlev tanımlarsa çağrı
+             * intrinsic'e KAÇIRILMAMALI. */
+            if (!ik && n == 1 && cagri_adi_uz == 14 &&
+                memcmp(cagri_adi, "g\xc3\xb6rev_ba\xc5\x9f" "lat", 14) == 0) {
+                /* görev_başlat(c: işlev() -> T) -> görev<T>
+                 * c = { ptr fn, ptr env } (V2-F1 fat value). Runtime ρ-ABI
+                 * dispatch'ini env-null'a bakarak yapar; fn AYNI değer olarak
+                 * her iki tipli parametreye de geçilir — böylece C tarafında
+                 * fn-ptr cast'i (dolayısıyla -Wcast-function-type / -Wpedantic
+                 * uyarısı) gerekmez. Bkz. kdl_runtime.c KdlGorevBare notu. */
+                IfadeSonuc c = ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                          "{ ptr, ptr }");
+                int fnr = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fnr, c.reg);
+                int envr = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", envr, c.reg);
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_gorev_basla_kapanis"
+                    "(ptr %%%d, ptr %%%d, ptr %%%d)\n", r, fnr, fnr, envr);
+                IfadeSonuc s = { r, "ptr", 0 };
+                return s;
+            }
+            if (!ik && n == 1 && cagri_adi_uz == 17 &&
+                memcmp(cagri_adi, "g\xc3\xb6rev_birle\xc5\x9f" "tir", 17) == 0) {
+                /* görev_birleştir(g: görev<T>) -> T  (R-BİRLEŞTİR: join)
+                 * Dönüş i32: lifted lambda'nın IR dönüşü bugün SABİT i32
+                 * (llvm.c lambda_emit — "v1: tek-ifade gövde i32"). Yani T
+                 * codegen'de fiilen tam32'dir; T'nin genişlemesi lambda dönüş
+                 * tipi çıkarsamasıyla BİRLİKTE gelmeli (ikisi tek iş). */
+                IfadeSonuc gv = ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                           "ptr");
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i32 @kdl_gorev_birlestir(ptr %%%d)\n",
+                    r, gv.reg);
+                IfadeSonuc s = { r, "i32", 0 };
+                return s;
+            }
+            if (!ik && n == 1 && cagri_adi_uz == 6 &&
+                memcmp(cagri_adi, "dondur", 6) == 0) {
+                /* dondur(v: &değişken T) -> &T  (R-PAYLAŞ)
+                 * V1'de bu YALNIZ bir tip-seviyesi işlemi: mutable referansı
+                 * immutable'a daraltır. Runtime temsili aynı ptr → identity,
+                 * sıfır talimat. Gerçek frozen-flag zorlaması V2 (tip_kontrol.c
+                 * DRF005 notu). Bu dal olmadan `call ptr @dondur(...)` üretilip
+                 * TANIMSIZ SEMBOL link hatası veriyordu. */
+                return ifade_uret(g, d->veri.cagri.argumanlar[0], "ptr");
+            }
+
             /* Built-in libc / kdl mapping */
             const char *kdl_donus = NULL;  /* override (NULL ise auto) */
             /* src-bugfix'ten: param_beklenen + builtin_donus (genis tasarim) */
@@ -5725,6 +5793,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
     fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
     fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
+    /* Katman 2 (Concurrency / DRF V1): görev_başlat / görev_birleştir hedefleri.
+     * basla_kapanis(fn, fn, env): fn BİLEREK iki kez — C tarafında iki farklı
+     * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */
+    fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)\n", out);
+    fputs("declare i32 @kdl_gorev_birlestir(ptr)\n", out);
     /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
     fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);

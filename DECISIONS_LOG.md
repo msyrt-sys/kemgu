@@ -5,6 +5,72 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-291 — KATMAN 2 CANLANDI: `görev_başlat`/`görev_birleştir`/`dondur` codegen + GERÇEK thread runtime (2026-07-16) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-290).
+
+**Karar [ETKİ: `src/llvm.c` (ast_tip_to_ir: görev/kanal→ptr; CAGRI'da 3 intrinsic erken-dönüş; 2 declare),
+`runtime/kdl_runtime.c` (KdlGorev genişletme + kdl_gorev_basla_kapanis + gerçek-thread sayaçları),
+`test/test_gorev_rt.c` (YENİ, 9 test), `test/test_llvm.c` (+4 uçtan uca), `test/ornekler/gorev_temel.kem`
+(YENİ).]** Katman 2 bugüne dek **yalnız ön-yüz**tü: tip sistemi + DRF tanılamaları eksiksiz (39/39) ama
+codegen SIFIR — bilinçli erteleme (D-008). Bu adım o ertelemeyi kapatır: **`görev` artık gerçekten çalışır.**
+
+**Ölçülen başlangıç durumu (falsifiye-kanıt):** `görev_başlat(|| 42)` bugün
+`call i32 @"görev_başlat"({ptr,ptr})` üretiyordu → `error: use of undefined value '@görev_başlat'`
+(link kırık). `görev<T>` ise `ast_tip_to_ir`'ın sonundaki `return "i32"` fallback'ine düşüyordu →
+**64-bit handle 32 bite kırpılır**. `dondur` da aynı sınıfta tanımsız sembol.
+
+- **Kilit bulgu — fat value zaten (fn, arg) çifti:** `işlev(...)` IR'de `{ ptr fn, ptr env }` (V2-F1) ve
+  çağrı ABI'si `env==null → fn(ρ)`, `env!=null → fn(ρ, env)` (V2-F4.2a ρ-ABI). Bu, bir thread-start'ın
+  ihtiyacı olan şeyin **aynısı** → görev_başlat = fat value'yu açıp runtime'a geçirmek. Ek closure
+  makinesi GEREKMEDİ.
+- **Cast-siz ABI (ölçülmüş karar):** wrapper'ın fn'i doğru imzayla çağırması gerek; ama `void*`→fn-ptr
+  `-Wpedantic`, fn-ptr→fn-ptr ise `-Wcast-function-type` uyarısı veriyor (**ikisi de ampirik ölçüldü**;
+  sıfır-uyarı hedefi ikisini de eler). Çözüm: codegen aynı `ptr`yi **iki ayrı tipli parametreye**
+  (`KdlGorevBare`/`KdlGorevKapanis`) geçer, C tarafı `env`e bakıp doğru olanı çağırır → her işaretçi
+  YALNIZ kendi gerçek tipiyle çağrılır: ne uyarı ne UB.
+- **Mevcut runtime yeniden kullanıldı:** `kdl_gorev_birlestir(KdlGorev*) -> i32` kdl_runtime.c'de ZATEN
+  vardı ve tam doğru imzadaydı; yalnız başlatıcı (ρ + env geçiren) eklendi.
+- **S1/S2 yapısal:** `kdl_gorev_basla_kapanis` her göreve `kdl_bolge_olustur()` ile KENDİ ρ_sahip'ini verir;
+  çağıranın ρ'su paylaşılmaz → iki thread aynı bump-allokatöre yazamaz. Test [7] iki görevin ρ'sunun
+  AYRI olduğunu doğrudan ölçer.
+
+**SINIR (bilinçli, dürüst):**
+- **ρ_sahip SERBEST EDİLMEZ (sızıntı).** R-BİRLEŞTİR "diğer bölgeler serbest" der; ama serbest bırakmak
+  görev-gövdesi tahsislerinin ρ_sahip'e HAPSOLDUĞUNU gerektirir (gövde, yakalanan bir `&değişken`e
+  ρ_sahip'ten işaretçi yazarsa serbest = UAF). Böyle bir **pozitif hapsedilme kanıtı YOK** — F4.2b'de
+  ρ_yerel ancak böyle bir kanıt + adversarial tarama sonrası serbest bırakılmıştı. Kanıtsız serbest
+  bırakmak yerine SIZDIRIYORUZ (güvenli taraf; F2 closure-env sızıntısıyla aynı status quo).
+  `kdl_bolge_bakiye()` bunu dürüstçe raporlar.
+- **T fiilen tam32.** Lifted lambda'nın IR dönüşü bugün SABİT i32 (`llvm.c` lambda_emit: "v1: tek-ifade
+  gövde i32") — **önceden var olan lambda sınırı**, görev getirmedi. Yan etkisi olumlu: codegen float
+  dönen lambda üretemediği için float-T'nin sessiz-bozulma riski yapısal olarak YOK. T'nin genişlemesi
+  lambda dönüş-tipi çıkarsamasıyla BİRLİKTE gelmeli (tek iş).
+- **`dondur` V1'de identity** (sıfır talimat): mutable→immutable daraltma yalnız TİP seviyesinde. Gerçek
+  frozen-flag (R-PAYLAŞ zorlaması) V2 — tip_kontrol.c DRF005 notu zaten öyle diyor.
+- **`kanal` HÂLÂ ÇALIŞMIYOR ve bu adımın kapsamı dışı:** DRF V1'de **kanal kurucusu YOK**. Tüm DRF
+  testleri kanalı *parametre* olarak alıyor (`işlev test(k: kanal<tam32>)`); hiçbiri kanal yaratmıyor →
+  gerçek bir programda `kanal<T>` değeri elde etmek İMKÂNSIZ, codegen eklense bile. Kurucu bir **syntax
+  kararı** (Mehmet'e sorulacak; spec `gönderen<T>`/`alan<T>` ayrık uçlar derken implementasyon tek
+  yönsüz `kanal<T>` kullanıyor — bu ayrışma da kararla birlikte çözülmeli).
+
+**Kanıt (gerçek derle+çalıştır, "42 döndü" ile yetinmeden):**
+- `test_gorev_rt` **9/9** — kritik olanlar: **[4] GERÇEK thread spawn edildi (sıralı fallback DEĞİL)** ve
+  **[7] S1: iki görevin ρ_sahip'i AYRI**. Bu iki test olmadan süit "yanlış sebeple" geçebilirdi: runtime
+  thread yaratılamazsa sessizce sıralı çalışır ve **aynı sonucu** üretir (D-287 LINCHPIN tuzağının aynı
+  sınıfı) → ayrım için `kdl_gorev_thread_sayisi`/`kdl_gorev_sirali_sayisi` sayaçları eklendi.
+- `test_llvm` **245/245** (+4: yakalamasız, yakalamalı closure env!=null, iki eşzamanlı görev 20+22, dondur).
+- Regresyon: DRF **39/39**, codegen semantik parite **76/76**, **SELF-HOST FIXPOINT ✓** (stage1==stage2,
+  33371 satır birebir — llvm.c'ye eklenen declare'ler self-host zincirini BOZMADI), lambda 5/5,
+  çıplak region-free 6/6, `test_tumu` exit 0.
+
+**Yan bulgu (kayda değer, ayrı iş):** skaler `&tam32` referansı bugün KEMGU'da **hiç okunamıyor** —
+`ver v` T020, `v + 0` T003, `*v` T001; yalnız taşınıp `&tam32` olarak döndürülebiliyor (D25 deseni). Hiçbir
+örnek/test skaler referans kullanmıyormuş. Bu yüzden `dondur`'un değer-turu testi yapı-referansı
+(`&Kutu` → `r.deger`) üzerinden yazıldı. Önceden var olan boşluk, bu adımın getirdiği değil.
+
+---
+
 ## D-290 — USERLAND ADIM 5+6 (SON): GERÇEK spawn+join (sys 12/14) + Model A program modeli teyidi — [15] SPAWN OK 🎉 (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-289).

@@ -1,0 +1,31 @@
+// KEMGU Katman 2 (Concurrency / DRF V1) — görev temel örneği
+//
+// görev_başlat(c: işlev() -> T) -> görev<T>
+//     Yeni bir görev başlatır. c PARAMETRESİZ bir kapanış olmalı (DRF001).
+//     Görev kendi bölgesini (ρ_sahip) sahiplenir — R-GÖREV / S2.
+//
+// görev_birleştir(g: görev<T>) -> T
+//     Görevin bitmesini bekler, sonucunu çağırana taşır — R-BİRLEŞTİR.
+//     g bu noktada TÜKETİLİR: görev<T> lineerdir, iki kez birleştirilemez
+//     (L002) ve hiç birleştirilmezse sızıntı olarak raporlanır (L001).
+//
+// Veri yarışı neden imkânsız (KEMGU_Bellek_Modeli.md Katman 2):
+//     S1 (tekil sahiplik) — bir bölgenin her an TEK sahibi vardır.
+//     S2 (başlangıç sahipliği) — görev yaratıldığında kendi ρ_sahip'ini alır;
+//     çağıranın bölgesi PAYLAŞILMAZ. İki thread aynı bölgeye erişemediği için
+//     yarış, çalışma-zamanı kilidiyle değil, TİP+BÖLGE seviyesinde elenir.
+//
+// Beklenen çıkış kodu: 42
+
+işlev main() -> tam32 {
+    // (a) Yakalamasız görev — kapanış hiçbir şey yakalamaz.
+    değişken a: görev<tam32> = görev_başlat(|| 20);
+
+    // (b) Yakalamalı görev — `temel` kapanışa değer olarak yakalanır
+    //     ve görevin bölgesine taşınır (R-GÖREV: YD(c) transferi).
+    değişken temel: tam32 = 20;
+    değişken b: görev<tam32> = görev_başlat(|| temel + 2);
+
+    // Her iki görev de birleştirilmeli — aksi halde L001 (tüketilmedi).
+    ver görev_birleştir(a) + görev_birleştir(b);
+}

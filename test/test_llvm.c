@@ -2614,6 +2614,66 @@ static void test_d2_kullanici_prefix_oncelik(void) {
                rc == 42);
 }
 
+/* === Katman 2 (Concurrency / DRF V1) — uctan uca codegen ===
+ * Bu testler `görev_başlat`/`görev_birleştir`/`dondur` icin GERCEK derleme +
+ * calistirma + exit-kodu dogrular. Runtime semantigi (gercek thread mi, S1/S2
+ * bolge ayrikligi mi) ayrica test_gorev_rt.c'de olculur — burada codegen'in
+ * dogru runtime cagrisini urettigi kanitlanir. */
+
+static void test_gorev_yakalamasiz(void) {
+    /* Yakalamasiz lambda -> fat value { @lambda_0, null } -> env=NULL yolu
+     * (runtime bare dispatch: i32 @lambda_0(ptr %rho)). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 42); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+    test_sonuc("gorev_baslat/birlestir (yakalamasiz) -> exit 42", rc == 42);
+}
+
+static void test_gorev_yakalamali(void) {
+    /* Yakalama -> env HEAP malloc -> fat value { @lambda_0, %env } -> env!=NULL
+     * yolu (runtime closure dispatch: i32 @lambda_0(ptr %rho, ptr %env)).
+     * Yakalanan x gorev govdesinde okunur. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 40; "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| x + 2); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+    test_sonuc("gorev_baslat yakalamali closure (env!=null) -> exit 42",
+               rc == 42);
+}
+
+static void test_gorev_coklu(void) {
+    /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 20); "
+        "de\xc4\x9fi\xc5\x9fken b: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 22); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a) + "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); }");
+    test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
+}
+
+static void test_dondur_identity(void) {
+    /* dondur(&değişken T) -> &T : V1'de tip-seviyesi islem, runtime identity.
+     * Onceki davranis: `call ptr @dondur(...)` -> TANIMSIZ SEMBOL link hatasi.
+     * Deger yapi-referansi uzerinden geri okunuyor (skaler `&tam32` bugun
+     * KEMGU'da okunamiyor — ayri, onceden var olan bir sinir). */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { deger: tam32; } "
+        "i\xc5\x9flev payla\xc5\x9f(k: &de\xc4\x9fi\xc5\x9fken Kutu) -> &Kutu { "
+        "ver dondur(k); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: Kutu = Kutu { deger: 42 }; "
+        "de\xc4\x9fi\xc5\x9fken r: &Kutu = payla\xc5\x9f(&de\xc4\x9fi\xc5\x9fken k); "
+        "ver r.deger; }");
+    test_sonuc("dondur(&degisken T) -> &T identity -> exit 42", rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2957,6 +3017,12 @@ int main(void) {
     printf("\n--- Codegen borc regresyonu (D1 + D2) ---\n");
     test_d1_generic_sonuc_ptr();
     test_d2_kullanici_prefix_oncelik();
+
+    printf("\n--- Katman 2: Concurrency / DRF V1 ---\n");
+    test_gorev_yakalamasiz();
+    test_gorev_yakalamali();
+    test_gorev_coklu();
+    test_dondur_identity();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

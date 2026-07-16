@@ -95,7 +95,8 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 30/30, multi-int + metin + yapı + float/dizi/struct-by-value)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 245/245, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/dondur)
+│   ├── test_gorev_rt.c                — Katman 2 görev runtime (kdl_gorev_basla_kapanis/birlestir) — 9/9; GERÇEK thread + S1/S2 ρ ayrıklığı kanıtı (D-291)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
@@ -668,10 +669,23 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 
 ### Sıradaki büyük seçenekler:
 - **DRF V2 (operasyonel)** — Plan Karar B; runtime izler + C++11 weak memory model fence emit
-- **Concurrency runtime** — `görev`/`kanal` lang syntax mevcut (DRF V1 statik tip kontrol);
-  runtime thread/channel implementasyonu, LLVM codegen, semaforlar (Plan Karar F V2)
+- ~~**Concurrency runtime — `görev` tarafı**~~ ✓ **D-291** (Katman 2 CANLI): `görev_başlat`/
+  `görev_birleştir` codegen + GERÇEK host thread (`kdl_gorev_basla_kapanis`); her görev
+  kendi ρ_sahip'ini alır (S1/S2 yapısal — test [7] ρ ayrıklığını ölçer). `dondur` V1'de
+  identity. **Kalan (bu sırayla):**
+  - **`kanal` — BLOKE: kurucu syntax kararı Mehmet'te.** DRF V1'de kanal KURUCUSU yok;
+    tüm testler kanalı parametre alıyor → gerçek programda `kanal<T>` elde etmek imkânsız.
+    Ayrıca spec `gönderen<T>`/`alan<T>` ayrık uçlar derken implementasyon tek `kanal<T>`
+    kullanıyor — kararla birlikte çözülmeli. (Runtime `kdl_kanal_*` host'ta ZATEN var.)
+  - **ρ_sahip serbest bırakma** — F4-sınıfı iş: pozitif hapsedilme (confinement) kanıtı +
+    adversarial tarama gerektirir (F4.2b'nin ρ_yerel deseni). Kanıtsız serbest = UAF riski.
+  - Semaforlar / bariyerler (Plan Karar F V2)
 - **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
-  block içindeki son `ver` deyimi tip dönüşü V2)
+  block içindeki son `ver` deyimi tip dönüşü V2) — **`görev<T>`'nin T'sini de bu açar:**
+  lifted lambda dönüşü bugün sabit i32 → görev<T> fiilen T=tam32 (D-291 sınırı, tek iş)
+- **Skaler referans okuma** (D-291 yan bulgusu): `&tam32` bugün hiç okunamıyor — `ver v`
+  T020, `v+0` T003, `*v` T001; yalnız taşınıp döndürülebiliyor. Yapı referansı (`r.alan`)
+  çalışıyor. Hiçbir örnek/test skaler referans kullanmıyor.
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)

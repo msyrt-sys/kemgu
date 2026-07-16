@@ -550,10 +550,29 @@ __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
  * Kanal: basit FIFO queue. Thread-safe degil (sequential).
  */
 
+/* === Katman 2 / DRF V1: gorev kapanis (closure) imzalari ===
+ * Codegen'in urettigi lifted lambda ρ-ABI'sine (V2-F4.2a) birebir uyar:
+ *   env == NULL -> bare   : i32 @lambda_N(ptr %rho)
+ *   env != NULL -> closure: i32 @lambda_N(ptr %rho, ptr %env)
+ * IKI AYRI alan (tek void* + cast DEGIL): object->fn-ptr donusumu -Wpedantic,
+ * fn-ptr->fn-ptr donusumu ise -Wcast-function-type uyarisi verir (ikisi de
+ * olcüldü). Codegen ayni `ptr`yi her iki parametreye de gecer; her isaretci
+ * YALNIZ kendi gercek tipiyle cagrildigi icin ne uyari ne UB olusur. */
+typedef int32_t (*KdlGorevBare)(void *rho);
+typedef int32_t (*KdlGorevKapanis)(void *rho, void *env);
+
 typedef struct {
     int32_t result;
     int done;
-    int32_t (*f)(void);     /* gorev islevi */
+    int32_t (*f)(void);     /* gorev islevi (eski kdl_gorev_basla_i32 yolu) */
+    /* Katman 2 yolu (kdl_gorev_basla_kapanis) — f==NULL iken kullanilir */
+    KdlGorevBare fn_bare;
+    KdlGorevKapanis fn_kapanis;
+    void *env;
+    /* R-GÖREV: ρ_sahip(t_yeni) — gorevin KENDI bolgesi (S2: yaratildiginda
+     * gorev sahiplenir). Gorev govdesindeki tahsisler buraya gider.
+     * V1: SERBEST EDILMEZ (sizinti) — bkz. kdl_gorev_birlestir notu. */
+    KdlBolge *rho;
 #ifdef KDL_THREAD_WIN
     HANDLE handle;
 #endif
@@ -563,51 +582,107 @@ typedef struct {
 #endif
 } KdlGorev;
 
+/* Gorev govdesi — her iki baslatma yolunun ortak cekirdegi. */
+static void kdl_gorev_govde(KdlGorev *g) {
+    if (g->fn_bare || g->fn_kapanis) {
+        if (g->env) g->result = g->fn_kapanis(g->rho, g->env);
+        else        g->result = g->fn_bare(g->rho);
+    } else {
+        g->result = g->f ? g->f() : 0;
+    }
+    g->done = 1;
+}
+
 #ifdef KDL_THREAD_WIN
 static DWORD WINAPI kdl_gorev_thread_main(LPVOID param) {
-    KdlGorev *g = (KdlGorev *)param;
-    g->result = g->f ? g->f() : 0;
-    g->done = 1;
+    kdl_gorev_govde((KdlGorev *)param);
     return 0;
 }
 #endif
 #ifdef KDL_THREAD_POSIX
 static void *kdl_gorev_thread_posix(void *param) {
-    KdlGorev *g = (KdlGorev *)param;
-    g->result = g->f ? g->f() : 0;
-    g->done = 1;
+    kdl_gorev_govde((KdlGorev *)param);
     return NULL;
 }
 #endif
+
+/* === Gercek-thread tanigi (kdl_bolge_*_sayisi deseni) ===
+ * Sirali fallback ile gercek thread AYNI sonucu uretir; dolayisiyla bir
+ * gorev testinin "dogru sonuc" vermesi thread'in gercekten spawn edildigini
+ * KANITLAMAZ. Bu iki sayac o ayrimi gozlemlenebilir kilar (test/teshis). */
+uint64_t kdl_gorev_thread_sayisi = 0;   /* gercek thread spawn edildi */
+uint64_t kdl_gorev_sirali_sayisi = 0;   /* fallback: cagiran thread'te calisti */
+
+/* Ortak spawn: thread yaratilamazsa gorevi SIRALI calistirir (fallback) —
+ * gorev semantigi korunur, yalniz paralellik kaybolur. */
+static void kdl_gorev_spawn(KdlGorev *g) {
+#ifdef KDL_THREAD_WIN
+    g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
+    if (!g->handle) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
+    else kdl_gorev_thread_sayisi++;
+#elif defined(KDL_THREAD_POSIX)
+    g->thr_valid = (pthread_create(&g->thr, NULL,
+                                    kdl_gorev_thread_posix, g) == 0);
+    if (!g->thr_valid) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
+    else kdl_gorev_thread_sayisi++;
+#else
+    kdl_gorev_sirali_sayisi++;
+    kdl_gorev_govde(g);   /* Thread yok -> sequential */
+#endif
+}
 
 /* islev pointer alir, ya gercek thread spawn ya sequential calistirir */
 KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
     KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = f;
+    g->fn_bare = NULL; g->fn_kapanis = NULL; g->env = NULL; g->rho = NULL;
     g->result = 0;
     g->done = 0;
-#ifdef KDL_THREAD_WIN
-    g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
-    if (!g->handle) {
-        g->result = f ? f() : 0;
-        g->done = 1;
-    }
-#elif defined(KDL_THREAD_POSIX)
-    g->thr_valid = (pthread_create(&g->thr, NULL,
-                                    kdl_gorev_thread_posix, g) == 0);
-    if (!g->thr_valid) {
-        g->result = f ? f() : 0;
-        g->done = 1;
-    }
-#else
-    /* Thread yok -> sequential */
-    g->result = f ? f() : 0;
-    g->done = 1;
-#endif
+    kdl_gorev_spawn(g);
     return g;
 }
 
+/* === Katman 2 / R-GÖREV: `görev_başlat(c)` codegen hedefi ===
+ * c fat value { ptr fn, ptr env } olarak gelir; codegen fn'i HER IKI tipli
+ * parametreye de gecer (bkz. KdlGorevBare/KdlGorevKapanis notu) ve env'i
+ * ayrica verir. Donen opak handle = KEMGU'daki `görev<T>` degeri (IR: ptr).
+ *
+ * S1/S2 (tekil sahiplik + baslangic sahipligi): yeni gorev KENDI ρ_sahip'ini
+ * alir; cagiranin ρ'su PAYLASILMAZ. Boylece cagiran ile gorev ayni bolgeye
+ * es zamanli erisemez — S1 yapisal olarak korunur (paylasilan-ρ yarisi
+ * imkansiz). */
+KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
+                                  KdlGorevKapanis fn_kapanis,
+                                  void *env) {
+    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    if (!g) return NULL;
+    g->f = NULL;
+    g->fn_bare = fn_bare;
+    g->fn_kapanis = fn_kapanis;
+    g->env = env;
+    g->result = 0;
+    g->done = 0;
+    g->rho = kdl_bolge_olustur();       /* R-GÖREV: ρ_sahip(t_yeni) */
+    if (!g->rho) { free(g); return NULL; }
+    kdl_gorev_spawn(g);
+    return g;
+}
+
+/* === R-BİRLEŞTİR: `görev_birleştir(g)` codegen hedefi ===
+ * Gorevin bitisini bekler (join) ve sonucu cagirana tasir.
+ *
+ * ρ_sahip V1'de SERBEST EDILMEZ (bilinerek sizdirilir). Aksiyom "sonuc
+ * ρ_çağıran'a terfi, sahiplenilen DIGER bolgeler serbest" der; ancak serbest
+ * birakmak, gorev govdesindeki tahsislerin ρ_sahip'e HAPSOLDUGUNU (confinement)
+ * gerektirir. Ornegin govde, yakalanan bir `&değişken`e ρ_sahip'ten bir isaretci
+ * yazarsa isaretci gorevi asar -> serbest birakmak UAF olur.
+ * Boyle bir POZITIF hapsedilme kaniti bu asamada YOK; F4.2b'de ρ_yerel ancak
+ * boyle bir kanit + adversarial tarama sonrasi serbest birakilmisti. Kanitsiz
+ * serbest birakmak yerine SIZDIRIYORUZ (guvenli taraf) — F2'nin closure-env
+ * sizintisiyla ayni status quo. kdl_bolge_bakiye() bunu durustce raporlar.
+ * Serbest birakma, ayri bir F4-sinifi is olarak ρ_sahip confinement kanitiyla
+ * birlikte gelir. */
 int32_t kdl_gorev_birlestir(KdlGorev *g) {
     if (!g) return 0;
 #ifdef KDL_THREAD_WIN
@@ -619,6 +694,7 @@ int32_t kdl_gorev_birlestir(KdlGorev *g) {
     if (g->thr_valid) pthread_join(g->thr, NULL);
 #endif
     int32_t r = g->result;
+    /* g->rho BILEREK serbest edilmiyor (yukaridaki not). */
     free(g);
     return r;
 }
