@@ -2748,6 +2748,41 @@ static void test_lambda_donus_kesirli(void) {
                rc == 42);
 }
 
+/* === D-294: görev<T> genisletme (runtime i64 tasima) === */
+
+static void test_gorev_metin(void) {
+    /* `görev<metin>`: lambda ptr doner (D-293), runtime i64 tasir, cagri yeri
+     * bildirilen görev<T>'den T=ptr ogrenip inttoptr eder. i32 tasimada bu
+     * isaretci KIRPILIRDI (D-294 oncesi: LLVM tip hatasi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("gorev<metin> (i64 tasima + inttoptr) -> exit 5", rc == 5);
+}
+
+static void test_gorev_kesirli_llvm_de_reddedilir(void) {
+    /* KATMANLI SAVUNMA — 2. katman. Tip kontrolu kesirli T'yi DRF001 ile
+     * reddeder (test_drf.c D47), ama `--llvm` modu tip kontrolu CALISTIRMAZ
+     * (onceden var olan davranis) -> bu yol da guvenli olmali.
+     * Oyle: birlestir sonucu i64 tasinir ve T'ye daraltilir; T=double icin
+     * `trunc i64 -> double` GECERSIZDIR -> LLVM gurultulu reddeder
+     * ("invalid cast opcode"). Yani `--check` atlansa bile SESSIZ cop
+     * uretilemez. (Bu testin `birlestir`i CAGIRMASI sart: cagirmazsa gecersiz
+     * cast hic emit edilmez ve test yanlis sebeple gecerdi.) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<kesirli64> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 3.5); "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("gorev<kesirli64>: --llvm yolunda da LLVM reddi (sessiz cop yok)",
+               rc != 0);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -3104,6 +3139,10 @@ int main(void) {
     test_lambda_donus_metin();
     test_lambda_donus_metin_ic_ice();
     test_lambda_donus_kesirli();
+
+    printf("\n--- gorev<T> genisletme (D-294) ---\n");
+    test_gorev_metin();
+    test_gorev_kesirli_llvm_de_reddedilir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

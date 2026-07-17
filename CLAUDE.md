@@ -95,9 +95,9 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 250/250, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 252/252, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması + görev<T> genişletme)
 │   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA kanıtı (D-291/D-292)
-│   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 46/46 (D40-D46: kanal_oluştur + V1 32-bit T kısıtı)
+│   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 49/49 (D40-D46 kanal_oluştur + 32-bit T kısıtı; D47-D49 görev<T> kesirli reddi + metin kabulü)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
 │       ├── gorev_temel.kem            — Katman 2: görev_başlat/birleştir (D-291) — exit 42
@@ -675,7 +675,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - ~~**Concurrency runtime — `görev` tarafı**~~ ✓ **D-291** (Katman 2 CANLI): `görev_başlat`/
   `görev_birleştir` codegen + GERÇEK host thread (`kdl_gorev_basla_kapanis`); her görev
   kendi ρ_sahip'ini alır (S1/S2 yapısal — test [7] ρ ayrıklığını ölçer). `dondur` V1'de
-  identity. **Kalan (bu sırayla):**
+  identity. **D-294:** runtime i64 taşımaya geçti → **`görev<metin>` çalışıyor**
+  (T ∈ {≤64-bit tamsayı, işaretçi-benzeri, boş}). **Kesirli T REDDEDİLİR** (DRF001):
+  runtime sonucu x0/rax'tan okur, float v0/xmm0'dadır → bitcast sessiz çöp olurdu;
+  `--llvm` tip kontrolünü atlasa bile `trunc i64→double` geçersiz → LLVM gürültülü reddeder
+  (katmanlı savunma, ikisi de ölçüldü). **Kalan (bu sırayla):**
   - ~~**`kanal`**~~ ✓ **D-292**: `kanal_oluştur<T>(kapasite)` kurucusu (T beklenen tipten;
     bağlamsız → DRF006) + gönder/al codegen + **BLOKLAYAN** host runtime (koşul değişkeni).
     Mehmet kararı: tek yönsüz `kanal<T>` (spec R-KANAL buna göre yeniden yazıldı; **bedeli:
@@ -704,7 +708,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
-- **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
+- ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
+  (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
+  roadmap güncellenmemiş). Ampirik doğrulama (derle+çalıştır+exit): dizi param `topla(xs:
+  Dizi<tam32>)`→42 ✓, dizi dönüş `yap() -> Dizi<tam32>`→42 ✓, `dizi_boyut`→3 ✓, generic
+  `kimlik<T>(x:T)->T` → 42 ✓, generic+metin → 5 ✓. **DERS:** roadmap maddelerini başlamadan
+  ölç — eskimiş olabilir.
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
 - **Linear V2:** lineer alanlı yapı (`yapı tekkez K { ... }`), L005 (koşullu tüketim tutarlılığı)
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)

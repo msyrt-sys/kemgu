@@ -1411,6 +1411,15 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             TipBilgisi *ic = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_gorev.ic_tip);
             if (ic->kategori == TIP_HATA) return t_hata(tk);
+            /* D-294: annotasyon/parametre yolundaki AYNI kısıt (görev_başlat
+             * yalnız YARATMA yolunu kapsar; `işlev t(g: görev<kesirli64>)`
+             * gibi bildirimler buradan geçer). */
+            if (ic->kategori == TIP_KESIRLI32 || ic->kategori == TIP_KESIRLI64) {
+                tip_hata(tk, tip_d, "DRF001",
+                    "gorev<T> V1'de kesirli T desteklemiyor (kesirli32/64) — "
+                    "runtime sonucu tamsayi yazmacindan okur");
+                return t_hata(tk);
+            }
             return tip_olustur_gorev(tk->arena, ic);
         }
 
@@ -3057,6 +3066,19 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* görev<T> dön — T = closure dönüş tipi */
                 TipBilgisi *donus = cf->veri.islev.donus;
                 if (!donus) donus = tip_olustur_basit(tk->arena, TIP_BOS);
+                /* D-294 V1 SINIRI: T KESİRLİ olamaz. Runtime görev sonucunu
+                 * tamsayı-dönüşlü bir fn-ptr ile alır (x0/rax); float dönüş
+                 * v0/xmm0'da gelir → değer SESSİZCE çöp olurdu. Reddetmek
+                 * yerine bitcast'lamak hata modunu loud→silent'a çevirirdi.
+                 * Kapasite kaybı YOK: görev<kesirli*> zaten hiç derlenmiyordu
+                 * (LLVM tip hatası); kazanç, düzgün bir KEMGU tanısı. */
+                if (donus->kategori == TIP_KESIRLI32 ||
+                    donus->kategori == TIP_KESIRLI64) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF001",
+                        "gorev<T> V1'de kesirli T desteklemiyor "
+                        "(kesirli32/64) — closure tamsayi/isaretci donmeli");
+                    return t_hata(tk);
+                }
                 return tip_olustur_gorev(tk->arena, donus);
             }
             /* kanal_oluştur(kapasite) -> kanal<T> — T YALNIZ beklenen tipten

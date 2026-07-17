@@ -558,11 +558,20 @@ __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
  * fn-ptr->fn-ptr donusumu ise -Wcast-function-type uyarisi verir (ikisi de
  * olcüldü). Codegen ayni `ptr`yi her iki parametreye de gecer; her isaretci
  * YALNIZ kendi gercek tipiyle cagrildigi icin ne uyari ne UB olusur. */
-typedef int32_t (*KdlGorevBare)(void *rho);
-typedef int32_t (*KdlGorevKapanis)(void *rho, void *env);
+/* D-294: dönüş int32_t -> int64_t (T genişletme).
+ * Neden: `görev<metin>` gibi işaretçi taşıyan T'lerde i32 taşıma işaretçiyi
+ * kırpardı. i64 taşıma HER İKİ yönü de doğru kılar:
+ *   - i32 dönen lambda int64 olarak çağrılınca üst 32 bit ÇÖP olur; codegen
+ *     birleştir sonucunu T'ye TRUNC ettiği için değer doğru kalır.
+ *   - ptr dönen lambda -> tam işaretçi (x0/rax 64-bit).
+ * KESİRLİ T DESTEKLENMEZ (tip kontrolünde reddedilir): float dönüş v0/xmm0'da
+ * gelir, buradaki tamsayı-dönüşlü çağrı x0/rax okur -> SESSİZ çöp. Reddetmek
+ * yerine bitcast'lamak hata modunu loud->silent'a çevirirdi. */
+typedef int64_t (*KdlGorevBare)(void *rho);
+typedef int64_t (*KdlGorevKapanis)(void *rho, void *env);
 
 typedef struct {
-    int32_t result;
+    int64_t result;
     int done;
     int32_t (*f)(void);     /* gorev islevi (eski kdl_gorev_basla_i32 yolu) */
     /* Katman 2 yolu (kdl_gorev_basla_kapanis) — f==NULL iken kullanilir */
@@ -683,7 +692,7 @@ KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
  * sizintisiyla ayni status quo. kdl_bolge_bakiye() bunu durustce raporlar.
  * Serbest birakma, ayri bir F4-sinifi is olarak ρ_sahip confinement kanitiyla
  * birlikte gelir. */
-int32_t kdl_gorev_birlestir(KdlGorev *g) {
+int64_t kdl_gorev_birlestir(KdlGorev *g) {
     if (!g) return 0;
 #ifdef KDL_THREAD_WIN
     if (g->handle) {
@@ -693,7 +702,7 @@ int32_t kdl_gorev_birlestir(KdlGorev *g) {
 #elif defined(KDL_THREAD_POSIX)
     if (g->thr_valid) pthread_join(g->thr, NULL);
 #endif
-    int32_t r = g->result;
+    int64_t r = g->result;   /* D-294: T'ye daraltma codegen'de (trunc/inttoptr) */
     /* g->rho BILEREK serbest edilmiyor (yukaridaki not). */
     free(g);
     return r;

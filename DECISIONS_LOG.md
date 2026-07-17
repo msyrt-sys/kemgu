@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-294 — `görev<T>` genişletme: `görev<metin>` çalışıyor (runtime i64 taşıma) + kesirli T reddi (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-293).
+
+**Karar [ETKİ: `runtime/kdl_runtime.c` (görev dönüşü int32_t→int64_t), `src/llvm.c`
+(`LlvmIsim.gorev_ic_ir` + `gorev_ic_ir_al`; birleştir emisyonu i64→T daraltma; declare),
+`src/tip_kontrol.c` (kesirli T reddi — 2 tıkaç), `test/test_gorev_rt.c` (ABI hizalama),
+`test/test_llvm.c` (+2), `test/test_drf.c` (+3).]**
+
+**Kapatılan boşluk:** D-293 lambda tarafını çözmüştü (`define ptr @lambda_0` ✓) ama
+`kdl_gorev_birlestir` **int32_t** dönüyordu → `görev<metin>` LLVM tip hatası veriyordu.
+Runtime i64 taşımaya geçti; `görev_birleştir` sonucu çağrı yerinde T'ye daraltılıyor
+(`ptr`→`inttoptr`, `i64`→aynen, `i8/16/32/i1`→`trunc`). **`görev<metin>` artık çalışıyor**
+(uçtan uca exit 5). T'nin IR'i **bildirilen** `görev<T>`den gelir (`gorev_ic_ir` —
+`görev<T>` IR'de opak `ptr` olduğu için T başka türlü bilinemez; D-293'teki
+`kapanis_donus_ir` deseninin aynısı).
+
+**Neden i32 dönen lambda bozulmuyor:** int64 olarak çağrılınca üst 32 bit ÇÖP olur, ama
+codegen sonucu T'ye **trunc** eder → değer doğru. (Bu trunc kozmetik değil, **şart**.)
+
+**KESİRLİ T REDDİ — KATMANLI SAVUNMA (ikisi de ölçüldü):**
+- Runtime sonucu **tamsayı** dönüşlü fn-ptr ile alır (x0/rax); kesirli dönüş **v0/xmm0**'dadır
+  → bitcast'lamak **SESSİZ çöp** üretirdi. Reddetmek, hata modunu loud→silent'a çevirmemenin
+  tek yolu (D-293'te tam bu tuzağa düşülüp yakalanmıştı).
+- **1. katman — tip kontrolü:** iki tıkaç (görev_başlat = YARATMA yolu; `DUGUM_TIP_GOREV` =
+  annotasyon/parametre yolu) → **DRF001**.
+- **2. katman — `--llvm` tip kontrolünü ÇALIŞTIRMAZ** (önceden var olan davranış, ölçüldü:
+  `--check` exit 1 ama `--llvm` exit 0). O yol da güvenli: T=double için emisyon
+  `trunc i64 -> double` üretir, bu **geçersizdir** → LLVM gürültülü reddeder
+  (`invalid cast opcode`). **Sessiz çöp yolu KAPALI.**
+- **Kapasite kaybı YOK:** `görev<kesirli*>` zaten hiç derlenmiyordu; kazanç düzgün tanı.
+
+**TEST TUZAĞI (yakalandı):** ilk yazdığım red-testi `birleştir`i ÇAĞIRMIYORDU → geçersiz cast
+hiç emit edilmiyor, program derlenip geçiyordu → test **yanlış sebeple** kalıyordu. Çağıracak
+şekilde düzeltildi. **Ayrıca `test_gorev_rt.c` hâlâ `extern int32_t kdl_gorev_birlestir`
+bildiriyordu**; ayrı derleme birimi olduğu için linker uyuşmazlığı YAKALAMAZ ve test düşük 32
+biti okuyup **yanlış sebeple geçerdi** — bildirimler tanımla birebir hizalandı.
+
+**SINIR:** `görev<T>` V1: T ∈ {≤64-bit tamsayı, işaretçi-benzeri (metin/&T/Dizi<T>), boş}.
+Kesirli T yok (yukarıdaki gerekçe). `kanal<T>` ayrı ve daha dar (32-bit tamsayı, D-292) —
+sınırı runtime tamponundan (int32_t), lambda'dan değil.
+
+**KANIT:** `test_llvm` **252/252** (+2: görev<metin> → exit 5; görev<kesirli64> `--llvm`
+yolunda da LLVM reddi). `test_drf` **49/49** (+3: D47 görev_başlat kesirli → DRF001, D48
+annotasyon yolu → DRF001, D49 görev<metin> = 0 hata). `test_gorev_rt` **13/13** (ABI hizalı).
+Regresyon: codegen parite **76/76**, **SELF-HOST FIXPOINT ✓** (33371 satır), `test_tumu`.
+
+**PARİTE BORCU (sürüyor):** D-291→D-294'ün hiçbiri `selfhost/codegen.kem`'de yok.
+
+---
+
 ## D-293 — Lambda dönüş-tipi çıkarsaması: `işlev() -> metin` / `-> kesirli64` lambdaları artık çalışıyor (2026-07-17) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-292).

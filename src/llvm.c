@@ -77,6 +77,11 @@ typedef struct LlvmIsim {
      * bilgidir → burada saklanır ve çağrı yerinde beklenen'e TERCİH edilir.
      * NULL = closure değil / tip bilinmiyor (arena_ayir_sifir varsayılanı). */
     const char *kapanis_donus_ir;
+    /* D-294: `görev<T>` tipli değişken/parametrenin T IR tipi. görev<T> IR'de
+     * opak `ptr` (handle) — T'yi SİLER. Runtime birleştir'i i64 taşır; sonucu
+     * T'ye daraltmak (trunc / inttoptr) için T gerekir. NULL = görev değil /
+     * annotasyonsuz (arena_ayir_sifir varsayılanı) → beklenen'e düşülür. */
+    const char *gorev_ic_ir;
     /* Liste<T> BUG-2 fix: tek-tip-arg'li generic kullanici tipi
      * (Liste<tam64> -> "i64") — &Liste<T> parametresinden T inference
      * icin yan-kanal (yapi IR'i type-erased %Liste, T tasimaz). */
@@ -553,6 +558,17 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
     const Dugum *dt = tip_d->veri.tip_islev.donus_tip;
     if (!dt) return NULL;
     return ast_tip_to_ir(g, dt);
+}
+
+/* D-294: tip düğümü `görev<T>` ise T'nin IR tipini döner, değilse NULL.
+ * `görev<T>` IR'de opak `ptr` (handle) — T SİLİNİR. Runtime birleştir'i i64
+ * taşır; sonucu T'ye daraltmak (trunc / inttoptr) için T'nin IR'i gerekir ve
+ * tek güvenilir kaynağı bildirilen tiptir. Bkz. LlvmIsim.gorev_ic_ir. */
+static const char *gorev_ic_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (!tip_d || tip_d->tip != DUGUM_TIP_GOREV) return NULL;
+    const Dugum *it = tip_d->veri.tip_gorev.ic_tip;
+    if (!it) return NULL;
+    return ast_tip_to_ir(g, it);
 }
 
 /* D-029 fix: tip dugumu bir YAPI ya da &Yapi veya *Yapi ise yapinin IR adi ("%T"),
@@ -3543,17 +3559,48 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (!ik && n == 1 && cagri_adi_uz == 17 &&
                 memcmp(cagri_adi, "g\xc3\xb6rev_birle\xc5\x9f" "tir", 17) == 0) {
                 /* görev_birleştir(g: görev<T>) -> T  (R-BİRLEŞTİR: join)
-                 * Dönüş i32: lifted lambda'nın IR dönüşü bugün SABİT i32
-                 * (llvm.c lambda_emit — "v1: tek-ifade gövde i32"). Yani T
-                 * codegen'de fiilen tam32'dir; T'nin genişlemesi lambda dönüş
-                 * tipi çıkarsamasıyla BİRLİKTE gelmeli (ikisi tek iş). */
+                 * D-294: runtime i64 taşır (metin/&T gibi işaretçi T'ler için;
+                 * i32 taşıma işaretçiyi kırpardı). Sonuç burada T'ye daraltılır.
+                 * T'nin IR'i BİLDİRİLEN `görev<T>`den gelir (gorev_ic_ir) —
+                 * görev<T> IR'de opak `ptr` olduğu için T başka türlü bilinemez.
+                 * Annotasyonsuz görev → gorev_ic_ir NULL → beklenen'e düşülür.
+                 * KESİRLİ T tip kontrolünde reddedilir (wrapper x0/rax okur,
+                 * float v0/xmm0'dadır → bitcast SESSİZ çöp olurdu). */
                 IfadeSonuc gv = ifade_uret(g, d->veri.cagri.argumanlar[0],
                                            "ptr");
-                int r = yeni_reg(g);
+                LlvmIsim *gi = NULL;
+                if (d->veri.cagri.argumanlar[0]->tip == DUGUM_TANIMLAYICI) {
+                    gi = isim_bul(g,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.metin,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.uzunluk);
+                }
+                const char *t_ir = (gi && gi->gorev_ic_ir) ? gi->gorev_ic_ir
+                                 : (beklenen ? beklenen : "i32");
+                int r64 = yeni_reg(g);
                 fprintf(g->out,
-                    "  %%%d = call i32 @kdl_gorev_birlestir(ptr %%%d)\n",
-                    r, gv.reg);
-                IfadeSonuc s = { r, "i32", 0 };
+                    "  %%%d = call i64 @kdl_gorev_birlestir(ptr %%%d)\n",
+                    r64, gv.reg);
+                if (strcmp(t_ir, "i64") == 0) {
+                    IfadeSonuc s = { r64, "i64", 0 };
+                    return s;
+                }
+                int r = yeni_reg(g);
+                if (strcmp(t_ir, "ptr") == 0) {
+                    fprintf(g->out, "  %%%d = inttoptr i64 %%%d to ptr\n",
+                            r, r64);
+                } else if (strcmp(t_ir, "void") == 0) {
+                    /* görev<boş>: sonuç yok — çağıran yine de bir IfadeSonuc
+                     * bekler (built-in void-call desenindeki placeholder). */
+                    fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+                    IfadeSonuc s = { r, "i32", 0 };
+                    return s;
+                } else {
+                    /* i1/i8/i16/i32 → trunc (i32 dönen lambda'nın üst 32 biti
+                     * ÇÖP olduğu için bu daraltma ŞART, kozmetik değil). */
+                    fprintf(g->out, "  %%%d = trunc i64 %%%d to %s\n",
+                            r, r64, t_ir);
+                }
+                IfadeSonuc s = { r, t_ir, 0 };
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 14 &&
@@ -4407,6 +4454,10 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                      * dönüş tipini BURADAN alır (bkz. kapanis_donus_ir). */
                     g->isimler->kapanis_donus_ir =
                         kapanis_donus_ir_al(g, d->veri.degisken.tip);
+                    /* D-294: `değişken g: görev<T> = ...` → T'nin IR'i
+                     * (görev<T> IR'de opak ptr; birleştir i64→T daraltması). */
+                    g->isimler->gorev_ic_ir =
+                        gorev_ic_ir_al(g, d->veri.degisken.tip);
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
@@ -4469,6 +4520,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
                 g->isimler->kapanis_donus_ir =
                     kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
+                g->isimler->gorev_ic_ir =
+                    gorev_ic_ir_al(g, d->veri.degisken.tip);        /* D-294 */
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
                 g->isimler->ref_yapi_ir =
@@ -5677,6 +5730,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-293: `işlev(...) -> T` tipli parametre (closure argüman) → T'nin IR'i */
         g->isimler->kapanis_donus_ir =
             kapanis_donus_ir_al(g, p->veri.parametre.tip);
+        /* D-294: `görev<T>` tipli parametre → T'nin IR'i (birleştir daraltması) */
+        g->isimler->gorev_ic_ir =
+            gorev_ic_ir_al(g, p->veri.parametre.tip);
         /* D-005: dtamN parametre -> isaretsiz isim */
         g->isimler->isaretsiz =
             ast_tip_isaretsiz_mi(p->veri.parametre.tip);
@@ -5959,7 +6015,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
      * basla_kapanis(fn, fn, env): fn BİLEREK iki kez — C tarafında iki farklı
      * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */
     fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)\n", out);
-    fputs("declare i32 @kdl_gorev_birlestir(ptr)\n", out);
+    /* D-294: i64 taşıma (işaretçi T'ler için); çağrı yerinde T'ye daraltılır. */
+    fputs("declare i64 @kdl_gorev_birlestir(ptr)\n", out);
     /* R-KANAL hedefleri. Bu imza host (kdl_runtime.c) ve bare-metal
      * (kdl_kanal.c) sürümlerinde AYNI — tek çağrı iki backend'e de bağlanır. */
     fputs("declare ptr @kdl_kanal_olustur(i32)\n", out);

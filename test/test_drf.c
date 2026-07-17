@@ -535,6 +535,39 @@ static void T43_kanal_olustur_kapasite_tamsayi_degil(void) {
                h >= 1);
 }
 
+static void T47_gorev_kesirli_reddedilir_baslat(void) {
+    /* D-294 KATMANLI SAVUNMA — 1. katman (tip kontrolü).
+     * Runtime görev sonucunu TAMSAYI dönüşlü bir fn-ptr ile alır (x0/rax);
+     * kesirli dönüş v0/xmm0'dadır → değer SESSİZCE çöp olurdu. Bitcast'lamak
+     * hata modunu loud→silent'a çevirirdi (D-293'te tam bu tuzağa düşüldü).
+     * Kapasite kaybı YOK: görev<kesirli*> zaten hiç derlenmiyordu (LLVM tip
+     * hatası); kazanç düzgün bir KEMGU tanısı.
+     * 2. katman (--llvm tip kontrolünü atlar) test_llvm.c'de. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 3.5);\n");
+    test_sonuc("D47: gorev_baslat(|| 3.5) -> DRF001 (kesirli T yok)", h >= 1);
+}
+
+static void T48_gorev_kesirli_reddedilir_annot(void) {
+    /* Aynı kısıt ANNOTASYON/PARAMETRE yolunda da geçerli olmalı —
+     * görev_başlat yalnız YARATMA yolunu kapsar. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test(g: g\xc3\xb6rev<kesirli64>) -> kesirli64 {\n"
+        "    ver g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "}\n");
+    test_sonuc("D48: gorev<kesirli64> parametre -> DRF001", h >= 1);
+}
+
+static void T49_gorev_metin_kabul(void) {
+    /* Kısıt fazla geniş olmamalı: işaretçi T (metin) D-294'te ÇALIŞIR
+     * (runtime i64 taşır + inttoptr). Uçtan uca kanıt test_llvm.c'de. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\");\n"
+        "    de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+    test_sonuc("D49: gorev<metin> = 0 hata (isaretci T destekleniyor)", h == 0);
+}
+
 static void T45_kanal_genis_T_reddedilir(void) {
     /* D-292 / Mehmet kararı: kanal<T> V1'de yalnız 32-bit tamsayı T.
      * kanal<tam64> ÖLÇÜLDÜ: derleniyor, çalışıyor ve SESSİZCE veri kaybediyor
@@ -639,6 +672,11 @@ int main(void) {
     T44_kanal_olustur_gonder_al_kompozisyon();
     T45_kanal_genis_T_reddedilir();
     T46_kanal_dar_tamsayi_kabul();
+
+    /* D47-D49: görev<T> genişletme + kesirli T reddi (D-294) */
+    T47_gorev_kesirli_reddedilir_baslat();
+    T48_gorev_kesirli_reddedilir_annot();
+    T49_gorev_metin_kabul();
 
     printf("\n=== %d/%d test gecti (basarili) ===\n", basarili, toplam_test);
     if (basarisiz > 0) {

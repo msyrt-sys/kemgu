@@ -37,15 +37,19 @@ static void test_sonuc(const char *ad, int durum) {
     }
 }
 
-/* Runtime API (kdl_runtime.c) — codegen'in urettigi `declare`lerle ayni ABI. */
-typedef int32_t (*KdlGorevBare)(void *rho);
-typedef int32_t (*KdlGorevKapanis)(void *rho, void *env);
+/* Runtime API (kdl_runtime.c) — codegen'in urettigi `declare`lerle ayni ABI.
+ * D-294: donusler int64_t (T genisletme; `görev<metin>` gibi isaretci T'ler
+ * icin i32 tasima isaretciyi kirpardi). Bu bildirimler tanimla BIREBIR
+ * eslesmeli: ayri derleme birimleri oldugu icin uyusmazligi linker YAKALAMAZ
+ * ve test dusuk 32 biti okuyup YANLIS SEBEPLE gecerdi. */
+typedef int64_t (*KdlGorevBare)(void *rho);
+typedef int64_t (*KdlGorevKapanis)(void *rho, void *env);
 typedef struct KdlGorevOpak KdlGorevOpak;
 
 extern KdlGorevOpak *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
                                              KdlGorevKapanis fn_kapanis,
                                              void *env);
-extern int32_t kdl_gorev_birlestir(KdlGorevOpak *g);
+extern int64_t kdl_gorev_birlestir(KdlGorevOpak *g);
 extern uint64_t kdl_gorev_thread_sayisi;
 extern uint64_t kdl_gorev_sirali_sayisi;
 
@@ -59,7 +63,7 @@ extern void kdl_kanal_serbest(KdlKanalOpak *k);
 /* === 1: bare yol (env == NULL) — codegen'in yakalamasiz lambda'si ===
  * Lifted lambda imzasi: i32 @lambda_N(ptr %rho) */
 static void *bare_gorulen_rho;
-static int32_t isci_bare(void *rho) {
+static int64_t isci_bare(void *rho) {
     bare_gorulen_rho = rho;
     return 42;
 }
@@ -67,7 +71,7 @@ static int32_t isci_bare(void *rho) {
 static void test_bare_yol(void) {
     bare_gorulen_rho = NULL;
     KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL);
-    int32_t r = kdl_gorev_birlestir(g);
+    int64_t r = kdl_gorev_birlestir(g);
     test_sonuc("bare (env=NULL): sonuc 42", r == 42);
     /* R-GÖREV: gorev KENDI ρ_sahip'ini alir -> govdeye NULL olmayan ρ gecer. */
     test_sonuc("bare: gorev govdesine ρ_sahip gecti (NULL degil)",
@@ -76,7 +80,7 @@ static void test_bare_yol(void) {
 
 /* === 2: kapanis yolu (env != NULL) — yakalamali lambda ===
  * Lifted lambda imzasi: i32 @lambda_N(ptr %rho, ptr %env) */
-static int32_t isci_kapanis(void *rho, void *env) {
+static int64_t isci_kapanis(void *rho, void *env) {
     (void)rho;
     return *(int32_t *)env + 2;
 }
@@ -84,7 +88,7 @@ static int32_t isci_kapanis(void *rho, void *env) {
 static void test_kapanis_yolu(void) {
     int32_t yakalanan = 40;
     KdlGorevOpak *g = kdl_gorev_basla_kapanis(NULL, isci_kapanis, &yakalanan);
-    int32_t r = kdl_gorev_birlestir(g);
+    int64_t r = kdl_gorev_birlestir(g);
     test_sonuc("kapanis (env!=NULL): env okundu, sonuc 42", r == 42);
 }
 
@@ -106,15 +110,15 @@ static void test_gercek_thread(void) {
  * yazardi -> veri yarisi. Bu test o paylasimin OLMADIGINI dogrudan olcer. */
 static void *rho_a;
 static void *rho_b;
-static int32_t isci_a(void *rho) { rho_a = rho; return 1; }
-static int32_t isci_b(void *rho) { rho_b = rho; return 2; }
+static int64_t isci_a(void *rho) { rho_a = rho; return 1; }
+static int64_t isci_b(void *rho) { rho_b = rho; return 2; }
 
 static void test_bolge_ayrikligi(void) {
     rho_a = NULL; rho_b = NULL;
     KdlGorevOpak *ga = kdl_gorev_basla_kapanis(isci_a, NULL, NULL);
     KdlGorevOpak *gb = kdl_gorev_basla_kapanis(isci_b, NULL, NULL);
-    int32_t ra = kdl_gorev_birlestir(ga);
-    int32_t rb = kdl_gorev_birlestir(gb);
+    int64_t ra = kdl_gorev_birlestir(ga);
+    int64_t rb = kdl_gorev_birlestir(gb);
     test_sonuc("iki gorev: sonuclar karismadi (1 ve 2)", ra == 1 && rb == 2);
     test_sonuc("S2: her gorev ρ_sahip aldi (ikisi de NULL degil)",
                rho_a != NULL && rho_b != NULL);
@@ -123,7 +127,7 @@ static void test_bolge_ayrikligi(void) {
 }
 
 /* === 5: cok gorev — sonuc/handle karismasi yok === */
-static int32_t isci_sabit_7(void *rho) { (void)rho; return 7; }
+static int64_t isci_sabit_7(void *rho) { (void)rho; return 7; }
 
 static void test_cok_gorev(void) {
     KdlGorevOpak *gs[8];
@@ -151,7 +155,7 @@ static void test_null_handle(void) {
  * olarak 0 donerdi ve o 0, gercekten gonderilmis bir 0'dan ayirt edilemezdi.
  * Bloklayan surumde 42 doner. */
 static KdlKanalOpak *kanal_gecikmeli;
-static int32_t isci_gecikmeli_gonder(void *rho) {
+static int64_t isci_gecikmeli_gonder(void *rho) {
     (void)rho;
     kisa_bekle(60);                       /* alici once kanal_al'a girsin */
     kdl_kanal_gonder(kanal_gecikmeli, 42);
@@ -171,7 +175,7 @@ static void test_kanal_al_bos_bloklar(void) {
  * Kapasite 2, 5 mesaj -> gonderici en az 3 kez dolu-bloklar. Eski surumde
  * tasan mesajlar SESSIZCE DUSERDI -> toplam 15 degil, 3 (1+2) cikardi. */
 static KdlKanalOpak *kanal_akis;
-static int32_t isci_bes_gonder(void *rho) {
+static int64_t isci_bes_gonder(void *rho) {
     (void)rho;
     for (int32_t i = 1; i <= 5; i++) kdl_kanal_gonder(kanal_akis, i);
     return 0;
