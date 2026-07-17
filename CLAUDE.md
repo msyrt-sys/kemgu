@@ -95,7 +95,7 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 247/247, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 250/250, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması)
 │   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA kanıtı (D-291/D-292)
 │   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 46/46 (D40-D46: kanal_oluştur + V1 32-bit T kısıtı)
 │   └── ornekler/
@@ -686,9 +686,18 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     adversarial tarama gerektirir (F4.2b'nin ρ_yerel deseni). Kanıtsız serbest = UAF riski.
   - Semaforlar / bariyerler (Plan Karar F V2)
   - `kanal` KEMGU-OS'ta (bare-metal .kem): ABI hazır (aynı imza), test yok
-- **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
-  block içindeki son `ver` deyimi tip dönüşü V2) — **`görev<T>`'nin T'sini de bu açar:**
-  lifted lambda dönüşü bugün sabit i32 → görev<T> fiilen T=tam32 (D-291 sınırı, tek iş)
+- ~~**Lambda ifade-form dönüş-tipi çıkarsama**~~ ✓ **D-293**: lifted lambda dönüşü artık
+  gövdenin doğal IR tipinden çıkarsanıyor (eskiden SABİT i32 → `|| "selam"` / `|| 3.5`
+  tip kontrolünden geçip LLVM'de patlıyordu). Closure çağrı yeri dönüş tipini **bildirilen**
+  `işlev(...) -> T`'den alıyor (`LlvmIsim.kapanis_donus_ir`) — fat value `{ptr,ptr}` T'yi
+  sildiği için bu şart; olmadan `metin_uzunluk(f())` segfault veriyordu.
+  **Kalan:** **blok-form gövde** (`|| { ...; ver x; }`) dönüşü hâlâ i32 — son-`ver`
+  çıkarsaması gövde ön-taraması ister (döngüsel bağımlılık; D-072, ayrı iş).
+  **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
+  de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **PARİTE BORCU:** görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
+  `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
+  şekiller yok) ama port ayrı iş olarak duruyor.
 - **Skaler referans okuma** (D-291 yan bulgusu): `&tam32` bugün hiç okunamıyor — `ver v`
   T020, `v+0` T003, `*v` T001; yalnız taşınıp döndürülebiliyor. Yapı referansı (`r.alan`)
   çalışıyor. Hiçbir örnek/test skaler referans kullanmıyor.

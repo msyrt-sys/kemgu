@@ -5,6 +5,60 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-293 — Lambda dönüş-tipi çıkarsaması: `işlev() -> metin` / `-> kesirli64` lambdaları artık çalışıyor (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-292).
+
+**Karar [ETKİ: `src/llvm.c` (lambda_emit iki-tamponlu yeniden yapılandırma; `dosya_kopyala` yardımcısı;
+`LlvmIsim.kapanis_donus_ir` + `kapanis_donus_ir_al`; closure çağrı yeri dönüş tipi), `test/test_llvm.c` (+3).]**
+
+**Ölçülen kusur:** `lambda_emit`'te `const char *donus = "i32"` **SABİT**ti. Sonuç: `|| "selam"`
+(`işlev() -> metin`) ve `|| 3.5` (`işlev() -> kesirli64`) **tip kontrolünden GEÇİP** LLVM'de patlıyordu
+(`'%0' defined with type 'ptr' but expected 'i32'`). Bu, görev/kanal'dan **BAĞIMSIZ**, düz lambda
+kullanımını kıran gerçek bir bug'dı.
+
+**Çözüm (a) — define satırı tipi bilmeden yazılamaz → iki tampon:** gövde önce `ic_tmp`'ye
+`ifade_uret(g, govde, NULL)` (**doğal** tip) ile yazılır, `r.tip` öğrenilir, sonra `define` satırı
+`govde_tmp`'ye yazılıp gövde eklenir. `hoist_renumber` zaten TÜM fonksiyon metnini tutarlı yeniden
+numaralandırır ve `define` satırında numaralı register yoktur (paramlar adlı: `%rho`/`%env`/`%x`) →
+sıralama değişikliği güvenli. `tmpfile()` başarısızsa eski davranışa (sabit i32) düşer.
+
+**Çözüm (b) — ARA BULGU: (a) TEK BAŞINA REGRESYON ÜRETTİ (yakalandı, kapatıldı).** (a)'dan sonra
+`define ptr @lambda_0` doğruydu ama **çağrı yeri** hâlâ i32 sanıyordu → `metin_uzunluk(f())`
+**derlenip SEGFAULT** verdi. Yani hata modu **loud (LLVM hatası) → silent-crash**'e dönmüştü — kabul
+edilemez; (a) tek başına GÖNDERİLEMEZDİ. Kök: `işlev(...) -> T` IR'de `{ ptr, ptr }` (fat value) →
+**T SİLİNİR**; çağrı yeri `beklenen ? beklenen : "i32"` TAHMİN ediyordu. Lambda dönüşü sabit i32 iken
+bu tahmin (yanlış ama) tutarlıydı; çıkarsama gelince kırıldı.
+**Kapatma:** `LlvmIsim.kapanis_donus_ir` — bildirilen `işlev(...) -> T` tipinden T'nin IR'i, değişken
+(annot'lu yol) ve fonksiyon parametresi kaydında doldurulur; çağrı yeri **bildirilen tipi beklenen'e
+TERCİH eder** (bildirilen tip otoriter). Annotasyonsuz closure (`değişken f = || ...`) için alan NULL
+kalır → eski `beklenen` davranışı korunur.
+
+**Ölçüm ayrımı (neden `|| 3.5` çalışıp `|| "selam"` çökmüştü):** `değişken v: kesirli64 = f();`
+çağrı yerine `beklenen="double"` verir → tesadüfen doğru. `metin_uzunluk(f())` ise built-in argümanı;
+`beklenen` YAYILMIYOR → i32 tahmini. Karşılaştırma kontrolü: `metin_uzunluk(kimlik("selam"))`
+(kullanıcı fonksiyonu) çalışıyordu — çünkü dönüş tipi imza tablosundan geliyor; sorun **yalnız
+closure** yolundaydı.
+
+**KAPSAM / SINIR:**
+- **Yalnız ifade-form gövde.** Blok-form (`|| { ...; ver x; }`) dönüşü **i32 KALIR** (mevcut davranış
+  birebir korunur). Çıkarsanamaz çünkü blok içindeki `ver` emit edilirken `g_donus_tip`'e ihtiyaç duyar,
+  tipi öğrenmek için ise gövdeyi emit etmek gerekir — **döngüsel**. Çözümü gövde ön-taraması (ayrı iş,
+  D-072).
+- **Bildirilen tip ≠ gövdenin doğal tipi** (örn. `işlev() -> tam64 = || 42`; literal doğal tipi i32)
+  BU işle çözülmez — regresyon da değil, **aynı kalır**.
+- **`görev<T>`'yi TEK BAŞINA AÇMAZ** (D-291'deki iddiamın düzeltmesi): `kdl_gorev_birlestir` de i32
+  döner; `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme ayrı, runtime-tarafı iş.
+- **PARİTE BORCU (dürüstçe):** bu çıkarsama `selfhost/codegen.kem`'de **YOK** → C derleyici ileride.
+  Gateler geçiyor çünkü korpusta i32-dışı lambda yok. D-291/D-292'nin görev/kanal codegen'i de aynı
+  durumda. Port ayrı iş.
+
+**KANIT:** `test_llvm` **250/250** (+3: metin ara-değişkenle → exit 5; **metin iç-içe built-in
+argümanında → exit 5** — regresyon vakasını kilitler; kesirli64 → 42). Regresyon: lambda **5/5**,
+codegen semantik parite **76/76**, **SELF-HOST FIXPOINT ✓** (stage1==stage2, 33371 satır), `test_tumu`.
+
+---
+
 ## D-292 — KATMAN 2 TAM: `kanal_oluştur` kurucusu + kanal codegen + BLOKLAYAN kanal (sessiz-yanlış-cevap kapatıldı) (2026-07-17) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-291).

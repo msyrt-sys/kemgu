@@ -67,6 +67,16 @@ typedef struct LlvmIsim {
      * genisligini BURADAN alir — beklenen/RHS'ten almak tam8/tam64/
      * struct icin yanlis genislik miscompile'iydi (ADIM-0 raporu). */
     const char *pointee_llvm_tip;
+    /* D-293: `işlev(...) -> T` tipli değişken/parametrenin DÖNÜŞ IR tipi.
+     * llvm_tip bu değişkenler için "{ ptr, ptr }" (fat value) — T'yi SİLER.
+     * Closure çağrı yeri (fat-value dispatch) eskiden `beklenen ? beklenen :
+     * "i32"` tahmin ediyordu; lambda dönüşü sabit i32 olduğu sürece bu (yanlış
+     * ama) tutarlıydı. Lambda dönüşü gövdeden çıkarsanınca tahmin KIRILDI:
+     * `metin_uzunluk(f())` gibi beklenen'in yayılmadığı bağlamlarda ptr dönen
+     * lambda i32 olarak çağrılıp SEGFAULT üretti. Bildirilen tip otoriter
+     * bilgidir → burada saklanır ve çağrı yerinde beklenen'e TERCİH edilir.
+     * NULL = closure değil / tip bilinmiyor (arena_ayir_sifir varsayılanı). */
+    const char *kapanis_donus_ir;
     /* Liste<T> BUG-2 fix: tek-tip-arg'li generic kullanici tipi
      * (Liste<tam64> -> "i64") — &Liste<T> parametresinden T inference
      * icin yan-kanal (yapi IR'i type-erased %Liste, T tasimaz). */
@@ -532,6 +542,17 @@ static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
         return ast_tip_to_ir(g, tip_d->veri.tip_pointer.hedef_tip);
     }
     return NULL;
+}
+
+/* D-293: tip düğümü `işlev(...) -> T` ise T'nin IR tipini döner, değilse NULL.
+ * Fat value ("{ ptr, ptr }") T'yi sildiği için closure çağrı yerinin dönüş
+ * tipini bilmesinin TEK güvenilir kaynağı bildirilen tiptir. Bkz. LlvmIsim
+ * kapanis_donus_ir. */
+static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (!tip_d || tip_d->tip != DUGUM_TIP_ISLEV) return NULL;
+    const Dugum *dt = tip_d->veri.tip_islev.donus_tip;
+    if (!dt) return NULL;
+    return ast_tip_to_ir(g, dt);
 }
 
 /* D-029 fix: tip dugumu bir YAPI ya da &Yapi veya *Yapi ise yapinin IR adi ("%T"),
@@ -3405,7 +3426,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                 d->veri.cagri.argumanlar[i], ab);
                         }
                     }
-                    const char *donus_indirect = beklenen ? beklenen : "i32";
+                    /* D-293: dönüş tipini önce BİLDİRİLEN closure tipinden al
+                     * (`işlev(...) -> T`). Fat value ("{ ptr, ptr }") T'yi
+                     * sildiği için burası eskiden `beklenen ? beklenen : "i32"`
+                     * TAHMİN ediyordu. Lambda dönüşü sabit i32 iken bu (yanlış
+                     * ama) tutarlıydı; dönüş gövdeden çıkarsanınca tahmin kırıldı:
+                     * beklenen'in yayılmadığı bağlamlarda (örn. `metin_uzunluk(f())`
+                     * — built-in argümanı) ptr dönen lambda i32 olarak çağrılıp
+                     * SEGFAULT üretiyordu. Bildirilen tip otoriter → önce o. */
+                    const char *donus_indirect =
+                        (vi && vi->kapanis_donus_ir) ? vi->kapanis_donus_ir
+                        : (beklenen ? beklenen : "i32");
                     /* === V2-F1 fat-value dispatch ===
                      * vi fat değer { ptr fn, ptr env } tutar. env==null → bare
                      * fn(args); env!=null → closure fn(env,args). "Closure mu"
@@ -4371,6 +4402,11 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* D-005: dtamN annot -> isaretsiz isim */
                     g->isimler->isaretsiz =
                         ast_tip_isaretsiz_mi(d->veri.degisken.tip);
+                    /* D-293: `değişken f: işlev() -> T = || ...` → T'nin IR'i.
+                     * Fat value ("{ ptr, ptr }") T'yi siler; closure çağrı yeri
+                     * dönüş tipini BURADAN alır (bkz. kapanis_donus_ir). */
+                    g->isimler->kapanis_donus_ir =
+                        kapanis_donus_ir_al(g, d->veri.degisken.tip);
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
@@ -4406,6 +4442,11 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
                     g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
+                    /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ — bu dal
+                     * "annot yok" yolu (d->veri.degisken.tip == NULL), yani
+                     * bildirilen closure dönüş tipi zaten YOK. Annotasyonsuz
+                     * closure değişkeni (`değişken f = || "selam"`) çağrıldığında
+                     * dönüş tipi bilinemez → beklenen'e düşer (mevcut davranış). */
                     /* D-069 Kat.2: değer sabit stack dizisi [N x T] ise N kaydet
                      * (arr[i] sınır-kontrolü için). Annot yok → stack yolu. */
                     if (d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR) {
@@ -4426,6 +4467,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                           1, alloca_reg, tip);
                 g->isimler->isaretsiz =
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
+                g->isimler->kapanis_donus_ir =
+                    kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
                 g->isimler->ref_yapi_ir =
@@ -5382,6 +5425,19 @@ static int alloca_satiri_mi(const char *s, int len) {
  * Tasima SSA numara sirasini bozdugu icin tum numarali degerleri (%<rakam>,
  * %bb<ad> ve %<ad> haric) ardisik yeniden numarala. dst'ye yaz. phi YOK
  * (codegen alloca/load-store kullanir) -> ileri-referans yok -> tek-gecis guvenli. */
+/* D-293: src'nin TAMAMINI dst'ye ekle (src başa sarılır, kapatılmaz).
+ * lambda_emit'te gövde ayrı tampona yazılıp dönüş tipi öğrenildikten sonra
+ * `define` satırının ARDINA eklemek için. */
+static void dosya_kopyala(FILE *src, FILE *dst) {
+    if (!src || !dst) return;
+    fseek(src, 0, SEEK_SET);
+    char tampon[4096];
+    size_t n;
+    while ((n = fread(tampon, 1, sizeof(tampon), src)) > 0) {
+        fwrite(tampon, 1, n, dst);
+    }
+}
+
 static void hoist_renumber(FILE *src, FILE *dst) {
     fseek(src, 0, SEEK_END);
     long n = ftell(src);
@@ -5618,6 +5674,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         }
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk,
                   0, alloca_reg, tip);
+        /* D-293: `işlev(...) -> T` tipli parametre (closure argüman) → T'nin IR'i */
+        g->isimler->kapanis_donus_ir =
+            kapanis_donus_ir_al(g, p->veri.parametre.tip);
         /* D-005: dtamN parametre -> isaretsiz isim */
         g->isimler->isaretsiz =
             ast_tip_isaretsiz_mi(p->veri.parametre.tip);
@@ -5707,22 +5766,38 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
                        i ? ", " : "", bl->capture_irler[i]);
     snprintf(envtip + eo, sizeof(envtip) - eo, " }");
 
-    const char *donus = "i32";   /* v1: tek-ifade gövde i32 (V2: gövde/checker'dan) */
+    /* D-293: dönüş tipi artık SABİT i32 DEĞİL — ifade-form gövdenin kendi DOĞAL
+     * IR tipinden çıkarsanır. Eskiden `donus = "i32"` sabitti; `|| "selam"`
+     * (işlev() -> metin) ve `|| 3.5` (işlev() -> kesirli64) tip kontrolünden
+     * GEÇİP LLVM'de patlıyordu ("'%0' defined with type 'ptr' but expected
+     * 'i32'"). Bu, görev/kanal'dan BAĞIMSIZ, düz lambda kullanımını kıran
+     * gerçek bir bug'dı.
+     *
+     * `define` satırı dönüş tipini BİLMEDEN yazılamaz; gövdenin tipi ise ancak
+     * emit edilince belli olur. Bu yüzden İKİ tampon: gövde önce `ic_tmp`'ye,
+     * tip öğrenilince `define` satırı `govde_tmp`'ye, sonra gövde eklenir.
+     * hoist_renumber zaten TÜM fonksiyon metnini tutarlı yeniden numaralandırır
+     * (define satırında numaralı register yok — paramlar adlı: %rho/%env/%x),
+     * dolayısıyla bu sıralama değişikliği güvenli. */
+    const char *donus = "i32";
     g_donus_tip = donus;
     g->aktif_donus_dugum = NULL;
 
     FILE *gercek_out = g->out;
     FILE *govde_tmp = tmpfile();
-    if (govde_tmp) g->out = govde_tmp;
+    FILE *ic_tmp = tmpfile();
+    /* tmpfile() başarısızsa: eski davranışa (sabit i32, tek tampon) düş —
+     * çıkarsama kaybolur ama üretim bozulmaz. */
+    if (!ic_tmp || !govde_tmp) {
+        if (ic_tmp) fclose(ic_tmp);
+        ic_tmp = NULL;
+        if (govde_tmp) g->out = govde_tmp;
+    } else {
+        g->out = ic_tmp;
+    }
 
-    /* KARMA temsil: yakalama varsa env ilk param; yoksa env YOK (bare fn). */
-    /* V2-F4.2a: ρ HER fat-value hedefinde ilk param (dispatch uniform ρ geçirir):
-     * bare  → @lambda(ptr %rho, args)
-     * closure → @lambda(ptr %rho, ptr %env, args)
-     * Böylece üst-düzey-fn (ρ-ABI) ile lambda fat-value dispatch'te ABI-uyumlu. */
     int has_env = bl->capture_sayi > 0;
-    fprintf(g->out, "define %s @%s(ptr %%rho", donus, bl->mangled);
-    if (has_env) fputs(", ptr %env", g->out);
+    /* Param IR tipleri define satırında da, prologda da lazım → önce hesapla. */
     const char **ptip = NULL;
     if (np > 0) ptip = (const char **)arena_ayir(g->arena,
         sizeof(const char *) * (size_t)np);
@@ -5731,11 +5806,20 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         const char *t = ast_tip_to_ir(g, p->veri.parametre.tip);
         if (!t) t = "i32";
         ptip[i] = t;
-        fputs(", ", g->out);
-        fprintf(g->out, "%s %%", t);
-        yerel_ad_yaz(g->out, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
     }
-    fputs(") {\nentry:\n", g->out);
+    /* ic_tmp yoksa (fallback) define satırını ŞİMDİ yaz — tip i32 kalır. */
+    if (!ic_tmp) {
+        fprintf(g->out, "define %s @%s(ptr %%rho", donus, bl->mangled);
+        if (has_env) fputs(", ptr %env", g->out);
+        for (int i = 0; i < np; i++) {
+            const Dugum *p = d->veri.lambda.parametreler[i];
+            fputs(", ", g->out);
+            fprintf(g->out, "%s %%", ptip[i]);
+            yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                         p->veri.parametre.ad_uzunluk);
+        }
+        fputs(") {\nentry:\n", g->out);
+    }
 
     g->reg = 0; g->label = 0; g->isimler = NULL;
     /* V2-F4.2a: lambda ρ'yu param olarak alır (dispatch geçirir) → gövde
@@ -5771,15 +5855,47 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     const Dugum *govde = d->veri.lambda.govde;
     int term = 0;
     if (govde && govde->tip == DUGUM_BLOK) {
-        /* v1: blok-form gövde son-ver çıkarsama yok (V2/D-072) — güvenli fallback */
+        /* Blok-form gövde: son-`ver` çıkarsaması YOK (V2/D-072) → dönüş i32
+         * KALIR (mevcut davranış birebir korunur). Çıkarsama yapılamaz çünkü
+         * blok içindeki `ver` deyimleri emit edilirken g_donus_tip'e ihtiyaç
+         * duyar — tipi öğrenmek için gövdeyi emit etmek gerekir: döngüsel.
+         * Çözümü ayrı iş (gövde ön-taraması). */
         term = blok_uret(g, govde);
     } else if (govde) {
-        IfadeSonuc r = ifade_uret(g, govde, donus);
-        int rr = int_donustur(g, r.reg, r.tip, donus);
+        /* İfade-form: beklenen tip VERME (NULL) → gövdenin DOĞAL IR tipi.
+         * Eskiden burada `donus`("i32") beklenen olarak geçilip int_donustur
+         * ile i32'ye zorlanıyordu; ptr/double gövdelerde bu, define'ın i32
+         * imzasıyla çelişen bir değer üretiyordu (LLVM reddi). */
+        IfadeSonuc r = ifade_uret(g, govde, NULL);
+        if (ic_tmp && r.tip && *r.tip) donus = r.tip;   /* çıkarsanan dönüş */
+        g_donus_tip = donus;
+        int rr = int_donustur(g, r.reg, r.tip, donus);  /* eş tipte no-op */
         fprintf(g->out, "  ret %s %%%d\n", donus, rr);
         term = 1;
     }
-    if (!term) fprintf(g->out, "  ret %s 0\n", donus);
+    if (!term) {
+        /* Terminatörsüz (blok-form fallback) → donus burada daima "i32"
+         * (yukarıdaki blok-form dalı `donus`u değiştirmez) → `ret i32 0`
+         * geçerli. `ret ptr 0` gibi geçersiz bir form üretilemez. */
+        fprintf(g->out, "  ret %s 0\n", donus);
+    }
+
+    if (ic_tmp) {
+        /* Tip artık BİLİNİYOR → define satırını yaz, sonra gövdeyi ekle. */
+        g->out = govde_tmp;
+        fprintf(g->out, "define %s @%s(ptr %%rho", donus, bl->mangled);
+        if (has_env) fputs(", ptr %env", g->out);
+        for (int i = 0; i < np; i++) {
+            const Dugum *p = d->veri.lambda.parametreler[i];
+            fputs(", ", g->out);
+            fprintf(g->out, "%s %%", ptip[i]);
+            yerel_ad_yaz(g->out, p->veri.parametre.ad,
+                         p->veri.parametre.ad_uzunluk);
+        }
+        fputs(") {\nentry:\n", g->out);
+        dosya_kopyala(ic_tmp, govde_tmp);
+        fclose(ic_tmp);
+    }
     fputs("}\n\n", g->out);
 
     if (govde_tmp) {

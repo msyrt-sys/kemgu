@@ -2710,6 +2710,44 @@ static void test_kanal_akis_denetimi(void) {
     test_sonuc("kanal akis denetimi (kap=2, 5 mesaj) -> exit 15", rc == 15);
 }
 
+/* === D-293: lambda donus-tipi cikarsamasi (ifade-form govde) ===
+ * Eskiden lifted lambda'nin IR donusu SABIT i32 idi -> `|| "selam"`
+ * (islev() -> metin) ve `|| 3.5` (islev() -> kesirli64) tip kontrolunden GECIP
+ * LLVM'de patliyordu ("'%0' defined with type 'ptr' but expected 'i32'").
+ * Artik donus govdenin DOGAL IR tipinden cikarsaniyor; closure cagri yeri de
+ * donus tipini BILDIRILEN tipten (islev(...) -> T) aliyor. */
+
+static void test_lambda_donus_metin(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> metin = || \"selam\"; "
+        "de\xc4\x9fi\xc5\x9fken s: metin = f(); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("lambda donus metin (islev() -> metin) -> exit 5", rc == 5);
+}
+
+static void test_lambda_donus_metin_ic_ice(void) {
+    /* Closure cagrisi bir BUILT-IN argumaninin icinde: beklenen tip buraya
+     * YAYILMIYOR. Cagri yeri donus tipini bildirilen `islev() -> metin`den
+     * almazsa i32 tahmin eder -> ptr kirpilir -> SEGFAULT (gozlendi).
+     * Bu test o yolu kilitler. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> metin = || \"selam\"; "
+        "ver metin_uzunluk(f()); }");
+    test_sonuc("lambda metin ic-ice built-in argumaninda -> exit 5", rc == 5);
+}
+
+static void test_lambda_donus_kesirli(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> kesirli64 = || 3.5; "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = f(); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("lambda donus kesirli64 (islev() -> kesirli64) -> exit 42",
+               rc == 42);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -3061,6 +3099,11 @@ int main(void) {
     test_dondur_identity();
     test_kanal_gorev_mesaj();
     test_kanal_akis_denetimi();
+
+    printf("\n--- Lambda donus-tipi cikarsamasi (D-293) ---\n");
+    test_lambda_donus_metin();
+    test_lambda_donus_metin_ic_ice();
+    test_lambda_donus_kesirli();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
