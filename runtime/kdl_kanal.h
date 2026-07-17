@@ -15,8 +15,19 @@
 
 typedef struct KdlKanal KdlKanal;
 
-/* Havuzdan yeni kanal ayır (havuz tükendiyse 0 döner). */
-KdlKanal *kdl_kanal_olustur(void);
+/* Havuzdan yeni kanal ayır (havuz tükendiyse 0 döner).
+ *
+ * `kapasite`: istenen kanal kapasitesi. Halka DERLEME-ZAMANI sabit boyutludur
+ * (bkz. kdl_kanal.c: KDL_KANAL_KAP); istenen kapasite bunu aşarsa 0 döner —
+ * SESSİZCE KIRPILMAZ (çağıran, istemediği bir kapasiteyle çalıştığını
+ * sanmasın). kapasite <= 0 → sabit halka kullanılır.
+ *
+ * İmza, host sürümüyle (kdl_runtime.c: kdl_kanal_olustur(int32_t)) BİLEREK
+ * AYNI: codegen `kanal_oluştur(n)` için tek bir @kdl_kanal_olustur(i32) çağırır
+ * ve bu çağrı host'ta da bare-metal'de de aynı ABI'yle bağlanır. Eskiden bu
+ * sürüm (void) idi → bare-metal hedefte kapasite argümanı sessizce yutulurdu
+ * (latent ABI tuzağı). */
+KdlKanal *kdl_kanal_olustur(int kapasite);
 
 /* Değer gönder — kanal doluysa preemption altında bekle (akış denetimi). */
 void kdl_kanal_gonder(KdlKanal *k, int deger);

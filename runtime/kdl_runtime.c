@@ -699,6 +699,15 @@ int32_t kdl_gorev_birlestir(KdlGorev *g) {
     return r;
 }
 
+/* === Katman 2 / R-KANAL: BLOKLAYAN SPSC/MPMC mesaj kanali ===
+ * Onceki surum BLOKLAMIYORDU ve iki sessiz-yanlis-cevap uretiyordu:
+ *   - bos kanalda kdl_kanal_al 0 donuyordu -> gercekten alinmis bir 0'dan
+ *     AYIRT EDILEMEZ (alici, gonderici henuz yazmadan "0 aldim" saniyordu),
+ *   - dolu kanalda kdl_kanal_gonder mesaji SESSIZCE DUSURUYORDU.
+ * R-KANAL sahiplik transferi bunlarla bozulur (transfer edilmemis deger
+ * alinmis gorunur). Artik her iki yon de kosul degiskeniyle BLOKLAR —
+ * bare-metal kdl_kanal.c'nin (preemption altinda busy-wait) semantigiyle
+ * ayni sozlesme, host'ta uygun ilkelle. */
 typedef struct {
     int32_t *veri;
     int32_t boyut;
@@ -706,10 +715,14 @@ typedef struct {
     int32_t bas, son;   /* circular buffer */
 #ifdef KDL_THREAD_WIN
     CRITICAL_SECTION kilit;
+    CONDITION_VARIABLE bos_degil;    /* alici bekler: veri yazildi */
+    CONDITION_VARIABLE dolu_degil;   /* gonderici bekler: yer acildi */
     int kilit_aktif;
 #endif
 #ifdef KDL_THREAD_POSIX
     pthread_mutex_t kilit;
+    pthread_cond_t bos_degil;
+    pthread_cond_t dolu_degil;
     int kilit_aktif;
 #endif
 } KdlKanal;
@@ -718,9 +731,13 @@ typedef struct {
 static void kdl_kilit_init(KdlKanal *k) {
 #ifdef KDL_THREAD_WIN
     InitializeCriticalSection(&k->kilit);
+    InitializeConditionVariable(&k->bos_degil);
+    InitializeConditionVariable(&k->dolu_degil);
     k->kilit_aktif = 1;
 #elif defined(KDL_THREAD_POSIX)
     pthread_mutex_init(&k->kilit, NULL);
+    pthread_cond_init(&k->bos_degil, NULL);
+    pthread_cond_init(&k->dolu_degil, NULL);
     k->kilit_aktif = 1;
 #else
     (void)k;
@@ -744,11 +761,56 @@ static void kdl_kilit_cik(KdlKanal *k) {
     (void)k;
 #endif
 }
+/* === Kosul bekleme/uyandirma (kilit TUTULURKEN cagrilir) ===
+ * Bekleme HER ZAMAN `while (kosul)` dongusunde kullanilir — sahte uyanma
+ * (spurious wakeup) ve "uyandirdiktan sonra baskasi kapti" yarisi icin. */
+static void kdl_kosul_bekle_bos_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    SleepConditionVariableCS(&k->bos_degil, &k->kilit, INFINITE);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_wait(&k->bos_degil, &k->kilit);
+#else
+    (void)k;   /* thread yok -> `while` busy-wait'e duser (uretici olamaz) */
+#endif
+}
+static void kdl_kosul_bekle_dolu_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    SleepConditionVariableCS(&k->dolu_degil, &k->kilit, INFINITE);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_wait(&k->dolu_degil, &k->kilit);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kosul_uyandir_bos_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    WakeConditionVariable(&k->bos_degil);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_signal(&k->bos_degil);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kosul_uyandir_dolu_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    WakeConditionVariable(&k->dolu_degil);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_signal(&k->dolu_degil);
+#else
+    (void)k;
+#endif
+}
+
 static void kdl_kilit_yok_et(KdlKanal *k) {
 #ifdef KDL_THREAD_WIN
+    /* CONDITION_VARIABLE'in yok-etme cagrisi yok (Win32). */
     if (k->kilit_aktif) DeleteCriticalSection(&k->kilit);
 #elif defined(KDL_THREAD_POSIX)
-    if (k->kilit_aktif) pthread_mutex_destroy(&k->kilit);
+    if (k->kilit_aktif) {
+        pthread_cond_destroy(&k->bos_degil);
+        pthread_cond_destroy(&k->dolu_degil);
+        pthread_mutex_destroy(&k->kilit);
+    }
 #else
     (void)k;
 #endif
@@ -767,26 +829,31 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     return k;
 }
 
+/* R-KANAL gonderim: v'yi ρ_kanal(k)'ye tasir. Kanal DOLUYSA yer acilana kadar
+ * BLOKLAR (akis denetimi) — eskiden mesaji sessizce dusuruyordu. */
 void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
     if (!k) return;
     kdl_kilit_gir(k);
-    if (k->boyut < k->kapasite) {
-        k->veri[k->son] = deger;
-        k->son = (k->son + 1) % k->kapasite;
-        k->boyut++;
-    }
+    while (k->boyut >= k->kapasite) kdl_kosul_bekle_dolu_degil(k);
+    k->veri[k->son] = deger;
+    k->son = (k->son + 1) % k->kapasite;
+    k->boyut++;
+    kdl_kosul_uyandir_bos_degil(k);   /* bekleyen alici varsa uyandir */
     kdl_kilit_cik(k);
 }
 
+/* R-KANAL alim: v'yi ρ_sahip(t_alan)'a tasir. Kanal BOSSA veri gelene kadar
+ * BLOKLAR — eskiden 0 donuyordu ve bu, gercekten gonderilmis bir 0'dan
+ * ayirt edilemiyordu (sessiz yanlis cevap). */
 int32_t kdl_kanal_al(KdlKanal *k) {
     if (!k) return 0;
     int32_t v = 0;
     kdl_kilit_gir(k);
-    if (k->boyut > 0) {
-        v = k->veri[k->bas];
-        k->bas = (k->bas + 1) % k->kapasite;
-        k->boyut--;
-    }
+    while (k->boyut == 0) kdl_kosul_bekle_bos_degil(k);
+    v = k->veri[k->bas];
+    k->bas = (k->bas + 1) % k->kapasite;
+    k->boyut--;
+    kdl_kosul_uyandir_dolu_degil(k);  /* bekleyen gonderici varsa uyandir */
     kdl_kilit_cik(k);
     return v;
 }

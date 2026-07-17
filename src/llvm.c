@@ -3525,6 +3525,52 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { r, "i32", 0 };
                 return s;
             }
+            if (!ik && n == 1 && cagri_adi_uz == 14 &&
+                memcmp(cagri_adi, "kanal_olu\xc5\x9ftur", 14) == 0) {
+                /* kanal_oluştur(kapasite: tam32) -> kanal<T>  (IR: ptr)
+                 * T yalnız tip-kontrolde yaşar; runtime kanal monomorfik i32
+                 * taşır (bkz. görev_birleştir'deki T=tam32 notu — aynı sınır). */
+                IfadeSonuc kap = ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                            "i32");
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call ptr @kdl_kanal_olustur(i32 %%%d)\n",
+                    r, kap.reg);
+                IfadeSonuc s = { r, "ptr", 0 };
+                return s;
+            }
+            if (!ik && n == 2 && cagri_adi_uz == 13 &&
+                memcmp(cagri_adi, "kanal_g\xc3\xb6nder", 13) == 0) {
+                /* kanal_gönder(k: kanal<T>, v: T) -> boş  (R-KANAL gönderim)
+                 * Runtime kanal DOLUYSA BLOKLAR (akış denetimi). */
+                IfadeSonuc kv = ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                           "ptr");
+                IfadeSonuc vv = ifade_uret(g, d->veri.cagri.argumanlar[1],
+                                           "i32");
+                fprintf(g->out,
+                    "  call void @kdl_kanal_gonder(ptr %%%d, i32 %%%d)\n",
+                    kv.reg, vv.reg);
+                /* Çağıran bir IfadeSonuc bekliyor — void yerine placeholder
+                 * (built-in şeridindeki void-call deseninin aynısı). */
+                int r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+                IfadeSonuc s = { r, "i32", 0 };
+                return s;
+            }
+            if (!ik && n == 1 && cagri_adi_uz == 8 &&
+                memcmp(cagri_adi, "kanal_al", 8) == 0) {
+                /* kanal_al(k: kanal<T>) -> T  (R-KANAL alım)
+                 * Runtime kanal BOŞSA BLOKLAR — böylece "henüz gönderilmedi"
+                 * ile "0 gönderildi" karışmaz (eski non-blocking sürümün
+                 * sessiz-yanlış-cevabı). */
+                IfadeSonuc kv = ifade_uret(g, d->veri.cagri.argumanlar[0],
+                                           "ptr");
+                int r = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i32 @kdl_kanal_al(ptr %%%d)\n", r, kv.reg);
+                IfadeSonuc s = { r, "i32", 0 };
+                return s;
+            }
             if (!ik && n == 1 && cagri_adi_uz == 6 &&
                 memcmp(cagri_adi, "dondur", 6) == 0) {
                 /* dondur(v: &değişken T) -> &T  (R-PAYLAŞ)
@@ -5798,6 +5844,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
      * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */
     fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)\n", out);
     fputs("declare i32 @kdl_gorev_birlestir(ptr)\n", out);
+    /* R-KANAL hedefleri. Bu imza host (kdl_runtime.c) ve bare-metal
+     * (kdl_kanal.c) sürümlerinde AYNI — tek çağrı iki backend'e de bağlanır. */
+    fputs("declare ptr @kdl_kanal_olustur(i32)\n", out);
+    fputs("declare void @kdl_kanal_gonder(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_kanal_al(ptr)\n", out);
     /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
     fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);

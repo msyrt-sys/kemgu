@@ -1415,10 +1415,32 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
         }
 
         case DUGUM_TIP_KANAL: {
-            /* Concurrency / DRF V1: kanal<T> — channel endpoint (linear) */
+            /* Concurrency / DRF V1: kanal<T> — channel endpoint */
             TipBilgisi *ic = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_kanal.ic_tip);
             if (ic->kategori == TIP_HATA) return t_hata(tk);
+            /* === V1 SINIRI (D-292): T 32-bit tamsayi olmali ===
+             * Runtime kanal tamponu monomorfik int32_t tasir (kdl_runtime.c /
+             * kdl_kanal.c). Genis T'ler OLCULDU ve ikisi de kabul edilemezdi:
+             *   kanal<tam64> -> deger i32'ye KIRPILIR: 2^33 gonderilip alindiginda
+             *                   esit cikmaz. DERLENIR, CALISIR, SESSIZCE KAYBEDER.
+             *   kanal<metin> -> LLVM reddeder ("'%N' defined with type 'ptr' but
+             *                   expected 'i32'") — gurultulu ama anlamsiz mesaj.
+             * Ikisini de burada, TIP seviyesinde ve ACIK mesajla reddediyoruz:
+             * en iyi hata modu derleme zamanidir. Bu tikac `kanal<T>` TIPININ
+             * cozuldugu tek nokta oldugu icin parametre/degisken/donus fark
+             * etmeksizin her kullanimi kapsar.
+             * Genisletme (i64/ptr tasiyan kanal), gorev<T>'nin T=tam32 sinirini
+             * da acan lambda donus-tipi cikarsamasiyla BIRLIKTE gelmeli — ikisi
+             * de ayni kokten (IR'de T i32'ye sabit). */
+            if (!tip_tamsayi_mi(ic) ||
+                ic->kategori == TIP_TAM64 || ic->kategori == TIP_DTAM64) {
+                tip_hata(tk, tip_d, "DRF006",
+                    "kanal<T> V1'de yalniz 32-bit tamsayi T destekler "
+                    "(tam8/16/32, dtam8/16/32) — tam64/kesirli/metin/yapi "
+                    "henuz yok (kanal tamponu monomorfik i32)");
+                return t_hata(tk);
+            }
             return tip_olustur_kanal(tk->arena, ic);
         }
 
@@ -3037,6 +3059,26 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (!donus) donus = tip_olustur_basit(tk->arena, TIP_BOS);
                 return tip_olustur_gorev(tk->arena, donus);
             }
+            /* kanal_oluştur(kapasite) -> kanal<T> — T YALNIZ beklenen tipten
+             * gelir (tip_belirle_beklenen'deki DUGUM_CAGRI dalı). Buraya
+             * düşmek "beklenen tip yok" demektir → T çıkarsanamaz. Sessizce
+             * bir T uydurmak yerine DRF006 ile açıkça reddet. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_olu\xc5\x9ftur", 14) == 0) {
+                if (d->veri.cagri.sayi != 1) {
+                    tip_hata(tk, d, "DRF006",
+                        "kanal_olustur tam 1 arguman gerektirir "
+                        "(kapasite: tam32)");
+                    return t_hata(tk);
+                }
+                tip_hata(tk, d, "DRF006",
+                    "kanal_olustur'un eleman tipi baglamdan cikarsanmali "
+                    "(ornek: degisken k: kanal<tam32> = kanal_olustur(8))");
+                return t_hata(tk);
+            }
             /* görev_birleştir(g: görev<T>) -> T — g tuketilir (R-BİRLEŞTİR) */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
@@ -3793,6 +3835,28 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     tip_olustur_basit(tk->arena, TIP_TAM64));
                 return tip_olustur_dizi(tk->arena,
                     (TipBilgisi *)beklenen->veri.dizi.eleman);
+            }
+            /* Katman 2 / R-KANAL: kanal_oluştur(kapasite: tam32) -> kanal<T>.
+             * T bir DEĞER argümanından çıkarsanamaz (kanal başlangıçta boş) →
+             * beklenen tipten gelir; `dizi_olustur<T>(N)` / boş dizi deseninin
+             * aynısı:
+             *     değişken k: kanal<tam32> = kanal_oluştur(8);
+             * Beklenen tip yoksa tip_belirle yolundaki DRF006 devreye girer. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 14 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "kanal_olu\xc5\x9ftur", 14) == 0 &&
+                beklenen->kategori == TIP_KANAL &&
+                d->veri.cagri.sayi == 1) {
+                TipBilgisi *n = tip_belirle_beklenen(tk,
+                    d->veri.cagri.argumanlar[0],
+                    tip_olustur_basit(tk->arena, TIP_TAM32));
+                if (n->kategori != TIP_HATA && !tip_tamsayi_mi(n)) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF006",
+                        "kanal_olustur kapasitesi tamsayi olmali");
+                }
+                return (TipBilgisi *)beklenen;   /* kanal<T> aynen doner */
             }
             /* v1 bölge-container: bölge_al(böl: yetki<R>, n: tam64) -> *T.
              * T context-driven (dizi_olustur deseni): beklenen *T olmali

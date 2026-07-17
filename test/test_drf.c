@@ -119,12 +119,19 @@ static void T3_kanal_tam32(void) {
     test_sonuc("D3: kanal<tam32> parametre + kanal_al = 0 hata", h == 0);
 }
 
-static void T4_kanal_metin(void) {
+static void T4_kanal_metin_v1_reddedilir(void) {
+    /* D-292: BEKLENTI DEGISTI (eskiden "0 hata" idi). Runtime kanal tamponu
+     * monomorfik int32_t tasir; kanal<metin> ile codegen metin ptr'ini `i32`
+     * operandi olarak gecirmeye calisir ve LLVM reddeder ("'%N' defined with
+     * type 'ptr' but expected 'i32'") — anlamsiz, backend-sizintili bir mesaj.
+     * Artik TIP seviyesinde, acik bir KEMGU tanisiyla reddediliyor.
+     * Karar: Mehmet (T'yi 32-bit tamsayiya kisitla). */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<metin>) -> metin {\n"
         "    ver kanal_al(k);\n"
         "}\n");
-    test_sonuc("D4: kanal<metin> parametre + kanal_al = 0 hata", h == 0);
+    test_sonuc("D4: kanal<metin> -> DRF006 (V1: T 32-bit tamsayi olmali)",
+               h >= 1);
 }
 
 static void T5_gorev_nested_kanal(void) {
@@ -136,12 +143,16 @@ static void T5_gorev_nested_kanal(void) {
     test_sonuc("D5: gorev<kanal<tam32>> nested = 0 hata", h == 0);
 }
 
-static void T6_kanal_nested_dizi(void) {
+static void T6_kanal_nested_dizi_v1_reddedilir(void) {
+    /* D-292: BEKLENTI DEGISTI (eskiden "0 hata" idi) — D4 ile ayni gerekce
+     * (Dizi<T> runtime'da ptr; i32 kanal tamponuna sigmaz). Parser/tip
+     * ic-ice generic'i hala dogru cozuyor; reddedilen yalniz T'nin GENISLIGI. */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<Dizi<tam32>>) -> Dizi<tam32> {\n"
         "    ver kanal_al(k);\n"
         "}\n");
-    test_sonuc("D6: kanal<Dizi<tam32>> nested = 0 hata", h == 0);
+    test_sonuc("D6: kanal<Dizi<tam32>> -> DRF006 (V1: T 32-bit tamsayi olmali)",
+               h >= 1);
 }
 
 /* ========================================================================
@@ -486,6 +497,79 @@ static void T39_dondur_idempotent_degil(void) {
  * Main
  * ======================================================================== */
 
+/* ========================================================================
+ * GROUP D40-D44: kanal_oluştur (R-KANAL kurucusu)
+ *
+ * D-292'ye kadar DRF V1'de kanal KURUCUSU YOKTU: her test kanalı parametre
+ * olarak alıyordu, hiçbiri yaratmıyordu → gerçek bir programda kanal<T> elde
+ * etmek imkânsızdı. Karar (Mehmet): tek yönsüz kanal<T> + kanal_oluştur.
+ * ======================================================================== */
+
+static void T40_kanal_olustur_annotasyonlu(void) {
+    /* T DEĞER argümanından çıkarsanamaz (kanal boş başlar) → bağlamdan gelir. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(4);\n");
+    test_sonuc("D40: değişken k: kanal<tam32> = kanal_oluştur(4) = 0 hata",
+               h == 0);
+}
+
+static void T41_kanal_olustur_baglamsiz(void) {
+    /* Bağlam yoksa T bilinemez → sessizce bir T uydurmak yerine DRF006. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k = kanal_olu\xc5\x9ftur(4);\n");
+    test_sonuc("D41: kanal_oluştur bağlamsız -> DRF006 (T çıkarsanamaz)",
+               h >= 1);
+}
+
+static void T42_kanal_olustur_arity(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur();\n");
+    test_sonuc("D42: kanal_oluştur() 0 arg -> DRF006", h >= 1);
+}
+
+static void T43_kanal_olustur_kapasite_tamsayi_degil(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = "
+        "kanal_olu\xc5\x9ftur(\"dort\");\n");
+    test_sonuc("D43: kanal_oluştur(metin) -> DRF006 (kapasite tamsayı olmalı)",
+               h >= 1);
+}
+
+static void T45_kanal_genis_T_reddedilir(void) {
+    /* D-292 / Mehmet kararı: kanal<T> V1'de yalnız 32-bit tamsayı T.
+     * kanal<tam64> ÖLÇÜLDÜ: derleniyor, çalışıyor ve SESSİZCE veri kaybediyor
+     * (2^33 gönder→al eşit çıkmıyor) — codegen değeri i32'ye kırpıyor, LLVM
+     * şikâyet etmiyor. Bu, hata modunu loud→silent'a çevirirdi. Artık tip
+     * seviyesinde reddediliyor. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test(k: kanal<tam64>) -> tam64 {\n"
+        "    ver kanal_al(k);\n"
+        "}\n");
+    test_sonuc("D45: kanal<tam64> -> DRF006 (SESSİZ kırpma engellendi)",
+               h >= 1);
+}
+
+static void T46_kanal_dar_tamsayi_kabul(void) {
+    /* Kısıt fazla geniş olmamalı: 32-bitten DAR tamsayılar kayıpsız sığar. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test(k: kanal<tam8>) -> tam8 {\n"
+        "    ver kanal_al(k);\n"
+        "}\n");
+    test_sonuc("D46: kanal<tam8> = 0 hata (dar tamsayı i32'ye kayıpsız sığar)",
+               h == 0);
+}
+
+static void T44_kanal_olustur_gonder_al_kompozisyon(void) {
+    /* Kurucu + gönder + al birlikte: uçtan uca tip akışı. kanal<T> LİNEER
+     * DEĞİL → k tüketilmez, tekrar kullanılabilir (D31 ile tutarlı). */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2);\n"
+        "    kanal_g\xc3\xb6nder(k, 7);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam32 = kanal_al(k);\n");
+    test_sonuc("D44: kanal_oluştur + gönder + al kompozisyonu = 0 hata",
+               h == 0);
+}
+
 int main(void) {
     printf("=== KEMGU DRF Test Paketi V1 ===\n");
     printf("Plan: belgeler/KEMGU_DRF_Genisletme_Plan.md\n");
@@ -496,9 +580,9 @@ int main(void) {
     T1_gorev_tam32();
     T2_gorev_metin();
     T3_kanal_tam32();
-    T4_kanal_metin();
+    T4_kanal_metin_v1_reddedilir();
     T5_gorev_nested_kanal();
-    T6_kanal_nested_dizi();
+    T6_kanal_nested_dizi_v1_reddedilir();
 
     /* D7-D12: gorev_baslat */
     T7_gorev_baslat_lambda();
@@ -546,6 +630,15 @@ int main(void) {
     T37_dizi_yakala_pozitif();
     T38_dizi_yakala_sonrasi_erisim_v1_limit();
     T39_dondur_idempotent_degil();
+
+    /* D40-D44: kanal_oluştur (R-KANAL kurucusu — D-292) */
+    T40_kanal_olustur_annotasyonlu();
+    T41_kanal_olustur_baglamsiz();
+    T42_kanal_olustur_arity();
+    T43_kanal_olustur_kapasite_tamsayi_degil();
+    T44_kanal_olustur_gonder_al_kompozisyon();
+    T45_kanal_genis_T_reddedilir();
+    T46_kanal_dar_tamsayi_kabul();
 
     printf("\n=== %d/%d test gecti (basarili) ===\n", basarili, toplam_test);
     if (basarisiz > 0) {

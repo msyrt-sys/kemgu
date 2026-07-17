@@ -33,7 +33,11 @@ struct KdlKanal {
 static struct KdlKanal kdl_kanal_havuz[KDL_KANAL_HAVUZ];
 static int kdl_kanal_sayi = 0;
 
-KdlKanal *kdl_kanal_olustur(void) {
+KdlKanal *kdl_kanal_olustur(int kapasite) {
+    /* Halka derleme-zamani sabit (en cok KAP-1 ogo). Istenen kapasite bunu
+     * asiyorsa SESSIZCE kirpmak yerine BASARISIZ don — cagiran, istedigi
+     * kapasiteyle calistigini sanmasin. kapasite<=0 -> sabit halka. */
+    if (kapasite > KDL_KANAL_KAP - 1) return 0;
     if (kdl_kanal_sayi >= KDL_KANAL_HAVUZ) return 0;
     struct KdlKanal *k = &kdl_kanal_havuz[kdl_kanal_sayi++];
     k->bas = 0;

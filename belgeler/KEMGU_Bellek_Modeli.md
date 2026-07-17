@@ -160,22 +160,55 @@ t_hedef sonlandırılır
 
 ### R-KANAL — Mesaj Geçişi
 
+> **Tasarım kararı (D-292):** Uçlar **AYRIK DEĞİLDİR** — tek, yönsüz `kanal<T>`
+> kullanılır. Bu kural önceden uçları `gönderen<T>` / `alan<T>` olarak ayrı
+> tipliyordu; implementasyon ise başından beri tek `kanal<T>` kullanıyordu
+> (DRF003/DRF004). Ayrışma, kurucu (`kanal_oluştur`) eklenirken tek `kanal<T>`
+> lehine çözüldü. **Bedeli açıkça kayıtlıdır:** yön tip seviyesinde garanti
+> EDİLMEZ — aynı görev bir kanaldan hem gönderip hem alabilir; tip sistemi
+> engellemez. Ayrık uçlar (`gönderen<T>`/`alan<T>`) ileride yeniden
+> değerlendirilebilir.
+
+**Kurucu:**
+```
+Γ ⊢ n : tam32    beklenen tip = kanal<T>
+
+──────────────────────────────────────────
+Γ ⊢ kanal_oluştur(n) : kanal<T>
+```
+`T` bir değer argümanından çıkarsanamaz (kanal boş başlar) → **bağlamdan**
+gelir (`dizi_olustur<T>(N)` / boş dizi deseni). Bağlam yoksa **DRF006**.
+
+> **V1 sınırı (D-292):** `T` **32-bit tamsayı** olmalı (`tam8/16/32`,
+> `dtam8/16/32`). Runtime kanal tamponu monomorfik `int32_t` taşır; geniş `T`
+> ölçüldüğünde `kanal<tam64>` **derlenip çalışıyor ve sessizce veri kaybediyordu**
+> (2^33 gönderilip alındığında eşit çıkmıyor). Bu yüzden geniş `T` tip
+> seviyesinde **DRF006** ile reddedilir — derleme zamanı, açık tanı. Genişletme
+> (i64/işaretçi taşıyan kanal) `görev<T>`'nin aynı kökten gelen T=tam32 sınırıyla
+> **birlikte** ele alınmalı (ikisinde de IR'de T i32'ye sabit).
+
 **Gönderim:**
 ```
-Γ ⊢ gönderen : gönderen<T>    Γ ⊢ v : T
+Γ ⊢ k : kanal<T>    Γ ⊢ v : T
 
 ───────────────────────────────────────────────────────
 sahiplik_transfer(v, ρ_kanal(k))
 Γ' = Γ \ {v}
 ```
+Kanal doluysa gönderim **bloklar** (akış denetimi) — mesaj sessizce düşmez.
 
 **Alım:**
 ```
-Γ ⊢ alan : alan<T>    v kanal k'dan alındı
+Γ ⊢ k : kanal<T>    v kanal k'dan alındı
 
 ────────────────────────────────────────────────────
 sahiplik_transfer(v, ρ_sahip(t_alan))
 ```
+Kanal boşsa alım **bloklar**. Bloklamasaydı "henüz gönderilmedi" ile
+"`0` gönderildi" ayırt edilemezdi (sessiz yanlış cevap).
+
+`k` **tüketilmez** (`kanal<T>` lineer değildir): kanal ucu yeniden kullanılabilir
+bir transfer tamponudur (ρ_kanal); tüketilen yalnız **gönderilen değerdir**.
 
 ### R-PAYLAŞ — Salt-Okunur Bölge Dondurma
 

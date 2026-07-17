@@ -95,10 +95,13 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 245/245, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/dondur)
-│   ├── test_gorev_rt.c                — Katman 2 görev runtime (kdl_gorev_basla_kapanis/birlestir) — 9/9; GERÇEK thread + S1/S2 ρ ayrıklığı kanıtı (D-291)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 247/247, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur)
+│   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA kanıtı (D-291/D-292)
+│   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 46/46 (D40-D46: kanal_oluştur + V1 32-bit T kısıtı)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
+│       ├── gorev_temel.kem            — Katman 2: görev_başlat/birleştir (D-291) — exit 42
+│       ├── kanal_mesaj.kem            — Katman 2: kanal mesaj geçişi + akış denetimi (D-292) — exit 15
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
 │       ├── yapilar.kem                — Generic yapılar + referans (TAMAMLANDI ✓)
 │       ├── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
@@ -673,13 +676,16 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   `görev_birleştir` codegen + GERÇEK host thread (`kdl_gorev_basla_kapanis`); her görev
   kendi ρ_sahip'ini alır (S1/S2 yapısal — test [7] ρ ayrıklığını ölçer). `dondur` V1'de
   identity. **Kalan (bu sırayla):**
-  - **`kanal` — BLOKE: kurucu syntax kararı Mehmet'te.** DRF V1'de kanal KURUCUSU yok;
-    tüm testler kanalı parametre alıyor → gerçek programda `kanal<T>` elde etmek imkânsız.
-    Ayrıca spec `gönderen<T>`/`alan<T>` ayrık uçlar derken implementasyon tek `kanal<T>`
-    kullanıyor — kararla birlikte çözülmeli. (Runtime `kdl_kanal_*` host'ta ZATEN var.)
+  - ~~**`kanal`**~~ ✓ **D-292**: `kanal_oluştur<T>(kapasite)` kurucusu (T beklenen tipten;
+    bağlamsız → DRF006) + gönder/al codegen + **BLOKLAYAN** host runtime (koşul değişkeni).
+    Mehmet kararı: tek yönsüz `kanal<T>` (spec R-KANAL buna göre yeniden yazıldı; **bedeli:
+    yön tip-seviyesinde garanti EDİLMEZ**). Kapatılan asıl kusur: boş kanalda `kanal_al` 0
+    dönüyordu — gerçek bir 0'dan ayırt edilemez (sessiz yanlış cevap); dolu kanalda gönderim
+    mesajı sessizce düşürüyordu. Kanal/görev ABI'si host+bare-metal'de artık AYNI.
   - **ρ_sahip serbest bırakma** — F4-sınıfı iş: pozitif hapsedilme (confinement) kanıtı +
     adversarial tarama gerektirir (F4.2b'nin ρ_yerel deseni). Kanıtsız serbest = UAF riski.
   - Semaforlar / bariyerler (Plan Karar F V2)
+  - `kanal` KEMGU-OS'ta (bare-metal .kem): ABI hazır (aynı imza), test yok
 - **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
   block içindeki son `ver` deyimi tip dönüşü V2) — **`görev<T>`'nin T'sini de bu açar:**
   lifted lambda dönüşü bugün sabit i32 → görev<T> fiilen T=tam32 (D-291 sınırı, tek iş)

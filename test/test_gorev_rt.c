@@ -14,6 +14,14 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#if defined(_WIN32)
+  #include <windows.h>
+  static void kisa_bekle(int ms) { Sleep((DWORD)ms); }
+#else
+  #include <unistd.h>
+  static void kisa_bekle(int ms) { usleep((useconds_t)ms * 1000); }
+#endif
+
 static int toplam_test = 0;
 static int basarili = 0;
 static int basarisiz = 0;
@@ -40,6 +48,13 @@ extern KdlGorevOpak *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
 extern int32_t kdl_gorev_birlestir(KdlGorevOpak *g);
 extern uint64_t kdl_gorev_thread_sayisi;
 extern uint64_t kdl_gorev_sirali_sayisi;
+
+/* Katman 2 / R-KANAL runtime */
+typedef struct KdlKanalOpak KdlKanalOpak;
+extern KdlKanalOpak *kdl_kanal_olustur(int32_t kapasite);
+extern void kdl_kanal_gonder(KdlKanalOpak *k, int32_t deger);
+extern int32_t kdl_kanal_al(KdlKanalOpak *k);
+extern void kdl_kanal_serbest(KdlKanalOpak *k);
 
 /* === 1: bare yol (env == NULL) — codegen'in yakalamasiz lambda'si ===
  * Lifted lambda imzasi: i32 @lambda_N(ptr %rho) */
@@ -126,6 +141,66 @@ static void test_null_handle(void) {
                kdl_gorev_birlestir(NULL) == 0);
 }
 
+/* ========================================================================
+ * KANAL (R-KANAL) — bloklama semantigi
+ * ======================================================================== */
+
+/* === 7: BOS kanalda kdl_kanal_al BLOKLAR ===
+ * Bu testin ayirt ediciligi kritik: gonderici BILEREK gecikir, boylece alici
+ * kesinlikle once kanal_al'a girer. ESKI (bloklamayan) surumde bu DETERMINISTIK
+ * olarak 0 donerdi ve o 0, gercekten gonderilmis bir 0'dan ayirt edilemezdi.
+ * Bloklayan surumde 42 doner. */
+static KdlKanalOpak *kanal_gecikmeli;
+static int32_t isci_gecikmeli_gonder(void *rho) {
+    (void)rho;
+    kisa_bekle(60);                       /* alici once kanal_al'a girsin */
+    kdl_kanal_gonder(kanal_gecikmeli, 42);
+    return 0;
+}
+
+static void test_kanal_al_bos_bloklar(void) {
+    kanal_gecikmeli = kdl_kanal_olustur(4);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_gecikmeli_gonder, NULL, NULL);
+    int32_t v = kdl_kanal_al(kanal_gecikmeli);   /* BLOKLAMALI */
+    (void)kdl_gorev_birlestir(g);
+    test_sonuc("bos kanalda kanal_al BLOKLAR (0 degil, 42 alir)", v == 42);
+    kdl_kanal_serbest(kanal_gecikmeli);
+}
+
+/* === 8: DOLU kanalda kdl_kanal_gonder BLOKLAR (akis denetimi) ===
+ * Kapasite 2, 5 mesaj -> gonderici en az 3 kez dolu-bloklar. Eski surumde
+ * tasan mesajlar SESSIZCE DUSERDI -> toplam 15 degil, 3 (1+2) cikardi. */
+static KdlKanalOpak *kanal_akis;
+static int32_t isci_bes_gonder(void *rho) {
+    (void)rho;
+    for (int32_t i = 1; i <= 5; i++) kdl_kanal_gonder(kanal_akis, i);
+    return 0;
+}
+
+static void test_kanal_gonder_dolu_bloklar(void) {
+    kanal_akis = kdl_kanal_olustur(2);            /* bilincli kucuk kapasite */
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bes_gonder, NULL, NULL);
+    kisa_bekle(60);                               /* gonderici dolu-bloklasin */
+    int32_t toplam = 0;
+    int sira_ok = 1;
+    for (int32_t i = 1; i <= 5; i++) {
+        int32_t v = kdl_kanal_al(kanal_akis);
+        if (v != i) sira_ok = 0;                  /* FIFO sirasi korunmali */
+        toplam += v;
+    }
+    (void)kdl_gorev_birlestir(g);
+    test_sonuc("dolu kanalda kanal_gonder BLOKLAR (5 mesaj, kap=2, toplam 15)",
+               toplam == 15);
+    test_sonuc("kanal FIFO sirasi korunur (1,2,3,4,5)", sira_ok);
+    kdl_kanal_serbest(kanal_akis);
+}
+
+/* === 9: NULL kanal savunmasi === */
+static void test_kanal_null(void) {
+    kdl_kanal_gonder(NULL, 1);                    /* cokmemeli */
+    test_sonuc("kdl_kanal_al(NULL) cokmeden 0 doner", kdl_kanal_al(NULL) == 0);
+}
+
 int main(void) {
     printf("=== KEMGU gorev runtime (Katman 2 / DRF V1) testleri ===\n");
     test_bare_yol();
@@ -134,6 +209,9 @@ int main(void) {
     test_bolge_ayrikligi();
     test_cok_gorev();
     test_null_handle();
+    test_kanal_al_bos_bloklar();
+    test_kanal_gonder_dolu_bloklar();
+    test_kanal_null();
     printf("=== %d/%d test gecti ===\n", basarili, toplam_test);
     return basarisiz == 0 ? 0 : 1;
 }

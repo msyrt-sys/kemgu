@@ -2674,6 +2674,42 @@ static void test_dondur_identity(void) {
     test_sonuc("dondur(&degisken T) -> &T identity -> exit 42", rc == 42);
 }
 
+static void test_kanal_gorev_mesaj(void) {
+    /* GERCEK thread'ler arasi mesaj gecisi: gorev gonderir, main alir.
+     * Bu test bloklamayi AYIRT EDER: eski (bloklamayan) runtime ile main
+     * gorev daha yazmadan kanal_al'dan 0 alip exit 0 veriyordu (gozlendi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(4); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<bo\xc5\x9f> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| kanal_g\xc3\xb6nder(k, 42)); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = kanal_al(k); "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver v; }");
+    test_sonuc("kanal: gorev gonderir + main alir (blokla) -> exit 42",
+               rc == 42);
+}
+
+static void test_kanal_akis_denetimi(void) {
+    /* Kapasite 2, 5 mesaj -> uretici DOLU kanalda bloklamak ZORUNDA.
+     * Eski surumde tasan mesajlar sessizce duserdi -> toplam 15 cikmazdi.
+     * FIFO sirasi + akis denetimi birlikte sinanir (1+2+3+4+5=15). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev uretici(k: kanal<tam32>) -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 1; "
+        "iken i <= 5 { kanal_g\xc3\xb6nder(k, i); i = i + 1; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| uretici(k)); "
+        "de\xc4\x9fi\xc5\x9fken toplam: tam32 = 0; "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = 0; "
+        "iken n < 5 { toplam = toplam + kanal_al(k); n = n + 1; } "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver toplam; }");
+    test_sonuc("kanal akis denetimi (kap=2, 5 mesaj) -> exit 15", rc == 15);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -3023,6 +3059,8 @@ int main(void) {
     test_gorev_yakalamali();
     test_gorev_coklu();
     test_dondur_identity();
+    test_kanal_gorev_mesaj();
+    test_kanal_akis_denetimi();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

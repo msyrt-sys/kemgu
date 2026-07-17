@@ -5,6 +5,84 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-292 — KATMAN 2 TAM: `kanal_oluştur` kurucusu + kanal codegen + BLOKLAYAN kanal (sessiz-yanlış-cevap kapatıldı) (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-291).
+
+**Karar [ETKİ: `src/tip_kontrol.c` (kanal_oluştur intrinsic: beklenen-tip yolu + DRF006),
+`src/llvm.c` (3 kanal intrinsic emisyonu + 3 declare), `runtime/kdl_runtime.c` (kanal BLOKLAYICI),
+`runtime/kdl_kanal.h/.c` + `test/bare_metal/kanal_arm.c` (ABI birleştirme), `test/test_drf.c` (+5),
+`test/test_gorev_rt.c` (+4), `test/test_llvm.c` (+2), `test/ornekler/kanal_mesaj.kem` (YENİ),
+`belgeler/KEMGU_Bellek_Modeli.md` (R-KANAL yeniden yazıldı).]**
+
+**Mehmet'in kararı (soruldu, onaylandı):** tek yönsüz `kanal<T>` + `kanal_oluştur(kapasite)`.
+Alternatif (spec'e sadık ayrık `gönderen<T>`/`alan<T>` uçlar) reddedildi — belirgin şekilde büyük iş.
+
+**Kapatılan boşluk 1 — kurucu yoktu:** DRF V1'de `kanal<T>` KURUCUSU yoktu; 39 DRF testinin tamamı
+kanalı *parametre* alıyordu, hiçbiri yaratmıyordu → gerçek bir programda `kanal<T>` değeri elde etmek
+**imkânsızdı** (codegen eklense bile). `kanal_oluştur(n)`'nin T'si bir DEĞER argümanından çıkarsanamaz
+(kanal boş başlar) → **beklenen tipten** gelir (`dizi_olustur<T>(N)` / boş dizi deseni). Bağlam yoksa
+sessizce bir T uydurmak yerine **DRF006**.
+
+**Kapatılan boşluk 2 — kanal SESSİZ YANLIŞ CEVAP veriyordu (asıl bulgu):** host `kdl_kanal_al` boş
+kanalda **0 dönüyordu** — ve o 0, gerçekten gönderilmiş bir 0'dan **AYIRT EDİLEMEZ**; `kdl_kanal_gonder`
+dolu kanalda mesajı **sessizce DÜŞÜRÜYORDU**. İkisi de R-KANAL sahiplik-transferini bozar (transfer
+edilmemiş değer alınmış görünür) ve "çökmezlik/yarış-yok" iddiasıyla çelişir. Artık her iki yön de
+**koşul değişkeniyle BLOKLAR** (Win32 CONDITION_VARIABLE / pthread_cond, `while(koşul)` döngüsünde —
+sahte uyanma güvenli). Bu, bare-metal `kdl_kanal.c`'nin (preemption altında busy-wait) **zaten doğru**
+olan sözleşmesiyle host'u hizalar. **Risk yok:** host kanal API'si ölü koddu (tek çağıran
+`bare_metal/kanal_arm.c` ve o BARE-METAL başlığı kullanıyor).
+
+**Kapatılan boşluk 3 — latent ABI tuzağı:** `kdl_kanal_olustur` host'ta `(int32_t)`, bare-metal'de
+`(void)` idi. Codegen tek `@kdl_kanal_olustur(i32)` çağırdığı için bare-metal hedefte kapasite
+**sessizce yutulacaktı**. Bare-metal imzası `(int kapasite)` yapıldı ve **dürüst** davranıyor: istenen
+kapasite derleme-zamanı halkayı aşarsa sessizce kırpmak yerine **0 döner**. Artık tek çağrı iki
+backend'e de aynı ABI ile bağlanır.
+
+**Kapatılan boşluk 4 — `kanal<T>`'nin SESSİZ veri kaybı (Mehmet kararı: 32-bit kısıt):** kanal codegen'i
+eklenince ortaya çıktı ki `kanal<tam64>` **derleniyor, çalışıyor ve sessizce veri kaybediyor**: 2^33
+gönderilip alındığında eşit çıkmıyor (ÖLÇÜLDÜ: exit 1). Sebep: runtime tamponu monomorfik `int32_t`,
+codegen değeri `i32` operandına zorluyor. Bu, hata modunu **loud → silent**'a çevirirdi (kanal codegen'i
+YOKKEN aynı program tanımsız-sembol link hatası veriyordu) — kabul edilemez.
+**Çözüm (Mehmet onayladı):** `kanal<T>` V1'de yalnız **32-bit tamsayı T** (tam8/16/32, dtam8/16/32).
+Tıkaç `kanal<T>` TİPİNİN çözüldüğü tek noktada (`DUGUM_TIP_KANAL`) → parametre/değişken/dönüş fark
+etmeksizin her kullanımı kapsar (ölçüldü). En iyi hata modu: **derleme zamanı, açık KEMGU tanısı**.
+- **ÖLÇÜM DÜZELTMESİ (kendi ilk hipotezim yanlıştı):** `kanal<metin>` sessiz DEĞİLDİ — LLVM zaten
+  gürültülü reddediyordu (`'%N' defined with type 'ptr' but expected 'i32'`). Tek gerçekten SESSİZ vaka
+  `kanal<tam64>`. Kısıt ikisini de düzgün bir tanıya çeviriyor.
+- **Test beklentisi DEĞİŞTİ (dürüstçe kaydedilir):** D4 (`kanal<metin>` = 0 hata) ve D6
+  (`kanal<Dizi<tam32>>` = 0 hata) artık **DRF006 bekliyor**. Dilin kabul ettiği küme daraldı.
+- **`görev<T>`'de simetrik kısıt YOK — çünkü gerek yok (ölçüldü):** `görev<tam64>` tip kontrolünde
+  **T001** ile yakalanıyor (lambda'nın gerçek dönüşü tam32 → `görev<tam32>` ≠ `görev<tam64>`),
+  `görev<metin>` ise LLVM'de gürültülü hata veriyor. **görev'in sessiz yolu yok.** Asimetrinin sebebi:
+  `kanal_gönder(k, v)`'de v, T ile uyumlu olduğu için tip kontrolünden geçer ve kırpma yalnız codegen'de
+  olur. (Bilinen pürüz: `görev<metin>`'in mesajı backend sızdırıyor — düzgün tanı ayrı iş.)
+
+**SINIR (bilinçli):** yön tip-seviyesinde garanti EDİLMEZ (aynı görev hem gönderip hem alabilir) —
+tek-`kanal<T>` kararının açık bedeli, `KEMGU_Bellek_Modeli.md` R-KANAL'da kayıtlı. Kanal monomorfik
+i32 taşır (D-291'deki T=tam32 sınırıyla AYNI kök: IR'de T i32'ye sabit) → genişletme, lambda dönüş-tipi
+çıkarsamasıyla BİRLİKTE gelmeli.
+
+**KANIT (bloklamayı AYIRT EDEN testler — "42 döndü" yetmez):**
+- `test_gorev_rt` **13/13** (+4): **[10] boş kanalda `kanal_al` BLOKLAR** — gönderici bilerek gecikir,
+  böylece alıcı kesinlikle önce girer; **eski sürüm burada deterministik olarak 0 dönerdi**.
+  **[11] dolu kanalda `kanal_gonder` BLOKLAR** (kap=2, 5 mesaj, toplam 15 — eski sürümde taşanlar
+  düşerdi). [12] FIFO sırası. [13] NULL savunması.
+- `test_llvm` **247/247** (+2): görev→kanal→main mesaj geçişi (exit 42) + akış denetimi (exit 15).
+  **Ayırt edicilik EMPİRİK olarak gözlendi:** bayat (bloklamayan) `kdl_runtime.o` ile aynı program
+  exit **0** veriyordu; bloklayan runtime ile **42**. Test gerçekten semantiği ölçüyor.
+- `test_drf` **44/44** (+5: D40 annotasyonlu, D41 bağlamsız→DRF006, D42 arity, D43 kapasite-tamsayı-değil,
+  D44 kurucu+gönder+al kompozisyonu).
+- Determinizm: mesaj geçişi **30/30**, akış denetimi **20/20** (yarış yok — bloklama sayesinde).
+- Regresyon: bare-metal `calistir_kanal_test_arm` **geçti** (toplam=55 — imza değişikliği kırmadı),
+  **SELF-HOST FIXPOINT ✓** (stage1==stage2, 33371 satır; korpus 92), codegen parite **76/76**.
+
+**SÜREÇ DERSİ:** `make` varsayılan hedefi `build/kdl_runtime.o`'yu KURMUYOR. İlk kanal denemesi bu
+yüzden exit 0 verdi (bayat runtime) — IR doğruydu, obje eskiydi. Elle sondajlarda runtime'a dokunduysan
+`mingw32-make build/kdl_runtime.o` şart; `calistir_*_test` hedefleri bağımlılıktan ötürü güvenli.
+
+---
+
 ## D-291 — KATMAN 2 CANLANDI: `görev_başlat`/`görev_birleştir`/`dondur` codegen + GERÇEK thread runtime (2026-07-16) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-290).
