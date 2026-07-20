@@ -575,7 +575,7 @@ genişletme (dosya/spawn/net), shell REPL, spawn/wait wiring.
 
 **Karar [ETKİ: `Makefile` (kem_os `.ll→.o` derlemesine `-ffunction-sections -fdata-sections` +
 objcopy `--rename-section` post-compile adımı); `runtime/kem_gorev.kem` (`kul_test`/`kul_test_adr`/
-`kem_linchpin_testi`); `test/ornekler/kem_os.kem` ([11] LINCHPIN bloğu). USERLAND_ROADMAP (438cb00)
+`kem_linchpin_testi`); `test/ornekler/kem_os.kem` ([11] LINCHPIN bloğu). USERLAND_ROADMAP (03133f0)
 ADIM 1 — enabling-primitif, Model A shell/spawn'ın önkoşulu.]** A5/B2'nin EL0 stub'ları runtime'da
 yazılan makine-koduydu (llvm-mc byte'lar) — `.kem`'de section-attribute YOK. Bu adım GERÇEK
 `.kem`-derlenmiş kodun `.user` (0x42000000, AP=01) section'ına yönlendirilip EL0'da çalıştığını kanıtlar.
@@ -1226,7 +1226,7 @@ kurar.
 
 **FALSİFİYE-KANIT (`cg_skaler_deref.kem`, genişlik-duyarlı — yanlış yük-genişliği TERS exit verir):**
 - **C-codegen (oracle):** `load i8/i16/i64` → **exit 24**.
-- **ESKİ self-host (HEAD 1c0c984, D-267 öncesi):** hepsi `load i32` → **exit 32 → DIVERGE** (32 ≠ 24). ✅ falsifiye görünür.
+- **ESKİ self-host (HEAD 9f0881f, D-267 öncesi):** hepsi `load i32` → **exit 32 → DIVERGE** (32 ≠ 24). ✅ falsifiye görünür.
 - **YENİ self-host (D-267 fix):** `load i8/i16/i64` → **exit 24 → PARİTE**. Self-host `*tam8==0` artık `load volatile i8`.
 - **Regresyon YOK:** **FIXPOINT stage1==stage2 BİREBİR (33371 satır)** — SERT KAPI geçti; lexer+parser+checker 90/90;
   codegen_diff **76/76** (cg_skaler_deref dâhil); test_tumu TAM YEŞİL; kem_os QEMU TEMİZ boot ([1..5]+MMIO+KEM-OS OK).
@@ -2621,7 +2621,7 @@ doğrular. **Kanıt:** torn_read=0 (yarım-yazılmış çift asla görülmedi �
 **Karar [ETKİ: yeni `test/bare_metal/recon_shell2_arm.c`; `Makefile`. Yalnız test — kaynak değişmedi.]** D-189
 recon kabuğu genişletme: `ping`/`dns`'e EK `scan <oktet>` (TCP SYN 80/443/22 → ACIK/KAPALI/FILTRELI, port_scan
 mantığı) + `arpscan` (subnet 10.0.2.1-5 ARP tarama → "ARPSCAN: N host"). **Kanıt:** `ping 2`→PING:CANLI +
-`arpscan`→2 host → "RECON2 SHELL OK", ping/arpscan det. Net-poll KÜÇÜK tik (cde6d00), char-pace giriş (D-188),
+`arpscan`→2 host → "RECON2 SHELL OK", ping/arpscan det. Net-poll KÜÇÜK tik (6bbf1ff), char-pace giriş (D-188),
 tampon user-VA. Nmap-benzeri komut-satırı pentest kabuğu. **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
 
 ## D-197 — OS: userspace HTTP POST — EL0 syscall ile veri gönderme (2026-07-03) [YÜKSEK]
@@ -2655,7 +2655,7 @@ fault)'ün x86 muadili. Kernel-sır 2MB-hizalı/2MB-boyut (kendi PD-girişini i�
 yalnız ring3-erişilen sayfalar (kod/stack) U/S=1. Ring3 kernel-sır OKUMA dener → **#PF v=14, err=0x5 (P|U-read),
 CR2=kernel-sır**. **Kanıt:** ring3 kernel belleğini OKUYAMADI (sır register'a ulaşmadı) → "PAGE ISO OK", 3/3 det,
 ilk-deneme (fallback yok). **Çift-mimari userspace izolasyon TAM: EL0(aarch64 sayfa-perm) + ring3(x86 U/S-sayfa).**
-Gate-marj: x86 hlt-loop timeout 12→20 (9039dd1, yük-flake). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
+Gate-marj: x86 hlt-loop timeout 12→20 (39612ba, yük-flake). **Not:** Paralel mini-agent üretti; cherry-pick ile entegre.
 
 ## D-194 — OS: SELF-HOST 128-bit bignum toplama — KEMGU carry propagation (2026-07-03) [YÜKSEK]
 
@@ -4664,7 +4664,7 @@ disiplini yakaladı.)
 ASan-temiz (18 orijinal UAF'ın TAMAMI kapandı)** + confined `dizi_al` döngüsü GERÇEK free + ASan temiz
 (exit 42) + `test_tumu` YEŞİL + DRF 39/39 + escape 22/22 + bolge_atama 15/15. Kalan 2 repro UAF
 (`probe_bare`, `probe_p1_ekle_inline`) F4.2b'den BAĞIMSIZ PRE-EXISTING bug (bare-literal→`dizi_*`
-stack/heap descriptor uyuşmazlığı; machinery commit `f9ad67a`'da da çöküyor) → ayrı task'a flaglendi.
+stack/heap descriptor uyuşmazlığı; machinery commit `db4073e`'da da çöküyor) → ayrı task'a flaglendi.
 
 **Sınırlar (v1):** Gerçek-serbest yalnız C-tarafı + skaler-eleman + confined-değişken. Geniş ama sound
 desenler (kaçan dizi, ptr-eleman, alias, capture) ρ_caller'da kalır (free kaçırılır ama UAF imkânsız).
@@ -4675,7 +4675,7 @@ Genişletme (ptr-eleman transitif free, daha keskin alias, self-host port) sonra
 ## D-102 — [YÜKSEK] Loop-carried soundness: escape/bölge ESC_ITERASYON ÜRETMEZ (güvenli geri-çekilme) (2026-06-20)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `1994a88` → D-101 ayrılmıştı; main D-101'i F4.2a'ya verdi → KONSOLİDASYON: D-102'ye yeniden numaralandı).
+> (branch tabanı origin/main `9977c3b` → D-101 ayrılmıştı; main D-101'i F4.2a'ya verdi → KONSOLİDASYON: D-102'ye yeniden numaralandı).
 
 **Karar [ETKİ: ORTA — yalnız `src/escape.c` + `src/bolge_atama.c` + testler; codegen/checker/IR
 DEĞİŞMEZ; izole commit; PR, merge edilmedi].** Escape analizi ARTIK **hiçbir** tahsisi `ESC_ITERASYON`
@@ -4748,7 +4748,7 @@ doğrulaması üzerine alındı — direktifin "güvenli geri-çekilme: ITERASYO
 ## D-101 — [YÜKSEK] V2 F4 FAZ 2a: region-passing ABI (ρ) — kullanıcı-fn + dizi helper'ları (re-scoped) (2026-06-17)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `1994a88` → en yüksek D-100 → D-101 ayrıldı).
+> (branch tabanı origin/main `9977c3b` → en yüksek D-100 → D-101 ayrıldı).
 
 **Karar [ETKİ: YÜKSEK — `src/llvm.c` + `selfhost/codegen.kem` (İKİ-DERLEYİCİ MİRROR) + `kdl_runtime.c`;
 izole commit].** Region-passing ABI'nin İLK adımı: her KULLANICI fonksiyonu ilk param `ptr %rho`
@@ -4809,7 +4809,7 @@ MSYS2 kabuğunda çalıştır veya `TMPDIR`'i `/c/`-köklü bir yola sabitle (he
 ## D-100 — [YÜKSEK] V2 F4 FAZ 1: sızan array/metin tahsisini global bölgeye yönlendir + sembol-çakışması temizliği (2026-06-17)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `75912a2` → en yüksek D-099 → D-100 ayrıldı).
+> (branch tabanı origin/main `e3d4784` → en yüksek D-099 → D-100 ayrıldı).
 
 **Karar [ETKİ: ORTA — yalnız `runtime/kdl_runtime.c`; codegen/checker/IR DEĞİŞMEZ; izole commit].**
 Sızan (çağırana dönen + hiç free edilmeyen) array ve yeni-metin tahsislerini F4.0 global bölgesine
@@ -4849,7 +4849,7 @@ hiç-serbest — beklenen). 0 uyarı.
 ## D-099 — V2 F4 FAZ 0: bölge (region) arena allokatörü runtime (`kdl_bolge`) (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `7166880` → en yüksek D-098 → D-099 ayrıldı).
+> (branch tabanı origin/main `ca64daf` → en yüksek D-098 → D-099 ayrıldı).
 
 **Karar [ETKİ: DÜŞÜK — saf runtime; codegen/checker/IR DEĞİŞMEZ; izole commit].** Bölge tabanlı
 bellek modelinin (`belgeler/KEMGU_Bellek_Modeli.md`, Katman 1) runtime tabanı. Bir BÖLGE = bir
@@ -4898,7 +4898,7 @@ referanssız ölü kod). ASan E2E 97/0 (yeni runtime'ı kullanan yok). 0 uyarı.
 ## D-098 — [YÜKSEK] V2 FAZ 2: yakalayan closure env'i stack→HEAP (@malloc) — kaçışta yaşar (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `099cd5e` → en yüksek D-097 → D-098 ayrıldı).
+> (branch tabanı origin/main `f30712e` → en yüksek D-097 → D-098 ayrıldı).
 
 **Karar [ETKİ: ORTA — `src/llvm.c` lambda env allokasyonu; izole commit; C-codegen-only].**
 V2 yol haritası 2. fazı (F1 üzerine). Yakalayan closure'ın **env ALLOKASYONUNU** stack `alloca`'dan
@@ -4939,7 +4939,7 @@ ASan E2E PASS=97 FAIL=0 (env leak'i dizi/metin leak'iyle aynı sınıf; leak-det
 ## D-097 — [YÜKSEK] V2 FAZ 1: fat-value closure ABI iskeleti — fn değeri {ptr fn, ptr env} + runtime env-null dispatch (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı origin/main `f938741` → en yüksek D-096 → D-097 ayrıldı).
+> (branch tabanı origin/main `43c2526` → en yüksek D-096 → D-097 ayrıldı).
 
 **Karar [ETKİ: YÜKSEK — `src/llvm.c` çekirdek codegen; izole commit; DAVRANIŞ-EŞDEĞER;
 C-codegen-only].** V2 (escaping-closure desteği) yol haritasının 1. fazı. Fonksiyon-değeri
@@ -4986,7 +4986,7 @@ parser 51/51, **CODEGEN FIXPOINT stage1==stage2 byte-identik**. `mingw32-make te
 ## D-096 — [YÜKSEK] V1 kaçan-closure UAF reddi (G005): YAKALAYAN ∧ KAÇAN closure compile-time reddedilir (2026-06-16)
 
 > **D-no:** merge anında güncel main'in en yüksek D-numarasına göre kesinleştir
-> (branch tabanı: origin/main 68f1fb0 → en yüksek D-095, dolayısıyla D-096 ayrıldı).
+> (branch tabanı: origin/main 82e14ed → en yüksek D-095, dolayısıyla D-096 ayrıldı).
 
 **Karar [ETKİ: `src/tip_kontrol.c` checker — yeni redd kodu G005; izole commit; C derleyici
 codegen DEĞİŞMEDİ].** Güvenlik-iddiası izi (D-071 devamı). Kaçan yakalayan closure açığı
@@ -5399,7 +5399,7 @@ değişkene çıkarınca uzunluk metadata hâlâ bozuk (nested-literal stack tem
 ayrı sorun — D-082 inner-heap'e bağlı, deferred). &Dizi referansı D-086.
 
 > **Not (merge):** PR #63'ün eski D-084'ü (stack `[N×T]` YAZMA OOB sınır-kontrolü)
-> bu main-merge'inde DÜŞÜRÜLDÜ — birebir aynı düzeltme main'de `a6d690d` / D-069
+> bu main-merge'inde DÜŞÜRÜLDÜ — birebir aynı düzeltme main'de `b09c5a2` / D-069
 > (Kategori 2) olarak zaten mevcut (`stack_uz` sınır-kontrolü, `src/llvm.c`). Kod
 > kaybı yok; yalnız çift kayıt önlendi. Düzeltmenin kendisi PR #63'ün
 > `src/llvm.c`'sinde KORUNUYOR.
@@ -5435,7 +5435,7 @@ birleşik driver da KENDİNİ fixpoint olarak üretir (self-host derleyici, chec
 
 **Süreç notu (şeffaflık):** Bu iş ilk olarak bayat D-081 tabanı üzerinde [D-082] etiketiyle yapıldı
 (commit 20b5408, tag `asama4-d082-backup`) — ama gerçek D-082 = CG8 dizi (origin/main). Branch
-origin/main'e (9f66dc9; D-082..D-085 dahil) sıfırlandı ve driver **yeni** codegen.kem (2659 satır;
+origin/main'e (6c26bdf; D-082..D-085 dahil) sıfırlandı ve driver **yeni** codegen.kem (2659 satır;
 CG8 dizi + CG7d + CG9a alloca-hoist + fixpoint) üzerine **yeniden** uygulandı, doğru D-086 ile.
 
 **KARAR 1 — Yer: codegen.kem YERİNDE.** `checker.kem`/`lexer.kem`/`parser.kem` DOKUNULMADI (Aşama 1-2

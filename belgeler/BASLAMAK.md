@@ -115,8 +115,7 @@ yedek branch al.
 ### 4.2 Worktree
 
 Repo aynı anda birden fazla iş için kullanılırken `git worktree add`
-tercih edilir. Claude Code da `.claude/worktrees/` altında bunları otomatik
-yönetir.
+tercih edilir. Worktree'ler `.claude/worktrees/` altında tutulur.
 
 ---
 
@@ -198,15 +197,8 @@ Kötü örnekler:
 - `WIP` — niye merge ediyorsun?
 - `Update`, `Update 2` — anlamsız
 
-### 6.3 İmza
 
-Eğer Claude Code ile birlikte çalışıyorsan:
-```
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
-```
-İnsan-AI ortak çalışmasını açıkça işaretle.
-
-### 6.4 Pre-commit hook'u
+### 6.3 Pre-commit hook'u
 
 `pre-commit` ile derleme + lint çalıştırma planlı (henüz hooks dizini boş).
 Hook eklenince `--no-verify` ile bypass **yasak**.
