@@ -445,27 +445,99 @@ sızıntıyla biterse `ERROR: AddressSanitizer: ...` çıkar ve adım onaylanmaz
 
 ## Yol Haritası
 
-Dürüst zaman-ufukları. Hiçbiri "mevcut" değildir.
+Dürüst zaman-ufukları. **Bu bölümdeki hiçbir madde "mevcut" değildir** — mevcut
+olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğu*,
+*neden önemli olduğu* ve *neyin beklediği* ile birlikte yazılmıştır.
 
-### Devam eden / yakın
-- **Açık tip argümanı** (turbofish) — jenerik çağrı/inşada `f<T>(...)` /
-  `Tip<T>{...}` (şu an yalnız çıkarsama).
-- **Gerçek kabiliyet ödünç alma** (mevcut MOVE/`delege` çözümü yerine).
-- Daha fazla stdlib: `Metin`/`Dosya` tamamlama, kripto BLAKE3/HMAC, OS RNG.
+### Yakın — tanımlı, engelsiz iş
 
-### Orta
-- **Ayrık / artımlı derleme** (arayüz dosyaları); glob import + opak tipler + re-export.
-- **Trait / bound sistemi** (`özellik`/`uygula`) — tam method dispatch.
-- Bölge/escape analizini sürücü hattına bağlama + **otomatik-serbestleyen arena**.
-
-### Vizyon (uzun vade — açıkça hedef, "yakında" değil)
 - **Self-host paritesini kapatma.** Bootstrap **fixpoint'i tuttu** (yukarıdaki
-  "Diğer Doğrulanmış Altsistemler" tablosu), ama C derleyici öndedir: en yeni codegen özellikleri (eşzamanlılık, lambda
-  dönüş-tipi çıkarsaması) `selfhost/codegen.kem`'e **henüz port edilmedi**.
-  Gateler geçiyor çünkü doğrulama korpusunda bu şekiller yok — borç gerçek.
-- **Saf-KEMGU işletim sistemi** + sürücüler (zamanlayıcı, MMU, syscall).
-- **DRF ispatı V2** — tam-dil, per-thread bölgeler, operasyonel/runtime tanık,
-  yan-kanal + WCET bileşenleri teoreme dahil.
+  "Diğer Doğrulanmış Altsistemler"), ama C derleyici öndedir: eşzamanlılık
+  codegen'i (`görev`/`kanal`) ve lambda dönüş-tipi çıkarsaması
+  `selfhost/codegen.kem`'e **henüz port edilmedi**.
+  *Neden önemli:* doğrulama korpusunda bu şekiller olmadığı için gateler geçiyor —
+  yani borç **sessiz**; her yeni C-codegen özelliğiyle büyüyor.
+  *Nerede:* `selfhost/codegen.kem`, `mingw32-make calistir_codegen_bootstrap`.
+
+- **Blok-form lambda dönüş-tipi çıkarsaması.** İfade-form (`|| 3.5`) çıkarsanıyor;
+  blok-form (`|| { …; ver x; }`) dönüşü hâlâ sabit `tam32`.
+  *Engel:* son-`ver`'i öğrenmek için gövdeyi emit etmek gerekir, ama emit sırasında
+  dönüş tipi zaten lazım — **döngüsel bağımlılık**. Gövde ön-taraması gerekiyor.
+
+- **Skaler referans okuma.** `&tam32` bugün **hiç okunamıyor** (`ver v` → T020,
+  `v + 0` → T003, `*v` → T001); yalnız taşınıp döndürülebiliyor. Yapı referansı
+  (`r.alan`) çalışıyor. Hiçbir örnek/test skaler referans kullanmadığı için
+  gözden kaçmıştı.
+
+- **Açık tip argümanı** (turbofish) — `f<T>(...)` / `Tip<T>{...}`. Şu an tip
+  argümanları yalnız *çıkarsanıyor*; çıkarsamanın yetmediği yerde yazacak sözdizim yok.
+
+- **Gerçek kabiliyet ödünç alma** — mevcut MOVE/`delege` çözümünün yerine.
+
+- **Stdlib genişletme** — `Metin`/`Dosya` tamamlama, kripto (BLAKE3/HMAC), OS RNG.
+
+### Orta — daha büyük ya da ön-koşullu
+
+- **Görev bölgesinin serbest bırakılması.** Şu an her görev kendi bölgesini alıyor
+  ama bölge **hiç serbest bırakılmıyor** (bilinçli sızıntı).
+  *Neden bekliyor:* serbest bırakmak, görev gövdesindeki tahsislerin o bölgeye
+  **hapsedildiğinin pozitif kanıtını** ister — gövde yakalanan bir `&değişken`e
+  bölgeden işaretçi yazarsa serbest bırakma **use-after-free** olur. Kanıtsız
+  serbest bırakma yapılmayacak; aynı disiplin `ρ_yerel` için de uygulanmıştı.
+
+- **Semaforlar / bariyerler** — `görev`/`kanal` üstüne daha zengin senkronizasyon.
+
+- **`kanal`'ın bare-metal (`.kem`) tarafında sınanması.** ABI hazır (host ile aynı
+  imza), ama çekirdek tarafında testi yok.
+
+- **Ayrık / artımlı derleme** — arayüz dosyaları, glob import, opak tipler, re-export.
+
+- **Trait / bound sistemi** (`özellik`/`uygula`) — tam method dispatch.
+
+- **Prosedürler-arası escape analizi** — çağrılan işlevin escape özeti (şu an çağrı
+  sonuçları konservatif kabul ediliyor); bölge/escape analizini sürücü hattına
+  bağlama + otomatik-serbestleyen arena.
+
+- **Tek-kaynak konsolidasyon** — checker mantığı iki yerde (self-host driver +
+  Aşama 2 referans `checker.kem`); ileride driver tek kaynak olabilir.
+
+- **LSP v3** — artımlı senkronizasyon, workspace, semanticTokens, references.
+
+### Uzun vade — açıkça hedef, "yakında" değil
+
+- **Saf-KEMGU işletim sistemi** + sürücüler (zamanlayıcı, MMU, syscall). Bugün
+  elde olan: libc'siz UART konsol, VirtIO protokol modelleri, bare-metal kernel
+  ELF bring-up'ı. **Tam OS yok.**
+
+- **DRF ispatı V2** — tam-dil kapsamı, per-thread bölgeler, operasyonel/runtime
+  tanık, weak-memory (C++11) fence emisyonu, yan-kanal + WCET bileşenlerinin
+  teoreme dahil edilmesi. Bugünkü teorem **V1 çekirdek alt-kümesi** içindir.
+
+- **`çeşit` varyantlarına veri** — bugün varyantlar payloadsuz (yalnız etiket).
+
+### Karar bekleyen — tasarım soruları (iş değil, karar)
+
+Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair karar**.
+
+- **`görev_başlat` başarısızlığı ne dönmeli?** Thread yaratılamazsa şu an
+  `kdl_panik` çağrılıyor. Bu, KEMGU'nun "çökmezlik" ilkesiyle gerilim hâlinde —
+  ama önceki davranış (görevi sıralı çalıştırmak) bloklayan bir kanal işleminde
+  **kalıcı kilitlenme** üretiyordu, yani daha kötüydü. Muhtemel doğru çözüm
+  `sonuç<görev<T>, Hata>`; bu bir dil kararı.
+
+- **Kanalda yön garantisi.** Bugün tek, yönsüz `kanal<T>` var: aynı görev hem
+  gönderip hem alabilir, tip sistemi engellemez. Bellek modelinin özgün tasarımı
+  ayrık uçlardı (`gönderen<T>` / `alan<T>`) — geri dönülür mü, kararı bekliyor.
+
+- **Custom ADT / enum sözdizimi** ve `eşleş` exhaustiveness'ın buna genişletilmesi.
+
+### Bilinen sınırlar (bugün geçerli)
+
+Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
+etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
+görev bölgesi sızdırılır; blok-form lambda dönüşü `tam32`; skaler `&T` okunamaz;
+`çeşit` varyantları payloadsuz; turbofish yok; self-host derleyici en yeni codegen
+özelliklerini içermez.
 
 ---
 
