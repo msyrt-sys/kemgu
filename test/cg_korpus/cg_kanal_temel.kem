@@ -1,0 +1,8 @@
+// D-299: kanal kurucu + gönder/al (tek thread; kapasite > mesaj sayısı).
+// Beklenen exit: 42
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(4);
+    kanal_gönder(k, 20);
+    kanal_gönder(k, 22);
+    ver kanal_al(k) + kanal_al(k);
+}

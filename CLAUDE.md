@@ -720,7 +720,18 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   çıkarsaması gövde ön-taraması ister (döngüsel bağımlılık; D-072, ayrı iş).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
-- **PARİTE BORCU:** görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
+- **PARİTE BORCU — D-299'da KISMEN KAPANDI.** Taşınanlar: `kanal_oluştur/gönder/al`,
+  `dondur`, `görev_birleştir` (+ `ll_tip` görev/kanal→ptr, `cg_aic` iç-tip kurtarımı,
+  i64 genişlet/daralt). Korpusa 5 vaka eklendi (76→**81**) — borcun SESSİZ olma sebebi
+  korpusta hiç kanal/görev olmamasıydı. **KALAN: `görev_başlat` + lambda dönüş
+  çıkarsaması** — self-host'ta closure/lambda codegen'i HİÇ YOK (LAMBDA ayrıştırılıyor
+  ama lifted fn emit edilmiyor) ve `yaz_bayt` ile doğrudan stdout'a yazıldığı için
+  C'nin ertelenmiş-kuyruk+tmpfile+hoist_renumber makinesi taşınamaz → ön-geçişli
+  emisyon ister. **`görev_birleştir` port edildi ama SINANAMIYOR** (görev<T> üretmenin
+  tek yolu `görev_başlat`). Ayrıca D-299'da bulunan ayrı kusur: self-host `TAM`
+  literalini daima i32 sayıyor → `kanal<tam64>`de 2^33 sessizce bozuluyordu
+  (`i64_genislet` artık immediate'ı tam genişlikte materyalize eder).
+  *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.
 - **Skaler referans okuma** (D-291 yan bulgusu): `&tam32` bugün hiç okunamıyor — `ver v`

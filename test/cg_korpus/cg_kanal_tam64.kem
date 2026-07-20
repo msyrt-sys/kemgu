@@ -1,0 +1,10 @@
+// D-299: kanal<tam64> — taşıyıcı i64. Literal 2^33 i32'ye SIĞMAZ; self-host
+// TAM literalini "i32" saydığı için `sext i32 <lit>` sessizce bozuyordu.
+// Beklenen exit: 42 (kayıpsız tur), bozulursa 1.
+işlev main() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(2);
+    kanal_gönder(k, 8589934592);
+    değişken v: tam64 = kanal_al(k);
+    eğer v == 8589934592 { ver 42; }
+    ver 1;
+}

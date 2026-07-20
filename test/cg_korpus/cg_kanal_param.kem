@@ -1,0 +1,8 @@
+// D-299: kanal<T> PARAMETRE yolu — T'nin kaynağı parametre annotasyonu.
+// Beklenen exit: 7
+işlev oku(k: kanal<tam32>) -> tam32 { ver kanal_al(k); }
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    kanal_gönder(k, 7);
+    ver oku(k);
+}

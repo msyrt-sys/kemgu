@@ -41,6 +41,7 @@ yapı Ayr {
     son_ref: metin;      // CG7c: son ifade sonucu ptr ise işaret ettiği yapı adı
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
     cg_apointee: Dizi<metin>;// D-267: *tamN pointer değişkeni ise skaler pointee LLVM tipi
+    cg_aic: Dizi<metin>;  // D-299: görev<T>/kanal<T> değişkeni ise T'nin LLVM tipi; değilse ""
                              // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
     beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
@@ -1931,7 +1932,19 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_aref, ref);   // CG7c: ptr → işaret edilen yapı
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
     dizi_ekle(p.cg_apointee, ""); // D-267: varsayılan "" (skaler pointer decl'i dizi_yaz ile set eder)
+    dizi_ekle(p.cg_aic, "");      // D-299: varsayılan "" (görev/kanal decl'i dizi_yaz ile set eder)
     ver 0;
+}
+// D-299: görev<T>/kanal<T> değişkeninin T LLVM tipi ("" bulunamazsa).
+// cg_var_elem_bul aynası — arama yönü ve cg_base sınırı birebir aynı olmalı
+// (blok-kapsam gölgelemesi için: sondan başa, cg_base'e kadar).
+işlev cg_var_ic_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) { ver dizi_al(p.cg_aic, i); }
+        i = i - 1;
+    }
+    ver "";
 }
 // CG-SCOPE: leksik kapsam kapanışı. Blok/döngü/eşleş-kolu girişinde alınan
 // `kapsam_bas = dizi_boyut(p.cg_ad)` ile çağrılır; [kapsam_bas, son) aralığındaki
@@ -2000,6 +2013,10 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // Referans/pointer/dizi → ptr (CG7b: &Yapi=ptr, Dizi<T>=heap ptr)
     eğer metin_esit(ta, "TIP_REFERANS") veya metin_esit(ta, "TIP_POINTER")
          veya metin_esit(ta, "TIP_DIZI") { ver "ptr"; }
+    // D-299 (Katman 2 parite): görev<T> / kanal<T> runtime'da OPAK handle (ptr).
+    // T yalnız tip-kontrolde yaşar. Bu dal olmadan ikisi de aşağıdaki "i32"
+    // fallback'ine düşüyordu → 64-bit handle 32 bite kırpılırdı (C llvm.c aynası).
+    eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") { ver "ptr"; }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
         değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
         ver metin_birlestir(metin_birlestir("{i8, ", tt), "}");
@@ -2038,6 +2055,18 @@ işlev tip_birlestir(a: metin, b: metin) -> metin {
 işlev ll_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver ""; }
     eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_DIZI") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    ver "";
+}
+// D-299: görev<T> / kanal<T> tip düğümü → T'nin LLVM tipi ("" ikisi de değilse).
+// görev<T>/kanal<T> IR'de opak `ptr` olduğu için T SİLİNİR; runtime i64 taşır ve
+// sonuç T'ye daraltılır (trunc / inttoptr). T'nin tek güvenilir kaynağı BİLDİRİLEN
+// tiptir — C llvm.c'deki gorev_ic_ir_al / kanal_ic_ir_al aynası.
+işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
+    eğer tip_idx < 0 { ver ""; }
+    değişken ta: metin = dizi_al(p.a_ad, tip_idx);
+    eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
     ver "";
@@ -2165,6 +2194,13 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_global_bolge_al()"); yb(10);   // V2-F4.2a: main/ρ-seed
     yaz_str("declare ptr @kdl_bolge_olustur()"); yb(10);       // V2-F4.2b: ρ_yerel aç
     yaz_str("declare void @kdl_bolge_serbest(ptr)"); yb(10);   // V2-F4.2b: ρ_yerel serbest
+    // D-299 (Katman 2 parite): görev/kanal runtime hedefleri. İmzalar C llvm.c ile
+    // BİREBİR aynı; kanal declare'i host (kdl_runtime.c) ve bare-metal (kdl_kanal.c)
+    // sürümlerinin ikisine de uyar.
+    yaz_str("declare i64 @kdl_gorev_birlestir(ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_kanal_olustur(i32)"); yb(10);
+    yaz_str("declare void @kdl_kanal_gonder(ptr, i64)"); yb(10);
+    yaz_str("declare i64 @kdl_kanal_al(ptr)"); yb(10);
     yaz_str("declare ptr @memcpy(ptr, ptr, i64)"); yb(10);
     yaz_str("declare i32 @kdl_metin_uzunluk(ptr)"); yb(10);
     yaz_str("declare i8 @kdl_metin_bayt(ptr, i32)"); yb(10);
@@ -2530,6 +2566,54 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                     ver lr;
                 }
             }
+        }
+        // ===== D-299: Katman 2 (Concurrency / DRF V1) intrinsic emisyonu =====
+        // C llvm.c'deki erken-dönüş bloklarının aynası. Bunlar aşağıdaki generic
+        // built-in/kullanıcı-fn yoluna SIĞMAZ: ρ ALMAZLAR ve taşıyıcı i64 ↔ T
+        // dönüşümü isterler. Bu blok olmadan self-host bunları KULLANICI işlevi
+        // sanıp `call i32 @"görev_başlat"(ptr %rho, ...)` üretiyordu → tanımsız
+        // sembol (C derleyicinin D-291 öncesi hâli).
+        // NOT: `görev_başlat` BURADA YOK — fat-value closure gerektirir, self-host'ta
+        // lambda codegen'i henüz yok (ayrı iş).
+        eğer metin_esit(fad, "dondur") {
+            // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
+            // temsili aynı ptr → identity, sıfır talimat (C ile birebir).
+            ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        }
+        eğer metin_esit(fad, "kanal_oluştur") {
+            değişken kkap: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken rk: tam32 = yeni_reg(p);
+            değişken rks: metin = reg_str(rk);
+            yaz_str("  "); yaz_str(rks); yaz_str(" = call ptr @kdl_kanal_olustur(i32 ");
+            yaz_str(kkap); yaz_str(")"); yb(10);
+            p.son_tip = "ptr"; p.son_elem = ""; p.son_ref = "";
+            ver rks;
+        }
+        eğer metin_esit(fad, "kanal_gönder") {
+            değişken kgk: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken kgv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            // Taşıyıcı i64: değeri DOĞAL tipinden genişlet (kırpma YOK).
+            değişken kg64: metin = i64_genislet(p, kgv, p.son_tip);
+            yaz_str("  call void @kdl_kanal_gonder(ptr "); yaz_str(kgk);
+            yaz_str(", i64 "); yaz_str(kg64); yaz_str(")"); yb(10);
+            // Çağıran bir değer bekliyor — void yerine yer tutucu (built-in deseni).
+            değişken rpz: tam32 = yeni_reg(p);
+            değişken rpzs: metin = reg_str(rpz);
+            yaz_str("  "); yaz_str(rpzs); yaz_str(" = add i32 0, 0"); yb(10);
+            p.son_tip = "i32"; p.son_elem = ""; p.son_ref = "";
+            ver rpzs;
+        }
+        eğer metin_esit(fad, "kanal_al") {
+            değişken kad: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken kat: metin = cagri_ic_tip(p, kad);   // bildirilen kanal<T> → T
+            değişken kak: metin = ifade_uret(p, kad);
+            ver i64_daralt(p, "kdl_kanal_al", kak, kat);
+        }
+        eğer metin_esit(fad, "görev_birleştir") {
+            değişken gbd: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken gbt: metin = cagri_ic_tip(p, gbd);   // bildirilen görev<T> → T
+            değişken gbg: metin = ifade_uret(p, gbd);
+            ver i64_daralt(p, "kdl_gorev_birlestir", gbg, gbt);
         }
         // CG8: dizi_* element-tip polimorfik built-in'leri (özel — arg sırasına bağlı).
         eğer metin_esit(fad, "dizi_boyut") {
@@ -3263,11 +3347,13 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken vtip: metin = "i32";
         değişken velem: metin = "";
         değişken vpointee: metin = "";   // D-267: *tamN ise skaler pointee LLVM tipi
+        değişken vic: metin = "";        // D-299: görev<T>/kanal<T> ise T'nin LLVM tipi
         değişken annot: tam32 = 0;
         eğer cs >= 2 {
             değişken annot_node: tam32 = dizi_al(p.cocuk, cb);
             vtip = ll_tip(p, annot_node); annot = 1;
             velem = ll_eleman_tip(p, annot_node);             // Dizi<T> → eleman
+            vic = ll_ic_tip(p, annot_node);                   // D-299: görev/kanal → T
             p.beklenen_elem = velem;                          // CG8: [] için bağlam
             // D-267: *tamN pointer → skaler pointee (deref-read yük-genişliği; C pointee_llvm_tip aynası)
             eğer metin_esit(dizi_al(p.a_ad, annot_node), "TIP_POINTER") {
@@ -3293,6 +3379,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
         eğer metin_uzunluk(vpointee) > 0 {   // D-267: skaler pointee tipi kaydet
             dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, vpointee);
+        }
+        eğer metin_uzunluk(vic) > 0 {   // D-299: görev<T>/kanal<T> iç tipi kaydet
+            dizi_yaz(p.cg_aic, dizi_boyut(p.cg_aic) - 1, vic);
         }
         ver 0;
     }
@@ -3453,6 +3542,77 @@ işlev param_pointee(p: &değişken Ayr, c: tam32) -> metin {
     değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") == yanlış { ver ""; }
     ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));        // pointee tipi
+}
+// D-299: çağrı argümanı bir TANIMLAYICI ise, o değişkenin bildirilen görev<T>/
+// kanal<T> iç tipini döner. Değilse "" → çağıran i64'e (tam genişlik) düşer,
+// yani KIRPMA olmaz. C llvm.c'deki `gi->gorev_ic_ir` aramasının aynası.
+işlev cagri_ic_tip(p: &değişken Ayr, argidx: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, argidx), "TANIMLAYICI") {
+        ver cg_var_ic_bul(p, dizi_al(p.a_deg, argidx));
+    }
+    ver "";
+}
+// D-299: `deg` (tipi `dt`) değerini i64 taşıyıcıya genişlet.
+// ptr → ptrtoint, i64 → aynen, dar tamsayı → sext (alım tarafı trunc ettiği için
+// dtamN'de de bit deseni korunur).
+işlev i64_genislet(p: &değişken Ayr, deg: metin, dt: metin) -> metin {
+    eğer metin_esit(dt, "i64") { ver deg; }
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    eğer metin_esit(dt, "ptr") {
+        yaz_str("  "); yaz_str(rs); yaz_str(" = ptrtoint ptr "); yaz_str(deg);
+        yaz_str(" to i64"); yb(10);
+        ver rs;
+    }
+    // IMMEDIATE (register değil, yani '%' ile başlamıyor) → TAM GENİŞLİKTE
+    // materyalize et. Self-host TAM literalini daima "i32" sayar ve ham rakam
+    // dizisi döndürür; `kanal<tam64>`de 2^33 gibi bir literal `sext i32 <lit>`
+    // ile SESSİZCE bozulurdu (ölçüldü: exit 1, doğrusu 42 — C `add i64 0, <lit>`
+    // üretiyor). Küçük literaller için de bu dönüşüm değer-eşdeğerdir.
+    eğer bayt(deg, 0) != 37 {   // 37 = '%'
+        yaz_str("  "); yaz_str(rs); yaz_str(" = add i64 0, "); yaz_str(deg); yb(10);
+        ver rs;
+    }
+    yaz_str("  "); yaz_str(rs); yaz_str(" = sext "); yaz_str(dt); yaz_str(" ");
+    yaz_str(deg); yaz_str(" to i64"); yb(10);
+    ver rs;
+}
+// D-299: `@fn(ptr h)` çağrısını i64 dönüşle yap ve sonucu `t`ye daralt.
+// t=="" → i64 bırak (KIRPMA YOK — bilinmeyen T'de tam genişlik güvenlidir;
+// C'deki `beklenen ? beklenen : "i64"` son çaresinin aynası, D-295 bloker onarımı).
+işlev i64_daralt(p: &değişken Ayr, fn: metin, h: metin, t: metin) -> metin {
+    değişken r64: tam32 = yeni_reg(p);
+    değişken r64s: metin = reg_str(r64);
+    yaz_str("  "); yaz_str(r64s); yaz_str(" = call i64 @"); yaz_str(fn);
+    yaz_str("(ptr "); yaz_str(h); yaz_str(")"); yb(10);
+    p.son_elem = ""; p.son_ref = "";
+    eğer metin_esit(t, "") veya metin_esit(t, "i64") { p.son_tip = "i64"; ver r64s; }
+    eğer metin_esit(t, "void") {   // görev<boş>: sonuç yok → yer tutucu
+        değişken rv: tam32 = yeni_reg(p);
+        değişken rvs: metin = reg_str(rv);
+        yaz_str("  "); yaz_str(rvs); yaz_str(" = add i32 0, 0"); yb(10);
+        p.son_tip = "i32"; ver rvs;
+    }
+    değişken rn: tam32 = yeni_reg(p);
+    değişken rns: metin = reg_str(rn);
+    eğer metin_esit(t, "ptr") {
+        yaz_str("  "); yaz_str(rns); yaz_str(" = inttoptr i64 "); yaz_str(r64s);
+        yaz_str(" to ptr"); yb(10);
+    }
+    değilse {
+        // i1/i8/i16/i32 → trunc. i32 dönen gövdenin üst 32 biti ÇÖP olduğu için
+        // bu daraltma ŞART (kozmetik değil).
+        yaz_str("  "); yaz_str(rns); yaz_str(" = trunc i64 "); yaz_str(r64s);
+        yaz_str(" to "); yaz_str(t); yb(10);
+    }
+    p.son_tip = t;
+    ver rns;
+}
+// D-299: `görev<T>` / `kanal<T>` tipli PARAMETRE → T'nin LLVM tipi ("" değilse).
+// `işlev uretici(k: kanal<tam32>)` gibi imzalarda T'nin tek kaynağı budur.
+işlev param_ic(p: &değişken Ayr, c: tam32) -> metin {
+    eğer dizi_al(p.a_cs, c) == 0 { ver ""; }
+    ver ll_ic_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));      // tip düğümü
 }
 // ============================================================================
 // V2-F4.2b — KESİN-YEREL (confined) KANITI: POZİTİF, default-deny local-proof.
@@ -3757,6 +3917,10 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken ppo: metin = param_pointee(p, c);   // D-267: skaler pointer pointee
             eğer metin_uzunluk(ppo) > 0 {
                 dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, ppo);
+            }
+            değişken pic: metin = param_ic(p, c);        // D-299: görev/kanal iç tipi
+            eğer metin_uzunluk(pic) > 0 {
+                dizi_yaz(p.cg_aic, dizi_boyut(p.cg_aic) - 1, pic);
             }
             pj = pj + 1;
         }
@@ -5051,7 +5215,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], cg_apointee: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
+        cg_aelem: [], cg_apointee: [], cg_aic: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",

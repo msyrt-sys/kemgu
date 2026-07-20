@@ -1,0 +1,9 @@
+// D-299: dondur(&değişken T) -> &T — V1'de identity (sıfır talimat).
+// Beklenen exit: 42
+yapı Kutu { deger: tam32; }
+işlev paylas(k: &değişken Kutu) -> &Kutu { ver dondur(k); }
+işlev main() -> tam32 {
+    değişken k: Kutu = Kutu { deger: 42 };
+    değişken r: &Kutu = paylas(&değişken k);
+    ver r.deger;
+}

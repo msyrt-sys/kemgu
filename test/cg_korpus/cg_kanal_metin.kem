@@ -1,0 +1,7 @@
+// D-299: işaretçi T — gönderimde ptrtoint, alımda inttoptr. Beklenen exit: 5
+işlev main() -> tam32 {
+    değişken k: kanal<metin> = kanal_oluştur(2);
+    kanal_gönder(k, "selam");
+    değişken s: metin = kanal_al(k);
+    ver metin_uzunluk(s);
+}

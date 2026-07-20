@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-299 — Self-host parite borcu: Katman 2'nin closure'sız kısmı `codegen.kem`'e taşındı (2026-07-20)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (ll_tip görev/kanal→ptr; ll_ic_tip; cg_aic alanı +
+cg_var_ic_bul; param_ic; i64_genislet/i64_daralt/cagri_ic_tip; 5 intrinsic emisyonu; 4 declare),
+`test/cg_korpus/` (+5 vaka).]** D-291→D-295'in self-host'a port edilmemiş olması "PARİTE BORCU"
+olarak kayıtlıydı. Bu adım borcun **taşınabilir kısmını** kapatır.
+
+**ÖNCE (ölçüldü):** self-host `görev_başlat`/`kanal_*`'ı **kullanıcı işlevi** sanıyordu →
+`call i32 @"kanal_oluştur"(ptr %rho, i32 4)` — ρ-ABI'li, tanımsız sembol. Yani C derleyicinin
+D-291 öncesi hâli. Ayrıca `görev<T>`/`kanal<T>` `ll_tip`'te `i32` fallback'ine düşüyordu
+(64-bit handle 32 bite kırpılırdı).
+
+**PORT EDİLENLER (C ile semantik eşdeğer, ölçüldü):** `kanal_oluştur`, `kanal_gönder`,
+`kanal_al`, `görev_birleştir`, `dondur`. T bildirilen `görev<T>`/`kanal<T>`den kurtarılır
+(`cg_aic` — C'deki `gorev_ic_ir`/`kanal_ic_ir` aynası); gönderimde `sext`/`ptrtoint`,
+alımda `trunc`/`inttoptr`; T kurtarılamazsa **i64** (kırpma YOK — D-295'in bloker onarımının
+aynası).
+
+**PORT EDİLMEYEN — `görev_başlat` (gerekçe):** fat-value closure (`{ptr, ptr}`) ister ve
+**self-host'ta lambda codegen'i HİÇ YOK** (LAMBDA düğümü ayrıştırılıyor, yalnız bölge-yönlendirme
+koruması için kullanılıyor; lifted fonksiyon emit edilmiyor — `store i32 0` yer tutucusu).
+Üstelik self-host `yaz_bayt` ile **doğrudan stdout'a** yazıyor: C'nin ertelenmiş-kuyruk +
+tmpfile + `hoist_renumber` makinesi olduğu gibi taşınamaz; ön-geçişli lifted-lambda emisyonu
+gerekir. Ayrı ve büyük bir iş. **`görev_birleştir` port edildi ama BUGÜN SINANAMIYOR** —
+`görev<T>` değeri üretmenin tek yolu `görev_başlat`. Bu dürüstçe kaydedilir.
+
+**BULUNAN VE ONARILAN AYRI KUSUR (literal genişliği):** self-host `TAM` literalini daima
+`i32` sayar ve ham immediate döndürür. `kanal<tam64>`de 2^33 literali `sext i32 8589934592`
+üretiyordu → **SESSİZ bozulma** (ölçüldü: exit 1, doğrusu 42; C `add i64 0, <lit>` üretir).
+Onarım: `i64_genislet` immediate operandı (`%` ile başlamayan) **tam genişlikte materyalize**
+eder. Küçük literaller için de değer-eşdeğer.
+
+**KORPUS — borcun SESSİZ olmasının sebebi kapatıldı:** 76 korpus dosyasının **0'ında**
+kanal/görev vardı; bu yüzden parite gate'i borcu görmüyordu. 5 vaka eklendi
+(`cg_kanal_temel/tam64/metin/param`, `cg_dondur`) → korpus **81**.
+
+**KAPSAM DIŞI (ölçüldü, port kaynaklı DEĞİL):** `değişken v: tam8 = 0 - 128; eğer v == 0 - 128`
+self-host'ta **kanal olmadan da** derlenmiyor (negatif literal ifadesi i32 kalıyor, i8 ile
+karşılaştırılıyor). Önceden var olan bidirectional-çıkarsama boşluğu; pozitif değerlerle
+kanal yolu C ile birebir çalışıyor.
+
+**KANIT:** `calistir_codegen_diff` **81/81** (5 yeni vaka dâhil), **SELF-HOST FIXPOINT ✓**
+(stage1==stage2, 34139 satır; lexer/parser/checker 92/92 bayt-birebir),
+`calistir_self_driver` TÜM MODLAR ✓ — **self-host-derlenmiş derleyici de 81/81**, `test_tumu`.
+
+---
+
 ## D-297 — Test altyapısı: süreç-benzersiz geçici yollar + Katman 2 kapsam boşlukları kapatıldı (2026-07-17)
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-296).
