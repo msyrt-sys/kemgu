@@ -95,7 +95,7 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 258/258, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması + görev<T> genişletme + D-295 bloker onarımları)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 263/263, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması + görev<T> genişletme + D-295 bloker onarımları + D-297 dar-T/örnek kapsamı)
 │   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA + sıralı-fallback-yok invaryantı (D-291/292/296)
 │   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 50/50 (D40-D46 kanal_oluştur; D47-D50 görev/kanal kesirli reddi + metin/tam64 kabulü)
 │   └── ornekler/
@@ -697,6 +697,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   bloklanıp bloklanmayacağını bilemez). Spawn başarısızlığı artık `kdl_panik`.
   Aynı adımda `görev_birleştir(NULL) → 0` sessiz-0'ı da kapatıldı. **V2:** doğru nihai çözüm
   panik değil, `görev_başlat`ın `sonuç<görev<T>, Hata>` dönmesi — DİL kararı (Mehmet).
+- **⚠ TEST ALTYAPISI (D-297):** `test_llvm.c` / `test_simd_llvm.c` geçici dosya yolları artık
+  **PID ile benzersiz** (`build/test_llvm_<pid>.kem` …) ve koşum sonunda siliniyor. Sabit yol,
+  aynı testin **iki eş zamanlı koşumunda** birbirini ezip **sahte kırmızı** üretiyordu
+  (252/252 yerine 157/252 gözlendi — kaynak TEMİZDİ, regresyon YOKTU). Yeni derle-çalıştır
+  testi eklerken bu deseni koru; sabit `build/*_temp.*` yolu KULLANMA.
 - **⚠ SÜREÇ DERSİ (D-295):** ön-merge adversarial denetim, D-291→D-294'te **3 BLOKER** buldu —
   hepsi "tip kurtarılamadı → sessizce `i32` varsay" kökünden; diff hata modunu **loud→silent**
   çeviriyordu. **Taşıyıcı genişliğini (i32→i64) değiştirince TÜM fallback'leri denetle.**

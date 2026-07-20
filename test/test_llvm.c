@@ -33,24 +33,49 @@ static void test_sonuc(const char *ad, int durum) {
 
 /* Platform algila: Windows cmd.exe (backslash path) veya POSIX sh */
 #ifdef _WIN32
+#include <process.h>
 #define DEV_NULL "NUL"
-#define KEM_PATH ".\\build\\test_llvm_temp.kem"
-#define LL_PATH ".\\build\\test_llvm_temp.ll"
-#define EXE_PATH ".\\build\\test_llvm_temp.exe"
 #define KEMGU_BIN ".\\build\\kemgu.exe"
+#define YOL_ONEK ".\\build\\"
+#define SUREC_NO() ((int)_getpid())
 #else
+#include <unistd.h>
 #define DEV_NULL "/dev/null"
-#define KEM_PATH "./build/test_llvm_temp.kem"
-#define LL_PATH "./build/test_llvm_temp.ll"
-#define EXE_PATH "./build/test_llvm_temp.exe"
 #define KEMGU_BIN "./build/kemgu"
+#define YOL_ONEK "./build/"
+#define SUREC_NO() ((int)getpid())
 #endif
+
+/* === D-297: gecici dosya yollari SUREC-BENZERSIZ ===
+ * Eskiden SABITTI (build/test_llvm_temp.{kem,ll,exe}). Ayni testin IKI ES
+ * ZAMANLI kosumu (paralel ajan / CI job / elle tetiklenen ikinci make)
+ * birbirinin dosyasini EZIYORDU. 2026-07-17'de gozlendi: 252/252 yerine
+ * 157/252 — kaynak TEMIZDI, regresyon YOKTU. Sahte kirmizi, yaniltici ve
+ * zaman kaybettiren bir sinyaldir; tanilama sirasinda gercek bir regresyonla
+ * karistirilabilir. PID ekleyerek kosumlari izole ediyoruz. */
+static char KEM_PATH[64];
+static char LL_PATH[64];
+static char EXE_PATH[64];
+
+static void gecici_yollari_kur(void) {
+    int pid = SUREC_NO();
+    snprintf(KEM_PATH, sizeof(KEM_PATH), "%stest_llvm_%d.kem", YOL_ONEK, pid);
+    snprintf(LL_PATH,  sizeof(LL_PATH),  "%stest_llvm_%d.ll",  YOL_ONEK, pid);
+    snprintf(EXE_PATH, sizeof(EXE_PATH), "%stest_llvm_%d.exe", YOL_ONEK, pid);
+}
+
+/* build/ dizinini PID'li artiklarla doldurmamak icin sonda sil. */
+static void gecici_yollari_temizle(void) {
+    remove(KEM_PATH);
+    remove(LL_PATH);
+    remove(EXE_PATH);
+}
 
 /* Bir KEMGU programini derle ve calistir, exit code'u don.
  * Hata olursa -1 doner. */
 static int derle_ve_calistir(const char *kemgu_kaynak) {
     /* fopen / / ile sorun yok — bu Windows API'sini kullanir */
-    FILE *f = fopen("build/test_llvm_temp.kem", "w");
+    FILE *f = fopen(KEM_PATH, "w");   /* D-297: surec-benzersiz */
     if (!f) return -1;
     fputs(kemgu_kaynak, f);
     fclose(f);
@@ -2861,7 +2886,72 @@ static void test_kanal_kesirli_llvm_de_reddedilir(void) {
     test_sonuc("kanal<kesirli64>: --llvm yolunda da LLVM reddi", rc != 0);
 }
 
+/* === D-297: DAR / ISARETSIZ T uctan uca (kapsam boslugu kapatma) ===
+ * test_drf'teki D3/D46 yalnizca TIP KONTROLU olcuyor (hata_sayisi()) — yani
+ * "kanal<tam8> derleniyor" iddiasi KANITSIZDI. D-295'in kanal testleri de
+ * yalnizca tam64/metin/kesirli kapsiyordu. Bu testler sext(gonderim)/trunc(alim)
+ * ciftinin dar ve ISARETSIZ T'de deger bozmadigini uctan uca kilitler. */
+
+static void test_kanal_tam8_negatif_turu(void) {
+    /* Isaretli dar T + NEGATIF deger: sext/trunc ciftinin isaret genisletmeyi
+     * dogru yaptigini kanitlar. -128 = tam8'in alt siniri (kenar durum). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(k: kanal<tam8>) -> tam8 { ver kanal_al(k); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam8> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 0 - 128); "
+        "de\xc4\x9fi\xc5\x9fken v: tam8 = oku(k); "
+        "e\xc4\x9f" "er v == 0 - 128 { ver 42; } ver 1; }");
+    test_sonuc("kanal<tam8> -128 turu (parametre yolu + sext/trunc) -> exit 42",
+               rc == 42);
+}
+
+static void test_kanal_dtam8_isaretsiz_turu(void) {
+    /* ISARETSIZ dar T: 200 > 127, yani isaretli yorumlansa NEGATIF olurdu.
+     * Hem deger turu hem de ISARETSIZ KARSILASTIRMA semantigi sinanir —
+     * gonderimde sext kullanmamiza ragmen alim tarafi trunc ettigi icin
+     * bit deseni korunur (D-295 gerekcesi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<dtam8> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 200); "
+        "de\xc4\x9fi\xc5\x9fken v: dtam8 = kanal_al(k); "
+        "e\xc4\x9f" "er v == 200 { e\xc4\x9f" "er v > 100 { ver 42; } } ver 1; }");
+    test_sonuc("kanal<dtam8> 200 turu + isaretsiz karsilastirma -> exit 42",
+               rc == 42);
+}
+
+static void test_kanal_dar_T_capraz_thread(void) {
+    /* Dar T, GERCEK thread sinirini gecerek: gorev gonderir, main alir. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam16> = kanal_olu\xc5\x9ftur(2); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<bo\xc5\x9f> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| kanal_g\xc3\xb6nder(k, 0 - 1000)); "
+        "de\xc4\x9fi\xc5\x9fken v: tam16 = kanal_al(k); "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "e\xc4\x9f" "er v == 0 - 1000 { ver 42; } ver 1; }");
+    test_sonuc("kanal<tam16> -1000 capraz-thread turu -> exit 42", rc == 42);
+}
+
+/* === D-297: Katman 2 ORNEK DOSYALARI artik exit-koduyla korunuyor ===
+ * gorev_temel.kem / kanal_mesaj.kem hicbir hedefte exit-kodu dogrulanmiyordu.
+ * Mutasyonla olculdu: `ver toplam` -> `ver 7` yapildiginda calistir_asan_denetim
+ * bunlari derleyip CALISTIRIYOR ama yalniz sanitizer metnine baktigi icin
+ * mutasyonu YAKALAMIYORDU. Yani bozulsalar hicbir gate kirmiziya donmezdi. */
+
+static void test_ornek_gorev_temel(void) {
+    int rc = derle_dosya_ve_calistir("test/ornekler/gorev_temel.kem");
+    test_sonuc("ornek gorev_temel.kem -> exit 42", rc == 42);
+}
+
+static void test_ornek_kanal_mesaj(void) {
+    int rc = derle_dosya_ve_calistir("test/ornekler/kanal_mesaj.kem");
+    test_sonuc("ornek kanal_mesaj.kem -> exit 15", rc == 15);
+}
+
 int main(void) {
+    gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
 
@@ -3230,8 +3320,16 @@ int main(void) {
     test_kanal_metin_turu();
     test_kanal_kesirli_llvm_de_reddedilir();
 
+    printf("\n--- D-297: dar/isaretsiz T + ornek dosyalari ---\n");
+    test_kanal_tam8_negatif_turu();
+    test_kanal_dtam8_isaretsiz_turu();
+    test_kanal_dar_T_capraz_thread();
+    test_ornek_gorev_temel();
+    test_ornek_kanal_mesaj();
+
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
            toplam_test, basarili, basarisiz);
+    gecici_yollari_temizle();   /* D-297: PID'li artiklari birak */
     return basarisiz > 0 ? 1 : 0;
 }

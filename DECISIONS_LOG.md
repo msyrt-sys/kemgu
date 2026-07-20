@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-297 — Test altyapısı: süreç-benzersiz geçici yollar + Katman 2 kapsam boşlukları kapatıldı (2026-07-17)
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-296).
+
+**Karar [ETKİ: `test/test_llvm.c`, `test/test_simd_llvm.c` (PID'li geçici yollar + 5 yeni test),
+`DECISIONS_LOG.md`, `CLAUDE.md`.]** Ön-merge denetimi/triajının bıraktığı iki takip maddesi.
+İkisi de merge-bloker değildi; ürün kodu **değişmedi**, yalnız test altyapısı ve kapsama.
+
+### (1) Sabit geçici dosya yolları → SÜREÇ-BENZERSİZ (sahte kırmızı kaynağı)
+`test_llvm.c` ve `test_simd_llvm.c` tek, sabit geçici yol kullanıyordu
+(`build/test_llvm_temp.{kem,ll,exe}`). Aynı testin **iki eş zamanlı koşumu** birbirinin
+dosyasını eziyordu. 2026-07-17'de gözlendi: 252/252 yerine **157/252** — kaynak TEMİZDİ,
+regresyon YOKTU. Sahte kırmızı, tanılama sırasında gerçek bir regresyonla karıştırılabilir;
+o gün gerçekten zaman kaybettirdi.
+- Yollar `PID` ile benzersizleştirildi (`test_llvm_<pid>.kem` vb.), sonda `remove()` ile
+  temizleniyor (build/ artık PID'li artıkla dolmuyor).
+- `fopen("build/test_llvm_temp.kem")` **sabit yol kaçağı** da kapatıldı (KEM_PATH kullanıyor).
+- Tampon boyutu 512→**64**: 512 ile GCC `-Wformat-truncation` üretiyordu (sıfır-uyarı hedefi);
+  gerçek yol ~33 karakter.
+- **KANIT:** 3 eş zamanlı koşum → **258/258, 258/258, 258/258** (eskiden çakışıyordu);
+  kalan PID artığı 0.
+
+### (2) Katman 2 kapsam boşlukları
+**(a) Dar/işaretsiz T uçtan uca yoktu.** `test_drf` D3/D46 yalnız TİP KONTROLÜ ölçüyordu
+(`hata_sayisi()`), yani "kanal<tam8> derleniyor" iddiası **kanıtsızdı**; D-295'in kanal
+testleri de yalnız tam64/metin/kesirli kapsıyordu. Eklendi:
+`kanal<tam8>` **-128** turu (parametre yolu + `sext`/`trunc` çifti), `kanal<dtam8>` **200** turu
++ **işaretsiz karşılaştırma**, `kanal<tam16>` **-1000** **çapraz-thread** turu.
+(Triaj bu davranışı 16 programla zaten ölçmüştü — risk yoktu, **kanıt** yoktu.)
+
+**(b) Örnek dosyaları semantik olarak korunmuyordu.** `gorev_temel.kem` (42) ve
+`kanal_mesaj.kem` (15) hiçbir hedefte exit-kodu doğrulanmıyordu. Triaj mutasyonla ölçmüştü:
+`calistir_asan_denetim` bunları derleyip **çalıştırıyor** ama yalnız sanitizer metnine baktığı
+için mutasyonu **yakalamıyordu**; `test/test_llvm.sh`'de exit-kod listesi var ama betik hiçbir
+Makefile hedefine **bağlı değil**. Artık `test_llvm.c`'de exit-kodu doğrulanıyor.
+- **MUTASYON DOĞRULAMASI:** iki örnekte `ver toplam` → `ver 7` yapıldığında yeni testler
+  **[262]/[263] KIRMIZIYA döndü** → koruma gerçek (sahte test değil). Mutasyon geri alındı.
+
+**KANIT:** `test_llvm` **263/263** (+5), sıfır uyarı; `test_tumu` geçti (FIXPOINT ✓).
+
+---
+
 ## D-296 — Sıralı görev fallback'i KALDIRILDI: kilitlenme → gürültülü panik (2026-07-17) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-295).
