@@ -550,10 +550,38 @@ __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
  * Kanal: basit FIFO queue. Thread-safe degil (sequential).
  */
 
+/* === Katman 2 / DRF V1: gorev kapanis (closure) imzalari ===
+ * Codegen'in urettigi lifted lambda ρ-ABI'sine (V2-F4.2a) birebir uyar:
+ *   env == NULL -> bare   : i32 @lambda_N(ptr %rho)
+ *   env != NULL -> closure: i32 @lambda_N(ptr %rho, ptr %env)
+ * IKI AYRI alan (tek void* + cast DEGIL): object->fn-ptr donusumu -Wpedantic,
+ * fn-ptr->fn-ptr donusumu ise -Wcast-function-type uyarisi verir (ikisi de
+ * olcüldü). Codegen ayni `ptr`yi her iki parametreye de gecer; her isaretci
+ * YALNIZ kendi gercek tipiyle cagrildigi icin ne uyari ne UB olusur. */
+/* D-294: dönüş int32_t -> int64_t (T genişletme).
+ * Neden: `görev<metin>` gibi işaretçi taşıyan T'lerde i32 taşıma işaretçiyi
+ * kırpardı. i64 taşıma HER İKİ yönü de doğru kılar:
+ *   - i32 dönen lambda int64 olarak çağrılınca üst 32 bit ÇÖP olur; codegen
+ *     birleştir sonucunu T'ye TRUNC ettiği için değer doğru kalır.
+ *   - ptr dönen lambda -> tam işaretçi (x0/rax 64-bit).
+ * KESİRLİ T DESTEKLENMEZ (tip kontrolünde reddedilir): float dönüş v0/xmm0'da
+ * gelir, buradaki tamsayı-dönüşlü çağrı x0/rax okur -> SESSİZ çöp. Reddetmek
+ * yerine bitcast'lamak hata modunu loud->silent'a çevirirdi. */
+typedef int64_t (*KdlGorevBare)(void *rho);
+typedef int64_t (*KdlGorevKapanis)(void *rho, void *env);
+
 typedef struct {
-    int32_t result;
+    int64_t result;
     int done;
-    int32_t (*f)(void);     /* gorev islevi */
+    int32_t (*f)(void);     /* gorev islevi (eski kdl_gorev_basla_i32 yolu) */
+    /* Katman 2 yolu (kdl_gorev_basla_kapanis) — f==NULL iken kullanilir */
+    KdlGorevBare fn_bare;
+    KdlGorevKapanis fn_kapanis;
+    void *env;
+    /* R-GÖREV: ρ_sahip(t_yeni) — gorevin KENDI bolgesi (S2: yaratildiginda
+     * gorev sahiplenir). Gorev govdesindeki tahsisler buraya gider.
+     * V1: SERBEST EDILMEZ (sizinti) — bkz. kdl_gorev_birlestir notu. */
+    KdlBolge *rho;
 #ifdef KDL_THREAD_WIN
     HANDLE handle;
 #endif
@@ -563,52 +591,108 @@ typedef struct {
 #endif
 } KdlGorev;
 
+/* Gorev govdesi — her iki baslatma yolunun ortak cekirdegi. */
+static void kdl_gorev_govde(KdlGorev *g) {
+    if (g->fn_bare || g->fn_kapanis) {
+        if (g->env) g->result = g->fn_kapanis(g->rho, g->env);
+        else        g->result = g->fn_bare(g->rho);
+    } else {
+        g->result = g->f ? g->f() : 0;
+    }
+    g->done = 1;
+}
+
 #ifdef KDL_THREAD_WIN
 static DWORD WINAPI kdl_gorev_thread_main(LPVOID param) {
-    KdlGorev *g = (KdlGorev *)param;
-    g->result = g->f ? g->f() : 0;
-    g->done = 1;
+    kdl_gorev_govde((KdlGorev *)param);
     return 0;
 }
 #endif
 #ifdef KDL_THREAD_POSIX
 static void *kdl_gorev_thread_posix(void *param) {
-    KdlGorev *g = (KdlGorev *)param;
-    g->result = g->f ? g->f() : 0;
-    g->done = 1;
+    kdl_gorev_govde((KdlGorev *)param);
     return NULL;
 }
 #endif
+
+/* === Gercek-thread tanigi (kdl_bolge_*_sayisi deseni) ===
+ * Sirali fallback ile gercek thread AYNI sonucu uretir; dolayisiyla bir
+ * gorev testinin "dogru sonuc" vermesi thread'in gercekten spawn edildigini
+ * KANITLAMAZ. Bu iki sayac o ayrimi gozlemlenebilir kilar (test/teshis). */
+uint64_t kdl_gorev_thread_sayisi = 0;   /* gercek thread spawn edildi */
+uint64_t kdl_gorev_sirali_sayisi = 0;   /* fallback: cagiran thread'te calisti */
+
+/* Ortak spawn: thread yaratilamazsa gorevi SIRALI calistirir (fallback) —
+ * gorev semantigi korunur, yalniz paralellik kaybolur. */
+static void kdl_gorev_spawn(KdlGorev *g) {
+#ifdef KDL_THREAD_WIN
+    g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
+    if (!g->handle) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
+    else kdl_gorev_thread_sayisi++;
+#elif defined(KDL_THREAD_POSIX)
+    g->thr_valid = (pthread_create(&g->thr, NULL,
+                                    kdl_gorev_thread_posix, g) == 0);
+    if (!g->thr_valid) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
+    else kdl_gorev_thread_sayisi++;
+#else
+    kdl_gorev_sirali_sayisi++;
+    kdl_gorev_govde(g);   /* Thread yok -> sequential */
+#endif
+}
 
 /* islev pointer alir, ya gercek thread spawn ya sequential calistirir */
 KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
     KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = f;
+    g->fn_bare = NULL; g->fn_kapanis = NULL; g->env = NULL; g->rho = NULL;
     g->result = 0;
     g->done = 0;
-#ifdef KDL_THREAD_WIN
-    g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
-    if (!g->handle) {
-        g->result = f ? f() : 0;
-        g->done = 1;
-    }
-#elif defined(KDL_THREAD_POSIX)
-    g->thr_valid = (pthread_create(&g->thr, NULL,
-                                    kdl_gorev_thread_posix, g) == 0);
-    if (!g->thr_valid) {
-        g->result = f ? f() : 0;
-        g->done = 1;
-    }
-#else
-    /* Thread yok -> sequential */
-    g->result = f ? f() : 0;
-    g->done = 1;
-#endif
+    kdl_gorev_spawn(g);
     return g;
 }
 
-int32_t kdl_gorev_birlestir(KdlGorev *g) {
+/* === Katman 2 / R-GÖREV: `görev_başlat(c)` codegen hedefi ===
+ * c fat value { ptr fn, ptr env } olarak gelir; codegen fn'i HER IKI tipli
+ * parametreye de gecer (bkz. KdlGorevBare/KdlGorevKapanis notu) ve env'i
+ * ayrica verir. Donen opak handle = KEMGU'daki `görev<T>` degeri (IR: ptr).
+ *
+ * S1/S2 (tekil sahiplik + baslangic sahipligi): yeni gorev KENDI ρ_sahip'ini
+ * alir; cagiranin ρ'su PAYLASILMAZ. Boylece cagiran ile gorev ayni bolgeye
+ * es zamanli erisemez — S1 yapisal olarak korunur (paylasilan-ρ yarisi
+ * imkansiz). */
+KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
+                                  KdlGorevKapanis fn_kapanis,
+                                  void *env) {
+    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    if (!g) return NULL;
+    g->f = NULL;
+    g->fn_bare = fn_bare;
+    g->fn_kapanis = fn_kapanis;
+    g->env = env;
+    g->result = 0;
+    g->done = 0;
+    g->rho = kdl_bolge_olustur();       /* R-GÖREV: ρ_sahip(t_yeni) */
+    if (!g->rho) { free(g); return NULL; }
+    kdl_gorev_spawn(g);
+    return g;
+}
+
+/* === R-BİRLEŞTİR: `görev_birleştir(g)` codegen hedefi ===
+ * Gorevin bitisini bekler (join) ve sonucu cagirana tasir.
+ *
+ * ρ_sahip V1'de SERBEST EDILMEZ (bilinerek sizdirilir). Aksiyom "sonuc
+ * ρ_çağıran'a terfi, sahiplenilen DIGER bolgeler serbest" der; ancak serbest
+ * birakmak, gorev govdesindeki tahsislerin ρ_sahip'e HAPSOLDUGUNU (confinement)
+ * gerektirir. Ornegin govde, yakalanan bir `&değişken`e ρ_sahip'ten bir isaretci
+ * yazarsa isaretci gorevi asar -> serbest birakmak UAF olur.
+ * Boyle bir POZITIF hapsedilme kaniti bu asamada YOK; F4.2b'de ρ_yerel ancak
+ * boyle bir kanit + adversarial tarama sonrasi serbest birakilmisti. Kanitsiz
+ * serbest birakmak yerine SIZDIRIYORUZ (guvenli taraf) — F2'nin closure-env
+ * sizintisiyla ayni status quo. kdl_bolge_bakiye() bunu durustce raporlar.
+ * Serbest birakma, ayri bir F4-sinifi is olarak ρ_sahip confinement kanitiyla
+ * birlikte gelir. */
+int64_t kdl_gorev_birlestir(KdlGorev *g) {
     if (!g) return 0;
 #ifdef KDL_THREAD_WIN
     if (g->handle) {
@@ -618,22 +702,36 @@ int32_t kdl_gorev_birlestir(KdlGorev *g) {
 #elif defined(KDL_THREAD_POSIX)
     if (g->thr_valid) pthread_join(g->thr, NULL);
 #endif
-    int32_t r = g->result;
+    int64_t r = g->result;   /* D-294: T'ye daraltma codegen'de (trunc/inttoptr) */
+    /* g->rho BILEREK serbest edilmiyor (yukaridaki not). */
     free(g);
     return r;
 }
 
+/* === Katman 2 / R-KANAL: BLOKLAYAN SPSC/MPMC mesaj kanali ===
+ * Onceki surum BLOKLAMIYORDU ve iki sessiz-yanlis-cevap uretiyordu:
+ *   - bos kanalda kdl_kanal_al 0 donuyordu -> gercekten alinmis bir 0'dan
+ *     AYIRT EDILEMEZ (alici, gonderici henuz yazmadan "0 aldim" saniyordu),
+ *   - dolu kanalda kdl_kanal_gonder mesaji SESSIZCE DUSURUYORDU.
+ * R-KANAL sahiplik transferi bunlarla bozulur (transfer edilmemis deger
+ * alinmis gorunur). Artik her iki yon de kosul degiskeniyle BLOKLAR —
+ * bare-metal kdl_kanal.c'nin (preemption altinda busy-wait) semantigiyle
+ * ayni sozlesme, host'ta uygun ilkelle. */
 typedef struct {
-    int32_t *veri;
+    int64_t *veri;   /* D-295: i64 tasima (isaretci/tam64 T icin) */
     int32_t boyut;
     int32_t kapasite;
     int32_t bas, son;   /* circular buffer */
 #ifdef KDL_THREAD_WIN
     CRITICAL_SECTION kilit;
+    CONDITION_VARIABLE bos_degil;    /* alici bekler: veri yazildi */
+    CONDITION_VARIABLE dolu_degil;   /* gonderici bekler: yer acildi */
     int kilit_aktif;
 #endif
 #ifdef KDL_THREAD_POSIX
     pthread_mutex_t kilit;
+    pthread_cond_t bos_degil;
+    pthread_cond_t dolu_degil;
     int kilit_aktif;
 #endif
 } KdlKanal;
@@ -642,9 +740,13 @@ typedef struct {
 static void kdl_kilit_init(KdlKanal *k) {
 #ifdef KDL_THREAD_WIN
     InitializeCriticalSection(&k->kilit);
+    InitializeConditionVariable(&k->bos_degil);
+    InitializeConditionVariable(&k->dolu_degil);
     k->kilit_aktif = 1;
 #elif defined(KDL_THREAD_POSIX)
     pthread_mutex_init(&k->kilit, NULL);
+    pthread_cond_init(&k->bos_degil, NULL);
+    pthread_cond_init(&k->dolu_degil, NULL);
     k->kilit_aktif = 1;
 #else
     (void)k;
@@ -668,11 +770,56 @@ static void kdl_kilit_cik(KdlKanal *k) {
     (void)k;
 #endif
 }
+/* === Kosul bekleme/uyandirma (kilit TUTULURKEN cagrilir) ===
+ * Bekleme HER ZAMAN `while (kosul)` dongusunde kullanilir — sahte uyanma
+ * (spurious wakeup) ve "uyandirdiktan sonra baskasi kapti" yarisi icin. */
+static void kdl_kosul_bekle_bos_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    SleepConditionVariableCS(&k->bos_degil, &k->kilit, INFINITE);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_wait(&k->bos_degil, &k->kilit);
+#else
+    (void)k;   /* thread yok -> `while` busy-wait'e duser (uretici olamaz) */
+#endif
+}
+static void kdl_kosul_bekle_dolu_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    SleepConditionVariableCS(&k->dolu_degil, &k->kilit, INFINITE);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_wait(&k->dolu_degil, &k->kilit);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kosul_uyandir_bos_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    WakeConditionVariable(&k->bos_degil);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_signal(&k->bos_degil);
+#else
+    (void)k;
+#endif
+}
+static void kdl_kosul_uyandir_dolu_degil(KdlKanal *k) {
+#ifdef KDL_THREAD_WIN
+    WakeConditionVariable(&k->dolu_degil);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_cond_signal(&k->dolu_degil);
+#else
+    (void)k;
+#endif
+}
+
 static void kdl_kilit_yok_et(KdlKanal *k) {
 #ifdef KDL_THREAD_WIN
+    /* CONDITION_VARIABLE'in yok-etme cagrisi yok (Win32). */
     if (k->kilit_aktif) DeleteCriticalSection(&k->kilit);
 #elif defined(KDL_THREAD_POSIX)
-    if (k->kilit_aktif) pthread_mutex_destroy(&k->kilit);
+    if (k->kilit_aktif) {
+        pthread_cond_destroy(&k->bos_degil);
+        pthread_cond_destroy(&k->dolu_degil);
+        pthread_mutex_destroy(&k->kilit);
+    }
 #else
     (void)k;
 #endif
@@ -682,7 +829,7 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     KdlKanal *k = (KdlKanal *)malloc(sizeof(KdlKanal));
     if (!k) return NULL;
     int32_t kap = kapasite > 0 ? kapasite : 16;
-    k->veri = (int32_t *)malloc((size_t)kap * sizeof(int32_t));
+    k->veri = (int64_t *)malloc((size_t)kap * sizeof(int64_t));
     k->kapasite = kap;
     k->boyut = 0;
     k->bas = 0;
@@ -691,26 +838,31 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     return k;
 }
 
-void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
+/* R-KANAL gonderim: v'yi ρ_kanal(k)'ye tasir. Kanal DOLUYSA yer acilana kadar
+ * BLOKLAR (akis denetimi) — eskiden mesaji sessizce dusuruyordu. */
+void kdl_kanal_gonder(KdlKanal *k, int64_t deger) {
     if (!k) return;
     kdl_kilit_gir(k);
-    if (k->boyut < k->kapasite) {
-        k->veri[k->son] = deger;
-        k->son = (k->son + 1) % k->kapasite;
-        k->boyut++;
-    }
+    while (k->boyut >= k->kapasite) kdl_kosul_bekle_dolu_degil(k);
+    k->veri[k->son] = deger;
+    k->son = (k->son + 1) % k->kapasite;
+    k->boyut++;
+    kdl_kosul_uyandir_bos_degil(k);   /* bekleyen alici varsa uyandir */
     kdl_kilit_cik(k);
 }
 
-int32_t kdl_kanal_al(KdlKanal *k) {
+/* R-KANAL alim: v'yi ρ_sahip(t_alan)'a tasir. Kanal BOSSA veri gelene kadar
+ * BLOKLAR — eskiden 0 donuyordu ve bu, gercekten gonderilmis bir 0'dan
+ * ayirt edilemiyordu (sessiz yanlis cevap). */
+int64_t kdl_kanal_al(KdlKanal *k) {
     if (!k) return 0;
-    int32_t v = 0;
+    int64_t v = 0;
     kdl_kilit_gir(k);
-    if (k->boyut > 0) {
-        v = k->veri[k->bas];
-        k->bas = (k->bas + 1) % k->kapasite;
-        k->boyut--;
-    }
+    while (k->boyut == 0) kdl_kosul_bekle_bos_degil(k);
+    v = k->veri[k->bas];
+    k->bas = (k->bas + 1) % k->kapasite;
+    k->boyut--;
+    kdl_kosul_uyandir_dolu_degil(k);  /* bekleyen gonderici varsa uyandir */
     kdl_kilit_cik(k);
     return v;
 }

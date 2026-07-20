@@ -160,22 +160,60 @@ t_hedef sonlandırılır
 
 ### R-KANAL — Mesaj Geçişi
 
+> **Tasarım kararı (D-292):** Uçlar **AYRIK DEĞİLDİR** — tek, yönsüz `kanal<T>`
+> kullanılır. Bu kural önceden uçları `gönderen<T>` / `alan<T>` olarak ayrı
+> tipliyordu; implementasyon ise başından beri tek `kanal<T>` kullanıyordu
+> (DRF003/DRF004). Ayrışma, kurucu (`kanal_oluştur`) eklenirken tek `kanal<T>`
+> lehine çözüldü. **Bedeli açıkça kayıtlıdır:** yön tip seviyesinde garanti
+> EDİLMEZ — aynı görev bir kanaldan hem gönderip hem alabilir; tip sistemi
+> engellemez. Ayrık uçlar (`gönderen<T>`/`alan<T>`) ileride yeniden
+> değerlendirilebilir.
+
+**Kurucu:**
+```
+Γ ⊢ n : tam32    beklenen tip = kanal<T>
+
+──────────────────────────────────────────
+Γ ⊢ kanal_oluştur(n) : kanal<T>
+```
+`T` bir değer argümanından çıkarsanamaz (kanal boş başlar) → **bağlamdan**
+gelir (`dizi_olustur<T>(N)` / boş dizi deseni). Bağlam yoksa **DRF006**.
+
+> **V1 sınırı (D-295; D-292'nin 32-bit kısıtını DEĞİŞTİRİR):** `T` ∈
+> {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`&T`/`Dizi<T>`), `boş`}.
+> D-292'de kanal tamponu `int32_t` taşıyor ve `T` 32-bit tamsayıyla sınırlıydı;
+> o kısıt yalnız `--check`i kapatıyordu ve `--llvm` tip kontrolü ÇALIŞTIRMADIĞI
+> için `kanal<tam64>` o yoldan derlenip **sessizce veri kaybediyordu** (ölçüldü).
+> D-295'te tampon — `görev` ile simetrik olarak — `int64_t`ye genişletildi:
+> kırpma sınıfı *gürültülü yapılmak yerine ortadan kaldırıldı*.
+>
+> **Kalan kısıt: kesirli `T`** (`görev` ile aynı gerekçe) — kanal tamsayı taşır,
+> kesirli değer `fptosi` ile girer, yani **değer** bozulur. Tip seviyesinde
+> **DRF006** ile reddedilir; `--check` atlansa bile emisyon `sext double → i64`
+> üretir ve bu **geçersizdir** → LLVM gürültülü reddeder (katmanlı savunma).
+
 **Gönderim:**
 ```
-Γ ⊢ gönderen : gönderen<T>    Γ ⊢ v : T
+Γ ⊢ k : kanal<T>    Γ ⊢ v : T
 
 ───────────────────────────────────────────────────────
 sahiplik_transfer(v, ρ_kanal(k))
 Γ' = Γ \ {v}
 ```
+Kanal doluysa gönderim **bloklar** (akış denetimi) — mesaj sessizce düşmez.
 
 **Alım:**
 ```
-Γ ⊢ alan : alan<T>    v kanal k'dan alındı
+Γ ⊢ k : kanal<T>    v kanal k'dan alındı
 
 ────────────────────────────────────────────────────
 sahiplik_transfer(v, ρ_sahip(t_alan))
 ```
+Kanal boşsa alım **bloklar**. Bloklamasaydı "henüz gönderilmedi" ile
+"`0` gönderildi" ayırt edilemezdi (sessiz yanlış cevap).
+
+`k` **tüketilmez** (`kanal<T>` lineer değildir): kanal ucu yeniden kullanılabilir
+bir transfer tamponudur (ρ_kanal); tüketilen yalnız **gönderilen değerdir**.
 
 ### R-PAYLAŞ — Salt-Okunur Bölge Dondurma
 

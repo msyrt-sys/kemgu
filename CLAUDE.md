@@ -95,9 +95,13 @@ kemgu/
 │   ├── test_escape.c                  — DFA escape analizi testleri (TAMAMLANDI ✓ — 17/17, ASan temiz)
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
-│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 30/30, multi-int + metin + yapı + float/dizi/struct-by-value)
+│   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 258/258, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması + görev<T> genişletme + D-295 bloker onarımları)
+│   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA kanıtı (D-291/D-292)
+│   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 50/50 (D40-D46 kanal_oluştur; D47-D50 görev/kanal kesirli reddi + metin/tam64 kabulü)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
+│       ├── gorev_temel.kem            — Katman 2: görev_başlat/birleştir (D-291) — exit 42
+│       ├── kanal_mesaj.kem            — Katman 2: kanal mesaj geçişi + akış denetimi (D-292) — exit 15
 │       ├── fibonacci.kem              — Özyinelemeli fibonacci (TAMAMLANDI ✓)
 │       ├── yapilar.kem                — Generic yapılar + referans (TAMAMLANDI ✓)
 │       ├── eslesme.kem                — Pattern matching + döngü (TAMAMLANDI ✓)
@@ -668,14 +672,56 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 
 ### Sıradaki büyük seçenekler:
 - **DRF V2 (operasyonel)** — Plan Karar B; runtime izler + C++11 weak memory model fence emit
-- **Concurrency runtime** — `görev`/`kanal` lang syntax mevcut (DRF V1 statik tip kontrol);
-  runtime thread/channel implementasyonu, LLVM codegen, semaforlar (Plan Karar F V2)
-- **Lambda block-form gövde tip çıkarsama** (V1 sınır: lambda body ifade-form;
-  block içindeki son `ver` deyimi tip dönüşü V2)
+- ~~**Concurrency runtime — `görev` tarafı**~~ ✓ **D-291** (Katman 2 CANLI): `görev_başlat`/
+  `görev_birleştir` codegen + GERÇEK host thread (`kdl_gorev_basla_kapanis`); her görev
+  kendi ρ_sahip'ini alır (S1/S2 yapısal — test [7] ρ ayrıklığını ölçer). `dondur` V1'de
+  identity. **D-294:** runtime i64 taşımaya geçti → **`görev<metin>` çalışıyor**
+  (T ∈ {≤64-bit tamsayı, işaretçi-benzeri, boş}). **Kesirli T REDDEDİLİR** (DRF001):
+  runtime sonucu x0/rax'tan okur, float v0/xmm0'dadır → bitcast sessiz çöp olurdu;
+  `--llvm` tip kontrolünü atlasa bile `trunc i64→double` geçersiz → LLVM gürültülü reddeder
+  (katmanlı savunma, ikisi de ölçüldü). **Kalan (bu sırayla):**
+  - ~~**`kanal`**~~ ✓ **D-292** + **D-295**: `kanal_oluştur<T>(kapasite)` kurucusu (T beklenen
+    tipten; bağlamsız → DRF006) + gönder/al codegen + **BLOKLAYAN** host runtime (koşul değişkeni).
+    Mehmet kararı: tek yönsüz `kanal<T>` (spec R-KANAL buna göre yeniden yazıldı; **bedeli:
+    yön tip-seviyesinde garanti EDİLMEZ**). Kapatılan asıl kusur: boş kanalda `kanal_al` 0
+    dönüyordu — gerçek bir 0'dan ayırt edilemez (sessiz yanlış cevap); dolu kanalda gönderim
+    mesajı sessizce düşürüyordu. Kanal/görev ABI'si host+bare-metal'de artık AYNI.
+    **D-295:** tampon `int64_t` → `kanal<tam64>`/`<metin>`/`<Dizi<T>>` GERÇEKTEN çalışır
+    (D-292'nin 32-bit kısıtı KALKTI — o kısıt yalnız `--check`i kapatıyordu, `--llvm` yolundan
+    sessiz kırpma sızıyordu). Kalan kısıt: **kesirli T** (DRF006, katmanlı savunma).
+- **⚠ SÜREÇ DERSİ (D-295):** ön-merge adversarial denetim, D-291→D-294'te **3 BLOKER** buldu —
+  hepsi "tip kurtarılamadı → sessizce `i32` varsay" kökünden; diff hata modunu **loud→silent**
+  çeviriyordu. **Taşıyıcı genişliğini (i32→i64) değiştirince TÜM fallback'leri denetle.**
+  Ayrıca: LLVM `declare` imza uyuşmazlığını **sessizce kabul eder** (ölçüldü) — "yanlış tip geçir,
+  LLVM reddetsin" bir savunma mekanizması DEĞİLDİR.
+  - **ρ_sahip serbest bırakma** — F4-sınıfı iş: pozitif hapsedilme (confinement) kanıtı +
+    adversarial tarama gerektirir (F4.2b'nin ρ_yerel deseni). Kanıtsız serbest = UAF riski.
+  - Semaforlar / bariyerler (Plan Karar F V2)
+  - `kanal` KEMGU-OS'ta (bare-metal .kem): ABI hazır (aynı imza), test yok
+- ~~**Lambda ifade-form dönüş-tipi çıkarsama**~~ ✓ **D-293**: lifted lambda dönüşü artık
+  gövdenin doğal IR tipinden çıkarsanıyor (eskiden SABİT i32 → `|| "selam"` / `|| 3.5`
+  tip kontrolünden geçip LLVM'de patlıyordu). Closure çağrı yeri dönüş tipini **bildirilen**
+  `işlev(...) -> T`'den alıyor (`LlvmIsim.kapanis_donus_ir`) — fat value `{ptr,ptr}` T'yi
+  sildiği için bu şart; olmadan `metin_uzunluk(f())` segfault veriyordu.
+  **Kalan:** **blok-form gövde** (`|| { ...; ver x; }`) dönüşü hâlâ i32 — son-`ver`
+  çıkarsaması gövde ön-taraması ister (döngüsel bağımlılık; D-072, ayrı iş).
+  **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
+  de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **PARİTE BORCU:** görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
+  `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
+  şekiller yok) ama port ayrı iş olarak duruyor.
+- **Skaler referans okuma** (D-291 yan bulgusu): `&tam32` bugün hiç okunamıyor — `ver v`
+  T020, `v+0` T003, `*v` T001; yalnız taşınıp döndürülebiliyor. Yapı referansı (`r.alan`)
+  çalışıyor. Hiçbir örnek/test skaler referans kullanmıyor.
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
-- **LLVM v4** (dizi param/return, dizi length, generic islev codegen)
+- ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
+  (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
+  roadmap güncellenmemiş). Ampirik doğrulama (derle+çalıştır+exit): dizi param `topla(xs:
+  Dizi<tam32>)`→42 ✓, dizi dönüş `yap() -> Dizi<tam32>`→42 ✓, `dizi_boyut`→3 ✓, generic
+  `kimlik<T>(x:T)->T` → 42 ✓, generic+metin → 5 ✓. **DERS:** roadmap maddelerini başlamadan
+  ölç — eskimiş olabilir.
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
 - **Linear V2:** lineer alanlı yapı (`yapı tekkez K { ... }`), L005 (koşullu tüketim tutarlılığı)
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)

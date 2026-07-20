@@ -1,0 +1,47 @@
+// KEMGU Katman 2 (Concurrency / DRF V1) — görev temel örneği
+//
+// görev_başlat(c: işlev() -> T) -> görev<T>
+//     Yeni bir görev başlatır. c PARAMETRESİZ bir kapanış olmalı (DRF001).
+//     Görev kendi bölgesini (ρ_sahip) sahiplenir — R-GÖREV / S2.
+//
+// görev_birleştir(g: görev<T>) -> T
+//     Görevin bitmesini bekler, sonucunu çağırana taşır — R-BİRLEŞTİR.
+//     g bu noktada TÜKETİLİR: görev<T> lineerdir, iki kez birleştirilemez
+//     (L002) ve hiç birleştirilmezse sızıntı olarak raporlanır (L001).
+//
+// Veri yarışı neden imkânsız (KEMGU_Bellek_Modeli.md Katman 2):
+//     S1 (tekil sahiplik) — bir bölgenin her an TEK sahibi vardır.
+//     S2 (başlangıç sahipliği) — görev yaratıldığında kendi ρ_sahip'ini alır;
+//     çağıranın bölgesi PAYLAŞILMAZ. İki thread aynı bölgeye erişemediği için
+//     yarış, çalışma-zamanı kilidiyle değil, TİP+BÖLGE seviyesinde elenir.
+//
+// T'nin kapsamı (D-294): T ∈ {≤64-bit tamsayı, işaretçi-benzeri (metin/&T/Dizi<T>), boş}.
+// KESİRLİ T DESTEKLENMEZ (DRF001): runtime görev sonucunu tamsayı yazmacından
+// (x0/rax) okur, kesirli dönüş v0/xmm0'dadır → sessizce çöp olurdu. Sessiz
+// bozulma yerine derleme-zamanı red tercih edildi.
+//
+// Beklenen çıkış kodu: 42
+
+işlev main() -> tam32 {
+    // (a) Yakalamasız görev — kapanış hiçbir şey yakalamaz.
+    değişken a: görev<tam32> = görev_başlat(|| 20);
+
+    // (b) Yakalamalı görev — `temel` kapanışa değer olarak yakalanır
+    //     ve görevin bölgesine taşınır (R-GÖREV: YD(c) transferi).
+    değişken temel: tam32 = 20;
+    değişken b: görev<tam32> = görev_başlat(|| temel + 2);
+
+    // (c) İşaretçi taşıyan T (D-294): görev bir `metin` döndürebilir.
+    //     Runtime i64 taşır; çağrı yeri bildirilen görev<metin>'den T=ptr
+    //     öğrenip inttoptr eder. i32 taşımada bu işaretçi kırpılırdı.
+    değişken c: görev<metin> = görev_başlat(|| "selam");
+
+    // Her görev birleştirilmeli — aksi halde L001 (tüketilmedi).
+    değişken s: metin = görev_birleştir(c);
+    değişken n: tam32 = metin_uzunluk(s);        // "selam" -> 5
+
+    // 20 + 22 = 42; n (5) doğrulanır ama toplama katılmaz.
+    değişken toplam: tam32 = görev_birleştir(a) + görev_birleştir(b);
+    eğer n != 5 { ver 1; }
+    ver toplam;
+}

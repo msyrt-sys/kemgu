@@ -25,7 +25,7 @@
 #define KDL_KANAL_HAVUZ  4   /* eşzamanlı kanal sayısı */
 
 struct KdlKanal {
-    volatile int buf[KDL_KANAL_KAP];
+    volatile int64_t buf[KDL_KANAL_KAP];   /* D-295: host ile AYNI genislik */
     volatile int bas;   /* okuma (tüketici) indeksi */
     volatile int son;   /* yazma (üretici) indeksi */
 };
@@ -33,7 +33,11 @@ struct KdlKanal {
 static struct KdlKanal kdl_kanal_havuz[KDL_KANAL_HAVUZ];
 static int kdl_kanal_sayi = 0;
 
-KdlKanal *kdl_kanal_olustur(void) {
+KdlKanal *kdl_kanal_olustur(int kapasite) {
+    /* Halka derleme-zamani sabit (en cok KAP-1 ogo). Istenen kapasite bunu
+     * asiyorsa SESSIZCE kirpmak yerine BASARISIZ don — cagiran, istedigi
+     * kapasiteyle calistigini sanmasin. kapasite<=0 -> sabit halka. */
+    if (kapasite > KDL_KANAL_KAP - 1) return 0;
     if (kdl_kanal_sayi >= KDL_KANAL_HAVUZ) return 0;
     struct KdlKanal *k = &kdl_kanal_havuz[kdl_kanal_sayi++];
     k->bas = 0;
@@ -49,15 +53,15 @@ static int kdl_kanal_bos(struct KdlKanal *k) {
     return k->son == k->bas;
 }
 
-void kdl_kanal_gonder(KdlKanal *k, int deger) {
+void kdl_kanal_gonder(KdlKanal *k, int64_t deger) {
     while (kdl_kanal_dolu(k)) { __asm__ volatile("" ::: "memory"); }
     k->buf[k->son] = deger;
     k->son = (k->son + 1) % KDL_KANAL_KAP;
 }
 
-int kdl_kanal_al(KdlKanal *k) {
+int64_t kdl_kanal_al(KdlKanal *k) {
     while (kdl_kanal_bos(k)) { __asm__ volatile("" ::: "memory"); }
-    int v = k->buf[k->bas];
+    int64_t v = k->buf[k->bas];
     k->bas = (k->bas + 1) % KDL_KANAL_KAP;
     return v;
 }

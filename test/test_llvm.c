@@ -2614,6 +2614,253 @@ static void test_d2_kullanici_prefix_oncelik(void) {
                rc == 42);
 }
 
+/* === Katman 2 (Concurrency / DRF V1) — uctan uca codegen ===
+ * Bu testler `görev_başlat`/`görev_birleştir`/`dondur` icin GERCEK derleme +
+ * calistirma + exit-kodu dogrular. Runtime semantigi (gercek thread mi, S1/S2
+ * bolge ayrikligi mi) ayrica test_gorev_rt.c'de olculur — burada codegen'in
+ * dogru runtime cagrisini urettigi kanitlanir. */
+
+static void test_gorev_yakalamasiz(void) {
+    /* Yakalamasiz lambda -> fat value { @lambda_0, null } -> env=NULL yolu
+     * (runtime bare dispatch: i32 @lambda_0(ptr %rho)). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 42); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+    test_sonuc("gorev_baslat/birlestir (yakalamasiz) -> exit 42", rc == 42);
+}
+
+static void test_gorev_yakalamali(void) {
+    /* Yakalama -> env HEAP malloc -> fat value { @lambda_0, %env } -> env!=NULL
+     * yolu (runtime closure dispatch: i32 @lambda_0(ptr %rho, ptr %env)).
+     * Yakalanan x gorev govdesinde okunur. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 40; "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| x + 2); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+    test_sonuc("gorev_baslat yakalamali closure (env!=null) -> exit 42",
+               rc == 42);
+}
+
+static void test_gorev_coklu(void) {
+    /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 20); "
+        "de\xc4\x9fi\xc5\x9fken b: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 22); "
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a) + "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); }");
+    test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
+}
+
+static void test_dondur_identity(void) {
+    /* dondur(&değişken T) -> &T : V1'de tip-seviyesi islem, runtime identity.
+     * Onceki davranis: `call ptr @dondur(...)` -> TANIMSIZ SEMBOL link hatasi.
+     * Deger yapi-referansi uzerinden geri okunuyor (skaler `&tam32` bugun
+     * KEMGU'da okunamiyor — ayri, onceden var olan bir sinir). */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { deger: tam32; } "
+        "i\xc5\x9flev payla\xc5\x9f(k: &de\xc4\x9fi\xc5\x9fken Kutu) -> &Kutu { "
+        "ver dondur(k); } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: Kutu = Kutu { deger: 42 }; "
+        "de\xc4\x9fi\xc5\x9fken r: &Kutu = payla\xc5\x9f(&de\xc4\x9fi\xc5\x9fken k); "
+        "ver r.deger; }");
+    test_sonuc("dondur(&degisken T) -> &T identity -> exit 42", rc == 42);
+}
+
+static void test_kanal_gorev_mesaj(void) {
+    /* GERCEK thread'ler arasi mesaj gecisi: gorev gonderir, main alir.
+     * Bu test bloklamayi AYIRT EDER: eski (bloklamayan) runtime ile main
+     * gorev daha yazmadan kanal_al'dan 0 alip exit 0 veriyordu (gozlendi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(4); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<bo\xc5\x9f> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| kanal_g\xc3\xb6nder(k, 42)); "
+        "de\xc4\x9fi\xc5\x9fken v: tam32 = kanal_al(k); "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver v; }");
+    test_sonuc("kanal: gorev gonderir + main alir (blokla) -> exit 42",
+               rc == 42);
+}
+
+static void test_kanal_akis_denetimi(void) {
+    /* Kapasite 2, 5 mesaj -> uretici DOLU kanalda bloklamak ZORUNDA.
+     * Eski surumde tasan mesajlar sessizce duserdi -> toplam 15 cikmazdi.
+     * FIFO sirasi + akis denetimi birlikte sinanir (1+2+3+4+5=15). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev uretici(k: kanal<tam32>) -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken i: tam32 = 1; "
+        "iken i <= 5 { kanal_g\xc3\xb6nder(k, i); i = i + 1; } ver 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| uretici(k)); "
+        "de\xc4\x9fi\xc5\x9fken toplam: tam32 = 0; "
+        "de\xc4\x9fi\xc5\x9fken n: tam32 = 0; "
+        "iken n < 5 { toplam = toplam + kanal_al(k); n = n + 1; } "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver toplam; }");
+    test_sonuc("kanal akis denetimi (kap=2, 5 mesaj) -> exit 15", rc == 15);
+}
+
+/* === D-293: lambda donus-tipi cikarsamasi (ifade-form govde) ===
+ * Eskiden lifted lambda'nin IR donusu SABIT i32 idi -> `|| "selam"`
+ * (islev() -> metin) ve `|| 3.5` (islev() -> kesirli64) tip kontrolunden GECIP
+ * LLVM'de patliyordu ("'%0' defined with type 'ptr' but expected 'i32'").
+ * Artik donus govdenin DOGAL IR tipinden cikarsaniyor; closure cagri yeri de
+ * donus tipini BILDIRILEN tipten (islev(...) -> T) aliyor. */
+
+static void test_lambda_donus_metin(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> metin = || \"selam\"; "
+        "de\xc4\x9fi\xc5\x9fken s: metin = f(); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("lambda donus metin (islev() -> metin) -> exit 5", rc == 5);
+}
+
+static void test_lambda_donus_metin_ic_ice(void) {
+    /* Closure cagrisi bir BUILT-IN argumaninin icinde: beklenen tip buraya
+     * YAYILMIYOR. Cagri yeri donus tipini bildirilen `islev() -> metin`den
+     * almazsa i32 tahmin eder -> ptr kirpilir -> SEGFAULT (gozlendi).
+     * Bu test o yolu kilitler. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> metin = || \"selam\"; "
+        "ver metin_uzunluk(f()); }");
+    test_sonuc("lambda metin ic-ice built-in argumaninda -> exit 5", rc == 5);
+}
+
+static void test_lambda_donus_kesirli(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> kesirli64 = || 3.5; "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = f(); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("lambda donus kesirli64 (islev() -> kesirli64) -> exit 42",
+               rc == 42);
+}
+
+/* === D-294: görev<T> genisletme (runtime i64 tasima) === */
+
+static void test_gorev_metin(void) {
+    /* `görev<metin>`: lambda ptr doner (D-293), runtime i64 tasir, cagri yeri
+     * bildirilen görev<T>'den T=ptr ogrenip inttoptr eder. i32 tasimada bu
+     * isaretci KIRPILIRDI (D-294 oncesi: LLVM tip hatasi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("gorev<metin> (i64 tasima + inttoptr) -> exit 5", rc == 5);
+}
+
+static void test_gorev_kesirli_llvm_de_reddedilir(void) {
+    /* KATMANLI SAVUNMA — 2. katman. Tip kontrolu kesirli T'yi DRF001 ile
+     * reddeder (test_drf.c D47), ama `--llvm` modu tip kontrolu CALISTIRMAZ
+     * (onceden var olan davranis) -> bu yol da guvenli olmali.
+     * Oyle: birlestir sonucu i64 tasinir ve T'ye daraltilir; T=double icin
+     * `trunc i64 -> double` GECERSIZDIR -> LLVM gurultulu reddeder
+     * ("invalid cast opcode"). Yani `--check` atlansa bile SESSIZ cop
+     * uretilemez. (Bu testin `birlestir`i CAGIRMASI sart: cagirmazsa gecersiz
+     * cast hic emit edilmez ve test yanlis sebeple gecerdi.) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<kesirli64> = "
+        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 3.5); "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = "
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("gorev<kesirli64>: --llvm yolunda da LLVM reddi (sessiz cop yok)",
+               rc != 0);
+}
+
+/* === D-295: SESSIZ-i32-fallback BLOKER onarimlari (regresyon kilidi) ===
+ * Uc bloker de AYNI kokten geliyordu: tip kurtarilamayinca codegen sessizce
+ * "i32" varsayiyor ve i64 tasiyiciyi kirpiyordu. Bu testler o yollari kilitler.
+ * NOT: hepsi ANNOTASYONSUZ bicimleri kullanir — annotasyonlu bicimler zaten
+ * gecıyordu, asil kirik olan idiomatik (annotasyonsuz) bicimdi. */
+
+static void test_annotsuz_gorev_tam64(void) {
+    /* BLOKER-1: `değişken c = görev_başlat(...)` + beklenen-yok.
+     * ONCE: --check OK, LLVM OK, exit 99 (SESSIZ YANLIS; 2^32 > 100 oldugu
+     * icin 1 olmaliydi) — trunc i64->i32 degeri kirpiyordu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: tam64 = 4294967296; "
+        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| b); "
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
+        "e\xc4\x9f" "er s > 100 { ver 1; } ver 99; }");
+    test_sonuc("annotasyonsuz gorev<tam64>: kirpma YOK -> exit 1", rc == 1);
+}
+
+static void test_annotsuz_gorev_metin(void) {
+    /* BLOKER-1 (isaretci varyanti). ONCE: SEGFAULT (ptr i32'ye kirpildi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("annotasyonsuz gorev<metin>: isaretci saglam -> exit 5", rc == 5);
+}
+
+static void test_annotsuz_closure_metin(void) {
+    /* BLOKER-3: `değişken f = || "selam"` + beklenen-yok.
+     * ONCE: lambda `define ptr` ama cagri `call i32` -> SEGFAULT. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = || \"selam\"; "
+        "ver metin_uzunluk(f()); }");
+    test_sonuc("annotasyonsuz closure -> metin: exit 5", rc == 5);
+}
+
+static void test_kanal_tam64_turu(void) {
+    /* BLOKER-2: kanal i64 tasima. ONCE: --check DRF006 ile reddediyordu ama
+     * `--llvm` tip kontrolu CALISTIRMADIGI icin o yoldan derlenip SESSIZCE
+     * kaybediyordu (2^33 gonder->al esit degil, exit 1). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam64> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 8589934592); "
+        "de\xc4\x9fi\xc5\x9fken v: tam64 = kanal_al(k); "
+        "e\xc4\x9f" "er v == 8589934592 { ver 42; } ver 1; }");
+    test_sonuc("kanal<tam64> 2^33 turu kayipsiz -> exit 42", rc == 42);
+}
+
+static void test_kanal_metin_turu(void) {
+    /* D-295 yeni yetenek: isaretci T kanaldan gecer. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<metin> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = kanal_al(k); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("kanal<metin> isaretci turu -> exit 5", rc == 5);
+}
+
+static void test_kanal_kesirli_llvm_de_reddedilir(void) {
+    /* KATMANLI SAVUNMA 2. katman (gorev<kesirli> ile ayni desen): `--llvm`
+     * tip kontrolu calistirmaz; emisyon `sext double -> i64` uretir, bu
+     * GECERSIZDIR -> LLVM gurultulu reddeder. Sessiz cop yolu KAPALI.
+     * (Bu testin gonder+al CAGIRMASI sart: cagirmazsa gecersiz cast hic emit
+     * edilmez ve test yanlis sebeple gecerdi — D-294'te bu tuzaga dusuldu.) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<kesirli64> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 3.5); "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = kanal_al(k); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("kanal<kesirli64>: --llvm yolunda da LLVM reddi", rc != 0);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -2957,6 +3204,31 @@ int main(void) {
     printf("\n--- Codegen borc regresyonu (D1 + D2) ---\n");
     test_d1_generic_sonuc_ptr();
     test_d2_kullanici_prefix_oncelik();
+
+    printf("\n--- Katman 2: Concurrency / DRF V1 ---\n");
+    test_gorev_yakalamasiz();
+    test_gorev_yakalamali();
+    test_gorev_coklu();
+    test_dondur_identity();
+    test_kanal_gorev_mesaj();
+    test_kanal_akis_denetimi();
+
+    printf("\n--- Lambda donus-tipi cikarsamasi (D-293) ---\n");
+    test_lambda_donus_metin();
+    test_lambda_donus_metin_ic_ice();
+    test_lambda_donus_kesirli();
+
+    printf("\n--- gorev<T> genisletme (D-294) ---\n");
+    test_gorev_metin();
+    test_gorev_kesirli_llvm_de_reddedilir();
+
+    printf("\n--- D-295: sessiz-i32-fallback bloker onarimlari ---\n");
+    test_annotsuz_gorev_tam64();
+    test_annotsuz_gorev_metin();
+    test_annotsuz_closure_metin();
+    test_kanal_tam64_turu();
+    test_kanal_metin_turu();
+    test_kanal_kesirli_llvm_de_reddedilir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

@@ -35,7 +35,10 @@ static void uretici(void) {
 
 int main(void) {
     kdl_yazdir_metin("KANAL BASLA");
-    kanal = kdl_kanal_olustur();
+    /* 3 = KDL_KANAL_KAP-1 (kdl_kanal.c'deki sabit halkanin tuttugu en cok oge).
+     * Bilincli olarak dusuk: uretici sik dolu-bloklar, tuketici sik bos-bloklar
+     * -> CIFT YONLU akis denetimi gercekten sinanir (bkz. kdl_kanal.c notu). */
+    kanal = kdl_kanal_olustur(3);
 
     kdl_preempt_baslat();
     kdl_preempt_gorev_olustur(uretici, yigin_u + sizeof(yigin_u));

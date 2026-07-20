@@ -5,6 +5,316 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-295 — 3 BLOKER onarımı: sessiz `i32` fallback'i elendi (ön-merge denetimi bulgusu) (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-294).
+
+**Nasıl bulundu:** `main`'e merge ÖNCESİ adversarial denetim (6 boyut paralel inceleme + her bulgu
+için 3 bağımsız çürütme lensi). 26 aday → 15 onaylanan, **3 bloker**. Üçü de bağımsız olarak
+derleyip-çalıştırarak teyit edildi. **Merge durduruldu, önce bunlar onarıldı.**
+
+**ORTAK KÖK:** codegen T'yi kurtaramadığında sessizce **`"i32"`** varsayıyordu. D-291→D-294 taşıyıcıyı
+i64'e genişletti ama fallback'i güncellemedi → i64 taşıyıcı i32'ye kırpılıyordu.
+
+| # | Program | --check | derleme | çalışma (ÖNCE) | SONRA |
+|---|---|---|---|---|---|
+| 1 | `değişken c = görev_başlat(\|\| tam64); değişken s = görev_birleştir(c);` | OK | OK | **exit 99** (doğrusu 1) | exit 1 ✓ |
+| 1b | aynısı, T=metin | OK | OK | **SEGFAULT** | exit 5 ✓ |
+| 2 | `kanal<tam64>` + `--llvm` (tip kontrolü atlanır) | DRF006 | OK | **exit 1** (doğrusu 42) | exit 42 ✓ |
+| 3 | `değişken f = \|\| "selam"; metin_uzunluk(f())` | OK | OK | **SEGFAULT** | exit 5 ✓ |
+
+**EN AĞIR OLGU — diff hata modunu LOUD→SILENT çeviriyordu:** aynı programlar `origin/main`'de
+`error: '%0' defined with type 'ptr' but expected 'i32'` ile **derlenmiyordu** (ölçüldü). Yani
+D-291→D-294, gürültülü derleme hatasını sessiz yanlış cevaba/segfault'a dönüştürmüştü — projenin
+kendi "loud > silent" ilkesinin birebir ihlali. D-292'nin "sessiz-yanlış-cevap kapatıldı" başlığı
+bu yüzden **yanlıştı**; kanal'da açtığı ikinci yolu görmemişti.
+
+**ONARIMLAR:**
+1. **`görev_birleştir` fallback `i32`→`i64`** (llvm.c). Kesirli T zaten reddedildiği için (D-294)
+   i64 son çare güvenli: hedeflerde (x86_64/aarch64) tamsayı ve işaretçi AYNI yazmaçta döner.
+2. **Closure çağrı yeri fallback `i32`→`i64`** (llvm.c). Annotasyonsuz closure'da ptr dönen lambda
+   artık kırpılmıyor. **Kalan açık (dürüstçe):** gövdesi kesirli dönen annotasyonsuz closure +
+   beklenen-yok hâlâ yanlış yazmaçtan okur; ama o vaka bugün de aşağı akışta **gürültülü** LLVM
+   reddi alıyor (ölçüldü) — i64 onu sessizleştirmiyor. Tam çözüm lambda dönüşünün çağrı yerinden
+   ÖNCE bilinmesini ister (ayrı iş).
+3. **Kanal runtime `int32_t`→`int64_t`** (host + bare-metal, AYNI ABI) + codegen T-farkında
+   gönderim/alım (`kanal_ic_ir`, `gorev_ic_ir` deseninin aynısı: gönderimde `sext`/`ptrtoint`,
+   alımda `trunc`/`inttoptr`).
+   **Neden "gürültülü yap" DEĞİL de "sınıfı yok et":** önce planım geniş T'de doğal tip geçirip
+   `declare` uyuşmazlığıyla LLVM'i reddettirmekti. **ÖLÇTÜM: LLVM imza uyuşmazlığını SESSİZCE
+   KABUL EDİYOR** (`opt -passes=verify` ve `llvm-as` exit 0) → plan geçersizdi. Ölçmeseydim
+   blokeri kapattığımı sanacaktım. Taşıyıcıyı genişletmek kırpma sınıfını tamamen ortadan kaldırır.
+
+**D-292'nin 32-bit kısıtı KALKTI (kapsam genişledi):** `kanal<tam64>`, `kanal<metin>`,
+`kanal<Dizi<T>>` artık GERÇEKTEN çalışıyor. **Kalan kısıt: kesirli T** (görev ile aynı gerekçe —
+kanal tamsayı taşır, `fptosi` DEĞERİ bozar). Katmanlı savunma kanal-float için de ölçüldü:
+`--llvm` tip kontrolünü atlasa bile emisyon `sext double → i64` üretir, bu **geçersizdir** → LLVM
+gürültülü reddeder.
+
+**TEST BEKLENTİSİ DEĞİŞTİ (dürüstçe):** D4/D6/D45 artık DRF006 değil **0 hata** bekliyor
+(yetenek genişledi); yeni D50 kesirli reddini kilitler.
+
+**KANIT:** `test_llvm` **258/258** (+6, hepsi ANNOTASYONSUZ biçimleri kullanır — kırık olan
+idiomatik biçimdi; annotasyonlular zaten geçiyordu). `test_drf` **50/50**. `test_gorev_rt` 13/13.
+Regresyon: bare-metal `calistir_kanal_test_arm` geçti (toplam=55 — i64 genişletme QEMU'da kırmadı),
+codegen parite **76/76**, **SELF-HOST FIXPOINT ✓** (33371 satır), `test_tumu`.
+
+**SÜREÇ DERSİ:** "Yeni bir tip kısıtı koyarken ikinci katmanı ÖLÇ" (D-294) yetmiyormuş — asıl ders:
+**taşıyıcı genişliğini değiştirince TÜM fallback'leri denetle.** Ayrıca denetim ajanlarına test
+sabotajı yaptırırken `test_llvm.c`'nin SABİT geçici dosya yolları (`build/test_llvm_temp.*`)
+eşzamanlı koşumda çakışıp 95 sahte hata üretti — test altyapısı sağlamlığı ayrı iş olarak kaydedildi.
+
+---
+
+## D-294 — `görev<T>` genişletme: `görev<metin>` çalışıyor (runtime i64 taşıma) + kesirli T reddi (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-293).
+
+**Karar [ETKİ: `runtime/kdl_runtime.c` (görev dönüşü int32_t→int64_t), `src/llvm.c`
+(`LlvmIsim.gorev_ic_ir` + `gorev_ic_ir_al`; birleştir emisyonu i64→T daraltma; declare),
+`src/tip_kontrol.c` (kesirli T reddi — 2 tıkaç), `test/test_gorev_rt.c` (ABI hizalama),
+`test/test_llvm.c` (+2), `test/test_drf.c` (+3).]**
+
+**Kapatılan boşluk:** D-293 lambda tarafını çözmüştü (`define ptr @lambda_0` ✓) ama
+`kdl_gorev_birlestir` **int32_t** dönüyordu → `görev<metin>` LLVM tip hatası veriyordu.
+Runtime i64 taşımaya geçti; `görev_birleştir` sonucu çağrı yerinde T'ye daraltılıyor
+(`ptr`→`inttoptr`, `i64`→aynen, `i8/16/32/i1`→`trunc`). **`görev<metin>` artık çalışıyor**
+(uçtan uca exit 5). T'nin IR'i **bildirilen** `görev<T>`den gelir (`gorev_ic_ir` —
+`görev<T>` IR'de opak `ptr` olduğu için T başka türlü bilinemez; D-293'teki
+`kapanis_donus_ir` deseninin aynısı).
+
+**Neden i32 dönen lambda bozulmuyor:** int64 olarak çağrılınca üst 32 bit ÇÖP olur, ama
+codegen sonucu T'ye **trunc** eder → değer doğru. (Bu trunc kozmetik değil, **şart**.)
+
+**KESİRLİ T REDDİ — KATMANLI SAVUNMA (ikisi de ölçüldü):**
+- Runtime sonucu **tamsayı** dönüşlü fn-ptr ile alır (x0/rax); kesirli dönüş **v0/xmm0**'dadır
+  → bitcast'lamak **SESSİZ çöp** üretirdi. Reddetmek, hata modunu loud→silent'a çevirmemenin
+  tek yolu (D-293'te tam bu tuzağa düşülüp yakalanmıştı).
+- **1. katman — tip kontrolü:** iki tıkaç (görev_başlat = YARATMA yolu; `DUGUM_TIP_GOREV` =
+  annotasyon/parametre yolu) → **DRF001**.
+- **2. katman — `--llvm` tip kontrolünü ÇALIŞTIRMAZ** (önceden var olan davranış, ölçüldü:
+  `--check` exit 1 ama `--llvm` exit 0). O yol da güvenli: T=double için emisyon
+  `trunc i64 -> double` üretir, bu **geçersizdir** → LLVM gürültülü reddeder
+  (`invalid cast opcode`). **Sessiz çöp yolu KAPALI.**
+- **Kapasite kaybı YOK:** `görev<kesirli*>` zaten hiç derlenmiyordu; kazanç düzgün tanı.
+
+**TEST TUZAĞI (yakalandı):** ilk yazdığım red-testi `birleştir`i ÇAĞIRMIYORDU → geçersiz cast
+hiç emit edilmiyor, program derlenip geçiyordu → test **yanlış sebeple** kalıyordu. Çağıracak
+şekilde düzeltildi. **Ayrıca `test_gorev_rt.c` hâlâ `extern int32_t kdl_gorev_birlestir`
+bildiriyordu**; ayrı derleme birimi olduğu için linker uyuşmazlığı YAKALAMAZ ve test düşük 32
+biti okuyup **yanlış sebeple geçerdi** — bildirimler tanımla birebir hizalandı.
+
+**SINIR:** `görev<T>` V1: T ∈ {≤64-bit tamsayı, işaretçi-benzeri (metin/&T/Dizi<T>), boş}.
+Kesirli T yok (yukarıdaki gerekçe). `kanal<T>` ayrı ve daha dar (32-bit tamsayı, D-292) —
+sınırı runtime tamponundan (int32_t), lambda'dan değil.
+
+**KANIT:** `test_llvm` **252/252** (+2: görev<metin> → exit 5; görev<kesirli64> `--llvm`
+yolunda da LLVM reddi). `test_drf` **49/49** (+3: D47 görev_başlat kesirli → DRF001, D48
+annotasyon yolu → DRF001, D49 görev<metin> = 0 hata). `test_gorev_rt` **13/13** (ABI hizalı).
+Regresyon: codegen parite **76/76**, **SELF-HOST FIXPOINT ✓** (33371 satır), `test_tumu`.
+
+**PARİTE BORCU (sürüyor):** D-291→D-294'ün hiçbiri `selfhost/codegen.kem`'de yok.
+
+---
+
+## D-293 — Lambda dönüş-tipi çıkarsaması: `işlev() -> metin` / `-> kesirli64` lambdaları artık çalışıyor (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-292).
+
+**Karar [ETKİ: `src/llvm.c` (lambda_emit iki-tamponlu yeniden yapılandırma; `dosya_kopyala` yardımcısı;
+`LlvmIsim.kapanis_donus_ir` + `kapanis_donus_ir_al`; closure çağrı yeri dönüş tipi), `test/test_llvm.c` (+3).]**
+
+**Ölçülen kusur:** `lambda_emit`'te `const char *donus = "i32"` **SABİT**ti. Sonuç: `|| "selam"`
+(`işlev() -> metin`) ve `|| 3.5` (`işlev() -> kesirli64`) **tip kontrolünden GEÇİP** LLVM'de patlıyordu
+(`'%0' defined with type 'ptr' but expected 'i32'`). Bu, görev/kanal'dan **BAĞIMSIZ**, düz lambda
+kullanımını kıran gerçek bir bug'dı.
+
+**Çözüm (a) — define satırı tipi bilmeden yazılamaz → iki tampon:** gövde önce `ic_tmp`'ye
+`ifade_uret(g, govde, NULL)` (**doğal** tip) ile yazılır, `r.tip` öğrenilir, sonra `define` satırı
+`govde_tmp`'ye yazılıp gövde eklenir. `hoist_renumber` zaten TÜM fonksiyon metnini tutarlı yeniden
+numaralandırır ve `define` satırında numaralı register yoktur (paramlar adlı: `%rho`/`%env`/`%x`) →
+sıralama değişikliği güvenli. `tmpfile()` başarısızsa eski davranışa (sabit i32) düşer.
+
+**Çözüm (b) — ARA BULGU: (a) TEK BAŞINA REGRESYON ÜRETTİ (yakalandı, kapatıldı).** (a)'dan sonra
+`define ptr @lambda_0` doğruydu ama **çağrı yeri** hâlâ i32 sanıyordu → `metin_uzunluk(f())`
+**derlenip SEGFAULT** verdi. Yani hata modu **loud (LLVM hatası) → silent-crash**'e dönmüştü — kabul
+edilemez; (a) tek başına GÖNDERİLEMEZDİ. Kök: `işlev(...) -> T` IR'de `{ ptr, ptr }` (fat value) →
+**T SİLİNİR**; çağrı yeri `beklenen ? beklenen : "i32"` TAHMİN ediyordu. Lambda dönüşü sabit i32 iken
+bu tahmin (yanlış ama) tutarlıydı; çıkarsama gelince kırıldı.
+**Kapatma:** `LlvmIsim.kapanis_donus_ir` — bildirilen `işlev(...) -> T` tipinden T'nin IR'i, değişken
+(annot'lu yol) ve fonksiyon parametresi kaydında doldurulur; çağrı yeri **bildirilen tipi beklenen'e
+TERCİH eder** (bildirilen tip otoriter). Annotasyonsuz closure (`değişken f = || ...`) için alan NULL
+kalır → eski `beklenen` davranışı korunur.
+
+**Ölçüm ayrımı (neden `|| 3.5` çalışıp `|| "selam"` çökmüştü):** `değişken v: kesirli64 = f();`
+çağrı yerine `beklenen="double"` verir → tesadüfen doğru. `metin_uzunluk(f())` ise built-in argümanı;
+`beklenen` YAYILMIYOR → i32 tahmini. Karşılaştırma kontrolü: `metin_uzunluk(kimlik("selam"))`
+(kullanıcı fonksiyonu) çalışıyordu — çünkü dönüş tipi imza tablosundan geliyor; sorun **yalnız
+closure** yolundaydı.
+
+**KAPSAM / SINIR:**
+- **Yalnız ifade-form gövde.** Blok-form (`|| { ...; ver x; }`) dönüşü **i32 KALIR** (mevcut davranış
+  birebir korunur). Çıkarsanamaz çünkü blok içindeki `ver` emit edilirken `g_donus_tip`'e ihtiyaç duyar,
+  tipi öğrenmek için ise gövdeyi emit etmek gerekir — **döngüsel**. Çözümü gövde ön-taraması (ayrı iş,
+  D-072).
+- **Bildirilen tip ≠ gövdenin doğal tipi** (örn. `işlev() -> tam64 = || 42`; literal doğal tipi i32)
+  BU işle çözülmez — regresyon da değil, **aynı kalır**.
+- **`görev<T>`'yi TEK BAŞINA AÇMAZ** (D-291'deki iddiamın düzeltmesi): `kdl_gorev_birlestir` de i32
+  döner; `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme ayrı, runtime-tarafı iş.
+- **PARİTE BORCU (dürüstçe):** bu çıkarsama `selfhost/codegen.kem`'de **YOK** → C derleyici ileride.
+  Gateler geçiyor çünkü korpusta i32-dışı lambda yok. D-291/D-292'nin görev/kanal codegen'i de aynı
+  durumda. Port ayrı iş.
+
+**KANIT:** `test_llvm` **250/250** (+3: metin ara-değişkenle → exit 5; **metin iç-içe built-in
+argümanında → exit 5** — regresyon vakasını kilitler; kesirli64 → 42). Regresyon: lambda **5/5**,
+codegen semantik parite **76/76**, **SELF-HOST FIXPOINT ✓** (stage1==stage2, 33371 satır), `test_tumu`.
+
+---
+
+## D-292 — KATMAN 2 TAM: `kanal_oluştur` kurucusu + kanal codegen + BLOKLAYAN kanal (sessiz-yanlış-cevap kapatıldı) (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-291).
+
+**Karar [ETKİ: `src/tip_kontrol.c` (kanal_oluştur intrinsic: beklenen-tip yolu + DRF006),
+`src/llvm.c` (3 kanal intrinsic emisyonu + 3 declare), `runtime/kdl_runtime.c` (kanal BLOKLAYICI),
+`runtime/kdl_kanal.h/.c` + `test/bare_metal/kanal_arm.c` (ABI birleştirme), `test/test_drf.c` (+5),
+`test/test_gorev_rt.c` (+4), `test/test_llvm.c` (+2), `test/ornekler/kanal_mesaj.kem` (YENİ),
+`belgeler/KEMGU_Bellek_Modeli.md` (R-KANAL yeniden yazıldı).]**
+
+**Mehmet'in kararı (soruldu, onaylandı):** tek yönsüz `kanal<T>` + `kanal_oluştur(kapasite)`.
+Alternatif (spec'e sadık ayrık `gönderen<T>`/`alan<T>` uçlar) reddedildi — belirgin şekilde büyük iş.
+
+**Kapatılan boşluk 1 — kurucu yoktu:** DRF V1'de `kanal<T>` KURUCUSU yoktu; 39 DRF testinin tamamı
+kanalı *parametre* alıyordu, hiçbiri yaratmıyordu → gerçek bir programda `kanal<T>` değeri elde etmek
+**imkânsızdı** (codegen eklense bile). `kanal_oluştur(n)`'nin T'si bir DEĞER argümanından çıkarsanamaz
+(kanal boş başlar) → **beklenen tipten** gelir (`dizi_olustur<T>(N)` / boş dizi deseni). Bağlam yoksa
+sessizce bir T uydurmak yerine **DRF006**.
+
+**Kapatılan boşluk 2 — kanal SESSİZ YANLIŞ CEVAP veriyordu (asıl bulgu):** host `kdl_kanal_al` boş
+kanalda **0 dönüyordu** — ve o 0, gerçekten gönderilmiş bir 0'dan **AYIRT EDİLEMEZ**; `kdl_kanal_gonder`
+dolu kanalda mesajı **sessizce DÜŞÜRÜYORDU**. İkisi de R-KANAL sahiplik-transferini bozar (transfer
+edilmemiş değer alınmış görünür) ve "çökmezlik/yarış-yok" iddiasıyla çelişir. Artık her iki yön de
+**koşul değişkeniyle BLOKLAR** (Win32 CONDITION_VARIABLE / pthread_cond, `while(koşul)` döngüsünde —
+sahte uyanma güvenli). Bu, bare-metal `kdl_kanal.c`'nin (preemption altında busy-wait) **zaten doğru**
+olan sözleşmesiyle host'u hizalar. **Risk yok:** host kanal API'si ölü koddu (tek çağıran
+`bare_metal/kanal_arm.c` ve o BARE-METAL başlığı kullanıyor).
+
+**Kapatılan boşluk 3 — latent ABI tuzağı:** `kdl_kanal_olustur` host'ta `(int32_t)`, bare-metal'de
+`(void)` idi. Codegen tek `@kdl_kanal_olustur(i32)` çağırdığı için bare-metal hedefte kapasite
+**sessizce yutulacaktı**. Bare-metal imzası `(int kapasite)` yapıldı ve **dürüst** davranıyor: istenen
+kapasite derleme-zamanı halkayı aşarsa sessizce kırpmak yerine **0 döner**. Artık tek çağrı iki
+backend'e de aynı ABI ile bağlanır.
+
+**Kapatılan boşluk 4 — `kanal<T>`'nin SESSİZ veri kaybı (Mehmet kararı: 32-bit kısıt):** kanal codegen'i
+eklenince ortaya çıktı ki `kanal<tam64>` **derleniyor, çalışıyor ve sessizce veri kaybediyor**: 2^33
+gönderilip alındığında eşit çıkmıyor (ÖLÇÜLDÜ: exit 1). Sebep: runtime tamponu monomorfik `int32_t`,
+codegen değeri `i32` operandına zorluyor. Bu, hata modunu **loud → silent**'a çevirirdi (kanal codegen'i
+YOKKEN aynı program tanımsız-sembol link hatası veriyordu) — kabul edilemez.
+**Çözüm (Mehmet onayladı):** `kanal<T>` V1'de yalnız **32-bit tamsayı T** (tam8/16/32, dtam8/16/32).
+Tıkaç `kanal<T>` TİPİNİN çözüldüğü tek noktada (`DUGUM_TIP_KANAL`) → parametre/değişken/dönüş fark
+etmeksizin her kullanımı kapsar (ölçüldü). En iyi hata modu: **derleme zamanı, açık KEMGU tanısı**.
+- **ÖLÇÜM DÜZELTMESİ (kendi ilk hipotezim yanlıştı):** `kanal<metin>` sessiz DEĞİLDİ — LLVM zaten
+  gürültülü reddediyordu (`'%N' defined with type 'ptr' but expected 'i32'`). Tek gerçekten SESSİZ vaka
+  `kanal<tam64>`. Kısıt ikisini de düzgün bir tanıya çeviriyor.
+- **Test beklentisi DEĞİŞTİ (dürüstçe kaydedilir):** D4 (`kanal<metin>` = 0 hata) ve D6
+  (`kanal<Dizi<tam32>>` = 0 hata) artık **DRF006 bekliyor**. Dilin kabul ettiği küme daraldı.
+- **`görev<T>`'de simetrik kısıt YOK — çünkü gerek yok (ölçüldü):** `görev<tam64>` tip kontrolünde
+  **T001** ile yakalanıyor (lambda'nın gerçek dönüşü tam32 → `görev<tam32>` ≠ `görev<tam64>`),
+  `görev<metin>` ise LLVM'de gürültülü hata veriyor. **görev'in sessiz yolu yok.** Asimetrinin sebebi:
+  `kanal_gönder(k, v)`'de v, T ile uyumlu olduğu için tip kontrolünden geçer ve kırpma yalnız codegen'de
+  olur. (Bilinen pürüz: `görev<metin>`'in mesajı backend sızdırıyor — düzgün tanı ayrı iş.)
+
+**SINIR (bilinçli):** yön tip-seviyesinde garanti EDİLMEZ (aynı görev hem gönderip hem alabilir) —
+tek-`kanal<T>` kararının açık bedeli, `KEMGU_Bellek_Modeli.md` R-KANAL'da kayıtlı. Kanal monomorfik
+i32 taşır (D-291'deki T=tam32 sınırıyla AYNI kök: IR'de T i32'ye sabit) → genişletme, lambda dönüş-tipi
+çıkarsamasıyla BİRLİKTE gelmeli.
+
+**KANIT (bloklamayı AYIRT EDEN testler — "42 döndü" yetmez):**
+- `test_gorev_rt` **13/13** (+4): **[10] boş kanalda `kanal_al` BLOKLAR** — gönderici bilerek gecikir,
+  böylece alıcı kesinlikle önce girer; **eski sürüm burada deterministik olarak 0 dönerdi**.
+  **[11] dolu kanalda `kanal_gonder` BLOKLAR** (kap=2, 5 mesaj, toplam 15 — eski sürümde taşanlar
+  düşerdi). [12] FIFO sırası. [13] NULL savunması.
+- `test_llvm` **247/247** (+2): görev→kanal→main mesaj geçişi (exit 42) + akış denetimi (exit 15).
+  **Ayırt edicilik EMPİRİK olarak gözlendi:** bayat (bloklamayan) `kdl_runtime.o` ile aynı program
+  exit **0** veriyordu; bloklayan runtime ile **42**. Test gerçekten semantiği ölçüyor.
+- `test_drf` **44/44** (+5: D40 annotasyonlu, D41 bağlamsız→DRF006, D42 arity, D43 kapasite-tamsayı-değil,
+  D44 kurucu+gönder+al kompozisyonu).
+- Determinizm: mesaj geçişi **30/30**, akış denetimi **20/20** (yarış yok — bloklama sayesinde).
+- Regresyon: bare-metal `calistir_kanal_test_arm` **geçti** (toplam=55 — imza değişikliği kırmadı),
+  **SELF-HOST FIXPOINT ✓** (stage1==stage2, 33371 satır; korpus 92), codegen parite **76/76**.
+
+**SÜREÇ DERSİ:** `make` varsayılan hedefi `build/kdl_runtime.o`'yu KURMUYOR. İlk kanal denemesi bu
+yüzden exit 0 verdi (bayat runtime) — IR doğruydu, obje eskiydi. Elle sondajlarda runtime'a dokunduysan
+`mingw32-make build/kdl_runtime.o` şart; `calistir_*_test` hedefleri bağımlılıktan ötürü güvenli.
+
+---
+
+## D-291 — KATMAN 2 CANLANDI: `görev_başlat`/`görev_birleştir`/`dondur` codegen + GERÇEK thread runtime (2026-07-16) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-290).
+
+**Karar [ETKİ: `src/llvm.c` (ast_tip_to_ir: görev/kanal→ptr; CAGRI'da 3 intrinsic erken-dönüş; 2 declare),
+`runtime/kdl_runtime.c` (KdlGorev genişletme + kdl_gorev_basla_kapanis + gerçek-thread sayaçları),
+`test/test_gorev_rt.c` (YENİ, 9 test), `test/test_llvm.c` (+4 uçtan uca), `test/ornekler/gorev_temel.kem`
+(YENİ).]** Katman 2 bugüne dek **yalnız ön-yüz**tü: tip sistemi + DRF tanılamaları eksiksiz (39/39) ama
+codegen SIFIR — bilinçli erteleme (D-008). Bu adım o ertelemeyi kapatır: **`görev` artık gerçekten çalışır.**
+
+**Ölçülen başlangıç durumu (falsifiye-kanıt):** `görev_başlat(|| 42)` bugün
+`call i32 @"görev_başlat"({ptr,ptr})` üretiyordu → `error: use of undefined value '@görev_başlat'`
+(link kırık). `görev<T>` ise `ast_tip_to_ir`'ın sonundaki `return "i32"` fallback'ine düşüyordu →
+**64-bit handle 32 bite kırpılır**. `dondur` da aynı sınıfta tanımsız sembol.
+
+- **Kilit bulgu — fat value zaten (fn, arg) çifti:** `işlev(...)` IR'de `{ ptr fn, ptr env }` (V2-F1) ve
+  çağrı ABI'si `env==null → fn(ρ)`, `env!=null → fn(ρ, env)` (V2-F4.2a ρ-ABI). Bu, bir thread-start'ın
+  ihtiyacı olan şeyin **aynısı** → görev_başlat = fat value'yu açıp runtime'a geçirmek. Ek closure
+  makinesi GEREKMEDİ.
+- **Cast-siz ABI (ölçülmüş karar):** wrapper'ın fn'i doğru imzayla çağırması gerek; ama `void*`→fn-ptr
+  `-Wpedantic`, fn-ptr→fn-ptr ise `-Wcast-function-type` uyarısı veriyor (**ikisi de ampirik ölçüldü**;
+  sıfır-uyarı hedefi ikisini de eler). Çözüm: codegen aynı `ptr`yi **iki ayrı tipli parametreye**
+  (`KdlGorevBare`/`KdlGorevKapanis`) geçer, C tarafı `env`e bakıp doğru olanı çağırır → her işaretçi
+  YALNIZ kendi gerçek tipiyle çağrılır: ne uyarı ne UB.
+- **Mevcut runtime yeniden kullanıldı:** `kdl_gorev_birlestir(KdlGorev*) -> i32` kdl_runtime.c'de ZATEN
+  vardı ve tam doğru imzadaydı; yalnız başlatıcı (ρ + env geçiren) eklendi.
+- **S1/S2 yapısal:** `kdl_gorev_basla_kapanis` her göreve `kdl_bolge_olustur()` ile KENDİ ρ_sahip'ini verir;
+  çağıranın ρ'su paylaşılmaz → iki thread aynı bump-allokatöre yazamaz. Test [7] iki görevin ρ'sunun
+  AYRI olduğunu doğrudan ölçer.
+
+**SINIR (bilinçli, dürüst):**
+- **ρ_sahip SERBEST EDİLMEZ (sızıntı).** R-BİRLEŞTİR "diğer bölgeler serbest" der; ama serbest bırakmak
+  görev-gövdesi tahsislerinin ρ_sahip'e HAPSOLDUĞUNU gerektirir (gövde, yakalanan bir `&değişken`e
+  ρ_sahip'ten işaretçi yazarsa serbest = UAF). Böyle bir **pozitif hapsedilme kanıtı YOK** — F4.2b'de
+  ρ_yerel ancak böyle bir kanıt + adversarial tarama sonrası serbest bırakılmıştı. Kanıtsız serbest
+  bırakmak yerine SIZDIRIYORUZ (güvenli taraf; F2 closure-env sızıntısıyla aynı status quo).
+  `kdl_bolge_bakiye()` bunu dürüstçe raporlar.
+- **T fiilen tam32.** Lifted lambda'nın IR dönüşü bugün SABİT i32 (`llvm.c` lambda_emit: "v1: tek-ifade
+  gövde i32") — **önceden var olan lambda sınırı**, görev getirmedi. Yan etkisi olumlu: codegen float
+  dönen lambda üretemediği için float-T'nin sessiz-bozulma riski yapısal olarak YOK. T'nin genişlemesi
+  lambda dönüş-tipi çıkarsamasıyla BİRLİKTE gelmeli (tek iş).
+- **`dondur` V1'de identity** (sıfır talimat): mutable→immutable daraltma yalnız TİP seviyesinde. Gerçek
+  frozen-flag (R-PAYLAŞ zorlaması) V2 — tip_kontrol.c DRF005 notu zaten öyle diyor.
+- **`kanal` HÂLÂ ÇALIŞMIYOR ve bu adımın kapsamı dışı:** DRF V1'de **kanal kurucusu YOK**. Tüm DRF
+  testleri kanalı *parametre* olarak alıyor (`işlev test(k: kanal<tam32>)`); hiçbiri kanal yaratmıyor →
+  gerçek bir programda `kanal<T>` değeri elde etmek İMKÂNSIZ, codegen eklense bile. Kurucu bir **syntax
+  kararı** (Mehmet'e sorulacak; spec `gönderen<T>`/`alan<T>` ayrık uçlar derken implementasyon tek
+  yönsüz `kanal<T>` kullanıyor — bu ayrışma da kararla birlikte çözülmeli).
+
+**Kanıt (gerçek derle+çalıştır, "42 döndü" ile yetinmeden):**
+- `test_gorev_rt` **9/9** — kritik olanlar: **[4] GERÇEK thread spawn edildi (sıralı fallback DEĞİL)** ve
+  **[7] S1: iki görevin ρ_sahip'i AYRI**. Bu iki test olmadan süit "yanlış sebeple" geçebilirdi: runtime
+  thread yaratılamazsa sessizce sıralı çalışır ve **aynı sonucu** üretir (D-287 LINCHPIN tuzağının aynı
+  sınıfı) → ayrım için `kdl_gorev_thread_sayisi`/`kdl_gorev_sirali_sayisi` sayaçları eklendi.
+- `test_llvm` **245/245** (+4: yakalamasız, yakalamalı closure env!=null, iki eşzamanlı görev 20+22, dondur).
+- Regresyon: DRF **39/39**, codegen semantik parite **76/76**, **SELF-HOST FIXPOINT ✓** (stage1==stage2,
+  33371 satır birebir — llvm.c'ye eklenen declare'ler self-host zincirini BOZMADI), lambda 5/5,
+  çıplak region-free 6/6, `test_tumu` exit 0.
+
+**Yan bulgu (kayda değer, ayrı iş):** skaler `&tam32` referansı bugün KEMGU'da **hiç okunamıyor** —
+`ver v` T020, `v + 0` T003, `*v` T001; yalnız taşınıp `&tam32` olarak döndürülebiliyor (D25 deseni). Hiçbir
+örnek/test skaler referans kullanmıyormuş. Bu yüzden `dondur`'un değer-turu testi yapı-referansı
+(`&Kutu` → `r.deger`) üzerinden yazıldı. Önceden var olan boşluk, bu adımın getirdiği değil.
+
+---
+
 ## D-290 — USERLAND ADIM 5+6 (SON): GERÇEK spawn+join (sys 12/14) + Model A program modeli teyidi — [15] SPAWN OK 🎉 (2026-07-14) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-289).

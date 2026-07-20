@@ -1,0 +1,52 @@
+// KEMGU Katman 2 (Concurrency / DRF V1) — kanal ile mesaj geçişi
+//
+// kanal_oluştur(kapasite: tam32) -> kanal<T>
+//     T bir DEĞER argümanından çıkarsanamaz (kanal başlangıçta boş) →
+//     BAĞLAMDAN gelir. Bu yüzden annotasyon zorunlu:
+//         değişken k: kanal<tam32> = kanal_oluştur(2);
+//     Bağlam yoksa DRF006 ile açıkça reddedilir (sessizce bir T uydurulmaz).
+//
+// kanal_gönder(k: kanal<T>, v: T) -> boş     — R-KANAL gönderim
+//     v'nin sahipliği ρ_kanal(k)'ye geçer (Γ' = Γ \ {v}). Kanal DOLUYSA yer
+//     açılana kadar BLOKLAR (akış denetimi) — mesaj ASLA sessizce düşmez.
+//
+// kanal_al(k: kanal<T>) -> T                 — R-KANAL alım
+//     Sahiplik ρ_sahip(t_alan)'a geçer. Kanal BOŞSA veri gelene kadar BLOKLAR.
+//     Bloklamasaydı "henüz gönderilmedi" ile "0 gönderildi" ayırt edilemezdi.
+//
+// NOT: `kanal<T>` lineer DEĞİLDİR (görev<T>'nin aksine) — kanal ucu yeniden
+// kullanılabilir bir transfer tamponudur; tüketilen yalnız GÖNDERİLEN değerdir.
+// Bu yüzden k hem üreticiye geçirilir hem main'de kullanılır.
+//
+// Bu örnek kapasiteyi bilinçli olarak 2 seçer ama 5 mesaj gönderir: üretici
+// dolu kanalda bloklamak ZORUNDA kalır → çift yönlü akış denetimi gerçekten
+// çalışır (yalnız "hiç bloklamadı" durumunda da geçen sahte bir test değil).
+//
+// Beklenen çıkış kodu: 15 (1+2+3+4+5, FIFO sırası korunarak)
+
+işlev uretici(k: kanal<tam32>) -> tam32 {
+    değişken i: tam32 = 1;
+    iken i <= 5 {
+        kanal_gönder(k, i);   // kanal doluyken burada bloklar
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+
+    // Üretici ayrı bir görevde (gerçek thread) koşar.
+    değişken g: görev<tam32> = görev_başlat(|| uretici(k));
+
+    // Tüketici (main): 5 mesajı sırayla al — kanal boşken bloklar.
+    değişken toplam: tam32 = 0;
+    değişken n: tam32 = 0;
+    iken n < 5 {
+        toplam = toplam + kanal_al(k);
+        n = n + 1;
+    }
+
+    görev_birleştir(g);   // R-BİRLEŞTİR — g tüketilmeli (yoksa L001)
+    ver toplam;
+}
