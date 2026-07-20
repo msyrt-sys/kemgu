@@ -24,8 +24,11 @@ işlev main() -> tam32 {
 ```
 
 > Geliştirme aşamasında: derleyici çekirdeği uçtan uca çalışıyor (KEMGU kaynağı →
-> native ikili), eşzamanlılık-güvenliği çekirdeği formel doğrulanmış. İşletim
-> sistemi ve self-hosting *vizyon* olarak yol haritasındadır (aşağıya bakın).
+> native ikili), eşzamanlılık-güvenliği çekirdeği formel doğrulanmış — ve
+> eşzamanlılık artık yalnız ispatlı değil, **çalışır**: `görev`/`kanal` gerçek
+> thread'lere ve bloklayan kanallara indirgenir. Self-host bootstrap **fixpoint'i
+> tuttu** (derleyici kendini bayt-birebir üretiyor); tam parite ve işletim sistemi
+> yol haritasındadır (aşağıya bakın).
 
 ---
 
@@ -84,6 +87,7 @@ makine-denetimli).
 | Çapraz-modül generic monomorphization | codegen | Generic fonk **ve** struct'lar dosyalar arası örneklenir (`kap::Liste<T>`). |
 | Nitelikli tip annotasyonu (`mod::Tip<args>`) | codegen | Tip pozisyonunda modül-nitelikli tip: `değişken l: dizi::Liste<tam64> = dizi::oluştur(böl)`. Çapraz-modül struct alan erişimi dahil. **v1 sınırı:** nitelikli *inşa ifadesi* `mod::Yapı{...}` henüz yok (factory + çıkarsama ile). |
 | Bit operatörleri (`&` `\|` `<<` `>>`) | codegen | Tamsayı genişlikleri arası otomatik dönüşüm. |
+| Eşzamanlılık `görev<T>` / `kanal<T>` | codegen | `görev_başlat(\|\| …)` **gerçek işletim-sistemi thread'i** başlatır (Win32/pthread); `görev_birleştir` sonucu çağırana taşır. `kanal_oluştur/gönder/al` — **bloklayan** kanal, çift yönlü akış denetimi (dolu kanalda gönderim, boş kanalda alım bekler). Her görev **kendi bölgesini** sahiplenir (S1/S2) → paylaşılan-bölge yarışı yapısal olarak imkânsız. Statik denetim DRF001-006; `görev<T>` lineerdir (birleştirilmezse L001, iki kez birleştirilirse L002). **v1 sınırı:** `T` ∈ {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`Dizi<T>`), `boş`} — kesirli `T` reddedilir (runtime tamsayı yazmacından okur). Görev bölgesi henüz serbest bırakılmaz (bilinçli sızıntı; hapsedilme kanıtı bekliyor). |
 
 ### Derleyici
 
@@ -165,19 +169,20 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 
 | Altsistem | Derinlik | Not |
 |-----------|----------|-----|
-| Statik DRF tip kontrolü (`görev`/`kanal`) | tip | Bölge-sahipliği tabanlı veri-yarışı denetimi (DRF001-005). |
 | `sabitsüre<T>` sabit-zaman | tip | Yan-kanal disiplini tip seviyesinde. |
 | `gerçekzamanlı` / WCET | tip | RT001-RT005 realtime kuralları. |
 | `vektör` SIMD | tip + codegen | Tip kontrolü + LLVM end-to-end. |
 | MMIO temeli | tip + runtime | `yetki<MMIO>` zorunluluğu (MM001-003); C testi 23/23. |
 | LSP sunucusu | runtime | stdio JSON-RPC; hover, completion, tanıma-git. |
+| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (33.371 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik 76/76 korpus. `mingw32-make calistir_codegen_bootstrap`. **Sınır:** en yeni C-codegen özellikleri (eşzamanlılık, lambda dönüş çıkarsaması) henüz port edilmedi. |
 
 ### Test & Kalite
 
-- **1200+ birim/entegrasyon testi**, 31 paket, **0 başarısız** — canlı çalıştırıldı.
+- **1200+ birim/entegrasyon testi**, 32 paket, **0 başarısız** — canlı çalıştırıldı.
   Bellek alan paketler Clang64 **ASan + UBSan** ile derlenir, temiz.
-  (Öne çıkanlar: `llvm` 205 uçtan-uca derle+çalıştır, `tip_kontrol` 174,
-  `parser` 107, `lexer` 103, `linear` 57, `capability` 40, `snapshot` 50.)
+  (Öne çıkanlar: `llvm` 263 uçtan-uca derle+çalıştır, `tip_kontrol` 174,
+  `parser` 107, `lexer` 103, `linear` 57, `drf` 50, `snapshot` 50,
+  `capability` 40, `görev_rt` 13 eşzamanlılık-runtime.)
 - **30.000 fuzz iterasyonu** (10.000 + 4×5.000), **0 çökme**, ASan/UBSan altında.
 - **Lean ispatı** `lake build` temiz, 0 `sorry`.
 
@@ -213,8 +218,39 @@ işlev ad_ver(o: seçimlik<metin>) -> metin {
 }
 ```
 
+```kemgu
+// ----- Eşzamanlılık: görev + kanal (gerçek thread'ler) -----
+işlev uretici(k: kanal<tam32>) -> tam32 {
+    değişken i: tam32 = 1;
+    iken i <= 5 {
+        kanal_gönder(k, i);        // kanal doluysa BLOKLAR (akış denetimi)
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);   // kapasite 2
+
+    // Ayrı bir thread'te çalışır; KENDİ bölgesini sahiplenir (S1/S2) —
+    // çağıranla bölge paylaşmadığı için veri yarışı yapısal olarak imkânsız.
+    değişken g: görev<tam32> = görev_başlat(|| uretici(k));
+
+    değişken toplam: tam32 = 0;
+    değişken n: tam32 = 0;
+    iken n < 5 {
+        toplam = toplam + kanal_al(k);   // kanal boşsa BLOKLAR
+        n = n + 1;
+    }
+
+    görev_birleştir(g);    // g lineer: birleştirilmezse L001 (derleme hatası)
+    ver toplam;            // → 15
+}
+```
+
 Daha fazla örnek: [`test/ornekler/`](test/ornekler/) — tutoriyal serisi
-`01_merhaba.kem` → `09_arm64.kem`.
+`01_merhaba.kem` → `09_arm64.kem`; eşzamanlılık için `gorev_temel.kem` ve
+`kanal_mesaj.kem`.
 
 ---
 
@@ -423,7 +459,10 @@ Dürüst zaman-ufukları. Hiçbiri "mevcut" değildir.
 - Bölge/escape analizini sürücü hattına bağlama + **otomatik-serbestleyen arena**.
 
 ### Vizyon (uzun vade — açıkça hedef, "yakında" değil)
-- **Self-hosting derleyici** (KEMGU ile yazılmış KEMGU derleyicisi).
+- **Self-host paritesini kapatma.** Bootstrap **fixpoint'i tuttu** (yukarıdaki
+  "Diğer Doğrulanmış Altsistemler" tablosu), ama C derleyici öndedir: en yeni codegen özellikleri (eşzamanlılık, lambda
+  dönüş-tipi çıkarsaması) `selfhost/codegen.kem`'e **henüz port edilmedi**.
+  Gateler geçiyor çünkü doğrulama korpusunda bu şekiller yok — borç gerçek.
 - **Saf-KEMGU işletim sistemi** + sürücüler (zamanlayıcı, MMU, syscall).
 - **DRF ispatı V2** — tam-dil, per-thread bölgeler, operasyonel/runtime tanık,
   yan-kanal + WCET bileşenleri teoreme dahil.
