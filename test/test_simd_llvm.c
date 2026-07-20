@@ -31,21 +31,40 @@ static void test_sonuc(const char *ad, int durum) {
 }
 
 #ifdef _WIN32
+#include <process.h>
 #define DEV_NULL "NUL"
-#define KEM_PATH ".\\build\\test_simd_temp.kem"
-#define LL_PATH ".\\build\\test_simd_temp.ll"
-#define EXE_PATH ".\\build\\test_simd_temp.exe"
 #define KEMGU_BIN ".\\build\\kemgu.exe"
+#define YOL_ONEK ".\\build\\"
+#define SUREC_NO() ((int)_getpid())
 #else
+#include <unistd.h>
 #define DEV_NULL "/dev/null"
-#define KEM_PATH "./build/test_simd_temp.kem"
-#define LL_PATH "./build/test_simd_temp.ll"
-#define EXE_PATH "./build/test_simd_temp.exe"
 #define KEMGU_BIN "./build/kemgu"
+#define YOL_ONEK "./build/"
+#define SUREC_NO() ((int)getpid())
 #endif
 
+/* D-297: gecici yollar SUREC-BENZERSIZ — bkz. test_llvm.c'deki ayrintili not.
+ * Sabit yol, ayni testin iki es zamanli kosumunda SAHTE kirmizi uretiyordu. */
+static char KEM_PATH[64];
+static char LL_PATH[64];
+static char EXE_PATH[64];
+
+static void gecici_yollari_kur(void) {
+    int pid = SUREC_NO();
+    snprintf(KEM_PATH, sizeof(KEM_PATH), "%stest_simd_%d.kem", YOL_ONEK, pid);
+    snprintf(LL_PATH,  sizeof(LL_PATH),  "%stest_simd_%d.ll",  YOL_ONEK, pid);
+    snprintf(EXE_PATH, sizeof(EXE_PATH), "%stest_simd_%d.exe", YOL_ONEK, pid);
+}
+
+static void gecici_yollari_temizle(void) {
+    remove(KEM_PATH);
+    remove(LL_PATH);
+    remove(EXE_PATH);
+}
+
 static int derle_ve_calistir(const char *kemgu_kaynak) {
-    FILE *f = fopen("build/test_simd_temp.kem", "w");
+    FILE *f = fopen(KEM_PATH, "w");   /* D-297: surec-benzersiz */
     if (!f) return -1;
     fputs(kemgu_kaynak, f);
     fclose(f);
@@ -136,6 +155,7 @@ static void test_vektor_eleman(void) {
 /* === Ana === */
 
 int main(void) {
+    gecici_yollari_kur();   /* D-297 */
     printf("=== KEMGU SIMD LLVM Backend Test Paketi ===\n\n");
 
     test_vektor_doldur_topla_42();
@@ -147,5 +167,6 @@ int main(void) {
     printf("\n=============================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
            toplam_test, basarili, basarisiz);
+    gecici_yollari_temizle();   /* D-297 */
     return basarisiz == 0 ? 0 : 1;
 }
