@@ -179,13 +179,18 @@ t_hedef sonlandırılır
 `T` bir değer argümanından çıkarsanamaz (kanal boş başlar) → **bağlamdan**
 gelir (`dizi_olustur<T>(N)` / boş dizi deseni). Bağlam yoksa **DRF006**.
 
-> **V1 sınırı (D-292):** `T` **32-bit tamsayı** olmalı (`tam8/16/32`,
-> `dtam8/16/32`). Runtime kanal tamponu monomorfik `int32_t` taşır; geniş `T`
-> ölçüldüğünde `kanal<tam64>` **derlenip çalışıyor ve sessizce veri kaybediyordu**
-> (2^33 gönderilip alındığında eşit çıkmıyor). Bu yüzden geniş `T` tip
-> seviyesinde **DRF006** ile reddedilir — derleme zamanı, açık tanı. Genişletme
-> (i64/işaretçi taşıyan kanal) `görev<T>`'nin aynı kökten gelen T=tam32 sınırıyla
-> **birlikte** ele alınmalı (ikisinde de IR'de T i32'ye sabit).
+> **V1 sınırı (D-295; D-292'nin 32-bit kısıtını DEĞİŞTİRİR):** `T` ∈
+> {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`&T`/`Dizi<T>`), `boş`}.
+> D-292'de kanal tamponu `int32_t` taşıyor ve `T` 32-bit tamsayıyla sınırlıydı;
+> o kısıt yalnız `--check`i kapatıyordu ve `--llvm` tip kontrolü ÇALIŞTIRMADIĞI
+> için `kanal<tam64>` o yoldan derlenip **sessizce veri kaybediyordu** (ölçüldü).
+> D-295'te tampon — `görev` ile simetrik olarak — `int64_t`ye genişletildi:
+> kırpma sınıfı *gürültülü yapılmak yerine ortadan kaldırıldı*.
+>
+> **Kalan kısıt: kesirli `T`** (`görev` ile aynı gerekçe) — kanal tamsayı taşır,
+> kesirli değer `fptosi` ile girer, yani **değer** bozulur. Tip seviyesinde
+> **DRF006** ile reddedilir; `--check` atlansa bile emisyon `sext double → i64`
+> üretir ve bu **geçersizdir** → LLVM gürültülü reddeder (katmanlı savunma).
 
 **Gönderim:**
 ```

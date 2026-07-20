@@ -119,19 +119,17 @@ static void T3_kanal_tam32(void) {
     test_sonuc("D3: kanal<tam32> parametre + kanal_al = 0 hata", h == 0);
 }
 
-static void T4_kanal_metin_v1_reddedilir(void) {
-    /* D-292: BEKLENTI DEGISTI (eskiden "0 hata" idi). Runtime kanal tamponu
-     * monomorfik int32_t tasir; kanal<metin> ile codegen metin ptr'ini `i32`
-     * operandi olarak gecirmeye calisir ve LLVM reddeder ("'%N' defined with
-     * type 'ptr' but expected 'i32'") — anlamsiz, backend-sizintili bir mesaj.
-     * Artik TIP seviyesinde, acik bir KEMGU tanisiyla reddediliyor.
-     * Karar: Mehmet (T'yi 32-bit tamsayiya kisitla). */
+static void T4_kanal_metin(void) {
+    /* D-295: kanal tamponu int64_t'ye genisletildi (gorev ile simetrik) ->
+     * isaretci T ARTIK CALISIR. (D-292'de gecici olarak DRF006 bekleniyordu;
+     * o kisit `--check`i kapatiyordu ama `--llvm` tip kontrolu calistirmadigi
+     * icin sessiz kirpmaya aciti — kisiti gurultulu yapmak yerine SINIFI YOK
+     * ETTIK.) Uctan uca kanit test_llvm.c'de. */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<metin>) -> metin {\n"
         "    ver kanal_al(k);\n"
         "}\n");
-    test_sonuc("D4: kanal<metin> -> DRF006 (V1: T 32-bit tamsayi olmali)",
-               h >= 1);
+    test_sonuc("D4: kanal<metin> = 0 hata (i64 tasima, D-295)", h == 0);
 }
 
 static void T5_gorev_nested_kanal(void) {
@@ -143,16 +141,13 @@ static void T5_gorev_nested_kanal(void) {
     test_sonuc("D5: gorev<kanal<tam32>> nested = 0 hata", h == 0);
 }
 
-static void T6_kanal_nested_dizi_v1_reddedilir(void) {
-    /* D-292: BEKLENTI DEGISTI (eskiden "0 hata" idi) — D4 ile ayni gerekce
-     * (Dizi<T> runtime'da ptr; i32 kanal tamponuna sigmaz). Parser/tip
-     * ic-ice generic'i hala dogru cozuyor; reddedilen yalniz T'nin GENISLIGI. */
+static void T6_kanal_nested_dizi(void) {
+    /* D-295: D4 ile ayni gerekce — Dizi<T> runtime'da ptr, i64 tampona sigar. */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<Dizi<tam32>>) -> Dizi<tam32> {\n"
         "    ver kanal_al(k);\n"
         "}\n");
-    test_sonuc("D6: kanal<Dizi<tam32>> -> DRF006 (V1: T 32-bit tamsayi olmali)",
-               h >= 1);
+    test_sonuc("D6: kanal<Dizi<tam32>> = 0 hata (i64 tasima, D-295)", h == 0);
 }
 
 /* ========================================================================
@@ -568,22 +563,34 @@ static void T49_gorev_metin_kabul(void) {
     test_sonuc("D49: gorev<metin> = 0 hata (isaretci T destekleniyor)", h == 0);
 }
 
-static void T45_kanal_genis_T_reddedilir(void) {
-    /* D-292 / Mehmet kararı: kanal<T> V1'de yalnız 32-bit tamsayı T.
-     * kanal<tam64> ÖLÇÜLDÜ: derleniyor, çalışıyor ve SESSİZCE veri kaybediyor
-     * (2^33 gönder→al eşit çıkmıyor) — codegen değeri i32'ye kırpıyor, LLVM
-     * şikâyet etmiyor. Bu, hata modunu loud→silent'a çevirirdi. Artık tip
-     * seviyesinde reddediliyor. */
+static void T45_kanal_tam64_calisir(void) {
+    /* D-295 (D-292'nin kısıtını DEĞİŞTİRİR). D-292'de kanal<tam64> DRF006 ile
+     * reddediliyordu; o tıkaç yalnız `--check`i kapatıyordu ve `--llvm` tip
+     * kontrolü ÇALIŞTIRMADIĞI için o yoldan derlenip SESSİZCE veri kaybediyordu
+     * (ölçüldü: 2^33 gönder→al eşit değil). Kısıtı gürültülü yapmak yerine
+     * SINIFI YOK ETTİK: kanal tamponu int64_t (görev ile simetrik) → kırpma
+     * imkânsız. Uçtan uca kanıt (2^33 turu) test_llvm.c'de. */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<tam64>) -> tam64 {\n"
         "    ver kanal_al(k);\n"
         "}\n");
-    test_sonuc("D45: kanal<tam64> -> DRF006 (SESSİZ kırpma engellendi)",
-               h >= 1);
+    test_sonuc("D45: kanal<tam64> = 0 hata (i64 tasima, kirpma yok)", h == 0);
+}
+
+static void T50_kanal_kesirli_reddedilir(void) {
+    /* D-295 KALAN kısıt: kesirli T. Kanal tamsayı taşır; kesirli değer i64'e
+     * bit-korumalı girmez (fptosi DEĞERİ bozar) → görev ile AYNI gerekçeyle
+     * tip seviyesinde reddedilir. 2. katman (--llvm) test_llvm.c'de: emisyon
+     * `sext double -> i64` üretir, bu GEÇERSİZDİR → LLVM gürültülü reddeder. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test(k: kanal<kesirli64>) -> kesirli64 {\n"
+        "    ver kanal_al(k);\n"
+        "}\n");
+    test_sonuc("D50: kanal<kesirli64> -> DRF006 (kesirli T yok)", h >= 1);
 }
 
 static void T46_kanal_dar_tamsayi_kabul(void) {
-    /* Kısıt fazla geniş olmamalı: 32-bitten DAR tamsayılar kayıpsız sığar. */
+    /* D-295: dar tamsayı da kayıpsız (i64 taşıma + alımda trunc). */
     int h = hata_sayisi(
         "i\xc5\x9flev test(k: kanal<tam8>) -> tam8 {\n"
         "    ver kanal_al(k);\n"
@@ -613,9 +620,9 @@ int main(void) {
     T1_gorev_tam32();
     T2_gorev_metin();
     T3_kanal_tam32();
-    T4_kanal_metin_v1_reddedilir();
+    T4_kanal_metin();
     T5_gorev_nested_kanal();
-    T6_kanal_nested_dizi_v1_reddedilir();
+    T6_kanal_nested_dizi();
 
     /* D7-D12: gorev_baslat */
     T7_gorev_baslat_lambda();
@@ -670,7 +677,8 @@ int main(void) {
     T42_kanal_olustur_arity();
     T43_kanal_olustur_kapasite_tamsayi_degil();
     T44_kanal_olustur_gonder_al_kompozisyon();
-    T45_kanal_genis_T_reddedilir();
+    T45_kanal_tam64_calisir();
+    T50_kanal_kesirli_reddedilir();
     T46_kanal_dar_tamsayi_kabul();
 
     /* D47-D49: görev<T> genişletme + kesirli T reddi (D-294) */

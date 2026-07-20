@@ -5,6 +5,67 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-295 — 3 BLOKER onarımı: sessiz `i32` fallback'i elendi (ön-merge denetimi bulgusu) (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-294).
+
+**Nasıl bulundu:** `main`'e merge ÖNCESİ adversarial denetim (6 boyut paralel inceleme + her bulgu
+için 3 bağımsız çürütme lensi). 26 aday → 15 onaylanan, **3 bloker**. Üçü de bağımsız olarak
+derleyip-çalıştırarak teyit edildi. **Merge durduruldu, önce bunlar onarıldı.**
+
+**ORTAK KÖK:** codegen T'yi kurtaramadığında sessizce **`"i32"`** varsayıyordu. D-291→D-294 taşıyıcıyı
+i64'e genişletti ama fallback'i güncellemedi → i64 taşıyıcı i32'ye kırpılıyordu.
+
+| # | Program | --check | derleme | çalışma (ÖNCE) | SONRA |
+|---|---|---|---|---|---|
+| 1 | `değişken c = görev_başlat(\|\| tam64); değişken s = görev_birleştir(c);` | OK | OK | **exit 99** (doğrusu 1) | exit 1 ✓ |
+| 1b | aynısı, T=metin | OK | OK | **SEGFAULT** | exit 5 ✓ |
+| 2 | `kanal<tam64>` + `--llvm` (tip kontrolü atlanır) | DRF006 | OK | **exit 1** (doğrusu 42) | exit 42 ✓ |
+| 3 | `değişken f = \|\| "selam"; metin_uzunluk(f())` | OK | OK | **SEGFAULT** | exit 5 ✓ |
+
+**EN AĞIR OLGU — diff hata modunu LOUD→SILENT çeviriyordu:** aynı programlar `origin/main`'de
+`error: '%0' defined with type 'ptr' but expected 'i32'` ile **derlenmiyordu** (ölçüldü). Yani
+D-291→D-294, gürültülü derleme hatasını sessiz yanlış cevaba/segfault'a dönüştürmüştü — projenin
+kendi "loud > silent" ilkesinin birebir ihlali. D-292'nin "sessiz-yanlış-cevap kapatıldı" başlığı
+bu yüzden **yanlıştı**; kanal'da açtığı ikinci yolu görmemişti.
+
+**ONARIMLAR:**
+1. **`görev_birleştir` fallback `i32`→`i64`** (llvm.c). Kesirli T zaten reddedildiği için (D-294)
+   i64 son çare güvenli: hedeflerde (x86_64/aarch64) tamsayı ve işaretçi AYNI yazmaçta döner.
+2. **Closure çağrı yeri fallback `i32`→`i64`** (llvm.c). Annotasyonsuz closure'da ptr dönen lambda
+   artık kırpılmıyor. **Kalan açık (dürüstçe):** gövdesi kesirli dönen annotasyonsuz closure +
+   beklenen-yok hâlâ yanlış yazmaçtan okur; ama o vaka bugün de aşağı akışta **gürültülü** LLVM
+   reddi alıyor (ölçüldü) — i64 onu sessizleştirmiyor. Tam çözüm lambda dönüşünün çağrı yerinden
+   ÖNCE bilinmesini ister (ayrı iş).
+3. **Kanal runtime `int32_t`→`int64_t`** (host + bare-metal, AYNI ABI) + codegen T-farkında
+   gönderim/alım (`kanal_ic_ir`, `gorev_ic_ir` deseninin aynısı: gönderimde `sext`/`ptrtoint`,
+   alımda `trunc`/`inttoptr`).
+   **Neden "gürültülü yap" DEĞİL de "sınıfı yok et":** önce planım geniş T'de doğal tip geçirip
+   `declare` uyuşmazlığıyla LLVM'i reddettirmekti. **ÖLÇTÜM: LLVM imza uyuşmazlığını SESSİZCE
+   KABUL EDİYOR** (`opt -passes=verify` ve `llvm-as` exit 0) → plan geçersizdi. Ölçmeseydim
+   blokeri kapattığımı sanacaktım. Taşıyıcıyı genişletmek kırpma sınıfını tamamen ortadan kaldırır.
+
+**D-292'nin 32-bit kısıtı KALKTI (kapsam genişledi):** `kanal<tam64>`, `kanal<metin>`,
+`kanal<Dizi<T>>` artık GERÇEKTEN çalışıyor. **Kalan kısıt: kesirli T** (görev ile aynı gerekçe —
+kanal tamsayı taşır, `fptosi` DEĞERİ bozar). Katmanlı savunma kanal-float için de ölçüldü:
+`--llvm` tip kontrolünü atlasa bile emisyon `sext double → i64` üretir, bu **geçersizdir** → LLVM
+gürültülü reddeder.
+
+**TEST BEKLENTİSİ DEĞİŞTİ (dürüstçe):** D4/D6/D45 artık DRF006 değil **0 hata** bekliyor
+(yetenek genişledi); yeni D50 kesirli reddini kilitler.
+
+**KANIT:** `test_llvm` **258/258** (+6, hepsi ANNOTASYONSUZ biçimleri kullanır — kırık olan
+idiomatik biçimdi; annotasyonlular zaten geçiyordu). `test_drf` **50/50**. `test_gorev_rt` 13/13.
+Regresyon: bare-metal `calistir_kanal_test_arm` geçti (toplam=55 — i64 genişletme QEMU'da kırmadı),
+codegen parite **76/76**, **SELF-HOST FIXPOINT ✓** (33371 satır), `test_tumu`.
+
+**SÜREÇ DERSİ:** "Yeni bir tip kısıtı koyarken ikinci katmanı ÖLÇ" (D-294) yetmiyormuş — asıl ders:
+**taşıyıcı genişliğini değiştirince TÜM fallback'leri denetle.** Ayrıca denetim ajanlarına test
+sabotajı yaptırırken `test_llvm.c`'nin SABİT geçici dosya yolları (`build/test_llvm_temp.*`)
+eşzamanlı koşumda çakışıp 95 sahte hata üretti — test altyapısı sağlamlığı ayrı iş olarak kaydedildi.
+
+---
+
 ## D-294 — `görev<T>` genişletme: `görev<metin>` çalışıyor (runtime i64 taşıma) + kesirli T reddi (2026-07-17) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-293).

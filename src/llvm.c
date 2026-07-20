@@ -82,6 +82,10 @@ typedef struct LlvmIsim {
      * T'ye daraltmak (trunc / inttoptr) için T gerekir. NULL = görev değil /
      * annotasyonsuz (arena_ayir_sifir varsayılanı) → beklenen'e düşülür. */
     const char *gorev_ic_ir;
+    /* D-295: `kanal<T>` tipli değişken/parametrenin T IR tipi. kanal<T> de
+     * IR'de opak `ptr` — T'yi SİLER. Runtime kanalı i64 taşır; gönderimde
+     * T→i64, alımda i64→T dönüşümü için gerekir. NULL = kanal değil. */
+    const char *kanal_ic_ir;
     /* Liste<T> BUG-2 fix: tek-tip-arg'li generic kullanici tipi
      * (Liste<tam64> -> "i64") — &Liste<T> parametresinden T inference
      * icin yan-kanal (yapi IR'i type-erased %Liste, T tasimaz). */
@@ -567,6 +571,16 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
 static const char *gorev_ic_ir_al(LlvmGen *g, const Dugum *tip_d) {
     if (!tip_d || tip_d->tip != DUGUM_TIP_GOREV) return NULL;
     const Dugum *it = tip_d->veri.tip_gorev.ic_tip;
+    if (!it) return NULL;
+    return ast_tip_to_ir(g, it);
+}
+
+/* D-295: tip düğümü `kanal<T>` ise T'nin IR tipini döner, değilse NULL.
+ * `kanal<T>` de IR'de opak `ptr` (handle) — T SİLİNİR. Runtime kanalı i64
+ * taşır; gönderimde T→i64, alımda i64→T dönüşümü için T gerekir. */
+static const char *kanal_ic_ir_al(LlvmGen *g, const Dugum *tip_d) {
+    if (!tip_d || tip_d->tip != DUGUM_TIP_KANAL) return NULL;
+    const Dugum *it = tip_d->veri.tip_kanal.ic_tip;
     if (!it) return NULL;
     return ast_tip_to_ir(g, it);
 }
@@ -3449,10 +3463,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * ama) tutarlıydı; dönüş gövdeden çıkarsanınca tahmin kırıldı:
                      * beklenen'in yayılmadığı bağlamlarda (örn. `metin_uzunluk(f())`
                      * — built-in argümanı) ptr dönen lambda i32 olarak çağrılıp
-                     * SEGFAULT üretiyordu. Bildirilen tip otoriter → önce o. */
+                     * SEGFAULT üretiyordu. Bildirilen tip otoriter → önce o.
+                     *
+                     * D-295 (BLOKER onarımı): son çare "i32" DEĞİL, "i64".
+                     * D-293 yalnız BİLDİRİLEN tipi kurtardı; ANNOTASYONSUZ
+                     * closure (`değişken f = || "selam";`) hâlâ i32'ye düşüyor
+                     * ve ptr dönen lambda i32 olarak çağrılıp SEGFAULT veriyordu
+                     * (ölçüldü). i64 son çare, hedeflerimizde (x86_64/aarch64)
+                     * işaretçi ve tamsayı dönüşünün AYNI yazmaçta (rax/x0)
+                     * gelmesinden yararlanır → kırpma yok.
+                     * KALAN AÇIK (dürüstçe): gövdesi kesirli dönen ANNOTASYONSUZ
+                     * closure, beklenen de yoksa hâlâ yanlış yazmaçtan okur
+                     * (double v0/xmm0'da). Bu vaka bugün de aşağı akışta LLVM
+                     * tarafından GÜRÜLTÜLÜ reddediliyor (ölçüldü) — i64 onu
+                     * sessizleştirmiyor; tam çözüm lambda dönüşünün çağrı
+                     * yerinden önce bilinmesini ister (ayrı iş). */
                     const char *donus_indirect =
                         (vi && vi->kapanis_donus_ir) ? vi->kapanis_donus_ir
-                        : (beklenen ? beklenen : "i32");
+                        : (beklenen ? beklenen : "i64");
                     /* === V2-F1 fat-value dispatch ===
                      * vi fat değer { ptr fn, ptr env } tutar. env==null → bare
                      * fn(args); env!=null → closure fn(env,args). "Closure mu"
@@ -3574,8 +3602,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         d->veri.cagri.argumanlar[0]->veri.tanimlayici.metin,
                         d->veri.cagri.argumanlar[0]->veri.tanimlayici.uzunluk);
                 }
+                /* D-295 (BLOKER onarımı): son çare "i32" DEĞİL, "i64".
+                 * Eski zincir `... : (beklenen ? beklenen : "i32")` idi ve
+                 * annotasyonsuz görev + beklenen-yok durumunda i64 runtime
+                 * sonucunu SESSİZCE kırpıyordu:
+                 *   `değişken c = görev_başlat(|| buyuk_tam64);`
+                 *   `değişken s = görev_birleştir(c);`   -> trunc i64->i32
+                 * --check OK, LLVM OK, program YANLIŞ cevap veriyordu (ölçüldü:
+                 * 2^32 için exit 99, doğrusu 1); T=metin'de segfault. Yani D-291
+                 * öncesindeki GÜRÜLTÜLÜ hatayı (tanımsız sembol) SESSİZ yanlışa
+                 * çeviriyordu — projenin loud>silent ilkesinin ihlali.
+                 * i64 son çare taşıyıcının tam genişliğidir: kırpma YOK. Gerçek T
+                 * dar bir tamsayıysa daraltmayı aşağı akıştaki int_donustur
+                 * beklenen tiple yapar; T işaretçi ise i64'ü ptr yerine kullanmak
+                 * LLVM'de tip hatasıdır (GÜRÜLTÜLÜ) — sessiz bozulma değil. */
                 const char *t_ir = (gi && gi->gorev_ic_ir) ? gi->gorev_ic_ir
-                                 : (beklenen ? beklenen : "i32");
+                                 : (beklenen ? beklenen : "i64");
                 int r64 = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = call i64 @kdl_gorev_birlestir(ptr %%%d)\n",
@@ -3620,14 +3662,42 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (!ik && n == 2 && cagri_adi_uz == 13 &&
                 memcmp(cagri_adi, "kanal_g\xc3\xb6nder", 13) == 0) {
                 /* kanal_gönder(k: kanal<T>, v: T) -> boş  (R-KANAL gönderim)
-                 * Runtime kanal DOLUYSA BLOKLAR (akış denetimi). */
+                 * Runtime kanal DOLUYSA BLOKLAR (akış denetimi).
+                 *
+                 * D-295: değer i32'ye ZORLANMIYOR, T'nin doğal tipiyle üretilip
+                 * i64'e genişletiliyor. Eskiden `ifade_uret(v, "i32")` idi ve
+                 * `kanal<tam64>`de değeri SESSİZCE kırpıyordu (ölçüldü: 2^33
+                 * gönderilip alındığında eşit çıkmıyordu). `--check` bunu DRF006
+                 * ile reddediyordu ama `--llvm` tip kontrolünü ÇALIŞTIRMAZ →
+                 * o yol sessiz veri kaybına açıktı. Artık taşıyıcı i64. */
                 IfadeSonuc kv = ifade_uret(g, d->veri.cagri.argumanlar[0],
                                            "ptr");
-                IfadeSonuc vv = ifade_uret(g, d->veri.cagri.argumanlar[1],
-                                           "i32");
+                LlvmIsim *ki = NULL;
+                if (d->veri.cagri.argumanlar[0]->tip == DUGUM_TANIMLAYICI) {
+                    ki = isim_bul(g,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.metin,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.uzunluk);
+                }
+                const char *kt = (ki && ki->kanal_ic_ir) ? ki->kanal_ic_ir
+                                                         : "i64";
+                IfadeSonuc vv = ifade_uret(g, d->veri.cagri.argumanlar[1], kt);
+                int v64 = vv.reg;
+                if (strcmp(vv.tip, "i64") != 0) {
+                    v64 = yeni_reg(g);
+                    if (strcmp(vv.tip, "ptr") == 0) {
+                        fprintf(g->out, "  %%%d = ptrtoint ptr %%%d to i64\n",
+                                v64, vv.reg);
+                    } else {
+                        /* i1/i8/i16/i32 → sext (KEMGU tamsayıları işaretli;
+                         * dtamN işaretsiz yolu alım tarafında trunc ile geri
+                         * daraltıldığı için bit deseni korunur). */
+                        fprintf(g->out, "  %%%d = sext %s %%%d to i64\n",
+                                v64, vv.tip, vv.reg);
+                    }
+                }
                 fprintf(g->out,
-                    "  call void @kdl_kanal_gonder(ptr %%%d, i32 %%%d)\n",
-                    kv.reg, vv.reg);
+                    "  call void @kdl_kanal_gonder(ptr %%%d, i64 %%%d)\n",
+                    kv.reg, v64);
                 /* Çağıran bir IfadeSonuc bekliyor — void yerine placeholder
                  * (built-in şeridindeki void-call deseninin aynısı). */
                 int r = yeni_reg(g);
@@ -3641,12 +3711,35 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * Runtime kanal BOŞSA BLOKLAR — böylece "henüz gönderilmedi"
                  * ile "0 gönderildi" karışmaz (eski non-blocking sürümün
                  * sessiz-yanlış-cevabı). */
+                /* D-295: runtime i64 taşır; sonuç T'ye daraltılır
+                 * (görev_birleştir ile birebir aynı desen). T bildirilen
+                 * `kanal<T>`den gelir; kurtarılamazsa i64 (kırpma YOK). */
                 IfadeSonuc kv = ifade_uret(g, d->veri.cagri.argumanlar[0],
                                            "ptr");
-                int r = yeni_reg(g);
+                LlvmIsim *ki = NULL;
+                if (d->veri.cagri.argumanlar[0]->tip == DUGUM_TANIMLAYICI) {
+                    ki = isim_bul(g,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.metin,
+                        d->veri.cagri.argumanlar[0]->veri.tanimlayici.uzunluk);
+                }
+                const char *kt = (ki && ki->kanal_ic_ir) ? ki->kanal_ic_ir
+                               : (beklenen ? beklenen : "i64");
+                int a64 = yeni_reg(g);
                 fprintf(g->out,
-                    "  %%%d = call i32 @kdl_kanal_al(ptr %%%d)\n", r, kv.reg);
-                IfadeSonuc s = { r, "i32", 0 };
+                    "  %%%d = call i64 @kdl_kanal_al(ptr %%%d)\n", a64, kv.reg);
+                if (strcmp(kt, "i64") == 0) {
+                    IfadeSonuc s = { a64, "i64", 0 };
+                    return s;
+                }
+                int r = yeni_reg(g);
+                if (strcmp(kt, "ptr") == 0) {
+                    fprintf(g->out, "  %%%d = inttoptr i64 %%%d to ptr\n",
+                            r, a64);
+                } else {
+                    fprintf(g->out, "  %%%d = trunc i64 %%%d to %s\n",
+                            r, a64, kt);
+                }
+                IfadeSonuc s = { r, kt, 0 };
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 6 &&
@@ -4458,6 +4551,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                      * (görev<T> IR'de opak ptr; birleştir i64→T daraltması). */
                     g->isimler->gorev_ic_ir =
                         gorev_ic_ir_al(g, d->veri.degisken.tip);
+                    g->isimler->kanal_ic_ir =
+                        kanal_ic_ir_al(g, d->veri.degisken.tip);
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
@@ -4522,6 +4617,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
                 g->isimler->gorev_ic_ir =
                     gorev_ic_ir_al(g, d->veri.degisken.tip);        /* D-294 */
+                g->isimler->kanal_ic_ir =
+                    kanal_ic_ir_al(g, d->veri.degisken.tip);
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
                 g->isimler->ref_yapi_ir =
@@ -5733,6 +5830,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-294: `görev<T>` tipli parametre → T'nin IR'i (birleştir daraltması) */
         g->isimler->gorev_ic_ir =
             gorev_ic_ir_al(g, p->veri.parametre.tip);
+        g->isimler->kanal_ic_ir =
+            kanal_ic_ir_al(g, p->veri.parametre.tip);
         /* D-005: dtamN parametre -> isaretsiz isim */
         g->isimler->isaretsiz =
             ast_tip_isaretsiz_mi(p->veri.parametre.tip);
@@ -6020,8 +6119,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* R-KANAL hedefleri. Bu imza host (kdl_runtime.c) ve bare-metal
      * (kdl_kanal.c) sürümlerinde AYNI — tek çağrı iki backend'e de bağlanır. */
     fputs("declare ptr @kdl_kanal_olustur(i32)\n", out);
-    fputs("declare void @kdl_kanal_gonder(ptr, i32)\n", out);
-    fputs("declare i32 @kdl_kanal_al(ptr)\n", out);
+    /* D-295: kanal da i64 taşır (görev ile simetrik) — `kanal<tam64>` /
+     * `kanal<metin>` sessizce kırpılmasın. */
+    fputs("declare void @kdl_kanal_gonder(ptr, i64)\n", out);
+    fputs("declare i64 @kdl_kanal_al(ptr)\n", out);
     /* Madde B: Dinamik dizi (KdlDizi*) — V2-F4.2a: allokasyon helper'ları ρ ilk param */
     fputs("declare ptr @kdl_dizi_olustur(ptr, i32)\n", out);
     fputs("declare void @kdl_dizi_ekle_tam(ptr, ptr, i32)\n", out);

@@ -2783,6 +2783,84 @@ static void test_gorev_kesirli_llvm_de_reddedilir(void) {
                rc != 0);
 }
 
+/* === D-295: SESSIZ-i32-fallback BLOKER onarimlari (regresyon kilidi) ===
+ * Uc bloker de AYNI kokten geliyordu: tip kurtarilamayinca codegen sessizce
+ * "i32" varsayiyor ve i64 tasiyiciyi kirpiyordu. Bu testler o yollari kilitler.
+ * NOT: hepsi ANNOTASYONSUZ bicimleri kullanir — annotasyonlu bicimler zaten
+ * gecıyordu, asil kirik olan idiomatik (annotasyonsuz) bicimdi. */
+
+static void test_annotsuz_gorev_tam64(void) {
+    /* BLOKER-1: `değişken c = görev_başlat(...)` + beklenen-yok.
+     * ONCE: --check OK, LLVM OK, exit 99 (SESSIZ YANLIS; 2^32 > 100 oldugu
+     * icin 1 olmaliydi) — trunc i64->i32 degeri kirpiyordu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken b: tam64 = 4294967296; "
+        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| b); "
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
+        "e\xc4\x9f" "er s > 100 { ver 1; } ver 99; }");
+    test_sonuc("annotasyonsuz gorev<tam64>: kirpma YOK -> exit 1", rc == 1);
+}
+
+static void test_annotsuz_gorev_metin(void) {
+    /* BLOKER-1 (isaretci varyanti). ONCE: SEGFAULT (ptr i32'ye kirpildi). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("annotasyonsuz gorev<metin>: isaretci saglam -> exit 5", rc == 5);
+}
+
+static void test_annotsuz_closure_metin(void) {
+    /* BLOKER-3: `değişken f = || "selam"` + beklenen-yok.
+     * ONCE: lambda `define ptr` ama cagri `call i32` -> SEGFAULT. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = || \"selam\"; "
+        "ver metin_uzunluk(f()); }");
+    test_sonuc("annotasyonsuz closure -> metin: exit 5", rc == 5);
+}
+
+static void test_kanal_tam64_turu(void) {
+    /* BLOKER-2: kanal i64 tasima. ONCE: --check DRF006 ile reddediyordu ama
+     * `--llvm` tip kontrolu CALISTIRMADIGI icin o yoldan derlenip SESSIZCE
+     * kaybediyordu (2^33 gonder->al esit degil, exit 1). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam64> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 8589934592); "
+        "de\xc4\x9fi\xc5\x9fken v: tam64 = kanal_al(k); "
+        "e\xc4\x9f" "er v == 8589934592 { ver 42; } ver 1; }");
+    test_sonuc("kanal<tam64> 2^33 turu kayipsiz -> exit 42", rc == 42);
+}
+
+static void test_kanal_metin_turu(void) {
+    /* D-295 yeni yetenek: isaretci T kanaldan gecer. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<metin> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, \"selam\"); "
+        "de\xc4\x9fi\xc5\x9fken s: metin = kanal_al(k); "
+        "ver metin_uzunluk(s); }");
+    test_sonuc("kanal<metin> isaretci turu -> exit 5", rc == 5);
+}
+
+static void test_kanal_kesirli_llvm_de_reddedilir(void) {
+    /* KATMANLI SAVUNMA 2. katman (gorev<kesirli> ile ayni desen): `--llvm`
+     * tip kontrolu calistirmaz; emisyon `sext double -> i64` uretir, bu
+     * GECERSIZDIR -> LLVM gurultulu reddeder. Sessiz cop yolu KAPALI.
+     * (Bu testin gonder+al CAGIRMASI sart: cagirmazsa gecersiz cast hic emit
+     * edilmez ve test yanlis sebeple gecerdi — D-294'te bu tuzaga dusuldu.) */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<kesirli64> = kanal_olu\xc5\x9ftur(2); "
+        "kanal_g\xc3\xb6nder(k, 3.5); "
+        "de\xc4\x9fi\xc5\x9fken v: kesirli64 = kanal_al(k); "
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("kanal<kesirli64>: --llvm yolunda da LLVM reddi", rc != 0);
+}
+
 int main(void) {
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
@@ -3143,6 +3221,14 @@ int main(void) {
     printf("\n--- gorev<T> genisletme (D-294) ---\n");
     test_gorev_metin();
     test_gorev_kesirli_llvm_de_reddedilir();
+
+    printf("\n--- D-295: sessiz-i32-fallback bloker onarimlari ---\n");
+    test_annotsuz_gorev_tam64();
+    test_annotsuz_gorev_metin();
+    test_annotsuz_closure_metin();
+    test_kanal_tam64_turu();
+    test_kanal_metin_turu();
+    test_kanal_kesirli_llvm_de_reddedilir();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

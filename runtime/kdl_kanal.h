@@ -13,6 +13,8 @@
 #ifndef KDL_KANAL_H
 #define KDL_KANAL_H
 
+#include <stdint.h>
+
 typedef struct KdlKanal KdlKanal;
 
 /* Havuzdan yeni kanal ayır (havuz tükendiyse 0 döner).
@@ -30,9 +32,9 @@ typedef struct KdlKanal KdlKanal;
 KdlKanal *kdl_kanal_olustur(int kapasite);
 
 /* Değer gönder — kanal doluysa preemption altında bekle (akış denetimi). */
-void kdl_kanal_gonder(KdlKanal *k, int deger);
+void kdl_kanal_gonder(KdlKanal *k, int64_t deger);
 
 /* Değer al — kanal boşsa preemption altında bekle. FIFO sıra korunur. */
-int kdl_kanal_al(KdlKanal *k);
+int64_t kdl_kanal_al(KdlKanal *k);
 
 #endif /* KDL_KANAL_H */

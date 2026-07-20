@@ -56,8 +56,8 @@ extern uint64_t kdl_gorev_sirali_sayisi;
 /* Katman 2 / R-KANAL runtime */
 typedef struct KdlKanalOpak KdlKanalOpak;
 extern KdlKanalOpak *kdl_kanal_olustur(int32_t kapasite);
-extern void kdl_kanal_gonder(KdlKanalOpak *k, int32_t deger);
-extern int32_t kdl_kanal_al(KdlKanalOpak *k);
+extern void kdl_kanal_gonder(KdlKanalOpak *k, int64_t deger);   /* D-295 */
+extern int64_t kdl_kanal_al(KdlKanalOpak *k);                    /* D-295 */
 extern void kdl_kanal_serbest(KdlKanalOpak *k);
 
 /* === 1: bare yol (env == NULL) — codegen'in yakalamasiz lambda'si ===
@@ -165,7 +165,7 @@ static int64_t isci_gecikmeli_gonder(void *rho) {
 static void test_kanal_al_bos_bloklar(void) {
     kanal_gecikmeli = kdl_kanal_olustur(4);
     KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_gecikmeli_gonder, NULL, NULL);
-    int32_t v = kdl_kanal_al(kanal_gecikmeli);   /* BLOKLAMALI */
+    int64_t v = kdl_kanal_al(kanal_gecikmeli);   /* BLOKLAMALI */
     (void)kdl_gorev_birlestir(g);
     test_sonuc("bos kanalda kanal_al BLOKLAR (0 degil, 42 alir)", v == 42);
     kdl_kanal_serbest(kanal_gecikmeli);
@@ -185,10 +185,10 @@ static void test_kanal_gonder_dolu_bloklar(void) {
     kanal_akis = kdl_kanal_olustur(2);            /* bilincli kucuk kapasite */
     KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bes_gonder, NULL, NULL);
     kisa_bekle(60);                               /* gonderici dolu-bloklasin */
-    int32_t toplam = 0;
+    int64_t toplam = 0;
     int sira_ok = 1;
     for (int32_t i = 1; i <= 5; i++) {
-        int32_t v = kdl_kanal_al(kanal_akis);
+        int64_t v = kdl_kanal_al(kanal_akis);
         if (v != i) sira_ok = 0;                  /* FIFO sirasi korunmali */
         toplam += v;
     }

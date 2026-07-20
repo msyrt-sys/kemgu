@@ -1428,26 +1428,25 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             TipBilgisi *ic = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_kanal.ic_tip);
             if (ic->kategori == TIP_HATA) return t_hata(tk);
-            /* === V1 SINIRI (D-292): T 32-bit tamsayi olmali ===
-             * Runtime kanal tamponu monomorfik int32_t tasir (kdl_runtime.c /
-             * kdl_kanal.c). Genis T'ler OLCULDU ve ikisi de kabul edilemezdi:
-             *   kanal<tam64> -> deger i32'ye KIRPILIR: 2^33 gonderilip alindiginda
-             *                   esit cikmaz. DERLENIR, CALISIR, SESSIZCE KAYBEDER.
-             *   kanal<metin> -> LLVM reddeder ("'%N' defined with type 'ptr' but
-             *                   expected 'i32'") — gurultulu ama anlamsiz mesaj.
-             * Ikisini de burada, TIP seviyesinde ve ACIK mesajla reddediyoruz:
-             * en iyi hata modu derleme zamanidir. Bu tikac `kanal<T>` TIPININ
-             * cozuldugu tek nokta oldugu icin parametre/degisken/donus fark
-             * etmeksizin her kullanimi kapsar.
-             * Genisletme (i64/ptr tasiyan kanal), gorev<T>'nin T=tam32 sinirini
-             * da acan lambda donus-tipi cikarsamasiyla BIRLIKTE gelmeli — ikisi
-             * de ayni kokten (IR'de T i32'ye sabit). */
-            if (!tip_tamsayi_mi(ic) ||
-                ic->kategori == TIP_TAM64 || ic->kategori == TIP_DTAM64) {
+            /* === V1 SINIRI (D-295, D-292'nin 32-bit kisitini DEGISTIRIR) ===
+             * D-292'de kanal tamponu int32_t tasiyordu ve T 32-bit tamsayiyla
+             * sinirliydi. O kisit `--check`i kapatiyordu ama `--llvm` TIP
+             * KONTROLU CALISTIRMADIGI icin `kanal<tam64>` o yoldan derlenip
+             * SESSIZCE veri kaybediyordu (olculdu: 2^33 gonder->al esit degil).
+             * D-295'te kanal tamponu -- gorev ile simetrik olarak -- int64_t'ye
+             * genisletildi: kirpma sinifi ortadan kalkti (gurultulu yapmak
+             * yerine YOK edildi), tam64/metin/&T artik GERCEKTEN calisir.
+             *
+             * KALAN kisit KESIRLI T (gorev ile AYNI gerekce, DRF001): kanal
+             * tamsayi tasir; kesirli deger i64'e sext/trunc ile degil ancak
+             * fptosi ile girer -- yani DEGER bozulur (bit deseni degil). Bunu
+             * bitcast'lamak yerine TIP seviyesinde reddediyoruz.
+             * Bu tikac `kanal<T>` TIPININ cozuldugu tek nokta oldugu icin
+             * parametre/degisken/donus fark etmeksizin her kullanimi kapsar. */
+            if (ic->kategori == TIP_KESIRLI32 || ic->kategori == TIP_KESIRLI64) {
                 tip_hata(tk, tip_d, "DRF006",
-                    "kanal<T> V1'de yalniz 32-bit tamsayi T destekler "
-                    "(tam8/16/32, dtam8/16/32) — tam64/kesirli/metin/yapi "
-                    "henuz yok (kanal tamponu monomorfik i32)");
+                    "kanal<T> V1'de kesirli T desteklemiyor (kesirli32/64) — "
+                    "kanal tamsayi tasir, kesirli deger bozulur");
                 return t_hata(tk);
             }
             return tip_olustur_kanal(tk->arena, ic);

@@ -718,7 +718,7 @@ int64_t kdl_gorev_birlestir(KdlGorev *g) {
  * bare-metal kdl_kanal.c'nin (preemption altinda busy-wait) semantigiyle
  * ayni sozlesme, host'ta uygun ilkelle. */
 typedef struct {
-    int32_t *veri;
+    int64_t *veri;   /* D-295: i64 tasima (isaretci/tam64 T icin) */
     int32_t boyut;
     int32_t kapasite;
     int32_t bas, son;   /* circular buffer */
@@ -829,7 +829,7 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
     KdlKanal *k = (KdlKanal *)malloc(sizeof(KdlKanal));
     if (!k) return NULL;
     int32_t kap = kapasite > 0 ? kapasite : 16;
-    k->veri = (int32_t *)malloc((size_t)kap * sizeof(int32_t));
+    k->veri = (int64_t *)malloc((size_t)kap * sizeof(int64_t));
     k->kapasite = kap;
     k->boyut = 0;
     k->bas = 0;
@@ -840,7 +840,7 @@ KdlKanal *kdl_kanal_olustur(int32_t kapasite) {
 
 /* R-KANAL gonderim: v'yi ρ_kanal(k)'ye tasir. Kanal DOLUYSA yer acilana kadar
  * BLOKLAR (akis denetimi) — eskiden mesaji sessizce dusuruyordu. */
-void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
+void kdl_kanal_gonder(KdlKanal *k, int64_t deger) {
     if (!k) return;
     kdl_kilit_gir(k);
     while (k->boyut >= k->kapasite) kdl_kosul_bekle_dolu_degil(k);
@@ -854,9 +854,9 @@ void kdl_kanal_gonder(KdlKanal *k, int32_t deger) {
 /* R-KANAL alim: v'yi ρ_sahip(t_alan)'a tasir. Kanal BOSSA veri gelene kadar
  * BLOKLAR — eskiden 0 donuyordu ve bu, gercekten gonderilmis bir 0'dan
  * ayirt edilemiyordu (sessiz yanlis cevap). */
-int32_t kdl_kanal_al(KdlKanal *k) {
+int64_t kdl_kanal_al(KdlKanal *k) {
     if (!k) return 0;
-    int32_t v = 0;
+    int64_t v = 0;
     kdl_kilit_gir(k);
     while (k->boyut == 0) kdl_kosul_bekle_bos_degil(k);
     v = k->veri[k->bas];
