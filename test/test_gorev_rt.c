@@ -5,10 +5,16 @@
  * ciftini DOGRUDAN (codegen'den bagimsiz) sinar. Codegen tarafinin uctan uca
  * kaniti ayrica test_llvm.c'dedir; burada runtime SEMANTIGI kanitlanir.
  *
- * NEDEN AYRI BIR TEST: runtime, thread yaratilamazsa gorevi SIRALI calistirir
- * (fallback). Sirali fallback ile gercek thread AYNI sonucu uretir — yani bir
- * gorev testinin "42 dondu" demesi thread'in gercekten spawn edildigini
- * KANITLAMAZ. Bu dosya o ayrimi (ve S1/S2 bolge sahipligini) acikca olcer.
+ * NEDEN AYRI BIR TEST: bir gorev testinin "42 dondu" demesi, thread'in
+ * gercekten spawn edildigini KANITLAMAZ. Bu dosya o ayrimi (ve S1/S2 bolge
+ * sahipligini) sayaclarla acikca olcer.
+ *
+ * D-296 GUNCELLEMESI: eskiden thread yaratilamazsa gorev SIRALI calistiriliyordu
+ * (fallback) ve iki yol AYNI sonucu uretiyordu — ayrimi gormek icin sayaclar
+ * sarttir. Fallback artik KALDIRILDI (spawn basarisizligi -> kdl_panik), cunku
+ * sirali calistirma bloklayan kanal islemi yapan bir govdede KALICI KILITLENME
+ * uretiyordu (olculdu: exit 124). Sayaclar korundu: `kdl_gorev_sirali_sayisi`
+ * artik bir INVARYANT TANIGIDIR (daima 0 — test [9]).
  */
 
 #include <stdio.h>
@@ -104,6 +110,16 @@ static void test_gercek_thread(void) {
                kdl_gorev_sirali_sayisi == once_sirali);
 }
 
+/* === 3b: D-296 INVARYANTI — sirali fallback ARTIK YOK ===
+ * Fallback kaldirildi (spawn basarisizligi -> kdl_panik). Bu sayac bu yuzden
+ * PROGRAM BOYUNCA 0 kalmali. Sifirdan farkli okunmasi, fallback'in bir sekilde
+ * geri geldigini gosterir — ki o durumda bloklayan kanal islemi yapan bir gorev
+ * KILITLENIR (olculdu: exit 124). Bu, ucuz ama gercek bir regresyon bekcisidir. */
+static void test_sirali_fallback_yok(void) {
+    test_sonuc("D-296: sirali fallback HIC devreye girmedi (sayac 0)",
+               kdl_gorev_sirali_sayisi == 0);
+}
+
 /* === 4: S1/S2 — her gorev KENDI bolgesini sahiplenir ===
  * S2 (baslangic sahipligi) + S1 (tekil sahiplik): iki ayri gorev ayni ρ'yu
  * PAYLASMAMALI. Paylassalardi iki thread ayni bump-allokatore es zamanli
@@ -139,11 +155,15 @@ static void test_cok_gorev(void) {
     test_sonuc("8 es zamanli gorev: hepsi 7 dondu", ok);
 }
 
-/* === 6: NULL handle savunmasi === */
-static void test_null_handle(void) {
-    test_sonuc("kdl_gorev_birlestir(NULL) cokmeden 0 doner",
-               kdl_gorev_birlestir(NULL) == 0);
-}
+/* === 6: NULL handle — D-296'da SESSIZ-0 KAPATILDI ===
+ * Eskiden burada `kdl_gorev_birlestir(NULL) == 0` iddia ediliyordu ve bu
+ * "savunmaci" gorunuyordu; aslinda SESSIZ YANLIS CEVAPTI: donen 0, gercekten
+ * 0 donmus bir gorevden ayirt edilemez (D-292'nin bos-kanal hatasiyla ayni
+ * sinif). Artik kdl_panik ile GURULTULU olduğu icin bu yol IN-PROCESS test
+ * EDILEMEZ (panik abort eder, test kosucusunu de oldururdu).
+ * Kapsama: davranis kdl_runtime.c'de belgeli; tetikleyicisi yalnizca OOM
+ * (kdl_gorev_basla_kapanis'in malloc/bolge basarisizligi). Ayri-surec testi
+ * gerekseydi calistir_* hedefi yazilirdi — maliyeti faydasini asiyor. */
 
 /* ========================================================================
  * KANAL (R-KANAL) — bloklama semantigi
@@ -212,7 +232,7 @@ int main(void) {
     test_gercek_thread();
     test_bolge_ayrikligi();
     test_cok_gorev();
-    test_null_handle();
+    test_sirali_fallback_yok();
     test_kanal_al_bos_bloklar();
     test_kanal_gonder_dolu_bloklar();
     test_kanal_null();

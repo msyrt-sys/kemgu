@@ -616,27 +616,60 @@ static void *kdl_gorev_thread_posix(void *param) {
 #endif
 
 /* === Gercek-thread tanigi (kdl_bolge_*_sayisi deseni) ===
- * Sirali fallback ile gercek thread AYNI sonucu uretir; dolayisiyla bir
- * gorev testinin "dogru sonuc" vermesi thread'in gercekten spawn edildigini
- * KANITLAMAZ. Bu iki sayac o ayrimi gozlemlenebilir kilar (test/teshis). */
+ * D-296: `kdl_gorev_sirali_sayisi` artik DAIMA 0 olmali — sirali fallback
+ * kaldirildi (asagiya bak). Sayac INVARYANT TANIGI olarak korunuyor: sifirdan
+ * farkli okunmasi, fallback'in bir sekilde geri gelmis oldugunu gosterir. */
 uint64_t kdl_gorev_thread_sayisi = 0;   /* gercek thread spawn edildi */
-uint64_t kdl_gorev_sirali_sayisi = 0;   /* fallback: cagiran thread'te calisti */
+uint64_t kdl_gorev_sirali_sayisi = 0;   /* D-296: DAIMA 0 (fallback kaldirildi) */
 
-/* Ortak spawn: thread yaratilamazsa gorevi SIRALI calistirir (fallback) —
- * gorev semantigi korunur, yalniz paralellik kaybolur. */
+/* === Ortak spawn ===
+ * D-296: SIRALI FALLBACK KALDIRILDI. Eskiden thread yaratilamazsa gorev
+ * cagiran thread'te calistiriliyor ve yorum "gorev semantigi korunur, yalniz
+ * paralellik kaybolur" diyordu. Bu YANLISTI:
+ *
+ *   Korunan yalniz GUVENLIK (safety) idi; CANLILIK (liveness) KAYBOLUYORDU.
+ *   Gorev govdesi bloklayan bir kanal islemi yaparsa (bos kanaldan kanal_al ya
+ *   da dolu kanala kanal_gonder) KALICI KILITLENME olusur — cunku karsi taraf
+ *   (cagiran) henuz calismiyor. OLCULDU (CreateThread -> NULL simulasyonu):
+ *     kanal_mesaj.kem  : gercek thread exit=15  | sirali fallback exit=124 (asildi)
+ *     tuketici-gorev   : gercek thread exit=42  | sirali fallback exit=124
+ *   Ikincisi KAPASITEDEN BAGIMSIZ kilitlenir.
+ *
+ * Sirali calistirma, bir esZAMANLILIK ilkelinin gecerli bir yedegi DEGILDIR:
+ * runtime, govdenin baska bir goreve bloklanip bloklanmayacagini BILEMEZ.
+ * Bu yuzden basarisizlik artik GURULTULU (kdl_panik) — projenin "gurultulu >
+ * sessiz" ilkesi geregi: acik tanili olum, sessiz asilmadan iyidir.
+ *
+ * Tetikleyici kaynak tukenmesidir (olculdu: bu makinede ~102374 thread sonrasi
+ * ERROR_NO_SYSTEM_RESOURCES) — yani nadirdir ama imkansiz degildir.
+ *
+ * V2 NOTU: KEMGU felsefesi "cokmezlik" oldugundan, dogru nihai cozum panik
+ * DEGIL, `görev_başlat`in `sonuç<görev<T>, Hata>` donmesidir. Bu bir DIL
+ * tasarim karari (Mehmet) — o gelene kadar panik, sessiz kilitlenmeden iyidir. */
 static void kdl_gorev_spawn(KdlGorev *g) {
 #ifdef KDL_THREAD_WIN
     g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
-    if (!g->handle) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
-    else kdl_gorev_thread_sayisi++;
+    if (!g->handle) {
+        kdl_panik("gorev baslatilamadi: thread yaratilamadi (kaynak tukenmesi). "
+                  "Sirali calistirma yedegi YOK — bloklayan kanal islemi "
+                  "kilitlenmeye yol acardi (D-296).");
+    }
+    kdl_gorev_thread_sayisi++;
 #elif defined(KDL_THREAD_POSIX)
     g->thr_valid = (pthread_create(&g->thr, NULL,
                                     kdl_gorev_thread_posix, g) == 0);
-    if (!g->thr_valid) { kdl_gorev_sirali_sayisi++; kdl_gorev_govde(g); }
-    else kdl_gorev_thread_sayisi++;
+    if (!g->thr_valid) {
+        kdl_panik("gorev baslatilamadi: pthread_create basarisiz (kaynak "
+                  "tukenmesi). Sirali calistirma yedegi YOK (D-296).");
+    }
+    kdl_gorev_thread_sayisi++;
 #else
-    kdl_gorev_sirali_sayisi++;
-    kdl_gorev_govde(g);   /* Thread yok -> sequential */
+    /* Bu derlemede thread YOK (ne Win32 ne POSIX). `görev` bu platformda
+     * esZAMANLILIK saglayamaz; sirali calistirmak gorev+kanal programlarini
+     * kilitlerdi. Sessizce yanlis calismak yerine acikca reddet. */
+    (void)g;
+    kdl_panik("gorev desteklenmiyor: bu derlemede thread yok "
+              "(KDL_THREAD_WIN/POSIX tanimli degil) — D-296.");
 #endif
 }
 
@@ -693,7 +726,17 @@ KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
  * Serbest birakma, ayri bir F4-sinifi is olarak ρ_sahip confinement kanitiyla
  * birlikte gelir. */
 int64_t kdl_gorev_birlestir(KdlGorev *g) {
-    if (!g) return 0;
+    /* D-296: eskiden `if (!g) return 0;` idi — SESSIZ YANLIS CEVAP. Cagiran
+     * gorevin sonucunu ister; donen 0, gercekten 0 donmus bir gorevden AYIRT
+     * EDILEMEZ (D-292'de kapatilan bos-kanal hatasiyla AYNI sinif).
+     * g yalnizca kdl_gorev_basla_kapanis'in NULL donmesiyle (malloc / bolge
+     * ayirma basarisizligi = OOM) NULL olabilir; o durumda program zaten
+     * kurtarilamaz durumdadir -> acik tani ver. */
+    if (!g) {
+        kdl_panik("gorev_birlestir: gecersiz (NULL) gorev tutamagi — "
+                  "gorev_baslat bellek yetersizliginden basarisiz olmus "
+                  "olabilir (D-296).");
+    }
 #ifdef KDL_THREAD_WIN
     if (g->handle) {
         WaitForSingleObject(g->handle, INFINITE);

@@ -5,6 +5,61 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-296 — Sıralı görev fallback'i KALDIRILDI: kilitlenme → gürültülü panik (2026-07-17) [YÜKSEK]
+
+> **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-295).
+
+**Karar [ETKİ: `runtime/kdl_runtime.c` (kdl_gorev_spawn fallback kaldırıldı; kdl_gorev_birlestir
+NULL yolu), `test/test_gorev_rt.c` (test [9] değişti + dosya başlığı).]** D-295 sonrası triajın
+ölçtüğü bulgu; merge-bloker değildi ama koddaki iddia **fiilen yanlıştı**.
+
+**Ölçülen kusur:** `kdl_gorev_spawn`, thread yaratılamazsa görevi **sıralı** çalıştırıyordu ve
+yorum "görev semantiği korunur, yalnız paralellik kaybolur" diyordu. **Yanlış:** korunan yalnız
+**GÜVENLİK** (safety); **CANLILIK** (liveness) kayboluyordu. Görev gövdesi bloklayan bir kanal
+işlemi yaparsa (boş kanaldan `kanal_al` / dolu kanala `kanal_gönder`) **kalıcı kilitlenme** olur —
+karşı taraf (çağıran) henüz çalışmıyordur.
+
+**ÖNCE/SONRA (aynı program, aynı simüle spawn hatası — `CreateThread → NULL`):**
+| | `kanal_mesaj.kem` |
+|---|---|
+| ESKİ (fallback var) | **exit 124** — 15 sn asıldı (KİLİTLENDİ) |
+| YENİ (fallback yok) | açık **PANIK** mesajı + süreç ölümü (asılma YOK) |
+
+Triaj ayrıca ölçtü: tüketici-görev deseni (görev boş kanaldan alır, main gönderir)
+**kapasiteden BAĞIMSIZ** kilitleniyordu — daha genel/kötü hâl.
+
+**Karar: sıralı çalıştırma bir eşzamanlılık ilkelinin geçerli yedeği DEĞİLDİR.** Runtime,
+gövdenin başka bir göreve bloklanıp bloklanmayacağını **bilemez**; dolayısıyla fallback temelden
+sağlıksızdır. Kaldırıldı; spawn başarısızlığı artık `kdl_panik` (projenin "gürültülü > sessiz"
+ilkesi — açık tanılı ölüm, sessiz asılmadan iyidir). `#else` dalı (ne Win32 ne POSIX) da panik
+eder: o derlemede `görev` eşzamanlılık sağlayamaz, sessizce yanlış çalışmaktansa açıkça reddeder.
+
+**Aynı adımda kapatılan ikinci sessiz-0:** `kdl_gorev_birlestir(NULL)` **0 dönüyordu** —
+gerçekten 0 dönmüş bir görevden **ayırt edilemez** (D-292'de kapatılan boş-kanal hatasıyla AYNI
+sınıf). Artık panik. Tetikleyici yalnızca OOM (`kdl_gorev_basla_kapanis`'in malloc/bölge
+başarısızlığı).
+
+**Tetikleyici nadir ama gerçek:** triaj ölçtü — bu makinede CreateThread ancak ~102374 thread
+sonrası başarısız oldu (`ERROR_NO_SYSTEM_RESOURCES`). Fallback ayrıca **SESSİZDİ** (yalnız sayaç
+artıyordu, stderr'e hiçbir şey yazılmıyordu).
+
+**TRADE-OFF (dürüstçe):** panik, KEMGU'nun "çökmezlik" felsefesiyle gerilim hâlinde. Ama
+`kdl_panik` bu projede zaten kurulu pratik (D-069 inline-OOB). **Doğru nihai çözüm panik DEĞİL,
+`görev_başlat`ın `sonuç<görev<T>, Hata>` dönmesidir** — bu bir DİL tasarım kararı (Mehmet).
+O gelene kadar panik, sessiz kilitlenmeden iyidir; kayıt bu gerilimi açıkça taşır.
+
+**TEST DEĞİŞİKLİĞİ:** eski test [9] `kdl_gorev_birlestir(NULL) == 0` iddia ediyordu ve
+"savunmacı" görünüyordu — aslında **sessiz yanlış cevabı doğruluyordu**. Yerine D-296
+invaryant bekçisi kondu: **`kdl_gorev_sirali_sayisi` daima 0** (sıfırdan farkı, fallback'in geri
+geldiğini ve dolayısıyla kilitlenme riskinin döndüğünü gösterir). NULL yolu panik ettiği için
+in-process test EDİLEMEZ (abort test koşucusunu da öldürürdü) — kapsama sınırı kayıtlı.
+
+**KANIT:** normal yol bozulmadı (`gorev_temel.kem` exit 42, `kanal_mesaj.kem` exit 15).
+`test_gorev_rt` 13/13, `test_llvm` 258/258, `test_drf` 50/50, bare-metal kanal, parite 76/76,
+**FIXPOINT ✓**, `test_tumu`.
+
+---
+
 ## D-295 — 3 BLOKER onarımı: sessiz `i32` fallback'i elendi (ön-merge denetimi bulgusu) (2026-07-17) [YÜKSEK]
 
 > **D-no:** merge anında güncel main'in en yüksek D'sine göre kesinleştir (taban: D-294).

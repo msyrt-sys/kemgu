@@ -96,7 +96,7 @@ kemgu/
 │   ├── test_json.c                    — JSON parser + yazıcı testleri (TAMAMLANDI ✓ — 21/21, ASan temiz)
 │   ├── test_lsp.c                     — LSP server MVP testleri (TAMAMLANDI ✓ — 6/6, ASan temiz)
 │   ├── test_llvm.c                    — LLVM backend entegrasyon (derle + çalıştır + exit kodu) (TAMAMLANDI ✓ — 258/258, multi-int + metin + yapı + float/dizi/struct-by-value + Katman 2 görev/kanal/dondur + lambda dönüş çıkarsaması + görev<T> genişletme + D-295 bloker onarımları)
-│   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA kanıtı (D-291/D-292)
+│   ├── test_gorev_rt.c                — Katman 2 görev+kanal runtime — 13/13; GERÇEK thread + S1/S2 ρ ayrıklığı + kanal BLOKLAMA + sıralı-fallback-yok invaryantı (D-291/292/296)
 │   ├── test_drf.c                     — Concurrency/DRF tip kontrolü — 50/50 (D40-D46 kanal_oluştur; D47-D50 görev/kanal kesirli reddi + metin/tam64 kabulü)
 │   └── ornekler/
 │       ├── hasta.kem                  — Mevcut örnek (TAMAMLANDI ✓)
@@ -689,6 +689,14 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **D-295:** tampon `int64_t` → `kanal<tam64>`/`<metin>`/`<Dizi<T>>` GERÇEKTEN çalışır
     (D-292'nin 32-bit kısıtı KALKTI — o kısıt yalnız `--check`i kapatıyordu, `--llvm` yolundan
     sessiz kırpma sızıyordu). Kalan kısıt: **kesirli T** (DRF006, katmanlı savunma).
+- ~~**Sıralı görev fallback'i**~~ ✗ **KALDIRILDI — D-296**: thread yaratılamazsa görevi sıralı
+  çalıştırmak, gövde bloklayan bir kanal işlemi yaparsa **KALICI KİLİTLENME** üretiyordu
+  (ölçüldü: aynı program, simüle spawn hatasıyla — eski exit 124/asıldı, yeni açık panik).
+  Koddaki "görev semantiği korunur" iddiası yanlıştı: **safety korunuyor, liveness kayboluyor.**
+  Sıralı çalıştırma bir eşzamanlılık ilkelinin geçerli yedeği DEĞİLDİR (runtime gövdenin
+  bloklanıp bloklanmayacağını bilemez). Spawn başarısızlığı artık `kdl_panik`.
+  Aynı adımda `görev_birleştir(NULL) → 0` sessiz-0'ı da kapatıldı. **V2:** doğru nihai çözüm
+  panik değil, `görev_başlat`ın `sonuç<görev<T>, Hata>` dönmesi — DİL kararı (Mehmet).
 - **⚠ SÜREÇ DERSİ (D-295):** ön-merge adversarial denetim, D-291→D-294'te **3 BLOKER** buldu —
   hepsi "tip kurtarılamadı → sessizce `i32` varsay" kökünden; diff hata modunu **loud→silent**
   çeviriyordu. **Taşıyıcı genişliğini (i32→i64) değiştirince TÜM fallback'leri denetle.**
