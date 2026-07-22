@@ -1,0 +1,6 @@
+// D-300: görev_başlat capture-free — lifted lambda + gerçek thread. Exit: 42
+işlev main() -> tam32 {
+    değişken a: görev<tam32> = görev_başlat(|| 20);
+    değişken b: görev<tam32> = görev_başlat(|| 22);
+    ver görev_birleştir(a) + görev_birleştir(b);
+}

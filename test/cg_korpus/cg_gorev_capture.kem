@@ -1,0 +1,6 @@
+// D-300: görev_başlat CAPTURE — heap env (yakalanan skaler). Exit: 42
+işlev main() -> tam32 {
+    değişken temel: tam32 = 40;
+    değişken g: görev<tam32> = görev_başlat(|| temel + 2);
+    ver görev_birleştir(g);
+}

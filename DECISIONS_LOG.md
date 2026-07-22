@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-300 — `görev_başlat` + closure/lambda codegen self-host'a taşındı: PARİTE BORCU TAM KAPANDI (2026-07-20)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lambda kuyruğu + capture analizi + heap-env +
+lifted-lambda emisyonu; ~200 satır), `test/cg_korpus/` (+3 vaka).]** D-299'un dürüstçe
+"KALAN" bıraktığı parça. Self-host'ta closure/lambda codegen'i **HİÇ YOKTU**; artık VAR.
+
+**MİMARİ ENGEL VE ÇÖZÜMÜ:** C, lifted lambda'yı ertelenmiş-kuyruk + geçici-dosya +
+`hoist_renumber` ile üretir; self-host `yaz_bayt` ile **doğrudan stdout**'a yazar, o
+makine taşınamaz. Çözüm: lambda AST düğümü `görev_başlat` argümanında görülünce
+(a) mangled ad atanır + fat-value/env `görev_başlat` **yerinde** emit edilir,
+(b) düğüm kuyruğa alınır → `emit_tanimlar` **SONRASI** top-level `define @lambda_N`
+üretilir (LLVM'de fonksiyon sırası önemsiz — ertelenmiş kuyruk yerine gövde-sonrası
+tek geçiş). Capture bilgisi call-site'ta (çevre scope canlıyken) çözülüp parçalı
+dizilerde saklanır — lifted emit'te çevre `cg_var` artık yok.
+
+**CAPTURE (tam destek):** capture analizi flat-AST'yi gezer (C `lambda_serbest_tara`
+aynası): `TANIMLAYICI` + çevre-lokal/param (`cg_var_bul != ""`) + lambda-param DEĞİL →
+yakalama; iç LAMBDA'ya girmez; dedup. Capture varsa: HEAP env struct malloc + her
+yakalananın DEĞERİ store; lifted lambda `%env`'den yükleyip alloca'ya koyar → gövde
+isimle erişir (C V2-F2 heap-env aynası).
+
+**DÖNÜŞ-TİPİ NUMARASI:** self-host imzayı gövde-EMİT'inden ÖNCE yazmak zorunda
+(doğrudan-stdout), ama gövdenin doğal tipi ancak emit'te bilinir. C bunu iki-tampon +
+tmpfile ile çözer. Self-host **daha basit**: lifted lambda'yı DAİMA `i64` döndürür
+(runtime `KdlGorevBare` = int64_t ile birebir ABI), gövde sonucunu `i64_genislet` ile
+i64'e çıkarır. Böylece imza-önden-yazma sorunu çözülür, C'nin iki-tampon makinesine
+gerek kalmaz. `görev_birleştir` zaten i64'ten T'ye daraltıyor.
+
+**SINIR (C ile AYNI):** ifade-form gövde. Blok-form (`|| { …; ver x }`) → `ret i64 0`
+fallback (korpus expr-form kullanır; DRF001 kapsamı dışı). İç lambda yok.
+
+**KANIT (C ile birebir eşdeğer, ölçüldü):** capture-free (`|| 42`→42, `|| "selam"`→5,
+iki görev→42); **capture** (`|| temel+2`→42, flagship `|| uretici(k)` çapraz-thread→15,
+2-değişken→42, dedup `|| x+x`→42). Flagship `kanal_mesaj.kem` self-host'ta **20/20
+deterministik** (yarış/kilit yok). `codegen_diff` **84/84** (+3 vaka: cg_gorev_baslat/
+capture/kanal), **SELF-HOST FIXPOINT ✓** (stage1==stage2, 35115 satır; 92/92 bayt-birebir),
+`calistir_self_driver` TÜM MODLAR ✓ — self-host-derlenmiş derleyici de 84/84.
+
+**SONUÇ:** D-291→D-297'nin tamamı (görev/kanal/dondur/lambda-dönüş/closure) artık
+self-host codegen'de. Parite borcu **kapandı**.
+
+---
+
 ## D-299 — Self-host parite borcu: Katman 2'nin closure'sız kısmı `codegen.kem`'e taşındı (2026-07-20)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (ll_tip görev/kanal→ptr; ll_ic_tip; cg_aic alanı +

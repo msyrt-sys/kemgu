@@ -27,7 +27,8 @@ işlev main() -> tam32 {
 > native ikili), eşzamanlılık-güvenliği çekirdeği formel doğrulanmış — ve
 > eşzamanlılık artık yalnız ispatlı değil, **çalışır**: `görev`/`kanal` gerçek
 > thread'lere ve bloklayan kanallara indirgenir. Self-host bootstrap **fixpoint'i
-> tuttu** (derleyici kendini bayt-birebir üretiyor); tam parite ve işletim sistemi
+> tuttu** (derleyici kendini bayt-birebir üretiyor) ve eşzamanlılık codegen'i —
+> lifted-lambda capture dâhil — self-host derleyiciye de taşındı; işletim sistemi
 > yol haritasındadır (aşağıya bakın).
 
 ---
@@ -174,7 +175,7 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 | `vektör` SIMD | tip + codegen | Tip kontrolü + LLVM end-to-end. |
 | MMIO temeli | tip + runtime | `yetki<MMIO>` zorunluluğu (MM001-003); C testi 23/23. |
 | LSP sunucusu | runtime | stdio JSON-RPC; hover, completion, tanıma-git. |
-| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (33.371 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik 76/76 korpus. `mingw32-make calistir_codegen_bootstrap`. **Sınır:** `kanal_*`/`dondur`/`görev_birleştir` port edildi (korpusta sınanıyor); `görev_başlat` + lambda dönüş çıkarsaması closure altyapısı beklediği için henüz yok. |
+| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (35.115 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik **84/84 korpus**. `mingw32-make calistir_codegen_bootstrap`. **Eşzamanlılık paritesi TAM:** `görev_başlat` (lifted-lambda + heap-env capture dâhil), `görev_birleştir`, `kanal_*`, `dondur` self-host codegen'de C ile eşdeğer üretiliyor. Kalan tek sınır C ile ortak: blok-form lambda dönüşü. |
 
 ### Test & Kalite
 
@@ -451,16 +452,6 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 ### Yakın — tanımlı, engelsiz iş
 
-- **Self-host'ta closure / lambda codegen'i.** Paritenin kalan — ve en büyük —
-  parçası. Kanal tarafı **port edildi** (`kanal_oluştur/gönder/al`, `dondur`,
-  `görev_birleştir`) ve parite korpusunda sınanıyor; ama **`görev_başlat` port
-  edilemedi**: fat-value closure (`{ptr, ptr}`) ister, self-host ise lifted lambda
-  emit etmiyor — LAMBDA düğümünü ayrıştırıp yalnızca bölge-yönlendirmesinde kullanıyor.
-  *Ek zorluk:* self-host doğrudan stdout'a yazar; C'nin ertelenmiş-kuyruk + geçici-dosya
-  + yeniden-numaralandırma makinesi olduğu gibi taşınamaz — **ön-geçişli** lifted-lambda
-  emisyonu gerekir.
-  *Buna bağlı olanlar:* `görev_başlat` ve lambda dönüş-tipi çıkarsaması.
-  *Nerede:* `selfhost/codegen.kem`, `mingw32-make calistir_codegen_bootstrap`.
 
 - **Blok-form lambda dönüş-tipi çıkarsaması.** İfade-form (`|| 3.5`) çıkarsanıyor;
   blok-form (`|| { …; ver x; }`) dönüşü hâlâ sabit `tam32`.
