@@ -3581,7 +3581,44 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_gorev_basla_kapanis"
                     "(ptr %%%d, ptr %%%d, ptr %%%d)\n", r, fnr, fnr, envr);
-                IfadeSonuc s = { r, "ptr", 0 };
+                /* Karar 1 (D-30x): görev_başlat → sonuç<görev<T>, metin>.
+                 * görev<T> ve metin İKİSİ de IR'de ptr → aggregate T'den BAĞIMSIZ
+                 * olarak DAİMA { i8, ptr, ptr }. Sarma DALLANMASIZ:
+                 *   tag = (handle == null) ? 1(hata) : 0(tamam)
+                 * ve üç alan da koşulsuz doldurulur — okuyucu (eşleş) tag'e göre
+                 * alan 1'i (görev handle) ya da alan 2'yi (hata metni) okur,
+                 * diğerini yok sayar. Başarısızlıkta handle zaten null'dır ama
+                 * tag=1 olduğundan okunmaz; başarıda hata metni yok sayılır.
+                 * Runtime spawn başarısızsa NULL döndürür (panik YOK, D-296 çözümü). */
+                int r_isnull = yeni_reg(g);
+                fprintf(g->out, "  %%%d = icmp eq ptr %%%d, null\n", r_isnull, r);
+                int r_tag = yeni_reg(g);
+                fprintf(g->out, "  %%%d = zext i1 %%%d to i8\n", r_tag, r_isnull);
+                int r_slot = yeni_reg(g);
+                fprintf(g->out, "  %%%d = alloca { i8, ptr, ptr }\n", r_slot);
+                int r_g0 = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = getelementptr { i8, ptr, ptr }, ptr %%%d, i32 0, i32 0\n",
+                    r_g0, r_slot);
+                fprintf(g->out, "  store i8 %%%d, ptr %%%d\n", r_tag, r_g0);
+                int r_g1 = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = getelementptr { i8, ptr, ptr }, ptr %%%d, i32 0, i32 1\n",
+                    r_g1, r_slot);
+                fprintf(g->out, "  store ptr %%%d, ptr %%%d\n", r, r_g1);
+                int r_emsg = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = getelementptr [20 x i8], ptr @.gorev_hata_str, i32 0, i32 0\n",
+                    r_emsg);
+                int r_g2 = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = getelementptr { i8, ptr, ptr }, ptr %%%d, i32 0, i32 2\n",
+                    r_g2, r_slot);
+                fprintf(g->out, "  store ptr %%%d, ptr %%%d\n", r_emsg, r_g2);
+                int r_load = yeni_reg(g);
+                fprintf(g->out, "  %%%d = load { i8, ptr, ptr }, ptr %%%d\n",
+                    r_load, r_slot);
+                IfadeSonuc s = { r_load, "{ i8, ptr, ptr }", 0 };
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 17 &&
@@ -6116,6 +6153,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)\n", out);
     /* D-294: i64 taşıma (işaretçi T'ler için); çağrı yerinde T'ye daraltılır. */
     fputs("declare i64 @kdl_gorev_birlestir(ptr)\n", out);
+    /* Karar 1 (D-30x): görev_başlat başarısızlığında sonuç'un hata(metin)
+     * payload'u. Sabit, preamble'da bir kez emit edilir (metin ön-geçişinden
+     * BAĞIMSIZ) — "gorev baslatilamadi" = 19 bayt + \00 = 20. */
+    fputs("@.gorev_hata_str = private constant [20 x i8] "
+          "c\"gorev baslatilamadi\\00\"\n", out);
     /* R-KANAL hedefleri. Bu imza host (kdl_runtime.c) ve bare-metal
      * (kdl_kanal.c) sürümlerinde AYNI — tek çağrı iki backend'e de bağlanır. */
     fputs("declare ptr @kdl_kanal_olustur(i32)\n", out);

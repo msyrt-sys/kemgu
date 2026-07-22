@@ -2645,14 +2645,26 @@ static void test_d2_kullanici_prefix_oncelik(void) {
  * bolge ayrikligi mi) ayrica test_gorev_rt.c'de olculur — burada codegen'in
  * dogru runtime cagrisini urettigi kanitlanir. */
 
+/* Karar 1 (D-30x): görev_başlat artik `sonuç<görev<T>, metin>` doner (görev
+ * baslatmak kaynak tukenmesinde basarisiz olabilir; KEMGU cokmez -> deger).
+ * Asagidaki iki yardimci "closure baslat -> handle'i eşleş ile ac" iskeletini
+ * BIR KEZ tanimlar; her test yalniz BIND adi + lambda verir, govdeyi tamam
+ * kolunda yazar. Boylece 9 gomulu programin hex-escape'i tekrar yazilmaz.
+ *   GB_AC(BIND, LAMBDA) ... <govde: BIND = görev<T>> ... GB_KAPA
+ * Hata kolu daima `ver 1;` — spawn basarisizligi (nadire) exit 1 verir. */
+#define GB_AC(BIND, LAMBDA) \
+    "e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9f" "lat(" LAMBDA ") { tamam(" BIND ") => { "
+#define GB_KAPA " } hata(gb_e) => { ver 1; } } "
+
 static void test_gorev_yakalamasiz(void) {
     /* Yakalamasiz lambda -> fat value { @lambda_0, null } -> env=NULL yolu
-     * (runtime bare dispatch: i32 @lambda_0(ptr %rho)). */
+     * (runtime bare dispatch: i32 @lambda_0(ptr %rho)). sonuç eşleş ile acilir. */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 42); "
-        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+        GB_AC("g", "|| 42")
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("gorev_baslat/birlestir (yakalamasiz) -> exit 42", rc == 42);
 }
 
@@ -2663,9 +2675,10 @@ static void test_gorev_yakalamali(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 40; "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| x + 2); "
-        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); }");
+        GB_AC("g", "|| x + 2")
+        "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("gorev_baslat yakalamali closure (env!=null) -> exit 42",
                rc == 42);
 }
@@ -2674,12 +2687,12 @@ static void test_gorev_coklu(void) {
     /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42). */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken a: g\xc3\xb6rev<tam32> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 20); "
-        "de\xc4\x9fi\xc5\x9fken b: g\xc3\xb6rev<tam32> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 22); "
+        GB_AC("a", "|| 20")
+        GB_AC("b", "|| 22")
         "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a) + "
-        "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); }");
+        "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); "
+        GB_KAPA GB_KAPA
+        "ver 99; }");
     test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
 }
 
@@ -2706,11 +2719,12 @@ static void test_kanal_gorev_mesaj(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(4); "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<bo\xc5\x9f> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| kanal_g\xc3\xb6nder(k, 42)); "
+        GB_AC("g", "|| kanal_g\xc3\xb6nder(k, 42)")
         "de\xc4\x9fi\xc5\x9fken v: tam32 = kanal_al(k); "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
-        "ver v; }");
+        "ver v; "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("kanal: gorev gonderir + main alir (blokla) -> exit 42",
                rc == 42);
 }
@@ -2725,13 +2739,14 @@ static void test_kanal_akis_denetimi(void) {
         "iken i <= 5 { kanal_g\xc3\xb6nder(k, i); i = i + 1; } ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2); "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| uretici(k)); "
+        GB_AC("g", "|| uretici(k)")
         "de\xc4\x9fi\xc5\x9fken toplam: tam32 = 0; "
         "de\xc4\x9fi\xc5\x9fken n: tam32 = 0; "
         "iken n < 5 { toplam = toplam + kanal_al(k); n = n + 1; } "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
-        "ver toplam; }");
+        "ver toplam; "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("kanal akis denetimi (kap=2, 5 mesaj) -> exit 15", rc == 15);
 }
 
@@ -2781,10 +2796,11 @@ static void test_gorev_metin(void) {
      * isaretci KIRPILIRDI (D-294 oncesi: LLVM tip hatasi). */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
+        GB_AC("g", "|| \"selam\"")
         "de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
-        "ver metin_uzunluk(s); }");
+        "ver metin_uzunluk(s); "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("gorev<metin> (i64 tasima + inttoptr) -> exit 5", rc == 5);
 }
 
@@ -2799,11 +2815,12 @@ static void test_gorev_kesirli_llvm_de_reddedilir(void) {
      * cast hic emit edilmez ve test yanlis sebeple gecerdi.) */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<kesirli64> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| 3.5); "
+        GB_AC("g", "|| 3.5")
         "de\xc4\x9fi\xc5\x9fken v: kesirli64 = "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
-        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; }");
+        "e\xc4\x9f" "er v > 3.0 { ver 42; } ver 1; "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("gorev<kesirli64>: --llvm yolunda da LLVM reddi (sessiz cop yok)",
                rc != 0);
 }
@@ -2821,9 +2838,11 @@ static void test_annotsuz_gorev_tam64(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken b: tam64 = 4294967296; "
-        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| b); "
-        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
-        "e\xc4\x9f" "er s > 100 { ver 1; } ver 99; }");
+        GB_AC("g", "|| b")
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "e\xc4\x9f" "er s > 100 { ver 1; } ver 99; "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("annotasyonsuz gorev<tam64>: kirpma YOK -> exit 1", rc == 1);
 }
 
@@ -2831,9 +2850,11 @@ static void test_annotsuz_gorev_metin(void) {
     /* BLOKER-1 (isaretci varyanti). ONCE: SEGFAULT (ptr i32'ye kirpildi). */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken c = g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\"); "
-        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(c); "
-        "ver metin_uzunluk(s); }");
+        GB_AC("g", "|| \"selam\"")
+        "de\xc4\x9fi\xc5\x9fken s = g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
+        "ver metin_uzunluk(s); "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("annotasyonsuz gorev<metin>: isaretci saglam -> exit 5", rc == 5);
 }
 
@@ -2926,11 +2947,12 @@ static void test_kanal_dar_T_capraz_thread(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam16> = kanal_olu\xc5\x9ftur(2); "
-        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<bo\xc5\x9f> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| kanal_g\xc3\xb6nder(k, 0 - 1000)); "
+        GB_AC("g", "|| kanal_g\xc3\xb6nder(k, 0 - 1000)")
         "de\xc4\x9fi\xc5\x9fken v: tam16 = kanal_al(k); "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(g); "
-        "e\xc4\x9f" "er v == 0 - 1000 { ver 42; } ver 1; }");
+        "e\xc4\x9f" "er v == 0 - 1000 { ver 42; } ver 1; "
+        GB_KAPA
+        "ver 99; }");
     test_sonuc("kanal<tam16> -1000 capraz-thread turu -> exit 42", rc == 42);
 }
 

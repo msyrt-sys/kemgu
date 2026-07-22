@@ -1,8 +1,14 @@
 // KEMGU Katman 2 (Concurrency / DRF V1) — görev temel örneği
 //
-// görev_başlat(c: işlev() -> T) -> görev<T>
+// görev_başlat(c: işlev() -> T) -> sonuç<görev<T>, metin>
 //     Yeni bir görev başlatır. c PARAMETRESİZ bir kapanış olmalı (DRF001).
 //     Görev kendi bölgesini (ρ_sahip) sahiplenir — R-GÖREV / S2.
+//
+//     Karar 1 (D-30x): DÖNÜŞ artık sonuç<görev<T>, metin>. Görev başlatmak
+//     BAŞARISIZ olabilir (kaynak tükenmesi ~10^5 thread; ya da thread'siz
+//     platform). KEMGU çökmez (exception/panik yok) → başarısızlık çağırana bir
+//     DEĞER olarak sunulur: tamam(görev<T>) veya hata(metin). Çağıran `eşleş`
+//     ile açar. Bu, dilin "çökmezlik" DNA'sının doğal sonucudur.
 //
 // görev_birleştir(g: görev<T>) -> T
 //     Görevin bitmesini bekler, sonucunu çağırana taşır — R-BİRLEŞTİR.
@@ -20,28 +26,36 @@
 // (x0/rax) okur, kesirli dönüş v0/xmm0'dadır → sessizce çöp olurdu. Sessiz
 // bozulma yerine derleme-zamanı red tercih edildi.
 //
+// ERGONOMİ NOTU: Bugün her görev_başlat bir `eşleş` ister → iç içe girer.
+// İleride sonuç için bir yayılım operatörü (`?`-benzeri) bu deseni düzleştirecek.
+//
 // Beklenen çıkış kodu: 42
 
 işlev main() -> tam32 {
-    // (a) Yakalamasız görev — kapanış hiçbir şey yakalamaz.
-    değişken a: görev<tam32> = görev_başlat(|| 20);
-
-    // (b) Yakalamalı görev — `temel` kapanışa değer olarak yakalanır
-    //     ve görevin bölgesine taşınır (R-GÖREV: YD(c) transferi).
-    değişken temel: tam32 = 20;
-    değişken b: görev<tam32> = görev_başlat(|| temel + 2);
-
     // (c) İşaretçi taşıyan T (D-294): görev bir `metin` döndürebilir.
-    //     Runtime i64 taşır; çağrı yeri bildirilen görev<metin>'den T=ptr
+    //     Runtime i64 taşır; birleştir yeri bildirilen görev<metin>'den T=ptr
     //     öğrenip inttoptr eder. i32 taşımada bu işaretçi kırpılırdı.
-    değişken c: görev<metin> = görev_başlat(|| "selam");
+    eşleş görev_başlat(|| "selam") {
+        tamam(c) => {
+            değişken s: metin = görev_birleştir(c);
+            eğer metin_uzunluk(s) != 5 { ver 1; }   // "selam" -> 5 doğrulanır
 
-    // Her görev birleştirilmeli — aksi halde L001 (tüketilmedi).
-    değişken s: metin = görev_birleştir(c);
-    değişken n: tam32 = metin_uzunluk(s);        // "selam" -> 5
-
-    // 20 + 22 = 42; n (5) doğrulanır ama toplama katılmaz.
-    değişken toplam: tam32 = görev_birleştir(a) + görev_birleştir(b);
-    eğer n != 5 { ver 1; }
-    ver toplam;
+            // (a) Yakalamasız görev — kapanış hiçbir şey yakalamaz.
+            eşleş görev_başlat(|| 20) {
+                tamam(a) => {
+                    // (b) Yakalamalı görev — `temel` kapanışa değer olarak
+                    //     yakalanır ve görevin bölgesine taşınır (YD(c) transferi).
+                    değişken temel: tam32 = 20;
+                    eşleş görev_başlat(|| temel + 2) {
+                        // 20 + 22 = 42.
+                        tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
+                        hata(eb) => { ver 1; }
+                    }
+                }
+                hata(ea) => { ver 1; }
+            }
+        }
+        hata(ec) => { ver 1; }
+    }
+    ver 99;   // ulaşılmaz (her dal ver ile döner)
 }

@@ -646,30 +646,31 @@ uint64_t kdl_gorev_sirali_sayisi = 0;   /* D-296: DAIMA 0 (fallback kaldirildi) 
  * V2 NOTU: KEMGU felsefesi "cokmezlik" oldugundan, dogru nihai cozum panik
  * DEGIL, `görev_başlat`in `sonuç<görev<T>, Hata>` donmesidir. Bu bir DIL
  * tasarim karari (Mehmet) — o gelene kadar panik, sessiz kilitlenmeden iyidir. */
-static void kdl_gorev_spawn(KdlGorev *g) {
+/* D-30x (Karar 1): spawn artik PANIK ETMEZ — basari/basarisizligi 1/0 olarak
+ * DONER. Cagiran (kdl_gorev_basla_*) basarisizlikta NULL doner; codegen bu
+ * NULL'i `sonuç<görev<T>, metin>` icinde `hata(...)`ya cevirir. Boylece D-296
+ * gerilimi TAMAMEN cozulur: ne sessiz sirali-fallback (kilitlenme) ne panik
+ * (cokmezlik ihlali) — basarisizlik dile bir DEGER olarak sunulur. Tetikleyici
+ * hala kaynak tukenmesi (~102374 thread sonrasi ERROR_NO_SYSTEM_RESOURCES) ya
+ * da thread'siz platform; ikisi de artik gurultulu-ama-cokmez. */
+static int kdl_gorev_spawn(KdlGorev *g) {
 #ifdef KDL_THREAD_WIN
     g->handle = CreateThread(NULL, 0, kdl_gorev_thread_main, g, 0, NULL);
-    if (!g->handle) {
-        kdl_panik("gorev baslatilamadi: thread yaratilamadi (kaynak tukenmesi). "
-                  "Sirali calistirma yedegi YOK — bloklayan kanal islemi "
-                  "kilitlenmeye yol acardi (D-296).");
-    }
+    if (!g->handle) return 0;
     kdl_gorev_thread_sayisi++;
+    return 1;
 #elif defined(KDL_THREAD_POSIX)
     g->thr_valid = (pthread_create(&g->thr, NULL,
                                     kdl_gorev_thread_posix, g) == 0);
-    if (!g->thr_valid) {
-        kdl_panik("gorev baslatilamadi: pthread_create basarisiz (kaynak "
-                  "tukenmesi). Sirali calistirma yedegi YOK (D-296).");
-    }
+    if (!g->thr_valid) return 0;
     kdl_gorev_thread_sayisi++;
+    return 1;
 #else
     /* Bu derlemede thread YOK (ne Win32 ne POSIX). `görev` bu platformda
      * esZAMANLILIK saglayamaz; sirali calistirmak gorev+kanal programlarini
-     * kilitlerdi. Sessizce yanlis calismak yerine acikca reddet. */
+     * kilitlerdi. Sessizce yanlis calismak yerine basarisizlik DONER. */
     (void)g;
-    kdl_panik("gorev desteklenmiyor: bu derlemede thread yok "
-              "(KDL_THREAD_WIN/POSIX tanimli degil) — D-296.");
+    return 0;
 #endif
 }
 
@@ -681,7 +682,7 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
     g->fn_bare = NULL; g->fn_kapanis = NULL; g->env = NULL; g->rho = NULL;
     g->result = 0;
     g->done = 0;
-    kdl_gorev_spawn(g);
+    if (!kdl_gorev_spawn(g)) { free(g); return NULL; }
     return g;
 }
 
@@ -707,7 +708,9 @@ KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
     g->done = 0;
     g->rho = kdl_bolge_olustur();       /* R-GÖREV: ρ_sahip(t_yeni) */
     if (!g->rho) { free(g); return NULL; }
-    kdl_gorev_spawn(g);
+    /* D-30x: spawn basarisizsa ρ_sahip'i de serbest birak (henuz gorev yok,
+     * confinement sorunu yok — govde hic calismadi) ve NULL don. */
+    if (!kdl_gorev_spawn(g)) { kdl_bolge_serbest(g->rho); free(g); return NULL; }
     return g;
 }
 

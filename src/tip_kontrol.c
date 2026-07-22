@@ -3078,7 +3078,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         "(kesirli32/64) — closure tamsayi/isaretci donmeli");
                     return t_hata(tk);
                 }
-                return tip_olustur_gorev(tk->arena, donus);
+                /* Karar 1 (D-30x): görev_başlat DÖNÜŞÜ artık
+                 * sonuç<görev<T>, metin> — spawn (kaynak tükenmesi / thread'siz
+                 * platform) başarısız olabilir. Panik yerine başarısızlık
+                 * çağırana bir DEĞER olarak sunulur (çökmezlik). Hata tipi V1'de
+                 * metin (payload'lı çeşit gelince GörevHata'ya yükseltilebilir).
+                 * Çağıran `eşleş` ile açar; tamam(g) → görev<T>, hata(e) → metin. */
+                TipBilgisi *gorev_tip = tip_olustur_gorev(tk->arena, donus);
+                TipBilgisi *hata_tip = tip_olustur_basit(tk->arena, TIP_METIN);
+                return tip_olustur_sonuc(tk->arena, gorev_tip, hata_tip);
             }
             /* kanal_oluştur(kapasite) -> kanal<T> — T YALNIZ beklenen tipten
              * gelir (tip_belirle_beklenen'deki DUGUM_CAGRI dalı). Buraya

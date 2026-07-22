@@ -18,6 +18,10 @@
 // kullanılabilir bir transfer tamponudur; tüketilen yalnız GÖNDERİLEN değerdir.
 // Bu yüzden k hem üreticiye geçirilir hem main'de kullanılır.
 //
+// Karar 1 (D-30x): görev_başlat artık sonuç<görev<T>, metin> döner (görev
+// başlatmak kaynak tükenmesinde başarısız olabilir; KEMGU çökmez → değer olarak
+// sunulur). Üretici görevi `eşleş` ile açılır.
+//
 // Bu örnek kapasiteyi bilinçli olarak 2 seçer ama 5 mesaj gönderir: üretici
 // dolu kanalda bloklamak ZORUNDA kalır → çift yönlü akış denetimi gerçekten
 // çalışır (yalnız "hiç bloklamadı" durumunda da geçen sahte bir test değil).
@@ -36,17 +40,20 @@ işlev uretici(k: kanal<tam32>) -> tam32 {
 işlev main() -> tam32 {
     değişken k: kanal<tam32> = kanal_oluştur(2);
 
-    // Üretici ayrı bir görevde (gerçek thread) koşar.
-    değişken g: görev<tam32> = görev_başlat(|| uretici(k));
-
-    // Tüketici (main): 5 mesajı sırayla al — kanal boşken bloklar.
-    değişken toplam: tam32 = 0;
-    değişken n: tam32 = 0;
-    iken n < 5 {
-        toplam = toplam + kanal_al(k);
-        n = n + 1;
+    // Üretici ayrı bir görevde (gerçek thread) koşar. sonuç açılır.
+    eşleş görev_başlat(|| uretici(k)) {
+        tamam(g) => {
+            // Tüketici (main): 5 mesajı sırayla al — kanal boşken bloklar.
+            değişken toplam: tam32 = 0;
+            değişken n: tam32 = 0;
+            iken n < 5 {
+                toplam = toplam + kanal_al(k);
+                n = n + 1;
+            }
+            görev_birleştir(g);   // R-BİRLEŞTİR — g tüketilmeli (yoksa L001)
+            ver toplam;
+        }
+        hata(e) => { ver 1; }   // görev başlatılamadı (kaynak tükenmesi)
     }
-
-    görev_birleştir(g);   // R-BİRLEŞTİR — g tüketilmeli (yoksa L001)
-    ver toplam;
+    ver 99;   // ulaşılmaz
 }

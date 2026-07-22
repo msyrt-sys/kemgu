@@ -5,6 +5,66 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-301 — `görev_başlat` → `sonuç<görev<T>, metin>`: panik yerine değer (çökmezlik) (2026-07-22)
+
+**Karar [YÜKSEK] [ETKİ: `src/tip_kontrol.c` (dönüş tipi), `src/llvm.c` + `selfhost/codegen.kem`
+(sonuç sarma + preamble global), `runtime/kdl_runtime.c` (spawn NULL), tüm görev çağrı
+yerleri (örnek/test/korpus eşleş'e taşındı).]** Karar 1 (Mehmet onayı). `görev_başlat`
+artık `görev<T>` DEĞİL `sonuç<görev<T>, metin>` döner.
+
+**GEREKÇE:** Görev başlatmak BAŞARISIZ olabilir (kaynak tükenmesi ~10^5 thread; ölçüldü
+ERROR_NO_SYSTEM_RESOURCES / thread'siz platform). D-296'da bu panik ediyordu — ama
+KEMGU'nun DNA'sı çökmezlik (exception/panik yok, `sonuç<T,H>` var). Panik bu kimliği
+ihlal ediyordu. Runtime alt katmanı zaten çökmüyordu (`kdl_bolge_olustur` OOM'de NULL
+döner) — panik EDEN tek yer görev katmanıydı. Artık başarısızlık çağırana bir DEĞER:
+`tamam(görev<T>)` / `hata(metin)`; çağıran `eşleş` ile açar. Hata tipi V1'de `metin`
+(payload'lı `çeşit` gelince `GörevHata`ya yükseltilebilir). D-296 gerilimi TAMAMEN çözüldü:
+ne sessiz sıralı-fallback (kilitlenme) ne panik.
+
+**DALLANMASIZ SARMA:** `görev<T>` ve `metin` ikisi de IR'de `ptr` → sonuç aggregate T'den
+BAĞIMSIZ olarak DAİMA `{ i8, ptr, ptr }`. Sarma dal/phi'siz: `tag = zext(icmp eq ptr
+handle, null)` (başarı 0 / başarısız 1); 3 alan da koşulsuz doldurulur (f0=tag, f1=handle,
+f2=sabit `@.gorev_hata_str`); okuyucu tag'e göre f1 ya da f2 okur, diğerini yok sayar.
+Runtime spawn başarısızsa NULL döner → f1=null ama tag=1 olduğu için okunmaz. C ve
+self-host aynı desen.
+
+**SELF-HOST BULGUSU (escape):** Preamble global'i ilk yazışta `c\"...\\00\"` KEMGU string
+literal'inde `\"`/`\\` İŞLENMEDEN literal kaldı → HER program bozuk IR (0/84 link).
+KEMGU'da `"` = `yb(34)`, `\` = `yb(92)` (str_globalleri_emit deseni). C escape'i işlediği
+için C tarafı doğruydu; yalnız self-host satırı düzeltildi.
+
+**SELF-HOST BULGUSU (ret_uydur):** eşleş-bound `tamam(g)` binding'i görev iç-tipini
+(görev_ic_ir) TAŞIMAZ → `görev_birleştir(g)` i64 taşıyıcıda kalır (daralmaz).
+`ver görev_birleştir(a) + görev_birleştir(b)` → `add i64` → `ret i32 <i64>` uyumsuzluk
+(cg_gorev_baslat/capture 82/84'te patladı; kanal geçti çünkü `ver t` döndürüyor). C
+beklenen'i `+`/`ver`'den akıtıp birleştir'de trunc yapıyor. Self-host çözümü: `ret_uydur`
+— `ver` değerini `cur_ret`'e tamsayı-daraltır (yalnız iki taraf da int + genişlik farklı).
+`trunc(a+b) == trunc(a)+trunc(b)` → exit-kod eşdeğer (C IR'ından farklı ama semantik denk;
+parite gate exit-kod). FIXPOINT korundu (codegen.kem'in kendi `ver`'leri genişlik-eşleşik →
+no-op; 35115→35493 satır, stage1==stage2).
+
+**V1 KNOWN-LIMIT (T18, açık + test edilmiş — sessiz DEĞİL):** `görev<T>` lineerdir ama
+onu KAPSAYAN `sonuç` V1'de lineer sayılmaz (`tip_lineer_mi` sonuç/seçimlik içine
+özyinelemez). Sonuç: eşleş ile AÇILMADAN düşen bir `sonuç<görev,metin>` için L001 leak
+uyarısı ARTIK tetiklenmez (iç görev join edilmez, thread detached koşar, ρ_sahip sızar —
+bellek-güvenliği ihlali DEĞİL, liveness/kaynak uyarısının kaybı). T38 ile aynı desen
+(dokümante V1 sınırı). **V2 doğru çözüm:** `tip_lineer_mi`'yi sonuç/seçimlik payload'una
+özyineli yap (lineer içerik → kapsayan lineer) VE eşleş'e lineer scrutinee tüketimi +
+iç-payload yeniden-bağlaması öğret (ikisi bir arada; tek başına birincisi tüm eşleş-açan
+pozitif testleri L001'e düşürürdü).
+
+**ERGONOMİ:** Her `görev_başlat` artık bir `eşleş` ister → çok-görevli kod iç içe girer
+(gorev_temel.kem 3 görev = 3 seviye). İleride sonuç için bir yayılım operatörü
+(`?`-benzeri) bu deseni düzleştirecek. (Rust emsali: `thread::spawn` doğrudan handle
+döner, `Builder::spawn` `Result` — KEMGU çökmezlik gereği `sonuç`u varsayılan yaptı.)
+
+**KANITLAR:** test_drf 50/50, test_gorev_rt 13/13, test_llvm 263/263, codegen_diff 84/84
+(C↔self-host semantik), FIXPOINT 35493 satır stage1==stage2, driver TÜM MODLAR, tip_kontrol
+189/189, simd 5/5, sıfır uyarı. Başarısızlık yolu (hata kolu destructuring) normal sonuç
+ile ayrıca doğrulandı (spawn hatası ~10^5 thread olmadan tetiklenemez).
+
+---
+
 ## D-300 — `görev_başlat` + closure/lambda codegen self-host'a taşındı: PARİTE BORCU TAM KAPANDI (2026-07-20)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (lambda kuyruğu + capture analizi + heap-env +

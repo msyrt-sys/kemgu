@@ -1,6 +1,13 @@
-// D-300: görev_başlat capture-free — lifted lambda + gerçek thread. Exit: 42
+// D-30x: görev_başlat capture-free — sonuç<görev<T>, metin> açılır. Exit: 42
 işlev main() -> tam32 {
-    değişken a: görev<tam32> = görev_başlat(|| 20);
-    değişken b: görev<tam32> = görev_başlat(|| 22);
-    ver görev_birleştir(a) + görev_birleştir(b);
+    eşleş görev_başlat(|| 20) {
+        tamam(a) => {
+            eşleş görev_başlat(|| 22) {
+                tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
+                hata(e2) => { ver 1; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    ver 99;
 }

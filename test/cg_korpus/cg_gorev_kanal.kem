@@ -1,4 +1,4 @@
-// D-300: görev_başlat + kanal (capture k) — çapraz-thread mesaj geçişi. Exit: 15
+// D-30x: görev_başlat + kanal (capture k) — çapraz-thread; sonuç açılır. Exit: 15
 işlev uretici(k: kanal<tam32>) -> tam32 {
     değişken i: tam32 = 1;
     iken i <= 5 { kanal_gönder(k, i); i = i + 1; }
@@ -6,10 +6,15 @@ işlev uretici(k: kanal<tam32>) -> tam32 {
 }
 işlev main() -> tam32 {
     değişken k: kanal<tam32> = kanal_oluştur(2);
-    değişken g: görev<tam32> = görev_başlat(|| uretici(k));
-    değişken t: tam32 = 0;
-    değişken n: tam32 = 0;
-    iken n < 5 { t = t + kanal_al(k); n = n + 1; }
-    görev_birleştir(g);
-    ver t;
+    eşleş görev_başlat(|| uretici(k)) {
+        tamam(g) => {
+            değişken t: tam32 = 0;
+            değişken n: tam32 = 0;
+            iken n < 5 { t = t + kanal_al(k); n = n + 1; }
+            görev_birleştir(g);
+            ver t;
+        }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
 }

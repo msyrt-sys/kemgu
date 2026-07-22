@@ -154,21 +154,25 @@ static void T6_kanal_nested_dizi(void) {
  * GROUP D7-D12: gorev_baslat — pozitif + arity
  * ======================================================================== */
 
+/* Karar 1 (D-30x): gorev_baslat artik sonuç<görev<T>, metin> doner. Pozitif
+ * testler artik eşleş ile acar; tamam kolunda görev<T> baglanip birlestirilir. */
 static void T7_gorev_baslat_lambda(void) {
-    /* Bir lambda'yi gorev_baslat ile thread'e gecir
+    /* Bir lambda'yi gorev_baslat ile thread'e gecir; sonuç eşleş ile acilir.
      * V1: lambda body ifade-form (block-form V2'ye saklı) */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32>"
-        " = g\xc3\xb6rev_ba\xc5\x9flat(|| 42);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
-    test_sonuc("D7: gorev_baslat(lambda) + birlestir = 0 hata", h == 0);
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 42) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
+    test_sonuc("D7: gorev_baslat(lambda) + eşleş/birlestir = 0 hata", h == 0);
 }
 
 static void T8_gorev_baslat_lambda_metin(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin>"
-        " = g\xc3\xb6rev_ba\xc5\x9flat(|| \"selam\");\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| \"selam\") {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D8: gorev_baslat(metin lambda) = 0 hata", h == 0);
 }
 
@@ -191,11 +195,14 @@ static void T11_gorev_baslat_non_islev(void) {
 }
 
 static void T12_gorev_baslat_donus_cikarsama(void) {
-    /* Annotsuz değişken — gorev<T> çıkarsanmalı */
+    /* Annotsuz — sonuç<görev<tam32>, metin> çıkarsanmalı; eşleş binding'i
+     * tamam(g)'yi görev<tam32> olarak bağlar (annotasyon yok). */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 7);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
-    test_sonuc("D12: annotsuz değişken gorev<tam32> çıkarsanır", h == 0);
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 7) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
+    test_sonuc("D12: annotsuz sonuç<görev<tam32>,metin> çıkarsanır", h == 0);
 }
 
 /* ========================================================================
@@ -204,17 +211,23 @@ static void T12_gorev_baslat_donus_cikarsama(void) {
 
 static void T13_birlestir_basit(void) {
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 5);\n"
-        "    de\xc4\x9fi\xc5\x9fken r: tam32 = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 5) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r: tam32 = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D13: birlestir(g) -> tam32 = 0 hata", h == 0);
 }
 
 static void T14_birlestir_iki_kez(void) {
-    /* g iki kez birlestir -> L002 (linear cift tuketim) */
+    /* g iki kez birlestir -> L002 (linear cift tuketim). g tamam kolunda baglanir. */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 5);\n"
-        "    de\xc4\x9fi\xc5\x9fken r1 = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
-        "    de\xc4\x9fi\xc5\x9fken r2 = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 5) {\n"
+        "        tamam(g) => {\n"
+        "            de\xc4\x9fi\xc5\x9fken r1 = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "            de\xc4\x9fi\xc5\x9fken r2 = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "        }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D14: birlestir(g) iki kez -> L002 cift tuketim", h >= 1);
 }
 
@@ -237,11 +250,30 @@ static void T17_birlestir_non_gorev(void) {
     test_sonuc("D17: birlestir(non-gorev) -> DRF002", h >= 1);
 }
 
-static void T18_gorev_tuketilmedi(void) {
-    /* L001: gorev<T> linear, scope sonunda tuketilmedi */
+static void T18_gorev_tuketilmedi_v1_limit(void) {
+    /* Karar 1 (D-30x) V1 KNOWN-LIMIT — sonuç sarmasinin bedeli.
+     *
+     * gorev_baslat artik `sonuç<görev<T>, metin>` doner (görev<T> DEGIL).
+     * görev<T> lineerdir (tip_lineer_mi), ama onu KAPSAYAN sonuç V1'de lineer
+     * SAYILMAZ (tip_lineer_mi sonuç/seçimlik icine OZYINELEMEZ). Sonuc: eşleş
+     * ile ACILMADAN dusen bir `sonuç<görev,metin>` icin L001 leak uyarisi
+     * ARTIK TETIKLENMEZ — ic görev hic cikarilmaz, join edilmez, thread
+     * detached kosar (ρ_sahip sizar; bellek-GUVENLIGI ihlali DEGIL, liveness/
+     * kaynak-sizinti uyarisinin kaybi).
+     *
+     * ONCE (görev_başlat -> görev<T>): bu program L001 verirdi (h>=1).
+     * SIMDI (görev_başlat -> sonuç<...>): V1'de 0 hata. Bu test o REGRESYONU
+     * DOKUMANTE eder (T38 ile ayni desen — sessiz degil, acik+test edilmis).
+     *
+     * V2 DOGRU COZUM: tip_lineer_mi'yi sonuç/seçimlik payload'una ozyineli
+     * yap (lineer icerik -> kapsayan sonuç lineer) VE eşleş'e lineer
+     * scrutinee tuketimi + ic-payload yeniden-baglamasini ogret. Ikisi bir
+     * arada; tek basina birincisi tum eşleş-acan pozitif testleri L001'e
+     * dusururdu. Bkz. DECISIONS_LOG D-30x. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 1);\n");
-    test_sonuc("D18: gorev tuketilmedi -> L001 (linear leak)", h >= 1);
+    test_sonuc("D18: sonuç<görev> eşleş'siz dusme -> V1'de L001 YOK "
+               "(KNOWN-LIMIT; V2: lineer yayilim)", h == 0);
 }
 
 /* ========================================================================
@@ -385,10 +417,11 @@ static void T33_gorev_kanal_birlikte(void) {
         "    ver kanal_al(k) + 1;\n"
         "}\n"
         "i\xc5\x9flev test() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<tam32>"
-        " = g\xc3\xb6rev_ba\xc5\x9flat(|| 0);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
-        "    ver r;\n"
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 0) {\n"
+        "        tamam(g) => { ver g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => { ver 0; }\n"
+        "    }\n"
+        "    ver 0;\n"
         "}\n");
     test_sonuc("D33: gorev + kanal kompozisyon (DRF-L1-L5) = 0 hata", h == 0);
 }
@@ -400,8 +433,10 @@ static void T34_tekkez_gorev_lc2(void) {
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken k = tekkez_olustur(42);\n"
         "    de\xc4\x9fi\xc5\x9fken n = kullan(k);\n"
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| n);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| n) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D34: gorev_baslat(non-linear) + ayri tekkez tuketim = 0 hata",
                h == 0);
 }
@@ -412,8 +447,10 @@ static void T35_yetki_gorev_drf_l6(void) {
      * Burada outer-scope tüketim ile DRF-L6 linear-pattern test edilir. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken y: yetki<Dosya> = yetki_olustur(1, 1);\n"
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 0);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| 0) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n"
         "    geri_al(y);\n");
     test_sonuc("D35: yetki<R> + gorev outer-scope tuketim (DRF-L6) = 0 hata",
                h == 0);
@@ -443,8 +480,10 @@ static void T37_dizi_yakala_pozitif(void) {
      * R-YAKALAMA-THREAD non-linear capture move semantiğini doğrular. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D37: Dizi non-linear capture + birlestir = 0 hata",
                h == 0);
 }
@@ -460,8 +499,10 @@ static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
      * Bu test V1 sınırını dokümante eder; V2'de h >= 1 olmalıdır. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
-        "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]);\n"
-        "    de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n"
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]) {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken r = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n"
         "    de\xc4\x9fi\xc5\x9fken s: tam32 = xs[1];\n");
     test_sonuc("D38: Dizi capture sonrasi erisim V1 KNOWN-LIMIT "
                "(V1: 0 hata, V2: hata bekleniyor)",
@@ -557,9 +598,10 @@ static void T49_gorev_metin_kabul(void) {
     /* Kısıt fazla geniş olmamalı: işaretçi T (metin) D-294'te ÇALIŞIR
      * (runtime i64 taşır + inttoptr). Uçtan uca kanıt test_llvm.c'de. */
     int h = kontrol_main(
-        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6rev<metin> = "
-        "g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\");\n"
-        "    de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9ftir(g);\n");
+        "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9f" "lat(|| \"selam\") {\n"
+        "        tamam(g) => { de\xc4\x9fi\xc5\x9fken s: metin = g\xc3\xb6rev_birle\xc5\x9ftir(g); }\n"
+        "        hata(e) => {}\n"
+        "    }\n");
     test_sonuc("D49: gorev<metin> = 0 hata (isaretci T destekleniyor)", h == 0);
 }
 
@@ -638,7 +680,7 @@ int main(void) {
     T15_birlestir_arity_sifir();
     T16_birlestir_arity_iki();
     T17_birlestir_non_gorev();
-    T18_gorev_tuketilmedi();
+    T18_gorev_tuketilmedi_v1_limit();
 
     /* D19-D24: kanal_gonder / kanal_al */
     T19_kanal_gonder_arity();

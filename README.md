@@ -88,7 +88,7 @@ makine-denetimli).
 | Çapraz-modül generic monomorphization | codegen | Generic fonk **ve** struct'lar dosyalar arası örneklenir (`kap::Liste<T>`). |
 | Nitelikli tip annotasyonu (`mod::Tip<args>`) | codegen | Tip pozisyonunda modül-nitelikli tip: `değişken l: dizi::Liste<tam64> = dizi::oluştur(böl)`. Çapraz-modül struct alan erişimi dahil. **v1 sınırı:** nitelikli *inşa ifadesi* `mod::Yapı{...}` henüz yok (factory + çıkarsama ile). |
 | Bit operatörleri (`&` `\|` `<<` `>>`) | codegen | Tamsayı genişlikleri arası otomatik dönüşüm. |
-| Eşzamanlılık `görev<T>` / `kanal<T>` | codegen | `görev_başlat(\|\| …)` **gerçek işletim-sistemi thread'i** başlatır (Win32/pthread); `görev_birleştir` sonucu çağırana taşır. `kanal_oluştur/gönder/al` — **bloklayan** kanal, çift yönlü akış denetimi (dolu kanalda gönderim, boş kanalda alım bekler). Her görev **kendi bölgesini** sahiplenir (S1/S2) → paylaşılan-bölge yarışı yapısal olarak imkânsız. Statik denetim DRF001-006; `görev<T>` lineerdir (birleştirilmezse L001, iki kez birleştirilirse L002). **v1 sınırı:** `T` ∈ {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`Dizi<T>`), `boş`} — kesirli `T` reddedilir (runtime tamsayı yazmacından okur). Görev bölgesi henüz serbest bırakılmaz (bilinçli sızıntı; hapsedilme kanıtı bekliyor). |
+| Eşzamanlılık `görev<T>` / `kanal<T>` | codegen | `görev_başlat(\|\| …)` **gerçek işletim-sistemi thread'i** başlatır (Win32/pthread) ve **`sonuç<görev<T>, metin>`** döner (başlatmak başarısız olabilir → çökmezlik gereği panik değil DEĞER; `eşleş` açar); `görev_birleştir` sonucu çağırana taşır. `kanal_oluştur/gönder/al` — **bloklayan** kanal, çift yönlü akış denetimi (dolu kanalda gönderim, boş kanalda alım bekler). Her görev **kendi bölgesini** sahiplenir (S1/S2) → paylaşılan-bölge yarışı yapısal olarak imkânsız. Statik denetim DRF001-006; `görev<T>` lineerdir (birleştirilmezse L001, iki kez birleştirilirse L002). **v1 sınırı:** `T` ∈ {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`Dizi<T>`), `boş`} — kesirli `T` reddedilir (runtime tamsayı yazmacından okur). Görev bölgesi henüz serbest bırakılmaz (bilinçli sızıntı; hapsedilme kanıtı bekliyor). |
 
 ### Derleyici
 
@@ -175,7 +175,7 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 | `vektör` SIMD | tip + codegen | Tip kontrolü + LLVM end-to-end. |
 | MMIO temeli | tip + runtime | `yetki<MMIO>` zorunluluğu (MM001-003); C testi 23/23. |
 | LSP sunucusu | runtime | stdio JSON-RPC; hover, completion, tanıma-git. |
-| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (35.115 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik **84/84 korpus**. `mingw32-make calistir_codegen_bootstrap`. **Eşzamanlılık paritesi TAM:** `görev_başlat` (lifted-lambda + heap-env capture dâhil), `görev_birleştir`, `kanal_*`, `dondur` self-host codegen'de C ile eşdeğer üretiliyor. Kalan tek sınır C ile ortak: blok-form lambda dönüşü. |
+| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (35.493 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik **84/84 korpus**. `mingw32-make calistir_codegen_bootstrap`. **Eşzamanlılık paritesi TAM:** `görev_başlat` (lifted-lambda + heap-env capture dâhil), `görev_birleştir`, `kanal_*`, `dondur` self-host codegen'de C ile eşdeğer üretiliyor. Kalan tek sınır C ile ortak: blok-form lambda dönüşü. |
 
 ### Test & Kalite
 
@@ -235,17 +235,22 @@ işlev main() -> tam32 {
 
     // Ayrı bir thread'te çalışır; KENDİ bölgesini sahiplenir (S1/S2) —
     // çağıranla bölge paylaşmadığı için veri yarışı yapısal olarak imkânsız.
-    değişken g: görev<tam32> = görev_başlat(|| uretici(k));
-
-    değişken toplam: tam32 = 0;
-    değişken n: tam32 = 0;
-    iken n < 5 {
-        toplam = toplam + kanal_al(k);   // kanal boşsa BLOKLAR
-        n = n + 1;
+    // görev_başlat -> sonuç<görev<T>, metin>: başlatmak başarısız olabilir
+    // (kaynak tükenmesi) → çökmezlik gereği bir DEĞER olarak sunulur, `eşleş` açar.
+    eşleş görev_başlat(|| uretici(k)) {
+        tamam(g) => {
+            değişken toplam: tam32 = 0;
+            değişken n: tam32 = 0;
+            iken n < 5 {
+                toplam = toplam + kanal_al(k);   // kanal boşsa BLOKLAR
+                n = n + 1;
+            }
+            görev_birleştir(g);    // g lineer: birleştirilmezse L001
+            ver toplam;            // → 15
+        }
+        hata(e) => { ver 1; }      // görev başlatılamadı
     }
-
-    görev_birleştir(g);    // g lineer: birleştirilmezse L001 (derleme hatası)
-    ver toplam;            // → 15
+    ver 99;                        // ulaşılmaz
 }
 ```
 
@@ -513,11 +518,10 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair karar**.
 
-- **`görev_başlat` başarısızlığı ne dönmeli?** Thread yaratılamazsa şu an
-  `kdl_panik` çağrılıyor. Bu, KEMGU'nun "çökmezlik" ilkesiyle gerilim hâlinde —
-  ama önceki davranış (görevi sıralı çalıştırmak) bloklayan bir kanal işleminde
-  **kalıcı kilitlenme** üretiyordu, yani daha kötüydü. Muhtemel doğru çözüm
-  `sonuç<görev<T>, Hata>`; bu bir dil kararı.
+- ~~**`görev_başlat` başarısızlığı ne dönmeli?**~~ **KARAR VERİLDİ (D-301):** artık
+  `sonuç<görev<T>, metin>` döner — thread yaratılamazsa panik değil, çağırana bir
+  DEĞER (`hata(metin)`). Çökmezlik ilkesiyle uyumlu. Hata tipi V1'de `metin`;
+  payload'lı `çeşit` (aşağıdaki 3. madde) gelince `GörevHata`ya yükseltilebilir.
 
 - **Kanalda yön garantisi.** Bugün tek, yönsüz `kanal<T>` var: aynı görev hem
   gönderip hem alabilir, tip sistemi engellemez. Bellek modelinin özgün tasarımı
@@ -530,8 +534,10 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
 görev bölgesi sızdırılır; blok-form lambda dönüşü `tam32`; skaler `&T` okunamaz;
-`çeşit` varyantları payloadsuz; turbofish yok; self-host derleyici en yeni codegen
-özelliklerini içermez.
+`çeşit` varyantları payloadsuz; turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
+için L001 leak uyarısı tetiklenmez (`eşleş`'siz düşen görev join edilmez —
+bellek-güvenliği değil liveness kaybı; `tip_lineer_mi` sonuç'a özyinelemez, V2 işi);
+self-host derleyici en yeni codegen özelliklerini içermez.
 
 ---
 

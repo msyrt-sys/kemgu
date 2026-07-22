@@ -2119,6 +2119,29 @@ işlev tip_genislik(t: metin) -> tam32 {
     eğer metin_esit(t, "i64") { ver 64; }
     ver 32;   // i32 (varsayılan)
 }
+// LLVM tamsayı tipi mi? (i1/i8/i16/i32/i64). ptr/void/float/struct → yanlış.
+işlev int_ll_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "i1") veya metin_esit(t, "i8") veya metin_esit(t, "i16")
+        veya metin_esit(t, "i32") veya metin_esit(t, "i64");
+}
+// Karar 1 (D-30x): `ver <ifade>` değerini fn dönüşüne (cur_ret) uydur — YALNIZ
+// iki taraf da tamsayı ve genişlik farklıysa (trunc/sext). görev_birleştir gibi
+// i64-taşıyıcı dönen ifadeler eşleş-bound iç-tip kaybında i64 kalır; `ver`
+// bağlamında fn dönüşü i32 ise burada daraltılır. C paritesi: C, daraltmayı
+// birleştir'de beklenen ile yapar; self-host ret'te yapar → exit-kod eşdeğer
+// (trunc(a+b) == trunc(a)+trunc(b)). cur_ret struct/ptr/float ise NO-OP.
+işlev ret_uydur(p: &değişken Ayr, op: metin) -> metin {
+    eğer metin_esit(p.son_tip, p.cur_ret) { ver op; }
+    eğer int_ll_mi(p.son_tip) == yanlış veya int_ll_mi(p.cur_ret) == yanlış { ver op; }
+    değişken islem: metin = "sext";
+    eğer tip_genislik(p.cur_ret) < tip_genislik(p.son_tip) { islem = "trunc"; }
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" ");
+    yaz_str(p.son_tip); yaz_str(" "); yaz_str(op); yaz_str(" to "); yaz_str(p.cur_ret); yb(10);
+    p.son_tip = p.cur_ret;
+    ver rs;
+}
 // ============================================================================
 // CG7 — metin literali + runtime builtin + declare header (D-072).
 // ============================================================================
@@ -2212,6 +2235,12 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     // sürümlerinin ikisine de uyar.
     yaz_str("declare i64 @kdl_gorev_birlestir(ptr)"); yb(10);
     yaz_str("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)"); yb(10);   // D-300
+    // Karar 1 (D-30x): görev_başlat başarısızlığında sonuç'un hata(metin)
+    // payload'u. Metin ön-geçişinden bağımsız sabit — 19 bayt + \00 = 20.
+    // KEMGU string literal'i \" / \\ işlemez → tırnak yb(34), ters-eğik yb(92)
+    // (str_globalleri_emit ile aynı desen). "gorev baslatilamadi" = 19 + \00 = 20.
+    yaz_str("@.gorev_hata_str = private constant [20 x i8] c"); yb(34);
+    yaz_str("gorev baslatilamadi"); yb(92); yaz_str("00"); yb(34); yb(10);
     yaz_str("declare ptr @kdl_kanal_olustur(i32)"); yb(10);
     yaz_str("declare void @kdl_kanal_gonder(ptr, i64)"); yb(10);
     yaz_str("declare i64 @kdl_kanal_al(ptr)"); yb(10);
@@ -2633,13 +2662,49 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str("  "); yaz_str(reg_str(gr));
             yaz_str(" = call ptr @kdl_gorev_basla_kapanis(ptr @"); yaz_str(mad);
             yaz_str(", ptr @"); yaz_str(mad); yaz_str(", ptr "); yaz_str(envreg); yaz_str(")"); yb(10);
+            // Karar 1 (D-30x): görev_başlat → sonuç<görev<T>, metin>. görev<T> ve
+            // metin ikisi de IR'de ptr → aggregate DAİMA { i8, ptr, ptr } (T'den
+            // bağımsız). DALLANMASIZ sarma: tag = (handle==null)?1:0; 3 alan da
+            // koşulsuz dolu — okuyucu tag'e göre alan1 (handle) ya da alan2 (hata
+            // metni) okur. Runtime spawn başarısızsa NULL döner (panik YOK). C
+            // llvm.c görev_başlat sonuç-sarma aynası.
+            değişken isn: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(isn));
+            yaz_str(" = icmp eq ptr "); yaz_str(reg_str(gr)); yaz_str(", null"); yb(10);
+            değişken tg: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(tg));
+            yaz_str(" = zext i1 "); yaz_str(reg_str(isn)); yaz_str(" to i8"); yb(10);
+            değişken slot: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(slot));
+            yaz_str(" = alloca { i8, ptr, ptr }"); yb(10);
+            değişken f0: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(f0));
+            yaz_str(" = getelementptr { i8, ptr, ptr }, ptr "); yaz_str(reg_str(slot));
+            yaz_str(", i32 0, i32 0"); yb(10);
+            yaz_str("  store i8 "); yaz_str(reg_str(tg)); yaz_str(", ptr "); yaz_str(reg_str(f0)); yb(10);
+            değişken f1: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(f1));
+            yaz_str(" = getelementptr { i8, ptr, ptr }, ptr "); yaz_str(reg_str(slot));
+            yaz_str(", i32 0, i32 1"); yb(10);
+            yaz_str("  store ptr "); yaz_str(reg_str(gr)); yaz_str(", ptr "); yaz_str(reg_str(f1)); yb(10);
+            değişken em: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(em));
+            yaz_str(" = getelementptr [20 x i8], ptr @.gorev_hata_str, i32 0, i32 0"); yb(10);
+            değişken f2: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(f2));
+            yaz_str(" = getelementptr { i8, ptr, ptr }, ptr "); yaz_str(reg_str(slot));
+            yaz_str(", i32 0, i32 2"); yb(10);
+            yaz_str("  store ptr "); yaz_str(reg_str(em)); yaz_str(", ptr "); yaz_str(reg_str(f2)); yb(10);
+            değişken ld: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(ld));
+            yaz_str(" = load { i8, ptr, ptr }, ptr "); yaz_str(reg_str(slot)); yb(10);
             // Lifted lambda'yı kuyruğa al (gövde-sonrası emit).
             dizi_ekle(p.lam_node, lam);
             dizi_ekle(p.lam_ad, mad);
             dizi_ekle(p.lam_capbase, capbase);
             dizi_ekle(p.lam_capcount, capcnt);
-            p.son_tip = "ptr"; p.son_elem = ""; p.son_ref = "";
-            ver reg_str(gr);
+            p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
+            ver reg_str(ld);
         }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
@@ -3116,6 +3181,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer bayt(p.cur_ret, 0) == 123 { p.beklenen_ll = p.cur_ret; }
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
             p.beklenen_ll = eski_bll;
+            op = ret_uydur(p, op);       // Karar 1: i64-taşıyıcı → fn dönüşüne daralt
             rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
             rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
