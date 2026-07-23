@@ -361,6 +361,40 @@ static void test_turkce_tip_adi_calistir(void) {
                rc == 42);
 }
 
+/* === D-302: generic çeşit (çeşit Secim<T>) — C-only, generic yapı ile aynı
+ * kapsam. Annotasyon + ver formu çalışır; T=tam32/tam64 uçtan uca doğru
+ * (tam64 SESSİZ KIRPILMAZ); T=metin/ptr codegen sınırı (yapı gibi, LLVM
+ * gürültülü reddeder); çağrı-arg doğrudan construction desteklenmez (yapı
+ * gibi). self-host generic çeşit desteklemez (generic yapı gibi). */
+static void test_generic_cesit_tam32(void) {
+    /* Annotasyon formu: değişken s: Secim<tam32> = Secim::Var(42). */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Secim<T> { Var(T), Yok }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Secim<tam32> = Secim::Var(42);\n"
+        "    e\xc5\x9fle\xc5\x9f s { Secim::Var(x) => { ver x; } "
+        "Secim::Yok => { ver 0; } }\n"
+        "    ver 0;\n"
+        "}\n");
+    test_sonuc("generic cesit Secim<tam32> (Var(42)) -> exit 42", rc == 42);
+}
+
+static void test_generic_cesit_tam64(void) {
+    /* T=tam64, 2^33: SESSİZ KIRPMA YOK (i64 kayıpsız taşınır). ver formu. */
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Kutu<T> { Dolu(T), Bos }\n"
+        "i\xc5\x9flev yap() -> Kutu<tam64> { ver Kutu::Dolu(8589934592); }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    e\xc5\x9fle\xc5\x9f yap() {\n"
+        "        Kutu::Dolu(v) => { e\xc4\x9f" "er v == 8589934592 "
+        "{ ver 42; } ver 1; }\n"
+        "        Kutu::Bos => { ver 0; }\n"
+        "    }\n"
+        "    ver 0;\n"
+        "}\n");
+    test_sonuc("generic cesit Kutu<tam64> 2^33 kayipsiz -> exit 42", rc == 42);
+}
+
 static void test_cesit_capraz_modul_calistir(void) {
     /* SELF-HOSTING deseni: payload + recursive çeşit MODÜLDE (ifd::Ifade) —
      * nitelikli yapıcı ifd::Ifade::Topla(&a,&b) + nitelikli annotation +
@@ -3175,6 +3209,8 @@ int main(void) {
     test_cesit_agac_verify();
     test_cesit_agac_calistir();
     test_turkce_tip_adi_calistir();
+    test_generic_cesit_tam32();     /* D-302 */
+    test_generic_cesit_tam64();     /* D-302 */
     test_cesit_capraz_modul_calistir();
     test_cesit_kenar_calistir();
     test_yorumlayici_calistir();

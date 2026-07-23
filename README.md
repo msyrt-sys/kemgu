@@ -81,7 +81,7 @@ makine-denetimli).
 | Bölge tabanlı bellek `bölge` (**GC yok**) | tip | Bölge temsili + R-* atama aksiyomları + fixed-point escape analizi modülleri. Çalışma-zamanı tahsisinde GC/refcount yok. Otomatik-serbestleyen gerçek arena V2. |
 | Kabiliyet token'ları `yetki<R>` | codegen | `yetki<Bellek>`, `yetki<MMIO>`, `yetki<Dosya>` … Lineer (sızıntı/çift-kullanım = CP005). `delege` (alt-token) + `geri_al` (iptal). |
 | `seçimlik<T>` (null yok) · `sonuç<T,H>` (istisna yok) | codegen | `eşleş` ile `değer(s)`/`hiç`, `tamam(v)`/`hata(e)` deseni — değer bağlama codegen'de çalışır. |
-| Etiketli birleşim / toplam tip `çeşit` | codegen | İsimli varyant kümesi + ayrık tag. `eşleş` exhaustiveness denetimi (M001). **v1 sınırı:** varyantlar payloadsuz (yalnız etiket; veri taşıyan varyant yok). |
+| Etiketli birleşim / toplam tip `çeşit` | codegen | İsimli varyant kümesi + ayrık tag. **Payload'lı varyant** (`Token { Sayi(tam64), Ad(metin) }`) + nitelikli desen binding (`Token::Sayi(n) => …`) + özyineli çeşit (`Dal(&Agac,&Agac)`). `eşleş` exhaustiveness denetimi (M001). **Generic `çeşit Secim<T>` (C-only, D-302):** T=tam32/tam64 uçtan uca (tam64 sessiz kırpılmaz); T=metin/ptr codegen sınırı (generic yapı gibi); self-host generic çeşit desteklemez. |
 | Jenerikler — **monomorphization** | codegen | İşlevler **ve** struct'lar; her örnekleme ayrı mangled fonksiyon (`@kimlik$i32`), runtime dispatch yok. **v1 sınırı:** tip argümanları yalnız *çıkarsanır* (açık `<T>` / turbofish henüz yok). |
 | Satıriçi assembly `satıriçi_asm` | codegen | Yalnız `güvensiz` blokta. `mimari:` + `şablon:` ile gerçek LLVM inline-asm'e indirgenir (çoklu çıktı dahil). |
 | Çok-dosya modüller (`kullan`, `genel`) | codegen | Aşağıda ayrı bölüm. |
@@ -512,8 +512,6 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
   tanık, weak-memory (C++11) fence emisyonu, yan-kanal + WCET bileşenlerinin
   teoreme dahil edilmesi. Bugünkü teorem **V1 çekirdek alt-kümesi** içindir.
 
-- **`çeşit` varyantlarına veri** — bugün varyantlar payloadsuz (yalnız etiket).
-
 ### Karar bekleyen — tasarım soruları (iş değil, karar)
 
 Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair karar**.
@@ -534,7 +532,8 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
 görev bölgesi sızdırılır; blok-form lambda dönüşü `tam32`; skaler `&T` okunamaz;
-`çeşit` varyantları payloadsuz; turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
+generic `çeşit` C-only (self-host desteklemez; T=metin codegen sınırı — yapı gibi);
+turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
 için L001 leak uyarısı tetiklenmez (`eşleş`'siz düşen görev join edilmez —
 bellek-güvenliği değil liveness kaybı; `tip_lineer_mi` sonuç'a özyinelemez, V2 işi);
 self-host derleyici en yeni codegen özelliklerini içermez.

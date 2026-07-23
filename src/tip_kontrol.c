@@ -1801,7 +1801,8 @@ static TipBilgisi *kontrol_yapi_olustur(TipKontrol *tk, const Dugum *d) {
 /* C3: d bir çeşit varyant YAPICISI mı (Cesit::V(args))? Öyleyse arg sayısını
  * + tiplerini varyant payload'una göre kontrol et ve TIP_YAPI(cesit) dön.
  * Değilse NULL (çağıran normal çağrı/modül-fonksiyon yoluna düşer). */
-static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d) {
+static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d,
+                                            const TipBilgisi *beklenen) {
     if (!d || d->tip != DUGUM_CAGRI || !d->veri.cagri.hedef ||
         d->veri.cagri.hedef->tip != DUGUM_YOL) {
         return NULL;
@@ -1815,6 +1816,15 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d) {
         tip_hata(tk, d, "M002", "cesit varyanti bulunamadi");
         return t_hata(tk);
     }
+    /* Generic çeşit (D-302): payload tipindeki T'yi çeşit generic scope'unda
+     * çöz (→ TIP_GENERIC_PARAM) sonra beklenen `Secim<tam32>`'in tip_arg'ından
+     * substitue et. beklenen yoksa T çözülemez (T011) — construction daima bir
+     * beklenen bağlamı ister (annotasyon/ver/parametre). */
+    int generic = cd->veri.cesit.tip_param_sayi > 0;
+    const Sembol *csem = generic
+        ? sembol_bul(tk->scope ? tk->scope : tk->global_scope,
+                     cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk)
+        : NULL;
     int beklenen_n = cesit_varyant_payload_sayi(cd, vi);
     int verilen_n = d->veri.cagri.sayi;
     if (verilen_n != beklenen_n) {
@@ -1825,7 +1835,16 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d) {
     }
     for (int i = 0; i < beklenen_n; i++) {
         const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[vi][i];
-        TipBilgisi *bt = ast_tip_to_bilgi(tk, pt);
+        TipBilgisi *bt;
+        if (generic && csem && csem->yapi_scope) {
+            Scope *eski = tk->scope;
+            tk->scope = csem->yapi_scope;      /* T → TIP_GENERIC_PARAM */
+            TipBilgisi *raw = ast_tip_to_bilgi(tk, pt);
+            tk->scope = eski;
+            bt = substitusyon(tk, raw, csem, beklenen);  /* T → tam32 */
+        } else {
+            bt = ast_tip_to_bilgi(tk, pt);
+        }
         TipBilgisi *at = tip_belirle_beklenen(tk,
             d->veri.cagri.argumanlar[i], bt);
         if (at->kategori != TIP_HATA && bt->kategori != TIP_HATA &&
@@ -1833,6 +1852,14 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d) {
             tip_hata(tk, d->veri.cagri.argumanlar[i], "M004",
                      "cesit varyant payload tipi uyumsuz");
         }
+    }
+    /* Generic ise concrete instance dön (beklenen'in tip_arg'ını taşı). */
+    if (generic && beklenen && beklenen->kategori == TIP_YAPI &&
+        beklenen->veri.yapi.tip_arg_sayi > 0) {
+        return tip_olustur_yapi(tk->arena, cd->veri.cesit.ad,
+                                cd->veri.cesit.ad_uzunluk,
+                                beklenen->veri.yapi.tip_arg,
+                                beklenen->veri.yapi.tip_arg_sayi);
     }
     return tip_olustur_yapi(tk->arena, cd->veri.cesit.ad,
                             cd->veri.cesit.ad_uzunluk, NULL, 0);
@@ -2255,9 +2282,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
         /* === Cagri === */
         case DUGUM_CAGRI: {
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — modül-fonksiyon
-             * çağrısından ÖNCE dene (sol bir çeşit ise yapıcı). */
+             * çağrısından ÖNCE dene (sol bir çeşit ise yapıcı). Beklenen-yok
+             * yolu: generic çeşit T'sini çözemez (construction beklenen ister). */
             {
-                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d);
+                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d, NULL);
                 if (cy) return cy;
             }
             /* Yerlesik konstrüktörler: değer(x), tamam(x), hata(x) */
@@ -3846,9 +3874,10 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
 
         case DUGUM_CAGRI: {
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — beklenen-bağlam
-             * yolunda da modül-fonksiyon çağrısından ÖNCE dene. */
+             * yolunda da modül-fonksiyon çağrısından ÖNCE dene. Generic çeşit
+             * T'si beklenen'den (Secim<tam32>) substitue edilir (D-302). */
             {
-                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d);
+                TipBilgisi *cy = cesit_yapici_tip_kontrol(tk, d, beklenen);
                 if (cy) return cy;
             }
             /* Madde B: dizi_olustur<T>(N) beklenen Dizi<T> ise T'yi kullan.
@@ -4071,6 +4100,25 @@ static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
     c.satir = cesit->satir;
     c.sutun = cesit->sutun;
     c.genel = cesit->veri.cesit.genel_mi;
+    /* Generic çeşit (D-302): tip paramlarını yapi_scope'a SEMBOL_GENERIC_PARAM
+     * olarak kaydet (yapı ile birebir). Böylece `substitusyon` payload tipindeki
+     * T'yi beklenen `Secim<tam32>`'in tip_arg'ından çözebilir; payload T de bu
+     * scope'ta TIP_GENERIC_PARAM olarak resolve olur (yoksa T011). */
+    if (cesit->veri.cesit.tip_param_sayi > 0) {
+        Scope *cs = scope_olustur(tk->arena, SCOPE_YAPI, tk->global_scope);
+        for (int j = 0; j < cesit->veri.cesit.tip_param_sayi; j++) {
+            const char *t_ad = cesit->veri.cesit.tip_paramlar[j];
+            int t_uz = (int)strlen(t_ad);
+            Sembol gp;
+            memset(&gp, 0, sizeof(gp));
+            gp.ad = t_ad;
+            gp.ad_uzunluk = t_uz;
+            gp.kategori = SEMBOL_GENERIC_PARAM;
+            gp.tip = tip_olustur_generic_param(tk->arena, t_ad, t_uz);
+            sembol_ekle(cs, tk->arena, &gp);
+        }
+        c.yapi_scope = cs;
+    }
     if (sembol_ekle(tk->global_scope, tk->arena, &c) != 0) {
         tip_hata(tk, cesit, "T026", "tip tanimi cakismasi (cesit)");
     }
@@ -4957,7 +5005,26 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                                     const Dugum *pt =
                                         cd->veri.cesit.varyant_payload_tipleri
                                             [vi][j];
-                                    TipBilgisi *ptip = ast_tip_to_bilgi(tk, pt);
+                                    TipBilgisi *ptip;
+                                    /* Generic çeşit (D-302): payload T'yi çeşit
+                                     * generic scope'unda çöz sonra scrutinee
+                                     * dt (Secim<tam32>) tip_arg'ından substitue. */
+                                    if (cd->veri.cesit.tip_param_sayi > 0) {
+                                        const Sembol *csem = sembol_bul(
+                                            tk->scope ? tk->scope
+                                                      : tk->global_scope,
+                                            cd->veri.cesit.ad,
+                                            cd->veri.cesit.ad_uzunluk);
+                                        Scope *eski_s = tk->scope;
+                                        if (csem && csem->yapi_scope)
+                                            tk->scope = csem->yapi_scope;
+                                        TipBilgisi *raw =
+                                            ast_tip_to_bilgi(tk, pt);
+                                        tk->scope = eski_s;
+                                        ptip = substitusyon(tk, raw, csem, dt);
+                                    } else {
+                                        ptip = ast_tip_to_bilgi(tk, pt);
+                                    }
                                     Sembol s;
                                     memset(&s, 0, sizeof(s));
                                     s.ad = alt->veri.desen_tanimlayici.ad;

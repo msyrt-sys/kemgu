@@ -596,16 +596,17 @@ static Dugum *parse_cesit_tanimi(Parser *p) {
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P350",
                                 "cesit adi bekleniyor");
 
-    /* Generic v1'de YOK */
+    /* Generic çeşit (C-only, D-302): tip parametreleri — yapı ile aynı sözdizim
+     * (`çeşit Secim<T> { ... }`). Bound'lar v1'de yok sayılır (parse edilip
+     * atılır). C codegen T'yi kullanım yerinin beklenen tipinden çözer;
+     * self-host generic çeşit desteklemez (generic yapı gibi). */
+    int cesit_tip_param_sayi = 0;
+    Dugum ***cesit_tp_bound = NULL;
+    int *cesit_tp_bound_say = NULL;
+    char **cesit_tip_paramlar = NULL;
     if (parser_eslesir(p, TOK_KUCUK)) {
-        parser_hata(p, parser_simdiki(p), "P353",
-            "cesit generic v1'de desteklenmiyor (gelecek surum)", NULL);
-        while (!parser_eslesir(p, TOK_BUYUK) &&
-               !parser_eslesir(p, TOK_SOL_SUSLU) &&
-               !parser_eslesir(p, TOK_DOSYA_SONU)) {
-            parser_ilerle(p);
-        }
-        if (parser_eslesir(p, TOK_BUYUK)) parser_ilerle(p);
+        cesit_tip_paramlar = parse_tip_param_listesi_genis(p,
+            &cesit_tip_param_sayi, &cesit_tp_bound, &cesit_tp_bound_say);
     }
 
     parser_bekle(p, TOK_SOL_SUSLU, "P351", "cesit govdesi icin '{' bekleniyor");
@@ -685,6 +686,9 @@ static Dugum *parse_cesit_tanimi(Parser *p) {
     d->veri.cesit.varyant_sayi = n;
     d->veri.cesit.varyant_payload_tipleri = v_payload;
     d->veri.cesit.varyant_payload_sayilari = v_payload_sayi;
+    d->veri.cesit.tip_paramlar = cesit_tip_paramlar;   /* D-302 generic çeşit */
+    d->veri.cesit.tip_param_sayi = cesit_tip_param_sayi;
+    (void)cesit_tp_bound; (void)cesit_tp_bound_say;    /* bound v1'de yok sayılır */
     return d;
     #undef PARSER_CESIT_MAX_VARYANT
 }

@@ -268,6 +268,10 @@ struct Dugum {
             int *varyant_uzunluklar;    /* her varyantın byte uzunluğu */
             int varyant_sayi;
             int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
+            /* Generic çeşit (C-only, D-302): tip parametreleri (yapı ile aynı
+             * paralel-dizi deseni). NULL/0 = generic olmayan (eski davranış). */
+            char **tip_paramlar;
+            int tip_param_sayi;
             /* C3 payload: [varyant][alan] tip düğümü; [varyant] alan sayısı.
              * NULL/0 (payloadsuz çeşit) eski davranışla aynı (bare iN disc). */
             Dugum ***varyant_payload_tipleri; /* [i] = i. varyantın tip düğüm dizisi */

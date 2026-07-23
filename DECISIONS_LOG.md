@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-302 — Generic çeşit (`çeşit Secim<T>`) — C-only, generic yapı ile aynı kapsam (2026-07-23)
+
+**Karar [ETKİ: `src/ast.h` (cesit tip_paramlar), `src/parser.c` (P353 reddi → tip param
+ayrıştırma), `src/tip_kontrol.c` (pre_populate_cesit yapi_scope + construction/eşleş
+substitüsyon), `test/test_llvm.c` (+2).]** Payload'lı `çeşit` + eşleş exhaustiveness ZATEN
+tamdı (ölçüm: roadmap "payloadsuz" eskimişti); eksik olan yalnız GENERIC çeşit'ti (P353 ile
+açıkça reddediliyordu). Karar 3'ün gerçek kalan işi buydu.
+
+**KAPSAM (Mehmet onayı — C-only):** self-host'ta generic YAPI bile bozuk/C-only (ölçüldü:
+`Kutu<tam32>` construction C exit 42, self-host exit 1 — `atla_tip_paramlar`=tip param ATLA,
+monomorphization makinesi YOK). Bu yüzden generic çeşit de C-only yapıldı — generic yapı'nın
+BUGÜNKÜ durumuyla birebir tutarlı. Tam parite (self-host monomorphization kurma) çok-oturumluk
+ayrı iş; bilinçli ertelendi. self-host generic çeşit'i (yapı gibi) desteklemez.
+
+**UYGULAMA:** pre_populate_cesit çeşit'e `yapi_scope` açıp tip paramlarını
+SEMBOL_GENERIC_PARAM olarak kaydeder (yapı aynası). Construction (`Secim::Var(42)`) ve eşleş
+binding (`Secim::Var(x)`) payload'daki `T`'yi çeşit generic scope'unda çözer (→
+TIP_GENERIC_PARAM) sonra beklenen/scrutinee `Secim<tam32>`'in tip_arg'ından `substitusyon` ile
+concrete'e (tam32) çevirir. Codegen SIFIR değişiklik: mevcut çeşit codegen + payload tip
+çözümü T=tam32/tam64'ü doğru üretir.
+
+**SINIRLAR (ölçülüp belgelendi — hepsi güvenli/gürültülü, sessiz DEĞİL):**
+- **T=tam32/tam64: uçtan uca DOĞRU.** tam64 2^33 → exit 42, **SESSİZ KIRPMA YOK** (çeşit
+  generic yapı'dan daha iyi — yapı `Kutu<tam64>`'ü i32'ye kırpardı).
+- **T=metin/ptr: --check geçer, codegen LLVM gürültülü reddeder** (T→i32 varsayılan, ptr
+  uyumsuz) — generic yapı ile birebir aynı sınır. Sessiz değil.
+- **Çağrı-argümanı doğrudan construction** (`ac(Secim::Var(42))`): M004 — beklenen çağrı
+  argümanına yayılmıyor. **Generic YAPI'da da AYNI** (ölçüldü: `al(Kutu{deger:42})` → T001).
+  Annotasyon + `ver` formu çalışır (ana idiom).
+
+**KANITLAR:** test_llvm 265/265 (+2: Secim<tam32>→42, Kutu<tam64> 2^33→42), tip_kontrol
+189/189, drf 50/50, parser 107/107 — regresyon yok. codegen_diff (mevcut korpus paritesi
+korunur; non-generic çeşit yolu değişmedi).
+
+**DERS (bu oturumda 3. kez):** roadmap maddesini başlamadan ÖLÇ. "payloadsuz çeşit"
+eskimişti (payload zaten vardı); generic çeşit sandığımdan büyüktü (self-host monomorphization
+yok). İki ölçüm de planı düzeltti.
+
+---
+
 ## D-301 — `görev_başlat` → `sonuç<görev<T>, metin>`: panik yerine değer (çökmezlik) (2026-07-22)
 
 **Karar [YÜKSEK] [ETKİ: `src/tip_kontrol.c` (dönüş tipi), `src/llvm.c` + `selfhost/codegen.kem`
