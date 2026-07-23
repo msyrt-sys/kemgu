@@ -395,6 +395,58 @@ static void test_generic_cesit_tam64(void) {
     test_sonuc("generic cesit Kutu<tam64> 2^33 kayipsiz -> exit 42", rc == 42);
 }
 
+/* === D-307: GERÇEK per-instantiation monomorphization (C-only) ===
+ * T→i32 tek-layout yerine %Kutu$ptr / {i8, ptr} per-instantiation. metin/ptr T
+ * ÇALIŞIR + iki farklı örnek AYNI programda bir arada (%Kutu$i32 + %Kutu$ptr). */
+static void test_mono_yapi_metin(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu<T> { deger: T; }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: Kutu<metin> = Kutu { deger: \"selam\" };\n"
+        "    ver metin_uzunluk(k.deger); }\n");
+    test_sonuc("mono generic yapi Kutu<metin> (ptr T) -> exit 5", rc == 5);
+}
+
+static void test_mono_yapi_coklu(void) {
+    /* HEADLINE: aynı programda Kutu<tam32> + Kutu<metin> — iki AYRI mono tip
+     * (%Kutu$i32 {i32} ve %Kutu$ptr {ptr}) bir arada. 20+5+17=42. */
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu<T> { deger: T; }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken a: Kutu<tam32> = Kutu { deger: 20 };\n"
+        "    de\xc4\x9fi\xc5\x9fken b: Kutu<metin> = Kutu { deger: \"selam\" };\n"
+        "    ver a.deger + metin_uzunluk(b.deger) + 17; }\n");
+    test_sonuc("mono generic yapi COKLU-inst (Kutu<tam32>+<metin>) -> exit 42",
+               rc == 42);
+}
+
+static void test_mono_cesit_metin(void) {
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Secim<T> { Var(T), Yok }\n"
+        "i\xc5\x9flev ac(s: Secim<metin>) -> tam32 {\n"
+        "    e\xc5\x9fle\xc5\x9f s { Secim::Var(x) => { ver metin_uzunluk(x); } "
+        "Secim::Yok => { ver 0; } } ver 0; }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Secim<metin> = Secim::Var(\"selam\");\n"
+        "    ver ac(s); }\n");
+    test_sonuc("mono generic cesit Secim<metin> (ptr payload) -> exit 5", rc == 5);
+}
+
+static void test_mono_cesit_coklu(void) {
+    int rc = derle_ve_calistir(
+        "\xc3\xa7" "e\xc5\x9fit Secim<T> { Var(T), Yok }\n"
+        "i\xc5\x9flev ai(s: Secim<tam32>) -> tam32 { e\xc5\x9fle\xc5\x9f s { "
+        "Secim::Var(x)=>{ver x;} Secim::Yok=>{ver 0;} } ver 0; }\n"
+        "i\xc5\x9flev am(s: Secim<metin>) -> tam32 { e\xc5\x9fle\xc5\x9f s { "
+        "Secim::Var(x)=>{ver metin_uzunluk(x);} Secim::Yok=>{ver 0;} } ver 0; }\n"
+        "i\xc5\x9flev main() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken a: Secim<tam32> = Secim::Var(20);\n"
+        "    de\xc4\x9fi\xc5\x9fken b: Secim<metin> = Secim::Var(\"selam\");\n"
+        "    ver ai(a) + am(b) + 17; }\n");
+    test_sonuc("mono generic cesit COKLU-inst (Secim<tam32>+<metin>) -> exit 42",
+               rc == 42);
+}
+
 static void test_cesit_capraz_modul_calistir(void) {
     /* SELF-HOSTING deseni: payload + recursive çeşit MODÜLDE (ifd::Ifade) —
      * nitelikli yapıcı ifd::Ifade::Topla(&a,&b) + nitelikli annotation +
@@ -3272,6 +3324,10 @@ int main(void) {
     test_turkce_tip_adi_calistir();
     test_generic_cesit_tam32();     /* D-302 */
     test_generic_cesit_tam64();     /* D-302 */
+    test_mono_yapi_metin();         /* D-307 */
+    test_mono_yapi_coklu();         /* D-307 */
+    test_mono_cesit_metin();        /* D-307 */
+    test_mono_cesit_coklu();        /* D-307 */
     test_cesit_capraz_modul_calistir();
     test_cesit_kenar_calistir();
     test_yorumlayici_calistir();

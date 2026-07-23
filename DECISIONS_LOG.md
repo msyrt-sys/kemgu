@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-307 — Gerçek per-instantiation monomorphization (C-only): T→i32 tek-layout kaldırıldı (2026-07-23)
+
+**Karar [ETKİ: `src/llvm.c` (~180 satır: MonoTip registry + mangle + per-inst tip emit +
+field access/construction/eşleş subst + layout-bağımlılık gate), `test/test_llvm.c` (+4).]**
+Eski model "T→i32 tek-layout" idi: `%Kutu = {i32}` (D-306) → `Kutu<metin>` (ptr) derlenemiyordu,
+`Kutu<tam32>`+`Kutu<metin>` aynı programda İMKÂNSIZDI. Artık GERÇEK per-instantiation:
+`%Kutu$ptr = {ptr}`, `%Kutu$i32 = {i32}` AYRI tipler, bir arada.
+
+**MİMARİ:**
+- **MonoTip registry:** her (yapı, arg-IR'ları) çifti mangle → `Kutu$ptr`; subst (T→arg) saklanır.
+- **YAPI → named** `%Kutu$X` (field-adı→index gerek); **ÇEŞİT → INLINE** `{i8, payloads}`
+  (positional; agg_alan_ir parse eder, named-emit/forward-ref yok).
+- **Keşif ön-geçişi** (ast_taransa_metinleri'ye piggyback): değişken/param/dönüş
+  annotasyonları taranıp mono kaydedilir → tipler fonksiyonlardan ÖNCE emit (alloca SIZED
+  ister; deferred emit "unsized type" verirdi — ölçüldü).
+- **Field access + construction + eşleş binding:** object'in mangled tipinden MonoTip
+  subst push → alan/payload tipleri T→arg çözülür (çeşit'te inline agg'den agg_alan_ir).
+
+**KRİTİK — LAYOUT-BAĞIMLILIK GATE (regresyon kökü):** mono YALNIZ bir tip-param ALAN
+tipinde geçtiğinde uygulanır. `Liste<T>` (veri:`*T`, uzunluk, kapasite) layout T'den
+BAĞIMSIZ (`*T`/`&T`/`Dizi<T>`/`görev`/`kanal` HER T için `ptr`) → **type-erased tek %Liste**
+korunur (eski mono-FONKSİYON modeli: `ekle$i64` %Liste üzerinde çalışır). İlk denemede
+`tip_dugum_param_gecer` pointer/ref/dizi içine iniyordu → `Liste<i64>`'ü mono'layıp
+`%Liste$i64` (emit edilmemiş) üretti → **6 stdlib Liste<T> testi KIRILDI** (ölçüldü:
+274→268). Düzeltme: pointer/ref/dizi/görev/kanal'a İNME (hep ptr, layout-bağımsız); yalnız
+doğrudan T + by-value composite (seçimlik/sonuç/nested-generic) sayılır.
+
+**KAPSAM:** T=metin/ptr, tam64, ÇOKLU-instantiation (aynı programda `Kutu<tam32>`+`Kutu<metin>`)
+— hepsi çalışır (yapı + çeşit). **C-ONLY** (self-host ayrı adım — Mehmet "C önce" kararı;
+self-host hâlâ D-306 "T→i32 tek-layout"). codegen_diff exit-kod paritesi korunur (korpus
+generic tam32 ikisinde de 42; IR farklı ama exit aynı).
+
+**KANITLAR:** test_llvm 274/274 (+4: yapı<metin>→5, yapı-çoklu→42, çeşit<metin>→5, çeşit-çoklu
+→42), tip_kontrol 189/189, drf 54/54, parser 107/107 — **Liste<T> regresyonu onarıldı**.
+
+**DERS:** yaygın-altyapıya (ast_tip_to_ir) dokunan değişiklik GENİŞ etki eder — layout-bağımlı
+vs type-erased generic AYRIMI şarttı; adversarial test-suite (Liste<T>) 6 kırığı yakaladı.
+
+---
+
 ## D-306 — Self-host generic monomorphization: generic yapı + çeşit self-host'ta çalışıyor (2026-07-23)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (ll_tip TIP_KULLANICI dalı — ~8 satır), `test/cg_korpus/`

@@ -81,7 +81,7 @@ makine-denetimli).
 | Bölge tabanlı bellek `bölge` (**GC yok**) | tip | Bölge temsili + R-* atama aksiyomları + fixed-point escape analizi modülleri. Çalışma-zamanı tahsisinde GC/refcount yok. Otomatik-serbestleyen gerçek arena V2. |
 | Kabiliyet token'ları `yetki<R>` | codegen | `yetki<Bellek>`, `yetki<MMIO>`, `yetki<Dosya>` … Lineer (sızıntı/çift-kullanım = CP005). `delege` (alt-token) + `geri_al` (iptal). |
 | `seçimlik<T>` (null yok) · `sonuç<T,H>` (istisna yok) | codegen | `eşleş` ile `değer(s)`/`hiç`, `tamam(v)`/`hata(e)` deseni — değer bağlama codegen'de çalışır. |
-| Etiketli birleşim / toplam tip `çeşit` | codegen | İsimli varyant kümesi + ayrık tag. **Payload'lı varyant** (`Token { Sayi(tam64), Ad(metin) }`) + nitelikli desen binding (`Token::Sayi(n) => …`) + özyineli çeşit (`Dal(&Agac,&Agac)`). `eşleş` exhaustiveness denetimi (M001). **Generic `çeşit Secim<T>` (D-302/D-306):** T=tam32 C **ve self-host** parite (D-306); C'de tam64 de (sessiz kırpılmaz); T=metin/ptr ortak codegen sınırı ("T→i32 tek-layout"). |
+| Etiketli birleşim / toplam tip `çeşit` | codegen | İsimli varyant kümesi + ayrık tag. **Payload'lı varyant** (`Token { Sayi(tam64), Ad(metin) }`) + nitelikli desen binding (`Token::Sayi(n) => …`) + özyineli çeşit (`Dal(&Agac,&Agac)`). `eşleş` exhaustiveness denetimi (M001). **Generic `çeşit Secim<T>` + generic yapı (D-302/D-306/D-307):** C'de **GERÇEK per-instantiation mono** (D-307) — T=metin/ptr/tam64 + çoklu-instantiation (`Kutu<tam32>`+`Kutu<metin>` aynı programda). Self-host T=tam32 parite (D-306, "T→i32 tek-layout" — metin/ptr self-host'ta henüz yok). Layout-bağımsız generic (`Liste<T>`, `veri:*T`) type-erased kalır. |
 | Jenerikler — **monomorphization** | codegen | İşlevler **ve** struct'lar; her örnekleme ayrı mangled fonksiyon (`@kimlik$i32`), runtime dispatch yok. **v1 sınırı:** tip argümanları yalnız *çıkarsanır* (açık `<T>` / turbofish henüz yok). |
 | Satıriçi assembly `satıriçi_asm` | codegen | Yalnız `güvensiz` blokta. `mimari:` + `şablon:` ile gerçek LLVM inline-asm'e indirgenir (çoklu çıktı dahil). |
 | Çok-dosya modüller (`kullan`, `genel`) | codegen | Aşağıda ayrı bölüm. |
@@ -527,8 +527,9 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
 görev bölgesi sızdırılır;
-generic yapı/çeşit self-host'ta da çalışır (D-306) ama T=metin codegen sınırı ortak
-("T→i32 tek-layout"); turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
+generic yapı/çeşit C'de GERÇEK per-instantiation mono (D-307: T=metin/ptr/tam64 +
+çoklu-inst) — self-host henüz T=tam32 (D-306); turbofish yok; `sonuç` içine sarılan
+lineer `görev<T>`
 için L001 leak uyarısı tetiklenmez (`eşleş`'siz düşen görev join edilmez —
 bellek-güvenliği değil liveness kaybı; `tip_lineer_mi` sonuç'a özyinelemez, V2 işi);
 self-host derleyici en yeni codegen özelliklerini içermez.

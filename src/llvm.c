@@ -154,6 +154,18 @@ typedef struct MonoKayit {
     struct MonoKayit *sonraki;
 } MonoKayit;
 
+/* D-307: per-instantiation generic yapı/çeşit örneği (Kutu<metin> → %Kutu$ptr).
+ * GERÇEK monomorphization: her (yapı, arg-IR'ları) çifti için AYRI tip emit
+ * edilir (eski "T→i32 tek-layout" yerine). subst, alan/payload tiplerini
+ * base'in T'sinden arg'a çözer; field access + construction + tip emit onu
+ * push eder. base_mangled ("Kutu$ptr") % olmadan; ast = base yapı/çeşit. */
+typedef struct MonoTip {
+    const char *mangled;      /* "Kutu$ptr" (arena, % yok) */
+    const Dugum *ast;         /* base yapı/çeşit AST düğümü */
+    TipSubst *subst;          /* tip_param adı → arg IR (alan çözümü) */
+    struct MonoTip *sonraki;
+} MonoTip;
+
 /* Yüklenmiş modül (cycle önleme) */
 typedef struct YuklenmisDosya {
     const char *yol;
@@ -200,6 +212,7 @@ typedef struct LlvmGen {
     IslevKayit *islevler;
     TipSubst *substler;     /* aktif generic param substitutions */
     MonoKayit *monolar;     /* emit edilmis instantiation'lar */
+    MonoTip *mono_tipler;   /* D-307: per-instantiation generic yapı/çeşit örnekleri */
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
     YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
@@ -554,6 +567,145 @@ static const char *subst_bul(LlvmGen *g, const char *ad, int ad_uz) {
 /* v1 bölge-container: AST tip dugumu *T ise pointee'nin IR tipi,
  * degilse NULL. (LlvmIsim.pointee_llvm_tip kaynaklari icin.) */
 static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d);
+static const char *mono_cesit_inline_ir(LlvmGen *g, const Dugum *cd,
+    char **params, int param_sayi, Dugum **args, int arg_sayi);
+static int agg_alan_ir(const char *agg, int idx, char *out, size_t out_n);  /* D-307 ileri */
+
+/* D-307: bir tip düğümü tip_paramlardan birine (ADIYLA) atıfta bulunuyor mu?
+ * Recursive (referans/pointer/dizi/seçimlik/sonuç/generic-arg içine iner).
+ * Bir generic yapı/çeşit'in per-instantiation MONO gerektirip gerektirmediğini
+ * belirler: T ALANDA geçiyorsa layout T'ye bağlı → mono (%Kutu$ptr). Geçmiyorsa
+ * (Liste<T> gibi — T yalnız heap elemanında, alan {ptr,i64,i64}) → type-erased
+ * tek %Liste (eski mono-FONKSİYON modeliyle uyumlu; per-inst KIRARDI). */
+static int tip_dugum_param_gecer(const Dugum *td, char **params, int psay) {
+    if (!td || psay <= 0) return 0;
+    if (td->tip == DUGUM_TIP_BASIT) {
+        const char *a = td->veri.tip_basit.ad;
+        int u = td->veri.tip_basit.ad_uzunluk;
+        for (int i = 0; i < psay; i++) {
+            if ((int)strlen(params[i]) == u && memcmp(params[i], a, (size_t)u) == 0)
+                return 1;
+        }
+        return 0;
+    }
+    switch (td->tip) {
+        /* D-307: &T / *T / Dizi<T> / görev<T> / kanal<T> HER T için `ptr` →
+         * layout T'den BAĞIMSIZ; T burada geçse bile mono GEREKMEZ (Liste<T>
+         * veri:*T → type-erased %Liste doğru). Bu yüzden İNME (0 dön). */
+        case DUGUM_TIP_REFERANS:
+        case DUGUM_TIP_POINTER:
+        case DUGUM_TIP_DIZI:
+        case DUGUM_TIP_GOREV:
+        case DUGUM_TIP_KANAL:
+            return 0;
+        case DUGUM_TIP_SECIMLIK:
+            return tip_dugum_param_gecer(td->veri.tip_secimlik.ic_tip, params, psay);
+        case DUGUM_TIP_SONUC:
+            return tip_dugum_param_gecer(td->veri.tip_sonuc.deger_tip, params, psay) ||
+                   tip_dugum_param_gecer(td->veri.tip_sonuc.hata_tip, params, psay);
+        case DUGUM_TIP_KULLANICI:
+            for (int i = 0; i < td->veri.tip_kullanici.tip_arg_sayi; i++)
+                if (tip_dugum_param_gecer(td->veri.tip_kullanici.tip_arg[i], params, psay))
+                    return 1;
+            return 0;
+        default: return 0;
+    }
+}
+
+/* D-307: generic yapı/çeşit'in HERHANGİ bir alan/payload tipi tip_param'a atıf
+ * yapıyor mu? Yaparsa layout T'ye bağlı → mono gerekli. */
+static int generic_layout_param_bagimli(const Dugum *ast, char **params, int psay) {
+    if (!ast) return 0;
+    if (ast->tip == DUGUM_YAPI) {
+        for (int i = 0; i < ast->veri.yapi.alan_sayi; i++)
+            if (tip_dugum_param_gecer(ast->veri.yapi.alanlar[i]->veri.alan.tip,
+                                      params, psay)) return 1;
+        return 0;
+    }
+    if (ast->tip == DUGUM_CESIT) {
+        for (int vi = 0; vi < ast->veri.cesit.varyant_sayi; vi++) {
+            int pn = ast->veri.cesit.varyant_payload_sayilari
+                ? ast->veri.cesit.varyant_payload_sayilari[vi] : 0;
+            for (int j = 0; j < pn; j++)
+                if (tip_dugum_param_gecer(
+                        ast->veri.cesit.varyant_payload_tipleri[vi][j],
+                        params, psay)) return 1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+/* D-307: bir IR tipini mangle-güvenli hâle getir (i32→i32, ptr→ptr, %Foo→Foo,
+ * "{ i8, ptr }"→"i8_ptr"). Non-alfanumerik atlanır/'_' olur → geçerli IR-ad. */
+static void mono_ir_sanitize(const char *ir, char *out, size_t out_n) {
+    size_t j = 0;
+    for (size_t i = 0; ir[i] && j + 1 < out_n; i++) {
+        char c = ir[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9')) out[j++] = c;
+        else if (c == ',') { if (j + 1 < out_n) out[j++] = '_'; }
+        /* '%', ' ', '{', '}' atlanır */
+    }
+    if (j == 0 && out_n > 1) out[j++] = 'x';
+    out[j] = '\0';
+}
+
+/* D-307: generic yapı/çeşit örneğini kaydet (Kutu, [metin]) → "%Kutu$ptr".
+ * base = yapı/çeşit AST; params = tip_paramlar; args = DUGUM tip arg düğümleri.
+ * Örnek dedup edilir; yeni ise mono_tipler'e eklenir (deferred emit). subst,
+ * base'in T'sini arg IR'ına eşler (alan/payload çözümü için). */
+static const char *mono_tip_kayit(LlvmGen *g, const Dugum *base,
+                                  const char *base_ad, int base_uz,
+                                  char **params, int param_sayi,
+                                  Dugum **args, int arg_sayi) {
+    char mang[256];
+    int mo = snprintf(mang, sizeof(mang), "%.*s", base_uz, base_ad);
+    TipSubst *subst = NULL;
+    int n = param_sayi < arg_sayi ? param_sayi : arg_sayi;
+    for (int i = 0; i < n; i++) {
+        const char *air = ast_tip_to_ir(g, args[i]);   /* nested mono destekli */
+        if (!air) air = "i32";
+        char san[96];
+        mono_ir_sanitize(air, san, sizeof(san));
+        mo += snprintf(mang + mo, sizeof(mang) - (size_t)mo, "$%s", san);
+        TipSubst *ts = (TipSubst *)arena_ayir(g->arena, sizeof(TipSubst));
+        ts->ad = params[i];
+        ts->ad_uz = (int)strlen(params[i]);
+        ts->ir = air;
+        ts->sonraki = subst;
+        subst = ts;
+    }
+    char *mkalici = (char *)arena_ayir(g->arena, (size_t)mo + 1);
+    memcpy(mkalici, mang, (size_t)mo + 1);
+    /* dedup: aynı mangled zaten kayıtlıysa yeniden kayıt etme */
+    int yeni = 1;
+    for (MonoTip *m = g->mono_tipler; m; m = m->sonraki) {
+        if (strcmp(m->mangled, mkalici) == 0) { yeni = 0; break; }
+    }
+    if (yeni) {
+        MonoTip *mt = (MonoTip *)arena_ayir(g->arena, sizeof(MonoTip));
+        mt->mangled = mkalici;
+        mt->ast = base;
+        mt->subst = subst;
+        mt->sonraki = g->mono_tipler;
+        g->mono_tipler = mt;
+    }
+    char *res = (char *)arena_ayir(g->arena, (size_t)mo + 2);
+    res[0] = '%';
+    memcpy(res + 1, mkalici, (size_t)mo + 1);
+    return res;
+}
+
+/* D-307: bir mangled IR tipini ("%Kutu$ptr") kayıtlı MonoTip'e çöz (yoksa NULL). */
+static MonoTip *mono_tip_bul(LlvmGen *g, const char *ir_tip) {
+    if (!ir_tip || ir_tip[0] != '%') return NULL;
+    const char *ad = ir_tip + 1;
+    for (MonoTip *m = g->mono_tipler; m; m = m->sonraki) {
+        if (strcmp(m->mangled, ad) == 0) return m;
+    }
+    return NULL;
+}
 static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
     if (tip_d && tip_d->tip == DUGUM_TIP_POINTER) {
         return ast_tip_to_ir(g, tip_d->veri.tip_pointer.hedef_tip);
@@ -661,6 +813,43 @@ static const char *cesit_struct_ir(LlvmGen *g, const Dugum *cd) {
     return yapi_ad_ir(g, cd->veri.cesit.ad, cd->veri.cesit.ad_uzunluk);
 }
 
+/* D-307: generic çeşit örneği → INLINE aggregate "{ i8, <payloads T→arg> }".
+ * Named %Secim$X yerine inline: agg_alan_ir positional parse eder, named-emit +
+ * forward-ref gerekmez, yapısal-eşitlik ile aynı örnekler paylaşılır. YAPI ise
+ * named (%Kutu$X) kalır (field-adı→index için). Payloadsuz generic çeşit → disc. */
+static const char *mono_cesit_inline_ir(LlvmGen *g, const Dugum *cd,
+    char **params, int param_sayi, Dugum **args, int arg_sayi) {
+    /* subst: params[i] → arg IR (arg'lar mevcut subst'la çözülür — concrete). */
+    TipSubst *subst = NULL;
+    int n = param_sayi < arg_sayi ? param_sayi : arg_sayi;
+    for (int i = 0; i < n; i++) {
+        const char *air = ast_tip_to_ir(g, args[i]);
+        if (!air) air = "i32";
+        TipSubst *ts = (TipSubst *)arena_ayir(g->arena, sizeof(TipSubst));
+        ts->ad = params[i]; ts->ad_uz = (int)strlen(params[i]);
+        ts->ir = air; ts->sonraki = subst; subst = ts;
+    }
+    if (!cesit_payload_var(cd)) return cesit_disc_ir(cd);
+    char buf[512];
+    int o = snprintf(buf, sizeof(buf), "{ %s", cesit_disc_ir(cd));
+    TipSubst *eski = g->substler;
+    g->substler = subst;   /* payload T→arg */
+    for (int vi = 0; vi < cd->veri.cesit.varyant_sayi; vi++) {
+        int pn = cesit_varyant_payload_n(cd, vi);
+        for (int j = 0; j < pn; j++) {
+            const char *pir = ast_tip_to_ir(g,
+                cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+            o += snprintf(buf + o, sizeof(buf) - (size_t)o, ", %s",
+                          pir ? pir : "i32");
+        }
+    }
+    g->substler = eski;
+    snprintf(buf + o, sizeof(buf) - (size_t)o, " }");
+    char *res = (char *)arena_ayir(g->arena, strlen(buf) + 1);
+    strcpy(res, buf);
+    return res;
+}
+
 /* C3 çapraz-modül: çeşit YapiKayit'ını sol-yoldan çöz — sol TANIMLAYICI
  * (Renk) ise adından, YOL (m::Renk) ise sag_ad'inden (çeşit adı düz IR-ad
  * uzayında, D-011). DUGUM_CESIT değilse NULL. */
@@ -692,6 +881,14 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
         return s;
     }
     const char *agg = cesit_struct_ir(g, cd);
+    /* D-307: generic çeşit construction — beklenen (Secim<metin>) INLINE
+     * aggregate ({i8, ptr}) verir → alloca/GEP per-instantiation; payload
+     * tipleri agg_alan_ir ile inline'dan okunur (subst gereksiz). */
+    int mono_cesit = 0;
+    if (cd->veri.cesit.tip_param_sayi > 0 && g->beklenen_tip) {
+        const char *mir = ast_tip_to_ir(g, g->beklenen_tip);
+        if (mir && mir[0] == '{') { agg = mir; mono_cesit = 1; }
+    }
     int ar = yeni_reg(g);
     fprintf(g->out, "  %%%d = alloca %s\n", ar, agg);
     int gt = yeni_reg(g);
@@ -701,8 +898,16 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
     int pn = cesit_varyant_payload_n(cd, vi);
     int ofs = cesit_varyant_alan_ofset(cd, vi);
     for (int j = 0; j < pn && cagri && j < n; j++) {
-        const char *pir = ast_tip_to_ir(g,
-            cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+        const char *pir;
+        char pbuf[160];
+        /* D-307: generic çeşit → payload tipini INLINE agg'den oku (agg_alan_ir);
+         * base T ast_tip_to_ir'da çözülemez. Non-generic → eski yol. */
+        if (mono_cesit && agg_alan_ir(agg, ofs + j, pbuf, sizeof(pbuf))) {
+            pir = pbuf;
+        } else {
+            pir = ast_tip_to_ir(g,
+                cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+        }
         if (!pir || strcmp(pir, "void") == 0) pir = "i8";
         IfadeSonuc pv = ifade_uret(g, cagri->veri.cagri.argumanlar[j], pir);
         int pr = pv.reg;
@@ -787,6 +992,33 @@ static const char *ast_tip_to_ir(LlvmGen *g, const Dugum *tip_d) {
                 if (yk->ast && yk->ast->tip == DUGUM_CESIT &&
                     !cesit_payload_var(yk->ast)) {
                     return cesit_disc_ir(yk->ast);
+                }
+                /* D-307: generic yapı/çeşit + tip argümanı → GERÇEK
+                 * per-instantiation mono (%Kutu$ptr), "T→i32 tek-layout" yerine.
+                 * tip_arg'lardan bir örnek kaydı üretilir + subst kurulur. */
+                int psay = 0; char **prm = NULL;
+                if (yk->ast && yk->ast->tip == DUGUM_YAPI) {
+                    psay = yk->ast->veri.yapi.tip_param_sayi;
+                    prm = yk->ast->veri.yapi.tip_paramlar;
+                } else if (yk->ast && yk->ast->tip == DUGUM_CESIT) {
+                    psay = yk->ast->veri.cesit.tip_param_sayi;
+                    prm = yk->ast->veri.cesit.tip_paramlar;
+                }
+                if (psay > 0 && tip_d->veri.tip_kullanici.tip_arg_sayi > 0 &&
+                    generic_layout_param_bagimli(yk->ast, prm, psay)) {
+                    /* D-307: mono YALNIZ layout T'ye bağlıysa (Kutu<T> deger:T).
+                     * Liste<T> gibi type-erased (T alanda geçmez) → base %Liste
+                     * (mono-fonksiyon modeliyle uyumlu; aşağı düşer).
+                     * YAPI → named %Kutu$X (field-adı→index gerek);
+                     * ÇEŞİT → INLINE {i8, payloads} (positional; agg_alan_ir). */
+                    if (yk->ast->tip == DUGUM_CESIT) {
+                        return mono_cesit_inline_ir(g, yk->ast, prm, psay,
+                            tip_d->veri.tip_kullanici.tip_arg,
+                            tip_d->veri.tip_kullanici.tip_arg_sayi);
+                    }
+                    return mono_tip_kayit(g, yk->ast, yk->ad, yk->ad_uz,
+                        prm, psay, tip_d->veri.tip_kullanici.tip_arg,
+                        tip_d->veri.tip_kullanici.tip_arg_sayi);
                 }
                 return yapi_ad_ir(g, yk->ad, yk->ad_uz);
             }
@@ -1198,6 +1430,15 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             ast_taransa_metinleri_liste(g, d->veri.program.uyeler,
                                          d->veri.program.sayi); break;
         case DUGUM_ISLEV:
+            /* D-307: param + dönüş tip annotasyonlarını mono-kaydet (param
+             * alloca'ları per-instantiation tip ister → önceden emit). */
+            for (int pi = 0; pi < d->veri.islev.param_sayi; pi++) {
+                const Dugum *p = d->veri.islev.parametreler[pi];
+                if (p && p->veri.parametre.tip)
+                    (void)ast_tip_to_ir(g, p->veri.parametre.tip);
+            }
+            if (d->veri.islev.donus_tipi)
+                (void)ast_tip_to_ir(g, d->veri.islev.donus_tipi);
             ast_taransa_metinleri(g, d->veri.islev.govde); break;
         case DUGUM_DISA:
             ast_taransa_metinleri(g, d->veri.disa.tanim); break;
@@ -1205,6 +1446,10 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             ast_taransa_metinleri_liste(g, d->veri.blok.deyimler,
                                          d->veri.blok.sayi); break;
         case DUGUM_DEGISKEN:
+            /* D-307: değişken tip annotasyonunu mono-kaydet (alloca %Kutu$ptr
+             * önceden tanımlı olmalı — forward-ref alloca'da geçersiz). */
+            if (d->veri.degisken.tip)
+                (void)ast_tip_to_ir(g, d->veri.degisken.tip);
             ast_taransa_metinleri(g, d->veri.degisken.deger); break;
         case DUGUM_ATAMA:
             ast_taransa_metinleri(g, d->veri.atama.hedef);
@@ -1564,6 +1809,11 @@ static void yapi_tip_tanimlari_emit(LlvmGen *g) {
         if (y->ast && y->ast->tip == DUGUM_CESIT) {
             const Dugum *c = y->ast;
             if (!cesit_payload_var(c)) continue;
+            /* D-307: layout-param-bağımlı generic çeşit base tipi EMIT EDİLMEZ
+             * (inline per-instantiation). Type-erased ise base emit edilir. */
+            if (c->veri.cesit.tip_param_sayi > 0 &&
+                generic_layout_param_bagimli(c, c->veri.cesit.tip_paramlar,
+                                             c->veri.cesit.tip_param_sayi)) continue;
             fputs("%", g->out);
             yerel_ad_yaz(g->out, y->ad, y->ad_uz);
             fprintf(g->out, " = type { %s", cesit_disc_ir(c));
@@ -1578,6 +1828,12 @@ static void yapi_tip_tanimlari_emit(LlvmGen *g) {
             fputs(" }\n", g->out);
             continue;
         }
+        /* D-307: layout-param-bağımlı generic yapı base tipi ('%Kutu') EMIT
+         * EDİLMEZ — per-instantiation (%Kutu$ptr). Type-erased generic (Liste<T>,
+         * T alanda geçmez) ise base %Liste emit EDİLİR (mono-fonksiyon modeli). */
+        if (y->ast->veri.yapi.tip_param_sayi > 0 &&
+            generic_layout_param_bagimli(y->ast, y->ast->veri.yapi.tip_paramlar,
+                                         y->ast->veri.yapi.tip_param_sayi)) continue;
         fputs("%", g->out);
         yerel_ad_yaz(g->out, y->ad, y->ad_uz);
         fputs(" = type { ", g->out);
@@ -1590,6 +1846,53 @@ static void yapi_tip_tanimlari_emit(LlvmGen *g) {
         fputs(" }\n", g->out);
     }
     if (g->yapilar) fputs("\n", g->out);
+}
+
+/* D-307: per-instantiation generic yapı/çeşit tip tanımlarını emit et
+ * (%Kutu$ptr = type {...}). Fonksiyonlardan SONRA çağrılır — mono_tipler
+ * codegen sırasında keşfedilir; LLVM adlı-tipleri modül-genelinde çözer
+ * (forward-ref güvenli). Her örneğin subst'ı push edilir → alan/payload
+ * tipleri T'den concrete arg'a çözülür. Yeni instantiation ekleyebileceği
+ * için (nested generic) sabit-nokta: liste büyümeyi durdurana kadar tekrar. */
+static void mono_tip_tanimlari_emit(LlvmGen *g) {
+    int emitlenen = 0;
+    /* dedup: emit edilmiş mangled'ları izle (basit — MonoKayit yeniden kullan) */
+    for (int iter = 0; iter < 64; iter++) {
+        int yeni_emit = 0;
+        for (MonoTip *m = g->mono_tipler; m; m = m->sonraki) {
+            if (mono_emitlendi(g, m->mangled)) continue;
+            /* emit edildi işaretle (mangle kaydı) */
+            MonoKayit *mk = (MonoKayit *)arena_ayir(g->arena, sizeof(MonoKayit));
+            mk->mangled = m->mangled; mk->sonraki = g->monolar; g->monolar = mk;
+            yeni_emit = 1; emitlenen = 1;
+            const Dugum *a = m->ast;
+            TipSubst *eski = g->substler;
+            g->substler = m->subst;   /* param→concrete IR (base'de outer subst yok) */
+            fprintf(g->out, "%%%s = type { ", m->mangled);
+            if (a->tip == DUGUM_CESIT) {
+                fprintf(g->out, "%s", cesit_disc_ir(a));
+                for (int vi = 0; vi < a->veri.cesit.varyant_sayi; vi++) {
+                    int pn = cesit_varyant_payload_n(a, vi);
+                    for (int j = 0; j < pn; j++) {
+                        const char *ir = ast_tip_to_ir(g,
+                            a->veri.cesit.varyant_payload_tipleri[vi][j]);
+                        fprintf(g->out, ", %s", ir ? ir : "i32");
+                    }
+                }
+            } else {
+                for (int i = 0; i < a->veri.yapi.alan_sayi; i++) {
+                    if (i > 0) fputs(", ", g->out);
+                    const char *ir = ast_tip_to_ir(g,
+                        a->veri.yapi.alanlar[i]->veri.alan.tip);
+                    fputs(ir ? ir : "i32", g->out);
+                }
+            }
+            fputs(" }\n", g->out);
+            g->substler = eski;
+        }
+        if (!yeni_emit) break;
+    }
+    if (emitlenen) fputs("\n", g->out);
 }
 
 /* === Ifade IR === */
@@ -1746,6 +2049,17 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
     /* Tip stringi: "%Ad" (Türkçe ad ise quote'lu — yapi_ad_ir). */
     const char *yapi_ir = yapi_ad_ir(g, y->ad, y->ad_uz);
 
+    /* D-307: generic yapı construction — beklenen_tip (Kutu<metin>) mangled
+     * tipi (%Kutu$ptr) + subst verir. Böylece alloca/GEP/store per-instantiation
+     * tipiyle, alan tipleri (T→arg) doğru çözülür. Subst fn sonunda geri alınır. */
+    TipSubst *mono_eski_subst = g->substler;
+    if (y->ast && y->ast->tip == DUGUM_YAPI &&
+        y->ast->veri.yapi.tip_param_sayi > 0 && g->beklenen_tip) {
+        const char *mir = ast_tip_to_ir(g, g->beklenen_tip);
+        MonoTip *mt = mono_tip_bul(g, mir);
+        if (mt) { yapi_ir = mir; g->substler = mt->subst; }
+    }
+
     int alloca_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = alloca %s\n", alloca_r, yapi_ir);
 
@@ -1782,6 +2096,7 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
     /* Struct degerini yukle (by-value akis icin) */
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", load_r, yapi_ir, alloca_r);
+    g->substler = mono_eski_subst;   /* D-307: subst geri al */
     IfadeSonuc s = { load_r, yapi_ir, 0 };
     return s;
 }
@@ -1793,8 +2108,16 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     /* Yapi tipini cikar: nesne.tip "%Ad" ise yapi adi, "ptr" ise once
      * nesnenin KAYITLI yapi tipi (ref_yapi_ir), yoksa alan-adi arama. */
     YapiKayit *yk = NULL;
+    MonoTip *mono_mt = NULL;   /* D-307: mangled generic örnek (%Kutu$ptr) */
     if (nesne.tip && nesne.tip[0] == '%') {
         yk = yapi_bul_ir(g, nesne.tip);
+        if (!yk) {
+            mono_mt = mono_tip_bul(g, nesne.tip);
+            if (mono_mt && mono_mt->ast->tip == DUGUM_YAPI) {
+                yk = yapi_bul(g, mono_mt->ast->veri.yapi.ad,
+                              mono_mt->ast->veri.yapi.ad_uzunluk);
+            }
+        }
     } else {
         /* D-029 fix: nesne TANIMLAYICI ise (&Yapi param/lokal) kayitli yapi
          * tipini kullan — global alan-adi tahmini iki yapi ayni alan adini
@@ -1819,7 +2142,12 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     int idx = yapi_alan_indeksi(yk, d->veri.erisim.alan,
                                  d->veri.erisim.alan_uzunluk, &alan_tip_d);
     if (idx < 0) return hata(g, "alan bulunamadi");
+    /* D-307: mangled generic örnek ise alan tipini örneğin subst'ıyla çöz
+     * (deger: T → arg IR). Subst hemen geri alınır (extractvalue/GEP etkilenmez). */
+    TipSubst *mono_eski = g->substler;
+    if (mono_mt) g->substler = mono_mt->subst;
     const char *alan_ir = ast_tip_to_ir(g, alan_tip_d);
+    g->substler = mono_eski;
 
     int alan_isz = ast_tip_isaretsiz_mi(alan_tip_d);  /* D-005 */
 
@@ -5281,8 +5609,18 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         if (!alt || alt->tip != DUGUM_DESEN_TANIMLAYICI) {
                             continue;  /* joker (_) vb. — bind yok */
                         }
-                        const char *pir = ast_tip_to_ir(g,
-                            cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+                        /* D-307: generic çeşit → payload tipini scrutinee'nin
+                         * INLINE agg'inden ({i8, ptr}) oku; base T ast_tip_to_ir'da
+                         * çözülemez (i32'ye düşer → ptr payload ile uyumsuz). */
+                        const char *pir;
+                        char pbuf[160];
+                        if (sty && sty[0] == '{' &&
+                            agg_alan_ir(sty, ofs + j, pbuf, sizeof(pbuf))) {
+                            pir = pbuf;
+                        } else {
+                            pir = ast_tip_to_ir(g,
+                                cd->veri.cesit.varyant_payload_tipleri[vi][j]);
+                        }
                         if (!pir) pir = "i32";
                         int pr = yeni_reg(g);
                         fprintf(g->out,
@@ -6475,6 +6813,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
     /* Emit module-basi: yapi tip tanimlari + string globalleri */
     yapi_tip_tanimlari_emit(&g);
+    /* D-307: per-instantiation generic tipler — ön-geçişte (ast_taransa_metinleri)
+     * keşfedilenler burada emit (fonksiyonlardan ÖNCE → alloca sized). Fonksiyon/
+     * lambda gövdelerinde keşfedilen geç örnekler sondaki çağrıda (dedup'lı). */
+    mono_tip_tanimlari_emit(&g);
     str_globalleri_emit(&g);
     /* D-252: küresel değişken module-globalleri (@ad = internal global <ir> <init>). */
     for (SabitKayit *ku = g.kureseller; ku; ku = ku->sonraki) {
@@ -6547,6 +6889,12 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         g.bekleyen_lambdalar = bl->sonraki;
         lambda_emit(&g, bl);
     }
+
+    /* D-307: per-instantiation generic yapı/çeşit tipleri (fonksiyonlarda
+     * keşfedilir → burada emit; LLVM adlı-tipleri modül-genelinde çözer,
+     * forward-ref güvenli). Lambdalardan SONRA — lambda gövdeleri de generic
+     * örneklendirme keşfedebilir. */
+    mono_tip_tanimlari_emit(&g);
 
     int hatalar = g.hata_sayisi;
     arena_serbest(a);
