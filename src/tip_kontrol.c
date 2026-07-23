@@ -415,6 +415,8 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->lambda_lineer_yakalama = 0;
     tk->lambda_yakalama = 0;
     tk->lambda_baslangic_scope = NULL;
+    tk->lambda_blok_cikarsama = 0;      /* D-304 */
+    tk->lambda_blok_donus = NULL;       /* D-304 */
     tk->aktif_escape = NULL;
 }
 
@@ -586,6 +588,7 @@ static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);  /* D-304 ileri bildirim */
 
 /* === Madde D: Generic call inference helpers (paralel session, kullanilmaz) ===
  *
@@ -3752,7 +3755,26 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 s.ast_dugumu = p;
                 sembol_ekle(tk->scope, tk->arena, &s);
             }
-            TipBilgisi *donus = tip_belirle(tk, d->veri.lambda.govde);
+            /* D-304: blok-form gövde (`|| { ...; ver e; }`) ifade DEĞİL → deyim
+             * olarak kontrol et ve dönüşü içindeki `ver`'lerden çıkarsa. İfade-form
+             * (`|| e`) eski yol (gövdenin doğal tipi). Önceki durum: tip_belirle(BLOK)
+             * → T001; blok-form lambda HİÇ --check'ten geçmiyordu. */
+            TipBilgisi *donus;
+            if (d->veri.lambda.govde &&
+                d->veri.lambda.govde->tip == DUGUM_BLOK) {
+                int eski_cik = tk->lambda_blok_cikarsama;
+                TipBilgisi *eski_bd = tk->lambda_blok_donus;
+                tk->lambda_blok_cikarsama = 1;
+                tk->lambda_blok_donus = NULL;
+                tip_kontrol_deyim(tk, d->veri.lambda.govde);
+                donus = tk->lambda_blok_donus
+                        ? tk->lambda_blok_donus
+                        : tip_olustur_basit(tk->arena, TIP_BOS);
+                tk->lambda_blok_cikarsama = eski_cik;
+                tk->lambda_blok_donus = eski_bd;
+            } else {
+                donus = tip_belirle(tk, d->veri.lambda.govde);
+            }
             tk->scope = gov_eski;
 
             int yakaladi = tk->lambda_lineer_yakalama;
@@ -4867,6 +4889,19 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_VER: {
+            /* D-304: blok-form lambda dönüş çıkarsaması — `ver <e>` tipini
+             * KAYDET (aktif_donus_tipi'ye karşı kontrol yerine). İlk `ver`
+             * kazanır; sonrakiler tutarlı varsayılır (well-typed lambda). */
+            if (tk->lambda_blok_cikarsama && d->veri.ver.deger) {
+                TipBilgisi *vt = tip_belirle(tk, d->veri.ver.deger);
+                if (!tk->lambda_blok_donus && vt->kategori != TIP_HATA) {
+                    tk->lambda_blok_donus = vt;
+                }
+                if (vt && tip_lineer_mi(vt)) {
+                    lineer_tuket_eger_baglamaysa(tk, d->veri.ver.deger);
+                }
+                break;
+            }
             if (!tk->aktif_donus_tipi) {
                 tip_hata(tk, d, "T023", "ver islev govdesi disinda");
                 break;

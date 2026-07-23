@@ -181,6 +181,10 @@ typedef struct BekleyenLambda {
     int *capture_uzlar;          /* paralel: ad uzunlukları */
     const char **capture_irler;  /* paralel: IR tipleri (env struct alanı + load) */
     int capture_sayi;
+    /* D-304: bildirilen dönüş IR'ı (işlev()->T annotasyonundan). Blok-form
+     * gövde son-`ver` çıkarsaması yapamadığı için (döngüsel) dönüş tipini
+     * BAĞLAMDAN alır. NULL → ifade-form (gövdeden çıkarsanır) ya da bilinmiyor. */
+    const char *beklenen_donus_ir;
     struct BekleyenLambda *sonraki;
 } BekleyenLambda;
 
@@ -217,6 +221,10 @@ typedef struct LlvmGen {
     /* D-071 (Sınıf B lambda V2): lifted lambda emisyon kuyruğu + benzersiz sayaç. */
     BekleyenLambda *bekleyen_lambdalar;
     int lambda_sayaci;
+    /* D-304: bir lambda değeri emit edilirken bağlamın beklediği dönüş IR'ı
+     * (değişken/atama annotasyonu işlev()->T ise T'nin IR'i). Blok-form lambda
+     * dönüş tipi için. Save/restore ile ayarlanır; yoksa NULL. */
+    const char *lambda_beklenen_donus;
     /* V2-F1: son_closure (derleme-zamanı closure tag'i) kaldırıldı — fn değeri
      * artık {ptr fn, ptr env} fat value; closure'luk env!=null ile runtime'da. */
     /* V2-F4.2a: aktif fonksiyonun bölge (ρ) referansı (IR string). Normal fn →
@@ -4396,6 +4404,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             BekleyenLambda *bl = (BekleyenLambda *)arena_ayir(g->arena,
                 sizeof(BekleyenLambda));
             bl->dugum = d; bl->mangled = mang; bl->capture_sayi = cc.sayi;
+            bl->beklenen_donus_ir = g->lambda_beklenen_donus;   /* D-304 */
             if (cc.sayi > 0) {
                 bl->capture_adlar = (const char **)arena_ayir(g->arena,
                     sizeof(char *) * (size_t)cc.sayi);
@@ -4580,7 +4589,14 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                      * yapısal tip = değişkenin annotasyonu. */
                     const Dugum *eski_bt = g->beklenen_tip;
                     g->beklenen_tip = d->veri.degisken.tip;
+                    /* D-304: blok-form lambda dönüş tipi — annotasyon işlev()->T
+                     * ise T'nin IR'ini lambda queue'suna aktar (gövde ön-taraması
+                     * yerine bağlamdan). NULL (işlev değil) → ifade-form davranışı. */
+                    const char *eski_lbd = g->lambda_beklenen_donus;
+                    g->lambda_beklenen_donus =
+                        kapanis_donus_ir_al(g, d->veri.degisken.tip);
                     dv = ifade_uret(g, d->veri.degisken.deger, tip);
+                    g->lambda_beklenen_donus = eski_lbd;
                     g->beklenen_tip = eski_bt;
                     int rr = int_donustur_im(g, dv.reg, dv.tip, tip,
                                              dv.isaretsiz);
@@ -6060,11 +6076,16 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     const Dugum *govde = d->veri.lambda.govde;
     int term = 0;
     if (govde && govde->tip == DUGUM_BLOK) {
-        /* Blok-form gövde: son-`ver` çıkarsaması YOK (V2/D-072) → dönüş i32
-         * KALIR (mevcut davranış birebir korunur). Çıkarsama yapılamaz çünkü
-         * blok içindeki `ver` deyimleri emit edilirken g_donus_tip'e ihtiyaç
-         * duyar — tipi öğrenmek için gövdeyi emit etmek gerekir: döngüsel.
-         * Çözümü ayrı iş (gövde ön-taraması). */
+        /* Blok-form gövde: son-`ver` çıkarsaması gövde ön-taramasını gerektirir
+         * (döngüsel: `ver` emit'i g_donus_tip ister). D-304: bağlamdan gelen
+         * BİLDİRİLEN dönüş IR'ı (işlev()->T annotasyonu, bl->beklenen_donus_ir)
+         * varsa onu kullan → blok içindeki `ver` doğru tiple ret eder ve define
+         * imzası eşleşir. Yoksa i32 kalır (eski davranış; annotasyonsuz blok-form
+         * hâlâ çıkarsayamaz — o gerçek gövde ön-taraması ister). */
+        if (bl->beklenen_donus_ir && *bl->beklenen_donus_ir) {
+            donus = bl->beklenen_donus_ir;
+            g_donus_tip = donus;
+        }
         term = blok_uret(g, govde);
     } else if (govde) {
         /* İfade-form: beklenen tip VERME (NULL) → gövdenin DOĞAL IR tipi.
@@ -6079,10 +6100,14 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         term = 1;
     }
     if (!term) {
-        /* Terminatörsüz (blok-form fallback) → donus burada daima "i32"
-         * (yukarıdaki blok-form dalı `donus`u değiştirmez) → `ret i32 0`
-         * geçerli. `ret ptr 0` gibi geçersiz bir form üretilemez. */
-        fprintf(g->out, "  ret %s 0\n", donus);
+        /* Terminatörsüz (blok-form ver'siz düşer). D-304: donus artık ptr/float
+         * de olabilir (bildirilen tip) → tipe uygun sıfır-değer emit et
+         * (`ret ptr 0` / `ret double 0` GEÇERSİZ olurdu). */
+        const char *sifir = "0";
+        if (strcmp(donus, "ptr") == 0) sifir = "null";
+        else if (strcmp(donus, "float") == 0 || strcmp(donus, "double") == 0)
+            sifir = "0.0";
+        fprintf(g->out, "  ret %s %s\n", donus, sifir);
     }
 
     if (ic_tmp) {

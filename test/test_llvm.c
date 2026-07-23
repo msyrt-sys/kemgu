@@ -2822,6 +2822,41 @@ static void test_lambda_donus_kesirli(void) {
                rc == 42);
 }
 
+/* === D-304: BLOK-form lambda dönüşü (`|| { ...; ver e; }`) ===
+ * Önce blok-form lambda HİÇ derlenmiyordu: (a) tip kontrol BLOK gövdeyi ifade
+ * sanıp T001, (b) codegen dönüş i32 sabiti → ptr/double gövdede LLVM reddi.
+ * D-304: (a) gövde deyim olarak kontrol + dönüş ver'lerden çıkarsanır,
+ * (b) codegen bildirilen dönüş IR'ını (işlev()->T) kullanır. C-only (self-host
+ * genel closure desteklemez). ifade-form ile PARİTE. */
+static void test_lambda_blok_metin(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> metin = "
+        "|| { ver \"selam\"; }; "
+        "ver metin_uzunluk(f()); }");
+    test_sonuc("BLOK-form lambda -> metin (|| { ver ... }) -> exit 5", rc == 5);
+}
+
+static void test_lambda_blok_cok_deyim(void) {
+    /* Çok-deyimli blok: değişken bildirimleri + son ver çıkarsanır (20+22). */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> tam32 = || { "
+        "de\xc4\x9fi\xc5\x9fken a: tam32 = 20; "
+        "de\xc4\x9fi\xc5\x9fken b: tam32 = 22; ver a + b; }; "
+        "ver f(); }");
+    test_sonuc("BLOK-form lambda cok-deyimli (20+22) -> exit 42", rc == 42);
+}
+
+static void test_lambda_blok_kesirli(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev() -> kesirli64 = || { "
+        "de\xc4\x9fi\xc5\x9fken x: kesirli64 = 3.5; ver x; }; "
+        "e\xc4\x9f" "er f() > 3.0 { ver 42; } ver 1; }");
+    test_sonuc("BLOK-form lambda -> kesirli64 -> exit 42", rc == 42);
+}
+
 /* === D-294: görev<T> genisletme (runtime i64 tasima) === */
 
 static void test_gorev_metin(void) {
@@ -3378,6 +3413,9 @@ int main(void) {
     test_lambda_donus_metin();
     test_lambda_donus_metin_ic_ice();
     test_lambda_donus_kesirli();
+    test_lambda_blok_metin();       /* D-304 */
+    test_lambda_blok_cok_deyim();   /* D-304 */
+    test_lambda_blok_kesirli();     /* D-304 */
 
     printf("\n--- gorev<T> genisletme (D-294) ---\n");
     test_gorev_metin();

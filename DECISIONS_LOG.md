@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-304 — Blok-form lambda dönüşü (`|| { …; ver e; }`) — C-only, ifade-form ile parite (2026-07-23)
+
+**Karar [ETKİ: `src/tip_kontrol.h/c` (blok-form lambda dönüş çıkarsaması), `src/llvm.c`
+(bildirilen dönüş IR'ı ile lifted lambda emisyonu), `test/test_llvm.c` (+3).]** Blok-form
+lambda ÖNCE TAMAMEN kırıktı — İKİ ayrı kusur:
+1. **Tip kontrol:** `tip_belirle(BLOK)` → T001 (BLOK ifade değil). Blok-form lambda HİÇ
+   `--check`'ten geçmiyordu (ölçüldü: `|| { ver 42; }` bile).
+2. **Codegen:** lifted lambda dönüşü SABİT i32 → `|| { ver "selam"; }` (ptr) LLVM'de
+   "`%0 ptr but expected i32`" reddi (D-293 yalnız ifade-form gövdeyi çözmüştü).
+
+**ÇÖZÜM:**
+- **Tip kontrol:** blok-form gövde artık DEYİM olarak kontrol edilir; dönüş içindeki
+  `ver <e>`'lerden ÇIKARSANIR (`lambda_blok_cikarsama` flag'i + `lambda_blok_donus`;
+  `ver` handler'ı çıkarsama modunda tipi kaydeder, aktif_donus_tipi'ye karşı kontrol yerine).
+- **Codegen:** bağlamın beklediği dönüş IR'ı (`değişken f: işlev()->T` annotasyonundan,
+  `kapanis_donus_ir_al`) DEGISKEN'de `lambda_beklenen_donus`'a aktarılır → BekleyenLambda'ya
+  → lambda_emit blok-form dalı i32 yerine onu kullanır (blok içindeki `ver` doğru tiple
+  ret eder + define imzası eşleşir). Terminatörsüz fallback ptr→null/float→0.0 güvenli.
+
+**KAPSAM — C-only, DOĞAL:** self-host GENEL closure'ları (`değişken f: işlev()->T = ||…`)
+HİÇ desteklemez (ölçüldü: `undefined @f`) — yalnız görev-lambda'ları (D-300). Yani D-293
+ifade-form closure ZATEN C-only'di; blok-form fix'i de doğal C-only. Parite/fixpoint YÜKÜ YOK.
+
+**PARİTE (ifade-form ile):** blok-form artık metin/kesirli64/tam32/çok-deyimli için çalışır —
+ifade-form ile BİREBİR aynı kapsam. **Ortak PRE-EXISTING sınır (blok-form'a ÖZGÜ DEĞİL):**
+`işlev()->tam64 = || 8589934592` her İKİ formda da T001 verir — bağlamsız büyük literal
+tam32'ye default olup tam64 annotasyonuyla unify olmuyor (closure dönüş-tipi bidirectional
+inference'ı yok; ayrı iş). Ölçüldü: ifade-form da aynı hatayı verir → regresyon değil.
+
+**KANITLAR:** test_llvm 269/269 (+3: blok metin→5, çok-deyim→42, kesirli→42), tip_kontrol
+189/189, drf 54/54 — regresyon yok. Blok-form artık `--check` VE `--llvm` uçtan uca geçer.
+
+---
+
 ## D-303 — Kanal yönü: `gönderen<T>`/`alan<T>` uçları — yön garantisi tip-seviyesinde (2026-07-23)
 
 **Karar [YÜKSEK] [ETKİ: `src/tip.h/c` (kanal.yon), `src/tip_kontrol.c` (uç tipi +

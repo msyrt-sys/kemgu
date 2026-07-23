@@ -729,8 +729,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   tip kontrolünden geçip LLVM'de patlıyordu). Closure çağrı yeri dönüş tipini **bildirilen**
   `işlev(...) -> T`'den alıyor (`LlvmIsim.kapanis_donus_ir`) — fat value `{ptr,ptr}` T'yi
   sildiği için bu şart; olmadan `metin_uzunluk(f())` segfault veriyordu.
-  **Kalan:** **blok-form gövde** (`|| { ...; ver x; }`) dönüşü hâlâ i32 — son-`ver`
-  çıkarsaması gövde ön-taraması ister (döngüsel bağımlılık; D-072, ayrı iş).
+  ~~**Kalan:** blok-form gövde i32~~ ✓ **ÇÖZÜLDÜ — D-304:** blok-form (`|| { ...; ver x; }`)
+  artık hem tip kontrol (gövde deyim olarak, dönüş ver'lerden çıkarsanır) hem codegen
+  (bildirilen `işlev()->T` IR'ı, `lambda_beklenen_donus`) uçtan uca çalışır — ifade-form ile
+  parite (metin/kesirli/tam32/çok-deyim). C-only (self-host genel closure desteklemez). Ortak
+  pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
 - **PARİTE BORCU — D-300'de TAM KAPANDI.** D-299: `kanal_oluştur/gönder/al`, `dondur`,
@@ -743,7 +746,7 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   literalini daima i32 sayıyordu → `kanal<tam64>`de 2^33 sessizce bozuluyordu
   (`i64_genislet` immediate'ı tam genişlikte materyalize ederek onardı).
   **SONUÇ: D-291→D-297'nin tamamı self-host codegen'de; C ile birebir eşdeğer.**
-  Kalan tek ortak sınır: blok-form lambda dönüşü (C'de de yok).
+  Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ (C-only — genel closure zaten yalnız C).
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.

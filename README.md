@@ -175,7 +175,7 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
 | `vektör` SIMD | tip + codegen | Tip kontrolü + LLVM end-to-end. |
 | MMIO temeli | tip + runtime | `yetki<MMIO>` zorunluluğu (MM001-003); C testi 23/23. |
 | LSP sunucusu | runtime | stdio JSON-RPC; hover, completion, tanıma-git. |
-| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (35.493 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik **84/84 korpus**. `mingw32-make calistir_codegen_bootstrap`. **Eşzamanlılık paritesi TAM:** `görev_başlat` (lifted-lambda + heap-env capture dâhil), `görev_birleştir`, `kanal_*`, `dondur` self-host codegen'de C ile eşdeğer üretiliyor. Kalan tek sınır C ile ortak: blok-form lambda dönüşü. |
+| Self-host bootstrap | **fixpoint** | `selfhost/*.kem` — KEMGU ile yazılmış lexer + parser + checker + codegen. Doğrulama: dört bileşen de C derleyicinin çıktısıyla **bayt-birebir** (92/92 dosya), ve codegen kendini derleyince **stage1 == stage2** (35.493 satır IR, birebir). Tek binary sürücü 4 modda (`--token/--parse/--check/--llvm`) C ile eşleşir; semantik eşdeğerlik **84/84 korpus**. `mingw32-make calistir_codegen_bootstrap`. **Eşzamanlılık paritesi TAM:** `görev_başlat` (lifted-lambda + heap-env capture dâhil), `görev_birleştir`, `kanal_*`, `dondur` self-host codegen'de C ile eşdeğer üretiliyor. Genel closure'lar (blok-form dâhil, D-304) C-only — self-host yalnız görev-lambda'larını lift eder. |
 
 ### Test & Kalite
 
@@ -458,10 +458,6 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 ### Yakın — tanımlı, engelsiz iş
 
 
-- **Blok-form lambda dönüş-tipi çıkarsaması.** İfade-form (`|| 3.5`) çıkarsanıyor;
-  blok-form (`|| { …; ver x; }`) dönüşü hâlâ sabit `tam32`.
-  *Engel:* son-`ver`'i öğrenmek için gövdeyi emit etmek gerekir, ama emit sırasında
-  dönüş tipi zaten lazım — **döngüsel bağımlılık**. Gövde ön-taraması gerekiyor.
 
 - **Skaler referans okuma.** `&tam32` bugün **hiç okunamıyor** (`ver v` → T020,
   `v + 0` → T003, `*v` → T001); yalnız taşınıp döndürülebiliyor. Yapı referansı
@@ -534,7 +530,7 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
-görev bölgesi sızdırılır; blok-form lambda dönüşü `tam32`; skaler `&T` okunamaz;
+görev bölgesi sızdırılır; skaler `&T` okunamaz;
 generic `çeşit` C-only (self-host desteklemez; T=metin codegen sınırı — yapı gibi);
 turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
 için L001 leak uyarısı tetiklenmez (`eşleş`'siz düşen görev join edilmez —
