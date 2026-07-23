@@ -2050,8 +2050,19 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
         değişken kad: metin = dizi_al(p.a_deg,
             dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
         eğer metin_esit(kad, "gönderen") veya metin_esit(kad, "alan") { ver "ptr"; }
+        // D-306: generic yapı/çeşit annotasyonu (Kutu<T>) → base yapı/çeşit IR.
+        // Self-host "T→i32 tek-layout" modeli: %Kutu BİR KEZ emit edilir (alan
+        // tipleri T→i32 fallback ile). Bu dal olmadan annotasyon i32'ye düşüp
+        // construction'ın ürettiği %Kutu ile ÇAKIŞIYORDU (k'nın alloca'sı i32,
+        // RHS %Kutu → store uyumsuz + alan erişimi ver "0"). Annotasyon da %Kutu'ya
+        // çözülmeli → construction + extractvalue tutarlı. C llvm.c paritesi.
+        eğer yapi_var_mi(p, kad) { ver metin_birlestir("%", kad); }
+        eğer cesit_var_mi(p, kad) {
+            eğer cesit_enum_mi(p, kad) { ver "i8"; }
+            ver cesit_struct_ir(p, kad);
+        }
     }
-    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver "i32"; }  // TIP_KULLANICI (generic/qualified) → CG sonrası
+    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver "i32"; }  // TIP_KULLANICI (qualified) → CG sonrası
     değişken t: metin = dizi_al(p.a_deg, tip_idx);
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
     eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver "i16"; }

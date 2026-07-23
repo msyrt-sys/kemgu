@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-306 — Self-host generic monomorphization: generic yapı + çeşit self-host'ta çalışıyor (2026-07-23)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (ll_tip TIP_KULLANICI dalı — ~8 satır), `test/cg_korpus/`
+(+2: cg_generic_yapi, cg_generic_cesit).]** Generic yapı (`Kutu<T>`) ve generic çeşit
+(`Secim<T>`, D-302) ÖNCE self-host'ta çalışmıyordu (C-only) — bu yüzden D-302 "C-only" diye
+belgelenmişti. Artık HER İKİSİ de self-host'ta C ile PARİTE çalışır.
+
+**KÖK NEDEN (ölçüldü — sandığımdan ÇOK küçük):** self-host altyapısı %90 hazırdı. Generic
+yapı için `%Kutu = type { i32 }` DOĞRU emit ediliyordu (self-host "T→i32 tek-layout" modeli:
+`atla_tip_paramlar` + alan `deger: T` → `ll_tip(T)` → i32 fallback). TEK kusur: `ll_tip`
+generic ANNOTASYONU (`Kutu<tam32>` = TIP_KULLANICI) `%Kutu` yerine i32 fallback'ine
+düşürüyordu → `değişken k: Kutu<tam32>`'nın alloca'sı i32, ama construction `%Kutu` üretiyor →
+`store i32 %6`(%6=%Kutu) uyumsuz + alan erişimi `.deger` fallback'e (`ver "0"`) düşüyordu.
+
+**ÇÖZÜM:** `ll_tip` TIP_KULLANICI dalı, base ad kayıtlı yapı/çeşit ise onun IR'ını döner
+(`%Kutu` / çeşit-struct) — construction ile tutarlı → alan erişimi extractvalue + eşleş
+binding çalışır. Bu TEK fix HEM yapı HEM çeşit'i düzeltti (ikisi de aynı ll_tip yolundan).
+C llvm.c paritesi.
+
+**KAPSAM (C ile BİREBİR):** T=tam32 çalışır (yapı + çeşit; construction + alan/eşleş).
+**Sınır C ile AYNI:** T=metin → C=1 self-host=1 (ikisi de gürültülü LLVM reddi; "T→i32
+tek-layout" modeli ptr T'yi kaldırmaz — GERÇEK monomorphization değil, C de değil). Yani
+"self-host'ta yok" borcu kapandı; "T→i32 tek-layout" ortak sınır kaldı (ayrı, daha büyük iş).
+
+**FIXPOINT GÜVENLİĞİ:** codegen.kem'in KENDİSİ generic yapı/çeşit TANIMLAMAZ (grep boş) →
+ll_tip değişikliği onun öz-derlemesini etkilemez. Ölçüldü: FIXPOINT 35597 → korundu.
+
+**KANITLAR:** codegen_diff **88/88** (+cg_generic_yapi/cesit, C↔self-host semantik), FIXPOINT
+stage1==stage2, self-host --check temiz. C generic testleri (test_llvm 265) değişmedi.
+
+---
+
 ## D-305 — Skaler güvenli referans okuma: `*v` ile `&T`'den `T` oku (güvensiz YOK) (2026-07-23)
 
 **Karar [ETKİ: `src/tip_kontrol.c` (OP_DEREFERANS referansları kabul eder), `test/test_llvm.c`

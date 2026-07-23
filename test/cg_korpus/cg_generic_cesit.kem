@@ -1,0 +1,11 @@
+// D-306: generic çeşit self-host parite — Secim<tam32> construction + eşleş.
+// Payload T→i32 tek-layout; annotasyon çeşit-struct IR'ına çözülür. Exit: 42
+çeşit Secim<T> { Var(T), Yok }
+işlev ac(s: Secim<tam32>) -> tam32 {
+    eşleş s { Secim::Var(x) => { ver x; } Secim::Yok => { ver 0; } }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken s: Secim<tam32> = Secim::Var(42);
+    ver ac(s);
+}

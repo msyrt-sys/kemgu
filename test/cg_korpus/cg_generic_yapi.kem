@@ -1,0 +1,8 @@
+// D-306: generic yapı self-host parite — Kutu<tam32> construction + alan erişimi.
+// Self-host "T→i32 tek-layout" modeli: annotasyon %Kutu'ya çözülür (i32 değil).
+// Exit: 42
+yapı Kutu<T> { deger: T; bos: mantıksal; }
+işlev main() -> tam32 {
+    değişken k: Kutu<tam32> = Kutu { deger: 42, bos: yanlış };
+    ver k.deger;
+}
