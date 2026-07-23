@@ -750,9 +750,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.
-- **Skaler referans okuma** (D-291 yan bulgusu): `&tam32` bugün hiç okunamıyor — `ver v`
-  T020, `v+0` T003, `*v` T001; yalnız taşınıp döndürülebiliyor. Yapı referansı (`r.alan`)
-  çalışıyor. Hiçbir örnek/test skaler referans kullanmıyor.
+- ~~**Skaler referans okuma**~~ ✓ **ÇÖZÜLDÜ — D-305:** `*v` ile `&T`'den `T` oku (güvenli
+  referans deref — güvensiz GEREKMEZ; ham pointer `*T` hâlâ G001 ister). OP_DEREFERANS
+  artık TIP_REFERANS'ı kabul eder; codegen zaten load ediyordu (D-265 yolu). C+self-host
+  parite, codegen_diff 86/86. **auto-deref DEĞİL** (`ver v` hâlâ T020) — IR opak-ptr
+  sessiz-miscompile riski; explicit `*v` seçildi (AST tip bilinir, loud>silent).
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)

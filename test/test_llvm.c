@@ -2730,11 +2730,24 @@ static void test_gorev_coklu(void) {
     test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
 }
 
+static void test_skaler_ref_oku(void) {
+    /* D-305: skaler güvenli referans okuma — `*v` ile &T'den T oku (güvensiz
+     * YOK; referans her zaman geçerli). Önce &tam32 HİÇ okunamıyordu
+     * (`*v`→T001, `ver v`/`v+0`→T020/T003). Yapı ref (`.alan`) zaten çalışıyordu;
+     * bu skaler yolu tamamlar. Dar tip + &değişken + yerel ref dâhil. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev oku(v: &tam32) -> tam32 { ver *v + 0; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9fken r: &tam32 = &x; "
+        "ver oku(r); }");
+    test_sonuc("skaler &tam32 oku (*v) -> exit 42", rc == 42);
+}
+
 static void test_dondur_identity(void) {
     /* dondur(&değişken T) -> &T : V1'de tip-seviyesi islem, runtime identity.
      * Onceki davranis: `call ptr @dondur(...)` -> TANIMSIZ SEMBOL link hatasi.
-     * Deger yapi-referansi uzerinden geri okunuyor (skaler `&tam32` bugun
-     * KEMGU'da okunamiyor — ayri, onceden var olan bir sinir). */
+     * (Skaler `&T` okuma D-305'te eklendi: `*v`.) */
     int rc = derle_ve_calistir(
         "yap\xc4\xb1 Kutu { deger: tam32; } "
         "i\xc5\x9flev payla\xc5\x9f(k: &de\xc4\x9fi\xc5\x9fken Kutu) -> &Kutu { "
@@ -3405,6 +3418,7 @@ int main(void) {
     test_gorev_yakalamasiz();
     test_gorev_yakalamali();
     test_gorev_coklu();
+    test_skaler_ref_oku();          /* D-305 */
     test_dondur_identity();
     test_kanal_gorev_mesaj();
     test_kanal_akis_denetimi();

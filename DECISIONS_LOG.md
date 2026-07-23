@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-305 — Skaler güvenli referans okuma: `*v` ile `&T`'den `T` oku (güvensiz YOK) (2026-07-23)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (OP_DEREFERANS referansları kabul eder), `test/test_llvm.c`
+(+1), `test/cg_korpus/` (+cg_skaler_ref).]** Skaler `&T` (ör. `&tam32`) ÖNCE HİÇ okunamıyordu:
+`*v` → T001 (`*` yalnız pointer), `ver v` → T020, `v+0` → T003. Yalnız taşınıp
+döndürülebiliyordu; yapı referansı (`r.alan`) ise auto-deref ile ZATEN okunabiliyordu.
+
+**ÇÖZÜM (minimal, sağlam):** `*v` artık GÜVENLİ referansta da çalışır — OP_DEREFERANS
+`TIP_REFERANS` gördüğünde `hedef`'i döner. **güvensiz GEREKMEZ** (referans her zaman
+geçerli; yalnız HAM pointer `*T` güvensiz ister — G001 ayrımı korundu). Codegen SIFIR
+değişiklik: OP_DEREFERANS handler'ı zaten pointee/beklenen tipiyle `load` ediyordu
+(D-265 ham-pointer deref-read yolu) — referans için de aynen çalıştı (self-host dâhil).
+
+**NEDEN `*v`, auto-deref DEĞİL:** implicit auto-deref (`ver v`) IR-seviyesinde SESSİZ-
+miscompile riskli — `&tam32` IR'de opak `ptr`; codegen bir "ptr"in yüklenecek-skaler-ref mi
+yoksa değer mi olduğunu IR'dan AYIRT EDEMEZ (yapı auto-deref'i ERISIM tipi bildiğinden
+çalışıyor). Explicit `*v` bir AST düğümü → tip bilinir, load kesin. Loud>silent: açık deref
+belirsizliği yok. (Transparent-referans auto-deref ileride tip-güdümlü codegen ile eklenebilir.)
+
+**KAPSAM:** &tam32/&tam8 (dar tip)/&değişken/yerel `&T = &x` + aritmetik (`*v + 0`) hepsi
+çalışır. C + self-host PARİTE (self-host codegen `*v`-deref'i zaten yapıyor; self-host
+checker de kabul ediyor — ölçüldü). güvensiz-ayrımı: `*T` ham pointer HÂLÂ G001 ister.
+
+**KANITLAR:** test_llvm 270/270 (+1: skaler &tam32→42), tip_kontrol 189/189, parser 107/107,
+codegen_diff **86/86** (+cg_skaler_ref, C↔self-host), regresyon yok.
+
+---
+
 ## D-304 — Blok-form lambda dönüşü (`|| { …; ver e; }`) — C-only, ifade-form ile parite (2026-07-23)
 
 **Karar [ETKİ: `src/tip_kontrol.h/c` (blok-form lambda dönüş çıkarsaması), `src/llvm.c`

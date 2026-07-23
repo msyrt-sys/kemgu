@@ -1,0 +1,10 @@
+// D-305: skaler güvenli referans okuma — `*v` ile &T'den T oku (güvensiz YOK).
+// Referans her zaman geçerli → güvenli deref. Exit: 42
+işlev oku(v: &tam32) -> tam32 {
+    ver *v + 0;
+}
+işlev main() -> tam32 {
+    değişken x: tam32 = 42;
+    değişken r: &tam32 = &x;
+    ver oku(r);
+}

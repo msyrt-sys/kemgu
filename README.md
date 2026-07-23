@@ -459,11 +459,6 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 
 
-- **Skaler referans okuma.** `&tam32` bugün **hiç okunamıyor** (`ver v` → T020,
-  `v + 0` → T003, `*v` → T001); yalnız taşınıp döndürülebiliyor. Yapı referansı
-  (`r.alan`) çalışıyor. Hiçbir örnek/test skaler referans kullanmadığı için
-  gözden kaçmıştı.
-
 - **Açık tip argümanı** (turbofish) — `f<T>(...)` / `Tip<T>{...}`. Şu an tip
   argümanları yalnız *çıkarsanıyor*; çıkarsamanın yetmediği yerde yazacak sözdizim yok.
 
@@ -530,7 +525,7 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
-görev bölgesi sızdırılır; skaler `&T` okunamaz;
+görev bölgesi sızdırılır;
 generic `çeşit` C-only (self-host desteklemez; T=metin codegen sınırı — yapı gibi);
 turbofish yok; `sonuç` içine sarılan lineer `görev<T>`
 için L001 leak uyarısı tetiklenmez (`eşleş`'siz düşen görev join edilmez —

@@ -2281,16 +2281,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return tip_olustur_referans(tk->arena, op, 1);
 
                 case OP_DEREFERANS:
+                    /* D-305: GÜVENLİ referans deref — `*v` ile &T'den T oku.
+                     * Referans her zaman geçerli (ham pointer değil) → güvensiz
+                     * GEREKMEZ. Yapı referansı zaten `.alan` ile auto-deref
+                     * ediyordu; skaler `&T` için okuma yolu buydu (eskiden
+                     * `*v` T001, `ver v`/`v+0` de reddediliyordu → hiç okunamıyordu). */
+                    if (op->kategori == TIP_REFERANS) {
+                        return op->veri.referans.hedef
+                             ? op->veri.referans.hedef : t_hata(tk);
+                    }
                     if (op->kategori != TIP_POINTER) {
                         tip_hata(tk, d, "T001",
-                                 "'*' sadece pointer tipinde kullanilir");
+                                 "'*' sadece pointer ya da referans tipinde "
+                                 "kullanilir");
                         return t_hata(tk);
                     }
-                    /* C5 on-kosul #2: *T ham pointer dereferansi yalniz
-                     * guvensiz blokta (ast.h'deki kural artik enforce). */
+                    /* C5 on-kosul #2: *T HAM pointer dereferansi yalniz
+                     * guvensiz blokta (ast.h'deki kural artik enforce).
+                     * Güvenli referans (&T) yukarıda ele alındı — güvensiz istemez. */
                     if (tk->guvensiz_baglam == 0) {
                         tip_hata(tk, d, "G001",
-                                 "*T dereferans yalniz guvensiz blok "
+                                 "*T ham pointer dereferans yalniz guvensiz blok "
                                  "icinde kullanilabilir");
                         return t_hata(tk);
                     }
