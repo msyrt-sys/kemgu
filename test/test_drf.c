@@ -652,6 +652,46 @@ static void T44_kanal_olustur_gonder_al_kompozisyon(void) {
                h == 0);
 }
 
+/* === D-303: kanal yön uçları (gönderen<T>/alan<T>) — yön güvenliği === */
+static void T51_yon_projeksiyon_pozitif(void) {
+    /* gönderen(k)/alan(k) projeksiyonu + doğru yönde kullanım = 0 hata. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2);\n"
+        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6nderen<tam32> = g\xc3\xb6nderen(k);\n"
+        "    de\xc4\x9fi\xc5\x9fken a: alan<tam32> = alan(k);\n"
+        "    kanal_g\xc3\xb6nder(g, 42);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: tam32 = kanal_al(a);\n");
+    test_sonuc("D51: gonderen/alan projeksiyon + dogru yon = 0 hata", h == 0);
+}
+
+static void T52_alan_ucundan_gonder_reddi(void) {
+    /* alan<T> (alıcı ucu) üzerinden kanal_gönder → DRF007 (yanlış yön). */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2);\n"
+        "    de\xc4\x9fi\xc5\x9fken a: alan<tam32> = alan(k);\n"
+        "    kanal_g\xc3\xb6nder(a, 42);\n");
+    test_sonuc("D52: alan ucundan kanal_gonder -> DRF007", h >= 1);
+}
+
+static void T53_gonderen_ucundan_al_reddi(void) {
+    /* gönderen<T> (gönderici ucu) üzerinden kanal_al → DRF007. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2);\n"
+        "    de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6nderen<tam32> = g\xc3\xb6nderen(k);\n"
+        "    de\xc4\x9fi\xc5\x9fken v = kanal_al(g);\n");
+    test_sonuc("D53: gonderen ucundan kanal_al -> DRF007", h >= 1);
+}
+
+static void T54_alan_serbest_tanimlayici(void) {
+    /* ÇAKIŞMA YOK: `alan` keyword DEĞİL → kullanıcı işlev adı olarak serbest.
+     * alan(6,7) (2 arg, kanal değil) → projeksiyon DEĞİL, kullanıcı işlevi. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev alan(en: tam32, boy: tam32) -> tam32 { ver en * boy; }\n"
+        "i\xc5\x9flev main() -> tam32 { ver alan(6, 7); }\n");
+    test_sonuc("D54: `alan` serbest tanimlayici/islev adi (cakisma yok) = 0 hata",
+               h == 0);
+}
+
 int main(void) {
     printf("=== KEMGU DRF Test Paketi V1 ===\n");
     printf("Plan: belgeler/KEMGU_DRF_Genisletme_Plan.md\n");
@@ -722,6 +762,10 @@ int main(void) {
     T45_kanal_tam64_calisir();
     T50_kanal_kesirli_reddedilir();
     T46_kanal_dar_tamsayi_kabul();
+    T51_yon_projeksiyon_pozitif();       /* D-303 */
+    T52_alan_ucundan_gonder_reddi();     /* D-303 */
+    T53_gonderen_ucundan_al_reddi();     /* D-303 */
+    T54_alan_serbest_tanimlayici();      /* D-303 */
 
     /* D47-D49: görev<T> genişletme + kesirli T reddi (D-294) */
     T47_gorev_kesirli_reddedilir_baslat();

@@ -88,7 +88,7 @@ makine-denetimli).
 | Çapraz-modül generic monomorphization | codegen | Generic fonk **ve** struct'lar dosyalar arası örneklenir (`kap::Liste<T>`). |
 | Nitelikli tip annotasyonu (`mod::Tip<args>`) | codegen | Tip pozisyonunda modül-nitelikli tip: `değişken l: dizi::Liste<tam64> = dizi::oluştur(böl)`. Çapraz-modül struct alan erişimi dahil. **v1 sınırı:** nitelikli *inşa ifadesi* `mod::Yapı{...}` henüz yok (factory + çıkarsama ile). |
 | Bit operatörleri (`&` `\|` `<<` `>>`) | codegen | Tamsayı genişlikleri arası otomatik dönüşüm. |
-| Eşzamanlılık `görev<T>` / `kanal<T>` | codegen | `görev_başlat(\|\| …)` **gerçek işletim-sistemi thread'i** başlatır (Win32/pthread) ve **`sonuç<görev<T>, metin>`** döner (başlatmak başarısız olabilir → çökmezlik gereği panik değil DEĞER; `eşleş` açar); `görev_birleştir` sonucu çağırana taşır. `kanal_oluştur/gönder/al` — **bloklayan** kanal, çift yönlü akış denetimi (dolu kanalda gönderim, boş kanalda alım bekler). Her görev **kendi bölgesini** sahiplenir (S1/S2) → paylaşılan-bölge yarışı yapısal olarak imkânsız. Statik denetim DRF001-006; `görev<T>` lineerdir (birleştirilmezse L001, iki kez birleştirilirse L002). **v1 sınırı:** `T` ∈ {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`Dizi<T>`), `boş`} — kesirli `T` reddedilir (runtime tamsayı yazmacından okur). Görev bölgesi henüz serbest bırakılmaz (bilinçli sızıntı; hapsedilme kanıtı bekliyor). |
+| Eşzamanlılık `görev<T>` / `kanal<T>` | codegen | `görev_başlat(\|\| …)` **gerçek işletim-sistemi thread'i** başlatır (Win32/pthread) ve **`sonuç<görev<T>, metin>`** döner (başlatmak başarısız olabilir → çökmezlik gereği panik değil DEĞER; `eşleş` açar); `görev_birleştir` sonucu çağırana taşır. `kanal_oluştur/gönder/al` — **bloklayan** kanal, çift yönlü akış denetimi (dolu kanalda gönderim, boş kanalda alım bekler). **Yön uçları (D-303):** `gönderen(k)`→`gönderen<T>`, `alan(k)`→`alan<T>` — yanlış yön derleme hatası (DRF007); `kanal<T>` full-duplex fabrika kalır. Her görev **kendi bölgesini** sahiplenir (S1/S2) → paylaşılan-bölge yarışı yapısal olarak imkânsız. Statik denetim DRF001-006; `görev<T>` lineerdir (birleştirilmezse L001, iki kez birleştirilirse L002). **v1 sınırı:** `T` ∈ {≤64-bit tamsayı, işaretçi-benzeri (`metin`/`Dizi<T>`), `boş`} — kesirli `T` reddedilir (runtime tamsayı yazmacından okur). Görev bölgesi henüz serbest bırakılmaz (bilinçli sızıntı; hapsedilme kanıtı bekliyor). |
 
 ### Derleyici
 
@@ -521,11 +521,14 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
   DEĞER (`hata(metin)`). Çökmezlik ilkesiyle uyumlu. Hata tipi V1'de `metin`;
   payload'lı `çeşit` (aşağıdaki 3. madde) gelince `GörevHata`ya yükseltilebilir.
 
-- **Kanalda yön garantisi.** Bugün tek, yönsüz `kanal<T>` var: aynı görev hem
-  gönderip hem alabilir, tip sistemi engellemez. Bellek modelinin özgün tasarımı
-  ayrık uçlardı (`gönderen<T>` / `alan<T>`) — geri dönülür mü, kararı bekliyor.
+- ~~**Kanalda yön garantisi.**~~ **KARAR VERİLDİ (D-303):** `gönderen<T>`/`alan<T>`
+  yön uçları eklendi (projeksiyon modeli). `gönderen(k)`/`alan(k)` uç projekte eder;
+  `kanal_gönder` yalnız gönderen|kanal, `kanal_al` yalnız alan|kanal alır — yanlış yön
+  DERLEME hatası (DRF007). `kanal<T>` full-duplex fabrika olarak kalır (geriye-uyumlu).
+  V1'de uçlar lineer değil (tam sahiplik V2).
 
-- **Custom ADT / enum sözdizimi** ve `eşleş` exhaustiveness'ın buna genişletilmesi.
+- ~~**Custom ADT / enum sözdizimi**~~ **YAPILMIŞTI + genişletildi:** payload'lı `çeşit`
+  + `eşleş` exhaustiveness zaten vardı; generic `çeşit Secim<T>` C-only eklendi (D-302).
 
 ### Bilinen sınırlar (bugün geçerli)
 

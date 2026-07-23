@@ -148,6 +148,16 @@ TipBilgisi *tip_olustur_kanal(Arena *a, TipBilgisi *ic) {
     TipBilgisi *t = tip_olustur_basit(a, TIP_KANAL);
     if (!t) return NULL;
     t->veri.kanal.ic = ic;
+    t->veri.kanal.yon = KANAL_YON_CIFT;
+    return t;
+}
+
+/* D-303: yön'lü kanal ucu (gönderen<T>/alan<T>). */
+TipBilgisi *tip_olustur_kanal_yon(Arena *a, TipBilgisi *ic, int yon) {
+    TipBilgisi *t = tip_olustur_basit(a, TIP_KANAL);
+    if (!t) return NULL;
+    t->veri.kanal.ic = ic;
+    t->veri.kanal.yon = yon;
     return t;
 }
 
@@ -324,8 +334,11 @@ int tip_esit(const TipBilgisi *a, const TipBilgisi *b) {
             return tip_esit(a->veri.gorev.ic, b->veri.gorev.ic);
 
         case TIP_KANAL:
-            /* DRF V1: kanal<T1> == kanal<T2> iff T1==T2 */
-            return tip_esit(a->veri.kanal.ic, b->veri.kanal.ic);
+            /* DRF V1: kanal<T1> == kanal<T2> iff T1==T2; D-303: yön de eşleşmeli
+             * (gönderen<T> != alan<T> != kanal<T>). gönder/al intrinsic'leri
+             * çift↔uç uyumunu ayrıca gevşetir. */
+            return a->veri.kanal.yon == b->veri.kanal.yon &&
+                   tip_esit(a->veri.kanal.ic, b->veri.kanal.ic);
     }
     return 0;
 }
@@ -440,7 +453,9 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             return;
 
         case TIP_KANAL:
-            fputs("kanal<", out);
+            fputs(t->veri.kanal.yon == KANAL_YON_GONDEREN ? "g\xc3\xb6nderen<"
+                : t->veri.kanal.yon == KANAL_YON_ALAN     ? "alan<"
+                : "kanal<", out);
             tip_yazdir(t->veri.kanal.ic, out);
             fputc('>', out);
             return;

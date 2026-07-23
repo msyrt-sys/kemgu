@@ -2990,6 +2990,19 @@ static void test_kanal_dar_T_capraz_thread(void) {
     test_sonuc("kanal<tam16> -1000 capraz-thread turu -> exit 42", rc == 42);
 }
 
+static void test_kanal_yon_uctan_uca(void) {
+    /* D-303: gönderen(k)/alan(k) projeksiyon uçtan uca. Uçlar aynı KdlKanal*
+     * ptr'ı (identity codegen) → gönderen'e gönder, alan'dan al çalışır. 42. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: kanal<tam32> = kanal_olu\xc5\x9ftur(2); "
+        "de\xc4\x9fi\xc5\x9fken g: g\xc3\xb6nderen<tam32> = g\xc3\xb6nderen(k); "
+        "de\xc4\x9fi\xc5\x9fken a: alan<tam32> = alan(k); "
+        "kanal_g\xc3\xb6nder(g, 42); "
+        "ver kanal_al(a); }");
+    test_sonuc("kanal yon: gonderen/alan projeksiyon -> exit 42", rc == 42);
+}
+
 /* === D-297: Katman 2 ORNEK DOSYALARI artik exit-koduyla korunuyor ===
  * gorev_temel.kem / kanal_mesaj.kem hicbir hedefte exit-kodu dogrulanmiyordu.
  * Mutasyonla olculdu: `ver toplam` -> `ver 7` yapildiginda calistir_asan_denetim
@@ -3382,6 +3395,7 @@ int main(void) {
     test_kanal_tam8_negatif_turu();
     test_kanal_dtam8_isaretsiz_turu();
     test_kanal_dar_T_capraz_thread();
+    test_kanal_yon_uctan_uca();     /* D-303 */
     test_ornek_gorev_temel();
     test_ornek_kanal_mesaj();
 

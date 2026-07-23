@@ -682,8 +682,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   (katmanlı savunma, ikisi de ölçüldü). **Kalan (bu sırayla):**
   - ~~**`kanal`**~~ ✓ **D-292** + **D-295**: `kanal_oluştur<T>(kapasite)` kurucusu (T beklenen
     tipten; bağlamsız → DRF006) + gönder/al codegen + **BLOKLAYAN** host runtime (koşul değişkeni).
-    Mehmet kararı: tek yönsüz `kanal<T>` (spec R-KANAL buna göre yeniden yazıldı; **bedeli:
-    yön tip-seviyesinde garanti EDİLMEZ**). Kapatılan asıl kusur: boş kanalda `kanal_al` 0
+    Mehmet kararı (D-292): tek yönsüz `kanal<T>`. **D-303 (Karar 2) BUNU GENİŞLETTİ:**
+    `gönderen<T>`/`alan<T>` yön uçları eklendi (projeksiyon: `gönderen(k)`/`alan(k)` identity;
+    `kanal_gönder` gönderen|kanal, `kanal_al` alan|kanal — yanlış yön DRF007). `kanal<T>`
+    full-duplex fabrika kalır (geriye-uyumlu). `TIP_KANAL.yon` alanı; keyword DEĞİL (tip
+    pozisyonunda generic-user-tip, `alan` serbest tanımlayıcı kalır; projeksiyon düşüşe-güvenli
+    `fn_var_mi`/`!ik`). V1: uçlar lineer değil. Bedeli D-292'de "yön garanti EDİLMEZ"di; artık
+    uç-tutucu için derleme-zamanı garanti var. Kapatılan asıl kusur: boş kanalda `kanal_al` 0
     dönüyordu — gerçek bir 0'dan ayırt edilemez (sessiz yanlış cevap); dolu kanalda gönderim
     mesajı sessizce düşürüyordu. Kanal/görev ABI'si host+bare-metal'de artık AYNI.
     **D-295:** tampon `int64_t` → `kanal<tam64>`/`<metin>`/`<Dizi<T>>` GERÇEKTEN çalışır

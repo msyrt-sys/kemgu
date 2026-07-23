@@ -140,9 +140,18 @@ struct TipBilgisi {
 
         struct {
             TipBilgisi *ic;       /* T — kanaldan geçen mesaj tipi */
+            /* Kanal yönü (D-303): 0=çift (kanal<T>, full-duplex fabrika),
+             * 1=gönderen<T> (yalnız kanal_gönder), 2=alan<T> (yalnız kanal_al).
+             * Uçlar aynı runtime kanalına (ptr) type-level görünümlerdir. */
+            int yon;
         } kanal;                  /* Concurrency / DRF V1 — kanal<T> */
     } veri;
 };
+
+/* Kanal yön sabitleri (D-303) */
+#define KANAL_YON_CIFT     0
+#define KANAL_YON_GONDEREN 1
+#define KANAL_YON_ALAN     2
 
 /* === Linear Types Spec V1: lineer mi? ===
  * tekkez<T> ve tekkez<...> sarilan herhangi bir tip lineer sayilir. */
@@ -188,6 +197,8 @@ TipBilgisi *tip_olustur_yetki(Arena *a, TipBilgisi *kaynak);
 TipBilgisi *tip_olustur_vektor(Arena *a, TipBilgisi *eleman, int lane_sayi);
 TipBilgisi *tip_olustur_gorev(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_kanal(Arena *a, TipBilgisi *ic);
+/* D-303: yön'lü kanal ucu (gönderen<T>/alan<T>). yon: KANAL_YON_* */
+TipBilgisi *tip_olustur_kanal_yon(Arena *a, TipBilgisi *ic, int yon);
 
 /* === Concurrency / DRF V1 helper === */
 /* görev<T> mü? */

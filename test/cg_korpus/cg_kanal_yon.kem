@@ -1,0 +1,10 @@
+// D-303: kanal yön uçları — gönderen(k)/alan(k) projeksiyonu (identity codegen).
+// Yön güvenliği tip kontrolünde; codegen uçları aynı KdlKanal* ptr'ı olarak taşır.
+// gönderen üzerinden gönder, alan üzerinden al. Exit: 42
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    değişken g: gönderen<tam32> = gönderen(k);
+    değişken a: alan<tam32> = alan(k);
+    kanal_gönder(g, 42);
+    ver kanal_al(a);
+}

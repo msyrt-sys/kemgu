@@ -3789,6 +3789,19 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * TANIMSIZ SEMBOL link hatası veriyordu. */
                 return ifade_uret(g, d->veri.cagri.argumanlar[0], "ptr");
             }
+            if (!ik && n == 1 &&
+                ((cagri_adi_uz == 9 &&
+                  memcmp(cagri_adi, "g\xc3\xb6nderen", 9) == 0) ||
+                 (cagri_adi_uz == 4 &&
+                  memcmp(cagri_adi, "alan", 4) == 0))) {
+                /* D-303: gönderen(k)/alan(k) — kanal yön ucu projeksiyonu.
+                 * Runtime-free IDENTITY (dondur gibi): gönderen<T>/alan<T>
+                 * uçları aynı KdlKanal* ptr'ına type-level görünümdür; codegen
+                 * hiç talimat üretmez, argümanı aynen döndürür. Yön güvenliği
+                 * tamamen tip kontrolünde (DRF007). `!ik` guard: kullanıcının
+                 * `alan` adlı işlevi varsa ONA düşer (isim gaspı yok). */
+                return ifade_uret(g, d->veri.cagri.argumanlar[0], "ptr");
+            }
 
             /* Built-in libc / kdl mapping */
             const char *kdl_donus = NULL;  /* override (NULL ise auto) */

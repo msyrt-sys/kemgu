@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-303 — Kanal yönü: `gönderen<T>`/`alan<T>` uçları — yön garantisi tip-seviyesinde (2026-07-23)
+
+**Karar [YÜKSEK] [ETKİ: `src/tip.h/c` (kanal.yon), `src/tip_kontrol.c` (uç tipi +
+projeksiyon + gönder/al yön), `src/llvm.c` + `selfhost/codegen.kem` (uç→ptr + projeksiyon
+identity), örnek + test + korpus.]** Karar 2 (Mehmet). **D-292'nin "tek yönsüz kanal<T>"
+kararını GENİŞLETİR** (tersine çevirmez): kanal<T> hâlâ full-duplex fabrika; ek olarak
+`gönderen<T>`/`alan<T>` yön'lü uçlar. Yanlış yön artık DERLEME hatası (DRF007).
+
+**MODEL — Projeksiyon (Mehmet seçti; KEMGU'da tuple/çoklu-dönüş yok):** `kanal_oluştur`
+hâlâ `kanal<T>` döner; `gönderen(k)` → `gönderen<T>`, `alan(k)` → `alan<T>` (runtime-free
+IDENTITY, dondur gibi — uçlar aynı `KdlKanal*` ptr'ına type-level görünüm). `kanal_gönder`
+gönderen|kanal alır, `kanal_al` alan|kanal alır. Uç-tutucu YANLIŞ yönü yapamaz (DRF007) ama
+mevcut `kanal<T>` kodu bozulmaz (geriye-uyumlu; kanal<T> = çift yön kaçış-kapısı).
+
+**TEMSİL:** yeni kategori yerine `TIP_KANAL`'a `yon` alanı (0=çift/1=gönderen/2=alan) —
+minimal, codegen tümü ptr kalır (yön'den bağımsız), yalnız tip_kontrol yön'e bakar.
+tip_esit yön de eşler (gönderen<T> != alan<T> != kanal<T>).
+
+**KEYWORD DEĞİL — `alan` çakışması ÇÖZÜLDÜ:** `gönderen`/`alan` keyword yapılmadı. Tip
+pozisyonunda generic-kullanıcı-tipi olarak parse edilir (`gönderen<T>` = TIP_KULLANICI),
+ada göre özel-durum. Projeksiyon `gönderen(k)`/`alan(k)` built-in çağrı adları — ama
+DÜŞÜŞE-GÜVENLİ: kullanıcının `alan`/`gönderen` adlı İŞLEVİ varsa ONA düşer (C: `!ik` guard;
+self-host: `fn_var_mi`). Böylece `alan` ("alan/bölge") serbest tanımlayıcı kalır.
+
+**SÜREÇ BULGUSU (adversarial değeri):** ilk self-host projeksiyonu KOŞULSUZ `alan`'ı
+gaspetti → **cg_cesit_payload'daki gerçek `işlev alan(s: Şekil)`** identity'ye çevrildi
+(`add {i8,i32,i32,i32}` — struct topluyordu). codegen_diff 84/85 ile yakalandı; base-diff
+kökü gösterdi; `fn_var_mi` guard'ı (C `!ik` aynası) kapattı. **DERS:** yaygın-kelime
+built-in adı EKLERKEN düşüşe-güvenli ol; korpus gerçek kullanıcı-fonksiyonu içerebilir.
+Ayrıca Edit-anchor duplikasyonu codegen.kem'i kırdı (P010 uzak satırda) → brace-dengesi
+her codegen.kem düzenlemesinde denetlenmeli; stale cg.ll "başka sebep" gibi göründü.
+
+**KANITLAR:** test_drf 54/54 (+4: D51 projeksiyon, D52/D53 yanlış-yön DRF007, D54 `alan`
+çakışmasız), test_llvm 266/266 (+1 uçtan uca), tip 26/26, tip_kontrol 189/189,
+codegen_diff **85/85** (+cg_kanal_yon), FIXPOINT 35597 stage1==stage2. Örnek: kanal_mesaj.kem
+artık yön-güvenli (üretici `gönderen<tam32>` alır → gövdede kanal_al DERLEME hatası; exit 15).
+
+**V1 SINIRLARI:** uçlar LİNEER DEĞİL (bir uç birden çok yere kopyalanabilir; tam sahiplik
+garantisi V2 — AskUserQuestion'daki 3. seçenek). Runtime tek yön kontrolü yok (host kanalı
+çift yönlü; yön yalnız derleme-zamanı). Yön yalnız uç-tutucu için zorlanır; kanal<T> tutan
+her ikisini de yapar (kaçış-kapısı).
+
+---
+
 ## D-302 — Generic çeşit (`çeşit Secim<T>`) — C-only, generic yapı ile aynı kapsam (2026-07-23)
 
 **Karar [ETKİ: `src/ast.h` (cesit tip_paramlar), `src/parser.c` (P353 reddi → tip param

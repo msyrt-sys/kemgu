@@ -1484,6 +1484,26 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
              * yolda da yapı SEMBOL_YAPI olarak çözülür; niteliksiz scope
              * zincirinde, nitelikli hedef modülün TİP namespace'inde. */
             const Dugum *yol = tip_d->veri.tip_kullanici.yol;
+            /* D-303: gönderen<T>/alan<T> — kanal yön uçları. KEYWORD DEĞİL;
+             * tip pozisyonunda generic-kullanıcı-tipi olarak parse edilir,
+             * burada ADA göre özel-durum. Böylece `alan` (yapı alanı) serbest
+             * tanımlayıcı olarak kalır — çakışma yok. */
+            if (yol && yol->tip == DUGUM_TANIMLAYICI &&
+                tip_d->veri.tip_kullanici.tip_arg_sayi == 1) {
+                const char *tad = yol->veri.tanimlayici.metin;
+                int tuz = yol->veri.tanimlayici.uzunluk;
+                int kyon = -1;
+                if (tuz == 9 && memcmp(tad, "g\xc3\xb6nderen", 9) == 0)
+                    kyon = KANAL_YON_GONDEREN;
+                else if (tuz == 4 && memcmp(tad, "alan", 4) == 0)
+                    kyon = KANAL_YON_ALAN;
+                if (kyon >= 0) {
+                    TipBilgisi *kic = ast_tip_to_bilgi(tk,
+                        tip_d->veri.tip_kullanici.tip_arg[0]);
+                    if (kic->kategori == TIP_HATA) return t_hata(tk);
+                    return tip_olustur_kanal_yon(tk->arena, kic, kyon);
+                }
+            }
             const Sembol *s = NULL;
             if (yol && yol->tip == DUGUM_TANIMLAYICI) {
                 s = sembol_bul(tk->scope, yol->veri.tanimlayici.metin,
@@ -3174,7 +3194,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (k_tip->kategori == TIP_HATA) return t_hata(tk);
                 if (!tip_kanal_mu(k_tip)) {
                     tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF003",
-                        "kanal_gonder ilk argumani kanal<T> olmali");
+                        "kanal_gonder ilk argumani kanal<T> ya da gonderen<T> olmali");
+                    return t_hata(tk);
+                }
+                /* D-303 yön güvenliği: alan<T> ucundan GÖNDERİLEMEZ. çift
+                 * (kanal<T>) ve gönderen<T> kabul edilir. */
+                if (k_tip->veri.kanal.yon == KANAL_YON_ALAN) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF007",
+                        "alan<T> (alici ucu) uzerinden kanal_gonder yapilamaz "
+                        "— gonderen<T> ya da kanal<T> gerekir");
                     return t_hata(tk);
                 }
                 TipBilgisi *t_tip = k_tip->veri.kanal.ic;
@@ -3203,11 +3231,45 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (k_tip->kategori == TIP_HATA) return t_hata(tk);
                 if (!tip_kanal_mu(k_tip)) {
                     tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF004",
-                        "kanal_al argumani kanal<T> olmali");
+                        "kanal_al argumani kanal<T> ya da alan<T> olmali");
+                    return t_hata(tk);
+                }
+                /* D-303 yön güvenliği: gönderen<T> ucundan ALINAMAZ. */
+                if (k_tip->veri.kanal.yon == KANAL_YON_GONDEREN) {
+                    tip_hata(tk, d->veri.cagri.argumanlar[0], "DRF007",
+                        "gonderen<T> (gonderici ucu) uzerinden kanal_al yapilamaz "
+                        "— alan<T> ya da kanal<T> gerekir");
                     return t_hata(tk);
                 }
                 /* T'yi dön — k tuketilmez */
                 return k_tip->veri.kanal.ic;
+            }
+            /* D-303: gönderen(k) / alan(k) — kanal<T> fabrikasından yön'lü uç
+             * projeksiyonu (runtime-free; codegen'de identity, dondur gibi).
+             * Uçlar aynı runtime kanalına type-level görünümlerdir. */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                ((d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9 &&
+                  memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                         "g\xc3\xb6nderen", 9) == 0) ||
+                 (d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 4 &&
+                  memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                         "alan", 4) == 0))) {
+                int istenen = (d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 9)
+                    ? KANAL_YON_GONDEREN : KANAL_YON_ALAN;
+                /* DÜŞÜŞE-GÜVENLİ: yalnız (tam 1 arg VE arg kanal<T>) ise
+                 * projeksiyon claim et. Değilse kullanıcının `alan`/`gönderen`
+                 * adlı işlevine düş (`alan` = "alan/bölge" yaygın tanımlayıcı;
+                 * built-in adı ONU gasp ETMEMELİ). */
+                if (d->veri.cagri.sayi == 1) {
+                    TipBilgisi *k_tip =
+                        tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    if (tip_kanal_mu(k_tip)) {
+                        return tip_olustur_kanal_yon(tk->arena,
+                            k_tip->veri.kanal.ic, istenen);
+                    }
+                }
+                /* düş: normal işlev çağrısı çözümü aşağıda */
             }
             /* dondur(v: &değişken T) -> &T — mutable referansi immutable yapar
              * (R-PAYLAŞ — Plan Karar E hibrit: built-in + frozen flag V2'de) */

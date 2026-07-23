@@ -28,10 +28,12 @@
 //
 // Beklenen çıkış kodu: 15 (1+2+3+4+5, FIFO sırası korunarak)
 
-işlev uretici(k: kanal<tam32>) -> tam32 {
+// D-303 yön güvenliği: üretici SADECE gönderen<tam32> alır → gövdesinde
+// kanal_al ÇAĞIRAMAZ (DRF007 derleme hatası). Yön tip-seviyesinde garanti.
+işlev uretici(g: gönderen<tam32>) -> tam32 {
     değişken i: tam32 = 1;
     iken i <= 5 {
-        kanal_gönder(k, i);   // kanal doluyken burada bloklar
+        kanal_gönder(g, i);   // kanal doluyken burada bloklar
         i = i + 1;
     }
     ver 0;
@@ -39,18 +41,21 @@ işlev uretici(k: kanal<tam32>) -> tam32 {
 
 işlev main() -> tam32 {
     değişken k: kanal<tam32> = kanal_oluştur(2);
+    // Yön uçlarını projekte et: üreticiye YALNIZ gönderen ucu geçer.
+    değişken g: gönderen<tam32> = gönderen(k);
+    değişken a: alan<tam32> = alan(k);
 
     // Üretici ayrı bir görevde (gerçek thread) koşar. sonuç açılır.
-    eşleş görev_başlat(|| uretici(k)) {
-        tamam(g) => {
-            // Tüketici (main): 5 mesajı sırayla al — kanal boşken bloklar.
+    eşleş görev_başlat(|| uretici(g)) {
+        tamam(gv) => {
+            // Tüketici (main): 5 mesajı alan ucundan al — kanal boşken bloklar.
             değişken toplam: tam32 = 0;
             değişken n: tam32 = 0;
             iken n < 5 {
-                toplam = toplam + kanal_al(k);
+                toplam = toplam + kanal_al(a);
                 n = n + 1;
             }
-            görev_birleştir(g);   // R-BİRLEŞTİR — g tüketilmeli (yoksa L001)
+            görev_birleştir(gv);  // R-BİRLEŞTİR — gv tüketilmeli (yoksa L001)
             ver toplam;
         }
         hata(e) => { ver 1; }   // görev başlatılamadı (kaynak tükenmesi)
