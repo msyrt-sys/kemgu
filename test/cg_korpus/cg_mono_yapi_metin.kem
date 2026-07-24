@@ -1,0 +1,7 @@
+// D-307: gerçek per-instantiation mono (self-host) — Kutu<metin> (T=metin → ptr).
+// Tek-layout T→i32 modelinde bu PATLARDI; artık %Kutu$ptr ayrı layout. Exit: 7
+yapı Kutu<T> { deger: T; }
+işlev main() -> tam32 {
+    değişken k: Kutu<metin> = Kutu { deger: "merhaba" };
+    ver metin_uzunluk(k.deger);
+}

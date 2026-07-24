@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-308 — Gerçek per-instantiation monomorphization SELF-HOST'a taşındı (2026-07-24)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (~230 satır: param registry + subst yığını +
+layout-gate + mangle + discovery pre-pass + per-inst tip emit + construction/access/
+eşleş mono-aware), `test/cg_korpus/` (+3: cg_mono_yapi_metin/coklu/cesit_metin).]**
+D-307 gerçek mono yalnız C (`src/llvm.c`) idi; self-host (`codegen.kem`) hâlâ D-306
+"T→i32 tek-layout" modelindeydi. Artık self-host da C ile TAM parite: `Kutu<metin>`
+(=`%Kutu$ptr`), `Kutu<tam32>`+`Kutu<metin>` bir arada, `Secim<metin>` (INLINE `{i8,ptr}`).
+
+**Kök zorluk (C'den kategorik olarak büyüktü):** self-host'ta (1) subst mekanizması
+YOKTU, (2) parser `atla_tip_paramlar` generic param ADLARINI ATIYORDU (T→arg eşlemesi
+için şart), (3) `alan_tip` çözülmüş LLVM string tutuyor, AST düğümü atılıyordu (mono
+re-resolve imkansız). Üçü de kuruldu: `tp_yad/tp_ad` yan-registry (parse'ta yakalanır),
+`mono_sp/mono_si` subst yığını (append-only + ad-blank pop = `cg_kapsam_kapat` deseni),
+`alan_tnode` (alan AST düğümü).
+
+**Layout-gate (C `tip_dugum_param_gecer` aynası):** mono YALNIZ bir tip-param alan/
+payload tipinde DOĞRUDAN geçiyorsa. `*T`/`&T`/`Dizi<T>`/`görev<T>`/`kanal<T>` = hep
+`ptr` → layout-bağımsız → tek type-erased layout (D-306 davranışı korunur; `Liste<T>`
+`veri:*T` regresyonsuz). SECIMLIK/SONUC/KULLANICI-arg özyinelenir.
+
+**Discovery pre-pass (`mono_kesif`):** tüm TIP_* düğümleri `yapi_tip_emit`'ten ÖNCE
+`ll_tip`'le taranır → mono örnekler alloca'dan önce SIZED emit edilir (geç-emit
+"Cannot allocate unsized type" verirdi — C `ast_taransa` aynası).
+
+**Threading:** construction (YAPI_OLUSTUR) beklenen mono IR'ı `beklenen_yapi` bağlamıyla
+alır (`beklenen_ll` deseni aynası); alan tipleri `agg_alan(mono_fields)` ile çözülür
+(`yapi_alan_tip` T→i32 verir). ERISIM mangled tipte base'i `mono_bul` ile çözer. Çeşit
+construction annotasyon-çözülmüş `{i8,ptr}`'ı `beklenen_ll`'den alır.
+
+**Doğrulama:** FIXPOINT (self_s2==self_s3 byte-identik) + codegen_diff 91/91 (+3 mono) +
+5 mono senaryosu C ile birebir exit-kodu (yapı-metin=7, çoklu-inst=33, çeşit-metin=8,
+generic-yapı=42, generic-çeşit=42). `--check` self↔C generic çeşit'te uyumlu.
+
+**Sınırlar (v1, C ile ortak):** nested-mono-alan (bir mono yapının alanı BAŞKA mono
+yapı) construction'da beklenen_yapi tek-seferlik tüketildiği için threading yok — v1
+C-parite hedefi top-level annotasyon. Referans-yoluyla mono alan erişimi (`&Kutu<T>`)
+value-path (extractvalue) kadar test edilmedi. Bound-check generic yapıda zaten vardı.
+
+**SONUÇ:** D-307'nin tamamı self-host codegen'de; generic yapı+çeşit real mono C↔self
+eşdeğer + fixpoint korundu.
+
+---
+
 ## D-307 — Gerçek per-instantiation monomorphization (C-only): T→i32 tek-layout kaldırıldı (2026-07-23)
 
 **Karar [ETKİ: `src/llvm.c` (~180 satır: MonoTip registry + mangle + per-inst tip emit +

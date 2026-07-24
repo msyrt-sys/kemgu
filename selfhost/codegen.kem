@@ -45,6 +45,7 @@ yapı Ayr {
                              // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
     beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
+    beklenen_yapi: metin;// D-307: beklenen mono yapı IR ("%Kutu$i32") — construction bağlamı
     son_elem: metin;     // CG8: son ifade Dizi ise eleman tipi
     cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
     lbl: tam32;          // CG4: temel-blok etiket sayacı (bb0, bb1, ...)
@@ -85,12 +86,27 @@ yapı Ayr {
     lam_capir: Dizi<metin>;  // DÜZ yakalama LLVM tipleri (tüm lambdalar)
     lam_sayac: tam32;        // lambda_N mangled sayacı
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
+    // D-307: gerçek per-instantiation mono. Parser generic param ADLARINI atıyordu
+    // (atla_tip_paramlar) → yan-registry, YAPI/ÇEŞİT ADIYLA anahtarlı:
+    // tp_yad (yapı/çeşit adı) ↔ tp_ad (param adı), paralel; tp_pending = geçici.
+    tp_yad: Dizi<metin>;
+    tp_ad: Dizi<metin>;
+    tp_pending: Dizi<metin>;
+    // subst: aktif param adı→arg IR (append-only, pop'ta ad="" blank — cg_var deseni).
+    mono_sp: Dizi<metin>;
+    mono_si: Dizi<metin>;
+    // kayıtlı YAPI örnekleri: mangled ("Kutu$ptr") ↔ base ad ("Kutu") ↔ çözülmüş
+    // alan-listesi IR ("{ ptr }") — deferred tip emit + field access için.
+    mono_mangled: Dizi<metin>;
+    mono_yad: Dizi<metin>;
+    mono_fields: Dizi<metin>;
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
     yapi_acount: Dizi<tam32>;// CG7b: alan sayısı
     alan_ad: Dizi<metin>;    // CG7b: alan adları (düz, yapı-bazlı gruplu)
     alan_tip: Dizi<metin>;   // CG7b: alan LLVM tipleri (düz; --check modunda KEMGU tipleri)
     alan_elem: Dizi<metin>;  // CG8: Dizi alanı ise eleman tipi; değilse ""
+    alan_tnode: Dizi<tam32>; // D-307: alan AST tip-düğümü (mono re-resolve için)
     // D3 çeşit yan-kanal (parse_cesit'te doldurulur; --ast dump'a DOKUNMAZ — düğüm/a_deg
     // değişmez → parite korunur). varyant disc sırası = cv_* içindeki çeşit-bazlı pozisyon.
     cv_cesit: Dizi<metin>;   // sahip çeşit adı (her varyant için)
@@ -971,11 +987,16 @@ işlev parse_parametre(p: &değişken Ayr) -> tam32 {
 // Generic tip parametre listesi `<T, U: B1 + B2, ...>` — PARSE + DISCARD (dump'ta
 // yok; bound tip düğümleri orphan kalır, kök'ten erişilmez). `>>` kapanış böl.
 işlev atla_tip_paramlar(p: &değişken Ayr) -> tam32 {
+    // D-307: param ADLARINI tp_pending'e yakala (yapı/çeşit register eder;
+    // İŞLEV/ÖZELLIK/UYGULA çağrıları da doldurur ama register etmez — bu
+    // yüzden her çağrıda temizle, sonuç sızmasın).
+    p.tp_pending = [];
     eğer sim_mi(p, "KUCUK") == yanlış { ver 0; }
     bekle(p, "KUCUK");
     değişken devam: mantıksal = doğru;
     eğer simdiki_buyuk_mu(p) { devam = yanlış; }
     iken devam {
+        dizi_ekle(p.tp_pending, sim_lex(p));  // param adı yakala (bekle'den ÖNCE)
         bekle(p, "TANIMLAYICI");          // param adı
         eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
             ilerle(p);
@@ -1494,19 +1515,27 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
         değilse { dizi_ekle(kids, parse_alan(p)); }
     }
     bekle(p, "SAG_SUSLU");
+    tip_param_kaydet(p, ad);   // D-307: yakalanan generic paramları ad'a bağla
     ver dugum_n(p, "YAPI", ad, s, u, kids);
+}
+// D-307: tp_pending (atla_tip_paramlar'da yakalanan param adları) → tp_yad/tp_ad
+// registry'sine yad adıyla bağla. Sonra pending'i temizle.
+işlev tip_param_kaydet(p: &değişken Ayr, yad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tp_pending) {
+        dizi_ekle(p.tp_yad, yad);
+        dizi_ekle(p.tp_ad, dizi_al(p.tp_pending, i));
+        i = i + 1;
+    }
+    p.tp_pending = [];
+    ver 0;
 }
 işlev parse_cesit(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // çeşit
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
-    eğer sim_mi(p, "KUCUK") {           // çeşit generic v1'de YOK → atla (C birebir)
-        p.hata_say = p.hata_say + 1;
-        iken (sim_mi(p, "BUYUK") == yanlış) ve (sim_mi(p, "SOL_SUSLU") == yanlış)
-          ve (sim_mi(p, "DOSYA_SONU") == yanlış) { ilerle(p); }
-        eğer sim_mi(p, "BUYUK") { ilerle(p); }
-    }
+    atla_tip_paramlar(p);   // D-307: generic çeşit paramlarını yakala (tp_pending)
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];   // payload tip düğümleri (varyant-sırası düz)
     değişken devam: mantıksal = doğru;
@@ -1545,6 +1574,7 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
     değişken cn: tam32 = dugum_n(p, "CESIT", ad, s, u, kids);
     dizi_ekle(p.cc_ad, ad);       // D3: çeşit-node registry (payload struct için)
     dizi_ekle(p.cc_node, cn);
+    tip_param_kaydet(p, ad);      // D-307: generic çeşit paramları
     ver cn;
 }
 
@@ -2019,6 +2049,217 @@ işlev cg_var_tip_bul(p: &değişken Ayr, ad: metin) -> metin {
     }
     ver "i32";
 }
+// ============================================================================
+// D-307 SELF-HOST — gerçek per-instantiation monomorphization altyapısı.
+//   C llvm.c (D-307) aynası: layout-param-bağımlı generic yapı/çeşit her arg
+//   kombinasyonu için AYRI layout alır (Kutu<metin>=%Kutu$ptr, Kutu<tam32>=
+//   %Kutu$i32). Layout-bağımsız (*T/&T/Dizi<T>/görev<T>/kanal<T> → hep ptr)
+//   generic tip TEK type-erased layout kalır (D-306 davranışı korunur).
+// ============================================================================
+// Param registry sorguları (parse'ta tp_yad/tp_ad dolduruldu).
+işlev tip_param_say(p: &değişken Ayr, yad: metin) -> tam32 {
+    değişken n: tam32 = 0;  değişken i: tam32 = 0;
+    değişken m: tam32 = dizi_boyut(p.tp_yad);
+    iken i < m { eğer metin_esit(dizi_al(p.tp_yad, i), yad) { n = n + 1; } i = i + 1; }
+    ver n;
+}
+işlev tip_param_ad(p: &değişken Ayr, yad: metin, k: tam32) -> metin {
+    değişken say: tam32 = 0;  değişken i: tam32 = 0;
+    değişken m: tam32 = dizi_boyut(p.tp_yad);
+    iken i < m {
+        eğer metin_esit(dizi_al(p.tp_yad, i), yad) {
+            eğer say == k { ver dizi_al(p.tp_ad, i); }
+            say = say + 1;
+        }
+        i = i + 1;
+    }
+    ver "";
+}
+işlev param_mi(p: &değişken Ayr, yad: metin, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;  değişken m: tam32 = dizi_boyut(p.tp_yad);
+    iken i < m {
+        eğer metin_esit(dizi_al(p.tp_yad, i), yad) ve metin_esit(dizi_al(p.tp_ad, i), ad) {
+            ver doğru;
+        }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// subst yığını: param adı → arg IR (append-only; pop'ta ad-blank = cg_kapsam_kapat deseni).
+işlev subst_bul(p: &değişken Ayr, ad: metin) -> metin {
+    eğer metin_esit(ad, "") { ver ""; }
+    değişken i: tam32 = dizi_boyut(p.mono_sp) - 1;
+    iken i >= 0 {
+        eğer metin_esit(dizi_al(p.mono_sp, i), ad) { ver dizi_al(p.mono_si, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+işlev subst_kapat(p: &değişken Ayr, bas: tam32) -> tam32 {
+    değişken i: tam32 = bas;  değişken n: tam32 = dizi_boyut(p.mono_sp);
+    iken i < n { dizi_yaz(p.mono_sp, i, ""); i = i + 1; }
+    ver 0;
+}
+işlev subst_it_hepsi(p: &değişken Ayr, base: metin, argir: Dizi<metin>) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(argir) {
+        dizi_ekle(p.mono_sp, tip_param_ad(p, base, i));
+        dizi_ekle(p.mono_si, dizi_al(argir, i));
+        i = i + 1;
+    }
+    ver 0;
+}
+// Layout gate: bir tip düğümü, yad'ın bir param'ını DOĞRUDAN geçirir mi?
+// TIP_BASIT param-adı → evet. SECIMLIK/SONUC/KULLANICI-arg → özyinele.
+// REFERANS/POINTER/DIZI/GOREV/KANAL → ptr, layout-bağımsız → hayır.
+işlev tip_dugum_param_gecer(p: &değişken Ayr, td: tam32, yad: metin) -> mantıksal {
+    eğer td < 0 { ver yanlış; }
+    değişken ta: metin = dizi_al(p.a_ad, td);
+    eğer metin_esit(ta, "TIP_BASIT") { ver param_mi(p, yad, dizi_al(p.a_deg, td)); }
+    eğer metin_esit(ta, "TIP_SECIMLIK") {
+        ver tip_dugum_param_gecer(p, dizi_al(p.cocuk, dizi_al(p.a_cb, td)), yad);
+    }
+    eğer metin_esit(ta, "TIP_SONUC") {
+        değişken sc: tam32 = dizi_al(p.a_cb, td);
+        eğer tip_dugum_param_gecer(p, dizi_al(p.cocuk, sc), yad) { ver doğru; }
+        ver tip_dugum_param_gecer(p, dizi_al(p.cocuk, sc + 1), yad);
+    }
+    eğer metin_esit(ta, "TIP_KULLANICI") {
+        değişken cb: tam32 = dizi_al(p.a_cb, td);
+        değişken cs: tam32 = dizi_al(p.a_cs, td);
+        değişken i: tam32 = 1;   // child 0 = ad-node
+        iken i < cs {
+            eğer tip_dugum_param_gecer(p, dizi_al(p.cocuk, cb + i), yad) { ver doğru; }
+            i = i + 1;
+        }
+        ver yanlış;
+    }
+    ver yanlış;
+}
+işlev mono_gerek_yapi(p: &değişken Ayr, yad: metin) -> mantıksal {
+    eğer tip_param_say(p, yad) == 0 { ver yanlış; }
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver yanlış; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer tip_dugum_param_gecer(p, dizi_al(p.alan_tnode, base + j), yad) { ver doğru; }
+        j = j + 1;
+    }
+    ver yanlış;
+}
+işlev mono_gerek_cesit(p: &değişken Ayr, cad: metin) -> mantıksal {
+    eğer tip_param_say(p, cad) == 0 { ver yanlış; }
+    değişken cn: tam32 = cesit_node_bul(p, cad);
+    eğer cn < 0 { ver yanlış; }
+    değişken cb: tam32 = dizi_al(p.a_cb, cn);
+    değişken cs: tam32 = dizi_al(p.a_cs, cn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer tip_dugum_param_gecer(p, dizi_al(p.cocuk, cb + i), cad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// IR string → mangling'e güvenli alnum-only tag ("{i8, ptr}"→"i8ptr", "ptr"→"ptr").
+işlev mono_ir_sanitize(s: metin) -> metin {
+    değişken r: metin = "";
+    değişken i: tam32 = 0;  değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        değişken c: tam32 = bayt(s, i);
+        eğer (c >= 48 ve c <= 57) veya (c >= 65 ve c <= 90) veya (c >= 97 ve c <= 122) {
+            r = metin_birlestir(r, metin_kes(s, i, 1));
+        }
+        i = i + 1;
+    }
+    ver r;
+}
+işlev mono_mangle(base: metin, argir: Dizi<metin>) -> metin {
+    değişken r: metin = base;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(argir) {
+        r = metin_birlestir(r, "$");
+        r = metin_birlestir(r, mono_ir_sanitize(dizi_al(argir, i)));
+        i = i + 1;
+    }
+    ver r;
+}
+işlev mono_bul(p: &değişken Ayr, mangled: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.mono_mangled) {
+        eğer metin_esit(dizi_al(p.mono_mangled, i), mangled) { ver i; }
+        i = i + 1;
+    }
+    ver -1;
+}
+// TIP_KULLANICI generic düğümün arg çocuklarının IR'ları (child 1..cs-1).
+işlev mono_arg_irleri(p: &değişken Ayr, tip_idx: tam32) -> Dizi<metin> {
+    değişken r: Dizi<metin> = [];
+    değişken cb: tam32 = dizi_al(p.a_cb, tip_idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, tip_idx);
+    değişken i: tam32 = 1;
+    iken i < cs {
+        dizi_ekle(r, ll_tip(p, dizi_al(p.cocuk, cb + i)));
+        i = i + 1;
+    }
+    ver r;
+}
+// Aktif subst ile yapı base'inin alan IR listesi → "{ t0, t1 }".
+işlev mono_yapi_alan_ir(p: &değişken Ayr, base: metin) -> metin {
+    değişken k: tam32 = yapi_idx(p, base);
+    eğer k < 0 { ver "{}"; }
+    değişken bs: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken r: metin = "{";   // agg_alan uyumu: iç boşluksuz ({i32, i32})
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer j > 0 { r = metin_birlestir(r, ", "); }
+        r = metin_birlestir(r, ll_tip(p, dizi_al(p.alan_tnode, bs + j)));
+        j = j + 1;
+    }
+    ver metin_birlestir(r, "}");
+}
+// Generic yapı örneğini kaydet + mangled tip adı döndür ("%Kutu$ptr").
+işlev mono_kayit_yapi(p: &değişken Ayr, base: metin, tip_idx: tam32) -> metin {
+    değişken argir: Dizi<metin> = mono_arg_irleri(p, tip_idx);
+    değişken mangled: metin = mono_mangle(base, argir);
+    eğer mono_bul(p, mangled) >= 0 { ver metin_birlestir("%", mangled); }
+    değişken bas: tam32 = dizi_boyut(p.mono_sp);
+    subst_it_hepsi(p, base, argir);
+    değişken fields: metin = mono_yapi_alan_ir(p, base);
+    subst_kapat(p, bas);
+    dizi_ekle(p.mono_mangled, mangled);
+    dizi_ekle(p.mono_yad, base);
+    dizi_ekle(p.mono_fields, fields);
+    ver metin_birlestir("%", mangled);
+}
+// Generic çeşit annotasyonu → INLINE çözülmüş {i8, <payloadlar>} (named değil).
+işlev mono_cesit_inline(p: &değişken Ayr, base: metin, tip_idx: tam32) -> metin {
+    değişken argir: Dizi<metin> = mono_arg_irleri(p, tip_idx);
+    değişken bas: tam32 = dizi_boyut(p.mono_sp);
+    subst_it_hepsi(p, base, argir);
+    değişken r: metin = cesit_struct_ir(p, base);
+    subst_kapat(p, bas);
+    ver r;
+}
+// Discovery pre-pass: tüm TIP_* düğümlerini ll_tip'le tara → mono örnekler
+// fonksiyon emit'inden ÖNCE kaydedilir (yapi_tip_emit onları da yazar; alloca
+// SIZED tip ister → geç-emit "unsized type" verirdi). C ast_taransa aynası.
+işlev mono_kesif(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer idx < 0 { ver 0; }
+    eğer metin_baslar(dizi_al(p.a_ad, idx), "TIP_") {
+        değişken _mono: metin = ll_tip(p, idx);   // yan-etki: mono_kayit
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        mono_kesif(p, dizi_al(p.cocuk, cb + i));
+        i = i + 1;
+    }
+    ver 0;
+}
 // CG6: KEMGU tip-düğümü → LLVM tip metni. mantıksal=i32 (CG2/CG4 bool mantığıyla tutarlı).
 işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver "i32"; }
@@ -2056,14 +2297,24 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
         // construction'ın ürettiği %Kutu ile ÇAKIŞIYORDU (k'nın alloca'sı i32,
         // RHS %Kutu → store uyumsuz + alan erişimi ver "0"). Annotasyon da %Kutu'ya
         // çözülmeli → construction + extractvalue tutarlı. C llvm.c paritesi.
-        eğer yapi_var_mi(p, kad) { ver metin_birlestir("%", kad); }
+        eğer yapi_var_mi(p, kad) {
+            // D-307: layout-param-bağımlı generic yapı → per-instantiation %Kutu$X.
+            // Layout-bağımsız (alanlar hep ptr) → tek layout %Kutu (D-306).
+            eğer mono_gerek_yapi(p, kad) { ver mono_kayit_yapi(p, kad, tip_idx); }
+            ver metin_birlestir("%", kad);
+        }
         eğer cesit_var_mi(p, kad) {
             eğer cesit_enum_mi(p, kad) { ver "i8"; }
+            // D-307: layout-bağımlı generic çeşit → INLINE çözülmüş {i8, ...}.
+            eğer mono_gerek_cesit(p, kad) { ver mono_cesit_inline(p, kad, tip_idx); }
             ver cesit_struct_ir(p, kad);
         }
     }
     eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver "i32"; }  // TIP_KULLANICI (qualified) → CG sonrası
     değişken t: metin = dizi_al(p.a_deg, tip_idx);
+    // D-307: aktif mono subst — param adı (T) → arg IR. Yapı/çeşit alanı çözümünde.
+    değişken sv: metin = subst_bul(p, t);
+    eğer metin_esit(sv, "") == yanlış { ver sv; }
     eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver "i8"; }
     eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver "i16"; }
     eğer metin_esit(t, "tam64") veya metin_esit(t, "dtam64") { ver "i64"; }
@@ -2400,6 +2651,7 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                     dizi_ekle(p.alan_ad, dizi_al(p.a_deg, ac));
                     dizi_ekle(p.alan_tip, ll_tip(p, atn));
                     dizi_ekle(p.alan_elem, ll_eleman_tip(p, atn));   // CG8: Dizi alanı eleman tipi
+                    dizi_ekle(p.alan_tnode, atn);   // D-307: mono re-resolve için AST düğümü
                     say = say + 1;
                 }
                 j = j + 1;
@@ -2421,17 +2673,28 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 işlev yapi_tip_emit(p: &değişken Ayr) -> tam32 {
     değişken k: tam32 = 0;
     iken k < dizi_boyut(p.yapi_ad) {
-        yaz_str("%"); yaz_str(dizi_al(p.yapi_ad, k)); yaz_str(" = type { ");
-        değişken base: tam32 = dizi_al(p.yapi_abase, k);
-        değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
-        değişken j: tam32 = 0;
-        iken j < cnt {
-            eğer j > 0 { yaz_str(", "); }
-            yaz_str(dizi_al(p.alan_tip, base + j));
-            j = j + 1;
+        // D-307: layout-param-bağımlı generic base ATLA (yalnız mono örnekleri
+        // emit edilir — %Kutu{i32} ölü tanım olurdu, C llvm.c paritesi).
+        eğer mono_gerek_yapi(p, dizi_al(p.yapi_ad, k)) == yanlış {
+            yaz_str("%"); yaz_str(dizi_al(p.yapi_ad, k)); yaz_str(" = type { ");
+            değişken base: tam32 = dizi_al(p.yapi_abase, k);
+            değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+            değişken j: tam32 = 0;
+            iken j < cnt {
+                eğer j > 0 { yaz_str(", "); }
+                yaz_str(dizi_al(p.alan_tip, base + j));
+                j = j + 1;
+            }
+            yaz_str(" }"); yb(10);
         }
-        yaz_str(" }"); yb(10);
         k = k + 1;
+    }
+    // D-307: kayıtlı mono örnekleri: %Kutu$ptr = type { ptr }
+    değişken m: tam32 = 0;
+    iken m < dizi_boyut(p.mono_mangled) {
+        yaz_str("%"); yaz_str(dizi_al(p.mono_mangled, m)); yaz_str(" = type ");
+        yaz_str(dizi_al(p.mono_fields, m)); yb(10);
+        m = m + 1;
     }
     ver 0;
 }
@@ -2568,6 +2831,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değişken hcad: metin = dizi_al(p.a_deg, hsol);
                 eğer cesit_var_mi(p, hcad) {
                     değişken agg: metin = cesit_struct_ir(p, hcad);
+                    // D-307: layout-bağımlı generic çeşit → annotasyon çözülmüş {i8, ptr}
+                    // beklenen_ll'de. cesit_struct_ir T→i32 fallback verir → payload
+                    // store tip uyumsuz (T=metin'de ptr≠i32). Yalnız mono-gerek çeşitte.
+                    eğer mono_gerek_cesit(p, hcad) {
+                        eğer metin_uzunluk(p.beklenen_ll) > 0 {
+                            eğer bayt(p.beklenen_ll, 0) == 123 { agg = p.beklenen_ll; }
+                        }
+                    }
                     değişken disc: tam32 = cesit_disc(p, hcad, hvary);
                     değişken ofs: tam32 = cesit_var_ofset(p, hcad, disc);
                     değişken ar: metin = reg_str(yeni_reg(p));
@@ -3006,6 +3277,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     eğer metin_esit(ad, "YAPI_OLUSTUR") {
         değişken yad: metin = dizi_al(p.a_deg, idx);
         değişken lltip: metin = metin_birlestir("%", yad);
+        // D-307: beklenen mono yapı ("%Kutu$i32") base'i eşleşiyorsa mangled tip +
+        // çözülmüş alan IR'ları kullan (yapi_alan_tip T→i32 fallback verir → yanlış).
+        değişken mono_mi: mantıksal = yanlış;
+        değişken mfields: metin = "";
+        eğer metin_uzunluk(p.beklenen_yapi) > 0 {
+            değişken bstrip: metin = metin_kes(p.beklenen_yapi, 1, metin_uzunluk(p.beklenen_yapi) - 1);
+            değişken bmi: tam32 = mono_bul(p, bstrip);
+            eğer bmi >= 0 ve metin_esit(dizi_al(p.mono_yad, bmi), yad) {
+                lltip = p.beklenen_yapi; mono_mi = doğru; mfields = dizi_al(p.mono_fields, bmi);
+            }
+        }
+        p.beklenen_yapi = "";   // tek seferlik tüket (nested construction sızmasın)
         değişken ap: tam32 = yeni_reg(p);
         değişken apr: metin = reg_str(ap);
         yaz_str("  "); yaz_str(apr); yaz_str(" = alloca "); yaz_str(lltip); yb(10);
@@ -3017,6 +3300,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken alan_ad_s: metin = dizi_al(p.a_deg, an);
             değişken fidx: tam32 = yapi_alan_idx(p, yad, alan_ad_s);
             değişken ftip: metin = yapi_alan_tip(p, yad, alan_ad_s);
+            eğer mono_mi { ftip = agg_alan(mfields, fidx); }   // D-307: çözülmüş alan IR
             p.beklenen_elem = yapi_alan_elem(p, yad, alan_ad_s);   // CG8: [] alan değeri için bağlam
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, an)));
             değişken g: tam32 = yeni_reg(p);
@@ -3041,13 +3325,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // CG7b: struct VALUE ("%..." ile başlar) → extractvalue.
         eğer bayt(ntip, 0) == 37 {
             değişken yad: metin = metin_kes(ntip, 1, metin_uzunluk(ntip) - 1);
-            değişken fidx: tam32 = yapi_alan_idx(p, yad, alan_ad_s);
-            değişken ftip: metin = yapi_alan_tip(p, yad, alan_ad_s);
+            // D-307: mangled mono tip ("Kutu$i32") → base ile alan indeks/IR çöz.
+            değişken mi: tam32 = mono_bul(p, yad);
+            değişken fbase: metin = yad;
+            eğer mi >= 0 { fbase = dizi_al(p.mono_yad, mi); }
+            değişken fidx: tam32 = yapi_alan_idx(p, fbase, alan_ad_s);
+            değişken ftip: metin = yapi_alan_tip(p, fbase, alan_ad_s);
+            eğer mi >= 0 { ftip = agg_alan(dizi_al(p.mono_fields, mi), fidx); }
+            değişken felem: metin = yapi_alan_elem(p, fbase, alan_ad_s);
             değişken r: tam32 = yeni_reg(p);
             değişken rs: metin = reg_str(r);
             yaz_str("  "); yaz_str(rs); yaz_str(" = extractvalue "); yaz_str(ntip); yaz_str(" "); yaz_str(nesne);
             yaz_str(", "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
-            p.son_tip = ftip; p.son_ref = ""; p.son_elem = yapi_alan_elem(p, yad, alan_ad_s);
+            p.son_tip = ftip; p.son_ref = ""; p.son_elem = felem;
             ver rs;
         }
         // CG7c: ptr (referans) → getelementptr + load.
@@ -3524,8 +3814,16 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // D3: annotasyon tagged-union ({i8,..}) ise yapıcı bağlamı kur (değer/tamam/...)
         değişken eski_bll: metin = p.beklenen_ll;
         eğer annot == 1 { eğer bayt(vtip, 0) == 123 { p.beklenen_ll = vtip; } }
+        // D-307: annotasyon mono yapı ("%Kutu$i32") → construction bağlamı kur
+        eğer annot == 1 {
+            eğer bayt(vtip, 0) == 37 {
+                değişken vstrip: metin = metin_kes(vtip, 1, metin_uzunluk(vtip) - 1);
+                eğer mono_bul(p, vstrip) >= 0 { p.beklenen_yapi = vtip; }
+            }
+        }
         değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
         p.beklenen_ll = eski_bll;   // RESET (sızdırma)
+        p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
         // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
@@ -4404,8 +4702,9 @@ işlev kuresel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
+    mono_kesif(p, kok);   // D-307: generic yapı örneklerini kaydet (emit'ten ÖNCE)
     yaz_str("target triple = "); yb(34); yaz_str("x86_64-pc-windows-gnu"); yb(34); yb(10); yb(10);
-    yapi_tip_emit(p);        // CG7b: %Ad = type { ... }
+    yapi_tip_emit(p);        // CG7b: %Ad = type { ... } (+ D-307 mono örnekleri)
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
@@ -5520,7 +5819,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], cg_apointee: [], cg_aic: [], beklenen_elem: "", son_elem: "", beklenen_ll: "",
+        cg_aelem: [], cg_apointee: [], cg_aic: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
@@ -5528,7 +5827,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0,
         str_deg: [],
-        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [],
+        tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
+        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],

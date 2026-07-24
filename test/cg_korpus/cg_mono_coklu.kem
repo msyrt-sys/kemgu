@@ -1,0 +1,8 @@
+// D-307: çoklu-instantiation — Kutu<tam32> + Kutu<metin> aynı programda YAN YANA.
+// %Kutu$i32={i32} ve %Kutu$ptr={ptr} eş zamanlı emit edilir. Exit: 33 (30 + 3).
+yapı Kutu<T> { deger: T; }
+işlev main() -> tam32 {
+    değişken a: Kutu<tam32> = Kutu { deger: 30 };
+    değişken b: Kutu<metin> = Kutu { deger: "abc" };
+    ver a.deger + metin_uzunluk(b.deger);
+}

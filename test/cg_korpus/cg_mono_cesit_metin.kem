@@ -1,0 +1,11 @@
+// D-307: gerçek per-instantiation mono — Secim<metin> (T=metin → payload ptr).
+// çeşit INLINE {i8, ptr} çözülür (named değil); eşleş binding ptr çıkarır. Exit: 8
+çeşit Secim<T> { Var(T), Yok }
+işlev ac(s: Secim<metin>) -> tam32 {
+    eşleş s { Secim::Var(x) => { ver metin_uzunluk(x); } Secim::Yok => { ver 0; } }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken s: Secim<metin> = Secim::Var("merhabaa");
+    ver ac(s);
+}
