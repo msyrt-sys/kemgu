@@ -3498,8 +3498,15 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             // D3: dönüş tipi tagged-union ({i8,..}) ise yapıcı bağlamı (ver tamam(x))
             değişken eski_bll: metin = p.beklenen_ll;
             eğer bayt(p.cur_ret, 0) == 123 { p.beklenen_ll = p.cur_ret; }
+            // D-308: dönüş tipi mono yapı ("%Kutu$ptr") ise construction bağlamı kur
+            // (ver Kutu{...}; değişken-annotasyonu yok → cur_ret'ten al). C cur_ret aynası.
+            eğer bayt(p.cur_ret, 0) == 37 {
+                değişken cstrip: metin = metin_kes(p.cur_ret, 1, metin_uzunluk(p.cur_ret) - 1);
+                eğer mono_bul(p, cstrip) >= 0 { p.beklenen_yapi = p.cur_ret; }
+            }
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
             p.beklenen_ll = eski_bll;
+            p.beklenen_yapi = "";   // D-308: RESET
             op = ret_uydur(p, op);       // Karar 1: i64-taşıyıcı → fn dönüşüne daralt
             rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
             rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası

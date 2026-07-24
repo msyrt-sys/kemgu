@@ -1,0 +1,8 @@
+// D-308: ver-bağlamında mono construction — değişken annotasyonu YOK, beklenen mono
+// tip fonksiyon dönüş tipinden (cur_ret="%Kutu$ptr") alınır. Exit: 3
+yapı Kutu<T> { deger: T; }
+işlev yap() -> Kutu<metin> { ver Kutu { deger: "xyz" }; }
+işlev main() -> tam32 {
+    değişken k: Kutu<metin> = yap();
+    ver metin_uzunluk(k.deger);
+}
