@@ -39,13 +39,25 @@ construction annotasyon-çözülmüş `{i8,ptr}`'ı `beklenen_ll`'den alır.
 5 mono senaryosu C ile birebir exit-kodu (yapı-metin=7, çoklu-inst=33, çeşit-metin=8,
 generic-yapı=42, generic-çeşit=42). `--check` self↔C generic çeşit'te uyumlu.
 
-**Sınırlar (v1, C ile ortak):** nested-mono-alan (bir mono yapının alanı BAŞKA mono
-yapı) construction'da beklenen_yapi tek-seferlik tüketildiği için threading yok — v1
-C-parite hedefi top-level annotasyon. Referans-yoluyla mono alan erişimi (`&Kutu<T>`)
-value-path (extractvalue) kadar test edilmedi. Bound-check generic yapıda zaten vardı.
+**Nested-mono-alan (D-308 devamı, HER İKİ TARAFTA):** mono yapı/çeşit'in alanı/payload'u
+BAŞKA mono yapı/çeşit olabilir. Self-host: construction alan döngüsünde alan tipi mono ise
+`beklenen_yapi` (%) / `beklenen_ll` ({) per-alan kurulur (dış tek-seferlik tüketimi sonrası).
+Çeşit payload döngüsünde de aynı. Test: yapı-in-yapı=12, yapı-alan-çeşit=5, çeşit-payload-
+yapı=8 — hepsi C-parite.
 
-**SONUÇ:** D-307'nin tamamı self-host codegen'de; generic yapı+çeşit real mono C↔self
-eşdeğer + fixpoint korundu.
+**⚠ ADVERSARIAL BULGU (loud>silent) — C'DE SESSİZ MISCOMPILE DÜZELTİLDİ:** çeşit payload'u
+mono yapı olduğunda (`Sec<metin>::Var(Ic<metin>)`) C (`src/llvm.c cesit_yapici_uret`) iç
+yapı construction'ına AST beklenen_tip+subst VERMİYORDU → iç `alloca %Ic` (T→i32 base) +
+`store i32 <ptr>` = **pointer'ı 32 bite sessizce kırpıyordu** (metin_uzunluk çöp döndürdü,
+ölçüldü: C=5 yerine doğru=8). Self-host'u yazarken ortaya çıktı; C de düzeltildi (params→args
+subst + payload-mono-yapıda beklenen_tip). Artık C=SELF=8 DOĞRU cevapta parite. Ders:
+"C-parite" = C'nin bug'ını taklit DEĞİL; ikisi de doğru olmalı.
+
+**Kalan sınır (v1):** Referans-yoluyla mono alan erişimi (`&Kutu<T>`) value-path
+(extractvalue) kadar test edilmedi. Bound-check generic yapıda zaten vardı.
+
+**SONUÇ:** D-307'nin tamamı + nested-mono self-host codegen'de; generic yapı+çeşit real
+mono C↔self eşdeğer (95/95 codegen_diff + 274/274 test_llvm) + fixpoint korundu.
 
 ---
 

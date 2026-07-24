@@ -1,0 +1,9 @@
+// D-308: mono çeşit payload'u = mono yapı (Sec<metin>::Var(Ic<metin>)). Payload ctor'una
+// beklenen_yapi+subst. C'de sessiz pointer→i32 kırpma bug'ıydı (metin_uzunluk çöp) → düzeltildi. Exit: 8
+yapı Ic<T> { v: T; }
+çeşit Sec<T> { Var(Ic<T>), Yok }
+işlev main() -> tam32 {
+    değişken s: Sec<metin> = Sec::Var(Ic { v: "merhabaa" });
+    eşleş s { Sec::Var(x) => { ver metin_uzunluk(x.v); } Sec::Yok => { ver 0; } }
+    ver 0;
+}

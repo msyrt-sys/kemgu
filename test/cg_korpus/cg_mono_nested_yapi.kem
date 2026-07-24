@@ -1,0 +1,8 @@
+// D-308: nested-mono-alan — mono yapı alanı BAŞKA mono yapı (Dis<metin>.ic=Ic<metin>).
+// Alan construction'ına beklenen_yapi threading (dış tüketilir → alan başına yeniden). Exit: 12
+yapı Ic<T> { v: T; }
+yapı Dis<T> { ic: Ic<T>; n: tam32; }
+işlev main() -> tam32 {
+    değişken d: Dis<metin> = Dis { ic: Ic { v: "merhaba" }, n: 5 };
+    ver metin_uzunluk(d.ic.v) + d.n;
+}

@@ -885,9 +885,28 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
      * aggregate ({i8, ptr}) verir → alloca/GEP per-instantiation; payload
      * tipleri agg_alan_ir ile inline'dan okunur (subst gereksiz). */
     int mono_cesit = 0;
+    TipSubst *pl_subst = NULL;   /* D-308: nested-mono payload çözümü (params→args) */
     if (cd->veri.cesit.tip_param_sayi > 0 && g->beklenen_tip) {
         const char *mir = ast_tip_to_ir(g, g->beklenen_tip);
         if (mir && mir[0] == '{') { agg = mir; mono_cesit = 1; }
+        /* D-308: payload'u BAŞKA mono yapı olan generic çeşit (Sec<T>{Var(Ic<T>)})
+         * — iç construction'ın %Ic$ptr üretmesi için params→args subst kur. Bu
+         * olmadan iç yapı_olustur %Ic base'ine düşüp pointer'ı i32'ye kırpardı
+         * (sessiz miscompile — ölçüldü: metin_uzunluk çöp döndürüyordu). */
+        if (mono_cesit && g->beklenen_tip->tip == DUGUM_TIP_KULLANICI) {
+            Dugum **args = g->beklenen_tip->veri.tip_kullanici.tip_arg;
+            int as = g->beklenen_tip->veri.tip_kullanici.tip_arg_sayi;
+            int np = cd->veri.cesit.tip_param_sayi;
+            int nn = np < as ? np : as;
+            for (int i = 0; i < nn; i++) {
+                const char *air = ast_tip_to_ir(g, args[i]);
+                if (!air) air = "i32";
+                TipSubst *ts = (TipSubst *)arena_ayir(g->arena, sizeof(TipSubst));
+                ts->ad = cd->veri.cesit.tip_paramlar[i];
+                ts->ad_uz = (int)strlen(cd->veri.cesit.tip_paramlar[i]);
+                ts->ir = air; ts->sonraki = pl_subst; pl_subst = ts;
+            }
+        }
     }
     int ar = yeni_reg(g);
     fprintf(g->out, "  %%%d = alloca %s\n", ar, agg);
@@ -909,7 +928,17 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
                 cd->veri.cesit.varyant_payload_tipleri[vi][j]);
         }
         if (!pir || strcmp(pir, "void") == 0) pir = "i8";
+        /* D-308: payload mono yapı (%Ic$ptr) ise iç construction'a AST beklenen_tip
+         * + subst ver → yapi_olustur mangled tipi üretir (yoksa %Ic base'e düşer). */
+        const Dugum *pl_eski_bt = g->beklenen_tip;
+        TipSubst *pl_eski_subst = g->substler;
+        if (mono_cesit && pir[0] == '%') {
+            g->beklenen_tip = cd->veri.cesit.varyant_payload_tipleri[vi][j];
+            if (pl_subst) g->substler = pl_subst;
+        }
         IfadeSonuc pv = ifade_uret(g, cagri->veri.cagri.argumanlar[j], pir);
+        g->beklenen_tip = pl_eski_bt;
+        g->substler = pl_eski_subst;
         int pr = pv.reg;
         if (!tip_kesirli_mi(pir) && !tip_kesirli_mi(pv.tip) &&
             tip_genisligi(pir) > 0 && tip_genisligi(pv.tip) > 0) {

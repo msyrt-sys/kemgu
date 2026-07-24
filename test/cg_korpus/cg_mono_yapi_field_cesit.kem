@@ -1,0 +1,12 @@
+// D-308: mono yapı alanı = mono çeşit (Kap<metin>.o=Opt<metin>). Alan çeşit ctor'una
+// beklenen_ll ({i8,ptr}) threading. Exit: 5
+çeşit Opt<T> { Bir(T), Hic }
+yapı Kap<T> { o: Opt<T>; }
+işlev ac(k: Kap<metin>) -> tam32 {
+    eşleş k.o { Opt::Bir(x) => { ver metin_uzunluk(x); } Opt::Hic => { ver 0; } }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken k: Kap<metin> = Kap { o: Opt::Bir("selam") };
+    ver ac(k);
+}

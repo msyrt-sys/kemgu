@@ -2850,7 +2850,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                     iken ai < cs {
                         değişken pf: tam32 = ofs + ai - 1;
                         değişken pt: metin = agg_alan(agg, pf);
+                        // D-308: nested-mono payload — payload tipi mono yapı/çeşit ise
+                        // iç construction'a bağlam ver.
+                        değişken esk_by: metin = p.beklenen_yapi;
+                        değişken esk_bll: metin = p.beklenen_ll;
+                        p.beklenen_yapi = ""; p.beklenen_ll = "";
+                        eğer bayt(pt, 0) == 37 {
+                            değişken pstrip: metin = metin_kes(pt, 1, metin_uzunluk(pt) - 1);
+                            eğer mono_bul(p, pstrip) >= 0 { p.beklenen_yapi = pt; }
+                        }
+                        eğer bayt(pt, 0) == 123 { p.beklenen_ll = pt; }
                         değişken pv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + ai));
+                        p.beklenen_yapi = esk_by; p.beklenen_ll = esk_bll;
                         değişken gp: metin = reg_str(yeni_reg(p));
                         yaz_str("  "); yaz_str(gp); yaz_str(" = getelementptr "); yaz_str(agg); yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(pf olarak tam64)); yb(10);
                         yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv); yaz_str(", ptr "); yaz_str(gp); yb(10);
@@ -3302,7 +3313,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken ftip: metin = yapi_alan_tip(p, yad, alan_ad_s);
             eğer mono_mi { ftip = agg_alan(mfields, fidx); }   // D-307: çözülmüş alan IR
             p.beklenen_elem = yapi_alan_elem(p, yad, alan_ad_s);   // CG8: [] alan değeri için bağlam
+            // D-308: nested-mono-alan — alan tipi başka mono yapı/çeşit ise iç
+            // construction'a bağlam ver (dış beklenen_yapi zaten tüketildi).
+            değişken eski_by: metin = p.beklenen_yapi;
+            değişken eski_bll2: metin = p.beklenen_ll;
+            eğer bayt(ftip, 0) == 37 {   // '%' → mono yapı alanı
+                değişken fstrip: metin = metin_kes(ftip, 1, metin_uzunluk(ftip) - 1);
+                eğer mono_bul(p, fstrip) >= 0 { p.beklenen_yapi = ftip; }
+            }
+            eğer bayt(ftip, 0) == 123 { p.beklenen_ll = ftip; }   // '{' → mono çeşit/tagged alanı
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, an)));
+            p.beklenen_yapi = eski_by;   // reset (dış zaten "" idi)
+            p.beklenen_ll = eski_bll2;
             değişken g: tam32 = yeni_reg(p);
             değişken gr: metin = reg_str(g);
             yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr "); yaz_str(lltip); yaz_str(", ptr ");
