@@ -53,8 +53,15 @@ yapı construction'ına AST beklenen_tip+subst VERMİYORDU → iç `alloca %Ic` 
 subst + payload-mono-yapıda beklenen_tip). Artık C=SELF=8 DOĞRU cevapta parite. Ders:
 "C-parite" = C'nin bug'ını taklit DEĞİL; ikisi de doğru olmalı.
 
-**Kalan sınır (v1):** Referans-yoluyla mono alan erişimi (`&Kutu<T>`) value-path
-(extractvalue) kadar test edilmedi. Bound-check generic yapıda zaten vardı.
+**Referans-yolu mono erişimi (D-308 devamı, HER İKİ TARAFTA):** `&Kutu<metin>` param
+üzerinde `k.alan`. Self: `param_ref_yapi` generic iç tip (TIP_KULLANICI) için `ll_tip`
+ile mangled pointee ("Kutu$ptr") döndürür (eskiden yalnız TIP_BASIT → "" → erişim "0");
+ERISIM ptr-path `mono_bul` ile base+çözülmüş alan. C: `erisim_uret` ptr-path'inde
+`ref_yapi_ir` mangled mono ise (`yapi_bul_ir` bulamaz) `mono_tip_bul` + `ptr_gep_ir`
+mangled tiple GEP. **C'de yine sessiz miscompile'dı:** base `%Kutu` ({i32}) ile GEP →
+pointer i32'ye kırpılıyor (2. alan offset de yanlış: ptr=8B vs i32=4B) → düzeltildi.
+Test: çok-alanlı `&Kutu<metin>`+`&Kutu<tam32>` = C=SELF=42 (offset doğru). Bound-check
+generic yapıda zaten vardı.
 
 **SONUÇ:** D-307'nin tamamı + nested-mono self-host codegen'de; generic yapı+çeşit real
 mono C↔self eşdeğer (95/95 codegen_diff + 274/274 test_llvm) + fixpoint korundu.

@@ -2138,6 +2138,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
      * nesnenin KAYITLI yapi tipi (ref_yapi_ir), yoksa alan-adi arama. */
     YapiKayit *yk = NULL;
     MonoTip *mono_mt = NULL;   /* D-307: mangled generic örnek (%Kutu$ptr) */
+    const char *ptr_gep_ir = NULL;   /* D-308: ptr-path mono GEP tipi (%Kutu$ptr) */
     if (nesne.tip && nesne.tip[0] == '%') {
         yk = yapi_bul_ir(g, nesne.tip);
         if (!yk) {
@@ -2155,7 +2156,21 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
         if (nd && nd->tip == DUGUM_TANIMLAYICI) {
             LlvmIsim *vi = isim_bul(g, nd->veri.tanimlayici.metin,
                                     nd->veri.tanimlayici.uzunluk);
-            if (vi && vi->ref_yapi_ir) yk = yapi_bul_ir(g, vi->ref_yapi_ir);
+            if (vi && vi->ref_yapi_ir) {
+                yk = yapi_bul_ir(g, vi->ref_yapi_ir);
+                /* D-308: &Kutu<metin> pointee'si mangled mono tip (%Kutu$ptr) →
+                 * yapi_bul_ir bulamaz (mono registry'de). mono_tip_bul + base yapı.
+                 * ptr_gep_ir=mangled → GEP/load DOĞRU layout (aksi halde %Kutu base
+                 * {i32} ile GEP → pointer i32'ye kırpılırdı, sessiz miscompile). */
+                if (!yk) {
+                    mono_mt = mono_tip_bul(g, vi->ref_yapi_ir);
+                    if (mono_mt && mono_mt->ast->tip == DUGUM_YAPI) {
+                        yk = yapi_bul(g, mono_mt->ast->veri.yapi.ad,
+                                      mono_mt->ast->veri.yapi.ad_uzunluk);
+                        ptr_gep_ir = vi->ref_yapi_ir;
+                    }
+                }
+            }
         }
         /* Son care (yapi tipi bilinmiyorsa): alan-adi arama (geriye uyum). */
         for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
@@ -2190,9 +2205,14 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     }
     /* Ptr ise: GEP + load */
     int gep_r = yeni_reg(g);
-    fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
-    yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
-    fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", nesne.reg, idx);
+    if (ptr_gep_ir) {   /* D-308: mono pointee → mangled tip ile GEP (DOĞRU layout) */
+        fprintf(g->out, "  %%%d = getelementptr %s, ptr %%%d, i32 0, i32 %d\n",
+                gep_r, ptr_gep_ir, nesne.reg, idx);
+    } else {
+        fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
+        yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
+        fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", nesne.reg, idx);
+    }
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
             load_r, alan_ir, gep_r);

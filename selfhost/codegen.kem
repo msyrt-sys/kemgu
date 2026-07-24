@@ -3365,8 +3365,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // CG7c: ptr (referans) → getelementptr + load.
         eğer metin_esit(nref, "") == yanlış {
             değişken lltip: metin = metin_birlestir("%", nref);
-            değişken fidx2: tam32 = yapi_alan_idx(p, nref, alan_ad_s);
-            değişken ftip2: metin = yapi_alan_tip(p, nref, alan_ad_s);
+            // D-308: nref mangled mono tip ("Kutu$ptr") ise base ile indeks/IR çöz
+            // (aksi halde yapi_alan_idx=-1 + i32 fallback → pointer'ı i32'ye kırpardı).
+            değişken rmi: tam32 = mono_bul(p, nref);
+            değişken rbase: metin = nref;
+            eğer rmi >= 0 { rbase = dizi_al(p.mono_yad, rmi); }
+            değişken fidx2: tam32 = yapi_alan_idx(p, rbase, alan_ad_s);
+            değişken ftip2: metin = yapi_alan_tip(p, rbase, alan_ad_s);
+            eğer rmi >= 0 { ftip2 = agg_alan(dizi_al(p.mono_fields, rmi), fidx2); }
             değişken g: tam32 = yeni_reg(p);
             değişken gr: metin = reg_str(g);
             yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr "); yaz_str(lltip); yaz_str(", ptr ");
@@ -3374,7 +3380,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken r2: tam32 = yeni_reg(p);
             değişken rs2: metin = reg_str(r2);
             yaz_str("  "); yaz_str(rs2); yaz_str(" = load "); yaz_str(ftip2); yaz_str(", ptr "); yaz_str(gr); yb(10);
-            p.son_tip = ftip2; p.son_ref = ""; p.son_elem = yapi_alan_elem(p, nref, alan_ad_s);
+            p.son_tip = ftip2; p.son_ref = ""; p.son_elem = yapi_alan_elem(p, rbase, alan_ad_s);
             ver rs2;
         }
         p.son_tip = "i32"; p.son_ref = ""; p.son_elem = "";
@@ -4018,6 +4024,17 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") == yanlış { ver ""; }
     değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));  // iç tip
+    // D-308: generic referans &Kutu<metin> → mangled pointee adı ("Kutu$ptr").
+    // ll_tip iç generic'i çözer (mono ise %Kutu$ptr, değilse %Kutu). Bu dal olmadan
+    // TIP_KULLANICI iç → "" dönüyordu → ptr-path erişimi düşüp alan "0" veriyordu.
+    eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_KULLANICI") {
+        değişken ir: metin = ll_tip(p, ic);
+        eğer bayt(ir, 0) == 37 {
+            değişken nm2: metin = metin_kes(ir, 1, metin_uzunluk(ir) - 1);
+            eğer yapi_var_mi(p, nm2) veya mono_bul(p, nm2) >= 0 { ver nm2; }
+        }
+        ver "";
+    }
     eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_BASIT") == yanlış { ver ""; }
     değişken nm: metin = dizi_al(p.a_deg, ic);
     eğer yapi_var_mi(p, nm) { ver nm; }

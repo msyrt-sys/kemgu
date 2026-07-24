@@ -1,0 +1,12 @@
+// D-308: referans-yolu mono erişimi — &Kutu<metin>/&Kutu<tam32> param üzerinde k.alan.
+// param_ref_yapi mangled pointee ("Kutu$ptr") + ERISIM ptr-path mono GEP/load. İkinci
+// alan offset kritik (ptr+i32 vs i32+i32). C'de base %Kutu ile GEP → pointer i32'ye
+// kırpılıyordu (sessiz miscompile) → düzeltildi. Exit: 42 (3+10 + 20+9).
+yapı Kutu<T> { deger: T; sayi: tam32; }
+işlev oku(k: &Kutu<metin>) -> tam32 { ver metin_uzunluk(k.deger) + k.sayi; }
+işlev okut(k: &Kutu<tam32>) -> tam32 { ver k.deger + k.sayi; }
+işlev main() -> tam32 {
+    değişken a: Kutu<metin> = Kutu { deger: "abc", sayi: 10 };
+    değişken b: Kutu<tam32> = Kutu { deger: 20, sayi: 9 };
+    ver oku(&a) + okut(&b);
+}
