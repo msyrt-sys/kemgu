@@ -778,8 +778,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   = spec'in kanonik örneği → L002, yani koşullu imha İMKÂNSIZDI) hem YANLIŞ KABUL EDİYORDU
   (tek dallı tüketim sessizce geçiyordu = lineer sızıntı). Artık dal-duyarlı: anlık-görüntü
   → dal izolasyonu → birleştir (iki dal=1 tüketim / tek dal=L005). test_linear 57→61,
-  kod-duyarlı kapı + sabotaj doğrulaması. **Kalan:** lineer alanlı yapı
-  (`yapı tekkez K { ... }` — hâlâ P021 ile reddediliyor), `eşleş` kolları, döngü gövdesi.
+  kod-duyarlı kapı + sabotaj doğrulaması. **D-312:** aynı disiplin `eşleş` kollarına
+  (N-kollu genelleme: hepsi tüketir=1 tüketim / karışık=L005) ve **döngülere** genişletildi
+  (yeni L-LOOP kuralı: `iken`/`için` gövdesi DIŞ bir lineer bağlamayı tüketemez — 0 iterasyon
+  = sızıntı, ≥2 = çift tüketim; gövde-içi tanımlar serbest). test_linear 57→67.
+  **Kalan:** lineer alanlı yapı (`yapı tekkez K { ... }` — hâlâ P021 ile reddediliyor).
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 

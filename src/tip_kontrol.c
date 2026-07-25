@@ -511,6 +511,25 @@ static void lin_durum_yaz(const LinAnlik *anlik, int *hedef) {
 
 static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d);
 
+/* D-312 / L-LOOP: dongu govdesi cikisinda birlestir. Anlik goruntudeki bir
+ * lineer baglama govdede tuketilmisse: dongu 0 kez donerse SIZINTI, >=2 kez
+ * donerse CIFT TUKETIM -> ikisi de tek-kez disiplinini bozar. Tuketilmis
+ * sayilir ki scope sonunda ayrica L001 patlamasin (tek kusur = tek hata). */
+static void lineer_dongu_birlestir(TipKontrol *tk, const Dugum *d,
+                                   const LinAnlik *anlik, const char *dongu_adi) {
+    for (int i = 0; i < anlik->sayi; i++) {
+        if (anlik->semboller[i]->lineer_tuketildi > anlik->taban[i]) {
+            char msj[192];
+            snprintf(msj, sizeof(msj),
+                "`%s` govdesi disaridan gelen lineer baglamayi tuketiyor "
+                "(dongu 0 kez donerse tuketilmez, >=2 kez donerse cift tuketim)",
+                dongu_adi);
+            tip_hata(tk, d, "L005", msj);
+            anlik->semboller[i]->lineer_tuketildi = anlik->taban[i] + 1;
+        }
+    }
+}
+
 /* Lambda govdesi icinde: parent scope'taki lineer baglamayi yakala.
  * Sadece bayrak set eder — tuketim asil consume context'inde
  * (kullan/imha/cagri arg/ver) gerceklesir. Boylece kullan(k) gibi
@@ -5084,7 +5103,18 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     "iken kosulu sabitsure tipinde olamaz "
                     "(loop iteration count = gizli = timing leak)");
             }
-            tip_kontrol_deyim(tk, d->veri.iken.govde);
+            {   /* D-312 / L-LOOP: döngü gövdesi DIŞ bir lineer bağlamayı
+                 * tüketemez. Döngü 0 kez dönerse tüketilmez (sızıntı), ≥2 kez
+                 * dönerse ÇİFT tüketim olur — ikisi de kaynağın (Dosya/Kilit)
+                 * tek-kez disiplinini bozar. Ölçüldü: eskiden SESSİZCE geçiyordu.
+                 * Kod: L005 (spec L006 tanımlamıyor; sınıf aynı — "tüketim yola
+                 * bağlı"). Gövde İÇİNDE tanımlanan bağlamalar anlık görüntüde
+                 * DEĞİLDİR → onlar normal L001/L002 disiplinine tabidir. */
+                LinAnlik lp;
+                lin_anlik_al(tk->scope, tk->arena, &lp);
+                tip_kontrol_deyim(tk, d->veri.iken.govde);
+                lineer_dongu_birlestir(tk, d, &lp, "iken");
+            }
             break;
         }
 
@@ -5112,7 +5142,10 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.satir = d->satir;
             s.sutun = d->sutun;
             sembol_ekle(tk->scope, tk->arena, &s);
+            LinAnlik lp2;   /* D-312 / L-LOOP — bkz. IKEN kolundaki not */
+            lin_anlik_al(tk->scope, tk->arena, &lp2);
             tip_kontrol_deyim(tk, d->veri.icin.govde);
+            lineer_dongu_birlestir(tk, d, &lp2, "i\xc3\xa7in");
             scope_lineer_kapanis_check(tk, tk->scope);
             tk->scope = eski;
             tk->scope_seviyesi--;
@@ -5134,8 +5167,21 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     "esles deger sabitsure tipinde olamaz "
                     "(kol secimi timing leak)");
             }
+            /* D-312 / L-COND (eşleş): `eğer`in N-kollu genellemesi. Her kol
+             * ANLIK GÖRÜNTÜDEN başlar; sonda birleştirilir. Ölçülen kusur ikili:
+             *   tüm kollar tüketir → eskiden L002 (sayaç kol_sayısı kadar arttı),
+             *   yalnız bazı kollar → eskiden SESSİZ (tüketmeyen yolda sızıntı). */
+            LinAnlik m_anlik;
+            lin_anlik_al(tk->scope, tk->arena, &m_anlik);
+            int m_kol = d->veri.esles.kol_sayi;
+            int *m_tuketen = NULL;   /* her lineer sembol için: kaç kol tüketti */
+            if (m_anlik.sayi > 0) {
+                m_tuketen = (int *)arena_ayir_sifir(tk->arena,
+                                sizeof(int) * (size_t)m_anlik.sayi);
+            }
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 const Dugum *kol = d->veri.esles.kollar[i];
+                if (m_anlik.sayi > 0) lin_anlik_geri(&m_anlik);  /* kolu izole et */
                 Scope *eski = tk->scope;
                 tk->scope_seviyesi++;
                 tk->scope = scope_olustur(tk->arena, SCOPE_BLOK, eski);
@@ -5260,6 +5306,26 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 scope_lineer_kapanis_check(tk, tk->scope);
                 tk->scope = eski;
                 tk->scope_seviyesi--;
+                /* Bu kol dış bir lineer bağlamayı tüketti mi? */
+                for (int k = 0; k < m_anlik.sayi; k++) {
+                    if (m_anlik.semboller[k]->lineer_tuketildi > m_anlik.taban[k])
+                        m_tuketen[k]++;
+                }
+            }
+            /* D-312: kolları birleştir — ya HEPSİ tüketir ya HİÇBİRİ. */
+            for (int k = 0; k < m_anlik.sayi; k++) {
+                int taban = m_anlik.taban[k];
+                if (m_tuketen[k] == 0) {
+                    m_anlik.semboller[k]->lineer_tuketildi = taban;
+                } else if (m_tuketen[k] == m_kol && m_kol > 0) {
+                    /* Her yol tüketiyor → TOPLAMDA BİR tüketim. */
+                    m_anlik.semboller[k]->lineer_tuketildi = taban + 1;
+                } else {
+                    tip_hata(tk, d, "L005",
+                        "esles kollari lineer tuketimde tutarsiz "
+                        "(bazi kollar tuketiyor, bazilari tuketmiyor)");
+                    m_anlik.semboller[k]->lineer_tuketildi = taban + 1;
+                }
             }
             /* C2.7: kapalı tip üzerinde kapsayıcılık denetimi. */
             esles_exhaustive_kontrol(tk, d, dt);

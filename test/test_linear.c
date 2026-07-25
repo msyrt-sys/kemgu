@@ -689,6 +689,70 @@ static void T61_kosul_sonrasi_cift_l002(void) {
     test_sonuc("L61: iki-dal-tuketim SONRASI yeniden tuketim -> L002", var);
 }
 
+/* === D-312: L-COND `eşleş` kollari + L-LOOP dongu govdesi ===
+ * `eger`in N-kollu genellemesi (eşleş) ve dongu ozel kurali. Ikisi de ayni
+ * iki-yonlu kusuru tasiyordu: tum kollar tuketince L002 (yanlis red), bazi
+ * kollar tuketince SESSIZ (yanlis kabul); dongu govdesinde tuketim SESSIZ. */
+
+static void T62_esles_tum_kollar_ok(void) {
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc5\x9fle\xc5\x9f 1 { 1 => { kullan(t); } _ => { imha(t); } }\n");
+    test_sonuc("L62: esles TUM kollar tuketir -> 0 hata (L002 false-positive gitti)",
+               h == 0);
+}
+
+static void T63_esles_uc_kol_ok(void) {
+    /* Ikiden fazla kol: birlestirme kol_sayisi'na gore genellenir. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc5\x9fle\xc5\x9f 1 { 1 => { kullan(t); } 2 => { imha(t); }"
+        " _ => { imha(t); } }\n");
+    test_sonuc("L63: esles 3 kol, hepsi tuketir -> 0 hata", h == 0);
+}
+
+static void T64_esles_bazi_kollar_l005(void) {
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc5\x9fle\xc5\x9f 1 { 1 => { kullan(t); } _ => { } }\n"
+        "}\n", "L005");
+    test_sonuc("L64: esles BAZI kollar tuketir -> L005", var);
+}
+
+static void T65_iken_govdesi_l005(void) {
+    /* Dongu 0 kez donerse sizinti, >=2 kez donerse cift tuketim. */
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken i: tam32 = 0;\n"
+        "    iken i < 3 { kullan(t); i = i + 1; }\n"
+        "}\n", "L005");
+    test_sonuc("L65: iken govdesi DIS lineer baglamayi tuketir -> L005", var);
+}
+
+static void T66_icin_govdesi_l005(void) {
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2];\n"
+        "    i\xc3\xa7in x: xs { kullan(t); }\n"
+        "}\n", "L005");
+    test_sonuc("L66: icin govdesi DIS lineer baglamayi tuketir -> L005", var);
+}
+
+static void T67_dongu_ici_yerel_ok(void) {
+    /* Dongu ICINDE tanimlanip ICINDE tuketilen baglama SERBESTTIR — her
+     * iterasyon kendi degerini yaratip tuketir. Kural fazla genis olsaydi
+     * (anlik goruntuye govde-ici tanimlar da girseydi) bu test duserdi. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken i: tam32 = 0;\n"
+        "    iken i < 2 { de\xc4\x9fi\xc5\x9fken u = tekkez_olustur(1);"
+        " imha(u); i = i + 1; }\n");
+    test_sonuc("L67: dongu-ICI tanim+tuketim -> 0 hata (kural fazla genis degil)",
+               h == 0);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -778,6 +842,14 @@ int main(void) {
     T59_tek_dal_l005();
     T60_else_tuketir_l005();
     T61_kosul_sonrasi_cift_l002();
+
+    printf("\n--- L62-L67: esles kollari + dongu govdesi (D-312) ---\n");
+    T62_esles_tum_kollar_ok();
+    T63_esles_uc_kol_ok();
+    T64_esles_bazi_kollar_l005();
+    T65_iken_govdesi_l005();
+    T66_icin_govdesi_l005();
+    T67_dongu_ici_yerel_ok();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

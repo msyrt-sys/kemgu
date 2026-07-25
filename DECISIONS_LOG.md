@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-312 — [YÜKSEK] L-COND `eşleş` kolları + L-LOOP döngü gövdesi (2026-07-25)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (ESLES/IKEN/ICIN kolları + `lineer_dongu_birlestir`),
+`test/test_linear.c` (+6).]** D-311 yalnız `eğer/değilse`yi kapsıyordu. `eşleş` ve
+döngüler **aynı iki-yönlü kusuru** taşıyordu (ölçüldü):
+
+| Senaryo | Önce | Şimdi |
+|---|---|---|
+| `eşleş` TÜM kollar tüketir | **L002** ❌ | **OK** ✓ |
+| `eşleş` BAZI kollar tüketir | **OK** (sessiz) ❌ | **L005** ✓ |
+| `iken`/`için` gövdesinde dış bağlama tüketimi | **OK** (sessiz) ❌ | **L005** ✓ |
+| Döngü İÇİNDE tanım + tüketim | OK ✓ | OK ✓ (kural fazla geniş değil) |
+
+**eşleş = `eğer`in N-kollu genellemesi:** her kol anlık görüntüden başlar (izolasyon),
+sonda kaç kolun tükettiği sayılır → hepsi ise **taban+1** (toplamda BİR tüketim),
+hiçbiri ise taban, karışıksa **L005**. Kol sayısı 2'yle sınırlı değil (L63: 3 kol).
+
+**L-LOOP (yeni kural):** döngü gövdesi **dışarıdan gelen** bir lineer bağlamayı
+tüketemez — döngü 0 kez dönerse tüketilmez (sızıntı), ≥2 kez dönerse **çift tüketim**;
+ikisi de `Dosya`/`Kilit`/`OTP_Anahtar` tek-kez disiplinini bozar. Gövde İÇİNDE tanımlanan
+bağlamalar anlık görüntüde DEĞİLDİR → her iterasyon kendi değerini yaratıp tüketebilir
+(L67 bu sınırı kilitler; kural fazla geniş olsaydı düşerdi).
+
+**Kod seçimi:** spec L006 tanımlamıyor; **yeni kullanıcı-görünür kod İCAT EDİLMEDİ**
+(adlandırma Mehmet'in kararı). Sınıf aynı olduğu için L005 mesaj ayrımıyla kullanıldı
+("eşleş kolları ... tutarsız" / "`iken` gövdesi dışarıdan gelen lineer bağlamayı
+tüketiyor").
+
+**Doğrulama:** test_linear **67/67** (61→67), tip_kontrol 189/189, capability 40/40,
+DRF 54/54, sabitsüre 39/39, WCET 35/35. **Sabotaj:** eşleş birleştirmesi devre dışı →
+L62+L63 düşer; döngü kuralı devre dışı → L65 düşer.
+
+**Kalan (Linear V2):** `yapı tekkez K { }` (lineer alanlı yapı) hâlâ P021 ile reddediliyor.
+
+---
+
 ## D-311 — [YÜKSEK] L-COND: dal-duyarlı lineer tüketim (hem yanlış-red hem yanlış-kabul) (2026-07-25)
 
 **Karar [ETKİ: `src/tip_kontrol.c` (~90 satır: anlık-görüntü/geri-yükle/birleştir + L005),
