@@ -441,6 +441,76 @@ static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
     s->lineer_tuketildi++;
 }
 
+/* ===================================================================
+ * D-311 — L-COND: DAL-DUYARLI lineer tuketim (Linear Spec V1 §L-COND)
+ * -------------------------------------------------------------------
+ * Onceki model AKIS-DUYARSIZ bir SAYACTI: her `kullan/imha` sembolun
+ * lineer_tuketildi'sini artiriyordu, dallardan bagimsiz. Bunun ikisi de
+ * ampirik olculdu:
+ *   (a) YANLIS RED (false positive): spec'in kanonik ornegi
+ *       `eger p { kullan(t); } degilse { imha(t); }` L002 veriyordu —
+ *       yani lineer bir kaynagi KOSULLU imha etmek IMKANSIZDI.
+ *   (b) YANLIS KABUL (false negative): `eger p { kullan(t); }` (else yok)
+ *       sessizce geciyordu — p yanlisken t hic tuketilmez (lineer sizinti),
+ *       spec bunu L005 LINEAR_COND_INCONSISTENT olarak reddeder.
+ * Cozum: dal girisinde tuketim durumu ANLIK-GORUNTULENIR, her dal kendi
+ * kopyasi uzerinde calisir, cikista BIRLESTIRILIR:
+ *   iki dal da tuketti  -> BIR tuketim (taban+1)
+ *   tam olarak bir dal  -> L005 + tuketilmis say (ardil L001 kaskadi olmasin)
+ *   hicbiri             -> taban
+ * else'siz `eger` = else dali TUKETMEYEN dal olarak ele alinir.
+ * =================================================================== */
+
+/* Scope zincirindeki lineer sembolleri gez; her biri icin geri-cagirim. */
+typedef struct {
+    Sembol **semboller;
+    int *taban;      /* dal oncesi lineer_tuketildi */
+    int sayi;
+    int kapasite;
+} LinAnlik;
+
+static void lin_anlik_al(Scope *s, Arena *a, LinAnlik *anlik) {
+    anlik->sayi = 0;
+    anlik->kapasite = 0;
+    anlik->semboller = NULL;
+    anlik->taban = NULL;
+    int n = 0;
+    for (Scope *sc = s; sc; sc = sc->parent) {
+        for (SembolLink *l = sc->bas; l; l = l->sonraki) {
+            if (l->sembol.tip && tip_lineer_mi(l->sembol.tip)) n++;
+        }
+    }
+    if (n == 0) return;
+    anlik->semboller = (Sembol **)arena_ayir(a, sizeof(Sembol *) * (size_t)n);
+    anlik->taban = (int *)arena_ayir(a, sizeof(int) * (size_t)n);
+    if (!anlik->semboller || !anlik->taban) return;
+    anlik->kapasite = n;
+    for (Scope *sc = s; sc; sc = sc->parent) {
+        for (SembolLink *l = sc->bas; l; l = l->sonraki) {
+            if (l->sembol.tip && tip_lineer_mi(l->sembol.tip)
+                && anlik->sayi < anlik->kapasite) {
+                anlik->semboller[anlik->sayi] = &l->sembol;
+                anlik->taban[anlik->sayi] = l->sembol.lineer_tuketildi;
+                anlik->sayi++;
+            }
+        }
+    }
+}
+
+/* Anlik goruntudeki degerlere geri don (dal izolasyonu). */
+static void lin_anlik_geri(const LinAnlik *anlik) {
+    for (int i = 0; i < anlik->sayi; i++)
+        anlik->semboller[i]->lineer_tuketildi = anlik->taban[i];
+}
+
+/* Dal sonrasi durumu kaydet (dis diziye). */
+static void lin_durum_yaz(const LinAnlik *anlik, int *hedef) {
+    for (int i = 0; i < anlik->sayi; i++)
+        hedef[i] = anlik->semboller[i]->lineer_tuketildi;
+}
+
+static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d);
+
 /* Lambda govdesi icinde: parent scope'taki lineer baglamayi yakala.
  * Sadece bayrak set eder — tuketim asil consume context'inde
  * (kullan/imha/cagri arg/ver) gerceklesir. Boylece kullan(k) gibi
@@ -4959,9 +5029,46 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     "eger kosulu sabitsure tipinde olamaz "
                     "(timing leak; ifsa(...) kullanin)");
             }
+            /* D-311 / L-COND: dal-duyarlı lineer tüketim (bkz. lin_anlik_al). */
+            LinAnlik anlik;
+            lin_anlik_al(tk->scope, tk->arena, &anlik);
+            int *then_durum = NULL, *else_durum = NULL;
+            if (anlik.sayi > 0) {
+                then_durum = (int *)arena_ayir(tk->arena,
+                                               sizeof(int) * (size_t)anlik.sayi);
+                else_durum = (int *)arena_ayir(tk->arena,
+                                               sizeof(int) * (size_t)anlik.sayi);
+            }
+
             tip_kontrol_deyim(tk, d->veri.eger.gozdoldur);
+            if (then_durum) lin_durum_yaz(&anlik, then_durum);
+            if (anlik.sayi > 0) lin_anlik_geri(&anlik);   /* dalları izole et */
+
             if (d->veri.eger.yan) {
                 tip_kontrol_deyim(tk, d->veri.eger.yan);
+            }
+            if (else_durum) lin_durum_yaz(&anlik, else_durum);
+
+            /* Birleştir: her lineer bağlama için iki dalın tüketimini karşılaştır. */
+            for (int i = 0; i < anlik.sayi; i++) {
+                int taban = anlik.taban[i];
+                int t_then = then_durum ? (then_durum[i] > taban) : 0;
+                int t_else = else_durum ? (else_durum[i] > taban) : 0;
+                if (t_then && t_else) {
+                    /* İki dal da tüketti → TOPLAMDA BİR tüketim (spec: OK).
+                     * Eski sayaç burada 2'ye çıkıp L002 veriyordu. */
+                    anlik.semboller[i]->lineer_tuketildi = taban + 1;
+                } else if (t_then || t_else) {
+                    /* Tam olarak bir dal tüketti → diğer yolda sızıntı. */
+                    tip_hata(tk, d, "L005",
+                        "kosullu dallar lineer tuketimde tutarsiz "
+                        "(bir dal tuketiyor, digeri tuketmiyor)");
+                    /* Tüketilmiş say: aksi halde scope sonunda ayrıca L001
+                     * patlar ve tek kusur İKİ hata olarak raporlanır. */
+                    anlik.semboller[i]->lineer_tuketildi = taban + 1;
+                } else {
+                    anlik.semboller[i]->lineer_tuketildi = taban;
+                }
             }
             break;
         }

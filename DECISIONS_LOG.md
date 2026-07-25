@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-311 — [YÜKSEK] L-COND: dal-duyarlı lineer tüketim (hem yanlış-red hem yanlış-kabul) (2026-07-25)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (~90 satır: anlık-görüntü/geri-yükle/birleştir + L005),
+`test/test_linear.c` (+4 test + kod-duyarlı yardımcı).]** Lineer tüketim takibi
+**AKIŞ-DUYARSIZ bir SAYAÇTI** (`kullan/imha` → `lineer_tuketildi++`, daldan bağımsız).
+İki yönü de ampirik ölçüldü:
+
+| Senaryo | Önce | Spec | Şimdi |
+|---|---|---|---|
+| `eğer p { kullan(t); } değilse { imha(t); }` | **L002** ❌ | OK | **OK** ✓ |
+| `eğer p { kullan(t); }` (else yok) | **OK** (sessiz) ❌ | L005 | **L005** ✓ |
+| `kullan(t); kullan(t);` | L002 ✓ | L002 | L002 ✓ |
+
+**Neden ciddiydi:** yanlış-red, spec'in KANONİK örneğini derlenemez yapıyordu — yani
+lineer bir kaynağı (`Dosya`/`Kilit`/`OTP_Anahtar`) **koşullu imha etmek İMKÂNSIZDI**.
+Yanlış-kabul ise sessiz lineer sızıntıydı (koşul yanlışken kaynak hiç tüketilmez ve
+L001 de tetiklenmiyordu — sayaç dal içinde artmış görünüyordu).
+
+**Çözüm:** `eğer` girişinde görünür tüm lineer sembollerin tüketim durumu
+ANLIK-GÖRÜNTÜLENİR (`lin_anlik_al`, scope zinciri boyunca), her dal kendi kopyasında
+çalışır (`lin_anlik_geri` ile izolasyon), çıkışta BİRLEŞTİRİLİR:
+- iki dal da tüketti → **taban+1** (toplamda BİR tüketim),
+- tam olarak bir dal → **L005** + tüketilmiş say (aksi halde scope sonunda ayrıca L001
+  patlar; tek kusur İKİ hata olarak raporlanırdı),
+- hiçbiri → taban.
+`else`siz `eğer`, "tüketmeyen else dalı" olarak ele alınır.
+
+**Test kapısı güçlendirildi:** `hata_sayisi() >= 1` zayıf bir kapıdır — L005 bekleyen bir
+test BAŞKA sebeple hata alsa da geçerdi. `hata_callback_ayarla` üzerinden **kod-duyarlı**
+`kod_uretildi_mi()` eklendi; L59/L60/L61 tam kodu doğrular. **Sabotaj doğrulaması:**
+birleştirme koşulu devre dışı bırakılınca L58 düşüyor (test gerçekten koruyor).
+
+**Doğrulama:** test_linear 61/61 (57→61), tip_kontrol 189/189, capability 40/40,
+DRF 54/54, sabitsüre 39/39, lineer örnekler (temel/closure/hata) korundu.
+
+**Sınırlar (V1):** `eşleş` kolları henüz bu disiplinden geçmiyor (yalnız `eğer/değilse`);
+döngü gövdesindeki koşullu tüketim de ayrı iş. `yapı tekkez K { }` (lineer alanlı yapı)
+hâlâ P021 ile reddediliyor — Linear V2'nin diğer yarısı.
+
+**YAN BULGU (ayrı iş):** tanılama kodu ÇAKIŞMASI — lexer `L001/L002/L005/L009/L010/L011`
+kullanıyor, Linear spec `L001/L002/L004/L005/L007/L008`. **L001, L002, L005 üçü de
+çakışıyor**: kullanıcı "L002" gördüğünde lexer hatası mı lineer hata mı ayırt edemez.
+Kullanıcıya görünen kod adlandırması olduğu için karar Mehmet'in.
+
+---
+
 ## D-310 — [YÜKSEK] Self-host: `görev_başlat` BLOK-form lambda gövdesi SESSİZCE düşüyordu (2026-07-25)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (lam_emit + VER kolu + `lam_i64` bayrağı),

@@ -764,7 +764,7 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   parite, codegen_diff 86/86. **auto-deref DEĞİL** (`ver v` hâlâ T020) — IR opak-ptr
   sessiz-miscompile riski; explicit `*v` seçildi (AST tip bilinir, loud>silent).
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
-- ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). Kalan: custom ADT/enum + eşleş exhaustiveness (C2.7, syntax kararı).
+- ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). ~~Kalan: custom ADT/enum + eşleş exhaustiveness~~ ✓ **ZATEN YAPILMIŞ** (2026-07-25 ölçümü): çeşit ADT var (D-302/D-306) ve exhaustiveness **M001** ile denetleniyor — eksik varyantı adıyla söyler (`M001: esles exhaustive degil — eksik varyant(lar): [Mavi]`). Madde eskimişti.
 - **LSP v3** (incremental sync, workspace, semanticTokens, references)
 - ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
   (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
@@ -773,7 +773,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   `kimlik<T>(x:T)->T` → 42 ✓, generic+metin → 5 ✓. **DERS:** roadmap maddelerini başlamadan
   ölç — eskimiş olabilir.
 - **Stdlib network/JSON/regex** (runtime altyapı sonra)
-- **Linear V2:** lineer alanlı yapı (`yapı tekkez K { ... }`), L005 (koşullu tüketim tutarlılığı)
+- **Linear V2:** ~~L005 (koşullu tüketim tutarlılığı)~~ ✓ **D-311** — tüketim takibi
+  akış-duyarsız SAYAÇTI; hem YANLIŞ REDDEDİYOR (`eğer p { kullan(t); } değilse { imha(t); }`
+  = spec'in kanonik örneği → L002, yani koşullu imha İMKÂNSIZDI) hem YANLIŞ KABUL EDİYORDU
+  (tek dallı tüketim sessizce geçiyordu = lineer sızıntı). Artık dal-duyarlı: anlık-görüntü
+  → dal izolasyonu → birleştir (iki dal=1 tüketim / tek dal=L005). test_linear 57→61,
+  kod-duyarlı kapı + sabotaj doğrulaması. **Kalan:** lineer alanlı yapı
+  (`yapı tekkez K { ... }` — hâlâ P021 ile reddediliyor), `eşleş` kolları, döngü gövdesi.
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 

@@ -5,6 +5,7 @@
 #include "tip.h"
 #include "sembol.h"
 #include "arena.h"
+#include "hata.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,33 @@ static int derle_kontrol(const char *kaynak, int *hata_out) {
     tip_kontrol_program(&tk, prog);
     if (hata_out) *hata_out = tk.hata_sayisi;
     arena_serbest(a);
+    return 0;
+}
+
+/* D-311: KOD-duyarli yardimci. Yalniz "hata sayisi >= 1" demek zayif bir
+ * kapidir — L005 bekleyen bir test, BASKA bir sebeple hata alsa da gecerdi.
+ * hata_raporla callback'i (hata.c) ile uretilen kodlari yakalar. */
+static char yakalanan_kodlar[64][8];
+static int yakalanan_sayi;
+
+static void kod_yakala(int satir, int sutun, const char *kod,
+                       const char *mesaj, const char *ipucu, void *ctx) {
+    (void)satir; (void)sutun; (void)mesaj; (void)ipucu; (void)ctx;
+    if (yakalanan_sayi < 64 && kod) {
+        snprintf(yakalanan_kodlar[yakalanan_sayi], 8, "%s", kod);
+        yakalanan_sayi++;
+    }
+}
+
+/* Kaynagi kontrol et; `kod` uretilmisse 1 doner. */
+static int kod_uretildi_mi(const char *kaynak, const char *kod) {
+    yakalanan_sayi = 0;
+    hata_callback_ayarla(kod_yakala, NULL);
+    int h = -1;
+    (void)derle_kontrol(kaynak, &h);
+    hata_callback_ayarla(NULL, NULL);
+    for (int i = 0; i < yakalanan_sayi; i++)
+        if (strcmp(yakalanan_kodlar[i], kod) == 0) return 1;
     return 0;
 }
 
@@ -614,6 +642,53 @@ static void T57_otp_anahtar_tuketilmedi(void) {
     test_sonuc("L57: OTP anahtar tuketilmedi -> L001", h >= 1);
 }
 
+/* === D-311 / L-COND: dal-duyarli tuketim (Spec V1 §L-COND) ===
+ * Onceki AKIS-DUYARSIZ sayac hem YANLIS REDDEDIYOR hem YANLIS KABUL EDIYORDU;
+ * bu dort test o iki yonu de kilitler. Kodlar KOD-duyarli dogrulanir
+ * (yalniz "hata var" demek, baska sebeple gecen bir testi maskelerdi). */
+
+static void T58_iki_dal_tuketir_ok(void) {
+    /* Spec'in KANONIK ornegi. Eskiden L002 veriyordu -> lineer bir kaynagi
+     * kosullu imha etmek IMKANSIZDI. */
+    int h = kontrol_main(
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc4\x9f" "er do\xc4\x9fru { kullan(t); } de\xc4\x9filse { imha(t); }\n");
+    test_sonuc("L58: iki dal da tuketir -> 0 hata (L002 false-positive gitti)",
+               h == 0);
+}
+
+static void T59_tek_dal_l005(void) {
+    /* else dalinda tuketim yok -> kosul yanlisken sizinti. Eskiden SESSIZ gecerdi. */
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc4\x9f" "er do\xc4\x9fru { kullan(t); }\n"
+        "}\n", "L005");
+    test_sonuc("L59: yalniz then tuketir -> L005", var);
+}
+
+static void T60_else_tuketir_l005(void) {
+    /* Simetri: yalniz else tuketirse de tutarsiz. */
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc4\x9f" "er do\xc4\x9fru { } de\xc4\x9filse { imha(t); }\n"
+        "}\n", "L005");
+    test_sonuc("L60: yalniz else tuketir -> L005", var);
+}
+
+static void T61_kosul_sonrasi_cift_l002(void) {
+    /* Dal-duyarlilik L002'yi ZAYIFLATMAMALI: then tuketip sonra yeniden
+     * tuketmek hala cift tuketimdir (kosul dogruyken). */
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken t = tekkez_olustur(5);\n"
+        "    e\xc4\x9f" "er do\xc4\x9fru { kullan(t); } de\xc4\x9filse { imha(t); }\n"
+        "    kullan(t);\n"
+        "}\n", "L002");
+    test_sonuc("L61: iki-dal-tuketim SONRASI yeniden tuketim -> L002", var);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -697,6 +772,12 @@ int main(void) {
     T55_otp_anahtar_iki_kez_tuketim();
     T56_otp_anahtar_imha_garantili();
     T57_otp_anahtar_tuketilmedi();
+
+    printf("\n--- L58-L61: L-COND dal-duyarli tuketim (D-311) ---\n");
+    T58_iki_dal_tuketir_ok();
+    T59_tek_dal_l005();
+    T60_else_tuketir_l005();
+    T61_kosul_sonrasi_cift_l002();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
