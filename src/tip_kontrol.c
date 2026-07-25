@@ -412,6 +412,9 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->kaynak = kaynak;
     tk->scope_seviyesi = 0;
     tk->lambda_govdesi_icinde = 0;
+    tk->imha_baglaminda = 0;   /* D-315: BASLATILMAZSA cop deger kontrolu SESSIZCE
+                                * atlar (olculdu: kismi-tasinmis yapinin tasinmasi
+                                * raporlanmiyordu). TipKontrol memset EDILMIYOR. */
     tk->lambda_lineer_yakalama = 0;
     tk->lambda_yakalama = 0;
     tk->lambda_baslangic_scope = NULL;
@@ -437,6 +440,16 @@ static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
             tip_hata(tk, d, "L002",
                 "lineer baglama iki kez tuketildi (move sonrasi erisim)");
         }
+    }
+    /* D-315 (V2.1): KISMI TASINMIS yapi BUTUN OLARAK TASINAMAZ. `imha` serbest
+     * (kalan alanlari atar), ama cagri argumani / `ver` ile devretmek DELIKLI
+     * bir degeri aliciya verirdi: alicinin tipi alani "var" gosterir, oysa
+     * tasinmistir -> use-after-move. imha_baglaminda bayragi IMHA_IFADE kolunda
+     * kurulur; digerlerinin hepsi tasimadir. */
+    if (s->lineer_alan_maskesi != 0 && !tk->imha_baglaminda) {
+        tip_hata(tk, d, "L002",
+            "kismi tasinmis lineer yapi butun olarak tasinamaz "
+            "(alani disari alinmis; yalniz imha edilebilir)");
     }
     s->lineer_tuketildi++;
 }
@@ -465,6 +478,9 @@ static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
 typedef struct {
     Sembol **semboller;
     int *taban;      /* dal oncesi lineer_tuketildi */
+    /* D-315: kismi-tasima maskesi de dal-yerel olmali. Maskesiz snapshot,
+     * bir dalda tasinan alani digerinde "tasinmis" gosterirdi (yanlis L002). */
+    unsigned int *taban_maske;
     int sayi;
     int kapasite;
 } LinAnlik;
@@ -483,7 +499,9 @@ static void lin_anlik_al(Scope *s, Arena *a, LinAnlik *anlik) {
     if (n == 0) return;
     anlik->semboller = (Sembol **)arena_ayir(a, sizeof(Sembol *) * (size_t)n);
     anlik->taban = (int *)arena_ayir(a, sizeof(int) * (size_t)n);
-    if (!anlik->semboller || !anlik->taban) return;
+    anlik->taban_maske = (unsigned int *)arena_ayir(a,
+                              sizeof(unsigned int) * (size_t)n);
+    if (!anlik->semboller || !anlik->taban || !anlik->taban_maske) return;
     anlik->kapasite = n;
     for (Scope *sc = s; sc; sc = sc->parent) {
         for (SembolLink *l = sc->bas; l; l = l->sonraki) {
@@ -491,6 +509,7 @@ static void lin_anlik_al(Scope *s, Arena *a, LinAnlik *anlik) {
                 && anlik->sayi < anlik->kapasite) {
                 anlik->semboller[anlik->sayi] = &l->sembol;
                 anlik->taban[anlik->sayi] = l->sembol.lineer_tuketildi;
+                anlik->taban_maske[anlik->sayi] = l->sembol.lineer_alan_maskesi;
                 anlik->sayi++;
             }
         }
@@ -499,8 +518,10 @@ static void lin_anlik_al(Scope *s, Arena *a, LinAnlik *anlik) {
 
 /* Anlik goruntudeki degerlere geri don (dal izolasyonu). */
 static void lin_anlik_geri(const LinAnlik *anlik) {
-    for (int i = 0; i < anlik->sayi; i++)
+    for (int i = 0; i < anlik->sayi; i++) {
         anlik->semboller[i]->lineer_tuketildi = anlik->taban[i];
+        anlik->semboller[i]->lineer_alan_maskesi = anlik->taban_maske[i];
+    }
 }
 
 /* Dal sonrasi durumu kaydet (dis diziye). */
@@ -510,6 +531,26 @@ static void lin_durum_yaz(const LinAnlik *anlik, int *hedef) {
 }
 
 static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d);
+
+/* D-315 (V2.1): alan sembolunun yapi icindeki 0-tabanli SIRASI (-1 yok). */
+static int yapi_alan_indeksi_sirali(const Sembol *yapi_sem, const Sembol *alan) {
+    if (!yapi_sem || !yapi_sem->yapi_scope || !alan) return -1;
+    int ix = 0;
+    for (SembolLink *l = yapi_sem->yapi_scope->bas; l; l = l->sonraki) {
+        if (l->sembol.kategori != SEMBOL_DEGISKEN) continue;  /* generic param atla */
+        if (&l->sembol == alan) return ix;
+        ix++;
+    }
+    return -1;
+}
+
+/* D-315 (V2.1): erisim nesnesi BASIT bir baglama mi? (s.x -> s'nin sembolu).
+ * Gecici deger / ic-ice erisim -> NULL (kismi tasima muhafazakar reddedilir). */
+static Sembol *erisim_baglama_sembolu(TipKontrol *tk, const Dugum *nesne) {
+    if (!nesne || nesne->tip != DUGUM_TANIMLAYICI) return NULL;
+    return sembol_bul_yazilabilir(tk->scope, nesne->veri.tanimlayici.metin,
+                                  nesne->veri.tanimlayici.uzunluk);
+}
 
 /* D-313 (Linear V2): yapi sembolunden TIP_YAPI kur ve `yapı tekkez K`
  * lineerligini tipe TASI. Bayrak tipte olmali cunku tip_lineer_mi (tip.c)
@@ -2067,7 +2108,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     "(tekkez<T>, yetki<R>, gorev<T> veya `yapi tekkez`)");
                 return t_hata(tk);
             }
+            tk->imha_baglaminda++;   /* D-315: kısmi taşınmış yapı imha edilebilir */
             lineer_tuket_eger_baglamaysa(tk, d->veri.imha_ifade.operand);
+            tk->imha_baglaminda--;
             return t_basit(tk, TIP_BOS);
         }
 
@@ -3672,11 +3715,38 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * değer; kaynak sahipliği etkilenmez). */
             if (alan->tip && tip_lineer_mi(alan->tip)
                 && nesne_tip->veri.yapi.lineer_mi) {
-                tip_hata(tk, d, "LR002",
-                    "lineer yapinin lineer alani disari okunamaz "
-                    "(kismi tasima V2'de yok; yapiyi butun olarak imha edin "
-                    "veya tasiyin)");
-                return t_hata(tk);
+                /* D-315 (V2.1) — KISMI TASIMA: alan disari TASINIR (move).
+                 * D-313'te bu tumden reddediliyordu cunku alan-bazli sahiplik
+                 * izlenmiyordu; artik baglama basina bit-maske tutuluyor:
+                 *   - ilk okuma  -> alani "tasindi" isaretle, alan tipini don
+                 *     (donen deger kendi basina lineer -> L001/L002 makinesi
+                 *     onu ayrica takip eder),
+                 *   - ikinci okuma -> L002 (ayni alan iki kez tasinamaz).
+                 * Yapinin KENDISI hala tuketilmelidir (imha) -> kabuk sizmaz. */
+                int alan_ix = yapi_alan_indeksi_sirali(yapi_sem, alan);
+                Sembol *bagl = erisim_baglama_sembolu(tk, d->veri.erisim.nesne);
+                if (alan_ix < 0 || alan_ix >= 32 || !bagl) {
+                    /* Cozulemedi (gecici deger / 32+ alan) -> KANITLANAMADI:
+                     * muhafazakar reddet (D-313 davranisi). */
+                    tip_hata(tk, d, "LR002",
+                        "lineer alan yalniz bir BAGLAMA uzerinden tasinabilir "
+                        "(gecici deger veya 32+ alanli yapi desteklenmiyor)");
+                    return t_hata(tk);
+                }
+                unsigned int bit = 1u << (unsigned)alan_ix;
+                if (bagl->lineer_alan_maskesi & bit) {
+                    tip_hata(tk, d, "L002",
+                        "lineer alan zaten disari tasindi (kismi tasima sonrasi "
+                        "yeniden erisim)");
+                    return t_hata(tk);
+                }
+                if (bagl->lineer_tuketildi >= 1) {
+                    tip_hata(tk, d, "L002",
+                        "yapi zaten tuketildi (tasima sonrasi alan erisimi)");
+                    return t_hata(tk);
+                }
+                bagl->lineer_alan_maskesi |= bit;
+                return alan->tip;
             }
             /* Generic instantiation: yapi.tip_arg varsa alan tipinde
              * substitusyon (T -> tam32 vs) */

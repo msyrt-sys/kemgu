@@ -57,6 +57,10 @@ typedef struct Sembol {
      * scope sonunda 0 = L001. */
     int lineer_tuketildi;          /* 0 = henuz tuketilmedi; 1+ = tuketim sayisi */
     int lineer_scope_seviyesi;     /* tanim aninda scope derinligi */
+    /* D-315 (Linear V2.1) — KISMI TASIMA: `yapı tekkez` baglamasinin hangi
+     * LINEER alanlari disari tasindi (bit i = i. alan). 32 alandan fazlasi
+     * icin kismi tasima muhafazakar reddedilir (maske tasar). 0 = el degmemis. */
+    unsigned int lineer_alan_maskesi;
 
     /* === Cok-dosya modul A: gorunurluk + ithal (import) alanlari ===
      * memset(0) ile baslatilan tum mevcut kod icin varsayilanlar guvenli. */

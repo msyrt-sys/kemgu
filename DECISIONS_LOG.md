@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-315 — [YÜKSEK] Linear V2.1: KISMİ TAŞIMA (partial move) (2026-07-25)
+
+**Karar [ETKİ: `src/sembol.h` (`lineer_alan_maskesi`), `src/tip_kontrol.h`
+(`imha_baglaminda`), `src/tip_kontrol.c` (ERISIM taşıma + LinAnlik maske snapshot +
+bütün-taşıma yasağı), `test/test_linear.c` (+4, L73 yeni semantiğe).]**
+D-313'te lineer yapının lineer alanını dışarı okumak **tümden reddediliyordu** (alan-bazlı
+sahiplik izlenmediği için). V2.1 bunu izleyerek serbest bırakır.
+
+**Model — bağlama başına bit-maske:** `Sembol.lineer_alan_maskesi` (bit i = i. alan
+taşındı).
+- `s.x` ilk okuma → alanı "taşındı" işaretle, alan tipini döndür. Dönen değer kendi
+  başına lineerdir → mevcut L001/L002 makinesi onu ayrıca izler.
+- `s.x` ikinci okuma → **L002** (aynı alan iki kez taşınamaz).
+- Yapının KENDİSİ hâlâ tüketilmelidir → kabuk sızmaz (L001 korunur).
+- **Kısmi taşınmış yapı BÜTÜN OLARAK TAŞINAMAZ** → L002. `imha` serbest (kalanı atar),
+  ama çağrı argümanı / `ver` ile devretmek **delikli** bir değeri alıcıya verirdi:
+  alıcının tipi alanı "var" gösterir, oysa taşınmıştır → use-after-move.
+- Alan yalnız bir **BAĞLAMA** üzerinden taşınabilir; geçici değer (`yap().x`) veya 32+
+  alanlı yapı → muhafazakâr **red** (kanıtlanamayan = DENY).
+
+**Dal-duyarlılıkla uyum:** `LinAnlik` artık maskeyi de anlık-görüntüler/geri yükler.
+Maskesiz snapshot, bir dalda taşınan alanı diğerinde "taşınmış" gösterip **yanlış L002**
+üretirdi (D-311/D-312 makinesiyle sessiz çelişki).
+
+**⚠ KENDİ KUSURUM (ölçümle yakalandı):** `TipKontrol` **memset EDİLMİYOR** — alanlar tek
+tek atanıyor. `imha_baglaminda`'yı başlatmayı unutmuştum → çöp değer, kontrol **SESSİZCE
+atlanıyordu** (pm4 senaryosu "OK" veriyordu). Adversarial senaryo yakaladı. *Ders:
+`TipKontrol`'e alan eklerken `tip_kontrol_baslat`'ta ilklendir.*
+
+**Yeni kullanıcı-görünür kod İCAT EDİLMEDİ:** L002 (double-use) semantik olarak tam
+oturuyor (taşınmış alana yeniden erişim = çift kullanım); geçici-değer reddi LR002.
+
+**Doğrulama:** test_linear **78/78** (74→78; L73 yeni semantiğe çevrildi), tip_kontrol
+189/189, capability 40/40, DRF 54/54, sabitsüre 39/39, parser 107/107, test_llvm 274/274,
+checker_diff 49/49, codegen_diff 100/100. **Sabotaj:** maske kontrolü kapatılınca L76,
+bütün-taşıma kontrolü kapatılınca L77 düşüyor (temiz derlemeyle doğrulandı).
+
+**SINIRLAR:**
+1. **Self-host'ta YOK — ama SOUND:** self-host kısmi taşımayı hâlâ D-314'ün LR002'siyle
+   REDDEDER (C kabul eder). Yani self-host daha muhafazakâr; sessiz miscompile YOK, hiçbir
+   kapı kırılmıyor (korpuslarda kısmi taşıma kullanılmıyor). Port ayrı iş.
+2. **`eşleş` ile lineer yapı destructuring YAPILMADI:** `eşleş s { Sahip { x } => ... }`
+   **P220 ile parse edilemiyor — yapı deseni DİLDE YOK.** Bu YENİ SÖZDİZİMİ demek;
+   `DESEN_YAPICI` yalnız çeşit varyantları için. Sözdizimi kararı Mehmet'in olduğu için
+   İCAT EDİLMEDİ.
+
+---
+
 ## D-314 — Linear V2 `yapı tekkez K` SELF-HOST'a portlandı (C parite) (2026-07-25)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (driver) + `selfhost/checker.kem` (referans checker)

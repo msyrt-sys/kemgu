@@ -207,8 +207,10 @@ değişken s: tekkez<Sahip> = tekkez_olustur(Sahip { x: tekkez_olustur(1) });   
 > ```
 > Tüketim: `imha(k)` veya taşıma (çağrı argümanı / `ver`). `kullan` KABUL ETMEZ
 > (lineer yapının sarmalanmış değeri yoktur → L007).
-> **Kısmi taşıma YASAK:** lineer yapının LİNEER alanı dışarı okunamaz (aynı kaynak
-> iki kez imha edilirdi); lineer-OLMAYAN alan okunabilir. Alan-bazlı taşıma V2.1.
+> **Kısmi taşıma (V2.1, D-315):** lineer alan dışarı TAŞINABİLİR — bağlama başına
+> bit-maske izler: ilk okuma taşır, ikinci okuma L002. Yapının kendisi hâlâ tüketilmeli.
+> Kısmi taşınmış yapı BÜTÜN OLARAK TAŞINAMAZ (delikli değer devri = use-after-move);
+> yalnız `imha` edilebilir. Geçici değer / 32+ alan → muhafazakâr red.
 > **Durum (D-314):** C + self-host (driver + referans checker) — TAM PARİTE.
 
 ### LR-3 — Bölge Kapanışında Sızıntısızlık

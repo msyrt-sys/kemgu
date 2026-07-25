@@ -807,17 +807,18 @@ static void T72_lineer_alan_siradan_yapida_lr002(void) {
     test_sonuc("L72: SIRADAN yapi + lineer alan -> LR002 (muafiyet dar)", var);
 }
 
-static void T73_kismi_tasima_red(void) {
-    /* Lineer alani disari okumak UNSOUND olurdu: hem alan hem yapi tuketilmek
-     * zorunda kalir -> AYNI kaynak iki kez imha edilir. */
+static void T73_kismi_tasima_alan_tuketilmeli(void) {
+    /* D-315 (V2.1): kismi tasima ARTIK SERBEST — ama tasinan alan kendi basina
+     * bir lineer baglamadir ve tuketilmelidir. (D-313'te bu tumden reddediliyordu;
+     * V2.1 alan-bazli sahiplik izler.) */
     int var = kod_uretildi_mi(
         "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
         "i\xc5\x9flev test() {\n"
         "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
-        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"
+        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"   /* f tuketilmedi */
         "    imha(s);\n"
-        "}\n", "LR002");
-    test_sonuc("L73: lineer alani disari okuma (kismi tasima) -> red", var);
+        "}\n", "L001");
+    test_sonuc("L73: kismi tasinan alan tuketilmezse -> L001", var);
 }
 
 static void T74_lineer_olmayan_alan_okuma_ok(void) {
@@ -831,6 +832,64 @@ static void T74_lineer_olmayan_alan_okuma_ok(void) {
         "}\n");
     test_sonuc("L74: lineer yapinin lineer-OLMAYAN alani okunabilir -> 0 hata",
                h == 0);
+}
+
+/* === D-315 (Linear V2.1): KISMI TASIMA (partial move) ===
+ * Lineer yapinin lineer alani DISARI TASINABILIR. Baglama basina bit-maske
+ * tutulur: ilk okuma alani "tasindi" isaretler, ikinci okuma L002. Yapinin
+ * KENDISI hala tuketilmelidir; ama kismi tasinmis yapi ARTIK TASINAMAZ
+ * (delikli deger devretmek use-after-move olurdu) — yalniz `imha` edilebilir. */
+
+static void T75_kismi_tasima_tam_akis_ok(void) {
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"
+        "    imha(f);\n"
+        "    imha(s);\n"
+        "}\n");
+    test_sonuc("L75: alan tasi + alani imha + kabugu imha -> 0 hata", h == 0);
+}
+
+static void T76_ayni_alan_iki_kez(void) {
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"
+        "    de\xc4\x9fi\xc5\x9fken g = s.x;\n"
+        "    imha(f); imha(g); imha(s);\n"
+        "}\n", "L002");
+    test_sonuc("L76: ayni alan IKI kez tasinamaz -> L002", var);
+}
+
+static void T77_kismi_tasinmis_yapi_tasinamaz(void) {
+    /* Delikli degeri aliciya devretmek: alicinin tipi alani "var" gosterir,
+     * oysa tasinmistir -> use-after-move. `imha` serbest, TASIMA degil. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev al(s: Sahip) -> tam32 { imha(s); ver 1; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"
+        "    imha(f);\n"
+        "    de\xc4\x9fi\xc5\x9fken a: tam32 = al(s);\n"
+        "}\n", "L002");
+    test_sonuc("L77: kismi tasinmis yapi TASINAMAZ (imha serbest) -> L002", var);
+}
+
+static void T78_kismi_tasima_gecici_deger_red(void) {
+    /* Alan yalniz bir BAGLAMA uzerinden tasinabilir; gecici deger uzerinde
+     * sahiplik izlenemez -> muhafazakar red (kanitlanamayan = DENY). */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev yap() -> Sahip { ver Sahip { x: tekkez_olustur(1) }; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken f = yap().x;\n"
+        "    imha(f);\n"
+        "}\n", "LR002");
+    test_sonuc("L78: gecici deger uzerinden kismi tasima -> red", var);
 }
 
 int main(void) {
@@ -937,8 +996,14 @@ int main(void) {
     T70_lineer_yapi_cift_imha();
     T71_lineer_alan_lineer_yapida_ok();
     T72_lineer_alan_siradan_yapida_lr002();
-    T73_kismi_tasima_red();
+    T73_kismi_tasima_alan_tuketilmeli();
     T74_lineer_olmayan_alan_okuma_ok();
+
+    printf("\n--- L75-L78: kismi tasima / partial move (D-315) ---\n");
+    T75_kismi_tasima_tam_akis_ok();
+    T76_ayni_alan_iki_kez();
+    T77_kismi_tasinmis_yapi_tasinamaz();
+    T78_kismi_tasima_gecici_deger_red();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

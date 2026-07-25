@@ -80,6 +80,9 @@ typedef struct TipKontrol {
     /* === Linear Types Spec V1 takibi === */
     int scope_seviyesi;            /* mevcut scope derinligi (lineer omur kontrolu) */
     int lambda_govdesi_icinde;     /* >0 = lambda govdesi visit ediyoruz */
+    /* D-315 (Linear V2.1): imha(...) operandini tuketiyoruz. Kismi tasinmis
+     * bir yapi YALNIZ imha ile tuketilebilir (tasima delikli deger devrederdi). */
+    int imha_baglaminda;
     /* D-304: blok-form lambda dönüş çıkarsaması. cikarsama>0 iken blok içindeki
      * `ver <e>` deyimi e'nin tipini blok_donus'a KAYDEDER (aktif_donus_tipi'ye
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
