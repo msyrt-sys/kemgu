@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-317 — L-COND / L-LOOP self-host'a portlandı — lineer parite borcu KAPANDI (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (anlık-görüntü yığını +
+EGER/IKEN ayrımı + ICIN + ESLES kolları), `test/check_korpus/lineer_kosullu.kem` (+1).]**
+D-316'da ölçüp belgelediğim parite borcu: **D-311/D-312 (L-COND/L-LOOP) self-host'ta HİÇ
+YOKTU** (`grep '"L005"' selfhost/*.kem` = 0) — C reddederken self **KABUL EDİYORDU**.
+Artık **8/8 senaryo C ile birebir**.
+
+**Mekanizma (C `LinAnlik` aynası, self-host'un dizi modeline uyarlandı):** `snap_tuk`/
+`snap_maske` bir **anlık-görüntü YIĞINI** (`snap_top` tepesi) — iç-içe `eğer`/`eşleş`
+için şart. `lin_snap_it` aktif dilimi iter, `lin_snap_geri(base, n)` dal izolasyonu
+sağlar, `lin_snap_at` yığını boşaltır. **`n` ile sınırlama kritik:** dal İÇİNDE tanımlanan
+bağlamalar dilimi büyütür; sınırsız geri-yükleme onları da ezerdi.
+
+**Kurallar (C ile aynı):**
+- `eğer`: iki dal da tüketti → taban+1 (BİR tüketim); tam biri → **L005** + tüketilmiş
+  say (ardıl L001 kaskadı olmasın); hiçbiri → taban. else'siz `eğer` = tüketmeyen else.
+- `eşleş`: N-kollu genelleme — her kol izole edilir, tüketen kol sayılır; hepsi → BİR
+  tüketim, karışık → L005.
+- `iken`/`için`: gövde DIŞ bağlamayı tüketirse **L005** (0 iterasyon = sızıntı, ≥2 =
+  çift tüketim). Gövde-içi tanımlar anlık görüntüde DEĞİL → serbest.
+
+**Doğrulama:** 8/8 C↔self birebir (iki-dal / tek-dal L005 / düz-çift L002 / eşleş-tüm-kol /
+eşleş-tek-kol / iken / için / döngü-içi-yerel) + **FIXPOINT** (41309 satır) +
+`calistir_codegen_bootstrap` (lexer/parser/checker 92 birebir) + checker_diff **51/51**
+(+1 korpus) + codegen_diff 100/100.
+
+**SONUÇ:** D-311→D-316'nın TAMAMI artık self-host'ta. Lineer alt-sistemde bilinen C↔self
+parite borcu KALMADI. Kalan tek Linear işi: `eşleş` ile lineer yapı destructuring —
+**yapı deseni dilde YOK (P220)**, yeni sözdizimi kararı Mehmet'te.
+
+---
+
 ## D-316 — Linear V2.1 KISMİ TAŞIMA self-host'a portlandı (C parite) (2026-07-25)
 
 **Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (`lin_maske`, `imha_bag`,

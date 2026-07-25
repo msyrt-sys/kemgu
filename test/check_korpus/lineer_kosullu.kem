@@ -1,0 +1,17 @@
+// D-317: L-COND self-host portu — C ↔ self --checkdump sıfır-diff.
+// Spec'in KANONİK örneği: iki dal da tüketirse TOPLAMDA BİR tüketimdir (eskiden
+// akış-duyarsız sayaç L002 veriyordu → koşullu imha İMKÂNSIZDI). `eşleş` kolları
+// aynı kuralın N-kollu genellemesi. Hatasız geçmeli.
+işlev main() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(5);
+    eğer doğru { kullan(t); } değilse { imha(t); }
+    değişken u: tekkez<tam32> = tekkez_olustur(7);
+    eşleş 1 { 1 => { kullan(u); } _ => { imha(u); } }
+    değişken i: tam32 = 0;
+    iken i < 2 {                      // döngü İÇİNDE tanım+tüketim serbest
+        değişken v: tekkez<tam32> = tekkez_olustur(1);
+        imha(v);
+        i = i + 1;
+    }
+    ver 42;
+}

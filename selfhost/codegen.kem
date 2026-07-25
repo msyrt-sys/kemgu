@@ -146,6 +146,9 @@ yapı Ayr {
     lin_sut: Dizi<tam32>;
     lin_tuk: Dizi<tam32>;    // tüketim sayacı (0=tüketilmedi; >=1 sonrası L002)
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
+    snap_tuk: Dizi<tam32>;   // D-317: L-COND dal izolasyonu — tüketim anlık görüntüsü
+    snap_maske: Dizi<tam32>; // D-317: paralel — maske anlık görüntüsü
+    snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;     // tip-hata kodları (traversal sırası)
@@ -5631,6 +5634,68 @@ işlev th_var_mi(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> mant
     }
     ver yanlış;
 }
+// ============================================================================
+// D-317 — L-COND / L-LOOP portu (C tip_kontrol.c D-311/D-312 aynası).
+//   Tüketim takibi AKIŞ-DUYARSIZ sayaçtı: `eğer p { kullan(t) } değilse { imha(t) }`
+//   (spec'in KANONİK örneği) L002 veriyor, tek-dallı tüketim ise SESSİZ geçiyordu.
+//   Çözüm: dal girişinde aktif lineer dilim ANLIK-GÖRÜNTÜLENİR, her dal kendi
+//   kopyasında çalışır, çıkışta BİRLEŞTİRİLİR.
+// ============================================================================
+// Aktif dilimdeki lineer bağlama sayısı.
+işlev lin_dilim_n(p: &değişken Ayr) -> tam32 {
+    ver dizi_boyut(p.lin_ad) - p.lin_basla;
+}
+// Aktif dilimi anlık-görüntü yığınına it; taban indeksi döner.
+işlev lin_snap_it(p: &değişken Ayr) -> tam32 {
+    değişken base: tam32 = p.snap_top;
+    değişken i: tam32 = p.lin_basla;
+    iken i < dizi_boyut(p.lin_ad) {
+        eğer p.snap_top < dizi_boyut(p.snap_tuk) {
+            dizi_yaz(p.snap_tuk, p.snap_top, dizi_al(p.lin_tuk, i));
+            dizi_yaz(p.snap_maske, p.snap_top, dizi_al(p.lin_maske, i));
+        } değilse {
+            dizi_ekle(p.snap_tuk, dizi_al(p.lin_tuk, i));
+            dizi_ekle(p.snap_maske, dizi_al(p.lin_maske, i));
+        }
+        p.snap_top = p.snap_top + 1;
+        i = i + 1;
+    }
+    ver base;
+}
+// Anlık görüntüden geri yükle (dal izolasyonu). n = görüntü alınırken ki eleman sayısı;
+// dal İÇİNDE tanımlanan bağlamalar dilimi büyütebilir → n ile sınırla.
+işlev lin_snap_geri(p: &değişken Ayr, base: tam32, n: tam32) -> tam32 {
+    değişken k: tam32 = 0;
+    iken (k < n) ve ((p.lin_basla + k) < dizi_boyut(p.lin_ad)) {
+        dizi_yaz(p.lin_tuk, p.lin_basla + k, dizi_al(p.snap_tuk, base + k));
+        dizi_yaz(p.lin_maske, p.lin_basla + k, dizi_al(p.snap_maske, base + k));
+        k = k + 1;
+    }
+    ver 0;
+}
+işlev lin_snap_at(p: &değişken Ayr, base: tam32) -> tam32 { p.snap_top = base; ver 0; }
+// L005 raporla (dal/döngü tutarsızlığı).
+işlev l005_yaz(p: &değişken Ayr, idx: tam32) -> tam32 {
+    dizi_ekle(p.th_kod, "L005");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
+// D-317 L-LOOP: gövde DIŞ bir lineer bağlamayı tüketiyorsa hata. Döngü 0 kez
+// dönerse sızıntı, >=2 kez dönerse ÇİFT tüketim. Gövde İÇİNDE tanımlananlar
+// anlık görüntüde DEĞİLDİR (n ile sınırlı) → onlar serbesttir.
+işlev lin_dongu_birlestir(p: &değişken Ayr, idx: tam32, base: tam32, n: tam32) -> tam32 {
+    değişken k: tam32 = 0;
+    iken (k < n) ve ((p.lin_basla + k) < dizi_boyut(p.lin_ad)) {
+        değişken taban: tam32 = dizi_al(p.snap_tuk, base + k);
+        eğer dizi_al(p.lin_tuk, p.lin_basla + k) > taban {
+            l005_yaz(p, idx);
+            dizi_yaz(p.lin_tuk, p.lin_basla + k, taban + 1);
+        }
+        k = k + 1;
+    }
+    ver 0;
+}
 // D-316: 1 << n (self-host `<<` operatörü var; ayrı işlev okunabilirlik için).
 işlev bit_kaydir_sol(v: tam32, n: tam32) -> tam32 { ver v << n; }
 // D-316: alanın, o yapının LİNEER alanları içindeki 0-tabanlı sırası (-1 yok).
@@ -5838,8 +5903,96 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken kosul: tam32 = dizi_al(p.cocuk, kb);
         kontrol_dugum(p, kosul);
         t021_kontrol(p, idx, kosul);
-        değişken j: tam32 = 1;
-        iken j < kc { kontrol_dugum(p, dizi_al(p.cocuk, kb + j)); j = j + 1; }
+        eğer metin_esit(ad, "IKEN") {
+            // D-317 L-LOOP: gövde dış lineer bağlamayı tüketemez.
+            değişken ln: tam32 = lin_dilim_n(p);
+            değişken lb: tam32 = lin_snap_it(p);
+            değişken j2: tam32 = 1;
+            iken j2 < kc { kontrol_dugum(p, dizi_al(p.cocuk, kb + j2)); j2 = j2 + 1; }
+            lin_dongu_birlestir(p, idx, lb, ln);
+            lin_snap_at(p, lb);
+            ver 0;
+        }
+        // D-317 L-COND: then/else AYRI anlık görüntüden çalışır, sonra birleşir.
+        değişken n0: tam32 = lin_dilim_n(p);
+        değişken b0: tam32 = lin_snap_it(p);          // taban
+        eğer kc > 1 { kontrol_dugum(p, dizi_al(p.cocuk, kb + 1)); }   // then
+        değişken bt: tam32 = lin_snap_it(p);          // then sonrası
+        lin_snap_geri(p, b0, n0);                     // dalları izole et
+        eğer kc > 2 { kontrol_dugum(p, dizi_al(p.cocuk, kb + 2)); }   // else
+        // Birleştir: iki dal da tüketti → BİR tüketim; tam biri → L005.
+        değişken k: tam32 = 0;
+        iken (k < n0) ve ((p.lin_basla + k) < dizi_boyut(p.lin_ad)) {
+            değişken tb: tam32 = dizi_al(p.snap_tuk, b0 + k);
+            değişken t_then: mantıksal = dizi_al(p.snap_tuk, bt + k) > tb;
+            değişken t_else: mantıksal = dizi_al(p.lin_tuk, p.lin_basla + k) > tb;
+            eğer t_then ve t_else { dizi_yaz(p.lin_tuk, p.lin_basla + k, tb + 1); }
+            değilse {
+                eğer t_then veya t_else {
+                    l005_yaz(p, idx);
+                    // Tüketilmiş say: aksi halde scope sonunda AYRICA L001 patlar
+                    // (tek kusur İKİ hata olarak raporlanırdı).
+                    dizi_yaz(p.lin_tuk, p.lin_basla + k, tb + 1);
+                } değilse { dizi_yaz(p.lin_tuk, p.lin_basla + k, tb); }
+            }
+            k = k + 1;
+        }
+        lin_snap_at(p, b0);
+        ver 0;
+    }
+    // D-317 L-LOOP (`için`): çocuk[0]=koleksiyon, çocuk[1]=gövde.
+    eğer metin_esit(ad, "ICIN") {
+        değişken ib: tam32 = dizi_al(p.a_cb, idx);
+        değişken ic: tam32 = dizi_al(p.a_cs, idx);
+        eğer ic > 0 { kontrol_dugum(p, dizi_al(p.cocuk, ib)); }
+        değişken in0: tam32 = lin_dilim_n(p);
+        değişken ib0: tam32 = lin_snap_it(p);
+        eğer ic > 1 { kontrol_dugum(p, dizi_al(p.cocuk, ib + 1)); }
+        lin_dongu_birlestir(p, idx, ib0, in0);
+        lin_snap_at(p, ib0);
+        ver 0;
+    }
+    // D-317 L-COND (`eşleş`): `eğer`in N-kollu genellemesi. çocuk[0]=değer,
+    // çocuk[1..]=ESLES_KOLU. Ya HEPSİ tüketir ya HİÇBİRİ; karışıksa L005.
+    eğer metin_esit(ad, "ESLES") {
+        değişken eb: tam32 = dizi_al(p.a_cb, idx);
+        değişken ec: tam32 = dizi_al(p.a_cs, idx);
+        eğer ec > 0 { kontrol_dugum(p, dizi_al(p.cocuk, eb)); }
+        değişken en0: tam32 = lin_dilim_n(p);
+        değişken eb0: tam32 = lin_snap_it(p);
+        değişken kol_n: tam32 = ec - 1;
+        değişken tuketen: Dizi<tam32> = [];
+        değişken z: tam32 = 0;
+        iken z < en0 { dizi_ekle(tuketen, 0); z = z + 1; }
+        değişken ki: tam32 = 1;
+        iken ki < ec {
+            lin_snap_geri(p, eb0, en0);          // her kolu İZOLE et
+            kontrol_dugum(p, dizi_al(p.cocuk, eb + ki));
+            değişken m: tam32 = 0;
+            iken (m < en0) ve ((p.lin_basla + m) < dizi_boyut(p.lin_ad)) {
+                eğer dizi_al(p.lin_tuk, p.lin_basla + m) > dizi_al(p.snap_tuk, eb0 + m) {
+                    dizi_yaz(tuketen, m, dizi_al(tuketen, m) + 1);
+                }
+                m = m + 1;
+            }
+            ki = ki + 1;
+        }
+        lin_snap_geri(p, eb0, en0);
+        değişken q: tam32 = 0;
+        iken (q < en0) ve ((p.lin_basla + q) < dizi_boyut(p.lin_ad)) {
+            değişken tb2: tam32 = dizi_al(p.snap_tuk, eb0 + q);
+            eğer dizi_al(tuketen, q) == 0 { dizi_yaz(p.lin_tuk, p.lin_basla + q, tb2); }
+            değilse {
+                eğer (dizi_al(tuketen, q) == kol_n) ve (kol_n > 0) {
+                    dizi_yaz(p.lin_tuk, p.lin_basla + q, tb2 + 1);
+                } değilse {
+                    l005_yaz(p, idx);
+                    dizi_yaz(p.lin_tuk, p.lin_basla + q, tb2 + 1);
+                }
+            }
+            q = q + 1;
+        }
+        lin_snap_at(p, eb0);
         ver 0;
     }
     // CAGRI: hedef T002 → (tanımsız → erken dön) → T010 arite (uyumsuz → erken dön)
@@ -6299,7 +6452,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_maske: [], imha_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_maske: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
