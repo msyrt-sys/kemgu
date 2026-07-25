@@ -1,0 +1,24 @@
+// D-310: i64 TAŞIYICI daraltması store bağlamlarında. `görev_birleştir`, eşleş ile
+// bağlanmış bir tutucuda iç tipi (görev<T> → T) bilemez → i64_daralt t="" ile i64
+// döner (KIRPMA YOK, doğru). Bu i64'ü annotasyonlu `değişken`e ya da mevcut bir
+// tam32 değişkene yazmak `store i32 %i64` üretiyordu (LLVM RED). Artık int_uydur
+// ile trunc/sext ediliyor. Şekiller: annotasyonlu değişken + ATAMA + tam64 hedef.
+// Exit: 42
+işlev main() -> tam32 {
+    değişken acc: tam32 = 0;
+    eşleş görev_başlat(|| { ver 20; }) {
+        tamam(a) => {
+            eşleş görev_başlat(|| 22) {
+                tamam(b) => {
+                    değişken t: tam32 = görev_birleştir(a);   // annotasyonlu → trunc
+                    acc = görev_birleştir(b);                 // ATAMA → trunc
+                    değişken g: tam64 = t olarak tam64;       // i64 hedef → no-op
+                    ver (g olarak tam32) + acc;
+                }
+                hata(e2) => { ver 2; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    ver 99;
+}

@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-310 — [YÜKSEK] Self-host: `görev_başlat` BLOK-form lambda gövdesi SESSİZCE düşüyordu (2026-07-25)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lam_emit + VER kolu + `lam_i64` bayrağı),
+`test/cg_korpus/cg_gorev_lambda_blok.kem` (+1).]**
+`görev_başlat(|| { ...; ver e; })` — blok-form closure gövdesi — self-host
+`lam_emit`'te `ret i64 0` fallback'ine düşüyordu: gövde HİÇ emit edilmiyordu.
+Sonuç **sessiz yanlış cevap** (repro: C exit 42, self-host exit 0 — link/IR hatası
+yok, program "başarıyla" yanlış değer döndürüyordu). D-309 ile ilgisi YOK
+(D-309 değişiklikleri stash'lenip yeniden ölçüldü — bug önceden vardı, D-300'den beri).
+
+**Onarım:** lam_emit gövde BLOK ise `deyim_uret` ile emit edilir; `cur_ret` "i64"
+(KdlGorevBare taşıyıcısı) kurulur ve `lam_i64` bayrağı açılır. VER kolu bu bayrakla
+`ret_uydur` yerine `i64_genislet` kullanır — `ret_uydur` YALNIZ int→int daraltır,
+ptr/dar-int'i olduğu gibi bırakırdı (`ret i64 %ptr` = geçersiz IR). `ver`siz düşen
+yol için terminatör fallback'i (`ret i64 0`) korunur. İfade-form yolu değişmedi.
+
+**Ölçüm:** yeni korpus dosyası üç şekli kapsar (çok-deyimli blok + heap dizi,
+yakalama/capture + blok, koşullu dal + blok) — C 42 ↔ self 42. codegen_diff 99/99,
+bootstrap FIXPOINT (stage2==stage3 birebir, 39326 satır), self_driver tüm modlar,
+test_gorev_rt 16/16 (D-309 ölçüm kapısı dâhil), test_drf 54/54, test_llvm 274/274.
+
+**İkinci onarım (aynı adım): i64 taşıyıcı daraltması store bağlamlarında.**
+`değişken t: tam32 = görev_birleştir(a)` / `t = görev_birleştir(a)` — eşleş ile
+bağlanmış tutucuda iç tip (görev<T> → T) bilinmediği için `i64_daralt` doğru olarak
+i64 bırakır (kırpma YOK), ama store hedefe uydurulmuyordu → `store i32 %i64` (LLVM RED).
+Yeni `int_uydur(op, hedef)` (ret_uydur'un hedef-parametreli biçimi) DEGISKEN
+(annotasyonlu) ve ATAMA (yerel TANIMLAYICI) store'larında trunc/sext ediyor.
+Korpus: `cg_gorev_i64_daralt.kem` (annotasyon + atama + tam64 hedef) → 42/42.
+
+**Ölçümle yakalanan kendi kusurum:** ilk `int_uydur` IMMEDIATE'lere de dokunuyordu →
+`sext i32 4294967296 to i64` literali SESSİZCE bozdu (`cg_skaler_deref` 24 yerine 56;
+korpus yakaladı). Guard eklendi: yalnız `%`-register uydurulur — D-299'daki
+`i64_genislet` dersinin aynısı (self-host TAM literalini daima i32 sayar).
+
+---
+
 ## D-309 — [YÜKSEK] ρ_sahip KOŞULLU serbest: POZİTİF hapsedilme kanıtı (F4-sınıfı) (2026-07-25)
 
 **Karar [ETKİ: `src/llvm.c` (+~230: kanıt + call-graph kapanışı), `selfhost/codegen.kem`

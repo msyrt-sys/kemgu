@@ -86,6 +86,11 @@ yapı Ayr {
     lam_capisim: Dizi<metin>;// DÜZ yakalama adları (tüm lambdalar)
     lam_capir: Dizi<metin>;  // DÜZ yakalama LLVM tipleri (tüm lambdalar)
     lam_sayac: tam32;        // lambda_N mangled sayacı
+    // D-310: lifted-lambda gövdesi emit ediliyor (1) → `ver` dönüşü i64 TAŞIYICIYA
+    // genişletilir (ret_uydur DEĞİL: o yalnız int→int daraltır, ptr/dar-int'i
+    // olduğu gibi bırakır → `ret i64 %ptr` gibi geçersiz IR). Blok-form gövde bu
+    // bayrak olmadan `ret i64 0` fallback'ine düşüyordu (SESSİZ yanlış cevap).
+    lam_i64: tam32;
     str_deg: Dizi<metin>;// CG7: benzersiz metin literalleri (indeks = @.str.N id)
     // D-307: gerçek per-instantiation mono. Parser generic param ADLARINI atıyordu
     // (atla_tip_paramlar) → yan-registry, YAPI/ÇEŞİT ADIYLA anahtarlı:
@@ -2395,6 +2400,29 @@ işlev int_ll_mi(t: metin) -> mantıksal {
     ver metin_esit(t, "i1") veya metin_esit(t, "i8") veya metin_esit(t, "i16")
         veya metin_esit(t, "i32") veya metin_esit(t, "i64");
 }
+// D-310: `op` (tipi p.son_tip) değerini `hedef` tamsayı tipine uydur — YALNIZ iki
+// taraf da tamsayı ve genişlik farklıysa (trunc/sext). ret_uydur'un hedef-parametreli
+// biçimi: store bağlamları (annotasyonlu `değişken`, `ATAMA`) için. Gerekçe:
+// `görev_birleştir`/`kanal_al` iç tip kaybında i64 TAŞIYICI döner (i64_daralt t="");
+// `değişken t: tam32 = görev_birleştir(a)` bunu `store i32 %i64` olarak yazıp LLVM'de
+// patlıyordu. p.son_tip hedefe güncellenir (çağıran zincirleme kullanır).
+işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin) -> metin {
+    eğer metin_esit(p.son_tip, hedef) { ver op; }
+    // IMMEDIATE (register değil) → DOKUNMA. Self-host TAM literalini daima "i32"
+    // sayıp ham rakam dizisi döndürür; `sext i32 4294967296 to i64` literali
+    // SESSİZCE bozar (ölçüldü: cg_skaler_deref 24 yerine 56). Literal zaten
+    // hedef tiple basılıyor (beklenen bağlamı) — D-299 i64_genislet ile aynı ders.
+    eğer bayt(op, 0) != 37 { ver op; }   // 37 = '%'
+    eğer int_ll_mi(p.son_tip) == yanlış veya int_ll_mi(hedef) == yanlış { ver op; }
+    değişken islem: metin = "sext";
+    eğer tip_genislik(hedef) < tip_genislik(p.son_tip) { islem = "trunc"; }
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" ");
+    yaz_str(p.son_tip); yaz_str(" "); yaz_str(op); yaz_str(" to "); yaz_str(hedef); yb(10);
+    p.son_tip = hedef;
+    ver rs;
+}
 // Karar 1 (D-30x): `ver <ifade>` değerini fn dönüşüne (cur_ret) uydur — YALNIZ
 // iki taraf da tamsayı ve genişlik farklıysa (trunc/sext). görev_birleştir gibi
 // i64-taşıyıcı dönen ifadeler eşleş-bound iç-tip kaybında i64 kalır; `ver`
@@ -3543,7 +3571,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
             p.beklenen_ll = eski_bll;
             p.beklenen_yapi = "";   // D-308: RESET
-            op = ret_uydur(p, op);       // Karar 1: i64-taşıyıcı → fn dönüşüne daralt
+            // D-310: lifted-lambda gövdesindeyiz → dönüş DAİMA i64 taşıyıcı
+            // (KdlGorevBare ABI). ret_uydur yalnız int→int; ptr/dar-int i64'e
+            // i64_genislet ile taşınır (ptrtoint/sext/immediate materyalize).
+            eğer p.lam_i64 == 1 { op = i64_genislet(p, op, p.son_tip); }
+            değilse { op = ret_uydur(p, op); }   // Karar 1: i64-taşıyıcı → fn dönüşüne daralt
             rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
             rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
@@ -3869,6 +3901,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
+        // D-310: annotasyonlu → değer tamsayı genişliğini annotasyona uydur
+        // (i64-taşıyıcı built-in dönüşü: `değişken t: tam32 = görev_birleştir(a)`).
+        eğer annot == 1 { v = int_uydur(p, v, vtip); }
         // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
         değişken areg: metin = "";
         eğer annot == 1 { areg = pa_reg_bul(p, idx); }
@@ -3902,6 +3937,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
+            v = int_uydur(p, v, vt);   // D-310: i64-taşıyıcı → hedef değişken genişliği
             yaz_str("  store "); yaz_str(vt); yaz_str(" "); yaz_str(v); yaz_str(", ptr ");
             yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
             ver 0;
@@ -4705,17 +4741,25 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
         cg_var_ekle(p, cad, reg_str(al), cir, "", "");
         ci = ci + 1;
     }
-    // Gövde: ifade-form (v1). Değeri i64'e genişletip ret.
+    // Gövde. İki form da i64 döner (imza yukarıda i64 açıldı):
+    //   ifade-form  `|| e`          → e'yi üret, i64'e genişlet, ret.
+    //   blok-form   `|| { ...; ver e; }` → deyimleri emit et; `ver` VER kolundan
+    //     lam_i64 bayrağıyla i64'e genişletilerek ret eder (D-310). Öncesinde
+    //     `ret i64 0` fallback vardı → gövde SESSİZCE düşüyordu (yanlış cevap).
+    değişken eski_ret: metin = p.cur_ret;
+    p.cur_ret = "i64";
+    p.lam_i64 = 1;
     eğer metin_esit(dizi_al(p.a_ad, govde), "BLOK") {
-        // Blok-form gövde: v1'de son-ver çıkarsaması yok — güvenli fallback
-        // olarak boş i64 dön (C ile aynı sınır; DRF001 zaten expr-form garanti
-        // etmez ama korpus expr-form kullanır).
-        yaz_str("  ret i64 0"); yb(10);
+        deyim_uret(p, govde);
+        // `ver`siz düşen yol (ör. koşullu dallar) → terminatörsüz blok kalmasın.
+        eğer p.bb_term == 0 { yaz_str("  ret i64 0"); yb(10); }
     } değilse {
         değişken bv: metin = ifade_uret(p, govde);
         değişken b64: metin = i64_genislet(p, bv, p.son_tip);
         yaz_str("  ret i64 "); yaz_str(b64); yb(10);
     }
+    p.lam_i64 = 0;
+    p.cur_ret = eski_ret;
     yaz_str("}"); yb(10); yb(10);
     ver 0;
 }
@@ -6100,7 +6144,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_ret: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
-        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0,
+        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0,
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
