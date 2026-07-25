@@ -255,6 +255,10 @@ struct Dugum {
             Dugum **alanlar;       /* DUGUM_ALAN listesi */
             int alan_sayi;
             int genel_mi;          /* A: 1 = 'genel' (çapraz-modül export) */
+            /* Linear Types V2 (D-313): `yapı tekkez K` — yapinin KENDISI
+             * lineer. 1 ise: tam bir kez tuketilir (L001/L002) ve LR002'den
+             * muaftir (yalniz lineer yapi lineer alan tasiyabilir). */
+            int lineer_mi;
         } yapi;
 
         /* C2.7: çeşit Ad { A, B(t1,t2), C } — isimli varyant kümesi (sum type).

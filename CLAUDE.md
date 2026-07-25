@@ -782,7 +782,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   (N-kollu genelleme: hepsi tüketir=1 tüketim / karışık=L005) ve **döngülere** genişletildi
   (yeni L-LOOP kuralı: `iken`/`için` gövdesi DIŞ bir lineer bağlamayı tüketemez — 0 iterasyon
   = sızıntı, ≥2 = çift tüketim; gövde-içi tanımlar serbest). test_linear 57→67.
-  **Kalan:** lineer alanlı yapı (`yapı tekkez K { ... }` — hâlâ P021 ile reddediliyor).
+  ~~**Kalan:** lineer alanlı yapı (`yapı tekkez K { ... }`)~~ ✓ **D-313**: `yapı tekkez K`
+  eklendi — yapının kendisi lineer (mevcut L001/L002/L-COND/L-LOOP makinesi otomatik
+  işler; bayrak TİPTE tutulur), LR002 muafiyeti YALNIZ lineer yapıya, `imha` kabul eder
+  `kullan` etmez, **kısmi taşıma YASAK** (lineer alanı dışarı okumak aynı kaynağı iki kez
+  imha ederdi; lineer-olmayan alan serbest). test_linear 67→74. C-only, self-host
+  gürültülü reddediyor (D-302→D-306 deseni). **Kalan (V2.1):** alan-bazlı taşıma
+  (partial move) + kendi tanılama kodu, `eşleş` ile lineer yapı destructuring.
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 

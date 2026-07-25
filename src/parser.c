@@ -542,6 +542,16 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     Token yapi_tok = parser_simdiki(p);
     parser_ilerle(p);  /* 'yapi' */
 
+    /* Linear Types V2 (D-313): `yapı tekkez K { ... }` — LINEER yapı.
+     * Kendisi lineerdir (tam bir kez tüketilir) ve LR002'den muaftır:
+     * yalnız lineer yapı lineer alan taşıyabilir. Sıradan `yapı` aynen
+     * kalır (geriye uyumlu; `tekkez` yoksa lineer_mi = 0). */
+    int lineer_mi = 0;
+    if (parser_eslesir(p, TOK_TEKKEZ)) {
+        lineer_mi = 1;
+        parser_ilerle(p);
+    }
+
     Token ad_tok = parser_bekle(p, TOK_TANIMLAYICI, "P021",
                                 "yapi adi bekleniyor");
 
@@ -581,6 +591,7 @@ static Dugum *parse_yapi_tanimi(Parser *p) {
     d->veri.yapi.tip_param_bound_sayilari = tip_param_bound_sayilari;
     d->veri.yapi.alanlar = liste_array_yap(&alanlar, p->arena);
     d->veri.yapi.alan_sayi = alanlar.sayi;
+    d->veri.yapi.lineer_mi = lineer_mi;   /* D-313 */
     return d;
 }
 

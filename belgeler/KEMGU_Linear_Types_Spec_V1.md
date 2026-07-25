@@ -197,6 +197,20 @@ değişken s: tekkez<Sahip> = tekkez_olustur(Sahip { x: tekkez_olustur(1) });   
 (V1'de yapılar lineer alan içeremez. V2'de "lineer yapı" kavramı eklenebilir;
 şimdilik dış sarmalayıcı `tekkez` zorunlu.)
 
+> **V2 GÜNCELLEMESİ (D-313 — uygulandı):** `yapı tekkez K { ... }` eklendi.
+> Yapının KENDİSİ lineerdir (tam bir kez tüketilir; L001/L002 + L-COND/L-LOOP
+> otomatik uygulanır) ve **LR002'den muaftır** — yalnız lineer yapı lineer alan
+> taşıyabilir, çünkü sahiplik zinciri kopmaz. Sıradan `yapı` için yasak sürer.
+> ```
+> yapı tekkez Kilit { id: tam32; kaynak: tekkez<tam32>; }   // OK (V2)
+> yapı Sıradan { x: tekkez<tam32>; }                         // HATA LR002
+> ```
+> Tüketim: `imha(k)` veya taşıma (çağrı argümanı / `ver`). `kullan` KABUL ETMEZ
+> (lineer yapının sarmalanmış değeri yoktur → L007).
+> **Kısmi taşıma YASAK:** lineer yapının LİNEER alanı dışarı okunamaz (aynı kaynak
+> iki kez imha edilirdi); lineer-OLMAYAN alan okunabilir. Alan-bazlı taşıma V2.1.
+> **Sınır:** C derleyicide; self-host henüz kabul etmiyor (gürültülü reddeder).
+
 ### LR-3 — Bölge Kapanışında Sızıntısızlık
 Bir bölge serbest bırakılmadan önce o bölgedeki tüm `tekkez<T>` bağlamaları
 **tüketilmiş** olmalıdır. Tüketilmemiş bağlama = LR001

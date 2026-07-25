@@ -177,6 +177,10 @@ int tip_lineer_mi(const TipBilgisi *t) {
      * kanal<T> non-linear V1: kanal endpoint birden çok thread arasında
      * "transfer tamponu" (ρ_kanal); v gönderiminde v tüketilir ama kanal
      * yeniden kullanılır. */
+    /* D-313 (Linear V2): `yapı tekkez K` — yapinin kendisi lineer. Bu dal
+     * sayesinde L001/L002/L005 + L-COND/L-LOOP makinesinin TAMAMI lineer
+     * yapilar icin de otomatik calisir (ayri kod yolu YOK). */
+    if (t->kategori == TIP_YAPI) return t->veri.yapi.lineer_mi;
     return t->kategori == TIP_TEKKEZ
         || t->kategori == TIP_YETKI
         || t->kategori == TIP_GOREV;

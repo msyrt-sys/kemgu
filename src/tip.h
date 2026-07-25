@@ -110,6 +110,9 @@ struct TipBilgisi {
             /* Generic instantiation argumanlari (yoksa 0) */
             TipBilgisi **tip_arg;
             int tip_arg_sayi;
+            /* Linear Types V2 (D-313): `yapı tekkez K` ise 1 → tip_lineer_mi
+             * dogru doner ve mevcut L001/L002/L005 makinesi otomatik isler. */
+            int lineer_mi;
         } yapi;
 
         struct {

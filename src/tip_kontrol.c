@@ -511,6 +511,20 @@ static void lin_durum_yaz(const LinAnlik *anlik, int *hedef) {
 
 static void lineer_yakalama_kontrol(TipKontrol *tk, const Dugum *d);
 
+/* D-313 (Linear V2): yapi sembolunden TIP_YAPI kur ve `yapı tekkez K`
+ * lineerligini tipe TASI. Bayrak tipte olmali cunku tip_lineer_mi (tip.c)
+ * sembol tablosuna erisemez; onu tasimadan L001/L002/L-COND makinesi lineer
+ * yapilari HIC gormezdi (sessiz kabul). */
+static TipBilgisi *yapi_tipi_sembolden(TipKontrol *tk, const Sembol *s,
+                                       TipBilgisi **args, int arg_sayi) {
+    TipBilgisi *t = tip_olustur_yapi(tk->arena, s->ad, s->ad_uzunluk,
+                                     args, arg_sayi);
+    if (t && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_YAPI) {
+        t->veri.yapi.lineer_mi = s->ast_dugumu->veri.yapi.lineer_mi;
+    }
+    return t;
+}
+
 /* D-312 / L-LOOP: dongu govdesi cikisinda birlestir. Anlik goruntudeki bir
  * lineer baglama govdede tuketilmisse: dongu 0 kez donerse SIZINTI, >=2 kez
  * donerse CIFT TUKETIM -> ikisi de tek-kez disiplinini bozar. Tuketilmis
@@ -1351,8 +1365,7 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             const Sembol *s = sembol_bul(tk->scope, ad, uz);
             if (s) {
                 if (s->kategori == SEMBOL_YAPI) {
-                    return tip_olustur_yapi(tk->arena, s->ad, s->ad_uzunluk,
-                                            NULL, 0);
+                    return yapi_tipi_sembolden(tk, s, NULL, 0);   /* D-313 */
                 }
                 if (s->kategori == SEMBOL_GENERIC_PARAM) {
                     return s->tip;  /* zaten TIP_GENERIC_PARAM */
@@ -1688,8 +1701,7 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
                             }
                         }
                     }
-                    return tip_olustur_yapi(tk->arena, s->ad, s->ad_uzunluk,
-                                            args, n);
+                    return yapi_tipi_sembolden(tk, s, args, n);   /* D-313 */
                 }
                 /* Niteliksiz çözülemedi → T011; nitelikli yol çözülemedi
                  * (modül yok / üye yapı değil) → T016. */
@@ -1897,12 +1909,11 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
     (void)hata;  /* hata zaten tk->hata_sayisi'na sayildi */
     /* Beklenen tipte tip_arg varsa concrete instance'i don */
     if (generic_var) {
-        return tip_olustur_yapi(tk->arena, yapi_sem->ad, yapi_sem->ad_uzunluk,
-                                beklenen->veri.yapi.tip_arg,
-                                beklenen->veri.yapi.tip_arg_sayi);
+        return yapi_tipi_sembolden(tk, yapi_sem,          /* D-313 */
+                                   beklenen->veri.yapi.tip_arg,
+                                   beklenen->veri.yapi.tip_arg_sayi);
     }
-    return tip_olustur_yapi(tk->arena, yapi_sem->ad, yapi_sem->ad_uzunluk,
-                            NULL, 0);
+    return yapi_tipi_sembolden(tk, yapi_sem, NULL, 0);   /* D-313 */
 }
 
 /* Geriye uyumlu wrapper (mevcut tip_belirle cagrilari icin) */
@@ -2046,9 +2057,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
         case DUGUM_IMHA_IFADE: {
             TipBilgisi *t = tip_belirle(tk, d->veri.imha_ifade.operand);
             if (t->kategori == TIP_HATA) return t_hata(tk);
-            if (t->kategori != TIP_TEKKEZ) {
+            /* D-313: `imha` HERHANGİ bir lineer değeri kabul eder — `yapı tekkez K`
+             * dahil. (`kullan` etmez: o sarmalanmış değeri ÇIKARIR, lineer yapının
+             * sarmalanmış bir değeri yoktur → L007 orada aynen kalır.) İmha, lineer
+             * yapıyı tüketmenin tek yerel yoludur; diğerleri taşımadır (arg/ver). */
+            if (t->kategori != TIP_TEKKEZ && !tip_lineer_mi(t)) {
                 tip_hata(tk, d, "L007",
-                    "imha(...) operandi tekkez tipinde olmali");
+                    "imha(...) operandi lineer tipte olmali "
+                    "(tekkez<T>, yetki<R>, gorev<T> veya `yapi tekkez`)");
                 return t_hata(tk);
             }
             lineer_tuket_eger_baglamaysa(tk, d->veri.imha_ifade.operand);
@@ -3644,6 +3660,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T009", "alan bulunamadi");
                 return t_hata(tk);
             }
+            /* D-313 (Linear V2) — KISMİ TAŞIMA YASAĞI: lineer bir yapının
+             * LINEER alanını dışarı okumak UNSOUND olurdu. Okunan değer kendi
+             * başına tüketilmesi gereken bir lineer bağlama olur; yapı da hâlâ
+             * tüketilmek zorundadır → AYNI kaynak İKİ kez tüketilir (çift imha).
+             * Ne yapılabilir: yapıyı bütün olarak `imha` et ya da taşı
+             * (arg/`ver`). Alan-bazlı taşıma (partial move) V2.1 işi ve kendi
+             * kodunu ister — burada YENİ KOD İCAT EDİLMEDİ, LR002 ailesi
+             * mesaj ayrımıyla kullanıldı (adlandırma Mehmet'in kararı).
+             * NOT: lineer yapının LINEER-OLMAYAN alanını okumak SERBEST (kopya
+             * değer; kaynak sahipliği etkilenmez). */
+            if (alan->tip && tip_lineer_mi(alan->tip)
+                && nesne_tip->veri.yapi.lineer_mi) {
+                tip_hata(tk, d, "LR002",
+                    "lineer yapinin lineer alani disari okunamaz "
+                    "(kismi tasima V2'de yok; yapiyi butun olarak imha edin "
+                    "veya tasiyin)");
+                return t_hata(tk);
+            }
             /* Generic instantiation: yapi.tip_arg varsa alan tipinde
              * substitusyon (T -> tam32 vs) */
             if (alan->tip && nesne_tip->veri.yapi.tip_arg_sayi > 0) {
@@ -4236,11 +4270,17 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
     for (int j = 0; j < yapi->veri.yapi.alan_sayi; j++) {
         const Dugum *alan = yapi->veri.yapi.alanlar[j];
         TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
-        /* Linear Types Spec V1 LR-2: yapi tekkez/yetki/gorev alani iceremez (V1)
-         * DRF V1 genişletmesi: tüm linear tipler LR-2 altında. */
-        if (alan_tipi && tip_lineer_mi(alan_tipi)) {
+        /* Linear Types Spec V1 LR-2: yapi tekkez/yetki/gorev alani iceremez.
+         * DRF V1 genişletmesi: tüm linear tipler LR-2 altında.
+         * D-313 (Linear V2) MUAFİYETİ: `yapı tekkez K` KENDİSİ lineer olduğu
+         * için lineer alan taşıyabilir — sahiplik zinciri kopmaz (K tüketilmeden
+         * kaybolamaz, K tüketilince alanları da onunla gider). Sıradan `yapı`
+         * için yasak AYNEN sürer: orada alan sahipsiz kalır ve sızardı. */
+        if (alan_tipi && tip_lineer_mi(alan_tipi)
+            && !yapi->veri.yapi.lineer_mi) {
             tip_hata(tk, alan, "LR002",
-                "yapi alani lineer tipte olamaz (V1: yapi lineer alan iceremez)");
+                "yapi alani lineer tipte olamaz "
+                "(lineer alan icin `yapi tekkez` kullanin)");
         }
         Sembol s;
         memset(&s, 0, sizeof(s));

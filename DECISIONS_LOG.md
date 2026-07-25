@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-313 — [YÜKSEK] Linear V2: `yapı tekkez K { ... }` — lineer yapı (2026-07-25)
+
+**Karar [ETKİ: `src/ast.h`+`src/parser.c` (yapi.lineer_mi), `src/tip.h`+`src/tip.c`
+(TIP_YAPI lineer bayrağı), `src/tip_kontrol.c` (yapi_tipi_sembolden + LR002 muafiyeti +
+imha + kısmi-taşıma reddi), `test/test_linear.c` (+7).]** Spec V1 diyordu ki *"V1'de
+yapılar lineer alan içeremez. V2'de 'lineer yapı' kavramı eklenebilir"* — eklendi.
+
+**Sözdizimi:** `yapı tekkez Kilit { id: tam32; }`. Sıradan `yapı` aynen kalır (bayrak
+yoksa `lineer_mi = 0`) → geriye tam uyumlu.
+
+**Semantik (yeni kod İCAT EDİLMEDİ; mevcut makine yeniden kullanıldı):**
+- `tip_lineer_mi` TIP_YAPI için bayrağı okur → **L001/L002 + D-311/D-312'nin
+  L-COND/L-LOOP makinesinin TAMAMI lineer yapılar için otomatik çalışır** (ayrı kod
+  yolu yok). Bayrak TİPTE tutulur çünkü `tip_lineer_mi` (tip.c) sembol tablosuna
+  erişemez; taşımasaydık lineer yapılar sessizce kabul edilirdi.
+- **LR002 muafiyeti:** lineer alan YALNIZ lineer yapıda serbest. Gerekçe: sahiplik
+  zinciri kopmaz (K tüketilmeden kaybolamaz; K tüketilince alanı da onunla gider).
+  Sıradan `yapı` yasağı AYNEN sürer (L72 bu darlığı kilitler).
+- **`imha` genişletildi**, `kullan` DEĞİL: `imha(k)` herhangi bir lineer değeri alır;
+  `kullan` sarmalanmış değeri ÇIKARIR ve lineer yapının sarmalanmış değeri yoktur →
+  orada L007 aynen kalır.
+- **KISMİ TAŞIMA YASAK:** lineer yapının LİNEER alanını dışarı okumak reddedilir.
+  Aksi UNSOUND olurdu: okunan alan kendi başına tüketilmek zorunda kalır, yapı da
+  tüketilmek zorundadır → **aynı kaynak iki kez imha edilir**. Lineer-OLMAYAN alan
+  okumak SERBEST (kopya değer — L74 kuralın fazla geniş olmadığını kilitler).
+
+**Kod seçimi:** kısmi-taşıma için **yeni kullanıcı-görünür kod icat edilmedi** (adlandırma
+Mehmet'in kararı); LR002 ailesi mesaj ayrımıyla kullanıldı — D-312'deki L005 tercihiyle
+aynı disiplin.
+
+**Doğrulama:** test_linear **74/74** (67→74), parser 107/107, tip_kontrol 189/189,
+AST 31/31, capability 40/40, DRF 54/54, sabitsüre 39/39, WCET 35/35, SIMD 30/30,
+test_llvm 274/274, codegen_diff 100/100, **FIXPOINT** korundu. C codegen uçtan uca
+çalışıyor (lineer yapı IR'de sıradan yapı — `imha` tip-seviyesi; ölçüldü: exit 42).
+
+**Sınır — C-only (GÜRÜLTÜLÜ):** self-host `yapı tekkez`i kabul ETMİYOR; `--check`
+LR002+T002 verir, `--llvm` yolu LLVM-RED olur. **Sessiz miscompile YOK** (ölçüldü).
+D-302→D-306 (generic çeşit) ile aynı desen: C-first, port ayrı iş.
+
+**Kalan (V2.1):** alan-bazlı taşıma (partial move) ve onun kendi tanılama kodu;
+`eşleş` ile lineer yapı destructuring.
+
+---
+
 ## D-312 — [YÜKSEK] L-COND `eşleş` kolları + L-LOOP döngü gövdesi (2026-07-25)
 
 **Karar [ETKİ: `src/tip_kontrol.c` (ESLES/IKEN/ICIN kolları + `lineer_dongu_birlestir`),

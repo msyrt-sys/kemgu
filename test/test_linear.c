@@ -753,6 +753,86 @@ static void T67_dongu_ici_yerel_ok(void) {
                h == 0);
 }
 
+/* === D-313 (Linear V2): `yapı tekkez K` — LINEER YAPI ===
+ * Yapinin KENDISI lineerdir: tam bir kez tuketilir ve LR002'den muaftir
+ * (yalniz lineer yapi lineer alan tasiyabilir; siradan yapida alan sahipsiz
+ * kalir ve sizardi). Tuketim: `imha(k)` ya da tasima (arg / `ver`).
+ * `kullan` KABUL ETMEZ — lineer yapinin sarmalanmis bir degeri yoktur. */
+
+static void T68_lineer_yapi_imha_ok(void) {
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez Kilit { id: tam32; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: Kilit = Kilit { id: 7 };\n"
+        "    imha(k);\n"
+        "}\n");
+    test_sonuc("L68: `yapi tekkez` tanim + imha -> 0 hata", h == 0);
+}
+
+static void T69_lineer_yapi_tuketilmedi(void) {
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Kilit { id: tam32; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: Kilit = Kilit { id: 7 };\n"
+        "}\n", "L001");
+    test_sonuc("L69: lineer yapi tuketilmedi -> L001", var);
+}
+
+static void T70_lineer_yapi_cift_imha(void) {
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Kilit { id: tam32; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: Kilit = Kilit { id: 7 };\n"
+        "    imha(k); imha(k);\n"
+        "}\n", "L002");
+    test_sonuc("L70: lineer yapi cift imha -> L002", var);
+}
+
+static void T71_lineer_alan_lineer_yapida_ok(void) {
+    /* LR002 MUAFIYETI: sahiplik zinciri kopmaz (Sahip tuketilmeden kaybolamaz). */
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    imha(s);\n"
+        "}\n");
+    test_sonuc("L71: lineer yapi LINEER alan tasiyabilir -> 0 hata", h == 0);
+}
+
+static void T72_lineer_alan_siradan_yapida_lr002(void) {
+    /* Yasak siradan `yapi` icin AYNEN surer — muafiyet fazla genis degil. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 Siradan { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() { }\n", "LR002");
+    test_sonuc("L72: SIRADAN yapi + lineer alan -> LR002 (muafiyet dar)", var);
+}
+
+static void T73_kismi_tasima_red(void) {
+    /* Lineer alani disari okumak UNSOUND olurdu: hem alan hem yapi tuketilmek
+     * zorunda kalir -> AYNI kaynak iki kez imha edilir. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    de\xc4\x9fi\xc5\x9fken f = s.x;\n"
+        "    imha(s);\n"
+        "}\n", "LR002");
+    test_sonuc("L73: lineer alani disari okuma (kismi tasima) -> red", var);
+}
+
+static void T74_lineer_olmayan_alan_okuma_ok(void) {
+    /* Kural fazla genis olmamali: lineer-OLMAYAN alan kopya deger, serbest. */
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez Kilit { id: tam32; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: Kilit = Kilit { id: 7 };\n"
+        "    de\xc4\x9fi\xc5\x9fken n: tam32 = k.id;\n"
+        "    imha(k);\n"
+        "}\n");
+    test_sonuc("L74: lineer yapinin lineer-OLMAYAN alani okunabilir -> 0 hata",
+               h == 0);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -850,6 +930,15 @@ int main(void) {
     T65_iken_govdesi_l005();
     T66_icin_govdesi_l005();
     T67_dongu_ici_yerel_ok();
+
+    printf("\n--- L68-L74: `yapi tekkez` lineer yapi (D-313) ---\n");
+    T68_lineer_yapi_imha_ok();
+    T69_lineer_yapi_tuketilmedi();
+    T70_lineer_yapi_cift_imha();
+    T71_lineer_alan_lineer_yapida_ok();
+    T72_lineer_alan_siradan_yapida_lr002();
+    T73_kismi_tasima_red();
+    T74_lineer_olmayan_alan_okuma_ok();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
