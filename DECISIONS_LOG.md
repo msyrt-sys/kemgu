@@ -5,6 +5,33 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-310 — [YÜKSEK] Self-host: `görev_başlat` BLOK-form lambda gövdesi SESSİZCE düşüyordu (2026-07-25)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (lam_emit + VER kolu + `lam_i64` bayrağı),
+`test/cg_korpus/cg_gorev_lambda_blok.kem` (+1).]**
+`görev_başlat(|| { ...; ver e; })` — blok-form closure gövdesi — self-host
+`lam_emit`'te `ret i64 0` fallback'ine düşüyordu: gövde HİÇ emit edilmiyordu.
+Sonuç **sessiz yanlış cevap** (repro: C exit 42, self-host exit 0 — link/IR hatası
+yok, program "başarıyla" yanlış değer döndürüyordu). D-309 ile ilgisi YOK
+(D-309 değişiklikleri stash'lenip yeniden ölçüldü — bug önceden vardı, D-300'den beri).
+
+**Onarım:** lam_emit gövde BLOK ise `deyim_uret` ile emit edilir; `cur_ret` "i64"
+(KdlGorevBare taşıyıcısı) kurulur ve `lam_i64` bayrağı açılır. VER kolu bu bayrakla
+`ret_uydur` yerine `i64_genislet` kullanır — `ret_uydur` YALNIZ int→int daraltır,
+ptr/dar-int'i olduğu gibi bırakırdı (`ret i64 %ptr` = geçersiz IR). `ver`siz düşen
+yol için terminatör fallback'i (`ret i64 0`) korunur. İfade-form yolu değişmedi.
+
+**Ölçüm:** yeni korpus dosyası üç şekli kapsar (çok-deyimli blok + heap dizi,
+yakalama/capture + blok, koşullu dal + blok) — C 42 ↔ self 42. codegen_diff 99/99,
+bootstrap FIXPOINT (stage2==stage3 birebir, 39326 satır), self_driver tüm modlar,
+test_gorev_rt 16/16 (D-309 ölçüm kapısı dâhil), test_drf 54/54, test_llvm 274/274.
+
+**Sınır (bu adımda KAPSAM DIŞI, ayrı iş):** `değişken t: tam32 = görev_birleştir(a)`
+— i64 taşıyıcı annotasyonlu değişkene daraltılmıyor → LLVM tip hatası. **Gürültülü**
+(sessiz değil), C tarafında yok. Korpus bu şekli `ver ...` ile geçer.
+
+---
+
 ## D-309 — [YÜKSEK] ρ_sahip KOŞULLU serbest: POZİTİF hapsedilme kanıtı (F4-sınıfı) (2026-07-25)
 
 **Karar [ETKİ: `src/llvm.c` (+~230: kanıt + call-graph kapanışı), `selfhost/codegen.kem`

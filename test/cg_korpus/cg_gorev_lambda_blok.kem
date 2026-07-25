@@ -1,0 +1,25 @@
+// D-310: görev_başlat gövdesi BLOK-form lambda (`|| { ...; ver e; }`).
+// Self-host lam_emit önce `ret i64 0` fallback'ine düşüyordu → gövde SESSİZCE
+// düşer, exit 0 (C: 42). Burada üç şekil ölçülür: çok-deyimli blok + dizi,
+// yakalama (capture) + blok, koşullu dal + blok. Exit: 42
+işlev main() -> tam32 {
+    değişken taban: tam32 = 30;
+    eşleş görev_başlat(|| { değişken xs: Dizi<tam32> = [40, 2]; ver xs[0] + xs[1]; }) {
+        tamam(a) => {
+            eşleş görev_başlat(|| { değişken k: tam32 = taban + 5; ver k; }) {
+                tamam(b) => {
+                    eşleş görev_başlat(|| { eğer 1 < 2 { ver 7; } ver 0; }) {
+                        tamam(c) => {
+                            // 42 + 35 + 7 = 84; 84 - 42 = 42
+                            ver görev_birleştir(a) + görev_birleştir(b) + görev_birleştir(c) - 42;
+                        }
+                        hata(e3) => { ver 3; }
+                    }
+                }
+                hata(e2) => { ver 2; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    ver 99;
+}
