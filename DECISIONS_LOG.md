@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-314 — Linear V2 `yapı tekkez K` SELF-HOST'a portlandı (C parite) (2026-07-25)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (driver) + `selfhost/checker.kem` (referans checker)
+— parser + `ly_ad`/`lyf_*` registry + LR002 muafiyeti + kısmi-taşıma reddi,
+`test/check_korpus/lineer_yapi.kem` (+1).]** D-313 C-only'di; self-host `yapı tekkez`i
+gürültülü reddediyordu. Artık **C ile birebir**.
+
+**Mekanizma (self-host'un basit modeline uyarlandı):** C'de bayrak tipte taşınıyor;
+self-host'ta tip nesnesi yok → parser lineer yapı ADLARINI `ly_ad`'a kaydeder,
+`deg_lineer_mi` annotasyon o listedeyse bağlamayı lineer sayar → **mevcut L001/L002
+akış-izleme makinesi ayrı kod olmadan devreye girer**. Düğüm/dump DEĞİŞMEZ → `--ast`
+paritesi korunur.
+
+**Kısmi-taşıma denetimi için ayrı kayıt:** `alan_tip` check modunda "?" olabildiği için
+ona GÜVENİLMEZ. Bunun yerine LR002 muafiyeti verilirken lineer alanlar `lyf_yapi`/
+`lyf_alan`'a yazılır; denetim bu tabloya bakar.
+
+**⚠ KANCA YERİ — ölçümle bulundu:** ERISIM kancasını önce `ifade_tip`'e koydum;
+`değişken n: tam32 = k.id` (annotasyonlu) yakalanıyor ama **`değişken f = s.x`
+(annotsuz) KAÇIYORDU** — `ifade_tip` yalnız annotasyon karşılaştırması için çağrılıyor.
+Teşhis: `lineer_alan_mi`'yi geçici olarak daima-doğru yapıp hangi senaryonun tetiklendiğine
+bakmak. Kanca her düğümü ziyaret eden `kontrol_dugum`'a taşındı.
+
+**MÜKERRERLİK BORCU ÖDENDİ:** `checker_diff` referans `checker.kem`'i kullanıyor; yalnız
+driver'ı değiştirmek 48/49 verdi. Aynı port checker.kem'e de uygulandı → **49/49**.
+(Bu, daha önce ölçtüğüm "159 fonksiyon mükerrer, 17'si sapmış" borcunun somut bedeli.)
+
+**Doğrulama:** 7/7 senaryo C↔self BİREBİR (tanım/L001/L002/lineer-alan/LR002/kısmi-taşıma/
+lineer-olmayan-alan) + **FIXPOINT** + `calistir_codegen_bootstrap` (lexer 92, parser 92,
+checker 92 birebir + codegen fixpoint 39928 satır) + `calistir_self_driver` (4 mod ×
+C-derlenmiş ve self-derlenmiş: 22/22, 12/12, 48/48, LLVM 100/100 ×2) + checker_diff 49/49 +
+codegen_diff 100/100 + test_linear 74/74.
+
+---
+
 ## D-313 — [YÜKSEK] Linear V2: `yapı tekkez K { ... }` — lineer yapı (2026-07-25)
 
 **Karar [ETKİ: `src/ast.h`+`src/parser.c` (yapi.lineer_mi), `src/tip.h`+`src/tip.c`

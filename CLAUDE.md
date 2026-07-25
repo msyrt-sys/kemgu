@@ -786,9 +786,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   eklendi — yapının kendisi lineer (mevcut L001/L002/L-COND/L-LOOP makinesi otomatik
   işler; bayrak TİPTE tutulur), LR002 muafiyeti YALNIZ lineer yapıya, `imha` kabul eder
   `kullan` etmez, **kısmi taşıma YASAK** (lineer alanı dışarı okumak aynı kaynağı iki kez
-  imha ederdi; lineer-olmayan alan serbest). test_linear 67→74. C-only, self-host
-  gürültülü reddediyor (D-302→D-306 deseni). **Kalan (V2.1):** alan-bazlı taşıma
-  (partial move) + kendi tanılama kodu, `eşleş` ile lineer yapı destructuring.
+  imha ederdi; lineer-olmayan alan serbest). test_linear 67→74. **D-314: SELF-HOST'a
+  portlandı** — driver + referans checker.kem ikisi de (7/7 senaryo C↔self birebir,
+  checker_diff 49/49, bootstrap FIXPOINT). Self-host'ta tip nesnesi yok → parser lineer
+  yapı ADLARINI kaydeder (`ly_ad`), mevcut L001/L002 makinesi otomatik işler.
+  **Kalan (V2.1):** alan-bazlı taşıma (partial move) + kendi tanılama kodu, `eşleş` ile
+  lineer yapı destructuring.
 - **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 

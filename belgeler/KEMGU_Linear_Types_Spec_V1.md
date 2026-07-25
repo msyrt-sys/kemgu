@@ -209,7 +209,7 @@ değişken s: tekkez<Sahip> = tekkez_olustur(Sahip { x: tekkez_olustur(1) });   
 > (lineer yapının sarmalanmış değeri yoktur → L007).
 > **Kısmi taşıma YASAK:** lineer yapının LİNEER alanı dışarı okunamaz (aynı kaynak
 > iki kez imha edilirdi); lineer-OLMAYAN alan okunabilir. Alan-bazlı taşıma V2.1.
-> **Sınır:** C derleyicide; self-host henüz kabul etmiyor (gürültülü reddeder).
+> **Durum (D-314):** C + self-host (driver + referans checker) — TAM PARİTE.
 
 ### LR-3 — Bölge Kapanışında Sızıntısızlık
 Bir bölge serbest bırakılmadan önce o bölgedeki tüm `tekkez<T>` bağlamaları

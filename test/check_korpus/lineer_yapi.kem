@@ -1,0 +1,14 @@
+// D-314: `yapı tekkez K` self-host portu — C ↔ self-host --checkdump sıfır-diff.
+// Kapsam: lineer yapı tanımı, LR002 muafiyeti (lineer alan YALNIZ lineer yapıda),
+// lineer-OLMAYAN alan okuma serbest, imha ile tüketim. Hatasız geçmeli.
+yapı tekkez Kilit { id: tam32; }
+yapı tekkez Sahip { x: tekkez<tam32>; etiket: tam32; }
+işlev main() -> tam32 {
+    değişken k: Kilit = Kilit { id: 7 };
+    değişken n: tam32 = k.id;        // lineer-OLMAYAN alan → serbest
+    imha(k);
+    değişken s: Sahip = Sahip { x: tekkez_olustur(1), etiket: 35 };
+    değişken e: tam32 = s.etiket;    // lineer-OLMAYAN alan → serbest
+    imha(s);
+    ver n + e;
+}
