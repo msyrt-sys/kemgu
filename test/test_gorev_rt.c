@@ -52,12 +52,16 @@ typedef int64_t (*KdlGorevBare)(void *rho);
 typedef int64_t (*KdlGorevKapanis)(void *rho, void *env);
 typedef struct KdlGorevOpak KdlGorevOpak;
 
+/* D-309: 4. param rho_serbest — codegen'in POZITIF confinement kanitinin
+ * sonucu. 0 = kanit yok -> ρ_sahip sizdirilir (eski davranis), 1 = kanitli
+ * -> join'de serbest. Bildirim tanimla BIREBIR eslesmeli (yukaridaki not). */
 extern KdlGorevOpak *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
                                              KdlGorevKapanis fn_kapanis,
-                                             void *env);
+                                             void *env, int32_t rho_serbest);
 extern int64_t kdl_gorev_birlestir(KdlGorevOpak *g);
 extern uint64_t kdl_gorev_thread_sayisi;
 extern uint64_t kdl_gorev_sirali_sayisi;
+extern int kdl_bolge_bakiye(void);   /* D-309 olcum kapisi: acik bolge sayisi */
 
 /* Katman 2 / R-KANAL runtime */
 typedef struct KdlKanalOpak KdlKanalOpak;
@@ -76,7 +80,7 @@ static int64_t isci_bare(void *rho) {
 
 static void test_bare_yol(void) {
     bare_gorulen_rho = NULL;
-    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL, 0);
     int64_t r = kdl_gorev_birlestir(g);
     test_sonuc("bare (env=NULL): sonuc 42", r == 42);
     /* R-GÖREV: gorev KENDI ρ_sahip'ini alir -> govdeye NULL olmayan ρ gecer. */
@@ -93,7 +97,7 @@ static int64_t isci_kapanis(void *rho, void *env) {
 
 static void test_kapanis_yolu(void) {
     int32_t yakalanan = 40;
-    KdlGorevOpak *g = kdl_gorev_basla_kapanis(NULL, isci_kapanis, &yakalanan);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(NULL, isci_kapanis, &yakalanan, 0);
     int64_t r = kdl_gorev_birlestir(g);
     test_sonuc("kapanis (env!=NULL): env okundu, sonuc 42", r == 42);
 }
@@ -103,7 +107,7 @@ static void test_kapanis_yolu(void) {
 static void test_gercek_thread(void) {
     uint64_t once_thread = kdl_gorev_thread_sayisi;
     uint64_t once_sirali = kdl_gorev_sirali_sayisi;
-    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL, 0);
     (void)kdl_gorev_birlestir(g);
     test_sonuc("GERCEK thread spawn edildi (sirali fallback DEGIL)",
                kdl_gorev_thread_sayisi == once_thread + 1 &&
@@ -131,8 +135,8 @@ static int64_t isci_b(void *rho) { rho_b = rho; return 2; }
 
 static void test_bolge_ayrikligi(void) {
     rho_a = NULL; rho_b = NULL;
-    KdlGorevOpak *ga = kdl_gorev_basla_kapanis(isci_a, NULL, NULL);
-    KdlGorevOpak *gb = kdl_gorev_basla_kapanis(isci_b, NULL, NULL);
+    KdlGorevOpak *ga = kdl_gorev_basla_kapanis(isci_a, NULL, NULL, 0);
+    KdlGorevOpak *gb = kdl_gorev_basla_kapanis(isci_b, NULL, NULL, 0);
     int64_t ra = kdl_gorev_birlestir(ga);
     int64_t rb = kdl_gorev_birlestir(gb);
     test_sonuc("iki gorev: sonuclar karismadi (1 ve 2)", ra == 1 && rb == 2);
@@ -149,7 +153,7 @@ static void test_cok_gorev(void) {
     KdlGorevOpak *gs[8];
     int ok = 1;
     for (int i = 0; i < 8; i++)
-        gs[i] = kdl_gorev_basla_kapanis(isci_sabit_7, NULL, NULL);
+        gs[i] = kdl_gorev_basla_kapanis(isci_sabit_7, NULL, NULL, 0);
     for (int i = 0; i < 8; i++)
         if (kdl_gorev_birlestir(gs[i]) != 7) ok = 0;
     test_sonuc("8 es zamanli gorev: hepsi 7 dondu", ok);
@@ -184,7 +188,7 @@ static int64_t isci_gecikmeli_gonder(void *rho) {
 
 static void test_kanal_al_bos_bloklar(void) {
     kanal_gecikmeli = kdl_kanal_olustur(4);
-    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_gecikmeli_gonder, NULL, NULL);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_gecikmeli_gonder, NULL, NULL, 0);
     int64_t v = kdl_kanal_al(kanal_gecikmeli);   /* BLOKLAMALI */
     (void)kdl_gorev_birlestir(g);
     test_sonuc("bos kanalda kanal_al BLOKLAR (0 degil, 42 alir)", v == 42);
@@ -203,7 +207,7 @@ static int64_t isci_bes_gonder(void *rho) {
 
 static void test_kanal_gonder_dolu_bloklar(void) {
     kanal_akis = kdl_kanal_olustur(2);            /* bilincli kucuk kapasite */
-    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bes_gonder, NULL, NULL);
+    KdlGorevOpak *g = kdl_gorev_basla_kapanis(isci_bes_gonder, NULL, NULL, 0);
     kisa_bekle(60);                               /* gonderici dolu-bloklasin */
     int64_t toplam = 0;
     int sira_ok = 1;
@@ -225,6 +229,30 @@ static void test_kanal_null(void) {
     test_sonuc("kdl_kanal_al(NULL) cokmeden 0 doner", kdl_kanal_al(NULL) == 0);
 }
 
+/* === 10: D-309 — ρ_sahip KOSULLU serbest birakma (OLCUM KAPISI) ===
+ * "Serbest biraktik" demek yetmez; ACIK BOLGE SAYISI olculur. kdl_bolge_bakiye()
+ * = olusturulan - serbest. Iki gorev ayni govdeyle kosar; tek fark bayrak:
+ *   rho_serbest=0 -> bakiye +1 (eski davranis: sizdir)
+ *   rho_serbest=1 -> bakiye +0 (ρ_sahip join'de geri verildi)
+ * Bayragin ETKISIZ olmasi (ikisi de +1) veya kanitsiz serbest (ikisi de +0)
+ * bu testte GURULTULU duser. */
+static void test_rho_sahip_serbest(void) {
+    int taban = kdl_bolge_bakiye();
+    KdlGorevOpak *g0 = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL, 0);
+    (void)kdl_gorev_birlestir(g0);
+    int sizdiran = kdl_bolge_bakiye() - taban;
+    test_sonuc("D-309: kanitsiz gorev (rho_serbest=0) ρ_sahip'i SIZDIRIR (+1)",
+               sizdiran == 1);
+
+    int taban2 = kdl_bolge_bakiye();
+    KdlGorevOpak *g1 = kdl_gorev_basla_kapanis(isci_bare, NULL, NULL, 1);
+    int64_t r = kdl_gorev_birlestir(g1);
+    int hapsedilen = kdl_bolge_bakiye() - taban2;
+    test_sonuc("D-309: kanitli gorev (rho_serbest=1) ρ_sahip'i GERI VERIR (+0)",
+               hapsedilen == 0);
+    test_sonuc("D-309: serbest birakma sonucu BOZMADI (42)", r == 42);
+}
+
 int main(void) {
     printf("=== KEMGU gorev runtime (Katman 2 / DRF V1) testleri ===\n");
     test_bare_yol();
@@ -236,6 +264,7 @@ int main(void) {
     test_kanal_al_bos_bloklar();
     test_kanal_gonder_dolu_bloklar();
     test_kanal_null();
+    test_rho_sahip_serbest();
     printf("=== %d/%d test gecti ===\n", basarili, toplam_test);
     return basarisiz == 0 ? 0 : 1;
 }

@@ -52,6 +52,7 @@ yapı Ayr {
     bb_term: tam32;      // CG4: mevcut blok terminatör (ret/br) ile bitti mi (1=evet)
     fn_ad: Dizi<metin>;  // CG6: işlev adı (ön-pass imza tablosu — CAGRI dönüş tipi)
     fn_ret: Dizi<metin>; // CG6: işlev dönüş LLVM tipi
+    fn_node: Dizi<tam32>;// D-309: ISLEV düğüm idx (ρ_sahip call-graph kapanışı)
     pa_node: Dizi<tam32>;// CG9: hoist-edilen DEGISKEN düğüm idx'i (alloca entry'de)
     pa_reg: Dizi<metin>; // CG9: o DEGISKEN'in entry-alloca reg'i
     pa_base: tam32;      // CG9: mevcut işlevin pa_* slice başlangıcı
@@ -2504,7 +2505,9 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     // BİREBİR aynı; kanal declare'i host (kdl_runtime.c) ve bare-metal (kdl_kanal.c)
     // sürümlerinin ikisine de uyar.
     yaz_str("declare i64 @kdl_gorev_birlestir(ptr)"); yb(10);
-    yaz_str("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)"); yb(10);   // D-300
+    // D-309: 4. param = rho_serbest (confinement kanıtı). declare ve call AYNI
+    // commit'te değişir — LLVM imza uyuşmazlığını SESSİZCE kabul eder (D-295).
+    yaz_str("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr, i32)"); yb(10);   // D-300/D-309
     // Karar 1 (D-30x): görev_başlat başarısızlığında sonuç'un hata(metin)
     // payload'u. Metin ön-geçişinden bağımsız sabit — 19 bayt + \00 = 20.
     // KEMGU string literal'i \" / \\ işlemez → tırnak yb(34), ters-eğik yb(92)
@@ -2962,7 +2965,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken gr: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(gr));
             yaz_str(" = call ptr @kdl_gorev_basla_kapanis(ptr @"); yaz_str(mad);
-            yaz_str(", ptr @"); yaz_str(mad); yaz_str(", ptr "); yaz_str(envreg); yaz_str(")"); yb(10);
+            yaz_str(", ptr @"); yaz_str(mad); yaz_str(", ptr "); yaz_str(envreg);
+            // D-309: ρ_sahip POZİTİF hapsedilme kanıtı (C gorev_rho_confined aynası).
+            // Kanıtlıysa runtime join'de ρ_sahip'i geri verir; değilse sızdırır.
+            yaz_str(", i32 ");
+            eğer rho_confined(p, govde) { yaz_str("1"); } değilse { yaz_str("0"); }
+            yaz_str(")"); yb(10);
             // Karar 1 (D-30x): görev_başlat → sonuç<görev<T>, metin>. görev<T> ve
             // metin ikisi de IR'de ptr → aggregate DAİMA { i8, ptr, ptr } (T'den
             // bağımsız). DALLANMASIZ sarma: tag = (handle==null)?1:0; 3 alan da
@@ -4148,6 +4156,225 @@ işlev lam_cap_dedup(p: &değişken Ayr, base: tam32, ad: metin) -> mantıksal {
 // Lambda gövdesindeki SERBEST değişkenleri lam_capisim/ir'e ekle (C lambda_serbest_tara
 // aynası). TANIMLAYICI + çevre-lokal/param (cg_var_bul != "") + lambda-param DEĞİL →
 // capture. İç LAMBDA'ya GİRME. `base` = bu lambda'nın capture dilim başı (dedup için).
+// ============================================================================
+// D-309 — ρ_sahip POZİTİF hapsedilme (confinement) kanıtı (C llvm.c AYNASI).
+//   ρ_sahip yalnız DİZİ tahsislerini taşır (ρ-ABI; metin/closure ρ ALMAZ).
+//   Kaçış yolları ölçüldü: dönüş + KANAL canlı; küresel (E011) ve yakalanan
+//   değişken (env kopyası) kapalı. Kanıt POZİTİFTİR — kanıtlanamayan = DENY;
+//   bilinmeyen düğüm tipi de DENY (dile yeni düğüm eklenirse muhafazakârlaşır,
+//   sessizce unsound OLMAZ). Sonuç `rho_serbest` bayrağıyla runtime'a taşınır.
+// ============================================================================
+// Ad → ISLEV düğüm idx (imza ön-pass'inde toplanan fn_node); -1 yok.
+işlev fn_node_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_ad) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_node, i); }
+        i = i + 1;
+    }
+    ver -1;
+}
+// ISLEV düğümünün gövdesi = SON çocuk (BLOK); -1 yoksa.
+işlev fn_govde_bul(p: &değişken Ayr, fi: tam32) -> tam32 {
+    eğer fi < 0 { ver -1; }
+    değişken cb: tam32 = dizi_al(p.a_cb, fi);
+    değişken cs: tam32 = dizi_al(p.a_cs, fi);
+    eğer cs == 0 { ver -1; }
+    değişken son: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+    eğer metin_esit(dizi_al(p.a_ad, son), "BLOK") { ver son; }
+    ver -1;
+}
+// LLVM tipi skaler mi? ptr / %Yapi / {agg} → hayır (ρ'ya iç-işaretçi taşıyabilir).
+işlev rho_skaler_ir(t: metin) -> mantıksal {
+    eğer metin_uzunluk(t) == 0 { ver yanlış; }
+    eğer metin_esit(t, "ptr") { ver yanlış; }
+    değişken c: tam32 = bayt(t, 0);
+    eğer c == 37 veya c == 123 { ver yanlış; }   // '%' yapı / '{' agregat
+    eğer metin_esit(t, "float") veya metin_esit(t, "double") { ver doğru; }
+    ver c == 105;   // 'i' → i1/i8/i16/i32/i64
+}
+// `ad` adlı bağlama, taranan altağaçta (fn gövdesi) SKALER annotasyonla
+// bildirilmiş mi? DEGISKEN/PARAMETRE düğümlerini ara. Bulunamazsa 0 (DENY).
+işlev rho_ad_skaler(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
+    eğer kok < 0 { ver yanlış; }
+    değişken na: metin = dizi_al(p.a_ad, kok);
+    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
+        eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
+            // Annotasyon = İLK çocuk (TIP_*); yoksa kanıtlanamaz.
+            değişken cb: tam32 = dizi_al(p.a_cb, kok);
+            değişken cs: tam32 = dizi_al(p.a_cs, kok);
+            eğer cs == 0 { ver yanlış; }
+            değişken t0: tam32 = dizi_al(p.cocuk, cb);
+            eğer metin_baslar(dizi_al(p.a_ad, t0), "TIP_") == yanlış { ver yanlış; }
+            ver rho_skaler_ir(ll_tip(p, t0));
+        }
+    }
+    değişken cb2: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs2: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs2 {
+        eğer rho_ad_skaler(p, dizi_al(p.cocuk, cb2 + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// `ad` Dizi<T> bildirimli ve T SKALER mi? (xs[i] eleman-kopya kanıtı için)
+işlev rho_ad_elem_skaler(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
+    eğer kok < 0 { ver yanlış; }
+    değişken na: metin = dizi_al(p.a_ad, kok);
+    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
+        eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
+            değişken cb: tam32 = dizi_al(p.a_cb, kok);
+            eğer dizi_al(p.a_cs, kok) == 0 { ver yanlış; }
+            değişken t0: tam32 = dizi_al(p.cocuk, cb);
+            eğer metin_esit(dizi_al(p.a_ad, t0), "TIP_DIZI") == yanlış { ver yanlış; }
+            ver rho_skaler_ir(ll_eleman_tip(p, t0));
+        }
+    }
+    değişken cb2: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs2: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs2 {
+        eğer rho_ad_elem_skaler(p, dizi_al(p.cocuk, cb2 + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// İfade KANITLI skaler mi? (kok = kapsayan fn gövdesi — ad çözümü için)
+işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksal {
+    eğer idx < 0 { ver yanlış; }
+    değişken a: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(a, "TAM") veya metin_esit(a, "KESIRLI")
+      veya metin_esit(a, "MANTIKSAL") veya metin_esit(a, "KARAKTER") { ver doğru; }
+    eğer metin_esit(a, "TANIMLAYICI") {
+        değişken tad: metin = dizi_al(p.a_deg, idx);
+        eğer rho_ad_skaler(p, kok, tad) { ver doğru; }
+        // YAKALANAN değişken: bildirimi taranan altağaçta DEĞİL, çevre kapsamda.
+        // Spawn yerinde çevre codegen kapsamı CANLI → cg_var tablosu kullanılır.
+        // cg_var_bul "" döner = yok (cg_var_tip_bul'un "i32" varsayılanı sessiz
+        // yanlış cevap olurdu → varlık kontrolü ÖNCE).
+        eğer metin_esit(cg_var_bul(p, tad), "") == yanlış {
+            ver rho_skaler_ir(cg_var_tip_bul(p, tad));
+        }
+        ver yanlış;
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    eğer metin_esit(a, "IKILI") {
+        eğer cs < 2 { ver yanlış; }
+        eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb), kok) == yanlış { ver yanlış; }
+        ver rho_skaler_ifade(p, dizi_al(p.cocuk, cb + 1), kok);
+    }
+    eğer metin_esit(a, "TEKLI") {
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        // adres-al / deref → işaretçi üretir/izler → DENY
+        eğer metin_esit(op, "&") veya metin_esit(op, "&degisken")
+          veya metin_esit(op, "deref*") { ver yanlış; }
+        eğer cs < 1 { ver yanlış; }
+        ver rho_skaler_ifade(p, dizi_al(p.cocuk, cb), kok);
+    }
+    eğer metin_esit(a, "TIP_DONUSTUR") {
+        eğer cs < 1 { ver yanlış; }
+        ver rho_skaler_ifade(p, dizi_al(p.cocuk, cb), kok);
+    }
+    eğer metin_esit(a, "INDEKS") {
+        // xs[i] — kapsayıcı Dizi<skaler> ise eleman KOPYA döner (C paritesi).
+        eğer cs < 1 { ver yanlış; }
+        değişken nes: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, nes), "TANIMLAYICI") == yanlış { ver yanlış; }
+        ver rho_ad_elem_skaler(p, kok, dizi_al(p.a_deg, nes));
+    }
+    eğer metin_esit(a, "CAGRI") {
+        // Kullanıcı işlevi + BİLDİRİLEN dönüşü skaler → sonuç kopya değer.
+        // (`|| yardimci(x)` ifade-form gövdesi bu dal olmadan kanıtlanamaz.)
+        // Gövdedeki kanal/spawn ihlalleri AYRICA rho_ihlal_tara'da denetlenir.
+        eğer cs == 0 { ver yanlış; }
+        değişken h: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış
+          ve metin_esit(dizi_al(p.a_ad, h), "YOL") == yanlış { ver yanlış; }
+        değişken fa: metin = dizi_al(p.a_deg, h);
+        eğer fn_var_mi(p, fa) == yanlış { ver yanlış; }   // built-in/dolaylı → kanıtlanmaz
+        ver rho_skaler_ir(fn_ret_bul(p, fa));
+    }
+    ver yanlış;   // çağrı/erişim/... → V1'de kanıtlanmaz
+}
+// Gövdeyi (ve transitif çağrılan kullanıcı işlevlerini) tara. 1 = ihlal.
+işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam32) -> mantıksal {
+    eğer idx < 0 { ver yanlış; }
+    eğer derinlik > 16 { ver doğru; }   // özyineleme tavanı → DENY
+    değişken a: metin = dizi_al(p.a_ad, idx);
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    // --- yaprak / zararsız ---
+    eğer metin_esit(a, "TAM") veya metin_esit(a, "KESIRLI") veya metin_esit(a, "METIN")
+      veya metin_esit(a, "KARAKTER") veya metin_esit(a, "MANTIKSAL")
+      veya metin_esit(a, "BOS") veya metin_esit(a, "TANIMLAYICI")
+      veya metin_esit(a, "YOL") { ver yanlış; }
+    // --- P1: dönüş KANITLI skaler olmalı ---
+    eğer metin_esit(a, "VER") {
+        eğer cs == 0 { ver yanlış; }
+        eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb), kok) == yanlış { ver doğru; }
+        ver yanlış;
+    }
+    // --- P2/P3/P4: çağrılar ---
+    eğer metin_esit(a, "CAGRI") {
+        eğer cs == 0 { ver doğru; }
+        değişken hed: tam32 = dizi_al(p.cocuk, cb);
+        değişken ha: metin = dizi_al(p.a_ad, hed);
+        eğer metin_esit(ha, "TANIMLAYICI") == yanlış ve metin_esit(ha, "YOL") == yanlış {
+            ver doğru;   // P4: dolaylı/hesaplanmış çağrı → gövdesi bilinmez
+        }
+        değişken fad: metin = dizi_al(p.a_deg, hed);
+        eğer metin_esit(fad, "görev_başlat") { ver doğru; }   // P3: iç-içe görev
+        eğer metin_esit(fad, "kanal_gönder") {                // P2: yük skaler mi?
+            eğer cs < 3 { ver doğru; }
+            eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb + 2), kok) == yanlış { ver doğru; }
+        }
+        // Kullanıcı işlevi → gövdesine in (call-graph kapanışı).
+        değişken fi: tam32 = fn_node_bul(p, fad);
+        eğer fi >= 0 {
+            değişken fgov: tam32 = fn_govde_bul(p, fi);
+            eğer fgov < 0 { ver doğru; }
+            eğer rho_ihlal_tara(p, fgov, fgov, derinlik + 1) { ver doğru; }
+        }
+        // Argümanları da tara (iç lambda/çağrı olabilir).
+        değişken ai: tam32 = 1;
+        iken ai < cs {
+            eğer rho_ihlal_tara(p, dizi_al(p.cocuk, cb + ai), kok, derinlik) { ver doğru; }
+            ai = ai + 1;
+        }
+        ver yanlış;
+    }
+    // --- gövde/deyim/ifade yapıları: çocukları tara ---
+    eğer metin_esit(a, "BLOK") veya metin_esit(a, "DEGISKEN") veya metin_esit(a, "ATAMA")
+      veya metin_esit(a, "IFADE_DEYIMI") veya metin_esit(a, "EGER")
+      veya metin_esit(a, "IKEN") veya metin_esit(a, "ICIN") veya metin_esit(a, "ESLES")
+      veya metin_esit(a, "ESLES_KOLU") veya metin_esit(a, "IKILI")
+      veya metin_esit(a, "TEKLI") veya metin_esit(a, "ERISIM")
+      veya metin_esit(a, "INDEKS") veya metin_esit(a, "DIZI_OLUSTUR")
+      veya metin_esit(a, "YAPI_OLUSTUR") veya metin_esit(a, "ALAN_ATAMA")
+      veya metin_esit(a, "TIP_DONUSTUR") veya metin_baslar(a, "TIP_")
+      veya metin_baslar(a, "DESEN_") {
+        değişken j: tam32 = 0;
+        iken j < cs {
+            eğer rho_ihlal_tara(p, dizi_al(p.cocuk, cb + j), kok, derinlik) { ver doğru; }
+            j = j + 1;
+        }
+        ver yanlış;
+    }
+    ver doğru;   // bilinmeyen düğüm (LAMBDA/GUVENSIZ/asm/lineer...) → DENY
+}
+// Görev gövdesi ρ_sahip'i hapsediyor mu? doğru = join'de serbest EDİLEBİLİR.
+işlev rho_confined(p: &değişken Ayr, govde: tam32) -> mantıksal {
+    eğer govde < 0 { ver yanlış; }
+    // P1 (İFADE-FORM): `|| ifade` gövdesinde `ver` düğümü YOKTUR — gövdenin
+    // KENDİSİ dönüş değeridir. Yalnız `ver`e bakmak kanıtı UNSOUND yapardı:
+    // `görev_başlat(|| [40,2])` ρ_sahip dizisini join'e sızdırırdı (ölçüldü:
+    // delik gerçekti, C ve self-host'ta AYNI anda düzeltildi).
+    eğer metin_esit(dizi_al(p.a_ad, govde), "BLOK") == yanlış {
+        eğer rho_skaler_ifade(p, govde, govde) == yanlış { ver yanlış; }
+    }
+    ver rho_ihlal_tara(p, govde, govde, 0) == yanlış;
+}
 işlev lam_cap_tara(p: &değişken Ayr, node: tam32, lam: tam32, base: tam32) -> tam32 {
     eğer node < 0 { ver 0; }
     değişken t: metin = dizi_al(p.a_ad, node);
@@ -4656,6 +4883,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") {
             dizi_ekle(p.fn_ad, dizi_al(p.a_deg, c));
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
+            dizi_ekle(p.fn_node, c);   // D-309: call-graph kapanışı
         }
         eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { imza_topla(p, c); }  // D3: modül üyeleri (flat)
         eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metod imzaları (CAGRI dispatch için)
@@ -4667,6 +4895,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                 eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") {
                     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, m));
                     dizi_ekle(p.fn_ret, islev_donus_tip(p, m));
+                    dizi_ekle(p.fn_node, m);   // D-309
                 }
                 ui = ui + 1;
             }
@@ -5868,7 +6097,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cg_aelem: [], cg_apointee: [], cg_aic: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
-        fn_ad: [], fn_ret: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
+        fn_ad: [], fn_ret: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0,

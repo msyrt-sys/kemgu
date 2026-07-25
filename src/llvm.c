@@ -2,6 +2,8 @@
 #include "arena.h"
 #include "lexer.h"
 #include "parser.h"
+#include "tip.h"           /* D-309: ρ_sahip confinement — TipBilgisi kategorileri */
+#include "sembol.h"        /* D-309: cozum_sembol->tip erişimi */
 #include "escape.h"        /* F4.2b: escape analizi (bölge yönlendirme oracle'ı) */
 #include "bolge_atama.h"   /* F4.2b: R-* bölge atama (escape-driven) */
 
@@ -2131,6 +2133,271 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
 }
 
 /* DUGUM_ERISIM -> struct value uzerinde extractvalue, ptr uzerinde GEP+load */
+/* ===================================================================
+ * D-309 — ρ_sahip POZİTİF hapsedilme (confinement) kanıtı
+ * -------------------------------------------------------------------
+ * ρ_sahip yalnız DİZİ tahsislerini taşır: ρ-ABI'de `kdl_dizi_*` ilk argüman
+ * olarak ρ alır; metin/closure/bölge_al ρ ALMAZ (global bölge — F4.1). Bir
+ * ρ_sahip işaretçisinin görevi aşabildiği yollar ÖLÇÜLDÜ (adversarial):
+ *   (1) görev DÖNÜŞÜ   — join sonucu çağırana taşır,
+ *   (2) KANAL           — CANLI kaçış (ölçüldü: dizi gönder → join sonrası oku),
+ *   (3) küresele yazma  — KAPALI (E011: küresel yalnız skaler),
+ *   (4) yakalanan değişkene yazma — env KOPYASI, dışarı sızmaz.
+ *
+ * Kanıt POZİTİFTİR: escape DFA'nın "kaçış bulamadım"ına GÜVENMEZ; her koşul
+ * inşa-gereği sound. Kanıtlanamayan her şey DENY (ρ_sahip sızdırılır = eski
+ * güvenli davranış). Bilinmeyen AST düğüm tipi de DENY (`default:`) — dile
+ * yeni düğüm eklenirse kanıt sessizce unsound olmaz, sadece muhafazakârlaşır.
+ *   P1  gövdedeki her `ver e` için e KANITLI skaler,
+ *   P2  erişilebilir kümede `kanal_gönder(k, e)` varsa e KANITLI skaler,
+ *   P3  erişilebilir kümede iç-içe `görev_başlat` YOK (iç görev ρ'yu env'inde
+ *       tutup dış join'i aşabilir),
+ *   P4  her çağrı hedefi çözülebilir kullanıcı-işlevi ya da built-in; işlev
+ *       DEĞERİ üzerinden dolaylı çağrı DENY (gövdesi bilinmez).
+ * =================================================================== */
+
+#define RHO_MAX_GORULEN 64   /* call-graph kapanışı: ziyaret edilen fn tavanı */
+
+typedef struct {
+    LlvmGen *g;
+    const Dugum *gorulen[RHO_MAX_GORULEN];   /* döngü kırıcı (özyineleme) */
+    int gorulen_sayi;
+    int ihlal;                               /* 1 = kanıt düştü */
+} RhoConfineCtx;
+
+/* TipBilgisi işaretçi-benzeri mi? Bilinmeyen/çözülemeyen → 1 (DENY tarafı). */
+static int rho_tip_isaretci_benzeri(const TipBilgisi *t) {
+    if (!t) return 1;
+    switch (t->kategori) {
+        /* Skaler: değer olarak kopyalanır, ρ'ya iç-işaretçi taşımaz. */
+        case TIP_TAM8:  case TIP_TAM16:  case TIP_TAM32:  case TIP_TAM64:
+        case TIP_DTAM8: case TIP_DTAM16: case TIP_DTAM32: case TIP_DTAM64:
+        case TIP_KESIRLI32: case TIP_KESIRLI64:
+        case TIP_MANTIKSAL: case TIP_KARAKTER: case TIP_BOS:
+            return 0;
+        default:
+            return 1;   /* dizi/metin/yapı/referans/görev/kanal/... + bilinmeyen */
+    }
+}
+
+/* Çağrı hedefinin adı (TANIMLAYICI/YOL); dolaylı çağrıda NULL. */
+static const char *rho_cagri_adi_ileri(const Dugum *hedef, int *uz) {
+    if (!hedef) return NULL;
+    if (hedef->tip == DUGUM_TANIMLAYICI) {
+        *uz = hedef->veri.tanimlayici.uzunluk;
+        return hedef->veri.tanimlayici.metin;
+    }
+    if (hedef->tip == DUGUM_YOL) {
+        *uz = hedef->veri.yol.sag_ad_uzunluk;
+        return hedef->veri.yol.sag_ad;
+    }
+    return NULL;
+}
+
+/* LLVM IR tipi skaler mi? ptr / %Yapi / {agg} → hayır. */
+static int rho_skaler_ir(const char *t) {
+    if (!t || !*t) return 0;
+    if (strcmp(t, "ptr") == 0) return 0;
+    if (t[0] == '%' || t[0] == '{') return 0;
+    if (strcmp(t, "float") == 0 || strcmp(t, "double") == 0) return 1;
+    return t[0] == 'i';   /* i1/i8/i16/i32/i64 */
+}
+
+/* İfade KANITLI skaler mi? (1 = kanıtlandı, 0 = kanıtlanamadı → DENY tarafı) */
+static int rho_skaler_ifade(LlvmGen *g, const Dugum *d) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_TAM: case DUGUM_KESIRLI:
+        case DUGUM_MANTIKSAL: case DUGUM_KARAKTER:
+            return 1;
+        case DUGUM_TANIMLAYICI:
+            /* Çözülmüş sembolün tipi skalerse kanıtlı; çözülmemişse DENY. */
+            return d->cozum_sembol && !rho_tip_isaretci_benzeri(
+                       ((const Sembol *)d->cozum_sembol)->tip);
+        case DUGUM_IKILI:
+            /* KEMGU'da işaretçi aritmetiği YOK; yine de iki operandı da iste. */
+            return rho_skaler_ifade(g, d->veri.ikili.sol) &&
+                   rho_skaler_ifade(g, d->veri.ikili.sag);
+        case DUGUM_TEKLI:
+            if (d->veri.tekli.op == OP_REF || d->veri.tekli.op == OP_REF_DEGISKEN ||
+                d->veri.tekli.op == OP_DEREFERANS) return 0;   /* adres/deref → DENY */
+            return rho_skaler_ifade(g, d->veri.tekli.operand);
+        case DUGUM_INDEKS:
+            /* xs[i] — eleman tipi skalerse kanıtlı (kapsayıcının sembol tipinden). */
+            {
+                const Dugum *n = d->veri.indeks.nesne;
+                if (!n || n->tip != DUGUM_TANIMLAYICI || !n->cozum_sembol) return 0;
+                const TipBilgisi *kt = ((const Sembol *)n->cozum_sembol)->tip;
+                if (!kt || kt->kategori != TIP_DIZI) return 0;
+                return !rho_tip_isaretci_benzeri(kt->veri.dizi.eleman);
+            }
+        case DUGUM_TIP_DONUSTUR:
+            return rho_skaler_ifade(g, d->veri.tip_donustur.kaynak);
+        case DUGUM_CAGRI: {
+            /* Kullanıcı işlevi + BİLDİRİLEN dönüşü skaler → sonuç kopya değer,
+             * ρ'ya iç-işaretçi taşımaz. (`|| yardimci(x)` ifade-form gövdesi bu
+             * dal olmadan kanıtlanamıyordu.) Built-in / dolaylı → kanıtlanmaz.
+             * NOT: bu YALNIZ değerin skalerliğini kanıtlar; çağrılan işlevin
+             * gövdesindeki kanal/spawn ihlalleri AYRICA rho_confine_tara'nın
+             * call-graph kapanışında denetlenir. */
+            int uz = 0;
+            const char *ad = rho_cagri_adi_ileri(d->veri.cagri.hedef, &uz);
+            if (!ad) return 0;
+            IslevKayit *ik = islev_bul(g, ad, uz);
+            if (!ik || ik->generic_mi) return 0;
+            return rho_skaler_ir(ik->donus_tip);
+        }
+        default:
+            return 0;   /* erişim/yapı_oluştur/dizi_oluştur/... → kanıtlanmaz */
+    }
+}
+
+static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d);
+
+static void rho_confine_liste(RhoConfineCtx *c, Dugum **l, int n) {
+    for (int i = 0; i < n; i++) rho_confine_tara(c, l[i]);
+}
+
+static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d) {
+    if (!d || c->ihlal) return;
+    switch (d->tip) {
+        /* --- yaprak / zararsız --- */
+        case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_METIN:
+        case DUGUM_KARAKTER: case DUGUM_MANTIKSAL: case DUGUM_BOS:
+        case DUGUM_TANIMLAYICI: case DUGUM_YOL:
+            return;
+
+        /* --- P1: dönüş kanıtlı skaler olmalı --- */
+        case DUGUM_VER:
+            if (d->veri.ver.deger && !rho_skaler_ifade(c->g, d->veri.ver.deger)) {
+                c->ihlal = 1; return;
+            }
+            rho_confine_tara(c, d->veri.ver.deger);
+            return;
+
+        /* --- P2/P3/P4: çağrılar --- */
+        case DUGUM_CAGRI: {
+            int uz = 0;
+            const char *ad = rho_cagri_adi_ileri(d->veri.cagri.hedef, &uz);
+            if (!ad) { c->ihlal = 1; return; }   /* P4: dolaylı/hesaplanmış çağrı */
+
+            /* P3: iç-içe görev_başlat — iç görev ρ'yu env'inde tutabilir. */
+            if (uz == 14 && memcmp(ad, "g\xc3\xb6rev_ba\xc5\x9f" "lat", 14) == 0) {
+                c->ihlal = 1; return;
+            }
+            /* P2: kanal_gönder(k, e) — e kanıtlı skaler değilse ρ kaçabilir.
+             * UZUNLUK 13: "kanal_gönder" 12 karakter ama ö 2 bayt (UTF-8).
+             * (14 yazmak testi sessizce geçirmişti — adversarial korpus yakaladı.) */
+            if (uz == 13 && memcmp(ad, "kanal_g\xc3\xb6nder", 13) == 0) {
+                if (d->veri.cagri.sayi < 2 ||
+                    !rho_skaler_ifade(c->g, d->veri.cagri.argumanlar[1])) {
+                    c->ihlal = 1; return;
+                }
+            }
+            /* Kullanıcı işlevi → gövdesine in (call-graph kapanışı). */
+            IslevKayit *ik = islev_bul(c->g, ad, uz);
+            if (ik && ik->ast) {
+                if (ik->generic_mi) { c->ihlal = 1; return; }  /* mono gövde belirsiz */
+                int yeni = 1;
+                for (int i = 0; i < c->gorulen_sayi; i++)
+                    if (c->gorulen[i] == ik->ast) { yeni = 0; break; }
+                if (yeni) {
+                    if (c->gorulen_sayi >= RHO_MAX_GORULEN) { c->ihlal = 1; return; }
+                    c->gorulen[c->gorulen_sayi++] = ik->ast;
+                    rho_confine_tara(c, ik->ast->veri.islev.govde);
+                    if (c->ihlal) return;
+                }
+            } else if (d->veri.cagri.hedef->cozum_sembol) {
+                /* Sembol tablosunda VAR ama işlev kaydı YOK → işlev-değerli
+                 * değişken (dolaylı çağrı). Built-in'ler COZUM_YOK kalır ve
+                 * ρ'yu görevi aşan bir yere yazamaz (kanal/spawn hariç, ikisi
+                 * de yukarıda) → güvenli. */
+                c->ihlal = 1; return;
+            }
+            rho_confine_liste(c, d->veri.cagri.argumanlar, d->veri.cagri.sayi);
+            return;
+        }
+
+        /* --- gövde/deyim yapıları --- */
+        case DUGUM_BLOK:
+            rho_confine_liste(c, d->veri.blok.deyimler, d->veri.blok.sayi); return;
+        case DUGUM_DEGISKEN:
+            rho_confine_tara(c, d->veri.degisken.deger); return;
+        case DUGUM_ATAMA:
+            rho_confine_tara(c, d->veri.atama.hedef);
+            rho_confine_tara(c, d->veri.atama.deger); return;
+        case DUGUM_IFADE_DEYIMI:
+            rho_confine_tara(c, d->veri.ifade_deyimi.ifade); return;
+        case DUGUM_EGER:
+            rho_confine_tara(c, d->veri.eger.kosul);
+            rho_confine_tara(c, d->veri.eger.gozdoldur);
+            rho_confine_tara(c, d->veri.eger.yan); return;
+        case DUGUM_IKEN:
+            rho_confine_tara(c, d->veri.iken.kosul);
+            rho_confine_tara(c, d->veri.iken.govde); return;
+        case DUGUM_ICIN:
+            rho_confine_tara(c, d->veri.icin.koleksiyon);
+            rho_confine_tara(c, d->veri.icin.govde); return;
+        case DUGUM_ESLES:
+            rho_confine_tara(c, d->veri.esles.deger);
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                const Dugum *kol = d->veri.esles.kollar[i];
+                if (kol && kol->tip == DUGUM_ESLES_KOLU)
+                    rho_confine_tara(c, kol->veri.esles_kolu.govde);
+            }
+            return;
+
+        /* --- ifadeler --- */
+        case DUGUM_IKILI:
+            rho_confine_tara(c, d->veri.ikili.sol);
+            rho_confine_tara(c, d->veri.ikili.sag); return;
+        case DUGUM_TEKLI:
+            rho_confine_tara(c, d->veri.tekli.operand); return;
+        case DUGUM_ERISIM:
+            rho_confine_tara(c, d->veri.erisim.nesne); return;
+        case DUGUM_INDEKS:
+            rho_confine_tara(c, d->veri.indeks.nesne);
+            rho_confine_tara(c, d->veri.indeks.indeks); return;
+        case DUGUM_DIZI_OLUSTUR:
+            rho_confine_liste(c, d->veri.dizi_olustur.elemanlar,
+                              d->veri.dizi_olustur.sayi); return;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                const Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (aa && aa->tip == DUGUM_ALAN_ATAMA)
+                    rho_confine_tara(c, aa->veri.alan_atama.deger);
+            }
+            return;
+        case DUGUM_TIP_DONUSTUR:
+            rho_confine_tara(c, d->veri.tip_donustur.kaynak); return;
+
+        default:
+            /* Bilinmeyen/ele alınmayan düğüm (lambda, güvensiz, satırici asm,
+             * lineer ifadeler, ...) → KANITLANAMADI. Sessiz atlamak unsound
+             * olurdu (lambda_serbest_tara'nın `default: return`'ü capture için
+             * doğru ama kanıt için DEĞİL). */
+            c->ihlal = 1;
+            return;
+    }
+}
+
+/* Görev gövdesi (lambda) ρ_sahip'i hapsediyor mu? 1 = join'de serbest EDİLEBİLİR. */
+static int gorev_rho_confined(LlvmGen *g, const Dugum *lambda_d) {
+    if (!lambda_d || lambda_d->tip != DUGUM_LAMBDA) return 0;   /* fn değeri → DENY */
+    const Dugum *govde = lambda_d->veri.lambda.govde;
+    if (!govde) return 0;
+    /* P1 (İFADE-FORM): `|| ifade` gövdesinde `ver` DÜĞÜMÜ YOKTUR — gövdenin
+     * KENDİSİ dönüş değeridir. Yalnız `ver`e bakmak burada kanıtı UNSOUND
+     * yapardı: `görev_başlat(|| [40,2])` ρ_sahip dizisini join'e sızdırır
+     * (ölçüldü: bu delik gerçekti, düzeltildi). Blok-form gövdede dönüşler
+     * `ver` üzerinden zaten denetleniyor. */
+    if (govde->tip != DUGUM_BLOK && !rho_skaler_ifade(g, govde)) return 0;
+    RhoConfineCtx c;
+    c.g = g; c.gorulen_sayi = 0; c.ihlal = 0;
+    rho_confine_tara(&c, govde);
+    return !c.ihlal;
+}
+
 static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     IfadeSonuc nesne = ifade_uret(g, d->veri.erisim.nesne, NULL);
 
@@ -3962,10 +4229,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int envr = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", envr, c.reg);
+                /* D-309: ρ_sahip POZİTİF hapsedilme kanıtı — kanıtlanırsa
+                 * runtime join'de ρ_sahip'i serbest bırakır; kanıtlanamazsa
+                 * (0) eski davranış: sızdır. Kanıt gövde AST'sinden üretilir
+                 * (gorev_rho_confined); escape DFA'ya GÜVENMEZ. */
+                int rho_ok = gorev_rho_confined(g, d->veri.cagri.argumanlar[0]);
                 int r = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_gorev_basla_kapanis"
-                    "(ptr %%%d, ptr %%%d, ptr %%%d)\n", r, fnr, fnr, envr);
+                    "(ptr %%%d, ptr %%%d, ptr %%%d, i32 %d)\n",
+                    r, fnr, fnr, envr, rho_ok);
                 /* Karar 1 (D-30x): görev_başlat → sonuç<görev<T>, metin>.
                  * görev<T> ve metin İKİSİ de IR'de ptr → aggregate T'den BAĞIMSIZ
                  * olarak DAİMA { i8, ptr, ptr }. Sarma DALLANMASIZ:
@@ -6575,7 +6848,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Katman 2 (Concurrency / DRF V1): görev_başlat / görev_birleştir hedefleri.
      * basla_kapanis(fn, fn, env): fn BİLEREK iki kez — C tarafında iki farklı
      * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */
-    fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr)\n", out);
+    /* D-309: 4. param = rho_serbest (codegen confinement kanıtı). declare ve
+     * call AYNI commit'te değişir — D-295 dersi: LLVM declare/call imza
+     * uyuşmazlığını SESSİZCE kabul eder, "LLVM reddeder" bir savunma değildir. */
+    fputs("declare ptr @kdl_gorev_basla_kapanis(ptr, ptr, ptr, i32)\n", out);
     /* D-294: i64 taşıma (işaretçi T'ler için); çağrı yerinde T'ye daraltılır. */
     fputs("declare i64 @kdl_gorev_birlestir(ptr)\n", out);
     /* Karar 1 (D-30x): görev_başlat başarısızlığında sonuç'un hata(metin)

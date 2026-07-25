@@ -5,6 +5,77 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-309 — [YÜKSEK] ρ_sahip KOŞULLU serbest: POZİTİF hapsedilme kanıtı (F4-sınıfı) (2026-07-25)
+
+**Karar [ETKİ: `src/llvm.c` (+~230: kanıt + call-graph kapanışı), `selfhost/codegen.kem`
+(+~200: parite), `runtime/kdl_runtime.c` (ABI 4. param + koşullu serbest),
+`test/test_gorev_rt.c` (ölçüm kapısı +3), `test/cg_korpus/` (+2 adversarial).]**
+Görev bölgesi ρ_sahip V1'de **bilinerek sızdırılıyordu** (D-291 notu: "pozitif hapsedilme
+kanıtı YOK"). Artık **kanıtlanırsa** join'de serbest bırakılıyor; kanıtlanamazsa eski
+güvenli davranış (sızdır) aynen korunuyor.
+
+**ÖNCE ÖLÇÜLDÜ — kaçış yüzeyi (adversarial, naif serbest bırakma UAF mi?):**
+| Yol | Ölçüm |
+|---|---|
+| Diziyi görevden döndür | LLVM-RED (gürültülü) — kapalı ama *kazara* |
+| **Kanala gönder** | 🔴 **CANLI** — dizi ρ_sahip'te, join SONRASI okunuyor → naif serbest = UAF |
+| Yakalanan değişkene yaz | env KOPYASI → dışarı sızmaz |
+| Küresele yaz | E011 (küresel yalnız skaler) — kapalı |
+ρ_sahip'e YALNIZ dizi tahsisleri düşer (ρ-ABI; `kdl_metin_birlestir` ρ ALMAZ → global
+bölge). Yol haritasının "kanıtsız serbest = UAF" uyarısı **güncel ve doğruydu**.
+
+**KANIT (pozitif; escape DFA'ya GÜVENMEZ, kanıtlanamayan = DENY):**
+- **P1** gövdenin her dönüşü KANITLI skaler (blok-formda `ver`, **ifade-formda gövdenin
+  kendisi** — aşağıdaki delik notuna bak),
+- **P2** transitif erişilebilir kümede `kanal_gönder(k, e)` varsa e KANITLI skaler,
+- **P3** erişilebilir kümede iç-içe `görev_başlat` YOK,
+- **P4** her çağrı hedefi çözülebilir (işlev-değeri üzerinden dolaylı çağrı → DENY),
+- **`default:` DENY** — ele alınmayan AST düğümü kanıtı düşürür. Dile yeni düğüm
+  eklenirse kanıt sessizce unsound olmaz, yalnız muhafazakârlaşır. (Mevcut
+  `lambda_serbest_tara`'nın `default: return`'ü capture için doğru, kanıt için DEĞİL.)
+Sonuç `kdl_gorev_basla_kapanis`'in 4. parametresi (`rho_serbest`) ile runtime'a taşınır;
+`kdl_gorev_birlestir` yalnız bayrak 1 iken `kdl_bolge_serbest` çağırır.
+
+**⚠ KENDİ KANITIMDA BULUNAN 2 KUSUR (ikisi de ölçümle yakalandı, düzeltildi):**
+1. **`kanal_gönder` uzunluğu 14 yazılmıştı, doğrusu 13** ("ö" 2 bayt). Kontrol hiç
+   tetiklenmiyordu → bilinen kaçış senaryosu `1` (serbest) alıyordu. Adversarial korpus
+   yakaladı. *Ders: UTF-8 Türkçe kimlik uzunluklarını literal yazarken say.*
+2. **İFADE-FORM lambda deliği (soundness):** `|| [40,2]` gövdesinde `ver` DÜĞÜMÜ YOKTUR —
+   gövdenin kendisi dönüş değeridir. Yalnız `ver`e bakan P1 bunu kaçırıyordu → ρ_sahip
+   dizisi join'e sızarken kanıt `1` diyordu (ölçüldü: C ve self-host'ta AYNI anda).
+   Düzeltme: gövde BLOK değilse gövdenin KENDİSİ kanıtlı skaler olmalı.
+
+**Hassasiyet (kanıt fazla kaba olmasın diye eklendi):** kullanıcı işlevinin BİLDİRİLEN
+dönüşü skalerse çağrı kanıtlı skaler (`|| yardimci(x)`); `xs[i]` kapsayıcı `Dizi<skaler>`
+ise eleman-kopya; self-host'ta yakalanan değişken çevre `cg_var` tablosundan çözülür
+(`cg_var_tip_bul`'un "i32" varsayılanı sessiz-yanlış olurdu → varlık `cg_var_bul` ile
+ÖNCE denetlenir). Sonuç: `cg_gorev_kanal`/`capture`/`kanal_mesaj`/`gorev_temel` gibi
+gerçek programlar kanıtı GEÇER (kanıt yalnız teoride değil pratikte de ateşler).
+
+**ÖLÇÜM KAPISI (test_gorev_rt [14]-[16]):** "serbest bıraktık" demek yetmez — açık bölge
+sayısı ölçülür (`kdl_bolge_bakiye`). Aynı gövde iki kez koşar, tek fark bayrak:
+`rho_serbest=0 → bakiye +1` (sızdırır), `=1 → +0` (geri verir), sonuç 42 bozulmaz.
+Bayrağın ETKİSİZ olması da kanıtsız serbest de bu testte gürültülü düşer.
+
+**Doğrulama:** C↔self-host kanıt kararları 10/10 BİREBİR + FIXPOINT (s2==s3) +
+codegen_diff + test_llvm + test_gorev_rt 16/16. Adversarial korpus: `cg_rho_sahip_kacis`
+(kanal kaçışı) 42 döner = kanıt kaçışı yakaladı, UAF yok.
+
+**Sınırlar (V1):** built-in dönüşü kanıtlanmaz (`ver dizi_al(...)` → DENY, güvenli taraf);
+`güvensiz`/iç-lambda/lineer düğümler DENY; bare-metal `kdl_gorev.c` AYRI API (ρ yok) →
+etkilenmez. Genişletme: built-in dönüş tipi tablosu, ρ_sahip'e düşen tahsislerin
+alan-duyarlı takibi.
+
+**YAN BULGU (D-309 DIŞI, önceden var — ayrı iş olarak işaretlendi):** `görev_başlat`
+gövdesi **blok-form lambda** ise (`|| { değişken xs = [...]; ver ...; }`) self-host
+codegen SESSİZCE yanlış sonuç üretiyor (C=42, self=0). D-309 değişiklikleri stash'lenip
+yeniden ölçülerek bunun ÖNCEDEN var olduğu doğrulandı. İfade-form (`|| hesapla()`) her
+ikisinde de doğru. `cg_rho_sahip_confined` korpusu bu yüzden bilerek ifade-form yazıldı
+(aynı kanıt yolunu — ρ-ABI ile çağrılan fn'de dizi tahsisi + skaler dönüş — egzersiz
+eder). Accept-but-silently-wrong sınıfı; kapatılmalı.
+
+---
+
 ## D-308 — Gerçek per-instantiation monomorphization SELF-HOST'a taşındı (2026-07-24)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (~230 satır: param registry + subst yığını +

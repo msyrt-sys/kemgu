@@ -1,0 +1,17 @@
+// D-309: ρ_sahip HAPSEDİLMİŞ görev — `hesapla` görevden çağrılır, diziyi ρ_sahip'te
+// tahsis eder (ρ-ABI: kullanıcı-fn ρ'yu ilk arg alır) ama dışarı VERMEZ (dönüş skaler,
+// kanal yok, iç-içe görev yok) → codegen POZİTİF confinement kanıtı üretir
+// (rho_serbest=1) ve runtime join'de ρ_sahip'i geri verir. Sonuç değişmez.
+// NOT: gövde bilerek İFADE-FORM (`|| hesapla()`) — blok-form lambda görev gövdesi
+// self-host codegen'de ÖNCEDEN BERİ desteklenmiyor (D-309 dışı, ayrı sınır). Exit: 42
+işlev hesapla() -> tam32 {
+    değişken xs: Dizi<tam32> = [40, 2];
+    ver xs[0] + xs[1];
+}
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| hesapla()) {
+        tamam(t) => { ver görev_birleştir(t); }
+        hata(e) => { ver 1; }
+    }
+    ver 0;
+}

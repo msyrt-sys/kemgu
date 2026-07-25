@@ -720,8 +720,16 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   çeviriyordu. **Taşıyıcı genişliğini (i32→i64) değiştirince TÜM fallback'leri denetle.**
   Ayrıca: LLVM `declare` imza uyuşmazlığını **sessizce kabul eder** (ölçüldü) — "yanlış tip geçir,
   LLVM reddetsin" bir savunma mekanizması DEĞİLDİR.
-  - **ρ_sahip serbest bırakma** — F4-sınıfı iş: pozitif hapsedilme (confinement) kanıtı +
-    adversarial tarama gerektirir (F4.2b'nin ρ_yerel deseni). Kanıtsız serbest = UAF riski.
+  - ~~**ρ_sahip serbest bırakma**~~ ✓ **D-309**: KOŞULLU serbest — codegen POZİTİF
+    hapsedilme kanıtı üretir (P1 dönüş skaler / P2 kanal yükü skaler / P3 iç-içe görev
+    yok / P4 dolaylı çağrı yok; **`default:` DENY** → bilinmeyen düğüm kanıtı düşürür),
+    `rho_serbest` bayrağıyla runtime'a taşır, `görev_birleştir` yalnız kanıtlıysa
+    `kdl_bolge_serbest` çağırır. Kanıtsız = eski davranış (sızdır). Kaçış yüzeyi ÖNCE
+    ölçüldü: **kanal CANLI kaçış** (naif serbest = UAF, ampirik), dönüş LLVM-RED,
+    küresel E011, yakalanan-değişken env-kopyası. Ölçüm kapısı `kdl_bolge_bakiye`
+    (test_gorev_rt [14]-[16]): bayrak 0 → +1 sızıntı, 1 → +0. C↔self 10/10 birebir +
+    FIXPOINT. Kendi kanıtımda 2 kusur ölçümle yakalandı (`kanal_gönder` bayt uzunluğu
+    13≠14; **ifade-form lambda gövdesi P1'i atlıyordu** = soundness deliği).
   - Semaforlar / bariyerler (Plan Karar F V2)
   - `kanal` KEMGU-OS'ta (bare-metal .kem): ABI hazır (aynı imza), test yok
 - ~~**Lambda ifade-form dönüş-tipi çıkarsama**~~ ✓ **D-293**: lifted lambda dönüşü artık

@@ -579,9 +579,13 @@ typedef struct {
     KdlGorevKapanis fn_kapanis;
     void *env;
     /* R-GÖREV: ρ_sahip(t_yeni) — gorevin KENDI bolgesi (S2: yaratildiginda
-     * gorev sahiplenir). Gorev govdesindeki tahsisler buraya gider.
-     * V1: SERBEST EDILMEZ (sizinti) — bkz. kdl_gorev_birlestir notu. */
+     * gorev sahiplenir). Gorev govdesindeki tahsisler buraya gider. */
     KdlBolge *rho;
+    /* D-309: ρ_sahip join'de serbest birakilabilir mi? Codegen'in POZITIF
+     * hapsedilme (confinement) kanitinin sonucu (gorev_rho_confined).
+     * 0 = kanit YOK -> sizdir (eski guvenli davranis). Runtime BU BAYRAGA
+     * GUVENIR; kaniti codegen uretir (bkz. llvm.c D-309 blogu). */
+    int32_t rho_serbest;
 #ifdef KDL_THREAD_WIN
     HANDLE handle;
 #endif
@@ -697,13 +701,14 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
  * imkansiz). */
 KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
                                   KdlGorevKapanis fn_kapanis,
-                                  void *env) {
+                                  void *env, int32_t rho_serbest) {
     KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = NULL;
     g->fn_bare = fn_bare;
     g->fn_kapanis = fn_kapanis;
     g->env = env;
+    g->rho_serbest = rho_serbest;   /* D-309: codegen confinement kaniti */
     g->result = 0;
     g->done = 0;
     g->rho = kdl_bolge_olustur();       /* R-GÖREV: ρ_sahip(t_yeni) */
@@ -717,17 +722,16 @@ KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
 /* === R-BİRLEŞTİR: `görev_birleştir(g)` codegen hedefi ===
  * Gorevin bitisini bekler (join) ve sonucu cagirana tasir.
  *
- * ρ_sahip V1'de SERBEST EDILMEZ (bilinerek sizdirilir). Aksiyom "sonuc
- * ρ_çağıran'a terfi, sahiplenilen DIGER bolgeler serbest" der; ancak serbest
- * birakmak, gorev govdesindeki tahsislerin ρ_sahip'e HAPSOLDUGUNU (confinement)
- * gerektirir. Ornegin govde, yakalanan bir `&değişken`e ρ_sahip'ten bir isaretci
- * yazarsa isaretci gorevi asar -> serbest birakmak UAF olur.
- * Boyle bir POZITIF hapsedilme kaniti bu asamada YOK; F4.2b'de ρ_yerel ancak
- * boyle bir kanit + adversarial tarama sonrasi serbest birakilmisti. Kanitsiz
- * serbest birakmak yerine SIZDIRIYORUZ (guvenli taraf) — F2'nin closure-env
- * sizintisiyla ayni status quo. kdl_bolge_bakiye() bunu durustce raporlar.
- * Serbest birakma, ayri bir F4-sinifi is olarak ρ_sahip confinement kanitiyla
- * birlikte gelir. */
+ * D-309: ρ_sahip artik KOSULLU serbest birakilir. Aksiyom "sonuc ρ_çağıran'a
+ * terfi, sahiplenilen DIGER bolgeler serbest" ancak gorev govdesindeki
+ * tahsislerin ρ_sahip'e HAPSOLDUGU (confinement) KANITLANIRSA uygulanabilir:
+ * govde ρ_sahip'ten bir isaretciyi disari verirse (donus / kanal) isaretci
+ * gorevi asar -> serbest birakmak UAF olur (ADVERSARIAL OLCULDU: kanal
+ * uzerinden dizi gonderip join sonrasi okumak canli bir kacis yoludur).
+ * Kaniti CODEGEN uretir (llvm.c gorev_rho_confined, POZITIF: kanitlanamayan
+ * = DENY) ve spawn'da `rho_serbest` bayragiyla buraya tasir. Bayrak 0 iken
+ * eski davranis (sizdir) aynen korunur. kdl_bolge_bakiye() ikisini de
+ * durustce raporlar. */
 int64_t kdl_gorev_birlestir(KdlGorev *g) {
     /* D-296: eskiden `if (!g) return 0;` idi — SESSIZ YANLIS CEVAP. Cagiran
      * gorevin sonucunu ister; donen 0, gercekten 0 donmus bir gorevden AYIRT
@@ -749,7 +753,9 @@ int64_t kdl_gorev_birlestir(KdlGorev *g) {
     if (g->thr_valid) pthread_join(g->thr, NULL);
 #endif
     int64_t r = g->result;   /* D-294: T'ye daraltma codegen'de (trunc/inttoptr) */
-    /* g->rho BILEREK serbest edilmiyor (yukaridaki not). */
+    /* D-309: yalniz codegen POZITIF confinement kaniti verdiyse serbest birak.
+     * Kanit yoksa (rho_serbest==0) eskisi gibi sizdir — guvenli taraf. */
+    if (g->rho_serbest && g->rho) kdl_bolge_serbest(g->rho);
     free(g);
     return r;
 }

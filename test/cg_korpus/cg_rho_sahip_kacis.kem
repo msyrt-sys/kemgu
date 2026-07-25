@@ -1,0 +1,22 @@
+// D-309 ADVERSARIAL: ρ_sahip dizisi KANAL üzerinden görevi aşar ve join'den
+// SONRA okunur — ölçülmüş CANLI kaçış yolu. Kanıt bunu REDDETMELİ
+// (rho_serbest=0 → ρ_sahip sızdırılır). Serbest bırakılsaydı bu program bir
+// USE-AFTER-FREE olurdu; 42 dönmesi kanıtın kaçışı yakaladığının tanığıdır.
+// Exit: 42
+işlev uret(k: kanal<Dizi<tam32>>) -> tam32 {
+    değişken xs: Dizi<tam32> = [42];
+    kanal_gönder(k, xs);
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken k: kanal<Dizi<tam32>> = kanal_oluştur(2);
+    eşleş görev_başlat(|| uret(k)) {
+        tamam(g) => {
+            değişken r: Dizi<tam32> = kanal_al(k);
+            görev_birleştir(g);
+            ver dizi_al(r, 0);     // join SONRASI okuma — ρ_sahip yaşamalı
+        }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}
