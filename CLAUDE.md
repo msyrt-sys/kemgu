@@ -755,9 +755,28 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   (`i64_genislet` immediate'ı tam genişlikte materyalize ederek onardı).
   **SONUÇ: D-291→D-297'nin tamamı self-host codegen'de; C ile birebir eşdeğer.**
   Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ (C-only — genel closure zaten yalnız C).
+  ⚠ **D-310 DÜZELTMESİ:** "birebir eşdeğer" iddiası blok-form `görev_başlat`
+  gövdesi için YANLIŞTI — self-host `lam_emit` o gövdeyi hiç emit etmiyordu
+  (aşağıya bak). Korpusta bu şekil yoktu, kapılar bu yüzden yeşildi.
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.
+- ~~**Self-host blok-form lambda gövdesi (görev_başlat closure'ı)**~~ ✓ **ÇÖZÜLDÜ — D-310:**
+  `görev_başlat(|| { ...; ver e; })` — self-host `lam_emit` gövdeyi emit ETMEDEN
+  `ret i64 0` fallback'ine düşüyordu → **SESSİZ YANLIŞ CEVAP** (C exit 42, self 0;
+  link/IR hatası YOK). D-300'den beri vardı; D-309 ile ilgisi yok (stash'lenip ölçüldü).
+  Onarım: BLOK gövde `deyim_uret` ile emit edilir, `cur_ret="i64"` + yeni `lam_i64`
+  bayrağı; `VER` bu bayrakla `ret_uydur` yerine `i64_genislet` kullanır (`ret_uydur`
+  YALNIZ int→int daraltır → `ret i64 %ptr` geçersiz IR olurdu). İkinci onarım:
+  `int_uydur(op, hedef)` ile i64-taşıyıcı store bağlamlarında (annotasyonlu `değişken` +
+  `ATAMA`) trunc/sext — `değişken t: tam32 = görev_birleştir(a)` `store i32 %i64`
+  üretiyordu (eşleş-bound tutucuda `görev<T>` iç tipi bilinmez → `i64_daralt` doğru
+  olarak i64 bırakır). **IMMEDIATE guard ŞART:** ilk sürüm literalleri de uydurdu →
+  `sext i32 4294967296 to i64` sessizce bozdu (`cg_skaler_deref` 24→56; korpus yakaladı)
+  — D-299 `i64_genislet` dersinin aynısı: self-host `TAM` literalini daima i32 sayar.
+  Korpus **100** (+2: cg_gorev_lambda_blok, cg_gorev_i64_daralt); FIXPOINT korundu.
+  **DERS:** "C ile birebir eşdeğer" iddiası ancak korpusun kapsadığı şekiller için
+  geçerlidir — parite iddiası yazarken hangi şeklin ÖLÇÜLMEDİĞİNİ de yaz.
 - ~~**Skaler referans okuma**~~ ✓ **ÇÖZÜLDÜ — D-305:** `*v` ile `&T`'den `T` oku (güvenli
   referans deref — güvensiz GEREKMEZ; ham pointer `*T` hâlâ G001 ister). OP_DEREFERANS
   artık TIP_REFERANS'ı kabul eder; codegen zaten load ediyordu (D-265 yolu). C+self-host
