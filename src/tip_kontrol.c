@@ -5299,7 +5299,70 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 /* Desen tanimlayici/yapici icindeki adlari scope'a ekle */
                 const Dugum *desen = kol->veri.esles_kolu.desen;
                 if (desen) {
-                    if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
+                    if (desen->tip == DUGUM_DESEN_YAPI) {
+                        /* D-318: `YapiAdi { alan1, alan2 }` destructuring.
+                         * Semantik: desen yapiyi TUKETIR (lineer yapida sart —
+                         * aksi halde hem yapi hem alanlar canli kalir = ayni
+                         * kaynak iki kez); baglanan alanlar kendi tipleriyle
+                         * kol scope'una girer, lineer olanlar kendi basina
+                         * lineer baglama olur (L001 onlari ayrica izler). */
+                        TipBilgisi *st = dt;
+                        if (st && st->kategori == TIP_REFERANS)
+                            st = st->veri.referans.hedef;
+                        const Sembol *ysem = NULL;
+                        if (st && st->kategori == TIP_YAPI) {
+                            ysem = yapi_sembol_capraz_bul(tk, st->veri.yapi.ad,
+                                                          st->veri.yapi.ad_uzunluk);
+                        }
+                        if (!ysem || st->veri.yapi.ad_uzunluk
+                                        != desen->veri.desen_yapi.yapi_uz
+                            || memcmp(st->veri.yapi.ad,
+                                      desen->veri.desen_yapi.yapi_ad,
+                                      (size_t)desen->veri.desen_yapi.yapi_uz) != 0) {
+                            tip_hata(tk, desen, "T001",
+                                "yapi deseni eslesen degerin tipiyle uyusmuyor");
+                        } else {
+                            /* V1 KURALI: TUM alanlar listelenmeli. Eksik alan,
+                             * lineer yapida SESSIZ SIZINTI olurdu (listelenmeyen
+                             * lineer alan hicbir yere baglanmaz ama yapi tuketilir).
+                             * Rest-desen (`..`) YENI SOZDIZIMI -> icat edilmedi. */
+                            int toplam = 0;
+                            for (SembolLink *l = ysem->yapi_scope->bas; l;
+                                 l = l->sonraki) {
+                                if (l->sembol.kategori == SEMBOL_DEGISKEN) toplam++;
+                            }
+                            if (toplam != desen->veri.desen_yapi.alan_sayi) {
+                                tip_hata(tk, desen, "T012",
+                                    "yapi deseni TUM alanlari listelemeli "
+                                    "(eksik alan sizabilir; `..` V1'de yok)");
+                            }
+                            for (int fi = 0;
+                                 fi < desen->veri.desen_yapi.alan_sayi; fi++) {
+                                const char *fad = desen->veri.desen_yapi.alan_adlar[fi];
+                                int fuz = desen->veri.desen_yapi.alan_uzlar[fi];
+                                const Sembol *alan =
+                                    sembol_yapi_alani(ysem, fad, fuz);
+                                if (!alan) {
+                                    tip_hata(tk, desen, "T009",
+                                             "yapi deseninde bilinmeyen alan");
+                                    continue;
+                                }
+                                Sembol fs;
+                                memset(&fs, 0, sizeof(fs));
+                                fs.ad = fad;
+                                fs.ad_uzunluk = fuz;
+                                fs.kategori = SEMBOL_DEGISKEN;
+                                fs.tip = alan->tip;
+                                fs.ast_dugumu = desen;
+                                fs.satir = desen->satir;
+                                fs.sutun = desen->sutun;
+                                fs.lineer_scope_seviyesi = tk->scope_seviyesi;
+                                sembol_ekle(tk->scope, tk->arena, &fs);
+                            }
+                            /* Yapiyi TUKET (lineer ise); lineer degilse no-op. */
+                            lineer_tuket_eger_baglamaysa(tk, d->veri.esles.deger);
+                        }
+                    } else if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
                         /* x => govde — x'in tipi dt */
                         Sembol s;
                         memset(&s, 0, sizeof(s));

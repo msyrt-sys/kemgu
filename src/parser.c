@@ -1391,6 +1391,46 @@ static Dugum *parse_desen(Parser *p) {
             return d;
         }
 
+        /* D-318: `YapiAdi { alan1, alan2 }` — yapi destructuring deseni.
+         * Desen POZISYONUNDA `{` belirsiz DEGILDIR: kol govdesi `=>` sonrasi
+         * gelir, dolayisiyla burada gorulen `{` yalniz yapi deseni olabilir. */
+        if (t.tip == TOK_TANIMLAYICI && parser_eslesir(p, TOK_SOL_SUSLU)) {
+            parser_ilerle(p);  /* { */
+            Liste adlar;
+            liste_baslat(&adlar);
+            Liste uzlar;
+            liste_baslat(&uzlar);
+            if (!parser_eslesir(p, TOK_SAG_SUSLU)) {
+                do {
+                    if (parser_eslesir(p, TOK_SAG_SUSLU)) break;
+                    Token at = parser_bekle(p, TOK_TANIMLAYICI, "P214",
+                        "yapi deseninde alan adi bekleniyor");
+                    liste_ekle(&adlar, p->arena,
+                        (Dugum *)ast_string_kopyala(p->arena,
+                                                    at.baslangic, at.uzunluk));
+                    liste_ekle(&uzlar, p->arena, (Dugum *)(size_t)at.uzunluk);
+                } while (parser_tuket(p, TOK_VIRGUL));
+            }
+            parser_bekle(p, TOK_SAG_SUSLU, "P215",
+                         "yapi deseninde '}' bekleniyor");
+            Dugum *d = dugum_olustur(p->arena, DUGUM_DESEN_YAPI, satir, sutun);
+            if (d) {
+                d->veri.desen_yapi.yapi_ad =
+                    ast_string_kopyala(p->arena, ad_baslangic, ad_uzunluk);
+                d->veri.desen_yapi.yapi_uz = ad_uzunluk;
+                d->veri.desen_yapi.alan_sayi = adlar.sayi;
+                d->veri.desen_yapi.alan_adlar =
+                    (const char **)liste_array_yap(&adlar, p->arena);
+                int *uz_dizi = (int *)arena_ayir(p->arena,
+                                   sizeof(int) * (size_t)(uzlar.sayi ? uzlar.sayi : 1));
+                Dugum **uz_ham = liste_array_yap(&uzlar, p->arena);
+                for (int i = 0; i < uzlar.sayi; i++)
+                    uz_dizi[i] = (int)(size_t)uz_ham[i];
+                d->veri.desen_yapi.alan_uzlar = uz_dizi;
+            }
+            return d;
+        }
+
         if (parser_eslesir(p, TOK_SOL_PAREN)) {
             parser_ilerle(p);
             Liste alt;

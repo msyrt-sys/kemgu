@@ -5758,8 +5758,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 const Dugum *desen = kol->veri.esles_kolu.desen;
                 const Dugum *govde = kol->veri.esles_kolu.govde;
                 int is_ctor = yapici_desen_mi(desen);
+                /* D-318: `YapiAdi { alan }` — yapinin TEK "varyanti" oldugu icin
+                 * desen DAIMA eslesir → catchall (kosul dali YOK). Baglamalar
+                 * govde basinda extractvalue ile kurulur (asagida). */
                 int catchall = !is_ctor && desen &&
                     (desen->tip == DUGUM_DESEN_JOKER ||
+                     desen->tip == DUGUM_DESEN_YAPI ||
                      desen->tip == DUGUM_DESEN_TANIMLAYICI);
                 int L_body = yeni_label(g);
                 int L_next = -1;
@@ -5892,6 +5896,32 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 /* Govde BB */
                 fprintf(g->out, "bb%d:\n", L_body);
                 ScopeMarker m = scope_gir(g);
+                /* D-318: yapi destructuring — her bagli alan icin extractvalue
+                 * + alloca + store, sonra isim tablosuna kaydet. Scrutinee bir
+                 * struct DEGERI (%Yapi) olarak `dr`de; alan indeksi yapi
+                 * kaydindan cozulur. */
+                if (desen && desen->tip == DUGUM_DESEN_YAPI) {
+                    YapiKayit *yk = yapi_bul(g, desen->veri.desen_yapi.yapi_ad,
+                                             desen->veri.desen_yapi.yapi_uz);
+                    for (int fi = 0; yk && fi < desen->veri.desen_yapi.alan_sayi;
+                         fi++) {
+                        const char *fad = desen->veri.desen_yapi.alan_adlar[fi];
+                        int fuz = desen->veri.desen_yapi.alan_uzlar[fi];
+                        const Dugum *ftip_d = NULL;
+                        int fidx = yapi_alan_indeksi(yk, fad, fuz, &ftip_d);
+                        if (fidx < 0) continue;
+                        const char *fir = ast_tip_to_ir(g, ftip_d);
+                        if (!fir) fir = "i32";
+                        int er = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
+                                er, sty, s.reg, fidx);
+                        int ar = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %s\n", ar, fir);
+                        fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+                                fir, er, ar);
+                        isim_ekle(g, fad, fuz, 0, ar, fir);
+                    }
+                }
                 /* C2.5: ctor payload'ını çıkar + bağlı değişkene ata
                  * (tamam(v)/hata(e)/değer(s)). 'tanimsiz tanimlayici' kalkar. */
                 if (is_ctor && ctor_pf >= 0 && ctor_bind &&

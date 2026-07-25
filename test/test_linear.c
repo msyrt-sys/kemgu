@@ -892,6 +892,66 @@ static void T78_kismi_tasima_gecici_deger_red(void) {
     test_sonuc("L78: gecici deger uzerinden kismi tasima -> red", var);
 }
 
+/* === D-318: `eşleş` YAPI DESENI (destructuring) ===
+ * `eşleş s { Sahip { x, n } => ... }` — desen yapiyi TUKETIR (lineer yapida sart:
+ * aksi halde hem yapi hem alanlar canli kalir = ayni kaynak iki kez), alanlar kol
+ * scope'una baglanir; lineer alanlar kendi basina lineer baglama olur.
+ * V1: TUM alanlar listelenmeli (rest-desen `..` YOK — yeni sozdizimi, icat edilmedi). */
+
+static void T79_yapi_deseni_tuketim_ok(void) {
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    e\xc5\x9fle\xc5\x9f s { Sahip { x } => { imha(x); } }\n"
+        "}\n");
+    test_sonuc("L79: yapi deseni + alani imha -> 0 hata", h == 0);
+}
+
+static void T80_yapi_deseni_alan_tuketilmedi(void) {
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    e\xc5\x9fle\xc5\x9f s { Sahip { x } => { } }\n"
+        "}\n", "L001");
+    test_sonuc("L80: baglanan lineer alan tuketilmedi -> L001", var);
+}
+
+static void T81_destructure_sonrasi_yapi(void) {
+    /* Destructure yapiyi TUKETIR -> sonrasinda imha ikinci tuketimdir. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    e\xc5\x9fle\xc5\x9f s { Sahip { x } => { imha(x); } }\n"
+        "    imha(s);\n"
+        "}\n", "L002");
+    test_sonuc("L81: destructure SONRASI yapiyi imha -> L002", var);
+}
+
+static void T82_eksik_alan_listesi(void) {
+    /* Listelenmeyen lineer alan hicbir yere baglanmaz ama yapi tuketilir
+     * -> SESSIZ SIZINTI olurdu. V1: tum alanlar zorunlu. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Iki { a: tekkez<tam32>; b: tam32; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Iki = Iki { a: tekkez_olustur(1), b: 2 };\n"
+        "    e\xc5\x9fle\xc5\x9f s { Iki { a } => { imha(a); } }\n"
+        "}\n", "T012");
+    test_sonuc("L82: yapi deseni EKSIK alan listesi -> T012", var);
+}
+
+static void T83_bilinmeyen_alan(void) {
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez Sahip { x: tekkez<tam32>; }\n"
+        "i\xc5\x9flev test() {\n"
+        "    de\xc4\x9fi\xc5\x9fken s: Sahip = Sahip { x: tekkez_olustur(1) };\n"
+        "    e\xc5\x9fle\xc5\x9f s { Sahip { y } => { } }\n"
+        "}\n", "T009");
+    test_sonuc("L83: yapi deseninde bilinmeyen alan -> T009", var);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -1004,6 +1064,13 @@ int main(void) {
     T76_ayni_alan_iki_kez();
     T77_kismi_tasinmis_yapi_tasinamaz();
     T78_kismi_tasima_gecici_deger_red();
+
+    printf("\n--- L79-L83: esles YAPI deseni (D-318) ---\n");
+    T79_yapi_deseni_tuketim_ok();
+    T80_yapi_deseni_alan_tuketilmedi();
+    T81_destructure_sonrasi_yapi();
+    T82_eksik_alan_listesi();
+    T83_bilinmeyen_alan();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

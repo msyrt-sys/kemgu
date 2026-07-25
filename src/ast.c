@@ -203,6 +203,7 @@ const char *dugum_tipi_adi(DugumTipi tip) {
         case DUGUM_DESEN_LITERAL:     return "DESEN_LITERAL";
         case DUGUM_DESEN_TANIMLAYICI: return "DESEN_TANIMLAYICI";
         case DUGUM_DESEN_YAPICI:      return "DESEN_YAPICI";
+        case DUGUM_DESEN_YAPI:        return "DESEN_YAPI";   /* D-318 */
         case DUGUM_DESEN_YOL:         return "DESEN_YOL";
         case DUGUM_DESEN_JOKER:       return "DESEN_JOKER";
         case DUGUM_ESLES_KOLU:        return "ESLES_KOLU";

@@ -95,6 +95,7 @@ typedef enum {
     DUGUM_DESEN_LITERAL,
     DUGUM_DESEN_TANIMLAYICI,
     DUGUM_DESEN_YAPICI,    /* TipAdi(alt_desen, ...) */
+    DUGUM_DESEN_YAPI,      /* D-318: YapiAdi { alan1, alan2 } — yapi destructuring */
     DUGUM_DESEN_YOL,       /* Cesit::Varyant — C2.7 (payloadsuz varyant deseni) */
     DUGUM_DESEN_JOKER,     /* _ */
     DUGUM_ESLES_KOLU,      /* desen => blok/ifade */
@@ -577,6 +578,17 @@ struct Dugum {
             Dugum **alt_desenler;
             int sayi;
         } desen_yapici;
+
+        /* D-318: `YapiAdi { alan1, alan2 }` — yapi destructuring deseni.
+         * Alanlar AYNI ADLA kol scope'una baglanir (yeniden-adlandirma ve
+         * rest-desen `..` V1'de YOK — icat edilmedi, ayri sozdizimi karari).
+         * V1 KURALI: TUM alanlar listelenmeli; eksik alan = lineer yapida
+         * sizinti riski, sirali yapida da belirsizlik -> acik hata. */
+        struct {
+            const char *yapi_ad; int yapi_uz;
+            const char **alan_adlar; int *alan_uzlar;
+            int alan_sayi;
+        } desen_yapi;
 
         /* C2.7: Cesit::Varyant deseni; C3: payload bağlama Cesit::V(a, b). */
         struct {
