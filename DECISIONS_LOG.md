@@ -26,9 +26,18 @@ yakalama/capture + blok, koşullu dal + blok) — C 42 ↔ self 42. codegen_diff
 bootstrap FIXPOINT (stage2==stage3 birebir, 39326 satır), self_driver tüm modlar,
 test_gorev_rt 16/16 (D-309 ölçüm kapısı dâhil), test_drf 54/54, test_llvm 274/274.
 
-**Sınır (bu adımda KAPSAM DIŞI, ayrı iş):** `değişken t: tam32 = görev_birleştir(a)`
-— i64 taşıyıcı annotasyonlu değişkene daraltılmıyor → LLVM tip hatası. **Gürültülü**
-(sessiz değil), C tarafında yok. Korpus bu şekli `ver ...` ile geçer.
+**İkinci onarım (aynı adım): i64 taşıyıcı daraltması store bağlamlarında.**
+`değişken t: tam32 = görev_birleştir(a)` / `t = görev_birleştir(a)` — eşleş ile
+bağlanmış tutucuda iç tip (görev<T> → T) bilinmediği için `i64_daralt` doğru olarak
+i64 bırakır (kırpma YOK), ama store hedefe uydurulmuyordu → `store i32 %i64` (LLVM RED).
+Yeni `int_uydur(op, hedef)` (ret_uydur'un hedef-parametreli biçimi) DEGISKEN
+(annotasyonlu) ve ATAMA (yerel TANIMLAYICI) store'larında trunc/sext ediyor.
+Korpus: `cg_gorev_i64_daralt.kem` (annotasyon + atama + tam64 hedef) → 42/42.
+
+**Ölçümle yakalanan kendi kusurum:** ilk `int_uydur` IMMEDIATE'lere de dokunuyordu →
+`sext i32 4294967296 to i64` literali SESSİZCE bozdu (`cg_skaler_deref` 24 yerine 56;
+korpus yakaladı). Guard eklendi: yalnız `%`-register uydurulur — D-299'daki
+`i64_genislet` dersinin aynısı (self-host TAM literalini daima i32 sayar).
 
 ---
 

@@ -2400,6 +2400,29 @@ işlev int_ll_mi(t: metin) -> mantıksal {
     ver metin_esit(t, "i1") veya metin_esit(t, "i8") veya metin_esit(t, "i16")
         veya metin_esit(t, "i32") veya metin_esit(t, "i64");
 }
+// D-310: `op` (tipi p.son_tip) değerini `hedef` tamsayı tipine uydur — YALNIZ iki
+// taraf da tamsayı ve genişlik farklıysa (trunc/sext). ret_uydur'un hedef-parametreli
+// biçimi: store bağlamları (annotasyonlu `değişken`, `ATAMA`) için. Gerekçe:
+// `görev_birleştir`/`kanal_al` iç tip kaybında i64 TAŞIYICI döner (i64_daralt t="");
+// `değişken t: tam32 = görev_birleştir(a)` bunu `store i32 %i64` olarak yazıp LLVM'de
+// patlıyordu. p.son_tip hedefe güncellenir (çağıran zincirleme kullanır).
+işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin) -> metin {
+    eğer metin_esit(p.son_tip, hedef) { ver op; }
+    // IMMEDIATE (register değil) → DOKUNMA. Self-host TAM literalini daima "i32"
+    // sayıp ham rakam dizisi döndürür; `sext i32 4294967296 to i64` literali
+    // SESSİZCE bozar (ölçüldü: cg_skaler_deref 24 yerine 56). Literal zaten
+    // hedef tiple basılıyor (beklenen bağlamı) — D-299 i64_genislet ile aynı ders.
+    eğer bayt(op, 0) != 37 { ver op; }   // 37 = '%'
+    eğer int_ll_mi(p.son_tip) == yanlış veya int_ll_mi(hedef) == yanlış { ver op; }
+    değişken islem: metin = "sext";
+    eğer tip_genislik(hedef) < tip_genislik(p.son_tip) { islem = "trunc"; }
+    değişken r: tam32 = yeni_reg(p);
+    değişken rs: metin = reg_str(r);
+    yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" ");
+    yaz_str(p.son_tip); yaz_str(" "); yaz_str(op); yaz_str(" to "); yaz_str(hedef); yb(10);
+    p.son_tip = hedef;
+    ver rs;
+}
 // Karar 1 (D-30x): `ver <ifade>` değerini fn dönüşüne (cur_ret) uydur — YALNIZ
 // iki taraf da tamsayı ve genişlik farklıysa (trunc/sext). görev_birleştir gibi
 // i64-taşıyıcı dönen ifadeler eşleş-bound iç-tip kaybında i64 kalır; `ver`
@@ -3878,6 +3901,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
+        // D-310: annotasyonlu → değer tamsayı genişliğini annotasyona uydur
+        // (i64-taşıyıcı built-in dönüşü: `değişken t: tam32 = görev_birleştir(a)`).
+        eğer annot == 1 { v = int_uydur(p, v, vtip); }
         // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
         değişken areg: metin = "";
         eğer annot == 1 { areg = pa_reg_bul(p, idx); }
@@ -3911,6 +3937,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
+            v = int_uydur(p, v, vt);   // D-310: i64-taşıyıcı → hedef değişken genişliği
             yaz_str("  store "); yaz_str(vt); yaz_str(" "); yaz_str(v); yaz_str(", ptr ");
             yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
             ver 0;
