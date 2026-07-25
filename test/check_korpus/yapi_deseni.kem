@@ -1,0 +1,14 @@
+// D-318: `eşleş` YAPI DESENI (destructuring) — C ↔ self --checkdump sıfır-diff.
+// `Yapi { alan1, alan2 }` alanları kol scope'una bağlar; lineer yapıda desen
+// yapıyı TÜKETİR (aksi halde hem yapı hem alanlar canlı = aynı kaynak iki kez).
+// V1: TÜM alanlar listelenmeli (rest-desen `..` YOK). Hatasız geçmeli.
+yapı tekkez Sahip { x: tekkez<tam32>; n: tam32; }
+yapı Nokta { a: tam32; b: tam32; }
+işlev main() -> tam32 {
+    değişken s: Sahip = Sahip { x: tekkez_olustur(40), n: 2 };
+    değişken t: tam32 = 0;
+    eşleş s { Sahip { x, n } => { t = kullan(x) + n; } }
+    değişken q: Nokta = Nokta { a: 1, b: 2 };   // lineer OLMAYAN yapı da desenlenebilir
+    eşleş q { Nokta { a, b } => { t = t + a + b; } }
+    ver t;
+}

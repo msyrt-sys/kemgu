@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-318 — [YÜKSEK] YENİ SÖZDİZİMİ: `eşleş` yapı deseni (destructuring) (2026-07-26)
+
+**Karar [ETKİ: `src/ast.h`/`ast.c`/`parser.c`/`tip_kontrol.c`/`llvm.c` +
+`selfhost/codegen.kem` + `selfhost/checker.kem`, `test/test_linear.c` (+5),
+`test/check_korpus/yapi_deseni.kem` (+1).]** **Mehmet onayıyla** eklenen YENİ
+SÖZDİZİMİ: `eşleş s { Yapi { alan1, alan2 } => { ... } }`.
+
+**Semantik:**
+- Yapının tek "varyantı" olduğu için desen **DAİMA eşleşir** → catchall (koşul dalı YOK).
+- Alanlar **aynı adla** kol scope'una bağlanır.
+- **LİNEER yapıda desen yapıyı TÜKETİR** — aksi halde hem yapı hem bağlanan alanlar
+  canlı kalır = aynı kaynak iki kez. Bağlanan lineer alanlar kendi başına lineer
+  bağlama olur (L001 onları ayrıca izler).
+- **V1: TÜM alanlar listelenmeli** (T012). Listelenmeyen lineer alan hiçbir yere
+  bağlanmaz ama yapı tüketilir → **sessiz sızıntı** olurdu.
+- Bilinmeyen alan → T009.
+
+**İCAT EDİLMEYENLER (ayrı sözdizimi kararları):** yeniden-adlandırma
+(`Yapi { x: yeni }`), rest-deseni (`..`), iç-içe desen (`Yapi { x: Alt { y } }`).
+
+**`--ast` PARİTESİ:** C dump'ı `DESEN_YAPI`'yi BOŞ değerle, çocuksuz yazar (yapı/alan
+adları dump'ta görünmez). Self-host **aynısını** üretir; adlar YAN-KANALDA tutulur
+(`dy_*`/`dyf_*` — çeşit `cv_*`/`cc_*` deseninin aynısı). Böylece parser bootstrap
+92/92 birebir korundu. *Bilinen sınır: dump `Sahip { x }` ile `Baska { y }`'yi ayırt
+etmez — fidelity boşluğu, korrektlik değil.*
+
+**⚠ SELF-HOST'ta BULUNAN ENGEL:** `eşleş` codegen'i **yapı-değeri scrutinee'de tümden
+atlıyordu** (`tagged == yanlış → ver 0`). Yapı için TAG YOKTUR; tag çıkarımı koşullu
+yapıldı (aksi halde geçersiz IR). Bu olmadan kol hiç emit edilmiyordu (exit 0).
+
+**Doğrulama:** test_linear **83/83** (78→83), parser 107/107, tip_kontrol 189/189,
+AST 31/31, test_llvm 274/274, C uçtan uca exit 42 (skaler + lineer alan), self-host
+uçtan uca exit 42, **FIXPOINT** (42003 satır), bootstrap (lexer/parser/checker 92
+birebir), checker_diff **52/52**, codegen_diff 100/100.
+
+**Bilinen C↔self farkı (hatalı programda, ikincil tanı):** `Sahip { y }` (bilinmeyen
+alan) → C `T009+T002`, self `T009`. İkisi de programı T009 ile REDDEDER; fark yalnız
+ikincil T002'de (C geçersiz alanı bağlamaz, self yerel_topla'da bağlar).
+
+**Sınır:** `yd_lin` gibi lineer-alanlı destructure self-host'ta LLVM-RED — sebebi
+D-318 DEĞİL, **`tekkez_olustur`un self-host codegen'inde HİÇ olmaması** (ölçüldü:
+D-318 öncesi de birebir aynı hata). Ayrı iş.
+
+---
+
 ## D-317 — L-COND / L-LOOP self-host'a portlandı — lineer parite borcu KAPANDI (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (anlık-görüntü yığını +

@@ -145,6 +145,10 @@ yapı Ayr {
     lin_sat: Dizi<tam32>;    // bildirim konumu (L001 için)
     lin_sut: Dizi<tam32>;
     lin_tuk: Dizi<tam32>;    // tüketim sayacı (0=tüketilmedi; >=1 sonrası L002)
+    dy_node: Dizi<tam32>;    // D-318: DESEN_YAPI düğüm idx (yan-kanal — dump DEĞİŞMEZ)
+    dy_yapi: Dizi<metin>;    // D-318: paralel — desendeki yapı adı
+    dyf_node: Dizi<tam32>;   // D-318: alan girdisi: sahip desen düğümü
+    dyf_alan: Dizi<metin>;   // D-318: paralel — alan adı
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
     snap_tuk: Dizi<tam32>;   // D-317: L-COND dal izolasyonu — tüketim anlık görüntüsü
     snap_maske: Dizi<tam32>; // D-317: paralel — maske anlık görüntüsü
@@ -1344,6 +1348,35 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
                 bekle(p, "SAG_PAREN");
             }
             ver dugum_n(p, "DESEN_YOL", metin_birlestir(metin_birlestir(ad, "::"), vad), s, u, kids);
+        }
+        // D-318: `YapiAdi { alan1, alan2 }` — yapı destructuring deseni.
+        // Desen POZİSYONUNDA `{` belirsiz DEĞİLDİR (kol gövdesi `=>` sonrası).
+        // Düğüm dump'ı C ile AYNI: değer BOŞ, çocuk YOK → --ast paritesi korunur;
+        // yapı/alan adları YAN-KANALA yazılır (çeşit cv_*/cc_* deseni).
+        eğer sim_mi(p, "SOL_SUSLU") {
+            ilerle(p);   // {
+            değişken alanlar: Dizi<metin> = [];
+            değişken dvm: mantıksal = doğru;
+            iken dvm {
+                eğer sim_mi(p, "SAG_SUSLU") { dvm = yanlış; }
+                değilse {
+                    dizi_ekle(alanlar, sim_lex(p));
+                    bekle(p, "TANIMLAYICI");
+                    eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+                    değilse { dvm = yanlış; }
+                }
+            }
+            bekle(p, "SAG_SUSLU");
+            değişken dn: tam32 = dugum0(p, "DESEN_YAPI", "", s, u);
+            dizi_ekle(p.dy_node, dn);
+            dizi_ekle(p.dy_yapi, ad);
+            değişken fi: tam32 = 0;
+            iken fi < dizi_boyut(alanlar) {
+                dizi_ekle(p.dyf_node, dn);
+                dizi_ekle(p.dyf_alan, dizi_al(alanlar, fi));
+                fi = fi + 1;
+            }
+            ver dn;
         }
         eğer sim_mi(p, "SOL_PAREN") {             // Yapıcı(alt, ...)
             ilerle(p);
@@ -3735,10 +3768,18 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             // D3: tagged-union ({i8,..}) destructuring — değilse atla (çeşit ileride)
             değişken tagged: mantıksal = yanlış;
             eğer metin_uzunluk(sty) > 0 { eğer bayt(sty, 0) == 123 { tagged = doğru; } }
-            eğer tagged == yanlış { ver 0; }
-            değişken tagr: metin = reg_str(yeni_reg(p));
-            yaz_str("  "); yaz_str(tagr); yaz_str(" = extractvalue "); yaz_str(sty);
-            yaz_str(" "); yaz_str(sval); yaz_str(", 0"); yb(10);
+            // D-318: `%Yapi` DEĞERİ scrutinee — yapı deseni destructuring için
+            // geçerli. Yapının tek "varyantı" olduğundan TAG YOKTUR; tüm kollar
+            // catchall'dır (tag çıkarımı atlanır, aksi halde geçersiz IR).
+            değişken yapi_scrut: mantıksal = yanlış;
+            eğer metin_uzunluk(sty) > 0 { eğer bayt(sty, 0) == 37 { yapi_scrut = doğru; } }
+            eğer (tagged == yanlış) ve (yapi_scrut == yanlış) { ver 0; }
+            değişken tagr: metin = "0";
+            eğer tagged {
+                tagr = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(tagr); yaz_str(" = extractvalue "); yaz_str(sty);
+                yaz_str(" "); yaz_str(sval); yaz_str(", 0"); yb(10);
+            }
             değişken Lend: metin = yeni_label(p);
             değişken acik: mantıksal = doğru;
             değişken i: tam32 = 1;
@@ -3756,11 +3797,15 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                     veya metin_esit(pad, "tamam") veya metin_esit(pad, "hata")
                     veya metin_esit(pad, "hiç");
                 değişken Lbody: metin = yeni_label(p);
+                // D-318: yapı deseni DAİMA eşleşir (yapının tek "varyantı") → catchall.
                 değişken katch: mantıksal = metin_esit(dad, "DESEN_JOKER")
+                    veya metin_esit(dad, "DESEN_YAPI")
                     veya (metin_esit(dad, "DESEN_TANIMLAYICI") ve variant == yanlış);
                 eğer katch {
                     br_to(p, Lbody);
                     etiket_yaz(p, Lbody);
+                    // D-318: alanları extractvalue + alloca ile bağla (C llvm.c aynası).
+                    eğer metin_esit(dad, "DESEN_YAPI") { desen_yapi_bagla(p, desen, sval, sty); }
                     deyim_uret(p, govde);
                     cg_kapsam_kapat(p, kapsam_bas);   // CG-SCOPE: kol kapsamını kapat
                     br_to(p, Lend);
@@ -5696,6 +5741,76 @@ işlev lin_dongu_birlestir(p: &değişken Ayr, idx: tam32, base: tam32, n: tam32
     }
     ver 0;
 }
+// D-318: yapı deseni destructuring emit — her bağlı alan için extractvalue +
+// alloca + store, sonra cg_var kaydı. Yapı DEĞERİ (%Yapi) `sval`de, tipi `sty`.
+// Alan indeksi/tipi yapı tablosundan; alan adları yan-kanaldan (dyf_*).
+işlev desen_yapi_bagla(p: &değişken Ayr, desen: tam32, sval: metin, sty: metin) -> tam32 {
+    eğer metin_uzunluk(sty) == 0 { ver 0; }
+    eğer bayt(sty, 0) != 37 { ver 0; }   // '%' değilse yapı değeri değil
+    değişken yad: metin = metin_kes(sty, 1, metin_uzunluk(sty) - 1);
+    değişken q: tam32 = 0;
+    iken q < dizi_boyut(p.dyf_node) {
+        eğer dizi_al(p.dyf_node, q) == desen {
+            değişken fad: metin = dizi_al(p.dyf_alan, q);
+            değişken fidx: tam32 = yapi_alan_idx(p, yad, fad);
+            eğer fidx >= 0 {
+                değişken fir: metin = yapi_alan_tip(p, yad, fad);
+                değişken er: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(er); yaz_str(" = extractvalue "); yaz_str(sty);
+                yaz_str(" "); yaz_str(sval); yaz_str(", ");
+                yaz_str(tam64_str(fidx olarak tam64)); yb(10);
+                değişken ar: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(ar); yaz_str(" = alloca "); yaz_str(fir); yb(10);
+                yaz_str("  store "); yaz_str(fir); yaz_str(" "); yaz_str(er);
+                yaz_str(", ptr "); yaz_str(ar); yb(10);
+                cg_var_ekle(p, fad, ar, fir, "", yapi_alan_elem(p, yad, fad));
+            }
+        }
+        q = q + 1;
+    }
+    ver 0;
+}
+// D-318: yapı deseni doğrulaması — C tip_kontrol.c aynası.
+//   T009: desende bilinmeyen alan.
+//   T012: TÜM alanlar listelenmeli (eksik alan = lineer yapıda SESSİZ SIZINTI;
+//         listelenmeyen lineer alan hiçbir yere bağlanmaz ama yapı tüketilir).
+// Ayrıca bağlanan LİNEER alanları lineer bağlama olarak kaydeder (L001 izler).
+işlev desen_yapi_dogrula(p: &değişken Ayr, des: tam32) -> tam32 {
+    değişken yad: metin = "";
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.dy_node) {
+        eğer dizi_al(p.dy_node, i) == des { yad = dizi_al(p.dy_yapi, i); }
+        i = i + 1;
+    }
+    eğer metin_esit(yad, "") { ver 0; }
+    eğer yapi_idx_bul(p, yad) < 0 { ver 0; }   // yapı bilinmiyor → başka hata
+    değişken listelenen: tam32 = 0;
+    değişken q: tam32 = 0;
+    iken q < dizi_boyut(p.dyf_node) {
+        eğer dizi_al(p.dyf_node, q) == des {
+            değişken fad: metin = dizi_al(p.dyf_alan, q);
+            listelenen = listelenen + 1;   // C: desendeki alan SAYISI (geçerlilikten bağımsız)
+            eğer alan_var_mi(p, yad, fad) == yanlış {
+                dizi_ekle(p.th_kod, "T009");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, des));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, des));
+            } değilse {
+                // Bağlanan alan LİNEER ise kendi başına lineer bağlamadır.
+                eğer lineer_alan_mi(p, yad, fad) {
+                    lin_ekle(p, fad, dizi_al(p.a_sat, des), dizi_al(p.a_sut, des));
+                }
+            }
+        }
+        q = q + 1;
+    }
+    değişken yi: tam32 = yapi_idx_bul(p, yad);
+    eğer listelenen != dizi_al(p.yapi_acount, yi) {
+        dizi_ekle(p.th_kod, "T012");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, des));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, des));
+    }
+    ver 0;
+}
 // D-316: 1 << n (self-host `<<` operatörü var; ayrı işlev okunabilirlik için).
 işlev bit_kaydir_sol(v: tam32, n: tam32) -> tam32 { ver v << n; }
 // D-316: alanın, o yapının LİNEER alanları içindeki 0-tabanlı sırası (-1 yok).
@@ -5840,6 +5955,17 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
                 dizi_ekle(p.yerel_tip, "?");
             }
+            // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
+            eğer metin_esit(ad, "DESEN_YAPI") {
+                değişken q: tam32 = 0;
+                iken q < dizi_boyut(p.dyf_node) {
+                    eğer dizi_al(p.dyf_node, q) == idx {
+                        dizi_ekle(p.yerel, dizi_al(p.dyf_alan, q));
+                        dizi_ekle(p.yerel_tip, "?");
+                    }
+                    q = q + 1;
+                }
+            }
         }
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -5967,6 +6093,16 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken ki: tam32 = 1;
         iken ki < ec {
             lin_snap_geri(p, eb0, en0);          // her kolu İZOLE et
+            // D-318: YAPI DESENI yapıyı TÜKETİR (lineer ise) — aksi halde hem
+            // yapı hem bağlanan alanlar canlı kalır = aynı kaynak iki kez.
+            değişken kol_d: tam32 = dizi_al(p.cocuk, eb + ki);
+            eğer dizi_al(p.a_cs, kol_d) > 0 {
+                değişken des: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, kol_d));
+                eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPI") {
+                    lin_tuket_dugum(p, dizi_al(p.cocuk, eb));
+                    desen_yapi_dogrula(p, des);
+                }
+            }
             kontrol_dugum(p, dizi_al(p.cocuk, eb + ki));
             değişken m: tam32 = 0;
             iken (m < en0) ve ((p.lin_basla + m) < dizi_boyut(p.lin_ad)) {
@@ -6452,7 +6588,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_maske: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
