@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-316 — Linear V2.1 KISMİ TAŞIMA self-host'a portlandı (C parite) (2026-07-25)
+
+**Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (`lin_maske`, `imha_bag`,
+`param_lineer_mi`, `lineer_alan_sirasi`, ERISIM taşıma, `deg_lineer_mi` ERISIM dalı),
+`test/check_korpus/lineer_kismi_tasima.kem` (+1).]** D-315 C-only'di; self-host kısmi
+taşımayı D-314'ün LR002'siyle REDDEDİYORDU. Artık **11/11 senaryo C ile birebir**.
+
+**Port (self-host'un dizi-tabanlı modeline uyarlandı):** C'de maske `Sembol`'de; self-host'ta
+`lin_maske` dizisi `lin_ad`'a paralel. Alan sırası `lyf_yapi`/`lyf_alan` içindeki
+**lineer-alan ordinali** (tüm alanların sırası GEREKMEZ — maske biti için yeterli).
+`imha_bag` sayacı imha bağlamını taşır (C'deki `imha_baglaminda` aynası).
+
+**⚠ İKİ EKSİK ÖLÇÜMLE BULUNDU (ikisi de sessiz parite kaybıydı):**
+1. **`deg_lineer_mi` ERISIM'i bilmiyordu** → `değişken f = s.x` lineer bağlama olarak
+   KAYDEDİLMİYORDU → f tüketilmese bile **L001 çıkmıyordu** (sessiz lineer sızıntı;
+   C=L001, self=OK). Değer bir lineer alan erişimiyse bağlama lineer sayılır.
+2. **`fn_plin` yalnız `TIP_TEKKEZ` bakıyordu** → `al(s: Sahip)` lineer YAPI parametresi
+   lineer sayılmıyor, çağrı argümanı TÜKETİLMİYORDU → yanlış L001 (C=L002, self=L001).
+   `param_lineer_mi`: `tekkez<T>` VEYA `yapı tekkez K`.
+
+**Doğrulama:** 11/11 senaryo C↔self birebir (pm1-pm4, pm7, ls1-ls5, ls7) + **FIXPOINT**
+(40341 satır) + `calistir_codegen_bootstrap` (lexer/parser/checker 92 birebir + codegen
+fixpoint) + checker_diff **50/50** (+1 korpus) + codegen_diff 100/100.
+
+**KALAN PARİTE BORCU (ayrı, ölçüldü):** **D-311/D-312 (L-COND/L-LOOP) self-host'ta YOK** —
+`grep '"L005"' selfhost/*.kem` = 0. Yani self-host koşullu/döngü tüketim tutarsızlığını
+denetlemiyor: C reddederken self KABUL EDER. Yön güvenli değil (self daha GEVŞEK), ama
+sessiz miscompile değil — yalnız checker gücü farkı. Ayrı iş.
+
+---
+
 ## D-315 — [YÜKSEK] Linear V2.1: KISMİ TAŞIMA (partial move) (2026-07-25)
 
 **Karar [ETKİ: `src/sembol.h` (`lineer_alan_maskesi`), `src/tip_kontrol.h`

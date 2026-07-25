@@ -145,6 +145,8 @@ yapı Ayr {
     lin_sat: Dizi<tam32>;    // bildirim konumu (L001 için)
     lin_sut: Dizi<tam32>;
     lin_tuk: Dizi<tam32>;    // tüketim sayacı (0=tüketilmedi; >=1 sonrası L002)
+    lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
+    imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;     // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
@@ -5240,7 +5242,7 @@ işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
             eğer bilinen_skaler_mi(pt) { dizi_ekle(p.fn_ptip, pt); }
             değilse { dizi_ekle(p.fn_ptip, "?"); }
             değişken tc: tam32 = son_cocuk(p, c);   // param tip çocuğu → tekkez mi (TC5b)
-            eğer (tc >= 0) ve tip_node_tekkez_mi(dizi_al(p.a_ad, tc)) { dizi_ekle(p.fn_plin, 1); }
+            eğer (tc >= 0) ve param_lineer_mi(p, tc) { dizi_ekle(p.fn_plin, 1); }
             değilse { dizi_ekle(p.fn_plin, 0); }
         }
         i = i + 1;
@@ -5598,6 +5600,16 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
 // ---- TC5b: lineer akış izleme yardımcıları ----
 // Linear Types Spec V1 = YALNIZ tekkez (yetki → CP005/TC7, görev → DRF/TC6 ayrı kod).
 işlev tip_node_tekkez_mi(ad: metin) -> mantıksal { ver metin_esit(ad, "TIP_TEKKEZ"); }
+// D-316: parametre tip düğümü LİNEER mi? tekkez<T> VEYA `yapı tekkez K`.
+// Yalnız TIP_TEKKEZ bakmak, lineer YAPI parametresini tüketimsiz bırakıyordu
+// (ölçüldü: cagri argümanı tüketilmeyip yanlış L001 çıkıyordu).
+işlev param_lineer_mi(p: &değişken Ayr, tc: tam32) -> mantıksal {
+    eğer tc < 0 { ver yanlış; }
+    değişken ta: metin = dizi_al(p.a_ad, tc);
+    eğer metin_esit(ta, "TIP_TEKKEZ") { ver doğru; }
+    eğer metin_esit(ta, "TIP_BASIT") { ver lineer_yapi_mi(p, dizi_al(p.a_deg, tc)); }
+    ver yanlış;
+}
 // Bir değişkenin tekkez olup olmadığı: annot tekkez VEYA değer tekkez_olustur(...).
 // D-314: ad bir LINEER YAPI mı (`yapı tekkez K`)? Parser'ın ly_ad kaydına bakar.
 işlev lineer_yapi_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
@@ -5619,6 +5631,22 @@ işlev th_var_mi(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> mant
     }
     ver yanlış;
 }
+// D-316: 1 << n (self-host `<<` operatörü var; ayrı işlev okunabilirlik için).
+işlev bit_kaydir_sol(v: tam32, n: tam32) -> tam32 { ver v << n; }
+// D-316: alanın, o yapının LİNEER alanları içindeki 0-tabanlı sırası (-1 yok).
+// Maske biti için yeterli — tüm alanların sırası GEREKMEZ.
+işlev lineer_alan_sirasi(p: &değişken Ayr, yad: metin, fad: metin) -> tam32 {
+    değişken ord: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.lyf_yapi) {
+        eğer metin_esit(dizi_al(p.lyf_yapi, i), yad) {
+            eğer metin_esit(dizi_al(p.lyf_alan, i), fad) { ver ord; }
+            ord = ord + 1;
+        }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 // D-314: (yapı adı, alan adı) çifti lineer yapının LİNEER alanı mı?
 işlev lineer_alan_mi(p: &değişken Ayr, yad: metin, fad: metin) -> mantıksal {
     değişken i: tam32 = 0;
@@ -5639,6 +5667,16 @@ işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
           ve lineer_yapi_mi(p, dizi_al(p.a_deg, c0)) { ver doğru; }
     }
     değişken vc: tam32 = son_cocuk(p, idx);
+    // D-316: değer bir lineer ALAN erişimiyse (kısmi taşıma) bağlama LİNEERDİR.
+    // Bu dal olmadan `değişken f = s.x` izlenmez → tüketilmese bile L001 ÇIKMAZ
+    // (sessiz lineer sızıntı; C ile parite bozulur — ölçüldü).
+    eğer (vc >= 0) ve metin_esit(dizi_al(p.a_ad, vc), "ERISIM") {
+        değişken vn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, vc));
+        eğer metin_esit(dizi_al(p.a_ad, vn), "TANIMLAYICI") {
+            eğer lineer_alan_mi(p, var_tip(p, dizi_al(p.a_deg, vn)),
+                                dizi_al(p.a_deg, vc)) { ver doğru; }
+        }
+    }
     eğer (vc >= 0) ve metin_esit(dizi_al(p.a_ad, vc), "CAGRI") {
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, vc));
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI")
@@ -5648,7 +5686,8 @@ işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
 }
 işlev lin_ekle(p: &değişken Ayr, ad: metin, sat: tam32, sut: tam32) -> tam32 {
     dizi_ekle(p.lin_ad, ad); dizi_ekle(p.lin_sat, sat);
-    dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0); ver 0;
+    dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0);
+    dizi_ekle(p.lin_maske, 0); ver 0;   // D-316
 }
 // Aktif dilimde (en yeni) lineer bağlamanın indeksi; yoksa -1.
 işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
@@ -5669,6 +5708,14 @@ işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
         dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
         dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
     }
+    // D-316: KISMİ TAŞINMIŞ yapı BÜTÜN OLARAK TAŞINAMAZ — delikli değeri alıcıya
+    // devretmek use-after-move olurdu (alıcının tipi alanı "var" gösterir).
+    // `imha` serbest: kalan alanları atar. C tip_kontrol.c aynası.
+    eğer (dizi_al(p.lin_maske, idx) != 0) ve (p.imha_bag == 0) {
+        dizi_ekle(p.th_kod, "L002");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
+    }
     dizi_yaz(p.lin_tuk, idx, dizi_al(p.lin_tuk, idx) + 1);
     ver 0;
 }
@@ -5681,7 +5728,7 @@ işlev lin_param_topla(p: &değişken Ayr, fn: tam32) -> tam32 {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
             değişken tc: tam32 = son_cocuk(p, c);
-            eğer (tc >= 0) ve tip_node_tekkez_mi(dizi_al(p.a_ad, tc)) {
+            eğer (tc >= 0) ve param_lineer_mi(p, tc) {
                 lin_ekle(p, dizi_al(p.a_deg, c), dizi_al(p.a_sat, c), dizi_al(p.a_sut, c));
             }
         }
@@ -5747,14 +5794,31 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // (unsound). Lineer-OLMAYAN alan okumak SERBEST. C tip_kontrol.c aynası.
     // Kanca BURADA (ifade_tip'te DEĞİL): ifade_tip yalnız annotasyonlu bildirimde
     // çağrılıyor → `değişken f = s.x` (annotsuz) kaçıyordu (ölçüldü).
+    // D-316 (V2.1 portu): lineer yapının LİNEER alanı DIŞARI TAŞINABİLİR.
+    // Bağlama başına bit-maske: ilk okuma alanı işaretler, ikinci okuma L002.
+    // Yapının kendisi hâlâ tüketilmeli. Bağlama çözülemezse (geçici değer) veya
+    // 31+ alan → muhafazakâr LR002 (kanıtlanamayan = DENY). C tip_kontrol.c aynası.
     eğer metin_esit(ad, "ERISIM") {
         değişken enes: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         eğer metin_esit(dizi_al(p.a_ad, enes), "TANIMLAYICI") {
-            eğer lineer_alan_mi(p, var_tip(p, dizi_al(p.a_deg, enes)),
-                                dizi_al(p.a_deg, idx)) {
-                dizi_ekle(p.th_kod, "LR002");
-                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
-                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            değişken ent: metin = var_tip(p, dizi_al(p.a_deg, enes));
+            eğer lineer_alan_mi(p, ent, dizi_al(p.a_deg, idx)) {
+                değişken eli: tam32 = lin_idx(p, dizi_al(p.a_deg, enes));
+                değişken eord: tam32 = lineer_alan_sirasi(p, ent, dizi_al(p.a_deg, idx));
+                eğer (eli < 0) veya (eord < 0) veya (eord > 30) {
+                    dizi_ekle(p.th_kod, "LR002");
+                    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+                } değilse {
+                    değişken ebit: tam32 = bit_kaydir_sol(1, eord);
+                    eğer (dizi_al(p.lin_maske, eli) & ebit) != 0 {
+                        dizi_ekle(p.th_kod, "L002");
+                        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+                    } değilse {
+                        dizi_yaz(p.lin_maske, eli, dizi_al(p.lin_maske, eli) | ebit);
+                    }
+                }
             }
         }
     }
@@ -5911,7 +5975,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "KULLAN_IFADE") veya metin_esit(ad, "IMHA_IFADE") {
         değişken op: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         kontrol_dugum(p, op);
+        // D-316: imha bağlamı — kısmi taşınmış yapı YALNIZ imha ile tüketilebilir.
+        eğer metin_esit(ad, "IMHA_IFADE") { p.imha_bag = p.imha_bag + 1; }
         lin_tuket_dugum(p, op);
+        eğer metin_esit(ad, "IMHA_IFADE") { p.imha_bag = p.imha_bag - 1; }
         ver 0;
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -6232,7 +6299,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], lin_maske: [], imha_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }

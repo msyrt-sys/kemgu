@@ -1,0 +1,12 @@
+// D-316: kısmi taşıma (partial move) self-host portu — C ↔ self --checkdump sıfır-diff.
+// Lineer alan dışarı taşınır (bağlama başına bit-maske), taşınan alan kendi başına
+// tüketilir, yapının kabuğu ayrıca imha edilir. Hatasız geçmeli.
+yapı tekkez Sahip { x: tekkez<tam32>; etiket: tam32; }
+işlev main() -> tam32 {
+    değişken s: Sahip = Sahip { x: tekkez_olustur(7), etiket: 35 };
+    değişken e: tam32 = s.etiket;   // lineer-OLMAYAN alan → serbest, taşıma değil
+    değişken f = s.x;               // KISMİ TAŞIMA → f lineer bağlama olur
+    değişken n: tam32 = kullan(f);  // f tüketildi
+    imha(s);                        // kabuk (kalan alanlar)
+    ver n + e;
+}
