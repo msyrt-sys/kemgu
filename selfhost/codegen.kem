@@ -2337,6 +2337,17 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // D-319: tekkez<T> SIFIR-MALİYET sarmalayıcı — IR'da T'nin ta kendisi.
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
+    // D-324: sabitsüre<T> de AYNI SINIF (Sabitsüre Spec V1, C llvm.c:1077 aynası):
+    // runtime'da T'nin ta kendisi. Olmadan "i32" fallback'i → `-> sabitsüre<tam64>`
+    // dönüşü `define i32` oluyordu (ÖLÇÜLDÜ; C: `define i64`) = imza düzeyinde 64→32.
+    // ⚠ ŞU AN İNERT: self-host sabitsüre desteği YOK — checker `ifşa`yı tanımıyor
+    // (T002) ve codegen `sabitsüre_olustur`/`ifşa` intrinsic'lerini emit etmiyor
+    // (`undefined value '@ifşa'`, LOUD link hatası). Yani hiçbir sabitsüre programı
+    // bu dala kadar gelemiyor. Dal yine de KONULDU: C ile parite borcunu kapatır ve
+    // sabitsüre self-host'a portlanınca (D-319'un tekkez eşleniği) hazır olur.
+    eğer metin_esit(ta, "TIP_SABITSURE") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
     eğer metin_esit(ta, "TIP_TEKKEZ") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }

@@ -5,6 +5,40 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-324 — `ll_tip`de `TIP_SABITSURE` + tekkez İMZA korpusu (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (`ll_tip`e 1 dal);
+`test/cg_korpus/cg_lineer_imza.kem` (+1, 104→105).]**
+Bu, planlanan işin ÖLÇÜMLE KÜÇÜLTÜLMÜŞ hâlidir — aşağıdaki düzeltme önemli.
+
+**1) `ll_tip(TIP_SABITSURE)` → iç tip.** D-321 (paralel oturum) `TIP_TEKKEZ` dalını
+koydu ama `TIP_SABITSURE`yi atladı; ikisi C `llvm.c:1077`de AYNI sınıftır. Ölçüldü:
+`işlev sar(x: tam64) -> sabitsüre<tam64>` için self-host **`define i32 @sar`**,
+C **`define i64 @sar`** → imza düzeyinde 64→32.
+
+**⚠ DÜZELTME — bu dal ŞU AN İNERT (önce yanlış çerçevelemiştim):** ölçünce çıktı ki
+self-host'ta sabitsüre desteği **hiç yok**:
+- **checker** `ifşa`yı tanımıyor → **T002** (C: OK),
+- **codegen** `sabitsüre_olustur`/`ifşa` intrinsic'lerini emit etmiyor →
+  `use of undefined value '@ifşa'` (**LOUD** link hatası, sessiz yanlış kod DEĞİL).
+
+Yani hiçbir sabitsüre programı bu dala kadar gelemiyor; **gate'lenebilir bir korpus
+testi yazmak MÜMKÜN DEĞİL** (ne `cg_korpus` çalışır ne `check_korpus` diff'i geçer).
+Dal yine de konuldu: C ile parite borcunu kapatır ve sabitsüre portlanınca hazırdır.
+**İlk niyetim `sabitsüre<metin>` ile örneklemekti — o TİP YASAK (CT006).**
+
+**2) `cg_lineer_imza.kem` (gerçekten gate'li kısım):** `tekkez<T>` İMZA pozisyonunu
+(`-> tekkez<metin>` dönüş + `t: tekkez<metin>` param) ölçer — D-319/D-321 korpusu
+yalnız YEREL değişkenleri kapsıyordu, `define`/param emisyonu ayrı kod yolu.
+C↔self exit **42/42**. codegen_diff **105/105**.
+
+**SIRADAKİ İŞ (bu daldan çıkan net iş kalemi):** sabitsüre'nin self-host portu —
+checker'da `ifşa`/`sabitsüre_olustur` tanınması + codegen'de intrinsic emisyonu
+(pass-through + `llvm.x86.sse2.lfence`, C aynası). D-319'un tekkez için yaptığının
+sabitsüre eşleniği.
+
+---
+
 ## D-323 — Self-host L001 asimetrisi: DOLAYLI çağrıda lineer argüman taşınır (2026-07-26)
 
 **Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) —
