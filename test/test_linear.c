@@ -952,6 +952,117 @@ static void T83_bilinmeyen_alan(void) {
     test_sonuc("L83: yapi deseninde bilinmeyen alan -> T009", var);
 }
 
+/* ========================================================================
+ * GROUP L84-L88: METHOD cagrisinda lineer arguman tuketimi (D-324)
+ * ------------------------------------------------------------------------
+ * `k.al(t)` — method-dispatch kolu argumani TUKETMIYORDU (normal cagri yolunda
+ * kural vardi). Iki hata modu ayni anda: sahte L001 (gecerli program reddedilir)
+ * VE move-sonrasi kullanim sessizce gecer (t hala "taze" gorunur).
+ * ======================================================================== */
+
+#define METOT_BASI \
+    "yap\xc4\xb1 K { n: tam32; }\n" \
+    "uygula K { i\xc5\x9flev al(kendin, y: tekkez<metin>) -> tam32 " \
+    "{ imha(y); ver 2; } }\n"
+
+static void T84_metot_lineer_arg_ok(void) {
+    int h = hata_sayisi(METOT_BASI
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { n: 1 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    ver k.al(m);\n"
+        "}\n");
+    test_sonuc("L84: k.al(m) lineer arg tuketir -> 0 hata", h == 0);
+}
+
+static void T85_metot_sonrasi_imha_l002(void) {
+    /* SESSIZ KABUL kapisi: m method'a tasindi, sonra imha -> use-after-move. */
+    int var = kod_uretildi_mi(METOT_BASI
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { n: 1 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    de\xc4\x9fi\xc5\x9fken r: tam32 = k.al(m);\n"
+        "    imha(m);\n"
+        "    ver r;\n"
+        "}\n", "L002");
+    test_sonuc("L85: k.al(m) sonrasi imha(m) -> L002", var);
+}
+
+static void T86_metot_cift_tuketim_l002(void) {
+    int var = kod_uretildi_mi(METOT_BASI
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { n: 1 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    ver k.al(m) + k.al(m);\n"
+        "}\n", "L002");
+    test_sonuc("L86: k.al(m) iki kez -> L002", var);
+}
+
+static void T87_metot_lineer_olmayan_ok(void) {
+    /* Over-consume yok: lineer OLMAYAN param etkilenmez. */
+    int h = hata_sayisi(
+        "yap\xc4\xb1 K { n: tam32; }\n"
+        "uygula K { i\xc5\x9flev topla(kendin, y: tam32) -> tam32 { ver y + 1; } }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { n: 1 };\n"
+        "    ver k.topla(41);\n"
+        "}\n");
+    test_sonuc("L87: lineer-olmayan metot argumani etkilenmez -> 0 hata", h == 0);
+}
+
+static void T88_metot_lineer_arg_tuketilmezse_l001(void) {
+    /* Metot argumani lineer DEGILSE tasima olmaz -> m sizar (L001). Tuketimin
+     * param lineerligine BAGLI oldugunu olcer (her argumani tuketmiyoruz). */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 K { n: tam32; }\n"
+        "uygula K { i\xc5\x9flev say(kendin) -> tam32 { ver 1; } }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { n: 1 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    ver k.say();\n"
+        "}\n", "L001");
+    test_sonuc("L88: metoda verilmeyen lineer baglama -> L001", var);
+}
+
+/* L89-L90: AYNI metot adi IKI tipte, FARKLI param lineerligi. Tuketim kurali
+ * (tip, metot) ciftine gore cozulmeli; yalniz ADA gore cozulurse bir tipin
+ * lineerligi otekine SIZAR (ya sahte tuketim ya kacan tuketim). Kayit sirasinin
+ * onemsiz oldugunu da olcer (iki yon ayri test). */
+
+static void T89_metot_ad_cakismasi_lineer_once(void) {
+    int h = hata_sayisi(
+        "yap\xc4\xb1 A { n: tam32; }\n"
+        "yap\xc4\xb1 B { n: tam32; }\n"
+        "uygula A { i\xc5\x9flev al(kendin, y: tekkez<metin>) -> tam32 "
+        "{ imha(y); ver 1; } }\n"
+        "uygula B { i\xc5\x9flev al(kendin, y: tam32) -> tam32 { ver y; } }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken a: A = A { n: 1 };\n"
+        "    de\xc4\x9fi\xc5\x9fken b: B = B { n: 2 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    ver a.al(m) + b.al(7);\n"
+        "}\n");
+    test_sonuc("L89: ayni metot adi, lineer olan ONCE -> 0 hata", h == 0);
+}
+
+static void T90_metot_ad_cakismasi_lineer_sonra(void) {
+    /* Ters kayit sirasi: lineer-OLMAYAN B.al once. A.al'in lineerligi b.al(7)'ye
+     * sizmamali (sizsaydi 7 tuketilmeye calisilir / m erken tuketilirdi). */
+    int h = hata_sayisi(
+        "yap\xc4\xb1 A { n: tam32; }\n"
+        "yap\xc4\xb1 B { n: tam32; }\n"
+        "uygula B { i\xc5\x9flev al(kendin, y: tam32) -> tam32 { ver y; } }\n"
+        "uygula A { i\xc5\x9flev al(kendin, y: tekkez<metin>) -> tam32 "
+        "{ imha(y); ver 1; } }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken b: B = B { n: 2 };\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"x\");\n"
+        "    de\xc4\x9fi\xc5\x9fken s: metin = kullan(m);\n"
+        "    ver b.al(7) + metin_uzunluk(s);\n"
+        "}\n");
+    test_sonuc("L90: ayni metot adi, lineer olan SONRA -> 0 hata", h == 0);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -1071,6 +1182,15 @@ int main(void) {
     T81_destructure_sonrasi_yapi();
     T82_eksik_alan_listesi();
     T83_bilinmeyen_alan();
+
+    printf("\n--- L84-L88: METHOD cagrisinda lineer tuketim (D-324) ---\n");
+    T84_metot_lineer_arg_ok();
+    T85_metot_sonrasi_imha_l002();
+    T86_metot_cift_tuketim_l002();
+    T87_metot_lineer_olmayan_ok();
+    T88_metot_lineer_arg_tuketilmezse_l001();
+    T89_metot_ad_cakismasi_lineer_once();
+    T90_metot_ad_cakismasi_lineer_sonra();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

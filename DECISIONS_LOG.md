@@ -5,6 +5,70 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-324 — METHOD çağrısında lineer argüman tüketimi (C + self-host BİRLİKTE) (2026-07-26)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (method-dispatch kolu, +1 kural);
+`selfhost/checker.kem` + `selfhost/codegen.kem` (yeni METOT imza tablosu: 5 alan +
+`uygula_kaydet`/`metot_kaydet`/`metot_plin_bul`/`param_kendin_mi`, `genel_topla`'da
+UYGULA kolu, CAGRI'da ERISIM kolu); `test/test_linear.c` (+7, 83→90);
+`test/check_korpus/tc5g_01..07` (+7, 59→66).]**
+D-321/D-323'te "ortak boşluk, parite bozuk değil" diye kapsam dışı bıraktığım kalem.
+
+**Kusur — İKİSİNDE DE aynı, iki hata modu birden:** normal çağrı yolunda
+"param lineer ise argümanı tüket" kuralı vardı; **method-dispatch kolunda YOKTU.**
+- **Sahte L001:** `k.al(m)` sonrası `m` tüketilmemiş sayılıyor → geçerli program reddedilir.
+- **SESSİZ KABUL:** `k.al(m); imha(m);` → `m` hâlâ "taze" görünür, **use-after-move
+  YAKALANMIYOR.** C'de de öyleydi (`C: OK` ölçüldü) — yani bu **parite-korumalı bir
+  soundness deliğiydi**, iki taraf birlikte yanlıştı.
+
+**C tarafı (1 kural):** method kolunda arg tipi zaten `tip_belirle_beklenen` ile TEK
+kez belirleniyor (D-320'nin iki-pas sorunu burada YOK) → aynı yardımcı, aynı koşul:
+`tip_lineer_mi(pt)` ise `lineer_tuket_eger_baglamaysa`.
+
+**Self-host tarafı (yeni tablo — `uygula` HİÇ kaydedilmiyordu):** `genel_topla`
+UYGULA'yı atlıyordu, method çağrısı ERISIM hedefiyle yedek yola düşüyordu. Eklenen:
+`(tip_adı, metot_adı) → param lineerliği` tablosu. `kendin` (receiver) **atlanır**
+(C'nin `has_kendin`/`offset` hizalamasının aynası; `kendin`in TIP_ çocuğu yoktur →
+`param_kendin_mi`). CAGRI'da alıcı tipi `ifade_tip` ile çözülür; **çözülemezse
+(bileşik → "?") tüketim YOK = eski davranış** (kanıtlanamayanda muhafazakâr kal).
+
+**Doğrulama — 4 senaryo, C oracle ile birebir (konum dâhil):**
+| senaryo | önce C | önce self | sonra (ikisi) |
+|---|---|---|---|
+| `k.al(m)` temiz | **L001** ❌ | **L001** ❌ | **OK** |
+| `k.al(m); imha(m);` | **OK** ❌ sessiz | **OK** ❌ sessiz | **L002 7:10** |
+| `k.al(m) + k.al(m)` | **L001** ❌ yanlış kod | **L001** ❌ | **L002 6:24** |
+| lineer-olmayan `k.topla(41)` | OK | OK | OK |
+
+**Sabotaj matrisi — iki taraf AYRI AYRI ölçüldü:** C kuralı iptal → test_linear
+[84][85][86] kırmızı, [87][88] yeşil kalır (yani over-consume etmediğimizi ölçen
+invaryantlar bozulmuyor). Self-host ERISIM kolu iptal → m1/m2/m3 C'den ayrışır.
+Sabotaj sonrası üç kaynak da `diff -q` ile temiz doğrulandı.
+
+**METOT ADI ÇAKIŞMASI (tablo tasarımının asıl sınavı):** iki tip aynı `al` adını
+FARKLI param lineerliğiyle tanımlayabilir. Tablo **(tip, ad)** çiftiyle anahtarlanır;
+yalnız ADA göre çözülseydi bir tipin lineerliği ötekine sızardı (ya sahte tüketim ya
+kaçan tüketim). Kayıt sırasının önemsizliği de ölçüldü (L89 lineer-önce / L90
+lineer-sonra) — C↔self ikisinde de OK.
+
+**Kapılar:** test_linear **90/90** (+7), checker_diff **66/66** (+7),
+codegen_diff 103/103, **FIXPOINT** (42861 satır), tip_kontrol 189/189,
+parser 107/107, capability 40/40 (CP005 aynı yardımcı), sıfır derleyici uyarısı.
+
+**⚠ ÖLÇÜM NOTU:** `calistir_codegen_bootstrap` artık **10 dakikayı aşıyor** (checker
+büyüdü + korpus 63'e çıktı). Kapı YEŞİL, ama kısa timeout'la koşturmak **sahte
+kırmızı** üretir — D-297'nin sabit-yol tuzağıyla aynı sınıf bir ölçüm artefaktı.
+
+**Sınır (kapsam dışı — TASARIM sorusu, icat edilmedi):** **receiver** (`kendin`)
+tüketimi. `k.al(...)`'da `k`'nın kendisi ne C'de ne self-host'ta tüketilir. Lineer
+bir yapının metodunu çağırmak `kendin`i taşır mı, ödünç mü alır — bu `kendin` /
+`&kendin` / `&değişken kendin` ayrımına bağlı bir dil tasarımı kararı (Mehmet'in
+alanı). Mevcut davranış: **ödünç (tüketmez)** — C↔self paritesi ölçüldü ve korpusa
+`tc5g_07_receiver_odunc.kem` olarak SABİTLENDİ, böylece ileride bir karar verilirse
+davranış değişikliği kapıdan sessizce geçemez.
+
+---
+
 ## D-323 — `tekkez_olustur` argüman tüketimi self-host checker'a eklendi (2026-07-26)
 
 **Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) — yeni
