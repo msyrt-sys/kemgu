@@ -1,0 +1,8 @@
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev test() -> tam32 {
+    değişken m: tekkez<metin> = tekkez_olustur("x");
+    değişken g: işlev(tam32, tam32) -> tam32 = topla;
+    değişken r: tam32 = g(1, 2);
+    imha(m);
+    ver r;
+}

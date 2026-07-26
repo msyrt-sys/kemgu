@@ -5,6 +5,64 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-323 — Self-host L001 asimetrisi: DOLAYLI çağrıda lineer argüman taşınır (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) —
+yeni `yerel_baglama_mi` yardımcısı + CAGRI yedek (fallback) döngüsü;
+`test/check_korpus/tc5e_01..04` (+4, 52→56).]**
+D-320'de kapsam dışı bırakıp not düştüğüm self-host asimetrisi kapatıldı.
+
+**Kusur:** self-host CAGRI kolunda lineer tüketim (`lin_tuket_dugum`) YALNIZ
+**bilinen-arite** yolunda (`fn_psay_bul >= 0`, `fn_plin_bul`) çalışıyordu. Yedek
+döngü — **işlev-tipli değişken üzerinden dolaylı çağrı** ve built-in'ler — argümanı
+hiç tüketmiyordu. **İki ayrı hata modu ÖLÇÜLDÜ:**
+- **Sahte L001 (yanlış red):** `değişken g: işlev(tekkez<metin>)->tam32 = f; g(m)`
+  → self **L001**, C **KABUL** → parite kaybı.
+- **SESSİZ KABUL (yanlış kabul, daha kötüsü):** `g(m); imha(m);` → C **L002**
+  (use-after-move), self **OK**. Gerçek bir çift tüketim **sessizce geçiyordu.**
+
+**Çözüm — kanıtlanabilir ayrım, tahmin değil:** self-host'ta bileşik tip-string'i
+yok (`tip_str` → `işlev(...)` için `"?"`), yani **param lineerliği kanıtlanamaz.**
+Ama karar verilebilir bir ayrım VAR: CAGRI hedefi TANIMLAYICI **ve aktif işlevin
+YEREL diliminde bir bağlama** ise çağrı DOLAYLIDIR (built-in adları yerelde
+bulunmaz). Yeni `yerel_baglama_mi` (= `ad_tanimli_mi`nin yalnız yerel yarısı) bunu
+sorar; dolaylıysa argüman `lin_tuket_dugum` ile tüketilir.
+
+**Gerekçe (neden tüketim doğru):** lineer bir bağlamayı bir çağrıya vermek
+**KOPYA DEĞİL TAŞIMADIR** — hedefin ne olduğundan bağımsız. Param lineer değilse
+zaten tip hatasıdır (C tarafı T001 verir); tüketmek yeni bir delik açmaz.
+
+**Built-in'ler BİLEREK değişmedi:** `metin_uzunluk(m)` (tekkez arg) hâlâ tüketilmez
+→ L001. Alternatif "tüm yedek-yol argümanlarını tüket" kuralı bunu **loud→silent**
+çevirirdi (C orada T001 verir, self-host bileşik param tipi göremediği için hiçbir
+şey diyemez → sessiz sızıntı). Dar kural seçildi.
+
+**Doğrulama (önce/sonra ÖLÇÜLDÜ, sabotajla değil doğrudan):**
+| senaryo | önce (self) | sonra (self) | C oracle |
+|---|---|---|---|
+| dolaylı çağrı, temiz | L001 ❌ | **OK** | OK |
+| dolaylı çağrı sonrası imha | **OK** ❌ (sessiz) | **L002** | L002 |
+| dolaylı çağrı ×2 | L001 ❌ (yanlış kod) | **L002** | L002 |
+| dolaylı çağrı, lineer-olmayan | OK | OK | OK |
+
+checker_diff **58/58** (+4 korpus), self_driver CHECK **58/58** (hem C-derlenmiş
+hem self-host-derlenmiş driver), TOKEN 22/22, PARSE 12/12, codegen **FIXPOINT**,
+test_linear/tip_kontrol dokunulmadı (C tarafı değişmedi).
+
+**Not — D-319 kod kaybı:** bu iş sırasında `calistir_codegen_diff`in main'de
+100/101 KIRMIZI olduğunu ölçmüştüm; sebebi D-319 commit'inin yalnız DECISIONS_LOG
+girdisini + korpus dosyasını içermesi, tarif ettiği `selfhost/codegen.kem`
+değişikliklerinin ağaçta olmamasıydı. **Bu, paralel bir oturumda D-321 (LC-3) ile
+onarıldı** — bu dal onun ÜSTÜNE kuruludur, o yüzden burada tekrar ele alınmaz.
+Kalan tek boşluk (`ll_tip`de `TIP_SABITSURE`) D-324'te kapatılır.
+
+**Sınır (kapsam dışı, bilinçli):** METHOD çağrısında (`k.al(m)`) lineer argüman
+**ne C'de ne self-host'ta** tüketilir — ikisi de L001 verir, yani **parite bozuk
+değil, ortak boşluk.** C `tip_kontrol.c` method-dispatch kolunda
+`lineer_tuket_eger_baglamaysa` çağrısı yok. Kapatmak C+self ortak iş.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`
