@@ -50,6 +50,46 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-327 — Lean ispat KAPISI: derleme ≠ ispat, aksiyom denetimi eklendi (2026-07-26)
+
+**⚠ ÖNCE BİR ÖLÇÜM DÜZELTMESİ (benim hatam).** Önceki turda "kalan başlıklar"
+listesinde *"DRF Lean'de 27 `sorry` var"* dedim. **Yanlış:** `grep -c sorry` **yorum
+satırlarını** saymış (dosya başlıklarındaki `Politika: ... sorry/axiom YOK` ve tracker
+alıntıları). Gerçek: taktik olarak **0 `sorry`**, **0 `axiom`** bildirimi.
+**DERS (bu oturumda üçüncü tekrar):** ham `grep` sayısı bir ölçüm DEĞİLDİR; eşleşmelerin
+ne olduğuna bak.
+
+**Karar [ETKİ: `test/lean_aksiyom_harness.sh` (yeni), `Makefile`
+(`calistir_lean_aksiyom` + .PHONY; mevcut `calistir_drf_lean_proof` mesajı düzeltildi).]**
+Asıl boşluk sorry değil, **doğrulamanın kendisiydi**: `calistir_drf_lean_proof` yalnız
+`lake build` çalıştırıp *"sorry/axiom: bkz. README"* diyordu — yani sorry-suzluk
+**belgelenmiş ama kapı ile ölçülmemişti**.
+
+**Neden yetersiz:** `lake build`in başarısı ispat kanıtı DEĞİLDİR — `sorry` içeren ispat
+da sorunsuz derlenir. **Ölçüldü:** üst teoremin bir bacağını `sorry` ile değiştirdim →
+**28/28 modül yine derlendi**. Tek geçerli kanıt `#print axioms`.
+
+**Kapı:** (1) tüm modülleri **mathlib'SİZ** derler — proje hiç `Mathlib` import etmiyor
+(ölçüldü) → lake/mathlib indirmesi gerekmez, **~1 dk**; (2) dört üst teoremin aksiyom
+kümesini yazdırır; (3) `sorryAx` görürse KIRMIZI.
+
+**Doğrulanan durum (bugün, Lean 4.29.0):** 28/28 modül derlendi ve
+`kemgu_soundness_v3` / `iyiTipli_no_fault` / `typed_no_fault` →
+`[propext, Classical.choice, Quot.sound]`, `t1_bellek_guvenligi_tam` →
+`[propext, Quot.sound]`. Hepsi Lean'in **standart** aksiyomları; **`sorryAx` YOK** →
+teoremler gerçekten ispatlı.
+
+**Sabotaj doğrulaması:** üst teoreme `sorry` enjekte → kapı `sorryAx` yakalayıp
+**exit 1**; temiz kaynakta **exit 0**.
+
+**KALAN (gerçek boşluk — sorry değil, KAPSAM):** `kemgu_soundness_v3` üç şey veriyor:
+DRF + per-Step bellek güvenliği + No-Fault. **Yan-kanal (SideChannel/NonInterference)
+ve WCET (BET/Boundedness) teoremin DIŞINDA** — dosyaları bilinçli "iskelet" (vakum
+conjunct olarak durmaları yerine ÇIKARILMIŞLAR; dürüstlük tercihi). Ayrıca hipotez
+`IyiTipliCekirdek` — tam KEMGU tip sistemi değil, çekirdek. Bunlar V2 hedefi.
+
+---
+
 ## D-326 — [YÜKSEK] Codegen'in "desteklemiyorum" yolu SESSİZ 0 üretiyordu → ÖLÜMCÜL (2026-07-26)
 
 **Karar [ETKİ: `src/llvm.c` (`hata()` — 8 çağrı yerinin tamamını kapsar).]** D-325'in
