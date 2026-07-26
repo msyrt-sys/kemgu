@@ -1,8 +1,11 @@
-// D-326 karşıt örnek: bildirilen işlev tipi ile lambda UYUMLU → temiz (OK).
+// D-332 karşıt örnek: bildirilen dönüş gövdeye YAYILIR (bidirectional) →
+// sayı literali varsayılan tam32'ye düşmez; hepsi TEMİZ (OK).
 işlev m() -> tam32 {
-    değişken f: işlev() -> tam32 = || 42;
-    değişken g: işlev(tam32) -> tam32 = |x: tam32| x + 1;
-    değişken h: işlev() -> tam32 = || { ver 7; };
+    değişken f: işlev() -> tam64 = || 8589934592;
+    değişken g: işlev() -> tam8 = || 42;
+    değişken h: işlev() -> tam64 = || { ver 5; };
+    değişken i: işlev() -> kesirli64 = || 1.5;
+    değişken j: işlev(tam32) -> tam32 = |x: tam32| x + 1;
     değişken k: işlev() -> boş = || { };
     ver 0;
 }

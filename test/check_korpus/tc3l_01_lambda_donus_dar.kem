@@ -1,9 +1,0 @@
-// D-326: bildirilen kapanış dönüşü ile lambda gövdesinin doğal tipi uyuşmuyor
-// (sayı literalinin varsayılanı tam32; bildirilen tam64/tam8) → T001 (DEGISKEN konumu).
-işlev m() -> tam32 {
-    değişken f: işlev() -> tam64 = || 8589934592;
-    değişken g: işlev() -> tam8 = || 42;
-    değişken h: işlev() -> tam64 = || { ver 5; };
-    değişken k: işlev(tam32) -> tam32 = || 42;
-    ver 0;
-}

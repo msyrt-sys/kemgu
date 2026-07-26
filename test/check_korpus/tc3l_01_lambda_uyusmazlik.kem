@@ -1,0 +1,10 @@
+// D-326/D-332: kapanış annotasyonu ile lambda UYUŞMAZLIĞI → T001 (DEGISKEN konumu).
+// Dar dönüş (tam64/tam8) ARTIK HATA DEĞİL (D-332 bidirectional) — bkz. tc3l_02.
+// Burada kalanlar: dönüş tipi ailesi farkı, arite farkı, parametre tipi farkı.
+işlev m() -> tam32 {
+    değişken f: işlev() -> metin = || 42;
+    değişken g: işlev(tam32) -> tam32 = || 42;
+    değişken h: işlev(tam64) -> tam32 = |x: tam32| x;
+    değişken k: işlev() -> mantıksal = || { ver 5; };
+    ver 0;
+}

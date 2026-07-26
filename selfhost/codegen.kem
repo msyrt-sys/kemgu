@@ -5804,16 +5804,18 @@ işlev lam_ilk_ver(p: &değişken Ayr, n: tam32) -> tam32 {
     }
     ver 0 - 1;
 }
-// LAMBDA'nın çıkarsanan dönüş tipi. İfade-form: gövdenin DOĞAL tipi (beklenen "?"
-// — C tip_belirle). Blok-form (D-304): ilk `ver`in değer tipi; `ver` yoksa "boş".
-işlev lam_donus_str(p: &değişken Ayr, lam: tam32) -> metin {
+// LAMBDA'nın çıkarsanan dönüş tipi. D-332: `bek` = BİLDİRİLEN dönüş, gövdeye
+// YAYILIR (bidirectional — C tip_belirle_beklenen aynası): `işlev()->tam64 = || 5`
+// gövdesi tam32 varsayılanına DÜŞMEZ. İfade-form: gövdenin tipi (bek bağlamında).
+// Blok-form (D-304): ilk `ver`in değer tipi (bek bağlamında); `ver` yoksa "boş".
+işlev lam_donus_str(p: &değişken Ayr, lam: tam32, bek: metin) -> metin {
     değişken g: tam32 = son_cocuk(p, lam);
     eğer g < 0 { ver "?"; }
-    eğer metin_esit(dizi_al(p.a_ad, g), "BLOK") == yanlış { ver ifade_tip(p, g, "?"); }
+    eğer metin_esit(dizi_al(p.a_ad, g), "BLOK") == yanlış { ver ifade_tip(p, g, bek); }
     değişken v: tam32 = lam_ilk_ver(p, g);
     eğer v < 0 { ver "boş"; }
     eğer dizi_al(p.a_cs, v) == 0 { ver "boş"; }
-    ver ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, v)), "?");
+    ver ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, v)), bek);
 }
 // İki tip-string'i "ikisi de BİLİNİYOR ve FARKLI" mı? ("?" → emin değiliz, atla.)
 işlev tip_kesin_farkli(a: metin, b: metin) -> mantıksal {
@@ -5842,8 +5844,8 @@ işlev t001_lambda_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             i = i + 1;
         }
-        eğer tip_kesin_farkli(tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ti) + tpn)),
-                              lam_donus_str(p, lam)) { kotu = doğru; }
+        değişken bek: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ti) + tpn));
+        eğer tip_kesin_farkli(bek, lam_donus_str(p, lam, bek)) { kotu = doğru; }
     } değilse {
         kotu = doğru;                     // arite farkı — C tip_esit de reddeder
     }

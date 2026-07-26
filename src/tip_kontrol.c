@@ -423,6 +423,8 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->lambda_baslangic_scope = NULL;
     tk->lambda_blok_cikarsama = 0;      /* D-304 */
     tk->lambda_blok_donus = NULL;       /* D-304 */
+    tk->lambda_beklenen_donus = NULL;   /* D-332 */
+    tk->lambda_blok_beklenen = NULL;    /* D-332 */
     tk->aktif_escape = NULL;
 }
 
@@ -4002,19 +4004,32 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * olarak kontrol et ve dönüşü içindeki `ver`'lerden çıkarsa. İfade-form
              * (`|| e`) eski yol (gövdenin doğal tipi). Önceki durum: tip_belirle(BLOK)
              * → T001; blok-form lambda HİÇ --check'ten geçmiyordu. */
+            /* D-332: bildirilen `işlev(...) -> T` bağlamı varsa gövdeye YAY
+             * (bidirectional). Bayrağı gövdeye GİRMEDEN al ve temizle — iç içe
+             * lambda dış bağlamı MİRAS ALMASIN (`|| || 5` iç lambda'ya tam64
+             * sızarsa yanlış çıkarsama olur). */
+            const TipBilgisi *bek_donus = tk->lambda_beklenen_donus;
+            tk->lambda_beklenen_donus = NULL;
+
             TipBilgisi *donus;
             if (d->veri.lambda.govde &&
                 d->veri.lambda.govde->tip == DUGUM_BLOK) {
                 int eski_cik = tk->lambda_blok_cikarsama;
                 TipBilgisi *eski_bd = tk->lambda_blok_donus;
+                const TipBilgisi *eski_bbd = tk->lambda_blok_beklenen;
                 tk->lambda_blok_cikarsama = 1;
                 tk->lambda_blok_donus = NULL;
+                tk->lambda_blok_beklenen = bek_donus;   /* D-332: `ver`e ilet */
                 tip_kontrol_deyim(tk, d->veri.lambda.govde);
                 donus = tk->lambda_blok_donus
                         ? tk->lambda_blok_donus
                         : tip_olustur_basit(tk->arena, TIP_BOS);
                 tk->lambda_blok_cikarsama = eski_cik;
                 tk->lambda_blok_donus = eski_bd;
+                tk->lambda_blok_beklenen = eski_bbd;
+            } else if (bek_donus) {
+                donus = tip_belirle_beklenen(tk, d->veri.lambda.govde,
+                                             bek_donus);
             } else {
                 donus = tip_belirle(tk, d->veri.lambda.govde);
             }
@@ -4184,6 +4199,23 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         case DUGUM_YAPI_OLUSTUR:
             if (beklenen->kategori == TIP_YAPI) {
                 return kontrol_yapi_olustur_ic(tk, d, beklenen);
+            }
+            break;
+
+        case DUGUM_LAMBDA:
+            /* D-332: `değişken f: işlev(...) -> T = |...| gövde;` — bildirilen
+             * dönüş tipini gövdeye YAY (bidirectional). Öncesinde gövde daima
+             * bağlamsız çıkarsanıyordu → `işlev()->tam64 = || 5` sayı literalinin
+             * tam32 varsayılanına düşüp T001 ile REDDEDİLİYORDU (dil düzeyinde
+             * yazılamayan bir şekil; codegen zaten bildirilen tipi emit ediyordu).
+             * Parametre tipleri lambda'da ZORUNLU annotasyonlu → yayılmaz;
+             * arite/parametre uyuşmazlığı hâlâ T001. */
+            if (beklenen->kategori == TIP_ISLEV) {
+                const TipBilgisi *eski = tk->lambda_beklenen_donus;
+                tk->lambda_beklenen_donus = beklenen->veri.islev.donus;
+                TipBilgisi *r = tip_belirle(tk, d);
+                tk->lambda_beklenen_donus = eski;
+                return r;
             }
             break;
 
@@ -5152,7 +5184,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
              * KAYDET (aktif_donus_tipi'ye karşı kontrol yerine). İlk `ver`
              * kazanır; sonrakiler tutarlı varsayılır (well-typed lambda). */
             if (tk->lambda_blok_cikarsama && d->veri.ver.deger) {
-                TipBilgisi *vt = tip_belirle(tk, d->veri.ver.deger);
+                /* D-332: bildirilen dönüş bağlamı varsa `ver <e>`'yi ONUN
+                 * içinde çıkarsa (literal varsayılanına düşme). */
+                TipBilgisi *vt = tk->lambda_blok_beklenen
+                    ? tip_belirle_beklenen(tk, d->veri.ver.deger,
+                                           tk->lambda_blok_beklenen)
+                    : tip_belirle(tk, d->veri.ver.deger);
                 if (!tk->lambda_blok_donus && vt->kategori != TIP_HATA) {
                     tk->lambda_blok_donus = vt;
                 }

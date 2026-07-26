@@ -6842,12 +6842,22 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         }
         term = blok_uret(g, govde);
     } else if (govde) {
-        /* İfade-form: beklenen tip VERME (NULL) → gövdenin DOĞAL IR tipi.
-         * Eskiden burada `donus`("i32") beklenen olarak geçilip int_donustur
-         * ile i32'ye zorlanıyordu; ptr/double gövdelerde bu, define'ın i32
-         * imzasıyla çelişen bir değer üretiyordu (LLVM reddi). */
-        IfadeSonuc r = ifade_uret(g, govde, NULL);
-        if (ic_tmp && r.tip && *r.tip) donus = r.tip;   /* çıkarsanan dönüş */
+        /* D-332: BİLDİRİLEN dönüş IR'ı (işlev()->T annotasyonu) varsa ifade-form
+         * gövde de ONU hedefler — blok-form ile parite. Şart: `işlev()->tam64 =
+         * || 8589934592` artık --check'ten geçiyor (bidirectional), ve gövde
+         * bağlamsız çıkarsanırsa literal i32'ye DÜŞÜP `add i32 0, 8589934592`
+         * (kırpma) + `define i32` / `call i64` SESSİZ uyuşmazlığı üretiyordu
+         * (ölçüldü — D-325 sınıfı). Bildirilen tip zaten tip kontrolünden geçmiş
+         * (aksi T001) → zorlamak güvenli.
+         * Bildirilen tip YOKSA beklenen VERME (NULL) → gövdenin DOĞAL IR tipi:
+         * eskiden burada `donus`("i32") beklenen geçilip int_donustur ile i32'ye
+         * zorlanıyordu; ptr/double gövdelerde bu, define'ın i32 imzasıyla çelişen
+         * bir değer üretiyordu (LLVM reddi). */
+        const char *bildirilen = (bl->beklenen_donus_ir && *bl->beklenen_donus_ir)
+                                 ? bl->beklenen_donus_ir : NULL;
+        if (bildirilen) { donus = bildirilen; g_donus_tip = donus; }
+        IfadeSonuc r = ifade_uret(g, govde, bildirilen);
+        if (!bildirilen && ic_tmp && r.tip && *r.tip) donus = r.tip;   /* çıkarsanan */
         g_donus_tip = donus;
         int rr = int_donustur(g, r.reg, r.tip, donus);  /* eş tipte no-op */
         fprintf(g->out, "  ret %s %%%d\n", donus, rr);

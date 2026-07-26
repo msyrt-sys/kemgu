@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-332 — Bildirilen kapanış dönüşü lambda GÖVDESİNE yayılır (bidirectional): C gevşetildi + gizli codegen kırpması kapandı (2026-07-26)
+
+**Karar [ETKİ: `src/tip_kontrol.h` (+2 alan), `src/tip_kontrol.c` (4 nokta: init,
+`tip_belirle_beklenen` DUGUM_LAMBDA dalı, DUGUM_LAMBDA gövde çıkarsaması, DUGUM_VER
+blok-form), `src/llvm.c` (ifade-form lifted lambda dönüşü), `selfhost/checker.kem` +
+`selfhost/codegen.kem` (`lam_donus_str` bek parametresi), korpus: `check_korpus/tc3l_01`
+yeniden kapsandı + `cg_korpus/cg_kapanis_donus_genis.kem` (yeni).]**
+
+D-331 self'i C'ye hizalamıştı; bu adım **C'nin kendisini** gevşetiyor (Mehmet kararı).
+
+**Kusur:** lambda gövdesi DAİMA bağlamsız çıkarsanıyordu → sayı literali `tam32`
+varsayılanına düşüyor, bildirilen `işlev()->tam64` ile uyuşmuyordu:
+`değişken f: işlev() -> tam64 = || 8589934592;` → **T001**. Bu, dilde yazılamayan
+bir şekildi; codegen zaten bildirilen tipi emit etmeye çalışıyordu.
+
+**Çözüm:** `tip_belirle_beklenen(DUGUM_LAMBDA, beklenen=işlev(...)→T)` T'yi
+`lambda_beklenen_donus` ile gövdeye yayar. İfade-form doğrudan, blok-form
+`lambda_blok_beklenen` üzerinden ilk `ver`e. Bayrak gövdeye **girmeden**
+temizlenir → iç içe lambda dış bağlamı MİRAS ALMAZ.
+**Yayılmayan:** parametre tipleri (lambda'da zaten zorunlu annotasyonlu) — arite
+ve parametre uyuşmazlığı hâlâ T001.
+
+**Yan bulgu (asıl tehlike):** gevşetme, gizli bir codegen kusurunu ERİŞİLEBİLİR
+yaptı — ifade-form lifted lambda `bl->beklenen_donus_ir`'i YOK SAYIYORDU
+(blok-form D-304'te kullanıyordu). Sonuç: `define i32 @lambda_0` + `trunc i64→i32`
+vs çağrı yerinde `call i64` — **D-325 sınıfı sessiz uyuşmazlık**. İfade-form artık
+bildirilen IR'ı hedefler (blok-form ile parite).
+
+**ÖLÇÜM UYARISI [YÜKSEK]:** bu kırpma **x86_64'te exit koduyla YAKALANAMAZ** —
+`trunc i64→i32` makine düzeyinde no-op, çağıran rax'ın TAMAMINI okur ve doğru
+değeri görür. Sabotajlı derleyici `2^33+42` testinde **42 döndü** (yani yeşil).
+Bu yüzden `cg_kapanis_donus_genis.kem` korpusuna **kesirli64** dönüş de kondu:
+orada uyuşmazlık kayıt SINIFI değiştirir (xmm0 vs rax) → LLVM açıkça reddeder
+(`'%0' defined with type 'double' but expected 'i32'`, sabotaj exit 127).
+**Genel ders:** aynı-genişlik-sınıfı tamsayı imza uyuşmazlığı için exit-kod
+gate'i falsifiye ETMEZ; korpusa farklı kayıt sınıfı (kesirli/ptr) koy.
+
+**Kapılar:** test_tip_kontrol 191/191, test_linear 89/89, test_llvm 274/274,
+lambda V2 5/5, DRF 54/54, stdlib --check, `calistir_checker_diff` 58/58 sıfır-diff,
+`calistir_self_driver` (4 mod + LLVM 106/106 ×2) + FIXPOINT,
+`calistir_codegen_bootstrap` FIXPOINT (45096 satır).
+
+**Sabotaj doğrulaması (iki mekanizma ayrı ayrı):**
+- checker yayılımı iptal → `tc3l_02` 3× T001 (temiz olması gerekirken).
+- codegen `bildirilen` hedefi iptal → `cg_kapanis_donus_genis` LLVM RED (exit 127).
+
+---
+
 ## D-331 — İşlev-tipli değişken annotasyonu self-host'ta HİÇ denetlenmiyordu: checker parite açığı kapatıldı (2026-07-26)
 
 **Karar [ETKİ: `selfhost/checker.kem` (+90), `selfhost/codegen.kem` (+90, birebir

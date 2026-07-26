@@ -1,0 +1,21 @@
+// D-332: bildirilen kapanış dönüşü gövdeye YAYILIR (ifade-form + blok-form).
+// Önceki durum: --check T001 ile reddediyordu; --llvm yolundan geçirilirse
+// `define i32` vs `call <bildirilen>` SESSİZ uyuşmazlığı (D-325 sınıfı).
+// NOT (ölçüldü): x86_64'te GENİŞ TAMSAYI kırpması exit koduyla YAKALANAMAZ
+// (`trunc i64→i32` makine düzeyinde no-op; çağıran rax'ın tamamını okur, doğru
+// değeri görür). Bu yüzden korpus KESİRLİ dönüşü de içerir: orada uyuşmazlık
+// kayıt sınıfı değiştirir (xmm0 vs rax) → sessiz kalamaz.
+işlev main() -> tam32 {
+    değişken f: işlev() -> tam64 = || 8589934634;
+    değişken g: işlev() -> tam64 = || { ver 8589934634; };
+    değişken h: işlev() -> kesirli64 = || 21.0;
+    değişken k: işlev() -> kesirli64 = || { ver 21.0; };
+    değişken v: tam64 = f();
+    değişken w: tam64 = g();
+    değişken x: kesirli64 = h();
+    değişken y: kesirli64 = k();
+    eğer (v == 8589934634) ve (w == 8589934634) {
+        ver ((x + y) / 1.0) olarak tam32;
+    }
+    ver 1;
+}

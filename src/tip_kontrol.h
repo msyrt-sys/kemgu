@@ -96,6 +96,15 @@ typedef struct TipKontrol {
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
     int lambda_blok_cikarsama;
     TipBilgisi *lambda_blok_donus;
+    /* D-332: bildirilen `işlev(...) -> T` bağlamından lambda GÖVDESİNE yayılan
+     * beklenen dönüş tipi (bidirectional). `değişken f: işlev()->tam64 = || 5;`
+     * → gövdedeki literal tam32 varsayılanına DÜŞMEZ, tam64 çıkarsanır.
+     * tip_belirle_beklenen(DUGUM_LAMBDA) kurar, DUGUM_LAMBDA gövde çıkarsaması
+     * TÜKETİR (iç içe lambda mirasını önlemek için gövdeye girmeden temizlenir). */
+    const TipBilgisi *lambda_beklenen_donus;
+    /* D-332: blok-form gövdede aktif beklenen dönüş — `ver <e>` bunu e'nin
+     * çıkarsamasına bağlam olarak geçirir (`|| { ver 5; }` + işlev()->tam64). */
+    const TipBilgisi *lambda_blok_beklenen;
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */
     int lambda_yakalama;           /* G005: >0 = lambda HERHANGI bir cevre
