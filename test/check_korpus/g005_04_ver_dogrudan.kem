@@ -1,0 +1,6 @@
+// G005 pozitif: kapanış DOĞRUDAN 'ver' ile kaçar (bağ takibi gerekmez).
+işlev yap() -> işlev() -> tam32 {
+    değişken s: metin = "abc";
+    ver || metin_uzunluk(s);
+}
+işlev main() -> tam32 { ver 0; }

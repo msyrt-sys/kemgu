@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-324 — [YÜKSEK] G005 self-host'a portlandı: parite açığı KAPANDI (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (İKİSİ de — checker
+mantığı iki yerde; `calistir_checker_diff` REFERANS `checker.kem`'i, `calistir_self_driver`
+driver'ı kullanır): +7 `Ayr` alanı (`g5_*`) ve 10 işlev (`g5_*` + `g005_kontrol`);
+`test/check_korpus/g005_0{1..5}_*.kem` (54→59 korpus).]**
+
+D-323'ün açık bıraktığı parite açığı: **self-host'ta G005 HİÇ YOKTU** (`grep` 0 sonuç).
+D-322 (genel kapanış codegen'i) öncesinde zararsızdı — self kapanış **derleyemiyordu**;
+D-322 ile CANLI oldu: self, C'nin reddettiği işaretçi-yakalayan kaçan kapanışı **kabul
+edip derliyordu**.
+
+**Port, C'nin iki ayrı mekanizmasının aynası:**
+- **Yakalama** ← `tip_kontrol.c` `genel_yakalama_kontrol` / `lambda_yakalama_yereli_mi`:
+  lambda alt-ağacındaki TANIMLAYICI, lambda-içi bildirime (param/yerel/**gölgeleme**)
+  çözülmüyor **ve** aktif işlev diliminde yerel/param ise = yakalama. İç LAMBDA'ya
+  girilmez (C'de bayraklar save/restore edilir).
+- **İşaretçi-benzerlik** ← `yakalama_isaretci_benzeri` (D-323): skaler DEĞİLSE evet;
+  **çözülemeyen tip = işaretçi VARSAY** (default-deny).
+- **Kaçış** ← `escape.c` `visit`/`ifadeyi_yukselt` ESC_CAGIRAN yayılımı: `ver`,
+  çağrı ARGÜMANI (**lambda LİTERALİNİN kendisi HARİÇ** — `görev_başlat(|| ...)` deseni;
+  C'de de bu istisna var), agregat alan/indeks ataması. Bağ takibi (`değişken`/`atama` →
+  takma ad) **sabit-noktaya kadar** tekrarlanır (maks 8 tur).
+
+**Self-host'a özgü bir kusur ÖLÇÜMLE bulundu ve kapatıldı:** self'te `yerel_tip`
+annotasyonsuz bildirimlerde `"?"` kalır; default-deny ile birleşince
+`değişken k = 42; ... || k` **yanlış-pozitif G005** verirdi (C kabul ediyor: sembol tipi
+çıkarsanır). `g5_deg_tip_ara` başlatıcıdan `ifade_tip` ile çıkarsayarak kapatır —
+şekil `d_annotasyonsuz_skaler` ile ölçüldü (C=OK, self=OK).
+
+**Sabotaj doğrulaması (iki yön, kod-duyarlı kapı):**
+- Kancayı etkisizleştir (`"LAMBDA"` → `"LAMBDAXX"`) → **2 pozitif korpus KIRMIZI**
+  (57/59), negatifler yeşil kalır.
+- D-323 daraltmasını kaldır (`g5_capptr` koşulunu düşür) → **skaler korpus KIRMIZI**
+  (58/59), diğerleri yeşil. Yani hem eksik-red hem fazla-red yakalanıyor.
+
+**Kapılar:** `calistir_checker_diff` **59/59** sıfır-diff; `calistir_self_driver`
+TOKEN 22/22, PARSE 12/12, **CHECK 59/59** (hem C-derlenmiş hem **self-host-derlenmiş**
+driver), LLVM 104/104 ×2, **FIXPOINT** kararlı; `calistir_codegen_diff` 104/104;
+`calistir_codegen_bootstrap` FIXPOINT. Ek olarak korpus dışı 6 şekil (kaçmayan-yakalayan,
+doğrudan-`ver`, yakalamayan, annotasyonsuz-skaler, Dizi-yakalama, gölgeleme) ve
+`görev_başlat(|| ...)` C oracle'ı ile **birebir**.
+
+**KAPSAM/SINIR (V1):** kaçış yaklaşımı sentaktik + bağ-takibi; C'nin DFA'sının
+**şekil-şekil aynası**, satır-satır kopyası değil. Takma ad kümesi düz (gölgelenmiş
+aynı-adlı bağlamalar birleşir) → C'den marjinal daha muhafazakâr olabilir; ölçülen 65
+korpus/şekilde ayrışma YOK. Yeni bir kaçış rotası (ör. küresel değişkene yazma) C'ye
+eklenirse buraya da eklenmeli.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`

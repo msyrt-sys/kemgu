@@ -1,0 +1,10 @@
+// G005: İŞARETÇİ yakalayan KAÇAN kapanış → reddedilir.
+// `s` metin (işaretçi-benzeri) yakalanır, kapanış `f` çağrı argümanı olarak
+// çerçeveden çıkar → kopyalanan işaretçi gösterdiği bölgeyi aşabilir.
+işlev al(g: işlev() -> tam32) -> tam32 { ver g(); }
+
+işlev main() -> tam32 {
+    değişken s: metin = "merhaba";
+    değişken f: işlev() -> tam32 = || metin_uzunluk(s);
+    ver al(f);
+}

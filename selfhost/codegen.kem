@@ -161,6 +161,14 @@ yapı Ayr {
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
+    // ---- G005: işaretçi yakalayan KAÇAN kapanış reddi (C tip_kontrol.c + escape.c aynası) ----
+    g5_alias: Dizi<metin>;   // lambda'ya bağlı takma adlar (bağ takibi)
+    g5_abase: tam32;         // aktif G005 sorgusunun takma ad dilim başı
+    g5_fn: tam32;            // aktif işlev düğümü (-1 = işlev dışı → G005 kapalı)
+    g5_cap: tam32;           // lambda çevre yakalıyor mu
+    g5_capptr: tam32;        // yakalananlardan biri işaretçi-benzeri mi
+    g5_kacti: tam32;         // lambda kaçıyor mu (ESC_CAGIRAN karşılığı)
+    g5_degisti: tam32;       // sabit-nokta iterasyonu: bu turda değişiklik oldu mu
     th_kod: Dizi<metin>;     // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -6190,6 +6198,203 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     iken i < cs { yerel_topla(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
     ver 0;
 }
+// =========================================================================
+// G005 — işaretçi yakalayan KAÇAN kapanış reddi (self-host portu).
+// C aynası: src/tip_kontrol.c (genel_yakalama_kontrol + yakalama_isaretci_benzeri,
+// D-323 daraltması) + src/escape.c (ifadeyi_yukselt/visit ESC_CAGIRAN yayılımı).
+// Koşul = (a) lambda ÇEVRE lokal/param YAKALIYOR ∧ (b) yakalananlardan en az biri
+// İŞARETÇİ-benzeri ∧ (c) lambda KAÇIYOR. Üçü birden yoksa reddedilmez
+// (over-reject yok: env HEAP olduğu için skaler yakalama güvenlidir).
+// Kaçış yolları C escape.c ile birebir: `ver`, çağrı ARGÜMANI (lambda
+// LİTERALİNİN kendisi HARİÇ — görev_başlat(|| ...) deseni), agregat alan/indeks
+// ataması. Bağ takibi (değişken/atama → takma ad) sabit-noktaya kadar tekrarlanır.
+// =========================================================================
+
+// İşaretçi-benzeri mi? (C yakalama_isaretci_benzeri): skaler DEĞİLSE evet.
+// Çözülemeyen tip ("?") = işaretçi VARSAY (default-deny; sessiz kabul yerine red).
+işlev g5_isaretci_tip_mi(t: metin) -> mantıksal {
+    eğer sayisal_mi(t) { ver yanlış; }
+    eğer metin_esit(t, "mantıksal") veya metin_esit(t, "karakter") veya metin_esit(t, "boş") { ver yanlış; }
+    ver doğru;
+}
+// `ad` aktif işlev diliminde yerel/param mı? (C: lambda_yakalama_yereli_mi'nin
+// SCOPE_ISLEV/BLOK + DEGISKEN/PARAMETRE koşulu; codegen: cg_var_bul != "").
+işlev g5_yerel_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.yerel);
+    değişken i: tam32 = p.yerel_basla;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// `ad` lambda alt-ağacında BİLDİRİLİYOR mu? (param/yerel/gölgeleme → yakalama DEĞİL)
+işlev g5_ic_bildirim_mi(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "PARAMETRE") veya metin_esit(t, "DEGISKEN")
+      veya metin_esit(t, "ICIN") veya metin_esit(t, "DESEN_TANIMLAYICI") {
+        eğer metin_esit(dizi_al(p.a_deg, node), ad) { ver doğru; }
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer g5_ic_bildirim_mi(p, dizi_al(p.cocuk, cb + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Annotasyonsuz yerel için tipi başlatıcıdan çıkarsa (self-host'ta yerel_tip
+// "?" olurdu; C'de sembol tipi çıkarsanır → bu dal olmadan yanlış-pozitif G005).
+işlev g5_deg_tip_ara(p: &değişken Ayr, node: tam32, ad: metin) -> metin {
+    eğer node < 0 { ver "?"; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "DEGISKEN") {
+        eğer metin_esit(dizi_al(p.a_deg, node), ad) {
+            değişken v: tam32 = son_cocuk(p, node);
+            eğer v >= 0 { ver ifade_tip(p, v, "?"); }
+        }
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken r: metin = g5_deg_tip_ara(p, dizi_al(p.cocuk, cb + i), ad);
+        eğer metin_esit(r, "?") == yanlış { ver r; }
+        i = i + 1;
+    }
+    ver "?";
+}
+// Lambda gövdesindeki çevre yakalamalarını tara → p.g5_cap / p.g5_capptr.
+// İÇ lambda'ya GİRME (C: iç-içe lambda bayrakları save/restore edilir).
+işlev g5_cap_tara(p: &değişken Ayr, node: tam32, lam: tam32) -> tam32 {
+    eğer node < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "LAMBDA") ve (node != lam) { ver 0; }
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ad: metin = dizi_al(p.a_deg, node);
+        eğer g5_ic_bildirim_mi(p, lam, ad) { ver 0; }
+        eğer g5_yerel_mi(p, ad) == yanlış { ver 0; }
+        p.g5_cap = 1;
+        değişken vt: metin = var_tip(p, ad);
+        eğer metin_esit(vt, "?") { vt = g5_deg_tip_ara(p, p.g5_fn, ad); }
+        eğer g5_isaretci_tip_mi(vt) { p.g5_capptr = 1; }
+        ver 0;
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs { g5_cap_tara(p, dizi_al(p.cocuk, cb + i), lam); i = i + 1; }
+    ver 0;
+}
+// Takma ad kümesi (aktif dilim [p.g5_abase, ...)).
+işlev g5_alias_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.g5_alias);
+    değişken i: tam32 = p.g5_abase;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.g5_alias, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev g5_alias_ekle(p: &değişken Ayr, ad: metin) -> tam32 {
+    eğer g5_alias_mi(p, ad) == yanlış { dizi_ekle(p.g5_alias, ad); p.g5_degisti = 1; }
+    ver 0;
+}
+işlev g5_kacti_ayarla(p: &değişken Ayr) -> tam32 {
+    eğer p.g5_kacti == 0 { p.g5_kacti = 1; p.g5_degisti = 1; }
+    ver 0;
+}
+// `nd` ifadesi `lam`e çözülüyor mu? (C escape.c ifadeyi_yukselt zinciri).
+işlev g5_cozer_mi(p: &değişken Ayr, nd: tam32, lam: tam32) -> mantıksal {
+    eğer nd < 0 { ver yanlış; }
+    eğer nd == lam { ver doğru; }
+    değişken t: metin = dizi_al(p.a_ad, nd);
+    değişken cb: tam32 = dizi_al(p.a_cb, nd);
+    değişken cs: tam32 = dizi_al(p.a_cs, nd);
+    eğer metin_esit(t, "TANIMLAYICI") { ver g5_alias_mi(p, dizi_al(p.a_deg, nd)); }
+    eğer metin_esit(t, "EGER") {
+        değişken r: mantıksal = yanlış;
+        eğer cs > 1 { eğer g5_cozer_mi(p, dizi_al(p.cocuk, cb + 1), lam) { r = doğru; } }
+        eğer cs > 2 { eğer g5_cozer_mi(p, dizi_al(p.cocuk, cb + 2), lam) { r = doğru; } }
+        ver r;
+    }
+    eğer metin_esit(t, "BLOK") {
+        eğer cs == 0 { ver yanlış; }
+        ver g5_cozer_mi(p, dizi_al(p.cocuk, cb + cs - 1), lam);
+    }
+    eğer metin_esit(t, "ERISIM") veya metin_esit(t, "INDEKS")
+      veya metin_esit(t, "TEKLI") veya metin_esit(t, "IFADE_DEYIMI") {
+        eğer cs > 0 { ver g5_cozer_mi(p, dizi_al(p.cocuk, cb), lam); }
+        ver yanlış;
+    }
+    ver yanlış;
+}
+// İşlev gövdesini tara: takma ad topla + kaçış yollarını işaretle.
+işlev g5_kacis_tara(p: &değişken Ayr, node: tam32, lam: tam32) -> tam32 {
+    eğer node < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    eğer metin_esit(t, "DEGISKEN") {
+        değişken v: tam32 = son_cocuk(p, node);
+        eğer v >= 0 {
+            eğer g5_cozer_mi(p, v, lam) { g5_alias_ekle(p, dizi_al(p.a_deg, node)); }
+        }
+    }
+    eğer metin_esit(t, "ATAMA") ve (cs > 1) {
+        değişken h: tam32 = dizi_al(p.cocuk, cb);
+        değişken v2: tam32 = dizi_al(p.cocuk, cb + 1);
+        eğer g5_cozer_mi(p, v2, lam) {
+            değişken ht: metin = dizi_al(p.a_ad, h);
+            eğer metin_esit(ht, "TANIMLAYICI") { g5_alias_ekle(p, dizi_al(p.a_deg, h)); }
+            eğer metin_esit(ht, "ERISIM") veya metin_esit(ht, "INDEKS") { g5_kacti_ayarla(p); }
+        }
+    }
+    eğer metin_esit(t, "VER") ve (cs > 0) {
+        eğer g5_cozer_mi(p, dizi_al(p.cocuk, cb), lam) { g5_kacti_ayarla(p); }
+    }
+    eğer metin_esit(t, "CAGRI") {
+        değişken k: tam32 = 1;
+        iken k < cs {
+            değişken arg: tam32 = dizi_al(p.cocuk, cb + k);
+            eğer metin_esit(dizi_al(p.a_ad, arg), "LAMBDA") == yanlış {
+                eğer g5_cozer_mi(p, arg, lam) { g5_kacti_ayarla(p); }
+            }
+            k = k + 1;
+        }
+    }
+    değişken i: tam32 = 0;
+    iken i < cs { g5_kacis_tara(p, dizi_al(p.cocuk, cb + i), lam); i = i + 1; }
+    ver 0;
+}
+// G005 kapısı — LAMBDA düğümü için (kontrol_dugum'da çocuk gezisinden SONRA:
+// C'de de G005 gövde kontrolünden sonra raporlanır → hata sırası birebir).
+işlev g005_kontrol(p: &değişken Ayr, lam: tam32) -> tam32 {
+    eğer p.g5_fn < 0 { ver 0; }
+    p.g5_cap = 0;
+    p.g5_capptr = 0;
+    g5_cap_tara(p, lam, lam);
+    eğer (p.g5_cap == 0) veya (p.g5_capptr == 0) { ver 0; }
+    değişken eski_base: tam32 = p.g5_abase;
+    değişken eski_kacti: tam32 = p.g5_kacti;
+    p.g5_abase = dizi_boyut(p.g5_alias);
+    p.g5_kacti = 0;
+    değişken tur: tam32 = 0;
+    iken tur < 8 {
+        p.g5_degisti = 0;
+        g5_kacis_tara(p, p.g5_fn, lam);
+        eğer p.g5_degisti == 0 { tur = 8; } değilse { tur = tur + 1; }
+    }
+    eğer p.g5_kacti == 1 {
+        dizi_ekle(p.th_kod, "G005");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, lam));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, lam));
+    }
+    p.g5_abase = eski_base;
+    p.g5_kacti = eski_kacti;
+    ver 0;
+}
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
@@ -6518,11 +6723,14 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
+    // G005: kapanış kapısı çocuk gezisinden SONRA (C: gövde kontrolünden sonra raporlanır).
+    eğer metin_esit(ad, "LAMBDA") { g005_kontrol(p, idx); }
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
+    p.g5_fn = fn;   // G005: aktif işlev gövdesi (kaçış taramasının kökü)
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
     lin_param_topla(p, fn);              // lineer parametreler dilime
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
@@ -6551,6 +6759,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
         } değilse {
             eğer metin_esit(ad, "SABIT") {
                 p.yerel_basla = dizi_boyut(p.yerel);
+                p.g5_fn = 0 - 1;   // G005: işlev dışı (C: aktif_escape NULL) → kapalı
                 kontrol_dugum(p, c);
             } değilse {
                 eğer metin_esit(ad, "MODUL") { kontrol_ust(p, c); }
@@ -6817,6 +7026,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
+        g5_alias: [], g5_abase: 0, g5_fn: 0 - 1, g5_cap: 0, g5_capptr: 0, g5_kacti: 0, g5_degisti: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }

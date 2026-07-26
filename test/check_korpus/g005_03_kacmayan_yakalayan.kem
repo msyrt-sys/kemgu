@@ -1,0 +1,6 @@
+// G005 negatif: yakalayan ama KAÇMAYAN kapanış (yalnız yerel çağrı) → TEMİZ.
+işlev main() -> tam32 {
+    değişken s: metin = "merhaba";
+    değişken f: işlev() -> tam32 = || metin_uzunluk(s);
+    ver f();
+}

@@ -1,0 +1,10 @@
+// D-323 negatif kontrolü: SKALER yakalayan KAÇAN kapanış TEMİZ olmalı.
+// env HEAP olduğu için (llvm.c V2-F2 @malloc) skaler yakalama çerçeve aşımında
+// dangling ÜRETEMEZ → G005 tetiklenmez (over-reject yok).
+işlev iki_kez(g: işlev(tam32) -> tam32, x: tam32) -> tam32 { ver g(g(x)); }
+
+işlev main() -> tam32 {
+    değişken k: tam32 = 10;
+    değişken f: işlev(tam32) -> tam32 = |v: tam32| v + k;
+    ver iki_kez(f, 22);
+}

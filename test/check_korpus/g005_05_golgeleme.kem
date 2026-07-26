@@ -1,0 +1,7 @@
+// G005 negatif: lambda parametresi dıştaki 's'yi GÖLGELER → yakalama YOK.
+işlev al(g: işlev(metin) -> tam32) -> tam32 { ver g("xy"); }
+işlev main() -> tam32 {
+    değişken s: metin = "merhaba";
+    değişken f: işlev(metin) -> tam32 = |s: metin| metin_uzunluk(s);
+    ver al(f);
+}
