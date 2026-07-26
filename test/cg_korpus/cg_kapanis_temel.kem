@@ -1,0 +1,11 @@
+// D-322: genel kapanış (closure) self-host codegen — C↔self exit-kodu eşdeğerliği.
+// Kapanış değeri fat value { fnptr, envptr }; env null ise bare çağrı, değilse
+// heap env geçilir. Kapsam: argümansız + argümanlı + YAKALAMALI + çoklu çağrı.
+// Öncesinde self-host `f()` için TANIMSIZ @f üretiyordu (link hatası). Exit: 52
+işlev main() -> tam32 {
+    değişken a: işlev() -> tam32 = || 20;
+    değişken b: işlev(tam32) -> tam32 = |v: tam32| v + 1;
+    değişken k: tam32 = 10;
+    değişken c: işlev() -> tam32 = || k + 1;     // yakalama → heap env
+    ver a() + b(0) + c() + a();                  // 20 + 1 + 11 + 20 = 52
+}

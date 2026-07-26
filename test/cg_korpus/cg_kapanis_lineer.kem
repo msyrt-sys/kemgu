@@ -1,0 +1,7 @@
+// D-322 + D-321 (LC-3): lineer kapanış — `tekkez<işlev(...)>` çağrısı TÜKETİMDİR
+// (tip kontrol) ve fat-value dolaylı çağrı olarak derlenir (codegen). D-321'de
+// yalnız checker tarafı kapanmıştı; codegen bu adımda geldi. Exit: 42
+işlev main() -> tam32 {
+    değişken f: tekkez<işlev() -> tam32> = tekkez_olustur(|| 42);
+    ver f();
+}

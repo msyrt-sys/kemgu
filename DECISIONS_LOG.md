@@ -50,6 +50,47 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-322 — GENEL KAPANIŞ (closure) codegen self-host'ta — C parite (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` — `ll_tip`/`ll_ic_tip` TIP_ISLEV, genel `LAMBDA`
+kolu, `lam_env_uret` (ortak env emisyonu), `lam_emit` genelleştirmesi, CAGRI kapanış
+dispatch'i, DEGISKEN dönüş-bağlamı; `test/cg_korpus/cg_kapanis_{temel,metin,lineer}.kem`
+(+3).]** D-321'de ölçüp bıraktığım boşluk: self-host kapanışları **tip-kontrol ediyor
+ama DERLEYEMİYORDU** — `f()` bir üst-düzey işlev sanılıp **TANIMSIZ `@f`** üretiliyordu.
+Artık C ile birebir. (Öncesinde self'te kapanış yalnız `görev_başlat` argümanı olarak
+vardı — D-300.)
+
+**Model (C llvm.c aynası):** kapanış değeri = **fat value `{ fnptr, envptr }`**.
+- `ll_tip(TIP_ISLEV)` → `{ ptr, ptr }`; `ll_ic_tip(TIP_ISLEV)` → **dönüş** IR'ı.
+- Lifted fn ABI: `(ptr %rho [, ptr %env], params...)`. Yakalama yoksa env `null`
+  ve **bare** çağrılır; varsa HEAP env geçilir. Çağrı yeri `env == null` üzerinde
+  dallanır (iki imza → iki `call`, sonuç slot'ta buluşur).
+- **Dönüş IR'ı BİLDİRİLEN tipten gelir** (`cg_aic`; C `kapanis_donus_ir` aynası) —
+  fat value T'yi sildiği için şart. Sabotajla ölçüldü: i32'ye zorlayınca
+  `metin_uzunluk(s())` **SEGFAULT** (işaretçi kırpması) — D-293'ün self-host aynası.
+- Env emisyonu `lam_env_uret`'te **tek kaynak**: görev yolu ile genel kapanış aynı
+  kodu kullanır (iki kopya ayrışırsa env düzeni sessizce sapardı). Env HEAP'tir —
+  lambda yaratan çerçeveden uzun yaşayabilir (görev), stack alloca yanlış olurdu.
+- `lam_emit` artık parametreleri emit eder ve dönüşü kuyruktan alır: `"i64"` =
+  görev/runtime taşıyıcı yolu (D-310 korundu), diğer her şey **doğal tip**.
+
+**Ölçüm (C↔self exit-kodu birebir, 6/6 şekil):** argümansız 42/42, argümanlı 42/42,
+**yakalamalı** 42/42, `-> metin` 7/7, blok-form gövde 42/42, çoklu çağrı 42/42.
+Ek: D-321'in bilinen codegen boşluğu (`tekkez<işlev>` LC-3) **artık derleniyor** →
+42/42. Kapılar: codegen_diff **104/104** (+3), self_driver 4-mod, FIXPOINT, görev
+runtime 16/16 (görev yolu regresyonsuz).
+
+**Sabotaj doğrulaması (iki bağımsız):** (1) dönüş IR'ını i32'ye sabitle → metin
+korpusu SEGFAULT; (2) fat value'ya env yerine `null` yaz → yakalamalı korpus SEGFAULT.
+Kapılar kod-duyarlı.
+
+**KALAN (V1 sınırı, C'de de aynı):** kapanış **parametre olarak** geçilemez
+(`işlev uygula(g: işlev(tam32)->tam32, ...)` C'de **parser** hatası — 27 hata) ve
+annotasyonsuz kapanışta dönüş i32 varsayılır. İkisi de bu işin kapsamı dışı,
+C-tarafı işi.
+
+---
+
 ## D-321 — Lineer closure ÇAĞRISI self-host'ta tüketim (LC-3 parite) + D-319 kod kaybı onarımı (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (ikisine de: `lin_fnk`

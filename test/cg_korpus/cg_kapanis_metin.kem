@@ -1,0 +1,8 @@
+// D-322: kapanış dönüş tipi BİLDİRİLEN tipten gelir — fat value T'yi siler.
+// `işlev() -> metin` i32 varsayılsaydı işaretçi sessizce kırpılırdı (D-293'ün
+// self-host aynası). Blok-form gövde de kapsamda. Exit: 42
+işlev main() -> tam32 {
+    değişken s: işlev() -> metin = || "merhaba";
+    değişken b: işlev() -> tam32 = || { değişken t: tam32 = 30; ver t + 5; };
+    ver metin_uzunluk(s()) + b();                // 7 + 35 = 42
+}

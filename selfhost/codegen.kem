@@ -83,6 +83,11 @@ yapı Ayr {
     lam_ad: Dizi<metin>;     // mangled ad ("lambda_0")
     lam_capbase: Dizi<tam32>;// bu lambda'nın lam_capisim/ir dilim başı
     lam_capcount: Dizi<tam32>;// yakalama sayısı
+    // D-322: genel kapanış. lam_ret = lifted fn'in DÖNÜŞ IR'ı ("i64" → görev_başlat
+    // taşıyıcı yolu, diğer her şey doğal tip). lam_bek_ret = LAMBDA emit edilirken
+    // yürürlükteki bildirilen dönüş IR'ı (bağlam; C lambda_beklenen_donus aynası).
+    lam_ret: Dizi<metin>;
+    lam_bek_ret: metin;
     lam_capisim: Dizi<metin>;// DÜZ yakalama adları (tüm lambdalar)
     lam_capir: Dizi<metin>;  // DÜZ yakalama LLVM tipleri (tüm lambdalar)
     lam_sayac: tam32;        // lambda_N mangled sayacı
@@ -2326,6 +2331,9 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // T yalnız tip-kontrolde yaşar. Bu dal olmadan ikisi de aşağıdaki "i32"
     // fallback'ine düşüyordu → 64-bit handle 32 bite kırpılırdı (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") { ver "ptr"; }
+    // D-322: işlev(...) -> T KAPANIŞ değeri = fat value { fnptr, envptr }.
+    // env null ise capture yok (bare çağrı), değilse heap env geçilir (C llvm.c aynası).
+    eğer metin_esit(ta, "TIP_ISLEV") { ver "{ ptr, ptr }"; }
     // D-319: tekkez<T> SIFIR-MALİYET sarmalayıcı — IR'da T'nin ta kendisi.
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
@@ -2412,6 +2420,15 @@ işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     değişken ta: metin = dizi_al(p.a_ad, tip_idx);
     eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    // D-322: işlev(...) -> T → DÖNÜŞ tipi (çocukların SONUNCUSU). Fat value T'yi
+    // sildiği için çağrı yeri dönüş IR'ını BİLDİRİLEN tipten almak ZORUNDA
+    // (C `kapanis_donus_ir` aynası); yoksa `metin_uzunluk(f())` gibi yerlerde
+    // i32 varsayımı işaretçiyi kırpardı.
+    eğer metin_esit(ta, "TIP_ISLEV") {
+        değişken ics: tam32 = dizi_al(p.a_cs, tip_idx);
+        eğer ics < 1 { ver ""; }
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx) + ics - 1));
     }
     ver "";
 }
@@ -3019,31 +3036,9 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             lam_cap_tara(p, govde, lam, capbase);
             değişken capcnt: tam32 = dizi_boyut(p.lam_capisim) - capbase;
             // Env: capture yoksa null; varsa HEAP struct (C V2-F2 aynası).
-            değişken envreg: metin = "null";
-            eğer capcnt > 0 {
-                değişken et: metin = lam_envtip(p, capbase, capcnt);
-                değişken er: tam32 = yeni_reg(p);
-                envreg = reg_str(er);
-                yaz_str("  "); yaz_str(envreg);
-                yaz_str(" = call ptr @malloc(i64 ptrtoint (ptr getelementptr (");
-                yaz_str(et); yaz_str(", ptr null, i32 1) to i64))"); yb(10);
-                değişken ci: tam32 = 0;
-                iken ci < capcnt {
-                    değişken cad: metin = dizi_al(p.lam_capisim, capbase + ci);
-                    değişken cir: metin = dizi_al(p.lam_capir, capbase + ci);
-                    değişken calloca: metin = cg_var_bul(p, cad);   // çevre alloca
-                    değişken lv: tam32 = yeni_reg(p);
-                    yaz_str("  "); yaz_str(reg_str(lv)); yaz_str(" = load "); yaz_str(cir);
-                    yaz_str(", ptr "); yaz_str(calloca); yb(10);
-                    değişken gp: tam32 = yeni_reg(p);
-                    yaz_str("  "); yaz_str(reg_str(gp)); yaz_str(" = getelementptr ");
-                    yaz_str(et); yaz_str(", ptr "); yaz_str(envreg);
-                    yaz_str(", i32 0, i32 "); yaz_str(tam64_str(ci olarak tam64)); yb(10);
-                    yaz_str("  store "); yaz_str(cir); yaz_str(" "); yaz_str(reg_str(lv));
-                    yaz_str(", ptr "); yaz_str(reg_str(gp)); yb(10);
-                    ci = ci + 1;
-                }
-            }
+            // D-322: emisyon lam_env_uret'e taşındı — genel kapanış kolu AYNI kodu
+            // kullanır (iki kopya ayrışırsa görev/kapanış env düzeni sessizce sapardı).
+            değişken envreg: metin = lam_env_uret(p, capbase, capcnt);
             // Runtime çağrısı: fn AYNI ptr iki kez (bare/kapanış), env üçüncü.
             değişken gr: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(gr));
@@ -3095,6 +3090,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(p.lam_ad, mad);
             dizi_ekle(p.lam_capbase, capbase);
             dizi_ekle(p.lam_capcount, capcnt);
+            dizi_ekle(p.lam_ret, "i64");   // D-322: görev yolu = runtime i64 taşıyıcı
             p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
             ver reg_str(ld);
         }
@@ -3196,6 +3192,80 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str(", i32 "); yaz_str(i3); yaz_str(")"); yb(10);
             p.son_tip = dizi_al_rettip(elem); p.son_elem = ""; p.son_ref = "";
             ver rs3;
+        }
+        // D-322: KAPANIŞ ÇAĞRISI — hedef, fat value { fnptr, envptr } tutan yerel
+        // bağlama ise dolaylı çağır. Bu kol olmadan `f()` bir üst-düzey işlev
+        // sanılıp TANIMSIZ `@f` üretiliyordu (link hatası; ölçüldü).
+        // ABI (C llvm.c aynası): fn(ptr %rho [, ptr %env], args...); env null ise
+        // bare çağrı. İki dal AYRI `call` gerektirir (imza farklı) → sonuç slot'ta
+        // buluşur. Argümanlar fat value YÜKLENMEDEN ÖNCE değerlendirilir (C sırası).
+        eğer fn_var_mi(p, fad) == yanlış {
+            eğer metin_esit(cg_var_tip_bul(p, fad), "{ ptr, ptr }") {
+                değişken kargs: Dizi<metin> = [];
+                değişken kargt: Dizi<metin> = [];
+                değişken ki: tam32 = 1;
+                iken ki < cs {
+                    dizi_ekle(kargs, ifade_uret(p, dizi_al(p.cocuk, cb + ki)));
+                    dizi_ekle(kargt, p.son_tip);
+                    ki = ki + 1;
+                }
+                // Dönüş IR'ı: bildirilen `işlev(...) -> T`'den (cg_aic'te saklı).
+                değişken kret: metin = cg_var_ic_bul(p, fad);
+                eğer metin_esit(kret, "") { kret = "i32"; }
+                değişken kslot: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kslot)); yaz_str(" = alloca "); yaz_str(kret); yb(10);
+                değişken kfv: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kfv)); yaz_str(" = load { ptr, ptr }, ptr ");
+                yaz_str(cg_var_bul(p, fad)); yb(10);
+                değişken kfn: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kfn));
+                yaz_str(" = extractvalue { ptr, ptr } "); yaz_str(reg_str(kfv)); yaz_str(", 0"); yb(10);
+                değişken kenv: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kenv));
+                yaz_str(" = extractvalue { ptr, ptr } "); yaz_str(reg_str(kfv)); yaz_str(", 1"); yb(10);
+                değişken knul: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(knul));
+                yaz_str(" = icmp eq ptr "); yaz_str(reg_str(kenv)); yaz_str(", null"); yb(10);
+                değişken lb: tam32 = p.lbl; p.lbl = p.lbl + 3;
+                değişken lbare: metin = metin_birlestir("bb", tam64_str(lb olarak tam64));
+                değişken lenvl: metin = metin_birlestir("bb", tam64_str((lb + 1) olarak tam64));
+                değişken lson: metin = metin_birlestir("bb", tam64_str((lb + 2) olarak tam64));
+                yaz_str("  br i1 "); yaz_str(reg_str(knul)); yaz_str(", label %"); yaz_str(lbare);
+                yaz_str(", label %"); yaz_str(lenvl); yb(10);
+                yaz_str(lbare); yaz_str(":"); yb(10);
+                değişken kr1: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kr1)); yaz_str(" = call "); yaz_str(kret);
+                yaz_str(" "); yaz_str(reg_str(kfn)); yaz_str("(ptr "); yaz_str(p.rho_ref);
+                değişken kj: tam32 = 0;
+                iken kj < dizi_boyut(kargs) {
+                    yaz_str(", "); yaz_str(dizi_al(kargt, kj)); yaz_str(" "); yaz_str(dizi_al(kargs, kj));
+                    kj = kj + 1;
+                }
+                yaz_str(")"); yb(10);
+                yaz_str("  store "); yaz_str(kret); yaz_str(" "); yaz_str(reg_str(kr1));
+                yaz_str(", ptr "); yaz_str(reg_str(kslot)); yb(10);
+                yaz_str("  br label %"); yaz_str(lson); yb(10);
+                yaz_str(lenvl); yaz_str(":"); yb(10);
+                değişken kr2: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kr2)); yaz_str(" = call "); yaz_str(kret);
+                yaz_str(" "); yaz_str(reg_str(kfn)); yaz_str("(ptr "); yaz_str(p.rho_ref);
+                yaz_str(", ptr "); yaz_str(reg_str(kenv));
+                kj = 0;
+                iken kj < dizi_boyut(kargs) {
+                    yaz_str(", "); yaz_str(dizi_al(kargt, kj)); yaz_str(" "); yaz_str(dizi_al(kargs, kj));
+                    kj = kj + 1;
+                }
+                yaz_str(")"); yb(10);
+                yaz_str("  store "); yaz_str(kret); yaz_str(" "); yaz_str(reg_str(kr2));
+                yaz_str(", ptr "); yaz_str(reg_str(kslot)); yb(10);
+                yaz_str("  br label %"); yaz_str(lson); yb(10);
+                yaz_str(lson); yaz_str(":"); yb(10);
+                değişken kld: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(kld)); yaz_str(" = load "); yaz_str(kret);
+                yaz_str(", ptr "); yaz_str(reg_str(kslot)); yb(10);
+                p.son_tip = kret; p.son_elem = ""; p.son_ref = "";
+                ver reg_str(kld);
+            }
         }
         // Built-in mi? Önce KULLANICI işlevi mi bak (yaz_str/yaz_kacis gibi yaz_ önekli user fn'leri
         // built-in sanmamak için); değilse önek-tabanlı @kdl_* eşlemesi dene.
@@ -3523,6 +3593,40 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         yaz_str(", i32 "); yaz_str(i2); yaz_str(")"); yb(10);
         p.son_tip = dizi_al_rettip(elem); p.son_elem = ""; p.son_ref = "";
         ver rs;
+    }
+    // D-322: GENEL KAPANIŞ. `|params| gövde` → fat value { @lambda_N, env }.
+    // env: yakalama yoksa null (bare çağrı), varsa HEAP struct. Lifted gövde
+    // kuyruğa alınır (doğrudan-stdout olduğumuz için gövde-SONRASI emit edilir).
+    // görev_başlat yolu bu kola GİRMEZ — orada LAMBDA argüman olarak özel işlenir.
+    eğer metin_esit(ad, "LAMBDA") {
+        değişken lmad: metin = metin_birlestir("lambda_", tam64_str(p.lam_sayac olarak tam64));
+        p.lam_sayac = p.lam_sayac + 1;
+        değişken llcb: tam32 = dizi_al(p.a_cb, idx);
+        değişken llcs: tam32 = dizi_al(p.a_cs, idx);
+        değişken lgovde: tam32 = dizi_al(p.cocuk, llcb + llcs - 1);
+        değişken lcapbase: tam32 = dizi_boyut(p.lam_capisim);
+        lam_cap_tara(p, lgovde, idx, lcapbase);
+        değişken lcapcnt: tam32 = dizi_boyut(p.lam_capisim) - lcapbase;
+        değişken lenv: metin = lam_env_uret(p, lcapbase, lcapcnt);
+        // Dönüş IR'ı BİLDİRİLEN tipten gelir (fat value T'yi siler). Bağlam yoksa
+        // i32 — bu, annotasyonsuz kapanışın ÖNCEDEN VAR OLAN sınırı (C ile aynı).
+        değişken lret: metin = p.lam_bek_ret;
+        eğer metin_esit(lret, "") { lret = "i32"; }
+        dizi_ekle(p.lam_node, idx);
+        dizi_ekle(p.lam_ad, lmad);
+        dizi_ekle(p.lam_capbase, lcapbase);
+        dizi_ekle(p.lam_capcount, lcapcnt);
+        dizi_ekle(p.lam_ret, lret);
+        değişken fv0: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(fv0));
+        yaz_str(" = insertvalue { ptr, ptr } undef, ptr @"); yaz_str(lmad);
+        yaz_str(", 0"); yb(10);
+        değişken fv1: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(fv1));
+        yaz_str(" = insertvalue { ptr, ptr } "); yaz_str(reg_str(fv0));
+        yaz_str(", ptr "); yaz_str(lenv); yaz_str(", 1"); yb(10);
+        p.son_tip = "{ ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
+        ver reg_str(fv1);
     }
     // D-319: kullan(t) — PASS-THROUGH (lineer muhasebe tamamen tip kontrolde).
     eğer metin_esit(ad, "KULLAN_IFADE") {
@@ -3982,7 +4086,12 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 eğer mono_bul(p, vstrip) >= 0 { p.beklenen_yapi = vtip; }
             }
         }
+        // D-322: annotasyon `işlev(...) -> T` ise lifted lambda'nın dönüş IR'ını
+        // bağlam olarak geçir (fat value T'yi siler; C lambda_beklenen_donus aynası).
+        değişken eski_lbr: metin = p.lam_bek_ret;
+        eğer annot == 1 { eğer metin_esit(vtip, "{ ptr, ptr }") { p.lam_bek_ret = vic; } }
         değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        p.lam_bek_ret = eski_lbr;   // RESET (sızdırma)
         p.beklenen_ll = eski_bll;   // RESET (sızdırma)
         p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
@@ -4531,6 +4640,36 @@ işlev lam_envtip(p: &değişken Ayr, base: tam32, cnt: tam32) -> metin {
     }
     ver metin_birlestir(r, " }");
 }
+// D-322: capture env'i emit et → env işaretçisi ("null" = yakalama yok).
+// HEAP (malloc) — env, lambda'yı yaratan çerçeveden UZUN yaşayabilir (görev),
+// bu yüzden stack alloca YANLIŞ olurdu. görev_başlat ve genel kapanış AYNI
+// yardımcıyı kullanır → env düzeni tek kaynaktan.
+işlev lam_env_uret(p: &değişken Ayr, base: tam32, cnt: tam32) -> metin {
+    eğer cnt <= 0 { ver "null"; }
+    değişken et: metin = lam_envtip(p, base, cnt);
+    değişken er: tam32 = yeni_reg(p);
+    değişken envreg: metin = reg_str(er);
+    yaz_str("  "); yaz_str(envreg);
+    yaz_str(" = call ptr @malloc(i64 ptrtoint (ptr getelementptr (");
+    yaz_str(et); yaz_str(", ptr null, i32 1) to i64))"); yb(10);
+    değişken ci: tam32 = 0;
+    iken ci < cnt {
+        değişken cad: metin = dizi_al(p.lam_capisim, base + ci);
+        değişken cir: metin = dizi_al(p.lam_capir, base + ci);
+        değişken calloca: metin = cg_var_bul(p, cad);   // çevre alloca
+        değişken lv: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(lv)); yaz_str(" = load "); yaz_str(cir);
+        yaz_str(", ptr "); yaz_str(calloca); yb(10);
+        değişken gp: tam32 = yeni_reg(p);
+        yaz_str("  "); yaz_str(reg_str(gp)); yaz_str(" = getelementptr ");
+        yaz_str(et); yaz_str(", ptr "); yaz_str(envreg);
+        yaz_str(", i32 0, i32 "); yaz_str(tam64_str(ci olarak tam64)); yb(10);
+        yaz_str("  store "); yaz_str(cir); yaz_str(" "); yaz_str(reg_str(lv));
+        yaz_str(", ptr "); yaz_str(reg_str(gp)); yb(10);
+        ci = ci + 1;
+    }
+    ver envreg;
+}
 // ============================================================================
 // V2-F4.2b — KESİN-YEREL (confined) KANITI: POZİTİF, default-deny local-proof.
 // C-tarafı src/escape.c (ky_confined / ky_dizi_builtin_confined / kesin_yerel)
@@ -4803,11 +4942,40 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
     değişken lcb: tam32 = dizi_al(p.a_cb, lam);
     değişken lcs: tam32 = dizi_al(p.a_cs, lam);
     değişken govde: tam32 = dizi_al(p.cocuk, lcb + lcs - 1);
-    // İmza: i64 dönüş (runtime taşıyıcısı), ρ + opsiyonel env.
-    yaz_str("define i64 @"); yaz_str(mad); yaz_str("(ptr %rho");
+    // İmza: dönüş IR'ı kuyruktan (görev yolu "i64" taşıyıcı; genel kapanış doğal
+    // tip), ρ + opsiyonel env + LAMBDA parametreleri (D-322).
+    değişken lret: metin = dizi_al(p.lam_ret, qi);
+    değişken i64_yolu: tam32 = 0;
+    eğer metin_esit(lret, "i64") { i64_yolu = 1; }
+    yaz_str("define "); yaz_str(lret); yaz_str(" @"); yaz_str(mad); yaz_str("(ptr %rho");
     eğer has_env == 1 { yaz_str(", ptr %env"); }
+    // Parametreler: LAMBDA çocukları = PARAMETRE* + gövde (SON çocuk).
+    değişken pi: tam32 = 0;
+    iken pi < lcs - 1 {
+        değişken pn: tam32 = dizi_al(p.cocuk, lcb + pi);
+        eğer metin_esit(dizi_al(p.a_ad, pn), "PARAMETRE") {
+            yaz_str(", "); yaz_str(ll_tip(p, son_cocuk(p, pn)));
+            yaz_str(" %"); yaz_str(dizi_al(p.a_deg, pn));
+        }
+        pi = pi + 1;
+    }
     yaz_str(") {"); yb(10);
     yaz_str("entry:"); yb(10);
+    // Parametreleri alloca'ya indir (gövde isimle erişir; islev_uret aynası).
+    pi = 0;
+    iken pi < lcs - 1 {
+        değişken pn2: tam32 = dizi_al(p.cocuk, lcb + pi);
+        eğer metin_esit(dizi_al(p.a_ad, pn2), "PARAMETRE") {
+            değişken pir: metin = ll_tip(p, son_cocuk(p, pn2));
+            değişken pad: metin = dizi_al(p.a_deg, pn2);
+            değişken pa: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(pa)); yaz_str(" = alloca "); yaz_str(pir); yb(10);
+            yaz_str("  store "); yaz_str(pir); yaz_str(" %"); yaz_str(pad);
+            yaz_str(", ptr "); yaz_str(reg_str(pa)); yb(10);
+            cg_var_ekle(p, pad, reg_str(pa), pir, "", "");
+        }
+        pi = pi + 1;
+    }
     // Capture'ları env'den yükle → alloca → cg_var kaydı.
     değişken ci: tam32 = 0;
     iken ci < capcnt {
@@ -4833,16 +5001,27 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
     //     lam_i64 bayrağıyla i64'e genişletilerek ret eder (D-310). Öncesinde
     //     `ret i64 0` fallback vardı → gövde SESSİZCE düşüyordu (yanlış cevap).
     değişken eski_ret: metin = p.cur_ret;
-    p.cur_ret = "i64";
-    p.lam_i64 = 1;
+    p.cur_ret = lret;
+    p.lam_i64 = i64_yolu;
     eğer metin_esit(dizi_al(p.a_ad, govde), "BLOK") {
         deyim_uret(p, govde);
         // `ver`siz düşen yol (ör. koşullu dallar) → terminatörsüz blok kalmasın.
-        eğer p.bb_term == 0 { yaz_str("  ret i64 0"); yb(10); }
+        eğer p.bb_term == 0 {
+            yaz_str("  ret "); yaz_str(lret);
+            eğer metin_esit(lret, "ptr") { yaz_str(" null"); } değilse { yaz_str(" 0"); }
+            yb(10);
+        }
     } değilse {
         değişken bv: metin = ifade_uret(p, govde);
-        değişken b64: metin = i64_genislet(p, bv, p.son_tip);
-        yaz_str("  ret i64 "); yaz_str(b64); yb(10);
+        eğer i64_yolu == 1 {
+            değişken b64: metin = i64_genislet(p, bv, p.son_tip);
+            yaz_str("  ret i64 "); yaz_str(b64); yb(10);
+        } değilse {
+            // D-322: doğal dönüş — gövde tipini BİLDİRİLEN dönüşe uydur (tamsayı
+            // genişliği); uymuyorsa LLVM reddeder (sessiz kırpma yerine gürültü).
+            değişken bn: metin = int_uydur(p, bv, lret);
+            yaz_str("  ret "); yaz_str(lret); yaz_str(" "); yaz_str(bn); yb(10);
+        }
     }
     p.lam_i64 = 0;
     p.cur_ret = eski_ret;
@@ -6630,7 +6809,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_ret: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
-        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0,
+        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "",
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],

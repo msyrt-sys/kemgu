@@ -740,7 +740,8 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   ~~**Kalan:** blok-form gövde i32~~ ✓ **ÇÖZÜLDÜ — D-304:** blok-form (`|| { ...; ver x; }`)
   artık hem tip kontrol (gövde deyim olarak, dönüş ver'lerden çıkarsanır) hem codegen
   (bildirilen `işlev()->T` IR'ı, `lambda_beklenen_donus`) uçtan uca çalışır — ifade-form ile
-  parite (metin/kesirli/tam32/çok-deyim). C-only (self-host genel closure desteklemez). Ortak
+  parite (metin/kesirli/tam32/çok-deyim). ~~C-only (self-host genel closure desteklemez)~~
+  ✓ **D-322: SELF-HOST'ta da var** (fat value {fnptr,envptr}; blok-form dâhil). Ortak
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
@@ -754,7 +755,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   literalini daima i32 sayıyordu → `kanal<tam64>`de 2^33 sessizce bozuluyordu
   (`i64_genislet` immediate'ı tam genişlikte materyalize ederek onardı).
   **SONUÇ: D-291→D-297'nin tamamı self-host codegen'de; C ile birebir eşdeğer.**
-  Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ (C-only — genel closure zaten yalnız C).
+  Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ. **D-322: GENEL KAPANIŞ da self-host'ta** —
+  fat value `{fnptr, envptr}`, lifted ABI `(ptr %rho[, ptr %env], params...)`, dönüş IR'ı
+  BİLDİRİLEN tipten (`cg_aic`). 6/6 şekil C↔self birebir; kapanış-parametresi hâlâ C'de de
+  parser-red (V1 sınırı). Bununla self-host'ta kapanış parite borcu KALMADI.
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.
