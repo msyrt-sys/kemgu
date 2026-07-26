@@ -28,8 +28,10 @@ trap 'rm -rf "$TMP"' EXIT
 cd "$KOK" || exit 1
 
 # --- 1) Derleme (bağımlılık sırası: birden çok pas, ilerleme durunca dur) ---
-dosyalar=$(find Kemgu -name "*.lean" | sed 's|\.lean$||')
-toplam=$(echo "$dosyalar" | wc -l)
+# Kök modül (Kemgu.lean) de derlenir — aksiyom denetimi onu import eder,
+# böylece TÜM alt modüller (ör. SideChannel.CT) tek import ile erişilebilir.
+dosyalar="$(find Kemgu -name "*.lean" | sed 's|\.lean$||') Kemgu"
+toplam=$(echo "$dosyalar" | tr ' ' '\n' | grep -c .)
 export LEAN_PATH="$TMP"
 for pas in 1 2 3 4 5 6 7 8; do
     ilerleme=0
@@ -55,7 +57,7 @@ echo "  Lean derleme: $kurulan/$toplam modül ✓"
 # --- 2) Aksiyom denetimi ---
 # Üst teorem + doğrudan taşıyıcıları. Yeni üst-düzey teorem eklenirse BURAYA da ekle.
 cat > "$TMP/aksiyom_denetim.lean" <<'LEANEOF'
-import Kemgu.Soundness.Main
+import Kemgu
 #print axioms Kemgu.Soundness.Main.kemgu_soundness_v3
 #print axioms Kemgu.Discharge.NoFault.iyiTipli_no_fault
 #print axioms Kemgu.Discharge.NoFault.typed_no_fault
@@ -67,6 +69,9 @@ import Kemgu.Soundness.Main
 #print axioms Kemgu.SideChannel.NonInterference.silme_simulasyon
 #print axioms Kemgu.SideChannel.NonInterference.ni_cekirdek_altkume
 #print axioms Kemgu.SideChannel.NonInterference.izGozlem_izSil
+#print axioms Kemgu.SideChannel.CT.ct_ni
+#print axioms Kemgu.SideChannel.CT.genel_ifade_korunum
+#print axioms Kemgu.SideChannel.CT.ct001_gerekli
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then
     echo "🔴 aksiyom denetimi çalıştırılamadı:"; head -10 "$TMP/aks.txt"; exit 1

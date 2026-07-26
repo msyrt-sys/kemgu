@@ -50,6 +50,51 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-330 — CT cekirdek hesabi: `eger` + gizli etiket + DALLANMALI NI (2026-07-26)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (YENİ, ~330 satır),
+`Kemgu.lean` (+1 import), `test/lean_aksiyom_harness.sh` (kök modül derlenir + 3 teorem).]**
+
+**TASARIM KARARI — neden ayri dil (durustce):** genisletme iki yoldan yapilabilirdi:
+- **(A)** `Sem/Core.Ifade` + `SmallStep.Step`'e `eger` eklemek. Bedeli: 28 modulun
+  tumevarim ispatlari (adim_korunum 21 case, progress, Aile2…) yeniden acilir, depo
+  uzun sure KIRMIZI kalir. Dogrulanmis cekirdek bu projenin en degerli varligi.
+- **(B)** CT disiplininin ASIL ICERIGINI kendi icinde TAM bir cekirdek hesapta
+  ispatlamak. Ana model DOKUNULMAZ.
+**(B) secildi.** Gerekce: (A) uzun sureli kirmizi + regresyon riski; (B) sorulan
+matematigi (gizli dallanma ⇒ sizinti; CT disiplini ⇒ NI) BUGUN ve TAM verir.
+
+**Hesap:** `eger` VAR; iki-noktali etiket kafesi (genel ⊑ gizli); store; buyuk-adim
+semantik `Calis` (deger + store + IZ uretir); gozlem `oOku/oYaz/**oDal**` — **dal karari
+saldirganda gorunur** (PC/timing sizintisinin modellenmesi).
+
+**CT disiplini (`CtOk`) — kagittan iki kural:**
+- **CT003:** gizli deger GENEL degiskene yazilamaz (`ifadeEtiket e ⊑ G x`).
+- **CT001:** `eger` kosulunun etiketi GENEL olmali (gizli uzerinde dallanma YASAK).
+
+**ISPATLANANLAR:**
+- `genel_ifade_korunum` (uclu tek tumevarim): GENEL etiketli ifade, dusuk-esdeger iki
+  store'da AYNI deger + AYNI iz uretir ve sonuc store'lari dusuk-esdeger kalir.
+- **`ct_ni` (ANA TEOREM):** CT-tipli program + dusuk-esdeger baslangic →
+  **izler BIREBIR AYNI (dal kararlari dahil)** ∧ sonuc store'lari dusuk-esdeger.
+- **`ct001_gerekli` (TANIK):** CT001 olmasaydi NI YANLIS olurdu — gizli `h` uzerinde
+  dallanan somut program, dusuk-esdeger iki store'da `oDal true` vs `oDal false`
+  uretir. Yani kural keyfi degil.
+
+**SABOTAJ:** `ct_eger`in `h_kosul_genel` sarti kaldirilinca (True'ya cevrilince)
+**4 hata** — `ct_ni` COKER; temiz → 0. **CT001'in mekanize gerekcesi budur.**
+
+**⚠ KOPRU YUKUMLULUGU (acik borc, dosya basliginda da yazili):** bu hesap ile
+`Sem/Core` arasinda simulasyon/gomme lemmasi YOKTUR. Dolayisiyla **"KEMGU'nun kendisi
+sabit-suredir" SONUCU BURADAN CIKMAZ**; cikan sonuc "CT disiplini, dallanmali bir
+cekirdek dilde NI'yi GARANTI EDER"dir. Kopru = (A)-tarzi entegrasyon, ayri karar.
+
+**Kapi:** `calistir_lean_aksiyom` — 29 modul + kok, **14 teorem**; `ct_ni`,
+`genel_ifade_korunum`, `ct001_gerekli` → `[propext]`, sorryAx YOK. Harness kok modulu
+de derler (aksi halde CT teoremleri denetime GIRMIYORDU — ilk kosumda yakalandi).
+
+---
+
 ## D-329 — Yan-kanal GLOBAL CATI tamamlandi: silme = ileri simulasyon (21/21) (2026-07-26)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/NonInterference.lean` (§6 + tanim
