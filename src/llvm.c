@@ -1978,10 +1978,21 @@ static void mono_tip_tanimlari_emit(LlvmGen *g) {
 
 /* === Ifade IR === */
 
+/* D-326: codegen'in DESTEKLEMEDIGI durum → OLUMCUL. Eskiden bu yol IR'a bir YORUM
+ * yazip `add i32 0, 0` uretiyordu: derleme BASARILI gorunuyor, program calisma
+ * zamaninda SESSIZCE 0 donuyordu. Olculdu: `değişken xs: Dizi<işlev()->tam32> = [|| 42];
+ * ver xs[0]();` → C exit 0 (dogrusu 42), tek iz IR icinde bir yorum satiri.
+ * Artik stderr'e yazilir + hata_sayisi artar → ana.c IR'i YAYINLAMAZ ve exit 1
+ * (AS001 ile ayni yol). Yayilma alani OLCULDU: 196 korpus/ornek/stdlib dosyasindan
+ * yalniz kem_os.kem TEK BASINA derlenince tetikliyor (gercek OS yolu birlestirilmis
+ * kaynak → 0 tetik), yani desteklenen hicbir yol kirilmiyor.
+ * Kod atanmadi (kullanici-gorunur tani kodlari Mehmet'in karari) — duz metin. */
 static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
     int r = yeni_reg(g);
     fprintf(g->out, "  ; HATA: %s\n", mesaj);
     fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
+    fprintf(stderr, "codegen hatasi (desteklenmeyen sekil): %s\n", mesaj);
+    g->hata_sayisi++;
     IfadeSonuc s = { r, "i32", 0 };
     return s;
 }

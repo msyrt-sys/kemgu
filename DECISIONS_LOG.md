@@ -50,6 +50,44 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-326 — [YÜKSEK] Codegen'in "desteklemiyorum" yolu SESSİZ 0 üretiyordu → ÖLÜMCÜL (2026-07-26)
+
+**Karar [ETKİ: `src/llvm.c` (`hata()` — 8 çağrı yerinin tamamını kapsar).]** D-325'in
+ortaya çıkardığı sınıfı (dolaylı çağrıda sessiz uyuşmazlık) kasıtlı taradım ve **daha
+kötüsünü** buldum: C codegen desteklemediği bir şekille karşılaşınca IR'a bir **YORUM**
+(`; HATA: ...`) yazıp `add i32 0, 0` üretiyordu → **derleme başarılı**, program çalışma
+zamanında **sessizce 0** dönüyordu.
+
+**Ölçülen tezahür:** `değişken xs: Dizi<işlev()->tam32> = [|| 42]; ver xs[0]();`
+→ `--check` **OK**, derleme **başarılı**, çalıştırma **exit 0** (doğrusu 42). Tek iz:
+IR içinde `; HATA: cagri hedefi tanimlayici degil` yorumu. Self-host aynı programda
+LLVM-RED veriyordu (gürültülü) — yani C, iki derleyicinin **sessiz** olanıydı.
+
+**Kapsam:** tek bir yardımcı (`hata()`) 8 çağrı yerini besliyor — tanımsız tanımlayıcı,
+metin literal kaydı yok, yapı tipi bilinmiyor, erişimde yapı çözülemedi, alan bulunamadı,
+sonuç/seçimlik yapıcısı çözülemedi, `yol` ifadesi desteklenmiyor, çağrı hedefi tanımlayıcı
+değil. Hepsi aynı sessiz-0 davranışındaydı.
+
+**Düzeltme:** `hata()` artık stderr'e yazar + `g->hata_sayisi`'nı artırır → `ana.c`
+mevcut AS001 yolundan **IR'i YAYINLAMAZ ve exit 1**. Yeni tanı **kodu icat edilmedi**
+(kullanıcı-görünür kodlar Mehmet'in kararı); düz metin mesaj.
+
+**Yayılma alanı ÖNCE ölçüldü (196 dosya: cg_korpus + örnekler + stdlib):** yalnız
+`kem_os.kem`'in **tek başına** derlenmesi tetikliyordu; **gerçek OS yolu** (birleştirilmiş
+kaynak + `--mimari arm64`) **exit 0, 8116 satır, 0 tetik**. Sonradan reddedilen 4 dosyanın
+2'si zaten **önceden** AS001 (yanlış mimariyle tek-başına derleme), 2'si **kasten geçersiz**
+checker korpusu (`--llvm` onların yolu değil). **Desteklenen hiçbir yol kırılmadı.**
+
+**Kapılar:** test_llvm 274/274, llvm_dogrula 10/10, dizi_sinir 37/37, codegen_diff,
+checker_diff, FIXPOINT; sıfır derleyici uyarısı.
+
+**KALAN (bu işin kapsamı dışı, ölçüldü):** dizi/yapı **içindeki** kapanış (`xs[0]()`,
+`k.fn()`) artık **gürültülü** reddediliyor ama hâlâ **desteklenmiyor**; gerçek destek
+ayrı iş. Ayrıca `değişken f: işlev()->tam64 = || 8589934592` C'de T001, self'te KABUL —
+checker parite açığı (self daha gevşek), ayrı iş.
+
+---
+
 ## D-325 — [YÜKSEK] Annotasyonsuz kapanış dönüşü: C'de SESSİZ YANLIŞ CEVAP kapatıldı (2026-07-26)
 
 **Karar [ETKİ: `src/llvm.c` (`lambda_donus_tahmin` + annotasyonsuz DEGISKEN dalı),
