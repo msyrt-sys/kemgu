@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-331 — İşlev-tipli değişken annotasyonu self-host'ta HİÇ denetlenmiyordu: checker parite açığı kapatıldı (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` (+90), `selfhost/codegen.kem` (+90, birebir
+ayna), `test/check_korpus/tc3l_01_lambda_donus_dar.kem` + `tc3l_02_lambda_donus_uyumlu.kem`
+(yeni; korpus 56→58).]**
+
+**Kusur (ölçüldü):** `değişken f: işlev() -> tam64 = || 8589934592;`
+- C (`build/kemgu.exe --check`): **T001** ile reddeder (2:5).
+- self-host driver: **KABUL EDER**, derler, 42 döner.
+
+Yani **self, C'nin reddettiğini kabul ediyordu** — yön önemli: bu, "self-host
+derleyici C'nin oracle'ıdır" invaryantını kırar. `checker_diff` korpusunda bu şekil
+bulunmadığı için hiçbir kapı yakalamıyordu.
+
+**Kök neden:** `annot_str` yalnız `TIP_BASIT` çözer; bileşik annotasyonda `"?"`
+döner ve `t001_kontrol` hemen çıkar. Sonuç: **işlev-tipli hiçbir değişken
+annotasyonu denetlenmiyordu** — dar dönüş (`tam64`/`tam8`), yanlış dönüş
+(`metin`), yanlış parametre tipi ve **arite** farkı dâhil (5 şekil ölçüldü,
+C beşini de T001'le reddediyor).
+
+**Çözüm:** `t001_lambda_kontrol` — annotasyon `TIP_ISLEV` **ve** değer `LAMBDA`
+ise C'nin `tip_esit(annot, lambda_tipi)` kararı taklit edilir:
+- arite farkı → T001,
+- bilinen parametre tipi farkı → T001,
+- bilinen dönüş tipi farkı → T001.
+
+Dönüş çıkarsaması C aynası: **ifade-form** gövdenin DOĞAL tipi (beklenen tip
+YAYILMAZ — C `tip_belirle`; sayı literali varsayılanı `tam32`), **blok-form**
+(D-304) gövdedeki **İLK** `ver`in değer tipi, `ver` yoksa `boş`.
+
+**Sınır (bilinçli):** çözülemeyen (`"?"`) taraf ATLANIR — self bu noktalarda
+C'den gevşek kalabilir, ama asla daha sıkı olmaz (false-positive yok).
+
+**İki yere birden yazıldı:** checker mantığı hem driver (`codegen.kem`) hem
+Aşama-2 referans checker'ında (`checker.kem`) yaşıyor; `calistir_checker_diff`
+REFERANS'ı kullanır, `calistir_self_driver` driver'ı — tek yer yetmez.
+
+**Kapılar:** `calistir_checker_diff` **58/58** sıfır-diff (kod+satır+sütun birebir),
+`calistir_self_driver` (C-built + self-host, 4 mod: 22/22 + 12/12 + 58/58 + LLVM
+105/105 ×2) + FIXPOINT, `calistir_codegen_bootstrap` FIXPOINT (lexer/parser/checker
+92 birebir, stage1==stage2 45090 satır).
+
+**Sabotaj doğrulaması:** `checker.kem`'deki kancayı kaldır → `tc3l_01` **🔴**,
+korpus 58/58 → 57/58. Kapı yük taşıyor.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`
