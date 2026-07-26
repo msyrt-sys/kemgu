@@ -1,0 +1,21 @@
+// D-322: tekkez<T> İMZA pozisyonunda (parametre + dönüş) — ll_tip'in fonksiyon
+// imzasında da iç tipi açtığını ölçer. cg_lineer_intrinsic.kem yalnız YEREL
+// değişkenleri kapsıyordu; imza yolu ayrı kod yolu (define/param emisyonu).
+// `tekkez<metin>` → ptr; i32 fallback'i olsaydı imza uyumsuz olur, çağrı yerinde
+// işaretçi 32 bite kırpılırdı (sessiz bozulma, link değil ÇALIŞMA hatası).
+//
+// KAPSAM DIŞI (önceden var olan CHECKER kusurları, codegen değil):
+//   - `f(kullan(t))` doğrudan çağrı argümanı → sahte L002 (D-320'de düzeltildi)
+//   - `tekkez_olustur(lineer_bağlama)` → sahte L001 (self-host built-in yolu, açık)
+// Bu dosya ikisinden de kaçınır; `kullan` ayrı deyimde. Exit: 42
+işlev sar(x: metin) -> tekkez<metin> { ver tekkez_olustur(x); }
+işlev boyu(t: tekkez<metin>) -> tam32 {
+    değişken s: metin = kullan(t);
+    ver metin_uzunluk(s);
+}
+işlev main() -> tam32 {
+    değişken a: tekkez<metin> = sar("merhaba");
+    değişken n: tam32 = boyu(a);
+    değişken b: tekkez<tam32> = tekkez_olustur(35);
+    ver n + kullan(b);
+}
