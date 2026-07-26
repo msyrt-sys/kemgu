@@ -24,12 +24,18 @@ NE ISPATLANIYOR (bugun, TAM olarak):
       → Tasinan verinin adimin VARLIGINA, ODAGINA ve urettigi GOZLEME
       etkisi yoktur. Bunlar NI icereginin tamamen yasadigi kurallardir.
 
-HENUZ ISPATLANMAYAN (durustce — SIRADAKI ADIM):
-  Global cati `∀ S S', Step S S' → Step (konfSil S) (konfSil S')`. Kalan
-  kurallar deger TASIMAZ (cong/fault/lineer/gorev/dondur) ama cati bir
-  TUMEVARIM ister (cong kurallari `h_inner : Step S1 S1'` ile ozyinelemeli).
-  Politika geregi `sorry` KONMADI: catı ifadesi yazilmadi, yalniz ispatlanan
-  parcalar duruyor.
+  (D) **GLOBAL CATI (§6, 21/21 kural):** `silme_simulasyon` —
+      `Step S S' → Step (konfSil S) (konfSil S')`. Deger tasiyanlar §5
+      lemmalariyla, fault/yapisal kurallar dogrudan, 3 congruence kurali
+      TUMEVARIM hipoteziyle (ic adim da silinmis dunyada atilabilir).
+  (E) **SONUC `ni_cekirdek_altkume`:** dusuk-esdeger (silinmisi ayni) iki
+      konfigurasyondan atilan adimlar AYNI gozlemi uretir.
+
+  ⚠ ISPATIN ZORLADIGI DARALTMA: `degerSil` once TUM degerleri birime
+  indiriyordu; `cGorevBaslatTamam` case'i COKTU — cunku `gorevVal t` bir
+  VERI degil THREAD KIMLIGIDIR ve kural onu yeniden uretir (ayrica `gBaslat t`
+  olayiyla zaten gozlemlenebilir). Tanim daraltildi (gorevVal korunur).
+  Yani "ne gizlidir" sorusunu ispat cevapladi, biz varsaymadik.
 
 NE ISPATLANMIYOR (ACIKCA):
   Kagit CT001/CT002/CT004'un korudugu asil sizinti kanallari — gizli
@@ -90,9 +96,16 @@ def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
 -- §2. Deger silme (erasure) — tum veriler birime indirgenir
 -- ============================================================
 
-/-- Tum degerler tek kanonik degere (birim) iner: "saldirgan veriyi
-    GORMEZ" varsayiminin sozdizimsel karsiligi. -/
-def degerSil (_ : Deger) : Deger := Deger.birim
+/-- Deger silme: veri yuku birime iner.
+    ISTISNA — `gorevVal t`: bu bir VERI degil, THREAD KIMLIGIDIR ve zaten
+    gozlemlenebilir (`gBaslat t` olayi saldirganda goruunur). Silinseydi
+    teorem GERCEGI ASAN bir sey iddia ederdi: cGorevBaslat kurali handle'i
+    yeniden URETIR, dolayisiyla silme orada simulasyon OLMAZDI — bu, ispat
+    denemesinde somut olarak ortaya cikti (unsolved goal) ve tanim boylece
+    DARALTILDI. Yani "ne silinir" sorusu ispat tarafindan zorlandi. -/
+def degerSil : Deger → Deger
+  | .gorevVal t => .gorevVal t
+  | _           => Deger.birim
 
 /-- Ifade silme: gomulu literaller birime iner, KONTROL ISKELETI korunur. -/
 def ifadeSil : Ifade → Ifade
@@ -171,14 +184,16 @@ theorem izGozlem_konfSil (S : Konfigurasyon) :
     degeri vurur) → arama basarisi KORUNUR, donen deger birimdir. -/
 theorem konumGet_storeSil (s : Store) (k : Konum) (v : Deger)
     (h : konumGet s k = some v) :
-    konumGet (storeSil s) k = some Deger.birim := by
+    konumGet (storeSil s) k = some (degerSil v) := by
   induction s with
   | nil => simp [konumGet] at h
   | cons p rest ih =>
       by_cases hk : p.1.bolge.id = k.bolge.id ∧ p.1.ofset = k.ofset
-      · show konumGet ((p.1, Deger.birim) :: rest.map _) k = _
+      · show konumGet ((p.1, degerSil p.2) :: rest.map _) k = _
         rw [konumGet, if_pos hk]
-      · show konumGet ((p.1, Deger.birim) :: rest.map _) k = _
+        rw [konumGet, if_pos hk] at h
+        exact congrArg (fun d => some (degerSil d)) (Option.some.inj h)
+      · show konumGet ((p.1, degerSil p.2) :: rest.map _) k = _
         rw [konumGet, if_neg hk]
         exact ih (by rw [konumGet, if_neg hk] at h; exact h)
 
@@ -206,7 +221,7 @@ theorem find?_kanallarSil (ks : List KanalDurumu) (k : KanalId) :
     birime iner. (Kuyruk UZUNLUGU yapisaldir — saldirgan zaten gorur.) -/
 theorem kanalIlk_kanallarSil (ks : List KanalDurumu) (k : KanalId) (v : Deger)
     (h : kanalIlk ks k = some v) :
-    kanalIlk (kanallarSil ks) k = some Deger.birim := by
+    kanalIlk (kanallarSil ks) k = some (degerSil v) := by
   unfold kanalIlk at h ⊢
   rw [find?_kanallarSil]
   cases hf : ks.find? (fun kd => kd.kid = k) with
@@ -214,11 +229,13 @@ theorem kanalIlk_kanallarSil (ks : List KanalDurumu) (k : KanalId) (v : Deger)
   | some kd =>
       rw [hf] at h
       simp only [Option.map_some]
-      show (kd.gonderKuyrugu.map degerSil).head? = some Deger.birim
+      show (kd.gonderKuyrugu.map degerSil).head? = some (degerSil v)
       simp only [] at h
       cases hq : kd.gonderKuyrugu with
       | nil => rw [hq] at h; exact absurd h (by simp)
-      | cons a tl => rfl
+      | cons a tl =>
+          rw [hq] at h
+          exact congrArg (fun d => some (degerSil d)) (Option.some.inj h)
 
 /-- Kanal kuyrugunun BOSLUGU silme altinda korunur (uzunluk yapisaldir). -/
 theorem kanalIlk_none_kanallarSil (ks : List KanalDurumu) (k : KanalId)
@@ -238,7 +255,7 @@ theorem kanalIlk_none_kanallarSil (ks : List KanalDurumu) (k : KanalId)
 
 /-- Kanala gonderim silme ile DEGISIR (kuyruk uzunlugu ayni, yuk birim). -/
 theorem kanalEkle_kanallarSil (ks : List KanalDurumu) (k : KanalId) (v : Deger) :
-    kanallarSil (kanalEkle ks k v) = kanalEkle (kanallarSil ks) k Deger.birim := by
+    kanallarSil (kanalEkle ks k v) = kanalEkle (kanallarSil ks) k (degerSil v) := by
   have h_comp : ((fun kd => decide (kd.kid = k)) ∘ kanalDurumSil)
               = (fun kd => decide (kd.kid = k)) := by
     funext kd; simp [kanalDurumSil_kid]
@@ -259,7 +276,7 @@ theorem kanalEkle_kanallarSil (ks : List KanalDurumu) (k : KanalId) (v : Deger) 
              = if (kanalDurumSil kd).kid = k then _ else kanalDurumSil kd
       rw [if_pos hk, if_pos (by rw [kanalDurumSil_kid]; exact hk)]
       show (⟨kd.kid, (kd.gonderKuyrugu ++ [v]).map degerSil⟩ : KanalDurumu)
-             = ⟨kd.kid, kd.gonderKuyrugu.map degerSil ++ [Deger.birim]⟩
+             = ⟨kd.kid, kd.gonderKuyrugu.map degerSil ++ [degerSil v]⟩
       simp [List.map_append, degerSil]
     · show kanalDurumSil (if kd.kid = k then _ else kd)
              = if (kanalDurumSil kd).kid = k then _ else kanalDurumSil kd
@@ -319,7 +336,7 @@ theorem silme_sim_sVarOku
               zaman  := S.zaman + 1,
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
-  refine Step.sVarOku _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx) x b Deger.birim
+  refine Step.sVarOku _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx) x b (degerSil v)
     ?_ ?_ h_b (konumGet_storeSil _ _ _ h_v) ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
@@ -343,7 +360,7 @@ theorem silme_sim_sAtamaTamam
               zaman  := S.zaman + 1,
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
-  refine Step.sAtamaTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx) x Deger.birim b
+  refine Step.sAtamaTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx) x (degerSil v) b
     ?_ ?_ h_b h_owner ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
@@ -364,7 +381,7 @@ theorem silme_sim_sSeqAtla
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
   refine Step.sSeqAtla _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
-    Deger.birim (ifadeSil b) ?_ ?_ ?_
+    (degerSil v) (ifadeSil b) ?_ ?_ ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
   · show ifadeSil ctx.ifade = _
@@ -384,7 +401,7 @@ theorem silme_sim_sGuvensizAtla
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
   refine Step.sGuvensizAtla _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
-    Deger.birim ?_ ?_ ?_
+    (degerSil v) ?_ ?_ ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
   · show ifadeSil ctx.ifade = _
@@ -416,7 +433,7 @@ theorem silme_sim_cKanalGonderTamam
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
   refine Step.cKanalGonderTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
-    k vId b Deger.birim ?_ ?_ h_b (konumGet_storeSil _ _ _ h_v) h_owner
+    k vId b (degerSil v) ?_ ?_ h_b (konumGet_storeSil _ _ _ h_v) h_owner
     (kanalIlk_none_kanallarSil _ _ h_bos) ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
@@ -446,7 +463,7 @@ theorem silme_sim_cKanalAlTamam
               fault  := none }) :
     Step (konfSil S) (konfSil S') := by
   refine Step.cKanalAlTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
-    k Deger.birim transferredBolge ?_ ?_
+    k (degerSil v) transferredBolge ?_ ?_
     (kanalIlk_kanallarSil _ _ _ h_v) h_transit ?_
   · show threadSil S.thread = _
     rw [h_t, threadSil_split]
@@ -455,5 +472,195 @@ theorem silme_sim_cKanalAlTamam
   · subst h_S'
     simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil,
           kanalCikar_kanallarSil]
+
+-- ============================================================
+-- §6. GLOBAL CATI — silme ILERI SIMULASYONDUR (21/21 kural)
+-- ============================================================
+
+/-- `ifadeyleKonf` (cong odagi) silme ile DEGISIR. -/
+theorem ifadeyleKonf_konfSil (S : Konfigurasyon) (ts1 ts2 : List ThreadCtx)
+    (ctx : ThreadCtx) (e : Ifade) :
+    konfSil (ifadeyleKonf S ts1 ts2 ctx e)
+      = ifadeyleKonf (konfSil S) (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+          (ifadeSil e) := by
+  simp [konfSil, ifadeyleKonf, threadSil_split, ctxSil]
+
+/-- Taze thread kimligi silmeden etkilenmez (tid'ler yapisal). -/
+theorem threadFresh_konfSil (S : Konfigurasyon) (t : ThreadId)
+    (h : threadFresh S t) : threadFresh (konfSil S) t := by
+  intro c h_mem
+  show c.tid ≠ t
+  have : c ∈ S.thread.map ctxSil := h_mem
+  rcases List.mem_map.mp this with ⟨c0, h0, h_eq⟩
+  rw [← h_eq]
+  exact h c0 h0
+
+/-- Frozen durumu sahiplikten okunur; silme sahipligi DEGISTIRMEZ. -/
+theorem isFrozen_konfSil (S : Konfigurasyon) (b : Bolge) (h : isFrozen S b) :
+    isFrozen (konfSil S) b := h
+
+/-- **ANA TEOREM (cekirdek alt-kume):** deger-silme bir ILERI SIMULASYONDUR.
+    Yani hicbir Step kurali, tasidigi VERIYE bakarak adimin varligini,
+    odagini ya da urettigi olayin turunu/konumunu degistirmez.
+
+    ISPAT NOTU: 21 kuralin hepsi kapali. Deger tasiyanlar §5 lemmalariyla,
+    yapisal/fault kurallari dogrudan, cong kurallari TUMEVARIM hipoteziyle
+    (ic adim da silinmis dunyada atilabilir). -/
+theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
+    Step (konfSil S) (konfSil S') := by
+  induction h with
+  | sVarOku S S' ts1 ts2 ctx x b v h_t h_if h_b h_v h_S' =>
+      exact silme_sim_sVarOku S S' ts1 ts2 ctx x b v h_t h_if h_b h_v h_S'
+  | sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S' =>
+      exact silme_sim_sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S'
+  | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
+      exact silme_sim_sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S'
+  | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
+      exact silme_sim_sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S'
+  | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>
+      exact silme_sim_cKanalGonderTamam S S' ts1 ts2 ctx k vId b v
+              h_t h_if h_b h_v h_owner h_bos h_S'
+  | cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S' =>
+      exact silme_sim_cKanalAlTamam S S' ts1 ts2 ctx k v tb h_t h_if h_v h_transit h_S'
+  -- ---- Fault kurallari: post-state YALNIZ fault alani (veri tasimaz) ----
+  | sAtamaHataDonmus S S' ts1 ts2 ctx x v b h_t h_if h_b h_frozen h_S' =>
+      refine Step.sAtamaHataDonmus _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x (degerSil v) b ?_ ?_ h_b (isFrozen_konfSil _ _ h_frozen) ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | sAtamaHataSahipDegil S S' ts1 ts2 ctx x v b h_t h_if h_b h_no h_S' =>
+      refine Step.sAtamaHataSahipDegil _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x (degerSil v) b ?_ ?_ h_b h_no ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | cGorevBaslatHataLineerIhlal S S' ts1 ts2 ctx yd kod vI h_t h_if h_in h_tuk h_S' =>
+      refine Step.cGorevBaslatHataLineerIhlal _ _ (threadSil ts1) (threadSil ts2)
+        (ctxSil ctx) yd (ifadeSil kod) vI ?_ ?_ h_in h_tuk ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | cKanalGonderHataLineerTuket S S' ts1 ts2 ctx k vId h_t h_if h_tuk h_S' =>
+      refine Step.cKanalGonderHataLineerTuket _ _ (threadSil ts1) (threadSil ts2)
+        (ctxSil ctx) k vId ?_ ?_ h_tuk ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | cDondurHataZatenDonmus S S' ts1 ts2 ctx b h_t h_if h_zaten h_S' =>
+      refine Step.cDondurHataZatenDonmus _ _ (threadSil ts1) (threadSil ts2)
+        (ctxSil ctx) b ?_ ?_ (isFrozen_konfSil _ _ h_zaten) ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | sLinKullanHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuk h_S' =>
+      refine Step.sLinKullanHataZatenTuketildi _ _ (threadSil ts1) (threadSil ts2)
+        (ctxSil ctx) x ?_ ?_ h_tuk ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  | sLinImhaHataZatenTuketildi S S' ts1 ts2 ctx x h_t h_if h_tuk h_S' =>
+      refine Step.sLinImhaHataZatenTuketildi _ _ (threadSil ts1) (threadSil ts2)
+        (ctxSil ctx) x ?_ ?_ h_tuk ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'; rfl
+  -- ---- Yapisal Tamam kurallari (deger tasimaz) ----
+  | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sah h_S' =>
+      refine Step.cGorevBaslatTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        tYeni yd (ifadeSil kod) ?_ ?_ (threadFresh_konfSil _ _ h_fresh) h_sah ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'
+        show konfSil _ = _
+        simp only [konfSil, threadSil, izSil, olaySil, ctxSil, ifadeSil, degerSil,
+                   List.map_append, List.map_cons, List.map_nil]
+  | cGorevBirlestirTamam S S' ts1 ts2 ctx g tHedef rb h_t h_if h_hedef h_donen h_S' =>
+      refine Step.cGorevBirlestirTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        g tHedef rb ?_ ?_ ?_ h_donen ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · obtain ⟨hctx, h_mem, h_tid, vSon, h_ifd⟩ := h_hedef
+        refine ⟨ctxSil hctx, ?_, h_tid, degerSil vSon, ?_⟩
+        · exact List.mem_map.mpr ⟨hctx, h_mem, rfl⟩
+        · show ifadeSil hctx.ifade = _; rw [h_ifd]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil]
+  | cDondurTamam S S' ts1 ts2 ctx b h_t h_if h_owner h_S' =>
+      refine Step.cDondurTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        b ?_ ?_ h_owner ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil]
+  | sLinKullanTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      refine Step.sLinKullanTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x ?_ ?_ h_aktif ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
+  | sLinImhaTamam S S' ts1 ts2 ctx x h_t h_if h_aktif h_S' =>
+      refine Step.sLinImhaTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x ?_ ?_ h_aktif ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
+  -- ---- Congruence kurallari: TUMEVARIM hipotezi (ic adim) ----
+  | sAtamaCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sAtamaCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        x (ifadeSil e) (ifadeSil e') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨y, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil y, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sSeqCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil a) (ifadeSil a') (ifadeSil b) ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨y, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil y, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sGuvensizCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil e) (ifadeSil e') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨y, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil y, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+
+/-- **SONUC (NI):** dusuk-esdeger (silinmisi ayni) iki konfigurasyondan
+    atilan adimlar AYNI gozlemi uretir — veri gozlemi etkilemez. -/
+theorem ni_cekirdek_altkume (S1 S2 S1' : Konfigurasyon)
+    (h_dusuk : konfSil S1 = konfSil S2) (h_adim : Step S1 S1') :
+    ∃ T', Step (konfSil S2) T' ∧ izGozlem T'.iz = izGozlem S1'.iz := by
+  refine ⟨konfSil S1', ?_, izGozlem_konfSil S1'⟩
+  rw [← h_dusuk]
+  exact silme_simulasyon S1 S1' h_adim
 
 end Kemgu.SideChannel.NonInterference

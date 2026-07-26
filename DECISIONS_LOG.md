@@ -50,6 +50,40 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-329 — Yan-kanal GLOBAL CATI tamamlandi: silme = ileri simulasyon (21/21) (2026-07-26)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/NonInterference.lean` (§6 + tanim
+daraltmasi), `test/lean_aksiyom_harness.sh` (+2 aksiyom denetimi).]** D-328'de acik
+biraktigim cati kapandi:
+
+- **`silme_simulasyon` (21/21 kural):** `Step S S' → Step (konfSil S) (konfSil S')`.
+  Deger tasiyan 6 kural §5 lemmalariyla, 7 fault + 5 yapisal kural dogrudan, **3
+  congruence kurali TUMEVARIM hipoteziyle** (ic adim silinmis dunyada da atilabilir;
+  `ifadeyleKonf_konfSil` + FIX-F yan-kosulunun silme altinda transportu).
+- **`ni_cekirdek_altkume`:** dusuk-esdeger (silinmisi ayni) iki konfigurasyondan atilan
+  adimlar AYNI gozlemi uretir.
+
+**⚠ ISPATIN ZORLADIGI TANIM DARALTMASI (asil bulgu):** `degerSil` once TUM degerleri
+birime indiriyordu. `cGorevBaslatTamam` case'i **COKTU** — cunku `Deger.gorevVal t` bir
+VERI degil **THREAD KIMLIGIDIR**: kural onu post-state'te yeniden URETIR, dolayisiyla
+"her deger silinir" varsayimi altinda silme orada simulasyon DEGILDIR. Ustelik o kimlik
+zaten gozlemlenebilir (`gBaslat t` olayi). Tanim daraltildi (`gorevVal` korunur) →
+**"ne gizlidir" sorusunu ispat cevapladi, biz varsaymadik.** Bu, mekanizasyonun
+belge-uzeri iddiaya karsi ustunlugunun somut ornegi.
+
+**Sabotaj:** `gorevVal`i de sil (yanlis daraltma) → **1 hata** (cGorevBaslat case'i);
+temiz → **0**. Ayrica D-328'in iki sabotaji (silme degeri korusun → 13 hata; gozlem
+degeri gostersin → 1 hata) gecerliligini koruyor.
+
+**Kapilar:** `calistir_lean_aksiyom` — 28/28 modul, 11 teorem;
+`silme_simulasyon` ve `ni_cekirdek_altkume` → `[propext, Quot.sound]` (**sorryAx YOK**).
+
+**KAPSAM DEGISMEDI:** teorem hala cekirdek alt-kume icindir — `Ifade`de dallanma/indeks/
+aritmetik olmadigi icin CT001/CT002/CT004 kanallari ifade edilemez; `kemgu_soundness_v3`e
+conjunct olarak EKLENMEDI. `eger` eklendiginde §5/§6 KIRMIZI verir (kasitli kapi).
+
+---
+
 ## D-328 — Yan-kanal: cekirdek alt-kume NON-INTERFERENCE ispatlandi (2026-07-26)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/NonInterference.lean` (iskelet →

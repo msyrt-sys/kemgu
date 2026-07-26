@@ -64,6 +64,8 @@ import Kemgu.Soundness.Main
 #print axioms Kemgu.SideChannel.NonInterference.silme_sim_sAtamaTamam
 #print axioms Kemgu.SideChannel.NonInterference.silme_sim_cKanalGonderTamam
 #print axioms Kemgu.SideChannel.NonInterference.silme_sim_cKanalAlTamam
+#print axioms Kemgu.SideChannel.NonInterference.silme_simulasyon
+#print axioms Kemgu.SideChannel.NonInterference.ni_cekirdek_altkume
 #print axioms Kemgu.SideChannel.NonInterference.izGozlem_izSil
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then
