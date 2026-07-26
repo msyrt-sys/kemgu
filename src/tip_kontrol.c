@@ -412,9 +412,11 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->kaynak = kaynak;
     tk->scope_seviyesi = 0;
     tk->lambda_govdesi_icinde = 0;
-    tk->imha_baglaminda = 0;   /* D-315: BASLATILMAZSA cop deger kontrolu SESSIZCE
+    tk->imha_baglaminda = 0;
+                               /* D-315: BASLATILMAZSA cop deger kontrolu SESSIZCE
                                 * atlar (olculdu: kismi-tasinmis yapinin tasinmasi
                                 * raporlanmiyordu). TipKontrol memset EDILMIYOR. */
+    tk->lineer_sondaj = 0;     /* D-320 */
     tk->lambda_lineer_yakalama = 0;
     tk->lambda_yakalama = 0;
     tk->lambda_baslangic_scope = NULL;
@@ -429,6 +431,9 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
  * Cift tuketim L002 hatasi (tekkez) veya CP005 (yetki). */
 static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
     if (!d || d->tip != DUGUM_TANIMLAYICI) return;
+    /* D-320: sondaj (tip-ogrenme) ziyaretinde defter TUTULMAZ. Asil tuketim
+     * pas 2'de sayilir; yoksa tek `kullan` iki kez sayilirdi (sahte L002). */
+    if (tk->lineer_sondaj > 0) return;
     Sembol *s = sembol_bul_yazilabilir(tk->scope,
         d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
     if (!s || !s->tip || !tip_lineer_mi(s->tip)) return;
@@ -3552,12 +3557,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             /* Once unify arg tipleri ile (substitue olmadan) — daha sonra
              * argumanlar substitue edilmis param tipi context'inde tekrar
              * cikarsanir. Iki pas: pas 1 inference, pas 2 type check. */
+            tk->lineer_sondaj++;    /* D-320: pas 1 = SONDAJ, tuketim sayilmaz */
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
                 TipBilgisi *arg_tip = tip_belirle(tk,
                     d->veri.cagri.argumanlar[i]);
                 gen_unify(&gb, param_tip, arg_tip);
             }
+            tk->lineer_sondaj--;
             /* Pas 2: arg tipini substitue edilmis param tipi context'inde
              * cikarsama + tip kontrolu */
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
@@ -3723,6 +3730,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                  *     onu ayrica takip eder),
                  *   - ikinci okuma -> L002 (ayni alan iki kez tasinamaz).
                  * Yapinin KENDISI hala tuketilmelidir (imha) -> kabuk sizmaz. */
+                /* D-320: sondaj ziyaretinde maske GUNCELLENMEZ (ve hata
+                 * uretilmez) — ayni erisim pas 2'de tekrar gorulur; burada
+                 * isaretlemek `f(k.a)` gibi TEK tasimayi iki kez saydirirdi. */
+                if (tk->lineer_sondaj > 0) return alan->tip;
                 int alan_ix = yapi_alan_indeksi_sirali(yapi_sem, alan);
                 Sembol *bagl = erisim_baglama_sembolu(tk, d->veri.erisim.nesne);
                 if (alan_ix < 0 || alan_ix >= 32 || !bagl) {

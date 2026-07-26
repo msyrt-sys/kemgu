@@ -952,6 +952,87 @@ static void T83_bilinmeyen_alan(void) {
     test_sonuc("L83: yapi deseninde bilinmeyen alan -> T009", var);
 }
 
+/* ========================================================================
+ * GROUP L84-L89: cagri argumaninda lineer tuketim (D-320)
+ * ------------------------------------------------------------------------
+ * DUGUM_CAGRI argumanlari IKI pas gorur (pas 1: generic unify, pas 2:
+ * beklenen-tip cikarsama + T001). Her ziyaret lineer defteri guncelleseydi
+ * TEK bir `kullan(t)` iki kez sayilirdi -> sahte L002. Bu grup hem sahte
+ * reddin gittigini hem GERCEK cift tuketimin hala yakalandigini olcer.
+ * ======================================================================== */
+
+static void T84_kullan_cagri_argumaninda_ok(void) {
+    /* `kullan(m)` DOGRUDAN arguman pozisyonunda: tam olarak BIR tuketim. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"merhaba\");\n"
+        "    ver metin_uzunluk(kullan(m));\n"
+        "}\n");
+    test_sonuc("L84: kullan(t) cagri argumaninda -> 0 hata", h == 0);
+}
+
+static void T85_kullan_ic_ice_cagri_ok(void) {
+    /* Ic ice cagri: dis cagrinin pas 1'i ic cagriyi da sondajlar. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"ab\");\n"
+        "    ver metin_uzunluk(metin_birlestir(kullan(m), \"c\"));\n"
+        "}\n");
+    test_sonuc("L85: ic ice cagri argumaninda kullan -> 0 hata", h == 0);
+}
+
+static void T86_kullan_generic_cagri_argumaninda_ok(void) {
+    /* Generic hedef: pas 1 (unify) GERCEKTEN gerekli — sondaj olmasa
+     * cikarsama bozulurdu; sondaj olmadan da tuketim cift sayilirdi. */
+    int h = hata_sayisi(
+        "i\xc5\x9flev kimlik<T>(x: T) -> T { ver x; }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"ab\");\n"
+        "    de\xc4\x9fi\xc5\x9fken s: metin = kimlik(kullan(m));\n"
+        "    ver metin_uzunluk(s);\n"
+        "}\n");
+    test_sonuc("L86: generic cagri argumaninda kullan -> 0 hata", h == 0);
+}
+
+static void T87_kismi_tasima_cagri_argumaninda_ok(void) {
+    /* D-315 kismi tasima maskesi de pas basina DEGIL, tasima basina
+     * isaretlenmeli: `f(k.a)` TEK tasimadir. */
+    int h = hata_sayisi(
+        "yap\xc4\xb1 tekkez K { a: tekkez<metin>; }\n"
+        "i\xc5\x9flev f(y: tekkez<metin>) -> tam32 { imha(y); ver 2; }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { a: tekkez_olustur(\"x\") };\n"
+        "    de\xc4\x9fi\xc5\x9fken r: tam32 = f(k.a);\n"
+        "    imha(k);\n"
+        "    ver r;\n"
+        "}\n");
+    test_sonuc("L87: f(k.a) kismi tasima -> 0 hata", h == 0);
+}
+
+static void T88_cagri_argumaninda_cift_kullan_hala_l002(void) {
+    /* SABOTAJ KAPISI: sondaj bayragi GERCEK cift tuketimi gizlememeli. */
+    int var = kod_uretildi_mi(
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken m: tekkez<metin> = tekkez_olustur(\"ab\");\n"
+        "    ver metin_uzunluk(kullan(m)) + metin_uzunluk(kullan(m));\n"
+        "}\n", "L002");
+    test_sonuc("L88: arg pozisyonunda cift kullan -> L002 (hala)", var);
+}
+
+static void T89_cagri_argumaninda_cift_alan_tasima_hala_l002(void) {
+    /* SABOTAJ KAPISI: ayni lineer alan iki cagriya verilemez. */
+    int var = kod_uretildi_mi(
+        "yap\xc4\xb1 tekkez K { a: tekkez<metin>; }\n"
+        "i\xc5\x9flev f(y: tekkez<metin>) -> tam32 { imha(y); ver 2; }\n"
+        "i\xc5\x9flev test() -> tam32 {\n"
+        "    de\xc4\x9fi\xc5\x9fken k: K = K { a: tekkez_olustur(\"x\") };\n"
+        "    de\xc4\x9fi\xc5\x9fken r: tam32 = f(k.a) + f(k.a);\n"
+        "    imha(k);\n"
+        "    ver r;\n"
+        "}\n", "L002");
+    test_sonuc("L89: arg pozisyonunda ayni alan iki kez -> L002 (hala)", var);
+}
+
 int main(void) {
     /* Tip kontrol stderr'e hata mesajlari yazar — testlerde sessiz olsun */
     freopen("nul", "w", stderr);
@@ -1071,6 +1152,14 @@ int main(void) {
     T81_destructure_sonrasi_yapi();
     T82_eksik_alan_listesi();
     T83_bilinmeyen_alan();
+
+    printf("\n--- L84-L89: cagri argumaninda tuketim (D-320) ---\n");
+    T84_kullan_cagri_argumaninda_ok();
+    T85_kullan_ic_ice_cagri_ok();
+    T86_kullan_generic_cagri_argumaninda_ok();
+    T87_kismi_tasima_cagri_argumaninda_ok();
+    T88_cagri_argumaninda_cift_kullan_hala_l002();
+    T89_cagri_argumaninda_cift_alan_tasima_hala_l002();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

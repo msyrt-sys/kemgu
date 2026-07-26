@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
+
+**Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`
+(3 nokta: init, `lineer_tuket_eger_baglamaysa` girişi, ERİŞİM kısmi-taşıma maskesi,
++ DUGUM_CAGRI pas-1 sarmalama), `test/test_linear.c` (+6, 83→89).]**
+D-319'un yan bulgusu kapatıldı — ve **öngörülen kök neden ölçümle doğrulandı.**
+
+**Kusur:** `DUGUM_CAGRI` argümanları İKİ pas görüyor — pas 1 generic unify
+(`tip_belirle`), pas 2 beklenen-tip çıkarsama + T001 (`tip_belirle_beklenen`).
+Her ziyaret lineer defteri mutasyona uğrattığı için **TEK** bir tüketim **İKİ**
+sayılıyordu:
+- `ver metin_uzunluk(kullan(m));` → sahte **L002**
+- `f(k.a)` (D-315 kısmi taşıma) → sahte **L002** "alan zaten dışarı taşındı"
+
+İkisi de **ÖNCEDEN VAR** (9fead86'da ölçüldü) — D-311..D-319 lineer işinin
+regresyonu DEĞİL. Yalıtım (D-319'daki gibi): ayrı deyim OK, `ver kullan(a)` OK,
+ikili ifade içinde OK — **yalnız argüman pozisyonu.**
+
+**Çözüm — SONDAJ (probe) modu, L002'yi özel-durumlamak DEĞİL:** `tk->lineer_sondaj`
+sayacı; pas 1 sondaj olarak işaretlenir, lineer defter (tüketim sayacı + kısmi-taşıma
+bit maskesi) **YALNIZ pas 2'de** güncellenir. Tanı **ölçüldü, tahmin edilmedi**:
+mekanizmayı iptal edince (sabotaj) tam olarak yeni 4 kabul-testi kırmızıya döndü.
+
+**Neden defter-susturma, tanı-susturma DEĞİL:** pas 1'de `tip_hata` KAPATILMADI.
+Kapatmak duplike raporu da temizlerdi ama pas 2'nin farklı bir yol izlediği durumda
+gerçek bir hatayı **loud→silent** çevirirdi. Bastırılan tek şey **durum mutasyonu**.
+
+**Doğrulama:** test_linear **89/89** (+6: 4 kabul — düz/iç-içe/generic çağrı +
+kısmi taşıma; **2 SABOTAJ KAPISI** — gerçek çift `kullan` ve aynı alanın iki kez
+taşınması hâlâ L002). L001 sızıntı tespiti bozulmadı. tip_kontrol 189/189,
+capability 40/40 (CP005 aynı yardımcıyı kullanır), llvm 274/274,
+checker_diff 52/52, codegen bootstrap **FIXPOINT** (42003 satır).
+
+**Self-host portu GEREKMEDİ — ölçüldü, varsayılmadı:** `kemgu_self.exe` her iki
+repro'yu zaten KABUL, her iki negatifi zaten L002 ile RED ediyordu. Self-host
+`ifade_tip`'i (pas 2) lineer yan etkisizdir ve ERİŞİM maske kancası yalnız
+`kontrol_dugum`'dadır. Yani bu düzeltme bir **parite kaybını kapatıyor** (C
+reddediyor, self kabul ediyordu), yeni bir parite borcu açmıyor.
+
+**Sınır:** self-host'un kendi asimetrisi duruyor (bilinen, bu işin kapsamı dışı) —
+`lin_tuket_dugum` yalnız bilinen-arity yolunda çalışır; builtin/dolaylı çağrı
+argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
+
+---
+
 ## D-319 — Lineer intrinsic CODEGEN self-host'a eklendi (C parite) (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (3 nokta: `ll_tip` TIP_TEKKEZ, `kullan`/`imha`
@@ -24,7 +69,7 @@ ediyor ama DERLEYEMİYORDU** — `tekkez_olustur` genel çağrı yoluna düşüp
 (i32 fallback'i olsaydı kırpardı), `imha`+aritmetik=42, koşullu tüketim (D-311 iki-dal)=42,
 yapı-deseni + lineer alan (D-318)=42. **codegen_diff 101/101** (+1 korpus), **FIXPOINT**
 (42003 satır), bootstrap (lexer/parser/checker 92 birebir), checker_diff 52/52,
-test_linear 83/83.
+test_linear 83/83. **(D-320 bu bulguyu kapattı.)**
 
 **⚠ YAN BULGU — ÖNCEDEN VAR OLAN yanlış L002 (ayrı iş olarak işaretlendi):**
 `kullan(t)` **DOĞRUDAN çağrı argümanı** olunca yanlış L002 üretiliyor:

@@ -83,6 +83,13 @@ typedef struct TipKontrol {
     /* D-315 (Linear V2.1): imha(...) operandini tuketiyoruz. Kismi tasinmis
      * bir yapi YALNIZ imha ile tuketilebilir (tasima delikli deger devrederdi). */
     int imha_baglaminda;
+    /* D-320: SONDAJ (probe) modu — ifadeyi YALNIZ tip ogrenmek icin ziyaret
+     * ediyoruz, tuketim SAYILMAZ. DUGUM_CAGRI argumanlari iki pas gorur
+     * (pas 1: generic unify, pas 2: beklenen-tip cikarsama + kontrol); her
+     * ziyaret lineer durumu mutasyona ugratirsa `f(kullan(t))` gibi TEK
+     * tuketim IKI sayilir -> sahte L002. Pas 1 bu bayrakla sondaj olarak
+     * isaretlenir; lineer defter YALNIZ pas 2'de guncellenir. */
+    int lineer_sondaj;
     /* D-304: blok-form lambda dönüş çıkarsaması. cikarsama>0 iken blok içindeki
      * `ver <e>` deyimi e'nin tipini blok_donus'a KAYDEDER (aktif_donus_tipi'ye
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
