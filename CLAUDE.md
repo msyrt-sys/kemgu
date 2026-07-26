@@ -757,8 +757,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   **SONUÇ: D-291→D-297'nin tamamı self-host codegen'de; C ile birebir eşdeğer.**
   Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ. **D-322: GENEL KAPANIŞ da self-host'ta** —
   fat value `{fnptr, envptr}`, lifted ABI `(ptr %rho[, ptr %env], params...)`, dönüş IR'ı
-  BİLDİRİLEN tipten (`cg_aic`). 6/6 şekil C↔self birebir; kapanış-parametresi hâlâ C'de de
-  parser-red (V1 sınırı). Bununla self-host'ta kapanış parite borcu KALMADI.
+  BİLDİRİLEN tipten (`cg_aic`). 6/6 şekil C↔self birebir. ~~kapanış-parametresi C'de de
+  parser-red~~ **YANLIŞ ÖLÇÜM (D-323): kapanış parametresi İKİSİNDE DE ÇALIŞIYOR** (eski
+  testte işlev adı olarak `uygula` anahtar kelimesi kullanılmıştı). **D-323:** G005
+  daraltıldı — yalnız İŞARETÇİ yakalayan kaçan kapanış reddedilir (env HEAP olduğu için
+  skaler yakalama güvenli). ⚠ **G005 self-host'ta YOK** → self, C'nin reddettiğini kabul
+  ediyor (D-322 ile canlı hale gelen parite açığı; port ayrı iş).
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.

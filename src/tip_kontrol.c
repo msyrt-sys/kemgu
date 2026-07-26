@@ -419,6 +419,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->lineer_sondaj = 0;     /* D-320 */
     tk->lambda_lineer_yakalama = 0;
     tk->lambda_yakalama = 0;
+    tk->lambda_yakalama_isaretci = 0;   /* D-323 (TipKontrol memset EDILMIYOR) */
     tk->lambda_baslangic_scope = NULL;
     tk->lambda_blok_cikarsama = 0;      /* D-304 */
     tk->lambda_blok_donus = NULL;       /* D-304 */
@@ -640,13 +641,38 @@ static int lambda_yakalama_yereli_mi(TipKontrol *tk, const char *ad, int uz) {
 
 /* G005: lambda govdesi icinde HERHANGI bir cevre lokal/param yakalamasini
  * isaretle (lineer + lineer-olmayan). lineer_yakalama_kontrol'un yaninda cagrilir. */
+/* D-323: yakalanan bir deger cerceve asiminda TEHLIKELI mi? Env HEAP oldugu icin
+ * (llvm.c V2-F2: @malloc) skaler kopyasi guvenlidir; isaretci kopyasi ise gosterdigi
+ * bolgeyi (ρ_yerel / cagiran cerceve) asabilir → dangling. Bilinmeyen/cozulemeyen
+ * tip TEHLIKELI sayilir (default-deny: sessiz kabul yerine gurultulu red). */
+static int yakalama_isaretci_benzeri(const TipBilgisi *t) {
+    if (!t) return 1;
+    switch (t->kategori) {
+        case TIP_TAM8:  case TIP_TAM16: case TIP_TAM32: case TIP_TAM64:
+        case TIP_DTAM8: case TIP_DTAM16: case TIP_DTAM32: case TIP_DTAM64:
+        case TIP_KESIRLI32: case TIP_KESIRLI64:
+        case TIP_MANTIKSAL: case TIP_KARAKTER: case TIP_BOS:
+            return 0;   /* skaler: env'de DEGER kopyasi */
+        case TIP_TEKKEZ:
+            return yakalama_isaretci_benzeri(t->veri.tekkez.ic);
+        default:
+            return 1;   /* metin/Dizi/ref/ham-pointer/yapi + bilinmeyen → DENY */
+    }
+}
+
 static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
     if (!d || d->tip != DUGUM_TANIMLAYICI) return;
     if (!tk->lambda_govdesi_icinde) return;
     if (!tk->lambda_baslangic_scope) return;
     if (lambda_yakalama_yereli_mi(tk, d->veri.tanimlayici.metin,
-                                  d->veri.tanimlayici.uzunluk))
+                                  d->veri.tanimlayici.uzunluk)) {
         tk->lambda_yakalama = 1;
+        const Sembol *sem = sembol_bul(tk->scope, d->veri.tanimlayici.metin,
+                                       d->veri.tanimlayici.uzunluk);
+        /* Sembol/tip cozulemezse isaretci VARSAY (default-deny). */
+        if (!sem || yakalama_isaretci_benzeri(sem->tip))
+            tk->lambda_yakalama_isaretci = 1;
+    }
 }
 
 /* Scope kapanisi: o scope'taki lineer baglamalar tuketilmis mi check.
@@ -3948,10 +3974,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int eski_lambda = tk->lambda_govdesi_icinde;
             int eski_yakalama = tk->lambda_lineer_yakalama;
             int eski_genel = tk->lambda_yakalama;   /* G005: ic-ice lambda korumasi */
+            int eski_genel_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
             Scope *eski_baslangic = tk->lambda_baslangic_scope;
             tk->lambda_govdesi_icinde = 1;
             tk->lambda_lineer_yakalama = 0;
             tk->lambda_yakalama = 0;
+            tk->lambda_yakalama_isaretci = 0;
             tk->lambda_baslangic_scope = eski_scope;
 
             /* Govde icin lambda_scope uzerinde yeni gövde scope (ADIM 29:
@@ -3994,6 +4022,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
             int yakaladi = tk->lambda_lineer_yakalama;
             int yakaladi_genel = tk->lambda_yakalama;   /* G005 */
+            int yakaladi_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
 
             /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
             scope_lineer_kapanis_check(tk, lambda_scope);
@@ -4001,11 +4030,19 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             tk->lambda_govdesi_icinde = eski_lambda;
             tk->lambda_lineer_yakalama = eski_yakalama;
             tk->lambda_yakalama = eski_genel;
+            tk->lambda_yakalama_isaretci = eski_genel_ptr;   /* D-323 */
             tk->lambda_baslangic_scope = eski_baslangic;
             tk->scope = eski_scope;
 
-            /* === G005 (V1): YAKALAYAN ∧ KAÇAN closure reddi ===
-             * Kaçan yakalayan closure'ın env'i (+ {fn,env} cifti) alloca ile
+            /* === G005: YAKALAYAN(ISARETCI) ∧ KAÇAN closure reddi ===
+             * D-323 DARALTMA (Mehmet karari): env ARTIK HEAP (llvm.c V2-F2 @malloc)
+             * — eski "env stack-omurlu" gerekcesi OLCULDU ve GECERSIZ. Dolayisiyla
+             * SKALER yakalama (env'de deger kopyasi) cerceve asiminda dangling
+             * URETEMEZ → reddedilmez. ISARETCI-benzeri yakalama (metin/Dizi/ref/ham-pointer/
+             * yapi) hala tehlikeli: kopyalanan isaretci gosterdigi bolgeyi (ρ_yerel
+             * / cagiran cerceve) asabilir → G005 KORUNUR. Cozulemeyen tip = DENY.
+             *
+             * (Tarihsel gerekce:) env'i (+ {fn,env} cifti) alloca ile
              * STACK-omurlu (src/llvm.c) → frame'i asinca dangling/UAF; ayrica
              * closure_mu kaçışta kaybolup cagri yerinde mis-dispatch. Bu yuzden
              * derleme-zamaninda reddet. Kosul: (a) lambda cevre lokal/param
@@ -4014,11 +4051,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * transitif atama zinciri). Yakalamayan lambda (bare fn-ptr, env yok)
              * ve fonksiyon-ici kalan yakalayan closure REDDEDILMEZ (over-reject yok).
              * Bkz. D-071 KAPSAM-DISI "lambda escape ... non-escaping v1 garantisi". */
-            if (yakaladi_genel && tk->aktif_escape &&
+            if (yakaladi_genel && yakaladi_ptr && tk->aktif_escape &&
                 escape_kategori(tk->aktif_escape, d) == ESC_CAGIRAN) {
                 tip_hata(tk, d, "G005",
-                    "yakalayan closure frame'i asamaz (env stack-omurlu, V1): "
-                    "yakalama yerine degeri parametre olarak gecirin ya da V2'yi bekleyin");
+                    "isaretci yakalayan closure frame'i asamaz (kopyalanan isaretci "
+                    "gosterdigi bolgeyi asabilir): skaler yakalayin, degeri parametre "
+                    "olarak gecirin ya da V2'yi bekleyin");
             }
 
             TipBilgisi *islev_t =

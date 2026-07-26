@@ -1906,18 +1906,20 @@ static void test_nonlambda_yeniden_atama_temiz(void) {
     arena_serbest(a);
 }
 
-/* === G005 (V1): kacan-closure reddi ===
- * YAKALAYAN ∧ KAÇAN closure compile-time reddedilir (env stack-omurlu → UAF).
- * Pozitif: yakalayan closure `ver` ile kacar -> G005.
- * Over-reject guard: yakalamayan return / fonksiyon-ici yakalayan kullanim -> 0 hata. */
+/* === G005: kacan-closure reddi (D-323 DARALTILMIS) ===
+ * env ARTIK HEAP (llvm.c V2-F2 @malloc) → SKALER yakalama cerceve asiminda
+ * dangling URETEMEZ. Bu yuzden G005 YALNIZ ISARETCI-benzeri yakalamada tetiklenir
+ * (metin/Dizi/ref/ham-pointer/yapi): kopyalanan isaretci gosterdigi bolgeyi asabilir.
+ * Pozitif: ISARETCI yakalayan closure `ver` ile kacar -> G005.
+ * Over-reject guard: skaler yakalama / yakalamayan return / fonksiyon-ici kullanim -> 0 hata. */
 
-/* G005 POZITIF 1: yakalayan (lineer-olmayan) closure dogrudan `ver` ile doner. */
+/* G005 POZITIF 1: ISARETCI (metin) yakalayan closure dogrudan `ver` ile doner. */
 static void test_kacan_closure_ver_lambda_g005(void) {
     Arena *a = arena_olustur(0);
     int h = program_kontrol(
-        "i\xc5\x9flev sayac_yap(b: tam32) -> i\xc5\x9flev() -> tam32 { "
-        "ver || b; }", a);
-    test_sonuc("G005: yakalayan closure `ver ||cap` -> hata", h >= 1);
+        "i\xc5\x9flev sayac_yap(s: metin) -> i\xc5\x9flev() -> metin { "
+        "ver || s; }", a);
+    test_sonuc("G005: isaretci yakalayan closure `ver ||cap` -> hata", h >= 1);
     arena_serbest(a);
 }
 
@@ -1925,21 +1927,42 @@ static void test_kacan_closure_ver_lambda_g005(void) {
 static void test_kacan_closure_transitif_g005(void) {
     Arena *a = arena_olustur(0);
     int h = program_kontrol(
-        "i\xc5\x9flev g(b: tam32) -> i\xc5\x9flev() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken f = || b; ver f; }", a);
+        "i\xc5\x9flev g(s: metin) -> i\xc5\x9flev() -> metin { "
+        "de\xc4\x9fi\xc5\x9fken f = || s; ver f; }", a);
     test_sonuc("G005: transitif `degisken f=||cap; ver f` -> hata", h >= 1);
     arena_serbest(a);
 }
 
-/* G005 POZITIF 3: lineer yakalayan closure da `ver` ile kacar (LR002/L004 `ver`'i
- * engellemez — `ver` gecerli tek-tuketim; env yine stack -> UAF). */
+/* G005 POZITIF 3: lineer + ISARETCI ic tip (tekkez<metin>) yakalayan closure kacar.
+ * (LR002/L004 `ver`'i engellemez — `ver` gecerli tek-tuketim.) */
 static void test_kacan_closure_lineer_g005(void) {
     Arena *a = arena_olustur(0);
     int h = program_kontrol(
-        "i\xc5\x9flev h() -> tekkez<i\xc5\x9flev() -> tam32> { "
-        "de\xc4\x9fi\xc5\x9fken anahtar: tekkez<tam32> = tekkez_olustur(123); "
+        "i\xc5\x9flev h() -> tekkez<i\xc5\x9flev() -> metin> { "
+        "de\xc4\x9fi\xc5\x9fken anahtar: tekkez<metin> = tekkez_olustur(\"gizli\"); "
         "de\xc4\x9fi\xc5\x9fken c = || kullan(anahtar); ver c; }", a);
-    test_sonuc("G005: lineer yakalayan closure `ver c` -> hata", h >= 1);
+    test_sonuc("G005: lineer ISARETCI yakalayan closure `ver c` -> hata", h >= 1);
+    arena_serbest(a);
+}
+
+/* D-323 GUARD: SKALER yakalayan closure KACAR -> 0 hata (daraltmanin ta kendisi).
+ * env heap oldugu icin `b`'nin DEGER kopyasi cerceve asiminda gecerli kalir. */
+static void test_kacan_closure_skaler_temiz_d323(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev sayac_yap(b: tam32) -> i\xc5\x9flev() -> tam32 { "
+        "ver || b; }", a);
+    test_sonuc("D-323: SKALER yakalayan closure `ver ||cap` -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* D-323 GUARD (transitif): skaler yakalama + transitif kacis -> 0 hata. */
+static void test_kacan_closure_skaler_transitif_temiz_d323(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev g(b: tam32) -> i\xc5\x9flev() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken f = || b; ver f; }", a);
+    test_sonuc("D-323: skaler transitif kacis -> 0 hata", h == 0);
     arena_serbest(a);
 }
 
@@ -2640,6 +2663,8 @@ int main(void) {
     test_kacan_closure_ver_lambda_g005();
     test_kacan_closure_transitif_g005();
     test_kacan_closure_lineer_g005();
+    test_kacan_closure_skaler_temiz_d323();
+    test_kacan_closure_skaler_transitif_temiz_d323();
     test_kacan_yakalamasiz_return_temiz_g005();
     test_kacan_closure_ici_cagri_temiz_g005();
     test_kacan_closure_kacmaz_temiz_g005();

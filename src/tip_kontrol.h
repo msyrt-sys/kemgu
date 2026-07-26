@@ -34,11 +34,12 @@
  *   T031: ozellik bilinmiyor (bound olarak verilen ad cozulemedi)
  *   G001: *T dereferans guvensiz blok disinda (C5 on-kosul #2)
  *   G002: satiriçi_asm guvensiz blok disinda (C5)
- *   G005: yakalayan (capturing) closure frame'i asiyor (return / frame-asiri
- *          saklama). env alloca ile stack-omurlu (llvm.c) → kaçinca dangling/UAF
- *          + closure_mu kaçışta kaybolup mis-dispatch. V1 redd: tehlikeli kodu
- *          derleyemezsin (D-071 "non-escaping" garantisini ZORLAR). C-checker only
- *          (self-host lambda yapmiyor → port moot, G004 gibi).
+ *   G005: ISARETCI yakalayan closure frame'i asiyor (return / frame-asiri
+ *          saklama). D-323 DARALTMA: env ARTIK HEAP (llvm.c V2-F2 @malloc) →
+ *          SKALER yakalama cerceve asiminda dangling URETEMEZ, reddedilmez;
+ *          isaretci-benzeri yakalama (metin/Dizi/ref/ham-pointer/yapi) kopyalanan
+ *          isaretciyle gosterdigi bolgeyi asabilir → REDDEDILIR. Tip cozulemezse
+ *          isaretci VARSAYILIR (default-deny).
  *   AS001: asm mimari etiketi hedef mimariyle uyusmuyor (C5 arch-tag;
  *          hedef KEMGU_HEDEF_MIMARI — llvm.h, hedefe-duyarli C8'de)
  *   AS002: asm operandi uygunsuz tip — yalniz kopyalanabilir primitif
@@ -100,6 +101,12 @@ typedef struct TipKontrol {
     int lambda_yakalama;           /* G005: >0 = lambda HERHANGI bir cevre
                                       lokal/param yakaladi (lineer + lineer-olmayan).
                                       codegen lambda_serbest_tara ile birebir. */
+    int lambda_yakalama_isaretci;  /* D-323: >0 = yakalananlardan EN AZ BIRI
+                                      isaretci-benzeri (metin/Dizi/ref/ham-pointer/yapi).
+                                      G005 YALNIZ bu durumda tetiklenir: env HEAP
+                                      oldugu icin skaler yakalama (deger kopyasi)
+                                      cerceve asiminda dangling URETEMEZ; isaretci
+                                      kopyasi ise gosterdigi bolgeyi asabilir. */
     Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
     /* G005: aktif islev govdesinin escape analizi (forward DFA, src/escape.c).
      * DUGUM_ISLEV govde kontrolu sirasinda kurulur; lambda case ESC_CAGIRAN

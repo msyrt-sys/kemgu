@@ -50,6 +50,49 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-323 — [YÜKSEK] G005 DARALTILDI: yalnız İŞARETÇİ yakalamada red (Mehmet kararı) (2026-07-26)
+
+**⚠ ÖNCE BİR ÖLÇÜM DÜZELTMESİ (D-322'deki iddiam YANLIŞTI).** D-322'de "kapanış
+parametre olarak geçilemez — C'de parser reddediyor (27 hata)" yazmıştım. **Yanlış:**
+test dosyamda işlev adı olarak **`uygula` (anahtar kelime)** kullanmışım; 27 hata ondandı.
+C **zaten** destekliyor: `işlev calistir(g: işlev(tam32)->tam32, x: tam32)` → `--check` OK,
+IR `define i32 @calistir(ptr %rho, { ptr, ptr } %g, i32 %x)`, exit 42; self-host da D-322
+sonrası aynı (42). **DERS:** "derleyici reddediyor" sonucunu yazmadan önce reddin
+GEREKÇESİNİ oku — hata mesajı (P014 "islev adi bekleniyor", sütun 8) test dosyasını
+işaret ediyordu, dil özelliğini değil.
+
+**Karar [ETKİ: `src/tip_kontrol.c` + `.h` (G005 koşulu + `lambda_yakalama_isaretci`),
+`test/test_tip_kontrol.c` (189→191; 3 test yeniden hedeflendi + 2 yeni koruma).]**
+Ölçüm sonrası bulunan gerçek ayrışma: **yakalayan** kapanış bir çağrıya argüman olunca
+**C reddediyordu (G005), self-host kabul edip doğru çalıştırıyordu.**
+
+**G005'in gerekçesi ESKİMİŞTİ (ölçüldü):** kural "env stack-ömürlü (llvm.c) → dangling"
+diyordu; oysa `llvm.c` V2-F2'den beri env **HEAP** (`@malloc`) — hem C hem self-host
+IR'ında `call ptr @malloc(...)` görülüyor. Yani C, kendi codegen'inin **doğru derlediği**
+programı reddediyordu.
+
+**Daraltma:** G005 artık `yakaladi_genel && yakaladi_ISARETCI && ESC_CAGIRAN`.
+- **Skaler yakalama** (tam*/dtam*/kesirli*/mantıksal/karakter/boş) → env'de **değer
+  kopyası**; çerçeve aşımında dangling ÜRETEMEZ → **serbest**.
+- **İşaretçi-benzeri yakalama** (metin/Dizi/ref/ham-pointer/yapı) → kopyalanan işaretçi
+  gösterdiği bölgeyi (ρ_yerel / çağıran çerçeve) aşabilir → **G005 KORUNUR**.
+- `tekkez<T>` iç tipine özyineler; **çözülemeyen tip = İŞARETÇİ varsayılır**
+  (default-deny — sessiz kabul yerine gürültülü red).
+- Hata metni de güncellendi (artık "skaler yakalayın" yolunu söylüyor).
+
+**Sabotaj doğrulaması (iki yön):** `yakaladi_ptr = 1` (daraltmayı iptal) → 2 yeni skaler
+koruma KIRMIZI; `yakaladi_ptr = 0` (işaretçi tarafını kapat) → 3 pozitif KIRMIZI.
+Kapı her iki yönde kod-duyarlı. Testler: tip_kontrol **191/191**, linear 89/89,
+escape 22/22, sıfır derleyici uyarısı.
+
+**KALAN — PARİTE AÇIĞI (açık, chip'li):** self-host'ta **G005 HİÇ YOK** (`grep`: 0 sonuç).
+D-322 öncesinde bu zararsızdı (self kapanış derleyemiyordu; başlık dosyası bile "port moot"
+diyordu), **D-322 ile CANLI hale geldi**: self, C'nin reddettiği işaretçi-yakalayan kaçan
+kapanışı kabul ediyor. Port, self-host'ta escape muhakemesi gerektiriyor (self'te genel
+escape DFA yok; yalnız `ky_*` kesin-yerel kanıtı var) → ayrı iş.
+
+---
+
 ## D-322 — GENEL KAPANIŞ (closure) codegen self-host'ta — C parite (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` — `ll_tip`/`ll_ic_tip` TIP_ISLEV, genel `LAMBDA`
@@ -84,10 +127,11 @@ runtime 16/16 (görev yolu regresyonsuz).
 korpusu SEGFAULT; (2) fat value'ya env yerine `null` yaz → yakalamalı korpus SEGFAULT.
 Kapılar kod-duyarlı.
 
-**KALAN (V1 sınırı, C'de de aynı):** kapanış **parametre olarak** geçilemez
-(`işlev uygula(g: işlev(tam32)->tam32, ...)` C'de **parser** hatası — 27 hata) ve
-annotasyonsuz kapanışta dönüş i32 varsayılır. İkisi de bu işin kapsamı dışı,
-C-tarafı işi.
+**~~KALAN: kapanış parametre olarak geçilemez~~ — BU İDDİA YANLIŞTI, bkz. D-323.**
+Ölçümüm hatalıydı (test dosyasında işlev adı olarak `uygula` ANAHTAR KELİMESİ);
+kapanış parametresi hem C'de hem self-host'ta **çalışıyor** (exit 42, IR
+`define i32 @calistir(ptr %rho, { ptr, ptr } %g, i32 %x)`).
+**Gerçek KALAN:** annotasyonsuz kapanışta dönüş i32 varsayılır (C'de de aynı).
 
 ---
 
