@@ -1,0 +1,5 @@
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2, 3];
+    değişken i: sabitsüre<tam32> = sabitsüre_olustur(1);
+    ver xs[i];
+}

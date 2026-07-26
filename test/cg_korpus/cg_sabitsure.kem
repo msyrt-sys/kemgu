@@ -1,0 +1,16 @@
+// D-327: sabitsüre UÇTAN UCA self-host'ta. Öncesinde `ifşa` checker'da T002,
+// codegen'de TANIMSIZ @ifşa (LOUD link hatası) idi → sabitsüre programları
+// self-host'ta HİÇ derlenmiyordu. Artık C ile birebir.
+// tam64 seçildi: ll_tip'in TIP_SABITSURE dalı (D-324) olmadan i32'ye düşerdi ve
+// 2^33 sessizce 0 olurdu — exit 42 ASLA çıkmaz. Her intrinsic bir lfence emit eder.
+// NOT: büyük literal DOĞRUDAN yerel değişkende sarılır; `f(8589934592)` biçimi
+// ÖNCEDEN VAR OLAN bir hatayı tetikler (çağrı argümanı i32'ye kırpılır) — D-327
+// kapsamı dışı, ayrı iş.
+// Exit: 42
+işlev main() -> tam32 {
+    değişken s: sabitsüre<tam64> = sabitsüre_olustur(8589934592);
+    değişken v: tam64 = ifşa(s);
+    değişken m: sabitsüre<tam32> = sabitsüre_olustur(7);
+    değişken n: tam32 = ifşa(m);
+    ver ((v / 204522252) olarak tam32) - n + 7;
+}

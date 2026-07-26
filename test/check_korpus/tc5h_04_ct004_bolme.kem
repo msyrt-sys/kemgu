@@ -1,0 +1,5 @@
+işlev main() -> tam32 {
+    değişken a: sabitsüre<tam32> = sabitsüre_olustur(10);
+    değişken b: sabitsüre<tam32> = sabitsüre_olustur(2);
+    ver ifşa(a / b);
+}
