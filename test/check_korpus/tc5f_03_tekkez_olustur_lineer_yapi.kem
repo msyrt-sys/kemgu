@@ -1,0 +1,7 @@
+yapı tekkez K { a: tekkez<metin>; }
+işlev test() -> tam32 {
+    değişken k: K = K { a: tekkez_olustur("x") };
+    değişken w = tekkez_olustur(k);
+    imha(w);
+    ver 0;
+}

@@ -1,0 +1,6 @@
+işlev test() -> tam32 {
+    değişken ic: tekkez<tam32> = tekkez_olustur(1);
+    değişken dis: tekkez<tekkez<tam32>> = tekkez_olustur(ic);
+    imha(dis);
+    ver 0;
+}

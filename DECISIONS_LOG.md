@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-325 — `tekkez_olustur` argüman tüketimi self-host checker'a eklendi (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) — yeni
+`tekkez_baglamasi_mi` yardımcısı + CAGRI'da intrinsic kolu; `test/check_korpus/tc5f_01..03`
+(+3, 56→59); `test/cg_korpus/cg_lineer_ic_ice.kem` (+1, 102→103).]**
+D-323'ün bilerek dar bıraktığı built-in yolundaki **tek ada-özel istisna** kapatıldı;
+D-324'ün korpustan çıkaramadığı şekil artık derleniyor.
+
+**Kusur:** `tekkez_olustur` bir built-in olduğu için self-host CAGRI'da yedek yola
+düşüyor, argümanı tüketmiyordu → `değişken dış = tekkez_olustur(iç);` (yani
+`tekkez<tekkez<T>>` kurmak) `iç` için **sahte L001** üretiyordu, C KABUL ederken.
+
+**Neden bu istisna meşru (D-321'in "built-in'lere dokunma" kuralını çiğnemiyor):**
+D-321'de built-in argümanlarını tüketmemenin gerekçesi, param lineerliğinin
+**bilinememesiydi** (tahmine dayalı tüketim loud→silent riski). Burada tahmin YOK:
+bu intrinsic'in tüketim semantiği C'de **açıkça yazılıdır** (`tip_kontrol.c` producer
+intrinsic'i). Kural ada-özel ve kanıtlanabilir.
+
+**C'nin DAR kuralı birebir aynalandı:** C yalnız `ic->kategori == TIP_TEKKEZ` iken
+tüketir — **lineer YAPI argümanını TÜKETMEZ.** `tekkez_baglamasi_mi` bu ayrımı yapar
+(lineer bağlama VE tipi lineer yapı değil). **Bu istisna YÜK TAŞIYOR, süs değil:**
+sabotajla `lineer_yapi_mi` guard'ı kaldırıldığında `tekkez_olustur(k)` senaryosu
+C=**L001** / self=**OK**'a ayrıştı — yani **sessiz kabul**. Ölçüldü.
+
+**Doğrulama — 4 senaryo, C oracle ile birebir (konum dâhil):**
+| senaryo | önce (self) | sonra (self) | C oracle |
+|---|---|---|---|
+| `tekkez_olustur(iç)` iç-içe | **L001** ❌ | **OK** | OK |
+| `tekkez_olustur(35)` düz | OK | OK | OK |
+| `tekkez_olustur(lineer_yapı)` | L001 | L001 | L001 (parite korundu) |
+| aynı `iç` iki kez sarılır | **L001** ❌ yanlış kod | **L002 4:59** | L002 4:59 |
+
+**Kapılar:** checker_diff **59/59** (+3), codegen_diff **103/103** (+1 — D-322'nin
+dışladığı `tekkez<tekkez<T>>` şekli artık uçtan uca: `--check` + `--llvm` + exit 42),
+self_driver **TÜM MODLAR** (CHECK 59/59 hem C-derlenmiş hem self-host-derlenmiş),
+**FIXPOINT** (42360 satır), linear 83/83, tip_kontrol 189/189.
+
+**Sınır (C'den DEVRALINAN, bilinçli aynalandı):** `tekkez_olustur(lineer_yapı)` C'de
+de argümanı tüketmez → yapı sızar (L001). Bu C'nin davranışı; parite için aynen
+korundu. Lineer yapıyı `tekkez` ile sarmanın doğru semantiği ayrı bir tasarım
+sorusu (Mehmet'in kararı) — burada **icat edilmedi**.
+
+---
+
 ## D-324 — `ll_tip`de `TIP_SABITSURE` + tekkez İMZA korpusu (2026-07-26)
 
 **Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (`ll_tip`e 1 dal);
