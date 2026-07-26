@@ -141,6 +141,14 @@ yapı Ayr {
     fn_pbase: Dizi<tam32>;   // fn_ad ile paralel: fn_ptip'te param tiplerinin başı
     fn_ptip: Dizi<metin>;    // düz param tip listesi (bilinen skaler; aksi "?")
     fn_plin: Dizi<tam32>;    // fn_ptip ile paralel: param lineer mi (1/0)
+    // D-326: METOT imza tablosu (uygula gövdeleri). Self-host'ta `uygula`
+    // hiç kaydedilmiyordu → method çağrısı ERISIM hedefiyle yedek yola düşüp
+    // lineer argümanı tüketmiyordu (sahte L001 + move-sonrası kullanım kaçıyordu).
+    m_tip: Dizi<metin>;      // metodun sahibi yapı adı
+    m_ad: Dizi<metin>;       // metot adı
+    m_pbase: Dizi<tam32>;    // m_plin'de bu metodun param dilimi başı
+    m_psay: Dizi<tam32>;     // param sayısı (`kendin` HARİÇ)
+    m_plin: Dizi<tam32>;     // param lineer mi (1/0), `kendin` HARİÇ sırayla
     giris_dizin: metin;      // giriş dosyasının dizini (import arama yolu)
     kullan_gorulen: Dizi<metin>;  // yüklenen modül adları (döngü/elmas dedup)
     ly_ad: Dizi<metin>;      // D-314: `yapı tekkez K` — lineer yapı adları
@@ -5407,6 +5415,8 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         }
         eğer metin_esit(ad, "ISLEV") { imza_kaydet(p, c); }   // TC3d imza tablosu
         eğer metin_esit(ad, "YAPI") { yapi_kaydet(p, c); }    // TC4 yapı tablosu
+        // D-326: uygula gövdesindeki metotları kaydet (hedef tip = kids[0]).
+        eğer metin_esit(ad, "UYGULA") { uygula_kaydet(p, c); }
         eğer metin_esit(ad, "MODUL") { g_ekle(p, dizi_al(p.a_deg, c)); genel_topla(p, c); }
         eğer metin_esit(ad, "DISA") {       // dışa <tanım> → iç tanım adı
             değişken dcb: tam32 = dizi_al(p.a_cb, c);
@@ -5499,6 +5509,69 @@ işlev param_tip_str(p: &değişken Ayr, param_idx: tam32) -> metin {
 }
 // İşlev imzasını tabloya kaydet (CAGRI dönüş + T010 + per-arg T001). Dönüş/param
 // yalnız bilinen skaler ise saklanır; aksi (yapı/generic/bileşik) "?" → atlanır.
+// D-326: PARAMETRE düğümü `kendin` (receiver) mı? `kendin`in TIP_ çocuğu YOKTUR
+// (param_tip_str'in "kendin → çocuk yok → ?" notu aynı gözlem). Metot param
+// indekslemesi C ile aynı hizada olsun diye receiver ATLANIR (C: has_kendin/offset).
+işlev param_kendin_mi(p: &değişken Ayr, param_idx: tam32) -> mantıksal {
+    değişken tc: tam32 = son_cocuk(p, param_idx);
+    eğer tc < 0 { ver doğru; }
+    ver metin_baslar(dizi_al(p.a_ad, tc), "TIP_") == yanlış;
+}
+// D-326: bir UYGULA düğümünün metotlarını (tip_adı, metot_adı) → param lineerliği
+// olarak kaydet. kids[0] = hedef tip düğümü; ISLEV adlı çocuklar = metotlar
+// (trait impl'de kids[1] özellik TIP_ düğümüdür, ISLEV olmadığı için atlanır).
+işlev uygula_kaydet(p: &değişken Ayr, uyg: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, uyg);
+    değişken cs: tam32 = dizi_al(p.a_cs, uyg);
+    eğer cs < 1 { ver 0; }
+    değişken tad: metin = tip_str(p, dizi_al(p.cocuk, cb));
+    eğer metin_esit(tad, "?") { ver 0; }   // bileşik hedef tip → izlenemez
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { metot_kaydet(p, tad, c); }
+        i = i + 1;
+    }
+    ver 0;
+}
+// D-326: tek metodun imzasını kaydet (`kendin` atlanır).
+işlev metot_kaydet(p: &değişken Ayr, tad: metin, fn: tam32) -> tam32 {
+    dizi_ekle(p.m_tip, tad);
+    dizi_ekle(p.m_ad, dizi_al(p.a_deg, fn));
+    dizi_ekle(p.m_pbase, dizi_boyut(p.m_plin));
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken say: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer param_kendin_mi(p, c) == yanlış {
+                değişken tc: tam32 = son_cocuk(p, c);
+                eğer (tc >= 0) ve param_lineer_mi(p, tc) { dizi_ekle(p.m_plin, 1); }
+                değilse { dizi_ekle(p.m_plin, 0); }
+                say = say + 1;
+            }
+        }
+        i = i + 1;
+    }
+    dizi_ekle(p.m_psay, say);
+    ver 0;
+}
+// D-326: (tip, metot, param j) → param lineer mi (1/0). Bulunamazsa 0 (tüketim yok
+// = eski davranış; KANITLANAMAYAN durumda muhafazakâr kal).
+işlev metot_plin_bul(p: &değişken Ayr, tad: metin, mad: metin, j: tam32) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.m_ad);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.m_tip, i), tad) ve metin_esit(dizi_al(p.m_ad, i), mad) {
+            eğer j >= dizi_al(p.m_psay, i) { ver 0; }
+            ver dizi_al(p.m_plin, dizi_al(p.m_pbase, i) + j);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, fn));
     değişken dt: metin = donus_str(p, fn);
@@ -6443,6 +6516,30 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer tekkez_baglamasi_mi(p, targ) { lin_tuket_dugum(p, targ); }
             ver 0;
         }
+        // D-326: METOT çağrısı (`k.al(t)`) — hedef ERISIM. Alıcının tipini çöz,
+        // metot tablosundan param lineerliğini oku, lineer olanı TÜKET. Bu kol
+        // olmadan method-dispatch yedek yola düşüyordu: hem sahte L001 hem de
+        // move-sonrası kullanım YAKALANMIYORDU (C tarafı da aynı boşluğa
+        // sahipti — D-326'da ikisi birlikte kapatıldı).
+        // Alıcı tipi çözülemezse (bileşik/"?") tüketim YOK = eski davranış
+        // (kanıtlanamayan durumda muhafazakâr kal).
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "ERISIM") {
+            değişken nesne: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hedef));
+            değişken ntip: metin = ifade_tip(p, nesne, "?");
+            değişken mad: metin = dizi_al(p.a_deg, hedef);
+            eğer metin_esit(ntip, "?") == yanlış {
+                değişken mi: tam32 = 1;
+                iken mi < hc {
+                    değişken marg: tam32 = dizi_al(p.cocuk, hb + mi);
+                    kontrol_dugum(p, marg);
+                    eğer metot_plin_bul(p, ntip, mad, mi - 1) == 1 {
+                        lin_tuket_dugum(p, marg);
+                    }
+                    mi = mi + 1;
+                }
+                ver 0;
+            }
+        }
         // D-323: DOLAYLI çağrı (işlev-tipli değişken üzerinden) — lineer argüman
         // TAŞINIR. Bilinen-arite yolu `fn_plin_bul` ile tüketir; bu yol tüketmezse
         // aynı program self-host'ta sahte L001 alır (C kabul eder → parite kaybı).
@@ -6877,7 +6974,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
-        fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
+        fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], m_tip: [], m_ad: [], m_pbase: [], m_psay: [], m_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []

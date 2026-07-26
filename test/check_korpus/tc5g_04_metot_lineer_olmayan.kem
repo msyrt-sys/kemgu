@@ -1,0 +1,6 @@
+yapı K { n: tam32; }
+uygula K { işlev topla(kendin, y: tam32) -> tam32 { ver y + 1; } }
+işlev test() -> tam32 {
+    değişken k: K = K { n: 1 };
+    ver k.topla(41);
+}
