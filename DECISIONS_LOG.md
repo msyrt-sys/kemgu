@@ -50,6 +50,44 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-325 — [YÜKSEK] Annotasyonsuz kapanış dönüşü: C'de SESSİZ YANLIŞ CEVAP kapatıldı (2026-07-26)
+
+**Karar [ETKİ: `src/llvm.c` (`lambda_donus_tahmin` + annotasyonsuz DEGISKEN dalı),
+`selfhost/codegen.kem` (`lam_ret_tahmin` + `son_lam_ret` + DEGISKEN/cg_aic),
+`test/cg_korpus/cg_kapanis_annotsuz.kem` (+1).]** "Sıradaki konu" için D-322'nin bilinen
+sınırını **ölçtüm** ve sınırın aslında iki ayrı kusur olduğu çıktı:
+
+**(1) C — SESSİZ YANLIŞ CEVAP (asıl bulgu).** `değişken k = || 1.5; ... k()`
+→ C `define double @lambda_0` üretiyor ama çağrı yerinde `call i32 %fn(...)`.
+**LLVM DOLAYLI çağrıda imza DENETLEMEZ** → program derlenir, çöp yazmaçtan okunur:
+ölçülen **exit 127** (doğrusu 42), başka bir şekilde **105** (doğrusu 42).
+`llvm.c`'deki mevcut yorum *"bu vaka LLVM tarafından GÜRÜLTÜLÜ reddediliyor (ölçüldü)"*
+diyordu — **ölçüm bunu ÇÜRÜTTÜ**. Bu, D-295 dersinin birebir tekrarı: *LLVM imza
+uyuşmazlığını yutar; "yanlış tip geçir, LLVM reddetsin" bir savunma mekanizması DEĞİLDİR.*
+
+**(2) self-host — LLVM REDDİ (gürültülü).** `değişken f = || "merhaba";` → dönüş "i32"
+fallback'ine düşüp `ret i32 <ptr>` üretiyordu. Aynı kök, farklı hata modu.
+
+**Çözüm (her iki derleyicide aynı):** annotasyon yokken dönüş IR'ı **gövdeden
+muhafazakâr tahmin** edilir ve **AYNI değer** hem lifted `define`'a hem **çağrı yerine**
+verilir (C: `lambda_beklenen_donus` + `kapanis_donus_ir`; self: kuyruk `lam_ret` +
+`cg_aic`). Böylece ikisi yapısal olarak asla ayrışamaz. Tahmin kapsamı: metin→ptr,
+kesirli→double, tam/mantıksal→i32, tanımlayıcı→değişkenin IR'ı, çağrı→çağrılanın dönüşü,
+ikili→sol operand, blok→ilk `ver`. **Tahmin edilemeyen şekil → NULL/"" → bugünkü i32
+davranışı** (yeni sessizlik EKLENMEZ).
+
+**Ölçüm:** `|| "merhaba"` C 42 / self 42 (öncesi: C 42, self LLVM-RED) · `|| 1.5`
+C **127→42** / self 42 · karışık (metin+kesirli+çağrı+tam) C **105→42** / self 42.
+**Sabotaj (iki bağımsız):** C'de tahminciyi kapat → korpus **57** (sessiz yanlış);
+self'te kapat → **LINK-FAIL**. Kapılar: test_llvm 274/274, codegen_diff, checker_diff,
+self_driver, FIXPOINT.
+
+**KALAN (ortak, C'de de aynı — ölçüldü):** annotasyonsuz + **yakalamalı**/blok-form bazı
+şekiller her iki derleyicide de **aynı biçimde** LLVM-RED veriyor (parite bozulmuyor,
+hata modu gürültülü). Ayrı iş.
+
+---
+
 ## D-324 — G005 self-host'a portlandı: güvenlik parite açığı kapandı (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (ikisine de: `g005_*`

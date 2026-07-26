@@ -726,6 +726,56 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
     return ast_tip_to_ir(g, dt);
 }
 
+/* D-325: ANNOTASYONSUZ closure'ın dönüş IR'ı — gövdeden MUHAFAZAKAR tahmin.
+ *
+ * NEDEN: lifted lambda ERTELENMIS emit edilir; define'in donusu gövdenin DOGAL
+ * IR tipinden cikarsanir (D-293). Ama `değişken f = || 1.5` gibi ANNOTASYONSUZ
+ * baglamada cagri yeri `kapanis_donus_ir`i NULL gorup beklenen'e (i32) duser →
+ * `define double @lambda_0` ama `call i32 %fn(...)`. LLVM DOLAYLI cagrida imza
+ * DENETLEMEZ (olculdu: program derlendi, exit 127 = SESSIZ YANLIS CEVAP).
+ * Eski kod yorumu "bu vaka LLVM tarafindan GURULTULU reddediliyor" diyordu —
+ * OLCUM BUNU CURUTTU (D-295 dersinin tekrari: LLVM imza uyusmazligini yutar).
+ *
+ * COZUM: ayni tahmin HEM define'a (bl->beklenen_donus_ir) HEM cagri yerine
+ * (kapanis_donus_ir) verilir → ikisi DAIMA ayni. Tahmin edilemeyen sekil NULL
+ * doner → bugunku i32 davranisi (yeni sessizlik EKLENMEZ). */
+static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
+    if (!govde) return NULL;
+    switch (govde->tip) {
+        case DUGUM_METIN:     return "ptr";
+        case DUGUM_KESIRLI:   return "double";
+        case DUGUM_TAM:       return "i32";
+        case DUGUM_MANTIKSAL: return "i32";
+        case DUGUM_TANIMLAYICI: {
+            LlvmIsim *vi = isim_bul(g, govde->veri.tanimlayici.metin,
+                                    govde->veri.tanimlayici.uzunluk);
+            return (vi && vi->llvm_tip) ? vi->llvm_tip : NULL;
+        }
+        case DUGUM_CAGRI: {
+            const Dugum *h = govde->veri.cagri.hedef;
+            if (!h || h->tip != DUGUM_TANIMLAYICI) return NULL;
+            for (IslevKayit *i = g->islevler; i; i = i->sonraki) {
+                if (i->ad_uz == h->veri.tanimlayici.uzunluk &&
+                    memcmp(i->ad, h->veri.tanimlayici.metin,
+                           (size_t)i->ad_uz) == 0)
+                    return i->donus_tip;
+            }
+            return NULL;
+        }
+        case DUGUM_IKILI:     /* aritmetik: sol operandin tipi */
+            return lambda_donus_tahmin(g, govde->veri.ikili.sol);
+        case DUGUM_BLOK: {    /* blok-form: ILK `ver` deyiminin degeri */
+            for (int i = 0; i < govde->veri.blok.sayi; i++) {
+                const Dugum *st = govde->veri.blok.deyimler[i];
+                if (st && st->tip == DUGUM_VER)
+                    return lambda_donus_tahmin(g, st->veri.ver.deger);
+            }
+            return NULL;
+        }
+        default: return NULL;   /* bilinmeyen → tahmin YOK (eski davranis) */
+    }
+}
+
 /* D-294: tip düğümü `görev<T>` ise T'nin IR tipini döner, değilse NULL.
  * `görev<T>` IR'de opak `ptr` (handle) — T SİLİNİR. Runtime birleştir'i i64
  * taşır; sonucu T'ye daraltmak (trunc / inttoptr) için T'nin IR'i gerekir ve
@@ -5294,7 +5344,19 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     }
                 } else {
                     /* Annot yok: deger once, sonra alloca */
+                    /* D-325: deger LAMBDA ise donus IR'ini govdeden tahmin et ve
+                     * AYNI degeri hem define'a (lambda_beklenen_donus) hem cagri
+                     * yerine (kapanis_donus_ir) ver — yoksa define double / call
+                     * i32 sessiz uyusmazligi olusur (olculdu). */
+                    const char *lam_tahmin = NULL;
+                    const char *eski_lbd2 = g->lambda_beklenen_donus;
+                    if (d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
+                        lam_tahmin = lambda_donus_tahmin(
+                            g, d->veri.degisken.deger->veri.lambda.govde);
+                        if (lam_tahmin) g->lambda_beklenen_donus = lam_tahmin;
+                    }
                     dv = ifade_uret(g, d->veri.degisken.deger, NULL);
+                    g->lambda_beklenen_donus = eski_lbd2;
                     tip = dv.tip;
                     int alloca_reg = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %s\n", alloca_reg, tip);
@@ -5304,7 +5366,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
                     g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
-                    /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ — bu dal
+                    /* D-325: tahmin varsa cagri yeri de AYNI donusu gorsun. */
+                    if (lam_tahmin) g->isimler->kapanis_donus_ir = lam_tahmin;
+                    /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ (tahmin yoksa) — bu dal
                      * "annot yok" yolu (d->veri.degisken.tip == NULL), yani
                      * bildirilen closure dönüş tipi zaten YOK. Annotasyonsuz
                      * closure değişkeni (`değişken f = || "selam"`) çağrıldığında

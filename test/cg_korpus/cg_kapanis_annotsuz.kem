@@ -1,0 +1,14 @@
+// D-325: ANNOTASYONSUZ kapanışta dönüş IR'ı GÖVDEDEN çıkarsanır — C↔self eşdeğerlik.
+// Öncesi: dönüş "i32" varsayılıyordu. C'de `define double @lambda_0` + `call i32 %fn`
+// üretiliyordu; LLVM DOLAYLI çağrıda imza denetlemez → SESSİZ YANLIŞ CEVAP (ölçüldü:
+// exit 127, doğrusu 42). Self'te ise `ret i32 <ptr>` ile LLVM reddi. Artık aynı tahmin
+// hem define'a hem çağrı yerine verilir. Kapsam: metin(ptr) + kesirli(double) +
+// çağrı-dönüşü + tam. Exit: 42
+işlev yedi() -> tam32 { ver 7; }
+işlev main() -> tam32 {
+    değişken m = || "merhaba";      // → ptr
+    değişken k = || 1.5;            // → double
+    değişken f = || yedi();         // → çağrılan işlevin dönüşü
+    değişken s = || 23;             // → i32
+    ver metin_uzunluk(m()) + ((k() olarak tam32) - 1) + f() + s() + 5;
+}

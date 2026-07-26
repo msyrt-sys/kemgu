@@ -88,6 +88,7 @@ yapı Ayr {
     // yürürlükteki bildirilen dönüş IR'ı (bağlam; C lambda_beklenen_donus aynası).
     lam_ret: Dizi<metin>;
     lam_bek_ret: metin;
+    son_lam_ret: metin;      // D-325: son emit edilen LAMBDA fat-value dönüş IR (cg_aic)
     lam_capisim: Dizi<metin>;// DÜZ yakalama adları (tüm lambdalar)
     lam_capir: Dizi<metin>;  // DÜZ yakalama LLVM tipleri (tüm lambdalar)
     lam_sayac: tam32;        // lambda_N mangled sayacı
@@ -3612,7 +3613,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // Dönüş IR'ı BİLDİRİLEN tipten gelir (fat value T'yi siler). Bağlam yoksa
         // i32 — bu, annotasyonsuz kapanışın ÖNCEDEN VAR OLAN sınırı (C ile aynı).
         değişken lret: metin = p.lam_bek_ret;
+        // D-325: bildirilen tip yoksa gövdeden tahmin et (yoksa `ret i32 <ptr>`).
+        eğer metin_esit(lret, "") { lret = lam_ret_tahmin(p, lgovde); }
         eğer metin_esit(lret, "") { lret = "i32"; }
+        p.son_lam_ret = lret;   // çağrı yeri AYNI tipi görmeli (cg_aic'e yazılır)
         dizi_ekle(p.lam_node, idx);
         dizi_ekle(p.lam_ad, lmad);
         dizi_ekle(p.lam_capbase, lcapbase);
@@ -4091,7 +4095,13 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // bağlam olarak geçir (fat value T'yi siler; C lambda_beklenen_donus aynası).
         değişken eski_lbr: metin = p.lam_bek_ret;
         eğer annot == 1 { eğer metin_esit(vtip, "{ ptr, ptr }") { p.lam_bek_ret = vic; } }
+        p.son_lam_ret = "";   // D-325
         değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        // D-325: ANNOTASYONSUZ kapanış — dönüş IR'ı lambda'dan çıkarsandı; çağrı yeri
+        // bunu cg_aic'ten okur. Yazılmazsa çağrı "i32" varsayar → imza uyuşmazlığı.
+        eğer annot == 0 {
+            eğer metin_esit(p.son_tip, "{ ptr, ptr }") { vic = p.son_lam_ret; }
+        }
         p.lam_bek_ret = eski_lbr;   // RESET (sızdırma)
         p.beklenen_ll = eski_bll;   // RESET (sızdırma)
         p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
@@ -4640,6 +4650,52 @@ işlev lam_envtip(p: &değişken Ayr, base: tam32, cnt: tam32) -> metin {
         i = i + 1;
     }
     ver metin_birlestir(r, " }");
+}
+// D-325: ANNOTASYONSUZ kapanışın dönüş IR'ı — gövdeden MUHAFAZAKÂR tahmin.
+// Neden gerek: self-host doğrudan-stdout, imza gövdeden ÖNCE yazılır; bildirilen tip
+// yoksa D-322 "i32" fallback'ine düşüyordu → `değişken f = || "merhaba";` gövdesi ptr
+// döndürüp `ret i32 <ptr>` üretiyordu (LLVM REDDEDER — ölçüldü; C aynı programı
+// derliyor, D-293 gövdeden çıkarsıyor). Tahmin edilemeyen şekil "" döner → çağıran
+// eski "i32" davranışına düşer (bugünkü durumdan KÖTÜ değil, sessizlik EKLEMEZ).
+işlev lam_ret_tahmin(p: &değişken Ayr, node: tam32) -> metin {
+    eğer node < 0 { ver ""; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "METIN") { ver "ptr"; }
+    eğer metin_esit(t, "KESIRLI") { ver "double"; }
+    eğer metin_esit(t, "TAM") veya metin_esit(t, "MANTIKSAL") { ver "i32"; }
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, node));
+        eğer metin_esit(vt, "") { ver ""; }
+        ver vt;
+    }
+    eğer metin_esit(t, "CAGRI") {
+        değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, node));
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver ""; }
+        değişken fad2: metin = dizi_al(p.a_deg, h);
+        eğer fn_var_mi(p, fad2) { ver fn_ret_bul(p, fad2); }
+        değişken kd: metin = builtin_kdl_ad(fad2);
+        eğer metin_esit(kd, "") { ver ""; }
+        ver builtin_ret(fad2);
+    }
+    eğer metin_esit(t, "IKILI") {   // aritmetik: sol operandın tipi
+        ver lam_ret_tahmin(p, dizi_al(p.cocuk, dizi_al(p.a_cb, node)));
+    }
+    eğer metin_esit(t, "BLOK") {    // blok-form: İLK `ver` deyiminin değeri
+        değişken cb2: tam32 = dizi_al(p.a_cb, node);
+        değişken cs2: tam32 = dizi_al(p.a_cs, node);
+        değişken i2: tam32 = 0;
+        iken i2 < cs2 {
+            değişken c2: tam32 = dizi_al(p.cocuk, cb2 + i2);
+            eğer metin_esit(dizi_al(p.a_ad, c2), "VER") {
+                eğer dizi_al(p.a_cs, c2) > 0 {
+                    ver lam_ret_tahmin(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c2)));
+                }
+            }
+            i2 = i2 + 1;
+        }
+        ver "";
+    }
+    ver "";
 }
 // D-322: capture env'i emit et → env işaretçisi ("null" = yakalama yok).
 // HEAP (malloc) — env, lambda'yı yaratan çerçeveden UZUN yaşayabilir (görev),
@@ -6959,7 +7015,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_ret: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
-        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "",
+        lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],

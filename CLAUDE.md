@@ -764,6 +764,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   skaler yakalama güvenli). ~~⚠ G005 self-host'ta YOK~~ ✓ **D-324: PORTLANDI** — C'nin
   ESC_CAGIRAN tetikleyicileri ölçülerek taklit edildi (`ver <ad>` ∨ çağrı ARGÜMANI; çağırmak
   kaçış değil), 5 şekilde kod+satır+sütun birebir; checker_diff 56/56, 3 sabotaj kapısı.
+  **D-325:** annotasyonsuz kapanış dönüşü artık GÖVDEDEN çıkarsanıyor (ikisinde de) —
+  C'de SESSİZ YANLIŞ CEVAP vardı (`define double` / `call i32`; LLVM dolaylı çağrıda imza
+  denetlemez → exit 127/105, doğrusu 42), self'te LLVM-RED. Aynı tahmin hem define'a hem
+  çağrı yerine verilir → yapısal olarak ayrışamazlar.
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.
