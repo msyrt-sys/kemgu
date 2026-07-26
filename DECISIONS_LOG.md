@@ -5,6 +5,59 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-335 — Kapanış yapı ALANINDA / dizi ELEMANINDA saklanıp çağrılabiliyor (iki uygulanmamış özellik kapandı) (2026-07-26)
+
+**Karar [ETKİ: `src/llvm.c` (+`kapanis_fv_cagri_emit` ortak emisyon, +`kapanis_hedef_donus_ir`,
+CAGRI ERISIM/INDEKS dalı, `dizi_eleman_struct_mi` genişletmesi, alan-başlatıcı +
+2 dizi-literal yolunda dönüş yayılımı), `selfhost/codegen.kem` (aynı beşi + yeni
+`kdl_dizi_*_yapi` by-value route, `cg_aelemnode`/`beklenen_elemnode`/`alan_tnode`
+erişimcileri), `test/cg_korpus/cg_kapanis_alan_eleman.kem` (yeni; cg korpusu 108→109).]**
+
+D-334 bu ikisini **AYRI: uygulanmamış özellik** diye ayırmıştı (dönüş yayılımı
+onarmıyordu — `tam32` kapanışla da kırıktılar). Bu adım özelliği ekliyor.
+
+**Kusur (ölçüldü, İKİ derleyicide de; ikisi de `--check`ten GEÇİYORDU):**
+| şekil | C | self-host |
+|---|---|---|
+| `Kutu { f: \|\| 42 }` + `(k.f)()` | LLVM RED: `@f` tanımsız | LLVM RED |
+| `[\|\| 42]` + `(xs[0])()` | **exit 0 (SESSİZ)** | LLVM RED |
+
+**Üç ayrı kök neden:**
+1. **Çağrı yolu:** fat-value dolaylı çağrı gövdesi YALNIZ `hedef = TANIMLAYICI`
+   dalında gömülüydü. `k.f()` metod dispatch'ine kaçıyordu (alan mı metod mu
+   ayrımı yoktu) → `@f`. Gövde ortak helper'a çıkarıldı; CAGRI'nin BAŞINA
+   ERISIM/INDEKS dalı kondu (metod dispatch'ten ÖNCE — dispatch onu yutuyordu).
+2. **Dizi temsili:** eleman by-value route'u `%Yapi` ile sınırlıydı; kapanış
+   fat value'su `{ ptr, ptr }` (16 bayt) 4 baytlık `kdl_dizi_ekle_tam` slot'una
+   yazılıyordu. Predikat aggregate'e (`%` ∨ `{`) genişletildi → `kdl_dizi_*_yapi`
+   + `sizeof` const-expr. **Self-host'ta by-value route HİÇ YOKTU** — declare'ler
+   ve ekle/al emisyonu bu adımda eklendi (yan kazanç: `Dizi<Yapı>` de mümkün).
+3. **Dönüş yayılımı:** alan başlatıcı + dizi-literal elemanı D-332 zincirinin
+   eksik iki bağlamıydı. C'de dizi için **İKİ** heap yolu var (ortak helper +
+   annotasyonlu `değişken xs: Dizi<T> = [..]` özel yolu) — yalnız helper'a
+   eklemek YETMEDİ (ölçüldü: hâlâ `define i32`).
+
+**Dönüş IR'ı kaynağı:** ERISIM → alıcının yapı adı → alanın AST tipi; INDEKS →
+dizinin eleman AST tipi. Çözülemezse dala GİRİLMEZ (metod dispatch / dizi
+built-in yolları aynen korunur) — muhafazakâr, over-reach yok.
+
+**Kapılar:** tip_kontrol 191/191, linear 89/89, llvm 274/274, lambda 5/5,
+DRF 54/54, dizi_sinir 37/37, gorev_rt 16/16, `calistir_checker_diff` 58/58,
+`calistir_self_driver` (4 mod + LLVM 109/109 ×2) + FIXPOINT,
+`calistir_codegen_bootstrap` FIXPOINT.
+
+**Sabotaj doğrulaması (üç mekanizma):** C aggregate predikatı daraltıldı →
+SEGFAULT (139); C çağrı dalı iptal → LLVM RED; self aggregate predikatı
+daraltıldı → LLVM RED. Üçünde de geri alınca 42.
+
+**SÜREÇ NOTU [YÜKSEK]:** `calistir_self_driver` ve `calistir_codegen_bootstrap`
+**AYNI ANDA** koşturuldu → ikisi de `build/`i paylaştığı için 10+ dk asıldı ve
+hiç çıktı üretmedi. D-297'nin dersi (eş zamanlı koşum sahte-kırmızı üretir)
+make hedefleri için de geçerli: **ağır self-host kapılarını SERİ koştur**, ve
+kapı koşarken `build/kemgu.exe`i yeniden derleme.
+
+---
+
 ## D-334 — Kapanış `ver` dönüşü: bildirilen dönüş codegen'de yayılmıyordu + kalan iki bağlam TARANDI (2026-07-26)
 
 **Karar [ETKİ: `src/llvm.c` (DUGUM_VER emit), `selfhost/codegen.kem`

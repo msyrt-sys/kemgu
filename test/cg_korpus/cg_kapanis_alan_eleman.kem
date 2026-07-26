@@ -1,0 +1,22 @@
+// D-335: kapanış YAPI ALANINDA ve DİZİ ELEMANINDA saklanır + çağrılır.
+// Önceki durum (ölçüldü, C ve self-host): `k.f()` metod dispatch'ine kaçıp
+// TANIMSIZ @f üretiyordu (LLVM RED); `xs[0]()` C'de SESSİZCE 0 döndürüyor,
+// self-host'ta 16 baytlık fat value 4 baytlık i32 slot'a yazılıp LLVM RED
+// veriyordu. İkisi de --check'ten GEÇİYORDU.
+// tam32 kolu = "sakla+çağır" özelliği; tam64/kesirli64 kolu = bildirilen
+// dönüşün başlatıcıya yayılması (D-332 sınıfı).
+yapı Kutu { f: işlev() -> tam64; g: işlev() -> kesirli64; }
+işlev main() -> tam32 {
+    değişken k: Kutu = Kutu { f: || 8589934634, g: || 10.5 };
+    değişken xs: Dizi<işlev() -> tam64> = [|| 8589934634, || 8589934634];
+    değişken ys: Dizi<işlev() -> tam32> = [|| 21];
+    değişken a: tam64 = (k.f)();
+    değişken b: kesirli64 = (k.g)();
+    değişken c: tam64 = (xs[0])();
+    değişken d: tam64 = (xs[1])();
+    değişken e: tam32 = (ys[0])();
+    eğer ((a >> 33) == 1) ve ((c >> 33) == 1) ve ((d >> 33) == 1) {
+        ver e + ((b + b) olarak tam32);
+    }
+    ver 1;
+}

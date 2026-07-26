@@ -1284,7 +1284,14 @@ static const char *kdl_al_donus_ir(const char *et) {
 
 /* D-087: eleman IR'i by-value YAPI mı (%Yapi)? Skaler/ptr → 0. */
 static int dizi_eleman_struct_mi(const char *et) {
-    return et && et[0] == '%';
+    /* D-335: `%Yapi` (adlandirilmis struct) VE `{ ... }` (anonim aggregate —
+     * bugun yalniz kapanis fat value `{ ptr, ptr }`) by-value route'a gider:
+     * kdl_dizi_*_yapi + sizeof const-expr. Once yalniz `%` bakiliyordu →
+     * Dizi<islev()->T> elemani 16 baytlik fat value oldugu halde
+     * kdl_dizi_ekle_tam (4 baytlik i32 slot) ile yaziliyordu; declare/call
+     * uyusmazligini LLVM yutuyor, runtime 4 bayt kopyaliyordu -> SEGFAULT
+     * (olculdu). Aggregate'i boyutuyla tasimak dogru route. */
+    return et && (et[0] == '%' || et[0] == '{');
 }
 
 /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
@@ -1392,6 +1399,13 @@ static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
     fputs(")\n", g->out);
     const Dugum *eski_bt = g->beklenen_tip;
     g->beklenen_tip = elem_d;  /* iç içe dizi/yapıcı elemanları için */
+    /* D-335: eleman tipi `islev(...)->T` ise T'yi lifted lambda define'ina tasi
+     * (D-332/D-333/D-334 kurali, dizi-literali eleman baglami). */
+    const char *eski_lbd_e = g->lambda_beklenen_donus;
+    {
+        const char *lam_ir = kapanis_donus_ir_al(g, elem_d);
+        if (lam_ir) g->lambda_beklenen_donus = lam_ir;
+    }
     for (int i = 0; i < hn; i++) {
         IfadeSonuc v = ifade_uret(g, d->veri.dizi_olustur.elemanlar[i], elem_ir);
         if (dizi_eleman_struct_mi(elem_ir)) {
@@ -1405,6 +1419,7 @@ static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
         fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
                 fn, dizi_rho, kdl_reg, elem_ir, vr);   /* F4.2b: aynı ρ */
     }
+    g->lambda_beklenen_donus = eski_lbd_e;   /* D-335 */
     g->beklenen_tip = eski_bt;
     IfadeSonuc s = { kdl_reg, "ptr", 0 };
     return s;
@@ -1978,6 +1993,103 @@ static void mono_tip_tanimlari_emit(LlvmGen *g) {
 
 /* === Ifade IR === */
 
+/* D-335: fat value { ptr fn, ptr env } uzerinden DOLAYLI cagri emisyonu.
+ * fv = ZATEN YUKLENMIS fat value register'i; donus = donus IR'i (fat value T'yi
+ * sildigi icin cagiran BILDIRILEN tipten saglamak zorunda).
+ *
+ * Eskiden bu govde DUGUM_CAGRI icinde, YALNIZ `hedef = TANIMLAYICI` (lokal/param)
+ * dalinda gomuluydu. Kapanisi bir yapi ALANINDA (`k.f()`) ya da dizi ELEMANINDA
+ * (`xs[0]()`) tutup cagirmak bu yuzden imkansizdi: `k.f()` metod dispatch'ine
+ * kacip TANIMSIZ @f uretiyordu (LLVM RED), `xs[0]()` ise C'de sessizce 0
+ * donduruyordu (olculdu). Govde buraya cikarildi -> uc baglam AYNI emisyonu paylasir.
+ *
+ * ABI (degismedi): env==null -> bare fn(rho, args); env!=null -> fn(rho, env, args).
+ * 'Closure mu' runtime'da (env-null) belirlenir -> derleme-zamani tag YOK. */
+static IfadeSonuc kapanis_fv_cagri_emit(LlvmGen *g, int fv, const char *donus,
+                                        IfadeSonuc *iargs, int n) {
+    int fn_reg = yeni_reg(g);
+    fprintf(g->out,
+        "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fn_reg, fv);
+    int env_reg = yeni_reg(g);
+    fprintf(g->out,
+        "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", env_reg, fv);
+    int slot = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", slot, donus);
+    int isnull = yeni_reg(g);
+    fprintf(g->out,
+        "  %%%d = icmp eq ptr %%%d, null\n", isnull, env_reg);
+    int L_bare = yeni_label(g);
+    int L_clo = yeni_label(g);
+    int L_join = yeni_label(g);
+    fprintf(g->out,
+        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+        isnull, L_bare, L_clo);
+    /* bare: env yok → ρ-ABI imza fn(ρ, args). V2-F4.2a: hedef
+     * üst-düzey-fn (ρ-ABI) ya da yakalamasız-lambda (ρ-ABI) →
+     * ikisi de ρ ilk param. ρ = çağıranın ρ_ref'i. */
+    fprintf(g->out, "bb%d:\n", L_bare);
+    int rb = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s",
+            rb, donus, fn_reg, g->rho_ref);
+    for (int i = 0; i < n; i++)
+        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+    fputs(")\n", g->out);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+            donus, rb, slot);
+    fprintf(g->out, "  br label %%bb%d\n", L_join);
+    /* closure: ρ + env → fn(ρ, env, args) */
+    fprintf(g->out, "bb%d:\n", L_clo);
+    int rc = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s, ptr %%%d",
+            rc, donus, fn_reg, g->rho_ref, env_reg);
+    for (int i = 0; i < n; i++)
+        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+    fputs(")\n", g->out);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
+            donus, rc, slot);
+    fprintf(g->out, "  br label %%bb%d\n", L_join);
+    /* join */
+    fprintf(g->out, "bb%d:\n", L_join);
+    int rr = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
+            rr, donus, slot);
+    IfadeSonuc s = { rr, donus, 0 };
+    return s;
+}
+
+/* D-335: `k.f()` / `xs[0]()` cagri HEDEFI bir kapanis (fat value) tutuyorsa,
+ * DONUS IR'ini BILDIRILEN tipten coz — degilse NULL (cagri eski yoluna duser).
+ *   ERISIM: alici -> kayitli yapi -> alanin AST tipi -> `islev(...)->T` ise T
+ *   INDEKS: dizinin eleman AST tipi (heap_dizi_eleman_ast) -> ayni kural
+ * NULL donmesi GUVENLIDIR: kapanis-disi alan/eleman cagrilari (metod dispatch,
+ * dizi built-in'leri) davranisini AYNEN korur. Muhafazakar: cozemedigimiz her
+ * sey NULL. */
+static const char *kapanis_hedef_donus_ir(LlvmGen *g, const Dugum *hedef) {
+    if (!hedef) return NULL;
+    if (hedef->tip == DUGUM_ERISIM) {
+        const Dugum *nd = hedef->veri.erisim.nesne;
+        if (!nd || nd->tip != DUGUM_TANIMLAYICI) return NULL;
+        LlvmIsim *vi = isim_bul(g, nd->veri.tanimlayici.metin,
+                                nd->veri.tanimlayici.uzunluk);
+        if (!vi) return NULL;
+        const char *yir = vi->ref_yapi_ir;
+        if (!yir && vi->llvm_tip && vi->llvm_tip[0] == '%') yir = vi->llvm_tip;
+        if (!yir) return NULL;
+        YapiKayit *yk = yapi_bul_ir(g, yir);
+        if (!yk) return NULL;
+        const Dugum *at = NULL;
+        if (yapi_alan_indeksi(yk, hedef->veri.erisim.alan,
+                              hedef->veri.erisim.alan_uzunluk, &at) < 0)
+            return NULL;
+        return kapanis_donus_ir_al(g, at);
+    }
+    if (hedef->tip == DUGUM_INDEKS) {
+        const Dugum *et = heap_dizi_eleman_ast(g, hedef->veri.indeks.nesne);
+        return kapanis_donus_ir_al(g, et);
+    }
+    return NULL;
+}
+
 static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
     int r = yeni_reg(g);
     fprintf(g->out, "  ; HATA: %s\n", mesaj);
@@ -2161,7 +2273,17 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
          * `[...]` verilince DIZI_OLUSTUR heap KdlDizi üretsin (stack değil). */
         const Dugum *eski_bt = g->beklenen_tip;
         g->beklenen_tip = alan_tip_d;
+        /* D-335: alan `islev(...)->T` ise T'yi lifted lambda define'ina tasi
+         * (D-332/D-333/D-334 ile ayni kural, alan baslatici baglami).
+         * Yoksa `Kutu { f: || 8589934634 }` govdesi i32'ye duser ama alan
+         * cagrisi bildirilen i64 ile yapilir -> sessiz uyusmazlik. */
+        const char *eski_lbd_a = g->lambda_beklenen_donus;
+        {
+            const char *lam_ir = kapanis_donus_ir_al(g, alan_tip_d);
+            if (lam_ir) g->lambda_beklenen_donus = lam_ir;
+        }
         IfadeSonuc deger = ifade_uret(g, aa->veri.alan_atama.deger, alan_ir);
+        g->lambda_beklenen_donus = eski_lbd_a;
         g->beklenen_tip = eski_bt;
         int dr = deger.reg;
         if (!tip_kesirli_mi(alan_ir) && !tip_kesirli_mi(deger.tip)
@@ -3444,6 +3566,41 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
         }
 
         case DUGUM_CAGRI: {
+            /* === D-335: kapanis ALAN / ELEMAN cagrisi ===
+             * `k.f()` (yapi alaninda kapanis) ve `xs[0]()` (Dizi elemaninda
+             * kapanis) — hedef TANIMLAYICI DEGIL. Onceki durum (olculdu):
+             *   `k.f()`   -> metod dispatch sanildi -> TANIMSIZ @f (LLVM RED)
+             *   `xs[0]()` -> C'de SESSIZCE 0 dondu, self-host'ta LLVM RED
+             * Ikisi de --check'ten GECIYORDU. Cozum: hedefi ifade olarak
+             * degerlendir; sonuc fat value ({ ptr, ptr }) ise D-335 ortak
+             * emisyonuna ver. Donus IR'i fat value'da SILINDIGI icin BILDIRILEN
+             * tipten gelir (alanin / elemanin `islev(...)->T` annotasyonu);
+             * cozulemezse i64 son care (D-295 gerekcesi: ptr ve tamsayi ayni
+             * yazmacta). Kapanis-DISI erisim/indeks hedefleri bu dala GIRMEZ
+             * (donus IR'i cozulemez) -> eski yollar aynen calisir. */
+            if (d->veri.cagri.hedef &&
+                (d->veri.cagri.hedef->tip == DUGUM_ERISIM ||
+                 d->veri.cagri.hedef->tip == DUGUM_INDEKS)) {
+                const char *kd = kapanis_hedef_donus_ir(g, d->veri.cagri.hedef);
+                if (kd) {
+                    IfadeSonuc hf = ifade_uret(g, d->veri.cagri.hedef,
+                                               "{ ptr, ptr }");
+                    if (hf.tip && strcmp(hf.tip, "{ ptr, ptr }") == 0) {
+                        int kn = d->veri.cagri.sayi;
+                        IfadeSonuc *ka = NULL;
+                        if (kn > 0) {
+                            ka = (IfadeSonuc *)arena_ayir(g->arena,
+                                sizeof(IfadeSonuc) * (size_t)kn);
+                            for (int i2 = 0; i2 < kn; i2++) {
+                                ka[i2] = ifade_uret(g,
+                                    d->veri.cagri.argumanlar[i2], NULL);
+                            }
+                        }
+                        return kapanis_fv_cagri_emit(g, hf.reg, kd, ka, kn);
+                    }
+                }
+            }
+
             /* Method dispatch: hedef DUGUM_ERISIM ise (x.method())
              * receiver'i ilk arg olarak gec. Method adi alan_adi. */
             if (d->veri.cagri.hedef &&
@@ -4192,54 +4349,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int fv = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = load { ptr, ptr }, ptr %%%d\n", fv, vi->reg_no);
-                    int fn_reg = yeni_reg(g);
-                    fprintf(g->out,
-                        "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fn_reg, fv);
-                    int env_reg = yeni_reg(g);
-                    fprintf(g->out,
-                        "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", env_reg, fv);
-                    int slot = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = alloca %s\n", slot, donus_indirect);
-                    int isnull = yeni_reg(g);
-                    fprintf(g->out,
-                        "  %%%d = icmp eq ptr %%%d, null\n", isnull, env_reg);
-                    int L_bare = yeni_label(g);
-                    int L_clo = yeni_label(g);
-                    int L_join = yeni_label(g);
-                    fprintf(g->out,
-                        "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
-                        isnull, L_bare, L_clo);
-                    /* bare: env yok → ρ-ABI imza fn(ρ, args). V2-F4.2a: hedef
-                     * üst-düzey-fn (ρ-ABI) ya da yakalamasız-lambda (ρ-ABI) →
-                     * ikisi de ρ ilk param. ρ = çağıranın ρ_ref'i. */
-                    fprintf(g->out, "bb%d:\n", L_bare);
-                    int rb = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s",
-                            rb, donus_indirect, fn_reg, g->rho_ref);
-                    for (int i = 0; i < n; i++)
-                        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
-                    fputs(")\n", g->out);
-                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            donus_indirect, rb, slot);
-                    fprintf(g->out, "  br label %%bb%d\n", L_join);
-                    /* closure: ρ + env → fn(ρ, env, args) */
-                    fprintf(g->out, "bb%d:\n", L_clo);
-                    int rc = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s, ptr %%%d",
-                            rc, donus_indirect, fn_reg, g->rho_ref, env_reg);
-                    for (int i = 0; i < n; i++)
-                        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
-                    fputs(")\n", g->out);
-                    fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            donus_indirect, rc, slot);
-                    fprintf(g->out, "  br label %%bb%d\n", L_join);
-                    /* join */
-                    fprintf(g->out, "bb%d:\n", L_join);
-                    int rr = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
-                            rr, donus_indirect, slot);
-                    IfadeSonuc s = { rr, donus_indirect, 0 };
-                    return s;
+                    return kapanis_fv_cagri_emit(g, fv, donus_indirect,
+                                                 iargs, n);
                 }
             }
 
@@ -5272,6 +5383,16 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * düşer, dış heap dizi uzunluk-metadata'sız stack ptr tutardı). */
                 const Dugum *eski_bt = g->beklenen_tip;
                 g->beklenen_tip = eleman_tip_ast_d;
+                /* D-335: eleman `islev(...)->T` ise T'yi lifted lambda define'ina
+                 * tasi. NOT: bu, dizi_literal_heap_emit'ten AYRI bir ikinci heap
+                 * yolu (annotasyonlu `degisken xs: Dizi<T> = [..]`) — propagasyonu
+                 * yalniz helper'a eklemek YETMEZ (olculdu: d1 hala `define i32`). */
+                const char *eski_lbd_d = g->lambda_beklenen_donus;
+                {
+                    const char *lam_ir =
+                        kapanis_donus_ir_al(g, eleman_tip_ast_d);
+                    if (lam_ir) g->lambda_beklenen_donus = lam_ir;
+                }
                 /* Her elemani ekle */
                 for (int i = 0; i < n; i++) {
                     IfadeSonuc v = ifade_uret(g, lit->veri.dizi_olustur.elemanlar[i],
@@ -5288,6 +5409,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
                         fn, dizi_rho, kdl_reg, eleman_tip, vr);   /* F4.2b: aynı ρ */
                 }
+                g->lambda_beklenen_donus = eski_lbd_d;   /* D-335 */
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
                 int alloca_reg = yeni_reg(g);
