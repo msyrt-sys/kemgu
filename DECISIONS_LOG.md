@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-319 — Lineer intrinsic CODEGEN self-host'a eklendi (C parite) (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (3 nokta: `ll_tip` TIP_TEKKEZ, `kullan`/`imha`
+ifade kolları, `tekkez_olustur` intrinsic'i), `test/cg_korpus/cg_lineer_intrinsic.kem`
+(+1).]** D-318'de ölçüp belgelediğim boşluk: self-host lineer programları **tip-kontrol
+ediyor ama DERLEYEMİYORDU** — `tekkez_olustur` genel çağrı yoluna düşüp **TANIMSIZ
+@tekkez_olustur** üretiyordu (link hatası). Artık C ile birebir.
+
+**Semantik (C llvm.c aynası — hepsi ZERO-OVERHEAD):**
+- `ll_tip(TIP_TEKKEZ)` → **iç tipin ta kendisi**. Bu dal olmadan `tekkez<T>` "i32"
+  fallback'ine düşerdi → `tekkez<metin>` gibi işaretçi T'lerde **sessiz 32-bit kırpma**.
+- `tekkez_olustur(e)` → argüman **PASS-THROUGH** (sıfır talimat).
+- `kullan(t)` → **PASS-THROUGH** (lineer muhasebe tamamen tip kontrolde).
+- `imha(t)` → operand YAN ETKİLERİ için değerlendirilir, değeri düşürülür (`add i32 0, 0`).
+
+**Doğrulama:** C↔self exit-kodu birebir — `tekkez<tam32>`=42, **`tekkez<metin>`=7**
+(i32 fallback'i olsaydı kırpardı), `imha`+aritmetik=42, koşullu tüketim (D-311 iki-dal)=42,
+yapı-deseni + lineer alan (D-318)=42. **codegen_diff 101/101** (+1 korpus), **FIXPOINT**
+(42003 satır), bootstrap (lexer/parser/checker 92 birebir), checker_diff 52/52,
+test_linear 83/83.
+
+**⚠ YAN BULGU — ÖNCEDEN VAR OLAN yanlış L002 (ayrı iş olarak işaretlendi):**
+`kullan(t)` **DOĞRUDAN çağrı argümanı** olunca yanlış L002 üretiliyor:
+`ver metin_uzunluk(kullan(m));` → L002, oysa `m` tam bir kez tüketiliyor.
+**D-307'de de var** (worktree ile ölçüldü) → D-311..D-319 lineer işinin regresyonu
+DEĞİL. Yalıtım: ayrı deyimde OK, `ver kullan(a)` OK, ikili ifade içinde OK — yalnız
+argüman pozisyonu. Muhtemel kök: DUGUM_CAGRI kolunda argümanın BİRDEN ÇOK kez
+`tip_belirle` edilmesi (her ziyaret KULLAN_IFADE'yi yeniden tüketiyor). Korpus dosyası
+bu tuzağa girmemek için `kullan`ı ayrı deyimde kullanır.
+
+**SONUÇ:** self-host artık lineer programları uçtan uca derliyor. Linear V1+V2+V2.1
+(D-311→D-319) C ve self-host'ta tam.
+
+---
+
 ## D-318 — [YÜKSEK] YENİ SÖZDİZİMİ: `eşleş` yapı deseni (destructuring) (2026-07-26)
 
 **Karar [ETKİ: `src/ast.h`/`ast.c`/`parser.c`/`tip_kontrol.c`/`llvm.c` +

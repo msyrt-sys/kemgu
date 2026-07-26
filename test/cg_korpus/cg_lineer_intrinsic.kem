@@ -1,0 +1,18 @@
+// D-319: lineer intrinsic codegen self-host'ta — C↔self exit-kodu eşdeğerliği.
+// `tekkez<T>` ZERO-OVERHEAD: IR'da T'nin ta kendisi; tekkez_olustur/kullan
+// PASS-THROUGH, imha operandı değerlendirip değeri düşürür. Öncesinde self-host
+// TANIMSIZ @tekkez_olustur üretiyordu → lineer program HİÇ derlenemiyordu.
+// Kapsam: tam32 + metin (işaretçi T — i32 fallback'i olsaydı sessizce kırpardı)
+// + koşullu tüketim (D-311 iki-dal) + imha.
+// NOT: `kullan` bilerek AYRI DEYİMDE — `f(kullan(m))` (doğrudan çağrı argümanı)
+// ÖNCEDEN VAR OLAN yanlış L002'yi tetikliyor (D-307'de de var; ayrı iş). Exit: 42
+işlev main() -> tam32 {
+    değişken a: tekkez<tam32> = tekkez_olustur(35);
+    değişken m: tekkez<metin> = tekkez_olustur("merhaba");
+    değişken atilan: tekkez<tam32> = tekkez_olustur(999);
+    imha(atilan);
+    değişken n: tam32 = 0;
+    eğer doğru { n = kullan(a); } değilse { imha(a); }
+    değişken s: metin = kullan(m);
+    ver n + metin_uzunluk(s);
+}
