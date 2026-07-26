@@ -62,6 +62,9 @@ yapı Ayr {
     m_pbase: Dizi<tam32>;    // m_plin'de bu metodun param dilimi başı
     m_psay: Dizi<tam32>;     // param sayısı (`kendin` HARİÇ)
     m_plin: Dizi<tam32>;     // param lineer mi (1/0), `kendin` HARİÇ sırayla
+    // D-327: sabitsüre bağlama tablosu (ad -> iç tip string'i).
+    ss_ad: Dizi<metin>;
+    ss_ic: Dizi<metin>;
     giris_dizin: metin;      // giriş dosyasının dizini (import arama yolu)
     kullan_gorulen: Dizi<metin>;  // yüklenen modül adları (döngü/elmas dedup)
     // ---- TC5b: lineer bağlama izleme (L001/L002 akış) — aktif işlev dilimi ----
@@ -1673,7 +1676,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
-        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], m_tip: [], m_ad: [], m_pbase: [], m_psay: [], m_plin: [],
+        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], ss_ad: [], ss_ic: [], m_tip: [], m_ad: [], m_pbase: [], m_psay: [], m_plin: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
@@ -1714,6 +1717,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
     g_ekle(p, "tekkez_olustur"); g_ekle(p, "sabitsüre_olustur");
+    g_ekle(p, "ifşa");   // D-327: sabitsüre declassification (CAGRI handler'ında)
     g_ekle(p, "delege"); g_ekle(p, "geri_al");
     g_ekle(p, "görev_başlat"); g_ekle(p, "görev_birleştir");
     g_ekle(p, "kanal_gönder"); g_ekle(p, "kanal_al"); g_ekle(p, "dur"); g_ekle(p, "dondur");
@@ -1916,6 +1920,160 @@ işlev metot_plin_bul(p: &değişken Ayr, tad: metin, mad: metin, j: tam32) -> t
         i = i + 1;
     }
     ver 0;
+}
+// ============ D-327: Sabitsüre Spec V1 — self-host portu ============
+// C `tip_kontrol.c` + `tip.c` aynası. Self-host'ta bileşik tip-string'i yok
+// (`tip_str` → sabitsüre<T> için "?"), o yüzden "bu ifade sabitsüre mi" sorusu
+// lineer makinenin (`lin_ad`) yaptığı gibi AYRI bir bağlama tablosuyla yanıtlanır.
+
+// CT006 yüklemi (C `tip_sabitsure_yetenekli_mi`): sabit-süre op'u olan tipler.
+// "?" (bilinmeyen/bileşik) → DOĞRU döner = ertele; yoksa sahte CT006 üretirdik.
+işlev ct_yetenekli_mi(t: metin) -> mantıksal {
+    eğer metin_esit(t, "?") { ver doğru; }
+    ver tamsayi_mi(t) veya metin_esit(t, "karakter") veya metin_esit(t, "mantıksal");
+}
+// Bağlama adı → sabitsüre dilimindeki indeks (-1 yok).
+işlev ss_idx(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = dizi_boyut(p.ss_ad) - 1;
+    iken i >= 0 {
+        eğer metin_esit(dizi_al(p.ss_ad, i), ad) { ver i; }
+        i = i - 1;
+    }
+    ver 0 - 1;
+}
+// CAGRI düğümünün hedef adı ("" değilse TANIMLAYICI).
+işlev cagri_hedef_ad(p: &değişken Ayr, idx: tam32) -> metin {
+    eğer dizi_al(p.a_cs, idx) < 1 { ver ""; }
+    değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver ""; }
+    ver dizi_al(p.a_deg, h);
+}
+// İfade sabitsüre mi? C'nin taint yayılımının aynası: ikili/tekli op'ta bir taraf
+// sabitsüre ise sonuç sabitsüre; `ifşa(...)` DECLASSIFY eder (sabitsüre DEĞİL).
+işlev ifade_ss_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "TANIMLAYICI") { ver ss_idx(p, dizi_al(p.a_deg, idx)) >= 0; }
+    eğer metin_esit(ad, "CAGRI") {
+        değişken f: metin = cagri_hedef_ad(p, idx);
+        eğer metin_esit(f, "sabitsüre_olustur") { ver doğru; }
+        ver yanlış;   // `ifşa` dâhil: declassify
+    }
+    eğer metin_esit(ad, "IKILI") {
+        eğer dizi_al(p.a_cs, idx) < 2 { ver yanlış; }
+        değişken b: tam32 = dizi_al(p.a_cb, idx);
+        ver ifade_ss_mi(p, dizi_al(p.cocuk, b))
+          veya ifade_ss_mi(p, dizi_al(p.cocuk, b + 1));
+    }
+    eğer metin_esit(ad, "TEKLI") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver yanlış; }
+        ver ifade_ss_mi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    }
+    ver yanlış;
+}
+// DEGISKEN sabitsüre bağlaması mı? (annot TIP_SABITSURE VEYA değer sabitsüre_olustur)
+işlev deg_sabitsure_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    eğer dizi_al(p.a_cs, idx) >= 2 {
+        değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_SABITSURE") { ver doğru; }
+    }
+    değişken vc: tam32 = son_cocuk(p, idx);
+    eğer vc < 0 { ver yanlış; }
+    ver ifade_ss_mi(p, vc);
+}
+// CT006: `sabitsüre<T>` düğümünde T constant-time yetenekli olmalı; iç içe YASAK.
+// Konum = TIP_SABITSURE düğümü (C: ast_tip_to_bilgi'deki `tip_d`).
+işlev ct006_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 1 { ver 0; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    değişken kotu: mantıksal = yanlış;
+    eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_SABITSURE") { kotu = doğru; }   // nesting
+    eğer ct_yetenekli_mi(tip_str(p, ic)) == yanlış { kotu = doğru; }
+    eğer kotu {
+        dizi_ekle(p.th_kod, "CT006");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
+}
+// CT004 (/ ve % yasak) + CT008 (kaydırma miktarı sabitsüre olamaz). Konum: IKILI.
+işlev ct004_ct008_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken b: tam32 = dizi_al(p.a_cb, idx);
+    değişken sol: tam32 = dizi_al(p.cocuk, b);
+    değişken sag: tam32 = dizi_al(p.cocuk, b + 1);
+    değişken op: metin = dizi_al(p.a_deg, idx);
+    eğer metin_esit(op, "/") veya metin_esit(op, "%") {
+        eğer ifade_ss_mi(p, sol) veya ifade_ss_mi(p, sag) {
+            dizi_ekle(p.th_kod, "CT004");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            ver 0;
+        }
+    }
+    eğer metin_esit(op, "<<") veya metin_esit(op, ">>") {
+        eğer ifade_ss_mi(p, sag) {
+            dizi_ekle(p.th_kod, "CT008");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        }
+    }
+    ver 0;
+}
+// CT002: dizi indeksi sabitsüre olamaz (cache-timing yan kanalı). Konum: INDEKS.
+işlev ct002_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken ix: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+    eğer ifade_ss_mi(p, ix) {
+        dizi_ekle(p.th_kod, "CT002");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
+}
+// CT003: sabitsüre<T> örtük olarak T'ye dönüşemez (`ifşa` zorunlu). Konum = C'nin
+// ct003_leak_kontrol'e geçirdiği düğüm: çağrı argümanında ARG, değişkende DEGISKEN.
+işlev ct003_bildir(p: &değişken Ayr, konum: tam32) -> tam32 {
+    dizi_ekle(p.th_kod, "CT003");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, konum));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, konum));
+    ver 0;
+}
+// D-327: sabitsüre intrinsic'lerinin tip kontrolü. C DUGUM_CAGRI sırası birebir:
+//   sabitsüre_olustur: arite(CT005) → argümanı gez → iç-içe(CT006) → yetenek(CT006)
+//   ifşa:              arite(CT007) → argümanı gez → operand sabitsüre mi(CT007)
+// Konum HEPSİNDE CAGRI düğümü (C: `tip_hata(tk, d, ...)`).
+// Dönüş: 1 = bu çağrı ele alındı (genel yola DÜŞMESİN).
+işlev ct_intrinsic_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, hc: tam32) -> tam32 {
+    değişken olustur: mantıksal = metin_esit(fad, "sabitsüre_olustur");
+    değişken declass: mantıksal = metin_esit(fad, "ifşa");
+    eğer (olustur veya declass) == yanlış { ver 0; }
+    değişken kod: metin = "CT005";
+    eğer declass { kod = "CT007"; }
+    eğer hc != 2 {                       // çocuk[0]=hedef → tam 1 argüman
+        dizi_ekle(p.th_kod, kod);
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        ver 1;
+    }
+    değişken arg: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+    kontrol_dugum(p, arg);
+    eğer olustur {
+        değişken kotu: mantıksal = yanlış;
+        eğer ifade_ss_mi(p, arg) { kotu = doğru; }   // iç içe sarma gereksiz (CT006)
+        eğer ct_yetenekli_mi(ifade_tip(p, arg, "?")) == yanlış { kotu = doğru; }
+        eğer kotu {
+            dizi_ekle(p.th_kod, "CT006");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        }
+        ver 1;
+    }
+    eğer ifade_ss_mi(p, arg) == yanlış {            // ifşa operandı sabitsüre olmalı
+        dizi_ekle(p.th_kod, "CT007");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 1;
 }
 işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, fn));
@@ -2601,6 +2759,12 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // D-327 (Sabitsüre V1) CT006: her `sabitsüre<T>` düğümünde T constant-time
+    // yetenekli olmalı. Bu kol TIP_ ERKEN DÖNÜŞÜNDEN ÖNCE olmak ZORUNDA — tip
+    // düğümleri ziyaret edilir ama gövdeye girmeden dönerler (ölçüldü: kuyruğa
+    // koyduğumda hiç tetiklenmedi). Konum = TIP_SABITSURE düğümü (C: `tip_d`),
+    // ve iç içe geçme (sabitsüre<sabitsüre<T>>) de burada yakalanır.
+    eğer metin_esit(ad, "TIP_SABITSURE") { ct006_kontrol(p, idx); }
     eğer metin_baslar(ad, "TIP_") { ver 0; }
     eğer metin_baslar(ad, "DESEN") { ver 0; }
     eğer metin_esit(ad, "YOL") { ver 0; }
@@ -2794,11 +2958,20 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                             dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
                         }
                     }
+                    // D-327 CT003: arg sabitsüre<T> → param T örtük declassify YASAK.
+                    // Konum = ARGÜMAN düğümü (C: ct003_leak_kontrol'e arg geçirilir).
+                    eğer (metin_esit(pt, "?") == yanlış) ve ifade_ss_mi(p, arg) {
+                        ct003_bildir(p, arg);
+                    }
                     eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
                     a = a + 1;
                 }
                 ver 0;
             }
+        }
+        // D-327: sabitsüre intrinsic'leri (sabitsüre_olustur / ifşa) — CT005/CT006/CT007.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
+            eğer ct_intrinsic_kontrol(p, idx, dizi_al(p.a_deg, hedef), hc) == 1 { ver 0; }
         }
         // D-325: `tekkez_olustur(e)` producer intrinsic'i — e bir TEKKEZ bağlamasıysa
         // TÜKETİR (dış sarmalayıcıya TAŞIMA: `tekkez<tekkez<T>>`). Bu kol olmadan
@@ -2959,6 +3132,27 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "DEGISKEN") {
         değişken vc2: tam32 = son_cocuk(p, idx);
         eğer vc2 >= 0 { lin_tuket_dugum(p, vc2); }   // move: değer lineer bağlamaysa tüket
+        // D-327: sabitsüre bağlaması izle (iç tip = annot'un TIP_SABITSURE çocuğu).
+        eğer deg_sabitsure_mi(p, idx) {
+            değişken sic: metin = "?";
+            eğer dizi_al(p.a_cs, idx) >= 2 {
+                değişken ac: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+                eğer metin_esit(dizi_al(p.a_ad, ac), "TIP_SABITSURE")
+                  ve (dizi_al(p.a_cs, ac) >= 1) {
+                    sic = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ac)));
+                }
+            }
+            dizi_ekle(p.ss_ad, dizi_al(p.a_deg, idx)); dizi_ekle(p.ss_ic, sic);
+        }
+        // D-327 CT003: annot NORMAL tip ama değer sabitsüre → örtük declassify YASAK.
+        eğer dizi_al(p.a_cs, idx) >= 2 {
+            değişken ac2: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+            eğer metin_baslar(dizi_al(p.a_ad, ac2), "TIP_")
+              ve (metin_esit(dizi_al(p.a_ad, ac2), "TIP_SABITSURE") == yanlış) {
+                değişken vc3: tam32 = son_cocuk(p, idx);
+                eğer (vc3 >= 0) ve ifade_ss_mi(p, vc3) { ct003_bildir(p, idx); }
+            }
+        }
         eğer deg_lineer_mi(p, idx) {
             lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
             eğer lin_fn_tipi_mi(p, idx) {
@@ -2970,7 +3164,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         t020_kontrol(p, idx);
         eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
     }
+    eğer metin_esit(ad, "INDEKS") { ct002_kontrol(p, idx); }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
+    eğer metin_esit(ad, "IKILI") { ct004_ct008_kontrol(p, idx); }   // D-327
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     ver 0;
 }

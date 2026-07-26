@@ -5,6 +5,68 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-327 — Sabitsüre Spec V1 self-host'a PORTLANDI (CT002-CT008 + intrinsic codegen) (2026-07-26)
+
+**Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) — 2 alan
+(`ss_ad`/`ss_ic`), 9 yardımcı, CAGRI/IKILI/INDEKS/DEGISKEN/TIP_SABITSURE kancaları,
+codegen'de 2 intrinsic; `test/check_korpus/tc5h_01..08` (+8, 68→76);
+`test/cg_korpus/cg_sabitsure.kem` (+1, 106→107).]**
+D-324'ün bıraktığı iş kalemi kapandı. **D-324'ün `ll_tip` dalı artık İNERT DEĞİL.**
+
+**Başlangıç durumu ÖLÇÜLDÜ — 8 senaryoda 8 ayrışma:** `ifşa` checker'da tanınmıyordu
+(T002) ve codegen'de TANIMSIZ (`@ifşa` link hatası) → sabitsüre programları self-host'ta
+**HİÇ derlenmiyordu**; CT002-CT008'in **hiçbiri** yoktu (self sessizce KABUL ediyordu).
+
+**⚠ ÖNEMLİ SIRALAMA GEREKÇESİ:** intrinsic'leri tanıtmak TEK BAŞINA self-host'u
+**DAHA PERMİSİF** yapardı — daha önce `ifşa` T002 verdiği için geçersiz sabitsüre kodu
+hiç derlenmiyordu (kazara güvenli); tanıtınca CT-ihlali eden kod derlenmeye başlardı.
+Bu yüzden **kurallar aynı adımda** portlandı, ayrı işe bırakılmadı.
+
+**Portlanan (C `tip_kontrol.c`/`tip.c` aynası, KONUM dâhil birebir):**
+| kural | ne | konum |
+|---|---|---|
+| CT002 | dizi indeksi sabitsüre olamaz (cache-timing) | INDEKS |
+| CT003 | `sabitsüre<T>` → `T` örtük declassify yasak (`ifşa` şart) | arg / DEGISKEN |
+| CT004 | sabitsüre üzerinde `/` `%` yasak (variable-time div) | IKILI |
+| CT005 | `sabitsüre_olustur` arite | CAGRI |
+| CT006 | sarılan T constant-time yetenekli olmalı + iç içe yasak | TIP_SABITSURE / CAGRI |
+| CT007 | `ifşa` arite + operand sabitsüre olmalı | CAGRI |
+| CT008 | kaydırma miktarı sabitsüre olamaz | IKILI |
+
+**Tasarım:** self-host'ta bileşik tip-string'i yok (`tip_str` → sabitsüre için `"?"`),
+o yüzden "bu ifade sabitsüre mi" sorusu lineer makinenin `lin_ad`'ı gibi **ayrı bir
+bağlama tablosuyla** (`ss_ad`/`ss_ic`) yanıtlanır. `ifade_ss_mi` C'nin **taint
+yayılımını** aynalar: ikili/tekli op'ta bir taraf sabitsüre ise sonuç sabitsüre;
+`ifşa(...)` **declassify** eder. `ct_yetenekli_mi` bilinmeyen tipte (`"?"`) **DOĞRU**
+döner = ertele — yoksa sahte CT006 üretirdik.
+
+**ÖLÇÜMLE BULUNAN İNCELİK:** CT006 kancası ilk denemede **hiç tetiklenmedi** — self-host
+`kontrol_dugum`'da `TIP_` düğümleri için **erken dönüş** var (`metin_baslar(ad,"TIP_")
+→ ver 0`), yani tip düğümleri ziyaret edilir ama gövdeye girmez. Kanca o dönüşten
+**ÖNCE** olmak zorunda. Kuyruğa koymak sessizce etkisizdi.
+
+**Codegen:** `sabitsüre_olustur` / `ifşa` → argüman **PASS-THROUGH** + `llvm.x86.sse2.lfence`
+(Spectre v1 bariyeri; C aynası, `declare` gerekmez). C↔self **lfence sayısı 4/4** birebir.
+
+**Doğrulama:** 8/8 senaryo C oracle ile **birebir (konum dâhil)** + iç-içe senaryosu (9.).
+**Sabotaj matrisi — 5 mekanizma AYRI AYRI iptal edildi**, her biri YALNIZ kendi
+senaryolarını kırdı (CT006→a2; intrinsic→a2/a3/a4; CT004/008→a5/a8; CT002→a7;
+CT003→a6). Sabotaj sonrası iki kaynak `diff -q` ile temiz.
+
+**Kapılar:** checker_diff **76/76** (+8), codegen_diff **107/107** (+1 — sabitsüre artık
+uçtan uca: `--check` + `--llvm` + exit 42), test_sabitsure 39/39 (C dokunulmadı),
+linear 96/96, tip_kontrol 189/189.
+
+**⚠ KAPSAM DIŞI — YENİ BULUNAN, ÖNCEDEN VAR OLAN SESSİZ MISCOMPILE:** self-host
+codegen'de **büyük TAM literali çağrı argümanı olarak i32'ye kırpılıyor**:
+`işlev kimlik(x: tam64)` + `kimlik(8589934592)` → `call i64 @kimlik(ptr, i32 8589934592)`
+→ C exit **42**, self exit **0** (SESSİZ YANLIŞ CEVAP). **sabitsüre'den bağımsız**
+(sabitsüresiz programla ve bu daldan ÖNCEKİ commit'te de üretildi). Korpus dosyası bu
+şekilden kaçınır. Ayrı iş — D-300'ün `i64_genislet` mekanizması çağrı-argümanı yoluna
+uygulanmamış görünüyor.
+
+---
+
 ## D-326 — METHOD çağrısında lineer argüman tüketimi (C + self-host BİRLİKTE) (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.c` (method-dispatch kolu, +1 kural);
@@ -133,6 +195,7 @@ self-host'ta sabitsüre desteği **hiç yok**:
 Yani hiçbir sabitsüre programı bu dala kadar gelemiyor; **gate'lenebilir bir korpus
 testi yazmak MÜMKÜN DEĞİL** (ne `cg_korpus` çalışır ne `check_korpus` diff'i geçer).
 Dal yine de konuldu: C ile parite borcunu kapatır ve sabitsüre portlanınca hazırdır.
+**(GÜNCELLEME: port D-327'de yapıldı — dal artık İNERT DEĞİL ve `cg_sabitsure.kem` onu gate'liyor.)**
 **İlk niyetim `sabitsüre<metin>` ile örneklemekti — o TİP YASAK (CT006).**
 
 **2) `cg_lineer_imza.kem` (gerçekten gate'li kısım):** `tekkez<T>` İMZA pozisyonunu
@@ -196,7 +259,7 @@ test_linear/tip_kontrol dokunulmadı (C tarafı değişmedi).
 girdisini + korpus dosyasını içermesi, tarif ettiği `selfhost/codegen.kem`
 değişikliklerinin ağaçta olmamasıydı. **Bu, paralel bir oturumda D-321 (LC-3) ile
 onarıldı** — bu dal onun ÜSTÜNE kuruludur, o yüzden burada tekrar ele alınmaz.
-Kalan tek boşluk (`ll_tip`de `TIP_SABITSURE`) D-324'te kapatılır.
+Kalan tek boşluk (`ll_tip`de `TIP_SABITSURE`) D-324'te kapatılır; sabitsüre'nin TAM portu D-327'de.
 
 **Sınır (kapsam dışı, bilinçli):** METHOD çağrısında (`k.al(m)`) lineer argüman
 **ne C'de ne self-host'ta** tüketilir — ikisi de L001 verir, yani **parite bozuk

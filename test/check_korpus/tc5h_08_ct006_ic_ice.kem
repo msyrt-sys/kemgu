@@ -1,0 +1,4 @@
+işlev main() -> tam32 {
+    değişken s: sabitsüre<sabitsüre<tam32>> = sabitsüre_olustur(sabitsüre_olustur(1));
+    ver 0;
+}

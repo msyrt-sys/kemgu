@@ -1,0 +1,5 @@
+işlev al(x: tam32) -> tam32 { ver x; }
+işlev main() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(42);
+    ver al(s);
+}
