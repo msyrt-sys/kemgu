@@ -50,6 +50,54 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-328 — Yan-kanal: cekirdek alt-kume NON-INTERFERENCE ispatlandi (2026-07-26)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/NonInterference.lean` (iskelet →
+~300 satır ispat), `test/lean_aksiyom_harness.sh` (+5 aksiyom denetimi).]**
+Mehmet karari (2026-07-26): **dar ama GERCEK NI**, adi kapsamini soylesin,
+`kemgu_soundness_v3`e conjunct olarak EKLENMESIN.
+
+**⚠ ISKELETIN "TIKANMA" LISTESI KISMEN ESKIMISTI (olculdu):** dosya "(1) `sabitsure<T>`
+qualifier modelimizde YOK" diyordu — oysa `Tip.sabitsure` Core'da **zaten var**; `Olay`
+(memOku/memYaz + konum, kanal olaylari) da gozlem kanali olarak hazirdi.
+
+**Saldirgan modeli:** gozlem = olayin TURU + kim + nerede (`GozlemOlay`); tasinan
+DEGER gorulmez. Silme (erasure) `degerSil` TEK KAYNAK — tum silme tanimlari ondan turer.
+
+**ISPATLANAN (hepsi derleniyor, sorryAx yok):**
+- **(A) Gozlem degerden bagimsiz carpanlanir:** `gozlem (olaySil o) = gozlem o`,
+  `izGozlem (izSil tau) = izGozlem tau`.
+- **(B) Silme, veri-erisim yardimcilariyla DEGISIR:** store lookup, kanal
+  `find?`/`ilk`/`ekle`/`cikar` — arama BASARISI, kuyruk UZUNLUGU ve BOSLUK durumu
+  korunur (bunlar yapisaldir, veri degil).
+- **(C) DEGER TASIYAN her Step kurali icin silme simulasyonu (6/6):** `sVarOku`,
+  `sAtamaTamam`, `sSeqAtla`, `sGuvensizAtla`, `cKanalGonderTamam`, `cKanalAlTamam` —
+  kural silinmis konfigurasyonda AYNEN uygulanabilir, sonuc silinmis-esdegerdir.
+  NI icerigi tam olarak bu kurallarda yasar.
+
+**HENUZ YOK (durustce):** global cati `∀ S S', Step S S' → Step (konfSil S) (konfSil S')`
+— kalan kurallar deger TASIMAZ ama cati TUMEVARIM ister (cong kurallari ozyinelemeli).
+Politika geregi `sorry` KONMADI: cati ifadesi yazilmadi.
+
+**KAPSAM SINIRI (dosya basliginda da yazili):** kagit CT001/CT002/CT004'un korudugu asil
+kanallar — gizli uzerinde DALLANMA, gizli INDEKS, gizli DIV/MOD — bu modelde **ifade
+edilemez** (`Ifade` alt-kumesinde kosullu/dongu/indeksleme/aritmetik YOK). Bu teorem
+**"KEMGU sabit-suredir" DEMEZ**; "cekirdek alt-kumede veri-bagimli gozlem yoktur" der.
+
+**SABOTAJ (ikisi de olctu):** (A) silme degeri KORUSUN (`degerSil = id`) → **13 hata**;
+(B) gozlem degeri gostersin → **1 hata**; temiz → **0**. Ispatlar tasiyici.
+
+**⚠ SUREC NOTU:** ilk sabotajim **0 hata** verdi — cunku `degerSil`i tanimlarda
+kullanmayip `Deger.birim`i her yere elle yazmisim; yani sabotaj hicbir sey olcmuyordu.
+Once tanimlar tek kaynaga baglandi, sonra sabotaj anlamli hale geldi. **DERS: sabotaj
+testi de once KENDISI dogrulanmali** ("kirmizi vermedi" ≠ "kod saglam").
+
+**Kapilar:** `calistir_lean_aksiyom` 28/28 modul + 9 teoremin aksiyom kumesi
+(yeni NI teoremleri dahil; `silme_sim_sVarOku` → `[propext]`, `izGozlem_izSil` →
+**hicbir aksiyoma dayanmiyor**), sorryAx YOK.
+
+---
+
 ## D-327 — Lean ispat KAPISI: derleme ≠ ispat, aksiyom denetimi eklendi (2026-07-26)
 
 **⚠ ÖNCE BİR ÖLÇÜM DÜZELTMESİ (benim hatam).** Önceki turda "kalan başlıklar"

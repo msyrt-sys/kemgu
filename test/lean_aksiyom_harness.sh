@@ -60,6 +60,11 @@ import Kemgu.Soundness.Main
 #print axioms Kemgu.Discharge.NoFault.iyiTipli_no_fault
 #print axioms Kemgu.Discharge.NoFault.typed_no_fault
 #print axioms Kemgu.MemSafety.Theorems.t1_bellek_guvenligi_tam
+#print axioms Kemgu.SideChannel.NonInterference.silme_sim_sVarOku
+#print axioms Kemgu.SideChannel.NonInterference.silme_sim_sAtamaTamam
+#print axioms Kemgu.SideChannel.NonInterference.silme_sim_cKanalGonderTamam
+#print axioms Kemgu.SideChannel.NonInterference.silme_sim_cKanalAlTamam
+#print axioms Kemgu.SideChannel.NonInterference.izGozlem_izSil
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then
     echo "🔴 aksiyom denetimi çalıştırılamadı:"; head -10 "$TMP/aks.txt"; exit 1
