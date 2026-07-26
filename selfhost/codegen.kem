@@ -3290,8 +3290,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(argt, p.son_tip);
         }
         değişken i: tam32 = 1;
+        // D-333: kapanış ARGÜMANI — callee param'ı `işlev(...)->T` ise T'yi lifted
+        // lambda define'ına bağlam olarak geç. ERISIM dispatch'te param 0 `kendin`
+        // olduğu için açık argümanlar 1 kayar.
+        değişken fnode: tam32 = 0 - 1;
+        eğer kullanici == 1 { fnode = fn_node_bul(p, fad); }
+        değişken poff: tam32 = 0;
+        eğer metin_esit(dizi_al(p.a_ad, hed), "ERISIM") { poff = 1; }
         iken i < cs {
+            değişken eski_lbr2: metin = p.lam_bek_ret;
+            eğer fnode >= 0 {
+                değişken pir: metin = fn_param_kapanis_ir(p, fnode, i - 1 + poff);
+                eğer metin_esit(pir, "") == yanlış { p.lam_bek_ret = pir; }
+            }
             dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, cb + i)));
+            p.lam_bek_ret = eski_lbr2;   // RESET (sızdırma)
             dizi_ekle(argt, p.son_tip);
             i = i + 1;
         }
@@ -4407,6 +4420,31 @@ işlev lam_cap_dedup(p: &değişken Ayr, base: tam32, ad: metin) -> mantıksal {
 //   sessizce unsound OLMAZ). Sonuç `rho_serbest` bayrağıyla runtime'a taşınır.
 // ============================================================================
 // Ad → ISLEV düğüm idx (imza ön-pass'inde toplanan fn_node); -1 yok.
+// D-333: `f(|| 42)` — callee'nin k'ıncı PARAMETRE'si `işlev(...) -> T` ise T'nin
+// IR'ı (aksi ""). C `kapanis_donus_ir_al(parametre.tip)` aynası: lifted lambda
+// define'ı BİLDİRİLEN dönüşü kullanmazsa gövdenin doğal tipine düşer
+// (`|| 8589934634` → `define i32`) ama callee `call i64` yapar → D-325 sınıfı
+// SESSİZ uyuşmazlık (ölçüldü: exit 1, doğrusu 42).
+işlev fn_param_kapanis_ir(p: &değişken Ayr, fn: tam32, k: tam32) -> metin {
+    eğer fn < 0 { ver ""; }
+    eğer k < 0 { ver ""; }
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;  değişken n: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer n == k {
+                değişken pcs: tam32 = dizi_al(p.a_cs, c);
+                eğer pcs == 0 { ver ""; }
+                ver ll_ic_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c) + pcs - 1));
+            }
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    ver "";
+}
 işlev fn_node_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.fn_ad) {

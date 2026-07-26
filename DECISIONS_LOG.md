@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-333 — Kapanış ÇAĞRI ARGÜMANI: bildirilen dönüş codegen'de yayılmıyordu → sessiz yanlış cevap (2026-07-26)
+
+**Karar [ETKİ: `src/llvm.c` (DUGUM_CAGRI arg döngüsü), `selfhost/codegen.kem`
+(`fn_param_kapanis_ir` + arg döngüsü), `test/cg_korpus/cg_kapanis_arg_donus.kem`
+(yeni; cg korpusu 106→107).]**
+
+D-332 tip kontrolünde çağrı-argüman bağlamını **zaten** yayıyordu (`tip_belirle_beklenen`
+pas 2 arg'ı param tipi bağlamında çıkarsar; ölçüldü: `uygulaM(|| 42)` param `işlev()->metin`
+ile **T001** veriyor). Eksik olan YALNIZ **codegen**'di.
+
+**Kusur (ölçüldü):**
+```
+işlev uygula64(f: işlev() -> tam64) -> tam64 { ver f(); }
+... uygula64(|| 8589934634)
+```
+→ `--check` **OK**, ama `define i32 @lambda_0` üretiliyor; callee kendi param
+annotasyonundan doğru okuyup `call i64` yapıyor. LLVM DOLAYLI çağrıda imza
+denetlemez → **exit 1, doğrusu 42** (D-325/D-332 ile aynı sınıf: loud değil silent).
+C ve self-host **İKİSİ DE** aynı kusuru taşıyordu.
+
+**Çözüm:** çağrı-argümanı emit edilirken callee'nin k'ıncı parametresi
+`işlev(...)->T` ise T'nin IR'ı lifted lambda define'ına bağlam olarak geçirilir
+(C: `kapanis_donus_ir_al(parametre.tip)` → `g->lambda_beklenen_donus`;
+self: yeni `fn_param_kapanis_ir` → `p.lam_bek_ret`). Bağlam arg başına kurulur
+ve RESET edilir (sızdırma yok). ERISIM metod dispatch'inde param 0 `kendin`
+olduğu için açık argümanlar 1 kaydırılır (`poff`).
+
+**Kapılar:** tip_kontrol 191/191, linear 89/89, llvm 274/274, lambda 5/5,
+DRF 54/54, stdlib --check, `calistir_checker_diff` 58/58,
+`calistir_self_driver` (4 mod + LLVM **107/107** ×2) + FIXPOINT,
+`calistir_codegen_bootstrap` FIXPOINT (45304 satır).
+
+**Sabotaj doğrulaması (iki derleyici ayrı ayrı):** C hedefi iptal → LLVM RED
+(`'%0' defined with type 'double' but expected 'i32'`); self hedefi iptal →
+exit 1 (doğrusu 42). Korpus D-332'in dersini uygular: geniş tamsayı kırpması
+x86_64'te exit koduyla yakalanamadığı için **kesirli64** kolu da var.
+
+---
+
 ## D-332 — Bildirilen kapanış dönüşü lambda GÖVDESİNE yayılır (bidirectional): C gevşetildi + gizli codegen kırpması kapandı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+2 alan), `src/tip_kontrol.c` (4 nokta: init,

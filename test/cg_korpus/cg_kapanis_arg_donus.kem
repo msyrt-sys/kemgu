@@ -1,0 +1,17 @@
+// D-333: kapanış ÇAĞRI ARGÜMANI olarak geçerken de bildirilen dönüş yayılır.
+// Önceki durum: --check OK ama `define i32 @lambda_0` vs callee'nin `call i64`'ü
+// → SESSİZ YANLIŞ CEVAP (ölçüldü: exit 1, doğrusu 42). D-325/D-332 ile aynı sınıf.
+// NOT: geniş TAMSAYI kırpması x86_64'te exit koduyla yakalanamaz (rax no-op) →
+// kesirli64 kolu ŞART: orada uyuşmazlık kayıt sınıfı değiştirir (xmm0 vs rax).
+işlev uygula64(f: işlev() -> tam64) -> tam64 { ver f(); }
+işlev uyguladbl(f: işlev() -> kesirli64) -> kesirli64 { ver f(); }
+işlev main() -> tam32 {
+    değişken v: tam64 = uygula64(|| 8589934634);
+    değişken w: tam64 = uygula64(|| { ver 8589934634; });
+    değişken x: kesirli64 = uyguladbl(|| 21.0);
+    değişken y: kesirli64 = uyguladbl(|| { ver 21.0; });
+    eğer ((v >> 33) == 1) ve ((w >> 33) == 1) {
+        ver (x + y) olarak tam32;
+    }
+    ver 1;
+}

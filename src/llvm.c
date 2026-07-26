@@ -4657,6 +4657,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * sanıp stack-array'i okur → misaligned UB/SEGFAULT. D-044'ün
                      * "tüm Dizi<T> bağlamları heap" amacını çağrı-arg'a tamamlar. */
                     const Dugum *cagri_eski_bt = g->beklenen_tip;
+                    const char *cagri_eski_lbd = g->lambda_beklenen_donus;
                     if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
                         i < ik->ast->veri.islev.param_sayi) {
                         const Dugum *pp = ik->ast->veri.islev.parametreler[i];
@@ -4664,8 +4665,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
                             g->beklenen_tip = pp->veri.parametre.tip;
                         }
+                        /* D-333: `f(|| 42)` — parametre `işlev(...)->T` ise T'nin
+                         * IR'ını lifted lambda define'ına taşı. Yoksa gövde DOĞAL
+                         * tipine düşer (`|| 8589934634` → `define i32`) ama callee
+                         * bildirilen tiple `call i64` yapar → D-325 sınıfı SESSİZ
+                         * uyuşmazlık (ölçüldü: exit 1, doğrusu 42). Callee tarafı
+                         * zaten kendi param annotasyonundan doğru okuyor (6649);
+                         * eksik olan YALNIZ define'dı. Tip kontrolü bu bağlamı
+                         * D-332'de zaten yayıyor (aksi T001) → güvenli. */
+                        if (pp && pp->veri.parametre.tip) {
+                            const char *lam_ir =
+                                kapanis_donus_ir_al(g, pp->veri.parametre.tip);
+                            if (lam_ir) g->lambda_beklenen_donus = lam_ir;
+                        }
                     }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
+                    g->lambda_beklenen_donus = cagri_eski_lbd;
                     g->beklenen_tip = cagri_eski_bt;
                     if (bekle && strcmp(args[i].tip, bekle) != 0 &&
                         (strcmp(bekle, "i64") == 0 ||
