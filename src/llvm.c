@@ -5200,7 +5200,19 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * tip = aktif islevin dönüş tipi. */
                 const Dugum *eski_bt = g->beklenen_tip;
                 g->beklenen_tip = g->aktif_donus_dugum;
+                /* D-334: `ver || 42` — aktif işlevin dönüşü `işlev(...)->T` ise
+                 * T'nin IR'ını lifted lambda define'ına taşı. Yoksa gövde DOĞAL
+                 * tipine düşer (`define i32`) ama çağıran bildirilen tiple
+                 * `call i64` yapar → D-325/D-332/D-333 sınıfı SESSİZ uyuşmazlık
+                 * (ölçüldü: exit 1, doğrusu 42; C + self-host ikisinde de). */
+                const char *eski_lbd_v = g->lambda_beklenen_donus;
+                {
+                    const char *lam_ir =
+                        kapanis_donus_ir_al(g, g->aktif_donus_dugum);
+                    if (lam_ir) g->lambda_beklenen_donus = lam_ir;
+                }
                 IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
+                g->lambda_beklenen_donus = eski_lbd_v;
                 g->beklenen_tip = eski_bt;
                 int rr = int_donustur(g, s.reg, s.tip, donus_tip);
                 rho_yerel_serbest_emit(g);   /* F4.2b (d): dönüş değeri (rr) materyalize sonrası */

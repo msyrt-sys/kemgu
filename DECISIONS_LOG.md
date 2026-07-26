@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-334 — Kapanış `ver` dönüşü: bildirilen dönüş codegen'de yayılmıyordu + kalan iki bağlam TARANDI (2026-07-26)
+
+**Karar [ETKİ: `src/llvm.c` (DUGUM_VER emit), `selfhost/codegen.kem`
+(+`islev_donus_node`, +`cur_ret_node` alanı, VER emit), `test/cg_korpus/cg_kapanis_ver_donus.kem`
+(yeni; cg korpusu 107→108).]**
+
+D-333'un ardından kalan üç kapanış bağlamı **ölçüldü**. Üçü de kırıktı, ama
+**aynı sebepten değil** — ayrımı kaydetmek önemli:
+
+| bağlam | C | self-host | sınıf |
+|---|---|---|---|
+| `ver \|\| 42` | exit 1 (sessiz) | exit 1 (sessiz) | **D-333 ile AYNI** → bu adımda onarıldı |
+| `Kutu { f: \|\| 42 }` | LLVM RED `@f` tanımsız | LLVM RED | **AYRI: uygulanmamış özellik** |
+| `[\|\| 42]` (Dizi elemanı) | exit 0 (sessiz) | LLVM RED | **AYRI: uygulanmamış özellik** |
+
+**Ayrımın kanıtı:** aynı iki şekil `tam32` kapanışla da (dönüş yayılımı NO-OP)
+denendi → **yine kırık** (`Kutu{f: || 42}` LLVM RED; `[|| 42]` C'de exit 0).
+Yani yapı-alanında/dizi-elemanında kapanış **saklamak ve çağırmak** henüz yok;
+dönüş-tipi yayılımı bunları ONARMAZ. Yapı alanı: `(k.f)()` üst-düzey `@f`
+sanılıyor (kapanış çağrı yolu alan erişimini tanımıyor). Dizi: fat value
+`{ptr,ptr}` eleman tipi olarak taşınmıyor (`'%6' ... expected 'i32'`).
+**Bunlar bu adımda ONARILMADI** — ayrı iş (V2), roadmap'e bırakıldı.
+
+**Onarılan (`ver` bağlamı):** aktif işlevin dönüşü `işlev(...)->T` ise T'nin IR'ı
+lifted lambda define'ına geçirilir. C: `kapanis_donus_ir_al(g->aktif_donus_dugum)`.
+Self: `cur_ret` yalnız IR string'i tuttuğu için AST düğümü gerekiyordu → yeni
+`cur_ret_node` alanı + `islev_donus_node`; lifted gövdeye girerken düğüm
+GEÇERSİZ kılınır (dış fn'in dönüşü içeride geçerli değil) ve çıkışta geri alınır.
+
+**Kapılar:** tip_kontrol 191/191, linear 89/89, llvm 274/274, lambda 5/5,
+DRF 54/54, stdlib --check, `calistir_checker_diff` 58/58,
+`calistir_self_driver` (4 mod + LLVM **108/108** ×2) + FIXPOINT,
+`calistir_codegen_bootstrap` FIXPOINT (45449 satır).
+
+**Sabotaj doğrulaması:** C hedefi iptal → exit 1; self hedefi iptal → exit 1
+(doğrusu 42). NOT: ilk sabotaj denemesi **yanlış çapa** yüzünden sessizce
+uygulanmadı ve "42" (yeşil) gösterdi — sabotajdan sonra çapanın gerçekten
+tuttuğunu (`grep -c`) doğrulamak ZORUNLU.
+
+---
+
 ## D-333 — Kapanış ÇAĞRI ARGÜMANI: bildirilen dönüş codegen'de yayılmıyordu → sessiz yanlış cevap (2026-07-26)
 
 **Karar [ETKİ: `src/llvm.c` (DUGUM_CAGRI arg döngüsü), `selfhost/codegen.kem`

@@ -1,0 +1,17 @@
+// D-334: kapanış `ver` DÖNÜŞÜ olarak da bildirilen dönüş yayılır.
+// Önceki durum: --check OK ama `define i32 @lambda_0` vs çağıranın `call i64`'ü
+// → SESSİZ YANLIŞ CEVAP (ölçüldü: C + self-host ikisi de exit 1, doğrusu 42).
+// D-332/D-333 ile aynı sınıf; kesirli64 kolu sabotajı falsifiye edilebilir kılar.
+işlev yap64() -> işlev() -> tam64 { ver || 8589934634; }
+işlev yapblok() -> işlev() -> tam64 { ver || { ver 8589934634; }; }
+işlev yapdbl() -> işlev() -> kesirli64 { ver || 21.0; }
+işlev main() -> tam32 {
+    değişken f: işlev() -> tam64 = yap64();
+    değişken g: işlev() -> tam64 = yapblok();
+    değişken h: işlev() -> kesirli64 = yapdbl();
+    değişken x: kesirli64 = h();
+    eğer ((f() >> 33) == 1) ve ((g() >> 33) == 1) {
+        ver (x + x) olarak tam32;
+    }
+    ver 1;
+}
