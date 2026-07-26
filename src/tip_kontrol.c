@@ -3502,6 +3502,18 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                                 tip_hata(tk, d->veri.cagri.argumanlar[i],
                                     "T001", "method arg tipi uyumsuz");
                             }
+                            /* D-324: method argumani da TASIMADIR. Normal cagri
+                             * yolunda (asagida) bu kural vardi, method-dispatch
+                             * kolunda YOKTU -> `k.al(t)` sonrasi t tuketilmemis
+                             * sayiliyordu: hem sahte L001 (gecerli program
+                             * reddedilir) hem de move-sonrasi kullanim
+                             * YAKALANMAZDI (t hala "taze" gorunur). Ayni kural,
+                             * ayni yardimci: param lineer (tekkez/yetki/lineer
+                             * yapi) ise argumani tuket. */
+                            if (pt && tip_lineer_mi(pt)) {
+                                lineer_tuket_eger_baglamaysa(tk,
+                                    d->veri.cagri.argumanlar[i]);
+                            }
                         }
                         if (m->veri.islev.donus_tipi) {
                             return ast_tip_to_bilgi(tk, m->veri.islev.donus_tipi);

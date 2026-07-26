@@ -1,0 +1,12 @@
+// AYNI metot adi, IKI tipte, FARKLI lineerlik — tablo (tip,ad) ile anahtarlanmali.
+// A.al lineer alir (tuketir), B.al tam32 alir (tuketmez).
+yapı A { n: tam32; }
+yapı B { n: tam32; }
+uygula A { işlev al(kendin, y: tekkez<metin>) -> tam32 { imha(y); ver 1; } }
+uygula B { işlev al(kendin, y: tam32) -> tam32 { ver y; } }
+işlev test() -> tam32 {
+    değişken a: A = A { n: 1 };
+    değişken b: B = B { n: 2 };
+    değişken m: tekkez<metin> = tekkez_olustur("x");
+    ver a.al(m) + b.al(7);
+}

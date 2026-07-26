@@ -1,0 +1,12 @@
+// Ters sira: B.al (lineer OLMAYAN) once kayitli; A.al'in lineerligi ona SIZMAMALI.
+// b.al(7) tuketim yapmamali; m ayri deyimde tuketilir (D-320 sekli KULLANILMADI).
+yapı A { n: tam32; }
+yapı B { n: tam32; }
+uygula B { işlev al(kendin, y: tam32) -> tam32 { ver y; } }
+uygula A { işlev al(kendin, y: tekkez<metin>) -> tam32 { imha(y); ver 1; } }
+işlev test() -> tam32 {
+    değişken b: B = B { n: 2 };
+    değişken m: tekkez<metin> = tekkez_olustur("x");
+    değişken s: metin = kullan(m);
+    ver b.al(7) + metin_uzunluk(s);
+}

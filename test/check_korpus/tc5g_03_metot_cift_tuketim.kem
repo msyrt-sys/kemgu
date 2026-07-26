@@ -1,0 +1,7 @@
+yapı K { n: tam32; }
+uygula K { işlev al(kendin, y: tekkez<metin>) -> tam32 { imha(y); ver 2; } }
+işlev test() -> tam32 {
+    değişken k: K = K { n: 1 };
+    değişken m: tekkez<metin> = tekkez_olustur("x");
+    ver k.al(m) + k.al(m);
+}
