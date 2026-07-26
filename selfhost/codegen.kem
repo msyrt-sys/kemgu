@@ -5362,6 +5362,16 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "değer"); g_ekle(p, "tamam"); g_ekle(p, "hata"); g_ekle(p, "kendin");
     ver 0;
 }
+// D-323: Ad, aktif işlevin YEREL diliminde bir bağlama mı (değişken/parametre)?
+// `ad_tanimli_mi`nin yerel yarısı — üst-düzey adları (işlev/yapı/sabit) SAYMAZ.
+// Kullanımı: CAGRI hedefi TANIMLAYICI ve yerel bağlamaysa çağrı DOLAYLIDIR
+// (işlev-tipli değişken üzerinden); built-in adı yerelde bulunmaz.
+işlev yerel_baglama_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.yerel);
+    değişken i: tam32 = p.yerel_basla;
+    iken i < n { eğer metin_esit(dizi_al(p.yerel, i), ad) { ver doğru; } i = i + 1; }
+    ver yanlış;
+}
 işlev ad_tanimli_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
     değişken n: tam32 = dizi_boyut(p.g_isim);
     değişken i: tam32 = 0;
@@ -6396,8 +6406,24 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 ver 0;
             }
         }
+        // D-323: DOLAYLI çağrı (işlev-tipli değişken üzerinden) — lineer argüman
+        // TAŞINIR. Bilinen-arite yolu `fn_plin_bul` ile tüketir; bu yol tüketmezse
+        // aynı program self-host'ta sahte L001 alır (C kabul eder → parite kaybı).
+        // Param lineerliği burada KANITLANAMAZ (self-host'ta bileşik tip-string'i
+        // yok, `işlev(...)` → "?"), ama lineer bir bağlamayı bir çağrıya vermek
+        // KOPYA DEĞİL TAŞIMADIR — hedef ne olursa olsun. Built-in adları yerelde
+        // bulunmaz → onlar eskisi gibi tüketilmez (davranış değişmez).
+        değişken dolayli: mantıksal = yanlış;
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
+            eğer yerel_baglama_mi(p, dizi_al(p.a_deg, hedef)) { dolayli = doğru; }
+        }
         değişken k: tam32 = 1;
-        iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
+        iken k < hc {
+            değişken arg2: tam32 = dizi_al(p.cocuk, hb + k);
+            kontrol_dugum(p, arg2);
+            eğer dolayli { lin_tuket_dugum(p, arg2); }
+            k = k + 1;
+        }
         ver 0;
     }
     // ATAMA: T022 (lvalue) önce → hedef T002 → değer T002 → T001 (tip uyumsuz).
