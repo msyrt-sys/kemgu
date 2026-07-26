@@ -330,5 +330,10 @@ theorem progress_konf
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
+  | eger k d y ih_k ih_d ih_y =>
+      -- D-332: HasType'ta `eger` kurali eklenene dek bu dal VAKUMDUR
+      -- (iyi-tipli program `eger` iceremez). Adim 3'te t_eger gelince
+      -- burasi gercek ispatla doldurulur.
+      nomatch h_ht
 
 end Kemgu.Meta.ProgressKorunum

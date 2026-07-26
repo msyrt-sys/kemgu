@@ -78,6 +78,8 @@ inductive GozlemOlay : Type where
   | gGonder   (t : ThreadId) (k : KanalId)
   | gAl       (t : ThreadId) (k : KanalId)
   | gDondur   (t : ThreadId) (b : Bolge)
+  /-- D-332: dal karari saldirgan tarafindan GORULUR (PC/timing kanali). -/
+  | gDal      (t : ThreadId) (alindi : Bool)
 
 /-- Olay → gozlem (deger projeksiyonu ATILIR). -/
 def gozlem : Olay → GozlemOlay
@@ -88,6 +90,7 @@ def gozlem : Olay → GozlemOlay
   | .kanalGonderOl t k v => .gGonder t k
   | .kanalAlOl t k v     => .gAl t k
   | .dondurOl t b        => .gDondur t b
+  | .dalOl t a           => .gDal t a
 
 /-- Iz → gozlem dizisi. -/
 def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
@@ -121,6 +124,7 @@ def ifadeSil : Ifade → Ifade
   | .kullanIf x           => .kullanIf x
   | .imhaIf x             => .imhaIf x
   | .guvensiz e           => .guvensiz (ifadeSil e)
+  | .eger k d y           => .eger (ifadeSil k) (ifadeSil d) (ifadeSil y)
 
 /-- Olay silme: tasinan deger birime iner (TUR + konum korunur). -/
 def olaySil : Olay → Olay
@@ -131,6 +135,9 @@ def olaySil : Olay → Olay
   | .kanalGonderOl t k v => .kanalGonderOl t k (degerSil v)
   | .kanalAlOl t k v     => .kanalAlOl t k (degerSil v)
   | .dondurOl t b        => .dondurOl t b
+  -- D-332: dal karari VERI degil KONTROL AKISIDIR → silinmez (silinseydi
+  -- teorem, PC-kanalinin saldirgana gorunmedigini iddia ederdi).
+  | .dalOl t a           => .dalOl t a
 
 def izSil (tau : Iz) : Iz := tau.map olaySil
 

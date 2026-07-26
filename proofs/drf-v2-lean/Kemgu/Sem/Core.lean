@@ -525,6 +525,13 @@ inductive Olay : Type where
   | kanalGonderOl (t : ThreadId) (k : KanalId) (v : Deger)
   | kanalAlOl     (t : ThreadId) (k : KanalId) (v : Deger)
   | dondurOl      (t : ThreadId) (b : Bolge)
+  /-- Dallanma karari (D-332, Mehmet onayi). SideChannel/CT.Gozlem.oDal'in
+      Core karsiligi: dal hedefleri farkli kod/zaman → PC/timing sizintisi,
+      dolayisiyla saldirganin GORDUGU bir olaydir. Bu olay OLMADAN kopru
+      ct_ni'nin asil icerigini (CT001'in kapattigi kanal) Core'a tasiyamaz.
+      Senkronizasyon olayi DEGILDIR: `synchronizes_with` onu saymaz ve
+      `olay_konum` none dondurur → veri-yarisi adayi da olamaz. -/
+  | dalOl         (t : ThreadId) (alindi : Bool)
 
 
 /-- Iz: gozlemlenmis olaylar (en yenisi basta) -/
@@ -551,6 +558,11 @@ inductive Ifade : Type where
   | kullanIf       (x : VarId)                              -- kullan(x) — Linear
   | imhaIf         (x : VarId)                              -- imha(x)   — Linear
   | guvensiz       (e : Ifade)                              -- guvensiz blok
+  /-- D-332: dallanma. `eger k d y` — kosul k degerlendirilir (sEgerCong),
+      deger sifir-disi ise d, sifir ise y dalina gecilir (sEgerSec) ve
+      `dalOl` olayi emit edilir. CT001'in korudugu kanalin ana modeldeki
+      temsili budur. -/
+  | eger           (kosul dogruDal yanlisDal : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -587,6 +599,14 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar e y → HedefVar (Ifade.atama x e) y
   | guvensiz_ic (e : Ifade) (y : VarId) :
       HedefVar e y → HedefVar (Ifade.guvensiz e) y
+  -- D-332: eger'in UC alt-ifadesi de kapsanir. Kosul sEgerCong ile,
+  -- dallar sEgerSec ile odaga girer; invariant her ucunde korunmali.
+  | eger_kosul (k d y : Ifade) (z : VarId) :
+      HedefVar k z → HedefVar (Ifade.eger k d y) z
+  | eger_dogru (k d y : Ifade) (z : VarId) :
+      HedefVar d z → HedefVar (Ifade.eger k d y) z
+  | eger_yanlis (k d y : Ifade) (z : VarId) :
+      HedefVar y z → HedefVar (Ifade.eger k d y) z
 
 /-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
     dondurIf var (dondur sahiplik gerektirir — h_owner). -/
@@ -601,6 +621,13 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge e b → HedefBolge (Ifade.atama x e) b
   | guvensiz_ic (e : Ifade) (b : Bolge) :
       HedefBolge e b → HedefBolge (Ifade.guvensiz e) b
+  -- D-332: eger'in uc alt-ifadesi (bkz. HedefVar aciklamasi).
+  | eger_kosul (k d y : Ifade) (b : Bolge) :
+      HedefBolge k b → HedefBolge (Ifade.eger k d y) b
+  | eger_dogru (k d y : Ifade) (b : Bolge) :
+      HedefBolge d b → HedefBolge (Ifade.eger k d y) b
+  | eger_yanlis (k d y : Ifade) (b : Bolge) :
+      HedefBolge y b → HedefBolge (Ifade.eger k d y) b
 
 /-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
 theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}
