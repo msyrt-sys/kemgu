@@ -90,10 +90,29 @@ Downstream 20 modul ise SmallStep derlenene kadar KASKAD (gercek is degil).
 **Buyukluk tahmini (olcume dayali):** 1-3 mekanik; 4 orta (her case ~5-20 satir,
 ~12-15 yer); 5 bagimsiz ve en buyuk parca (yeni tumevarim).
 
-**KARAR GEREKTIREN NOKTA (Mehmet):** `sEgerSec` V1 tasariminda kosulun ONCEDEN
-degerlendirilmis olmasi gerekiyor (kosul-congruence kurali YOK — `sSeqAtla` deseni).
-Kosul-congruence eklenirse cong ailesi 3→4 olur ve FIX-F cerceve yan-kosulu oraya da
-tasinmali. Bu, dis-kontrat sinifi bir genisleme.
+**~~KARAR GEREKTIREN NOKTA~~ → ✅ KARAR VERILDI (Mehmet, 2026-07-27): KOSUL-CONGRUENCE
+EKLENECEK, cong ailesi 3→4.**
+
+Uygulama sartlari (bu karar bagladigi icin BURAYA yaziliyor — uygulama, halihazirda
+kosan kopru gorevinde yapilacak; ayni dosyaya paralel dokunmamak icin bu oturum
+`SmallStep.lean`e ELLEMEDI):
+
+1. **Yeni kural `sEgerKosulCong`** — `eger k d y` icinde `k` deger DEGILSE kosulda
+   ic adim atilir. Bicim: mevcut `sSeqCong`/`sAtamaCong`/`sGuvensizCong` ile BIREBIR
+   ayni iskelet (`h_S1 = ifadeyleKonf ...`, `h_inner : Step S1 S1'`, `h_t1'`, `h_tid`,
+   `h_if'`, `h_S'` disari `.eger k' d y` olarak sarar).
+2. **FIX-F cerceve yan-kosulu ZORUNLU** — yeni kurala da
+   `h_yan : ts2' = ts2 ∨ ∃ y, ts2' = ts2 ++ [y]` eklenecek. Gerekce: FIX-F,
+   cong-penceresi counterexample'ini (kosan thread'i pencerede bitmis goren join)
+   eleyen sarttir; eksik birakilirsa AYNI ACIK yeni kuraldan geri gelir.
+   **Bu bir tercih degil, dogruluk sartidir.**
+3. **Dokunulacak tumevarim yerleri** (cong ailesi 3→4 oldugu icin HEPSINDE +1 case):
+   `adim_korunum`, `step_fault_preserves_typed`, `step_iz_analiz`, `progress_konf`,
+   Drf L0-L7, MemSafety, ve `SideChannel/NonInterference.silme_simulasyon`
+   (bu sonuncuda yeni case mevcut 3 cong case'inin BIREBIR kopyasidir —
+   `ifadeyleKonf_konfSil` + IH; deger tasimaz).
+4. **Kabul kapisi:** `calistir_lean_aksiyom` yesil (sorryAx YOK) + `silme_simulasyon`
+   ve `ni_cekirdek_altkume` hala ispatli olmali. Yarim entegrasyon MERGE EDILMEZ.
 
 ---
 
