@@ -50,6 +50,51 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-324 — G005 self-host'a portlandı: güvenlik parite açığı kapandı (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (ikisine de: `g005_*`
+yardımcıları + `aktif_fn` + 3 kanca), `test/check_korpus/g005_ptr_kacis.kem`,
+`test/check_korpus/g005_skaler_temiz.kem` (+2).]** D-323'te işaretlediğim açık: self-host
+G005'i **hiç bilmiyordu** (`grep` → 0). D-322 öncesi zararsızdı (self kapanış
+derleyemiyordu; `tip_kontrol.h` bile "port moot" diyordu), **D-322 ile canlı** hale
+gelmişti: self, C'nin **güvenlik gerekçesiyle reddettiği** programı kabul ediyordu.
+
+**Zorluk ve çözüm:** self-host'ta genel escape DFA YOK (yalnız `ky_*` kesin-yerel kanıtı).
+Bu yüzden C'nin `ESC_CAGIRAN` tetikleyicileri **tahmin edilmedi, ÖLÇÜLDÜ** (5 şekil,
+`--checkdump` ile):
+| şekil | C | self (port sonrası) |
+|---|---|---|
+| `ver ‖s` (doğrudan) | G005 1,49 | **G005 1,49** |
+| `değişken f=‖s; ver f` (transitif) | G005 1,79 | **G005 1,79** |
+| `al(f)` (çağrı ARGÜMANI) | G005 2,93 | **G005 2,93** |
+| `f()` (çağrı HEDEFİ) | OK | **OK** |
+| skaler yakalama + kaçış | OK | **OK** |
+Kod + **satır + sütun** birebir. Kural: kaçış = `ver <ad>` ∨ çağrı argümanı olmak;
+**çağırmak kaçış DEĞİL**.
+
+**Tasarım notları:**
+- Karar **LAMBDA yerinde** verilir (bağ adı için gövdede ileri-tarama) → C'nin raporlama
+  **sırası** da korunur; hata konumu daima LAMBDA düğümü (C ile aynı).
+- İşaretçi-benzerlik tip STRING'inden: skaler beyaz-liste dışındaki her şey (metin/Dizi/
+  `&T`/ham-pointer/yapı **ve `"?"`**) işaretçi sayılır → **default-deny**.
+- Sahte yakalama ayıklama: lambda'nın kendi parametreleri ve **gövde-içi bildirimler**
+  hariç tutulur (checker'ın yerel tablosu bunları da içerir; ayıklanmazsa C'nin kabul
+  ettiğini reddederdik).
+
+**Sabotaj doğrulaması (üç bağımsız, üçü de yakalandı):** (1) işaretçi kararını kapat →
+`g005_ptr_kacis` düşer; (2) her yakalamayı işaretçi say (daraltmayı iptal) →
+`g005_skaler_temiz` düşer; (3) çağrı-argümanı kaçışını kapat → `g005_ptr_kacis` düşer.
+
+**Kapılar:** checker_diff **56/56** (+2), codegen_diff, self_driver, FIXPOINT.
+Self-host kaynağının kendisi yeni kural altında temiz (C ve self ikisi de "OK") →
+fixpoint riski yok.
+
+**BİLİNEN SINIR:** birden çok hatalı programda G005'in **diğer** tanılara göre sırası
+C'den sapabilir (C escape DFA'yı lambda ziyaretinde sorgular; self ileri-tarama yapar).
+Korpusta böyle bir dosya yok; çıkarsa `--checkdump` diff'i **gürültülü** olarak yakalar.
+
+---
+
 ## D-323 — [YÜKSEK] G005 DARALTILDI: yalnız İŞARETÇİ yakalamada red (Mehmet kararı) (2026-07-26)
 
 **⚠ ÖNCE BİR ÖLÇÜM DÜZELTMESİ (D-322'deki iddiam YANLIŞTI).** D-322'de "kapanış

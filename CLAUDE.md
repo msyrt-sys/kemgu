@@ -761,8 +761,9 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   parser-red~~ **YANLIŞ ÖLÇÜM (D-323): kapanış parametresi İKİSİNDE DE ÇALIŞIYOR** (eski
   testte işlev adı olarak `uygula` anahtar kelimesi kullanılmıştı). **D-323:** G005
   daraltıldı — yalnız İŞARETÇİ yakalayan kaçan kapanış reddedilir (env HEAP olduğu için
-  skaler yakalama güvenli). ⚠ **G005 self-host'ta YOK** → self, C'nin reddettiğini kabul
-  ediyor (D-322 ile canlı hale gelen parite açığı; port ayrı iş).
+  skaler yakalama güvenli). ~~⚠ G005 self-host'ta YOK~~ ✓ **D-324: PORTLANDI** — C'nin
+  ESC_CAGIRAN tetikleyicileri ölçülerek taklit edildi (`ver <ad>` ∨ çağrı ARGÜMANI; çağırmak
+  kaçış değil), 5 şekilde kod+satır+sütun birebir; checker_diff 56/56, 3 sabotaj kapısı.
   *(Eski not:)* görev/kanal codegen (D-291/D-292) ve lambda dönüş çıkarsaması (D-293)
   `selfhost/codegen.kem`'de YOK → C derleyici ileride. Gateler geçiyor (korpusta bu
   şekiller yok) ama port ayrı iş olarak duruyor.

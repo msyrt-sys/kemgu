@@ -1,0 +1,13 @@
+// D-324: G005 self-host portu — İŞARETÇİ yakalayan KAÇAN kapanış reddedilir.
+// Üç kaçış biçimi de C ile birebir (kod+satır+sütun): doğrudan `ver ||s`,
+// transitif `değişken f = ||s; ver f`, ve ÇAĞRI ARGÜMANI `al(f)`.
+// Konum DAİMA lambda düğümü (C tip_kontrol.c aynası). BEKLENEN: 3× G005.
+işlev al(g: işlev() -> metin) -> tam32 { ver metin_uzunluk(g()); }
+işlev dogrudan(s: metin) -> işlev() -> metin { ver || s; }
+işlev transitif(s: metin) -> işlev() -> metin { değişken f: işlev() -> metin = || s; ver f; }
+işlev arguman() -> tam32 {
+    değişken s: metin = "merhaba";
+    değişken f: işlev() -> metin = || s;
+    ver al(f);
+}
+işlev main() -> tam32 { ver 42; }

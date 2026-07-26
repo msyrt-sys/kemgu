@@ -136,6 +136,7 @@ yapı Ayr {
     yerel_tip: Dizi<metin>;  // yerel ile paralel: tip-string ("?"=bilinmiyor)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;      // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor)
+    aktif_fn: tam32;       // D-324: aktif işlev düğümü (G005 ileri-tarama kapsamı)
     fn_donus: Dizi<metin>;   // fn_ad ile paralel: dönüş tipi (bilinen skaler; aksi "?")
     fn_psay: Dizi<tam32>;    // fn_ad ile paralel: parametre sayısı
     fn_pbase: Dizi<tam32>;   // fn_ad ile paralel: fn_ptip'te param tiplerinin başı
@@ -6073,6 +6074,150 @@ işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
 // ÇAĞRILDIĞINDA çağrının kendisi tüketimdir (C tip_kontrol.c: hedef tipi TIP_TEKKEZ
 // + iç TIP_ISLEV ise hedef sembolü tüketilir). Bağlama başına SABİT bilgi olduğu için
 // anlık-görüntü (snapshot) makinesine dahil DEĞİL.
+// ===== D-324: G005 (işaretçi yakalayan kaçan kapanış) — C tip_kontrol.c aynası =====
+// C kuralı (D-323 daraltılmış): lambda ÇEVRE lokal/param YAKALIYOR **ve** yakalananlardan
+// en az biri İŞARETÇİ-benzeri **ve** lambda KAÇIYOR → G005. env HEAP olduğu için skaler
+// yakalama güvenli; işaretçi kopyası gösterdiği bölgeyi aşabilir.
+// KONUM: LAMBDA düğümü — C ile birebir (ölçüldü: doğrudan `ver ||s`, transitif
+// `değişken f=||s; ver f`, çağrı argümanı `al(f)` → üçünde de hata LAMBDA'nın sat/sut'unda).
+// Self-host'ta genel escape DFA YOK → C'nin ESC_CAGIRAN tetikleyicileri ÖLÇÜLEREK taklit
+// edilir: `ver <ad>` ya da CAGRI ARGÜMANI olmak. Çağrı HEDEFİ (`f()`) kaçış DEĞİLDİR
+// (C'de de OK — ölçüldü). Tip çözülemezse (`"?"`) İŞARETÇİ varsayılır (default-deny).
+işlev g005_skaler_tip_mi(t: metin) -> mantıksal {
+    eğer metin_esit(t, "tam8") veya metin_esit(t, "tam16") { ver doğru; }
+    eğer metin_esit(t, "tam32") veya metin_esit(t, "tam64") { ver doğru; }
+    eğer metin_esit(t, "dtam8") veya metin_esit(t, "dtam16") { ver doğru; }
+    eğer metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver doğru; }
+    eğer metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64") { ver doğru; }
+    eğer metin_esit(t, "mantıksal") veya metin_esit(t, "karakter") { ver doğru; }
+    eğer metin_esit(t, "boş") { ver doğru; }
+    ver yanlış;   // metin/Dizi/&T/ham-pointer/yapı/"?" → İŞARETÇİ (default-deny)
+}
+// Ad, lambda'nın KENDİ parametresi mi? (yakalama değil)
+işlev g005_lam_param_mi(p: &değişken Ayr, lam: tam32, ad: metin) -> mantıksal {
+    değişken cb: tam32 = dizi_al(p.a_cb, lam);
+    değişken cs: tam32 = dizi_al(p.a_cs, lam);
+    değişken i: tam32 = 0;
+    iken i < cs - 1 {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer metin_esit(dizi_al(p.a_deg, c), ad) { ver doğru; }
+        }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Ad lambda GÖVDESİNDE bildirilmiş mi? (yakalama değil — checker'ın yerel tablosu
+// gövde-içi bildirimleri de içerir, ayıklanmazsa SAHTE yakalama üretir.)
+işlev g005_govde_bildirimi_mi(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "DEGISKEN") {
+        eğer metin_esit(dizi_al(p.a_deg, node), ad) { ver doğru; }
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer g005_govde_bildirimi_mi(p, dizi_al(p.cocuk, cb + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Ad, aktif işlev diliminde YEREL/PARAM mı? (global/işlev adı → yakalama değil)
+işlev g005_yerel_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(p.yerel);
+    değişken i: tam32 = p.yerel_basla;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Lambda İŞARETÇİ-benzeri bir çevre bağını yakalıyor mu? İç LAMBDA'ya GİRMEZ
+// (C lambda_serbest_tara / self lam_cap_tara ile aynı sınır).
+işlev g005_ptr_yakalar_mi(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ad: metin = dizi_al(p.a_deg, node);
+        eğer g005_lam_param_mi(p, lam, ad) { ver yanlış; }
+        eğer g005_govde_bildirimi_mi(p, govde, ad) { ver yanlış; }
+        eğer g005_yerel_mi(p, ad) == yanlış { ver yanlış; }
+        ver g005_skaler_tip_mi(var_tip(p, ad)) == yanlış;
+    }
+    eğer metin_esit(t, "LAMBDA") { ver yanlış; }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer g005_ptr_yakalar_mi(p, dizi_al(p.cocuk, cb + i), lam, govde) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev g005_lam_ptr_mi(p: &değişken Ayr, lam: tam32) -> mantıksal {
+    değişken cb: tam32 = dizi_al(p.a_cb, lam);
+    değişken cs: tam32 = dizi_al(p.a_cs, lam);
+    eğer cs < 1 { ver yanlış; }
+    değişken gv: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+    ver g005_ptr_yakalar_mi(p, gv, lam, gv);
+}
+// `ad` bağı bu alt-ağaçta KAÇIYOR mu? (C ESC_CAGIRAN tetikleyicileri — ölçüldü)
+işlev g005_ad_kaciyor_mu(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    eğer metin_esit(t, "VER") {
+        eğer cs > 0 {
+            değişken v: tam32 = dizi_al(p.cocuk, cb);
+            eğer metin_esit(dizi_al(p.a_ad, v), "TANIMLAYICI") {
+                eğer metin_esit(dizi_al(p.a_deg, v), ad) { ver doğru; }
+            }
+        }
+    }
+    eğer metin_esit(t, "CAGRI") {
+        değişken k: tam32 = 1;   // çocuk 0 = HEDEF; çağırmak kaçış DEĞİL
+        iken k < cs {
+            değişken arg: tam32 = dizi_al(p.cocuk, cb + k);
+            eğer metin_esit(dizi_al(p.a_ad, arg), "TANIMLAYICI") {
+                eğer metin_esit(dizi_al(p.a_deg, arg), ad) { ver doğru; }
+            }
+            k = k + 1;
+        }
+    }
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer g005_ad_kaciyor_mu(p, dizi_al(p.cocuk, cb + i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev g005_yaz(p: &değişken Ayr, lam: tam32) -> tam32 {
+    dizi_ekle(p.th_kod, "G005");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, lam));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, lam));
+    ver 0;
+}
+// DEGISKEN değeri LAMBDA ise: işaretçi yakalıyor + bağ aktif işlevde kaçıyorsa G005.
+// Karar LAMBDA yerinde verilir (ileri-tarama) → C'nin raporlama SIRASI da korunur.
+işlev g005_degisken_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    eğer cs < 1 { ver 0; }
+    değişken v: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + cs - 1);
+    eğer metin_esit(dizi_al(p.a_ad, v), "LAMBDA") == yanlış { ver 0; }
+    eğer g005_lam_ptr_mi(p, v) == yanlış { ver 0; }
+    eğer p.aktif_fn < 0 { ver 0; }
+    eğer g005_ad_kaciyor_mu(p, p.aktif_fn, dizi_al(p.a_deg, idx)) { g005_yaz(p, v); }
+    ver 0;
+}
+// `ver <lambda>` / `f(<lambda>)`: bağ yok, lambda DOĞRUDAN kaçıyor.
+işlev g005_dogrudan_kontrol(p: &değişken Ayr, node: tam32) -> tam32 {
+    eğer node < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "LAMBDA") == yanlış { ver 0; }
+    eğer g005_lam_ptr_mi(p, node) { g005_yaz(p, node); }
+    ver 0;
+}
 işlev lin_fn_tipi_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     eğer dizi_al(p.a_cs, idx) < 2 { ver yanlış; }
     değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
@@ -6390,6 +6535,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                             dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
                         }
                     }
+                    g005_dogrudan_kontrol(p, arg);   // D-324
                     eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
                     a = a + 1;
                 }
@@ -6397,7 +6543,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
         }
         değişken k: tam32 = 1;
-        iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
+        // D-324: kapanis CAGRI ARGUMANI olarak kacabilir (hedef degil - k 1den baslar).
+        iken k < hc { g005_dogrudan_kontrol(p, dizi_al(p.cocuk, hb + k)); kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
         ver 0;
     }
     // ATAMA: T022 (lvalue) önce → hedef T002 → değer T002 → T001 (tip uyumsuz).
@@ -6505,6 +6652,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "DEGISKEN") {
         değişken vc2: tam32 = son_cocuk(p, idx);
         eğer vc2 >= 0 { lin_tuket_dugum(p, vc2); }   // move: değer lineer bağlamaysa tüket
+        g005_degisken_kontrol(p, idx);   // D-324
         eğer deg_lineer_mi(p, idx) {
             lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
             eğer lin_fn_tipi_mi(p, idx) {
@@ -6514,6 +6662,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "VER") {
         t020_kontrol(p, idx);
+        eğer dizi_al(p.a_cs, idx) > 0 { g005_dogrudan_kontrol(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }   // D-324
         eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
     }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
@@ -6523,6 +6672,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
+    p.aktif_fn = fn;                     // D-324: G005 kaçış taramasının kökü
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
     lin_param_topla(p, fn);              // lineer parametreler dilime
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
@@ -6813,7 +6963,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,

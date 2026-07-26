@@ -1,0 +1,15 @@
+// D-323/D-324 KORUMA: SKALER yakalayan kapanış KAÇSA BİLE temiz (env HEAP → değer
+// kopyası dangling üretemez), ve İŞARETÇİ yakalasa bile ÇAĞIRMAK kaçış değildir.
+// Bu dosya daraltmanın her iki tarafını da kilitler. BEKLENEN: hatasız.
+işlev iki_kez(g: işlev(tam32) -> tam32, x: tam32) -> tam32 { ver g(g(x)); }
+işlev skaler_kacar() -> tam32 {
+    değişken k: tam32 = 10;
+    değişken f: işlev(tam32) -> tam32 = |v: tam32| v + k;   // skaler yakalama + kaçış
+    ver iki_kez(f, 11);
+}
+işlev isaretci_kacmaz() -> tam32 {
+    değişken s: metin = "merhaba";
+    değişken f: işlev() -> tam32 = || metin_uzunluk(s);      // işaretçi ama SADECE çağrılır
+    ver f();
+}
+işlev main() -> tam32 { ver skaler_kacar() + isaretci_kacmaz(); }
