@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-322 — D-319'un EKSİK codegen portu gerçekten yapıldı (kırık kapı açıldı) (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (3 nokta: `ll_tip` TIP_TEKKEZ/TIP_SABITSURE dalı,
+CAGRI'da `tekkez_olustur` intrinsic'i, `ifade_uret`'te KULLAN_IFADE/IMHA_IFADE kolları);
+`test/cg_korpus/cg_lineer_imza.kem` (+1, 101→102).]**
+
+**Bulgu (D-321'de ölçülüp raporlandı):** D-319 commit'i (`6c2e1aa`) **yalnızca
+`DECISIONS_LOG.md` girdisini ve korpus dosyasını** içeriyordu — tarif ettiği üç
+`selfhost/codegen.kem` değişikliği **ağaçta yoktu.** Sonuç: `calistir_codegen_diff`
+ve `calistir_self_driver` **origin/main'de KIRMIZI** (100/101), ve hata tam olarak
+D-319'un "düzeltildi" dediği hataydı:
+```
+call i32 @tekkez_olustur(ptr %5, i32 999)   ; TANIMSIZ sembol → link hatası
+store ptr 0, ptr %4                          ; kullan(m) → SESSİZ "0"
+```
+Bu commit o üç değişikliği **gerçekten** yapar. **DERS:** bir D-girdisinin "yapıldı"
+demesi kanıt değildir; `git show --stat` ile commit'in İÇERİĞİNİ doğrula.
+
+**Semantik (C `src/llvm.c` aynası — hepsi ZERO-OVERHEAD):**
+- `ll_tip(TIP_TEKKEZ)` → **iç tipin ta kendisi**. Olmadan `i32` fallback'i →
+  `tekkez<metin>` gibi işaretçi T'lerde **sessiz 32-bit kırpma**. `TIP_SABITSURE`
+  aynı sınıf (C llvm.c:1077 ile birebir) → aynı dalda kapatıldı.
+- `tekkez_olustur(e)` → argüman **PASS-THROUGH** (sıfır talimat). Arite guard
+  (`cs == 2`); guard tutmazsa genel çağrı yoluna düşer → **TANIMSIZ sembol = LOUD
+  link hatası**, sessiz yanlış kod değil.
+- `kullan(t)` → **PASS-THROUGH**; `imha(t)` → operand YAN ETKİLERİ için değerlendirilir,
+  değer düşürülür (`add i32 0, 0`). İkisi de yoksa `ifade_uret` fallback'i **sessiz "0"**
+  dönüyordu → `store ptr 0` (geçersiz IR).
+
+**Doğrulama — üçü de AYRI AYRI kanıtlandı (sabotaj matrisi):** her mekanizma tek
+tek iptal edildi; her seferinde **iki korpus dosyası da 42 → 1** düştü. Yani üç kol
+da yük taşıyor, hiçbiri süs değil. Sabotaj sonrası dosya `diff -q` ile temiz doğrulandı.
+
+**Yeni korpus `cg_lineer_imza.kem`:** D-319'un dosyası yalnız YEREL değişkenleri
+kapsıyordu; bu dosya **imza pozisyonunu** (`-> tekkez<metin>` dönüş, `t: tekkez<metin>`
+param) ölçer — ayrı kod yolu (`define`/param emisyonu). C↔self exit 42/42; C imza
+`define ptr @sar(...)`, self aynı.
+
+**Kapılar:** `calistir_codegen_diff` **102/102** (main'de 100/101 KIRMIZIYDI),
+`calistir_self_driver` **TÜM MODLAR GEÇTİ** (main'de BAŞARISIZ'dı) — LLVM 102/102 hem
+`kemgu_self` hem `kemgu_self2` ile, TOKEN 22/22, PARSE 12/12, CHECK 56/56;
+`calistir_checker_diff` 56/56; **FIXPOINT** (42233 satır).
+
+**Korpustan bilinçle DIŞLANAN iki şekil (ÖNCEDEN VAR OLAN checker kusurları, codegen
+değil):** `f(kullan(t))` doğrudan çağrı argümanı → sahte L002 (**D-320**'de düzeltildi);
+`tekkez_olustur(lineer_bağlama)` (ör. `tekkez<tekkez<T>>` kurma) → self-host'ta sahte
+**L001** — D-321'in bilerek dar tuttuğu built-in yolu. İkincisi **hâlâ açık**: C'de
+`tekkez_olustur` argümanını tüketen açık bir handler var (`tip_kontrol.c`), self-host'ta
+yok. Ada-özel, kanıtlanabilir bir kural → ayrı iş.
+
+---
+
 ## D-321 — Self-host L001 asimetrisi: DOLAYLI çağrıda lineer argüman taşınır (2026-07-26)
 
 **Karar [ETKİ: `selfhost/checker.kem` + `selfhost/codegen.kem` (gömülü kopya) —

@@ -2325,6 +2325,13 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // T yalnız tip-kontrolde yaşar. Bu dal olmadan ikisi de aşağıdaki "i32"
     // fallback'ine düşüyordu → 64-bit handle 32 bite kırpılırdı (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") { ver "ptr"; }
+    // D-322 (Linear V1 parite): tekkez<T> ZERO-OVERHEAD → IR'da İÇ TİPİN TA KENDİSİ.
+    // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → `tekkez<metin>` gibi
+    // İŞARETÇİ T'lerde SESSİZ 32-bit kırpma (ptr'ı i32'ye sığdırmak). C llvm.c
+    // ast_tip_to_ir aynası. sabitsüre<T> de aynı sınıf (Sabitsüre Spec V1).
+    eğer metin_esit(ta, "TIP_TEKKEZ") veya metin_esit(ta, "TIP_SABITSURE") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
         değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
         ver metin_birlestir(metin_birlestir("{i8, ", tt), "}");
@@ -3091,6 +3098,13 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
             ver reg_str(ld);
         }
+        // D-322: tekkez_olustur(e) -> tekkez<T>. IR'da sıfır-maliyet sarmalayıcı
+        // (tekkez<T> = T, ll_tip iç tipi açar) → argüman PASS-THROUGH, sıfır talimat.
+        // Bu dal olmadan genel çağrı yoluna düşüp TANIMSIZ @tekkez_olustur üretiyordu
+        // → lineer program HİÇ link edilemiyordu. C llvm.c aynası.
+        eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
+            ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
             // temsili aynı ptr → identity, sıfır talimat (C ile birebir).
@@ -3576,6 +3590,22 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             }
         }
         p.son_tip = "i32"; ver "0";   // diğer YOL → sonraki iş
+    }
+    // D-322 (Linear V1 parite) — IR'da zero-overhead (tekkez<T> = T).
+    // Bu iki kol olmadan aşağıdaki fallback'e düşüp SESSİZ "0" dönerlerdi:
+    // `değişken s: metin = kullan(m);` → `store ptr 0` (geçersiz IR / yanlış değer).
+    // Lineer muhasebe TAMAMEN tip kontrolde; burada yalnız değer akışı var.
+    eğer metin_esit(ad, "KULLAN_IFADE") {
+        ver ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    }
+    // imha(e): operand YAN ETKİLERİ için değerlendirilir, değeri düşürülür
+    // (saydam/primitif tiplerde runtime iş yok). C llvm.c aynası: `add i32 0, 0`.
+    eğer metin_esit(ad, "IMHA_IFADE") {
+        ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        değişken ir: metin = reg_str(yeni_reg(p));
+        yaz_str("  "); yaz_str(ir); yaz_str(" = add i32 0, 0"); yb(10);
+        p.son_tip = "i32"; p.son_ref = ""; p.son_elem = "";
+        ver ir;
     }
     p.son_tip = "i32";
     ver "0";   // CG6 dışı düğüm → CG7+
