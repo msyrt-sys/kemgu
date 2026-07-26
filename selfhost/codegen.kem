@@ -6116,6 +6116,18 @@ işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
     ver 0 - 1;
 }
 // Bir düğüm lineer bağlamaysa tüket; zaten tüketilmişse L002 (düğüm konumu).
+// D-325: Düğüm, TEKKEZ bir bağlamaya mı çözülüyor? (lineer YAPI HARİÇ.)
+// C `tekkez_olustur` producer intrinsic'i argümanı YALNIZ `ic->kategori ==
+// TIP_TEKKEZ` iken tüketir — lineer yapı argümanını TÜKETMEZ (o yüzden C'de
+// `tekkez_olustur(k)` sonrası k sızar → L001). Parite için aynı ayrımı yap:
+// lineer bağlama VE tipi lineer yapı DEĞİL → tekkez bağlaması.
+işlev tekkez_baglamasi_mi(p: &değişken Ayr, node: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver yanlış; }
+    değişken ad: metin = dizi_al(p.a_deg, node);
+    eğer lin_idx(p, ad) < 0 { ver yanlış; }               // lineer bağlama değil
+    eğer lineer_yapi_mi(p, var_tip(p, ad)) { ver yanlış; }  // lineer YAPI → C tüketmez
+    ver doğru;
+}
 işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
     eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver 0; }
     değişken idx: tam32 = lin_idx(p, dizi_al(p.a_deg, node));
@@ -6416,6 +6428,20 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 }
                 ver 0;
             }
+        }
+        // D-325: `tekkez_olustur(e)` producer intrinsic'i — e bir TEKKEZ bağlamasıysa
+        // TÜKETİR (dış sarmalayıcıya TAŞIMA: `tekkez<tekkez<T>>`). Bu kol olmadan
+        // aşağıdaki yedek döngüye düşüyordu (built-in → arite bilinmez → tüketim yok)
+        // ve `değişken dış = tekkez_olustur(iç);` iç için sahte L001 üretiyordu —
+        // C KABUL ederken. D-323'ün bilerek dar bıraktığı built-in yolundaki tek
+        // ADA-ÖZEL, kanıtlanabilir istisna: bu intrinsic'in tüketim semantiği C'de
+        // AÇIKÇA yazılıdır (tip_kontrol.c producer intrinsic'i), tahmin değil.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI")
+          ve metin_esit(dizi_al(p.a_deg, hedef), "tekkez_olustur") ve (hc == 2) {
+            değişken targ: tam32 = dizi_al(p.cocuk, hb + 1);
+            kontrol_dugum(p, targ);
+            eğer tekkez_baglamasi_mi(p, targ) { lin_tuket_dugum(p, targ); }
+            ver 0;
         }
         // D-323: DOLAYLI çağrı (işlev-tipli değişken üzerinden) — lineer argüman
         // TAŞINIR. Bilinen-arite yolu `fn_plin_bul` ile tüketir; bu yol tüketmezse
