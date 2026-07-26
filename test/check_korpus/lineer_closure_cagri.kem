@@ -1,0 +1,9 @@
+// D-321 (LC-3): lineer closure ÇAĞRISI tüketimdir — C ↔ self --checkdump sıfır-diff.
+// `tekkez<işlev(...)>` bağlaması çağrıldığında çağrının KENDİSİ onu tüketir.
+// Bu kural olmadan self-host hedefi hiç tüketmiyordu → sahte L001 (C kabul, self red).
+// NOT: bu program self-host CODEGEN'de derlenmez (genel closure yalnız C'de) —
+// bu yüzden cg_korpus'ta değil, checker korpusunda. Hatasız geçmeli.
+işlev main() -> tam32 {
+    değişken f: tekkez<işlev() -> tam32> = tekkez_olustur(|| 42);
+    ver f();
+}

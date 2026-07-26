@@ -1,0 +1,8 @@
+// D-321 negatif kapı: lineer closure İKİ kez çağrılırsa L002 (çift tüketim).
+// Kabul tarafını (lineer_closure_cagri.kem) açan kural, red tarafını GEVŞETMEMELİ —
+// bu dosya "her çağrıyı tüket" kuralının sayaç olarak işlediğini ölçer.
+// C ↔ self --checkdump sıfır-diff. BEKLENEN: L002.
+işlev main() -> tam32 {
+    değişken f: tekkez<işlev() -> tam32> = tekkez_olustur(|| 21);
+    ver f() + f();
+}

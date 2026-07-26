@@ -50,6 +50,50 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-321 — Lineer closure ÇAĞRISI self-host'ta tüketim (LC-3 parite) + D-319 kod kaybı onarımı (2026-07-26)
+
+**Karar [ETKİ: `selfhost/codegen.kem` + `selfhost/checker.kem` (ikisine de: `lin_fnk`
+kaydı + `lin_fn_tipi_mi` + CAGRI kancası), `test/check_korpus/lineer_closure_cagri.kem`,
+`test/check_korpus/lineer_closure_hata.kem` (+2).]**
+
+**1) Kapatılan asimetri (ölçüldü).** `değişken f: tekkez<işlev()->tam32> = ...; ver f();`
+→ **C: OK / self: L001**. Self-host'ta lineer tüketim yalnız *bilinen-arite* çağrı
+yolunda (`fn_psay_bul >= 0`, kullanıcı işlevi) işliyordu; çağrı hedefinin KENDİSİ hiç
+tüketilmiyordu. C (`tip_kontrol.c`) LC-3 gereği hedef tipi `TIP_TEKKEZ` + iç `TIP_ISLEV`
+ise hedef sembolünü tüketir. Artık self de tüketiyor: bağlama başına SABİT `lin_fnk`
+bayrağı (annotasyon `tekkez<işlev(...)>` mü) — sabit olduğu için anlık-görüntü
+(snapshot) makinesine dahil DEĞİL.
+
+**Sabotaj doğrulaması:** kancayı etkisizleştirince `checker_diff` 54/54 → **52/54**
+(hem kabul hem red korpusu düşer) → kapı kod-duyarlı. Negatif korumalar: iki kez çağrı
+→ L002 (ikisinde de), hiç çağrılmaz → L001 (ikisinde de), lineer-olmayan closure
+etkilenmez.
+
+**2) ⚠ SÜREÇ HATASI — D-319'un KODU commit'lenmemişti.** `6c2e1aa` yalnız
+DECISIONS_LOG + korpus içeriyordu; `selfhost/codegen.kem` **staged edilmemişti**.
+Bu iş sırasında bir UTF-8 bozulmasını `git checkout --` ile geri alırken çalışma
+ağacındaki D-319 düzenlemeleri de silindi ve kayıp ancak `codegen_diff`'in
+**100/101**'e düşmesiyle ortaya çıktı (`cg_lineer_intrinsic.kem` link edilemedi).
+D-319'un üç kancası (ll_tip TIP_TEKKEZ / `tekkez_olustur` / `kullan`+`imha`) bu
+commit'te **yeniden uygulandı**; SELF exit 42, `codegen_diff` 101/101 geri geldi.
+
+**DERSLER:** (a) commit sonrası `git show --stat` ile **hangi dosyaların girdiğini**
+doğrula — "kapılar yeşildi" commit içeriğini kanıtlamaz, kapılar çalışma ağacını ölçer.
+(b) `git checkout -- <dosya>` commit'lenmemiş işi **geri dönüşsüz** siler; bozuk düzenlemeyi
+geri almadan önce commit durumunu kontrol et. (c) Toplu-düzenleme için `perl -i` UTF-8
+katmanı olmadan Türkçe kaynakta **çift kodlama** üretti (`ğ` bozuldu) — .kem/.c dosyalarında
+Edit aracını kullan.
+
+**Kapılar:** checker_diff **54/54** (+2), codegen_diff **101/101**, bootstrap FIXPOINT,
+test_linear 89/89, tip_kontrol 189/189.
+
+**KALAN (bu işin kapsamı dışı, ölçüldü):** lineer closure ÇAĞRISI self-host **codegen**'de
+hâlâ derlenmiyor (`use of undefined value '@f'`) — self-host genel closure desteklemez;
+D-321 ÖNCESİNDE de aynı hata. Bu yüzden yeni korpus dosyaları `cg_korpus`'ta değil
+`check_korpus`'ta.
+
+---
+
 ## D-319 — Lineer intrinsic CODEGEN self-host'a eklendi (C parite) (2026-07-26)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (3 nokta: `ll_tip` TIP_TEKKEZ, `kullan`/`imha`

@@ -150,6 +150,7 @@ yapı Ayr {
     dyf_node: Dizi<tam32>;   // D-318: alan girdisi: sahip desen düğümü
     dyf_alan: Dizi<metin>;   // D-318: paralel — alan adı
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
+    lin_fnk: Dizi<tam32>;    // D-321: bağlama tekkez<işlev(...)> mü (LC-3 çağrı tüketimi)
     snap_tuk: Dizi<tam32>;   // D-317: L-COND dal izolasyonu — tüketim anlık görüntüsü
     snap_maske: Dizi<tam32>; // D-317: paralel — maske anlık görüntüsü
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
@@ -2325,6 +2326,12 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // T yalnız tip-kontrolde yaşar. Bu dal olmadan ikisi de aşağıdaki "i32"
     // fallback'ine düşüyordu → 64-bit handle 32 bite kırpılırdı (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") { ver "ptr"; }
+    // D-319: tekkez<T> SIFIR-MALİYET sarmalayıcı — IR'da T'nin ta kendisi.
+    // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
+    // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
+    eğer metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
         değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
         ver metin_birlestir(metin_birlestir("{i8, ", tt), "}");
@@ -3091,6 +3098,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
             ver reg_str(ld);
         }
+        eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
+            // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer
+            // muhasebe tamamen tip kontrolde; bu dal olmadan genel çağrı yoluna
+            // düşüp TANIMSIZ @tekkez_olustur üretiyordu (link hatası).
+            ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
             // temsili aynı ptr → identity, sıfır talimat (C ile birebir).
@@ -3510,6 +3523,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         yaz_str(", i32 "); yaz_str(i2); yaz_str(")"); yb(10);
         p.son_tip = dizi_al_rettip(elem); p.son_elem = ""; p.son_ref = "";
         ver rs;
+    }
+    // D-319: kullan(t) — PASS-THROUGH (lineer muhasebe tamamen tip kontrolde).
+    eğer metin_esit(ad, "KULLAN_IFADE") {
+        ver ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    }
+    // D-319: imha(t) — operand YAN ETKİLERİ için değerlendirilir, değeri düşürülür.
+    eğer metin_esit(ad, "IMHA_IFADE") {
+        ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        değişken ir: tam32 = yeni_reg(p);
+        değişken irs: metin = reg_str(ir);
+        yaz_str("  "); yaz_str(irs); yaz_str(" = add i32 0, 0"); yb(10);
+        p.son_tip = "i32"; p.son_elem = ""; p.son_ref = "";
+        ver irs;
     }
     eğer metin_esit(ad, "TIP_DONUSTUR") {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -5864,10 +5890,21 @@ işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// D-321 (LC-3): bağlama annotasyonu `tekkez<işlev(...)>` mü? Böyle bir bağlama
+// ÇAĞRILDIĞINDA çağrının kendisi tüketimdir (C tip_kontrol.c: hedef tipi TIP_TEKKEZ
+// + iç TIP_ISLEV ise hedef sembolü tüketilir). Bağlama başına SABİT bilgi olduğu için
+// anlık-görüntü (snapshot) makinesine dahil DEĞİL.
+işlev lin_fn_tipi_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver yanlış; }
+    değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_TEKKEZ") == yanlış { ver yanlış; }
+    eğer dizi_al(p.a_cs, c0) < 1 { ver yanlış; }
+    ver metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, dizi_al(p.a_cb, c0))), "TIP_ISLEV");
+}
 işlev lin_ekle(p: &değişken Ayr, ad: metin, sat: tam32, sut: tam32) -> tam32 {
     dizi_ekle(p.lin_ad, ad); dizi_ekle(p.lin_sat, sat);
     dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0);
-    dizi_ekle(p.lin_maske, 0); ver 0;   // D-316
+    dizi_ekle(p.lin_maske, 0); dizi_ekle(p.lin_fnk, 0); ver 0;   // D-316/D-321
 }
 // Aktif dilimde (en yeni) lineer bağlamanın indeksi; yoksa -1.
 işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
@@ -6143,6 +6180,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer ad_tanimli_mi(p, fad) == yanlış {
                 ver 0;   // C: tanımsız hedef → TIP_HATA → erken dönüş (arg atlanır)
             }
+            // D-321 (LC-3): hedef, lineer bir `tekkez<işlev(...)>` bağlaması ise
+            // ÇAĞRI onu TÜKETİR. Bu dal olmadan bilinen-arite yoluna girmeyen çağrı
+            // hedefi hiç tüketilmiyordu → sahte L001 (C kabul ediyor, self reddediyordu).
+            eğer fn_psay_bul(p, fad) < 0 {
+                değişken lfi: tam32 = lin_idx(p, fad);
+                eğer lfi >= 0 {
+                    eğer dizi_al(p.lin_fnk, lfi) == 1 { lin_tuket_dugum(p, hedef); }
+                }
+            }
             değişken ps: tam32 = fn_psay_bul(p, fad);
             eğer ps >= 0 {                        // kullanıcı işlevi → arite bilinir
                 eğer (hc - 1) != ps {             // çocuk[0]=hedef → arg sayısı = hc-1
@@ -6282,6 +6328,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer vc2 >= 0 { lin_tuket_dugum(p, vc2); }   // move: değer lineer bağlamaysa tüket
         eğer deg_lineer_mi(p, idx) {
             lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
+            eğer lin_fn_tipi_mi(p, idx) {
+                dizi_yaz(p.lin_fnk, dizi_boyut(p.lin_fnk) - 1, 1);   // D-321
+            }
         }
     }
     eğer metin_esit(ad, "VER") {
@@ -6588,7 +6637,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş",
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
