@@ -50,6 +50,53 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-331 — KOPRU: maliyet OLCULDU, entegrasyon planlandi (yapilmadi) (2026-07-27)
+
+**Sonuc: KOPRU BU ADIMDA YAPILMADI — ama artik TAHMIN degil OLCUM var.**
+Depo TEMIZ birakildi (yarim entegrasyon merge EDILMEDI); kapi yesil.
+
+**Neden yapilamadi (yapisal, ertelenebilir degil):** kopru "CT teoremi ⟹ KEMGU
+hakkinda bir onerme" demek; hedef onerme `Sem/Core`'da DALLANMA olmadan
+YAZILAMAZ. Yani kopru, once (A)-entegrasyonunu (Core'a `eger`) gerektirir.
+
+**OLCUM 1 — `Ifade`'ye `eger` eklemek BEDAVA:** dogru bagimlilik sirasiyla
+derlendiginde **29/29 modul YINE derleniyor, 0 hata**. Sebep: `HasType`'ta `eger`
+kurali olmadigi surece hicbir IYI-TIPLI program onu icermez → progress/korunum
+teoremleri vakum olarak korunur.
+
+**⚠ OLCUM ARTEFAKTI (kendi hatam, kayda gecti):** ilk denemede "26 hata" gordum ve
+neredeyse rapor ediyordum. Gercek: modulleri RASTGELE sirayla derledigim icin her
+biri *"bagimlilik .olean yok"* diye 1 hata veriyordu — **kaskad, gercek hata degil**.
+Bu oturumda ucuncu kez ayni sinif: **ham sayi bir olcum DEGILDIR, icerigine bak.**
+
+**OLCUM 2 — asil maliyet Step kuralinda:** `sEgerSec` (kosul deger ise dal sec)
+eklenince `Sem/SmallStep` **4 gercek hata** verdi:
+1. `vk = Deger.birim` icin `DecidableEq Deger` YOK (Deger'e deriving gerek),
+2-3. SmallStep icindeki iki `induction h_step` (`step_iz_analiz`, `step_fault_*`)
+   → *"Alternative `sEgerSec` has not been provided"*,
+4. bagli bir hata.
+Downstream 20 modul ise SmallStep derlenene kadar KASKAD (gercek is degil).
+
+**Kalan is listesi (bir sonraki oturum icin, siraya girmis hali):**
+1. `Deger`'e `DecidableEq` (ya da kosul testini `Deger.birim` desen-eslemesiyle yaz).
+2. SmallStep ici 2 induction'a `sEgerSec` case'i.
+3. `HasType`'a `t_eger` + `LineerTamam`/`RegionTamam` kapsayici case'leri.
+4. Step uzerinden tumevarim yapan HER teorem: `adim_korunum` (21→22),
+   `step_fault_preserves_typed`, `progress_konf` (yeni tanik), Drf L0-L7,
+   MemSafety, ve **`SideChannel/NonInterference.silme_simulasyon` (21→22)**.
+5. **Asil kopru:** `CT.Ifade → Core.Ifade` gomme + `CT.Calis` ile `StepStar`
+   arasinda simulasyon + `CT.Gozlem` ile `Olay` gozlemi arasinda eslesme →
+   `ct_ni`'nin Core'a TASINMASI.
+**Buyukluk tahmini (olcume dayali):** 1-3 mekanik; 4 orta (her case ~5-20 satir,
+~12-15 yer); 5 bagimsiz ve en buyuk parca (yeni tumevarim).
+
+**KARAR GEREKTIREN NOKTA (Mehmet):** `sEgerSec` V1 tasariminda kosulun ONCEDEN
+degerlendirilmis olmasi gerekiyor (kosul-congruence kurali YOK — `sSeqAtla` deseni).
+Kosul-congruence eklenirse cong ailesi 3→4 olur ve FIX-F cerceve yan-kosulu oraya da
+tasinmali. Bu, dis-kontrat sinifi bir genisleme.
+
+---
+
 ## D-330 — CT cekirdek hesabi: `eger` + gizli etiket + DALLANMALI NI (2026-07-26)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (YENİ, ~330 satır),
