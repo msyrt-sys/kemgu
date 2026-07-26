@@ -82,6 +82,17 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 tipOrtamGet Γ x = some (Tip.tekkez τ) →
                 HasType Γ Δ (Ifade.imhaIf x) Tip.bos
 
+  /-- T-EGER (D-332): `eger k d y` — kosul HERHANGI bir tipte olabilir
+      (KEMGU'da `degerDogruMu` tum degerler icin tanimli), iki dal AYNI
+      tipte olmalidir; sonuc o tiptir.
+      NOT: gizlilik/CT disiplini BU katmanda DEGIL — o SideChannel/CT'nin
+      `CtOk` yargisidir; klasik tipleme onu bilmez (katman ayrimi). -/
+  | t_eger    (Γ : TipOrtam) (Δ : KanalOrtam) (k d y : Ifade) (τk τ : Tip) :
+                HasType Γ Δ k τk →
+                HasType Γ Δ d τ →
+                HasType Γ Δ y τ →
+                HasType Γ Δ (Ifade.eger k d y) τ
+
   /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
   | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
                 HasType Γ Δ e τ →

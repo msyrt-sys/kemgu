@@ -105,10 +105,37 @@ def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
     teorem GERCEGI ASAN bir sey iddia ederdi: cGorevBaslat kurali handle'i
     yeniden URETIR, dolayisiyla silme orada simulasyon OLMAZDI — bu, ispat
     denemesinde somut olarak ortaya cikti (unsolved goal) ve tanim boylece
-    DARALTILDI. Yani "ne silinir" sorusu ispat tarafindan zorlandi. -/
+    DARALTILDI. Yani "ne silinir" sorusu ispat tarafindan zorlandi.
+
+    ISTISNA 2 (D-332 — DALLANMA EKLENINCE ISPATIN ZORLADIGI IKINCI
+    DARALTMA): `degerDogruMu` biti KORUNUR. `eger` ve `dalOl` modele
+    girdiginde "tum degerler birime iner" tanimi teoremi YANLIS yapar:
+    orijinal kosum `oDal true`, silinmis kosum `oDal false` uretirdi —
+    silme artik bir SIMULASYON OLMAZDI. Bu tesadufi bir teknik ayrinti
+    DEGIL, CT'nin ta kendisidir: veri kontrol akisini etkiler ve kontrol
+    akisi GOZLENIR. Dolayisiyla o TEK BIT saldirgandan saklanamaz ve
+    "silinmis" sayilamaz. Skaler 0/1'e, isaretci-benzeri degerler
+    `skaler 1`'e (dogru), `birim` kendine (yanlis) iner.
+    Yani yine: "ne gizlidir" sorusunu ISPAT cevapladi, biz varsaymadik. -/
 def degerSil : Deger → Deger
   | .gorevVal t => .gorevVal t
-  | _           => Deger.birim
+  | .skaler n   => .skaler (if n = 0 then 0 else 1)
+  | .birim      => Deger.birim
+  | _           => .skaler 1
+
+/-- Silme, DAL KARARINI korur (D-332). `degerSil`in yukaridaki
+    daraltmasinin tam olarak satin aldigi sey; sEgerSec simulasyonunun
+    kalbi. -/
+theorem degerDogruMu_degerSil (v : Deger) :
+    degerDogruMu (degerSil v) = degerDogruMu v := by
+  cases v with
+  | skaler n =>
+      by_cases h : n = 0
+      · simp [degerSil, degerDogruMu, h]
+      · simp [degerSil, degerDogruMu, h]
+  | birim => rfl
+  | gorevVal t => rfl
+  | _ => rfl
 
 /-- Ifade silme: gomulu literaller birime iner, KONTROL ISKELETI korunur. -/
 def ifadeSil : Ifade → Ifade
@@ -522,6 +549,39 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
       exact silme_sim_sAtamaTamam S S' ts1 ts2 ctx x v b h_t h_if h_b h_owner h_S'
   | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
       exact silme_sim_sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S'
+  -- D-332: sEgerSec. `degerDogruMu_degerSil` sayesinde silinmis dunyada
+  -- AYNI dal secilir ve AYNI `dalOl` olayi uretilir. Bu adim, ISTISNA 2
+  -- daraltmasinin neden ZORUNLU oldugunun ispat-icindeki kanitidir.
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      refine Step.sEgerSec _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        (degerSil v) (ifadeSil d) (ifadeSil y) alindi ?_ ?_ ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · rw [degerDogruMu_degerSil]; exact h_dal
+      · subst h_S'
+        cases alindi with
+        | true =>
+            simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
+        | false =>
+            simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sEgerCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil k) (ifadeSil k') (ifadeSil d) (ifadeSil y)
+        ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       exact silme_sim_sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S'
   | cKanalGonderTamam S S' ts1 ts2 ctx k vId b v h_t h_if h_b h_v h_owner h_bos h_S' =>

@@ -51,6 +51,8 @@ theorem step_fault_preserves_typed
       intro _ _; subst h_S'; rfl
   | sSeqAtla S S' ts1 ts2 ctx v b h_t h_if h_S' =>
       intro _ _; subst h_S'; rfl
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      intro _ _; subst h_S'; rfl
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       intro _ _; subst h_S'; rfl
   | cGorevBaslatTamam S S' ts1 ts2 ctx tYeni yd kod h_t h_if h_fresh h_sahipler h_S' =>
@@ -185,6 +187,24 @@ theorem step_fault_preserves_typed
       have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx e).fault = none := by
         simpa [ifadeyleKonf] using h_no_fault
       simpa using ih h_konf1 h_nf1
+  -- D-332: sEgerCong — diger cong'larla birebir ayni desen (odaklama + IH).
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_typed_S h_no_fault
+      subst h_S1 h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ', Λ'', Ρ'', h_typed⟩ := h_typed_S.2.1 ctx h_ctx_in
+      rw [h_if] at h_typed
+      have h_typed_k := typed_eger_kosul h_typed
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx k) := by
+        show KonfTipliFull Γ Δ Ρ
+          { S with thread := ts1 ++ { ctx with ifade := k } :: ts2 }
+        exact konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx k h_typed_S h_t h_typed_k
+          (fun z h => by rw [h_if]; exact HedefVar.eger_kosul k d y z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.eger_kosul k d y bb h)
+      have h_nf1 : (ifadeyleKonf S ts1 ts2 ctx k).fault = none := by
+        simpa [ifadeyleKonf] using h_no_fault
+      simpa using ih h_konf1 h_nf1
 
 
 -- ============================================================
@@ -299,6 +319,32 @@ theorem adim_odak_yuku
         exact ⟨Λo, Ρoo, typed_seq_atla h_ty,
           lineerKucuk_refl _, bolgeIliski_refl _⟩
       · intro y bb h_o h_yz
+        exact ⟨h_o, fun h => h⟩
+  -- D-332: sEgerSec — secilen dal odaga girer; ortamlar DEGISMEZ
+  -- (l_eger/r_eger cikisi = kosulun cikisi, kosul burada `sabit v`).
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S'
+      have h_ne : ({ ctx with ifade := if alindi then d else y } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_i : (if alindi then d else y) = ctx.ifade :=
+          congrArg ThreadCtx.ifade h_e
+        rw [h_if] at h_i
+        cases alindi with
+        | true  => exact eger_ne_dogru (Ifade.sabit v) d y (by simpa using h_i.symm)
+        | false => exact eger_ne_yanlis (Ifade.sabit v) d y (by simpa using h_i.symm)
+      have h2' : ts1 ++ ({ ctx with ifade := if alindi then d else y } : ThreadCtx)
+          :: ts2 = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' (Or.inl rfl) h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        exact ⟨Λo, Ρoo, typed_eger_dal h_ty alindi,
+          lineerKucuk_refl _, bolgeIliski_refl _⟩
+      · intro y' bb h_o h_yz
         exact ⟨h_o, fun h => h⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
@@ -838,6 +884,64 @@ theorem adim_odak_yuku
                (h_ie.1 x bA h_gxA h_yzA) h_yzA⟩,
             h_ke, h_ie⟩
       · exact h_B
+  -- D-332: sEgerCong odak-yuku. Dallar icin ORTAM TASIMASI GEREKMEZ:
+  -- LineerNotr/RegionNotr sozdizimseldir (yeni ortamda aynen gecerli),
+  -- r_eger'in Ρ-bagli dal premise'leri iliski-transport + notr-kimlik
+  -- ile yeni Ρk''de yeniden kurulur.
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
+      subst h_S1
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ0, Λ0, Ρ0, h_ty0⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty0
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx k) :=
+        konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx k h_konf h_t
+          (typed_eger_kosul h_ty0)
+          (fun z h => by rw [h_if]; exact HedefVar.eger_kosul k d y z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.eger_kosul k d y bb h)
+      obtain ⟨h_nei, h_A, h_B⟩ :=
+        ih h_konf1 ts1 ts2 { ctx with ifade := k } ts2' ctx' rfl h_t1' h_yan
+      have h_ne : ({ ctx' with ifade := Ifade.eger k' d y } : ThreadCtx)
+          ≠ ctx := by
+        intro h_e
+        have h_if2x := congrArg ThreadCtx.ifade h_e
+        have h_if2 : Ifade.eger k' d y = ctx.ifade := h_if2x
+        have h_lin2x := congrArg ThreadCtx.lineer h_e
+        have h_lin2 : ctx'.lineer = ctx.lineer := h_lin2x
+        rw [h_if] at h_if2
+        injection h_if2 with h_kk _ _
+        apply h_nei
+        show (⟨ctx'.tid, ctx'.ifade, ctx'.lineer⟩ : ThreadCtx)
+            = ⟨ctx.tid, k, ctx.lineer⟩
+        rw [h_tid, h_if', h_kk, h_lin2]
+      have h2' : ts1 ++ ({ ctx' with ifade := Ifade.eger k' d y } : ThreadCtx)
+          :: ts2' = ts1o ++ ctxo' :: ts2o' := h2
+      obtain ⟨h_e1, h_e2, h_e3, h_e4, h_e5⟩ :=
+        cerrah_kilit ts1o ts1 (h_t.symm.trans h1) h2' h_yan h_yano h_ne
+      rw [h_e2, h_e3]
+      refine ⟨h_ne, ?_, ?_⟩
+      · intro τo Λo Ρoo h_ty
+        rw [h_if] at h_ty
+        obtain ⟨ht, hl, hr⟩ := h_ty
+        match ht, hl, hr with
+        | HasType.t_eger _ _ _ _ _ τk _ htk htd hty,
+          LineerTamam.l_eger _ _ Λk _ _ _ hlk h_nd h_ny,
+          RegionTamam.r_eger _ _ Ρk _ _ _ hrk h_rnd h_rny hrd hry =>
+          obtain ⟨Λk', Ρk', h_tyk', h_kk, h_ik⟩ := h_A τk Λk Ρk ⟨htk, hlk, hrk⟩
+          rw [h_if'] at h_tyk'
+          obtain ⟨Ρdn, h_rd', _⟩ := regionTamam_iliski_transport hrd Ρk' h_ik
+          obtain ⟨Ρyn, h_ry', _⟩ := regionTamam_iliski_transport hry Ρk' h_ik
+          rw [regionNotr_cikis_esit h_rd' h_rnd] at h_rd'
+          rw [regionNotr_cikis_esit h_ry' h_rny] at h_ry'
+          exact ⟨Λk', Ρk',
+            ⟨HasType.t_eger _ _ _ _ _ τk _ h_tyk'.hasType htd hty,
+             LineerTamam.l_eger _ _ _ k' d y h_tyk'.lineerOK h_nd h_ny,
+             RegionTamam.r_eger _ _ _ k' d y h_tyk'.regionOK h_rnd h_rny
+               h_rd' h_ry'⟩,
+            h_kk, h_ik⟩
+      · exact h_B
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_konf ts1o ts2o ctxo ts2o' ctxo' h1 h2 h_yano
       subst h_S1
@@ -972,6 +1076,47 @@ theorem adim_korunum
         rw [h_t] at h9
         exact hedefBolgeSahip_degisim h9 _ rfl
           (fun b' h => by rw [h_if]; exact HedefBolge.seq_sag _ _ b' h)
+      · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h13
+        exact tidAyrik_degisim h13 _ rfl
+  -- D-332: sEgerSec — sSeqAtla ile ayni sekil. Secilen dal odaga girer;
+  -- bolge/sahiplik/kanal DEGISMEZ (yalniz iz'e dalOl eklenir, ki
+  -- KonfTipliFull iz'i kisitlamaz).
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      intro h_konf
+      subst h_S'
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      refine ⟨Ρ, h_konf.1, ?_, h_konf.2.2.1, h_konf.2.2.2.1, rfl,
+              h_konf.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.1, h_konf.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 2: eger (sabit v) d y → secilen dal (typed_eger_dal)
+        have h_thread := h_konf.2.1
+        obtain ⟨τ0, Λ0, Ρ0, h_ty⟩ := h_thread ctx h_ctx_in
+        rw [h_if] at h_ty
+        have h_thread' := h_thread
+        rw [h_t] at h_thread'
+        exact threadTipli_degisim h_thread' _
+          ⟨τ0, Λ0, Ρ0, typed_eger_dal h_ty alindi⟩
+      · -- comp 8: dalin hedefleri eger_dogru/eger_yanlis ile kapsaniyordu
+        have h8 := h_konf.2.2.2.2.2.2.2.1
+        rw [h_t] at h8
+        refine hedefVarSahip_degisim h8 _ rfl (fun z h => ?_)
+        rw [h_if]
+        cases alindi with
+        | true  => exact HedefVar.eger_dogru _ d y z (by simpa using h)
+        | false => exact HedefVar.eger_yanlis _ d y z (by simpa using h)
+      · -- comp 9
+        have h9 := h_konf.2.2.2.2.2.2.2.2.1
+        rw [h_t] at h9
+        refine hedefBolgeSahip_degisim h9 _ rfl (fun bb h => ?_)
+        rw [h_if]
+        cases alindi with
+        | true  => exact HedefBolge.eger_dogru _ d y bb (by simpa using h)
+        | false => exact HedefBolge.eger_yanlis _ d y bb (by simpa using h)
       · have h13 := h_konf.2.2.2.2.2.2.2.2.2.2.2.2.1
         rw [h_t] at h13
         exact tidAyrik_degisim h13 _ rfl
@@ -2529,6 +2674,142 @@ theorem adim_korunum
                 ({ ctx' with ifade := Ifade.seq a' b } : ThreadCtx).tid)
               rw [h_tid2]
               exact h_own1
+          · exact h_konf1'.2.2.2.2.2.2.2.2.1 c
+              (by rw [h_t1']
+                  exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+              bb hb h_kayit h_yz
+      · -- comp 13
+        have h13 := h_konf1'.2.2.2.2.2.2.2.2.2.2.2.2.1
+        rw [h_t1'] at h13
+        exact tidAyrik_degisim h13 _ rfl
+  -- D-332: sEgerCong — sSeqCong ile ayni iskelet. Dallar icin ortam
+  -- tasimasi gerekmez (LineerNotr/RegionNotr sozdizimsel); r_eger'in
+  -- Ρ-bagli dal premise'leri iliski-transport + notr-kimlik ile yeniden
+  -- kurulur. HedefVar/HedefBolge yukumlulukleri: kosul kolu ctx''den,
+  -- dal kollari h_B (odak-yuku onceki-ortam kanadi) uzerinden.
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_konf
+      subst h_S1
+      have h_ctx_in : ctx ∈ S.thread := by
+        rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+      obtain ⟨τ0, Λ0, Ρ0, h_ty0⟩ := h_konf.2.1 ctx h_ctx_in
+      rw [h_if] at h_ty0
+      have h_konf1 : KonfTipliFull Γ Δ Ρ (ifadeyleKonf S ts1 ts2 ctx k) :=
+        konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx k h_konf h_t
+          (typed_eger_kosul h_ty0)
+          (fun z h => by rw [h_if]; exact HedefVar.eger_kosul k d y z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.eger_kosul k d y bb h)
+      obtain ⟨Ρ1', h_konf1'⟩ := ih h_konf1
+      obtain ⟨h_nei, h_A, h_B⟩ :=
+        adim_odak_yuku Γ Δ Ρ _ S1' h_inner h_konf1
+          ts1 ts2 { ctx with ifade := k } ts2' ctx' rfl h_t1' h_yan
+      subst h_S'
+      have h_beq : S.bolge = Ρ := h_konf.2.2.2.2.2.1
+      have h_beq1 : S1'.bolge = Ρ1' := h_konf1'.2.2.2.2.2.1
+      refine ⟨Ρ1', h_konf1'.1, ?_, h_konf1'.2.2.1, h_konf1'.2.2.2.1,
+              h_konf1'.2.2.2.2.1, h_beq1, h_konf1'.2.2.2.2.2.2.1, ?_, ?_,
+              h_konf1'.2.2.2.2.2.2.2.2.2.1,
+              h_konf1'.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf1'.2.2.2.2.2.2.2.2.2.2.2.1, ?_,
+              h_konf1'.2.2.2.2.2.2.2.2.2.2.2.2.2.1,
+              h_konf1'.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+      · -- comp 2
+        intro c h_mem
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · exact h_konf1'.2.1 c
+            (by rw [h_t1']; exact List.mem_append.mpr (Or.inl h1))
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he
+            obtain ⟨ht0, hl0, hr0⟩ := h_ty0
+            match ht0, hl0, hr0 with
+            | HasType.t_eger _ _ _ _ _ τk _ htk htd hty,
+              LineerTamam.l_eger _ _ Λk _ _ _ hlk h_nd h_ny,
+              RegionTamam.r_eger _ _ Ρk _ _ _ hrk h_rnd h_rny hrd hry =>
+              rw [← h_beq] at hrk
+              obtain ⟨Λk', Ρk', h_tyk', h_kk, h_ik⟩ :=
+                h_A τk Λk Ρk ⟨htk, hlk, hrk⟩
+              rw [h_if'] at h_tyk'
+              obtain ⟨Ρdn, h_rd', _⟩ := regionTamam_iliski_transport hrd Ρk' h_ik
+              obtain ⟨Ρyn, h_ry', _⟩ := regionTamam_iliski_transport hry Ρk' h_ik
+              rw [regionNotr_cikis_esit h_rd' h_rnd] at h_rd'
+              rw [regionNotr_cikis_esit h_ry' h_rny] at h_ry'
+              rw [h_beq1] at h_tyk'
+              exact ⟨τ0, Λk', Ρk',
+                ⟨HasType.t_eger _ _ _ _ _ τk _ h_tyk'.hasType htd hty,
+                 LineerTamam.l_eger _ _ _ k' d y h_tyk'.lineerOK h_nd h_ny,
+                 RegionTamam.r_eger _ _ _ k' d y h_tyk'.regionOK h_rnd h_rny
+                   h_rd' h_ry'⟩⟩
+          · exact h_konf1'.2.1 c
+              (by rw [h_t1']; exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+      · -- comp 8
+        intro c h_mem z hz bb h_bb h_yz
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · exact h_konf1'.2.2.2.2.2.2.2.1 c
+            (by rw [h_t1']; exact List.mem_append.mpr (Or.inl h1)) z hz bb h_bb h_yz
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he
+            have hz2 : HedefVar (Ifade.eger k' d y) z := hz
+            have h_bb2 : bolgeOrtamGet S1'.bolge z = some bb := h_bb
+            have h_ctx'_in : ctx' ∈ S1'.thread := by
+              rw [h_t1']
+              exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+            have h_dal : ∀ (hz3 : HedefVar (Ifade.eger k d y) z),
+                sahiplikGet S1'.sahiplik bb = some (Sahip.thread
+                  ({ ctx' with ifade := Ifade.eger k' d y } : ThreadCtx).tid) := by
+              intro hz3
+              obtain ⟨h_pre, h_pres⟩ := h_B z bb h_bb2 h_yz
+              have h_pre2 : bolgeOrtamGet S.bolge z = some bb := h_pre
+              have h_own0 := h_konf.2.2.2.2.2.2.2.1 ctx h_ctx_in z
+                (by rw [h_if]; exact hz3) bb h_pre2 h_yz
+              have h_tid2 : ({ ctx' with ifade := Ifade.eger k' d y }
+                  : ThreadCtx).tid = ctx.tid := h_tid
+              rw [h_tid2]
+              exact h_pres h_own0
+            cases hz2 with
+            | eger_kosul _ _ _ _ h_k' =>
+                exact h_konf1'.2.2.2.2.2.2.2.1 ctx' h_ctx'_in z
+                  (by rw [h_if']; exact h_k') bb h_bb2 h_yz
+            | eger_dogru _ _ _ _ h_d' =>
+                exact h_dal (HedefVar.eger_dogru k d y z h_d')
+            | eger_yanlis _ _ _ _ h_y' =>
+                exact h_dal (HedefVar.eger_yanlis k d y z h_y')
+          · exact h_konf1'.2.2.2.2.2.2.2.1 c
+              (by rw [h_t1']
+                  exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))
+              z hz bb h_bb h_yz
+      · -- comp 9
+        intro c h_mem bb hb h_kayit h_yz
+        rcases List.mem_append.mp h_mem with h1 | h2
+        · exact h_konf1'.2.2.2.2.2.2.2.2.1 c
+            (by rw [h_t1']; exact List.mem_append.mpr (Or.inl h1)) bb hb h_kayit h_yz
+        · rcases List.mem_cons.mp h2 with he | h3
+          · subst he
+            have hb2 : HedefBolge (Ifade.eger k' d y) bb := hb
+            have h_ctx'_in : ctx' ∈ S1'.thread := by
+              rw [h_t1']
+              exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+            have h_dal : ∀ (hb3 : HedefBolge (Ifade.eger k d y) bb),
+                sahiplikGet S1'.sahiplik bb = some (Sahip.thread
+                  ({ ctx' with ifade := Ifade.eger k' d y } : ThreadCtx).tid) := by
+              intro hb3
+              obtain ⟨x0, h_x0⟩ := h_kayit
+              have h_x02 : bolgeOrtamGet S1'.bolge x0 = some bb := h_x0
+              obtain ⟨h_prex, h_pres⟩ := h_B x0 bb h_x02 h_yz
+              have h_prex2 : bolgeOrtamGet S.bolge x0 = some bb := h_prex
+              have h_own0 := h_konf.2.2.2.2.2.2.2.2.1 ctx h_ctx_in bb
+                (by rw [h_if]; exact hb3) ⟨x0, h_prex2⟩ h_yz
+              have h_tid2 : ({ ctx' with ifade := Ifade.eger k' d y }
+                  : ThreadCtx).tid = ctx.tid := h_tid
+              rw [h_tid2]
+              exact h_pres h_own0
+            cases hb2 with
+            | eger_kosul _ _ _ _ h_k' =>
+                exact h_konf1'.2.2.2.2.2.2.2.2.1 ctx' h_ctx'_in bb
+                  (by rw [h_if']; exact h_k') h_kayit h_yz
+            | eger_dogru _ _ _ _ h_d' =>
+                exact h_dal (HedefBolge.eger_dogru k d y bb h_d')
+            | eger_yanlis _ _ _ _ h_y' =>
+                exact h_dal (HedefBolge.eger_yanlis k d y bb h_y')
           · exact h_konf1'.2.2.2.2.2.2.2.2.1 c
               (by rw [h_t1']
                   exact List.mem_append.mpr (Or.inr (List.Mem.tail _ h3)))

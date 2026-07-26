@@ -47,6 +47,35 @@ open Kemgu.Sem.Core Kemgu.Sem.StateTipli
 -- §2. RegionTamam (RegionOK) — Plan v2 §3.4 — INDUKTIF JUDGMENT
 -- ============================================================
 
+/-- `RegionNotr e` — e BOLGE-NOTR: bolge ortamini DEVRETMEZ.
+    Sozdizimseldir (Ρ ve Γ'dan BAGIMSIZ), bu yuzden ortam degisimi
+    altinda aynen tasinir — `r_eger`in transport kollarini kapatan sey
+    budur.
+
+    DISARIDA BIRAKILANLAR — Ρ'yu gercekten degistiren UC form:
+    `gorevBaslat` (yakalananlar sahip(tYeni)'ye gecer), `kanalGonderIf`
+    (bolge kanalRho'ya gecer), `dondurIf` (bolge donmus olur).
+    ICERIDE: `atama` DAHIL (r_atama'nin ciktisi = govdenin ciktisi;
+    yazilabilirlik yan-kosulu ciktiyi DEGISTIRMEZ) — dolayisiyla
+    `eger` dallari ATAMA YAPABILIR. -/
+inductive RegionNotr : Ifade → Prop where
+  | rn_tanim (x : VarId) : RegionNotr (Ifade.tanim x)
+  | rn_sabit (v : Deger) : RegionNotr (Ifade.sabit v)
+  | rn_atama (x : VarId) (e : Ifade) :
+      RegionNotr e → RegionNotr (Ifade.atama x e)
+  | rn_seq (a b : Ifade) :
+      RegionNotr a → RegionNotr b → RegionNotr (Ifade.seq a b)
+  | rn_gorev_birlestir (g : VarId) : RegionNotr (Ifade.gorevBirlestir g)
+  | rn_kanal_al (k : KanalId) : RegionNotr (Ifade.kanalAlIf k)
+  | rn_kullan (x : VarId) : RegionNotr (Ifade.kullanIf x)
+  | rn_imha (x : VarId) : RegionNotr (Ifade.imhaIf x)
+  | rn_guvensiz (e : Ifade) :
+      RegionNotr e → RegionNotr (Ifade.guvensiz e)
+  | rn_eger (k d y : Ifade) :
+      RegionNotr k → RegionNotr d → RegionNotr y →
+      RegionNotr (Ifade.eger k d y)
+
+
 /-- RegionTamam Γ Ρ e Ρ' — Bolge durum gecisi:
     Γ : TipOrtam (tip ortami, baz alindi)
     Ρ : BolgeOrtam (giris Bolge haritasi)
@@ -61,8 +90,8 @@ open Kemgu.Sem.Core Kemgu.Sem.StateTipli
     - dondur ile hedef bolge donmus'a gectigi (R-PAYLAS)
 
     Plan v2 §3.4 4 ana kural + 8 ek kapsayici kural (ifade case coverage:
-    sabit, tanim, seq, gorev_birlestir, kanal_al, kullan, imha, guvensiz).
-    Bu 12 kural Ifade'in tum constructor'larini kapsar. -/
+    sabit, tanim, seq, gorev_birlestir, kanal_al, kullan, imha, guvensiz)
+    + D-332 r_eger. Bu kurallar Ifade'in tum constructor'larini kapsar. -/
 inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Prop where
 
   /-- R-TANIM: degisken referansi Ρ'yu etkilemez (salt okuma). -/
@@ -161,6 +190,27 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
   /-- R-IMHA: linear imha Ρ'yu etkilemez (V1 sinir; benzer kullan). -/
   | r_imha (Γ : TipOrtam) (Ρ : BolgeOrtam) (x : VarId) :
              RegionTamam Γ Ρ (Ifade.imhaIf x) Ρ
+
+  /-- R-EGER (D-332): kosul Ρ → Ρk; her iki dal BOLGE-NOTR'dur ve Ρk'den
+      Ρk'ye gecer; sonuc Ρk.
+
+      Iki premise ailesi de GEREKLI ve FARKLI is yapar:
+      * `RegionNotr d/y` (sozdizimsel): ciktinin girisle AYNI oldugunu
+        Ρ'DAN BAGIMSIZ soyler → transport kollarinda yeni ortamda da
+        gecerlidir (dal-birlestirmesi icin ortam-bulusmasi GEREKMEZ).
+      * `RegionTamam Γ Ρk d/y Ρk` (Ρ'ya bagli): dallardaki ATAMA'larin
+        yazilabilirlik yan-kosullarini (frozen-yazma yasagi) tasir.
+
+      Hangi dal alinirsa alinsin cikis Ρk oldugundan korunum dal
+      secimine bagimsizdir. V1 daraltmasi: dallar bolge DEVRI yapamaz
+      (dondur / kanal_gonder / gorev_baslat) — bunlar kosulda veya
+      `eger` disinda yazilir. -/
+  | r_eger (Γ : TipOrtam) (Ρ Ρk : BolgeOrtam) (k d y : Ifade) :
+             RegionTamam Γ Ρ k Ρk →
+             RegionNotr d → RegionNotr y →
+             RegionTamam Γ Ρk d Ρk →
+             RegionTamam Γ Ρk y Ρk →
+             RegionTamam Γ Ρ (Ifade.eger k d y) Ρk
 
   /-- R-GUVENSIZ: ic ifade delegate. -/
   | r_guvensiz (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (e : Ifade) :
@@ -366,6 +416,63 @@ theorem dondur_get (Ρ : BolgeOrtam) (b : Bolge) (y : VarId) :
 -- §4. Yaz-geri + Transport (Onarim v3 kapanis — DECISIONS_LOG tasarimi)
 -- ============================================================
 
+/-- BOLGE-NOTR ⟹ CIKIS = GIRIS. Sozdizimsel notrluk, HANGI ortamda
+    tiplenirse tiplensin cikisin girise esit oldugunu verir. `r_eger`in
+    transport kollarinin motoru: yeni ortam Ρn'de dal yine Ρn'e doner. -/
+theorem regionNotr_cikis_esit {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
+    (h : RegionTamam Γ Ρ e Ρout) : RegionNotr e → Ρout = Ρ := by
+  induction h with
+  | r_tanim _ _ => exact fun _ => rfl
+  | r_sabit _ _ => exact fun _ => rfl
+  | r_atama _ _ _ _ _ _ _ _ ih =>
+      intro h_n; cases h_n with | rn_atama _ _ h_ne => exact ih h_ne
+  | r_seq _ _ _ _ _ _ _ ih_a ih_b =>
+      intro h_n
+      cases h_n with
+      | rn_seq _ _ h_na h_nb => rw [ih_b h_nb, ih_a h_na]
+  | r_gorev_baslat _ _ _ _ _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
+  | r_gorev_birlestir _ _ => exact fun _ => rfl
+  | r_kanal_gonder _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
+  | r_kanal_al _ _ => exact fun _ => rfl
+  | r_dondur _ _ _ _ _ _ _ => intro h_n; nomatch h_n
+  | r_kullan _ _ => exact fun _ => rfl
+  | r_imha _ _ => exact fun _ => rfl
+  | r_eger _ _ _ _ _ _ _ _ _ _ ih_k _ _ =>
+      intro h_n; cases h_n with | rn_eger _ _ _ h_nk _ _ => exact ih_k h_nk
+  | r_guvensiz _ _ _ _ ih =>
+      intro h_n; cases h_n with | rn_guvensiz _ h_ne => exact ih h_ne
+
+
+/-- BOLGE-NOTR ifadenin BOLGE-HEDEFI YOKTUR. `HedefBolge`nin tek taban
+    kurali `dondur_bas`tir ve `dondurIf` notr degildir; dolayisiyla notr
+    bir ifade hicbir bolgeyi hedeflemez. Transport kollarinda `eger`
+    dallarinin HedefBolge yukumlulugunu VAKUMA dusuren lemma. -/
+theorem regionNotr_hedefBolge_yok {e : Ifade} (h_n : RegionNotr e) :
+    ∀ b : Bolge, ¬ HedefBolge e b := by
+  induction h_n with
+  | rn_tanim x => intro b h; nomatch h
+  | rn_sabit v => intro b h; nomatch h
+  | rn_atama x e _ ih =>
+      intro b h; exact ih b (hedefBolge_atama_inv h)
+  | rn_seq a c _ _ ih_a ih_c =>
+      intro b h
+      rcases hedefBolge_seq_inv h with h' | h'
+      · exact ih_a b h'
+      · exact ih_c b h'
+  | rn_gorev_birlestir g => intro b h; nomatch h
+  | rn_kanal_al k => intro b h; nomatch h
+  | rn_kullan x => intro b h; nomatch h
+  | rn_imha x => intro b h; nomatch h
+  | rn_guvensiz e _ ih =>
+      intro b h; exact ih b (hedefBolge_guvensiz_inv h)
+  | rn_eger k d y _ _ _ ih_k ih_d ih_y =>
+      intro b h
+      cases h with
+      | eger_kosul _ _ _ _ h' => exact ih_k b h'
+      | eger_dogru _ _ _ _ h' => exact ih_d b h'
+      | eger_yanlis _ _ _ _ h' => exact ih_y b h'
+
+
 /-- YAZ-GERI: cikis ortaminda YAZILABILIR kategorili gorunen kayit,
     giriste de aynidir — tum R-guncellemeleri yazilamaz kategori
     (sahip/kanalRho/donmus) yazar. -/
@@ -389,6 +496,8 @@ theorem regionTamam_yaz_geri {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
       · rw [h_bb] at h_y
         simp [bolgeKategoriDegistir, kategoriYazilabilir] at h_y
       · exact h_acc
+  -- D-332: cikis = kosulun cikisi (dallar notr) → IH_k aynen.
+  | r_eger _ _ _ _ _ _ _ _ _ _ ih_k _ _ => exact ih_k
   | r_gorev_birlestir _ _ => exact fun _ _ h_o _ => h_o
   | r_kanal_gonder _ _ k v b0 _ _ h_eq =>
       intro y b h_o h_y
@@ -478,6 +587,25 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
       · intro y hy
         subst h_eq
         exact sahipAta_agree _ Ρn yd tY y hy
+  -- D-332: kosul transport edilir; dallar BOLGE-NOTR oldugu icin yeni
+  -- ortamda da GIRIS = CIKIS (regionNotr_cikis_esit) ve HedefBolge
+  -- yukumlulukleri VAKUMDUR (regionNotr_hedefBolge_yok). Dal-birlestirme
+  -- (ortam bulusmasi) GEREKMEZ — daraltmanin satin aldigi sey budur.
+  | r_eger _ _ k d y h_rk h_nd h_ny _ _ ih_k ih_d ih_y =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρkn, h_k', agree_k⟩ := ih_k Ρn
+        (fun z hz => h_hv z (HedefVar.eger_kosul k d y z hz))
+        (fun x bb hb hyz hlk =>
+          h_hb x bb (HedefBolge.eger_kosul k d y bb hb) hyz hlk)
+      obtain ⟨Ρdn, h_d', _⟩ := ih_d Ρkn
+        (fun z hz => agree_k z (h_hv z (HedefVar.eger_dogru k d y z hz)))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_nd bb))
+      obtain ⟨Ρyn, h_y', _⟩ := ih_y Ρkn
+        (fun z hz => agree_k z (h_hv z (HedefVar.eger_yanlis k d y z hz)))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_ny bb))
+      rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
+      rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
+      exact ⟨Ρkn, RegionTamam.r_eger _ _ _ k d y h_k' h_nd h_ny h_d' h_y', agree_k⟩
   | r_gorev_birlestir _ g =>
       exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_gorev_birlestir _ _ g, fun _ h => h⟩
   | r_kanal_gonder _ _ k v b h_lk h_yz h_eq =>
@@ -574,6 +702,15 @@ theorem regionTamam_iliski_transport {Γ : TipOrtam}
       obtain ⟨Ρan, h_ra', hi_a⟩ := ih_a Ρn hi
       obtain ⟨Ρbn, h_rb', hi_b⟩ := ih_b Ρan hi_a
       exact ⟨Ρbn, RegionTamam.r_seq _ _ _ _ a b h_ra' h_rb', hi_b⟩
+  -- D-332: dallar notr → yeni ortamda da kimlik; iliski kosuldan gelir.
+  | r_eger _ _ k d y _ h_nd h_ny _ _ ih_k ih_d ih_y =>
+      intro Ρn hi
+      obtain ⟨Ρkn, h_k', hi_k⟩ := ih_k Ρn hi
+      obtain ⟨Ρdn, h_d', _⟩ := ih_d Ρkn hi_k
+      obtain ⟨Ρyn, h_y', _⟩ := ih_y Ρkn hi_k
+      rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
+      rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
+      exact ⟨Ρkn, RegionTamam.r_eger _ _ _ k d y h_k' h_nd h_ny h_d' h_y', hi_k⟩
   | r_gorev_baslat Ρo' _ Ρkod yd kod tY h_cap h_khv h_khb _ h_eq ih =>
       intro Ρn hi
       subst h_eq

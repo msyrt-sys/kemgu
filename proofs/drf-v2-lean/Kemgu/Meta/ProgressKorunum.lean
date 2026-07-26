@@ -50,6 +50,10 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
       Engelli S e → Engelli S (Ifade.atama x e)
   | guvensiz_ic (e : Ifade) :
       Engelli S e → Engelli S (Ifade.guvensiz e)
+  -- D-332: kosul engelliyse `eger` de engellidir (dallar degerlendirme
+  -- baglami DEGILDIR — yalniz kosul odaga girer).
+  | eger_kosul (k d y : Ifade) :
+      Engelli S k → Engelli S (Ifade.eger k d y)
 
 /-- Engelli'nin odakli konfigurasyondan ana konfigurasyona transferi:
     kanal ayni; thread listesi yalniz odakli ifadede farkli — odaktaki
@@ -80,6 +84,7 @@ theorem engelli_konf_transfer
   | seq_sol a b _ ih => exact Engelli.seq_sol a b ih
   | atama_ic x e _ ih => exact Engelli.atama_ic x e ih
   | guvensiz_ic e _ ih => exact Engelli.guvensiz_ic e ih
+  | eger_kosul k d y _ ih => exact Engelli.eger_kosul k d y ih
 
 
 -- ============================================================
@@ -330,10 +335,39 @@ theorem progress_konf
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
-  | eger k d y ih_k ih_d ih_y =>
-      -- D-332: HasType'ta `eger` kurali eklenene dek bu dal VAKUMDUR
-      -- (iyi-tipli program `eger` iceremez). Adim 3'te t_eger gelince
-      -- burasi gercek ispatla doldurulur.
-      nomatch h_ht
+  -- D-332: `eger` progress. Kosul deger ise sEgerSec; engelliyse eger de
+  -- engelli; adim atiyorsa sEgerCong ile sarilir. Dallar burada
+  -- degerlendirilmez (odak yalniz kosuldur) — seq deseninin aynisi.
+  | eger k d y ih_k _ih_d _ih_y =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_eger _ _ _ _ _ τk _ htk _ _,
+        LineerTamam.l_eger _ _ Λk _ _ _ hlk _ _,
+        RegionTamam.r_eger _ _ Ρk _ _ _ hrk _ _ _ _ =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx k h_konf h_t
+          (by rw [h_lin]; exact ⟨τk, Λk, Ρk, ⟨htk, hlk, hrk⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.eger_kosul k d y z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.eger_kosul k d y bb h)
+        rcases ih_k τk Λin Λk Ρk htk hlk hrk (ifadeyleKonf S ts1 ts2 ctx k)
+            h_konf1 ts1 ts2 { ctx with ifade := k } rfl rfl h_lin with
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
+        · -- kosul deger → sEgerSec (dal `degerDogruMu v` ile secilir)
+          cases h_val with
+          | iv_sabit v =>
+            exact Or.inr (Or.inr ⟨_,
+              { ctx with ifade := if degerDogruMu v then d else y }, ts2,
+              Step.sEgerSec S _ ts1 ts2 ctx v d y (degerDogruMu v)
+                h_t h_if rfl rfl,
+              rfl, rfl, Or.inl rfl⟩)
+        · -- kosul engelli → eger de engelli
+          exact Or.inr (Or.inl (Engelli.eger_kosul k d y
+            (engelli_konf_transfer S ts1 ts2 ctx k k h_eng h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · -- kosul adim atar → sEgerCong
+          exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .eger ctx1'.ifade d y }, ts2',
+            Step.sEgerCong S _ (ifadeyleKonf S ts1 ts2 ctx k) S1'
+              ts1 ts2 ts2' ctx ctx1' k ctx1'.ifade d y
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
 
 end Kemgu.Meta.ProgressKorunum

@@ -56,6 +56,36 @@ def Tip.lineerMi : Tip → Bool
 -- §3. LineerTamam (LinearOK) — Plan v2 §3.3 — INDUKTIF JUDGMENT
 -- ============================================================
 
+/-- `LineerNotr Γ e` — e LINEER-NOTR: hicbir lineer baglamayi tuketmez.
+    D-332'de `eger` dallari icin gerekir.
+
+    KRITIK OZELLIK: yargida Λ YOKTUR (yalniz Γ). Bu sayede ortam
+    zayiflatmasi altinda AYNEN tasinir (`lineerTamam_kucuk_transport`'un
+    `l_eger` kolu bedava kapanir) — dal-duyarli meet yaklasiminin
+    gerektirdigi monotonluk makinesi olmadan.
+
+    DISARIDA BIRAKILANLAR (tuketen veya tuketebilen formlar):
+    `tanim` lineer tipte, `gorevBaslat` (yakalama tuketir),
+    `kanalGonderIf` (gonderim tuketir), `kullanIf`, `imhaIf`. -/
+inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
+  | n_tanim (x : VarId) (τ : Tip) :
+      tipOrtamGet Γ x = some τ → Tip.lineerMi τ = false →
+      LineerNotr Γ (Ifade.tanim x)
+  | n_sabit (v : Deger) : LineerNotr Γ (Ifade.sabit v)
+  | n_atama (x : VarId) (e : Ifade) :
+      LineerNotr Γ e → LineerNotr Γ (Ifade.atama x e)
+  | n_seq (a b : Ifade) :
+      LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.seq a b)
+  | n_gorev_birlestir (g : VarId) : LineerNotr Γ (Ifade.gorevBirlestir g)
+  | n_kanal_al (k : KanalId) : LineerNotr Γ (Ifade.kanalAlIf k)
+  | n_dondur (b : Bolge) : LineerNotr Γ (Ifade.dondurIf b)
+  | n_guvensiz (e : Ifade) :
+      LineerNotr Γ e → LineerNotr Γ (Ifade.guvensiz e)
+  | n_eger (k d y : Ifade) :
+      LineerNotr Γ k → LineerNotr Γ d → LineerNotr Γ y →
+      LineerNotr Γ (Ifade.eger k d y)
+
+
 /-- LineerTamam Γ Λ e Λ' — Lineer durum gecisi:
     Γ : TipOrtam (tip ortami)
     Λ : LineerOrtam (giriş Lineerlik haritasi)
@@ -157,10 +187,51 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
             LineerTamam Γ Λ (Ifade.imhaIf x)
                           (lineerOrtamUpdate Λ x Lineerlik.tuketildi)
 
+  /-- L-EGER (D-332): kosul Λ → Λk; HER IKI DAL LINEER-NOTR olmalidir
+      (`LineerNotr` — asagida), yani dis bir lineer baglamayi TUKETEMEZ;
+      cikis ortami Λk'dir.
+
+      GEREKCE: hangi dal alinirsa alinsin adim-sonrasi lineer ortam
+      AYNIDIR → korunum ispati dal secimine bagimsiz olur.
+
+      ** V1 DARALTMASI (acikca borc) **: KEMGU derleyicisi D-311/D-312'de
+      dal-DUYARLI tuketimi destekler (`eger p { kullan(t); } degilse
+      { imha(t); }` GECERLIDIR). Bu MODEL onu KAPSAMAZ — burada
+      dallar lineer tuketim yapamaz. Daraltma KONSERVATIFTIR (model
+      dilin bir ALT KUMESI; kabul edilen her program gercekte de
+      gecerli), yani ispatlanan teoremler gecerli kalir; eksik olan
+      KAPSAMDIR. Tam L-COND icin ortam-bulusmasi (meet: "iki daldan
+      birinde tuketildiyse tuketildi") + ≼-monotonluk lemmasi gerekir —
+      V2 isi. Bu daraltma CT koprusunu ETKILEMEZ (CT hesabinda lineerlik
+      yoktur). -/
+  | l_eger (Γ : TipOrtam) (Λ Λk : LineerOrtam) (k d y : Ifade) :
+             LineerTamam Γ Λ k Λk →
+             LineerNotr Γ d →
+             LineerNotr Γ y →
+             LineerTamam Γ Λ (Ifade.eger k d y) Λk
+
   /-- L-GUVENSIZ: ic ifade delegate. -/
   | l_guvensiz (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (e : Ifade) :
                  LineerTamam Γ Λ e Λ' →
                  LineerTamam Γ Λ (Ifade.guvensiz e) Λ'
+
+
+/-- LINEER-NOTR ⟹ KIMLIK GECISI: notr ifade HERHANGI bir Λ'dan
+    kendisine gecer. `eger` dallarinin adim sonrasi tiplenmesini
+    (korunum) ve transport'u besleyen lemma. -/
+theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
+    (h : LineerNotr Γ e) : ∀ Λ, LineerTamam Γ Λ e Λ := by
+  induction h with
+  | n_tanim x τ h_g h_lin => exact fun Λ => LineerTamam.l_tanim_nonlin Γ Λ x τ h_g h_lin
+  | n_sabit v => exact fun Λ => LineerTamam.l_sabit Γ Λ v
+  | n_atama x e _ ih => exact fun Λ => LineerTamam.l_atama Γ Λ Λ x e (ih Λ)
+  | n_seq a b _ _ ih_a ih_b => exact fun Λ => LineerTamam.l_seq Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
+  | n_gorev_birlestir g => exact fun Λ => LineerTamam.l_gorev_birlestir Γ Λ g
+  | n_kanal_al k => exact fun Λ => LineerTamam.l_kanal_al Γ Λ k
+  | n_dondur b => exact fun Λ => LineerTamam.l_dondur Γ Λ b
+  | n_guvensiz e _ ih => exact fun Λ => LineerTamam.l_guvensiz Γ Λ Λ e (ih Λ)
+  | n_eger k d y _ hd hy ih_k _ _ =>
+      exact fun Λ => LineerTamam.l_eger Γ Λ Λ k d y (ih_k Λ) hd hy
 
 
 -- ============================================================
@@ -368,5 +439,11 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       intro Λn hk
       obtain ⟨Λen, h_e, hk'⟩ := ih Λn hk
       exact ⟨Λen, LineerTamam.l_guvensiz _ _ _ e h_e, hk'⟩
+  -- D-332: dallar LineerNotr — yargi Λ'dan BAGIMSIZ oldugu icin aynen
+  -- tasinir; cikis kosulun cikisidir, IH onu verir.
+  | l_eger _ _ k d y _ h_nd h_ny ih_k =>
+      intro Λn hk
+      obtain ⟨Λkn, h_k, hk'⟩ := ih_k Λn hk
+      exact ⟨Λkn, LineerTamam.l_eger _ _ _ k d y h_k h_nd h_ny, hk'⟩
 
 end Kemgu.Sem.LineerTamam

@@ -205,6 +205,42 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 thread := ts1 ++ { ctx' with ifade := .seq a' b } :: ts2' }) :
       Step S S'
 
+  /-- S-EGER-SEC (D-332): kosul deger → dal secilir, `dalOl` olayi emit
+      edilir. Olayin emit edilmesi teoremin ASIL ICERIGIDIR: dal karari
+      saldirganin gordugu ize girer, dolayisiyla CT001 (gizli kosulda
+      dallanma yasagi) olmadan non-interference SAGLANAMAZ. -/
+  | sEgerSec
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (v : Deger) (d y : Ifade) (alindi : Bool)
+      (h_t   : S.thread = ts1 ++ ctx :: ts2)
+      (h_if  : ctx.ifade = .eger (.sabit v) d y)
+      (h_dal : alindi = degerDogruMu v)
+      (h_S'  : S' = { S with
+                thread := ts1 ++ { ctx with ifade := if alindi then d else y } :: ts2,
+                iz     := .dalOl ctx.tid alindi :: S.iz,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-EGER-CONG (D-332, Mehmet karari): kosul deger degilse kosulun
+      icinde adim at. FIX-F cerceve yan-kosulu (h_yan) diger cong
+      kurallariyla AYNEN ayni — odakli pozisyona kilit, yan thread'ler
+      yalniz spawn appendi ile degisebilir. -/
+  | sEgerCong
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (k k' d y : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .eger k d y)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx k)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = k')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .eger k' d y } :: ts2' }) :
+      Step S S'
+
   /-- S-GUVENSIZ-ATLA: ic ifade deger → sarmal acilir. -/
   | sGuvensizAtla
       (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
@@ -508,6 +544,16 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   | sSeqCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
+  -- D-332: sEgerSec `dalOl` emit eder — memOku/memYaz DEGIL, store'a
+  -- dokunmaz → dorduncu disjunct (diger-olay).
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      subst h_S'
+      refine Or.inr (Or.inr (Or.inr ⟨.dalOl ctx.tid alindi, rfl, ?_, ?_, rfl⟩))
+      · intro t0 k0 v0 hh; nomatch hh
+      · intro t0 k0 v0 hh; nomatch hh
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -591,6 +637,16 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
           by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
           by simpa [ifadeyleKonf] using h_z⟩
+  -- D-332
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -661,6 +717,15 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  -- D-332
+  | sEgerSec S S' ts1 ts2 ctx v d y alindi h_t h_if h_dal h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx k).sahiplik b
           = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
       simpa using ih h1
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>

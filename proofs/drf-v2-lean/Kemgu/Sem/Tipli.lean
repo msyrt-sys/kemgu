@@ -58,6 +58,40 @@ theorem typed_seq_sol {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     RegionTamam.r_seq _ _ Ρa _ _ _ hra _ =>
     exact ⟨τa, Λa, Ρa, ⟨hta, hla, hra⟩⟩
 
+/-- D-332: `eger`in KOSULU tiplidir (sEgerCong tipleme tarafi). -/
+theorem typed_eger_kosul {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {k d y : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.eger k d y) τ Λ' Ρ') :
+    ∃ τk Λk Ρk, Typed Γ Δ Λ Ρ k τk Λk Ρk := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_eger _ _ _ _ _ τk _ htk _ _,
+    LineerTamam.l_eger _ _ Λk _ _ _ hlk _ _,
+    RegionTamam.r_eger _ _ Ρk _ _ _ hrk _ _ _ _ =>
+    exact ⟨τk, Λk, Ρk, ⟨htk, hlk, hrk⟩⟩
+
+/-- D-332: `eger`in SECILEN DALI tiplidir — kosul deger oldugunda
+    (sEgerSec) adim sonrasi thread ifadesinin tiplenmesini verir.
+    Cikis ortamlari dal secimine BAGIMSIZ (Λk / Ρk): l_eger dallari
+    lineer-notr, r_eger dallari bolge-notr kilar. -/
+theorem typed_eger_dal {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {v : Deger} {d y : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.eger (Ifade.sabit v) d y) τ Λ' Ρ')
+    (alindi : Bool) :
+    Typed Γ Δ Λ Ρ (if alindi then d else y) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_eger _ _ _ _ _ _ _ _ htd hty,
+    LineerTamam.l_eger _ _ _ _ _ _ hlk h_nd h_ny,
+    RegionTamam.r_eger _ _ _ _ _ _ hrk _ _ hrd hry =>
+    -- kosul `sabit v`: l_sabit / r_sabit → Λk = Λ, Ρk = Ρ
+    cases hlk
+    cases hrk
+    cases alindi with
+    | true  => exact ⟨htd, lineerNotr_kimlik h_nd _, hrd⟩
+    | false => exact ⟨hty, lineerNotr_kimlik h_ny _, hry⟩
+
 /-- Atama RHS'i tiplidir (sAtamaCong tipleme tarafi). -/
 theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}

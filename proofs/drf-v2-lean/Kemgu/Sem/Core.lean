@@ -99,6 +99,18 @@ inductive Deger : Type where
 end
 
 
+/-- Dallanma kosulunun DOGRU sayilip sayilmadigi (D-332).
+    `Deger` uzerinde DecidableEq TUREMEZ (mutual + List Deger), o yuzden
+    kosul testi desen-eslemesiyle yazilir — toplam ve karar verilebilir.
+    Yalniz `skaler`in sifir olmasi ve `birim` YANLIS'tir; diger butun
+    degerler (isaretci-benzeri: metin/yapi/dizi/closure/yetki/gorev)
+    DOGRU sayilir. -/
+def degerDogruMu : Deger → Bool
+  | .skaler n => n ≠ 0
+  | .birim    => false
+  | _         => true
+
+
 -- ============================================================
 -- §5. Lineerlik durumu (Lambda — Linear V1)
 -- Kaynak: Op.Sem §2.2
@@ -567,6 +579,18 @@ inductive Ifade : Type where
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
 theorem seq_ne_sag (a b : Ifade) : Ifade.seq a b ≠ b := by
+  intro h
+  have h_size := congrArg sizeOf h
+  simp at h_size
+
+/-- D-332: `eger` secilen dalina esit olamaz (odak GERCEKTEN degisir). -/
+theorem eger_ne_dogru (k d y : Ifade) : Ifade.eger k d y ≠ d := by
+  intro h
+  have h_size := congrArg sizeOf h
+  simp at h_size
+  omega
+
+theorem eger_ne_yanlis (k d y : Ifade) : Ifade.eger k d y ≠ y := by
   intro h
   have h_size := congrArg sizeOf h
   simp at h_size
