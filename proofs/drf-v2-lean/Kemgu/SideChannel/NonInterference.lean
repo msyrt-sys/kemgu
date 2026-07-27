@@ -131,12 +131,21 @@ def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
     skaler-duzey non-interference'i tasiyan sey BU TEOREM DEGIL,
     `SideChannel/CT` + `CTKopru.kopru_ni`dir (CT001/CT003 disiplini
     altinda). Burada geriye kalan icerik: gozlem, ISARETCI-BENZERI
-    yuklerden (metin/yapi/dizi/closure/yetki) BAGIMSIZDIR. -/
+    yuklerden (metin/yapi/dizi/closure/yetki) BAGIMSIZDIR.
+
+    ISTISNA 4 (D-336 — INDEKSLI OKUMA EKLENINCE): isaretci-benzeri
+    degerler artik `skaler 1`e DEGIL, TEK BIR KANONIK OPAK DEGERE iner.
+    Sebep yine ispat: `hucreOku` skaler-olmayan hucreyi 0 okur; eger
+    silme onu `skaler 1`e cevirseydi silinmis kosum 1 okurdu → 0 ≠ 1,
+    `sIndeksOku` simulasyonu COKERDI. Kanonik opak deger hem `hucreOku`
+    ile (ikisi de 0) hem `degerDogruMu` ile (ikisi de dogru) uyumludur.
+    Bu bir DARALTMA DEGIL, aksine daha tutarli bir gizleme: tum
+    isaretci-benzeri yukler birbirinden AYIRT EDILEMEZ hale gelir. -/
 def degerSil : Deger → Deger
   | .gorevVal t => .gorevVal t
   | .skaler n   => .skaler n          -- D-334: silinmez (bkz. ISTISNA 3)
   | .birim      => Deger.birim
-  | _           => .skaler 1
+  | _           => .metinDeg ⟨0, BolgeKategorisi.lit⟩ 0   -- kanonik opak
 
 /-- Silme, DAL KARARINI korur (D-332). `degerSil`in yukaridaki
     daraltmasinin tam olarak satin aldigi sey; sEgerSec simulasyonunun
@@ -165,6 +174,7 @@ def ifadeSil : Ifade → Ifade
   -- D-335: literal desen `n` SILINMEZ — kontrol iskeletinin parcasi
   -- (hangi kolun tuttugu `dalOl` ile zaten gozlenir).
   | .esles s n d y        => .esles (ifadeSil s) n (ifadeSil d) (ifadeSil y)
+  | .indeks x idx         => .indeks x (ifadeSil idx)
 
 /-- Olay silme: tasinan deger birime iner (TUR + konum korunur). -/
 def olaySil : Olay → Olay
@@ -226,6 +236,30 @@ theorem izGozlem_konfSil (S : Konfigurasyon) :
 -- ============================================================
 -- §4. Silme, veri-erisim yardimcilariyla DEGISME (commutation)
 -- ============================================================
+
+/-- D-336: **HUCRE OKUMA SILME ALTINDA DEGISMEZ.** `sIndeksOku`
+    simulasyonunun kalbi; ISTISNA 3 + ISTISNA 4 birlikte tam olarak
+    bunu satin alir. -/
+theorem hucreOku_storeSil (sigma : Store) (k : Konum) :
+    hucreOku (storeSil sigma) k = hucreOku sigma k := by
+  induction sigma with
+  | nil => rfl
+  | cons p rest ih =>
+      show (match konumGet ((p.1, degerSil p.2) :: rest.map _) k with
+            | some (.skaler n) => n | _ => 0)
+          = hucreOku (p :: rest) k
+      show (match (if p.1.bolge.id = k.bolge.id ∧ p.1.ofset = k.ofset
+                   then some (degerSil p.2)
+                   else konumGet (rest.map (fun q => (q.1, degerSil q.2))) k) with
+            | some (.skaler n) => n | _ => 0)
+          = (match (if p.1.bolge.id = k.bolge.id ∧ p.1.ofset = k.ofset
+                    then some p.2 else konumGet rest k) with
+             | some (.skaler n) => n | _ => 0)
+      by_cases hk : p.1.bolge.id = k.bolge.id ∧ p.1.ofset = k.ofset
+      · rw [if_pos hk, if_pos hk]
+        cases p.2 <;> rfl
+      · rw [if_neg hk, if_neg hk]; exact ih
+
 
 /-- Store lookup silme altinda: konum ANAHTARI degismez (silme yalniz
     degeri vurur) → arama basarisi KORUNUR, donen deger birimdir. -/
@@ -610,6 +644,34 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
       refine Step.sToplaCongSag _ _ (konfSil S1) (konfSil S1')
         (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
         (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  -- D-336: sIndeksOku — okunan ADRES yapisal (bolge+ofset), okunan DEGER
+  -- `hucreOku_storeSil` ile korunur → AYNI `memOku` olayi.
+  | sIndeksOku S S' ts1 ts2 ctx x i b n h_t h_if h_b h_n h_S' =>
+      refine Step.sIndeksOku _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x i b n ?_ ?_ h_b ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · show n = hucreOku (storeSil S.store) ⟨b, i.toNat⟩
+        rw [hucreOku_storeSil]; exact h_n
+      · subst h_S'
+        simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil]
+  | sIndeksCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sIndeksCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        x (ifadeSil e) (ifadeSil e') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
       · show threadSil S.thread = _; rw [h_t, threadSil_split]
       · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
       · rw [h_S1, ifadeyleKonf_konfSil]

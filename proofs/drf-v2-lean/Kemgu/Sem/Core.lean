@@ -550,6 +550,22 @@ inductive Olay : Type where
 abbrev Iz := List Olay
 
 
+/-- D-336: HUCRE OKUMA — TOPLAM (total) skaler okuma.
+    Neden `konumGet` degil de bu: (1) indeksli okuma TAKILMAMALI
+    (progress), (2) sonucu DAIMA skaler olmali (korunum: `t_indeks`
+    `scalar` der). Kayitli olmayan ya da skaler-olmayan hucre 0 okur.
+
+    DURUSTLUK NOTU: bu, bellegin TOPLAM oldugu bir modeldir — SINIR
+    DENETIMI (bounds check) MODELLENMEZ. KEMGU'nun gercek dizi erisimi
+    sinir-kontrollu olup ihlalde panikler; burada amac yan-kanal
+    (adres sizintisi), bellek-guvenligi degil. CT hesabinin store'u
+    (`Ad → Nat → Int`) da toplamdir, yani kopru bu noktada SADIKTIR. -/
+def hucreOku (sigma : Store) (k : Konum) : Int :=
+  match konumGet sigma k with
+  | some (.skaler n) => n
+  | _                => 0
+
+
 -- ============================================================
 -- §9. Ifade sozdizimi (DRF icin minimal subset)
 -- Kaynak: Op.Sem §1 grammar
@@ -596,6 +612,13 @@ inductive Ifade : Type where
       ** KAPSAM: bu, KEMGU `esles`inin LITERAL-DESEN alt kumesidir;
       yapici/cesit desenleri (D-318) KAPSAM DISIDIR (Core'da ADT yok). -/
   | esles          (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)
+  /-- D-336: INDEKSLI OKUMA `x[idx]`. `Konum`un `ofset` alani nihayet
+      kullaniliyor: okunan konum `⟨bolge(x), idx⟩`dir ve uretilen
+      `memOku` olayi O KONUMU tasir → **ERISIM ADRESI GOZLENIR**.
+      Gizli-indeks kanali (onbellek-zamanlama; ornek: AES S-box aramasi)
+      modelde boylece IFADE EDILEBILIR hale gelir.
+      V1 KAPSAM: yalniz OKUMA (indeksli yazma V2 — Mehmet karari). -/
+  | indeks         (dizi : VarId) (idx : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -682,6 +705,10 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar d z → HedefVar (Ifade.esles s n d y) z
   | esles_kalan (s : Ifade) (n : Int) (d y : Ifade) (z : VarId) :
       HedefVar y z → HedefVar (Ifade.esles s n d y) z
+  -- D-336: indeksli OKUMA sahiplik gerektirmez (sVarOku gibi); yalniz
+  -- INDEKS IFADESI hedef tasiyabilir.
+  | indeks_ic (x : VarId) (idx : Ifade) (z : VarId) :
+      HedefVar idx z → HedefVar (Ifade.indeks x idx) z
 
 /-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
     dondurIf var (dondur sahiplik gerektirir — h_owner). -/
@@ -719,6 +746,9 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge d b → HedefBolge (Ifade.esles s n d y) b
   | esles_kalan (s : Ifade) (n : Int) (d y : Ifade) (b : Bolge) :
       HedefBolge y b → HedefBolge (Ifade.esles s n d y) b
+  -- D-336
+  | indeks_ic (x : VarId) (idx : Ifade) (b : Bolge) :
+      HedefBolge idx b → HedefBolge (Ifade.indeks x idx) b
 
 /-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
 theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}

@@ -120,6 +120,14 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ y τ →
                 HasType Γ Δ (Ifade.esles s n d y) τ
 
+  /-- T-INDEKS (D-336): `x[idx]` — x kayitli (bolgesi bulunabilsin diye:
+      progress `bolgeOrtamGet` icin Γ-kaydina dayanir), indeks `scalar`,
+      okunan hucre `scalar` (`hucreOku` daima skaler doner). -/
+  | t_indeks  (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId) (idx : Ifade) (τ : Tip) :
+                tipOrtamGet Γ x = some τ →
+                HasType Γ Δ idx Tip.scalar →
+                HasType Γ Δ (Ifade.indeks x idx) Tip.scalar
+
   /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
   | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
                 HasType Γ Δ e τ →

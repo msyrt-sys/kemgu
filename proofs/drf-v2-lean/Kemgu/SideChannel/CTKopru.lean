@@ -78,6 +78,8 @@ inductive Sadik : CT.Ifade → Prop where
   /-- D-335: `esles`in degeri secilen koldan gelir. -/
   | s_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
       Sadik d → Sadik y → Sadik (.esles s n d y)
+  /-- D-336: okunan hucrenin degeri her iki tarafta da `s x i`. -/
+  | s_indeks (x : CT.Ad) (idx : CT.Ifade) : Sadik (.indeks x idx)
   -- NOT: `iken` SADIK DEGILDIR — CT'de dongu 0 dondurur, Core'da
   -- (acilmis `eger`in yanlis dali) `birim`. Dongu bir DEYIMDIR; degeri
   -- kullanilan bir konuma giremez (`sabitDeg` ile ayni sinif).
@@ -106,18 +108,26 @@ inductive GomOk : CT.Ifade → Prop where
       karsilastirilir). -/
   | g_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
       GomOk s → Sadik s → GomOk d → GomOk y → GomOk (.esles s n d y)
+  /-- D-336: indeks ifadesi `Sadik` olmali (adres ondan hesaplanir). -/
+  | g_indeks (x : CT.Ad) (idx : CT.Ifade) :
+      GomOk idx → Sadik idx → GomOk (.indeks x idx)
 
 /-- CT ifadesi → Core ifadesi. D-334'ten beri TOPLAM (her bicim icin
     gercek bir karsilik var; tikac dal YOK). -/
 def gom : CT.Ifade → Ifade
   | .sabit n        => .sabit (.skaler n)
-  | .degisken x     => .tanim x
+  -- D-336: CT'de duz degisken = `x[0]`, dolayisiyla gomme de INDEKSLI
+  -- okumadir (`tanim` DEGIL). Kazanc: okuma TOPLAM oldugundan store
+  -- uyumu tek bir bicimle (`hucreOku`) ifade edilir; `sVarOku`nun
+  -- `konumGet ... = some v` on-kosulu (kayitli olma) gerekmez.
+  | .degisken x     => .indeks x (.sabit (.skaler 0))
   | .sabitDeg x e   => .atama x (gom e)
   | .sira a b       => .seq (gom a) (gom b)
   | .eger k d y     => .eger (gom k) (gom d) (gom y)
   | .topla a b      => .topla (gom a) (gom b)   -- D-334
   | .iken k g       => .iken (gom k) (gom g)    -- D-335
   | .esles s n d y  => .esles (gom s) n (gom d) (gom y)
+  | .indeks x idx   => .indeks x (gom idx)      -- D-336
 
 /-- Ifadenin degiskenleri V icinde mi (Kapsam 3). -/
 inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
@@ -132,6 +142,8 @@ inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
   | k_iken (k g : CT.Ifade) : Kapsar V k → Kapsar V g → Kapsar V (.iken k g)
   | k_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
       Kapsar V s → Kapsar V d → Kapsar V y → Kapsar V (.esles s n d y)
+  | k_indeks (x : CT.Ad) (idx : CT.Ifade) :
+      x ∈ V → Kapsar V idx → Kapsar V (.indeks x idx)
 
 -- ============================================================
 -- §2. Gomme — durum (bolge / sahiplik / store)
@@ -177,49 +189,56 @@ theorem sahOf_get {V : List CT.Ad} {x : CT.Ad} (h : x ∈ V) :
                      | head => exact absurd rfl hw
                      | tail _ h' => exact h')
 
-/-- Store UYUMU: Core store'u, CT store'unu V uzerinde GERCEKLER.
-    GENISLETILEBILIR (extensional) tanim SART: `sAtamaTamam` store'a
-    ONE EKLER (uzerine yazmaz), yani sozdizimsel esitlik yasamaz. -/
+/-- Store UYUMU (D-336: HER OFSET icin). Core store'u, CT store'unu
+    V uzerinde ve TUM indekslerde GERCEKLER — `hucreOku` uzerinden
+    ifade edilir cunku `sIndeksOku` de onu kullanir (ve okuma TOPLAM;
+    kayitli olmayan hucre 0 okur, CT tarafinda da store toplam). -/
 def StoreUyum (V : List CT.Ad) (s : CT.Store) (sigma : Store) : Prop :=
-  ∀ x ∈ V, konumGet sigma ⟨bol x, 0⟩ = some (.skaler (s x))
+  ∀ x ∈ V, ∀ i : Nat, hucreOku sigma ⟨bol x, i⟩ = s x i
 
-/-- Yazma uyumu korur: Core'un prepend'i CT'nin `yaz`ina karsilik gelir. -/
+/-- Yazma uyumu korur: Core'un prepend'i CT'nin `yaz`ina karsilik gelir
+    (ikisi de YALNIZ ofset 0'i degistirir). -/
 theorem storeUyum_yaz {V : List CT.Ad} {s : CT.Store} {sigma : Store}
     (h : StoreUyum V s sigma) (x : CT.Ad) (n : Int) :
     StoreUyum V (CT.yaz s x n) ((⟨bol x, 0⟩, Deger.skaler n) :: sigma) := by
-  intro y hy
-  show (if (bol x).id = (bol y).id ∧ (0 : Nat) = 0 then some (Deger.skaler n)
-        else konumGet sigma ⟨bol y, 0⟩) = some (.skaler (CT.yaz s x n y))
-  by_cases hxy : y = x
-  · subst hxy
+  intro y hy i
+  show (match (if (bol x).id = (bol y).id ∧ (0 : Nat) = i
+               then some (Deger.skaler n) else konumGet sigma ⟨bol y, i⟩) with
+        | some (.skaler m) => m | _ => 0) = CT.yaz s x n y i
+  by_cases hxy : y = x ∧ i = 0
+  · obtain ⟨h1, h2⟩ := hxy
+    subst h1; subst h2
     rw [if_pos ⟨rfl, rfl⟩]
     simp [CT.yaz]
-  · have hid : ¬ ((bol x).id = (bol y).id ∧ (0 : Nat) = 0) := by
-      intro hc; exact hxy hc.1.symm
-    rw [if_neg hid, h y hy]
+  · have hid : ¬ ((bol x).id = (bol y).id ∧ (0 : Nat) = i) := by
+      intro hc
+      exact hxy ⟨hc.1.symm, hc.2.symm⟩
+    rw [if_neg hid]
+    show hucreOku sigma ⟨bol y, i⟩ = _
+    rw [h y hy i]
     simp [CT.yaz, hxy]
 
-/-- CT store'unun Core GERCEKLEMESI. VAKUM DENETIMI: `StoreUyum`
-    hipotezi HER CT store'u icin saglanabilir — yani `kopru_ni`
-    "boyle bir sigma yoksa" diye bos gecmez. -/
-def storeOf (V : List CT.Ad) (s : CT.Store) : Store :=
-  V.map (fun x => (⟨bol x, 0⟩, Deger.skaler (s x)))
+/-- **VAKUM DENETIMI (D-336, indeksli hal):** `StoreUyum` hipotezi
+    BOS DEGILDIR — hem de SIFIR-OLMAYAN bir DIZI HUCRESI iceren bir
+    ornekle. Burada `tablo` (1) degiskeninin 3. hucresi 9'dur; Core
+    tarafinda tek elemanli bir store bunu gercekler.
+    (Genel bir `storeOf` insasi yerine somut tanik secildi: teoremin
+    hipotezinin saglanabildigini gostermek icin bu YETER ve ispati
+    kisa/denetlenebilir tutar.) -/
+theorem storeUyum_ornek :
+    StoreUyum [0, 1] (fun x i => if x = 1 ∧ i = 3 then 9 else 0)
+      [(⟨bol 1, 3⟩, Deger.skaler 9)] := by
+  intro x _ i
+  show (match (if (bol 1).id = (bol x).id ∧ 3 = i
+               then some (Deger.skaler 9) else none) with
+        | some (.skaler m) => m | _ => 0)
+      = if x = 1 ∧ i = 3 then 9 else 0
+  by_cases h : x = 1 ∧ i = 3
+  · obtain ⟨h1, h2⟩ := h
+    subst h1; subst h2
+    rw [if_pos ⟨rfl, rfl⟩, if_pos ⟨rfl, rfl⟩]
+  · rw [if_neg h, if_neg (by intro hc; exact h ⟨hc.1.symm, hc.2.symm⟩)]
 
-theorem storeUyum_storeOf (V : List CT.Ad) (s : CT.Store) :
-    StoreUyum V s (storeOf V s) := by
-  intro x hx
-  induction V with
-  | nil => cases hx
-  | cons w rest ih =>
-      show (if (bol w).id = (bol x).id ∧ (0 : Nat) = 0
-            then some (Deger.skaler (s w))
-            else konumGet (storeOf rest s) ⟨bol x, 0⟩) = _
-      by_cases hw : w = x
-      · subst hw; rw [if_pos ⟨rfl, rfl⟩]
-      · rw [if_neg (by intro hc; exact hw hc.1)]
-        exact ih (by cases hx with
-                     | head => exact absurd rfl hw
-                     | tail _ h' => exact h')
 
 -- ============================================================
 -- §3. K-sekilli konfigurasyon + K-kosumu
@@ -347,18 +366,34 @@ theorem krun_esles {V : List CT.Ad} (n : Int) (dd yy : Ifade) {d d' : KDurum}
         [] [] [] ⟨t0, .esles dA.ifade n dd yy, []⟩ ⟨t0, dB.ifade, []⟩
         dA.ifade dB.ifade n dd yy rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
+theorem krun_indeks {V : List CT.Ad} (x : VarId) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .indeks x d.ifade }
+           { d' with ifade := .indeks x d'.ifade } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .indeks x dB.ifade } _ ?_ ih
+      exact Step.sIndeksCong (K V { dA with ifade := .indeks x dA.ifade })
+        (K V { dB with ifade := .indeks x dB.ifade }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .indeks x dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
+        x dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
 -- ============================================================
 -- §5. Taban adimlar (tek Step, K → K)
 -- ============================================================
 
-theorem adim_oku (V : List CT.Ad) (sigma : Store) (x : CT.Ad) (n : Int)
-    (iz : Iz) (z : Zaman) (hx : x ∈ V)
-    (hv : konumGet sigma ⟨bol x, 0⟩ = some (.skaler n)) :
-    Step (K V ⟨sigma, .tanim x, iz, z⟩)
-         (K V ⟨sigma, .sabit (.skaler n),
-               .memOku t0 ⟨bol x, 0⟩ (.skaler n) :: iz, z + 1⟩) :=
-  Step.sVarOku _ _ [] [] ⟨t0, .tanim x, []⟩ x (bol x) (.skaler n)
-    rfl rfl (rhoOf_get hx) hv rfl
+/-- D-336: INDEKSLI OKUMA taban adimi. `x[i]` okur, `memOku ⟨bol x, i⟩`
+    olayini uretir — yani ADRES ize girer. CT'nin `c_degisken`i de
+    `c_indeks`i de buna gomulur (CT'de duz degisken = `x[0]`). -/
+theorem adim_indeks (V : List CT.Ad) (sigma : Store) (x : CT.Ad) (i : Int)
+    (iz : Iz) (z : Zaman) (hx : x ∈ V) :
+    Step (K V ⟨sigma, .indeks x (.sabit (.skaler i)), iz, z⟩)
+         (K V ⟨sigma, .sabit (.skaler (hucreOku sigma ⟨bol x, i.toNat⟩)),
+               .memOku t0 ⟨bol x, i.toNat⟩
+                 (.skaler (hucreOku sigma ⟨bol x, i.toNat⟩)) :: iz, z + 1⟩) :=
+  Step.sIndeksOku _ _ [] [] ⟨t0, .indeks x (.sabit (.skaler i)), []⟩
+    x i (bol x) _ rfl rfl (rhoOf_get hx) rfl rfl
 
 theorem adim_yaz (V : List CT.Ad) (sigma : Store) (x : CT.Ad) (n : Int)
     (iz : Iz) (z : Zaman) (hx : x ∈ V) :
@@ -415,7 +450,9 @@ theorem dogruMu_skaler (n : Int) : degerDogruMu (.skaler n) = decide (n ≠ 0) :
 -- ============================================================
 
 def gomGoz : CT.Gozlem → GozlemOlay
-  | .oOku x   => .gOku t0 ⟨bol x, 0⟩
+  -- D-336: INDEKS ofsete gider — CT'nin adres gozlemi ile Core'un
+  -- `Konum` gozlemi BIREBIR eslesir.
+  | .oOku x i => .gOku t0 ⟨bol x, i⟩
   | .oYaz x   => .gYaz t0 ⟨bol x, 0⟩
   | .oDal a   => .gDal t0 a
 
@@ -457,12 +494,40 @@ theorem gomme_sim {V : List CT.Ad} :
   | c_sabit s n =>
       intro _ _ sigma iz z hu
       exact ⟨.skaler n, sigma, iz, z, KRun.refl _, hu, rfl, fun _ => rfl⟩
+  -- D-336: duz degisken = `x[0]`; Core tarafi sIndeksOku.
   | c_degisken s x =>
       intro _ h_kap sigma iz z hu
       have hx : x ∈ V := by cases h_kap with | k_degisken _ h => exact h
-      exact ⟨.skaler (s x), sigma, _, z + 1,
-        KRun.adim _ _ _ (adim_oku V sigma x (s x) iz z hx (hu x hx))
-          (KRun.refl _), hu, rfl, fun _ => rfl⟩
+      have hval : hucreOku sigma ⟨bol x, (0 : Int).toNat⟩ = s x 0 := hu x hx 0
+      refine ⟨.skaler (s x 0), sigma,
+        .memOku t0 ⟨bol x, 0⟩ (.skaler (s x 0)) :: iz, z + 1, ?_, hu, ?_,
+        fun _ => rfl⟩
+      · have hst := adim_indeks V sigma x 0 iz z hx
+        rw [hval] at hst
+        exact KRun.adim _ _ _ hst (KRun.refl _)
+      · show gozlem (Olay.memOku t0 ⟨bol x, 0⟩ (.skaler (s x 0))) :: izGozlem iz = _
+        rfl
+  -- D-336 (CT005): `x[idx]` — indeks kosar, sonra ADRESLI okuma.
+  | c_indeks s si x idx ti vi _ ihI =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_indeks _ _ h_gi h_si =>
+        have hx : x ∈ V := by cases h_kap with | k_indeks _ _ h _ => exact h
+        have h_ki : Kapsar V idx := by cases h_kap with | k_indeks _ _ _ h => exact h
+        obtain ⟨wi, sgI, izI, zI, hrI, huI, hgI, hsI⟩ := ihI h_gi h_ki sigma iz z hu
+        rw [hsI h_si] at hrI
+        have hval : hucreOku sgI ⟨bol x, vi.toNat⟩ = si x vi.toNat := huI x hx vi.toNat
+        have hst := adim_indeks V sgI x vi izI zI hx
+        rw [hval] at hst
+        refine ⟨.skaler (si x vi.toNat), sgI,
+          .memOku t0 ⟨bol x, vi.toNat⟩ (.skaler (si x vi.toNat)) :: izI, zI + 1,
+          krun_trans (krun_indeks (V := V) x hrI)
+            (KRun.adim _ _ _ hst (KRun.refl _)),
+          huI, ?_, fun _ => rfl⟩
+        show gozlem (Olay.memOku t0 ⟨bol x, vi.toNat⟩ (.skaler (si x vi.toNat)))
+               :: izGozlem izI = _
+        rw [hgI, gomGozIz_append]
+        simp [gozlem, gomGoz, gomGozIz]
   | c_topla s s1 s2 a b t1 t2 v1 v2 _ _ iha ihb =>
       -- D-334: soldan saga kosum + sToplaTamam. Iz katkisi `sira` ile
       -- ayni sekilde birlesir (topla adimlari OLAY URETMEZ).
@@ -782,5 +847,20 @@ theorem kopru_iken_esles_bos_degil :
       (Kapsar.k_iken _ _ (Kapsar.k_sabit 0)
         (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 5)))
       (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 7))
+
+/-- D-336: koprunun INDEKSLI OKUMA kapsadiginin taniki — ve CT005'e
+    UYAN bir program. `tablo[i]` : `tablo` (1) GIZLI bir tablo olabilir,
+    ama INDEKS (`i`, degisken 1... burada GENEL bir degisken) genel
+    olmalidir. Bu tam olarak "S-box'a genel indeksle bak" desenidir;
+    CT005'in yasakladigi sey ise gizli indekstir (`ct005_gerekli`). -/
+theorem kopru_indeks_bos_degil :
+    ∃ (G : CT.EtiketOrtam) (e : CT.Ifade),
+      CT.CtOk G e ∧ GomOk e ∧ Kapsar [0, 1] e
+      ∧ (∃ x idx, e = .indeks x idx) := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .indeks 0 (.degisken 1), ?_, ?_, ?_, ⟨_, _, rfl⟩⟩
+  · exact CT.CtOk.ct_indeks 0 _ (CT.CtOk.ct_degisken 1) (by decide)
+  · exact GomOk.g_indeks 0 _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
+  · exact Kapsar.k_indeks 0 _ (by decide) (Kapsar.k_degisken 1 (by decide))
 
 end Kemgu.SideChannel.CTKopru

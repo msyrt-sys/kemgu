@@ -63,6 +63,9 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
   -- atar (acilma). Yalniz `esles`in skrutini engellenebilir.
   | esles_skrut (s : Ifade) (n : Int) (d y : Ifade) :
       Engelli S s → Engelli S (Ifade.esles s n d y)
+  -- D-336: yalniz INDEKS ifadesi engellenebilir; okumanin kendisi TOPLAM.
+  | indeks_ic (x : VarId) (idx : Ifade) :
+      Engelli S idx → Engelli S (Ifade.indeks x idx)
 
 /-- Engelli'nin odakli konfigurasyondan ana konfigurasyona transferi:
     kanal ayni; thread listesi yalniz odakli ifadede farkli — odaktaki
@@ -97,6 +100,7 @@ theorem engelli_konf_transfer
   | topla_sol a b _ ih => exact Engelli.topla_sol a b ih
   | topla_sag v b _ ih => exact Engelli.topla_sag v b ih
   | esles_skrut s n d y _ ih => exact Engelli.esles_skrut s n d y ih
+  | indeks_ic x idx _ ih => exact Engelli.indeks_ic x idx ih
 
 
 -- ============================================================
@@ -345,6 +349,45 @@ theorem progress_konf
             { ctx1' with ifade := .guvensiz ctx1'.ifade }, ts2',
             Step.sGuvensizCong S _ (ifadeyleKonf S ts1 ts2 ctx e) S1'
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
+  -- D-336: `indeks` progress. Dizi degiskeninin BOLGESI `h_bagli`den
+  -- gelir (t_indeks Γ-kaydini sart kostugu icin); okuma TOPLAM oldugundan
+  -- (hucreOku) STUCK durum YOKTUR — sinir denetimi modellenmiyor.
+  | indeks x idx ih_idx =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_indeks _ _ _ _ τx h_gx hti,
+        LineerTamam.l_indeks _ _ Λi _ _ _ _ _ hli,
+        RegionTamam.r_indeks _ _ Ρi _ _ hri =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx idx h_konf h_t
+          (by rw [h_lin]; exact ⟨Tip.scalar, Λi, Ρi, ⟨hti, hli, hri⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.indeks_ic x idx z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.indeks_ic x idx bb h)
+        rcases ih_idx Tip.scalar Λin Λi Ρi hti hli hri
+            (ifadeyleKonf S ts1 ts2 ctx idx) h_konf1 ts1 ts2
+            { ctx with ifade := idx } rfl rfl h_lin with
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
+        · -- indeks DEGER → skaler (dt_skaler tekilligi) → sIndeksOku
+          cases h_val with
+          | iv_sabit vi =>
+            match hti with
+            | HasType.t_sabit _ _ _ _ hdt =>
+              cases hdt with
+              | dt_skaler i =>
+                have h_bagli := h_konf.2.2.2.2.2.2.2.2.2.1
+                obtain ⟨b, _, h_b, _, _⟩ := h_bagli x τx h_gx
+                exact Or.inr (Or.inr ⟨_,
+                  { ctx with ifade := .sabit (.skaler
+                      (hucreOku S.store ⟨b, i.toNat⟩)) }, ts2,
+                  Step.sIndeksOku S _ ts1 ts2 ctx x i b _ h_t h_if h_b rfl rfl,
+                  rfl, rfl, Or.inl rfl⟩)
+        · exact Or.inr (Or.inl (Engelli.indeks_ic x idx
+            (engelli_konf_transfer S ts1 ts2 ctx idx idx h_eng h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .indeks x ctx1'.ifade }, ts2',
+            Step.sIndeksCong S _ (ifadeyleKonf S ts1 ts2 ctx idx) S1'
+              ts1 ts2 ts2' ctx ctx1' x idx ctx1'.ifade
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
   -- D-335: `iken` progress — EN KOLAY DAL: `sIkenAc` kosulsuz atar

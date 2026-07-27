@@ -96,12 +96,22 @@ def Etiket.altMi : Etiket → Etiket → Bool
   | .gizli, .genel => false
 
 abbrev Ad := Nat
-abbrev Store := Ad → Int
+
+/-- D-336: HER DEGISKEN BIR DIZIDIR (Mehmet karari). Duz degisken =
+    indeks 0. `Sem/Core`daki karsilik `Konum = ⟨bolge(x), ofset⟩`dir;
+    yani bu esleme ana modelin ZATEN VAROLAN ofset alanina oturur.
+    Store TOPLAMDIR — sinir denetimi modellenmez (bkz. `Core.hucreOku`). -/
+abbrev Store := Ad → Nat → Int
+
+/-- Etiket DIZI BASINADIR: bir dizinin tum hucreleri ayni gizlilik
+    seviyesindedir. (Hucre-basina etiket V2; kriptografik tablolar
+    — S-box gibi — zaten dizi-butunu GENEL, INDEKS gizli olur ki
+    CT'nin yasakladigi sey tam olarak budur.) -/
 abbrev EtiketOrtam := Ad → Etiket
 
-/-- Store guncelleme. -/
+/-- Store guncelleme (duz degisken = indeks 0). -/
 def yaz (s : Store) (x : Ad) (v : Int) : Store :=
-  fun y => if y = x then v else s y
+  fun y i => if y = x ∧ i = 0 then v else s y i
 
 -- ============================================================
 -- §2. Sozdizimi — DALLANMA VAR (ana modelde olmayan sey)
@@ -116,6 +126,7 @@ inductive Ifade : Type where
   | eger     (kosul : Ifade) (dogruDal yanlisDal : Ifade)
   | iken     (kosul govde : Ifade)                              -- D-335 (CT002)
   | esles    (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)   -- D-335 (CT004)
+  | indeks   (dizi : Ad) (idx : Ifade)                           -- D-336 (CT005)
 
 -- ============================================================
 -- §3. Saldirgan gozlemi — erisim deseni + DAL KARARI
@@ -125,7 +136,10 @@ inductive Ifade : Type where
     `oDal` KRITIK: dallanma karari saldirgan tarafindan gorulur
     (dal hedefleri farkli kod/zaman → PC/timing sizintisi). -/
 inductive Gozlem : Type where
-  | oOku (x : Ad)
+  /-- D-336: okuma gozlemi artik INDEKSI de tasir — saldirgan ERISIM
+      ADRESINI gorur (onbellek-satiri zamanlamasi). Duz degisken okumasi
+      `oOku x 0`dir. Gizli-indeks kanali (CT005) tam olarak buradadir. -/
+  | oOku (x : Ad) (i : Nat)
   | oYaz (x : Ad)
   | oDal (alindi : Bool)
 deriving DecidableEq, Repr
@@ -140,7 +154,13 @@ inductive Calis : Store → Ifade → Store → Iz → Int → Prop where
   | c_sabit (s : Store) (n : Int) :
       Calis s (.sabit n) s [] n
   | c_degisken (s : Store) (x : Ad) :
-      Calis s (.degisken x) s [.oOku x] (s x)
+      Calis s (.degisken x) s [.oOku x 0] (s x 0)
+  /-- D-336 (CT005): `x[idx]` — once indeks kosar, sonra hucre okunur ve
+      **OKUNAN ADRES IZE GIRER** (`oOku x i`). Indeks negatifse `toNat`
+      ile 0'a kirpilir (store TOPLAM; sinir denetimi modellenmez). -/
+  | c_indeks (s s1 : Store) (x : Ad) (idx : Ifade) (ti : Iz) (vi : Int)
+      (hi : Calis s idx s1 ti vi) :
+      Calis s (.indeks x idx) s1 (ti ++ [.oOku x vi.toNat]) (s1 x vi.toNat)
   | c_topla (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
       (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
       Calis s (.topla a b) s2 (t1 ++ t2) (v1 + v2)
@@ -198,6 +218,9 @@ def ifadeEtiket (G : EtiketOrtam) : Ifade → Etiket
   | .iken k g       => (ifadeEtiket G k).birlesim (ifadeEtiket G g)
   | .esles s _ d y  => ((ifadeEtiket G s).birlesim (ifadeEtiket G d)).birlesim
                          (ifadeEtiket G y)
+  -- D-336: okunan degerin etiketi DIZININ etiketi (ve indeksinki —
+  -- gizli indeksle secilen hucre de gizli sayilir; muhafazakar).
+  | .indeks x idx   => (G x).birlesim (ifadeEtiket G idx)
 
 /-- CT disiplini. Iki kural kagittan gelir:
     * **CT003 (sizinti):** gizli deger GENEL degiskene yazilamaz.
@@ -228,6 +251,13 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
       (hs : CtOk G s) (hd : CtOk G d) (hy : CtOk G y)
       (h_skrut_genel : ifadeEtiket G s = .genel) :            -- CT004
       CtOk G (.esles s n d y)
+  /-- **CT005 (gizli indeks):** INDEKS GENEL olmalidir — gizliye gore
+      adreslemek erisilen adresi (dolayisiyla onbellek satirini) sizdirir.
+      Dizinin KENDISI gizli olabilir (S-box gibi tablolar genelde
+      geneldir; yasaklanan sey INDEKSIN gizli olmasidir). -/
+  | ct_indeks (x : Ad) (idx : Ifade) (hi : CtOk G idx)
+      (h_idx_genel : ifadeEtiket G idx = .genel) :            -- CT005
+      CtOk G (.indeks x idx)
 
 -- ============================================================
 -- §6. Dusuk-esdegerlik (saldirganin ayirt edemedigi store'lar)
@@ -235,23 +265,24 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
 
 /-- Iki store, GENEL etiketli tum degiskenlerde ayni ise dusuk-esdegerdir. -/
 def DusukEs (G : EtiketOrtam) (s1 s2 : Store) : Prop :=
-  ∀ x, G x = .genel → s1 x = s2 x
+  ∀ x, G x = .genel → ∀ i, s1 x i = s2 x i
 
 theorem dusukEs_yaz_genel (G : EtiketOrtam) (s1 s2 : Store) (x : Ad) (v : Int)
     (h : DusukEs G s1 s2) : DusukEs G (yaz s1 x v) (yaz s2 x v) := by
-  intro y hy
-  by_cases hxy : y = x
+  intro y hy i
+  by_cases hxy : y = x ∧ i = 0
   · simp [yaz, hxy]
-  · simp [yaz, hxy]; exact h y hy
+  · simp [yaz, hxy]; exact h y hy i
 
 /-- GIZLI degiskene yazmak dusuk-esdegerligi BOZMAZ (saldirgan gormez). -/
 theorem dusukEs_yaz_gizli (G : EtiketOrtam) (s1 s2 : Store) (x : Ad) (v1 v2 : Int)
     (h : DusukEs G s1 s2) (hx : G x = .gizli) :
     DusukEs G (yaz s1 x v1) (yaz s2 x v2) := by
-  intro y hy
+  intro y hy i
   by_cases hxy : y = x
   · rw [hxy] at hy; rw [hx] at hy; exact absurd hy (by simp)
-  · simp [yaz, hxy]; exact h y hy
+  · have h1 : ¬ (y = x ∧ i = 0) := by intro hc; exact hxy hc.1
+    simp [yaz, h1]; exact h y hy i
 
 -- ============================================================
 -- §7. ANA LEMMA — genel ifadeler gizli veriden BAGIMSIZDIR
@@ -287,7 +318,7 @@ theorem genel_ifade_korunum (G : EtiketOrtam) :
       cases h2; exact ⟨rfl, rfl, h_low⟩
   | c_degisken s x =>
       intro s2 s2' t2 v2 h2 h_low h_et
-      cases h2; exact ⟨h_low x h_et, rfl, h_low⟩
+      cases h2; exact ⟨h_low x h_et 0, rfl, h_low⟩
   | c_topla s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
       intro s2 s2' t2 v2 h2 h_low h_et
       cases h2 with
@@ -296,6 +327,17 @@ theorem genel_ifade_korunum (G : EtiketOrtam) :
         obtain ⟨hva, hta, h_low'⟩ := ihA hA2 h_low h_ea
         obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
         exact ⟨by rw [hva, hvb], by rw [hta, htb], h_low''⟩
+  -- D-336 (CT005): etiket GENEL ise hem DIZI hem INDEKS geneldir →
+  -- iki kosumda AYNI adres okunur ve AYNI deger doner.
+  | c_indeks s si x idx ti vi hI1 ihI =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_ex, h_ei⟩ := birlesim_genel h_et
+      cases h2 with
+      | c_indeks _ si2 _ _ ti2 vi2 hI2 =>
+        obtain ⟨hvi, hti, h_low'⟩ := ihI hI2 h_low h_ei
+        refine ⟨?_, by rw [hti, hvi], h_low'⟩
+        rw [hvi]
+        exact h_low' x h_ex vi2.toNat
   | c_atama s sa1 x e ta1 va1 hE1 ihE =>
       intro s2 s2' t2 v2 h2 h_low h_et
       cases h2 with
@@ -437,6 +479,17 @@ theorem ct_ni (G : EtiketOrtam) :
           obtain ⟨hta, h_low'⟩ := ihA hA2 hca h_low
           obtain ⟨htb, h_low''⟩ := ihB hB2 hcb h_low'
           exact ⟨by rw [hta, htb], h_low''⟩
+  -- D-336 (CT005): `h_ig` (indeks genel) sayesinde iki kosum AYNI adresi
+  -- okur → izler ayni. Bu sart OLMASAYDI `oOku x i1` vs `oOku x i2`
+  -- ayrisirdi (ct005_gerekli taniği).
+  | c_indeks s si x idx ti vi hI1 ihI =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_indeks _ _ hci h_ig =>
+        cases h2 with
+        | c_indeks _ si2 _ _ ti2 vi2 hI2 =>
+          obtain ⟨hvi, hti, h_low'⟩ := genel_ifade_korunum G hI1 hI2 h_low h_ig
+          exact ⟨by rw [hti, hvi], h_low'⟩
   | c_atama s sa1 x e ta1 va1 hE1 ihE =>
       intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
@@ -561,16 +614,16 @@ theorem ct001_gerekli :
   -- G: 0. degisken GIZLI (h), digerleri genel
   refine ⟨fun x => if x = 0 then .gizli else .genel,
           .eger (.degisken 0) (.sabit 1) (.sabit 2),
-          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 0 else 5),
-          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 0 else 5),
-          [.oOku 0, .oDal true], [.oOku 0, .oDal false], 1, 2, ?_, ?_, ?_, ?_⟩
+          (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 0 else 5),
+          (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 0 else 5),
+          [.oOku 0 0, .oDal true], [.oOku 0 0, .oDal false], 1, 2, ?_, ?_, ?_, ?_⟩
   · intro x hx
     by_cases h0 : x = 0
     · rw [h0] at hx; exact absurd hx (by simp)
     · simp [h0]
-  · exact Calis.c_eger_dogru _ _ _ _ _ _ [.oOku 0] [] 1 1
+  · exact Calis.c_eger_dogru _ _ _ _ _ _ [.oOku 0 0] [] 1 1
       (Calis.c_degisken _ 0) (by decide) (Calis.c_sabit _ 1)
-  · exact Calis.c_eger_yanlis _ _ _ _ _ _ [.oOku 0] [] 0 2
+  · exact Calis.c_eger_yanlis _ _ _ _ _ _ [.oOku 0 0] [] 0 2
       (Calis.c_degisken _ 0) rfl (Calis.c_sabit _ 2)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
 
@@ -588,21 +641,21 @@ theorem ct002_gerekli :
       ∧ t1 ≠ t2 := by
   refine ⟨fun x => if x = 0 then .gizli else .genel,
           .iken (.degisken 0) (.sabitDeg 0 (.sabit 0)),
-          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 0 else 5),
-          yaz (fun x => if x = 0 then 1 else 5) 0 0,
-          (fun x => if x = 0 then 0 else 5),
-          [.oOku 0] ++ .oDal true :: ([.oYaz 0] ++ [.oOku 0, .oDal false]),
-          [.oOku 0] ++ [.oDal false], 0, 0, ?_, ?_, ?_, ?_⟩
+          (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 0 else 5),
+          yaz (fun x _ => if x = 0 then 1 else 5) 0 0,
+          (fun x _ => if x = 0 then 0 else 5),
+          [.oOku 0 0] ++ .oDal true :: ([.oYaz 0] ++ [.oOku 0 0, .oDal false]),
+          [.oOku 0 0] ++ [.oDal false], 0, 0, ?_, ?_, ?_, ?_⟩
   · intro x hx
     by_cases h0 : x = 0
     · rw [h0] at hx; exact absurd hx (by simp)
     · simp [h0]
-  · exact Calis.c_iken_dogru _ _ _ _ _ _ [.oOku 0] [.oYaz 0]
-      [.oOku 0, .oDal false] 1 0 0
+  · exact Calis.c_iken_dogru _ _ _ _ _ _ [.oOku 0 0] [.oYaz 0]
+      [.oOku 0 0, .oDal false] 1 0 0
       (Calis.c_degisken _ 0) (by decide)
       (Calis.c_atama _ _ 0 (.sabit 0) [] 0 (Calis.c_sabit _ 0))
-      (Calis.c_iken_yanlis _ _ _ _ [.oOku 0] 0 (Calis.c_degisken _ 0) rfl)
-  · exact Calis.c_iken_yanlis _ _ _ _ [.oOku 0] 0 (Calis.c_degisken _ 0) rfl
+      (Calis.c_iken_yanlis _ _ _ _ [.oOku 0 0] 0 (Calis.c_degisken _ 0) rfl)
+  · exact Calis.c_iken_yanlis _ _ _ _ [.oOku 0 0] 0 (Calis.c_degisken _ 0) rfl
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
 
 /-- **CT004'un GEREKLILIGI (D-335):** gizli skrutin uzerinde ESLESEN
@@ -615,18 +668,47 @@ theorem ct004_gerekli :
       ∧ t1 ≠ t2 := by
   refine ⟨fun x => if x = 0 then .gizli else .genel,
           .esles (.degisken 0) 1 (.sabit 5) (.sabit 7),
-          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 2 else 5),
-          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 2 else 5),
-          [.oOku 0] ++ .oDal true :: [], [.oOku 0] ++ .oDal false :: [],
+          (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 2 else 5),
+          (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 2 else 5),
+          [.oOku 0 0] ++ .oDal true :: [], [.oOku 0 0] ++ .oDal false :: [],
           5, 7, ?_, ?_, ?_, ?_⟩
   · intro x hx
     by_cases h0 : x = 0
     · rw [h0] at hx; exact absurd hx (by simp)
     · simp [h0]
-  · exact Calis.c_esles_tuttu _ _ _ _ 1 _ _ [.oOku 0] [] 1 5
+  · exact Calis.c_esles_tuttu _ _ _ _ 1 _ _ [.oOku 0 0] [] 1 5
       (Calis.c_degisken _ 0) rfl (Calis.c_sabit _ 5)
-  · exact Calis.c_esles_tutmadi _ _ _ _ 1 _ _ [.oOku 0] [] 2 7
+  · exact Calis.c_esles_tutmadi _ _ _ _ 1 _ _ [.oOku 0 0] [] 2 7
       (Calis.c_degisken _ 0) (by decide) (Calis.c_sabit _ 7)
+  · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CT005'in GEREKLILIGI (D-336):** GIZLI INDEKSLE tablo okumak,
+    okunan ADRESI sizdirir. Klasik onbellek-zamanlama saldirisinin
+    (AES S-box) mekanize cekirdegi.
+
+    Program: `tablo[h]` — `tablo` (1) GENEL, `h` (0) GIZLI. Iki
+    dusuk-esdeger store'da h farkli oldugu icin izler `oOku 1 3` ve
+    `oOku 1 7` olur → AYRISIR. `ct_indeks`in `h_idx_genel` sarti bu
+    yuzden gereklidir. -/
+theorem ct005_gerekli :
+    ∃ (G : EtiketOrtam) (e : Ifade) (s1 s2 s1' s2' : Store)
+      (t1 t2 : Iz) (v1 v2 : Int),
+      DusukEs G s1 s2 ∧ Calis s1 e s1' t1 v1 ∧ Calis s2 e s2' t2 v2
+      ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .indeks 1 (.degisken 0),
+          (fun x _ => if x = 0 then 3 else 5),
+          (fun x _ => if x = 0 then 7 else 5),
+          (fun x _ => if x = 0 then 3 else 5),
+          (fun x _ => if x = 0 then 7 else 5),
+          [.oOku 0 0] ++ [.oOku 1 3], [.oOku 0 0] ++ [.oOku 1 7],
+          5, 5, ?_, ?_, ?_, ?_⟩
+  · intro x hx i
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact Calis.c_indeks _ _ 1 _ [.oOku 0 0] 3 (Calis.c_degisken _ 0)
+  · exact Calis.c_indeks _ _ 1 _ [.oOku 0 0] 7 (Calis.c_degisken _ 0)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
 
 end Kemgu.SideChannel.CT

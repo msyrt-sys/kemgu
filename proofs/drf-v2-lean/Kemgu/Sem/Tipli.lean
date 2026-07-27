@@ -196,6 +196,36 @@ theorem typed_esles_dal {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     | true  => exact ⟨htd, lineerNotr_kimlik h_nd _, hrd⟩
     | false => exact ⟨hty, lineerNotr_kimlik h_ny _, hry⟩
 
+/-- D-336: indeksli okumanin INDEKS ifadesi tiplidir (sIndeksCong). -/
+theorem typed_indeks_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.indeks x e) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ e Tip.scalar Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_indeks _ _ _ _ _ _ hte,
+    LineerTamam.l_indeks _ _ _ _ _ _ _ _ hle,
+    RegionTamam.r_indeks _ _ _ _ _ hre =>
+    exact ⟨hte, hle, hre⟩
+
+/-- D-336: okunan hucre SKALERDIR — `sIndeksOku` sonrasi tiplenme.
+    Cikis ortamlari indeks ifadesinin (burada `sabit`) ciktisidir. -/
+theorem typed_indeks_oku {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {x : VarId} {i : Int} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.indeks x (Ifade.sabit (.skaler i))) τ Λ' Ρ')
+    (n : Int) :
+    Typed Γ Δ Λ Ρ (Ifade.sabit (.skaler n)) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_indeks _ _ _ _ _ _ _,
+    LineerTamam.l_indeks _ _ _ _ _ _ _ _ hle,
+    RegionTamam.r_indeks _ _ _ _ _ hre =>
+    cases hle; cases hre
+    exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
+
 /-- Atama RHS'i tiplidir (sAtamaCong tipleme tarafi). -/
 theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}

@@ -5,6 +5,63 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-336 — GİZLİ İNDEKS (CT005): erişim adresi artık gözlenir (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+`Ifade.indeks x idx` + `Step.sIndeksOku`/`sIndeksCong` (29→31 kural) + `t_indeks`/
+`l_indeks`/`r_indeks`; CT tarafında `Ifade.indeks`, `Calis.c_indeks`, `CtOk.ct_indeks`
+(**CT005**); köprüde `gom`/`Sadik`/`GomOk`/`Kapsar`/`krun_indeks`/`adim_indeks`.
+
+**MEHMET KARARLARI (soruldu):**
+1. Bellek modeli: **`CT.Store = Ad → Nat → Int`** — her değişken bir dizi, düz
+   değişken = indeks 0. Ayrı dizi uzayı reddedildi (her yargı iki ortam taşırdı).
+2. **Sadece OKUMA.** İndeksli yazma (`a[i] = e`) V2 — açık kapsam notu.
+
+**YENİ `Olay` KURUCUSU GEREKMEDİ — ve bu tesadüf değil.** `Sem/Core`'un
+`Konum = ⟨Bolge, ofset⟩` alanı vardı ama ofset hep 0 kullanılıyordu; indeksli
+okuma tam oraya oturdu. `memOku` zaten `Konum` taşıdığından **erişim adresi
+kendiliğinden gözlenir** — gizli-indeks kanalı (önbellek-zamanlama, AES S-box)
+modelde böylece ifade edilebilir oldu.
+
+**OKUMA TOPLAM (`hucreOku`) — ve bu bir kapsam beyanıdır.** İndeksli okumanın
+takılmaması (progress) ve sonucunun daima skaler olması (korunum) için hücre
+okuma toplam tanımlandı: kayıtlı olmayan ya da skaler-olmayan hücre 0 okur.
+**Bu, SINIR DENETİMİNİN MODELLENMEDİĞİ anlamına gelir.** KEMGU'nun gerçek dizi
+erişimi sınır-kontrollüdür ve ihlalde panikler; buradaki amaç yan-kanal, bellek
+güvenliği değil. CT store'u da toplam olduğu için köprü bu noktada SADIKTIR.
+
+**KÖPRÜDE BİR SADELEŞME:** CT'de düz değişken artık `x[0]` olduğundan `gom`
+`degisken x`i `tanim x` yerine **`indeks x 0`**a gömüyor. Kazanç: `sVarOku`nun
+"konum kayıtlı olmalı" ön-koşulu düşüyor, store uyumu tek biçimle (`hucreOku`)
+ifade ediliyor. `StoreUyum` artık TÜM ofsetler için.
+
+**İSPATIN ZORLADIĞI DÖRDÜNCÜ DARALTMA — `degerSil`in hedefi değişti.**
+İşaretçi-benzeri değerler artık `skaler 1`e değil **tek bir kanonik opak değere**
+iniyor. Sebep: `hucreOku` skaler-olmayan hücreyi 0 okur; silme onu `skaler 1`e
+çevirseydi silinmiş koşum 1 okurdu → 0 ≠ 1, `sIndeksOku` simülasyonu çökerdi.
+Kanonik opak değer hem `hucreOku` (ikisi de 0) hem `degerDogruMu` (ikisi de
+doğru) ile uyumlu. Bu bir daraltma değil, daha tutarlı bir gizleme.
+
+**VAKUM + SABOTAJ:**
+- `ct005_gerekli`: gizli indeksle tablo okumak izleri ayrıştırır
+  (`oOku 1 3` vs `oOku 1 7`) — klasik önbellek-zamanlama saldırısının çekirdeği.
+- `kopru_indeks_bos_degil`: CT005'e UYAN (genel indeksli) program hipotezleri sağlar.
+- `storeUyum_ornek`: `StoreUyum` sıfır-olmayan bir DİZİ HÜCRESİYLE sağlanabilir
+  → hipotez tarafı boş değil. (Genel `storeOf` inşası yerine somut tanık seçildi;
+  teoremin vakum olmadığını göstermek için yeter ve ispatı denetlenebilir tutar.)
+- Sabotaj: CT005 şartını kaldır → **4 hata**; `gomGoz`da adresi sabitle (indeks
+  izlenmesin) → **3 hata**; geri alınca 0.
+
+**HÂLÂ AÇIK:** indeksli YAZMA, eşzamanlı CT, çarpma/**bölme** (veri-bağımlı
+gecikme — kendi kuralını ister), `esles`in yapıcı/çeşit desenleri, ve
+hücre-başına gizlilik etiketi (şu an etiket dizi başına).
+
+---
+
 ## D-335 — `iken` + `esles`: CT002 ve CT004 mekanize edildi (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

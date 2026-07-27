@@ -81,6 +81,8 @@ inductive RegionNotr : Ifade → Prop where
   | rn_esles (s : Ifade) (n : Int) (d y : Ifade) :
       RegionNotr s → RegionNotr d → RegionNotr y →
       RegionNotr (Ifade.esles s n d y)
+  | rn_indeks (x : VarId) (idx : Ifade) :
+      RegionNotr idx → RegionNotr (Ifade.indeks x idx)
 
 
 /-- RegionTamam Γ Ρ e Ρ' — Bolge durum gecisi:
@@ -243,6 +245,13 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
               RegionTamam Γ Ρs d Ρs →
               RegionTamam Γ Ρs y Ρs →
               RegionTamam Γ Ρ (Ifade.esles s n d y) Ρs
+
+  /-- R-INDEKS (D-336): okuma bolge ortamini etkilemez; gecis yalniz
+      indeks ifadesinden gelir (r_atama'nin aksine yazma yok, dolayisiyla
+      yazilabilirlik yan-kosulu da YOK). -/
+  | r_indeks (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (x : VarId) (idx : Ifade) :
+               RegionTamam Γ Ρ idx Ρ' →
+               RegionTamam Γ Ρ (Ifade.indeks x idx) Ρ'
 
   /-- R-GUVENSIZ: ic ifade delegate. -/
   | r_guvensiz (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (e : Ifade) :
@@ -458,6 +467,8 @@ theorem regionNotr_cikis_esit {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
   | r_sabit _ _ => exact fun _ => rfl
   | r_atama _ _ _ _ _ _ _ _ ih =>
       intro h_n; cases h_n with | rn_atama _ _ h_ne => exact ih h_ne
+  | r_indeks _ _ _ _ _ ih =>
+      intro h_n; cases h_n with | rn_indeks _ _ h_ni => exact ih h_ni
   | r_seq _ _ _ _ _ _ _ ih_a ih_b =>
       intro h_n
       cases h_n with
@@ -496,6 +507,8 @@ theorem regionNotr_hedefBolge_yok {e : Ifade} (h_n : RegionNotr e) :
   | rn_sabit v => intro b h; nomatch h
   | rn_atama x e _ ih =>
       intro b h; exact ih b (hedefBolge_atama_inv h)
+  | rn_indeks x idx _ ih =>
+      intro b h; cases h with | indeks_ic _ _ _ h' => exact ih b h'
   | rn_seq a c _ _ ih_a ih_c =>
       intro b h
       rcases hedefBolge_seq_inv h with h' | h'
@@ -544,6 +557,7 @@ theorem regionTamam_yaz_geri {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
   | r_tanim _ _ => exact fun _ _ h_o _ => h_o
   | r_sabit _ _ => exact fun _ _ h_o _ => h_o
   | r_atama _ _ _ _ _ _ _ _ ih => exact ih
+  | r_indeks _ _ _ _ _ ih => exact ih
   | r_seq _ _ _ _ _ _ _ ih_a ih_b =>
       exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
   | r_topla _ _ _ _ _ _ _ ih_a ih_b =>
@@ -621,6 +635,14 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
         rw [h_agree x (h_hv x (HedefVar.atama_bas x e))]
         exact h_gx
       exact ⟨Ρe', RegionTamam.r_atama _ _ _ x e b h_re' h_gx' h_yz, h_agree⟩
+  -- D-336: indeksli okuma — yazma yok, yan-kosul yok; sadece indeks tasinir.
+  | r_indeks _ _ x e _ ih =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρe', h_re', h_agree⟩ := ih Ρn
+        (fun z hz => h_hv z (HedefVar.indeks_ic x e z hz))
+        (fun x' bb hb hyz hlk =>
+          h_hb x' bb (HedefBolge.indeks_ic x e bb hb) hyz hlk)
+      exact ⟨Ρe', RegionTamam.r_indeks _ _ _ x e h_re', h_agree⟩
   | r_seq _ _ _ a b h_ra _ ih_a ih_b =>
       intro Ρn h_hv h_hb
       obtain ⟨Ρa', h_ra', agree_a⟩ := ih_a Ρn
@@ -806,6 +828,11 @@ theorem regionTamam_iliski_transport {Γ : TipOrtam}
       obtain ⟨Ρen, h_re', hi'⟩ := ih Ρn hi
       exact ⟨Ρen, RegionTamam.r_atama _ _ _ x e b h_re'
         (hi'.1 x b h_gx h_yz) h_yz, hi'⟩
+  -- D-336
+  | r_indeks _ _ x e _ ih =>
+      intro Ρn hi
+      obtain ⟨Ρen, h_re', hi'⟩ := ih Ρn hi
+      exact ⟨Ρen, RegionTamam.r_indeks _ _ _ x e h_re', hi'⟩
   | r_seq _ _ _ a b _ _ ih_a ih_b =>
       intro Ρn hi
       obtain ⟨Ρan, h_ra', hi_a⟩ := ih_a Ρn hi
