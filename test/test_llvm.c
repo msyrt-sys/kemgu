@@ -3119,6 +3119,60 @@ static void test_ornek_kanal_mesaj(void) {
     test_sonuc("ornek kanal_mesaj.kem -> exit 15", rc == 15);
 }
 
+/* === D-335: ISARETSIZ (dtamN) SEMANTIGI — C tarafi KILIT ===
+ * Bu bes test C'nin DOGRU isaretsiz davranisini sabitler. Self-host su an
+ * imzasizligi IZLEMIYOR (codegen.kem: "imzasizlik (dtam) izlemiyor") ve
+ * ayni programlarda SESSIZCE YANLIS sonuc uretiyor (olculdu: zext yerine
+ * sext, udiv yerine sdiv, lshr yerine ashr, ucmp yerine scmp). Port ayri
+ * is; bu testler en azindan C tarafinin regresyona ugramasini engeller. */
+
+static void test_isaretsiz_genisletme(void) {
+    /* dtam8 200 -> tam32: zext ile 200; sext ile -56 olurdu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; ver (a olarak tam32); }");
+    test_sonuc("isaretsiz genisletme dtam8 200 -> zext -> exit 200", rc == 200);
+}
+
+static void test_isaretsiz_bolme(void) {
+    /* 200/4 = 50 (udiv). sdiv olsaydi (-56)/4 = -14. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; de\xc4\x9fi\xc5\x9fken b: dtam8 = 4; "
+        "ver ((a / b) olarak tam32); }");
+    test_sonuc("isaretsiz bolme dtam8 200/4 -> udiv -> exit 50", rc == 50);
+}
+
+static void test_isaretsiz_mod(void) {
+    /* 200 % 7 = 4 (urem). srem olsaydi (-56)%7 = 0.
+     * NOT: bu bir printf bicim dizisi DEGIL — KEMGU kaynagi; tek '%'. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; de\xc4\x9fi\xc5\x9fken b: dtam8 = 7; "
+        "ver ((a % b) olarak tam32); }");
+    test_sonuc("isaretsiz mod dtam8 200 mod 7 -> urem -> exit 4", rc == 4);
+}
+
+static void test_isaretsiz_kaydirma(void) {
+    /* 200>>2 = 50 (lshr). ashr olsaydi (-56)>>2 = -14. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; ver ((a >> 2) olarak tam32); }");
+    test_sonuc("isaretsiz kaydirma dtam8 200>>2 -> lshr -> exit 50", rc == 50);
+}
+
+static void test_isaretsiz_karsilastirma(void) {
+    /* 200 > 100 DOGRU (ugt). sgt olsaydi (-56) > 100 YANLIS olurdu. */
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: dtam8 = 200; de\xc4\x9fi\xc5\x9fken b: dtam8 = 100; "
+        /* UTF-8 hex-escape tuzagi (CLAUDE.md): \x9f'den sonra 'e' hex rakam →
+         * concatenation ile ayir, yoksa \x9fe okunur. */
+        "e\xc4\x9f" "er a > b { ver 42; } ver 1; }");
+    test_sonuc("isaretsiz karsilastirma dtam8 200>100 -> ugt -> exit 42",
+               rc == 42);
+}
+
 /* === D-334: KAPANIS KONTEYNERDE (yapi alani / dizi elemani) === */
 
 /* Yapi ALANI kapanis: `k.fn()`. Once her ERISIM-hedefli cagri METOD
@@ -3563,6 +3617,13 @@ int main(void) {
     test_kanal_yon_uctan_uca();     /* D-303 */
     test_ornek_gorev_temel();
     test_ornek_kanal_mesaj();
+
+    printf("\n--- D-335: isaretsiz (dtamN) semantigi — C kilidi ---\n");
+    test_isaretsiz_genisletme();
+    test_isaretsiz_bolme();
+    test_isaretsiz_mod();
+    test_isaretsiz_kaydirma();
+    test_isaretsiz_karsilastirma();
 
     printf("\n--- D-334: kapanis konteynerde (yapi alani / dizi elemani) ---\n");
     test_kapanis_yapi_alani();

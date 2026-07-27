@@ -50,6 +50,42 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-335 — [YÜKSEK] Self-host ISARETSIZ (dtamN) semantigi YOK → sessiz yanlis cevap (2026-07-27)
+
+**Karar [ETKİ: `test/test_llvm.c` (279 → **284**, C tarafi KILIT).]** Adversarial tarama
+(sayisal donusum yuzeyi) bir SINIF sessiz-yanlis-cevap buldu — bu kez **self-host**'ta.
+
+**ÖLÇÜM (C = dogru, self = yanlis):**
+| program (dtam8) | C | self | dogru |
+|---|---|---|---|
+| `a=200; (a olarak tam32)` | 200 | yanlis | 200 |
+| `a/b` (200/4) | 50 | yanlis | 50 |
+| `a mod b` (200 mod 7) | 4 | **0** | 4 |
+| `a >> 2` (200>>2) | 50 | yanlis | 50 |
+| `a > b` (200>100) | 42 | **1** | 42 |
+
+**IR KANITI:** self `sext i8` / `sdiv i8` / `ashr i8` uretiyor; C `zext` / `udiv` /
+`lshr` / `ugt`. **Kok neden KODDA YAZILI** (`selfhost/codegen.kem` ~1928):
+*"imzasizlik (dtam) izlemiyor — sdiv/srem'de oldugu gibi DAIMA imzali varyant"*.
+Yani bilinen bir kisit olarak NOT DUSULMUS, ama sonucu **sessiz yanlis cevap**;
+kripto (`stdlib/kripto`), OS surucu ve bayt isleme kodunda dogrudan yanlis davranis.
+
+**Bu adimda YAPILAN:** C'nin DOGRU davranisi 5 testle KILITLENDI (test_llvm 279→284:
+genisletme/bolme/mod/kaydirma/karsilastirma). Self-host portu **CHIP'LENDI** — ayni
+dosyaya (`selfhost/codegen.kem`) dokunan baska gorevler kosuyor, paralel duzenleme bu
+oturumda iki kez ise mal olmustu.
+
+**Korpusa (cg_korpus) EKLENMEDI** — self su an YANLIS oldugu icin codegen_diff hakli
+olarak kirmizi verirdi; kirmizi main birakilmaz. Self duzelince korpusa tasinacak.
+
+**⚠ SUREC NOTU:** ilk yazdigim 2 test C'de KIRMIZI verdi — ikisi de BENIM test
+kaynagimdaki hataydi (bagimsiz olcumde C dogruydu): (a) `%` icin printf kacisi
+sanip `%%` yazmisim (bu printf DEGIL, KEMGU kaynagi); (b) `eğer` yazarken CLAUDE.md'nin
+UTF-8 hex-escape kuralini ihlal etmisim (`\x9f` sonrasi 'e' hex rakam →
+concatenation sart). **Test kirmizisini once TESTTE ara.**
+
+---
+
 ## D-334 — KAPANIS KONTEYNERDE: yapi alani + dizi elemani cagrilabilir (2026-07-27)
 
 **Karar [ETKİ: `src/llvm.c` (`fat_cagri_uret` ORTAK dispatch + `yapi_alan_tip_dugumu`
