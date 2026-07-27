@@ -75,6 +75,12 @@ inductive Sadik : CT.Ifade → Prop where
   | s_eger (k d y : CT.Ifade) : Sadik d → Sadik y → Sadik (.eger k d y)
   /-- D-334: toplamin degeri `skaler (v1+v2)` — sadik. -/
   | s_topla (a b : CT.Ifade) : Sadik (.topla a b)
+  /-- D-335: `esles`in degeri secilen koldan gelir. -/
+  | s_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
+      Sadik d → Sadik y → Sadik (.esles s n d y)
+  -- NOT: `iken` SADIK DEGILDIR — CT'de dongu 0 dondurur, Core'da
+  -- (acilmis `eger`in yanlis dali) `birim`. Dongu bir DEYIMDIR; degeri
+  -- kullanilan bir konuma giremez (`sabitDeg` ile ayni sinif).
 
 /-- Gomulebilir CT ifadeleri. D-334'ten beri CT'nin TUM bicimleri
     gomulebilir; tek kisit `Sadik` (Kapsam 2). -/
@@ -93,6 +99,13 @@ inductive GomOk : CT.Ifade → Prop where
       `sabit (skaler _)` olmasini ister. -/
   | g_topla (a b : CT.Ifade) :
       GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.topla a b)
+  /-- D-335: dongu. Kosul `Sadik` olmali (dal karari ona bagli). -/
+  | g_iken (k g : CT.Ifade) :
+      GomOk k → Sadik k → GomOk g → GomOk (.iken k g)
+  /-- D-335: desen eslemesi. Skrutin `Sadik` olmali (literal ile
+      karsilastirilir). -/
+  | g_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
+      GomOk s → Sadik s → GomOk d → GomOk y → GomOk (.esles s n d y)
 
 /-- CT ifadesi → Core ifadesi. D-334'ten beri TOPLAM (her bicim icin
     gercek bir karsilik var; tikac dal YOK). -/
@@ -103,6 +116,8 @@ def gom : CT.Ifade → Ifade
   | .sira a b       => .seq (gom a) (gom b)
   | .eger k d y     => .eger (gom k) (gom d) (gom y)
   | .topla a b      => .topla (gom a) (gom b)   -- D-334
+  | .iken k g       => .iken (gom k) (gom g)    -- D-335
+  | .esles s n d y  => .esles (gom s) n (gom d) (gom y)
 
 /-- Ifadenin degiskenleri V icinde mi (Kapsam 3). -/
 inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
@@ -114,6 +129,9 @@ inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
   | k_eger (k d y : CT.Ifade) :
       Kapsar V k → Kapsar V d → Kapsar V y → Kapsar V (.eger k d y)
   | k_topla (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.topla a b)
+  | k_iken (k g : CT.Ifade) : Kapsar V k → Kapsar V g → Kapsar V (.iken k g)
+  | k_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
+      Kapsar V s → Kapsar V d → Kapsar V y → Kapsar V (.esles s n d y)
 
 -- ============================================================
 -- §2. Gomme — durum (bolge / sahiplik / store)
@@ -316,6 +334,19 @@ theorem krun_topla_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
         [] [] [] ⟨t0, .topla (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
         v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
+theorem krun_esles {V : List CT.Ad} (n : Int) (dd yy : Ifade) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .esles d.ifade n dd yy }
+           { d' with ifade := .esles d'.ifade n dd yy } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .esles dB.ifade n dd yy } _ ?_ ih
+      exact Step.sEslesCong (K V { dA with ifade := .esles dA.ifade n dd yy })
+        (K V { dB with ifade := .esles dB.ifade n dd yy }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .esles dA.ifade n dd yy, []⟩ ⟨t0, dB.ifade, []⟩
+        dA.ifade dB.ifade n dd yy rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
 -- ============================================================
 -- §5. Taban adimlar (tek Step, K → K)
 -- ============================================================
@@ -359,6 +390,22 @@ theorem adim_topla (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
          (K V ⟨sigma, .sabit (.skaler (n1 + n2)), iz, z + 1⟩) :=
   Step.sToplaTamam _ _ [] []
     ⟨t0, .topla (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
+
+/-- D-335: dongu ACILMASI (olaysiz yapisal adim). -/
+theorem adim_iken_ac (V : List CT.Ad) (sigma : Store) (k g : Ifade)
+    (iz : Iz) (z : Zaman) :
+    Step (K V ⟨sigma, .iken k g, iz, z⟩)
+         (K V ⟨sigma, .eger k (.seq g (.iken k g)) (.sabit .birim), iz, z + 1⟩) :=
+  Step.sIkenAc _ _ [] [] ⟨t0, .iken k g, []⟩ k g rfl rfl rfl
+
+/-- D-335: literal desen secimi (`dalOl` uretir). -/
+theorem adim_esles (V : List CT.Ad) (sigma : Store) (m n : Int)
+    (dd yy : Ifade) (iz : Iz) (z : Zaman) :
+    Step (K V ⟨sigma, .esles (.sabit (.skaler m)) n dd yy, iz, z⟩)
+         (K V ⟨sigma, (if decide (m = n) then dd else yy),
+               .dalOl t0 (decide (m = n)) :: iz, z + 1⟩) :=
+  Step.sEslesSec _ _ [] [] ⟨t0, .esles (.sabit (.skaler m)) n dd yy, []⟩
+    m n dd yy (decide (m = n)) rfl rfl rfl rfl
 
 /-- Dal testi CT ile BIREBIR: `degerDogruMu (skaler n) ↔ n ≠ 0`. -/
 theorem dogruMu_skaler (n : Int) : degerDogruMu (.skaler n) = decide (n ≠ 0) := rfl
@@ -518,6 +565,123 @@ theorem gomme_sim {V : List CT.Ad} :
           simp [gozlem, gomGoz, List.append_assoc]
         · intro hs
           cases hs with | s_eger _ _ _ _ h => exact hsY h
+  -- D-335 (CT002): DONGU. Core tarafi: sIkenAc (acilma) → acilmis `eger`in
+  -- kosulu kosar → sEgerSec (`dalOl true`) → govde → sSeqAtla → IC DONGU.
+  -- Ucuncu IH (ihI) ic dongu icin — CT'nin ozyinelemeli kuralinin karsiligi.
+  | c_iken_dogru s s1 s2 s3 k g tk tg ti vk vg vi _ h_dogru _ _ ihK ihG ihI =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_iken _ _ h_gk h_sk h_gg =>
+        have h_kk : Kapsar V k := by cases h_kap with | k_iken _ _ h _ => exact h
+        have h_kg : Kapsar V g := by cases h_kap with | k_iken _ _ _ h => exact h
+        obtain ⟨wk, sgK, izK, zK, hrK, huK, hgK, hsK⟩ := ihK h_gk h_kk sigma iz (z + 1) hu
+        rw [hsK h_sk] at hrK
+        have h_dal : degerDogruMu (Deger.skaler vk) = true := by
+          rw [dogruMu_skaler]; exact decide_eq_true h_dogru
+        obtain ⟨wg, sgG, izG, zG, hrG, huG, hgG, _⟩ :=
+          ihG h_gg h_kg sgK (.dalOl t0 true :: izK) (zK + 1) huK
+        obtain ⟨wi, sgI, izI, zI, hrI, huI, hgI, _⟩ :=
+          ihI (GomOk.g_iken k g h_gk h_sk h_gg) (Kapsar.k_iken k g h_kk h_kg)
+            sgG izG (zG + 1) huG
+        have hstep := adim_dal V sgK vk (.seq (gom g) (.iken (gom k) (gom g)))
+          (.sabit .birim) izK zK
+        rw [h_dal] at hstep
+        refine ⟨wi, sgI, izI, zI,
+          KRun.adim _ ⟨sigma, .eger (gom k) (.seq (gom g) (.iken (gom k) (gom g)))
+              (.sabit .birim), iz, z + 1⟩ _
+            (adim_iken_ac V sigma (gom k) (gom g) iz z)
+            (krun_trans
+              (krun_eger (V := V) (.seq (gom g) (.iken (gom k) (gom g)))
+                (.sabit .birim) hrK)
+              (KRun.adim _ ⟨sgK, .seq (gom g) (.iken (gom k) (gom g)),
+                  .dalOl t0 true :: izK, zK + 1⟩ _ hstep
+                (krun_trans (krun_seq (V := V) (.iken (gom k) (gom g)) hrG)
+                  (KRun.adim _ ⟨sgG, .iken (gom k) (gom g), izG, zG + 1⟩ _
+                    (adim_seq_atla V sgG wg (.iken (gom k) (gom g)) izG zG)
+                    hrI)))),
+          huI, ?_, ?_⟩
+        · rw [hgI, hgG, gomGozIz_append, gomGozIz_cons, gomGozIz_append]
+          show gomGozIz ti ++ (gomGozIz tg ++
+                 (gozlem (Olay.dalOl t0 true) :: izGozlem izK)) = _
+          rw [hgK]
+          simp [gozlem, gomGoz, List.append_assoc]
+        · intro hs; nomatch hs
+  | c_iken_yanlis s s1 k g tk vk _ h_yanlis ihK =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_iken _ _ h_gk h_sk h_gg =>
+        have h_kk : Kapsar V k := by cases h_kap with | k_iken _ _ h _ => exact h
+        obtain ⟨wk, sgK, izK, zK, hrK, huK, hgK, hsK⟩ := ihK h_gk h_kk sigma iz (z + 1) hu
+        rw [hsK h_sk] at hrK
+        have h_dal : degerDogruMu (Deger.skaler vk) = false := by
+          rw [dogruMu_skaler, h_yanlis]; rfl
+        have hstep := adim_dal V sgK vk (.seq (gom g) (.iken (gom k) (gom g)))
+          (.sabit .birim) izK zK
+        rw [h_dal] at hstep
+        refine ⟨.birim, sgK, .dalOl t0 false :: izK, zK + 1,
+          KRun.adim _ ⟨sigma, .eger (gom k) (.seq (gom g) (.iken (gom k) (gom g)))
+              (.sabit .birim), iz, z + 1⟩ _
+            (adim_iken_ac V sigma (gom k) (gom g) iz z)
+            (krun_trans
+              (krun_eger (V := V) (.seq (gom g) (.iken (gom k) (gom g)))
+                (.sabit .birim) hrK)
+              (KRun.adim _ ⟨sgK, .sabit .birim, .dalOl t0 false :: izK, zK + 1⟩ _
+                hstep (KRun.refl _))),
+          huK, ?_, ?_⟩
+        · rw [gomGozIz_append]
+          show gozlem (Olay.dalOl t0 false) :: izGozlem izK = _
+          rw [hgK]
+          simp [gozlem, gomGoz, gomGozIz]
+        · intro hs; nomatch hs
+  -- D-335 (CT004): DESEN ESLEMESI — `eger` deseninin aynisi.
+  | c_esles_tuttu s s1 s2 sk n d y ts td vs vd _ h_tuttu _ ihS ihD =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_esles _ _ _ _ h_gs h_ss h_gd h_gy =>
+        have h_ks : Kapsar V sk := by cases h_kap with | k_esles _ _ _ _ h _ _ => exact h
+        have h_kd : Kapsar V d := by cases h_kap with | k_esles _ _ _ _ _ h _ => exact h
+        obtain ⟨ws, sgS, izS, zS, hrS, huS, hgS, hsS⟩ := ihS h_gs h_ks sigma iz z hu
+        rw [hsS h_ss] at hrS
+        have h_dal : decide (vs = n) = true := decide_eq_true h_tuttu
+        obtain ⟨wd, sgD, izD, zD, hrD, huD, hgD, hsD⟩ :=
+          ihD h_gd h_kd sgS (.dalOl t0 true :: izS) (zS + 1) huS
+        have hstep := adim_esles V sgS vs n (gom d) (gom y) izS zS
+        rw [h_dal] at hstep
+        refine ⟨wd, sgD, izD, zD,
+          krun_trans (krun_esles (V := V) n (gom d) (gom y) hrS)
+            (KRun.adim _ ⟨sgS, gom d, .dalOl t0 true :: izS, zS + 1⟩ _
+              hstep hrD),
+          huD, ?_, ?_⟩
+        · rw [hgD, gomGozIz_append, gomGozIz_cons]
+          show gomGozIz td ++ (gozlem (Olay.dalOl t0 true) :: izGozlem izS) = _
+          rw [hgS]
+          simp [gozlem, gomGoz, List.append_assoc]
+        · intro hs
+          cases hs with | s_esles _ _ _ _ h _ => exact hsD h
+  | c_esles_tutmadi s s1 s2 sk n d y ts ty vs vy _ h_tutmadi _ ihS ihY =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_esles _ _ _ _ h_gs h_ss h_gd h_gy =>
+        have h_ks : Kapsar V sk := by cases h_kap with | k_esles _ _ _ _ h _ _ => exact h
+        have h_ky : Kapsar V y := by cases h_kap with | k_esles _ _ _ _ _ _ h => exact h
+        obtain ⟨ws, sgS, izS, zS, hrS, huS, hgS, hsS⟩ := ihS h_gs h_ks sigma iz z hu
+        rw [hsS h_ss] at hrS
+        have h_dal : decide (vs = n) = false := decide_eq_false h_tutmadi
+        obtain ⟨wy, sgY, izY, zY, hrY, huY, hgY, hsY⟩ :=
+          ihY h_gy h_ky sgS (.dalOl t0 false :: izS) (zS + 1) huS
+        have hstep := adim_esles V sgS vs n (gom d) (gom y) izS zS
+        rw [h_dal] at hstep
+        refine ⟨wy, sgY, izY, zY,
+          krun_trans (krun_esles (V := V) n (gom d) (gom y) hrS)
+            (KRun.adim _ ⟨sgS, gom y, .dalOl t0 false :: izS, zS + 1⟩ _
+              hstep hrY),
+          huY, ?_, ?_⟩
+        · rw [hgY, gomGozIz_append, gomGozIz_cons]
+          show gomGozIz ty ++ (gozlem (Olay.dalOl t0 false) :: izGozlem izS) = _
+          rw [hgS]
+          simp [gozlem, gomGoz, List.append_assoc]
+        · intro hs
+          cases hs with | s_esles _ _ _ _ _ h => exact hsY h
 
 -- ============================================================
 -- §8. ANA SONUC — ct_ni ANA MODELE TASINDI
@@ -547,7 +711,7 @@ theorem kopru_ni (G : CT.EtiketOrtam) (V : List CT.Ad) (e : CT.Ifade)
       ∧ izGozlem iz1 = izGozlem iz2 := by
   obtain ⟨w1, sg1, iz1, z1, hr1, _, hg1, _⟩ := gomme_sim h_r1 h_gom h_kap sigma1 iz z hu1
   obtain ⟨w2, sg2, iz2, z2, hr2, _, hg2, _⟩ := gomme_sim h_r2 h_gom h_kap sigma2 iz z hu2
-  obtain ⟨h_iz_esit, _⟩ := CT.ct_ni G e s1 s2 s1' s2' t1 t2 v1 v2 h_ct h_low h_r1 h_r2
+  obtain ⟨h_iz_esit, _⟩ := CT.ct_ni G h_r1 h_r2 h_ct h_low
   exact ⟨w1, w2, sg1, sg2, iz1, iz2, z1, z2,
     krun_stepStar hr1, krun_stepStar hr2, by rw [hg1, hg2, h_iz_esit]⟩
 
@@ -586,6 +750,37 @@ theorem kopru_bos_degil :
   · exact Kapsar.k_eger _ _ _
       (Kapsar.k_topla _ _ (Kapsar.k_degisken 1 (by decide)) (Kapsar.k_sabit 1))
       (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 5))
+      (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 7))
+
+/-- D-335: koprunun DONGU ve DESEN ESLEMESI kapsadiginin taniki.
+    Program: `iken (1 == 1 kolu) ...` yerine dogrudan
+    `esles (degisken 1) 3 (iken (sabit 0) (0 = 5)) (0 = 7)` — hem `esles`
+    hem `iken` iceriyor, skrutin/kosul GENEL (CT004/CT002 uyumlu), yazma
+    hedefi GIZLI (CT003 uyumlu). Yani D-335'in ekledigi iki bicim de
+    `kopru_ni` hipotezlerini saglayabiliyor; genisleme vakum degil. -/
+theorem kopru_iken_esles_bos_degil :
+    ∃ (G : CT.EtiketOrtam) (e : CT.Ifade),
+      CT.CtOk G e ∧ GomOk e ∧ Kapsar [0, 1] e
+      ∧ (∃ s n d y, e = .esles s n d y)
+      ∧ (∃ s n k g y, e = .esles s n (.iken k g) y) := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .esles (.degisken 1) 3
+            (.iken (.sabit 0) (.sabitDeg 0 (.sabit 5)))
+            (.sabitDeg 0 (.sabit 7)),
+          ?_, ?_, ?_, ⟨_, _, _, _, rfl⟩, ⟨_, _, _, _, _, rfl⟩⟩
+  · exact CT.CtOk.ct_esles _ 3 _ _ (CT.CtOk.ct_degisken 1)
+      (CT.CtOk.ct_iken _ _ (CT.CtOk.ct_sabit 0)
+        (CT.CtOk.ct_atama 0 (.sabit 5) (CT.CtOk.ct_sabit 5) (by decide))
+        (by decide))
+      (CT.CtOk.ct_atama 0 (.sabit 7) (CT.CtOk.ct_sabit 7) (by decide))
+      (by decide)
+  · exact GomOk.g_esles _ 3 _ _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
+      (GomOk.g_iken _ _ (GomOk.g_sabit 0) (Sadik.s_sabit 0)
+        (GomOk.g_atama 0 _ (GomOk.g_sabit 5) (Sadik.s_sabit 5)))
+      (GomOk.g_atama 0 _ (GomOk.g_sabit 7) (Sadik.s_sabit 7))
+  · exact Kapsar.k_esles _ 3 _ _ (Kapsar.k_degisken 1 (by decide))
+      (Kapsar.k_iken _ _ (Kapsar.k_sabit 0)
+        (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 5)))
       (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 7))
 
 end Kemgu.SideChannel.CTKopru

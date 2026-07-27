@@ -5,6 +5,65 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-335 — `iken` + `esles`: CT002 ve CT004 mekanize edildi (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+Üç katmanın üçünde birden: **Core** (26→29 kural), **CT hesabı**, **köprü**.
+
+**MEHMET KARARLARI (soruldu):**
+1. `esles` **İKİLİ** biçim — `esles skrut n eslesen kalan` (tek literal kol +
+   kalan). Çok kollu eşleşme iç içe yazılarak ifade edilir. Liste-biçimi
+   (`List (Int × Ifade)`) reddedildi: her tümevarım yeri liste lemması isterdi.
+2. `esles` gözlemi **kol başına `dalOl`** (dallanma zinciri modeli). Atlama
+   tablosu modeli (tek `eslesOl`) SEÇİLMEDİ — o, derleyicinin `eşleş`i
+   sabit-süreli bir jump table'a derlediği bir DONANIM İDDİASI olurdu; model
+   onu ispatlamaz, varsayardı. Bu seçim daha muhafazakâr: deneme sırası da sızar.
+
+**`iken` AÇMA İLE (kendi cong/dal kuralları YOK):**
+`sIkenAc : iken k g ⟶ eger k (seq g (iken k g)) (sabit birim)`.
+Kazanç: tek Step kuralı, D-332'nin `eger` makinesi tümüyle yeniden kullanılıyor.
+Yan etki İSTENEN: her tur açılan `eger` bir `dalOl` üretir → **tur sayısı
+saldırgana görünür**, ki CT002'nin koruduğu kanal tam olarak budur.
+`typed_iken_ac` açılmanın tip koruduğunu gösterir; özyineleme YOK (açılmış
+terimdeki `iken k g` için ORİJİNAL türetimler yeniden kullanılır).
+
+**LİNEER/BÖLGE DİSİPLİNİ:** `l_iken` = KEMGU'nun **L-LOOP** kuralının (D-312)
+mekanize hali — döngü gövdesi dış bir lineer bağlamayı TÜKETEMEZ (0 iterasyon =
+sızıntı, ≥2 = çifte tüketim). `r_iken` aynı gerekçeyle bölge devri yasak;
+**atama serbest** (`RegionNotr` atamayı içerir). `l_esles`/`r_esles` = `eger`
+disiplini.
+
+**YAPISAL DEĞİŞİKLİK — CT ispatları artık TÜRETİM üzerinde tümevarım.**
+`iken`in büyük-adım kuralı KENDİSİNE özyineler (`Calis s2 (iken k g) s3 ...`),
+dolayısıyla `Ifade` üzerinde yapısal tümevarım iç koşum için IH VERMEZ.
+`genel_ifade_korunum` ve `ct_ni` koşum türetimi üzerinde tümevarıma çevrildi
+(ikinci koşum evrensel nicelenmiş, her case'de ters çevriliyor). Bu, `iken`i
+eklemenin GERÇEK maliyetiydi — kural sayısı değil.
+
+**VAKUM + SABOTAJ (hepsi ispatlı/ölçülü):**
+- `ct002_gerekli`: gizli `h` üzerinde dönen program iki düşük-eşdeğer store'da
+  FARKLI UZUNLUKTA iz üretir (bir tur vs sıfır tur).
+- `ct004_gerekli`: gizli skrutin üzerinde eşleşen program hangi kolun tuttuğunu
+  sızdırır (`oDal true` vs `oDal false`).
+- `kopru_iken_esles_bos_degil`: `CtOk ∧ GomOk ∧ Kapsar` birlikte sağlanabilir ve
+  tanık hem `esles` hem `iken` içerir → genişleme vakum değil.
+- Sabotaj: CT002 şartını kaldır → **9 hata**; CT004 şartını kaldır → **8 hata**;
+  geri alınca 0. Yani iki kural da LOAD-BEARING.
+
+**KÖPRÜ:** `gom` `iken`/`esles`i de kapsıyor. `Sadik` (D-333 Kapsam 2) genişledi:
+`esles` sadık (değeri kolundan gelir), **`iken` SADIK DEĞİL** — CT'de döngü 0,
+Core'da `birim` döner; döngü bir DEYİMDİR (`sabitDeg` ile aynı sınıf).
+
+**HÂLÂ AÇIK:** eşzamanlı CT, GİZLİ İNDEKS (erişim adresi), çarpma/**bölme**
+(bölmenin veri-bağımlı gecikmesi `topla`dan farklı bir CT kuralı ister),
+`esles`in yapıcı/çeşit desenleri (Core'da ADT yok — D-318 KEMGU'da var).
+
+---
+
 ## D-334 — Core'a ARİTMETİK (`topla`); köprü CT'nin TAMAMINI kapsıyor (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

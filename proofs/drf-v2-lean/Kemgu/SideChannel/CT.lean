@@ -38,12 +38,21 @@ KOPRU (D-333): ARTIK VAR — `SideChannel/CTKopru.lean`.
   TASINDI: CT-tipli program `Sem/Core`'da kosturuldugunda dusuk-esdeger
   iki store AYNI `izGozlem`i uretir — DAL KARARLARI dahil.
 
+GENISLEME (D-334/D-335): `topla` (aritmetik), `iken` (dongu — CT002) ve
+  `esles` (literal desen eslemesi — CT004) HEM bu hesaba HEM `Sem/Core`'a
+  HEM koprüye eklendi. `ct_ni` artik dort dallanma bicimini de kapsiyor.
+  YAPISAL NOT: `iken` buyuk-adim kurali KENDISINE ozyineledigi icin
+  `genel_ifade_korunum` ve `ct_ni` artik `Ifade` uzerinde degil KOSUM
+  TURETIMI uzerinde tumevarim yapiyor.
+
 KALAN BORC (daralmis, acikca):
-  Kopru CT'nin TOPLA-SIZ ve deger-sadik (`Sadik`) parcasinda, SONLU
-  degisken kumesiyle ve TEK THREAD icin kuruludur. Yani "KEMGU'nun
-  KENDISI sabit-suredir" tam iddiasi hala CIKMAZ; eksikler: Core'da
-  aritmetik yoklugu, eszamanli CT, `iken`/`esles`/gizli indeks
-  (CT002/CT004). Ayrinti + vakum ve sabotaj denetimleri: D-333.
+  Kopru CT'nin deger-sadik (`Sadik`) parcasinda, SONLU degisken
+  kumesiyle ve TEK THREAD icin kuruludur. Yani "KEMGU'nun KENDISI
+  sabit-suredir" tam iddiasi hala CIKMAZ; eksikler: ESZAMANLI CT,
+  GIZLI INDEKS (bellek erisim adresi), carpma/BOLME (bolmenin
+  veri-bagimli gecikmesi `topla`dan farkli bir CT kurali ister),
+  ve `esles`in YAPICI/CESIT desenleri (Core'da ADT yok).
+  Ayrinti + vakum ve sabotaj denetimleri: D-333, D-334, D-335.
 
 NE ISPATLANIYOR (bu dosyada, tam):
   - `genel_ifade_degeri_esit`: etiketi GENEL olan ifade, dusuk-esdeger
@@ -55,9 +64,11 @@ NE ISPATLANIYOR (bu dosyada, tam):
   + hangi dalin alindigi) DEGISMEZ.
 
 NEDEN VAKUM DEGIL:
-  `ct_eger` kuralindaki `kosul etiketi = genel` sarti KALDIRILIRSA ispat
-  COKER (gizli kosul iki kosumda farkli dal → farkli iz). Bu, CT001'in
-  mekanize gerekcesidir: kural keyfi degil, NI'nin ta kendisi icin gerekli.
+  `ct_eger`/`ct_iken`/`ct_esles` kurallarindaki "kosul (skrutin) etiketi
+  = genel" sarti KALDIRILIRSA ispat COKER. Uc TANIK bunu gosterir:
+  `ct001_gerekli` (dallanma), `ct002_gerekli` (dongu — TUR SAYISI sizar),
+  `ct004_gerekli` (eslesme — HANGI KOL sizar). Yani bu kurallar keyfi
+  degil, NI'nin ta kendisi icin gereklidir.
 ═══════════════════════════════════════════════════════════════════════
 -/
 
@@ -103,6 +114,8 @@ inductive Ifade : Type where
   | sabitDeg (x : Ad) (e : Ifade)          -- x = e
   | sira     (a b : Ifade)                 -- a; b
   | eger     (kosul : Ifade) (dogruDal yanlisDal : Ifade)
+  | iken     (kosul govde : Ifade)                              -- D-335 (CT002)
+  | esles    (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)   -- D-335 (CT004)
 
 -- ============================================================
 -- §3. Saldirgan gozlemi — erisim deseni + DAL KARARI
@@ -145,6 +158,29 @@ inductive Calis : Store → Ifade → Store → Iz → Int → Prop where
       (hk : Calis s k s1 tk vk) (h_yanlis : vk = 0)
       (hy : Calis s1 y s2 ty vy) :
       Calis s (.eger k d y) s2 (tk ++ .oDal false :: ty) vy
+  /-- D-335 (CT002): dongu — her TUR bir `oDal` uretir, yani TUR SAYISI
+      saldirgana gorunur. Deger 0 (dongu bir DEYIMDIR). -/
+  | c_iken_dogru (s s1 s2 s3 : Store) (k g : Ifade) (tk tg ti : Iz)
+      (vk vg vi : Int)
+      (hk : Calis s k s1 tk vk) (h_dogru : vk ≠ 0)
+      (hg : Calis s1 g s2 tg vg)
+      (hi : Calis s2 (.iken k g) s3 ti vi) :
+      Calis s (.iken k g) s3 (tk ++ .oDal true :: (tg ++ ti)) 0
+  | c_iken_yanlis (s s1 : Store) (k g : Ifade) (tk : Iz) (vk : Int)
+      (hk : Calis s k s1 tk vk) (h_yanlis : vk = 0) :
+      Calis s (.iken k g) s1 (tk ++ [.oDal false]) 0
+  /-- D-335 (CT004): literal desen eslemesi — `eger` ile AYNI gozlem
+      modeli (kol basina bir dal karari; Mehmet karari). -/
+  | c_esles_tuttu (s s1 s2 : Store) (sk : Ifade) (n : Int) (d y : Ifade)
+      (ts td : Iz) (vs vd : Int)
+      (hs : Calis s sk s1 ts vs) (h_tuttu : vs = n)
+      (hd : Calis s1 d s2 td vd) :
+      Calis s (.esles sk n d y) s2 (ts ++ .oDal true :: td) vd
+  | c_esles_tutmadi (s s1 s2 : Store) (sk : Ifade) (n : Int) (d y : Ifade)
+      (ts ty : Iz) (vs vy : Int)
+      (hs : Calis s sk s1 ts vs) (h_tutmadi : vs ≠ n)
+      (hy : Calis s1 y s2 ty vy) :
+      Calis s (.esles sk n d y) s2 (ts ++ .oDal false :: ty) vy
 
 -- ============================================================
 -- §5. CT tipleme disiplini (kagit CT001 + CT003)
@@ -158,6 +194,9 @@ def ifadeEtiket (G : EtiketOrtam) : Ifade → Etiket
   | .sabitDeg _ e   => ifadeEtiket G e
   | .sira a b       => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .eger k d y     => ((ifadeEtiket G k).birlesim (ifadeEtiket G d)).birlesim
+                         (ifadeEtiket G y)
+  | .iken k g       => (ifadeEtiket G k).birlesim (ifadeEtiket G g)
+  | .esles s _ d y  => ((ifadeEtiket G s).birlesim (ifadeEtiket G d)).birlesim
                          (ifadeEtiket G y)
 
 /-- CT disiplini. Iki kural kagittan gelir:
@@ -178,6 +217,17 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
   | ct_eger (k d y : Ifade) (hk : CtOk G k) (hd : CtOk G d) (hy : CtOk G y)
       (h_kosul_genel : ifadeEtiket G k = .genel) :            -- CT001
       CtOk G (.eger k d y)
+  /-- **CT002 (dongu):** dongu KOSULU GENEL olmalidir — gizli uzerinde
+      donmek TUR SAYISINI sizdirir (her tur bir `oDal`). -/
+  | ct_iken (k g : Ifade) (hk : CtOk G k) (hg : CtOk G g)
+      (h_kosul_genel : ifadeEtiket G k = .genel) :            -- CT002
+      CtOk G (.iken k g)
+  /-- **CT004 (desen eslemesi):** SKRUTIN GENEL olmalidir — gizli uzerinde
+      eslesmek hangi kolun tuttugunu sizdirir. -/
+  | ct_esles (s : Ifade) (n : Int) (d y : Ifade)
+      (hs : CtOk G s) (hd : CtOk G d) (hy : CtOk G y)
+      (h_skrut_genel : ifadeEtiket G s = .genel) :            -- CT004
+      CtOk G (.esles s n d y)
 
 -- ============================================================
 -- §6. Dusuk-esdegerlik (saldirganin ayirt edemedigi store'lar)
@@ -215,80 +265,126 @@ theorem birlesim_genel {e1 e2 : Etiket} (h : e1.birlesim e2 = .genel) :
              | gizli => exact absurd h (by simp [Etiket.birlesim])
   | gizli => exact absurd h (by simp [Etiket.birlesim])
 
-/-- **Ana lemma (uclu, tek tumevarim):** etiketi GENEL olan ifade,
-    dusuk-esdeger iki store'da AYNI degeri, AYNI izi uretir ve sonuc
-    store'lari yine dusuk-esdegerdir. (Gizli veri onu etkileyemez.)
-    Uclu olmasi ZORUNLU: alt-ifadeler icin IH'ye ara store'larin
-    dusuk-esdegerligi lazim (aksi halde dairesel ileri-referans olurdu). -/
+/-- **Ana lemma:** etiketi GENEL olan ifade, dusuk-esdeger iki store'da
+    AYNI degeri, AYNI izi uretir ve sonuc store'lari yine dusuk-esdegerdir.
+    (Gizli veri onu etkileyemez.)
+
+    D-335 YAPISAL DEGISIKLIK: tumevarim artik `Ifade` uzerinde DEGIL,
+    **KOSUM TURETIMI (`Calis`) uzerinde**. Sebep `iken`: dongunun
+    buyuk-adim kurali KENDISINE ozyineler (`Calis s2 (iken k g) s3 ...`),
+    yani yapisal tumevarim o ic kosum icin IH VERMEZ. Turetim uzerinde
+    tumevarim verir. (Ayni degisiklik `ct_ni`de de yapildi.) -/
 theorem genel_ifade_korunum (G : EtiketOrtam) :
-    ∀ (e : Ifade) (s1 s2 s1' s2' : Store) (t1 t2 : Iz) (v1 v2 : Int),
+    ∀ {s1 : Store} {e : Ifade} {s1' : Store} {t1 : Iz} {v1 : Int},
+      Calis s1 e s1' t1 v1 →
+      ∀ {s2 s2' : Store} {t2 : Iz} {v2 : Int}, Calis s2 e s2' t2 v2 →
       DusukEs G s1 s2 → ifadeEtiket G e = .genel →
-      Calis s1 e s1' t1 v1 → Calis s2 e s2' t2 v2 →
       v1 = v2 ∧ t1 = t2 ∧ DusukEs G s1' s2' := by
-  intro e
-  induction e with
-  | sabit n =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low _ h1 h2
-      cases h1; cases h2; exact ⟨rfl, rfl, h_low⟩
-  | degisken x =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low h_et h1 h2
-      cases h1; cases h2
-      exact ⟨h_low x h_et, rfl, h_low⟩
-  | topla a b iha ihb =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low h_et h1 h2
-      cases h1 with
-      | c_topla _ sa1 _ _ _ ta1 tb1 va1 vb1 hA1 hB1 =>
-        cases h2 with
-        | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
-          obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
-          obtain ⟨hva, hta, h_low'⟩ := iha _ _ _ _ _ _ _ _ h_low h_ea hA1 hA2
-          obtain ⟨hvb, htb, h_low''⟩ := ihb _ _ _ _ _ _ _ _ h_low' h_eb hB1 hB2
-          exact ⟨by rw [hva, hvb], by rw [hta, htb], h_low''⟩
-  | sabitDeg x e ih =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low h_et h1 h2
-      cases h1 with
-      | c_atama _ sa1 _ _ ta1 va1 hE1 =>
-        cases h2 with
-        | c_atama _ sa2 _ _ ta2 va2 hE2 =>
-          obtain ⟨hv, ht, h_low'⟩ := ih _ _ _ _ _ _ _ _ h_low h_et hE1 hE2
-          refine ⟨hv, by rw [ht], ?_⟩
-          rw [hv]
-          exact dusukEs_yaz_genel G sa1 sa2 x _ h_low'
-  | sira a b iha ihb =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low h_et h1 h2
-      cases h1 with
-      | c_sira _ sa1 _ _ _ ta1 tb1 va1 vb1 hA1 hB1 =>
-        cases h2 with
-        | c_sira _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
-          obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
-          obtain ⟨_, hta, h_low'⟩ := iha _ _ _ _ _ _ _ _ h_low h_ea hA1 hA2
-          obtain ⟨hvb, htb, h_low''⟩ := ihb _ _ _ _ _ _ _ _ h_low' h_eb hB1 hB2
-          exact ⟨hvb, by rw [hta, htb], h_low''⟩
-  | eger k d y ihk ihd ihy =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_low h_et h1 h2
+  intro s1 e s1' t1 v1 h1
+  induction h1 with
+  | c_sabit s n =>
+      intro s2 s2' t2 v2 h2 h_low _
+      cases h2; exact ⟨rfl, rfl, h_low⟩
+  | c_degisken s x =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2; exact ⟨h_low x h_et, rfl, h_low⟩
+  | c_topla s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2 with
+      | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+        obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+        obtain ⟨hva, hta, h_low'⟩ := ihA hA2 h_low h_ea
+        obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
+        exact ⟨by rw [hva, hvb], by rw [hta, htb], h_low''⟩
+  | c_atama s sa1 x e ta1 va1 hE1 ihE =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2 with
+      | c_atama _ sa2 _ _ ta2 va2 hE2 =>
+        obtain ⟨hv, ht, h_low'⟩ := ihE hE2 h_low h_et
+        refine ⟨hv, by rw [ht], ?_⟩
+        rw [hv]
+        exact dusukEs_yaz_genel G sa1 sa2 x _ h_low'
+  | c_sira s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2 with
+      | c_sira _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+        obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+        obtain ⟨_, hta, h_low'⟩ := ihA hA2 h_low h_ea
+        obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
+        exact ⟨hvb, by rw [hta, htb], h_low''⟩
+  | c_eger_dogru s sk1 _ k d y tk1 td1 vk1 vd1 hK1 hD1 hDal1 ihK ihD =>
+      intro s2 s2' t2 v2 h2 h_low h_et
       obtain ⟨h_kd, h_ey⟩ := birlesim_genel h_et
       obtain ⟨h_ek, h_ed⟩ := birlesim_genel h_kd
-      cases h1 with
-      | c_eger_dogru _ sk1 _ _ _ _ tk1 td1 vk1 vd1 hK1 hD1 hDal1 =>
-        cases h2 with
-        | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
-            obtain ⟨_, htk, h_low'⟩ := ihk _ _ _ _ _ _ _ _ h_low h_ek hK1 hK2
-            obtain ⟨hvd, htd, h_low''⟩ := ihd _ _ _ _ _ _ _ _ h_low' h_ed hDal1 hDal2
-            exact ⟨hvd, by rw [htk, htd], h_low''⟩
-        | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
-            obtain ⟨hvk, _, _⟩ := ihk _ _ _ _ _ _ _ _ h_low h_ek hK1 hK2
-            exact absurd (hvk ▸ hK2z) hD1
-      | c_eger_yanlis _ sk1 _ _ _ _ tk1 ty1 vk1 vy1 hK1 hK1z hY1 =>
-        cases h2 with
-        | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
-            obtain ⟨hvk, _, _⟩ := ihk _ _ _ _ _ _ _ _ h_low h_ek hK1 hK2
-            exact absurd (hvk ▸ hK1z) hD2
-        | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
-            obtain ⟨_, htk, h_low'⟩ := ihk _ _ _ _ _ _ _ _ h_low h_ek hK1 hK2
-            obtain ⟨hvy, hty, h_low''⟩ := ihy _ _ _ _ _ _ _ _ h_low' h_ey hY1 hY2
-            exact ⟨hvy, by rw [htk, hty], h_low''⟩
-
--- ============================================================
+      cases h2 with
+      | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
+          obtain ⟨_, htk, h_low'⟩ := ihK hK2 h_low h_ek
+          obtain ⟨hvd, htd, h_low''⟩ := ihD hDal2 h_low' h_ed
+          exact ⟨hvd, by rw [htk, htd], h_low''⟩
+      | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
+          obtain ⟨hvk, _, _⟩ := ihK hK2 h_low h_ek
+          exact absurd (hvk ▸ hK2z) hD1
+  | c_eger_yanlis s sk1 _ k d y tk1 ty1 vk1 vy1 hK1 hK1z hY1 ihK ihY =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_kd, h_ey⟩ := birlesim_genel h_et
+      obtain ⟨h_ek, h_ed⟩ := birlesim_genel h_kd
+      cases h2 with
+      | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
+          obtain ⟨hvk, _, _⟩ := ihK hK2 h_low h_ek
+          exact absurd (hvk ▸ hK1z) hD2
+      | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
+          obtain ⟨_, htk, h_low'⟩ := ihK hK2 h_low h_ek
+          obtain ⟨hvy, hty, h_low''⟩ := ihY hY2 h_low' h_ey
+          exact ⟨hvy, by rw [htk, hty], h_low''⟩
+  -- D-335 (CT002): dongu. Ucuncu IH (ihI) ic kosum icin — YAPISAL
+  -- tumevarimin veremedigi sey tam olarak buydu.
+  | c_iken_dogru s s1x s2x s3x k g tk tg ti vk vg vi hK1 hD1 hG1 hI1 ihK ihG ihI =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_ek, h_eg⟩ := birlesim_genel h_et
+      cases h2 with
+      | c_iken_dogru _ sk2 sg2 _ _ _ tk2 tg2 ti2 vk2 vg2 vi2 hK2 hD2 hG2 hI2 =>
+          obtain ⟨_, htk, h_low'⟩ := ihK hK2 h_low h_ek
+          obtain ⟨_, htg, h_low''⟩ := ihG hG2 h_low' h_eg
+          obtain ⟨_, hti, h_low3⟩ := ihI hI2 h_low'' h_et
+          exact ⟨rfl, by rw [htk, htg, hti], h_low3⟩
+      | c_iken_yanlis _ sk2 _ _ tk2 vk2 hK2 hK2z =>
+          obtain ⟨hvk, _, _⟩ := ihK hK2 h_low h_ek
+          exact absurd (hvk ▸ hK2z) hD1
+  | c_iken_yanlis s sk1 k g tk1 vk1 hK1 hK1z ihK =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_ek, h_eg⟩ := birlesim_genel h_et
+      cases h2 with
+      | c_iken_dogru _ sk2 sg2 _ _ _ tk2 tg2 ti2 vk2 vg2 vi2 hK2 hD2 hG2 hI2 =>
+          obtain ⟨hvk, _, _⟩ := ihK hK2 h_low h_ek
+          exact absurd (hvk ▸ hK1z) hD2
+      | c_iken_yanlis _ sk2 _ _ tk2 vk2 hK2 hK2z =>
+          obtain ⟨_, htk, h_low'⟩ := ihK hK2 h_low h_ek
+          exact ⟨rfl, by rw [htk], h_low'⟩
+  -- D-335 (CT004): literal desen eslemesi — `eger` ile ayni akil yurutme.
+  | c_esles_tuttu s ss1 _ sk n d y ts1 td1 vs1 vd1 hS1 hT1 hD1 ihS ihD =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_sd, h_ey⟩ := birlesim_genel h_et
+      obtain ⟨h_es, h_ed⟩ := birlesim_genel h_sd
+      cases h2 with
+      | c_esles_tuttu _ ss2 _ _ _ _ _ ts2 td2 vs2 vd2 hS2 hT2 hD2 =>
+          obtain ⟨_, hts, h_low'⟩ := ihS hS2 h_low h_es
+          obtain ⟨hvd, htd, h_low''⟩ := ihD hD2 h_low' h_ed
+          exact ⟨hvd, by rw [hts, htd], h_low''⟩
+      | c_esles_tutmadi _ ss2 _ _ _ _ _ ts2 ty2 vs2 vy2 hS2 hT2 hY2 =>
+          obtain ⟨hvs, _, _⟩ := ihS hS2 h_low h_es
+          exact absurd (hT1.symm.trans (hvs ▸ rfl : vs1 = vs2) ▸ rfl : vs2 = n) hT2
+  | c_esles_tutmadi s ss1 _ sk n d y ts1 ty1 vs1 vy1 hS1 hT1 hY1 ihS ihY =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_sd, h_ey⟩ := birlesim_genel h_et
+      obtain ⟨h_es, h_ed⟩ := birlesim_genel h_sd
+      cases h2 with
+      | c_esles_tuttu _ ss2 _ _ _ _ _ ts2 td2 vs2 vd2 hS2 hT2 hD2 =>
+          obtain ⟨hvs, _, _⟩ := ihS hS2 h_low h_es
+          exact absurd (hvs ▸ hT2) hT1
+      | c_esles_tutmadi _ ss2 _ _ _ _ _ ts2 ty2 vs2 vy2 hS2 hT2 hY2 =>
+          obtain ⟨_, hts, h_low'⟩ := ihS hS2 h_low h_es
+          obtain ⟨hvy, hty, h_low''⟩ := ihY hY2 h_low' h_ey
+          exact ⟨hvy, by rw [hts, hty], h_low''⟩
 -- §8. ANA TEOREM — CT disiplini ⟹ NON-INTERFERENCE
 -- ============================================================
 
@@ -310,100 +406,146 @@ theorem ct_gizli_atama_genel_gormez (G : EtiketOrtam) :
 
     Yani gizli girdi ne olursa olsun saldirganin gordugu desen AYNIDIR.
 
-    KRITIK KURAL: `ct_eger`in `h_kosul_genel` sarti (kagit CT001). Bu sart
-    OLMASAYDI ispat `eger` case'inde COKERDI: gizli kosul iki kosumda farkli
+    KRITIK KURALLAR: `ct_eger`in `h_kosul_genel` sarti (CT001),
+    `ct_iken`inki (CT002 — tur sayisi sizmasin) ve `ct_esles`inki
+    (CT004 — hangi kolun tuttugu sizmasin). Bu sartlar OLMASAYDI ispat
+    ilgili case'de COKERDI: gizli kosul/skrutin iki kosumda farkli
     dallara giderdi → izlerde `oDal true` vs `oDal false` → NI IHLALI.
-    Yani CT001 keyfi bir yasak degil, NI'nin GEREKTIRDIGI seydir. -/
+
+    D-335: tumevarim `Ifade` uzerinde DEGIL **kosum turetimi uzerinde**
+    (bkz. `genel_ifade_korunum` notu — `iken` kendisine ozyineler). -/
 theorem ct_ni (G : EtiketOrtam) :
-    ∀ (e : Ifade) (s1 s2 s1' s2' : Store) (t1 t2 : Iz) (v1 v2 : Int),
+    ∀ {s1 : Store} {e : Ifade} {s1' : Store} {t1 : Iz} {v1 : Int},
+      Calis s1 e s1' t1 v1 →
+      ∀ {s2 s2' : Store} {t2 : Iz} {v2 : Int}, Calis s2 e s2' t2 v2 →
       CtOk G e → DusukEs G s1 s2 →
-      Calis s1 e s1' t1 v1 → Calis s2 e s2' t2 v2 →
       t1 = t2 ∧ DusukEs G s1' s2' := by
-  intro e
-  induction e with
-  | sabit n =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 _ h_low h1 h2
-      cases h1; cases h2; exact ⟨rfl, h_low⟩
-  | degisken x =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 _ h_low h1 h2
-      cases h1; cases h2; exact ⟨rfl, h_low⟩
-  | topla a b iha ihb =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_ct h_low h1 h2
+  intro s1 e s1' t1 v1 h1
+  induction h1 with
+  | c_sabit s n =>
+      intro s2 s2' t2 v2 h2 _ h_low
+      cases h2; exact ⟨rfl, h_low⟩
+  | c_degisken s x =>
+      intro s2 s2' t2 v2 h2 _ h_low
+      cases h2; exact ⟨rfl, h_low⟩
+  | c_topla s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
       | ct_topla _ _ hca hcb =>
-        cases h1 with
-        | c_topla _ sa1 _ _ _ ta1 tb1 va1 vb1 hA1 hB1 =>
-          cases h2 with
-          | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
-            obtain ⟨hta, h_low'⟩ := iha _ _ _ _ _ _ _ _ hca h_low hA1 hA2
-            obtain ⟨htb, h_low''⟩ := ihb _ _ _ _ _ _ _ _ hcb h_low' hB1 hB2
-            exact ⟨by rw [hta, htb], h_low''⟩
-  | sabitDeg x e ih =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_ct h_low h1 h2
+        cases h2 with
+        | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+          obtain ⟨hta, h_low'⟩ := ihA hA2 hca h_low
+          obtain ⟨htb, h_low''⟩ := ihB hB2 hcb h_low'
+          exact ⟨by rw [hta, htb], h_low''⟩
+  | c_atama s sa1 x e ta1 va1 hE1 ihE =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
       | ct_atama _ _ hce h_akis =>
-        cases h1 with
-        | c_atama _ sa1 _ _ ta1 va1 hE1 =>
-          cases h2 with
-          | c_atama _ sa2 _ _ ta2 va2 hE2 =>
-            obtain ⟨ht, h_low'⟩ := ih _ _ _ _ _ _ _ _ hce h_low hE1 hE2
-            refine ⟨by rw [ht], ?_⟩
-            -- Hedefin etiketi GENEL ise, CT003 (h_akis) ifadenin de GENEL
-            -- olmasini zorlar → yazilan degerler ESIT (ana lemma).
-            cases hx : G x with
-            | gizli => exact dusukEs_yaz_gizli G sa1 sa2 x _ _ h_low' hx
-            | genel =>
-                have h_e_genel : ifadeEtiket G e = .genel := by
-                  rw [hx] at h_akis
-                  cases hE : ifadeEtiket G e with
-                  | genel => rfl
-                  | gizli => rw [hE] at h_akis; exact absurd h_akis (by simp [Etiket.altMi])
-                obtain ⟨hv, _, _⟩ :=
-                  genel_ifade_korunum G e _ _ _ _ _ _ _ _ h_low h_e_genel hE1 hE2
-                rw [hv]
-                exact dusukEs_yaz_genel G sa1 sa2 x _ h_low'
-  | sira a b iha ihb =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_ct h_low h1 h2
+        cases h2 with
+        | c_atama _ sa2 _ _ ta2 va2 hE2 =>
+          obtain ⟨ht, h_low'⟩ := ihE hE2 hce h_low
+          refine ⟨by rw [ht], ?_⟩
+          -- Hedefin etiketi GENEL ise, CT003 (h_akis) ifadenin de GENEL
+          -- olmasini zorlar → yazilan degerler ESIT (ana lemma).
+          cases hx : G x with
+          | gizli => exact dusukEs_yaz_gizli G sa1 sa2 x _ _ h_low' hx
+          | genel =>
+              have h_e_genel : ifadeEtiket G e = .genel := by
+                rw [hx] at h_akis
+                cases hE : ifadeEtiket G e with
+                | genel => rfl
+                | gizli =>
+                    rw [hE] at h_akis
+                    exact absurd h_akis (by simp [Etiket.altMi])
+              obtain ⟨hv, _, _⟩ := genel_ifade_korunum G hE1 hE2 h_low h_e_genel
+              rw [hv]
+              exact dusukEs_yaz_genel G sa1 sa2 x _ h_low'
+  | c_sira s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
       | ct_sira _ _ hca hcb =>
-        cases h1 with
-        | c_sira _ sa1 _ _ _ ta1 tb1 va1 vb1 hA1 hB1 =>
-          cases h2 with
-          | c_sira _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
-            obtain ⟨hta, h_low'⟩ := iha _ _ _ _ _ _ _ _ hca h_low hA1 hA2
-            obtain ⟨htb, h_low''⟩ := ihb _ _ _ _ _ _ _ _ hcb h_low' hB1 hB2
-            exact ⟨by rw [hta, htb], h_low''⟩
-  | eger k d y ihk ihd ihy =>
-      intro s1 s2 s1' s2' t1 t2 v1 v2 h_ct h_low h1 h2
+        cases h2 with
+        | c_sira _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+          obtain ⟨hta, h_low'⟩ := ihA hA2 hca h_low
+          obtain ⟨htb, h_low''⟩ := ihB hB2 hcb h_low'
+          exact ⟨by rw [hta, htb], h_low''⟩
+  | c_eger_dogru s sk1 _ k d y tk1 td1 vk1 vd1 hK1 hD1 hDal1 ihK ihD =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
-      | ct_eger _ _ _ hck hcd hcy h_kosul_genel =>
-        -- CT001 sayesinde kosul GENEL → iki kosumda AYNI deger → AYNI dal.
-        cases h1 with
-        | c_eger_dogru _ sk1 _ _ _ _ tk1 td1 vk1 vd1 hK1 hD1 hDal1 =>
-          cases h2 with
-          | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
-              obtain ⟨_, htk, h_low'⟩ :=
-                genel_ifade_korunum G k _ _ _ _ _ _ _ _ h_low h_kosul_genel hK1 hK2
-              obtain ⟨htd, h_low''⟩ := ihd _ _ _ _ _ _ _ _ hcd h_low' hDal1 hDal2
-              exact ⟨by rw [htk, htd], h_low''⟩
-          | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
-              -- ISTE BU CELISKI CT001 OLMADAN OLUSMAZDI:
-              obtain ⟨hvk, _, _⟩ :=
-                genel_ifade_korunum G k _ _ _ _ _ _ _ _ h_low h_kosul_genel hK1 hK2
-              exact absurd (hvk ▸ hK2z) hD1
-        | c_eger_yanlis _ sk1 _ _ _ _ tk1 ty1 vk1 vy1 hK1 hK1z hY1 =>
-          cases h2 with
-          | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
-              obtain ⟨hvk, _, _⟩ :=
-                genel_ifade_korunum G k _ _ _ _ _ _ _ _ h_low h_kosul_genel hK1 hK2
-              exact absurd (hvk ▸ hK1z) hD2
-          | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
-              obtain ⟨_, htk, h_low'⟩ :=
-                genel_ifade_korunum G k _ _ _ _ _ _ _ _ h_low h_kosul_genel hK1 hK2
-              obtain ⟨hty, h_low''⟩ := ihy _ _ _ _ _ _ _ _ hcy h_low' hY1 hY2
-              exact ⟨by rw [htk, hty], h_low''⟩
-
--- ============================================================
+      | ct_eger _ _ _ hck hcd hcy h_kg =>
+        cases h2 with
+        | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
+            obtain ⟨_, htk, h_low'⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            obtain ⟨htd, h_low''⟩ := ihD hDal2 hcd h_low'
+            exact ⟨by rw [htk, htd], h_low''⟩
+        | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
+            -- CT001 OLMADAN BU CELISKI OLUSMAZDI:
+            obtain ⟨hvk, _, _⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            exact absurd (hvk ▸ hK2z) hD1
+  | c_eger_yanlis s sk1 _ k d y tk1 ty1 vk1 vy1 hK1 hK1z hY1 ihK ihY =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_eger _ _ _ hck hcd hcy h_kg =>
+        cases h2 with
+        | c_eger_dogru _ sk2 _ _ _ _ tk2 td2 vk2 vd2 hK2 hD2 hDal2 =>
+            obtain ⟨hvk, _, _⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            exact absurd (hvk ▸ hK1z) hD2
+        | c_eger_yanlis _ sk2 _ _ _ _ tk2 ty2 vk2 vy2 hK2 hK2z hY2 =>
+            obtain ⟨_, htk, h_low'⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            obtain ⟨hty, h_low''⟩ := ihY hY2 hcy h_low'
+            exact ⟨by rw [htk, hty], h_low''⟩
+  -- D-335 (CT002): DONGU. `h_kg` (kosul genel) olmasaydi iki kosum farkli
+  -- TUR SAYISI yapardi → izler ayrisirdi. Ucuncu IH (ihI) ic kosum icin.
+  | c_iken_dogru s s1x s2x s3x k g tk tg ti vk vg vi hK1 hD1 hG1 hI1 ihK ihG ihI =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_iken _ _ hck hcg h_kg =>
+        cases h2 with
+        | c_iken_dogru _ sk2 sg2 _ _ _ tk2 tg2 ti2 vk2 vg2 vi2 hK2 hD2 hG2 hI2 =>
+            obtain ⟨_, htk, h_low'⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            obtain ⟨htg, h_low''⟩ := ihG hG2 hcg h_low'
+            obtain ⟨hti, h_low3⟩ := ihI hI2 (CtOk.ct_iken k g hck hcg h_kg) h_low''
+            exact ⟨by rw [htk, htg, hti], h_low3⟩
+        | c_iken_yanlis _ sk2 _ _ tk2 vk2 hK2 hK2z =>
+            obtain ⟨hvk, _, _⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            exact absurd (hvk ▸ hK2z) hD1
+  | c_iken_yanlis s sk1 k g tk1 vk1 hK1 hK1z ihK =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_iken _ _ hck hcg h_kg =>
+        cases h2 with
+        | c_iken_dogru _ sk2 sg2 _ _ _ tk2 tg2 ti2 vk2 vg2 vi2 hK2 hD2 hG2 hI2 =>
+            obtain ⟨hvk, _, _⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            exact absurd (hvk ▸ hK1z) hD2
+        | c_iken_yanlis _ sk2 _ _ tk2 vk2 hK2 hK2z =>
+            obtain ⟨_, htk, h_low'⟩ := genel_ifade_korunum G hK1 hK2 h_low h_kg
+            exact ⟨by rw [htk], h_low'⟩
+  -- D-335 (CT004): DESEN ESLEMESI. `h_sg` (skrutin genel) olmasaydi iki
+  -- kosum FARKLI KOL secebilirdi → izler ayrisirdi.
+  | c_esles_tuttu s ss1 _ sk n d y ts1 td1 vs1 vd1 hS1 hT1 hD1 ihS ihD =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_esles _ _ _ _ hcs hcd hcy h_sg =>
+        cases h2 with
+        | c_esles_tuttu _ ss2 _ _ _ _ _ ts2 td2 vs2 vd2 hS2 hT2 hD2 =>
+            obtain ⟨_, hts, h_low'⟩ := genel_ifade_korunum G hS1 hS2 h_low h_sg
+            obtain ⟨htd, h_low''⟩ := ihD hD2 hcd h_low'
+            exact ⟨by rw [hts, htd], h_low''⟩
+        | c_esles_tutmadi _ ss2 _ _ _ _ _ ts2 ty2 vs2 vy2 hS2 hT2 hY2 =>
+            obtain ⟨hvs, _, _⟩ := genel_ifade_korunum G hS1 hS2 h_low h_sg
+            exact absurd (hvs ▸ hT1) hT2
+  | c_esles_tutmadi s ss1 _ sk n d y ts1 ty1 vs1 vy1 hS1 hT1 hY1 ihS ihY =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_esles _ _ _ _ hcs hcd hcy h_sg =>
+        cases h2 with
+        | c_esles_tuttu _ ss2 _ _ _ _ _ ts2 td2 vs2 vd2 hS2 hT2 hD2 =>
+            obtain ⟨hvs, _, _⟩ := genel_ifade_korunum G hS1 hS2 h_low h_sg
+            exact absurd (hvs ▸ hT2) hT1
+        | c_esles_tutmadi _ ss2 _ _ _ _ _ ts2 ty2 vs2 vy2 hS2 hT2 hY2 =>
+            obtain ⟨_, hts, h_low'⟩ := genel_ifade_korunum G hS1 hS2 h_low h_sg
+            obtain ⟨hty, h_low''⟩ := ihY hY2 hcy h_low'
+            exact ⟨by rw [hts, hty], h_low''⟩
 -- §9. CT001'in GEREKLILIGI — kural kaldirilirsa NI COKER
 -- ============================================================
 
@@ -430,6 +572,61 @@ theorem ct001_gerekli :
       (Calis.c_degisken _ 0) (by decide) (Calis.c_sabit _ 1)
   · exact Calis.c_eger_yanlis _ _ _ _ _ _ [.oOku 0] [] 0 2
       (Calis.c_degisken _ 0) rfl (Calis.c_sabit _ 2)
+  · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CT002'nin GEREKLILIGI (D-335):** gizli `h` uzerinde DONEN program,
+    iki dusuk-esdeger store'da FARKLI UZUNLUKTA iz uretir — cunku TUR
+    SAYISI gizliye baglidir. `ct_iken`in `h_kosul_genel` sarti bu yuzden
+    keyfi degildir.
+
+    Program: `iken (degisken 0) (0 = 0)` — h ≠ 0 ise bir tur doner ve
+    h'yi sifirlar; h = 0 ise hic donmez. -/
+theorem ct002_gerekli :
+    ∃ (G : EtiketOrtam) (e : Ifade) (s1 s2 s1' s2' : Store)
+      (t1 t2 : Iz) (v1 v2 : Int),
+      DusukEs G s1 s2 ∧ Calis s1 e s1' t1 v1 ∧ Calis s2 e s2' t2 v2
+      ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .iken (.degisken 0) (.sabitDeg 0 (.sabit 0)),
+          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 0 else 5),
+          yaz (fun x => if x = 0 then 1 else 5) 0 0,
+          (fun x => if x = 0 then 0 else 5),
+          [.oOku 0] ++ .oDal true :: ([.oYaz 0] ++ [.oOku 0, .oDal false]),
+          [.oOku 0] ++ [.oDal false], 0, 0, ?_, ?_, ?_, ?_⟩
+  · intro x hx
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact Calis.c_iken_dogru _ _ _ _ _ _ [.oOku 0] [.oYaz 0]
+      [.oOku 0, .oDal false] 1 0 0
+      (Calis.c_degisken _ 0) (by decide)
+      (Calis.c_atama _ _ 0 (.sabit 0) [] 0 (Calis.c_sabit _ 0))
+      (Calis.c_iken_yanlis _ _ _ _ [.oOku 0] 0 (Calis.c_degisken _ 0) rfl)
+  · exact Calis.c_iken_yanlis _ _ _ _ [.oOku 0] 0 (Calis.c_degisken _ 0) rfl
+  · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CT004'un GEREKLILIGI (D-335):** gizli skrutin uzerinde ESLESEN
+    program, hangi kolun tuttugunu sizdirir (`oDal true` vs `oDal false`).
+    `ct_esles`in `h_skrut_genel` sarti bu yuzden gereklidir. -/
+theorem ct004_gerekli :
+    ∃ (G : EtiketOrtam) (e : Ifade) (s1 s2 s1' s2' : Store)
+      (t1 t2 : Iz) (v1 v2 : Int),
+      DusukEs G s1 s2 ∧ Calis s1 e s1' t1 v1 ∧ Calis s2 e s2' t2 v2
+      ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .esles (.degisken 0) 1 (.sabit 5) (.sabit 7),
+          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 2 else 5),
+          (fun x => if x = 0 then 1 else 5), (fun x => if x = 0 then 2 else 5),
+          [.oOku 0] ++ .oDal true :: [], [.oOku 0] ++ .oDal false :: [],
+          5, 7, ?_, ?_, ?_, ?_⟩
+  · intro x hx
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact Calis.c_esles_tuttu _ _ _ _ 1 _ _ [.oOku 0] [] 1 5
+      (Calis.c_degisken _ 0) rfl (Calis.c_sabit _ 5)
+  · exact Calis.c_esles_tutmadi _ _ _ _ 1 _ _ [.oOku 0] [] 2 7
+      (Calis.c_degisken _ 0) (by decide) (Calis.c_sabit _ 7)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
 
 end Kemgu.SideChannel.CT
