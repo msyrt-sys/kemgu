@@ -92,6 +92,50 @@ theorem typed_eger_dal {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     | true  => exact ⟨htd, lineerNotr_kimlik h_nd _, hrd⟩
     | false => exact ⟨hty, lineerNotr_kimlik h_ny _, hry⟩
 
+/-- D-334: `topla`nin SOL operandi tiplidir (sToplaCongSol tarafi). -/
+theorem typed_topla_sol {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {a b : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.topla a b) τ Λ' Ρ') :
+    ∃ τa Λa Ρa, Typed Γ Δ Λ Ρ a τa Λa Ρa := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_topla _ _ _ _ hta _,
+    LineerTamam.l_topla _ _ Λa _ _ _ hla _,
+    RegionTamam.r_topla _ _ Ρa _ _ _ hra _ =>
+    exact ⟨Tip.scalar, Λa, Ρa, ⟨hta, hla, hra⟩⟩
+
+/-- D-334: sol operand DEGER iken sag operand tiplidir (sToplaCongSag). -/
+theorem typed_topla_sag {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {v : Deger} {b : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.topla (Ifade.sabit v) b) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ b Tip.scalar Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_topla _ _ _ _ _ htb,
+    LineerTamam.l_topla _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_topla _ _ _ _ _ _ hra hrb =>
+    -- sol operand `sabit v`: l_sabit / r_sabit → Λa = Λ, Ρa = Ρ
+    cases hla
+    cases hra
+    exact ⟨htb, hlb, hrb⟩
+
+/-- D-334: iki operand da deger → toplam tiplidir (sToplaTamam sonrasi). -/
+theorem typed_topla_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {n1 n2 : Int} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ
+          (Ifade.topla (Ifade.sabit (.skaler n1)) (Ifade.sabit (.skaler n2)))
+          τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ (Ifade.sabit (.skaler (n1 + n2))) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_topla _ _ _ _ _ _,
+    LineerTamam.l_topla _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_topla _ _ _ _ _ _ hra hrb =>
+    cases hla; cases hlb; cases hra; cases hrb
+    exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
+
 /-- Atama RHS'i tiplidir (sAtamaCong tipleme tarafi). -/
 theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}

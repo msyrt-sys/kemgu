@@ -114,12 +114,27 @@ def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
     silme artik bir SIMULASYON OLMAZDI. Bu tesadufi bir teknik ayrinti
     DEGIL, CT'nin ta kendisidir: veri kontrol akisini etkiler ve kontrol
     akisi GOZLENIR. Dolayisiyla o TEK BIT saldirgandan saklanamaz ve
-    "silinmis" sayilamaz. Skaler 0/1'e, isaretci-benzeri degerler
-    `skaler 1`'e (dogru), `birim` kendine (yanlis) iner.
-    Yani yine: "ne gizlidir" sorusunu ISPAT cevapladi, biz varsaymadik. -/
+    "silinmis" sayilamaz. Isaretci-benzeri degerler `skaler 1`'e (dogru),
+    `birim` kendine (yanlis) iner.
+    Yani yine: "ne gizlidir" sorusunu ISPAT cevapladi, biz varsaymadik.
+
+    ISTISNA 3 (D-334 — ARITMETIK EKLENINCE ISPATIN ZORLADIGI UCUNCU
+    DARALTMA): SKALERLER ARTIK HIC SILINMIYOR. D-332'de 0/1 bitine
+    indirmek yetiyordu; `topla` gelince YETMEZ, cunku aritmetik O BITIN
+    UZERINDE HESAP YAPAR: n1 = n2 = 1 icin silinmis kosum 1 + 1 = 2
+    uretir, orijinalin silinmisi ise `skaler 1`dir — 2 ≠ 1, yani
+    `silme_simulasyon` COKERDI (ispat denemesinde somut olarak cikti).
+
+    Bunun ANLAMI (kucumsenmemeli): bu teoremin skaler-duzeyi artik BOS.
+    D-329'un "tum veri silinir" ifadesi yalnizca dil veri uzerinde HESAP
+    da DALLANMA da yapamadigi icin dogruydu. Ikisi de eklendiginde
+    skaler-duzey non-interference'i tasiyan sey BU TEOREM DEGIL,
+    `SideChannel/CT` + `CTKopru.kopru_ni`dir (CT001/CT003 disiplini
+    altinda). Burada geriye kalan icerik: gozlem, ISARETCI-BENZERI
+    yuklerden (metin/yapi/dizi/closure/yetki) BAGIMSIZDIR. -/
 def degerSil : Deger → Deger
   | .gorevVal t => .gorevVal t
-  | .skaler n   => .skaler (if n = 0 then 0 else 1)
+  | .skaler n   => .skaler n          -- D-334: silinmez (bkz. ISTISNA 3)
   | .birim      => Deger.birim
   | _           => .skaler 1
 
@@ -128,14 +143,7 @@ def degerSil : Deger → Deger
     kalbi. -/
 theorem degerDogruMu_degerSil (v : Deger) :
     degerDogruMu (degerSil v) = degerDogruMu v := by
-  cases v with
-  | skaler n =>
-      by_cases h : n = 0
-      · simp [degerSil, degerDogruMu, h]
-      · simp [degerSil, degerDogruMu, h]
-  | birim => rfl
-  | gorevVal t => rfl
-  | _ => rfl
+  cases v <;> rfl
 
 /-- Ifade silme: gomulu literaller birime iner, KONTROL ISKELETI korunur. -/
 def ifadeSil : Ifade → Ifade
@@ -152,6 +160,7 @@ def ifadeSil : Ifade → Ifade
   | .imhaIf x             => .imhaIf x
   | .guvensiz e           => .guvensiz (ifadeSil e)
   | .eger k d y           => .eger (ifadeSil k) (ifadeSil d) (ifadeSil y)
+  | .topla a b            => .topla (ifadeSil a) (ifadeSil b)
 
 /-- Olay silme: tasinan deger birime iner (TUR + konum korunur). -/
 def olaySil : Olay → Olay
@@ -566,6 +575,47 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
             simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
         | false =>
             simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
+  -- D-334: sToplaTamam. ISTISNA 3 sayesinde silinmis dunyada AYNI
+  -- toplama yapilir (skalerler silinmiyor); olay yok.
+  | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      refine Step.sToplaTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        n1 n2 ?_ ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
+  | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sToplaCongSol _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil a) (ifadeSil a') (ifadeSil b) ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sToplaCongSag _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
   | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y
       h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       refine Step.sEgerCong _ _ (konfSil S1) (konfSil S1')

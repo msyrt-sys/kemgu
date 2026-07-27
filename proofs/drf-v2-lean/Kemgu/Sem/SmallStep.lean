@@ -241,6 +241,53 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 thread := ts1 ++ { ctx' with ifade := .eger k' d y } :: ts2' }) :
       Step S S'
 
+  /-- S-TOPLA-TAMAM (D-334): iki operand da skaler deger → toplanir.
+      OLAY URETMEZ (aritmetik dogrudan gozlenmez); store/sahiplik sabit. -/
+  | sToplaTamam
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (n1 n2 : Int)
+      (h_t  : S.thread = ts1 ++ ctx :: ts2)
+      (h_if : ctx.ifade = .topla (.sabit (.skaler n1)) (.sabit (.skaler n2)))
+      (h_S' : S' = { S with
+                thread := ts1 ++ { ctx with ifade := .sabit (.skaler (n1 + n2)) } :: ts2,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-TOPLA-CONG-SOL (D-334): SOL operand icinde adim at.
+      (Deger olan sol operand adim atamaz → sira belirsizligi YOK.) -/
+  | sToplaCongSol
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (a a' b : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .topla a b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx a)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = a')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .topla a' b } :: ts2' }) :
+      Step S S'
+
+  /-- S-TOPLA-CONG-SAG (D-334): sol operand DEGER ise sag operand icinde
+      adim at. Sol-once/sag-sonra sirasi CT'nin `c_topla`si ile birebir. -/
+  | sToplaCongSag
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (v : Deger) (b b' : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .topla (.sabit v) b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx b)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = b')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .topla (.sabit v) b' } :: ts2' }) :
+      Step S S'
+
   /-- S-GUVENSIZ-ATLA: ic ifade deger → sarmal acilir. -/
   | sGuvensizAtla
       (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
@@ -554,6 +601,15 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   | sEgerCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' k k' d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
+  -- D-334: topla OLAY URETMEZ, store/sahiplik sabit → birinci disjunct.
+  | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
+  | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
+  | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -647,6 +703,23 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
           by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
           by simpa [ifadeyleKonf] using h_z⟩
+  -- D-334
+  | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
+  | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -726,6 +799,21 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx k).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  -- D-334
+  | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v bb bb' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx bb).sahiplik b
           = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
       simpa using ih h1
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>

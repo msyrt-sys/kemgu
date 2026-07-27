@@ -575,6 +575,14 @@ inductive Ifade : Type where
       `dalOl` olayi emit edilir. CT001'in korudugu kanalin ana modeldeki
       temsili budur. -/
   | eger           (kosul dogruDal yanlisDal : Ifade)
+  /-- D-334: tamsayi toplama. Degerlendirme SOLDAN SAGA (sToplaCongSol,
+      sonra sToplaCongSag), sonra sToplaTamam. Olay URETMEZ — aritmetik
+      saldirgan tarafindan dogrudan gozlenmez; sizinti kanali onun
+      SONUCUNUN bir kosula/adrese girmesidir, ki onlar zaten gozlenir.
+      Tip disiplini `Tip.scalar` (t_topla) — `dt_skaler` scalar'in TEK
+      tanitici kurali oldugu icin iyi-tipli deger operandlar zorunlu
+      olarak `skaler`dir (progress buna dayanir). -/
+  | topla          (sol sag : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -631,6 +639,11 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar d z → HedefVar (Ifade.eger k d y) z
   | eger_yanlis (k d y : Ifade) (z : VarId) :
       HedefVar y z → HedefVar (Ifade.eger k d y) z
+  -- D-334: topla'nin her iki operandi da odaga girer.
+  | topla_sol (a b : Ifade) (z : VarId) :
+      HedefVar a z → HedefVar (Ifade.topla a b) z
+  | topla_sag (a b : Ifade) (z : VarId) :
+      HedefVar b z → HedefVar (Ifade.topla a b) z
 
 /-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
     dondurIf var (dondur sahiplik gerektirir — h_owner). -/
@@ -652,6 +665,11 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge d b → HedefBolge (Ifade.eger k d y) b
   | eger_yanlis (k d y : Ifade) (b : Bolge) :
       HedefBolge y b → HedefBolge (Ifade.eger k d y) b
+  -- D-334
+  | topla_sol (a c : Ifade) (b : Bolge) :
+      HedefBolge a b → HedefBolge (Ifade.topla a c) b
+  | topla_sag (a c : Ifade) (b : Bolge) :
+      HedefBolge c b → HedefBolge (Ifade.topla a c) b
 
 /-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
 theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}

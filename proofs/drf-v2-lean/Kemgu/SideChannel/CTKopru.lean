@@ -21,11 +21,11 @@ uretir — DAL KARARLARI (`gDal`) DAHIL.
 ═══════════════════════════════════════════════════════════════════════
 KAPSAM ve ACIKCA BORC (durustluk paketi)
 ═══════════════════════════════════════════════════════════════════════
-1. **`topla` KAPSAM DISI.** `Sem/Core.Ifade`de ARITMETIK YOKTUR (D-332
-   olcumu). Gomme CT'nin TOPLA-SIZ parcasinda tanimlidir (`GomOk`).
-   Icerik kaybi SINIRLI: CT001'in korudugu kanal (gizli uzerinde
-   dallanma) ve `ct001_gerekli` taniginin ta kendisi bu parcadadir.
-   Core'a `topla` eklemek ayri istir (yeni Step kurali + tum tumevarimlar).
+1. **`topla` ARTIK KAPSAM ICINDE (D-334).** D-333'te Core'da aritmetik
+   olmadigi icin disaridaydi; D-334 `Ifade.topla` + `sToplaTamam` +
+   `sToplaCongSol/Sag` + `t_topla`/`l_topla`/`r_topla` ekledi. Gomme
+   artik CT'nin TUM ifade bicimlerini kapsar (`sabit`, `degisken`,
+   `topla`, `sabitDeg`, `sira`, `eger`) — tek kisit asagidaki `Sadik`.
 2. **`Sadik` (deger-sadakati).** OLCULEN ayrisma: CT'de `x = e` DEGER
    olarak v dondurur, Core'da `sAtamaTamam` `birim` dondurur. Bu yuzden
    atama, degeri KULLANILAN konumlara giremez: `GomOk` bir atamanin
@@ -73,8 +73,11 @@ inductive Sadik : CT.Ifade → Prop where
   /-- `a; b`nin degeri b'den gelir → a'nin sadakati GEREKMEZ. -/
   | s_sira (a b : CT.Ifade) : Sadik b → Sadik (.sira a b)
   | s_eger (k d y : CT.Ifade) : Sadik d → Sadik y → Sadik (.eger k d y)
+  /-- D-334: toplamin degeri `skaler (v1+v2)` — sadik. -/
+  | s_topla (a b : CT.Ifade) : Sadik (.topla a b)
 
-/-- Gomulebilir CT ifadeleri (Kapsam 1 + 2). -/
+/-- Gomulebilir CT ifadeleri. D-334'ten beri CT'nin TUM bicimleri
+    gomulebilir; tek kisit `Sadik` (Kapsam 2). -/
 inductive GomOk : CT.Ifade → Prop where
   | g_sabit (n : Int) : GomOk (.sabit n)
   | g_degisken (x : CT.Ad) : GomOk (.degisken x)
@@ -85,16 +88,21 @@ inductive GomOk : CT.Ifade → Prop where
   /-- `eger`in KOSULU deger-sadik olmali — dal karari ona bagli. -/
   | g_eger (k d y : CT.Ifade) :
       GomOk k → Sadik k → GomOk d → GomOk y → GomOk (.eger k d y)
+  /-- D-334: `topla` ARTIK GOMULEBILIR (Core'a `Ifade.topla` eklendi).
+      Her iki operand `Sadik` olmali — `sToplaTamam` operandlarin
+      `sabit (skaler _)` olmasini ister. -/
+  | g_topla (a b : CT.Ifade) :
+      GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.topla a b)
 
-/-- CT ifadesi → Core ifadesi. `topla` kapsam disi (`GomOk` altinda o dal
-    ASLA kullanilmaz). -/
+/-- CT ifadesi → Core ifadesi. D-334'ten beri TOPLAM (her bicim icin
+    gercek bir karsilik var; tikac dal YOK). -/
 def gom : CT.Ifade → Ifade
   | .sabit n        => .sabit (.skaler n)
   | .degisken x     => .tanim x
   | .sabitDeg x e   => .atama x (gom e)
   | .sira a b       => .seq (gom a) (gom b)
   | .eger k d y     => .eger (gom k) (gom d) (gom y)
-  | .topla _ _      => .sabit .birim
+  | .topla a b      => .topla (gom a) (gom b)   -- D-334
 
 /-- Ifadenin degiskenleri V icinde mi (Kapsam 3). -/
 inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
@@ -105,6 +113,7 @@ inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
   | k_sira (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.sira a b)
   | k_eger (k d y : CT.Ifade) :
       Kapsar V k → Kapsar V d → Kapsar V y → Kapsar V (.eger k d y)
+  | k_topla (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.topla a b)
 
 -- ============================================================
 -- §2. Gomme — durum (bolge / sahiplik / store)
@@ -281,6 +290,32 @@ theorem krun_eger {V : List CT.Ad} (dd yy : Ifade) {d d' : KDurum}
         [] [] [] ⟨t0, .eger dA.ifade dd yy, []⟩ ⟨t0, dB.ifade, []⟩
         dA.ifade dB.ifade dd yy rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
+theorem krun_topla_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .topla d.ifade b }
+           { d' with ifade := .topla d'.ifade b } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .topla dB.ifade b } _ ?_ ih
+      exact Step.sToplaCongSol (K V { dA with ifade := .topla dA.ifade b })
+        (K V { dB with ifade := .topla dB.ifade b }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .topla dA.ifade b, []⟩ ⟨t0, dB.ifade, []⟩
+        dA.ifade dB.ifade b rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
+theorem krun_topla_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .topla (.sabit v) d.ifade }
+           { d' with ifade := .topla (.sabit v) d'.ifade } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .topla (.sabit v) dB.ifade } _ ?_ ih
+      exact Step.sToplaCongSag (K V { dA with ifade := .topla (.sabit v) dA.ifade })
+        (K V { dB with ifade := .topla (.sabit v) dB.ifade }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .topla (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
+        v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
 -- ============================================================
 -- §5. Taban adimlar (tek Step, K → K)
 -- ============================================================
@@ -315,6 +350,15 @@ theorem adim_dal (V : List CT.Ad) (sigma : Store) (n : Int)
                .dalOl t0 (degerDogruMu (.skaler n)) :: iz, z + 1⟩) :=
   Step.sEgerSec _ _ [] [] ⟨t0, .eger (.sabit (.skaler n)) dd yy, []⟩
     (.skaler n) dd yy (degerDogruMu (.skaler n)) rfl rfl rfl rfl
+
+/-- D-334: iki skaler deger → toplam. Olay uretmez (CT'nin `c_topla`si
+    da iz katkisi yapmaz — sadece alt-ifadelerin izleri birlesir). -/
+theorem adim_topla (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
+    (iz : Iz) (z : Zaman) :
+    Step (K V ⟨sigma, .topla (.sabit (.skaler n1)) (.sabit (.skaler n2)), iz, z⟩)
+         (K V ⟨sigma, .sabit (.skaler (n1 + n2)), iz, z + 1⟩) :=
+  Step.sToplaTamam _ _ [] []
+    ⟨t0, .topla (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
 
 /-- Dal testi CT ile BIREBIR: `degerDogruMu (skaler n) ↔ n ≠ 0`. -/
 theorem dogruMu_skaler (n : Int) : degerDogruMu (.skaler n) = decide (n ≠ 0) := rfl
@@ -372,9 +416,25 @@ theorem gomme_sim {V : List CT.Ad} :
       exact ⟨.skaler (s x), sigma, _, z + 1,
         KRun.adim _ _ _ (adim_oku V sigma x (s x) iz z hx (hu x hx))
           (KRun.refl _), hu, rfl, fun _ => rfl⟩
-  | c_topla _ _ _ _ _ _ _ _ _ _ _ _ =>
-      -- Kapsam 1: `topla` gomulemez → GomOk hipotezi bu dali BOSALTIR.
-      intro h_gom _ _ _ _ _; nomatch h_gom
+  | c_topla s s1 s2 a b t1 t2 v1 v2 _ _ iha ihb =>
+      -- D-334: soldan saga kosum + sToplaTamam. Iz katkisi `sira` ile
+      -- ayni sekilde birlesir (topla adimlari OLAY URETMEZ).
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_topla _ _ h_ga h_sa h_gb h_sb =>
+        have h_ka : Kapsar V a := by cases h_kap with | k_topla _ _ h _ => exact h
+        have h_kb : Kapsar V b := by cases h_kap with | k_topla _ _ _ h => exact h
+        obtain ⟨w1, sg1, iz1, z1, hr1, hu1, hg1, hs1⟩ := iha h_ga h_ka sigma iz z hu
+        rw [hs1 h_sa] at hr1
+        obtain ⟨w2, sg2, iz2, z2, hr2, hu2, hg2, hs2⟩ := ihb h_gb h_kb sg1 iz1 z1 hu1
+        rw [hs2 h_sb] at hr2
+        refine ⟨.skaler (v1 + v2), sg2, iz2, z2 + 1,
+          krun_trans (krun_topla_sol (V := V) (gom b) hr1)
+            (krun_trans (krun_topla_sag (V := V) (.skaler v1) hr2)
+              (KRun.adim _ ⟨sg2, .sabit (.skaler (v1 + v2)), iz2, z2 + 1⟩ _
+                (adim_topla V sg2 v1 v2 iz2 z2) (KRun.refl _))),
+          hu2, ?_, fun _ => rfl⟩
+        rw [hg2, hg1, gomGozIz_append, List.append_assoc]
   | c_atama s s1 x e t1 vv he ih =>
       intro h_gom h_kap sigma iz z hu
       cases h_gom with
@@ -499,25 +559,32 @@ theorem kopru_ni (G : CT.EtiketOrtam) (V : List CT.Ad) (e : CT.Ifade)
     `Kapsar` saglayan, ustelik GERCEKTEN DALLANAN ve GIZLI degiskene
     YAZAN bir program vardir.
 
-    Program: `eger (degisken 1) (0 = 5) (0 = 7)` — 1 GENEL (kosul, CT001
-    uyumlu), 0 GIZLI (yazma hedefi, CT003 uyumlu: genel deger gizliye
-    yazilabilir). Yani `kopru_ni`nin hipotezleri BIRLIKTE saglanabilir;
+    Program: `eger (1 + 1) (0 = 5) (0 = 7)` — 1 GENEL (kosulda okunur,
+    CT001 uyumlu), 0 GIZLI (yazma hedefi, CT003 uyumlu: genel deger
+    gizliye yazilabilir). D-334'ten beri kosulda ARITMETIK da var, yani
+    tanik yeni kapsamı fiilen kullanir. Hipotezler BIRLIKTE saglanabilir;
     teorem vakum degildir. -/
 theorem kopru_bos_degil :
     ∃ (G : CT.EtiketOrtam) (e : CT.Ifade),
       CT.CtOk G e ∧ GomOk e ∧ Kapsar [0, 1] e
-      ∧ (∃ k d y, e = .eger k d y) := by
+      ∧ (∃ a b d y, e = .eger (.topla a b) d y) := by
   refine ⟨fun x => if x = 0 then .gizli else .genel,
-          .eger (.degisken 1) (.sabitDeg 0 (.sabit 5)) (.sabitDeg 0 (.sabit 7)),
-          ?_, ?_, ?_, ⟨_, _, _, rfl⟩⟩
-  · exact CT.CtOk.ct_eger _ _ _ (CT.CtOk.ct_degisken 1)
+          .eger (.topla (.degisken 1) (.sabit 1))
+                (.sabitDeg 0 (.sabit 5)) (.sabitDeg 0 (.sabit 7)),
+          ?_, ?_, ?_, ⟨_, _, _, _, rfl⟩⟩
+  · exact CT.CtOk.ct_eger _ _ _
+      (CT.CtOk.ct_topla _ _ (CT.CtOk.ct_degisken 1) (CT.CtOk.ct_sabit 1))
       (CT.CtOk.ct_atama 0 (.sabit 5) (CT.CtOk.ct_sabit 5) (by decide))
       (CT.CtOk.ct_atama 0 (.sabit 7) (CT.CtOk.ct_sabit 7) (by decide))
       (by decide)
-  · exact GomOk.g_eger _ _ _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
+  · exact GomOk.g_eger _ _ _
+      (GomOk.g_topla _ _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
+        (GomOk.g_sabit 1) (Sadik.s_sabit 1))
+      (Sadik.s_topla _ _)
       (GomOk.g_atama 0 _ (GomOk.g_sabit 5) (Sadik.s_sabit 5))
       (GomOk.g_atama 0 _ (GomOk.g_sabit 7) (Sadik.s_sabit 7))
-  · exact Kapsar.k_eger _ _ _ (Kapsar.k_degisken 1 (by decide))
+  · exact Kapsar.k_eger _ _ _
+      (Kapsar.k_topla _ _ (Kapsar.k_degisken 1 (by decide)) (Kapsar.k_sabit 1))
       (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 5))
       (Kapsar.k_atama 0 _ (by decide) (Kapsar.k_sabit 7))
 

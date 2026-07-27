@@ -74,6 +74,8 @@ inductive RegionNotr : Ifade → Prop where
   | rn_eger (k d y : Ifade) :
       RegionNotr k → RegionNotr d → RegionNotr y →
       RegionNotr (Ifade.eger k d y)
+  | rn_topla (a b : Ifade) :
+      RegionNotr a → RegionNotr b → RegionNotr (Ifade.topla a b)
 
 
 /-- RegionTamam Γ Ρ e Ρ' — Bolge durum gecisi:
@@ -190,6 +192,13 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
   /-- R-IMHA: linear imha Ρ'yu etkilemez (V1 sinir; benzer kullan). -/
   | r_imha (Γ : TipOrtam) (Ρ : BolgeOrtam) (x : VarId) :
              RegionTamam Γ Ρ (Ifade.imhaIf x) Ρ
+
+  /-- R-TOPLA (D-334): SIRALI kompozisyon (r_seq ile ayni) — dallanma
+      yok, `RegionNotr` daraltmasi GEREKMEZ. -/
+  | r_topla (Γ : TipOrtam) (Ρ Ρa Ρb : BolgeOrtam) (a b : Ifade) :
+              RegionTamam Γ Ρ a Ρa →
+              RegionTamam Γ Ρa b Ρb →
+              RegionTamam Γ Ρ (Ifade.topla a b) Ρb
 
   /-- R-EGER (D-332): kosul Ρ → Ρk; her iki dal BOLGE-NOTR'dur ve Ρk'den
       Ρk'ye gecer; sonuc Ρk.
@@ -430,6 +439,10 @@ theorem regionNotr_cikis_esit {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
       intro h_n
       cases h_n with
       | rn_seq _ _ h_na h_nb => rw [ih_b h_nb, ih_a h_na]
+  | r_topla _ _ _ _ _ _ _ ih_a ih_b =>
+      intro h_n
+      cases h_n with
+      | rn_topla _ _ h_na h_nb => rw [ih_b h_nb, ih_a h_na]
   | r_gorev_baslat _ _ _ _ _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
   | r_gorev_birlestir _ _ => exact fun _ => rfl
   | r_kanal_gonder _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
@@ -471,6 +484,11 @@ theorem regionNotr_hedefBolge_yok {e : Ifade} (h_n : RegionNotr e) :
       | eger_kosul _ _ _ _ h' => exact ih_k b h'
       | eger_dogru _ _ _ _ h' => exact ih_d b h'
       | eger_yanlis _ _ _ _ h' => exact ih_y b h'
+  | rn_topla a c _ _ ih_a ih_c =>
+      intro b h
+      cases h with
+      | topla_sol _ _ _ h' => exact ih_a b h'
+      | topla_sag _ _ _ h' => exact ih_c b h'
 
 
 /-- YAZ-GERI: cikis ortaminda YAZILABILIR kategorili gorunen kayit,
@@ -487,6 +505,8 @@ theorem regionTamam_yaz_geri {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
   | r_sabit _ _ => exact fun _ _ h_o _ => h_o
   | r_atama _ _ _ _ _ _ _ _ ih => exact ih
   | r_seq _ _ _ _ _ _ _ ih_a ih_b =>
+      exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
+  | r_topla _ _ _ _ _ _ _ ih_a ih_b =>
       exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
   | r_gorev_baslat _ _ _ yd _ tY _ _ _ _ h_eq _ =>
       intro y b h_o h_y
@@ -572,6 +592,22 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
           have h_ag := agree_a x (h_n.trans h_geri.symm)
           rw [h_ag]; exact hlk)
       exact ⟨Ρb', RegionTamam.r_seq _ _ _ _ a b h_ra' h_rb',
+        fun y hy => agree_b y (agree_a y hy)⟩
+  -- D-334: r_seq ile BIREBIR ayni (sirali kompozisyon).
+  | r_topla _ _ _ a b h_ra _ ih_a ih_b =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρa', h_ra', agree_a⟩ := ih_a Ρn
+        (fun y hy => h_hv y (HedefVar.topla_sol a b y hy))
+        (fun x bb hb hyz hlk =>
+          h_hb x bb (HedefBolge.topla_sol a b bb hb) hyz hlk)
+      obtain ⟨Ρb', h_rb', agree_b⟩ := ih_b Ρa'
+        (fun y hy => agree_a y (h_hv y (HedefVar.topla_sag a b y hy)))
+        (fun x bb hb hyz hlk => by
+          have h_geri := regionTamam_yaz_geri h_ra x bb hlk hyz
+          have h_n := h_hb x bb (HedefBolge.topla_sag a b bb hb) hyz h_geri
+          have h_ag := agree_a x (h_n.trans h_geri.symm)
+          rw [h_ag]; exact hlk)
+      exact ⟨Ρb', RegionTamam.r_topla _ _ _ _ a b h_ra' h_rb',
         fun y hy => agree_b y (agree_a y hy)⟩
   | r_gorev_baslat _ _ Ρkod yd kod tY h_cap h_kodhv h_kodhb _ h_eq ih =>
       intro Ρn h_hv _
@@ -702,6 +738,11 @@ theorem regionTamam_iliski_transport {Γ : TipOrtam}
       obtain ⟨Ρan, h_ra', hi_a⟩ := ih_a Ρn hi
       obtain ⟨Ρbn, h_rb', hi_b⟩ := ih_b Ρan hi_a
       exact ⟨Ρbn, RegionTamam.r_seq _ _ _ _ a b h_ra' h_rb', hi_b⟩
+  | r_topla _ _ _ a b _ _ ih_a ih_b =>
+      intro Ρn hi
+      obtain ⟨Ρan, h_ra', hi_a⟩ := ih_a Ρn hi
+      obtain ⟨Ρbn, h_rb', hi_b⟩ := ih_b Ρan hi_a
+      exact ⟨Ρbn, RegionTamam.r_topla _ _ _ _ a b h_ra' h_rb', hi_b⟩
   -- D-332: dallar notr → yeni ortamda da kimlik; iliski kosuldan gelir.
   | r_eger _ _ k d y _ h_nd h_ny _ _ ih_k ih_d ih_y =>
       intro Ρn hi

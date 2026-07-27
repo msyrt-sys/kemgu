@@ -84,6 +84,8 @@ inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
   | n_eger (k d y : Ifade) :
       LineerNotr Γ k → LineerNotr Γ d → LineerNotr Γ y →
       LineerNotr Γ (Ifade.eger k d y)
+  | n_topla (a b : Ifade) :
+      LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.topla a b)
 
 
 /-- LineerTamam Γ Λ e Λ' — Lineer durum gecisi:
@@ -187,6 +189,13 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
             LineerTamam Γ Λ (Ifade.imhaIf x)
                           (lineerOrtamUpdate Λ x Lineerlik.tuketildi)
 
+  /-- L-TOPLA (D-334): SIRALI kompozisyon (l_seq ile ayni) — dallanma
+      olmadigi icin `LineerNotr` daraltmasi GEREKMEZ. -/
+  | l_topla (Γ : TipOrtam) (Λ Λa Λb : LineerOrtam) (a b : Ifade) :
+              LineerTamam Γ Λ a Λa →
+              LineerTamam Γ Λa b Λb →
+              LineerTamam Γ Λ (Ifade.topla a b) Λb
+
   /-- L-EGER (D-332): kosul Λ → Λk; HER IKI DAL LINEER-NOTR olmalidir
       (`LineerNotr` — asagida), yani dis bir lineer baglamayi TUKETEMEZ;
       cikis ortami Λk'dir.
@@ -232,6 +241,8 @@ theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
   | n_guvensiz e _ ih => exact fun Λ => LineerTamam.l_guvensiz Γ Λ Λ e (ih Λ)
   | n_eger k d y _ hd hy ih_k _ _ =>
       exact fun Λ => LineerTamam.l_eger Γ Λ Λ k d y (ih_k Λ) hd hy
+  | n_topla a b _ _ ih_a ih_b =>
+      exact fun Λ => LineerTamam.l_topla Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
 
 
 -- ============================================================
@@ -441,6 +452,11 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       exact ⟨Λen, LineerTamam.l_guvensiz _ _ _ e h_e, hk'⟩
   -- D-332: dallar LineerNotr — yargi Λ'dan BAGIMSIZ oldugu icin aynen
   -- tasinir; cikis kosulun cikisidir, IH onu verir.
+  | l_topla _ _ _ a b _ _ ih_a ih_b =>
+      intro Λn hk
+      obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
+      obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
+      exact ⟨Λbn, LineerTamam.l_topla _ _ _ _ a b h_a h_b, hk_b⟩
   | l_eger _ _ k d y _ h_nd h_ny ih_k =>
       intro Λn hk
       obtain ⟨Λkn, h_k, hk'⟩ := ih_k Λn hk

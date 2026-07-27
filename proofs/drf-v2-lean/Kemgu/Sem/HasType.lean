@@ -93,6 +93,16 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ y τ →
                 HasType Γ Δ (Ifade.eger k d y) τ
 
+  /-- T-TOPLA (D-334): iki operand da `scalar`; sonuc `scalar`.
+      KRITIK: `DegerTipli`de `Tip.scalar` uretebilen TEK kural
+      `dt_skaler`dir → iyi-tipli bir DEGER operand zorunlu olarak
+      `Deger.skaler`dir. `progress_konf`in `topla` kolu bu tekilligi
+      kullanir (aksi halde `topla (sabit "x") ...` STUCK olurdu). -/
+  | t_topla   (Γ : TipOrtam) (Δ : KanalOrtam) (a b : Ifade) :
+                HasType Γ Δ a Tip.scalar →
+                HasType Γ Δ b Tip.scalar →
+                HasType Γ Δ (Ifade.topla a b) Tip.scalar
+
   /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
   | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
                 HasType Γ Δ e τ →

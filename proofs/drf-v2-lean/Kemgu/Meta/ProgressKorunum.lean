@@ -54,6 +54,11 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
   -- baglami DEGILDIR — yalniz kosul odaga girer).
   | eger_kosul (k d y : Ifade) :
       Engelli S k → Engelli S (Ifade.eger k d y)
+  -- D-334: soldan saga degerlendirme → once sol, sol deger ise sag.
+  | topla_sol (a b : Ifade) :
+      Engelli S a → Engelli S (Ifade.topla a b)
+  | topla_sag (v : Deger) (b : Ifade) :
+      Engelli S b → Engelli S (Ifade.topla (Ifade.sabit v) b)
 
 /-- Engelli'nin odakli konfigurasyondan ana konfigurasyona transferi:
     kanal ayni; thread listesi yalniz odakli ifadede farkli — odaktaki
@@ -85,6 +90,8 @@ theorem engelli_konf_transfer
   | atama_ic x e _ ih => exact Engelli.atama_ic x e ih
   | guvensiz_ic e _ ih => exact Engelli.guvensiz_ic e ih
   | eger_kosul k d y _ ih => exact Engelli.eger_kosul k d y ih
+  | topla_sol a b _ ih => exact Engelli.topla_sol a b ih
+  | topla_sag v b _ ih => exact Engelli.topla_sag v b ih
 
 
 -- ============================================================
@@ -333,6 +340,77 @@ theorem progress_konf
             { ctx1' with ifade := .guvensiz ctx1'.ifade }, ts2',
             Step.sGuvensizCong S _ (ifadeyleKonf S ts1 ts2 ctx e) S1'
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
+  -- D-334: `topla` progress. Soldan saga: sol deger degilse sToplaCongSol,
+  -- sol deger + sag deger degilse sToplaCongSag, ikisi de deger ise
+  -- sToplaTamam. **Tipin isi burada:** operand `sabit v` VE `scalar`
+  -- tipli ise, `DegerTipli`de scalar'i uretebilen TEK kural `dt_skaler`
+  -- oldugu icin v ZORUNLU OLARAK `skaler n`dir → `topla (sabit "x") ...`
+  -- gibi bir STUCK durum iyi-tipli programda OLUSAMAZ.
+  | topla a b ih_a ih_b =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_topla _ _ _ _ hta htb,
+        LineerTamam.l_topla _ _ Λa _ _ _ hla hlb,
+        RegionTamam.r_topla _ _ Ρa _ _ _ hra hrb =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx a h_konf h_t
+          (by rw [h_lin]; exact ⟨Tip.scalar, Λa, Ρa, ⟨hta, hla, hra⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.topla_sol a b z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.topla_sol a b bb h)
+        rcases ih_a Tip.scalar Λin Λa Ρa hta hla hra (ifadeyleKonf S ts1 ts2 ctx a)
+            h_konf1 ts1 ts2 { ctx with ifade := a } rfl rfl h_lin with
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
+        · -- sol DEGER → tipten skaler oldugu cikar; sag tarafa gec
+          cases h_val with
+          | iv_sabit va =>
+            -- `sabit va : scalar` → va = skaler n1 (dt_skaler tekilligi)
+            match hta with
+            | HasType.t_sabit _ _ _ _ hdt =>
+              cases hdt with
+              | dt_skaler n1 =>
+                -- sol operand `sabit (skaler n1)`; l_sabit/r_sabit → Λa=Λin, Ρa=Ρ
+                cases hla
+                cases hra
+                have h_konf2 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx b h_konf h_t
+                  (by rw [h_lin]; exact ⟨Tip.scalar, Λ', Ρ', ⟨htb, hlb, hrb⟩⟩)
+                  (fun z h => by rw [h_if]; exact HedefVar.topla_sag _ b z h)
+                  (fun bb h => by rw [h_if]; exact HedefBolge.topla_sag _ b bb h)
+                rcases ih_b Tip.scalar Λin Λ' Ρ' htb hlb hrb
+                    (ifadeyleKonf S ts1 ts2 ctx b) h_konf2 ts1 ts2
+                    { ctx with ifade := b } rfl rfl h_lin with
+                    h_val2 | h_eng2 | ⟨S2', ctx2', ts2'', h_step2, h_t2', h_tid2, h_yan2⟩
+                · -- sag da DEGER → sToplaTamam
+                  cases h_val2 with
+                  | iv_sabit vb =>
+                    match htb with
+                    | HasType.t_sabit _ _ _ _ hdtb =>
+                      cases hdtb with
+                      | dt_skaler n2 =>
+                        exact Or.inr (Or.inr ⟨_,
+                          { ctx with ifade := .sabit (.skaler (n1 + n2)) }, ts2,
+                          Step.sToplaTamam S _ ts1 ts2 ctx n1 n2 h_t h_if rfl,
+                          rfl, rfl, Or.inl rfl⟩)
+                · -- sag ENGELLI → topla da engelli
+                  exact Or.inr (Or.inl (Engelli.topla_sag _ b
+                    (engelli_konf_transfer S ts1 ts2 ctx b b h_eng2 h_t
+                      (fun v h => by rw [h_if] at h; cases h))))
+                · -- sag ADIM ATAR → sToplaCongSag
+                  exact Or.inr (Or.inr ⟨_,
+                    { ctx2' with ifade := .topla (.sabit (.skaler n1)) ctx2'.ifade },
+                    ts2'',
+                    Step.sToplaCongSag S _ (ifadeyleKonf S ts1 ts2 ctx b) S2'
+                      ts1 ts2 ts2'' ctx ctx2' (.skaler n1) b ctx2'.ifade
+                      h_t h_if rfl h_step2 h_t2' h_tid2 rfl h_yan2 rfl,
+                    rfl, h_tid2, h_yan2⟩)
+        · -- sol ENGELLI → topla da engelli
+          exact Or.inr (Or.inl (Engelli.topla_sol a b
+            (engelli_konf_transfer S ts1 ts2 ctx a a h_eng h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · -- sol ADIM ATAR → sToplaCongSol
+          exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .topla ctx1'.ifade b }, ts2',
+            Step.sToplaCongSol S _ (ifadeyleKonf S ts1 ts2 ctx a) S1'
+              ts1 ts2 ts2' ctx ctx1' a ctx1'.ifade b
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
   -- D-332: `eger` progress. Kosul deger ise sEgerSec; engelliyse eger de

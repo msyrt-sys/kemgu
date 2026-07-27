@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-334 — Core'a ARİTMETİK (`topla`); köprü CT'nin TAMAMINI kapsıyor (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum,
+SideChannel/{NonInterference,CTKopru}].** Kapı: **31/31 modül, `sorryAx` YOK,
+ham `sorry` 0.**
+
+`Ifade.topla` + `Step.sToplaTamam` / `sToplaCongSol` / `sToplaCongSag`
+(**23→26 kural**, cong ailesi 4→6) + `t_topla` / `l_topla` / `r_topla`.
+Step üzerinden tümevarım yapan her teorem yeniden kapatıldı.
+
+**Değerlendirme sırası SOLDAN SAĞA** — seçim değil, zorunluluk: CT'nin `c_topla`sı
+önce `a` sonra `b` koşturur; köprünün iz karşılığı ancak bu sırada birebir olur.
+
+**PROGRESS'İ TİP TAŞIYOR (yeni bağımlılık):** `topla (sabit v) ...` iyi-tipliyse
+`v` zorunlu olarak `skaler`dir, çünkü `DegerTipli`de `Tip.scalar` üretebilen TEK
+kural `dt_skaler`dir. Bu tekillik olmasaydı `topla (sabit "x") ...` STUCK olurdu
+ve `progress_konf` çökerdi. `l_topla`/`r_topla` sıralı kompozisyon (dallanma yok)
+→ D-332'nin `LineerNotr`/`RegionNotr` daraltması burada GEREKMEZ.
+
+**İSPATIN ZORLADIĞI ÜÇÜNCÜ DARALTMA — `degerSil` SKALERLERİ ARTIK HİÇ SİLMİYOR.**
+D-332'de 0/1 bitini korumak yetiyordu; `topla` gelince YETMEZ, çünkü **aritmetik
+o bitin üzerinde hesap yapar**: n1 = n2 = 1 için silinmiş koşum `1+1 = 2` üretir,
+orijinalin silinmişi `skaler 1`dir → 2 ≠ 1, `silme_simulasyon` ÇÖKER.
+
+Bunun anlamı küçümsenmemeli: **bu teoremin skaler düzeyi artık boş.** D-329'un
+"tüm veri silinir" ifadesi yalnızca dil veri üzerinde ne hesap ne dallanma
+yapabildiği için doğruydu; ikisi de eklenince skaler düzey non-interference'ı
+taşıyan şey `silme_simulasyon` DEĞİL, `SideChannel/CT` + `CTKopru.kopru_ni`dir
+(CT001/CT003 disiplini altında). Geriye kalan içerik: gözlem, işaretçi-benzeri
+yüklerden (metin/yapı/dizi/closure/yetki) bağımsızdır. **D-332 (a) maddesi bu
+maddeyle GÜNCELLENDİ.**
+
+**KÖPRÜ GENİŞLEDİ:** `CTKopru`da `gom` artık TOPLAM — CT'nin bütün ifade biçimleri
+(`sabit`, `degisken`, `topla`, `sabitDeg`, `sira`, `eger`) gerçek bir Core
+karşılığına gidiyor, tıkaç dal YOK. Kalan tek kısıt `Sadik` (D-333 Kapsam 2).
+`kopru_bos_degil` tanığı da güçlendirildi: koşulda artık aritmetik var
+(`eger (1 + 1) (0=5) (0=7)`), yani yeni kapsamı fiilen kullanıyor.
+
+**SABOTAJ DOĞRULAMASI:**
+- `degerSil`i D-332 haline (0/1 biti) geri al → **5 hata**. Daraltma FORCED,
+  süsleme değil.
+- `gom`da `topla`yı tıkaca döndür → **3 hata**. Köprü gerçekten `topla`yı kullanıyor.
+- İkisi geri alınınca 0 hata.
+
+**HÂLÂ AÇIK:** eşzamanlı CT, `iken`/`esles`, gizli indeks, çarpma/bölme
+(CT002/CT004). Bölme ayrıca sabit-süre açısından `topla`dan FARKLI (veri-bağımlı
+gecikme) — eklenirse kendi CT kuralını ister.
+
+---
+
 ## D-333 — KÖPRÜ KURULDU: `ct_ni` ana modele TAŞINDI (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (YENİ),
