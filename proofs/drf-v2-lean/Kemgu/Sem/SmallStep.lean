@@ -254,6 +254,55 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 fault  := none }) :
       Step S S'
 
+  /-- S-BOL-TAMAM (D-338): `n1 / n2`. `sToplaTamam`dan TEK farki:
+      **`bolOl` OLAYI EMIT EDER**. Toplama sabit cevrimdir, bolme degil;
+      gecikme operandlarin fonksiyonu oldugundan operandlar gozleme
+      girer (muhafazakar ust sinir). `n2 = 0` icin sonuc 0 (Lean `Int`
+      bolmesi) — TOPLAM, takilma/fault YOK. -/
+  | sBolTamam
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (n1 n2 : Int)
+      (h_t  : S.thread = ts1 ++ ctx :: ts2)
+      (h_if : ctx.ifade = .bol (.sabit (.skaler n1)) (.sabit (.skaler n2)))
+      (h_S' : S' = { S with
+                thread := ts1 ++ { ctx with ifade := .sabit (.skaler (n1 / n2)) } :: ts2,
+                iz     := .bolOl ctx.tid n1 n2 :: S.iz,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-BOL-CONG-SOL (D-338). -/
+  | sBolCongSol
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (a a' b : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .bol a b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx a)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = a')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .bol a' b } :: ts2' }) :
+      Step S S'
+
+  /-- S-BOL-CONG-SAG (D-338): sol operand DEGER ise sagda adim at. -/
+  | sBolCongSag
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (v : Deger) (b b' : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .bol (.sabit v) b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx b)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = b')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .bol (.sabit v) b' } :: ts2' }) :
+      Step S S'
+
   /-- S-TOPLA-CONG-SOL (D-334): SOL operand icinde adim at.
       (Deger olan sol operand adim atamaz → sira belirsizligi YOK.) -/
   | sToplaCongSol
@@ -741,6 +790,19 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   -- D-334: topla OLAY URETMEZ, store/sahiplik sabit → birinci disjunct.
   | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
+  -- D-338: sBolTamam `bolOl` emit eder — memOku/memYaz DEGIL, store'a
+  -- dokunmaz → dorduncu disjunct (diger-olay).
+  | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'
+      refine Or.inr (Or.inr (Or.inr ⟨.bolOl ctx.tid n1 n2, rfl, ?_, ?_, rfl⟩))
+      · intro t0 k0 v0 hh; nomatch hh
+      · intro t0 k0 v0 hh; nomatch hh
+  | sBolCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
+  | sBolCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
@@ -872,6 +934,23 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
   -- D-334
   | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
+  -- D-338
+  | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sBolCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
+  | sBolCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
@@ -1009,6 +1088,21 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   -- D-334
   | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
+  -- D-338
+  | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sBolCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  | sBolCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v bb bb' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx bb).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
   | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'

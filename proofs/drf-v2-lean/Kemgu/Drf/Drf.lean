@@ -40,6 +40,7 @@ def olay_thread : Olay → Option ThreadId
   | .kanalAlOl t _ _ => some t
   | .dondurOl t _ => some t
   | .dalOl t _ => some t
+  | .bolOl t _ _ => some t
 
 def olay_konum : Olay → Option Konum
   | .memOku _ k _ => some k

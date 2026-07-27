@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-338 — BÖLME (CT006): veri-bağımlı gecikme artık gözlenir (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum, Drf/Drf,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+`Ifade.bol` + `Step.sBolTamam`/`sBolCongSol`/`sBolCongSag` (34→37 kural) +
+`t_bol`/`l_bol`/`r_bol`; CT'de `Calis.c_bol`, `CtOk.ct_bol` (**CT006**),
+`Gozlem.oBol`; köprüde `gom`/`GomOk`/`Kapsar`/iki `krun_bol_*`/`adim_bol`.
+
+**MEHMET KARARLARI (soruldu):**
+1. **`Olay.bolOl t a b` — OPERANDLARI taşır.** Gerekçe: gecikme operandların bir
+   fonksiyonudur, dolayısıyla saldırganın öğrenebileceğinin **üst sınırı**
+   operandlardır. Soyut bir `gecikme` fonksiyonu seçeneği reddedildi (sabit
+   seçilirse teorem sessizce vakumlaşır, gerçekçi seçilirse donanım iddiası
+   modele gömülür).
+2. **Sıfıra bölme TOPLAM:** `n/0 = 0` (Lean `Int`). Fault seçeneği
+   `typed_no_fault`/`iyiTipli_no_fault` teoremlerini KIRARDI — tipleme böleni
+   sıfırdan uzak tutamaz. D-336'nın `hucreOku` totalliğiyle aynı sınıf kapsam
+   beyanı: model yan-kanalı konuşuyor, hata semantiğini değil. KEMGU'nun gerçek
+   bölmesi `sonuç<T,H>` döndürür/panikler.
+
+**BU, `topla`DAN YAPISAL OLARAK FARKLI — ve fark ölçüldü.** `sToplaTamam` olay
+üretmez, `sBolTamam` üretir; `ct_topla`da operand-genellik şartı yoktur,
+`ct_bol`da vardır. Bu asimetrinin keyfi olmadığını **iki tanık birlikte**
+gösteriyor:
+- `ct006_gerekli`: gizli bölünenli `h / 2` iki koşumda `oBol 3 2` vs `oBol 7 2`
+  üretir → izler AYRIŞIR.
+- `topla_gizli_operand_zararsiz`: **aynı şekildeki** `h + 2` için izler
+  AYNIDIR (aksiyoma bile ihtiyaç duymadan ispatlandı).
+Yani "her aritmetiğe aynı şartı koy" refleksi yanlış olurdu; ayrım gözlem
+tabanlıdır.
+
+**SABOTAJ:** CT006'nın iki genellik şartını kaldır → **5 hata**; `sBolTamam`ı
+olaysız yap (`topla` gibi) → **3 hata**; geri alınca 0. İkincisi özellikle
+önemli: olay olmasaydı CT006 vakum olurdu (gizli operand hiçbir şey sızdırmazdı)
+— yani gözlem ile kural birbirini tutuyor.
+
+**HÂLÂ AÇIK:** eşzamanlı CT, **çarpma** (bazı çekirdeklerde de veri-bağımlı —
+şu an modelde yok), mod (`%`), `esles`in yapıcı/çeşit desenleri,
+hücre-başına gizlilik etiketi, dizi sınır denetimi.
+
+---
+
 ## D-337 — İNDEKSLİ YAZMA (CT005-Y): yazma adresi de gözlenir (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

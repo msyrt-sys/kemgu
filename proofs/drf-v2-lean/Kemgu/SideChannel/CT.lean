@@ -133,6 +133,7 @@ inductive Ifade : Type where
   | esles    (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)   -- D-335 (CT004)
   | indeks   (dizi : Ad) (idx : Ifade)                           -- D-336 (CT005)
   | indeksAta (dizi : Ad) (idx : Ifade) (deger : Ifade)          -- D-337 (CT005-Y)
+  | bol      (a b : Ifade)                                       -- D-338 (CT006)
 
 -- ============================================================
 -- §3. Saldirgan gozlemi — erisim deseni + DAL KARARI
@@ -148,6 +149,11 @@ inductive Gozlem : Type where
   | oOku (x : Ad) (i : Nat)
   | oYaz (x : Ad) (i : Nat)
   | oDal (alindi : Bool)
+  /-- D-338 (CT006): BOLME gozlemi — OPERANDLARI tasir. Bolme sabit
+      cevrim DEGILDIR; gecikmesi operandlarin fonksiyonudur, dolayisiyla
+      saldirganin ogrenebileceginin UST SINIRI operandlardir.
+      `topla`nin boyle bir gozlemi YOKTUR — fark tam olarak budur. -/
+  | oBol (a b : Int)
 deriving DecidableEq, Repr
 
 abbrev Iz := List Gozlem
@@ -178,6 +184,12 @@ inductive Calis : Store → Ifade → Store → Iz → Int → Prop where
   | c_topla (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
       (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
       Calis s (.topla a b) s2 (t1 ++ t2) (v1 + v2)
+  /-- D-338 (CT006): `a / b` — soldan saga kosum, sonra **`oBol` OLAYI**.
+      `c_topla` ile TEK farki bu olaydir; sifira bolme icin Lean `Int`
+      bolmesi (n/0 = 0) — TOPLAM. -/
+  | c_bol (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
+      (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
+      Calis s (.bol a b) s2 (t1 ++ t2 ++ [.oBol v1 v2]) (v1 / v2)
   | c_atama (s s1 : Store) (x : Ad) (e : Ifade) (t : Iz) (v : Int)
       (h : Calis s e s1 t v) :
       Calis s (.sabitDeg x e) (yaz s1 x v) (t ++ [.oYaz x 0]) v
@@ -225,6 +237,7 @@ def ifadeEtiket (G : EtiketOrtam) : Ifade → Etiket
   | .sabit _        => .genel
   | .degisken x     => G x
   | .topla a b      => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
+  | .bol a b        => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .sabitDeg _ e   => ifadeEtiket G e
   | .sira a b       => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .eger k d y     => ((ifadeEtiket G k).birlesim (ifadeEtiket G d)).birlesim
@@ -253,6 +266,15 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
   | ct_degisken (x : Ad) : CtOk G (.degisken x)
   | ct_topla (a b : Ifade) (ha : CtOk G a) (hb : CtOk G b) :
       CtOk G (.topla a b)
+  /-- **CT006 (veri-bagimli gecikme):** BOLMENIN HER IKI OPERANDI GENEL
+      olmalidir. `ct_topla`da BOYLE BIR SART YOKTUR — cunku toplama
+      sabit cevrimdir. Fark keyfi degil: `sBolTamam`/`c_bol` operandlari
+      ize koyar, dolayisiyla gizli operand DOGRUDAN gozlenir
+      (`ct006_gerekli` taniki). -/
+  | ct_bol (a b : Ifade) (ha : CtOk G a) (hb : CtOk G b)
+      (h_a_genel : ifadeEtiket G a = .genel)                   -- CT006
+      (h_b_genel : ifadeEtiket G b = .genel) :                 -- CT006
+      CtOk G (.bol a b)
   | ct_atama (x : Ad) (e : Ifade) (he : CtOk G e)
       (h_akis : (ifadeEtiket G e).altMi (G x) = true) :      -- CT003
       CtOk G (.sabitDeg x e)
@@ -373,6 +395,16 @@ theorem genel_ifade_korunum (G : EtiketOrtam) :
   | c_degisken s x =>
       intro s2 s2' t2 v2 h2 h_low h_et
       cases h2; exact ⟨h_low x h_et 0, rfl, h_low⟩
+  -- D-338 (CT006): etiket GENEL → her iki operand genel → operand
+  -- DEGERLERI de esit → `oBol` olaylari BIREBIR ayni.
+  | c_bol s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2 with
+      | c_bol _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+        obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+        obtain ⟨hva, hta, h_low'⟩ := ihA hA2 h_low h_ea
+        obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
+        exact ⟨by rw [hva, hvb], by rw [hta, htb, hva, hvb], h_low''⟩
   | c_topla s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
       intro s2 s2' t2 v2 h2 h_low h_et
       cases h2 with
@@ -538,6 +570,18 @@ theorem ct_ni (G : EtiketOrtam) :
   | c_degisken s x =>
       intro s2 s2' t2 v2 h2 _ h_low
       cases h2; exact ⟨rfl, h_low⟩
+  -- D-338 (CT006): `h_ag`/`h_bg` OLMADAN bu dal COKER — gizli operandli
+  -- bolme iki kosumda FARKLI `oBol` uretirdi (ct006_gerekli taniki).
+  -- `c_topla` dalinda boyle bir sart YOK; fark tam olarak burada.
+  | c_bol s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_bol _ _ hca hcb h_ag h_bg =>
+        cases h2 with
+        | c_bol _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+          obtain ⟨hva, hta, h_low'⟩ := genel_ifade_korunum G hA1 hA2 h_low h_ag
+          obtain ⟨hvb, htb, h_low''⟩ := genel_ifade_korunum G hB1 hB2 h_low' h_bg
+          exact ⟨by rw [hta, htb, hva, hvb], h_low''⟩
   | c_topla s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
       intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
@@ -837,5 +881,52 @@ theorem ct005y_gerekli :
   · exact Calis.c_indeks_ata _ _ _ 1 _ _ [.oOku 0 0] [] 7 1
       (Calis.c_degisken _ 0) (Calis.c_sabit _ 1)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CT006'nin GEREKLILIGI (D-338):** GIZLI OPERANDLI BOLME, operandi
+    (dolayisiyla gecikmeyi) sizdirir. Program: `h / 2`, `h` (0) GIZLI.
+    Izler `oBol 3 2` vs `oBol 7 2` → AYRISIR.
+
+    KRITIK KARSILASTIRMA: AYNI programda `/` yerine `+` olsaydi izler
+    AYNI kalirdi (`c_topla` olay uretmez) — yani CT006, `ct_topla`da
+    OLMAYAN bir sarti hakli olarak talep eder. Fark uydurma degil,
+    bolmenin sabit-cevrimli OLMAMASIDIR. -/
+theorem ct006_gerekli :
+    ∃ (G : EtiketOrtam) (e : Ifade) (s1 s2 s1' s2' : Store)
+      (t1 t2 : Iz) (v1 v2 : Int),
+      DusukEs G s1 s2 ∧ Calis s1 e s1' t1 v1 ∧ Calis s2 e s2' t2 v2
+      ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .bol (.degisken 0) (.sabit 2),
+          (fun x _ => if x = 0 then 3 else 5),
+          (fun x _ => if x = 0 then 7 else 5),
+          (fun x _ => if x = 0 then 3 else 5),
+          (fun x _ => if x = 0 then 7 else 5),
+          [.oOku 0 0] ++ [] ++ [.oBol 3 2], [.oOku 0 0] ++ [] ++ [.oBol 7 2],
+          1, 3, ?_, ?_, ?_, ?_⟩
+  · intro x hx i
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact Calis.c_bol _ _ _ _ _ [.oOku 0 0] [] 3 2
+      (Calis.c_degisken _ 0) (Calis.c_sabit _ 2)
+  · exact Calis.c_bol _ _ _ _ _ [.oOku 0 0] [] 7 2
+      (Calis.c_degisken _ 0) (Calis.c_sabit _ 2)
+  · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **KARSIT TANIK (D-338):** ayni sekildeki TOPLAMA'da izler AYNIDIR —
+    yani CT006'nin `ct_topla`ya EKLENMEMESI de dogru bir karardir.
+    Bu, "her aritmetige ayni sarti koy" refleksinin YANLIS oldugunu
+    ve ayrimin gercek (gozlem-tabanli) oldugunu gosterir. -/
+theorem topla_gizli_operand_zararsiz :
+    ∀ (s1 s2 s1' s2' : Store) (t1 t2 : Iz) (v1 v2 : Int),
+      Calis s1 (.topla (.degisken 0) (.sabit 2)) s1' t1 v1 →
+      Calis s2 (.topla (.degisken 0) (.sabit 2)) s2' t2 v2 →
+      t1 = t2 := by
+  intro s1 s2 s1' s2' t1 t2 v1 v2 h1 h2
+  cases h1 with
+  | c_topla _ _ _ _ _ _ _ _ _ hA1 hB1 =>
+    cases h2 with
+    | c_topla _ _ _ _ _ _ _ _ _ hA2 hB2 =>
+      cases hA1; cases hA2; cases hB1; cases hB2; rfl
 
 end Kemgu.SideChannel.CT

@@ -544,6 +544,13 @@ inductive Olay : Type where
       Senkronizasyon olayi DEGILDIR: `synchronizes_with` onu saymaz ve
       `olay_konum` none dondurur → veri-yarisi adayi da olamaz. -/
   | dalOl         (t : ThreadId) (alindi : Bool)
+  /-- D-338: BOLME olayi — OPERANDLARI tasir (Mehmet karari).
+      Gerekce: bolme SABIT CEVRIM DEGILDIR; gecikmesi operandlarin bir
+      FONKSIYONUDUR. Saldirganin ogrenebileceginin UST SINIRI operandlarin
+      kendisidir, dolayisiyla muhafazakar model onlari gozleme koyar.
+      `topla`nin BOYLE bir olayi YOKTUR — cunku toplama sabit cevrimdir;
+      fark tam olarak buradadir ve CT006'nin varlik sebebidir. -/
+  | bolOl         (t : ThreadId) (a b : Int)
 
 
 /-- Iz: gozlemlenmis olaylar (en yenisi basta) -/
@@ -624,6 +631,13 @@ inductive Ifade : Type where
       Uretilen `memYaz` olayi `⟨bolge(x), idx⟩` konumunu tasir →
       **YAZMA ADRESI DE GOZLENIR** (okuma tarafi D-336). -/
   | indeksAta      (dizi : VarId) (idx : Ifade) (deger : Ifade)
+  /-- D-338: TAMSAYI BOLMESI `a / b`. `topla` ile ayni degerlendirme
+      sirasi (soldan saga) ama `bolOl` olayi uretir — veri-bagimli
+      gecikme kanali (CT006).
+      V1 KAPSAM: `b = 0` icin sonuc 0 (Lean `Int` bolmesi; TOPLAM).
+      KEMGU'nun gercek bolmesi `sonuc<T,H>` dondurur ya da paniklerdir;
+      burada amac yan-kanal, hata semantigi DEGIL (bkz. `hucreOku`). -/
+  | bol            (sol sag : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -699,6 +713,11 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar a z → HedefVar (Ifade.topla a b) z
   | topla_sag (a b : Ifade) (z : VarId) :
       HedefVar b z → HedefVar (Ifade.topla a b) z
+  -- D-338
+  | bol_sol (a b : Ifade) (z : VarId) :
+      HedefVar a z → HedefVar (Ifade.bol a b) z
+  | bol_sag (a b : Ifade) (z : VarId) :
+      HedefVar b z → HedefVar (Ifade.bol a b) z
   -- D-335
   | iken_kosul (k g : Ifade) (z : VarId) :
       HedefVar k z → HedefVar (Ifade.iken k g) z
@@ -747,6 +766,11 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge a b → HedefBolge (Ifade.topla a c) b
   | topla_sag (a c : Ifade) (b : Bolge) :
       HedefBolge c b → HedefBolge (Ifade.topla a c) b
+  -- D-338
+  | bol_sol (a c : Ifade) (b : Bolge) :
+      HedefBolge a b → HedefBolge (Ifade.bol a c) b
+  | bol_sag (a c : Ifade) (b : Bolge) :
+      HedefBolge c b → HedefBolge (Ifade.bol a c) b
   -- D-335
   | iken_kosul (k g : Ifade) (b : Bolge) :
       HedefBolge k b → HedefBolge (Ifade.iken k g) b

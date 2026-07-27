@@ -103,6 +103,13 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ b Tip.scalar →
                 HasType Γ Δ (Ifade.topla a b) Tip.scalar
 
+  /-- T-BOL (D-338): `topla` ile AYNI tipleme. Fark tipte DEGIL,
+      GOZLEMDE (`sBolTamam` `bolOl` uretir) ve CT disiplinindedir. -/
+  | t_bol     (Γ : TipOrtam) (Δ : KanalOrtam) (a b : Ifade) :
+                HasType Γ Δ a Tip.scalar →
+                HasType Γ Δ b Tip.scalar →
+                HasType Γ Δ (Ifade.bol a b) Tip.scalar
+
   /-- T-IKEN (D-335): kosul `scalar`, govde herhangi bir tipte; dongunun
       kendisi `bos`. (Acilma sonrasi `eger`in iki dali da `bos` olur:
       `seq g (iken k g)` : bos ve `sabit birim` : bos.) -/
