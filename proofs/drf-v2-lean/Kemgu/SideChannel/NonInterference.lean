@@ -175,6 +175,7 @@ def ifadeSil : Ifade → Ifade
   -- (hangi kolun tuttugu `dalOl` ile zaten gozlenir).
   | .esles s n d y        => .esles (ifadeSil s) n (ifadeSil d) (ifadeSil y)
   | .indeks x idx         => .indeks x (ifadeSil idx)
+  | .indeksAta x idx e    => .indeksAta x (ifadeSil idx) (ifadeSil e)
 
 /-- Olay silme: tasinan deger birime iner (TUR + konum korunur). -/
 def olaySil : Olay → Olay
@@ -667,6 +668,48 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
         rw [hucreOku_storeSil]; exact h_n
       · subst h_S'
         simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil]
+  -- D-337: sIndeksYaz — yazilan ADRES (bolge+ofset) ve DEGER (skaler,
+  -- D-334'ten beri silinmiyor) korunur → AYNI `memYaz` olayi.
+  | sIndeksYaz S S' ts1 ts2 ctx x i n b h_t h_if h_b h_owner h_S' =>
+      refine Step.sIndeksYaz _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        x i n b ?_ ?_ h_b h_owner ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil,
+              degerSil, storeSil]
+  | sIndeksAtaCongIdx S S' S1 S1' ts1 ts2 ts2' ctx ctx' x idx idx' e
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sIndeksAtaCongIdx _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        x (ifadeSil idx) (ifadeSil idx') (ifadeSil e) ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sIndeksAtaCongDeg S S' S1 S1' ts1 ts2 ts2' ctx ctx' x v e e'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sIndeksAtaCongDeg _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        x (degerSil v) (ifadeSil e) (ifadeSil e') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
   | sIndeksCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e'
       h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       refine Step.sIndeksCong _ _ (konfSil S1) (konfSil S1')

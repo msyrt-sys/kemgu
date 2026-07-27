@@ -226,6 +226,50 @@ theorem typed_indeks_oku {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
 
+/-- D-337: indeksli yazmanin INDEKSI tiplidir (sIndeksAtaCongIdx). -/
+theorem typed_indeks_ata_idx {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {x : VarId} {idx e : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.indeksAta x idx e) τ Λ' Ρ') :
+    ∃ τi Λi Ρi, Typed Γ Δ Λ Ρ idx τi Λi Ρi := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_indeks_ata _ _ _ _ _ _ hti _,
+    LineerTamam.l_indeks_ata _ _ Λi _ _ _ _ _ _ _ hli _,
+    RegionTamam.r_indeks_ata _ _ Ρi _ _ _ _ _ hri _ _ _ =>
+    exact ⟨Tip.scalar, Λi, Ρi, ⟨hti, hli, hri⟩⟩
+
+/-- D-337: indeks DEGER iken yazilacak DEGER tiplidir (sIndeksAtaCongDeg). -/
+theorem typed_indeks_ata_deg {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {x : VarId} {v : Deger} {e : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.indeksAta x (Ifade.sabit v) e) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ e Tip.scalar Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_indeks_ata _ _ _ _ _ _ _ hte,
+    LineerTamam.l_indeks_ata _ _ _ _ _ _ _ _ _ _ hli hle,
+    RegionTamam.r_indeks_ata _ _ _ _ _ _ _ _ hri hre _ _ =>
+    cases hli; cases hri
+    exact ⟨hte, hle, hre⟩
+
+/-- D-337: yazma sonrasi `birim` tiplidir (sIndeksYaz sonrasi). -/
+theorem typed_indeks_yaz {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {x : VarId} {i n : Int} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ
+          (Ifade.indeksAta x (Ifade.sabit (.skaler i)) (Ifade.sabit (.skaler n)))
+          τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ (Ifade.sabit Deger.birim) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_indeks_ata _ _ _ _ _ _ _ _,
+    LineerTamam.l_indeks_ata _ _ _ _ _ _ _ _ _ _ hli hle,
+    RegionTamam.r_indeks_ata _ _ _ _ _ _ _ _ hri hre _ _ =>
+    cases hli; cases hle; cases hri; cases hre
+    exact ⟨HasType.t_sabit _ _ _ _ DegerTipli.dt_birim,
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
+
 /-- Atama RHS'i tiplidir (sAtamaCong tipleme tarafi). -/
 theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}

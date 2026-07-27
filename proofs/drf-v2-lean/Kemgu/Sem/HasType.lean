@@ -128,6 +128,20 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ idx Tip.scalar →
                 HasType Γ Δ (Ifade.indeks x idx) Tip.scalar
 
+  /-- T-INDEKS-ATA (D-337): `x[idx] = deger` — x kayitli, indeks ve deger
+      `scalar`; yazma bir DEYIM oldugundan sonuc `bos`. -/
+  | t_indeks_ata (Γ : TipOrtam) (Δ : KanalOrtam) (x : VarId)
+                 (idx e : Ifade) :
+                   -- Dizinin tipi `scalar`: hucreler skalerdir. Bu SART
+                   -- (herhangi bir τ degil), cunku ofset-0'a yazmak
+                   -- KonfTipliFull'un `bagli` bileseninde x'in degerinin
+                   -- tipini belirler — τ serbest olsaydi `skaler n`
+                   -- yazmak o bileseni BOZARDI (korunum ispatinda cikti).
+                   tipOrtamGet Γ x = some Tip.scalar →
+                   HasType Γ Δ idx Tip.scalar →
+                   HasType Γ Δ e Tip.scalar →
+                   HasType Γ Δ (Ifade.indeksAta x idx e) Tip.bos
+
   /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
   | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
                 HasType Γ Δ e τ →

@@ -113,6 +113,11 @@ abbrev EtiketOrtam := Ad → Etiket
 def yaz (s : Store) (x : Ad) (v : Int) : Store :=
   fun y i => if y = x ∧ i = 0 then v else s y i
 
+/-- D-337: INDEKSLI store guncelleme — `x[i] = v`. `yaz`, bunun i = 0
+    ozel halidir. -/
+def yazH (s : Store) (x : Ad) (i : Nat) (v : Int) : Store :=
+  fun y j => if y = x ∧ j = i then v else s y j
+
 -- ============================================================
 -- §2. Sozdizimi — DALLANMA VAR (ana modelde olmayan sey)
 -- ============================================================
@@ -127,6 +132,7 @@ inductive Ifade : Type where
   | iken     (kosul govde : Ifade)                              -- D-335 (CT002)
   | esles    (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)   -- D-335 (CT004)
   | indeks   (dizi : Ad) (idx : Ifade)                           -- D-336 (CT005)
+  | indeksAta (dizi : Ad) (idx : Ifade) (deger : Ifade)          -- D-337 (CT005-Y)
 
 -- ============================================================
 -- §3. Saldirgan gozlemi — erisim deseni + DAL KARARI
@@ -140,7 +146,7 @@ inductive Gozlem : Type where
       ADRESINI gorur (onbellek-satiri zamanlamasi). Duz degisken okumasi
       `oOku x 0`dir. Gizli-indeks kanali (CT005) tam olarak buradadir. -/
   | oOku (x : Ad) (i : Nat)
-  | oYaz (x : Ad)
+  | oYaz (x : Ad) (i : Nat)
   | oDal (alindi : Bool)
 deriving DecidableEq, Repr
 
@@ -161,12 +167,20 @@ inductive Calis : Store → Ifade → Store → Iz → Int → Prop where
   | c_indeks (s s1 : Store) (x : Ad) (idx : Ifade) (ti : Iz) (vi : Int)
       (hi : Calis s idx s1 ti vi) :
       Calis s (.indeks x idx) s1 (ti ++ [.oOku x vi.toNat]) (s1 x vi.toNat)
+  /-- D-337 (CT005-Y): `x[idx] = e` — ONCE INDEKS, SONRA DEGER (Core'un
+      `sIndeksAtaCongIdx`/`CongDeg` sirasiyla birebir). **YAZILAN ADRES
+      IZE GIRER** (`oYaz x i`). Deger olarak yazilani dondurur. -/
+  | c_indeks_ata (s s1 s2 : Store) (x : Ad) (idx e : Ifade)
+      (ti te : Iz) (vi ve : Int)
+      (hi : Calis s idx s1 ti vi) (he : Calis s1 e s2 te ve) :
+      Calis s (.indeksAta x idx e) (yazH s2 x vi.toNat ve)
+        (ti ++ te ++ [.oYaz x vi.toNat]) ve
   | c_topla (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
       (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
       Calis s (.topla a b) s2 (t1 ++ t2) (v1 + v2)
   | c_atama (s s1 : Store) (x : Ad) (e : Ifade) (t : Iz) (v : Int)
       (h : Calis s e s1 t v) :
-      Calis s (.sabitDeg x e) (yaz s1 x v) (t ++ [.oYaz x]) v
+      Calis s (.sabitDeg x e) (yaz s1 x v) (t ++ [.oYaz x 0]) v
   | c_sira (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
       (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
       Calis s (.sira a b) s2 (t1 ++ t2) v2
@@ -221,6 +235,13 @@ def ifadeEtiket (G : EtiketOrtam) : Ifade → Etiket
   -- D-336: okunan degerin etiketi DIZININ etiketi (ve indeksinki —
   -- gizli indeksle secilen hucre de gizli sayilir; muhafazakar).
   | .indeks x idx   => (G x).birlesim (ifadeEtiket G idx)
+  -- D-337: yazmanin degeri yazilan degerdir, AMA etiketine INDEKSINKI de
+  -- katilir. Gerekce (ispat tarafindan zorlandi): `genel_ifade_korunum`
+  -- "etiketi genel olan ifade AYNI IZI uretir" der; indeks etiketi
+  -- katilmasaydi gizli indeksli bir yazma "genel" sayilir ve iki kosumda
+  -- `oYaz x i1` vs `oYaz x i2` uretirdi → lemma YANLIS olurdu.
+  -- Katmak MUHAFAZAKARDIR (etiketi yukseltir), dolayisiyla guvenlidir.
+  | .indeksAta _ idx e => (ifadeEtiket G idx).birlesim (ifadeEtiket G e)
 
 /-- CT disiplini. Iki kural kagittan gelir:
     * **CT003 (sizinti):** gizli deger GENEL degiskene yazilamaz.
@@ -258,6 +279,14 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
   | ct_indeks (x : Ad) (idx : Ifade) (hi : CtOk G idx)
       (h_idx_genel : ifadeEtiket G idx = .genel) :            -- CT005
       CtOk G (.indeks x idx)
+  /-- **CT005-Y (gizli indeksle YAZMA):** indeks GENEL olmali (yazilan
+      adres sizar) VE CT003 akis kurali: yazilan degerin etiketi hedef
+      dizinin etiketine dusmelidir. Iki sart iki FARKLI kanali kapatir:
+      `h_idx_genel` ADRES kanalini, `h_akis` VERI kanalini. -/
+  | ct_indeks_ata (x : Ad) (idx e : Ifade) (hi : CtOk G idx) (he : CtOk G e)
+      (h_idx_genel : ifadeEtiket G idx = .genel)               -- CT005-Y
+      (h_akis : (ifadeEtiket G e).altMi (G x) = true) :        -- CT003
+      CtOk G (.indeksAta x idx e)
 
 -- ============================================================
 -- §6. Dusuk-esdegerlik (saldirganin ayirt edemedigi store'lar)
@@ -283,6 +312,31 @@ theorem dusukEs_yaz_gizli (G : EtiketOrtam) (s1 s2 : Store) (x : Ad) (v1 v2 : In
   · rw [hxy] at hy; rw [hx] at hy; exact absurd hy (by simp)
   · have h1 : ¬ (y = x ∧ i = 0) := by intro hc; exact hxy hc.1
     simp [yaz, h1]; exact h y hy i
+
+/-- D-337: INDEKSLI yazmanin dusuk-esdegerlik lemmalari. Adres AYNI
+    oldugu surece (CT005-Y bunu garanti eder) GENEL diziye ayni deger
+    yazilir; GIZLI diziye ne yazilirsa yazilsin gorunmez. -/
+theorem dusukEs_yazH_genel (G : EtiketOrtam) (s1 s2 : Store) (x : Ad)
+    (i : Nat) (v : Int) (h : DusukEs G s1 s2) :
+    DusukEs G (yazH s1 x i v) (yazH s2 x i v) := by
+  intro y hy j
+  by_cases hxy : y = x ∧ j = i
+  · simp [yazH, hxy]
+  · simp [yazH, hxy]; exact h y hy j
+
+theorem dusukEs_yazH_gizli (G : EtiketOrtam) (s1 s2 : Store) (x : Ad)
+    (i1 i2 : Nat) (v1 v2 : Int)
+    (h : DusukEs G s1 s2) (hx : G x = .gizli) :
+    DusukEs G (yazH s1 x i1 v1) (yazH s2 x i2 v2) := by
+  intro y hy j
+  by_cases hxy : y = x
+  · rw [hxy] at hy; rw [hx] at hy; exact absurd hy (by simp)
+  · have h1 : ¬ (y = x ∧ j = i1) := by intro hc; exact hxy hc.1
+    have h2 : ¬ (y = x ∧ j = i2) := by intro hc; exact hxy hc.1
+    show (if y = x ∧ j = i1 then v1 else s1 y j)
+        = (if y = x ∧ j = i2 then v2 else s2 y j)
+    rw [if_neg h1, if_neg h2]
+    exact h y hy j
 
 -- ============================================================
 -- §7. ANA LEMMA — genel ifadeler gizli veriden BAGIMSIZDIR
@@ -329,6 +383,20 @@ theorem genel_ifade_korunum (G : EtiketOrtam) :
         exact ⟨by rw [hva, hvb], by rw [hta, htb], h_low''⟩
   -- D-336 (CT005): etiket GENEL ise hem DIZI hem INDEKS geneldir →
   -- iki kosumda AYNI adres okunur ve AYNI deger doner.
+  -- D-337: etiket GENEL ise yazilan DEGER geneldir; indeks etiketi
+  -- burada serbesttir (ifadeEtiket yalniz degerden gelir) — ADRES
+  -- esitligi `ct_ni` tarafinda `ct_indeks_ata`nin `h_idx_genel`iyle
+  -- saglanir. Bu lemma yalniz DEGER + iz esitligini kurar.
+  | c_indeks_ata s si se x idx e ti te vi ve hI1 hE1 ihI ihE =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      obtain ⟨h_ei, h_ee⟩ := birlesim_genel h_et
+      cases h2 with
+      | c_indeks_ata _ si2 se2 _ _ _ ti2 te2 vi2 ve2 hI2 hE2 =>
+        obtain ⟨hvi, hti, h_low'⟩ := ihI hI2 h_low h_ei
+        obtain ⟨hve, hte, h_low''⟩ := ihE hE2 h_low' h_ee
+        refine ⟨hve, by rw [hti, hte, hvi], ?_⟩
+        rw [hvi, hve]
+        exact dusukEs_yazH_genel G se se2 x _ _ h_low''
   | c_indeks s si x idx ti vi hI1 ihI =>
       intro s2 s2' t2 v2 h2 h_low h_et
       obtain ⟨h_ex, h_ei⟩ := birlesim_genel h_et
@@ -482,6 +550,36 @@ theorem ct_ni (G : EtiketOrtam) :
   -- D-336 (CT005): `h_ig` (indeks genel) sayesinde iki kosum AYNI adresi
   -- okur → izler ayni. Bu sart OLMASAYDI `oOku x i1` vs `oOku x i2`
   -- ayrisirdi (ct005_gerekli taniği).
+  -- D-337 (CT005-Y): IKI sart IKI farkli kanali kapatir —
+  -- `h_ig` (indeks genel) ADRESI esitler, `h_akis` (CT003) GENEL diziye
+  -- gizli deger yazilmasini engeller. Biri eksik olsa ispat coker.
+  | c_indeks_ata s si se x idx e ti te vi ve hI1 hE1 ihI ihE =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_indeks_ata _ _ _ hci hce h_ig h_akis =>
+        cases h2 with
+        | c_indeks_ata _ si2 se2 _ _ _ ti2 te2 vi2 ve2 hI2 hE2 =>
+          -- indeks GENEL → ayni adres, ayni iz parcasi
+          obtain ⟨hvi, hti, h_low'⟩ :=
+            genel_ifade_korunum G hI1 hI2 h_low h_ig
+          obtain ⟨hte, h_low''⟩ := ihE hE2 hce h_low'
+          refine ⟨by rw [hti, hte, hvi], ?_⟩
+          -- hedef dizinin etiketine gore ayrilir
+          cases hx : G x with
+          | gizli =>
+              exact dusukEs_yazH_gizli G se se2 x _ _ _ _ h_low'' hx
+          | genel =>
+              -- CT003: hedef GENEL ise yazilan deger de GENEL olmali
+              have h_e_genel : ifadeEtiket G e = .genel := by
+                rw [hx] at h_akis
+                cases hE : ifadeEtiket G e with
+                | genel => rfl
+                | gizli => rw [hE] at h_akis
+                           exact absurd h_akis (by simp [Etiket.altMi])
+              obtain ⟨hve, _, _⟩ :=
+                genel_ifade_korunum G hE1 hE2 h_low' h_e_genel
+              rw [hvi, hve]
+              exact dusukEs_yazH_genel G se se2 x _ _ h_low''
   | c_indeks s si x idx ti vi hI1 ihI =>
       intro s2 s2' t2 v2 h2 h_ct h_low
       cases h_ct with
@@ -644,13 +742,13 @@ theorem ct002_gerekli :
           (fun x _ => if x = 0 then 1 else 5), (fun x _ => if x = 0 then 0 else 5),
           yaz (fun x _ => if x = 0 then 1 else 5) 0 0,
           (fun x _ => if x = 0 then 0 else 5),
-          [.oOku 0 0] ++ .oDal true :: ([.oYaz 0] ++ [.oOku 0 0, .oDal false]),
+          [.oOku 0 0] ++ .oDal true :: ([.oYaz 0 0] ++ [.oOku 0 0, .oDal false]),
           [.oOku 0 0] ++ [.oDal false], 0, 0, ?_, ?_, ?_, ?_⟩
   · intro x hx
     by_cases h0 : x = 0
     · rw [h0] at hx; exact absurd hx (by simp)
     · simp [h0]
-  · exact Calis.c_iken_dogru _ _ _ _ _ _ [.oOku 0 0] [.oYaz 0]
+  · exact Calis.c_iken_dogru _ _ _ _ _ _ [.oOku 0 0] [.oYaz 0 0]
       [.oOku 0 0, .oDal false] 1 0 0
       (Calis.c_degisken _ 0) (by decide)
       (Calis.c_atama _ _ 0 (.sabit 0) [] 0 (Calis.c_sabit _ 0))
@@ -709,6 +807,35 @@ theorem ct005_gerekli :
     · simp [h0]
   · exact Calis.c_indeks _ _ 1 _ [.oOku 0 0] 3 (Calis.c_degisken _ 0)
   · exact Calis.c_indeks _ _ 1 _ [.oOku 0 0] 7 (Calis.c_degisken _ 0)
+  · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CT005-Y'nin GEREKLILIGI (D-337):** GIZLI INDEKSE YAZMAK, yazilan
+    ADRESI sizdirir — okuma tarafiyla (ct005_gerekli) simetrik.
+    Program: `tablo[h] = 1`, `h` (0) GIZLI. Izler `oYaz 1 3` vs
+    `oYaz 1 7` → AYRISIR. Yani `ct_indeks_ata`nin `h_idx_genel` sarti
+    gereklidir (`h_akis` ise AYRI bir kanali — veri sizintisini — kapatir;
+    ikisi birbirinin yerine gecmez). -/
+theorem ct005y_gerekli :
+    ∃ (G : EtiketOrtam) (e : Ifade) (s1 s2 s1' s2' : Store)
+      (t1 t2 : Iz) (v1 v2 : Int),
+      DusukEs G s1 s2 ∧ Calis s1 e s1' t1 v1 ∧ Calis s2 e s2' t2 v2
+      ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          .indeksAta 1 (.degisken 0) (.sabit 1),
+          (fun x _ => if x = 0 then 3 else 5),
+          (fun x _ => if x = 0 then 7 else 5),
+          yazH (fun x _ => if x = 0 then 3 else 5) 1 3 1,
+          yazH (fun x _ => if x = 0 then 7 else 5) 1 7 1,
+          [.oOku 0 0] ++ [] ++ [.oYaz 1 3], [.oOku 0 0] ++ [] ++ [.oYaz 1 7],
+          1, 1, ?_, ?_, ?_, ?_⟩
+  · intro x hx i
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact Calis.c_indeks_ata _ _ _ 1 _ _ [.oOku 0 0] [] 3 1
+      (Calis.c_degisken _ 0) (Calis.c_sabit _ 1)
+  · exact Calis.c_indeks_ata _ _ _ 1 _ _ [.oOku 0 0] [] 7 1
+      (Calis.c_degisken _ 0) (Calis.c_sabit _ 1)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
 
 end Kemgu.SideChannel.CT

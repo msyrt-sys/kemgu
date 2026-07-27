@@ -66,6 +66,11 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
   -- D-336: yalniz INDEKS ifadesi engellenebilir; okumanin kendisi TOPLAM.
   | indeks_ic (x : VarId) (idx : Ifade) :
       Engelli S idx → Engelli S (Ifade.indeks x idx)
+  -- D-337: indeksli yazmada once indeks, sonra deger odaga girer.
+  | indeksAta_idx (x : VarId) (idx e : Ifade) :
+      Engelli S idx → Engelli S (Ifade.indeksAta x idx e)
+  | indeksAta_deg (x : VarId) (v : Deger) (e : Ifade) :
+      Engelli S e → Engelli S (Ifade.indeksAta x (Ifade.sabit v) e)
 
 /-- Engelli'nin odakli konfigurasyondan ana konfigurasyona transferi:
     kanal ayni; thread listesi yalniz odakli ifadede farkli — odaktaki
@@ -101,6 +106,8 @@ theorem engelli_konf_transfer
   | topla_sag v b _ ih => exact Engelli.topla_sag v b ih
   | esles_skrut s n d y _ ih => exact Engelli.esles_skrut s n d y ih
   | indeks_ic x idx _ ih => exact Engelli.indeks_ic x idx ih
+  | indeksAta_idx x idx e _ ih => exact Engelli.indeksAta_idx x idx e ih
+  | indeksAta_deg x v e _ ih => exact Engelli.indeksAta_deg x v e ih
 
 
 -- ============================================================
@@ -389,6 +396,78 @@ theorem progress_konf
             Step.sIndeksCong S _ (ifadeyleKonf S ts1 ts2 ctx idx) S1'
               ts1 ts2 ts2' ctx ctx1' x idx ctx1'.ifade
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
+  -- D-337: `indeksAta` progress — once indeks, sonra deger; ikisi de
+  -- deger olunca sIndeksYaz (sahiplik `h_hvar`dan, hedef `indeksAta_bas`).
+  | indeksAta x idx e ih_idx ih_e =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_indeks_ata _ _ _ _ _ h_gx hti hte,
+        LineerTamam.l_indeks_ata _ _ Λi _ _ _ _ _ _ _ hli hle,
+        RegionTamam.r_indeks_ata _ _ Ρi _ _ _ _ bA hri hre h_gxA h_yzA =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx idx h_konf h_t
+          (by rw [h_lin]; exact ⟨Tip.scalar, Λi, Ρi, ⟨hti, hli, hri⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.indeksAta_idx x idx e z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.indeksAta_idx x idx e bb h)
+        rcases ih_idx Tip.scalar Λin Λi Ρi hti hli hri
+            (ifadeyleKonf S ts1 ts2 ctx idx) h_konf1 ts1 ts2
+            { ctx with ifade := idx } rfl rfl h_lin with
+            h_vi | h_ei | ⟨S1', ctx1', ts2', h_st1, h_t1', h_tid1, h_yan1⟩
+        · -- indeks DEGER → deger tarafina gec
+          cases h_vi with
+          | iv_sabit vi =>
+            match hti with
+            | HasType.t_sabit _ _ _ _ hdti =>
+              cases hdti with
+              | dt_skaler i =>
+                cases hli; cases hri
+                have h_konf2 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx e h_konf h_t
+                  (by rw [h_lin]; exact ⟨Tip.scalar, Λ', Ρ', ⟨hte, hle, hre⟩⟩)
+                  (fun z h => by rw [h_if]; exact HedefVar.indeksAta_deg x _ e z h)
+                  (fun bb h => by rw [h_if]; exact HedefBolge.indeksAta_deg x _ e bb h)
+                rcases ih_e Tip.scalar Λin Λ' Ρ' hte hle hre
+                    (ifadeyleKonf S ts1 ts2 ctx e) h_konf2 ts1 ts2
+                    { ctx with ifade := e } rfl rfl h_lin with
+                    h_ve | h_ee | ⟨S2', ctx2', ts2'', h_st2, h_t2', h_tid2, h_yan2⟩
+                · -- ikisi de deger → sIndeksYaz (sahiplik invariant'tan)
+                  cases h_ve with
+                  | iv_sabit ve =>
+                    match hte with
+                    | HasType.t_sabit _ _ _ _ hdte =>
+                      cases hdte with
+                      | dt_skaler n =>
+                        cases hle; cases hre
+                        have h_ctx_in : ctx ∈ S.thread := by
+                          rw [h_t]; exact List.mem_append.mpr (Or.inr (List.Mem.head _))
+                        have h_beq := h_konf.2.2.2.2.2.1
+                        have h_hvar := h_konf.2.2.2.2.2.2.2.1
+                        have h_bS : bolgeOrtamGet S.bolge x = some bA := by
+                          rw [h_beq]; exact h_gxA
+                        exact Or.inr (Or.inr ⟨_,
+                          { ctx with ifade := .sabit .birim }, ts2,
+                          Step.sIndeksYaz S _ ts1 ts2 ctx x i n bA h_t h_if h_bS
+                            (h_hvar ctx h_ctx_in x
+                              (by rw [h_if]; exact HedefVar.indeksAta_bas x _ _)
+                              bA h_bS h_yzA)
+                            rfl,
+                          rfl, rfl, Or.inl rfl⟩)
+                · exact Or.inr (Or.inl (Engelli.indeksAta_deg x _ e
+                    (engelli_konf_transfer S ts1 ts2 ctx e e h_ee h_t
+                      (fun v h => by rw [h_if] at h; cases h))))
+                · exact Or.inr (Or.inr ⟨_,
+                    { ctx2' with ifade := .indeksAta x (.sabit (.skaler i)) ctx2'.ifade },
+                    ts2'',
+                    Step.sIndeksAtaCongDeg S _ (ifadeyleKonf S ts1 ts2 ctx e) S2'
+                      ts1 ts2 ts2'' ctx ctx2' x (.skaler i) e ctx2'.ifade
+                      h_t h_if rfl h_st2 h_t2' h_tid2 rfl h_yan2 rfl,
+                    rfl, h_tid2, h_yan2⟩)
+        · exact Or.inr (Or.inl (Engelli.indeksAta_idx x idx e
+            (engelli_konf_transfer S ts1 ts2 ctx idx idx h_ei h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .indeksAta x ctx1'.ifade e }, ts2',
+            Step.sIndeksAtaCongIdx S _ (ifadeyleKonf S ts1 ts2 ctx idx) S1'
+              ts1 ts2 ts2' ctx ctx1' x idx ctx1'.ifade e
+              h_t h_if rfl h_st1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
   -- D-335: `iken` progress — EN KOLAY DAL: `sIkenAc` kosulsuz atar
   -- (acilma bir bookkeeping adimidir; kosul acilmis `eger`de degerlendirilir).

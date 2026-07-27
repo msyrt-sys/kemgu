@@ -619,6 +619,11 @@ inductive Ifade : Type where
       modelde boylece IFADE EDILEBILIR hale gelir.
       V1 KAPSAM: yalniz OKUMA (indeksli yazma V2 — Mehmet karari). -/
   | indeks         (dizi : VarId) (idx : Ifade)
+  /-- D-337: INDEKSLI YAZMA `x[idx] = deger`. Degerlendirme sirasi
+      INDEKS SONRA DEGER (CT'nin `c_indeksAta`si ile birebir).
+      Uretilen `memYaz` olayi `⟨bolge(x), idx⟩` konumunu tasir →
+      **YAZMA ADRESI DE GOZLENIR** (okuma tarafi D-336). -/
+  | indeksAta      (dizi : VarId) (idx : Ifade) (deger : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -709,6 +714,13 @@ inductive HedefVar : Ifade → VarId → Prop where
   -- INDEKS IFADESI hedef tasiyabilir.
   | indeks_ic (x : VarId) (idx : Ifade) (z : VarId) :
       HedefVar idx z → HedefVar (Ifade.indeks x idx) z
+  -- D-337: indeksli YAZMA sahiplik GEREKTIRIR → dizi degiskeni HEDEFTIR.
+  | indeksAta_bas (x : VarId) (idx e : Ifade) :
+      HedefVar (Ifade.indeksAta x idx e) x
+  | indeksAta_idx (x : VarId) (idx e : Ifade) (z : VarId) :
+      HedefVar idx z → HedefVar (Ifade.indeksAta x idx e) z
+  | indeksAta_deg (x : VarId) (idx e : Ifade) (z : VarId) :
+      HedefVar e z → HedefVar (Ifade.indeksAta x idx e) z
 
 /-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
     dondurIf var (dondur sahiplik gerektirir — h_owner). -/
@@ -749,6 +761,11 @@ inductive HedefBolge : Ifade → Bolge → Prop where
   -- D-336
   | indeks_ic (x : VarId) (idx : Ifade) (b : Bolge) :
       HedefBolge idx b → HedefBolge (Ifade.indeks x idx) b
+  -- D-337
+  | indeksAta_idx (x : VarId) (idx e : Ifade) (b : Bolge) :
+      HedefBolge idx b → HedefBolge (Ifade.indeksAta x idx e) b
+  | indeksAta_deg (x : VarId) (idx e : Ifade) (b : Bolge) :
+      HedefBolge e b → HedefBolge (Ifade.indeksAta x idx e) b
 
 /-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
 theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}

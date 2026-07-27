@@ -5,6 +5,61 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-337 — İNDEKSLİ YAZMA (CT005-Y): yazma adresi de gözlenir (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+D-336'nın açık bıraktığı yazma tarafı kapandı. `Ifade.indeksAta x idx e` +
+`Step.sIndeksYaz`/`sIndeksAtaCongIdx`/`sIndeksAtaCongDeg` (31→34 kural) +
+`t_indeks_ata`/`l_indeks_ata`/`r_indeks_ata`; CT'de `Calis.c_indeks_ata`,
+`CtOk.ct_indeks_ata`, `yazH`; köprüde `gom`/`GomOk`/`Kapsar`/iki `krun_*`/
+`adim_indeks_yaz`/`storeUyum_yazH`.
+
+**Değerlendirme sırası İNDEKS SONRA DEĞER** — CT `c_indeks_ata` ile Core'un iki
+cong kuralı birebir aynı sırayı dayatıyor (aksi halde iz sırası ayrışırdı).
+
+**CT'nin `oYaz`ı artık İNDEKS TAŞIYOR** (`oYaz x i`). Bu zorunluydu: Core'un
+`memYaz`ı `Konum` taşır, `Konum` ofseti içerir — yazma adresi gözlenir. Düz
+atama `oYaz x 0`.
+
+**İKİ AYRI KURAL, İKİ AYRI KANAL (ölçüldü, birbirinin yerine geçmiyor):**
+`ct_indeks_ata` iki şart koşar — `h_idx_genel` (CT005-Y) **ADRES** kanalını,
+`h_akis` (CT003) **VERİ** kanalını kapatır. Sabotaj ikisini de ayrı ayrı
+doğruladı: indeks şartını kaldır → **5 hata**; akış şartını kaldır → **4 hata**.
+
+**İSPATIN ZORLADIĞI İKİ DÜZELTME:**
+
+**(a) `ifadeEtiket (indeksAta x idx e)` İNDEKSİN etiketini de birleştirmek
+zorunda kaldı.** İlk yazdığım hâli sadece `ifadeEtiket e` idi (atama
+konvansiyonu). `genel_ifade_korunum` — "etiketi genel olan ifade AYNI İZİ
+üretir" — bu tanımla **YANLIŞ** oluyor: gizli indeksli ama genel değerli bir
+yazma "genel" sayılır, iki koşumda `oYaz x i1` vs `oYaz x i2` üretirdi.
+İndeksi katmak etiketi yükseltir, yani muhafazakârdır.
+
+**(b) `t_indeks_ata` dizinin tipini `scalar` olmaya ZORLADI** (serbest τ değil).
+`KonfTipliFull`un `bagli` bileşeni ofset-0'daki değerin tipini x'in tipine
+bağlar; τ serbest bırakılınca `x[0] = n` yazması o bileşeni bozuyordu
+(korunum ispatında somut olarak çıktı). Yan etki: `bagli` ofset-0'ı konuştuğu
+için korunum ispatı **ofset ayrımı** yapıyor — i ≠ 0 ise gölgeleme yok (kolay
+kol), i = 0 ise `sAtamaTamam`ın BolgeAyrik argümanı aynen geçerli.
+
+**SAHİPLİK:** indeksli yazma `sAtamaTamam` ile aynı `h_owner` şartına tabi →
+`HedefVar.indeksAta_bas` ile dizi değişkeni HEDEFTİR (okuma tarafında değildi).
+
+**VAKUM:** `ct005y_gerekli` (gizli indekse yazma izleri ayrıştırır: `oYaz 1 3`
+vs `oYaz 1 7`), `kopru_indeks_yaz_bos_degil` (CT005-Y + CT003'e uyan program
+hipotezleri sağlar). Ek sabotaj: `gomGoz`da yazma adresini sabitle → **3 hata**.
+
+**HÂLÂ AÇIK:** eşzamanlı CT, çarpma/**bölme** (veri-bağımlı gecikme), `esles`in
+yapıcı/çeşit desenleri, **hücre-başına gizlilik etiketi** (etiket hâlâ dizi
+başına — "tablonun bir kısmı gizli" kapsanmıyor), ve dizi **sınır denetimi**
+(model bilinçli olarak toplam bellek varsayar — D-336).
+
+---
+
 ## D-336 — GİZLİ İNDEKS (CT005): erişim adresi artık gözlenir (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

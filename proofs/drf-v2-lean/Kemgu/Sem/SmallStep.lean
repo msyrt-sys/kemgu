@@ -373,6 +373,58 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 thread := ts1 ++ { ctx' with ifade := .indeks x e' } :: ts2' }) :
       Step S S'
 
+  /-- S-INDEKS-YAZ (D-337): `x[i] = n`. `sAtamaTamam` ile ayni sahiplik
+      sarti (`h_owner`) — yazma sahiplik ister. Yazilan konum
+      `⟨bolge(x), i.toNat⟩` ve emit edilen `memYaz` O KONUMU tasir →
+      **yazma adresi de gozlenir**. Sonuc `birim` (yazma bir DEYIMDIR). -/
+  | sIndeksYaz
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (x : VarId) (i : Int) (n : Int) (b : Bolge)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .indeksAta x (.sabit (.skaler i)) (.sabit (.skaler n)))
+      (h_b     : bolgeOrtamGet S.bolge x = some b)
+      (h_owner : sahiplikGet S.sahiplik b = some (Sahip.thread ctx.tid))
+      (h_S'    : S' = { S with
+                thread := ts1 ++ { ctx with ifade := .sabit .birim } :: ts2,
+                store  := (⟨b, i.toNat⟩, Deger.skaler n) :: S.store,
+                iz     := .memYaz ctx.tid ⟨b, i.toNat⟩ (.skaler n) :: S.iz,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-INDEKS-ATA-CONG-IDX (D-337): INDEKS icinde adim at (once indeks). -/
+  | sIndeksAtaCongIdx
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (x : VarId) (idx idx' e : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .indeksAta x idx e)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx idx)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = idx')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .indeksAta x idx' e } :: ts2' }) :
+      Step S S'
+
+  /-- S-INDEKS-ATA-CONG-DEG (D-337): indeks DEGER ise deger icinde adim at. -/
+  | sIndeksAtaCongDeg
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (x : VarId) (v : Deger) (e e' : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .indeksAta x (.sabit v) e)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx e)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = e')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with
+                  ifade := .indeksAta x (.sabit v) e' } :: ts2' }) :
+      Step S S'
+
   /-- S-GUVENSIZ-ATLA: ic ifade deger → sarmal acilir. -/
   | sGuvensizAtla
       (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
@@ -713,6 +765,17 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   | sIndeksCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
+  -- D-337: sIndeksYaz bir memYaz'dir — UCUNCU disjunct (yazma+sahiplik).
+  | sIndeksYaz S S' ts1 ts2 ctx x i n b h_t h_if h_b h_owner h_S' =>
+      subst h_S'
+      exact Or.inr (Or.inr (Or.inl
+        ⟨ctx.tid, ⟨b, i.toNat⟩, .skaler n, rfl, rfl, rfl, h_owner⟩))
+  | sIndeksAtaCongIdx S S' S1 S1' ts1 ts2 ts2' ctx ctx' x idx idx' e h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
+  | sIndeksAtaCongDeg S S' S1 S1' ts1 ts2 ts2' ctx ctx' x v e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -845,6 +908,23 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
           by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
           by simpa [ifadeyleKonf] using h_z⟩
+  -- D-337
+  | sIndeksYaz S S' ts1 ts2 ctx x i n b h_t h_if h_b h_owner h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sIndeksAtaCongIdx S S' S1 S1' ts1 ts2 ts2' ctx ctx' x idx idx' e h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
+  | sIndeksAtaCongDeg S S' S1 S1' ts1 ts2 ts2' ctx ctx' x v e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -956,6 +1036,21 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | sIndeksOku S S' ts1 ts2 ctx x i b' n h_t h_if h_b h_n h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
   | sIndeksCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' x e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx e).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  -- D-337
+  | sIndeksYaz S S' ts1 ts2 ctx x i n b' h_t h_if h_b h_owner h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sIndeksAtaCongIdx S S' S1 S1' ts1 ts2 ts2' ctx ctx' x idx idx' e h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx idx).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  | sIndeksAtaCongDeg S S' S1 S1' ts1 ts2 ts2' ctx ctx' x v e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx e).sahiplik b

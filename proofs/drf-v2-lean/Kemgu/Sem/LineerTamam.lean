@@ -94,6 +94,10 @@ inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
   | n_indeks (x : VarId) (idx : Ifade) (τ : Tip) :
       tipOrtamGet Γ x = some τ → Tip.lineerMi τ = false →
       LineerNotr Γ idx → LineerNotr Γ (Ifade.indeks x idx)
+  | n_indeks_ata (x : VarId) (idx e : Ifade) (τ : Tip) :
+      tipOrtamGet Γ x = some τ → Tip.lineerMi τ = false →
+      LineerNotr Γ idx → LineerNotr Γ e →
+      LineerNotr Γ (Ifade.indeksAta x idx e)
 
 
 /-- LineerTamam Γ Λ e Λ' — Lineer durum gecisi:
@@ -252,6 +256,17 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
                LineerTamam Γ Λ idx Λ' →
                LineerTamam Γ Λ (Ifade.indeks x idx) Λ'
 
+  /-- L-INDEKS-ATA (D-337): SIRALI kompozisyon (indeks sonra deger);
+      dizi LINEER OLMAMALI (bir lineer degerin hucresine yazmak kismi
+      tasima olurdu — D-315). -/
+  | l_indeks_ata (Γ : TipOrtam) (Λ Λi Λe : LineerOrtam) (x : VarId)
+                 (idx e : Ifade) (τ : Tip) :
+                   tipOrtamGet Γ x = some τ →
+                   Tip.lineerMi τ = false →
+                   LineerTamam Γ Λ idx Λi →
+                   LineerTamam Γ Λi e Λe →
+                   LineerTamam Γ Λ (Ifade.indeksAta x idx e) Λe
+
   /-- L-GUVENSIZ: ic ifade delegate. -/
   | l_guvensiz (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (e : Ifade) :
                  LineerTamam Γ Λ e Λ' →
@@ -282,6 +297,9 @@ theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
       exact fun Λ => LineerTamam.l_esles Γ Λ Λ s n d y (ih_s Λ) hd hy
   | n_indeks x idx τ h_g h_lin _ ih =>
       exact fun Λ => LineerTamam.l_indeks Γ Λ Λ x idx τ h_g h_lin (ih Λ)
+  | n_indeks_ata x idx e τ h_g h_lin _ _ ih_i ih_e =>
+      exact fun Λ => LineerTamam.l_indeks_ata Γ Λ Λ Λ x idx e τ h_g h_lin
+        (ih_i Λ) (ih_e Λ)
 
 
 -- ============================================================
@@ -504,6 +522,11 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       intro Λn hk
       obtain ⟨Λen, h_e, hk'⟩ := ih Λn hk
       exact ⟨Λen, LineerTamam.l_indeks _ _ _ x idx τ h_g h_lin h_e, hk'⟩
+  | l_indeks_ata _ _ _ x idx e τ h_g h_lin _ _ ih_i ih_e =>
+      intro Λn hk
+      obtain ⟨Λin, h_i, hk_i⟩ := ih_i Λn hk
+      obtain ⟨Λen, h_e, hk_e⟩ := ih_e Λin hk_i
+      exact ⟨Λen, LineerTamam.l_indeks_ata _ _ _ _ x idx e τ h_g h_lin h_i h_e, hk_e⟩
   | l_esles _ _ s n d y _ h_nd h_ny ih_s =>
       intro Λn hk
       obtain ⟨Λsn, h_s, hk'⟩ := ih_s Λn hk
