@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-339 — MOD / KALAN (CT006-M): aynı bölücü, ayrı olay (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum, Drf/Drf,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+`Ifade.kalan` + `Step.sKalanTamam`/`sKalanCongSol`/`sKalanCongSag` (37→40 kural) +
+`t_kalan`/`l_kalan`/`r_kalan`; CT'de `Calis.c_kalan`, `CtOk.ct_kalan` (**CT006-M**),
+`Gozlem.oMod`; köprüde tam kapsama. D-338'in birebir aynası.
+
+**BU KARARI SORMADIM — D-338'de anlaşılan ilkeden ÇIKIYOR.** Tek açık nokta
+`bolOl`u yeniden kullanmak mıydı: **hayır, ayrı `modOl`.** Gerekçe: `bolOl`
+paylaşılsaydı `a/b` ile `a%b` **aynı izi** üretirdi, yani "hangi işlem"
+bilgisi saldırgandan **saklanmış** olurdu — bu İYİMSER bir varsayımdır ve
+D-338'in "gözlem = üst sınır" ilkesiyle çelişir. Donanımda aynı bölücü birim
+kullanılsa bile farklı komuttur ve izde ayırt edilebilir.
+
+**SIFIRA MOD:** Lean `Int` semantiği (`a % 0 = a`); TOPLAM — D-338'in sıfıra
+bölme kararıyla tutarlı, aynı kapsam beyanı geçerli.
+
+**VAKUM + SABOTAJ:**
+- `ct006m_gerekli`: gizli operandlı `h % 2` → `oMod 3 2` vs `oMod 7 2` (ayrışır).
+- `kopru_kalan_bos_degil`: CT006-M'ye uyan program hipotezleri sağlar.
+- CT006-M'nin iki genellik şartını kaldır → **5 hata**.
+- **`oMod`u `gBol`e çakıştır** (yani div/mod ayrımını gizle) → **3 hata**.
+  Bu ikincisi ayrı-olay kararının köprüde gerçekten yük taşıdığının ölçümü:
+  çakıştırınca iz karşılığı bozuluyor.
+
+**YÖNTEM NOTU:** D-338 blokları mekanik olarak aynalandı (`bol`→`kalan`,
+`bolOl`→`modOl`, `/`→`%`). İki yerde ayna eksik kaldı ve derleyici yakaladı:
+`Ifade` kurucusu (`| bol` satırı nokta içermediği için) ve `progress_konf`un
+`| bol a b ih_a ih_b =>` case başlığı. Yani mekanik aynalama güvenli değil,
+kapı güvenli — ikisi de `lake build` tarafından bulundu.
+
+**HÂLÂ AÇIK:** eşzamanlı CT, **çarpma** (bazı çekirdeklerde veri-bağımlı),
+`esles`in yapıcı/çeşit desenleri, hücre-başına gizlilik etiketi, dizi sınır
+denetimi.
+
+---
+
 ## D-338 — BÖLME (CT006): veri-bağımlı gecikme artık gözlenir (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

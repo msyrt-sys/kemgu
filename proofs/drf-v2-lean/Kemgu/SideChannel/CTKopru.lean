@@ -77,6 +77,8 @@ inductive Sadik : CT.Ifade → Prop where
   | s_topla (a b : CT.Ifade) : Sadik (.topla a b)
   /-- D-338: bolumun degeri `skaler (v1/v2)` — sadik. -/
   | s_bol (a b : CT.Ifade) : Sadik (.bol a b)
+  /-- D-339: bolumun degeri `skaler (v1/v2)` — sadik. -/
+  | s_kalan (a b : CT.Ifade) : Sadik (.kalan a b)
   /-- D-335: `esles`in degeri secilen koldan gelir. -/
   | s_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
       Sadik d → Sadik y → Sadik (.esles s n d y)
@@ -109,6 +111,9 @@ inductive GomOk : CT.Ifade → Prop where
   /-- D-338: bolme — `topla` ile ayni gomme sarti. -/
   | g_bol (a b : CT.Ifade) :
       GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.bol a b)
+  /-- D-339: bolme — `topla` ile ayni gomme sarti. -/
+  | g_kalan (a b : CT.Ifade) :
+      GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.kalan a b)
   /-- D-335: dongu. Kosul `Sadik` olmali (dal karari ona bagli). -/
   | g_iken (k g : CT.Ifade) :
       GomOk k → Sadik k → GomOk g → GomOk (.iken k g)
@@ -139,6 +144,7 @@ def gom : CT.Ifade → Ifade
   | .eger k d y     => .eger (gom k) (gom d) (gom y)
   | .topla a b      => .topla (gom a) (gom b)   -- D-334
   | .bol a b        => .bol (gom a) (gom b)     -- D-338
+  | .kalan a b        => .kalan (gom a) (gom b)     -- D-339
   | .iken k g       => .iken (gom k) (gom g)    -- D-335
   | .esles s n d y  => .esles (gom s) n (gom d) (gom y)
   | .indeks x idx   => .indeks x (gom idx)      -- D-336
@@ -155,6 +161,7 @@ inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
       Kapsar V k → Kapsar V d → Kapsar V y → Kapsar V (.eger k d y)
   | k_topla (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.topla a b)
   | k_bol (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.bol a b)
+  | k_kalan (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.kalan a b)
   | k_iken (k g : CT.Ifade) : Kapsar V k → Kapsar V g → Kapsar V (.iken k g)
   | k_esles (s : CT.Ifade) (n : Int) (d y : CT.Ifade) :
       Kapsar V s → Kapsar V d → Kapsar V y → Kapsar V (.esles s n d y)
@@ -405,6 +412,18 @@ theorem krun_bol_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
         (K V { dB with ifade := .bol dB.ifade b }) (K V dA) (K V dB)
         [] [] [] ⟨t0, .bol dA.ifade b, []⟩ ⟨t0, dB.ifade, []⟩
         dA.ifade dB.ifade b rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+theorem krun_kalan_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .kalan d.ifade b }
+           { d' with ifade := .kalan d'.ifade b } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .kalan dB.ifade b } _ ?_ ih
+      exact Step.sKalanCongSol (K V { dA with ifade := .kalan dA.ifade b })
+        (K V { dB with ifade := .kalan dB.ifade b }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .kalan dA.ifade b, []⟩ ⟨t0, dB.ifade, []⟩
+        dA.ifade dB.ifade b rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
 theorem krun_bol_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
     (h : KRun V d d') :
@@ -417,6 +436,19 @@ theorem krun_bol_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
       exact Step.sBolCongSag (K V { dA with ifade := .bol (.sabit v) dA.ifade })
         (K V { dB with ifade := .bol (.sabit v) dB.ifade }) (K V dA) (K V dB)
         [] [] [] ⟨t0, .bol (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
+        v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
+theorem krun_kalan_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .kalan (.sabit v) d.ifade }
+           { d' with ifade := .kalan (.sabit v) d'.ifade } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .kalan (.sabit v) dB.ifade } _ ?_ ih
+      exact Step.sKalanCongSag (K V { dA with ifade := .kalan (.sabit v) dA.ifade })
+        (K V { dB with ifade := .kalan (.sabit v) dB.ifade }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .kalan (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
         v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
 theorem krun_esles {V : List CT.Ad} (n : Int) (dd yy : Ifade) {d d' : KDurum}
@@ -546,6 +578,16 @@ theorem adim_bol (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
   Step.sBolTamam _ _ [] []
     ⟨t0, .bol (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
 
+/-- D-339: bolme taban adimi — `modOl` olayi uretir (adim_topla'dan
+    tek farki budur). -/
+theorem adim_kalan (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
+    (iz : Iz) (z : Zaman) :
+    Step (K V ⟨sigma, .kalan (.sabit (.skaler n1)) (.sabit (.skaler n2)), iz, z⟩)
+         (K V ⟨sigma, .sabit (.skaler (n1 % n2)),
+               .modOl t0 n1 n2 :: iz, z + 1⟩) :=
+  Step.sKalanTamam _ _ [] []
+    ⟨t0, .kalan (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
+
 /-- D-335: dongu ACILMASI (olaysiz yapisal adim). -/
 theorem adim_iken_ac (V : List CT.Ad) (sigma : Store) (k g : Ifade)
     (iz : Iz) (z : Zaman) :
@@ -577,6 +619,7 @@ def gomGoz : CT.Gozlem → GozlemOlay
   | .oDal a   => .gDal t0 a
   -- D-338: CT'nin operand-tasiyan bolme gozlemi, Core'un `gBol`una.
   | .oBol a b => .gBol t0 a b
+  | .oMod a b => .gMod t0 a b
 
 /-- CT izi (yeni-SONDA) → Core gozlem izi (yeni-BASTA). -/
 def gomGozIz (t : CT.Iz) : List GozlemOlay := (t.map gomGoz).reverse
@@ -698,6 +741,28 @@ theorem gomme_sim {V : List CT.Ad} :
                 (adim_bol V sg2 v1 v2 iz2 z2) (KRun.refl _))),
           hu2, ?_, fun _ => rfl⟩
         show gozlem (Olay.bolOl t0 v1 v2) :: izGozlem iz2 = _
+        rw [hg2, hg1, gomGozIz_append, gomGozIz_append]
+        simp [gozlem, gomGoz, gomGozIz, List.append_assoc]
+  -- D-339: bolme — `topla` ile ayni akis, AMA son adim `modOl` uretir;
+  -- iz karsiligi `gomGoz (.oMod v1 v2) = .gMod t0 v1 v2` ile kapanir.
+  | c_kalan s s1 s2 a b t1 t2 v1 v2 _ _ iha ihb =>
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_kalan _ _ h_ga h_sa h_gb h_sb =>
+        have h_ka : Kapsar V a := by cases h_kap with | k_kalan _ _ h _ => exact h
+        have h_kb : Kapsar V b := by cases h_kap with | k_kalan _ _ _ h => exact h
+        obtain ⟨w1, sg1, iz1, z1, hr1, hu1, hg1, hs1⟩ := iha h_ga h_ka sigma iz z hu
+        rw [hs1 h_sa] at hr1
+        obtain ⟨w2, sg2, iz2, z2, hr2, hu2, hg2, hs2⟩ := ihb h_gb h_kb sg1 iz1 z1 hu1
+        rw [hs2 h_sb] at hr2
+        refine ⟨.skaler (v1 % v2), sg2, .modOl t0 v1 v2 :: iz2, z2 + 1,
+          krun_trans (krun_kalan_sol (V := V) (gom b) hr1)
+            (krun_trans (krun_kalan_sag (V := V) (.skaler v1) hr2)
+              (KRun.adim _ ⟨sg2, .sabit (.skaler (v1 % v2)),
+                 .modOl t0 v1 v2 :: iz2, z2 + 1⟩ _
+                (adim_kalan V sg2 v1 v2 iz2 z2) (KRun.refl _))),
+          hu2, ?_, fun _ => rfl⟩
+        show gozlem (Olay.modOl t0 v1 v2) :: izGozlem iz2 = _
         rw [hg2, hg1, gomGozIz_append, gomGozIz_append]
         simp [gozlem, gomGoz, gomGozIz, List.append_assoc]
   | c_topla s s1 s2 a b t1 t2 v1 v2 _ _ iha ihb =>
@@ -1064,5 +1129,19 @@ theorem kopru_bol_bos_degil :
   · exact GomOk.g_bol _ _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
       (GomOk.g_sabit 2) (Sadik.s_sabit 2)
   · exact Kapsar.k_bol _ _ (Kapsar.k_degisken 1 (by decide)) (Kapsar.k_sabit 2)
+
+/-- D-339: koprunun KALAN (mod) kapsadiginin taniki — CT006-M'ye UYAN
+    (`d % 2`, `d` GENEL). Gizli operandli olan `ct006m_gerekli`dedir. -/
+theorem kopru_kalan_bos_degil :
+    ∃ (G : CT.EtiketOrtam) (e : CT.Ifade),
+      CT.CtOk G e ∧ GomOk e ∧ Kapsar [0, 1] e
+      ∧ (∃ a b, e = .kalan a b) := by
+  refine ⟨fun _ => .genel, .kalan (.degisken 1) (.sabit 2),
+          ?_, ?_, ?_, ⟨_, _, rfl⟩⟩
+  · exact CT.CtOk.ct_kalan _ _ (CT.CtOk.ct_degisken 1) (CT.CtOk.ct_sabit 2)
+      (by decide) (by decide)
+  · exact GomOk.g_kalan _ _ (GomOk.g_degisken 1) (Sadik.s_degisken 1)
+      (GomOk.g_sabit 2) (Sadik.s_sabit 2)
+  · exact Kapsar.k_kalan _ _ (Kapsar.k_degisken 1 (by decide)) (Kapsar.k_sabit 2)
 
 end Kemgu.SideChannel.CTKopru

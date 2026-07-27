@@ -88,6 +88,8 @@ inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
       LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.topla a b)
   | n_bol (a b : Ifade) :
       LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.bol a b)
+  | n_kalan (a b : Ifade) :
+      LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.kalan a b)
   | n_iken (k g : Ifade) :
       LineerNotr Γ k → LineerNotr Γ g → LineerNotr Γ (Ifade.iken k g)
   | n_esles (s : Ifade) (n : Int) (d y : Ifade) :
@@ -216,6 +218,12 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
               LineerTamam Γ Λa b Λb →
               LineerTamam Γ Λ (Ifade.bol a b) Λb
 
+  /-- L-KALAN (D-339): sirali kompozisyon (`topla` ile ayni). -/
+  | l_kalan (Γ : TipOrtam) (Λ Λa Λb : LineerOrtam) (a b : Ifade) :
+              LineerTamam Γ Λ a Λa →
+              LineerTamam Γ Λa b Λb →
+              LineerTamam Γ Λ (Ifade.kalan a b) Λb
+
   /-- L-EGER (D-332): kosul Λ → Λk; HER IKI DAL LINEER-NOTR olmalidir
       (`LineerNotr` — asagida), yani dis bir lineer baglamayi TUKETEMEZ;
       cikis ortami Λk'dir.
@@ -301,6 +309,8 @@ theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
       exact fun Λ => LineerTamam.l_topla Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
   | n_bol a b _ _ ih_a ih_b =>
       exact fun Λ => LineerTamam.l_bol Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
+  | n_kalan a b _ _ ih_a ih_b =>
+      exact fun Λ => LineerTamam.l_kalan Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
   | n_iken k g hk hg _ _ =>
       exact fun Λ => LineerTamam.l_iken Γ Λ k g hk hg
   | n_esles s n d y _ hd hy ih_s _ _ =>
@@ -529,6 +539,11 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
       obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
       exact ⟨Λbn, LineerTamam.l_bol _ _ _ _ a b h_a h_b, hk_b⟩
+  | l_kalan _ _ _ a b _ _ ih_a ih_b =>
+      intro Λn hk
+      obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
+      obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
+      exact ⟨Λbn, LineerTamam.l_kalan _ _ _ _ a b h_a h_b, hk_b⟩
   -- D-335: l_iken tamamen Λ-bagimsiz (notr yargilar) → aynen tasinir.
   | l_iken _ k g hk hg =>
       intro Λn hkk

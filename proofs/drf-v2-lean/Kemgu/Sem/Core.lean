@@ -551,6 +551,13 @@ inductive Olay : Type where
       `topla`nin BOYLE bir olayi YOKTUR — cunku toplama sabit cevrimdir;
       fark tam olarak buradadir ve CT006'nin varlik sebebidir. -/
   | bolOl         (t : ThreadId) (a b : Int)
+  /-- D-339: MOD olayi. `bolOl`dan AYRI tutuldu — `bolOl` yeniden
+      kullanilsaydi `a/b` ile `a%b` AYNI izi uretirdi, yani saldirgandan
+      "hangi islem" bilgisi SAKLANMIS olurdu. Bu IYIMSER bir varsayim
+      olurdu; muhafazakar model (D-338 ilkesi: gozlem = ust sinir) ayri
+      olay ister. Donanimda ayni bolucu birimi kullanilsa bile FARKLI
+      komuttur ve izde ayirt edilebilir. -/
+  | modOl         (t : ThreadId) (a b : Int)
 
 
 /-- Iz: gozlemlenmis olaylar (en yenisi basta) -/
@@ -638,6 +645,11 @@ inductive Ifade : Type where
       KEMGU'nun gercek bolmesi `sonuc<T,H>` dondurur ya da paniklerdir;
       burada amac yan-kanal, hata semantigi DEGIL (bkz. `hucreOku`). -/
   | bol            (sol sag : Ifade)
+  /-- D-339: KALAN (mod) `a % b`. `bol` ile ayni sinif: veri-bagimli
+      gecikme (ayni bolucu birim) → `modOl` olayi uretir ve CT006-M
+      operandlarin GENEL olmasini ister.
+      V1 KAPSAM: `b = 0` icin Lean `Int` semantigi (`a % 0 = a`); TOPLAM. -/
+  | kalan          (sol sag : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -718,6 +730,11 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar a z → HedefVar (Ifade.bol a b) z
   | bol_sag (a b : Ifade) (z : VarId) :
       HedefVar b z → HedefVar (Ifade.bol a b) z
+  -- D-339
+  | kalan_sol (a b : Ifade) (z : VarId) :
+      HedefVar a z → HedefVar (Ifade.kalan a b) z
+  | kalan_sag (a b : Ifade) (z : VarId) :
+      HedefVar b z → HedefVar (Ifade.kalan a b) z
   -- D-335
   | iken_kosul (k g : Ifade) (z : VarId) :
       HedefVar k z → HedefVar (Ifade.iken k g) z
@@ -771,6 +788,11 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge a b → HedefBolge (Ifade.bol a c) b
   | bol_sag (a c : Ifade) (b : Bolge) :
       HedefBolge c b → HedefBolge (Ifade.bol a c) b
+  -- D-339
+  | kalan_sol (a c : Ifade) (b : Bolge) :
+      HedefBolge a b → HedefBolge (Ifade.kalan a c) b
+  | kalan_sag (a c : Ifade) (b : Bolge) :
+      HedefBolge c b → HedefBolge (Ifade.kalan a c) b
   -- D-335
   | iken_kosul (k g : Ifade) (b : Bolge) :
       HedefBolge k b → HedefBolge (Ifade.iken k g) b

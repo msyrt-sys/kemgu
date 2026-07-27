@@ -179,6 +179,49 @@ theorem typed_bol_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
 
+/-- D-339: `bol`un SOL operandi tiplidir (sKalanCongSol tarafi). -/
+theorem typed_kalan_sol {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {a b : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.kalan a b) τ Λ' Ρ') :
+    ∃ τa Λa Ρa, Typed Γ Δ Λ Ρ a τa Λa Ρa := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_kalan _ _ _ _ hta _,
+    LineerTamam.l_kalan _ _ Λa _ _ _ hla _,
+    RegionTamam.r_kalan _ _ Ρa _ _ _ hra _ =>
+    exact ⟨Tip.scalar, Λa, Ρa, ⟨hta, hla, hra⟩⟩
+
+/-- D-339: sol operand DEGER iken sag operand tiplidir (sKalanCongSag). -/
+theorem typed_kalan_sag {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {v : Deger} {b : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.kalan (Ifade.sabit v) b) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ b Tip.scalar Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_kalan _ _ _ _ _ htb,
+    LineerTamam.l_kalan _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_kalan _ _ _ _ _ _ hra hrb =>
+    cases hla
+    cases hra
+    exact ⟨htb, hlb, hrb⟩
+
+/-- D-339: iki operand da deger → bolum tiplidir (sKalanTamam sonrasi). -/
+theorem typed_kalan_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {n1 n2 : Int} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ
+          (Ifade.kalan (Ifade.sabit (.skaler n1)) (Ifade.sabit (.skaler n2)))
+          τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ (Ifade.sabit (.skaler (n1 % n2))) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_kalan _ _ _ _ _ _,
+    LineerTamam.l_kalan _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_kalan _ _ _ _ _ _ hra hrb =>
+    cases hla; cases hlb; cases hra; cases hrb
+    exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
+
 /-- D-335: **DONGU ACILMASI TIP KORUR** — `sIkenAc`in tipleme tarafi.
     `iken k g`nin acilmis hali `eger k (seq g (iken k g)) (sabit birim)`
     yine tiplidir. Ozyineleme YOK: acilmis terimin icindeki `iken k g`

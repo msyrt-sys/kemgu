@@ -85,6 +85,11 @@ inductive GozlemOlay : Type where
       gecikmesidir (gecikme operandlarin fonksiyonu → ust sinir olarak
       operandlar). Sabit-cevrimli `topla`nin boyle bir gozlemi YOKTUR. -/
   | gBol      (t : ThreadId) (a b : Int)
+  /-- D-339: BOLME gozlemi — OPERANDLARI tasir. Diger gozlemlerin
+      aksine burada DEGER gorunur; sebep bolmenin veri-bagimli
+      gecikmesidir (gecikme operandlarin fonksiyonu → ust sinir olarak
+      operandlar). Sabit-cevrimli `topla`nin boyle bir gozlemi YOKTUR. -/
+  | gMod      (t : ThreadId) (a b : Int)
 
 /-- Olay → gozlem (deger projeksiyonu ATILIR). -/
 def gozlem : Olay → GozlemOlay
@@ -97,6 +102,7 @@ def gozlem : Olay → GozlemOlay
   | .dondurOl t b        => .gDondur t b
   | .dalOl t a           => .gDal t a
   | .bolOl t a b         => .gBol t a b
+  | .modOl t a b         => .gMod t a b
 
 /-- Iz → gozlem dizisi. -/
 def izGozlem (tau : Iz) : List GozlemOlay := tau.map gozlem
@@ -177,6 +183,7 @@ def ifadeSil : Ifade → Ifade
   | .eger k d y           => .eger (ifadeSil k) (ifadeSil d) (ifadeSil y)
   | .topla a b            => .topla (ifadeSil a) (ifadeSil b)
   | .bol a b              => .bol (ifadeSil a) (ifadeSil b)
+  | .kalan a b              => .kalan (ifadeSil a) (ifadeSil b)
   | .iken k g             => .iken (ifadeSil k) (ifadeSil g)
   -- D-335: literal desen `n` SILINMEZ — kontrol iskeletinin parcasi
   -- (hangi kolun tuttugu `dalOl` ile zaten gozlenir).
@@ -198,6 +205,7 @@ def olaySil : Olay → Olay
   | .dalOl t a           => .dalOl t a
   -- D-338: bolme operandlari VERI DEGIL, GECIKME KANALIDIR → silinmez.
   | .bolOl t a b         => .bolOl t a b
+  | .modOl t a b         => .modOl t a b
 
 def izSil (tau : Iz) : Iz := tau.map olaySil
 
@@ -654,6 +662,48 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
   | sBolCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b'
       h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       refine Step.sBolCongSag _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  -- toplama yapilir (skalerler silinmiyor); olay yok.
+  -- D-339: sKalanTamam — operandlar skaler oldugu icin silme onlara
+  -- dokunmaz (D-334 ISTISNA 3) → AYNI `modOl` olayi.
+  | sKalanTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      refine Step.sKalanTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        n1 n2 ?_ ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil, degerSil]
+  | sKalanCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sKalanCongSol _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil a) (ifadeSil a') (ifadeSil b) ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sKalanCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sKalanCongSag _ _ (konfSil S1) (konfSil S1')
         (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
         (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
       · show threadSil S.thread = _; rw [h_t, threadSil_split]
