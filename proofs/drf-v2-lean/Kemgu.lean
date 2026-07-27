@@ -43,6 +43,7 @@ import Kemgu.Drf.DrfCrossStep
 import Kemgu.MemSafety.Theorems
 -- Faz B2: BET iskelet (realtime model refactor bekler)
 import Kemgu.BET.Boundedness
+import Kemgu.BET.CoreBound
 -- Faz B3: Side-Channel iskelet (sabitsure tracking refactor bekler)
 import Kemgu.SideChannel.NonInterference
 import Kemgu.SideChannel.CT

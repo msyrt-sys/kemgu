@@ -75,6 +75,9 @@ import Kemgu
 #print axioms Kemgu.BET.Boundedness.bet
 #print axioms Kemgu.BET.Boundedness.bet_rt8
 #print axioms Kemgu.BET.Boundedness.bet_dal_max_gerekli
+#print axioms Kemgu.BET.CoreBound.hatasiz_adim_azaltir
+#print axioms Kemgu.BET.CoreBound.hatasiz_kosum_siniri
+#print axioms Kemgu.BET.CoreBound.core_bet_rt8
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then
     echo "🔴 aksiyom denetimi çalıştırılamadı:"; head -10 "$TMP/aks.txt"; exit 1

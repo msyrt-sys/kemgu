@@ -50,6 +50,47 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-333 — BET KOPRUSU: ana modelde kosum-uzunlugu SINIRI ispatlandi (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/BET/CoreBound.lean` (YENİ, ~260 satir),
+`Kemgu.lean` (+1 import), `test/lean_aksiyom_harness.sh` (+3 denetim).]**
+D-332'nin acik borcu ("Sem/Core'a kopru YOK") — **bugun yapilabilir parcasi kapandi**.
+`SmallStep.lean`e DOKUNULMADI (kosan kopru goreviyle cakisma yok; yeni dosya).
+
+**Ne ispatlandi (ANA MODEL uzerinde, cekirdek hesapta degil):**
+- `hatasiz_adim_azaltir` (21/21 kural): fault uretmeyen HER adim `konfOlcu`yu
+  STRICT azaltir. Fault kurallari `h_nf` ile dislanir (post-state yalniz `fault`
+  alanini degistirir → olcu DUSMEZ; bu bir kusur degil, modelin dogru okunmasi).
+- **`hatasiz_kosum_siniri`:** `HatasizZincir n S S' → n ≤ konfOlcu S`.
+- `core_bet_rt8`: kagit RT.8 formu — `∃N, ∀hatasiz kosum: uzunluk ≤ N`.
+
+**Sinir GIRDIDEN BAGIMSIZ:** `konfOlcu` yalnizca thread ifadelerinin sozdizimsel
+olcusune bakar; store/kanal icerigi (girdi) formule HIC girmez.
+
+**NEDEN SINIR VAR:** `Core.Ifade`de dongu/ozyineleme/cagri YOK → her Tamam kurali
+odakli ifadeyi kucultur. `gorevBaslat` bile net -1 (sarmalayici kaybolur, `kod`
+cocuk thread'e tasinir).
+
+**TASIMAYAN parca (durustce):** D-332'nin asil icerigi olan **dal-max** muhakemesi
+buraya GECMEZ — `Core.Ifade`de `eger` YOK (olculdu). O parca koprunun `eger`
+gerektiren kismidir (kosan gorev + D-331 eki karari).
+
+**SABOTAJ:** (A) `gorevBaslat` olcusunden `kod` dusuruldu → **1 hata**;
+(B) hatasizlik sarti kaldirildi (`h_nf : True`) → **11 hata**; temiz → **0**.
+
+**⚠ SUREC NOTU (bu oturumda IKINCI kez):** B sabotajinin ilk denemesi **0 hata**
+verdi — perl kalibi tutmadigi icin dosya HIC DEGISMEMISTI. `grep` ile satirin
+gercekten degistigi dogrulandiktan sonra 11 hata cikti. **Sabotaj testinin
+KENDISI once dogrulanmali** (D-328'de ayni tuzak yasandi).
+
+**Kapi:** `calistir_lean_aksiyom` — 30+kok modul, **20 teorem**, sorryAx YOK.
+
+**BAKIM:** `sEgerKosulCong`/`sEgerSec` Step'e eklendiginde bu dosya +case ister →
+kapi KIRMIZI verir (sessiz kalmaz); `olcu (eger k d y) = 1 + olcu k + olcu d + olcu y`
+yeterlidir (burada olcu YAPISALDIR, WCET degil).
+
+---
+
 ## D-332 — BET/WCET teoremi ispatlandi: statik sinir, girdiden BAGIMSIZ (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/BET/Boundedness.lean` (iskelet → ~190 satir
