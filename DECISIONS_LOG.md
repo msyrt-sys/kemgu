@@ -5,6 +5,66 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-337 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (+164/−17), `test/cg_korpus/` (+2 korpus,
+105→107).]** D-335 C tarafını kilitlemiş, self-host'un **hiçbir** `dtamN` işlemini
+imzasız üretmediğini ölçmüştü. Bu adım self-host'u C oracle'ına bağlar.
+
+**Kusur (sessiz yanlış cevap):** `selfhost/codegen.kem` imzasızlığı hiç izlemiyordu —
+her `dtam` işlemi imzalı varyantla üretiliyordu (`sext`/`sdiv`/`srem`/`ashr`/`sgt`).
+Kodda "kapsam dışı, izlenmiyor" diye **bilinen bir kısıt olarak yazılıydı**, ama sonucu
+derleme hatası değil **yanlış sayı**ydı: `dtam8 200` bit deseni her yerde −56 sanılıyordu.
+Ölçülen (C vs self): `200 olarak tam32` 200/127 · `200/4` 50/127 · `200%7` 4/0 ·
+`200>>2` 50/127 · `200>100` 42/1. Kripto (`stdlib/kripto`), sürücüler ve bayt işleme
+kodunda doğrudan yanlış davranış.
+
+**Mekanizma:** C'de bu bilgi `IfadeSonuc.isaretsiz` alanında **akar**; self-host'ta
+`ifade_uret` tek bir metin döndürdüğü için taşıyıcı yok. Seçim: **saf (yan-etkisiz)
+yeniden-hesap** — `ifade_isz(p, idx)`, düğüm türünden imzasızlığı türetir
+(TANIMLAYICI→değişken kaydı, TIP_DONUSTUR→hedef tip, IKILI→sol‖sağ, TEKLI neg/~→operand,
+CAGRI→bildirilen dönüş). C'nin `.isaretsiz` **okuduğu her yerin** karşılığı bunu çağırır.
+
+**Neden durum (`p.son_isz`) DEĞİL — gerekçe:** `son_tip` her dalda yeniden yazılır,
+imzasızlık ise yalnız birkaç dalda anlamlıdır. Durum tutulsaydı ele alınmayan dallardan
+**sızar** ve alakasız bir ifadeyi `udiv`/`lshr`'e düşürürdü — yani aynı sınıf hatayı
+(sessiz yanlış cevap) ters yönde üretirdi. Saf işlevin varsayılanı `0` = imzalı = eski
+davranış; bu, atlanan her düğümü **güvenli** tarafa düşürür.
+
+**Kayıt yolları:** `cg_aisz` (değişken/parametre, `cg_ad` ile paralel — `cg_var_bul` ile
+AYNI arama yönü/sınırı, blok-gölgelemesinde tip ve imzasızlık aynı slot'tan gelmeli) +
+`fn_risz` (işlev dönüşü). `fn_ad` checker ile PAYLAŞILIR → `fn_risz_bul` sınırı `fn_ad`
+değil **kendi boyutu** (aksi OOB panik).
+
+**Emisyon (C ile birebir):** genişletme `zext`, bölme `udiv`, mod `urem`, sağa kaydırma
+`lshr`, karşılaştırma `ult/ule/ugt/uge`. `add/sub/mul/and/or/xor/shl` ve `eq/ne` imzadan
+BAĞIMSIZ → tek varyant.
+
+**Ölçüm:** 5 şeklin 5'i de C ile eşleşti (200/50/4/50/42). Yeni korpus
+`cg_isaretsiz_temel.kem` (exit 254 = zext 200 + udiv 50 + urem 4),
+`cg_isaretsiz_kaydir_kars.kem` (exit 77 = lshr 50 + ugt 20 + ult 7; parametre yolu +
+dtamN dönüş tipi dâhil). Falsifiye edici seçim: 200 > 127 → i8'de imzalı yorum negatif,
+her dal imzasız/imzalı ayrımında FARKLI değer verir.
+
+**Sabotaj (3/3, her biri diff ile uygulandığı DOĞRULANDI):** `zext→sext` → temel 254→127;
+`lshr→ashr` + `ugt→sgt` → kaydır_karş 77→249 (temel etkilenmedi — doğru, `>>`/karşılaştırma
+kullanmıyor); `udiv→sdiv` → temel 254→190. İki korpus dosyası **bağımsız olarak** yük taşıyor.
+
+**Kapılar:** codegen_diff **107/107**, checker_diff 56/56, calistir_llvm_test 284/284,
+calistir_self_driver (4 mod + self-host-derlenmiş driver + FIXPOINT), codegen_bootstrap
+**FIXPOINT ✓** (lexer/parser/checker 92 birebir + stage1 IR == stage2 IR, 45436 satır).
+
+**Süreç dersi:** `sed -i` Türkçe `.kem` kaynağında tüm dosyayı yeniden yazdı (satır-sonu
+dönüşümü → 7229 satırlık sahte diff). CLAUDE.md'nin `perl -i` yasağı **`sed -i` için de
+geçerli** — Edit aracını kullan. Sabotajın kendisi her seferinde `diff` ile doğrulandı.
+
+**Sınır (V1):** `ifade_isz` ele almadığı düğümlerde 0 (imzalı) döner — ERİŞİM (`k.alan`),
+INDEKS (`xs[i]`) ve yapı alanı `dtamN` ise imzasızlık **taşınmaz** (C'de `alan_isz`
+üzerinden taşınır, `src/llvm.c:2594`). Hata modu **imzalıya düşmek**, yani D-335 öncesi
+davranış — yeni bir sessiz-yanlış sınıfı DEĞİL, kapanmamış eski yüzey. Kapatılması ayrı adım.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`

@@ -1,0 +1,28 @@
+// cg_isaretsiz_kaydir_kars.kem — D-337: işaretsiz SAĞA KAYDIRMA + KARŞILAŞTIRMA.
+// -----------------------------------------------------------------------------
+// cg_isaretsiz_temel.kem'in ikinci yarısı: `>>` ve ilişkisel operatörler.
+//   lshr vs ashr : 200>>2 = 50  vs (-56)>>2 = -14
+//   ugt  vs sgt  : 200>100 DOĞRU vs (-56)>100 YANLIŞ
+//   ult  vs slt  : 200<100 YANLIŞ vs (-56)<100 DOĞRU
+// Parametre yolu da ölçülür (imzasızlık PARAMETRE kaydından da gelmeli, yalnız
+// `değişken` annotasyonundan değil) + işlev DÖNÜŞ tipi dtamN → çağrı yerinde imzasız.
+// Beklenen exit = 50 + 20 + 7 = 77.
+işlev kaydir(x: dtam8, s: dtam8) -> dtam8 {
+    ver x >> s;          // lshr (parametre imzasızlığı)
+}
+işlev buyuk_mu(x: dtam8, y: dtam8) -> tam32 {
+    eğer x > y { ver 20; }   // ugt
+    ver 0;
+}
+işlev kucuk_mu(x: dtam8, y: dtam8) -> tam32 {
+    eğer x < y { ver 0; }    // ult → yanlış → 7'ye düşer
+    ver 7;
+}
+işlev main() -> tam32 {
+    değişken a: dtam8 = 200;
+    değişken b: dtam8 = 100;
+    değişken iki: dtam8 = 2;
+    // kaydir dönüşü dtam8 → çağrı sonucu imzasız → zext (sext olsa -14)
+    değişken k: tam32 = kaydir(a, iki) olarak tam32;
+    ver k + buyuk_mu(a, b) + kucuk_mu(a, b);
+}
