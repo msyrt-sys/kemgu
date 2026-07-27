@@ -72,6 +72,9 @@ import Kemgu
 #print axioms Kemgu.SideChannel.CT.ct_ni
 #print axioms Kemgu.SideChannel.CT.genel_ifade_korunum
 #print axioms Kemgu.SideChannel.CT.ct001_gerekli
+#print axioms Kemgu.SideChannel.CTKopru.gomme_sim
+#print axioms Kemgu.SideChannel.CTKopru.kopru_ni
+#print axioms Kemgu.SideChannel.CTKopru.kopru_bos_degil
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then
     echo "🔴 aksiyom denetimi çalıştırılamadı:"; head -10 "$TMP/aks.txt"; exit 1

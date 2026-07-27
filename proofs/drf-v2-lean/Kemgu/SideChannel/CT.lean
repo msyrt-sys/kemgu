@@ -32,14 +32,18 @@ teoremler (21→23 kural) kapatildi; depo yesil, sorryAx yok. Yani
 (A)'nin yan urunu: `silme_simulasyon` dallanma altinda YANLIS oluyordu;
 `degerSil` dal-bitini koruyacak sekilde daraltildi — bkz. D-332 (a).
 
-KOPRU YUKUMLULUGU (HALA ACIK BORC — daralmis hali):
-  Bu hesap ile Sem/Core arasinda bir simulasyon/gomme lemmasi HALA
-  YOKTUR. Yani "KEMGU'nun kendisi sabit-suredir" SONUCU BURADAN
-  CIKMAZ; cikan sonuc "CT disiplini, dallanmali bir cekirdek dilde
-  NI'yi GARANTI EDER"dir. FARK: hedef onerme artik Sem/Core'da
-  YAZILABILIR (once yazilamiyordu) — kalan is gomme + simulasyondur.
-  Olculen 5 yukumluluk (aritmetik yoklugu, toplam-vs-sonlu ortam,
-  buyuk-adim/kucuk-adim, iz sirasi, sahiplik) icin bkz. D-332.
+KOPRU (D-333): ARTIK VAR — `SideChannel/CTKopru.lean`.
+  `gom` (CT.Ifade → Core.Ifade), `gomme_sim` (Calis → StepStar, gozlem
+  izi birebir) ve `kopru_ni` ile bu dosyadaki `ct_ni` ANA MODELE
+  TASINDI: CT-tipli program `Sem/Core`'da kosturuldugunda dusuk-esdeger
+  iki store AYNI `izGozlem`i uretir — DAL KARARLARI dahil.
+
+KALAN BORC (daralmis, acikca):
+  Kopru CT'nin TOPLA-SIZ ve deger-sadik (`Sadik`) parcasinda, SONLU
+  degisken kumesiyle ve TEK THREAD icin kuruludur. Yani "KEMGU'nun
+  KENDISI sabit-suredir" tam iddiasi hala CIKMAZ; eksikler: Core'da
+  aritmetik yoklugu, eszamanli CT, `iken`/`esles`/gizli indeks
+  (CT002/CT004). Ayrinti + vakum ve sabotaj denetimleri: D-333.
 
 NE ISPATLANIYOR (bu dosyada, tam):
   - `genel_ifade_degeri_esit`: etiketi GENEL olan ifade, dusuk-esdeger

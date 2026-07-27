@@ -5,6 +5,59 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-333 — KÖPRÜ KURULDU: `ct_ni` ana modele TAŞINDI (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (YENİ),
+`Kemgu.lean` (+1 import), `test/lean_aksiyom_harness.sh` (+3 `#print axioms`)].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+**D-330/D-331/D-332'nin açık bıraktığı borç KAPANDI.** `CT.ct_ni` artık ayrı bir
+oyuncak hesap hakkında değil, **`Sem/Core` koşumları** hakkında bir şey söylüyor:
+
+- `gom : CT.Ifade → Core.Ifade`, `gomGoz : CT.Gozlem → GozlemOlay`
+  (`oOku↦gOku`, `oYaz↦gYaz`, **`oDal↦gDal`**).
+- `gomme_sim` — CT'nin BÜYÜK-ADIM koşumu Core'un KÜÇÜK-ADIM koşumuna gömülür;
+  gözlem izi birebir karşılık gelir; ifade `Sadik` ise son değer CT'nin değeri.
+- `kopru_ni` — CT-tipli (`CtOk`) + gömülebilir program, düşük-eşdeğer iki
+  başlangıç store'undan Core'da koşturulduğunda **`izGozlem` AYNIDIR** —
+  dal kararları (`gDal`) dâhil. `StepStar` formunda (gerçek Core koşumu).
+
+**`KRun` (tasarım):** cong-yükseltmeyi doğrudan `StepStar` üzerinde yapmak ara
+konfigürasyonların şekli için bir korunum lemması ister. Bunun yerine yalnız
+K-şekilli konfigürasyonlardan geçen bir kapanış tanımlandı; cong-yükseltme onun
+üzerinde tek tümevarım. **Kolaylık bir VARSAYIM DEĞİL:** `krun_stepStar` ile
+gerçek `StepStar`a düşüyor (ispatlanmış alt-ilişki).
+
+**KAPSAM (dördü de ölçüldü, seçilmedi):**
+1. **`topla` DIŞARIDA** — Core'da aritmetik yok (D-332 ölçümü). CT001'in koruduğu
+   kanal ve `ct001_gerekli` tanığı bu parçada olduğu için içerik kaybı sınırlı.
+2. **`Sadik` şartı** — CT'de `x = e` değer olarak v döner, Core'da `sAtamaTamam`
+   `birim` döner. Atama bir KOŞULA girseydi (`eğer (x = e) ...`) CT `v ≠ 0`e,
+   Core `degerDogruMu birim = false`e dallanırdı → **simülasyon çökerdi**. Bu
+   yüzden atamanın SAĞ TARAFI ve `eger` KOŞULU `Sadik` olmalı; atama deyim
+   konumunda (`x = e; ...`) serbest.
+3. **Sonlu V** — `CT.Store` toplam, Core'unki assoc liste → `Kapsar V e`.
+4. **Tek thread** — gömülen programda spawn yok → FIX-F daima sol kola düşer.
+   Köprü EŞZAMANLILIK HAKKINDA BİR ŞEY SÖYLEMEZ (CT hesabı da söylemiyordu).
+
+**VAKUM DENETİMİ (iki taraflı, ispatlı):**
+- `kopru_bos_degil`: `CtOk ∧ GomOk ∧ Kapsar` birlikte sağlanabilir ve tanık
+  GERÇEKTEN dallanıyor + gizliye yazıyor (`eger (degisken 1) (0=5) (0=7)`,
+  1 genel / 0 gizli) → teorem vakum değil.
+- `storeUyum_storeOf`: `StoreUyum` hipotezi HER CT store'u için kurulabilir
+  (`storeOf`) → `kopru_ni` "öyle bir sigma yok" diye boş geçmiyor.
+
+**SABOTAJ DOĞRULAMASI (kapı gerçekten ölçüyor mu — memory kuralı):**
+- `gomGoz (.oDal a) ↦ .gDal t0 true` (dal kararı izlenmesin) → **3 hata**.
+  Yani dal kararının taşınması ispatta LOAD-BEARING.
+- `adim_yaz` hedefi `bol (x+1)`e kaydırıldı (store ilişkisi taşıyıcı mı) →
+  **4 hata**. Geri alındıktan sonra 0 hata.
+
+**HÂLÂ AÇIK:** `topla` (Core'a aritmetik), eşzamanlı CT, `iken`/`esles`/gizli
+indeks (CT002/CT004). "KEMGU sabit-süredir" tam iddiası bunları da ister.
+
+---
+
 ## D-332 — (A) ENTEGRASYONU YAPILDI: Core'a `eger` + dal gözlemi; köprü ölçüldü (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

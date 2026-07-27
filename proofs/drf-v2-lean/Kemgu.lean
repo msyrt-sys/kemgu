@@ -46,6 +46,8 @@ import Kemgu.BET.Boundedness
 -- Faz B3: Side-Channel iskelet (sabitsure tracking refactor bekler)
 import Kemgu.SideChannel.NonInterference
 import Kemgu.SideChannel.CT
+-- D-333: CT hesabi ↔ Sem/Core koprusu (gomme + simulasyon + kopru_ni)
+import Kemgu.SideChannel.CTKopru
 
 -- Faz C: V3 Butunleşik Guvenlik Metateoremi (bundled form)
 import Kemgu.Soundness.Main
