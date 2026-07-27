@@ -76,6 +76,11 @@ inductive RegionNotr : Ifade → Prop where
       RegionNotr (Ifade.eger k d y)
   | rn_topla (a b : Ifade) :
       RegionNotr a → RegionNotr b → RegionNotr (Ifade.topla a b)
+  | rn_iken (k g : Ifade) :
+      RegionNotr k → RegionNotr g → RegionNotr (Ifade.iken k g)
+  | rn_esles (s : Ifade) (n : Int) (d y : Ifade) :
+      RegionNotr s → RegionNotr d → RegionNotr y →
+      RegionNotr (Ifade.esles s n d y)
 
 
 /-- RegionTamam Γ Ρ e Ρ' — Bolge durum gecisi:
@@ -220,6 +225,24 @@ inductive RegionTamam : TipOrtam → BolgeOrtam → Ifade → BolgeOrtam → Pro
              RegionTamam Γ Ρk d Ρk →
              RegionTamam Γ Ρk y Ρk →
              RegionTamam Γ Ρ (Ifade.eger k d y) Ρk
+
+  /-- R-IKEN (D-335): kosul ve govde BOLGE-NOTR; dongu Ρ'yu devretmez.
+      Gerekce `l_iken` ile ayni: tur sayisi statik bilinmedigi icin bir
+      devir "kac kez" olacagi belirsiz olurdu. Yazma (atama) SERBEST —
+      `RegionNotr` atamayi icerir. -/
+  | r_iken (Γ : TipOrtam) (Ρ : BolgeOrtam) (k g : Ifade) :
+             RegionNotr k → RegionNotr g →
+             RegionTamam Γ Ρ k Ρ →
+             RegionTamam Γ Ρ g Ρ →
+             RegionTamam Γ Ρ (Ifade.iken k g) Ρ
+
+  /-- R-ESLES (D-335): `r_eger` ile ayni sekil (kollar bolge-notr). -/
+  | r_esles (Γ : TipOrtam) (Ρ Ρs : BolgeOrtam) (s : Ifade) (n : Int) (d y : Ifade) :
+              RegionTamam Γ Ρ s Ρs →
+              RegionNotr d → RegionNotr y →
+              RegionTamam Γ Ρs d Ρs →
+              RegionTamam Γ Ρs y Ρs →
+              RegionTamam Γ Ρ (Ifade.esles s n d y) Ρs
 
   /-- R-GUVENSIZ: ic ifade delegate. -/
   | r_guvensiz (Γ : TipOrtam) (Ρ Ρ' : BolgeOrtam) (e : Ifade) :
@@ -443,6 +466,12 @@ theorem regionNotr_cikis_esit {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
       intro h_n
       cases h_n with
       | rn_topla _ _ h_na h_nb => rw [ih_b h_nb, ih_a h_na]
+  -- D-335: r_iken/r_esles cikisi zaten girise esit / skrutinden gelir.
+  | r_iken _ _ _ _ _ _ _ _ _ => intro _; rfl
+  | r_esles _ _ _ _ _ _ _ _ _ _ _ ih_s _ _ =>
+      intro h_n
+      cases h_n with
+      | rn_esles _ _ _ _ h_ns _ _ => exact ih_s h_ns
   | r_gorev_baslat _ _ _ _ _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
   | r_gorev_birlestir _ _ => exact fun _ => rfl
   | r_kanal_gonder _ _ _ _ _ _ _ _ => intro h_n; nomatch h_n
@@ -489,6 +518,17 @@ theorem regionNotr_hedefBolge_yok {e : Ifade} (h_n : RegionNotr e) :
       cases h with
       | topla_sol _ _ _ h' => exact ih_a b h'
       | topla_sag _ _ _ h' => exact ih_c b h'
+  | rn_iken k g _ _ ih_k ih_g =>
+      intro b h
+      cases h with
+      | iken_kosul _ _ _ h' => exact ih_k b h'
+      | iken_govde _ _ _ h' => exact ih_g b h'
+  | rn_esles s n d y _ _ _ ih_s ih_d ih_y =>
+      intro b h
+      cases h with
+      | esles_skrut _ _ _ _ _ h' => exact ih_s b h'
+      | esles_eslesen _ _ _ _ _ h' => exact ih_d b h'
+      | esles_kalan _ _ _ _ _ h' => exact ih_y b h'
 
 
 /-- YAZ-GERI: cikis ortaminda YAZILABILIR kategorili gorunen kayit,
@@ -508,6 +548,9 @@ theorem regionTamam_yaz_geri {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade}
       exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
   | r_topla _ _ _ _ _ _ _ ih_a ih_b =>
       exact fun y b h_o h_y => ih_a y b (ih_b y b h_o h_y) h_y
+  -- D-335: iken cikisi = giris; esles cikisi skrutinden gelir.
+  | r_iken _ _ _ _ _ _ _ _ _ => exact fun _ _ h_o _ => h_o
+  | r_esles _ _ _ _ _ _ _ _ _ _ _ ih_s _ _ => exact ih_s
   | r_gorev_baslat _ _ _ yd _ tY _ _ _ _ h_eq _ =>
       intro y b h_o h_y
       subst h_eq
@@ -642,6 +685,36 @@ theorem regionTamam_transport {Γ : TipOrtam} {Ρ Ρout : BolgeOrtam} {e : Ifade
       rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
       rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
       exact ⟨Ρkn, RegionTamam.r_eger _ _ _ k d y h_k' h_nd h_ny h_d' h_y', agree_k⟩
+  -- D-335: iken — her sey NOTR, HedefBolge yukumlulukleri VAKUM.
+  | r_iken _ k g h_nk h_ng _ _ ih_k ih_g =>
+      intro Ρn h_hv _
+      obtain ⟨Ρkn, h_k', agree_k⟩ := ih_k Ρn
+        (fun z hz => h_hv z (HedefVar.iken_kosul k g z hz))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_nk bb))
+      obtain ⟨Ρgn, h_g', _⟩ := ih_g Ρn
+        (fun z hz => h_hv z (HedefVar.iken_govde k g z hz))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_ng bb))
+      have e1 : Ρkn = Ρn := regionNotr_cikis_esit h_k' h_nk
+      have e2 : Ρgn = Ρn := regionNotr_cikis_esit h_g' h_ng
+      subst e1; subst e2
+      exact ⟨_, RegionTamam.r_iken _ _ k g h_nk h_ng h_k' h_g', agree_k⟩
+  -- D-335: esles — r_eger deseninin aynisi.
+  | r_esles _ _ s n d y h_rs h_nd h_ny _ _ ih_s ih_d ih_y =>
+      intro Ρn h_hv h_hb
+      obtain ⟨Ρsn, h_s', agree_s⟩ := ih_s Ρn
+        (fun z hz => h_hv z (HedefVar.esles_skrut s n d y z hz))
+        (fun x bb hb hyz hlk =>
+          h_hb x bb (HedefBolge.esles_skrut s n d y bb hb) hyz hlk)
+      obtain ⟨Ρdn, h_d', _⟩ := ih_d Ρsn
+        (fun z hz => agree_s z (h_hv z (HedefVar.esles_eslesen s n d y z hz)))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_nd bb))
+      obtain ⟨Ρyn, h_y', _⟩ := ih_y Ρsn
+        (fun z hz => agree_s z (h_hv z (HedefVar.esles_kalan s n d y z hz)))
+        (fun _ bb hb _ _ => absurd hb (regionNotr_hedefBolge_yok h_ny bb))
+      rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
+      rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
+      exact ⟨Ρsn, RegionTamam.r_esles _ _ _ s n d y h_s' h_nd h_ny h_d' h_y',
+        agree_s⟩
   | r_gorev_birlestir _ g =>
       exact fun Ρn _ _ => ⟨Ρn, RegionTamam.r_gorev_birlestir _ _ g, fun _ h => h⟩
   | r_kanal_gonder _ _ k v b h_lk h_yz h_eq =>
@@ -752,6 +825,23 @@ theorem regionTamam_iliski_transport {Γ : TipOrtam}
       rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
       rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
       exact ⟨Ρkn, RegionTamam.r_eger _ _ _ k d y h_k' h_nd h_ny h_d' h_y', hi_k⟩
+  -- D-335
+  | r_iken _ k g h_nk h_ng _ _ ih_k ih_g =>
+      intro Ρn hi
+      obtain ⟨Ρkn, h_k', hi_k⟩ := ih_k Ρn hi
+      obtain ⟨Ρgn, h_g', _⟩ := ih_g Ρn hi
+      have e1 : Ρkn = Ρn := regionNotr_cikis_esit h_k' h_nk
+      have e2 : Ρgn = Ρn := regionNotr_cikis_esit h_g' h_ng
+      subst e1; subst e2
+      exact ⟨_, RegionTamam.r_iken _ _ k g h_nk h_ng h_k' h_g', hi_k⟩
+  | r_esles _ _ s n d y _ h_nd h_ny _ _ ih_s ih_d ih_y =>
+      intro Ρn hi
+      obtain ⟨Ρsn, h_s', hi_s⟩ := ih_s Ρn hi
+      obtain ⟨Ρdn, h_d', _⟩ := ih_d Ρsn hi_s
+      obtain ⟨Ρyn, h_y', _⟩ := ih_y Ρsn hi_s
+      rw [regionNotr_cikis_esit h_d' h_nd] at h_d'
+      rw [regionNotr_cikis_esit h_y' h_ny] at h_y'
+      exact ⟨Ρsn, RegionTamam.r_esles _ _ _ s n d y h_s' h_nd h_ny h_d' h_y', hi_s⟩
   | r_gorev_baslat Ρo' _ Ρkod yd kod tY h_cap h_khv h_khb _ h_eq ih =>
       intro Ρn hi
       subst h_eq

@@ -86,6 +86,11 @@ inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
       LineerNotr Γ (Ifade.eger k d y)
   | n_topla (a b : Ifade) :
       LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.topla a b)
+  | n_iken (k g : Ifade) :
+      LineerNotr Γ k → LineerNotr Γ g → LineerNotr Γ (Ifade.iken k g)
+  | n_esles (s : Ifade) (n : Int) (d y : Ifade) :
+      LineerNotr Γ s → LineerNotr Γ d → LineerNotr Γ y →
+      LineerNotr Γ (Ifade.esles s n d y)
 
 
 /-- LineerTamam Γ Λ e Λ' — Lineer durum gecisi:
@@ -219,6 +224,21 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
              LineerNotr Γ y →
              LineerTamam Γ Λ (Ifade.eger k d y) Λk
 
+  /-- L-IKEN (D-335) — KEMGU'nun L-LOOP kuralinin (D-312) mekanize hali:
+      **dongu govdesi DIS bir lineer baglamayi TUKETEMEZ.** Gerekce ayni:
+      0 iterasyon = sizinti, ≥2 iterasyon = cifte tuketim. Kosul da notr
+      olmalidir (her turda yeniden degerlendirilir). Cikis = giris. -/
+  | l_iken (Γ : TipOrtam) (Λ : LineerOrtam) (k g : Ifade) :
+             LineerNotr Γ k → LineerNotr Γ g →
+             LineerTamam Γ Λ (Ifade.iken k g) Λ
+
+  /-- L-ESLES (D-335): `l_eger` ile ayni disiplin — kollar lineer-notr
+      (V1 daraltmasi; dal-duyarli tuketim V2, bkz. D-332 (b)). -/
+  | l_esles (Γ : TipOrtam) (Λ Λs : LineerOrtam) (s : Ifade) (n : Int) (d y : Ifade) :
+              LineerTamam Γ Λ s Λs →
+              LineerNotr Γ d → LineerNotr Γ y →
+              LineerTamam Γ Λ (Ifade.esles s n d y) Λs
+
   /-- L-GUVENSIZ: ic ifade delegate. -/
   | l_guvensiz (Γ : TipOrtam) (Λ Λ' : LineerOrtam) (e : Ifade) :
                  LineerTamam Γ Λ e Λ' →
@@ -243,6 +263,10 @@ theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
       exact fun Λ => LineerTamam.l_eger Γ Λ Λ k d y (ih_k Λ) hd hy
   | n_topla a b _ _ ih_a ih_b =>
       exact fun Λ => LineerTamam.l_topla Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
+  | n_iken k g hk hg _ _ =>
+      exact fun Λ => LineerTamam.l_iken Γ Λ k g hk hg
+  | n_esles s n d y _ hd hy ih_s _ _ =>
+      exact fun Λ => LineerTamam.l_esles Γ Λ Λ s n d y (ih_s Λ) hd hy
 
 
 -- ============================================================
@@ -457,6 +481,14 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
       obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
       exact ⟨Λbn, LineerTamam.l_topla _ _ _ _ a b h_a h_b, hk_b⟩
+  -- D-335: l_iken tamamen Λ-bagimsiz (notr yargilar) → aynen tasinir.
+  | l_iken _ k g hk hg =>
+      intro Λn hkk
+      exact ⟨Λn, LineerTamam.l_iken _ _ k g hk hg, hkk⟩
+  | l_esles _ _ s n d y _ h_nd h_ny ih_s =>
+      intro Λn hk
+      obtain ⟨Λsn, h_s, hk'⟩ := ih_s Λn hk
+      exact ⟨Λsn, LineerTamam.l_esles _ _ _ s n d y h_s h_nd h_ny, hk'⟩
   | l_eger _ _ k d y _ h_nd h_ny ih_k =>
       intro Λn hk
       obtain ⟨Λkn, h_k, hk'⟩ := ih_k Λn hk

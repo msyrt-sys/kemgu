@@ -583,6 +583,19 @@ inductive Ifade : Type where
       tanitici kurali oldugu icin iyi-tipli deger operandlar zorunlu
       olarak `skaler`dir (progress buna dayanir). -/
   | topla          (sol sag : Ifade)
+  /-- D-335: `iken k g` — kosullu dongu. Semantik ACMA ile verilir
+      (sIkenAc): `iken k g ⟶ eger k (seq g (iken k g)) (sabit birim)`.
+      Boylece TUR SAYISI her turda bir `dalOl` uretir — yani dongu
+      sayisi saldirgana GORUNUR. Bu, CT002'nin (gizli kosullu dongu)
+      mekanize edilmis hali icin dogru gozlem modelidir. -/
+  | iken           (kosul govde : Ifade)
+  /-- D-335: `esles skrut n eslesen kalan` — LITERAL desen eslemesi
+      (Mehmet karari: IKILI bicim). `skrut` degeri n'e esitse `eslesen`,
+      degilse `kalan` secilir ve bir `dalOl` uretilir. Cok kollu eslesme
+      ic ice yazilarak ifade edilir.
+      ** KAPSAM: bu, KEMGU `esles`inin LITERAL-DESEN alt kumesidir;
+      yapici/cesit desenleri (D-318) KAPSAM DISIDIR (Core'da ADT yok). -/
+  | esles          (skrut : Ifade) (n : Int) (eslesen kalan : Ifade)
 
 
 /-- seq, sag bilesenine esit olamaz (yapisal buyukluk — odak-degisimi). -/
@@ -599,6 +612,20 @@ theorem eger_ne_dogru (k d y : Ifade) : Ifade.eger k d y ≠ d := by
   omega
 
 theorem eger_ne_yanlis (k d y : Ifade) : Ifade.eger k d y ≠ y := by
+  intro h
+  have h_size := congrArg sizeOf h
+  simp at h_size
+
+/-- D-335: `esles` secilen koluna esit olamaz (odak GERCEKTEN degisir). -/
+theorem esles_ne_eslesen (s : Ifade) (n : Int) (d y : Ifade) :
+    Ifade.esles s n d y ≠ d := by
+  intro h
+  have h_size := congrArg sizeOf h
+  simp at h_size
+  omega
+
+theorem esles_ne_kalan (s : Ifade) (n : Int) (d y : Ifade) :
+    Ifade.esles s n d y ≠ y := by
   intro h
   have h_size := congrArg sizeOf h
   simp at h_size
@@ -644,6 +671,17 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar a z → HedefVar (Ifade.topla a b) z
   | topla_sag (a b : Ifade) (z : VarId) :
       HedefVar b z → HedefVar (Ifade.topla a b) z
+  -- D-335
+  | iken_kosul (k g : Ifade) (z : VarId) :
+      HedefVar k z → HedefVar (Ifade.iken k g) z
+  | iken_govde (k g : Ifade) (z : VarId) :
+      HedefVar g z → HedefVar (Ifade.iken k g) z
+  | esles_skrut (s : Ifade) (n : Int) (d y : Ifade) (z : VarId) :
+      HedefVar s z → HedefVar (Ifade.esles s n d y) z
+  | esles_eslesen (s : Ifade) (n : Int) (d y : Ifade) (z : VarId) :
+      HedefVar d z → HedefVar (Ifade.esles s n d y) z
+  | esles_kalan (s : Ifade) (n : Int) (d y : Ifade) (z : VarId) :
+      HedefVar y z → HedefVar (Ifade.esles s n d y) z
 
 /-- `HedefBolge e b`: e'nin govdesinde b bolge-literalini donduran bir
     dondurIf var (dondur sahiplik gerektirir — h_owner). -/
@@ -670,6 +708,17 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge a b → HedefBolge (Ifade.topla a c) b
   | topla_sag (a c : Ifade) (b : Bolge) :
       HedefBolge c b → HedefBolge (Ifade.topla a c) b
+  -- D-335
+  | iken_kosul (k g : Ifade) (b : Bolge) :
+      HedefBolge k b → HedefBolge (Ifade.iken k g) b
+  | iken_govde (k g : Ifade) (b : Bolge) :
+      HedefBolge g b → HedefBolge (Ifade.iken k g) b
+  | esles_skrut (s : Ifade) (n : Int) (d y : Ifade) (b : Bolge) :
+      HedefBolge s b → HedefBolge (Ifade.esles s n d y) b
+  | esles_eslesen (s : Ifade) (n : Int) (d y : Ifade) (b : Bolge) :
+      HedefBolge d b → HedefBolge (Ifade.esles s n d y) b
+  | esles_kalan (s : Ifade) (n : Int) (d y : Ifade) (b : Bolge) :
+      HedefBolge y b → HedefBolge (Ifade.esles s n d y) b
 
 /-- Hedef tersine-cevirme yardimcilari (cong odak-yuku ayristirmasi). -/
 theorem hedefVar_seq_inv {a b : Ifade} {y : VarId}
@@ -695,6 +744,34 @@ theorem hedefBolge_atama_inv {x : VarId} {e : Ifade} {bb : Bolge}
     (h : HedefBolge (Ifade.atama x e) bb) : HedefBolge e bb := by
   cases h with
   | atama_ic _ _ _ h => exact h
+
+/-- D-335: ACILMIS dongunun hedefleri, ORIJINAL dongunun hedeflerine
+    geri esler. `sIkenAc` sonrasi HedefVar/HedefBolge invaryantlarinin
+    korunmasini saglayan lemma — OZYINELEME YOK, cunku `seq`in sag kolu
+    zaten `iken k g`nin kendisidir. -/
+theorem hedefVar_iken_ac {k g : Ifade} {z : VarId}
+    (h : HedefVar (Ifade.eger k (Ifade.seq g (Ifade.iken k g))
+                     (Ifade.sabit Deger.birim)) z) :
+    HedefVar (Ifade.iken k g) z := by
+  cases h with
+  | eger_kosul _ _ _ _ h' => exact HedefVar.iken_kosul k g z h'
+  | eger_dogru _ _ _ _ h' =>
+      rcases hedefVar_seq_inv h' with hg | hi
+      · exact HedefVar.iken_govde k g z hg
+      · exact hi
+  | eger_yanlis _ _ _ _ h' => nomatch h'
+
+theorem hedefBolge_iken_ac {k g : Ifade} {b : Bolge}
+    (h : HedefBolge (Ifade.eger k (Ifade.seq g (Ifade.iken k g))
+                       (Ifade.sabit Deger.birim)) b) :
+    HedefBolge (Ifade.iken k g) b := by
+  cases h with
+  | eger_kosul _ _ _ _ h' => exact HedefBolge.iken_kosul k g b h'
+  | eger_dogru _ _ _ _ h' =>
+      rcases hedefBolge_seq_inv h' with hg | hi
+      · exact HedefBolge.iken_govde k g b hg
+      · exact hi
+  | eger_yanlis _ _ _ _ h' => nomatch h'
 
 theorem hedefVar_guvensiz_inv {e : Ifade} {y : VarId}
     (h : HedefVar (Ifade.guvensiz e) y) : HedefVar e y := by

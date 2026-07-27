@@ -59,6 +59,10 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
       Engelli S a → Engelli S (Ifade.topla a b)
   | topla_sag (v : Deger) (b : Ifade) :
       Engelli S b → Engelli S (Ifade.topla (Ifade.sabit v) b)
+  -- D-335: `iken` icin Engelli kolu GEREKMEZ — `sIkenAc` KOSULSUZ adim
+  -- atar (acilma). Yalniz `esles`in skrutini engellenebilir.
+  | esles_skrut (s : Ifade) (n : Int) (d y : Ifade) :
+      Engelli S s → Engelli S (Ifade.esles s n d y)
 
 /-- Engelli'nin odakli konfigurasyondan ana konfigurasyona transferi:
     kanal ayni; thread listesi yalniz odakli ifadede farkli — odaktaki
@@ -92,6 +96,7 @@ theorem engelli_konf_transfer
   | eger_kosul k d y _ ih => exact Engelli.eger_kosul k d y ih
   | topla_sol a b _ ih => exact Engelli.topla_sol a b ih
   | topla_sag v b _ ih => exact Engelli.topla_sag v b ih
+  | esles_skrut s n d y _ ih => exact Engelli.esles_skrut s n d y ih
 
 
 -- ============================================================
@@ -340,6 +345,47 @@ theorem progress_konf
             { ctx1' with ifade := .guvensiz ctx1'.ifade }, ts2',
             Step.sGuvensizCong S _ (ifadeyleKonf S ts1 ts2 ctx e) S1'
               ts1 ts2 ts2' ctx ctx1' e ctx1'.ifade
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
+  -- D-335: `iken` progress — EN KOLAY DAL: `sIkenAc` kosulsuz atar
+  -- (acilma bir bookkeeping adimidir; kosul acilmis `eger`de degerlendirilir).
+  | iken k g _ih_k _ih_g =>
+      exact Or.inr (Or.inr ⟨_,
+        { ctx with ifade := .eger k (.seq g (.iken k g)) (.sabit .birim) }, ts2,
+        Step.sIkenAc S _ ts1 ts2 ctx k g h_t h_if rfl, rfl, rfl, Or.inl rfl⟩)
+  -- D-335: `esles` progress — `eger` + `topla` deseninin birlesimi:
+  -- skrutin `scalar` tipli DEGER ise `dt_skaler` tekilligi onu `skaler m`
+  -- yapar, sonra literal ile karsilastirilir (sEslesSec).
+  | esles s n d y ih_s _ih_d _ih_y =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_esles _ _ _ _ _ _ _ hts _ _,
+        LineerTamam.l_esles _ _ Λs _ _ _ _ hls _ _,
+        RegionTamam.r_esles _ _ Ρs _ _ _ _ hrs _ _ _ _ =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx s h_konf h_t
+          (by rw [h_lin]; exact ⟨Tip.scalar, Λs, Ρs, ⟨hts, hls, hrs⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.esles_skrut s n d y z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.esles_skrut s n d y bb h)
+        rcases ih_s Tip.scalar Λin Λs Ρs hts hls hrs (ifadeyleKonf S ts1 ts2 ctx s)
+            h_konf1 ts1 ts2 { ctx with ifade := s } rfl rfl h_lin with
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
+        · cases h_val with
+          | iv_sabit vs =>
+            match hts with
+            | HasType.t_sabit _ _ _ _ hdt =>
+              cases hdt with
+              | dt_skaler m =>
+                exact Or.inr (Or.inr ⟨_,
+                  { ctx with ifade := if decide (m = n) then d else y }, ts2,
+                  Step.sEslesSec S _ ts1 ts2 ctx m n d y (decide (m = n))
+                    h_t h_if rfl rfl,
+                  rfl, rfl, Or.inl rfl⟩)
+        · exact Or.inr (Or.inl (Engelli.esles_skrut s n d y
+            (engelli_konf_transfer S ts1 ts2 ctx s s h_eng h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .esles ctx1'.ifade n d y }, ts2',
+            Step.sEslesCong S _ (ifadeyleKonf S ts1 ts2 ctx s) S1'
+              ts1 ts2 ts2' ctx ctx1' s ctx1'.ifade n d y
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)
   -- D-334: `topla` progress. Soldan saga: sol deger degilse sToplaCongSol,

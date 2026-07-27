@@ -103,6 +103,23 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ b Tip.scalar →
                 HasType Γ Δ (Ifade.topla a b) Tip.scalar
 
+  /-- T-IKEN (D-335): kosul `scalar`, govde herhangi bir tipte; dongunun
+      kendisi `bos`. (Acilma sonrasi `eger`in iki dali da `bos` olur:
+      `seq g (iken k g)` : bos ve `sabit birim` : bos.) -/
+  | t_iken    (Γ : TipOrtam) (Δ : KanalOrtam) (k g : Ifade) (τg : Tip) :
+                HasType Γ Δ k Tip.scalar →
+                HasType Γ Δ g τg →
+                HasType Γ Δ (Ifade.iken k g) Tip.bos
+
+  /-- T-ESLES (D-335): skrutine `scalar` (literal ile karsilastirilir),
+      iki kol AYNI tipte; sonuc o tip. `t_eger` ile ayni sekil. -/
+  | t_esles   (Γ : TipOrtam) (Δ : KanalOrtam) (s : Ifade) (n : Int)
+              (d y : Ifade) (τ : Tip) :
+                HasType Γ Δ s Tip.scalar →
+                HasType Γ Δ d τ →
+                HasType Γ Δ y τ →
+                HasType Γ Δ (Ifade.esles s n d y) τ
+
   /-- T-GUVENSIZ: ic ifadeyi delegate eder (NoGuvensiz program seviyesinde). -/
   | t_guvensiz (Γ : TipOrtam) (Δ : KanalOrtam) (e : Ifade) (τ : Tip) :
                 HasType Γ Δ e τ →

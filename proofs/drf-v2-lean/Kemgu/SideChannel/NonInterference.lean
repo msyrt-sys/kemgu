@@ -161,6 +161,10 @@ def ifadeSil : Ifade → Ifade
   | .guvensiz e           => .guvensiz (ifadeSil e)
   | .eger k d y           => .eger (ifadeSil k) (ifadeSil d) (ifadeSil y)
   | .topla a b            => .topla (ifadeSil a) (ifadeSil b)
+  | .iken k g             => .iken (ifadeSil k) (ifadeSil g)
+  -- D-335: literal desen `n` SILINMEZ — kontrol iskeletinin parcasi
+  -- (hangi kolun tuttugu `dalOl` ile zaten gozlenir).
+  | .esles s n d y        => .esles (ifadeSil s) n (ifadeSil d) (ifadeSil y)
 
 /-- Olay silme: tasinan deger birime iner (TUR + konum korunur). -/
 def olaySil : Olay → Olay
@@ -606,6 +610,47 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
       refine Step.sToplaCongSag _ _ (konfSil S1) (konfSil S1')
         (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
         (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  -- D-335: sIkenAc — acilma silme altinda AYNEN yapilir (yapisal adim).
+  | sIkenAc S S' ts1 ts2 ctx k g h_t h_if h_S' =>
+      refine Step.sIkenAc _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        (ifadeSil k) (ifadeSil g) ?_ ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
+  -- D-335: sEslesSec — skalerler silinmediginden (D-334 ISTISNA 3) AYNI
+  -- literal karsilastirmasi yapilir → AYNI kol, AYNI `dalOl`.
+  | sEslesSec S S' ts1 ts2 ctx m n d y tuttu h_t h_if h_dal h_S' =>
+      refine Step.sEslesSec _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        m n (ifadeSil d) (ifadeSil y) tuttu ?_ ?_ h_dal ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        cases tuttu with
+        | true =>
+            simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
+        | false =>
+            simp [konfSil, threadSil_split, izSil, olaySil, ctxSil, ifadeSil]
+  | sEslesCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' s s' n d y
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sEslesCong _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil s) (ifadeSil s') n (ifadeSil d) (ifadeSil y)
+        ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
       · show threadSil S.thread = _; rw [h_t, threadSil_split]
       · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
       · rw [h_S1, ifadeyleKonf_konfSil]

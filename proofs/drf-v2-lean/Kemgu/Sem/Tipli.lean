@@ -136,6 +136,66 @@ theorem typed_topla_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
 
+/-- D-335: **DONGU ACILMASI TIP KORUR** — `sIkenAc`in tipleme tarafi.
+    `iken k g`nin acilmis hali `eger k (seq g (iken k g)) (sabit birim)`
+    yine tiplidir. Ozyineleme YOK: acilmis terimin icindeki `iken k g`
+    icin ORIJINAL turetimler (h_l / h_r) yeniden kullanilir. -/
+theorem typed_iken_ac {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {k g : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.iken k g) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ (Ifade.eger k (Ifade.seq g (Ifade.iken k g))
+                     (Ifade.sabit Deger.birim)) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_iken _ _ _ _ τg htk htg,
+    LineerTamam.l_iken _ _ _ _ h_nk h_ng,
+    RegionTamam.r_iken _ _ _ _ h_rnk h_rng h_rk h_rg =>
+    refine ⟨HasType.t_eger _ _ k _ _ Tip.scalar Tip.bos htk
+              (HasType.t_seq _ _ g _ τg Tip.bos htg
+                (HasType.t_iken _ _ k g τg htk htg))
+              (HasType.t_sabit _ _ _ _ DegerTipli.dt_birim),
+            LineerTamam.l_eger _ _ _ k _ _
+              (lineerNotr_kimlik h_nk Λ)
+              (LineerNotr.n_seq _ _ h_ng (LineerNotr.n_iken k g h_nk h_ng))
+              (LineerNotr.n_sabit _),
+            RegionTamam.r_eger _ _ _ k _ _ h_rk
+              (RegionNotr.rn_seq _ _ h_rng (RegionNotr.rn_iken k g h_rnk h_rng))
+              (RegionNotr.rn_sabit _)
+              (RegionTamam.r_seq _ _ _ _ g _ h_rg
+                (RegionTamam.r_iken _ _ k g h_rnk h_rng h_rk h_rg))
+              (RegionTamam.r_sabit _ _ _)⟩
+
+/-- D-335: `esles`in SKRUTINI tiplidir (sEslesCong tarafi). -/
+theorem typed_esles_skrut {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {s : Ifade} {n : Int} {d y : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.esles s n d y) τ Λ' Ρ') :
+    ∃ τs Λs Ρs, Typed Γ Δ Λ Ρ s τs Λs Ρs := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_esles _ _ _ _ _ _ _ hts _ _,
+    LineerTamam.l_esles _ _ Λs _ _ _ _ hls _ _,
+    RegionTamam.r_esles _ _ Ρs _ _ _ _ hrs _ _ _ _ =>
+    exact ⟨Tip.scalar, Λs, Ρs, ⟨hts, hls, hrs⟩⟩
+
+/-- D-335: `esles`in SECILEN KOLU tiplidir (sEslesSec sonrasi). -/
+theorem typed_esles_dal {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {m : Int} {n : Int} {d y : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.esles (Ifade.sabit (.skaler m)) n d y) τ Λ' Ρ')
+    (tuttu : Bool) :
+    Typed Γ Δ Λ Ρ (if tuttu then d else y) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_esles _ _ _ _ _ _ _ _ htd hty,
+    LineerTamam.l_esles _ _ _ _ _ _ _ hls h_nd h_ny,
+    RegionTamam.r_esles _ _ _ _ _ _ _ hrs _ _ hrd hry =>
+    cases hls
+    cases hrs
+    cases tuttu with
+    | true  => exact ⟨htd, lineerNotr_kimlik h_nd _, hrd⟩
+    | false => exact ⟨hty, lineerNotr_kimlik h_ny _, hry⟩
+
 /-- Atama RHS'i tiplidir (sAtamaCong tipleme tarafi). -/
 theorem typed_atama_ic {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {x : VarId} {e : Ifade} {τ : Tip}

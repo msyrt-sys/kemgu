@@ -288,6 +288,57 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 thread := ts1 ++ { ctx' with ifade := .topla (.sabit v) b' } :: ts2' }) :
       Step S S'
 
+  /-- S-IKEN-AC (D-335): dongu ACILIR — kendi cong/dal kurallarini
+      GEREKTIRMEZ, `eger` makinesini yeniden kullanir:
+        `iken k g  ⟶  eger k (seq g (iken k g)) (sabit birim)`
+      Sonuc: her TUR bir `dalOl` uretir (aciliten `eger` sayesinde),
+      yani DONGU SAYISI saldirgana gorunur — CT002 icin dogru model.
+      Kendisi OLAY URETMEZ (acilma bir bookkeeping adimidir). -/
+  | sIkenAc
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (k g : Ifade)
+      (h_t  : S.thread = ts1 ++ ctx :: ts2)
+      (h_if : ctx.ifade = .iken k g)
+      (h_S' : S' = { S with
+                thread := ts1 ++ { ctx with
+                  ifade := .eger k (.seq g (.iken k g)) (.sabit .birim) } :: ts2,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-ESLES-SEC (D-335): skrutine deger → literal ile karsilastir,
+      kol sec, `dalOl` emit et. Mehmet karari: eslesme KOL BASINA bir
+      dal karari olarak gozlenir (dallanma zinciri modeli) — atlama
+      tablosu VARSAYILMAZ. -/
+  | sEslesSec
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (m n : Int) (d y : Ifade) (tuttu : Bool)
+      (h_t   : S.thread = ts1 ++ ctx :: ts2)
+      (h_if  : ctx.ifade = .esles (.sabit (.skaler m)) n d y)
+      (h_dal : tuttu = decide (m = n))
+      (h_S'  : S' = { S with
+                thread := ts1 ++ { ctx with ifade := if tuttu then d else y } :: ts2,
+                iz     := .dalOl ctx.tid tuttu :: S.iz,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
+
+  /-- S-ESLES-CONG (D-335): skrutine deger degilse iceride adim at. -/
+  | sEslesCong
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (s s' : Ifade) (n : Int) (d y : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .esles s n d y)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx s)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = s')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .esles s' n d y } :: ts2' }) :
+      Step S S'
+
   /-- S-GUVENSIZ-ATLA: ic ifade deger → sarmal acilir. -/
   | sGuvensizAtla
       (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
@@ -610,6 +661,17 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
+  -- D-335: sIkenAc olay uretmez; sEslesSec `dalOl` uretir.
+  | sIkenAc S S' ts1 ts2 ctx k g h_t h_if h_S' =>
+      subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
+  | sEslesSec S S' ts1 ts2 ctx m n d y tuttu h_t h_if h_dal h_S' =>
+      subst h_S'
+      refine Or.inr (Or.inr (Or.inr ⟨.dalOl ctx.tid tuttu, rfl, ?_, ?_, rfl⟩))
+      · intro t0 k0 v0 hh; nomatch hh
+      · intro t0 k0 v0 hh; nomatch hh
+  | sEslesCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' s s' n d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -720,6 +782,18 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
           by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
           by simpa [ifadeyleKonf] using h_z⟩
+  -- D-335
+  | sIkenAc S S' ts1 ts2 ctx k g h_t h_if h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sEslesSec S S' ts1 ts2 ctx m n d y tuttu h_t h_if h_dal h_S' =>
+      subst h_S'; exact Or.inl rfl
+  | sEslesCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' s s' n d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   | sGuvensizCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' e e' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -814,6 +888,17 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx bb).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  -- D-335
+  | sIkenAc S S' ts1 ts2 ctx k g h_t h_if h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sEslesSec S S' ts1 ts2 ctx m n d y tuttu h_t h_if h_dal h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  | sEslesCong S S' S1 S1' ts1 ts2 ts2' ctx ctx' s s' n d y h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx s).sahiplik b
           = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
       simpa using ih h1
   | sGuvensizAtla S S' ts1 ts2 ctx v h_t h_if h_S' =>
