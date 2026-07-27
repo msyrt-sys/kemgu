@@ -23,11 +23,23 @@ IFADE EDILEMIYORDU. Dogru genisletme iki yoldan biriyle yapilabilirdi:
 (gizli kosulda dallanma yasagi) ve CT003 (gizli→genel sizinti yasagi)
 HIPOTEZ olarak alinir ve bunlardan NON-INTERFERENCE ISPATLANIR.
 
-KOPRU YUKUMLULUGU (acikca borc):
-  Bu hesap ile Sem/Core arasinda bir simulasyon/gomme lemmasi YOKTUR.
-  Yani "KEMGU'nun kendisi sabit-suredir" SONUCU BURADAN CIKMAZ; cikan
-  sonuc "CT disiplini, dallanmali bir cekirdek dilde NI'yi GARANTI EDER"
-  dir. Kopru (A)-tarzi entegrasyon isidir ve ayri karar gerektirir.
+GUNCELLEME (D-332): yukaridaki (A)/(B) ikilemi ARTIK GECERSIZ — (A) DA
+YAPILDI. `Sem/Core`'a `Ifade.eger`, `Olay.dalOl`, `Step.sEgerSec` +
+`Step.sEgerCong`, `HasType.t_eger`, `LineerTamam.l_eger`,
+`RegionTamam.r_eger` eklendi ve Step uzerinden tumevarim yapan TUM
+teoremler (21→23 kural) kapatildi; depo yesil, sorryAx yok. Yani
+"bedeli orantisiz" gerekcesi OLCULDU ve yanlis cikti — bedel odendi.
+(A)'nin yan urunu: `silme_simulasyon` dallanma altinda YANLIS oluyordu;
+`degerSil` dal-bitini koruyacak sekilde daraltildi — bkz. D-332 (a).
+
+KOPRU YUKUMLULUGU (HALA ACIK BORC — daralmis hali):
+  Bu hesap ile Sem/Core arasinda bir simulasyon/gomme lemmasi HALA
+  YOKTUR. Yani "KEMGU'nun kendisi sabit-suredir" SONUCU BURADAN
+  CIKMAZ; cikan sonuc "CT disiplini, dallanmali bir cekirdek dilde
+  NI'yi GARANTI EDER"dir. FARK: hedef onerme artik Sem/Core'da
+  YAZILABILIR (once yazilamiyordu) — kalan is gomme + simulasyondur.
+  Olculen 5 yukumluluk (aritmetik yoklugu, toplam-vs-sonlu ortam,
+  buyuk-adim/kucuk-adim, iz sirasi, sahiplik) icin bkz. D-332.
 
 NE ISPATLANIYOR (bu dosyada, tam):
   - `genel_ifade_degeri_esit`: etiketi GENEL olan ifade, dusuk-esdeger

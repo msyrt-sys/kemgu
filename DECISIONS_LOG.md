@@ -5,6 +5,80 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-332 — (A) ENTEGRASYONU YAPILDI: Core'a `eger` + dal gözlemi; köprü ölçüldü (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum, Drf/Drf,
+SideChannel/NonInterference].** Kapı yeşil: `calistir_lean_aksiyom` → **30/30 modül,
+`sorryAx` YOK, ham `sorry` 0**.
+
+**D-331'de planlanan 1-4. adımlar TAMAM.** Ana model artık dallanmayı İFADE EDEBİLİYOR:
+`Ifade.eger`, `Step.sEgerSec` + `Step.sEgerCong` (21→23 kural), `HasType.t_eger`,
+`LineerTamam.l_eger`, `RegionTamam.r_eger`. Step üzerinden tümevarım yapan HER teorem
+kapatıldı (`step_iz_analiz`, `step_fault_gorunum`, `step_donmus_korunur`,
+`step_fault_preserves_typed`, `adim_odak_yuku`, `adim_korunum`, `progress_konf`,
+`silme_simulasyon`).
+
+**MEHMET KARARLARI (ikisi de sorulup alındı, ikisi de maksimal seçenek):**
+1. `sEgerCong` **VAR** (koşul-congruence). Bedeli ödendi: cong ailesi 3→4, FIX-F
+   çerçeve yan-koşulu (`h_yan`) yeni kurala da yazıldı. Kazancı: genel koşul
+   ifadeleri gerçekten adım atar (koşul önceden-değerlendirilmiş olmak zorunda değil).
+2. `Olay.dalOl (t, alindi)` **EKLENDİ** — CT'deki `Gozlem.oDal`'ın Core karşılığı.
+   Bu olmadan köprü CT001'in kapattığı PC/timing kanalını Core'da ifade EDEMEZDİ.
+   Senkronizasyon olayı değildir (`olay_konum = none` → veri-yarışı adayı olamaz).
+
+**D-331'in ÖLÇÜMÜ DOĞRU ÇIKTI, biri hariç:** `DecidableEq Deger` gerekmedi —
+koşul testi `degerDogruMu : Deger → Bool` ile desen-eşlemesi olarak yazıldı
+(D-331'in kendi verdiği alternatif). Ayrıca cong kararı yüzünden SmallStep'te
+2 değil **3** tümevarım yeri çıktı.
+
+**ÖLÇÜMÜN ZORLADIĞI İKİ DARALTMA (ikisi de ispat tarafından bulundu, varsayılmadı):**
+
+**(a) `degerSil` artık dal-bitini KORUYOR — yoksa `silme_simulasyon` YANLIŞ.**
+D-329'un erasure teoremi ("tüm değerler birime iner") dallanma eklenince ÇÖKER:
+orijinal koşum `dalOl true`, silinmiş koşum `dalOl false` üretirdi → silme bir
+simülasyon OLMAZDI. Bu teknik bir ayrıntı değil, CT'nin ta kendisi: **veri kontrol
+akışını etkiler ve kontrol akışı GÖZLENİR**, dolayısıyla o tek bit saldırgandan
+saklanamaz. Tanım daraltıldı (`skaler n ↦ skaler (0|1)`, işaretçi-benzeri ↦ `skaler 1`,
+`birim ↦ birim`) ve `degerDogruMu_degerSil` ile kanıtlandı. D-329'daki `gorevVal`
+istisnasının birebir aynı sınıfı: "ne gizlidir" sorusunu yine İSPAT cevapladı.
+
+**(b) `eger` DALLARI V1'de ORTAM DEVRETMEZ** — `LineerNotr` (dallar dış lineer bağlama
+TÜKETEMEZ) + `RegionNotr` (dallar bölge devri yapamaz: `dondur`/`kanal_gonder`/
+`gorev_baslat` yok; **`atama` DAHİL, yani dallar yazabilir**). Gerekçe: her iki
+transport lemması (`lineerTamam_kucuk_transport`, `regionTamam_transport`,
+`regionTamam_iliski_transport`) iki dalın ÇIKIŞLARINI birleştirmeyi ister; birleştirme
+için ortam-buluşması (meet) + ≼-monotonluk makinesi gerekir. Nötrlük yargıları Λ/Ρ'dan
+BAĞIMSIZ (sözdizimsel) olduğu için transport altında bedava taşınır — daraltmanın satın
+aldığı şey budur. **Bu KONSERVATİF bir daraltmadır** (model dilin alt kümesi; kabul
+edilen her program gerçekte de geçerli) → ispatlanan teoremler geçerli, eksik olan
+KAPSAM. **Açık borç:** derleyici D-311/D-312'de dal-DUYARLI tüketimi destekliyor
+(`eğer p { kullan(t); } değilse { imha(t); }` GEÇERLİ); model bunu kapsamıyor. V2 işi.
+Köprüyü ETKİLEMEZ (CT hesabında lineerlik yok).
+
+**5. ADIM (ASIL KÖPRÜ) YAPILMADI — yine TAHMİN değil ÖLÇÜM var:**
+1. **Core'da ARİTMETİK YOK.** `CT.Ifade.topla`'nın Core karşılığı yok → köprü ya
+   CT'nin **topla-sız parçasına** kısıtlanır (CT001'in tüm içeriği ve
+   `ct001_gerekli` tanığı bu parçada — yani içerik kaybı YOK), ya da Core'a `topla`
+   eklenir (yeni Step kuralı + tüm tümevarımlar yeniden).
+2. **Toplam vs sonlu ortam.** `CT.Store = Ad → Int` TOPLAM; Core'un `store`/`bolge`
+   sonlu assoc listeler → köprü sonlu bir değişken kümesiyle parametrize edilmeli
+   (`vars(e) ⊆ V` yan-koşulu her yerde).
+3. **Büyük-adım vs küçük-adım.** `CT.Calis` büyük-adım; Core küçük-adım + thread.
+   `seq`/`atama`/`eger` için StepStar congruence-yükseltme lemmaları gerekir.
+   **Kolaylaştırıcı (ölçüldü):** gömülü programda `gorevBaslat` YOK → spawn yok →
+   FIX-F'in `ts2' = ts2 ∨ ∃y, ts2' = ts2 ++ [y]` ayrışımı daima sol kola düşer.
+4. **İz sırası:** CT ekler (yeni SONDA), Core öne ekler (yeni BAŞTA) → karşılık
+   ters çevirmeyle; olay sırası kural-kural BİREBİR eşleşiyor (c_degisken↔sVarOku,
+   c_atama↔sAtamaTamam, c_sira↔sSeqAtla (olaysız), c_eger_*↔sEgerSec).
+5. **Sahiplik:** Core yazması `h_owner` ister → başlangıç konfigürasyonu t0'a her
+   değişkenin bölgesinin sahipliğini vermeli; gömülü programda devir olmadığı için
+   korunur.
+
+**Kural:** yarım entegrasyon merge EDİLMEDİ; depo bu commit'te de yeşil.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`
