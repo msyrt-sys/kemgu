@@ -50,6 +50,47 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-332 — BET/WCET teoremi ispatlandi: statik sinir, girdiden BAGIMSIZ (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/BET/Boundedness.lean` (iskelet → ~190 satir
+ispat), `test/lean_aksiyom_harness.sh` (+3 aksiyom denetimi).]** Yan-kanalda (D-330)
+isleyen desen tekrarlandi: RT disiplininin ASIL ICERIGI kendi icinde TAM bir cekirdek
+hesapta ispatlandi; ana model DOKUNULMADI (koprusu ayri is).
+
+**⚠ ISKELETIN TIKANMA LISTESI ESKIMISTI (D-328'deki ile ayni durum):** dosya
+"(2) cycle counting modelimizde YOK, (3) wcet fonksiyonu mekanize degil" diyordu —
+ikisi de bu adimda dogrudan KURULDU; ayri bir "Core genisletmesi" ON-KOSUL DEGILMIS.
+
+**Model:** maliyet-sayan buyuk-adim semantik `Calis s e s' v n` (`n` = harcanan adim),
+statik `wcet : Ifade → Nat`. `eger` sinirinda **`Nat.max`** (hangi dalin kosacagi
+girdiye bagli).
+
+**ISPATLANANLAR:**
+- **`bet`** (ana teorem): `Calis s e s' v n → n ≤ wcet e`. Girdi store'u `s` SERBEST →
+  sinir TUM girdiler icin gecerli.
+- **`bet_rt8`**: kagit RT.8 formu — `∃N, ∀giris: maliyet ≤ N` (N := `wcet e`).
+- **`bet_dal_max_gerekli`** (TANIK): `eger`de "yalniz dogru dali say" tanimi
+  (`wcetYanlis`) bir ust sinir DEGILDIR — somut karsi-ornek (kosul 0 → pahali yanlis
+  dal kosar; sinir 3, gercek 5). Yani `max` keyfi degil, BET'in DOGRULUGU icin gerekli.
+
+**NEDEN SINIR VAR (durustluk):** bu cekirdek dilde **DONGU YOK / OZYINELEME YOK /
+TAHSIS YOK** — kagit RT001/RT002/RT003 sozdizimine GOMULU. Sinirin varligi bu
+kisitlarin SONUCUDUR; teorem "KEMGU genel olarak sinirlidir" DEMEZ. Bu kisitlar C
+tarafinda `src/wcet.c`'de RT001-RT005 ile zaten zorlanir.
+
+**SABOTAJ (ikisi de olctu):** (A) `eger` sinirindan `max` kaldirilip yalniz dogru dal
+sayilinca → **2 hata** (`bet` coker); (B) `topla` sinirinden +1 dusurulunce → **1 hata**;
+temiz → **0**.
+
+**Kapi:** `calistir_lean_aksiyom` — 29+kok modul, **17 teorem**; `bet`/`bet_rt8` →
+`[propext]`, `bet_dal_max_gerekli` → **hicbir aksiyoma dayanmiyor**; sorryAx YOK.
+
+**KOPRU YUKUMLULUGU (acik, CT ile ayni sinif):** bu hesap ile `Sem/Core` arasinda
+gomme/simulasyon YOK → "KEMGU'nun gercekzamanli islevleri sinirlidir" sonucu BURADAN
+CIKMAZ. Cikan sonuc: "RT disiplini statik WCET sinirini GARANTI EDER."
+
+---
+
 ## D-331 — KOPRU: maliyet OLCULDU, entegrasyon planlandi (yapilmadi) (2026-07-27)
 
 **Sonuc: KOPRU BU ADIMDA YAPILMADI — ama artik TAHMIN degil OLCUM var.**
