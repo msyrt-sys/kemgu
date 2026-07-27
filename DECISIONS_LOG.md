@@ -50,6 +50,45 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-334 — KAPANIS KONTEYNERDE: yapi alani + dizi elemani cagrilabilir (2026-07-27)
+
+**Karar [ETKİ: `src/llvm.c` (`fat_cagri_uret` ORTAK dispatch + `yapi_alan_tip_dugumu`
++ ERISIM/INDEKS cagri yollari + `dizi_eleman_struct_mi` genisletmesi),
+`test/test_llvm.c` (274 → **279**).]** D-326'da gurultulu reddedilen iki sekil artik
+GERCEKTEN destekleniyor.
+
+**Iki AYRI kok neden (olculdu):**
+1. **Yapi alani** `k.fn()`: ERISIM hedefli HER cagri **METOD** sayiliyordu → alan adiyla
+   `call i32 @fn(...)` uretiliyor, **TANIMSIZ SEMBOL** veriyordu. Cozum: once alicinin
+   yapisina bakip alanin BILDIRILEN tipi `işlev(...)->T` mi diye olc; oyleyse metod
+   degil, fat value tutan ALANDIR → dolayli cagri. Donus IR'i alanin bildirilen
+   tipinden gelir (i32 varsayilsa `-> metin` alaninda isaretci KIRPILIRDI).
+2. **Dizi elemani** `xs[0]()`: `dizi_eleman_struct_mi` yalniz `%Yapi`ya bakiyordu →
+   16 baytlik fat value SKALER sanilip `kdl_dizi_ekle_tam(i32)` imzasina geciriliyordu.
+   **LLVM bunu SESSIZCE kabul ediyor** (D-295/D-325 dersinin ucuncu tekrari). Cozum:
+   predikat `{ ptr, ptr }`i de by-value kabul eder → runtime'in `kdl_dizi_*_yapi`
+   (eleman_byte + memcpy) yolu; zaten VARDI, yalnizca yonlendirme eksikti.
+
+**ORTAK DISPATCH:** `fat_cagri_uret` — env-null dallanmasi TEK KAYNAK (degisken /
+yapi alani / dizi elemani ayni yoldan). Iki kopya birakilsaydi biri duzeltilip digeri
+unutulurdu (D-322'de `lam_env_uret` ayni sebeple cikmisti).
+
+**Testler (test_llvm 274→279, hepsi derle+calistir+exit):** yapi alani 42 · yakalamali
+alan + arguman 42 · dizi elemani 42 · **coklu eleman + yakalama** 42 (dogru elemanin
+secildigini olcer) · `-> metin` alani 42 (isaretci donus).
+
+**SABOTAJ:** (A) fat value skaler sayilsin → **2 test kirmizi**; (B) alan-kapanis
+tespiti kapatilsin → **3 test kirmizi**; temiz → **0**.
+
+**Kapilar:** test_llvm **279/279**, codegen_diff **105/105**, dizi_sinir 37/37,
+sifir derleyici uyarisi.
+
+**⚠ PARITE BORCU (acik, chip'li):** self-host bu iki sekilde LINK-RED veriyor
+(gurultulu — sessiz sapma YOK) → C ileride. Korpusa (cg_korpus) EKLENMEDI, cunku
+codegen_diff hakli olarak kirmizi verirdi; testler C-tarafi suitinde. Port ayri is.
+
+---
+
 ## D-333 — BET KOPRUSU: ana modelde kosum-uzunlugu SINIRI ispatlandi (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/BET/CoreBound.lean` (YENİ, ~260 satir),

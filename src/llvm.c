@@ -726,6 +726,68 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
     return ast_tip_to_ir(g, dt);
 }
 
+/* D-334: fat value ({ ptr fn, ptr env }) uzerinden DOLAYLI CAGRI — ORTAK yol.
+ *
+ * Bu yardimci, closure'in NEREDE durdugundan bagimsizdir: degisken, YAPI ALANI
+ * ya da (ileride) dizi elemani. TEK KAYNAK olmasi onemli — env-null dallanmasi
+ * iki yere kopyalanirsa biri duzeltilip digeri unutulur (D-322'de env emisyonu
+ * icin ayni ders alindi, `lam_env_uret` oradan cikti).
+ *
+ * `fv_reg`: ZATEN YUKLENMIS fat deger. env==null → bare fn(ρ, args);
+ * env!=null → closure fn(ρ, env, args). "Closure mu" runtime'da belirlenir. */
+static IfadeSonuc fat_cagri_uret(LlvmGen *g, int fv_reg, const char *donus,
+                                 IfadeSonuc *iargs, int n) {
+    int fn_reg = yeni_reg(g);
+    fprintf(g->out, "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fn_reg, fv_reg);
+    int env_reg = yeni_reg(g);
+    fprintf(g->out, "  %%%d = extractvalue { ptr, ptr } %%%d, 1\n", env_reg, fv_reg);
+    int slot = yeni_reg(g);
+    fprintf(g->out, "  %%%d = alloca %s\n", slot, donus);
+    int isnull = yeni_reg(g);
+    fprintf(g->out, "  %%%d = icmp eq ptr %%%d, null\n", isnull, env_reg);
+    int L_bare = yeni_label(g);
+    int L_clo = yeni_label(g);
+    int L_join = yeni_label(g);
+    fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+            isnull, L_bare, L_clo);
+    fprintf(g->out, "bb%d:\n", L_bare);
+    int rb = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s", rb, donus, fn_reg, g->rho_ref);
+    for (int i = 0; i < n; i++)
+        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+    fputs(")\n", g->out);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n", donus, rb, slot);
+    fprintf(g->out, "  br label %%bb%d\n", L_join);
+    fprintf(g->out, "bb%d:\n", L_clo);
+    int rc = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call %s %%%d(ptr %s, ptr %%%d",
+            rc, donus, fn_reg, g->rho_ref, env_reg);
+    for (int i = 0; i < n; i++)
+        fprintf(g->out, ", %s %%%d", iargs[i].tip, iargs[i].reg);
+    fputs(")\n", g->out);
+    fprintf(g->out, "  store %s %%%d, ptr %%%d\n", donus, rc, slot);
+    fprintf(g->out, "  br label %%bb%d\n", L_join);
+    fprintf(g->out, "bb%d:\n", L_join);
+    int rr = yeni_reg(g);
+    fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", rr, donus, slot);
+    IfadeSonuc s = { rr, donus, 0 };
+    return s;
+}
+
+/* D-334: yapi ALANININ bildirilen tip dugumu (kapanis alani icin donus IR'i
+ * buradan cikar). Bulunamazsa NULL. */
+static const Dugum *yapi_alan_tip_dugumu(YapiKayit *yk,
+                                         const char *ad, int ad_uz) {
+    if (!yk || !yk->ast) return NULL;
+    for (int i = 0; i < yk->ast->veri.yapi.alan_sayi; i++) {
+        const Dugum *a = yk->ast->veri.yapi.alanlar[i];
+        if (a->veri.alan.ad_uzunluk == ad_uz &&
+            memcmp(a->veri.alan.ad, ad, (size_t)ad_uz) == 0)
+            return a->veri.alan.tip;
+    }
+    return NULL;
+}
+
 /* D-325: ANNOTASYONSUZ closure'ın dönüş IR'ı — gövdeden MUHAFAZAKAR tahmin.
  *
  * NEDEN: lifted lambda ERTELENMIS emit edilir; define'in donusu gövdenin DOGAL
@@ -1283,8 +1345,16 @@ static const char *kdl_al_donus_ir(const char *et) {
 }
 
 /* D-087: eleman IR'i by-value YAPI mı (%Yapi)? Skaler/ptr → 0. */
+/* D-334: by-value (memcpy'lenen) eleman mi?
+ * `%Yapi` (nominal struct) VE `{ ptr, ptr }` (KAPANIS fat value) — ikisi de
+ * 1 makine-kelimesine SIGMAZ, runtime'in `kdl_dizi_*_yapi` (eleman_byte +
+ * memcpy) yolundan gitmelidir. Fat value'yu skaler sanmak, 16 baytlik
+ * agregati `kdl_dizi_ekle_tam(i32)` imzasina gecirirdi (olculdu: LLVM bunu
+ * SESSIZCE kabul ediyordu → bozuk dizi). */
 static int dizi_eleman_struct_mi(const char *et) {
-    return et && et[0] == '%';
+    if (!et) return 0;
+    if (et[0] == '%') return 1;
+    return strcmp(et, "{ ptr, ptr }") == 0;
 }
 
 /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
@@ -3460,6 +3530,40 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_ERISIM) {
                 const Dugum *erisim = d->veri.cagri.hedef;
+                /* D-334: KAPANIS ALANI mi, METOD mu? `k.fn()` iki sekli de
+                 * gosterebilir. Once alicinin yapisina bakip alanin BILDIRILEN
+                 * tipi `işlev(...) -> T` mi diye olc; oyleyse bu bir metod
+                 * DEGIL, fat-value tutan ALANDIR → dolayli cagri.
+                 * Onceki davranis: her ERISIM metod sayiliyordu → alan adiyla
+                 * `call i32 @fn(...)` uretilip TANIMSIZ SEMBOL veriyordu (olculdu). */
+                {
+                    IfadeSonuc alici_on = ifade_uret(g,
+                        erisim->veri.erisim.nesne, NULL);
+                    YapiKayit *ryk = yapi_bul_ir(g, alici_on.tip);
+                    const Dugum *alan_td = yapi_alan_tip_dugumu(ryk,
+                        erisim->veri.erisim.alan, erisim->veri.erisim.alan_uzunluk);
+                    const char *kap_donus = kapanis_donus_ir_al(g, alan_td);
+                    if (kap_donus) {
+                        /* Alan gercekten kapanis: fat degeri OKU (ERISIM'i
+                         * yeniden uretmek yerine alici degerinden extractvalue —
+                         * alici zaten hesaplandi, yan etki tekrarlanmaz). */
+                        int alan_ix = yapi_alan_indeksi(ryk,
+                            erisim->veri.erisim.alan,
+                            erisim->veri.erisim.alan_uzunluk, NULL);
+                        if (alan_ix >= 0) {
+                            int fv = yeni_reg(g);
+                            fprintf(g->out,
+                                "  %%%d = extractvalue %s %%%d, %d\n",
+                                fv, alici_on.tip, alici_on.reg, alan_ix);
+                            int n2 = d->veri.cagri.sayi;
+                            IfadeSonuc *ia = (IfadeSonuc *)arena_ayir(g->arena,
+                                sizeof(IfadeSonuc) * (size_t)(n2 > 0 ? n2 : 1));
+                            for (int i = 0; i < n2; i++)
+                                ia[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
+                            return fat_cagri_uret(g, fv, kap_donus, ia, n2);
+                        }
+                    }
+                }
                 IfadeSonuc receiver = ifade_uret(g,
                     erisim->veri.erisim.nesne, NULL);
                 int n = d->veri.cagri.sayi;
@@ -3605,6 +3709,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     return s;
                 }
                 /* cozulemedi — mevcut hata yoluna dus (gorunur yorum) */
+            }
+            /* D-334: DIZI ELEMANI kapanis cagrisi — `xs[i]()`.
+             * Hedefi uret; IR tipi fat value ise dolayli cagir. Dizi elemani
+             * by-value 16 bayt olarak saklanir (dizi_eleman_struct_mi).
+             * Donus IR'i: dizinin BILDIRILEN eleman tipinden (cg kaydi) degil,
+             * beklenen'den cikar — dizi eleman tipi `{ ptr, ptr }` T'yi siler;
+             * beklenen yoksa i32 (mevcut annotasyonsuz-kapanis siniri). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_INDEKS) {
+                IfadeSonuc hedef = ifade_uret(g, d->veri.cagri.hedef, NULL);
+                if (hedef.tip && strcmp(hedef.tip, "{ ptr, ptr }") == 0) {
+                    int n2 = d->veri.cagri.sayi;
+                    IfadeSonuc *ia = (IfadeSonuc *)arena_ayir(g->arena,
+                        sizeof(IfadeSonuc) * (size_t)(n2 > 0 ? n2 : 1));
+                    for (int i = 0; i < n2; i++)
+                        ia[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], NULL);
+                    const char *dn = (beklenen && *beklenen) ? beklenen : "i32";
+                    return fat_cagri_uret(g, hedef.reg, dn, ia, n2);
+                }
+                return hata(g, "dizi elemani cagrilabilir degil (kapanis bekleniyor)");
             }
             if (!d->veri.cagri.hedef ||
                 d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI) {

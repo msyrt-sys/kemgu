@@ -3119,6 +3119,63 @@ static void test_ornek_kanal_mesaj(void) {
     test_sonuc("ornek kanal_mesaj.kem -> exit 15", rc == 15);
 }
 
+/* === D-334: KAPANIS KONTEYNERDE (yapi alani / dizi elemani) === */
+
+/* Yapi ALANI kapanis: `k.fn()`. Once her ERISIM-hedefli cagri METOD
+ * sanildigi icin alan adiyla `@fn` cagriliyordu -> TANIMSIZ SEMBOL. */
+static void test_kapanis_yapi_alani(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { fn: i\xc5\x9flev() -> tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = Kutu { fn: || 42 }; ver k.fn(); }");
+    test_sonuc("kapanis yapi alani k.fn() -> exit 42", rc == 42);
+}
+
+/* Yakalamali kapanis alani + baska alan + arguman (env!=null yolu). */
+static void test_kapanis_yapi_alani_yakalamali(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { fn: i\xc5\x9flev(tam32) -> tam32; n: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: tam32 = 10; "
+        "de\xc4\x9fi\xc5\x9fken b = Kutu { fn: |v: tam32| v + k, n: 2 }; "
+        "ver b.fn(30) + b.n; }");
+    test_sonuc("kapanis yapi alani YAKALAMALI + arg -> exit 42", rc == 42);
+}
+
+/* Dizi ELEMANI kapanis: `xs[i]()`. Fat value 16 bayt -> by-value (yapi)
+ * eleman yolundan saklanir; skaler sanilsa 16B agregat i32 imzasina
+ * gecirilirdi (LLVM bunu SESSIZCE kabul ediyordu). */
+static void test_kapanis_dizi_elemani(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<i\xc5\x9flev() -> tam32> = [|| 42]; "
+        "ver xs[0](); }");
+    test_sonuc("kapanis dizi elemani xs[0]() -> exit 42", rc == 42);
+}
+
+/* Coklu eleman + yakalama + arguman: dogru elemanin secildigini olcer. */
+static void test_kapanis_dizi_coklu(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k: tam32 = 5; "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<i\xc5\x9flev(tam32) -> tam32> = "
+        "[|v: tam32| v + 1, |v: tam32| v + k]; "
+        "ver xs[0](6) + xs[1](30); }");
+    test_sonuc("kapanis dizi coklu eleman + yakalama -> exit 42", rc == 42);
+}
+
+/* Isaretci donus (metin): alanin BILDIRILEN donus tipi kullanilmali;
+ * i32 varsayilsaydi isaretci kirpilirdi. */
+static void test_kapanis_yapi_alani_metin(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Kutu { fn: i\xc5\x9flev() -> metin; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken k = Kutu { fn: || \"merhaba\" }; "
+        "ver metin_uzunluk(k.fn()) + 35; }");
+    test_sonuc("kapanis yapi alani -> metin (isaretci donus) -> exit 42",
+               rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3506,6 +3563,13 @@ int main(void) {
     test_kanal_yon_uctan_uca();     /* D-303 */
     test_ornek_gorev_temel();
     test_ornek_kanal_mesaj();
+
+    printf("\n--- D-334: kapanis konteynerde (yapi alani / dizi elemani) ---\n");
+    test_kapanis_yapi_alani();
+    test_kapanis_yapi_alani_yakalamali();
+    test_kapanis_dizi_elemani();
+    test_kapanis_dizi_coklu();
+    test_kapanis_yapi_alani_metin();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
