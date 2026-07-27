@@ -15,7 +15,8 @@ işlev main() -> tam32 {
                     değişken g: tam64 = t olarak tam64;       // i64 hedef → no-op
                     ver (g olarak tam32) + acc;
                 }
-                hata(e2) => { ver 2; }
+                // D-336: hata dalinda da `a` birlestirilmeli (aksi halde sizar).
+                hata(e2) => { değişken yut: tam32 = görev_birleştir(a); ver 2; }
             }
         }
         hata(e1) => { ver 1; }

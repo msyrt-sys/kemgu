@@ -50,6 +50,44 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-336 — [YÜKSEK] `--llvm` tip kontrolunu BAGLAMIYOR; TIP KONTROL KAPISI + 4 gercek sizinti (2026-07-27)
+
+**Karar [ETKİ: `test/check_kapisi.sh` (YENİ), `Makefile` (`calistir_check_kapisi`),
+`test/cg_korpus/cg_gorev_{baslat,i64_daralt,lambda_blok}.kem` +
+`test/ornekler/gorev_temel.kem` (4 GERCEK sizinti onarildi).]**
+
+**BULGU 1 — `--llvm` tip kontrolunu ZORLAMIYOR (olculdu):** `--check` REDDETTIGI bir
+program `--llvm` ile derlenip **CALISAN ikili** uretebiliyor:
+`işlev f(x: tam32)...  ver f(40, 99);` (FAZLA argüman) → `--check` RED, `--llvm`
+**exit 0**, clang kabul, program **exit 42**. Yanlis arg tipiyle de derleniyor (cop 127).
+Yani derleme yolu (`kemgu --llvm | clang`) tip kontrolunden GECMIYOR.
+
+**BULGU 2 — bunun birikmis bedeli:** hicbir kapi korpus/ornek uzerinde `--check`
+kosturmadigi icin depoda **11/206 dosya** `--check` RED aliyordu ve kimse gormemisti.
+Dagilim: **4 × L005 (GERCEK LINEER SIZINTI)**, 1 × E004 + 1 × E002 + 1 × T001
+(kasitli codegen korpuslari), 3 × T002 (tek-basina derlenemeyen parca dosyalar),
+1 kasten-hatali ornek.
+
+**4 GERCEK SIZINTI ONARILDI:** `eşleş görev_başlat(...) { tamam(a) => {...}
+hata(e) => { ver 1; } }` — HATA dalinda `a` hic birlestirilmiyordu → gorev tanitici
+o yolda dusuyor (sizinti). **L005 DOGRU CALISIYORDU; kusur ORNEKTEYDI.** Duzeltme:
+hata dallarinda `görev_birleştir(a)` cagrilir. **Exit kodlari DEGISMEDI** (4 dosya da
+42) → codegen_diff **105/105** korundu.
+
+**KAPI:** `calistir_check_kapisi` — korpus/ornek/stdlib `--check`ten gecmeli.
+Gecmeyecek dosya MUAF listesine **GEREKCESIYLE** yazilir (sessiz birikme yerine acik
+karar). Su an **199/206 gecti, 7 muaf, 0 RED**.
+**Sabotaj:** bir korpus dosyasina tip hatasi enjekte → kapi **exit 1** + dosyayi
+isimlendirdi; temiz → **exit 0**.
+
+**KARAR GEREKTIREN (Mehmet) — YAPILMADI:** `--llvm` tip hatasinda REDDETSIN mi?
+Bugun etsek **kem_os dahil 7 muaf dosya** derlenemez; bu bir DIS-KONTRAT degisikligi.
+Secenekler: (a) `--llvm` kati + `--tip-atla` kacis kapisi; (b) muaf dosyalarin
+gercek nedenleri giderilsin (parca dosyalar icin birlesik derleme, kasitli
+korpuslar icin `güvensiz`/annotasyon); (c) mevcut hal + bu kapi yeterli sayilsin.
+
+---
+
 ## D-335 — [YÜKSEK] Self-host ISARETSIZ (dtamN) semantigi YOK → sessiz yanlis cevap (2026-07-27)
 
 **Karar [ETKİ: `test/test_llvm.c` (279 → **284**, C tarafi KILIT).]** Adversarial tarama
