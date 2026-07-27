@@ -1,0 +1,15 @@
+// D-337: KAPANIŞ YAPI ALANINDA — `k.fn()`. Alanın BİLDİRİLEN tipi `işlev(..)->T`
+// ise bu bir METOD DEĞİL, fat value tutan alandır → dolaylı çağrı. Öncesi: her
+// ERISIM-hedefli çağrı metod sayılıyordu → alan adıyla `@fn` çağrılıp LINK hatası.
+// Kapsam: yakalamasız (env=null) + yakalamalı+argüman (env≠null) + işaretçi dönüş
+// (dönüş IR'ı alanın bildirilen tipinden; i32 varsayımı işaretçiyi kırpardı). Exit: 42
+yapı Kutu { fn: işlev() -> tam32; }
+yapı Sayan { fn: işlev(tam32) -> tam32; n: tam32; }
+yapı Metinci { fn: işlev() -> metin; }
+işlev main() -> tam32 {
+    değişken a = Kutu { fn: || 10 };
+    değişken k: tam32 = 4;
+    değişken b = Sayan { fn: |v: tam32| v + k, n: 2 };
+    değişken c = Metinci { fn: || "merhaba" };
+    ver a.fn() + b.fn(19) + b.n + metin_uzunluk(c.fn());
+}
