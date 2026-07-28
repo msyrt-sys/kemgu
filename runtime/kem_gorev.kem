@@ -27,6 +27,13 @@ sabit KG_STK2: tam64 = 1193279488;        // 0x47200000: görev2 yığın tepesi
 küresel değişken kem_paktif: tam64 = 0;    // o an koşan görev
 küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil kem_preempt_baslat'ta 1)
 
+// MODEL B / MB-1b: görev başına adres alanı (TTBR0). ttbr[i] = o görevin L1 PA'sı;
+// 0 = "çekirdek alanını miras al" (Model A davranışı — geriye uyumlu).
+sabit KG_TTBR: tam64 = 1157640448;        // 0x45003100: ttbr[i] tablosu (KG_SYSC üstü)
+
+çıplak işlev kg_ttbr_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_TTBR + i * 8) olarak *tam64; *p = v; }
+çıplak işlev kg_ttbr_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_TTBR + i * 8) olarak *tam64; ver *p; }
+
 çıplak işlev kg_psp_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; *p = v; }
 çıplak işlev kg_psp_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; ver *p; }
 çıplak işlev kg_yaz64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
@@ -41,6 +48,8 @@ küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil k
     kg_yaz64(KG_G2, 0);
     değişken k: tam64 = 0;
     iken k < 16 { kg_yaz64(KG_OLU + k * 8, 0); k = k + 1; }   // olu[] tablosu temizle
+    değişken j: tam64 = 0;
+    iken j < 16 { kg_ttbr_yaz(j, 0); j = j + 1; }             // ttbr[] = 0 (çekirdek alanı)
 }
 çıplak işlev kem_preempt_ac() { kg_yaz64(KG_AKTIF, 1); }
 
@@ -74,6 +83,14 @@ küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil k
         eğer kg_oku64(KG_OLU + n * 8) == 0 { kem_paktif = n; bulundu = 1; }
         t = t + 1;
     }
+    // MODEL B / MB-1b: seçilen görevin adres alanına geç. ttbr[i]==0 ise Model A
+    // davranışı (çekirdek alanı) — geriye uyumlu. Anahtarlama BURADA güvenli:
+    // kem_preempt EL1'de, IRQ içinde koşar ve her adres alanı çekirdek RAM'ini
+    // AYNI identity eşlemeyle içerir (kmmu_as_olustur L2'yi kopyalar) → bu
+    // işlevin kendi kodu/yığını anahtarlamadan SONRA da haritalı kalır.
+    değişken yeni: tam64 = kg_ttbr_oku(kem_paktif);
+    eğer yeni == 0 { yeni = KMMU_L1; }
+    kmmu_ttbr_yaz(yeni);
     ver kg_psp_oku(kem_paktif);                   // sonraki (canlı) görevin SP'si → .S switch
 }
 
@@ -87,6 +104,71 @@ küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil k
 // Fixed-RAM volatile deref (kg_yaz64/kg_oku64) → store sink EDİLMEZ, main taze görür.
 çıplak işlev kem_gorev1() { iken 1 == 1 { kg_yaz64(KG_G1, kg_oku64(KG_G1) + 1); } }
 çıplak işlev kem_gorev2() { iken 1 == 1 { kg_yaz64(KG_G2, kg_oku64(KG_G2) + 1); } }
+
+// ============================================================================
+// MODEL B / MB-1b kanıtı: ZAMANLAYICI-GÜDÜMLÜ adres alanı anahtarlaması.
+// ----------------------------------------------------------------------------
+// İki preemptive görev, her biri KENDİ adres alanında, AYNI sanal adrese (özel
+// VA) kendi imzasını BİR KEZ yazar, sonra sonsuz döngüde okuyup doğrular.
+//
+// Neden BİR KEZ yazıp sürekli doğrulama? Çünkü "her turda yaz+oku" olasılıksal
+// bir testtir: tek bir zaman diliminde yaz-oku arası genelde kesilmez, dolayısıyla
+// PAYLAŞILAN bir sayfada bile çoğu tur geçerdi. Tek yazım + sürekli doğrulama
+// DETERMİNİSTİKTİR: paylaşılan sayfada ikinci görevin ilk yazımı birincininkini
+// KALICI olarak ezer → birinci görev bir daha ASLA kendi imzasını göremez →
+// hata bayrağı kesin olarak yanar.
+sabit KG_ASERR: tam64 = 1157640224;       // 0x45003020: çapraz-bulaşma bayrağı
+sabit KG_ASF1: tam64 = 1157640232;        // 0x45003028: görev1 "imzamı yazdım" bayrağı
+sabit KG_ASF2: tam64 = 1157640240;        // 0x45003030: görev2 "imzamı yazdım" bayrağı
+sabit KG_AS_IMZA1: tam64 = 4369;          // 0x1111
+sabit KG_AS_IMZA2: tam64 = 8738;          // 0x2222
+sabit KG_STK3: tam64 = 1194328064;        // 0x47300000: as-görev yığın tepesi
+
+// EL SIKIŞMA neden ŞART (sabotajla ÖĞRENİLDİ): ilk sürüm "yaz, sonra sonsuz
+// doğrula" idi ve TTBR anahtarlaması KAPATILDIĞINDA BİLE YEŞİL geçti — çünkü
+// main, görev2 yazar yazmaz bekleme döngüsünden çıkıyordu; görev1 bir daha hiç
+// koşmuyor, dolayısıyla çakışmayı GÖRMÜYORDU. Test hiçbir şey ölçmüyordu.
+// Onarım: doğrulama ancak İKİ görev de imzasını yazdıktan SONRA sayılır. Bayraklar
+// çekirdek RAM'inde (KG_*) — her adres alanında AYNI identity eşlemeyle görünür,
+// yani adres alanından bağımsız paylaşılan senkronizasyon alanı.
+çıplak işlev kem_as_gorev1() {
+    kg_yaz64(KMMU_OZEL_VA, KG_AS_IMZA1);
+    kg_yaz64(KG_ASF1, 1);
+    iken 1 == 1 {
+        eğer kg_oku64(KG_ASF2) == 1 {          // diğeri de yazdı → ancak şimdi anlamlı
+            eğer kg_oku64(KMMU_OZEL_VA) == KG_AS_IMZA1 {
+                kg_yaz64(KG_G1, kg_oku64(KG_G1) + 1);
+            } değilse {
+                kg_yaz64(KG_ASERR, 1);
+            }
+        }
+    }
+}
+çıplak işlev kem_as_gorev2() {
+    kg_yaz64(KMMU_OZEL_VA, KG_AS_IMZA2);
+    kg_yaz64(KG_ASF2, 1);
+    iken 1 == 1 {
+        eğer kg_oku64(KG_ASF1) == 1 {
+            eğer kg_oku64(KMMU_OZEL_VA) == KG_AS_IMZA2 {
+                kg_yaz64(KG_G2, kg_oku64(KG_G2) + 1);
+            } değilse {
+                kg_yaz64(KG_ASERR, 1);
+            }
+        }
+    }
+}
+çıplak işlev kg_as_gorev1_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_as_gorev1
+add $0, $0, :lo12:kem_as_gorev1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kg_as_gorev2_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_as_gorev2
+add $0, $0, :lo12:kem_as_gorev2"# çıktı("=r", &x) } }
+    ver x;
+}
 
 // Görev giriş adreslerini asm ile materyalize et (.kem işlev-adresi → tam64).
 çıplak işlev kg_gorev1_adr() -> tam64 {
@@ -117,6 +199,37 @@ add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
     kg_yaz64(KG_AKTIF, 0);                        // preemption DURDUR → main devam
     eğer (kg_oku64(KG_G1) >= 2) ve (kg_oku64(KG_G2) >= 2) {
         ver 1;                                     // her iki görev de koştu → interleave
+    }
+    ver 0;
+}
+
+// MB-1b kapısı: iki görev, iki AYRI adres alanı, zamanlayıcı TTBR0'ı değiştiriyor.
+// Geçmesi için ÜÇÜ birden: her iki görev koştu (sayaçlar ilerledi) VE hiçbir görev
+// diğerinin imzasını görmedi (KG_ASERR == 0). Zamanlayıcı TTBR anahtarlamasaydı
+// ikinci görevin yazması birincininkini kalıcı ezerdi → KG_ASERR yanardı.
+çıplak işlev kem_as_zamanlayici_testi() -> tam32 {
+    değişken a0: tam64 = kmmu_as_olustur(2);       // 0/1 kmmu_izolasyon_testi'nin
+    değişken a1: tam64 = kmmu_as_olustur(3);       // kullandığı alanlar — çakışma yok
+    eğer (a0 == 0) veya (a1 == 0) { ver 0; }
+
+    kem_preempt_baslat();
+    kg_yaz64(KG_ASERR, 0);
+    kg_yaz64(KG_ASF1, 0);
+    kg_yaz64(KG_ASF2, 0);
+    değişken t1: tam64 = kem_gorev_olustur(kg_as_gorev1_adr(), KG_STK1);
+    değişken t2: tam64 = kem_gorev_olustur(kg_as_gorev2_adr(), KG_STK3);
+    kg_ttbr_yaz(t1, a0);
+    kg_ttbr_yaz(t2, a1);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken ((kg_oku64(KG_G1) < 4) veya (kg_oku64(KG_G2) < 4)) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kg_yaz64(KG_AKTIF, 0);                         // preemption DURDUR → main devam
+    kmmu_ttbr_yaz(KMMU_L1);                        // çekirdek alanına kesin dönüş
+    eğer (kg_oku64(KG_G1) >= 4) ve (kg_oku64(KG_G2) >= 4)
+       ve (kg_oku64(KG_ASERR) == 0) {
+        ver 1;
     }
     ver 0;
 }

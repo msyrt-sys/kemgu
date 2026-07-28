@@ -706,6 +706,15 @@ işlev main() -> tam32 {
         uart_satir("[16] ADRES ALANI HATA");
     }
 
+    // [17] SUREC IZOLASYON (MODEL B / MB-1b): zamanlayıcı-güdümlü TTBR0 anahtarlama.
+    // İki preemptive görev ayrı adres alanlarında; hiçbiri diğerinin imzasını görmez.
+    değişken asz_ok: tam32 = kem_as_zamanlayici_testi();
+    eğer asz_ok == 1 {
+        uart_satir("[17] SUREC IZOLASYON OK");
+    } değilse {
+        uart_satir("[17] SUREC IZOLASYON HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {
