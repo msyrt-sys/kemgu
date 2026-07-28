@@ -731,3 +731,11 @@ Bekleyen kararlar:
 
 - **Engellediği iş:** 7 test `--tip-atla` ile derleniyor (borç görünür
   işaretli). Karar verilene kadar kapanamaz.
+
+- **[2026-07-28 GÜNCELLEME — D-344]** Borç 16 → **7**; kalan 7'nin **tamamı**
+  yukarıdaki 3 sorudur. Derleyici tarafında kapatılabilecek borç KALMADI:
+  D-343 kesirli32 literal bağlamı + `Dizi<Yapı> = []`; D-344 tipsiz sayı
+  ifadesi bağlamı (kanal `0 - 128`) + dönüş-tipi güdümlü generic bağlama;
+  ayrıca 5 test **kaynağı** düzeltildi (3× mmio örtük dönüşüm, 1× `&değişken`,
+  1× iç içe `eşleş`te birleştirilmeyen görev handle'ı — checker haklıydı).
+  Dolayısıyla bu üç sorunun yanıtı doğrudan 7 testi serbest bırakır.

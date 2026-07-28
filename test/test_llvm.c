@@ -955,8 +955,10 @@ static void test_generic_iki_kat(void) {
 }
 
 static void test_generic_coklu_instan(void) {
-    /* Iki ayri tip ile iki ayri instantiation */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    /* Iki ayri tip ile iki ayri instantiation.
+     * D-344: BORC GERI ALINDI — `kimlik(20)` artik BEKLENEN donus tipinden
+     * (tam8) T'yi baglar; once literal default'u (tam32) kazanip T001 veriyordu. */
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev kimlik<T>(x: T) -> T { ver x; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken a: tam8 = kimlik(20); "
@@ -1728,26 +1730,26 @@ static void test_mmio_sabit_adres(void) {
 
 static void test_mmio16_round_trip(void) {
     /* 16-bit yaz 42 -> oku16 -> exit. ver: tam16 (i16) -> tam32 (sext). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(   /* D-344: kaynak duzeltildi (ortuk donusum yok) */ 
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz16(y, 4096, 42);\n"
         "  de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y, 4096);\n"
         "  geri_al(y);\n"
-        "  ver v;\n"
+        "  ver (v olarak tam32);\n"
         "}");
     test_sonuc("mmio16 yaz 42 -> oku16 -> exit 42", rc == 42);
 }
 
 static void test_mmio64_round_trip(void) {
     /* 64-bit yaz 42 -> oku64 -> exit. ver: tam64 (i64) -> tam32 (trunc). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(   /* D-344: kaynak duzeltildi (ortuk donusum yok) */ 
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz64(y, 8192, 42);\n"
         "  de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 8192);\n"
         "  geri_al(y);\n"
-        "  ver v;\n"
+        "  ver (v olarak tam32);\n"
         "}");
     test_sonuc("mmio64 yaz 42 -> oku64 -> exit 42", rc == 42);
 }
@@ -1757,7 +1759,7 @@ static void test_mmio16_komsu_ayrisir(void) {
      * 4098 AYNI kelimeye duser (4096>>2 == 4098>>2 == 1024); ikinci yaz
      * birinciyi ezer -> oku16(4096)=32 -> toplam 64 (eski exit-5 sinifi hata).
      * Byte-adreslenebilir mock'ta ayri slotlar: 10 + 32 = 42. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(   /* D-344: kaynak duzeltildi (ortuk donusum yok) */ 
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz16(y, 4096, 10);\n"
@@ -1765,7 +1767,7 @@ static void test_mmio16_komsu_ayrisir(void) {
         "  de\xc4\x9fi\xc5\x9fken a: tam16 = mmio_oku16(y, 4096);\n"
         "  de\xc4\x9fi\xc5\x9fken b: tam16 = mmio_oku16(y, 4098);\n"
         "  geri_al(y);\n"
-        "  ver a + b;\n"
+        "  ver (a olarak tam32) + (b olarak tam32);\n"
         "}");
     test_sonuc("mmio16 komsu alanlar ayrisir (eski exit-5 cakismasi duzeldi) -> 42",
                rc == 42);
@@ -1818,13 +1820,16 @@ static void test_struct_alan_atama(void) {
      * (DUGUM_ATAMA yalniz tanimlayici hedef taniyordu) -> D4/D5
      * blk_yapilandirma cfg alanlari hep 0 kalirdi. Hem lokal struct
      * hem &degisken referans param hedefi dogrulanir. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    /* D-344: BORC GERI ALINDI — kaynak DUZELTILDI (checker haklıydi): parametre
+     * `&değişken K` iken cagri `&k` (salt-okunur ref) geciriyordu. Dogrusu
+     * `&değişken k`. Bu bir derleyici kusuru degil, testin eksigiydi. */
+    int rc = derle_ve_calistir(
         "yap\xc4\xb1 K { a: tam32; b: tam64; } "
         "i\xc5\x9flev doldur(k: &de\xc4\x9fi\xc5\x9fken K) -> tam32 { "
         "k.a = 40; k.b = 2; ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: K = K { a: 0, b: 0 }; "
-        "doldur(&k); "
+        "doldur(&de\xc4\x9fi\xc5\x9fken k); "
         "ver k.a + (k.b olarak tam32); }");
     test_sonuc("alan atama: &degisken ref uzerinden mutasyon -> exit 42",
                rc == 42);
@@ -2764,6 +2769,12 @@ static void test_d2_kullanici_prefix_oncelik(void) {
 #define GB_AC(BIND, LAMBDA) \
     "e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9f" "lat(" LAMBDA ") { tamam(" BIND ") => { "
 #define GB_KAPA " } hata(gb_e) => { ver 1; } } "
+/* D-344: IC ICE eşleş icin hata kolu — DIS handle'i birlestirerek kapatir.
+ * Ic eşleş'in hata kolunda dis görev join EDILMEZSE handle sizar (liveness);
+ * checker bunu L005 ile DOGRU yakaliyor (D-336'nin kapattigi sinif). Yani bu
+ * bir derleyici kusuru DEGIL, test programinin eksigiydi. */
+#define GB_KAPA_BIRLESTIR(BIND) \
+    " } hata(gb_e) => { ver g\xc3\xb6rev_birle\xc5\x9f" "tir(" BIND "); } } "
 
 static void test_gorev_yakalamasiz(void) {
     /* Yakalamasiz lambda -> fat value { @lambda_0, null } -> env=NULL yolu
@@ -2793,14 +2804,16 @@ static void test_gorev_yakalamali(void) {
 }
 
 static void test_gorev_coklu(void) {
-    /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42).
+     * D-344: BORC GERI ALINDI — kaynak DUZELTILDI (checker haklıydi): ic eşleş'in
+     * hata kolu `a`yi birlestirmiyordu = gercek handle sizintisi (L005). */
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         GB_AC("a", "|| 20")
         GB_AC("b", "|| 22")
         "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a) + "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); "
-        GB_KAPA GB_KAPA
+        GB_KAPA_BIRLESTIR("a") GB_KAPA
         "ver 99; }");
     test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
 }
@@ -3073,7 +3086,7 @@ static void test_kanal_kesirli_llvm_de_reddedilir(void) {
 static void test_kanal_tam8_negatif_turu(void) {
     /* Isaretli dar T + NEGATIF deger: sext/trunc ciftinin isaret genisletmeyi
      * dogru yaptigini kanitlar. -128 = tam8'in alt siniri (kenar durum). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(   /* D-344: BORC GERI ALINDI */ 
         "i\xc5\x9flev oku(k: kanal<tam8>) -> tam8 { ver kanal_al(k); } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam8> = kanal_olu\xc5\x9ftur(2); "
@@ -3101,7 +3114,7 @@ static void test_kanal_dtam8_isaretsiz_turu(void) {
 
 static void test_kanal_dar_T_capraz_thread(void) {
     /* Dar T, GERCEK thread sinirini gecerek: gorev gonderir, main alir. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(   /* D-344: BORC GERI ALINDI */ 
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam16> = kanal_olu\xc5\x9ftur(2); "
         GB_AC("g", "|| kanal_g\xc3\xb6nder(k, 0 - 1000)")
@@ -3285,6 +3298,31 @@ static void test_kesirli_literal_tamsayi_karisim_yok(void) {
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 1; "
         "de\xc4\x9fi\xc5\x9fken y: tam32 = x + 2.5; ver 42; }");
     test_sonuc("tam32 + kesirli literal HALA T001", rc != 42);
+}
+
+/* D-344: TIPSIZ SAYI IFADESI baglamdan tiplenir (tek literal DEGIL, ifade).
+ * Once: `değişken v: tam8 = 1 + 2;` -> T001. KEMGU'da negatif sabit `0 - 128`
+ * diye yazildigi icin bu, dar T'li tum kanal/karsilastirma kodunu kesiyordu. */
+static void test_tipsiz_ifade_baglami(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken v: tam8 = 1 + 2; "
+        "de\xc4\x9fi\xc5\x9fken w: tam8 = 0 - 128; "
+        /* UTF-8 escape tuzagi: \x9f sonrasi 'e' hex rakami -> \x9fe olarak
+         * yutulur (CLAUDE.md). Concatenation ile ayir. */
+        "e\xc4\x9f" "er w == 0 - 128 { ver (v olarak tam32) + 39; } ver 1; }");
+    test_sonuc("tipsiz sayi ifadesi baglamdan tiplenir (tam8) -> exit 42",
+               rc == 42);
+}
+
+/* NEGATIF: TIPLI operand baglamdan YENIDEN tiplenmez (ortuk donusum yok).
+ * `x: tam32` iken `değişken v: tam8 = x + 2;` HALA T001 olmali. */
+static void test_tipli_operand_baglamdan_tiplenmez(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 1; "
+        "de\xc4\x9fi\xc5\x9fken v: tam8 = x + 2; ver 42; }");
+    test_sonuc("tam32 operand tam8 baglaminda HALA T001", rc != 42);
 }
 
 /* Bos dizi literali YAPI elemanli tipte de baglamdan tiplenir.
@@ -3752,6 +3790,8 @@ int main(void) {
     test_kesirli_literal_tamsayi_karisim_yok();
     test_bos_dizi_yapi_elemanli();
     test_dizi_yanlis_eleman_hala_red();
+    test_tipsiz_ifade_baglami();
+    test_tipli_operand_baglamdan_tiplenmez();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

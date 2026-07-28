@@ -309,6 +309,64 @@ korpuslar icin `güvensiz`/annotasyon); (c) mevcut hal + bu kapi yeterli sayilsi
 
 ---
 
+## D-344 — TIP BORCU 16 → 7: Grup A kapandi, kalan HEPSI Mehmet karari (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (tipsiz sayi ifadesi baglami + donus-tipi gudumlu
+generic baglama), `src/tip_kontrol.h` (+1 alan `cagri_beklenen`), `test/test_llvm.c`
+(291 → **293**; 5 test BORC yolundan KATI yola dondu).]** D-343'un devami; Grup A
+(checker yanlis pozitifleri) TAMAMLANDI.
+
+**1) TIPSIZ SAYI IFADESI baglami (kanal borcunun koku).** `değişken v: tam8 = 1 + 2;`
+bile T001 veriyordu: beklenen tip yalniz TEK literale yayiliyordu, ikili ifadenin
+operandlari default tam32 kaliyordu. KEMGU'da negatif sabit `0 - 128` diye yazildigi
+icin bu, DAR T'li tum kanal/karsilastirma kodunu kesiyordu (DRF003 + T001 borclari).
+Yeni `tipsiz_sayi_ifadesi_mi` (literal / tekli `-` / aritmetik ikili — tanimlayici veya
+cagri gorulurse 0) hem `tip_belirle_beklenen`'de yaymayi hem mevcut daraltma kuralini
+besler. **Etki alani "tipi olmayan" ifadelerle SINIRLI:** `x + 2` (x: tam32) tam8
+baglaminda HALA T001 — ortuk donusum uretilmedi.
+
+**2) DONUS-TIPI GUDUMLU generic baglama.** `değişken a: tam8 = kimlik(20);` → T,
+literalin default'undan (tam32) baglaniyordu → T001. Artik: islevin donus tipi CIPLAK
+bir generic param ise ve T'yi tasiyan TUM argumanlar tipsiz sayi ifadesiyse, T beklenen
+donus tipinden baglanir (`gen_bagla` "ilk goren kazanir" oldugu icin unify oncesi
+tohumlanir). **Tek bir TIPLI argüman varsa kural DEVREYE GIRMEZ** — `kimlik(t)`
+(t: tam32) tam8 baglaminda HALA T001. Beklenen tip cagri site'ina yeni
+`tk->cagri_beklenen` alaniyla tasinir (tek seferlik tuketilir).
+
+**3) L005 (ic ice `görev` eşleş) — CHECKER HAKLIYDI, siniflandirma DUZELTILDI.**
+D-343'te "Grup A (yanlis pozitif)" diye siniflamistim; olcum aksini gosterdi: ic eşleş'in
+`hata` kolu DIS handle'i (`a`) birlestirmiyordu = **gercek handle sizintisi** — D-336'nin
+kapattigi sinifin ta kendisi. Duzeltilen sey TEST KAYNAGI oldu (`GB_KAPA_BIRLESTIR`
+makrosu). **Ders: siniflandirma da bir HIPOTEZDIR; her maddeyi ayrica olc.**
+
+**4) Grup B (test kaynagi) da kapatildi:** 3 mmio testi `ver v` ile tamN→tam32 ortuk
+donusum bekliyordu → `(v olarak tam32)`; 1 test `&değişken K` parametresine `&k`
+geciriyordu → `&değişken k`. Hicbirinde `--tip-atla` KULLANILMADI (D-337 vaka23 emsali).
+
+**BORC DURUMU: 16 → 7.** Kalan 7'nin **hepsi** KIRMIZI_QUEUE'daki 3 spec sorusuna
+dayaniyor: `&x` → `*T` (4), `mantıksal olarak tamN` (1), `yetki<R>` CP005 (2).
+Derleyici tarafinda kapatilabilecek borc KALMADI.
+
+**Testler:** test_llvm 291 → **293** (yeni: tipsiz ifade baglami tam8 → 42; TIPLI operand
+tam8 baglaminda HALA T001). Katiya donen 5: kesirli32 (D-343), kanal<tam8> -128,
+kanal<tam16> -1000, generic kimlik, iki es zamanli gorev, + 4 Grup B testi.
+
+**SABOTAJ:** (T) `tipsiz_sayi_ifadesi_mi` daima 0 → **29 test kirmizi** (kural hem yeni
+hem MEVCUT daraltmayi besliyor); (G) donus-tipi baglamasi kapali → **[34] kirmizi**;
+temiz → 0.
+
+**⚠ SUREC (iki kez ayni tuzak):** yeni testi `python` ile yazarken (a) `\x9f` sonrasi
+`e` gelen `"e\xc4\x9fer"` **hex-escape yutmasina** girdi (CLAUDE.md kurali) — string
+bozuldu, `--llvm` rc=-1, test kirmizi; (b) daha once ayni yolla **UTF-8 cift kodlama**
+olmustu. **Turkce icerikli C/kem kaynagini script ile YAZMA — Edit araci kullan;
+`\x` escape'inden sonra 0-9/a-f/A-F geliyorsa concatenation ile ayir.**
+
+**Kapilar:** test_llvm **293/293**, check_kapisi **205/212 + 7 muaf, 0 RED**,
+tip_kontrol 191/191, linear 89/89, drf 54/54, checker_diff **56/56**, codegen_diff
+**111/111**, codegen_bootstrap FIXPOINT, sifir derleyici uyarisi.
+
+---
+
 ## D-343 — TIP BORCU sinifladirmasi + 2 checker YANLIS POZITIFI kapandi (2026-07-28)
 
 **Karar [ETKİ: `src/tip_kontrol.c` (kesirli literal baglami + bos dizi eleman tipi),

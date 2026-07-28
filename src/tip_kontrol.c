@@ -22,6 +22,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
     tk->ciplak_baglam = 0;   /* D-257 */
+    tk->cagri_beklenen = NULL;   /* D-344 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
      * kayitlari) global'in PARENT'i olan ayri bir scope'ta yasar. Dosya-modul
@@ -1869,6 +1870,33 @@ static TipBilgisi *kontrol_ikili_vektor(TipKontrol *tk, const Dugum *d,
     return sol;
 }
 
+/* D-344: dugum YALNIZ tipsiz sayi literallerinden kurulu bir aritmetik ifade mi?
+ * (`5`, `0 - 128`, `2 * 3 + 1`). Tanimlayici / cagri / cast gorulurse 0 — o
+ * ifadelerin KENDI tipi vardir, baglamdan yeniden tiplenmeleri ortuk donusum
+ * olurdu. Tam ve kesirli literal KARISIMI da 0 (aile karisimi zaten T001).
+ * Amac: baglam yaymasinin etki alanini "tipi olmayan" ifadelerle sinirlamak. */
+static int tipsiz_sayi_ifadesi_mi(const Dugum *d) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_TAM:
+        case DUGUM_KESIRLI:
+            return 1;
+        case DUGUM_TEKLI:
+            /* yalniz aritmetik negasyon; & / * / değil baglamdan tiplenmez */
+            if (d->veri.tekli.op != OP_NEG) return 0;
+            return tipsiz_sayi_ifadesi_mi(d->veri.tekli.operand);
+        case DUGUM_IKILI: {
+            Operator op = d->veri.ikili.op;
+            if (op != OP_ARTI && op != OP_EKSI && op != OP_CARPI &&
+                op != OP_BOLU && op != OP_MOD) return 0;
+            return tipsiz_sayi_ifadesi_mi(d->veri.ikili.sol) &&
+                   tipsiz_sayi_ifadesi_mi(d->veri.ikili.sag);
+        }
+        default:
+            return 0;
+    }
+}
+
 static TipBilgisi *kontrol_ikili_sayisal(TipKontrol *tk, const Dugum *d,
                                          TipBilgisi *sol, TipBilgisi *sag) {
     /* SIMD Spec V1: önce vektör hattı */
@@ -2270,11 +2298,15 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * yayılımı kendi kurallarına sahip — S2/V testleri). */
             if (!tip_sabitsure_mi(sol) && !tip_sabitsure_mi(sag) &&
                 !tip_vektor_mu(sol) && !tip_vektor_mu(sag)) {
-                if (d->veri.ikili.sol->tip == DUGUM_TAM &&
+                /* D-344: "literal" olcutu artik TEK dugum degil, TIPSIZ SAYI
+                 * IFADESI (`0 - 128`, `2 * 3`). Once yalniz DUGUM_TAM'a bakiliyordu
+                 * → `v == 0 - 128` (v: tam8) T001 veriyordu; negatif sabit KEMGU'da
+                 * boyle yazildigi icin tam8/tam16 karsilastirmalari REDDEDILIYORDU. */
+                if (tipsiz_sayi_ifadesi_mi(d->veri.ikili.sol) &&
                     tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                     !tip_esit(sol, sag)) {
                     sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
-                } else if (d->veri.ikili.sag->tip == DUGUM_TAM &&
+                } else if (tipsiz_sayi_ifadesi_mi(d->veri.ikili.sag) &&
                            tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                            !tip_esit(sol, sag)) {
                     sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
@@ -3600,6 +3632,39 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * argumanlar substitue edilmis param tipi context'inde tekrar
              * cikarsanir. Iki pas: pas 1 inference, pas 2 type check. */
             tk->lineer_sondaj++;    /* D-320: pas 1 = SONDAJ, tuketim sayilmaz */
+            /* D-344: DONUS-TIPI GUDUMLU baglama. Islevin donus tipi CIPLAK bir
+             * generic param (T) ise ve T'yi tasiyan TUM argumanlar TIPSIZ sayi
+             * ifadesi ise, T'yi beklenen donus tipinden bagla. Once: literalin
+             * default'u (tam32) T'yi belirliyordu → `değişken a: tam8 = kimlik(20);`
+             * T001. Tek bir TIPLI argüman varsa bu kural DEVREYE GIRMEZ — o zaman
+             * T argümandan gelir (ortuk donusum uretmemek icin). */
+            const TipBilgisi *bek_donus = tk->cagri_beklenen;
+            tk->cagri_beklenen = NULL;   /* tek seferlik tuket (ic cagrilara sizmasin) */
+            if (bek_donus && hedef_tip->veri.islev.donus &&
+                hedef_tip->veri.islev.donus->kategori == TIP_GENERIC_PARAM &&
+                (tip_tamsayi_mi(bek_donus) || tip_kesirli_sayi_mi(bek_donus)) &&
+                bek_donus->kategori != TIP_GENERIC_PARAM) {
+                const TipBilgisi *rt = hedef_tip->veri.islev.donus;
+                int tasiyan = 0, hepsi_tipsiz = 1;
+                for (int i = 0; i < d->veri.cagri.sayi; i++) {
+                    TipBilgisi *pt = hedef_tip->veri.islev.parametreler[i];
+                    if (pt && pt->kategori == TIP_GENERIC_PARAM &&
+                        pt->veri.generic_param.ad_uzunluk ==
+                            rt->veri.generic_param.ad_uzunluk &&
+                        memcmp(pt->veri.generic_param.ad,
+                               rt->veri.generic_param.ad,
+                               (size_t)rt->veri.generic_param.ad_uzunluk) == 0) {
+                        tasiyan++;
+                        if (!tipsiz_sayi_ifadesi_mi(d->veri.cagri.argumanlar[i]))
+                            hepsi_tipsiz = 0;
+                    }
+                }
+                if (tasiyan > 0 && hepsi_tipsiz) {
+                    gen_bagla(&gb, rt->veri.generic_param.ad,
+                              rt->veri.generic_param.ad_uzunluk,
+                              (TipBilgisi *)bek_donus);
+                }
+            }
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
                 TipBilgisi *arg_tip = tip_belirle(tk,
@@ -4349,7 +4414,14 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 return tip_olustur_vektor(tk->arena, arg_t,
                     beklenen->veri.vektor.lane_sayi);
             }
-            break;
+            /* D-344: donus-tipi gudumlu generic baglama icin beklenen tipi
+             * cagri site'ina tasi (generic blogu okur + hemen temizler). */
+            tk->cagri_beklenen = beklenen;
+            {
+                TipBilgisi *r = tip_belirle(tk, d);
+                tk->cagri_beklenen = NULL;
+                return r;
+            }
         }
 
         case DUGUM_IKILI: {
@@ -4364,8 +4436,33 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 if (sol->kategori == TIP_HATA || sag->kategori == TIP_HATA) {
                     return t_hata(tk);
                 }
+                break;
             }
-            break;
+            /* D-344: TIPSIZ SAYI IFADESI (yalniz literallerden kurulu aritmetik)
+             * baglamdan tiplenir. Once: `değişken v: tam8 = 1 + 2;` → T001, cunku
+             * beklenen tip yalniz TEK literale yayiliyordu; ikili ifadenin
+             * operandlari default tam32 kaliyordu. `0 - 128` (negatif sabit bu
+             * sekilde yazilir) bu yuzden tam8/tam16 baglaminda REDDEDILIYORDU —
+             * kanal<tam8> DRF003 borcunun koku. Yayma YALNIZ tipsiz operandlara
+             * etki eder: `x + 2` (x: tam32) icinde x kendi tipini korur → tam8
+             * baglaminda HALA T001 (ortuk donusum yok). */
+            {
+                Operator op = d->veri.ikili.op;
+                int aritmetik = (op == OP_ARTI || op == OP_EKSI ||
+                                 op == OP_CARPI || op == OP_BOLU || op == OP_MOD);
+                if (!aritmetik) break;
+                if (!tip_tamsayi_mi(beklenen) && !tip_kesirli_sayi_mi(beklenen))
+                    break;
+                if (!tipsiz_sayi_ifadesi_mi(d)) break;
+                TipBilgisi *sol = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sol, beklenen);
+                TipBilgisi *sag = tip_belirle_beklenen(tk,
+                    d->veri.ikili.sag, beklenen);
+                if (sol->kategori == TIP_HATA || sag->kategori == TIP_HATA) {
+                    return t_hata(tk);
+                }
+                return kontrol_ikili_sayisal(tk, d, sol, sag);
+            }
         }
 
         default:

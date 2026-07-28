@@ -116,6 +116,12 @@ typedef struct TipKontrol {
     int guvensiz_baglam;           /* >0 = guvensiz blok icindeyiz (derinlik).
                                       *T dereferans (G001) ve satiriçi_asm (G002)
                                       yalniz guvensiz baglamda gecerli. */
+    /* D-344: generic çağrının BEKLENEN dönüş tipi (varsa). `tip_belirle_beklenen`
+     * DUGUM_CAGRI dalında kurulur, generic çıkarsama bloğunda okunur, hemen
+     * temizlenir. Amaç: `değişken a: tam8 = kimlik(20);` — T yalnız argüman
+     * tipinden çıkarsanınca literal default'u (tam32) kazanıyor ve T001 çıkıyordu.
+     * YALNIZ tipsiz sayı argümanlarında etkili (typed arg kendi tipini korur). */
+    const struct TipBilgisi *cagri_beklenen;
     int ciplak_baglam;             /* D-257: >0 = çıplak işlev gövdesindeyiz.
                                       Çıplak (ρ-suz C-ABI) yalnız çıplak/extern
                                       çağırır; normal (ρ-alan) fn çağrısı → E013
