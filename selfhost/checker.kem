@@ -809,11 +809,22 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
         }
         // generic argümanlar?
         eğer sim_mi(p, "KUCUK") {
-            değişken args: Dizi<tam32> = parse_generic_args(p);
-            // Dizi<T> özel (yalnız niteliksiz)
-            eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") ve (dizi_boyut(args) == 1) {
-                ver dugum1(p, "TIP_DIZI", "", s, u, dizi_al(args, 0));
+            // DZ Spec V1 / DZ.1: "Dizi" özel — parse_generic_args'tan ÖNCE
+            // (o yordam TİP listesi bekler, N ise DEĞER). codegen.kem ile
+            // BİREBİR aynı dal; N `a_deg`'de metin ("" = bilinmiyor).
+            eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") {
+                bekle(p, "KUCUK");
+                değişken et: tam32 = parse_tip(p);
+                değişken uz: metin = "";
+                eğer sim_mi(p, "VIRGUL") {
+                    ilerle(p);
+                    uz = sim_lex(p);
+                    bekle(p, "TAMSAYI");
+                }
+                bekle_buyuk(p);
+                ver dugum1(p, "TIP_DIZI", uz, s, u, et);
             }
+            değişken args: Dizi<tam32> = parse_generic_args(p);
             değişken yk: tam32 = yol;
             eğer nitelikli == yanlış { yk = dugum0(p, "TANIMLAYICI", ad, s, u); }
             değişken kids: Dizi<tam32> = [];
@@ -2069,6 +2080,42 @@ işlev son_cocuk(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer cs == 0 { ver 0 - 1; }
     ver dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + cs - 1);
 }
+// Ondalık basamak dizisi → tam32 ('_' ayracı atlanır). codegen.kem aynası.
+işlev dz_metin_tam32(s: metin) -> tam32 {
+    değişken r: tam32 = 0;
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        değişken b: tam32 = bayt(s, i);
+        eğer b == 95 { i = i + 1; }
+        değilse {
+            eğer (b < 48) veya (b > 57) { ver r; }
+            r = r * 10 + (b - 48);
+            i = i + 1;
+        }
+    }
+    ver r;
+}
+// DZ001 (DZ Spec V1): dizi literali eleman sayısı ≠ N.
+// C tip_kontrol.c DUGUM_DIZI_OLUSTUR (beklenen yolu) aynası; codegen.kem ile
+// BİREBİR. Yalnız doğrudan `değişken x: Dizi<T, N> = [ ... ];` şekli ölçülür —
+// D-339'un SHA-256 kusurunun tam olarak aldığı şekil budur.
+işlev dz001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    eğer cs < 2 { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken annot: tam32 = dizi_al(p.cocuk, cb);
+    değişken deger: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+    eğer metin_esit(dizi_al(p.a_ad, annot), "TIP_DIZI") == yanlış { ver 0; }
+    değişken nstr: metin = dizi_al(p.a_deg, annot);
+    eğer metin_esit(nstr, "") { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, deger), "DIZI_OLUSTUR") == yanlış { ver 0; }
+    eğer dizi_al(p.a_cs, deger) == dz_metin_tam32(nstr) { ver 0; }
+    dizi_ekle(p.th_kod, "DZ001");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, deger));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, deger));
+    ver 0;
+}
 // T001: annotation vs değer tipi (DEGISKEN/SABIT). Güvenli — yalnız emin olunca.
 işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken annot: metin = annot_str(p, idx);
@@ -2952,7 +2999,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
-    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
+        t001_kontrol(p, idx);
+        dz001_kontrol(p, idx);   // DZ Spec V1
+    }
     // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.
     eğer metin_esit(ad, "DEGISKEN") {
         değişken vc2: tam32 = son_cocuk(p, idx);

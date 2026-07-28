@@ -1,7 +1,7 @@
 # KEMGU Statik Dizi Uzunluğu Spec V1 — `Dizi<T, N>`
 
-**Durum:** TASLAK — tasarım kararları Mehmet tarafından onaylandı (2026-07-28),
-uygulama BAŞLAMADI.
+**Durum:** UYGULANDI (2026-07-28). Tasarım kararları Mehmet tarafından onaylandı;
+DZ.8 adımlarının tamamı indi. Uygulama sırasında ortaya çıkan iki sapma DZ.11'de.
 **Kapsam:** Aşama (a) — *bildirim-yeri arity kontrolü*. Aşama (b) (büyütücü-parametre
 etki analizi) bilinçli olarak V1.1'e bırakıldı; gerekçe DZ.5'te.
 
@@ -293,6 +293,54 @@ Sabotajın kendisi `diff` ile teyit edilir.
 - **Bağımlı/refinement tipler:** `i < N` ispatı ile runtime sınır kontrolünün
   elenmesi. Ayrı faz; tip sistemi baştan tasarlanır.
 - **N-generic işlev:** `işlev f<N>(xs: Dizi<T, N>)` — const-generic parametre.
+
+---
+
+## DZ.11 — Uygulamada ortaya çıkan iki sapma
+
+Spec yazılırken öngörülmemiş, uygulama sırasında **ölçümle** bulundu.
+
+### (1) N, literalden ÇIKARSANMAZ — yalnız açık annotasyondan bilinir
+
+İlk uygulama dizi literalinin gerçek eleman sayısını tipe taşıyordu. Bu,
+annotasyonsuz mevcut kodu kırardı:
+
+```kemgu
+değişken xs = [1, 2, 3];   // cikarsama N=3 verirdi
+dizi_ekle(xs, 4);          // → DZ003! Oysa bu kod bugun GECERLI.
+```
+
+Spec'in "hiçbir mevcut kod kırılmaz" sözü, N'in **yalnız açık annotasyondan**
+gelmesine bağlıdır. Uygulama buna göre düzeltildi: `DUGUM_DIZI_OLUSTUR`
+beklenen-tip yolundan **annotasyonun N'ini** döndürür, literalinkini değil.
+Sonuç: `Dizi<T>` yazan (yani 1316 mevcut kullanımın tamamı) hiçbir DZ kuralına
+takılmaz.
+
+### (2) Self-host'ta SESSİZ parite kaybı vardı — parser dalı
+
+`Dizi<tam32, 4>` self-host'ta hata vermiyordu; **`TIP_KULLANICI`** üretiyordu
+(C: `TIP_DIZI`). Sebep: self-host `Dizi`'yi `parse_generic_args` (tip listesi)
+sonrası `dizi_boyut(args) == 1` koşuluyla tanıyor; iki argümanda koşul düşüp
+genel kullanıcı-tipi dalına kayıyordu. Hata modu **sessiz**ti — `--check` "OK"
+diyordu.
+
+Onarım: C'deki gibi `Dizi` dalı `parse_generic_args`'tan **önce** ele alınır.
+N, düğümün `a_deg` alanında metin olarak taşınır. Düz döküm paritesi için C
+`ast_duz_yaz`'a da `DUGUM_TIP_DIZI` durumu eklendi; **her ikisi de N'i yalnız
+`> 0` iken basar** → N kullanmayan korpusun dökümü byte-identik kalır.
+
+**Checker mantığı İKİ yerde:** `selfhost/codegen.kem` (driver) *ve*
+`selfhost/checker.kem` (Aşama 2 referans checker'ı; `checker_diff` harness'ı
+bunu kullanır). DZ001 ikisine de eklendi — biri atlanırsa kapı sessizce yeşil
+kalırdı (ölçüldü: yalnız `codegen.kem` düzenlendiğinde `checker_diff` kırmızı).
+
+### Self-host kapsamı (V1 sınırı)
+
+Self-host checker'da **yalnız DZ001** var ve yalnız doğrudan
+`değişken x: Dizi<T, N> = [ ... ];` şeklinde. Gerekçe: self-host'ta beklenen-tip
+yayılımı yok, dolayısıyla DZ002-DZ005 için gereken bağlam mevcut değil. Bu,
+D-339'un kusurunun aldığı şekli tam olarak kapsar. **C, oracle'dır**;
+DZ002-DZ005 C'ye özgüdür ve `check_korpus` bunları sınamaz.
 
 ---
 

@@ -46,7 +46,32 @@ TipBilgisi *tip_olustur_dizi(Arena *a, TipBilgisi *eleman) {
     TipBilgisi *t = tip_olustur_basit(a, TIP_DIZI);
     if (!t) return NULL;
     t->veri.dizi.eleman = eleman;
+    t->veri.dizi.uzunluk = 0;   /* DZ: BILINMIYOR */
     return t;
+}
+
+/* DZ Spec V1 */
+TipBilgisi *tip_olustur_dizi_n(Arena *a, TipBilgisi *eleman, int uzunluk) {
+    TipBilgisi *t = tip_olustur_dizi(a, eleman);
+    if (t) t->veri.dizi.uzunluk = uzunluk;
+    return t;
+}
+
+/* DZ.3 akis kurali (YONLU). N disa dogru SILINIR, ice dogru IDDIA EDILEMEZ:
+ *   Dizi<T,64> -> Dizi<T>     serbest (silinme)
+ *   Dizi<T>    -> Dizi<T,64>  DZ004  (dogrulanamayan iddia)
+ *   Dizi<T,32> -> Dizi<T,64>  DZ005  (N uyusmazligi)
+ * Eleman tipi burada DENETLENMEZ — onu `tip_esit` yapar (bu islev yalniz
+ * uzunluk boyutunu ekler; boylece mevcut T001/T013 mesajlari degismez). */
+int tip_dizi_akis_uygun(const TipBilgisi *hedef, const TipBilgisi *kaynak) {
+    if (!hedef || !kaynak) return 0;
+    if (hedef->kategori != TIP_DIZI || kaynak->kategori != TIP_DIZI) return 0;
+    int hn = hedef->veri.dizi.uzunluk;
+    int kn = kaynak->veri.dizi.uzunluk;
+    if (hn == 0) return 0;          /* hedef bilinmiyor -> silinme, serbest */
+    if (kn == 0) return 4;          /* DZ004 */
+    if (kn != hn) return 5;         /* DZ005 */
+    return 0;
 }
 
 TipBilgisi *tip_olustur_secimlik(Arena *a, TipBilgisi *ic) {
@@ -379,8 +404,14 @@ void tip_yazdir(const TipBilgisi *t, FILE *out) {
             return;
 
         case TIP_DIZI:
+            /* DZ: N yalniz YAZILMISSA basilir (uzunluk 0 = bilinmiyor) →
+             * N kullanmayan mevcut korpusun ciktisi BIREBIR ayni kalir
+             * (checker_diff / --checkdump paritesi korunur). */
             fputs("Dizi<", out);
             tip_yazdir(t->veri.dizi.eleman, out);
+            if (t->veri.dizi.uzunluk > 0) {
+                fprintf(out, ", %d", t->veri.dizi.uzunluk);
+            }
             fputc('>', out);
             return;
 

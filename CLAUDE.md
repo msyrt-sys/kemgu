@@ -211,7 +211,7 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 ### Tip Sistemi
 ```
 Basit:    tam8-64, dtam8-64, kesirli32-64, mantıksal, karakter, metin, boş
-Bileşik:  yapı{}, Dizi<T>, seçimlik<T>, sonuç<T,H>, &T, &değişken T, *T
+Bileşik:  yapı{}, Dizi<T>, Dizi<T,N>, seçimlik<T>, sonuç<T,H>, &T, &değişken T, *T
 Null:     YOK — seçimlik<T> ile değer/hiç
 Exception: YOK — sonuç<T,H> ile tamam/hata
 ```
@@ -230,6 +230,8 @@ Exception: YOK — sonuç<T,H> ile tamam/hata
 - Sonuç: heap dizi erişimi **runtime'da** sınır-kontrollü (`kdl_runtime.c` — hem `i < 0` hem `i >= boyut`) → self-host codegen'de **inline stack-OOB kontrolü hiç gerekmez**. `codegen.kem`'de `icmp uge = 0` olması "eksik kontrol" değil, "stack dizi yok" demektir.
 - C derleyici (bootstrap) hem stack hem heap diziyi destekler → orada inline stack sınır-kontrolü gereklidir (D-069; `güvensiz` blokta opt-out).
 - **KURAL:** Self-host yoluna ileride stack dizi (`[N×T]`) EKLENİRSE, inline stack-OOB kontrolü **aynı commit'te** zorunludur. Kontrolsüz stack dizisi = bellek-güvenliği regresyonu.
+- **⚠ `Dizi<T, N>` bu kuralı DEĞİŞTİRMEZ** (DZ Spec V1, `belgeler/KEMGU_Dizi_N_Spec_V1.md` §DZ.2/§DZ.10). N **yalnız tip düzeyinde** yaşar, `--llvm` çıktısına hiç geçmez; temsil heap `KdlDizi*` kalır, runtime sınır kontrolü kalır. "Uzunluk artık belli, stack'e alalım" cazibesi bilinçli olarak REDDEDİLDİ — stack temsili istenirse ayrı spec + yukarıdaki OOB yükümlülüğü.
+- **DZ Spec V1 sınırı:** `Dizi<T, N>` V1'de bir *bildirim-yeri kontrolüdür, invaryant DEĞİLDİR* — N silinerek geçirilen bir dizi callee'de büyütülebilir (§DZ.5, ampirik). **WCET/`gerçekzamanlı` bound'u V1'in N'ine DAYANDIRILAMAZ** (Realtime §RT.12 maddesi Aşama (b)'ye bağlı).
 
 ---
 

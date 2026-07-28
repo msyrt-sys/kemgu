@@ -499,6 +499,10 @@ struct Dugum {
 
         struct {
             Dugum *eleman_tip;
+            /* DZ Spec V1: Dizi<T, N> statik uzunluk. 0 = BILINMIYOR (Dizi<T>).
+             * N yalniz TIP duzeyinde yasar — codegen'e HIC gecmez (DZ.2:
+             * temsil degismez, heap KdlDizi* kalir, sinir kontrolu kalir). */
+            int uzunluk;
         } tip_dizi;
 
         struct {

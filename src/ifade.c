@@ -870,25 +870,65 @@ Dugum *parse_tip(Parser *p) {
 
         /* Generic argumanlari? */
         if (parser_eslesir(p, TOK_KUCUK)) {
+            /* DZ Spec V1 / DZ.1: "Dizi" ozel — DUGUM_TIP_DIZI, yalniz
+             * NITELIKSIZ Dizi<T> veya Dizi<T, N>.
+             *
+             * parse_generic_listesi'nden ONCE ele alinir: o yordam bir TIP
+             * listesi bekler, N ise bir DEGER. `Dizi<T, 64>` oradan gecerse
+             * "64 bir tip degil" diye reddedilirdi.
+             *
+             * Belirsizlik yok: bir tip asla tamsayi literaliyle baslayamaz,
+             * dolayisiyla ',' sonrasi TAMSAYI tek anlamli. N tamsayi literali
+             * olmali (DZ.1) — derleme-zamani sabit degerlendirici YOK;
+             * vektör<T, N> ile birebir ayni kisit ve ayni gerekce. */
+            if (!nitelikli_yol && ad_uz == 4 && memcmp(ad, "Dizi", 4) == 0) {
+                parser_bekle(p, TOK_KUCUK, "P318",
+                             "Dizi<T> icin '<' bekleniyor");
+                Dugum *eleman = parse_tip(p);
+                int uzunluk = 0;   /* 0 = BILINMIYOR (Dizi<T>) */
+                if (parser_eslesir(p, TOK_VIRGUL)) {
+                    parser_ilerle(p);
+                    Token n_tok = parser_simdiki(p);
+                    if (n_tok.tip == TOK_TAMSAYI) {
+                        /* Basamak kopyala — '_' ayraci atilir (1_024 gecerli) */
+                        char buf[16];
+                        int bi = 0;
+                        for (int i = 0; i < n_tok.uzunluk &&
+                                        bi < (int)sizeof(buf) - 1; i++) {
+                            char c = n_tok.baslangic[i];
+                            if (c != '_') buf[bi++] = c;
+                        }
+                        buf[bi] = '\0';
+                        uzunluk = (int)strtol(buf, NULL, 10);
+                        parser_ilerle(p);
+                        if (uzunluk <= 0) {
+                            parser_hata(p, n_tok, "P371",
+                                "Dizi<T, N> icin N pozitif olmali",
+                                NULL);
+                            uzunluk = 0;
+                        }
+                    } else {
+                        parser_hata(p, n_tok, "P370",
+                            "Dizi<T, N> ikinci argumani derleme-zamani "
+                            "tamsayi literal olmali",
+                            NULL);
+                    }
+                }
+                parser_buyuk_ayir(p);
+                parser_bekle(p, TOK_BUYUK, "P319",
+                             "Dizi<...> icin '>' bekleniyor");
+                Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_DIZI,
+                                         satir, sutun);
+                if (d) {
+                    d->veri.tip_dizi.eleman_tip = eleman;
+                    d->veri.tip_dizi.uzunluk = uzunluk;
+                }
+                return d;
+            }
+
             Liste args;
             liste_baslat(&args);
             (void)parse_generic_listesi(p, "P318", "P319", 1, &args);
-
-            /* "Dizi" ozel: DUGUM_TIP_DIZI — yalniz NITELIKSIZ Dizi<T> */
-            if (!nitelikli_yol && ad_uz == 4 && memcmp(ad, "Dizi", 4) == 0) {
-                if (args.sayi != 1) {
-                    parser_hata(p, t, "P318b",
-                        "Dizi<T> tam olarak bir tip argumani gerektirir",
-                        NULL);
-                }
-                Dugum *eleman = (args.sayi >= 1)
-                    ? args.bas->dugum
-                    : dugum_hata(p->arena, satir, sutun);
-                Dugum *d = dugum_olustur(p->arena, DUGUM_TIP_DIZI,
-                                         satir, sutun);
-                if (d) d->veri.tip_dizi.eleman_tip = eleman;
-                return d;
-            }
 
             /* Genel: kullanici tipi (nitelikli veya degil) */
             Dugum *yol = nitelikli_yol

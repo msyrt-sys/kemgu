@@ -1,0 +1,40 @@
+// dz_dizi_n.kem — DZ Spec V1: Dizi<T, N> statik uzunluk.
+// -----------------------------------------------------------------------------
+// C ile self-host checker'in DZ001'de BIREBIR ayni raporu vermesini olcer.
+// D-339'un SHA-256 kusuru tam olarak asagidaki `eksik` sekliydi: 62 elemanli
+// literal, 64'e kadar indekslenen bir degiskene atanmisti; `--check` sessizdi,
+// hata ancak calisma aninda PANIK olarak goruluyordu.
+//
+// NOT: self-host checker DZ001'i YALNIZ dogrudan
+// `değişken x: Dizi<T, N> = [ ... ];` seklinde olcer (beklenen-tip yayilimi
+// self-host'ta yok). Korpus bu yuzden o sekle sadik kalir — DZ002-DZ005 C'ye
+// ozgudur ve burada SINANMAZ (bkz. DZ.8/5 sinir notu).
+
+// (a) Eleman sayisi N'den AZ → DZ001.
+işlev eksik() -> tam32 {
+    değişken a: Dizi<tam32, 4> = [1, 2, 3];
+    ver a[0];
+}
+
+// (b) Eleman sayisi N'den FAZLA → DZ001.
+işlev fazla() -> tam32 {
+    değişken b: Dizi<tam32, 2> = [1, 2, 3];
+    ver b[0];
+}
+
+// (c) TAM eslesme → hata YOK.
+işlev tam_eslesme() -> tam32 {
+    değişken c: Dizi<tam32, 3> = [7, 8, 9];
+    ver c[0];
+}
+
+// (d) N yazilmamis → eski davranis, hicbir DZ kurali islemez.
+işlev n_yok() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    dizi_ekle(d, 4);          // N bilinmiyor → DZ003 YOK (geriye uyum)
+    ver d[0];
+}
+
+işlev main() -> tam32 {
+    ver eksik() + fazla() + tam_eslesme() + n_yok();
+}

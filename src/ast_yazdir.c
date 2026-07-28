@@ -439,6 +439,13 @@ void ast_duz_yaz(const Dugum *d, FILE *c, int derinlik) {
         case DUGUM_MANTIKSAL: fputc(d->veri.mantiksal.deger ? '1' : '0', c); break;
         case DUGUM_TANIMLAYICI:
             duz_kacis_yaz(c, d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk); break;
+        /* DZ Spec V1: Dizi<T, N> statik uzunluk. YALNIZ yazilmissa basilir
+         * (0 = bilinmiyor) → N kullanmayan mevcut korpusun duz dokumu BIREBIR
+         * ayni kalir; self-host `a_deg`'de ayni degeri tasir (parite). */
+        case DUGUM_TIP_DIZI:
+            if (d->veri.tip_dizi.uzunluk > 0)
+                fprintf(c, "%d", d->veri.tip_dizi.uzunluk);
+            break;
         case DUGUM_IKILI: fputs(operator_adi(d->veri.ikili.op), c); break;
         case DUGUM_TEKLI: fputs(operator_adi(d->veri.tekli.op), c); break;
         case DUGUM_ERISIM:

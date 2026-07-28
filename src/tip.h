@@ -86,6 +86,11 @@ struct TipBilgisi {
 
         struct {
             TipBilgisi *eleman;
+            /* DZ Spec V1: statik uzunluk. 0 = BILINMIYOR (Dizi<T>).
+             * DZ.2: yalniz TIP duzeyinde — codegen'e hic gecmez.
+             * NOT: `tip_esit` bu alani BILEREK yok sayar (DZ.3 "disa dogru
+             * silinme" serbest). Yonlu kontrol `tip_dizi_akis_uygun`da. */
+            int uzunluk;
         } dizi;
 
         struct {
@@ -187,6 +192,12 @@ TipBilgisi *tip_olustur_basit(Arena *a, TipKategorisi k);
 TipBilgisi *tip_olustur_referans(Arena *a, TipBilgisi *hedef, int degisken_mi);
 TipBilgisi *tip_olustur_pointer(Arena *a, TipBilgisi *hedef);
 TipBilgisi *tip_olustur_dizi(Arena *a, TipBilgisi *eleman);
+/* DZ Spec V1: statik uzunluklu dizi (uzunluk 0 => tip_olustur_dizi ile ayni). */
+TipBilgisi *tip_olustur_dizi_n(Arena *a, TipBilgisi *eleman, int uzunluk);
+/* DZ.3 akis kurali — YONLU. hedef <- kaynak atamasi uygun mu?
+ *   0 = uygun · 4 = DZ004 (bilinmeyen -> bilinen) · 5 = DZ005 (N uyusmazligi)
+ * Yalniz iki taraf da TIP_DIZI ise anlamli; degilse 0 doner. */
+int tip_dizi_akis_uygun(const TipBilgisi *hedef, const TipBilgisi *kaynak);
 TipBilgisi *tip_olustur_secimlik(Arena *a, TipBilgisi *ic);
 TipBilgisi *tip_olustur_sonuc(Arena *a, TipBilgisi *deger, TipBilgisi *hata);
 TipBilgisi *tip_olustur_islev(Arena *a, TipBilgisi **params, int param_sayi,

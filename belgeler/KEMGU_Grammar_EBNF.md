@@ -205,7 +205,9 @@ referans_tip    = "&" tip
 
 pointer_tip     = "*" tip ;
 
-dizi_tipi       = "Dizi" "<" tip ">" ;
+(* DZ Spec V1: N istege bagli statik uzunluk (tamsayi literali; sabit ifade
+   V1'de YOK — vektör<T,N> ile ayni kisit). Yoklugu "bilinmiyor" demektir. *)
+dizi_tipi       = "Dizi" "<" tip [ "," tamsayi_literal ] ">" ;
 
 seçimlik_tip    = "seçimlik" "<" tip ">" ;
 

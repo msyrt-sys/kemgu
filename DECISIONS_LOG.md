@@ -5,6 +5,75 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-340 [YÜKSEK] — `Dizi<T, N>` statik dizi uzunluğu (DZ Spec V1, Aşama a) (2026-07-28)
+
+**Karar [ETKİ: `src/ast.h`, `src/ifade.c`, `src/ast_yazdir.c`, `src/tip.{h,c}`,
+`src/tip_kontrol.c`, `selfhost/codegen.kem`, `selfhost/checker.kem`,
+`stdlib/kripto/karma.kem`, `test/check_korpus/` (56→57), EBNF, CLAUDE.md.
+`src/llvm.c`: **DOKUNULMADI** — kasıtlı.]**
+Spec: `belgeler/KEMGU_Dizi_N_Spec_V1.md`. Tasarım kararları Mehmet onaylı.
+
+**Motivasyon.** D-339'da SHA-256 mesaj çizelgesi dizisinin 62 elemanlı olduğu
+(64 olmalı) ortaya çıktı → `W[62]`/`W[63]` sınır dışı → çalışma anında PANİK,
+yani `sha256_blok_sikistir` **hiç çalışmamıştı**. `--check` yakalayamıyordu:
+literal eleman sayısı hiçbir şeyle karşılaştırılmıyordu.
+
+**Beş tasarım kararı.** (1) N yalnız TİP düzeyinde — temsil DEĞİŞMEZ.
+(2) N = tamsayı literali (`vektör<T,N>` emsali; sabit değerlendirici yok).
+(3) N dışa doğru SİLİNİR. (4) N-bilinen bağlamda büyütme YASAK.
+(5) N-bilinmeyen → N-bilinen daralma YASAK.
+
+**DZ.2 — temsil değişmezliği bir KAPIDIR, niyet değil.** N `--llvm` çıktısına
+hiç geçmez. Ölçüldü: `src/llvm.c` diff **boş**, `codegen_diff` 108/108,
+`codegen_bootstrap` FIXPOINT korundu. Bu bozulursa DZ.2 ihlal edilmiştir.
+
+**Kurallar:** `P370`/`P371` (parser), `DZ001` literal arity, `DZ002` sabit
+indeks, `DZ003` büyütme, `DZ004` daralma, `DZ005` N uyuşmazlığı.
+`tip_esit` uzunluğu **bilerek yok sayar** (silinmenin her yerde çalışması için);
+yönlü kontrol ayrı bir işlevde (`tip_dizi_akis_uygun`) — simetrik bir eşitlik
+bağıntısıyla yönlü bir kural ifade edilemez.
+
+**Uygulamada iki sapma (spec DZ.11'e işlendi).**
+1. **N literalden ÇIKARSANMAZ.** İlk uygulama literalin gerçek sayısını tipe
+   taşıyordu; `değişken xs = [1,2,3]; dizi_ekle(xs,4);` gibi **annotasyonsuz
+   mevcut kod** aniden DZ003'e takılırdı. "Hiçbir mevcut kod kırılmaz" sözü
+   N'in yalnız açık annotasyondan gelmesine bağlı → düzeltildi.
+2. **Self-host'ta SESSİZ parite kaybı.** `Dizi<tam32, 4>` self-host'ta hata
+   vermiyor, **`TIP_KULLANICI`** üretiyordu (C: `TIP_DIZI`) — `parse_generic_args`
+   sonrası `dizi_boyut(args)==1` koşulu düşüyordu. `--check` "OK" diyordu.
+   Onarım C aynası. Düz döküm paritesi için C `ast_duz_yaz`'a da TIP_DIZI
+   eklendi; **ikisi de N'i yalnız `>0` iken basar** → mevcut korpus byte-identik.
+
+**Checker mantığı İKİ yerde (CLAUDE.md notunun bedeli ölçüldü):**
+`selfhost/codegen.kem` **ve** `selfhost/checker.kem`. Yalnız ilki düzenlendiğinde
+`checker_diff` KIRMIZI oldu (harness `checker.kem` kullanıyor) — ikisine de eklendi.
+
+**KANIT (istenen bitiş).** `karma.kem`'de `W` → `Dizi<sabitsüre<dtam32>, 64>`,
+`sha256_K` → `Dizi<dtam32, 64>`, `sha256_H0` → `Dizi<dtam32, 8>`.
+Aynı sabotaj (W'den bir eleman sil), iki davranış:
+
+| | `--check` | çalışma |
+|---|---|---|
+| N yokken (eski) | `OK` — sessiz | `PANİK: dizi sınır ihlali (i=63, boyut=63)`, exit 127 |
+| N varken (DZ) | `hata[DZ001]: dizi literali 63 eleman iceriyor, tip 64 istiyor` | derlenmez |
+
+D-339'un kusuru artık derleme zamanında yakalanıyor. Sabotajın kendisi `diff`
+ile teyit edildi.
+
+**Kapılar:** tip 26/26 · tip_kontrol 191/191 · parser 107/107 · ast 31/31 ·
+llvm 284/284 · linear 89/89 · sabitsure 39/39 · simd 30/30 · wcet 35/35 ·
+stdlib_check · kripto_check · kripto_vektor 11/11 · codegen_diff 108/108 ·
+**checker_diff 57/57** · codegen_bootstrap FIXPOINT · self_driver.
+
+**Sınır (V1) — spec DZ.5, kısaltılmadan tekrar:** `Dizi<T, N>` bir
+**bildirim-yeri kontrolüdür, INVARYANT DEĞİLDİR.** N silinerek geçirilen bir
+dizi callee'de büyütülebilir (ampirik). **WCET/`gerçekzamanlı` bound'u V1'in
+N'ine DAYANDIRILAMAZ** — Realtime §RT.12 maddesi Aşama (b) (büyütücü-parametre
+etki analizi, DZ006) inene kadar açılmamalı. (b) tamamen eklemelidir.
+Self-host'ta yalnız DZ001 vardır; DZ002-DZ005 C'ye özgüdür (C oracle'dır).
+
+---
+
 ## D-339 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı siliyordu; kripto koşum kapısı açıldı (2026-07-28)
 
 > **⚠ D-NUMARA ÇAKIŞMASI (merge'de çözülmeli):** `origin/main`'de **D-337 iki farklı

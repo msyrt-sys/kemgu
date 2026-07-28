@@ -730,6 +730,45 @@ static TipBilgisi *dizi_arg_coz(TipBilgisi *t) {
     return NULL;
 }
 
+/* === DZ003: N-bilinen baglamda BUYUTME yasak ===
+ * `Dizi<T, N>` "tam olarak N" demektir; buyutmek bu sozu bozar. N yazilmamis
+ * `Dizi<T>` eskisi gibi buyur — N yalniz ACIK annotasyondan bilindigi icin
+ * (bkz. DUGUM_DIZI_OLUSTUR notu) hicbir mevcut kod kirilmaz. */
+static void dz_buyutme_kontrol(TipKontrol *tk, const Dugum *d,
+                               const TipBilgisi *dz, const char *fn_ad) {
+    if (!dz || dz->kategori != TIP_DIZI) return;
+    if (dz->veri.dizi.uzunluk <= 0) return;
+    char msj[160];
+    snprintf(msj, sizeof(msj),
+        "%s ile buyutulemez: Dizi<T, %d> sabit uzunluktur "
+        "(N'siz Dizi<T> kullanin)", fn_ad, dz->veri.dizi.uzunluk);
+    tip_hata(tk, d, "DZ003", msj);
+}
+
+/* === DZ004 / DZ005: DZ.3 akis kurali (YONLU) ===
+ * N disa dogru SILINIR (Dizi<T,64> -> Dizi<T> serbest), ice dogru IDDIA
+ * EDILEMEZ. Bu, `tip_esit` ile YAPILAMAZ: o simetriktir ve uzunlugu bilerek
+ * yok sayar (silinmenin her yerde calismasi icin). */
+static void dz_akis_kontrol(TipKontrol *tk, const Dugum *d,
+                            const TipBilgisi *hedef,
+                            const TipBilgisi *kaynak) {
+    int r = tip_dizi_akis_uygun(hedef, kaynak);
+    if (r == 0) return;
+    char msj[192];
+    if (r == 4) {
+        snprintf(msj, sizeof(msj),
+            "uzunlugu bilinmeyen Dizi<T>, Dizi<T, %d> hedefine verilemez "
+            "(kaynagin tipi de N ile yazilmali)",
+            hedef->veri.dizi.uzunluk);
+        tip_hata(tk, d, "DZ004", msj);
+    } else {
+        snprintf(msj, sizeof(msj),
+            "dizi uzunlugu uyusmuyor: Dizi<T, %d> verildi, Dizi<T, %d> bekleniyor",
+            kaynak->veri.dizi.uzunluk, hedef->veri.dizi.uzunluk);
+        tip_hata(tk, d, "DZ005", msj);
+    }
+}
+
 /* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
  * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
  * yetki<MMIO> degilse MM002 raporlanir. */
@@ -1473,7 +1512,9 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
         case DUGUM_TIP_DIZI: {
             TipBilgisi *eleman = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_dizi.eleman_tip);
-            return tip_olustur_dizi(tk->arena, eleman);
+            /* DZ: annotasyondaki N tip bilgisine tasinir (0 = bilinmiyor) */
+            return tip_olustur_dizi_n(tk->arena, eleman,
+                                      tip_d->veri.tip_dizi.uzunluk);
         }
 
         case DUGUM_TIP_SECIMLIK: {
@@ -2576,6 +2617,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_ekle ilk argumani Dizi<T> olmali");
                     }
+                    dz_buyutme_kontrol(tk, d, dz, "dizi_ekle");   /* DZ003 */
                     TipBilgisi *bek = dz ? dz->veri.dizi.eleman : NULL;
                     TipBilgisi *et = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1], bek);
@@ -2686,6 +2728,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_kapasite_ayarla ilk arg Dizi<T> olmali");
                     }
+                    dz_buyutme_kontrol(tk, d, dizi_arg_coz(dt),
+                                       "dizi_kapasite_ayarla");   /* DZ003 */
                     if (!tip_tamsayi_mi(yt) && yt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[1], "T028",
                             "dizi_kapasite_ayarla yeni kapasite tamsayi olmali");
@@ -3614,6 +3658,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
                 }
+                /* DZ.3: parametre N-bilinen ise arguman da olmali */
+                dz_akis_kontrol(tk, d->veri.cagri.argumanlar[i],
+                                param_tip, arg_tip);
                 /* Linear Types Spec V1 + Capability Spec V1:
                  * param lineer (tekkez veya yetki) ise arg consume */
                 if (param_tip && tip_lineer_mi(param_tip)) {
@@ -3842,6 +3889,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     "sabitsure tipinde dizi indeksi yasak "
                     "(cache-timing yan kanali — ifsa(idx) kullanin)");
                 return t_hata(tk);
+            }
+            /* === DZ002: sabit indeks N sinirinin disinda ===
+             * Yalniz indeks bir TAMSAYI LITERALI ve N biliniyorken uygulanir.
+             * Degisken indeks (W[i]) V1'de statik denetlenmez — `i < N` ispati
+             * bagimli/refinement tipler ister (DZ.9). Runtime sinir kontrolu
+             * her hâlükârda yerinde (DZ.2). */
+            if (nesne_tip->veri.dizi.uzunluk > 0 &&
+                d->veri.indeks.indeks &&
+                d->veri.indeks.indeks->tip == DUGUM_TAM) {
+                long long sabit_i =
+                    (long long)d->veri.indeks.indeks->veri.tam.deger;
+                int nn = nesne_tip->veri.dizi.uzunluk;
+                if (sabit_i < 0 || sabit_i >= (long long)nn) {
+                    char msj[128];
+                    snprintf(msj, sizeof(msj),
+                        "sabit indeks %lld, sinir 0..%d", sabit_i, nn - 1);
+                    tip_hata(tk, d, "DZ002", msj);
+                }
             }
             /* Sabitsüre dizi içeren eleman tipi — sabitsüre kalır (taint) */
             TipBilgisi *elem = nesne_tip->veri.dizi.eleman;
@@ -4191,10 +4256,23 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             if (beklenen->kategori != TIP_DIZI) break;
             const TipBilgisi *eleman_t = beklenen->veri.dizi.eleman;
             int n = d->veri.dizi_olustur.sayi;
+            int bek_n = beklenen->veri.dizi.uzunluk;   /* DZ: 0 = bilinmiyor */
+            /* === DZ001: dizi literali eleman sayisi != N ===
+             * D-339'un SHA-256 hatasini DOGRUDAN yakalayan kural. Beklenen tip
+             * yolundan gectigi icin `değişken` annotasyonu, cagri argumani,
+             * `ver` ve yapi alani icin AYNI anda gecerlidir. Bos dizi de dahil
+             * (N>0 iken `[]` yazmak da ihlaldir). */
+            if (bek_n > 0 && n != bek_n) {
+                char msj[128];
+                snprintf(msj, sizeof(msj),
+                    "dizi literali %d eleman iceriyor, tip %d istiyor",
+                    n, bek_n);
+                tip_hata(tk, d, "DZ001", msj);
+            }
             if (n == 0) {
                 /* Bos dizi -> beklenen tip */
-                return tip_olustur_dizi(tk->arena,
-                    t_basit(tk, eleman_t->kategori));  /* shallow */
+                return tip_olustur_dizi_n(tk->arena,
+                    t_basit(tk, eleman_t->kategori), bek_n);  /* shallow */
             }
             /* Dolu dizi: her eleman beklenen->dizi.eleman context'inde */
             for (int i = 0; i < n; i++) {
@@ -4205,8 +4283,16 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                              "T013", "dizi elemani beklenen tip ile uyumsuz");
                 }
             }
-            return tip_olustur_dizi(tk->arena,
-                                    (TipBilgisi *)eleman_t);
+            /* DZ: sonuc, ANNOTASYONUN N'ini tasir (literalin sayisini degil).
+             * Iki gerekce:
+             *  (1) Degiskenin BILDIRILEN tipi odur; DZ001 uyusmazligi zaten
+             *      raporladi, tip sistemi bildirime sadik kalmali.
+             *  (2) N'i literalden CIKARSAMAK olmaz: `değişken xs = [1,2,3];
+             *      dizi_ekle(xs, 4);` gibi ANNOTASYONSUZ mevcut kod aniden
+             *      DZ003'e takilirdi. N yalniz ACIK annotasyondan bilinir →
+             *      spec'in "hicbir mevcut kod kirilmaz" sozu korunur. */
+            return tip_olustur_dizi_n(tk->arena,
+                                      (TipBilgisi *)eleman_t, bek_n);
         }
 
         case DUGUM_CAGRI: {
@@ -5074,6 +5160,10 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     annot->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T001",
                              "degisken tip annot ile baslangic uyumsuz");
+                /* DZ.3: annot N-bilinen ise deger de olmali. `else if` —
+                 * tip zaten uyusmuyorsa ikinci bir hata yigmayiz. */
+                } else {
+                    dz_akis_kontrol(tk, d, annot, deger_tip);
                 }
             } else {
                 deger_tip = tip_belirle(tk, d->veri.degisken.deger);
@@ -5143,6 +5233,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             } else if (!tip_esit(ht, dt) &&
                 ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T001", "atama tipi uyumsuz");
+            } else {
+                dz_akis_kontrol(tk, d, ht, dt);   /* DZ.3 — atama */
             }
             break;
         }
@@ -5174,6 +5266,10 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     tk->aktif_donus_tipi->kategori != TIP_HATA &&
                     ct003_leak_kontrol(tk, d, deger, tk->aktif_donus_tipi)) {
                     /* hata raporlandı */
+                } else if (tip_dizi_akis_uygun(tk->aktif_donus_tipi,
+                                               deger) != 0) {
+                    /* DZ.3 — `ver`: donus tipi N-bilenense deger de olmali */
+                    dz_akis_kontrol(tk, d, tk->aktif_donus_tipi, deger);
                 } else if (!tip_esit(deger, tk->aktif_donus_tipi) &&
                     deger->kategori != TIP_HATA &&
                     tk->aktif_donus_tipi->kategori != TIP_HATA) {
