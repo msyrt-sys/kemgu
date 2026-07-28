@@ -168,6 +168,50 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
+## D-337 — [YÜKSEK] `--llvm` ARTIK KATI: tip hatasi = derleme yok; `--tip-atla` kacis kapisi (2026-07-27)
+
+**Karar (Mehmet, 2026-07-27): "simdi kati yap, 16 testi `--tip-atla` ile isaretle".**
+**[ETKİ: `src/ana.c` (kati mod + `--tip-atla`), `test/test_llvm.c` (16 test BORC
+isaretli), `test/codegen_diff_harness.sh`, `test/dizi_sinir_harness.sh` (1 test
+kaynagi DUZELTILDI + 3 sessiz-atlama gurultulendi), `Makefile` (kem_os borcu).]**
+
+**Davranis:** `--llvm` tip hatasinda **stderr'e gercek taniyi yazar, IR URETMEZ,
+exit 1**. Once: `--check` REDDETTIGI program derlenip **calisan ikili** veriyordu
+(`f(40, 99)` → exit 42). `--tip-atla` eski davranisi ACIK BEYANLA geri getirir.
+
+**⚠ ONCE OLCULDU — KARARI DEGISTIREN BULGU (Mehmet'e sunuldu, onay alindi):**
+kati mod 16 testi kirdi ve **en az 2'si CHECKER YANLIS POZITIFI**:
+- `işlev h(x: kesirli32) -> kesirli32 { ver x + 21.0; }` → **T001** (literal
+  `kesirli64` varsayilip `kesirli32`e daraltilmiyor) — GECERLI program.
+- `(b olarak tam32)` (b: mantıksal) → **E002** — test [226] bunu gecerli sayiyor.
+Yani bugun kati mod **gecerli programlari da reddediyor**; bu bir BORCTUR.
+
+**Borc GORUNUR isaretlendi:** 16 test `derle_ve_calistir_TIP_BORCU(...)` ile
+derlenir — adi cagri yerinde OKUNUR. Checker kusuru kapandikca ilgili test normal
+yola DONMELIDIR. (Gizli bayrak degil, isimle beyan.)
+
+**DUZELTILEN (ortulmedi):** `dizi_sinir_harness` vaka23 `m.b + m.a` (tam64+tam8)
+→ T001. **Tani DOGRU** — KEMGU'da ortuk sayisal donusum YOK (ASLA listesi).
+Test kaynagi `(m.b olarak tam32) + (m.a olarak tam32)` yapildi; `--tip-atla`
+KULLANILMADI. Ayrica ayni harness'ta `--llvm` cikisini yutan **3 nokta**
+gurultulendi (sessiz atlama → acik hata).
+
+**Diger borclar (acik beyanla):** `kem_os` birlesik kaynagi 60 tip hatasi
+(Makefile'da `--tip-atla` + "BORC, bayrak KALDIRILMALI" notu); codegen_diff
+harness'i `--tip-atla` kullanir (isi CODEGEN esdegerligi; tip zorlamasi D-336
+kapisinda ve cg_korpus'u zaten kapsiyor — aksi halde 3 kasitli korpus SESSIZCE
+atlanip kapsam 105→102 dusuyordu).
+
+**Kapilar:** test_llvm **284/284**, codegen_diff **105/105**, dizi_sinir **37/37**,
+check_kapisi 199/206+7muaf, llvm_dogrula 10/10, gorev_rt 16/16, snapshot 50/50,
+simd_llvm 5/5, stdlib+kripto --check, sifir derleyici uyarisi.
+
+**SIRADAKI (borc kapatma):** checker yanlis pozitifleri — (1) kesirli32 literal
+baglami, (2) `mantıksal olarak tamN`, (3) siniflandirilmamis 14 test. Kapandikca
+`derle_ve_calistir_TIP_BORCU` cagrilari normal yola dondurulmeli.
+
+---
+
 ## D-336 — [YÜKSEK] `--llvm` tip kontrolunu BAGLAMIYOR; TIP KONTROL KAPISI + 4 gercek sizinti (2026-07-27)
 
 **Karar [ETKİ: `test/check_kapisi.sh` (YENİ), `Makefile` (`calistir_check_kapisi`),

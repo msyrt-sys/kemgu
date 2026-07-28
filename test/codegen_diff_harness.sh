@@ -53,7 +53,13 @@ for f in "$KORPUS"/*.kem; do
     # Win11'de .exe yeniden-yazımı dosya-kilidi yarışına girer → dosya-başı benzersiz ad.
     b=$(basename "$f" .kem)
     # C codegen → exit (oracle)
-    "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null
+    # D-337: bu harness'ın işi CODEGEN eşdeğerliği; tip kapısı AYRI kapıdır
+    # (calistir_check_kapisi, D-336) ve cg_korpus'u zaten kapsar. Korpusta
+    # KASITLI tip-geçersiz dosyalar var (cg6_trunc/cg_skaler_deref/
+    # cg_deref_pointer — codegen trunc/deref yollarını ölçerler); tip kapısı
+    # katı olunca bunlar oracle'sız kalıp SESSİZCE atlanıyordu (105→102).
+    # `--tip-atla` ile codegen kapsamı korunur, tip zorlaması kaybolmaz.
+    "$KEMGU" --llvm --tip-atla "$f" > "$TMP/$b.c.ll" 2>/dev/null
     if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
         echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"; continue
     fi
