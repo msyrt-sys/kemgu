@@ -1734,8 +1734,11 @@ inductive IfDE (G : EtiketOrtam) : Ifade → Ifade → Prop where
   | kalan (a b : Ifade) :
       ifadeEtiket G a = .genel → ifadeEtiket G b = .genel →
       IfDE G (.kalan a b) (.kalan a b)
+  /-- CT003: hedef GIZLI ise yazilan deger serbest. Hedef GENEL ise
+      CT003 zaten degerin de genel olmasini zorlar → o hal `genel`
+      kurucusuyla kapsanir (etiket birlesimi genel cikar). -/
   | sabitDeg (x : Ad) (e1 e2 : Ifade) :
-      IfDE G e1 e2 → IfDE G (.sabitDeg x e1) (.sabitDeg x e2)
+      G x = .gizli → IfDE G e1 e2 → IfDE G (.sabitDeg x e1) (.sabitDeg x e2)
   | sira (a1 a2 b : Ifade) :
       IfDE G a1 a2 → IfDE G (.sira a1 b) (.sira a2 b)
   /-- CT001: kosul genel → dal karari AYNI. -/
@@ -1751,7 +1754,7 @@ inductive IfDE (G : EtiketOrtam) : Ifade → Ifade → Prop where
   | indeks (x : Ad) (idx : Ifade) :
       ifadeEtiket G idx = .genel → IfDE G (.indeks x idx) (.indeks x idx)
   | indeksAta (x : Ad) (idx e1 e2 : Ifade) :
-      ifadeEtiket G idx = .genel → IfDE G e1 e2 →
+      G x = .gizli → ifadeEtiket G idx = .genel → IfDE G e1 e2 →
       IfDE G (.indeksAta x idx e1) (.indeksAta x idx e2)
 
 /-- CT-tipli bir ifade KENDISIYLE denktir. `CtOk`un yan-kosullari, `IfDE`nin
@@ -1766,13 +1769,34 @@ theorem ifde_refl {G : EtiketOrtam} : ∀ {e : Ifade}, CtOk G e → IfDE G e e :
   | ct_carp a b _ _ iha ihb => exact IfDE.carp a a b b iha ihb
   | ct_bol a b _ _ hag hbg _ _ => exact IfDE.bol a b hag hbg
   | ct_kalan a b _ _ hag hbg _ _ => exact IfDE.kalan a b hag hbg
-  | ct_atama x e _ _ ih => exact IfDE.sabitDeg x e e ih
+  | ct_atama x e _ hak ih =>
+      cases hgx : G x with
+      | gizli => exact IfDE.sabitDeg x e e hgx ih
+      | genel =>
+          -- CT003 + G x genel → degerin etiketi de GENEL → butun ifade genel
+          have hle : ifadeEtiket G e = .genel := by
+            rw [hgx] at hak
+            cases h : ifadeEtiket G e with
+            | genel => rfl
+            | gizli => rw [h] at hak; simp [Etiket.altMi] at hak
+          exact IfDE.genel _ hle
   | ct_sira a b _ _ iha _ => exact IfDE.sira a a b iha
   | ct_eger k d y _ _ _ hkg _ _ _ => exact IfDE.eger k d y hkg
   | ct_iken k g _ _ hkg _ _ => exact IfDE.iken k g hkg
   | ct_esles s n d y _ _ _ hsg _ _ _ => exact IfDE.esles s n d y hsg
   | ct_indeks x idx _ hig _ => exact IfDE.indeks x idx hig
-  | ct_indeks_ata x idx e _ _ hig _ _ ihe => exact IfDE.indeksAta x idx e e hig ihe
+  | ct_indeks_ata x idx e _ _ hig hak _ ihe =>
+      cases hgx : G x with
+      | gizli => exact IfDE.indeksAta x idx e e hgx hig ihe
+      | genel =>
+          have hle : ifadeEtiket G e = .genel := by
+            rw [hgx] at hak
+            cases h : ifadeEtiket G e with
+            | genel => rfl
+            | gizli => rw [h] at hak; simp [Etiket.altMi] at hak
+          exact IfDE.genel _ (by
+            show (ifadeEtiket G idx).birlesim (ifadeEtiket G e) = _
+            rw [hig, hle]; rfl)
 
 /-- `CtOk` KUCUK-ADIM ALTINDA KORUNUR. Kritik nokta: etiketler degisse bile
     (gizli okuma → `sabit`, etiketi genel) CT'nin sart kostugu konumlar
@@ -1893,6 +1917,24 @@ theorem ctok_adim_korunur {G : EtiketOrtam} :
   | a_esles_tutmadi m n d y _ =>
       intro hc; cases hc with | ct_esles _ _ _ _ _ _ hcy _ => exact hcy
 
+/-- `sabit` bir DEGERDIR: adim atmaz. -/
+theorem adim_sabit_yok {s s' : Store} {n : Int} {e' : Ifade} {t : Iz} :
+    ¬ Adim s (.sabit n) s' e' t := by intro h; cases h
+
+/-- `IfDE` SEKIL KORUR: bir taraf `sabit` ise digeri de `sabit`tir.
+    (Capraz kural cakismalarini celiskiye dusuren lemma.) -/
+theorem ifde_sabit_sag {G : EtiketOrtam} {e1 : Ifade} {m : Int}
+    (h : IfDE G e1 (.sabit m)) : ∃ n, e1 = .sabit n := by
+  cases h with
+  | genel _ _ => exact ⟨m, rfl⟩
+  | sabit n1 _ => exact ⟨n1, rfl⟩
+
+theorem ifde_sabit_sol {G : EtiketOrtam} {n : Int} {e2 : Ifade}
+    (h : IfDE G (.sabit n) e2) : ∃ m, e2 = .sabit m := by
+  cases h with
+  | genel _ _ => exact ⟨n, rfl⟩
+  | sabit _ n2 => exact ⟨n2, rfl⟩
+
 /-- **VAKUM DENETIMI 1 — `IfDE` GERCEKTEN gizliye toleransli.** Farkli
     sabitler denktir; yani gizli bir okumanin kalintisi (`sabit v1` vs
     `sabit v2`) iliskilendirilebiliyor. Bu olmasaydi `IfDE` sadece
@@ -1911,5 +1953,262 @@ theorem ifde_dal_kosulunda_tolerans_yok (G : EtiketOrtam) (d y : Ifade) :
   -- HICBIR kurucu birlesmez: `genel` de `eger` de IKI TARAFIN AYNI
   -- olmasini ister, kosullar (1 vs 2) farkli.
   intro h; cases h
+
+/-- **ANA TEOREM (ince_adim_ni) — KUCUK-ADIM NON-INTERFERENCE:**
+    `IfDE`-denk iki ifade, dusuk-esdeger iki store'da TEK ADIM attiginda
+    (1) AYNI izi uretir, (2) kalintilar yine `IfDE`-denktir, (3) store'lar
+    dusuk-esdeger kalir.
+
+    `ct_ni`nin kucuk-adim karsiligi. FARK — ve blok ici preemption'in
+    tam olarak dayandigi nokta: burada "ifade bitene kadar" degil TEK ADIM
+    konusuluyor, yani ADIMLAR ARASINDA baska bir thread araya girebilir
+    ve invaryant (IfDE + DusukEs) yine korunur.
+
+    TASARIM BULGUSU (D-346'da duvara carpip ogrenildi): `genel_adim_korunum`
+    butun ifadeye DEGIL, esitligi zorlanan ALT-TERIME uygulanir —
+    ornegin `indeks x idx`in kendisi gizli olabilir ama `idx` geneldir. -/
+theorem ince_adim_ni (G : EtiketOrtam) :
+    ∀ {e1 e2 : Ifade}, IfDE G e1 e2 → CtOk G e1 →
+    ∀ {s1 s1' : Store} {e1' : Ifade} {t1 : Iz}, Adim s1 e1 s1' e1' t1 →
+    ∀ {s2 s2' : Store} {e2' : Ifade} {t2 : Iz}, Adim s2 e2 s2' e2' t2 →
+    DusukEs G s1 s2 →
+    t1 = t2 ∧ IfDE G e1' e2' ∧ DusukEs G s1' s2' := by
+  intro e1 e2 h_de
+  induction h_de with
+  | genel e hg =>
+      -- KAMUSAL kol: tamamen `genel_adim_korunum`a devredilir
+      intro _ s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1 h2 h_low hg
+      exact ⟨ht, by rw [← he]; exact IfDE.genel _ hg', hl⟩
+  | sabit n1 n2 =>
+      intro _ s1 s1' e1' t1 h1; cases h1
+  | degisken x =>
+      intro _ s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases h1; cases h2
+      exact ⟨rfl, IfDE.sabit _ _, h_low⟩
+  | topla a1 a2 b1 b2 hda hdb iha ihb =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_topla _ _ hca hcb =>
+        cases h1 with
+        | a_topla_sol a1' h1a =>
+            cases h2 with
+            | a_topla_sol a2' h2a =>
+                obtain ⟨ht, hd, hl⟩ := iha hca h1a h2a h_low
+                exact ⟨ht, IfDE.topla _ _ _ _ hd hdb, hl⟩
+            | a_topla_sag _ _ =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hda
+                exact absurd (hn ▸ h1a) adim_sabit_yok
+            | a_topla =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hda
+                exact absurd (hn ▸ h1a) adim_sabit_yok
+        | a_topla_sag b1' h1b =>
+            cases h2 with
+            | a_topla_sag b2' h2b =>
+                obtain ⟨ht, hd, hl⟩ := ihb hcb h1b h2b h_low
+                exact ⟨ht, IfDE.topla _ _ _ _ (IfDE.sabit _ _) hd, hl⟩
+            | a_topla_sol _ h2a =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hda
+                exact absurd (hm ▸ h2a) adim_sabit_yok
+            | a_topla =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hdb
+                exact absurd (hm ▸ h1b) adim_sabit_yok
+        | a_topla =>
+            cases h2 with
+            | a_topla => exact ⟨rfl, IfDE.sabit _ _, h_low⟩
+            | a_topla_sol _ h2a =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hda
+                exact absurd (hm ▸ h2a) adim_sabit_yok
+            | a_topla_sag _ h2b =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hdb
+                exact absurd (hm ▸ h2b) adim_sabit_yok
+  | carp a1 a2 b1 b2 hda hdb iha ihb =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_carp _ _ hca hcb =>
+        cases h1 with
+        | a_carp_sol a1' h1a =>
+            cases h2 with
+            | a_carp_sol a2' h2a =>
+                obtain ⟨ht, hd, hl⟩ := iha hca h1a h2a h_low
+                exact ⟨ht, IfDE.carp _ _ _ _ hd hdb, hl⟩
+            | a_carp_sag _ _ =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hda
+                exact absurd (hn ▸ h1a) adim_sabit_yok
+            | a_carp =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hda
+                exact absurd (hn ▸ h1a) adim_sabit_yok
+        | a_carp_sag b1' h1b =>
+            cases h2 with
+            | a_carp_sag b2' h2b =>
+                obtain ⟨ht, hd, hl⟩ := ihb hcb h1b h2b h_low
+                exact ⟨ht, IfDE.carp _ _ _ _ (IfDE.sabit _ _) hd, hl⟩
+            | a_carp_sol _ h2a =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hda
+                exact absurd (hm ▸ h2a) adim_sabit_yok
+            | a_carp =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hdb
+                exact absurd (hm ▸ h1b) adim_sabit_yok
+        | a_carp =>
+            cases h2 with
+            | a_carp => exact ⟨rfl, IfDE.sabit _ _, h_low⟩
+            | a_carp_sol _ h2a =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hda
+                exact absurd (hm ▸ h2a) adim_sabit_yok
+            | a_carp_sag _ h2b =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hdb
+                exact absurd (hm ▸ h2b) adim_sabit_yok
+  | bol a b hag hbg =>
+      -- CT006: iki operand da GENEL → butun ifade GENEL → kamusal kol
+      intro _ s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      have hg : ifadeEtiket G (.bol a b) = .genel := by
+        show (ifadeEtiket G a).birlesim (ifadeEtiket G b) = _
+        rw [hag, hbg]; rfl
+      obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1 h2 h_low hg
+      exact ⟨ht, by rw [← he]; exact IfDE.genel _ hg', hl⟩
+  | kalan a b hag hbg =>
+      intro _ s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      have hg : ifadeEtiket G (.kalan a b) = .genel := by
+        show (ifadeEtiket G a).birlesim (ifadeEtiket G b) = _
+        rw [hag, hbg]; rfl
+      obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1 h2 h_low hg
+      exact ⟨ht, by rw [← he]; exact IfDE.genel _ hg', hl⟩
+  | sabitDeg x ea eb hgx hde ih =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_atama _ _ hce _ =>
+        cases h1 with
+        | a_atama_cong ea' h1e =>
+            cases h2 with
+            | a_atama_cong eb' h2e =>
+                obtain ⟨ht, hd, hl⟩ := ih hce h1e h2e h_low
+                exact ⟨ht, IfDE.sabitDeg x _ _ hgx hd, hl⟩
+            | a_atama =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hde
+                exact absurd (hn ▸ h1e) adim_sabit_yok
+        | a_atama =>
+            cases h2 with
+            | a_atama =>
+                -- HEDEF GIZLI: yazilan degerler farkli olabilir, gorunmez
+                exact ⟨rfl, IfDE.sabit _ _,
+                  dusukEs_yaz_gizli G s1 s2 x _ _ h_low hgx⟩
+            | a_atama_cong _ h2e =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hde
+                exact absurd (hm ▸ h2e) adim_sabit_yok
+  | sira a1 a2 b hda ih =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_sira _ _ hca hcb =>
+        cases h1 with
+        | a_sira_cong a1' h1a =>
+            cases h2 with
+            | a_sira_cong a2' h2a =>
+                obtain ⟨ht, hd, hl⟩ := ih hca h1a h2a h_low
+                exact ⟨ht, IfDE.sira _ _ _ hd, hl⟩
+            | a_sira_atla =>
+                obtain ⟨n, hn⟩ := ifde_sabit_sag hda
+                exact absurd (hn ▸ h1a) adim_sabit_yok
+        | a_sira_atla =>
+            cases h2 with
+            | a_sira_atla => exact ⟨rfl, ifde_refl hcb, h_low⟩
+            | a_sira_cong _ h2a =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hda
+                exact absurd (hm ▸ h2a) adim_sabit_yok
+  | eger k d y hkg =>
+      -- IKI TARAF AYNI ifade; kosul GENEL → ayni kural, ayni dal
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_eger _ _ _ hck hcd hcy _ =>
+        cases h1 with
+        | a_eger_cong k1' h1k =>
+            cases h2 with
+            | a_eger_cong k2' h2k =>
+                obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1k h2k h_low hkg
+                exact ⟨ht, by rw [← he]; exact IfDE.eger _ d y hg', hl⟩
+            | a_eger_dogru _ _ => exact absurd h1k adim_sabit_yok
+            | a_eger_yanlis => exact absurd h1k adim_sabit_yok
+        | a_eger_dogru n hn =>
+            cases h2 with
+            | a_eger_dogru _ _ => exact ⟨rfl, ifde_refl hcd, h_low⟩
+            | a_eger_yanlis => exact absurd rfl hn
+            | a_eger_cong _ h2k => exact absurd h2k adim_sabit_yok
+        | a_eger_yanlis =>
+            cases h2 with
+            | a_eger_yanlis => exact ⟨rfl, ifde_refl hcy, h_low⟩
+            | a_eger_dogru _ hn => exact absurd rfl hn
+            | a_eger_cong _ h2k => exact absurd h2k adim_sabit_yok
+  | iken k g hkg =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases h1; cases h2
+      exact ⟨rfl, ifde_refl (ctok_adim_korunur (Adim.a_iken_ac s1 k g) hct), h_low⟩
+  | esles sk n d y hsg =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_esles _ _ _ _ hcs hcd hcy _ =>
+        cases h1 with
+        | a_esles_cong sk1' h1s =>
+            cases h2 with
+            | a_esles_cong sk2' h2s =>
+                obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1s h2s h_low hsg
+                exact ⟨ht, by rw [← he]; exact IfDE.esles _ n d y hg', hl⟩
+            | a_esles_tuttu _ _ => exact absurd h1s adim_sabit_yok
+            | a_esles_tutmadi _ _ => exact absurd h1s adim_sabit_yok
+        | a_esles_tuttu m hm =>
+            cases h2 with
+            | a_esles_tuttu _ _ => exact ⟨rfl, ifde_refl hcd, h_low⟩
+            | a_esles_tutmadi _ hm2 => exact absurd hm hm2
+            | a_esles_cong _ h2s => exact absurd h2s adim_sabit_yok
+        | a_esles_tutmadi m hm =>
+            cases h2 with
+            | a_esles_tutmadi _ _ => exact ⟨rfl, ifde_refl hcy, h_low⟩
+            | a_esles_tuttu _ hm2 => exact absurd hm2 hm
+            | a_esles_cong _ h2s => exact absurd h2s adim_sabit_yok
+  | indeks x idx hig =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_indeks _ _ hci _ =>
+        cases h1 with
+        | a_indeks_cong idx1' h1i =>
+            cases h2 with
+            | a_indeks_cong idx2' h2i =>
+                obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1i h2i h_low hig
+                exact ⟨ht, by rw [← he]; exact IfDE.indeks x _ hg', hl⟩
+            | a_indeks _ => exact absurd h1i adim_sabit_yok
+        | a_indeks i =>
+            cases h2 with
+            | a_indeks _ => exact ⟨rfl, IfDE.sabit _ _, h_low⟩
+            | a_indeks_cong _ h2i => exact absurd h2i adim_sabit_yok
+  | indeksAta x idx ea eb hgx hig hde ih =>
+      intro hct s1 s1' e1' t1 h1 s2 s2' e2' t2 h2 h_low
+      cases hct with
+      | ct_indeks_ata _ _ _ hci hce _ _ =>
+        cases h1 with
+        | a_indeks_ata_idx idx1' h1i =>
+            cases h2 with
+            | a_indeks_ata_idx idx2' h2i =>
+                obtain ⟨he, ht, hl, hg'⟩ := genel_adim_korunum G h1i h2i h_low hig
+                exact ⟨ht, by rw [← he]; exact IfDE.indeksAta x _ _ _ hgx hg' hde, hl⟩
+            | a_indeks_ata_deg _ _ _ => exact absurd h1i adim_sabit_yok
+            | a_indeks_ata _ _ => exact absurd h1i adim_sabit_yok
+        | a_indeks_ata_deg _ ea' h1e =>
+            cases h2 with
+            | a_indeks_ata_deg _ eb' h2e =>
+                obtain ⟨ht, hd, hl⟩ := ih hce h1e h2e h_low
+                exact ⟨ht, IfDE.indeksAta x _ _ _ hgx hig hd, hl⟩
+            | a_indeks_ata_idx _ h2i => exact absurd h2i adim_sabit_yok
+            | a_indeks_ata _ _ =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hde
+                exact absurd (hm ▸ h1e) adim_sabit_yok
+        | a_indeks_ata i nn =>
+            cases h2 with
+            | a_indeks_ata _ _ =>
+                -- HEDEF GIZLI: yazilan deger gorunmez; ADRES ise AYNI
+                -- (indeks GENEL — CT005-Y), o yuzden izler esit.
+                exact ⟨rfl, IfDE.sabit _ _,
+                  dusukEs_yazH_gizli G s1 s2 x _ _ _ _ h_low hgx⟩
+            | a_indeks_ata_idx _ h2i => exact absurd h2i adim_sabit_yok
+            | a_indeks_ata_deg _ _ h2e =>
+                obtain ⟨m, hm⟩ := ifde_sabit_sol hde
+                exact absurd (hm ▸ h2e) adim_sabit_yok
 
 end Kemgu.SideChannel.CT
