@@ -2070,6 +2070,38 @@ static void test_aritmetik_literal_mantiksal_hata(void) {
     arena_serbest(a);
 }
 
+/* BD-1: bos dizi baglaminda YAPI eleman tipi — ad/alanlar DUSMEMELI.
+ * Eskiden eleman tipi `t_basit(kategori)` ile SIG kopyalaniyordu; TIP_YAPI'da
+ * ad kayboldugu icin nominal esitlik tutmuyor ve T001 veriyordu. Skaler eleman
+ * tipinde gorunmuyordu (orada kategori tipin TAMAMI) — bu yuzden yillarca
+ * fark edilmedi. */
+static void test_bos_dizi_yapi_eleman(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 Nokta { x: tam32; } "
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9f" "ken s: Dizi<tam32> = []; "
+        "de\xc4\x9fi\xc5\x9f" "ken y: Dizi<Nokta> = []; ver 0; }", a);
+    test_sonuc("bos dizi: yapi eleman tipi korunur (skaler + yapi) -> 0 hata",
+               h == 0);
+    arena_serbest(a);
+}
+
+/* BD-2 (SABOTAJ): bos dizi YANLIS yapiya atanirsa yine de HATA vermeli —
+ * duzeltme nominal esitligi gevsetmemeli. */
+static void test_bos_dizi_yanlis_yapi_hata(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "yap\xc4\xb1 Nokta { x: tam32; } "
+        "yap\xc4\xb1 Kutu { s: tam32; } "
+        "i\xc5\x9flev al(d: Dizi<Kutu>) -> tam32 { ver 0; } "
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9f" "ken y: Dizi<Nokta> = []; ver al(y); }", a);
+    test_sonuc("bos dizi SABOTAJ: Dizi<Nokta> -> Dizi<Kutu> parametresi HATA",
+               h > 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback tip cikarsamasi === */
 
 /* D-1: Dizi<T> param -> T arg'dan cikarsanir */
@@ -2745,6 +2777,8 @@ int main(void) {
     test_aritmetik_literal_tipli_yan();
     test_aritmetik_literal_tipli_uyusmaz_hata();
     test_aritmetik_literal_mantiksal_hata();
+    test_bos_dizi_yapi_eleman();
+    test_bos_dizi_yanlis_yapi_hata();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
