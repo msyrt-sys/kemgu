@@ -365,6 +365,120 @@ korpuslar icin `güvensiz`/annotasyon); (c) mevcut hal + bu kapi yeterli sayilsi
 
 ---
 
+## D-342 — [YÜKSEK] `%Yapi` dizi elemani self-host'a portlandi + C'de `için` SESSIZ YANLIS CEVAP kapandi (2026-07-28)
+
+> **Numara notu:** bu dal (`claude/hopeful-tharp-8dc610`) commit mesajlarinda D-337
+> (kapanis konteynerde) ve D-338 (`%Yapi` dizi elemani) diyor. Merge aninda main
+> D-337/D-338/D-339'u almis, D-340 ise `claude/distracted-tesla-e03311` kripto
+> commit'ine rezerve edilmisti → bu iki kayit **D-341** (kapanis konteynerde) ve
+> **D-342** (`%Yapi`) oldu. Kod ici markerlar da kaydirildi; main'in ISARETSIZ
+> (dtamN) isine ait D-337/D-338 markerlarina DOKUNULMADI.
+
+**Karar [ETKİ: `selfhost/codegen.kem` (`dizi_eleman_yapi_mi` + `dizi_eleman_byte` +
+`dizi_yapi_{ekle,al,yaz}_emit` ORTAK yol + 5 cagri yeri), `src/llvm.c` (`için` dali
+by-value yonlendirmesi), `test/test_llvm.c` (286), `test/cg_korpus/cg_yapi_dizi.kem`
+(YENİ, korpus 107 → **108**).]** D-341'de bilincli birakilan `%Yapi` bosluğu kapatildi;
+port sirasinda **C tarafinda daha ciddi bir kusur** ortaya cikti.
+
+**1) Self-host `%Yapi` bosluğu (ONCE OLCULDU — 6 sekil, hepsi LLVM-RED):** dizi
+literali, `dizi_ekle`, `ps[i] = v`, `ps[i]` okuma, dizi parametresi, metin alanli yapi.
+Kok neden: `dizi_ekle_sonek` `%Nokta`yi skaler sayip `kdl_dizi_ekle_tam(ptr,ptr,i32)`e
+struct DEGER geciriyordu — **doğrudan** cagrida LLVM imzayi denetler → gurultulu red.
+Sessiz-okuma yolu (`kdl_dizi_al_tam` 8 baytlik elemanin ilk 4 baytini okur) ERISILEMEZDI:
+diziyi doldurmanin her yolu derleme zamaninda reddediliyordu; yazmasiz tek okuma bos
+dizi, onu da runtime sinir-kontrolu iki derleyicide birebir kesiyor (`PANIK: dizi sınır
+ihlali`, exit 127). **Onarim IKI parcali:** (a) `dizi_eleman_yapi_mi` `%` onekini de
+by-value kabul eder; (b) `dizi_eleman_byte` nominal yapida sabit "4" yerine
+`ptrtoint (ptr getelementptr (%Yapi, ptr null, i32 1) to i32)` uretir — hizalama/dolgu
+hesabi derleyicinin isi. Yalniz (a) yapilsaydi 8+ baytlik yapi 4 baytlik gozeye
+sikisirdi: **SESSIZ bellek bozulmasi** (sabotaj E ile olculdu → exit 139).
+
+**2) [YÜKSEK] C'de `için` dongusu SESSIZ YANLIS CEVAP veriyordu.** Port sonrasi C↔self
+karsilastirmasi ayristi: `için p: ps` (2 elemanli `Dizi<Nokta>` toplami) C'de **exit 14**,
+self-host'ta **42** (dogrusu 42). Uretilen IR: `call %Nokta @kdl_dizi_al_tam(...)` —
+declare `i32`, cagri yeri `%Nokta`. **LLVM declare/cagri-yeri uyusmazligini SESSIZCE
+kabul ediyor** (D-295/D-325/D-334 dersinin BESINCI tekrari) → cop okunuyordu. Diger dort
+dizi yolunda (INDEKS / `dizi_al` / `dizi_ekle` / `dizi_yaz`) by-value yonlendirmesi
+D-087'den beri VARDI; yalniz `için` dali atlanmisti. **Bu kusuru bulan sey portun
+kendisiydi** — iki bagimsiz uygulama ayni programda ayrisinca sessiz hata gurultuye
+donusuyor (self-host'un asil degeri).
+
+**ORTAK YOL:** `dizi_yapi_{ekle,al,yaz}_emit` — bes cagri yeri (dizi literali, uc
+built-in, INDEKS okuma/yazma, `için`) tek kaynaktan. Kopyalansaydi biri duzeltilip
+digeri unutulurdu; **C'de tam bu oldu** (`için` dali).
+
+**Testler:** C↔self-host exit birebir 7 sekil (yukaridaki 6 + `için`). test_llvm
+284→**286** (yeni: `için` yapi dizisi 42, `için` kapanis dizisi 42 — ikisi de C'de
+sessiz-yanlis-cevap regresyon kilidi). Korpus `cg_yapi_dizi.kem`: literal + indeks
+okuma/yazma + `dizi_ekle`/`dizi_al` + `için` + isaretci alanli yapi → 42.
+
+**SABOTAJ (hepsi dosyada `grep` ile DOGRULANDI):** (C) C `için` by-value yonlendirmesi
+kapatilsin → **[285]+[286] kirmizi, digerleri temiz**; (D) self-host `%` dali kapatilsin
+→ **cg_yapi_dizi LLVM-RED, cg_kapanis_dizi YESIL** (izolasyon); (E) `dizi_eleman_byte`
+sabit "4" → **exit 139** (boyut hesabinin tasiyici oldugu kanit). ⚠ Sureç notu: sabotaj C
+ilk denemede YANLIS SATIRA dustu (`replace(...,1)` ilk eslemeyi vurdu; CRLF yuzunden
+cok-satirli anahtar da eslesmedi) ve "2 kirmizi" gorunumu doğru sanilabilirdi — kirmizi
+TESTLERIN ADI okunmasa yanlis sonuc cikardi. **Sabotajda hangi testin kirmizi oldugunu
+ADIYLA dogrula.**
+
+**Kapilar:** test_llvm **286/286**, codegen_bootstrap **FIXPOINT** (stage1==stage2,
+45619 satir; lexer/parser/checker 92/92), codegen_diff **108/108**, self_driver (4 mod +
+self-host + FIXPOINT; LLVM 108/108 iki asamada da), checker_diff **56/56**, sifir
+derleyici uyarisi.
+
+---
+
+## D-341 — KAPANIS KONTEYNERDE self-host'a PORTLANDI: D-334 parite borcu KAPANDI (2026-07-27)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (`fat_cagri_uret` ORTAK dispatch + `yapi_alan_ic`
++ `erisim_kapanis_ic` + `dizi_eleman_yapi_mi` + ERISIM/INDEKS cagri yollari + by-value
+dizi eleman emisyonu + 3 `kdl_dizi_*_yapi` declare), `test/cg_korpus/` (105 → **107**:
+`cg_kapanis_yapi_alani.kem`, `cg_kapanis_dizi.kem`).]** D-334'un C tarafinda actigi iki
+sekil (`k.fn()` yapi alani, `xs[i]()` dizi elemani) artik self-host codegen'de de var;
+D-334'te acik birakilan **parite borcu KAPANDI**. Oncesi (olculdu): ikisi de self-host'ta
+LINK-RED — gurultulu, sessiz sapma yoktu.
+
+**Portlanan uc mekanizma:**
+1. **`fat_cagri_uret` (ORTAK dispatch):** env-null dallanmasi TEK KAYNAK — yerel baglama
+   (D-322) / yapi alani / dizi elemani ayni yoldan. D-322'nin inline blogu bu yardimciya
+   cekildi; iki kopya birakilsaydi biri duzeltilip digeri unutulurdu.
+2. **Yapi alani:** `erisim_kapanis_ic` — alanin BILDIRILEN tipi `işlev(...)->T` mi diye
+   olcer; oyleyse metod DEGIL, fat value tutan alandir → dolayli cagri, donus IR'i
+   `yapi_alan_ic` ile alanin bildirilen tipinden (i32 varsayimi `-> metin` alaninda
+   isaretciyi kirpardi). **C'den fark (bilincli):** C alici ifadesini URETIP tipe bakar;
+   self-host STATIK cozer (TANIMLAYICI alici: degisken IR'i / referans hedefi). Sebep:
+   self-host'ta iki kez uretim yan etkiyi tekrarlardi. Statik cozulemeyen alici (or.
+   `f().fn()`) metod yoluna duser → LINK-RED (gurultulu), sessiz sapma YOK.
+3. **Dizi elemani:** `dizi_eleman_yapi_mi` (`{ ptr, ptr }` → by-value) + `kdl_dizi_ekle_yapi`
+   / `kdl_dizi_al_yapi` yolu + `eleman_byte = 16`. Skaler sayilsaydi 16 baytlik agregat
+   `kdl_dizi_ekle_tam(i32)` imzasina gecerdi (**LLVM SESSIZCE kabul eder** — D-295/D-325/
+   D-334 dersinin dorduncu tekrari). `xs[i]()` fat degilse: BILDIRILMEMIS sembole cagri →
+   LLVM ayrıştırma hatasi (sessiz "0" YASAK, D-326).
+
+**Donus IR'i baglami:** `ll_ic_tip` `Dizi<işlev(..)->T>` icin T dondurur; degisken
+bildiriminde `beklenen_elem_ic`, yapi alaninda `yapi_alan_ic` lifted lambda'nin donusunu
+besler ve **ayni kaynak** cagri yerine verilir (D-325 dersi: iki ayri tahmin ayrisir).
+
+**Testler (C↔self-host exit BIREBIR, 5 sekil):** yapi alani 42 · yakalamali alan +
+arguman 42 · `-> metin` alani (isaretci donus) 42 · dizi elemani 42 · coklu eleman +
+yakalama + arguman 42.
+
+**SABOTAJ (ikisi de dosyada `grep` ile DOGRULANDI):** (A) fat value skaler sayilsin →
+**iki korpus dosyasi da LLVM-RED**; (B) alan-kapanis tespiti kapatilsin → **yapi alani
+RED, dizi YESIL** (izolasyon dogru); temiz → **ikisi de 42**.
+
+**Kapilar:** codegen_bootstrap **FIXPOINT** (lexer/parser/checker 92/92 birebir +
+stage1==stage2, 45371 satir), codegen_diff **107/107**, self_driver (C-built + self-host
++ FIXPOINT, 4 mod: token 22/22, parse 12/12, check 56/56, LLVM 107/107), checker_diff
+**56/56**.
+
+**Sinir (V1, pre-existing):** self-host dizi elemani olarak `%Yapi` (nominal struct)
+HALA desteklenmiyor — `dizi_eleman_yapi_mi` yalniz fat value'yu by-value kabul eder
+(C'deki predikat `%`i de kapsar). Bu D-334 oncesinden gelen ayri bir bosluk; bu adimda
+genisletilmedi, cunku korpusta sekli yok ve ayri olcum ister.
+
+---
+
 ## D-335 — [YÜKSEK] Self-host ISARETSIZ (dtamN) semantigi YOK → sessiz yanlis cevap (2026-07-27)
 
 **Karar [ETKİ: `test/test_llvm.c` (279 → **284**, C tarafi KILIT).]** Adversarial tarama
