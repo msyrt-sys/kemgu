@@ -1322,4 +1322,380 @@ theorem ct_esz_gerekli :
   · intro h
     exact absurd (List.cons.inj (List.cons.inj h).2).1 (by decide)
 
+-- ============================================================
+-- §11. KUCUK-ADIM CT (D-345) — BLOK ICI PREEMPTION
+-- ============================================================
+
+/-
+NEDEN (D-341 KARARI GERI ALINDI):
+  Blok-atomik model (§10) araya girmeyi yalniz BLOK SINIRLARINDA birakti.
+  Blok ICINDE preemption BUYUK-ADIM `Calis` ile IFADE EDILEMEZ: `Calis s e
+  s' t v` store'un yalnizca `e` tarafindan degistirildigini VARSAYAR.
+  Bu bolum kucuk-adim bir `Adim` bagintisi ekler; araya girme ARTIK HER
+  ADIMDA mumkundur.
+
+TASARIM: buyuk-adim `Calis` SILINMEDI. §1-§10'un tamami (ct_ni, ct_esz_ni,
+kopru, tum tanikler) oldugu gibi gecerli kalir — onlar blok-atomik hikayeyi
+anlatir. Bu bolum INCE-TANELI hikayeyi anlatir. Iki hikaye ayni `CtOk`
+disiplinini paylasir.
+
+DEGER = `sabit n`. Diger her sey adim atar.
+-/
+
+/-- Kucuk-adim CT reduksiyonu. Her adim SIFIR ya da BIR gozlem uretir.
+    Cong kurallari degerlendirme sirasini sabitler (soldan saga) —
+    `Sem/Core`un cong ailesiyle birebir ayni disiplin. -/
+inductive Adim : Store → Ifade → Store → Ifade → Iz → Prop where
+  -- --- degisken / indeks okuma ---
+  | a_degisken (s : Store) (x : Ad) :
+      Adim s (.degisken x) s (.sabit (s x 0)) [.oOku x 0]
+  | a_indeks_cong (s s' : Store) (x : Ad) (idx idx' : Ifade) (t : Iz) :
+      Adim s idx s' idx' t → Adim s (.indeks x idx) s' (.indeks x idx') t
+  | a_indeks (s : Store) (x : Ad) (i : Int) :
+      Adim s (.indeks x (.sabit i)) s (.sabit (s x i.toNat)) [.oOku x i.toNat]
+  -- --- aritmetik (soldan saga) ---
+  | a_topla_sol (s s' : Store) (a a' b : Ifade) (t : Iz) :
+      Adim s a s' a' t → Adim s (.topla a b) s' (.topla a' b) t
+  | a_topla_sag (s s' : Store) (n : Int) (b b' : Ifade) (t : Iz) :
+      Adim s b s' b' t → Adim s (.topla (.sabit n) b) s' (.topla (.sabit n) b') t
+  | a_topla (s : Store) (n1 n2 : Int) :
+      Adim s (.topla (.sabit n1) (.sabit n2)) s (.sabit (n1 + n2)) []
+  | a_carp_sol (s s' : Store) (a a' b : Ifade) (t : Iz) :
+      Adim s a s' a' t → Adim s (.carp a b) s' (.carp a' b) t
+  | a_carp_sag (s s' : Store) (n : Int) (b b' : Ifade) (t : Iz) :
+      Adim s b s' b' t → Adim s (.carp (.sabit n) b) s' (.carp (.sabit n) b') t
+  | a_carp (s : Store) (n1 n2 : Int) :
+      Adim s (.carp (.sabit n1) (.sabit n2)) s (.sabit (n1 * n2)) []
+  | a_bol_sol (s s' : Store) (a a' b : Ifade) (t : Iz) :
+      Adim s a s' a' t → Adim s (.bol a b) s' (.bol a' b) t
+  | a_bol_sag (s s' : Store) (n : Int) (b b' : Ifade) (t : Iz) :
+      Adim s b s' b' t → Adim s (.bol (.sabit n) b) s' (.bol (.sabit n) b') t
+  /-- D-338: bolme OPERANDLARI ize koyar (veri-bagimli gecikme). -/
+  | a_bol (s : Store) (n1 n2 : Int) :
+      Adim s (.bol (.sabit n1) (.sabit n2)) s (.sabit (n1 / n2)) [.oBol n1 n2]
+  | a_kalan_sol (s s' : Store) (a a' b : Ifade) (t : Iz) :
+      Adim s a s' a' t → Adim s (.kalan a b) s' (.kalan a' b) t
+  | a_kalan_sag (s s' : Store) (n : Int) (b b' : Ifade) (t : Iz) :
+      Adim s b s' b' t → Adim s (.kalan (.sabit n) b) s' (.kalan (.sabit n) b') t
+  | a_kalan (s : Store) (n1 n2 : Int) :
+      Adim s (.kalan (.sabit n1) (.sabit n2)) s (.sabit (n1 % n2)) [.oMod n1 n2]
+  -- --- yazma ---
+  | a_atama_cong (s s' : Store) (x : Ad) (e e' : Ifade) (t : Iz) :
+      Adim s e s' e' t → Adim s (.sabitDeg x e) s' (.sabitDeg x e') t
+  | a_atama (s : Store) (x : Ad) (n : Int) :
+      Adim s (.sabitDeg x (.sabit n)) (yaz s x n) (.sabit n) [.oYaz x 0]
+  | a_indeks_ata_idx (s s' : Store) (x : Ad) (idx idx' e : Ifade) (t : Iz) :
+      Adim s idx s' idx' t →
+      Adim s (.indeksAta x idx e) s' (.indeksAta x idx' e) t
+  | a_indeks_ata_deg (s s' : Store) (x : Ad) (i : Int) (e e' : Ifade) (t : Iz) :
+      Adim s e s' e' t →
+      Adim s (.indeksAta x (.sabit i) e) s' (.indeksAta x (.sabit i) e') t
+  | a_indeks_ata (s : Store) (x : Ad) (i n : Int) :
+      Adim s (.indeksAta x (.sabit i) (.sabit n))
+            (yazH s x i.toNat n) (.sabit n) [.oYaz x i.toNat]
+  -- --- kontrol akisi ---
+  | a_sira_cong (s s' : Store) (a a' b : Ifade) (t : Iz) :
+      Adim s a s' a' t → Adim s (.sira a b) s' (.sira a' b) t
+  | a_sira_atla (s : Store) (n : Int) (b : Ifade) :
+      Adim s (.sira (.sabit n) b) s b []
+  | a_eger_cong (s s' : Store) (k k' d y : Ifade) (t : Iz) :
+      Adim s k s' k' t → Adim s (.eger k d y) s' (.eger k' d y) t
+  | a_eger_dogru (s : Store) (n : Int) (d y : Ifade) : n ≠ 0 →
+      Adim s (.eger (.sabit n) d y) s d [.oDal true]
+  | a_eger_yanlis (s : Store) (d y : Ifade) :
+      Adim s (.eger (.sabit 0) d y) s y [.oDal false]
+  /-- Dongu ACILIR (Core'un `sIkenAc`i ile ayni): uydurma kural YOK. -/
+  | a_iken_ac (s : Store) (k g : Ifade) :
+      Adim s (.iken k g) s (.eger k (.sira g (.iken k g)) (.sabit 0)) []
+  | a_esles_cong (s s' : Store) (sk sk' : Ifade) (n : Int) (d y : Ifade) (t : Iz) :
+      Adim s sk s' sk' t → Adim s (.esles sk n d y) s' (.esles sk' n d y) t
+  | a_esles_tuttu (s : Store) (m n : Int) (d y : Ifade) : m = n →
+      Adim s (.esles (.sabit m) n d y) s d [.oDal true]
+  | a_esles_tutmadi (s : Store) (m n : Int) (d y : Ifade) : m ≠ n →
+      Adim s (.esles (.sabit m) n d y) s y [.oDal false]
+
+/-- **VAKUM DENETIMI:** kucuk-adim GERCEKTEN ince-taneli — `topla`nin SOL
+    operandi tek basina adim atar, yani `a + b` ifadesinin ORTASINDA
+    (a okundu, b okunmadi) duraklanabilir. Buyuk-adimda bu nokta YOKTU. -/
+theorem adim_ara_nokta_var (s : Store) (x y : Ad) :
+    Adim s (.topla (.degisken x) (.degisken y))
+          s (.topla (.sabit (s x 0)) (.degisken y)) [.oOku x 0] :=
+  Adim.a_topla_sol _ _ _ _ _ _ (Adim.a_degisken _ _)
+
+/-- **GENEL PARCANIN KUCUK-ADIM KORUNUMU (D-345 cekirdegi):**
+    etiketi GENEL olan bir ifade, dusuk-esdeger iki store'da
+    (1) AYNI adimi atar (kalinti ifadeler BIREBIR ESIT),
+    (2) AYNI izi uretir,
+    (3) sonuc store'lari dusuk-esdeger kalir,
+    (4) **kalinti yine GENEL etiketlidir** — tumevarimin devam etmesini
+        saglayan sart budur.
+
+    `genel_ifade_korunum`un kucuk-adim karsiligi. ARADAKI FARK: burada
+    "ifade bitene kadar" degil "TEK ADIM" konusuluyor, yani ADIMLAR
+    ARASINDA baska bir thread'in araya girmesi anlamlidir. Blok ici
+    preemption'i mumkun kilan sey tam olarak bu. -/
+theorem genel_adim_korunum (G : EtiketOrtam) :
+    ∀ {s1 : Store} {e : Ifade} {s1' : Store} {e1' : Ifade} {t1 : Iz},
+      Adim s1 e s1' e1' t1 →
+      ∀ {s2 s2' : Store} {e2' : Ifade} {t2 : Iz}, Adim s2 e s2' e2' t2 →
+      DusukEs G s1 s2 → ifadeEtiket G e = .genel →
+      e1' = e2' ∧ t1 = t2 ∧ DusukEs G s1' s2' ∧ ifadeEtiket G e1' = .genel := by
+  intro s1 e s1' e1' t1 h1
+  induction h1 with
+  | a_degisken x =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      cases h2
+      exact ⟨by rw [h_low x h_et 0], rfl, h_low, rfl⟩
+  | a_indeks_cong s' x idx idx' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ex, h_ei⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_indeks_cong _ _ _ idx2 t2b h2i =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2i h_low h_ei
+          exact ⟨by rw [he], ht, hl, by
+            show (G x).birlesim (ifadeEtiket G idx') = _
+            rw [h_ex, hg]; rfl⟩
+      | a_indeks _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_indeks x i =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ex, _⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_indeks _ _ => exact ⟨by rw [h_low x h_ex i.toNat], rfl, h_low, rfl⟩
+      | a_indeks_cong _ _ _ _ _ h2i => nomatch h2i
+  | a_topla_sol s' a a' b t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_topla_sol _ _ a2 _ t2b h2a =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2a h_low h_ea
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G a').birlesim (ifadeEtiket G b) = _
+            rw [hg, h_eb]; rfl⟩
+      | a_topla_sag _ _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_topla _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_topla_sag s' n b b' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_topla_sag _ _ _ b2 t2b h2b =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2b h_low h_eb
+          exact ⟨by rw [he], ht, hl, by
+            show (Etiket.genel).birlesim (ifadeEtiket G b') = _
+            rw [hg]; rfl⟩
+      | a_topla_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_topla _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_topla n1 n2 =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_topla _ _ => exact ⟨rfl, rfl, h_low, rfl⟩
+      | a_topla_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_topla_sag _ _ _ _ _ h2b => nomatch h2b
+  | a_carp_sol s' a a' b t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_carp_sol _ _ a2 _ t2b h2a =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2a h_low h_ea
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G a').birlesim (ifadeEtiket G b) = _
+            rw [hg, h_eb]; rfl⟩
+      | a_carp_sag _ _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_carp _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_carp_sag s' n b b' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_carp_sag _ _ _ b2 t2b h2b =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2b h_low h_eb
+          exact ⟨by rw [he], ht, hl, by
+            show (Etiket.genel).birlesim (ifadeEtiket G b') = _
+            rw [hg]; rfl⟩
+      | a_carp_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_carp _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_carp n1 n2 =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_carp _ _ => exact ⟨rfl, rfl, h_low, rfl⟩
+      | a_carp_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_carp_sag _ _ _ _ _ h2b => nomatch h2b
+  | a_bol_sol s' a a' b t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_bol_sol _ _ a2 _ t2b h2a =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2a h_low h_ea
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G a').birlesim (ifadeEtiket G b) = _
+            rw [hg, h_eb]; rfl⟩
+      | a_bol_sag _ _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_bol _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_bol_sag s' n b b' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_bol_sag _ _ _ b2 t2b h2b =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2b h_low h_eb
+          exact ⟨by rw [he], ht, hl, by
+            show (Etiket.genel).birlesim (ifadeEtiket G b') = _
+            rw [hg]; rfl⟩
+      | a_bol_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_bol _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_bol n1 n2 =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_bol _ _ => exact ⟨rfl, rfl, h_low, rfl⟩
+      | a_bol_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_bol_sag _ _ _ _ _ h2b => nomatch h2b
+  | a_kalan_sol s' a a' b t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_kalan_sol _ _ a2 _ t2b h2a =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2a h_low h_ea
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G a').birlesim (ifadeEtiket G b) = _
+            rw [hg, h_eb]; rfl⟩
+      | a_kalan_sag _ _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_kalan _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_kalan_sag s' n b b' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_kalan_sag _ _ _ b2 t2b h2b =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2b h_low h_eb
+          exact ⟨by rw [he], ht, hl, by
+            show (Etiket.genel).birlesim (ifadeEtiket G b') = _
+            rw [hg]; rfl⟩
+      | a_kalan_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_kalan _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_kalan n1 n2 =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_kalan _ _ => exact ⟨rfl, rfl, h_low, rfl⟩
+      | a_kalan_sol _ _ _ _ _ h2a => nomatch h2a
+      | a_kalan_sag _ _ _ _ _ h2b => nomatch h2b
+  | a_atama_cong s' x e e' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      cases h2 with
+      | a_atama_cong _ _ _ e2b t2b h2e =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2e h_low h_et
+          exact ⟨by rw [he], ht, hl, hg⟩
+      | a_atama _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_atama x n =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_atama _ _ => exact ⟨rfl, rfl, dusukEs_yaz_genel G _ s2 x n h_low, rfl⟩
+      | a_atama_cong _ _ _ _ _ h2e => nomatch h2e
+  | a_indeks_ata_idx s' x idx idx' e t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ei, h_ee⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_indeks_ata_idx _ _ _ idx2 _ t2b h2i =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2i h_low h_ei
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G idx').birlesim (ifadeEtiket G e) = _
+            rw [hg, h_ee]; rfl⟩
+      | a_indeks_ata_deg _ _ _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_indeks_ata _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_indeks_ata_deg s' x i e e' t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_ee⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_indeks_ata_deg _ _ _ _ e2b t2b h2e =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2e h_low h_ee
+          exact ⟨by rw [he], ht, hl, by
+            show (Etiket.genel).birlesim (ifadeEtiket G e') = _
+            rw [hg]; rfl⟩
+      | a_indeks_ata_idx _ _ _ _ _ _ h2i => nomatch h2i
+      | a_indeks_ata _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_indeks_ata x i n =>
+      intro s2 s2' e2' t2 h2 h_low _
+      cases h2 with
+      | a_indeks_ata _ _ _ =>
+          exact ⟨rfl, rfl, dusukEs_yazH_genel G _ s2 x i.toNat n h_low, rfl⟩
+      | a_indeks_ata_idx _ _ _ _ _ _ h2i => nomatch h2i
+      | a_indeks_ata_deg _ _ _ _ _ _ h2e => nomatch h2e
+  | a_sira_cong s' a a' b t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_sira_cong _ _ a2 _ t2b h2a =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2a h_low h_ea
+          exact ⟨by rw [he], ht, hl, by
+            show (ifadeEtiket G a').birlesim (ifadeEtiket G b) = _
+            rw [hg, h_eb]; rfl⟩
+      | a_sira_atla _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_sira_atla n b =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_eb⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_sira_atla _ _ => exact ⟨rfl, rfl, h_low, h_eb⟩
+      | a_sira_cong _ _ _ _ _ h2a => nomatch h2a
+  | a_eger_cong s' k k' d y t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_kd, h_ey⟩ := birlesim_genel h_et
+      obtain ⟨h_ek, h_ed⟩ := birlesim_genel h_kd
+      cases h2 with
+      | a_eger_cong _ _ k2 _ _ t2b h2k =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2k h_low h_ek
+          exact ⟨by rw [he], ht, hl, by
+            show ((ifadeEtiket G k').birlesim (ifadeEtiket G d)).birlesim
+                   (ifadeEtiket G y) = _
+            rw [hg, h_ed, h_ey]; rfl⟩
+      | a_eger_dogru _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_eger_yanlis _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_eger_dogru n d y hn =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_kd, _⟩ := birlesim_genel h_et
+      obtain ⟨_, h_ed⟩ := birlesim_genel h_kd
+      cases h2 with
+      | a_eger_dogru _ _ _ _ => exact ⟨rfl, rfl, h_low, h_ed⟩
+      | a_eger_yanlis _ _ => exact absurd rfl hn
+      | a_eger_cong _ _ _ _ _ _ h2k => nomatch h2k
+  | a_eger_yanlis d y =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_ey⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_eger_yanlis _ _ => exact ⟨rfl, rfl, h_low, h_ey⟩
+      | a_eger_dogru _ _ _ hn => exact absurd rfl hn
+      | a_eger_cong _ _ _ _ _ _ h2k => nomatch h2k
+  | a_iken_ac k g =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_ek, h_eg⟩ := birlesim_genel h_et
+      cases h2
+      refine ⟨rfl, rfl, h_low, ?_⟩
+      show ((ifadeEtiket G k).birlesim
+             ((ifadeEtiket G g).birlesim
+               ((ifadeEtiket G k).birlesim (ifadeEtiket G g)))).birlesim
+             Etiket.genel = _
+      rw [h_ek, h_eg]; rfl
+  | a_esles_cong s' sk sk' n d y t _ ih =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_sd, h_ey⟩ := birlesim_genel h_et
+      obtain ⟨h_es, h_ed⟩ := birlesim_genel h_sd
+      cases h2 with
+      | a_esles_cong _ _ sk2 _ _ _ t2b h2s =>
+          obtain ⟨he, ht, hl, hg⟩ := ih h2s h_low h_es
+          exact ⟨by rw [he], ht, hl, by
+            show ((ifadeEtiket G sk').birlesim (ifadeEtiket G d)).birlesim
+                   (ifadeEtiket G y) = _
+            rw [hg, h_ed, h_ey]; rfl⟩
+      | a_esles_tuttu _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+      | a_esles_tutmadi _ _ _ _ _ => nomatch ‹Adim _ (Ifade.sabit _) _ _ _›
+  | a_esles_tuttu m n d y hmn =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨h_sd, _⟩ := birlesim_genel h_et
+      obtain ⟨_, h_ed⟩ := birlesim_genel h_sd
+      cases h2 with
+      | a_esles_tuttu _ _ _ _ _ => exact ⟨rfl, rfl, h_low, h_ed⟩
+      | a_esles_tutmadi _ _ _ _ h2n => exact absurd hmn h2n
+      | a_esles_cong _ _ _ _ _ _ _ h2s => nomatch h2s
+  | a_esles_tutmadi m n d y hmn =>
+      intro s2 s2' e2' t2 h2 h_low h_et
+      obtain ⟨_, h_ey⟩ := birlesim_genel h_et
+      cases h2 with
+      | a_esles_tutmadi _ _ _ _ _ => exact ⟨rfl, rfl, h_low, h_ey⟩
+      | a_esles_tuttu _ _ _ _ h2m => exact absurd h2m hmn
+      | a_esles_cong _ _ _ _ _ _ _ h2s => nomatch h2s
+
 end Kemgu.SideChannel.CT

@@ -5,6 +5,61 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-345 — KÜÇÜK-ADIM CT: blok içi preemption (KISMİ — çekirdek indi) (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§11 yeni),
+`test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+**D-341'İN KARARI GERİ ALINDI** (Mehmet, ölçüm sonrası). D-341'de küçük-adım
+CT fiyatlanıp reddedilmişti; blok içi preemption talebi onu zorunlu kıldı.
+
+**NEDEN ZORUNLU (kestirme yol arandı, BULUNAMADI):** blok içi preemption
+büyük-adım `Calis` ile **ifade edilemez** — `Calis s e s' t v` store'un
+yalnızca `e` tarafından değiştirildiğini *varsayar*. Ölçülen bağımlılık:
+`Calis` 16 kurucu; `genel_ifade_korunum` (165 satır), `ct_ni` (207),
+`gomme_sim` (374) üçü de `Calis` **türevi** üzerinde tümevarım yapıyor;
+18 tanık `Calis` türevi inşa ediyor.
+
+**BU ADIMDA YAPILAN:**
+- `Adim` — küçük-adım CT redüksiyonu, **27 kural** (13 İfade biçimi için
+  cong + redüksiyon). Değerlendirme sırası `Sem/Core`un cong ailesiyle
+  birebir aynı disiplin. `iken` **açılır** (Core'un `sIkenAc`i gibi) —
+  uydurma kural YOK.
+- `adim_ara_nokta_var` — **ince-tanelilik tanığı**: `a + b` ifadesinin
+  ORTASINDA (a okundu, b okunmadı) duraklanabiliyor. Büyük-adımda bu nokta
+  YOKTU.
+- **`genel_adim_korunum`** — çekirdek: etiketi GENEL olan ifade,
+  düşük-eşdeğer iki store'da (1) **aynı adımı** atar, kalıntılar **birebir
+  eşit**, (2) aynı izi üretir, (3) store'lar düşük-eşdeğer kalır,
+  (4) **kalıntı yine GENEL etiketli**. `genel_ifade_korunum`un küçük-adım
+  karşılığı; 27 durumun tamamı ispatlı.
+
+**BÜYÜK-ADIM SİLİNMEDİ.** §1–§10 (ct_ni, ct_esz_ni, köprü, 18 tanık) aynen
+geçerli — onlar **blok-atomik** hikâyeyi anlatıyor. §11 **ince-taneli**
+hikâyeyi anlatıyor. İki hikâye aynı `CtOk` disiplinini paylaşıyor. Bu,
+mevcut yığını riske atmamak için bilinçli bir karardır.
+
+**SABOTAJ:** GENEL-etiket hipotezini kaldır → **31 hata**; kalıntı-etiket
+korunumunu (4. conjunct) kaldır → **32 hata**. İkincisi kritik: o conjunct
+olmadan tümevarım **yürümüyor** — yani dekoratif değil, taşıyıcı.
+
+**⚠ AÇIKÇA EKSİK (bu adım KISMİ):** tam ince-taneli NI için gereken kalan
+parça, **gizliye-toleranslı ifade denkliği** (`IfDE`) + onun `Adim` altında
+korunumu + serpiştirilmiş `EszInce` koşumu. Gerekçe: gizli bir değişken
+okunduğunda kalıntı `sabit v1` / `sabit v2` **farklıdır** (etiket sistemi
+sabitleri hep `genel` sayar), dolayısıyla iki koşumu ilişkilendirmek için
+yapısal bir denklik bağıntısı gerekiyor. `genel_adim_korunum` o bağıntının
+**public kolunu** verir (kamusal alt-terimler eşit kalır) — yani kalan iş
+"gizli kolu" ve ~27 durumluk ikinci bir korunum ispatıdır. Tahmin ~400-600
+satır; BAŞLANMADI.
+
+**Yani:** blok içi preemption **ifade edilebilir** hâle geldi (`Adim` +
+ara-nokta tanığı) ve NI'nin kamusal çekirdeği ispatlandı; **tam ince-taneli
+NI teoremi henüz YOK**.
+
+---
+
 ## D-344 — N-ADIM SERPİŞTİRME: eşzamanlı köprü TAMAMLANDI (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (§11 yeni),
