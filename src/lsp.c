@@ -224,6 +224,13 @@ static void belge_sembolleri_topla(Belge *b) {
                     gercek->satir, gercek->sutun,
                     "sabit", "sabit");
                 break;
+            case DUGUM_CESIT:
+                sembol_ekle_belge(b,
+                    gercek->veri.cesit.ad,
+                    gercek->veri.cesit.ad_uzunluk,
+                    gercek->satir, gercek->sutun,
+                    "cesit", "\xc3\xa7" "e\xc5\x9fit (sum type)");
+                break;
             default: break;
         }
     }
@@ -431,6 +438,7 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
                  "\"hoverProvider\":true,"
                  "\"definitionProvider\":true,"
                  "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
+                 "\"documentSymbolProvider\":true,"
                  "\"diagnosticProvider\":{\"interFileDependencies\":false,"
                  "\"workspaceDiagnostics\":false}"
                  "},\"serverInfo\":{\"name\":\"kemgu-lsp\",\"version\":\"0.2\"}}}");
@@ -539,6 +547,161 @@ static void definition_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
     json_yazici_serbest(&y);
 }
 
+/* === documentSymbol (LSP v3) ===
+ *
+ * Ust duzey tanimlari hiyerarsik DocumentSymbol[] olarak dondurur:
+ *   islev(12) / yapi(23)+alanlar(8) / ozellik(11)+uyeler(6) /
+ *   sabit(14) / cesit(10)+varyantlar(22) / modul(2)+uyeler(rekursif)
+ *
+ * NOT: AST dugumleri bitis konumu tasimadigi icin `range` = `selectionRange`
+ * (ad araligi). Istemciler bunu kabul eder (range >= selectionRange sarti saglanir).
+ */
+
+/* "ad":{"start":{...},"end":{...}} seklinde bir Range alani yazar. */
+static void ds_range_yaz(JsonYazici *y, const char *alan_ad,
+                         int satir_1, int sutun_1, int uzunluk) {
+    int s = satir_1 > 0 ? satir_1 - 1 : 0;
+    int k = sutun_1 > 0 ? sutun_1 - 1 : 0;
+    json_yaz(y, "\"");
+    json_yaz(y, alan_ad);
+    json_yaz(y, "\":{\"start\":{\"line\":");
+    json_yaz_int(y, s);
+    json_yaz(y, ",\"character\":");
+    json_yaz_int(y, k);
+    json_yaz(y, "},\"end\":{\"line\":");
+    json_yaz_int(y, s);
+    json_yaz(y, ",\"character\":");
+    json_yaz_int(y, k + (uzunluk > 0 ? uzunluk : 1));
+    json_yaz(y, "}}");
+}
+
+/* Bir DocumentSymbol nesnesi acar: {"name":..,"detail":..,"kind":..,range,selectionRange
+ * Cocuk yazilacaksa cagiran ",\"children\":[...]" ekler, sonra "}" kapatir. */
+static void ds_bas_yaz(JsonYazici *y, const char *ad, int ad_uz, int kind,
+                       const char *detay, int satir_1, int sutun_1) {
+    json_yaz(y, "{\"name\":");
+    if (ad && ad_uz > 0) json_yaz_metin_lit_n(y, ad, (size_t)ad_uz);
+    else json_yaz(y, "\"?\"");
+    json_yaz(y, ",\"detail\":");
+    json_yaz_metin_lit(y, detay ? detay : "");
+    json_yaz(y, ",\"kind\":");
+    json_yaz_int(y, kind);
+    json_yaz(y, ",");
+    ds_range_yaz(y, "range", satir_1, sutun_1, ad_uz);
+    json_yaz(y, ",");
+    ds_range_yaz(y, "selectionRange", satir_1, sutun_1, ad_uz);
+}
+
+/* Bir ust duzey tanimi yazar. Yazdiysa 1 doner. */
+static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
+    if (!d) return 0;
+    if (d->tip == DUGUM_DISA && d->veri.disa.tanim) d = d->veri.disa.tanim;
+
+    switch (d->tip) {
+        case DUGUM_ISLEV:
+            ds_bas_yaz(y, d->veri.islev.ad, d->veri.islev.ad_uzunluk,
+                       12, "i\xc5\x9flev", d->satir, d->sutun);
+            json_yaz(y, "}");
+            return 1;
+        case DUGUM_SABIT:
+            ds_bas_yaz(y, d->veri.sabit.ad, d->veri.sabit.ad_uzunluk,
+                       14, "sabit", d->satir, d->sutun);
+            json_yaz(y, "}");
+            return 1;
+        case DUGUM_YAPI: {
+            ds_bas_yaz(y, d->veri.yapi.ad, d->veri.yapi.ad_uzunluk,
+                       23, "yap\xc4\xb1", d->satir, d->sutun);
+            json_yaz(y, ",\"children\":[");
+            int once = 1;
+            for (int i = 0; i < d->veri.yapi.alan_sayi; i++) {
+                const Dugum *a = d->veri.yapi.alanlar[i];
+                if (!a || a->tip != DUGUM_ALAN) continue;
+                if (!once) json_yaz(y, ",");
+                once = 0;
+                ds_bas_yaz(y, a->veri.alan.ad, a->veri.alan.ad_uzunluk,
+                           8, "alan", a->satir, a->sutun);
+                json_yaz(y, "}");
+            }
+            json_yaz(y, "]}");
+            return 1;
+        }
+        case DUGUM_CESIT: {
+            ds_bas_yaz(y, d->veri.cesit.ad, d->veri.cesit.ad_uzunluk,
+                       10, "\xc3\xa7" "e\xc5\x9fit", d->satir, d->sutun);
+            json_yaz(y, ",\"children\":[");
+            for (int i = 0; i < d->veri.cesit.varyant_sayi; i++) {
+                if (i) json_yaz(y, ",");
+                ds_bas_yaz(y, d->veri.cesit.varyantlar[i],
+                           d->veri.cesit.varyant_uzunluklar[i],
+                           22, "varyant", d->satir, d->sutun);
+                json_yaz(y, "}");
+            }
+            json_yaz(y, "]}");
+            return 1;
+        }
+        case DUGUM_OZELLIK: {
+            ds_bas_yaz(y, d->veri.ozellik.ad, d->veri.ozellik.ad_uzunluk,
+                       11, "\xc3\xb6zellik", d->satir, d->sutun);
+            json_yaz(y, ",\"children\":[");
+            int once = 1;
+            for (int i = 0; i < d->veri.ozellik.uye_sayi; i++) {
+                const Dugum *u = d->veri.ozellik.uyeler[i];
+                if (!u || u->tip != DUGUM_ISLEV) continue;
+                if (!once) json_yaz(y, ",");
+                once = 0;
+                ds_bas_yaz(y, u->veri.islev.ad, u->veri.islev.ad_uzunluk,
+                           6, "metot", u->satir, u->sutun);
+                json_yaz(y, "}");
+            }
+            json_yaz(y, "]}");
+            return 1;
+        }
+        case DUGUM_MODUL: {
+            ds_bas_yaz(y, d->veri.modul.ad, d->veri.modul.ad_uzunluk,
+                       2, "mod\xc3\xbcl", d->satir, d->sutun);
+            json_yaz(y, ",\"children\":[");
+            int once = 1;
+            for (int i = 0; i < d->veri.modul.sayi; i++) {
+                size_t once_uz = y->kullanilan;
+                if (!once) json_yaz(y, ",");
+                if (!ds_tanim_yaz(y, d->veri.modul.uyeler[i])) {
+                    y->kullanilan = once_uz;  /* yazilmadi: virgulu geri al */
+                    continue;
+                }
+                once = 0;
+            }
+            json_yaz(y, "]}");
+            return 1;
+        }
+        default: return 0;
+    }
+}
+
+static void documentsymbol_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":[");
+    int once = 1;
+    if (belge && belge->prog && belge->prog->tip == DUGUM_PROGRAM) {
+        for (int i = 0; i < belge->prog->veri.program.sayi; i++) {
+            size_t once_uz = y.kullanilan;
+            if (!once) json_yaz(&y, ",");
+            if (!ds_tanim_yaz(&y, belge->prog->veri.program.uyeler[i])) {
+                y.kullanilan = once_uz;
+                continue;
+            }
+            once = 0;
+        }
+    }
+    json_yaz(&y, "]}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
 /* === Completion === */
 
 static const char *KEYWORDS[] = {
@@ -587,6 +750,7 @@ static void completion_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
             else if (strcmp(s->kategori, "yapi") == 0) kind = 22;
             else if (strcmp(s->kategori, "ozellik") == 0) kind = 8;
             else if (strcmp(s->kategori, "sabit") == 0) kind = 21;
+            else if (strcmp(s->kategori, "cesit") == 0) kind = 13;
             json_yaz_int(&y, kind);
             json_yaz(&y, ",\"detail\":");
             json_yaz_metin_lit(&y, s->kategori);
@@ -718,6 +882,8 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             definition_yanitla(cikti, istek, &belge);
         } else if (strcmp(yontem, "textDocument/completion") == 0) {
             completion_yanitla(cikti, istek, &belge);
+        } else if (strcmp(yontem, "textDocument/documentSymbol") == 0) {
+            documentsymbol_yanitla(cikti, istek, &belge);
         }
         /* Bilinmeyen request id'li ise yanitsiz birakiyoruz (LSP kabul edilebilir) */
 
