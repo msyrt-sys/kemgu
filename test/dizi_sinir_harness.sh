@@ -35,7 +35,10 @@ panic_bekle() {
 deger_bekle() {
     local ad="$1" brc="$2" src="$3"
     printf '%s\n' "$src" > "$TMP/$ad.kem"
-    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    # D-337: --llvm ARTIK tip kontrolünü bağlar; çıkışı yutma (sessiz atlama
+    # yerine gürültülü hata — eskiden başarısız üretim fark edilmiyordu).
+    if ! "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null; then
+        echo "  🔴 $ad: --llvm üretemedi (tip hatası?)"; fail=$((fail+1)); return; fi
     clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
     "$TMP/$ad.exe" > "$TMP/$ad.out" 2>"$TMP/$ad.err"; local rc=$?
     if [ "$rc" -eq "$brc" ]; then echo "  ✅ $ad: rc=$rc (doğru)"; pass=$((pass+1));
@@ -180,8 +183,11 @@ deger_bekle vaka23_struct_padding 42 'yapı M { a: tam8; b: tam64; }
 işlev main() -> tam32 {
     değişken xs: Dizi<M> = [M { a: 2, b: 40 }];
     değişken m: M = dizi_al(xs, 0);
-    ver m.b + m.a;
+    ver (m.b olarak tam32) + (m.a olarak tam32);
 }'
+# D-337: eski hâli `m.b + m.a` idi (tam64 + tam8) — T001. Tanı DOĞRU: KEMGU'da
+# örtük sayısal dönüşüm YOK (ASLA listesi). `--llvm` tip kontrolünü bağlayınca
+# bu test kaynağı düzeltildi; `--tip-atla` ile ÖRTÜLMEDİ.
 # Struct dizi OOB de runtime sınır-kontrollü.
 panic_bekle vaka24_struct_oob 'yapı Nokta { x: tam32; y: tam32; }
 işlev main() -> tam32 {
@@ -256,7 +262,10 @@ opt_out_kontrol() {
     güvensiz { r = arr[1]; }
     ver r;
 }' > "$TMP/$ad.kem"
-    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    # D-337: --llvm ARTIK tip kontrolünü bağlar; çıkışı yutma (sessiz atlama
+    # yerine gürültülü hata — eskiden başarısız üretim fark edilmiyordu).
+    if ! "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null; then
+        echo "  🔴 $ad: --llvm üretemedi (tip hatası?)"; fail=$((fail+1)); return; fi
     local pc; pc=$(grep -c 'call void @kdl_panik' "$TMP/$ad.ll")
     clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
     "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
@@ -273,7 +282,10 @@ opt_out_yazma_kontrol() {
     güvensiz { arr[1] = 5; }
     ver 0;
 }' > "$TMP/$ad.kem"
-    "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null
+    # D-337: --llvm ARTIK tip kontrolünü bağlar; çıkışı yutma (sessiz atlama
+    # yerine gürültülü hata — eskiden başarısız üretim fark edilmiyordu).
+    if ! "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null; then
+        echo "  🔴 $ad: --llvm üretemedi (tip hatası?)"; fail=$((fail+1)); return; fi
     local pc; pc=$(grep -c 'call void @kdl_panik' "$TMP/$ad.ll")
     clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
     "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
