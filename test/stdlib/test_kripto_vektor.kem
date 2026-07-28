@@ -201,7 +201,14 @@ işlev test_v3_hkdf_info_layout() -> sabitsüre<dtam8> {
 // ============================================================================
 //
 // r before clamp: 85:d6:be:78:57:55:6d:33:7f:44:52:fe:42:d5:06:a8
-// r after clamp:  85:d6:be:78:57:55:6d:03:7f:44:52:0c:42:d5:06:08
+// r after clamp:  85:d6:be:08:54:55:6d:03:7c:44:52:0e:40:d5:06:08
+//   (little-endian tamsayi = 0x806d5400e52447c036d555408bed685 — RFC 8439 §2.5.2)
+//
+// D-339 DUZELTMESI: bu satir ONCEDEN YANLISTI
+//   ("85:d6:be:78:57:55:6d:03:7f:44:52:0c:42:d5:06:08" — r[3]/r[4]/r[8]/r[12]
+//    maskelenmemis gosterilmis, r[11] de 0x0c yerine 0x0e olmaliydi).
+// Yanlis olmasi fark edilmemisti cunku bu dosya HIC CALISTIRILMIYORDU; hicbir
+// sey yorumu dogrulamiyordu. Gercek kapi artik test_kripto_kosum.kem T10'da.
 
 işlev test_v4_poly1305_r_clamp() -> tam32 {
     değişken r: Dizi<sabitsüre<dtam8>> = [

@@ -162,6 +162,11 @@ işlev sha256_blok_sikistir(
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        // D-339: bu son satir EKSIKTI — dizi 62 elemanliydi, SHA-256 mesaj cizelgesi
+        // 64 kelime ister. W[62]/W[63] sinir disi → calisma aninda PANIK. `--check`
+        // dizi uzunlugunu indekse karsi dogrulamaz, kripto kapisi da yalniz --check
+        // yapiyordu → SHA-256 HIC calismamis olmasina ragmen tum kapilar yesildi.
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
 

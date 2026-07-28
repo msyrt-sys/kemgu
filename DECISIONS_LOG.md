@@ -74,10 +74,42 @@ alındığında: yeni korpus 15→5, kripto koşum kapısı **6/6 → 0/6** (alt
 **hepsi** düşer). Aynı sabotajlı derleyiciyle **eski** `calistir_kripto_check` YEŞİL
 kalır — kapı körlüğü ampirik olarak gösterildi.
 
+**Koşum kapısı genişletildi (6 → 11 vektör) ve İKİ GERÇEK STDLIB KUSURU buldu.**
+
+1. **SHA-256 mesaj çizelgesi dizisi 62 elemanlıydı — 64 olmalı** (`karma.kem`).
+   `W[62]`/`W[63]` sınır dışı → çalışma anında **PANİK**. Yani `sha256_blok_sikistir`
+   **hiç çalışmamıştı**. `--check` dizi uzunluğunu indekse karşı doğrulamaz; yalnız
+   gerçekten çalıştırmak yakalar. Onarıldı (+2 eleman). Not: runtime sınır kontrolü
+   görevini yaptı — bellek güvenliği ihlali değil, **loud** başarısızlık.
+2. **`test_kripto_vektor.kem`'deki Poly1305 clamp yorumu yanlıştı**
+   (`85:d6:be:78:…:0c:…` — `r[3]/r[4]/r[8]/r[12]` maskelenmemiş, `r[11]` de yanlış).
+   Doğrusu `85:d6:be:08:54:55:6d:03:7c:44:52:0e:40:d5:06:08`
+   (= `0x806d5400e52447c036d555408bed685`, RFC 8439 §2.5.2 ile birebir). Yorum
+   hiçbir şey tarafından doğrulanmadığı için yıllarca yanlış durmuş. Düzeltildi.
+
+**Beklenen değerlerin kaynağı — ezber DEĞİL.** Bağımsız bir referans implementasyonu
+yazıldı, o da RFC 8439 **§2.4.2** şifreleme vektörüyle çapraz doğrulandı
+(`ct[0:16] = 6e2e359a2568f98041ba0728dd0d6981`). İlk denemede §2.3.2 için
+**hatalı hatırlanan** değerler oracle tarafından düzeltildi — ezberden sabitlenseydi
+gate yanlış bir "doğru cevap"a kilitlenirdi.
+
+**Kapsam dışı bırakılanlar — gerekçeli.** `hkdf_extract`/`hkdf_expand` ve
+`poly1305_blok_birikim` kaynakta **V1 PLACEHOLDER** ("KESİNLİKLE üretim için
+kullanma", "NOT a real Poly1305!") — XOR-blend stub, gerçek HMAC-SHA256 / Barrett
+reduction V2'de. RFC 5869 / Poly1305 MAC bilinen-cevap kapısı **yazılmadı**: geçmezdi,
+stub çıktısını "RFC" diye sabitlemek ise sahte uyum izlenimi verirdi — kapısız
+olmaktan daha kötü. V2'de gerçek implementasyon gelince eklenmeli.
+
+**Koşum kapısı içeriği (11):** SHA-256("abc") + SHA-256("") **tam digest**
+(FIPS 180-4 App. B) · ChaCha20 blok RFC 8439 §2.3.2 (16 kelimenin tamamı) + QR
+§2.1.1 · Poly1305 r-clamp §2.5.2 (16 baytın tamamı) · ROTR/ROTL yüksek-bit ·
+σ0/σ1/Σ0 · H0/K sabitleri. Sabotajda **11 → 2** (yalnız kaydırmadan bağımsız
+sabit kontrolleri ayakta kalır).
+
 **Kapılar:** llvm_test 284/284 · sabitsure_test 39/39 · codegen_diff **108/108**
 (C↔self birebir) · checker_diff 56/56 · codegen_bootstrap FIXPOINT (92×3 birebir,
 stage1 IR == stage2 IR, 45567 satır) · self_driver (4 mod + self-host-derlenmiş) ·
-kripto_check · kripto_vektor 6/6.
+kripto_check · **kripto_vektor 11/11** · stdlib_check.
 
 **Sınır (V1):** `tekkez<dtamN>` üzerinde `>>` tip kontrolünde T028 ile reddedilir
 (lineer tip aritmetik operandı olamaz) → C'deki TEKKEZ özyinelemesi bugün

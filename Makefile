@@ -618,7 +618,10 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # `sabitsüre<dtam32> >> n` -> ashr hatasi SHA-256 Sigma/sigma fonksiyonlarinin
 # TAMAMINI ve ChaCha20 quarter-round'u bozdugu halde tum kapilar YESIL kaldi.
 # Burasi GERCEKTEN derler + calistirir + exit koduyla karsilastirir.
-# Olculdu: fix geri alinirsa exit 6 -> 0 (6 vektorun ALTISI da duser).
+# Olculdu: fix geri alinirsa exit 11 -> 0 (vektorlerin HEPSI duser).
+# Bu kapi ayrica SHA-256 mesaj cizelgesi dizisinin 62 elemanli oldugunu (64 olmali)
+# ortaya cikardi — sinir ihlali/PANIK. `--check` dizi uzunlugunu indekse karsi
+# dogrulamaz; yalnizca GERCEKTEN CALISTIRMAK bunu yakalar.
 calistir_kripto_vektor: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o | $(BUILD)
 	@echo "kripto bilinen-cevap vektor kosumu (NIST FIPS 180-4 + RFC 8439)..."
 	@b="$(BUILD)/_kripto_kosum_$$$$"; \
@@ -630,9 +633,13 @@ calistir_kripto_vektor: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o | $(BUILD)
 	clang "$$b.o" $(BUILD)/kdl_runtime.o -o "$$b.exe" 2>/dev/null || \
 		{ echo "FAIL: link"; rm -f "$$b".*; exit 1; }; \
 	"./$$b.exe"; ec=$$?; rm -f "$$b".*; \
-	if [ "$$ec" -ne 6 ]; then \
-		echo "FAIL: bilinen-cevap vektorleri — 6/6 beklenirken $$ec/6 gecti"; exit 1; fi; \
-	echo "Kripto bilinen-cevap: 6/6 vektor gecti (ChaCha20 QR, ROTR/ROTL, SHA-256 s0/s1/Sigma0)!"
+	if [ "$$ec" -ne 11 ]; then \
+		echo "FAIL: bilinen-cevap vektorleri — 11/11 beklenirken $$ec/11 gecti"; \
+		echo "      (127 = calisma-anı PANIK; 0 = hepsi dustu)"; exit 1; fi; \
+	echo "Kripto bilinen-cevap: 11/11 vektor gecti"
+	@echo "  SHA-256(\"abc\") + SHA-256(\"\") TAM digest (FIPS 180-4 App. B)"
+	@echo "  ChaCha20 blok RFC 8439 2.3.2 (16 kelime) + QR 2.1.1"
+	@echo "  Poly1305 r-clamp RFC 8439 2.5.2 (16 bayt) + ROTR/ROTL + sigma/Sigma + sabitler"
 
 # ARM64 (aarch64) cross-compile dogrulama — DGX Spark / Android NDK altyapisi
 # Mevcut KEMGU --llvm IR ciktisini clang -target ile ARM64 ELF object'e cevirir.
