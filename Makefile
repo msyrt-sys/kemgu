@@ -618,7 +618,7 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # ashr'e cevirir ve SHA-256/ChaCha20 SESSIZCE yanlis sonuc verir — tip kontrolu
 # bunu goremez, yalniz kosum gorebilir.
 #
-# D-341: ONARILDI ve test_tumu'ya BAGLANDI. Onceki not (D-340) su idi:
+# D-343: ONARILDI ve test_tumu'ya BAGLANDI. Onceki not (D-340) su idi:
 #   "sabitsure<dtamN> imzasizligi tasimiyor (ast_tip_isaretsiz_mi yalniz
 #   DUGUM_TIP_BASIT kabul ediyor) -> kapi kirmizi, test_tumu'ya baglanmadi;
 #   baglanmasi imzasizlik onariminin SON isidir."

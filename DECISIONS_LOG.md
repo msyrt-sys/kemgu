@@ -5,7 +5,11 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-341 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı taşımıyordu; kripto çekirdeği onarıldı (2026-07-28)
+## D-343 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı taşımıyordu; kripto çekirdeği onarıldı (2026-07-28)
+
+> **Numara notu:** commit mesajı (`f214381`) D-341 diyor; merge anında D-341 ve D-342
+> `origin/main`'e giren kapanış-konteyner işine (PR #107) verilmişti, bu kayıt
+> **D-343**'tür. Yetkili kayıt bu dosyadır.
 
 **Karar [ETKİ: `src/llvm.c` (+13), `selfhost/codegen.kem` (+3 dal),
 `test/cg_korpus/cg_isaretsiz_sarmalayici.kem` (yeni, 108→109),

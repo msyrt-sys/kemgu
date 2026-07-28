@@ -1,4 +1,4 @@
-// cg_isaretsiz_sarmalayici.kem — D-341: sabitsüre<T> sarmalayıcısı imzasızlığı
+// cg_isaretsiz_sarmalayici.kem — D-343: sabitsüre<T> sarmalayıcısı imzasızlığı
 // (ve self-host'ta genişliği) TAŞIR.
 // -----------------------------------------------------------------------------
 // D-340 kripto koşum kapısı bu kusuru ChaCha20 QR + SHA-256("abc") ile ölçtü:
