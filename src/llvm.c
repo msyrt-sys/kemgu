@@ -1529,7 +1529,7 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
 }
 
 /* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi?
- * D-343: sabitsure<T> / tekkez<T> ZERO-OVERHEAD sarmalayicilardir — ast_tip_to_ir
+ * D-344: sabitsure<T> / tekkez<T> ZERO-OVERHEAD sarmalayicilardir — ast_tip_to_ir
  * bunlarin icine iner (sabitsure<dtam8> -> "i8"). Burada inilmiyordu: IR tipi
  * dogru (i8) ama IMZASIZLIK dusuyordu -> `>>` icin `ashr`, bolme icin `sdiv`.
  * Ikisinin ayni sarmalayiciyi FARKLI cozmesi = sessiz yanlis cevap; kripto

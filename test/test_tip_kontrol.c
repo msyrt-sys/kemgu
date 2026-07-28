@@ -2001,6 +2001,75 @@ static void test_kacan_closure_kacmaz_temiz_g005(void) {
     arena_serbest(a);
 }
 
+/* === Aritmetik literal baglami: beklenen tip operandlara ozyineler === */
+
+/* AL-1: `degisken a: tam64 = 5 + 3;` — iki taraf da TIPSIZ literal */
+static void test_aritmetik_literal_degisken_annot(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9f" "ken x: tam64 = 5 + 3; "
+        "de\xc4\x9fi\xc5\x9f" "ken y: dtam8 = 2 * 3 + 1; ver 0; }", a);
+    test_sonuc("aritmetik literal: degisken annot baglami -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* AL-2: `ver 0 - 1;` donus tam64 — ver baglami operandlara iner */
+static void test_aritmetik_literal_ver_baglami(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev g() -> tam64 { ver 0 - 1; } "
+        "i\xc5\x9flev h() -> tam64 { ver -1; }", a);
+    test_sonuc("aritmetik literal: ver baglami (0-1 ve -1) -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* AL-3: cagri argumani baglami */
+static void test_aritmetik_literal_arg_baglami(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev al(p: tam64) -> tam64 { ver p; } "
+        "i\xc5\x9flev f() -> tam32 { de\xc4\x9fi\xc5\x9f" "ken r: tam64 = "
+        "al(1000 + 7 * 2); ver 0; }", a);
+    test_sonuc("aritmetik literal: cagri arg baglami -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* AL-4: TIPLI operand yaninda literal agaci — tek-tarafli kural */
+static void test_aritmetik_literal_tipli_yan(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f(x: tam64) -> tam64 { ver x + (16 * 8); } "
+        "i\xc5\x9flev k(x: tam64) -> mant\xc4\xb1ksal { ver x == (0 - 1); }", a);
+    test_sonuc("aritmetik literal: tipli operand yaninda literal agaci -> 0 hata",
+               h == 0);
+    arena_serbest(a);
+}
+
+/* AL-5 (SABOTAJ): TIPLI operand uyusmuyorsa ESKISI GIBI hata — genisleme
+ * literal-disina TASMAMALI. Bir literal agacinda DEGISKEN gorulur gorulmez
+ * uyum devre disi kalir. */
+static void test_aritmetik_literal_tipli_uyusmaz_hata(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev g(x: tam32) -> tam64 { ver x + 1; }", a);
+    test_sonuc("aritmetik literal SABOTAJ: tam32 degisken -> tam64 donus HATA",
+               h > 0);
+    arena_serbest(a);
+}
+
+/* AL-6 (SABOTAJ): tamsayi-disi beklenen tipe literal agaci UYMAZ */
+static void test_aritmetik_literal_mantiksal_hata(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { de\xc4\x9fi\xc5\x9f" "ken b: mant\xc4\xb1ksal "
+        "= 5 + 3; ver 0; } "
+        "i\xc5\x9flev m() -> metin { ver 0 - 1; }", a);
+    test_sonuc("aritmetik literal SABOTAJ: mantiksal/metin beklenen -> HATA",
+               h > 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback tip cikarsamasi === */
 
 /* D-1: Dizi<T> param -> T arg'dan cikarsanir */
@@ -2668,6 +2737,14 @@ int main(void) {
     test_kacan_yakalamasiz_return_temiz_g005();
     test_kacan_closure_ici_cagri_temiz_g005();
     test_kacan_closure_kacmaz_temiz_g005();
+
+    printf("\n--- Aritmetik literal baglami (beklenen tip ozyineler) ---\n");
+    test_aritmetik_literal_degisken_annot();
+    test_aritmetik_literal_ver_baglami();
+    test_aritmetik_literal_arg_baglami();
+    test_aritmetik_literal_tipli_yan();
+    test_aritmetik_literal_tipli_uyusmaz_hata();
+    test_aritmetik_literal_mantiksal_hata();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

@@ -618,7 +618,7 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # ashr'e cevirir ve SHA-256/ChaCha20 SESSIZCE yanlis sonuc verir — tip kontrolu
 # bunu goremez, yalniz kosum gorebilir.
 #
-# D-343: ONARILDI ve test_tumu'ya BAGLANDI. Onceki not (D-340) su idi:
+# D-344: ONARILDI ve test_tumu'ya BAGLANDI. Onceki not (D-340) su idi:
 #   "sabitsure<dtamN> imzasizligi tasimiyor (ast_tip_isaretsiz_mi yalniz
 #   DUGUM_TIP_BASIT kabul ediyor) -> kapi kirmizi, test_tumu'ya baglanmadi;
 #   baglanmasi imzasizlik onariminin SON isidir."
@@ -862,7 +862,7 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # (C malloc çıkarılmış) + kem_heap.o (saf-.kem malloc/free). Diğer kernel'ler BM_A64_OBJS'i
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
 KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
-              $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_kem_heap.o \
+              $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o \
               $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_zaman_kem.o \
               $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
               $(BUILD)/bm_a64_virtio_net.o
@@ -950,11 +950,19 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
-	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
-	@# D-337 TIP BORCU: `--llvm` artık tip kontrolünü BAĞLAR; kem_os birleşik
-	@# kaynağı bugün 60 tip hatası veriyor (ölçüldü) → geçici olarak --tip-atla.
-	@# Bu bir MUAFİYET değil BORÇ: hatalar giderilince bayrak KALDIRILMALI.
-	./$(BUILD)/kemgu$(EXE) --llvm --tip-atla --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
+	@# kem_heap.kem ARTIK BİRLEŞİK BİRİMİN PARÇASI (eskiden ayrı bm_a64_kem_heap.o idi).
+	@# Sebep: kdl_metin_uzunluk/kdl_metin_bayt çağrıları çapraz-birimdi → tip denetimi
+	@# onları TANIMSIZ görüyordu (8×T002) ve bu, --tip-atla borcunun son kalemiydi.
+	@# KEMGU'da üst düzey ileri-bildirim (gövdesiz imza) YOK — ölçüldü: `imza_yeterli`
+	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
+	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
+	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
+	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
+	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
+	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem \
+	  | awk -f test/strip_defined_declares.awk > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -ffunction-sections -fdata-sections -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	@# LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): 'kul_' önekli .kem sembolleri EL0-userland
 	@# routing sözleşmesi. -ffunction-sections/-fdata-sections her sembolü kendi .text.<isim>/
@@ -986,33 +994,33 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: C kdl_bare_heap hala malloc/free TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
 		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (malloc|free)$$'; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T malloc$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T malloc$$'; then \
 		echo "FAIL: saf-.kem kem_heap malloc TANIMLAMIYOR"; exit 1; \
 	fi
-	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; bm_a64_kem_heap.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
+	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; kem_os.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
 	@echo "FALSIFIYE-KANIT (K3/D-261): C region (kdl_bolge) olustur/ayir/serbest SIFIR, saf-.kem sağlıyor:"
 	@if llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -qE ' T kdl_bolge_(olustur|ayir|serbest)$$'; then \
 		echo "FAIL: C kdl_bolge hala region primitifi TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
 		llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T kdl_bolge_(olustur|ayir|serbest)$$'; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_bolge_olustur$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_bolge_olustur$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_bolge_olustur TANIMLAMIYOR"; exit 1; \
 	fi
-	@echo "  (bm_a64_bolge_kemregion.o: 0 region C-tanımı; bm_a64_kem_heap.o: T kdl_bolge_olustur — kem_os region'u SAF-.kem çıplak arena'dan)"
+	@echo "  (bm_a64_bolge_kemregion.o: 0 region C-tanımı; kem_os.o: T kdl_bolge_olustur — kem_os region'u SAF-.kem çıplak arena'dan)"
 	@echo "FALSIFIYE-KANIT (K2/D-262): C dizi (kdl_dizi.inc) + memcpy/memset SIFIR, saf-.kem sağlıyor:"
 	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (kdl_dizi_olustur|memcpy|memset)$$'; then \
 		echo "FAIL: C kdl_bare_heap hala dizi/memcpy/memset TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
 		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (kdl_dizi_olustur|memcpy|memset)$$'; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_dizi_olustur$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_dizi_olustur$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_dizi_olustur TANIMLAMIYOR"; exit 1; \
 	fi
-	@echo "  (bm_a64_heap_kemmalloc.o: 0 dizi/memcpy/memset C-tanımı; bm_a64_kem_heap.o: T kdl_dizi_olustur+memcpy — kem_os dizi/kopya SAF-.kem)"
+	@echo "  (bm_a64_heap_kemmalloc.o: 0 dizi/memcpy/memset C-tanımı; kem_os.o: T kdl_dizi_olustur+memcpy — kem_os dizi/kopya SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (K4b/D-263): C kdl_global_bolge_al SIFIR, saf-.kem sağlıyor:"
 	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T kdl_global_bolge_al$$'; then \
 		echo "FAIL: C kdl_bare_heap hala kdl_global_bolge_al TANIMLIYOR"; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_global_bolge_al$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_global_bolge_al$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_global_bolge_al TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (kem_os global-bölge de SAF-.kem)"
@@ -1022,34 +1030,34 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: C allocator objeleri hala allocator-yığını sembolü TANIMLIYOR (K1-K4b guard eksik)"; \
 		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; exit 1; \
 	fi
-	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ bm_a64_kem_heap.o SAF-.kem'den. K1→K4b TAMAM.)"
+	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ kem_os.o SAF-.kem'den. K1→K4b TAMAM.)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/metin, D-264): C kdl_metin_bare.o (bm_a64_metin.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_metin_uzunluk$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_metin_uzunluk$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_metin_uzunluk TANIMLAMIYOR"; exit 1; \
 	fi
-	@echo "  (bm_a64_metin.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_metin_uzunluk/bayt — metin de SAF-.kem)"
+	@echo "  (bm_a64_metin.o kem_os link'inden ÇIKARILDI; kem_os.o: T kdl_metin_uzunluk/bayt — metin de SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/mmio, D-266): C mmio oku32/yaz32 SIFIR, saf-.kem VOLATILE sağlıyor:"
 	@if llvm-nm $(BUILD)/bm_a64_mmio_kem.o | grep -qE ' T kdl_mmio_(oku32|yaz32)$$'; then \
 		echo "FAIL: C kdl_runtime_mmio hala oku32/yaz32 TANIMLIYOR (guard etkisiz)"; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_mmio_oku32$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_mmio_oku32$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_mmio_oku32 TANIMLAMIYOR"; exit 1; \
 	fi
-	@if ! grep -qE "load volatile i32.*|store volatile i32" $(BUILD)/kem_heap.ll; then \
+	@if ! grep -qE "load volatile i32.*|store volatile i32" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: .kem mmio VOLATILE değil (MMIO -O2 elenebilir)"; exit 1; \
 	fi
-	@echo "  (bm_a64_mmio_kem.o: 0 oku32/yaz32 C-tanımı; bm_a64_kem_heap.o: T kdl_mmio_oku32 + VOLATILE — mmio32 de SAF-.kem)"
+	@echo "  (bm_a64_mmio_kem.o: 0 oku32/yaz32 C-tanımı; kem_os.o: T kdl_mmio_oku32 + VOLATILE — mmio32 de SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/yetki, D-268): C kdl_yetki_bare (bm_a64_yetki.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_olustur$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_yetki_olustur$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_yetki_olustur TANIMLAMIYOR"; exit 1; \
 	fi
-	@if ! llvm-nm $(BUILD)/bm_a64_kem_heap.o | grep -qE ' T kdl_yetki_geri_al$$'; then \
+	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_yetki_geri_al$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_yetki_geri_al TANIMLAMIYOR"; exit 1; \
 	fi
 	@if ! llvm-nm $(BUILD)/kem_os.elf | grep -qE 'kem_yetki_sayac'; then \
 		echo "FAIL: kem_os.elf .kem yetki sayacı (kem_yetki_sayac) içermiyor — saf-.kem sağlayıcı linklenmemiş"; exit 1; \
 	fi
-	@echo "  (bm_a64_yetki.o kem_os link'inden ÇIKARILDI; bm_a64_kem_heap.o: T kdl_yetki_olustur/geri_al + kem_os.elf'te kem_yetki_sayac — yetki SAF-.kem, Yasa-4)"
+	@echo "  (bm_a64_yetki.o kem_os link'inden ÇIKARILDI; kem_os.o: T kdl_yetki_olustur/geri_al + kem_os.elf'te kem_yetki_sayac — yetki SAF-.kem, Yasa-4)"
 	@echo "FALSIFIYE-KANIT (YASA-3): kem_os IR'inda C kdl_yazdir CAGRISI = 0 (cikti saf .kem UART):"
 	@if grep -qE "call.*kdl_yazdir" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_os IR'inda kdl_yazdir CAGRISI var — konsol hala C runtime'a iniyor (Faz-2a eksik)"; \
@@ -1284,12 +1292,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "FS SYSCALL OK" $(BUILD)/kem_os.out \
 		   && grep -q "SHELL OK" $(BUILD)/kem_os.out \
 		   && grep -q "SPAWN OK" $(BUILD)/kem_os.out \
+		   && grep -q "ADRES ALANI OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \
@@ -5276,7 +5285,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_kripto_kosum
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_kripto_kosum calistir_check_kapisi
 	@echo "Tum testler gecti!"
 
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===

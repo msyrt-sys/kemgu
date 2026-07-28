@@ -2075,7 +2075,7 @@ işlev dtam_ad_mi(t: metin) -> tam32 {
 işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
     eğer tip_idx < 0 { ver 0; }
     değişken ta: metin = dizi_al(p.a_ad, tip_idx);
-    // D-343: sabitsüre<T> / tekkez<T> SIFIR-MALİYET sarmalayıcı — ll_tip içine
+    // D-344: sabitsüre<T> / tekkez<T> SIFIR-MALİYET sarmalayıcı — ll_tip içine
     // iner, burası inmiyordu → IR tipi doğru ama imzasızlık DÜŞÜYORDU (`ashr`).
     // C llvm.c `ast_tip_isaretsiz_mi` aynası; iki işlev AYNI sarmalayıcıyı AYNI
     // şekilde çözmeli, aksi halde sessiz yanlış cevap (D-340 kripto kapısı ölçtü).
@@ -2400,7 +2400,7 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(ta, "TIP_TEKKEZ") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
-    // D-343: sabitsüre<T> de SIFIR-MALİYET sarmalayıcı (C llvm.c:1189 aynası).
+    // D-344: sabitsüre<T> de SIFIR-MALİYET sarmalayıcı (C llvm.c:1189 aynası).
     // Bu dal YOKTU → aşağıdaki "i32" fallback'ine düşüyordu: `sabitsüre<dtam8>`
     // için C `alloca i8` üretirken self-host `alloca i32` üretiyordu (ÖLÇÜLDÜ).
     // Yani D-340'ın bulduğu imzasızlık kusurunun yanında self-host'ta ayrıca bir
@@ -3484,7 +3484,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // düşüp TANIMSIZ @tekkez_olustur üretiyordu (link hatası).
             ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         }
-        // D-343: sabitsüre_olustur(e) / ifşa(e) — PASS-THROUGH + speculation
+        // D-344: sabitsüre_olustur(e) / ifşa(e) — PASS-THROUGH + speculation
         // bariyeri (C llvm.c:3768 aynası; Spectre v1 azaltması). Bu dal YOKTU →
         // genel çağrı yoluna düşüp TANIMSIZ @sabitsüre_olustur üretiyordu
         // (link hatası, ÖLÇÜLDÜ) — yani self-host `stdlib/kripto`yu hiç

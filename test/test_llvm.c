@@ -89,9 +89,14 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
 
 /* TIP BORCU: checker bu programi reddediyor; codegen yolunu olcmek icin tip
  * kapisi ATLANIR. KALICI DEGIL — kusur kapaninca geri alinmali. */
-static int derle_ve_calistir_TIP_BORCU(const char *kemgu_kaynak) {
-    return derle_calistir_ic(kemgu_kaynak, 1);
+static int g_borc_satir = 0;   /* uyari mesajinda cagri yerini gostermek icin */
+static int derle_ve_calistir_borc_ic(const char *kemgu_kaynak, int satir) {
+    g_borc_satir = satir;
+    int r = derle_calistir_ic(kemgu_kaynak, 1);
+    g_borc_satir = 0;
+    return r;
 }
+#define derle_ve_calistir_TIP_BORCU(k) derle_ve_calistir_borc_ic((k), __LINE__)
 
 static int derle_calistir_ic(const char *kemgu_kaynak, int tip_atla) {
     /* fopen / / ile sorun yok — bu Windows API'sini kullanir */
@@ -101,6 +106,22 @@ static int derle_calistir_ic(const char *kemgu_kaynak, int tip_atla) {
     fclose(f);
 
     char komut[1024];
+
+    /* BORÇ DENETİMİ (kendini-iptal eden muafiyet): tip kapısı atlanacaksa,
+     * ÖNCE programin gercekten reddedilip reddedilmedigini olc. Checker kusuru
+     * kapandiginda muafiyet SESSIZCE gecerliligini yitirir ve kimse fark
+     * etmez — bu satirlar onu GURULTULU yapar. Uyari goren: bu cagriyi
+     * `derle_ve_calistir`a geri alin. */
+    if (tip_atla) {
+        snprintf(komut, sizeof(komut), "%s --check %s > %s 2>%s",
+                 KEMGU_BIN, KEM_PATH, DEV_NULL, DEV_NULL);
+        if (system(komut) == 0) {
+            fprintf(stderr,
+                "  \xe2\x9a\xa0 TIP BORCU KAPANDI (test_llvm.c:%d): bu program "
+                "artik --check'ten GECIYOR — cagriyi derle_ve_calistir'a geri "
+                "alin.\n", g_borc_satir);
+        }
+    }
 
     /* kemgu --llvm > .ll
      * NOT: cmd.exe path'lerinde / ile baslayan token flag sayilir.
@@ -3071,7 +3092,7 @@ static void test_kanal_kesirli_llvm_de_reddedilir(void) {
 static void test_kanal_tam8_negatif_turu(void) {
     /* Isaretli dar T + NEGATIF deger: sext/trunc ciftinin isaret genisletmeyi
      * dogru yaptigini kanitlar. -128 = tam8'in alt siniri (kenar durum). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev oku(k: kanal<tam8>) -> tam8 { ver kanal_al(k); } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam8> = kanal_olu\xc5\x9ftur(2); "
@@ -3099,7 +3120,7 @@ static void test_kanal_dtam8_isaretsiz_turu(void) {
 
 static void test_kanal_dar_T_capraz_thread(void) {
     /* Dar T, GERCEK thread sinirini gecerek: gorev gonderir, main alir. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam16> = kanal_olu\xc5\x9ftur(2); "
         GB_AC("g", "|| kanal_g\xc3\xb6nder(k, 0 - 1000)")
