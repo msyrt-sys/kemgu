@@ -117,7 +117,8 @@ static void test_initialize_yaniti(void) {
         JsonDeger *r1 = json_alan(j1, "result");
         JsonDeger *cap = json_alan(r1, "capabilities");
         JsonDeger *tds = json_alan(cap, "textDocumentSync");
-        ok = j1 && r1 && cap && tds && tds->veri.tamsayi == 1;
+        /* LSP v3: incremental sync ilan edilir */
+        ok = j1 && r1 && cap && tds && tds->veri.tamsayi == 2;
         arena_serbest(a);
     }
     test_sonuc("initialize -> capabilities donen yanit", ok);
@@ -618,6 +619,106 @@ static void test_references_bos(void) {
     fclose(cikti);
 }
 
+/* LSP v3: incremental sync — aralik degisimi (UTF-16 ofset, Turkce karakterli satir) */
+static void test_incremental_aralik_degisimi(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev main() -> tam32 { ver 0; }"
+     * "işlev" 5 UTF-16 birim (ş tek birim) -> "main" [6,10) araliginda */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 { ver 0; }\"}}}");
+    /* "main" -> "basla" (aralik degisimi) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"version\":2},"
+        "\"contentChanges\":[{\"range\":{"
+        "\"start\":{\"line\":0,\"character\":6},"
+        "\"end\":{\"line\":0,\"character\":10}},\"text\":\"basla\"}]}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    /* initialize + 2 diag (open, change) + documentSymbol + shutdown */
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        /* degisiklik sonrasi diagnostics temiz kalmali */
+        LspYanit *yd = yanit_n(y, 2);
+        JsonDeger *jd = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        ok = json_dizi_sayi(json_alan(json_alan(jd, "params"), "diagnostics")) == 0;
+        if (ok) {
+            LspYanit *ys = yanit_n(y, 3);
+            JsonDeger *j = json_ayrist(a, ys->govde, ys->content_length, NULL);
+            JsonDeger *result = json_alan(j, "result");
+            ok = json_dizi_sayi(result) == 1;
+            if (ok) {
+                int n_uz = 0;
+                const char *ad = json_metin(
+                    json_alan(json_dizi_eleman(result, 0), "name"), &n_uz);
+                ok = ad && strcmp(ad, "basla") == 0;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("incremental didChange araligi degistirir (main -> basla)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: incremental sync — cok satirli belgeye ekleme (bos aralik) */
+static void test_incremental_ekleme(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev main() -> tam32 {\n  ver 0\n}" — ';' eksik, parser hatasi */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 {\\n  ver 0\\n}\"}}}");
+    /* 1. satirin sonuna ';' ekle (bos aralik = saf ekleme) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"version\":2},"
+        "\"contentChanges\":[{\"range\":{"
+        "\"start\":{\"line\":1,\"character\":7},"
+        "\"end\":{\"line\":1,\"character\":7}},\"text\":\";\"}]}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *y2 = yanit_n(y, 1);   /* open: hatali */
+        LspYanit *y3 = yanit_n(y, 2);   /* change: temiz */
+        JsonDeger *j2 = json_ayrist(a, y2->govde, y2->content_length, NULL);
+        JsonDeger *j3 = json_ayrist(a, y3->govde, y3->content_length, NULL);
+        JsonDeger *d2 = json_alan(json_alan(j2, "params"), "diagnostics");
+        JsonDeger *d3 = json_alan(json_alan(j3, "params"), "diagnostics");
+        ok = json_dizi_sayi(d2) > 0 && json_dizi_sayi(d3) == 0;
+        arena_serbest(a);
+    }
+    test_sonuc("incremental didChange ekleme yapar (';' -> temiz)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 static void test_shutdown_yanit(void) {
     FILE *girdi = tmpfile();
     FILE *cikti = tmpfile();
@@ -669,6 +770,10 @@ int main(void) {
     printf("\n--- LSP v3 (references) ---\n");
     test_references_islev();
     test_references_bos();
+
+    printf("\n--- LSP v3 (incremental sync) ---\n");
+    test_incremental_aralik_degisimi();
+    test_incremental_ekleme();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

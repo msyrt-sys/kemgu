@@ -170,6 +170,65 @@ static void belge_temizle(Belge *b) {
     memset(b, 0, sizeof(*b));
 }
 
+/* === Incremental sync (LSP v3) ===
+ *
+ * textDocumentSync = 2 (Incremental). didChange girdileri iki bicimde gelir:
+ *   { "range": {...}, "text": "..." }  -> araligi degistir
+ *   { "text": "..." }                  -> tum belgeyi degistir (eski full yol)
+ * Ikisi de desteklenir; degisiklikler geldikleri sirada uygulanir.
+ *
+ * LSP konumlarinda `character` UTF-16 kod birimi sayar (spec varsayilani).
+ * Asagidaki donusturucu UTF-8 tamponunda bunu bayt ofsetine cevirir. */
+
+static int konum_bayt_ofseti(const char *s, int uz, int satir_0, int karakter_0) {
+    int i = 0;
+    /* Istenen satirin basina git */
+    for (int satir = 0; satir < satir_0 && i < uz; ) {
+        if (s[i] == '\n') { satir++; i++; }
+        else i++;
+    }
+    /* Satir icinde karakter_0 kadar UTF-16 kod birimi ilerle */
+    int birim = 0;
+    while (i < uz && birim < karakter_0 && s[i] != '\n') {
+        unsigned char c = (unsigned char)s[i];
+        int bayt = 1;
+        if (c >= 0xF0) bayt = 4;
+        else if (c >= 0xE0) bayt = 3;
+        else if (c >= 0xC0) bayt = 2;
+        if (i + bayt > uz) bayt = uz - i;
+        i += bayt;
+        birim += (bayt == 4) ? 2 : 1;  /* BMP disi = surrogate cifti */
+    }
+    return i;
+}
+
+/* Belgenin [bas, son) bayt araligini `metin` ile degistir. */
+static void belge_aralik_uygula(Belge *b, const JsonDeger *range,
+                                const char *metin, int uz) {
+    if (!b->icerik || !range) return;
+    const JsonDeger *st = json_alan(range, "start");
+    const JsonDeger *en = json_alan(range, "end");
+    if (!st || !en) return;
+    int bas = konum_bayt_ofseti(b->icerik, b->icerik_uz,
+        (int)json_tamsayi(json_alan(st, "line")),
+        (int)json_tamsayi(json_alan(st, "character")));
+    int son = konum_bayt_ofseti(b->icerik, b->icerik_uz,
+        (int)json_tamsayi(json_alan(en, "line")),
+        (int)json_tamsayi(json_alan(en, "character")));
+    if (son < bas) son = bas;
+
+    int yeni_uz = b->icerik_uz - (son - bas) + uz;
+    char *yeni = (char *)malloc((size_t)yeni_uz + 1);
+    if (!yeni) return;
+    memcpy(yeni, b->icerik, (size_t)bas);
+    if (uz > 0) memcpy(yeni + bas, metin, (size_t)uz);
+    memcpy(yeni + bas + uz, b->icerik + son, (size_t)(b->icerik_uz - son));
+    yeni[yeni_uz] = '\0';
+    free(b->icerik);
+    b->icerik = yeni;
+    b->icerik_uz = yeni_uz;
+}
+
 /* Ust duzey sembolleri AST'den cikar ve belgeye kayit et. */
 static void sembol_ekle_belge(Belge *b, const char *ad, int ad_uz,
                               int satir, int sutun,
@@ -484,9 +543,10 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
     } else {
         json_yaz(&y, "null");
     }
-    /* Capabilities: textDocumentSync = 1 (full) + hover + completion + definition */
+    /* Capabilities: textDocumentSync = 2 (incremental; range'siz degisiklik
+     * geriye uyumlu olarak tam-metin yerine gecer) */
     json_yaz(&y, ",\"result\":{\"capabilities\":{"
-                 "\"textDocumentSync\":1,"
+                 "\"textDocumentSync\":2,"
                  "\"hoverProvider\":true,"
                  "\"definitionProvider\":true,"
                  "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
@@ -941,21 +1001,32 @@ static void open_or_change_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
     const char *uri = json_metin(json_alan(td, "uri"), &uri_uz);
     if (!uri) return;
 
-    const char *icerik = NULL;
-    int icerik_uz = 0;
     if (change_mu) {
         JsonDeger *changes = json_alan(params, "contentChanges");
         int n = json_dizi_sayi(changes);
-        if (n > 0) {
-            JsonDeger *c0 = json_dizi_eleman(changes, 0);
-            icerik = json_metin(json_alan(c0, "text"), &icerik_uz);
+        int uygulandi = 0;
+        for (int i = 0; i < n; i++) {
+            JsonDeger *c = json_dizi_eleman(changes, i);
+            int t_uz = 0;
+            const char *t = json_metin(json_alan(c, "text"), &t_uz);
+            if (!t) continue;
+            JsonDeger *range = json_alan(c, "range");
+            if (range && belge->icerik) {
+                belge_aralik_uygula(belge, range, t, t_uz);
+            } else {
+                /* Geriye uyumlu tam-metin degisimi (full sync) */
+                belge_set(belge, uri, uri_uz, t, t_uz);
+            }
+            uygulandi = 1;
         }
+        if (!uygulandi) return;
+        if (!belge->uri) return;
     } else {
-        icerik = json_metin(json_alan(td, "text"), &icerik_uz);
+        int icerik_uz = 0;
+        const char *icerik = json_metin(json_alan(td, "text"), &icerik_uz);
+        if (!icerik) return;
+        belge_set(belge, uri, uri_uz, icerik, icerik_uz);
     }
-    if (!icerik) return;
-
-    belge_set(belge, uri, uri_uz, icerik, icerik_uz);
     analiz_et(belge, dc);
     publish_diagnostics(cikti, belge->uri, dc);
 }
