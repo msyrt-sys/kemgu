@@ -1,0 +1,18 @@
+// TC6b (D-252/D-259 KORUMA): `çıplak işlev` — region-prologue EMIT EDİLMEZ,
+// true C-ABI. Tip denetimi açısından normal işlev gibi denetlenmeli; `çıplak`
+// başlığı tanınmazsa üst-öge parse'ı kayar ve sahte tanı üretir.
+// BEKLENEN: hatasız (OK).
+çıplak işlev kare(x: tam64) -> tam64 {
+    ver x * x;
+}
+
+çıplak işlev topla(a: tam64, b: tam64) -> tam64 {
+    değişken s: tam64 = a + b;
+    ver s;
+}
+
+işlev main() -> tam32 {
+    kare(6);
+    topla(1, 2);
+    ver 0;
+}

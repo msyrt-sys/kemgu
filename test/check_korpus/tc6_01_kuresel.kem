@@ -1,0 +1,20 @@
+// TC6a (D-253 KORUMA): `küresel değişken` modül-global durum. Küresel erişim
+// güvensiz-tier ister; `çıplak` işlev bu izni verir (D-254/D-256 grant) —
+// kem_malloc.kem'in gerçek deseni. Küresel bağlama ad çözümünde görünmezse
+// okuma/yazma sahte T002 üretir. BEKLENEN: hatasız (OK).
+küresel değişken sayac: tam64 = 0;
+
+çıplak işlev kur(taban: tam64) -> tam32 {
+    sayac = taban;
+    ver 0;
+}
+
+çıplak işlev arttir(n: tam64) -> tam64 {
+    değişken p: tam64 = sayac;
+    sayac = sayac + n;
+    ver p;
+}
+
+işlev main() -> tam32 {
+    ver 0;
+}
