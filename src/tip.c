@@ -541,6 +541,21 @@ int tip_tamsayi_mi(const TipBilgisi *t) {
     }
 }
 
+/* D-343: kesirli mi? sabitsure<T> ici cekilir (tip_tamsayi_mi ile ayni disiplin).
+ * GENERIC_PARAM deferred=1 — instantiation'a birakilir. */
+int tip_kesirli_sayi_mi(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_SABITSURE) return tip_kesirli_sayi_mi(t->veri.sabitsure.ic);
+    switch (t->kategori) {
+        case TIP_KESIRLI32: case TIP_KESIRLI64:
+            return 1;
+        case TIP_GENERIC_PARAM:
+            return 1;  /* deferred */
+        default:
+            return 0;
+    }
+}
+
 int tip_mantiksal_mi(const TipBilgisi *t) {
     if (!t) return 0;
     if (t->kategori == TIP_SABITSURE) return tip_mantiksal_mi(t->veri.sabitsure.ic);

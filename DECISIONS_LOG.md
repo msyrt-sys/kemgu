@@ -309,6 +309,62 @@ korpuslar icin `güvensiz`/annotasyon); (c) mevcut hal + bu kapi yeterli sayilsi
 
 ---
 
+## D-343 — TIP BORCU sinifladirmasi + 2 checker YANLIS POZITIFI kapandi (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (kesirli literal baglami + bos dizi eleman tipi),
+`src/tip.h`/`src/tip.c` (`tip_kesirli_sayi_mi`), `test/test_llvm.c` (286 → **291**;
+1 test BORC yolundan KATI yola dondu).]** D-337'nin "SIRADAKI (borc kapatma)" maddesi.
+
+**1) ONCE SINIFLANDIRMA (16 borc programinin GERCEK tanisi olculdu).** Gecici
+enstruman: `derle_ve_calistir_TIP_BORCU` her programi `--check`ten de gecirip taniyi
+biriktirdi (sonra GERI ALINDI). Sonuc uc gruba ayrildi:
+
+| Grup | Vaka | Kim hatali |
+|---|---|---|
+| **A. Checker yanlis pozitifi** | kesirli32 literal baglami (1); `kanal<tam8>` + `0 - 128` literali ve `v == 0 - 128` (1); generic donus-tipi cikarsamasi `kimlik(20)` → tam8 (1); `eşleş` L005 kol KAPSAMI — `a` yalniz `tamam(a)` kolunda tanimli, `hata` kolunda tuketilemez (1) | **derleyici** |
+| **B. Test kaynagi hatali** | `ver v` tamN→tam32 ortuk donusum yok (3: mmio16/mmio64/mmio-komsu); `doldur(&k)` param `&değişken K` iken `&k` gecilmis (1) | **test** (D-337'deki vaka23 gibi) |
+| **C. 🔴 TASARIM KARARI (Mehmet)** | `&x` → `*T` gecisi `güvensiz` icinde (4); `mantıksal olarak tamN` E002 (1); `yetki<R>` CP005 "scope sonunda tuketilmedi" (2) | **spec** — KIRMIZI_QUEUE'ya |
+
+**2) KAPATILAN 1: kesirli literal baglami.** Tipsiz kesirli literalin default'u
+`kesirli64`; `x: kesirli32` ile `x + 21.0` → T001 = GECERLI program reddi. Tamsayi
+literali icin AYNI kural zaten vardi (bkz. ayni blok) — kesirli dali eksikti. Simetrik
+eklendi (+ yeni `tip_kesirli_sayi_mi`; ad `tip_kesirli_mi` DEGIL — `src/llvm.c`'de ayni
+adli static IR-yardimcisi var, cakisirdi). **Genisletme DEGIL:** iki TIPLI kesirli farkli
+genislikte HALA T001; tamsayi+kesirli karisimi HALA T001 (ortuk donusum ASLA).
+
+**3) KAPATILAN 2 (siniflandirmada YOKTU — `check_kapisi` yakaladi): `Dizi<Yapı> = []`.**
+Bos dizi literalinde eleman tipi beklenenden **yalniz KATEGORI** ile yeniden kuruluyordu
+(`t_basit(tk, eleman_t->kategori)`); TIP_YAPI'da yapi ADI + tip argumanlari DUSUYORDU →
+`değişken xs: Dizi<N> = [];` T001. `Dizi<tam32> = []` calistigi icin kusur skaler
+elemanda GORUNMUYORDU. Eleman tipi artik beklenenden OLDUGU GIBI alinir. Bu, D-342'de
+eklenen `cg_yapi_dizi.kem` korpusunu da `--check` kapisindan gecirir (o kapi codegen_diff
+`--tip-atla` kullandigi icin D-342'de gorulmemisti).
+
+**Testler:** test_llvm 286 → **291**. `test_kesirli32` **BORC yolundan KATI yola DONDU**
+(TIP_BORCU cagrisi 16 → 15). Yeni: SOL literal (`21.0 + x`) 42 · kesirli32+kesirli64
+HALA T001 · tam32+kesirli literal HALA T001 · `Dizi<Yapı> = []` 42 · `Dizi<N> = [M{}]`
+HALA T013.
+
+**SABOTAJ:** (K1) SOL dal kapatilsin → [287] kirmizi; (K2) SAG dal kapatilsin → [27]
+kirmizi; (B) bos-dizi onarimi geri alinsin → [290] kirmizi; temiz → 0.
+⚠ **Ilk sabotaj SESSIZ KALDI** — o an yalniz SAG-literal testi vardi, SOL dal HIC
+kapsanmiyordu. Sabotajin "hicbir sey kirmadi" sonucu **testin yetersizligini** gosterir,
+kodun dogrulugunu degil; SOL-literal testi bu yuzden eklendi.
+
+**Self-host parite (olculdu):** `Dizi<Yapı> = []` ve kesirli32 literali self-host
+checker'da ZATEN kabul ediliyordu (daha kaba) → C artik onunla ayni yonde. Ters yonde
+bir bosluk var: `tam32 + 2.5` self-host `--check`te OK (C: T001) — ama `--llvm` ciktisi
+LLVM-RED veriyor (gurultulu, sessiz sapma YOK). Ayri is olarak duruyor.
+
+**Kapilar:** test_llvm **291/291**, check_kapisi **205/212 + 7 muaf, 0 RED**,
+tip_kontrol 191/191, linear 89/89, codegen_bootstrap FIXPOINT, codegen_diff, checker_diff
+(asagida), sifir derleyici uyarisi.
+
+**SIRADAKI (kalan borc):** Grup A'nin ucu — `kanal<tam8>` literal daraltmasi, generic
+donus-tipi cikarsamasi, L005 kol kapsami. Grup C Mehmet'in karari (KIRMIZI_QUEUE).
+
+---
+
 ## D-342 — [YÜKSEK] `%Yapi` dizi elemani self-host'a portlandi + C'de `için` SESSIZ YANLIS CEVAP kapandi (2026-07-28)
 
 > **Numara notu:** bu dal (`claude/hopeful-tharp-8dc610`) commit mesajlarinda D-337

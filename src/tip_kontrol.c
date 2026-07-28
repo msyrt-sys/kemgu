@@ -2279,6 +2279,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                            !tip_esit(sol, sag)) {
                     sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
                 }
+                /* D-343: AYNI KURAL KESİRLİ LİTERALE DE. Tipsiz kesirli literal
+                 * default'u kesirli64; `x: kesirli32` ile `x + 21.0` T001
+                 * veriyordu — GEÇERLİ program reddi (D-337'de borç olarak
+                 * işaretlendi). Tamsayı dalının birebir simetriği: literal olan
+                 * taraf karşı tarafın kesirli tipinde yeniden çıkarılır.
+                 * Genişletme DEĞİL (kesirli32 + kesirli64 hâlâ T001) — yalnız
+                 * TİPSİZ literal bağlamdan tiplenir; örtük dönüşüm yok. */
+                if (d->veri.ikili.sol->tip == DUGUM_KESIRLI &&
+                    tip_kesirli_sayi_mi(sol) && tip_kesirli_sayi_mi(sag) &&
+                    !tip_esit(sol, sag)) {
+                    sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
+                } else if (d->veri.ikili.sag->tip == DUGUM_KESIRLI &&
+                           tip_kesirli_sayi_mi(sol) && tip_kesirli_sayi_mi(sag) &&
+                           !tip_esit(sol, sag)) {
+                    sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
+                }
             }
             switch (d->veri.ikili.op) {
                 case OP_ARTI:  case OP_EKSI:
@@ -4192,9 +4208,14 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             const TipBilgisi *eleman_t = beklenen->veri.dizi.eleman;
             int n = d->veri.dizi_olustur.sayi;
             if (n == 0) {
-                /* Bos dizi -> beklenen tip */
-                return tip_olustur_dizi(tk->arena,
-                    t_basit(tk, eleman_t->kategori));  /* shallow */
+                /* Bos dizi -> beklenen tip.
+                 * D-343: eleman tipi BEKLENENDEN OLDUGU GIBI alinir. Onceki
+                 * `t_basit(tk, eleman_t->kategori)` SIG (shallow) kopyasi
+                 * yalniz KATEGORIYI tasiyordu; TIP_YAPI'da yapi ADI ve tip
+                 * argumanlari dusuyor -> `değişken xs: Dizi<N> = []` T001
+                 * veriyordu (GECERLI program reddi; `Dizi<tam32> = []` calisiyordu
+                 * cunku orada kategori TIPIN TAMAMI). */
+                return tip_olustur_dizi(tk->arena, (TipBilgisi *)eleman_t);
             }
             /* Dolu dizi: her eleman beklenen->dizi.eleman context'inde */
             for (int i = 0; i < n; i++) {

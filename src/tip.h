@@ -231,6 +231,8 @@ const char *tip_kategorisi_adi(TipKategorisi k);
 int tip_sayisal_mi(const TipBilgisi *t);
 /* Tamsayi mi? (bit op, mod icin) */
 int tip_tamsayi_mi(const TipBilgisi *t);
+/* Kesirli mi? (D-343: tipsiz kesirli literalin baglamdan tiplenmesi icin) */
+int tip_kesirli_sayi_mi(const TipBilgisi *t);
 /* Mantiksal mi? */
 int tip_mantiksal_mi(const TipBilgisi *t);
 

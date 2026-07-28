@@ -897,8 +897,10 @@ static void test_kesirli64(void) {
     test_sonuc("kesirli64 (double) hesap(21.0) * 2.0 -> 42", rc == 42);
 }
 
+/* D-343: BORC GERI ALINDI — checker artik tipsiz kesirli literali baglamdan
+ * tipliyor (`x: kesirli32` ile `x + 21.0`). Normal (KATI) yola dondu. */
 static void test_kesirli32(void) {
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev hesap(x: kesirli32) -> kesirli32 { ver x + 21.0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken r: kesirli32 = hesap(21.0); "
@@ -3251,6 +3253,64 @@ static void test_kapanis_yapi_alani_metin(void) {
                rc == 42);
 }
 
+/* === D-343: kesirli literal baglami (checker yanlis pozitifi kapandi) === */
+
+/* SOL taraftaki tipsiz kesirli literal de baglamdan tiplenir (`21.0 + x`).
+ * SABOTAJLA OLCULDU: yalniz sag-literal testi varken SOL dal HIC kapsanmiyordu
+ * (sabotaj sessiz kaldi) — bu test o boslugu kapatir. */
+static void test_kesirli32_sol_literal(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev hesap(x: kesirli32) -> kesirli32 { ver 21.0 + x; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken r: kesirli32 = hesap(21.0); ver 42; }");
+    test_sonuc("kesirli32 SOL literal (21.0 + x) -> exit 42", rc == 42);
+}
+
+/* NEGATIF: iki TIPLI kesirli, farkli genislik -> HALA T001. Ortuk sayisal
+ * donusum KEMGU'da ASLA yok; duzeltilen sey yalniz TIPSIZ literalin baglamdan
+ * tiplenmesiydi. KATI modda tip hatasi -> IR yok -> rc != 42. */
+static void test_kesirli_ortuk_donusum_yok(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken a: kesirli32 = 1.0; "
+        "de\xc4\x9fi\xc5\x9fken b: kesirli64 = 2.0; "
+        "de\xc4\x9fi\xc5\x9fken c: kesirli64 = a + b; ver 42; }");
+    test_sonuc("kesirli32 + kesirli64 HALA T001 (ortuk donusum yok)", rc != 42);
+}
+
+/* NEGATIF: kesirli literal + TAMSAYI degisken -> HALA T001 (aile karisimi). */
+static void test_kesirli_literal_tamsayi_karisim_yok(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 1; "
+        "de\xc4\x9fi\xc5\x9fken y: tam32 = x + 2.5; ver 42; }");
+    test_sonuc("tam32 + kesirli literal HALA T001", rc != 42);
+}
+
+/* Bos dizi literali YAPI elemanli tipte de baglamdan tiplenir.
+ * Once: `değişken xs: Dizi<N> = [];` -> T001 (beklenen eleman tipi yalniz
+ * KATEGORIDEN yeniden kuruluyordu; TIP_YAPI'da ad/tip-argumanlari dusuyordu).
+ * `Dizi<tam32> = []` calisiyordu -> kusur YAPI/generic elemanda GORUNMEZDI. */
+static void test_bos_dizi_yapi_elemanli(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 N { x: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<N> = []; "
+        "dizi_ekle(xs, N { x: 42 }); "
+        "de\xc4\x9fi\xc5\x9fken e = xs[0]; ver e.x; }");
+    test_sonuc("bos dizi literali Dizi<Yapi> baglamindan tiplenir -> exit 42",
+               rc == 42);
+}
+
+/* NEGATIF: bos OLMAYAN dizide yanlis eleman tipi HALA reddedilmeli (T013). */
+static void test_dizi_yanlis_eleman_hala_red(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 N { x: tam32; } yap\xc4\xb1 M { y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<N> = [M { y: 1 }]; ver 42; }");
+    test_sonuc("Dizi<N> = [M{...}] HALA T013", rc != 42);
+}
+
 /* === D-342: `için` dongusu BY-VALUE eleman uzerinde === */
 
 /* SESSIZ YANLIS CEVAP regresyonu: `için` dali by-value elemani skaler
@@ -3685,6 +3745,13 @@ int main(void) {
     printf("\n--- D-342: `icin` dongusu by-value eleman uzerinde ---\n");
     test_icin_yapi_dizisi();
     test_icin_kapanis_dizisi();
+
+    printf("\n--- D-343: kesirli literal baglami ---\n");
+    test_kesirli32_sol_literal();
+    test_kesirli_ortuk_donusum_yok();
+    test_kesirli_literal_tamsayi_karisim_yok();
+    test_bos_dizi_yapi_elemanli();
+    test_dizi_yanlis_eleman_hala_red();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

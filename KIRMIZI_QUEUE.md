@@ -701,3 +701,33 @@ Bekleyen kararlar:
 4. **`src/ast_kaynak.c/h`** — AST→source pretty printer. LSP format komutu 
    gerektiğinde port edilir. Sarı kategori.
 ---
+
+## [2026-07-28] — Katı `--llvm` borcu: 3 tip-sistemi semantiği kararı (D-343 Grup C)
+
+- **Kategori:** tip katmanı / unsafe primitif semantiği
+- **Bağlam:** D-337 `--llvm`'i katı yaptı ve 16 testi `TIP_BORCU` işaretledi.
+  D-343'te 16'sının gerçek tanısı ölçülüp sınıflandırıldı: 4'ü checker yanlış
+  pozitifi (2'si D-343'te kapandı), 4'ü test kaynağı hatası, **7'si aşağıdaki
+  3 SPEC sorusuna dayanıyor** — derleyici tarafında tek başıma karara
+  bağlanamaz, çünkü üçü de dilin sözleşmesini değiştirir.
+
+- **Karar bekleyen 3 soru:**
+
+  1. **`&x` → `*T` geçişi (4 test).** `işlev oku(p: *tam32)` çağrısına
+     `oku(&x)` geçiliyor (hepsi `güvensiz` bloğu bağlamında). Bugün T001.
+     Seçenekler: (a) `güvensiz` içinde `&T` → `*T` örtük geçiş serbest;
+     (b) açık `(&x olarak *tam32)` zorunlu; (c) yeni `adres(x)` intrinsic'i.
+     **Not:** (a) "örtük dönüşüm YOK" ilkesine dokunur — ama referans→ham
+     pointer bir *sayısal* dönüşüm değil, temsil aynı. Karar sizin.
+
+  2. **`mantıksal olarak tamN` (1 test).** Bugün E002 ("kaynak ve hedef
+     sayısal/karakter olmalı"). Seçenekler: (a) izin ver (doğru→1, yanlış→0);
+     (b) yasak kalsın, test `eğer b { 1 } değilse { 0 }` yazsın.
+
+  3. **`yetki<R>` scope-sonu tüketimi CP005 (2 test).** `delege` zinciriyle
+     türetilen ara yetkiler (`y1`, `y2`) tüketilmeden scope bitiyor → CP005.
+     Soru: türetilmiş yetki **tüketilmek zorunda mı**, yoksa `geri_al(kök)`
+     zinciri kapatıyor mu? Bu, capability modelinin doğrusallık derecesi.
+
+- **Engellediği iş:** 7 test `--tip-atla` ile derleniyor (borç görünür
+  işaretli). Karar verilene kadar kapanamaz.
