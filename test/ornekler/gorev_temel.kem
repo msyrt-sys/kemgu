@@ -49,7 +49,12 @@ işlev main() -> tam32 {
                     eşleş görev_başlat(|| temel + 2) {
                         // 20 + 22 = 42.
                         tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
-                        hata(eb) => { ver 1; }
+                        // D-336: HATA dalında da `a` birleştirilmeli. Aksi halde bu
+                        // yolda görev tanıtıcısı hiç birleştirilmeden düşer = SIZINTI
+                        // (L005 bunu bildiriyordu; örnek dosya kuralı ihlal ediyordu
+                        // ve hiçbir kapı korpus üzerinde --check koşturmadığı için
+                        // fark edilmemişti).
+                        hata(eb) => { değişken yut: tam32 = görev_birleştir(a); ver 1; }
                     }
                 }
                 hata(ea) => { ver 1; }

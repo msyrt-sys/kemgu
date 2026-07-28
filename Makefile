@@ -63,7 +63,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom kemgu_self calistir_self_driver bench test_tumu
+.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi kemgu_self calistir_self_driver bench test_tumu
 .PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
 
 # === Ana hedef ===
@@ -935,7 +935,10 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
 	@cat runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
-	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
+	@# D-337 TIP BORCU: `--llvm` artık tip kontrolünü BAĞLAR; kem_os birleşik
+	@# kaynağı bugün 60 tip hatası veriyor (ölçüldü) → geçici olarak --tip-atla.
+	@# Bu bir MUAFİYET değil BORÇ: hatalar giderilince bayrak KALDIRILMALI.
+	./$(BUILD)/kemgu$(EXE) --llvm --tip-atla --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -ffunction-sections -fdata-sections -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	@# LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): 'kul_' önekli .kem sembolleri EL0-userland
 	@# routing sözleşmesi. -ffunction-sections/-fdata-sections her sembolü kendi .text.<isim>/
@@ -5282,6 +5285,13 @@ calistir_drf_lean_proof:
 # atlama mesaji aciktir.
 calistir_lean_aksiyom:
 	@bash test/lean_aksiyom_harness.sh
+
+# D-336: TIP KONTROL KAPISI — korpus/ornek/stdlib dosyalari --check'ten gecmeli.
+# `--llvm` tip kontrolunu BAGLAMAZ (olculdu: --check reddettigi programi derleyip
+# CALISAN ikili uretebiliyor). Bu kapi olmadan depoda --check RED alan dosyalar
+# sessizce birikiyordu (11 dosya; 4'u GERCEK lineer sizinti).
+calistir_check_kapisi: $(BUILD)/kemgu$(EXE)
+	@bash test/check_kapisi.sh
 
 clean:
 	rm -rf $(BUILD)

@@ -4,7 +4,10 @@ işlev main() -> tam32 {
         tamam(a) => {
             eşleş görev_başlat(|| 22) {
                 tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
-                hata(e2) => { ver 1; }
+                // D-336: hata dalinda da `a` BIRLESTIRILMELI — aksi halde gorev
+                // tanitici bu yolda sizar (L005: kollar lineer tuketimde tutarsiz).
+                // Once bu dosya --check REDDEDIYORDU ama hicbir kapi olcmuyordu.
+                hata(e2) => { değişken yut: tam32 = görev_birleştir(a); ver 1; }
             }
         }
         hata(e1) => { ver 1; }

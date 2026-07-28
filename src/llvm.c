@@ -5871,7 +5871,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     cmp, L_body, L_done);
             fprintf(g->out, "bb%d:\n", L_body);
             /* x = dizi_al(kdl_ptr, i_load)
-             * D-338: BY-VALUE eleman (%Yapi / kapanis fat value) skaler
+             * D-342: BY-VALUE eleman (%Yapi / kapanis fat value) skaler
              * `kdl_dizi_al_tam` ile OKUNAMAZ. Onceki kod donus tipine `et`
              * yazip `@kdl_dizi_al_tam`i cagiriyordu: declare i32 vs call
              * %Nokta. **LLVM bunu SESSIZCE kabul ediyor** (D-295/D-334

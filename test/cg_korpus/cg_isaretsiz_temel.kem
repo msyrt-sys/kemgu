@@ -1,0 +1,25 @@
+// cg_isaretsiz_temel.kem — D-337: işaretsiz (dtamN) GENİŞLETME + BÖLME + MOD paritesi.
+// -----------------------------------------------------------------------------
+// Self-host codegen imzasızlığı HİÇ izlemiyordu: her dtam işlemi imzalı varyantla
+// (sext/sdiv/srem) üretiliyor → dtam8 200 bit deseni -56 sanılıyor, SESSİZ YANLIŞ
+// CEVAP (kripto/sürücü/bayt işleme kodunda doğrudan yanlış davranış). C tarafı
+// D-335'te kilitlendi; bu korpus self-host'u aynı yere bağlar.
+//
+// Falsifiye edici seçim: 200 > 127 → i8'de işaretli yorum NEGATİF. Her dal
+// imzasız/imzalı ayrımında FARKLI değer verir → codegen_diff (exit-kodu) yakalar.
+//   zext vs sext : 200      vs 4294967240 (-56)
+//   udiv vs sdiv : 200/4=50 vs -56/4=-14
+//   urem vs srem : 200%7=4  vs -56%7=0
+// Beklenen exit = 200 + 50 + 4 = 254 (tek bayt exit sınırında; 254 < 256).
+işlev main() -> tam32 {
+    değişken a: dtam8 = 200;
+    değişken b: dtam8 = 4;
+    değişken m: dtam8 = 7;
+    // Genişletme: zext olmalı (sext → -56 → toplam negatif)
+    değişken g: tam32 = a olarak tam32;
+    // Bölme: udiv olmalı (sdiv → -14)
+    değişken d: tam32 = (a / b) olarak tam32;
+    // Mod: urem olmalı (srem → 0)
+    değişken r: tam32 = (a % m) olarak tam32;
+    ver g + d + r;
+}

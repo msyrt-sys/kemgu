@@ -1,0 +1,63 @@
+// cg_isaretsiz_alan.kem — D-339: YAPI ALANI (dtamN) imzasızlığının AKMASI.
+// -----------------------------------------------------------------------------
+// D-337 imzasızlığı değişken/parametre/işlev-dönüşü için kilitledi, ama `k.alan`
+// yolunu bilerek kapsam dışı bıraktı: ifade_isz ERISIM'i ele almıyordu → alan
+// dtam8 olsa bile 0 (imzalı) dönüyordu. C tarafında bu yol AÇIK (llvm.c:2594
+// `ast_tip_isaretsiz_mi(alan_tip_d)`) → `yapı Bayt { v: dtam8 }` gibi kripto/
+// sürücü şekillerinde C ile self-host AYRIŞIYOR ve self YANLIŞ sonuç veriyordu.
+//
+// Falsifiye edici seçim (D-337 ile aynı disiplin): 200 > 127 → i8'de işaretli
+// yorum NEGATİF, ve her dal imzasız/imzalı ayrımında FARKLI değer verir:
+//   zext vs sext : 200      vs 4294967240 (-56)
+//   udiv vs sdiv : 200/4=50 vs -56/4=-14
+//   urem vs srem : 200%7=4  vs -56%7=0
+//   lshr vs ashr : 200>>2=50 vs (-56)>>2=-14
+//   ugt  vs sgt  : 200>100 DOĞRU (12) vs YANLIŞ (0)
+// ÖLÇÜLEN exit = 60 (C oracle). ERISIM imzasızlığı sabote edilince 127 ölçüldü.
+//
+// ⚠ Bu dosya kapının KENDİ kör noktasını da ortaya çıkardı: sabotajlı değer TAM
+// OLARAK 127'ydi ve codegen_diff_harness.sh 127'yi "Defender exec yarışı" sayıp
+// ATLIYORDU → gerçek miscompile yeşil geçiyordu. Kural D-339'da daraltıldı
+// (127 yalnız ORACLE'da ortamsal). Sabit değiştirirken bunu hatırla.
+//
+// Üç taban ölçülür — hepsi ERISIM ama farklı codegen dalından geçer:
+//   1) struct VALUE (yerel yapı)      → extractvalue dalı
+//   2) &Yapi referans parametresi     → getelementptr + load dalı
+//   3) iç içe `d.ic.v`                → özyinelemeli taban çözümü
+yapı Bayt {
+    v: dtam8;
+}
+yapı Dis {
+    ic: Bayt;
+}
+
+// 2) referans parametresi: cg_aref üzerinden yapı adı çözülmeli
+işlev ref_bol(b: &Bayt) -> tam32 {
+    ver (b.v / 4) olarak tam32;   // udiv (sdiv olsa -14)
+}
+
+işlev main() -> tam32 {
+    değişken b: Bayt = Bayt { v: 200 };
+
+    // 1) struct value / extractvalue dalı — genişletme
+    değişken g: tam32 = b.v olarak tam32;        // zext (sext olsa 4294967240)
+
+    // 2) referans dalı — bölme
+    değişken d: tam32 = ref_bol(&b);             // 50
+
+    // 1) mod: alan imzasızlığı ikili işlemin TAMAMINI imzasız yapar
+    değişken m: dtam8 = 7;
+    değişken r: tam32 = (b.v % m) olarak tam32;  // urem → 4 (srem olsa 0)
+
+    // 3) iç içe erişim: d2.ic.v — taban özyinelemeyle çözülmeli
+    değişken d2: Dis = Dis { ic: Bayt { v: 200 } };
+    değişken uc: dtam8 = 2;
+    değişken k: tam32 = (d2.ic.v >> uc) olarak tam32;   // lshr → 50 (ashr olsa -14)
+
+    // Karşılaştırma: ugt (sgt olsa yanlış → 0)
+    değişken yuz: dtam8 = 100;
+    değişken c: tam32 = 0;
+    eğer b.v > yuz { c = 12; }
+
+    ver g + d + r + k + c;
+}

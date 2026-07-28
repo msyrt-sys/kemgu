@@ -5,6 +5,141 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-339 [YÜKSEK] — Yapı alanı (dtamN) imzasızlığı self-host'ta akar + codegen_diff'in 127 kör noktası kapandı (2026-07-28)
+
+> **Numara notu:** commit mesajı (`86747b9`) D-338 diyor; merge anında D-338 yukarıdaki
+> işaretsiz-semantik kararına verildiği için bu kayıt **D-339**'dur. Ayrıca
+> `claude/distracted-tesla-e03311` dalındaki kripto commit'i (`3f2cb34`) de kendini
+> D-338 sanıyor — o dal merge edilirken aynı kural gereği **D-340**'a kaymalıdır.
+>
+> Kod içi işaretler: bu kararın markerları D-339'a güncellendi. Yukarıdaki D-338
+> kararının `selfhost/codegen.kem` içindeki `D-337` markerları **bilerek** olduğu gibi
+> bırakıldı (paralel dalın sahip olduğu satırlar; yeniden yazmak tesla dalına gereksiz
+> çakışma üretirdi). Eşleme bu dosyadadır.
+
+**Karar [ETKİ: `selfhost/codegen.kem` (+59), `test/cg_korpus/cg_isaretsiz_alan.kem`
+(yeni, 107→108), `test/codegen_diff_harness.sh` (127 kuralı daraltıldı).]**
+D-337'nin bilinçli "Sınır (V1)" maddesini kapatır.
+
+**Kusur:** `ifade_isz` ERISIM'i ele almıyor, `k.alan` için daima 0 (imzalı) dönüyordu.
+C tarafında bu yol AÇIK (`llvm.c:2594` `int alan_isz = ast_tip_isaretsiz_mi(alan_tip_d);`
+— hem `extractvalue` hem `GEP+load` dalı bunu `IfadeSonuc`'a koyar). Sonuç: bir
+regresyon DEĞİL (imzalıya düşmek = D-335 öncesi davranış) ama `yapı Bayt { v: dtam8 }`
+gibi kripto/sürücü şekillerinde **C ile self-host AYRIŞIYOR ve self yanlış sonuç
+veriyordu**. Ölçülen: `b.v olarak tam32` C=200 / self=−56; `b.v/4` C=50 / self=−14.
+
+**Mekanizma:** `yapi_alan_isz(p, yad, alan)` — `yapi_alan_tip` aynası, ama `alan_tip`
+(LLVM string `"i8"`) imzasızlığı **siler**, o yüzden `alan_tnode` (AST tip düğümü)
+üzerinden `ll_isz`. C ile birebir incelik: mono örnekte bile **BASE** alan düğümü
+kullanılır — C'de de subst yalnız `ast_tip_to_ir`'ı sarar, `alan_isz` subst DIŞINDA
+kalır. Nesnenin yapı adı `erisim_yapi_ad` ile **saf** çözülür: emit dalı bunu
+`p.son_tip`/`p.son_ref`'ten alır ama o durum ancak kod yayılırken oluşur, `ifade_isz`
+saf olmak zorunda → aynı iki kaynak (`cg_atip` / `cg_aref`) doğrudan sorgulanır.
+İç içe `a.b.c` için özyineleme (iç alan tipi `"%Ic"` ise taban olur). Çözülemezse
+`""` → 0 = imzalı = eski davranış (güvenli taraf).
+
+**INDEKS BİLEREK YAPILMADI — ölçüm gerekçesi:** görev "C'de ERISIM ve INDEKS yollarını
+ÖLÇ, birebir aynala" diyordu. Ölçüldü: C'nin **üç** INDEKS dalı da
+(`llvm.c:3249` heap `kdl_dizi_al`, `:3282` türetilmiş taban, `:3318` stack GEP+load)
+`IfadeSonuc s = { r, tip, 0 }` üretir. Yani C'de de dizi elemanı imzasızlığı TAŞINMAZ.
+Self-host'un 0 dönmesi C ile **birebir aynıdır** — parite kaybı değil, **ortak sınır**.
+Bunu C'de "düzeltmek" oracle'ı değiştirmek olurdu; kapsam dışı bırakıldı.
+
+**Ölçüm:** yeni korpus `cg_isaretsiz_alan.kem`, exit **60**. Üç farklı codegen dalını
+ayrı ayrı yükler: struct-value (`extractvalue`), `&Yapi` referans parametresi
+(`GEP+load`), iç içe `d2.ic.v` (özyinelemeli taban). Falsifiye edici seçim D-337 ile
+aynı disiplin: 200 > 127.
+
+**Sabotaj (uygulandığı `diff` ile DOĞRULANDI):** ERISIM dalına `ver 0` → IR'da
+`udiv→sdiv` ve `zext→sext` (grep ile teyit), exit 60→127, kapı 🔴.
+
+**⚠ ASIL BULGU — kapı kendi ölçtüğü şeye kördü:** sabotajlı değer **tam olarak 127**
+çıktı ve `codegen_diff_harness.sh` 127'yi *"korpusta hiçbir program 127 dönmez →
+127 DAİMA ortamsal (Defender exec yarışı)"* premisiyle **⚠ ATLIYORDU**. Yani gerçek
+bir miscompile yeşil geçti (`107/107`). Premis yanlış ölçülmüştü. Kural daraltıldı:
+127 yalnız **ORACLE**'da ortamsal sayılır (oracle yoksa karşılaştırma anlamsız);
+oracle sağlam değer verirken aday kalıcı 127 diyorsa (12 retry sonrası) bu bir
+ANLAŞMAZLIKTIR, fail. Bu, D-338'in kodundan bağımsız olarak **tüm korpusu** korur.
+Ders: "bu değer asla oluşmaz" varsayımına dayanan atlama kuralları, tam da o değeri
+üreten hata sınıfına kördür.
+
+**Kapılar:** codegen_diff **108/108**, codegen_bootstrap **FIXPOINT ✓**
+(lexer/parser/checker 92 birebir + stage1 IR == stage2 IR, 45729 satır),
+calistir_self_driver (4 mod, C-derlenmiş + self-host-derlenmiş + FIXPOINT;
+LLVM 108/108 her iki driver'da), checker_diff 56/56, calistir_llvm_test 284/284.
+
+**Not (dal tabanı):** D-337 (`7f645be`) merge anında `origin/main`'de DEĞİLDİ
+(`claude/distracted-tesla-e03311`); bu iş o commit'in üzerine kuruldu.
+
+---
+
+## D-338 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
+
+> **Numara notu (merge anında kaydırıldı):** bu karar `7f645be` commit'inde **D-337**
+> olarak yazılmıştı, ama merge anında `origin/main`'de D-337 **başka** bir karara
+> (`dc2879c`, `--llvm` katı tip kapısı) verilmişti. CLAUDE.md kuralı ("D-NNN'i merge
+> anında güncel main'deki en yüksek D'ye bakıp ver") gereği D-338'e kaydırıldı.
+> Commit **mesajı** D-337 diyor (paralel dalın sahip olduğu commit yeniden yazılmadı);
+> **yetkili kayıt bu dosyadır.**
+
+**Karar [ETKİ: `selfhost/codegen.kem` (+164/−17), `test/cg_korpus/` (+2 korpus,
+105→107).]** D-335 C tarafını kilitlemiş, self-host'un **hiçbir** `dtamN` işlemini
+imzasız üretmediğini ölçmüştü. Bu adım self-host'u C oracle'ına bağlar.
+
+**Kusur (sessiz yanlış cevap):** `selfhost/codegen.kem` imzasızlığı hiç izlemiyordu —
+her `dtam` işlemi imzalı varyantla üretiliyordu (`sext`/`sdiv`/`srem`/`ashr`/`sgt`).
+Kodda "kapsam dışı, izlenmiyor" diye **bilinen bir kısıt olarak yazılıydı**, ama sonucu
+derleme hatası değil **yanlış sayı**ydı: `dtam8 200` bit deseni her yerde −56 sanılıyordu.
+Ölçülen (C vs self): `200 olarak tam32` 200/127 · `200/4` 50/127 · `200%7` 4/0 ·
+`200>>2` 50/127 · `200>100` 42/1. Kripto (`stdlib/kripto`), sürücüler ve bayt işleme
+kodunda doğrudan yanlış davranış.
+
+**Mekanizma:** C'de bu bilgi `IfadeSonuc.isaretsiz` alanında **akar**; self-host'ta
+`ifade_uret` tek bir metin döndürdüğü için taşıyıcı yok. Seçim: **saf (yan-etkisiz)
+yeniden-hesap** — `ifade_isz(p, idx)`, düğüm türünden imzasızlığı türetir
+(TANIMLAYICI→değişken kaydı, TIP_DONUSTUR→hedef tip, IKILI→sol‖sağ, TEKLI neg/~→operand,
+CAGRI→bildirilen dönüş). C'nin `.isaretsiz` **okuduğu her yerin** karşılığı bunu çağırır.
+
+**Neden durum (`p.son_isz`) DEĞİL — gerekçe:** `son_tip` her dalda yeniden yazılır,
+imzasızlık ise yalnız birkaç dalda anlamlıdır. Durum tutulsaydı ele alınmayan dallardan
+**sızar** ve alakasız bir ifadeyi `udiv`/`lshr`'e düşürürdü — yani aynı sınıf hatayı
+(sessiz yanlış cevap) ters yönde üretirdi. Saf işlevin varsayılanı `0` = imzalı = eski
+davranış; bu, atlanan her düğümü **güvenli** tarafa düşürür.
+
+**Kayıt yolları:** `cg_aisz` (değişken/parametre, `cg_ad` ile paralel — `cg_var_bul` ile
+AYNI arama yönü/sınırı, blok-gölgelemesinde tip ve imzasızlık aynı slot'tan gelmeli) +
+`fn_risz` (işlev dönüşü). `fn_ad` checker ile PAYLAŞILIR → `fn_risz_bul` sınırı `fn_ad`
+değil **kendi boyutu** (aksi OOB panik).
+
+**Emisyon (C ile birebir):** genişletme `zext`, bölme `udiv`, mod `urem`, sağa kaydırma
+`lshr`, karşılaştırma `ult/ule/ugt/uge`. `add/sub/mul/and/or/xor/shl` ve `eq/ne` imzadan
+BAĞIMSIZ → tek varyant.
+
+**Ölçüm:** 5 şeklin 5'i de C ile eşleşti (200/50/4/50/42). Yeni korpus
+`cg_isaretsiz_temel.kem` (exit 254 = zext 200 + udiv 50 + urem 4),
+`cg_isaretsiz_kaydir_kars.kem` (exit 77 = lshr 50 + ugt 20 + ult 7; parametre yolu +
+dtamN dönüş tipi dâhil). Falsifiye edici seçim: 200 > 127 → i8'de imzalı yorum negatif,
+her dal imzasız/imzalı ayrımında FARKLI değer verir.
+
+**Sabotaj (3/3, her biri diff ile uygulandığı DOĞRULANDI):** `zext→sext` → temel 254→127;
+`lshr→ashr` + `ugt→sgt` → kaydır_karş 77→249 (temel etkilenmedi — doğru, `>>`/karşılaştırma
+kullanmıyor); `udiv→sdiv` → temel 254→190. İki korpus dosyası **bağımsız olarak** yük taşıyor.
+
+**Kapılar:** codegen_diff **107/107**, checker_diff 56/56, calistir_llvm_test 284/284,
+calistir_self_driver (4 mod + self-host-derlenmiş driver + FIXPOINT), codegen_bootstrap
+**FIXPOINT ✓** (lexer/parser/checker 92 birebir + stage1 IR == stage2 IR, 45436 satır).
+
+**Süreç dersi:** `sed -i` Türkçe `.kem` kaynağında tüm dosyayı yeniden yazdı (satır-sonu
+dönüşümü → 7229 satırlık sahte diff). CLAUDE.md'nin `perl -i` yasağı **`sed -i` için de
+geçerli** — Edit aracını kullan. Sabotajın kendisi her seferinde `diff` ile doğrulandı.
+
+**Sınır (V1):** `ifade_isz` ele almadığı düğümlerde 0 (imzalı) döner — ERİŞİM (`k.alan`),
+INDEKS (`xs[i]`) ve yapı alanı `dtamN` ise imzasızlık **taşınmaz** (C'de `alan_isz`
+üzerinden taşınır, `src/llvm.c:2594`). Hata modu **imzalıya düşmek**, yani D-335 öncesi
+davranış — yeni bir sessiz-yanlış sınıfı DEĞİL, kapanmamış eski yüzey. Kapatılması ayrı adım.
+
+---
+
 ## D-320 — Çağrı argümanında sahte L002: iki-pas ziyaret SONDAJ'landı (2026-07-26)
 
 **Karar [ETKİ: `src/tip_kontrol.h` (+1 alan `lineer_sondaj`), `src/tip_kontrol.c`
@@ -50,12 +185,101 @@ argümanları tüketilmez → o yolda L001 sahte pozitifi mümkün.
 
 ---
 
-## D-338 — [YÜKSEK] `%Yapi` dizi elemani self-host'a portlandi + C'de `için` SESSIZ YANLIS CEVAP kapandi (2026-07-28)
+## D-337 — [YÜKSEK] `--llvm` ARTIK KATI: tip hatasi = derleme yok; `--tip-atla` kacis kapisi (2026-07-27)
+
+**Karar (Mehmet, 2026-07-27): "simdi kati yap, 16 testi `--tip-atla` ile isaretle".**
+**[ETKİ: `src/ana.c` (kati mod + `--tip-atla`), `test/test_llvm.c` (16 test BORC
+isaretli), `test/codegen_diff_harness.sh`, `test/dizi_sinir_harness.sh` (1 test
+kaynagi DUZELTILDI + 3 sessiz-atlama gurultulendi), `Makefile` (kem_os borcu).]**
+
+**Davranis:** `--llvm` tip hatasinda **stderr'e gercek taniyi yazar, IR URETMEZ,
+exit 1**. Once: `--check` REDDETTIGI program derlenip **calisan ikili** veriyordu
+(`f(40, 99)` → exit 42). `--tip-atla` eski davranisi ACIK BEYANLA geri getirir.
+
+**⚠ ONCE OLCULDU — KARARI DEGISTIREN BULGU (Mehmet'e sunuldu, onay alindi):**
+kati mod 16 testi kirdi ve **en az 2'si CHECKER YANLIS POZITIFI**:
+- `işlev h(x: kesirli32) -> kesirli32 { ver x + 21.0; }` → **T001** (literal
+  `kesirli64` varsayilip `kesirli32`e daraltilmiyor) — GECERLI program.
+- `(b olarak tam32)` (b: mantıksal) → **E002** — test [226] bunu gecerli sayiyor.
+Yani bugun kati mod **gecerli programlari da reddediyor**; bu bir BORCTUR.
+
+**Borc GORUNUR isaretlendi:** 16 test `derle_ve_calistir_TIP_BORCU(...)` ile
+derlenir — adi cagri yerinde OKUNUR. Checker kusuru kapandikca ilgili test normal
+yola DONMELIDIR. (Gizli bayrak degil, isimle beyan.)
+
+**DUZELTILEN (ortulmedi):** `dizi_sinir_harness` vaka23 `m.b + m.a` (tam64+tam8)
+→ T001. **Tani DOGRU** — KEMGU'da ortuk sayisal donusum YOK (ASLA listesi).
+Test kaynagi `(m.b olarak tam32) + (m.a olarak tam32)` yapildi; `--tip-atla`
+KULLANILMADI. Ayrica ayni harness'ta `--llvm` cikisini yutan **3 nokta**
+gurultulendi (sessiz atlama → acik hata).
+
+**Diger borclar (acik beyanla):** `kem_os` birlesik kaynagi 60 tip hatasi
+(Makefile'da `--tip-atla` + "BORC, bayrak KALDIRILMALI" notu); codegen_diff
+harness'i `--tip-atla` kullanir (isi CODEGEN esdegerligi; tip zorlamasi D-336
+kapisinda ve cg_korpus'u zaten kapsiyor — aksi halde 3 kasitli korpus SESSIZCE
+atlanip kapsam 105→102 dusuyordu).
+
+**Kapilar:** test_llvm **284/284**, codegen_diff **105/105**, dizi_sinir **37/37**,
+check_kapisi 199/206+7muaf, llvm_dogrula 10/10, gorev_rt 16/16, snapshot 50/50,
+simd_llvm 5/5, stdlib+kripto --check, sifir derleyici uyarisi.
+
+**SIRADAKI (borc kapatma):** checker yanlis pozitifleri — (1) kesirli32 literal
+baglami, (2) `mantıksal olarak tamN`, (3) siniflandirilmamis 14 test. Kapandikca
+`derle_ve_calistir_TIP_BORCU` cagrilari normal yola dondurulmeli.
+
+---
+
+## D-336 — [YÜKSEK] `--llvm` tip kontrolunu BAGLAMIYOR; TIP KONTROL KAPISI + 4 gercek sizinti (2026-07-27)
+
+**Karar [ETKİ: `test/check_kapisi.sh` (YENİ), `Makefile` (`calistir_check_kapisi`),
+`test/cg_korpus/cg_gorev_{baslat,i64_daralt,lambda_blok}.kem` +
+`test/ornekler/gorev_temel.kem` (4 GERCEK sizinti onarildi).]**
+
+**BULGU 1 — `--llvm` tip kontrolunu ZORLAMIYOR (olculdu):** `--check` REDDETTIGI bir
+program `--llvm` ile derlenip **CALISAN ikili** uretebiliyor:
+`işlev f(x: tam32)...  ver f(40, 99);` (FAZLA argüman) → `--check` RED, `--llvm`
+**exit 0**, clang kabul, program **exit 42**. Yanlis arg tipiyle de derleniyor (cop 127).
+Yani derleme yolu (`kemgu --llvm | clang`) tip kontrolunden GECMIYOR.
+
+**BULGU 2 — bunun birikmis bedeli:** hicbir kapi korpus/ornek uzerinde `--check`
+kosturmadigi icin depoda **11/206 dosya** `--check` RED aliyordu ve kimse gormemisti.
+Dagilim: **4 × L005 (GERCEK LINEER SIZINTI)**, 1 × E004 + 1 × E002 + 1 × T001
+(kasitli codegen korpuslari), 3 × T002 (tek-basina derlenemeyen parca dosyalar),
+1 kasten-hatali ornek.
+
+**4 GERCEK SIZINTI ONARILDI:** `eşleş görev_başlat(...) { tamam(a) => {...}
+hata(e) => { ver 1; } }` — HATA dalinda `a` hic birlestirilmiyordu → gorev tanitici
+o yolda dusuyor (sizinti). **L005 DOGRU CALISIYORDU; kusur ORNEKTEYDI.** Duzeltme:
+hata dallarinda `görev_birleştir(a)` cagrilir. **Exit kodlari DEGISMEDI** (4 dosya da
+42) → codegen_diff **105/105** korundu.
+
+**KAPI:** `calistir_check_kapisi` — korpus/ornek/stdlib `--check`ten gecmeli.
+Gecmeyecek dosya MUAF listesine **GEREKCESIYLE** yazilir (sessiz birikme yerine acik
+karar). Su an **199/206 gecti, 7 muaf, 0 RED**.
+**Sabotaj:** bir korpus dosyasina tip hatasi enjekte → kapi **exit 1** + dosyayi
+isimlendirdi; temiz → **exit 0**.
+
+**KARAR GEREKTIREN (Mehmet) — YAPILMADI:** `--llvm` tip hatasinda REDDETSIN mi?
+Bugun etsek **kem_os dahil 7 muaf dosya** derlenemez; bu bir DIS-KONTRAT degisikligi.
+Secenekler: (a) `--llvm` kati + `--tip-atla` kacis kapisi; (b) muaf dosyalarin
+gercek nedenleri giderilsin (parca dosyalar icin birlesik derleme, kasitli
+korpuslar icin `güvensiz`/annotasyon); (c) mevcut hal + bu kapi yeterli sayilsin.
+
+---
+
+## D-342 — [YÜKSEK] `%Yapi` dizi elemani self-host'a portlandi + C'de `için` SESSIZ YANLIS CEVAP kapandi (2026-07-28)
+
+> **Numara notu:** bu dal (`claude/hopeful-tharp-8dc610`) commit mesajlarinda D-337
+> (kapanis konteynerde) ve D-338 (`%Yapi` dizi elemani) diyor. Merge aninda main
+> D-337/D-338/D-339'u almis, D-340 ise `claude/distracted-tesla-e03311` kripto
+> commit'ine rezerve edilmisti → bu iki kayit **D-341** (kapanis konteynerde) ve
+> **D-342** (`%Yapi`) oldu. Kod ici markerlar da kaydirildi; main'in ISARETSIZ
+> (dtamN) isine ait D-337/D-338 markerlarina DOKUNULMADI.
 
 **Karar [ETKİ: `selfhost/codegen.kem` (`dizi_eleman_yapi_mi` + `dizi_eleman_byte` +
 `dizi_yapi_{ekle,al,yaz}_emit` ORTAK yol + 5 cagri yeri), `src/llvm.c` (`için` dali
 by-value yonlendirmesi), `test/test_llvm.c` (286), `test/cg_korpus/cg_yapi_dizi.kem`
-(YENİ, korpus 107 → **108**).]** D-337'de bilincli birakilan `%Yapi` bosluğu kapatildi;
+(YENİ, korpus 107 → **108**).]** D-341'de bilincli birakilan `%Yapi` bosluğu kapatildi;
 port sirasinda **C tarafinda daha ciddi bir kusur** ortaya cikti.
 
 **1) Self-host `%Yapi` bosluğu (ONCE OLCULDU — 6 sekil, hepsi LLVM-RED):** dizi
@@ -106,7 +330,7 @@ derleyici uyarisi.
 
 ---
 
-## D-337 — KAPANIS KONTEYNERDE self-host'a PORTLANDI: D-334 parite borcu KAPANDI (2026-07-27)
+## D-341 — KAPANIS KONTEYNERDE self-host'a PORTLANDI: D-334 parite borcu KAPANDI (2026-07-27)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (`fat_cagri_uret` ORTAK dispatch + `yapi_alan_ic`
 + `erisim_kapanis_ic` + `dizi_eleman_yapi_mi` + ERISIM/INDEKS cagri yollari + by-value

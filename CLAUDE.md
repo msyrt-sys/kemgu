@@ -755,10 +755,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   literalini daima i32 sayıyordu → `kanal<tam64>`de 2^33 sessizce bozuluyordu
   (`i64_genislet` immediate'ı tam genişlikte materyalize ederek onardı).
   **SONUÇ: D-291→D-297'nin tamamı self-host codegen'de; C ile birebir eşdeğer.**
-  Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ. **D-337: KAPANIŞ KONTEYNERDE de self-host'ta**
+  Blok-form lambda dönüşü D-304'te ÇÖZÜLDÜ. **D-341: KAPANIŞ KONTEYNERDE de self-host'ta**
   — `k.fn()` (yapı alanı) + `xs[i]()` (dizi elemanı, by-value 16B `kdl_dizi_*_yapi` yolu),
   ortak `fat_cagri_uret` dispatch; 5/5 şekil C↔self birebir, korpus 105→107. D-334'ün
-  parite borcu KAPANDI. ~~Kalan: self-host dizi elemanı olarak `%Yapi`~~ ✓ **D-338:**
+  parite borcu KAPANDI. ~~Kalan: self-host dizi elemanı olarak `%Yapi`~~ ✓ **D-342:**
   nominal yapı dizi elemanı da self-host'ta (by-value memcpy + `ptrtoint getelementptr`
   boyut hesabı; 5 çağrı yeri ortak `dizi_yapi_*_emit` yolundan). **Port, C'de SESSİZ
   YANLIŞ CEVAP buldu:** `için` dalı by-value elemanı `@kdl_dizi_al_tam` ile okuyordu

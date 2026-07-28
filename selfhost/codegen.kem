@@ -42,18 +42,20 @@ yapı Ayr {
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
     cg_apointee: Dizi<metin>;// D-267: *tamN pointer değişkeni ise skaler pointee LLVM tipi
     cg_aic: Dizi<metin>;  // D-299: görev<T>/kanal<T> değişkeni ise T'nin LLVM tipi; değilse ""
+    cg_aisz: Dizi<metin>; // D-337: değişken/parametre işaretsiz (dtamN) ise "1"; değilse ""
                              // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
     beklenen_elem: metin;// CG8: sonraki [] literali için beklenen eleman tipi
     beklenen_ll: metin;  // D3: beklenen tagged-union LLVM tipi ({i8,..}) — yapıcı bağlamı
     beklenen_yapi: metin;// D-307: beklenen mono yapı IR ("%Kutu$i32") — construction bağlamı
     son_elem: metin;     // CG8: son ifade Dizi ise eleman tipi
-    beklenen_elem_ic: metin; // D-337: [] literali kapanış elemanlıysa lifted dönüş IR'ı
-    son_ic: metin;       // D-337: son ifade kapanış (fat value) ise dönüş IR'ı; değilse ""
+    beklenen_elem_ic: metin; // D-341: [] literali kapanış elemanlıysa lifted dönüş IR'ı
+    son_ic: metin;       // D-341: son ifade kapanış (fat value) ise dönüş IR'ı; değilse ""
     cg_base: tam32;      // CG3: mevcut işlevin değişken-slice başlangıcı (reset yerine)
     lbl: tam32;          // CG4: temel-blok etiket sayacı (bb0, bb1, ...)
     bb_term: tam32;      // CG4: mevcut blok terminatör (ret/br) ile bitti mi (1=evet)
     fn_ad: Dizi<metin>;  // CG6: işlev adı (ön-pass imza tablosu — CAGRI dönüş tipi)
     fn_ret: Dizi<metin>; // CG6: işlev dönüş LLVM tipi
+    fn_risz: Dizi<metin>;// D-337: fn_ad ile paralel — dönüş tipi dtamN ise "1"; değilse ""
     fn_node: Dizi<tam32>;// D-309: ISLEV düğüm idx (ρ_sahip call-graph kapanışı)
     pa_node: Dizi<tam32>;// CG9: hoist-edilen DEGISKEN düğüm idx'i (alloca entry'de)
     pa_reg: Dizi<metin>; // CG9: o DEGISKEN'in entry-alloca reg'i
@@ -1919,30 +1921,40 @@ işlev yeni_reg(p: &değişken Ayr) -> tam32 {
     ver r;
 }
 işlev reg_str(r: tam32) -> metin { ver metin_birlestir("%", tam64_str(r olarak tam64)); }
-işlev ll_ikili(op: metin) -> metin {
+// D-337: `isz`=1 → işaretsiz (dtamN) semantik. C llvm.c ile birebir: bölme udiv,
+// mod urem, sağa kaydırma lshr. add/sub/mul/and/or/xor/shl imzadan BAĞIMSIZ
+// (iki tümleyende aynı bit deseni) → tek varyant.
+işlev ll_ikili(op: metin, isz: tam32) -> metin {
     eğer metin_esit(op, "+") { ver "add"; }
     eğer metin_esit(op, "-") { ver "sub"; }
     eğer metin_esit(op, "*") { ver "mul"; }
-    eğer metin_esit(op, "/") { ver "sdiv"; }
+    eğer metin_esit(op, "/") { eğer isz == 1 { ver "udiv"; } ver "sdiv"; }
     eğer metin_esit(op, "ve") { ver "and"; }    // mantıksal (kısa-devresiz, C v1 ile aynı)
     eğer metin_esit(op, "veya") { ver "or"; }
-    // Bit/kaydırma (D3 parite — C llvm.c:2436-2442 ile birebir). Not: codegen.kem
-    // imzasızlık (dtam) izlemiyor — sdiv/srem'de olduğu gibi DAİMA imzalı varyant;
-    // `>>` → ashr (C imzalıda ashr, yalnız dtam'da lshr — kapsam dışı, izlenmiyor).
+    // Bit/kaydırma (D3 parite — C llvm.c:2436-2442 ile birebir).
     eğer metin_esit(op, "&") { ver "and"; }
     eğer metin_esit(op, "|") { ver "or"; }
     eğer metin_esit(op, "^") { ver "xor"; }
     eğer metin_esit(op, "<<") { ver "shl"; }
-    eğer metin_esit(op, ">>") { ver "ashr"; }
+    eğer metin_esit(op, ">>") { eğer isz == 1 { ver "lshr"; } ver "ashr"; }
+    eğer isz == 1 { ver "urem"; }
     ver "srem";   // %
 }
 işlev karsilastirma_mi(op: metin) -> mantıksal {
     ver metin_esit(op, "==") veya metin_esit(op, "!=") veya metin_esit(op, "<")
         veya metin_esit(op, ">") veya metin_esit(op, "<=") veya metin_esit(op, ">=");
 }
-işlev icmp_pred(op: metin) -> metin {
+// D-337: `isz`=1 → işaretsiz yüklemler (ult/ugt/ule/uge). eq/ne imzadan bağımsız.
+// C icmp_pred_u aynası: dtam8 200 > 100 imzalı icmp'de (-56 > 100) YANLIŞ dönüyordu.
+işlev icmp_pred(op: metin, isz: tam32) -> metin {
     eğer metin_esit(op, "==") { ver "eq"; }
     eğer metin_esit(op, "!=") { ver "ne"; }
+    eğer isz == 1 {
+        eğer metin_esit(op, "<") { ver "ult"; }
+        eğer metin_esit(op, ">") { ver "ugt"; }
+        eğer metin_esit(op, "<=") { ver "ule"; }
+        ver "uge";   // >=
+    }
     eğer metin_esit(op, "<") { ver "slt"; }
     eğer metin_esit(op, ">") { ver "sgt"; }
     eğer metin_esit(op, "<=") { ver "sle"; }
@@ -2040,6 +2052,42 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
     dizi_ekle(p.cg_apointee, ""); // D-267: varsayılan "" (skaler pointer decl'i dizi_yaz ile set eder)
     dizi_ekle(p.cg_aic, "");      // D-299: varsayılan "" (görev/kanal decl'i dizi_yaz ile set eder)
+    dizi_ekle(p.cg_aisz, "");     // D-337: varsayılan "" = imzalı (dtamN decl'i dizi_yaz ile set eder)
+    ver 0;
+}
+// D-337: son eklenen değişkeni işaretsiz (dtamN) olarak işaretle.
+işlev cg_var_isz_isaretle(p: &değişken Ayr, isz: tam32) -> tam32 {
+    eğer isz == 1 { dizi_yaz(p.cg_aisz, dizi_boyut(p.cg_aisz) - 1, "1"); }
+    ver 0;
+}
+// D-337: 0/1 → paralel metin dizilerinde saklanan biçim ("" / "1").
+işlev isz_str(v: tam32) -> metin {
+    eğer v == 1 { ver "1"; }
+    ver "";
+}
+// D-337: tip ADI işaretsiz tamsayı mı? (C ast_tip_isaretsiz_mi aynası — "dtam" öneki)
+işlev dtam_ad_mi(t: metin) -> tam32 {
+    eğer metin_esit(t, "dtam8") veya metin_esit(t, "dtam16")
+      veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver 1; }
+    ver 0;
+}
+// D-337: AST tip düğümü işaretsiz mi? (yalnız TIP_BASIT dtamN — C ile birebir)
+işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
+    eğer tip_idx < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver 0; }
+    ver dtam_ad_mi(dizi_al(p.a_deg, tip_idx));
+}
+// D-337: değişken/parametre işaretsiz mi? (cg_var_bul ile AYNI arama yönü/sınırı —
+// blok-kapsam gölgelemesinde tip ve imzasızlık AYNI slot'tan gelmeli).
+işlev cg_var_isz_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) {
+            eğer metin_esit(dizi_al(p.cg_aisz, i), "1") { ver 1; }
+            ver 0;
+        }
+        i = i - 1;
+    }
     ver 0;
 }
 // D-299: görev<T>/kanal<T> değişkeninin T LLVM tipi ("" bulunamazsa).
@@ -2434,7 +2482,7 @@ işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
         eğer ics < 1 { ver ""; }
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx) + ics - 1));
     }
-    // D-337: Dizi<işlev(...) -> T> → T'nin IR'ı. Eleman fat value olduğu için T
+    // D-341: Dizi<işlev(...) -> T> → T'nin IR'ı. Eleman fat value olduğu için T
     // dizi elemanında da SİLİNİR; `xs[i]()` çağrı yerinin dönüş IR'ını bildirilen
     // tipten alması gerekir (i32 varsayımı işaretçi dönüşü kırpardı).
     eğer metin_esit(ta, "TIP_DIZI") {
@@ -2444,9 +2492,9 @@ işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
 }
 // CG8: eleman LLVM tipi → kdl_dizi_olustur eleman_byte ("8"=ptr/i64, "4"=diğer).
 işlev dizi_eleman_byte(elem: metin) -> metin {
-    // D-337: kapanış fat value { ptr, ptr } = 2 işaretçi = 16 bayt.
+    // D-341: kapanış fat value { ptr, ptr } = 2 işaretçi = 16 bayt.
     eğer metin_esit(elem, "{ ptr, ptr }") { ver "16"; }
-    // D-338: nominal yapı — boyutu LLVM hesaplasın (hizalama/dolgu derleyicinin işi).
+    // D-342: nominal yapı — boyutu LLVM hesaplasın (hizalama/dolgu derleyicinin işi).
     // Sabit "4" yazmak 8+ baytlık yapıyı 4 baytlık gözeye sıkıştırırdı: SESSİZ bellek
     // bozulması. C llvm.c `eleman_byte_yaz` aynası.
     eğer metin_uzunluk(elem) > 0 {
@@ -2481,14 +2529,14 @@ işlev dizi_al_rettip(elem: metin) -> metin {
     eğer metin_esit(elem, "i64") { ver "i64"; }
     ver "i32";
 }
-// D-337/D-338: eleman BY-VALUE (memcpy) mi? İki şekil: nominal yapı `%Yapi` (D-338)
-// ve kapanış fat value `{ ptr, ptr }` (D-337). İkisi de tek makine-kelimesine SIĞMAZ,
+// D-341/D-342: eleman BY-VALUE (memcpy) mi? İki şekil: nominal yapı `%Yapi` (D-342)
+// ve kapanış fat value `{ ptr, ptr }` (D-341). İkisi de tek makine-kelimesine SIĞMAZ,
 // runtime'ın kdl_dizi_*_yapi (eleman_byte + memcpy) yolundan gitmeli. Skaler sanılırsa
 // agregat `kdl_dizi_ekle_tam(i32)` imzasına geçirilirdi (C llvm.c
 // `dizi_eleman_struct_mi` aynası).
 işlev dizi_eleman_yapi_mi(et: metin) -> mantıksal {
     eğer metin_uzunluk(et) == 0 { ver yanlış; }
-    eğer bayt(et, 0) == 37 { ver doğru; }   // '%' → nominal yapı (D-338)
+    eğer bayt(et, 0) == 37 { ver doğru; }   // '%' → nominal yapı (D-342)
     ver metin_esit(et, "{ ptr, ptr }");
 }
 // CG6: LLVM int tip bit-genişliği (sext/trunc seçimi için).
@@ -2509,7 +2557,8 @@ işlev int_ll_mi(t: metin) -> mantıksal {
 // `görev_birleştir`/`kanal_al` iç tip kaybında i64 TAŞIYICI döner (i64_daralt t="");
 // `değişken t: tam32 = görev_birleştir(a)` bunu `store i32 %i64` olarak yazıp LLVM'de
 // patlıyordu. p.son_tip hedefe güncellenir (çağıran zincirleme kullanır).
-işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin) -> metin {
+// D-337: `isz`=1 → genişletme zext (kaynak işaretsiz; C int_donustur_im aynası).
+işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin, isz: tam32) -> metin {
     eğer metin_esit(p.son_tip, hedef) { ver op; }
     // IMMEDIATE (register değil) → DOKUNMA. Self-host TAM literalini daima "i32"
     // sayıp ham rakam dizisi döndürür; `sext i32 4294967296 to i64` literali
@@ -2519,6 +2568,7 @@ işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin) -> metin {
     eğer int_ll_mi(p.son_tip) == yanlış veya int_ll_mi(hedef) == yanlış { ver op; }
     değişken islem: metin = "sext";
     eğer tip_genislik(hedef) < tip_genislik(p.son_tip) { islem = "trunc"; }
+    değilse { eğer isz == 1 { islem = "zext"; } }   // D-337
     değişken r: tam32 = yeni_reg(p);
     değişken rs: metin = reg_str(r);
     yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" ");
@@ -2532,11 +2582,12 @@ işlev int_uydur(p: &değişken Ayr, op: metin, hedef: metin) -> metin {
 // bağlamında fn dönüşü i32 ise burada daraltılır. C paritesi: C, daraltmayı
 // birleştir'de beklenen ile yapar; self-host ret'te yapar → exit-kod eşdeğer
 // (trunc(a+b) == trunc(a)+trunc(b)). cur_ret struct/ptr/float ise NO-OP.
-işlev ret_uydur(p: &değişken Ayr, op: metin) -> metin {
+işlev ret_uydur(p: &değişken Ayr, op: metin, isz: tam32) -> metin {
     eğer metin_esit(p.son_tip, p.cur_ret) { ver op; }
     eğer int_ll_mi(p.son_tip) == yanlış veya int_ll_mi(p.cur_ret) == yanlış { ver op; }
     değişken islem: metin = "sext";
     eğer tip_genislik(p.cur_ret) < tip_genislik(p.son_tip) { islem = "trunc"; }
+    değilse { eğer isz == 1 { islem = "zext"; } }   // D-337
     değişken r: tam32 = yeni_reg(p);
     değişken rs: metin = reg_str(r);
     yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(islem); yaz_str(" ");
@@ -2692,7 +2743,7 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare i32 @kdl_dizi_al_tam(ptr, i32)"); yb(10);
     yaz_str("declare i64 @kdl_dizi_al_tam64(ptr, i32)"); yb(10);
     yaz_str("declare ptr @kdl_dizi_al_ptr(ptr, i32)"); yb(10);
-    // D-337: BY-VALUE eleman (kapanış fat value) — eleman_byte + memcpy yolu.
+    // D-341: BY-VALUE eleman (kapanış fat value) — eleman_byte + memcpy yolu.
     yaz_str("declare void @kdl_dizi_ekle_yapi(ptr, ptr, ptr)"); yb(10);   // V2-F4.2a: ρ
     yaz_str("declare void @kdl_dizi_al_yapi(ptr, i32, ptr)"); yb(10);
     yaz_str("declare void @kdl_dizi_yaz_yapi(ptr, i32, ptr)"); yb(10);
@@ -2748,6 +2799,25 @@ işlev yapi_alan_tip(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     }
     ver "i32";
 }
+// D-339: yapı alanı işaretsiz (dtamN) mi? yapi_alan_tip aynası — ama alan_tip
+// (LLVM string "i8") imzasızlığı SİLER, o yüzden alan_tnode (AST tip düğümü)
+// üzerinden ll_isz. C llvm.c:2594 `ast_tip_isaretsiz_mi(alan_tip_d)` karşılığı.
+// NOT (C ile birebir): mono örnekte bile BASE alan düğümü kullanılır — C'de de
+// subst yalnız ast_tip_to_ir'ı sarar, alan_isz hesabı subst DIŞINDA kalır.
+işlev yapi_alan_isz(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver 0; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) {
+            ver ll_isz(p, dizi_al(p.alan_tnode, base + j));
+        }
+        j = j + 1;
+    }
+    ver 0;
+}
 // CG8: Dizi alanının eleman tipi ("" Dizi değilse).
 işlev yapi_alan_elem(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     değişken k: tam32 = yapi_idx(p, yad);
@@ -2761,7 +2831,7 @@ işlev yapi_alan_elem(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     }
     ver "";
 }
-// D-337: alanın BİLDİRİLEN iç tipi (`işlev(...) -> T` ise T'nin IR'ı; Dizi<işlev..>
+// D-341: alanın BİLDİRİLEN iç tipi (`işlev(...) -> T` ise T'nin IR'ı; Dizi<işlev..>
 // ise eleman dönüşü). Kapanış alanı `k.fn()` çağrısının dönüş IR'ı buradan gelir —
 // alan_tip yalnız "{ ptr, ptr }" der, T silinmiştir.
 işlev yapi_alan_ic(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
@@ -2862,6 +2932,20 @@ işlev fn_ret_bul(p: &değişken Ayr, ad: metin) -> metin {
     }
     ver "i32";
 }
+// D-337: çağrılan işlevin dönüş tipi işaretsiz (dtamN) mi? (C donus_isaretsiz aynası)
+// NOT: fn_ad checker ile PAYLAŞILIR (fn_kaydet de ekler) → fn_risz daha kısa
+// olabilir; sınır fn_risz'in kendi boyutu (fn_ret_bul'un fn_ad sınırı yerine).
+işlev fn_risz_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_risz) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) {
+            eğer metin_esit(dizi_al(p.fn_risz, i), "1") { ver 1; }
+            ver 0;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 // CG7a: ad bir KULLANICI işlevi mi (imza tablosunda)? (built-in/user ayrımı için).
 işlev fn_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
     değişken i: tam32 = 0;
@@ -2885,6 +2969,102 @@ işlev islev_donus_tip(p: &değişken Ayr, idx: tam32) -> metin {
         i = i + 1;
     }
     ver "i32";
+}
+// D-337: ISLEV düğümünün dönüş tipi işaretsiz (dtamN) mi? islev_donus_tip aynası —
+// aynı düğümü seçmeli (ilk PARAMETRE/BLOK olmayan çocuk = dönüş tipi).
+işlev islev_donus_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ca: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ca, "PARAMETRE") == yanlış ve metin_esit(ca, "BLOK") == yanlış {
+            ver ll_isz(p, c);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// D-339: bir ERISIM nesnesinin YAPI ADI (mangled değil, base) — SAF çözüm.
+// ifade_uret'in ERISIM dalı bunu p.son_tip ("%Yad" = struct value) / p.son_ref
+// ("Yad" = referans pointee) üzerinden BULUR; ama o durum ancak kod yayılırken
+// oluşur. ifade_isz saf olmak zorunda (bkz. ifade_isz yorumu) → aynı iki kaynağı
+// (cg_atip / cg_aref) doğrudan sorgular. İç içe `a.b.c` için özyineleme: iç alan
+// tipi "%Ic" ise onu taban yap (emit dalındaki extractvalue zincirinin aynısı).
+// Çözülemezse "" → çağıran 0 (imzalı) varsayar = D-337 öncesi davranış.
+işlev erisim_yapi_ad(p: &değişken Ayr, nesne: tam32) -> metin {
+    eğer nesne < 0 { ver ""; }
+    değişken ad: metin = dizi_al(p.a_ad, nesne);
+    eğer metin_esit(ad, "TANIMLAYICI") {
+        değişken nad: metin = dizi_al(p.a_deg, nesne);
+        değişken nt: metin = cg_var_tip_bul(p, nad);
+        eğer bayt(nt, 0) == 37 { ver metin_kes(nt, 1, metin_uzunluk(nt) - 1); }
+        ver cg_var_ref_bul(p, nad);   // referans param → pointee yapı adı ("" olabilir)
+    }
+    eğer metin_esit(ad, "ERISIM") {
+        değişken ic: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, nesne)));
+        eğer metin_uzunluk(ic) == 0 { ver ""; }
+        değişken mi: tam32 = mono_bul(p, ic);
+        eğer mi >= 0 { ic = dizi_al(p.mono_yad, mi); }
+        değişken ft: metin = yapi_alan_tip(p, ic, dizi_al(p.a_deg, nesne));
+        eğer bayt(ft, 0) == 37 { ver metin_kes(ft, 1, metin_uzunluk(ft) - 1); }
+        ver "";   // skaler alan → daha derin erişim yok
+    }
+    ver "";   // çağrı dönüşü / indeks vb. → V1'de çözülmez (konservatif: imzalı)
+}
+// D-337: bir İFADE düğümünün değeri işaretsiz (dtamN) semantikli mi?
+// C llvm.c'de bu bilgi IfadeSonuc.isaretsiz alanında AKAR; self-host'ta ifade_uret
+// tek bir metin döndürdüğü için SAF (yan-etkisiz) bir yeniden-hesap olarak tutulur.
+// Neden durum (p.son_*) DEĞİL: son_tip her dalda yeniden yazılır, imzasızlık ise
+// yalnız birkaç dalda anlamlı — durum tutulsa ele alınmayan dallardan SIZAR
+// (yanlışlıkla udiv/lshr). Saf işlev varsayılanı 0 (=imzalı, eski davranış).
+// C'nin `.isaretsiz` OKUDUĞU her yerin karşılığı bunu çağırır.
+işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer idx < 0 { ver 0; }
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    // Yükleme: değişken/parametre kaydından (C isim->isaretsiz)
+    eğer metin_esit(ad, "TANIMLAYICI") { ver cg_var_isz_bul(p, dizi_al(p.a_deg, idx)); }
+    // `x olarak dtamN` → hedef tipin imzasızlığı (C: hedef_isz)
+    eğer metin_esit(ad, "TIP_DONUSTUR") {
+        ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
+    }
+    eğer metin_esit(ad, "IKILI") {
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        // Karşılaştırma i1, ve/veya i32 döner → sonuç imzasız DEĞİL (C: {r,"i1",0})
+        eğer karsilastirma_mi(op) { ver 0; }
+        eğer metin_esit(op, "ve") veya metin_esit(op, "veya") { ver 0; }
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        eğer ifade_isz(p, dizi_al(p.cocuk, cb)) == 1 { ver 1; }   // C: sol||sag
+        ver ifade_isz(p, dizi_al(p.cocuk, cb + 1));
+    }
+    eğer metin_esit(ad, "TEKLI") {
+        değişken uop: metin = dizi_al(p.a_deg, idx);
+        // neg/~ tipi korur (C: s = {r, xt, ...}); değil/& i32/ptr → 0
+        eğer metin_esit(uop, "neg") veya metin_esit(uop, "~") {
+            ver ifade_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        }
+        ver 0;
+    }
+    eğer metin_esit(ad, "CAGRI") {
+        değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
+        ver fn_risz_bul(p, dizi_al(p.a_deg, h));
+    }
+    // D-339: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
+    // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).
+    eğer metin_esit(ad, "ERISIM") {
+        değişken yad: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer metin_uzunluk(yad) == 0 { ver 0; }
+        değişken mi: tam32 = mono_bul(p, yad);
+        eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
+        ver yapi_alan_isz(p, yad, dizi_al(p.a_deg, idx));
+    }
+    // D-339 ÖLÇÜM: INDEKS (xs[i]) BİLEREK yok — C llvm.c'nin ÜÇ INDEKS dalı da
+    // (heap kdl_dizi_al 3249, türetilmiş taban 3282, stack GEP+load 3318)
+    // `IfadeSonuc s = { r, tip, 0 }` üretir; yani C'de de dizi elemanı imzasızlığı
+    // TAŞINMAZ. 0 dönmek burada C ile BİREBİR aynıdır (ortak sınır, parite kaybı DEĞİL).
+    ver 0;
 }
 // CG4: temel-blok etiket üret/yaz + koşullu fall-through dal.
 işlev yeni_label(p: &değişken Ayr) -> metin {
@@ -2913,7 +3093,7 @@ işlev kosul_i1(p: &değişken Ayr, c: metin) -> metin {
     ver rs;
 }
 
-// D-338: BY-VALUE eleman emisyonu (ekle/al/yaz) — ORTAK yol. Beş çağrı yeri var
+// D-342: BY-VALUE eleman emisyonu (ekle/al/yaz) — ORTAK yol. Beş çağrı yeri var
 // (dizi literali, dizi_ekle/dizi_al/dizi_yaz built-in'leri, INDEKS okuma/yazma,
 // `için` döngüsü); kopyalanırsa biri düzeltilip diğeri unutulur (D-322/D-334 dersi).
 // NOT: ρ parametresi `bolge` adını taşır — `rho` lifted işlevin örtük `%rho`
@@ -2952,7 +3132,7 @@ işlev dizi_yapi_yaz_emit(p: &değişken Ayr, arr: metin, i: metin,
     ver 0;
 }
 
-// D-337: fat value ({ ptr, ptr }) üzerinden DOLAYLI ÇAĞRI — ORTAK yol.
+// D-341: fat value ({ ptr, ptr }) üzerinden DOLAYLI ÇAĞRI — ORTAK yol.
 // Kapanışın NEREDE durduğundan bağımsızdır: yerel bağlama, YAPI ALANI ya da
 // DİZİ ELEMANI. TEK KAYNAK olması önemli — env-null dallanması iki yere
 // kopyalanırsa biri düzeltilip diğeri unutulur (C llvm.c `fat_cagri_uret` aynası;
@@ -3013,7 +3193,7 @@ işlev fat_cagri_uret(p: &değişken Ayr, fv: metin, kret: metin,
     ver reg_str(kld);
 }
 
-// D-337: dizi ifadesinin ELEMAN iç tipi (Dizi<işlev(..)->T> ise T'nin IR'ı).
+// D-341: dizi ifadesinin ELEMAN iç tipi (Dizi<işlev(..)->T> ise T'nin IR'ı).
 // Yalnız TANIMLAYICI tabanı statik çözer (cg_aic kaydı); diğerlerinde "" →
 // çağrı yeri i32 varsayar. Yan etkisi YOK (ifade üretmez).
 işlev dizi_ic_bul(p: &değişken Ayr, node: tam32) -> metin {
@@ -3023,7 +3203,7 @@ işlev dizi_ic_bul(p: &değişken Ayr, node: tam32) -> metin {
     }
     ver "";
 }
-// D-337: `x.alan()` hedefindeki ALANIN kapanış olup olmadığını YAN ETKİSİZ ölç.
+// D-341: `x.alan()` hedefindeki ALANIN kapanış olup olmadığını YAN ETKİSİZ ölç.
 // Alıcının yapı adı statik çözülür (TANIMLAYICI: değişken IR'ı "%Yapi" ya da
 // referans hedefi). Kapanış alanıysa dönüş IR'ı, değilse "" döner ("" → metod
 // dispatch'e düş, eski davranış). C llvm.c alıcıyı ÜRETİP tipe bakar; burada
@@ -3050,7 +3230,7 @@ işlev erisim_kapanis_ic(p: &değişken Ayr, hed: tam32) -> metin {
 
 // İfade → operand metni ("5" veya "%3"); yan-IR yaz_str ile akıtılır.
 işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
-    p.son_ic = "";   // D-337: kapanış dönüş IR'ı — üreten dal sonunda yazar
+    p.son_ic = "";   // D-341: kapanış dönüş IR'ı — üreten dal sonunda yazar
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") { p.son_tip = "i32"; ver dizi_al(p.a_deg, idx); }
     // D3 Öncelik-1: kesirli literal — immediate (TAM gibi), son_tip double (kesirli64
@@ -3351,7 +3531,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken d2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
-            eğer dizi_eleman_yapi_mi(et) {   // D-338: by-value eleman
+            eğer dizi_eleman_yapi_mi(et) {   // D-342: by-value eleman
                 dizi_yapi_ekle_emit(p, p.rho_ref, d2, et, e);
             }
             değilse {
@@ -3367,7 +3547,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken iy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken vy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 3));
             değişken vty: metin = p.son_tip;
-            eğer dizi_eleman_yapi_mi(vty) {   // D-338: by-value eleman
+            eğer dizi_eleman_yapi_mi(vty) {   // D-342: by-value eleman
                 dizi_yapi_yaz_emit(p, dy, iy, vty, vy);
             }
             değilse {
@@ -3383,7 +3563,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken elem: metin = p.son_elem;
             değişken i3: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             eğer metin_esit(elem, "") { elem = "i32"; }
-            eğer dizi_eleman_yapi_mi(elem) {   // D-338: by-value eleman
+            eğer dizi_eleman_yapi_mi(elem) {   // D-342: by-value eleman
                 değişken fr3: metin = dizi_yapi_al_emit(p, d3, i3, elem);
                 p.son_tip = elem; p.son_elem = ""; p.son_ref = "";
                 ver fr3;
@@ -3418,11 +3598,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değişken kfv: tam32 = yeni_reg(p);
                 yaz_str("  "); yaz_str(reg_str(kfv)); yaz_str(" = load { ptr, ptr }, ptr ");
                 yaz_str(cg_var_bul(p, fad)); yb(10);
-                // D-337: dolaylı çağrı ORTAK yoldan (fat_cagri_uret).
+                // D-341: dolaylı çağrı ORTAK yoldan (fat_cagri_uret).
                 ver fat_cagri_uret(p, reg_str(kfv), kret, kargs, kargt);
             }
         }
-        // D-337: KAPANIŞ ALANI mı, METOD mu? `k.fn()` iki şekli de gösterebilir.
+        // D-341: KAPANIŞ ALANI mı, METOD mu? `k.fn()` iki şekli de gösterebilir.
         // Alanın BİLDİRİLEN tipi `işlev(...) -> T` ise bu bir metod DEĞİL, fat
         // value tutan ALANDIR → dolaylı çağrı. Önceki davranış: her ERISIM-hedefli
         // çağrı metod sayılıyordu → alan adıyla `@fn` çağrılıp LINK hatası (ölçüldü).
@@ -3442,7 +3622,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 ver fat_cagri_uret(p, efv, eic, eargs, eargt);
             }
         }
-        // D-337: DİZİ ELEMANI kapanış çağrısı — `xs[i]()`. Hedefi üret; IR tipi fat
+        // D-341: DİZİ ELEMANI kapanış çağrısı — `xs[i]()`. Hedefi üret; IR tipi fat
         // value ise dolaylı çağır, DEĞİLSE GÜRÜLTÜLÜ hata (sessiz 0 YASAK, D-326).
         eğer metin_esit(dizi_al(p.a_ad, hed), "INDEKS") {
             değişken ifv: metin = ifade_uret(p, hed);
@@ -3568,12 +3748,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken sag: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         değişken gt: metin = p.son_tip;
         değişken optip: metin = tip_birlestir(st, gt);
+        // D-337: operandlardan biri işaretsizse (dtamN) TÜM işlem işaretsiz
+        // semantikle yapılır (C llvm.c: `int isz = sol.isaretsiz || sag.isaretsiz`).
+        değişken bisz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb));
+        eğer bisz == 0 { bisz = ifade_isz(p, dizi_al(p.cocuk, cb + 1)); }
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);
             // D3 Öncelik-1: float/double → fcmp + ordered yüklem; aksi icmp.
             değişken cmpk: metin = "icmp ";
-            değişken pred: metin = icmp_pred(op);
+            değişken pred: metin = icmp_pred(op, bisz);
             eğer kesirli_ll_mi(optip) { cmpk = "fcmp "; pred = fcmp_pred(op); }
             yaz_str("  "); yaz_str(cs2); yaz_str(" = "); yaz_str(cmpk); yaz_str(pred);
             yaz_str(" "); yaz_str(optip); yaz_str(" "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
@@ -3583,7 +3767,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // D3 Öncelik-1: float/double → f-varyant (fadd/...); aksi tamsayı.
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
-        değişken mnem: metin = ll_ikili(op);
+        değişken mnem: metin = ll_ikili(op, bisz);
         eğer kesirli_ll_mi(optip) { mnem = ll_ikili_f(op); }
         yaz_str("  "); yaz_str(rs); yaz_str(" = "); yaz_str(mnem);
         yaz_str(" "); yaz_str(optip); yaz_str(" "); yaz_str(sol); yaz_str(", "); yaz_str(sag); yb(10);
@@ -3689,7 +3873,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 eğer mono_bul(p, fstrip) >= 0 { p.beklenen_yapi = ftip; }
             }
             eğer bayt(ftip, 0) == 123 { p.beklenen_ll = ftip; }   // '{' → mono çeşit/tagged alanı
-            // D-337: kapanış alanı — lifted lambda'nın dönüş IR'ı alanın BİLDİRİLEN
+            // D-341: kapanış alanı — lifted lambda'nın dönüş IR'ı alanın BİLDİRİLEN
             // tipinden (fat value T'yi siler; `k.fn()` çağrı yeri de aynı kaynağı okur).
             değişken eski_lbr3: metin = p.lam_bek_ret;
             eğer dizi_eleman_yapi_mi(ftip) {
@@ -3765,7 +3949,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     eğer metin_esit(ad, "DIZI_OLUSTUR") {
         değişken elem: metin = p.beklenen_elem;
         p.beklenen_elem = "";   // tek seferlik tüket
-        // D-337: kapanış elemanlı dizi — lifted lambda'nın dönüş IR'ı bildirilen
+        // D-341: kapanış elemanlı dizi — lifted lambda'nın dönüş IR'ı bildirilen
         // eleman tipinden gelir (fat value T'yi siler). Bağlam tek seferlik.
         değişken elem_ic: metin = p.beklenen_elem_ic;
         p.beklenen_elem_ic = "";
@@ -3791,7 +3975,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken et: metin = p.son_tip;
             p.lam_bek_ret = eski_lbr2;   // RESET (sızdırma)
             eğer dizi_eleman_yapi_mi(et) {
-                // D-337/D-338: BY-VALUE (memcpy) eklenir. Skaler yol agregatı i32
+                // D-341/D-342: BY-VALUE (memcpy) eklenir. Skaler yol agregatı i32
                 // imzasına geçirirdi (LLVM'in doğrudan-çağrı denetimi bunu yakalar,
                 // ama kırpma riski taşıyan yolu hiç üretmiyoruz).
                 dizi_yapi_ekle_emit(p, drho, dr, et, e);
@@ -3815,7 +3999,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken i2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         eğer metin_esit(elem, "") { elem = "i32"; }
         eğer dizi_eleman_yapi_mi(elem) {
-            // D-337/D-338: BY-VALUE okunur (kdl_dizi_al_yapi + load). Skaler
+            // D-341/D-342: BY-VALUE okunur (kdl_dizi_al_yapi + load). Skaler
             // `kdl_dizi_al_tam` elemanın yalnız ilk 4 baytını okurdu.
             değişken fr2: metin = dizi_yapi_al_emit(p, arr, i2, elem);
             p.son_tip = elem; p.son_elem = ""; p.son_ref = ""; p.son_ic = elem_ic2;
@@ -3905,6 +4089,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken islem: metin = "sext";
         eğer ksf == yanlış ve hdf == yanlış {
             eğer tip_genislik(hedef) < tip_genislik(kaynak) { islem = "trunc"; }
+            // D-337: KAYNAK işaretsizse genişletme zext (C int_donustur_im
+            // `isaretsiz` parametresi = kaynak.isaretsiz). `dtam8 200 olarak tam32`
+            // sext ile -56 döndürüyordu; zext ile 200.
+            değilse {
+                eğer ifade_isz(p, dizi_al(p.cocuk, cb)) == 1 { islem = "zext"; }
+            }
         }
         eğer ksf == yanlış ve hdf { islem = "sitofp"; }      // int → float
         eğer ksf ve hdf == yanlış { islem = "fptosi"; }      // float → int
@@ -3991,7 +4181,8 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             // (KdlGorevBare ABI). ret_uydur yalnız int→int; ptr/dar-int i64'e
             // i64_genislet ile taşınır (ptrtoint/sext/immediate materyalize).
             eğer p.lam_i64 == 1 { op = i64_genislet(p, op, p.son_tip); }
-            değilse { op = ret_uydur(p, op); }   // Karar 1: i64-taşıyıcı → fn dönüşüne daralt
+            // D-337: kaynak işaretsizse genişletme zext (`ver a` — a: dtam8, fn -> dtam32)
+            değilse { op = ret_uydur(p, op, ifade_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)))); }
             rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
             rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
@@ -4092,7 +4283,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         yaz_str("  br i1 "); yaz_str(cmp); yaz_str(", label %"); yaz_str(Lbody);
         yaz_str(", label %"); yaz_str(Ldone); yb(10); p.bb_term = 1;
         etiket_yaz(p, Lbody);
-        // x = kdl_dizi_al_<sonek>(kp, i)   —  D-338: by-value eleman ise _yapi yolu
+        // x = kdl_dizi_al_<sonek>(kp, i)   —  D-342: by-value eleman ise _yapi yolu
         değişken elr: metin = "";
         eğer dizi_eleman_yapi_mi(et) {
             elr = dizi_yapi_al_emit(p, kp, il, et);
@@ -4315,7 +4506,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             velem = ll_eleman_tip(p, annot_node);             // Dizi<T> → eleman
             vic = ll_ic_tip(p, annot_node);                   // D-299: görev/kanal → T
             p.beklenen_elem = velem;                          // CG8: [] için bağlam
-            // D-337: Dizi<işlev(..)->T> → eleman lifted lambda'sının dönüş IR bağlamı.
+            // D-341: Dizi<işlev(..)->T> → eleman lifted lambda'sının dönüş IR bağlamı.
             eğer dizi_eleman_yapi_mi(velem) { p.beklenen_elem_ic = vic; }
             // D-267: *tamN pointer → skaler pointee (deref-read yük-genişliği; C pointee_llvm_tip aynası)
             eğer metin_esit(dizi_al(p.a_ad, annot_node), "TIP_POINTER") {
@@ -4350,7 +4541,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
         // D-310: annotasyonlu → değer tamsayı genişliğini annotasyona uydur
         // (i64-taşıyıcı built-in dönüşü: `değişken t: tam32 = görev_birleştir(a)`).
-        eğer annot == 1 { v = int_uydur(p, v, vtip); }
+        // D-337: değer ifadesinin imzasızlığı (C: dv.isaretsiz) — store dönüşümünde
+        // zext/sext seçimi VE değişken kaydı için.
+        değişken visz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb + cs - 1));
+        eğer annot == 1 { v = int_uydur(p, v, vtip, visz); }
         // CG9: annotasyonlu → alloca entry'de hoist edildi; değilse inline (eski yol).
         değişken areg: metin = "";
         eğer annot == 1 { areg = pa_reg_bul(p, idx); }
@@ -4361,6 +4555,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
+        // D-337: imzasızlık kaydı — annotasyon varsa ONDAN (C: ast_tip_isaretsiz_mi),
+        // yoksa değer ifadesinden (C: dv.isaretsiz).
+        eğer annot == 1 { cg_var_isz_isaretle(p, ll_isz(p, dizi_al(p.cocuk, cb))); }
+        değilse { cg_var_isz_isaretle(p, visz); }
         eğer metin_uzunluk(vpointee) > 0 {   // D-267: skaler pointee tipi kaydet
             dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, vpointee);
         }
@@ -4384,7 +4582,9 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
-            v = int_uydur(p, v, vt);   // D-310: i64-taşıyıcı → hedef değişken genişliği
+            // D-310: i64-taşıyıcı → hedef değişken genişliği. D-337: kaynak
+            // işaretsizse zext (dtam8 → dtam32 ataması 200'ü korur, -56 değil).
+            v = int_uydur(p, v, vt, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));
             yaz_str("  store "); yaz_str(vt); yaz_str(" "); yaz_str(v); yaz_str(", ptr ");
             yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
             ver 0;
@@ -4427,7 +4627,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken iy2: metin = ifade_uret(p, dizi_al(p.cocuk, lcb + 1));     // indeks → i32
             değişken vy2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));      // değer
             değişken vty2: metin = p.son_tip;                                  // değer LLVM tipi
-            eğer dizi_eleman_yapi_mi(vty2) {   // D-338: by-value eleman
+            eğer dizi_eleman_yapi_mi(vty2) {   // D-342: by-value eleman
                 dizi_yapi_yaz_emit(p, taban, iy2, vty2, vy2);
                 ver 0;
             }
@@ -5321,7 +5521,7 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
         } değilse {
             // D-322: doğal dönüş — gövde tipini BİLDİRİLEN dönüşe uydur (tamsayı
             // genişliği); uymuyorsa LLVM reddeder (sessiz kırpma yerine gürültü).
-            değişken bn: metin = int_uydur(p, bv, lret);
+            değişken bn: metin = int_uydur(p, bv, lret, ifade_isz(p, govde));
             yaz_str("  ret "); yaz_str(lret); yaz_str(" "); yaz_str(bn); yb(10);
         }
     }
@@ -5400,6 +5600,10 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 yaz_str(", ptr "); yaz_str(areg); yb(10);
             }
             cg_var_ekle(p, dizi_al(p.a_deg, c), areg, pt, param_ref_yapi(p, c), param_elem(p, c));
+            // D-337: dtamN parametre → işaretsiz (C llvm.c:6790 aynası)
+            eğer dizi_al(p.a_cs, c) > 0 {
+                cg_var_isz_isaretle(p, ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c))));
+            }
             değişken ppo: metin = param_pointee(p, c);   // D-267: skaler pointer pointee
             eğer metin_uzunluk(ppo) > 0 {
                 dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, ppo);
@@ -5494,6 +5698,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") {
             dizi_ekle(p.fn_ad, dizi_al(p.a_deg, c));
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
+            dizi_ekle(p.fn_risz, isz_str(islev_donus_isz(p, c)));   // D-337
             dizi_ekle(p.fn_node, c);   // D-309: call-graph kapanışı
         }
         eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { imza_topla(p, c); }  // D3: modül üyeleri (flat)
@@ -5506,6 +5711,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                 eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") {
                     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, m));
                     dizi_ekle(p.fn_ret, islev_donus_tip(p, m));
+                    dizi_ekle(p.fn_risz, isz_str(islev_donus_isz(p, m)));   // D-337
                     dizi_ekle(p.fn_node, m);   // D-309
                 }
                 ui = ui + 1;
@@ -7254,11 +7460,11 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], cg_apointee: [], cg_aic: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
+        cg_aelem: [], cg_apointee: [], cg_aic: [], cg_aisz: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         beklenen_elem_ic: "", son_ic: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
-        fn_ad: [], fn_ret: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
+        fn_ad: [], fn_ret: [], fn_risz: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",

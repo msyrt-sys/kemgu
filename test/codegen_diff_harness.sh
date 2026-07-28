@@ -53,7 +53,13 @@ for f in "$KORPUS"/*.kem; do
     # Win11'de .exe yeniden-yazımı dosya-kilidi yarışına girer → dosya-başı benzersiz ad.
     b=$(basename "$f" .kem)
     # C codegen → exit (oracle)
-    "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null
+    # D-337: bu harness'ın işi CODEGEN eşdeğerliği; tip kapısı AYRI kapıdır
+    # (calistir_check_kapisi, D-336) ve cg_korpus'u zaten kapsar. Korpusta
+    # KASITLI tip-geçersiz dosyalar var (cg6_trunc/cg_skaler_deref/
+    # cg_deref_pointer — codegen trunc/deref yollarını ölçerler); tip kapısı
+    # katı olunca bunlar oracle'sız kalıp SESSİZCE atlanıyordu (105→102).
+    # `--tip-atla` ile codegen kapsamı korunur, tip zorlaması kaybolmaz.
+    "$KEMGU" --llvm --tip-atla "$f" > "$TMP/$b.c.ll" 2>/dev/null
     if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
         echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"; continue
     fi
@@ -64,9 +70,16 @@ for f in "$KORPUS"/*.kem; do
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
     run_exe "$TMP/$b.k.exe"; kaday=$RC
-    # Kalıcı 127 (Defender) = ortamsal → oracle güvenilmez, atla (fail sayma).
-    if [ "$coracle" -eq 127 ] || [ "$kaday" -eq 127 ]; then
-        echo "  ⚠ $(basename "$f") — 127 (Defender exec yarışı, ortamsal) atlandı"; continue
+    # D-339 ONARIM: eski kural `coracle==127 || kaday==127` idi ve "korpusta hiçbir
+    # program 127 dönmez" premisine dayanıyordu. Bu premis YANLIŞ ölçüldü:
+    # cg_isaretsiz_alan.kem sabotajlı codegen ile TAM OLARAK 127 üretti (12 retry
+    # sonrası kararlı, oracle 60) → GERÇEK bir miscompile ⚠ ATLANDI olarak yeşil
+    # geçti. Yani sabotaj kapısı kendi ölçtüğü şeye kördü.
+    # Yeni kural: 127 yalnız ORACLE'da ortamsal sayılır (oracle yoksa karşılaştırma
+    # anlamsız). Oracle sağlam bir değer verirken aday kalıcı 127 diyorsa bu bir
+    # ANLAŞMAZLIKTIR — sessizce atlanamaz.
+    if [ "$coracle" -eq 127 ]; then
+        echo "  ⚠ $(basename "$f") — oracle 127 (Defender exec yarışı, ortamsal) atlandı"; continue
     fi
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))

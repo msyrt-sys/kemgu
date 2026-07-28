@@ -1,4 +1,4 @@
-// D-338: NOMINAL YAPI dizi elemanı (%Yapi) — self-host'ta by-value (memcpy) yol.
+// D-342: NOMINAL YAPI dizi elemanı (%Yapi) — self-host'ta by-value (memcpy) yol.
 // Öncesi: `dizi_ekle_sonek` %Yapi'yı skaler sayıp `kdl_dizi_ekle_tam(i32)` imzasına
 // struct değer geçiriyordu → doğrudan çağrıda LLVM-RED (diziyi doldurmak İMKÂNSIZDI).
 // Ayrıca eleman boyutu sabit "4" idi; artık LLVM `ptrtoint getelementptr` ile hesaplar

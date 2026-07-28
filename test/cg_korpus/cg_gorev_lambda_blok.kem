@@ -13,10 +13,15 @@ işlev main() -> tam32 {
                             // 42 + 35 + 7 = 84; 84 - 42 = 42
                             ver görev_birleştir(a) + görev_birleştir(b) + görev_birleştir(c) - 42;
                         }
-                        hata(e3) => { ver 3; }
+                        // D-336: hata dallarinda da acik gorevler birlestirilmeli.
+                        hata(e3) => {
+                            değişken y1: tam32 = görev_birleştir(a);
+                            değişken y2: tam32 = görev_birleştir(b);
+                            ver 3;
+                        }
                     }
                 }
-                hata(e2) => { ver 2; }
+                hata(e2) => { değişken yut: tam32 = görev_birleştir(a); ver 2; }
             }
         }
         hata(e1) => { ver 1; }

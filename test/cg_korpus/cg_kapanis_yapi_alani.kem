@@ -1,4 +1,4 @@
-// D-337: KAPANIŞ YAPI ALANINDA — `k.fn()`. Alanın BİLDİRİLEN tipi `işlev(..)->T`
+// D-341: KAPANIŞ YAPI ALANINDA — `k.fn()`. Alanın BİLDİRİLEN tipi `işlev(..)->T`
 // ise bu bir METOD DEĞİL, fat value tutan alandır → dolaylı çağrı. Öncesi: her
 // ERISIM-hedefli çağrı metod sayılıyordu → alan adıyla `@fn` çağrılıp LINK hatası.
 // Kapsam: yakalamasız (env=null) + yakalamalı+argüman (env≠null) + işaretçi dönüş

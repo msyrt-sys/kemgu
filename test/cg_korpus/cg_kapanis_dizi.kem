@@ -1,4 +1,4 @@
-// D-337: KAPANIŞ DİZİ ELEMANINDA — `xs[i]()`. Fat value 16 bayt → BY-VALUE
+// D-341: KAPANIŞ DİZİ ELEMANINDA — `xs[i]()`. Fat value 16 bayt → BY-VALUE
 // (kdl_dizi_*_yapi, memcpy) saklanır; skaler sanılsaydı 16 baytlık agregat
 // `kdl_dizi_ekle_tam(i32)` imzasına geçirilirdi (LLVM bunu SESSİZCE kabul eder
 // → bozuk dizi). Kapsam: tek eleman, çok eleman + yakalama + argüman. Exit: 42

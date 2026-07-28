@@ -490,9 +490,19 @@ static int mode_checkdump(const char *kaynak, const char *dosya_adi) {
  * (benchmark kacis yolu). */
 static int g_llvm_dogrula = 1;
 
-/* Tek-gecis ad cozumu: resolver gecisinde hatalar susturulur —
- * --llvm tip hatali programlarda da eskisi gibi emit etmeye devam
- * eder (binding'siz dugumler codegen'de string fallback'ine duser). */
+/* D-337: `--llvm` artik TIP KONTROLUNU BAGLAR. Onceki hal olculdu ve
+ * SESSIZ-YANLIS-CEVAP ureticiydi: `--check` REDDETTIGI program `--llvm` ile
+ * derlenip CALISAN ikili verebiliyordu (`f(40, 99)` fazla argumanla exit 42).
+ * Derleme yolu `kemgu --llvm | clang` oldugu icin bu, tip sisteminin pratikte
+ * BAGLAYICI OLMAMASI demekti.
+ *
+ * KACIS KAPISI `--tip-atla`: bilinen borclu yapilar icin (ol. kem_os birlesik
+ * kaynagi 60 tip hatasi veriyor; kasitli codegen korpuslari E002/E004/T001).
+ * Kacis ACIK olmali — sessiz gecis degil, bayrakla BEYAN. */
+static int g_tip_atla = 0;
+
+/* Tek-gecis ad cozumu: resolver gecisinde hatalar susturulur (yalniz
+ * --tip-atla modunda; aksi halde hatalar KULLANICIYA gosterilir). */
 static void sessiz_hata_cb(int satir, int sutun, const char *kod,
                            const char *mesaj, const char *ipucu, void *ctx) {
     (void)satir; (void)sutun; (void)kod;
@@ -542,9 +552,20 @@ static int mode_llvm(const char *kaynak, const char *dosya_adi) {
         if (g) {
             TipKontrol tk;
             tip_kontrol_baslat(&tk, a, g, dosya_adi, kaynak);
-            hata_callback_ayarla(sessiz_hata_cb, NULL);
+            /* D-337: --tip-atla YOKSA hatalar KULLANICIYA yazilir ve emit
+             * ENGELLENIR. Tip hatali programdan ikili uretmek, tip sistemini
+             * pratikte baglayici olmaktan cikariyordu. */
+            if (g_tip_atla) hata_callback_ayarla(sessiz_hata_cb, NULL);
             tip_kontrol_program(&tk, prog);
-            hata_callback_ayarla(NULL, NULL);
+            if (g_tip_atla) hata_callback_ayarla(NULL, NULL);
+            if (!g_tip_atla && tk.hata_sayisi > 0) {
+                fprintf(stderr,
+                    "\nHATA: %s — tip kontrol %d hata (LLVM IR URETILMEDI).\n"
+                    "  Bilerek tip hatali kod derliyorsaniz: --tip-atla\n",
+                    dosya_adi, tk.hata_sayisi);
+                arena_serbest(a);
+                return 1;
+            }
         }
     }
 
@@ -653,6 +674,11 @@ int main(int argc, char *argv[]) {
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--no-verify") == 0) {
             g_llvm_dogrula = 0;  /* C2 kapisini kapat (benchmark kacisi) */
+            arg_idx++;
+        } else if (strcmp(argv[arg_idx], "--tip-atla") == 0) {
+            /* D-337: tip hatalarina RAGMEN emit et (bilinen borclu yapilar).
+             * ACIK BEYAN — sessiz gecis degil. */
+            g_tip_atla = 1;
             arg_idx++;
         } else if (strcmp(argv[arg_idx], "--mimari") == 0) {
             /* D-269 (P1): hedef mimari sec (satirici_asm arch-gate + emit triple).
