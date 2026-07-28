@@ -5870,10 +5870,24 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
                     cmp, L_body, L_done);
             fprintf(g->out, "bb%d:\n", L_body);
-            /* x = dizi_al(kdl_ptr, i_load) */
-            int el_reg = yeni_reg(g);
-            fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
-                    el_reg, et, fn_al, kdl_ptr, i_load);
+            /* x = dizi_al(kdl_ptr, i_load)
+             * D-342: BY-VALUE eleman (%Yapi / kapanis fat value) skaler
+             * `kdl_dizi_al_tam` ile OKUNAMAZ. Onceki kod donus tipine `et`
+             * yazip `@kdl_dizi_al_tam`i cagiriyordu: declare i32 vs call
+             * %Nokta. **LLVM bunu SESSIZCE kabul ediyor** (D-295/D-334
+             * dersinin tekrari) → cop okunuyordu (olculdu: `için` ile
+             * 2-elemanli Nokta dizisi toplaminda exit 14, dogrusu 42).
+             * Diger dizi yollarindaki (INDEKS/dizi_al/ekle/yaz) by-value
+             * yonlendirmesi VARDI; yalniz `için` dalinda eksikti. */
+            int el_reg;
+            if (dizi_eleman_struct_mi(et)) {
+                IfadeSonuc es = dizi_struct_al_emit(g, kdl_ptr, i_load, et);
+                el_reg = es.reg;
+            } else {
+                el_reg = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        el_reg, et, fn_al, kdl_ptr, i_load);
+            }
             fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                     et, el_reg, x_alloca);
             /* Govde scope: x isim olarak ekle */
