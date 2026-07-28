@@ -310,7 +310,7 @@ static void test_hover_islev(void) {
     mesaj_yaz(girdi,
         "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"textDocument/hover\",\"params\":{"
         "\"textDocument\":{\"uri\":\"file:///x.kem\"},"
-        "\"position\":{\"line\":0,\"character\":60}}}");
+        "\"position\":{\"line\":0,\"character\":62}}}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
     rewind(girdi);
@@ -324,12 +324,9 @@ static void test_hover_islev(void) {
         LspYanit *yh = yanit_n(y, 2);  /* hover yaniti */
         JsonDeger *j = json_ayrist(a, yh->govde, yh->content_length, NULL);
         JsonDeger *result = json_alan(j, "result");
-        /* result null veya hover icerik dondu */
-        ok = (j != NULL);  /* en az parse edilebildiyse */
-        if (result && result->tip != JSON_NULL) {
-            JsonDeger *cont = json_alan(result, "contents");
-            ok = cont != NULL;
-        }
+        /* "say" cagri konumunda hover icerik DOLU olmali (null degil) */
+        ok = j && result && result->tip != JSON_NULL
+          && json_alan(result, "contents") != NULL;
         arena_serbest(a);
     }
     test_sonuc("hover yaniti formatla doner", ok);
@@ -389,7 +386,7 @@ static void test_definition_islev(void) {
     mesaj_yaz(girdi,
         "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"textDocument/definition\","
         "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
-        "\"position\":{\"line\":0,\"character\":60}}}");
+        "\"position\":{\"line\":0,\"character\":62}}}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
     rewind(girdi);
@@ -402,12 +399,10 @@ static void test_definition_islev(void) {
         LspYanit *yd = yanit_n(y, 2);
         JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
         JsonDeger *result = json_alan(j, "result");
-        /* Hover spec: result null veya range icerir */
-        ok = j != NULL;
-        if (result && result->tip != JSON_NULL) {
-            JsonDeger *range = json_alan(result, "range");
-            ok = range != NULL;
-        }
+        /* "say" cagri konumunda tanim bulunmali: uri + range DOLU */
+        ok = j && result && result->tip != JSON_NULL
+          && json_alan(result, "uri") != NULL
+          && json_alan(result, "range") != NULL;
         arena_serbest(a);
     }
     test_sonuc("definition yaniti uri+range doner", ok);
@@ -528,6 +523,101 @@ static void test_documentsymbol_cesit(void) {
     fclose(cikti);
 }
 
+/* LSP v3: references */
+static void test_references_islev(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev say() -> tam32 { ver 0; } işlev main() -> tam32 { ver say() + say(); }"
+     * say tanimi + 2 cagri kullanimi = 3 location (includeDeclaration=true) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev say() -> tam32 { ver 0; } "
+        "i\\u015flev main() -> tam32 { ver say() + say(); }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":0,\"character\":62},"
+        "\"context\":{\"includeDeclaration\":true}}}");
+    /* includeDeclaration=false -> yalniz 2 kullanim */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":0,\"character\":62},"
+        "\"context\":{\"includeDeclaration\":false}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = json_dizi_sayi(result) == 3;
+        if (ok) {
+            JsonDeger *l0 = json_dizi_eleman(result, 0);
+            int u_uz = 0;
+            const char *uri = json_metin(json_alan(l0, "uri"), &u_uz);
+            JsonDeger *range = json_alan(l0, "range");
+            ok = uri && strcmp(uri, "file:///x.kem") == 0 && range != NULL;
+        }
+        if (ok) {
+            LspYanit *yr2 = yanit_n(y, 3);
+            JsonDeger *j2 = json_ayrist(a, yr2->govde, yr2->content_length, NULL);
+            ok = json_dizi_sayi(json_alan(j2, "result")) == 2;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("references tanim+kullanimlari doner (includeDeclaration)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: references — tanimlayici olmayan konum -> null */
+static void test_references_bos(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 { ver 0; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":32,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":5,\"character\":0},"
+        "\"context\":{\"includeDeclaration\":true}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result != NULL && result->tip == JSON_NULL;
+        arena_serbest(a);
+    }
+    test_sonuc("references tanimlayici disi konumda null doner", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 static void test_shutdown_yanit(void) {
     FILE *girdi = tmpfile();
     FILE *cikti = tmpfile();
@@ -575,6 +665,10 @@ int main(void) {
     printf("\n--- LSP v3 (documentSymbol) ---\n");
     test_documentsymbol_hiyerarsi();
     test_documentsymbol_cesit();
+
+    printf("\n--- LSP v3 (references) ---\n");
+    test_references_islev();
+    test_references_bos();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
