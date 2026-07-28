@@ -202,6 +202,58 @@ static int konum_bayt_ofseti(const char *s, int uz, int satir_0, int karakter_0)
     return i;
 }
 
+/* === Bayt <-> UTF-16 kod birimi donusumu ===
+ *
+ * Parser/lexer sutunlari 1-tabanli BAYT sutunudur. LSP `character` alani ise
+ * UTF-16 kod birimi sayar. Turkce harfler (ş/ğ/ı/ö/ü/ç) 2 baytlik UTF-8
+ * dizileridir; donusum yapilmazsa editor yanlis sutunu isaretler.
+ *
+ * Tek kaynak: `konum_bayt_ofseti` (UTF-16 -> bayt). Asagidakiler ters yonu ve
+ * satir basi hesabini ayni kod uzerinden turetir. */
+
+/* [bas, son) bayt araligindaki UTF-16 kod birimi sayisi. */
+static int utf16_say(const char *s, int bas, int son) {
+    int n = 0;
+    int i = bas;
+    while (i < son) {
+        unsigned char c = (unsigned char)s[i];
+        int bayt = 1;
+        if (c >= 0xF0) bayt = 4;
+        else if (c >= 0xE0) bayt = 3;
+        else if (c >= 0xC0) bayt = 2;
+        if (i + bayt > son) bayt = son - i;
+        i += bayt;
+        n += (bayt == 4) ? 2 : 1;  /* BMP disi = surrogate cifti = 2 birim */
+    }
+    return n;
+}
+
+/* Bir metnin UTF-16 kod birimi uzunlugu. */
+static int utf16_uzunluk(const char *s, int uz) {
+    if (!s || uz <= 0) return 0;
+    return utf16_say(s, 0, uz);
+}
+
+/* KEMGU 1-tabanli BAYT sutunu -> LSP 0-tabanli UTF-16 karakteri. */
+static int lsp_karakter(const Belge *b, int satir_1, int sutun_1) {
+    int bayt = sutun_1 > 0 ? sutun_1 - 1 : 0;
+    if (!b || !b->icerik) return bayt;
+    int satir_0 = satir_1 > 0 ? satir_1 - 1 : 0;
+    int satir_bas = konum_bayt_ofseti(b->icerik, b->icerik_uz, satir_0, 0);
+    int son = satir_bas + bayt;
+    if (son > b->icerik_uz) son = b->icerik_uz;
+    if (son < satir_bas) son = satir_bas;
+    return utf16_say(b->icerik, satir_bas, son);
+}
+
+/* LSP 0-tabanli UTF-16 karakteri -> KEMGU 1-tabanli BAYT sutunu. */
+static int kemgu_sutun(const Belge *b, int satir_0, int karakter_0) {
+    if (!b || !b->icerik) return karakter_0 + 1;
+    int satir_bas = konum_bayt_ofseti(b->icerik, b->icerik_uz, satir_0, 0);
+    int ofset = konum_bayt_ofseti(b->icerik, b->icerik_uz, satir_0, karakter_0);
+    return ofset - satir_bas + 1;
+}
+
 /* Belgenin [bas, son) bayt araligini `metin` ile degistir. */
 static void belge_aralik_uygula(Belge *b, const JsonDeger *range,
                                 const char *metin, int uz) {
@@ -457,7 +509,8 @@ static BelgeSembol *belge_sembol_bul(Belge *b, const char *ad, int ad_uz) {
 
 /* === Diagnostic yayini === */
 
-static void publish_diagnostics(FILE *cikti, const char *uri, DiagCtx *dc) {
+static void publish_diagnostics(FILE *cikti, const char *uri, DiagCtx *dc,
+                                const Belge *belge) {
     JsonYazici y;
     json_yazici_baslat(&y);
     json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\","
@@ -468,10 +521,10 @@ static void publish_diagnostics(FILE *cikti, const char *uri, DiagCtx *dc) {
     for (LspDiag *d = dc->bas; d; d = d->sonraki) {
         if (!once) json_yaz(&y, ",");
         once = 0;
-        /* LSP konum 0-tabanli, KEMGU 1-tabanli. Sutun 0 olamayacagi icin
-         * dikkat: 1 -> 0. */
+        /* LSP konum 0-tabanli, KEMGU 1-tabanli. Sutun ayrica BAYT'tan
+         * UTF-16 kod birimine cevrilir. */
         int s = d->satir > 0 ? d->satir - 1 : 0;
-        int k = d->sutun > 0 ? d->sutun - 1 : 0;
+        int k = lsp_karakter(belge, d->satir, d->sutun);
         json_yaz(&y, "{\"range\":{\"start\":{\"line\":");
         json_yaz_int(&y, s);
         json_yaz(&y, ",\"character\":");
@@ -580,8 +633,8 @@ static void hover_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
     const char *icerik_str = NULL;
     BelgeSembol *sem = NULL;
     if (belge && belge->prog) {
-        const Dugum *d = bul_tanimlayici_konum(belge->prog,
-                                                line_0 + 1, char_0 + 1);
+        const Dugum *d = bul_tanimlayici_konum(belge->prog, line_0 + 1,
+            kemgu_sutun(belge, line_0, char_0));
         if (d) {
             sem = belge_sembol_bul(belge,
                 d->veri.tanimlayici.metin,
@@ -625,16 +678,18 @@ static void definition_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
     int found = 0;
     int def_line = 0, def_col = 0, def_uz = 0;
     if (belge && belge->prog) {
-        const Dugum *d = bul_tanimlayici_konum(belge->prog,
-                                                line_0 + 1, char_0 + 1);
+        const Dugum *d = bul_tanimlayici_konum(belge->prog, line_0 + 1,
+            kemgu_sutun(belge, line_0, char_0));
         if (d) {
             BelgeSembol *sem = belge_sembol_bul(belge,
                 d->veri.tanimlayici.metin,
                 d->veri.tanimlayici.uzunluk);
             if (sem) {
                 def_line = sem->satir > 0 ? sem->satir - 1 : 0;
-                def_col = sem->sutun > 0 ? sem->sutun - 1 : 0;
-                def_uz = sem->ad_uz;
+                /* BAYT sutunu -> UTF-16 karakteri; uzunluk da UTF-16 birimi */
+                def_col = lsp_karakter(belge, sem->satir, sem->sutun);
+                def_uz = utf16_uzunluk(sem->ad, sem->ad_uz);
+                if (def_uz <= 0) def_uz = 1;
                 found = 1;
             }
         }
@@ -670,25 +725,27 @@ static void definition_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
  * dosya disi kullanimlar taranmaz. */
 
 /* documentSymbol bolumunde tanimli — Range yazici. */
-static void ds_range_yaz(JsonYazici *y, const char *alan_ad,
-                         int satir_1, int sutun_1, int uzunluk);
+static void ds_range_yaz(JsonYazici *y, const Belge *b, const char *alan_ad,
+                         int satir_1, int sutun_1, const char *ad, int ad_uz);
 
 typedef struct {
     JsonYazici *y;
+    const Belge *belge;
     const char *uri;
     const char *ad;
     int ad_uz;
     int *once;
 } RefCtx;
 
-static void ref_konum_yaz(JsonYazici *y, const char *uri,
-                          int satir_1, int sutun_1, int uzunluk, int *once) {
+static void ref_konum_yaz(JsonYazici *y, const Belge *b, const char *uri,
+                          int satir_1, int sutun_1,
+                          const char *ad, int ad_uz, int *once) {
     if (!*once) json_yaz(y, ",");
     *once = 0;
     json_yaz(y, "{\"uri\":");
     json_yaz_metin_lit(y, uri);
     json_yaz(y, ",");
-    ds_range_yaz(y, "range", satir_1, sutun_1, uzunluk);
+    ds_range_yaz(y, b, "range", satir_1, sutun_1, ad, ad_uz);
     json_yaz(y, "}");
 }
 
@@ -696,7 +753,8 @@ static void ref_ziyaret(const Dugum *d, void *ctx) {
     RefCtx *rc = (RefCtx *)ctx;
     if (d->veri.tanimlayici.uzunluk != rc->ad_uz) return;
     if (memcmp(d->veri.tanimlayici.metin, rc->ad, (size_t)rc->ad_uz) != 0) return;
-    ref_konum_yaz(rc->y, rc->uri, d->satir, d->sutun, rc->ad_uz, rc->once);
+    ref_konum_yaz(rc->y, rc->belge, rc->uri, d->satir, d->sutun,
+                  rc->ad, rc->ad_uz, rc->once);
 }
 
 static void references_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
@@ -723,7 +781,8 @@ static void references_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
 
     const Dugum *hedef = NULL;
     if (belge && belge->prog) {
-        hedef = bul_tanimlayici_konum(belge->prog, line_0 + 1, char_0 + 1);
+        hedef = bul_tanimlayici_konum(belge->prog, line_0 + 1,
+            kemgu_sutun(belge, line_0, char_0));
     }
 
     if (!hedef || !belge->uri) {
@@ -741,12 +800,13 @@ static void references_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
 
     if (tanimi_dahil_et) {
         BelgeSembol *sem = belge_sembol_bul(belge, ad, ad_uz);
-        if (sem) ref_konum_yaz(&y, belge->uri, sem->satir, sem->sutun,
-                               sem->ad_uz, &once);
+        if (sem) ref_konum_yaz(&y, belge, belge->uri, sem->satir, sem->sutun,
+                               sem->ad, sem->ad_uz, &once);
     }
 
     RefCtx rc;
     rc.y = &y;
+    rc.belge = belge;
     rc.uri = belge->uri;
     rc.ad = ad;
     rc.ad_uz = ad_uz;
@@ -769,10 +829,15 @@ static void references_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
  */
 
 /* "ad":{"start":{...},"end":{...}} seklinde bir Range alani yazar. */
-static void ds_range_yaz(JsonYazici *y, const char *alan_ad,
-                         int satir_1, int sutun_1, int uzunluk) {
+static void ds_range_yaz(JsonYazici *y, const Belge *b, const char *alan_ad,
+                         int satir_1, int sutun_1,
+                         const char *ad, int ad_uz) {
     int s = satir_1 > 0 ? satir_1 - 1 : 0;
-    int k = sutun_1 > 0 ? sutun_1 - 1 : 0;
+    /* Konum BAYT sutunundan UTF-16 karakterine cevrilir; uzunluk ise adin
+     * kendi UTF-16 birim sayisidir (ad, konumdan bagimsiz olabilir). */
+    int k = lsp_karakter(b, satir_1, sutun_1);
+    int uzunluk = utf16_uzunluk(ad, ad_uz);
+    if (uzunluk <= 0) uzunluk = 1;
     json_yaz(y, "\"");
     json_yaz(y, alan_ad);
     json_yaz(y, "\":{\"start\":{\"line\":");
@@ -782,13 +847,14 @@ static void ds_range_yaz(JsonYazici *y, const char *alan_ad,
     json_yaz(y, "},\"end\":{\"line\":");
     json_yaz_int(y, s);
     json_yaz(y, ",\"character\":");
-    json_yaz_int(y, k + (uzunluk > 0 ? uzunluk : 1));
+    json_yaz_int(y, k + uzunluk);
     json_yaz(y, "}}");
 }
 
 /* Bir DocumentSymbol nesnesi acar: {"name":..,"detail":..,"kind":..,range,selectionRange
  * Cocuk yazilacaksa cagiran ",\"children\":[...]" ekler, sonra "}" kapatir. */
-static void ds_bas_yaz(JsonYazici *y, const char *ad, int ad_uz, int kind,
+static void ds_bas_yaz(JsonYazici *y, const Belge *b,
+                       const char *ad, int ad_uz, int kind,
                        const char *detay, int satir_1, int sutun_1) {
     json_yaz(y, "{\"name\":");
     if (ad && ad_uz > 0) json_yaz_metin_lit_n(y, ad, (size_t)ad_uz);
@@ -798,29 +864,29 @@ static void ds_bas_yaz(JsonYazici *y, const char *ad, int ad_uz, int kind,
     json_yaz(y, ",\"kind\":");
     json_yaz_int(y, kind);
     json_yaz(y, ",");
-    ds_range_yaz(y, "range", satir_1, sutun_1, ad_uz);
+    ds_range_yaz(y, b, "range", satir_1, sutun_1, ad, ad_uz);
     json_yaz(y, ",");
-    ds_range_yaz(y, "selectionRange", satir_1, sutun_1, ad_uz);
+    ds_range_yaz(y, b, "selectionRange", satir_1, sutun_1, ad, ad_uz);
 }
 
 /* Bir ust duzey tanimi yazar. Yazdiysa 1 doner. */
-static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
+static int ds_tanim_yaz(JsonYazici *y, const Belge *b, const Dugum *d) {
     if (!d) return 0;
     if (d->tip == DUGUM_DISA && d->veri.disa.tanim) d = d->veri.disa.tanim;
 
     switch (d->tip) {
         case DUGUM_ISLEV:
-            ds_bas_yaz(y, d->veri.islev.ad, d->veri.islev.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.islev.ad, d->veri.islev.ad_uzunluk,
                        12, "i\xc5\x9flev", d->satir, d->sutun);
             json_yaz(y, "}");
             return 1;
         case DUGUM_SABIT:
-            ds_bas_yaz(y, d->veri.sabit.ad, d->veri.sabit.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.sabit.ad, d->veri.sabit.ad_uzunluk,
                        14, "sabit", d->satir, d->sutun);
             json_yaz(y, "}");
             return 1;
         case DUGUM_YAPI: {
-            ds_bas_yaz(y, d->veri.yapi.ad, d->veri.yapi.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.yapi.ad, d->veri.yapi.ad_uzunluk,
                        23, "yap\xc4\xb1", d->satir, d->sutun);
             json_yaz(y, ",\"children\":[");
             int once = 1;
@@ -829,7 +895,7 @@ static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
                 if (!a || a->tip != DUGUM_ALAN) continue;
                 if (!once) json_yaz(y, ",");
                 once = 0;
-                ds_bas_yaz(y, a->veri.alan.ad, a->veri.alan.ad_uzunluk,
+                ds_bas_yaz(y, b, a->veri.alan.ad, a->veri.alan.ad_uzunluk,
                            8, "alan", a->satir, a->sutun);
                 json_yaz(y, "}");
             }
@@ -837,12 +903,12 @@ static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
             return 1;
         }
         case DUGUM_CESIT: {
-            ds_bas_yaz(y, d->veri.cesit.ad, d->veri.cesit.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.cesit.ad, d->veri.cesit.ad_uzunluk,
                        10, "\xc3\xa7" "e\xc5\x9fit", d->satir, d->sutun);
             json_yaz(y, ",\"children\":[");
             for (int i = 0; i < d->veri.cesit.varyant_sayi; i++) {
                 if (i) json_yaz(y, ",");
-                ds_bas_yaz(y, d->veri.cesit.varyantlar[i],
+                ds_bas_yaz(y, b, d->veri.cesit.varyantlar[i],
                            d->veri.cesit.varyant_uzunluklar[i],
                            22, "varyant", d->satir, d->sutun);
                 json_yaz(y, "}");
@@ -851,7 +917,7 @@ static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
             return 1;
         }
         case DUGUM_OZELLIK: {
-            ds_bas_yaz(y, d->veri.ozellik.ad, d->veri.ozellik.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.ozellik.ad, d->veri.ozellik.ad_uzunluk,
                        11, "\xc3\xb6zellik", d->satir, d->sutun);
             json_yaz(y, ",\"children\":[");
             int once = 1;
@@ -860,7 +926,7 @@ static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
                 if (!u || u->tip != DUGUM_ISLEV) continue;
                 if (!once) json_yaz(y, ",");
                 once = 0;
-                ds_bas_yaz(y, u->veri.islev.ad, u->veri.islev.ad_uzunluk,
+                ds_bas_yaz(y, b, u->veri.islev.ad, u->veri.islev.ad_uzunluk,
                            6, "metot", u->satir, u->sutun);
                 json_yaz(y, "}");
             }
@@ -868,14 +934,14 @@ static int ds_tanim_yaz(JsonYazici *y, const Dugum *d) {
             return 1;
         }
         case DUGUM_MODUL: {
-            ds_bas_yaz(y, d->veri.modul.ad, d->veri.modul.ad_uzunluk,
+            ds_bas_yaz(y, b, d->veri.modul.ad, d->veri.modul.ad_uzunluk,
                        2, "mod\xc3\xbcl", d->satir, d->sutun);
             json_yaz(y, ",\"children\":[");
             int once = 1;
             for (int i = 0; i < d->veri.modul.sayi; i++) {
                 size_t once_uz = y->kullanilan;
                 if (!once) json_yaz(y, ",");
-                if (!ds_tanim_yaz(y, d->veri.modul.uyeler[i])) {
+                if (!ds_tanim_yaz(y, b, d->veri.modul.uyeler[i])) {
                     y->kullanilan = once_uz;  /* yazilmadi: virgulu geri al */
                     continue;
                 }
@@ -901,7 +967,7 @@ static void documentsymbol_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) 
         for (int i = 0; i < belge->prog->veri.program.sayi; i++) {
             size_t once_uz = y.kullanilan;
             if (!once) json_yaz(&y, ",");
-            if (!ds_tanim_yaz(&y, belge->prog->veri.program.uyeler[i])) {
+            if (!ds_tanim_yaz(&y, belge, belge->prog->veri.program.uyeler[i])) {
                 y.kullanilan = once_uz;
                 continue;
             }
@@ -1028,7 +1094,7 @@ static void open_or_change_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
         belge_set(belge, uri, uri_uz, icerik, icerik_uz);
     }
     analiz_et(belge, dc);
-    publish_diagnostics(cikti, belge->uri, dc);
+    publish_diagnostics(cikti, belge->uri, dc, belge);
 }
 
 static void close_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
@@ -1042,7 +1108,7 @@ static void close_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
     if (!uri) return;
     /* Bos diagnostic listesi gonder */
     diag_temizle(dc);
-    publish_diagnostics(cikti, uri, dc);
+    publish_diagnostics(cikti, uri, dc, NULL);
     belge_temizle(belge);
 }
 
