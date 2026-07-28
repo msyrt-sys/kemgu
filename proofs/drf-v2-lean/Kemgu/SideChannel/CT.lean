@@ -1698,4 +1698,218 @@ theorem genel_adim_korunum (G : EtiketOrtam) :
       | a_esles_tuttu _ _ _ _ h2m => exact absurd h2m hmn
       | a_esles_cong _ _ _ _ _ _ _ h2s => nomatch h2s
 
+-- ============================================================
+-- §12. GIZLI KOL (D-346) — gizliye-toleransli ifade denkligi
+-- ============================================================
+
+/-
+SORUN (D-345'te olculdu): gizli bir degisken okununca kalinti
+`sabit v1` / `sabit v2` FARKLIDIR — etiket sistemi sabitleri hep `genel`
+saydigi icin iki kosumu iliskilendirmek yapisal bir denklik ister.
+`genel_adim_korunum` bu bagintinin KAMUSAL kolunu verdi (kamusal
+alt-terimler ESIT kalir). Burada GIZLI kol tanimlanip korunumu ispatlanir.
+
+FIKIR: `IfDE G e1 e2` = "iki kosumun ayni noktadaki ifadeleri". Sabitler
+SERBESTTIR (gizli veriden gelebilir), AMA kontrol akisini / adresi /
+veri-bagimli gecikmeyi belirleyen konumlarda ESITLIK ve GENEL etiket
+ZORUNLUDUR — bunlar tam olarak CT001/CT004/CT005/CT006'nin sartlaridir.
+-/
+
+/-- Gizliye-toleransli ifade denkligi. -/
+inductive IfDE (G : EtiketOrtam) : Ifade → Ifade → Prop where
+  /-- KAMUSAL kol: GENEL etiketli ifade iki kosumda BIREBIR AYNIDIR
+      (`genel_adim_korunum` bunu adim altinda korur). -/
+  | genel (e : Ifade) : ifadeEtiket G e = .genel → IfDE G e e
+  /-- GIZLI kol: sabitler serbest — gizli okumadan gelmis olabilirler. -/
+  | sabit (n1 n2 : Int) : IfDE G (.sabit n1) (.sabit n2)
+  | degisken (x : Ad) : IfDE G (.degisken x) (.degisken x)
+  | topla (a1 a2 b1 b2 : Ifade) :
+      IfDE G a1 a2 → IfDE G b1 b2 → IfDE G (.topla a1 b1) (.topla a2 b2)
+  | carp (a1 a2 b1 b2 : Ifade) :
+      IfDE G a1 a2 → IfDE G b1 b2 → IfDE G (.carp a1 b1) (.carp a2 b2)
+  /-- CT006: bolme OPERANDLARI genel → iki kosumda ESIT. -/
+  | bol (a b : Ifade) :
+      ifadeEtiket G a = .genel → ifadeEtiket G b = .genel →
+      IfDE G (.bol a b) (.bol a b)
+  | kalan (a b : Ifade) :
+      ifadeEtiket G a = .genel → ifadeEtiket G b = .genel →
+      IfDE G (.kalan a b) (.kalan a b)
+  | sabitDeg (x : Ad) (e1 e2 : Ifade) :
+      IfDE G e1 e2 → IfDE G (.sabitDeg x e1) (.sabitDeg x e2)
+  | sira (a1 a2 b : Ifade) :
+      IfDE G a1 a2 → IfDE G (.sira a1 b) (.sira a2 b)
+  /-- CT001: kosul genel → dal karari AYNI. -/
+  | eger (k d y : Ifade) :
+      ifadeEtiket G k = .genel → IfDE G (.eger k d y) (.eger k d y)
+  /-- CT002: dongu kosulu genel → tur sayisi AYNI. -/
+  | iken (k g : Ifade) :
+      ifadeEtiket G k = .genel → IfDE G (.iken k g) (.iken k g)
+  /-- CT004: skrutin genel → hangi kol AYNI. -/
+  | esles (sk : Ifade) (n : Int) (d y : Ifade) :
+      ifadeEtiket G sk = .genel → IfDE G (.esles sk n d y) (.esles sk n d y)
+  /-- CT005: indeks genel → ADRES AYNI. -/
+  | indeks (x : Ad) (idx : Ifade) :
+      ifadeEtiket G idx = .genel → IfDE G (.indeks x idx) (.indeks x idx)
+  | indeksAta (x : Ad) (idx e1 e2 : Ifade) :
+      ifadeEtiket G idx = .genel → IfDE G e1 e2 →
+      IfDE G (.indeksAta x idx e1) (.indeksAta x idx e2)
+
+/-- CT-tipli bir ifade KENDISIYLE denktir. `CtOk`un yan-kosullari, `IfDE`nin
+    esitlik isteyen kollarini tam olarak besler — yani iki disiplin AYNI
+    yerlerde ayni seyi talep ediyor. -/
+theorem ifde_refl {G : EtiketOrtam} : ∀ {e : Ifade}, CtOk G e → IfDE G e e := by
+  intro e h
+  induction h with
+  | ct_sabit n => exact IfDE.sabit n n
+  | ct_degisken x => exact IfDE.degisken x
+  | ct_topla a b _ _ iha ihb => exact IfDE.topla a a b b iha ihb
+  | ct_carp a b _ _ iha ihb => exact IfDE.carp a a b b iha ihb
+  | ct_bol a b _ _ hag hbg _ _ => exact IfDE.bol a b hag hbg
+  | ct_kalan a b _ _ hag hbg _ _ => exact IfDE.kalan a b hag hbg
+  | ct_atama x e _ _ ih => exact IfDE.sabitDeg x e e ih
+  | ct_sira a b _ _ iha _ => exact IfDE.sira a a b iha
+  | ct_eger k d y _ _ _ hkg _ _ _ => exact IfDE.eger k d y hkg
+  | ct_iken k g _ _ hkg _ _ => exact IfDE.iken k g hkg
+  | ct_esles s n d y _ _ _ hsg _ _ _ => exact IfDE.esles s n d y hsg
+  | ct_indeks x idx _ hig _ => exact IfDE.indeks x idx hig
+  | ct_indeks_ata x idx e _ _ hig _ _ ihe => exact IfDE.indeksAta x idx e e hig ihe
+
+/-- `CtOk` KUCUK-ADIM ALTINDA KORUNUR. Kritik nokta: etiketler degisse bile
+    (gizli okuma → `sabit`, etiketi genel) CT'nin sart kostugu konumlar
+    GENEL kalir — bunu `genel_adim_korunum`un 4. conjunct'i saglar. -/
+theorem ctok_adim_korunur {G : EtiketOrtam} :
+    ∀ {s e s' e' t}, Adim s e s' e' t → CtOk G e → CtOk G e' := by
+  intro s e s' e' t h
+  induction h with
+  | a_degisken x => intro _; exact CtOk.ct_sabit _
+  | a_indeks_cong s' x idx idx' t hstep ih =>
+      intro hc
+      cases hc with
+      | ct_indeks _ _ hci hig =>
+          exact CtOk.ct_indeks x idx' (ih hci)
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hig).2.2.2)
+  | a_indeks x i => intro _; exact CtOk.ct_sabit _
+  | a_topla_sol s' a a' b t _ ih =>
+      intro hc; cases hc with
+      | ct_topla _ _ hca hcb => exact CtOk.ct_topla a' b (ih hca) hcb
+  | a_topla_sag s' n b b' t _ ih =>
+      intro hc; cases hc with
+      | ct_topla _ _ hca hcb => exact CtOk.ct_topla _ b' hca (ih hcb)
+  | a_topla n1 n2 => intro _; exact CtOk.ct_sabit _
+  | a_carp_sol s' a a' b t _ ih =>
+      intro hc; cases hc with
+      | ct_carp _ _ hca hcb => exact CtOk.ct_carp a' b (ih hca) hcb
+  | a_carp_sag s' n b b' t _ ih =>
+      intro hc; cases hc with
+      | ct_carp _ _ hca hcb => exact CtOk.ct_carp _ b' hca (ih hcb)
+  | a_carp n1 n2 => intro _; exact CtOk.ct_sabit _
+  | a_bol_sol s' a a' b t hstep ih =>
+      intro hc; cases hc with
+      | ct_bol _ _ hca hcb hag hbg =>
+          exact CtOk.ct_bol a' b (ih hca) hcb
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hag).2.2.2) hbg
+  | a_bol_sag s' n b b' t hstep ih =>
+      intro hc; cases hc with
+      | ct_bol _ _ hca hcb hag hbg =>
+          exact CtOk.ct_bol _ b' hca (ih hcb) hag
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hbg).2.2.2)
+  | a_bol n1 n2 => intro _; exact CtOk.ct_sabit _
+  | a_kalan_sol s' a a' b t hstep ih =>
+      intro hc; cases hc with
+      | ct_kalan _ _ hca hcb hag hbg =>
+          exact CtOk.ct_kalan a' b (ih hca) hcb
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hag).2.2.2) hbg
+  | a_kalan_sag s' n b b' t hstep ih =>
+      intro hc; cases hc with
+      | ct_kalan _ _ hca hcb hag hbg =>
+          exact CtOk.ct_kalan _ b' hca (ih hcb) hag
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hbg).2.2.2)
+  | a_kalan n1 n2 => intro _; exact CtOk.ct_sabit _
+  | a_atama_cong s' x e e' t hstep ih =>
+      intro hc; cases hc with
+      | ct_atama _ _ hce hak => exact CtOk.ct_atama x e' (ih hce) (by
+          -- CT003 akis sarti korunur. Iki hal:
+          --  * G x = gizli → her sey gizli'ye duser, sart otomatik.
+          --  * G x = genel → hak zaten e'nin GENEL oldugunu zorlar, ve
+          --    `genel_adim_korunum`in 4. conjunct'i e''nun de genel
+          --    kaldigini verir. Yeni lemma GEREKMEZ.
+          cases hgx : G x with
+          | gizli => cases ifadeEtiket G e' <;> simp [Etiket.altMi]
+          | genel =>
+              have he : ifadeEtiket G e = .genel := by
+                rw [hgx] at hak
+                cases hle : ifadeEtiket G e with
+                | genel => rfl
+                | gizli => rw [hle] at hak; simp [Etiket.altMi] at hak
+              rw [(genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) he).2.2.2]
+              simp [Etiket.altMi])
+  | a_atama x n => intro _; exact CtOk.ct_sabit _
+  | a_indeks_ata_idx s' x idx idx' e t hstep ih =>
+      intro hc; cases hc with
+      | ct_indeks_ata _ _ _ hci hce hig hak =>
+          exact CtOk.ct_indeks_ata x idx' e (ih hci) hce
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hig).2.2.2) hak
+  | a_indeks_ata_deg s' x i e e' t hstep ih =>
+      intro hc; cases hc with
+      | ct_indeks_ata _ _ _ hci hce hig hak =>
+          exact CtOk.ct_indeks_ata x _ e' hci (ih hce) hig (by
+            cases hgx : G x with
+            | gizli => cases ifadeEtiket G e' <;> simp [Etiket.altMi]
+            | genel =>
+                have he : ifadeEtiket G e = .genel := by
+                  rw [hgx] at hak
+                  cases hle : ifadeEtiket G e with
+                  | genel => rfl
+                  | gizli => rw [hle] at hak; simp [Etiket.altMi] at hak
+                rw [(genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) he).2.2.2]
+                simp [Etiket.altMi])
+  | a_indeks_ata x i n => intro _; exact CtOk.ct_sabit _
+  | a_sira_cong s' a a' b t _ ih =>
+      intro hc; cases hc with
+      | ct_sira _ _ hca hcb => exact CtOk.ct_sira a' b (ih hca) hcb
+  | a_sira_atla n b => intro hc; cases hc with | ct_sira _ _ _ hcb => exact hcb
+  | a_eger_cong s' k k' d y t hstep ih =>
+      intro hc; cases hc with
+      | ct_eger _ _ _ hck hcd hcy hkg =>
+          exact CtOk.ct_eger k' d y (ih hck) hcd hcy
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hkg).2.2.2)
+  | a_eger_dogru n d y _ =>
+      intro hc; cases hc with | ct_eger _ _ _ _ hcd _ _ => exact hcd
+  | a_eger_yanlis d y =>
+      intro hc; cases hc with | ct_eger _ _ _ _ _ hcy _ => exact hcy
+  | a_iken_ac k g =>
+      intro hc; cases hc with
+      | ct_iken _ _ hck hcg hkg =>
+          exact CtOk.ct_eger k _ _ hck
+            (CtOk.ct_sira g _ hcg (CtOk.ct_iken k g hck hcg hkg))
+            (CtOk.ct_sabit 0) hkg
+  | a_esles_cong s' sk sk' n d y t hstep ih =>
+      intro hc; cases hc with
+      | ct_esles _ _ _ _ hcs hcd hcy hsg =>
+          exact CtOk.ct_esles sk' n d y (ih hcs) hcd hcy
+            ((genel_adim_korunum G hstep hstep (fun _ _ _ => rfl) hsg).2.2.2)
+  | a_esles_tuttu m n d y _ =>
+      intro hc; cases hc with | ct_esles _ _ _ _ _ hcd _ _ => exact hcd
+  | a_esles_tutmadi m n d y _ =>
+      intro hc; cases hc with | ct_esles _ _ _ _ _ _ hcy _ => exact hcy
+
+/-- **VAKUM DENETIMI 1 — `IfDE` GERCEKTEN gizliye toleransli.** Farkli
+    sabitler denktir; yani gizli bir okumanin kalintisi (`sabit v1` vs
+    `sabit v2`) iliskilendirilebiliyor. Bu olmasaydi `IfDE` sadece
+    esitlik olurdu ve gizli kol HICBIR SEY eklemezdi. -/
+theorem ifde_gizli_toleransli (G : EtiketOrtam) :
+    IfDE G (.sabit 3) (.sabit 7) := IfDE.sabit 3 7
+
+/-- **VAKUM DENETIMI 2 — ama KONTROL AKISINDA tolerans YOK.** Kosulu
+    farkli iki `eger` denk DEGILDIR: `IfDE.genel` esitlik ister,
+    `IfDE.eger` de oyle. Yani `IfDE` sabitleri her yerde serbest
+    birakmiyor — CT001'in korudugu konumda ESITLIK zorunlu.
+    Iki tanik birlikte iliskinin ne cok gevsek ne cok siki oldugunu
+    olcuyor. -/
+theorem ifde_dal_kosulunda_tolerans_yok (G : EtiketOrtam) (d y : Ifade) :
+    ¬ IfDE G (.eger (.sabit 1) d y) (.eger (.sabit 2) d y) := by
+  -- HICBIR kurucu birlesmez: `genel` de `eger` de IKI TARAFIN AYNI
+  -- olmasini ister, kosullar (1 vs 2) farkli.
+  intro h; cases h
+
 end Kemgu.SideChannel.CT

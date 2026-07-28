@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-346 — GİZLİ KOL: `IfDE` ilişkisi + altyapı (KISMİ) (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§12 yeni),
+`test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+D-345 küçük-adım NI'nin **kamusal** kolunu (`genel_adim_korunum`) indirmişti.
+Bu adım **gizli** kolun ilişkisini ve iki taşıyıcı lemmasını ekliyor.
+
+**YENİ:**
+- **`IfDE G e1 e2`** — gizliye-toleranslı ifade denkliği (14 kurucu).
+  Sabitler **serbest** (gizli okumadan gelmiş olabilirler), ama kontrol
+  akışını / adresi / veri-bağımlı gecikmeyi belirleyen konumlarda
+  **eşitlik + GENEL etiket** zorunlu — bunlar tam olarak
+  CT001/CT004/CT005/CT006'nın şartları.
+- **`ifde_refl`** — `CtOk G e → IfDE G e e`. Bu ispat bir şeyi *gösterdi*:
+  `CtOk`un yan-koşulları, `IfDE`nin eşitlik istediği kolları **tam olarak**
+  besliyor; yani iki disiplin **aynı yerlerde aynı şeyi** talep ediyor.
+  İlişki yanlış tasarlansaydı bu lemma çökerdi.
+- **`ctok_adim_korunur`** (27 durum) — `CtOk` küçük-adım altında korunur.
+  Kritik nokta: etiketler değişse bile (gizli okuma → `sabit`, etiketi
+  genel) CT'nin şart koştuğu konumlar GENEL kalıyor; bunu
+  `genel_adim_korunum`un 4. conjunct'i sağlıyor. **Yeni lemma gerekmedi:**
+  CT003 akış şartı için `G x = genel` halinde `genel_adim_korunum` yetiyor.
+
+**VAKUM DENETİMİ — ilişkinin ne çok gevşek ne çok sıkı olduğu ölçüldü:**
+- `ifde_gizli_toleransli`: farklı sabitler denk (aksi hâlde `IfDE` sadece
+  eşitlik olurdu, gizli kol hiçbir şey eklemezdi).
+- `ifde_dal_kosulunda_tolerans_yok`: koşulu farklı iki `eger` denk DEĞİL
+  (CT001'in koruduğu konumda eşitlik zorunlu).
+
+**⚠ AÇIKÇA EKSİK — bu adım da KISMİ:** asıl teorem `ince_adim_ni`
+(`IfDE`nin `Adim` altında korunumu + iz eşitliği) **YOK**. Denedim ve
+`indeks` kolunda duvara çarptım; oradan çıkan **tasarım bulgusu** şu:
+`genel_adim_korunum` bütün ifadeye DEĞİL, **eşitliği zorlanan ALT-TERİME**
+uygulanmalı (`indeks x idx`in kendisi gizli olabilir ama `idx` geneldir).
+Kalan iş: ~14 `IfDE` kurucusu × eşleşen `Adim` kuralları, her kolda ya
+`genel_adim_korunum`u alt-terime uygulamak ya da özyinelemek.
+
+**SÜREÇ NOTU (kendi hatam, kayda geçsin):** ana teoremi yazarken dosyaya
+`sorry` koydum. Bu, projenin açık politikasına aykırı ("ispat yoksa teorem
+YAZILMAZ"). Derhal geri aldım; depo hiçbir commit'te `sorry` görmedi. Doğru
+davranış, yarım teoremi hiç yazmamaktı.
+
+---
+
 ## D-345 — KÜÇÜK-ADIM CT: blok içi preemption (KISMİ — çekirdek indi) (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§11 yeni),
