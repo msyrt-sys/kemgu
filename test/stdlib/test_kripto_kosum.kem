@@ -1,0 +1,110 @@
+// KEMGU Stdlib — Kripto BİLİNEN-CEVAP KOŞUM kapısı (D-338)
+// =========================================================
+//
+// KAPI BOŞLUĞU (D-338'in gerçek kök nedeni): `calistir_kripto_check` YALNIZ
+// `--check` (tip kontrolü) yapıyordu. test_kripto_vektor.kem'in içindeki resmi
+// NIST/RFC vektörleri HİÇ ÇALIŞTIRILMIYORDU — dosyada `main` bile yoktu, dönen
+// değerler hiçbir beklenen cevapla KARŞILAŞTIRILMIYORDU. Bu yüzden
+// `sabitsüre<dtam32> >> n` -> ashr (işaret yayılımı) hatası SHA-256'nın
+// Σ0/Σ1/σ0/σ1 fonksiyonlarının TAMAMINI ve ChaCha20 quarter-round'u sessizce
+// bozduğu hâlde tüm kapılar YEŞİL kaldı.
+//
+// Bu dosya o boşluğu kapatır: gerçekten DERLENİR, ÇALIŞTIRILIR ve resmi
+// vektörlerle karşılaştırılır. Her test 1 puan; main tüm puanları toplar.
+// Beklenen exit = 6. Herhangi bir yanlış cevap exit'i düşürür.
+//
+// NOT: stdlib/kripto.kem + stdlib/kripto/*.kem bundle'ının ARKASINA eklenir
+// (tek dosya derleme — import sistemi henüz yok).
+
+// ---------------------------------------------------------------------------
+// T1: ChaCha20 quarter-round — RFC 8439 §2.1.1
+//   girdi : a=0x11111111 b=0x01020304 c=0x9B8D6F43 d=0x01234567
+//   cikti : a=0xEA2A92F4 b=0xCB1CF8CE c=0x4581472E d=0x5881C4BB
+// `_sifre_rotl_u32` (dolayisiyla `>>`) yolunu dogrudan olcer. ashr ile
+// c ve d kelimeleri BOZULUR (yuksek bit set degerlerde 1 yayilimi).
+// ---------------------------------------------------------------------------
+işlev t1_chacha_qr() -> tam32 {
+    değişken s: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_olustur((0x11111111 olarak dtam32)),
+        sabitsüre_olustur((0x01020304 olarak dtam32)),
+        sabitsüre_olustur((0x9B8D6F43 olarak dtam32)),
+        sabitsüre_olustur((0x01234567 olarak dtam32))
+    ];
+    değişken _r: tam32 = chacha20_qr(s, 0, 1, 2, 3);
+    değişken a: dtam32 = ifşa(s[0]);
+    değişken b: dtam32 = ifşa(s[1]);
+    değişken c: dtam32 = ifşa(s[2]);
+    değişken d: dtam32 = ifşa(s[3]);
+    eğer a == (0xEA2A92F4 olarak dtam32) ve b == (0xCB1CF8CE olarak dtam32)
+      ve c == (0x4581472E olarak dtam32) ve d == (0x5881C4BB olarak dtam32) {
+        ver 1;
+    }
+    ver 0;
+}
+
+// ---------------------------------------------------------------------------
+// T2: ROTR — yuksek bitli girdi. ROTR(0x80000010, 4) = 0x08000001.
+// ashr olsaydi 0xF8000001 cikardi.
+// ---------------------------------------------------------------------------
+işlev t2_rotr_yuksek_bit() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur((0x80000010 olarak dtam32));
+    eğer ifşa(rotr_u32(x, 4)) == (0x08000001 olarak dtam32) { ver 1; }
+    ver 0;
+}
+
+// ---------------------------------------------------------------------------
+// T3: ROTL — yuksek bitli girdi. ROTL(0x80000010, 4) = 0x00000108.
+// ---------------------------------------------------------------------------
+işlev t3_rotl_yuksek_bit() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur((0x80000010 olarak dtam32));
+    eğer ifşa(rotl_u32(x, 4)) == (0x00000108 olarak dtam32) { ver 1; }
+    ver 0;
+}
+
+// ---------------------------------------------------------------------------
+// T4: SHA-256 sigma0_low (σ0) — FIPS 180-4 §4.1.2.
+//   σ0(x) = ROTR7(x) ^ ROTR18(x) ^ SHR3(x)
+//   x = 0x80000000 icin:
+//     ROTR7  = 0x01000000
+//     ROTR18 = 0x00002000
+//     SHR3   = 0x10000000      (LOGICAL shift — ashr olsaydi 0xF0000000)
+//     XOR    = 0x11002000
+// SHR3 dali `x >> 3` — bug'in dogrudan ustunde.
+// ---------------------------------------------------------------------------
+işlev t4_sha256_sigma0_low() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur((0x80000000 olarak dtam32));
+    eğer ifşa(_karma_sigma0_low(x)) == (0x11002000 olarak dtam32) { ver 1; }
+    ver 0;
+}
+
+// ---------------------------------------------------------------------------
+// T5: SHA-256 sigma1_low (σ1) — FIPS 180-4 §4.1.2.
+//   σ1(x) = ROTR17(x) ^ ROTR19(x) ^ SHR10(x)
+//   x = 0x80000000 icin:
+//     ROTR17 = 0x00004000
+//     ROTR19 = 0x00001000
+//     SHR10  = 0x00200000
+//     XOR    = 0x00205000
+// ---------------------------------------------------------------------------
+işlev t5_sha256_sigma1_low() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur((0x80000000 olarak dtam32));
+    eğer ifşa(_karma_sigma1_low(x)) == (0x00205000 olarak dtam32) { ver 1; }
+    ver 0;
+}
+
+// ---------------------------------------------------------------------------
+// T6: SHA-256 Sigma0 (Σ0) — ROTR2 ^ ROTR13 ^ ROTR22 (kaydirma yok, saf rotasyon).
+//   x = 0x80000000: ROTR2=0x20000000, ROTR13=0x00040000, ROTR22=0x00000200
+//   XOR = 0x20040200
+// Rotasyonun ic `>>` dali yine isaretsiz olmali.
+// ---------------------------------------------------------------------------
+işlev t6_sha256_sigma0() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur((0x80000000 olarak dtam32));
+    eğer ifşa(_karma_sigma0(x)) == (0x20040200 olarak dtam32) { ver 1; }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    ver t1_chacha_qr() + t2_rotr_yuksek_bit() + t3_rotl_yuksek_bit()
+      + t4_sha256_sigma0_low() + t5_sha256_sigma1_low() + t6_sha256_sigma0();
+}

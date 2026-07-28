@@ -1,0 +1,59 @@
+// cg_isaretsiz_sabitsure.kem — D-338: SIFIR-MALIYET SARMALAYICI + isaretsizlik.
+// -----------------------------------------------------------------------------
+// D-335 (C) ve D-337 (self-host) CIPLAK `dtamN`'i kilitledi. Bu dosya AYRI bir
+// yuzeyi olcer: sarmalayici tipler. `sabitsüre<T>` IR'da T'ye cozulur
+// (zero-overhead) ama isaretsizlik ic tipe OZYINELEMIYORDU:
+//
+//   sabitsüre<dtam32> uzerinde `>>`  ->  ashr  (YANLIS — isaret yayilimi)
+//   ciplak      dtam32 uzerinde `>>`  ->  lshr  (dogru, D-335 kapsami)
+//
+// Bilinen-cevap kapisi: ROTR(0x80000010, 4) — stdlib/kripto rotr_u32'nin ta
+// kendisi (SHA-256 Sigma/sigma fonksiyonlari bunun uzerine kurulu).
+//   dogru (lshr) : (x>>4)|(x<<28) = 0x08000001 | 0x00000000 = 0x08000001
+//   yanlis (ashr): (x>>4) yayilan 1'lerle 0xF8000001
+// Dusuk bayt IKI durumda da 0x01 — yalniz LSB'ye bakan bir kapi ashr'i
+// MASKELERDI. Bu yuzden bit 24-27 nibble'i ayrica olculur (dogru 0x8, ashr 0xF).
+//
+// Beklenen exit = 1 (dusuk bayt) + 8 (nibble) + 4 (dtam64) + 2 (satir-ici ifsa) = 15.
+
+// stdlib/kripto.kem rotr_u32 ile AYNI sekil (shift miktari tam32 — CT008).
+işlev rotr_ss(x: sabitsüre<dtam32>, n: tam32) -> sabitsüre<dtam32> {
+    değişken sag: sabitsüre<dtam32> = x >> n;
+    değişken sol: sabitsüre<dtam32> = x << (32 - n);
+    ver sag | sol;
+}
+
+// Ic tip genisligi de sarmalayicidan gecmeli — yalniz isaretsizlik degil.
+// NOT: yuksek bit `<< 63` ile KURULUR — 9223372036854775808 literali lexer'da
+// INT64_MAX'e kirpiliyor (ayri, onceden var olan sinir; bu kapiyi kor ederdi).
+işlev sag64_ss(x: sabitsüre<dtam64>, n: tam32) -> sabitsüre<dtam64> {
+    değişken yuksek: sabitsüre<dtam64> = x << 63;   // 0x8000000000000000
+    ver yuksek >> n;
+}
+
+işlev main() -> tam32 {
+    değişken x: sabitsüre<dtam32> = sabitsüre_olustur(2147483664);   // 0x80000010
+    değişken r: dtam32 = ifşa(rotr_ss(x, 4));                        // dogru: 0x08000001
+
+    // (a) dusuk bayt: 0x01 -> 1. Iki durumda da ayni; TEK BASINA yetmez.
+    değişken dusuk: tam32 = (r % 256) olarak tam32;
+
+    // (b) bit 24-27 nibble'i: dogru 0x8 -> 8; ashr olsaydi 0xF -> 15.
+    değişken nib: tam32 = ((r >> 24) % 16) olarak tam32;
+
+    // (c) dtam64 yolu: 0x8000000000000000 >> 61 -> lshr 4; ashr -1 (%256 = 255).
+    değişken b: sabitsüre<dtam64> = sabitsüre_olustur(1);
+    değişken y: dtam64 = ifşa(sag64_ss(b, 61));
+    değişken d64: tam32 = (y % 256) olarak tam32;   // dogru 4
+
+    // (d) SATIR-ICI ifşa: pass-through intrinsic ARGUMANIN isaretsizligini
+    // tasimalidir. Tasimazsa `sext` cikar: 0x80000000 -> -2147483648 (%256 = 0
+    // srem'de) yerine dogru 2147483648. Ayni ifade `değişken`e alininca dogru,
+    // satir-ici kullanilinca yanlis olurdu — sinsi bir ayrisma.
+    değişken h: sabitsüre<dtam32> = sabitsüre_olustur(2147483648);
+    değişken genis: tam64 = ifşa(h) olarak tam64;
+    değişken ici: tam32 = 0;
+    eğer genis == 2147483648 { ici = 2; }   // sext olsaydi -2147483648
+
+    ver dusuk + nib + d64 + ici;
+}

@@ -1528,9 +1528,35 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
     return int_donustur_im(g, src_reg, src_tip, dst_tip, 0);
 }
 
-/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
+/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi?
+ *
+ * D-338: ZERO-OVERHEAD SARMALAYICILARA OZYINELE. `ast_tip_to_ir` sabitsure<T>
+ * / tekkez<T>'yi T'ye, vektor<T,N>'i <N x T>'ye cozer — yani IR'da tamsayi
+ * genisligi ic tipten gelir. Isaretsizlik de AYNI yoldan gelmeliydi; gelmiyordu.
+ * Sonuc SESSIZ YANLIS CEVAP idi: `sabitsure<dtam32>` uzerinde `>>` = ashr
+ * (isaret yayilimi), oysa ciplak `dtam32` uzerinde dogru sekilde lshr.
+ * Etki alani yalniz kaydirma degil — udiv/urem ve u-karsilastirma predikatlari
+ * da bu bayrakla secilir; `ifsa(...)`/`sabitsure_olustur(...)` intrinsic'leri
+ * argumanin IfadeSonuc'unu pass-through ettigi icin onlar da bu duzeltmeyle
+ * dogru isaretsizligi tasir.
+ *
+ * KURAL: ast_tip_to_ir'da ic tipe ozyineleyen her sarmalayici dugumun BURADA
+ * da ozyinelemesi gerekir. Aksi halde temsil (genislik) ile semantik
+ * (isaretlilik) ayrisir. ast_tip_to_ir'daki diger dugumler tamsayi DEGIL
+ * (referans/pointer/dizi/gorev/kanal -> ptr, yetki -> struct, islev -> fat
+ * value, sonuc/secimlik -> aggregate), o yuzden kapsam disi. */
 static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
-    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    if (!tip_d) return 0;
+    if (tip_d->tip == DUGUM_TIP_SABITSURE) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_sabitsure.ic_tip);
+    }
+    if (tip_d->tip == DUGUM_TIP_TEKKEZ) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_tekkez.ic_tip);
+    }
+    if (tip_d->tip == DUGUM_TIP_VEKTOR) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_vektor.eleman_tip);
+    }
+    if (tip_d->tip != DUGUM_TIP_BASIT) return 0;
     return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
            memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
 }

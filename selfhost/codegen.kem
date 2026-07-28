@@ -2069,10 +2069,21 @@ işlev dtam_ad_mi(t: metin) -> tam32 {
       veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver 1; }
     ver 0;
 }
-// D-337: AST tip düğümü işaretsiz mi? (yalnız TIP_BASIT dtamN — C ile birebir)
+// D-337: AST tip düğümü işaretsiz mi? (TIP_BASIT dtamN — C ile birebir)
+// D-338: SIFIR-MALİYET SARMALAYICILARA ÖZYİNELE. ll_tip sabitsüre<T>/tekkez<T>'yi
+// T'ye çözer; işaretsizlik de AYNI yoldan gelmeliydi, gelmiyordu. Sonuç SESSİZ
+// YANLIŞ CEVAP: sabitsüre<dtam32> üzerinde `>>` = ashr (işaret yayılımı), oysa
+// çıplak dtam32 üzerinde doğru şekilde lshr. Etki yalnız kaydırma değil —
+// udiv/urem ve u-karşılaştırma predikatları da bu bayrakla seçilir.
+// KURAL: ll_tip'te iç tipe özyineleyen her sarmalayıcının BURADA da özyinelemesi
+// gerekir; aksi halde temsil (genişlik) ile semantik (işaretlilik) ayrışır.
 işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
     eğer tip_idx < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver 0; }
+    değişken ta: metin = dizi_al(p.a_ad, tip_idx);
+    eğer metin_esit(ta, "TIP_SABITSURE") veya metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver 0; }
     ver dtam_ad_mi(dizi_al(p.a_deg, tip_idx));
 }
 // D-337: değişken/parametre işaretsiz mi? (cg_var_bul ile AYNI arama yönü/sınırı —
@@ -2388,6 +2399,13 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    // D-338: sabitsüre<T> de SIFIR-MALİYET sarmalayıcı (tekkez ile aynı sınıf).
+    // Bu dal olmadan aşağıdaki "i32" fallback'ine düşüyordu → sabitsüre<dtam64>
+    // SESSİZCE 32 bite kırpılırdı (stdlib/kripto rotr_u64 = SHA-512 yolu).
+    // C llvm.c ast_tip_to_ir aynası.
+    eğer metin_esit(ta, "TIP_SABITSURE") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
@@ -2953,7 +2971,18 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "CAGRI") {
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
-        ver fn_risz_bul(p, dizi_al(p.a_deg, h));
+        değişken hf: metin = dizi_al(p.a_deg, h);
+        // D-338: PASS-THROUGH intrinsic'ler kendi ARGÜMANLARININ işaretsizliğini
+        // taşır (C llvm.c bunları `ver inner;` ile döndürür — IfadeSonuc.isaretsiz
+        // arguman ile birlikte gelir). Bu dal olmadan `ifşa(x) olarak tam64`
+        // fn_risz_bul'a düşüp 0 alıyordu → sext (SESSİZ YANLIŞ: 0x80000000 için
+        // 2147483648 yerine -2147483648). `değişken`e alınca doğruydu, satır-içi
+        // kullanınca yanlış — aynı ifadenin iki farklı cevabı.
+        eğer metin_esit(hf, "ifşa") veya metin_esit(hf, "sabitsüre_olustur")
+          veya metin_esit(hf, "tekkez_olustur") {
+            ver ifade_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
+        }
+        ver fn_risz_bul(p, hf);
     }
     ver 0;
 }
@@ -3222,6 +3251,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // muhasebe tamamen tip kontrolde; bu dal olmadan genel çağrı yoluna
             // düşüp TANIMSIZ @tekkez_olustur üretiyordu (link hatası).
             ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        }
+        // D-338: Sabitsüre Spec V1 intrinsic'leri — sabitsüre_olustur(e) ve ifşa(e).
+        // İkisi de PASS-THROUGH (sabitsüre<T> IR'da T'nin ta kendisi) + ardından
+        // x86 lfence speculation barrier'ı. C llvm.c aynası (declare gerekmez —
+        // llvm.* built-in). Bu dal olmadan genel çağrı yoluna düşüp TANIMSIZ
+        // @"ifşa" / @"sabitsüre_olustur" sembolü üretiyordu (link hatası → self-host
+        // sabitsüre içeren HİÇBİR programı derleyemiyordu).
+        eğer metin_esit(fad, "sabitsüre_olustur") veya metin_esit(fad, "ifşa") {
+            eğer cs == 2 {
+                değişken sso: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                yaz_str("  call void @llvm.x86.sse2.lfence()"); yb(10);
+                ver sso;
+            }
         }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
@@ -3495,6 +3537,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // semantikle yapılır (C llvm.c: `int isz = sol.isaretsiz || sag.isaretsiz`).
         değişken bisz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb));
         eğer bisz == 0 { bisz = ifade_isz(p, dizi_al(p.cocuk, cb + 1)); }
+        // D-338: OPERAND GENİŞLİK UYUMU. `optip` iki operandın ORTAK tipini seçer
+        // ama operandların KENDİSİ dönüştürülmüyordu → `lshr i64 %a, %b` (%b i32)
+        // gibi GEÇERSİZ IR. C llvm.c operand başına int_donustur çağırır; aynası.
+        // Gerçek şekil: stdlib/kripto `rotr_u64(x: sabitsüre<dtam64>, n: tam32)`
+        // — kaydırma miktarı tam32, değer dtam64. Hata modu LLVM-RED (sessiz değil),
+        // o yüzden D-337'de görünmedi: korpusta karışık-genişlikli ikili yoktu.
+        // Genişlikler zaten eşitse int_uydur no-op'tur (immediate'a da dokunmaz).
+        p.son_tip = st;  sol = int_uydur(p, sol, optip, bisz);
+        p.son_tip = gt;  sag = int_uydur(p, sag, optip, bisz);
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);

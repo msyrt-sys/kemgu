@@ -5,6 +5,88 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-339 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı siliyordu; kripto koşum kapısı açıldı (2026-07-28)
+
+> **⚠ D-NUMARA ÇAKIŞMASI (merge'de çözülmeli):** `origin/main`'de **D-337 iki farklı
+> değişikliğe** verilmiş: `dc2879c` (`--llvm` tip kontrolünü bağlıyor) ve bu dalın
+> tabanı `7f645be` (self-host imzasız semantiği). CLAUDE.md'nin uyardığı paralel-dal
+> çakışması gerçekleşti. Bu kayıt çakışmayı atlayıp **D-339** alır; `7f645be`'nin
+> D-338'e çekilmesi o dalın sahibine ait.
+
+**Karar [ETKİ: `src/llvm.c` (+28/−2), `selfhost/codegen.kem` (+~45), `Makefile`
+(+yeni koşum kapısı), `test/cg_korpus/` (107→108), `test/stdlib/` (+1 koşum testi).]**
+D-335 (C) ve D-337/`7f645be` (self-host) **çıplak** `dtamN`'i kilitledi. Bu adım
+**ayrı bir yüzeyi** kapatır: sıfır-maliyet **sarmalayıcı** tipler.
+
+**Kusur (sessiz yanlış cevap).** `ast_tip_to_ir` `sabitsüre<T>`/`tekkez<T>`'yi T'ye,
+`vektör<T,N>`'i `<N x T>`'ye çözer — yani **temsil** (genişlik) iç tipten gelir. Ama
+`ast_tip_isaretsiz_mi` yalnız `DUGUM_TIP_BASIT` kabul ediyordu → **semantik**
+(işaretlilik) iç tipe özyinelemiyordu. Temsil ile semantik ayrıştı:
+
+```
+işlev sag(x: sabitsüre<dtam32>, n: tam32) -> ... { ver x >> n; }  →  ashr  ✗
+işlev sag(x:            dtam32,  n: tam32) -> ... { ver x >> n; }  →  lshr  ✓
+```
+
+Etki yalnız kaydırma değil: `udiv`/`urem` ve u-karşılaştırma predikatları da bu
+bayrakla seçilir. `stdlib/kripto`'nun tamamı `sabitsüre<dtamN>` üzerine kurulu →
+`rotr_u32`/`rotl_u32`/`rotr_u64`, SHA-256 `Σ0/Σ1/σ0/σ1` (dolayısıyla **sıkıştırma
+fonksiyonunun tamamı**) ve ChaCha20 quarter-round (dolayısıyla **ChaCha20 ve
+ChaCha20-Poly1305'in tamamı**) yüksek bit set her girdide yanlış sonuç veriyordu —
+SHA-256 state/W kelimelerinde rutin bir durum.
+
+**Onarım — tek nokta + KURAL.** `ast_tip_isaretsiz_mi` SABITSURE/TEKKEZ/VEKTOR için
+iç tipe özyineler. Koda yazılan invaryant: *`ast_tip_to_ir`'da iç tipe özyineleyen her
+sarmalayıcının burada da özyinelemesi gerekir.* Diğer düğümler tamsayı değil
+(referans/pointer/dizi/görev/kanal→ptr, yetki→struct, işlev→fat value,
+sonuç/seçimlik→aggregate), kapsam dışı.
+
+**Yan bulgu — aynı kök.** `ifşa(x) olarak tam64` satır-içi kullanıldığında `sext`
+üretiyordu; `değişken`e alınınca doğruydu. `ifşa`/`sabitsüre_olustur` argümanın
+`IfadeSonuc`'unu pass-through ettiği için bu, C'de tek onarımla kapandı (ayrı karar
+gerekmedi). Self-host'ta `ifade_isz` CAGRI dalı bu intrinsic'leri tanımıyordu →
+ayrıca eklendi.
+
+**Self-host paritesi — üç ayrı boşluk ölçüldü.** (1) `ll_isz` özyinelemesi
+(imzasızlık, asıl hedef). (2) `ll_tip`'te `TIP_SABITSURE` dalı **yoktu** → `i32`
+fallback'i, yani `sabitsüre<dtam64>` **sessizce 32 bite kırpılıyordu** (SHA-512 yolu).
+(3) `ifşa`/`sabitsüre_olustur` intrinsic'leri hiç ele alınmıyordu → tanımsız
+`@"ifşa"` sembolü; self-host `sabitsüre` içeren **hiçbir** programı derleyemiyordu.
+
+**Kapsam genişlemesi (bilinçli, gerekçeli).** Self-host ikili işlem `optip` ortak tipi
+seçiyor ama **operandları dönüştürmüyordu** → `lshr i64 %a, %b` (%b i32) = geçersiz IR.
+Gerçek şekil `rotr_u64(x: sabitsüre<dtam64>, n: tam32)`. D-337'de görünmedi çünkü
+korpusta karışık-genişlikli ikili yoktu. Hata modu **LLVM-RED** (sessiz değil), ama bu
+yüzey olmadan parite kapısı kurulamıyordu → C'nin operand başına `int_donustur`
+davranışı aynalandı. Genişlikler eşitse `int_uydur` no-op.
+
+**KAPI BOŞLUĞU — asıl kök neden.** `calistir_kripto_check` **yalnız `--check`**
+yapıyordu. `test/stdlib/test_kripto_vektor.kem` içindeki resmi NIST/RFC vektörleri
+**hiç çalıştırılmıyordu** — dosyada `main` yoktu ve dönen değerler hiçbir beklenen
+cevapla **karşılaştırılmıyordu**. Bu yüzden hata tüm kapılar YEŞİL'ken shipledi.
+Yeni `calistir_kripto_vektor` gerçekten derler + çalıştırır + exit koduyla karşılaştırır
+(ChaCha20 QR RFC 8439 §2.1.1, ROTR/ROTL yüksek-bit, SHA-256 σ0/σ1/Σ0 FIPS 180-4).
+`calistir_kripto_check` ve `calistir_kripto_vektor` artık `test_tumu`'ya bağlı
+(ikisi de bağlı değildi).
+
+**Sabotaj doğrulaması (sabotajın kendisi `diff`'le teyit edildi).** Onarım geri
+alındığında: yeni korpus 15→5, kripto koşum kapısı **6/6 → 0/6** (altı vektörün
+**hepsi** düşer). Aynı sabotajlı derleyiciyle **eski** `calistir_kripto_check` YEŞİL
+kalır — kapı körlüğü ampirik olarak gösterildi.
+
+**Kapılar:** llvm_test 284/284 · sabitsure_test 39/39 · codegen_diff **108/108**
+(C↔self birebir) · checker_diff 56/56 · codegen_bootstrap FIXPOINT (92×3 birebir,
+stage1 IR == stage2 IR, 45567 satır) · self_driver (4 mod + self-host-derlenmiş) ·
+kripto_check · kripto_vektor 6/6.
+
+**Sınır (V1):** `tekkez<dtamN>` üzerinde `>>` tip kontrolünde T028 ile reddedilir
+(lineer tip aritmetik operandı olamaz) → C'deki TEKKEZ özyinelemesi bugün
+ulaşılamaz; savunma amaçlı ve sarmalayıcı-kuralının parçası olarak bırakıldı.
+Ayrı, önceden var olan sınır: `9223372036854775808` literali lexer'da INT64_MAX'e
+kırpılıyor (korpusta `<< 63` ile dolanıldı; bu kararın kapsamı değil).
+
+---
+
 ## D-337 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (+164/−17), `test/cg_korpus/` (+2 korpus,
