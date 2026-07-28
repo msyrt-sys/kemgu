@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-343 — ODAK DEĞİŞİMİ KORUNUMU: serpiştirme Core'un kendi Step'ine indi (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (§10 yeni),
+`test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+D-342'nin bıraktığı borç: `kopru_esz_ni` serpiştirmeyi CT tarafında bırakıyordu.
+Bu adım serpiştirmeyi **Core'un kendi `Step`ine** indiriyor.
+
+**İŞİN ÇEKİRDEĞİ İKİ GÖZLEM:**
+1. **`odak_kur`** — `KN` (tam thread listesinden konfigürasyon) ile `K`
+   (çerçeveli) **aynı şeydir**: çerçeve yalnızca listeyi böler. Dolayısıyla
+   **odak, konfigürasyonu değiştirmeden herhangi bir thread'e taşınabilir.**
+   Bu, istenen korunum lemmasının ta kendisi ve `rfl` ile kapanıyor
+   (aksiyoma bile ihtiyaç duymuyor) — çünkü `Step` kuralları D-333'ten beri
+   zaten `ts1 ++ ctx :: ts2` formundaydı; köprü onu gereksizce sabitlemişti.
+2. **Core thread'i blok LİSTESİ tutmaz, tek ifade tutar.** Ardışık bloklar
+   `seq` zinciri olarak kodlandı (`blokZinciri`). `krun_seq` +
+   `adim_seq_atla` ile bir blok koşup **kalanı bırakmak** Core'un kendi
+   kurallarıyla oluyor — "sonraki bloğu yükle" diye **uydurma bir adım
+   GEREKMEDİ**. Bu önemliydi: uydurma bir kural eklemek modeli sessizce
+   güçlendirmek olurdu.
+
+**YENİ TEOREMLER:** `KN`, `K_KN`, `odak_kur`, `blokZinciri`, `blok_kos`,
+`serpistirme_adimi` (bir zamanlama adımı = gerçek `StepStar`; diğer
+thread'ler aynen kalır), **`odak_degisimi_birlesir`** (iki ardışık adım
+FARKLI thread'lere odaklanır ve Core'da `stepStar_trans` ile BİRLEŞİR).
+
+**VAKUM + SABOTAJ:**
+- `odak_degisimi_bos_degil`: aynı thread listesi **iki farklı çerçeveye**
+  ayrışıyor (i=1 ve j=0 odaklı) — odak değişimi gerçek bir yeniden-bölünme.
+- `h_ara` (ara-konfigürasyon eşitliği) kaldırılınca → **4 hata**.
+- `blok_kos`taki seq-atla adımı kaldırılınca (blok kalanı bırakmazsa) →
+  **3 hata**.
+
+**⚠ KALAN — açıkça:** `odak_degisimi_birlesir` **İKİ adımlık** haldir. Keyfi
+uzunlukta bir zamanlama için tümevarım, CT'nin `Sistem`i ile Core'un thread
+listesi arasında bir eşleşme bağıntısının (`sysIlerlet` ↔ `blokZinciri`
+kuyruğu) adım-adım korunmasını ister; bu liste-indeksleme lemmalarıyla ayrı
+bir iş. Yani **artık eksik olan tek şey n-adım tümevarımıdır** — Core-seviyeli
+odak değişiminin kendisi (asıl zorluk sanılan kısım) ÇÖZÜLDÜ ve ölçüldü.
+
+**HÂLÂ AÇIK:** n-adım serpiştirme tümevarımı, küçük-adım CT, `esles` yapıcı
+desenleri, hücre-başına gizlilik etiketi, dizi sınır denetimi,
+platform-parametrik CT.
+
+---
+
 ## D-342 — KÖPRÜ N-THREAD'e ÇIKARILDI + tek-yazıcı sahiplik köprüsü (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (geniş

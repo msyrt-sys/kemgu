@@ -1364,4 +1364,157 @@ theorem kopru_tek_thread_ozel_hal (G : CT.EtiketOrtam) (V : List CT.Ad)
   kopru_ni G V own cerceveTek e h_ct h_gom h_kap h_ys h_low h_r1 h_r2
     sigma1 sigma2 iz z hu1 hu2
 
+-- ============================================================
+-- §10. CORE-SERPISTIRMESI (D-343) — ODAK DEGISTIRME KORUNUMU
+-- ============================================================
+
+/-
+D-342'nin KALAN BORCU: `kopru_esz_ni` serpistirmeyi CT tarafinda
+birakiyordu. Buradaki is, serpistirmeyi CORE'un KENDI `Step`ine tasimak:
+zamanlama her adimda ODAGI DEGISTIRIR, ve odak degisiminin gecerli
+olmasi icin thread listesinin YENIDEN BOLUNEBILMESI gerekir.
+
+ISIN CEKIRDEGI iki gozlemdir:
+  (1) `K V own F d` bir KONFIGURASYONDUR; thread listesi
+      `F.ts1 ++ ⟨F.tid, d.ifade, []⟩ :: F.ts2`. Ayni konfigurasyon,
+      BASKA bir F' cercevesiyle de yazilabilir — yeter ki thread listesi
+      ayni olsun. `odak_kur` bunu verir.
+  (2) Core thread'i TEK ifade tutar, blok LISTESI tutmaz. Bir thread'in
+      ardisik bloklari `seq` ZINCIRI olarak kodlanir (`blokZinciri`);
+      `krun_seq` + `adim_seq_atla` ile bir blok kosup KALANI birakmak
+      Core'un kendi kurallariyla yapilir — yani "sonraki blogu yukle"
+      diye UYDURMA bir adim GEREKMEZ.
+-/
+
+/-- Tam thread listesinden konfigurasyon (cerceve YOK — odak serbest). -/
+def KN (V : List CT.Ad) (own : CT.Ad → ThreadId)
+    (thr : List ThreadCtx) (sigma : Store) (iz : Iz) (z : Zaman) : Konfigurasyon :=
+  { thread   := thr
+    store    := sigma
+    sahiplik := sahOf V own
+    kanal    := []
+    zaman    := z
+    iz       := iz
+    fault    := none
+    bolge    := rhoOf V }
+
+/-- `K` ile `KN` ayni seydir: cerceve yalnizca thread listesini BOLER. -/
+theorem K_KN (V : List CT.Ad) (own : CT.Ad → ThreadId) (F : Cerceve) (d : KDurum) :
+    K V own F d
+      = KN V own (F.ts1 ++ ⟨F.tid, d.ifade, []⟩ :: F.ts2) d.store d.iz d.zaman := rfl
+
+/-- **ODAK KURMA (korunumun cekirdegi):** thread listesi `ts1 ++ ctx :: ts2`
+    seklinde bolunebiliyorsa, o listeyle kurulan `KN` konfigurasyonu
+    `⟨ts1, ts2, ctx.tid⟩` cercevesiyle kurulan `K` ile AYNIDIR.
+    Yani ODAK, konfigurasyonu DEGISTIRMEDEN herhangi bir thread'e
+    tasinabilir — Core-serpistirmesini mumkun kilan sey budur. -/
+theorem odak_kur (V : List CT.Ad) (own : CT.Ad → ThreadId)
+    (ts1 ts2 : List ThreadCtx) (tid : ThreadId) (e : Ifade)
+    (sigma : Store) (iz : Iz) (z : Zaman) :
+    KN V own (ts1 ++ ⟨tid, e, []⟩ :: ts2) sigma iz z
+      = K V own ⟨ts1, ts2, tid⟩ ⟨sigma, e, iz, z⟩ := rfl
+
+/-- Bir thread'in ARDISIK BLOKLARI: `seq` zinciri. Bos liste `birim`e iner
+    (thread bitti). Core'un `sSeqAtla`si zincirde bir blok ilerletir —
+    "sonraki blogu yukle" diye ek bir kural GEREKMEZ. -/
+def blokZinciri : List CT.Ifade → Ifade
+  | []      => .sabit .birim
+  | b :: bs => .seq (gom b) (blokZinciri bs)
+
+/-- **BIR BLOK KOSUMU (Core'da):** `seq (gom b) kalan` odaktayken, b'nin
+    CT kosumu Core'da yapilir ve odak `kalan`a gecer. Iki mevcut parca
+    birlestirilir: `krun_seq` (gomme_sim'i seq'in soluna yukseltir) ve
+    `adim_seq_atla` (deger olan solu atar). -/
+theorem blok_kos {V : List CT.Ad} {own : CT.Ad → ThreadId} {F : Cerceve}
+    {s s' : CT.Store} {b : CT.Ifade} {t : CT.Iz} {v : Int}
+    (h_run : CT.Calis s b s' t v)
+    (h_gom : GomOk b) (h_kap : Kapsar V b) (h_ys : YazmaSahibi own F.tid b)
+    (kalan : Ifade) (sigma : Store) (iz : Iz) (z : Zaman)
+    (hu : StoreUyum V s sigma) :
+    ∃ (sigma' : Store) (iz' : Iz) (z' : Zaman),
+      KRun V own F ⟨sigma, .seq (gom b) kalan, iz, z⟩ ⟨sigma', kalan, iz', z'⟩
+      ∧ StoreUyum V s' sigma'
+      ∧ izGozlem iz' = gomGozIz F.tid t ++ izGozlem iz := by
+  obtain ⟨w, sg, izb, zb, hr, hu', hg, _⟩ := gomme_sim h_run h_gom h_kap h_ys sigma iz z hu
+  refine ⟨sg, izb, zb + 1, ?_, hu', ?_⟩
+  · exact krun_trans (krun_seq (V := V) (own := own) (F := F) kalan hr)
+      (KRun.adim _ ⟨sg, kalan, izb, zb + 1⟩ _
+        (adim_seq_atla V own F sg w kalan izb zb) (KRun.refl _))
+  · exact hg
+
+/-- **CORE-SERPISTIRME ADIMI:** thread listesi `ts1 ++ ⟨i, seq (gom b) kalan,
+    []⟩ :: ts2` iken, i. thread'in b blogu Core'da kosar ve listede yalniz
+    O THREAD'in ifadesi `kalan`a doner — DIGER THREAD'LER AYNEN KALIR.
+    "Korunum" tam olarak budur: `ts1`/`ts2` adim boyunca DEGISMEZ, cunku
+    `K`nin cercevesi sabittir; ve sonuc yine `KN` formundadir, yani
+    SIRADAKI zamanlama adimi BASKA bir thread'e odaklanabilir. -/
+theorem serpistirme_adimi {V : List CT.Ad} {own : CT.Ad → ThreadId}
+    {s s' : CT.Store} {b : CT.Ifade} {t : CT.Iz} {v : Int}
+    (ts1 ts2 : List ThreadCtx) (i : ThreadId) (kalan : Ifade)
+    (h_run : CT.Calis s b s' t v)
+    (h_gom : GomOk b) (h_kap : Kapsar V b) (h_ys : YazmaSahibi own i b)
+    (sigma : Store) (iz : Iz) (z : Zaman) (hu : StoreUyum V s sigma) :
+    ∃ (sigma' : Store) (iz' : Iz) (z' : Zaman),
+      StepStar (KN V own (ts1 ++ ⟨i, .seq (gom b) kalan, []⟩ :: ts2) sigma iz z)
+               (KN V own (ts1 ++ ⟨i, kalan, []⟩ :: ts2) sigma' iz' z')
+      ∧ StoreUyum V s' sigma'
+      ∧ izGozlem iz' = gomGozIz i t ++ izGozlem iz := by
+  obtain ⟨sigma', iz', z', hr, hu', hg⟩ :=
+    blok_kos (V := V) (own := own) (F := ⟨ts1, ts2, i⟩) h_run h_gom h_kap h_ys
+      kalan sigma iz z hu
+  exact ⟨sigma', iz', z', krun_stepStar hr, hu', hg⟩
+
+/-- **ODAK DEGISIMI KORUNUMU (asil lemma):** iki ardisik serpistirme adimi
+    FARKLI thread'lere odaklanabilir ve Core'da BIRLESIR. Yani zamanlama
+    `[i, j]` gercek bir `StepStar`a karsilik gelir.
+
+    Neden bu bir KORUNUM lemmasi: birinci adim `ts1_i/ts2_i` cercevesiyle,
+    ikincisi `ts1_j/ts2_j` ile kosar; ARADAKI konfigurasyon her iki
+    bolunmede de AYNI `KN` oldugu icin (odak_kur) `stepStar_trans`
+    uygulanabilir. `ts1`/`ts2`nin adim boyunca degismemesi (cerceve
+    sabitligi) bunun on kosuludur. -/
+theorem odak_degisimi_birlesir {V : List CT.Ad} {own : CT.Ad → ThreadId}
+    {s sa s' : CT.Store} {b1 b2 : CT.Ifade} {t1 t2 : CT.Iz} {v1 v2 : Int}
+    (ts1 ts2 : List ThreadCtx) (i : ThreadId) (kalan : Ifade)
+    (us1 us2 : List ThreadCtx) (j : ThreadId) (kalan2 : Ifade)
+    (h_run1 : CT.Calis s b1 sa t1 v1) (h_run2 : CT.Calis sa b2 s' t2 v2)
+    (h_g1 : GomOk b1) (h_k1 : Kapsar V b1) (h_y1 : YazmaSahibi own i b1)
+    (h_g2 : GomOk b2) (h_k2 : Kapsar V b2) (h_y2 : YazmaSahibi own j b2)
+    (sigma : Store) (iz : Iz) (z : Zaman) (hu : StoreUyum V s sigma)
+    -- ARA KONFIGURASYON KOSULU: birinci adimin CIKTI thread listesi,
+    -- ikinci adimin GIRDI thread listesiyle ayni (odak degisimi burada).
+    (h_ara : ts1 ++ ⟨i, kalan, []⟩ :: ts2
+             = us1 ++ ⟨j, .seq (gom b2) kalan2, []⟩ :: us2) :
+    ∃ (sigma' : Store) (iz' : Iz) (z' : Zaman),
+      StepStar (KN V own (ts1 ++ ⟨i, .seq (gom b1) kalan, []⟩ :: ts2) sigma iz z)
+               (KN V own (us1 ++ ⟨j, kalan2, []⟩ :: us2) sigma' iz' z')
+      ∧ StoreUyum V s' sigma'
+      ∧ izGozlem iz' = gomGozIz j t2 ++ gomGozIz i t1 ++ izGozlem iz := by
+  obtain ⟨sg1, iz1, z1, hr1, hu1, hg1⟩ :=
+    serpistirme_adimi (V := V) (own := own) ts1 ts2 i kalan h_run1 h_g1 h_k1 h_y1
+      sigma iz z hu
+  rw [h_ara] at hr1
+  obtain ⟨sg2, iz2, z2, hr2, hu2, hg2⟩ :=
+    serpistirme_adimi (V := V) (own := own) us1 us2 j kalan2 h_run2 h_g2 h_k2 h_y2
+      sg1 iz1 z1 hu1
+  refine ⟨sg2, iz2, z2, stepStar_trans _ _ _ hr1 hr2, hu2, ?_⟩
+  rw [hg2, hg1, List.append_assoc]
+
+/-- **VAKUM DENETIMI:** odak GERCEKTEN degisebiliyor — iki thread'li bir
+    listede once 1. thread, sonra 0. thread kosar (zamanlama `[1,0]`).
+    Ara konfigurasyon kosulu (`h_ara`) burada gercek bir yeniden-bolunmedir:
+    `[] ++ ⟨1,..⟩ :: [t0ctx]`  =  `[t1ctx'] ++ ⟨0,..⟩ :: []` DEGIL —
+    listeler farkli sirada bolunuyor, ayni liste iki farkli cerceveye
+    ayrisiyor. -/
+theorem odak_degisimi_bos_degil (V : List CT.Ad) (own : CT.Ad → ThreadId)
+    (e0 e1 : Ifade) :
+    ∃ (ts1 ts2 us1 us2 : List ThreadCtx) (i j : ThreadId) (k1 k2 : Ifade),
+      i ≠ j
+      ∧ ts1 ++ ⟨i, k1, []⟩ :: ts2 = us1 ++ ⟨j, k2, []⟩ :: us2
+      ∧ ts1 = [] ∧ us2 = [] := by
+  refine ⟨[], [⟨0, e0, []⟩], [⟨1, .sabit .birim, []⟩], [], 1, 0,
+          .sabit .birim, e0, ?_, ?_, rfl, rfl⟩
+  · decide
+  · rfl
+
 end Kemgu.SideChannel.CTKopru
