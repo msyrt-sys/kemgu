@@ -36,7 +36,7 @@ link_retry() {   # $1=ll  $2=exe
 # korpusta hiçbir program 127 dönmez → 127 DAİMA ortamsal (gerçek codegen hatası kesin
 # bir exit verir: 139 segfault / yanlış değer, asla 127). OS dosyayı bırakana dek bekle +
 # tekrar dene (RC global, en çok 12 tur ~3.6s). Kalıcı 127 → çağıran ⚠ ATLAR (fail DEĞİL).
-# D-344: 127'yi "ortamsal" saymak SEZGİSELDİ ve iki kez GERÇEK bir 127'yi maskeledi
+# D-345: 127'yi "ortamsal" saymak SEZGİSELDİ ve iki kez GERÇEK bir 127'yi maskeledi
 # (cg_isaretsiz_alan sabotajı aday tarafında, cg_isaretsiz_sarmalayici sabotajı oracle
 # tarafında — ikisi de tam olarak 127 üretti). Bir programın 127 dönmesi ile exec'in
 # BAŞARISIZ olması exit kodundan ayırt edilemez; ama STDERR'den ayırt edilir: exec
@@ -91,7 +91,7 @@ for f in "$KORPUS"/*.kem; do
     # Yeni kural: 127 yalnız ORACLE'da ortamsal sayılır (oracle yoksa karşılaştırma
     # anlamsız). Oracle sağlam bir değer verirken aday kalıcı 127 diyorsa bu bir
     # ANLAŞMAZLIKTIR — sessizce atlanamaz.
-    # D-344: artık exit-KODUNA değil, exec'in gerçekten başarısız olduğuna bakıyoruz.
+    # D-345: artık exit-KODUNA değil, exec'in gerçekten başarısız olduğuna bakıyoruz.
     if [ "$coracle_env" -eq 1 ]; then
         echo "  ⚠ $(basename "$f") — oracle exec edilemedi (Defender, ortamsal) atlandı"; continue
     fi

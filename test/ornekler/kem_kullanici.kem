@@ -1,0 +1,32 @@
+// kem_kullanici.kem — MODEL B kullanıcı programı (AYRI ELF, DİSKTEN yüklenir).
+// ============================================================================
+// Model A'da userland programlar çekirdek imajına GÖMÜLÜYDU (`kul_` önekli
+// semboller, objcopy ile .user bölümüne yönlendirilirdi) — yani "yeni bir
+// program çalıştırmak" çekirdeği yeniden derlemek demekti. Model B bunu kırar:
+// bu dosya AYRI bir ELF'e derlenir, disk imajına yazılır ve çekirdek onu
+// ÇALIŞMA ZAMANINDA okuyup kendi adres alanına yükler.
+//
+// Çekirdek işlevlerini ÇAĞIRAMAZ (ayrı bağlama birimi, ayrı adres alanı) —
+// çekirdekle tek arayüzü `svc` syscall sınırıdır. Bu, ELF'in gerçekten bağımsız
+// olduğunun kanıtı: linkte hiçbir çekirdek sembolü çözülmez.
+//
+// VA 0x44000000'a bağlanır (linker/user-aarch64.ld) — süreç-özel sayfa.
+// Çekirdek onu sürecin fiziksel sayfasına kopyalar; aynı VA her süreçte BAŞKA
+// bir fiziksel sayfaya bakar (MB-1a).
+//
+// Yaptığı iş: syscall 7 (satır) → çekirdek syscall sayacını artırır (çalıştığının
+// taklit edilemez kanıtı), sonra syscall 13 (çık) ile kendini sonlandırır.
+// `b .` yalnızca güvenlik ağı — exit dönerse EL0'da asılı kal, çekirdeğe düşme.
+çıplak işlev _start() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"movz x8, #7
+svc #0
+movz x8, #13
+svc #0
+b ."#
+            bozulan("~{x8}") bozulan("~{memory}")
+        }
+    }
+}

@@ -4224,7 +4224,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             int n = d->veri.dizi_olustur.sayi;
             if (n == 0) {
                 /* Bos dizi -> beklenen tip.
-                 * D-344: ONCEDEN `t_basit(tk, eleman_t->kategori)` idi — eleman
+                 * D-345: ONCEDEN `t_basit(tk, eleman_t->kategori)` idi — eleman
                  * tipini KATEGORISINDEN yeniden kuruyordu ("shallow"). Basit
                  * tiplerde (tam32 vb.) bu yuvarlak gider, ama TIP_YAPI'da yapi
                  * ADI, generic'te arg listesi DUSER -> uretilen tip beklenenle

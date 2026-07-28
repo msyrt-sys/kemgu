@@ -117,7 +117,8 @@ static void test_initialize_yaniti(void) {
         JsonDeger *r1 = json_alan(j1, "result");
         JsonDeger *cap = json_alan(r1, "capabilities");
         JsonDeger *tds = json_alan(cap, "textDocumentSync");
-        ok = j1 && r1 && cap && tds && tds->veri.tamsayi == 1;
+        /* LSP v3: incremental sync ilan edilir */
+        ok = j1 && r1 && cap && tds && tds->veri.tamsayi == 2;
         arena_serbest(a);
     }
     test_sonuc("initialize -> capabilities donen yanit", ok);
@@ -310,7 +311,7 @@ static void test_hover_islev(void) {
     mesaj_yaz(girdi,
         "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"textDocument/hover\",\"params\":{"
         "\"textDocument\":{\"uri\":\"file:///x.kem\"},"
-        "\"position\":{\"line\":0,\"character\":60}}}");
+        "\"position\":{\"line\":0,\"character\":62}}}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
     rewind(girdi);
@@ -324,12 +325,9 @@ static void test_hover_islev(void) {
         LspYanit *yh = yanit_n(y, 2);  /* hover yaniti */
         JsonDeger *j = json_ayrist(a, yh->govde, yh->content_length, NULL);
         JsonDeger *result = json_alan(j, "result");
-        /* result null veya hover icerik dondu */
-        ok = (j != NULL);  /* en az parse edilebildiyse */
-        if (result && result->tip != JSON_NULL) {
-            JsonDeger *cont = json_alan(result, "contents");
-            ok = cont != NULL;
-        }
+        /* "say" cagri konumunda hover icerik DOLU olmali (null degil) */
+        ok = j && result && result->tip != JSON_NULL
+          && json_alan(result, "contents") != NULL;
         arena_serbest(a);
     }
     test_sonuc("hover yaniti formatla doner", ok);
@@ -389,7 +387,7 @@ static void test_definition_islev(void) {
     mesaj_yaz(girdi,
         "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"textDocument/definition\","
         "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
-        "\"position\":{\"line\":0,\"character\":60}}}");
+        "\"position\":{\"line\":0,\"character\":62}}}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
     mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
     rewind(girdi);
@@ -402,15 +400,614 @@ static void test_definition_islev(void) {
         LspYanit *yd = yanit_n(y, 2);
         JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
         JsonDeger *result = json_alan(j, "result");
-        /* Hover spec: result null veya range icerir */
-        ok = j != NULL;
-        if (result && result->tip != JSON_NULL) {
-            JsonDeger *range = json_alan(result, "range");
-            ok = range != NULL;
-        }
+        /* "say" cagri konumunda tanim bulunmali: uri + range DOLU */
+        ok = j && result && result->tip != JSON_NULL
+          && json_alan(result, "uri") != NULL
+          && json_alan(result, "range") != NULL;
         arena_serbest(a);
     }
     test_sonuc("definition yaniti uri+range doner", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: documentSymbol */
+static void test_documentsymbol_hiyerarsi(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* yapı Nokta { x: tam32; y: tam32; } işlev main() -> tam32 { ver 0; } */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"yap\\u0131 Nokta { x: tam32; y: tam32; } "
+        "i\\u015flev main() -> tam32 { ver 0; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = json_dizi_sayi(result) == 2;
+        if (ok) {
+            JsonDeger *s0 = json_dizi_eleman(result, 0);
+            int n_uz = 0;
+            const char *ad = json_metin(json_alan(s0, "name"), &n_uz);
+            JsonDeger *kind = json_alan(s0, "kind");
+            JsonDeger *cocuk = json_alan(s0, "children");
+            /* yapi -> SymbolKind.Struct(23), 2 alan cocugu */
+            ok = ad && strcmp(ad, "Nokta") == 0
+              && kind && kind->veri.tamsayi == 23
+              && json_dizi_sayi(cocuk) == 2;
+            if (ok) {
+                JsonDeger *c0 = json_dizi_eleman(cocuk, 0);
+                const char *cad = json_metin(json_alan(c0, "name"), &n_uz);
+                ok = cad && strcmp(cad, "x") == 0
+                  && json_alan(c0, "kind")->veri.tamsayi == 8
+                  && json_alan(c0, "selectionRange") != NULL;
+            }
+        }
+        if (ok) {
+            JsonDeger *s1 = json_dizi_eleman(result, 1);
+            int n_uz = 0;
+            const char *ad = json_metin(json_alan(s1, "name"), &n_uz);
+            ok = ad && strcmp(ad, "main") == 0
+              && json_alan(s1, "kind")->veri.tamsayi == 12;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("documentSymbol yapi+alanlar hiyerarsik doner", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: documentSymbol — cesit varyantlari */
+static void test_documentsymbol_cesit(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* çeşit Renk { Kirmizi, Mavi } */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"\\u00e7e\\u015fit Renk { Kirmizi, Mavi }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = json_dizi_sayi(result) == 1;
+        if (ok) {
+            JsonDeger *s0 = json_dizi_eleman(result, 0);
+            int n_uz = 0;
+            const char *ad = json_metin(json_alan(s0, "name"), &n_uz);
+            JsonDeger *cocuk = json_alan(s0, "children");
+            ok = ad && strcmp(ad, "Renk") == 0
+              && json_alan(s0, "kind")->veri.tamsayi == 10
+              && json_dizi_sayi(cocuk) == 2;
+            if (ok) {
+                const char *v1 = json_metin(
+                    json_alan(json_dizi_eleman(cocuk, 1), "name"), &n_uz);
+                ok = v1 && strcmp(v1, "Mavi") == 0;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("documentSymbol cesit varyantlari doner", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: references */
+static void test_references_islev(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev say() -> tam32 { ver 0; } işlev main() -> tam32 { ver say() + say(); }"
+     * say tanimi + 2 cagri kullanimi = 3 location (includeDeclaration=true) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev say() -> tam32 { ver 0; } "
+        "i\\u015flev main() -> tam32 { ver say() + say(); }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":0,\"character\":62},"
+        "\"context\":{\"includeDeclaration\":true}}}");
+    /* includeDeclaration=false -> yalniz 2 kullanim */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":0,\"character\":62},"
+        "\"context\":{\"includeDeclaration\":false}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = json_dizi_sayi(result) == 3;
+        if (ok) {
+            JsonDeger *l0 = json_dizi_eleman(result, 0);
+            int u_uz = 0;
+            const char *uri = json_metin(json_alan(l0, "uri"), &u_uz);
+            JsonDeger *range = json_alan(l0, "range");
+            ok = uri && strcmp(uri, "file:///x.kem") == 0 && range != NULL;
+        }
+        if (ok) {
+            LspYanit *yr2 = yanit_n(y, 3);
+            JsonDeger *j2 = json_ayrist(a, yr2->govde, yr2->content_length, NULL);
+            ok = json_dizi_sayi(json_alan(j2, "result")) == 2;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("references tanim+kullanimlari doner (includeDeclaration)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: references — tanimlayici olmayan konum -> null */
+static void test_references_bos(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 { ver 0; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":32,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":5,\"character\":0},"
+        "\"context\":{\"includeDeclaration\":true}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result != NULL && result->tip == JSON_NULL;
+        arena_serbest(a);
+    }
+    test_sonuc("references tanimlayici disi konumda null doner", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: incremental sync — aralik degisimi (UTF-16 ofset, Turkce karakterli satir) */
+static void test_incremental_aralik_degisimi(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev main() -> tam32 { ver 0; }"
+     * "işlev" 5 UTF-16 birim (ş tek birim) -> "main" [6,10) araliginda */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 { ver 0; }\"}}}");
+    /* "main" -> "basla" (aralik degisimi) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"version\":2},"
+        "\"contentChanges\":[{\"range\":{"
+        "\"start\":{\"line\":0,\"character\":6},"
+        "\"end\":{\"line\":0,\"character\":10}},\"text\":\"basla\"}]}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    /* initialize + 2 diag (open, change) + documentSymbol + shutdown */
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        /* degisiklik sonrasi diagnostics temiz kalmali */
+        LspYanit *yd = yanit_n(y, 2);
+        JsonDeger *jd = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        ok = json_dizi_sayi(json_alan(json_alan(jd, "params"), "diagnostics")) == 0;
+        if (ok) {
+            LspYanit *ys = yanit_n(y, 3);
+            JsonDeger *j = json_ayrist(a, ys->govde, ys->content_length, NULL);
+            JsonDeger *result = json_alan(j, "result");
+            ok = json_dizi_sayi(result) == 1;
+            if (ok) {
+                int n_uz = 0;
+                const char *ad = json_metin(
+                    json_alan(json_dizi_eleman(result, 0), "name"), &n_uz);
+                ok = ad && strcmp(ad, "basla") == 0;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("incremental didChange araligi degistirir (main -> basla)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* LSP v3: incremental sync — cok satirli belgeye ekleme (bos aralik) */
+static void test_incremental_ekleme(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev main() -> tam32 {\n  ver 0\n}" — ';' eksik, parser hatasi */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 {\\n  ver 0\\n}\"}}}");
+    /* 1. satirin sonuna ';' ekle (bos aralik = saf ekleme) */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"version\":2},"
+        "\"contentChanges\":[{\"range\":{"
+        "\"start\":{\"line\":1,\"character\":7},"
+        "\"end\":{\"line\":1,\"character\":7}},\"text\":\";\"}]}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *y2 = yanit_n(y, 1);   /* open: hatali */
+        LspYanit *y3 = yanit_n(y, 2);   /* change: temiz */
+        JsonDeger *j2 = json_ayrist(a, y2->govde, y2->content_length, NULL);
+        JsonDeger *j3 = json_ayrist(a, y3->govde, y3->content_length, NULL);
+        JsonDeger *d2 = json_alan(json_alan(j2, "params"), "diagnostics");
+        JsonDeger *d3 = json_alan(json_alan(j3, "params"), "diagnostics");
+        ok = json_dizi_sayi(d2) > 0 && json_dizi_sayi(d3) == 0;
+        arena_serbest(a);
+    }
+    test_sonuc("incremental didChange ekleme yapar (';' -> temiz)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* === UTF-16 konum donusumu (LSP spec: `character` = UTF-16 kod birimi) ===
+ *
+ * Kullanilan belge (iki satir):
+ *   satir 0: "işlev ölç() -> tam32 { ver 7; }"
+ *   satir 1: "işlev main() -> tam32 { ver ölç(); }"
+ *
+ * Satir 1'de "ölç" cagrisi: UTF-16 sutun 28 (bayt sutunu 29) — fark "işlev"
+ * icindeki 'ş' harfinin 2 bayt olmasindan gelir.
+ *
+ * NOT (mevcut davranis, bu adimda DEGISTIRILMEDI): tanim konumu olarak AST
+ * dugumunun konumu kullanilir, yani `işlev` anahtar kelimesinin sutunu (0).
+ * Aralik uzunlugu ise adin UTF-16 birim sayisidir ("ölç" = 3). Bu yuzden
+ * tanim araligi (0,0)-(0,3) beklenir. Bayt tabanli eski kod (0,0)-(0,5)
+ * uretiyordu — "ölç" 5 BAYT oldugu icin.
+ */
+
+#define UTF16_BELGE \
+    "\"i\\u015flev \\u00f6l\\u00e7() -> tam32 { ver 7; }\\n" \
+    "i\\u015flev main() -> tam32 { ver \\u00f6l\\u00e7(); }\""
+
+/* Bir Range nesnesinden start/end character + line degerlerini oku. */
+static int range_oku(JsonDeger *range, int *sl, int *sc, int *el, int *ec) {
+    if (!range) return 0;
+    JsonDeger *st = json_alan(range, "start");
+    JsonDeger *en = json_alan(range, "end");
+    if (!st || !en) return 0;
+    *sl = (int)json_tamsayi(json_alan(st, "line"));
+    *sc = (int)json_tamsayi(json_alan(st, "character"));
+    *el = (int)json_tamsayi(json_alan(en, "line"));
+    *ec = (int)json_tamsayi(json_alan(en, "character"));
+    return 1;
+}
+
+/* didOpen + tek istek gonderen ortak yardimci; istenen yanit dondurulur. */
+static void utf16_belge_ac(FILE *girdi) {
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///t.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":" UTF16_BELGE "}}}");
+}
+
+static void test_utf16_hover_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    utf16_belge_ac(girdi);
+    /* UTF-16 sutun 28 = "ölç" cagrisinin 'ö' harfi */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"textDocument/hover\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///t.kem\"},"
+        "\"position\":{\"line\":1,\"character\":28}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yh = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yh->govde, yh->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = j && result && result->tip != JSON_NULL
+          && json_alan(result, "contents") != NULL;
+        arena_serbest(a);
+    }
+    test_sonuc("hover: T\xc3\xbcrk\xc3\xa7" "e satirda UTF-16 sutunu bulur", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+static void test_utf16_definition_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    utf16_belge_ac(girdi);
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"textDocument/definition\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///t.kem\"},"
+        "\"position\":{\"line\":1,\"character\":28}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        int sl = -1, sc = -1, el = -1, ec = -1;
+        ok = result && result->tip != JSON_NULL
+          && range_oku(json_alan(result, "range"), &sl, &sc, &el, &ec)
+          && sl == 0 && sc == 0 && el == 0 && ec == 3;
+        if (!ok) printf("      (olculen: line=%d char=%d..%d)\n", sl, sc, ec);
+        arena_serbest(a);
+    }
+    test_sonuc("definition: tanim araligi UTF-16 (0..3)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+static void test_utf16_references_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    utf16_belge_ac(girdi);
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"textDocument/references\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///t.kem\"},"
+        "\"position\":{\"line\":1,\"character\":28},"
+        "\"context\":{\"includeDeclaration\":true}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result && json_dizi_sayi(result) == 2;
+        if (ok) {
+            /* Kullanim konumu (satir 1) listede olmali: 28..31 */
+            int bulundu = 0;
+            for (int i = 0; i < 2; i++) {
+                int sl, sc, el, ec;
+                if (!range_oku(json_alan(json_dizi_eleman(result, i), "range"),
+                               &sl, &sc, &el, &ec)) continue;
+                if (sl == 1 && sc == 28 && ec == 31) bulundu = 1;
+                /* Tanim: dugum konumu = `işlev` sutunu 0, uzunluk 3 birim */
+                if (sl == 0 && (sc != 0 || ec != 3)) ok = 0;
+            }
+            ok = ok && bulundu;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("references: kullanim+tanim araliklari UTF-16", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* documentSymbol: "yapı Ölçüm { x_ölçü: tam32; }"
+ *   yapi adi  : dugum konumu = `yapı` sutunu 0, ad 5 birim -> 0..5
+ *   alan adi  : UTF-16 sutun 13, 6 birim -> 13..19   (bayt: 17..26) */
+static void test_utf16_documentsymbol_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///t.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"yap\\u0131 \\u00d6l\\u00e7\\u00fcm { x_\\u00f6l\\u00e7\\u00fc: tam32; }\""
+        "}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///t.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *ys = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, ys->govde, ys->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result && json_dizi_sayi(result) == 1;
+        if (ok) {
+            int sl, sc, el, ec;
+            JsonDeger *s0 = json_dizi_eleman(result, 0);
+            ok = range_oku(json_alan(s0, "selectionRange"), &sl, &sc, &el, &ec)
+              && sl == 0 && sc == 0 && ec == 5;
+            if (!ok) printf("      (yapi olculen: line=%d char=%d..%d)\n",
+                            sl, sc, ec);
+            JsonDeger *ch = json_alan(s0, "children");
+            if (ok) ok = json_dizi_sayi(ch) == 1;
+            if (ok) {
+                ok = range_oku(json_alan(json_dizi_eleman(ch, 0),
+                                          "selectionRange"),
+                               &sl, &sc, &el, &ec)
+                  && sl == 0 && sc == 13 && ec == 19;
+                if (!ok) printf("      (alan olculen: line=%d char=%d..%d)\n",
+                                sl, sc, ec);
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("documentSymbol: yap\xc4\xb1+alan araliklari UTF-16", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+static void test_utf16_diagnostic_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev main() -> tam32 { ver şey; }" — 'şey' tanimsiz.
+     * 'ş' harfi UTF-16 sutun 28'de, bayt sutunu 29'da. */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///t.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev main() -> tam32 { ver \\u015fey; }\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 3;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 1);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *diags = json_alan(json_alan(j, "params"), "diagnostics");
+        ok = json_dizi_sayi(diags) > 0;
+        if (ok) {
+            int sl, sc, el, ec;
+            ok = range_oku(json_alan(json_dizi_eleman(diags, 0), "range"),
+                           &sl, &sc, &el, &ec)
+              && sl == 0 && sc == 28;
+            if (!ok) printf("      (olculen: line=%d char=%d..%d)\n", sl, sc, ec);
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("diagnostic: hata sutunu UTF-16 (28)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* BMP disi karakter (emoji, U+1F600 = surrogate cifti = 2 UTF-16 birim).
+ * JSON'a ham UTF-8 bayt olarak gomulur — json.c `\uXXXX` surrogate ciftlerini
+ * BIRLESTIRMEZ (olculdu), o yuzden kacis dizisi degil ham bayt kullaniyoruz.
+ *
+ * Belge: sabit S: metin = "<emoji>"; işlev main() -> tam32 { ver şey; }
+ * Emoji oncesi 22 UTF-16 birim; emoji 2 birim; sonra "; işlev main() ..." */
+static void test_utf16_bmp_disi_emoji(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///t.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"sabit S: metin = \\\"\xf0\x9f\x98\x80\\\"; "
+        "i\\u015flev main() -> tam32 { ver \\u015fey; }\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 3;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 1);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *diags = json_alan(json_alan(j, "params"), "diagnostics");
+        ok = json_dizi_sayi(diags) > 0;
+        if (ok) {
+            int sl, sc, el, ec;
+            /* Beklenen: emoji 2 UTF-16 birim sayilir.
+             * 'sabit S: metin = "' = 18 birim, emoji 2 -> 20, '"; ' -> 23,
+             * 'işlev main() -> tam32 { ver ' 28 birim -> 51. */
+            ok = range_oku(json_alan(json_dizi_eleman(diags, 0), "range"),
+                           &sl, &sc, &el, &ec)
+              && sl == 0 && sc == 51;
+            if (!ok) printf("      (olculen: line=%d char=%d..%d)\n", sl, sc, ec);
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("diagnostic: BMP disi emoji = 2 UTF-16 birim", ok);
     yanitlari_serbest(y);
     fclose(girdi);
     fclose(cikti);
@@ -459,6 +1056,26 @@ int main(void) {
     test_hover_islev();
     test_completion_response();
     test_definition_islev();
+
+    printf("\n--- LSP v3 (documentSymbol) ---\n");
+    test_documentsymbol_hiyerarsi();
+    test_documentsymbol_cesit();
+
+    printf("\n--- LSP v3 (references) ---\n");
+    test_references_islev();
+    test_references_bos();
+
+    printf("\n--- LSP v3 (incremental sync) ---\n");
+    test_incremental_aralik_degisimi();
+    test_incremental_ekleme();
+
+    printf("\n--- UTF-16 konum donusumu ---\n");
+    test_utf16_hover_turkce();
+    test_utf16_definition_turkce();
+    test_utf16_references_turkce();
+    test_utf16_documentsymbol_turkce();
+    test_utf16_diagnostic_turkce();
+    test_utf16_bmp_disi_emoji();
 
     printf("\n==============================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
