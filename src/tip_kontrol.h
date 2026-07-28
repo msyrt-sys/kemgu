@@ -64,6 +64,21 @@ typedef struct YuklenmisModul {
     struct YuklenmisModul *sonraki;
 } YuklenmisModul;
 
+/* === DZ Spec V1 Asama (b): buyutucu-parametre etki analizi (DZ006) ===
+ * Bir islevin dizi parametresi, govdede `dizi_ekle`/`dizi_kapasite_ayarla`
+ * ile buyutuluyorsa (dogrudan) veya buyutucu bir parametreye iletiliyorsa
+ * (transitif) BUYUTUCU'dur. Diziler referansla gectigi icin bu, cagirandaki
+ * N'i yalanlar → N-bilinen arguman buyutucu parametreye gecemez.
+ * Kayit AST dugum isaretcisiyle anahtarlanir (ad cakismasindan bagimsiz). */
+typedef struct DzBuyutucu {
+    const struct Dugum *islev;     /* DUGUM_ISLEV */
+    const char *ad;
+    int ad_uz;
+    int param_sayi;
+    unsigned char *bayrak;         /* param_sayi uzunlugunda 0/1 */
+    struct DzBuyutucu *sonraki;
+} DzBuyutucu;
+
 typedef struct TipKontrol {
     Arena *arena;
     Scope *scope;                  /* mevcut scope */
@@ -95,6 +110,9 @@ typedef struct TipKontrol {
      * `ver <e>` deyimi e'nin tipini blok_donus'a KAYDEDER (aktif_donus_tipi'ye
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
     int lambda_blok_cikarsama;
+    /* DZ Spec V1 Asama (b): buyutucu-parametre tablosu (pre_populate sonrasi
+     * fixpoint ile doldurulur; DUGUM_CAGRI'de DZ006 icin okunur). */
+    DzBuyutucu *dz_buyutucular;
     TipBilgisi *lambda_blok_donus;
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */

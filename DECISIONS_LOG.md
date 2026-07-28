@@ -5,6 +5,76 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-341 [YÜKSEK] — DZ006: büyütücü-parametre etki analizi; DZ.5 deliğinin BİR yolu kapandı (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.{h,c}`, `Makefile` (+`calistir_dz_test`),
+`test/dz_korpus/` (yeni), spec DZ.5/DZ.9. `src/llvm.c` ve self-host:
+**DOKUNULMADI**.]** DZ Spec V1 Aşama (b).
+
+**Kusur (D-340 DZ.5'te ölçülmüştü).** Diziler heap'te ve **referansla** geçtiği
+için, N'in silindiği bir çağrının içinde yapılan büyütme çağırana görünür →
+çağırandaki N yalan söyler:
+```kemgu
+işlev buyut(xs: Dizi<tam32>) { dizi_ekle(xs, 99); }
+değişken W: Dizi<tam32, 2> = [1, 2];
+buyut(W);   // N silinir → izinliydi; W artık 3 elemanlı
+```
+
+**Mekanizma.** Bir işlevin parametresi, gövdede `dizi_ekle`/
+`dizi_kapasite_ayarla`'nın ilk argümanıysa (doğrudan) ya da büyütücü bir
+parametreye argüman olarak iletiliyorsa (transitif) **büyütücü**dür; çağrı
+grafiğinde fixpoint ile yayılır. N-bilinen argüman büyütücü parametreye
+geçemez → **DZ006**. Tablo AST düğüm işaretçisiyle anahtarlanır (ad
+çakışmasından bağımsız); transitif adımda ad eşleşmesi **OR**'lanır =
+over-approximate. **Alias analizi gerekmez.**
+
+**YÖN — bilinçli asimetri.** Bir büyütücüyü *kaçırmak* unsound'dur (delik açık
+kalır); *fazladan* işaretlemek yalnız geçerli kodu reddeder (loud). Bu yüzden
+gövde gezicisi **tüm konteyner düğüm tiplerini açıkça listeler**; `default:`
+yalnız çocuksuz yapraklar içindir. Yeni konteyner düğüm → geziciye de eklenmeli.
+
+**İlk uygulamada İKİ SESSİZ ATLAMA ölçümle bulundu (ikisi de onarıldı):**
+1. **Modül-nitelikli çağrı** `m::buyut(W)` DZ006'yı atlıyordu — hedef
+   `DUGUM_YOL`, `DUGUM_TANIMLAYICI` değil; yalnız `sembol_bul`'a bakılıyordu.
+   Onarım: önce `cozum_sembol` (her iki biçimde de dolu).
+2. **Metot çağrısı** `k.buyut(W)` DZ006'yı atlıyordu — metot dispatch normal
+   çağrı yolundan **önce return ediyor**, oradaki kontroller hiç çalışmıyordu.
+   Onarım: DZ.3 + DZ006 metot dalına da bağlandı (`kendin` offset'i ile).
+   Üç çağrı biçimi de ayrı ayrı ölçüldü.
+
+**⚠ (b) BEKLENEN FAYDAYI TAM VERMEDİ — dürüst kayıt.** DZ006 sonrası **iki yol
+daha ölçülerek AÇIK bulundu** (spec DZ.5'e yazıldı):
+- **Kapanış/lambda:** büyütücü bir lambda'ya geçirmek DZ006 vermez (çağrılan
+  şey adlandırılmış işlev değil, kapanış *değeri*). Ölçüldü: `--check` OK.
+- **Yapı alanı:** `Kutu { ic: W }` ile N silinir, sonra `k.ic` üzerinden
+  büyütülür. Ölçüldü: `--check` OK.
+
+> **Sonuç: `Dizi<T, N>` DZ006'dan sonra bile TAM invaryant DEĞİLDİR.**
+> **WCET / Realtime §RT.12 HÂLÂ N'e dayandırılamaz** — yeni "Aşama (c)"
+> (kapanış + yapı alanı) kapanana kadar. D-340'ta "(b) inince RT.12 açılabilir"
+> beklentisi **yanlış çıktı**; kayda geçti.
+
+**Bilinen yanlış pozitif (loud, güvenli yön):** parametre gölgeleme —
+`işlev f(xs: ...) { değişken xs = [...]; dizi_ekle(xs, 1); }` param'ı büyütücü
+işaretler. Ad-tabanlı eşlemenin bedeli; çözüm yerel adı değiştirmek. Kapsam
+takibi V2.
+
+**Kapı + sabotaj.** `calistir_dz_test` (yeni): `test/dz_korpus/dz_buyutucu.kem`
+**tam 6** DZ006 vermeli (doğrudan · kapasite · 3-adım transitif · eğer · iken ·
+blok) ve `sadece_okur` çağrısı **temiz** kalmalı (yanlış pozitif kapısı).
+Sabotaj (transitif dalı kapat): 6 → 5, kapı kırmızı; sabotajın kendisi `diff`
+ile teyit edildi. Korpus `check_korpus`'a KONULMADI — orası C↔self birebir
+parite ölçer, self-host'ta DZ006 yok (oraya konsa `checker_diff` kırmızı olurdu).
+
+**Yanlış pozitif taraması:** stdlib, kripto bundle, `selfhost/codegen.kem`,
+`selfhost/checker.kem` — hiçbirinde DZ006 tetiklenmedi.
+
+**Kapılar:** dz_test 6/6 · tip_kontrol 191/191 · llvm 284/284 · linear 89/89 ·
+stdlib_check · kripto_check · kripto_vektor 11/11 · codegen_diff 108/108 ·
+checker_diff 57/57 · codegen_bootstrap FIXPOINT (45864 satır) · self_driver.
+
+---
+
 ## D-340 [YÜKSEK] — `Dizi<T, N>` statik dizi uzunluğu (DZ Spec V1, Aşama a) (2026-07-28)
 
 **Karar [ETKİ: `src/ast.h`, `src/ifade.c`, `src/ast_yazdir.c`, `src/tip.{h,c}`,

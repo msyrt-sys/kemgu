@@ -231,7 +231,7 @@ Exception: YOK — sonuç<T,H> ile tamam/hata
 - C derleyici (bootstrap) hem stack hem heap diziyi destekler → orada inline stack sınır-kontrolü gereklidir (D-069; `güvensiz` blokta opt-out).
 - **KURAL:** Self-host yoluna ileride stack dizi (`[N×T]`) EKLENİRSE, inline stack-OOB kontrolü **aynı commit'te** zorunludur. Kontrolsüz stack dizisi = bellek-güvenliği regresyonu.
 - **⚠ `Dizi<T, N>` bu kuralı DEĞİŞTİRMEZ** (DZ Spec V1, `belgeler/KEMGU_Dizi_N_Spec_V1.md` §DZ.2/§DZ.10). N **yalnız tip düzeyinde** yaşar, `--llvm` çıktısına hiç geçmez; temsil heap `KdlDizi*` kalır, runtime sınır kontrolü kalır. "Uzunluk artık belli, stack'e alalım" cazibesi bilinçli olarak REDDEDİLDİ — stack temsili istenirse ayrı spec + yukarıdaki OOB yükümlülüğü.
-- **DZ Spec V1 sınırı:** `Dizi<T, N>` V1'de bir *bildirim-yeri kontrolüdür, invaryant DEĞİLDİR* — N silinerek geçirilen bir dizi callee'de büyütülebilir (§DZ.5, ampirik). **WCET/`gerçekzamanlı` bound'u V1'in N'ine DAYANDIRILAMAZ** (Realtime §RT.12 maddesi Aşama (b)'ye bağlı).
+- **DZ Spec V1 sınırı (D-340 + D-341):** `Dizi<T, N>` — DZ001-DZ005 (bildirim-yeri) + DZ006 (büyütücü-parametre etki analizi) indi. **Buna rağmen TAM invaryant DEĞİLDİR:** DZ006 yalnız *adlandırılmış işlev parametresi* yolunu kapatır; **kapanış/lambda** ve **yapı alanı** yolları ölçülerek AÇIK bulundu (§DZ.5). **WCET/`gerçekzamanlı` bound'u HÂLÂ N'e DAYANDIRILAMAZ** — Realtime §RT.12 "Aşama (c)"ye bağlı. Self-host'ta yalnız DZ001 var; DZ002-DZ006 C'ye özgü (C oracle).
 
 ---
 

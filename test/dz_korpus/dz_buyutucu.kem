@@ -1,0 +1,48 @@
+// dz_buyutucu.kem — DZ Spec V1 Aşama (b): DZ006 büyütücü-parametre analizi.
+// -----------------------------------------------------------------------------
+// DZ.5'te ÖLÇÜLEN delik: diziler heap'te ve REFERANSLA geçtiği için, N'in
+// silindiği bir çağrının içinde yapılan büyütme ÇAĞIRANA GÖRÜNÜR → çağırandaki
+// N yalan söyler. DZ006 bunu kapatır.
+//
+// NEDEN check_korpus'ta DEĞİL: orası C oracle'ı ile self-host checker'ını
+// BİREBİR karşılaştırır. Self-host'ta DZ006 YOK (yalnız DZ001 var, bkz. spec
+// DZ.11) → bu dosya oraya konulsa checker_diff kırmızı olurdu. C'ye özgü
+// kurallar bu ayrı korpusta durur; kapı: `make calistir_dz_test`.
+
+// (a) doğrudan büyütücü
+işlev d_buyut(xs: Dizi<tam32>) -> tam32 { dizi_ekle(xs, 1); ver 0; }
+
+// (b) kapasite de büyütmedir
+işlev k_buyut(xs: Dizi<tam32>) -> tam32 { dizi_kapasite_ayarla(xs, 8); ver 0; }
+
+// (c) transitif — 3 adım (t1 -> t2 -> d_buyut)
+işlev t2(y: Dizi<tam32>) -> tam32 { ver d_buyut(y); }
+işlev t1(x: Dizi<tam32>) -> tam32 { ver t2(x); }
+
+// (d) konteyner düğümler içinde gizlenmiş büyütme
+işlev c_eger(a: Dizi<tam32>, k: mantıksal) -> tam32 {
+    eğer k { dizi_ekle(a, 1); }
+    ver 0;
+}
+işlev c_iken(a: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 1 { dizi_ekle(a, 1); i = i + 1; }
+    ver 0;
+}
+işlev c_blok(a: Dizi<tam32>) -> tam32 { { dizi_ekle(a, 1); } ver 0; }
+
+// (e) BÜYÜTMEYEN — DZ006 tetiklenMEmeli
+işlev sadece_okur(xs: Dizi<tam32>) -> tam32 { ver xs[0]; }
+
+işlev main() -> tam32 {
+    değişken W: Dizi<tam32, 2> = [1, 2];
+    değişken r: tam32 = 0;
+    r = r + d_buyut(W);        // DZ006
+    r = r + k_buyut(W);        // DZ006
+    r = r + t1(W);             // DZ006 (transitif)
+    r = r + c_eger(W, doğru);  // DZ006
+    r = r + c_iken(W);         // DZ006
+    r = r + c_blok(W);         // DZ006
+    r = r + sadece_okur(W);    // temiz — okuma N'i bozmaz
+    ver r;
+}

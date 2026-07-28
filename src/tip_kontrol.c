@@ -745,6 +745,10 @@ static void dz_buyutme_kontrol(TipKontrol *tk, const Dugum *d,
     tip_hata(tk, d, "DZ003", msj);
 }
 
+/* DZ Spec V1 Asama (b): buyutucu tablosu sorgusu (tanim tip_kontrol_program
+ * yakininda — analiz orada kurulur). DUGUM_CAGRI'de DZ006 icin gerekir. */
+static DzBuyutucu *dz_kayit_bul(TipKontrol *tk, const Dugum *islev);
+
 /* === DZ004 / DZ005: DZ.3 akis kurali (YONLU) ===
  * N disa dogru SILINIR (Dizi<T,64> -> Dizi<T> serbest), ice dogru IDDIA
  * EDILEMEZ. Bu, `tip_esit` ile YAPILAMAZ: o simetriktir ve uzunlugu bilerek
@@ -3572,6 +3576,35 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                                 tip_hata(tk, d->veri.cagri.argumanlar[i],
                                     "T001", "method arg tipi uyumsuz");
                             }
+                            /* DZ.3 akis + DZ006 — METHOD yolu. Bu blok
+                             * olmadan `k.buyut(W)` DZ006'yi ATLIYORDU
+                             * (olculdu: hatasiz geciyordu = soundness acigi);
+                             * method dispatch normal cagri yolundan ONCE
+                             * return ettigi icin oradaki kontroller
+                             * calismiyor. `kendin` offset'i dikkate alinir. */
+                            dz_akis_kontrol(tk, d->veri.cagri.argumanlar[i],
+                                            pt, at);
+                            if (at && at->kategori == TIP_DIZI &&
+                                at->veri.dizi.uzunluk > 0) {
+                                DzBuyutucu *mb = dz_kayit_bul(tk, m);
+                                int pi = i + offset;
+                                if (mb && pi < mb->param_sayi &&
+                                    mb->bayrak[pi]) {
+                                    char msj[224];
+                                    snprintf(msj, sizeof(msj),
+                                        "Dizi<T, %d> argumani buyutucu "
+                                        "parametreye verilemez: '%.*s' %d. "
+                                        "parametresini dizi_ekle/"
+                                        "dizi_kapasite_ayarla ile buyutuyor "
+                                        "(buyutme cagirana gorunur → N yalan "
+                                        "olurdu)",
+                                        at->veri.dizi.uzunluk,
+                                        mb->ad_uz, mb->ad, pi + 1);
+                                    tip_hata(tk,
+                                        d->veri.cagri.argumanlar[i],
+                                        "DZ006", msj);
+                                }
+                            }
                         }
                         if (m->veri.islev.donus_tipi) {
                             return ast_tip_to_bilgi(tk, m->veri.islev.donus_tipi);
@@ -3661,6 +3694,38 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* DZ.3: parametre N-bilinen ise arguman da olmali */
                 dz_akis_kontrol(tk, d->veri.cagri.argumanlar[i],
                                 param_tip, arg_tip);
+                /* === DZ006 (Asama b): N-bilinen arguman, BUYUTUCU parametreye
+                 * gecemez. Diziler referansla gecer → callee'nin buyutmesi
+                 * cagirana gorunur ve cagirandaki N'i YALANLAR (DZ.5). */
+                if (arg_tip && arg_tip->kategori == TIP_DIZI &&
+                    arg_tip->veri.dizi.uzunluk > 0) {
+                    /* Cagri hedefini coz. `cozum_sembol` ONCE denenir: hem
+                     * `f(...)` (TANIMLAYICI) hem `m::f(...)` (YOL) icin
+                     * doludur. Yalniz sembol_bul'a bakmak modul-nitelikli
+                     * cagriyi ATLIYORDU → DZ006 sessizce dusuyordu (olculdu:
+                     * `m::mbuyut(W)` hatasiz geciyordu = soundness acigi). */
+                    const Dugum *hd = d->veri.cagri.hedef;
+                    const Sembol *fs = hd->cozum_sembol;
+                    if (!fs && hd->tip == DUGUM_TANIMLAYICI) {
+                        fs = sembol_bul(tk->scope,
+                                hd->veri.tanimlayici.metin,
+                                hd->veri.tanimlayici.uzunluk);
+                    }
+                    DzBuyutucu *bk = (fs && fs->ast_dugumu)
+                        ? dz_kayit_bul(tk, fs->ast_dugumu) : NULL;
+                    if (bk && i < bk->param_sayi && bk->bayrak[i]) {
+                        char msj[224];
+                        snprintf(msj, sizeof(msj),
+                            "Dizi<T, %d> argumani buyutucu parametreye "
+                            "verilemez: '%.*s' %d. parametresini "
+                            "dizi_ekle/dizi_kapasite_ayarla ile buyutuyor "
+                            "(buyutme cagirana gorunur → N yalan olurdu)",
+                            arg_tip->veri.dizi.uzunluk,
+                            bk->ad_uz, bk->ad, i + 1);
+                        tip_hata(tk, d->veri.cagri.argumanlar[i],
+                                 "DZ006", msj);
+                    }
+                }
                 /* Linear Types Spec V1 + Capability Spec V1:
                  * param lineer (tekkez veya yetki) ise arg consume */
                 if (param_tip && tip_lineer_mi(param_tip)) {
@@ -6111,12 +6176,224 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
 /* === Ana fonksiyon === */
 
+/* ===========================================================================
+ * DZ Spec V1 Asama (b) — BUYUTUCU-PARAMETRE ETKI ANALIZI (DZ006)
+ * ---------------------------------------------------------------------------
+ * DZ.5'te olculen delik: diziler heap'te ve REFERANSLA gectigi icin, N'in
+ * silindigi bir cagrinin icinde yapilan buyutme CAGIRANA GORUNUR:
+ *
+ *     işlev buyut(xs: Dizi<tam32>) { dizi_ekle(xs, 99); }
+ *     değişken W: Dizi<tam32, 2> = [1, 2];
+ *     buyut(W);      // N silinir → izinli; W artik 3 elemanli → N YALAN
+ *
+ * Cozum: bir islevin dizi parametresi
+ *   (dogrudan)  govdede dizi_ekle/dizi_kapasite_ayarla'nin ILK argumani ise
+ *   (transitif) buyutucu bir parametreye ARGUMAN olarak iletiliyorsa
+ * BUYUTUCU'dur. Cagri grafiginde fixpoint ile yayilir. ALIAS ANALIZI GEREKMEZ
+ * — yalnizca parametre adinin dogrudan gecirilmesi izlenir.
+ *
+ * YON: bu analiz over-approximate etmelidir. Bir buyutucuyu KACIRMAK unsound
+ * (delik acik kalir); FAZLADAN isaretlemek yalnizca gecerli kodu reddeder
+ * (loud). Bu yuzden gezici TUM konteyner dugumlerini acikca listeler ve
+ * `default:` dali yalnizca COCUKSUZ yaprak dugumler icindir.
+ * =========================================================================== */
+
+static DzBuyutucu *dz_kayit_bul(TipKontrol *tk, const Dugum *islev) {
+    for (DzBuyutucu *b = tk->dz_buyutucular; b; b = b->sonraki) {
+        if (b->islev == islev) return b;
+    }
+    return NULL;
+}
+
+/* Ada gore ARA — transitif adimda kullanilir. Ayni ad birden fazla islevde
+ * varsa (modul/uygula) HEPSI taranir ve bayraklar OR'lanir: over-approximate
+ * = guvenli yon. */
+static int dz_ad_buyutucu_mu(TipKontrol *tk, const char *ad, int ad_uz,
+                             int param_i) {
+    for (DzBuyutucu *b = tk->dz_buyutucular; b; b = b->sonraki) {
+        if (b->ad_uz == ad_uz && memcmp(b->ad, ad, (size_t)ad_uz) == 0 &&
+            param_i < b->param_sayi && b->bayrak[param_i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Dugum, `ad` adli parametreye dogrudan basvuran bir tanimlayici mi? */
+static int dz_param_referansi_mi(const Dugum *d, const char *ad, int ad_uz) {
+    if (!d || d->tip != DUGUM_TANIMLAYICI) return 0;
+    return d->veri.tanimlayici.uzunluk == ad_uz &&
+           memcmp(d->veri.tanimlayici.metin, ad, (size_t)ad_uz) == 0;
+}
+
+/* Govdeyi gez; `kayit`in parametrelerinden buyutulenleri isaretle.
+ * Donus: en az bir bayrak DEGISTIYSE 1 (fixpoint sonlandirmasi icin). */
+static int dz_govde_tara(TipKontrol *tk, const Dugum *d, DzBuyutucu *kayit,
+                         Dugum *const *paramlar) {
+    if (!d) return 0;
+    int degisti = 0;
+
+    if (d->tip == DUGUM_CAGRI && d->veri.cagri.hedef &&
+        d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+        const char *fa = d->veri.cagri.hedef->veri.tanimlayici.metin;
+        int fu = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+        int buyuten_builtin =
+            (fu == 9  && memcmp(fa, "dizi_ekle", 9) == 0) ||
+            (fu == 20 && memcmp(fa, "dizi_kapasite_ayarla", 20) == 0);
+        for (int i = 0; i < kayit->param_sayi; i++) {
+            if (kayit->bayrak[i]) continue;
+            const Dugum *p = paramlar[i];
+            if (!p || p->tip != DUGUM_PARAMETRE) continue;
+            const char *pa = p->veri.parametre.ad;
+            int pu = p->veri.parametre.ad_uzunluk;
+            /* (dogrudan) buyuten built-in'in ILK argumani */
+            if (buyuten_builtin && d->veri.cagri.sayi >= 1 &&
+                dz_param_referansi_mi(d->veri.cagri.argumanlar[0], pa, pu)) {
+                kayit->bayrak[i] = 1; degisti = 1; continue;
+            }
+            /* (transitif) buyutucu bir parametreye arguman olarak iletiliyor */
+            if (!buyuten_builtin) {
+                for (int j = 0; j < d->veri.cagri.sayi; j++) {
+                    if (dz_param_referansi_mi(d->veri.cagri.argumanlar[j],
+                                              pa, pu) &&
+                        dz_ad_buyutucu_mu(tk, fa, fu, j)) {
+                        kayit->bayrak[i] = 1; degisti = 1; break;
+                    }
+                }
+            }
+        }
+    }
+
+    /* --- Cocuklara in. Konteyner dugumler ACIKCA listelenir; atlanan bir tip
+     * SESSIZ soundness acigi demektir (bkz. yukaridaki YON notu). --- */
+    #define DZ_IN(x) do { degisti |= dz_govde_tara(tk, (x), kayit, paramlar); } while (0)
+    switch (d->tip) {
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++) DZ_IN(d->veri.blok.deyimler[i]);
+            break;
+        case DUGUM_IFADE_DEYIMI: DZ_IN(d->veri.ifade_deyimi.ifade); break;
+        case DUGUM_DEGISKEN:     DZ_IN(d->veri.degisken.deger); break;
+        case DUGUM_ATAMA:
+            DZ_IN(d->veri.atama.hedef); DZ_IN(d->veri.atama.deger); break;
+        case DUGUM_VER:          DZ_IN(d->veri.ver.deger); break;
+        case DUGUM_EGER:
+            DZ_IN(d->veri.eger.kosul); DZ_IN(d->veri.eger.gozdoldur);
+            DZ_IN(d->veri.eger.yan); break;
+        case DUGUM_IKEN:
+            DZ_IN(d->veri.iken.kosul); DZ_IN(d->veri.iken.govde); break;
+        case DUGUM_ICIN:
+            DZ_IN(d->veri.icin.koleksiyon); DZ_IN(d->veri.icin.govde); break;
+        case DUGUM_ESLES:
+            DZ_IN(d->veri.esles.deger);
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) DZ_IN(d->veri.esles.kollar[i]);
+            break;
+        case DUGUM_ESLES_KOLU:   DZ_IN(d->veri.esles_kolu.govde); break;
+        case DUGUM_GUVENSIZ:     DZ_IN(d->veri.guvensiz.blok); break;
+        case DUGUM_SATIRICI_ASM:
+            for (int i = 0; i < d->veri.satirici_asm.girdi_sayi; i++)
+                DZ_IN(d->veri.satirici_asm.girdi_ifadeler[i]);
+            break;
+        case DUGUM_IKILI:
+            DZ_IN(d->veri.ikili.sol); DZ_IN(d->veri.ikili.sag); break;
+        case DUGUM_TEKLI:        DZ_IN(d->veri.tekli.operand); break;
+        case DUGUM_CAGRI:
+            DZ_IN(d->veri.cagri.hedef);
+            for (int i = 0; i < d->veri.cagri.sayi; i++) DZ_IN(d->veri.cagri.argumanlar[i]);
+            break;
+        case DUGUM_ERISIM:       DZ_IN(d->veri.erisim.nesne); break;
+        case DUGUM_INDEKS:
+            DZ_IN(d->veri.indeks.nesne); DZ_IN(d->veri.indeks.indeks); break;
+        case DUGUM_LAMBDA:       DZ_IN(d->veri.lambda.govde); break;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++)
+                DZ_IN(d->veri.yapi_olustur.alanlar[i]);
+            break;
+        case DUGUM_ALAN_ATAMA:   DZ_IN(d->veri.alan_atama.deger); break;
+        case DUGUM_DIZI_OLUSTUR:
+            for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
+                DZ_IN(d->veri.dizi_olustur.elemanlar[i]);
+            break;
+        case DUGUM_KULLAN_IFADE: DZ_IN(d->veri.kullan_ifade.operand); break;
+        case DUGUM_IMHA_IFADE:   DZ_IN(d->veri.imha_ifade.operand); break;
+        case DUGUM_TIP_DONUSTUR: DZ_IN(d->veri.tip_donustur.kaynak); break;
+        default:
+            /* Yaprak (literal/tanimlayici/yol/desen/tip dugumleri) — cagri
+             * icermez. Yeni bir KONTEYNER dugum tipi eklenirse buraya da
+             * eklenmelidir; aksi halde icindeki buyutme GORULMEZ. */
+            break;
+    }
+    #undef DZ_IN
+    return degisti;
+}
+
+/* Program uyelerinden islev kayitlarini topla (modul/dışa/uygula icine iner). */
+static void dz_kayitlari_topla(TipKontrol *tk, Dugum *const *uyeler, int sayi) {
+    for (int i = 0; i < sayi; i++) {
+        const Dugum *u = uyeler[i];
+        if (!u) continue;
+        switch (u->tip) {
+            case DUGUM_ISLEV: {
+                if (!u->veri.islev.govde) break;      /* yalniz imza */
+                if (dz_kayit_bul(tk, u)) break;
+                DzBuyutucu *b = (DzBuyutucu *)arena_ayir_sifir(tk->arena,
+                                                    sizeof(DzBuyutucu));
+                if (!b) break;
+                b->islev = u;
+                b->ad = u->veri.islev.ad;
+                b->ad_uz = u->veri.islev.ad_uzunluk;
+                b->param_sayi = u->veri.islev.param_sayi;
+                if (b->param_sayi > 0) {
+                    b->bayrak = (unsigned char *)arena_ayir_sifir(tk->arena,
+                                    (size_t)b->param_sayi);
+                    if (!b->bayrak) break;
+                }
+                b->sonraki = tk->dz_buyutucular;
+                tk->dz_buyutucular = b;
+                break;
+            }
+            case DUGUM_MODUL:
+                dz_kayitlari_topla(tk, u->veri.modul.uyeler, u->veri.modul.sayi);
+                break;
+            case DUGUM_DISA:
+                dz_kayitlari_topla(tk, &u->veri.disa.tanim, 1);
+                break;
+            case DUGUM_UYGULA:
+                dz_kayitlari_topla(tk, u->veri.uygula.islevler,
+                                   u->veri.uygula.islev_sayi);
+                break;
+            default: break;
+        }
+    }
+}
+
+/* Fixpoint: bayraklar durulana kadar tekrarla. Her tur en az bir bayragi
+ * 0→1 yapar; toplam bayrak sayisi sonlu → sonlanir. Ust sinir guvenlik agi. */
+static void dz_buyutucu_analiz(TipKontrol *tk, const Dugum *program) {
+    tk->dz_buyutucular = NULL;
+    dz_kayitlari_topla(tk, program->veri.program.uyeler,
+                       program->veri.program.sayi);
+    int tur = 0;
+    int degisti = 1;
+    while (degisti && tur < 64) {
+        degisti = 0;
+        for (DzBuyutucu *b = tk->dz_buyutucular; b; b = b->sonraki) {
+            if (b->param_sayi <= 0) continue;
+            degisti |= dz_govde_tara(tk, b->islev->veri.islev.govde, b,
+                                     b->islev->veri.islev.parametreler);
+        }
+        tur++;
+    }
+}
+
 void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate(tk, program);
     /* A faz-2: tum moduller kayitli — kullan baglarini kur (dongusel
      * import bildirim sirasi onemsiz). */
     kullan_baglari_kur(tk, program);
+    /* DZ Spec V1 Asama (b): buyutucu-parametre fixpoint'i. Cagri yerleri
+     * ziyaret edilmeden ONCE tamamlanmali (DZ006 bu tabloyu okur). */
+    dz_buyutucu_analiz(tk, program);
     for (int i = 0; i < program->veri.program.sayi; i++) {
         tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }

@@ -2,8 +2,10 @@
 
 **Durum:** UYGULANDI (2026-07-28). Tasarım kararları Mehmet tarafından onaylandı;
 DZ.8 adımlarının tamamı indi. Uygulama sırasında ortaya çıkan iki sapma DZ.11'de.
-**Kapsam:** Aşama (a) — *bildirim-yeri arity kontrolü*. Aşama (b) (büyütücü-parametre
-etki analizi) bilinçli olarak V1.1'e bırakıldı; gerekçe DZ.5'te.
+**Kapsam:** Aşama (a) — bildirim-yeri arity kontrolü (DZ001-DZ005) **+ Aşama (b)**
+— büyütücü-parametre etki analizi (DZ006). İkisi de indi.
+**⚠ Buna rağmen `Dizi<T, N>` TAM invaryant DEĞİLDİR** — kapanış ve yapı-alanı
+yolları ölçülerek açık bulundu; WCET hâlâ N'e dayanamaz. Ayrıntı DZ.5.
 
 ---
 
@@ -187,30 +189,76 @@ buyut(W);        // DZ.3: N silinir → izinli
 çalıştırıldı; `dizi_boyut(W)` çağrıdan sonra **3** döndü — yani callee'nin
 büyütmesi çağırana gerçekten görünüyor. Delik teorik değil.
 
-### Bunun anlamı
-
-> **V1'de `Dizi<T, N>` bir BİLDİRİM-YERİ KONTROLÜDÜR, bir INVARYANT DEĞİLDİR.**
-
-- ✅ D-339'un SHA-256 hata sınıfını yakalar (orada büyütme yoktur).
-- ✅ Bellek güvenliğini hiç etkilemez — runtime kontrolü her hâlükârda yerinde.
-- ❌ **WCET / `gerçekzamanlı` bound'u V1'in N'ine DAYANDIRILAMAZ.** N yalan
-  olabileceği için hesaplanan sınır gerçekçi olmayabilir. Realtime Spec §RT.12'nin
-  `Dizi<T, N>` maddesi **Aşama (b) inene kadar açılmamalıdır.**
-
-### Aşama (b) — V1.1'e bırakılan çözüm
+### Aşama (b) — ✅ UYGULANDI (DZ006)
 
 **Büyütücü-parametre etki analizi:** gövdesinde bir parametreye `dizi_ekle` /
 `dizi_kapasite_ayarla` uygulayan işlevin o parametresi *büyütücü* işaretlenir;
 çağrı grafiğinde fixpoint ile yayılır (doğrudan + transitif); N-bilinen argüman
-büyütücü parametreye geçemez (yeni kod: DZ006).
+büyütücü parametreye geçemez → **DZ006**.
 
-- **Alias analizi GEREKMEZ** — yalnız parametre etkisi izlenir.
-- Altyapı mevcut: `src/escape.c` zaten fixpoint DFA yürütüyor.
+- **Alias analizi GEREKMEZ** — yalnız parametre adının doğrudan geçirilmesi
+  izlenir.
+- Yukarıdaki delik örneği artık `DZ006` verir (ölçüldü).
 
-**(b) neden sonraya bırakılabilir — kritik gerekçe:** (b) **tamamen eklemelidir**.
-Yalnızca bugün kabul edilen programları *reddeder*; çalışan hiçbir kodu bozmaz.
-Dolayısıyla (a) ile başlayıp (b)'ye sıkmak güvenli bir yoldur — tersi değildir.
-Tek şart: **(b) inmeden WCET'i N'e bağlamayın.**
+**Analiz yönü — over-approximate.** Bir büyütücüyü *kaçırmak* unsound'dur
+(delik açık kalır); *fazladan* işaretlemek yalnızca geçerli kodu reddeder
+(loud). Bu yüzden gövde gezicisi **tüm konteyner düğüm tiplerini açıkça
+listeler**; `default:` dalı yalnız çocuksuz yapraklar içindir. Yeni bir
+konteyner düğüm tipi eklenirse geziciye de eklenmelidir.
+
+**Üç çağrı biçimi de kapsanır** (üçü de ayrı ayrı ölçüldü):
+`f(W)` · `m::f(W)` (modül-nitelikli) · `k.f(W)` (metot). Son ikisi ilk
+uygulamada **sessizce atlanıyordu** — bkz. DZ.11 (3).
+
+### Bilinen yanlış pozitif: parametre gölgeleme
+
+```kemgu
+işlev golge(xs: Dizi<tam32>) -> tam32 {
+    değişken xs: Dizi<tam32> = [9];   // param'i gölgeler
+    dizi_ekle(xs, 1);                  // YEREL'i büyütür, param'ı DEĞİL
+    ver 0;
+}
+```
+Analiz ad-tabanlı olduğu için `xs` parametresi büyütücü işaretlenir → çağıran
+`Dizi<T,N>` geçirirse DZ006 alır. **Yanlış pozitif, ama loud** ve güvenli yönde;
+çözüm yerel değişkeni yeniden adlandırmaktır. Kapsam takibi V2.
+
+### ⚠ DZ006'dan SONRA HÂLÂ AÇIK OLAN İKİ YOL (ölçüldü, 2026-07-28)
+
+DZ006 **adlandırılmış işlev parametresi** yolunu kapatır — DZ.5'te ölçülen yol
+buydu. Ama aynı sınıftan iki yol daha var ve **ikisi de hâlâ açık**:
+
+**(i) Kapanış/lambda** — büyütücü bir lambda'ya geçirmek DZ006 vermez:
+```kemgu
+değişken W: Dizi<tam32, 2> = [1, 2];
+değişken f: işlev(Dizi<tam32>) -> tam32 = |q: Dizi<tam32>| { dizi_ekle(q, 9); ver 0; };
+f(W);      // ölçüldü: `--check` OK — DZ006 YOK
+```
+Sebep: çağrılan şey adlandırılmış bir işlev değil, bir kapanış *değeri*;
+büyütücü tablosu AST işlev düğümleriyle anahtarlanır. Kapatmak değer-akışı
+analizi ister.
+
+**(ii) Yapı alanı** — N, yapı kurulumunda silinir, sonra alan üzerinden büyütülür:
+```kemgu
+yapı Kutu { ic: Dizi<tam32>; }
+işlev buyut(k: Kutu) -> tam32 { dizi_ekle(k.ic, 9); ver 0; }
+değişken k: Kutu = Kutu { ic: W };   // DZ.3: alan N'siz → silinme, izinli
+buyut(k);                             // ölçüldü: `--check` OK — DZ006 YOK
+```
+Sebep: büyütülen şey bir parametre *adı* değil, `k.ic` alan erişimi.
+
+### Sonuç — abartmadan
+
+> **DZ006'dan sonra bile `Dizi<T, N>` TAM bir invaryant DEĞİLDİR.**
+> Kapanan: işlev-parametresi yolu (DZ.5'in ölçtüğü yol). Açık kalan: kapanış
+> ve yapı alanı yolları (yukarıda ölçüldü).
+
+- ✅ D-339'un SHA-256 hata sınıfını yakalar (DZ001) ve artık büyütücü işlevlere
+  kaçmasını da engeller (DZ006).
+- ✅ Bellek güvenliğini hiç etkilemez — runtime kontrolü her hâlükârda yerinde.
+- ❌ **WCET / `gerçekzamanlı` bound'u HÂLÂ N'e DAYANDIRILAMAZ.** Realtime Spec
+  §RT.12'nin `Dizi<T, N>` maddesi, yukarıdaki iki yol da kapanana kadar
+  **açılmamalıdır.** (b) beklenen faydayı tam vermedi; bu dürüstçe kaydedilir.
 
 ---
 
@@ -239,7 +287,7 @@ dizi_tipi       = "Dizi" "<" tip [ "," tamsayi_literal ] ">" ;
 | `DZ003` | Tip | N-bilinen bağlamda büyütme (`dizi_ekle` / `dizi_kapasite_ayarla`) |
 | `DZ004` | Tip | Uzunluğu bilinmeyen değer N-bilinen hedefe veriliyor |
 | `DZ005` | Tip | N uyuşmazlığı (`Dizi<T,32>` → `Dizi<T,64>`) |
-| `DZ006` | Tip | *(V1.1 — Aşama b)* N-bilinen argüman büyütücü parametreye veriliyor |
+| `DZ006` | Tip | N-bilinen argüman büyütücü parametreye veriliyor (Aşama b) |
 
 `DZ` öneki serbest olarak doğrulandı (mevcut önekler: AS, BL, CP, CT, DRF, E, G,
 L, LR, M, MM, P, RT, T, V). `P370/P371` de `P363`'ten sonra boştadır.
@@ -286,10 +334,16 @@ Sabotajın kendisi `diff` ile teyit edilir.
 
 ## DZ.9 — V2'ye bırakılanlar
 
-- **Aşama (b):** büyütücü-parametre etki analizi + DZ006 (bkz. DZ.5).
+- **Aşama (c) — N kaçışının kalan iki yolu** (DZ.5'te ölçüldü, öncelikli):
+  büyütücü **kapanışa** geçirilen dizi ve **yapı alanında** taşınan dizi.
+  Bunlar kapanmadan `Dizi<T, N>` tam invaryant olmaz.
+- **Parametre gölgeleme yanlış pozitifi:** ad-tabanlı eşleme yerine kapsam
+  takibi (DZ.5).
 - **Sabit ifade N:** `Dizi<T, W_SAYI>` — sabit değerlendirici gerekir;
   `vektör<T, N>` ile **aynı adımda**.
-- **WCET tüketimi:** `için x: buf` statik bound (Realtime §RT.12) — (b)'ye bağlı.
+- **WCET tüketimi:** `için x: buf` statik bound (Realtime §RT.12) — **Aşama
+  (c)'ye** bağlı. (b) tek başına yetmedi.
+- **Self-host DZ002-DZ006:** bugün self-host'ta yalnız DZ001 var.
 - **Bağımlı/refinement tipler:** `i < N` ispatı ile runtime sınır kontrolünün
   elenmesi. Ayrı faz; tip sistemi baştan tasarlanır.
 - **N-generic işlev:** `işlev f<N>(xs: Dizi<T, N>)` — const-generic parametre.
