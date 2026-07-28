@@ -5,6 +5,64 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-338 [YÜKSEK] — Yapı alanı (dtamN) imzasızlığı self-host'ta akar + codegen_diff'in 127 kör noktası kapandı (2026-07-28)
+
+**Karar [ETKİ: `selfhost/codegen.kem` (+59), `test/cg_korpus/cg_isaretsiz_alan.kem`
+(yeni, 107→108), `test/codegen_diff_harness.sh` (127 kuralı daraltıldı).]**
+D-337'nin bilinçli "Sınır (V1)" maddesini kapatır.
+
+**Kusur:** `ifade_isz` ERISIM'i ele almıyor, `k.alan` için daima 0 (imzalı) dönüyordu.
+C tarafında bu yol AÇIK (`llvm.c:2594` `int alan_isz = ast_tip_isaretsiz_mi(alan_tip_d);`
+— hem `extractvalue` hem `GEP+load` dalı bunu `IfadeSonuc`'a koyar). Sonuç: bir
+regresyon DEĞİL (imzalıya düşmek = D-335 öncesi davranış) ama `yapı Bayt { v: dtam8 }`
+gibi kripto/sürücü şekillerinde **C ile self-host AYRIŞIYOR ve self yanlış sonuç
+veriyordu**. Ölçülen: `b.v olarak tam32` C=200 / self=−56; `b.v/4` C=50 / self=−14.
+
+**Mekanizma:** `yapi_alan_isz(p, yad, alan)` — `yapi_alan_tip` aynası, ama `alan_tip`
+(LLVM string `"i8"`) imzasızlığı **siler**, o yüzden `alan_tnode` (AST tip düğümü)
+üzerinden `ll_isz`. C ile birebir incelik: mono örnekte bile **BASE** alan düğümü
+kullanılır — C'de de subst yalnız `ast_tip_to_ir`'ı sarar, `alan_isz` subst DIŞINDA
+kalır. Nesnenin yapı adı `erisim_yapi_ad` ile **saf** çözülür: emit dalı bunu
+`p.son_tip`/`p.son_ref`'ten alır ama o durum ancak kod yayılırken oluşur, `ifade_isz`
+saf olmak zorunda → aynı iki kaynak (`cg_atip` / `cg_aref`) doğrudan sorgulanır.
+İç içe `a.b.c` için özyineleme (iç alan tipi `"%Ic"` ise taban olur). Çözülemezse
+`""` → 0 = imzalı = eski davranış (güvenli taraf).
+
+**INDEKS BİLEREK YAPILMADI — ölçüm gerekçesi:** görev "C'de ERISIM ve INDEKS yollarını
+ÖLÇ, birebir aynala" diyordu. Ölçüldü: C'nin **üç** INDEKS dalı da
+(`llvm.c:3249` heap `kdl_dizi_al`, `:3282` türetilmiş taban, `:3318` stack GEP+load)
+`IfadeSonuc s = { r, tip, 0 }` üretir. Yani C'de de dizi elemanı imzasızlığı TAŞINMAZ.
+Self-host'un 0 dönmesi C ile **birebir aynıdır** — parite kaybı değil, **ortak sınır**.
+Bunu C'de "düzeltmek" oracle'ı değiştirmek olurdu; kapsam dışı bırakıldı.
+
+**Ölçüm:** yeni korpus `cg_isaretsiz_alan.kem`, exit **60**. Üç farklı codegen dalını
+ayrı ayrı yükler: struct-value (`extractvalue`), `&Yapi` referans parametresi
+(`GEP+load`), iç içe `d2.ic.v` (özyinelemeli taban). Falsifiye edici seçim D-337 ile
+aynı disiplin: 200 > 127.
+
+**Sabotaj (uygulandığı `diff` ile DOĞRULANDI):** ERISIM dalına `ver 0` → IR'da
+`udiv→sdiv` ve `zext→sext` (grep ile teyit), exit 60→127, kapı 🔴.
+
+**⚠ ASIL BULGU — kapı kendi ölçtüğü şeye kördü:** sabotajlı değer **tam olarak 127**
+çıktı ve `codegen_diff_harness.sh` 127'yi *"korpusta hiçbir program 127 dönmez →
+127 DAİMA ortamsal (Defender exec yarışı)"* premisiyle **⚠ ATLIYORDU**. Yani gerçek
+bir miscompile yeşil geçti (`107/107`). Premis yanlış ölçülmüştü. Kural daraltıldı:
+127 yalnız **ORACLE**'da ortamsal sayılır (oracle yoksa karşılaştırma anlamsız);
+oracle sağlam değer verirken aday kalıcı 127 diyorsa (12 retry sonrası) bu bir
+ANLAŞMAZLIKTIR, fail. Bu, D-338'in kodundan bağımsız olarak **tüm korpusu** korur.
+Ders: "bu değer asla oluşmaz" varsayımına dayanan atlama kuralları, tam da o değeri
+üreten hata sınıfına kördür.
+
+**Kapılar:** codegen_diff **108/108**, codegen_bootstrap **FIXPOINT ✓**
+(lexer/parser/checker 92 birebir + stage1 IR == stage2 IR, 45729 satır),
+calistir_self_driver (4 mod, C-derlenmiş + self-host-derlenmiş + FIXPOINT;
+LLVM 108/108 her iki driver'da), checker_diff 56/56, calistir_llvm_test 284/284.
+
+**Not (dal tabanı):** D-337 (`7f645be`) merge anında `origin/main`'de DEĞİLDİ
+(`claude/distracted-tesla-e03311`); bu iş o commit'in üzerine kuruldu.
+
+---
+
 ## D-337 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
 
 **Karar [ETKİ: `selfhost/codegen.kem` (+164/−17), `test/cg_korpus/` (+2 korpus,

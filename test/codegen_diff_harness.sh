@@ -64,9 +64,16 @@ for f in "$KORPUS"/*.kem; do
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
     run_exe "$TMP/$b.k.exe"; kaday=$RC
-    # Kalıcı 127 (Defender) = ortamsal → oracle güvenilmez, atla (fail sayma).
-    if [ "$coracle" -eq 127 ] || [ "$kaday" -eq 127 ]; then
-        echo "  ⚠ $(basename "$f") — 127 (Defender exec yarışı, ortamsal) atlandı"; continue
+    # D-338 ONARIM: eski kural `coracle==127 || kaday==127` idi ve "korpusta hiçbir
+    # program 127 dönmez" premisine dayanıyordu. Bu premis YANLIŞ ölçüldü:
+    # cg_isaretsiz_alan.kem sabotajlı codegen ile TAM OLARAK 127 üretti (12 retry
+    # sonrası kararlı, oracle 60) → GERÇEK bir miscompile ⚠ ATLANDI olarak yeşil
+    # geçti. Yani sabotaj kapısı kendi ölçtüğü şeye kördü.
+    # Yeni kural: 127 yalnız ORACLE'da ortamsal sayılır (oracle yoksa karşılaştırma
+    # anlamsız). Oracle sağlam bir değer verirken aday kalıcı 127 diyorsa bu bir
+    # ANLAŞMAZLIKTIR — sessizce atlanamaz.
+    if [ "$coracle" -eq 127 ]; then
+        echo "  ⚠ $(basename "$f") — oracle 127 (Defender exec yarışı, ortamsal) atlandı"; continue
     fi
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))

@@ -2766,6 +2766,25 @@ işlev yapi_alan_tip(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     }
     ver "i32";
 }
+// D-338: yapı alanı işaretsiz (dtamN) mi? yapi_alan_tip aynası — ama alan_tip
+// (LLVM string "i8") imzasızlığı SİLER, o yüzden alan_tnode (AST tip düğümü)
+// üzerinden ll_isz. C llvm.c:2594 `ast_tip_isaretsiz_mi(alan_tip_d)` karşılığı.
+// NOT (C ile birebir): mono örnekte bile BASE alan düğümü kullanılır — C'de de
+// subst yalnız ast_tip_to_ir'ı sarar, alan_isz hesabı subst DIŞINDA kalır.
+işlev yapi_alan_isz(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver 0; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) {
+            ver ll_isz(p, dizi_al(p.alan_tnode, base + j));
+        }
+        j = j + 1;
+    }
+    ver 0;
+}
 // CG8: Dizi alanının eleman tipi ("" Dizi değilse).
 işlev yapi_alan_elem(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     değişken k: tam32 = yapi_idx(p, yad);
@@ -2917,6 +2936,33 @@ işlev islev_donus_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
+// D-338: bir ERISIM nesnesinin YAPI ADI (mangled değil, base) — SAF çözüm.
+// ifade_uret'in ERISIM dalı bunu p.son_tip ("%Yad" = struct value) / p.son_ref
+// ("Yad" = referans pointee) üzerinden BULUR; ama o durum ancak kod yayılırken
+// oluşur. ifade_isz saf olmak zorunda (bkz. ifade_isz yorumu) → aynı iki kaynağı
+// (cg_atip / cg_aref) doğrudan sorgular. İç içe `a.b.c` için özyineleme: iç alan
+// tipi "%Ic" ise onu taban yap (emit dalındaki extractvalue zincirinin aynısı).
+// Çözülemezse "" → çağıran 0 (imzalı) varsayar = D-337 öncesi davranış.
+işlev erisim_yapi_ad(p: &değişken Ayr, nesne: tam32) -> metin {
+    eğer nesne < 0 { ver ""; }
+    değişken ad: metin = dizi_al(p.a_ad, nesne);
+    eğer metin_esit(ad, "TANIMLAYICI") {
+        değişken nad: metin = dizi_al(p.a_deg, nesne);
+        değişken nt: metin = cg_var_tip_bul(p, nad);
+        eğer bayt(nt, 0) == 37 { ver metin_kes(nt, 1, metin_uzunluk(nt) - 1); }
+        ver cg_var_ref_bul(p, nad);   // referans param → pointee yapı adı ("" olabilir)
+    }
+    eğer metin_esit(ad, "ERISIM") {
+        değişken ic: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, nesne)));
+        eğer metin_uzunluk(ic) == 0 { ver ""; }
+        değişken mi: tam32 = mono_bul(p, ic);
+        eğer mi >= 0 { ic = dizi_al(p.mono_yad, mi); }
+        değişken ft: metin = yapi_alan_tip(p, ic, dizi_al(p.a_deg, nesne));
+        eğer bayt(ft, 0) == 37 { ver metin_kes(ft, 1, metin_uzunluk(ft) - 1); }
+        ver "";   // skaler alan → daha derin erişim yok
+    }
+    ver "";   // çağrı dönüşü / indeks vb. → V1'de çözülmez (konservatif: imzalı)
+}
 // D-337: bir İFADE düğümünün değeri işaretsiz (dtamN) semantikli mi?
 // C llvm.c'de bu bilgi IfadeSonuc.isaretsiz alanında AKAR; self-host'ta ifade_uret
 // tek bir metin döndürdüğü için SAF (yan-etkisiz) bir yeniden-hesap olarak tutulur.
@@ -2955,6 +3001,19 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
         ver fn_risz_bul(p, dizi_al(p.a_deg, h));
     }
+    // D-338: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
+    // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).
+    eğer metin_esit(ad, "ERISIM") {
+        değişken yad: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer metin_uzunluk(yad) == 0 { ver 0; }
+        değişken mi: tam32 = mono_bul(p, yad);
+        eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
+        ver yapi_alan_isz(p, yad, dizi_al(p.a_deg, idx));
+    }
+    // D-338 ÖLÇÜM: INDEKS (xs[i]) BİLEREK yok — C llvm.c'nin ÜÇ INDEKS dalı da
+    // (heap kdl_dizi_al 3249, türetilmiş taban 3282, stack GEP+load 3318)
+    // `IfadeSonuc s = { r, tip, 0 }` üretir; yani C'de de dizi elemanı imzasızlığı
+    // TAŞINMAZ. 0 dönmek burada C ile BİREBİR aynıdır (ortak sınır, parite kaybı DEĞİL).
     ver 0;
 }
 // CG4: temel-blok etiket üret/yaz + koşullu fall-through dal.
