@@ -715,6 +715,16 @@ işlev main() -> tam32 {
         uart_satir("[17] SUREC IZOLASYON HATA");
     }
 
+    // [18] ELF YUKLE (MODEL B / MB-2): çekirdek imajında OLMAYAN bir program,
+    // DİSKTEN okunup ELF64 çözümlenerek kendi adres alanına yüklenir ve EL0'da
+    // çalıştırılır. Model A'da program çalıştırmak çekirdeği derlemek demekti.
+    değişken elf_ok: tam32 = kelf_calistir_testi();
+    eğer elf_ok == 1 {
+        uart_satir("[18] ELF YUKLE OK");
+    } değilse {
+        uart_satir("[18] ELF YUKLE HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

@@ -944,7 +944,29 @@ calistir_kernel_dizi_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 # .kem-native UART sürücüsüne portlandı, C kdl_yazdir SİLİNDİ. FALSİFİYE-KANIT (YASA-3, bu
 # çekirdeğin KENDİSİNE): kem_os IR'ında `call @kdl_yazdir*` = 0 (gate grep-enforce). Entegrasyon
 # kanıtı: dört alt-sistem doğru sonuç verirse (5/5 iç-kontrol) TEK "KEMGU KEM-OS OK" marker'ı.
-calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o
+# MODEL B / MB-2: kullanıcı programı AYRI bir ELF olarak derlenir ve disk imajına
+# yazılır — çekirdek imajına GÖMÜLMEZ. `-z max-page-size=4096`: varsayılan 64KB
+# hizalama PT_LOAD'ı 64KB dosya ofsetine iter ve 66KB'lık bir imaj üretir; 4KB
+# hizalama ile ELF sektör sınırlarına oturur ve yükleyicinin okuması kısalır.
+# Link'te hiçbir çekirdek sembolü çözülmez (ayrı birim) — programın çekirdekle
+# tek arayüzü `svc`. Bu, ELF'in gerçekten bağımsız olduğunun kanıtıdır.
+$(BUILD)/kem_user.elf: test/ornekler/kem_kullanici.kem linker/user-aarch64.ld $(BUILD)/kemgu$(EXE) | $(BUILD)
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 test/ornekler/kem_kullanici.kem > $(BUILD)/kem_user.ll
+	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_user.ll -c -o $(BUILD)/kem_user.o
+	ld.lld -m aarch64linux -T linker/user-aarch64.ld -z max-page-size=4096 \
+		-o $@ $(BUILD)/kem_user.o
+	@# Falsifiye-kanıt: yüklenecek ELF ET_EXEC + AArch64 + giriş 0x44000000 olmalı;
+	@# aksi halde çekirdek yükleyicisi (kelf_basligi_gecerli) onu REDDEDER ve kapı
+	@# "yükleyici bozuk" sanılır. Burada erkenden, açık mesajla yakala.
+	@llvm-readelf -h $@ | grep -q "EXEC (Executable file)" || \
+		{ echo "FAIL: kem_user.elf ET_EXEC degil (PIE?) — yukleyici reddeder"; exit 1; }
+	@llvm-readelf -h $@ | grep -q "AArch64" || \
+		{ echo "FAIL: kem_user.elf AArch64 degil"; exit 1; }
+	@llvm-readelf -h $@ | grep -q "0x44000000" || \
+		{ echo "FAIL: kem_user.elf girisi 0x44000000 degil (linker script?)"; exit 1; }
+	@echo "  (kem_user.elf: ET_EXEC AArch64 giris=0x44000000 — diske yazilmaya hazir)"
+
+calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/kem_user.elf
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
 	@# --mimari arm64: dsb sy satıriçi_asm (P1) açık. Sıra: sürücü-bağımlılık (blk→minifs) → kem_os.
@@ -955,7 +977,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1264,7 +1286,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@echo "  (vnet_checksum + net_icmp_testi wire — ICMP ping round-trip SAF-.kem)"
 	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		rm -f $(BUILD)/kem_os.out; \
-		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=64 2>/dev/null; \
+		dd if=/dev/zero of=$(BUILD)/kem_os_disk.img bs=512 count=128 2>/dev/null; \
+		dd if=$(BUILD)/kem_user.elf of=$(BUILD)/kem_os_disk.img bs=512 seek=8 conv=notrunc 2>/dev/null; \
 		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
 			-global virtio-mmio.force-legacy=false \
 			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
@@ -1292,12 +1315,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "SPAWN OK" $(BUILD)/kem_os.out \
 		   && grep -q "ADRES ALANI OK" $(BUILD)/kem_os.out \
 		   && grep -q "SUREC IZOLASYON OK" $(BUILD)/kem_os.out \
+		   && grep -q "ELF YUKLE OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \

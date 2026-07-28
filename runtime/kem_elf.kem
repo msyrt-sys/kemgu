@@ -1,0 +1,185 @@
+// kem_elf.kem — MODEL B / MB-2: DİSKTEN ELF64 YÜKLEYİCİ (saf-.kem).
+// ============================================================================
+// Model A'nın sınırı: userland programlar çekirdek imajına GÖMÜLÜYDÜ. Yeni bir
+// program çalıştırmak = çekirdeği yeniden derlemek. Model B bunu kırar: program
+// AYRI bir ELF'tir, diskte durur, çekirdek ÇALIŞMA ZAMANINDA okur, çözümler ve
+// sürecin adres alanına yükler.
+//
+// Bağımlılıklar (cat sırası): kem_virtio_blk (vblk_oku/vblk_data_oku),
+// kem_mmu (KMMU_OZEL_*), kem_gorev (kem_gorev_olustur_el0, kg_ttbr_yaz).
+//
+// SINIRLAR (V1, bilinçli):
+//   • Tek PT_LOAD segment kümesi; dinamik bağlama YOK, yeniden konumlandırma YOK
+//     (ET_EXEC, sabit VA). ET_DYN/PIE REDDEDİLİR — sessizce yanlış yüklemek yerine.
+//   • Program tek süreç-özel 2MB sayfaya sığmalı. Sığmıyorsa 0 döner (KIRPMAZ).
+//   • Sayfa izinleri segment bazında ayarlanmaz (tüm sayfa RW+X). Segment-başına
+//     W^X, sayfa granülü 4KB'a inince yapılabilir — V1'de 2MB blok var.
+
+sabit KELF_SEKTOR: tam64 = 8;              // ELF imajının disk başlangıç sektörü
+                                           // (0..2 minifs'in; 8 bol pay bırakır)
+sabit KELF_CUR: tam64 = 1157640248;        // 0x45003038: önbellekteki sektör no
+sabit KELF_CUR_GECERLI: tam64 = 1157640256; // 0x45003040: önbellek geçerli mi (0/1)
+sabit KELF_2MB: tam64 = 2097152;
+
+çıplak işlev kelf_y64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
+çıplak işlev kelf_o64s(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+çıplak işlev kelf_y8(adr: tam64, v: dtam8) { değişken p: *dtam8 = adr olarak *dtam8; *p = v; }
+
+// Ofsetin bulunduğu sektörü tampona getir. 0 = hazır, 1 = disk hatası.
+// Sektör önbellekli: ardışık okumada 512 baytta bir disk turu (önbelleksiz
+// sürüm bayt başına bir virtio turu demekti).
+çıplak işlev kelf_sektor_hazirla(base: tam64, ofset: tam64) -> tam32 {
+    değişken sek: tam64 = KELF_SEKTOR + ofset / 512;
+    eğer (kelf_o64s(KELF_CUR_GECERLI) == 0) veya (kelf_o64s(KELF_CUR) != sek) {
+        eğer vblk_oku(base, sek) != 0 {
+            kelf_y64(KELF_CUR_GECERLI, 0);
+            ver 1;
+        }
+        kelf_y64(KELF_CUR, sek);
+        kelf_y64(KELF_CUR_GECERLI, 1);
+    }
+    ver 0;
+}
+
+// Tampondan HAM bayt (dtam8 olarak KALIR). Ayrı tutulmasının sebebi tip
+// güvenliği: kopyalama döngüsü baytı tam64'e genişletip sonra dtam8'e
+// DARALTSAYDI derleyici E004 (kayıp prezisyon) ile REDDEDERDİ — haklı olarak,
+// çünkü derleyici değerin 0..255 aralığında kaldığını bilemez. Bayt yolu
+// baştan sona dtam8 kalır; genişletme yalnız ARİTMETİK için yapılır.
+çıplak işlev kelf_ham8(ofset: tam64) -> dtam8 {
+    değişken ic: tam64 = ofset - (ofset / 512) * 512;
+    ver vblk_data_oku(ic olarak tam32);
+}
+
+// Aritmetik amaçlı bayt okuma (başlık alanları). -1 = disk hatası.
+çıplak işlev kelf_bayt(base: tam64, ofset: tam64) -> tam64 {
+    eğer kelf_sektor_hazirla(base, ofset) != 0 { ver 0 - 1; }
+    ver (kelf_ham8(ofset)) olarak tam64;
+}
+
+// Küçük-endian çok baytlı okumalar (ELF64 daima küçük-endian, aarch64 hedefinde).
+çıplak işlev kelf_o16(base: tam64, ofset: tam64) -> tam64 {
+    ver kelf_bayt(base, ofset) + kelf_bayt(base, ofset + 1) * 256;
+}
+çıplak işlev kelf_o32(base: tam64, ofset: tam64) -> tam64 {
+    ver kelf_o16(base, ofset) + kelf_o16(base, ofset + 2) * 65536;
+}
+çıplak işlev kelf_o64(base: tam64, ofset: tam64) -> tam64 {
+    ver kelf_o32(base, ofset) + kelf_o32(base, ofset + 4) * 4294967296;
+}
+
+// ELF64 başlığını doğrula. 1 = bu imaj bizim yükleyebileceğimiz türden.
+// REDDETME GÜRÜLTÜLÜDÜR: uymayan her alan 0 döndürür — "yakın" bir imajı
+// zorla yüklemeye çalışmak sessiz bir çökme üretirdi.
+çıplak işlev kelf_basligi_gecerli(base: tam64) -> tam32 {
+    eğer kelf_bayt(base, 0) != 127 { ver 0; }        // 0x7F
+    eğer kelf_bayt(base, 1) != 69 { ver 0; }         // 'E'
+    eğer kelf_bayt(base, 2) != 76 { ver 0; }         // 'L'
+    eğer kelf_bayt(base, 3) != 70 { ver 0; }         // 'F'
+    eğer kelf_bayt(base, 4) != 2 { ver 0; }          // ELFCLASS64
+    eğer kelf_bayt(base, 5) != 1 { ver 0; }          // ELFDATA2LSB
+    eğer kelf_o16(base, 16) != 2 { ver 0; }          // e_type = ET_EXEC (PIE DEĞİL)
+    eğer kelf_o16(base, 18) != 183 { ver 0; }        // e_machine = EM_AARCH64
+    ver 1;
+}
+
+// ELF'i adres alanı #as_i'ye yükle; giriş noktasını (e_entry) döner. 0 = hata.
+//
+// Kopyalama sürecin FİZİKSEL sayfasına yapılır (çekirdeğin identity görüşü),
+// hedef adres alanına GEÇMEDEN. Böylece yükleme sırasında çekirdek kendi
+// alanında kalır — TTBR ile oynamak, yükleyicinin kendi kodunu haritasız
+// bırakma riskini gereksizce doğururdu.
+çıplak işlev kelf_yukle(base: tam64, as_i: tam64) -> tam64 {
+    eğer (as_i < 0) veya (as_i >= KMMU_AS_AZAMI) { ver 0; }
+    kelf_y64(KELF_CUR_GECERLI, 0);                   // önbelleği tazele
+    eğer kelf_basligi_gecerli(base) != 1 { ver 0; }
+
+    değişken giris: tam64 = kelf_o64(base, 24);      // e_entry
+    değişken phoff: tam64 = kelf_o64(base, 32);      // e_phoff
+    değişken phent: tam64 = kelf_o16(base, 54);      // e_phentsize
+    değişken phnum: tam64 = kelf_o16(base, 56);      // e_phnum
+    eğer (phent < 56) veya (phnum < 1) veya (phnum > 16) { ver 0; }
+
+    değişken sayfa_pa: tam64 = KMMU_OZEL_PA + as_i * KELF_2MB;
+    değişken yuklendi: tam64 = 0;
+    değişken k: tam64 = 0;
+    iken k < phnum {
+        değişken ph: tam64 = phoff + k * phent;
+        eğer kelf_o32(base, ph) == 1 {               // PT_LOAD
+            değişken ofs: tam64 = kelf_o64(base, ph + 8);
+            değişken va: tam64 = kelf_o64(base, ph + 16);
+            değişken fsz: tam64 = kelf_o64(base, ph + 32);
+            değişken msz: tam64 = kelf_o64(base, ph + 40);
+            // Sınır denetimi — TAŞMA SESSİZCE KIRPILMAZ, yükleme REDDEDİLİR.
+            eğer va < KMMU_OZEL_VA { ver 0; }
+            değişken rel: tam64 = va - KMMU_OZEL_VA;
+            eğer (rel + msz) > KELF_2MB { ver 0; }
+            eğer fsz > msz { ver 0; }                 // bozuk başlık
+
+            değişken hedef: tam64 = sayfa_pa + rel;
+            değişken i: tam64 = 0;
+            iken i < fsz {                            // dosya içeriği
+                eğer kelf_sektor_hazirla(base, ofs + i) != 0 { ver 0; }
+                kelf_y8(hedef + i, kelf_ham8(ofs + i));
+                i = i + 1;
+            }
+            iken i < msz {                            // .bss → sıfırla
+                kelf_y8(hedef + i, 0 olarak dtam8);
+                i = i + 1;
+            }
+            yuklendi = yuklendi + 1;
+        }
+        k = k + 1;
+    }
+    eğer yuklendi == 0 { ver 0; }                     // PT_LOAD yoksa çalıştırılamaz
+
+    // I-cache bakımı ZORUNLU: kod baytlarını VERİ olarak yazdık (identity görüş).
+    // Bakım yapılmazsa CPU eski/çöp komutları getirebilir — bu, "bazen çalışan"
+    // türden bir hata olurdu. 64 baytlık satırlarla tüm yüklenen bölge temizlenir.
+    değişken c: tam64 = 0;
+    iken c < KELF_ICACHE_BOLGE {
+        kg_icache_flush(sayfa_pa + c);
+        c = c + 64;
+    }
+    ver giris;
+}
+
+// ============================================================================
+// MB-2 kapısı: DİSKTEN yüklenen ELF'i KENDİ adres alanında EL0'da ÇALIŞTIR.
+//
+// Kanıt zinciri (her halka taklit edilemez):
+//   1. ELF çekirdek imajında YOK — diske ayrı dd edilir; çekirdek onu okur.
+//   2. Başlıkları çekirdek çözümler (sahte imaj kabul edilmez — kelf_basligi_gecerli).
+//   3. PT_LOAD sürecin KENDİ fiziksel sayfasına kopyalanır (MB-1a izolasyonu).
+//   4. e_entry'ye EL0'da atlanır; program `svc` ile çekirdeğe döner.
+//   5. Syscall sayacının ARTMASI programın GERÇEKTEN koştuğunun ölçüsüdür —
+//      yükleme başarılı olup çalıştırma başarısız olsaydı sayaç artmazdı.
+sabit KELF_AS: tam64 = 4;                    // 0..3 MB-1 testlerinin
+sabit KELF_KSTK: tam64 = 1191182336;         // 0x47000000: EL0 görevinin çekirdek yığını
+sabit KELF_USTK: tam64 = 1141899264;         // 0x44100000: EL0 user yığını (özel sayfa içi)
+sabit KELF_ICACHE_BOLGE: tam64 = 65536;      // 64KB — yüklenen kod bölgesi payı
+
+çıplak işlev kelf_calistir_testi() -> tam32 {
+    değişken base: tam64 = vblk_bul();
+    eğer base == 0 { ver 0; }
+    eğer vblk_kur(base) != 0 { ver 0; }
+
+    değişken l1: tam64 = kmmu_as_olustur(KELF_AS);
+    eğer l1 == 0 { ver 0; }
+    değişken giris: tam64 = kelf_yukle(base, KELF_AS);
+    eğer giris == 0 { ver 0; }
+
+    değişken once: tam64 = kg_oku64(KG_SYSC);
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(giris, KELF_KSTK, KELF_USTK);
+    kg_ttbr_yaz(t, l1);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_SYSC) <= once) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kg_yaz64(KG_AKTIF, 0);                   // preemption DURDUR
+    kmmu_ttbr_yaz(KMMU_L1);                  // çekirdek alanına kesin dönüş
+    eğer kg_oku64(KG_SYSC) > once { ver 1; }
+    ver 0;
+}

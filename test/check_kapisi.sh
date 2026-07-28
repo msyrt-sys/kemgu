@@ -23,6 +23,9 @@ muaf() {
     # BİRLEŞTİRİLİP derler (Makefile kem_os_comb). Tek başına T002 doğaldır.
     *test/ornekler/kem_os.kem)          echo "parça dosya — gerçek yapı birleştirilmiş kaynak" ;;
     *test/ornekler/kem_asm_kernel.kem)  echo "parça dosya + arch-etiketli asm (AS001 hedefe bağlı)" ;;
+    # MODEL B kullanıcı programı: arch-etiketli asm → bayraksız --check AS001 verir.
+    # Gerçek denetimi AŞAĞIDA, `--mimari arm64` ile yapılır (muafiyet DEĞİL, doğru bayrak).
+    *test/ornekler/kem_kullanici.kem)   echo "arch-etiketli asm — asagida --mimari arm64 ile denetlenir" ;;
     # KASTEN hatalı örnek: L001/L002/L004/LR002 sergiler (belgede yazılı).
     *test/ornekler/lineer_hata.kem)     echo "kasten hatalı — lineer tanı örnekleri" ;;
     # stdlib modül-import yolu gerektiren örnek (tek başına T002).
@@ -61,7 +64,7 @@ done
 KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
                 runtime/kem_zaman.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
-                test/ornekler/kem_os.kem"
+                runtime/kem_elf.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
@@ -70,7 +73,7 @@ if [ "$kemos_eksik" -eq 0 ]; then
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
   if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os (birleşik kaynak, 8 parça) --check geçti"
+    echo "  ✅ kem_os (birleşik kaynak, 9 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
@@ -81,6 +84,20 @@ if [ "$kemos_eksik" -eq 0 ]; then
   rm -f build/kem_os_kapi.kem
 else
   echo "  ⏭  kem_os parçaları eksik — birleşik kontrol atlandı"
+fi
+
+# MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir
+# birimdir → doğru mimari bayrağıyla tip kapısından GEÇMELİ.
+if [ -f test/ornekler/kem_kullanici.kem ]; then
+  tot=$((tot + 1))
+  if "$KEMGU" --check --mimari arm64 test/ornekler/kem_kullanici.kem >/dev/null 2>&1; then
+    echo "  ✅ kem_kullanici.kem (Model B kullanıcı programı) --check geçti"
+  else
+    red=$((red + 1))
+    echo "  🔴 kem_kullanici.kem --check'ten geçmiyor:"
+    "$KEMGU" --check --mimari arm64 test/ornekler/kem_kullanici.kem 2>&1 \
+      | grep -m3 "hata\[" | sed 's/^/       /'
+  fi
 fi
 
 echo "=== tip kontrol kapısı: $((tot - red - muaf_n))/$tot geçti, $muaf_n muaf, $red RED ==="
