@@ -929,5 +929,19 @@ Belge dosyaları: Türkçe.
 - Bellek alan modüller için her test çalıştırmasında ASan aktif olmalı; `ERROR: AddressSanitizer` çıkarsa adım onaylanmaz
 - Her mantıksal birim bitince Türkçe küçük git commit
 - Türkçe UTF-8 hex escape kuralı: ayrıntı için yukarıdaki **"Türkçe UTF-8 Dikkat Noktası"** bölümüne bak (kural: her Türkçe karakter escape'inden sonra 0-9 / a-f / A-F geliyorsa concatenation şart)
-- **D-numara tahsisi (DECISIONS_LOG):** D-NNN'i **merge anında, güncel `origin/main`'deki en yüksek D'ye bakıp** ver — branch açarken DEĞİL. Paralel oturumlar eski main'den dallanıp aynı numarayı kapar (yaşandı: D-076→082→086→088→092 zinciri + D-094 G004/güvensiz çakışması). PR açarken main ilerlemişse numarayı güncelle.
+- **D-numara SADECE `DECISIONS_LOG.md`'de — commit mesajına YAZMA.** (Mehmet kararı,
+  2026-07-28.) Commit başlığı işi anlatır, numara vermez: `Yapi alani imzasizligi
+  self-host'ta akar` ✓ / `... [D-339]` ✗. Numarayı yalnız `DECISIONS_LOG.md` girdisine
+  yaz, **merge anında** güncel `origin/main`'deki en yüksek D'ye bakarak.
+  **Gerekçe (ölçüldü):** numara commit mesajına gömülünce, main her ilerlediğinde
+  mesajlar da bayatlıyor ve tek yol ya history rewrite (paralel dallara çakışma
+  üretir) ya da mesajı yanlış bırakmak oluyordu. Tek oturumda **beş kez** kaydı
+  (D-341→343→344→345); kapılar ~20 dk sürerken main daha hızlı ilerliyor, yani
+  "merge anında ver" kuralı mesaj için yapısal olarak tutturulamaz. Log tek satırda
+  düzeltilebilir, commit mesajı düzeltilemez → **yetkili kayıt daima
+  `DECISIONS_LOG.md`.**
+  - Numara çakışırsa: **yayınlanmış** (`origin/main`'e push edilmiş) numara sabit
+    kalır, push edilmemiş olan kayar.
+  - Eski commit'lerde gömülü `[D-NNN]` etiketleri **yeniden yazılmaz** (yayınlanmış
+    history + paralel dallar); log'daki girdi yetkilidir.
 - **Seri ilerleme (dizi/codegen güvenlik işi):** Aynı dosyaya dokunan (özellikle `src/llvm.c`, `selfhost/codegen.kem`) dizi/bellek-güvenliği işini **tek daldan, seri** yürüt; main'e sık merge et. Paralel dallar aynı handler'da çakışır.

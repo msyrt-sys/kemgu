@@ -3,6 +3,14 @@
 Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-review'da
 özellikle bakılması istenen, izole commit'li kararlar.
 
+**Numara kuralı (Mehmet kararı, 2026-07-28):** D-NNN **yalnız bu dosyada** tutulur;
+commit mesajına `[D-NNN]` YAZILMAZ. Sebep: numara mesaja gömülünce main her
+ilerlediğinde bayatlıyor ve düzeltmenin tek yolu history rewrite oluyordu — tek
+oturumda beş kez kaydı. Bu dosya tek satırda düzeltilebilir, commit mesajı
+düzeltilemez → **yetkili kayıt burasıdır.** Çakışmada yayınlanmış numara sabit kalır,
+push edilmemiş olan kayar. 2026-07-28 öncesi commit'lerdeki gömülü `[D-NNN]`
+etiketleri tarihsel kalıntıdır; eşleşmezlerse bu dosya geçerlidir.
+
 ---
 
 ## D-345 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı taşımıyordu; kripto çekirdeği onarıldı (2026-07-28)
