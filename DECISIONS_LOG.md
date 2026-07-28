@@ -65,8 +65,19 @@ alındı → 59/59. İkisi de GERÇEK kapı.
 - **Artık ikilik riski:** ortak 182 işlev adının **19'unun gövdesi hâlâ
   farklı** (`ifade_tip`, `kontrol_dugum`, `t003_kontrol`, `lin_tuket_dugum`,
   `parse_yapi`, `parse_cesit` …). `checker.kem` `codegen.kem`'in ÖZ ALT
-  KÜMESİ (182 ⊂ 327, yalnız-checker = 0). Tek-kaynak konsolidasyon kararı
-  Mehmet'te — bu commit ayrışmayı kapatır ama KÖKÜNÜ (iki uygulama) kaldırmaz.
+  KÜMESİ (182 ⊂ 327, yalnız-checker = 0). Bu commit ayrışmayı kapatır ama
+  KÖKÜNÜ (iki uygulama) kaldırmaz.
+
+**MEHMET KARARI (2026-07-28):** `checker.kem` **SİLİNMEYECEK**, ikili yapı
+şimdilik korunacak — gerekçe: `calistir_checker_diff` artık `test_tumu`'da
+koştuğu için yeni ayrışma ANINDA kırmızı olur; Aşama-2'nin bağımsız referans
+tanığı (codegen_bootstrap'taki ayrı `checker` bileşeni, 92/92) korunur.
+**Kabul edilen bilinen borç:** 19 farklı gövde duruyor → korpusun uyandırmadığı
+bir şekil hâlâ sessizce ayrışabilir; her checker değişikliği İKİ yerde
+yapılmalı. Konsolidasyon ileriye bırakıldı (Aşama-5 "tek-kaynak" maddesi).
+**Bu borcun tek panzehiri korpus kapsamıdır:** checker'a yeni bir kural/
+sözdizimi eklenirken `test/check_korpus/`'a onu uyandıran örnek EKLENMELİ —
+aksi halde ayrışma yine sessizce birikir (bu oturumun asıl dersi).
 - Ayrıca ölçülen, kapsam DIŞI önceden-var-olan eksik: `değişken q: tam32 = f;`
   (işlev değerini skalere atama) oracle `T001` verir, `checker.kem` vermez.
 
