@@ -5,6 +5,68 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-344 [YÜKSEK] — MODEL B: süreç izolasyonu + diskten ELF yükleme (2026-07-28)
+
+**Karar [ETKİ: `runtime/kem_mmu.kem`, `runtime/kem_gorev.kem`, `runtime/kem_elf.kem`
+(yeni), `test/ornekler/kem_kullanici.kem` (yeni), `linker/user-aarch64.ld` (yeni),
+`test/ornekler/kem_os.kem` (+3 kapı), `Makefile`, `test/check_kapisi.sh`.]**
+
+**Neden:** "Kullanılabilir OS" eşiğinin altındaki iki eksik — süreçler birbirinden
+yalıtık değildi (tek adres alanı; `kem_gorev.kem:13` bunu açıkça yazıyordu) ve
+programlar çekirdek imajına gömülüydü (Model A: yeni program = çekirdeği derle).
+
+**MB-1a — süreç başına adres alanı.** `kmmu_as_olustur(i)`: her alan kendi L1+L2'sine
+sahip; L2 çekirdek L2'sinin **tam kopyası**, tek fark `KMMU_OZEL_VA` girişi. Kopyalama
+**zorunlu**: TTBR0 düşük VA'ları kapsar ve çekirdek de düşük VA'da koşar (TTBR1 yok) →
+kopyalamazsak TTBR yazan komutun bir sonrakisi haritasız kalır. `kmmu_ttbr_yaz` +
+tam TLB flush (ASID yok, v1).
+**Kanıt `[16]`:** A'ya yaz → B'ye yaz → A'ya dön → A'nınki duruyor; ayrıca çekirdeğin
+identity görüşünden iki ayrı fiziksel sayfa bağımsız doğrulanır.
+
+**MB-1b — zamanlayıcı.** `KG_TTBR` tablosu; `kem_preempt` seçtiği görevin alanına
+geçer. `ttbr[i]==0` = çekirdek alanını miras al → **geriye uyumlu**. Kanıt `[17]`.
+
+**MB-2 — diskten ELF64.** `kem_elf.kem` (saf-.kem): sektör-önbellekli okuma, başlık
+doğrulama, PT_LOAD kopyalama, `.bss` sıfırlama, I-cache bakımı. Kullanıcı programı
+ayrı ELF (`-z max-page-size=4096`), disk sektör 8. Kopyalama sürecin **fiziksel**
+sayfasına, hedef alana geçmeden yapılır — TTBR ile oynamak yükleyicinin kendi kodunu
+haritasız bırakma riskini gereksizce doğururdu. Her sınır ihlali **0 döndürür**, sessiz
+kırpma yok. Kanıt `[18]`.
+
+**⚠ ÖLÇÜM DERSLERİ (üçü de sabotajla bulundu, üçü de bu kaydın asıl değeri):**
+
+1. **RAM tavanı.** Özel sayfalar önce `0x48000000`'a kondu; ESR `0x96000050`
+   (DFSC=`0b010000` = senkron **harici** abort — "çeviri oldu, fiziksel adres yok").
+   Çeviri hatası DEĞİL. QEMU `-M virt`'te `-m` yok → varsayılan 128 MiB → tavan tam
+   `0x48000000`. Sayfalar `0x47400000`'a; kapasite 6 adres alanı.
+2. **Dekoratif test.** `[16]` ilk eklendiğinde Makefile grep zincirine bağlanmamıştı:
+   test "HATA" yazarken build yeşil kalıyordu. *Yeni bir OS kontrolü eklerken kapıya
+   bağlama adımı atlanırsa test hiçbir şey korumaz.*
+3. **Yanlış-yeşil eşzamanlılık testi.** `[17]`'nin ilk sürümü ("imzanı yaz, sonra
+   sonsuz doğrula") TTBR anahtarlaması **tamamen kapatıldığında bile** yeşil geçti:
+   main, görev2 yazar yazmaz bekleme döngüsünden çıkıyordu; görev1 bir daha koşup
+   çakışmayı görmüyordu. El sıkışma eklendi (doğrulama ancak iki görev de yazdıktan
+   sonra sayılır). **Ders: "geçti" ile "ölçtü" aynı şey değil — eşzamanlı bir
+   mekanizmayı ölçen test, gözlemin gerçekleşmesini garanti etmelidir.**
+
+**Yan bulgu — dil doğru davrandı:** ELF kopyalama döngüsü baytı `tam64`'e genişletip
+`dtam8`'e daraltıyordu → **E004** ile reddedildi. Haklı red (derleyici değerin
+0..255'te kaldığını bilemez). Bayt yolu baştan sona `dtam8` kalacak şekilde ikiye
+ayrıldı; çekirdek tip-temiz kaldı.
+
+**Ayrıca:** bir sabotaj `sed` sözdizim hatasıyla **uygulanmamıştı** ve yeşil
+görünmüştü. *Sabotajın uygulandığı `grep -c` ile doğrulanmadan sonuca güvenilmez.*
+
+**Sınırlar (V1):** ASID yok (her anahtarlamada tam TLB flush); EL0 kod sayfası
+segment-başına W^X almıyor (2MB blok granülü); program tek 2MB sayfaya sığmalı;
+dinamik bağlama/relocation yok (ET_EXEC); ELF dosya sisteminden değil sabit
+sektörden okunur (çok-dosyalı minifs ayrı iş); adres alanı kapasitesi 6.
+
+**Testler:** kem_os QEMU boot `[1..18]` + `KEMGU KEM-OS OK`; tip kapısı 204/212
+(0 red); 4 bağımsız sabotaj kapısı doğrulandı.
+
+---
+
 ## D-343 [YÜKSEK] — kem_os tip-temiz: `--tip-atla` borcu kapandı; aritmetik literal bağlamı onarıldı (2026-07-28)
 
 **Karar [ETKİ: `src/tip_kontrol.c`, `runtime/kem_mmu.kem`, `Makefile`
