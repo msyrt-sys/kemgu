@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-347 — KİLİT-ADIM (lockstep) altyapısı: `ince_adim_ni`'nin taşıyıcı lemmaları (2026-07-28)
+
+**Ne yapıldı.** `CT.lean` §12.1: `adim_sabit_yok`, `ifde_sabit_sag`,
+`ifde_sabit_sol` + vakum tanığı `ifde_deger_deger_olmayan_yok`. Kapı 4 satır
+büyüdü (47→51 `#print axioms`); hepsi `does not depend on any axioms`.
+
+**Neden bunlar.** `ince_adim_ni` (küçük-adım NI) `IfDE`-denk iki terimin
+**aynı yerde** adım atmasına dayanır. Bu, `IfDE`'nin bir DEĞERİ asla bir
+değer-olmayanla ilişkilendirmemesinden gelir; yukarıdaki üç lemma tam da bunu
+söyler. Onlarsız `topla/carp/bol/kalan/sıra/atama` çapraz durumları
+(`a_topla_sol` × `a_topla_sag` gibi) kapatılamaz.
+
+**ÖLÇÜM — sabotaj.** `IfDE`'ye `| sabotajKurucu (e) (n) : IfDE G e (.sabit n)`
+(değer ↔ değer-olmayan) enjekte edildi → **tam olarak 2 hata**, ikisi de
+`ifde_sabit_sag` (1931) ve `ifde_sabit_sol` (1938). Başka hiçbir teorem
+etkilenmedi ⇒ lemmalar yük taşıyor, vakum değil. Geri alındı, depo yeşil.
+
+**ÖLÇÜM — `cases` arity.** `Adim`'in 29 kurucusunun `cases` altındaki bağlayıcı
+sayıları ampirik ölçüldü (pozisyonel sayma YANLIŞ sonuç veriyor — mağazanın
+birleştirilip birleştirilmediği kurucuya göre değişiyor):
+`a_topla_sol/sag 6`, `a_topla 2`, `a_bol_sol/sag 6`, `a_bol 2`,
+`a_eger_cong 7`, `a_eger_dogru 4`, `a_eger_yanlis 2`, `a_iken_ac 2`,
+`a_esles_cong 8`, `a_esles_tuttu/tutmadi 5`, `a_indeks_cong 6`, `a_indeks 2`,
+`a_atama_cong 6`, `a_atama 2`, `a_indeks_ata_idx/deg 7`, `a_indeks_ata 3`,
+`a_sira_cong 6`, `a_sira_atla 2`. Kurucu adları da düzeltildi
+(`a_esles_tuttu/tutmadi`, `a_indeks_ata_idx/deg` — tahmin edilen adlar yanlıştı).
+
+**BULGU — `ince_adim_ni` imzası değişmeli.** İlk tasarım
+(`IfDE → CtOk G e1 → Adim → Adim → …`) **ispatlanamaz**: `eger/iken/esles`
+kollarında `IfDE.eger k d y hkg` yalnız koşulun genel olduğunu söyler, dal
+gövdeleri arasında hiçbir ilişki vermez; indirgeme sonrası `IfDE G d d`
+gerekir ve bu ancak `ifde_refl` ile, o da **`CtOk G d`** ister. Dolayısıyla
+teorem **iki tarafın da** `CtOk`'unu almalı:
+`IfDE G e1 e2 → CtOk G e1 → CtOk G e2 → …`. Bu bir kolaylık değil, ispatın
+zorladığı bir doğruluk şartı.
+
+**AÇIK BORÇ (V2).** `ince_adim_ni`'nin kendisi HENÜZ YOK. Tasarımı tamamen
+belirlendi (14 `IfDE` kolu × eşleşen `Adim` kuralları; `genel` kolu
+`genel_adim_korunum`, çapraz kollar bu commit'teki kilit-adım lemmaları,
+dal kolları `ifde_refl` ile). Politika gereği yarım teorem YAZILMADI.
+
+**SÜREÇ NOTU.** Bu adımda `sorry` içeren bir taslak bir kez dosyaya yazıldı ve
+derhal geri alındı (hiçbir commit'e girmedi). Kural: ispat yoksa teorem
+yazılmaz — taslak bile.
+
+---
+
 ## D-346 — GİZLİ KOL: `IfDE` ilişkisi + altyapı (KISMİ) (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§12 yeni),

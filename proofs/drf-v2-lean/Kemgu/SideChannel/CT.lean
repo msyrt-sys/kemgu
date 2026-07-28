@@ -1912,4 +1912,40 @@ theorem ifde_dal_kosulunda_tolerans_yok (G : EtiketOrtam) (d y : Ifade) :
   -- olmasini ister, kosullar (1 vs 2) farkli.
   intro h; cases h
 
+/-! ### §12.1 KILIT-ADIM (lockstep) ALTYAPISI
+
+`ince_adim_ni` (kucuk-adim NI) icin sart olan lemmalar. Cekirdek gozlem:
+`IfDE` bir DEGERI asla bir DEGER-OLMAYANLA iliskilendirmez. Bu olmasaydi
+iki kosum "farkli yerlerde" adim atabilir, izler yapisal olarak
+ayrisabilirdi — yani NI'nin kilit-adim argumani cokerdi. -/
+
+/-- Bir `sabit`ten adim ATILAMAZ (deger, normal formdur). -/
+theorem adim_sabit_yok {s s' : Store} {n : Int} {e' : Ifade} {t : Iz} :
+    ¬ Adim s (.sabit n) s' e' t := by
+  intro h; cases h
+
+/-- `IfDE` SAGDA bir deger goruyorsa SOLDA da deger vardir. -/
+theorem ifde_sabit_sag {G : EtiketOrtam} {e1 : Ifade} {n : Int} :
+    IfDE G e1 (.sabit n) → ∃ m, e1 = .sabit m := by
+  intro h; cases h with
+  | genel _ _ => exact ⟨n, rfl⟩
+  | sabit m _ => exact ⟨m, rfl⟩
+
+/-- Simetrigi: SOLDA deger varsa SAGDA da vardir. -/
+theorem ifde_sabit_sol {G : EtiketOrtam} {e2 : Ifade} {n : Int} :
+    IfDE G (.sabit n) e2 → ∃ m, e2 = .sabit m := by
+  intro h; cases h with
+  | genel _ _ => exact ⟨n, rfl⟩
+  | sabit _ m => exact ⟨m, rfl⟩
+
+/-- **VAKUM DENETIMI 3 — kilit-adim GERCEKTEN bir kisit.** `IfDE`
+    gizli-toleransli oldugu halde (bkz. `ifde_gizli_toleransli`) bir
+    degeri adim-atabilir bir terimle iliskilendirmez: ornekte sag taraf
+    `degisken x` adim atabilirken sol taraf `sabit 3` atamaz, ve iliski
+    zaten KURULAMAZ. Bu tanik olmasaydi yukaridaki iki lemma BOS
+    olabilirdi (her ikisi de yalnizca "deger↔deger" durumunu konusur). -/
+theorem ifde_deger_deger_olmayan_yok (G : EtiketOrtam) (x : Ad) :
+    ¬ IfDE G (.sabit 3) (.degisken x) := by
+  intro h; cases h
+
 end Kemgu.SideChannel.CT
