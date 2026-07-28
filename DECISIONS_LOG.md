@@ -5,12 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-340 [YÜKSEK] — Kripto bilinen-cevap KOŞUM kapısı kuruldu; 2 gerçek kusur buldu (2026-07-28)
+
+**Karar [ETKİ: `test/kripto_kosum_harness.sh` (yeni), `test/stdlib/test_kripto_kosum.kem`
+(yeni), `Makefile` (+`calistir_kripto_kosum`), `stdlib/kripto/karma.kem` (+2 öğe).]**
+
+**Kapı boşluğu:** `calistir_kripto_check` yalnızca `--check` (tip kontrolü) yapıyordu.
+`test/stdlib/test_kripto_vektor.kem` NIST/RFC vektörlerini gömüyor ama beklenen değerle
+**karşılaştırmıyor** ("expected check runtime'da (V2)") ve hiç **çalıştırılmıyordu**.
+Yani `stdlib/kripto`'nun sayısal doğruluğu HİÇ ölçülmemişti. Yeni kapı bundle'ı derler,
+**çalıştırır** ve RFC 8439 §2.1.1 (ChaCha20 QR) + NIST FIPS 180-4 App. B.1 (SHA-256 "abc")
+vektörleriyle karşılaştırır.
+
+**Tasarım — KONTROL biti:** exit kodu bit maskesi (+1 KONTROL sabit tablolar, +2 ChaCha20,
++4 SHA-256; tam geçiş 7). KONTROL biti imzasızlık/kaydırma yolundan GEÇMEZ → kapının
+kendisini doğrular: 0 ise kapı bozuk (derleme/bağlama), 1 ise kapı sağlam ve kripto
+çekirdeği yanlış. "Kırmızı ama sebebi ilgisiz" yanılgısını yapısal olarak engeller.
+
+**Kurulduğu gün 2 GERÇEK kusur buldu:**
+1. **SHA-256 W dizisi 62 öğe** (`stdlib/kripto/karma.kem`) — message schedule 64 gerektirir.
+   Çalışma-anı `PANIK: dizi sınır ihlali (i=62, boyut=62)`. Saf kaynak hatası; `--check`
+   göremez (dizi uzunluğu tipte değil). Bu adımda düzeltildi (+2 öğe, `dizi_boyut`=64 ölçüldü).
+2. **`sabitsüre<dtamN>` imzasızlığı silinmesi** — kapı KIRMIZI (exit 1: yalnız KONTROL).
+   ChaCha20 QR ve SHA-256("abc") NIST/RFC cevabını vermiyor. Kök neden `src/llvm.c`
+   `ast_tip_isaretsiz_mi` yalnız `DUGUM_TIP_BASIT` kabul ediyor; `DUGUM_TIP_SABITSURE`/
+   `DUGUM_TIP_TEKKEZ` iç tipe özyinelemiyor → `>>` `lshr` yerine `ashr`. Onarım AYRI adım.
+
+**Kapının ayırt ediciliği ÖLÇÜLDÜ (ters-sabotaj):** `ast_tip_isaretsiz_mi`'ye SABITSURE/
+TEKKEZ özyinelemesi geçici olarak eklendi → kapı **3/3 YEŞİL** (SHA-256("abc") doğru NIST
+özetini üretti); geri alındı → tekrar kırmızı. Hem onarımın uygulandığı hem geri alındığı
+`diff` ile doğrulandı. Yani kapı tam olarak bu kusuru ölçüyor, başka bir şeyi değil — ve
+tanı doğrulanmış durumda (onarım ~6 satır).
+
+**test_tumu'ya BAĞLANMADI (bilinçli):** kapı bugün kırmızı; bağlansaydı ilgisiz her işi
+kırmızıya çevirirdi. Bağlama, imzasızlık onarımının **son işi** olmalı — kapı o onarımın
+doğrulamasıdır. Makefile yorumunda yazılı.
+
+**Ders:** `--check`-only kapı, sayısal doğruluk için kapı DEĞİLDİR. Kripto/codegen gibi
+"tip doğru ama sayı yanlış" olabilen alanlarda koşum kapısı zorunlu. Bu boşluk olmasaydı
+her iki kusur da yakalanırdı.
+
+---
 ## D-339 [YÜKSEK] — Yapı alanı (dtamN) imzasızlığı self-host'ta akar + codegen_diff'in 127 kör noktası kapandı (2026-07-28)
 
 > **Numara notu:** commit mesajı (`86747b9`) D-338 diyor; merge anında D-338 yukarıdaki
 > işaretsiz-semantik kararına verildiği için bu kayıt **D-339**'dur. Ayrıca
-> `claude/distracted-tesla-e03311` dalındaki kripto commit'i (`3f2cb34`) de kendini
-> D-338 sanıyor — o dal merge edilirken aynı kural gereği **D-340**'a kaymalıdır.
+> `claude/distracted-tesla-e03311` dalındaki kripto commit'i de kendini D-338
+> sanıyordu; o dal kendini yeniden numaralamış ve **D-340** olarak main'e alındı
+> (yukarıdaki girdi) — bu uyarı çözüldü.
 >
 > Kod içi işaretler: bu kararın markerları D-339'a güncellendi. Yukarıdaki D-338
 > kararının `selfhost/codegen.kem` içindeki `D-337` markerları **bilerek** olduğu gibi

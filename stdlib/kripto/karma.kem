@@ -162,6 +162,7 @@ işlev sha256_blok_sikistir(
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
+        sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32)),
         sabitsüre_olustur((0 olarak dtam32)), sabitsüre_olustur((0 olarak dtam32))
     ];
 

@@ -1,0 +1,121 @@
+// KEMGU Stdlib Testi — Kripto BİLİNEN-CEVAP KOŞUM kapısı (çalıştırılır)
+// ============================================================================
+//
+// `test_kripto_vektor.kem`den FARKI: o dosya vektörleri gömer ama beklenen
+// değerle KARŞILAŞTIRMAZ ("expected check runtime'da (V2)") ve yalnız `--check`
+// edilir. Bu dosya derlenir, ÇALIŞTIRILIR ve exit koduyla cevap verir.
+//
+// Neden gerekli: stdlib/kripto gectien `sabitsüre<dtamN>` üzerine kurulu.
+// Sarmalayıcı tip imzasızlığı taşımazsa `>>` `lshr` yerine `ashr` üretir ve
+// SHA-256/ChaCha20 rotasyonları yüksek bit set olan girdilerde SESSİZCE yanlış
+// sonuç verir. Tip kontrolü bunu göremez — yalnız koşum görebilir.
+//
+// EXIT KODU = bit maskesi (tam geçiş = 7):
+//   +1  KONTROL  — sabit tablolar (imzasızlıktan BAĞIMSIZ; her zaman geçmeli)
+//   +2  ChaCha20 quarter-round (RFC 8439 §2.1.1)
+//   +4  SHA-256("abc") sıkıştırma (NIST FIPS 180-4, Appendix B)
+//
+// KONTROL biti kapının kendisini doğrular: 0 dönerse kapı bozuktur (derleme/
+// bağlama sorunu), 1 dönerse kapı SAĞLAM ve kripto çekirdeği yanlıştır.
+//
+// Karşılaştırma deseni (ÖNEMLİ): `ifşa(...)` sonucu ÖNCE `dtam32` annotasyonlu
+// değişkene alınır, SONRA `olarak tam64` ile genişletilir. Satır-içi
+// `ifşa(...) olarak tam64` yazılırsa builtin dönüşü imzasız sayılmaz, sext
+// üretilir ve test KENDİ karşılaştırmasında yanlış negatif verir (ölçüldü).
+
+// ---------------------------------------------------------------------------
+// KONTROL — sabit tablolar. Hiçbir kaydırma/imzasızlık yolundan geçmez.
+// ---------------------------------------------------------------------------
+işlev kt_kontrol() -> tam32 {
+    değişken K: Dizi<dtam32> = sha256_K();
+    değişken H: Dizi<dtam32> = sha256_H0();
+    değişken k0: dtam32 = K[0];
+    değişken k63: dtam32 = K[63];
+    değişken h0: dtam32 = H[0];
+    değişken gecti: tam32 = 1;
+    eğer (k0 olarak tam64) != 0x428A2F98 { gecti = 0; }
+    eğer (k63 olarak tam64) != 0xC67178F2 { gecti = 0; }
+    eğer (h0 olarak tam64) != 0x6A09E667 { gecti = 0; }
+    ver gecti;
+}
+
+// ---------------------------------------------------------------------------
+// ChaCha20 quarter-round — RFC 8439 §2.1.1 test vektörü
+//   Girdi:  a=0x11111111 b=0x01020304 c=0x9b8d6f43 d=0x01234567
+//   Çıktı:  a=0xea2a92f4 b=0xcb1cf8ce c=0x4581472e d=0x5881c4bb
+// c ve d yüksek bitleri set olan değerlere ulaşır → rotl'ün iç `>>`si
+// `ashr` ise sonuç sapar.
+// ---------------------------------------------------------------------------
+işlev kt_chacha_qr() -> tam32 {
+    değişken a0: dtam32 = 0x11111111;
+    değişken b0: dtam32 = 0x01020304;
+    değişken c0: dtam32 = 0x9B8D6F43;
+    değişken d0: dtam32 = 0x01234567;
+    değişken st: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_olustur(a0), sabitsüre_olustur(b0),
+        sabitsüre_olustur(c0), sabitsüre_olustur(d0)
+    ];
+    chacha20_qr(st, 0, 1, 2, 3);
+    değişken ra: dtam32 = ifşa(st[0]);
+    değişken rb: dtam32 = ifşa(st[1]);
+    değişken rc: dtam32 = ifşa(st[2]);
+    değişken rd: dtam32 = ifşa(st[3]);
+    değişken gecti: tam32 = 1;
+    eğer (ra olarak tam64) != 0xEA2A92F4 { gecti = 0; }
+    eğer (rb olarak tam64) != 0xCB1CF8CE { gecti = 0; }
+    eğer (rc olarak tam64) != 0x4581472E { gecti = 0; }
+    eğer (rd olarak tam64) != 0x5881C4BB { gecti = 0; }
+    ver gecti;
+}
+
+// ---------------------------------------------------------------------------
+// SHA-256("abc") tek blok — NIST FIPS 180-4 Appendix B.1
+//   M = "abc" || 0x80 || 0...0 || uzunluk(24 bit)
+//   Beklenen: ba7816bf 8f01cfea 414140de 5dae2223
+//             b00361a3 96177a9c b410ff61 f20015ad
+// σ0/σ1 (SHR 3 / SHR 10) ve Σ0/Σ1 (ROTR) message schedule'ın her adımında
+// çalışır → imzasızlık kaybı ilk W[16]'da sapmayı başlatır.
+// ---------------------------------------------------------------------------
+işlev kt_sha256_abc() -> tam32 {
+    değişken w0: dtam32 = 0x61626380;   // "abc" + 0x80 padding
+    değişken sifir: dtam32 = 0;
+    değişken w15: dtam32 = 24;          // mesaj uzunluğu = 24 bit
+    değişken blok: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_olustur(w0),    sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir),
+        sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(sifir), sabitsüre_olustur(w15)
+    ];
+    değişken H: Dizi<dtam32> = sha256_H0();
+    değişken h0: dtam32 = H[0];
+    değişken h1: dtam32 = H[1];
+    değişken h2: dtam32 = H[2];
+    değişken h3: dtam32 = H[3];
+    değişken h4: dtam32 = H[4];
+    değişken h5: dtam32 = H[5];
+    değişken h6: dtam32 = H[6];
+    değişken h7: dtam32 = H[7];
+    değişken state: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_olustur(h0), sabitsüre_olustur(h1),
+        sabitsüre_olustur(h2), sabitsüre_olustur(h3),
+        sabitsüre_olustur(h4), sabitsüre_olustur(h5),
+        sabitsüre_olustur(h6), sabitsüre_olustur(h7)
+    ];
+    sha256_blok_sikistir(state, blok);
+    değişken s0: dtam32 = ifşa(state[0]);
+    değişken s1: dtam32 = ifşa(state[1]);
+    değişken s7: dtam32 = ifşa(state[7]);
+    değişken gecti: tam32 = 1;
+    eğer (s0 olarak tam64) != 0xBA7816BF { gecti = 0; }
+    eğer (s1 olarak tam64) != 0x8F01CFEA { gecti = 0; }
+    eğer (s7 olarak tam64) != 0xF20015AD { gecti = 0; }
+    ver gecti;
+}
+
+işlev main() -> tam32 {
+    değişken skor: tam32 = 0;
+    eğer kt_kontrol() == 1 { skor = skor + 1; }
+    eğer kt_chacha_qr() == 1 { skor = skor + 2; }
+    eğer kt_sha256_abc() == 1 { skor = skor + 4; }
+    ver skor;   // 7 = tam geçiş
+}
