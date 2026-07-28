@@ -5,7 +5,17 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-338 [YÜKSEK] — Yapı alanı (dtamN) imzasızlığı self-host'ta akar + codegen_diff'in 127 kör noktası kapandı (2026-07-28)
+## D-339 [YÜKSEK] — Yapı alanı (dtamN) imzasızlığı self-host'ta akar + codegen_diff'in 127 kör noktası kapandı (2026-07-28)
+
+> **Numara notu:** commit mesajı (`86747b9`) D-338 diyor; merge anında D-338 yukarıdaki
+> işaretsiz-semantik kararına verildiği için bu kayıt **D-339**'dur. Ayrıca
+> `claude/distracted-tesla-e03311` dalındaki kripto commit'i (`3f2cb34`) de kendini
+> D-338 sanıyor — o dal merge edilirken aynı kural gereği **D-340**'a kaymalıdır.
+>
+> Kod içi işaretler: bu kararın markerları D-339'a güncellendi. Yukarıdaki D-338
+> kararının `selfhost/codegen.kem` içindeki `D-337` markerları **bilerek** olduğu gibi
+> bırakıldı (paralel dalın sahip olduğu satırlar; yeniden yazmak tesla dalına gereksiz
+> çakışma üretirdi). Eşleme bu dosyadadır.
 
 **Karar [ETKİ: `selfhost/codegen.kem` (+59), `test/cg_korpus/cg_isaretsiz_alan.kem`
 (yeni, 107→108), `test/codegen_diff_harness.sh` (127 kuralı daraltıldı).]**
@@ -63,7 +73,14 @@ LLVM 108/108 her iki driver'da), checker_diff 56/56, calistir_llvm_test 284/284.
 
 ---
 
-## D-337 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
+## D-338 [YÜKSEK] — Self-host codegen'de işaretsiz (dtamN) semantiği kilitlendi (2026-07-27)
+
+> **Numara notu (merge anında kaydırıldı):** bu karar `7f645be` commit'inde **D-337**
+> olarak yazılmıştı, ama merge anında `origin/main`'de D-337 **başka** bir karara
+> (`dc2879c`, `--llvm` katı tip kapısı) verilmişti. CLAUDE.md kuralı ("D-NNN'i merge
+> anında güncel main'deki en yüksek D'ye bakıp ver") gereği D-338'e kaydırıldı.
+> Commit **mesajı** D-337 diyor (paralel dalın sahip olduğu commit yeniden yazılmadı);
+> **yetkili kayıt bu dosyadır.**
 
 **Karar [ETKİ: `selfhost/codegen.kem` (+164/−17), `test/cg_korpus/` (+2 korpus,
 105→107).]** D-335 C tarafını kilitlemiş, self-host'un **hiçbir** `dtamN` işlemini

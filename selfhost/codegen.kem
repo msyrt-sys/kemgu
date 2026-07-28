@@ -2766,7 +2766,7 @@ işlev yapi_alan_tip(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     }
     ver "i32";
 }
-// D-338: yapı alanı işaretsiz (dtamN) mi? yapi_alan_tip aynası — ama alan_tip
+// D-339: yapı alanı işaretsiz (dtamN) mi? yapi_alan_tip aynası — ama alan_tip
 // (LLVM string "i8") imzasızlığı SİLER, o yüzden alan_tnode (AST tip düğümü)
 // üzerinden ll_isz. C llvm.c:2594 `ast_tip_isaretsiz_mi(alan_tip_d)` karşılığı.
 // NOT (C ile birebir): mono örnekte bile BASE alan düğümü kullanılır — C'de de
@@ -2936,7 +2936,7 @@ işlev islev_donus_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
-// D-338: bir ERISIM nesnesinin YAPI ADI (mangled değil, base) — SAF çözüm.
+// D-339: bir ERISIM nesnesinin YAPI ADI (mangled değil, base) — SAF çözüm.
 // ifade_uret'in ERISIM dalı bunu p.son_tip ("%Yad" = struct value) / p.son_ref
 // ("Yad" = referans pointee) üzerinden BULUR; ama o durum ancak kod yayılırken
 // oluşur. ifade_isz saf olmak zorunda (bkz. ifade_isz yorumu) → aynı iki kaynağı
@@ -3001,7 +3001,7 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
         ver fn_risz_bul(p, dizi_al(p.a_deg, h));
     }
-    // D-338: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
+    // D-339: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
     // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).
     eğer metin_esit(ad, "ERISIM") {
         değişken yad: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
@@ -3010,7 +3010,7 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
         ver yapi_alan_isz(p, yad, dizi_al(p.a_deg, idx));
     }
-    // D-338 ÖLÇÜM: INDEKS (xs[i]) BİLEREK yok — C llvm.c'nin ÜÇ INDEKS dalı da
+    // D-339 ÖLÇÜM: INDEKS (xs[i]) BİLEREK yok — C llvm.c'nin ÜÇ INDEKS dalı da
     // (heap kdl_dizi_al 3249, türetilmiş taban 3282, stack GEP+load 3318)
     // `IfadeSonuc s = { r, tip, 0 }` üretir; yani C'de de dizi elemanı imzasızlığı
     // TAŞINMAZ. 0 dönmek burada C ile BİREBİR aynıdır (ortak sınır, parite kaybı DEĞİL).

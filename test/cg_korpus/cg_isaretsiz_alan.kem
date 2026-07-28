@@ -1,4 +1,4 @@
-// cg_isaretsiz_alan.kem — D-338: YAPI ALANI (dtamN) imzasızlığının AKMASI.
+// cg_isaretsiz_alan.kem — D-339: YAPI ALANI (dtamN) imzasızlığının AKMASI.
 // -----------------------------------------------------------------------------
 // D-337 imzasızlığı değişken/parametre/işlev-dönüşü için kilitledi, ama `k.alan`
 // yolunu bilerek kapsam dışı bıraktı: ifade_isz ERISIM'i ele almıyordu → alan
@@ -17,7 +17,7 @@
 //
 // ⚠ Bu dosya kapının KENDİ kör noktasını da ortaya çıkardı: sabotajlı değer TAM
 // OLARAK 127'ydi ve codegen_diff_harness.sh 127'yi "Defender exec yarışı" sayıp
-// ATLIYORDU → gerçek miscompile yeşil geçiyordu. Kural D-338'de daraltıldı
+// ATLIYORDU → gerçek miscompile yeşil geçiyordu. Kural D-339'da daraltıldı
 // (127 yalnız ORACLE'da ortamsal). Sabit değiştirirken bunu hatırla.
 //
 // Üç taban ölçülür — hepsi ERISIM ama farklı codegen dalından geçer:

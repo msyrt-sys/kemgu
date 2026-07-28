@@ -70,7 +70,7 @@ for f in "$KORPUS"/*.kem; do
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
     run_exe "$TMP/$b.k.exe"; kaday=$RC
-    # D-338 ONARIM: eski kural `coracle==127 || kaday==127` idi ve "korpusta hiçbir
+    # D-339 ONARIM: eski kural `coracle==127 || kaday==127` idi ve "korpusta hiçbir
     # program 127 dönmez" premisine dayanıyordu. Bu premis YANLIŞ ölçüldü:
     # cg_isaretsiz_alan.kem sabotajlı codegen ile TAM OLARAK 127 üretti (12 retry
     # sonrası kararlı, oracle 60) → GERÇEK bir miscompile ⚠ ATLANDI olarak yeşil
