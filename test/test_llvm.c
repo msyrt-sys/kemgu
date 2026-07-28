@@ -3272,6 +3272,35 @@ static void test_kapanis_yapi_alani_metin(void) {
                rc == 42);
 }
 
+/* === D-342: `için` dongusu BY-VALUE eleman uzerinde === */
+
+/* SESSIZ YANLIS CEVAP regresyonu: `için` dali by-value elemani skaler
+ * `@kdl_dizi_al_tam` ile okuyordu — declare i32 vs call %Nokta. LLVM bunu
+ * SESSIZCE kabul eder → cop deger. Olculdu: exit 14, dogrusu 42.
+ * (Diger dizi yollari — INDEKS / dizi_al / ekle / yaz — zaten by-value idi.) */
+static void test_icin_yapi_dizisi(void) {
+    int rc = derle_ve_calistir(
+        "yap\xc4\xb1 Nokta { x: tam32; y: tam32; } "
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken ps: Dizi<Nokta> = "
+        "[Nokta { x: 4, y: 6 }, Nokta { x: 12, y: 20 }]; "
+        "de\xc4\x9fi\xc5\x9fken t: tam32 = 0; "
+        "i\xc3\xa7in p: ps { t = t + p.x + p.y; } ver t; }");
+    test_sonuc("icin dongusu yapi dizisi (by-value eleman) -> exit 42",
+               rc == 42);
+}
+
+/* Ayni dal, KAPANIS fat value elemanli dizide (16 bayt) — `için` ile gezinti. */
+static void test_icin_kapanis_dizisi(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { "
+        "de\xc4\x9fi\xc5\x9fken xs: Dizi<i\xc5\x9flev() -> tam32> = "
+        "[|| 20, || 22]; "
+        "de\xc4\x9fi\xc5\x9fken t: tam32 = 0; "
+        "i\xc3\xa7in f: xs { t = t + f(); } ver t; }");
+    test_sonuc("icin dongusu kapanis dizisi (fat value) -> exit 42", rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3673,6 +3702,10 @@ int main(void) {
     test_kapanis_dizi_elemani();
     test_kapanis_dizi_coklu();
     test_kapanis_yapi_alani_metin();
+
+    printf("\n--- D-342: `icin` dongusu by-value eleman uzerinde ---\n");
+    test_icin_yapi_dizisi();
+    test_icin_kapanis_dizisi();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
