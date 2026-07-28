@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-342 — KÖPRÜ N-THREAD'e ÇIKARILDI + tek-yazıcı sahiplik köprüsü (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (geniş
+refactor + §9 yeni), `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+Köprü D-333'ten beri `[] ++ ctx :: []` çerçevesine **sabitlenmişti**. Artık
+`Cerceve (ts1, ts2, tid)` parametrik: `K`, `KRun`, 17 `krun_*`, 11 `adim_*`,
+`gomme_sim`, `kopru_ni` hepsi çerçeveyi taşıyor. `gomGoz`/`gomGozIz` artık
+thread kimliği alıyor. Tek-thread kurulumu `cerceveTek`in **özel hali**
+(`kopru_tek_thread_ozel_hal` bunu gösteriyor — geriye uyum tanığı).
+
+**ÖLÇÜLEN SEMANTİK ÇATIŞMA — ve Mehmet kararı (TEK YAZICI):**
+Core'da **yazma** bölge sahipliği ister (`sAtamaTamam`/`sIndeksYaz` →
+`sahiplikGet ... = some (thread ctx.tid)`); CT'nin eşzamanlı modelinde store
+tamamen paylaşımlıdır. Çatışma **yalnız yazmada**: `sVarOku`/`sIndeksOku`
+sahiplik istemez, yani **thread-arası OKUMA girişimi serbest**. Çözüm:
+`own : Ad → ThreadId` sahiplik haritası (`sahOf` artık `own`-parametrik) +
+yeni `Yazar` yargısı (bir ifadenin yazdığı değişkenler) + `YazmaSahibi`
+ön-koşulu. `gomme_sim`in 25 özyineli çağrısına alt-ifade sahiplik argümanı
+geçirildi.
+
+**AÇIK BORÇ (kapsam sınırı):** `CT.esz_zamanlama_etkili` tanığındaki
+**iki-yazıcı** program GÖMÜLEMEZ (iki thread aynı değişkene yazar). Bu zaten
+bir **veri yarışıdır** ve KEMGU'nun bölge disiplini onu tasarım gereği
+yasaklar — yani kayıp "ifade edilemeyen güvenli program" değil, "modelin
+dışlamayı AMAÇLADIĞI program". Yine de kapsam sınırıdır.
+
+**VAKUM DENETİMİ — ilk denemem YETERSİZDİ, ölçüm gösterdi.**
+`kopru_cerceve_tasiniyor`u ilk yazdığımda gövdesi `KRun.refl` idi; sabotaj
+(çerçeveyi tekrar tek-thread'e sabitle) **0 hata** verdi — yani tanık hiçbir
+şey ölçmüyordu, çerçeve sadece taşınıyor ama kullanılmıyordu. Tanığı
+**gerçek bir yazma adımı** atacak hâle getirdim (boş olmayan `ts1`/`ts2` ile
+`adim_yaz`); aynı sabotaj artık **28 hata** veriyor. Yani çerçeve Step
+kurallarına gerçekten geçiyor.
+
+**Diğer sabotaj:** `YazmaSahibi` ön-koşulunu kaldır → **20 hata**.
+
+**⚠ KALAN BORÇ — dürüstlük notu:** `kopru_esz_ni` serpiştirmeyi **CT
+tarafında** bırakıyor; ana modele taşınan şey her bloğun Core koşumudur
+(`gomme_sim`, artık N-thread çerçeveyle). Core'un kendi `Step`i ile
+thread değiştirme (gerçek Core-serpiştirmesi) V2: bunun için
+`Konfigurasyon.thread` listesinin adımlar arası yeniden bölünmesi hakkında
+bir korunum lemması gerekiyor. Yani "KEMGU'nun kendisi eşzamanlı
+sabit-süredir" **hâlâ tam çıkmıyor**; çıkan şey bir adım daha yakın.
+
+**HÂLÂ AÇIK:** Core-serpiştirmesi (thread değiştirme korunumu), küçük-adım CT,
+`esles` yapıcı desenleri, hücre-başına gizlilik etiketi, dizi sınır denetimi,
+platform-parametrik CT.
+
+---
+
 ## D-341 — EŞZAMANLI CT: zamanlama kanalı + kompozisyonellik (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§10 yeni),
