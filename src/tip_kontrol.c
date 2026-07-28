@@ -4223,9 +4223,15 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             const TipBilgisi *eleman_t = beklenen->veri.dizi.eleman;
             int n = d->veri.dizi_olustur.sayi;
             if (n == 0) {
-                /* Bos dizi -> beklenen tip */
-                return tip_olustur_dizi(tk->arena,
-                    t_basit(tk, eleman_t->kategori));  /* shallow */
+                /* Bos dizi -> beklenen tip.
+                 * D-344: ONCEDEN `t_basit(tk, eleman_t->kategori)` idi — eleman
+                 * tipini KATEGORISINDEN yeniden kuruyordu ("shallow"). Basit
+                 * tiplerde (tam32 vb.) bu yuvarlak gider, ama TIP_YAPI'da yapi
+                 * ADI, generic'te arg listesi DUSER -> uretilen tip beklenenle
+                 * esit olmaz: `degisken qs: Dizi<Nokta> = [];` T001 verirdi.
+                 * Dogrusu asagidaki DOLU dizi dalinin yaptigi: beklenen eleman
+                 * tipini oldugu gibi kullan. */
+                return tip_olustur_dizi(tk->arena, (TipBilgisi *)eleman_t);
             }
             /* Dolu dizi: her eleman beklenen->dizi.eleman context'inde */
             for (int i = 0; i < n; i++) {

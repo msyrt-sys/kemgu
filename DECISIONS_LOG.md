@@ -56,13 +56,27 @@ artık `🔴 oracle exit=127 ≠ aday=107` diyor. **Ders:** bir değerin "asla o
 varsayımına dayanan atlama kuralı, o değeri üreten hata sınıfına kördür — ve
 daraltmak yetmez, sinyali doğru kaynaktan (stderr) okumak gerekir.
 
+**Entegrasyonda ÇIKAN AYRI KUSUR (bu adımda onarıldı):** birleştirme sırasında
+`calistir_check_kapisi` (kem_os dalı) ile `cg_yapi_dizi.kem` (PR #107) **ilk kez**
+buluştu ve kırmızı verdi. Sebep benim değişikliğim değil, gerçek bir tip-çıkarsama
+açığıydı: `değişken qs: Dizi<Nokta> = [];` → T001. Boş-dizi bağlam dalı eleman tipini
+**kategorisinden yeniden kuruyordu** (`t_basit(tk, eleman_t->kategori)`, yorumu bile
+"shallow") → `TIP_YAPI`'da yapı ADI, generic'te arg listesi DÜŞÜYORDU; basit tiplerde
+(tam32) yuvarlak gittiği için yıllarca görünmemişti. Hemen altındaki DOLU-dizi dalı
+doğrusunu yapıyor (`(TipBilgisi *)eleman_t`); tek satırla hizalandı. **Yan kazanç:**
+`Dizi<Dizi<tam32>>` ve `Dizi<seçimlik<tam32>>` boş literalleri de sessizce bozuktu,
+onlar da düzeldi (4 satırlık asgari repro ile ölçüldü). Kapı 206→**207/214, 0 RED**.
+**Ders:** iki dal ayrı ayrı yeşilken birleşimleri kırmızı olabilir — kapı ile korpus
+farklı dallardan geliyorsa, buluştukları merge ilk gerçek testtir.
+
 **Kapsam notu:** korpus `tekkez<T>` dalını bağımsız ÖLÇMEZ (aynı kod yolunu paylaşır);
 `sabitsüre` sabit-zaman disiplini `/`·`%` (CT004) ve değişken kaydırmayı (CT008)
 yasakladığı için korpus yalnız izinli işlemleri kullanır.
 
-**Kapılar:** kripto_kosum **3/3** (artık test_tumu'da), codegen_diff **109/109**,
-codegen_bootstrap FIXPOINT ✓, self_driver (4 mod ×2 + FIXPOINT), checker_diff 56/56,
-llvm_test 284/284, sabitsure_test, linear_test, kripto_check ✓.
+**Kapılar (dört kez main entegrasyonundan sonra, son hâl):** kripto_kosum **3/3**
+(artık test_tumu'da), check_kapisi **207/214 0 RED**, codegen_diff **112/112**,
+checker_diff 56/56, tip_kontrol 197/197, llvm_test 286/286, codegen_bootstrap
+**FIXPOINT ✓** (46915 satır), self_driver (4 mod ×2 + FIXPOINT). Sıfır uyarı.
 
 ---
 
