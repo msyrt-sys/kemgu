@@ -1,0 +1,14 @@
+// TC6c (D-249 KORUMA): `güvensiz` blokta ham-pointer deref-ATAMASI (`*p = v`)
+// GEÇERLİ bir lvalue'dur — T022 muafiyeti. Muafiyet yoksa koşulsuz T022 gelir.
+// BEKLENEN: hatasız (OK).
+işlev yaz(adres: tam64, deg: tam32) -> tam32 {
+    güvensiz {
+        değişken p: *tam32 = adres olarak *tam32;
+        *p = deg;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    ver 0;
+}

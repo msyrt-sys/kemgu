@@ -5,6 +5,73 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-344 [YÜKSEK] — `checker.kem` ↔ `codegen.kem` ayrışması kapatıldı; `calistir_checker_diff` `test_tumu`'ya bağlandı (2026-07-28)
+
+**Karar [ETKİ: `selfhost/checker.kem`, `test/check_korpus/`, `Makefile`]:**
+Aşama-2 referans checker'ı (`selfhost/checker.kem`) ile birleşik driver
+(`selfhost/codegen.kem`) içindeki checker ayrışmıştı. Ayrışma ÖNCE korpusa
+örnek eklenerek GÖRÜNÜR yapıldı, sonra kapatıldı, sonra kapı `test_tumu`'ya
+bağlandı.
+
+**Ölçülen ayrışma (onarım öncesi):** `test/ornekler/kem_malloc.kem` üzerinde
+C oracle `OK`, `codegen.kem --check` `OK`, ama `checker.kem` **5 SAHTE tanı**
+üretiyordu: `T002 24:5`, `T002 31:27`, `T002 32:5`, `T002 32:16`, `T022 39:5`.
+
+**Kök nedenler (3, hepsi ölçülerek doğrulandı):**
+1. **`küresel` (D-253) HİÇ yoktu** — `anahtar_tip`'te yok → `parse_ust_oge`
+   HATA dalına düşüyor, küresel ad global kapsama girmiyor → her okuma/yazma
+   sahte `T002`.
+2. **`*p = v` T022 muafiyeti (D-249) yoktu** — muafiyet yalnız
+   `codegen.kem`'de; `checker.kem` `güvensiz` blokta deref-atamaya KOŞULSUZ
+   `T022` veriyordu.
+3. **`çıplak` (D-255) HİÇ yoktu** — hata-kurtarma sayesinde `--checkdump`
+   çıktısı tesadüfen doğru kalıyordu (aşağıda "gate edilmiyor" notu).
+
+**Onarım (`checker.kem`, hepsi `codegen.kem` aynası):** `anahtar_tip`'e
+`küresel`→`KURESEL` + `çıplak`→`CIPLAK`; `parse_kuresel` (C `parser.c` parite);
+`parse_ust_oge` dispatch; `parse_islev_genel` modifier döngüsü (çıplak/
+gerçekzamanlı herhangi sıra); `genel_topla`'ya `KURESEL` → `g_ekle` (ad
+çözümü); `kontrol_ust`'ta `KURESEL` init'i `SABIT` gibi denetlenir; ATAMA'da
+`hedef_deref` (TEKLI/`deref*`) T022 muafiyeti.
+
+**Korpus (+3):** `tc6_01_kuresel.kem` (küresel+çıplak, kem_malloc deseni),
+`tc6_02_ciplak.kem`, `tc6_03_deref_atama.kem`. Hepsi oracle `OK`.
+
+**Kapı:** `calistir_checker_diff` artık `test_tumu` zincirinde (Makefile:5285).
+Daha önce YOKTU — `checker.kem`'in TEK doğruluk kapısı hiç koşmuyordu, ayrışma
+bu yüzden sessizce birikmişti.
+
+**Doğrulama:** checker_diff 56/56 → **59/59**. `kem_malloc.kem` 5 sahte tanı
+→ **0** (oracle ile birebir). codegen_bootstrap FIXPOINT ✓ (lexer/parser/
+checker 92/92 birebir + stage1==stage2, 45729 satır). self_driver 4 mod ✓
+(LLVM 108/108 ×2 + fixpoint). check_kapisi 203/210, 0 RED. codegen_diff 108/108.
+
+**Sabotaj kapısı (kanıt):** T022 muafiyeti kaldırıldı → `tc6_03` KIRMIZI
+(58/59); `KURESEL`→`g_ekle` kaldırıldı → `tc6_01` KIRMIZI (58/59); geri
+alındı → 59/59. İkisi de GERÇEK kapı.
+
+**Kapsam/sınırlar (dürüst):**
+- **`tc6_02_ciplak` GATE ETMİYOR:** `CIPLAK` anahtar kelimesi sabote edilince
+  korpus yine 59/59 kaldı. `--checkdump` yalnız T/L/M kodu basıyor; `çıplak`'ın
+  hata-kurtarma yolu (sahte HATA düğümü + `hata_say` şişmesi) dump'a
+  YANSIMIYOR. Denenen 6 şekil (tek/çift modifier, `dışa çıplak`, gövde-hatalı,
+  çift tanım) hiçbirinde ayrışma gözlenmedi. `CIPLAK` eklemesi bu yüzden
+  *gözlemlenebilir hata onarımı değil*, AST hijyeni + `codegen.kem` paritesi;
+  `tc6_02` gate-etmeyen regresyon kilidi olarak tutuldu.
+- **E010 İKİSİNDE DE YOK:** `küresel`'e güvensiz-tier dışından erişim C
+  oracle'da `E010` verir; `checker.kem` VE `codegen.kem` bunu uygulamıyor
+  (ölçüldü). Korpus dosyası `çıplak` kullandığı için bu yol uyanmıyor. AYRI
+  ve ÖNCEDEN VAR OLAN eksik.
+- **Artık ikilik riski:** ortak 182 işlev adının **19'unun gövdesi hâlâ
+  farklı** (`ifade_tip`, `kontrol_dugum`, `t003_kontrol`, `lin_tuket_dugum`,
+  `parse_yapi`, `parse_cesit` …). `checker.kem` `codegen.kem`'in ÖZ ALT
+  KÜMESİ (182 ⊂ 327, yalnız-checker = 0). Tek-kaynak konsolidasyon kararı
+  Mehmet'te — bu commit ayrışmayı kapatır ama KÖKÜNÜ (iki uygulama) kaldırmaz.
+- Ayrıca ölçülen, kapsam DIŞI önceden-var-olan eksik: `değişken q: tam32 = f;`
+  (işlev değerini skalere atama) oracle `T001` verir, `checker.kem` vermez.
+
+---
+
 ## D-343 [YÜKSEK] — kem_os tip-temiz: `--tip-atla` borcu kapandı; aritmetik literal bağlamı onarıldı (2026-07-28)
 
 **Karar [ETKİ: `src/tip_kontrol.c`, `runtime/kem_mmu.kem`, `Makefile`

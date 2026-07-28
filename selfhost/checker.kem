@@ -202,6 +202,8 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "güvensiz") { ver "GUVENSIZ"; }
     eğer metin_esit(w, "sabitsüre") { ver "SABITSURE"; }
     eğer metin_esit(w, "gerçekzamanlı") { ver "GERCEKZAMANLI"; }
+    eğer metin_esit(w, "küresel") { ver "KURESEL"; }   // D-253: modül-mutable global
+    eğer metin_esit(w, "çıplak") { ver "CIPLAK"; }     // D-255: no-region-prologue işlev
     eğer metin_esit(w, "vektör") { ver "VEKTOR"; }
     eğer metin_esit(w, "görev") { ver "GOREV"; }
     eğer metin_esit(w, "satıriçi_asm") { ver "SATIRICI_ASM"; }
@@ -1392,9 +1394,14 @@ işlev parse_blok(p: &değişken Ayr) -> tam32 {
 // İşlev (gerçekzamanlı? + generic + param + dönüş + gövde). imza_yeterli=1 →
 // gövde yerine ';' (özellik imzası). Generic params PARSE+DISCARD (dump'ta yok).
 işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") {
-        ilerle(p);
-        eğer sim_mi(p, "GERCEKZAMANLI") { p.hata_say = p.hata_say + 1; ilerle(p); }
+    // D-255: çıplak / gerçekzamanlı işlev-modifier (herhangi sıra). C parser.c aynası.
+    değişken devam_mod: mantıksal = doğru;
+    iken devam_mod {
+        eğer sim_mi(p, "GERCEKZAMANLI") { ilerle(p); }
+        değilse {
+            eğer sim_mi(p, "CIPLAK") { ilerle(p); }
+            değilse { devam_mod = yanlış; }
+        }
     }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     bekle(p, "ISLEV");
@@ -1503,7 +1510,7 @@ işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
-        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev_genel(p, 1));
         } değilse { devam = yanlış; }
     }
@@ -1526,7 +1533,7 @@ işlev parse_uygula(p: &değişken Ayr) -> tam32 {
     bekle(p, "SOL_SUSLU");
     değişken devam: mantıksal = doğru;
     iken devam {
-        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") {
+        eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev(p));
         } değilse { devam = yanlış; }
     }
@@ -1544,6 +1551,20 @@ işlev parse_sabit(p: &değişken Ayr) -> tam32 {
     değişken dg: tam32 = parse_ifade(p);
     bekle(p, "NOKTALI_VIRGUL");
     ver dugum2(p, "SABIT", ad, s, u, tip, dg);
+}
+// D-253: küresel değişken ad: tip = init;  → "KURESEL" düğüm (C parser.c parite).
+işlev parse_kuresel(p: &değişken Ayr) -> tam32 {
+    değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
+    ilerle(p);  // küresel
+    bekle(p, "DEGISKEN");
+    değişken ad: metin = sim_lex(p);
+    bekle(p, "TANIMLAYICI");
+    bekle(p, "IKI_NOKTA");
+    değişken tip: tam32 = parse_tip(p);
+    bekle(p, "ESIT");
+    değişken dg: tam32 = parse_ifade(p);
+    bekle(p, "NOKTALI_VIRGUL");
+    ver dugum2(p, "KURESEL", ad, s, u, tip, dg);
 }
 // ---- P5: modül / kullan / dışa / genel ----
 // kullan m[::seg...][::{a,b}][olarak d];  → KULLAN (deger=yol; seçili/alias dump'ta yok).
@@ -1577,7 +1598,7 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
 }
 // genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).
 işlev parse_disa_govde(p: &değişken Ayr) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") veya sim_mi(p, "CIPLAK") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
     eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
@@ -1612,7 +1633,8 @@ işlev parse_modul(p: &değişken Ayr) -> tam32 {
     ver dugum_n(p, "MODUL", ad, s, u, kids);
 }
 işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
-    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
+    eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") veya sim_mi(p, "CIPLAK") { ver parse_islev(p); }
+    eğer sim_mi(p, "KURESEL") { ver parse_kuresel(p); }   // D-253
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
     eğer sim_mi(p, "OZELLIK") { ver parse_ozellik(p); }
@@ -1738,7 +1760,8 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ad: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ad, "ISLEV") veya metin_esit(ad, "YAPI")
-          veya metin_esit(ad, "CESIT") veya metin_esit(ad, "SABIT") {
+          veya metin_esit(ad, "CESIT") veya metin_esit(ad, "SABIT")
+          veya metin_esit(ad, "KURESEL") {   // D-253: küresel değişken adı da global
             g_ekle(p, dizi_al(p.a_deg, c));
         }
         eğer metin_esit(ad, "ISLEV") { imza_kaydet(p, c); }   // TC3d imza tablosu
@@ -2862,7 +2885,11 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken ab: tam32 = dizi_al(p.a_cb, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, ab);
         değişken deger: tam32 = dizi_al(p.cocuk, ab + 1);
-        eğer lvalue_mi(dizi_al(p.a_ad, hedef)) == yanlış {
+        // D-249 (GAP-2 parite): *p (TEKLI deref*) da lvalue — ham pointer deref-write
+        // (C tip_kontrol.c D-248 T022 gevşetme aynası).
+        değişken hedef_deref: mantıksal = metin_esit(dizi_al(p.a_ad, hedef), "TEKLI")
+            ve metin_esit(dizi_al(p.a_deg, hedef), "deref*");
+        eğer (lvalue_mi(dizi_al(p.a_ad, hedef)) == yanlış) ve (hedef_deref == yanlış) {
             dizi_ekle(p.th_kod, "T022");
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
@@ -3004,7 +3031,8 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
             yerel_topla(p, c);
             kontrol_govde(p, c);
         } değilse {
-            eğer metin_esit(ad, "SABIT") {
+            // D-253: KURESEL init'i SABIT gibi denetlenir (üst-düzey, yerel yok).
+            eğer metin_esit(ad, "SABIT") veya metin_esit(ad, "KURESEL") {
                 p.yerel_basla = dizi_boyut(p.yerel);
                 kontrol_dugum(p, c);
             } değilse {
