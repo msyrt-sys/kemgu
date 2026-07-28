@@ -1290,12 +1290,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "FS SYSCALL OK" $(BUILD)/kem_os.out \
 		   && grep -q "SHELL OK" $(BUILD)/kem_os.out \
 		   && grep -q "SPAWN OK" $(BUILD)/kem_os.out \
+		   && grep -q "ADRES ALANI OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \

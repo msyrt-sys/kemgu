@@ -696,6 +696,16 @@ işlev main() -> tam32 {
         uart_satir("[15] SPAWN HATA");
     }
 
+    // [16] ADRES ALANI (MODEL B / MB-1a): süreç başına TTBR0. İki adres alanı,
+    // AYNI sanal adres, FARKLI fiziksel sayfa — A'nın değeri B'nin yazmasından
+    // sonra DURUYOR. Model A'da (tek adres alanı) taklit EDİLEMEZ.
+    değişken izol_ok: tam32 = kmmu_izolasyon_testi();
+    eğer izol_ok == 1 {
+        uart_satir("[16] ADRES ALANI OK");
+    } değilse {
+        uart_satir("[16] ADRES ALANI HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

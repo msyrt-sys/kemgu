@@ -168,6 +168,107 @@ isb"#
     ver 0;
 }
 
+// ============================================================================
+// MODEL B / MB-1a: SÜREÇ BAŞINA ADRES ALANI (per-process TTBR0).
+// ----------------------------------------------------------------------------
+// Bugüne kadar (Model A) kem_os TEK adres alanı kullanıyordu: tüm görevler aynı
+// L1/L2'yi paylaşıyordu (kem_gorev.kem: "TTBR swap YOK (v1)"). EL0/EL1 ayrımı
+// vardı ama SÜREÇLER BİRBİRİNDEN YALITIK DEĞİLDİ — iki EL0 süreci aynı sanal
+// adreste aynı fiziksel baytı görüyordu. "Kullanılabilir OS" eşiğinin altındaki
+// asıl eksik buydu.
+//
+// TASARIM: her adres alanı KENDİ L1+L2 çiftine sahip. L2, çekirdek L2'sinin
+// TAM KOPYASI (512 giriş) — yani tüm çekirdek RAM'i her adres alanında AYNI
+// identity eşlemeyle görünür. Bu ZORUNLU: TTBR0 düşük VA'ları kapsar ve
+// çekirdek de düşük VA'da koşar (TTBR1/high-half yok); kopyalamazsak TTBR
+// yazan komutun BİR SONRAKİ komutu haritasız kalır ve çekirdek ölür.
+// TEK fark: KMMU_OZEL_VA girişi her alanda BAŞKA bir fiziksel sayfaya bakar.
+//
+// SINIR (MB-1a): özel sayfa VERİ sayfasıdır; EL0 KOD sayfası (L2[16]) hâlâ
+// paylaşılır. Süreç başına KOD eşlemesi ELF yükleyicinin (MB-2) işidir.
+sabit KMMU_AS_TABAN: tam64 = 1157660672;    // 0x45010000: adres-alanı tablo arenası
+sabit KMMU_AS_ADIM: tam64 = 8192;           // 0x2000: her alan = L1(4KB) + L2(4KB)
+sabit KMMU_OZEL_VA: tam64 = 1140850688;     // 0x44000000: süreç-özel VA (L2[32])
+sabit KMMU_OZEL_IDX: tam64 = 32;            // (0x44000000 - 0x40000000) / 2MB
+// ÖLÇÜLDÜ (ampirik, ilk denemede 0x48000000 seçilmişti): QEMU `-M virt` komut
+// satırında `-m` YOK → varsayılan RAM 128 MiB → fiziksel RAM 0x40000000..0x48000000.
+// 0x48000000 tam bir bayt DIŞARIDA: yazma ESR=0x96000050 (DFSC=0b010000 = senkron
+// HARİCİ abort — "çeviri oldu, fiziksel adres yok") verdi. Çeviri hatası DEĞİL;
+// tablolar doğruydu, hedef RAM yoktu. Özel sayfalar RAM tavanının ALTINDA olmalı.
+// Yığınlar 0x47100000/0x47200000 (2MB blok 56-57) → 58'den itibaren boş, 63'e kadar.
+sabit KMMU_OZEL_PA: tam64 = 1195376640;     // 0x47400000: özel sayfa PA tabanı (blok 58)
+sabit KMMU_AS_AZAMI: tam64 = 6;             // blok 58..63 → en çok 6 adres alanı
+
+// Adres alanı #i'yi kur; L1 fiziksel adresini döner (TTBR0'a yazılacak değer).
+// i >= KMMU_AS_AZAMI ise 0 döner (SESSİZ TAŞMA YOK — çağıran 0'ı görür).
+çıplak işlev kmmu_as_olustur(i: tam64) -> tam64 {
+    eğer (i < 0) veya (i >= KMMU_AS_AZAMI) { ver 0; }
+    değişken l1: tam64 = KMMU_AS_TABAN + i * KMMU_AS_ADIM;
+    değişken l2: tam64 = l1 + 4096;
+    değişken k: tam64 = 0;
+    iken k < 512 { kmmu_y64(l1 + k * 8, 0); k = k + 1; }          // L1 sıfırla
+    değişken n: tam64 = 0;
+    iken n < 512 {                                                 // L2 = çekirdek L2 KOPYASI
+        kmmu_y64(l2 + n * 8, kmmu_o64(KMMU_L2 + n * 8));
+        n = n + 1;
+    }
+    // TEK FARK: özel VA → sürece ait fiziksel 2MB blok (AP=01, EL0+EL1 RW).
+    kmmu_y64(l2 + KMMU_OZEL_IDX * 8, (KMMU_OZEL_PA + i * KMMU_2MB) + 1861);
+    kmmu_y64(l1, 1025);                                            // L1[0] Device (0x401)
+    kmmu_y64(l1 + 8, l2 + 3);                                      // L1[1] → kendi L2'si
+    ver l1;
+}
+
+// TTBR0'ı değiştir + TLB'yi tamamen geçersiz kıl. dsb/isb sıralaması ŞART:
+// isb olmadan sonraki komutlar ESKİ çeviriyle getirilmiş olabilir.
+// ASID kullanılmıyor (v1) → tam TLB flush; doğru ama pahalı.
+çıplak işlev kmmu_ttbr_yaz(l1: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"msr ttbr0_el1, $0
+dsb ish
+tlbi vmalle1
+dsb ish
+isb"#
+            girdi("r", l1)
+            bozulan("~{memory}")
+        }
+    }
+}
+
+// İZOLASYON KANITI (falsifiye edilebilir): iki adres alanı, AYNI sanal adres,
+// FARKLI fiziksel sayfa. A'ya yaz → B'ye yaz → A'ya DÖN → A'nın değeri DURUYOR mu?
+//
+// Tek adres alanında bu TAKLİT EDİLEMEZ: B'nin yazması A'nınkini ezerdi ve
+// son okuma 0xBB verirdi. Ayrıca çekirdeğin identity görüşünden iki fiziksel
+// sayfa BAĞIMSIZ olarak doğrulanır — yani "değeri bir yerde sakladık" türü bir
+// sahtelik de elenir. 1 = süreç izolasyonu donanımda GERÇEK.
+çıplak işlev kmmu_izolasyon_testi() -> tam32 {
+    değişken a: tam64 = kmmu_as_olustur(0);
+    değişken b: tam64 = kmmu_as_olustur(1);
+    eğer (a == 0) veya (b == 0) { ver 0; }
+
+    kmmu_ttbr_yaz(a);
+    kmmu_y64(KMMU_OZEL_VA, 2863311530);              // 0xAAAAAAAA → A'nın sayfası
+    kmmu_ttbr_yaz(b);
+    kmmu_y64(KMMU_OZEL_VA, 3149642683);              // 0xBBBBBBBB → B'nin sayfası
+    değişken bv: tam64 = kmmu_o64(KMMU_OZEL_VA);     // B kendi değerini görmeli
+    kmmu_ttbr_yaz(a);
+    değişken av: tam64 = kmmu_o64(KMMU_OZEL_VA);     // ASIL KANIT: A'nınki DURUYOR mu?
+
+    kmmu_ttbr_yaz(KMMU_L1);                          // çekirdek alanına dön
+    // Bağımsız doğrulama: çekirdeğin identity görüşünden iki AYRI fiziksel sayfa.
+    değişken pa: tam64 = kmmu_o64(KMMU_OZEL_PA);
+    değişken pb: tam64 = kmmu_o64(KMMU_OZEL_PA + KMMU_2MB);
+
+    eğer (av == 2863311530) ve (bv == 3149642683)
+       ve (pa == 2863311530) ve (pb == 3149642683) {
+        ver 1;
+    }
+    ver 0;
+}
+
 // GERÇEK fault-gate: haritasız VA oku → .S recovery → FAR doğru + kurtarıldı mı?
 // 1 = MMU zorluyor + gerçek fault yakalandı + FAR==VA + OS devam ediyor. Sentetik DEĞİL.
 çıplak işlev kmmu_fault_testi() -> tam32 {
