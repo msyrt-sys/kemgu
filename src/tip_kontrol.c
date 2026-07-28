@@ -992,6 +992,37 @@ static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
     return tip_olustur_basit(tk->arena, k);
 }
 
+/* TIPSIZ tamsayi LITERAL IFADESI mi? — yalnizca tamsayi literallerinden ve
+ * aritmetik/negasyon operatorlerinden olusan bir alt-agac. Boyle bir alt-agac
+ * hicbir BAGLAMA sahip degildir (default tam32'ye duser), dolayisiyla
+ * beklenen tipe gore YENIDEN cikarsanabilir — `x: tam64; x + (16 * 8)` ve
+ * `ver 0 - 1` (donus tam64) bu sayede T001/T020 vermez.
+ *
+ * MUHAFAZAKAR: bir DEGISKEN, cagri, alan erisimi veya `olarak` donusumu
+ * gorulur gormez 0 doner — yani yalnizca literaller uyum saglar, tipli
+ * ifadeler ESKISI GIBI hata verir (sessiz genislemeye kapi acilmaz). */
+static int tamsayi_literal_ifade_mi(const Dugum *d) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_TAM:
+            return 1;
+        case DUGUM_TEKLI:
+            return d->veri.tekli.op == OP_NEG &&
+                   tamsayi_literal_ifade_mi(d->veri.tekli.operand);
+        case DUGUM_IKILI:
+            switch (d->veri.ikili.op) {
+                case OP_ARTI: case OP_EKSI: case OP_CARPI:
+                case OP_BOLU: case OP_MOD:
+                    return tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
+                           tamsayi_literal_ifade_mi(d->veri.ikili.sag);
+                default:
+                    return 0;
+            }
+        default:
+            return 0;
+    }
+}
+
 /* === Madde D: Generic callback tip cikarsamasi (multi-param + compound) ===
  *
  * Bir cagri site'da `hedef<T,U,V>(...)` icin:
@@ -2270,11 +2301,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * yayılımı kendi kurallarına sahip — S2/V testleri). */
             if (!tip_sabitsure_mi(sol) && !tip_sabitsure_mi(sag) &&
                 !tip_vektor_mu(sol) && !tip_vektor_mu(sag)) {
-                if (d->veri.ikili.sol->tip == DUGUM_TAM &&
+                if (tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
                     tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                     !tip_esit(sol, sag)) {
                     sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
-                } else if (d->veri.ikili.sag->tip == DUGUM_TAM &&
+                } else if (tamsayi_literal_ifade_mi(d->veri.ikili.sag) &&
                            tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                            !tip_esit(sol, sag)) {
                     sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
@@ -4344,8 +4375,57 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     return t_hata(tk);
                 }
             }
+            /* Bidirectional cikarsama, aritmetik operandlara OZYINELER:
+             * beklenen tamsayi/kesirli ise ve ifade TIPSIZ bir literal
+             * agaci ise (bkz. tamsayi_literal_ifade_mi), literaller
+             * beklenen tipte cikarsanir. `degisken a: tam64 = 5 + 3;`
+             * ve `ver 0 - 1;` (donus tam64) bu daldan gecer.
+             *
+             * MUHAFAZAKAR: tipli bir operand (degisken/cagri) varsa
+             * tamsayi_literal_ifade_mi 0 doner → normal yola dusulur ve
+             * uyusmazlik ESKISI GIBI raporlanir. Yani bu dal yalnizca
+             * BUGUN HATA VEREN literal durumlari kabul eder; gecen hicbir
+             * programin anlamini degistirmez. */
+            if (tamsayi_literal_ifade_mi(d) &&
+                (tip_tamsayi_mi(beklenen) ||
+                 beklenen->kategori == TIP_KESIRLI32 ||
+                 beklenen->kategori == TIP_KESIRLI64)) {
+                switch (d->veri.ikili.op) {
+                    case OP_ARTI: case OP_EKSI: case OP_CARPI:
+                    case OP_BOLU: case OP_MOD: {
+                        TipBilgisi *sol = tip_belirle_beklenen(
+                            tk, d->veri.ikili.sol, beklenen);
+                        TipBilgisi *sag = tip_belirle_beklenen(
+                            tk, d->veri.ikili.sag, beklenen);
+                        if (sol->kategori != TIP_HATA &&
+                            sag->kategori != TIP_HATA &&
+                            tip_esit(sol, beklenen) &&
+                            tip_esit(sag, beklenen)) {
+                            return t_basit(tk, beklenen->kategori);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
             break;
         }
+
+        case DUGUM_TEKLI:
+            /* -(literal agaci) da beklenen tipte cikarsanir (ver -1 → tam64) */
+            if (d->veri.tekli.op == OP_NEG &&
+                tamsayi_literal_ifade_mi(d) &&
+                (tip_tamsayi_mi(beklenen) ||
+                 beklenen->kategori == TIP_KESIRLI32 ||
+                 beklenen->kategori == TIP_KESIRLI64)) {
+                TipBilgisi *o = tip_belirle_beklenen(
+                    tk, d->veri.tekli.operand, beklenen);
+                if (o->kategori != TIP_HATA && tip_esit(o, beklenen)) {
+                    return t_basit(tk, beklenen->kategori);
+                }
+            }
+            break;
 
         default:
             break;

@@ -52,6 +52,37 @@ for f in test/cg_korpus/*.kem test/ornekler/*.kem stdlib/*.kem \
   "$KEMGU" --check "$f" 2>&1 | grep -m1 "hata\[" | sed 's/^/       /'
 done
 
+# --- KEM-OS BİRLEŞİK KAYNAK (tek başına parça dosyalar yukarıda muaf) ---
+# Çekirdeğin KENDİSİ dilin tip kapısından geçmeli. kem_os bir zamanlar
+# `--tip-atla` ile derleniyordu: "derleme zamanı güvenlik" tezini savunan bir
+# dilin işletim sistemi, kendi tip denetimini atlıyordu. Borç kapandı; bu blok
+# geri düşmeyi engeller. Dosya sırası Makefile'daki `calistir_kem_os_arm`
+# cat sırasıyla AYNI olmalı (kem_heap ÖNCE — çapraz-birim T002'yi kapatır).
+KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
+                runtime/kem_zaman.kem runtime/kem_virtio_blk.kem
+                runtime/kem_minifs.kem runtime/kem_virtio_net.kem
+                test/ornekler/kem_os.kem"
+kemos_eksik=0
+for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
+if [ "$kemos_eksik" -eq 0 ]; then
+  mkdir -p build
+  cat $KEMOS_PARCALAR > build/kem_os_kapi.kem
+  tot=$((tot + 1))
+  # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
+  if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
+    echo "  ✅ kem_os (birleşik kaynak, 8 parça) --check geçti"
+  else
+    red=$((red + 1))
+    echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
+    "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem 2>&1 \
+      | grep -m5 "hata\[" | sed 's/^/       /'
+    echo "       (--tip-atla EKLEMEYİN — kök nedeni düzeltin.)"
+  fi
+  rm -f build/kem_os_kapi.kem
+else
+  echo "  ⏭  kem_os parçaları eksik — birleşik kontrol atlandı"
+fi
+
 echo "=== tip kontrol kapısı: $((tot - red - muaf_n))/$tot geçti, $muaf_n muaf, $red RED ==="
 [ "$red" -eq 0 ] || {
   echo "🔴 Yukarıdaki dosyalar --check'ten geçmiyor. Ya düzeltin ya da"
