@@ -88,6 +88,10 @@ import Kemgu
 #print axioms Kemgu.SideChannel.CTKopru.kopru_bol_bos_degil
 #print axioms Kemgu.SideChannel.CT.ct006m_gerekli
 #print axioms Kemgu.SideChannel.CT.carp_gizli_operand_zararsiz
+#print axioms Kemgu.SideChannel.CT.ct_esz_ni
+#print axioms Kemgu.SideChannel.CT.esz_zamanlama_etkili
+#print axioms Kemgu.SideChannel.CT.esz_capraz_girisim_gercek
+#print axioms Kemgu.SideChannel.CT.ct_esz_gerekli
 #print axioms Kemgu.SideChannel.CTKopru.kopru_kalan_bos_degil
 LEANEOF
 if ! lean --root=. "$TMP/aksiyom_denetim.lean" > "$TMP/aks.txt" 2>&1; then

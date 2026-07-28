@@ -5,6 +5,62 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-341 — EŞZAMANLI CT: zamanlama kanalı + kompozisyonellik (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CT.lean` (§10 yeni),
+`test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+`Zamanlama`/`ThreadBloklari`/`Sistem`/`EszIz` + `EszCalis` (serpiştirilmiş
+koşum) + `SistemCtOk` + **`ct_esz_ni`**: CT-tipli bir sistem, **herhangi bir
+zamanlama** altında, düşük-eşdeğer iki başlangıç store'unda **birebir aynı**
+serpiştirilmiş gözlem izini üretir ve son store'lar düşük-eşdeğer kalır.
+
+**MEHMET KARARLARI (soruldu):**
+1. **Blok-atomik, PARAMETRİK incelik.** Her thread bir `List Ifade`; zamanlama
+   hangi thread'in sıradaki bloğunu koşacağını seçer. Teorem her blok ayrımı
+   için geçerli olduğundan programcı istediği kadar ince bölebilir. Reddedilen:
+   CT'yi küçük-adıma çevirmek — `genel_ifade_korunum` ve `ct_ni` sıfırdan
+   yazılırdı (≈3-4 kat iş, D-330'dan beri birikmiş ispatlar riske girerdi).
+2. **Şimdilik yalnız CT hesabı.** Köprü (CTKopru) TEK THREAD kalıyor.
+
+**İKİ YENİ ŞEY MEKANİZE OLDU:**
+- **Zamanlama kanalı kapandı.** Zamanlama `∀`-nicelenmiş, yani "saldırgan
+  zamanlamayı seçebilir" hâli de kapsanıyor. **Uyarlanır (adaptive) saldırgan
+  da kapsanıyor:** teorem izlerin aynı olduğunu söylediği için, gözlemlere
+  bakarak karar veren deterministik bir zamanlayıcı iki koşumda aynı seçimleri
+  yapar — sabit-liste nicelemesi yeterli. (Bu bir gözlem, ispat değil.)
+- **Kompozisyonellik.** İspat her blok için `ct_ni`yi kullanıp düşük-eşdeğerliği
+  bloklar **arasında** taşıyor. Store PAYLAŞILDIĞI için bu tek-thread `ct_ni`den
+  gerçekten fazlası.
+
+**VAKUM DENETİMLERİ (3 tanık) — "eşzamanlı" adının boş olmadığının ölçümü:**
+- `esz_zamanlama_etkili`: iki thread aynı değişkene yazar; **farklı zamanlama
+  farklı son store** verir. Yani model bağımsız thread'ler koşturmuyor.
+- `esz_capraz_girisim_gercek`: bir thread'in yazdığını diğeri **okur**
+  (`x = 7` → başka thread `y = x` → 7). Store thread-yerel olsaydı çökerdi.
+- `ct_esz_gerekli`: sistemdeki **bir** thread CT001'i ihlal ederse
+  serpiştirilmiş izler ayrışır → `SistemCtOk` hipotezi gerekli.
+
+**SABOTAJ:** `SistemCtOk` hipotezini kaldır → **5 hata**; store paylaşımını
+kaldır (thread-yerel yap) → **17 hata**. İkincisi paylaşımın ispatın her
+yerine dokunduğunu gösteriyor.
+
+**⚠ AÇIK SINIRLAR (ikisi de dosyaya yazıldı):**
+1. **Blok-atomik:** araya girme yalnız blok sınırlarında. Bir bloğun ortasında
+   preemption eden gerçek bir çekirdek DOĞRUDAN temsil edilmiyor. Tam incelik
+   için CT'nin küçük-adıma çevrilmesi gerekir — V2.
+2. **Köprü hâlâ tek thread:** bu teorem `Sem/Core`un çok-thread'li semantiğine
+   TAŞINMADI. Yani "KEMGU'nun kendisi eşzamanlı sabit-süredir" ÇIKMIYOR;
+   çıkan şey "CT disiplini, paylaşımlı-bellekli blok-atomik eşzamanlılıkta
+   NI'yi garanti eder".
+
+**HÂLÂ AÇIK:** köprünün N-thread'e çıkarılması, küçük-adım CT (tam incelik),
+`esles`in yapıcı/çeşit desenleri, hücre-başına gizlilik etiketi, dizi sınır
+denetimi, platform-parametrik CT.
+
+---
+
 ## D-340 — ÇARPMA: `topla` sınıfı — modele gömülü donanım iddiası (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

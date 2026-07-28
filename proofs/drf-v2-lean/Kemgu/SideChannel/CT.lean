@@ -1072,4 +1072,250 @@ theorem topla_gizli_operand_zararsiz :
     | c_topla _ _ _ _ _ _ _ _ _ hA2 hB2 =>
       cases hA1; cases hA2; cases hB1; cases hB2; rfl
 
+-- ============================================================
+-- §10. ESZAMANLI CT (D-341) — ZAMANLAMA KANALI ve KOMPOZISYONELLIK
+-- ============================================================
+
+/-
+NE EKLIYOR
+──────────
+Buraya kadar her sey TEK THREAD'di. Eszamanlilikta YENI olan iki sey var:
+  (1) **Zamanlama (schedule) kanali:** thread'ler PAYLASILAN store uzerinde
+      calisir; hangi thread ne zaman kostugu gozlemlenen izi degistirir.
+  (2) **Capraz girisim:** A thread'inin yazdigi, B thread'inin okudugu.
+
+ISPATLANAN SEY (`ct_esz_ni`): TUM bloklari CT-tipli olan bir sistem,
+HERHANGI bir zamanlama altinda, dusuk-esdeger iki baslangic store'unda
+BIREBIR AYNI serpistirilmis izi uretir ve son store'lar yine dusuk-esdeger
+kalir. Yani **gizli veri ne izi ne de zamanlamanin etkisini degistirir.**
+
+Zamanlama TUMEL NICELENMISTIR (∀ zam), yani "saldırgan zamanlamayi
+secebilir" durumu da kapsanir. UYARLANIR (adaptive) bir saldırgan
+zamanlayici da kapsanir: teorem izlerin AYNI oldugunu soyledigi icin,
+gozlemlere bakarak karar veren deterministik bir zamanlayici iki kosumda
+AYNI secimleri yapar — dolayisiyla sabit-liste nicelemesi yeterlidir.
+
+⚠ ACIK SINIR (Mehmet karari — blok-atomik incelik):
+  Araya girme (preemption) yalniz BLOK SINIRLARINDA olur; bir blogun
+  ICINDE thread degismez. Teorem HER blok ayrimi icin gecerli oldugundan
+  programci istedigi kadar ince bolebilir (incelik PARAMETRIKTIR), ama
+  bir blogun ortasinda preemption eden gercek bir cekirdek bu modelde
+  DOGRUDAN temsil edilmez. Tam incelik icin CT'nin kucuk-adima
+  cevrilmesi gerekir — V2.
+  Ayrica: kopru (CTKopru) HALA TEK THREAD'dir, yani bu teorem
+  `Sem/Core`un cok-thread'li semantigine TASINMAMISTIR.
+-/
+
+/-- Zamanlama: hangi thread'in sirasi. Liste bittiginde kosum biter. -/
+abbrev Zamanlama := List Nat
+
+/-- Bir thread = ARDISIK BLOKLAR. Blok = atomik kosan CT ifadesi. -/
+abbrev ThreadBloklari := List Ifade
+
+/-- Sistem = thread listesi. Store PAYLASILIR (tek `Store`). -/
+abbrev Sistem := List ThreadBloklari
+
+/-- i. thread'in SIRADAKI blogu (yoksa/bittiyse none). -/
+def sysIlkBlok : Sistem → Nat → Option Ifade
+  | [], _          => none
+  | ts :: _, 0     => ts.head?
+  | _ :: rest, n+1 => sysIlkBlok rest n
+
+/-- i. thread'i bir blok ilerlet. -/
+def sysIlerlet : Sistem → Nat → Sistem
+  | [], _             => []
+  | ts :: rest, 0     => ts.tail :: rest
+  | ts :: rest, n+1   => ts :: sysIlerlet rest n
+
+/-- Serpistirilmis iz: her gozlem HANGI THREAD'den geldigini tasir. -/
+abbrev EszIz := List (Nat × Gozlem)
+
+/-- SERPISTIRILMIS KOSUM. Zamanlama listesini soldan tuketir; her adimda
+    secili thread'in siradaki blogu ATOMIK kosar ve izi thread etiketiyle
+    serpistirilmis ize eklenir. Bitmis/olmayan thread secilirse ADIM ATLANIR
+    (zamanlama yine tuketilir) — gercek zamanlayicilarin bos quantum'u. -/
+inductive EszCalis : Store → Sistem → Zamanlama → Store → EszIz → Prop where
+  | bitti (s : Store) (sys : Sistem) :
+      EszCalis s sys [] s []
+  | adim (s sa s' : Store) (sys : Sistem) (i : Nat) (kalan : Zamanlama)
+      (blok : Ifade) (t : Iz) (v : Int) (izK : EszIz)
+      (h_get  : sysIlkBlok sys i = some blok)
+      (h_run  : Calis s blok sa t v)
+      (h_rest : EszCalis sa (sysIlerlet sys i) kalan s' izK) :
+      EszCalis s sys (i :: kalan) s' (t.map (fun g => (i, g)) ++ izK)
+  | atla (s s' : Store) (sys : Sistem) (i : Nat) (kalan : Zamanlama) (izK : EszIz)
+      (h_yok  : sysIlkBlok sys i = none)
+      (h_rest : EszCalis s sys kalan s' izK) :
+      EszCalis s sys (i :: kalan) s' izK
+
+/-- Sistemin TUM bloklari CT-tipli. -/
+def SistemCtOk (G : EtiketOrtam) (sys : Sistem) : Prop :=
+  ∀ ts ∈ sys, ∀ e ∈ ts, CtOk G e
+
+theorem sistemCtOk_blok {G : EtiketOrtam} {sys : Sistem} {i : Nat} {blok : Ifade}
+    (h : SistemCtOk G sys) (h_get : sysIlkBlok sys i = some blok) :
+    CtOk G blok := by
+  induction sys generalizing i with
+  | nil => cases h_get
+  | cons ts rest ih =>
+      cases i with
+      | zero =>
+          have h_head : ts.head? = some blok := h_get
+          cases ts with
+          | nil => cases h_head
+          | cons b bs =>
+              have hb : b = blok := Option.some.inj h_head
+              subst hb
+              exact h (b :: bs) (List.Mem.head _) b (List.Mem.head _)
+      | succ n =>
+          exact ih (fun ts' h' e he => h ts' (List.Mem.tail _ h') e he) h_get
+
+theorem sistemCtOk_ilerlet {G : EtiketOrtam} {sys : Sistem}
+    (h : SistemCtOk G sys) (i : Nat) : SistemCtOk G (sysIlerlet sys i) := by
+  induction sys generalizing i with
+  | nil => intro ts h_ts; cases h_ts
+  | cons ts rest ih =>
+      cases i with
+      | zero =>
+          intro ts' h_ts' e he
+          rcases List.mem_cons.mp h_ts' with h_eq | h_rest
+          · subst h_eq
+            exact h ts (List.Mem.head _) e (List.mem_of_mem_tail he)
+          · exact h ts' (List.Mem.tail _ h_rest) e he
+      | succ n =>
+          intro ts' h_ts' e he
+          rcases List.mem_cons.mp h_ts' with h_eq | h_rest
+          · subst h_eq; exact h ts' (List.Mem.head _) e he
+          · exact ih (fun t2 h2 e2 he2 => h t2 (List.Mem.tail _ h2) e2 he2)
+              n ts' h_rest e he
+
+/-- **ANA TEOREM (ct_esz_ni) — ESZAMANLI NON-INTERFERENCE:**
+    CT-tipli bir sistem, HERHANGI bir zamanlama altinda, dusuk-esdeger iki
+    baslangic store'unda AYNI serpistirilmis gozlem izini uretir ve son
+    store'lar yine dusuk-esdegerdir.
+
+    NEDEN TEK-THREAD `ct_ni`DEN DAHA FAZLASI: store PAYLASILIR, yani
+    A thread'inin yazdigini B okur. Ispat her blok icin `ct_ni`yi kullanir
+    ve dusuk-esdegerligi bloklar ARASINDA tasir — kompozisyonellik
+    argumaninin ta kendisi. Zamanlama kanali kapanir cunku her blogun
+    izi (dolayisiyla UZUNLUGU) gizliden bagimsizdir; zamanlayici bloklari
+    ayni noktalarda boler. -/
+theorem ct_esz_ni (G : EtiketOrtam) :
+    ∀ {s1 : Store} {sys : Sistem} {zam : Zamanlama} {s1' : Store} {t1 : EszIz},
+      EszCalis s1 sys zam s1' t1 →
+      ∀ {s2 s2' : Store} {t2 : EszIz}, EszCalis s2 sys zam s2' t2 →
+      SistemCtOk G sys → DusukEs G s1 s2 →
+      t1 = t2 ∧ DusukEs G s1' s2' := by
+  intro s1 sys zam s1' t1 h1
+  induction h1 with
+  | bitti s sys =>
+      intro s2 s2' t2 h2 _ h_low
+      cases h2
+      exact ⟨rfl, h_low⟩
+  | adim s sa s' sys i kalan blok t v izK h_get h_run h_rest ih =>
+      intro s2 s2' t2 h2 h_ct h_low
+      cases h2 with
+      | adim _ sa2 _ _ _ _ blok2 t2b v2 izK2 h_get2 h_run2 h_rest2 =>
+          -- AYNI sistem + AYNI thread indeksi → AYNI blok (lookup fonksiyonel)
+          have h_eq : blok2 = blok := by
+            rw [h_get] at h_get2; exact (Option.some.inj h_get2).symm
+          rw [h_eq] at h_run2
+          have h_cb : CtOk G blok := sistemCtOk_blok h_ct h_get
+          obtain ⟨ht, h_low'⟩ := ct_ni G h_run h_run2 h_cb h_low
+          obtain ⟨htk, h_low''⟩ :=
+            ih h_rest2 (sistemCtOk_ilerlet h_ct i) h_low'
+          exact ⟨by rw [ht, htk], h_low''⟩
+      | atla _ _ _ _ _ _ h_yok2 _ =>
+          rw [h_get] at h_yok2; nomatch h_yok2
+  | atla s s' sys i kalan izK h_yok h_rest ih =>
+      intro s2 s2' t2 h2 h_ct h_low
+      cases h2 with
+      | adim _ _ _ _ _ _ _ _ _ _ h_get2 _ _ =>
+          rw [h_yok] at h_get2; nomatch h_get2
+      | atla _ _ _ _ _ _ _ h_rest2 =>
+          exact ih h_rest2 h_ct h_low
+
+-- ============================================================
+-- §10.1 ESZAMANLI MODELIN VAKUM DENETIMLERI
+-- ============================================================
+
+/-- **(1) ZAMANLAMA GERCEKTEN ETKILI** — model bagimsiz thread'ler
+    KOSTURMUYOR. Iki thread ayni degiskene yazar; FARKLI zamanlamalar
+    FARKLI son store verir. `ct_esz_ni` bunu YASAKLAMAZ (zamanlama bir
+    GIRDIDIR, gizli DEGIL); yasakladigi sey gizli verinin izi
+    degistirmesidir. Bu tanik olmasa "eszamanlilik" adi bos olurdu. -/
+theorem esz_zamanlama_etkili :
+    ∃ (sys : Sistem) (s : Store) (zamA zamB : Zamanlama)
+      (sA sB : Store) (tA tB : EszIz),
+      EszCalis s sys zamA sA tA ∧ EszCalis s sys zamB sB tB
+      ∧ sA 0 0 ≠ sB 0 0 := by
+  refine ⟨[[.sabitDeg 0 (.sabit 1)], [.sabitDeg 0 (.sabit 2)]],
+          (fun _ _ => 0), [0, 1], [1, 0],
+          yaz (yaz (fun _ _ => 0) 0 1) 0 2,
+          yaz (yaz (fun _ _ => 0) 0 2) 0 1,
+          [(0, Gozlem.oYaz 0 0), (1, Gozlem.oYaz 0 0)],
+          [(1, Gozlem.oYaz 0 0), (0, Gozlem.oYaz 0 0)], ?_, ?_, ?_⟩
+  · exact EszCalis.adim _ _ _ _ 0 [1] _ [.oYaz 0 0] 1 _ rfl
+      (Calis.c_atama _ _ 0 _ [] 1 (Calis.c_sabit _ 1))
+      (EszCalis.adim _ _ _ _ 1 [] _ [.oYaz 0 0] 2 _ rfl
+        (Calis.c_atama _ _ 0 _ [] 2 (Calis.c_sabit _ 2))
+        (EszCalis.bitti _ _))
+  · exact EszCalis.adim _ _ _ _ 1 [0] _ [.oYaz 0 0] 2 _ rfl
+      (Calis.c_atama _ _ 0 _ [] 2 (Calis.c_sabit _ 2))
+      (EszCalis.adim _ _ _ _ 0 [] _ [.oYaz 0 0] 1 _ rfl
+        (Calis.c_atama _ _ 0 _ [] 1 (Calis.c_sabit _ 1))
+        (EszCalis.bitti _ _))
+  · simp [yaz]
+
+/-- **(2) CAPRAZ GIRISIM GERCEK** — bir thread'in YAZDIGINI digeri OKUR
+    (store PAYLASILIR). `x = 7; (baska thread) y = x` zincirinde ikinci
+    thread 7 okur. Store thread-yerel olsaydi bu ispat COKERDI. -/
+theorem esz_capraz_girisim_gercek :
+    ∃ (sys : Sistem) (s s' : Store) (zam : Zamanlama) (iz : EszIz),
+      EszCalis s sys zam s' iz ∧ s' 1 0 = 7 := by
+  refine ⟨[[.sabitDeg 0 (.sabit 7)], [.sabitDeg 1 (.degisken 0)]],
+          (fun _ _ => 0),
+          yaz (yaz (fun _ _ => 0) 0 7) 1 7, [0, 1],
+          [(0, Gozlem.oYaz 0 0), (1, Gozlem.oOku 0 0), (1, Gozlem.oYaz 1 0)],
+          ?_, ?_⟩
+  · exact EszCalis.adim _ _ _ _ 0 [1] _ [.oYaz 0 0] 7 _ rfl
+      (Calis.c_atama _ _ 0 _ [] 7 (Calis.c_sabit _ 7))
+      (EszCalis.adim _ _ _ _ 1 [] _ [.oOku 0 0, .oYaz 1 0] 7 _ rfl
+        (Calis.c_atama _ _ 1 _ [.oOku 0 0] 7 (Calis.c_degisken _ 0))
+        (EszCalis.bitti _ _))
+  · simp [yaz]
+
+/-- **(3) ESZAMANLI CT SARTLARI GEREKLI** — sistemdeki BIR thread CT001'i
+    ihlal ederse (gizli kosulda dallanma) serpistirilmis izler AYRISIR.
+    Yani `SistemCtOk` hipotezi vakum degil, gercekten gerekli.
+    `ct001_gerekli`nin eszamanli sisteme kaldirilmis hali. -/
+theorem ct_esz_gerekli :
+    ∃ (G : EtiketOrtam) (sys : Sistem) (zam : Zamanlama)
+      (s1 s2 s1' s2' : Store) (t1 t2 : EszIz),
+      DusukEs G s1 s2 ∧ EszCalis s1 sys zam s1' t1
+      ∧ EszCalis s2 sys zam s2' t2 ∧ t1 ≠ t2 := by
+  refine ⟨fun x => if x = 0 then .gizli else .genel,
+          [[.eger (.degisken 0) (.sabit 1) (.sabit 2)]], [0],
+          (fun x _ => if x = 0 then 1 else 5),
+          (fun x _ => if x = 0 then 0 else 5),
+          (fun x _ => if x = 0 then 1 else 5),
+          (fun x _ => if x = 0 then 0 else 5),
+          [(0, Gozlem.oOku 0 0), (0, Gozlem.oDal true)],
+          [(0, Gozlem.oOku 0 0), (0, Gozlem.oDal false)],
+          ?_, ?_, ?_, ?_⟩
+  · intro x hx i
+    by_cases h0 : x = 0
+    · rw [h0] at hx; exact absurd hx (by simp)
+    · simp [h0]
+  · exact EszCalis.adim _ _ _ _ 0 [] _ [.oOku 0 0, .oDal true] 1 _ rfl
+      (Calis.c_eger_dogru _ _ _ _ _ _ [.oOku 0 0] [] 1 1
+        (Calis.c_degisken _ 0) (by decide) (Calis.c_sabit _ 1))
+      (EszCalis.bitti _ _)
+  · exact EszCalis.adim _ _ _ _ 0 [] _ [.oOku 0 0, .oDal false] 2 _ rfl
+      (Calis.c_eger_yanlis _ _ _ _ _ _ [.oOku 0 0] [] 0 2
+        (Calis.c_degisken _ 0) rfl (Calis.c_sabit _ 2))
+      (EszCalis.bitti _ _)
+  · intro h
+    exact absurd (List.cons.inj (List.cons.inj h).2).1 (by decide)
+
 end Kemgu.SideChannel.CT
