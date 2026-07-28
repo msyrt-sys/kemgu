@@ -2072,7 +2072,15 @@ işlev dtam_ad_mi(t: metin) -> tam32 {
 // D-337: AST tip düğümü işaretsiz mi? (yalnız TIP_BASIT dtamN — C ile birebir)
 işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
     eğer tip_idx < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver 0; }
+    değişken ta: metin = dizi_al(p.a_ad, tip_idx);
+    // D-341: sabitsüre<T> / tekkez<T> SIFIR-MALİYET sarmalayıcı — ll_tip içine
+    // iner, burası inmiyordu → IR tipi doğru ama imzasızlık DÜŞÜYORDU (`ashr`).
+    // C llvm.c `ast_tip_isaretsiz_mi` aynası; iki işlev AYNI sarmalayıcıyı AYNI
+    // şekilde çözmeli, aksi halde sessiz yanlış cevap (D-340 kripto kapısı ölçtü).
+    eğer metin_esit(ta, "TIP_SABITSURE") veya metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver 0; }
     ver dtam_ad_mi(dizi_al(p.a_deg, tip_idx));
 }
 // D-337: değişken/parametre işaretsiz mi? (cg_var_bul ile AYNI arama yönü/sınırı —
@@ -2388,6 +2396,14 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    // D-341: sabitsüre<T> de SIFIR-MALİYET sarmalayıcı (C llvm.c:1189 aynası).
+    // Bu dal YOKTU → aşağıdaki "i32" fallback'ine düşüyordu: `sabitsüre<dtam8>`
+    // için C `alloca i8` üretirken self-host `alloca i32` üretiyordu (ÖLÇÜLDÜ).
+    // Yani D-340'ın bulduğu imzasızlık kusurunun yanında self-host'ta ayrıca bir
+    // GENİŞLİK kusuru vardı; dtam8 taşma semantiği i32'de hiç oluşmaz.
+    eğer metin_esit(ta, "TIP_SABITSURE") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
@@ -3281,6 +3297,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // muhasebe tamamen tip kontrolde; bu dal olmadan genel çağrı yoluna
             // düşüp TANIMSIZ @tekkez_olustur üretiyordu (link hatası).
             ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        }
+        // D-341: sabitsüre_olustur(e) / ifşa(e) — PASS-THROUGH + speculation
+        // bariyeri (C llvm.c:3768 aynası; Spectre v1 azaltması). Bu dal YOKTU →
+        // genel çağrı yoluna düşüp TANIMSIZ @sabitsüre_olustur üretiyordu
+        // (link hatası, ÖLÇÜLDÜ) — yani self-host `stdlib/kripto`yu hiç
+        // derleyemiyordu. Bariyeri atlamak sessiz bir GÜVENLİK sapması olurdu:
+        // sabitsüre'nin varlık sebebi tam da bu bariyer.
+        eğer metin_esit(fad, "sabitsüre_olustur") veya metin_esit(fad, "ifşa") {
+            eğer cs == 2 {
+                değişken iç: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                yaz_str("  call void @llvm.x86.sse2.lfence()"); yb(10);
+                ver iç;
+            }
         }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime

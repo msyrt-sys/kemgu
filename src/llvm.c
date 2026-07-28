@@ -1528,9 +1528,22 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
     return int_donustur_im(g, src_reg, src_tip, dst_tip, 0);
 }
 
-/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
+/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi?
+ * D-341: sabitsure<T> / tekkez<T> ZERO-OVERHEAD sarmalayicilardir — ast_tip_to_ir
+ * bunlarin icine iner (sabitsure<dtam8> -> "i8"). Burada inilmiyordu: IR tipi
+ * dogru (i8) ama IMZASIZLIK dusuyordu -> `>>` icin `ashr`, bolme icin `sdiv`.
+ * Ikisinin ayni sarmalayiciyi FARKLI cozmesi = sessiz yanlis cevap; kripto
+ * kosum kapisi (D-340) bunu ChaCha20 QR + SHA-256("abc") ile olctu.
+ * Ozyineleme ast_tip_to_ir'daki dallarin BIREBIR aynasi olmali. */
 static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
-    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    if (!tip_d) return 0;
+    if (tip_d->tip == DUGUM_TIP_SABITSURE) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_sabitsure.ic_tip);
+    }
+    if (tip_d->tip == DUGUM_TIP_TEKKEZ) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_tekkez.ic_tip);
+    }
+    if (tip_d->tip != DUGUM_TIP_BASIT) return 0;
     return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
            memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
 }

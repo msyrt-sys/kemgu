@@ -5,6 +5,62 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-341 [YÜKSEK] — `sabitsüre<T>` sarmalayıcısı imzasızlığı taşımıyordu; kripto çekirdeği onarıldı (2026-07-28)
+
+**Karar [ETKİ: `src/llvm.c` (+13), `selfhost/codegen.kem` (+3 dal),
+`test/cg_korpus/cg_isaretsiz_sarmalayici.kem` (yeni, 108→109),
+`test/codegen_diff_harness.sh` (127 sezgiseli kaldırıldı), `Makefile`
+(`calistir_kripto_kosum` → `test_tumu`).]** D-340'ın açık bıraktığı kusur kapatıldı.
+
+**Kusur (sessiz yanlış cevap):** `ast_tip_to_ir` `sabitsüre<T>`/`tekkez<T>`
+sarmalayıcılarının **içine iniyor** (sıfır-maliyet: `sabitsüre<dtam8>` → `i8`), ama
+`ast_tip_isaretsiz_mi` **inmiyordu** (yalnız `DUGUM_TIP_BASIT`). Sonuç: IR tipi DOĞRU,
+imzasızlık DÜŞÜK → `>>` için `ashr`, bölme için `sdiv`. **Aynı sarmalayıcıyı iki işlevin
+FARKLI çözmesi** — derleme hatası değil, yanlış sayı. SHA-256 message schedule (σ0/σ1)
+tam da bu `>>` yolunu kullanır. Onarım: `ast_tip_to_ir`'daki dalların birebir aynası.
+
+**Ölçüm:** onarım öncesi `ashr i8`, sonrası `lshr i8`. Kripto koşum kapısı (D-340)
+**1/3 → 3/3**: ChaCha20 QR (RFC 8439 §2.1.1) ve SHA-256("abc") (NIST FIPS 180-4 App.
+B.1) artık doğru cevabı veriyor. Kapı `test_tumu`'ya BAĞLANDI — D-340'ın "bağlanması
+onarımın son işidir" notu gereği.
+
+**Self-host'ta ÜÇ ayrı açık ölçüldü (biri C'de yoktu):**
+1. `ll_isz` aynı özyinelemeden yoksundu (C ile aynı kusur).
+2. **`ll_tip`'in `TIP_SABITSURE` dalı hiç YOKTU** → `alloca i32` (C `alloca i8`).
+   Yani imzasızlığın yanında bir **GENİŞLİK** kusuru; dtam8 taşma semantiği
+   self-host'ta hiç oluşmuyordu. C'de bu dal vardı (`llvm.c:1189`).
+3. **`sabitsüre_olustur`/`ifşa` intrinsic'i yoktu** → genel çağrı yoluna düşüp
+   TANIMSIZ `@sabitsüre_olustur` üretiyordu (link hatası). Yani self-host
+   `stdlib/kripto`yu **hiç derleyemiyordu**. C aynası: pass-through + `lfence`
+   (Spectre v1). Bariyeri atlamak sessiz bir GÜVENLİK sapması olurdu — `sabitsüre`'nin
+   varlık sebebi tam da o bariyer.
+
+**Sabotaj (2 yönlü, her biri `diff` ile uygulandığı DOĞRULANDI):** C'de SABITSURE
+özyinelemesi → `ver 0`: kripto kapısı 3/3 → 1/3 KIRMIZI, korpus oracle 107→127.
+Self-host'ta `ll_isz` özyinelemesi → `ver 0`: aday 107→127. İki taraf da bağımsız
+olarak yük taşıyor.
+
+**⚠ 127 SEZGİSELİ KALDIRILDI (ikinci kez yakalandı):** D-339'da kuralı "127 yalnız
+oracle'da ortamsal" diye daraltmıştım; bu adımda sabotaj **oracle** tarafında 127
+üretti ve test YİNE sessizce atlandı. Yani daraltma yetmemiş — kök sorun exit
+kodundan "program 127 döndü" ile "exec edilemedi"yi ayırmaya çalışmaktı; bu ikisi
+exit koduyla **ayırt edilemez**. Artık **stderr**'e bakılıyor: exec başarısızlığında
+kabuk "No such file / cannot execute / permission denied" yazar, programın kendi
+127'sinde stderr sessizdir (`RC_ENV` bayrağı). Doğrulandı: sabotajlı koşumda kapı
+artık `🔴 oracle exit=127 ≠ aday=107` diyor. **Ders:** bir değerin "asla oluşmayacağı"
+varsayımına dayanan atlama kuralı, o değeri üreten hata sınıfına kördür — ve
+daraltmak yetmez, sinyali doğru kaynaktan (stderr) okumak gerekir.
+
+**Kapsam notu:** korpus `tekkez<T>` dalını bağımsız ÖLÇMEZ (aynı kod yolunu paylaşır);
+`sabitsüre` sabit-zaman disiplini `/`·`%` (CT004) ve değişken kaydırmayı (CT008)
+yasakladığı için korpus yalnız izinli işlemleri kullanır.
+
+**Kapılar:** kripto_kosum **3/3** (artık test_tumu'da), codegen_diff **109/109**,
+codegen_bootstrap FIXPOINT ✓, self_driver (4 mod ×2 + FIXPOINT), checker_diff 56/56,
+llvm_test 284/284, sabitsure_test, linear_test, kripto_check ✓.
+
+---
+
 ## D-340 [YÜKSEK] — Kripto bilinen-cevap KOŞUM kapısı kuruldu; 2 gerçek kusur buldu (2026-07-28)
 
 **Karar [ETKİ: `test/kripto_kosum_harness.sh` (yeni), `test/stdlib/test_kripto_kosum.kem`

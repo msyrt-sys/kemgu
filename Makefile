@@ -618,11 +618,13 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # ashr'e cevirir ve SHA-256/ChaCha20 SESSIZCE yanlis sonuc verir — tip kontrolu
 # bunu goremez, yalniz kosum gorebilir.
 #
-# ⚠ SU AN KIRMIZI (bilinen): sabitsure<dtamN> imzasizligi tasimiyor
-#   (src/llvm.c ast_tip_isaretsiz_mi yalniz DUGUM_TIP_BASIT kabul ediyor).
-#   Bu yuzden test_tumu'ya HENUZ BAGLANMADI — aksi halde ilgisiz her isi
-#   kirmiziya cevirirdi. Imzasizlik onarimi merge edilince test_tumu'ya
-#   eklenmesi o adimin SON isidir (kapi o onarimin dogrulamasidir).
+# D-341: ONARILDI ve test_tumu'ya BAGLANDI. Onceki not (D-340) su idi:
+#   "sabitsure<dtamN> imzasizligi tasimiyor (ast_tip_isaretsiz_mi yalniz
+#   DUGUM_TIP_BASIT kabul ediyor) -> kapi kirmizi, test_tumu'ya baglanmadi;
+#   baglanmasi imzasizlik onariminin SON isidir."
+#   Onarim yapildi (C: SABITSURE/TEKKEZ ozyinelemesi; self-host: ll_isz ayni
+#   ozyineleme + ll_tip'te eksik TIP_SABITSURE dali + sabitsure_olustur/ifsa
+#   intrinsic'i). Kapi 3/3 yesil; artik regresyon bekcisi olarak bagli.
 calistir_kripto_kosum: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/kripto_kosum_harness.sh
 
@@ -5274,7 +5276,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_kripto_kosum
 	@echo "Tum testler gecti!"
 
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===

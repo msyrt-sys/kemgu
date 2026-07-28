@@ -36,14 +36,27 @@ link_retry() {   # $1=ll  $2=exe
 # korpusta hiçbir program 127 dönmez → 127 DAİMA ortamsal (gerçek codegen hatası kesin
 # bir exit verir: 139 segfault / yanlış değer, asla 127). OS dosyayı bırakana dek bekle +
 # tekrar dene (RC global, en çok 12 tur ~3.6s). Kalıcı 127 → çağıran ⚠ ATLAR (fail DEĞİL).
-run_exe() {   # $1=exe
-    "$1" >/dev/null 2>&1; RC=$?
+# D-341: 127'yi "ortamsal" saymak SEZGİSELDİ ve iki kez GERÇEK bir 127'yi maskeledi
+# (cg_isaretsiz_alan sabotajı aday tarafında, cg_isaretsiz_sarmalayici sabotajı oracle
+# tarafında — ikisi de tam olarak 127 üretti). Bir programın 127 dönmesi ile exec'in
+# BAŞARISIZ olması exit kodundan ayırt edilemez; ama STDERR'den ayırt edilir: exec
+# başarısızlığında kabuk "No such file / cannot execute / Permission denied" yazar,
+# programın kendi 127'sinde stderr sessizdir. RC_ENV=1 → gerçekten ortamsal.
+run_exe() {   # $1=exe  -> RC (exit kodu), RC_ENV (1 = exec edilemedi)
+    _err=$("$1" 2>&1 >/dev/null); RC=$?
+    RC_ENV=0
     deneme=0
-    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 12 ]; do
+    while [ "$RC" -eq 127 ] \
+       && printf '%s' "$_err" | grep -qiE "no such file|cannot execute|not found|permission denied" \
+       && [ "$deneme" -lt 12 ]; do
         sleep 0.3
-        "$1" >/dev/null 2>&1; RC=$?
+        _err=$("$1" 2>&1 >/dev/null); RC=$?
         deneme=$((deneme+1))
     done
+    if [ "$RC" -eq 127 ] \
+       && printf '%s' "$_err" | grep -qiE "no such file|cannot execute|not found|permission denied"; then
+        RC_ENV=1   # 12 denemeden sonra hâlâ exec edilemiyor → gerçekten ortamsal
+    fi
     return 0
 }
 
@@ -63,13 +76,13 @@ for f in "$KORPUS"/*.kem; do
     if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
         echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"; continue
     fi
-    run_exe "$TMP/$b.c.exe"; coracle=$RC
+    run_exe "$TMP/$b.c.exe"; coracle=$RC; coracle_env=$RC_ENV
     # KEMGU codegen → exit (aday)
     "$CODEGEN" "$f" > "$TMP/$b.k.ll" 2>/dev/null
     if ! link_retry "$TMP/$b.k.ll" "$TMP/$b.k.exe"; then
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi
-    run_exe "$TMP/$b.k.exe"; kaday=$RC
+    run_exe "$TMP/$b.k.exe"; kaday=$RC; kaday_env=$RC_ENV
     # D-339 ONARIM: eski kural `coracle==127 || kaday==127` idi ve "korpusta hiçbir
     # program 127 dönmez" premisine dayanıyordu. Bu premis YANLIŞ ölçüldü:
     # cg_isaretsiz_alan.kem sabotajlı codegen ile TAM OLARAK 127 üretti (12 retry
@@ -78,8 +91,12 @@ for f in "$KORPUS"/*.kem; do
     # Yeni kural: 127 yalnız ORACLE'da ortamsal sayılır (oracle yoksa karşılaştırma
     # anlamsız). Oracle sağlam bir değer verirken aday kalıcı 127 diyorsa bu bir
     # ANLAŞMAZLIKTIR — sessizce atlanamaz.
-    if [ "$coracle" -eq 127 ]; then
-        echo "  ⚠ $(basename "$f") — oracle 127 (Defender exec yarışı, ortamsal) atlandı"; continue
+    # D-341: artık exit-KODUNA değil, exec'in gerçekten başarısız olduğuna bakıyoruz.
+    if [ "$coracle_env" -eq 1 ]; then
+        echo "  ⚠ $(basename "$f") — oracle exec edilemedi (Defender, ortamsal) atlandı"; continue
+    fi
+    if [ "$kaday_env" -eq 1 ]; then
+        echo "  ⚠ $(basename "$f") — aday exec edilemedi (Defender, ortamsal) atlandı"; continue
     fi
     if [ "$coracle" -eq "$kaday" ]; then
         echo "  ✅ $(basename "$f") (exit=$coracle)"; pass=$((pass+1))
