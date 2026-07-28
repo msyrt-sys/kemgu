@@ -2446,6 +2446,15 @@ işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
 işlev dizi_eleman_byte(elem: metin) -> metin {
     // D-337: kapanış fat value { ptr, ptr } = 2 işaretçi = 16 bayt.
     eğer metin_esit(elem, "{ ptr, ptr }") { ver "16"; }
+    // D-338: nominal yapı — boyutu LLVM hesaplasın (hizalama/dolgu derleyicinin işi).
+    // Sabit "4" yazmak 8+ baytlık yapıyı 4 baytlık gözeye sıkıştırırdı: SESSİZ bellek
+    // bozulması. C llvm.c `eleman_byte_yaz` aynası.
+    eğer metin_uzunluk(elem) > 0 {
+        eğer bayt(elem, 0) == 37 {
+            değişken g1: metin = metin_birlestir("ptrtoint (ptr getelementptr (", elem);
+            ver metin_birlestir(g1, ", ptr null, i32 1) to i32)");
+        }
+    }
     eğer metin_esit(elem, "ptr") veya metin_esit(elem, "i64") { ver "8"; }
     ver "4";
 }
@@ -2472,12 +2481,14 @@ işlev dizi_al_rettip(elem: metin) -> metin {
     eğer metin_esit(elem, "i64") { ver "i64"; }
     ver "i32";
 }
-// D-337: eleman BY-VALUE (memcpy) mi? Kapanış fat value { ptr, ptr } 16 bayt —
-// tek makine-kelimesine SIĞMAZ, runtime'ın kdl_dizi_*_yapi (eleman_byte + memcpy)
-// yolundan gitmeli. Skaler sanılırsa 16 baytlık agregat `kdl_dizi_ekle_tam(i32)`
-// imzasına geçirilirdi (C llvm.c `dizi_eleman_struct_mi` aynası; LLVM bunu
-// SESSİZCE kabul ediyor → bozuk dizi).
+// D-337/D-338: eleman BY-VALUE (memcpy) mi? İki şekil: nominal yapı `%Yapi` (D-338)
+// ve kapanış fat value `{ ptr, ptr }` (D-337). İkisi de tek makine-kelimesine SIĞMAZ,
+// runtime'ın kdl_dizi_*_yapi (eleman_byte + memcpy) yolundan gitmeli. Skaler sanılırsa
+// agregat `kdl_dizi_ekle_tam(i32)` imzasına geçirilirdi (C llvm.c
+// `dizi_eleman_struct_mi` aynası).
 işlev dizi_eleman_yapi_mi(et: metin) -> mantıksal {
+    eğer metin_uzunluk(et) == 0 { ver yanlış; }
+    eğer bayt(et, 0) == 37 { ver doğru; }   // '%' → nominal yapı (D-338)
     ver metin_esit(et, "{ ptr, ptr }");
 }
 // CG6: LLVM int tip bit-genişliği (sext/trunc seçimi için).
@@ -2902,6 +2913,45 @@ işlev kosul_i1(p: &değişken Ayr, c: metin) -> metin {
     ver rs;
 }
 
+// D-338: BY-VALUE eleman emisyonu (ekle/al/yaz) — ORTAK yol. Beş çağrı yeri var
+// (dizi literali, dizi_ekle/dizi_al/dizi_yaz built-in'leri, INDEKS okuma/yazma,
+// `için` döngüsü); kopyalanırsa biri düzeltilip diğeri unutulur (D-322/D-334 dersi).
+// NOT: ρ parametresi `bolge` adını taşır — `rho` lifted işlevin örtük `%rho`
+// parametresiyle çakışır (LLVM "redefinition of argument"; ölçüldü).
+işlev dizi_yapi_ekle_emit(p: &değişken Ayr, bolge: metin, dr: metin,
+                          et: metin, val: metin) -> tam32 {
+    değişken ts: tam32 = yeni_reg(p);
+    yaz_str("  "); yaz_str(reg_str(ts)); yaz_str(" = alloca "); yaz_str(et); yb(10);
+    yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(val);
+    yaz_str(", ptr "); yaz_str(reg_str(ts)); yb(10);
+    yaz_str("  call void @kdl_dizi_ekle_yapi(ptr "); yaz_str(bolge);
+    yaz_str(", ptr "); yaz_str(dr); yaz_str(", ptr "); yaz_str(reg_str(ts));
+    yaz_str(")"); yb(10);
+    ver 0;
+}
+işlev dizi_yapi_al_emit(p: &değişken Ayr, arr: metin, i: metin, et: metin) -> metin {
+    değişken dst: tam32 = yeni_reg(p);
+    yaz_str("  "); yaz_str(reg_str(dst)); yaz_str(" = alloca "); yaz_str(et); yb(10);
+    yaz_str("  call void @kdl_dizi_al_yapi(ptr "); yaz_str(arr);
+    yaz_str(", i32 "); yaz_str(i); yaz_str(", ptr "); yaz_str(reg_str(dst));
+    yaz_str(")"); yb(10);
+    değişken fr: tam32 = yeni_reg(p);
+    yaz_str("  "); yaz_str(reg_str(fr)); yaz_str(" = load "); yaz_str(et);
+    yaz_str(", ptr "); yaz_str(reg_str(dst)); yb(10);
+    ver reg_str(fr);
+}
+işlev dizi_yapi_yaz_emit(p: &değişken Ayr, arr: metin, i: metin,
+                         et: metin, val: metin) -> tam32 {
+    değişken ts: tam32 = yeni_reg(p);
+    yaz_str("  "); yaz_str(reg_str(ts)); yaz_str(" = alloca "); yaz_str(et); yb(10);
+    yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(val);
+    yaz_str(", ptr "); yaz_str(reg_str(ts)); yb(10);
+    yaz_str("  call void @kdl_dizi_yaz_yapi(ptr "); yaz_str(arr);
+    yaz_str(", i32 "); yaz_str(i); yaz_str(", ptr "); yaz_str(reg_str(ts));
+    yaz_str(")"); yb(10);
+    ver 0;
+}
+
 // D-337: fat value ({ ptr, ptr }) üzerinden DOLAYLI ÇAĞRI — ORTAK yol.
 // Kapanışın NEREDE durduğundan bağımsızdır: yerel bağlama, YAPI ALANI ya da
 // DİZİ ELEMANI. TEK KAYNAK olması önemli — env-null dallanması iki yere
@@ -3301,9 +3351,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken d2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
-            yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
-            yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
-            yaz_str(d2); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
+            eğer dizi_eleman_yapi_mi(et) {   // D-338: by-value eleman
+                dizi_yapi_ekle_emit(p, p.rho_ref, d2, et, e);
+            }
+            değilse {
+                yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
+                yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
+                yaz_str(d2); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
+            }
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = "";
             ver "0";
         }
@@ -3312,9 +3367,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken iy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken vy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 3));
             değişken vty: metin = p.son_tip;
-            yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty)); yaz_str("(ptr ");
-            yaz_str(dy); yaz_str(", i32 "); yaz_str(iy); yaz_str(", "); yaz_str(dizi_arg_tip(vty));
-            yaz_str(" "); yaz_str(vy); yaz_str(")"); yb(10);
+            eğer dizi_eleman_yapi_mi(vty) {   // D-338: by-value eleman
+                dizi_yapi_yaz_emit(p, dy, iy, vty, vy);
+            }
+            değilse {
+                yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty)); yaz_str("(ptr ");
+                yaz_str(dy); yaz_str(", i32 "); yaz_str(iy); yaz_str(", "); yaz_str(dizi_arg_tip(vty));
+                yaz_str(" "); yaz_str(vy); yaz_str(")"); yb(10);
+            }
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = "";
             ver "0";
         }
@@ -3323,6 +3383,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken elem: metin = p.son_elem;
             değişken i3: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             eğer metin_esit(elem, "") { elem = "i32"; }
+            eğer dizi_eleman_yapi_mi(elem) {   // D-338: by-value eleman
+                değişken fr3: metin = dizi_yapi_al_emit(p, d3, i3, elem);
+                p.son_tip = elem; p.son_elem = ""; p.son_ref = "";
+                ver fr3;
+            }
             değişken r3: tam32 = yeni_reg(p);
             değişken rs3: metin = reg_str(r3);
             yaz_str("  "); yaz_str(rs3); yaz_str(" = call "); yaz_str(dizi_al_rettip(elem));
@@ -3726,16 +3791,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken et: metin = p.son_tip;
             p.lam_bek_ret = eski_lbr2;   // RESET (sızdırma)
             eğer dizi_eleman_yapi_mi(et) {
-                // D-337: fat value BY-VALUE (memcpy) eklenir — alloca + store +
-                // kdl_dizi_ekle_yapi. Skaler yol 16 baytlık agregatı i32 imzasına
-                // geçirirdi (LLVM SESSİZCE kabul eder → bozuk dizi).
-                değişken ts: tam32 = yeni_reg(p);
-                yaz_str("  "); yaz_str(reg_str(ts)); yaz_str(" = alloca "); yaz_str(et); yb(10);
-                yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(e);
-                yaz_str(", ptr "); yaz_str(reg_str(ts)); yb(10);
-                yaz_str("  call void @kdl_dizi_ekle_yapi(ptr "); yaz_str(drho);
-                yaz_str(", ptr "); yaz_str(dr); yaz_str(", ptr "); yaz_str(reg_str(ts));
-                yaz_str(")"); yb(10);
+                // D-337/D-338: BY-VALUE (memcpy) eklenir. Skaler yol agregatı i32
+                // imzasına geçirirdi (LLVM'in doğrudan-çağrı denetimi bunu yakalar,
+                // ama kırpma riski taşıyan yolu hiç üretmiyoruz).
+                dizi_yapi_ekle_emit(p, drho, dr, et, e);
                 i = i + 1;
             }
             değilse {
@@ -3756,18 +3815,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken i2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         eğer metin_esit(elem, "") { elem = "i32"; }
         eğer dizi_eleman_yapi_mi(elem) {
-            // D-337: fat value BY-VALUE okunur (kdl_dizi_al_yapi + load). Skaler
-            // `kdl_dizi_al_tam` 16 baytlık elemanın yalnız ilk 4 baytını okurdu.
-            değişken dst: tam32 = yeni_reg(p);
-            yaz_str("  "); yaz_str(reg_str(dst)); yaz_str(" = alloca "); yaz_str(elem); yb(10);
-            yaz_str("  call void @kdl_dizi_al_yapi(ptr "); yaz_str(arr);
-            yaz_str(", i32 "); yaz_str(i2); yaz_str(", ptr "); yaz_str(reg_str(dst));
-            yaz_str(")"); yb(10);
-            değişken fr: tam32 = yeni_reg(p);
-            yaz_str("  "); yaz_str(reg_str(fr)); yaz_str(" = load "); yaz_str(elem);
-            yaz_str(", ptr "); yaz_str(reg_str(dst)); yb(10);
+            // D-337/D-338: BY-VALUE okunur (kdl_dizi_al_yapi + load). Skaler
+            // `kdl_dizi_al_tam` elemanın yalnız ilk 4 baytını okurdu.
+            değişken fr2: metin = dizi_yapi_al_emit(p, arr, i2, elem);
             p.son_tip = elem; p.son_elem = ""; p.son_ref = ""; p.son_ic = elem_ic2;
-            ver reg_str(fr);
+            ver fr2;
         }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
@@ -4040,11 +4092,17 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         yaz_str("  br i1 "); yaz_str(cmp); yaz_str(", label %"); yaz_str(Lbody);
         yaz_str(", label %"); yaz_str(Ldone); yb(10); p.bb_term = 1;
         etiket_yaz(p, Lbody);
-        // x = kdl_dizi_al_<sonek>(kp, i)
-        değişken elr: metin = reg_str(yeni_reg(p));
-        yaz_str("  "); yaz_str(elr); yaz_str(" = call "); yaz_str(dizi_al_rettip(et));
-        yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(et)); yaz_str("(ptr "); yaz_str(kp);
-        yaz_str(", i32 "); yaz_str(il); yaz_str(")"); yb(10);
+        // x = kdl_dizi_al_<sonek>(kp, i)   —  D-338: by-value eleman ise _yapi yolu
+        değişken elr: metin = "";
+        eğer dizi_eleman_yapi_mi(et) {
+            elr = dizi_yapi_al_emit(p, kp, il, et);
+        }
+        değilse {
+            elr = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(elr); yaz_str(" = call "); yaz_str(dizi_al_rettip(et));
+            yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(et)); yaz_str("(ptr "); yaz_str(kp);
+            yaz_str(", i32 "); yaz_str(il); yaz_str(")"); yb(10);
+        }
         yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(elr); yaz_str(", ptr "); yaz_str(xa); yb(10);
         // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter yarat (per-iterasyon).
         p.dongu_d = p.dongu_d + 1;
@@ -4369,6 +4427,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken iy2: metin = ifade_uret(p, dizi_al(p.cocuk, lcb + 1));     // indeks → i32
             değişken vy2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));      // değer
             değişken vty2: metin = p.son_tip;                                  // değer LLVM tipi
+            eğer dizi_eleman_yapi_mi(vty2) {   // D-338: by-value eleman
+                dizi_yapi_yaz_emit(p, taban, iy2, vty2, vy2);
+                ver 0;
+            }
             yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty2)); yaz_str("(ptr ");
             yaz_str(taban); yaz_str(", i32 "); yaz_str(iy2); yaz_str(", "); yaz_str(dizi_arg_tip(vty2));
             yaz_str(" "); yaz_str(vy2); yaz_str(")"); yb(10);

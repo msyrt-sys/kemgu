@@ -1,0 +1,21 @@
+// D-338: NOMINAL YAPI dizi elemanı (%Yapi) — self-host'ta by-value (memcpy) yol.
+// Öncesi: `dizi_ekle_sonek` %Yapi'yı skaler sayıp `kdl_dizi_ekle_tam(i32)` imzasına
+// struct değer geçiriyordu → doğrudan çağrıda LLVM-RED (diziyi doldurmak İMKÂNSIZDI).
+// Ayrıca eleman boyutu sabit "4" idi; artık LLVM `ptrtoint getelementptr` ile hesaplar
+// (8+ baytlık yapıyı 4 baytlık gözeye sıkıştırmak SESSİZ bellek bozulması olurdu).
+// Kapsam: literal + indeks okuma + indeks yazma + dizi_ekle/dizi_al built-in +
+// `için` gezinme + işaretçi alanlı yapı (metin). Exit: 42
+yapı Nokta { x: tam32; y: tam32; }
+yapı Kutu { s: metin; n: tam32; }
+işlev main() -> tam32 {
+    değişken ps: Dizi<Nokta> = [Nokta { x: 1, y: 1 }, Nokta { x: 3, y: 4 }];
+    ps[0] = Nokta { x: 2, y: 5 };            // indeks yazma (by-value)
+    değişken t: tam32 = ps[0].x + ps[1].y;   // indeks okuma = 2 + 4 = 6
+    için p: ps { t = t + p.x + p.y; }        // 6 + (2+5) + (3+4) = 20
+    değişken qs: Dizi<Nokta> = [];
+    dizi_ekle(qs, Nokta { x: 6, y: 8 });     // built-in ekle
+    değişken q = dizi_al(qs, 0);             // built-in al
+    değişken ks: Dizi<Kutu> = [Kutu { s: "merhaba", n: 1 }];
+    değişken k = ks[0];                      // işaretçi alanlı yapı
+    ver t + q.x + q.y + metin_uzunluk(k.s) + k.n;   // 20 + 14 + 7 + 1 = 42
+}
