@@ -1102,8 +1102,12 @@ AYNI secimleri yapar — dolayisiyla sabit-liste nicelemesi yeterlidir.
   bir blogun ortasinda preemption eden gercek bir cekirdek bu modelde
   DOGRUDAN temsil edilmez. Tam incelik icin CT'nin kucuk-adima
   cevrilmesi gerekir — V2.
-  Ayrica: kopru (CTKopru) HALA TEK THREAD'dir, yani bu teorem
-  `Sem/Core`un cok-thread'li semantigine TASINMAMISTIR.
+  GUNCELLEME (D-342/D-343/D-344): "kopru tek thread" notu ARTIK GECERSIZ.
+  Kopru N-thread'e cikarildi (Cerceve), odak degisimi Core'da korunum
+  lemmasiyla kuruldu (odak_kur) ve n-adim serpistirme tumevarimi kapatildi
+  (CTKopru.esz_core_sim). Sonuc: CTKopru.kopru_esz_core_ni — serpistirme
+  artik CT tarafinda DEGIL, Core'un kendi Step'indedir. Kalan kisit
+  TEK-YAZICI'dir (iki thread ayni degiskene yazamaz; bkz. D-342).
 -/
 
 /-- Zamanlama: hangi thread'in sirasi. Liste bittiginde kosum biter. -/

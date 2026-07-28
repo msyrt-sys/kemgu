@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-344 — N-ADIM SERPİŞTİRME: eşzamanlı köprü TAMAMLANDI (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (§11 yeni),
+`test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+D-343 odak değişimini iki adım için birleştirmişti. Bu adım **keyfi
+uzunluktaki zamanlama** için tümevarımı kapatıyor.
+
+**KÖPRÜ EŞLEMESİ:** `thrOf` — CT'nin `Sistem`i (thread başına BLOK LİSTESİ)
+→ Core'un `thread` listesi (thread başına TEK İFADE, kalan blokların `seq`
+zinciri). Thread kimliği = indeks.
+
+**ANA LEMMA `thrOf_bol`:** i. thread'in sıradaki bloğu b ise, `thrOf sys`
+tam olarak `ts1 ++ ⟨i, seq (gom b) (kalan zincir), []⟩ :: ts2` diye bölünür
+**VE** bir blok ilerletildikten sonraki sistem **AYNI ts1/ts2 ile**
+`ts1 ++ ⟨i, kalan zincir, []⟩ :: ts2` verir. Bu, `serpistirme_adimi`nin
+girdi/çıktı şekliyle birebir örtüşür — yani diğer thread'ler değişmez ve
+sıradaki zamanlama adımı **başka bir thread'e** odaklanabilir.
+
+**YENİ:** `thrOfAux`/`thrOf`, `thrOf_bol`, `sysIlkBlok_mem`,
+`sistemGomOk_blok`, `sistemYazmaSahibi_blok`, `sysIlerlet_get`,
+`sistemGomOk_ilerlet`, `sistemYazmaSahibi_ilerlet`, `gomEszIz` (+2 lemma),
+**`esz_core_sim`** (n-adım simülasyon, zamanlama üzerinde tümevarım) ve
+**`kopru_esz_core_ni`**.
+
+**FARK (D-342 ile):** `kopru_esz_ni` serpiştirmeyi CT tarafında bırakıyordu;
+`kopru_esz_core_ni`de **iki koşum da gerçek Core `StepStar`ıdır**. Yani
+CT-tipli, gömülebilir, tek-yazıcı bir sistem `Sem/Core`da koşturulduğunda
+düşük-eşdeğer iki store **aynı Core gözlem izini** üretir.
+
+**Boş quantum (`atla`) Core'da HİÇ ADIM ATMAZ** (`StepStar.refl`) — doğru,
+çünkü CT tarafında da hiçbir olay üretilmiyor.
+
+**SABOTAJ:** `thrOf_bol`un ikinci sonucunu (ilerletilmiş sistemin AYNI
+çerçeveyle bölünmesi) boz → **4 hata**; `blokZinciri`yi kır (kalan blokları
+düşür) → **3 hata**.
+
+**⚠ KALAN SINIRLAR (değişmedi):** blok-atomik incelik (blok içinde
+preemption yok), tek-yazıcı kısıtı (iki-yazıcı = veri yarışı, tasarım gereği
+dışlanmış), `esles` yapıcı desenleri, hücre-başına gizlilik etiketi, dizi
+sınır denetimi, platform-parametrik CT.
+
+---
+
 ## D-343 — ODAK DEĞİŞİMİ KORUNUMU: serpiştirme Core'un kendi Step'ine indi (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/SideChannel/CTKopru.lean` (§10 yeni),

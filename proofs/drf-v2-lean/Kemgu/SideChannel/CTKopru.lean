@@ -1517,4 +1517,232 @@ theorem odak_degisimi_bos_degil (V : List CT.Ad) (own : CT.Ad → ThreadId)
   · decide
   · rfl
 
+-- ============================================================
+-- §11. N-ADIM SERPISTIRME (D-344) — zamanlama uzerinde tumevarim
+-- ============================================================
+
+/-
+D-343 odak degisimini IKI adim icin birlestirdi. Burada keyfi uzunluktaki
+bir zamanlama icin tumevarim yapiliyor. Gereken kopru: CT'nin `Sistem`i
+(thread basina BLOK LISTESI) ile Core'un `thread` listesi (thread basina
+TEK IFADE) arasindaki esleme — `thrOf`.
+-/
+
+/-- CT sistemi → Core thread listesi. i. thread'in Core ifadesi, o
+    thread'in KALAN bloklarinin `seq` zinciridir. Thread kimligi = indeks. -/
+def thrOfAux : Nat → CT.Sistem → List ThreadCtx
+  | _, []        => []
+  | i, ts :: rest => ⟨i, blokZinciri ts, []⟩ :: thrOfAux (i + 1) rest
+
+def thrOf (sys : CT.Sistem) : List ThreadCtx := thrOfAux 0 sys
+
+/-- **ANA ESLEME LEMMASI:** i. thread'in siradaki blogu b ise, `thrOf sys`
+    tam olarak `... ⟨i, seq (gom b) (kalan zincir), []⟩ ...` seklinde
+    bolunur; VE bir blok ilerletildikten sonraki sistem AYNI ts1/ts2 ile
+    `... ⟨i, kalan zincir, []⟩ ...` verir.
+
+    Bu, `serpistirme_adimi`nin girdi/cikti sekliyle BIREBIR ortusur —
+    yani bir zamanlama adimi Core'da gercek bir `StepStar`a ceviriliyor
+    ve DIGER THREAD'LER (ts1/ts2) degismiyor. -/
+theorem thrOfAux_bol : ∀ (sys : CT.Sistem) (k i : Nat) (b : CT.Ifade),
+    CT.sysIlkBlok sys i = some b →
+    ∃ (ts1 ts2 : List ThreadCtx) (kalanBloklar : List CT.Ifade),
+      thrOfAux k sys
+        = ts1 ++ ⟨k + i, .seq (gom b) (blokZinciri kalanBloklar), []⟩ :: ts2
+      ∧ thrOfAux k (CT.sysIlerlet sys i)
+        = ts1 ++ ⟨k + i, blokZinciri kalanBloklar, []⟩ :: ts2 := by
+  intro sys
+  induction sys with
+  | nil => intro k i b h; cases h
+  | cons ts rest ih =>
+      intro k i b h
+      cases i with
+      | zero =>
+          have h_head : ts.head? = some b := h
+          cases ts with
+          | nil => cases h_head
+          | cons b0 bs =>
+              have hb : b0 = b := Option.some.inj h_head
+              refine ⟨[], thrOfAux (k + 1) rest, bs, ?_, ?_⟩
+              · show ⟨k, blokZinciri (b0 :: bs), []⟩ :: thrOfAux (k + 1) rest = _
+                simp [blokZinciri, hb]
+              · show ⟨k, blokZinciri (b0 :: bs).tail, []⟩ :: thrOfAux (k + 1) rest = _
+                simp [blokZinciri]
+      | succ n =>
+          obtain ⟨ts1, ts2, kb, h1, h2⟩ := ih (k + 1) n b h
+          have hk : k + 1 + n = k + (n + 1) := by omega
+          rw [hk] at h1 h2
+          refine ⟨⟨k, blokZinciri ts, []⟩ :: ts1, ts2, kb, ?_, ?_⟩
+          · show ⟨k, blokZinciri ts, []⟩ :: thrOfAux (k + 1) rest = _
+            rw [h1]; rfl
+          · show ⟨k, blokZinciri ts, []⟩ :: thrOfAux (k + 1) (CT.sysIlerlet rest n) = _
+            rw [h2]; rfl
+
+theorem thrOf_bol (sys : CT.Sistem) (i : Nat) (b : CT.Ifade)
+    (h : CT.sysIlkBlok sys i = some b) :
+    ∃ (ts1 ts2 : List ThreadCtx) (kb : List CT.Ifade),
+      thrOf sys = ts1 ++ ⟨i, .seq (gom b) (blokZinciri kb), []⟩ :: ts2
+      ∧ thrOf (CT.sysIlerlet sys i) = ts1 ++ ⟨i, blokZinciri kb, []⟩ :: ts2 := by
+  obtain ⟨ts1, ts2, kb, h1, h2⟩ := thrOfAux_bol sys 0 i b h
+  exact ⟨ts1, ts2, kb, by simpa using h1, by simpa using h2⟩
+
+-- --- Sistem-seviyesi on-kosullarin blok'a inmesi + ilerletme altinda korunumu ---
+
+theorem sysIlkBlok_mem : ∀ (sys : CT.Sistem) (i : Nat) (b : CT.Ifade),
+    CT.sysIlkBlok sys i = some b → ∃ ts, sys[i]? = some ts ∧ b ∈ ts := by
+  intro sys
+  induction sys with
+  | nil => intro i b h; cases h
+  | cons ts rest ih =>
+      intro i b h
+      cases i with
+      | zero =>
+          have h_head : ts.head? = some b := h
+          cases ts with
+          | nil => cases h_head
+          | cons b0 bs =>
+              have hb : b0 = b := Option.some.inj h_head
+              exact ⟨b0 :: bs, rfl, hb ▸ List.Mem.head _⟩
+      | succ n =>
+          obtain ⟨ts', hg, hm⟩ := ih n b h
+          exact ⟨ts', hg, hm⟩
+
+theorem sistemGomOk_blok {V : List CT.Ad} {sys : CT.Sistem} {i : Nat} {b : CT.Ifade}
+    (h : SistemGomOk V sys) (h_get : CT.sysIlkBlok sys i = some b) :
+    GomOk b ∧ Kapsar V b := by
+  obtain ⟨ts, hg, hm⟩ := sysIlkBlok_mem sys i b h_get
+  exact h ts (List.mem_of_getElem? hg) b hm
+
+theorem sistemYazmaSahibi_blok {own : CT.Ad → ThreadId} {sys : CT.Sistem}
+    {i : Nat} {b : CT.Ifade}
+    (h : SistemYazmaSahibi own sys) (h_get : CT.sysIlkBlok sys i = some b) :
+    YazmaSahibi own i b := by
+  obtain ⟨ts, hg, hm⟩ := sysIlkBlok_mem sys i b h_get
+  exact h i ts hg b hm
+
+theorem sysIlerlet_get : ∀ (sys : CT.Sistem) (i j : Nat) (ts' : CT.ThreadBloklari),
+    (CT.sysIlerlet sys i)[j]? = some ts' →
+    ∃ ts, sys[j]? = some ts ∧ ∀ e ∈ ts', e ∈ ts := by
+  intro sys
+  induction sys with
+  | nil => intro i j ts' h; cases h
+  | cons ts rest ih =>
+      intro i j ts' h
+      cases i with
+      | zero =>
+          cases j with
+          | zero =>
+              have : ts.tail = ts' := Option.some.inj h
+              exact ⟨ts, rfl, fun e he => List.mem_of_mem_tail (this ▸ he)⟩
+          | succ m => exact ⟨ts', h, fun _ he => he⟩
+      | succ n =>
+          cases j with
+          | zero => exact ⟨ts', h, fun _ he => he⟩
+          | succ m =>
+              obtain ⟨ts0, hg, hsub⟩ := ih n m ts' h
+              exact ⟨ts0, hg, hsub⟩
+
+theorem sistemGomOk_ilerlet {V : List CT.Ad} {sys : CT.Sistem}
+    (h : SistemGomOk V sys) (i : Nat) : SistemGomOk V (CT.sysIlerlet sys i) := by
+  intro ts' h_ts' e he
+  obtain ⟨j, hj⟩ := List.getElem?_of_mem h_ts'
+  obtain ⟨ts, hg, hsub⟩ := sysIlerlet_get sys i j ts' hj
+  exact h ts (List.mem_of_getElem? hg) e (hsub e he)
+
+theorem sistemYazmaSahibi_ilerlet {own : CT.Ad → ThreadId} {sys : CT.Sistem}
+    (h : SistemYazmaSahibi own sys) (i : Nat) :
+    SistemYazmaSahibi own (CT.sysIlerlet sys i) := by
+  intro j ts' hj e he
+  obtain ⟨ts, hg, hsub⟩ := sysIlerlet_get sys i j ts' hj
+  exact h j ts hg e (hsub e he)
+
+/-- Serpistirilmis CT izinin Core gozlem izine gommesi (her gozlem KENDI
+    thread kimligiyle). CT izi yeni-SONDA, Core yeni-BASTA → `reverse`. -/
+def gomEszIz (t : CT.EszIz) : List GozlemOlay :=
+  (t.map (fun p => gomGoz p.1 p.2)).reverse
+
+theorem gomEszIz_append (t1 t2 : CT.EszIz) :
+    gomEszIz (t1 ++ t2) = gomEszIz t2 ++ gomEszIz t1 := by
+  simp [gomEszIz, List.map_append]
+
+theorem gomEszIz_blok (i : ThreadId) (t : CT.Iz) :
+    gomEszIz (t.map (fun g => (i, g))) = gomGozIz i t := by
+  simp [gomEszIz, gomGozIz, List.map_map]
+
+/-- **N-ADIM SERPISTIRME SIMULASYONU (esz_core_sim):** CT'nin
+    serpistirilmis kosumunun TAMAMI Core'da gercek bir `StepStar`dir.
+    Zamanlama uzerinde tumevarim; her adim `serpistirme_adimi`, odak
+    degisimi `thrOf_bol` + `stepStar_trans` ile birlesir.
+
+    Sonuc sistemi EXISTENTIAL: `CT.EszCalis` son sistemi tasimadigi icin
+    (yalniz store/iz tasiyor) burada varlikla veriliyor. -/
+theorem esz_core_sim {V : List CT.Ad} {own : CT.Ad → ThreadId} :
+    ∀ {s : CT.Store} {sys : CT.Sistem} {zam : CT.Zamanlama}
+      {s' : CT.Store} {t : CT.EszIz},
+      CT.EszCalis s sys zam s' t →
+      SistemGomOk V sys → SistemYazmaSahibi own sys →
+      ∀ (sigma : Store) (iz : Iz) (z : Zaman), StoreUyum V s sigma →
+      ∃ (sysSon : CT.Sistem) (sigma' : Store) (iz' : Iz) (z' : Zaman),
+        StepStar (KN V own (thrOf sys) sigma iz z)
+                 (KN V own (thrOf sysSon) sigma' iz' z')
+        ∧ StoreUyum V s' sigma'
+        ∧ izGozlem iz' = gomEszIz t ++ izGozlem iz := by
+  intro s sys zam s' t h
+  induction h with
+  | bitti s sys =>
+      intro _ _ sigma iz z hu
+      exact ⟨sys, sigma, iz, z, StepStar.refl _, hu, by simp [gomEszIz]⟩
+  | adim s sa s' sys i kalan blok tb v izK h_get h_run h_rest ih =>
+      intro h_gom h_ys sigma iz z hu
+      obtain ⟨ts1, ts2, kb, h_bol1, h_bol2⟩ := thrOf_bol sys i blok h_get
+      obtain ⟨h_gb, h_kb⟩ := sistemGomOk_blok h_gom h_get
+      have h_yb := sistemYazmaSahibi_blok h_ys h_get
+      -- (1) i. thread'in blogu Core'da kosar; ts1/ts2 DEGISMEZ
+      obtain ⟨sg1, iz1, z1, hr1, hu1, hg1⟩ :=
+        serpistirme_adimi (V := V) (own := own) ts1 ts2 i (blokZinciri kb)
+          h_run h_gb h_kb h_yb sigma iz z hu
+      rw [← h_bol1] at hr1
+      rw [← h_bol2] at hr1
+      -- (2) kalan zamanlama: ODAK BASKA THREAD'E gecebilir (thrOf_bol
+      --     ara konfigurasyonu her iki bolunmede AYNI kilar)
+      obtain ⟨sysSon, sg2, iz2, z2, hr2, hu2, hg2⟩ :=
+        ih (sistemGomOk_ilerlet h_gom i) (sistemYazmaSahibi_ilerlet h_ys i)
+          sg1 iz1 z1 hu1
+      refine ⟨sysSon, sg2, iz2, z2, stepStar_trans _ _ _ hr1 hr2, hu2, ?_⟩
+      rw [hg2, hg1, gomEszIz_append, gomEszIz_blok, List.append_assoc]
+  | atla s s' sys i kalan izK h_yok h_rest ih =>
+      -- Bos quantum: Core'da HIC ADIM ATILMAZ (StepStar.refl) — bu da
+      -- dogru, cunku CT tarafinda da hicbir olay uretilmez.
+      intro h_gom h_ys sigma iz z hu
+      exact ih h_gom h_ys sigma iz z hu
+
+/-- **ESZAMANLI KOPRU — TAM HAL (kopru_esz_core_ni):** CT-tipli,
+    gomulebilir, tek-yazici bir sistem HERHANGI bir zamanlama altinda
+    `Sem/Core`da kosturuldugunda, dusuk-esdeger iki baslangic store'u
+    AYNI CORE GOZLEM IZINI uretir.
+
+    D-342'nin `kopru_esz_ni`sinden farki: serpistirme artik CT tarafinda
+    KALMIYOR — iki kosum da GERCEK Core `StepStar`lari. -/
+theorem kopru_esz_core_ni (G : CT.EtiketOrtam) (V : List CT.Ad)
+    (own : CT.Ad → ThreadId) (sys : CT.Sistem)
+    (h_ct : CT.SistemCtOk G sys) (h_gom : SistemGomOk V sys)
+    (h_ys : SistemYazmaSahibi own sys)
+    {s1 s2 s1' s2' : CT.Store} {zam : CT.Zamanlama} {t1 t2 : CT.EszIz}
+    (h_low : CT.DusukEs G s1 s2)
+    (h_r1 : CT.EszCalis s1 sys zam s1' t1)
+    (h_r2 : CT.EszCalis s2 sys zam s2' t2)
+    (sigma1 sigma2 : Store) (iz : Iz) (z : Zaman)
+    (hu1 : StoreUyum V s1 sigma1) (hu2 : StoreUyum V s2 sigma2) :
+    ∃ (sy1 sy2 : CT.Sistem) (sg1 sg2 : Store) (iz1 iz2 : Iz) (z1 z2 : Zaman),
+      StepStar (KN V own (thrOf sys) sigma1 iz z) (KN V own (thrOf sy1) sg1 iz1 z1)
+      ∧ StepStar (KN V own (thrOf sys) sigma2 iz z) (KN V own (thrOf sy2) sg2 iz2 z2)
+      ∧ izGozlem iz1 = izGozlem iz2 := by
+  obtain ⟨sy1, sg1, iz1, z1, hr1, _, hg1⟩ :=
+    esz_core_sim (V := V) (own := own) h_r1 h_gom h_ys sigma1 iz z hu1
+  obtain ⟨sy2, sg2, iz2, z2, hr2, _, hg2⟩ :=
+    esz_core_sim (V := V) (own := own) h_r2 h_gom h_ys sigma2 iz z hu2
+  obtain ⟨h_iz_esit, _⟩ := CT.ct_esz_ni G h_r1 h_r2 h_ct h_low
+  exact ⟨sy1, sy2, sg1, sg2, iz1, iz2, z1, z2, hr1, hr2, by
+    rw [hg1, hg2, h_iz_esit]⟩
+
 end Kemgu.SideChannel.CTKopru
