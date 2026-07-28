@@ -5,6 +5,60 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-343 [YÜKSEK] — kem_os tip-temiz: `--tip-atla` borcu kapandı; aritmetik literal bağlamı onarıldı (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.c`, `runtime/kem_mmu.kem`, `Makefile`
+(kem_os cat + falsifiye-gate yönlendirmesi + `test_tumu`), `test/check_kapisi.sh`,
+`test/test_tip_kontrol.c` (+6), `test/test_llvm.c` (borç denetimi, 16→14).]**
+
+**Neden:** D-337 `--llvm`'e tip kapısını bağladı, ama kem_os build'i `--tip-atla`
+ile muaf tutuldu ve bu **BORÇ** olarak yazıldı. Sonuç: "derleme zamanı güvenlik"
+tezini savunan dilin işletim sistemi, kendi tip denetiminden geçmiyordu.
+
+**Ölçüm düzeltmesi:** hata sayısı **60 değil 23**. Önceki sayım `--mimari arm64`
+bayrağı olmadan yapılmış; AS001'lerin tamamı sahteydi. *Ders: bayrağa duyarlı
+bir aracın çıktısını bayraksız sayma.*
+
+**Kök neden 1 — beklenen tip aritmetik operandlara yayılmıyordu (15 hata).**
+`değişken a: tam64 = 5 + 3;` bile T001 veriyordu; belgelenmiş bidirectional
+çıkarsamanın deliği. `tamsayi_literal_ifade_mi()` (yalnız literal + aritmetik +
+negasyon; değişken/çağrı/`olarak` görülür görülmez 0) eklendi ve iki yerde
+kullanıldı: `tip_belirle` IKILI tek-taraflı uyumu artık literal AĞACINI kabul
+ediyor; `tip_belirle_beklenen` IKILI/TEKLI dıştan gelen tipi operandlara
+özyineliyor. **Muhafazakâr:** yalnızca bugün HATA VEREN salt-literal durumları
+kabul eder — tipli operand varsa red eskisi gibi sürer (2 sabotaj testi kilitler).
+*Mehmet onayı alındı (tip sistemi değişikliği).*
+
+**Kök neden 2 — `kdl_metin_uzunluk/bayt` çapraz-birimdi (8 hata).** KEMGU'da üst
+düzey ileri-bildirim **YOK** (ölçüldü: `imza_yeterli` yalnız `özellik` gövdesinde,
+`src/parser.c:738`) → tek-birim birleştirme, **dil değişikliği gerektirmeyen tek
+çözüm**. `kem_heap.kem` cat'e alındı, çıktı `strip_defined_declares.awk`'tan
+geçiriliyor, `bm_a64_kem_heap.o` link'ten çıkarıldı. Falsifiye-kanıt gate'leri
+`kem_os.o`'ya yönlendirildi — **kanıt korunuyor**, yalnız hangi objede arandığı
+değişti.
+
+**Kök neden 3 — gerçek `tam64`→`dtam64` uyuşmazlığı (5 hata).** Adres/ESR
+değerleri işaretsiz yorumlanmalı; kaynakta açık dönüşüm eklendi (yamamak değil,
+doğrusunu yazmak).
+
+**Kapı:** `check_kapisi.sh` artık kem_os **birleşik** kaynağını da denetliyor
+(8 parça, `--mimari arm64`) ve `calistir_check_kapisi` **`test_tumu`'ya bağlandı**
+— daha önce hiçbir varsayılan koşumda çalışmıyordu. Sabotajla doğrulandı.
+
+**Kendini iptal eden muafiyet:** `test_llvm.c` TIP_BORCU sarmalayıcısı artık
+muaf programı önce `--check`'ten geçiriyor; geçerse çağrı satırıyla gürültülü
+uyarı basıyor. Bu sayede 2 borcun kapandığı **ölçülerek** görüldü ve geri alındı
+(16→14). Muafiyetin sessizce geçerliliğini yitirmesi artık imkânsız.
+
+**Sınır (V1):** `bm_a64_kem_heap.o` kuralı Makefile'da duruyor ama artık kem_os
+tarafından kullanılmıyor (ölü hedef, zararsız). Kalan 14 tip borcu (kesirli32
+literal bağlamı, `mantıksal olarak tamN`, sınıflandırılmamışlar) ayrı iş.
+
+**Testler:** tip_kontrol 197/197 (+6), llvm 284/284, `test_tumu` tam koşum 0 hata,
+kem_os QEMU boot `[1..15]` + `KEMGU KEM-OS OK`.
+
+---
+
 ## D-340 [YÜKSEK] — Kripto bilinen-cevap KOŞUM kapısı kuruldu; 2 gerçek kusur buldu (2026-07-28)
 
 **Karar [ETKİ: `test/kripto_kosum_harness.sh` (yeni), `test/stdlib/test_kripto_kosum.kem`
