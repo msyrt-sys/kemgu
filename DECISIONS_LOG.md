@@ -5,6 +5,138 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-344 [YÜKSEK] — `checker.kem` ↔ `codegen.kem` ayrışması kapatıldı; `calistir_checker_diff` `test_tumu`'ya bağlandı (2026-07-28)
+
+**Karar [ETKİ: `selfhost/checker.kem`, `test/check_korpus/`, `Makefile`]:**
+Aşama-2 referans checker'ı (`selfhost/checker.kem`) ile birleşik driver
+(`selfhost/codegen.kem`) içindeki checker ayrışmıştı. Ayrışma ÖNCE korpusa
+örnek eklenerek GÖRÜNÜR yapıldı, sonra kapatıldı, sonra kapı `test_tumu`'ya
+bağlandı.
+
+**Ölçülen ayrışma (onarım öncesi):** `test/ornekler/kem_malloc.kem` üzerinde
+C oracle `OK`, `codegen.kem --check` `OK`, ama `checker.kem` **5 SAHTE tanı**
+üretiyordu: `T002 24:5`, `T002 31:27`, `T002 32:5`, `T002 32:16`, `T022 39:5`.
+
+**Kök nedenler (3, hepsi ölçülerek doğrulandı):**
+1. **`küresel` (D-253) HİÇ yoktu** — `anahtar_tip`'te yok → `parse_ust_oge`
+   HATA dalına düşüyor, küresel ad global kapsama girmiyor → her okuma/yazma
+   sahte `T002`.
+2. **`*p = v` T022 muafiyeti (D-249) yoktu** — muafiyet yalnız
+   `codegen.kem`'de; `checker.kem` `güvensiz` blokta deref-atamaya KOŞULSUZ
+   `T022` veriyordu.
+3. **`çıplak` (D-255) HİÇ yoktu** — hata-kurtarma sayesinde `--checkdump`
+   çıktısı tesadüfen doğru kalıyordu (aşağıda "gate edilmiyor" notu).
+
+**Onarım (`checker.kem`, hepsi `codegen.kem` aynası):** `anahtar_tip`'e
+`küresel`→`KURESEL` + `çıplak`→`CIPLAK`; `parse_kuresel` (C `parser.c` parite);
+`parse_ust_oge` dispatch; `parse_islev_genel` modifier döngüsü (çıplak/
+gerçekzamanlı herhangi sıra); `genel_topla`'ya `KURESEL` → `g_ekle` (ad
+çözümü); `kontrol_ust`'ta `KURESEL` init'i `SABIT` gibi denetlenir; ATAMA'da
+`hedef_deref` (TEKLI/`deref*`) T022 muafiyeti.
+
+**Korpus (+3):** `tc6_01_kuresel.kem` (küresel+çıplak, kem_malloc deseni),
+`tc6_02_ciplak.kem`, `tc6_03_deref_atama.kem`. Hepsi oracle `OK`.
+
+**Kapı:** `calistir_checker_diff` artık `test_tumu` zincirinde (Makefile:5285).
+Daha önce YOKTU — `checker.kem`'in TEK doğruluk kapısı hiç koşmuyordu, ayrışma
+bu yüzden sessizce birikmişti.
+
+**Doğrulama:** checker_diff 56/56 → **59/59**. `kem_malloc.kem` 5 sahte tanı
+→ **0** (oracle ile birebir). codegen_bootstrap FIXPOINT ✓ (lexer/parser/
+checker 92/92 birebir + stage1==stage2, 45729 satır). self_driver 4 mod ✓
+(LLVM 108/108 ×2 + fixpoint). check_kapisi 203/210, 0 RED. codegen_diff 108/108.
+
+**Sabotaj kapısı (kanıt):** T022 muafiyeti kaldırıldı → `tc6_03` KIRMIZI
+(58/59); `KURESEL`→`g_ekle` kaldırıldı → `tc6_01` KIRMIZI (58/59); geri
+alındı → 59/59. İkisi de GERÇEK kapı.
+
+**Kapsam/sınırlar (dürüst):**
+- **`tc6_02_ciplak` GATE ETMİYOR:** `CIPLAK` anahtar kelimesi sabote edilince
+  korpus yine 59/59 kaldı. `--checkdump` yalnız T/L/M kodu basıyor; `çıplak`'ın
+  hata-kurtarma yolu (sahte HATA düğümü + `hata_say` şişmesi) dump'a
+  YANSIMIYOR. Denenen 6 şekil (tek/çift modifier, `dışa çıplak`, gövde-hatalı,
+  çift tanım) hiçbirinde ayrışma gözlenmedi. `CIPLAK` eklemesi bu yüzden
+  *gözlemlenebilir hata onarımı değil*, AST hijyeni + `codegen.kem` paritesi;
+  `tc6_02` gate-etmeyen regresyon kilidi olarak tutuldu.
+- **E010 İKİSİNDE DE YOK:** `küresel`'e güvensiz-tier dışından erişim C
+  oracle'da `E010` verir; `checker.kem` VE `codegen.kem` bunu uygulamıyor
+  (ölçüldü). Korpus dosyası `çıplak` kullandığı için bu yol uyanmıyor. AYRI
+  ve ÖNCEDEN VAR OLAN eksik.
+- **Artık ikilik riski:** ortak 182 işlev adının **19'unun gövdesi hâlâ
+  farklı** (`ifade_tip`, `kontrol_dugum`, `t003_kontrol`, `lin_tuket_dugum`,
+  `parse_yapi`, `parse_cesit` …). `checker.kem` `codegen.kem`'in ÖZ ALT
+  KÜMESİ (182 ⊂ 327, yalnız-checker = 0). Bu commit ayrışmayı kapatır ama
+  KÖKÜNÜ (iki uygulama) kaldırmaz.
+
+**MEHMET KARARI (2026-07-28):** `checker.kem` **SİLİNMEYECEK**, ikili yapı
+şimdilik korunacak — gerekçe: `calistir_checker_diff` artık `test_tumu`'da
+koştuğu için yeni ayrışma ANINDA kırmızı olur; Aşama-2'nin bağımsız referans
+tanığı (codegen_bootstrap'taki ayrı `checker` bileşeni, 92/92) korunur.
+**Kabul edilen bilinen borç:** 19 farklı gövde duruyor → korpusun uyandırmadığı
+bir şekil hâlâ sessizce ayrışabilir; her checker değişikliği İKİ yerde
+yapılmalı. Konsolidasyon ileriye bırakıldı (Aşama-5 "tek-kaynak" maddesi).
+**Bu borcun tek panzehiri korpus kapsamıdır:** checker'a yeni bir kural/
+sözdizimi eklenirken `test/check_korpus/`'a onu uyandıran örnek EKLENMELİ —
+aksi halde ayrışma yine sessizce birikir (bu oturumun asıl dersi).
+- Ayrıca ölçülen, kapsam DIŞI önceden-var-olan eksik: `değişken q: tam32 = f;`
+  (işlev değerini skalere atama) oracle `T001` verir, `checker.kem` vermez.
+
+---
+
+## D-343 [YÜKSEK] — kem_os tip-temiz: `--tip-atla` borcu kapandı; aritmetik literal bağlamı onarıldı (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.c`, `runtime/kem_mmu.kem`, `Makefile`
+(kem_os cat + falsifiye-gate yönlendirmesi + `test_tumu`), `test/check_kapisi.sh`,
+`test/test_tip_kontrol.c` (+6), `test/test_llvm.c` (borç denetimi, 16→14).]**
+
+**Neden:** D-337 `--llvm`'e tip kapısını bağladı, ama kem_os build'i `--tip-atla`
+ile muaf tutuldu ve bu **BORÇ** olarak yazıldı. Sonuç: "derleme zamanı güvenlik"
+tezini savunan dilin işletim sistemi, kendi tip denetiminden geçmiyordu.
+
+**Ölçüm düzeltmesi:** hata sayısı **60 değil 23**. Önceki sayım `--mimari arm64`
+bayrağı olmadan yapılmış; AS001'lerin tamamı sahteydi. *Ders: bayrağa duyarlı
+bir aracın çıktısını bayraksız sayma.*
+
+**Kök neden 1 — beklenen tip aritmetik operandlara yayılmıyordu (15 hata).**
+`değişken a: tam64 = 5 + 3;` bile T001 veriyordu; belgelenmiş bidirectional
+çıkarsamanın deliği. `tamsayi_literal_ifade_mi()` (yalnız literal + aritmetik +
+negasyon; değişken/çağrı/`olarak` görülür görülmez 0) eklendi ve iki yerde
+kullanıldı: `tip_belirle` IKILI tek-taraflı uyumu artık literal AĞACINI kabul
+ediyor; `tip_belirle_beklenen` IKILI/TEKLI dıştan gelen tipi operandlara
+özyineliyor. **Muhafazakâr:** yalnızca bugün HATA VEREN salt-literal durumları
+kabul eder — tipli operand varsa red eskisi gibi sürer (2 sabotaj testi kilitler).
+*Mehmet onayı alındı (tip sistemi değişikliği).*
+
+**Kök neden 2 — `kdl_metin_uzunluk/bayt` çapraz-birimdi (8 hata).** KEMGU'da üst
+düzey ileri-bildirim **YOK** (ölçüldü: `imza_yeterli` yalnız `özellik` gövdesinde,
+`src/parser.c:738`) → tek-birim birleştirme, **dil değişikliği gerektirmeyen tek
+çözüm**. `kem_heap.kem` cat'e alındı, çıktı `strip_defined_declares.awk`'tan
+geçiriliyor, `bm_a64_kem_heap.o` link'ten çıkarıldı. Falsifiye-kanıt gate'leri
+`kem_os.o`'ya yönlendirildi — **kanıt korunuyor**, yalnız hangi objede arandığı
+değişti.
+
+**Kök neden 3 — gerçek `tam64`→`dtam64` uyuşmazlığı (5 hata).** Adres/ESR
+değerleri işaretsiz yorumlanmalı; kaynakta açık dönüşüm eklendi (yamamak değil,
+doğrusunu yazmak).
+
+**Kapı:** `check_kapisi.sh` artık kem_os **birleşik** kaynağını da denetliyor
+(8 parça, `--mimari arm64`) ve `calistir_check_kapisi` **`test_tumu`'ya bağlandı**
+— daha önce hiçbir varsayılan koşumda çalışmıyordu. Sabotajla doğrulandı.
+
+**Kendini iptal eden muafiyet:** `test_llvm.c` TIP_BORCU sarmalayıcısı artık
+muaf programı önce `--check`'ten geçiriyor; geçerse çağrı satırıyla gürültülü
+uyarı basıyor. Bu sayede 2 borcun kapandığı **ölçülerek** görüldü ve geri alındı
+(16→14). Muafiyetin sessizce geçerliliğini yitirmesi artık imkânsız.
+
+**Sınır (V1):** `bm_a64_kem_heap.o` kuralı Makefile'da duruyor ama artık kem_os
+tarafından kullanılmıyor (ölü hedef, zararsız). Kalan 14 tip borcu (kesirli32
+literal bağlamı, `mantıksal olarak tamN`, sınıflandırılmamışlar) ayrı iş.
+
+**Testler:** tip_kontrol 197/197 (+6), llvm 284/284, `test_tumu` tam koşum 0 hata,
+kem_os QEMU boot `[1..15]` + `KEMGU KEM-OS OK`.
+
+---
+
 ## D-340 [YÜKSEK] — Kripto bilinen-cevap KOŞUM kapısı kuruldu; 2 gerçek kusur buldu (2026-07-28)
 
 **Karar [ETKİ: `test/kripto_kosum_harness.sh` (yeni), `test/stdlib/test_kripto_kosum.kem`

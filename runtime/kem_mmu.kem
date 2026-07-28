@@ -237,10 +237,12 @@ sabit KIS_UART_TXFF: tam32  = 32;          // bit5
 // kdl_istisna_isle birebir: FAR oku + "ISTISNA tip=0x.. a=0x.. b=0x.. adr=0x.." + wfe sonsuz.
 çıplak işlev kdl_istisna_isle(tip: tam64, a: tam64, b: tam64) {
     değişken adr: tam64 = kis_far_oku();
-    kis_metin("ISTISNA tip=0x"); kis_onaltilik(tip);
-    kis_metin(" a=0x"); kis_onaltilik(a);
-    kis_metin(" b=0x"); kis_onaltilik(b);
-    kis_metin(" adr=0x"); kis_onaltilik(adr);
+    // kis_onaltilik ISARETSIZ (dtam64) ister — adres/ESR degerleri isaretsiz
+    // yorumlanmali (tam64 negatif goruntusu onaltilik basaminda YANLIS olur).
+    kis_metin("ISTISNA tip=0x"); kis_onaltilik(tip olarak dtam64);
+    kis_metin(" a=0x"); kis_onaltilik(a olarak dtam64);
+    kis_metin(" b=0x"); kis_onaltilik(b olarak dtam64);
+    kis_metin(" adr=0x"); kis_onaltilik(adr olarak dtam64);
     kis_satir();
     iken 1 == 1 {
         güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"wfe"# bozulan("~{memory}") } }
@@ -271,7 +273,7 @@ str x10, [x9]"#
 // kdl_el0_izolasyon_isle birebir: rapor + kem_gorev_bitir. .S FAR'ı x0'da geçer.
 çıplak işlev kdl_el0_izolasyon_isle(far: tam64) {
     kis_metin("IZOLASYON OK: EL0 kernel-erisim reddedildi (surec olduruldu) FAR=0x");
-    kis_onaltilik(far);
+    kis_onaltilik(far olarak dtam64);
     kis_satir();
     kem_gorev_bitir();
 }
