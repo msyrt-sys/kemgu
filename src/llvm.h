@@ -44,6 +44,19 @@
  * ile karşılaştırılır + triple aarch64 emit edilir → aarch64 sysreg/bariyer asm .kem'de
  * açılır (kem_os subsystem göçü önkoşulu). MİNİMAL: yalnız asm-gate + triple; başka target-
  * awareness YOK (KEMGU IR zaten target-agnostik; triple clang --target ile override edilir). */
+/* D-346: sabitsüre CT bariyerinin GÜCÜ (yalnız arm64'te anlamlı).
+ *   "csdb" (VARSAYILAN) — HINT uzayında; FEAT'siz çekirdekte mimari olarak NOP,
+ *                         yani HER aarch64 çekirdeğinde güvenle çalışır.
+ *   "sb"               — FEAT_SB (ARMv8.5+); daha güçlü spekülasyon bariyeri.
+ *                         ⚠ FEAT_SB'SİZ çekirdekte encoding (0xd50330ff)
+ *                         `msr S0_3_C3_C0_7, xzr` olarak çözülür — NOP DEĞİL,
+ *                         tahsis edilmemiş sistem yazması. Bu yüzden opt-in;
+ *                         yalnız hedefin ARMv8.5+ olduğu BİLİNİYORSA kullan
+ *                         (ör. DGX Spark / Grace = Neoverse V2). Ölçüm ve
+ *                         gerekçe: DECISIONS_LOG D-346. */
+void llvm_ct_bariyer_ayarla(const char *tur);
+const char *llvm_ct_bariyer(void);
+
 void llvm_hedef_ayarla(const char *mimari, const char *triple);
 const char *llvm_hedef_mimari(void);   /* geçerli asm arch-tag (AS001 karşılaştırması) */
 const char *llvm_hedef_triple(void);   /* geçerli emit triple */

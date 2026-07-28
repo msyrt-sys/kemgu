@@ -2036,6 +2036,12 @@ işlev agg_alan(s: metin, n: tam32) -> metin {
 işlev tagunion_yapici_mi(ad: metin) -> mantıksal {
     ver metin_esit(ad, "değer") veya metin_esit(ad, "tamam") veya metin_esit(ad, "hata");
 }
+// D-345: x86 lfence spekülasyon bariyeri (Spectre v1) — sabitsüre intrinsic'lerinden
+// sonra basılır. LLVM built-in intrinsic; `declare` GEREKMEZ (C llvm.c aynası).
+işlev lfence_yaz(p: &değişken Ayr) -> tam32 {
+    yaz_str("  call void @llvm.x86.sse2.lfence()"); yb(10);
+    ver 0;
+}
 // i1 sonucu → i32 (0/1) genişlet; üretilen reg'i döndür.
 işlev zext_i1(p: &değişken Ayr, c: metin) -> metin {
     değişken r: tam32 = yeni_reg(p);
@@ -2071,10 +2077,21 @@ işlev dtam_ad_mi(t: metin) -> tam32 {
       veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver 1; }
     ver 0;
 }
-// D-337: AST tip düğümü işaretsiz mi? (yalnız TIP_BASIT dtamN — C ile birebir)
+// D-337: AST tip düğümü işaretsiz mi? (C ast_tip_isaretsiz_mi aynası)
+// D-345: ŞEFFAF SARMALAYICILAR (sabitsüre<T> / tekkez<T>) İÇ TİPE ÖZYİNELER —
+// ll_tip'in özyinelediği kümeyle BİREBİR aynı tutulmalı (oraya yeni bir şeffaf
+// sarmalayıcı eklenirse BURAYA DA eklenmeli). Bu olmadan
+// `sabitsüre<dtamN>` imzasız SAYILMIYOR → `>>` lshr yerine ashr; stdlib/kripto
+// tamamen sabitsüre üzerine kurulu olduğu için SHA-256/ChaCha20 sessizce yanlış.
+// Yalnız bu ikisi: görev/kanal→opak ptr, yetki→struct, seçimlik/sonuç→tagged
+// aggregate, Dizi/referans/pointer→ptr. Hiçbiri "T'nin kendisi" değil.
 işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
     eğer tip_idx < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver 0; }
+    değişken ta: metin = dizi_al(p.a_ad, tip_idx);
+    eğer metin_esit(ta, "TIP_SABITSURE") veya metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    eğer metin_esit(ta, "TIP_BASIT") == yanlış { ver 0; }
     ver dtam_ad_mi(dizi_al(p.a_deg, tip_idx));
 }
 // D-337: değişken/parametre işaretsiz mi? (cg_var_bul ile AYNI arama yönü/sınırı —
@@ -2390,6 +2407,13 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşerdi → tekkez<metin> gibi
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_TEKKEZ") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    // D-345: sabitsüre<T> de SIFIR-MALİYET sarmalayıcı (C ast_tip_to_ir aynası).
+    // Bu dal YOKTU → "i32" fallback'ine düşüyordu: `sabitsüre<dtam64>` i32 olarak
+    // üretiliyor (SESSİZ 32-bit kırpma), `sabitsüre<metin>` ise kırpılmış işaretçi.
+    // Tam olarak D-319'un tekkez için kapattığı sınıf; sabitsüre atlanmış.
+    eğer metin_esit(ta, "TIP_SABITSURE") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
@@ -3468,6 +3492,27 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // düşüp TANIMSIZ @tekkez_olustur üretiyordu (link hatası).
             ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         }
+        // D-345: sabitsüre_olustur(e) / ifşa(e) — değer PASS-THROUGH (tekkez_olustur
+        // ile aynı sınıf). Bu dallar YOKTU → genel çağrı yoluna düşüp TANIMSIZ
+        // @"sabitsüre_olustur" / @"ifşa" üretiyordu (LLVM link-red: sabitsüre
+        // kullanan HİÇBİR program self-host'ta derlenemiyordu).
+        // D-345: + lfence SPEKÜLASYON BARİYERİ (Spectre v1) — C llvm.c ile birebir.
+        // Değer sıfır-maliyet, bariyer DEĞİL: eksikse üretilen kod hâlâ DOĞRU
+        // sonucu verir ama sabitsüre'nin VAAT ETTİĞİ CT sertliğini vermez, yani
+        // exit-kodu oracle'ı bunu YAKALAYAMAZ (sessiz güvenlik zayıflaması).
+        // Bu yüzden ayrı bir IR-İÇERİK kapısı var: calistir_lfence_parite.
+        // Koşulsuz emisyon C'nin aynası; self-host zaten x86_64'e sabit
+        // (satır 5543 triple), o yüzden burada mimari dalı YOK.
+        eğer metin_esit(fad, "sabitsüre_olustur") ve (cs == 2) {
+            değişken sv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            lfence_yaz(p);
+            ver sv;
+        }
+        eğer metin_esit(fad, "ifşa") ve (cs == 2) {
+            değişken iv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            lfence_yaz(p);
+            ver iv;
+        }
         eğer metin_esit(fad, "dondur") {
             // dondur(v: &değişken T) -> &T — V1'de TİP-seviyesi işlem; runtime
             // temsili aynı ptr → identity, sıfır talimat (C ile birebir).
@@ -3752,6 +3797,23 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // semantikle yapılır (C llvm.c: `int isz = sol.isaretsiz || sag.isaretsiz`).
         değişken bisz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb));
         eğer bisz == 0 { bisz = ifade_isz(p, dizi_al(p.cocuk, cb + 1)); }
+        // D-345: OPERAND GENİŞLİKLERİNİ EŞİTLE (C int_donustur_im aynası).
+        // Eskiden yoktu: `sabitsüre<dtam64> >> tam32` → `lshr i64 %a, %b(i32)`
+        // = GEÇERSİZ IR. Gizli kalmıştı çünkü sabitsüre ll_tip'te "i32"ye
+        // düşüyordu (aynı D-345'te onarıldı) → iki operand da i32 oluyordu.
+        // Yön güvenli: yalnız LLVM'in zaten REDDETTİĞİ IR'ı geçerli yapar.
+        // int_uydur IMMEDIATE'a dokunmaz (literal zaten optip ile basılır).
+        // p.son_tip geçici olarak kaynak tiple kurulur (int_uydur onu kaynak
+        // olarak okur), sonunda optip'e sabitlenir.
+        eğer metin_esit(st, optip) == yanlış {
+            p.son_tip = st;
+            sol = int_uydur(p, sol, optip, ifade_isz(p, dizi_al(p.cocuk, cb)));
+        }
+        eğer metin_esit(gt, optip) == yanlış {
+            p.son_tip = gt;
+            sag = int_uydur(p, sag, optip, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));
+        }
+        p.son_tip = optip;
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);

@@ -642,6 +642,8 @@ static void kullanim_yazdir(const char *prog_adi) {
         "  --lsp     Language Server (stdio JSON-RPC)\n"
         "  --no-verify  LLVM IR dogrulama kapisini kapat (sadece --llvm)\n"
         "  --mimari M   Hedef mimari: arm64|x86_64 (satirici_asm arch-gate + triple; varsayilan x86_64)\n"
+        "  --ct-bariyer B  sabitsure spekulasyon bariyeri: csdb|sb (varsayilan csdb).\n"
+        "               sb = FEAT_SB (ARMv8.5+) ister; olmayan cekirdekte NOP DEGIL.\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -694,6 +696,22 @@ int main(int argc, char *argv[]) {
                 llvm_hedef_ayarla("x86_64", "x86_64-pc-windows-gnu");
             } else {
                 fprintf(stderr, "--mimari: bilinmeyen mimari '%s' (arm64|x86_64)\n", m);
+                return 2;
+            }
+            arg_idx += 2;
+        } else if (strcmp(argv[arg_idx], "--ct-bariyer") == 0) {
+            /* D-346: sabitsüre CT bariyer gucu (yalniz arm64'te anlamli).
+             * Varsayilan csdb — HER cekirdekte guvenli. sb OPT-IN: FEAT_SB
+             * (ARMv8.5+) gerektirir; olmayan cekirdekte encoding NOP DEGIL. */
+            if (arg_idx + 1 >= argc) {
+                fprintf(stderr, "--ct-bariyer: tur argumani gerekli (csdb|sb)\n");
+                return 2;
+            }
+            const char *b = argv[arg_idx + 1];
+            if (strcmp(b, "csdb") == 0 || strcmp(b, "sb") == 0) {
+                llvm_ct_bariyer_ayarla(strcmp(b, "sb") == 0 ? "sb" : "csdb");
+            } else {
+                fprintf(stderr, "--ct-bariyer: bilinmeyen tur '%s' (csdb|sb)\n", b);
                 return 2;
             }
             arg_idx += 2;

@@ -5,6 +5,210 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-346 [YÜKSEK] — CT bariyeri hedefe-duyarlı; ARM64 kripto derlemesi AÇILDI (2026-07-28)
+
+**Karar [ETKİ: `src/llvm.c` (`ct_bariyer_yaz` — koşulsuz lfence yerine mimari
+dispatch), `test/ct_bariyer_parite_harness.sh` (D-345'ün `lfence_parite`
+harness'ının yeniden adlandırılmış + genişletilmiş hâli), `Makefile`
+(`calistir_lfence_parite` → `calistir_ct_bariyer`).]**
+
+**Kusur:** `sabitsüre` spekülasyon bariyeri KOŞULSUZ `@llvm.x86.sse2.lfence()`
+basıyordu — `--mimari arm64` verilse bile. Ölçüldü: aarch64 backend'inde
+`fatal error: Cannot select: intrinsic %llvm.x86.sse2.lfence` → **`sabitsüre`
+kullanan HİÇBİR program ARM64'e derlenemiyordu**, yani `stdlib/kripto`nun
+tamamı DGX Spark / Android NDK hedeflerinde bloke. Hata modu GÜRÜLTÜLÜ
+(derleyici çöküyor), sessiz değil — ama kapsam tam: ARM64'te kripto yok.
+
+**Seçilen karşılık: CSDB** (`llvm.aarch64.hint(i32 20)`). ARM'in Spectre-v1
+için önerdiği bariyer. HINT uzayında olduğu için özelliği desteklemeyen eski
+çekirdeklerde mimari olarak NOP → geniş çekirdek yelpazesinde güvenle emit
+edilir (Android NDK gerekçesi). Ölçüldü: assembly'de `csdb` üretiyor.
+
+**REDDEDİLEN aday `llvm.aarch64.sb` (FEAT_SB, ARMv8.5 — daha güçlü bariyer):
+TUZAK, ölçümle yakalandı.** `call void @llvm.aarch64.sb()` sorunsuz DERLENİYOR
+ama assembly'de `bl llvm.aarch64.sb` üretiyor — yani intrinsic tanınmıyor,
+harici FONKSİYON ÇAĞRISI sanılıyor. "Derlendi = çalışıyor" değil; bariyer
+yerine sessizce bir çağrı konurdu. **IR'a bakmak bunu yakalamaz, assembly'ye
+bakmak yakalar** — kapı bu yüzden assembly sayıyor.
+*Açık bırakılan seçim:* bariyeri SB'ye yükseltmek (ARMv8.5+ hedeflerde daha
+güçlü) mümkün; ön koşul emisyonun assembly'de doğrulanması. CSDB portatif
+olduğu için varsayılan seçildi — bu bir güvenlik/taşınabilirlik dengesi
+kararıdır, Mehmet farklı tercih ederse tek satırlık değişiklik.
+
+**Kapı genişletildi (D-345'ün kapısı → iki boyut):**
+- (A) x86_64 C↔self-host paritesi: lfence sayıları eşit VE > 0 (değişmedi).
+- (B) **arm64 doğruluğu (YENİ):** x86 intrinsic kalıntısı YOK + IR aarch64'e
+  GERÇEKTEN derleniyor + **assembly'de `csdb` sayısı x86 lfence sayısıyla
+  birebir**. Ölçüm: `cg_isaretsiz_sabitsure` 4/4, **kripto bundle 210/210**.
+Kapı adı `calistir_lfence_parite` → `calistir_ct_bariyer` (artık yalnız lfence
+değil, hedefe göre lfence|csdb ölçüyor).
+
+**Sabotaj (diff ile uygulandığı doğrulandı):** arm64 dalı `if (0)` ile devre
+dışı → (B) KIRMIZI ("aarch64 DERLENMEDİ"), (A) YEŞİL kaldı, `kripto_kosum`
+**3/3 YEŞİL** kaldı. İki boyut bağımsız ve exit-kodu kapılarının göremediği
+kör nokta bir kez daha gösterildi.
+
+**Kapsam sınırı — self-host:** `selfhost/codegen.kem` x86_64 triple'a SABİT
+(`--mimari` desteği yok) → orada mimari dalı YOK, x86 lfence basmaya devam
+ediyor ve bu DOĞRU. Kapının (B) boyutu bu yüzden C-tarafı. Self-host'a hedef
+seçimi eklemek ayrı iş (triple emisyonu da sabit-kodlu).
+
+**Kapılar:** ct_bariyer (A+B) ✓, kripto_kosum 3/3, llvm_test 286/286,
+sabitsure 39/39, **arm64_test** (ARM64 ELF cross-compile) ✓, codegen_diff
+112/112, checker_diff 56/56, mmio 23/23, codegen_bootstrap FIXPOINT,
+self_driver.
+
+### Ek — FEAT_SB bariyeri OPT-IN (`--ct-bariyer sb`)
+
+**Karar [ETKİ: `src/llvm.h` + `src/tip.c` (`llvm_ct_bariyer_ayarla/-` durum),
+`src/llvm.c` (`ct_bariyer_yaz` sb dalı), `src/ana.c` (`--ct-bariyer csdb|sb`),
+`test/ct_bariyer_parite_harness.sh` (3. boyut).]**
+D-346 arm64'e CSDB getirmişti; bu adım daha güçlü **SB** (FEAT_SB, ARMv8.5+)
+bariyerini ekler.
+
+**SB VARSAYILAN DEĞİL — ölçülmüş gerekçe.** İki bariyerin encoding'i FEAT'siz
+çekirdekte nasıl çözülüyor (llvm-objdump, özellik kapalı):
+| bariyer | encoding | FEAT'siz çözümleme |
+|---|---|---|
+| CSDB | `d503229f` | `csdb` — HINT uzayı, mimari olarak NOP |
+| **SB** | `d50330ff` | **`msr S0_3_C3_C0_7, xzr`** — tahsis edilmemiş sistem yazması |
+SB'yi koşulsuz basmak ARMv8.5 öncesi çekirdeklerde (Android'in büyük kısmı)
+**NOP değil, tanımsız sistem yazması** üretirdi. Bu yüzden `--ct-bariyer sb`
+opt-in; varsayılan `csdb` (her çekirdekte güvenli). Hedefin ARMv8.5+ olduğu
+BİLİNİYORSA (ör. DGX Spark / Grace = Neoverse V2) açılır.
+
+**EMİSYON: inline asm, intrinsic DEĞİL — ölçümle seçildi.**
+`llvm.aarch64.sb` bu LLVM'de TANINMIYOR: `"target-features"="+sb"` verilse bile
+assembly'de `bl llvm.aarch64.sb` (FONKSİYON ÇAĞRISI) üretiyor — yani bariyer
+yerine sessizce bir çağrı konardı. `.arch_extension sb` + `sb` inline asm ise
+gerçek komutu üretiyor ve fonksiyon-başı `target-features` niteliği
+GEREKTİRMEZ (her `define` için ayrı attribute grubu emit etme zorunluluğunu
+kaldırır). Özelliksiz düz inline asm ise assembler hatası verir (gürültülü).
+
+**ASSEMBLY DOĞRULAMASI (istenen kanıt, kripto bundle = gerçek yük):**
+- `--ct-bariyer sb` → **210 gerçek `sb` komutu**, encoding `d50330ff` ×210,
+  **`bl` sızıntısı 0**.
+- varsayılan (csdb) → 210 `csdb` (değişmedi).
+- x86_64 → 210 `lfence` (değişmedi).
+
+**Kapı 3. boyut kazandı** — (C) `--ct-bariyer sb`: obje ÜRETİLİYOR + encoding
+sayısı x86 lfence sayısıyla birebir + **`bl ...sb` sızıntısı SIFIR**. IR sayımı
+bu tuzağı yakalamaz; assembly/obje seviyesi şart.
+
+**Sabotaj 2/2 (diff ile doğrulandı):** (i) reddedilen `llvm.aarch64.sb`
+intrinsic'ine geri dön → (C) KIRMIZI. *Not:* bu sabotaj `bl` sızıntısı olarak
+değil "aarch64 DERLENMEDİ" olarak yakalandı — codegen `declare` basmadığı için
+LLVM bilinmeyen `llvm.*` adını IR ayrıştırmada reddediyor (manuel denemede
+`declare` vardı, orada `bl` üretmişti). `bl` kontrolü yine de savunmada kalıyor:
+biri `declare` eklerse tuzak geri gelir. (ii) `sb` dalını `if (0)` ile devre
+dışı bırak (bayrağı sessizce yok say) → (C) KIRMIZI ("sb encoding sayısı 0").
+
+**Kapılar:** ct_bariyer (A+B+C) ✓, kripto_kosum 3/3, llvm_test 286/286,
+sabitsure 39/39, tip_test 26/26, arm64_test ✓, codegen_diff 112/112,
+checker_diff 56/56, codegen_bootstrap FIXPOINT, self_driver.
+
+**Sınır:** self-host (`--mimari`/`--ct-bariyer` yok, x86_64'e sabit) yalnız
+lfence basar — (A) boyutu bunu ölçer, (B)/(C) C-taraflıdır. Ayrıca `sb`
+seçildiğinde derleyici hedefin gerçekten ARMv8.5+ olduğunu DOĞRULAYAMAZ; bu
+kullanıcının beyanıdır (bayrağın adı ve `--help` metni bunu söyler).
+
+---
+
+## D-345 [YÜKSEK] — Şeffaf sarmalayıcılar imzasızlığı SİLİYORDU; SHA-256/ChaCha20 onarıldı (2026-07-28)
+
+**Karar [ETKİ: `src/llvm.c` (`ast_tip_isaretsiz_mi` özyineleme), `selfhost/codegen.kem`
+(5 ayrı onarım), `test/cg_korpus/cg_isaretsiz_sabitsure.kem` (yeni),
+`test/lfence_parite_harness.sh` (yeni kapı), `Makefile` (kripto + lfence kapıları
+test_tumu'ya bağlandı).]**
+D-340'ın kurduğu kırmızı kapı YEŞİLE döndü: `calistir_kripto_kosum` 3/3.
+
+**Kök neden:** `ast_tip_isaretsiz_mi` yalnız `DUGUM_TIP_BASIT` kabul ediyordu.
+`sabitsüre<T>`/`tekkez<T>` IR'da zero-overhead `T`'ye çözülür (`ast_tip_to_ir` bu
+özyinelemeyi YAPIYOR) ama **imzasızlık özyinelemiyordu** → `>>` `lshr` yerine `ashr`.
+stdlib/kripto tamamen `sabitsüre` üzerine kurulu olduğu için SHA-256 (Σ0/Σ1/σ0/σ1),
+ChaCha20 (quarter-round rotl) ve `rotr_u32/rotl_u32/rotr_u64` yüksek bit set girdilerde
+SESSİZCE yanlış sonuç veriyordu.
+
+**Neden yalnız bu iki sarmalayıcı:** görev/kanal→opak ptr, yetki→struct,
+seçimlik/sonuç→tagged aggregate, Dizi/referans/pointer→ptr. Hiçbiri "T'nin kendisi"
+değil. Kural: `ast_tip_to_ir`'ın özyinelediği küme ile `ast_tip_isaretsiz_mi`'nin
+kümesi BİREBİR aynı tutulmalı — koda yazıldı.
+
+**Onarım sırasında ORTAYA ÇIKAN 3 ek self-host kusuru** (her biri C'de yoktu):
+1. **`ll_tip`'te `TIP_SABITSURE` dalı HİÇ YOKTU** → "i32" fallback'ine düşüyordu:
+   `sabitsüre<dtam64>` 32 bite SESSİZCE kırpılıyor, `sabitsüre<metin>` kırpılmış
+   işaretçi oluyordu. Tam olarak D-319'un tekkez için kapattığı sınıf; sabitsüre
+   atlanmış. Ölçüldü: C `define i64 @al`, self `define i32 @al`.
+2. **IKILI operand genişlik eşitlemesi yoktu** → `sabitsüre<dtam64> >> tam32` için
+   `lshr i64 %a, %b(i32)` = GEÇERSİZ IR. (1)'in i32-kırpması bunu MASKELİYORDU:
+   iki operand da i32 olunca uyumsuzluk görünmüyordu. Bir kusuru onarmak ötekini
+   açığa çıkardı. Yön güvenli: yalnız LLVM'in zaten reddettiği IR'ı geçerli yapar.
+3. **`sabitsüre_olustur`/`ifşa` intrinsic'leri self-host codegen'de YOKTU** → genel
+   çağrı yoluna düşüp TANIMSIZ `@"ifşa"` üretiyordu; yani `sabitsüre` kullanan
+   HİÇBİR program self-host'ta derlenemiyordu (gürültülü LLVM reddi, sessiz değil).
+   `tekkez_olustur` ile aynı pass-through deseniyle eklendi.
+4. **lfence (Spectre v1) self-host'ta BASILMIYORDU** — C basıyor. Aşağıda ayrı başlık.
+
+**lfence + YENİ KAPI SINIFI (bu adımın en önemli parçası):** `sabitsüre` intrinsic'leri
+C'de değer pass-through + `@llvm.x86.sse2.lfence()` spekülasyon bariyeri emit eder.
+Self-host yalnız değeri geçiriyordu. **Bu, exit-kodu ile ÖLÇÜLEMEZ:** lfence programın
+sonucunu değiştirmez, yani `codegen_diff` de `calistir_kripto_kosum` da bariyerin
+düşmesini GÖREMEZ — `sabitsüre`nin VAAT ETTİĞİ constant-time sertliği sessizce
+kaybolur. Bu yüzden **IR-İÇERİK kapısı** eklendi: `calistir_lfence_parite`
+(D-256'nın "çıplak işlev sıfır region-symbol" kapısıyla aynı gerekçe).
+Ölçüt: C lfence sayısı == self-host sayısı **VE > 0** (ikisi de sıfırken vacuous
+geçmeyi engeller). Korpus: `cg_isaretsiz_sabitsure.kem` (4/4) + **kripto bundle
+(210/210)** — gerçek yük; tek dosyalık korpus yanlış güven verirdi.
+
+**Kapının gerekliliği ÖLÇÜLDÜ:** `ifşa` dalından lfence düşürüldü → IR kapısı yakaladı
+(4→2, 210→203), **exit-kodu kapısı hâlâ "5 doğru" dedi**. Yani bu kapı mevcut hiçbir
+kapının göremediği bir kör noktayı kapatıyor; "sabotaj var ama tüm kapılar yeşil"
+durumu bire bir gösterildi.
+
+**Koşulsuz emisyon (C aynası):** C `--mimari arm64` verilse bile x86 lfence basar.
+Self-host zaten x86_64 triple'a sabit olduğu için burada mimari dalı YOK — parite
+korunuyor. C'nin arm64 yolundaki bu davranışı ayrı bir konu (aşağıda sınır).
+
+**D-340'ın yan bulgusu aynı kökten kapandı:** satır-içi `ifşa(...) olarak tam64` sext
+üretiyordu. `ifşa`/`sabitsüre_olustur` C'de zaten `IfadeSonuc`'u pass-through ediyor —
+imzasızlık argümandan geliyor; kök onarılınca otomatik düzeldi (ölçüldü: `zext`, 42).
+
+**Sabotaj (4/4, her biri `diff` ile uygulandığı doğrulandı):** self `ifşa` dalından
+lfence düşür → lfence kapısı 4→2 / 210→203 KIRMIZI, exit-kodu kapıları YEŞİL kalır
+(kör nokta kanıtı); C özyinelemesi kaldır →
+kripto kapısı 7→1; self `ll_isz` sarmalayıcı dalı → korpus 5→4 (yalnız imzasızlık
+boyutu); self `ll_tip` SABITSURE dalı → korpus 5→1 (yalnız genişlik boyutu). Korpusun
+iki boyutu BAĞIMSIZ yük taşıyor.
+
+**Kapılar:** calistir_kripto_kosum **3/3** (test_tumu'ya BAĞLANDI — D-340'ta verilen söz),
+**calistir_lfence_parite 2/2 (yeni)**, codegen_diff 108/108, llvm_test 284/284,
+sabitsure_test 39/39, linear_test 89/89, checker_diff 56/56, stdlib_check,
+codegen_bootstrap FIXPOINT, self_driver (4 mod + self-host-derlenmiş + FIXPOINT).
+
+**Süreç dersi (kendi hatam):** `codegen_bootstrap` arka planda koşarken aynı anda
+sabotaj deneyleri için `build/kemgu.exe` yeniden derlendi → harness referans
+derleyicisi altından değişti, PARSER 91/92 SAHTE KIRMIZI. Temiz koşumda 92/92.
+**Kural: ağır bootstrap/driver kapıları koşarken derleyici binary'sine DOKUNMA.**
+(D-297'nin sabit-yol çakışmasıyla aynı sınıf: paylaşılan artefakt üzerinde yarış.)
+
+**Süreç dersi 2 (harness):** kapı ilk yazımda `build/codegen.exe`'ye düşüyordu →
+BAYAT OBJE ölçüldü ("self=0 sapma" yanılgısı). Artık `CODEGEN` dışarıdan verilmediyse
+DAİMA taze derler. Ayrıca `grep -c || echo 0` deseni "0\n0" üretip karşılaştırmayı
+bozuyor (grep eşleşme yokken "0" BASAR ve exit 1 döner) — `|| echo 0` KULLANMA.
+
+**Sınırlar (ölçüldü, varsayılmadı):**
+- ~~**C `--mimari arm64` verildiğinde de x86 lfence basıyor**~~ ✓ **D-346'te
+  ÇÖZÜLDÜ** (hedefe-duyarlı `ct_bariyer_yaz`; arm64 → CSDB). Ölçüm o adımda:
+  aarch64 backend'i x86 intrinsic'ini "Cannot select" ile REDDEDİYORDU, yani
+  ARM64'te sabitsüre kullanan hiçbir program derlenemiyordu.
+- `vektör<dtamN>` kaydırma yüzeyi YOK: tip kontrolü T028 ile reddediyor
+  (`kaydirma operatoru sol taraf tamsayi ister`) — bu sarmalayıcı sınıfı dışında.
+- `ifade_isz` ERISIM'i D-339'da kazandı; **INDEKS (`xs[i]`) bilerek yok** ve bu bir
+  parite kaybı DEĞİL: C'nin üç INDEKS dalı da `IfadeSonuc{r,tip,0}` üretiyor, yani
+  dizi elemanı imzasızlığı C'de de taşınmıyor (D-339 ölçümü). ORTAK sınır.
+
+---
+
 ## D-344 [YÜKSEK] — `checker.kem` ↔ `codegen.kem` ayrışması kapatıldı; `calistir_checker_diff` `test_tumu`'ya bağlandı (2026-07-28)
 
 **Karar [ETKİ: `selfhost/checker.kem`, `test/check_korpus/`, `Makefile`]:**

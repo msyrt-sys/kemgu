@@ -1,0 +1,35 @@
+// cg_isaretsiz_sabitsure.kem — D-345: ŞEFFAF SARMALAYICI imzasızlık + genişlik.
+// -----------------------------------------------------------------------------
+// D-338 imzasızlığı çıplak `dtamN` için kilitledi, ama `sabitsüre<dtamN>` /
+// `tekkez<dtamN>` sarmalayıcıları iç tipe ÖZYİNELEMİYORDU:
+//   - imzasızlık kaybı → `>>` lshr yerine ashr (SESSİZ yanlış cevap)
+//   - self-host'ta ayrıca `sabitsüre<T>` ll_tip'te HİÇ yoktu → "i32" fallback
+//     (sabitsüre<dtam64> 32 bite kırpılıyordu — D-319'un tekkez sınıfı)
+// stdlib/kripto tamamen sabitsüre üzerine kurulu → SHA-256/ChaCha20 yanlıştı.
+//
+// Falsifiye edici seçim: 0x80000010 yüksek bit SET → imzalı yorumda negatif.
+//   ROTR(0x80000010, 4) = 0x08000001 = 134217729  (lshr, DOĞRU)
+//                         0xF8000001 (ashr) → tamamen farklı
+// 64-bit dal genişlik kırpmasını yakalar: 2^33 >> 3 = 2^30; i32'ye kırpılırsa 0.
+// Beklenen exit = 1 + 4 = 5.
+işlev rotr_ct(x: sabitsüre<dtam32>, n: tam32) -> sabitsüre<dtam32> {
+    değişken sag: sabitsüre<dtam32> = x >> n;
+    değişken sol: sabitsüre<dtam32> = x << (32 - n);
+    ver sag | sol;
+}
+// tekkez<T> aynı sınıf (lineer sarmalayıcı; imzasızlık aynı şekilde özyinelemeli)
+işlev kaydir_genis(x: sabitsüre<dtam64>, n: tam32) -> sabitsüre<dtam64> {
+    ver x >> n;
+}
+işlev main() -> tam32 {
+    değişken skor: tam32 = 0;
+    // 32-bit: imzasızlık dalı
+    değişken ham: dtam32 = 2147483664;          // 0x80000010
+    değişken r: dtam32 = ifşa(rotr_ct(sabitsüre_olustur(ham), 4));
+    eğer (r olarak tam64) == 134217729 { skor = skor + 1; }
+    // 64-bit: genişlik dalı (i32'ye kırpılırsa 8589934592 >> 3 = 0)
+    değişken buyuk: dtam64 = 8589934592;        // 2^33
+    değişken g: dtam64 = ifşa(kaydir_genis(sabitsüre_olustur(buyuk), 3));
+    eğer g == 1073741824 { skor = skor + 4; }   // 2^30
+    ver skor;   // 5 = ikisi de doğru
+}

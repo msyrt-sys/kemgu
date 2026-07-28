@@ -1528,9 +1528,75 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
     return int_donustur_im(g, src_reg, src_tip, dst_tip, 0);
 }
 
-/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
+/* D-346: sabitsüre spekulasyon bariyeri — HEDEFE DUYARLI.
+ *
+ * Onceki durum: kosulsuz `@llvm.x86.sse2.lfence()`. `--mimari arm64` verilince
+ * bu intrinsic aarch64 backend'inde SECILEMEZ → "fatal error: Cannot select"
+ * (olculdu). Yani sabitsüre kullanan HICBIR program ARM64'e derlenemiyordu;
+ * stdlib/kripto'nun tamami ARM64 (DGX Spark / Android NDK) hedefinde bloke.
+ *
+ * arm64 karsiligi CSDB (Consumption of Speculative Data Barrier) — ARM'in
+ * Spectre-v1 icin onerdigi bariyer. HINT uzayinda (#20) oldugu icin FEAT'siz
+ * eski cekirdeklerde mimari olarak NOP'tur; yani genis cekirdek yelpazesinde
+ * GUVENLE emit edilir (Android NDK gerekcesi).
+ *
+ * NEDEN `llvm.aarch64.sb` DEGIL (FEAT_SB, ARMv8.5 — daha guclu bariyer):
+ * OLCULDU, TUZAK. `call void @llvm.aarch64.sb()` derleniyor AMA
+ * `bl llvm.aarch64.sb` (FONKSIYON CAGRISI) uretiyor — intrinsic taninmiyor,
+ * harici sembol saniliyor. Yani "derlendi = calisiyor" DEGIL; sessizce
+ * bariyer yerine cagri konurdu. `llvm.aarch64.hint(i32 20)` ise gercekten
+ * `csdb` uretiyor (olculdu). Bariyeri SB'ye yukseltmek isteniyorsa once bu
+ * emisyonun assembly'de dogrulanmasi ZORUNLU.
+ *
+ * Iki intrinsic de `declare` GEREKTIRMEZ (LLVM bilinen llvm.* intrinsic'leri
+ * otomatik bildirir — ikisi de olculdu). */
+static void ct_bariyer_yaz(LlvmGen *g) {
+    if (strcmp(llvm_hedef_mimari(), "arm64") == 0) {
+        if (strcmp(llvm_ct_bariyer(), "sb") == 0) {
+            /* D-346: FEAT_SB (ARMv8.5+) — CSDB'den GUCLU spekulasyon bariyeri.
+             * OPT-IN (`--ct-bariyer sb`); varsayilan DEGIL cunku FEAT_SB'siz
+             * cekirdekte encoding 0xd50330ff `msr S0_3_C3_C0_7, xzr` olarak
+             * cozulur (NOP DEGIL, tahsis edilmemis sistem yazmasi) — OLCULDU.
+             *
+             * INLINE ASM, intrinsic DEGIL: `llvm.aarch64.sb` bu LLVM'de
+             * TANINMIYOR — "target-features"="+sb" verilse bile assembly'de
+             * `bl llvm.aarch64.sb` (FONKSIYON CAGRISI) uretiyor, yani sessizce
+             * bariyer yerine cagri konar (OLCULDU, D-346'da de ayni tuzak).
+             * `.arch_extension sb` asm icinde: fonksiyon-basi target-features
+             * niteligi GEREKMEZ, her `define` icin ayri attribute grubu
+             * emit etme zorunlulugunu kaldirir. */
+            fputs("  call void asm sideeffect \".arch_extension sb\\0Asb\", \"\"()\n",
+                  g->out);
+        } else {
+            /* CSDB = HINT #20 (varsayilan; her cekirdekte guvenli) */
+            fputs("  call void @llvm.aarch64.hint(i32 20)\n", g->out);
+        }
+    } else {
+        fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+    }
+}
+
+/* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi?
+ *
+ * D-345: SEFFAF SARMALAYICILAR (sabitsüre<T> / tekkez<T>) IC TIPE OZYINELER.
+ * Bu ikisi IR'da zero-overhead T'ye cozulur (ast_tip_to_ir yukarida ayni
+ * ozyinelemeyi yapar) — ama imzasizlik ozyinelemiyordu, yani `>>` lshr yerine
+ * ashr uretiliyordu. stdlib/kripto TAMAMEN sabitsüre uzerine kurulu oldugu icin
+ * SHA-256/ChaCha20 rotasyonlari yuksek bit set girdilerde SESSIZCE yanlis
+ * sonuc veriyordu (kapi: calistir_kripto_kosum).
+ *
+ * NEDEN YALNIZ BU IKISI: gorev/kanal -> opak ptr, yetki -> struct,
+ * secimlik/sonuc -> tagged aggregate, Dizi/referans/pointer -> ptr.
+ * Hicbiri "T'nin kendisi" degil; yalniz sabitsüre/tekkez seffaf.
+ * ast_tip_to_ir'in ozyineledigi kume ile BIREBIR ayni tutulmali — oraya yeni
+ * bir seffaf sarmalayici eklenirse BURAYA DA eklenmeli. */
 static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
-    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    if (!tip_d) return 0;
+    if (tip_d->tip == DUGUM_TIP_SABITSURE)
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_sabitsure.ic_tip);
+    if (tip_d->tip == DUGUM_TIP_TEKKEZ)
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_tekkez.ic_tip);
+    if (tip_d->tip != DUGUM_TIP_BASIT) return 0;
     return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
            memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
 }
@@ -3766,9 +3832,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if ((_is_olustur || _is_ifsa) && d->veri.cagri.sayi == 1) {
                     IfadeSonuc inner = ifade_uret(g,
                         d->veri.cagri.argumanlar[0], beklenen);
-                    /* x86 lfence speculation barrier — Spectre v1 mitigation.
-                     * Modern LLVM intrinsic; declare gerekmez (built-in). */
-                    fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    ct_bariyer_yaz(g);   /* D-346: hedefe-duyarli CT bariyeri */
                     return inner;
                 }
                 /* Linear Types V1: tekkez_olustur(e) -> tekkez<T>.

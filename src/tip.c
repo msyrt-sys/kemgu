@@ -18,6 +18,12 @@ void llvm_hedef_ayarla(const char *mimari, const char *triple) {
 const char *llvm_hedef_mimari(void) { return g_hedef_mimari; }
 const char *llvm_hedef_triple(void) { return g_hedef_triple; }
 
+/* D-346: CT bariyer gucu. Varsayilan "csdb" — HER aarch64 cekirdeginde
+ * guvenli (HINT uzayi, FEAT'siz cekirdekte NOP). "sb" OPT-IN'dir; bkz. llvm.h. */
+static const char *g_ct_bariyer = "csdb";
+void llvm_ct_bariyer_ayarla(const char *tur) { if (tur) g_ct_bariyer = tur; }
+const char *llvm_ct_bariyer(void) { return g_ct_bariyer; }
+
 /* === Olusturucular === */
 
 TipBilgisi *tip_olustur_basit(Arena *a, TipKategorisi k) {
