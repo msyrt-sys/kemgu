@@ -103,6 +103,16 @@ inductive HasType : TipOrtam → KanalOrtam → Ifade → Tip → Prop where
                 HasType Γ Δ b Tip.scalar →
                 HasType Γ Δ (Ifade.topla a b) Tip.scalar
 
+  /-- T-CARP (D-340): iki operand da `scalar`; sonuc `scalar`.
+      KRITIK: `DegerTipli`de `Tip.scalar` uretebilen TEK kural
+      `dt_skaler`dir → iyi-tipli bir DEGER operand zorunlu olarak
+      `Deger.skaler`dir. `progress_konf`in `carp` kolu bu tekilligi
+      kullanir (aksi halde `carp (sabit "x") ...` STUCK olurdu). -/
+  | t_carp   (Γ : TipOrtam) (Δ : KanalOrtam) (a b : Ifade) :
+                HasType Γ Δ a Tip.scalar →
+                HasType Γ Δ b Tip.scalar →
+                HasType Γ Δ (Ifade.carp a b) Tip.scalar
+
   /-- T-BOL (D-338): `topla` ile AYNI tipleme. Fark tipte DEGIL,
       GOZLEMDE (`sBolTamam` `bolOl` uretir) ve CT disiplinindedir. -/
   | t_bol     (Γ : TipOrtam) (Δ : KanalOrtam) (a b : Ifade) :

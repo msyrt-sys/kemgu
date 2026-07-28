@@ -59,6 +59,10 @@ inductive Engelli (S : Konfigurasyon) : Ifade → Prop where
       Engelli S a → Engelli S (Ifade.topla a b)
   | topla_sag (v : Deger) (b : Ifade) :
       Engelli S b → Engelli S (Ifade.topla (Ifade.sabit v) b)
+  | carp_sol (a b : Ifade) :
+      Engelli S a → Engelli S (Ifade.carp a b)
+  | carp_sag (v : Deger) (b : Ifade) :
+      Engelli S b → Engelli S (Ifade.carp (Ifade.sabit v) b)
   | bol_sol (a b : Ifade) :
       Engelli S a → Engelli S (Ifade.bol a b)
   | bol_sag (v : Deger) (b : Ifade) :
@@ -112,6 +116,8 @@ theorem engelli_konf_transfer
   | eger_kosul k d y _ ih => exact Engelli.eger_kosul k d y ih
   | topla_sol a b _ ih => exact Engelli.topla_sol a b ih
   | topla_sag v b _ ih => exact Engelli.topla_sag v b ih
+  | carp_sol a b _ ih => exact Engelli.carp_sol a b ih
+  | carp_sag v b _ ih => exact Engelli.carp_sag v b ih
   | bol_sol a b _ ih => exact Engelli.bol_sol a b ih
   | bol_sag v b _ ih => exact Engelli.bol_sag v b ih
   | kalan_sol a b _ ih => exact Engelli.kalan_sol a b ih
@@ -724,6 +730,71 @@ theorem progress_konf
           exact Or.inr (Or.inr ⟨_,
             { ctx1' with ifade := .topla ctx1'.ifade b }, ts2',
             Step.sToplaCongSol S _ (ifadeyleKonf S ts1 ts2 ctx a) S1'
+              ts1 ts2 ts2' ctx ctx1' a ctx1'.ifade b
+              h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
+            rfl, h_tid1, h_yan1⟩)
+  | carp a b ih_a ih_b =>
+      match h_ht, h_lt, h_rt with
+      | HasType.t_carp _ _ _ _ hta htb,
+        LineerTamam.l_carp _ _ Λa _ _ _ hla hlb,
+        RegionTamam.r_carp _ _ Ρa _ _ _ hra hrb =>
+        have h_konf1 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx a h_konf h_t
+          (by rw [h_lin]; exact ⟨Tip.scalar, Λa, Ρa, ⟨hta, hla, hra⟩⟩)
+          (fun z h => by rw [h_if]; exact HedefVar.carp_sol a b z h)
+          (fun bb h => by rw [h_if]; exact HedefBolge.carp_sol a b bb h)
+        rcases ih_a Tip.scalar Λin Λa Ρa hta hla hra (ifadeyleKonf S ts1 ts2 ctx a)
+            h_konf1 ts1 ts2 { ctx with ifade := a } rfl rfl h_lin with
+            h_val | h_eng | ⟨S1', ctx1', ts2', h_step1, h_t1', h_tid1, h_yan1⟩
+        · -- sol DEGER → tipten skaler oldugu cikar; sag tarafa gec
+          cases h_val with
+          | iv_sabit va =>
+            -- `sabit va : scalar` → va = skaler n1 (dt_skaler tekilligi)
+            match hta with
+            | HasType.t_sabit _ _ _ _ hdt =>
+              cases hdt with
+              | dt_skaler n1 =>
+                -- sol operand `sabit (skaler n1)`; l_sabit/r_sabit → Λa=Λin, Ρa=Ρ
+                cases hla
+                cases hra
+                have h_konf2 := konfTipliFull_odak Γ Δ Ρ S ts1 ts2 ctx b h_konf h_t
+                  (by rw [h_lin]; exact ⟨Tip.scalar, Λ', Ρ', ⟨htb, hlb, hrb⟩⟩)
+                  (fun z h => by rw [h_if]; exact HedefVar.carp_sag _ b z h)
+                  (fun bb h => by rw [h_if]; exact HedefBolge.carp_sag _ b bb h)
+                rcases ih_b Tip.scalar Λin Λ' Ρ' htb hlb hrb
+                    (ifadeyleKonf S ts1 ts2 ctx b) h_konf2 ts1 ts2
+                    { ctx with ifade := b } rfl rfl h_lin with
+                    h_val2 | h_eng2 | ⟨S2', ctx2', ts2'', h_step2, h_t2', h_tid2, h_yan2⟩
+                · -- sag da DEGER → sCarpTamam
+                  cases h_val2 with
+                  | iv_sabit vb =>
+                    match htb with
+                    | HasType.t_sabit _ _ _ _ hdtb =>
+                      cases hdtb with
+                      | dt_skaler n2 =>
+                        exact Or.inr (Or.inr ⟨_,
+                          { ctx with ifade := .sabit (.skaler (n1 * n2)) }, ts2,
+                          Step.sCarpTamam S _ ts1 ts2 ctx n1 n2 h_t h_if rfl,
+                          rfl, rfl, Or.inl rfl⟩)
+                · -- sag ENGELLI → carp da engelli
+                  exact Or.inr (Or.inl (Engelli.carp_sag _ b
+                    (engelli_konf_transfer S ts1 ts2 ctx b b h_eng2 h_t
+                      (fun v h => by rw [h_if] at h; cases h))))
+                · -- sag ADIM ATAR → sCarpCongSag
+                  exact Or.inr (Or.inr ⟨_,
+                    { ctx2' with ifade := .carp (.sabit (.skaler n1)) ctx2'.ifade },
+                    ts2'',
+                    Step.sCarpCongSag S _ (ifadeyleKonf S ts1 ts2 ctx b) S2'
+                      ts1 ts2 ts2'' ctx ctx2' (.skaler n1) b ctx2'.ifade
+                      h_t h_if rfl h_step2 h_t2' h_tid2 rfl h_yan2 rfl,
+                    rfl, h_tid2, h_yan2⟩)
+        · -- sol ENGELLI → carp da engelli
+          exact Or.inr (Or.inl (Engelli.carp_sol a b
+            (engelli_konf_transfer S ts1 ts2 ctx a a h_eng h_t
+              (fun v h => by rw [h_if] at h; cases h))))
+        · -- sol ADIM ATAR → sCarpCongSol
+          exact Or.inr (Or.inr ⟨_,
+            { ctx1' with ifade := .carp ctx1'.ifade b }, ts2',
+            Step.sCarpCongSol S _ (ifadeyleKonf S ts1 ts2 ctx a) S1'
               ts1 ts2 ts2' ctx ctx1' a ctx1'.ifade b
               h_t h_if rfl h_step1 h_t1' h_tid1 rfl h_yan1 rfl,
             rfl, h_tid1, h_yan1⟩)

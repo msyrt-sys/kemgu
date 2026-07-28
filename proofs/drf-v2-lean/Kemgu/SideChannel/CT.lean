@@ -45,6 +45,30 @@ GENISLEME (D-334/D-335): `topla` (aritmetik), `iken` (dongu — CT002) ve
   `genel_ifade_korunum` ve `ct_ni` artik `Ifade` uzerinde degil KOSUM
   TURETIMI uzerinde tumevarim yapiyor.
 
+═══════════════════════════════════════════════════════════════════════
+⚠ CARPMA VARSAYIMI (D-340) — MODELE GOMULU DONANIM IDDIASI
+═══════════════════════════════════════════════════════════════════════
+`carp` (tamsayi carpmasi) bu modelde `topla` SINIFINDADIR: olay uretmez,
+CT operand-genellik sarti YOKTUR, yani GIZLI × GIZLI SERBESTTIR.
+`bol`/`kalan` ise operandlarini ize koyar ve genellik ISTER (CT006/CT006-M).
+
+BU AYRIM BIR TEOREM DEGIL, BIR VARSAYIMDIR:
+  * GECERLI oldugu yer: KEMGU'nun birincil hedefleri ARM64 ve x86_64 —
+    tamsayi carpmasi sabit cevrimdir. CT arac ekosisteminin (ct-verif,
+    FaCT, dudect) standart varsayimi da budur: div/mod ayrilir, mul
+    sabit sayilir.
+  * GECERSIZ oldugu yer: ERKEN BITEN carpicilar — ARM Cortex-M0/M3,
+    bazi MIPS/PowerPC cekirdekleri. Orada `carp`in da `bol` gibi
+    modellenmesi gerekir; bu modelin sonuclari O PLATFORMLARDA GECMEZ.
+  * NEDEN boyle secildi (Mehmet karari): aksi halde alan carpimi
+    (gizli × gizli) yasaklanir ve HICBIR kripto primitifi — Curve25519,
+    Poly1305, RSA — CT-tipli yazilamaz; disiplin asil kullanim alaninda
+    ise yaramaz hale gelir.
+  * Model-ici tutarlilik taniki: `carp_gizli_operand_zararsiz`.
+  * V2 secenegi: platform-parametrik model (bir bayrak tum yargilarda
+    tasinir) — kabaca 2 kat is, henuz yapilmadi.
+═══════════════════════════════════════════════════════════════════════
+
 KALAN BORC (daralmis, acikca):
   Kopru CT'nin deger-sadik (`Sadik`) parcasinda, SONLU degisken
   kumesiyle ve TEK THREAD icin kuruludur. Yani "KEMGU'nun KENDISI
@@ -126,6 +150,7 @@ inductive Ifade : Type where
   | sabit    (n : Int)
   | degisken (x : Ad)
   | topla    (a b : Ifade)
+  | carp    (a b : Ifade)
   | sabitDeg (x : Ad) (e : Ifade)          -- x = e
   | sira     (a b : Ifade)                 -- a; b
   | eger     (kosul : Ifade) (dogruDal yanlisDal : Ifade)
@@ -190,6 +215,9 @@ inductive Calis : Store → Ifade → Store → Iz → Int → Prop where
   | c_topla (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
       (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
       Calis s (.topla a b) s2 (t1 ++ t2) (v1 + v2)
+  | c_carp (s s1 s2 : Store) (a b : Ifade) (t1 t2 : Iz) (v1 v2 : Int)
+      (h1 : Calis s a s1 t1 v1) (h2 : Calis s1 b s2 t2 v2) :
+      Calis s (.carp a b) s2 (t1 ++ t2) (v1 * v2)
   /-- D-338 (CT006): `a / b` — soldan saga kosum, sonra **`oBol` OLAYI**.
       `c_topla` ile TEK farki bu olaydir; sifira bolme icin Lean `Int`
       bolmesi (n/0 = 0) — TOPLAM. -/
@@ -249,6 +277,7 @@ def ifadeEtiket (G : EtiketOrtam) : Ifade → Etiket
   | .sabit _        => .genel
   | .degisken x     => G x
   | .topla a b      => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
+  | .carp a b      => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .bol a b        => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .kalan a b        => (ifadeEtiket G a).birlesim (ifadeEtiket G b)
   | .sabitDeg _ e   => ifadeEtiket G e
@@ -279,6 +308,8 @@ inductive CtOk (G : EtiketOrtam) : Ifade → Prop where
   | ct_degisken (x : Ad) : CtOk G (.degisken x)
   | ct_topla (a b : Ifade) (ha : CtOk G a) (hb : CtOk G b) :
       CtOk G (.topla a b)
+  | ct_carp (a b : Ifade) (ha : CtOk G a) (hb : CtOk G b) :
+      CtOk G (.carp a b)
   /-- **CT006 (veri-bagimli gecikme):** BOLMENIN HER IKI OPERANDI GENEL
       olmalidir. `ct_topla`da BOYLE BIR SART YOKTUR — cunku toplama
       sabit cevrimdir. Fark keyfi degil: `sBolTamam`/`c_bol` operandlari
@@ -441,6 +472,14 @@ theorem genel_ifade_korunum (G : EtiketOrtam) :
       intro s2 s2' t2 v2 h2 h_low h_et
       cases h2 with
       | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+        obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
+        obtain ⟨hva, hta, h_low'⟩ := ihA hA2 h_low h_ea
+        obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
+        exact ⟨by rw [hva, hvb], by rw [hta, htb], h_low''⟩
+  | c_carp s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_low h_et
+      cases h2 with
+      | c_carp _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
         obtain ⟨h_ea, h_eb⟩ := birlesim_genel h_et
         obtain ⟨hva, hta, h_low'⟩ := ihA hA2 h_low h_ea
         obtain ⟨hvb, htb, h_low''⟩ := ihB hB2 h_low' h_eb
@@ -632,6 +671,15 @@ theorem ct_ni (G : EtiketOrtam) :
       | ct_topla _ _ hca hcb =>
         cases h2 with
         | c_topla _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
+          obtain ⟨hta, h_low'⟩ := ihA hA2 hca h_low
+          obtain ⟨htb, h_low''⟩ := ihB hB2 hcb h_low'
+          exact ⟨by rw [hta, htb], h_low''⟩
+  | c_carp s sa1 _ a b ta1 tb1 va1 vb1 hA1 hB1 ihA ihB =>
+      intro s2 s2' t2 v2 h2 h_ct h_low
+      cases h_ct with
+      | ct_carp _ _ hca hcb =>
+        cases h2 with
+        | c_carp _ sa2 _ _ _ ta2 tb2 va2 vb2 hA2 hB2 =>
           obtain ⟨hta, h_low'⟩ := ihA hA2 hca h_low
           obtain ⟨htb, h_low''⟩ := ihB hB2 hcb h_low'
           exact ⟨by rw [hta, htb], h_low''⟩
@@ -986,6 +1034,27 @@ theorem ct006m_gerekli :
   · exact Calis.c_kalan _ _ _ _ _ [.oOku 0 0] [] 7 2
       (Calis.c_degisken _ 0) (Calis.c_sabit _ 2)
   · intro h; exact absurd (List.cons.inj h).2 (by decide)
+
+/-- **CARPMA KARSIT TANIGI (D-340):** gizli operandli CARPMA izleri
+    DEGISTIRMEZ — yani `carp`i `topla` sinifinda tutmak (CT sarti KOYMAMAK)
+    bu modelde tutarlidir; `bol`/`kalan` icin ayni sey YANLIS olurdu
+    (`ct006_gerekli` / `ct006m_gerekli`).
+
+    ⚠ BU BIR DONANIM IDDIASINA DAYANIR (bkz. dosya basindaki CARPMA
+    VARSAYIMI notu ve D-340): tanik yalnizca MODELIN ic tutarliligini
+    gosterir, gercek CPU'nun carpicisinin sabit cevrim oldugunu KANITLAMAZ.
+    Erken biten carpicilarda (Cortex-M0/M3) varsayim dusar. -/
+theorem carp_gizli_operand_zararsiz :
+    ∀ (s1 s2 s1' s2' : Store) (t1 t2 : Iz) (v1 v2 : Int),
+      Calis s1 (.carp (.degisken 0) (.sabit 2)) s1' t1 v1 →
+      Calis s2 (.carp (.degisken 0) (.sabit 2)) s2' t2 v2 →
+      t1 = t2 := by
+  intro s1 s2 s1' s2' t1 t2 v1 v2 h1 h2
+  cases h1 with
+  | c_carp _ _ _ _ _ _ _ _ _ hA1 hB1 =>
+    cases h2 with
+    | c_carp _ _ _ _ _ _ _ _ _ hA2 hB2 =>
+      cases hA1; cases hA2; cases hB1; cases hB2; rfl
 
 /-- **KARSIT TANIK (D-338):** ayni sekildeki TOPLAMA'da izler AYNIDIR —
     yani CT006'nin `ct_topla`ya EKLENMEMESI de dogru bir karardir.

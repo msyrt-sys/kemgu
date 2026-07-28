@@ -182,6 +182,7 @@ def ifadeSil : Ifade → Ifade
   | .guvensiz e           => .guvensiz (ifadeSil e)
   | .eger k d y           => .eger (ifadeSil k) (ifadeSil d) (ifadeSil y)
   | .topla a b            => .topla (ifadeSil a) (ifadeSil b)
+  | .carp a b            => .carp (ifadeSil a) (ifadeSil b)
   | .bol a b              => .bol (ifadeSil a) (ifadeSil b)
   | .kalan a b              => .kalan (ifadeSil a) (ifadeSil b)
   | .iken k g             => .iken (ifadeSil k) (ifadeSil g)
@@ -725,6 +726,15 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
         rw [h_if]; rfl
       · subst h_S'
         simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
+  | sCarpTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      refine Step.sCarpTamam _ _ (threadSil ts1) (threadSil ts2) (ctxSil ctx)
+        n1 n2 ?_ ?_ ?_
+      · show threadSil S.thread = _
+        rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _
+        rw [h_if]; rfl
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil, degerSil]
   | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b
       h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       refine Step.sToplaCongSol _ _ (konfSil S1) (konfSil S1')
@@ -740,9 +750,39 @@ theorem silme_simulasyon (S S' : Konfigurasyon) (h : Step S S') :
         · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
       · subst h_S'
         simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sCarpCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sCarpCongSol _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (ifadeSil a) (ifadeSil a') (ifadeSil b) ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
   | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b'
       h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       refine Step.sToplaCongSag _ _ (konfSil S1) (konfSil S1')
+        (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
+        (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
+      · show threadSil S.thread = _; rw [h_t, threadSil_split]
+      · show ifadeSil ctx.ifade = _; rw [h_if]; rfl
+      · rw [h_S1, ifadeyleKonf_konfSil]
+      · show threadSil S1'.thread = _; rw [h_t1', threadSil_split]
+      · show ifadeSil ctx'.ifade = _; rw [h_if']
+      · rcases h_yan with h | ⟨z, h⟩
+        · exact Or.inl (by rw [h])
+        · exact Or.inr ⟨ctxSil z, by rw [h]; simp [threadSil, List.map_append]⟩
+      · subst h_S'
+        simp [konfSil, threadSil_split, ctxSil, ifadeSil]
+  | sCarpCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b'
+      h_t h_if h_S1 _h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      refine Step.sCarpCongSag _ _ (konfSil S1) (konfSil S1')
         (threadSil ts1) (threadSil ts2) (threadSil ts2') (ctxSil ctx) (ctxSil ctx')
         (degerSil v) (ifadeSil b) (ifadeSil b') ?_ ?_ ?_ ih ?_ h_tid ?_ ?_ ?_
       · show threadSil S.thread = _; rw [h_t, threadSil_split]

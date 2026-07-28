@@ -86,6 +86,8 @@ inductive LineerNotr (Γ : TipOrtam) : Ifade → Prop where
       LineerNotr Γ (Ifade.eger k d y)
   | n_topla (a b : Ifade) :
       LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.topla a b)
+  | n_carp (a b : Ifade) :
+      LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.carp a b)
   | n_bol (a b : Ifade) :
       LineerNotr Γ a → LineerNotr Γ b → LineerNotr Γ (Ifade.bol a b)
   | n_kalan (a b : Ifade) :
@@ -212,6 +214,11 @@ inductive LineerTamam : TipOrtam → LineerOrtam → Ifade → LineerOrtam → P
               LineerTamam Γ Λa b Λb →
               LineerTamam Γ Λ (Ifade.topla a b) Λb
 
+  | l_carp (Γ : TipOrtam) (Λ Λa Λb : LineerOrtam) (a b : Ifade) :
+              LineerTamam Γ Λ a Λa →
+              LineerTamam Γ Λa b Λb →
+              LineerTamam Γ Λ (Ifade.carp a b) Λb
+
   /-- L-BOL (D-338): sirali kompozisyon (`topla` ile ayni). -/
   | l_bol (Γ : TipOrtam) (Λ Λa Λb : LineerOrtam) (a b : Ifade) :
               LineerTamam Γ Λ a Λa →
@@ -307,6 +314,8 @@ theorem lineerNotr_kimlik {Γ : TipOrtam} {e : Ifade}
       exact fun Λ => LineerTamam.l_eger Γ Λ Λ k d y (ih_k Λ) hd hy
   | n_topla a b _ _ ih_a ih_b =>
       exact fun Λ => LineerTamam.l_topla Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
+  | n_carp a b _ _ ih_a ih_b =>
+      exact fun Λ => LineerTamam.l_carp Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
   | n_bol a b _ _ ih_a ih_b =>
       exact fun Λ => LineerTamam.l_bol Γ Λ Λ Λ a b (ih_a Λ) (ih_b Λ)
   | n_kalan a b _ _ ih_a ih_b =>
@@ -534,6 +543,11 @@ theorem lineerTamam_kucuk_transport {Γ : TipOrtam}
       obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
       obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
       exact ⟨Λbn, LineerTamam.l_topla _ _ _ _ a b h_a h_b, hk_b⟩
+  | l_carp _ _ _ a b _ _ ih_a ih_b =>
+      intro Λn hk
+      obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk
+      obtain ⟨Λbn, h_b, hk_b⟩ := ih_b Λan hk_a
+      exact ⟨Λbn, LineerTamam.l_carp _ _ _ _ a b h_a h_b, hk_b⟩
   | l_bol _ _ _ a b _ _ ih_a ih_b =>
       intro Λn hk
       obtain ⟨Λan, h_a, hk_a⟩ := ih_a Λn hk

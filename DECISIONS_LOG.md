@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-340 — ÇARPMA: `topla` sınıfı — modele gömülü donanım iddiası (2026-07-27)
+
+**Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,
+RegionTamam,Tipli}, Discharge/NoFault, Meta/ProgressKorunum,
+SideChannel/{NonInterference,CT,CTKopru}, `test/lean_aksiyom_harness.sh`].**
+Kapı: **31/31 modül, `sorryAx` YOK, ham `sorry` 0.**
+
+`Ifade.carp` + `Step.sCarpTamam`/`sCarpCongSol`/`sCarpCongSag` (40→43 kural) +
+`t_carp`/`l_carp`/`r_carp`; CT'de `Calis.c_carp`, `CtOk.ct_carp`; köprüde tam
+kapsama. **`topla`nın birebir aynası** — olay YOK, CT şartı YOK.
+
+**MEHMET KARARI (soruldu):** çarpma **sabit çevrim** sınıfında; **gizli × gizli
+SERBEST**. Reddedilenler: (a) `bol` gibi veri-bağımlı — gizli × gizli'yi
+yasaklardı, yani Curve25519/Poly1305/RSA gibi **hiçbir kripto primitifi
+CT-tipli yazılamazdı**, disiplin asıl kullanım alanında işe yaramaz hale
+gelirdi; (b) platform-parametrik — en dürüstü ama bir bayrak tüm yargılarda ve
+~43 kuralın tümevarımlarında taşınırdı (≈2 kat iş), V2'ye bırakıldı.
+
+**BU BİR TEOREM DEĞİL, VARSAYIM — ve dosyaya açıkça yazıldı.**
+`SideChannel/CT.lean` başına "⚠ ÇARPMA VARSAYIMI (D-340)" bloğu eklendi:
+- **Geçerli:** ARM64, x86_64 (KEMGU'nun birincil hedefleri) — tamsayı çarpması
+  sabit çevrim. CT araç ekosisteminin (ct-verif, FaCT, dudect) standart
+  varsayımı da bu: div/mod ayrılır, mul sabit sayılır.
+- **GEÇERSİZ:** erken biten çarpıcılar — ARM Cortex-M0/M3, bazı MIPS/PowerPC.
+  Bu modelin sonuçları o platformlarda **geçmez**.
+
+**VAKUM DENETİMİ — asıl önemli olan bu.** `carp` olay üretmediği ve CT şartı
+olmadığı için "hiçbir şey iddia etmiyor" olabilirdi. `carp_gizli_operand_zararsiz`
+(gizli operandlı çarpmanın izleri aynı) bunu ölçüyor ve **hiçbir aksiyoma
+dayanmıyor**. Sabotajla içeriği doğrulandı: `c_carp`a bir olay eklenince
+(yani çarpma veri-bağımlı yapılınca) **tanık ÇÖKÜYOR** (CT.lean:1057 `rfl`
+başarısız) — demek ki tanık modelleme seçimine gerçekten duyarlı, vakum değil.
+
+**AYRIM ÖLÇÜLDÜ:** aynı şekildeki program için `+` ve `*` izleri aynı
+(`topla_gizli_operand_zararsiz`, `carp_gizli_operand_zararsiz`), `/` ve `%`
+izleri ayrışıyor (`ct006_gerekli`, `ct006m_gerekli`). Yani dört aritmetik
+işlemin CT sınıflandırması artık mekanize ve birbirinden ayırt edilebilir.
+
+**HÂLÂ AÇIK:** eşzamanlı CT, `esles`in yapıcı/çeşit desenleri, hücre-başına
+gizlilik etiketi, dizi sınır denetimi, platform-parametrik CT (V2).
+
+---
+
 ## D-339 — MOD / KALAN (CT006-M): aynı bölücü, ayrı olay (2026-07-27)
 
 **Karar [ETKİ: `proofs/drf-v2-lean/Kemgu/` — Sem/{Core,SmallStep,HasType,LineerTamam,

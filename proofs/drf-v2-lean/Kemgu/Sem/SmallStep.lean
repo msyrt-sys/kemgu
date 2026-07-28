@@ -253,6 +253,18 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
                 zaman  := S.zaman + 1,
                 fault  := none }) :
       Step S S'
+  /-- S-CARP-TAMAM (D-340): iki operand da skaler deger → carpnir.
+      OLAY URETMEZ (aritmetik dogrudan gozlenmez); store/sahiplik sabit. -/
+  | sCarpTamam
+      (S S' : Konfigurasyon) (ts1 ts2 : List ThreadCtx) (ctx : ThreadCtx)
+      (n1 n2 : Int)
+      (h_t  : S.thread = ts1 ++ ctx :: ts2)
+      (h_if : ctx.ifade = .carp (.sabit (.skaler n1)) (.sabit (.skaler n2)))
+      (h_S' : S' = { S with
+                thread := ts1 ++ { ctx with ifade := .sabit (.skaler (n1 * n2)) } :: ts2,
+                zaman  := S.zaman + 1,
+                fault  := none }) :
+      Step S S'
   /-- S-KALAN-TAMAM (D-339): `n1 % n2`. `sToplaTamam`dan TEK farki:
       **`modOl` OLAYI EMIT EDER**. Toplama sabit cevrimdir, bolme degil;
       gecikme operandlarin fonksiyonu oldugundan operandlar gozleme
@@ -383,6 +395,39 @@ inductive Step : Konfigurasyon → Konfigurasyon → Prop where
       (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
       (h_S'    : S' = { S1' with
                 thread := ts1 ++ { ctx' with ifade := .topla (.sabit v) b' } :: ts2' }) :
+      Step S S'
+  /-- S-CARP-CONG-SOL (D-340): SOL operand icinde adim at.
+      (Deger olan sol operand adim atamaz → sira belirsizligi YOK.) -/
+  | sCarpCongSol
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (a a' b : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .carp a b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx a)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = a')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .carp a' b } :: ts2' }) :
+      Step S S'
+
+  /-- S-CARP-CONG-SAG (D-340): sol operand DEGER ise sag operand icinde
+      adim at. Sol-once/sag-sonra sirasi CT'nin `c_carp`si ile birebir. -/
+  | sCarpCongSag
+      (S S' S1 S1' : Konfigurasyon) (ts1 ts2 ts2' : List ThreadCtx)
+      (ctx ctx' : ThreadCtx) (v : Deger) (b b' : Ifade)
+      (h_t     : S.thread = ts1 ++ ctx :: ts2)
+      (h_if    : ctx.ifade = .carp (.sabit v) b)
+      (h_S1    : S1 = ifadeyleKonf S ts1 ts2 ctx b)
+      (h_inner : Step S1 S1')
+      (h_t1'   : S1'.thread = ts1 ++ ctx' :: ts2')
+      (h_tid   : ctx'.tid = ctx.tid)
+      (h_if'   : ctx'.ifade = b')
+      (h_yan   : ts2' = ts2 ∨ ∃ z, ts2' = ts2 ++ [z])  -- FIX-F
+      (h_S'    : S' = { S1' with
+                thread := ts1 ++ { ctx' with ifade := .carp (.sabit v) b' } :: ts2' }) :
       Step S S'
 
   /-- S-IKEN-AC (D-335): dongu ACILIR — kendi cong/dal kurallarini
@@ -840,6 +885,10 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
       subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
   -- D-338: sBolTamam `bolOl` emit eder — memOku/memYaz DEGIL, store'a
   -- dokunmaz → dorduncu disjunct (diger-olay).
+  | sCarpTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'; exact Or.inl ⟨rfl, rfl, rfl⟩
+  -- D-338: sBolTamam `bolOl` emit eder — memOku/memYaz DEGIL, store'a
+  -- dokunmaz → dorduncu disjunct (diger-olay).
   | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       subst h_S'
       refine Or.inr (Or.inr (Or.inr ⟨.bolOl ctx.tid n1 n2, rfl, ?_, ?_, rfl⟩))
@@ -865,7 +914,14 @@ theorem step_iz_analiz (S S' : Konfigurasyon) (h_step : Step S S') :
   | sToplaCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
+  | sCarpCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
   | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      simpa [ifadeyleKonf] using ih
+  -- D-335: sIkenAc olay uretmez; sEslesSec `dalOl` uretir.
+  | sCarpCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       simpa [ifadeyleKonf] using ih
   -- D-335: sIkenAc olay uretmez; sEslesSec `dalOl` uretir.
@@ -994,6 +1050,9 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
   | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   -- D-338
+  | sCarpTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      subst h_S'; exact Or.inl rfl
+  -- D-338
   | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       subst h_S'; exact Or.inl rfl
   | sBolCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -1033,7 +1092,22 @@ theorem step_fault_gorunum (S S' : Konfigurasyon) (h_step : Step S S') :
       · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
           by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
           by simpa [ifadeyleKonf] using h_z⟩
+  | sCarpCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' b h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
   | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      subst h_S1 h_S'
+      rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
+      · exact Or.inl h_f
+      · exact Or.inr ⟨sebep, h_f, by simpa [ifadeyleKonf] using h_iz,
+          by simpa [ifadeyleKonf] using h_st, by simpa [ifadeyleKonf] using h_sa,
+          by simpa [ifadeyleKonf] using h_z⟩
+  -- D-335
+  | sCarpCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v b b' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       subst h_S1 h_S'
       rcases ih with h_f | ⟨sebep, h_f, h_iz, h_st, h_sa, h_z⟩
       · exact Or.inl h_f
@@ -1164,6 +1238,9 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
   | sToplaTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
   -- D-338
+  | sCarpTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
+      intro h_frozen; subst h_S'; exact h_frozen
+  -- D-338
   | sBolTamam S S' ts1 ts2 ctx n1 n2 h_t h_if h_S' =>
       intro h_frozen; subst h_S'; exact h_frozen
   | sBolCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
@@ -1198,7 +1275,20 @@ theorem step_donmus_korunur (S S' : Konfigurasyon) (h_step : Step S S')
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
           = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
       simpa using ih h1
+  | sCarpCongSol S S' S1 S1' ts1 ts2 ts2' ctx ctx' a a' bb h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx a).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
   | sToplaCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v bb bb' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
+      intro h_frozen
+      subst h_S1 h_S'
+      have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx bb).sahiplik b
+          = some Sahip.donmus := by simpa [ifadeyleKonf] using h_frozen
+      simpa using ih h1
+  -- D-335
+  | sCarpCongSag S S' S1 S1' ts1 ts2 ts2' ctx ctx' v bb bb' h_t h_if h_S1 h_inner h_t1' h_tid h_if' h_yan h_S' ih =>
       intro h_frozen
       subst h_S1 h_S'
       have h1 : sahiplikGet (ifadeyleKonf S ts1 ts2 ctx bb).sahiplik b

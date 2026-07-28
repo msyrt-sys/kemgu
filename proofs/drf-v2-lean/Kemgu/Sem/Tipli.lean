@@ -136,6 +136,50 @@ theorem typed_topla_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
            LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
 
+/-- D-340: `carp`nin SOL operandi tiplidir (sCarpCongSol tarafi). -/
+theorem typed_carp_sol {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {a b : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.carp a b) τ Λ' Ρ') :
+    ∃ τa Λa Ρa, Typed Γ Δ Λ Ρ a τa Λa Ρa := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_carp _ _ _ _ hta _,
+    LineerTamam.l_carp _ _ Λa _ _ _ hla _,
+    RegionTamam.r_carp _ _ Ρa _ _ _ hra _ =>
+    exact ⟨Tip.scalar, Λa, Ρa, ⟨hta, hla, hra⟩⟩
+
+/-- D-340: sol operand DEGER iken sag operand tiplidir (sCarpCongSag). -/
+theorem typed_carp_sag {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {v : Deger} {b : Ifade} {τ : Tip}
+    {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ (Ifade.carp (Ifade.sabit v) b) τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ b Tip.scalar Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_carp _ _ _ _ _ htb,
+    LineerTamam.l_carp _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_carp _ _ _ _ _ _ hra hrb =>
+    -- sol operand `sabit v`: l_sabit / r_sabit → Λa = Λ, Ρa = Ρ
+    cases hla
+    cases hra
+    exact ⟨htb, hlb, hrb⟩
+
+/-- D-340: iki operand da deger → carpm tiplidir (sCarpTamam sonrasi). -/
+theorem typed_carp_atla {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
+    {Ρ : BolgeOrtam} {n1 n2 : Int} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}
+    (h : Typed Γ Δ Λ Ρ
+          (Ifade.carp (Ifade.sabit (.skaler n1)) (Ifade.sabit (.skaler n2)))
+          τ Λ' Ρ') :
+    Typed Γ Δ Λ Ρ (Ifade.sabit (.skaler (n1 * n2))) τ Λ' Ρ' := by
+  obtain ⟨ht, hl, hr⟩ := h
+  match ht, hl, hr with
+  | HasType.t_carp _ _ _ _ _ _,
+    LineerTamam.l_carp _ _ _ _ _ _ hla hlb,
+    RegionTamam.r_carp _ _ _ _ _ _ hra hrb =>
+    cases hla; cases hlb; cases hra; cases hrb
+    exact ⟨HasType.t_sabit _ _ _ _ (DegerTipli.dt_skaler _),
+           LineerTamam.l_sabit _ _ _, RegionTamam.r_sabit _ _ _⟩
+
 /-- D-338: `bol`un SOL operandi tiplidir (sBolCongSol tarafi). -/
 theorem typed_bol_sol {Γ : TipOrtam} {Δ : KanalOrtam} {Λ : LineerOrtam}
     {Ρ : BolgeOrtam} {a b : Ifade} {τ : Tip} {Λ' : LineerOrtam} {Ρ' : BolgeOrtam}

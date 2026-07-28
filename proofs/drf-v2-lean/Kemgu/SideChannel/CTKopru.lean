@@ -75,6 +75,7 @@ inductive Sadik : CT.Ifade → Prop where
   | s_eger (k d y : CT.Ifade) : Sadik d → Sadik y → Sadik (.eger k d y)
   /-- D-334: toplamin degeri `skaler (v1+v2)` — sadik. -/
   | s_topla (a b : CT.Ifade) : Sadik (.topla a b)
+  | s_carp (a b : CT.Ifade) : Sadik (.carp a b)
   /-- D-338: bolumun degeri `skaler (v1/v2)` — sadik. -/
   | s_bol (a b : CT.Ifade) : Sadik (.bol a b)
   /-- D-339: bolumun degeri `skaler (v1/v2)` — sadik. -/
@@ -109,6 +110,9 @@ inductive GomOk : CT.Ifade → Prop where
   | g_topla (a b : CT.Ifade) :
       GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.topla a b)
   /-- D-338: bolme — `topla` ile ayni gomme sarti. -/
+  | g_carp (a b : CT.Ifade) :
+      GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.carp a b)
+  /-- D-338: bolme — `carp` ile ayni gomme sarti. -/
   | g_bol (a b : CT.Ifade) :
       GomOk a → Sadik a → GomOk b → Sadik b → GomOk (.bol a b)
   /-- D-339: bolme — `topla` ile ayni gomme sarti. -/
@@ -143,6 +147,7 @@ def gom : CT.Ifade → Ifade
   | .sira a b       => .seq (gom a) (gom b)
   | .eger k d y     => .eger (gom k) (gom d) (gom y)
   | .topla a b      => .topla (gom a) (gom b)   -- D-334
+  | .carp a b      => .carp (gom a) (gom b)   -- D-340
   | .bol a b        => .bol (gom a) (gom b)     -- D-338
   | .kalan a b        => .kalan (gom a) (gom b)     -- D-339
   | .iken k g       => .iken (gom k) (gom g)    -- D-335
@@ -160,6 +165,7 @@ inductive Kapsar (V : List CT.Ad) : CT.Ifade → Prop where
   | k_eger (k d y : CT.Ifade) :
       Kapsar V k → Kapsar V d → Kapsar V y → Kapsar V (.eger k d y)
   | k_topla (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.topla a b)
+  | k_carp (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.carp a b)
   | k_bol (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.bol a b)
   | k_kalan (a b : CT.Ifade) : Kapsar V a → Kapsar V b → Kapsar V (.kalan a b)
   | k_iken (k g : CT.Ifade) : Kapsar V k → Kapsar V g → Kapsar V (.iken k g)
@@ -386,6 +392,18 @@ theorem krun_topla_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
         (K V { dB with ifade := .topla dB.ifade b }) (K V dA) (K V dB)
         [] [] [] ⟨t0, .topla dA.ifade b, []⟩ ⟨t0, dB.ifade, []⟩
         dA.ifade dB.ifade b rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+theorem krun_carp_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .carp d.ifade b }
+           { d' with ifade := .carp d'.ifade b } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .carp dB.ifade b } _ ?_ ih
+      exact Step.sCarpCongSol (K V { dA with ifade := .carp dA.ifade b })
+        (K V { dB with ifade := .carp dB.ifade b }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .carp dA.ifade b, []⟩ ⟨t0, dB.ifade, []⟩
+        dA.ifade dB.ifade b rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
 theorem krun_topla_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
     (h : KRun V d d') :
@@ -398,6 +416,19 @@ theorem krun_topla_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
       exact Step.sToplaCongSag (K V { dA with ifade := .topla (.sabit v) dA.ifade })
         (K V { dB with ifade := .topla (.sabit v) dB.ifade }) (K V dA) (K V dB)
         [] [] [] ⟨t0, .topla (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
+        v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
+
+theorem krun_carp_sag {V : List CT.Ad} (v : Deger) {d d' : KDurum}
+    (h : KRun V d d') :
+    KRun V { d with ifade := .carp (.sabit v) d.ifade }
+           { d' with ifade := .carp (.sabit v) d'.ifade } := by
+  induction h with
+  | refl _ => exact KRun.refl _
+  | adim dA dB _ hs _ ih =>
+      refine KRun.adim _ { dB with ifade := .carp (.sabit v) dB.ifade } _ ?_ ih
+      exact Step.sCarpCongSag (K V { dA with ifade := .carp (.sabit v) dA.ifade })
+        (K V { dB with ifade := .carp (.sabit v) dB.ifade }) (K V dA) (K V dB)
+        [] [] [] ⟨t0, .carp (.sabit v) dA.ifade, []⟩ ⟨t0, dB.ifade, []⟩
         v dA.ifade dB.ifade rfl rfl rfl hs rfl rfl rfl (Or.inl rfl) rfl
 
 theorem krun_bol_sol {V : List CT.Ad} (b : Ifade) {d d' : KDurum}
@@ -567,6 +598,13 @@ theorem adim_topla (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
          (K V ⟨sigma, .sabit (.skaler (n1 + n2)), iz, z + 1⟩) :=
   Step.sToplaTamam _ _ [] []
     ⟨t0, .topla (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
+
+theorem adim_carp (V : List CT.Ad) (sigma : Store) (n1 n2 : Int)
+    (iz : Iz) (z : Zaman) :
+    Step (K V ⟨sigma, .carp (.sabit (.skaler n1)) (.sabit (.skaler n2)), iz, z⟩)
+         (K V ⟨sigma, .sabit (.skaler (n1 * n2)), iz, z + 1⟩) :=
+  Step.sCarpTamam _ _ [] []
+    ⟨t0, .carp (.sabit (.skaler n1)) (.sabit (.skaler n2)), []⟩ n1 n2 rfl rfl rfl
 
 /-- D-338: bolme taban adimi — `bolOl` olayi uretir (adim_topla'dan
     tek farki budur). -/
@@ -782,6 +820,25 @@ theorem gomme_sim {V : List CT.Ad} :
             (krun_trans (krun_topla_sag (V := V) (.skaler v1) hr2)
               (KRun.adim _ ⟨sg2, .sabit (.skaler (v1 + v2)), iz2, z2 + 1⟩ _
                 (adim_topla V sg2 v1 v2 iz2 z2) (KRun.refl _))),
+          hu2, ?_, fun _ => rfl⟩
+        rw [hg2, hg1, gomGozIz_append, List.append_assoc]
+  | c_carp s s1 s2 a b t1 t2 v1 v2 _ _ iha ihb =>
+      -- D-340: soldan saga kosum + sCarpTamam. Iz katkisi `sira` ile
+      -- ayni sekilde birlesir (carp adimlari OLAY URETMEZ).
+      intro h_gom h_kap sigma iz z hu
+      cases h_gom with
+      | g_carp _ _ h_ga h_sa h_gb h_sb =>
+        have h_ka : Kapsar V a := by cases h_kap with | k_carp _ _ h _ => exact h
+        have h_kb : Kapsar V b := by cases h_kap with | k_carp _ _ _ h => exact h
+        obtain ⟨w1, sg1, iz1, z1, hr1, hu1, hg1, hs1⟩ := iha h_ga h_ka sigma iz z hu
+        rw [hs1 h_sa] at hr1
+        obtain ⟨w2, sg2, iz2, z2, hr2, hu2, hg2, hs2⟩ := ihb h_gb h_kb sg1 iz1 z1 hu1
+        rw [hs2 h_sb] at hr2
+        refine ⟨.skaler (v1 * v2), sg2, iz2, z2 + 1,
+          krun_trans (krun_carp_sol (V := V) (gom b) hr1)
+            (krun_trans (krun_carp_sag (V := V) (.skaler v1) hr2)
+              (KRun.adim _ ⟨sg2, .sabit (.skaler (v1 * v2)), iz2, z2 + 1⟩ _
+                (adim_carp V sg2 v1 v2 iz2 z2) (KRun.refl _))),
           hu2, ?_, fun _ => rfl⟩
         rw [hg2, hg1, gomGozIz_append, List.append_assoc]
   | c_atama s s1 x e t1 vv he ih =>

@@ -613,6 +613,16 @@ inductive Ifade : Type where
       tanitici kurali oldugu icin iyi-tipli deger operandlar zorunlu
       olarak `skaler`dir (progress buna dayanir). -/
   | topla          (sol sag : Ifade)
+  /-- D-340: TAMSAYI CARPMASI `a * b`. **`bol`/`kalan` DEGIL, `topla`
+      SINIFINDA:** olay URETMEZ, CT operand-genellik sarti YOKTUR, yani
+      GIZLI × GIZLI SERBESTTIR.
+      Bu bir DONANIM IDDIASIDIR (Mehmet karari) — bkz. SideChannel/CT
+      icindeki "CARPMA VARSAYIMI" notu ve D-340. Ozeti: KEMGU'nun hedef
+      ISA'larinda (ARM64, x86_64) tamsayi carpmasi sabit cevrimdir; erken
+      biten carpicilarda (Cortex-M0/M3 gibi) MODEL GECERSIZDIR.
+      Gerekce: aksi halde alan carpimi (gizli × gizli) yasaklanir ve
+      HICBIR kripto primitifi CT-tipli yazilamaz. -/
+  | carp           (sol sag : Ifade)
   /-- D-335: `iken k g` — kosullu dongu. Semantik ACMA ile verilir
       (sIkenAc): `iken k g ⟶ eger k (seq g (iken k g)) (sabit birim)`.
       Boylece TUR SAYISI her turda bir `dalOl` uretir — yani dongu
@@ -725,6 +735,10 @@ inductive HedefVar : Ifade → VarId → Prop where
       HedefVar a z → HedefVar (Ifade.topla a b) z
   | topla_sag (a b : Ifade) (z : VarId) :
       HedefVar b z → HedefVar (Ifade.topla a b) z
+  | carp_sol (a b : Ifade) (z : VarId) :
+      HedefVar a z → HedefVar (Ifade.carp a b) z
+  | carp_sag (a b : Ifade) (z : VarId) :
+      HedefVar b z → HedefVar (Ifade.carp a b) z
   -- D-338
   | bol_sol (a b : Ifade) (z : VarId) :
       HedefVar a z → HedefVar (Ifade.bol a b) z
@@ -783,6 +797,10 @@ inductive HedefBolge : Ifade → Bolge → Prop where
       HedefBolge a b → HedefBolge (Ifade.topla a c) b
   | topla_sag (a c : Ifade) (b : Bolge) :
       HedefBolge c b → HedefBolge (Ifade.topla a c) b
+  | carp_sol (a c : Ifade) (b : Bolge) :
+      HedefBolge a b → HedefBolge (Ifade.carp a c) b
+  | carp_sag (a c : Ifade) (b : Bolge) :
+      HedefBolge c b → HedefBolge (Ifade.carp a c) b
   -- D-338
   | bol_sol (a c : Ifade) (b : Bolge) :
       HedefBolge a b → HedefBolge (Ifade.bol a c) b
