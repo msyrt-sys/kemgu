@@ -625,21 +625,21 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 # DZ Spec V1 — C-tarafi kural kapisi (DZ001-DZ006).
 # check_korpus'tan AYRI: orasi C<->self-host BIREBIR paritesi olcer, self-host'ta
 # ise yalniz DZ001 var (spec DZ.11). C'ye ozgu kurallar burada dogrulanir.
-# Beklenen: dz_buyutucu.kem TAM 6 adet DZ006 verir (transitif + konteynerler),
+# Beklenen: dz_buyutucu.kem TAM 7 adet DZ006 verir (transitif + konteynerler + deref),
 # `sadece_okur` cagrisi TEMIZ kalir (okuma N'i bozmaz).
 calistir_dz_test: $(BUILD)/kemgu$(EXE) | $(BUILD)
 	@echo "DZ Spec V1 kural kapisi (DZ001-DZ006)..."
 	@n=$$(./$(BUILD)/kemgu$(EXE) --checkdump test/dz_korpus/dz_buyutucu.kem 2>/dev/null \
 	      | grep -c '^DZ006'); \
-	if [ "$$n" -ne 6 ]; then \
-		echo "FAIL: dz_buyutucu.kem — 6 DZ006 beklenirken $$n bulundu"; \
+	if [ "$$n" -ne 7 ]; then \
+		echo "FAIL: dz_buyutucu.kem — 7 DZ006 beklenirken $$n bulundu"; \
 		./$(BUILD)/kemgu$(EXE) --checkdump test/dz_korpus/dz_buyutucu.kem; exit 1; fi; \
 	t=$$(./$(BUILD)/kemgu$(EXE) --checkdump test/dz_korpus/dz_buyutucu.kem 2>/dev/null \
 	      | grep -vc '^DZ006'); \
 	if [ "$$t" -ne 0 ]; then \
 		echo "FAIL: beklenmeyen ek tani (sadece_okur temiz kalmali)"; \
 		./$(BUILD)/kemgu$(EXE) --checkdump test/dz_korpus/dz_buyutucu.kem; exit 1; fi
-	@echo "DZ kapisi: 6/6 DZ006 (dogrudan + kapasite + transitif + eger/iken/blok), yanlis pozitif yok!"
+	@echo "DZ kapisi: 7/7 DZ006 (dogrudan + kapasite + transitif + eger/iken/blok + deref), yanlis pozitif yok!"
 
 calistir_kripto_vektor: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o | $(BUILD)
 	@echo "kripto bilinen-cevap vektor kosumu (NIST FIPS 180-4 + RFC 8439)..."

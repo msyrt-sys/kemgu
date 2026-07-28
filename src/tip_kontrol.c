@@ -748,6 +748,7 @@ static void dz_buyutme_kontrol(TipKontrol *tk, const Dugum *d,
 /* DZ Spec V1 Asama (b): buyutucu tablosu sorgusu (tanim tip_kontrol_program
  * yakininda — analiz orada kurulur). DUGUM_CAGRI'de DZ006 icin gerekir. */
 static DzBuyutucu *dz_kayit_bul(TipKontrol *tk, const Dugum *islev);
+static const TipBilgisi *dz_dizi_coz(const TipBilgisi *t);
 
 /* === DZ004 / DZ005: DZ.3 akis kurali (YONLU) ===
  * N disa dogru SILINIR (Dizi<T,64> -> Dizi<T> serbest), ice dogru IDDIA
@@ -3697,8 +3698,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* === DZ006 (Asama b): N-bilinen arguman, BUYUTUCU parametreye
                  * gecemez. Diziler referansla gecer → callee'nin buyutmesi
                  * cagirana gorunur ve cagirandaki N'i YALANLAR (DZ.5). */
-                if (arg_tip && arg_tip->kategori == TIP_DIZI &&
-                    arg_tip->veri.dizi.uzunluk > 0) {
+                const TipBilgisi *arg_dz = dz_dizi_coz(arg_tip);   /* D-342 */
+                if (arg_dz && arg_dz->veri.dizi.uzunluk > 0) {
                     /* Cagri hedefini coz. `cozum_sembol` ONCE denenir: hem
                      * `f(...)` (TANIMLAYICI) hem `m::f(...)` (YOL) icin
                      * doludur. Yalniz sembol_bul'a bakmak modul-nitelikli
@@ -3720,7 +3721,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                             "verilemez: '%.*s' %d. parametresini "
                             "dizi_ekle/dizi_kapasite_ayarla ile buyutuyor "
                             "(buyutme cagirana gorunur → N yalan olurdu)",
-                            arg_tip->veri.dizi.uzunluk,
+                            arg_dz->veri.dizi.uzunluk,
                             bk->ad_uz, bk->ad, i + 1);
                         tip_hata(tk, d->veri.cagri.argumanlar[i],
                                  "DZ006", msj);
@@ -6219,11 +6220,30 @@ static int dz_ad_buyutucu_mu(TipKontrol *tk, const char *ad, int ad_uz,
     return 0;
 }
 
-/* Dugum, `ad` adli parametreye dogrudan basvuran bir tanimlayici mi? */
+/* Dugum, `ad` adli parametreye basvuruyor mu?
+ * D-342 (t5 kusuru): `&degisken Dizi<T>` parametresinde buyutme
+ * `dizi_ekle(*xs, ...)` seklinde yazilir — arguman CIPLAK tanimlayici degil,
+ * bir OP_DEREFERANS. Yalniz TANIMLAYICI'ya bakmak bu parametreyi buyutucu
+ * ISARETLEMIYORDU (olculdu: `--check` OK = DZ006 sessizce dusuyordu).
+ * Referans-al/deref sarmalayicilari soyulur; ikisi de ayni nesneyi adlar. */
 static int dz_param_referansi_mi(const Dugum *d, const char *ad, int ad_uz) {
+    while (d && d->tip == DUGUM_TEKLI &&
+           (d->veri.tekli.op == OP_DEREFERANS ||
+            d->veri.tekli.op == OP_REF ||
+            d->veri.tekli.op == OP_REF_DEGISKEN)) {
+        d = d->veri.tekli.operand;
+    }
     if (!d || d->tip != DUGUM_TANIMLAYICI) return 0;
     return d->veri.tanimlayici.uzunluk == ad_uz &&
            memcmp(d->veri.tanimlayici.metin, ad, (size_t)ad_uz) == 0;
+}
+
+/* Referans sarmalayicisini soy — `&degisken Dizi<T,N>` argumaninin N'ini
+ * gormek icin (D-342). TIP_DIZI degilse NULL. */
+static const TipBilgisi *dz_dizi_coz(const TipBilgisi *t) {
+    if (!t) return NULL;
+    if (t->kategori == TIP_REFERANS) t = t->veri.referans.hedef;
+    return (t && t->kategori == TIP_DIZI) ? t : NULL;
 }
 
 /* Govdeyi gez; `kayit`in parametrelerinden buyutulenleri isaretle.

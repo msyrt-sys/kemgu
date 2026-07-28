@@ -5,6 +5,64 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-342 — DZ006 `&değişken` deref eksiği onarıldı + Aşama (c) kapsamı (D) olarak belirlendi (2026-07-28)
+
+**Karar [ETKİ: `src/tip_kontrol.c` (küçük), `Makefile`, `test/dz_korpus/`,
+spec DZ.5/DZ.9 + yeni **DZ.12**. `src/llvm.c` ve self-host: DOKUNULMADI.]**
+
+### 1. N kaçış yüzeyinin SİSTEMATİK taraması (9 senaryo)
+
+D-341'de iki yolu iki *tahminle* bulmuştum. Yüzeyin tamamı tarandı; sonuç
+"iki yol kaldı"dan **kötü** çıktı:
+
+AÇIK: **t9 yerel takma-ad** (`değişken A: Dizi<tam32> = W;` — iki satır, hiç
+çağrı yok) · t8 dönüş takma-adı · t3 yapı alanı · t4 iç içe dizi · t7
+`seçimlik` yükü · t1 lambda parametresi.
+KAPALI: t5 (bu adımda onarıldı) · t2 lambda yakalama (DZ003) · t6 küresel
+(E011 — DZ ile ilgisiz, tesadüfi).
+
+**Kök neden "kalan yollar" değil, tek yapısal seçim:** DZ.3 silinmeye izin
+verir ve diziler değiştirilebilir takma-adlardır → her silinme noktası N'siz
+bir takma-ad üretir. İşlev parametresi bunlardan yalnızca biriydi.
+
+### 2. t5 onarımı (analiz EKSİĞİ, tasarım tercihi değil)
+
+`&değişken Dizi<T>` parametresinde büyütme `dizi_ekle(*xs, …)` yazılır —
+argüman çıplak tanımlayıcı DEĞİL, bir `OP_DEREFERANS`. Yalnız `DUGUM_TANIMLAYICI`
+aranıyordu → bu parametre büyütücü **işaretlenmiyordu** (ölçüldü: `--check` OK
+= DZ006 sessizce düşüyordu). Onarım: `dz_param_referansi_mi` deref/ref
+sarmalayıcılarını soyar; DZ006 çağrı yerinde `dz_dizi_coz` referansı açar.
+Kapı 6→7.
+
+### 3. Aşama (c) kapsamı — Mehmet kararı: **(D)**
+
+Değerlendirilen ve **seçilmeyen** yollar: (A1) silinmeyi yasakla — ucuz
+(~40-60 satır + 11 yerde göç) ama salt-okuma yardımcıları farklı N'leri kabul
+edemez, const-generic olmadan ağır ergonomik bedel · (A2) (A1)+N-generic —
+ergonomiyi çözer ama yeni tip-sistemi özelliği · (B) dondurma/taint — sağlam
+ve ergonomik ama değer-akışı/alias analizi, en büyüğü · (C) hiçbir şey.
+
+**SEÇİLEN (D) — WCET-yerel pozitif hapsedilme kanıtı.** WCET'in ihtiyacı N'in
+evrensel invaryant olması değil, belirli bir döngüde o dizinin uzunluğunu
+bilmek — **yerel** bir özellik. Kanıt yükümlülükleri P1 (yerelde `Dizi<T,N>`
+bildirimi) · P2 (büyütücüye geçmiyor — DZ006) · P3 (takma-adı alınmamış:
+atama/dönüş/alan/dizi/seçimlik/kapanış YOK → t9/t8/t3/t4/t7/t1 burada kapanır)
+· P4 (büyütme yok). **`default:` DENY** — kanıtsız durumda RT002 aynen durur.
+
+**Neden bu desen:** deponun kendi yerleşik yöntemi — D-309'da `ρ_sahip`
+serbest bırakma tam olarak böyle çözüldü (pozitif kanıt + `default:` DENY +
+kaçış yüzeyi ÖNCE ölçülür).
+
+**(D) neyi DEĞİŞTİRMEZ:** `Dizi<T,N>` genel olarak invaryant OLMAZ; t9/t8/t3/
+t4/t7/t1 dil düzeyinde açık kalır. (D) yalnız WCET'in güvenle tüketebileceği
+dar ve kanıtlanmış bir alt küme tanımlar. Genel invaryant istenirse (A2)/(B)
+ayrı karar. Kapsam DZ.12'de; **henüz UYGULANMADI.**
+
+**Kapılar:** dz_test **7/7** · tip_kontrol 191/191 · llvm 284/284 · linear
+89/89 · wcet 35/35 · stdlib_check · kripto_vektor 11/11.
+
+---
+
 ## D-341 [YÜKSEK] — DZ006: büyütücü-parametre etki analizi; DZ.5 deliğinin BİR yolu kapandı (2026-07-28)
 
 **Karar [ETKİ: `src/tip_kontrol.{h,c}`, `Makefile` (+`calistir_dz_test`),

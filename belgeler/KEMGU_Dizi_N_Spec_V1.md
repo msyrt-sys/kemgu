@@ -223,7 +223,34 @@ Analiz ad-tabanlı olduğu için `xs` parametresi büyütücü işaretlenir → 
 `Dizi<T,N>` geçirirse DZ006 alır. **Yanlış pozitif, ama loud** ve güvenli yönde;
 çözüm yerel değişkeni yeniden adlandırmaktır. Kapsam takibi V2.
 
-### ⚠ DZ006'dan SONRA HÂLÂ AÇIK OLAN İKİ YOL (ölçüldü, 2026-07-28)
+### ⚠ N KAÇIŞ YÜZEYİ — SİSTEMATİK TARAMA (9 senaryo, 2026-07-28)
+
+(b) sonrası iki yolu iki *tahminle* bulmuştum; sonra yüzeyin tamamı tarandı.
+Sonuç "iki yol kaldı"dan kötü:
+
+| # | Yol | Durum |
+|---|---|---|
+| t9 | **Yerel takma-ad** `değişken A: Dizi<tam32> = W;` | 🔴 AÇIK |
+| t8 | Dönüş ile takma-ad | 🔴 AÇIK |
+| t3 | Yapı alanı | 🔴 AÇIK |
+| t4 | İç içe dizi `[W]` | 🔴 AÇIK |
+| t7 | `seçimlik<Dizi<T>>` yükü | 🔴 AÇIK |
+| t1 | Lambda parametresi | 🔴 AÇIK |
+| t5 | `&değişken Dizi<T>` param | ✅ **D-342'de KAPANDI** (analiz eksiği idi) |
+| t2 | Lambda yakalama | ✅ KAPALI (DZ003 — yakalama N'i görür) |
+| t6 | Küresel | ✅ KAPALI (E011 — DZ ile ilgisiz, tesadüfi) |
+
+**t9 belirleyicidir:** iki satır, hiç fonksiyon çağrısı yok. N'i yenmek için
+DZ006'ya uğramaya gerek bile yok.
+
+### Kök neden — "kalan yollar" değil, tek yapısal seçim
+
+DZ.3 **silinmeye izin verir** ve diziler **değiştirilebilir takma-adlardır**.
+Her silinme noktası N'siz bir takma-ad üretir; büyütme oradan görünmez olur.
+İşlev parametresi bunlardan yalnızca *biriydi*. Dolayısıyla "kalan yolları
+kapat" yanlış çerçevedir; doğrusu **"silinmeyi sağlam yap"**.
+
+### ⚠ Aşağıdaki iki örnek, yukarıdaki tablodan (t1, t3)
 
 DZ006 **adlandırılmış işlev parametresi** yolunu kapatır — DZ.5'te ölçülen yol
 buydu. Ama aynı sınıftan iki yol daha var ve **ikisi de hâlâ açık**:
@@ -256,9 +283,55 @@ Sebep: büyütülen şey bir parametre *adı* değil, `k.ic` alan erişimi.
 - ✅ D-339'un SHA-256 hata sınıfını yakalar (DZ001) ve artık büyütücü işlevlere
   kaçmasını da engeller (DZ006).
 - ✅ Bellek güvenliğini hiç etkilemez — runtime kontrolü her hâlükârda yerinde.
-- ❌ **WCET / `gerçekzamanlı` bound'u HÂLÂ N'e DAYANDIRILAMAZ.** Realtime Spec
-  §RT.12'nin `Dizi<T, N>` maddesi, yukarıdaki iki yol da kapanana kadar
-  **açılmamalıdır.** (b) beklenen faydayı tam vermedi; bu dürüstçe kaydedilir.
+- ❌ **WCET / `gerçekzamanlı` bound'u HÂLÂ N'e DAYANDIRILAMAZ.** (b) beklenen
+  faydayı tam vermedi; bu dürüstçe kaydedilir.
+
+---
+
+## DZ.12 — Aşama (c): WCET-YEREL HAPSEDİLME KANITI (Mehmet kararı, 2026-07-28)
+
+Yukarıdaki tarama, N'i **evrensel invaryant** yapmanın maliyetini ortaya koydu.
+Değerlendirilen dört yol ve neden seçilmedikleri:
+
+| Seçenek | İçerik | Neden seçilmedi |
+|---|---|---|
+| (A1) | Silinmeyi yasakla | ~40-60 satır + 11 yerde göç **ucuz**, ama salt-okuma yardımcıları (`sadece_okur(xs: Dizi<tam32>)`) farklı N'leri kabul edemez → N başına çoğaltma. Const-generic olmadan ağır ergonomik bedel. |
+| (A2) | (A1) + N-generic (`işlev f<N>(...)`) | Ergonomiyi çözer ama **const-generic** yeni bir tip-sistemi özelliği; DZ kapsamını aşar. |
+| (B) | Dondurma/taint (alias boyunca yayılan "uzunluk donduruldu") | Sağlam **ve** ergonomik, fakat değer-akışı/alias analizi ister — dördün en büyüğü. |
+| (C) | Olduğu gibi bırak | Sıfır iş; WCET kalıcı olarak kapalı. |
+
+**SEÇİLEN: (D) — WCET-yerel pozitif hapsedilme kanıtı.**
+
+> WCET'in ihtiyacı N'in evrensel invaryant olması **değildir**; belirli bir
+> `için x: buf` döngüsünde `buf`'un uzunluğunu bilmektir — bu **yerel** bir
+> özelliktir. (D), N'i global olarak sağlamlaştırmak yerine, WCET analizinin
+> *o dizi için* pozitif bir hapsedilmişlik kanıtı üretmesini ister.
+
+**Kanıt yükümlülükleri (hepsi sağlanmalı; biri düşerse kanıt düşer):**
+- **P1** — `buf` YERELDE `Dizi<T, N>` olarak bildirilmiş (parametre değil,
+  küresel değil, alan değil).
+- **P2** — `buf` hiçbir büyütücüye geçmiyor (DZ006 bunu zaten denetler).
+- **P3** — `buf`'un takma-adı alınmamış: başka bir bağlamaya atanmamış,
+  `ver` ile döndürülmemiş, yapı alanına/diziye/`seçimlik`e konmamış,
+  kapanışta yakalanmamış. *(t9/t8/t3/t4/t7/t1'in tamamı burada kapanır.)*
+- **P4** — `buf` üzerinde `dizi_ekle`/`dizi_kapasite_ayarla` yok (DZ003 zaten
+  yasaklar, kanıt yine de bağımsız doğrular).
+
+**`default:` DENY.** Kanıt üretilemeyen her durumda RT002 aynen durur — yani
+"kanıt yok = eski davranış". Kanıtın yanlışlıkla üretilmesi bir WCET yanlışına
+yol açar; üretilmemesi yalnızca bir iyileştirmenin kaçırılmasına.
+
+**Neden bu desen:** deponun **kendi yerleşik yöntemi**. D-309'da `ρ_sahip`
+serbest bırakma tam olarak böyle çözüldü — P1-P4 pozitif kanıt + `default:`
+DENY + kanıtsız durumda eski davranış. Orada da kaçış yüzeyi ÖNCE ölçülmüştü.
+
+**(D) neyi DEĞİŞTİRMEZ:** `Dizi<T, N>` genel olarak invaryant olmaya devam
+etmez; t9/t8/t3/t4/t7/t1 dil düzeyinde AÇIK kalır. (D) yalnızca WCET'in
+güvenle tüketebileceği **dar ve kanıtlanmış** bir alt küme tanımlar. Genel
+invaryant istenirse (A2) veya (B) ayrı bir karar olarak gelir.
+
+**Kapsam DIŞI (bilerek):** (D) `src/wcet.c` entegrasyonudur; DZ001-DZ006 tip
+kuralları değişmez, `src/llvm.c` ve self-host'a dokunulmaz.
 
 ---
 
@@ -334,15 +407,16 @@ Sabotajın kendisi `diff` ile teyit edilir.
 
 ## DZ.9 — V2'ye bırakılanlar
 
-- **Aşama (c) — N kaçışının kalan iki yolu** (DZ.5'te ölçüldü, öncelikli):
-  büyütücü **kapanışa** geçirilen dizi ve **yapı alanında** taşınan dizi.
-  Bunlar kapanmadan `Dizi<T, N>` tam invaryant olmaz.
+- **Aşama (c) = (D)** — WCET-yerel hapsedilme kanıtı; kapsamı **DZ.12**'de
+  tanımlı, henüz UYGULANMADI.
+- **Genel invaryant** (t9/t8/t3/t4/t7/t1'i dil düzeyinde kapatmak): (A2) veya
+  (B). AYRI bir karar; (D) bunu yapmaz.
 - **Parametre gölgeleme yanlış pozitifi:** ad-tabanlı eşleme yerine kapsam
   takibi (DZ.5).
 - **Sabit ifade N:** `Dizi<T, W_SAYI>` — sabit değerlendirici gerekir;
   `vektör<T, N>` ile **aynı adımda**.
 - **WCET tüketimi:** `için x: buf` statik bound (Realtime §RT.12) — **Aşama
-  (c)'ye** bağlı. (b) tek başına yetmedi.
+  (c)/(D)'ye** bağlı (DZ.12). (b) tek başına yetmedi.
 - **Self-host DZ002-DZ006:** bugün self-host'ta yalnız DZ001 var.
 - **Bağımlı/refinement tipler:** `i < N` ispatı ile runtime sınır kontrolünün
   elenmesi. Ayrı faz; tip sistemi baştan tasarlanır.

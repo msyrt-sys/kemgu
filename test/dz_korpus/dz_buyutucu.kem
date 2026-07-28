@@ -31,7 +31,13 @@ işlev c_iken(a: Dizi<tam32>) -> tam32 {
 }
 işlev c_blok(a: Dizi<tam32>) -> tam32 { { dizi_ekle(a, 1); } ver 0; }
 
-// (e) BÜYÜTMEYEN — DZ006 tetiklenMEmeli
+// (e) `&değişken Dizi<T>` parametresi — büyütme `dizi_ekle(*xs, …)` yazılır,
+// yani argüman ÇIPLAK tanımlayıcı DEĞİL, bir deref. D-342'ye kadar bu
+// parametre büyütücü işaretlenMİYORDU (ölçüldü: `--check` OK = DZ006 sessizce
+// düşüyordu). Referans-al/deref sarmalayıcıları artık soyuluyor.
+işlev r_buyut(xs: &değişken Dizi<tam32>) -> tam32 { dizi_ekle(*xs, 1); ver 0; }
+
+// (f) BÜYÜTMEYEN — DZ006 tetiklenMEmeli (yanlış pozitif kapısı)
 işlev sadece_okur(xs: Dizi<tam32>) -> tam32 { ver xs[0]; }
 
 işlev main() -> tam32 {
@@ -43,6 +49,7 @@ işlev main() -> tam32 {
     r = r + c_eger(W, doğru);  // DZ006
     r = r + c_iken(W);         // DZ006
     r = r + c_blok(W);         // DZ006
+    r = r + r_buyut(&değişken W);  // DZ006 (deref üzerinden — D-342)
     r = r + sadece_okur(W);    // temiz — okuma N'i bozmaz
     ver r;
 }
