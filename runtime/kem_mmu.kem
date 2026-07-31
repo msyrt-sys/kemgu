@@ -187,7 +187,7 @@ isb"#
 // SINIR (MB-1a): özel sayfa VERİ sayfasıdır; EL0 KOD sayfası (L2[16]) hâlâ
 // paylaşılır. Süreç başına KOD eşlemesi ELF yükleyicinin (MB-2) işidir.
 sabit KMMU_AS_TABAN: tam64 = 1157660672;    // 0x45010000: adres-alanı tablo arenası
-sabit KMMU_AS_ADIM: tam64 = 8192;           // 0x2000: her alan = L1(4KB) + L2(4KB)
+sabit KMMU_AS_ADIM: tam64 = 12288;          // 0x3000: her alan = L1 + L2 + L3 (3×4KB)
 sabit KMMU_OZEL_VA: tam64 = 1140850688;     // 0x44000000: süreç-özel VA (L2[32])
 sabit KMMU_OZEL_IDX: tam64 = 32;            // (0x44000000 - 0x40000000) / 2MB
 // ÖLÇÜLDÜ (ampirik, ilk denemede 0x48000000 seçilmişti): QEMU `-M virt` komut
@@ -198,6 +198,28 @@ sabit KMMU_OZEL_IDX: tam64 = 32;            // (0x44000000 - 0x40000000) / 2MB
 // Yığınlar 0x47100000/0x47200000 (2MB blok 56-57) → 58'den itibaren boş, 63'e kadar.
 sabit KMMU_OZEL_PA: tam64 = 1195376640;     // 0x47400000: özel sayfa PA tabanı (blok 58)
 sabit KMMU_AS_AZAMI: tam64 = 6;             // blok 58..63 → en çok 6 adres alanı
+
+// --- MB-3: 4KB SAYFA GRANÜLÜ (L3) + W^X ---------------------------------
+// Süreç-özel bölge artık TEK 2MB blok değil, 512×4KB SAYFA. Sebep: W^X izinleri
+// segment başına verilebilsin. 2MB blokta kod ve veri aynı tanımlayıcıyı
+// paylaştığı için sayfa zorunlu olarak hem YAZILABİLİR hem ÇALIŞTIRILABİLİRDİ —
+// klasik W^X ihlali: yüklenen bir program kendi kodunu değiştirebilir, ya da
+// veri olarak yazdığı baytları çalıştırabilirdi.
+//
+// Tanımlayıcı bitleri (ARMv8-A, 4KB granül, L3 sayfa):
+//   bit[1:0]=0b11 sayfa | bit[4:2]=AttrIdx(1=Normal, MAIR 0xFF00) | bit[9:8]=0b11 iç-paylaşım
+//   bit10=AF(erişim bayrağı) | bit[7:6]=AP | bit53=PXN | bit54=UXN
+//   Taban = 0x400(AF) + 0x300(SH) + 0x4(AttrIdx=1) + 0x3(sayfa) = 0x707
+//   AP=01 (0x40): EL1 RW + EL0 RW   |  AP=11 (0xC0): EL1 RO + EL0 RO
+sabit KMMU_S_VERI: tam64 = 27021597764224839;
+//   = 0x747 (taban+AP01) + (1<<53 PXN) + (1<<54 UXN)  → EL0 RW, ÇALIŞTIRILAMAZ
+sabit KMMU_S_KOD: tam64 = 9007199254742983;
+//   = 0x7C7 (taban+AP11) + (1<<53 PXN)                 → EL0 RO+X, YAZILAMAZ
+//   PXN her ikisinde de SET: çekirdek kullanıcı sayfalarından KOMUT GETİRMEZ.
+//   Yükleyici kod sayfasına çekirdeğin IDENTITY görüşünden yazar (başka VA) —
+//   bu yüzden AP=11 (EL1 RO) yükleme yolunu engellemez.
+sabit KMMU_SAYFA: tam64 = 4096;
+sabit KMMU_SAYFA_SAYI: tam64 = 512;         // 2MB / 4KB
 
 // Adres alanı #i'yi kur; L1 fiziksel adresini döner (TTBR0'a yazılacak değer).
 // i >= KMMU_AS_AZAMI ise 0 döner (SESSİZ TAŞMA YOK — çağıran 0'ı görür).
@@ -212,11 +234,34 @@ sabit KMMU_AS_AZAMI: tam64 = 6;             // blok 58..63 → en çok 6 adres a
         kmmu_y64(l2 + n * 8, kmmu_o64(KMMU_L2 + n * 8));
         n = n + 1;
     }
-    // TEK FARK: özel VA → sürece ait fiziksel 2MB blok (AP=01, EL0+EL1 RW).
-    kmmu_y64(l2 + KMMU_OZEL_IDX * 8, (KMMU_OZEL_PA + i * KMMU_2MB) + 1861);
+    // TEK FARK: özel VA artık 2MB BLOK değil, kendi L3 TABLOSU (512×4KB sayfa).
+    // Sayfalar VARSAYILAN OLARAK VERİ (RW + çalıştırılamaz) — en kısıtlı makul
+    // başlangıç. Kod izni yalnızca ELF yükleyicisinin AÇIKÇA verdiği sayfalara
+    // konur (kmmu_sayfa_kod). Ters sıra (varsayılan çalıştırılabilir) seçilseydi,
+    // izin atamayı unutan her yol sessizce W^X'i devre dışı bırakırdı.
+    değişken l3: tam64 = l1 + 8192;
+    değişken pa: tam64 = KMMU_OZEL_PA + i * KMMU_2MB;
+    değişken s: tam64 = 0;
+    iken s < KMMU_SAYFA_SAYI {
+        kmmu_y64(l3 + s * 8, (pa + s * KMMU_SAYFA) + KMMU_S_VERI);
+        s = s + 1;
+    }
+    kmmu_y64(l2 + KMMU_OZEL_IDX * 8, l3 + 3);                      // L2[32] → L3 tablosu
     kmmu_y64(l1, 1025);                                            // L1[0] Device (0x401)
     kmmu_y64(l1 + 8, l2 + 3);                                      // L1[1] → kendi L2'si
     ver l1;
+}
+
+// Adres alanı #i'de, özel bölgenin `sayfa` numaralı 4KB sayfasını KOD yap
+// (EL0 için salt-okunur + çalıştırılabilir). Aralık dışı → 0 (sessiz yok sayma
+// YOK: çağıran kaç sayfanın işaretlendiğini sayabilir).
+çıplak işlev kmmu_sayfa_kod(i: tam64, sayfa: tam64) -> tam32 {
+    eğer (i < 0) veya (i >= KMMU_AS_AZAMI) { ver 0; }
+    eğer (sayfa < 0) veya (sayfa >= KMMU_SAYFA_SAYI) { ver 0; }
+    değişken l3: tam64 = KMMU_AS_TABAN + i * KMMU_AS_ADIM + 8192;
+    değişken pa: tam64 = KMMU_OZEL_PA + i * KMMU_2MB + sayfa * KMMU_SAYFA;
+    kmmu_y64(l3 + sayfa * 8, pa + KMMU_S_KOD);
+    ver 1;
 }
 
 // TTBR0'ı değiştir + TLB'yi tamamen geçersiz kıl. dsb/isb sıralaması ŞART:

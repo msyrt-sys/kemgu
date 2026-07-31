@@ -725,6 +725,16 @@ işlev main() -> tam32 {
         uart_satir("[18] ELF YUKLE HATA");
     }
 
+    // [19] W^X (MODEL B / MB-3): süreç sayfaları 4KB granülde; kod sayfası EL0
+    // için salt-okunur+çalıştırılabilir, veri sayfası yazılabilir+çalıştırılamaz.
+    // EL0 stub kendi kod sayfasına yazmayı dener → izin fault'u → süreç öldürülür.
+    değişken wx_ok: tam32 = kelf_wx_testi();
+    eğer wx_ok == 1 {
+        uart_satir("[19] W^X OK");
+    } değilse {
+        uart_satir("[19] W^X HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

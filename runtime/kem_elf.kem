@@ -106,6 +106,12 @@ sabit KELF_2MB: tam64 = 2097152;
     iken k < phnum {
         değişken ph: tam64 = phoff + k * phent;
         eğer kelf_o32(base, ph) == 1 {               // PT_LOAD
+            değişken bayrak: tam64 = kelf_o32(base, ph + 4);   // p_flags: X=1 W=2 R=4
+            // W^X: aynı anda YAZILABİLİR ve ÇALIŞTIRILABİLİR segment REDDEDİLİR.
+            // Böyle bir segmenti yüklemek, dilin bellek-güvenliği tezini yükleyici
+            // katmanında sessizce iptal ederdi. Reddetmek DOĞRU cevap; "yükle ama
+            // sadece okunur yap" gibi bir yorum programı sessizce bozardı.
+            eğer ((bayrak & 1) == 1) ve ((bayrak & 2) == 2) { ver 0; }
             değişken ofs: tam64 = kelf_o64(base, ph + 8);
             değişken va: tam64 = kelf_o64(base, ph + 16);
             değişken fsz: tam64 = kelf_o64(base, ph + 32);
@@ -126,6 +132,19 @@ sabit KELF_2MB: tam64 = 2097152;
             iken i < msz {                            // .bss → sıfırla
                 kelf_y8(hedef + i, 0 olarak dtam8);
                 i = i + 1;
+            }
+            // W^X: yalnız ÇALIŞTIRILABİLİR segmentin sayfaları kod yapılır.
+            // Sayfalar varsayılan olarak veri (RW+XN); burada AÇIKÇA kod iznine
+            // geçirilir → izin vermeyi unutan bir yol W^X'i devre dışı bırakamaz,
+            // programı çalışmaz hale getirir (sessiz zayıflama yerine gürültülü hata).
+            eğer (bayrak & 1) == 1 {
+                değişken s0: tam64 = rel / KMMU_SAYFA;
+                değişken s1: tam64 = (rel + msz - 1) / KMMU_SAYFA;
+                değişken s: tam64 = s0;
+                iken s <= s1 {
+                    eğer kmmu_sayfa_kod(as_i, s) != 1 { ver 0; }
+                    s = s + 1;
+                }
             }
             yuklendi = yuklendi + 1;
         }
@@ -158,6 +177,73 @@ sabit KELF_AS: tam64 = 4;                    // 0..3 MB-1 testlerinin
 sabit KELF_KSTK: tam64 = 1191182336;         // 0x47000000: EL0 görevinin çekirdek yığını
 sabit KELF_USTK: tam64 = 1141899264;         // 0x44100000: EL0 user yığını (özel sayfa içi)
 sabit KELF_ICACHE_BOLGE: tam64 = 65536;      // 64KB — yüklenen kod bölgesi payı
+
+// ============================================================================
+// MB-3b kapısı: W^X DONANIMDA ZORLANIYOR MU?
+//
+// EL0'da koşan bir stub ÖNCE bir syscall yapar (koştuğunu kanıtlar), SONRA kendi
+// KOD SAYFASINA yazmayı dener. Kod sayfası AP=11 (EL0 salt-okunur) olduğu için
+// yazma izin fault'u üretmeli → mevcut EL0-kill yolu süreci öldürmeli.
+//
+// İKİ KOŞUL neden ŞART (SABOTAJLA ÖĞRENİLDİ): ilk sürüm yalnızca "süreç öldü mü"
+// diye bakıyordu ve kod sayfasını VERİ yapan sabotajda BİLE yeşil geçti — çünkü
+// veri sayfası XN'dir, stub hiç ÇALIŞAMAZ, komut abort'u yine öldürür. Test
+// "yazma fault'u" ile "çalıştırma fault'u"nu AYIRT EDEMİYORDU.
+// Şimdi ayırt edici: syscall sayacı ARTMALI (⇒ sayfa GERÇEKTEN çalıştırılabilir)
+// VE süreç ÖLMELİ (⇒ yazma reddedildi). Üç durumda da doğru sonuç:
+//   • Doğru W^X       : sayaç artar + ölür        → YEŞİL
+//   • Sayfa veri (XN) : sayaç ARTMAZ              → KIRMIZI
+//   • W^X yok (RWX)   : sayaç artar, yazma geçer,
+//                       stub sonsuz döner, ölmez  → KIRMIZI
+//
+// Stub, yüklenen programın segmentinden UZAK bir sayfaya (sayfa 2 = 0x44002000)
+// konur ki gerçek programı ezmesin. Çekirdek stub'ı IDENTITY görüşünden yazar
+// (kod sayfası EL1 için de RO'dur — bu yüzden 0x44002000 VA'sından YAZILAMAZ).
+// Komut kodlamaları llvm-mc ile doğrulandı (tahmin değil):
+//   d28000e8 movz x8,#7       | d4000001 svc #0
+//   d2840009 movz x9,#0x2000  | f2a88009 movk x9,#0x4400,lsl#16
+//   f9000129 str x9,[x9]      | 14000000 b .
+sabit KELF_WX_AS: tam64 = 5;                 // 0..4 diger testlerin
+sabit KELF_WX_SAYFA: tam64 = 2;              // 0x44002000
+sabit KELF_WX_VA: tam64 = 1140858880;        // 0x44002000
+sabit KELF_WX_KSTK: tam64 = 1190133760;      // 0x46F00000: ayrı çekirdek yığını
+sabit KELF_WX_USTK: tam64 = 1141899264;      // 0x44100000: EL0 yığını (veri sayfası)
+
+çıplak işlev kelf_wx_testi() -> tam32 {
+    değişken l1: tam64 = kmmu_as_olustur(KELF_WX_AS);
+    eğer l1 == 0 { ver 0; }
+    // Stub'ı sürecin FİZİKSEL sayfasına yaz (identity görüş), sonra KOD yap.
+    değişken pa: tam64 = KMMU_OZEL_PA + KELF_WX_AS * KELF_2MB
+                       + KELF_WX_SAYFA * KMMU_SAYFA;
+    kg_yaz32(pa + 0, 3531604200 olarak tam32);    // movz x8, #7
+    kg_yaz32(pa + 4, 3556769793 olarak tam32);    // svc #0   (koştuğunu kanıtla)
+    kg_yaz32(pa + 8, 3531866121 olarak tam32);    // movz x9, #0x2000
+    kg_yaz32(pa + 12, 4071129097 olarak tam32);   // movk x9, #0x4400, lsl #16
+    kg_yaz32(pa + 16, 4177527081 olarak tam32);   // str x9, [x9]  → izin fault'u
+    kg_yaz32(pa + 20, 335544320 olarak tam32);    // b .  (fault olmazsa asılı kal)
+    kg_icache_flush(pa);
+    kg_icache_flush(pa + 16);                     // 2. önbellek satırı da
+    eğer kmmu_sayfa_kod(KELF_WX_AS, KELF_WX_SAYFA) != 1 { ver 0; }
+
+    değişken once: tam64 = kg_oku64(KG_SYSC);
+    kis_el0_kill_ac();                       // EL0 fault → süreci öldür
+    kem_preempt_baslat();
+    değişken t: tam64 = kem_gorev_olustur_el0(KELF_WX_VA, KELF_WX_KSTK,
+                                              KELF_WX_USTK);
+    kg_ttbr_yaz(t, l1);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken (kg_oku64(KG_OLU + t * 8) == 0) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kem_preempt_aktif_kapat();
+    kmmu_ttbr_yaz(KMMU_L1);                  // çekirdek alanına kesin dönüş
+    // İKİ koşul birden (yukarıdaki gerekçe): çalıştı VE yazma reddedildi.
+    eğer (kg_oku64(KG_SYSC) > once) ve (kg_oku64(KG_OLU + t * 8) == 1) {
+        ver 1;
+    }
+    ver 0;
+}
 
 çıplak işlev kelf_calistir_testi() -> tam32 {
     değişken base: tam64 = vblk_bul();
