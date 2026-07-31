@@ -24,13 +24,23 @@ SECTIONS
 {
     . = 0x40000000;          /* QEMU virt RAM */
 
+    /* MB-4 (çekirdek W^X): bölüm sınırları 4KB'a HİZALI olmalı. Sayfa izinleri
+     * 4KB granülde verilir; .text ile .rodata aynı sayfayı paylaşırsa o sayfa
+     * zorunlu olarak hem çalıştırılabilir hem rodata olur ve ayrım anlamını
+     * yitirir (ölçüldü: .text 0x4000b228'de bitiyor, .rodata 0x4000b230'da
+     * başlıyordu — AYNI sayfa). Hizalama birkaç KB dolgu maliyetinde. */
+    __text_start = .;
+
     .text : ALIGN(16) {
         *(.text._start)      /* boot kod en başta */
         *(.text*)
         *(.text.*)
     }
 
-    .rodata : ALIGN(16) {
+    . = ALIGN(4096);
+    __text_end = .;
+
+    .rodata : ALIGN(4096) {
         __rodata_start = .;      /* D-151: syscall okuma-pointer doğrulama sınırı */
         *(.rodata*)
         *(.rodata.*)
@@ -38,7 +48,10 @@ SECTIONS
         __rodata_end = .;
     }
 
-    .data : ALIGN(16) {
+    . = ALIGN(4096);
+    __rodata_sayfa_sonu = .;     /* rodata'nın kapsadığı SON sayfanın sonu */
+
+    .data : ALIGN(4096) {
         *(.data*)
         *(.data.*)
         *(.sdata*)

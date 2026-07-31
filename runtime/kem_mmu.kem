@@ -129,6 +129,28 @@ sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
     // A5 (D-281): EL0 user page — 0x42000000 (L2[16]) AP=01 (EL0+EL1 RW, UXN=0 EL0-exec).
     // desc = pa | 0x745 (0x705 Normal + bit6 AP=01). EL0 stub + user yığını burada.
     kmmu_y64(KMMU_L2 + 16 * 8, 1107296256 + 1861);                  // 0x42000000 | 0x745
+    // MB-4: blok 0'ı (çekirdek imajı) 4KB sayfalara böl ve W^X uygula.
+    // [0x40000000, __text_end)          → EL1 RO + ÇALIŞTIRILABİLİR
+    // [__text_end, __rodata_sayfa_sonu) → EL1 RO + çalıştırılamaz
+    // gerisi (data/bss/yığın/heap başı)  → EL1 RW + çalıştırılamaz
+    // Sınırlar linker'da 4KB'a hizalı (bkz. bare-metal-aarch64.ld) — hizalı
+    // olmasalardı .text ile .rodata aynı sayfayı paylaşır, ayrım anlamını
+    // yitirirdi. MMU HENÜZ KAPALI: tablolar düz yazma ile kuruluyor.
+    değişken tson: tam64 = kmmu_text_son();
+    değişken rson: tam64 = kmmu_rodata_son();
+    değişken s: tam64 = 0;
+    iken s < KMMU_SAYFA_SAYI {
+        değişken va: tam64 = KMMU_RAM + s * KMMU_SAYFA;
+        değişken tan: tam64 = KMMU_K_VERI;
+        eğer va < tson {
+            tan = KMMU_K_KOD;
+        } değilse {
+            eğer va < rson { tan = KMMU_K_ROD; }
+        }
+        kmmu_y64(KMMU_K_L3 + s * 8, va + tan);
+        s = s + 1;
+    }
+    kmmu_y64(KMMU_L2, KMMU_K_L3 + 3);                               // L2[0] → çekirdek L3
     kmmu_y64(KMMU_L1, 1025);                                         // L1[0] Device (0x401)
     kmmu_y64(KMMU_L1 + 8, KMMU_L2 + 3);                             // L1[1] → L2 tablo (0x3)
     değişken mair: tam64 = 65280;                                    // 0xFF00
@@ -221,6 +243,44 @@ sabit KMMU_S_KOD: tam64 = 9007199254742983;
 sabit KMMU_SAYFA: tam64 = 4096;
 sabit KMMU_SAYFA_SAYI: tam64 = 512;         // 2MB / 4KB
 
+// --- MB-4: ÇEKİRDEĞİN KENDİ SAYFALARINA W^X --------------------------------
+// MB-3 kullanıcı tarafını sertleştirdi ama çekirdek hâlâ 2MB blok + AP=00 idi:
+// EL1 için RWX. Yani çekirdek KENDİ KODUNU yazabiliyordu. Kullanıcı tarafını
+// kapatıp çekirdeği açık bırakmak, saldırı yüzeyini taşımaktan ibaret olurdu.
+//
+// Çekirdek imajı ölçüldü: .text 0x40000000..~0x4000c000, .rodata, .data/.bss,
+// 16KB yığın ve heap başlangıcı — HEPSİ blok 0 (0x40000000..0x40200000) içinde.
+// Bu yüzden yalnız blok 0 için L3 kurulur; kalan 511 blok 2MB olarak kalır
+// (heap 0x4100f9d0'a kadar uzanıyor — orası zaten veri, kod yok).
+//
+// EL1 izinleri (EL0'ın hiçbirine erişimi yok — AP=00/10 ikisi de EL0'a kapalı):
+//   AP=00 (0x00) EL1 RW  |  AP=10 (0x80) EL1 RO
+//   Taban 0x707 = AF + iç-paylaşım + AttrIdx1 + sayfa
+// 0x45030000: çekirdek blok-0 L3 tablosu. Adres-alanı arenası 0x45010000..
+// 0x45022000'i kaplıyor (6 × 12KB) → çakışmayı önlemek için 0x45030000.
+sabit KMMU_K_L3: tam64 = 1157824512;
+sabit KMMU_K_KOD: tam64 = 18014398509483911;
+//   = 0x787 (taban+AP10) + (1<<54 UXN)            → EL1 RO + ÇALIŞTIRILABİLİR
+sabit KMMU_K_ROD: tam64 = 27021597764224903;
+//   = 0x787 + (1<<54 UXN) + (1<<53 PXN)           → EL1 RO, çalıştırılamaz
+sabit KMMU_K_VERI: tam64 = 27021597764224775;
+//   = 0x707 (taban+AP00) + UXN + PXN              → EL1 RW, çalıştırılamaz
+
+// Linker sembolleri inline-asm ile okunur (.kem `küresel` internal-linkage
+// olduğu için bunlar C/linker tarafında tanımlı kalır — D-276 deseni).
+çıplak işlev kmmu_text_son() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, __text_end
+add $0, $0, :lo12:__text_end"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kmmu_rodata_son() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, __rodata_sayfa_sonu
+add $0, $0, :lo12:__rodata_sayfa_sonu"# çıktı("=r", &x) } }
+    ver x;
+}
+
 // Adres alanı #i'yi kur; L1 fiziksel adresini döner (TTBR0'a yazılacak değer).
 // i >= KMMU_AS_AZAMI ise 0 döner (SESSİZ TAŞMA YOK — çağıran 0'ı görür).
 çıplak işlev kmmu_as_olustur(i: tam64) -> tam64 {
@@ -309,6 +369,33 @@ isb"#
 
     eğer (av == 2863311530) ve (bv == 3149642683)
        ve (pa == 2863311530) ve (pb == 3149642683) {
+        ver 1;
+    }
+    ver 0;
+}
+
+// Haritalı ama SALT-OKUNUR bir adrese volatile YAZ → izin fault'u (tek str;
+// .S recovery ELR+=4 ile atlar). kmmu_oku_faulting'in yazma ikizi.
+çıplak işlev kmmu_yaz_faulting(adr: tam64, v: tam64) {
+    değişken p: *tam64 = adr olarak *tam64;
+    *p = v;
+}
+
+// ÇEKİRDEK W^X kapısı: çekirdek KENDİ .text'ine yazmayı dener → izin fault'u.
+// Taklit edilemez: .text yazılabilir olsaydı store SESSİZCE başarılı olur,
+// fault hiç oluşmaz, bayrak temizlenmez → 0. Ayrıca yazılan değerin GERÇEKTEN
+// yazılmadığı da doğrulanır (kod baytı değişmemeli) — "fault oldu ama yazma da
+// geçti" gibi bir ara durum elenmiş olur.
+çıplak işlev kmmu_kernel_wx_testi() -> tam32 {
+    değişken hedef: tam64 = KMMU_RAM;             // 0x40000000 = _start (.text)
+    değişken once: tam64 = kmmu_o64(hedef);       // okuma SERBEST (RO)
+    kmmu_yakala_yaz(0);
+    kmmu_bekle_yaz(1);                            // .S recovery iste
+    kmmu_yaz_faulting(hedef, 3735928559);         // 0xDEADBEEF → izin fault'u
+    değişken bekle: tam64 = kmmu_bekle_oku();     // 0 = .S kurtardı
+    değişken far: tam64 = kmmu_yakala_oku();
+    değişken sonra: tam64 = kmmu_o64(hedef);      // kod DEĞİŞMEMİŞ olmalı
+    eğer (bekle == 0) ve (far == hedef) ve (sonra == once) {
         ver 1;
     }
     ver 0;

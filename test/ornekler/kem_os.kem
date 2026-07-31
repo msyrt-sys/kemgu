@@ -735,6 +735,17 @@ işlev main() -> tam32 {
         uart_satir("[19] W^X HATA");
     }
 
+    // [20] CEKIRDEK W^X (MODEL B / MB-4): çekirdeğin KENDİ .text'i salt-okunur.
+    // MB-3 kullanıcı tarafını sertleştirmişti; çekirdek hâlâ RWX idi — saldırı
+    // yüzeyini kapatmak yerine taşımak olurdu. Çekirdek kendi koduna yazmayı
+    // dener → izin fault'u → .S kurtarır → kod baytı DEĞİŞMEMİŞ.
+    değişken kwx_ok: tam32 = kmmu_kernel_wx_testi();
+    eğer kwx_ok == 1 {
+        uart_satir("[20] CEKIRDEK W^X OK");
+    } değilse {
+        uart_satir("[20] CEKIRDEK W^X HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {
