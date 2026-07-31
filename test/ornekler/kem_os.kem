@@ -46,11 +46,15 @@ sabit UART_TXFF: tam32  = 32;          // bit5 = TX FIFO dolu
 
 // Tek bayt yaz: FR.TXFF temizlenene kadar bekle → DR'ye yaz. yetki<MMIO> linear
 // (üret/oku-ödünç/yaz-ödünç/geri_al; & bitwise, != öncelik için parantez ZORUNLU).
+// AH-3b: taban artık SABİT DEĞİL — kmmu_uart_taban() device-tree'den keşfedilen
+// değeri döner (DTB yoksa derleme-zamanı sabitine düşer). UART_TABAN yalnız
+// YEDEK olarak kalır; gerçek kartta doğru adres buradan gelecek.
 işlev uart_bayt(b: tam32) {
     değişken y: yetki<MMIO> = yetki_olustur(6, MMIO_OKU_YAZ);
-    iken (mmio_oku32(y, UART_TABAN + UART_FR) & UART_TXFF) != 0 {
+    değişken t: tam64 = kmmu_uart_taban();
+    iken (mmio_oku32(y, t + UART_FR) & UART_TXFF) != 0 {
     }
-    mmio_yaz32(y, UART_TABAN + UART_DR, b);
+    mmio_yaz32(y, t + UART_DR, b);
     geri_al(y);
 }
 
@@ -777,15 +781,20 @@ işlev main() -> tam32 {
         uart_metin("     MAP  = 0x"); uart_onaltilik(kmmu_o64(KMMU_BLOK_SLOT) olarak dtam64);
         uart_satir(" blok x 2MB");
     }
+    // DÜZELTİLDİ: bu kontrol önce "keşfedilen == derleme-zamanı sabiti" diyordu.
+    // YANLIŞTI ve amaca AYKIRIYDI: gerçek bir kartta keşfedilen adres sabitten
+    // FARKLI olacak (asıl istenen bu) ve kapı yanlışlıkla kırmızı olacaktı —
+    // yani kapı, kaldırmaya çalıştığımız QEMU varsayımını kendi içine gömüyordu.
+    // Sabotajla ortaya çıktı: yedek sabitleri bozunca çekirdek YİNE konuştu
+    // (keşif çalışıyor) ama bu eşitlik kontrolü patladı.
+    // Doğru ölçüt: keşif TUTARLI mı (kdtb_kesif_testi) ve çekirdek onu KULLANIYOR
+    // mu (kmmu_uart_taban keşfedilenle aynı olmalı — sabitle değil).
     değişken kesif_ok: tam32 = kdtb_kesif_testi();
     eğer kesif_ok == 1 {
-        // Keşfedilen değerler bugün sabit-kodlu olanlarla AYNI çıkmalı — aksi
-        // halde ya ayrıştırma yanlış ya sabitler. İkisi de bilinmek istenir.
-        eğer (kdtb_uart_tabani(dtb) == KIS_UART_TABAN)
-           ve (kdtb_ram_tabani(dtb) == KMMU_RAM) {
+        eğer kmmu_uart_taban() == kdtb_uart_tabani(dtb) {
             uart_satir("[22] DTB KESIF OK");
         } değilse {
-            uart_satir("[22] DTB KESIF HATA (kesfedilen != sabit)");
+            uart_satir("[22] DTB KESIF HATA (kesfedildi ama KULLANILMIYOR)");
         }
     } değilse {
         uart_satir("[22] DTB KESIF HATA");

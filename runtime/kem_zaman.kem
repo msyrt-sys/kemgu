@@ -54,10 +54,10 @@ ldr $0, [x9]"#
 
 // GIC init (kdl_kesme_kur birebir). ISENABLER0 bit27 = 1<<27 = 134217728.
 çıplak işlev kdl_kesme_kur() {
-    kz_mmio_yaz(KZ_GICD + 0, 1);              // GICD_CTLR = enable
-    kz_mmio_yaz(KZ_GICC + 4, 255);            // GICC_PMR = 0xFF (tüm öncelikler)
-    kz_mmio_yaz(KZ_GICC + 0, 1);              // GICC_CTLR = enable
-    kz_mmio_yaz(KZ_GICD + 256, 134217728);    // ISENABLER0 bit27
+    kz_mmio_yaz(kmmu_gicd_taban() + 0, 1);              // GICD_CTLR = enable
+    kz_mmio_yaz(kmmu_gicc_taban() + 4, 255);            // GICC_PMR = 0xFF (tüm öncelikler)
+    kz_mmio_yaz(kmmu_gicc_taban() + 0, 1);              // GICC_CTLR = enable
+    kz_mmio_yaz(kmmu_gicd_taban() + 256, 134217728);    // ISENABLER0 bit27
 }
 // Timer start (kdl_timer_baslat birebir): interval ~10ms, enable, daifclr.
 çıplak işlev kdl_timer_baslat() {
@@ -70,13 +70,13 @@ ldr $0, [x9]"#
 // IRQ dispatch — .S kdl_irq_ortak `bl kdl_irq_isle` (sp = trap-frame ptr). timer →
 // re-arm + tik++; EOI. A3: preemption YOK → sp OLDUĞU GİBİ döner (aynı bağlam sürer).
 çıplak işlev kdl_irq_isle(sp: tam64) -> tam64 {
-    değişken iar: tam32 = kz_mmio_oku(KZ_GICC + 12);       // GICC_IAR
+    değişken iar: tam32 = kz_mmio_oku(kmmu_gicc_taban() + 12);       // GICC_IAR
     değişken irq: tam32 = iar - ((iar / 1024) * 1024);     // iar & 0x3FF
     eğer irq == KZ_TIMER_IRQ {
         kz_cntv_tval(kem_timer_aralik);                    // re-arm (ISTATUS temizler)
         kem_tik = kem_tik + 1;
     }
-    kz_mmio_yaz(KZ_GICC + 16, iar);                        // GICC_EOIR (kesme bitti)
+    kz_mmio_yaz(kmmu_gicc_taban() + 16, iar);                        // GICC_EOIR (kesme bitti)
     ver kem_preempt(sp);                                   // A4: scheduler (aktif değilse sp döner)
 }
 

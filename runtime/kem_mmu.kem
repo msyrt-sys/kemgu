@@ -113,6 +113,28 @@ sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
 // DTB'den türetilir; buraya yazılır ki kapı ölçebilsin (aynı ikili farklı
 // bellek boyutlarında farklı sayı bildirmeli — sabit kod bunu yapamaz).
 sabit KMMU_BLOK_SLOT: tam64 = 1157640272;  // 0x45003050
+// AH-3b: çalışma zamanında keşfedilen cihaz tabanları. Sabitler artık YEDEK.
+sabit KMMU_UART_SLOT: tam64 = 1157640280;  // 0x45003058
+sabit KMMU_GICD_SLOT: tam64 = 1157640288;  // 0x45003060
+sabit KMMU_GICC_SLOT: tam64 = 1157640296;  // 0x45003068
+
+// Tüketicilerin çağıracağı erişimciler. Yuva 0 ise (kdl_mmu_kur henüz koşmadı)
+// derleme-zamanı sabitine düşülür — boot'un en erken anında bile UART çalışır.
+çıplak işlev kmmu_uart_taban() -> tam64 {
+    değişken v: tam64 = kmmu_o64(KMMU_UART_SLOT);
+    eğer v == 0 { ver KIS_UART_TABAN; }
+    ver v;
+}
+çıplak işlev kmmu_gicd_taban() -> tam64 {
+    değişken v: tam64 = kmmu_o64(KMMU_GICD_SLOT);
+    eğer v == 0 { ver KZ_GICD; }
+    ver v;
+}
+çıplak işlev kmmu_gicc_taban() -> tam64 {
+    değişken v: tam64 = kmmu_o64(KMMU_GICC_SLOT);
+    eğer v == 0 { ver KZ_GICC; }
+    ver v;
+}
 
 çıplak işlev kmmu_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
 çıplak işlev kmmu_o64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
@@ -145,6 +167,23 @@ sabit KMMU_BLOK_SLOT: tam64 = 1157640272;  // 0x45003050
     değişken blok: tam64 = rboy / KMMU_2MB;
     eğer blok > 512 { blok = 512; }                                   // tek L2 = 1 GiB tavan
     kmmu_y64(KMMU_BLOK_SLOT, blok);                                   // teşhis/kapı için
+
+    // AH-3b: UART ve GIC tabanları da keşiften. Burada (MMU açılmadan, boot'un
+    // en başında) yuvalara yazılır; tüm tüketiciler sabit yerine yuvayı okur.
+    // Yedek DEĞERLER derleme-zamanı sabitleri — DTB yoksa çekirdek yine konuşur.
+    kmmu_y64(KMMU_UART_SLOT, KIS_UART_TABAN);
+    kmmu_y64(KMMU_GICD_SLOT, KZ_GICD);
+    kmmu_y64(KMMU_GICC_SLOT, KZ_GICC);
+    eğer kdtb_gecerli_mi(dtb) == 1 {
+        değişken u: tam64 = kdtb_uart_tabani(dtb);
+        eğer u != 0 { kmmu_y64(KMMU_UART_SLOT, u); }
+        değişken gd: tam64 = kdtb_gic_dist(dtb);
+        değişken gc: tam64 = kdtb_gic_cpu(dtb);
+        eğer (gd != 0) ve (gc != 0) {
+            kmmu_y64(KMMU_GICD_SLOT, gd);
+            kmmu_y64(KMMU_GICC_SLOT, gc);
+        }
+    }
 
     değişken i: tam64 = 0;
     iken i < 512 { kmmu_y64(KMMU_L1 + i * 8, 0); i = i + 1; }        // L1 sıfırla
@@ -483,8 +522,8 @@ sabit KIS_UART_TXFF: tam32  = 32;          // bit5
 
 // TXFF boşalana dek bekle + bayt yaz (çıplak, capability-suz — mevcut uart_bayt'ın ham eşleniği).
 çıplak işlev kis_bayt(b: tam32) {
-    iken (kis_o32(KIS_UART_FR) & KIS_UART_TXFF) != 0 { }
-    kis_y32(KIS_UART_DR, b);
+    iken (kis_o32(kmmu_uart_taban() + 24) & KIS_UART_TXFF) != 0 { }
+    kis_y32(kmmu_uart_taban(), b);
 }
 çıplak işlev kis_metin(s: metin) {
     değişken n: tam32 = metin_uzunluk(s);
@@ -563,7 +602,7 @@ sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
 // DR'yi TEK sefer oku (gerçek donanımda okuma FIFO'dan tüketir — iki kez okumak FARKLI
 // bayt/bozuk değer döndürebilir; tek-okuma + yerel değişkende mod-al ile düzeltildi).
 çıplak işlev kis_rx_dr_oku() -> tam32 {
-    değişken d: tam32 = kis_o32(KIS_UART_DR);
+    değişken d: tam32 = kis_o32(kmmu_uart_taban());
     ver d - ((d / 256) * 256);
 }
 çıplak işlev kis_buf_yaz8(adr: tam64, i: tam32, b: tam32) { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; *p = b olarak dtam8; }
@@ -582,7 +621,7 @@ sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
         değişken geldi: tam32 = 0;
         değişken i: tam64 = 0;
         iken i < 20000 {
-            eğer (kis_o32(KIS_UART_FR) & KIS_UART_RXFE) == 0 { geldi = 1; i = 20000; } değilse { i = i + 1; }
+            eğer (kis_o32(kmmu_uart_taban() + 24) & KIS_UART_RXFE) == 0 { geldi = 1; i = 20000; } değilse { i = i + 1; }
         }
         eğer geldi == 0 {
             kis_buf_yaz8(buf_adr, un, 0);
