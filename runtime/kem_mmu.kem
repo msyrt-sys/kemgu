@@ -109,6 +109,10 @@ sabit KMMU_CEVIRI_VA: tam64 = 1342177280;  // 0x50000000 (non-identity kaynak)
 sabit KMMU_CEVIRI_PA: tam64 = 1174405120;  // 0x46000000 (backed RAM hedef, free)
 sabit KMMU_RAM: tam64 = 1073741824;        // 0x40000000
 sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
+// AH-3a: kdl_mmu_kur'un GERÇEKTEN haritaladığı 2MB blok sayısı. Sabit değil,
+// DTB'den türetilir; buraya yazılır ki kapı ölçebilsin (aynı ikili farklı
+// bellek boyutlarında farklı sayı bildirmeli — sabit kod bunu yapamaz).
+sabit KMMU_BLOK_SLOT: tam64 = 1157640272;  // 0x45003050
 
 çıplak işlev kmmu_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
 çıplak işlev kmmu_o64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
@@ -116,12 +120,42 @@ sabit KMMU_2MB: tam64 = 2097152;           // 0x200000
 // SAF-.kem MMU kurulumu — .S boot'tan çağrılır. Descriptor'lar kdl_mmu.c birebir:
 //   Device blok=0x401(1025), Normal-2MB blok=pa|0x705(+1797), tablo=l2|0x3(+3).
 çıplak işlev kdl_mmu_kur() {
+    // AH-3a: haritalanacak RAM miktarı artık DEVICE-TREE'den. Eskiden koşulsuz
+    // 512 blok (1 GiB) haritalanıyordu — RAM'i olmayan adresler de "geçerli"
+    // görünüyordu ve oraya erişim çeviri hatası yerine SENKRON HARİCİ ABORT
+    // veriyordu (MB-1a'da tam bu yaşandı: 0x48000000, RAM tavanının bir baytı
+    // ötesi). Var olmayan belleği haritalamak, hatayı geç ve yanlış yerde
+    // gösterir. Artık yalnız GERÇEKTEN var olan RAM haritalanır.
+    //
+    // DTB yoksa/bozuksa eski davranışa düşülür (1 GiB) — gerileme değil, aynı
+    // yer. Bu bilinçli: keşif başarısızsa çekirdek yine boot etmeli.
+    //
+    // SINIR (v1): RAM'in L1[1] penceresinde (0x40000000..0x80000000) olduğu
+    // varsayımı SÜRÜYOR; yalnız BOYUT keşiften geliyor. RAM'i 0x0'da başlayan
+    // kartlar (Raspberry Pi) L1[0] gerektirir — AH-4'ün işi.
+    değişken dtb: tam64 = kdtb_adres();
+    değişken rboy: tam64 = 512 * KMMU_2MB;                            // yedek: 1 GiB
+    eğer kdtb_gecerli_mi(dtb) == 1 {
+        değişken rb: tam64 = kdtb_ram_tabani(dtb);
+        değişken rn: tam64 = kdtb_ram_boyutu(dtb);
+        // Yalnız BEKLENEN pencereye oturan ve makul boyutlu bir keşif kabul
+        // edilir; aksi halde yedek. Saçma bir DTB yüzünden boot'u kaybetmeyiz.
+        eğer (rb == KMMU_RAM) ve (rn >= 33554432) { rboy = rn; }
+    }
+    değişken blok: tam64 = rboy / KMMU_2MB;
+    eğer blok > 512 { blok = 512; }                                   // tek L2 = 1 GiB tavan
+    kmmu_y64(KMMU_BLOK_SLOT, blok);                                   // teşhis/kapı için
+
     değişken i: tam64 = 0;
     iken i < 512 { kmmu_y64(KMMU_L1 + i * 8, 0); i = i + 1; }        // L1 sıfırla
     değişken n: tam64 = 0;
-    iken n < 512 {                                                    // L2 identity (2MB Normal)
-        değişken pa: tam64 = KMMU_RAM + n * KMMU_2MB;
-        kmmu_y64(KMMU_L2 + n * 8, pa + 1797);                        // |0x705
+    iken n < 512 {
+        eğer n < blok {                                               // GERÇEK RAM → identity
+            değişken pa: tam64 = KMMU_RAM + n * KMMU_2MB;
+            kmmu_y64(KMMU_L2 + n * 8, pa + 1797);                    // |0x705
+        } değilse {
+            kmmu_y64(KMMU_L2 + n * 8, 0);                            // RAM YOK → haritasız
+        }
         n = n + 1;
     }
     değişken idx: tam64 = (KMMU_CEVIRI_VA - KMMU_RAM) / KMMU_2MB;     // 128: non-identity override

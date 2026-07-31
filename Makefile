@@ -1013,6 +1013,20 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 	fi; \
 	if ! grep -q "RAM  = 0x40000000 + 0x20000000" $(BUILD)/dtb_512.out; then \
 		echo "  FAIL: -m 512 icin beklenen 0x20000000 bulunamadi"; exit 1; \
+	fi; \
+	M256=$$(grep -oE "MAP  = 0x[0-9A-F]+" $(BUILD)/dtb_256.out | head -1); \
+	M512=$$(grep -oE "MAP  = 0x[0-9A-F]+" $(BUILD)/dtb_512.out | head -1); \
+	echo "  -m 256 -> $$M256 blok  |  -m 512 -> $$M512 blok"; \
+	if [ "$$M256" = "$$M512" ]; then \
+		echo "  FAIL: haritalanan blok sayisi DEGISMIYOR — kesif KULLANILMIYOR"; \
+		echo "        (deger okunuyor ama sayfa tablosu hala sabit varsayimla kuruluyor)"; \
+		exit 1; \
+	fi; \
+	if ! grep -q "MAP  = 0x80 blok" $(BUILD)/dtb_256.out; then \
+		echo "  FAIL: -m 256 icin 128 (0x80) blok bekleniyordu"; exit 1; \
+	fi; \
+	if ! grep -q "MAP  = 0x100 blok" $(BUILD)/dtb_512.out; then \
+		echo "  FAIL: -m 512 icin 256 (0x100) blok bekleniyordu"; exit 1; \
 	fi
 	@echo "  (RAM boyutu -m ile DEGISTI ve her ikisi de dogru -> deger DTB'den okunuyor)"
 	@grep -E "UART|GICD|RSV" $(BUILD)/dtb_256.out | head -3 | sed 's/^/  /'
