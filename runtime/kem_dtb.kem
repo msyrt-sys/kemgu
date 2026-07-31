@@ -1,0 +1,77 @@
+// kem_dtb.kem — AH-1: DEVICE-TREE (FDT) OKUYUCU (saf-.kem).
+// ============================================================================
+// NEDEN: bugüne kadar HER cihaz adresi QEMU `virt` kartına sabit-kodluydu —
+// UART 0x09000000, GIC 0x08000000/0x08010000, RAM tabanı 0x40000000, RAM tavanı
+// 128 MiB varsayımı. Gerçek bir ARM64 kartında bunların HİÇBİRİ tutmaz; çekirdek
+// boot eder ama ekrana tek karakter basmaz. Oysa firmware (QEMU dâhil, Raspberry
+// Pi firmware'i dâhil) çekirdeğe device-tree'nin adresini X0'da GEÇİRİYOR —
+// biz onu `_start`ın ilk komutunda eziyorduk.
+//
+// Bu modül o bilgiyi okunur hâle getirir. FDT biçimi (devicetree.org spec):
+//   başlık: magic(be32)=0xd00dfeed, totalsize, off_dt_struct, off_dt_strings,
+//           off_mem_rsvmap, version, last_comp_version, boot_cpuid_phys,
+//           size_dt_strings, size_dt_struct   — HEPSİ BÜYÜK-ENDIAN.
+// aarch64 küçük-endian çalışır → her alan bayt bayt çevrilmeli.
+//
+// SINIR (AH-1): yalnız başlık doğrulama + toplam boyut. Düğüm gezme (/memory,
+// UART, GIC keşfi) AH-2'nin işi. Adım adım ilerlemek bilinçli: her adımın
+// kendi falsifiye edilebilir kapısı olsun.
+
+sabit KDTB_MAGIC: tam64 = 3490578157;      // 0xd00dfeed
+
+çıplak işlev kdtb_o8(adr: tam64) -> tam64 {
+    değişken p: *dtam8 = adr olarak *dtam8;
+    ver (*p) olarak tam64;
+}
+
+// FDT alanları BÜYÜK-ENDIAN; aarch64 küçük-endian → elle birleştir.
+çıplak işlev kdtb_be32(adr: tam64) -> tam64 {
+    ver kdtb_o8(adr) * 16777216 + kdtb_o8(adr + 1) * 65536
+      + kdtb_o8(adr + 2) * 256 + kdtb_o8(adr + 3);
+}
+
+// _start'ın sakladığı DTB adresini oku (.S `.data` globali — D-276 deseni:
+// .kem `küresel` internal-linkage olduğu için .S/C tarafında tanımlı kalır).
+çıplak işlev kdtb_adres() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp x9, kdl_dtb_adres
+add x9, x9, :lo12:kdl_dtb_adres
+ldr $0, [x9]"# çıktı("=r", &x) bozulan("~{x9}") bozulan("~{memory}") } }
+    ver x;
+}
+
+// TEŞHİS/YEDEK: RAM'de FDT magic'ini ara. Firmware'in verdiği adres yanlış ya
+// da yapı taşınmış olabilir; 4KB hizalı tarama ucuzdur (128 MiB → 32768 adım).
+// Gerçek kartta da ilk bakılacak yer burasıdır. 0 = bulunamadı.
+çıplak işlev kdtb_tara(bas: tam64, son: tam64) -> tam64 {
+    değişken a: tam64 = bas;
+    iken a < son {
+        eğer kdtb_be32(a) == KDTB_MAGIC { ver a; }
+        a = a + 4096;
+    }
+    ver 0;
+}
+
+çıplak işlev kdtb_gecerli_mi(dtb: tam64) -> tam32 {
+    eğer dtb == 0 { ver 0; }
+    eğer kdtb_be32(dtb) != KDTB_MAGIC { ver 0; }
+    ver 1;
+}
+
+çıplak işlev kdtb_toplam_boyut(dtb: tam64) -> tam64 {
+    ver kdtb_be32(dtb + 4);
+}
+
+// AH-1 kapısı: firmware GERÇEKTEN bir DTB geçirdi mi ve okuyabiliyor muyuz?
+//
+// Taklit edilemez: magic (0xd00dfeed) rastgele bellekte bulunmaz ve BÜYÜK-ENDIAN
+// okunmak zorundadır — bayt sırasını yanlış yaparsak 0xedfe0dd0 görürüz, eşleşmez.
+// Ayrıca totalsize makul bir aralıkta olmalı: sıfır ya da absürt büyük bir değer,
+// "magic'i tesadüfen yakaladık" durumunu ele verir.
+çıplak işlev kdtb_testi() -> tam32 {
+    değişken d: tam64 = kdtb_adres();
+    eğer kdtb_gecerli_mi(d) != 1 { ver 0; }
+    değişken n: tam64 = kdtb_toplam_boyut(d);
+    eğer (n < 64) veya (n > 2097152) { ver 0; }   // 64B..2MB dışı = şüpheli
+    ver 1;
+}

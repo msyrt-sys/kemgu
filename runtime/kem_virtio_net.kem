@@ -6,12 +6,23 @@
 //
 // Genel VOLATILE deref + dsb yardımcıları kem_virtio_blk.kem'den (aynı CAT birimi:
 // vblk_y32/o32/y64/y16/o16/y8/o8 + vblk_dsb; VM_* register offsetleri + VBLK_MAGIC_DEG).
-// DMA = SABİT identity-RAM 0x44000000 (blk'nin 0x43000000'ından 16MB üstte), MANUEL
-// 16-hizalı offset. IRQ YOK (used-ring poll). Allocator YOK (static-adres). T002 yok.
+// DMA = SABİT identity-RAM (MANUEL 16-hizalı offset). IRQ YOK (used-ring poll).
+// Allocator YOK (static-adres). T002 yok.
+//
+// ⚠ AH-1'DE TAŞINDI: 0x44000000 → 0x46800000. Eski adres firmware'in DEVICE-TREE'yi
+// koyduğu yerdi (QEMU virt'te ölçüldü; RPi firmware'i de RAM'e DTB yazar). Yani ağ
+// sürücüsü ilk paketi göndermeden önce çekirdeğin donanım-keşif verisini EZİYORDU.
+// Ölçüm: main'in başında 0x44000000'da FDT magic VAR, testlerin sonunda YOK.
+// Bugüne kadar fark edilmemesinin sebebi DTB'nin hiç OKUNMAMASI (her adres
+// sabit-kodluydu) — yani hata değil, hatanın GÖRÜNMEZLİĞİ yerleşikti.
+//
+// SINIF OLARAK KALICI ÇÖZÜM DEĞİL: sabit-adres DMA, firmware'in RAM'e koyduğu
+// HERHANGİ bir yapıyla çakışabilir. Doğrusu DTB'nin /memreserve + /reserved-memory
+// düğümlerini okuyup ayrılmış bölgelerden KAÇINMAK. AH-2'nin işi.
 
 sabit VN_DEV_NET: tam32 = 1;
 
-küresel değişken vnet_dma: tam64 = 1140850688;   // 0x44000000
+küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000 (DTB bölgesinden UZAK)
 küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
 küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
 

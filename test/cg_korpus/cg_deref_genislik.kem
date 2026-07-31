@@ -1,0 +1,39 @@
+// cg_deref_genislik.kem — D-347: deref-read + `olarak` DÖNÜŞÜM bağlamı.
+// -----------------------------------------------------------------------------
+// cg_skaler_deref.kem (D-265/D-267) deref-read'i KARŞILAŞTIRMA bağlamında ölçer
+// (`*p8 == 0`) — orada `beklenen` verilmez, pointee'ye düşülür ve doğru çalışırdı.
+// BU dosya AYRI bir yolu ölçer: `(*p) olarak tamN`. Orada `beklenen` VERİLİR ve
+// eski kod onu pointee'ye TERCİH ediyordu → 1 baytlık nesneden 8 BAYT okuma.
+// Ne hata ne uyarı: SESSİZ YANLIŞ CEVAP + sınır-dışı okuma. Gerçek etkisi kem_os'ta
+// ölçüldü (device-tree magic doğrulaması absürd değer gördü).
+//
+// Genişlik-duyarlı falsifiye: her dal yanlış genişlikte TERS sonuç verir.
+// Beklenen exit = 42.
+//   Doğru (i8 yükle + zext):  dar=200, gen=1  → 40 + 2 = 42
+//   Hatalı (i64 yükle):       dar = üst baytları da yutmuş devasa sayı → 0 + ... ≠ 42
+işlev main() -> tam32 {
+    güvensiz {
+        değişken toplam: tam32 = 0;
+
+        // KAPSAM NOTU: alt baytlar 128'DEN KÜÇÜK seçildi — böylece sext ve zext
+        // AYNI sonucu verir ve bu dosya YALNIZ YÜK GENİŞLİĞİNİ ölçer. Pointee
+        // İŞARETLİLİĞİ (0xC8 → 200 mü -56 mı) AYRI bir eksen ve self-host'ta
+        // hâlâ açık (cg_apointee tipi tutuyor, işaretliliği tutmuyor) — o ayrı
+        // iş olarak izleniyor. Burada karıştırılsaydı bu kapı iki farklı kusuru
+        // tek kırmızıda birleştirir ve hangisinin bozulduğu görünmezdi.
+
+        // v: alt bayt 0x48 = 72; üst baytlar sıfır DEĞİL → 8 bayt okunursa 65352.
+        değişken v: dtam64 = 65352;                  // 0xFF48
+        değişken p: *dtam8 = (&v) olarak *dtam8;
+        değişken dar: tam64 = (*p) olarak tam64;
+        eğer dar == 72 { toplam = toplam + 40; }
+
+        // v2: alt bayt 0x7F = 127; 8 bayt okunursa 383.
+        değişken v2: dtam64 = 383;                   // 0x017F
+        değişken p2: *dtam8 = (&v2) olarak *dtam8;
+        değişken dar2: tam64 = (*p2) olarak tam64;
+        eğer dar2 == 127 { toplam = toplam + 2; }
+
+        ver toplam;
+    }
+}

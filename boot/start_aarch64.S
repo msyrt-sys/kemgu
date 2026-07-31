@@ -22,6 +22,18 @@
 .type _start, %function
 
 _start:
+    /* 0. AH-1: firmware'in X0'da geçirdiği device-tree (FDT) adresini SAKLA.
+     * ARM64 Linux boot protokolü (ve QEMU -kernel, ve RPi firmware) çekirdeğe
+     * DTB fiziksel adresini X0'da verir. Bu satır eklenene kadar X0 bir sonraki
+     * komutta yığın tepesiyle EZİLİYORDU — yani donanımı çalışma zamanında
+     * keşfetmek için gereken TEK bilgi geliyor ve çöpe atılıyordu; tüm cihaz
+     * adresleri QEMU virt'e sabit-kodlu kalmak zorundaydı.
+     * kdl_dtb_adres .data'da (bss DEĞİL) → aşağıdaki .bss temizliği silmez;
+     * bu yüzden burada, her şeyden önce yazılabilir. X1 bu noktada serbest. */
+    adrp    x1, kdl_dtb_adres
+    add     x1, x1, :lo12:kdl_dtb_adres
+    str     x0, [x1]
+
     /* 1. Stack pointer — linker'ın hesapladığı __stack_top */
     adrp    x0, __stack_top
     add     x0, x0, :lo12:__stack_top
@@ -394,4 +406,10 @@ kdl_fault_yakalanan:
     .quad 0
 .global kdl_el0_kill_aktif
 kdl_el0_kill_aktif:
+    .quad 0
+/* AH-1: firmware'in X0'da geçirdiği FDT (device-tree) fiziksel adresi.
+ * _start'ın İLK işi burayı yazmaktır. 0 = firmware DTB vermedi (ya da bu
+ * platform vermiyor) → keşif yapılamaz, sabit adreslere düşülür. */
+.global kdl_dtb_adres
+kdl_dtb_adres:
     .quad 0

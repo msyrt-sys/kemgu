@@ -5,12 +5,12 @@
  * Çekirdek imajından AYRI bir ELF üretir. Çekirdek bunu diskten okur, ELF64
  * başlıklarını çözümler ve PT_LOAD segmentlerini sürecin adres alanına yükler.
  *
- * 0x44000000 = KMMU_OZEL_VA (runtime/kem_mmu.kem): süreç-özel 2MB sanal sayfa.
+ * 0x54000000 = KMMU_OZEL_VA (runtime/kem_mmu.kem): süreç-özel 2MB sanal sayfa.
  * Her sürecin bu VA'sı BAŞKA bir fiziksel sayfaya bakar → programlar birbirinin
  * kodunu/verisini göremez. Sayfa AP=01 (EL0 RW) ve UXN=0 (EL0-exec).
  *
  * Bu betik bare-metal-aarch64.ld'den AYRI tutulur: çekirdek 0x40000000'a,
- * kullanıcı programı 0x44000000'a bağlanır. Tek betiği paylaşsalardı yükleme
+ * kullanıcı programı 0x54000000'a bağlanır. Tek betiği paylaşsalardı yükleme
  * adresi çakışırdı.
  */
 
@@ -18,7 +18,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x44000000;
+    . = 0x54000000;
 
     .text : ALIGN(16) {
         *(.text._start)

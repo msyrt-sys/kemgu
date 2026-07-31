@@ -962,9 +962,9 @@ $(BUILD)/kem_user.elf: test/ornekler/kem_kullanici.kem linker/user-aarch64.ld $(
 		{ echo "FAIL: kem_user.elf ET_EXEC degil (PIE?) — yukleyici reddeder"; exit 1; }
 	@llvm-readelf -h $@ | grep -q "AArch64" || \
 		{ echo "FAIL: kem_user.elf AArch64 degil"; exit 1; }
-	@llvm-readelf -h $@ | grep -q "0x44000000" || \
-		{ echo "FAIL: kem_user.elf girisi 0x44000000 degil (linker script?)"; exit 1; }
-	@echo "  (kem_user.elf: ET_EXEC AArch64 giris=0x44000000 — diske yazilmaya hazir)"
+	@llvm-readelf -h $@ | grep -q "0x54000000" || \
+		{ echo "FAIL: kem_user.elf girisi 0x54000000 degil (linker script?)"; exit 1; }
+	@echo "  (kem_user.elf: ET_EXEC AArch64 giris=0x54000000 — diske yazilmaya hazir)"
 
 calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/kem_user.elf
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
@@ -977,7 +977,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1003,6 +1003,15 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	fi
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
 		$(BUILD)/kem_os_routed.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
+	@# AH-1: HAM İKİLİ üret ve QEMU'yu bununla boot et (ELF ile DEĞİL).
+	@# İki sebep, ikisi de ölçülmüş:
+	@#  1. Raspberry Pi firmware'i ELF DEĞİL ham `kernel8.img` ister → gerçek
+	@#     donanım hedefiyle aynı biçimi test etmek zorundayız.
+	@#  2. QEMU `-kernel <ELF>` Linux boot protokolünü ATLAR: doğrudan giriş
+	@#     noktasına atlar ve X0'a DEVICE-TREE adresini KOYMAZ (ölçüldü: x0=0).
+	@#     Ham imajla protokol uygulanır ve DTB adresi gelir → donanım keşfi
+	@#     mümkün olur. Yani biçim değişikliği kozmetik değil, [21]'in ön koşulu.
+	llvm-objcopy -O binary $(BUILD)/kem_os.elf $(BUILD)/kem_os.img
 	@echo "Libc sembol kontrol (olmamali):"
 	@if llvm-nm --undefined-only $(BUILD)/kem_os.elf | \
 		grep -E 'malloc|free|printf|fopen|puts|memcpy|strlen|__chkstk' > /dev/null; then \
@@ -1293,7 +1302,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.elf 2>/dev/null || true; \
+			-serial file:$(BUILD)/kem_os.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kem_os.out; echo "--- son ---"; \
 		if grep -q "KEMGU KEM-OS OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[1\] BOOT OK" $(BUILD)/kem_os.out \
@@ -1318,12 +1327,13 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "ELF YUKLE OK" $(BUILD)/kem_os.out \
 		   && grep -q "W\^X OK" $(BUILD)/kem_os.out \
 		   && grep -q "CEKIRDEK W\^X OK" $(BUILD)/kem_os.out \
+		   && grep -q "DTB OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
 		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
-			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
+			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
 			exit 1; \

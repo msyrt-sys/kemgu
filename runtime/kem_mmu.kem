@@ -210,8 +210,15 @@ isb"#
 // paylaşılır. Süreç başına KOD eşlemesi ELF yükleyicinin (MB-2) işidir.
 sabit KMMU_AS_TABAN: tam64 = 1157660672;    // 0x45010000: adres-alanı tablo arenası
 sabit KMMU_AS_ADIM: tam64 = 12288;          // 0x3000: her alan = L1 + L2 + L3 (3×4KB)
-sabit KMMU_OZEL_VA: tam64 = 1140850688;     // 0x44000000: süreç-özel VA (L2[32])
-sabit KMMU_OZEL_IDX: tam64 = 32;            // (0x44000000 - 0x40000000) / 2MB
+// AH-1'DE ÖLÇÜLEREK TAŞINDI (0x44000000 → 0x54000000). Ham imajla boot edilince
+// QEMU device-tree'yi TAM 0x44000000'a koyuyor — yani süreç-özel eşleme gerçek
+// DTB'yi GÖLGELİYORDU; çekirdek kendi keşif verisini okuyamıyordu. Bu bir tesadüf
+// değil sınıfsal bir hata: süreç-özel SANAL adres, gerçek RAM'i gölgelememeli.
+// 0x54000000 identity penceresi (0x40000000..0x80000000) içinde ama 128 MiB RAM
+// tavanının ÜSTÜNDE → hiçbir firmware yapısıyla çakışamaz; L2 girişi zaten
+// süreç sayfasına yönlendirildiği için arkasında RAM olmaması sorun değil.
+sabit KMMU_OZEL_VA: tam64 = 1409286144;     // 0x54000000: süreç-özel VA (L2[160])
+sabit KMMU_OZEL_IDX: tam64 = 160;           // (0x54000000 - 0x40000000) / 2MB
 // ÖLÇÜLDÜ (ampirik, ilk denemede 0x48000000 seçilmişti): QEMU `-M virt` komut
 // satırında `-m` YOK → varsayılan RAM 128 MiB → fiziksel RAM 0x40000000..0x48000000.
 // 0x48000000 tam bir bayt DIŞARIDA: yazma ESR=0x96000050 (DFSC=0b010000 = senkron

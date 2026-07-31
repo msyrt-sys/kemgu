@@ -69,6 +69,9 @@ typedef struct LlvmIsim {
      * genisligini BURADAN alir — beklenen/RHS'ten almak tam8/tam64/
      * struct icin yanlis genislik miscompile'iydi (ADIM-0 raporu). */
     const char *pointee_llvm_tip;
+    /* D-347: pointee dtamN mi (isaretsiz)? Deref-read genisletmesinde
+     * zext/sext secimi icin. Bkz. pointee_isaretsiz_al. */
+    int pointee_isaretsiz;
     /* D-293: `işlev(...) -> T` tipli değişken/parametrenin DÖNÜŞ IR tipi.
      * llvm_tip bu değişkenler için "{ ptr, ptr }" (fat value) — T'yi SİLER.
      * Closure çağrı yeri (fat-value dispatch) eskiden `beklenen ? beklenen :
@@ -713,6 +716,18 @@ static const char *pointee_ir_al(LlvmGen *g, const Dugum *tip_d) {
         return ast_tip_to_ir(g, tip_d->veri.tip_pointer.hedef_tip);
     }
     return NULL;
+}
+
+static int ast_tip_isaretsiz_mi(const Dugum *tip_d);   /* ileri bildirim */
+
+/* D-347: pointee ISARETSIZ mi (*dtamN)? Deref-read'de pointee genisliginde
+ * yukleyip beklenen tipe genisletirken zext/sext secimi buna bagli:
+ * *dtam8 icinde 200 varsa tam64'e ZEXT ile 200 gelmeli, SEXT ile -56 gelirdi. */
+static int pointee_isaretsiz_al(const Dugum *tip_d) {
+    if (tip_d && tip_d->tip == DUGUM_TIP_POINTER) {
+        return ast_tip_isaretsiz_mi(tip_d->veri.tip_pointer.hedef_tip);
+    }
+    return 0;
 }
 
 /* D-293: tip düğümü `işlev(...) -> T` ise T'nin IR tipini döner, değilse NULL.
@@ -3465,22 +3480,51 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * deref-write handler'ları zaten pointee_llvm_tip kullanıyordu; bu
                  * deref-READ gap'iydi. beklenen VERİLİRSE korunur (çağıran o tipi bekler). */
                 const char *deref_pointee = NULL;
+                int deref_isz = 0;
                 if (d->veri.tekli.operand->tip == DUGUM_TANIMLAYICI) {
                     LlvmIsim *dvi = isim_bul(g,
                         d->veri.tekli.operand->veri.tanimlayici.metin,
                         d->veri.tekli.operand->veri.tanimlayici.uzunluk);
-                    if (dvi && dvi->pointee_llvm_tip) deref_pointee = dvi->pointee_llvm_tip;
+                    if (dvi && dvi->pointee_llvm_tip) {
+                        deref_pointee = dvi->pointee_llvm_tip;
+                        deref_isz = dvi->pointee_isaretsiz;
+                    }
                 }
+                /* D-347 ONARIM — ONCELIK TERS CEVRILDI. Eskiden `beklenen`
+                 * pointee'ye TERCIH ediliyordu ("cagiran o tipi bekler").
+                 * Bu iki AYRI seyi karistiriyordu:
+                 *   • pointee tipi = BELLEKTEKI nesnenin GERCEK genisligi,
+                 *   • beklenen     = cagiranin istedigi DEGER tipi.
+                 * Sonuc: `değişken p: *dtam8; ver (*p) olarak tam64;`
+                 * `load i64` uretiyordu — 1 baytlik nesneden 8 BAYT okuma
+                 * (sinir-disi okuma + cop deger). Ne hata ne uyari; SESSIZ
+                 * YANLIS CEVAP. Gercek etkisi olculdu: DTB magic dogrulamasi
+                 * 0x4c004500450044 gibi absurd bir deger gorup basarisiz oldu.
+                 * Ayni ders `pointee_llvm_tip` yorumunda indeks oku/yaz icin
+                 * ZATEN yaziliydi; deref-READ yolunda uygulanmamisti.
+                 * Dogrusu: pointee genisliginde YUKLE, sonra beklenen'e
+                 * DONUSTUR (dtamN -> zext, tamN -> sext). Pointee bilinmiyorsa
+                 * eski davranis korunur (baska bilgi yok). */
                 const char *yuk_tip =
-                    (beklenen && strcmp(beklenen, "ptr") != 0) ? beklenen
-                        : (deref_pointee ? deref_pointee : "i32");
+                    deref_pointee ? deref_pointee
+                        : ((beklenen && strcmp(beklenen, "ptr") != 0) ? beklenen
+                                                                     : "i32");
                 int r = yeni_reg(g);
                 /* D-248 (GAP-3): güvensiz blokta VOLATILE load (MMIO okuması
                  * clang -O2 tarafından elenmez/yeniden-sıralanmaz). */
                 const char *vol = (g->guvensiz_derinlik > 0) ? "volatile " : "";
                 fprintf(g->out, "  %%%d = load %s%s, ptr %%%d\n",
                         r, vol, yuk_tip, p.reg);
-                IfadeSonuc s = { r, yuk_tip, 0 };
+                /* Yuklenen GERCEK genislikten beklenen tipe donustur.
+                 * int_donustur_im tipler esitse no-op'tur (reg aynen doner). */
+                if (beklenen && strcmp(beklenen, "ptr") != 0 &&
+                    strcmp(beklenen, yuk_tip) != 0 &&
+                    yuk_tip[0] == 'i' && beklenen[0] == 'i') {
+                    int rc = int_donustur_im(g, r, yuk_tip, beklenen, deref_isz);
+                    IfadeSonuc sc = { rc, beklenen, deref_isz };
+                    return sc;
+                }
+                IfadeSonuc s = { r, yuk_tip, deref_isz };
                 return s;
             }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
@@ -5457,6 +5501,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* v1 bölge-container: *T annot -> pointee kaydi */
                     g->isimler->pointee_llvm_tip =
                         pointee_ir_al(g, d->veri.degisken.tip);
+                    g->isimler->pointee_isaretsiz =
+                        pointee_isaretsiz_al(d->veri.degisken.tip);
                     /* D-029 fix: &Yapi, *Yapi veya Yapi annot -> yapi IR kaydi */
                     g->isimler->ref_yapi_ir =
                         ref_yapi_ir_al(g, d->veri.degisken.tip);
@@ -5536,6 +5582,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     kanal_ic_ir_al(g, d->veri.degisken.tip);
                 g->isimler->pointee_llvm_tip =
                     pointee_ir_al(g, d->veri.degisken.tip);
+                g->isimler->pointee_isaretsiz =
+                    pointee_isaretsiz_al(d->veri.degisken.tip);
                 g->isimler->ref_yapi_ir =
                     ref_yapi_ir_al(g, d->veri.degisken.tip);
                 g->isimler->generic_arg_ir =
@@ -6807,6 +6855,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* v1 bölge-container: *T parametre -> pointee kaydi */
         g->isimler->pointee_llvm_tip =
             pointee_ir_al(g, p->veri.parametre.tip);
+        g->isimler->pointee_isaretsiz =
+            pointee_isaretsiz_al(p->veri.parametre.tip);
         /* D-029 fix: &Yapi, *Yapi veya Yapi parametre -> yapi IR kaydi (field
          * erisiminde dogru yapi cozumu) */
         g->isimler->ref_yapi_ir =

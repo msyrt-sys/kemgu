@@ -746,6 +746,20 @@ işlev main() -> tam32 {
         uart_satir("[20] CEKIRDEK W^X HATA");
     }
 
+    // [21] DTB (AH-1): firmware'in X0'da geçirdiği device-tree okunuyor mu?
+    // Bu ana kadar her cihaz adresi QEMU virt'e sabit-kodluydu; DTB, gerçek
+    // donanımda çalışma-zamanı keşfin TEK kaynağı. Adresi + adresteki DTB'nin
+    // ilk 8 baytını da bas — teşhis için (gerçek kartta ilk bakılacak yer).
+    değişken dtb: tam64 = kdtb_adres();
+    uart_metin("     DTB adresi = 0x"); uart_onaltilik(dtb olarak dtam64); uart_satir("");
+    değişken dtb_ok: tam32 = kdtb_testi();
+    eğer dtb_ok == 1 {
+        uart_metin("     DTB boyut = 0x"); uart_onaltilik(kdtb_toplam_boyut(dtb) olarak dtam64); uart_satir("");
+        uart_satir("[21] DTB OK");
+    } değilse {
+        uart_satir("[21] DTB HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

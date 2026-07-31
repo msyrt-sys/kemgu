@@ -34,6 +34,7 @@ muaf() {
     # Bunlar `--llvm` codegen yolunu ölçer; `--check` reddi TASARIM GEREĞİ.
     *test/cg_korpus/cg6_trunc.kem)        echo "kasıtlı daraltma (E004) — codegen trunc yolu ölçülür" ;;
     *test/cg_korpus/cg_skaler_deref.kem)  echo "kasıtlı skaler deref cast (E002)" ;;
+    *test/cg_korpus/cg_deref_genislik.kem) echo "kasıtlı skaler deref cast (E002) — D-347 yük genişliği" ;;
     *test/cg_korpus/cg_deref_pointer.kem) echo "kasıtlı ham-pointer arg (T001)" ;;
     *) return 1 ;;
   esac
@@ -64,7 +65,7 @@ done
 KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
                 runtime/kem_zaman.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
-                runtime/kem_elf.kem test/ornekler/kem_os.kem"
+                runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
@@ -73,7 +74,7 @@ if [ "$kemos_eksik" -eq 0 ]; then
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
   if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os (birleşik kaynak, 9 parça) --check geçti"
+    echo "  ✅ kem_os (birleşik kaynak, 10 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
