@@ -760,6 +760,32 @@ işlev main() -> tam32 {
         uart_satir("[21] DTB HATA");
     }
 
+    // [22] DTB KESIF (AH-2): cihaz adresleri artık SABİT DEĞİL, DTB'den okunuyor.
+    // Basılan RAM boyutu asıl kanıt: aynı ikili farklı `-m` ile boot edilince
+    // DEĞİŞMELİ. Sabit-kodlu bir değer bunu yapamaz (Makefile iki koşumla ölçer).
+    eğer dtb_ok == 1 {
+        uart_metin("     RAM  = 0x"); uart_onaltilik(kdtb_ram_tabani(dtb) olarak dtam64);
+        uart_metin(" + 0x"); uart_onaltilik(kdtb_ram_boyutu(dtb) olarak dtam64); uart_satir("");
+        uart_metin("     UART = 0x"); uart_onaltilik(kdtb_uart_tabani(dtb) olarak dtam64); uart_satir("");
+        uart_metin("     GICD = 0x"); uart_onaltilik(kdtb_gic_dist(dtb) olarak dtam64);
+        uart_metin("  GICC = 0x"); uart_onaltilik(kdtb_gic_cpu(dtb) olarak dtam64); uart_satir("");
+        uart_metin("     RSV  = "); uart_onaltilik(kdtb_rsv_sayisi(dtb) olarak dtam64);
+        uart_satir(" bolge");
+    }
+    değişken kesif_ok: tam32 = kdtb_kesif_testi();
+    eğer kesif_ok == 1 {
+        // Keşfedilen değerler bugün sabit-kodlu olanlarla AYNI çıkmalı — aksi
+        // halde ya ayrıştırma yanlış ya sabitler. İkisi de bilinmek istenir.
+        eğer (kdtb_uart_tabani(dtb) == KIS_UART_TABAN)
+           ve (kdtb_ram_tabani(dtb) == KMMU_RAM) {
+            uart_satir("[22] DTB KESIF OK");
+        } değilse {
+            uart_satir("[22] DTB KESIF HATA (kesfedilen != sabit)");
+        }
+    } değilse {
+        uart_satir("[22] DTB KESIF HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

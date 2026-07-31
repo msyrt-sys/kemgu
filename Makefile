@@ -63,8 +63,8 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi kemgu_self calistir_self_driver bench test_tumu
-.PHONY: all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
+.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi kemgu_self calistir_self_driver bench test_tumu
+.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
 
 # === Ana hedef ===
 
@@ -966,6 +966,57 @@ $(BUILD)/kem_user.elf: test/ornekler/kem_kullanici.kem linker/user-aarch64.ld $(
 		{ echo "FAIL: kem_user.elf girisi 0x54000000 degil (linker script?)"; exit 1; }
 	@echo "  (kem_user.elf: ET_EXEC AArch64 giris=0x54000000 — diske yazilmaya hazir)"
 
+# AH-2 FALSİFİYE KAPISI: cihaz keşfi GERÇEKTEN device-tree'den mi geliyor?
+# ----------------------------------------------------------------------------
+# Tek koşum bunu kanıtlayamaz — sabit-kodlu bir değer de "doğru" görünür. Kanıt
+# AYNI İKİLİYİ farklı bellek boyutlarıyla boot etmek: DTB'den okuyan bir çekirdek
+# iki farklı RAM boyutu bildirir, sabit-kodlu olan İKİSİNDE DE aynısını söyler.
+#
+# HAM İMAJ neden: Raspberry Pi firmware'i ELF DEĞİL ham ikili (kernel8.img) ister
+# → bu hedef aynı zamanda RPi'nin boot biçimini prova eder. (DÜZELTME: bir ara
+# "QEMU ELF'e DTB geçmiyor" diye not düşülmüştü; YANLIŞ ölçümdü — QEMU ELF yolunda
+# da X0'da DTB geçiriyor. O sıradaki 0 okuması iki BAŞKA kusurdan geliyordu:
+# codegen'in *dtam8 üzerinden 8 bayt okuması ve süreç-VA'sının DTB'yi gölgelemesi.
+# İkisi de onarıldı; ELF yolu da [21]/[22] geçiyor.)
+calistir_kem_os_dtb_arm: calistir_kem_os_arm
+	@echo "AH-2: DTB kesfi — ayni ikili, IKI farkli bellek boyutu:"
+	@llvm-objcopy -O binary $(BUILD)/kem_os.elf $(BUILD)/kem_os.img
+	@if ! command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		echo "  QEMU yok — AH-2 kapisi atlandi."; exit 0; \
+	fi
+	@ok=1; \
+	for MB in 256 512; do \
+		rm -f $(BUILD)/dtb_$$MB.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m $$MB \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+			-serial file:$(BUILD)/dtb_$$MB.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
+		if ! grep -q "\[22\] DTB KESIF OK" $(BUILD)/dtb_$$MB.out 2>/dev/null; then \
+			echo "  FAIL: -m $$MB ile [22] DTB KESIF OK yok"; \
+			grep -E "DTB|RAM|UART|GICD" $(BUILD)/dtb_$$MB.out 2>/dev/null | sed 's/^/    /'; \
+			ok=0; \
+		fi; \
+	done; \
+	[ "$$ok" -eq 1 ] || exit 1; \
+	R256=$$(grep -oE "RAM  = 0x[0-9A-F]+ \+ 0x[0-9A-F]+" $(BUILD)/dtb_256.out | head -1); \
+	R512=$$(grep -oE "RAM  = 0x[0-9A-F]+ \+ 0x[0-9A-F]+" $(BUILD)/dtb_512.out | head -1); \
+	echo "  -m 256 -> $$R256"; \
+	echo "  -m 512 -> $$R512"; \
+	if [ "$$R256" = "$$R512" ]; then \
+		echo "  FAIL: iki kosumda AYNI RAM boyutu — deger DTB'den GELMIYOR (sabit-kodlu)"; \
+		exit 1; \
+	fi; \
+	if ! grep -q "RAM  = 0x40000000 + 0x10000000" $(BUILD)/dtb_256.out; then \
+		echo "  FAIL: -m 256 icin beklenen 0x10000000 bulunamadi"; exit 1; \
+	fi; \
+	if ! grep -q "RAM  = 0x40000000 + 0x20000000" $(BUILD)/dtb_512.out; then \
+		echo "  FAIL: -m 512 icin beklenen 0x20000000 bulunamadi"; exit 1; \
+	fi
+	@echo "  (RAM boyutu -m ile DEGISTI ve her ikisi de dogru -> deger DTB'den okunuyor)"
+	@grep -E "UART|GICD|RSV" $(BUILD)/dtb_256.out | head -3 | sed 's/^/  /'
+
 calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/kem_user.elf
 	@echo "Faz-2/B1 .kem-native OS: kem_virtio_blk.kem + kem_os.kem -> ARM64 ELF..."
 	@# FAZ-B1/B2: virtio-blk + minifs .kem sürücüleri kem_os ile CAT (tek birim → çıplak→çıplak, T002 yok).
@@ -1328,6 +1379,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "W\^X OK" $(BUILD)/kem_os.out \
 		   && grep -q "CEKIRDEK W\^X OK" $(BUILD)/kem_os.out \
 		   && grep -q "DTB OK" $(BUILD)/kem_os.out \
+		   && grep -q "DTB KESIF OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \

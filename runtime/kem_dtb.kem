@@ -75,3 +75,230 @@ ldr $0, [x9]"# çıktı("=r", &x) bozulan("~{x9}") bozulan("~{memory}") } }
     eğer (n < 64) veya (n > 2097152) { ver 0; }   // 64B..2MB dışı = şüpheli
     ver 1;
 }
+
+// ============================================================================
+// AH-2: FDT YAPI BLOĞU GEZGİNİ — gerçek cihaz keşfi.
+// ----------------------------------------------------------------------------
+// AH-1 yalnız "DTB var mı" sorusunu yanıtladı. Asıl kazanç burada: RAM tabanı/
+// boyutu, UART ve GIC adresleri artık SABİT DEĞİL, çalışma zamanında okunuyor.
+//
+// FDT yapı bloğu jeton dizisidir (hepsi büyük-endian be32):
+//   1 = BEGIN_NODE  → ardından null-sonlu ad, 4'e hizalı
+//   2 = END_NODE
+//   3 = PROP        → ardından uzunluk(be32), ad_ofseti(be32), değer, 4'e hizalı
+//   4 = NOP
+//   9 = END
+// Özellik ADLARI ayrı bir dizgi bloğunda; PROP'taki ad_ofseti oraya indeks.
+sabit KDTB_HDR_STRUCT: tam64 = 8;       // off_dt_struct
+sabit KDTB_HDR_STRINGS: tam64 = 12;     // off_dt_strings
+sabit KDTB_HDR_RSVMAP: tam64 = 16;      // off_mem_rsvmap
+sabit KDTB_HDR_STRUCT_BOY: tam64 = 36;  // size_dt_struct
+sabit KDTB_UZ_SLOT: tam64 = 1157640264; // 0x45003048: son bulunan prop uzunluğu
+
+çıplak işlev kdtb_y64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
+çıplak işlev kdtb_o64s(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+çıplak işlev kdtb_be64(adr: tam64) -> tam64 {
+    ver kdtb_be32(adr) * 4294967296 + kdtb_be32(adr + 4);
+}
+çıplak işlev kdtb_hiz4(n: tam64) -> tam64 { ver ((n + 3) / 4) * 4; }
+çıplak işlev kdtb_struct_bas(dtb: tam64) -> tam64 { ver dtb + kdtb_be32(dtb + KDTB_HDR_STRUCT); }
+çıplak işlev kdtb_str_bas(dtb: tam64) -> tam64 { ver dtb + kdtb_be32(dtb + KDTB_HDR_STRINGS); }
+çıplak işlev kdtb_struct_boy(dtb: tam64) -> tam64 { ver kdtb_be32(dtb + KDTB_HDR_STRUCT_BOY); }
+
+// Bellekteki null-sonlu dizginin uzunluğu.
+çıplak işlev kdtb_strlen(adr: tam64) -> tam64 {
+    değişken n: tam64 = 0;
+    iken kdtb_o8(adr + n) != 0 { n = n + 1; }
+    ver n;
+}
+
+// Bellekteki null-sonlu ad, s ile TAM eşit mi? (1 = evet)
+çıplak işlev kdtb_ad_esit(adr: tam64, s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken a: tam64 = kdtb_o8(adr + (i olarak tam64));
+        değişken b: tam64 = (metin_bayt(s, i)) olarak tam64;
+        eğer a != b { ver 0; }
+        i = i + 1;
+    }
+    eğer kdtb_o8(adr + (n olarak tam64)) != 0 { ver 0; }   // s yalnız ÖNEK olmamalı
+    ver 1;
+}
+
+// Bellekteki ad, s ile BAŞLIYOR mu? Düğüm adları birim-adresi taşır
+// (memory@40000000 gibi) → tam eşitlik yerine önek gerekir.
+çıplak işlev kdtb_ad_onek(adr: tam64, s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken a: tam64 = kdtb_o8(adr + (i olarak tam64));
+        değişken b: tam64 = (metin_bayt(s, i)) olarak tam64;
+        eğer a != b { ver 0; }
+        i = i + 1;
+    }
+    ver 1;
+}
+
+// Adı onek ile başlayan İLK düğüm; BEGIN_NODE jetonunun adresini döner (0=yok).
+çıplak işlev kdtb_dugum_ara(dtb: tam64, onek: metin) -> tam64 {
+    değişken p: tam64 = kdtb_struct_bas(dtb);
+    değişken son: tam64 = p + kdtb_struct_boy(dtb);
+    iken p < son {
+        değişken tok: tam64 = kdtb_be32(p);
+        eğer tok == 1 {
+            eğer kdtb_ad_onek(p + 4, onek) == 1 { ver p; }
+            p = p + 4 + kdtb_hiz4(kdtb_strlen(p + 4) + 1);
+        } değilse {
+            eğer tok == 3 {
+                p = p + 12 + kdtb_hiz4(kdtb_be32(p + 4));
+            } değilse {
+                eğer tok == 9 { ver 0; }
+                p = p + 4;
+            }
+        }
+    }
+    ver 0;
+}
+
+// dugum'un DOĞRUDAN özelliklerinde ad'ı ara; değer adresini döner (0 = yok).
+// Uzunluk KDTB_UZ_SLOT'a yazılır (KEMGU'da çoklu dönüş yok; bu dosyadaki diğer
+// durum değişkenleriyle aynı sabit-RAM deseni).
+çıplak işlev kdtb_prop_ara(dtb: tam64, dugum: tam64, ad: metin) -> tam64 {
+    kdtb_y64(KDTB_UZ_SLOT, 0);
+    değişken p: tam64 = dugum + 4 + kdtb_hiz4(kdtb_strlen(dugum + 4) + 1);
+    değişken str: tam64 = kdtb_str_bas(dtb);
+    değişken devam: tam32 = 1;
+    iken devam == 1 {
+        değişken tok: tam64 = kdtb_be32(p);
+        eğer tok == 3 {
+            değişken uz: tam64 = kdtb_be32(p + 4);
+            eğer kdtb_ad_esit(str + kdtb_be32(p + 8), ad) == 1 {
+                kdtb_y64(KDTB_UZ_SLOT, uz);
+                ver p + 12;
+            }
+            p = p + 12 + kdtb_hiz4(uz);
+        } değilse {
+            eğer tok == 4 { p = p + 4; } değilse { devam = 0; }
+        }
+    }
+    ver 0;
+}
+
+// compatible özelliği uyumlu'yu İÇEREN ilk düğüm. compatible bir dizgi
+// LİSTESİDİR (null ile ayrılmış) — yalnız ilkine bakmak yanlış olurdu.
+çıplak işlev kdtb_uyumlu_ara(dtb: tam64, uyumlu: metin) -> tam64 {
+    değişken p: tam64 = kdtb_struct_bas(dtb);
+    değişken son: tam64 = p + kdtb_struct_boy(dtb);
+    iken p < son {
+        değişken tok: tam64 = kdtb_be32(p);
+        eğer tok == 1 {
+            değişken v: tam64 = kdtb_prop_ara(dtb, p, "compatible");
+            eğer v != 0 {
+                değişken uz: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
+                değişken q: tam64 = v;
+                iken q < (v + uz) {
+                    eğer kdtb_ad_esit(q, uyumlu) == 1 { ver p; }
+                    q = q + kdtb_strlen(q) + 1;
+                }
+            }
+            p = p + 4 + kdtb_hiz4(kdtb_strlen(p + 4) + 1);
+        } değilse {
+            eğer tok == 3 {
+                p = p + 12 + kdtb_hiz4(kdtb_be32(p + 4));
+            } değilse {
+                eğer tok == 9 { ver 0; }
+                p = p + 4;
+            }
+        }
+    }
+    ver 0;
+}
+
+// reg özelliğinin i. 64-bit hücresi. aarch64'te #address-cells=#size-cells=2
+// olduğundan reg = <adres boyut adres boyut ...>. Aralık dışı → 0 (çöp okuma yok).
+çıplak işlev kdtb_reg(dtb: tam64, dugum: tam64, i: tam64) -> tam64 {
+    eğer dugum == 0 { ver 0; }
+    değişken v: tam64 = kdtb_prop_ara(dtb, dugum, "reg");
+    eğer v == 0 { ver 0; }
+    değişken uz: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
+    eğer ((i + 1) * 8) > uz { ver 0; }
+    ver kdtb_be64(v + i * 8);
+}
+
+// --- Keşif API'si: sabit adreslerin YERİNE geçecek olanlar ------------------
+çıplak işlev kdtb_ram_tabani(dtb: tam64) -> tam64 {
+    ver kdtb_reg(dtb, kdtb_dugum_ara(dtb, "memory"), 0);
+}
+çıplak işlev kdtb_ram_boyutu(dtb: tam64) -> tam64 {
+    ver kdtb_reg(dtb, kdtb_dugum_ara(dtb, "memory"), 1);
+}
+çıplak işlev kdtb_uart_tabani(dtb: tam64) -> tam64 {
+    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,pl011"), 0);
+}
+// GIC reg = <dist_adres dist_boyut cpu_adres cpu_boyut> → cpu tabanı 2. hücre.
+çıplak işlev kdtb_gic_dist(dtb: tam64) -> tam64 {
+    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,cortex-a15-gic"), 0);
+}
+çıplak işlev kdtb_gic_cpu(dtb: tam64) -> tam64 {
+    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,cortex-a15-gic"), 2);
+}
+
+// /memreserve girdileri: (adres, boyut) çiftleri, (0,0) ile biter. Firmware'in
+// "buraya DOKUNMA" dediği bölgeler. i. çiftin adresi döner; boyut KDTB_UZ_SLOT'ta.
+çıplak işlev kdtb_rsv(dtb: tam64, i: tam64) -> tam64 {
+    kdtb_y64(KDTB_UZ_SLOT, 0);
+    değişken p: tam64 = dtb + kdtb_be32(dtb + KDTB_HDR_RSVMAP);
+    değişken k: tam64 = 0;
+    iken k < 64 {
+        değişken adr: tam64 = kdtb_be64(p);
+        değişken boy: tam64 = kdtb_be64(p + 8);
+        eğer (adr == 0) ve (boy == 0) { ver 0; }
+        eğer k == i { kdtb_y64(KDTB_UZ_SLOT, boy); ver adr; }
+        p = p + 16;
+        k = k + 1;
+    }
+    ver 0;
+}
+çıplak işlev kdtb_rsv_sayisi(dtb: tam64) -> tam64 {
+    değişken p: tam64 = dtb + kdtb_be32(dtb + KDTB_HDR_RSVMAP);
+    değişken k: tam64 = 0;
+    iken k < 64 {
+        eğer (kdtb_be64(p) == 0) ve (kdtb_be64(p + 8) == 0) { ver k; }
+        p = p + 16;
+        k = k + 1;
+    }
+    ver k;
+}
+
+// Bir adres, firmware'in rezerve ettiği bölgeye düşüyor mu? (1 = evet)
+// Allocator/sayfa-tablosu yerleşimi bunu SORMALI — aksi halde firmware
+// yapılarını (DTB'nin kendisi dâhil) sessizce ezeriz. AH-1'de tam bu oldu:
+// virtio-net DMA tamponu DTB'nin üstüne düşüyordu ve kimse fark etmiyordu.
+çıplak işlev kdtb_rezerve_mi(dtb: tam64, adr: tam64) -> tam32 {
+    değişken n: tam64 = kdtb_rsv_sayisi(dtb);
+    değişken k: tam64 = 0;
+    iken k < n {
+        değişken a: tam64 = kdtb_rsv(dtb, k);
+        değişken b: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
+        eğer (adr >= a) ve (adr < (a + b)) { ver 1; }
+        k = k + 1;
+    }
+    ver 0;
+}
+
+// AH-2 kapısı: keşfedilen değerler tutarlı mı?
+// Boyutun DOĞRU olduğunu bu fonksiyon KANITLAYAMAZ — onu Makefile iki farklı
+// `-m` ile boot ederek yapar (sabit-kodlu değer iki koşumda DEĞİŞEMEZ).
+çıplak işlev kdtb_kesif_testi() -> tam32 {
+    değişken d: tam64 = kdtb_adres();
+    eğer kdtb_gecerli_mi(d) != 1 { ver 0; }
+    eğer kdtb_ram_tabani(d) == 0 { ver 0; }
+    değişken boy: tam64 = kdtb_ram_boyutu(d);
+    eğer (boy < 16777216) veya (boy > 68719476736) { ver 0; }   // 16MB..64GB
+    eğer kdtb_uart_tabani(d) == 0 { ver 0; }
+    eğer kdtb_gic_dist(d) == 0 { ver 0; }
+    eğer kdtb_gic_cpu(d) == 0 { ver 0; }
+    ver 1;
+}
