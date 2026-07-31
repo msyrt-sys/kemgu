@@ -5,7 +5,59 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
-## D-344 [YÜKSEK] — MODEL B: süreç izolasyonu + diskten ELF yükleme (2026-07-28)
+## D-346 [YÜKSEK] — MODEL B / MB-3: 4KB sayfa granülü + segment-başına W^X (2026-07-31)
+
+**Karar [ETKİ: `runtime/kem_mmu.kem`, `runtime/kem_elf.kem`,
+`test/ornekler/kem_os.kem` (+`[19]`), `Makefile`.]**
+
+**Neden:** [D-345] sonrası süreç sayfası TEK 2MB blok ve AP=01/UXN=0 idi — yüklenen
+her program için aynı sayfa hem **yazılabilir** hem **çalıştırılabilir**. Program
+kendi kodunu değiştirebilir ya da veri olarak yazdığı baytları çalıştırabilirdi:
+"bellek güvenliği dil seviyesinde" diyen bir sistemde yükleyici katmanında açılmış
+bir kapı.
+
+**MB-3a — 4KB granül:** süreç-özel bölge kendi L3 tablosuna sahip (512×4KB).
+Sayfalar **varsayılan olarak veri** (RW + XN). Ters sıra (varsayılan
+çalıştırılabilir) seçilseydi, izin atamayı unutan her yol W^X'i **sessizce**
+devre dışı bırakırdı; bu yönde ise program çalışmaz — gürültülü hata.
+
+**MB-3b — izinler:** ELF `p_flags`'e göre yalnız X bayraklı segmentin sayfaları
+`kmmu_sayfa_kod` ile AP=11 (EL0 salt-okunur) + UXN=0 yapılır. **W+X birlikte
+işaretli segment REDDEDİLİR.** PXN her iki izinde de set: çekirdek kullanıcı
+sayfalarından komut getirmez. Yükleyici kod sayfasına çekirdeğin **identity**
+görüşünden yazar (başka VA) — bu yüzden AP=11 yükleme yolunu engellemez.
+
+**⚠ İKİ ÖZ-DÜZELTME (ikisi de sabotajla bulundu):**
+
+1. **`[19]` yanlış-yeşildi.** İlk sürüm yalnız "süreç öldü mü" diye bakıyordu ve
+   kod sayfasını VERİ yapan sabotajda **bile** geçti — veri sayfası XN'dir, stub
+   hiç çalışamaz, komut abort'u yine öldürür. Test "yazma fault'u" ile "çalıştırma
+   fault'u"nu **ayırt edemiyordu**. Artık iki koşul: syscall sayacı **artmalı**
+   (⇒ sayfa gerçekten çalıştırılabilir) **ve** süreç **ölmeli** (⇒ yazma reddedildi).
+2. **Sabotajın kendisi yanlıştı.** "RWX" için `1<<53 + 7` yazılmıştı — yani **AF
+   (erişim bayrağı) yok**; test edilen şey "RWX" değil "erişilemez sayfa"ydı.
+   `[18]`'in de kırılması ele verdi; doğru tanımlayıcı (`0x747 + PXN`) ile
+   tekrarlandı. *Sabotajın ne ölçtüğü de doğrulanmalı.*
+
+**Sabotaj matrisi (üçü de ölçüldü):** doğru W^X → `[18]` OK `[19]` OK · kod sayfası
+XN → HATA/HATA · kod sayfası RWX → `[18]` OK `[19]` **HATA**.
+
+**Sınırlar (V1):** ASID yok; L3 yalnız süreç bölgesinde (**çekirdek hâlâ 2MB blok —
+kendi kodu yazılabilir**); `.rodata` ayrı korunmuyor; yığın sayfaları veri
+varsayılanından gelir.
+
+**Testler:** kem_os `[1..19]` + `KEMGU KEM-OS OK`; tip kapısı 207/215 (0 RED);
+`test_tumu` 0 hata (FIXPOINT ✓, codegen 111/111, checker 56/56).
+
+---
+
+## D-345 [YÜKSEK] — MODEL B: süreç izolasyonu + diskten ELF yükleme (2026-07-28)
+
+> **NUMARA KAYDIRMASI:** bu kayıt önce D-344 olarak yazılmıştı. Paralel bir dal
+> (PR #108, `checker.kem` ayrışması) aynı numarayı **önce** yayımladı; CLAUDE.md
+> kuralı gereği (*"D-NNN'i merge anında güncel `origin/main`'deki en yüksek D'ye
+> bakıp ver"*) sonradan gelen kayıt kaydırıldı. Bu oturumun commit mesajlarında
+> `[D-344]` geçen Model B referansları **bu kaydı** (D-345) gösterir.
 
 **Karar [ETKİ: `runtime/kem_mmu.kem`, `runtime/kem_gorev.kem`, `runtime/kem_elf.kem`
 (yeni), `test/ornekler/kem_kullanici.kem` (yeni), `linker/user-aarch64.ld` (yeni),
@@ -64,6 +116,81 @@ sektörden okunur (çok-dosyalı minifs ayrı iş); adres alanı kapasitesi 6.
 
 **Testler:** kem_os QEMU boot `[1..18]` + `KEMGU KEM-OS OK`; tip kapısı 204/212
 (0 red); 4 bağımsız sabotaj kapısı doğrulandı.
+## D-344 [YÜKSEK] — `checker.kem` ↔ `codegen.kem` ayrışması kapatıldı; `calistir_checker_diff` `test_tumu`'ya bağlandı (2026-07-28)
+
+**Karar [ETKİ: `selfhost/checker.kem`, `test/check_korpus/`, `Makefile`]:**
+Aşama-2 referans checker'ı (`selfhost/checker.kem`) ile birleşik driver
+(`selfhost/codegen.kem`) içindeki checker ayrışmıştı. Ayrışma ÖNCE korpusa
+örnek eklenerek GÖRÜNÜR yapıldı, sonra kapatıldı, sonra kapı `test_tumu`'ya
+bağlandı.
+
+**Ölçülen ayrışma (onarım öncesi):** `test/ornekler/kem_malloc.kem` üzerinde
+C oracle `OK`, `codegen.kem --check` `OK`, ama `checker.kem` **5 SAHTE tanı**
+üretiyordu: `T002 24:5`, `T002 31:27`, `T002 32:5`, `T002 32:16`, `T022 39:5`.
+
+**Kök nedenler (3, hepsi ölçülerek doğrulandı):**
+1. **`küresel` (D-253) HİÇ yoktu** — `anahtar_tip`'te yok → `parse_ust_oge`
+   HATA dalına düşüyor, küresel ad global kapsama girmiyor → her okuma/yazma
+   sahte `T002`.
+2. **`*p = v` T022 muafiyeti (D-249) yoktu** — muafiyet yalnız
+   `codegen.kem`'de; `checker.kem` `güvensiz` blokta deref-atamaya KOŞULSUZ
+   `T022` veriyordu.
+3. **`çıplak` (D-255) HİÇ yoktu** — hata-kurtarma sayesinde `--checkdump`
+   çıktısı tesadüfen doğru kalıyordu (aşağıda "gate edilmiyor" notu).
+
+**Onarım (`checker.kem`, hepsi `codegen.kem` aynası):** `anahtar_tip`'e
+`küresel`→`KURESEL` + `çıplak`→`CIPLAK`; `parse_kuresel` (C `parser.c` parite);
+`parse_ust_oge` dispatch; `parse_islev_genel` modifier döngüsü (çıplak/
+gerçekzamanlı herhangi sıra); `genel_topla`'ya `KURESEL` → `g_ekle` (ad
+çözümü); `kontrol_ust`'ta `KURESEL` init'i `SABIT` gibi denetlenir; ATAMA'da
+`hedef_deref` (TEKLI/`deref*`) T022 muafiyeti.
+
+**Korpus (+3):** `tc6_01_kuresel.kem` (küresel+çıplak, kem_malloc deseni),
+`tc6_02_ciplak.kem`, `tc6_03_deref_atama.kem`. Hepsi oracle `OK`.
+
+**Kapı:** `calistir_checker_diff` artık `test_tumu` zincirinde (Makefile:5285).
+Daha önce YOKTU — `checker.kem`'in TEK doğruluk kapısı hiç koşmuyordu, ayrışma
+bu yüzden sessizce birikmişti.
+
+**Doğrulama:** checker_diff 56/56 → **59/59**. `kem_malloc.kem` 5 sahte tanı
+→ **0** (oracle ile birebir). codegen_bootstrap FIXPOINT ✓ (lexer/parser/
+checker 92/92 birebir + stage1==stage2, 45729 satır). self_driver 4 mod ✓
+(LLVM 108/108 ×2 + fixpoint). check_kapisi 203/210, 0 RED. codegen_diff 108/108.
+
+**Sabotaj kapısı (kanıt):** T022 muafiyeti kaldırıldı → `tc6_03` KIRMIZI
+(58/59); `KURESEL`→`g_ekle` kaldırıldı → `tc6_01` KIRMIZI (58/59); geri
+alındı → 59/59. İkisi de GERÇEK kapı.
+
+**Kapsam/sınırlar (dürüst):**
+- **`tc6_02_ciplak` GATE ETMİYOR:** `CIPLAK` anahtar kelimesi sabote edilince
+  korpus yine 59/59 kaldı. `--checkdump` yalnız T/L/M kodu basıyor; `çıplak`'ın
+  hata-kurtarma yolu (sahte HATA düğümü + `hata_say` şişmesi) dump'a
+  YANSIMIYOR. Denenen 6 şekil (tek/çift modifier, `dışa çıplak`, gövde-hatalı,
+  çift tanım) hiçbirinde ayrışma gözlenmedi. `CIPLAK` eklemesi bu yüzden
+  *gözlemlenebilir hata onarımı değil*, AST hijyeni + `codegen.kem` paritesi;
+  `tc6_02` gate-etmeyen regresyon kilidi olarak tutuldu.
+- **E010 İKİSİNDE DE YOK:** `küresel`'e güvensiz-tier dışından erişim C
+  oracle'da `E010` verir; `checker.kem` VE `codegen.kem` bunu uygulamıyor
+  (ölçüldü). Korpus dosyası `çıplak` kullandığı için bu yol uyanmıyor. AYRI
+  ve ÖNCEDEN VAR OLAN eksik.
+- **Artık ikilik riski:** ortak 182 işlev adının **19'unun gövdesi hâlâ
+  farklı** (`ifade_tip`, `kontrol_dugum`, `t003_kontrol`, `lin_tuket_dugum`,
+  `parse_yapi`, `parse_cesit` …). `checker.kem` `codegen.kem`'in ÖZ ALT
+  KÜMESİ (182 ⊂ 327, yalnız-checker = 0). Bu commit ayrışmayı kapatır ama
+  KÖKÜNÜ (iki uygulama) kaldırmaz.
+
+**MEHMET KARARI (2026-07-28):** `checker.kem` **SİLİNMEYECEK**, ikili yapı
+şimdilik korunacak — gerekçe: `calistir_checker_diff` artık `test_tumu`'da
+koştuğu için yeni ayrışma ANINDA kırmızı olur; Aşama-2'nin bağımsız referans
+tanığı (codegen_bootstrap'taki ayrı `checker` bileşeni, 92/92) korunur.
+**Kabul edilen bilinen borç:** 19 farklı gövde duruyor → korpusun uyandırmadığı
+bir şekil hâlâ sessizce ayrışabilir; her checker değişikliği İKİ yerde
+yapılmalı. Konsolidasyon ileriye bırakıldı (Aşama-5 "tek-kaynak" maddesi).
+**Bu borcun tek panzehiri korpus kapsamıdır:** checker'a yeni bir kural/
+sözdizimi eklenirken `test/check_korpus/`'a onu uyandıran örnek EKLENMELİ —
+aksi halde ayrışma yine sessizce birikir (bu oturumun asıl dersi).
+- Ayrıca ölçülen, kapsam DIŞI önceden-var-olan eksik: `değişken q: tam32 = f;`
+  (işlev değerini skalere atama) oracle `T001` verir, `checker.kem` vermez.
 
 ---
 
