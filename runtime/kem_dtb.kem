@@ -216,33 +216,103 @@ sabit KDTB_UZ_SLOT: tam64 = 1157640264; // 0x45003048: son bulunan prop uzunluğ
     ver 0;
 }
 
-// reg özelliğinin i. 64-bit hücresi. aarch64'te #address-cells=#size-cells=2
-// olduğundan reg = <adres boyut adres boyut ...>. Aralık dışı → 0 (çöp okuma yok).
-çıplak işlev kdtb_reg(dtb: tam64, dugum: tam64, i: tam64) -> tam64 {
+// AH-4a: `reg` HÜCRE SAYISI karta göre değişir. Önceki sürüm
+// #address-cells=#size-cells=2 VARSAYIYORDU; bu yalnız QEMU virt için doğru.
+// Raspberry Pi ağaçları (ve pek çok gerçek kart) başka kombinasyonlar kullanır —
+// yanlış hücre sayısıyla okumak SESSİZ YANLIŞ ADRES üretir: çekirdek var olmayan
+// bir yere UART yazar ve hiç konuşmaz. Artık kök düğümden okunuyor.
+//
+// Spec varsayılanları: #address-cells=2, #size-cells=1 (özellik yoksa).
+sabit KDTB_AC_VARSAYILAN: tam64 = 2;
+sabit KDTB_SC_VARSAYILAN: tam64 = 1;
+
+// n hücrelik (n×4 bayt) büyük-endian değeri birleştir.
+çıplak işlev kdtb_hucre_oku(adr: tam64, n: tam64) -> tam64 {
+    değişken v: tam64 = 0;
+    değişken k: tam64 = 0;
+    iken k < n {
+        v = v * 4294967296 + kdtb_be32(adr + k * 4);
+        k = k + 1;
+    }
+    ver v;
+}
+
+// Kök düğüm = yapı bloğundaki İLK BEGIN_NODE (adı boş dizgi). Boş önek her adla
+// eşleştiği için kdtb_dugum_ara(dtb, "") ilk düğümü, yani kökü döner.
+çıplak işlev kdtb_kok(dtb: tam64) -> tam64 { ver kdtb_dugum_ara(dtb, ""); }
+
+çıplak işlev kdtb_kok_hucre(dtb: tam64, ad: metin, varsayilan: tam64) -> tam64 {
+    değişken k: tam64 = kdtb_kok(dtb);
+    eğer k == 0 { ver varsayilan; }
+    değişken v: tam64 = kdtb_prop_ara(dtb, k, ad);
+    eğer v == 0 { ver varsayilan; }
+    değişken n: tam64 = kdtb_be32(v);
+    eğer (n < 1) veya (n > 2) { ver varsayilan; }   // 1 ya da 2 dışı desteklenmiyor
+    ver n;
+}
+çıplak işlev kdtb_ac(dtb: tam64) -> tam64 {
+    ver kdtb_kok_hucre(dtb, "#address-cells", KDTB_AC_VARSAYILAN);
+}
+çıplak işlev kdtb_sc(dtb: tam64) -> tam64 {
+    ver kdtb_kok_hucre(dtb, "#size-cells", KDTB_SC_VARSAYILAN);
+}
+
+// `reg`in i. (adres, boyut) çiftinin ADRESİ. Boyut KDTB_UZ_SLOT'a yazılır.
+// Aralık dışı → 0 (çöp okuma yok).
+çıplak işlev kdtb_reg_cift(dtb: tam64, dugum: tam64, i: tam64) -> tam64 {
     eğer dugum == 0 { ver 0; }
     değişken v: tam64 = kdtb_prop_ara(dtb, dugum, "reg");
     eğer v == 0 { ver 0; }
     değişken uz: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
-    eğer ((i + 1) * 8) > uz { ver 0; }
-    ver kdtb_be64(v + i * 8);
+    değişken ac: tam64 = kdtb_ac(dtb);
+    değişken sc: tam64 = kdtb_sc(dtb);
+    değişken adim: tam64 = (ac + sc) * 4;
+    eğer ((i + 1) * adim) > uz { kdtb_y64(KDTB_UZ_SLOT, 0); ver 0; }
+    değişken taban: tam64 = v + i * adim;
+    değişken adr: tam64 = kdtb_hucre_oku(taban, ac);
+    değişken boy: tam64 = kdtb_hucre_oku(taban + ac * 4, sc);
+    kdtb_y64(KDTB_UZ_SLOT, boy);
+    ver adr;
+}
+
+// Geriye uyumlu erişimci: eski çağrı yerleri "i. 64-bit hücre" mantığıyla
+// yazılmıştı (0=adres, 1=boyut, 2=ikinci adres...). Hücre-sayısı-duyarlı
+// karşılığa eşlenir: çift indeksler adres, tek indeksler boyut.
+çıplak işlev kdtb_reg(dtb: tam64, dugum: tam64, i: tam64) -> tam64 {
+    değişken cift: tam64 = i / 2;
+    değişken adr: tam64 = kdtb_reg_cift(dtb, dugum, cift);
+    eğer (i - cift * 2) == 0 { ver adr; }
+    ver kdtb_o64s(KDTB_UZ_SLOT);       // tek indeks → o çiftin boyutu
 }
 
 // --- Keşif API'si: sabit adreslerin YERİNE geçecek olanlar ------------------
 çıplak işlev kdtb_ram_tabani(dtb: tam64) -> tam64 {
-    ver kdtb_reg(dtb, kdtb_dugum_ara(dtb, "memory"), 0);
+    ver kdtb_reg_cift(dtb, kdtb_dugum_ara(dtb, "memory"), 0);
 }
 çıplak işlev kdtb_ram_boyutu(dtb: tam64) -> tam64 {
-    ver kdtb_reg(dtb, kdtb_dugum_ara(dtb, "memory"), 1);
+    değişken a: tam64 = kdtb_reg_cift(dtb, kdtb_dugum_ara(dtb, "memory"), 0);
+    eğer a == 0 { ver 0; }
+    ver kdtb_o64s(KDTB_UZ_SLOT);
 }
 çıplak işlev kdtb_uart_tabani(dtb: tam64) -> tam64 {
-    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,pl011"), 0);
+    ver kdtb_reg_cift(dtb, kdtb_uyumlu_ara(dtb, "arm,pl011"), 0);
 }
-// GIC reg = <dist_adres dist_boyut cpu_adres cpu_boyut> → cpu tabanı 2. hücre.
+// GIC düğümü: QEMU virt "arm,cortex-a15-gic", Raspberry Pi 4 "arm,gic-400"
+// der. Tek ada bağlanmak, kartlar arası taşınabilirliği daha ilk adımda kırardı.
+// Aranan adlar sırayla denenir; ilk bulunan kullanılır.
+çıplak işlev kdtb_gic_dugum(dtb: tam64) -> tam64 {
+    değişken d: tam64 = kdtb_uyumlu_ara(dtb, "arm,cortex-a15-gic");
+    eğer d != 0 { ver d; }
+    d = kdtb_uyumlu_ara(dtb, "arm,gic-400");
+    eğer d != 0 { ver d; }
+    ver kdtb_uyumlu_ara(dtb, "arm,cortex-a7-gic");
+}
+// GIC reg = <dist cpu ...> → 0. çift distributor, 1. çift CPU arayüzü.
 çıplak işlev kdtb_gic_dist(dtb: tam64) -> tam64 {
-    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,cortex-a15-gic"), 0);
+    ver kdtb_reg_cift(dtb, kdtb_gic_dugum(dtb), 0);
 }
 çıplak işlev kdtb_gic_cpu(dtb: tam64) -> tam64 {
-    ver kdtb_reg(dtb, kdtb_uyumlu_ara(dtb, "arm,cortex-a15-gic"), 2);
+    ver kdtb_reg_cift(dtb, kdtb_gic_dugum(dtb), 1);
 }
 
 // /memreserve girdileri: (adres, boyut) çiftleri, (0,0) ile biter. Firmware'in

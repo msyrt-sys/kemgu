@@ -1,0 +1,37 @@
+/*
+ * AH-4a FALSİFİYE GİRDİSİ: #size-cells = 1 olan bir device-tree.
+ * ============================================================================
+ * QEMU virt'in KENDİ ürettiği ağaç #address-cells=2, #size-cells=2 kullanır.
+ * Ayrıştırıcı bu değerleri kök düğümden OKUMAK zorunda; sabit 2/2 varsayarsa
+ * burada RAM boyutunu YANLIŞ ofsetten okur ve saçma bir değer bulur.
+ *
+ * Bu dosya donanımı QEMU virt ile AYNI tarif eder (adresler birebir) — tek fark
+ * hücre sayılarıdır. Yani çekirdek doğru ayrıştırıyorsa hiçbir şey değişmez;
+ * yanlış ayrıştırıyorsa RAM boyutu bozulur ve kapı kırmızı olur.
+ *
+ * Üretim: dtc -I dts -O dtb -o build/hucre_2_1.dtb test/dtb/hucre_2_1.dts
+ */
+/dts-v1/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <1>;          /* virt'in ürettiği 2 DEĞİL — kasıtlı */
+    compatible = "linux,dummy-virt";
+    model = "KEMGU AH-4a hucre testi";
+
+    memory@40000000 {
+        device_type = "memory";
+        reg = <0x0 0x40000000 0x8000000>;      /* 128 MiB — tek hücre boyut */
+    };
+
+    pl011@9000000 {
+        compatible = "arm,pl011", "arm,primecell";
+        reg = <0x0 0x9000000 0x1000>;
+    };
+
+    intc@8000000 {
+        compatible = "arm,gic-400";            /* RPi'nin kullandığı ad */
+        reg = <0x0 0x8000000 0x10000          /* distributor */
+               0x0 0x8010000 0x10000>;        /* CPU arayüzü */
+    };
+};

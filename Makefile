@@ -1029,6 +1029,32 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		echo "  FAIL: -m 512 icin 256 (0x100) blok bekleniyordu"; exit 1; \
 	fi
 	@echo "  (RAM boyutu -m ile DEGISTI ve her ikisi de dogru -> deger DTB'den okunuyor)"
+	@# AH-4a: HÜCRE SAYISI duyarlılığı. QEMU virt'in ürettiği ağaç daima
+	@# #address-cells=2/#size-cells=2 kullanır; gerçek kartlar (Raspberry Pi dâhil)
+	@# başka kombinasyonlar kullanır. Sabit 2/2 varsayan bir ayrıştırıcı orada
+	@# SESSİZ YANLIŞ ADRES üretir — çekirdek var olmayan bir yere UART yazar ve
+	@# hiç konuşmaz. Bu adım aynı donanımı 2/1 hücreyle tarif eden bir DTB ile
+	@# boot eder: doğru ayrıştırma → aynı sonuç; sabit varsayım → RAM 0x0.
+	@# DTB ayrıca `arm,gic-400` kullanır (RPi'nin adı) → çok-adlı GIC arama da ölçülür.
+	@if command -v dtc > /dev/null 2>&1 && command -v qemu-system-aarch64 > /dev/null 2>&1; then \
+		dtc -I dts -O dtb -o $(BUILD)/hucre_2_1.dtb test/dtb/hucre_2_1.dts 2>/dev/null; \
+		rm -f $(BUILD)/hucre.out; \
+		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
+			-dtb $(BUILD)/hucre_2_1.dtb -global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/hucre.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
+		if ! grep -q "RAM  = 0x40000000 + 0x8000000" $(BUILD)/hucre.out 2>/dev/null; then \
+			echo "  FAIL: 2/1 hucreli DTB yanlis okundu (hucre sayisi kokten OKUNMUYOR)"; \
+			grep -E "RAM|UART|GICD" $(BUILD)/hucre.out 2>/dev/null | sed 's/^/    /'; exit 1; \
+		fi; \
+		if ! grep -q "GICD = 0x8000000" $(BUILD)/hucre.out 2>/dev/null; then \
+			echo "  FAIL: arm,gic-400 uyumlu adi bulunamadi (RPi GIC'i kesfedilemez)"; exit 1; \
+		fi; \
+		echo "  (2/1 hucreli + arm,gic-400 DTB dogru okundu -> hucre sayisi kokten geliyor)"; \
+	else \
+		echo "  (dtc/qemu yok — hucre-sayisi kapisi atlandi)"; \
+	fi
 	@grep -E "UART|GICD|RSV" $(BUILD)/dtb_256.out | head -3 | sed 's/^/  /'
 
 calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmio_kem.o $(BUILD)/kem_user.elf
