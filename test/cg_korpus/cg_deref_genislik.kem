@@ -9,30 +9,49 @@
 //
 // Genişlik-duyarlı falsifiye: her dal yanlış genişlikte TERS sonuç verir.
 // Beklenen exit = 42.
-//   Doğru (i8 yükle + zext):  dar=200, gen=1  → 40 + 2 = 42
-//   Hatalı (i64 yükle):       dar = üst baytları da yutmuş devasa sayı → 0 + ... ≠ 42
+//   Doğru (i8 yükle + zext):  dar=72, dar2=127, isz=200, imz=-56 → 20+2+15+5 = 42
+//   Hatalı (i64 yükle):       dar = üst baytları da yutmuş devasa sayı → dal düşer
+//   Hatalı (sext seçimi):     isz dalı -56 görür → dal düşer
 işlev main() -> tam32 {
     güvensiz {
         değişken toplam: tam32 = 0;
 
-        // KAPSAM NOTU: alt baytlar 128'DEN KÜÇÜK seçildi — böylece sext ve zext
-        // AYNI sonucu verir ve bu dosya YALNIZ YÜK GENİŞLİĞİNİ ölçer. Pointee
-        // İŞARETLİLİĞİ (0xC8 → 200 mü -56 mı) AYRI bir eksen ve self-host'ta
-        // hâlâ açık (cg_apointee tipi tutuyor, işaretliliği tutmuyor) — o ayrı
-        // iş olarak izleniyor. Burada karıştırılsaydı bu kapı iki farklı kusuru
-        // tek kırmızıda birleştirir ve hangisinin bozulduğu görünmezdi.
+        // KAPSAM NOTU (D-348 ile GÜNCELLENDİ): bu dosya artık İKİ ekseni birden
+        // ölçer — (1) deref yük GENİŞLİĞİ [D-347] ve (2) pointee İŞARETLİLİĞİ
+        // [D-348]. İkisi AYRI dallarda tutulur: genişlik dalları 128'DEN KÜÇÜK
+        // baytlar kullanır (sext=zext → yalnız genişliğe duyarlı), işaretlilik
+        // dalları 0xC8 kullanır (genişlik doğruyken bile zext/sext'i ayırt eder).
+        // Böylece kırmızı olan dal hangi kusurun döndüğünü tek başına söyler.
 
+        // --- EKSEN 1: yük genişliği ---
         // v: alt bayt 0x48 = 72; üst baytlar sıfır DEĞİL → 8 bayt okunursa 65352.
         değişken v: dtam64 = 65352;                  // 0xFF48
         değişken p: *dtam8 = (&v) olarak *dtam8;
         değişken dar: tam64 = (*p) olarak tam64;
-        eğer dar == 72 { toplam = toplam + 40; }
+        eğer dar == 72 { toplam = toplam + 20; }
 
         // v2: alt bayt 0x7F = 127; 8 bayt okunursa 383.
         değişken v2: dtam64 = 383;                   // 0x017F
         değişken p2: *dtam8 = (&v2) olarak *dtam8;
         değişken dar2: tam64 = (*p2) olarak tam64;
         eğer dar2 == 127 { toplam = toplam + 2; }
+
+        // --- EKSEN 2: pointee işaretliliği (D-348) ---
+        // v3: alt bayt 0xC8 = 200. *dtam8 → İŞARETSİZ pointee → ZEXT → 200.
+        // SEXT seçilseydi -56 gelirdi: doğru genişlikte, YANLIŞ DEĞER.
+        değişken v3: dtam64 = 4294967240;            // 0xFFFFFFC8
+        değişken p3: *dtam8 = (&v3) olarak *dtam8;
+        değişken isz: tam64 = (*p3) olarak tam64;
+        eğer isz == 200 { toplam = toplam + 15; }
+
+        // v4: aynı bayt, ama pointee *tam8 = İŞARETLİ → SEXT → -56.
+        // Karşılaştırma sağ tarafı SALT-LİTERAL ARİTMETİK `(0 - 56)`: tipsiz
+        // alt-ağaç karşı operandın (tam64) genişliğinde üretilmeli. i32'de
+        // kalırsa `icmp eq i64 %a, %b(i32)` = GEÇERSİZ IR (link hatası).
+        değişken v4: dtam64 = 4294967240;
+        değişken p4: *tam8 = (&v4) olarak *tam8;
+        değişken imz: tam64 = (*p4) olarak tam64;
+        eğer imz == (0 - 56) { toplam = toplam + 5; }
 
         ver toplam;
     }

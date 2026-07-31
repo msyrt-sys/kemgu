@@ -5,6 +5,59 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-348 [YÜKSEK] — Self-host codegen: pointee İŞARETLİLİĞİ + salt-literal aritmetiğin genişliği (2026-07-31)
+
+**Karar [ETKİ: `selfhost/codegen.kem`, `test/cg_korpus/cg_deref_genislik.kem`.]**
+
+**Neden:** D-347 deref-read yük GENİŞLİĞİNİ hem C'de hem (D-267 üzerinden) self-host'ta
+kapattı, ama `cg_deref_genislik.kem` yazılırken ÖLÇÜLEN iki parite açığı kasıtlı olarak
+kapsam dışı bırakılmıştı (dosyanın "KAPSAM NOTU"su). Bu kayıt ikisini de kapatır.
+
+**AÇIK 1 — pointee işaretliliği (SESSİZ YANLIŞ CEVAP).** Ölçüm:
+`değişken p: *dtam8 = ...; (*p) olarak tam64` — C `zext i8` → **200**, self-host
+`sext i8` → **-56**. Doğru genişlik, yanlış değer; ne hata ne uyarı. Kök: `cg_apointee`
+pointee TİPİNİ tutuyordu, İŞARETLİLİĞİNİ tutmuyordu; `ifade_isz`'in TEKLI dalında
+`deref*` yoktu → 0 (=imzalı) varsayılıyordu. Onarım: `cg_apointee_isz` (cg_apointee
+ile PARALEL; tip yazılan HER iki yerde birlikte yazılır) + `cg_var_pointee_isz_bul` +
+`param_pointee_isz` + `ifade_isz` `deref*` dalı. C'deki `LlvmIsim.pointee_isaretsiz`
+aynası.
+
+**AÇIK 2 — salt-literal aritmetiğin genişliği (GEÇERSİZ IR).** Ölçüm:
+`x: tam64; x == (0 - 56)` → self-host `sub i32 0, 56` + `icmp eq i64` → link hatası
+(`'%N' defined with type 'i32' but expected 'i64'`). C bunu tip kontrolünde çözer
+(D-343 `tamsayi_literal_ifade_mi`); self-host codegen'de karşılığı yoktu. Tek TAM
+literali IMMEDIATE basıldığı için zaten çalışıyordu — kusur yalnız literal
+ARİTMETİĞİ register materyalize ettiğinde görünüyordu. Onarım: `tamsayi_lit_ifade_mi`
+(C'nin aynası: yalnız TAM/neg/aritmetik; değişken/çağrı/erişim/`olarak` görülürse 0)
++ `int_ll_tahmin` + `p.lit_ll` zorlama alanı, IKILI'da kurulup geri alınır.
+
+**Neden `int_ll_tahmin` SAF (emit etmeyen) bir tahmin:** `sol` daima önce emit edilir;
+sol literal-taraf olduğunda karşı genişliği öğrenmek için sag'ı önce emit etmek IR
+SIRASINI bozardı. Tahmin çözemezse "" döner → zorlama yok = eski davranış.
+Miras kuralı: bir IKILI'nın KENDİSİ salt-literal ise dıştan gelen zorlama iç
+literallere iner (`x == (1 + 2 * 3)`); tipli tarafa asla sızmaz.
+
+**Kapsam/sınırlar:** `değişken x: tam64 = 0 - 56;` (annotasyonlu bildirim) hâlâ
+`sub i32` + `sext` üretir — GEÇERLİ IR ve i32'ye sığan değerler için DOĞRU; C'nin
+`add i64` biçiminden farklı ama semantik eşdeğer. i32'ye sığmayan literal aritmetiği
+bu yolda hâlâ kırpar (`int_uydur` yorumundaki mevcut sınır, D-299 `i64_genislet`
+dersiyle aynı sınıf) — ayrı iş.
+
+**Testler:** `cg_deref_genislik.kem` artık İKİ ekseni de ölçer (genişlik dalları
+<128 bayt kullanır → sext=zext; işaretlilik dalları 0xC8 kullanır → genişlik
+doğruyken bile zext/sext'i ayırt eder), exit 42 = 20+2+15+5. `calistir_codegen_diff`
+112/112, `calistir_checker_diff` 59/59, `calistir_check_kapisi` 207/216 (0 RED),
+`calistir_self_driver` tüm modlar, `calistir_codegen_bootstrap` FIXPOINT
+(stage1==stage2, 47519 satır). C derleyiciye DOKUNULMADI.
+
+**Sabotaj doğrulaması:** (1) `ifade_isz` deref* dalı `ver 0`'a çevrildi → korpus
+exit 42→**27** (işaretlilik dalı düştü). (2) `zsag` zorlaması kaldırıldı → KEMGU IR
+link EDİLEMEDİ, harness 112/112→**111/112**. Her iki sabotajın kaynağa gerçekten
+uygulandığı `grep -c` ile 1 sayılarak kanıtlandı; sonra dosya birebir geri alındı
+(`grep -c SABOTAJ` = 0).
+
+---
+
 ## D-346 [YÜKSEK] — MODEL B / MB-3: 4KB sayfa granülü + segment-başına W^X (2026-07-31)
 
 **Karar [ETKİ: `runtime/kem_mmu.kem`, `runtime/kem_elf.kem`,
