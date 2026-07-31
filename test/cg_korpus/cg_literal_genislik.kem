@@ -1,0 +1,37 @@
+// cg_literal_genislik.kem — D-348: TİPSİZ salt-literal aritmetiğin GENİŞLİĞİ.
+// -----------------------------------------------------------------------------
+// Tek bir TAM literali IMMEDIATE basılır → genişliği bağlamdan bağımsız doğrudur
+// ve bu yol ZATEN çalışıyordu. Kusur yalnız literal ARİTMETİĞİ bir register
+// materyalize ettiğinde görünür: alt-ağaç i32'de üretilip sonra genişletilirse
+//   • karşılaştırma bağlamında → `icmp eq i64 %a, %b(i32)` = GEÇERSİZ IR (gürültülü),
+//   • annotasyonlu bildirimde → `add i32 4294967296, 8` = LLVM SESSİZCE kırpar
+//     (0 + 8 = 8), sonra sext → SESSİZ YANLIŞ CEVAP.
+// İkinci hâl tehlikeli olan: ne hata ne uyarı, yalnız yanlış sayı.
+//
+// Değer-duyarlı falsifiye: her dal i32'de üretilirse TERS sonuç verir.
+// Beklenen exit = 42.
+işlev main() -> tam32 {
+    değişken toplam: tam32 = 0;
+
+    // --- Dal 1: annotasyonlu bildirim, i32'ye SIĞMAYAN literal aritmetiği ---
+    // i32'de üretilirse 4294967296 → 0'a kırpılır, sonuç 8 olur (≠ beklenen).
+    değişken a: tam64 = 4294967296 + 8;          // 2^32 + 8
+    eğer a == 4294967304 { toplam = toplam + 20; }
+
+    // --- Dal 2: karşılaştırma bağlamı, salt-literal aritmetik sağ tarafta ---
+    // i32'de kalırsa icmp operand tipleri uyuşmaz → IR link EDİLEMEZ.
+    değişken b: tam64 = 0 - 56;
+    eğer b == (0 - 56) { toplam = toplam + 12; }
+
+    // --- Dal 3: iç içe literal aritmetiği (dıştan gelen zorlama İNMELİ) ---
+    // `(1 + (2 * 3))` alt-ağacının TAMAMI tam64 genişliğinde üretilmeli.
+    değişken c: tam64 = 4294967296;
+    eğer (c + (1 + 2 * 3)) == 4294967303 { toplam = toplam + 5; }
+
+    // --- Dal 4: TİPLİ operand varsa zorlama OLMAMALI (muhafazakârlık kapısı) ---
+    // `c` bir DEĞİŞKEN → alt-ağaç salt-literal DEĞİL → eski yol; sonuç yine doğru.
+    değişken d: tam32 = 5;
+    eğer (d * 2) == 10 { toplam = toplam + 5; }
+
+    ver toplam;
+}

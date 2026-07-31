@@ -4635,7 +4635,22 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken eski_lbr: metin = p.lam_bek_ret;
         eğer annot == 1 { eğer metin_esit(vtip, "{ ptr, ptr }") { p.lam_bek_ret = vic; } }
         p.son_lam_ret = "";   // D-325
-        değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + cs - 1));
+        // D-348: annotasyonlu bildirimde değer SALT-LİTERAL aritmetik ise annotasyonun
+        // genişliğinde üret. Olmadan i32'de üretilip sext ediliyordu:
+        // `değişken x: tam64 = 4294967296 + 8;` → `add i32 4294967296, 8` — LLVM bunu
+        // SESSİZCE kırpar (0 + 8 = 8) → SESSİZ YANLIŞ CEVAP (ölçüldü: exit 7, doğrusu 42).
+        // Bu, IKILI'daki literal-genişlik kusuruyla AYNI sınıf; orada geçersiz IR
+        // (gürültülü), burada sessiz — bu yüzden ayrıca kapatılır.
+        değişken eski_lit2: metin = p.lit_ll;
+        değişken vson: tam32 = dizi_al(p.cocuk, cb + cs - 1);
+        eğer annot == 1 {
+            eğer tamsayi_lit_ifade_mi(p, vson) == 1 {
+                eğer metin_esit(vtip, "i8") veya metin_esit(vtip, "i16")
+                  veya metin_esit(vtip, "i32") veya metin_esit(vtip, "i64") { p.lit_ll = vtip; }
+            }
+        }
+        değişken v: metin = ifade_uret(p, vson);
+        p.lit_ll = eski_lit2;   // RESET (sızdırma)
         // D-325: ANNOTASYONSUZ kapanış — dönüş IR'ı lambda'dan çıkarsandı; çağrı yeri
         // bunu cg_aic'ten okur. Yazılmazsa çağrı "i32" varsayar → imza uyuşmazlığı.
         eğer annot == 0 {

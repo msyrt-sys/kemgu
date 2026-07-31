@@ -37,24 +37,44 @@ SIRASINI bozardı. Tahmin çözemezse "" döner → zorlama yok = eski davranı�
 Miras kuralı: bir IKILI'nın KENDİSİ salt-literal ise dıştan gelen zorlama iç
 literallere iner (`x == (1 + 2 * 3)`); tipli tarafa asla sızmaz.
 
-**Kapsam/sınırlar:** `değişken x: tam64 = 0 - 56;` (annotasyonlu bildirim) hâlâ
-`sub i32` + `sext` üretir — GEÇERLİ IR ve i32'ye sığan değerler için DOĞRU; C'nin
-`add i64` biçiminden farklı ama semantik eşdeğer. i32'ye sığmayan literal aritmetiği
-bu yolda hâlâ kırpar (`int_uydur` yorumundaki mevcut sınır, D-299 `i64_genislet`
-dersiyle aynı sınıf) — ayrı iş.
+**AÇIK 2b — aynı kusurun SESSİZ hâli (annotasyonlu bildirim).** İlk taslakta bu yol
+"geçerli IR, semantik eşdeğer, ayrı iş" diye SINIR olarak kaydedilmişti. **Ölçüm bunu
+çürüttü:** `değişken x: tam64 = 4294967296 + 8;` → self-host `add i32 4294967296, 8`.
+LLVM bu taşan immediate'i **sessizce kırpar** (0 + 8 = 8), sonra `sext` → exit **7**,
+doğrusu 42 (C: `add i64`). Ne hata ne uyarı — AÇIK 2 ile aynı kusur, ama karşılaştırma
+bağlamında GÜRÜLTÜLÜ (geçersiz IR), bildirim bağlamında SESSİZ. Bu yüzden ayrıca
+kapatıldı: annotasyonlu bildirimde değer alt-ağacı salt-literal ise `p.lit_ll`
+annotasyonun genişliğine kurulur (ve RESET edilir).
+
+**DERS (D-295'in tekrarı):** "geçerli IR üretiyor" ile "doğru cevap veriyor" AYNI ŞEY
+DEĞİLDİR. Bir sınırı kaydetmeden ÖNCE ölç — burada sınır diye yazılan şey aslında
+sessiz bir miscompile'dı ve yalnız akıl yürütmeyle "eşdeğer" ilan edilmişti.
+LLVM'in taşan immediate'i sessizce kabul etmesi, D-295'teki "declare imza uyuşmazlığını
+sessizce kabul eder" bulgusuyla aynı sınıf: **LLVM bir savunma mekanizması değildir.**
+
+**Kapsam/sınırlar:** Zorlama yalnız SALT-LİTERAL alt-ağaçlara uygulanır; bir değişken/
+çağrı/erişim/`olarak` görülür görülmez devre dışı (muhafazakârlık kapısı korpusta
+Dal 4 ile ölçülür). `int_ll_tahmin` yalnız TANIMLAYICI / `olarak` / doğrudan çağrı
+dönüşünü çözer; çözemediğinde "" → zorlama yok = eski davranış.
 
 **Testler:** `cg_deref_genislik.kem` artık İKİ ekseni de ölçer (genişlik dalları
 <128 bayt kullanır → sext=zext; işaretlilik dalları 0xC8 kullanır → genişlik
-doğruyken bile zext/sext'i ayırt eder), exit 42 = 20+2+15+5. `calistir_codegen_diff`
-112/112, `calistir_checker_diff` 59/59, `calistir_check_kapisi` 207/216 (0 RED),
-`calistir_self_driver` tüm modlar, `calistir_codegen_bootstrap` FIXPOINT
-(stage1==stage2, 47519 satır). C derleyiciye DOKUNULMADI.
+doğruyken bile zext/sext'i ayırt eder), exit 42 = 20+2+15+5. YENİ:
+`cg_literal_genislik.kem` (4 dal: taşan literal bildirimi / karşılaştırma / iç içe
+literal / tipli-operand muhafazakârlık kapısı), exit 42 = 20+12+5+5; `--check` de
+geçer (tip kapısı muafiyeti DEĞİL). Korpus **112 → 113**.
+`calistir_codegen_diff` 113/113, `calistir_checker_diff` 59/59,
+`calistir_check_kapisi` 208/217 (0 RED), `calistir_codegen_bootstrap` FIXPOINT
+(stage1==stage2, 47610 satır), `calistir_self_driver` tüm modlar,
+`make test_tumu` exit 0 / 0 kırmızı / 0 ASan. C derleyiciye DOKUNULMADI.
 
-**Sabotaj doğrulaması:** (1) `ifade_isz` deref* dalı `ver 0`'a çevrildi → korpus
-exit 42→**27** (işaretlilik dalı düştü). (2) `zsag` zorlaması kaldırıldı → KEMGU IR
-link EDİLEMEDİ, harness 112/112→**111/112**. Her iki sabotajın kaynağa gerçekten
-uygulandığı `grep -c` ile 1 sayılarak kanıtlandı; sonra dosya birebir geri alındı
-(`grep -c SABOTAJ` = 0).
+**Sabotaj doğrulaması (3/3):** (1) `ifade_isz` deref* dalı `ver 0`'a çevrildi →
+`cg_deref_genislik` exit 42→**27** (işaretlilik dalı düştü). (2) `zsag` zorlaması
+kaldırıldı → KEMGU IR link EDİLEMEDİ, harness 112/112→**111/112**. (3) bildirim
+zorlaması (`p.lit_ll = vtip`) kaldırıldı → `cg_literal_genislik` exit 42→**22**,
+**link TEMİZ** — yani bu kapı sessiz hâli gerçekten yakalıyor (gürültüye
+güvenmiyor). Üç sabotajın da kaynağa uygulandığı `grep -c` ile 1 sayılarak
+kanıtlandı; her birinden sonra dosya birebir geri alındı (`grep -c SABOTAJ` = 0).
 
 ---
 
