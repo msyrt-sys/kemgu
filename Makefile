@@ -1052,6 +1052,21 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 			echo "  FAIL: arm,gic-400 uyumlu adi bulunamadi (RPi GIC'i kesfedilemez)"; exit 1; \
 		fi; \
 		echo "  (2/1 hucreli + arm,gic-400 DTB dogru okundu -> hucre sayisi kokten geliyor)"; \
+		rm -f $(BUILD)/ust2g.out; \
+		timeout 30 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 2048 \
+			-global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/ust2g.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
+		if ! grep -q "MAP  = 0x400 blok" $(BUILD)/ust2g.out 2>/dev/null; then \
+			echo "  FAIL: -m 2048 icin 1024 (0x400) blok bekleniyordu (tek-L2 tavani geri mi geldi?)"; \
+			grep -E "RAM|MAP" $(BUILD)/ust2g.out 2>/dev/null | sed 's/^/    /'; exit 1; \
+		fi; \
+		if ! grep -q "\[24\] UST BELLEK OK" $(BUILD)/ust2g.out 2>/dev/null; then \
+			echo "  FAIL: -m 2048'de 1 GiB otesi RAM'e yazip okunamadi"; \
+			grep -E "\[24\]" $(BUILD)/ust2g.out 2>/dev/null | sed 's/^/    /'; exit 1; \
+		fi; \
+		echo "  (-m 2048: 0x400 blok + 1 GiB otesine yaz/oku BASARILI -> coklu L2 canli)"; \
 	else \
 		echo "  (dtc/qemu yok — hucre-sayisi kapisi atlandi)"; \
 	fi

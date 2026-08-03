@@ -815,6 +815,21 @@ işlev main() -> tam32 {
         uart_satir("[23] YERLESIM HATA");
     }
 
+    // [24] UST BELLEK (AH-5): 1 GiB'in ötesindeki RAM gerçekten haritalı mı?
+    // MAP sayacı yalnız basılan bir sayı; kanıt ikinci L2'nin kapsadığı adrese
+    // yazıp geri okumak. 128 MiB'lik varsayılan koşumda uygulanamaz — bu ATLANDI
+    // olarak GÖRÜNÜR yazılır, sessizce geçilmez.
+    değişken ust: tam32 = kmmu_ust_bellek_testi();
+    eğer ust == 1 {
+        uart_satir("[24] UST BELLEK OK (>1 GiB haritali)");
+    } değilse {
+        eğer ust == 2 {
+            uart_satir("[24] UST BELLEK ATLANDI (RAM <= 1 GiB)");
+        } değilse {
+            uart_satir("[24] UST BELLEK HATA");
+        }
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {
