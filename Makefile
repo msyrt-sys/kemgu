@@ -1420,6 +1420,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "CEKIRDEK W\^X OK" $(BUILD)/kem_os.out \
 		   && grep -q "DTB OK" $(BUILD)/kem_os.out \
 		   && grep -q "DTB KESIF OK" $(BUILD)/kem_os.out \
+		   && grep -q "YERLESIM OK" $(BUILD)/kem_os.out \
 		   && grep -q "DISK RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \

@@ -800,6 +800,21 @@ işlev main() -> tam32 {
         uart_satir("[22] DTB KESIF HATA");
     }
 
+    // [23] YERLESIM (AH-4b): L1 yuvaları artık sabit değil, adresten hesaplanıyor.
+    // Politika saf hesap olduğu için RASPBERRY PI 4 sayılarıyla da burada, kart
+    // elde olmadan doğrulanıyor. Sabit "L1[0]=cihaz, L1[1]=RAM" varsayımı Pi
+    // satırlarının hiçbirini tutturamaz.
+    uart_metin("     L1: RAM yuva="); uart_onaltilik(kmmu_l1_idx(KMMU_RAM) olarak dtam64);
+    uart_metin(" UART yuva="); uart_onaltilik(kmmu_l1_idx(kmmu_uart_taban()) olarak dtam64);
+    uart_metin(" cekirdek blok="); uart_onaltilik(kmmu_kernel_blok(KMMU_RAM, kmmu_text_bas()) olarak dtam64);
+    uart_satir("");
+    değişken yer_ok: tam32 = kmmu_yerlesim_testi();
+    eğer yer_ok == 1 {
+        uart_satir("[23] YERLESIM OK (virt + RPi4 sayilari)");
+    } değilse {
+        uart_satir("[23] YERLESIM HATA");
+    }
+
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

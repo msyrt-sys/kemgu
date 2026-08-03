@@ -118,6 +118,41 @@ sabit KMMU_UART_SLOT: tam64 = 1157640280;  // 0x45003058
 sabit KMMU_GICD_SLOT: tam64 = 1157640288;  // 0x45003060
 sabit KMMU_GICC_SLOT: tam64 = 1157640296;  // 0x45003068
 
+// ============================================================================
+// AH-4b: YERLEŞİM POLİTİKASI — saf hesap, donanımdan bağımsız.
+// ----------------------------------------------------------------------------
+// Bugüne kadar sayfa tablosu yerleşimi QEMU virt'e GÖMÜLÜYDÜ: "L1[0] = cihaz,
+// L1[1] = RAM". Raspberry Pi 4'te RAM 0x0'da, çevre birimleri 0xFE000000'da —
+// yani ikisi de YANLIŞ yuvaya düşer ve çekirdek ilk erişimde ölür.
+//
+// SORUN: RAM'i 0x0'da olan bir kartı QEMU virt'te DOĞRULAYAMAYIZ (virt'te RAM
+// daima 0x40000000). Yazılıp doğrulanamayan kod, bu projenin kaçındığı şey.
+// ÇÖZÜM: yerleşim KARARINI saf işlevlere ayır. Bu işlevler hiçbir donanıma
+// dokunmaz, yalnız (adres) → (yuva) hesabı yapar; dolayısıyla RASPBERRY PI
+// SAYILARIYLA DA test edilebilir — kart elde olmadan. Donanıma uygulama ayrı
+// bir adım ve zaten QEMU virt'te ölçülüyor.
+sabit KMMU_1GB: tam64 = 1073741824;         // her L1 girişi 1 GiB kapsar
+
+// Bir fiziksel adres hangi L1 yuvasına düşer? (4KB granül, 39-bit VA → L1 = 1 GiB)
+çıplak işlev kmmu_l1_idx(adr: tam64) -> tam64 { ver adr / KMMU_1GB; }
+
+// Bir adres, RAM'in kapsadığı L1 yuvasında mı? (cihaz yuvası mı RAM yuvası mı
+// ayrımı için — aynı yuvaya hem Device blok hem RAM tablosu koyulamaz.)
+çıplak işlev kmmu_ayni_yuva(a: tam64, b: tam64) -> tam32 {
+    eğer kmmu_l1_idx(a) == kmmu_l1_idx(b) { ver 1; }
+    ver 0;
+}
+
+// Çekirdek imajının, RAM tabanına göre kaçıncı 2MB bloğunda olduğu. Eskiden
+// "blok 0" VARSAYILIYORDU; QEMU virt'te (kernel 0x40000000 = RAM tabanı) ve
+// RPi'de (kernel 0x80000, RAM tabanı 0 → yine blok 0) doğru çıkıyor, ama
+// varsayım olarak bırakmak yerine HESAPLANIYOR — yükleme adresi değişirse
+// sessizce yanlış sayfaya W^X uygulamak istemeyiz.
+çıplak işlev kmmu_kernel_blok(ram_tabani: tam64, kernel_adr: tam64) -> tam64 {
+    eğer kernel_adr < ram_tabani { ver 0; }
+    ver (kernel_adr - ram_tabani) / KMMU_2MB;
+}
+
 // Tüketicilerin çağıracağı erişimciler. Yuva 0 ise (kdl_mmu_kur henüz koşmadı)
 // derleme-zamanı sabitine düşülür — boot'un en erken anında bile UART çalışır.
 çıplak işlev kmmu_uart_taban() -> tam64 {
@@ -223,9 +258,25 @@ sabit KMMU_GICC_SLOT: tam64 = 1157640296;  // 0x45003068
         kmmu_y64(KMMU_K_L3 + s * 8, va + tan);
         s = s + 1;
     }
-    kmmu_y64(KMMU_L2, KMMU_K_L3 + 3);                               // L2[0] → çekirdek L3
-    kmmu_y64(KMMU_L1, 1025);                                         // L1[0] Device (0x401)
-    kmmu_y64(KMMU_L1 + 8, KMMU_L2 + 3);                             // L1[1] → L2 tablo (0x3)
+    // AH-4b: L1 yuvaları artık SABİT DEĞİL, keşfedilen adreslerden hesaplanıyor.
+    // Eskiden "L1[0]=cihaz, L1[1]=RAM" gömülüydü — QEMU virt'in yerleşimi. RPi 4'te
+    // RAM 0x0'da (yuva 0), çevre birimleri 0xFE000000'da (yuva 3); gömülü hâliyle
+    // çekirdek ilk erişimde ölürdü.
+    değişken kb: tam64 = kmmu_kernel_blok(KMMU_RAM, kmmu_text_bas());
+    kmmu_y64(KMMU_L2 + kb * 8, KMMU_K_L3 + 3);                      // çekirdek bloğu → L3
+
+    değişken ram_yuva: tam64 = kmmu_l1_idx(KMMU_RAM);
+    kmmu_y64(KMMU_L1 + ram_yuva * 8, KMMU_L2 + 3);                  // RAM yuvası → L2
+
+    // Cihaz yuvaları: UART ve GIC'in düştüğü 1 GiB bölgeleri Device blok yap.
+    // RAM yuvasıyla ÇAKIŞIRSA dokunma — orada zaten L2 tablosu var ve onu
+    // Device blokla ezmek RAM'i haritasız bırakırdı (sessiz ölüm).
+    değişken uy: tam64 = kmmu_l1_idx(kmmu_o64(KMMU_UART_SLOT));
+    eğer uy != ram_yuva { kmmu_y64(KMMU_L1 + uy * 8, uy * KMMU_1GB + 1025); }
+    değişken gy: tam64 = kmmu_l1_idx(kmmu_o64(KMMU_GICD_SLOT));
+    eğer gy != ram_yuva { kmmu_y64(KMMU_L1 + gy * 8, gy * KMMU_1GB + 1025); }
+    değişken gcy: tam64 = kmmu_l1_idx(kmmu_o64(KMMU_GICC_SLOT));
+    eğer gcy != ram_yuva { kmmu_y64(KMMU_L1 + gcy * 8, gcy * KMMU_1GB + 1025); }
     değişken mair: tam64 = 65280;                                    // 0xFF00
     değişken tcr: tam64 = 4303369497;                              // 0x100803519
     değişken sbit: tam64 = 4101;                                   // 0x1005 (SCTLR M|C|I)
@@ -348,6 +399,12 @@ sabit KMMU_K_VERI: tam64 = 27021597764224775;
 
 // Linker sembolleri inline-asm ile okunur (.kem `küresel` internal-linkage
 // olduğu için bunlar C/linker tarafında tanımlı kalır — D-276 deseni).
+çıplak işlev kmmu_text_bas() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, __text_start
+add $0, $0, :lo12:__text_start"# çıktı("=r", &x) } }
+    ver x;
+}
 çıplak işlev kmmu_text_son() -> tam64 {
     değişken x: tam64 = 0;
     güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, __text_end
@@ -479,6 +536,38 @@ isb"#
         ver 1;
     }
     ver 0;
+}
+
+// AH-4b kapısı: YERLEŞİM POLİTİKASI doğru mu — hem QEMU virt hem RASPBERRY PI 4
+// sayılarıyla. Politika saf hesap olduğu için Pi elde olmadan da ölçülebilir;
+// asıl kazanç bu. (Donanıma uygulama ayrı ve QEMU virt'te zaten ölçülüyor.)
+//
+// QEMU virt : RAM 0x40000000 → yuva 1 | UART 0x09000000 → yuva 0 | GIC 0x08000000 → 0
+// RPi 4     : RAM 0x00000000 → yuva 0 | UART 0xFE201000 → yuva 3 | GIC 0xFF841000 → 3
+// Çekirdek bloğu: virt'te 0x40000000-0x40000000 = blok 0; RPi'de 0x80000-0 = blok 0.
+//
+// Sabit "L1[0]=cihaz, L1[1]=RAM" varsayımı RPi satırının HİÇBİRİNİ tutturamaz.
+çıplak işlev kmmu_yerlesim_testi() -> tam32 {
+    // --- QEMU virt ---
+    eğer kmmu_l1_idx(1073741824) != 1 { ver 0; }        // RAM 0x40000000
+    eğer kmmu_l1_idx(150994944) != 0 { ver 0; }         // UART 0x09000000
+    eğer kmmu_l1_idx(134217728) != 0 { ver 0; }         // GICD 0x08000000
+    eğer kmmu_kernel_blok(1073741824, 1073741824) != 0 { ver 0; }
+    // --- Raspberry Pi 4 (BCM2711, low-peripheral) ---
+    eğer kmmu_l1_idx(0) != 0 { ver 0; }                 // RAM 0x00000000
+    eğer kmmu_l1_idx(4263313408) != 3 { ver 0; }        // UART 0xFE201000
+    eğer kmmu_l1_idx(4287176704) != 3 { ver 0; }        // GICD 0xFF841000
+    eğer kmmu_l1_idx(4287180800) != 3 { ver 0; }        // GICC 0xFF842000
+    eğer kmmu_kernel_blok(0, 524288) != 0 { ver 0; }    // kernel8.img @ 0x80000
+    // RPi'de RAM yuvası (0) ile cihaz yuvası (3) FARKLI olmalı — aynı olsaydı
+    // Device blok RAM tablosunu ezerdi.
+    eğer kmmu_ayni_yuva(0, 4263313408) != 0 { ver 0; }
+    // QEMU virt'te de farklı (1 vs 0).
+    eğer kmmu_ayni_yuva(1073741824, 150994944) != 0 { ver 0; }
+    // 2 GiB RAM'li bir Pi'de 1 GiB'lik ikinci bölge yuva 1'e düşer (tek L2
+    // sınırımızın nerede devreye girdiğini kayda geçirir).
+    eğer kmmu_l1_idx(1073741824 + 1) != 1 { ver 0; }
+    ver 1;
 }
 
 // GERÇEK fault-gate: haritasız VA oku → .S recovery → FAR doğru + kurtarıldı mı?
