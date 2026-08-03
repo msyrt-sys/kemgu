@@ -1,0 +1,66 @@
+/*
+ * AH-6 FALSİFİYE GİRDİSİ: cihazlar bir `soc` veri yolunun ALTINDA ve adresleri
+ * ÇOCUK adres uzayında yazılı — Raspberry Pi'nin gerçek yapısı.
+ * ============================================================================
+ * Gerçek bcm2711 ağacında:
+ *     soc { ranges = <0x7e000000 0x0 0xfe000000 0x01800000>;
+ *           serial@7e201000 { compatible="arm,pl011"; reg=<0x7e201000 0x200>; }; }
+ * yani UART'ın reg'i 0x7e201000, GERÇEK CPU adresi 0xfe201000.
+ *
+ * Bu dosya AYNI YAPIYI kurar ama çeviri hedefini QEMU virt'in GERÇEK UART'ına
+ * (0x09000000) ayarlar. Böylece:
+ *   • Çeviri DOĞRU yapılırsa → 0x7e000000 → 0x09000000 → çekirdek konuşur.
+ *   • Çeviri YAPILMAZSA      → 0x7e000000 kullanılır → orası haritasız →
+ *     çekirdek TEK KARAKTER BASMAZ. Sessiz değil, tamamen ölü — ve bu tam
+ *     olarak gerçek bir Pi'de yaşanacak olan şey.
+ *
+ * Ayrıca `soc` kendi #address-cells/#size-cells'ini (1/1) tanımlar; kök 2/2
+ * kullanır. `reg` EBEVEYNİN hücreleriyle okunmazsa adres de bozulur — bu iki
+ * kusur (hücre sayısı + ranges) burada AYNI ANDA ölçülür.
+ *
+ * Üretim: dtc -I dts -O dtb -o build/soc_ranges.dtb test/dtb/soc_ranges.dts
+ */
+/dts-v1/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    compatible = "linux,dummy-virt";
+    model = "KEMGU AH-6 soc ranges testi";
+
+    memory@40000000 {
+        device_type = "memory";
+        reg = <0x0 0x40000000 0x0 0x8000000>;      /* 128 MiB, kök seviyesinde */
+    };
+
+    soc {
+        compatible = "simple-bus";
+        #address-cells = <1>;                       /* kökten FARKLI (2 değil) */
+        #size-cells = <1>;
+        /* çocuk 0x7e000000 → ebeveyn 0x09000000, 16 MiB pencere */
+        ranges = <0x7e000000 0x0 0x09000000 0x01000000>;
+
+        serial@7e000000 {
+            compatible = "arm,pl011", "arm,primecell";
+            reg = <0x7e000000 0x1000>;              /* → CPU 0x09000000 */
+        };
+
+        intc@7d000000 {
+            compatible = "arm,gic-400";
+            /* çocuk 0x7d000000 aralık DIŞI → çeviri yok, aynen kalır.
+             * Bu bilinçli: GIC'i kök seviyesinde tutmak yerine, aralık-dışı
+             * davranışın da (aynen bırak) ölçülmesini istiyoruz. */
+            reg = <0x7d000000 0x10000>;
+        };
+    };
+
+    /* GIC'in GERÇEK adresi kök seviyesinde ayrı bir düğümle verilir ki
+     * çekirdek zamanlayıcıyı kurabilsin (soc altındaki intc yalnız
+     * aralık-dışı davranışı ölçmek için var; ilk bulunan kazanır sırası
+     * gereği bu düğüm ONDAN ÖNCE gelmeli). */
+    intc@8000000 {
+        compatible = "arm,cortex-a15-gic";
+        reg = <0x0 0x8000000 0x0 0x10000
+               0x0 0x8010000 0x0 0x10000>;
+    };
+};

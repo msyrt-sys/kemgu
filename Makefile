@@ -1067,6 +1067,20 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 			grep -E "\[24\]" $(BUILD)/ust2g.out 2>/dev/null | sed 's/^/    /'; exit 1; \
 		fi; \
 		echo "  (-m 2048: 0x400 blok + 1 GiB otesine yaz/oku BASARILI -> coklu L2 canli)"; \
+		dtc -I dts -O dtb -o $(BUILD)/soc_ranges.dtb test/dtb/soc_ranges.dts 2>/dev/null; \
+		rm -f $(BUILD)/soc.out; \
+		timeout 25 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
+			-dtb $(BUILD)/soc_ranges.dtb -global virtio-mmio.force-legacy=false \
+			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-device virtio-blk-device,drive=d0 \
+			-serial file:$(BUILD)/soc.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
+		if ! grep -q "UART = 0x9000000" $(BUILD)/soc.out 2>/dev/null; then \
+			echo "  FAIL: soc/ranges cevirisi yapilmadi — UART cocuk adresinde kaldi"; \
+			echo "        (Raspberry Pi'de bu = cekirdek TEK KARAKTER BASMAZ)"; \
+			echo "        cikti $$(wc -c < $(BUILD)/soc.out 2>/dev/null) bayt:"; \
+			head -c 200 $(BUILD)/soc.out 2>/dev/null | sed 's/^/    /'; exit 1; \
+		fi; \
+		echo "  (soc altindaki 0x7e000000 -> 0x09000000 cevrildi -> ranges zinciri canli)"; \
 	else \
 		echo "  (dtc/qemu yok — hucre-sayisi kapisi atlandi)"; \
 	fi

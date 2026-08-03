@@ -257,6 +257,116 @@ sabit KDTB_SC_VARSAYILAN: tam64 = 1;
     ver kdtb_kok_hucre(dtb, "#size-cells", KDTB_SC_VARSAYILAN);
 }
 
+// ============================================================================
+// AH-6: VERİ YOLU (`ranges`) ADRES ÇEVİRİSİ — Raspberry Pi için ZORUNLU.
+// ----------------------------------------------------------------------------
+// QEMU virt cihazları kökün DOĞRUDAN çocuğudur; adresleri olduğu gibi CPU
+// adresidir. Raspberry Pi öyle DEĞİL: cihazlar bir `soc` veri yolunun altında
+// ve `reg` değerleri SoC'nin ÇOCUK adres uzayında yazılıdır:
+//     soc { ranges = <0x7e000000 0x0 0xfe000000 0x01800000>;
+//           serial@7e201000 { reg = <0x7e201000 0x200>; }; }
+// Yani UART'ın reg'i 0x7e201000, GERÇEK CPU adresi 0xfe201000. Çeviri
+// yapılmazsa keşif 0x7e201000 döner — var olmayan bir adres. Çekirdek oraya
+// yazar ve TEK KARAKTER BASMAZ; üstelik neden basmadığını da söyleyemez.
+//
+// İki şey gerekir: (1) bir düğümün EBEVEYNİNİ bilmek — `reg` daima EBEVEYNİN
+// #address-cells/#size-cells'i ile yorumlanır (kökünkiyle DEĞİL; şimdiye kadar
+// kök değerleri kullanılıyordu, bu yalnız kökün doğrudan çocukları için doğru);
+// (2) atadan ataya `ranges` uygulamak.
+sabit KDTB_YIGIN: tam64 = 1157640304;   // 0x45003070: ebeveyn yığını (16 seviye)
+sabit KDTB_DERINLIK_AZAMI: tam64 = 16;
+
+// Bir düğümün EBEVEYN düğümü (0 = kök ya da bulunamadı). Yapı bloğu düz
+// tarandığı için derinlik yığını tutulur: BEGIN_NODE iterken yığına yaz,
+// END_NODE'da azalt. Hedef düğüme varınca bir üst seviyedeki düğüm ebeveyndir.
+çıplak işlev kdtb_ebeveyn(dtb: tam64, dugum: tam64) -> tam64 {
+    değişken p: tam64 = kdtb_struct_bas(dtb);
+    değişken son: tam64 = p + kdtb_struct_boy(dtb);
+    değişken derinlik: tam64 = 0;
+    iken p < son {
+        değişken tok: tam64 = kdtb_be32(p);
+        eğer tok == 1 {
+            eğer p == dugum {
+                eğer derinlik == 0 { ver 0; }
+                ver kdtb_o64s(KDTB_YIGIN + (derinlik - 1) * 8);
+            }
+            eğer derinlik < KDTB_DERINLIK_AZAMI {
+                kdtb_y64(KDTB_YIGIN + derinlik * 8, p);
+            }
+            derinlik = derinlik + 1;
+            p = p + 4 + kdtb_hiz4(kdtb_strlen(p + 4) + 1);
+        } değilse {
+            eğer tok == 2 {
+                eğer derinlik > 0 { derinlik = derinlik - 1; }
+                p = p + 4;
+            } değilse {
+                eğer tok == 3 {
+                    p = p + 12 + kdtb_hiz4(kdtb_be32(p + 4));
+                } değilse {
+                    eğer tok == 9 { ver 0; }
+                    p = p + 4;
+                }
+            }
+        }
+    }
+    ver 0;
+}
+
+// Belirli bir DÜĞÜMÜN hücre-sayısı özelliği (kökünki değil). 0 düğüm = kök.
+çıplak işlev kdtb_dugum_hucre(dtb: tam64, dugum: tam64, ad: metin,
+                              varsayilan: tam64) -> tam64 {
+    eğer dugum == 0 { ver varsayilan; }
+    değişken v: tam64 = kdtb_prop_ara(dtb, dugum, ad);
+    eğer v == 0 { ver varsayilan; }
+    değişken n: tam64 = kdtb_be32(v);
+    eğer (n < 1) veya (n > 2) { ver varsayilan; }
+    ver n;
+}
+
+// Bir veri yolunun `ranges`ini uygula: ÇOCUK adresi → EBEVEYN adres uzayı.
+// ranges girdisi = <çocuk_adres[cac] ebeveyn_adres[pac] boyut[csc]>.
+//   • `ranges` YOK      → çeviri tanımsız; adres AYNEN döner (konservatif).
+//   • `ranges;` (boş)   → BİREBİR eşleme (spec) → adres aynen.
+//   • eşleşme yok       → aynen (aralık dışı; sessiz sıfırlamak daha kötü olurdu).
+çıplak işlev kdtb_ranges_cevir(dtb: tam64, vyolu: tam64, adr: tam64) -> tam64 {
+    eğer vyolu == 0 { ver adr; }
+    değişken r: tam64 = kdtb_prop_ara(dtb, vyolu, "ranges");
+    eğer r == 0 { ver adr; }
+    değişken uz: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
+    eğer uz == 0 { ver adr; }                       // boş ranges = birebir
+    değişken cac: tam64 = kdtb_dugum_hucre(dtb, vyolu, "#address-cells", kdtb_ac(dtb));
+    değişken csc: tam64 = kdtb_dugum_hucre(dtb, vyolu, "#size-cells", kdtb_sc(dtb));
+    değişken eb: tam64 = kdtb_ebeveyn(dtb, vyolu);
+    değişken pac: tam64 = kdtb_ac(dtb);
+    eğer eb != 0 { pac = kdtb_dugum_hucre(dtb, eb, "#address-cells", kdtb_ac(dtb)); }
+    değişken adim: tam64 = (cac + pac + csc) * 4;
+    eğer adim == 0 { ver adr; }
+    değişken k: tam64 = 0;
+    iken ((k + 1) * adim) <= uz {
+        değişken t: tam64 = r + k * adim;
+        değişken c: tam64 = kdtb_hucre_oku(t, cac);
+        değişken pp: tam64 = kdtb_hucre_oku(t + cac * 4, pac);
+        değişken sz: tam64 = kdtb_hucre_oku(t + (cac + pac) * 4, csc);
+        eğer (adr >= c) ve (adr < (c + sz)) { ver pp + (adr - c); }
+        k = k + 1;
+    }
+    ver adr;
+}
+
+// Düğümün adresini KÖKE kadar çevir: her ata veri yolunun `ranges`i sırayla
+// uygulanır. Derinlik sınırlı (8) — bozuk/döngüsel ağaçta sonsuza gitmez.
+çıplak işlev kdtb_cevir_zincir(dtb: tam64, dugum: tam64, adr: tam64) -> tam64 {
+    değişken a: tam64 = adr;
+    değişken n: tam64 = kdtb_ebeveyn(dtb, dugum);
+    değişken guard: tam64 = 0;
+    iken (n != 0) ve (guard < 8) {
+        a = kdtb_ranges_cevir(dtb, n, a);
+        n = kdtb_ebeveyn(dtb, n);
+        guard = guard + 1;
+    }
+    ver a;
+}
+
 // `reg`in i. (adres, boyut) çiftinin ADRESİ. Boyut KDTB_UZ_SLOT'a yazılır.
 // Aralık dışı → 0 (çöp okuma yok).
 çıplak işlev kdtb_reg_cift(dtb: tam64, dugum: tam64, i: tam64) -> tam64 {
@@ -264,15 +374,25 @@ sabit KDTB_SC_VARSAYILAN: tam64 = 1;
     değişken v: tam64 = kdtb_prop_ara(dtb, dugum, "reg");
     eğer v == 0 { ver 0; }
     değişken uz: tam64 = kdtb_o64s(KDTB_UZ_SLOT);
-    değişken ac: tam64 = kdtb_ac(dtb);
-    değişken sc: tam64 = kdtb_sc(dtb);
+    // AH-6: `reg` daima EBEVEYNİN hücre sayılarıyla yorumlanır — kökünkiyle
+    // DEĞİL. Önceki sürüm kök değerlerini kullanıyordu; bu yalnız kökün
+    // DOĞRUDAN çocukları için doğru (QEMU virt böyle). Raspberry Pi'de cihazlar
+    // `soc` altında ve orada hücre sayıları farklı → sessiz yanlış adres.
+    değişken eb: tam64 = kdtb_ebeveyn(dtb, dugum);
+    değişken ac: tam64 = kdtb_dugum_hucre(dtb, eb, "#address-cells", kdtb_ac(dtb));
+    değişken sc: tam64 = kdtb_dugum_hucre(dtb, eb, "#size-cells", kdtb_sc(dtb));
     değişken adim: tam64 = (ac + sc) * 4;
     eğer ((i + 1) * adim) > uz { kdtb_y64(KDTB_UZ_SLOT, 0); ver 0; }
     değişken taban: tam64 = v + i * adim;
     değişken adr: tam64 = kdtb_hucre_oku(taban, ac);
     değişken boy: tam64 = kdtb_hucre_oku(taban + ac * 4, sc);
+    // AH-6: çocuk adres uzayından CPU adres uzayına çevir (ata `ranges` zinciri).
+    // SIRA ÖNEMLİ: kdtb_cevir_zincir içeride kdtb_prop_ara("ranges") çağırır ve
+    // o da KDTB_UZ_SLOT'u EZER. Boyut bu yüzden çeviriden SONRA yazılır.
+    // (İlk sürümde ters sıradaydı ve RAM boyutu sessizce 0 oldu — kapı yakaladı.)
+    değişken cevrili: tam64 = kdtb_cevir_zincir(dtb, dugum, adr);
     kdtb_y64(KDTB_UZ_SLOT, boy);
-    ver adr;
+    ver cevrili;
 }
 
 // Geriye uyumlu erişimci: eski çağrı yerleri "i. 64-bit hücre" mantığıyla
