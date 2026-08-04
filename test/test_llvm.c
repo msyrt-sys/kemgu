@@ -120,6 +120,17 @@ static int derle_calistir_ic(const char *kemgu_kaynak, int tip_atla) {
                 "  \xe2\x9a\xa0 TIP BORCU KAPANDI (test_llvm.c:%d): bu program "
                 "artik --check'ten GECIYOR — cagriyi derle_ve_calistir'a geri "
                 "alin.\n", g_borc_satir);
+        } else if (getenv("KEMGU_BORC_DOKUM")) {
+            /* KEMGU_BORC_DOKUM=1 ile her acik borcun TANI KODUNU listele.
+             * Borcu kapatmak icin once SINIFLANDIRMAK gerekir; "14 borc var"
+             * bilgisi tek basina hangi checker kusurunun onarilacagini
+             * soylemez. Varsayilan kosumda sessiz — yalniz istendiginde. */
+            char dk[1024];
+            snprintf(dk, sizeof(dk),
+                     "%s --check %s 2>&1 | grep -m1 \"hata\\[\" "
+                     "| sed \"s|^|  BORC %d: |\" 1>&2",
+                     KEMGU_BIN, KEM_PATH, g_borc_satir);
+            if (system(dk) != 0) { /* grep eslesmezse sessiz */ }
         }
     }
 
@@ -919,7 +930,7 @@ static void test_kesirli64(void) {
 }
 
 static void test_kesirli32(void) {
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev hesap(x: kesirli32) -> kesirli32 { ver x + 21.0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken r: kesirli32 = hesap(21.0); "
@@ -1747,26 +1758,28 @@ static void test_mmio_sabit_adres(void) {
 
 static void test_mmio16_round_trip(void) {
     /* 16-bit yaz 42 -> oku16 -> exit. ver: tam16 (i16) -> tam32 (sext). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz16(y, 4096, 42);\n"
         "  de\xc4\x9fi\xc5\x9fken v: tam16 = mmio_oku16(y, 4096);\n"
         "  geri_al(y);\n"
-        "  ver v;\n"
+        /* KEMGU'da ORTUK DONUSUM YOK (ASLA listesi): tam16 -> tam32 acik
+         * `olarak` ister. Checker HAKLIYDI; test programi gecersizdi. */
+        "  ver v olarak tam32;\n"
         "}");
     test_sonuc("mmio16 yaz 42 -> oku16 -> exit 42", rc == 42);
 }
 
 static void test_mmio64_round_trip(void) {
     /* 64-bit yaz 42 -> oku64 -> exit. ver: tam64 (i64) -> tam32 (trunc). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz64(y, 8192, 42);\n"
         "  de\xc4\x9fi\xc5\x9fken v: tam64 = mmio_oku64(y, 8192);\n"
         "  geri_al(y);\n"
-        "  ver v;\n"
+        "  ver v olarak tam32;\n"
         "}");
     test_sonuc("mmio64 yaz 42 -> oku64 -> exit 42", rc == 42);
 }
@@ -1776,7 +1789,7 @@ static void test_mmio16_komsu_ayrisir(void) {
      * 4098 AYNI kelimeye duser (4096>>2 == 4098>>2 == 1024); ikinci yaz
      * birinciyi ezer -> oku16(4096)=32 -> toplam 64 (eski exit-5 sinifi hata).
      * Byte-adreslenebilir mock'ta ayri slotlar: 10 + 32 = 42. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 {\n"
         "  de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3);\n"
         "  mmio_yaz16(y, 4096, 10);\n"
@@ -1784,7 +1797,7 @@ static void test_mmio16_komsu_ayrisir(void) {
         "  de\xc4\x9fi\xc5\x9fken a: tam16 = mmio_oku16(y, 4096);\n"
         "  de\xc4\x9fi\xc5\x9fken b: tam16 = mmio_oku16(y, 4098);\n"
         "  geri_al(y);\n"
-        "  ver a + b;\n"
+        "  ver (a + b) olarak tam32;\n"
         "}");
     test_sonuc("mmio16 komsu alanlar ayrisir (eski exit-5 cakismasi duzeldi) -> 42",
                rc == 42);
@@ -1837,13 +1850,13 @@ static void test_struct_alan_atama(void) {
      * (DUGUM_ATAMA yalniz tanimlayici hedef taniyordu) -> D4/D5
      * blk_yapilandirma cfg alanlari hep 0 kalirdi. Hem lokal struct
      * hem &degisken referans param hedefi dogrulanir. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "yap\xc4\xb1 K { a: tam32; b: tam64; } "
         "i\xc5\x9flev doldur(k: &de\xc4\x9fi\xc5\x9fken K) -> tam32 { "
         "k.a = 40; k.b = 2; ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: K = K { a: 0, b: 0 }; "
-        "doldur(&k); "
+        "doldur(&değişken k); "
         "ver k.a + (k.b olarak tam32); }");
     test_sonuc("alan atama: &degisken ref uzerinden mutasyon -> exit 42",
                rc == 42);
@@ -1853,11 +1866,14 @@ static void test_yetki_delege_abi(void) {
     /* Init-test koku #2: %kdl_yetki (16B) IR<->C sinirinda first-class
      * arg gecirilirdi; Win64 C ABI pointer bekler -> kdl_yetki_delege
      * prologunda segfault. Fix: sret/ptr C-uyumlu imzalar. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
         "de\xc4\x9fi\xc5\x9fken y1: yetki<MMIO> = delege(y, 3); "
         "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y1, 1); "
+        /* yetki<R> LINEER: her biri geri_al ister. Eksikti -> CP005. Checker
+         * HAKLIYDI (sizinti gercek); test programi gecersizdi. */
+        "geri_al(y2); geri_al(y1); geri_al(y); "
         "ver 42; }");
     test_sonuc("yetki_olustur + delege zinciri (Win64 C ABI) -> exit 42",
                rc == 42);
@@ -2044,9 +2060,12 @@ static void test_matris_de_karsilikli_ozyineleme(void) {
 static void test_matris_e_yetki_param_sinir(void) {
     /* Matris E: yetki<R> fonksiyon SINIRINDA pass-through (Win64 sret
      * ABI yolu calismaya devam — &Struct fix sonrasi). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev kullan_yetki(y: yetki<MMIO>) -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y, 1); ver 42; } "
+        /* Cagrilan, hem delege ettigini hem DEVRALDIGI yetkiyi geri_al eder;
+         * yetki<R> lineer. Eksikti -> CP005; checker HAKLIYDI. */
+        "de\xc4\x9fi\xc5\x9fken y2: yetki<MMIO> = delege(y, 1); "
+        "geri_al(y2); geri_al(y); ver 42; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken y: yetki<MMIO> = yetki_olustur(6, 3); "
         "ver kullan_yetki(y); }");
@@ -2813,13 +2832,19 @@ static void test_gorev_yakalamali(void) {
 
 static void test_gorev_coklu(void) {
     /* Iki es zamanli gorev: handle'lar ve sonuclar karismamali (20+22=42). */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    /* Ic ICE gorev: IC `hata` kolu, DIS gorevi (a) birlestirmeden cikamaz —
+     * cikarsa ikinci spawn basarisiz oldugunda birinci gorev asla join
+     * EDILMEZ (liveness sizintisi). Checker bunu L005 ile HAKLI olarak
+     * reddediyordu; GB_KAPA'nin genel `ver 1;` kolu bu ic-ice sekilde
+     * yetersizdi. Ic kol acikca yazildi. */
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
         GB_AC("a", "|| 20")
         GB_AC("b", "|| 22")
         "ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a) + "
         "g\xc3\xb6rev_birle\xc5\x9f" "tir(b); "
-        GB_KAPA GB_KAPA
+        " } hata(gb_e2) => { ver g\xc3\xb6rev_birle\xc5\x9f" "tir(a); } } "
+        GB_KAPA
         "ver 99; }");
     test_sonuc("iki es zamanli gorev (20+22) -> exit 42", rc == 42);
 }

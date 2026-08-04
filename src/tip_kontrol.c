@@ -1001,6 +1001,38 @@ static TipBilgisi *t_basit(TipKontrol *tk, TipKategorisi k) {
  * MUHAFAZAKAR: bir DEGISKEN, cagri, alan erisimi veya `olarak` donusumu
  * gorulur gormez 0 doner — yani yalnizca literaller uyum saglar, tipli
  * ifadeler ESKISI GIBI hata verir (sessiz genislemeye kapi acilmaz). */
+/* Bir tip kesirli mi (kesirli32/64)? tip_tamsayi_mi'nin float ikizi. */
+static int tip_kesirli_mi(const TipBilgisi *t) {
+    if (!t) return 0;
+    return t->kategori == TIP_KESIRLI32 || t->kategori == TIP_KESIRLI64;
+}
+
+/* TIPSIZ kesirli LITERAL IFADESI mi? tamsayi_literal_ifade_mi'nin float ikizi.
+ * Kesirli literaller DAIMA kesirli64'e duser (baglamsiz varsayilan); `21.0f`
+ * gibi bir genislik son-eki YOK. Bu yuzden `kesirli32 x; x + 21.0` programcinin
+ * duzeltemeyecegi bir T001 uretiyordu. */
+static int kesirli_literal_ifade_mi(const Dugum *d) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_KESIRLI:
+            return 1;
+        case DUGUM_TEKLI:
+            return d->veri.tekli.op == OP_NEG &&
+                   kesirli_literal_ifade_mi(d->veri.tekli.operand);
+        case DUGUM_IKILI:
+            switch (d->veri.ikili.op) {
+                case OP_ARTI: case OP_EKSI: case OP_CARPI:
+                case OP_BOLU: case OP_MOD:
+                    return kesirli_literal_ifade_mi(d->veri.ikili.sol) &&
+                           kesirli_literal_ifade_mi(d->veri.ikili.sag);
+                default:
+                    return 0;
+            }
+        default:
+            return 0;
+    }
+}
+
 static int tamsayi_literal_ifade_mi(const Dugum *d) {
     if (!d) return 0;
     switch (d->tip) {
@@ -2307,6 +2339,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
                 } else if (tamsayi_literal_ifade_mi(d->veri.ikili.sag) &&
                            tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
+                           !tip_esit(sol, sag)) {
+                    sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
+                }
+                /* KESIRLI ikizi: `kesirli32 x; x + 21.0` T001 veriyordu, cunku
+                 * kesirli literal DAIMA kesirli64'e dusuyor ve yukaridaki kural
+                 * yalniz TAMSAYI literallerini kapsiyordu. Tamsayi tarafinda
+                 * cozulen sorunun (D-343) float ikizi; ayni muhafazakarlik:
+                 * yalnizca TIPSIZ literal agaci uyum saglar, tipli bir operand
+                 * varsa red ESKISI GIBI surer. `21.0f` gibi bir sozdizimi YOK,
+                 * yani programcinin baska caresi de yoktu. */
+                else if (kesirli_literal_ifade_mi(d->veri.ikili.sol) &&
+                         tip_kesirli_mi(sol) && tip_kesirli_mi(sag) &&
+                         !tip_esit(sol, sag)) {
+                    sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
+                } else if (kesirli_literal_ifade_mi(d->veri.ikili.sag) &&
+                           tip_kesirli_mi(sol) && tip_kesirli_mi(sag) &&
                            !tip_esit(sol, sag)) {
                     sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
                 }
