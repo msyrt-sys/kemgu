@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-349 [YÜKSEK] — `güvensiz` blokta `(&x) olarak *T`: referanstan ham işaretçi (2026-08-04)
+
+**Karar [Mehmet; ETKİ: `src/tip_kontrol.c`, `test/test_tip_kontrol.c` (+3),
+`test/test_llvm.c`, `test/check_kapisi.sh`.]**
+
+**Neden:** Yerel bir değişkenin ham adresini almanın **hiçbir yasal yolu yoktu**
+— `oku(&x)` → T001, `(&x) olarak *tam32` → E002. Boşluk `--tip-atla` ile
+dolduruluyordu: aynı yetki **hiçbir işaret bırakmadan** veriliyordu. Verilebilecek
+en kötü biçimdi.
+
+**Kural:** `güvensiz` blok içinde `&T`/`&değişken T` → `*U`. IR'da **no-op**
+(opak işaretçi modelinde ikisi de `ptr`); ayrım yalnız tip sisteminde ve amacı
+bu. Artık bilinçli, **işaretli** (`güvensiz`) ve **denetlenebilir**
+(`grep 'olarak \*'`).
+
+**Bilinçli olarak korunanlar:**
+- `güvensiz` **dışında hâlâ E002** — kaçış kapısı işarete bağlı kalmalı; aksi
+  halde güvenli kod da ham işaretçi üretir ve bölge/ömür garantisi **sessizce**
+  kaybolur. Sabotaj testi kilitler.
+- **Ters yön açılmadı** — `*T olarak &T` hâlâ yasak. Ham işaretçiyi güvenli
+  referansa terfi ettirmek, **olmayan bir garantiyi uydurmak** olurdu.
+- Pointee tipi aynı olmak zorunda değil (`&dtam64` → `*dtam8`): `güvensiz`'de
+  yeniden yorumlama zaten amaç ve mevcut `int → *T` yolu **daha geniş** yetki
+  veriyor.
+
+**Sonuç:** tip borcu **6 → 2**. Üç korpus dosyasının **muafiyeti kalktı**
+(`cg_deref_genislik`, `cg_pointee_isaret`, `cg_skaler_deref`) — artık gerçekten
+tip kapısından geçiyorlar (muafiyet 10 → 7).
+
+**Kalan 2 borç (tasarım soruları, açık):** `mantıksal olarak tam32` reddi;
+generic dönüş-tipi güdümlü çıkarsama (belgeli V1 sınırı).
+
+**Yol üstünde bulundu (ayrı iş):** self-host checker **E002'yi hiç üretmiyor**
+(kodda sıfır geçiş) — `metin olarak tam32` C'de red, self-host'ta OK. Önceden
+vardı; `checker_diff` yakalamamış çünkü korpusta bu şekil yok — PR #108'deki
+`küresel`/`çıplak` açığıyla **aynı desen**.
+
+**Testler:** tip_kontrol 202/202 (+3), test_llvm 286/286, tip kapısı 210/217 (0 RED).
+
+---
+
 ## D-348 — Tip borcu 14 → 6: bir checker kusuru, yedi geçersiz test programı (2026-08-04)
 
 **Karar [ETKİ: `src/tip_kontrol.c`, `test/test_llvm.c`.]**
