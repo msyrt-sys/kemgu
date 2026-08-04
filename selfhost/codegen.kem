@@ -171,6 +171,7 @@ yapı Ayr {
     snap_maske: Dizi<tam32>; // D-317: paralel — maske anlık görüntüsü
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
+    guv_bag: tam32;          // `güvensiz` blok derinliği (C tk->guvensiz_baglam aynası)
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;     // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
@@ -6420,6 +6421,78 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     ver 0;
 }
+// ---- Madde E: explicit tip dönüştürme (`x olarak T`) — E001/E002/E003/E004 ----
+// C src/tip_kontrol.c DUGUM_TIP_DONUSTUR kolunun aynası (kural sırası birebir).
+// Sınıf dizgisi: skaler tip adı | "*" (ham işaretçi) | "&" (referans) | "tekkez" | "?".
+// "?" = emin değil → kontrol ATLANIR (C emin olduğu yerde hata verir; yanlış-pozitif yok).
+işlev cast_hedef_sinif(p: &değişken Ayr, tn: tam32) -> metin {
+    değişken a: metin = dizi_al(p.a_ad, tn);
+    eğer metin_esit(a, "TIP_POINTER") { ver "*"; }
+    eğer metin_esit(a, "TIP_TEKKEZ") { ver "tekkez"; }
+    eğer metin_esit(a, "TIP_REFERANS") { ver "&"; }
+    eğer metin_esit(a, "TIP_BASIT") {
+        değişken ad: metin = dizi_al(p.a_deg, tn);
+        eğer bilinen_skaler_mi(ad) { ver ad; }   // kullanıcı tipi → "?" (C'de T011 riski)
+    }
+    ver "?";
+}
+işlev cast_kaynak_sinif(p: &değişken Ayr, src: tam32) -> metin {
+    değişken a: metin = dizi_al(p.a_ad, src);
+    eğer metin_esit(a, "TEKLI") {
+        değişken op: metin = dizi_al(p.a_deg, src);
+        eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") { ver "&"; }
+    }
+    eğer metin_esit(a, "TANIMLAYICI") {
+        eğer lin_idx(p, dizi_al(p.a_deg, src)) >= 0 { ver "tekkez"; }
+    }
+    değişken t: metin = ifade_tip(p, src, "?");
+    eğer bilinen_skaler_mi(t) { ver t; }
+    ver "?";
+}
+// C kw_kaynak/kw_hedef aynası: tamsayı bit genişliği; kesirli32=320, kesirli64=640.
+işlev cast_genislik(t: metin) -> tam32 {
+    eğer metin_esit(t, "tam8") veya metin_esit(t, "dtam8") { ver 8; }
+    eğer metin_esit(t, "tam16") veya metin_esit(t, "dtam16") { ver 16; }
+    eğer metin_esit(t, "tam32") veya metin_esit(t, "dtam32") { ver 32; }
+    eğer metin_esit(t, "tam64") veya metin_esit(t, "dtam64") { ver 64; }
+    eğer metin_esit(t, "kesirli32") { ver 320; }
+    eğer metin_esit(t, "kesirli64") { ver 640; }
+    eğer metin_esit(t, "karakter") { ver 32; }
+    ver 0;
+}
+işlev cast_hata(p: &değişken Ayr, idx: tam32, kod: metin) -> tam32 {
+    dizi_ekle(p.th_kod, kod);
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
+işlev cast_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken ks: metin = cast_kaynak_sinif(p, dizi_al(p.cocuk, cb));
+    değişken hs: metin = cast_hedef_sinif(p, dizi_al(p.cocuk, cb + 1));
+    eğer metin_esit(hs, "tekkez") { ver cast_hata(p, idx, "E001"); }   // hedef tekkez
+    eğer metin_esit(ks, "tekkez") { ver cast_hata(p, idx, "E003"); }   // kaynak tekkez
+    eğer metin_esit(hs, "?") veya metin_esit(ks, "?") { ver 0; }       // emin değil → atla
+    eğer metin_esit(ks, "*") ve metin_esit(hs, "metin") { ver 0; }     // tipli ptr → opak
+    eğer p.guv_bag > 0 {
+        eğer tamsayi_mi(ks) ve metin_esit(hs, "*") { ver 0; }          // inttoptr
+        eğer metin_esit(ks, "*") ve tamsayi_mi(hs) { ver 0; }          // ptrtoint
+        eğer metin_esit(ks, "&") ve metin_esit(hs, "*") { ver 0; }     // D-349: &T -> *U (IR'da no-op)
+    }
+    eğer (sayisal_mi(ks) ve sayisal_mi(hs)) == yanlış {
+        değişken c2i: mantıksal = metin_esit(ks, "karakter") ve tamsayi_mi(hs);
+        değişken i2c: mantıksal = tamsayi_mi(ks) ve metin_esit(hs, "karakter");
+        eğer (c2i veya i2c) == yanlış { ver cast_hata(p, idx, "E002"); }
+    }
+    değişken kw: tam32 = cast_genislik(ks);
+    değişken hw: tam32 = cast_genislik(hs);
+    eğer (kw > 0 ve kw <= 64) ve (hw > 0 ve hw <= 64) {
+        eğer kw >= 64 ve hw < 32 { ver cast_hata(p, idx, "E004"); }    // tam64 → tam8/tam16
+    }
+    eğer (kw >= 320 ve hw >= 320) ve kw > hw { ver cast_hata(p, idx, "E004"); }  // kesirli64 → kesirli32
+    ver 0;
+}
 // ---- TC5b: lineer akış izleme yardımcıları ----
 // Linear Types Spec V1 = YALNIZ tekkez (yetki → CP005/TC7, görev → DRF/TC6 ayrı kod).
 işlev tip_node_tekkez_mi(ad: metin) -> mantıksal { ver metin_esit(ad, "TIP_TEKKEZ"); }
@@ -6907,6 +6980,13 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // Madde E: TIP_DONUSTUR bir İFADE'dir (TIP_ öneki yanıltıcı) — kaynak alt-ağacı
+    // gezilir (C: önce kaynağın tipi belirlenir), sonra E001-E004; hedef tip düğümü atlanır.
+    eğer metin_esit(ad, "TIP_DONUSTUR") {
+        eğer dizi_al(p.a_cs, idx) > 0 { kontrol_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
+        cast_kontrol(p, idx);
+        ver 0;
+    }
     eğer metin_baslar(ad, "TIP_") { ver 0; }
     eğer metin_baslar(ad, "DESEN") { ver 0; }
     eğer metin_esit(ad, "YOL") { ver 0; }
@@ -7209,6 +7289,16 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(ad, "IMHA_IFADE") { p.imha_bag = p.imha_bag + 1; }
         lin_tuket_dugum(p, op);
         eğer metin_esit(ad, "IMHA_IFADE") { p.imha_bag = p.imha_bag - 1; }
+        ver 0;
+    }
+    // Madde E: `güvensiz` gövdesinde int <-> *T dönüşümü izinli (C guvensiz_baglam).
+    eğer metin_esit(ad, "GUVENSIZ") {
+        p.guv_bag = p.guv_bag + 1;
+        değişken gcb: tam32 = dizi_al(p.a_cb, idx);
+        değişken gcs: tam32 = dizi_al(p.a_cs, idx);
+        değişken gi: tam32 = 0;
+        iken gi < gcs { kontrol_dugum(p, dizi_al(p.cocuk, gcb + gi)); gi = gi + 1; }
+        p.guv_bag = p.guv_bag - 1;
         ver 0;
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -7536,7 +7626,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }

@@ -5,6 +5,62 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-350 [YÜKSEK] — `olarak` tip kuralları self-host checker'a portlandı: E001-E004 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+7).
+
+**Ölçülen açık (D-349'un yol-üstü bulgusu):** self-host checker `E002`'yi **hiç
+üretmiyordu** (`grep -c E002 selfhost/codegen.kem` → 0). Ampirik:
+
+```
+işlev main() -> tam32 { değişken s: metin = "ab"; değişken n: tam32 = s olarak tam32; ver n; }
+   kemgu.exe      --check → hata[E002]  (satır 1, sütun 78)
+   kemgu_self.exe --check → OK
+```
+
+Yani self-host checker C'nin **reddettiği programları kabul ediyordu** — sessiz
+gevşeklik. `checker_diff` yakalamadı çünkü korpusta `olarak` tip-kural ihlali
+YOKTU; PR #108'in `küresel`/`çıplak` açığıyla **aynı desen**: kural yoksa kapı
+yeşil kalır.
+
+**Kök neden (tek satır):** `kontrol_dugum`'un başındaki `metin_baslar(ad, "TIP_")
+→ ver 0` koruması `TIP_DONUSTUR`'u da yutuyordu. Ama `TIP_DONUSTUR` bir **tip
+düğümü değil, İFADE**'dir (`TIP_` öneki yanıltıcı) — böylece hem Madde E
+kontrolleri hem de **cast kaynağının alt-ağacı** (T002 vb.) hiç gezilmiyordu.
+
+**Portlanan kural kümesi (C `src/tip_kontrol.c` DUGUM_TIP_DONUSTUR sırası birebir):**
+
+| # | kaynak → hedef | sonuç |
+|---|---|---|
+| 1 | `X olarak tekkez<T>` | **E001** |
+| 2 | `tekkez<T> olarak X` | **E003** |
+| 3 | `*T olarak metin` | izinli (tipli tampon → opak) |
+| 4 | `tamsayı olarak *T` / `*T olarak tamsayı` | **yalnız `güvensiz`** (D-248) |
+| 5 | `&T olarak *U` | **yalnız `güvensiz`** (D-349); dışarıda E002 |
+| 6 | kaynak veya hedef sayısal değil (karakter↔tamsayı hariç) | **E002** |
+| 7 | `tam64 → tam8/tam16`, `kesirli64 → kesirli32` | **E004** |
+
+`tam64 → tam32` ve `tam32 → tam8` İZİNLİ (C'nin "yalnız ≥64-bit'ten <32-bit'e"
+kuralı) — daraltmanın tamamı değil, **anlamlı bit kaybı** yasak.
+
+**Muhafazakârlık sınırı (bilinçli):** self-host tip çıkarsaması dizgi-tabanlı;
+kaynak/hedef sınıfı `"?"` (emin değil) ise kontrol **atlanır**. Bu, yanlış-pozitif
+üretmeyi imkânsız kılar; kalan gevşeklik C ile diff'te görünür ve korpusla kapatılır.
+Ayrıca self-host parser `çıplak` işaretini düğümde tutmadığı için `çıplak` gövde
+(C'de örtük `güvensiz`) bu ayrımdan yararlanamaz — bugün korpusta bu şekil yok.
+
+**Sabotaj doğrulaması (7 kural, her biri tek tek):** kural kaldırıldı → kapının
+kırmızıya döndüğü GÖRÜLDÜ → geri konuldu. Sabotajın uygulandığı her seferinde
+`grep SABOTAJ-Sn` ile kanıtlandı (uygulanmamış sabotaj "0 hata" der ve yanıltır):
+S1 E002 (66→63), S2 E004-tamsayı (65), S3 E004-kesirli (65), S4 `güvensiz`
+gevşetmesi (64; **yanlış-pozitif** yönünde), S5 E001 + S6 E003 (64),
+S7 D-349 `&T → *U` (65).
+
+**Testler:** `checker_diff` 66/66 (59 → 66 korpus), `self_driver` 4 mod × 2 driver
++ FIXPOINT, `check_kapisi` 0 RED.
+
+---
+
 ## D-349 [YÜKSEK] — `güvensiz` blokta `(&x) olarak *T`: referanstan ham işaretçi (2026-08-04)
 
 **Karar [Mehmet; ETKİ: `src/tip_kontrol.c`, `test/test_tip_kontrol.c` (+3),

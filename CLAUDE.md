@@ -745,6 +745,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **`olarak` TİP KURALLARI — D-350'de self-host'a portlandı.** E001/E002/E003/E004 artık
+  self-host checker'da da var (kod+satır+sütun C ile birebir; `güvensiz` ayrımı dâhil —
+  D-248 `tamsayı↔*T`, D-349 `&T→*U`). Kök neden tek satırdı: `kontrol_dugum` başındaki
+  `metin_baslar(ad,"TIP_")` koruması `TIP_DONUSTUR`'u yutuyordu — oysa o bir İFADE.
+  **DERS (PR #108 deseninin tekrarı):** `checker_diff` yeşilse kural DOĞRU demek değil,
+  korpusta o şekil YOKSA kapı sessizce yeşil kalır. Yeni checker kuralı = korpusa
+  uyandırıcı örnek (`test/check_korpus/tc7_*`) + kural-başına sabotaj kapısı.
 - **PARİTE BORCU — D-300'de TAM KAPANDI.** D-299: `kanal_oluştur/gönder/al`, `dondur`,
   `görev_birleştir` (+ `ll_tip` görev/kanal→ptr, `cg_aic`, i64 genişlet/daralt). **D-300:
   `görev_başlat` + closure/lambda codegen** — capture analizi (flat-AST, C

@@ -1,0 +1,6 @@
+// Madde E / E002: referans -> ham işaretçi dönüşümü `güvensiz` DIŞINDA reddedilir.
+işlev main() -> tam32 {
+    değişken x: tam32 = 5;
+    değişken p: *tam32 = (&x) olarak *tam32;
+    ver 0;
+}

@@ -1,0 +1,6 @@
+// Madde E / E002: sayısal-olmayan kaynak (metin) `olarak tam32` reddedilir.
+işlev main() -> tam32 {
+    değişken s: metin = "ab";
+    değişken n: tam32 = s olarak tam32;
+    ver n;
+}

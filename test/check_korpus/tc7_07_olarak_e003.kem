@@ -1,0 +1,6 @@
+// Madde E / E003: lineer (tekkez) bağlama `olarak` ile dışarı çıkarılamaz.
+işlev main() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(5);
+    değişken n: tam32 = t olarak tam32;
+    ver n;
+}
