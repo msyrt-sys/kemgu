@@ -1886,11 +1886,11 @@ static void test_yetki_delege_abi(void) {
 
 static void test_audit_deref_okuma(void) {
     /* Gap #1: *p deref load emit etmiyordu — ptr DEGERI donerdi. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
         "g\xc3\xbcvensiz { ver *p; } ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
-        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; ver oku(&x); }");
+        "de\xc4\x9fi\xc5\x9fken x: tam32 = 42; güvensiz { ver oku((&x) olarak *tam32); } ver 0; }");
     test_sonuc("audit: *p deref yukleme round-trip -> exit 42", rc == 42);
 }
 
@@ -2105,39 +2105,39 @@ static void test_matris_d_esles_cesit_exhaustive(void) {
 static void test_d006_ref_alan_okuma(void) {
     /* &p.x = &(p.x): alan adresi -> deref-oku round-trip. Eskiden
      * (&p).x -> kopya-adres -> i32 deger ptr-param'a -> SEGFAULT. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "yap\xc4\xb1 P { x: tam32; y: tam32; } "
         "i\xc5\x9flev artir(p: *tam32) -> tam32 { "
         "g\xc3\xbcvensiz { ver *p + 1; } ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken p: P = P { x: 41, y: 0 }; "
-        "g\xc3\xbcvensiz { ver artir(&p.x); } ver 1; }");
+        "g\xc3\xbcvensiz { ver artir((&p.x) olarak *tam32); } ver 1; }");
     test_sonuc("D-006: &p.x = &(p.x) deref-oku round-trip -> exit 42",
                rc == 42);
 }
 
 static void test_d006_ref_eleman_okuma(void) {
     /* &d[i] = &(d[i]): eleman adresi -> deref-oku. Eskiden (&d)[i]. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
         "g\xc3\xbcvensiz { ver *p; } ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken d = [10, 42, 30]; "
-        "g\xc3\xbcvensiz { ver oku(&d[1]); } ver 1; }");
+        "g\xc3\xbcvensiz { ver oku((&d[1]) olarak *tam32); } ver 1; }");
     test_sonuc("D-006: &d[i] = &(d[i]) deref-oku round-trip -> exit 42",
                rc == 42);
 }
 
 static void test_d006_ref_nested_alan(void) {
     /* &a.b.c = &((a.b).c): ic ice alan adresi. */
-    int rc = derle_ve_calistir_TIP_BORCU(   /* D-337 TIP BORCU */ 
+    int rc = derle_ve_calistir(
         "yap\xc4\xb1 Ic { v: tam32; } "
         "yap\xc4\xb1 Dis { ic: Ic; } "
         "i\xc5\x9flev oku(p: *tam32) -> tam32 { "
         "g\xc3\xbcvensiz { ver *p; } ver 0; } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken d: Dis = Dis { ic: Ic { v: 42 } }; "
-        "g\xc3\xbcvensiz { ver oku(&d.ic.v); } ver 1; }");
+        "g\xc3\xbcvensiz { ver oku((&d.ic.v) olarak *tam32); } ver 1; }");
     test_sonuc("D-006: &a.b.c ic ice alan adresi -> exit 42", rc == 42);
 }
 

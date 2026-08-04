@@ -34,8 +34,6 @@ muaf() {
     # Bunlar `--llvm` codegen yolunu ölçer; `--check` reddi TASARIM GEREĞİ.
     *test/cg_korpus/cg6_trunc.kem)        echo "kasıtlı daraltma (E004) — codegen trunc yolu ölçülür" ;;
     *test/cg_korpus/cg_skaler_deref.kem)  echo "kasıtlı skaler deref cast (E002)" ;;
-    *test/cg_korpus/cg_deref_genislik.kem) echo "kasıtlı skaler deref cast (E002) — D-347 yük genişliği" ;;
-    *test/cg_korpus/cg_pointee_isaret.kem) echo "kasıtlı skaler deref cast (E002) — AH-P pointee işaretliliği" ;;
     *test/cg_korpus/cg_deref_pointer.kem) echo "kasıtlı ham-pointer arg (T001)" ;;
     *) return 1 ;;
   esac

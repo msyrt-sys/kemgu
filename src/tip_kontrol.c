@@ -2253,6 +2253,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (kt->kategori == TIP_POINTER && tip_tamsayi_mi(ht)) {
                     return ht;   /* *T -> int (ptrtoint) */
                 }
+                /* D-349 (Mehmet karari): guvensiz blokta `(&x) olarak *T` —
+                 * GUVENLI REFERANSTAN HAM ISARETCI. Bugune kadar yerel bir
+                 * degiskenin ham adresini almanin HICBIR yasal yolu yoktu:
+                 * `oku(&x)` T001, `(&x) olarak *tam32` E002 veriyordu. Bosluk
+                 * `--tip-atla` ile dolduruluyordu -- yani HICBIR isaret
+                 * birakmadan; bu, ayni yetkiyi vermenin en kotu bicimiydi.
+                 *
+                 * IR'da NO-OP: opak isaretci modelinde &T de *T de `ptr`.
+                 * Ayrim yalniz tip sisteminde ve amaci bu; burada BILINCLI,
+                 * isaretli (guvensiz) ve DENETLENEBILIR (`grep 'olarak \*'`)
+                 * bir kacis kapisi aciliyor.
+                 *
+                 * Pointee tipi AYNI olmak ZORUNDA DEGIL (`&dtam64` -> `*dtam8`
+                 * bayt erisimi icin gecerli): guvensiz blokta ham-isaretci
+                 * uzerinden yeniden yorumlama zaten amacin kendisi ve
+                 * `int -> *T` yolu (yukarida) ondan DAHA genis bir yetki
+                 * veriyor. Devralinmayan sey ACIKTIR: bolge/omur garantisi
+                 * ham isaretciye TASINMAZ -- `guvensiz` tam da bunu beyan eder. */
+                if (kt->kategori == TIP_REFERANS && ht->kategori == TIP_POINTER) {
+                    return ht;
+                }
             }
             int kaynak_sayisal = tip_sayisal_mi(kt);
             int hedef_sayisal = tip_sayisal_mi(ht);

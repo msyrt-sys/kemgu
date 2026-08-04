@@ -2102,6 +2102,43 @@ static void test_bos_dizi_yanlis_yapi_hata(void) {
     arena_serbest(a);
 }
 
+/* === D-349: guvensiz blokta `(&x) olarak *T` — referanstan ham isaretci === */
+
+/* RP-1: guvensiz ICINDE izinli; yerel degiskenin ham adresi alinabilir. */
+static void test_ref_to_ptr_guvensiz_ok(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev oku(p: *tam32) -> tam32 { g\xc3\xbcvensiz { ver *p; } ver 0; } "
+        "i\xc5\x9flev f() -> tam32 { de\xc4\x9fi\xc5\x9f" "ken x: tam32 = 42; "
+        "g\xc3\xbcvensiz { ver oku((&x) olarak *tam32); } ver 0; }", a);
+    test_sonuc("D-349: guvensiz icinde (&x) olarak *tam32 -> 0 hata", h == 0);
+    arena_serbest(a);
+}
+
+/* RP-2 (SABOTAJ): guvensiz DISINDA hala E002. Kacis kapisi `guvensiz`
+ * isaretine BAGLI kalmali — aksi halde guvenli kod da ham isaretci uretebilir
+ * ve bolge/omur garantisi sessizce kaybolur. */
+static void test_ref_to_ptr_guvensiz_disinda_red(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f() -> tam32 { de\xc4\x9fi\xc5\x9f" "ken x: tam32 = 42; "
+        "de\xc4\x9fi\xc5\x9f" "ken p: *tam32 = (&x) olarak *tam32; ver 0; }", a);
+    test_sonuc("D-349 SABOTAJ: guvensiz DISINDA (&x) olarak *T -> HATA", h > 0);
+    arena_serbest(a);
+}
+
+/* RP-3: ters yon ACILMADI — `*T olarak &T` hala yasak. Ham isaretciyi guvenli
+ * referansa terfi ettirmek, olmayan bir garantiyi UYDURMAK olurdu. */
+static void test_ptr_to_ref_hala_yasak(void) {
+    Arena *a = arena_olustur(0);
+    int h = program_kontrol(
+        "i\xc5\x9flev f(p: *tam32) -> tam32 { "
+        "g\xc3\xbcvensiz { de\xc4\x9fi\xc5\x9f" "ken r: &tam32 = p olarak &tam32; "
+        "ver 0; } ver 0; }", a);
+    test_sonuc("D-349: *T -> &T terfi HALA yasak (garanti uydurulamaz)", h > 0);
+    arena_serbest(a);
+}
+
 /* === Madde D: Generic callback tip cikarsamasi === */
 
 /* D-1: Dizi<T> param -> T arg'dan cikarsanir */
@@ -2779,6 +2816,11 @@ int main(void) {
     test_aritmetik_literal_mantiksal_hata();
     test_bos_dizi_yapi_eleman();
     test_bos_dizi_yanlis_yapi_hata();
+
+    printf("\n--- D-349: guvensiz'de referanstan ham isaretci ---\n");
+    test_ref_to_ptr_guvensiz_ok();
+    test_ref_to_ptr_guvensiz_disinda_red();
+    test_ptr_to_ref_hala_yasak();
 
     printf("\n===========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
