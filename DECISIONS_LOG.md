@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-348 — Tip borcu 14 → 6: bir checker kusuru, yedi geçersiz test programı (2026-08-04)
+
+**Karar [ETKİ: `src/tip_kontrol.c`, `test/test_llvm.c`.]**
+
+**Ana bulgu:** D-337'de açılan tip borcunun **çoğu checker kusuru değildi** —
+geçersiz test programlarıydı. Checker **altı kez haklı**, bir kez haksız çıktı.
+Bu, "borç" etiketinin kendi başına bir teşhis olmadığını gösteriyor: borcu
+kapatmak önce **sınıflandırmayı** gerektiriyor.
+
+**Derleyici kusuru (1):** `kesirli32 x; x + 21.0` → T001. Kesirli literaller
+daima `kesirli64`'e düşer ve `21.0f` gibi bir genişlik son-eki **yok** →
+programcının düzeltemeyeceği bir red. D-343'ün (tamsayı literal bağlamı) float
+ikizi eklendi (`kesirli_literal_ifade_mi`, `tip_kesirli_mi`). Aynı
+muhafazakârlık: yalnız **tipsiz literal ağacı** uyum sağlar.
+
+**Geçersiz test programları (7) — checker haklıydı:**
+`ver v;` (tam16/tam64→tam32) ×3 — örtük dönüşüm yok (ASLA listesi);
+`doldur(&k)` — parametre `&değişken K`; `yetki<MMIO>` ×2 — **gerçek lineer
+sızıntı**; iç içe `görev` — **gerçek liveness sızıntısı** (iç `hata` kolu dış
+görevi birleştirmeden çıkıyordu; ikinci spawn başarısız olsa birinci görev asla
+join edilmezdi).
+
+**Görünürlük (kalıcı):** `KEMGU_BORC_DOKUM=1` ile her açık borcun tanı kodu
+listelenir. "14 borç var" tek başına hangi kusurun onarılacağını söylemiyordu.
+
+**Kalan 6 — üçü de TASARIM SORUSU (Mehmet kararı, bilerek açık):**
+1. **`&x` → `*T` yasal yolu YOK** (4 borç). Yerel bir değişkenin ham adresini
+   almanın hiçbir yolu yok; `&x olarak *tam32` de T001. Aynı boşluk
+   `cg_deref_genislik.kem` ve `cg_pointee_isaret.kem`'i muaf listesinde tutuyor.
+2. **`mantıksal olarak tam32`** reddediliyor (E002).
+3. **Generic dönüş-tipi güdümlü çıkarsama** — CLAUDE.md'de belgeli V1 sınırı.
+
+**Testler:** test_llvm 286/286; `test_tumu` 0 hata; FIXPOINT ✓; codegen 113/113;
+checker sıfır-diff 59/59; tip kapısı 207/217 (0 RED).
+
+---
+
 ## D-347 [YÜKSEK] — Self-host parite: deref pointee işaretliliği + ikili operand genişliği (2026-08-04)
 
 **Karar [ETKİ: `selfhost/codegen.kem`, `test/cg_korpus/cg_pointee_isaret.kem` (yeni),
