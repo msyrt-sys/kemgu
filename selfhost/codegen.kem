@@ -41,6 +41,11 @@ yapı Ayr {
     son_ref: metin;      // CG7c: son ifade sonucu ptr ise işaret ettiği yapı adı
     cg_aelem: Dizi<metin>;// CG8: Dizi değişkeni ise eleman LLVM tipi; değilse ""
     cg_apointee: Dizi<metin>;// D-267: *tamN pointer değişkeni ise skaler pointee LLVM tipi
+    cg_apisz: Dizi<metin>;   // AH-P: pointee İŞARETSİZ (*dtamN) ise "1"; değilse "".
+                             // cg_apointee yalnız LLVM TİPİNİ ("i8") tutuyordu; işaretlilik
+                             // kayboluyordu → `(*p) olarak tam64` daima sext ediyordu ve
+                             // *dtam8'den 0xC8 okumak 200 yerine -56 veriyordu (SESSİZ
+                             // YANLIŞ CEVAP; C sürümü doğru zext üretiyordu).
     cg_aic: Dizi<metin>;  // D-299: görev<T>/kanal<T> değişkeni ise T'nin LLVM tipi; değilse ""
     cg_aisz: Dizi<metin>; // D-337: değişken/parametre işaretsiz (dtamN) ise "1"; değilse ""
                              // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
@@ -2051,6 +2056,7 @@ işlev cg_var_ekle(p: &değişken Ayr, ad: metin, areg: metin, tip: metin, ref: 
     dizi_ekle(p.cg_aref, ref);   // CG7c: ptr → işaret edilen yapı
     dizi_ekle(p.cg_aelem, elem); // CG8: Dizi → eleman tipi
     dizi_ekle(p.cg_apointee, ""); // D-267: varsayılan "" (skaler pointer decl'i dizi_yaz ile set eder)
+    dizi_ekle(p.cg_apisz, "");    // AH-P: pointee işaretsizliği (varsayılan "" = işaretli)
     dizi_ekle(p.cg_aic, "");      // D-299: varsayılan "" (görev/kanal decl'i dizi_yaz ile set eder)
     dizi_ekle(p.cg_aisz, "");     // D-337: varsayılan "" = imzalı (dtamN decl'i dizi_yaz ile set eder)
     ver 0;
@@ -2127,6 +2133,20 @@ işlev cg_var_ref_bul(p: &değişken Ayr, ad: metin) -> metin {
     ver "";
 }
 // D-267: *tamN pointer değişkeninin skaler pointee LLVM tipi ("i8"/.../"i64"); değilse "".
+// AH-P: pointee İŞARETSİZ mi (*dtamN)? 1 = evet. deref-read'in genişletme
+// işlemini (sext/zext) belirler.
+işlev cg_var_pointee_isz_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
+    iken i >= p.cg_base {
+        eğer metin_esit(dizi_al(p.cg_ad, i), ad) {
+            eğer metin_esit(dizi_al(p.cg_apisz, i), "1") { ver 1; }
+            ver 0;
+        }
+        i = i - 1;
+    }
+    ver 0;
+}
+
 işlev cg_var_pointee_bul(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = dizi_boyut(p.cg_ad) - 1;
     iken i >= p.cg_base {
@@ -3044,6 +3064,18 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(uop, "neg") veya metin_esit(uop, "~") {
             ver ifade_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
         }
+        // AH-P: `*p` — işaretsizlik POINTEE'den akar. Bu dal eksikti: deref
+        // daima 0 (işaretli) dönüyordu → `(*p) olarak tam64` daima sext ve
+        // *dtam8'den 0xC8 okumak 200 yerine -56 veriyordu. C sürümü doğruydu
+        // (pointee TipBilgisi'ni taşıyor); self-host yalnız LLVM tipini
+        // tutuyordu, işaretlilik eksenini düşürüyordu.
+        eğer metin_esit(uop, "deref*") {
+            değişken on: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+            eğer metin_esit(dizi_al(p.a_ad, on), "TANIMLAYICI") {
+                ver cg_var_pointee_isz_bul(p, dizi_al(p.a_deg, on));
+            }
+            ver 0;
+        }
         ver 0;
     }
     eğer metin_esit(ad, "CAGRI") {
@@ -3752,6 +3784,17 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // semantikle yapılır (C llvm.c: `int isz = sol.isaretsiz || sag.isaretsiz`).
         değişken bisz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb));
         eğer bisz == 0 { bisz = ifade_isz(p, dizi_al(p.cocuk, cb + 1)); }
+        // AH-P: tip_birlestir ORTAK tipi SEÇER ama operandları DÖNÜŞTÜRMEZDİ.
+        // `x_i64 == (0 - 56)` self-host'ta `sub i32` üretip ardından
+        // `icmp eq i64 %a, %b` yazıyordu — %b i32. LLVM bunu REDDEDER (ölçüldü:
+        // "'%22' defined with type 'i32' but expected 'i64'"), yani program hiç
+        // derlenmiyordu. C tarafı beklenen genişliği literal alt-ağacına yayıyor.
+        // Burada eşdeğer sonuç register-düzeyi genişletmeyle sağlanır; immediate
+        // operandlara int_uydur zaten DOKUNMAZ (D-299 dersi).
+        eğer int_ll_mi(optip) {
+            p.son_tip = st; sol = int_uydur(p, sol, optip, bisz);
+            p.son_tip = gt; sag = int_uydur(p, sag, optip, bisz);
+        }
         eğer karsilastirma_mi(op) {
             değişken c: tam32 = yeni_reg(p);
             değişken cs2: metin = reg_str(c);
@@ -4498,6 +4541,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken vtip: metin = "i32";
         değişken velem: metin = "";
         değişken vpointee: metin = "";   // D-267: *tamN ise skaler pointee LLVM tipi
+        değişken vpointee_isz: tam32 = 0; // AH-P: pointee işaretsiz mi (*dtamN)
         değişken vic: metin = "";        // D-299: görev<T>/kanal<T> ise T'nin LLVM tipi
         değişken annot: tam32 = 0;
         eğer cs >= 2 {
@@ -4511,6 +4555,8 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             // D-267: *tamN pointer → skaler pointee (deref-read yük-genişliği; C pointee_llvm_tip aynası)
             eğer metin_esit(dizi_al(p.a_ad, annot_node), "TIP_POINTER") {
                 vpointee = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, annot_node)));
+                // AH-P: pointee işaretsiz mi (*dtamN)? ll_isz tip düğümünden okur.
+                vpointee_isz = ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, annot_node)));
             }
         }
         // D3: annotasyon tagged-union ({i8,..}) ise yapıcı bağlamı kur (değer/tamam/...)
@@ -4561,6 +4607,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değilse { cg_var_isz_isaretle(p, visz); }
         eğer metin_uzunluk(vpointee) > 0 {   // D-267: skaler pointee tipi kaydet
             dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, vpointee);
+            // AH-P: pointee'nin İŞARETSİZLİĞİ de kaydedilir. Yalnız LLVM tipini
+            // saklamak (i8) işaretliliği düşürüyordu → deref daima sext.
+            eğer vpointee_isz == 1 {
+                dizi_yaz(p.cg_apisz, dizi_boyut(p.cg_apisz) - 1, "1");
+            }
         }
         eğer metin_uzunluk(vic) > 0 {   // D-299: görev<T>/kanal<T> iç tipi kaydet
             dizi_yaz(p.cg_aic, dizi_boyut(p.cg_aic) - 1, vic);
@@ -4742,6 +4793,13 @@ işlev param_pointee(p: &değişken Ayr, c: tam32) -> metin {
     değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));   // tip düğümü
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") == yanlış { ver ""; }
     ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));        // pointee tipi
+}
+// AH-P: parametre *dtamN mi (pointee işaretsiz)? deref genişletmesini belirler.
+işlev param_pointee_isz(p: &değişken Ayr, c: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, c) == 0 { ver 0; }
+    değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") == yanlış { ver 0; }
+    ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));
 }
 // D-299: çağrı argümanı bir TANIMLAYICI ise, o değişkenin bildirilen görev<T>/
 // kanal<T> iç tipini döner. Değilse "" → çağıran i64'e (tam genişlik) düşer,
@@ -5607,6 +5665,10 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken ppo: metin = param_pointee(p, c);   // D-267: skaler pointer pointee
             eğer metin_uzunluk(ppo) > 0 {
                 dizi_yaz(p.cg_apointee, dizi_boyut(p.cg_apointee) - 1, ppo);
+                // AH-P: parametre pointee'sinin işaretsizliği (deref sext/zext).
+                eğer param_pointee_isz(p, c) == 1 {
+                    dizi_yaz(p.cg_apisz, dizi_boyut(p.cg_apisz) - 1, "1");
+                }
             }
             değişken pic: metin = param_ic(p, c);        // D-299: görev/kanal iç tipi
             eğer metin_uzunluk(pic) > 0 {
@@ -7460,7 +7522,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], cg_apointee: [], cg_aic: [], cg_aisz: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
+        cg_aelem: [], cg_apointee: [], cg_apisz: [], cg_aic: [], cg_aisz: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         beklenen_elem_ic: "", son_ic: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,

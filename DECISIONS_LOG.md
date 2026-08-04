@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-347 [YÜKSEK] — Self-host parite: deref pointee işaretliliği + ikili operand genişliği (2026-08-04)
+
+**Karar [ETKİ: `selfhost/codegen.kem`, `test/cg_korpus/cg_pointee_isaret.kem` (yeni),
+`test/check_kapisi.sh`.]**
+
+**Neden:** self-host codegen'de iki ayrı parite açığı vardı; ikisi de ölçüldü.
+
+**Kusur 1 — pointee İŞARETLİLİĞİ (sessiz yanlış cevap).** `cg_apointee` yalnız
+LLVM **tipini** (`i8`) tutuyordu; işaretlilik ekseni düşüyordu. `ifade_isz`'in
+`deref*` dalı hiç yoktu → daima 0 (işaretli) → `(*p) olarak tam64` **daima
+`sext`**. `*dtam8` üzerinden `0xC8` okumak **200 yerine −56** veriyordu; C sürümü
+doğru `zext` üretiyordu. Bu, AH-1'de device-tree baytlarını bozan sınıfın aynısı —
+ne hata ne uyarı, yalnız yanlış sayı.
+*Çözüm:* `cg_apisz` paralel dizisi (değişken + parametre yollarında doldurulur),
+`cg_var_pointee_isz_bul`, `param_pointee_isz`, ve `ifade_isz`'e `deref*` dalı.
+
+**Kusur 2 — ikili operand GENİŞLİĞİ (LLVM-red).** `tip_birlestir` ortak tipi
+**seçiyor** ama operandları **dönüştürmüyordu**: `x_i64 == (0 - 56)` için
+`sub i32` üretilip ardından `icmp eq i64 %a, %b` yazılıyordu →
+*"'%22' defined with type 'i32' but expected 'i64'"*. Program **hiç derlenmiyordu**.
+C tarafı beklenen genişliği literal alt-ağacına yayıyor.
+*Çözüm:* ikili emisyonda mevcut `int_uydur` ile register-düzeyi genişletme.
+Immediate operandlara `int_uydur` zaten dokunmaz (D-299 dersi: `sext i32 4294967296`
+literali sessizce bozuyordu).
+
+**Kapı:** `test/cg_korpus/cg_pointee_isaret.kem`. Mevcut `cg_deref_genislik.kem`
+(D-347 öncesi) alt baytları **bilerek** 128'in altında seçip yalnız *yük
+genişliğini* ölçüyor ve bu ekseni hiç ölçmüyordu — dosyanın kendi yorumunda da
+böyle yazıyordu. Yeni dosya iki kusuru da falsifiye edilebilir biçimde yakalar.
+
+**Sabotaj (ikisi ayrı ayrı):** `deref*` dalı devre dışı → exit 2 (42 değil);
+operand genişliği uyumlaması devre dışı → IR LLVM tarafından reddedildi, exe yok.
+
+**Ölçüm:** C ve self-host artık birebir aynı IR üretiyor
+(`zext i8` + `sext i8`), ikisi de exit 42.
+
+**Testler:** `test_tumu` 0 hata; FIXPOINT ✓ (47061 satır kararlı); codegen semantik
+eşdeğerlik **113/113** her iki bootstrap aşamasında; checker sıfır-diff 59/59;
+tip kapısı 207/217 (0 RED).
+
+---
+
 ## D-346 [YÜKSEK] — MODEL B / MB-3: 4KB sayfa granülü + segment-başına W^X (2026-07-31)
 
 **Karar [ETKİ: `runtime/kem_mmu.kem`, `runtime/kem_elf.kem`,

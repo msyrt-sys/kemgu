@@ -1,0 +1,41 @@
+// cg_pointee_isaret.kem — AH-P: deref POINTEE İŞARETLİLİĞİ + ikili operand genişliği.
+// -----------------------------------------------------------------------------
+// cg_deref_genislik.kem (D-347) deref'in YÜK GENİŞLİĞİNİ ölçer ve alt baytları
+// bilerek 128'den küçük seçer ki sext/zext AYNI sonucu versin — yani orası
+// işaretliliği ÖLÇMEZ. Bu dosya tam o ekseni ölçer.
+//
+// İKİ AYRI KUSUR, ikisi de self-host'ta ölçüldü ve kapatıldı:
+//
+//  1) POINTEE İŞARETLİLİĞİ. `cg_apointee` yalnız LLVM TİPİNİ ("i8") tutuyordu;
+//     işaretlilik ekseni düşüyordu → `(*p) olarak tam64` DAİMA sext ediyordu.
+//     *dtam8 üzerinden 0xC8 okumak 200 yerine -56 veriyordu: SESSİZ YANLIŞ CEVAP
+//     (C sürümü doğru zext üretiyordu). AH-1'de device-tree baytları bu sınıftan
+//     bozulmuştu.
+//
+//  2) İKİLİ OPERAND GENİŞLİĞİ. `tip_birlestir` ortak tipi SEÇİYOR ama operandları
+//     DÖNÜŞTÜRMÜYORDU: `x_i64 == (0 - 56)` için `sub i32` üretilip ardından
+//     `icmp eq i64 %a, %b` yazılıyordu → LLVM REDDEDER, program hiç derlenmez.
+//
+// Falsifiye: her dal yanlış davranışta TERS sonuç verir.
+//   Doğru:  u=200 (zext) → +40 ; s=-56 (sext) → +2  → 42
+//   Hatalı: u=-56  → +0  ; ya da IR LLVM tarafından reddedilir → çalışmaz
+işlev main() -> tam32 {
+    güvensiz {
+        değişken v: dtam64 = 200;                    // alt bayt 0xC8
+        değişken t: tam32 = 0;
+
+        // İŞARETSİZ pointee: zext beklenir → 200
+        değişken pu: *dtam8 = (&v) olarak *dtam8;
+        değişken u: tam64 = (*pu) olarak tam64;
+        eğer u == 200 { t = t + 40; }
+
+        // İŞARETLİ pointee: sext beklenir → -56
+        // Sağ taraf (0 - 56) TİPSİZ literal ağacı; sol taraf i64. Operand
+        // genişliği uyumlanmazsa LLVM IR'ı reddeder.
+        değişken ps: *tam8 = (&v) olarak *tam8;
+        değişken s: tam64 = (*ps) olarak tam64;
+        eğer s == (0 - 56) { t = t + 2; }
+
+        ver t;
+    }
+}
