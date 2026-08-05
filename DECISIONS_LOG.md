@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-371 [YÜKSEK] — G005 YANLIŞ-POZİTİFİ: doğrudan lambda argümanı kaçış değildir (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host `test/ornekler/kanal_mesaj.kem` gibi **GEÇERLİ** programları
+`G005` ile reddediyordu (C: `OK`). D-370'te ölçüm alanı `test/ornekler/`e
+genişletilince ortaya çıktı; D-324'ten kalma, regresyon değil.
+
+**Kök neden.** C `escape.c` çağrı argümanlarını ESC_CAGIRAN'a terfi ettirirken
+**LAMBDA argümanını bilinçli olarak MUAF tutar** (kaynaktaki yorum: lambda hiçbir
+zaman serbest edilmez → terfi gereksiz; üstelik `görev_başlat(|| ...)` desenini
+G005'te yanlış-pozitif yapar, görev'in kendi R-YAKALAMA-THREAD sahiplik modeli
+vardır). D-324 portu C'nin tetikleyicilerini ölçerek taklit etmişti ama bu
+**istisnayı** almamıştı.
+
+**Daraltma ölçüldü, uydurulmadı** (3 şekil): `al(|| s)` doğrudan argüman → **G005
+YOK**; `değişken f = || s; al(f)` ada bağlı → **G005 VAR** (16:39); `ver || s`
+→ **G005 VAR** (21:9). Yani muafiyet YALNIZ doğrudan lambda argümanına ait —
+ada bağlanmış lambda ve `ver` yolu aynen korunur.
+
+**DERS (D-356/S31'in tekrarı, ölçülerek yaşandı):** ilk sabotaj (S75) **SESSİZ
+kaldı** — `al(...)` bilinen-işlev yolundan giderken `görev_başlat(...)` AYRI bir
+built-in çağrı yolundan gidiyor ve korpusta o şekil yoktu. `görev_başlat(|| s)`
+örneği eklenince S75 kırmızıya döndü. **İki kod yolu varsa korpusta İKİSİ de
+olmalı;** sabotajın sessizliği kuralın doğruluğu değil, korpusun eksikliğidir.
+
+**Kapılar:** `checker_diff` **133/133** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 101/101, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED).
+**Sabotaj:** S75 (built-in çağrı yolu muafiyeti), S76 (bilinen-işlev yolu
+muafiyeti), S77 (muafiyet aşırı genişlerse ada bağlı lambda kaçar) — üçü de
+kırmızı, `grep` ile uygulandıkları kanıtlandı, geri alındı.
+
+**Ölçüm alanı genişletildi (99 dosya: stdlib + ornekler + kütüphane).** Kalan
+sapmalar — hepsi EKSİK tanı ya da ayrı sınıf, bu partide DEĞİL:
+`AS001` self-host'ta hiç yok (2 dosya); `kem_os.kem` T002 kuyruğu; **`CP005`
+yanlış-pozitifi** `mmio_smoke.kem` + `virtio_selfhost_rw.kem`'de (self-host
+"yetki tüketilmedi" diyor, C `OK`) → sıradaki iş.
+
+---
+
 ## D-370 [YÜKSEK] — T011 portlandı; imza/gövde tanı SIRASI iki geçişe ayrıldı (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+2).

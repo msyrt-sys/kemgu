@@ -1,0 +1,37 @@
+// D-371 / G005: DOĞRUDAN lambda argümanı KAÇIŞ SAYILMAZ.
+// C `escape.c` lambda argümanını ESC_CAGIRAN terfisinden bilinçli MUAF tutar
+// (`görev_başlat(|| ..)` deseni — görev'in kendi R-YAKALAMA-THREAD sahiplik
+// modeli var). D-324 portu bu istisnayı almamıştı → self-host `kanal_mesaj.kem`
+// gibi GEÇERLİ programları reddediyordu (yanlış-pozitif, ölçüldü).
+// Bu dosya İKİ yönü birden kapılar: muafiyet VAR (dogrudan_arg) ve
+// muafiyet YOK (bagli_arg, ver_dogrudan) — biri kayarsa kırmızıya döner.
+işlev al(f: işlev() -> metin) -> tam32 { ver 0; }
+
+işlev dogrudan_arg() -> tam32 {
+    değişken s: metin = "x";
+    ver al(|| s);                          // MUAF: G005 YOK
+}
+işlev bagli_arg() -> tam32 {
+    değişken s: metin = "x";
+    değişken f: işlev() -> metin = || s;   // G005: ada bağlı → muaf DEĞİL
+    ver al(f);
+}
+işlev ver_dogrudan() -> işlev() -> metin {
+    değişken s: metin = "x";
+    ver || s;                              // G005: `ver` kaçıştır
+}
+// BUILT-IN çağrı yolu (bilinen-işlev yolundan AYRI kod yolu — `görev_başlat`
+// argüman imzası checker'da yok). `kanal_mesaj.kem`'i düşüren asıl şekil budur.
+işlev builtin_arg() -> tam32 {
+    değişken s: metin = "x";
+    eşleş görev_başlat(|| s) {            // MUAF: G005 YOK
+        tamam(g) => { görev_birleştir(g); }
+        hata(e) => { }
+    }
+    ver 0;
+}
+işlev skaler_arg() -> tam32 {
+    değişken n: tam32 = 1;
+    ver al(|| "sabit");                    // yakalama yok → G005 YOK
+}
+işlev main() -> tam32 { ver 0; }

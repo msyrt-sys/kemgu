@@ -8293,7 +8293,6 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                     }
                     eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
                     g003_kontrol(p, fad, a - 1, arg);   // D-358: C sırası — lineer tüketimden SONRA
-                    g005_dogrudan_kontrol(p, arg);   // D-324
                     a = a + 1;
                 }
                 ver 0;
@@ -8301,7 +8300,11 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         değişken k: tam32 = 1;
         // D-324: kapanis CAGRI ARGUMANI olarak kacabilir (hedef degil - k 1den baslar).
-        iken k < hc { g005_dogrudan_kontrol(p, dizi_al(p.cocuk, hb + k)); kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
+        // D-371: DOĞRUDAN lambda argümanı KAÇIŞ SAYILMAZ — C `escape.c` onu
+        // ESC_CAGIRAN terfisinden bilinçli olarak MUAF tutar (`görev_başlat(|| ..)`
+        // deseni; görev'in kendi R-YAKALAMA-THREAD sahiplik modeli var). Ada BAĞLI
+        // lambda muaf DEĞİL (`değişken f = || s; al(f)` → G005; ölçüldü).
+        iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
         ver 0;
     }
     // ATAMA: T022 (lvalue) önce → hedef T002 → değer T002 → T001 (tip uyumsuz).
