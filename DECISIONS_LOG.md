@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-355 — L007 + L008 self-host'a portlandı: lineer intrinsik operand/arite (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Kural (C birebir):**
+- `kullan(e)` operandı **TAM OLARAK** `tekkez<T>` olmalı. `yapı tekkez` KABUL
+  EDİLMEZ — `kullan` sarmalanan değeri ÇIKARIR, lineer yapının sarmalanmış bir
+  değeri yoktur. C bu ayrımı açıkça yapıyor (D-313).
+- `imha(e)` **herhangi** bir lineer değeri kabul eder (tekkez / yetki / görev /
+  `yapı tekkez`) — lineer yapıyı tüketmenin tek yerel yolu odur.
+- Her iki hatada da C `t_hata` döner → operand **TÜKETİLMEZ** → ardından L001
+  gelebilir (ölçüldü: `kullan(lineer_yapı)` → `L007` + `L001`, ikisi de birebir).
+- `tekkez_olustur(...)` **tam 1** argüman → aksi L008 (çağrı düğümünde).
+
+**PORT SIRASINDA ÖLÇÜLEN KUSUR (kendi ilk tasarımım):** biti "1 = tekkez<T>"
+olarak kurmuştum ve `kullan`da `bit == 0` iken L007 veriyordum. Ama **0
+"lineer yapı" demek değil, "bilinmiyor" demek** — `değişken t =
+tekkez_olustur(5)` (annotasyonsuz) da 0. Sonuç: mevcut `tc5b_02_l002` ve
+`lineer_kismi_tasima` korpus dosyalarında **sahte L007**. Bit ters çevrildi:
+**1 = KESİN `yapı tekkez`**, rapor yalnız pozitif bilgide. Sabotaj S28 bu
+kusuru kalıcı olarak kapıladı (geri konduğunda 4 dosya kırmızı).
+
+**Korpus tasarımı:** `tc12_02`'deki `annotasyonsuz()` işlevi tam bu kusuru
+uyandırmak için var — `değişken t = tekkez_olustur(5); kullan(t)`.
+
+**Sabotaj (4; `grep SABOTAJ-Sn` ile kanıtlı):** S25 skaler-operand L007 (80→79),
+S26 lineer-yapı L007 (79; L001 kaskadı da düştü), S27 L008 (79),
+S28 bit yorumu (**76** — yanlış-pozitif yönünde, mevcut dosyalar dâhil).
+
+**Probe matrisi 9/9 birebir:** `kullan`(skaler/metin/lineer-yapı/tekkez),
+`imha`(skaler/lineer-yapı/tekkez), `tekkez_olustur`(2 arg / 0 arg).
+
+**Sonuç:** self-host checker kod kapsamı **33 → 35/74**; korpus **78 → 80**;
+korpusun uyandırdığı kod **31 → 33**. Kalan 39 kod.
+
+---
+
 ## D-354 — T013 (dizi eleman tipi) + tamsayı-literal uyarlama onarımı (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

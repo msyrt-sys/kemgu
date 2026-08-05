@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **L007/L008 — D-355.** `kullan` YALNIZ `tekkez<T>` alır (`yapı tekkez` almaz);
+  `imha` her lineeri alır; hata → operand tüketilmez (L001 kaskadı C ile birebir).
+  **DERS:** yan-dizi bitlerini "pozitif bilgi" olarak kur — `0` çoğu zaman
+  "hayır" değil "bilinmiyor"dur (annotasyonsuz `değişken t = tekkez_olustur(..)`
+  bunu ölçtürdü; sabotaj S28 kalıcı kapı). **Kapsam 35/74.**
 - **T013 + LİTERAL UYARLAMA — D-354.** T013'ün iki yolu var ve **suçlanan eleman
   farklı** (annotasyon varsa ilk eleman suçlanabilir) → `dizi_bek` bağlamı şart.
   Yol üstünde ayrı bir kusur: `ifade_tip` tamsayı literalini **kesirli** bağlama

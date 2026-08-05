@@ -172,6 +172,9 @@ yapı Ayr {
     dyf_alan: Dizi<metin>;   // D-318: paralel — alan adı
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
     lin_fnk: Dizi<tam32>;    // D-321: bağlama tekkez<işlev(...)> mü (LC-3 çağrı tüketimi)
+    lin_tek: Dizi<tam32>;    // D-355: 1 = bağlamanın KESİN `yapı tekkez` olduğu biliniyor.
+                             // 0 = tekkez<T> VEYA bilinmiyor (annotasyonsuz `değişken k =
+                             // tekkez_olustur(..)` de 0) → L007 YALNIZ 1'de verilir.
     snap_tuk: Dizi<tam32>;   // D-317: L-COND dal izolasyonu — tüketim anlık görüntüsü
     snap_maske: Dizi<tam32>; // D-317: paralel — maske anlık görüntüsü
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
@@ -6622,6 +6625,31 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// ---- D-355: L007 — `kullan`/`imha` operandının lineerliği ----
+// C: `kullan(e)` operandı TAM OLARAK `tekkez<T>` olmalı (sarmalanan değeri ÇIKARIR;
+// `yapı tekkez`in sarmalanmış bir değeri yoktur → orada da L007). `imha(e)` ise
+// HERHANGİ bir lineer değeri kabul eder (tekkez / yetki / görev / `yapı tekkez`).
+// Hata varsa C t_hata döner → operand TÜKETİLMEZ (ardından L001 gelebilir).
+// Emin olamadığımız operandlarda (tip "?") kontrol atlanır.
+işlev l007_kontrol(p: &değişken Ayr, idx: tam32, op: tam32, kullan_mi: mantıksal) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, op), "TANIMLAYICI") {
+        değişken li: tam32 = lin_idx(p, dizi_al(p.a_deg, op));
+        eğer li >= 0 {
+            // KESİN lineer yapı + `kullan` → L007. Bit 0 ise (tekkez<T> ya da
+            // annotasyonsuz bağlama) SUSULUR — 0 "yapı" demek DEĞİL, "bilinmiyor".
+            eğer kullan_mi ve (dizi_al(p.lin_tek, li) == 1) {
+                sekil_hata(p, idx, "L007");
+                ver doğru;
+            }
+            ver yanlış;   // lineer ve uygun → hata yok
+        }
+    }
+    eğer bilinen_skaler_mi(ifade_tip(p, op, "?")) {   // kesinlikle lineer değil
+        sekil_hata(p, idx, "L007");
+        ver doğru;
+    }
+    ver yanlış;
+}
 // ---- D-354: T013 — dizi literali eleman tipi ----
 // C DUGUM_DIZI_OLUSTUR'un İKİ yolu var ve konumları farklı:
 //   (a) Dizi<E> BAĞLAMI var  → her eleman E ile karşılaştırılır (İLK eleman DÂHİL)
@@ -7165,7 +7193,8 @@ işlev lin_fn_tipi_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
 işlev lin_ekle(p: &değişken Ayr, ad: metin, sat: tam32, sut: tam32) -> tam32 {
     dizi_ekle(p.lin_ad, ad); dizi_ekle(p.lin_sat, sat);
     dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0);
-    dizi_ekle(p.lin_maske, 0); dizi_ekle(p.lin_fnk, 0); ver 0;   // D-316/D-321
+    dizi_ekle(p.lin_maske, 0); dizi_ekle(p.lin_fnk, 0);
+    dizi_ekle(p.lin_tek, 0); ver 0;   // D-316/D-321/D-355
 }
 // Aktif dilimde (en yeni) lineer bağlamanın indeksi; yoksa -1.
 işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
@@ -7208,6 +7237,11 @@ işlev lin_param_topla(p: &değişken Ayr, fn: tam32) -> tam32 {
             değişken tc: tam32 = son_cocuk(p, c);
             eğer (tc >= 0) ve param_lineer_mi(p, tc) {
                 lin_ekle(p, dizi_al(p.a_deg, c), dizi_al(p.a_sat, c), dizi_al(p.a_sut, c));
+                // D-355: parametre KESİN `yapı tekkez` mi? (`kullan` yalnız tekkez<T> alır)
+                eğer metin_esit(dizi_al(p.a_ad, tc), "TIP_BASIT")
+                  ve lineer_yapi_mi(p, dizi_al(p.a_deg, tc)) {
+                    dizi_yaz(p.lin_tek, dizi_boyut(p.lin_tek) - 1, 1);
+                }
             }
         }
         i = i + 1;
@@ -7476,6 +7510,11 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             // D-353 T006: hedef işlev tipinde değil → C erken döner (arite/arg yok).
             eğer t006_kontrol(p, idx, hedef) { ver 0; }
+            // D-355 L008: `tekkez_olustur` üretici intrinsic'i TAM 1 argüman alır.
+            eğer metin_esit(fad, "tekkez_olustur") ve ((hc - 1) != 1) {
+                sekil_hata(p, idx, "L008");
+                ver 0;   // C: t_hata → argüman kontrolü yok
+            }
             // D-321 (LC-3): hedef, lineer bir `tekkez<işlev(...)>` bağlaması ise
             // ÇAĞRI onu TÜKETİR. Bu dal olmadan bilinen-arite yoluna girmeyen çağrı
             // hedefi hiç tüketilmiyordu → sahte L001 (C kabul ediyor, self reddediyordu).
@@ -7608,6 +7647,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "KULLAN_IFADE") veya metin_esit(ad, "IMHA_IFADE") {
         değişken op: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         kontrol_dugum(p, op);
+        // D-355 L007: operand lineer değilse C erken döner → TÜKETİM YOK (L001 gelebilir).
+        eğer l007_kontrol(p, idx, op, metin_esit(ad, "KULLAN_IFADE")) { ver 0; }
         // D-316: imha bağlamı — kısmi taşınmış yapı YALNIZ imha ile tüketilebilir.
         eğer metin_esit(ad, "IMHA_IFADE") { p.imha_bag = p.imha_bag + 1; }
         lin_tuket_dugum(p, op);
@@ -7651,6 +7692,12 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
             eğer lin_fn_tipi_mi(p, idx) {
                 dizi_yaz(p.lin_fnk, dizi_boyut(p.lin_fnk) - 1, 1);   // D-321
+            }
+            // D-355: annotasyon KESİN lineer YAPI mı? (annotasyonsuz / tekkez<T> → 0)
+            değişken lan: tam32 = annot_node(p, idx);
+            eğer (lan >= 0) ve metin_esit(dizi_al(p.a_ad, lan), "TIP_BASIT")
+              ve lineer_yapi_mi(p, dizi_al(p.a_deg, lan)) {
+                dizi_yaz(p.lin_tek, dizi_boyut(p.lin_tek) - 1, 1);
             }
         }
     }
@@ -7970,7 +8017,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], dizi_bek: "?", kur_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
