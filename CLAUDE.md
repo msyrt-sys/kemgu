@@ -745,6 +745,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **SABİTSÜRE ALT-SİSTEMİ KAPANDI (8/8) — D-367.** Taint yayılımı pahalı sanılmıştı;
+  ölçüm TEK ÖZYİNELİ YÜKLEM olduğunu gösterdi (aritmetik/bit operandı sabitsüre ise
+  sonuç da sabitsüre; karşılaştırma ve `ifşa` dışarıda). Yol üstünde MEVCUT bir
+  yanlış-pozitif bulundu: **`ifşa` (ş ile!)** built-in listesinde yoktu → geçerli
+  declassify çağrıları sahte T002 alıyordu (D-361'de ASCII `ifsa` denenip yanlış
+  gerekçeyle elenmişti). **Kapsam 67/74; kalan 7'nin 2'si ölü → gerçekte 5.**
 - **DRF ALT-SİSTEMİ KAPANDI (7/7) — D-366.** Kesirli T reddi İKİ yolda (annotasyon
   + yapıcı) ve konumlar farklı düğümlerde (DRF001→argüman, DRF006→çağrı,
   DRF007→argüman). **Yön TİPTEN OKUNAMIYOR:** `alan<T>` → `TIP_KULLANICI` ve

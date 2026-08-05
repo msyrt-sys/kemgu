@@ -1,0 +1,49 @@
+// D-367 / CT001-CT008: sabitsüre (constant-time) kuralları.
+// `sabitsüre<T>` GİZLİ veriyi işaretler. Gizli veri üzerinde dallanma, indeksleme
+// ve bölme YASAK (branch/cache/div zamanlama yan kanalları); normal tipe implicit
+// akış da yasak — `ifşa(...)` ile açıkça declassify edilmelidir.
+işlev dallanma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    eğer s { ver 1; }        // T021 + CT001
+    ver 0;
+}
+işlev taint_dallanma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    eğer s + s { ver 1; }    // T021 + CT001 (aritmetik sonucu da gizlidir)
+    ver 0;
+}
+işlev indeksleme() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2];
+    değişken i: sabitsüre<tam32> = sabitsüre_olustur(0);
+    ver xs[i];               // CT002
+}
+işlev implicit_akis() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    değişken n: tam32 = s;   // CT003
+    ver n;
+}
+işlev bolme() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    değişken q: sabitsüre<tam32> = s / s;   // CT004
+    ver 0;
+}
+işlev uretici_arite() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5, 6);   // CT005
+    ver 0;
+}
+işlev sarilan_tip() -> tam32 {
+    değişken s: sabitsüre<metin> = sabitsüre_olustur("a");    // CT006 x2
+    ver 0;
+}
+işlev declass_arite() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    ver ifşa(s, 1);          // CT007
+}
+işlev kaydirma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(2);
+    değişken n: tam32 = 1;
+    ver n << s;              // CT008
+}
+işlev main() -> tam32 {
+    ver 0;
+}

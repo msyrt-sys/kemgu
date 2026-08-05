@@ -150,6 +150,7 @@ yapı Ayr {
     yerel_yig: Dizi<tam32>;  // D-358: 1 = annotasyonsuz dizi-literali bağlaması (YIĞIN dizi) — G003
     yerel_fn: Dizi<tam32>;   // D-358: 1 = `işlev(...)->T` annotasyonlu bağlama — G004
     yerel_yet: Dizi<metin>;  // D-364: `yetki<R>` bağlamasının KAYNAK adı ("" = yetki değil)
+    yerel_sab: Dizi<tam32>; // D-367: 1 = `sabitsüre<T>` annotasyonlu bağlama (CT001-CT008)
     yerel_yon: Dizi<metin>;  // D-366: kanal ucu yönü ("alan"/"gönderen"/"") — DRF007.
                              // Tipten DEĞİL, DEĞERDEN okunur: `alan<T>` annotasyonu
                              // TIP_KULLANICI'ya düşer ve ADI düğümde tutulmaz.
@@ -5979,6 +5980,9 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "vektor_kucuk"); g_ekle(p, "vektor_buyuk"); g_ekle(p, "vektor_sec");
     // D-361: C'de VAR ama listede EKSİK olanlar — her biri geçerli programda
     // sahte T002 üretiyordu (kap.kem `bölge_al` ile ölçüldü).
+    // D-367: `ifşa` (ş ile!) C built-in'i; listede yoktu → geçerli declassify
+    // çağrıları sahte T002 alıyordu (ASCII `ifsa`yı C de tanımıyor).
+    g_ekle(p, "ifşa");
     g_ekle(p, "bölge_al"); g_ekle(p, "kanal_oluştur");
     g_ekle(p, "gönderen"); g_ekle(p, "alan");
     g_ekle(p, "vektor_ve_azalt"); g_ekle(p, "vektor_veya_azalt");
@@ -6385,6 +6389,8 @@ işlev t020_kontrol(p: &değişken Ayr, ver_idx: tam32) -> tam32 {
 }
 // T021: eğer/iken koşulu mantıksal olmalı. eger_idx konumunda. ("?"→atla)
 işlev t021_kontrol(p: &değişken Ayr, eger_idx: tam32, kosul_idx: tam32) -> tam32 {
+    // D-367: `sabitsüre<T>` koşulu mantıksal DEĞİLDİR → T021 (C sırası: CT001'den ÖNCE).
+    eğer sabitsure_ifade_mi(p, kosul_idx) { ver sekil_hata(p, eger_idx, "T021"); }
     değişken kt: metin = ifade_tip(p, kosul_idx, "mantıksal");
     eğer (metin_esit(kt, "?") == yanlış) ve (metin_esit(kt, "mantıksal") == yanlış) {
         dizi_ekle(p.th_kod, "T021");
@@ -6566,6 +6572,11 @@ işlev tip_node_ptr_mi(p: &değişken Ayr, tn: tam32) -> tam32 {
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") { ver 1; }
     ver 0;
 }
+işlev tip_node_sabitsure_mi(p: &değişken Ayr, tn: tam32) -> tam32 {   // D-367
+    eğer tn < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_SABITSURE") { ver 1; }
+    ver 0;
+}
 işlev tip_node_dizi_mi(p: &değişken Ayr, tn: tam32) -> tam32 {   // D-353
     eğer tn < 0 { ver 0; }
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_DIZI") { ver 1; }
@@ -6682,6 +6693,82 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
         ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
     }
     ver yanlış;
+}
+// ---- D-367: CT001-CT008 — sabitsüre (constant-time) kuralları ----
+// `sabitsüre<T>` gizli veriyi işaretler: dallanma/indeksleme/bölme ONUN üzerinde
+// yapılamaz, normal tipe implicit dönüşemez (`ifşa(...)` zorunlu), sarılan tip
+// constant-time YETENEKLİ olmalı. Aritmetik sabitsüre'yi KORUR (taint yayılımı).
+işlev tip_sabitsure_yetenekli_mi(t: metin) -> mantıksal {
+    ver tamsayi_mi(t) veya metin_esit(t, "karakter") veya metin_esit(t, "mantıksal");
+}
+işlev ct006_tip_kontrol(p: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_SABITSURE") == yanlış { ver 0; }
+    eğer dizi_al(p.a_cs, tn) == 0 { ver 0; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));
+    eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_BASIT") == yanlış { ver 0; }
+    eğer tip_sabitsure_yetenekli_mi(dizi_al(p.a_deg, ic)) == yanlış {
+        sekil_hata(p, tn, "CT006");
+    }
+    ver 0;
+}
+işlev bag_sabitsure_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_sab, i) == 1; }
+        i = i - 1;
+    }
+    ver yanlış;
+}
+// Doğrudan bağlama + ARİTMETİK/BİT yayılımı. Karşılaştırma ve `ifşa(...)` DIŞARIDA
+// (ilki mantıksal üretir, ikincisi declassify eder).
+işlev sabitsure_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken a: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(a, "TANIMLAYICI") { ver bag_sabitsure_mi(p, dizi_al(p.a_deg, idx)); }
+    eğer metin_esit(a, "IKILI") {
+        değişken op: metin = dizi_al(p.a_deg, idx);
+        eğer (aritmetik_mi(op) veya bit_op_mi(op)) == yanlış { ver yanlış; }
+        eğer dizi_al(p.a_cs, idx) < 2 { ver yanlış; }
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        ver sabitsure_ifade_mi(p, dizi_al(p.cocuk, cb))
+          veya sabitsure_ifade_mi(p, dizi_al(p.cocuk, cb + 1));
+    }
+    ver yanlış;
+}
+işlev ct_cagri_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    eğer metin_esit(fad, "sabitsüre_olustur") {
+        eğer n != 1 { sekil_hata(p, idx, "CT005"); ver doğru; }
+        eğer metin_esit(p.drf_bek, "ct6") { sekil_hata(p, idx, "CT006"); ver doğru; }
+        ver yanlış;
+    }
+    eğer metin_esit(fad, "ifşa") {
+        eğer n != 1 { sekil_hata(p, idx, "CT007"); ver doğru; }
+        değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+        eğer (sabitsure_ifade_mi(p, a0) == yanlış)
+          ve bilinen_skaler_mi(ifade_tip(p, a0, "?")) {
+            sekil_hata(p, idx, "CT007");
+            ver doğru;
+        }
+        ver yanlış;
+    }
+    ver yanlış;
+}
+// CT004/CT008: sabitsüre operandlı `/`,`%` ve sabitsüre KAYDIRMA MİKTARI yasak.
+işlev ct_ikili_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken op: metin = dizi_al(p.a_deg, idx);
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken sol: tam32 = dizi_al(p.cocuk, cb);
+    değişken sag: tam32 = dizi_al(p.cocuk, cb + 1);
+    eğer metin_esit(op, "/") veya metin_esit(op, "%") {
+        eğer sabitsure_ifade_mi(p, sol) veya sabitsure_ifade_mi(p, sag) {
+            ver sekil_hata(p, idx, "CT004");
+        }
+    }
+    eğer metin_esit(op, "<<") veya metin_esit(op, ">>") {
+        eğer sabitsure_ifade_mi(p, sag) { ver sekil_hata(p, idx, "CT008"); }
+    }
+    ver 0;
 }
 // ---- D-366: DRF001-DRF007 — eşzamanlılık (görev/kanal) kuralları ----
 // DRF001/DRF006: `görev<T>`/`kanal<T>` V1'de KESİRLİ T taşıyamaz (runtime sonucu
@@ -7097,6 +7184,10 @@ işlev indeks_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken taban: tam32 = dizi_al(p.cocuk, cb);
     değişken it: metin = ifade_tip(p, dizi_al(p.cocuk, cb + 1), "?");
+    // D-367 CT002: sabitsüre indeks = cache-timing yan kanalı (`ifşa` gerekir).
+    eğer sabitsure_ifade_mi(p, dizi_al(p.cocuk, cb + 1)) {
+        ver sekil_hata(p, idx, "CT002");
+    }
     eğer ptr_ifade_mi(p, taban) {
         eğer bilinen_tamsayi_degil(it) { ver sekil_hata(p, idx, "T005"); }   // D-353
         eğer p.guv_bag == 0 { ver g001_hata(p, idx); }
@@ -7682,6 +7773,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
         dizi_ekle(p.yerel_fn, 0);
         dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, tc));   // D-364 MM002/CP004
         dizi_ekle(p.yerel_yon, "");   // D-366: parametrede yön sinyali yok
+        dizi_ekle(p.yerel_sab, tip_node_sabitsure_mi(p, tc));   // D-367 CT
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -7702,6 +7794,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
             } değilse { dizi_ekle(p.yerel_fn, 0); }
             dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, van));   // D-364
             dizi_ekle(p.yerel_yon, kanal_uc_yonu(p, son_cocuk(p, idx)));   // D-366 DRF007
+            dizi_ekle(p.yerel_sab, tip_node_sabitsure_mi(p, van));   // D-367
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -7713,6 +7806,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.yerel_fn, 0);
                 dizi_ekle(p.yerel_yet, "");
                 dizi_ekle(p.yerel_yon, "");
+                dizi_ekle(p.yerel_sab, 0);
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -7728,6 +7822,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.yerel_fn, 0);
                         dizi_ekle(p.yerel_yet, "");
                         dizi_ekle(p.yerel_yon, "");
+                        dizi_ekle(p.yerel_sab, 0);
                     }
                     q = q + 1;
                 }
@@ -7754,6 +7849,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         // D-366: tip düğümü de denetlenir — `görev<kesirli*>`/`kanal<kesirli*>`
         // annotasyon/parametre yolunda DRF001/DRF006. Alt tipler için özyinele.
         drf_tip_kontrol(p, idx);
+        ct006_tip_kontrol(p, idx);   // D-367
         değişken tb: tam32 = dizi_al(p.a_cb, idx);
         değişken tc2: tam32 = dizi_al(p.a_cs, idx);
         değişken ti: tam32 = 0;
@@ -7827,6 +7923,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken kosul: tam32 = dizi_al(p.cocuk, kb);
         kontrol_dugum(p, kosul);
         t021_kontrol(p, idx, kosul);
+        // D-367 CT001: gizli veri üzerinde dallanma = branch-timing yan kanalı.
+        eğer sabitsure_ifade_mi(p, kosul) { sekil_hata(p, idx, "CT001"); }
         eğer metin_esit(ad, "IKEN") {
             // D-317 L-LOOP: gövde dış lineer bağlamayı tüketemez.
             değişken ln: tam32 = lin_dilim_n(p);
@@ -7955,6 +8053,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer mmio_kontrol(p, idx, fad) { ver 0; }
             eğer cp004_kontrol(p, idx, fad) { ver 0; }
             eğer drf_cagri_kontrol(p, idx, fad) { ver 0; }   // D-366
+            eğer ct_cagri_kontrol(p, idx, fad) { ver 0; }    // D-367 CT005/CT007
             // D-355 L008: `tekkez_olustur` üretici intrinsic'i TAM 1 argüman alır.
             eğer metin_esit(fad, "tekkez_olustur") ve ((hc - 1) != 1) {
                 sekil_hata(p, idx, "L008");
@@ -8135,6 +8234,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer metin_esit(dizi_al(p.a_ad, dan), "TIP_GOREV") { p.drf_bek = "görev"; }
             eğer metin_esit(dizi_al(p.a_ad, dan), "TIP_KANAL") { p.drf_bek = "kanal"; }
         }
+        // D-367 CT006 yapıcı yolu: annotasyon `sabitsüre<CT-olmayan>` ise
+        // `sabitsüre_olustur` çağrısı da reddedilir (C iki yolda ayrı ayrı).
+        eğer (tip_node_sabitsure_mi(p, dan) == 1) ve (dizi_al(p.a_cs, dan) > 0) {
+            değişken dic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, dan));
+            eğer metin_esit(dizi_al(p.a_ad, dic), "TIP_BASIT")
+              ve (tip_sabitsure_yetenekli_mi(dizi_al(p.a_deg, dic)) == yanlış) {
+                p.drf_bek = "ct6";
+            }
+        }
     }
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
         değişken an: tam32 = annot_node(p, idx);
@@ -8150,6 +8258,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     p.drf_bek = eski_drf;
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
+    // D-367 CT003: sabitsüre değer NORMAL tipli bağlamaya implicit akamaz.
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
+        değişken can: tam32 = annot_node(p, idx);
+        değişken cvc: tam32 = son_cocuk(p, idx);
+        eğer (can >= 0) ve (tip_node_sabitsure_mi(p, can) == 0)
+          ve (cvc >= 0) ve sabitsure_ifade_mi(p, cvc) {
+            sekil_hata(p, idx, "CT003");
+        }
+    }
     // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.
     eğer metin_esit(ad, "DEGISKEN") {
         değişken vc2: tam32 = son_cocuk(p, idx);
@@ -8177,7 +8294,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer dizi_al(p.a_cs, idx) > 0 { g005_dogrudan_kontrol(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }   // D-324
         eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
     }
-    eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
+    eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); ct_ikili_kontrol(p, idx); }   // TC3e/f + T028 + D-367
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     eğer metin_esit(ad, "INDEKS") { indeks_kontrol(p, idx); }   // D-351 G001 + D-353 T005/T008
     // D-358 G002: satıriçi asm yalnız güvensiz blokta (ham makine kodu tier kapısı).
@@ -8590,7 +8707,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,

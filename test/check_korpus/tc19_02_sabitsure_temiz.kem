@@ -1,0 +1,37 @@
+// D-367: geçerli sabitsüre kullanımları — yanlış-pozitif kapısı.
+// `ifşa(...)` declassify eder: ondan SONRA değer artık gizli değildir, yani
+// dallanma/indeksleme/bölme serbesttir. Aritmetik sabitsüre'yi KORUR.
+işlev declassify() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(42);
+    değişken n: tam32 = ifşa(s);
+    ver n;
+}
+işlev aritmetik_korur() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    değişken q: sabitsüre<tam32> = s + s;
+    değişken r: sabitsüre<tam32> = q * q;
+    ver ifşa(r);
+}
+işlev declass_sonrasi_dallanma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(1);
+    değişken n: tam32 = ifşa(s);
+    eğer n == 1 { ver 1; }
+    ver 0;
+}
+işlev ct_yetenekli_tipler() -> tam32 {
+    değişken a: sabitsüre<tam8> = sabitsüre_olustur(1);
+    değişken b: sabitsüre<dtam64> = sabitsüre_olustur(2);
+    // NOT: `sabitsüre<karakter>`/`sabitsüre<mantıksal>` + `sabitsüre_olustur(...)`
+    // C'de T001 verir (üreticinin dönüş tipi çıkarsaması tamsayı literaline
+    // bağlı) — bu bir CT kuralı DEĞİL, ayrı bir tip-çıkarsama sınırı. Bu dosya
+    // CT yanlış-pozitif kapısı olduğu için o şekiller buraya alınmadı.
+    ver 0;
+}
+işlev acik_kaydirma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(2);
+    değişken n: tam32 = 1;
+    ver n << ifşa(s);
+}
+işlev main() -> tam32 {
+    ver 0;
+}

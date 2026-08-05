@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-367 — CT001-CT008 portlandı: SABİTSÜRE ALT-SİSTEMİ KAPANDI (8/8) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Plan "iki parça" idi, ÖLÇÜM TEK PARÇAYA İNDİRDİ.** Taint yayılımının pahalı
+olacağını varsaymıştım; C'nin kuralı ölçülünce **tek özyineli yüklem** olduğu
+görüldü: aritmetik/bit operandlarından biri sabitsüre ise sonuç da sabitsüre.
+Karşılaştırma ve `ifşa(...)` bu yolun DIŞINDA (ilki mantıksal üretir, ikincisi
+declassify eder). Yayılım eklenince kalan tek fark da kapandı.
+
+**Kurallar:** CT001 dallanma · CT002 indeksleme · CT003 implicit akış ·
+CT004 `/`,`%` · CT005 üretici aritesi · CT006 sarılan tip CT-yetenekli değil
+(annotasyon + yapıcı, İKİ tanı) · CT007 `ifşa` aritesi/operandı · CT008 kaydırma
+miktarı.
+
+**Yol üstünde bulunan MEVCUT YANLIŞ-POZİTİF:** `ifşa` (ş ile!) self-host'un
+built-in listesinde YOKTU → her geçerli declassify çağrısı **sahte T002** alıyordu.
+D-361'de ASCII `ifsa` denenmiş ve "C de tanımıyor" diye elenmişti — **yazım
+yanlıştı**, doğrusu ölçülerek bulundu. Bu, D-361'deki eleme gerekçesinin bir
+kısmını geçersiz kılıyor.
+
+**Yan bulgu (T021):** `sabitsüre<T>` koşulu mantıksal olmadığı için C **T021 +
+CT001** verir. Self-host'ta `yerel_tip` sabitsüre'yi "?"e düşürdüğünden T021 hiç
+çıkmıyordu; sabitsüre bilgisiyle o da kapandı.
+
+**Korpus dosyası yazarken ölçüm iki satırı eledi:** `sabitsüre<karakter>` ve
+`sabitsüre<mantıksal>` + `sabitsüre_olustur(...)` C'de **T001** veriyor
+(üreticinin dönüş çıkarsaması tamsayı literaline bağlı) — CT kuralı değil, ayrı
+bir tip-çıkarsama sınırı. "Temiz" dosyaya alınmadı, gerekçesi dosyaya yazıldı.
+
+**Sabotaj (3):** S64 taint yayılımı (127→126), S65 CT008 (126), S66 `ifşa`nın
+declassify etmesi (**yanlış-pozitif yönünde**: geçerli tüm kullanımlar CT003 aldı).
+
+**Probe 12/12 birebir.**
+
+**Sonuç:** self-host checker kod kapsamı **59 → 67/74**. **SABİTSÜRE ALT-SİSTEMİ
+8/8 KAPANDI.** Kalan **7 kod**: M004, T011, T014, T030, T031 + 2 ölü (T015/T023).
+**Yani gerçekte kalan 5.** C tarafı regresyonsuz: sabitsure 39/39.
+
+---
+
 ## D-366 — DRF001-DRF007 portlandı: DRF ALT-SİSTEMİ KAPANDI (7/7) (2026-08-05)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
