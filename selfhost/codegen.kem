@@ -151,6 +151,8 @@ yapı Ayr {
     yerel_fn: Dizi<tam32>;   // D-358: 1 = `işlev(...)->T` annotasyonlu bağlama — G004
     dizi_bek: metin;         // D-354: aktif Dizi<E> bağlamının eleman tipi ("?"=yok)
     kur_ad: Dizi<metin>;     // D-351: küresel değişken adları (E010; checker prepass)
+    si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
+    si_yol: Dizi<metin>;     // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;      // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor)
     aktif_fn: tam32;       // D-324: aktif işlev düğümü (G005 ileri-tarama kapsamı)
@@ -1846,7 +1848,13 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
             ilerle(p);
             değişken d2: mantıksal = doğru;
             iken d2 {
+                // D-361 yan-kanal: seçili adlar NİTELİKSİZ gelir → global ad
+                // olarak kaydedilmezse geçerli kullanımları sahte T002 alır
+                // (ana_secili.kem ile ölçüldü). Aynı ad iki modülden gelirse T042.
+                değişken sad: metin = sim_lex(p);
                 bekle(p, "TANIMLAYICI");
+                dizi_ekle(p.si_ad, sad);
+                dizi_ekle(p.si_yol, yol);
                 eğer sim_mi(p, "VIRGUL") { ilerle(p); }
                 değilse { d2 = yanlış; }
             }
@@ -5950,6 +5958,11 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "vektor_doldur"); g_ekle(p, "vektor_eleman"); g_ekle(p, "vektor_topla");
     g_ekle(p, "vektor_min"); g_ekle(p, "vektor_max"); g_ekle(p, "vektor_esit");
     g_ekle(p, "vektor_kucuk"); g_ekle(p, "vektor_buyuk"); g_ekle(p, "vektor_sec");
+    // D-361: C'de VAR ama listede EKSİK olanlar — her biri geçerli programda
+    // sahte T002 üretiyordu (kap.kem `bölge_al` ile ölçüldü).
+    g_ekle(p, "bölge_al"); g_ekle(p, "kanal_oluştur");
+    g_ekle(p, "gönderen"); g_ekle(p, "alan");
+    g_ekle(p, "vektor_ve_azalt"); g_ekle(p, "vektor_veya_azalt");
     // keyword-konstrüktörler (tip_belirle özel-case: değer/tamam/hata + hiç + kendin)
     g_ekle(p, "değer"); g_ekle(p, "tamam"); g_ekle(p, "hata"); g_ekle(p, "kendin");
     ver 0;
@@ -7566,6 +7579,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.th_kod, "T002");
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        } değilse eğer (yerel_var_mi(p, nm) == yanlış) ve secili_belirsiz_mi(p, nm) {
+            sekil_hata(p, idx, "T042");   // D-361: çıplak ad iki modülden geldi
         } değilse {
             // D-351 E010: küresel değişkene erişim (okuma + yazma) yalnız güvensiz
             // blokta. Yerel bir bağlama aynı adı gölgeliyorsa küresel ÇÖZÜLMEZ (C:
@@ -8191,11 +8206,35 @@ işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
+            // D-361: T040 BURADA RAPORLANMIYOR — önce runtime'ın UTF-8 yol
+            // desteği gerekiyor (C ana.c MultiByteToWideChar kullanıyor ÇÜNKÜ
+            // Windows'ta fopen ANSI codepage'e düşüp `kütüphane/`de başarısız
+            // olur). Self-host o dönüşümü yapmadığından kütüphane modülleri
+            // sessizce yüklenmiyor; T040 eklenirse GEÇERLİ dosyalar sahte hata
+            // alır (ölçüldü: 4 yanlış-pozitif). Önce runtime, sonra T040.
             modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin);
         }
         i = i + 1;
     }
+    // D-361: seçili import adları NİTELİKSİZ görünür → global ada ekle.
+    değişken j: tam32 = 0;
+    iken j < dizi_boyut(p.si_ad) { g_ekle(p, dizi_al(p.si_ad, j)); j = j + 1; }
     ver 0;
+}
+// D-361 / T042: aynı ad BİRDEN ÇOK modülden seçili-import edildiyse çıplak
+// kullanımı belirsizdir (nitelikli erişim geçerli kalır).
+işlev secili_belirsiz_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;  değişken n: tam32 = 0;  değişken ilk: metin = "";
+    iken i < dizi_boyut(p.si_ad) {
+        eğer metin_esit(dizi_al(p.si_ad, i), ad) {
+            eğer n == 0 { ilk = dizi_al(p.si_yol, i); n = 1; }
+            değilse {
+                eğer metin_esit(dizi_al(p.si_yol, i), ilk) == yanlış { ver doğru; }
+            }
+        }
+        i = i + 1;
+    }
+    ver yanlış;
 }
 işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     builtin_ekle(p);
@@ -8230,7 +8269,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], dizi_bek: "?", kur_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,

@@ -745,6 +745,15 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **⚠ MODÜL YÜZEYİ + RUNTIME UTF-8 YOL KUSURU — D-361.** `test/moduller/` ölçülünce
+  self-host'un **geçerli programları reddettiği** 3 yanlış-pozitif çıktı: 6 eksik
+  built-in (`bölge_al` vb.) ve seçili import adlarının parser'da ATILMASI. Onarıldı;
+  T042 portlandı (kapsam 44/74). **T040 GERİ ALINDI:** sessiz "modül bulunamadı"
+  atlaması gerçek bir kusuru maskeliyormuş — C `ana.c` `MultiByteToWideChar`
+  kullanıyor çünkü Windows `fopen` ANSI codepage'e düşüp `kütüphane/` yolunda
+  BAŞARISIZ olur; self-host runtime bunu yapmadığından **`kütüphane/` modülleri
+  sessizce yüklenmiyor**. Önce runtime yol onarımı, sonra T040.
+  `checker_diff` artık `test/moduller/`i de kapsıyor: **88 → 118 dosya** (2 muaf).
 - **KALAN TANI KODLARININ HARİTASI — D-360.** `--token` 235 dosyada temiz. Kalan
   31 kodun **2'si ÖLÜ** (T015/T023 — C parser'ı o şekilleri reddediyor, portlanmayacak),
   kalan 29'un **23'ü yalnız 4 alt-sistemin tip temsiline bağlı**: sabitsüre (CT001-008),

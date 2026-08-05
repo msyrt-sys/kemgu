@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-361 [YÜKSEK] — Modül yüzeyi ölçüldü: 3 YANLIŞ-POZİTİF onarıldı + T042 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
+
+D-360'ın önerdiği modül kümesine (T016/T040/T041/T042) girmeden önce yüzey ölçüldü:
+`test/moduller/` (32 dosya) C oracle'ına karşı koşuldu → **6 sapma, İKİ YÖNDE**.
+Kritik olan yön beklenmedikti: **self-host GEÇERLİ programları reddediyordu.**
+
+### Onarılan yanlış-pozitifler (self-host C'den KATI — daha ciddi sınıf)
+
+1. **Eksik built-in'ler (6).** `bölge_al`, `kanal_oluştur`, `gönderen`, `alan`,
+   `vektor_ve_azalt`, `vektor_veya_azalt` self-host'un `builtin_ekle` listesinde
+   yoktu → geçerli çağrılar **sahte T002** alıyordu (`kap.kem`'de 2 hata ölçüldü).
+   Liste C ile karşılaştırılarak tamamlandı. (`ifsa` ve `bölge_serbest` EKLENMEDİ —
+   probe: C de onları tanımıyor.)
+2. **Seçili import (`kullan m::{a,b}`).** Parser seçilen adları **atıyordu**
+   ("dump'ta yok") → niteliksiz gelen `topla` sahte T002 alıyordu
+   (`ana_secili.kem`). Yan-kanal `si_ad`/`si_yol` eklendi (cv_* deseni).
+
+### Portlanan tanı
+
+3. **T042** — aynı ad birden çok modülden seçili-import edilirse çıplak kullanımı
+   belirsiz. `si_yol` sayesinde "aynı ad, FARKLI modül" ayrımı yapılabiliyor.
+   Öncesinde self-host burada T042 yerine **T002** veriyordu (`ana_belirsiz.kem`):
+   doğru konum, yanlış kod.
+
+### T040 DENENDİ ve GERİ ALINDI — sessiz atlama bir runtime kusurunu maskeliyormuş
+
+`modul_yukle`'nin "bulunamadı → sessizce geç" davranışını T040'a çevirmek
+**4 yanlış-pozitif** üretti (`dizi_*.kem`). Kök neden ölçüldü: C `ana.c`
+**`MultiByteToWideChar`** kullanıyor, çünkü **Windows'ta `fopen` ANSI codepage'e
+düşer ve UTF-8 `kütüphane/` yolunda BAŞARISIZ olur**. Self-host'un
+`dosya_var_mi`/`dosya_oku` runtime'ı bu dönüşümü yapmıyor → `kütüphane/`
+modülleri **sessizce yüklenmiyor**. Yani T040 sağlam değil: doğru kural, yanlış
+öncül. **Sıra: önce runtime UTF-8 yol onarımı, sonra T040.** Bu, "sessiz atlama"nın
+altında yatan gerçek kusuru göstermesi bakımından kayda değer.
+
+### Kapı genişletildi
+
+`checker_diff` artık `test/moduller/`i de kapsıyor: **88 → 118 dosya**
+(2 belgeli muafiyet: `ana_gizli` T041 portlanmadı, `ana_kutuphane` runtime'a bağlı).
+Muafiyet listesi kapanınca boşalmalı.
+
+**Sabotaj (3):** S44 eksik built-in (118→117, `kap.kem` sahte T002'ye döndü),
+S45 seçili-ad kaydı (117 — hem `ana_secili` hem `ana_belirsiz`),
+S46 T042 (117).
+
+**Sonuç:** self-host checker kod kapsamı **43 → 44/74**; kapı **88 → 118 dosya**;
+modül yüzeyi 26/32 → **30/32**.
+
+---
+
 ## D-360 — Kalan tanı kodlarının ULAŞILABİLİRLİK taraması + E013 portu (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).

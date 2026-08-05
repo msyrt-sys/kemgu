@@ -22,9 +22,18 @@ if ! clang -x ir "$TMP/c.ll" -x none "$RT" -o "$TMP/kemcheck.exe" 2>/dev/null; t
     echo "🔴 KEMGU-checker link edilemedi"; exit 1
 fi
 
-pass=0; fail=0
-for f in test/check_korpus/*.kem; do
+# D-361: modül fikstürleri de kapıya dâhil (çapraz-dosya import yüzeyi).
+# MUAF (2) — bilinen, belgeli boşluklar; kapatıldıklarında bu liste boşalmalı:
+#   ana_gizli.kem      → T041 (`genel` olmayan üyeye çapraz erişim) portlanmadı
+#   ana_kutuphane.kem  → T040/T016; ÖNCE runtime'ın UTF-8 yol desteği gerekiyor
+#                        (self-host `kütüphane/` modüllerini açamıyor — bkz. D-361)
+MUAF="ana_gizli.kem ana_kutuphane.kem"
+muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
+
+pass=0; fail=0; muaf=0
+for f in test/check_korpus/*.kem test/moduller/*.kem; do
     [ -f "$f" ] || continue
+    if muaf_mi "$(basename "$f")"; then muaf=$((muaf+1)); continue; fi
     "$KEMGU" --checkdump "$f" 2>/dev/null > "$TMP/oracle.txt"
     "$TMP/kemcheck.exe" "$f" > "$TMP/aday.txt" 2>/dev/null
     if diff -q "$TMP/oracle.txt" "$TMP/aday.txt" >/dev/null 2>&1; then
@@ -35,5 +44,5 @@ for f in test/check_korpus/*.kem; do
         fail=$((fail+1))
     fi
 done
-echo "=== checker --checkdump sıfır-diff: $pass/$((pass+fail)) korpus ==="
+echo "=== checker --checkdump sıfır-diff: $pass/$((pass+fail)) korpus ($muaf muaf) ==="
 [ "$fail" -eq 0 ]
