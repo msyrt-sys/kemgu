@@ -149,6 +149,7 @@ yapı Ayr {
     yerel_dizi: Dizi<tam32>; // D-353: yerel ile paralel — 1 = Dizi<T> bağlaması (T005)
     yerel_yig: Dizi<tam32>;  // D-358: 1 = annotasyonsuz dizi-literali bağlaması (YIĞIN dizi) — G003
     yerel_fn: Dizi<tam32>;   // D-358: 1 = `işlev(...)->T` annotasyonlu bağlama — G004
+    yerel_yet: Dizi<metin>;  // D-364: `yetki<R>` bağlamasının KAYNAK adı ("" = yetki değil)
     dizi_bek: metin;         // D-354: aktif Dizi<E> bağlamının eleman tipi ("?"=yok)
     kur_ad: Dizi<metin>;     // D-351: küresel değişken adları (E010; checker prepass)
     si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
@@ -6676,6 +6677,77 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// ---- D-364: MM001/MM002/MM003 + CP004 — MMIO ve yetki intrinsikleri ----
+// mmio_okuN(y: yetki<MMIO>, adres) 2 arg · mmio_yazN(y, adres, değer) 3 arg
+//   MM001 arite (ÇAĞRI) · MM002 arg0 yetki<MMIO> değil (ARG) · MM003 tamsayı değil (ARG)
+// geri_al(y: yetki<R>) → CP004 arite (ÇAĞRI) / operand yetki değil (ARG)
+// CP005 (çift tüketim) BU PARTİDE YOK: lineer yetki izleme ayrı iş.
+işlev yetki_kaynak_adi(p: &değişken Ayr, tn: tam32) -> metin {
+    eğer tn < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_YETKI") == yanlış { ver ""; }
+    eğer dizi_al(p.a_cs, tn) == 0 { ver ""; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));
+    eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_BASIT") { ver dizi_al(p.a_deg, ic); }
+    ver "";
+}
+işlev bag_yetki_kaynak(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_yet, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+işlev kesin_yetki_degil(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TANIMLAYICI") {
+        değişken nm: metin = dizi_al(p.a_deg, idx);
+        eğer yerel_var_mi(p, nm) { ver metin_esit(bag_yetki_kaynak(p, nm), ""); }
+        ver yanlış;
+    }
+    ver bilinen_skaler_mi(ifade_tip(p, idx, "?"));
+}
+işlev bag_yetki_kaynak_ifade(p: &değişken Ayr, idx: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TANIMLAYICI") {
+        ver bag_yetki_kaynak(p, dizi_al(p.a_deg, idx));
+    }
+    ver "";
+}
+işlev mmio_oku_mu(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "mmio_oku16") veya metin_esit(ad, "mmio_oku32")
+      veya metin_esit(ad, "mmio_oku64");
+}
+işlev mmio_yaz_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "mmio_yaz16") veya metin_esit(ad, "mmio_yaz32")
+      veya metin_esit(ad, "mmio_yaz64");
+}
+işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    değişken oku: mantıksal = mmio_oku_mu(fad);
+    değişken yaz: mantıksal = mmio_yaz_mi(fad);
+    eğer (oku veya yaz) == yanlış { ver yanlış; }
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    değişken bek: tam32 = 2;
+    eğer yaz { bek = 3; }
+    eğer n != bek { sekil_hata(p, idx, "MM001"); ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "MMIO") == yanlış
+      ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
+    değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
+    eğer bilinen_tamsayi_degil(ifade_tip(p, a1, "?")) { sekil_hata(p, a1, "MM003"); }
+    eğer yaz {
+        değişken a2: tam32 = dizi_al(p.cocuk, cb + 3);
+        eğer bilinen_tamsayi_degil(ifade_tip(p, a2, "?")) { sekil_hata(p, a2, "MM003"); }
+    }
+    ver yanlış;
+}
+işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    eğer metin_esit(fad, "geri_al") == yanlış { ver yanlış; }
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    eğer n != 1 { sekil_hata(p, idx, "CP004"); ver doğru; }
+    değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+    eğer kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    ver yanlış;
+}
 // ---- D-358: G002 + G003 + G004 — güvensiz-tier ve temsil kuralları ----
 // G002: `satıriçi_asm` yalnız `güvensiz` blokta (ham makine kodu = tier kapısı).
 // G003: annotasyonsuz `değişken a = [..]` YIĞIN dizi üretir; `Dizi<T>` parametresi
@@ -7504,6 +7576,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
         dizi_ekle(p.yerel_dizi, tip_node_dizi_mi(p, tc));   // D-353 T005
         dizi_ekle(p.yerel_yig, 0);   // parametre yığın-dizi bağlaması olamaz
         dizi_ekle(p.yerel_fn, 0);
+        dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, tc));   // D-364 MM002/CP004
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -7522,6 +7595,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer (van >= 0) ve metin_esit(dizi_al(p.a_ad, van), "TIP_ISLEV") {
                 dizi_ekle(p.yerel_fn, 1);
             } değilse { dizi_ekle(p.yerel_fn, 0); }
+            dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, van));   // D-364
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -7531,6 +7605,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.yerel_dizi, 0);
                 dizi_ekle(p.yerel_yig, 0);
                 dizi_ekle(p.yerel_fn, 0);
+                dizi_ekle(p.yerel_yet, "");
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -7544,6 +7619,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.yerel_dizi, 0);
                         dizi_ekle(p.yerel_yig, 0);
                         dizi_ekle(p.yerel_fn, 0);
+                        dizi_ekle(p.yerel_yet, "");
                     }
                     q = q + 1;
                 }
@@ -7753,6 +7829,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             }
             // D-353 T006: hedef işlev tipinde değil → C erken döner (arite/arg yok).
             eğer t006_kontrol(p, idx, hedef) { ver 0; }
+            // D-364: MMIO + yetki intrinsikleri (C bunları normal çağrı yolundan
+            // ÖNCE özel-case eder; hata varsa erken döner).
+            eğer mmio_kontrol(p, idx, fad) { ver 0; }
+            eğer cp004_kontrol(p, idx, fad) { ver 0; }
             // D-355 L008: `tekkez_olustur` üretici intrinsic'i TAM 1 argüman alır.
             eğer metin_esit(fad, "tekkez_olustur") ve ((hc - 1) != 1) {
                 sekil_hata(p, idx, "L008");
@@ -8372,7 +8452,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,

@@ -1,0 +1,29 @@
+// D-364 / MM001 + MM002 + MM003 + CP004: MMIO ve yetki intrinsikleri.
+// MMIO erişimi bir YETENEK (yetki<MMIO>) ister — donanım kaydına erişim
+// ambient authority ile değil, taşınan bir yetkiyle yapılır.
+işlev arite() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    değişken a: tam32 = mmio_oku32(y);       // MM001: tam 2 argüman
+    geri_al(y);
+    ver a;
+}
+işlev yetki_degil() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    değişken a: tam32 = mmio_oku32(5, 0);    // MM002: ilk argüman yetki<MMIO> olmalı
+    geri_al(y);
+    ver a;
+}
+işlev adres_tamsayi_degil() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    değişken a: tam32 = mmio_oku32(y, doğru);  // MM003: adres tamsayı olmalı
+    geri_al(y);
+    ver a;
+}
+işlev geri_al_yetki_degil() -> tam32 {
+    değişken n: tam32 = 5;
+    geri_al(n);                              // CP004: operand yetki<R> olmalı
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

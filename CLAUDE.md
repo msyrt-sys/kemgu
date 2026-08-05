@@ -745,6 +745,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **MMIO + yetki — D-364.** MM001/MM002/MM003 + CP004 portlandı (kapsam **51/74**).
+  Yeni yan-dizi `yerel_yet` (`yetki<R>` kaynak adı). **CP005 bilinçli olarak YOK:**
+  `deg_lineer_mi` TIP_YETKI'yi saymıyor ve kod L002 değil CP005 olmalı → lineer
+  makineye yetki-ayrımlı yol eklemek ayrı adım.
 - **MODÜL ALT-SİSTEMİ KAPANDI — D-363.** T041 (private-by-default) portlandı;
   engel `genel`in düğüme yansımamasıydı (`parse_genel` çıplak tanım döner) →
   `gen_node` yan-kanalı. **`checker_diff` 120/120, MUAFİYET LİSTESİ BOŞ.**

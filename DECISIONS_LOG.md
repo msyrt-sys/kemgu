@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-364 — MMIO + yetki intrinsikleri portlandı: MM001/MM002/MM003 + CP004 (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+D-363'ten sonra kalan iş "alt-sistem" sınıfındaydı; ilk alt-sistem olarak
+MMIO+yetki seçildi (kem_os'un canlı kullandığı yüzey, lineer altyapı hazır).
+
+**Kurallar (6 MMIO built-in'i: 16/32/64 × oku/yaz):**
+- `mmio_okuN(y: yetki<MMIO>, adres)` 2 argüman · `mmio_yazN(y, adres, değer)` 3
+- **MM001** arite (ÇAĞRI düğümü, erken dönüş) · **MM002** arg0 `yetki<MMIO>` değil
+  (ARG düğümü) · **MM003** adres/değer tamsayı değil (ARG düğümü)
+- **CP004** `geri_al` tam 1 argüman (ÇAĞRI) / operandı `yetki<R>` (ARG)
+
+**Yeni yan-dizi `yerel_yet`:** bağlamanın `yetki<R>` KAYNAK adı ("" = yetki değil).
+MM002 "kaynak MMIO mu" sorusunu bununla yanıtlıyor. Muhafazakârlık: yalnız
+**kesin** olduğumuzda konuşuyoruz — `kesin_yetki_degil` bilinen skaler ya da
+yetki-olmayan bir bağlama gerektiriyor; emin olunamayan ifade → susuluyor.
+
+**CP005 BU PARTİDE YOK (bilinçli):** `yetki<R>`nin çift tüketimi lineer izleme
+ister. Ölçüldü: `param_lineer_mi` TIP_YETKI'yi zaten sayıyor ama `deg_lineer_mi`
+saymıyor; ayrıca kod L002 değil **CP005** olmalı. Mevcut lineer makineye
+yetki-ayrımlı bir kod yolu eklemek ayrı bir adım — tahminle yazılmadı.
+
+**Sabotaj (5):** S52 MM001 (122→121), S53 MM002 (121), S54 MM003 (121),
+S55 MM002'nin "kaynak MMIO" ayrımı (**yanlış-pozitif yönünde**: geçerli
+`yetki<MMIO>` kullanımları reddedildi), S56 CP004 (121).
+
+**Probe 7/7 birebir** (CP005 içeren 2 şekil hariç — kapsam dışı, bilinçli).
+
+**Sonuç:** self-host checker kod kapsamı **47 → 51/74**; korpus **90 dosya**,
+kapı **122** (0 muaf). Kalan 23 kodun 2'si ölü (T015/T023).
+C tarafı regresyonsuz: capability 40/40, mmio 23/23.
+
+---
+
 ## D-363 — T041 (private-by-default) portlandı: MODÜL ALT-SİSTEMİ KAPANDI (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
