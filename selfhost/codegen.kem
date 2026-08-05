@@ -147,6 +147,7 @@ yapı Ayr {
     yerel_ptr: Dizi<tam32>;  // D-351: yerel ile paralel — 1 = ham işaretçi (*T) bağlaması (G001)
     yerel_ham: Dizi<metin>;  // D-352: yerel ile paralel — SÜZÜLMEMİŞ annotation tip adı (M001)
     yerel_dizi: Dizi<tam32>; // D-353: yerel ile paralel — 1 = Dizi<T> bağlaması (T005)
+    dizi_bek: metin;         // D-354: aktif Dizi<E> bağlamının eleman tipi ("?"=yok)
     kur_ad: Dizi<metin>;     // D-351: küresel değişken adları (E010; checker prepass)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;      // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor)
@@ -6188,7 +6189,10 @@ işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
 işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") {
-        eğer sayisal_mi(beklenen) { ver beklenen; }   // bidirectional sayı literal
+        // D-354: C `tip_tamsayi_mi(beklenen)` — tamsayı literali YALNIZ tamsayı
+        // bağlamına uyarlanır. `sayisal_mi` demek `değişken x: kesirli64 = 1`i
+        // sessizce kabul ettiriyordu (C: T001) ve dizi elemanında konum kaydırıyordu.
+        eğer tamsayi_mi(beklenen) { ver beklenen; }   // bidirectional sayı literal
         ver "tam32";
     }
     eğer metin_esit(ad, "KESIRLI") {
@@ -6617,6 +6621,45 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
         ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
     }
     ver yanlış;
+}
+// ---- D-354: T013 — dizi literali eleman tipi ----
+// C DUGUM_DIZI_OLUSTUR'un İKİ yolu var ve konumları farklı:
+//   (a) Dizi<E> BAĞLAMI var  → her eleman E ile karşılaştırılır (İLK eleman DÂHİL)
+//   (b) bağlam yok           → İLK eleman referanstır, sonrakiler onunla karşılaştırılır
+// (a) yolunda referans E olduğu için hata İLK elemanda çıkabilir; (b)'yi (a) yerine
+// kullanmak KONUMU kaydırırdı — bu yüzden bağlam `dizi_bek` ile taşınır.
+// (b) yolunda İKİ eleman da sayısalsa ATLANIR: bağlamı olan ama buraya düşen
+// yerlerde (`ver`, argüman) C'nin suçladığı eleman farklı olabilir.
+// Dizi<E> bağlamı YALNIZ annotasyonlu bildirimden gelir (muhafazakâr alt küme).
+işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken n: tam32 = dizi_al(p.a_cs, idx);
+    eğer n == 0 { ver 0; }        // boş dizi (T014) bu partide YOK
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken bek: metin = p.dizi_bek;
+    eğer metin_esit(bek, "?") == yanlış {          // (a) bağlamlı yol
+        değişken i: tam32 = 0;
+        iken i < n {
+            değişken e: tam32 = dizi_al(p.cocuk, cb + i);
+            değişken t: metin = ifade_tip(p, e, bek);
+            eğer (metin_esit(t, "?") == yanlış) ve (metin_esit(t, bek) == yanlış) {
+                sekil_hata(p, e, "T013");
+            }
+            i = i + 1;
+        }
+        ver 0;
+    }
+    değişken ilk: metin = ifade_tip(p, dizi_al(p.cocuk, cb), "?");   // (b) bağlamsız
+    eğer metin_esit(ilk, "?") { ver 0; }
+    değişken j: tam32 = 1;
+    iken j < n {
+        değişken e2: tam32 = dizi_al(p.cocuk, cb + j);
+        değişken t2: metin = ifade_tip(p, e2, "?");
+        eğer (metin_esit(t2, "?") == yanlış) ve (metin_esit(t2, ilk) == yanlış) {
+            eğer (sayisal_mi(ilk) ve sayisal_mi(t2)) == yanlış { sekil_hata(p, e2, "T013"); }
+        }
+        j = j + 1;
+    }
+    ver 0;
 }
 // T007: `x.alan` — x bilinen bir SKALER ise yapı değildir.
 işlev t007_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
@@ -7583,8 +7626,20 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    // D-354: `değişken xs: Dizi<E> = [...]` — E'yi çocuk gezintisi boyunca bağlam
+    // olarak taşı (C'nin beklenen-tip yolu). Diğer bağlamlar "?" kalır.
+    değişken eski_bek: metin = p.dizi_bek;
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
+        değişken an: tam32 = annot_node(p, idx);
+        eğer tip_node_dizi_mi(p, an) == 1 {
+            eğer dizi_al(p.a_cs, an) > 0 {
+                p.dizi_bek = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, an)));
+            } değilse { p.dizi_bek = "?"; }
+        } değilse { p.dizi_bek = "?"; }
+    }
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+    p.dizi_bek = eski_bek;
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
     // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.
@@ -7608,6 +7663,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     eğer metin_esit(ad, "INDEKS") { indeks_kontrol(p, idx); }   // D-351 G001 + D-353 T005/T008
     eğer metin_esit(ad, "ERISIM") { t007_kontrol(p, idx); }     // D-353 T007
+    eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx); }   // D-354 T013
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
@@ -7911,7 +7967,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], kur_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], dizi_bek: "?", kur_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,

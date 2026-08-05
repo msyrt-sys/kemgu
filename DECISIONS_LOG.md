@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-354 — T013 (dizi eleman tipi) + tamsayı-literal uyarlama onarımı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**T013'ün İKİ yolu var ve SUÇLANAN ELEMAN farklı** — ölçülmeden görülmezdi:
+
+| bağlam | referans | `[1, "a"]` için hata |
+|---|---|---|
+| `Dizi<metin>` annotasyonu VAR | E = `metin` | **ilk** eleman (`1`) |
+| annotasyon YOK | ilk eleman (`tam32`) | **ikinci** eleman (`"a"`) |
+
+Tek yolu (homojenlik) kullanmak tanıyı **yanlış elemanın üzerinde** gösterirdi.
+Bu yüzden `dizi_bek` alanı eklendi: `değişken xs: Dizi<E> = [...]` bildiriminde
+E, çocuk gezintisi boyunca bağlam olarak taşınır. Sabotaj S23 bunu ölçtü:
+(a) yolu kapatılınca hata `6:35` yerine `6:38`'e kaydı ve `Dizi<tam8> =
+[doğru, doğru]`ın **iki** hatası **tek**e düştü.
+
+**Yol üstünde bulunan ikinci kusur (bağımsız, daha geniş etkili):**
+`ifade_tip`'in TAM dalı `sayisal_mi(beklenen)` kullanıyordu; C
+`tip_tamsayi_mi`. Yani self-host **tamsayı literalini kesirli bağlama
+uyarlıyordu** → `değişken x: kesirli64 = 1;` C'de **T001**, self-host'ta **OK**.
+Tek jeton (`sayisal_mi` → `tamsayi_mi`) düzeltti; T013'ün konum doğruluğunu da
+bu besliyor (`Dizi<kesirli64> = [1, 2.5]` artık ilk elemanı suçluyor, C gibi).
+Sabotaj S24 kapıyı doğruladı.
+
+**BİLİNÇLİ BOŞLUK — kapıyla değil ÖLÇÜMLE gerekçelendirilmiş:** bağlamsız yolda
+her iki eleman da sayısalsa kontrol atlanır. Sebep ölçüldü: `ver [1, 2.5]`
+dönüşü `Dizi<kesirli64>` olan bir işlevde C **ilk** elemanı suçluyor
+(`--checkdump` → `1:38`), bağlamsız yol ise ikinciyi suçlardı — yani koruma
+kaldırılırsa **yanlış konumda** tanı üretilir. Bu boşluk korpusla kapılanamaz
+(C konuşurken self susuyor ⇒ o şekli korpusa koymak kapıyı kalıcı kırmızı
+yapardı). `ver`/argüman bağlamları da "?" kalır; onları kapatmak beklenen-tip
+yayıcısı ister (ayrı iş).
+
+**T014 PORTLANMADI:** boş dizi bağlamı C'de sezgiye aykırı — `ver []`
+(dönüş `Dizi<T>`) **kabul**, ama `g([])` (parametre `Dizi<T>`) **T014**
+(ölçüldü). Kuralı taklit etmek gerçek bir beklenen-tip yayıcısı gerektirir;
+tahminle yazmak yanlış-pozitif üretirdi.
+
+**Sabotaj (2; `grep SABOTAJ-Sn` ile kanıtlı):** S23 bağlamlı yol (78→77, hem
+konum hem sayı bozuldu), S24 literal uyarlaması (77).
+
+**Sonuç:** self-host checker kod kapsamı **32 → 33/74**; korpus **76 → 78**;
+korpusun uyandırdığı kod **30 → 31**.
+
+---
+
 ## D-353 — "Yanlış şekil" tanıları self-host'a portlandı: T005/T006/T007/T008/T027 (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

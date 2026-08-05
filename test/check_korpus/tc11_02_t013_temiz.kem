@@ -1,0 +1,34 @@
+// D-354: geçerli dizi literalleri — yanlış-pozitif kapısı.
+yapı Nokta { x: tam32; }
+
+işlev homojen() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2, 3];
+    ver xs[0];
+}
+işlev dar_tamsayi() -> tam32 {
+    değişken xs: Dizi<tam8> = [1, 2];         // literaller tam8'e uyarlanır
+    ver 0;
+}
+işlev kesirli() -> tam32 {
+    değişken xs: Dizi<kesirli64> = [1.5, 2.5];
+    ver 0;
+}
+işlev metinler() -> tam32 {
+    değişken xs: Dizi<metin> = ["a", "b"];
+    ver 0;
+}
+işlev yapilar() -> tam32 {
+    değişken xs: Dizi<Nokta> = [Nokta { x: 1 }, Nokta { x: 2 }];
+    ver 0;
+}
+işlev ic_ice() -> tam32 {
+    değişken xs: Dizi<Dizi<tam32>> = [[1, 2], [3]];
+    ver 0;
+}
+işlev bos_baglamli() -> tam32 {
+    değişken xs: Dizi<tam32> = [];
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

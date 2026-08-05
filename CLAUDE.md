@@ -745,6 +745,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **T013 + LİTERAL UYARLAMA — D-354.** T013'ün iki yolu var ve **suçlanan eleman
+  farklı** (annotasyon varsa ilk eleman suçlanabilir) → `dizi_bek` bağlamı şart.
+  Yol üstünde ayrı bir kusur: `ifade_tip` tamsayı literalini **kesirli** bağlama
+  uyarlıyordu (C uyarlamaz) → `değişken x: kesirli64 = 1` sessizce geçiyordu.
+  **T014 portlanmadı** (boş dizi bağlamı C'de sezgiye aykırı: `ver []` OK ama
+  `g([])` T014 → gerçek beklenen-tip yayıcısı ister). **Kapsam 33/74.**
 - **"YANLIŞ ŞEKİL" TANILARI — D-353'te self-host'a portlandı:** T005/T006/T007/
   T008/T027 (hepsi tek kalıp: tip bilinen skaler, bağlam yapı/dizi/işlev istiyor).
   INDEKS sırası C ile birebir (ptr→T005/G001, skaler→T008, dizi→T005). Yeni
