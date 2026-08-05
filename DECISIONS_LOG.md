@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-366 — DRF001-DRF007 portlandı: DRF ALT-SİSTEMİ KAPANDI (7/7) (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Kurallar:** `görev<T>`/`kanal<T>` V1'de **kesirli T taşıyamaz** (DRF001/DRF006) —
+runtime sonucu tamsayı yazmacından okur (x0/rax), kesirli değer v0/xmm0'dadır →
+bitcast **sessiz çöp** verirdi. C bu kısıtı **İKİ yolda ayrı ayrı** uyguluyor
+(annotasyon/tip düğümü + yapıcı çağrısı) ve **iki tanı birden** üretiyor.
+Ayrıca arite kuralları (DRF002 `görev_birleştir`, DRF003 `kanal_gönder`,
+DRF004 `kanal_al`, DRF005 `dondur`) ve yön güvenliği (DRF007: `alan<T>` alıcı
+ucundan gönderim yasak).
+
+**Konumlar C'den ölçülerek alındı; ÜÇÜ FARKLI düğümde:**
+- DRF001 (yapıcı yolu) → **argüman** düğümü
+- DRF006 (yapıcı yolu) → **çağrı** düğümü
+- DRF007 → **argüman** düğümü (ilk denemede çağrı düğümüne koymuştum: 1 sütun
+  kaydı, C kaynağına bakılarak düzeltildi)
+
+**Yön sinyali TİPTEN OKUNAMADI (ölçüm):** `alan<T>` annotasyonu self-host'ta
+`TIP_KULLANICI`ya düşüyor ve **kullanıcı-tipi adı düğümde tutulmuyor**
+(`--parse` dump'ında a_deg boş). Bu yüzden yön **değerden** okunuyor:
+`alan(k)` / `gönderen(k)` projeksiyon çağrısı → `yerel_yon` yan-dizisi.
+
+**Yeni alanlar:** `yerel_yon` (kanal ucu yönü), `drf_bek` (aktif
+`görev<kesirli*>`/`kanal<kesirli*>` annotasyon bağlamı — `dizi_bek` deseni).
+
+**Sabotaj (4):** S60 annotasyon yolu (125→124), S61 yapıcı yolu DRF001 (124),
+S62 DRF007 (124), S63 yön ayrımı (**yanlış-pozitif yönünde**: `gönderen`
+ucundan gönderim reddedildi).
+
+**Probe 8/8 birebir** (7 kod + temiz şekil).
+
+**Sonuç:** self-host checker kod kapsamı **52 → 59/74**. **DRF alt-sistemi 7/7
+KAPANDI.** Kalan 15 kod: sabitsüre (8), M004, T011/T014, T030/T031 + 2 ölü.
+C tarafı regresyonsuz: drf 54/54, gorev_rt 16/16.
+
+---
+
 ## D-365 — CP005 portlandı: MMIO + YETKİ ALT-SİSTEMİ KAPANDI (5/5) (2026-08-05)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).

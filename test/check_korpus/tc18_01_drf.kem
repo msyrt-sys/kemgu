@@ -1,0 +1,36 @@
+// D-366 / DRF001-DRF007: eşzamanlılık (görev/kanal) kuralları.
+// Kesirli T reddi bir TEMSİL kısıtıdır: runtime sonucu tamsayı yazmacından
+// (x0/rax) okur, kesirli değer v0/xmm0'dadır → bitcast sessiz çöp verirdi.
+// Bu yüzden İKİ yerde reddedilir: annotasyon VE yapıcı çağrısı.
+işlev gorev_kesirli() -> tam32 {
+    değişken g: görev<kesirli64> = görev_başlat(|| 1.0);   // DRF001 x2
+    ver 0;
+}
+işlev kanal_kesirli() -> tam32 {
+    değişken k: kanal<kesirli64> = kanal_oluştur(4);        // DRF006 x2
+    ver 0;
+}
+işlev birlestir_arite() -> tam32 {
+    ver görev_birleştir();      // DRF002
+}
+işlev gonder_arite() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(4);
+    kanal_gönder(k);            // DRF003
+    ver 0;
+}
+işlev al_arite() -> tam32 {
+    ver kanal_al();             // DRF004
+}
+işlev dondur_arite() -> tam32 {
+    dondur();                   // DRF005
+    ver 0;
+}
+işlev yon_ihlali() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(4);
+    değişken a: alan<tam32> = alan(k);
+    kanal_gönder(a, 5);         // DRF007: alıcı ucundan gönderilemez
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

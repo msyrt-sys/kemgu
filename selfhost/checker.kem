@@ -43,6 +43,10 @@ yapı Ayr {
     yerel_yig: Dizi<tam32>; // D-358: 1 = annotasyonsuz dizi-literali bağlaması (YIĞIN dizi) — G003
     yerel_fn: Dizi<tam32>;  // D-358: 1 = `işlev(...)->T` annotasyonlu bağlama — G004
     yerel_yet: Dizi<metin>; // D-364: `yetki<R>` bağlamasının KAYNAK adı ("" = yetki değil)
+    yerel_yon: Dizi<metin>; // D-366: kanal ucu yönü ("alan"/"gönderen"/"") — DRF007.
+                            // Tipten DEĞİL, DEĞERDEN okunur: `alan<T>` annotasyonu
+                            // TIP_KULLANICI'ya düşer ve ADI düğümde tutulmaz.
+    drf_bek: metin;         // D-366: aktif `görev<kesirli*>`/`kanal<kesirli*>` bağlamı
     dizi_bek: metin;        // D-354: aktif Dizi<E> bağlamının eleman tipi ("?"=yok)
     cv_cesit: Dizi<metin>;  // D-352: her varyant için sahip çeşit adı (parser yan-kanalı)
     cv_ad: Dizi<metin>;     // D-352: varyant adı (cv_cesit ile paralel)
@@ -1738,7 +1742,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -2519,6 +2523,91 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     eğer metin_esit(dizi_al(p.a_ad, idx), "DIZI_OLUSTUR") { ver doğru; }
     eğer metin_esit(dizi_al(p.a_ad, idx), "TANIMLAYICI") {
         ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
+    }
+    ver yanlış;
+}
+// ---- D-366: DRF001-DRF007 — eşzamanlılık (görev/kanal) kuralları ----
+// DRF001/DRF006: `görev<T>` ve `kanal<T>` V1'de KESİRLİ T taşıyamaz. Runtime
+//   sonucu tamsayı yazmacından okur (x0/rax), kesirli değer v0/xmm0'dadır →
+//   bitcast SESSİZ ÇÖP olurdu. İKİ yerde raporlanır: annotasyon/tip düğümü VE
+//   yapıcı çağrısı (C aynı kısıtı iki yolda ayrı ayrı uygular).
+// DRF002-005: intrinsic ariteleri (görev_birleştir 1, kanal_gönder 2,
+//   kanal_al 1, dondur 1) — hepsi ÇAĞRI düğümünde.
+// DRF007: `alan<T>` (alıcı ucu) üzerinden `kanal_gönder` yapılamaz (yön garantisi).
+işlev tip_kesirli_arg_mi(p: &değişken Ayr, tn: tam32) -> mantıksal {
+    eğer tn < 0 { ver yanlış; }
+    eğer dizi_al(p.a_cs, tn) == 0 { ver yanlış; }
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));
+    eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_BASIT") == yanlış { ver yanlış; }
+    ver kesirli_mi(dizi_al(p.a_deg, ic));
+}
+// Tip düğümü denetimi: `görev<kesirli*>` → DRF001, `kanal<kesirli*>` → DRF006.
+işlev drf_tip_kontrol(p: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer tip_kesirli_arg_mi(p, tn) == yanlış { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_GOREV") { ver sekil_hata(p, tn, "DRF001"); }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_KANAL") { ver sekil_hata(p, tn, "DRF006"); }
+    ver 0;
+}
+// Değer bir kanal UCU projeksiyonu mu? `alan(k)` / `gönderen(k)` → yön adı.
+// Tipten okunamıyor: `alan<T>` annotasyonu TIP_KULLANICI'ya düşüyor ve ADI
+// düğümde tutulmuyor (ölçüldü) → DEĞER tarafı tek güvenilir sinyal.
+işlev kanal_uc_yonu(p: &değişken Ayr, deger: tam32) -> metin {
+    eğer deger < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, deger), "CAGRI") == yanlış { ver ""; }
+    eğer dizi_al(p.a_cs, deger) == 0 { ver ""; }
+    değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, deger));
+    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver ""; }
+    değişken nm: metin = dizi_al(p.a_deg, h);
+    eğer metin_esit(nm, "alan") veya metin_esit(nm, "gönderen") { ver nm; }
+    ver "";
+}
+// Bağlamanın kanal YÖNÜ: "alan" = alıcı ucu (DRF007), "" = bilinmiyor/yön yok.
+işlev bag_kanal_yon(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_yon, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+// DRF intrinsic arite + yön denetimi. Dönüş: 1 = erken dönüldü.
+işlev drf_cagri_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;   // çocuk[0] = hedef
+    eğer metin_esit(fad, "görev_birleştir") {
+        eğer n != 1 { sekil_hata(p, idx, "DRF002"); ver doğru; }
+        ver yanlış;
+    }
+    eğer metin_esit(fad, "kanal_al") {
+        eğer n != 1 { sekil_hata(p, idx, "DRF004"); ver doğru; }
+        ver yanlış;
+    }
+    eğer metin_esit(fad, "dondur") {
+        eğer n != 1 { sekil_hata(p, idx, "DRF005"); ver doğru; }
+        ver yanlış;
+    }
+    // D-366: yapıcı çağrısı yolu — C aynı kesirli kısıtını burada TEKRAR uygular
+    // (annotasyon yolundan bağımsız; iki tanı birden çıkar). Konumlar FARKLI:
+    // görev_başlat → ARGÜMAN düğümü, kanal_oluştur → ÇAĞRI düğümü (C birebir).
+    eğer metin_esit(fad, "görev_başlat") ve metin_esit(p.drf_bek, "görev") {
+        eğer n >= 1 {
+            sekil_hata(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1), "DRF001");
+            ver doğru;
+        }
+    }
+    eğer metin_esit(fad, "kanal_oluştur") ve metin_esit(p.drf_bek, "kanal") {
+        sekil_hata(p, idx, "DRF006");
+        ver doğru;
+    }
+    eğer metin_esit(fad, "kanal_gönder") {
+        eğer n != 2 { sekil_hata(p, idx, "DRF003"); ver doğru; }
+        // DRF007: ilk argüman ALICI ucu (`alan<T>`) ise gönderim yapılamaz.
+        değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+        eğer metin_esit(dizi_al(p.a_ad, a0), "TANIMLAYICI")
+          ve metin_esit(bag_kanal_yon(p, dizi_al(p.a_deg, a0)), "alan") {
+            sekil_hata(p, a0, "DRF007");   // C: ARGÜMAN düğümü (çağrı değil)
+            ver doğru;
+        }
+        ver yanlış;
     }
     ver yanlış;
 }
@@ -3401,6 +3490,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
         dizi_ekle(p.yerel_yig, 0);   // parametre yığın-dizi bağlaması olamaz
         dizi_ekle(p.yerel_fn, 0);
         dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, tc));   // D-364 MM002/CP004
+        dizi_ekle(p.yerel_yon, "");   // D-366: parametrede yön sinyali yok
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -3420,6 +3510,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.yerel_fn, 1);
             } değilse { dizi_ekle(p.yerel_fn, 0); }
             dizi_ekle(p.yerel_yet, yetki_kaynak_adi(p, van));   // D-364
+            dizi_ekle(p.yerel_yon, kanal_uc_yonu(p, son_cocuk(p, idx)));   // D-366 DRF007
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
@@ -3430,6 +3521,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.yerel_yig, 0);
                 dizi_ekle(p.yerel_fn, 0);
                 dizi_ekle(p.yerel_yet, "");
+                dizi_ekle(p.yerel_yon, "");
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -3444,6 +3536,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.yerel_yig, 0);
                         dizi_ekle(p.yerel_fn, 0);
                         dizi_ekle(p.yerel_yet, "");
+                        dizi_ekle(p.yerel_yon, "");
                     }
                     q = q + 1;
                 }
@@ -3466,7 +3559,21 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         cast_kontrol(p, idx);
         ver 0;
     }
-    eğer metin_baslar(ad, "TIP_") { ver 0; }
+    eğer metin_baslar(ad, "TIP_") {
+        // D-366: tip düğümü de denetlenir — `görev<kesirli*>`/`kanal<kesirli*>`
+        // annotasyon/parametre yolunda DRF001/DRF006. Alt tipler için özyinele
+        // (`Dizi<görev<kesirli64>>` gibi iç içe şekiller de yakalansın).
+        drf_tip_kontrol(p, idx);
+        değişken tb: tam32 = dizi_al(p.a_cb, idx);
+        değişken tc2: tam32 = dizi_al(p.a_cs, idx);
+        değişken ti: tam32 = 0;
+        iken ti < tc2 {
+            değişken tcc: tam32 = dizi_al(p.cocuk, tb + ti);
+            eğer metin_baslar(dizi_al(p.a_ad, tcc), "TIP_") { kontrol_dugum(p, tcc); }
+            ti = ti + 1;
+        }
+        ver 0;
+    }
     eğer metin_baslar(ad, "DESEN") { ver 0; }
     eğer metin_esit(ad, "YOL") { m002_yol_kontrol(p, idx); ver 0; }   // D-357 (A)
     // D-314 KISMİ TAŞIMA YASAĞI: lineer yapının LİNEER alanı dışarı okunamaz
@@ -3653,6 +3760,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // ÖNCE özel-case eder; hata varsa erken döner).
             eğer mmio_kontrol(p, idx, fad) { ver 0; }
             eğer cp004_kontrol(p, idx, fad) { ver 0; }
+            eğer drf_cagri_kontrol(p, idx, fad) { ver 0; }   // D-366
             // D-355 L008: `tekkez_olustur` üretici intrinsic'i TAM 1 argüman alır.
             eğer metin_esit(fad, "tekkez_olustur") ve ((hc - 1) != 1) {
                 sekil_hata(p, idx, "L008");
@@ -3823,6 +3931,17 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // D-354: `değişken xs: Dizi<E> = [...]` — E'yi çocuk gezintisi boyunca bağlam
     // olarak taşı (C'nin beklenen-tip yolu). Diğer bağlamlar "?" kalır.
     değişken eski_bek: metin = p.dizi_bek;
+    // D-366: `görev<kesirli*>` / `kanal<kesirli*>` annotasyonu → yapıcı çağrısı
+    // yolunda DRF001/DRF006 (C aynı kısıtı iki yolda ayrı ayrı uygular).
+    değişken eski_drf: metin = p.drf_bek;
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
+        değişken dan: tam32 = annot_node(p, idx);
+        p.drf_bek = "";
+        eğer tip_kesirli_arg_mi(p, dan) {
+            eğer metin_esit(dizi_al(p.a_ad, dan), "TIP_GOREV") { p.drf_bek = "görev"; }
+            eğer metin_esit(dizi_al(p.a_ad, dan), "TIP_KANAL") { p.drf_bek = "kanal"; }
+        }
+    }
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
         değişken an: tam32 = annot_node(p, idx);
         eğer tip_node_dizi_mi(p, an) == 1 {
@@ -3834,6 +3953,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
     p.dizi_bek = eski_bek;
+    p.drf_bek = eski_drf;
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
     // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.

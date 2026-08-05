@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **DRF ALT-SİSTEMİ KAPANDI (7/7) — D-366.** Kesirli T reddi İKİ yolda (annotasyon
+  + yapıcı) ve konumlar farklı düğümlerde (DRF001→argüman, DRF006→çağrı,
+  DRF007→argüman). **Yön TİPTEN OKUNAMIYOR:** `alan<T>` → `TIP_KULLANICI` ve
+  kullanıcı-tipi adı düğümde YOK → yön DEĞERDEN (`alan(k)`/`gönderen(k)`
+  projeksiyonu) okunuyor (`yerel_yon`). **Kapsam 59/74**; kalan 15'in 8'i sabitsüre.
 - **MMIO + YETKİ ALT-SİSTEMİ KAPANDI (5/5) — D-365.** CP005 **yeni kural değil**:
   L001/L002/L004'ün yetki karşılığı. `tip_node_tekkez_mi`'ye `TIP_YETKI` eklendi →
   mevcut lineer makinenin TAMAMI yetki için çalışıyor; `lin_yet` biti yalnız
