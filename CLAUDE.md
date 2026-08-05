@@ -745,6 +745,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **M002/M003 — D-357.** ÜÇ ayrı bölge (değer `Çeşit::V` / yapıcı `Çeşit::V(a)` /
+  desen), C'de üç ayrı kod. Desende varyant **skrutininin tipinden** aranır, desen
+  önekinden DEĞİL. Çıplak desen (`Secim::Bir =>`, alt-desen yok) M003 VERMEZ.
+  **M004 portlanmadı** (payload tip tablosu + generic substitüsyon). **Kapsam 39/74.**
 - **E011/E012 — D-356.** Küresel tip yalnız skaler/ham-işaretçi, init yalnız
   sabit-literal (`METIN` literal listesinde YOK → `küresel s: metin = "a"` hem
   E011 hem E012 alır). C'nin `pre_populate` 4. geçişine yerleştirildi (T024 ile

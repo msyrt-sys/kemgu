@@ -1,0 +1,37 @@
+// D-357 / M002 + M003: çeşit varyantı ve payload aritesi. ÜÇ ayrı bölge var ve
+// C'de üçü ayrı kod: (A) değer `Çeşit::V`, (B) yapıcı `Çeşit::V(a)`, (C) desen.
+// (C)'de varyant DESENİN ÖNEKİNDEN DEĞİL, SKRUTİNİNİN tipinden aranır.
+çeşit Renk { Kirmizi, Mavi }
+çeşit Secim { Bir(tam32), Hic }
+
+işlev deger() -> tam32 {
+    değişken r: Renk = Renk::Yesil;      // M002 (A): varyant yok
+    ver 0;
+}
+işlev yapici_varyant() -> tam32 {
+    değişken s: Secim = Secim::Uc(1);    // M002 (B)
+    ver 0;
+}
+işlev yapici_arite() -> tam32 {
+    değişken s: Secim = Secim::Bir(1, 2);  // M003 (B): payload 1 bekleniyor
+    ver 0;
+}
+işlev yapici_bos() -> tam32 {
+    değişken s: Secim = Secim::Bir();    // M003 (B): 0 verildi
+    ver 0;
+}
+işlev desen_varyant(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Yesil => { ver 1; }        // M002 (C)
+        _ => { ver 0; }
+    }
+}
+işlev desen_arite(s: Secim) -> tam32 {
+    eşleş s {
+        Secim::Bir(a, b) => { ver 1; }   // M003 (C)
+        _ => { ver 0; }
+    }
+}
+işlev main() -> tam32 {
+    ver 0;
+}

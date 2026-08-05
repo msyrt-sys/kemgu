@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-357 — M002 + M003 self-host'a portlandı: çeşit varyantı ve payload aritesi (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**ÜÇ ayrı bölge, C'de üç ayrı kod** — biri atlanırsa o şekil sessizce geçer:
+
+| bölge | şekil | tanı | konum |
+|---|---|---|---|
+| (A) değer | `Çeşit::V` | M002 | YOL düğümü |
+| (B) yapıcı | `Çeşit::V(a,b)` | M002 → M003 | ÇAĞRI düğümü |
+| (C) desen | `Çeşit::V(a,b) =>` | M002 → M003 | DESEN düğümü |
+
+**(C)'nin ince yeri:** C varyantı **desenin önekinden değil, SKRUTİNİNİN
+tipinden** arar (`cesit_ara(dt->yapi.ad)`). D-352'nin `esles_cesit_adi`
+altyapısı bu yüzden yeniden kullanıldı — desendeki `Başka::V` yazımı çeşidi
+belirlemez.
+
+**(C)'nin ikinci ince yeri:** alt-desen sayısı **0 ise M003 VERİLMEZ** —
+payload'lı bir varyantın çıplak deseni (`Secim::Bir =>`) geçerlidir. Sabotaj
+S36 bunu ölçtü: muafiyet kaldırılınca `tc14_02`'deki geçerli kod reddedildi.
+
+**(B)'de erken dönüş:** C hem M002 hem M003'ten sonra `t_hata` döner →
+argüman tip kontrolü yapılmaz. Self-host aynı erken dönüşü uyguluyor.
+
+**M004 PORTLANMADI:** payload **tipi** uyumu, varyant-başına-alan tip tablosu
+**ve** generic çeşitte substitüsyon (`Secim<T>` → `Secim<tam32>`) ister.
+Yan-kanal genişletmesi + tip yayılımı gerektiği için ayrı iş.
+
+**Yeni yan-kanal:** `cv_pc` (varyant payload alan sayısı) checker.kem'e eklendi;
+codegen.kem'de D3'ten beri vardı.
+
+**Sabotaj (5; `grep SABOTAJ-Sn` ile kanıtlı):** S32 (A) M002 (85→84),
+S33 (B) M003 (84), S34 (C) M002 (84), S35 (C) M003 (84),
+S36 çıplak-desen muafiyeti (84 — **yanlış-pozitif yönünde**).
+
+**Probe matrisi 10/10 birebir:** üç bölge × (varyant yok / arite fazla / arite
+eksik / doğru) + çıplak desen + tam kapsama.
+
+**Sonuç:** self-host checker kod kapsamı **37 → 39/74**; korpus **83 → 85**;
+korpusun uyandırdığı kod **35 → 37**. Kalan 35 kod.
+
+---
+
 ## D-356 — E011 + E012 self-host'a portlandı: `küresel` tip/başlangıç kısıtları (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+3).

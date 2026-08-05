@@ -6625,6 +6625,92 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// ---- D-357: M002 + M003 — çeşit varyantı ve payload arite ----
+// ÜÇ bölgede geçerli, üçü de C'de ayrı kod: (A) değer `Çeşit::V`, (B) yapıcı
+// çağrısı `Çeşit::V(a,b)`, (C) `eşleş` deseni `Çeşit::V(a,b)`.
+// C desende varyantı DESENİN ÖNEKİNDEN DEĞİL, SKRUTİNİNİN tipinden arar — bu
+// yüzden (C) yolu `esles_cesit_adi`yi kullanır (D-352 altyapısı).
+// M004 (payload TİPİ) portlanmadı: payload tip tablosu + generic substitüsyon ister.
+işlev cesit_varyant_var(p: &değişken Ayr, cad: metin, vad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad)
+          ve metin_esit(dizi_al(p.cv_ad, i), vad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev cesit_varyant_pc(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad)
+          ve metin_esit(dizi_al(p.cv_ad, i), vad) { ver dizi_al(p.cv_pc, i); }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// YOL düğümünün SOL tarafı bir çeşit adı mı? ("" = değil / emin değil)
+işlev yol_cesit_adi(p: &değişken Ayr, sol: tam32) -> metin {
+    değişken a: metin = dizi_al(p.a_ad, sol);
+    eğer metin_esit(a, "TANIMLAYICI") veya metin_esit(a, "YOL") {
+        değişken nm: metin = dizi_al(p.a_deg, sol);
+        eğer cesit_var_mi(p, nm) { ver nm; }
+    }
+    ver "";
+}
+// "Ad::Varyant" dizgisinden varyant kısmı (sonek). Yoksa "".
+işlev yol_varyant_adi(p: &değişken Ayr, s: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_ad) {
+        değişken v: metin = dizi_al(p.cv_ad, i);
+        eğer metin_biter(s, metin_birlestir("::", v)) { ver v; }
+        i = i + 1;
+    }
+    ver "";
+}
+// (A) değer konumunda `Çeşit::V` — varyant yoksa M002 (YOL düğümünde).
+işlev m002_yol_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) == 0 { ver 0; }
+    değişken cad: metin = yol_cesit_adi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    eğer metin_esit(cad, "") { ver 0; }
+    eğer cesit_varyant_var(p, cad, dizi_al(p.a_deg, idx)) == yanlış {
+        sekil_hata(p, idx, "M002");
+    }
+    ver 0;
+}
+// (B) yapıcı çağrısı `Çeşit::V(a,b)` — M002 sonra M003 (ikisi de ÇAĞRI düğümünde).
+işlev m002_yapici_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") == yanlış { ver yanlış; }
+    eğer dizi_al(p.a_cs, hedef) == 0 { ver yanlış; }
+    değişken cad: metin = yol_cesit_adi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, hedef)));
+    eğer metin_esit(cad, "") { ver yanlış; }
+    değişken vad: metin = dizi_al(p.a_deg, hedef);
+    eğer cesit_varyant_var(p, cad, vad) == yanlış {
+        sekil_hata(p, idx, "M002");
+        ver doğru;
+    }
+    eğer (dizi_al(p.a_cs, idx) - 1) != cesit_varyant_pc(p, cad, vad) {
+        sekil_hata(p, idx, "M003");
+        ver doğru;
+    }
+    ver yanlış;
+}
+// (C) desen `Çeşit::V(a,b)` — varyant SKRUTİNİNİN çeşidinde aranır.
+// C: alt-desen sayısı 0 ise M003 VERİLMEZ (çıplak `Çeşit::V` deseni serbest).
+işlev m002_desen_kontrol(p: &değişken Ayr, des: tam32, cad: metin) -> tam32 {
+    eğer metin_esit(cad, "") { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YOL") == yanlış { ver 0; }
+    değişken vad: metin = yol_varyant_adi(p, dizi_al(p.a_deg, des));
+    eğer metin_esit(vad, "") veya (cesit_varyant_var(p, cad, vad) == yanlış) {
+        sekil_hata(p, des, "M002");
+        ver 0;
+    }
+    değişken an: tam32 = dizi_al(p.a_cs, des);
+    eğer (an > 0) ve (an != cesit_varyant_pc(p, cad, vad)) {
+        sekil_hata(p, des, "M003");
+    }
+    ver 0;
+}
 // ---- D-356: E011 + E012 — `küresel` tip ve başlangıç kısıtları ----
 // C pre_populate_kuresel aynası. Küresel durum bootstrap-circularity çözümüdür:
 // allocator'a bağlanamaz → tip YALNIZ skaler/ham-işaretçi, başlangıç YALNIZ
@@ -7363,7 +7449,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_baslar(ad, "TIP_") { ver 0; }
     eğer metin_baslar(ad, "DESEN") { ver 0; }
-    eğer metin_esit(ad, "YOL") { ver 0; }
+    eğer metin_esit(ad, "YOL") { m002_yol_kontrol(p, idx); ver 0; }   // D-357 (A)
     // D-314 KISMİ TAŞIMA YASAĞI: lineer yapının LİNEER alanı dışarı okunamaz —
     // hem alan hem yapı tüketilmek zorunda kalır → AYNI kaynak İKİ kez imha
     // (unsound). Lineer-OLMAYAN alan okumak SERBEST. C tip_kontrol.c aynası.
@@ -7493,6 +7579,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken kol_d: tam32 = dizi_al(p.cocuk, eb + ki);
             eğer dizi_al(p.a_cs, kol_d) > 0 {
                 değişken des: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, kol_d));
+                // D-357 (C): desen varyantı + payload aritesi (gövdeden ÖNCE).
+                m002_desen_kontrol(p, des, esles_cesit_adi(p, dizi_al(p.cocuk, eb)));
                 eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPI") {
                     lin_tuket_dugum(p, dizi_al(p.cocuk, eb));
                     desen_yapi_dogrula(p, des);
@@ -7533,6 +7621,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hb: tam32 = dizi_al(p.a_cb, idx);
         değişken hc: tam32 = dizi_al(p.a_cs, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, hb);
+        // D-357 (B): çeşit yapıcısı `Çeşit::V(...)` — C bunu normal çağrı yolundan
+        // ÖNCE dener ve hata varsa erken döner (argüman kontrolü yok).
+        eğer m002_yapici_kontrol(p, idx, hedef) { ver 0; }
         kontrol_dugum(p, hedef);                 // hedef T002 (C: tip_belirle(hedef))
         eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
             değişken fad: metin = dizi_al(p.a_deg, hedef);
