@@ -6625,6 +6625,37 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// ---- D-356: E011 + E012 — `küresel` tip ve başlangıç kısıtları ----
+// C pre_populate_kuresel aynası. Küresel durum bootstrap-circularity çözümüdür:
+// allocator'a bağlanamaz → tip YALNIZ skaler/ham-işaretçi, başlangıç YALNIZ
+// sabit-literal. (`metin` İKİSİNİ de ihlal eder: hem tip hem literal yasak.)
+// Konum: KURESEL düğümü. Sıra: E011 → E012 → T024 (C sembol_ekle'den önce).
+işlev kuresel_tip_izinli_mi(p: &değişken Ayr, tn: tam32) -> mantıksal {
+    eğer tn < 0 { ver yanlış; }
+    değişken a: metin = dizi_al(p.a_ad, tn);
+    eğer metin_esit(a, "TIP_POINTER") { ver doğru; }        // ham işaretçi serbest
+    eğer metin_esit(a, "TIP_BASIT") == yanlış { ver yanlış; }  // Dizi/&/seçimlik/... yasak
+    değişken t: metin = dizi_al(p.a_deg, tn);
+    ver sayisal_mi(t) veya metin_esit(t, "mantıksal") veya metin_esit(t, "karakter");
+}
+işlev sabit_literal_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "TAM") veya metin_esit(ad, "KESIRLI")
+      veya metin_esit(ad, "MANTIKSAL") veya metin_esit(ad, "BOS")
+      veya metin_esit(ad, "KARAKTER");   // METIN BİLİNÇLİ olarak YOK (C ile birebir)
+}
+işlev kuresel_kisit_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken tn: tam32 = 0 - 1;
+    eğer cs > 0 { tn = dizi_al(p.cocuk, cb); }
+    eğer kuresel_tip_izinli_mi(p, tn) == yanlış { sekil_hata(p, idx, "E011"); }
+    değişken dv: tam32 = 0 - 1;
+    eğer cs > 1 { dv = dizi_al(p.cocuk, cb + 1); }
+    eğer (dv < 0) veya (sabit_literal_mi(dizi_al(p.a_ad, dv)) == yanlış) {
+        sekil_hata(p, idx, "E012");
+    }
+    ver 0;
+}
 // ---- D-355: L007 — `kullan`/`imha` operandının lineerliği ----
 // C: `kullan(e)` operandı TAM OLARAK `tekkez<T>` olmalı (sarmalanan değeri ÇIKARIR;
 // `yapı tekkez`in sarmalanmış bir değeri yoktur → orada da L007). `imha(e)` ise
@@ -7775,7 +7806,8 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
 işlev tanim_adi(p: &değişken Ayr, c: tam32) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, c);
     eğer metin_esit(ad, "ISLEV") veya metin_esit(ad, "YAPI") veya metin_esit(ad, "CESIT")
-      veya metin_esit(ad, "SABIT") veya metin_esit(ad, "OZELLIK") veya metin_esit(ad, "MODUL") {
+      veya metin_esit(ad, "SABIT") veya metin_esit(ad, "OZELLIK") veya metin_esit(ad, "MODUL")
+      veya metin_esit(ad, "KURESEL") {   // D-356: küresel de global sembol (T024)
         ver dizi_al(p.a_deg, c);
     }
     eğer metin_esit(ad, "DISA") {
@@ -7840,7 +7872,11 @@ işlev dup_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
     iken i < cs {       // Geçiş 3 (uygula: ad yok) atlanır; Geçiş 4: işlev+sabit+modül
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken k: metin = etkin_kind(p, c);
-        eğer metin_esit(k, "ISLEV") veya metin_esit(k, "SABIT") veya metin_esit(k, "MODUL") {
+        // D-356: küresel de C'nin 4. geçişinde — kaynak sırası korunur (E011/E012
+        // ile T024 arasındaki serpiştirme C ile aynı kalsın diye AYNI döngüde).
+        eğer metin_esit(k, "ISLEV") veya metin_esit(k, "SABIT") veya metin_esit(k, "MODUL")
+          veya metin_esit(k, "KURESEL") {
+            eğer metin_esit(k, "KURESEL") { kuresel_kisit_kontrol(p, c); }
             dup_isle(p, gor, c);
         }
         i = i + 1;

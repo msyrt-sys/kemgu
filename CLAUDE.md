@@ -745,6 +745,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **E011/E012 — D-356.** Küresel tip yalnız skaler/ham-işaretçi, init yalnız
+  sabit-literal (`METIN` literal listesinde YOK → `küresel s: metin = "a"` hem
+  E011 hem E012 alır). C'nin `pre_populate` 4. geçişine yerleştirildi (T024 ile
+  serpiştirme sırası korunur). **DERS:** sabotaj S31 ilk turda SESSİZ kaldı —
+  kural doğruydu ama korpusta o şekil yoktu; `tc13_03` eklenince kırmızıya döndü.
+  Sabotajın sessizliği bir SONUÇTUR: korpusu genişlet, kuralı silme. **Kapsam 37/74.**
 - **L007/L008 — D-355.** `kullan` YALNIZ `tekkez<T>` alır (`yapı tekkez` almaz);
   `imha` her lineeri alır; hata → operand tüketilmez (L001 kaskadı C ile birebir).
   **DERS:** yan-dizi bitlerini "pozitif bilgi" olarak kur — `0` çoğu zaman

@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-356 — E011 + E012 self-host'a portlandı: `küresel` tip/başlangıç kısıtları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+3).
+
+**Kural (C `pre_populate_kuresel` aynası):** küresel durum bootstrap-circularity
+çözümüdür — **allocator'a bağlanamaz**. Bu yüzden:
+- **E011:** tip yalnız sayısal / `mantıksal` / `karakter` / `*T`. `metin`, `Dizi<T>`,
+  yapı, seçimlik → yasak.
+- **E012:** başlangıç değeri yalnız **sabit-literal** (`TAM`/`KESIRLI`/`MANTIKSAL`/
+  `BOS`/`KARAKTER`). **`METIN` bu listede YOK** — `küresel değişken s: metin = "a"`
+  bu yüzden **hem E011 hem E012** alır (ölçüldü).
+- Sıra: E011 → E012 → T024, hepsi KURESEL düğümünde.
+
+**Yerleştirme kararı:** C bu tanıları `pre_populate`'in **4. geçişinde** (işlev/
+sabit/modül ile birlikte, **kaynak sırasında**) üretiyor. Self-host'un
+`dup_kontrol`'ü zaten aynı geçiş yapısını taşıyordu → küresel kontrolü **aynı
+döngüye** kondu; böylece E011/E012 ile T024'ün serpiştirme sırası korunuyor
+(`tc13_03` bunu ölçüyor).
+
+**Yan kazanım:** `tanim_adi`'ya `KURESEL` eklendi — küresel adı artık global
+sembol olarak çift-tanım denetimine giriyor (C: aynı scope). `küresel sayac` +
+`işlev sayac()` → T024, C ile birebir.
+
+**SÜREÇ NOTU — sabotaj ilk turda SESSİZ KALDI:** S31 (küresel adının global
+sembol sayılması) kaldırıldığında korpus **yeşil kaldı** — çünkü korpusta
+küresel/işlev ad çakışması **yoktu**. Kural ölçümle doğruydu (probe g8) ama
+**kapısızdı**. `tc13_03` eklendikten sonra S31 kırmızıya döndü. D-350'de
+kaydedilen desenin bir kez daha tekrarı: *yeni kural = korpusa uyandırıcı örnek,
+sonra sabotaj.* Sabotajın sessiz kalması bir sonuçtur, gürültü değil.
+
+**Sabotaj (3; `grep SABOTAJ-Sn` ile kanıtlı):** S29 E011 (83→82), S30 `METIN`in
+literal listesine sızması (82), S31 küresel-global-sembol (82 — **yalnız
+korpus genişletildikten sonra gözlemlenebilir oldu**).
+
+**Probe matrisi 9/9 birebir:** metin/Dizi/yapı küresel (E011+E012), ifade-init
+(E012), tam32/işaretçi/mantıksal/karakter/kesirli (temiz), ad çakışması (T024),
+E011+E012+T024 serpiştirmesi.
+
+**Sonuç:** self-host checker kod kapsamı **35 → 37/74**; korpus **80 → 83**;
+korpusun uyandırdığı kod **33 → 35**. Kalan 37 kod.
+
+---
+
 ## D-355 — L007 + L008 self-host'a portlandı: lineer intrinsik operand/arite (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
