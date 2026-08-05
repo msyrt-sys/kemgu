@@ -745,6 +745,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **⚠ PARSE KAPISI SESSİZ AYRIŞMIŞTI — D-359.** `--parse` 12 dosyada yeşilken 212
+  gerçek dosyada **8 sapma** vardı (`küresel`: C'de DUGUM_DEGISKEN+bayrak, `--ast`
+  "DEGISKEN" basar; self-host ayrı KURESEL düğümü). Dump eşlendi (`dump_ad`), iç ad
+  korundu. **Kapı büyüklüğünü periyodik ölç:** mevcut check/cg korpuslarını
+  `--parse`'tan geçirmek bedava genişletmedir. **T015 ve T023 ÖLÜ tanı** (C parser'ı
+  o şekilleri zaten reddediyor) → portlanmadı; kalan kod listesini körü körüne tüketme,
+  önce ULAŞILABİLİRLİĞİ ölç. T011 ertelendi (generic tip paramları parser'da atılıyor).
 - **G002/G003/G004 — D-358.** Üçü de "kabul et, çalışırken çök"ü derleme zamanına
   çeker. G003 İKİ daraltmalı: yalnız **annotasyonsuz** bağlama yasak (annotasyonlu
   `Dizi<T>` ve doğrudan literal argüman serbest). **Kapsam 42/74** — kalan 32 kodun

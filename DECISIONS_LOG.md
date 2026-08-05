@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-359 [YÜKSEK] — `--parse` paritesinde SESSİZ sapma: `küresel` dump'ı + üç ölü tanı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem` (dump), `test/parse_korpus/` (+1).
+
+**Sıradaki port (T011/T015/T023) ölçülünce İKİSİ ÖLÜ ÇIKTI:**
+- **T015** (`lambda parametre tip annotasyonu gerek`) — C **parser'ı** annotasyonsuz
+  lambda parametresini zaten reddediyor (`|x| x+1` → P013+P011). Checker'daki kola
+  hiçbir kaynak ulaşamıyor.
+- **T023** (`ver işlev gövdesi dışında`) — `ver`i fonksiyon dışına koyan her şekil
+  parser'da P001. `aktif_donus_tipi` yalnız init'te NULL; checker'a ulaşan her `ver`
+  bir işlev ya da lambda gövdesindedir.
+
+İkisi de **C'de ölü kod**. Self-host'a portlanmaları anlamsız olurdu: kapılanamazlar
+(hiçbir korpus dosyası uyandıramaz) ve ulaşılamayan kod ürettirirlerdi. Bu, "kalan 32
+kod" listesinin körü körüne tüketilmemesi gerektiğini gösteriyor — **her kodun önce
+ULAŞILABİLİRLİĞİ ölçülmeli.** (T011 ertelendi: gerçek bir tip-adı evreni ister —
+self-host parser generic tip parametrelerini ATIYOR, dolayısıyla yarım bir port
+`T` üzerinde yanlış-pozitif üretirdi. Ayrı iş.)
+
+**Asıl bulgu — parser kapısı sessizce ayrışıyordu:** `--parse` gate'i 12 dosyada
+yeşilken, elimizdeki **212 gerçek dosya** üzerinde ölçüm **8 SAPMA** gösterdi. Hepsi
+aynı kök: C'de `küresel` ayrı bir düğüm TİPİ **değil** (DUGUM_DEGISKEN + `kuresel_mi`
+bayrağı; `--ast` "DEGISKEN" basar), self-host ise D-253'ten beri ayrı bir `KURESEL`
+düğümü tutuyor. Sapma **önceden vardı** (bu oturumun işi değil) ve `parse_korpus`'ta
+küresel içeren tek dosya olmadığı için hiç görülmedi.
+
+**Onarım:** iç düğüm adı KORUNDU (checker/codegen ona göre dallanıyor — D-356),
+yalnız **dump** eşlendi (`dump_ad`: KURESEL → DEGISKEN). Rename etmek D-356'nın
+E011/E012/T024 dallanmasını ve codegen'in küresel yolunu kırardı.
+
+**Sonuç:** `--parse` paritesi mevcut korpuslar üzerinde **204/212 → 212/212**.
+`parse_korpus` 12 → 13 (`p7_kuresel_ciplak.kem`: küresel + çıplak + gerçekzamanlı
++ güvensiz + `olarak`). Sabotaj S41 (dump eşlemesi kaldırıldı) kapıyı kırmızıya
+döndürüyor.
+
+**DERS (D-350'nin kardeşi):** bir kapının yeşil olması, kapsadığı ŞEKİL kümesinin
+yeterli olduğu anlamına gelmez. `checker_diff` 87 dosyada koşarken `--parse` 12
+dosyada koşuyordu; asimetri sapmayı sakladı. **Kapı büyüklüğünü periyodik olarak
+ölç** — mevcut korpusları çapraz koşturmak (check+cg dosyalarını `--parse`'tan
+geçirmek) bedava bir genişletmedir.
+
+---
+
 ## D-358 — G002 + G003 + G004 self-host'a portlandı: tier ve temsil kuralları (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

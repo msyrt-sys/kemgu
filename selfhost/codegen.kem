@@ -5889,9 +5889,17 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
 //   (codegen'in ==/!= dahil olanıyla çakışmasın); yapi_var_mi drop (codegen'inki
 //   yapi_idx ≡ checker yapi_idx_bul). checker.kem origin/main'de DEĞİŞMEMİŞ.
 // ============================================================================
+// D-359: dump'ta düğüm adı. `küresel` C'de ayrı düğüm TİPİ değil — DUGUM_DEGISKEN
+// üzerinde bir BAYRAK (kuresel_mi) ve `--ast` onu "DEGISKEN" olarak basıyor.
+// Self-host ayrı bir "KURESEL" düğümü tutuyor (D-253; checker/codegen ona göre
+// dallanıyor) → iç adı KORUYUP yalnız DÖKÜMÜ eşliyoruz.
+işlev dump_ad(ad: metin) -> metin {
+    eğer metin_esit(ad, "KURESEL") { ver "DEGISKEN"; }
+    ver ad;
+}
 işlev duz_yaz(p: &değişken Ayr, idx: tam32, derinlik: tam32) -> tam32 {
     yaz_tam(derinlik);  yb(9);
-    yaz_str(dizi_al(p.a_ad, idx));  yb(9);
+    yaz_str(dump_ad(dizi_al(p.a_ad, idx)));  yb(9);
     yaz_kacis(dizi_al(p.a_deg, idx));  yb(9);
     yaz_tam(dizi_al(p.a_sat, idx));  yb(9);
     yaz_tam(dizi_al(p.a_sut, idx));  yb(10);
