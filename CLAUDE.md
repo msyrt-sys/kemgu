@@ -745,7 +745,14 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
-- **⚠ MODÜL YÜZEYİ + RUNTIME UTF-8 YOL KUSURU — D-361.** `test/moduller/` ölçülünce
+- **RUNTIME UTF-8 YOL ONARIMI — D-362.** `runtime/kdl_runtime.c` düz `fopen`
+  kullanıyordu → Windows ANSI codepage yüzünden `kütüphane/` **açılamıyordu**
+  (self-host o modülleri SESSİZCE yüklemiyordu). `kdl_fopen_utf8`
+  (`MultiByteToWideChar`+`_wfopen`, ana.c deseni) eklendi, 8 çağrı yeri çevrildi.
+  Ölçüm: aynı IR, eski runtime exit 7 → yeni runtime exit 42. **Bayat-obje tuzağı
+  yaşandı:** `stash pop` sonrası make "up to date" dedi; `rm -f` şart.
+  Ardından T040 + T016 açıldı (kapsam **46/74**), muafiyet 2 → 1.
+- **⚠ MODÜL YÜZEYİ — D-361.** `test/moduller/` ölçülünce
   self-host'un **geçerli programları reddettiği** 3 yanlış-pozitif çıktı: 6 eksik
   built-in (`bölge_al` vb.) ve seçili import adlarının parser'da ATILMASI. Onarıldı;
   T042 portlandı (kapsam 44/74). **T040 GERİ ALINDI:** sessiz "modül bulunamadı"

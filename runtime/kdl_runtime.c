@@ -946,6 +946,29 @@ void kdl_kanal_serbest(KdlKanal *k) {
 
 /* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) === */
 
+/* D-362: fopen Windows'ta ANSI codepage kullanir — UTF-8 yol (ornek: kütüphane/)
+ * BOZULUR ve dosya acilamaz. src/ana.c bu yuzden dosya_ac_utf8 tasiyordu; runtime
+ * ise duz fopen kullaniyordu, dolayisiyla SELF-HOST derleyici `kütüphane/` altindaki
+ * modulleri SESSIZCE yukleyemiyordu (D-361'de olculdu: modul_icerik "" donuyor,
+ * `kullan dizi;` hicbir sey yuklemeden geciyordu).
+ * Cozum ana.c ile AYNI: UTF-8 -> UTF-16 cevir, _wfopen. Donusum basarisizsa
+ * duz fopen'a dus (ASCII yollar icin davranis degismez). */
+static FILE *kdl_fopen_utf8(const char *yol, const char *kip) {
+#ifdef _WIN32
+    wchar_t wyol[1024];
+    wchar_t wkip[8];
+    if (MultiByteToWideChar(CP_UTF8, 0, yol, -1, wyol, 1024) <= 0) {
+        return fopen(yol, kip);
+    }
+    if (MultiByteToWideChar(CP_UTF8, 0, kip, -1, wkip, 8) <= 0) {
+        return fopen(yol, kip);
+    }
+    return _wfopen(wyol, wkip);
+#else
+    return fopen(yol, kip);
+#endif
+}
+
 /* Dosya ac: mod stringi "okuma"/"yazma"/"ekleme" (UTF-8 KEMGU) -> "rb"/"wb"/"ab" */
 void *kdl_dosya_ac(const char *yol, const char *mod) {
     if (!yol || !mod) return NULL;
@@ -953,7 +976,7 @@ void *kdl_dosya_ac(const char *yol, const char *mod) {
     /* "okuma" 5 byte, "yazma" 5 byte, "ekleme" 6 byte */
     if (strcmp(mod, "yazma") == 0) c_mod = "wb";
     else if (strcmp(mod, "ekleme") == 0) c_mod = "ab";
-    return (void *)fopen(yol, c_mod);
+    return (void *)kdl_fopen_utf8(yol, c_mod);
 }
 
 /* Dosyadan satir oku — heap'te metin doner (null = EOF) */
@@ -996,7 +1019,7 @@ int32_t kdl_dosya_bitti_mi(void *f) {
 
 /* Tum dosyayi oku (heap) */
 const char *kdl_dosya_tumu_oku(const char *yol) {
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1020,7 +1043,7 @@ const char *kdl_dosya_oku(const char *yol) {
 /* dosya_var_mi — fopen kontrolu (stat yerine portable) */
 int kdl_dosya_var_mi(const char *yol) {
     if (!yol) return 0;
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return 0;
     fclose(f);
     return 1;
@@ -1041,7 +1064,7 @@ int32_t kdl_dosya_yeniden_adlandir(const char *eski, const char *yeni) {
 /* dosya_boyut — fseek/ftell ile byte sayisi (yoksa -1) */
 int64_t kdl_dosya_boyut(const char *yol) {
     if (!yol) return -1;
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return -1;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1142,7 +1165,7 @@ const char *kdl_arg_al(int32_t i) {
  * Mod "wb" — uzeryine yazar. byteler ham KdlDizi* (kdl_dizi_*). */
 int32_t kdl_dosya_yaz_byte(const char *yol, const char *byteler, int32_t boyut) {
     if (!yol || !byteler || boyut < 0) return -1;
-    FILE *f = fopen(yol, "wb");
+    FILE *f = kdl_fopen_utf8(yol, "wb");
     if (!f) return -1;
     size_t yazildi = fwrite(byteler, 1, (size_t)boyut, f);
     fclose(f);
@@ -1153,7 +1176,7 @@ int32_t kdl_dosya_yaz_byte(const char *yol, const char *byteler, int32_t boyut) 
  * boyut_out NULL degilse boyutu yazar. NULL -> dosya yok / hata. */
 const char *kdl_dosya_oku_byte(const char *yol, int32_t *boyut_out) {
     if (!yol) { if (boyut_out) *boyut_out = -1; return NULL; }
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) { if (boyut_out) *boyut_out = -1; return NULL; }
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1196,7 +1219,7 @@ int32_t kdl_otp_anahtar_uret(const char *yol, int32_t boyut) {
     for (int32_t i = 0; i < boyut; i++) {
         buf[i] = (char)(kdl_prng_next64() & 0xff);
     }
-    FILE *f = fopen(yol, "wb");
+    FILE *f = kdl_fopen_utf8(yol, "wb");
     if (!f) { free(buf); return -1; }
     size_t yazildi = fwrite(buf, 1, (size_t)boyut, f);
     fclose(f);
@@ -1352,7 +1375,7 @@ KdlYetki kdl_dosya_ac_yetkili(const char *yol, uint16_t izin) {
     if (izin & KDL_IZIN_YAZ) c_mod = (izin & KDL_IZIN_OKU) ? "wb+" : "wb";
     else if (izin & KDL_IZIN_OKU) c_mod = "rb";
     else return y;  /* izin yok = ac yok */
-    FILE *f = fopen(yol, c_mod);
+    FILE *f = kdl_fopen_utf8(yol, c_mod);
     if (!f) return y;
     /* Basari: yetki uret + handle bir global tabloya ekle (basit v1: id->FILE*)
      * V1'de FILE* dogrudan id yerine kullanilir (id=ptr value, unforgeable yok).

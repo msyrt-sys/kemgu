@@ -23,11 +23,10 @@ if ! clang -x ir "$TMP/c.ll" -x none "$RT" -o "$TMP/kemcheck.exe" 2>/dev/null; t
 fi
 
 # D-361: modül fikstürleri de kapıya dâhil (çapraz-dosya import yüzeyi).
-# MUAF (2) — bilinen, belgeli boşluklar; kapatıldıklarında bu liste boşalmalı:
-#   ana_gizli.kem      → T041 (`genel` olmayan üyeye çapraz erişim) portlanmadı
-#   ana_kutuphane.kem  → T040/T016; ÖNCE runtime'ın UTF-8 yol desteği gerekiyor
-#                        (self-host `kütüphane/` modüllerini açamıyor — bkz. D-361)
-MUAF="ana_gizli.kem ana_kutuphane.kem"
+# MUAF (1) — bilinen, belgeli boşluk; kapatıldığında bu liste boşalmalı:
+#   ana_gizli.kem → T041 (`genel` olmayan üyeye çapraz erişim) portlanmadı.
+# (ana_kutuphane.kem D-362'de kapandı: runtime UTF-8 yol onarımı + T040 + T016.)
+MUAF="ana_gizli.kem"
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; muaf=0

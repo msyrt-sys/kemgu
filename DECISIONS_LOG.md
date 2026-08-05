@@ -5,6 +5,55 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-362 [YÜKSEK] — Runtime UTF-8 yol onarımı (`kütüphane/`) + T040 + T016 (2026-08-04)
+
+**ETKİ:** `runtime/kdl_runtime.c`, `selfhost/codegen.kem`, `selfhost/checker.kem`,
+`test/checker_diff_harness.sh`.
+
+### Kök neden: runtime `fopen` UTF-8 yolu açamıyordu
+
+D-361, T040'ın "modül bulunamadı" öncülünün YANLIŞ olduğunu göstermişti. Kök neden
+ölçüldü ve onarıldı: **Windows'ta `fopen` ANSI codepage kullanır**, dolayısıyla
+UTF-8 yol `kütüphane/dizi.kem` **açılamaz**. `src/ana.c` bunu bildiği için kendi
+`dosya_ac_utf8`'ini taşıyordu; `runtime/kdl_runtime.c` ise **düz `fopen`**
+kullanıyordu → self-host derleyici `kütüphane/` altındaki modülleri **sessizce**
+yükleyemiyordu.
+
+**Onarım:** `kdl_fopen_utf8` (ana.c'nin deseni: `MultiByteToWideChar` + `_wfopen`,
+dönüşüm başarısızsa düz `fopen`'a düşer) ve **8 çağrı yerinin tamamı** ona çevrildi.
+
+**ÖNCE/SONRA ÖLÇÜMÜ (aynı IR, iki farklı runtime objesi):**
+```
+dosya_var_mi("kütüphane/dizi.kem") → ESKİ runtime: exit 7  (açılamadı)
+                                     YENİ runtime: exit 42 (açıldı)
+```
+
+**Bayat-obje tuzağı yaşandı ve atlatıldı:** `git stash pop` sonrası
+`mingw32-make build/kdl_runtime.o` **"up to date"** dedi — obje ESKİ kaynaktan
+kalmıştı. CLAUDE.md'nin uyardığı tuzak; `rm -f` + yeniden derleme ile doğrulandı.
+
+### Açılan tanılar
+
+- **T040** (modül yüklenemedi) — artık **sıfır yanlış-pozitif** (D-361'de 4 tane
+  vardı). C İKİ KEZ raporluyor (ana.c'de iki yükleme geçişi); parite için ikisi de.
+- **T016** (modül bulunamadı) — `X::y`de X ne çeşit ne modülse. Modül adları üç
+  kaynaktan: yüklenen `kullan`lar (tam yol + **son segment**), `modül m` blokları,
+  ve **alias**lar (`kullan m olarak d` — parser onu atıyordu, yan-kanal eklendi).
+  İç içe `a::b::c` yolunda ara düğüm YOL olduğu için self-host **susar** (C modül
+  zinciriyle çözer; emin olunamayan yerde tanı üretilmez).
+
+**Sabotaj (3):** S47 T040 (119→118), S48 T016 (118), S49 modül-adı kaydı
+(**birçok geçerli dosya sahte T016 aldı** — kaydın yanlış-pozitif koruması olduğu
+ölçüldü).
+
+**Muafiyet listesi 2 → 1:** `ana_kutuphane.kem` kapandı. Kalan tek muaf
+`ana_gizli.kem` (T041 — `genel` görünürlüğü portlanmadı).
+
+**Sonuç:** self-host checker kod kapsamı **44 → 46/74**; kapı **119 dosya**
+(1 muaf); modül yüzeyi **31/32**.
+
+---
+
 ## D-361 [YÜKSEK] — Modül yüzeyi ölçüldü: 3 YANLIŞ-POZİTİF onarıldı + T042 (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
