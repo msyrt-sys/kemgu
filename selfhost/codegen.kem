@@ -182,6 +182,7 @@ yapı Ayr {
     dyf_alan: Dizi<metin>;   // D-318: paralel — alan adı
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
     lin_fnk: Dizi<tam32>;    // D-321: bağlama tekkez<işlev(...)> mü (LC-3 çağrı tüketimi)
+    lin_yet: Dizi<tam32>;    // D-365: 1 = bağlama `yetki<R>` — L001/L002/L004 yerine CP005
     lin_tek: Dizi<tam32>;    // D-355: 1 = bağlamanın KESİN `yapı tekkez` olduğu biliniyor.
                              // 0 = tekkez<T> VEYA bilinmiyor (annotasyonsuz `değişken k =
                              // tekkez_olustur(..)` de 0) → L007 YALNIZ 1'de verilir.
@@ -6472,7 +6473,8 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {
         eğer metin_esit(dizi_al(p.a_ad, operand), "TANIMLAYICI")
           ve (lin_idx(p, dizi_al(p.a_deg, operand)) >= 0) {
-            dizi_ekle(p.th_kod, "L004");
+            // D-365: yetki bağlamasına referans → CP005 (aksi L004).
+            dizi_ekle(p.th_kod, lin_kod(p, lin_idx(p, dizi_al(p.a_deg, operand)), "L004"));
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
@@ -6746,6 +6748,8 @@ işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer n != 1 { sekil_hata(p, idx, "CP004"); ver doğru; }
     değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
     eğer kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    // D-365: `geri_al` yetkiyi TÜKETİR (mmio_*/bölge_al ÖDÜNÇ alır, tüketmez).
+    lin_tuket_dugum(p, a0);
     ver yanlış;
 }
 // ---- D-358: G002 + G003 + G004 — güvensiz-tier ve temsil kuralları ----
@@ -7109,7 +7113,21 @@ işlev m001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
 }
 // ---- TC5b: lineer akış izleme yardımcıları ----
 // Linear Types Spec V1 = YALNIZ tekkez (yetki → CP005/TC7, görev → DRF/TC6 ayrı kod).
-işlev tip_node_tekkez_mi(ad: metin) -> mantıksal { ver metin_esit(ad, "TIP_TEKKEZ"); }
+// D-365: `yetki<R>` de LİNEER (Capability Spec V1) — C tip_lineer_mi ile aynı.
+// L001/L002/L004 makinesinin TAMAMI yetki için de çalışır; tek fark RAPORLANAN
+// KOD: yetki bağlamasında CP005 (lin_yet biti).
+işlev tip_node_tekkez_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI");
+}
+işlev lin_yetki_mi(p: &değişken Ayr, i: tam32) -> mantıksal {
+    eğer i < 0 { ver yanlış; }
+    eğer i >= dizi_boyut(p.lin_yet) { ver yanlış; }
+    ver dizi_al(p.lin_yet, i) == 1;
+}
+işlev lin_kod(p: &değişken Ayr, i: tam32, kod: metin) -> metin {
+    eğer lin_yetki_mi(p, i) { ver "CP005"; }
+    ver kod;
+}
 // D-316: parametre tip düğümü LİNEER mi? tekkez<T> VEYA `yapı tekkez K`.
 // Yalnız TIP_TEKKEZ bakmak, lineer YAPI parametresini tüketimsiz bırakıyordu
 // (ölçüldü: cagri argümanı tüketilmeyip yanlış L001 çıkıyordu).
@@ -7485,7 +7503,8 @@ işlev lin_ekle(p: &değişken Ayr, ad: metin, sat: tam32, sut: tam32) -> tam32 
     dizi_ekle(p.lin_ad, ad); dizi_ekle(p.lin_sat, sat);
     dizi_ekle(p.lin_sut, sut); dizi_ekle(p.lin_tuk, 0);
     dizi_ekle(p.lin_maske, 0); dizi_ekle(p.lin_fnk, 0);
-    dizi_ekle(p.lin_tek, 0); ver 0;   // D-316/D-321/D-355
+    dizi_ekle(p.lin_tek, 0); dizi_ekle(p.lin_yet, 0);
+    ver 0;   // D-316/D-321/D-355/D-365
 }
 // Aktif dilimde (en yeni) lineer bağlamanın indeksi; yoksa -1.
 işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
@@ -7502,7 +7521,7 @@ işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
     değişken idx: tam32 = lin_idx(p, dizi_al(p.a_deg, node));
     eğer idx < 0 { ver 0; }
     eğer dizi_al(p.lin_tuk, idx) >= 1 {
-        dizi_ekle(p.th_kod, "L002");
+        dizi_ekle(p.th_kod, lin_kod(p, idx, "L002"));   // D-365: yetki → CP005
         dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
         dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
     }
@@ -7510,7 +7529,7 @@ işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
     // devretmek use-after-move olurdu (alıcının tipi alanı "var" gösterir).
     // `imha` serbest: kalan alanları atar. C tip_kontrol.c aynası.
     eğer (dizi_al(p.lin_maske, idx) != 0) ve (p.imha_bag == 0) {
-        dizi_ekle(p.th_kod, "L002");
+        dizi_ekle(p.th_kod, lin_kod(p, idx, "L002"));   // D-365
         dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
         dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
     }
@@ -7533,6 +7552,10 @@ işlev lin_param_topla(p: &değişken Ayr, fn: tam32) -> tam32 {
                   ve lineer_yapi_mi(p, dizi_al(p.a_deg, tc)) {
                     dizi_yaz(p.lin_tek, dizi_boyut(p.lin_tek) - 1, 1);
                 }
+                // D-365: `yetki<R>` parametresi → tanılar CP005.
+                eğer metin_esit(yetki_kaynak_adi(p, tc), "") == yanlış {
+                    dizi_yaz(p.lin_yet, dizi_boyut(p.lin_yet) - 1, 1);
+                }
             }
         }
         i = i + 1;
@@ -7545,7 +7568,7 @@ işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
     değişken i: tam32 = p.lin_basla;
     iken i < n {
         eğer dizi_al(p.lin_tuk, i) == 0 {
-            dizi_ekle(p.th_kod, "L001");
+            dizi_ekle(p.th_kod, lin_kod(p, i, "L001"));   // D-365: yetki → CP005
             dizi_ekle(p.th_sat, dizi_al(p.lin_sat, i));
             dizi_ekle(p.th_sut, dizi_al(p.lin_sut, i));
         }
@@ -8026,6 +8049,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer lin_fn_tipi_mi(p, idx) {
                 dizi_yaz(p.lin_fnk, dizi_boyut(p.lin_fnk) - 1, 1);   // D-321
             }
+            // D-365: `yetki<R>` bağlaması → tanılar CP005 olarak raporlanır.
+            eğer metin_esit(yetki_kaynak_adi(p, annot_node(p, idx)), "") == yanlış {
+                dizi_yaz(p.lin_yet, dizi_boyut(p.lin_yet) - 1, 1);
+            }
             // D-355: annotasyon KESİN lineer YAPI mı? (annotasyonsuz / tekkez<T> → 0)
             değişken lan: tam32 = annot_node(p, idx);
             eğer (lan >= 0) ve metin_esit(dizi_al(p.a_ad, lan), "TIP_BASIT")
@@ -8455,7 +8482,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }

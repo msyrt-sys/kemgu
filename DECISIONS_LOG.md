@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-365 — CP005 portlandı: MMIO + YETKİ ALT-SİSTEMİ KAPANDI (5/5) (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+**Ölçümle çıkan asıl bulgu — CP005 YENİ BİR KURAL DEĞİL.** C'de üç ayrı yerde,
+mevcut lineer tanıların **yetki karşılığı** olarak üretiliyor:
+
+| lineer tanı | yetki bağlamasında |
+|---|---|
+| L002 (çift tüketim) | **CP005** |
+| L001 (tüketilmedi) | **CP005** |
+| L004 (lineere referans) | **CP005** |
+
+Yani gereken şey yeni bir analiz değil, **mevcut makineye yetki'yi sokmak + kod
+ikamesi**. Bu, D-313'ün `yapı tekkez` için yaptığının aynısı (ayrı kod yolu YOK).
+
+**Uygulama:** `tip_node_tekkez_mi` artık `TIP_YETKI`yi de sayıyor (C
+`tip_lineer_mi` ile hizalı) → yetki bağlamaları lineer dilime giriyor ve
+L001/L002/L004/L-COND/L-LOOP makinesinin **tamamı** onlar için de çalışıyor.
+Yeni bit `lin_yet` yalnız **raporlanan kodu** seçiyor (`lin_kod`).
+
+**Tüketim/ödünç ayrımı ölçüldü:** `geri_al(y)` **tüketir**; `mmio_*(y, ...)` ve
+`bölge_al(y, ...)` **ödünç alır** (tüketmez). Sabotaj S59 bunu kapıladı:
+`geri_al` tüketmeyince `tc17_02`'deki geçerli kod sahte CP005 aldı.
+
+**Sabotaj (3):** S57 kod ikamesi (123→122; CP005 yerine L001/L002/L004 çıktı),
+S58 yetkinin lineer sayılması (122), S59 `geri_al` tüketimi (**yanlış-pozitif
+yönünde**, geçerli dosyalar kırıldı).
+
+**Probe 9/9 birebir** — üç CP005 şekli + tekkez'in L001/L002'sinin BOZULMADIĞI
+(kod ikamesi yalnız yetki bağlamasında).
+
+**Sonuç:** self-host checker kod kapsamı **51 → 52/74**.
+**MMIO + yetki alt-sistemi 5/5 KAPANDI** (MM001-003, CP004, CP005).
+Kalan 22 kod: sabitsüre (8), DRF (7), M004, T011/T014, T030/T031 + 2 ölü.
+C tarafı regresyonsuz: linear 89/89, capability 40/40.
+
+---
+
 ## D-364 — MMIO + yetki intrinsikleri portlandı: MM001/MM002/MM003 + CP004 (2026-08-05)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

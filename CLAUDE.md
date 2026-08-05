@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **MMIO + YETKİ ALT-SİSTEMİ KAPANDI (5/5) — D-365.** CP005 **yeni kural değil**:
+  L001/L002/L004'ün yetki karşılığı. `tip_node_tekkez_mi`'ye `TIP_YETKI` eklendi →
+  mevcut lineer makinenin TAMAMI yetki için çalışıyor; `lin_yet` biti yalnız
+  raporlanan KODU seçiyor (D-313'ün `yapı tekkez` deseni). `geri_al` TÜKETİR,
+  `mmio_*`/`bölge_al` ÖDÜNÇ alır. **Kapsam 52/74.**
 - **MMIO + yetki — D-364.** MM001/MM002/MM003 + CP004 portlandı (kapsam **51/74**).
   Yeni yan-dizi `yerel_yet` (`yetki<R>` kaynak adı). **CP005 bilinçli olarak YOK:**
   `deg_lineer_mi` TIP_YETKI'yi saymıyor ve kod L002 değil CP005 olmalı → lineer
