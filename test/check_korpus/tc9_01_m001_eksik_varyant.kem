@@ -1,0 +1,13 @@
+// D-352 / M001: kapalı tip (çeşit) üzerinde `eşleş` TÜM varyantları kapsamalı.
+// Eksik varyant = çalışma zamanında düşülecek bir dal → derleme zamanında red.
+çeşit Renk { Kirmizi, Yesil, Mavi }
+
+işlev ad(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 1; }
+        Renk::Yesil => { ver 2; }
+    }
+}
+işlev main() -> tam32 {
+    ver 0;
+}

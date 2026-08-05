@@ -1,0 +1,26 @@
+// D-352 / M001: kapsayıcılığın İKİ meşru biçimi — tüm varyantlar sayılır, ya da
+// üst düzey joker `_` / bağlama yakalayıcı vardır. İkisi de OK.
+çeşit Renk { Kirmizi, Yesil, Mavi }
+
+işlev hepsi(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 1; }
+        Renk::Yesil => { ver 2; }
+        Renk::Mavi => { ver 3; }
+    }
+}
+işlev joker(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 1; }
+        _ => { ver 0; }
+    }
+}
+işlev baglama(r: Renk) -> tam32 {
+    eşleş r {
+        Renk::Kirmizi => { ver 1; }
+        digeri => { ver 0; }
+    }
+}
+işlev main() -> tam32 {
+    ver 0;
+}

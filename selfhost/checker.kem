@@ -38,6 +38,9 @@ yapı Ayr {
     yerel: Dizi<metin>;   // append-only kapsam yığını (param + lokal)
     yerel_tip: Dizi<metin>; // yerel ile paralel: her ismin tip-string'i ("?"=bilinmiyor)
     yerel_ptr: Dizi<tam32>; // D-351: yerel ile paralel — 1 = ham işaretçi (*T) bağlaması (G001)
+    yerel_ham: Dizi<metin>; // D-352: yerel ile paralel — SÜZÜLMEMİŞ annotation tip adı (M001)
+    cv_cesit: Dizi<metin>;  // D-352: her varyant için sahip çeşit adı (parser yan-kanalı)
+    cv_ad: Dizi<metin>;     // D-352: varyant adı (cv_cesit ile paralel)
     kur_ad: Dizi<metin>;    // D-351: küresel değişken adları (E010)
     cip_node: Dizi<tam32>;  // D-351: `çıplak` işlev düğümleri — gövdesi örtük güvensiz
     yerel_basla: tam32;   // aktif işlevin yerel diliminin başlangıcı (slice)
@@ -1488,7 +1491,10 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
             eğer sim_mi(p, "TANIMLAYICI") == yanlış {  // anti-hang (C panik_sync+break)
                 p.hata_say = p.hata_say + 1; ilerle(p); devam = yanlış;
             } değilse {
+            değişken vad: metin = sim_lex(p);
             ilerle(p);   // varyant adı (dump'ta yok)
+            dizi_ekle(p.cv_cesit, ad);   // D-352 yan-kanal: M001 için varyant tablosu
+            dizi_ekle(p.cv_ad, vad);
             eğer sim_mi(p, "SOL_PAREN") {
                 ilerle(p);
                 değişken d2: mantıksal = doğru;
@@ -1696,7 +1702,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], kur_ad: [], cip_node: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], cv_cesit: [], cv_ad: [], kur_ad: [], cip_node: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -2419,6 +2425,97 @@ işlev g001_indeks_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer p.guv_bag == 0 { ver g001_hata(p, idx); }
     ver 0;
 }
+// ---- D-352: M001 — `eşleş` kapsayıcılık (exhaustiveness), ÇEŞİT dalı ----
+// C esles_exhaustive_kontrol aynası. KAPSAM: yalnız çeşit skrutinisi. seçimlik<T>
+// ve sonuç<T,H> dalları PORTLANMADI — self-host'ta bileşik tip bilgisi yok
+// (ifade_tip "?" döner); o iki dal bilinçli boşluktur (yanlış-pozitif üretmez).
+işlev metin_biter(s: metin, son: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken m: tam32 = metin_uzunluk(son);
+    eğer m > n { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < m {
+        eğer metin_bayt(s, n - m + i) != metin_bayt(son, i) { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+işlev cesit_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Skrutini ÇEŞİT tipinde mi? Değilse/emin değilsek "" (kontrol atlanır).
+// Yalnız TANIMLAYICI: annotasyonlu yerel/parametre. Diğer ifadeler → "".
+işlev esles_cesit_adi(p: &değişken Ayr, kosul: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, kosul), "TANIMLAYICI") == yanlış { ver ""; }
+    değişken nm: metin = dizi_al(p.a_deg, kosul);
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), nm) {
+            değişken t: metin = dizi_al(p.yerel_ham, i);
+            eğer cesit_var_mi(p, t) { ver t; }
+            ver "";
+        }
+        i = i - 1;
+    }
+    ver "";
+}
+// Kolun deseni (yoksa -1).
+işlev kol_deseni(p: &değişken Ayr, kol: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, kol) == 0 { ver 0 - 1; }
+    ver dizi_al(p.cocuk, dizi_al(p.a_cb, kol));
+}
+işlev m001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken ec: tam32 = dizi_al(p.a_cs, idx);
+    eğer ec < 1 { ver 0; }
+    değişken eb: tam32 = dizi_al(p.a_cb, idx);
+    // Üst düzey joker `_` ya da bağlama yakalayıcısı → exhaustive ('hiç' HARİÇ:
+    // o seçimlik varyantıdır, yakalayıcı değil — C ile birebir).
+    değişken ki: tam32 = 1;
+    iken ki < ec {
+        değişken des: tam32 = kol_deseni(p, dizi_al(p.cocuk, eb + ki));
+        eğer des >= 0 {
+            değişken da: metin = dizi_al(p.a_ad, des);
+            eğer metin_esit(da, "DESEN_JOKER") { ver 0; }
+            eğer metin_esit(da, "DESEN_TANIMLAYICI")
+              ve (metin_esit(dizi_al(p.a_deg, des), "hiç") == yanlış) { ver 0; }
+        }
+        ki = ki + 1;
+    }
+    değişken cad: metin = esles_cesit_adi(p, dizi_al(p.cocuk, eb));
+    eğer metin_esit(cad, "") { ver 0; }
+    // Her varyant bir DESEN_YOL ile kapsanmalı. C YALNIZ varyant kısmını
+    // karşılaştırır (yol öneki yok sayılır) → sonek eşleşmesi birebir aynısı.
+    değişken eksik_var: mantıksal = yanlış;
+    değişken v: tam32 = 0;
+    iken v < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, v), cad) {
+            değişken hedef: metin = metin_birlestir("::", dizi_al(p.cv_ad, v));
+            değişken kapsandi: mantıksal = yanlış;
+            değişken k2: tam32 = 1;
+            iken k2 < ec {
+                değişken d2: tam32 = kol_deseni(p, dizi_al(p.cocuk, eb + k2));
+                eğer d2 >= 0 {
+                    eğer metin_esit(dizi_al(p.a_ad, d2), "DESEN_YOL")
+                      ve metin_biter(dizi_al(p.a_deg, d2), hedef) { kapsandi = doğru; }
+                }
+                k2 = k2 + 1;
+            }
+            eğer kapsandi == yanlış { eksik_var = doğru; }
+        }
+        v = v + 1;
+    }
+    eğer eksik_var {
+        dizi_ekle(p.th_kod, "M001");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
+}
 // ---- TC5b: lineer akış izleme yardımcıları ----
 // Linear Types Spec V1 = YALNIZ tekkez (yetki → CP005/TC7, görev → DRF/TC6 ayrı kod).
 işlev tip_node_tekkez_mi(ad: metin) -> mantıksal { ver metin_esit(ad, "TIP_TEKKEZ"); }
@@ -2830,16 +2927,21 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, tip_str(p, tc)));
         } değilse { dizi_ekle(p.yerel_tip, "?"); }
         dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, tc));   // D-351 G001
+        eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
+            dizi_ekle(p.yerel_ham, tip_str(p, tc));       // D-352 M001 (süzülmemiş)
+        } değilse { dizi_ekle(p.yerel_ham, "?"); }
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
             dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
             dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, annot_node(p, idx)));   // D-351
+            dizi_ekle(p.yerel_ham, annot_str(p, idx));    // D-352
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
                 dizi_ekle(p.yerel_tip, "?");
                 dizi_ekle(p.yerel_ptr, 0);
+                dizi_ekle(p.yerel_ham, "?");
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -2849,6 +2951,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.yerel, dizi_al(p.dyf_alan, q));
                         dizi_ekle(p.yerel_tip, "?");
                         dizi_ekle(p.yerel_ptr, 0);
+                        dizi_ekle(p.yerel_ham, "?");
                     }
                     q = q + 1;
                 }
@@ -3029,6 +3132,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             q = q + 1;
         }
         lin_snap_at(p, eb0);
+        m001_kontrol(p, idx);   // D-352: C sırası — L005'ten SONRA (kapsayıcılık en son)
         ver 0;
     }
     // CAGRI: hedef T002 → (tanımsız → erken dön) → T010 arite (uyumsuz → erken dön)

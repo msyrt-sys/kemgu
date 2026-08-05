@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **`eşleş` KAPSAYICILIK (M001) — D-352'de self-host'a portlandı** (çeşit dalı).
+  Yan-kanal: `cv_cesit`/`cv_ad` (varyant adları — `parse_cesit` bunları ATIYORDU)
+  + `yerel_ham` (süzülmemiş annotasyon tip adı; `yerel_tip` çeşidi "?"e düşürüyor).
+  **Bilinçli sınır:** `seçimlik<T>` ve `sonuç<T,H>` dalları YOK — self-host'ta
+  bileşik tip temsili yok; kapanması tip çıkarsaması işine bağlı.
 - **GÜVENSİZ-TIER KAPILARI — D-351'de self-host'a portlandı.** `G001` (ham işaretçi
   deref/indeksleme) + `E010` (küresel erişim) artık self-host checker'da da var;
   `çıplak` gövde örtük güvensiz (yan-kanal `cip_node`/`g_ciplak` — düğüme alan

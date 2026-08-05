@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-352 — M001 (`eşleş` kapsayıcılık) self-host'a portlandı: çeşit dalı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Neden:** D-350 taramasının 3. sıradaki maddesi. Eksik varyant = **çalışma
+zamanında düşülecek bir dal**; C bunu derleme zamanında M001 ile reddediyordu,
+self-host sessizce kabul ediyordu. Ölçüldü: `çeşit R { A, B }` + yalnız `R::A`
+kolu → C `M001`, self `OK`.
+
+**Portlanan kural (C `esles_exhaustive_kontrol` aynası):**
+1. Üst düzey joker `_` **veya** bağlama yakalayıcısı varsa → exhaustive, çık.
+   `hiç` bu kuraldan MUAF (o bir seçimlik varyantıdır, yakalayıcı değil).
+2. Skrutini çeşit ise: her varyant bir `Yol::Varyant` deseniyle kapsanmalı;
+   eksik varsa `eşleş` düğümünde M001.
+3. Açık tipler (tamsayı vb.) ve `yapı` denetlenmez — geriye uyum.
+
+C **yalnız varyant kısmını** karşılaştırır (yol öneki yok sayılır); self-host'ta
+desen adı `"Ad::Varyant"` tek dizgi olduğu için **sonek eşleşmesi** (`metin_biter`)
+birebir aynı davranış.
+
+**KAPSAM SINIRI (bilinçli, belgeli):** `seçimlik<T>` (değer/hiç) ve `sonuç<T,H>`
+(tamam/hata + H çeşidi) dalları **portlanmadı** — self-host'ta bileşik tip bilgisi
+yok (`ifade_tip` "?" döner). Bu bir gevşeklik olarak KALIR; yanlış-pozitif üretmez.
+Kapanması, self-host tip çıkarsamasının bileşik tipleri temsil etmesine bağlı —
+ayrı ve daha büyük bir iş.
+
+**İki yan-kanal gerekti** (düğüme alan eklemek `--ast`/`--parse` dump paritesini
+bozardı; D-318 deseni):
+- `cv_cesit`/`cv_ad` — varyant adları. `parse_cesit` bunları **atıyordu**
+  ("dump'ta yok"). codegen.kem'de zaten vardı (D3), checker.kem'e eklendi.
+- `yerel_ham` — yerel/parametre annotasyonunun **süzülmemiş** tip adı.
+  Mevcut `yerel_tip`, çeşit adlarını `yapi_var_mi` süzgecinden geçiremediği için
+  "?"e düşürüyordu; `yerel_tip`'i değiştirmek T001/T003'ü geniş biçimde etkilerdi
+  → ayrı, izole dizi.
+
+**Sabotaj doğrulaması (3 kural; `grep SABOTAJ-Sn` ile kanıtlı):** S14 M001
+raporlaması (74→73), S15 joker muafiyeti (73 — yanlış-pozitif yönünde),
+S16 bağlama-yakalayıcı muafiyeti (73 — kuralın ince yarısı).
+
+**Probe matrisi (7/7 C ile birebir):** parametre skrutini, yerel değişken
+skrutini, payload'lı varyant, 3-varyanttan 1'i, tam kapsama, `yapı` (M001 yok),
+tamsayı (açık tip, M001 yok).
+
+**Sonuç:** self-host checker kod kapsamı **26 → 27/74**; korpus **72 → 74**.
+
+---
+
 ## D-351 [YÜKSEK] — G001 + E010 self-host'a portlandı: güvensiz-tier kapıları (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+6).
