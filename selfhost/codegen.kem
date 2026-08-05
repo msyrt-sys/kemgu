@@ -154,6 +154,9 @@ yapı Ayr {
     si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
     si_yol: Dizi<metin>;     // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
     mod_ad: Dizi<metin>;     // D-362: bilinen modül adları (yüklenen + `modül m` + alias) — T016
+    gen_node: Dizi<tam32>;   // D-363: `genel` işaretli tanım düğümleri (parser yan-kanalı)
+    priv_mod: Dizi<metin>;   // D-363: dosya-modülünün `genel` OLMAYAN üyeleri — modül adı
+    priv_ad: Dizi<metin>;    // D-363: priv_mod ile paralel — üye adı (T041)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;      // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor)
     aktif_fn: tam32;       // D-324: aktif işlev düğümü (G005 ileri-tarama kapsamı)
@@ -1894,7 +1897,12 @@ işlev parse_disa(p: &değişken Ayr) -> tam32 {
 // genel SARMALAMAZ — iç tanımı doğrudan döner (genel_mi bayrağı dump'ta yok).
 işlev parse_genel(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // genel
-    ver parse_disa_govde(p);
+    // D-363: `genel` düğüme yansımıyor (parse_disa_govde ÇIPLAK tanım döner) →
+    // `genel işlev f` ile `işlev f` ayırt edilemiyordu. Yan-kanal: işaretli
+    // düğümler. T041 (private-by-default) bu ayrımın üstünde duruyor.
+    değişken n: tam32 = parse_disa_govde(p);
+    dizi_ekle(p.gen_node, n);
+    ver n;
 }
 işlev parse_modul(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
@@ -6758,6 +6766,12 @@ işlev m002_yol_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
           ve (modul_ad_mi(p, dizi_al(p.a_deg, sol)) == yanlış)
           ve (yerel_var_mi(p, dizi_al(p.a_deg, sol)) == yanlış) {
             sekil_hata(p, idx, "T016");
+            ver 0;
+        }
+        // D-363 T041: modül BULUNDU ama üye `genel` değil (private-by-default).
+        eğer metin_esit(dizi_al(p.a_ad, sol), "TANIMLAYICI")
+          ve ozel_uye_mi(p, dizi_al(p.a_deg, sol), dizi_al(p.a_deg, idx)) {
+            sekil_hata(p, idx, "T041");
         }
         ver 0;
     }
@@ -8183,6 +8197,30 @@ işlev modul_icerik(dizin: metin, rel: metin) -> metin {
     eğer dosya_var_mi(a2) { ver dosya_oku(a2); }
     ver "";
 }
+// D-363: üst-düzey bir TANIM mı? T041 yalnız adlandırılmış tanımlar için anlamlı.
+işlev tanim_kind_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "ISLEV") veya metin_esit(ad, "YAPI") veya metin_esit(ad, "CESIT")
+      veya metin_esit(ad, "SABIT") veya metin_esit(ad, "OZELLIK");
+}
+// D-363: düğüm `genel` işaretli mi? (o modülün KENDİ ayrıştırıcısının yan-kanalı)
+işlev gen_isaretli_mi(mp: &değişken Ayr, n: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(mp.gen_node) {
+        eğer dizi_al(mp.gen_node, i) == n { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// D-363 / T041: `mod::uye` — üye o dosya-modülünde var ama `genel` değil.
+işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.priv_mod) {
+        eğer metin_esit(dizi_al(p.priv_mod, i), mad)
+          ve metin_esit(dizi_al(p.priv_ad, i), uad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 // Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
 işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
@@ -8207,6 +8245,13 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
                 değişken inner: tam32 = dizi_al(mp.cocuk, dizi_al(mp.a_cb, c));
                 g_ekle(p, dizi_al(mp.a_deg, inner));
             }
+        }
+        // D-363 T041 (private-by-default): DOSYA-modülünün `genel` İŞARETSİZ
+        // üyeleri dışarıdan erişilemez. `dışa` sarmalı ve `genel` işaretlisi muaf;
+        // dosya-içi `modül m { }` blokları bu yola girmediği için doğal olarak muaf.
+        eğer tanim_kind_mi(cad) ve (gen_isaretli_mi(&değişken mp, c) == yanlış) {
+            dizi_ekle(p.priv_mod, son_segment(modul_yol));
+            dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
         }
         eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
         ci = ci + 1;
@@ -8327,7 +8372,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,

@@ -745,6 +745,12 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **MODÜL ALT-SİSTEMİ KAPANDI — D-363.** T041 (private-by-default) portlandı;
+  engel `genel`in düğüme yansımamasıydı (`parse_genel` çıplak tanım döner) →
+  `gen_node` yan-kanalı. **`checker_diff` 120/120, MUAFİYET LİSTESİ BOŞ.**
+  Kapsam **47/74**; kalan 27'nin 2'si ölü, 23'ü dört alt-sistemin tip temsiline
+  bağlı. **Tek tek portlanabilecek genel-amaçlı kod KALMADI** — bundan sonrası
+  alt-sistem işi (sabitsüre / DRF / MMIO+yetki) ya da tip evreni.
 - **RUNTIME UTF-8 YOL ONARIMI — D-362.** `runtime/kdl_runtime.c` düz `fopen`
   kullanıyordu → Windows ANSI codepage yüzünden `kütüphane/` **açılamıyordu**
   (self-host o modülleri SESSİZCE yüklemiyordu). `kdl_fopen_utf8`

@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-363 — T041 (private-by-default) portlandı: MODÜL ALT-SİSTEMİ KAPANDI (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
+
+**Kural:** dosya-modülünün `genel` işaretsiz üyeleri **çapraz-modül erişilemez**
+(private-by-default). Modülün kendi içinden kardeşler görünür; dosya-içi
+`modül m { }` blokları C'de de denetlenmiyor.
+
+**Engel:** `genel` düğüme YANSIMIYORDU. `parse_genel` → `parse_disa_govde`
+**çıplak tanımı** döndürüyor (DISA sarmalı yok) → `genel işlev f` ile `işlev f`
+self-host'ta **ayırt edilemiyordu**. Yan-kanal `gen_node` eklendi (D-352/353/358
+deseni); `modul_yukle` her dosya-modülünün kendi ayrıştırıcısından (`mp`) okuyup
+`genel` OLMAYAN üyeleri `priv_mod`/`priv_ad`'e kaydediyor.
+
+**Sıra:** T016 (modül yok) → T041 (modül var, üye özel). T016 tetiklenirse erken
+dönülür — C'nin sırası da böyle (`yol_modul_scope_coz` başarısızsa T041'e gelinmez).
+
+**Sabotaj (2):** S50 T041 (120→119), S51 `genel` muafiyeti (**birçok geçerli dosya
+kırıldı** — muafiyetin yanlış-pozitif koruması olduğu ölçüldü).
+
+### MUAFİYET LİSTESİ BOŞALDI
+
+`checker_diff` **120/120, 0 muaf**. Modül yüzeyi üç adımda tamamen kapandı:
+D-361 (seçili import + T042), D-362 (runtime UTF-8 yolu + T040 + T016),
+D-363 (T041). Yeni bir muafiyet eklenirse gerekçesi DECISIONS_LOG'a yazılmalı.
+
+**Sonuç:** self-host checker kod kapsamı **46 → 47/74**. Kalan 27 kodun **2'si ölü**
+(T015/T023) ve kalan 25'in **23'ü** dört alt-sistemin tip temsiline bağlı
+(CT*/DRF*/MM*+CP*), 2'si tip evreni (T011/T014) — artı M004 ve T030/T031.
+**Modül kümesi tamamlandı; tek tek portlanabilecek genel-amaçlı kod KALMADI.**
+
+---
+
 ## D-362 [YÜKSEK] — Runtime UTF-8 yol onarımı (`kütüphane/`) + T040 + T016 (2026-08-04)
 
 **ETKİ:** `runtime/kdl_runtime.c`, `selfhost/codegen.kem`, `selfhost/checker.kem`,
