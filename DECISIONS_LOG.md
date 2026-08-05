@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-373 — AS001 (satıriçi_asm mimari kapısı) self-host'a portlandı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kural.** `satıriçi_asm { mimari: X ... }` etiketi HEDEF mimariyle uyuşmalı;
+uyuşmazsa `AS001`. Amaç: yanlış hedefe **sessizce bozuk makine kodu üretmek
+yerine** derleme hatası. C sırası ölçüldü: aynı düğümde **önce G002, sonra
+AS001** (`güvensiz` dışındaki uyumsuz asm İKİ tanı alır).
+
+**Hedef mimari self-host'ta SABİT `x86_64`.** Bu bir varsayım değil, ölçülmüş
+olgu: C'nin varsayılanı `x86_64`'tür (`KEMGU_HEDEF_MIMARI`) ve **self-host
+sürücüde `--mimari` bayrağı YOKTUR** → hedef gerçekten değişmez. Sürücüye
+`--mimari` eklenirse `as001_kontrol` da güncellenmeli (koda not düşüldü).
+
+**Ölçüm tuzağı:** ilk probe'da `mimari: aarch64` yazdım ve `--mimari aarch64`
+ile İKİ tanı birden aldım — kural bozuk sandım. Gerçek: C'de mimari adı
+**`arm64`**tür (`aarch64` yalnız bayrak değeri olarak kabul edilip `arm64`e
+çevrilir), yani `aarch64` etiketi hiçbir hedefle eşleşmez. Kural doğruydu,
+probe yanlıştı. **Beklenmedik sonuçta önce probe'u doğrula.**
+
+**Etiket parser yan-kanalında** (`asm_node`/`asm_mim`): parser etiketi
+atıyordu; düğüme alan eklemek `--ast` paritesini bozardı.
+
+**Kapılar:** `checker_diff` **135/135** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 103/103, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED).
+**Sabotaj:** S79 (AS001 tanısı), S80 (G002/AS001 SIRASI ters çevrildi) — ikisi
+de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**Geniş ölçüm 97/99** (D-372'de 96). Kalan 2 sapmanın ikisi de **eksik tanı**:
+`kem_asm_kernel.kem` `T001 18:16` — `yazdir_tam` gibi **built-in'lerin PARAMETRE
+TİPİ** self-host'ta yok (built-in imza tablosu işi); `kem_os.kem` `T002` kuyruğu
+(tanımsız ad `dtb` — kapsam çözümü). İkisi de ayrı alt-sistem.
+
+---
+
 ## D-372 [YÜKSEK] — CP005 YANLIŞ-POZİTİFİ: `yetki<R>` parametresi lineerdir (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
