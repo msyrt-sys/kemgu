@@ -162,6 +162,7 @@ yapı Ayr {
     si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
     si_yol: Dizi<metin>;     // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
     mod_ad: Dizi<metin>;     // D-362: bilinen modül adları (yüklenen + `modül m` + alias) — T016
+    gp_ad: Dizi<metin>;      // D-370: generic tip parametresi ADLARI (T011 muafiyeti)
     gp_sahip: Dizi<metin>;   // D-369: generic bound tablosu — sahip tip adı
     gp_idx: Dizi<tam32>;     // D-369: paralel — tip parametresinin sırası (0-tabanlı)
     gp_bound: Dizi<metin>;   // D-369: paralel — bound (özellik) adı
@@ -1071,6 +1072,10 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
     eğer simdiki_buyuk_mu(p) { devam = yanlış; }
     iken devam {
         dizi_ekle(p.tp_pending, sim_lex(p));  // param adı yakala (bekle'den ÖNCE)
+        // D-370: param ADI da yan-kanala — T011 evreninde generic paramlar MUAF.
+        // Kapsam-duyarsız (tüm bildirimlerin paramları tek listede): yalnız
+        // EKSİK tanı üretebilir, YANLIŞ tanı üretemez.
+        dizi_ekle(p.gp_ad, sim_lex(p));
         bekle(p, "TANIMLAYICI");          // param adı
         eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
             ilerle(p);
@@ -6379,6 +6384,9 @@ işlev son_cocuk(p: &değişken Ayr, idx: tam32) -> tam32 {
 işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken annot: metin = annot_str(p, idx);
     eğer metin_esit(annot, "?") { ver 0; }
+    // D-370: annotasyon BİLİNMEYEN bir tipse C tipi HATA'ya düşürür ve T001'e
+    // hiç gelmez (yalnız T011 çıkar). Aksi hâlde tek kusur iki tanı üretirdi.
+    eğer tip_adi_bilinir_mi(p, annot) == yanlış { ver 0; }
     değişken vc: tam32 = son_cocuk(p, idx);
     eğer vc < 0 { ver 0; }
     değişken vt: metin = ifade_tip(p, vc, annot);
@@ -6727,6 +6735,45 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
         ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
     }
     ver yanlış;
+}
+// ---- D-370: T011 — bilinmeyen tip ----
+// Tip-adı EVRENİ: yerleşik skalerler + `yapı` + `çeşit` + generic param adları
+// + küresel ad tablosu (çapraz-dosya `dışa` ithalatları oradan gelir).
+// `özellik` adı EVRENDE DEĞİL — ölçüldü: `işlev f(x: Say)` C'de T011 verir
+// (özellik bound'dur, tip değil). Bound konumundaki adlar zaten orphan
+// düğümlerdedir (kökten erişilmez) → bu denetime hiç uğramazlar.
+// Emin olamadığımız her şeyde SUSULUR: yalnız TIP_BASIT denetlenir.
+işlev generic_param_adi_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.gp_ad) {
+        eğer metin_esit(dizi_al(p.gp_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Yetenek KAYNAK tipleri (`yetki<R>` içinde R): C'de yerleşik nominal tipler.
+işlev yetki_kaynak_tipi_mi(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "MMIO") veya metin_esit(ad, "Dosya") veya metin_esit(ad, "Soket")
+      veya metin_esit(ad, "Bellek") veya metin_esit(ad, "Donanim")
+      veya metin_esit(ad, "OTP_Anahtar");
+}
+işlev tip_adi_bilinir_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    eğer bilinen_skaler_mi(ad) { ver doğru; }
+    eğer yetki_kaynak_tipi_mi(ad) { ver doğru; }   // D-370
+    eğer yapi_var_mi(p, ad) { ver doğru; }
+    eğer cesit_var_mi(p, ad) { ver doğru; }
+    eğer generic_param_adi_mi(p, ad) { ver doğru; }
+    // Küresel ad tablosu: çapraz-dosya `dışa` yapı/çeşit adları burada.
+    // (İşlev/sabit adlarını da içerir → aynı adlı bir tip için tanı KAÇAR;
+    // eksik tanı kabul, yanlış tanı DEĞİL.)
+    ver ad_tanimli_mi(p, ad);
+}
+işlev t011_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_BASIT") == yanlış { ver 0; }
+    eğer tip_adi_bilinir_mi(p, dizi_al(p.a_deg, idx)) == yanlış {
+        sekil_hata(p, idx, "T011");
+    }
+    ver 0;
 }
 // ---- D-369: T030 + T031 — generic bound denetimi ----
 // `yapı Vektor<T: Say>` yazıldıysa `Vektor<Tam>` ancak `uygula Say için Tam`
@@ -7997,6 +8044,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         drf_tip_kontrol(p, idx);
         ct006_tip_kontrol(p, idx);   // D-367
         t030_kontrol(p, idx);        // D-369 T030/T031
+        t011_kontrol(p, idx);        // D-370 T011
         değişken tb: tam32 = dizi_al(p.a_cb, idx);
         değişken tc2: tam32 = dizi_al(p.a_cs, idx);
         değişken ti: tam32 = 0;
@@ -8450,6 +8498,43 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx); }   // D-354 T013
     ver 0;
 }
+// D-370: İMZA GEÇİŞİ. C, tipleri `pre_populate`de çözer → TÜM imza/alan tanıları
+// TÜM gövde tanılarından ÖNCE çıkar (ölçüldü: T030@8 imza, T011@5 gövde → 8 önce).
+// D-369 bunu kontrol_govde içine koymuştu; küme doğruydu ama SIRA yanlıştı —
+// korpusta imza-hatası ile gövde-hatası aynı dosyada olmadığı için gizli kalmıştı.
+işlev kontrol_imza(p: &değişken Ayr, fn: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_baslar(dizi_al(p.a_ad, c), "TIP_") { kontrol_dugum(p, c); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") ve (dizi_al(p.a_cs, c) > 0) {
+            değişken ptn: tam32 = son_cocuk(p, c);
+            eğer (ptn >= 0) ve metin_baslar(dizi_al(p.a_ad, ptn), "TIP_") {
+                kontrol_dugum(p, ptn);
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// D-370: `yapı`/`çeşit` ALAN ve PAYLOAD tipleri (aynı ön-geçişte).
+işlev kontrol_yapi_alanlari(p: &değişken Ayr, c: tam32) -> tam32 {
+    değişken yb: tam32 = dizi_al(p.a_cb, c);
+    değişken yc: tam32 = dizi_al(p.a_cs, c);
+    değişken yi: tam32 = 0;
+    iken yi < yc {
+        değişken yn: tam32 = dizi_al(p.cocuk, yb + yi);
+        eğer metin_baslar(dizi_al(p.a_ad, yn), "TIP_") { kontrol_dugum(p, yn); }
+        eğer metin_esit(dizi_al(p.a_ad, yn), "ALAN") ve (dizi_al(p.a_cs, yn) > 0) {
+            değişken atn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, yn));
+            eğer metin_baslar(dizi_al(p.a_ad, atn), "TIP_") { kontrol_dugum(p, atn); }
+        }
+        yi = yi + 1;
+    }
+    ver 0;
+}
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
@@ -8466,16 +8551,6 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { kontrol_dugum(p, c); }
-        // D-369: DÖNÜŞ TİPİ ve PARAMETRE TİPLERİ de denetlenir. Eskiden yalnız
-        // gövdeye iniliyordu → `işlev f() -> görev<kesirli64>` gibi imza-üstü
-        // tip tanıları (DRF001/DRF006/CT006/T030/T031) HİÇ ÇIKMIYORDU (ölçüldü).
-        eğer metin_baslar(dizi_al(p.a_ad, c), "TIP_") { kontrol_dugum(p, c); }
-        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") ve (dizi_al(p.a_cs, c) > 0) {
-            değişken ptn: tam32 = son_cocuk(p, c);
-            eğer (ptn >= 0) ve metin_baslar(dizi_al(p.a_ad, ptn), "TIP_") {
-                kontrol_dugum(p, ptn);
-            }
-        }
         i = i + 1;
     }
     eğer cip { p.guv_bag = p.guv_bag - 1; p.cip_bag = p.cip_bag - 1; }
@@ -8487,6 +8562,32 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
+    // ---- D-370 ÖN-GEÇİŞ (C `pre_populate`): ÖNCE tüm yapılar, SONRA tüm işlevler ----
+    iken i < cs {
+        değişken pc: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken pa: metin = dizi_al(p.a_ad, pc);
+        eğer metin_esit(pa, "DISA") ve (dizi_al(p.a_cs, pc) > 0) {
+            pc = dizi_al(p.cocuk, dizi_al(p.a_cb, pc));
+            pa = dizi_al(p.a_ad, pc);
+        }
+        p.yerel_basla = dizi_boyut(p.yerel);
+        eğer metin_esit(pa, "YAPI") veya metin_esit(pa, "CESIT") { kontrol_yapi_alanlari(p, pc); }
+        i = i + 1;
+    }
+    i = 0;
+    iken i < cs {
+        değişken fc: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken fa: metin = dizi_al(p.a_ad, fc);
+        eğer metin_esit(fa, "DISA") ve (dizi_al(p.a_cs, fc) > 0) {
+            fc = dizi_al(p.cocuk, dizi_al(p.a_cb, fc));
+            fa = dizi_al(p.a_ad, fc);
+        }
+        p.yerel_basla = dizi_boyut(p.yerel);
+        eğer metin_esit(fa, "ISLEV") { kontrol_imza(p, fc); }
+        i = i + 1;
+    }
+    // ---- GÖVDE GEÇİŞİ ----
+    i = 0;
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ad: metin = dizi_al(p.a_ad, c);
@@ -8865,7 +8966,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,

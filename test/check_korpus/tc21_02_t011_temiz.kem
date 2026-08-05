@@ -1,0 +1,16 @@
+// D-370: T011 YANLIŞ-POZİTİF kapısı — tip-adı evreninin her üyesi.
+// Bir üye evrenden düşerse bu dosya kırmızıya döner.
+yapı Nokta { x: tam32; }
+çeşit Renk { Kirmizi, Mavi }
+
+işlev skaler(a: tam32, b: kesirli64, c: mantıksal, d: metin, e: karakter) -> tam8 { ver 0; }
+işlev yapi_adi(n: Nokta) -> Nokta { ver n; }
+işlev cesit_adi(r: Renk) -> Renk { ver r; }
+işlev generic_param<T>(x: T) -> T { ver x; }        // T generic param → evrende
+işlev bilesik(xs: Dizi<Nokta>, s: seçimlik<tam32>) -> tam32 { ver 0; }
+işlev yetki_kaynak() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);   // MMIO yerleşik kaynak tipi
+    geri_al(y);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

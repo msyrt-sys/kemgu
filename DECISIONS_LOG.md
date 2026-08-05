@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-370 [YÜKSEK] — T011 portlandı; imza/gövde tanı SIRASI iki geçişe ayrıldı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+2).
+
+**T011 (bilinmeyen tip).** Tip-adı EVRENİ ölçümle kuruldu (10 probe): yerleşik
+skalerler + `yapı` + `çeşit` + generic param adları + yetenek kaynak tipleri
+(`MMIO`/`Dosya`/`Soket`/`Bellek`/`Donanim`/`OTP_Anahtar`) + küresel ad tablosu.
+**`özellik` adı EVRENDE DEĞİL** — ölçüldü: `işlev f(x: Say)` C'de T011 verir;
+özellik bir BOUND'dur, tip değil. Generic param adları yeni `gp_ad` yan-kanalına
+yazılır (parser; düğüme alan eklemek `--ast` paritesini bozardı). Yan etki:
+annotasyon bilinmeyen tipse **T001 bastırılır** — C tipi HATA'ya düşürdüğü için
+T001'e hiç gelmez; bastırmasız tek kusur iki tanı üretirdi.
+
+**Asıl bulgu — SIRA, küme değil.** T011 eklenince küme birebir tuttu ama SIRA
+tutmadı. Ölçüm (`T030@8` imza + `T011@5` gövde → **8 önce**): C tipleri
+`pre_populate`de çözer, yani **TÜM imza/alan tanıları TÜM gövde tanılarından
+önce** çıkar; ön-geçiş de kendi içinde ÖNCE tüm `yapı`/`çeşit`, SONRA tüm
+`işlev`. D-369 imza gezintisini `kontrol_govde` içine koymuştu — küme doğru,
+sıra yanlıştı. Korpusta imza-hatası ile gövde-hatası **aynı dosyada olmadığı
+için gizli kalmıştı**; T011 ikisini de üretebilen ilk kod olduğu için ortaya
+çıktı. `kontrol_imza` + `kontrol_yapi_alanlari` ayrıldı, `kontrol_ust` üç
+geçişli oldu (yapılar → imzalar → gövdeler).
+
+**DERS (D-350'nin tekrarı, yeni yüzü):** yeşil `checker_diff` "kural doğru"
+demek değil; **tanı SIRASI da bir sözleşmedir** ve tek-tanılı korpus dosyaları
+onu hiç sınamaz. Yeni kural eklerken korpusa **iki farklı geçişten tanı üreten**
+tek dosya koy.
+
+**Yan bulgu (bu partiden DEĞİL, kayda geçsin):** ölçüm alanını `test/ornekler/`e
+genişletince `kanal_mesaj.kem`'de self-host `G005 49 28` verirken C `OK` diyor —
+**yanlış-pozitif**. Önceki commit'te de var (regresyon değil, D-324'ten kalma).
+Ayrıca `kem_asm_kernel.kem`/`kem_kullanici.kem`'de `AS001` self-host'ta hiç yok.
+
+**Kapılar:** `checker_diff` **132/132** (0 muaf), sürücü koşum takımı 4 mod × 2
+sürücü (TOKEN 22/22, PARSE 13/13, CHECK 100/100, LLVM 113/113 ×2) + FIXPOINT,
+`check_kapisi` 210/217 (0 RED), C birim: tip_kontrol 202, parser 107, linear 89,
+drf 54, capability 40, sabitsüre 39, mmio 23.
+
+**Sabotaj kapıları:** S72 (T011 tanısı → tc21_01 kırmızı), S73 (yetenek kaynak
+evreni → 5 dosya kırmızı), S74 (imza ön-geçişi → tc20_01 + tc21_01 kırmızı).
+Üçü de `grep SABOTAJ-S7n` ile uygulandığı kanıtlandı, sonra geri alındı.
+
+**Kapsam:** self-host tanı kodu **68** (D-369'da 66). Kalan gerçek kod: **T014**
+(boş dizi bağlamı). `T015`/`T023` ÖLÜ (C'de parser şekli reddediyor).
+
+---
+
 ## D-369 [YÜKSEK] — T030 + T031 portlandı; İMZA-ÜSTÜ tip denetimi eksikti (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
