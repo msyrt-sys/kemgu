@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-358 — G002 + G003 + G004 self-host'a portlandı: tier ve temsil kuralları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+Üçü de **"kabul et, çalışırken çök" senaryolarını derleme zamanına çeken** kurallar
+(çökmezlik #1) — self-host'ta yoklukları bu güvenceyi o yolda geçersiz kılıyordu.
+
+| kod | kural | neden |
+|---|---|---|
+| G002 | `satıriçi_asm` yalnız `güvensiz` blokta | ham makine kodu = tier kapısı |
+| G003 | annotasyonsuz `değişken a = [..]` → `Dizi<T>` parametresine geçirilemez | yığın `[N×T]` vs dinamik `KdlDizi*` → callee yanlış okur (misaligned UB/segfault) |
+| G004 | `işlev(...)` tipli bağlama yeniden atanamaz | closure temsili (bare fn-ptr ↔ `{fn,env}`) bağlama anında sabitlenir; yeniden atama çağrı yerinde yanlış dispatch |
+
+**G003'ün İKİ daraltması ölçüldü ve ikisi de yük taşıyor:**
+- **Annotasyon şartı:** yalnız annotasyonsuz bağlama yasak. `değişken a: Dizi<tam32>
+  = [..]` **serbest** (heap). Sabotaj S40: şart kaldırılınca `tc15_02`'deki geçerli
+  kod reddedildi.
+- **Literal argüman muaf:** `topla([1,2,3])` serbest — codegen literali heap'e
+  yönlendirir. Yasak olan yalnız **yığın değişkeni** yolu.
+
+**Sıra:** G003 C'de argüman döngüsünde, T001 ve lineer tüketimden **sonra**
+raporlanıyor; self-host aynı sıraya yerleştirildi (konum = argüman düğümü).
+
+**Yeni yan-diziler:** `yerel_yig` (annotasyonsuz dizi-literali bağlaması),
+`yerel_fn` (`işlev(...)` annotasyonlu bağlama), `fn_pdizi` (parametre `Dizi<T>` mü).
+D-351/353/355'in `yerel_ptr`/`yerel_dizi`/`lin_tek` deseniyle aynı; hepsi
+**pozitif bilgi** taşıyor (D-355 dersi).
+
+**Sabotaj (4; `grep SABOTAJ-Sn` ile kanıtlı):** S37 G002 (87→86), S38 G003 (86),
+S39 G004 (86), S40 G003'ün annotasyon daraltması (86 — **yanlış-pozitif yönünde**).
+
+**Probe matrisi 8/8 birebir:** asm güvensiz-içi/dışı, yığın-değişken/annotasyonlu/
+literal argüman, işlev yeniden-atama/çağrı, skaler yeniden-atama.
+
+**Sonuç:** self-host checker kod kapsamı **39 → 42/74**; korpus **85 → 87**;
+korpusun uyandırdığı kod **37 → 40**. Kalan 32 kod — **hepsi özel alt-sistem**
+(`CT*` sabitsüre, `DRF*` eşzamanlılık, `MM*` MMIO, `CP*` yetki) ya da modül/generic
+(`T011/T014/T015/T016/T023/T030/T031/T040-042`, `E013`, `M004`).
+
+---
+
 ## D-357 — M002 + M003 self-host'a portlandı: çeşit varyantı ve payload aritesi (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

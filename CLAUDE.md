@@ -745,6 +745,10 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **G002/G003/G004 — D-358.** Üçü de "kabul et, çalışırken çök"ü derleme zamanına
+  çeker. G003 İKİ daraltmalı: yalnız **annotasyonsuz** bağlama yasak (annotasyonlu
+  `Dizi<T>` ve doğrudan literal argüman serbest). **Kapsam 42/74** — kalan 32 kodun
+  tamamı özel alt-sistem (CT*/DRF*/MM*/CP*) ya da modül/generic.
 - **M002/M003 — D-357.** ÜÇ ayrı bölge (değer `Çeşit::V` / yapıcı `Çeşit::V(a)` /
   desen), C'de üç ayrı kod. Desende varyant **skrutininin tipinden** aranır, desen
   önekinden DEĞİL. Çıplak desen (`Secim::Bir =>`, alt-desen yok) M003 VERMEZ.

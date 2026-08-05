@@ -1,0 +1,32 @@
+// D-358: aynı yapıların İZİNLİ biçimleri — yanlış-pozitif kapısı.
+// Kritik ayrımlar:
+//   G002 → `güvensiz` blok kapıyı açar
+//   G003 → annotasyonlu `Dizi<T>` bağlaması VE doğrudan literal argüman SERBEST
+//          (literal codegen'de heap'e yönlendirilir; yasak olan YIĞIN DEĞİŞKENİ)
+//   G004 → işlev tipli bağlamayı ÇAĞIRMAK serbest; yasak olan YENİDEN ATAMA
+işlev topla(xs: Dizi<tam32>) -> tam32 {
+    ver xs[0];
+}
+işlev asm_guvensiz() -> tam32 {
+    güvensiz { satıriçi_asm { mimari: x86_64  şablon: r#"nop"# } }
+    ver 0;
+}
+işlev annotasyonlu_dizi() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3];
+    ver topla(a);
+}
+işlev literal_arg() -> tam32 {
+    ver topla([1, 2, 3]);
+}
+işlev islev_cagri() -> tam32 {
+    değişken f: işlev(tam32) -> tam32 = |x: tam32| x + 1;
+    ver f(41);
+}
+işlev skaler_yeniden_atama() -> tam32 {
+    değişken n: tam32 = 1;
+    n = 2;
+    ver n;
+}
+işlev main() -> tam32 {
+    ver 0;
+}
