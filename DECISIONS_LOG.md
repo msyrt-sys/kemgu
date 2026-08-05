@@ -5,6 +5,37 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-372 [YÜKSEK] — CP005 YANLIŞ-POZİTİFİ: `yetki<R>` parametresi lineerdir (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host `test/ornekler/mmio_smoke.kem` ve `virtio_selfhost_rw.kem`'i
+sahte `CP005` ("yetki tüketilmedi") ile reddediyordu (C: `OK`). D-371'de ölçüm
+alanı `kütüphane/`i de kapsayacak şekilde genişletilince ortaya çıktı.
+
+**Kök neden — TEK SATIR.** `param_lineer_mi` yalnız `TIP_TEKKEZ` ve lineer yapıyı
+sayıyordu; **`TIP_YETKI` yoktu**. Dolayısıyla `işlev f(y: yetki<MMIO>)` çağrısı
+argümanı TAŞIMIYOR (tüketmiyor) sayılıyor, `y` scope sonunda "tüketilmedi"
+görünüyordu. **D-365'in eksik kalan yarısı:** o parti `TIP_YETKI`'yi
+`tip_node_tekkez_mi`ye eklemişti (bağlamanın kendisi lineer) ama **parametre
+lineerliğine** eklememişti (taşıma noktası). İki ayrı yüklem, biri güncellendi.
+
+**DERS:** "yetki artık mevcut lineer makinenin TAMAMINI kullanıyor" (D-365)
+iddiası **yüklem yüklem doğrulanmalıydı**. Bir tip yeni bir lineer sınıfa
+katılırken, lineerliği soran HER yüklemi `grep` ile listele — `tip_node_tekkez_mi`,
+`param_lineer_mi`, `deg_lineer_mi` ayrı ayrı karar veriyor.
+
+**Kapılar:** `checker_diff` **134/134** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 102/102, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim: capability 40, linear 89, mmio 23. **Sabotaj S78** (TIP_YETKI dalı
+kaldırıldı) → `tc23_01` kırmızı; `grep` ile uygulandığı kanıtlandı, geri alındı.
+
+**Geniş ölçüm (99 dosya) sonucu: YANLIŞ-POZİTİF KALMADI** (96/99). Kalan 3
+sapmanın hepsi **EKSİK tanı** (self-host sessiz, C konuşuyor) — daha hafif sınıf:
+`AS001` self-host'ta hiç yok (2 dosya) + `kem_os.kem` T002 kuyruğu.
+
+---
+
 ## D-371 [YÜKSEK] — G005 YANLIŞ-POZİTİFİ: doğrudan lambda argümanı kaçış değildir (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

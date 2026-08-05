@@ -7500,6 +7500,10 @@ işlev param_lineer_mi(p: &değişken Ayr, tc: tam32) -> mantıksal {
     eğer tc < 0 { ver yanlış; }
     değişken ta: metin = dizi_al(p.a_ad, tc);
     eğer metin_esit(ta, "TIP_TEKKEZ") { ver doğru; }
+    // D-372: `yetki<R>` parametresi de LİNEER → argüman TAŞINIR (tüketilir).
+    // D-365 TIP_YETKI'yi `tip_node_tekkez_mi`ye ekledi ama BURAYA eklemedi →
+    // `işlev f(y: yetki<MMIO>)` çağrısı y'yi tüketmiyordu → sahte CP005 (ölçüldü).
+    eğer metin_esit(ta, "TIP_YETKI") { ver doğru; }
     eğer metin_esit(ta, "TIP_BASIT") { ver lineer_yapi_mi(p, dizi_al(p.a_deg, tc)); }
     ver yanlış;
 }
