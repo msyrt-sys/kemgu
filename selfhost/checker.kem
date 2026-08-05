@@ -52,6 +52,8 @@ yapı Ayr {
     cv_cesit: Dizi<metin>;  // D-352: her varyant için sahip çeşit adı (parser yan-kanalı)
     cv_ad: Dizi<metin>;     // D-352: varyant adı (cv_cesit ile paralel)
     cv_pc: Dizi<tam32>;     // D-357: varyant payload alan sayısı (enum=0) — M003
+    cv_pb: Dizi<tam32>;     // D-368: varyantın payload TİP tablosundaki tabanı (M004)
+    cv_pt: Dizi<metin>;     // D-368: düz payload tip dizgileri ("?" = bilinmiyor)
     kur_ad: Dizi<metin>;    // D-351: küresel değişken adları (E010)
     cip_node: Dizi<tam32>;  // D-351: `çıplak` işlev düğümleri — gövdesi örtük güvensiz
     si_ad: Dizi<metin>;     // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
@@ -1534,6 +1536,16 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
                 bekle(p, "SAG_PAREN");
             }
             dizi_ekle(p.cv_pc, dizi_boyut(kids) - pc0);   // D-357
+            // D-368 M004: payload TİP dizgilerini düz tabloya yaz (varyant başına
+            // taban + sayı). `kids` bu çeşidin payload tip düğümlerini varyant
+            // sırasında tutuyor; tip_str TIP_BASIT dışını "?" yapar → emin
+            // olmadığımız yerde karşılaştırma atlanır.
+            dizi_ekle(p.cv_pb, dizi_boyut(p.cv_pt));
+            değişken pk: tam32 = pc0;
+            iken pk < dizi_boyut(kids) {
+                dizi_ekle(p.cv_pt, tip_str(p, dizi_al(kids, pk)));
+                pk = pk + 1;
+            }
             eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
             }
         }
@@ -1743,7 +1755,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -2853,6 +2865,16 @@ işlev cesit_varyant_var(p: &değişken Ayr, cad: metin, vad: metin) -> mantıks
     }
     ver yanlış;
 }
+// D-368: varyantın payload tip tablosundaki tabanı (yoksa -1).
+işlev cesit_varyant_pb(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad)
+          ve metin_esit(dizi_al(p.cv_ad, i), vad) { ver dizi_al(p.cv_pb, i); }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 işlev cesit_varyant_pc(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.cv_cesit) {
@@ -2924,6 +2946,26 @@ işlev m002_yapici_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mant
     eğer (dizi_al(p.a_cs, idx) - 1) != cesit_varyant_pc(p, cad, vad) {
         sekil_hata(p, idx, "M003");
         ver doğru;
+    }
+    // D-368 M004: arite tuttu → her argüman payload TİPİYLE karşılaştırılır.
+    // Konum ARGÜMAN düğümü; birden çok uyumsuz argüman birden çok tanı verir.
+    // Beklenen tip bağlam olarak geçirilir (literal uyarlaması C ile aynı:
+    // `Bir(tam8)` + `5` KABUL). Taraflardan biri "?" ise ATLANIR.
+    değişken tb: tam32 = cesit_varyant_pb(p, cad, vad);
+    eğer tb >= 0 {
+        değişken ai: tam32 = 0;
+        değişken an2: tam32 = dizi_al(p.a_cs, idx) - 1;
+        iken ai < an2 {
+            değişken bekt: metin = dizi_al(p.cv_pt, tb + ai);
+            eğer metin_esit(bekt, "?") == yanlış {
+                değişken arg: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1 + ai);
+                değişken att: metin = ifade_tip(p, arg, bekt);
+                eğer (metin_esit(att, "?") == yanlış) ve (metin_esit(att, bekt) == yanlış) {
+                    sekil_hata(p, arg, "M004");
+                }
+            }
+            ai = ai + 1;
+        }
     }
     ver yanlış;
 }

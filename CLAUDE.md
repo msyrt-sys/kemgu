@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **ÇEŞİT ALT-SİSTEMİ KAPANDI (4/4) — D-368.** M004 için `cv_*`e payload TİP tablosu
+  eklendi (`cv_pb`/`cv_pt`). Beklenen tip BAĞLAM olarak geçmeli — `Dar(tam8)` +
+  literal `5` geçerlidir (S68 sabotajı: bağlamsız hâlde sahte M004).
+  **Kapsam 68/74; kalan 6'nın 2'si ölü → gerçekte 4** (T011/T014 tip evreni,
+  T030/T031 generic bound).
 - **SABİTSÜRE ALT-SİSTEMİ KAPANDI (8/8) — D-367.** Taint yayılımı pahalı sanılmıştı;
   ölçüm TEK ÖZYİNELİ YÜKLEM olduğunu gösterdi (aritmetik/bit operandı sabitsüre ise
   sonuç da sabitsüre; karşılaştırma ve `ifşa` dışarıda). Yol üstünde MEVCUT bir

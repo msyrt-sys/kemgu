@@ -5,6 +5,35 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-368 — M004 portlandı: ÇEŞİT ALT-SİSTEMİ KAPANDI (4/4) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+**Kural:** çeşit varyantı yapıcısında M003 (arite) geçtikten SONRA her argüman
+kendi payload tipiyle karşılaştırılır; konum **argüman düğümü**, birden çok
+uyumsuz argüman **birden çok tanı** verir.
+
+**Gereken altyapı:** D-357'nin `cv_*` yan-kanalına payload **TİP** tablosu
+(`cv_pb` taban + `cv_pt` düz tip dizgileri). `parse_cesit` payload tip düğümlerini
+zaten `kids`e topluyordu; oradan `tip_str` ile dizgiye çevrildi. TIP_BASIT dışı
+("?") karşılaştırmadan muaf — emin olmadığımız yerde susuluyor.
+
+**Beklenen tip BAĞLAM olarak geçirilmeli:** `Dar(tam8)` varyantına `5` literali
+geçerlidir (C literali dar tipe uyarlar). Sabotaj S68 bunu ölçtü: bağlam
+kaldırılınca `Dar::Kucuk(5)` **sahte M004** aldı.
+
+**Sabotaj (2):** S67 M004 (128→127), S68 beklenen-tip bağlamı (127 —
+**yanlış-pozitif yönünde**).
+
+**Probe 6/6 birebir** (tek uyumsuz / ikinci uyumsuz / her ikisi / geçerli /
+dar-literal uyarlaması).
+
+**Sonuç:** self-host checker kod kapsamı **67 → 68/74**. **ÇEŞİT ALT-SİSTEMİ 4/4
+KAPANDI** (M001-M004). Kalan **6 kod**: T011, T014, T030, T031 + 2 ölü
+(T015/T023) → **gerçekte 4**, hepsi tip-evreni/generic-bound işi.
+
+---
+
 ## D-367 — CT001-CT008 portlandı: SABİTSÜRE ALT-SİSTEMİ KAPANDI (8/8) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

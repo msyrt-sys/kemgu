@@ -1,0 +1,29 @@
+// D-368 / M004: çeşit varyantı yapıcısında payload TİP uyumu.
+// M003 (arite) geçtikten SONRA her argüman kendi payload tipiyle karşılaştırılır;
+// birden çok uyumsuz argüman birden çok tanı verir. Beklenen tip bağlam olarak
+// geçer, yani tamsayı literali dar payload tipine UYARLANIR (`Dar(tam8)` + `5` OK).
+çeşit Secim { Bir(tam32), Ikili(tam32, metin), Hic }
+çeşit Dar { Kucuk(tam8) }
+
+işlev tek_uyumsuz() -> tam32 {
+    değişken s: Secim = Secim::Bir("a");            // M004 (arg0)
+    ver 0;
+}
+işlev ikinci_uyumsuz() -> tam32 {
+    değişken s: Secim = Secim::Ikili(1, 2);         // M004 (arg1)
+    ver 0;
+}
+işlev her_ikisi() -> tam32 {
+    değişken s: Secim = Secim::Ikili(doğru, 7);     // M004 x2
+    ver 0;
+}
+işlev gecerli() -> tam32 {
+    değişken a: Secim = Secim::Bir(5);
+    değişken b: Secim = Secim::Ikili(1, "x");
+    değişken c: Secim = Secim::Hic;
+    değişken d: Dar = Dar::Kucuk(5);                // literal tam8'e uyarlanır
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

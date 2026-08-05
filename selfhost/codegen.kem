@@ -133,6 +133,8 @@ yapı Ayr {
     cv_cesit: Dizi<metin>;   // sahip çeşit adı (her varyant için)
     cv_ad: Dizi<metin>;      // varyant adı
     cv_pc: Dizi<tam32>;      // varyant payload alan sayısı (enum=0)
+    cv_pb: Dizi<tam32>;      // D-368: varyantın payload TİP tablosundaki tabanı (M004)
+    cv_pt: Dizi<metin>;      // D-368: düz payload tip dizgileri ("?" = bilinmiyor)
     cc_ad: Dizi<metin>;      // çeşit adı (her çeşit için bir kez) — payload struct için
     cc_node: Dizi<tam32>;    // CESIT düğüm idx (payload tipleri = düğümün kids'i)
     // ---- AŞAMA 4 (driver): tip denetleyici durumu (checker.kem'den; D-086) ----
@@ -1664,6 +1666,14 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
             dizi_ekle(p.cv_cesit, ad);
             dizi_ekle(p.cv_ad, vad);
             dizi_ekle(p.cv_pc, pc);
+            // D-368 M004: payload TİP dizgilerini düz tabloya yaz (varyant başına
+            // taban + sayı). Bu varyantın tip düğümleri `kids`in SON pc tanesi.
+            dizi_ekle(p.cv_pb, dizi_boyut(p.cv_pt));
+            değişken pk: tam32 = dizi_boyut(kids) - pc;
+            iken pk < dizi_boyut(kids) {
+                dizi_ekle(p.cv_pt, tip_str(p, dizi_al(kids, pk)));
+                pk = pk + 1;
+            }
             eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
             }
         }
@@ -6970,6 +6980,16 @@ işlev cesit_varyant_var(p: &değişken Ayr, cad: metin, vad: metin) -> mantıks
     }
     ver yanlış;
 }
+// D-368: varyantın payload tip tablosundaki tabanı (yoksa -1).
+işlev cesit_varyant_pb(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cv_cesit) {
+        eğer metin_esit(dizi_al(p.cv_cesit, i), cad)
+          ve metin_esit(dizi_al(p.cv_ad, i), vad) { ver dizi_al(p.cv_pb, i); }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 işlev cesit_varyant_pc(p: &değişken Ayr, cad: metin, vad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.cv_cesit) {
@@ -7038,6 +7058,24 @@ işlev m002_yapici_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mant
     eğer (dizi_al(p.a_cs, idx) - 1) != cesit_varyant_pc(p, cad, vad) {
         sekil_hata(p, idx, "M003");
         ver doğru;
+    }
+    // D-368 M004: arite tuttu → her argüman payload TİPİYLE karşılaştırılır.
+    // Konum ARGÜMAN düğümü; beklenen tip bağlam olarak geçer (literal uyarlaması).
+    değişken tb: tam32 = cesit_varyant_pb(p, cad, vad);
+    eğer tb >= 0 {
+        değişken ai: tam32 = 0;
+        değişken an2: tam32 = dizi_al(p.a_cs, idx) - 1;
+        iken ai < an2 {
+            değişken bekt: metin = dizi_al(p.cv_pt, tb + ai);
+            eğer metin_esit(bekt, "?") == yanlış {
+                değişken arg: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1 + ai);
+                değişken att: metin = ifade_tip(p, arg, bekt);
+                eğer (metin_esit(att, "?") == yanlış) ve (metin_esit(att, bekt) == yanlış) {
+                    sekil_hata(p, arg, "M004");
+                }
+            }
+            ai = ai + 1;
+        }
     }
     ver yanlış;
 }
@@ -8698,7 +8736,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
         cg_aelem: [], cg_apointee: [], cg_apisz: [], cg_aic: [], cg_aisz: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         beklenen_elem_ic: "", son_ic: "",
-        cv_cesit: [], cv_ad: [], cv_pc: [], cc_ad: [], cc_node: [],
+        cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], fn_risz: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
