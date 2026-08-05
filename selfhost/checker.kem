@@ -59,6 +59,12 @@ yapı Ayr {
     si_ad: Dizi<metin>;     // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
     si_yol: Dizi<metin>;    // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
     mod_ad: Dizi<metin>;    // D-362: bilinen modül adları (yüklenen + `modül m` + alias) — T016
+    gp_sahip: Dizi<metin>;  // D-369: generic bound tablosu — sahip tip adı
+    gp_idx: Dizi<tam32>;    // D-369: paralel — tip parametresinin sırası (0-tabanlı)
+    gp_bound: Dizi<metin>;  // D-369: paralel — bound (özellik) adı
+    oz_ad: Dizi<metin>;     // D-369: bilinen `özellik` adları (T031)
+    uyg_tip: Dizi<metin>;   // D-369: `uygula OZ için TIP` — TIP tarafı
+    uyg_oz: Dizi<metin>;    // D-369: paralel — OZ tarafı (T030)
     gen_node: Dizi<tam32>;  // D-363: `genel` işaretli tanım düğümleri (parser yan-kanalı)
     priv_mod: Dizi<metin>;  // D-363: dosya-modülünün `genel` OLMAYAN üyeleri — modül adı
     priv_ad: Dizi<metin>;   // D-363: priv_mod ile paralel — üye adı (T041)
@@ -936,18 +942,37 @@ işlev parse_parametre(p: &değişken Ayr) -> tam32 {
 }
 // Generic tip parametre listesi `<T, U: B1 + B2, ...>` — PARSE + DISCARD (dump'ta
 // yok; bound tip düğümleri orphan kalır, kök'ten erişilmez). `>>` kapanış böl.
-işlev atla_tip_paramlar(p: &değişken Ayr) -> tam32 {
+işlev atla_tip_paramlar(p: &değişken Ayr) -> tam32 { ver atla_tip_paramlar_sahipli(p, ""); }
+// D-369: `sahip` verilirse generic parametre ADLARI ve BOUND'ları yan-kanala
+// yazılır (dump DEĞİŞMEZ — düğüm üretilmiyor). T030/T031 bu tabloya dayanır:
+// `Vektor<Tam>` yazıldığında T'nin bound'ları burada bulunur.
+işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
     eğer sim_mi(p, "KUCUK") == yanlış { ver 0; }
     bekle(p, "KUCUK");
     değişken devam: mantıksal = doğru;
+    değişken pi: tam32 = 0;
     eğer simdiki_buyuk_mu(p) { devam = yanlış; }
     iken devam {
         bekle(p, "TANIMLAYICI");          // param adı
         eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
             ilerle(p);
+            değişken b1: metin = sim_lex(p);
             parse_tip(p);                 // ilk bound (orphan düğüm)
-            iken sim_mi(p, "ARTI") { ilerle(p); parse_tip(p); }
+            eğer metin_esit(sahip, "") == yanlış {
+                dizi_ekle(p.gp_sahip, sahip); dizi_ekle(p.gp_idx, pi);
+                dizi_ekle(p.gp_bound, b1);
+            }
+            iken sim_mi(p, "ARTI") {
+                ilerle(p);
+                değişken bn: metin = sim_lex(p);
+                parse_tip(p);
+                eğer metin_esit(sahip, "") == yanlış {
+                    dizi_ekle(p.gp_sahip, sahip); dizi_ekle(p.gp_idx, pi);
+                    dizi_ekle(p.gp_bound, bn);
+                }
+            }
         }
+        pi = pi + 1;
         eğer sim_mi(p, "VIRGUL") { ilerle(p); }
         değilse { devam = yanlış; }
     }
@@ -1486,7 +1511,7 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
     eğer lineer { dizi_ekle(p.ly_ad, ad); }
-    atla_tip_paramlar(p);
+    atla_tip_paramlar_sahipli(p, ad);   // D-369: bound tablosu (T030/T031)
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
@@ -1755,7 +1780,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], si_ad: [], si_yol: [], mod_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -2573,6 +2598,97 @@ işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
         ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
     }
     ver yanlış;
+}
+// ---- D-369: T030 + T031 — generic bound denetimi ----
+// `yapı Vektor<T: Say>` yazıldıysa `Vektor<Tam>` ancak `uygula Say için Tam`
+// varsa geçerlidir (T030). Bound olarak verilen ad hiç özellik değilse T031.
+// Konum: TIP_KULLANICI düğümü (C tip_d ile aynı).
+// Bound tablosu parser yan-kanalından (gp_*), özellik/uygula kayıtları AST'den.
+işlev ozellik_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.oz_ad) {
+        eğer metin_esit(dizi_al(p.oz_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev uygula_var_mi(p: &değişken Ayr, tip: metin, oz: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.uyg_tip) {
+        eğer metin_esit(dizi_al(p.uyg_tip, i), tip)
+          ve metin_esit(dizi_al(p.uyg_oz, i), oz) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Üst düzeyden `özellik` adlarını ve `uygula X için T` çiftlerini topla.
+işlev ozellik_uygula_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ad: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ad, "OZELLIK") { dizi_ekle(p.oz_ad, dizi_al(p.a_deg, c)); }
+        // UYGULA: çocuk[0]=hedef tip, çocuk[1]=özellik (trait impl); tek çocuk
+        // inherent impl demektir (özellik yok) → kayıt dışı.
+        eğer metin_esit(ad, "UYGULA") ve (dizi_al(p.a_cs, c) >= 2) {
+            değişken ub: tam32 = dizi_al(p.a_cb, c);
+            değişken ht: tam32 = dizi_al(p.cocuk, ub);
+            değişken oz: tam32 = dizi_al(p.cocuk, ub + 1);
+            eğer metin_esit(dizi_al(p.a_ad, ht), "TIP_BASIT")
+              ve metin_esit(dizi_al(p.a_ad, oz), "TIP_BASIT") {
+                dizi_ekle(p.uyg_tip, dizi_al(p.a_deg, ht));
+                dizi_ekle(p.uyg_oz, dizi_al(p.a_deg, oz));
+            }
+        }
+        eğer metin_esit(ad, "MODUL") veya metin_esit(ad, "DISA") {
+            ozellik_uygula_topla(p, c);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// `Vektor<Tam>` — TIP_KULLANICI: çocuk[0] = ad (TANIMLAYICI), çocuk[1..] = argümanlar.
+işlev t030_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_KULLANICI") == yanlış { ver 0; }
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    eğer cs < 2 { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken h: tam32 = dizi_al(p.cocuk, cb);
+    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
+    değişken tad: metin = dizi_al(p.a_deg, h);
+    değişken ai: tam32 = 0;
+    iken ai < (cs - 1) {
+        değişken arg: tam32 = dizi_al(p.cocuk, cb + 1 + ai);
+        // Argüman tipi yalnız TIP_BASIT ise adı bilinir; aksi (iç içe generic,
+        // Dizi, referans...) → emin değiliz, susuyoruz.
+        eğer metin_esit(dizi_al(p.a_ad, arg), "TIP_BASIT") {
+            değişken argad: metin = dizi_al(p.a_deg, arg);
+            // Generic param adı (`T` gibi) bound denetiminden MUAF — C'de de
+            // resolve enclosing scope'tan gelir.
+            eğer (bilinen_skaler_mi(argad) veya yapi_var_mi(p, argad)
+                  veya cesit_var_mi(p, argad)) {
+                değişken bi: tam32 = 0;
+                iken bi < dizi_boyut(p.gp_sahip) {
+                    eğer metin_esit(dizi_al(p.gp_sahip, bi), tad)
+                      ve (dizi_al(p.gp_idx, bi) == ai) {
+                        değişken bd: metin = dizi_al(p.gp_bound, bi);
+                        eğer ozellik_var_mi(p, bd) == yanlış {
+                            sekil_hata(p, idx, "T031");
+                        } değilse {
+                            eğer uygula_var_mi(p, argad, bd) == yanlış {
+                                sekil_hata(p, idx, "T030");
+                            }
+                        }
+                    }
+                    bi = bi + 1;
+                }
+            }
+        }
+        ai = ai + 1;
+    }
+    ver 0;
 }
 // ---- D-367: CT001-CT008 — sabitsüre (constant-time) kuralları, BAĞLAMA DÜZEYİ ----
 // `sabitsüre<T>` gizli veriyi işaretler: dallanma/indeksleme/bölme ONUN üzerinde
@@ -3718,6 +3834,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         // (`Dizi<görev<kesirli64>>` gibi iç içe şekiller de yakalansın).
         drf_tip_kontrol(p, idx);
         ct006_tip_kontrol(p, idx);   // D-367
+        t030_kontrol(p, idx);        // D-369 T030/T031
         değişken tb: tam32 = dizi_al(p.a_cb, idx);
         değişken tc2: tam32 = dizi_al(p.a_cs, idx);
         değişken ti: tam32 = 0;
@@ -4185,6 +4302,16 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { kontrol_dugum(p, c); }
+        // D-369: DÖNÜŞ TİPİ ve PARAMETRE TİPLERİ de denetlenir. Eskiden yalnız
+        // gövdeye iniliyordu → `işlev f() -> görev<kesirli64>` gibi imza-üstü
+        // tip tanıları (DRF001/DRF006/CT006/T030/T031) HİÇ ÇIKMIYORDU (ölçüldü).
+        eğer metin_baslar(dizi_al(p.a_ad, c), "TIP_") { kontrol_dugum(p, c); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") ve (dizi_al(p.a_cs, c) > 0) {
+            değişken ptn: tam32 = son_cocuk(p, c);
+            eğer (ptn >= 0) ve metin_baslar(dizi_al(p.a_ad, ptn), "TIP_") {
+                kontrol_dugum(p, ptn);
+            }
+        }
         i = i + 1;
     }
     eğer cip { p.guv_bag = p.guv_bag - 1; p.cip_bag = p.cip_bag - 1; }
@@ -4551,6 +4678,7 @@ işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
     lr002_kontrol(p, kok);   // TC5a: yapı lineer alan (LR002) — gövdelerden ÖNCE
     kur_ad_topla(p, kok);    // D-351: E010 için küresel adlar — gövdelerden ÖNCE
+    ozellik_uygula_topla(p, kok);   // D-369: özellik + uygula kayıtları (T030/T031)
     kontrol_ust(p, kok);
     ver 0;
 }

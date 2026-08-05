@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-369 [YÜKSEK] — T030 + T031 portlandı; İMZA-ÜSTÜ tip denetimi eksikti (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Beklenen engel çıkmadı:** D-368'de "TIP_KULLANICI adı düğümde yok, yan-kanal
+gerekir" demiştim. Ölçüm düzeltti — **ad çocuk[0]'daki TANIMLAYICI düğümünde**
+(`TIP_KULLANICI` → çocuk[0]=ad, çocuk[1..]=tip argümanları). C'nin `--ast`'i de
+a_deg'i boş basıyor, yani self-host zaten sadıktı. Yalnız **bound tablosu** için
+yan-kanal gerekti (`atla_tip_paramlar` bound'ları PARSE+DISCARD ediyordu).
+
+**Kural:** `yapı Vektor<T: Say>` ise `Vektor<Tam>` ancak `uygula Say için Tam`
+varsa geçerli (T030); bound adı hiç `özellik` değilse T031. Özellik/uygula
+kayıtları AST'den türetildi (yan-kanal gerekmedi): `UYGULA` düğümü
+çocuk[0]=hedef tip, çocuk[1]=özellik.
+
+### ASIL BULGU: işlev DÖNÜŞ ve PARAMETRE tipleri hiç denetlenmiyordu
+
+T030/T031 ilk denemede tetiklenmedi. Sebep tekil bir kural eksiği değildi:
+`kontrol_govde` **yalnız BLOK çocuğuna** iniyordu → **imza üstündeki hiçbir tip
+düğümü gezilmiyordu.** Yani `işlev f() -> görev<kesirli64>` (ölçüldü: C DRF001
+verir) ve `işlev f(g: görev<kesirli64>)` self-host'ta **sessizce geçiyordu**.
+
+Bu, D-366'nın (DRF) ve D-367'nin (CT006) de eksik kalan yanıydı — o partilerde
+tanılar yalnız `değişken` annotasyonu yolundan çıkıyordu. Tek satırlık gezinti
+düzeltmesi **dört partinin** kapsamını genişletti.
+
+**Sabotaj (3):** S69 T030 (130→129), S70 T031/T030 ayrımı (129 — yanlış KOD
+üretildi), S71 imza-üstü gezinti (129 — **iki tanı birden düştü**).
+
+**Probe 6/6 birebir** (bound ihlali / karşılanmış / bilinmeyen bound / generic
+işlev / dönüş tipi DRF001 / parametre tipi DRF001).
+
+**Sonuç:** self-host checker kod kapsamı **68 → 70/74**. Kalan **4 kod**:
+T011, T014 + 2 ölü (T015/T023) → **gerçekte 2**, ikisi de tip-evreni işi
+(T011 tam tip-adı evreni, T014 beklenen-tip yayıcısı).
+
+---
+
 ## D-368 — M004 portlandı: ÇEŞİT ALT-SİSTEMİ KAPANDI (4/4) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
