@@ -1,0 +1,9 @@
+// D-351 / G001: aynı dereferans `güvensiz` blokta İZİNLİ (kaçış kapısı işaretli).
+işlev main() -> tam32 {
+    değişken x: tam32 = 42;
+    güvensiz {
+        değişken p: *tam32 = (&x) olarak *tam32;
+        ver *p;
+    }
+    ver 0;
+}

@@ -144,6 +144,8 @@ yapı Ayr {
     g_ciplak: Dizi<tam32>;       // D-255: çıplak işlev düğüm idx'leri (region-prologue SKIP)
     yerel: Dizi<metin>;      // append-only kapsam yığını (param + lokal)
     yerel_tip: Dizi<metin>;  // yerel ile paralel: tip-string ("?"=bilinmiyor)
+    yerel_ptr: Dizi<tam32>;  // D-351: yerel ile paralel — 1 = ham işaretçi (*T) bağlaması (G001)
+    kur_ad: Dizi<metin>;     // D-351: küresel değişken adları (E010; checker prepass)
     yerel_basla: tam32;      // aktif işlevin yerel diliminin başlangıcı (slice)
     aktif_donus: metin;      // aktif işlevin dönüş tipi ("boş"=void, "?"=bilinmiyor)
     aktif_fn: tam32;       // D-324: aktif işlev düğümü (G005 ileri-tarama kapsamı)
@@ -6410,6 +6412,12 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
     }
+    // D-351 G001: `*p` ham işaretçi dereferansı yalnız güvensiz blokta.
+    // Güvenli referans deref (`*v`, &T) SERBEST (D-305) — ptr_ifade_mi yalnız *T'ye doğru.
+    eğer metin_esit(op, "deref*") {
+        eğer ptr_ifade_mi(p, operand) ve (p.guv_bag == 0) { g001_hata(p, idx); }
+        ver 0;
+    }
     // TC5b L004: lineer bağlama referansı alınamaz (& / &değişken).
     eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {
         eğer metin_esit(dizi_al(p.a_ad, operand), "TANIMLAYICI")
@@ -6491,6 +6499,102 @@ işlev cast_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer kw >= 64 ve hw < 32 { ver cast_hata(p, idx, "E004"); }    // tam64 → tam8/tam16
     }
     eğer (kw >= 320 ve hw >= 320) ve kw > hw { ver cast_hata(p, idx, "E004"); }  // kesirli64 → kesirli32
+    ver 0;
+}
+// ---- D-351: G001 (ham işaretçi) + E010 (küresel erişim) — güvensiz-tier kapıları ----
+// C: `*T` dereferansı/indekslemesi ve `küresel` değişken erişimi YALNIZ `güvensiz`
+// blokta (D-252/D-257: `çıplak` gövde örtük güvensiz). İkisi de bellek-güvenliği
+// kapısıdır — self-host'ta yoklukları "güvensiz program işaretsiz geçer" demekti.
+işlev tip_node_ptr_mi(p: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer tn < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") { ver 1; }
+    ver 0;
+}
+// DEGISKEN/SABIT annotation tip düğümü (yoksa -1). annot_str ile aynı koşul.
+işlev annot_node(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) >= 2 {
+        değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_baslar(dizi_al(p.a_ad, c0), "TIP_") { ver c0; }
+    }
+    ver 0 - 1;
+}
+// Bağlama ham işaretçi mi? (yerel_ptr, yerel ile paralel; sondan ilk eşleşme.)
+işlev bag_ptr_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_ptr, i) == 1; }
+        i = i - 1;
+    }
+    ver yanlış;
+}
+// İfade KESİNLİKLE ham işaretçi mi? Emin değilsek yanlış (yanlış-pozitif yok).
+işlev ptr_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken a: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(a, "TANIMLAYICI") { ver bag_ptr_mi(p, dizi_al(p.a_deg, idx)); }
+    // (e olarak *T) → ham işaretçi, AMA yalnız `güvensiz` içinde: dışarıda bu cast'in
+    // KENDİSİ E002'dir ve C tipi HATA'ya düşürüp deref'ten erken döner (G001 vermez).
+    // Koşulsuz saymak `*(4096 olarak *tam32)`da E002+G001 üretiyordu (ölçüldü).
+    eğer metin_esit(a, "TIP_DONUSTUR") ve (p.guv_bag > 0) {
+        eğer dizi_al(p.a_cs, idx) >= 2 {
+            ver tip_node_ptr_mi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1)) == 1;
+        }
+    }
+    ver yanlış;
+}
+// Bir ad küresel değişken mi? (kur_ad listesi — E010.)
+işlev kuresel_ad_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.kur_ad) {
+        eğer metin_esit(dizi_al(p.kur_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Aktif işlevin yerel diliminde bu ad var mı? (gölgeleme: yerel küreseli örter.)
+işlev yerel_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = p.yerel_basla;
+    iken i < dizi_boyut(p.yerel) {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Üst düzeyden (modül/dışa dâhil) küresel değişken ADLARINI topla (E010 için).
+// NOT: codegen'in `kuresel_topla`'sı IR emit eder ve yalnız --llvm yolunda çalışır;
+// bu checker prepass'i ondan BAĞIMSIZ olmalı (--check tek başına doğru olsun).
+işlev kur_ad_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ad: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ad, "KURESEL") { dizi_ekle(p.kur_ad, dizi_al(p.a_deg, c)); }
+        eğer metin_esit(ad, "MODUL") veya metin_esit(ad, "DISA") { kur_ad_topla(p, c); }
+        i = i + 1;
+    }
+    ver 0;
+}
+// İşlev düğümü `çıplak` mı? (D-255 g_ciplak listesi — parser yan-kanalı.)
+işlev ciplak_govde_mi(p: &değişken Ayr, fn: tam32) -> mantıksal {
+    ver ciplak_mi(p, fn) == 1;
+}
+// G001: ham işaretçi dereferansı / indekslemesi güvensiz blok ister.
+işlev g001_hata(p: &değişken Ayr, idx: tam32) -> tam32 {
+    dizi_ekle(p.th_kod, "G001");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
+// INDEKS tabanı ham işaretçi ise: güvensiz dışında G001 (C aynı düğümde raporlar).
+// C sırası: indeks tamsayı DEĞİLSE önce T005 verip döner — o kolu (T005 self-host'ta
+// yok) sessizce atlıyoruz, böylece kod uydurmuyoruz.
+işlev g001_indeks_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    eğer ptr_ifade_mi(p, dizi_al(p.cocuk, cb)) == yanlış { ver 0; }
+    eğer bilinen_tamsayi_degil(ifade_tip(p, dizi_al(p.cocuk, cb + 1), "?")) { ver 0; }
+    eğer p.guv_bag == 0 { ver g001_hata(p, idx); }
     ver 0;
 }
 // ---- TC5b: lineer akış izleme yardımcıları ----
@@ -6949,14 +7053,17 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
             dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, tip_str(p, tc)));
         } değilse { dizi_ekle(p.yerel_tip, "?"); }
+        dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, tc));   // D-351 G001
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
             dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
+            dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, annot_node(p, idx)));   // D-351
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
                 dizi_ekle(p.yerel_tip, "?");
+                dizi_ekle(p.yerel_ptr, 0);
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -6965,6 +7072,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                     eğer dizi_al(p.dyf_node, q) == idx {
                         dizi_ekle(p.yerel, dizi_al(p.dyf_alan, q));
                         dizi_ekle(p.yerel_tip, "?");
+                        dizi_ekle(p.yerel_ptr, 0);
                     }
                     q = q + 1;
                 }
@@ -7029,6 +7137,16 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.th_kod, "T002");
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        } değilse {
+            // D-351 E010: küresel değişkene erişim (okuma + yazma) yalnız güvensiz
+            // blokta. Yerel bir bağlama aynı adı gölgeliyorsa küresel ÇÖZÜLMEZ (C:
+            // sembol tablosu yereli kazandırır) → E010 yok. C hata verse de akışı
+            // KESMEZ (t_hata dönmez) — burada da devam ediyoruz.
+            eğer (p.guv_bag == 0) ve kuresel_ad_mi(p, nm) ve (yerel_var_mi(p, nm) == yanlış) {
+                dizi_ekle(p.th_kod, "E010");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            }
         }
         ver 0;
     }
@@ -7326,6 +7444,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
+    eğer metin_esit(ad, "INDEKS") { g001_indeks_kontrol(p, idx); }   // D-351 G001
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
@@ -7334,6 +7453,10 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     p.aktif_fn = fn;                     // D-324: G005 kaçış taramasının kökü
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
     lin_param_topla(p, fn);              // lineer parametreler dilime
+    // D-351 (C D-257): `çıplak` işlev gövdesi ÖRTÜK güvensiz bağlamdır — küresel
+    // erişim ve ham işaretçi izni oradan gelir (kem_malloc'un gerçek deseni).
+    değişken cip: mantıksal = ciplak_govde_mi(p, fn);
+    eğer cip { p.guv_bag = p.guv_bag + 1; }
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
     değişken i: tam32 = 0;
@@ -7342,6 +7465,7 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { kontrol_dugum(p, c); }
         i = i + 1;
     }
+    eğer cip { p.guv_bag = p.guv_bag - 1; }
     lin_kapanis(p);   // TC5b: tüketilmemiş lineer bağlama → L001
     ver 0;
 }
@@ -7597,6 +7721,7 @@ işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     genel_topla(p, kok);
     dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
     lr002_kontrol(p, kok);   // TC5a: yapı lineer alan (LR002) — gövdelerden ÖNCE
+    kur_ad_topla(p, kok);    // D-351: E010 için küresel adlar — gövdelerden ÖNCE
     kontrol_ust(p, kok);
     ver 0;
 }
@@ -7623,7 +7748,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], kur_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,

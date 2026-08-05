@@ -745,6 +745,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **GÜVENSİZ-TIER KAPILARI — D-351'de self-host'a portlandı.** `G001` (ham işaretçi
+  deref/indeksleme) + `E010` (küresel erişim) artık self-host checker'da da var;
+  `çıplak` gövde örtük güvensiz (yan-kanal `cip_node`/`g_ciplak` — düğüme alan
+  eklemek `--ast` paritesini bozardı). Öncesinde self-host **güvensiz programı
+  işaretsiz geçiriyordu**. **Ölçülmüş kapsam:** C checker 74 tanı kodu, self-host
+  26 — kalan ~48 kod için D-350'nin tarama yöntemini kullan (`--checkdump` vs
+  `kemgu_self --check` probe matrisi); 21'i "C red, self OK" olarak kanıtlandı.
 - **`olarak` TİP KURALLARI — D-350'de self-host'a portlandı.** E001/E002/E003/E004 artık
   self-host checker'da da var (kod+satır+sütun C ile birebir; `güvensiz` ayrımı dâhil —
   D-248 `tamsayı↔*T`, D-349 `&T→*U`). Kök neden tek satırdı: `kontrol_dugum` başındaki

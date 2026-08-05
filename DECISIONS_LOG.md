@@ -5,6 +5,55 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-351 [YÜKSEK] — G001 + E010 self-host'a portlandı: güvensiz-tier kapıları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+6).
+
+**Neden bu ikisi önce:** D-350'nin taraması, C checker'ın **74** tanı kodundan
+self-host'ta yalnız **24**'ünün bulunduğunu ölçtü. Kalanların çoğu "yanlış program
+derlenir" sınıfındaydı; **G001 ve E010 farklı bir sınıftadır**: bunlar yokken
+self-host yolu **güvensiz programı işaretsiz geçiriyordu** — dilin merkezî iddiası
+(`güvensiz` dışında ham bellek yok) o yolda geçersizdi. Ampirik:
+
+```
+işlev f(p: *tam32) -> tam32 { ver *p; }        C: G001    self: OK
+küresel değişken s: tam32 = 0; ... ver s;       C: E010    self: OK
+```
+
+**Portlanan kurallar (C birebir, kod+satır+sütun eşit):**
+- **G001** — `*p` dereferansı ve `p[i]` indekslemesi ham işaretçide `güvensiz` ister.
+  Güvenli `&T` deref (D-305) ve `Dizi<T>` indeksleme ETKİLENMEZ: kural **tipe** bakar,
+  yazılışa değil. Bunun için `yerel_ptr` (yerel ile paralel bit) eklendi.
+- **E010** — `küresel` değişkene erişim (okuma **ve** yazma) `güvensiz` ister.
+  `çıplak` gövde örtük güvensizdir (C D-257) — `kem_malloc`'un gerçek deseni.
+  Aynı adlı yerel bağlama küreseli **gölgeler** → E010 yok.
+
+**Yan gereksinim:** `çıplak` işareti self-host parser'ında düğüme yazılmıyordu.
+Düğüme alan eklemek `--parse`/`--ast` dump paritesini bozardı → **yan-kanal**
+(`cip_node`; codegen.kem'de zaten var olan `g_ciplak`). D-318'in deseni.
+
+**Port SESSİZ BİR KUSUR BULDU (kendi kodumda, ölçümle):** `*(4096 olarak *tam32)`
+— güvensiz dışında. C'de bu cast'in **kendisi** E002'dir, tip HATA'ya düşer ve
+dereferans erken döner → **tek** hata. İlk portum ptr'liği cast'in HEDEF tipinden
+okuyup cast'in geçerli olup olmadığını sormuyordu → `E002 + G001` kaskadı: tek
+kusur iki hata olarak raporlanıyordu. `olarak *T` yalnız `güvensiz` içinde geçerli
+olduğundan, ptr sayma da `guv_bag > 0` koşuluna bağlandı. Korpusa uyandırıcı örnek
+eklendi (`tc8_06`).
+
+**Sabotaj doğrulaması (6 kural; her biri `grep SABOTAJ-Sn` ile kanıtlandı):**
+S8 G001-deref (72→71), S9 G001-indeks (71), S10 E010 (71), S11 `çıplak` muafiyeti
+(**70** — yanlış-pozitif yönünde; mevcut `tc6_01_kuresel` de kırmızıya döndü, yani
+muafiyet yük taşıyor), S12 gölgeleme (71), S13 `ptr_ifade_mi` daraltması (**70** —
+güvenli `&T` deref'i ve `Dizi<T>` indekslemesi yanlışlıkla reddedilir).
+
+**Sonuç:** self-host checker kod kapsamı **24 → 26/74**; korpus **66 → 72**.
+Bellek-güvenliği kapılarında C ile parite tam.
+
+**Testler:** `checker_diff` 72/72, `self_driver` 4 mod × 2 driver + FIXPOINT,
+`check_kapisi` 210/217 (0 RED).
+
+---
+
 ## D-350 [YÜKSEK] — `olarak` tip kuralları self-host checker'a portlandı: E001-E004 (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+7).

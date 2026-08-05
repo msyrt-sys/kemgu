@@ -1,0 +1,12 @@
+// D-351 / G001: `*p` ham işaretçi dereferansı `güvensiz` DIŞINDA reddedilir.
+// Güvenli referans deref (`*r`, &T) SERBEST kalır (D-305) — aynı sözdizimi,
+// farklı güvenlik sınıfı; kural tipe bakar, yazılışa değil.
+işlev oku(p: *tam32) -> tam32 {
+    ver *p;
+}
+işlev güvenli(r: &tam32) -> tam32 {
+    ver *r;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

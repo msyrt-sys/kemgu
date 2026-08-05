@@ -1,0 +1,6 @@
+// D-351 / G001 x E002 etkileşimi: `güvensiz` DIŞINDA `olarak *T` cast'inin KENDİSİ
+// E002'dir; C tipi HATA'ya düşürür ve dereferanstan erken döner → G001 verilmez.
+// Tek kusur TEK hata olarak raporlanmalı (E002+G001 kaskadı DEĞİL).
+işlev main() -> tam32 {
+    ver *(4096 olarak *tam32);
+}
