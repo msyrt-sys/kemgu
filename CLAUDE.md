@@ -745,6 +745,13 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **KALAN TANI KODLARININ HARİTASI — D-360.** `--token` 235 dosyada temiz. Kalan
+  31 kodun **2'si ÖLÜ** (T015/T023 — C parser'ı o şekilleri reddediyor, portlanmayacak),
+  kalan 29'un **23'ü yalnız 4 alt-sistemin tip temsiline bağlı**: sabitsüre (CT001-008),
+  DRF (DRF001-007), MMIO+yetki (MM001-003/CP004-005), modül (T016/T040-042).
+  Dağınık kalanlar: T011/T014 (tip evreni), T030/T031 (bound), M004 (payload tip).
+  **Genel-amaçlı ucuz port sınıfı D-358'de bitti.** E013 portlandı (43/74):
+  `cip_bag` `guv_bag`'den AYRI tutulmalı — `güvensiz` blok işlevi çıplak YAPMAZ.
 - **⚠ PARSE KAPISI SESSİZ AYRIŞMIŞTI — D-359.** `--parse` 12 dosyada yeşilken 212
   gerçek dosyada **8 sapma** vardı (`küresel`: C'de DUGUM_DEGISKEN+bayrak, `--ast`
   "DEGISKEN" basar; self-host ayrı KURESEL düğümü). Dump eşlendi (`dump_ad`), iç ad

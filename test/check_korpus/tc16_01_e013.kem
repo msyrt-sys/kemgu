@@ -1,0 +1,34 @@
+// D-360 / E013 (C D-257 çıplak-call-rule): `çıplak` işlev ρ-suz C-ABI'dir.
+// Normal (ρ-alan) bir kullanıcı işlevini çağırırsa codegen geçirecek bir bölge
+// bulamaz → `ptr null` → callee null-bölgeye tahsis eder → segfault.
+// Çıplak → çıplak ve çıplak → built-in SERBEST (ikisi de ρ almaz).
+işlev normal() -> tam32 {
+    ver 1;
+}
+çıplak işlev alt_ciplak() -> tam32 {
+    ver 2;
+}
+çıplak işlev ihlal() -> tam32 {
+    ver normal();          // E013
+}
+çıplak işlev izinli() -> tam32 {
+    ver alt_ciplak();      // çıplak → çıplak: serbest
+}
+çıplak işlev builtin_cagri(s: metin) -> tam32 {
+    ver metin_uzunluk(s);  // built-in ρ almaz: serbest
+}
+işlev normalden_cagri() -> tam32 {
+    ver normal();          // normal → normal: serbest
+}
+// KRİTİK AYRIM: `güvensiz` blok işlevi ÇIPLAK YAPMAZ. Kural `çıplak` gövdeye
+// bağlıdır (ρ-suz C-ABI), güvensiz-tier'a değil. Bu ikisi karıştırılırsa
+// aşağıdaki GEÇERLİ çağrı sahte E013 alır.
+işlev guvensiz_icinden() -> tam32 {
+    güvensiz {
+        ver normal();
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

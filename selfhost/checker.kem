@@ -91,6 +91,8 @@ yapı Ayr {
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     guv_bag: tam32;          // `güvensiz` blok derinliği (C tk->guvensiz_baglam aynası)
+    cip_bag: tam32;          // D-360: `çıplak` gövde derinliği (C ciplak_baglam) — E013.
+                             // guv_bag'den AYRI: `güvensiz` blok çıplak yapmaz.
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     th_sat: Dizi<tam32>;
@@ -1717,7 +1719,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -2423,6 +2425,17 @@ işlev ciplak_govde_mi(p: &değişken Ayr, fn: tam32) -> mantıksal {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.cip_node) {
         eğer dizi_al(p.cip_node, i) == fn { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// D-360 (C D-257 çıplak-call-rule): çağrılan işlev ADIYLA çıplak mı?
+// Çıplak işlev ρ-suz C-ABI'dir; normal (ρ-alan) bir işlevi çağırırsa codegen
+// `ptr null` geçirir → callee null-bölgeye tahsis eder → segfault. Statik red.
+işlev fn_ciplak_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.cip_node) {
+        eğer metin_esit(dizi_al(p.a_deg, dizi_al(p.cip_node, i)), ad) { ver doğru; }
         i = i + 1;
     }
     ver yanlış;
@@ -3502,6 +3515,12 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                     dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
                     ver 0;   // C: arite uyumsuz → erken dönüş (arg tip kontrolü yok)
                 }
+                // D-360 E013: çıplak gövdeden normal (ρ-alan) kullanıcı işlevi
+                // çağrılamaz. C sırası: T010'dan SONRA; hata AKIŞI KESMEZ (arg
+                // kontrolü devam eder). Built-in/extern ρ almaz → muaf.
+                eğer (p.cip_bag > 0) ve (fn_ciplak_mi(p, fad) == yanlış) {
+                    sekil_hata(p, idx, "E013");
+                }
                 // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
                 değişken a: tam32 = 1;
                 iken a < hc {
@@ -3698,7 +3717,7 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
     // D-351 (C D-257): `çıplak` işlev gövdesi ÖRTÜK güvensiz bağlamdır — küresel
     // erişim ve ham işaretçi izni oradan gelir (kem_malloc'un gerçek deseni).
     değişken cip: mantıksal = ciplak_govde_mi(p, fn);
-    eğer cip { p.guv_bag = p.guv_bag + 1; }
+    eğer cip { p.guv_bag = p.guv_bag + 1; p.cip_bag = p.cip_bag + 1; }   // D-360
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
     değişken i: tam32 = 0;
@@ -3707,7 +3726,7 @@ işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { kontrol_dugum(p, c); }
         i = i + 1;
     }
-    eğer cip { p.guv_bag = p.guv_bag - 1; }
+    eğer cip { p.guv_bag = p.guv_bag - 1; p.cip_bag = p.cip_bag - 1; }
     lin_kapanis(p);   // TC5b: tüketilmemiş lineer bağlama → L001
     ver 0;
 }

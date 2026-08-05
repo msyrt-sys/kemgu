@@ -5,6 +5,68 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-360 — Kalan tanı kodlarının ULAŞILABİLİRLİK taraması + E013 portu (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+### 1) `--token` çapraz ölçümü: temiz
+
+D-359'un yöntemi lexer'a uygulandı — **235 gerçek dosyanın tamamında** `--token`
+paritesi birebir (`lex_korpus` 22 dosyalıkken). Sapma YOK; lexer sağlam.
+
+### 2) Kalan 31 kodun ulaşılabilirlik taraması — "kalan iş"in gerçek boyutu
+
+Yöntem: her kod için C'nin kendi test paketinde bir tanık var mı (`grep` test/*.c),
+sonra tanıksızlar için doğrudan probe.
+
+**ÖLÜ (2) — C'de ulaşılamaz, PORTLANMAYACAK:**
+`T015` (annotasyonsuz lambda parametresi → parser P013+P011),
+`T023` (`ver` işlev dışında → parser P001). D-359'da ölçüldü, burada test-paketi
+kanıtıyla teyit edildi (ikisinin de testi YOK).
+
+**ULAŞILABİLİR (29) — dördü tanıksızdı, probe ile doğrulandı:**
+`M004` (`S::Bir("a")` → payload tip uyumsuz), `T040` (`kullan yokmodul` → modül
+yüklenemedi), ayrıca `T041`/`T042` (test_llvm'de).
+
+**Alt-sistem sınıflandırması (kalan 29 → 4 altyapı + 6 dağınık):**
+
+| küme | kodlar | gereken altyapı |
+|---|---|---|
+| sabitsüre | CT001-CT008 (8) | `sabitsüre<T>` tip temsili + taint yayılımı |
+| DRF | DRF001-DRF007 (7) | `görev<T>`/`kanal<T>` tip temsili |
+| MMIO + yetki | MM001-003, CP004-005 (5) | `yetki<R>` lineer yetenek tipi |
+| modül/import | T016, T040, T041, T042 (4) | modül scope çözümü + `genel` görünürlüğü |
+| generic/bound | T030, T031 (2) | bound tablosu + uygula kaydı |
+| tip evreni | T011, T014 (2) | tam tip-adı evreni / beklenen-tip yayıcısı |
+| tekil | M004 (1) | varyant payload TİP tablosu |
+
+**Sonuç: "31 kod kaldı" yanıltıcıydı.** Gerçek şekil: **2 ölü**, ve kalan 29'un
+**23'ü yalnız 4 alt-sistemin tip temsiline bağlı**. Genel-amaçlı ucuz port sınıfı
+D-358'de bitti; buradan sonrası alt-sistem işidir.
+
+### 3) E013 portlandı (dağınık kümenin en küçüğü)
+
+C D-257 çıplak-call-rule: `çıplak` işlev ρ-suz C-ABI'dir; normal (ρ-alan) bir
+kullanıcı işlevini çağırırsa codegen `ptr null` geçirir → callee null-bölgeye
+tahsis eder → segfault. Çıplak→çıplak ve çıplak→built-in serbest (ikisi de ρ almaz).
+
+**KRİTİK AYRIM — `cip_bag` `guv_bag`'den AYRI:** `güvensiz` blok bir işlevi
+**çıplak yapmaz**. D-351'de çıplak gövde için `guv_bag` artırılıyordu (tier izni);
+E013 ise ρ-ABI'ye bağlı, ayrı bir sayaç ister. Sabotaj S43 (`cip_bag` → `guv_bag`)
+**ilk turda sessiz kaldı** — korpusta "güvensiz bloktan normal işlev çağrısı" şekli
+yoktu. `tc16_01`'e o şekil eklendi, S43 kırmızıya döndü. **D-356'nın S31 dersinin
+birebir tekrarı** ve bu kez ayrımın kendisi ölçüldü.
+
+**Sabotaj (2):** S42 E013 (88→87), S43 `cip_bag`↔`guv_bag` karışımı (87 — yalnız
+korpus genişletildikten sonra).
+
+**Probe 4/4 birebir:** çıplak→normal (E013), çıplak→çıplak, normal→normal,
+çıplak→built-in.
+
+**Sonuç:** self-host checker kod kapsamı **42 → 43/74**; korpus **87 → 88**.
+
+---
+
 ## D-359 [YÜKSEK] — `--parse` paritesinde SESSİZ sapma: `küresel` dump'ı + üç ölü tanı (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem` (dump), `test/parse_korpus/` (+1).
