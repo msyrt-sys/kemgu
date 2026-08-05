@@ -745,6 +745,11 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   pre-existing sınır: `işlev()->tam64 = || 8589934592` (büyük literal default'u; ifade-form da).
   **NOT (D-291 düzeltmesi):** bu, `görev<T>`'yi TEK BAŞINA AÇMAZ — `kdl_gorev_birlestir`
   de i32 döner, `kanal<T>` sınırı ise runtime tamponundan (int32_t). Genişletme runtime işi.
+- **"YANLIŞ ŞEKİL" TANILARI — D-353'te self-host'a portlandı:** T005/T006/T007/
+  T008/T027 (hepsi tek kalıp: tip bilinen skaler, bağlam yapı/dizi/işlev istiyor).
+  INDEKS sırası C ile birebir (ptr→T005/G001, skaler→T008, dizi→T005). Yeni
+  yan-dizi `yerel_dizi`. **Self-host checker kapsamı 32/74** (D-350'de 24).
+  Kalan 42 kod çoğunlukla özel alt-sistem (sabitsüre/DRF/MMIO/yetki/modül).
 - **`eşleş` KAPSAYICILIK (M001) — D-352'de self-host'a portlandı** (çeşit dalı).
   Yan-kanal: `cv_cesit`/`cv_ad` (varyant adları — `parse_cesit` bunları ATIYORDU)
   + `yerel_ham` (süzülmemiş annotasyon tip adı; `yerel_tip` çeşidi "?"e düşürüyor).

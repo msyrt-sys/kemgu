@@ -1,0 +1,24 @@
+// D-353: aynı sözdizimlerinin DOĞRU şekilleri — hiçbiri uyanmamalı. Bu dosya
+// yanlış-pozitif kapısıdır: T005-T008/T027 tetiklenirse gerçek kod kırılır.
+yapı Nokta { x: tam32; y: tam32; }
+
+işlev kare(n: tam32) -> tam32 { ver n * n; }
+
+işlev alan(n: Nokta) -> tam32 { ver n.x + n.y; }
+işlev alan_ref(n: &Nokta) -> tam32 { ver n.x; }
+işlev indeks(xs: Dizi<tam32>) -> tam32 { ver xs[1]; }
+işlev ic_ice(xs: Dizi<Dizi<tam32>>) -> tam32 { ver xs[0][0]; }
+işlev cagri() -> tam32 { ver kare(6); }
+işlev kapanis() -> tam32 {
+    değişken f: işlev(tam32) -> tam32 = |x: tam32| x + 1;
+    ver f(41);
+}
+işlev builtin(s: metin) -> tam32 { ver metin_uzunluk(s); }
+işlev dongu(xs: Dizi<tam32>) -> tam32 {
+    değişken t: tam32 = 0;
+    için x: xs { t = t + x; }
+    ver t;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

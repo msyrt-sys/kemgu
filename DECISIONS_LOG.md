@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-353 — "Yanlış şekil" tanıları self-host'a portlandı: T005/T006/T007/T008/T027 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Neden birlikte:** Beşi de **tek bir kalıbın** örnekleri — ifadenin tipi bilinen
+bir skaler, ama bağlam yapı / dizi / işlev **şekli** istiyor. Aynı dokuda
+(`ifade_tip` + `bilinen_skaler_mi`) durdukları için tek partide gittiler.
+
+| kod | bağlam | koşul |
+|---|---|---|
+| T007 | `x.alan` | x bilinen skaler → yapı değil |
+| T008 | `x[i]` | x bilinen skaler → Dizi değil |
+| T005 | `x[i]` | x **kesin** Dizi/ham işaretçi, i bilinen non-tamsayı |
+| T006 | `f(...)` | f, bilinen skaler tipte bir **yerel bağlama** |
+| T027 | `için x: k` | k bilinen skaler → Dizi değil |
+
+**INDEKS sırası C ile birebir kuruldu** (D-351'in G001'i de bu sıraya girdi):
+ham işaretçi → (indeks non-tamsayı ? T005 : güvensiz dışında G001); bilinen
+skaler → T008; kesin Dizi → (indeks non-tamsayı ? T005). Şekil bilinmiyorsa
+hiçbir şey söylenmez.
+
+**T006'nın dar kapısı:** yalnız **yerel bağlama** olan hedefler. Kullanıcı
+işlevleri ve builtin'ler yerel bağlama değildir → etkilenmez; kapanış değişkeni
+`işlev(...)->T` annotasyonuyla `yerel_tip`'te "?" olur → atlanır. Bu daraltma
+olmadan her çağrı yanlış-pozitif riski taşırdı.
+
+**Yeni yan-dizi:** `yerel_dizi` (yerel ile paralel bit) — T005 "taban kesin
+Dizi mi" sorusunu `yerel_tip`'e dokunmadan yanıtlar (`yerel_tip` Dizi'yi "?"e
+düşürüyor ve onu değiştirmek T001/T003'ü geniş biçimde etkilerdi). D-351'in
+`yerel_ptr`, D-352'nin `yerel_ham` deseniyle aynı.
+
+**Probe matrisi 19/19 C ile birebir:** 10 pozitif (her kod × 2 skaler tip) +
+**9 negatif** (yapı alanı, Dizi indeksleme, iç içe dizi, kullanıcı işlevi
+çağrısı, kapanış çağrısı, builtin çağrısı, `&Yapı` alanı, `için` üstünde Dizi,
+çeşit `eşleş`) — hiçbiri uyanmadı.
+
+**Sabotaj doğrulaması (6; `grep SABOTAJ-Sn` ile kanıtlı):** S17 T007 (76→75),
+S18 T008 (75), S19 T006 (75), S20 T027 (75), S21 T005 (75), **S22
+`bilinen_skaler_mi` daraltması (73 — yanlış-pozitif yönünde; `lineer_yapi`
+ve `lineer_kismi_tasima` gibi MEVCUT dosyalar da kırmızıya döndü, yani daraltma
+yük taşıyor).**
+
+**Sonuç:** self-host checker kod kapsamı **27 → 32/74** (D-350 başlangıcı: 24).
+Korpus **74 → 76**; korpusun uyandırdığı kod sayısı **22 → 30**.
+
+**Kalan 42 kod** (bu partiden sonra): `T011 T013 T014 T015 T016 T023 T030 T031
+T040-T042` (tip/modül), `L007 L008`, `E011-E013`, `G002-G004`, `M002-M004`,
+`CP004-005`, `CT001-008`, `DRF001-007`, `MM001-003`. Çoğu özel alt-sistem
+(sabitsüre / DRF / MMIO / yetki); tarama yöntemi D-350'de.
+
+---
+
 ## D-352 — M001 (`eşleş` kapsayıcılık) self-host'a portlandı: çeşit dalı (2026-08-04)
 
 **ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).

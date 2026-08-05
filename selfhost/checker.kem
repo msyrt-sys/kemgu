@@ -39,6 +39,7 @@ yapı Ayr {
     yerel_tip: Dizi<metin>; // yerel ile paralel: her ismin tip-string'i ("?"=bilinmiyor)
     yerel_ptr: Dizi<tam32>; // D-351: yerel ile paralel — 1 = ham işaretçi (*T) bağlaması (G001)
     yerel_ham: Dizi<metin>; // D-352: yerel ile paralel — SÜZÜLMEMİŞ annotation tip adı (M001)
+    yerel_dizi: Dizi<tam32>;// D-353: yerel ile paralel — 1 = Dizi<T> bağlaması (T005)
     cv_cesit: Dizi<metin>;  // D-352: her varyant için sahip çeşit adı (parser yan-kanalı)
     cv_ad: Dizi<metin>;     // D-352: varyant adı (cv_cesit ile paralel)
     kur_ad: Dizi<metin>;    // D-351: küresel değişken adları (E010)
@@ -1702,7 +1703,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], cv_cesit: [], cv_ad: [], kur_ad: [], cip_node: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], cv_cesit: [], cv_ad: [], kur_ad: [], cip_node: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -2335,6 +2336,11 @@ işlev tip_node_ptr_mi(p: &değişken Ayr, tn: tam32) -> tam32 {
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_POINTER") { ver 1; }
     ver 0;
 }
+işlev tip_node_dizi_mi(p: &değişken Ayr, tn: tam32) -> tam32 {   // D-353
+    eğer tn < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_DIZI") { ver 1; }
+    ver 0;
+}
 // DEGISKEN/SABIT annotation tip düğümü (yoksa -1). annot_str ile aynı koşul.
 işlev annot_node(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer dizi_al(p.a_cs, idx) >= 2 {
@@ -2414,16 +2420,73 @@ işlev g001_hata(p: &değişken Ayr, idx: tam32) -> tam32 {
     dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
     ver 0;
 }
-// INDEKS tabanı ham işaretçi ise: güvensiz dışında G001 (C aynı düğümde raporlar).
-// C sırası: indeks tamsayı DEĞİLSE önce T005 verip döner — o kolu (T005 self-host'ta
-// yok) sessizce atlıyoruz, böylece kod uydurmuyoruz.
-işlev g001_indeks_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+// INDEKS denetimi — C DUGUM_INDEKS sırası birebir:
+//   taban ham işaretçi → indeks tamsayı değilse T005, değilse güvensiz dışında G001
+//   taban Dizi<T> DEĞİL (bilinen skaler) → T008
+//   taban Dizi<T> → indeks tamsayı değilse T005
+// Taban şekli bilinmiyorsa hiçbir şey söylenmez.
+işlev indeks_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
-    eğer ptr_ifade_mi(p, dizi_al(p.cocuk, cb)) == yanlış { ver 0; }
-    eğer bilinen_tamsayi_degil(ifade_tip(p, dizi_al(p.cocuk, cb + 1), "?")) { ver 0; }
-    eğer p.guv_bag == 0 { ver g001_hata(p, idx); }
+    değişken taban: tam32 = dizi_al(p.cocuk, cb);
+    değişken it: metin = ifade_tip(p, dizi_al(p.cocuk, cb + 1), "?");
+    eğer ptr_ifade_mi(p, taban) {
+        eğer bilinen_tamsayi_degil(it) { ver sekil_hata(p, idx, "T005"); }   // D-353
+        eğer p.guv_bag == 0 { ver g001_hata(p, idx); }
+        ver 0;
+    }
+    eğer bilinen_skaler_mi(ifade_tip(p, taban, "?")) { ver sekil_hata(p, idx, "T008"); }
+    eğer dizi_ifade_mi(p, taban) ve bilinen_tamsayi_degil(it) {
+        ver sekil_hata(p, idx, "T005");
+    }
     ver 0;
+}
+// ---- D-353: "yanlış şekil" tanıları — T005/T006/T007/T008/T027 ----
+// Ortak kalıp: ifadenin tipi BİLİNEN bir skaler, ama bağlam yapı / dizi / işlev
+// şekli istiyor. "?" (emin değil) → kontrol ATLANIR (yanlış-pozitif yok).
+işlev sekil_hata(p: &değişken Ayr, idx: tam32, kod: metin) -> tam32 {
+    dizi_ekle(p.th_kod, kod);
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
+// Bağlama KESİN olarak Dizi<T> mi? (yerel_dizi, yerel ile paralel.)
+işlev bag_dizi_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_dizi, i) == 1; }
+        i = i - 1;
+    }
+    ver yanlış;
+}
+işlev dizi_ifade_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "DIZI_OLUSTUR") { ver doğru; }
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TANIMLAYICI") {
+        ver bag_dizi_mi(p, dizi_al(p.a_deg, idx));
+    }
+    ver yanlış;
+}
+// T007: `x.alan` — x bilinen bir SKALER ise yapı değildir.
+işlev t007_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) == 0 { ver 0; }
+    değişken nt: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
+    eğer bilinen_skaler_mi(nt) { ver sekil_hata(p, idx, "T007"); }
+    ver 0;
+}
+// T027: `için x: k` — k bilinen bir SKALER ise Dizi<T> değildir.
+işlev t027_kontrol(p: &değişken Ayr, idx: tam32, kol: tam32) -> tam32 {
+    eğer bilinen_skaler_mi(ifade_tip(p, kol, "?")) { ver sekil_hata(p, idx, "T027"); }
+    ver 0;
+}
+// T006: `f(...)` — f bilinen SKALER tipte bir YEREL bağlama ise işlev değildir.
+// (Kullanıcı işlevleri ve builtin'ler yerel bağlama DEĞİLDİR → etkilenmez.)
+işlev t006_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") == yanlış { ver yanlış; }
+    değişken nm: metin = dizi_al(p.a_deg, hedef);
+    eğer yerel_var_mi(p, nm) == yanlış { ver yanlış; }
+    eğer bilinen_skaler_mi(var_tip(p, nm)) == yanlış { ver yanlış; }
+    sekil_hata(p, idx, "T006");
+    ver doğru;
 }
 // ---- D-352: M001 — `eşleş` kapsayıcılık (exhaustiveness), ÇEŞİT dalı ----
 // C esles_exhaustive_kontrol aynası. KAPSAM: yalnız çeşit skrutinisi. seçimlik<T>
@@ -2930,18 +2993,21 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") {
             dizi_ekle(p.yerel_ham, tip_str(p, tc));       // D-352 M001 (süzülmemiş)
         } değilse { dizi_ekle(p.yerel_ham, "?"); }
+        dizi_ekle(p.yerel_dizi, tip_node_dizi_mi(p, tc));   // D-353 T005
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
             dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
             dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, annot_node(p, idx)));   // D-351
             dizi_ekle(p.yerel_ham, annot_str(p, idx));    // D-352
+            dizi_ekle(p.yerel_dizi, tip_node_dizi_mi(p, annot_node(p, idx)));   // D-353
         } değilse {
             eğer metin_esit(ad, "ICIN") veya metin_esit(ad, "DESEN_TANIMLAYICI") {
                 dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
                 dizi_ekle(p.yerel_tip, "?");
                 dizi_ekle(p.yerel_ptr, 0);
                 dizi_ekle(p.yerel_ham, "?");
+                dizi_ekle(p.yerel_dizi, 0);
             }
             // D-318: yapı deseni alanları da yerel bağlamadır (yan-kanaldan).
             eğer metin_esit(ad, "DESEN_YAPI") {
@@ -2952,6 +3018,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.yerel_tip, "?");
                         dizi_ekle(p.yerel_ptr, 0);
                         dizi_ekle(p.yerel_ham, "?");
+                        dizi_ekle(p.yerel_dizi, 0);
                     }
                     q = q + 1;
                 }
@@ -3074,6 +3141,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken ib: tam32 = dizi_al(p.a_cb, idx);
         değişken ic: tam32 = dizi_al(p.a_cs, idx);
         eğer ic > 0 { kontrol_dugum(p, dizi_al(p.cocuk, ib)); }
+        eğer ic > 0 { t027_kontrol(p, idx, dizi_al(p.cocuk, ib)); }   // D-353 T027
         değişken in0: tam32 = lin_dilim_n(p);
         değişken ib0: tam32 = lin_snap_it(p);
         eğer ic > 1 { kontrol_dugum(p, dizi_al(p.cocuk, ib + 1)); }
@@ -3147,6 +3215,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer ad_tanimli_mi(p, fad) == yanlış {
                 ver 0;   // C: tanımsız hedef → TIP_HATA → erken dönüş (arg atlanır)
             }
+            // D-353 T006: hedef işlev tipinde değil → C erken döner (arite/arg yok).
+            eğer t006_kontrol(p, idx, hedef) { ver 0; }
             // D-321 (LC-3): hedef, lineer bir `tekkez<işlev(...)>` bağlaması ise
             // ÇAĞRI onu TÜKETİR. Bu dal olmadan bilinen-arite yoluna girmeyen çağrı
             // hedefi hiç tüketilmiyordu → sahte L001 (C kabul ediyor, self reddediyordu).
@@ -3320,7 +3390,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); }   // TC3e/f + T028
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
-    eğer metin_esit(ad, "INDEKS") { g001_indeks_kontrol(p, idx); }   // D-351 G001
+    eğer metin_esit(ad, "INDEKS") { indeks_kontrol(p, idx); }   // D-351 G001 + D-353 T005/T008
+    eğer metin_esit(ad, "ERISIM") { t007_kontrol(p, idx); }     // D-353 T007
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
