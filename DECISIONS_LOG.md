@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-393 [YÜKSEK] — CODEGEN: çağrı argümanı param IR tipine genişletiliyor (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1). D-392'de bulunan kök
+KAPATILDI.
+
+**Kusur.** Çağrı yerinde argüman **argümanın DOĞAL tipiyle** basılıyordu,
+**parametrenin BİLDİRİLEN tipiyle** değil: `f(a: dtam64, ..)` için
+`call @f(i32 10, ..)` — oysa `define` i64 bekliyor. LLVM bunu **SESSİZCE
+kabul eder** (D-295'in dersi): ilk 3 argüman register'a sığdığı için doğru
+görünür, **4.'den itibaren ÇÖP okunur**. `bignum_selfhost`'un `0` yerine
+yığın adresi basmasının kökü buydu (`vektor_dogrula` ALTI `dtam64` param).
+
+**D-392'nin başarısız denemesi neden başarısızdı, nasıl çözüldü.** İlk deneme
+checker'ın imza tablosuna (`fn_ptip_bul`) bakıyordu; o tablo **YALNIZ
+`kontrol_program`da — CHECK yolunda — doldurulur** ve `--llvm` yolu onu hiç
+kurmaz → `codegen.exe` çağrı içeren HER dosyada düştü. Çözüm: codegen'in
+**KENDİ ön-geçişi** (`param_ir_topla`), emit'in kullandığı **aynı `param_tip`
+fonksiyonuyla** kaydediyor → değer tutarlılığı yapısal olarak garanti.
+Ön-geçiş şart: bir çağrı sonradan tanımlanan işleve de gidebilir.
+
+**Kapı EN AZ 4 parametre ister.** 3 parametreli bir test **yanlış uygulamada
+da geçerdi** (ilk 3 register'a sığıyor) — D-391'in "sığan sayı sınamaz"
+dersinin kardeşi. Korpus ayrıca i32'ye sığmayan bir değer (2^33) ve wrap
+davranışı içerir.
+
+**DÜRÜST SINIR — sınır korumaları GATE'Lİ DEĞİL.** `param_ir_tip`'teki
+"kayıt bulunamadı" ve "arite dışı" korumaları mevcut korpusla **gözlenemiyor**
+(`param_ir_topla` her üst-düzey işlevi kaydediyor; arite uyuşmazlığını checker
+zaten reddediyor). Sabotaj S117 her iki biçimde de SESSİZ kaldı. Korumaları
+**tutuyorum** — D-392 tam da bir arama başarısızlığının derleyiciyi düşürdüğünü
+gösterdi — ama yapay korpus vakası UYDURMADIM.
+
+**Kapılar:** `codegen_diff` **118/118**. **Sabotaj S116** (genişletme
+kaldırıldı) → kırmızı (42≠1).
+
+**GENİŞ ÖLÇÜM: gerçek sapma 2 → 1.** (`OK=64`; kalan 3 "fark"ın 2'si C'nin de
+segfault ettiği EŞLEŞEN çökmeler.) Tek kalan: `base64_selfhost` (C=0, S=127,
+`dizi sınır ihlali i=5 boyut=5`) — D-392'de indirgeme denendi, sapma
+üretilemedi; ayrı kök.
+
+---
+
 ## D-392 — ÖLÇÜM: çağrı argümanı param tipine genişletilmiyor (kök bulundu, DÜZELTİLMEDİ) (2026-08-06)
 
 **ETKİ:** yok — kod DEĞİŞMEDİ (denenen düzeltme geri alındı). Bu bir ÖLÇÜM kaydı.

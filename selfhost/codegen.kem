@@ -145,6 +145,10 @@ yapı Ayr {
     g_isim: Dizi<metin>;     // global isimler (builtin + üst-düzey tanım)
     g_kuresel_ad: Dizi<metin>;   // D-253: küresel değişken adları (@ad load/store)
     g_kuresel_tip: Dizi<metin>;  // paralel: küresel LLVM ir tipi
+    pi_ad: Dizi<metin>;          // D-393: CODEGEN-yolu param IR tipi tablosu — fn adı
+    pi_base: Dizi<tam32>;        // paralel: pi_tip'teki başlangıç indeksi
+    pi_say: Dizi<tam32>;         // paralel: parametre sayısı
+    pi_tip: Dizi<metin>;         // düz param LLVM tipi listesi (param_tip ile)
     g_sabit_ad: Dizi<metin>;     // D-391: üst-düzey `sabit` adları
     g_sabit_deger: Dizi<tam32>;  // paralel: DEĞER İFADESİ düğümü (inline edilir)
     g_sabit_tip: Dizi<metin>;    // paralel: sabitin LLVM ir tipi ("" = bilinmiyor)
@@ -3866,8 +3870,24 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         değişken i: tam32 = 1;
         iken i < cs {
-            dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, cb + i)));
-            dizi_ekle(argt, p.son_tip);
+            değişken av: metin = ifade_uret(p, dizi_al(p.cocuk, cb + i));
+            değişken at: metin = p.son_tip;
+            // D-393: ARGÜMAN, PARAMETRENİN BİLDİRİLEN IR tipine genişletilmeli.
+            // Eskiden argümanın DOĞAL tipi basılıyordu → `f(a: dtam64, ..)` için
+            // `call @f(i32 10, ..)`; `define` i64 bekliyor. LLVM bunu SESSİZCE
+            // kabul eder (D-295) → ilk 3 argüman register'a sığdığı için doğru
+            // görünür, 4.'den itibaren ÇÖP okunur (D-392'de ölçüldü).
+            // Tablo codegen'in KENDİ ön-geçişinden (`param_ir_topla`); checker'ın
+            // `fn_ptip` tablosu bu yolda BOŞTUR ve sınır-güvensizdir.
+            eğer kullanici == 1 {
+                değişken pt: metin = param_ir_tip(p, fname, i - 1);
+                eğer metin_esit(pt, "i64") ve (metin_esit(at, "i64") == yanlış) {
+                    av = i64_genislet(p, av, at);
+                    at = "i64";
+                }
+            }
+            dizi_ekle(args, av);
+            dizi_ekle(argt, at);
             i = i + 1;
         }
         // D-258: çıplak callee → C-ABI (ρ YOK). kullanıcı-fn ama çıplak ise ρ atla.
@@ -6015,6 +6035,62 @@ işlev kuresel_init_yaz(p: &değişken Ayr, dv: tam32, ir: metin) -> tam32 {
     eğer metin_esit(ir, "ptr") { yaz_str("null"); ver 0; }
     yaz_str("0"); ver 0;
 }
+// ---- D-393: CODEGEN-YOLU PARAM IR TİPİ TABLOSU ----
+// Checker'ın imza tablosu (`fn_ad`/`fn_ptip`) YALNIZ `kontrol_program`da —
+// yani CHECK yolunda — doldurulur; `--llvm` codegen yolu onu HİÇ kurmaz
+// (D-392'de ölçüldü: oraya bakmak `dizi sınır ihlali` ile düşürdü).
+// Bu tablo codegen'in KENDİ ön-geçişidir ve emit'in kullandığı `param_tip`
+// ile AYNI değeri kaydeder → çağrı yerinde argüman, parametrenin BİLDİRİLEN
+// IR tipine genişletilebilir. Ön-geçiş şart: bir çağrı, sonradan tanımlanan
+// bir işleve de gidebilir.
+işlev param_ir_ara(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = dizi_boyut(p.pi_ad) - 1;
+    iken i >= 0 {
+        eğer metin_esit(dizi_al(p.pi_ad, i), ad) { ver i; }
+        i = i - 1;
+    }
+    ver 0 - 1;
+}
+// SINIR-GÜVENLİ sorgu: kayıt yoksa ya da j arite dışındaysa "" döner.
+// (Checker'daki `fn_ptip_bul` sınır kontrolü YAPMAZ — D-392'de bu düşürmüştü.)
+işlev param_ir_tip(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
+    değişken k: tam32 = param_ir_ara(p, ad);
+    eğer k < 0 { ver ""; }
+    eğer j < 0 { ver ""; }
+    eğer j >= dizi_al(p.pi_say, k) { ver ""; }
+    ver dizi_al(p.pi_tip, dizi_al(p.pi_base, k) + j);
+}
+işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
+    dizi_ekle(p.pi_ad, dizi_al(p.a_deg, fn));
+    dizi_ekle(p.pi_base, dizi_boyut(p.pi_tip));
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;  değişken n: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            dizi_ekle(p.pi_tip, param_tip(p, c));   // emit ile AYNI fonksiyon
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    dizi_ekle(p.pi_say, n);
+    ver 0;
+}
+// Üst-düzey ISLEV'leri tara (DISA/MODUL içine iner).
+işlev param_ir_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken u: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ua: metin = dizi_al(p.a_ad, u);
+        eğer metin_esit(ua, "DISA") veya metin_esit(ua, "MODUL") { param_ir_topla(p, u); }
+        eğer metin_esit(ua, "ISLEV") { param_ir_kaydet(p, u); }
+        i = i + 1;
+    }
+    ver 0;
+}
 // ---- D-391: ÜST-DÜZEY `sabit` TABLOSU ----
 // C llvm.c `sabit_kayit`/`sabit_bul` aynası: sabit BİR DEĞER DEĞİL, bir İFADE
 // ŞABLONUDUR — tanımlayıcı çözümünde değer ifadesi INLINE edilir (global
@@ -6089,6 +6165,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
+    param_ir_topla(p, kok);  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
     sabit_topla(p, kok);     // D-391: üst-düzey sabit tablosu (emit YOK, inline)
     kuresel_topla(p, kok);   // D-253: küresel değişken module-globalleri
     yb(10);
@@ -9699,7 +9776,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,

@@ -1,0 +1,38 @@
+// D-393: ÇAĞRI ARGÜMANI, PARAMETRENİN BİLDİRİLEN IR TİPİNE genişletilmeli.
+// Self-host argümanın DOĞAL tipini basıyordu → `f(a: dtam64, ..)` çağrısı
+// `call @f(i32 10, ..)` üretiyor, oysa `define` i64 bekliyor. LLVM bu
+// uyuşmazlığı SESSİZCE kabul eder (D-295'in dersi): ilk 3 argüman register'a
+// sığdığı için DOĞRU GÖRÜNÜR, 4.'den itibaren ÇÖP okunur.
+// Bu yüzden kapı EN AZ 4 parametre ister — 3 parametreli bir test yanlış
+// uygulamada da geçerdi (D-391'in "sığan sayı sınamaz" dersinin kardeşi).
+// `bignum_selfhost` (vektor_dogrula: ALTI dtam64 param) bu kökten `0` yerine
+// yığın adresi basıyordu.
+// NOT: tablo codegen'in KENDİ ön-geçişinden gelir (`param_ir_topla`);
+// checker'ın `fn_ptip` tablosu `--llvm` yolunda BOŞTUR (D-392'de ölçüldü).
+işlev tum_bir() -> dtam64 {
+    değişken s: dtam64 = 0;
+    ver s - 1;                       // 2^64-1 (mod-2^64 wrap)
+}
+
+// ALTI dtam64 parametre: 4/5/6 numaralı slotlar yanlış genişletmede çöp okur.
+işlev alti(a: dtam64, b: dtam64, c: dtam64, d: dtam64, e: dtam64, f: dtam64) -> dtam64 {
+    ver a + b + c + d + e + f;
+}
+
+// i32 literal → i64 parametre (genişletme immediate yolunda).
+işlev literal_yol() -> dtam64 {
+    ver alti(1, 2, 3, 4, 5, 6);      // 21
+}
+
+// i32'ye SIĞMAYAN değer: kırpılma olursa sonuç değişir (gözlenebilir).
+işlev genis_yol() -> dtam64 {
+    ver alti(8589934592, 0, 0, 0, 0, 0);   // 2^33
+}
+
+işlev main() -> tam32 {
+    eğer literal_yol() != 21 { ver 1; }
+    eğer genis_yol() != 8589934592 { ver 2; }
+    // wrap davranışı da korunmalı (dtam64 işaretsiz aritmetik)
+    eğer alti(tum_bir(), 1, 0, 0, 0, 0) != 0 { ver 3; }
+    ver 42;
+}
