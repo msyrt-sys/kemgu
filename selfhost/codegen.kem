@@ -4515,6 +4515,22 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
         değişken sval: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
         değişken sty: metin = p.son_tip;
+        değişken sref: metin = p.son_ref;   // D-390: referans ise işaret edilen çeşit adı
+        // D-390: `eşleş` skrutinisi `&Çeşit` ise OTOMATİK DEREFERENCE. Skrutini ptr
+        // yüklenmiş bir referans (sty="ptr") ve son_ref bir ÇEŞİT adı ise, tag
+        // extractvalue'dan ÖNCE çeşit değerini yükle. Bu kol olmadan `eşleş`
+        // ptr'yi ne skaler ne tagged ne yapı sanıp TÜM eşleşmeyi atlıyor →
+        // fallthrough `ver 0` (10_cesit_ast/11_yorumlayici: exit 42 yerine 0,
+        // SESSİZ YANLIŞ CEVAP). C llvm.c `load %Çeşit, ptr` aynası.
+        eğer metin_esit(sty, "ptr") ve (metin_esit(sref, "") == yanlış) {
+            eğer cesit_var_mi(p, sref) {
+                değişken cty: metin = cesit_struct_ir(p, sref);
+                değişken dr: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(dr); yaz_str(" = load "); yaz_str(cty);
+                yaz_str(", ptr "); yaz_str(sval); yb(10);
+                sval = dr; sty = cty;
+            }
+        }
         değişken skaler: mantıksal = metin_esit(sty, "i8") veya metin_esit(sty, "i16")
             veya metin_esit(sty, "i32") veya metin_esit(sty, "i64")
             veya metin_esit(sty, "float") veya metin_esit(sty, "double");
@@ -4929,7 +4945,10 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     }
     eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_BASIT") == yanlış { ver ""; }
     değişken nm: metin = dizi_al(p.a_deg, ic);
-    eğer yapi_var_mi(p, nm) { ver nm; }
+    // D-390: ÇEŞİT pointee de kaydedilmeli. Eskiden yalnız yapi_var_mi
+    // sorgulanıyordu → `&Çeşit` parametresi için son_ref "" dönüyor, `eşleş`
+    // auto-deref'i tetiklenmiyor ve tag-eşleştirme sessizce atlanıyordu.
+    eğer yapi_var_mi(p, nm) veya cesit_var_mi(p, nm) { ver nm; }
     ver "";
 }
 // D-267: PARAMETRE *tamN (skaler pointer) ise pointee LLVM tipi ("i8"/"i16"/"i64");

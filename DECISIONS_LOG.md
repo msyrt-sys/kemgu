@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-390 [YÜKSEK] — CODEGEN: `eşleş &Çeşit` auto-deref (C sınıfı — sessiz yanlış cevap) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (C sınıfı — EN AĞIR: derleniyor ama exit 42 yerine 0).** `eşleş`
+skrutinisi `&Çeşit` (çeşit REFERANSI) olduğunda self-host tag-eşleştirmeyi
+HİÇ emit etmiyor → tüm eşleşmeyi atlayıp fallthrough `ver 0`. Geçerli IR ama
+YANLIŞ MANTIK. `10_cesit_ast` + `11_yorumlayici` (özyinelemeli AST değerlendirici,
+`&Ifade`/`&Dugum` üzerinde eşleş) bu kökten 0 dönüyordu.
+
+**İzole edildi:** payload çeşit + eşleş binding DEĞER üzerinde ÇALIŞIYOR (probe);
+kök yalnız `&Çeşit` (referans) skrutinisi. C `load %Çeşit, ptr` ile auto-deref
+edip extractvalue yapıyor; self-host ptr'yi ne skaler ne tagged ne yapı sanıp
+atlıyordu.
+
+**İKİ KATMANLI kök (her ikisi de gerekti):**
+1. `param_ref_yapi` — `&Çeşit` parametresinin pointee ADINI kaydetmiyordu:
+   yalnız `yapi_var_mi` sorgulanıyordu, çeşit YAPI değil → `son_ref=""`.
+   `cesit_var_mi` eklendi.
+2. `eşleş` handler — `son_ref` çeşit adı olsa bile auto-deref YOKTU. `sty="ptr"`
+   + `son_ref`=çeşit → `load %Çeşit, ptr` deref + `sty`=inline tip; sonra mevcut
+   tagged yolu (extractvalue) çalışır.
+
+**Kapı boşluğu D-356/388/389'un aynısı:** `cg_korpus`'ta `eşleş` HEP DEĞER
+üzerindeydi, `&Çeşit` referansı üstünde HİÇ yoktu. Yeni korpus
+(`cg_esles_referans_cesit.kem` — özyinelemeli `&Dugum` ağaç toplama, →42) iki
+katmanı da kapılar.
+
+**Kapılar:** `codegen_diff` **116/116**, `checker_diff` 148/148 (0 muaf),
+sürücü 4 mod × 2 + FIXPOINT. **Sabotaj S112** (param_ref_yapi çeşit kaydı) +
+**S113** (eşleş auto-deref) — ikisi de ayrı ayrı kırmızı (42≠0), `grep` ile
+kanıtlandı. (Not: perl çok-satır deseni iki kez tutmadı; `grep -c` ile
+uygulanmayı DOĞRULADIM, sed ile satır-numarasından uyguladım.)
+
+**GENİŞ ÖLÇÜM: 48→50 OK, 19→17 FARK.** C sınıfı (sessiz yanlış cevap) TÜKENDİ.
+Kalan 17 — SIRADAKİ:
+- **A sınıfı (14):** `expected instruction opcode`/`value token` — bozuk IR
+  (metin/kripto/sort ağır); ortak eksik özellik.
+- **Dağınık (3):** `gorev_temel` (i64-but-ptr), `matris_carpim` (i32-but-float),
+  `bignum_selfhost` (ikisi de exit 0, stdout farkı).
+
+---
+
 ## D-389 [YÜKSEK] — CODEGEN: `dizi_olustur(N)` çağrı-formu (B sınıfı, 9 dosya) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
