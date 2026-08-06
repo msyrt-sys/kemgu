@@ -1938,12 +1938,33 @@ işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
         ver metin_birlestir("sonuç<", metin_birlestir(r1,
             metin_birlestir(", ", metin_birlestir(r2, ">"))));
     }
-    ver "?";   // diğer bileşikler (&/işlev/tekkez/...) — sonraki artımlar
+    // D-380: 3. artım — `&T` ve `&değişken T`. C İKİSİNİ AYIRIR (her iki yönde
+    // de T001 — ölçüldü), o yüzden değişebilirlik temsile GİRER.
+    // AST: `TIP_REFERANS` düğümünde a_deg == "degisken" ise değişken referans.
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_REFERANS") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken it: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer bilinen_tip_mi(it) == yanlış { ver "?"; }
+        eğer metin_esit(dizi_al(p.a_deg, idx), "degisken") {
+            ver metin_birlestir("&değişken ", it);
+        }
+        ver metin_birlestir("&", it);
+    }
+    // D-380: ham işaretçi `*T` — referansla AYNI şekil, ayrı önek (C ikisini
+    // ayırır: `*tam32` ↔ `&tam32` T001 verir; ölçüldü).
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_POINTER") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken pt2: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer bilinen_tip_mi(pt2) == yanlış { ver "?"; }
+        ver metin_birlestir("*", pt2);
+    }
+    ver "?";   // diğer bileşikler (işlev/tekkez/...) — sonraki artımlar
 }
 // Karşılaştırılabilir (tam bilinen) tip mi? Skaler ∪ bilinen bileşikler.
 işlev bilinen_tip_mi(t: metin) -> mantıksal {
     ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<")
-      veya metin_baslar(t, "seçimlik<") veya metin_baslar(t, "sonuç<");   // D-378
+      veya metin_baslar(t, "seçimlik<") veya metin_baslar(t, "sonuç<")   // D-378
+      veya metin_baslar(t, "&") veya metin_baslar(t, "*");   // D-380: `&T` / `&değişken T` / `*T`
 }
 // `Dizi<E>` → `E` (değilse "?"). `metin_kes(s, başlangıç, UZUNLUK)` — ölçüldü.
 işlev dizi_ic_tip(t: metin) -> metin {
@@ -2336,6 +2357,26 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             değişken t: metin = ifade_tip(p, operand, beklenen);
             eğer bilinen_sayisal_degil(t) { ver "?"; }
             ver t;
+        }
+        // D-380: `&x` / `&değişken x` → referans tipi; `*r` → hedef tipi.
+        eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {
+            değişken bt: metin = ifade_tip(p, operand, "?");
+            eğer bilinen_tip_mi(bt) == yanlış { ver "?"; }
+            eğer metin_esit(op, "&degisken") { ver metin_birlestir("&değişken ", bt); }
+            ver metin_birlestir("&", bt);
+        }
+        eğer metin_esit(op, "deref*") {   // AST op adı "deref*" (ölçüldü)
+            değişken rt: metin = ifade_tip(p, operand, "?");
+            // UYARI: `metin_kes`/`metin_uzunluk` BAYT tabanlıdır ve "&değişken "
+            // öneki 12 BAYTTIR (ğ ve ş ikişer bayt) — sabit 10 yazmak `*m`yi
+            // bozup sahte T003 üretiyordu (ölçüldü). Uzunluğu HESAPLAT.
+            değişken mo: metin = "&değişken ";
+            eğer metin_baslar(rt, mo) {
+                ver metin_kes(rt, metin_uzunluk(mo), metin_uzunluk(rt) - metin_uzunluk(mo));
+            }
+            eğer metin_baslar(rt, "&") { ver metin_kes(rt, 1, metin_uzunluk(rt) - 1); }
+            eğer metin_baslar(rt, "*") { ver metin_kes(rt, 1, metin_uzunluk(rt) - 1); }
+            ver "?";
         }
         eğer metin_esit(op, "~") {   // bit değil: tamsayı → operand tipi; aksi "?" (T028)
             değişken t: metin = ifade_tip(p, operand, beklenen);

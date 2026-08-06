@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-380 [YÜKSEK] — Bileşik tip 4. artım: `&T`, `&değişken T`, `*T` (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**DEĞİŞEBİLİRLİK temsile girer.** Ölçüldü: `&T` ↔ `&değişken T` **her iki yönde
+de** T001 verir → `&tam32` ve `&değişken tam32` AYRI temsillerdir. `&T` ↔ `*T`
+de ayrıdır. Ham işaretçi aynı şekilde eklendi (ayrı önek `*`).
+
+**Açtığı tanılar (8/8 probe):** referans vs skaler · hedef-tip farkı ·
+değişebilirlik farkı (iki yön) · `*r` dereferans tipi (D-305'in güvenli deref'i
+buradan tip kazandı) · ham işaretçi iç tip + deref.
+
+**⚠ UTF-8 BAYT TUZAĞI — gerçek yanlış-pozitif üretti.** `*m` (m: `&değişken
+tam32`) için öneki soyarken **sabit 10** yazmıştım; `"&değişken "` UTF-8'de
+**12 BAYTTIR** (`ğ` ve `ş` ikişer bayt) ve `metin_kes`/`metin_uzunluk` BAYT
+tabanlıdır. Sonuç: tip bozuluyor, `*r + *m` sahte T003 alıyordu. Uzunluk artık
+`metin_uzunluk(mo)` ile HESAPLANIYOR. Sabotaj S95 bunu kalıcı kapıya bağladı.
+**DERS:** Türkçe dizgilerde sabit offset YAZMA — CLAUDE.md'nin hex-escape
+uyarısının çalışma-zamanı karşılığı budur.
+
+**Süreç notu:** `awk` ile blok taşıma codegen.kem'i bozdu (22 parser hatası);
+`git checkout` + `Edit` ile temiz portlandı. Çok satırlı blokları betikle
+taşımak kırılgan — dengeli parantez garantisi yok.
+
+**Bilinen sınır:** `&x olarak *tam32` sonucu — `olarak` (TIP_DONUSTUR) ifadesinin
+TİPİ hâlâ modellenmiyor → C T001 verirken self susar (EKSİK tanı, yanlış değil).
+
+**Kapılar:** `checker_diff` **142/142** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 110/110, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S94 (`TIP_REFERANS` temsili), S95 (bayt-uzunluğu yerine sabit 10)
+— ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `işlev(..)->T` · `tekkez<T>` · `çeşit` payload · `olarak`
+ifadesinin tipi.
+
+---
+
 ## D-379 — Bileşik tip 3. artım: yapı alanları + ifade skrutinisi (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
