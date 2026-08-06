@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-389 [YÜKSEK] — CODEGEN: `dizi_olustur(N)` çağrı-formu (B sınıfı, 9 dosya) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (B sınıfı — "i32 but expected ptr", 9 gerçek dosya).** Self-host
+`dizi_olustur(N)` **fonksiyon-çağrısı** formunu özel-durumsuz bırakıyordu →
+genel builtin yoluna düşüp `call i32 @dizi_olustur(...)` üretiyordu: yanlış ad
+(`@dizi_olustur` ≠ `@kdl_dizi_olustur`), yanlış dönüş (i32 ≠ ptr), ve eksik
+`kdl_dizi_kapasite_ayarla` takip çağrısı. Literal `[..]` yolu ZATEN doğruydu;
+kusur yalnız çağrı-formundaydı ve `dizi_ekle`/`dizi_al`/`dizi_boyut`'un aksine
+özel-durumu yoktu.
+
+**Basit ad eşlemesi DEĞİL — iki-adımlı dönüşüm.** C `dizi_olustur(N)`'yi:
+  `%r = call ptr @kdl_dizi_olustur(ρ, ELEMAN_BYTE)`   [kapasite DEĞİL]
+  `call void @kdl_dizi_kapasite_ayarla(ρ, %r, N)`      [kullanıcının N'i]
+Eleman-byte `p.beklenen_elem` (annotasyon `Dizi<T>` bağlamı) üzerinden.
+
+**⚠ D-030 GÜVENLİK KURALI KORUNDU.** `dizi_eleman_byte("")` "4" döndürür ama
+BİLİNMEYEN eleman için C **8** kullanır (güvenli üst sınır). 4 yazmak ptr/i64
+dizisini yarı-rezerve edip `dizi_ekle_ptr`de HEAP-OVERFLOW ediyordu (D-030).
+Boş durumu ELLE 8'e sabitlendi; bilinen skaler → `dizi_eleman_byte` (4 veya 8).
+`Dizi<tam32>`→4, `Dizi<metin>`→8 ölçüldü.
+
+**TEK düzeltme 9 dosyayı birden açtı:** 13_token_akisi, 14_oncelikli_ayristirici,
+15_agac_insa, 16_degiskenli_dil, 17_kontrol_dili, 18_fonksiyon_dili,
+diag_heap_yaz_linkli, kem_dizi_kernel, kernel_dizi — hepsi C ile birebir exit.
+
+**Kapı boşluğu, D-388/D-356'nın aynısı:** `codegen_diff` yeşildi çünkü
+`cg_korpus`'ta `dizi_olustur(N)` çağrı-formu HİÇ yoktu. Yeni korpus dosyası üç
+katmanı kapılar: doğru ad+dönüş, kapasite_ayarla, eleman-byte seçimi (4 vs 8).
+
+**Kapılar:** `codegen_diff` **115/115**, `checker_diff` 148/148 (0 muaf).
+**Sabotaj S111** (case devre dışı) → yeni korpus kırmızı, `grep` ile kanıtlandı.
+
+**GENİŞ ÖLÇÜM İLERLEMESİ (test/ornekler + stdlib/temel): 38→48 OK, 29→19 FARK.**
+Kalan 19 sapma üç sınıfta — SIRADAKİ İŞ:
+- **C sınıfı (2, EN AĞIR):** `10_cesit_ast` + `11_yorumlayici` derleniyor ama
+  **exit 42 yerine 0** (sessiz yanlış cevap). Payload çeşit + eşleş destructure.
+- **A sınıfı (14):** `expected instruction opcode`/`value token` — bozuk IR,
+  ortak bir eksik özellik (metin/kripto/sort ağır).
+- **Dağınık (3):** `gorev_temel` (i64-but-ptr), `matris_carpim` (i32-but-float),
+  `bignum_selfhost` (ikisi de exit 0 ama stdout farkı).
+
+---
+
 ## D-388 [YÜKSEK] — CODEGEN: öneğe uymayan yerleşiklerin IR eşlemesi (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).

@@ -3672,6 +3672,31 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             ver i64_daralt(p, "kdl_gorev_birlestir", gbg, gbt);
         }
         // CG8: dizi_* element-tip polimorfik built-in'leri (özel — arg sırasına bağlı).
+        // D-389: `dizi_olustur(N)` FONKSİYON-ÇAĞRISI formu. Literal `[..]` yolu
+        // (parse_dizi_olustur) zaten doğruydu; ama çağrı-formu özel-durumsuz
+        // olduğundan genel builtin yoluna düşüp `call i32 @dizi_olustur` (yanlış
+        // ad + yanlış dönüş + eksik kapasite_ayarla) üretiyordu → clang "i32 but
+        // expected ptr" (B sınıfı, 9 dosya). C llvm.c'nin çağrı-formu aynası:
+        //   %r = call ptr @kdl_dizi_olustur(ρ, eleman_byte)   [kapasite DEĞİL]
+        //   call void @kdl_dizi_kapasite_ayarla(ρ, %r, N)      [kullanıcının N'i]
+        // eleman_byte: C güvenlik kuralı (D-030) — BİLİNMEYEN eleman = 8 (güvenli
+        // üst sınır; 4 yazmak ptr/i64 dizisini yarı-rezerve edip HEAP-OVERFLOW
+        // ediyordu). dizi_eleman_byte("") "4" döndürdüğü için boş durumu ELLE 8.
+        eğer metin_esit(fad, "dizi_olustur") {
+            değişken doelem: metin = p.beklenen_elem;
+            değişken doeb: metin = "8";
+            eğer metin_esit(doelem, "") == yanlış { doeb = dizi_eleman_byte(doelem); }
+            değişken dokap: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken dor: tam32 = yeni_reg(p);
+            değişken dors: metin = reg_str(dor);
+            yaz_str("  "); yaz_str(dors); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");
+            yaz_str(p.rho_ref); yaz_str(", i32 "); yaz_str(doeb); yaz_str(")"); yb(10);
+            yaz_str("  call void @kdl_dizi_kapasite_ayarla(ptr ");
+            yaz_str(p.rho_ref); yaz_str(", ptr "); yaz_str(dors);
+            yaz_str(", i32 "); yaz_str(dokap); yaz_str(")"); yb(10);
+            p.son_tip = "ptr"; p.son_elem = doelem; p.son_ref = "";
+            ver dors;
+        }
         eğer metin_esit(fad, "dizi_boyut") {
             değişken d: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken r: tam32 = yeni_reg(p);
