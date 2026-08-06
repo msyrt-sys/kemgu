@@ -965,6 +965,34 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   TASARIM kararıdır, **Mehmet'e sorulmadan sabitlenmeyecek**.
 - **`görev<T>` LİNEERDİR** (`kanal<T>` değil) — D-384.
 
+### 🎯 SELF-HOST CODEGEN PARİTESİ TAMAMLANDI (D-388..D-394, 2026-08-06)
+Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` yalnız
+`cg_korpus` üzerinde koşuyordu; `test/ornekler` + `stdlib/temel`e karşı ölçünce
+**31 sapma** çıktı. Yedi partide kapatıldı:
+- **GERÇEK SAPMA SIFIR** (OK=65). Kalan 2 "fark" `kem_mmio_ham` + `kem_pointer`:
+  bare-metal keşif dosyaları, host'ta eşlenmemiş MMIO adresi okuyorlar →
+  **C DE segfault ediyor**, self-host BİREBİR aynı → parite doğru, kusur değil.
+  (`03_kontrol.kem` exit 151 de ÇÖKME DEĞİL: kaynağın kendisi `120+30+1=151`
+  yazıyor — "exit>128 = çökme" testi yanıltıcıdır.)
+- **`codegen_diff` 113 → 119** (0 muaf).
+- Kapatılan kökler: yerleşik IR ad eşlemesi (`yazdir`/`bellek_al`/`otp_*`) ·
+  `dizi_olustur(N)` çağrı-formu · `eşleş &Çeşit` auto-deref · üst-düzey `sabit`
+  referansı · çağrı argümanının param IR tipine genişletilmesi · **KARAKTER
+  literali** (hepsi `'A'`→0 idi).
+- **Bu köklerin ÜÇÜ sessiz yanlış cevap üretiyordu** (geçerli IR, çalışan
+  program, yanlış değer) — derleme hatasından ağır sınıf.
+
+**TEKRARLAYAN DERS — kapı, YANLIŞ uygulamanın GÖZLENEBİLİR olduğu şekli ister:**
+sabotaj üç kez SESSİZ kaldı ve her seferinde korpus düzeltildi, kural değil:
+(a) `sonuç<sonuç<..>,..>` yetmedi çünkü yanlış ayrıştırma da uyumsuz tip üretip
+AYNI tanıyı veriyordu → doğru davranışın SESSİZ olduğu şekil gerekti (D-385);
+(b) sabit değeri i32'ye SIĞIYORDU → 2^33 gerekti (D-391); (c) 3 parametreli
+çağrı yetmedi çünkü ilk 3 argüman register'a sığıyor → EN AZ 4 gerekti (D-393).
+
+**ÖLÇÜM ARACI DA YANLIŞ OLABİLİR:** D-391'de "ham işaretçi deref bozuk" sanıp
+`&x olarak *tam32` probe'u yazdım — C onu T001 ile REDDEDİYOR, yani probe
+geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
+
 **KAPI SEÇİMİ (bu seride iki kez ısırdı):** `checker_diff` yeşilken
 `calistir_parser_diff` KIRMIZI kalabilir — üç ayrı uygulama var
 (`selfhost/parser.kem` referans parser, `selfhost/checker.kem` referans checker,
