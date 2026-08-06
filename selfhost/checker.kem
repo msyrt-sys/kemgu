@@ -115,6 +115,7 @@ yapı Ayr {
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     guv_bag: tam32;          // `güvensiz` blok derinliği (C tk->guvensiz_baglam aynası)
+    tuk_kapali: tam32;       // D-375: >0 iken lineer tüketim bastırılır (arg ön-geçişi)
     yer_son: tam32;          // D-374: fn tablosunda YERLEŞİK girişlerin bitiş indeksi
                              // (tohumlama en başta → yerleşikler [0, yer_son) aralığı)
     cip_bag: tam32;          // D-360: `çıplak` gövde derinliği (C ciplak_baglam) — E013.
@@ -1799,7 +1800,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -3839,6 +3840,10 @@ işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
 }
 // Bir düğüm lineer bağlamaysa tüket; zaten tüketilmişse L002 (düğüm konumu).
 işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
+    // D-375: ÖN-GEÇİŞ sırasında tüketim YAPILMAZ. C argüman alt-ağacını İKİ KEZ
+    // tip-belirler (tanılar ikilenir) ama lineer tüketimi İKİLEMEZ (ölçüldü:
+    // `al(tuket(t))` → C `OK`). Bastırma olmadan ön-geçiş sahte L002 üretirdi.
+    eğer p.tuk_kapali > 0 { ver 0; }
     eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver 0; }
     değişken idx: tam32 = lin_idx(p, dizi_al(p.a_deg, node));
     eğer idx < 0 { ver 0; }
@@ -4231,6 +4236,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                      ve (yerlesik_imza_mi(p, fad) == yanlış) {   // D-374 muafiyeti
                     sekil_hata(p, idx, "E013");
                 }
+                // D-375: C argüman alt-ağacını İKİ KEZ tip-belirler → traversal
+                // kaynaklı TÜM tanılar (T002/T005-T008/T010/G001/E002…) İKİLENİR.
+                // Sıra ölçüldü: ÖNCE tüm argümanlar üzerinden bir geçiş, SONRA
+                // ikinci geçiş + per-arg T001 (`al(s, yok())` → T002;T001;T002).
+                // Ön-geçişte tüketim KAPALI: C lineeri ikilemiyor (`al(tuket(t))` → OK).
+                p.tuk_kapali = p.tuk_kapali + 1;
+                değişken pa2: tam32 = 1;
+                iken pa2 < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + pa2)); pa2 = pa2 + 1; }
+                p.tuk_kapali = p.tuk_kapali - 1;
                 // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
                 değişken a: tam32 = 1;
                 iken a < hc {

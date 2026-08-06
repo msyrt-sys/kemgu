@@ -1,0 +1,26 @@
+// D-375: C, bilinen bir işlevin ARGÜMAN alt-ağacını İKİ KEZ tip-belirler →
+// traversal kaynaklı TÜM tanılar İKİLENİR (T002/T007/E002/T010/G001…).
+// Self-host tek geçiş yapıyordu → aynı KÜME, farklı ÇOKLUK (kem_os.kem'de
+// 11 konumda ölçüldü). Sıra: ÖNCE tüm argümanlar üzerinden bir geçiş, SONRA
+// ikinci geçiş + per-arg T001.
+// KRİTİK: per-arg T001 ve LİNEER TÜKETİM ikilenmez — ön-geçişte tüketim kapalı
+// (C `al(tuket(t))` için `OK` der; bastırma olmadan sahte L002 çıkardı).
+işlev al(x: tam32) -> tam32 { ver 0; }
+işlev iki(x: tam32, y: tam32) -> tam32 { ver 0; }
+işlev tuket(t: tekkez<tam32>) -> tam32 { imha(t); ver 0; }
+
+işlev tanimsiz_ikili() -> tam32 {
+    ver al(yok());                      // T002 ×2
+}
+işlev iki_arg_serpistirme() -> tam32 {
+    ver iki(yok(), yok2());             // T002(a);T002(b);T002(a);T002(b) — arg başına DEĞİL
+}
+işlev t001_ikilenmez() -> tam32 {
+    değişken s: metin = "a";
+    ver iki(s, yok());                  // T002; T001; T002 — T001 tek
+}
+işlev lineer_ikilenmez() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1);
+    ver al(tuket(t));                   // TEMİZ: tüketim ikilenmemeli
+}
+işlev main() -> tam32 { ver 0; }

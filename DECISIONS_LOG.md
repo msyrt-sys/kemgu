@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-375 [YÜKSEK] — Argüman alt-ağacı İKİ KEZ denetlenir; geniş ölçüm 131/131 (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur — küme değil ÇOKLUK.** `kem_os.kem`'de C 11 konumda tanıyı **İKİ KEZ**
+basıyordu, self-host bir kez. Aynı küme, farklı çokluk.
+
+**Yanlış hipotez ölçümle düzeltildi (iki kez).** Önce "tanımsız `dtb`, kapsam
+sorunu" sandım — sütun 59 `dtb` değil **`kdtb_toplam_boyut`** çıktı. Sonra
+"`olarak` iki kez denetliyor" sandım — `olarak`sız da ikileniyordu. Gerçek:
+**bilinen bir işlevin ARGÜMAN alt-ağacı iki kez tip-belirlenir.**
+
+**Yapı ölçüldü, tahmin edilmedi.** `iki(yok(), yok2())` → `a,b,a,b` (arg başına
+DEĞİL, iki TAM geçiş). `iki(s, yok())` → `T002; T001; T002` → 1. geçiş yalnız
+gezinti, 2. geçiş gezinti + per-arg T001. İkilenenler traversal kaynaklı her şey
+(T002/T007/T010/G001/E002); **per-arg T001 ikilenmez.**
+
+**Kritik ayrıntı — durum değiştiren yollar ikilenmez.** `al(tuket(t))` C'de `OK`:
+lineer tüketim İKİLENMİYOR. Naif "iki kez gez" sahte `L002` üretirdi (gerçek bir
+yanlış-pozitif). `tuk_kapali` sayacıyla ön-geçişte tüketim bastırıldı; ön-geçiş
+mevcut geçişin ÖNÜNE eklendiği için eski davranışın tamamı korundu.
+
+**DERS:** çokluk farkı "kozmetik" görünür ama kökü yapısaldır — buradaki kök,
+C'nin argümanları iki kez tip-belirlemesiydi. Ve çokluk paritesini kurarken
+**hangi etkilerin idempotent olması gerektiğini ölçmek şart**: tanı raporlama
+ikilenebilir, lineer tüketim ikilenemez.
+
+**Kapılar:** `checker_diff` **137/137** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 105/105, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim linear 89 / capability 40. **Sabotaj:** S83 (ön-geçiş kapatıldı),
+S84 (tüketim bastırması kaldırıldı) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**🎯 GENİŞ ÖLÇÜM 131/131 — TAM PARİTE.** `stdlib` + `stdlib/temel` +
+`test/ornekler` + `kütüphane` + `test/moduller` yüzeyinde C oracle ile self-host
+checker arasında **sıfır fark**: ne yanlış-pozitif ne eksik tanı. `kem_os.kem`
+dâhil. Kalan tek resmî tanı kodu: **T014** (boş dizi bağlamı) — korpus dışı
+şekillerde ortaya çıkabilir.
+
+---
+
 ## D-374 [YÜKSEK] — Yerleşik imza tablosu: T010 + T001 yerleşik çağrılarda açıldı (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
