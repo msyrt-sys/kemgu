@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-374 [YÜKSEK] — Yerleşik imza tablosu: T010 + T001 yerleşik çağrılarda açıldı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host'ta yerleşiklerin (built-in) yalnız **ADI** vardı, imzası yoktu
+→ `fn_psay_bul` -1 dönüyor, arite ve argüman-tipi denetimi HİÇ çalışmıyordu.
+Ölçüldü: `yazdir_tam("metin")` → C `T001`, self `OK`; `yazdir_tam()` → C `T010`,
+self `OK`. Beş şeklin beşi de sessizdi.
+
+**Çözüm — yeni makine YOK.** Mevcut `fn_ad`/`fn_psay`/`fn_ptip`/`fn_donus` tablosu
+(T010 + per-arg T001 makinesi) 47 yerleşik imzayla **tohumlandı**; tanı yolları
+olduğu gibi çalıştı. İmzalar `src/tip_kontrol.c`'den **programatik çıkarıldı**
+(`awk`), elle kopyalanmadı — 47 girişte elle transkripsiyon sessiz hata kaynağı.
+
+**Kapı bir YANLIŞ-POZİTİF yakaladı (bu partinin en değerli anı).** Yerleşikler
+tabloya girince `E013` (çıplak gövdeden ρ-alan işlev çağırma) onları "normal
+kullanıcı işlevi" saymaya başladı → `çıplak işlev f() { ver metin_uzunluk(s); }`
+sahte E013 aldı. **Ayrım eskiden KENDİLİĞİNDEN oluyordu** ("tabloda yok" =
+"yerleşik"); tabloya girince AÇIKÇA yapılmalıydı. `yer_son` eşiğiyle çözüldü
+(tohumlama en başta → yerleşikler `[0, yer_son)` aralığı; yeni paralel dizi yok).
+**DERS:** bir tabloyu genişletmek, o tablonun YOKLUĞUNU sinyal olarak kullanan
+her yeri bozar — `fn_psay_bul(...) < 0` gibi "bulunamadı" testlerini `grep`le.
+
+**Yol üstünde ölçülen ironi:** tohumlayıcıyı yazarken `yerlesik_ekle(p, "arg_sayi",
+"tam32", [])` **T014** verdi (boş dizi bağlamı) — tam da henüz portlamadığım kod.
+Tipli bir `değişken bos: Dizi<metin> = []` ile çözüldü.
+
+**Kapılar:** `checker_diff` **136/136** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 104/104, **LLVM 113/113 ×2** — codegen regresyonu yok) + FIXPOINT,
+`check_kapisi` 210/217 (0 RED), C birim tip_kontrol 202. **Sabotaj:** S81
+(imza tablosu kurulmadı → tc25_01 kırmızı), S82 (E013 muafiyeti kaldırıldı →
+tc16_01 + tc25_01 kırmızı). İkisi de `grep` ile kanıtlandı, geri alındı.
+
+**Geniş ölçüm 130/131** (alan `test/moduller/` ile büyütüldü). `kem_asm_kernel.kem`
+KAPANDI. **Tek kalan sapma:** `kem_os.kem` `T002` kuyruğu (tanımsız ad `dtb` —
+kapsam çözümü). Yanlış-pozitif YOK.
+
+---
+
 ## D-373 — AS001 (satıriçi_asm mimari kapısı) self-host'a portlandı (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

@@ -1,0 +1,38 @@
+// D-374: YERLEŞİK (built-in) İMZA TABLOSU — T010 (arite) + T001 (arg/dönüş tipi).
+// Self-host'ta yerleşiklerin yalnız ADI vardı, imzası yoktu → `yazdir_tam("a")`
+// ve `yazdir_tam()` SESSİZCE geçiyordu (ölçüldü: C T001/T010, self OK).
+// Bu dosya dört yönü kapılar: arg tipi, arite (az/çok), dönüş tipi, ve
+// yerleşiklerin E013'ten MUAF kalması (ρ almazlar → `çıplak` gövdeden çağrılır).
+işlev arg_tipi() -> tam32 {
+    değişken s: metin = "a";
+    yazdir_tam(s);                          // T001: metin ≠ tam32
+    ver 0;
+}
+işlev arite_az() -> tam32 {
+    yazdir_tam();                           // T010
+    ver 0;
+}
+işlev arite_cok() -> tam32 {
+    yazdir_tam(1, 2);                       // T010
+    ver 0;
+}
+işlev donus_tipi() -> tam32 {
+    değişken s: metin = metin_uzunluk("abc");   // T001: tam32 ≠ metin
+    ver 0;
+}
+işlev daraltma() -> tam32 {
+    değişken x: tam64 = 5;
+    yazdir_tam(x);                          // T001: tam64 ≠ tam32
+    ver 0;
+}
+// TEMİZ yollar — biri kayarsa yanlış-pozitif olarak kırmızıya döner.
+işlev temiz() -> tam32 {
+    yazdir_metin("ok");
+    yazdir_tam(1);
+    yazdir_satir();                         // 0-arite yerleşik
+    ver arg_sayi();
+}
+çıplak işlev ciplak_yerlesik(s: metin) -> tam32 {
+    ver metin_uzunluk(s);                   // yerleşik ρ almaz → E013 YOK
+}
+işlev main() -> tam32 { ver 0; }

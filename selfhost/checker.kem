@@ -115,6 +115,8 @@ yapı Ayr {
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     guv_bag: tam32;          // `güvensiz` blok derinliği (C tk->guvensiz_baglam aynası)
+    yer_son: tam32;          // D-374: fn tablosunda YERLEŞİK girişlerin bitiş indeksi
+                             // (tohumlama en başta → yerleşikler [0, yer_son) aralığı)
     cip_bag: tam32;          // D-360: `çıplak` gövde derinliği (C ciplak_baglam) — E013.
                              // guv_bag'den AYRI: `güvensiz` blok çıplak yapmaz.
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
@@ -1797,7 +1799,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -1970,6 +1972,90 @@ işlev param_tip_str(p: &değişken Ayr, param_idx: tam32) -> metin {
     değişken tc: tam32 = son_cocuk(p, param_idx);
     eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") { ver tip_str(p, tc); }
     ver "?";
+}
+// ---- D-374: YERLEŞİK (built-in) İMZA TABLOSU ----
+// C `tip_kontrol.c` yerleşikleri sembol tablosuna gerçek imzayla ekler; self-host'ta
+// yalnız ADLARI vardı → `yazdir_tam("metin")` ve `yazdir_tam()` SESSİZCE geçiyordu
+// (ölçüldü: C T001 / T010, self OK). İmzalar C kaynağından programatik çıkarıldı,
+// elle kopyalanmadı. Mevcut T010/T001 makinesi bu tabloyu olduğu gibi kullanır.
+// SINIR: yalnız skaler/metin imzalı yerleşikler; `Dizi<T>`/generic alanlar "?"
+// olurdu ve zaten denetlenmez → listeye ALINMADI (sessizlik, yanlış tanı değil).
+işlev yerlesik_ekle(p: &değişken Ayr, ad: metin, dt: metin, pt: Dizi<metin>) -> tam32 {
+    dizi_ekle(p.fn_ad, ad);
+    dizi_ekle(p.fn_donus, dt);
+    dizi_ekle(p.fn_psay, dizi_boyut(pt));
+    dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(pt) {
+        dizi_ekle(p.fn_ptip, dizi_al(pt, i));
+        dizi_ekle(p.fn_plin, 0);    // yerleşiklerde lineer parametre YOK
+        dizi_ekle(p.fn_pdizi, 0);   // ve dizi parametresi de YOK (liste dışı)
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
+    değişken bos: Dizi<metin> = [];   // `[]` doğrudan argüman olarak T014 verir (bağlam yok)
+    yerlesik_ekle(p, "yazdir", "tam32", ["metin"]);
+    yerlesik_ekle(p, "bellek_al", "metin", ["tam64"]);
+    yerlesik_ekle(p, "bellek_serbest", "boş", ["metin"]);
+    yerlesik_ekle(p, "bellek_kopyala", "metin", ["metin", "metin", "tam64"]);
+    yerlesik_ekle(p, "metin_uzunluk", "tam32", ["metin"]);
+    yerlesik_ekle(p, "metin_bayt", "tam8", ["metin", "tam32"]);
+    yerlesik_ekle(p, "metin_esit", "mantıksal", ["metin", "metin"]);
+    yerlesik_ekle(p, "metin_birlestir", "metin", ["metin", "metin"]);
+    yerlesik_ekle(p, "metin_kes", "metin", ["metin", "tam32", "tam32"]);
+    yerlesik_ekle(p, "metin_kucuk", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_buyuk", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_kucuk_tr", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_buyuk_tr", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_kucuk_ascii", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_buyuk_ascii", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_icerir", "mantıksal", ["metin", "metin"]);
+    yerlesik_ekle(p, "metin_baslar", "mantıksal", ["metin", "metin"]);
+    yerlesik_ekle(p, "metin_biter", "mantıksal", ["metin", "metin"]);
+    yerlesik_ekle(p, "metin_kirp", "metin", ["metin"]);
+    yerlesik_ekle(p, "metin_yer_degistir", "metin", ["metin", "metin", "metin"]);
+    yerlesik_ekle(p, "yazdir_tam", "boş", ["tam32"]);
+    yerlesik_ekle(p, "yazdir_tam64", "boş", ["tam64"]);
+    yerlesik_ekle(p, "yazdir_satir", "boş", bos);
+    yerlesik_ekle(p, "yaz_tam", "boş", ["tam32"]);
+    yerlesik_ekle(p, "yaz_tam64", "boş", ["tam64"]);
+    yerlesik_ekle(p, "yaz_bayt", "boş", ["tam32"]);
+    yerlesik_ekle(p, "ondalik_bicimle", "metin", ["metin"]);
+    yerlesik_ekle(p, "yazdir_metin", "boş", ["metin"]);
+    yerlesik_ekle(p, "yazdir_isaretsiz_tam", "boş", ["dtam32"]);
+    yerlesik_ekle(p, "yazdir_isaretsiz_tam64", "boş", ["dtam64"]);
+    yerlesik_ekle(p, "yazdir_onaltilik", "boş", ["dtam64"]);
+    yerlesik_ekle(p, "yaz_onaltilik", "boş", ["dtam64"]);
+    yerlesik_ekle(p, "yazdir_karakter", "boş", ["karakter"]);
+    yerlesik_ekle(p, "yaz_karakter", "boş", ["karakter"]);
+    yerlesik_ekle(p, "oku_karakter", "karakter", bos);
+    yerlesik_ekle(p, "dosya_ac", "metin", ["metin", "metin"]);
+    yerlesik_ekle(p, "dosya_oku", "metin", ["metin"]);
+    yerlesik_ekle(p, "dosya_yaz", "tam32", ["metin", "metin"]);
+    yerlesik_ekle(p, "dosya_kapat", "boş", ["metin"]);
+    yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
+    yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
+    yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);
+    yerlesik_ekle(p, "dosya_boyut", "tam64", ["metin"]);
+    yerlesik_ekle(p, "arg_sayi", "tam32", bos);
+    yerlesik_ekle(p, "arg_al", "metin", ["tam32"]);
+    yerlesik_ekle(p, "otp_anahtar_uret", "tam32", ["metin", "tam32"]);
+    yerlesik_ekle(p, "otp_xor_uygula", "tam32", ["metin", "metin", "metin"]);
+    p.yer_son = dizi_boyut(p.fn_ad);   // bundan sonrası KULLANICI işlevi
+    ver 0;
+}
+// Ad bir YERLEŞİK mi? (E013 muafiyeti: yerleşikler ρ almaz → çıplak gövdeden
+// çağrılabilir. D-374'ten önce yerleşikler fn tablosunda YOKTU ve bu ayrım
+// kendiliğinden oluyordu; tabloya girince AÇIKÇA yapılmalı — kapı yakaladı.)
+işlev yerlesik_imza_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < p.yer_son {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
 }
 // İşlev imzasını tabloya kaydet (CAGRI dönüş + T010 + per-arg T001). Dönüş/param
 // yalnız bilinen skaler ise saklanır; aksi (yapı/generic/bileşik) "?" → atlanır.
@@ -4141,7 +4227,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 // D-360 E013: çıplak gövdeden normal (ρ-alan) kullanıcı işlevi
                 // çağrılamaz. C sırası: T010'dan SONRA; hata AKIŞI KESMEZ (arg
                 // kontrolü devam eder). Built-in/extern ρ almaz → muaf.
-                eğer (p.cip_bag > 0) ve (fn_ciplak_mi(p, fad) == yanlış) {
+                eğer (p.cip_bag > 0) ve (fn_ciplak_mi(p, fad) == yanlış)
+                     ve (yerlesik_imza_mi(p, fad) == yanlış) {   // D-374 muafiyeti
                     sekil_hata(p, idx, "E013");
                 }
                 // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
@@ -4810,6 +4897,7 @@ işlev secili_belirsiz_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 }
 işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     builtin_ekle(p);
+    yerlesik_imzalari_kur(p);     // D-374: yerleşik İMZALARI (T010 arite + T001 arg tipi)
     kullan_yukle_hepsi(p, kok);   // TC8a: cross-file dışa semboller (T002'den ÖNCE)
     modul_bildirim_topla(p, kok); // D-362: dosya içi `modül m` adları (T016)
     genel_topla(p, kok);
