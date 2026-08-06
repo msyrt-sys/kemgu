@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-388 [YÜKSEK] — CODEGEN: öneğe uymayan yerleşiklerin IR eşlemesi (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**YENİ EKSEN — ve ilk ölçüm ağır bir kusur buldu.** Checker paritesi doygunlaşınca
+(D-387) ölçümü CODEGEN'e çevirdim: `codegen_diff` kapısı yalnız `test/cg_korpus`
+(113 dosya) üzerinde koşuyor. `test/ornekler` + `stdlib/temel`e karşı ölçünce
+**31 sapma** çıktı.
+
+**Kök neden (bu partide kapatılan):** `builtin_kdl_ad` ÖNEK-tabanlıydı
+(`metin_`/`dosya_`/`yaz_`/`yazdir_`/`arg_`). Hiçbir öneğe uymayan `yazdir`,
+`bellek_al`, `bellek_serbest` ve `otp_*` için self-host `@yazdir` gibi
+**TANIMSIZ semboller** çağırıyordu → clang IR'ı REDDEDİYORDU.
+**`test/ornekler/hello.kem` BİLE derlenmiyordu** — 4 satırlık program.
+
+**Ad eşlemesi TEK BAŞINA yetmedi — üç ayrı katman gerekti:**
+1. **Ad:** `yazdir`→`puts`, `bellek_al`→`malloc`, `bellek_serbest`→`free`,
+   `otp_*`→`kdl_otp_*` (hepsi C `--llvm` çıktısından ÖLÇÜLDÜ, tahmin değil).
+2. **`declare`:** OTP sembolleri bildirilmiyordu → ad doğru olsa da "undefined value".
+3. **Dönüş tipi:** `builtin_ret` bu adları bilmediği için `void` varsayıyor,
+   `call void @malloc(...)` üretip DEĞERİ kaybediyor, ardından `store ptr 0`
+   gibi çöp IR çıkıyordu.
+
+**Parite için C'nin DAVRANIŞI taklit edildi, "doğrusu" değil:** C `free`yi
+`call i32 @free` olarak emit eder ama `declare void @free` yazar — LLVM bu
+uyuşmazlığı SESSİZCE kabul eder (D-295'in dersi). Self-host aynısını yapar.
+
+**Kapı boşluğu, D-356'nın dersinin aynısı:** `codegen_diff` 113/113 YEŞİLDİ
+çünkü `cg_korpus` bu adları hiç içermiyordu. Yeni korpus dosyası
+`cg_yerlesik_ad_eslemesi.kem` üç katmanı da kapılar.
+
+**Kapılar:** `codegen_diff` **114/114**, `checker_diff` 148/148 (0 muaf),
+`parser_diff` 13/13. **Sabotaj:** S109 (ad eşlemesi), S110 (dönüş tipi) —
+ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**AÇIK KALAN (ölçüldü, bu partide DEĞİL):** geniş codegen ölçümü 36→**38 OK**,
+31→**29 FARK**. Kalan sapmalar üç sınıfta kümeleniyor:
+- `expected instruction opcode` (13 dosya) — bozuk IR, ortak bir eksik özellik
+- `'%N' defined with type 'i32' but expected 'ptr'` (8 dosya) — tip uyuşmazlığı
+- `10_cesit_ast` / `11_yorumlayici`: derleniyor ama **exit 42 yerine 0** —
+  SESSİZ YANLIŞ CEVAP, en ağır sınıf; sıradaki iş bu olmalı.
+
+---
+
 ## D-387 [YÜKSEK] — SERİ KAPANIŞI: `parser_diff` regresyonu onarıldı + durum konsolidasyonu (2026-08-06)
 
 **ETKİ:** `selfhost/parser.kem`, `CLAUDE.md`.

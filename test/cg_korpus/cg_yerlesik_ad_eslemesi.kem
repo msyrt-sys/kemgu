@@ -1,0 +1,23 @@
+// D-388: ÖNEĞE UYMAYAN yerleşiklerin IR ad eşlemesi.
+// `builtin_kdl_ad` önek-tabanlıydı (metin_/dosya_/yaz_/yazdir_/arg_) → `yazdir`,
+// `bellek_al`, `bellek_serbest` ve `otp_*` hiçbir önekle eşleşmiyordu; self-host
+// `@yazdir` gibi TANIMSIZ semboller çağırıyor, clang IR'ı REDDEDİYORDU.
+// `test/ornekler/hello.kem` BİLE derlenmiyordu — ama `cg_korpus` bu adları
+// içermediği için kapı yeşildi (D-356'nın "korpusta o şekil yok" dersi).
+// Eşlemeler C `--llvm` çıktısından ÖLÇÜLDÜ: yazdir→puts, bellek_al→malloc,
+// bellek_serbest→free, otp_*→kdl_otp_* (+ `declare` satırları).
+işlev main() -> tam32 {
+    yazdir("yerlesik ad eslemesi");
+    değişken tampon: metin = bellek_al(64);
+    bellek_serbest(tampon);
+    // DİKKAT: `otp_anahtar_uret` ilk argümanı bir DOSYA ADIDIR ve o dosyayı
+    // YAZAR. Korpus dosyası repoya artefakt bırakmamalı → `build/` altına yaz
+    // (gitignore'lu). İlk sürümde "anahtar" yazmıştım ve kapı her koşuşunda
+    // repo köküne izlenmeyen bir dosya bırakıyordu.
+    değişken k: tam32 = otp_anahtar_uret("build/cg_otp_anahtar", 7);
+    // Önek yolundakiler de aynı dosyada kapılansın (regresyon yüzeyi ortak).
+    değişken n: tam32 = metin_uzunluk("abcde");
+    yazdir_tam(n);
+    yazdir_satir();
+    ver n + 37;   // 5 + 37 = 42
+}

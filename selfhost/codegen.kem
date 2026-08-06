@@ -2772,6 +2772,15 @@ işlev str_pre_pass(p: &değişken Ayr) -> tam32 {
 // KEMGU built-in adı → @kdl_* adı ("" = built-in değil, kullanıcı işlevi). dizi_* özel (CG8).
 // Önek-tabanlı (C codegen ile aynı): metin_/dosya_/yaz_/yazdir_/arg_ + birkaç tekil.
 işlev builtin_kdl_ad(ad: metin) -> metin {
+    // D-388: ÖNEĞE UYMAYAN üç yerleşik. Bunlar hiçbir önekle eşleşmediği için
+    // self-host `@yazdir` / `@bellek_al` / `@otp_anahtar_uret` çağırıyordu →
+    // clang "use of undefined value" ile REDDEDİYORDU. `hello.kem` bile
+    // derlenmiyordu; `cg_korpus` bu adları içermediği için kapı yeşildi.
+    // Eşlemeler C `--llvm` çıktısından ÖLÇÜLDÜ (tahmin değil).
+    eğer metin_esit(ad, "yazdir") { ver "puts"; }              // libc
+    eğer metin_esit(ad, "bellek_al") { ver "malloc"; }         // libc
+    eğer metin_esit(ad, "bellek_serbest") { ver "free"; }      // libc
+    eğer metin_baslar(ad, "otp_") { ver metin_birlestir("kdl_", ad); }
     eğer metin_baslar(ad, "metin_") veya metin_baslar(ad, "dosya_") veya metin_baslar(ad, "yaz_")
          veya metin_baslar(ad, "yazdir_") veya metin_baslar(ad, "arg_")
          veya metin_esit(ad, "oku_karakter") veya metin_esit(ad, "ondalik_bicimle") {
@@ -2781,6 +2790,16 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
 }
 // Built-in dönüş LLVM tipi (sonek-bazlı).
 işlev builtin_ret(ad: metin) -> metin {
+    // D-388: öneğe uymayan yerleşiklerin DÖNÜŞ tipleri. Ad eşlemesi tek başına
+    // yetmiyordu: tip bilinmeyince `call void @malloc(...)` üretilip DEĞER
+    // kayboluyor, ardından `store ptr 0` gibi çöp IR çıkıyordu.
+    // Tipler C `--llvm` çıktısından ÖLÇÜLDÜ (C `free`yi i32 döndürür — kendi
+    // `declare void @free` satırıyla tutarsız ama LLVM bunu sessizce kabul eder,
+    // D-295; parite için C'nin DAVRANIŞI taklit edilir, "doğrusu" değil).
+    eğer metin_esit(ad, "yazdir") { ver "i32"; }        // puts
+    eğer metin_esit(ad, "bellek_al") { ver "ptr"; }     // malloc
+    eğer metin_esit(ad, "bellek_serbest") { ver "i32"; }// free (C böyle emit eder)
+    eğer metin_baslar(ad, "otp_") { ver "i32"; }
     eğer metin_esit(ad, "metin_uzunluk") { ver "i32"; }
     eğer metin_esit(ad, "metin_bayt") { ver "i8"; }
     eğer metin_esit(ad, "metin_esit") veya metin_esit(ad, "metin_icerir") veya metin_esit(ad, "metin_baslar")
@@ -2813,6 +2832,11 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     // (str_globalleri_emit ile aynı desen). "gorev baslatilamadi" = 19 + \00 = 20.
     yaz_str("@.gorev_hata_str = private constant [20 x i8] c"); yb(34);
     yaz_str("gorev baslatilamadi"); yb(92); yaz_str("00"); yb(34); yb(10);
+    // D-388: OTP yerleşiklerinin `declare`'ları da eksikti (ad eşlemesi tek
+    // başına yetmez — sembol bildirilmezse clang "undefined value" der).
+    // İmzalar C `--llvm` çıktısından ÖLÇÜLDÜ.
+    yaz_str("declare i32 @kdl_otp_anahtar_uret(ptr, i32)"); yb(10);
+    yaz_str("declare i32 @kdl_otp_xor_uygula(ptr, ptr, ptr)"); yb(10);
     yaz_str("declare ptr @kdl_kanal_olustur(i32)"); yb(10);
     yaz_str("declare void @kdl_kanal_gonder(ptr, i64)"); yb(10);
     yaz_str("declare i64 @kdl_kanal_al(ptr)"); yb(10);
