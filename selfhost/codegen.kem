@@ -7792,6 +7792,63 @@ işlev metin_biter(s: metin, son: metin) -> mantıksal {
 // Skrutini ÇEŞİT tipinde mi? Değilse/emin değilsek "" (kontrol atlanır).
 // Yalnız TANIMLAYICI: annotasyonlu yerel/parametre. Diğer ifadeler → "".
 // D-378: skrutininin (SÜZÜLMEMİŞ) tipi — `seçimlik<..>` / `sonuç<..>` ayrımı için.
+// ---- D-385: DESEN BAĞLAMA TİPLERİ ----
+// `eşleş s { değer(v) => ... }` içinde `v`nin tipi skrutininin tipinden gelir.
+// `yerel_topla` düz bir ön-geçiştir ve skrutini bağlamını GÖRMEZ → bağlamalar
+// oraya "?" ile girer. Tip, kol işlenirken YERİNDE atanır.
+// `sonuç<T, H>` ayrıştırması DERİNLİK-DUYARLI olmalı: `sonuç<Dizi<tam32>, metin>`
+// içindeki ilk virgül üst düzey değildir.
+işlev sonuc_arg(t: metin, ikinci: mantıksal) -> metin {
+    eğer metin_baslar(t, "sonuç<") == yanlış { ver "?"; }
+    değişken bas: tam32 = metin_uzunluk("sonuç<");
+    değişken n: tam32 = metin_uzunluk(t);
+    değişken derinlik: tam32 = 0;
+    değişken i: tam32 = bas;
+    iken i < n - 1 {
+        değişken b: tam32 = metin_bayt(t, i) olarak tam32;
+        eğer b == 60 { derinlik = derinlik + 1; }        // '<'
+        eğer b == 62 { derinlik = derinlik - 1; }        // '>'
+        eğer (b == 44) ve (derinlik == 0) {              // ',' üst düzey
+            eğer ikinci { ver metin_kes(t, i + 2, n - i - 3); }   // ", " atla
+            ver metin_kes(t, bas, i - bas);
+        }
+        i = i + 1;
+    }
+    ver "?";
+}
+// Aktif dilimdeki (en yeni) `ad` bağlamasının tipini YERİNDE güncelle.
+işlev yerel_tip_ata(p: &değişken Ayr, ad: metin, t: metin) -> tam32 {
+    eğer metin_esit(t, "?") { ver 0; }
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) {
+            dizi_yaz(p.yerel_tip, i, t);
+            dizi_yaz(p.yerel_ham, i, t);
+            ver 0;
+        }
+        i = i - 1;
+    }
+    ver 0;
+}
+// Kolun deseni `değer(v)`/`tamam(v)`/`hata(e)` ise bağlamanın tipini ata.
+işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin) -> tam32 {
+    eğer des < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPICI") == yanlış { ver 0; }
+    eğer dizi_al(p.a_cs, des) < 1 { ver 0; }
+    değişken bn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, des));
+    eğer metin_esit(dizi_al(p.a_ad, bn), "DESEN_TANIMLAYICI") == yanlış { ver 0; }
+    değişken vad: metin = dizi_al(p.a_deg, des);
+    değişken bad: metin = dizi_al(p.a_deg, bn);
+    eğer metin_esit(vad, "değer") ve metin_baslar(st, "seçimlik<") {
+        değişken ic: metin = metin_kes(st, metin_uzunluk("seçimlik<"),
+                                       metin_uzunluk(st) - metin_uzunluk("seçimlik<") - 1);
+        yerel_tip_ata(p, bad, ic);
+        ver 0;
+    }
+    eğer metin_esit(vad, "tamam") { yerel_tip_ata(p, bad, sonuc_arg(st, yanlış)); }
+    eğer metin_esit(vad, "hata") { yerel_tip_ata(p, bad, sonuc_arg(st, doğru)); }
+    ver 0;
+}
 işlev esles_skrutini_tipi(p: &değişken Ayr, kosul: tam32) -> metin {
     // D-379: TANIMLAYICI dışındaki skrutiniler (`k.s`, `xs[0]`, `f()`) için
     // genel tip çıkarsamasına düş. `yerel_ham` yalnız yerel BAĞLAMALAR içindir.
@@ -8663,6 +8720,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken kol_d: tam32 = dizi_al(p.cocuk, eb + ki);
             eğer dizi_al(p.a_cs, kol_d) > 0 {
                 değişken des: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, kol_d));
+                // D-385: desen bağlamasının TİPİ skrutininden gelir (gövdeden ÖNCE).
+                desen_bagla_tip(p, des, esles_skrutini_tipi(p, dizi_al(p.cocuk, eb)));
                 // D-357 (C): desen varyantı + payload aritesi (gövdeden ÖNCE).
                 m002_desen_kontrol(p, des, esles_cesit_adi(p, dizi_al(p.cocuk, eb)));
                 eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPI") {

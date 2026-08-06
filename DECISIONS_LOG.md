@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-385 [YÜKSEK] — Desen bağlama tipleri (`eşleş` kollarında) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** `eşleş s { değer(v) => ... }` içinde `v`nin tipi BİLİNMİYORDU:
+`yerel_topla` düz bir ön-geçiştir ve skrutini bağlamını görmez → desen
+bağlamaları oraya `"?"` ile girer, gövdedeki her karşılaştırma sessiz kalırdı.
+Tip artık kol işlenirken YERİNDE atanıyor (`yerel_tip_ata`).
+
+**Eşleme:** `seçimlik<T>` + `değer(v)` → `v: T`; `sonuç<T,H>` + `tamam(v)` →
+`v: T`; `hata(e)` → `e: H`. Ayrıştırma **DERİNLİK-DUYARLI** — `sonuç<T, H>`
+içindeki her virgül üst düzey değildir.
+
+**⚠ SABOTAJ İKİ KEZ SESSİZ KALDI — kapı tasarımı dersi.** Derinlik-duyarlılığı
+kaldırdığımda gate YEŞİL kaldı:
+1. `sonuç<Dizi<tam32>, metin>` yetmedi — ilk argümanda virgül YOK.
+2. `sonuç<sonuç<tam32, metin>, metin>` da yetmedi! Yanlış ayrıştırma
+   (`"sonuç<tam32"`) da annotasyonla UYUŞMUYOR → **aynı T001** çıkıyor, fark
+   gözlenemiyor.
+
+Kapıyı ancak **doğru ayrıştırmada tanı ÇIKMAYAN** bir şekil kurdu
+(`tamam(v) => { değişken w: sonuç<tam32, metin> = v; }` → TEMİZ; yanlış
+ayrıştırmada sahte T001). **DERS:** hatalı şekiller bir kuralı kapılamaya
+yetmez — yanlış uygulama da hata üretiyorsa tanı AYNI kalır. Kapı, **doğru
+davranışın SESSİZ olduğu** bir şekil ister.
+
+**Bilinen sınır:** `eşleş görev_başlat(..) { tamam(g) => ... }` L001'i hâlâ
+çıkmıyor — `görev_başlat`ın dönüş tipi (`sonuç<görev<T>, metin>`) yerleşik imza
+tablosunda yok, skrutini tipi bilinmiyor. Bu ayrı bir iş (D-374'ün tablosuna
+Katman 2 intrinsiklerini eklemek).
+
+**Kapılar:** `checker_diff` **147/147** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 115/115, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / parser 107, **geniş ölçüm 131/131**.
+Probe 6/6 birebir. **Sabotaj:** S104 (bağlama tipi ataması), S105 (derinlik
+duyarlılığı — ancak üçüncü denemede gözlenebilir hâle geldi).
+
+---
+
 ## D-384 [YÜKSEK] — `görev<T>` LİNEER; `kanal<T>` değil (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
