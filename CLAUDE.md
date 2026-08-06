@@ -969,12 +969,34 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` yalnız
 `cg_korpus` üzerinde koşuyordu; `test/ornekler` + `stdlib/temel`e karşı ölçünce
 **31 sapma** çıktı. Yedi partide kapatıldı:
-- **GERÇEK SAPMA SIFIR** (OK=65). Kalan 2 "fark" `kem_mmio_ham` + `kem_pointer`:
-  bare-metal keşif dosyaları, host'ta eşlenmemiş MMIO adresi okuyorlar →
-  **C DE segfault ediyor**, self-host BİREBİR aynı → parite doğru, kusur değil.
-  (`03_kontrol.kem` exit 151 de ÇÖKME DEĞİL: kaynağın kendisi `120+30+1=151`
-  yazıyor — "exit>128 = çökme" testi yanıltıcıdır.)
-- **`codegen_diff` 113 → 119** (0 muaf).
+- **⚠ DÜZELTME (D-395): "GERÇEK SAPMA SIFIR" İDDİAM YANLIŞTI.** Elle koşturduğum
+  ölçüm döngüsünde link başarısızlıkları **sessizce `fark` sayılıp yazdırılmıyordu**;
+  ben o iki dosyayı "beklenen bare-metal segfault" sandım. Kapıyı Makefile'a bağlayıp
+  koşunca gerçek yüz çıktı: `gorev_temel` ve `matris_carpim` **GERÇEKTEN
+  başarısız** (aşağıda). Doğru sayı 65/67'dir, 65/65 değil.
+  **DERS: elle koşturulan ölçüm döngüsü kapı DEĞİLDİR** — kapı sessiz düşen dalı
+  olmayacak biçimde yazılır ve `[ "$fail" -eq 0 ]` ile biter. Ölçümü kapıya
+  bağlamadan "sıfır sapma" DEME.
+- Bare-metal keşif dosyaları (`kem_mmio_ham`, `kem_pointer`) host'ta eşlenmemiş
+  MMIO adresi okuyor → **C DE segfault ediyor**, self-host BİREBİR aynı → parite
+  doğru, kusur değil, muafiyet gerekmez. (`03_kontrol.kem` exit 151 de ÇÖKME
+  DEĞİL: kaynağın kendisi `120+30+1=151` yazıyor — "exit>128 = çökme" yanıltıcı.)
+- **`codegen_diff` 113 → 119** (0 muaf) + **YENİ KAPI `calistir_codegen_genis`**
+  (D-395): `test/ornekler` + `stdlib/temel` üzerinde exit koduna EK OLARAK
+  **stdout** karşılaştırır. `codegen_diff`in dar korpusu bu 31 sapmanın HİÇBİRİNİ
+  görmüyordu; `bignum_selfhost` iki tarafta da exit 0 verirken stdout'ta `0`
+  yerine yığın adresi basıyordu — yalnız exit'e bakan kapı bunu KAÇIRIR.
+  Durum: **65/67, 2 muaf** (aşağıdaki iki kök).
+- **AÇIK KALAN İKİ KÖK (kapının muafiyet listesinde, küçülmek zorunda):**
+  - `matris_carpim` — **SIMD yok.** Kaynak `vektör<kesirli32,4>` kullanıyor;
+    C `<4 x float>` yayar, self-host codegen'de vektör TİPİ hiç yok → her şeyi
+    `i32` sanıyor. Arg-genişletme kusuru değil, **eksik özellik**.
+  - `gorev_temel` — **desen-bağlaması iç tipi yok.** `eşleş görev_başlat(..)
+    { tamam(g) => görev_birleştir(g) }` içinde `g` desen bağlamasıdır; codegen
+    iç tipini (`görev<metin>`→ptr) bilmiyor → `cagri_ic_tip` `""` döner,
+    `i64_daralt` i64'te kalır, ptr yuvasına yazılır. `i64_daralt`ın ptr dalı
+    DOĞRU; eksik olan TİP BİLGİSİ. Checker'da aynı boşluk D-385/386'da kapandı,
+    codegen karşılığı henüz yok.
 - Kapatılan kökler: yerleşik IR ad eşlemesi (`yazdir`/`bellek_al`/`otp_*`) ·
   `dizi_olustur(N)` çağrı-formu · `eşleş &Çeşit` auto-deref · üst-düzey `sabit`
   referansı · çağrı argümanının param IR tipine genişletilmesi · **KARAKTER

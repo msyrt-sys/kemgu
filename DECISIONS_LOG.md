@@ -5,6 +5,60 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-395 [YÜKSEK] — KAPI: geniş codegen eşdeğerliği + kendi yanlış iddiamın düzeltilmesi (2026-08-06)
+
+**Karar:** `test/codegen_genis_harness.sh` + `make calistir_codegen_genis`.
+`test/ornekler/*.kem` + `stdlib/temel/*.kem` yüzeyindeki her `main()`'li programı
+C oracle ile karşılaştırır — **exit koduna EK OLARAK stdout**.
+
+**Gerekçe 1 — `codegen_diff` bu sınıfı görmüyor.** O kapı `test/cg_korpus/`
+üzerinde koşar ve korpus AMAÇLI dar (her dosya bir özelliği izole eder). Gerçek
+programlardaki 31 sapma (D-388→394) o kapı yemyeşilken birikmişti.
+
+**Gerekçe 2 — yalnız exit'e bakmak yetmez.** `bignum_selfhost` İKİ tarafta da
+exit 0 veriyordu ama stdout'ta `0` yerine yığın adresi basıyordu. Exit-only bir
+kapı bu sessiz yanlış cevabı KAÇIRIR.
+
+**🔴 BU KAPI BENİM KENDİ İDDİAMI ÇÜRÜTTÜ.** D-394'ün commit'inde ve CLAUDE.md'de
+"GERÇEK SAPMA SIFIR (OK=65)" yazmıştım. Elle koşturduğum ölçüm döngüsünde
+`link_retry` başarısızlığı sessizce `fark` sayılıyor ama YAZDIRILMIYORDU; kalan
+iki dosyayı "C'nin de segfault ettiği eşleşen çökme" diye kendi kendime
+açıkladım. Kapı yazılınca ikisi de kırmızı çıktı. **Doğru sayı 65/67.**
+> **DERS: elle koşturulan ölçüm döngüsü kapı DEĞİLDİR.** Kapı, sessiz düşen
+> dalı olmayacak biçimde yazılır ve `[ "$fail" -eq 0 ]` ile biter. Ölçümü kapıya
+> BAĞLAMADAN "sıfır sapma" deme. Bu, D-359'un ("parse kapısı sessiz ayrışmıştı")
+> ve D-356'nın ("sabotajın sessizliği bir SONUÇTUR") aynı sınıftan tekrarı.
+
+**Muafiyet listesi (2 satır, KÜÇÜLMEK ZORUNDA) — kökleri ÖLÇÜLDÜ:**
+- `matris_carpim` — **SIMD yok.** `vektör<kesirli32,4>`; C `<4 x float>` yayar,
+  self-host'ta vektör tipi HİÇ yok → `i32` sanıyor (`'%9' i32 but expected
+  'float'`). D-393'ün arg-genişletmesiyle akraba DEĞİL; eksik özellik.
+- `gorev_temel` — **desen-bağlaması iç tipi yok.** `eşleş görev_başlat(..)
+  { tamam(g) => görev_birleştir(g) }`: `g` desen bağlaması, codegen iç tipini
+  (`görev<metin>`→ptr) bilmiyor → `cagri_ic_tip` `""`, `i64_daralt` i64'te kalır,
+  ptr yuvasına yazılır (`i64 but expected ptr`). **`i64_daralt`ın ptr dalı
+  DOĞRU** — eksik olan yalnız TİP BİLGİSİ. Checker'da aynı boşluk D-385/386'da
+  kapandı; codegen karşılığı ayrı iş.
+- Muafiyet KURALI harness başlığına yazıldı: yeni satır eklemek kapıyı
+  zayıflatmaktır; önce KÖKÜ onar. (`checker_diff`in muafiyet listesi bu
+  disiplinle BOŞA indi — emsal var.)
+
+**Muafiyet GEREKMEYEN durum:** `kem_mmio_ham`/`kem_pointer` host'ta eşlenmemiş
+MMIO okur ve İKİ TARAFTA DA segfault eder → eşleşen çökme zaten GEÇER. Muafiyet
+yalnız ayrışan davranış içindir.
+
+**Sabotaj S120:** D-394'ün KARAKTER dalı `eğer yanlış` yapıldı (uygulandığı
+`sed -n '3429p'` ile GÖRÜLDÜ, `grep -c` = 1) → kapı `base64_selfhost` üzerinde
+**kırmızı** (exit 2). Geri alındı → 65/65 yeşil. Sabotajlı koşumda aday kalıcı
+127 verdi: D-339 kuralı doğru çalıştı (127 yalnız ORACLE'da ortamsaldır;
+adayda ANLAŞMAZLIKTIR, sessizce atlanamaz).
+
+**Kapsam/sınır:** Kapı yalnız `main()`'i olan programları alır; oracle IR'ı
+kuramazsa (tip hatası/modül importu — bu kapının işi değil) ATLAR, başarısız
+saymaz (12 atlandı).
+
+---
+
 ## D-394 [YÜKSEK] — CODEGEN: KARAKTER literali (son gerçek sapma kapandı) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
@@ -40,9 +94,14 @@ değiştirdim, korpusa not düştüm.
 **Sabotaj S118** (KARAKTER dalı) + **S119** (hex çevrimi — ilk düzeltmemi sessiz
 kılan tam nokta) — ikisi de kırmızı.
 
-**🎯 GENİŞ ÖLÇÜM: GERÇEK SAPMA SIFIR.** `OK=65`, kalan 2 "fark" C'nin de
-segfault ettiği EŞLEŞEN çökmeler (self-host kusuru değil). Dört partide
-(D-388→394) codegen paritesi **36 → 65**.
+**🎯 GENİŞ ÖLÇÜM:** Dört partide (D-388→394) codegen paritesi **36 → 65**.
+
+> **⚠ D-395 DÜZELTMESİ — bu satırda "GERÇEK SAPMA SIFIR" yazıyordu, YANLIŞTI.**
+> Elle koşturduğum ölçüm döngüsünde link başarısızlıkları sessizce `fark`
+> sayılıyor ama YAZDIRILMIYORDU; kalan iki dosyayı "C'nin de segfault ettiği
+> eşleşen çökme" sandım. Ölçümü D-395'te kapıya bağlayınca gerçek yüz çıktı:
+> `gorev_temel` (i64→ptr) ve `matris_carpim` (SIMD yok) **gerçekten
+> başarısız**. Doğru sayı **65/67**. Ayrıntı D-395'te.
 
 ---
 
