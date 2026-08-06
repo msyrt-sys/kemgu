@@ -64,6 +64,44 @@ Diğer dillerin tuzaklarından kaçınma:
     `ekle_satir`, `var_mi`, `sil`, `boyut`, `yeniden_adlandir`, `kopyala`
   - SINIR: syscall layer (KIRMIZI_QUEUE G)
 
+### Veri yapıları ve algoritmalar (saf, uçtan uca doğrulanmış)
+
+Hepsi saf KEMGU; `--check` + sentinel `main` sürücüsüyle
+(`--llvm | clang | çalıştır -> exit 42`) uçtan uca ölçülmüştür.
+Ortak sözleşmeler: koleksiyon = `Dizi<T>` + disiplinli API (sarmalayıcı
+yapı yok); eleman SİLME primitifi olmadığı için küçülten işlemler yeni
+dizi döner; çok-değerli dönüş olmadığı için "oku (tepe/on), sonra
+küçült (cek/cikar)" iki adımı; yokluk `seçimlik<T>`.
+
+- **`yigin.kem`** — LIFO yığın: `yigin_it`, `yigin_tepe`, `yigin_cek`,
+  `yigin_bos_mu`, `yigin_boyut`, `yigin_temizle` + somut kurucular
+- **`kuyruk.kem`** — FIFO kuyruk: `kuyruk_ekle`, `kuyruk_on`,
+  `kuyruk_cikar`, `kuyruk_bos_mu`, `kuyruk_boyut` + somut kurucular
+- **`obek.kem`** — ikili min-öbek (priority queue): `obek_kur` (O(n)
+  heapify), `obek_ekle`, `obek_cek`, `obek_tepe`, `obek_gecerli_mi`
+- **`arama.kem`** — `dogrusal_ara`, `ikili_ara`, `ilk_uygun`,
+  `son_uygun`, `alt_sinir`, `ust_sinir` (bulunamama `seçimlik<tam32>`;
+  sınırlar konum döner — C++ lower/upper_bound eşleniği)
+- **`sirali.kem`** — `sirali_konum`, `sirali_ekle`, `birlestir_sirali`
+  (kararlı merge), `hizli_sirala` (Lomuto quicksort — dizi.kem
+  `sirala`yı tamamlar, yerine geçmez)
+- **`eslem.kem`** — paralel-dizi anahtar->değer eşlemi:
+  `eslem_bul`, `eslem_bul_ya_da`, `eslem_koy` (yerinde),
+  `eslem_sil_anahtar`/`eslem_sil_deger`, `eslem_gecerli_mi`
+- **`bit.kem`** — tamamen aritmetik bit işlemleri (alan: x >= 0,
+  indeks 0..30): `bit_al/kur/temizle/cevir`, `bit_say`, `onde_sifir`,
+  `guc_iki_mi`, `sola_dondur`/`saga_dondur` (açık genişlik parametreli)
+- **`istatistik.kem`** — tam32 betimleyici istatistik: `ist_ortalama`,
+  `ist_medyan` (girdiyi bozmaz), `ist_aralik`, `ist_varyans`,
+  `ist_std_sapma`, `ist_en_sik` (kırpılma noktaları belgeli)
+- **`zaman.kem`** — saf takvim aritmetiği (saat okumaz): `artik_yil_mi`,
+  `ay_gun_sayisi`, `tarih_gecerli_mi`, `gun_numarasi` (Hinnant
+  days_from_civil, epoch 1970-01-01), `gun_farki`, `haftanin_gunu`
+  (0=Pazartesi), `yilin_gunu`; alan yıl >= 1
+- **`matris.kem`** — düz-bellek (row-major) tam32 matris: `mat_al/yaz`,
+  `mat_olustur`, `mat_birim`, `mat_topla`, `mat_skaler_carp`,
+  `mat_carp`, `mat_transpoze`, `mat_iz`, `mat_gecerli_mi`
+
 ## Kullanım
 
 ```kemgu
@@ -94,6 +132,16 @@ Hiçbir runtime gerektirmez — saf type-checked KEMGU.
 | sonuc | ◐ KSonuc | parser tamam/hata desen |
 | metin | ◐ skeleton | runtime string primitif |
 | dosya | ◐ skeleton | syscall layer |
+| yigin | ✓ tam | Yok |
+| kuyruk | ✓ tam | Yok |
+| obek | ✓ tam | Yok |
+| arama | ✓ tam | Yok |
+| sirali | ✓ tam | Yok |
+| eslem | ✓ tam | Yok (karma tablo V2: hash primitifi) |
+| bit | ✓ tam | Yok (kaydırma op gelirse sadeleşir) |
+| istatistik | ✓ tam | Yok (kesirli sürüm: float codegen) |
+| zaman | ✓ tam | Yok (ters dönüşüm V2: yapı-dönüş) |
+| matris | ✓ tam | Yok (Matris yapısı V2) |
 | koleksiyon/Tablo | ⏳ | Allocator runtime |
 | io/yazdir | ⏳ | Syscall layer |
 | iş/Görev | ⏳ | Thread runtime |
