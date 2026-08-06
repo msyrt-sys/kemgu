@@ -5,6 +5,56 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-391 [YÜKSEK] — CODEGEN: üst-düzey `sabit` referansı (A sınıfı, 13 dosya) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (A sınıfı — 14 dosya, `expected instruction opcode`).** Self-host
+codegen'de **üst-düzey `sabit` için emit yolu HİÇ YOKTU**. `sabit K` referansı
+yerel/param olarak aranıyor, bulunamayınca `cg_var_bul` `""` dönüyor ve
+`load i32, ptr ` (**BOŞ operand**) üretiliyordu → geçersiz IR.
+**`ver K;` kadar basit bir şekil bile bozuktu.**
+
+**Teşhis yolu — ilk probe'um GEÇERSİZDİ.** Hata satırının kendisi değil bir
+ÖNCEKİ satır bozuktu; `kem_mmio_ham`'da `load i32, ptr ` görünce "ham işaretçi
+deref bozuk" sandım ve `&x olarak *tam32` ile probe yazdım — ama C onu **T001
+ile reddediyor**, yani ölçüm aracım hatalıydı. Gerçek şekli dosyadan BİREBİR
+alınca (`(UART_TABAN + UART_FR) olarak *tam32`) `inttoptr`ın DOĞRU olduğu,
+kusurun `sabit` operandlarında olduğu ortaya çıktı. **Probe'u kaynaktan al,
+kendin uydurma.**
+
+**Çözüm — C `sabit_kayit`/`sabit_bul` aynası.** Sabit bir DEĞER değil, bir
+**İFADE ŞABLONU**dur: global emit edilmez, kullanıldığı yerde INLINE edilir.
+Üç paralel dizi (`g_sabit_ad`/`g_sabit_deger`/`g_sabit_tip`) + `sabit_topla`
+(DISA/MODUL içine iner) + tanımlayıcı çözümünde yerel-yoksa-sabit dalı.
+Çapraz-dosya sabitler aynı ağaçta olduğundan kendiliğinden çözülür.
+
+**Bildirilen tip literali EZER:** `sabit K: tam64 = 8589934592` → i64. Bu satır
+olmadan değer i32'de hesaplanıp SESSİZCE KIRPILIR.
+
+**⚠ SABOTAJ SESSİZ KALDI, KORPUS DÜZELTİLDİ (D-385'in dersi tekrar).** S115'i
+(bildirilen tip uygulanmıyor) ilk koşumda gate YEŞİL kaldı: korpusta `GENIS`
+150994944 idi ve **i32'ye SIĞIYOR** → yanlış uygulama da doğru sonucu veriyor.
+2^33'e (`8589934592`) çevrilince kırpılma gözlenebilir oldu ve S115 kırmızıya
+döndü (42≠1). **Sığan bir sayı bu yolu SINAMAZ.**
+
+**TEK düzeltme 13 dosyayı açtı:** utf8/crc32/sort/hashmap/json/rc4/vm/
+turkce_case/turkce_sort/asm/hashcrack/sha256/kem_mmio_ham — hepsi birebir.
+
+**Kapılar:** `codegen_diff` **117/117**, `checker_diff` 148/148 (0 muaf),
+sürücü 4 mod × 2 + FIXPOINT. **Sabotaj S114** (sabit tablosu aranmıyor) +
+**S115** (bildirilen tip) — ikisi de kırmızı.
+
+**GENİŞ ÖLÇÜM: 50→63 OK, 17→4 FARK.** Üç partide (D-389/390/391) codegen
+paritesi **36→63**. Kalan 4:
+- `base64_selfhost` — **REGRESYON DEĞİL**: fix öncesi IR bile üretilemiyordu
+  (ölçüldü), şimdi çalışıyor ama çıktı basmadan 127 ile ölüyor → KISMİ ilerleme,
+  ayrı kök.
+- `bignum_selfhost` — ikisi de exit 0, stdout farkı.
+- 2 segfault (C de segfault ediyor — muhtemelen ortak, ayrı iş).
+
+---
+
 ## D-390 [YÜKSEK] — CODEGEN: `eşleş &Çeşit` auto-deref (C sınıfı — sessiz yanlış cevap) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).

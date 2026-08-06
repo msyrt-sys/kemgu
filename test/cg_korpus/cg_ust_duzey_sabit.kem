@@ -1,0 +1,39 @@
+// D-391: ÜST-DÜZEY `sabit` referansı codegen'de HİÇ çözülmüyordu.
+// Self-host `sabit K`'yı yerel arıyor, bulamayınca `cg_var_bul` "" döndürüyor
+// ve `load i32, ptr ` (BOŞ operand) üretiyordu → clang "expected instruction
+// opcode". A sınıfının 14 dosyasının TAMAMI bu kökten düşüyordu — `ver K;`
+// kadar basit bir şekil bile bozuktu.
+// C llvm.c `sabit_kayit`/`sabit_bul` aynası: sabit bir DEĞER değil, bir İFADE
+// ŞABLONUDUR — global emit edilmez, kullanıldığı yerde INLINE edilir.
+// `cg_korpus`ta üst-düzey `sabit` HİÇ yoktu (D-356'nın "korpusta o şekil yok").
+sabit BAZ: tam32 = 40;
+sabit EK: tam32 = 2;
+// 2^33 — i32'ye SIĞMAZ. Bildirilen tip (tam64) uygulanmazsa değer i32'de
+// hesaplanıp sessizce KIRPILIR. Sığan bir sayı (ör. 150994944) bu yolu
+// SINAMAZ: yanlış uygulama da doğru sonucu verir → kapı sessiz kalır.
+sabit GENIS: tam64 = 8589934592;
+sabit MASKE: tam32 = 32;
+
+işlev sabit_aritmetik() -> tam32 {
+    ver BAZ + EK;                     // 42 — iki sabit inline
+}
+
+// Sabit BİLDİRİLEN tipiyle taşınmalı (tam64), literalin i32'siyle değil:
+// aksi halde i32'ye sığmayan adres sessizce kırpılır.
+işlev sabit_genis() -> tam64 {
+    ver GENIS + 0;
+}
+
+// Sabit bir ifadenin içinde (bit işlemi) — A sınıfındaki MMIO deseninin özü.
+işlev sabit_ifade_icinde(x: tam32) -> tam32 {
+    ver x & MASKE;
+}
+
+işlev main() -> tam32 {
+    değişken a: tam32 = sabit_aritmetik();          // 42
+    değişken g: tam64 = sabit_genis();              // 150994944
+    değişken m: tam32 = sabit_ifade_icinde(96);     // 96 & 32 = 32
+    eğer g != 8589934592 { ver 1; }
+    eğer m != 32 { ver 2; }
+    ver a;                                          // 42
+}
