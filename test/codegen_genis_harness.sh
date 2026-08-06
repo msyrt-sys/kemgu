@@ -49,22 +49,15 @@ run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
     return 0
 }
 
-# ---- MUAFİYET LİSTESİ (KÜÇÜLMEK ZORUNDA — asla büyümemeli) ----
-# Bu kapı kurulduğunda 67 gerçek programdan 65'i geçiyordu. Kalan 2'si, kapının
-# ölçtüğü sınıftan AYRI iki eksik özelliğe bağlı ve kökleri ÖLÇÜLDÜ:
-#
-#   matris_carpim — SIMD. Kaynak `vektör<kesirli32, 4>` kullanıyor; C bunu
-#     `<4 x float>` olarak yayar, self-host codegen'de vektör TİPİ HİÇ YOK →
-#     her şeyi i32 sanıyor ("'%9' i32 but expected 'float'"). Arg-genişletme
-#     kusuru DEĞİL; eksik özellik.
-#
-# (gorev_temel D-396'da ONARILDI ve listeden ÇIKARILDI — muafiyet listesi
-#  küçülmek içindir; kapatılan kök burada durmaz.)
-#
-# KURAL: buraya yeni satır EKLEMEK, kapıyı zayıflatmaktır. Bir sapma çıkarsa
-# önce KÖKÜ onar; muafiyet yalnız kökü ÖLÇÜLMÜŞ ve ayrı iş olduğu kanıtlanmış
-# durumlar içindir. (checker_diff'in muafiyet listesi bu disiplinle BOŞA indi.)
-MUAF="matris_carpim"
+# ---- MUAFİYET LİSTESİ: BOŞ ----
+# Kapı kurulduğunda 2 satır vardı (D-395); ikisi de kapatıldı:
+#   gorev_temel   → D-396 (eşleş desen-bağlamasının iç tipi)
+#   matris_carpim → D-397 (SIMD vektör<T,N>)
+# Muafiyet listesi KÜÇÜLMEK İÇİNDİR. Buraya yeni satır EKLEMEK kapıyı
+# zayıflatmaktır: bir sapma çıkarsa önce KÖKÜ onar. Muafiyet yalnız kökü
+# ÖLÇÜLMÜŞ ve ayrı iş olduğu KANITLANMIŞ durumlar içindir — ve o zaman bile
+# geçici sayılır. (checker_diff'in listesi de bu disiplinle boşa indi.)
+MUAF=""
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; atla=0; muaf_say=0

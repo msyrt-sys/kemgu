@@ -1,0 +1,45 @@
+// D-397: SIMD `vektör<T, N>` self-host codegen'de HİÇ YOKTU.
+//
+// Parser TIP_VEKTOR düğümünü zaten üretiyordu (lane a_deg'de), checker
+// yerleşikleri zaten tanıyordu — eksik olan YALNIZ codegen'di. `ll_tip`'te dal
+// olmadığı için her vektör `i32` fallback'ine düşüyordu:
+//     %9 = call i32 @vektor_topla(ptr %rho, i32 %8)
+//     ret float %9                       ; 'i32' but expected 'float'
+//
+// DÖRT ayrı kök vardı; her biri bir öncekini onarınca ORTAYA ÇIKTI (yani tek
+// ölçümle görülemezlerdi, sırayla soyuldular):
+//   1. ll_tip: TIP_VEKTOR → "<N x T>"          (yoksa i32)
+//   2. yerleşikler: doldur/eleman/topla         (yoksa tanımsız @vektor_*)
+//   3. kesirli_ll_mi: "<N x float>" DE kesirli  (yoksa `mul <4 x float>` = LLVM-red)
+//   4. beklenen_ll: annotasyon "<N x T>" ise bağlam kur
+//                                               (yoksa `<4 x i32>` varsayılanına
+//                                                düşüp `i32 2.0` basar = LLVM-red)
+//
+// Bu dosya DÖRDÜNÜ de uyandırır. Her satırın hangi kökü ölçtüğü aşağıda.
+işlev main() -> tam32 {
+    // (4) annotasyon bağlamı + (2) splat: lane=4, eleman=float BEKLENEN'den okunur.
+    //     Bağlam kurulmazsa `<4 x i32> undef, i32 2.0` → LLVM reddeder.
+    değişken a: vektör<kesirli32, 4> = vektor_doldur(2.0);   // [2,2,2,2]
+    değişken b: vektör<kesirli32, 4> = vektor_doldur(3.0);   // [3,3,3,3]
+
+    // (3) lane-wise çarpım: kesirli_ll_mi vektörü tanımazsa `mul <4 x float>`
+    //     yayılır ve LLVM "invalid operand type" der.
+    değişken c: vektör<kesirli32, 4> = a * b;                // [6,6,6,6]
+
+    // (2) reduce: kesirli eleman → llvm.vector.reduce.fadd (0.0 başlangıç
+    //     operandı ŞART; reduce.add ile ARİTELERİ farklı, karıştırmak LLVM-red).
+    değişken t: kesirli32 = vektor_topla(c);                 // 24.0
+
+    // (2) extractelement — eleman tipi DEĞERİN IR'ından okunur, beklenenden değil.
+    değişken e: kesirli32 = vektor_eleman(c, 1);             // 6.0
+
+    // (1) ll_tip: tamsayı lane'ler de çalışmalı — `<4 x i32>` yolu reduce.add'e
+    //     gider (fadd DEĞİL). İki intrinsic'i ayırmayan bir uygulama burada patlar.
+    değişken g: vektör<tam32, 4> = vektor_doldur(5);
+    değişken h: tam32 = vektor_topla(g);                     // 20
+
+    eğer (t olarak tam32) != 24 { ver 1; }
+    eğer (e olarak tam32) != 6 { ver 2; }
+    eğer h != 20 { ver 3; }
+    ver 42;
+}

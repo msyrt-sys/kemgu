@@ -987,10 +987,19 @@ Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` ya
   görmüyordu; `bignum_selfhost` iki tarafta da exit 0 verirken stdout'ta `0`
   yerine yığın adresi basıyordu — yalnız exit'e bakan kapı bunu KAÇIRIR.
   Durum: **65/67, 2 muaf** (aşağıdaki iki kök).
-- **AÇIK KALAN İKİ KÖK (kapının muafiyet listesinde, küçülmek zorunda):**
-  - `matris_carpim` — **SIMD yok.** Kaynak `vektör<kesirli32,4>` kullanıyor;
-    C `<4 x float>` yayar, self-host codegen'de vektör TİPİ hiç yok → her şeyi
-    `i32` sanıyor. Arg-genişletme kusuru değil, **eksik özellik**.
+- **🎯 MUAFİYET LİSTESİ BOŞALDI — kapı 67/67.** Kurulduğunda 2 satır vardı;
+  ikisi de kapatıldı (D-396, D-397). Tasarlandığı gibi: muafiyet listesi
+  küçülmek içindir.
+  - ~~`matris_carpim`~~ ✓ **D-397: SIMD `vektör<T,N>` eklendi.** **DÖRT ayrı
+    kök**, her biri bir öncekini onarınca ortaya çıktı (tek ölçümle
+    görülemezlerdi): (1) `ll_tip` → `"<N x T>"`; (2) `vektor_doldur`/`_eleman`/
+    `_topla` yerleşikleri; (3) **`kesirli_ll_mi` vektörü tanımalı** — yoksa
+    lane-wise `mul <4 x float>` = LLVM-red; (4) annotasyon `"<N x T>"` ise
+    `beklenen_ll` bağlamı — yoksa `vektor_doldur` lane/eleman bilgisini
+    kurtaramaz. Parser ve checker ZATEN hazırdı; eksik olan yalnız codegen'di.
+    **`reduce.fadd` (0.0 başlangıçlı) ile `reduce.add` (operandsız) ARİTELERİ
+    farklıdır** — karıştırmak LLVM-red verir; ikisi de oracle'dan ölçüldü,
+    `<4 x i32>` varsayılanı dâhil uydurulmadı.
   - ~~`gorev_temel`~~ ✓ **D-396'da ONARILDI** (muafiyet 2→1, kapı 66/66).
     `görev_başlat` artık T'yi `son_ic` ile yayınlar (`lam_ret_tahmin`), `eşleş`
     skrutininin `son_ic`ini HEMEN yerelde yakalayıp desen payload'ına taşır.

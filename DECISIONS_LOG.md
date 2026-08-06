@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-397 [YÜKSEK] — CODEGEN: SIMD `vektör<T,N>` (son muafiyet kapandı) (2026-08-07)
+
+**Kusur:** Self-host codegen'de vektör TİPİ hiç yoktu. Parser `TIP_VEKTOR`
+düğümünü zaten üretiyordu (lane `a_deg`'de), checker yerleşikleri zaten
+tanıyordu — eksik olan YALNIZ codegen'di. `ll_tip`'te dal olmadığı için her
+vektör `i32` fallback'ine düşüyordu:
+```
+%9 = call i32 @vektor_topla(ptr %rho, i32 %8)
+ret float %9                     ; 'i32' but expected 'float'
+```
+
+**DÖRT ayrı kök — her biri bir öncekini onarınca ORTAYA ÇIKTI** (tek ölçümle
+görülemezlerdi; sırayla soyuldular, her adımda LLVM yeni bir hata verdi):
+1. `ll_tip`: `TIP_VEKTOR` → `"<N x T>"` (C `ast_tip_to_ir` aynası). Yoksa `i32`.
+2. Yerleşikler: `vektor_doldur` (insertelement+shufflevector splat),
+   `vektor_eleman` (extractelement), `vektor_topla` (reduce). Yoksa tanımsız
+   `@vektor_*` sembolü.
+3. `kesirli_ll_mi`: `"<N x float>"`/`"<N x double>"` **DE kesirlidir**
+   (C llvm.c:2193 aynası). Yoksa lane-wise çarpım `mul <4 x float>` yayar →
+   LLVM "invalid operand type".
+4. `beklenen_ll`: annotasyon `"<N x T>"` ise bağlam kur. Yoksa `vektor_doldur`
+   lane/eleman bilgisini kurtaramaz, C ile aynı `<4 x i32>` varsayılanına düşer
+   ve `insertelement <4 x i32> undef, i32 2.0` basar → LLVM-red.
+
+**Ölçüm notu:** `<4 x i32>` varsayılanını UYDURMADIM — C oracle'ın davranışı
+(`src/llvm.c:4120`). Aynı şekilde `reduce.fadd`in `0.0` başlangıç operandı ve
+`reduce.add`in operandsızlığı da oracle'dan okundu; **iki intrinsic'in ARİTELERİ
+farklıdır**, karıştırmak LLVM-red verir.
+
+**Yardımcılar (ham IR string üstünde — self-host'ta tip nesnesi yok, IR string'i
+tek gerçektir; `agg_alan` ile aynı disiplin):** `vek_ir_mi`, `vek_lane`,
+`vek_elem`, `vek_abbr` (float→f32, double→f64).
+
+**Sabotaj — dört kök, dört ayrı kapı:** S124 (`ll_tip` dalı), S125
+(`vektor_topla`), S126 (vektör-kesirli tanıma), S127 (`beklenen_ll` bağlamı) →
+**dördü de** `cg_simd_vektor` üzerinde KIRMIZI (120/121). Tek dosya dördünü de
+uyandırıyor; hangi satırın hangi kökü ölçtüğü korpus dosyasında yazılı.
+
+**Korpus:** `test/cg_korpus/cg_simd_vektor.kem`. Hem `vektör<kesirli32,4>` hem
+`vektör<tam32,4>` içerir — **tamsayı lane'ler `reduce.add` yoluna gider**, yalnız
+kesirli test etmek 2 numaralı kökün yarısını ölçmeden bırakırdı.
+
+**🎯 SONUÇ: `codegen_genis` 67/67, MUAFİYET LİSTESİ BOŞ.** Kapı D-395'te 2
+muafiyetle kuruldu, D-396 + D-397 ile boşaldı — tasarlandığı gibi.
+
+**Kapılar:** `codegen_genis` **67/67 (0 muaf)** · `codegen_diff` **121/121** ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (stage1==stage2,
+62168 satır).
+
+---
+
 ## D-396 [YÜKSEK] — CODEGEN: `eşleş` desen-bağlamasının iç tipi (görev<T>) (2026-08-07)
 
 **Kusur:** `görev_başlat` dönüşü `sonuç<görev<T>, metin>` ve IR karşılığı

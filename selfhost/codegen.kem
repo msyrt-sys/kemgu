@@ -2090,7 +2090,12 @@ işlev icmp_pred(op: metin, isz: tam32) -> metin {
 }
 // D3 Öncelik-1: float/double — operand LLVM tipi float/double mu?
 işlev kesirli_ll_mi(t: metin) -> mantıksal {
-    ver metin_esit(t, "float") veya metin_esit(t, "double");
+    eğer metin_esit(t, "float") veya metin_esit(t, "double") { ver doğru; }
+    // D-397 (SIMD Spec V1, C llvm.c:2193 aynası): "<N x float>" / "<N x double>"
+    // DE kesirlidir. Bu kol olmadan lane-wise aritmetik tamsayı mnemoniğine
+    // düşüyordu → `mul <4 x float>` (LLVM-red: "invalid operand type").
+    // Sonek eşleşmesi kullanılıyor çünkü N basamak sayısı değişken.
+    ver metin_biter(t, " x float>") veya metin_biter(t, " x double>");
 }
 // Float aritmetik mnemonik (C llvm.c:2426-2432 ile birebir).
 işlev ll_ikili_f(op: metin) -> metin {
@@ -2159,6 +2164,39 @@ işlev agg_alan(s: metin, n: tam32) -> metin {
         }
     }
     ver sonuc;
+}
+// D-397 (SIMD): IR tipi "<N x T>" biçiminde mi? agg_alan gibi ham metin üstünde
+// çalışır — self-host'ta tip nesnesi yok, IR string'i TEK gerçektir.
+işlev vek_ir_mi(s: metin) -> mantıksal {
+    eğer metin_uzunluk(s) < 6 { ver yanlış; }
+    eğer bayt(s, 0) != 60 { ver yanlış; }          // '<'
+    eğer bayt(s, metin_uzunluk(s) - 1) != 62 { ver yanlış; }   // '>'
+    // "<N x T>" — ilk karakterden sonra RAKAM gelmeli. Bu kontrol `<4 x i32>`
+    // maskesini de kabul eder; ayrım gerekmiyor, ikisi de geçerli vektör IR'ı.
+    değişken c: tam32 = bayt(s, 1);
+    ver (c >= 48) ve (c <= 57);
+}
+// "<N x T>" → N (ham rakam dizisi; hesaplama yok, doğrudan IR'a basılır).
+işlev vek_lane(s: metin) -> metin {
+    değişken i: tam32 = 1;
+    değişken uz: tam32 = metin_uzunluk(s);
+    iken i < uz ve (bayt(s, i) >= 48) ve (bayt(s, i) <= 57) { i = i + 1; }
+    ver metin_kes(s, 1, i - 1);
+}
+// "<N x T>" → T. C'nin `strstr(ir, " x ")` + `strchr(t_start,'>')` aynası.
+işlev vek_elem(s: metin) -> metin {
+    değişken uz: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 1;
+    iken i < uz ve (bayt(s, i) >= 48) ve (bayt(s, i) <= 57) { i = i + 1; }
+    // i şimdi " x " başında olmalı: ' ' 'x' ' '
+    eğer i + 3 > uz { ver "i32"; }
+    ver metin_kes(s, i + 3, uz - 1 - (i + 3));
+}
+// D-397: LLVM reduce intrinsic kısaltması (float→f32, double→f64, iN aynen).
+işlev vek_abbr(e: metin) -> metin {
+    eğer metin_esit(e, "float") { ver "f32"; }
+    eğer metin_esit(e, "double") { ver "f64"; }
+    ver e;
 }
 // D3: tagged-union yapıcı adı mı? (değer/tamam/hata)
 işlev tagunion_yapici_mi(ad: metin) -> mantıksal {
@@ -2534,6 +2572,17 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // işaretçi T'lerde SESSİZ 32-bit kırpma (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_TEKKEZ") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    // D-397: vektör<T, N> → "<N x T>" (SIMD Spec V1; C ast_tip_to_ir aynası).
+    // Bu dal olmadan aşağıdaki "i32" fallback'ine düşüyordu → `<4 x float>`
+    // bekleyen her yer `i32` görüyordu ("'%9' i32 but expected 'float'").
+    // Lane sayısı parser'da a_deg'e YAZILI (TAMSAYI simgesi, ham rakam dizisi).
+    eğer metin_esit(ta, "TIP_VEKTOR") {
+        değişken et: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+        değişken v1: metin = metin_birlestir("<", dizi_al(p.a_deg, tip_idx));
+        değişken v2: metin = metin_birlestir(v1, " x ");
+        değişken v3: metin = metin_birlestir(v2, et);
+        ver metin_birlestir(v3, ">");
     }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
         değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
@@ -3677,6 +3726,73 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_ic = lam_ret_tahmin(p, govde);
             ver reg_str(ld);
         }
+        // ---- D-397: SIMD yerleşikleri (C llvm.c aynası) ----
+        // vektor_doldur(s) → splat. Beklenen "<N x T>" ise ondan; yoksa C ile AYNI
+        // varsayılan `<4 x i32>` (uydurmadım, oracle'dan ölçtüm).
+        eğer metin_esit(fad, "vektor_doldur") ve (cs == 2) {
+            değişken vt: metin = p.beklenen_ll;
+            eğer vek_ir_mi(vt) == yanlış { vt = "<4 x i32>"; }
+            değişken el: metin = vek_elem(vt);
+            değişken ln: metin = vek_lane(vt);
+            değişken eski: metin = p.beklenen_ll;
+            p.beklenen_ll = el;   // skaler argüman eleman tipinde üretilmeli
+            değişken sv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            p.beklenen_ll = eski;
+            değişken r1: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(r1); yaz_str(" = insertelement "); yaz_str(vt);
+            yaz_str(" undef, "); yaz_str(el); yaz_str(" "); yaz_str(sv);
+            yaz_str(", i32 0"); yb(10);
+            değişken r2: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(r2); yaz_str(" = shufflevector "); yaz_str(vt);
+            yaz_str(" "); yaz_str(r1); yaz_str(", "); yaz_str(vt);
+            yaz_str(" undef, <"); yaz_str(ln); yaz_str(" x i32> zeroinitializer"); yb(10);
+            p.son_tip = vt; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver r2;
+        }
+        // vektor_eleman(v, i) -> T (extractelement). Eleman tipi DEĞERİN IR'ından
+        // okunur — beklenen tipten DEĞİL (beklenen T'dir, vektör değil).
+        eğer metin_esit(fad, "vektor_eleman") ve (cs == 3) {
+            değişken eskib: metin = p.beklenen_ll;
+            p.beklenen_ll = "";
+            değişken vv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken vt2: metin = p.son_tip;
+            p.beklenen_ll = "i32";
+            değişken iv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            p.beklenen_ll = eskib;
+            değişken el2: metin = "i32";
+            eğer vek_ir_mi(vt2) { el2 = vek_elem(vt2); }
+            değişken r3: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(r3); yaz_str(" = extractelement "); yaz_str(vt2);
+            yaz_str(" "); yaz_str(vv); yaz_str(", i32 "); yaz_str(iv); yb(10);
+            p.son_tip = el2; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver r3;
+        }
+        // vektor_topla(v) -> T. Kesirli eleman → reduce.fadd (SIRALI toplama için
+        // başlangıç operandı 0.0 ŞART); tamsayı → reduce.add (başlangıç YOK).
+        // İki intrinsic'in ARİTELERİ farklı — karıştırmak LLVM-red verir.
+        eğer metin_esit(fad, "vektor_topla") ve (cs == 2) {
+            değişken eskib2: metin = p.beklenen_ll;
+            p.beklenen_ll = "";
+            değişken vv2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken vt3: metin = p.son_tip;
+            p.beklenen_ll = eskib2;
+            değişken el3: metin = "i32";
+            değişken ln3: metin = "4";
+            eğer vek_ir_mi(vt3) { el3 = vek_elem(vt3); ln3 = vek_lane(vt3); }
+            değişken r4: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(r4); yaz_str(" = call "); yaz_str(el3);
+            eğer metin_esit(el3, "float") veya metin_esit(el3, "double") {
+                yaz_str(" @llvm.vector.reduce.fadd.v"); yaz_str(ln3);
+                yaz_str(vek_abbr(el3)); yaz_str("("); yaz_str(el3); yaz_str(" 0.0, ");
+                yaz_str(vt3); yaz_str(" "); yaz_str(vv2); yaz_str(")"); yb(10);
+            } değilse {
+                yaz_str(" @llvm.vector.reduce.add.v"); yaz_str(ln3);
+                yaz_str(vek_abbr(el3)); yaz_str("("); yaz_str(vt3); yaz_str(" ");
+                yaz_str(vv2); yaz_str(")"); yb(10);
+            }
+            p.son_tip = el3; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver r4;
+        }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
             // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer
             // muhasebe tamamen tip kontrolde; bu dal olmadan genel çağrı yoluna
@@ -4813,6 +4929,12 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // D3: annotasyon tagged-union ({i8,..}) ise yapıcı bağlamı kur (değer/tamam/...)
         değişken eski_bll: metin = p.beklenen_ll;
         eğer annot == 1 { eğer bayt(vtip, 0) == 123 { p.beklenen_ll = vtip; } }
+        // D-397: annotasyon vektör ("<N x T>") ise de bağlam kur — `vektor_doldur`
+        // lane sayısını ve eleman tipini BEKLENEN tipten okur, başka kaynağı yok.
+        // Kurulmazsa C ile aynı `<4 x i32>` varsayılanına düşer ve `2.0` gibi bir
+        // kesirli skaler i32 lane'e basılır → LLVM-red ("floating point constant
+        // invalid for type"). Sessiz değil ama yine de yanlış.
+        eğer annot == 1 { eğer vek_ir_mi(vtip) { p.beklenen_ll = vtip; } }
         // D-307: annotasyon mono yapı ("%Kutu$i32") → construction bağlamı kur
         eğer annot == 1 {
             eğer bayt(vtip, 0) == 37 {
