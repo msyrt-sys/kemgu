@@ -1024,8 +1024,17 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
   parse edip sentetik `DUGUM_MODUL` olarak AST'nin BAŞINA **splice** eder (tek
   ağaç). Self-host `modul_yukle` ayrı bir `Ayr`e parse edip **yalnız ADları
   hasat ediyor, AST'yi ATIYOR**; üstelik `--llvm` dispatch'i yükleyiciyi HİÇ
-  çağırmıyor. AST düz paralel dizi → indeks yeniden-eşlemesi gerekir, codegen'de
-  AST kopyalama yardımcısı YOK. Mekanizma `selfhost/checker.kem`'de de KOPYALI.
+  çağırmıyor. Mekanizma `selfhost/checker.kem`'de de KOPYALI.
+  - **✅ DE-RİSK EDİLDİ (ölçüldü, D-398 sonrası): AST kopyalama GEREKMİYOR.**
+    İlk teşhis "ayrı `Ayr`den indeks yeniden-eşlemesi şart, AST kopyalama
+    yardımcısı yok" idi — bu PAHALI yol. **Kaynak düzeyinde birleştirme
+    ÇALIŞIYOR:** modül kaynağını `modül <ad> { ... }` ile sarıp giriş dosyasının
+    önüne koymak + `kullan` satırını düşürmek → tek lex+parse, tek AST, yan-kanal
+    kaybı YOK. Ampirik: `ana_mat` için self-host **exit 42 = C**. D-398'in
+    mangling'i bu yolu doğrudan besliyor (`@mat.topla` kendiliğinden çıkıyor).
+  - Kalan tasarım ayrıntıları: alias (`kullan m olarak x` → `modül x { }`),
+    seçili import (çıplak ad görünürlüğü), transitif zincir sırası, ve konum
+    kayması (yalnız `--llvm` yolunda; tanılar `--check`te üretiliyor).
 - **YAN BULGU — check paritesi SIĞ:** `mat::topla(20)` (yanlış arite) C'de
   `T010`, self'te `OK`. 131/131 mevcut korpusta doğru ama isim düzeyinde;
   imza/tip yok. **Parite sayısı mekanizma derinliğini KANITLAMAZ.**
@@ -1049,6 +1058,17 @@ geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
 `selfhost/codegen.kem` birleşik sürücü). Korpusa dosya eklerken **hangi
 uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
 koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
+
+**⚠ EKSİK ARTEFAKT — `build/codegen.exe` (D-398'de İKİ KEZ ısırdı):** sabotaj
+döngüsünde `rm -f build/codegen.exe` yapıp sonra ELLE ölçüm koşarsan her dosya
+"IR üretemedi" der ve bu **sahte bir kök** gibi görünür (bir kez "modül desteği
+yok" sandım, bir kez "kaynak-splice çalışmıyor"). `calistir_self_driver`
+`kemgu_self.exe` kurar, `codegen.exe`'yi KURMAZ. **Elle ölçümden önce daima:**
+```
+build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll && \
+  clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe
+```
+Kapılar (`calistir_codegen_diff/genis`) bunu kendileri yapar — elle koşum yapmaz.
 
 **BAYAT ARTEFAKT (yine yaşandı):** `git checkout origin/main` ile ölçüm yapıp geri
 dönünce `build/kemgu.exe` ESKİ kaynaktan kalır ve tüm parite kapıları sahte kırmızı
