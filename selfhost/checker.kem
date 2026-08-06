@@ -81,12 +81,15 @@ yapı Ayr {
     // ---- TC3g: parametre tip tablosu (CAGRI per-arg T001) ----
     fn_pbase: Dizi<tam32>; // paralel: fn_ptip'te bu işlevin param tiplerinin başı
     fn_ptip: Dizi<metin>; // düz param tip listesi (yalnız bilinen skaler; aksi "?")
+    fn_ptn: Dizi<tam32>;  // D-376: paralel — param TİP DÜĞÜMÜ (T014 bağlam yayılımı)
     // ---- TC4: yapı tablosu (yapı_olustur T017/T012/T001 + erişim tipi) ----
     yapi_ad: Dizi<metin>;    // yapı adları
     yapi_abase: Dizi<tam32>; // paralel: alan_ad/alan_tip'te alan başlangıcı
     yapi_acount: Dizi<tam32>; // paralel: alan sayısı
     alan_ad: Dizi<metin>;    // düz alan adı listesi
     alan_tip: Dizi<metin>;   // paralel: alan tipi (yalnız bilinen skaler; aksi "?")
+    alan_tn: Dizi<tam32>;    // D-376: paralel — alan TİP DÜĞÜMÜ (T014 iç içe Dizi yürüyüşü)
+    t14_muaf: Dizi<tam32>;   // D-376: T014'ten MUAF boş-dizi düğümleri (beklenen tip Dizi)
     fn_plin: Dizi<tam32>;    // fn_ptip ile paralel: param lineer mi (1/0) — tüketim
     fn_pdizi: Dizi<tam32>;   // D-358: fn_ptip ile paralel: param Dizi<T> mü (G003)
     // ---- TC8: cross-file/modül import (kullan → dışa sembol toplama) ----
@@ -1797,8 +1800,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], asm_node: [], asm_mim: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
-        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_plin: [], fn_pdizi: [],
-        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [],
+        fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
+        yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
@@ -1989,6 +1992,7 @@ işlev yerlesik_ekle(p: &değişken Ayr, ad: metin, dt: metin, pt: Dizi<metin>) 
     değişken i: tam32 = 0;
     iken i < dizi_boyut(pt) {
         dizi_ekle(p.fn_ptip, dizi_al(pt, i));
+        dizi_ekle(p.fn_ptn, 0 - 1);   // D-376: yerleşiklerde tip düğümü YOK
         dizi_ekle(p.fn_plin, 0);    // yerleşiklerde lineer parametre YOK
         dizi_ekle(p.fn_pdizi, 0);   // ve dizi parametresi de YOK (liste dışı)
         i = i + 1;
@@ -2076,6 +2080,7 @@ işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
             değişken pt: metin = param_tip_str(p, c);
             eğer bilinen_skaler_mi(pt) { dizi_ekle(p.fn_ptip, pt); }
             değilse { dizi_ekle(p.fn_ptip, "?"); }
+            dizi_ekle(p.fn_ptn, son_cocuk(p, c));   // D-376: param tip DÜĞÜMÜ
             değişken tc: tam32 = son_cocuk(p, c);   // param tip çocuğu → tekkez mi (TC5b)
             eğer (tc >= 0) ve param_lineer_mi(p, tc) { dizi_ekle(p.fn_plin, 1); }
             değilse { dizi_ekle(p.fn_plin, 0); }
@@ -2110,6 +2115,20 @@ işlev fn_psay_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     ver 0 - 1;
 }
 // İşlev adı + parametre indeksi → param tip-string'i ("?" = bilinmeyen/bileşik).
+// D-376: param TİP DÜĞÜMÜ (yoksa -1). C'nin İKİNCİ argüman geçişi beklenen tipi
+// yayar → `g(xs: Dizi<tam32>)` için `g([])` T014'ü YALNIZ BİR KEZ alır (ilk geçiş
+// bağlamsız). Param tipi skaler ise iki kez alır (ölçüldü).
+işlev fn_ptn_bul(p: &değişken Ayr, ad: metin, j: tam32) -> tam32 {
+    değişken n: tam32 = dizi_boyut(p.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) {
+            ver dizi_al(p.fn_ptn, dizi_al(p.fn_pbase, i) + j);
+        }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 işlev fn_ptip_bul(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
     değişken n: tam32 = dizi_boyut(p.fn_ad);
     değişken i: tam32 = 0;
@@ -2138,6 +2157,7 @@ işlev yapi_kaydet(p: &değişken Ayr, yapi: tam32) -> tam32 {
             eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") { ft = tip_str(p, tc); }
             eğer bilinen_skaler_mi(ft) { dizi_ekle(p.alan_tip, ft); }
             değilse { dizi_ekle(p.alan_tip, "?"); }
+            dizi_ekle(p.alan_tn, tc);   // D-376: tip DÜĞÜMÜ (string "?"e düşse de)
             n = n + 1;
         }
         i = i + 1;
@@ -3329,9 +3349,95 @@ işlev l007_kontrol(p: &değişken Ayr, idx: tam32, op: tam32, kullan_mi: mantı
 // uyarlıyor ve hangi elemanın suçlandığı bağlama bağlı (yanlış konum riski).
 // Dizi<E> bağlamı YALNIZ annotasyonlu bildirimden gelir; `ver`/argüman bağlamları
 // "?" kalır (muhafazakâr alt küme — yanlış-pozitif yok).
+// ---- D-376: T014 — boş dizi tipi çıkarsanamaz ----
+// KURAL (ölçüldü, 22 probe): boş `[]` yalnız beklenen tipin `Dizi<..>` olduğu
+// DAR bir konum listesinde geçerlidir; başka HER yerde T014.
+//   MUAF: değişken/sabit/küresel annotasyonu · `ver` (dönüş tipi Dizi) ·
+//         yapı literali alanı (alan tipi Dizi) · dizi elemanı (eleman tipi Dizi) ·
+//         atama (lvalue Dizi)
+//   T014: annotasyonsuz · beklenen skaler · ÇAĞRI ARGÜMANI (kullanıcı VE yerleşik)
+//         · `olarak` operandı · lambda gövdesi (dönüş Dizi OLSA BİLE) · `değer([])`
+//         · indeksleme · ikili operand
+// Bağlam YAYILMAZ: `değişken xs: Dizi<tam32> = f([])` → içteki `[]` T014 alır.
+// Bu yüzden bayrak DEĞİL, DÜĞÜM MUAFİYETİ kullanılır — bayrak alt-ağaca sızardı.
+işlev t14_muaf_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.t14_muaf) {
+        eğer dizi_al(p.t14_muaf, i) == idx { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Beklenen TİP DÜĞÜMÜ biliniyorsa kesin yürüyüş: `[[]]` + `Dizi<Dizi<T>>` → iç `[]`
+// de muaf; `[1, []]` + `Dizi<tam32>` → iç `[]` muaf DEĞİL (C: T014 + T013).
+işlev t14_muaf_isaretle(p: &değişken Ayr, deger: tam32, tn: tam32) -> tam32 {
+    eğer deger < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, deger), "DIZI_OLUSTUR") == yanlış { ver 0; }
+    eğer (tn < 0) veya (tip_node_dizi_mi(p, tn) != 1) { ver 0; }
+    dizi_ekle(p.t14_muaf, deger);
+    eğer dizi_al(p.a_cs, tn) < 1 { ver 0; }
+    değişken etn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));   // eleman tip düğümü
+    değişken cb: tam32 = dizi_al(p.a_cb, deger);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, deger) {
+        t14_muaf_isaretle(p, dizi_al(p.cocuk, cb + i), etn);
+        i = i + 1;
+    }
+    ver 0;
+}
+// Tip düğümü ELDE YOKKEN (atama: yerelin yalnız "Dizi mi" bilgisi var): iç içe
+// boş dizileri de muaf tut. AŞIRI muafiyet = EKSİK tanı; yanlış tanı DEĞİL.
+işlev t14_muaf_hepsi(p: &değişken Ayr, deger: tam32) -> tam32 {
+    eğer deger < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, deger), "DIZI_OLUSTUR") == yanlış { ver 0; }
+    dizi_ekle(p.t14_muaf, deger);
+    değişken cb: tam32 = dizi_al(p.a_cb, deger);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, deger) {
+        t14_muaf_hepsi(p, dizi_al(p.cocuk, cb + i));
+        i = i + 1;
+    }
+    ver 0;
+}
+// İşlevin DÖNÜŞ tip düğümü (donus_str'in düğüm karşılığı; yoksa -1).
+işlev donus_tip_node(p: &değişken Ayr, fn: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_baslar(dizi_al(p.a_ad, c), "TIP_") { ver c; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// `Tip { alan: [] }` — alanın BİLDİRİLEN tipi Dizi ise değer muaf (alan_tn tablosu).
+işlev yapi_alan_t14_muaf(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken yi: tam32 = yapi_idx_bul(p, dizi_al(p.a_deg, idx));
+    eğer yi < 0 { ver 0; }
+    değişken ab: tam32 = dizi_al(p.yapi_abase, yi);
+    değişken an: tam32 = dizi_al(p.yapi_acount, yi);
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, idx) {
+        değişken f: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken j: tam32 = 0;
+        iken j < an {
+            eğer metin_esit(dizi_al(p.alan_ad, ab + j), dizi_al(p.a_deg, f)) {
+                t14_muaf_isaretle(p, son_cocuk(p, f), dizi_al(p.alan_tn, ab + j));
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken n: tam32 = dizi_al(p.a_cs, idx);
-    eğer n == 0 { ver 0; }        // boş dizi (T014) bu partide YOK — bkz. D-354 notu
+    eğer n == 0 {                 // D-376: boş dizi → bağlam yoksa T014
+        eğer t14_muaf_mi(p, idx) == yanlış { sekil_hata(p, idx, "T014"); }
+        ver 0;
+    }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken bek: metin = p.dizi_bek;
     eğer metin_esit(bek, "?") == yanlış {          // (a) bağlamlı yol
@@ -3991,6 +4097,24 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // D-376 T014 muafiyetleri — çocuk gezintisinden ÖNCE işaretlenmeli.
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT")
+      veya metin_esit(ad, "KURESEL") {
+        t14_muaf_isaretle(p, son_cocuk(p, idx), annot_node(p, idx));
+    }
+    eğer metin_esit(ad, "VER") ve (p.aktif_fn >= 0) ve (dizi_al(p.a_cs, idx) > 0) {
+        t14_muaf_isaretle(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)),
+                          donus_tip_node(p, p.aktif_fn));
+    }
+    eğer metin_esit(ad, "ATAMA") ve (dizi_al(p.a_cs, idx) > 1) {
+        // Yerelin yalnız "Dizi mi" bilgisi var → iç içe muafiyet (aşırı = eksik tanı).
+        değişken lv: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, lv), "TANIMLAYICI")
+          ve bag_dizi_mi(p, dizi_al(p.a_deg, lv)) {
+            t14_muaf_hepsi(p, son_cocuk(p, idx));
+        }
+    }
+    eğer metin_esit(ad, "YAPI_OLUSTUR") { yapi_alan_t14_muaf(p, idx); }
     // Madde E: TIP_DONUSTUR bir İFADE'dir (TIP_ öneki yanıltıcı) — kaynak alt-ağacı
     // gezilir (C: önce kaynağın tipi belirlenir), sonra E001-E004; hedef tip düğümü atlanır.
     eğer metin_esit(ad, "TIP_DONUSTUR") {
@@ -4249,6 +4373,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken a: tam32 = 1;
                 iken a < hc {
                     değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
+                    // D-376: İKİNCİ geçişte beklenen tip yayılır → param `Dizi<..>`
+                    // ise boş `[]` bu geçişte T014 ALMAZ (C ile birebir).
+                    t14_muaf_isaretle(p, arg, fn_ptn_bul(p, fad, a - 1));
                     kontrol_dugum(p, arg);
                     değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
                     eğer metin_esit(pt, "?") == yanlış {

@@ -1,0 +1,48 @@
+// D-376 / T014: boş `[]` tipi çıkarsanamaz — beklenen tip `Dizi<..>` DEĞİLSE hata.
+// Bağlam DAR bir konum listesinde yayılır (20 probe ile ölçüldü) ve alt-ağaca
+// SIZMAZ: `değişken xs: Dizi<tam32> = f([])` → içteki `[]` yine T014 alır.
+// Bu yüzden bayrak değil, DÜĞÜM MUAFİYETİ kullanılır.
+yapı K { xs: Dizi<tam32>; }
+sabit SXS: Dizi<tam32> = [];                        // MUAF (sabit annotasyonu)
+
+işlev g(xs: Dizi<tam32>) -> tam32 { ver 0; }
+işlev gg(xs: Dizi<Dizi<tam32>>) -> tam32 { ver 0; }
+
+// ---- MUAF konumlar (T014 YOK) ----
+işlev muaf_annot() -> tam32 {
+    değişken xs: Dizi<tam32> = [];
+    değişken ic: Dizi<Dizi<tam32>> = [[]];          // iç içe: eleman tipi de Dizi
+    ver 0;
+}
+işlev muaf_ver() -> Dizi<Dizi<tam32>> { ver [[]]; }
+işlev muaf_atama() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    xs = [];
+    ver 0;
+}
+işlev muaf_yapi_alani() -> tam32 {
+    değişken k: K = K { xs: [] };
+    ver 0;
+}
+// ---- T014 VEREN konumlar ----
+işlev t014_annotsuz() -> tam32 {
+    değişken xs = [];                               // T014
+    ver 0;
+}
+işlev t014_cagri_argumani() -> tam32 {
+    // Param `Dizi<..>` OLSA BİLE T014 — C argümanı iki kez tip-belirler ve
+    // beklenen tipi YALNIZ ikinci geçişte yayar → tanı TAM BİR KEZ çıkar.
+    ver g([]) + gg([[]]);                           // T014 ×2 (her çağrıda bir)
+}
+işlev t014_lambda() -> tam32 {
+    değişken f: işlev() -> Dizi<tam32> = || [];     // T014: dönüş Dizi OLSA BİLE
+    ver 0;
+}
+işlev t014_indeks() -> tam32 {
+    ver [][0];                                      // T014
+}
+işlev t014_ikili() -> tam32 {
+    değişken b: mantıksal = [] == [];               // T014 ×2
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

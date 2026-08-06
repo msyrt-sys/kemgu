@@ -5,6 +5,60 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-376 [YÜKSEK] — T014 portlandı: tanı-kodu ekseni KAPANDI (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kural 20 probe ile ölçüldü.** Boş `[]` yalnız **DAR** bir konum listesinde
+geçerli; başka her yerde T014:
+- **MUAF:** `değişken`/`sabit`/`küresel` annotasyonu · `ver` (dönüş tipi Dizi) ·
+  yapı literali alanı (alan tipi Dizi) · dizi elemanı (eleman tipi Dizi) ·
+  atama (lvalue Dizi)
+- **T014:** annotasyonsuz · beklenen skaler · **çağrı argümanı** · `olarak`
+  operandı · **lambda gövdesi (dönüş `Dizi` OLSA BİLE)** · `değer([])` ·
+  indeksleme · ikili operand
+
+**Bağlam SIZMAZ → bayrak DEĞİL, düğüm muafiyeti.** `değişken xs: Dizi<tam32> =
+f([])` → içteki `[]` yine T014. Bayrak alt-ağaca sızardı; bunun yerine muaf
+düğümler listeye işaretlenir (`t14_muaf`). Tip düğümü elde varken **kesin
+yürüyüş** (`[[]]`+`Dizi<Dizi<T>>` → iç `[]` de muaf; `[1,[]]`+`Dizi<tam32>` →
+muaf DEĞİL), elde yokken (atama) **aşırı muafiyet** — aşırı = EKSİK tanı,
+yanlış tanı değil.
+
+**D-375 ile etkileşim ölçüldü.** `g(xs: Dizi<tam32>)` için `g([])` T014'ü **tam
+bir kez** alır: C argümanı iki kez tip-belirler ama beklenen tipi YALNIZ ikinci
+geçişte yayar. Skaler paramda iki kez alır. Parite için param TİP DÜĞÜMLERİ
+tabloya eklendi (`fn_ptn`).
+
+**İki yanlış-pozitifi kapı yakaladı.** `xs = []` ve `K { xs: [] }` sahte T014
+alıyordu: muafiyet işaretlemem `kontrol_dugum`un ORTASINDAYDI, oysa ATAMA ve
+YAPI_OLUSTUR'un **daha erken dönen** işleyicileri var. Blok fonksiyonun EN
+BAŞINA taşındı. **DERS:** erken-dönüşlü bir dispatch zincirine iş eklerken
+konum bir tercih değil, bir DOĞRULUK koşuludur.
+
+**Port sırasında ikinci kusur — bayat alan yeniden kullanımı.** codegen.kem'de
+hazır görünen `alan_tnode` (D-307) **CHECK yolunda BOŞ**; onu okumak sürücüyü
+`PANIK: dizi sınır ihlali (boyut=0)` ile düşürdü (14 dosya kırmızı). Ayrı
+`alan_tn` eklendi. **DERS:** aynı adlı bir tablo her yolda dolu değildir.
+
+**BİLİNÇLİ SINIR (V1).** T014'ün KENDİSİ 20/20 birebir; ancak C'nin T014 ile
+BİRLİKTE ürettiği **takip tanıları** (T020/T001/T013/E002) self-host'ta çıkmaz —
+`ifade_tip` boş dizi için `"?"` döner ve doktrin gereği susulur. Bu, D-352'den
+beri bilinen **bileşik tip temsili yokluğu**; ayrı iş.
+
+**Kapılar:** `checker_diff` **138/138** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 106/106, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S85 (T014 tanısı), S86 (kesin tip yürüyüşü → 2 dosya), S87 (atama
+aşırı-muafiyeti) — üçü de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**🏁 KAMPANYA EKSENİ KAPANDI.** Self-host tanı kodu **70** (D-350'de 24).
+Kalan iki kod `T015`/`T023` **ÖLÜ** (C parser'ı o şekilleri reddeder) →
+portlanacak tanı kodu KALMADI. Bundan sonrası tip evreni (bileşik tip temsili)
+ya da yeni dil özelliği işidir.
+
+---
+
 ## D-375 [YÜKSEK] — Argüman alt-ağacı İKİ KEZ denetlenir; geniş ölçüm 131/131 (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
