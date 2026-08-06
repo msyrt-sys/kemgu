@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-377 [YÜKSEK] — Bileşik tip temsili, 1. artım: `Dizi<E>` (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Neden.** D-376'nın "bilinçli sınır"ının ve D-352'nin `eşleş` boşluğunun ORTAK
+kökü tekti: `tip_str` HER bileşik tipi `"?"`e düşürüyordu → `Dizi` tipli
+T001/T013/T020 karşılaştırmaları hiç yapılmıyordu.
+
+**Artımlı ve davranış-nötr başlatıldı.** `tip_str` `Dizi<E>` üretir; ama
+`bilinen_skaler_mi` BİLEREK dokunulmadı — mevcut ~15 tüketici "Dizi<..>"yi
+skaler saymaz, hepsi eskisi gibi susar. Yeni temsile opt-in eden yerler ayrı bir
+`bilinen_tip_mi` kullanır. Kapsam tek tek ve ÖLÇÜLEREK açıldı: `yerel_tip_filtrele`,
+`fn_donus`, `fn_ptip`, `ifade_tip` (DIZI_OLUSTUR + INDEKS), T001'in D-370 kapısı.
+
+**Açtığı tanılar (7/7 probe birebir):** `Dizi` vs skaler T001 · eleman-tipi farkı
+(`Dizi<tam32>` ≠ `Dizi<metin>`) · `ver` T020 · `xs[0]` eleman tipi · çağrı
+argümanı · çağrı dönüşü. Hepsi ÖNCE tamamen sessizdi.
+
+**İki gizli etkileşim ölçümle yakalandı — ikisi de YANLIŞ-POZİTİF:**
+1. **İç içe dizide bağlam daralmıyordu.** `Dizi<Dizi<tam32>> = [[1,2],[3]]` →
+   iç literaller "Dizi<tam32>" ile karşılaştırılıp sahte T013 aldı. Eleman tipi
+   önce "?" olduğu için bu yol HİÇ uyanmamıştı. Daraltıcı eklendi.
+2. **Generic param sızıntısı.** `tip_str` TIP_BASIT'te ham adı döndürdüğü için
+   `Dizi<T>` "bilinen" sayıldı → `sirali_mi<T>(xs: Dizi<T>)` gövdesindeki
+   `xs[0] > xs[1]` sahte T003 aldı (`kütüphane/dizi.kem` + `karsilastir.kem`,
+   geniş ölçümde yakalandı). C generic'i ERTELER; eleman "gerçekten bilinen"
+   değilse tüm tip "?" olur.
+
+**DERS:** bir temsili zenginleştirmek, o temsilin FAKİRLİĞİNE dayanan her sessiz
+yolu uyandırır. İkisi de "kural yanlıştı" değil, "bu yol ilk kez çalışıyor"du.
+Bu yüzden artım davranış-nötr başlamalı ve kapsam tek tek açılmalı.
+
+**Kapılar:** `checker_diff` **139/139** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 107/107, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S88 (`Dizi<E>` üretimi), S89 (generic ertelemesi → yanlış-pozitif
+kapısı) — ikisi de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**Sıradaki artımlar:** `seçimlik<T>` / `sonuç<T,H>` (D-352'nin `eşleş`
+kapsayıcılık dalları buna bağlı) · `&T` · `yapı` alan tiplerinin bileşik hâli.
+
+---
+
 ## D-376 [YÜKSEK] — T014 portlandı: tanı-kodu ekseni KAPANDI (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

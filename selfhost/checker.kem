@@ -1903,9 +1903,33 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 }
 // Alt-ağaçtaki param/lokal/için/desen-binding adlarını yerel'e topla.
 // ---- TC3: tip çıkarsama (string-encoded; "?" = bilinmiyor → T001 atla) ----
+// D-377: BİLEŞİK TİP TEMSİLİ — 1. artım: yalnız `Dizi<E>`.
+// `bilinen_skaler_mi` BİLEREK dokunulmadı: mevcut tüm tüketiciler "Dizi<..>"yi
+// skaler saymaz → hepsi eskisi gibi SUSAR. Yeni temsile opt-in eden yerler
+// `bilinen_tip_mi` kullanır. Böylece artım davranış-nötr başlar, kapsam
+// tek tek ve ölçülerek açılır.
 işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
     eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_BASIT") { ver dizi_al(p.a_deg, idx); }
-    ver "?";   // bileşik tip (Dizi/&/seçimlik/...) — ileri TC
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_DIZI") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken e: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        // Eleman GERÇEKTEN bilinmeli. `tip_str` TIP_BASIT'te ham adı döndürür —
+        // generic param (`Dizi<T>`) da öyle gelir. Onu "bilinen" saymak
+        // `xs[i] > xs[j]` gibi generic gövdelerde sahte T003 üretiyordu (ölçüldü:
+        // `sirali_mi<T>(xs: Dizi<T>)`). C generic'i ERTELER → biz de "?" deriz.
+        eğer (bilinen_skaler_mi(e) veya metin_baslar(e, "Dizi<")) == yanlış { ver "?"; }
+        ver metin_birlestir("Dizi<", metin_birlestir(e, ">"));
+    }
+    ver "?";   // diğer bileşikler (&/seçimlik/sonuç/...) — sonraki artımlar
+}
+// Karşılaştırılabilir (tam bilinen) tip mi? Skaler ∪ `Dizi<bilinen>`.
+işlev bilinen_tip_mi(t: metin) -> mantıksal {
+    ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<");
+}
+// `Dizi<E>` → `E` (değilse "?"). `metin_kes(s, başlangıç, UZUNLUK)` — ölçüldü.
+işlev dizi_ic_tip(t: metin) -> metin {
+    eğer metin_baslar(t, "Dizi<") == yanlış { ver "?"; }
+    ver metin_kes(t, 5, metin_uzunluk(t) - 6);
 }
 işlev sayisal_mi(t: metin) -> mantıksal {
     ver metin_esit(t, "tam8") veya metin_esit(t, "tam16") veya metin_esit(t, "tam32")
@@ -2067,7 +2091,7 @@ işlev yerlesik_imza_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, fn));
     değişken dt: metin = donus_str(p, fn);
-    eğer bilinen_skaler_mi(dt) { dizi_ekle(p.fn_donus, dt); }
+    eğer bilinen_tip_mi(dt) { dizi_ekle(p.fn_donus, dt); }   // D-377: Dizi<..> de
     değilse { dizi_ekle(p.fn_donus, "?"); }
     dizi_ekle(p.fn_psay, param_say(p, fn));
     dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));   // param tiplerinin başlangıcı
@@ -2078,7 +2102,7 @@ işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
             değişken pt: metin = param_tip_str(p, c);
-            eğer bilinen_skaler_mi(pt) { dizi_ekle(p.fn_ptip, pt); }
+            eğer bilinen_tip_mi(pt) { dizi_ekle(p.fn_ptip, pt); }   // D-377: Dizi<..> de
             değilse { dizi_ekle(p.fn_ptip, "?"); }
             dizi_ekle(p.fn_ptn, son_cocuk(p, c));   // D-376: param tip DÜĞÜMÜ
             değişken tc: tam32 = son_cocuk(p, c);   // param tip çocuğu → tekkez mi (TC5b)
@@ -2234,6 +2258,21 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     eğer metin_esit(ad, "MANTIKSAL") { ver "mantıksal"; }
     eğer metin_esit(ad, "BOS") { ver "boş"; }
     eğer metin_esit(ad, "TANIMLAYICI") { ver var_tip(p, dizi_al(p.a_deg, idx)); }
+    // D-377: dizi literalinin tipi. Bağlam varsa ONA uyarlanır (C bidirectional);
+    // yoksa ilk elemandan çıkarsanır. BOŞ dizi bağlamsız → "?" (T014 zaten ayrı
+    // kural; burada tip UYDURMAK sahte T001 üretirdi).
+    eğer metin_esit(ad, "DIZI_OLUSTUR") {
+        eğer metin_baslar(beklenen, "Dizi<") { ver beklenen; }
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken e0: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
+        eğer bilinen_tip_mi(e0) == yanlış { ver "?"; }
+        ver metin_birlestir("Dizi<", metin_birlestir(e0, ">"));
+    }
+    // D-377: `xs[i]` → eleman tipi (dizi tipi biliniyorsa).
+    eğer metin_esit(ad, "INDEKS") ve (dizi_al(p.a_cs, idx) > 0) {
+        değişken bt: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
+        eğer metin_baslar(bt, "Dizi<") { ver dizi_ic_tip(bt); }
+    }
     eğer metin_esit(ad, "IKILI") {
         değişken op: metin = dizi_al(p.a_deg, idx);
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
@@ -2324,7 +2363,11 @@ işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(annot, "?") { ver 0; }
     // D-370: annotasyon BİLİNMEYEN bir tipse C tipi HATA'ya düşürür ve T001'e
     // hiç gelmez (yalnız T011 çıkar). Aksi hâlde tek kusur iki tanı üretirdi.
-    eğer tip_adi_bilinir_mi(p, annot) == yanlış { ver 0; }
+    // D-377: kapı yalnız BASİT tip ADLARI içindir; `Dizi<..>` bir ad değil, bileşik
+    // temsildir ve tip_adi_bilinir_mi'de doğal olarak bulunmaz → muaf tutulmalı.
+    eğer metin_baslar(annot, "Dizi<") == yanlış {
+        eğer tip_adi_bilinir_mi(p, annot) == yanlış { ver 0; }
+    }
     değişken vc: tam32 = son_cocuk(p, idx);
     eğer vc < 0 { ver 0; }
     değişken vt: metin = ifade_tip(p, vc, annot);
@@ -4012,7 +4055,9 @@ işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
 // saklanır; aksi (generic "T" gibi bilinmeyen ad) → "?" → kontrol atlanır.
 // C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true" → generic'te T003 yok.
 işlev yerel_tip_filtrele(p: &değişken Ayr, t: metin) -> metin {
-    eğer bilinen_skaler_mi(t) veya yapi_var_mi(p, t) { ver t; }
+    // D-377: `Dizi<bilinen>` artık TAM bilinen sayılır → yerel/dönüş tipi olarak
+    // taşınır ve T001/T020 karşılaştırmalarına girer.
+    eğer bilinen_tip_mi(t) veya yapi_var_mi(p, t) { ver t; }
     ver "?";
 }
 işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
@@ -4535,6 +4580,13 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 p.drf_bek = "ct6";
             }
         }
+    }
+    // D-377: İÇ İÇE dizi — eleman tipi de `Dizi<E2>` ise alt literale inerken
+    // bağlamı DARALT. Önce eleman tipi "?"e düştüğü için bu yol hiç uyanmıyordu;
+    // bileşik temsil gelince daraltmasız bağlam iç literalleri YANLIŞ tiple
+    // karşılaştırırdı (ölçüldü: `Dizi<Dizi<tam32>> = [[1,2],[3]]` → sahte T013).
+    eğer metin_esit(ad, "DIZI_OLUSTUR") ve metin_baslar(p.dizi_bek, "Dizi<") {
+        p.dizi_bek = dizi_ic_tip(p.dizi_bek);
     }
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
         değişken an: tam32 = annot_node(p, idx);
