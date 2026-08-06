@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-386 [YÜKSEK] — Katman 2 intrinsik dönüş tipleri; `eşleş` görev L001 kapandı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Bu intrinsikler yerleşik imza TABLOSUNA GİRMEZ.** D-374'ün tablosu skaler
+imzalıdır; Katman 2 intrinsiklerinin dönüşü ARGÜMANDAN türer, C'de de bağlam
+duyarlı özel-durumdur. Ölçülen kurallar:
+- `kanal_al(k)` → k'nin `kanal<E>` eleman tipi
+- `görev_birleştir(g)` → g'nin `görev<T>` yükü
+- `görev_başlat(|| e)` → `sonuç<görev<T>, metin>`, T = lambda gövdesinin tipi
+
+**D-385'in bıraktığı boşluk kapandı.** Skrutini tipi artık bilindiği için
+`eşleş görev_başlat(..) { tamam(g) => ... }` bağlaması `görev<T>` tipini alıyor;
+lineer olduğunda dilime giriyor ve **C ile birebir `L001 0:0`** üretiyor
+(konum yok — sembol kaynakta bir konuma karşılık gelmiyor, ölçüldü). İki kez
+`görev_birleştir` → L002 da birebir.
+
+**D-384'ün kuralı ikinci kez uygulandı.** İlk uygulama `tc18_01_drf.kem`'de
+sahte T001 üretti: `görev_başlat(|| 1.0)` DRF001 alır, C tipi HATA'ya düşürür.
+"Geçersiz tip = tanı YOK" kuralının bu kez TİP tarafı; kesirli yükte "?" dönülür.
+Aynı kural iki partide iki farklı yüzeyde çıktı (lineer yükümlülük / tip
+bildirimi) — **hata yolunda hiçbir türetilmiş bilgi yayılmamalı.**
+
+**Kapılar:** `checker_diff` **148/148** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 116/116, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / drf 54, **geniş ölçüm 131/131**.
+Probe 6/6 birebir. **Sabotaj:** S106 (intrinsik dönüş tipi), S107 (lineer desen
+bağlaması kaydı), S108 (kesirli kapısı — yanlış-pozitif dosyasında kırmızı).
+
+**KARAR BEKLEYEN:** `işlev(..)->T` temsili. `tip_str`in üreteceği dizgi biçimi
+bir TİP SİSTEMİ kararıdır (çok argümanlı + dönüşlü) ve korpusa + iki uygulamaya
+girdikten sonra değiştirmek pahalıdır → CLAUDE.md gereği Mehmet'e sorulmadan
+sabitlenmeyecek. Self-host checker'da karar gerektirmeyen iş KALMADI.
+
+---
+
 ## D-385 [YÜKSEK] — Desen bağlama tipleri (`eşleş` kollarında) (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

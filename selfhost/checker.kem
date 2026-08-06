@@ -2314,6 +2314,39 @@ işlev var_tip(p: &değişken Ayr, ad: metin) -> metin {
     ver bulunan;
 }
 // İfade tipi (beklenen ile bidirectional). Bilinmeyen → "?". (TC3a: literal+ident.)
+// ---- D-386: Katman 2 intrinsiklerinin DÖNÜŞ tipleri ----
+// Ölçüldü (C oracle):
+//   `kanal_al(k)`           → k'nin `kanal<E>` eleman tipi E
+//   `görev_birleştir(g)`    → g'nin `görev<T>` yükü T
+//   `görev_başlat(|| e)`    → `sonuç<görev<T>, metin>`, T = lambda gövdesinin tipi
+// Bunlar C'de yerleşik imza tablosunda DEĞİL (D-374'ün tablosu skaler imzalıdır);
+// tipleri argümandan türer, o yüzden ayrı ele alınır.
+işlev tek_arg_ic_tip(p: &değişken Ayr, idx: tam32, onek: metin) -> metin {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver "?"; }
+    değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+    değişken at: metin = ifade_tip(p, a0, "?");
+    eğer metin_baslar(at, onek) == yanlış { ver "?"; }
+    ver metin_kes(at, metin_uzunluk(onek), metin_uzunluk(at) - metin_uzunluk(onek) - 1);
+}
+işlev intrinsik_donus(p: &değişken Ayr, idx: tam32, fad: metin) -> metin {
+    eğer metin_esit(fad, "kanal_al") { ver tek_arg_ic_tip(p, idx, "kanal<"); }
+    eğer metin_esit(fad, "görev_birleştir") { ver tek_arg_ic_tip(p, idx, "görev<"); }
+    eğer metin_esit(fad, "görev_başlat") {
+        eğer dizi_al(p.a_cs, idx) < 2 { ver "?"; }
+        değişken lam: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+        eğer metin_esit(dizi_al(p.a_ad, lam), "LAMBDA") == yanlış { ver "?"; }
+        değişken lc: tam32 = son_cocuk(p, lam);   // gövde (ifade- ya da blok-form)
+        eğer lc < 0 { ver "?"; }
+        // Blok-form gövdenin tipi bu yoldan çıkarsanmaz → "?" (susarız).
+        değişken t: metin = ifade_tip(p, lc, "?");
+        eğer bilinen_tip_mi(t) == yanlış { ver "?"; }
+        // D-386: KESİRLİ yük DRF001 alır → C tipi HATA'ya düşürür ve T001 ÇIKMAZ.
+        // (D-384'ün "geçersiz tip = yükümlülük yok" kuralının tip tarafı.)
+        eğer kesirli_mi(t) { ver "?"; }
+        ver metin_birlestir("sonuç<görev<", metin_birlestir(t, ">, metin>"));
+    }
+    ver "?";
+}
 işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") {
@@ -2429,6 +2462,10 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     eğer metin_esit(ad, "CAGRI") {   // TC3d: kullanıcı işlevi çağrısı → dönüş tipi
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));   // çocuk[0]=hedef
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") {
+            // D-386: Katman 2 intrinsikleri C'de imza TABLOSUNDA DEĞİL, bağlam
+            // duyarlı özel-durumdur → dönüşleri ARGÜMAN tipinden türetilir.
+            değişken kt: metin = intrinsik_donus(p, idx, dizi_al(p.a_deg, h));
+            eğer metin_esit(kt, "?") == yanlış { ver kt; }
             ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
         }
         ver "?";   // method/dolaylı çağrı → ileri TC
@@ -3732,6 +3769,11 @@ işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin) -> tam32 {
     }
     eğer metin_esit(vad, "tamam") { yerel_tip_ata(p, bad, sonuc_arg(st, yanlış)); }
     eğer metin_esit(vad, "hata") { yerel_tip_ata(p, bad, sonuc_arg(st, doğru)); }
+    // D-386: bağlanan tip LİNEERSE bağlama lineer dilime girer. C bu bağlama için
+    // KONUM 0:0 basar (sembol kaynakta bir konuma karşılık gelmiyor — ölçüldü).
+    değişken bt: metin = var_tip(p, bad);
+    eğer metin_baslar(bt, "görev<") veya metin_baslar(bt, "tekkez<")
+      veya metin_baslar(bt, "yetki<") { lin_ekle(p, bad, 0, 0); }
     ver 0;
 }
 işlev esles_skrutini_tipi(p: &değişken Ayr, kosul: tam32) -> metin {
