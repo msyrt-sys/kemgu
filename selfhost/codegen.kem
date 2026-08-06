@@ -6155,14 +6155,28 @@ işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
         eğer yetki_kaynak_tipi_mi(yad) == yanlış { ver "?"; }
         ver metin_birlestir("yetki<", metin_birlestir(yad, ">"));
     }
-    ver "?";   // diğer bileşikler (işlev/görev/kanal/...) — sonraki artımlar
+    // D-383: 6. artım — `görev<T>` ve `kanal<T>` (Katman 2 eşzamanlılık tipleri).
+    // NOT: `gönderen<T>`/`alan<T>` yön uçları AST'de `TIP_KULLANICI`dır (D-366'da
+    // ölçüldü: yön TİPTEN okunamaz) → onlar "?" kalır, susarız.
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_GOREV")
+      veya metin_esit(dizi_al(p.a_ad, idx), "TIP_KANAL") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken ct: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer bilinen_tip_mi(ct) == yanlış { ver "?"; }
+        eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_GOREV") {
+            ver metin_birlestir("görev<", metin_birlestir(ct, ">"));
+        }
+        ver metin_birlestir("kanal<", metin_birlestir(ct, ">"));
+    }
+    ver "?";   // diğer bileşikler (işlev/gönderen/alan/...) — sonraki artımlar
 }
 // Karşılaştırılabilir (tam bilinen) tip mi? Skaler ∪ `Dizi<bilinen>`.
 işlev bilinen_tip_mi(t: metin) -> mantıksal {
     ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<")
       veya metin_baslar(t, "seçimlik<") veya metin_baslar(t, "sonuç<")   // D-378
       veya metin_baslar(t, "&") veya metin_baslar(t, "*")   // D-380
-      veya metin_baslar(t, "tekkez<") veya metin_baslar(t, "yetki<");   // D-382
+      veya metin_baslar(t, "tekkez<") veya metin_baslar(t, "yetki<")   // D-382
+      veya metin_baslar(t, "görev<") veya metin_baslar(t, "kanal<");   // D-383
 }
 // `Dizi<E>` → `E` (değilse "?"). `metin_kes(s, başlangıç, UZUNLUK)` — ölçüldü.
 işlev dizi_ic_tip(t: metin) -> metin {

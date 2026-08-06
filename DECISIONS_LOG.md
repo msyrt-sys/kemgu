@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-383 — `görev<T>` + `kanal<T>` temsili (bileşik tip 7. artım) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Temsil eklendi**, D-382'nin kanıtlanmış deseniyle (tek argümanlı bileşik).
+Açılan: `kanal<T>` vs skaler T001 · iç-tip farkı · çağrı argümanı · `görev<T>`
+dönüşünde T020.
+
+**`gönderen<T>`/`alan<T>` TEMSİL EDİLEMEZ — bilinçli sessizlik.** D-366'da
+ölçülen olgu doğrulandı: yön uçları AST'de `TIP_KULLANICI`dır, yön TİPTEN
+okunamaz (o yüzden DRF007 DEĞERDEN okunuyor). `TIP_KULLANICI` için tip üretmek
+kullanıcı yapılarıyla karışırdı → "?" bırakıldı, self-host susar.
+
+**ÖLÇÜLDÜ AMA UYGULANMADI (sıradaki iş).** C'de **`görev<T>` LİNEERDİR**,
+`kanal<T>` değildir:
+- `işlev al(g: görev<tam32>) -> tam32 { ver 0; }` → **L001** (param tüketilmedi)
+- gövde `görev_birleştir(g)` içeriyorsa → OK
+- `kanal<T>` parametresi hiç kullanılmasa bile → OK
+
+Self-host'un lineer makinesinde `TIP_GOREV` YOK → bu L001'ler çıkmıyor. Bu bir
+TEMSİL işi değil, LİNEER MAKİNE işidir (D-382'de `tekkez`/`yetki` için yapılanın
+`görev` karşılığı) ve `eşleş` deseniyle bağlanan görevlerde C'nin konumu `0:0`
+bastığı ölçüldü — o tuhaflığın da taklidi gerekir. Ayrı adım olarak bırakıldı;
+bu partinin korpusunda lineer şekil YOK.
+
+**Kapılar:** `checker_diff` **145/145** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 113/113, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / drf 54 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S100 (`görev`/`kanal` temsili) → kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `işlev(..)->T` (çok argümanlı — temsil biçimi bir TASARIM
+kararı, Mehmet'e sorulmalı) · `çeşit` payload tipleri · `görev` lineerliği.
+
+---
+
 ## D-382 [YÜKSEK] — `tekkez<T>` + `yetki<R>`; LİNEER TAŞIMA kuralı düzeltildi (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
