@@ -1,0 +1,47 @@
+// D-382: bileşik tip 6. artım — `tekkez<T>` + `yetki<R>` (lineer tipler).
+// Ayrıca LİNEER TAŞIMA kuralı düzeltildi: taşıma yalnız YENİ BAĞLAMA
+// LİNEERSE olur. Ölçüm (C oracle):
+//   `b: tekkez<metin> = a`  → TAŞIR  (a tüketilir; b için L001/L002)
+//   `n: tam32 = a`          → TAŞIMAZ (a için L001)
+// Ayırt edici T001'in çıkması DEĞİL, hedef bağlamanın lineerliğidir.
+işlev t001_tekkez_skaler() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1);
+    değişken n: tam32 = t;                  // T001; TAŞIMA YOK
+    imha(t);                                // geçerli — t hâlâ canlı
+    ver 0;
+}
+işlev t001_tekkez_ic_tip() -> tam32 {
+    değişken a: tekkez<tam32> = tekkez_olustur(1);
+    değişken b: tekkez<metin> = a;          // T001; ama TAŞIR (b lineer)
+    imha(b);
+    ver 0;
+}
+işlev lineer_bag_imhasiz() -> tam32 {
+    değişken a: tekkez<tam32> = tekkez_olustur(1);
+    değişken b: tekkez<metin> = a;          // T001 + L001 (b tüketilmedi)
+    ver 0;
+}
+işlev skaler_bag_imhasiz() -> tam32 {
+    değişken a: tekkez<tam32> = tekkez_olustur(1);
+    değişken n: tam32 = a;                  // T001 + L001 (a tüketilmedi)
+    ver 0;
+}
+işlev t001_yetki_skaler() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    değişken n: tam32 = y;                  // T001; TAŞIMA YOK
+    geri_al(y);
+    ver 0;
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz_tasima() -> tam32 {
+    değişken a: tekkez<tam32> = tekkez_olustur(1);
+    değişken b: tekkez<tam32> = a;          // geçerli taşıma
+    imha(b);
+    ver 0;
+}
+işlev temiz_yetki() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    geri_al(y);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

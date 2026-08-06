@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-382 [YÜKSEK] — `tekkez<T>` + `yetki<R>`; LİNEER TAŞIMA kuralı düzeltildi (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Temsil.** `tekkez<T>` ve `yetki<R>` `tip_str`e eklendi. `yetki<R>`'nin iç adı
+bir KAYNAK adıdır (MMIO/Dosya/...), skaler değildir → `bilinen_tip_mi`
+kapısından geçmez; `yetki_kaynak_tipi_mi` ile ayrıca doğrulanır.
+
+**Asıl bulgu — LİNEER TAŞIMA kuralı YANLIŞTI (mevcut kusur).** Self-host
+`değişken` bildiriminde değeri KOŞULSUZ tüketiyordu. C ölçüldü (3 şekil):
+- `b: tekkez<metin> = a` → **TAŞIR** (a tüketilir; b için L001/L002)
+- `n: tam32 = a` → **TAŞIMAZ** (a için L001)
+
+Yani ayırt edici **hedef bağlamanın LİNEERLİĞİ**dir. Bu kusur bugüne kadar
+görünmezdi: tip uyuşmazlığı olan lineer bildirim ancak `tekkez<T>` temsili
+gelince T001 üretebiliyordu; o zamana dek şekil korpusa hiç girmemişti.
+
+**İlk hipotezim YANLIŞTI, ölçüm ayırdı.** "Taşıma T001 çıkmazsa olur" dedim ve
+`t001_cikar_mi` kapısı yazdım — bir şekli düzeltti, diğerini BOZDU
+(`b: tekkez<metin> = a` için sahte L001). İkinci ölçüm turu doğru ayrımı
+(`deg_lineer_mi`) gösterdi. **İki şekil arasında ayrım yapan bir kural
+yazarken İKİSİNİ de ölçmeden yazma.**
+
+**Kapılar:** `checker_diff` **144/144** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 112/112, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / capability 40 / parser 107,
+**geniş ölçüm 131/131**. Probe 8/8 birebir. **Sabotaj:** S98 (`tekkez<T>`
+temsili), S99 (koşulsuz taşımaya dönüş) — ikisi de kırmızı.
+
+**Kalan artımlar:** `işlev(..)->T` · `görev<T>`/`kanal<T>` · `çeşit` payload.
+
+---
+
 ## D-381 — `olarak` ifadesinin TİPİ (bileşik tip 5. artım) (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

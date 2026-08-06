@@ -6138,13 +6138,31 @@ işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
         eğer bilinen_tip_mi(pt2) == yanlış { ver "?"; }
         ver metin_birlestir("*", pt2);
     }
-    ver "?";   // diğer bileşikler (işlev/tekkez/...) — sonraki artımlar
+    // D-382: 5. artım — `tekkez<T>` ve `yetki<R>` (lineer tipler).
+    // `yetki<R>` iç adı bir KAYNAK adıdır (MMIO/Dosya/...), skaler değildir →
+    // `bilinen_tip_mi` kapısından geçmez; ayrıca ele alınır.
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_TEKKEZ") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken lt: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer bilinen_tip_mi(lt) == yanlış { ver "?"; }
+        ver metin_birlestir("tekkez<", metin_birlestir(lt, ">"));
+    }
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_YETKI") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken yt: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, yt), "TIP_BASIT") == yanlış { ver "?"; }
+        değişken yad: metin = dizi_al(p.a_deg, yt);
+        eğer yetki_kaynak_tipi_mi(yad) == yanlış { ver "?"; }
+        ver metin_birlestir("yetki<", metin_birlestir(yad, ">"));
+    }
+    ver "?";   // diğer bileşikler (işlev/görev/kanal/...) — sonraki artımlar
 }
 // Karşılaştırılabilir (tam bilinen) tip mi? Skaler ∪ `Dizi<bilinen>`.
 işlev bilinen_tip_mi(t: metin) -> mantıksal {
     ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<")
       veya metin_baslar(t, "seçimlik<") veya metin_baslar(t, "sonuç<")   // D-378
-      veya metin_baslar(t, "&") veya metin_baslar(t, "*");   // D-380
+      veya metin_baslar(t, "&") veya metin_baslar(t, "*")   // D-380
+      veya metin_baslar(t, "tekkez<") veya metin_baslar(t, "yetki<");   // D-382
 }
 // `Dizi<E>` → `E` (değilse "?"). `metin_kes(s, başlangıç, UZUNLUK)` — ölçüldü.
 işlev dizi_ic_tip(t: metin) -> metin {
@@ -8913,7 +8931,11 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // TC5b: değişken — değer lineer bağlamaysa move-tüket; bağlama lineer ise izle.
     eğer metin_esit(ad, "DEGISKEN") {
         değişken vc2: tam32 = son_cocuk(p, idx);
-        eğer vc2 >= 0 { lin_tuket_dugum(p, vc2); }   // move: değer lineer bağlamaysa tüket
+        // D-382: TAŞIMA yalnız YENİ BAĞLAMA LİNEERSE olur (C ile birebir).
+        // Ölçüm (3 şekil): `b: tekkez<metin> = a` → taşır (a tüketilir, b için
+        // L001/L002); `n: tam32 = a` → TAŞIMAZ (a için L001). Yani ayırt edici
+        // T001'in çıkması DEĞİL, hedef bağlamanın lineerliğidir.
+        eğer (vc2 >= 0) ve deg_lineer_mi(p, idx) { lin_tuket_dugum(p, vc2); }
         g005_degisken_kontrol(p, idx);   // D-324
         eğer deg_lineer_mi(p, idx) {
             lin_ekle(p, dizi_al(p.a_deg, idx), dizi_al(p.a_sat, idx), dizi_al(p.a_sut, idx));
