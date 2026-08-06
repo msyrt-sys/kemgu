@@ -5,6 +5,72 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-398 [YÜKSEK] — CODEGEN: modül ad-mangling (`@mod.ad`) (2026-08-07)
+
+**Nasıl bulundu:** D-395'in kurduğu geniş kapı `test/ornekler` + `stdlib/temel`de
+doyunca ölçüm HİÇ BAKILMAMIŞ bir yüzeye çevrildi: `test/moduller/`. Orada
+self-host `--check` **131/131 tam paritede**, ama `--llvm` **18/18 başarısız**.
+
+**⚠ ÖLÇÜM ARACIM ÖNCE BOZUKTU.** İlk koşumda 18 dosyanın hepsi "IR üretemedi"
+dedi; sebep modül desteği DEĞİL, sabotaj döngüsünde sildiğim `build/codegen.exe`
+idi (`make calistir_codegen_diff` onu kurar, ama ben elle koşuyordum). Yeniden
+kurmadan raporlasaydım kök TAMAMEN yanlış çıkacaktı. (D-391'in aynı dersi.)
+
+**Gerçek kök kümesi** 4 lensli + 24 çürütücülü bir fan-out ile çıkarıldı (22 kök
+onaylandı, 3 iddia çürütüldü/daraltıldı). İki AYRI iş olduğu ortaya çıktı:
+
+**(A) Çapraz-dosya modül yükleme — BU ADIMDA YAPILMADI.** C `src/ana.c`
+`modulleri_yukle` ile modülü AYNI arena'da parse edip sentetik `DUGUM_MODUL`
+olarak program AST'sinin BAŞINA **splice** eder → tek ağaç, tip kontrol ve
+codegen aynı ağaçtan beslenir. Self-host `modul_yukle` modülü AYRI bir `Ayr`e
+parse edip **yalnız ADları hasat ediyor, AST'yi ATIYOR**; üstelik `--llvm`
+dispatch'i yükleyiciyi HİÇ çağırmıyor. AST düz paralel dizilerdir → ayrı `Ayr`den
+indeks yeniden-eşlemesi gerekir ve codegen.kem'de AST kopyalama yardımcısı YOK.
+Yan bulgu: check paritesi **SIĞ** — `mat::topla(20)` (yanlış arite) C'de `T010`,
+self'te `OK`. 131/131 mevcut korpusta doğru ama mekanizma isim düzeyinde.
+
+**(B) Ad-mangling — BU ADIMDA YAPILDI.** (A)'dan BAĞIMSIZ ve satır içi `modül`
+bloklarıyla bugün ölçülebilir:
+```
+C:    define @a.f  +  define @b.f     → exit 42
+SELF: define @f    +  define @f       → invalid redefinition of function 'f'
+```
+Mangling makinesi self-host'ta HİÇ yoktu. **(A)'nın da ön koşuludur** —
+yükleyiciyi bağlamak bunu kendiliğinden çözmez.
+
+**Onarım (üç mekanizma):** `p.mod_onek` önek zinciri +
+1. **define** — `@<önek>.<ad>` (`mangle`, C `modul_mangle` aynası, ayırıcı '.').
+2. **nitelikli çağrı** — `yol_noktali`: YOL zinciri → `a.f` / `d.i.f`. Önceden
+   `a_deg`den YALNIZ son segment alınıyordu (`f`) → `call @f`, tanımsız sembol.
+3. **modül-içi çıplak çağrı** — `fn_coz` MODÜL-ÖNCE bağlar. C modül-içi çıplak
+   çağrıyı da mangle'lıyor (`@a.f` gövdesinden `call @a.gizli`); ayrıca modül
+   üyesi üst-düzey bir adı GÖLGELER, önce modüle bakmak bunu korur.
+
+`imza_topla` da mangled ad tutar — çağrı çözümü ve define emisyonu AYNI adı
+görmezse dönüş tipi kurtarılamaz.
+
+**Yerleştirme kararı:** `fad` YUKARIDA topluca değiştirilmedi; yalnız kullanıcı-
+işlev çözüm noktası dokunuldu. Yerleşikler ve tagged-union yapıcıları `fad`ı
+ÇIPLAK adla karşılaştırıyor — toplu değişiklik o ayrımları sessizce bozardı.
+
+**Sabotaj — üç mekanizma, ÜÇ FARKLI başarısızlık kipi:** S128 (define mangle) →
+link hatası (120/122). S129 (nitelikli ad) → link hatası (120/122). **S130
+(modül-önce bağlama) → `exit=4`**, yani korpusun `c::f() != 100` muhafızı: modül
+üyesi yerine üst-düzey `gizli()` (999) çağrılıyor — **link hatası değil, SESSİZ
+YANLIŞ CEVAP**. Korpus bu kipi ölçmek için özellikle gölgelenen bir üst-düzey ad
+içerir.
+
+**Korpus:** `test/cg_korpus/cg_modul_mangle.kem` (ad çakışması + iç içe modül +
+modül-içi çıplak çağrı + gölgeleme). Satır içi `modül` kullanır — dosya
+yüklemeye BAĞIMLI DEĞİL.
+
+**Kapılar:** `codegen_diff` **122/122** · `codegen_genis` 67/67 (0 muaf) ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (62446 satır).
+
+**Kalan:** (A) çapraz-dosya yükleme — 18 dosya hâlâ düşüyor, ayrı adım.
+
+---
+
 ## D-397 [YÜKSEK] — CODEGEN: SIMD `vektör<T,N>` (son muafiyet kapandı) (2026-08-07)
 
 **Kusur:** Self-host codegen'de vektör TİPİ hiç yoktu. Parser `TIP_VEKTOR`

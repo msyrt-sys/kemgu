@@ -1014,6 +1014,24 @@ Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` ya
 - **Bu köklerin ÜÇÜ sessiz yanlış cevap üretiyordu** (geçerli IR, çalışan
   program, yanlış değer) — derleme hatasından ağır sınıf.
 
+### ⚠ AÇIK CEPHE: ÇAPRAZ-DOSYA MODÜL CODEGEN'İ (D-398, 2026-08-07)
+Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--check`
+**131/131 paritede** ama `--llvm` **18/18 DÜŞÜYOR**. İki AYRI iş çıktı:
+- ~~**Ad-mangling**~~ ✓ **D-398**: `@a.f`/`@d.i.f`; define + nitelikli çağrı +
+  **modül-içi çıplak çağrı (MODÜL-ÖNCE bağlama)**. Satır içi `modül` bloklarıyla
+  dosya yüklemeden BAĞIMSIZ ölçülür; (A)'nın da ön koşuludur.
+- **(A) KALAN — çapraz-dosya yükleme.** C `modulleri_yukle` modülü AYNI arena'da
+  parse edip sentetik `DUGUM_MODUL` olarak AST'nin BAŞINA **splice** eder (tek
+  ağaç). Self-host `modul_yukle` ayrı bir `Ayr`e parse edip **yalnız ADları
+  hasat ediyor, AST'yi ATIYOR**; üstelik `--llvm` dispatch'i yükleyiciyi HİÇ
+  çağırmıyor. AST düz paralel dizi → indeks yeniden-eşlemesi gerekir, codegen'de
+  AST kopyalama yardımcısı YOK. Mekanizma `selfhost/checker.kem`'de de KOPYALI.
+- **YAN BULGU — check paritesi SIĞ:** `mat::topla(20)` (yanlış arite) C'de
+  `T010`, self'te `OK`. 131/131 mevcut korpusta doğru ama isim düzeyinde;
+  imza/tip yok. **Parite sayısı mekanizma derinliğini KANITLAMAZ.**
+- **`--parse` paritesi de kanıt değil:** C `--ast` yolunda da `modulleri_yukle`
+  çağrılmıyor → 13/13 sıfır-diff modül yükleme hakkında hiçbir şey söylemez.
+
 **TEKRARLAYAN DERS — kapı, YANLIŞ uygulamanın GÖZLENEBİLİR olduğu şekli ister:**
 sabotaj üç kez SESSİZ kaldı ve her seferinde korpus düzeltildi, kural değil:
 (a) `sonuç<sonuç<..>,..>` yetmedi çünkü yanlış ayrıştırma da uyumsuz tip üretip

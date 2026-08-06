@@ -78,6 +78,7 @@ yapı Ayr {
     ky_lambda: tam32;      // aktif işlev gövdesinde LAMBDA var mı (1 → routing GUARD: ρ_yerel kapalı)
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
     uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
+    mod_onek: metin;       // D-398: aktif modül önek zinciri ("a", "d.i"); ""=üst düzey
     sc_slot: metin;        // B4: ve/veya kısa-devre i32 slot reg'i — fn girişinde (entry) BİR KEZ alloca, tüm ve/veya tekrar kullanır (döngü-içi alloca yığın taşmasını önler)
     rho_iter: metin;       // F4.3: en-dış döngü ρ_iter IR reg ("%N") — gövde-girişinde yarat, her gövde-çıkışında serbest; ""=döngü-dışı
     dongu_d: tam32;        // F4.3: emisyon döngü-derinliği (0=döngü-dışı; 1=en-dış → ρ_iter sahibi; >1=iç, ρ_iter'a dokunmaz)
@@ -2165,6 +2166,49 @@ işlev agg_alan(s: metin, n: tam32) -> metin {
     }
     ver sonuc;
 }
+// ---- D-398: modül ad-mangling (C llvm.c modul_mangle aynası) ----
+// Modül üyeleri IR'da "<önek>.<ad>" olarak yayılır (ayırıcı '.', iç içe modülde
+// zincirlenir: "d.i.f"). Bu makine self-host'ta HİÇ YOKTU → iki modül aynı üye
+// adını taşıyınca `define @f` İKİ KEZ yayılıyor ve LLVM reddediyor
+// ("invalid redefinition of function 'f'"). C `@a.f`/`@b.f` yayıp çalışıyor.
+işlev mangle(onek: metin, ad: metin) -> metin {
+    eğer metin_uzunluk(onek) == 0 { ver ad; }
+    ver metin_birlestir(metin_birlestir(onek, "."), ad);
+}
+// D-398: YOL zincirini noktalı IR adına çevir (a::f → "a.f", d::i::f → "d.i.f").
+// Parser YOL'u `dugum1(p,"YOL", sağ_segment, ..., sol_çocuk)` olarak kurar: ad
+// a_deg'de, SOL taraf tek çocuk. Özyineleme sol tarafa iner.
+// TANIMLAYICI tabanında sadece adı döner → çağıran çıplak/nitelikli ayrımını
+// yapmak zorunda kalmaz.
+işlev yol_noktali(p: &değişken Ayr, node: tam32) -> metin {
+    eğer node < 0 { ver ""; }
+    değişken na: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(na, "YOL") == yanlış { ver dizi_al(p.a_deg, node); }
+    eğer dizi_al(p.a_cs, node) < 1 { ver dizi_al(p.a_deg, node); }
+    değişken sol: metin = yol_noktali(p, dizi_al(p.cocuk, dizi_al(p.a_cb, node)));
+    ver mangle(sol, dizi_al(p.a_deg, node));
+}
+// D-398: bir işlev adının imza tablosunda kayıtlı olup olmadığı.
+işlev fn_kayitli_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_ad) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// D-398: çağrı adını çöz — MODÜL-ÖNCE bağlama (C resolver davranışı).
+// Modül içindeyken çıplak `gizli()` çağrısı ÖNCE `<önek>.gizli` aranır; yoksa
+// üst düzeye düşer. Bu şart: C modül-içi çıplak çağrıyı da mangle'lıyor
+// (`@a.f` gövdesinden `call @a.gizli`), aksi halde modül üyesi kendi kardeşini
+// çağıramaz. Ayrıca modül üyesi üst-düzey bir adı GÖLGELEYEBİLİR — önce modül
+// bakmak o gölgelemeyi korur.
+işlev fn_coz(p: &değişken Ayr, ad: metin) -> metin {
+    eğer metin_uzunluk(p.mod_onek) == 0 { ver ad; }
+    değişken m: metin = mangle(p.mod_onek, ad);
+    eğer fn_kayitli_mi(p, m) { ver m; }
+    ver ad;
+}
 // D-397 (SIMD): IR tipi "<N x T>" biçiminde mi? agg_alan gibi ham metin üstünde
 // çalışır — self-host'ta tip nesnesi yok, IR string'i TEK gerçektir.
 işlev vek_ir_mi(s: metin) -> mantıksal {
@@ -4010,7 +4054,20 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken rt: metin = "";
         değişken fname: metin = "";
         değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
-        eğer metin_esit(kdl, "") { rt = fn_ret_bul(p, fad); fname = fad; kullanici = 1; }
+        eğer metin_esit(kdl, "") {
+            // D-398: KULLANICI işlevinin IR adını çöz. İki yol:
+            //  (a) hedef YOL ise (a::f, d::i::f) → noktalı ad "a.f" / "d.i.f".
+            //      Öncesinde a_deg'den YALNIZ son segment alınıyordu ("f") →
+            //      `call @f` yayılıp tanımsız sembol oluyordu.
+            //  (b) çıplak ad ise MODÜL-ÖNCE çöz (modül içindeysek kardeş üye).
+            // Bu nokta BİLİNÇLİ olarak seçildi: `fad`ı yukarıda topluca
+            // değiştirmek yerleşik/çeşit-yapıcı ayrımlarını bozardı (onlar
+            // `fad`ı ÇIPLAK adla karşılaştırıyor).
+            değişken hedef: tam32 = dizi_al(p.cocuk, cb);
+            değişken rn: metin = fn_coz(p, fad);
+            eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") { rn = yol_noktali(p, hedef); }
+            rt = fn_ret_bul(p, rn); fname = rn; kullanici = 1;
+        }
         değilse { rt = builtin_ret(fad); fname = kdl; }
         // Argümanları SIRAYLA değerlendir (yan-IR akar), operand+tip biriktir.
         değişken args: Dizi<metin> = [];
@@ -5993,7 +6050,10 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer main_mi == 1 { rho_var = 0; }
     eğer ciplak == 1 { rho_var = 0; }
     // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
-    yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @"); ir_ad_yaz(dizi_al(p.a_deg, idx)); yaz_str("(");
+    // D-398: modül üyesi ise ad "<önek>.<ad>" (C modul_mangle aynası). Üst düzeyde
+    // mod_onek boş → ad değişmez, yani mevcut tüm çıktı BİREBİR korunur.
+    yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @");
+    ir_ad_yaz(mangle(p.mod_onek, dizi_al(p.a_deg, idx))); yaz_str("(");
     eğer rho_var == 1 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param (çıplak/main hariç)
     değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
@@ -6134,12 +6194,19 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     iken i < cs {
         değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") {
-            dizi_ekle(p.fn_ad, dizi_al(p.a_deg, c));
+            // D-398: imza tablosu MANGLED adı tutar — çağrı çözümü (fn_coz) ve
+            // define emisyonu AYNI adı görmeli, yoksa dönüş tipi kurtarılamaz.
+            dizi_ekle(p.fn_ad, mangle(p.mod_onek, dizi_al(p.a_deg, c)));
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
             dizi_ekle(p.fn_risz, isz_str(islev_donus_isz(p, c)));   // D-337
             dizi_ekle(p.fn_node, c);   // D-309: call-graph kapanışı
         }
-        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { imza_topla(p, c); }  // D3: modül üyeleri (flat)
+        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") {   // D3: modül üyeleri (flat)
+            değişken esk_mo: metin = p.mod_onek;         // D-398: önek zinciri
+            p.mod_onek = mangle(esk_mo, dizi_al(p.a_deg, c));
+            imza_topla(p, c);
+            p.mod_onek = esk_mo;
+        }
         eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metod imzaları (CAGRI dispatch için)
             değişken ucb: tam32 = dizi_al(p.a_cb, c);
             değişken ucs: tam32 = dizi_al(p.a_cs, c);
@@ -6168,7 +6235,12 @@ işlev emit_tanimlar(p: &değişken Ayr, kok: tam32) -> tam32 {
     iken i < cs {
         değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
-        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { emit_tanimlar(p, c); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") {
+            değişken esk_mo2: metin = p.mod_onek;   // D-398: önek zinciri (emit)
+            p.mod_onek = mangle(esk_mo2, dizi_al(p.a_deg, c));
+            emit_tanimlar(p, c);
+            p.mod_onek = esk_mo2;
+        }
         eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metodlarını emit et
             // kids[0] = hedef yapı tipi → kendin'in by-value tipi (uygula_hedef).
             // Metod ISLEV'leri normal fn gibi emit; kendin PARAMETRE'si param_tip ile
@@ -9942,7 +10014,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         fn_ad: [], fn_ret: [], fn_risz: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
+        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],

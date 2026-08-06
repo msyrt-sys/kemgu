@@ -1,0 +1,52 @@
+// D-398: modül ad-mangling self-host codegen'de HİÇ YOKTU.
+//
+// C modül üyelerini IR'da "<önek>.<ad>" olarak yayar (ayırıcı '.', iç içe
+// modülde zincirlenir). Self-host öneki tamamen düşürüyordu:
+//     C:    define i32 @a.f   +  define i32 @b.f
+//     SELF: define i32 @f     +  define i32 @f
+//     clang: error: invalid redefinition of function 'f'
+//
+// Bu dosya DOSYA-YÜKLEMEDEN bağımsızdır — satır içi `modül` blokları kullanır.
+// Kusuru bugün ölçülebilir kılan da bu: `kullan` ile dosya import etmeye gerek
+// yok. (Çapraz-dosya modül yükleme AYRI ve daha büyük bir iş; self-host'un
+// --llvm yolu modül dosyalarını hiç yüklemiyor.)
+//
+// ÜÇ ŞEKİL — üçü de ayrı bir mekanizmayı ölçer:
+
+// (1) AD ÇAKIŞMASI: iki modülde aynı üye adı. Mangling yoksa `define @f` iki
+//     kez yayılır ve LLVM REDDEDER. Öneksiz bir uygulamanın kaçamayacağı şekil.
+modül a {
+    dışa işlev f() -> tam32 { ver 10; }
+}
+modül b {
+    dışa işlev f() -> tam32 { ver 12; }
+}
+
+// (2) İÇ İÇE MODÜL: önek ZİNCİRLENMELİ (@d.i.f). Tek seviyelik bir uygulama
+//     buradan `@i.f` üretir ve çağrı yeriyle uyuşmaz.
+modül d {
+    modül i {
+        dışa işlev f() -> tam32 { ver 20; }
+    }
+}
+
+// (3) MODÜL-İÇİ ÇIPLAK ÇAĞRI: `f` kardeşi `gizli`yi ÖNEKSİZ çağırıyor, ama IR'da
+//     @c.gizli olmalı (C aynası). Yalnız nitelikli çağrıyı mangle'layan bir
+//     uygulama burada `@gizli` çağırır → tanımsız sembol. Modül-ÖNCE bağlama
+//     ayrıca gölgelemeyi de korur: aşağıdaki üst-düzey `gizli` GÖLGELENİR.
+modül c {
+    işlev gizli() -> tam32 { ver 100; }          // <- bu çağrılmalı
+    dışa işlev f() -> tam32 { ver gizli(); }
+}
+// Üst düzeyde AYNI adda bir işlev: modül-önce bağlama çalışmazsa c::f() bunu
+// çağırır ve 100 yerine 999 döner — SESSİZ YANLIŞ CEVAP, link hatası değil.
+işlev gizli() -> tam32 { ver 999; }
+
+işlev main() -> tam32 {
+    eğer a::f() != 10 { ver 1; }
+    eğer b::f() != 12 { ver 2; }
+    eğer d::i::f() != 20 { ver 3; }
+    eğer c::f() != 100 { ver 4; }      // gölgeleme: 999 gelirse yanlış bağlama
+    eğer gizli() != 999 { ver 5; }     // üst düzeyden çağrı hâlâ üst düzeyi bulmalı
+    ver a::f() + b::f() + d::i::f();   // 10 + 12 + 20 = 42
+}
