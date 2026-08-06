@@ -1,0 +1,28 @@
+// D-384: `görev<T>` LİNEERDİR (`kanal<T>` değildir) — ölçüldü.
+// `görev_birleştir(g)` görevi TÜKETİR; tüketilmezse L001, iki kez tüketilirse
+// L002. Başka bir işleve `görev<T>` parametresi olarak geçirmek de taşımadır.
+// KRİTİK: `görev<kesirli*>` DRF001 alır → C tipi HATA'ya düşürür ve bağlama
+// lineer SAYILMAZ (geçersiz tip = lineer yükümlülük YOK).
+// BİLİNEN SINIR: `eşleş görev_başlat(..) { tamam(g) => ... }` ile bağlanan
+// görev için C `L001 0:0` verir; self-host SUSAR — desen-bağlama TİPLERİ
+// mekanizması yok (D-378 notu). Ayrı iş; bu dosyada o şekil YOK.
+işlev tuketen(g: görev<tam32>) -> tam32 { ver görev_birleştir(g); }
+
+işlev l001_param_tuketilmedi(g: görev<tam32>) -> tam32 {
+    ver 0;                                  // L001: g tüketilmedi
+}
+işlev l002_iki_kez(g: görev<tam32>) -> tam32 {
+    görev_birleştir(g);
+    ver görev_birleştir(g);                 // L002
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz_birlestir(g: görev<tam32>) -> tam32 {
+    ver görev_birleştir(g);
+}
+işlev temiz_tasima(g: görev<tam32>) -> tam32 {
+    ver tuketen(g);                         // taşıma da tüketimdir
+}
+işlev temiz_kanal(k: kanal<tam32>) -> tam32 {
+    ver 0;                                  // kanal LİNEER DEĞİL → L001 YOK
+}
+işlev main() -> tam32 { ver 0; }

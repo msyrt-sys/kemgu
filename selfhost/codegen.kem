@@ -7251,6 +7251,8 @@ işlev drf_cagri_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıks
     değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
     eğer metin_esit(fad, "görev_birleştir") {
         eğer n != 1 { sekil_hata(p, idx, "DRF002"); ver doğru; }
+        // D-384: `görev_birleştir(g)` görevi TÜKETİR (lineer).
+        lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
         ver yanlış;
     }
     eğer metin_esit(fad, "kanal_al") {
@@ -7915,7 +7917,10 @@ işlev m001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
 // L001/L002/L004 makinesinin TAMAMI yetki için de çalışır; tek fark RAPORLANAN
 // KOD: yetki bağlamasında CP005 (lin_yet biti).
 işlev tip_node_tekkez_mi(ad: metin) -> mantıksal {
-    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI");
+    // D-384: `görev<T>` de LİNEERDİR (`kanal<T>` DEĞİL). Raporlanan kod L001/L002
+    // (yetki gibi CP005 DEĞİL) → `lin_yet` biti görev için SET EDİLMEZ.
+    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI")
+      veya metin_esit(ad, "TIP_GOREV");
 }
 işlev lin_yetki_mi(p: &değişken Ayr, i: tam32) -> mantıksal {
     eğer i < 0 { ver yanlış; }
@@ -7937,6 +7942,9 @@ işlev param_lineer_mi(p: &değişken Ayr, tc: tam32) -> mantıksal {
     // D-365 TIP_YETKI'yi `tip_node_tekkez_mi`ye ekledi ama BURAYA eklemedi →
     // `işlev f(y: yetki<MMIO>)` çağrısı y'yi tüketmiyordu → sahte CP005 (ölçüldü).
     eğer metin_esit(ta, "TIP_YETKI") { ver doğru; }
+    // D-384: `görev<T>` lineerdir — AMA T kesirliyse DRF001 çıkar, C tipi
+    // HATA.ya düşürür ve bağlama lineer SAYILMAZ.
+    eğer metin_esit(ta, "TIP_GOREV") { ver tip_kesirli_arg_mi(p, tc) == yanlış; }
     eğer metin_esit(ta, "TIP_BASIT") { ver lineer_yapi_mi(p, dizi_al(p.a_deg, tc)); }
     ver yanlış;
 }
@@ -8122,7 +8130,12 @@ işlev lineer_alan_mi(p: &değişken Ayr, yad: metin, fad: metin) -> mantıksal 
 işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     eğer dizi_al(p.a_cs, idx) >= 2 {
         değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
-        eğer tip_node_tekkez_mi(dizi_al(p.a_ad, c0)) { ver doğru; }
+        // D-384: `görev<kesirli*>` DRF001 alır → lineer SAYILMAZ.
+        eğer tip_node_tekkez_mi(dizi_al(p.a_ad, c0)) {
+            eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_GOREV")
+              ve tip_kesirli_arg_mi(p, c0) { ver yanlış; }
+            ver doğru;
+        }
         // D-314: annotasyon LINEER YAPI ise bağlama da lineerdir → mevcut
         // L001/L002 akış-izleme makinesi ayrı kod olmadan devreye girer.
         eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_BASIT")

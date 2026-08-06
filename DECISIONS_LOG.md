@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-384 [YÜKSEK] — `görev<T>` LİNEER; `kanal<T>` değil (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**D-383'te ölçülüp bırakılan iş yapıldı.** C ölçümü (6 şekil): `görev<T>`
+parametresi tüketilmezse **L001**, iki kez `görev_birleştir` edilirse **L002**;
+başka bir işleve `görev<T>` parametresi olarak geçirmek de TAŞIMADIR;
+`kanal<T>` parametresi hiç kullanılmasa bile **OK** (lineer değil).
+
+**D-372'nin dersi işe yaradı.** "Lineerliği soran HER yüklemi `grep`le" notu
+sayesinde üç ayrı yüklem birlikte güncellendi: `tip_node_tekkez_mi`,
+`param_lineer_mi`, `deg_lineer_mi` — artı tüketim noktası (`görev_birleştir`).
+Bu kez hiçbiri unutulmadı.
+
+**⚠ GEÇERSİZ TİP = LİNEER YÜKÜMLÜLÜK YOK.** İlk uygulama `tc18_01_drf.kem`'de
+sahte L001 üretti: `değişken g: görev<kesirli64> = ...` DRF001 alıyor, C tipi
+HATA'ya düşürüyor ve bağlamayı lineer SAYMIYOR. Kapı hem `param_lineer_mi`ye
+hem `deg_lineer_mi`ye eklendi. **Genel kural:** bir tipi lineer sınıfa sokarken
+"o tip GEÇERSİZ olduğunda ne olur" sorusunu ayrıca ölç — hata yolunda lineer
+yükümlülük DOĞMAZ.
+
+**Bilinen sınır (ölçüldü, uygulanmadı):** `eşleş görev_başlat(..) { tamam(g) =>
+... }` ile bağlanan görev için C **`L001 0:0`** verir (konum yok — sembol
+kaynakta bir konuma karşılık gelmiyor); self-host SUSAR. Bunun için desen-bağlama
+TİPLERİ gerekir (D-378'de not edilen mekanizma). `görev_başlat`a özel sözdizimsel
+kestirme GENELLENMEZ, o yüzden yapılmadı; korpusta o şekil yok.
+
+**Kapılar:** `checker_diff` **146/146** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 114/114, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / drf 54 / capability 40,
+**geniş ölçüm 131/131**. Probe 6/6 birebir. **Sabotaj:** S101 (görev param
+lineerliği), S102 (`görev_birleştir` tüketimi), S103 (kesirli kapısı —
+yanlış-pozitif dosyasında kırmızı) — üçü de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan:** `işlev(..)->T` temsili — çok argümanlı, temsil biçimi bir **TASARIM
+kararı**; CLAUDE.md gereği Mehmet'e sorulmadan sabitlenmemeli. `çeşit` payload
+tipleri ve desen-bağlama tipleri de açık.
+
+---
+
 ## D-383 — `görev<T>` + `kanal<T>` temsili (bileşik tip 7. artım) (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

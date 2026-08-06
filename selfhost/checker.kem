@@ -3133,6 +3133,9 @@ işlev drf_cagri_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıks
     değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;   // çocuk[0] = hedef
     eğer metin_esit(fad, "görev_birleştir") {
         eğer n != 1 { sekil_hata(p, idx, "DRF002"); ver doğru; }
+        // D-384: `görev_birleştir(g)` görevi TÜKETİR (lineer). Arite hatalıysa
+        // C erken döner → tüketim de olmaz (yukarıdaki dal zaten çıkıyor).
+        lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
         ver yanlış;
     }
     eğer metin_esit(fad, "kanal_al") {
@@ -3799,7 +3802,13 @@ işlev m001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
 // Bu sayede L001/L002/L004 makinesinin TAMAMI yetki için de çalışır; tek fark
 // RAPORLANAN KOD: yetki bağlamasında CP005 (lin_yet biti).
 işlev tip_node_tekkez_mi(ad: metin) -> mantıksal {
-    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI");
+    // D-384: `görev<T>` de LİNEERDİR (ölçüldü: `işlev al(g: görev<tam32>)`
+    // gövdesinde `görev_birleştir(g)` yoksa L001; iki kez birleştirmek L002).
+    // `kanal<T>` lineer DEĞİLDİR (parametre hiç kullanılmasa bile OK).
+    // Raporlanan kod L001/L002'dir (yetki gibi CP005 DEĞİL) → `lin_yet` biti
+    // görev için SET EDİLMEZ.
+    ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI")
+      veya metin_esit(ad, "TIP_GOREV");
 }
 // D-365: lineer dilimdeki bağlama yetki mi? (kod seçimi için)
 işlev lin_yetki_mi(p: &değişken Ayr, i: tam32) -> mantıksal {
@@ -3823,6 +3832,10 @@ işlev param_lineer_mi(p: &değişken Ayr, tc: tam32) -> mantıksal {
     // D-365 TIP_YETKI'yi `tip_node_tekkez_mi`ye ekledi ama BURAYA eklemedi →
     // `işlev f(y: yetki<MMIO>)` çağrısı y'yi tüketmiyordu → sahte CP005 (ölçüldü).
     eğer metin_esit(ta, "TIP_YETKI") { ver doğru; }
+    // D-384: `görev<T>` lineerdir — AMA T kesirliyse DRF001 çıkar, C tipi
+    // HATA'ya düşürür ve bağlama lineer SAYILMAZ (ölçüldü: tc18_01'de sahte
+    // L001 üretmiştim). Geçersiz tip = lineer yükümlülük YOK.
+    eğer metin_esit(ta, "TIP_GOREV") { ver tip_kesirli_arg_mi(p, tc) == yanlış; }
     eğer metin_esit(ta, "TIP_BASIT") { ver lineer_yapi_mi(p, dizi_al(p.a_deg, tc)); }
     ver yanlış;
 }
@@ -3966,7 +3979,13 @@ işlev lineer_alan_mi(p: &değişken Ayr, yad: metin, fad: metin) -> mantıksal 
 işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
     eğer dizi_al(p.a_cs, idx) >= 2 {
         değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
-        eğer tip_node_tekkez_mi(dizi_al(p.a_ad, c0)) { ver doğru; }
+        // D-384: `görev<kesirli*>` DRF001 alır → C tipi HATA'ya düşürür ve
+        // bağlama lineer SAYILMAZ. Geçersiz tip = lineer yükümlülük YOK.
+        eğer tip_node_tekkez_mi(dizi_al(p.a_ad, c0)) {
+            eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_GOREV")
+              ve tip_kesirli_arg_mi(p, c0) { ver yanlış; }
+            ver doğru;
+        }
         // D-314: annotasyon LINEER YAPI ise bağlama da lineerdir.
         eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_BASIT")
           ve lineer_yapi_mi(p, dizi_al(p.a_deg, c0)) { ver doğru; }
