@@ -5,6 +5,49 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-392 — ÖLÇÜM: çağrı argümanı param tipine genişletilmiyor (kök bulundu, DÜZELTİLMEDİ) (2026-08-06)
+
+**ETKİ:** yok — kod DEĞİŞMEDİ (denenen düzeltme geri alındı). Bu bir ÖLÇÜM kaydı.
+
+**Kök neden KESİN olarak bulundu.** Self-host çağrı yerinde argümanı
+**argümanın DOĞAL tipiyle** basıyor, **parametrenin BİLDİRİLEN tipiyle** değil:
+```
+SELF:  call i32 @f(ptr %0, i32 10, i32 20, i32 30, i32 40)   ← define i64 bekliyor
+C   :  call i32 @f(ptr %0, i64 %2, i64 %3, i64 %4, i64 %5)
+```
+LLVM bu uyuşmazlığı **SESSİZCE kabul eder** (D-295'in dersi). İlk 3 argüman
+register'a sığdığı için doğru görünür; **4.'den itibaren ÇÖP okunur.**
+
+**Minimal üretim (ölçüldü):** `işlev f(a..f: dtam64)` çağrısı →
+`10 20 30 <çöp> <çöp> <çöp>`. Sınır tam olarak 4. parametrede. `tam32` param
+ile ÇALIŞIYOR (i32 zaten doğal tip) → yalnız genişletme gereken tiplerde.
+`bignum_selfhost`'un `0` yerine yığın adresi basmasının kökü budur
+(`vektor_dogrula` ALTI `dtam64` parametre alıyor).
+
+**DENENEN DÜZELTME GERİ ALINDI — neden çalışmadı:** arg döngüsünde
+`fn_ptip_bul`/`fn_psay_bul` ile param tipini sorup `i64_genislet` uygulamak
+`codegen.exe`'yi **çağrı içeren HER dosyada** düşürdü (`dizi sınır ihlali
+i=0, boyut=0`). Sebep: **imza tablosu (`fn_ad`/`fn_psay`/`fn_ptip`) yalnız
+`kontrol_program`da — yani CHECK yolunda — doldurulur** (`genel_topla` →
+`imza_kaydet`). `--llvm` codegen yolu tabloyu HİÇ kurmaz. Ayrıca
+`fn_ptip_bul` SINIR KONTROLÜ YAPMAZ (`dizi_al` taşar).
+
+**Yol üstünde ikinci hata:** ilk denemede o kapsamda var olmayan `fad`
+değişkenini kullandım (doğrusu `fname`) — self-host bunu sessizce boş dizgiye
+çözdü. Kapsamda olmayan ad, derleme hatası değil SESSİZ yanlış davranış üretti.
+
+**SIRADAKİ İŞ İÇİN GEREKEN:** düzeltme, imza tablosunun codegen yolunda da
+mevcut olmasını gerektirir. İki seçenek: (a) `--llvm` yolunda `genel_topla`
+çağır (yan etkileri ölçülmeli — `g_ekle` dup riski), (b) emit sırasında
+parametre IR tiplerini ayrı bir tabloya kaydet. Ayrıca `fn_ptip_bul`/
+`fn_psay_bul` sınır-güvenli hale getirilmeli.
+
+**`base64_selfhost` (kalan diğer sapma) AYNI SINIF OLABİLİR** — `b64_encode`
+`(Dizi<tam32>, tam32, Dizi<karakter>)` alıyor, 3 param; ama indirgenmiş
+şekiller sapmayı üretmedi, ortak kök doğrulanmadı.
+
+---
+
 ## D-391 [YÜKSEK] — CODEGEN: üst-düzey `sabit` referansı (A sınıfı, 13 dosya) (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
