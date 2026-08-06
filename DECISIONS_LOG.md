@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-396 [YÜKSEK] — CODEGEN: `eşleş` desen-bağlamasının iç tipi (görev<T>) (2026-08-07)
+
+**Kusur:** `görev_başlat` dönüşü `sonuç<görev<T>, metin>` ve IR karşılığı
+`{ i8, ptr, ptr }`. **Bu aggregate T'yi SİLER** — `görev<T>` de `metin` de ptr.
+`tamam(g)` deseniyle bağlanan `g` için codegen `cg_aic`i `""` bırakıyordu →
+`görev_birleştir(g)`de hedef tip bilinmiyor → `i64_daralt` runtime'ın **i64
+taşıyıcısında KALIYOR** ve ptr yuvasına yazılıyordu:
+```
+%17 = call i64 @kdl_gorev_birlestir(ptr %16)
+store ptr %17, ptr %18        ; 'i64' but expected 'ptr'
+```
+**`i64_daralt`ın ptr dalı DOĞRUYDU** — ilk teşhisim onu suçlamak olabilirdi;
+ölçüm eksik olanın yalnız TİP BİLGİSİ olduğunu gösterdi. Checker tarafında aynı
+boşluk D-385/386'da kapanmıştı; codegen karşılığı yoktu.
+
+**Onarım (iki nokta):**
+1. `görev_başlat` T'yi **yayınlar**: `p.son_ic = lam_ret_tahmin(p, govde)`.
+   T = lifted lambda'nın DOĞAL dönüş IR'ı. Kuyruğa yazılan `lam_ret = "i64"`
+   runtime TAŞIYICISIDIR, T değildir — ikisini karıştırmak kusurun kendisiydi.
+2. `eşleş` skrutini `son_ic`ini **hemen** yerelde yakalar (`sic`) — aşağıdaki her
+   `ifade_uret` `p.son_ic`i ezer — ve DESEN_YAPICI payload bağlamasına taşır.
+
+**`pf==1` kısıtı:** yalnız başarı alanına (tamam/değer) yazılır; alan 2 `metin`dir
+ve T ile ilgisi yoktur.
+
+**Sabotaj:** S121 (T yayını) → `cg_gorev_desen_ic_tip` KIRMIZI (119/120).
+S122 (payload'a taşıma) → KIRMIZI (119/120). **S123 (`pf==1` kısıtını kaldır) →
+SESSİZ.** Bunu gizlemiyorum: kısıt bu korpusta **gözlenebilir değil**, çünkü
+`cg_aic`i okuyan üç yol da (`cagri_ic_tip`, kapanış dönüş IR'ı) bağlamanın
+görev/kanal/kapanış olarak KULLANILMASINI ister — `e: metin` için bu tip
+hatasıdır. Yani kısıt **savunmacıdır, kapılı değildir**; anlamı doğru kodluyor
+ama ölçülmüş bir regresyon kapısı yok. (D-356: sabotajın sessizliği bir
+SONUÇTUR; kuralı silmek yerine kaydını dürüst tut.)
+
+**Korpus:** `test/cg_korpus/cg_gorev_desen_ic_tip.kem`. **T=metin ÖZELLİKLE
+seçildi** — T `tam32` olsaydı i64→i32 trunc yolu zaten çalışıyordu ve dosya
+yeşil kalıp kusuru kaçırırdı.
+
+**Kapılar:** `codegen_genis` **66/66** (muafiyet 2→**1**) · `codegen_diff`
+**120/120** · `checker_diff` 148/148 · FIXPOINT ✓ (stage1==stage2, 61384 satır) ·
+sürücü 4 mod × 2 sürücü ✓.
+
+**Kalan tek muafiyet:** `matris_carpim` (SIMD `vektör<T,N>` self-host codegen'de
+yok) — ayrı ve daha büyük iş.
+
+---
+
 ## D-395 [YÜKSEK] — KAPI: geniş codegen eşdeğerliği + kendi yanlış iddiamın düzeltilmesi (2026-08-06)
 
 **Karar:** `test/codegen_genis_harness.sh` + `make calistir_codegen_genis`.

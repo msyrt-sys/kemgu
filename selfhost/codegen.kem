@@ -3668,6 +3668,13 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(p.lam_capcount, capcnt);
             dizi_ekle(p.lam_ret, "i64");   // D-322: görev yolu = runtime i64 taşıyıcı
             p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
+            // D-396: görev<T>'nin T'sini YAYINLA. Aggregate `{ i8, ptr, ptr }` T'yi
+            // SİLER (görev<T> ve metin ikisi de ptr) → `eşleş tamam(g)` ile bağlanan
+            // `g`nin iç tipi başka hiçbir yerden kurtarılamaz. T = lifted lambda'nın
+            // DOĞAL dönüş IR'ı (kuyruğa yazılan "i64" runtime TAŞIYICISIDIR, T değil).
+            // Yazılmazsa `görev_birleştir(g)` hedef tipi "" görür, i64_daralt i64'te
+            // kalır ve ptr yuvasına yazılır → `i64 but expected ptr` (gorev_temel).
+            p.son_ic = lam_ret_tahmin(p, govde);
             ver reg_str(ld);
         }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
@@ -4587,6 +4594,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken sval: metin = ifade_uret(p, dizi_al(p.cocuk, cb));
         değişken sty: metin = p.son_tip;
         değişken sref: metin = p.son_ref;   // D-390: referans ise işaret edilen çeşit adı
+        // D-396: skrutininin İÇ tipi (görev<T>/kanal<T>'nin T'si). HEMEN yakalanmalı —
+        // aşağıdaki her ifade_uret p.son_ic'i ezer. Desen payload'ına bağlanan ada
+        // aktarılır ki `görev_birleştir(g)` doğru hedef tipe daraltabilsin.
+        değişken sic: metin = p.son_ic;
         // D-390: `eşleş` skrutinisi `&Çeşit` ise OTOMATİK DEREFERENCE. Skrutini ptr
         // yüklenmiş bir referans (sty="ptr") ve son_ref bir ÇEŞİT adı ise, tag
         // extractvalue'dan ÖNCE çeşit değerini yükle. Bu kol olmadan `eşleş`
@@ -4680,6 +4691,13 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                             yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
                             yaz_str(", ptr "); yaz_str(ba); yb(10);
                             cg_var_ekle(p, bad, ba, pt, "", "");
+                            // D-396: payload İÇ tipini bağlamaya taşı. YALNIZ başarı
+                            // alanı (pf==1: tamam/değer) — hata alanı (pf==2) `metin`dir
+                            // ve görev<T>'nin T'siyle ilgisi YOKTUR; ona `sic` yazmak
+                            // `eşleş`in hata kolunda yanlış daraltma üretirdi.
+                            eğer (pf == 1) ve (metin_uzunluk(sic) > 0) {
+                                dizi_yaz(p.cg_aic, dizi_boyut(p.cg_aic) - 1, sic);
+                            }
                         }
                     }
                     eğer metin_esit(dad, "DESEN_YOL") {

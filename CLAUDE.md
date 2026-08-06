@@ -991,12 +991,13 @@ Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` ya
   - `matris_carpim` — **SIMD yok.** Kaynak `vektör<kesirli32,4>` kullanıyor;
     C `<4 x float>` yayar, self-host codegen'de vektör TİPİ hiç yok → her şeyi
     `i32` sanıyor. Arg-genişletme kusuru değil, **eksik özellik**.
-  - `gorev_temel` — **desen-bağlaması iç tipi yok.** `eşleş görev_başlat(..)
-    { tamam(g) => görev_birleştir(g) }` içinde `g` desen bağlamasıdır; codegen
-    iç tipini (`görev<metin>`→ptr) bilmiyor → `cagri_ic_tip` `""` döner,
-    `i64_daralt` i64'te kalır, ptr yuvasına yazılır. `i64_daralt`ın ptr dalı
-    DOĞRU; eksik olan TİP BİLGİSİ. Checker'da aynı boşluk D-385/386'da kapandı,
-    codegen karşılığı henüz yok.
+  - ~~`gorev_temel`~~ ✓ **D-396'da ONARILDI** (muafiyet 2→1, kapı 66/66).
+    `görev_başlat` artık T'yi `son_ic` ile yayınlar (`lam_ret_tahmin`), `eşleş`
+    skrutininin `son_ic`ini HEMEN yerelde yakalayıp desen payload'ına taşır.
+    **Kritik ayrım:** kuyruğa yazılan `lam_ret="i64"` runtime TAŞIYICISIDIR,
+    `görev<T>`nin T'si DEĞİL — ikisini karıştırmak kusurun kendisiydi. Ayrıca
+    `i64_daralt`ın ptr dalı en baştan DOĞRUYDU; eksik olan yalnız TİP BİLGİSİYDİ
+    (yanlış bileşeni suçlamamak için ölçüm şart).
 - Kapatılan kökler: yerleşik IR ad eşlemesi (`yazdir`/`bellek_al`/`otp_*`) ·
   `dizi_olustur(N)` çağrı-formu · `eşleş &Çeşit` auto-deref · üst-düzey `sabit`
   referansı · çağrı argümanının param IR tipine genişletilmesi · **KARAKTER

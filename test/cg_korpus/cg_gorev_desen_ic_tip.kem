@@ -1,0 +1,39 @@
+// D-396: `eşleş` desen bağlamasının İÇ TİPİ (görev<T>'nin T'si) codegen'de
+// kayıtlı değildi.
+//
+// `görev_başlat` dönüşü `sonuç<görev<T>, metin>` ve IR karşılığı
+// `{ i8, ptr, ptr }`. Bu aggregate T'yi SİLER — görev<T> de metin de ptr'dir.
+// `tamam(g)` deseniyle bağlanan `g` için codegen `cg_aic`i "" bırakıyordu →
+// `görev_birleştir(g)`de hedef tip bilinmiyor → `i64_daralt` runtime'ın i64
+// taşıyıcısında KALIYOR ve ptr yuvasına yazılıyordu:
+//     %17 = call i64 @kdl_gorev_birlestir(ptr %16)
+//     store ptr %17, ptr %18          ; 'i64' but expected 'ptr'
+//
+// `i64_daralt`ın ptr dalı DOĞRUYDU; eksik olan yalnız TİP BİLGİSİYDİ. Checker
+// tarafında aynı boşluk D-385/386'da kapanmıştı, codegen karşılığı yoktu.
+//
+// GÖZLENEBİLİRLİK: yanlış davranış LLVM'i REDDETTİRİR (link hatası), sessiz
+// yanlış cevap değil. Kapı bunu "IR link edilemedi" olarak görür.
+//
+// T = metin (ptr) seçildi ÖZELLİKLE: T tam32 olsaydı i64→i32 trunc yolu zaten
+// çalışıyordu ve dosya YEŞİL kalıp kusuru kaçırırdı.
+işlev selam_uret() -> metin {
+    ver "KEMGU";
+}
+
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| selam_uret()) {
+        tamam(g) => {
+            // g: görev<metin> — birleştirme ptr vermeli, i64 değil.
+            değişken s: metin = görev_birleştir(g);
+            eğer metin_uzunluk(s) != 5 { ver 1; }
+            ver 42;
+        }
+        hata(e) => {
+            // Spawn başarısız (D-301: panik değil DEĞER). Bu kolda `e` metin'dir
+            // ve görev<T>'nin T'siyle ilgisi YOKTUR — sic yalnız pf==1'e yazılır.
+            eğer metin_uzunluk(e) == 0 { ver 2; }
+            ver 3;
+        }
+    }
+}

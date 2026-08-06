@@ -58,17 +58,13 @@ run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
 #     her şeyi i32 sanıyor ("'%9' i32 but expected 'float'"). Arg-genişletme
 #     kusuru DEĞİL; eksik özellik.
 #
-#   gorev_temel — desen-bağlaması iç tipi. `eşleş görev_başlat(..) { tamam(g) =>
-#     görev_birleştir(g) }` — `g` bir DESEN BAĞLAMASIDIR ve codegen'de iç tipi
-#     (`görev<metin>` → ptr) kayıtlı değil → `cagri_ic_tip` "" döner →
-#     `i64_daralt` i64'te kalır, ptr yuvasına yazılır ("i64 but expected ptr").
-#     `i64_daralt`ın ptr dalı DOĞRU; eksik olan TİP BİLGİSİ. Checker tarafında
-#     aynı boşluk D-385/D-386'da kapatılmıştı; codegen karşılığı henüz yok.
+# (gorev_temel D-396'da ONARILDI ve listeden ÇIKARILDI — muafiyet listesi
+#  küçülmek içindir; kapatılan kök burada durmaz.)
 #
 # KURAL: buraya yeni satır EKLEMEK, kapıyı zayıflatmaktır. Bir sapma çıkarsa
 # önce KÖKÜ onar; muafiyet yalnız kökü ÖLÇÜLMÜŞ ve ayrı iş olduğu kanıtlanmış
 # durumlar içindir. (checker_diff'in muafiyet listesi bu disiplinle BOŞA indi.)
-MUAF="matris_carpim gorev_temel"
+MUAF="matris_carpim"
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; atla=0; muaf_say=0
