@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-394 [YÜKSEK] — CODEGEN: KARAKTER literali (son gerçek sapma kapandı) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur — SESSİZ YANLIŞ CEVAP, en ağır sınıf.** `ifade_uret`te **KARAKTER dalı
+HİÇ YOKTU** → düğüm tanınmıyor, fonksiyon sonunda `"0"` düşüyordu: `'A'` 65
+yerine **0**. IR geçerli, clang kabul ediyor, program çalışıyor — yalnız değer
+yanlış.
+
+**⚠ TUZAK — ilk düzeltmem SESSİZCE başarısız oldu.** `TAM` dalını ayna alıp
+`a_deg`i doğrudan bastım; ama parser kod noktasını `--ast` dump paritesi için
+**`"U+0041"` biçiminde** saklar (`karakter_deger`), SAYI olarak değil. Sonuç
+yine 0'dı. Hex→ondalık çevirici (`karakter_kod_noktasi`) ŞART.
+
+**Etkisi `base64_selfhost`te maskelenmişti.** Bağımsız çok-ajanlı analiz
+(salt-okuma fan-out + adversarial çürütme, 24 ajan) zinciri benden daha eksiksiz
+çıkardı: `b64_alfabe`/`b64_index` tabloları tamamen 0 → `beklenen` de 0 →
+karşılaştırma EŞLEŞİYOR ve "KEM B64 OK" basılıyor (**kusur kendini maskeliyor**)
+→ `b64_index(0)` hep 0 döner, `'='` için `-1` ASLA dönmez → `i3 > -1` guard'ı
+hep doğru → 8 karakter = 2 grup × 3 bayt = **6 yazma**, `cozulen` 5 elemanlı →
+`cozulen[5]` → `PANIK: dizi sınır ihlali (i=5, boyut=5)`. Gözlenen mesajla birebir.
+
+**Bu yüzden indirgeme ÜÇ KEZ başarısız olmuştu (D-392):** encode-only ve
+encode+decode şekillerinde `beklenen` karşılaştırması da sıfırlarla eşleştiği
+için kusur GÖRÜNMÜYORDU. Panik ancak tam zincir kurulunca çıkıyor.
+
+**ÖLÇÜM DÜZELTMESİ:** korpusa `'ş'` için 351 (kod noktası) yazmıştım — C **197**
+veriyor (UTF-8 ilk baytı 0xC5). Bootstrap parser'ın mevcut davranışı bu;
+self-host onu birebir taklit ediyor ve parite DOĞRU. Varsayımı ölçümle
+değiştirdim, korpusa not düştüm.
+
+**Kapılar:** `codegen_diff` **119/119**, `checker_diff` 148/148 (0 muaf).
+**Sabotaj S118** (KARAKTER dalı) + **S119** (hex çevrimi — ilk düzeltmemi sessiz
+kılan tam nokta) — ikisi de kırmızı.
+
+**🎯 GENİŞ ÖLÇÜM: GERÇEK SAPMA SIFIR.** `OK=65`, kalan 2 "fark" C'nin de
+segfault ettiği EŞLEŞEN çökmeler (self-host kusuru değil). Dört partide
+(D-388→394) codegen paritesi **36 → 65**.
+
+---
+
 ## D-393 [YÜKSEK] — CODEGEN: çağrı argümanı param IR tipine genişletiliyor (2026-08-06)
 
 **ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1). D-392'de bulunan kök

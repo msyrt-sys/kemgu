@@ -1,0 +1,40 @@
+// D-394: KARAKTER literali codegen'de HİÇ ele alınmıyordu.
+// `ifade_uret`te KARAKTER dalı YOKTU → düğüm tanınmıyor, sonda "0" düşüyordu:
+// `'A'` 65 yerine 0. IR GEÇERLİ, clang kabul ediyor, program ÇALIŞIYOR —
+// yalnız değer yanlış. SESSİZ YANLIŞ CEVAP (en ağır sınıf).
+// `base64_selfhost` bu yüzden HİÇ çıktı basmıyordu: `yaz_karakter(c[i])` her
+// seferinde 0 (NUL) yazıyordu; panik ise 0'ların yol açtığı ikincil etkiydi.
+//
+// TUZAK: parser kod noktasını a_deg'e SAYI olarak DEĞİL, `--ast` dump paritesi
+// için "U+0041" biçiminde saklar (karakter_deger). İlk düzeltmem a_deg'i
+// doğrudan bastı ve SESSİZCE 0 üretmeye devam etti — hex'ten ondalığa çevirmek
+// ŞART (karakter_kod_noktasi).
+işlev harf() -> tam32 {
+    ver 'A' olarak tam32;                 // 65
+}
+
+// ÖLÇÜM NOTU: C oracle çok baytlı bir karakter için KOD NOKTASINI değil,
+// UTF-8'in İLK BAYTINI verir ('ş' → 197 = 0xC5, 351 DEĞİL). Bu bootstrap
+// parser'ın mevcut davranışıdır; self-host onu birebir taklit eder ve parite
+// bu yüzden DOĞRUDUR. Değeri yorumlamadım, ÖLÇTÜM — 351 varsayımım yanlıştı.
+işlev cok_baytli() -> tam32 {
+    ver 'ş' olarak tam32;                 // 197 (UTF-8 ilk baytı 0xC5)
+}
+
+işlev main() -> tam32 {
+    // Doğrudan literal
+    eğer harf() != 65 { ver 1; }
+    // Çok baytlı kod noktası (hex çevrimi 4 hane işlemeli)
+    eğer cok_baytli() != 197 { ver 2; }
+    // karakter DEĞİŞKENİ ve Dizi<karakter> elemanı
+    değişken k: karakter = 'Z';
+    eğer (k olarak tam32) != 90 { ver 3; }
+    değişken d: Dizi<karakter> = ['0', '9'];
+    eğer (d[0] olarak tam32) != 48 { ver 4; }
+    eğer (d[1] olarak tam32) != 57 { ver 5; }
+    // Çıktı yolu: yaz_karakter gerçekten o baytı yazmalı
+    yaz_karakter('4');
+    yaz_karakter('2');
+    yazdir_satir();
+    ver 42;
+}
