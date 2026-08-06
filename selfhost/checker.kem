@@ -118,6 +118,8 @@ yapı Ayr {
     snap_top: tam32;         // D-317: anlık-görüntü yığını tepesi
     imha_bag: tam32;         // D-316: imha(...) operandını tüketiyoruz (kısmi taşınmış yapı yalnız imha edilebilir)
     guv_bag: tam32;          // `güvensiz` blok derinliği (C tk->guvensiz_baglam aynası)
+    cast_sessiz: tam32;      // D-381: >0 iken cast tanıları RAPORLANMAZ (yalnız ölçülür)
+    cast_hata_var: tam32;    // D-381: son cast_kontrol koşumunda hata çıktı mı
     tuk_kapali: tam32;       // D-375: >0 iken lineer tüketim bastırılır (arg ön-geçişi)
     yer_son: tam32;          // D-374: fn tablosunda YERLEŞİK girişlerin bitiş indeksi
                              // (tohumlama en başta → yerleşikler [0, yer_son) aralığı)
@@ -1803,7 +1805,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -2298,6 +2300,13 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     eğer metin_esit(ad, "MANTIKSAL") { ver "mantıksal"; }
     eğer metin_esit(ad, "BOS") { ver "boş"; }
     eğer metin_esit(ad, "TANIMLAYICI") { ver var_tip(p, dizi_al(p.a_deg, idx)); }
+    // D-381: `e olarak T` → T. AST: çocuk[0]=kaynak ifade, çocuk[1]=hedef TİP düğümü.
+    // Dönüşümün kendisi geçersizse (E001-E004) C tipi HATA'ya düşürür ve T001'e
+    // gelmez; bu yüzden hedef tipi ancak dönüşüm GEÇERLİYSE bildirilir.
+    eğer metin_esit(ad, "TIP_DONUSTUR") ve (dizi_al(p.a_cs, idx) > 1) {
+        eğer cast_gecerli_mi(p, idx) == yanlış { ver "?"; }
+        ver tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
+    }
     // D-377: dizi literalinin tipi. Bağlam varsa ONA uyarlanır (C bidirectional);
     // yoksa ilk elemandan çıkarsanır. BOŞ dizi bağlamsız → "?" (T014 zaten ayrı
     // kural; burada tip UYDURMAK sahte T001 üretirdi).
@@ -2635,10 +2644,26 @@ işlev cast_genislik(t: metin) -> tam32 {
     ver 0;
 }
 işlev cast_hata(p: &değişken Ayr, idx: tam32, kod: metin) -> tam32 {
+    // D-381: SESSİZ mod — `cast_gecerli_mi` aynı kuralı RAPORLAMADAN yeniden
+    // koşturur. Kuralı ikinci kez YAZMAK (kopyalamak) iki uygulamanın zamanla
+    // ayrışmasına yol açardı; tek kaynak korunur.
+    p.cast_hata_var = 1;
+    eğer p.cast_sessiz > 0 { ver 0; }
     dizi_ekle(p.th_kod, kod);
     dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
     dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
     ver 0;
+}
+// Dönüşüm GEÇERLİ mi? (E001-E004 üretmiyor mu?) — raporlamadan ölçer.
+işlev cast_gecerli_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken eski: tam32 = p.cast_hata_var;
+    p.cast_sessiz = p.cast_sessiz + 1;
+    p.cast_hata_var = 0;
+    cast_kontrol(p, idx);
+    değişken sonuc: mantıksal = p.cast_hata_var == 0;
+    p.cast_sessiz = p.cast_sessiz - 1;
+    p.cast_hata_var = eski;
+    ver sonuc;
 }
 işlev cast_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }

@@ -1,0 +1,46 @@
+// D-381: `e olarak T` ifadesinin TİPİ artık biliniyor (T).
+// Önce TIP_DONUSTUR `ifade_tip`te yoktu → `olarak` içeren her ifade "?"e
+// düşüyor ve tüm karşılaştırmalar SESSİZ kalıyordu. `olarak` KEMGU'da yaygın.
+// KRİTİK: dönüşüm GEÇERSİZSE (E001-E004) C tipi HATA'ya düşürür ve T001'e
+// GELMEZ → hedef tip ancak dönüşüm geçerliyse bildirilir (aksi hâlde tek kusur
+// iki tanı üretirdi).
+işlev t001_skaler_olarak() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken s: metin = x olarak tam64;      // T001: tam64 ≠ metin
+    ver 0;
+}
+işlev t001_olarak_dizi_baglami() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken d: Dizi<tam32> = x olarak tam64;  // T001: tam64 ≠ Dizi<tam32>
+    ver 0;
+}
+işlev t001_ham_isaretci() -> tam32 {
+    güvensiz {
+        değişken x: tam32 = 1;
+        // ÖLÇÜM NOTU: C bu satırda da T001 verir — `&T olarak *U` cast KURALI
+        // (D-349) güvensizde geçerli olsa bile C'nin ürettiği ifade tipi
+        // annotasyonla eşleşmiyor. Kural yorumlanmadı, davranış ölçüldü.
+        değişken a: *tam32 = &x olarak *tam32;   // T001
+        değişken b: &tam32 = a;                  // T001: *tam32 ≠ &tam32
+    }
+    ver 0;
+}
+// GEÇERSİZ dönüşüm: yalnız cast tanısı çıkmalı, T001 EKLENMEMELİ.
+işlev gecersiz_cast_tek_tani() -> tam32 {
+    değişken s: metin = "a";
+    değişken y: tam32 = s olarak tam32;      // yalnız E002
+    ver 0;
+}
+işlev e004_tek_tani() -> tam32 {
+    değişken x: tam64 = 1;
+    değişken s: metin = x olarak tam8;       // yalnız E004
+    ver 0;
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken y: tam64 = x olarak tam64;
+    değişken z: tam32 = (x olarak tam64) olarak tam32;
+    ver z;
+}
+işlev main() -> tam32 { ver 0; }

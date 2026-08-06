@@ -5,6 +5,38 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-381 — `olarak` ifadesinin TİPİ (bileşik tip 5. artım) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** `TIP_DONUSTUR` `ifade_tip`te HİÇ yoktu → `olarak` içeren her ifade
+`"?"`e düşüyor ve tüm karşılaştırmalar sessiz kalıyordu. `olarak` KEMGU'da
+yaygın (özellikle `güvensiz` ve MMIO kodunda), yani boşluk genişti.
+D-380'in bıraktığı bilinen sınır buydu.
+
+**Kural: hedef tipi ancak dönüşüm GEÇERLİYSE bildirilir.** Dönüşüm E001-E004
+üretiyorsa C tipi HATA'ya düşürür ve T001'e hiç gelmez; bu kapı olmadan tek
+kusur İKİ tanı üretirdi (D-351'de yaşanan kaskadın aynısı).
+
+**Kuralı KOPYALAMADIM — sessiz mod ekledim.** `cast_gecerli_mi`, mevcut
+`cast_kontrol`u `cast_sessiz` sayacıyla RAPORLAMADAN yeniden koşturur.
+E001-E004 mantığını ikinci kez yazmak iki kopyanın zamanla ayrışmasına yol
+açardı; tek kaynak korunur. (`tuk_kapali` — D-375 — ile aynı desen.)
+
+**Ölçüm notu:** `&x olarak *tam32` C'de **T001 verir** — cast KURALI (D-349)
+güvensizde geçerli olsa bile üretilen ifade tipi annotasyonla eşleşmiyor.
+Kuralı yorumlamadım, davranışı ölçüp korpusa not düştüm.
+
+**Kapılar:** `checker_diff` **143/143** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 111/111, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe 7/7 birebir (geçersiz-cast'te SUSMA davranışı dâhil). **Sabotaj:**
+S96 (hedef tipi bildirimi), S97 (geçerlilik kapısı) — ikisi de kırmızı.
+
+**Kalan artımlar:** `işlev(..)->T` · `tekkez<T>` · `çeşit` payload tipleri.
+
+---
+
 ## D-380 [YÜKSEK] — Bileşik tip 4. artım: `&T`, `&değişken T`, `*T` (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
