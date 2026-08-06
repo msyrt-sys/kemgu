@@ -852,9 +852,9 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   deref/indeksleme) + `E010` (küresel erişim) artık self-host checker'da da var;
   `çıplak` gövde örtük güvensiz (yan-kanal `cip_node`/`g_ciplak` — düğüme alan
   eklemek `--ast` paritesini bozardı). Öncesinde self-host **güvensiz programı
-  işaretsiz geçiriyordu**. **Ölçülmüş kapsam:** C checker 74 tanı kodu, self-host
-  26 — kalan ~48 kod için D-350'nin tarama yöntemini kullan (`--checkdump` vs
-  `kemgu_self --check` probe matrisi); 21'i "C red, self OK" olarak kanıtlandı.
+  işaretsiz geçiriyordu**. *(Kapsam notu ESKİDİ — o gün 26 koddu; D-387 itibarıyla
+  **70** ve portlanacak kod kalmadı. Güncel durum için "SELF-HOST CHECKER PARİTESİ
+  TAMAMLANDI" bölümüne bak.)*
 - **`olarak` TİP KURALLARI — D-350'de self-host'a portlandı.** E001/E002/E003/E004 artık
   self-host checker'da da var (kod+satır+sütun C ile birebir; `güvensiz` ayrımı dâhil —
   D-248 `tamsayı↔*T`, D-349 `&T→*U`). Kök neden tek satırdı: `kontrol_dugum` başındaki
@@ -947,6 +947,39 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   üretir (21728 satır IR kararlı).
 - **SIRADA:** tek-kaynak konsolidasyon (checker.kem ↔ driver) — checker mantığı iki yerde
   (driver + Aşama 2 referans checker.kem); ileride driver tek-kaynak olabilir.
+
+### 🎯 SELF-HOST CHECKER PARİTESİ TAMAMLANDI (D-350..D-387, 2026-08-06)
+**Ölçülmüş durum — yukarıdaki "26 tanı kodu / kalan ~48" notu ARTIK GEÇERSİZ:**
+- **Self-host tanı kodu: 70** (D-350'de 24). Kalan `T015`/`T023` **ÖLÜ** (C parser'ı
+  o şekilleri zaten reddediyor) → **portlanacak tanı kodu KALMADI.**
+- **GENİŞ ÖLÇÜM 131/131 TAM PARİTE:** `stdlib` + `stdlib/temel` + `test/ornekler` +
+  `kütüphane` + `test/moduller` yüzeyinde C oracle ile **sıfır fark** — ne
+  yanlış-pozitif ne eksik tanı (`kem_os.kem` dâhil).
+- **Kapılar:** `checker_diff` **148/148** (0 muaf) · `parser_diff` 13/13 ·
+  `codegen_diff` 113/113 · sürücü 4 mod × 2 sürücü + FIXPOINT · `check_kapisi`
+  210/217 (0 RED) · C birim **903 test**.
+- **Bileşik tip temsili (D-377..D-386):** `Dizi<E>` · `seçimlik<T>` · `sonuç<T,H>` ·
+  `&T`/`&değişken T`/`*T` · `tekkez<T>`/`yetki<R>` · `görev<T>`/`kanal<T>` ·
+  `olarak` ifadesinin tipi · yapı ALAN tipleri · `eşleş` desen-bağlama tipleri ·
+  Katman 2 intrinsik dönüşleri. **KALAN:** `işlev(..)->T` — temsil biçimi bir
+  TASARIM kararıdır, **Mehmet'e sorulmadan sabitlenmeyecek**.
+- **`görev<T>` LİNEERDİR** (`kanal<T>` değil) — D-384.
+
+**KAPI SEÇİMİ (bu seride iki kez ısırdı):** `checker_diff` yeşilken
+`calistir_parser_diff` KIRMIZI kalabilir — üç ayrı uygulama var
+(`selfhost/parser.kem` referans parser, `selfhost/checker.kem` referans checker,
+`selfhost/codegen.kem` birleşik sürücü). Korpusa dosya eklerken **hangi
+uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
+koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
+
+**BAYAT ARTEFAKT (yine yaşandı):** `git checkout origin/main` ile ölçüm yapıp geri
+dönünce `build/kemgu.exe` ESKİ kaynaktan kalır ve tüm parite kapıları sahte kırmızı
+verir (148→144 gözlendi). Dal değiştirdiysen `rm -f build/kemgu.exe build/kdl_runtime.o`
++ `make` ŞART.
+
+**Bootstrap kapıları (`calistir_lexer_bootstrap`, `calistir_parser_bootstrap`)
+`origin/main`'de DE exit 2 verir** — oran raporlarlar (%96-99), yeşil/kırmızı kapı
+değildirler. Bunu regresyon sanma.
 
 ### İlerideki Fazlar
 - ~~Tip sistemi (tip çıkarsama, tip kontrolü)~~ ✓ ADIM 11

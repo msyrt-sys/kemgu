@@ -5,6 +5,54 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-387 [YÜKSEK] — SERİ KAPANIŞI: `parser_diff` regresyonu onarıldı + durum konsolidasyonu (2026-08-06)
+
+**ETKİ:** `selfhost/parser.kem`, `CLAUDE.md`.
+
+**⚠ KENDİ SERİMDEN ÇIKAN REGRESYON — merge öncesi tam koşumda yakalandı.**
+`calistir_parser_diff` **12/13 KIRMIZI**ydı ve seri boyunca HİÇ koşulmamıştı.
+Kök: D-359 parse korpusuna `p7_kuresel_ciplak.kem` eklerken yalnız **sürücüyü**
+(`codegen.kem`) onardı; **`selfhost/parser.kem`** (Aşama-2 REFERANS parser, ÜÇÜNCÜ
+uygulama) `küresel`/`çıplak` anahtar kelimelerini hiç tanımıyordu. Kapı
+12/12'den 12/13'e düştü ve fark edilmedi çünkü ben hep `checker_diff` +
+sürücü koşum takımını koşuyordum.
+
+**Onarım:** `küresel`/`çıplak` parser.kem'e eklendi. C'de ikisi de AYRI düğüm
+tipi DEĞİLDİR (`DUGUM_DEGISKEN`/`DUGUM_ISLEV` + bayrak; `--ast` "DEGISKEN"/"ISLEV"
+basar) → referans parser bayrağı TUTMAZ, anahtar kelimeyi yutup normal yola
+devam eder. **Konum ölçüldü:** düğüm `küresel`in konumunu taşır (sütun 1),
+`değişken`inkini DEĞİL (sütun 10) → `dizi_yaz` ile düzeltildi. **13/13.**
+
+**DERS — KAPI SEÇİMİ:** bu depoda üç ayrı self-host uygulaması var
+(`parser.kem` / `checker.kem` / `codegen.kem`). Korpusa dosya eklemek, o şekli
+görmesi gereken HER uygulamanın kapısını koşmayı gerektirir. "checker_diff yeşil"
+demek "parite tam" demek DEĞİLDİR. (D-378'de sürücü kapısı bir port hatası
+yakalamıştı; bu onun tersi — sürücü yeşilken referans parser kırmızıydı.)
+
+**DERS — BAYAT ARTEFAKT (yine):** `git checkout origin/main` ile karşılaştırma
+yapıp geri dönünce `build/kemgu.exe` ESKİ kaynaktan kalır; `checker_diff`
+148→144 sahte kırmızı verdi. `rm -f build/kemgu.exe build/kdl_runtime.o` + `make`
+şart. CLAUDE.md'ye yazıldı.
+
+**Ölçülen ama regresyon OLMAYAN:** `calistir_lexer_bootstrap` ve
+`calistir_parser_bootstrap` **origin/main'de DE exit 2** verir (oran raporlarlar,
+yeşil/kırmızı kapı değildirler). Bizim dalda oranlar origin/main'e göre daha iyi
+(parser 514/520 vs 444/462).
+
+### SERİ ÖZETİ (D-350 → D-387, 38 commit)
+- **Self-host tanı kodu: 24 → 70.** Kalan `T015`/`T023` ÖLÜ → portlanacak kod yok.
+- **Geniş ölçüm 131/131 TAM PARİTE** (94/99'dan; D-371→375 arasında 5 yanlış-pozitif
+  kapatıldı: G005, CP005, AS001 eksiği, arg çokluğu, T001 takip tanıları).
+- **Korpus:** `check_korpus` 59 → **148**, `parse_korpus` 12 → 13. Muafiyet listesi BOŞ.
+- **Sabotaj kapıları:** S1 → **S108** (bu seride 37 yeni).
+- **Kapatılan alt-sistemler:** modül · MMIO+yetki · DRF · sabitsüre · çeşit ·
+  bileşik tip temsili (10 artım).
+- **En sık tekrarlayan ders:** *bir temsili/tabloyu zenginleştirmek, onun
+  fakirliğine dayanan her sessiz yolu uyandırır* (D-374 E013, D-377 generic
+  sızıntısı, D-382 lineer taşıma, D-384/386 "geçersiz tip = tanı yok").
+
+---
+
 ## D-386 [YÜKSEK] — Katman 2 intrinsik dönüş tipleri; `eşleş` görev L001 kapandı (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

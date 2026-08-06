@@ -156,6 +156,11 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "güvensiz") { ver "GUVENSIZ"; }
     eğer metin_esit(w, "sabitsüre") { ver "SABITSURE"; }
     eğer metin_esit(w, "gerçekzamanlı") { ver "GERCEKZAMANLI"; }
+    // D-387: `küresel` ve `çıplak` bu REFERANS parser'da hiç yoktu. D-359 parse
+    // korpusuna p7'yi eklerken yalnız SÜRÜCÜYÜ onarmıştı → `calistir_parser_diff`
+    // 12/12'den 12/13'e düştü ve o kapı seri boyunca hiç koşulmadı.
+    eğer metin_esit(w, "küresel") { ver "KURESEL"; }
+    eğer metin_esit(w, "çıplak") { ver "CIPLAK"; }
     eğer metin_esit(w, "vektör") { ver "VEKTOR"; }
     eğer metin_esit(w, "görev") { ver "GOREV"; }
     eğer metin_esit(w, "satıriçi_asm") { ver "SATIRICI_ASM"; }
@@ -1532,6 +1537,24 @@ işlev parse_modul(p: &değişken Ayr) -> tam32 {
     ver dugum_n(p, "MODUL", ad, s, u, kids);
 }
 işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
+    // D-387: `küresel değişken x: T = v;` — C'de AYRI bir düğüm TİPİ DEĞİLDİR
+    // (DUGUM_DEGISKEN + bayrak; `--ast` "DEGISKEN" basar). Bu referans parser
+    // dump paritesi için var, o yüzden bayrağı TUTMAZ: `küresel`i yut, gerisini
+    // normal değişken bildirimi olarak ayrıştır.
+    eğer sim_mi(p, "KURESEL") {
+        // KONUM `küresel` anahtar kelimesinindir (C tek düğüm üretir ve onu
+        // `küresel`in konumuyla açar) — `değişken`inki DEĞİL. Ölçüldü: sütun 1 vs 10.
+        değişken ks: tam32 = sim_sat(p);  değişken ku: tam32 = sim_sut(p);
+        ilerle(p);
+        değişken nd: tam32 = parse_degisken(p);
+        dizi_yaz(p.a_sat, nd, ks); dizi_yaz(p.a_sut, nd, ku);
+        ver nd;
+    }
+    // `çıplak işlev f(..)` — C'de yine DUGUM_ISLEV + bayrak (`--ast` "ISLEV").
+    eğer sim_mi(p, "CIPLAK") {
+        ilerle(p);
+        ver parse_islev(p);
+    }
     eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
