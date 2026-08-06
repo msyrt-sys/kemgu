@@ -5,6 +5,36 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-379 — Bileşik tip 3. artım: yapı alanları + ifade skrutinisi (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**İki küçük değişiklik, geniş kazanç.**
+1. `yapi_kaydet` alan tiplerini `bilinen_skaler_mi` ile süzüyordu → `k.xs`,
+   `k.s`, `k.r` tipleri BİLİNMİYORDU ve alan erişimli her zincir sessizdi.
+   `bilinen_tip_mi`ye çevrildi (TEK SATIR) → `k.xs` T001, `k.xs[0]` eleman tipi,
+   `k.s` iç-tip farkı açıldı. ERISIM dalı zaten `alan_tip_bul`a gidiyordu;
+   yeni kod GEREKMEDİ — bariyer yalnız o filtreydi.
+2. `esles_skrutini_tipi` yalnız TANIMLAYICI çözüyordu → `eşleş k.s`, `eşleş f()`,
+   `eşleş xs[0]` M001 vermiyordu. TANIMLAYICI dışında genel `ifade_tip`e düşüldü.
+   (`yerel_ham` yalnız yerel BAĞLAMALAR içindir; ifadelerin karşılığı yok.)
+
+**Yöntem notu:** D-377/378'de kurulan temsil, bu artımda **yeni makine
+yazmadan** meyve verdi — engel her seferinde bir SÜZGEÇTİ, eksik mantık değil.
+Bileşik temsile geçerken `bilinen_skaler_mi` çağrılarını tek tek gözden
+geçirmek (hangisi "skaler mi" hangisi "bilinen mi" soruyor) bu serinin
+tekrarlayan işi oldu.
+
+**Kapılar:** `checker_diff` **141/141** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 109/109, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe 8/8 birebir. **Sabotaj:** S92 (alan tipi süzgeci skalere döndürüldü),
+S93 (skrutini yine yalnız TANIMLAYICI) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `&T` · `işlev(..)->T` · `tekkez<T>` · `çeşit` payload tipleri.
+
+---
+
 ## D-378 [YÜKSEK] — Bileşik tip 2. artım: `seçimlik<T>` + `sonuç<T,H>`; M001 dalları KAPANDI (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

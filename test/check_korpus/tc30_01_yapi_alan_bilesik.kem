@@ -1,0 +1,47 @@
+// D-379: yapı ALAN tipleri de bileşik olabilir + `eşleş` skrutinisi artık
+// TANIMLAYICI ile sınırlı değil. Önce `alan_tip` yalnız skaler saklıyordu →
+// `k.xs`, `k.s` tipi bilinmiyordu ve alan erişimli her zincir SESSİZDİ.
+yapı K {
+    xs: Dizi<tam32>;
+    s: seçimlik<tam32>;
+    r: sonuç<tam32, metin>;
+    n: tam32;
+}
+işlev yeni() -> K { ver K { xs: [1], s: hiç, r: tamam(1), n: 0 }; }
+işlev fs() -> seçimlik<tam32> { ver hiç; }
+
+işlev t001_alan_dizi() -> tam32 {
+    değişken k: K = yeni();
+    değişken m: tam32 = k.xs;                   // T001: alan Dizi<tam32>
+    ver 0;
+}
+işlev t001_alan_indeks() -> tam32 {
+    değişken k: K = yeni();
+    değişken m: metin = k.xs[0];                // T001: eleman tam32
+    ver 0;
+}
+işlev t001_alan_secimlik() -> tam32 {
+    değişken k: K = yeni();
+    değişken m: seçimlik<metin> = k.s;          // T001: iç tip farkı
+    ver 0;
+}
+// ---- M001: skrutini artık ifade olabilir ----
+işlev m001_alan_skrutini() -> tam32 {
+    değişken k: K = yeni();
+    eşleş k.s { değer(v) => { ver v; } }        // M001: `hiç` eksik
+}
+işlev m001_cagri_skrutini() -> tam32 {
+    eşleş fs() { değer(v) => { ver v; } }       // M001: çağrı skrutinisi
+}
+işlev m001_alan_sonuc() -> tam32 {
+    değişken k: K = yeni();
+    eşleş k.r { tamam(v) => { ver v; } }        // M001: `hata` eksik
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken k: K = yeni();
+    değişken d: Dizi<tam32> = k.xs;
+    değişken o: seçimlik<tam32> = k.s;
+    eşleş k.s { değer(v) => { ver v + k.n + k.xs[0]; } hiç => { ver 0; } }
+}
+işlev main() -> tam32 { ver 0; }

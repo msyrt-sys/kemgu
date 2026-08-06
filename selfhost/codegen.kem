@@ -6378,7 +6378,7 @@ işlev yapi_kaydet(p: &değişken Ayr, yapi: tam32) -> tam32 {
             değişken tc: tam32 = son_cocuk(p, c);
             değişken ft: metin = "?";
             eğer (tc >= 0) ve metin_baslar(dizi_al(p.a_ad, tc), "TIP_") { ft = tip_str(p, tc); }
-            eğer bilinen_skaler_mi(ft) { dizi_ekle(p.alan_tip, ft); }
+            eğer bilinen_tip_mi(ft) { dizi_ekle(p.alan_tip, ft); }   // D-379: bileşik de
             değilse { dizi_ekle(p.alan_tip, "?"); }
             dizi_ekle(p.alan_tn, tc);   // D-376: tip DÜĞÜMÜ (string "?"e düşse de)
             n = n + 1;
@@ -7695,7 +7695,11 @@ işlev metin_biter(s: metin, son: metin) -> mantıksal {
 // Yalnız TANIMLAYICI: annotasyonlu yerel/parametre. Diğer ifadeler → "".
 // D-378: skrutininin (SÜZÜLMEMİŞ) tipi — `seçimlik<..>` / `sonuç<..>` ayrımı için.
 işlev esles_skrutini_tipi(p: &değişken Ayr, kosul: tam32) -> metin {
-    eğer metin_esit(dizi_al(p.a_ad, kosul), "TANIMLAYICI") == yanlış { ver ""; }
+    // D-379: TANIMLAYICI dışındaki skrutiniler (`k.s`, `xs[0]`, `f()`) için
+    // genel tip çıkarsamasına düş. `yerel_ham` yalnız yerel BAĞLAMALAR içindir.
+    eğer metin_esit(dizi_al(p.a_ad, kosul), "TANIMLAYICI") == yanlış {
+        ver ifade_tip(p, kosul, "?");
+    }
     değişken nm: metin = dizi_al(p.a_deg, kosul);
     değişken i: tam32 = dizi_boyut(p.yerel) - 1;
     iken i >= p.yerel_basla {
