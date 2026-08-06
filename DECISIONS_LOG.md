@@ -5,6 +5,45 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-378 [YÜKSEK] — Bileşik tip 2. artım: `seçimlik<T>` + `sonuç<T,H>`; M001 dalları KAPANDI (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**İki kazanç, tek yatırım.** `tip_str` artık `seçimlik<T>` ve `sonuç<T,H>` de
+üretiyor. Bu (a) tip KARŞILAŞTIRMALARINI (T001/T020) ve (b) **`eşleş`
+KAPSAYICILIĞINI (M001)** aynı anda açtı.
+
+**D-352'nin bilinçli borcu kapandı.** O parti M001'i yalnız `çeşit` dalı için
+portlamış, `seçimlik`/`sonuç` dallarını AÇIK bırakmıştı — gerekçe: "self-host'ta
+bileşik tip temsili yok, skrutininin `seçimlik` olduğu ANLAŞILAMIYOR". D-377/378
+temsili getirince engel ortadan kalktı; dallar birkaç satırda eklendi.
+**Bir borcu kapatmanın doğru zamanı, onu doğuran eksikliğin kapandığı andır.**
+
+**Varyant tarama ölçüldü:** `değer(v)`/`tamam(v)` `DESEN_YAPICI`, çıplak `hiç`
+`DESEN_TANIMLAYICI` olarak gelir → iki düğüm tipi de taranmalı. Joker `_` ve
+bağlama yakalayıcısı mevcut erken-dönüşle zaten kapatıyor.
+
+**D-377'nin generic koruması genelleştirildi.** `Dizi<seçimlik<tam32>>` çalışmıyordu:
+eleman kontrolü elle sayılmış bir listeydi (`skaler ∪ Dizi<`). `bilinen_tip_mi`ye
+çevrildi — o da generic param'ı (`T`) içermediği için **erteleme korunur**.
+Aynı şekilde T001'in D-370 kapısı `Dizi<` özel-durumundan `bilinen_tip_mi`ye alındı.
+
+**Sürücü kapısı bir PORT hatası yakaladı.** `sonuç` dalı codegen.kem'e eksik
+taşınmıştı (blok kesilmişti); `checker_diff` YEŞİLDİ (o dosyayı referans checker
+ile ölçüyor) ama sürücü koşum takımı `M001 36 5` eksiğini gösterdi. **İki
+uygulamalı bir sistemde tek kapı yetmez** — parite kapıları farklı ikilileri ölçer.
+
+**Kapılar:** `checker_diff` **140/140** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 108/108, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe: tip 8/8 + M001 7/7 birebir. **Sabotaj:** S90 (seçimlik M001 dalı),
+S91 (`TIP_SECIMLIK` temsili) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `&T` · `işlev(..)->T` · `tekkez<T>` · yapı alanlarının
+bileşik hâli (`alan_tip` hâlâ yalnız skaler saklıyor).
+
+---
+
 ## D-377 [YÜKSEK] — Bileşik tip temsili, 1. artım: `Dizi<E>` (2026-08-06)
 
 **ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).

@@ -6097,14 +6097,33 @@ işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
         // generic param (`Dizi<T>`) da öyle gelir. Onu "bilinen" saymak
         // `xs[i] > xs[j]` gibi generic gövdelerde sahte T003 üretiyordu (ölçüldü:
         // `sirali_mi<T>(xs: Dizi<T>)`). C generic'i ERTELER → biz de "?" deriz.
-        eğer (bilinen_skaler_mi(e) veya metin_baslar(e, "Dizi<")) == yanlış { ver "?"; }
+        // D-378: `bilinen_tip_mi` generic param.i (`T`) İÇERMEZ → erteleme korunur.
+        eğer bilinen_tip_mi(e) == yanlış { ver "?"; }
         ver metin_birlestir("Dizi<", metin_birlestir(e, ">"));
     }
-    ver "?";   // diğer bileşikler (&/seçimlik/sonuç/...) — sonraki artımlar
+    // D-378: 2. artım — `seçimlik<T>` ve `sonuç<T,H>`. Aynı muhafazakârlık:
+    // her argüman GERÇEKTEN bilinmeli, aksi hâlde TÜM tip "?" (generic ertelenir).
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_SECIMLIK") {
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        değişken s1: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+        eğer bilinen_tip_mi(s1) == yanlış { ver "?"; }
+        ver metin_birlestir("seçimlik<", metin_birlestir(s1, ">"));
+    }
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_SONUC") {
+        eğer dizi_al(p.a_cs, idx) < 2 { ver "?"; }
+        değişken cb2: tam32 = dizi_al(p.a_cb, idx);
+        değişken r1: metin = tip_str(p, dizi_al(p.cocuk, cb2));
+        değişken r2: metin = tip_str(p, dizi_al(p.cocuk, cb2 + 1));
+        eğer (bilinen_tip_mi(r1) ve bilinen_tip_mi(r2)) == yanlış { ver "?"; }
+        ver metin_birlestir("sonuç<", metin_birlestir(r1,
+            metin_birlestir(", ", metin_birlestir(r2, ">"))));
+    }
+    ver "?";   // diğer bileşikler (&/işlev/tekkez/...) — sonraki artımlar
 }
 // Karşılaştırılabilir (tam bilinen) tip mi? Skaler ∪ `Dizi<bilinen>`.
 işlev bilinen_tip_mi(t: metin) -> mantıksal {
-    ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<");
+    ver bilinen_skaler_mi(t) veya metin_baslar(t, "Dizi<")
+      veya metin_baslar(t, "seçimlik<") veya metin_baslar(t, "sonuç<");   // D-378
 }
 // `Dizi<E>` → `E` (değilse "?"). `metin_kes(s, başlangıç, UZUNLUK)` — ölçüldü.
 işlev dizi_ic_tip(t: metin) -> metin {
@@ -6541,7 +6560,8 @@ işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     // D-370: annotasyon BİLİNMEYEN bir tipse C tipi HATA'ya düşürür ve T001'e
     // hiç gelmez (yalnız T011 çıkar). Aksi hâlde tek kusur iki tanı üretirdi.
     // D-377: kapı yalnız BASİT tip ADLARI içindir; `Dizi<..>` muaf.
-    eğer metin_baslar(annot, "Dizi<") == yanlış {
+    // D-377/D-378: kapı yalnız BASİT tip ADLARI içindir; bileşikler muaf.
+    eğer bilinen_tip_mi(annot) == yanlış {
         eğer tip_adi_bilinir_mi(p, annot) == yanlış { ver 0; }
     }
     değişken vc: tam32 = son_cocuk(p, idx);
@@ -7673,6 +7693,39 @@ işlev metin_biter(s: metin, son: metin) -> mantıksal {
 // (cesit_var_mi codegen.kem'de zaten var — cc_ad registry'si, parser doldurur.)
 // Skrutini ÇEŞİT tipinde mi? Değilse/emin değilsek "" (kontrol atlanır).
 // Yalnız TANIMLAYICI: annotasyonlu yerel/parametre. Diğer ifadeler → "".
+// D-378: skrutininin (SÜZÜLMEMİŞ) tipi — `seçimlik<..>` / `sonuç<..>` ayrımı için.
+işlev esles_skrutini_tipi(p: &değişken Ayr, kosul: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, kosul), "TANIMLAYICI") == yanlış { ver ""; }
+    değişken nm: metin = dizi_al(p.a_deg, kosul);
+    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
+    iken i >= p.yerel_basla {
+        eğer metin_esit(dizi_al(p.yerel, i), nm) { ver dizi_al(p.yerel_ham, i); }
+        i = i - 1;
+    }
+    ver "";
+}
+// Bir varyant adı kollardan biriyle kapsanmış mı? (DESEN_YAPICI ∪ DESEN_TANIMLAYICI)
+işlev esles_varyant_var_mi(p: &değişken Ayr, idx: tam32, ad: metin) -> mantıksal {
+    değişken ec: tam32 = dizi_al(p.a_cs, idx);
+    değişken eb: tam32 = dizi_al(p.a_cb, idx);
+    değişken k: tam32 = 1;
+    iken k < ec {
+        değişken d: tam32 = kol_deseni(p, dizi_al(p.cocuk, eb + k));
+        eğer d >= 0 {
+            değişken da: metin = dizi_al(p.a_ad, d);
+            eğer (metin_esit(da, "DESEN_YAPICI") veya metin_esit(da, "DESEN_TANIMLAYICI"))
+              ve metin_esit(dizi_al(p.a_deg, d), ad) { ver doğru; }
+        }
+        k = k + 1;
+    }
+    ver yanlış;
+}
+işlev m001_yaz(p: &değişken Ayr, idx: tam32) -> tam32 {
+    dizi_ekle(p.th_kod, "M001");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
 işlev esles_cesit_adi(p: &değişken Ayr, kosul: tam32) -> metin {
     eğer metin_esit(dizi_al(p.a_ad, kosul), "TANIMLAYICI") == yanlış { ver ""; }
     değişken nm: metin = dizi_al(p.a_deg, kosul);
@@ -7708,6 +7761,23 @@ işlev m001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
               ve (metin_esit(dizi_al(p.a_deg, des), "hiç") == yanlış) { ver 0; }
         }
         ki = ki + 1;
+    }
+    // D-378: `seçimlik<T>` ve `sonuç<T,H>` dalları. D-352'de BİLİNÇLİ olarak
+    // açık bırakılmıştı: o zaman bileşik tip temsili yoktu, skrutininin
+    // `seçimlik` mi olduğu ANLAŞILAMIYORDU. D-377/D-378 temsili getirdi.
+    // Varyantlar: seçimlik → `değer` + `hiç`; sonuç → `tamam` + `hata`.
+    // `değer(v)`/`tamam(v)` DESEN_YAPICI, çıplak `hiç` DESEN_TANIMLAYICI olarak
+    // gelir (ölçüldü) → iki düğüm tipi de taranır.
+    değişken st: metin = esles_skrutini_tipi(p, dizi_al(p.cocuk, eb));
+    eğer metin_baslar(st, "seçimlik<") {
+        eğer (esles_varyant_var_mi(p, idx, "değer") ve esles_varyant_var_mi(p, idx, "hiç"))
+             == yanlış { m001_yaz(p, idx); }
+        ver 0;
+    }
+    eğer metin_baslar(st, "sonuç<") {
+        eğer (esles_varyant_var_mi(p, idx, "tamam") ve esles_varyant_var_mi(p, idx, "hata"))
+             == yanlış { m001_yaz(p, idx); }
+        ver 0;
     }
     değişken cad: metin = esles_cesit_adi(p, dizi_al(p.cocuk, eb));
     eğer metin_esit(cad, "") { ver 0; }
