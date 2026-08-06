@@ -1,0 +1,212 @@
+// KEMGU Stdlib Testi — Arama
+// =================================
+//
+// Bu dosya `stdlib/arama.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+// seçimlik<tam32> dönüşler eşleş ile skalere ayrıştırılır.
+
+// Test predicate'leri
+işlev arama_cift_mi(x: tam32) -> mantıksal { ver x % 2 == 0; }
+işlev arama_negatif_mi(x: tam32) -> mantıksal { ver x < 0; }
+
+// --- dogrusal_ara ---
+işlev test_dogrusal_var() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    eşleş dogrusal_ara(d, 20) {
+        değer(v) => { ver v; }                   // 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_dogrusal_ilk_eslesme() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 7, 5];
+    eşleş dogrusal_ara(d, 5) {
+        değer(v) => { ver v; }                   // 0 (ilk eşleşme)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_dogrusal_yok() -> mantıksal {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    eşleş dogrusal_ara(d, 99) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_dogrusal_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş dogrusal_ara(d, 1) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_dogrusal_metin() -> tam32 {
+    değişken d: Dizi<metin> = ["alma", "asma", "ayva"];
+    eşleş dogrusal_ara(d, "asma") {
+        değer(v) => { ver v; }                   // 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- ikili_ara (sıralı dizi) ---
+işlev test_ikili_orta() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 3, 5, 7, 9];
+    eşleş ikili_ara(d, 5) {
+        değer(v) => { ver v; }                   // 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ikili_ilk() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 3, 5, 7, 9];
+    eşleş ikili_ara(d, 1) {
+        değer(v) => { ver v; }                   // 0
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ikili_son() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 3, 5, 7, 9];
+    eşleş ikili_ara(d, 9) {
+        değer(v) => { ver v; }                   // 4
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ikili_yok() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 3, 5, 7, 9];
+    eşleş ikili_ara(d, 4) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_ikili_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş ikili_ara(d, 1) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_ikili_tek_eleman() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    eşleş ikili_ara(d, 42) {
+        değer(v) => { ver v; }                   // 0
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- ilk_uygun / son_uygun ---
+işlev test_ilk_uygun() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    eşleş ilk_uygun(d, arama_cift_mi) {
+        değer(v) => { ver v; }                   // 1 (ilk çift: 2)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ilk_uygun_yok() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 3, 5];
+    eşleş ilk_uygun(d, arama_cift_mi) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_son_uygun() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    eşleş son_uygun(d, arama_cift_mi) {
+        değer(v) => { ver v; }                   // 3 (son çift: 4)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_son_uygun_yok() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3];
+    eşleş son_uygun(d, arama_negatif_mi) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- alt_sinir / ust_sinir (sıralı dizi, tekrarlı) ---
+işlev test_alt_sinir_tekrarli() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver alt_sinir(d, 20);                        // 1 (ilk 20)
+}
+
+işlev test_ust_sinir_tekrarli() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver ust_sinir(d, 20);                        // 3 (son 20'nin ardı)
+}
+
+işlev test_sinir_gecis_sayisi() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver ust_sinir(d, 20) - alt_sinir(d, 20);     // 2 (20 iki kez)
+}
+
+işlev test_alt_sinir_arada() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver alt_sinir(d, 25);                        // 3 (25 buraya eklenir)
+}
+
+işlev test_alt_sinir_bas() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver alt_sinir(d, 5);                         // 0
+}
+
+işlev test_alt_sinir_son() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver alt_sinir(d, 99);                        // 3 (n)
+}
+
+işlev test_ust_sinir_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver ust_sinir(d, 1);                         // 0
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_dogrusal_var() != 1 { ver 1; }
+    eğer test_dogrusal_ilk_eslesme() != 0 { ver 2; }
+    eğer değil test_dogrusal_yok() { ver 3; }
+    eğer değil test_dogrusal_bos() { ver 4; }
+    eğer test_dogrusal_metin() != 1 { ver 5; }
+    eğer test_ikili_orta() != 2 { ver 6; }
+    eğer test_ikili_ilk() != 0 { ver 7; }
+    eğer test_ikili_son() != 4 { ver 8; }
+    eğer değil test_ikili_yok() { ver 9; }
+    eğer değil test_ikili_bos() { ver 10; }
+    eğer test_ikili_tek_eleman() != 0 { ver 11; }
+    eğer test_ilk_uygun() != 1 { ver 12; }
+    eğer değil test_ilk_uygun_yok() { ver 13; }
+    eğer test_son_uygun() != 3 { ver 14; }
+    eğer değil test_son_uygun_yok() { ver 15; }
+    eğer test_alt_sinir_tekrarli() != 1 { ver 16; }
+    eğer test_ust_sinir_tekrarli() != 3 { ver 17; }
+    eğer test_sinir_gecis_sayisi() != 2 { ver 18; }
+    eğer test_alt_sinir_arada() != 3 { ver 19; }
+    eğer test_alt_sinir_bas() != 0 { ver 20; }
+    eğer test_alt_sinir_son() != 3 { ver 21; }
+    eğer test_ust_sinir_bos() != 0 { ver 22; }
+    ver 42;
+}

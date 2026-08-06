@@ -1,0 +1,107 @@
+// KEMGU Stdlib Testi — Kuyruk
+// =================================
+//
+// Bu dosya `stdlib/kuyruk.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü diziler çağıran scope'ta indekslenmez; sonuçlar
+// kuyruk_boyut / kuyruk_on parametresine geçirilerek skalere indirgenir
+// (test_dizi.kem'deki F4-güvenli desen).
+
+// --- kurucular ---
+işlev test_olustur_tam_bos() -> mantıksal {
+    ver kuyruk_bos_mu(kuyruk_olustur_tam());
+}
+
+işlev test_olustur_metin_boyut() -> tam32 {
+    ver kuyruk_boyut(kuyruk_olustur_metin());
+}
+
+// --- ekle / boyut ---
+işlev test_ekle_boyut() -> tam32 {
+    değişken k: Dizi<tam32> = [];
+    ver kuyruk_boyut(kuyruk_ekle(kuyruk_ekle(k, 10), 20));   // 2
+}
+
+işlev test_ekle_on() -> tam32 {
+    değişken k: Dizi<tam32> = [];
+    eşleş kuyruk_on(kuyruk_ekle(kuyruk_ekle(k, 10), 20)) {
+        değer(v) => { ver v; }                               // 10 (ilk eklenen)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- on ---
+işlev test_on_dolu() -> tam32 {
+    değişken k: Dizi<tam32> = [10, 20, 30];
+    eşleş kuyruk_on(k) {
+        değer(v) => { ver v; }                               // 10
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_on_bos() -> mantıksal {
+    değişken k: Dizi<tam32> = [];
+    eşleş kuyruk_on(k) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }                                // boş -> hiç
+    }
+    ver yanlış;
+}
+
+// --- cikar ---
+işlev test_cikar_boyut() -> tam32 {
+    ver kuyruk_boyut(kuyruk_cikar([10, 20, 30]));            // 2
+}
+
+işlev test_cikar_on() -> tam32 {
+    eşleş kuyruk_on(kuyruk_cikar([10, 20, 30])) {
+        değer(v) => { ver v; }                               // 20 (10 atıldı)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_cikar_bos() -> tam32 {
+    değişken k: Dizi<tam32> = [];
+    ver kuyruk_boyut(kuyruk_cikar(k));                       // 0
+}
+
+// --- metin elemanlar ---
+işlev test_metin_on() -> mantıksal {
+    değişken k: Dizi<metin> = ["alma", "asma"];
+    eşleş kuyruk_on(k) {
+        değer(v) => { ver v == "alma"; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// --- FIFO senaryosu: ekle 1, ekle 2, çıkar -> ön 2 ---
+işlev test_fifo_sirasi() -> tam32 {
+    değişken k: Dizi<tam32> = [];
+    eşleş kuyruk_on(kuyruk_cikar(kuyruk_ekle(kuyruk_ekle(k, 1), 2))) {
+        değer(v) => { ver v; }                               // 2 (1 çıktı)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_olustur_tam_bos() { ver 1; }
+    eğer test_olustur_metin_boyut() != 0 { ver 2; }
+    eğer test_ekle_boyut() != 2 { ver 3; }
+    eğer test_ekle_on() != 10 { ver 4; }
+    eğer test_on_dolu() != 10 { ver 5; }
+    eğer değil test_on_bos() { ver 6; }
+    eğer test_cikar_boyut() != 2 { ver 7; }
+    eğer test_cikar_on() != 20 { ver 8; }
+    eğer test_cikar_bos() != 0 { ver 9; }
+    eğer değil test_metin_on() { ver 10; }
+    eğer test_fifo_sirasi() != 2 { ver 11; }
+    ver 42;
+}

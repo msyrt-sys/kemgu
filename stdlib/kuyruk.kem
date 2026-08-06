@@ -1,0 +1,85 @@
+// KEMGU Stdlib — Kuyruk (FIFO)
+// =============================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<T> üzerinde FIFO kuyruk: ilk giren ilk çıkar. Dizinin ÖNÜ
+// (indeks 0) kuyruğun önüdür; ekleme dizi_ekle ile sona yapılır.
+//
+// Tasarım kuralı:
+//   - Ayrı bir Kuyruk<T> sarmalayıcı tipi YOK: kuyruk = Dizi<T> +
+//     disiplinli API (yigin.kem ile aynı gerekçe).
+//   - Tüm işlevler `kuyruk_` önekli: yigin.kem `bos_mu`/`boyut`
+//     operasyon adlarını da tanımlıyor; iki modül aynı programda
+//     yan yana kullanılabilsin diye önek zorunlu.
+//   - `kuyruk_cikar` ÇIKARILAN DEĞERİ DEĞİL küçültülmüş kuyruğu döner.
+//     Çok-değerli dönüş olmadığı için iki adım: önce `kuyruk_on` ile
+//     oku, sonra `kuyruk_cikar` ile küçült (yigin_cek ile aynı desen).
+//   - `kuyruk_cikar` yeni dizi kurar ve baştaki elemanı atlar — O(n).
+//     Halka tampon (ring buffer) sürümü baş-indeksi taşıyan bir yapı
+//     ister; şimdilik küçük kuyruklar için bu yeterli.
+//   - Boş kuyrukta `kuyruk_on` hiç döner (sentinel yerine seçimlik<T>).
+
+// --- Kurucular ---
+//
+// Parametresiz generic kurucu yazılamaz (tip argümanları yalnız
+// parametrelerden çıkarsanır); yaygın tipler için somut kurucular.
+// Generic bağlamda: değişken k: Dizi<T> = dizi_olustur(0);
+
+// Boş tam32 kuyruğu kur.
+işlev kuyruk_olustur_tam() -> Dizi<tam32> {
+    değişken k: Dizi<tam32> = dizi_olustur(0);
+    ver k;
+}
+
+// Boş metin kuyruğu kur.
+işlev kuyruk_olustur_metin() -> Dizi<metin> {
+    değişken k: Dizi<metin> = dizi_olustur(0);
+    ver k;
+}
+
+// --- Sorgular ---
+
+// Eleman sayısı.
+işlev kuyruk_boyut<T>(k: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: k {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Boş mu?
+işlev kuyruk_bos_mu<T>(k: Dizi<T>) -> mantıksal {
+    ver kuyruk_boyut(k) == 0;
+}
+
+// --- Erişim ---
+
+// Öndeki eleman (çıkarmadan oku). Boş kuyrukta hiç.
+işlev kuyruk_on<T>(k: Dizi<T>) -> seçimlik<T> {
+    eğer kuyruk_bos_mu(k) { ver hiç; }
+    ver değer(k[0]);
+}
+
+// --- Dönüşümler ---
+
+// Ekle (enqueue) — elemanı kuyruğun sonuna ekle. Yerinde ekler,
+// aynı diziyi döner (zincirleme kullanım).
+işlev kuyruk_ekle<T>(k: Dizi<T>, x: T) -> Dizi<T> {
+    dizi_ekle(k, x);
+    ver k;
+}
+
+// Çıkar (dequeue) — öndeki eleman ATILMIŞ yeni kuyruğu döner.
+// Çıkarılan değer gerekiyorsa önce kuyruk_on ile oku. Boş kuyrukta
+// boş döner.
+işlev kuyruk_cikar<T>(k: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    değişken n: tam32 = kuyruk_boyut(k);
+    değişken i: tam32 = 1;
+    iken i < n {
+        dizi_ekle(sonuc, k[i]);
+        i = i + 1;
+    }
+    ver sonuc;
+}
