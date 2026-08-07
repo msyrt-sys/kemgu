@@ -115,6 +115,17 @@ küçült (cek/cikar)" iki adımı; yokluk `seçimlik<T>`.
   1e9+7; FNV/djb2 bilinçli değil — taşan çarpma + XOR ister):
   `karma_tam`, `karma_dizi_tam`, `karma_birlestir`, `karma_kova`
   (eslem karma-tablo V2 köprüsü), `karma_modcarp`, `karma_normalize`
+- **`tablo.kem`** — açık adresli karma tablo (tam32->tam32, O(1)
+  amortize; tek düz dizi: `[kapasite | anahtarlar | değerler |
+  işaretler]`; silme mezartaşıyla — zincir kopmaz): `tablo_olustur`,
+  `tablo_koy` (1=yeni/0=güncel/-1=dolu), `tablo_bul`, `tablo_var_mi`,
+  `tablo_sil`, `tablo_boyut`; sabit kapasite, rehash V2
+- **`geometri.kem`** — kesin tamsayı 2B geometri (epsilon yok, her
+  predikat kesin): `geo_yon` (ccw/cw/doğrusal), `geo_capraz`,
+  `geo_nokta_carpim`, `geo_manhattan`, `geo_uzaklik_kare`,
+  `geo_dikdortgen_icinde_mi`, `geo_parca_uzerinde_mi`,
+  `geo_parcalar_kesisir_mi` (CLRS), `geo_alan_iki_kat[_isaretli]`
+  (shoelace ×2); |koordinat| <= 16000 sınırı belgeli
 
 ## Kullanım
 
@@ -159,6 +170,8 @@ Hiçbir runtime gerektirmez — saf type-checked KEMGU.
 | kesir | ✓ tam | Yok (tam64 iç aritmetik V2) |
 | rastgele | ✓ tam | Yok (bias'sız aralık V2) |
 | karma | ✓ tam | Yok (karma_metin: karakter erişimi) |
+| tablo | ✓ tam | Yok (rehash V2) |
+| geometri | ✓ tam | Yok (büyük koordinat: tam64 V2) |
 | koleksiyon/Tablo | ⏳ | Allocator runtime |
 | io/yazdir | ⏳ | Syscall layer |
 | iş/Görev | ⏳ | Thread runtime |
