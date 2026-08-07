@@ -1067,11 +1067,15 @@ LLVM-RED'den çıkıp çalışıyor.
 üretip tamamen yanlış bir kök aramama yol açmıştı.
 
 ### ⚠ AÇIK KALANLAR (D-408'de ölçüldü, kayda geçti)
-- **`test/snapshots` yüzeyi (D-409'da açıldı): 57/62.** Kalan 5 AYRI kök —
-  "tek kök" varsayılmadı: `ad_cozum_sapma` (`@ic.g`) · `asm_round_trip`
-  (**C=42 KEMGU=1**) · `bolge_al_grow` (`@bellek_kopyala`) · `cesit_sonuc`
-  (**C=42 KEMGU=3**) · `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
-  **İKİSİ SESSİZ YANLIŞ CEVAP** — link hatalarından ÖNCE onlara bakılmalı.
+- **`test/snapshots` yüzeyi (D-409'da açıldı): 58/62.** ✓ `cesit_sonuc` D-410'da
+  kapandı (`eşleş` iç ayırıcı testi — **sessiz yanlış cevap**tı). Kalan 4 AYRI
+  kök: `ad_cozum_sapma` (`@ic.g`) · `asm_round_trip` (**C=42 KEMGU=1**, hâlâ
+  sessiz yanlış cevap) · `bolge_al_grow` (`@bellek_kopyala`) ·
+  `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+- **⚠ ÇOK-KOLLU TESTTE EN AZ ÜÇ VARYANT KULLAN.** D-410'da "hep ilk kola git"
+  hatası İKİ varyantla %50 olasılıkla doğru cevabı verir ve test **tesadüfen
+  yeşil kalır**. Üç varyant + hepsinin AYRI dönüş değeri şart. (D-393'ün
+  "3 parametre yetmez, en az 4" dersinin aynısı.)
 - **`sabitsüre` codegen'i — GÜVENLİK-DUYARLI, yarım yapılamaz.** C
   `sabitsüre_olustur`u pass-through yapar AMA yanında
   **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri yayar. Self-host'ta

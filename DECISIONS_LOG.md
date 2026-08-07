@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-410 [YÜKSEK] — CODEGEN: `eşleş` iç ayırıcı testi — SESSİZ YANLIŞ CEVAP (2026-08-07)
+
+**En ağır sınıf.** Link hatası YOK, IR geçerli, program çalışıyor — yalnız
+**yanlış dala gidiyor**. `test/snapshots/cesit_sonuc` C=42 iken KEMGU=3
+veriyordu.
+
+**Kusur:** self-host `eşleş`te alt-deseni **DAİMA bir bağlama ADI** sanıyordu.
+`hata(H::B)` gibi bir **DESEN_YOL** alt-deseninde iç ayırıcı **HİÇ
+karşılaştırılmıyordu** → dış tag eşleşince gövdeye giriliyor, dolayısıyla TÜM
+`hata(...)` kolları **İLKİNE** gidiyordu. (`H::B` adında bir değişken bağlanıyordu
+— zararsız ama anlamsız.)
+
+**Ölçümle izole edildi** (dosyanın tamamıyla uğraşmadan): 3 varyantlı minimal
+probe → `hata(H::B)` için C=20, SELF=**10**. Hipotez ("yalnız dış tag'e bakıyor")
+önce yazıldı, sonra ölçüldü — teşhis değil ÖLÇÜM.
+
+**Onarım:** dış tag dalından SONRA, gövdenin başında İKİNCİ bir dal payload'ın
+ayırıcısını sınar; tutmazsa `Lnext`e (sonraki kol) düşer. Payload'lı çeşit
+`{i8,...}` ise ayırıcı 0. alandadır (`extractvalue`), payload'suz enum doğrudan
+`i8`dir.
+
+**Korpus:** `cg_cesit_ic_ayirici.kem` (`cesit_sonuc` snapshot'undan birebir kopya
++ gerekçe notu — uydurmadım).
+**⚠ NEDEN EN AZ ÜÇ VARYANT ŞART:** iki varyantla "hep ilkine git" hatası %50
+olasılıkla doğru cevabı verir ve test **tesadüfen yeşil kalabilir**. Üç varyant +
+hepsinin AYRI dönüş değeri, yanlış dallanmayı kaçınılmaz kılar.
+(D-393'ün "3 parametre yetmez, en az 4 gerekir" dersinin aynısı.)
+
+**Sabotaj S151** → `exit=42 ≠ 3` — yani kapı sessiz-yanlış-cevap kipini
+**exit farkı olarak** yakalıyor, link hatası olarak değil (133 → 132/133).
+
+**`test/snapshots` 57/62 → 58/62.** Kalan 4 AYRI kök: `ad_cozum_sapma` (`@ic.g`) ·
+`asm_round_trip` (**C=42 KEMGU=1**, hâlâ sessiz yanlış cevap) · `bolge_al_grow`
+(`@bellek_kopyala`) · `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+
+**Kapılar:** `codegen_diff` **133/133** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-409 [YÜKSEK] — CODEGEN: Türkçe TİP adlarının IR'da tırnaklanması (2026-08-07)
 
 **Yeni yüzey `test/snapshots`** (81 dosya, kapısız) ölçüldü: **56/62**, ALTI

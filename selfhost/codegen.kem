@@ -5277,6 +5277,34 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                             yaz_str("  "); yaz_str(ba); yaz_str(" = alloca "); yaz_str(pt); yb(10);
                             yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
                             yaz_str(", ptr "); yaz_str(ba); yb(10);
+                            // D-410: alt-desen bir DESEN_YOL ise (`hata(H::B)`) bu bir
+                            // BAĞLAMA DEĞİL, İÇ AYIRICI TESTİDİR. Eski kod alt-deseni
+                            // daima ad sanıp `H::B` diye bir değişken bağlıyor ve iç
+                            // ayırıcıyı HİÇ karşılaştırmıyordu → TÜM `hata(...)` kolları
+                            // İLKİNE gidiyordu. Link hatası YOK, IR geçerli, program
+                            // çalışıyor — SESSİZ YANLIŞ CEVAP (ölçüldü: `hata(H::B)`
+                            // için 20 yerine 10). Dış tag zaten kontrol edildi; burada
+                            // İKİNCİ bir dal payload'ın ayırıcısını sınar ve tutmazsa
+                            // Lnext'e (sonraki kol) düşer.
+                            eğer metin_esit(dizi_al(p.a_ad, alt), "DESEN_YOL") {
+                                değişken idisc: tam32 = yol_disc(p, bad);
+                                değişken itag: metin = pv;
+                                // Payload'lı çeşit `{i8, ...}` ise ayırıcı 0. alandadır;
+                                // payload'suz (enum) çeşit doğrudan i8'dir.
+                                eğer bayt(pt, 0) == 123 {
+                                    değişken it2: metin = reg_str(yeni_reg(p));
+                                    yaz_str("  "); yaz_str(it2); yaz_str(" = extractvalue ");
+                                    yaz_str(pt); yaz_str(" "); yaz_str(pv); yaz_str(", 0"); yb(10);
+                                    itag = it2;
+                                }
+                                değişken Lin: metin = yeni_label(p);
+                                değişken cr2: metin = reg_str(yeni_reg(p));
+                                yaz_str("  "); yaz_str(cr2); yaz_str(" = icmp eq i8 "); yaz_str(itag);
+                                yaz_str(", "); yaz_str(tam64_str(idisc olarak tam64)); yb(10);
+                                yaz_str("  br i1 "); yaz_str(cr2); yaz_str(", label %"); yaz_str(Lin);
+                                yaz_str(", label %"); yaz_str(Lnext); yb(10); p.bb_term = 1;
+                                etiket_yaz(p, Lin);
+                            }
                             cg_var_ekle(p, bad, ba, pt, "", "");
                             // D-396: payload İÇ tipini bağlamaya taşı. YALNIZ başarı
                             // alanı (pf==1: tamam/değer) — hata alanı (pf==2) `metin`dir
