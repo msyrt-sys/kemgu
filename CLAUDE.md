@@ -1032,9 +1032,22 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
     önüne koymak + `kullan` satırını düşürmek → tek lex+parse, tek AST, yan-kanal
     kaybı YOK. Ampirik: `ana_mat` için self-host **exit 42 = C**. D-398'in
     mangling'i bu yolu doğrudan besliyor (`@mat.topla` kendiliğinden çıkıyor).
-  - Kalan tasarım ayrıntıları: alias (`kullan m olarak x` → `modül x { }`),
-    seçili import (çıplak ad görünürlüğü), transitif zincir sırası, ve konum
-    kayması (yalnız `--llvm` yolunda; tanılar `--check`te üretiliyor).
+  - ✓ **D-399 UYGULADI (KISMİ): 0/18 → 7/18**, sıfır regresyon. Kaynak-splice
+    yolu `--llvm` dispatch'ine bağlandı (iki geçiş: parse → `kullan` listesi →
+    birleştir → yeniden parse). Modül yoksa çıktı BİREBİR korunur.
+  - **⚠ AÇIK KÖK — iç içe `ayr_olustur`+`lex_et` `metin` değerlerini eziyor.**
+    `ana_zincir`de sarmal adı kayboluyor (`@dortle_topla`, olması gereken
+    `@zincir.dortle_topla`). İKİ hipotez ölçüldü, İKİSİ DE ÇÜRÜDÜ: (a) "ad
+    özyinelemeden sonra hesaplanıyor" → önce hesapladım, değişmedi; (b) "`p`
+    üzerinden aliasing" → mutasyondan önce sabitledim, değişmedi. Bozulan YALNIZ
+    içinde özyineleme YAPAN modül (`mat`in döngüsü boş, o sağlam). **Self-host
+    bellek semantiği sorusu — tahminle kapatma, ölç.**
+  - Kalan 11, üç sınıf: transitif (1) · alias+seçili import (3, sarmal adı
+    ALIAS'tan gelmeli / `::{a,b}` çıplak ad görünürlüğü) · **çapraz-modül
+    tip/generic (7)** — hepsi `'%N' i32 but expected 'ptr'`, ad çözümü DEĞİL tip
+    çözümü, ayrı alt-sistem.
+  - **`modul_yukle` (--check) aynı transitif-dizin kusurunu taşıyor ama MASKELİ:**
+    check yalnız isim topluyor, `ana_zincir` `mat`in adlarına ihtiyaç duymuyor.
 - **YAN BULGU — check paritesi SIĞ:** `mat::topla(20)` (yanlış arite) C'de
   `T010`, self'te `OK`. 131/131 mevcut korpusta doğru ama isim düzeyinde;
   imza/tip yok. **Parite sayısı mekanizma derinliğini KANITLAMAZ.**

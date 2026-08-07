@@ -1,0 +1,20 @@
+// D-399: ÇAPRAZ-DOSYA modül codegen'i. self-host --llvm yolu modül dosyalarını
+// HİÇ yüklemiyordu → `kullan` içeren her program `use of undefined value`
+// veriyordu (test/moduller yüzeyinde 18/18 başarısız).
+//
+// C `modulleri_yukle` modülü AYNI arena'da parse edip sentetik DUGUM_MODUL
+// olarak AST'nin başına SPLICE eder. Self-host'ta bunun doğrudan karşılığı
+// pahalıdır (düz paralel diziler + onlarca yan-kanal → indeks yeniden-eşleme,
+// sessiz kayıp riski). Bunun yerine birleştirme KAYNAK düzeyinde yapılır:
+// modül metni `modül <ad> { ... }` ile sarılıp girişin önüne konur, sonra TEK
+// lex+parse koşar. D-398'in mangling'i gerisini halleder.
+kullan cgmodul_mat;
+
+işlev main() -> tam32 {
+    // Nitelikli çağrı → @cgmodul_mat.topla
+    eğer cgmodul_mat::topla(20, 2) != 22 { ver 1; }
+    // Modül-İÇİ çıplak çağrı zinciri → @cgmodul_mat.gizliyi_kullan içinden
+    // @cgmodul_mat.gizli. Modül-önce bağlama olmasa üst düzeye kaçardı.
+    eğer cgmodul_mat::gizliyi_kullan() != 20 { ver 2; }
+    ver cgmodul_mat::topla(cgmodul_mat::gizliyi_kullan(), 22);   // 20+22 = 42
+}

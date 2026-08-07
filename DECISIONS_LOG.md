@@ -5,6 +5,64 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-399 [YÜKSEK] — CODEGEN: çapraz-dosya modül yükleme, KAYNAK düzeyinde (2026-08-07)
+
+**Durum: KISMİ — `test/moduller` 0/18 → 7/18.** Kalan 11'in sınıfları aşağıda,
+her biri ÖLÇÜLMÜŞ kökle. Mevcut kapılarda **sıfır regresyon**.
+
+**Karar — neden AST splice DEĞİL:** C `modulleri_yukle` modülü AYNI arena'da
+parse edip sentetik `DUGUM_MODUL` olarak AST'nin başına splice eder. Self-host'ta
+doğrudan karşılığı PAHALI: AST düz paralel dizilerdir, ayrı bir `Ayr`den
+kopyalamak indeks yeniden-eşlemesi ister ve onlarca YAN-KANAL dizisi (`cv_*`,
+`gp_*`, `yerel_*`, `ly_ad`, `gen_node`, `pi_*` …) sessizce düşerdi — kaybı
+gözlenmeyen, en tehlikeli sınıf.
+
+**Bunun yerine KAYNAK düzeyinde birleştirme:** modül metni `modül <ad> { ... }`
+ile sarılıp giriş kaynağının ÖNÜNE konur, sonra TEK lex+parse koşar. Tek AST
+çıkar, yan-kanallar doğal olarak dolar, kopyalama kodu YOKTUR. D-398'in
+mangling'i bu yolu doğrudan besler (`@mat.topla` sarmaldan kendiliğinden çıkar).
+**Uygulamadan ÖNCE elle ölçüldü** (ana_mat + ana_zincir manuel splice → exit 42).
+
+İki geçiş şart: `kullan` listesini öğrenmek için önce parse etmek gerekir.
+Modül yoksa birleşik == "" → mevcut çıktı BİREBİR korunur.
+
+**Yol üstünde ölçülen kusur — transitif importer dizini.** `dizin_al(rel)` TEK
+BAŞINA yanlıştır (`rel`="zincir.kem" → ""), taban dizin kaybolur. Taban + alt-yol
+birleştirilmeli. **`modul_yukle` (--check yolu) AYNI hesabı yapıyor ve orada
+GÖRÜNMÜYOR** — check yalnız İSİM topluyor, `ana_zincir` `mat`in adlarına hiç
+ihtiyaç duymuyor → kusur MASKELİ. (Check paritesinin sığlığının ikinci kanıtı.)
+
+**⚠ ÇÖZÜLEMEYEN KÖK — iç içe `ayr_olustur`+`lex_et` metin belleğini eziyor.**
+`ana_zincir`de sarmal adı kayboluyor: `@zincir.dortle_topla` yerine
+`@dortle_topla`. İKİ ayrı hipotez ÖLÇÜLDÜ ve İKİSİ DE ÇÜRÜDÜ:
+(a) "ad özyinelemeden sonra hesaplanıyor" → önce hesapladım, DEĞİŞMEDİ;
+(b) "`p` üzerinden aliasing" → adı her mutasyondan önce sabitledim, DEĞİŞMEDİ.
+Geriye kalan açıklama: `metin` değerleri araya giren iç içe lex+parse'tan sağ
+çıkmıyor. **`mat` bozulmuyor çünkü onun özyineleme döngüsü BOŞ** — yalnız İÇİNDE
+özyineleme YAPAN modül bozuluyor. Bu bir self-host bellek semantiği sorusudur ve
+ayrı ölçüm ister; tahminle kapatmadım.
+
+**Kalan 11 — üç sınıf, kökleri ölçüldü:**
+- **Transitif (1):** `ana_zincir` — yukarıdaki kök.
+- **Alias / seçili import (3):** `ana_alias` (`@m.topla`: sarmal adı ALIAS'tan
+  gelmeli, dosya adından değil), `ana_secili` (`@topla`: `::{a,b}` çıplak ad
+  görünürlüğü ister), `ana_nitelikli` (`@cift_b.f`).
+- **Çapraz-modül tip/generic (7):** `ana_ifd`, `ana_kap`, `ana_kap_coklu`,
+  `dizi_*` — hepsi `'%N' i32 but expected 'ptr'`. Ad çözümü DEĞİL, tip çözümü;
+  ayrı alt-sistem.
+
+**Kapı:** `test/cg_korpus/cg_modul_capraz.kem` + fikstür `cgmodul_mat.kem`.
+Fikstürde `main` YOK → harness "oracle yok, atla" der, kapıyı kirletmez (bu
+davranış ölçüldü, varsayılmadı). Test nitelikli çağrıyı VE modül-içi çıplak
+çağrı zincirini birlikte ölçer.
+
+**Sabotaj S131** (`mods = ""`) → `cg_modul_capraz` KIRMIZI (122/123).
+
+**Kapılar:** `codegen_diff` **123/123** · `checker_diff` 148/148 ·
+`parser_diff` 13/13 · FIXPOINT ✓ (62766 satır).
+
+---
+
 ## D-398 [YÜKSEK] — CODEGEN: modül ad-mangling (`@mod.ad`) (2026-08-07)
 
 **Nasıl bulundu:** D-395'in kurduğu geniş kapı `test/ornekler` + `stdlib/temel`de

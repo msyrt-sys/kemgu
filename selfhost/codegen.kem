@@ -9904,6 +9904,103 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
     }
     ver 0;
 }
+// ---- D-399: --llvm için ÇAPRAZ-DOSYA modül yükleme (KAYNAK düzeyinde) ----
+// C `modulleri_yukle` modülü AYNI arena'da parse edip sentetik DUGUM_MODUL olarak
+// AST'nin başına SPLICE eder. Self-host'ta bunun doğrudan karşılığı PAHALI: AST düz
+// paralel dizilerdir, ayrı bir `Ayr`den kopyalamak indeks yeniden-eşlemesi ister ve
+// onlarca YAN-KANAL dizisi (cv_*, gp_*, yerel_*, ly_ad, gen_node, pi_* ...) sessizce
+// düşerdi — kaybı gözlenmeyen, en tehlikeli sınıf.
+//
+// Bunun yerine birleştirme KAYNAK düzeyinde yapılır: her modülün metni
+// `modül <ad> { ... }` ile sarılıp giriş kaynağının ÖNÜNE konur, sonra TEK lex+parse
+// koşar. Tek AST çıkar, yan-kanallar doğal olarak dolar, kopyalama kodu YOKTUR.
+// D-398'in ad-mangling'i bu yolu doğrudan besler: sarmal `@mat.topla` üretir.
+//
+// Ampirik doğrulama (elle, uygulamadan ÖNCE): ana_mat ve ana_zincir (transitif)
+// bu biçimde self-host'ta exit 42 = C verdi.
+//
+// Modülün KENDİ `kullan`'ları için modül geçici bir `Ayr`e parse edilir — ama
+// yalnız KULLAN düğümlerinin `a_deg` METİNLERİ okunur, AST kopyalanmaz.
+işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
+    // Modül ADI EN BAŞTA sabitlenir — `p` üzerinde HİÇBİR mutasyon olmadan önce.
+    // Çağıran `modul_src_bir(p, dizi_al(p.a_deg, c), ...)` biçiminde çağırıyor:
+    // `yol` `p`'nin KENDİ dizisinden okunuyor ve callee aynı `p`yi büyütüyor
+    // (`dizi_ekle(p.kullan_gorulen, ...)`) → ALIASING. Adı sonradan hesaplamak
+    // ÖLÇÜLDÜ ve BOZUKTU: `@zincir.dortle_topla` yerine `@dortle_topla` çıkıyordu.
+    // İç özyinelemede kusur GÖRÜNMÜYORDU çünkü orada `yol` ayrı bir `mp`den
+    // okunuyor — aliasing yok. (Aynı hatayı "özyinelemeden önce hesapla" diye
+    // düzeltmeye çalıştım, İŞE YARAMADI; belirleyici olan sıra değil, MUTASYON.)
+    değişken mad: metin = son_segment(yol);
+    değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
+    değişken gi: tam32 = 0;
+    iken gi < gn {
+        eğer metin_esit(dizi_al(p.kullan_gorulen, gi), yol) { ver ""; }   // döngü/çift import
+        gi = gi + 1;
+    }
+    dizi_ekle(p.kullan_gorulen, yol);
+    değişken rel: metin = modul_path(yol);
+    değişken ic: metin = modul_icerik(dizin, rel);
+    // Bulunamadı → SESSİZ atla. Tanı üretmek --check'in işi (T040); burada hata
+    // basmak --llvm çıktısını IR olmayan metinle kirletirdi.
+    eğer metin_esit(ic, "") { ver ""; }
+    // Transitif importer dizini: modülün BULUNDUĞU dizin. `dizin_al(rel)` TEK
+    // BAŞINA yanlıştır — `rel` göreli bir alt-yoldur ("zincir.kem" → ""), taban
+    // dizin kaybolur ve iç `kullan mat;` çözülemez (ölçüldü: ana_zincir'de
+    // '@mat.topla' tanımsız). Taban + alt-yol BİRLEŞTİRİLMELİ.
+    // NOT: `modul_yukle` (--check yolu) aynı hesabı yapıyor; orada GÖRÜNMÜYOR
+    // çünkü check yalnız İSİM topluyor ve ana_zincir `mat`in adlarına hiç
+    // ihtiyaç duymuyor — kusur maskeli. Bu yolu onun aynası yapmadım.
+    değişken alt: metin = dizin_al(rel);
+    değişken mdiz: metin = dizin;
+    eğer metin_uzunluk(alt) > 0 {
+        eğer metin_uzunluk(dizin) > 0 {
+            mdiz = metin_birlestir(metin_birlestir(dizin, "/"), alt);
+        } değilse { mdiz = alt; }
+    }
+    // Sarmal başlığı ÖZYİNELEMEDEN ÖNCE kurulur. Sonrasında kurmak ÖLÇÜLDÜ ve
+    // BOZUKTU: `zincir` için ad kayboluyor, `@zincir.dortle_topla` yerine
+    // `@dortle_topla` yayılıyordu (mat doğruydu — yalnız İÇ ÖZYİNELEME YAPAN
+    // modül bozuluyordu). Yani `yol`/`ic` gibi metin değerleri, araya giren
+    // `ayr_olustur`+`lex_et`ten sağ çıkmıyor.
+    değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " {\n");
+    değişken govde: metin = metin_birlestir(metin_birlestir(bas, ic), "\n}\n");
+    değişken mp: Ayr = ayr_olustur(ic);
+    lex_et(&değişken mp);
+    değişken mkok: tam32 = parse_program(&değişken mp);
+    // Transitif bağımlılıklar ÖNCE (kendi gövdesinden önce yayılır).
+    değişken on: metin = "";
+    değişken cb: tam32 = dizi_al(mp.a_cb, mkok);
+    değişken cs: tam32 = dizi_al(mp.a_cs, mkok);
+    değişken ci: tam32 = 0;
+    iken ci < cs {
+        değişken c: tam32 = dizi_al(mp.cocuk, cb + ci);
+        eğer metin_esit(dizi_al(mp.a_ad, c), "KULLAN") {
+            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz));
+        }
+        ci = ci + 1;
+    }
+    // Sarmal. Modül adı yolun SON segmenti (a::b → "b") — nitelikli erişim
+    // `b::uye` biçiminde yazılır, C de böyle çözer.
+    // İç `kullan` satırları sarmalın İÇİNDE kalır: codegen KULLAN düğümünü
+    // yok sayar ve nitelikli yollar (mat::topla) MUTLAK çözülür → zararsız.
+    // (Ölçüldü: ana_zincir bu biçimde 42.)
+    ver metin_birlestir(on, govde);
+}
+// Giriş programının üst-düzey `kullan`'larını kaynak metnine çevirir ("" = modül yok).
+işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
+    değişken out: metin = "";
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
+            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin));
+        }
+        i = i + 1;
+    }
+    ver out;
+}
 // Üst-düzey tüm `kullan`'ları yükle (giriş dosyasının dizininden).
 işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
@@ -10078,6 +10175,18 @@ işlev main() -> tam32 {
         ver 0;
     }
     // --llvm (varsayılan)
+    // D-399: çapraz-dosya modüller. Giriş `kullan` içeriyorsa modül kaynakları
+    // `modül <ad> { }` sarmalıyla ÖNE eklenir ve program YENİDEN parse edilir.
+    // İki geçiş şart: `kullan` listesini öğrenmek için önce parse etmek gerekir.
+    // Modül yoksa hiçbir şey değişmez (birleşik == "") → mevcut çıktı BİREBİR korunur.
+    p.giris_dizin = dizin_al(yol);
+    değişken mods: metin = modul_src_topla(&değişken p, kok, p.giris_dizin);
+    eğer metin_uzunluk(mods) > 0 {
+        değişken birlesik: metin = metin_birlestir(mods, kaynak);
+        p = ayr_olustur(birlesik);
+        lex_et(&değişken p);
+        kok = parse_program(&değişken p);
+    }
     program_uret(&değişken p, kok);
     ver 0;
 }

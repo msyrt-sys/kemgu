@@ -1,0 +1,11 @@
+// D-399 fikstürü — cg_modul_capraz.kem'in import ettiği modül.
+// `main` YOK: codegen_diff harness'ı oracle IR'ını linkleyemez ve bu dosyayı
+// "oracle yok, atla" ile geçer. Yani fikstür kapıyı kirletmez.
+genel işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+
+// Modül-içi çıplak çağrı: IR'da @cgmodul_mat.gizli olmalı (D-398 modül-önce
+// bağlama). Dışa açık DEĞİL — C tüm modül üyelerini görünürlükten bağımsız emit
+// eder, yalnız erişim checker kuralıdır.
+işlev gizli() -> tam32 { ver 20; }
+
+genel işlev gizliyi_kullan() -> tam32 { ver gizli(); }
