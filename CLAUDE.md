@@ -1047,6 +1047,28 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
     hipotezi ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze gittim; doğru
     hamle en baştan ARA DEĞERİ BASTIRMAKTI. `mat`in çalışması TESADÜFTÜ — çöpü
     izleyen `//` yorumu satırı yutuyordu.
+### ⚠⚠ SELF-HOST'TA GENERIC İŞLEV MONOMORFİZASYONU YOK (ölçüldü 2026-08-07)
+`ADIM 23`'teki "LLVM monomorphization" **C derleyiciye aittir**; self-host'ta
+generic İŞLEV mono'su **hiç yoktur**. Ölçüm (`işlev kimlik<T>(x: T) -> T`):
+```
+C:    define i32 @kimlik$i32(ptr, i32)  +  define i64 @kimlik$i64(ptr, i64)
+SELF: define i32 @kimlik(ptr, i32)      ← TEK gövde, T daima i32 varsayılıyor
+      call i32 @kimlik(ptr %2, i64 %5)  ← İMZA UYUŞMAZLIĞI
+```
+- **Tamsayı T'de SESSİZ geçiyor** — LLVM `define`/`call` uyuşmazlığını kabul
+  eder (D-295 dersi) ve x86-64 ABI'sinde değer register'da hayatta kalıyor.
+  `2^33+42` ile denedim: **kırpılmadı**, ikisi de doğru. Yani bu, tamsayıda
+  gözlenebilir bir kusur ÜRETMİYOR — ama sağlamlığı ABI tesadüfüne dayanıyor.
+- **`kesirli64`'te LOUD:** `'%4' i32 but expected 'double'` → LLVM reddeder.
+  Register sınıfı değiştiği an tesadüf biter (D-294'ün aynı dersi).
+- **Bu, `test/moduller`de kalan 7 dosyanın KÖKÜYLE AYNI** — `dizi::Liste<tam64>`
+  gibi çapraz-modül generic'ler `@dizi.al$i64` ister, self-host `@dizi.al` yayar.
+- **Mevcut malzeme:** self-host'ta `mono_mangle` / `mono_ir_sanitize` /
+  `mono_gerek_yapi` / `mono_gerek_cesit` VAR — ama YAPI/ÇEŞİT için. İşlev yolu
+  yok. `gp_ad` (D-370) generic param adlarını zaten tutuyor. C karşılığı:
+  `src/llvm.c` `BekleyenSpec` + bekleyenler worklist'i (~2891, ~2987).
+- **Sıradaki iş bu.** Ad çözümü (D-398/400) bitti; kalan tek büyük parça bu.
+
   - **Kalan 7 — TEK sınıf: çapraz-modül GENERIC MONOMORFİZASYONU** (`ana_ifd`,
     `ana_kap`, `ana_kap_coklu`, `dizi_*`), hepsi `'%N' i32 but expected 'ptr'`.
     Ad çözümü DEĞİL. Ölçüldü (`dizi_kullan`):
