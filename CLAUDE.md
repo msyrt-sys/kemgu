@@ -1047,7 +1047,18 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
     hipotezi ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze gittim; doğru
     hamle en baştan ARA DEĞERİ BASTIRMAKTI. `mat`in çalışması TESADÜFTÜ — çöpü
     izleyen `//` yorumu satırı yutuyordu.
-### ⚠⚠ SELF-HOST'TA GENERIC İŞLEV MONOMORFİZASYONU YOK (ölçüldü 2026-08-07)
+### ✓ GENERIC İŞLEV MONOMORFİZASYONU EKLENDİ — D-401 (aşağıdaki not ARTIK TARİHÎ)
+Kök TEK SATIRDI: `parse_islev_genel` `tip_param_kaydet`i çağırmıyordu → işlev
+generic param adları yakalanıp atılıyordu. İkame makinesinin GERİ KALANI zaten
+vardı. Artık `@kimlik$i64`/`@kimlik$double` yayılıyor; `kesirli64` generic
+LLVM-RED'den çıkıp çalışıyor.
+- **V1 SINIRI:** çıkarsama yalnız **ÇIPLAK `T` parametresinden**. `Dizi<T>` gibi
+  iç içe konumlar ve **dönüş-tipi-güdümlü** çıkarsama YOK. Bu yüzden base gövde
+  de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
+  denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
+- `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+
+### ⚠⚠ (TARİHÎ) SELF-HOST'TA GENERIC İŞLEV MONOMORFİZASYONU YOK (ölçüldü 2026-08-07)
 `ADIM 23`'teki "LLVM monomorphization" **C derleyiciye aittir**; self-host'ta
 generic İŞLEV mono'su **hiç yoktur**. Ölçüm (`işlev kimlik<T>(x: T) -> T`):
 ```

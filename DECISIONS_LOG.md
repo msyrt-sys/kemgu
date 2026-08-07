@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-401 [YÜKSEK] — CODEGEN: generic İŞLEV monomorfizasyonu (self-host) (2026-08-07)
+
+**Kusur:** `ADIM 23 — LLVM monomorphization` **C derleyiciye** aittir; self-host'ta
+generic İŞLEV mono'su HİÇ YOKTU. Tek gövde yayılıp T daima `i32` sanılıyordu:
+```
+C:    define i32 @kimlik$i32(ptr, i32)  +  define i64 @kimlik$i64(ptr, i64)
+SELF: define i32 @kimlik(ptr, i32)      ← TEK gövde
+      call i32 @kimlik(ptr %2, i64 %5)  ← İMZA UYUŞMAZLIĞI
+```
+
+**KÖK — tek satır:** `parse_islev_genel` `atla_tip_paramlar`ı çağırıyor ama
+`tip_param_kaydet`i ÇAĞIRMIYORDU → param adları `tp_pending`de yakalanıp bir
+sonraki bildirimde ÜZERİNE YAZILIYORDU. Yapı/çeşit yolu kaydediyor, işlev yolu
+kaydetmiyordu. İkame makinesinin GERİ KALANI zaten vardı (`subst_bul` `ll_tip`e
+bağlı, `mono_ir_sanitize`, `mono_sp`/`mono_si` yığını).
+
+**⚠ TAMSAYIYLA ÖLÇMEK YETMEZ — üç kez yanlış yeşil aldım.** LLVM `define`/`call`
+uyuşmazlığını SESSİZCE kabul eder (D-295) ve x86-64'te tamsayı değer register'da
+hayatta kalır: `2^33+42` ile denedim, **kırpılmadı**, eski kod da 42 verdi. Kusur
+ancak **register sınıfı değişince** gözlenebilir olur (D-294'ün aynı dersi:
+tamsayı x0/rax, kesirli v0/xmm0). Korpusun asıl dişi `kesirli64` örneğidir.
+Ayrıca **exit-kodu testi yanıltıcıydı**: kırpma olsa bile alt 32 bit 42 verip
+testi yeşil gösterebiliyordu → karşılaştırmalı teste geçildi.
+
+**Uygulama:** `fs_*` bekleyenler kuyruğu + `mono_islev_kayit` (arg IR
+tiplerinden T çıkarsama, `$i64` mangling) + `fs_kuyruk_emit` **WORKLIST**
+(specialization emisyonu SIRASINDA yeni specialization doğabilir — generic→generic)
++ `fn_ad_zorla` (define adı override).
+
+**⚠ KENDİ TASARIM HATAM, ÖLÇÜMLE YAKALANDI:** ilk sürümde base gövdeyi C gibi
+ATLIYORDUM → **regresyon 11/18 → 8/18** (`@sayi.azami`, `@dizi.al`,
+`@arac.capraz` tanımsız). Sebep: mono çıkarsaması BAŞARISIZ olan çağrı yerleri
+base ada düşüyor, gövde yoksa tanımsız sembol. **C'nin base'i atlayabilmesi
+çıkarsamasının TAM olmasına dayanır; benimki V1'de kısmî** (yalnız ÇIPLAK `T`
+parametresi tanınır; `Dizi<T>` gibi iç içe konumlar ve dönüş-tipi-güdümlü
+çıkarsama yok). Base ile `f$i64` AYRI semboller → ikisini birden yaymak çakışma
+üretmez, yalnız kullanılmayan bir gövde bırakır. Sağlamlık > IR zarafeti.
+
+**Sonuç:** aynı-dosya generic mono ÇALIŞIYOR (`kesirli64` artık 42; önceden
+LLVM-RED). `test/moduller` **11/18'de sabit** — regresyon yok, ilerleme de yok:
+kalan 7 dosya **dönüş-tipi-güdümlü** çıkarsama istiyor (`dizi::oluştur(...)`de
+T argümanlarda YOK, nitelikli annotasyondan gelir). Ayrı adım.
+
+**Sabotaj:** S135 (işlev tip-param kaydı) · S136 (çağrı yeri mono) · S137
+(specialization kuyruğu) → **üçü de** `cg_generic_mono` üzerinde KIRMIZI (125/126).
+
+**Kapılar:** `codegen_diff` **126/126** · `codegen_genis` 67/67 (0 muaf) ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (63783 satır).
+
+---
+
 ## D-400 [YÜKSEK] — CODEGEN: `\n` kaçış tuzağı + alias/seçili import (7/18 → 11/18) (2026-08-07)
 
 **🎯 EN ÖNEMLİ BULGU — `\n` KEMGU dizgi literalinde KAÇIŞ DEĞİLDİR.**

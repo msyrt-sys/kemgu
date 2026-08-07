@@ -122,6 +122,13 @@ yapı Ayr {
     mono_mangled: Dizi<metin>;
     mono_yad: Dizi<metin>;
     mono_fields: Dizi<metin>;
+    // D-401: generic ISLEV monomorfizasyonu — bekleyenler kuyrugu
+    fs_node: Dizi<tam32>;    // generic islev AST dugumu
+    fs_ad: Dizi<metin>;      // mangled ad ("kimlik$i64")
+    fs_sp: Dizi<metin>;      // ikame: param adlari (bosluk-ayrik tek metin)
+    fs_si: Dizi<metin>;      // ikame: IR tipleri (bosluk-ayrik tek metin)
+    fs_emit: Dizi<metin>;    // emit edilmis mangled adlar (dedup)
+    fn_ad_zorla: metin;      // islev_uret icin ad override ("" = normal)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
     yapi_acount: Dizi<tam32>;// CG7b: alan sayısı
@@ -1635,6 +1642,15 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
     atla_tip_paramlar(p);
+    // D-401: İŞLEVİN generic param adlarını KAYDET. Öncesinde `atla_tip_paramlar`
+    // adları `tp_pending`e yakalıyor ama işlev yolunda kimse tüketmiyordu → bir
+    // sonraki bildirimde ÜZERİNE YAZILIYORDU. Sonuç: self-host generic işlevleri
+    // hiç monomorfize etmiyor, T'yi daima i32 sanıyordu (ölçüldü: tek
+    // `@kimlik(ptr,i32)` gövde + `call ... i64` imza uyuşmazlığı; tamsayıda ABI
+    // tesadüfüyle ayakta kalıyor, `kesirli64`te LLVM reddediyor).
+    // Registry yapı/çeşit ile ORTAK (`tp_yad`/`tp_ad`): çakışma riski yok çünkü
+    // `mono_gerek_yapi` yalnız `yapi_var_mi` doğruyken sorgulanır.
+    tip_param_kaydet(p, ad);
     bekle(p, "SOL_PAREN");
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "SAG_PAREN") == yanlış {
@@ -2467,6 +2483,121 @@ işlev subst_bul(p: &değişken Ayr, ad: metin) -> metin {
         i = i - 1;
     }
     ver "";
+}
+// ---- D-401: generic İŞLEV monomorfizasyonu ----
+// Bir ad generic işlev olarak kayıtlı mı? (`tp_yad` registry'si yapı/çeşit ile
+// ortak; çağrı yerinde bunu yalnız KULLANICI İŞLEVİ için sorguluyoruz.)
+işlev fn_generic_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tp_yad) {
+        eğer metin_esit(dizi_al(p.tp_yad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Base ada karşılık gelen ISLEV düğümü (imza tablosundan).
+işlev fn_dugum_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_ad) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_node, i); }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// `tp` generic param adı, `fn` düğümünün KAÇINCI parametresinin tipi?
+// (-1 = hiçbiri; o param çıkarsanamaz.) Yalnız ÇIPLAK `T` biçimini tanır —
+// `Dizi<T>` gibi iç içe konumlar V1'de kapsam dışı (C de arg tipinden çıkarsar,
+// ama iç içe eşleştirme ayrı iştir; eksik çıkarsama SESSİZ yanlış üretmesin diye
+// aşağıda bulunamayan param mono'yu tümden İPTAL eder).
+işlev fn_param_idx(p: &değişken Ayr, fn: tam32, tp: metin) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    değişken pi: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer dizi_al(p.a_cs, c) > 0 {
+                değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+                eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_BASIT") {
+                    eğer metin_esit(dizi_al(p.a_deg, tn), tp) { ver pi; }
+                }
+            }
+            pi = pi + 1;
+        }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// Bu mangled ad daha önce kuyruğa girdi mi / emit edildi mi?
+işlev fs_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fs_ad) {
+        eğer metin_esit(dizi_al(p.fs_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Çağrı yerinde specialization kaydı. Argüman IR tiplerinden T'leri çıkarsar,
+// mangled adı üretir ve gerekiyorsa kuyruğa alır. "" = mono YAPILAMADI (çağıran
+// eski davranışa düşer; sessiz yanlış ad üretmektense mono'yu iptal etmek yeğdir).
+işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>) -> metin {
+    değişken fn: tam32 = fn_dugum_bul(p, base);
+    eğer fn < 0 { ver ""; }
+    değişken sp: metin = "";
+    değişken si: metin = "";
+    değişken mang: metin = base;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tp_yad) {
+        eğer metin_esit(dizi_al(p.tp_yad, i), base) {
+            değişken tp: metin = dizi_al(p.tp_ad, i);
+            değişken pidx: tam32 = fn_param_idx(p, fn, tp);
+            eğer pidx < 0 { ver ""; }                       // çıkarsanamadı → iptal
+            eğer pidx >= dizi_boyut(argt) { ver ""; }        // arity uyuşmuyor → iptal
+            değişken ir: metin = dizi_al(argt, pidx);
+            eğer metin_esit(ir, "") { ver ""; }
+            eğer metin_uzunluk(sp) > 0 { sp = metin_birlestir(sp, " "); si = metin_birlestir(si, " "); }
+            sp = metin_birlestir(sp, tp);
+            si = metin_birlestir(si, ir);
+            mang = metin_birlestir(metin_birlestir(mang, "$"), mono_ir_sanitize(ir));
+        }
+        i = i + 1;
+    }
+    eğer metin_esit(mang, base) { ver "" ; }   // hiç param yok → generic değil
+    eğer fs_var_mi(p, mang) == yanlış {
+        dizi_ekle(p.fs_node, fn);
+        dizi_ekle(p.fs_ad, mang);
+        dizi_ekle(p.fs_sp, sp);
+        dizi_ekle(p.fs_si, si);
+    }
+    ver mang;
+}
+// Boşluk-ayrık listeyi subst yığınına it; itilen sayıyı döner.
+işlev subst_it_liste(p: &değişken Ayr, sp: metin, si: metin) -> tam32 {
+    değişken n: tam32 = 0;
+    değişken a: tam32 = 0;  değişken b: tam32 = 0;
+    değişken ua: tam32 = metin_uzunluk(sp);
+    iken a <= ua {
+        eğer (a == ua) veya (bayt(sp, a) == 32) {
+            // sp[b..a) ve si'nin AYNI sıradaki parçası
+            dizi_ekle(p.mono_sp, metin_kes(sp, b, a - b));
+            n = n + 1;
+            b = a + 1;
+        }
+        a = a + 1;
+    }
+    // si aynı sayıda parçaya bölünür (üretimde birlikte kuruldular).
+    değişken c: tam32 = 0;  değişken d: tam32 = 0;  değişken k: tam32 = 0;
+    değişken ub: tam32 = metin_uzunluk(si);
+    iken c <= ub {
+        eğer (c == ub) veya (bayt(si, c) == 32) {
+            dizi_ekle(p.mono_si, metin_kes(si, d, c - d));
+            k = k + 1;
+            d = c + 1;
+        }
+        c = c + 1;
+    }
+    ver n;
 }
 işlev subst_kapat(p: &değişken Ayr, bas: tam32) -> tam32 {
     değişken i: tam32 = bas;  değişken n: tam32 = dizi_boyut(p.mono_sp);
@@ -4137,6 +4268,30 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             dizi_ekle(args, av);
             dizi_ekle(argt, at);
             i = i + 1;
+        }
+        // D-401: GENERIC İŞLEV MONOMORFİZASYONU. Burada yapılmalı — T argüman IR
+        // tiplerinden çıkarsanır ve `argt` ancak arg döngüsünden SONRA doludur.
+        // Mono yapılamazsa (`""`) eski davranışa düşülür: yanlış bir ad uydurmak
+        // yerine mevcut (kusurlu ama tanıdık) yolu korumak yeğdir.
+        eğer kullanici == 1 {
+            eğer fn_generic_mi(p, fname) {
+                değişken spec: metin = mono_islev_kayit(p, fname, argt);
+                eğer metin_esit(spec, "") == yanlış {
+                    // Dönüş tipi de T'ye bağlı → ikame ALTINDA yeniden hesapla.
+                    değişken fnn: tam32 = fn_dugum_bul(p, fname);
+                    değişken sbas: tam32 = dizi_boyut(p.mono_sp);
+                    değişken si_i: tam32 = 0;
+                    iken si_i < dizi_boyut(p.fs_ad) {
+                        eğer metin_esit(dizi_al(p.fs_ad, si_i), spec) {
+                            subst_it_liste(p, dizi_al(p.fs_sp, si_i), dizi_al(p.fs_si, si_i));
+                        }
+                        si_i = si_i + 1;
+                    }
+                    eğer fnn >= 0 { rt = islev_donus_tip(p, fnn); }
+                    subst_kapat(p, sbas);
+                    fname = spec;
+                }
+            }
         }
         // D-258: çıplak callee → C-ABI (ρ YOK). kullanıcı-fn ama çıplak ise ρ atla.
         değişken callee_rho: tam32 = kullanici;
@@ -6088,8 +6243,11 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     // 1) İmza: adlı parametreler (%a0, %a1...) — adlı olduğundan %N reg sayacını tüketmez.
     // D-398: modül üyesi ise ad "<önek>.<ad>" (C modul_mangle aynası). Üst düzeyde
     // mod_onek boş → ad değişmez, yani mevcut tüm çıktı BİREBİR korunur.
+    // D-401: specialization emisyonunda ad DIŞARIDAN zorlanır (mangled `f$i64`).
+    değişken def_ad: metin = mangle(p.mod_onek, dizi_al(p.a_deg, idx));
+    eğer metin_uzunluk(p.fn_ad_zorla) > 0 { def_ad = p.fn_ad_zorla; }
     yaz_str("define "); yaz_str(p.cur_ret); yaz_str(" @");
-    ir_ad_yaz(mangle(p.mod_onek, dizi_al(p.a_deg, idx))); yaz_str("(");
+    ir_ad_yaz(def_ad); yaz_str("(");
     eğer rho_var == 1 { yaz_str("ptr %rho"); }   // V2-F4.2a: ρ ilk param (çıplak/main hariç)
     değişken pn: tam32 = 0;
     değişken i: tam32 = 0;
@@ -6270,6 +6428,14 @@ işlev emit_tanimlar(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken i: tam32 = 0;
     iken i < cs {
         değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
+        // D-401: generic işlevin BASE gövdesi de yayılmaya DEVAM eder.
+        // İlk sürümümde base'i atlıyordum (C öyle yapıyor) — bu REGRESYON üretti
+        // (11/18 → 8/18): mono çıkarsaması BAŞARISIZ olan çağrı yerleri base ada
+        // düşüyor ve gövde yoksa TANIMSIZ SEMBOL oluyor (`@sayi.azami`,
+        // `@dizi.al`, `@arac.capraz` — T'nin çıplak parametre olmadığı şekiller).
+        // Base ile `f$i64` AYRI sembollerdir; ikisini birden yaymak çakışma
+        // üretmez, yalnız kullanılmayan bir gövde bırakır. C'nin base'i atlaması
+        // onun çıkarsamasının TAM olmasına dayanır; benimki V1'de kısmî.
         eğer metin_esit(dizi_al(p.a_ad, c), "ISLEV") { islev_uret(p, c); }
         eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") {
             değişken esk_mo2: metin = p.mod_onek;   // D-398: önek zinciri (emit)
@@ -6451,6 +6617,35 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yb(10);
     emit_tanimlar(p, kok);   // D3: DISA-aç + MODUL-recurse + ISLEV emit
     lam_kuyruk_emit(p);      // D-300: görev_başlat lifted-lambda'ları (gövde-sonrası)
+    fs_kuyruk_emit(p);       // D-401: generic işlev specialization'ları
+    ver 0;
+}
+// D-401: bekleyen specialization'ları emit et. WORKLIST — emisyon SIRASINDA yeni
+// specialization doğabilir (generic işlev başka bir generic'i çağırıyorsa), bu
+// yüzden sabit sayaçla değil, kuyruk BÜYÜYEBİLİR varsayımıyla dönülür.
+işlev fs_kuyruk_emit(p: &değişken Ayr) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fs_ad) {
+        değişken mang: metin = dizi_al(p.fs_ad, i);
+        // Zaten emit edildiyse atla (aynı ad iki kez kuyruğa girmez ama
+        // savunmacı: worklist büyürken tekrar taranıyor).
+        değişken atla: mantıksal = yanlış;
+        değişken e: tam32 = 0;
+        iken e < dizi_boyut(p.fs_emit) {
+            eğer metin_esit(dizi_al(p.fs_emit, e), mang) { atla = doğru; }
+            e = e + 1;
+        }
+        eğer atla == yanlış {
+            dizi_ekle(p.fs_emit, mang);
+            değişken sbas: tam32 = dizi_boyut(p.mono_sp);
+            subst_it_liste(p, dizi_al(p.fs_sp, i), dizi_al(p.fs_si, i));
+            p.fn_ad_zorla = mang;
+            islev_uret(p, dizi_al(p.fs_node, i));
+            p.fn_ad_zorla = "";
+            subst_kapat(p, sbas);
+        }
+        i = i + 1;
+    }
     ver 0;
 }
 
@@ -10160,7 +10355,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],
-        tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
+        tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_emit: [], fn_ad_zorla: "",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], alan_elem: [], alan_tnode: [],
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
