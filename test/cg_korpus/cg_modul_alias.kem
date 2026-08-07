@@ -1,0 +1,28 @@
+// D-400: alias ve seçili import ÇAĞRI YERİNDE çözülür.
+//
+// C ORACLE ÖLÇÜLDÜ (varsayılmadı): her iki biçimde de define DAİMA GERÇEK modül
+// adını taşır — `@cgmodul_mat.topla`. Alias yalnız çağrı yerinde yaşar. Yani
+// sarmalı alias'la adlandırmak YANLIŞ olurdu; ilk içgüdüm oydu, ölçüm düzeltti.
+//
+//   kullan mat olarak m;     →  m::topla(..)  ⇒  call @mat.topla
+//   kullan mat::{topla};     →  topla(..)     ⇒  call @mat.topla
+//
+// Self-host'ta parser eşlemeleri ZATEN tutuyordu (`si_ad`/`si_yol`), codegen
+// onlara HİÇ bakmıyordu. Alias için eşleme yoktu (`mod_ad` yalnız "bu ad bir
+// modüldür" diyor, HANGİ modül olduğunu söylemiyor) → `al_ad`/`al_yol` eklendi.
+kullan cgmodul_mat olarak cm;
+kullan cgmodul_mat::{topla};
+
+işlev main() -> tam32 {
+    // (1) ALIAS: `cm` → cgmodul_mat. Çözülmezse `@cm.topla` (tanımsız sembol).
+    eğer cm::topla(1, 1) != 2 { ver 1; }
+
+    // (2) SEÇİLİ İMPORT: çıplak `topla` → @cgmodul_mat.topla. Çözülmezse
+    //     `@topla` (tanımsız sembol).
+    eğer topla(2, 2) != 4 { ver 2; }
+
+    // (3) Alias ile modül-içi çıplak çağrı zinciri hâlâ çalışmalı.
+    eğer cm::gizliyi_kullan() != 20 { ver 3; }
+
+    ver topla(cm::gizliyi_kullan(), 22);   // 20 + 22 = 42
+}

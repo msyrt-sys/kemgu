@@ -1035,17 +1035,21 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
   - ✓ **D-399 UYGULADI (KISMİ): 0/18 → 7/18**, sıfır regresyon. Kaynak-splice
     yolu `--llvm` dispatch'ine bağlandı (iki geçiş: parse → `kullan` listesi →
     birleştir → yeniden parse). Modül yoksa çıktı BİREBİR korunur.
-  - **⚠ AÇIK KÖK — iç içe `ayr_olustur`+`lex_et` `metin` değerlerini eziyor.**
-    `ana_zincir`de sarmal adı kayboluyor (`@dortle_topla`, olması gereken
-    `@zincir.dortle_topla`). İKİ hipotez ölçüldü, İKİSİ DE ÇÜRÜDÜ: (a) "ad
-    özyinelemeden sonra hesaplanıyor" → önce hesapladım, değişmedi; (b) "`p`
-    üzerinden aliasing" → mutasyondan önce sabitledim, değişmedi. Bozulan YALNIZ
-    içinde özyineleme YAPAN modül (`mat`in döngüsü boş, o sağlam). **Self-host
-    bellek semantiği sorusu — tahminle kapatma, ölç.**
-  - Kalan 11, üç sınıf: transitif (1) · alias+seçili import (3, sarmal adı
-    ALIAS'tan gelmeli / `::{a,b}` çıplak ad görünürlüğü) · **çapraz-modül
-    tip/generic (7)** — hepsi `'%N' i32 but expected 'ptr'`, ad çözümü DEĞİL tip
-    çözümü, ayrı alt-sistem.
+  - ✓ **D-400: 7/18 → 11/18. AD ÇÖZÜMÜ SINIFLARININ TAMAMI KAPANDI.**
+    Alias + seçili import çağrı yerinde çözülüyor (`alias_coz`, `si_ad`/`si_yol`).
+  - **⚠⚠ `\n` KEMGU DİZGİ LİTERALİNDE KAÇIŞ DEĞİLDİR** — `metin_uzunluk("a\nb")
+    == 4`, hem C hem self-host (dil davranışı, parite kusuru değil). `codegen.kem`
+    her yerde `yb(10)` kullanır. Kaynak metni ÜRETEN kod yazarken bunu unutma:
+    D-399'un sarmalı `"{\n"` ile kuruluyordu → üretilen kaynağa düz `\`+`n` çöpü
+    girdi ve **beni tamamen yanlış bir köke sürükledi** ("iç içe lex+parse belleği
+    eziyor" — D-399'a öyle yazmıştım, YANLIŞTI).
+    **DERS: "A çalışıyor, B çalışmıyor" bir MEKANİZMA teşhisi değildir.** İki
+    hipotezi ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze gittim; doğru
+    hamle en baştan ARA DEĞERİ BASTIRMAKTI. `mat`in çalışması TESADÜFTÜ — çöpü
+    izleyen `//` yorumu satırı yutuyordu.
+  - **Kalan 7 — TEK sınıf: çapraz-modül TİP çözümü** (`ana_ifd`, `ana_kap`,
+    `ana_kap_coklu`, `dizi_*`), hepsi `'%N' i32 but expected 'ptr'`. Ad değil tip;
+    ayrı alt-sistem.
   - **`modul_yukle` (--check) aynı transitif-dizin kusurunu taşıyor ama MASKELİ:**
     check yalnız isim topluyor, `ana_zincir` `mat`in adlarına ihtiyaç duymuyor.
 - **YAN BULGU — check paritesi SIĞ:** `mat::topla(20)` (yanlış arite) C'de

@@ -1,0 +1,12 @@
+// D-400 fikstürü — TRANSİTİF halka: cgmodul_zincir → cgmodul_mat.
+// `main` YOK → harness "oracle yok, atla" der.
+//
+// Bu fikstür kapının SABOTAJ DUYARLILIĞI için şart. Tek seviyeli bir modülde
+// bozuk sarmal (düz `\n` çöpü) TESADÜFEN çalışıyor: çöpü izleyen `//` yorumu
+// satırı yutuyor. Yalnız İÇİNDE özyineleme yapan modülde çöp gözlenebilir hâle
+// geliyor. Bu dosya olmadan S134 SESSİZ kalıyordu (ölçüldü).
+kullan cgmodul_mat;
+
+genel işlev iki_kat(x: tam32) -> tam32 {
+    ver cgmodul_mat::topla(x, x);
+}

@@ -5,6 +5,53 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-400 [YÜKSEK] — CODEGEN: `\n` kaçış tuzağı + alias/seçili import (7/18 → 11/18) (2026-08-07)
+
+**🎯 EN ÖNEMLİ BULGU — `\n` KEMGU dizgi literalinde KAÇIŞ DEĞİLDİR.**
+`metin_uzunluk("a\nb") == 4` (hem C hem self-host — dil davranışı, parite kusuru
+değil). `codegen.kem` bu yüzden her yerde `yb(10)` kullanır. D-399'daki sarmalım
+`"{\n"` ile kuruluyordu → üretilen kaynağa **düz `\` + `n` çöpü** giriyordu.
+
+**BU BENİ YANLIŞ BİR KÖKE SÜRÜKLEDİ.** `mat` çalışıyor, `zincir` çalışmıyordu; buradan
+"iç içe `ayr_olustur`+`lex_et` metin belleğini eziyor" sonucuna varmıştım (D-399'a
+öyle yazdım). **YANLIŞTI.** Çürüten deney: özyinelemeyi kapattım ama iç içe
+lex+parse'ı BIRAKTIM → sarmal DÜZELDİ. Yani iç içe parse masumdu. Ardından probe
+ile `bas`ı bastırdım: `bas=modül mat {\n` — çöp gözle görüldü.
+> **DERS: "A çalışıyor, B çalışmıyor" bir MEKANİZMA teşhisi değildir.** İki
+> hipotezi (sıra / aliasing) ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze
+> gittim. Doğru hamle en baştan **ara değeri bastırmaktı** — teşhis değil ölçüm.
+> `mat`in çalışması TESADÜFTÜ: çöpü izleyen `//` yorumu satırı yutuyordu.
+
+**Onarım:** gerçek satır sonlarına yaslan — açılışta `{` sonrası BOŞLUK yeter
+(`ic`in ilk satırı zaten kendi satırı), kapanışta `ic` dosya-sonu satır-sonuyla
+bittiği için `}` yeni satırda başlar. Yeni kaçış makinesi GEREKMEDİ.
+
+**Alias / seçili import — C ÖLÇÜLDÜ, VARSAYILMADI.** İlk içgüdüm sarmalı alias'la
+adlandırmaktı; ölçüm bunu çürüttü: C **her iki biçimde de** define'ı GERÇEK modül
+adıyla yayar (`@mat.topla`), alias YALNIZ çağrı yerinde yaşar.
+- Seçili import: parser eşlemeyi ZATEN `si_ad`/`si_yol`de tutuyordu, codegen
+  bakmıyordu → `fn_coz`a eklendi (kayıt kontrolüyle; aynı adda gerçek bir
+  üst-düzey işlev varsa yanlış yönlendirme olmasın).
+- Alias: eşleme YOKTU (`mod_ad` yalnız "bu ad bir modüldür" der, HANGİ modül
+  olduğunu söylemez) → `al_ad`/`al_yol` çifti eklendi, `alias_coz` YOL'un EN SOL
+  segmentinde uygulanır (`m::topla`da `topla` üye adıdır, modül değil).
+
+**Sonuç: `test/moduller` 7/18 → 11/18** (D-399'un 0→7'si üstüne). **Ad çözümü
+sınıflarının TAMAMI kapandı.** Kalan 7'nin hepsi TEK sınıf: çapraz-modül TİP
+çözümü (`'%N' i32 but expected 'ptr'`) — `ana_ifd`, `ana_kap`, `ana_kap_coklu`,
+`dizi_*`. Ad değil tip; ayrı alt-sistem.
+
+**Sabotaj:** S132 (alias) KIRMIZI · S133 (seçili import) KIRMIZI ·
+**S134 (`\n` çöpü) ÖNCE SESSİZ**. Gizlemedim: korpusta o şekil YOKTU. Tek
+seviyeli modülde çöp tesadüfen çalışıyor; yalnız TRANSİTİF halkada gözlenebilir.
+`cgmodul_zincir.kem` + `cg_modul_transitif.kem` eklendi → S134 KIRMIZI (124/125).
+**Kuralı değil KORPUSU düzelttim** (D-356 disiplininin dördüncü tekrarı).
+
+**Kapılar:** `codegen_diff` **125/125** · `checker_diff` 148/148 ·
+`parser_diff` 13/13 · FIXPOINT ✓ (62893 satır).
+
+---
+
 ## D-399 [YÜKSEK] — CODEGEN: çapraz-dosya modül yükleme, KAYNAK düzeyinde (2026-08-07)
 
 **Durum: KISMİ — `test/moduller` 0/18 → 7/18.** Kalan 11'in sınıfları aşağıda,

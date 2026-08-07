@@ -172,6 +172,8 @@ yapı Ayr {
     si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
     si_yol: Dizi<metin>;     // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
     mod_ad: Dizi<metin>;     // D-362: bilinen modül adları (yüklenen + `modül m` + alias) — T016
+    al_ad: Dizi<metin>;      // D-400: `kullan <yol> olarak <ad>` — alias adı
+    al_yol: Dizi<metin>;     // D-400: aynı indekste gerçek modül yolu
     asm_node: Dizi<tam32>;   // D-373: SATIRICI_ASM düğümü — `mimari:` etiketi (AS001)
     asm_mim: Dizi<metin>;    // D-373: asm_node ile paralel — etiketteki mimari adı
     gp_ad: Dizi<metin>;      // D-370: generic tip parametresi ADLARI (T011 muafiyeti)
@@ -1962,6 +1964,11 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "OLARAK") {   // alias: `kullan m olarak d` → `d::` de geçerli modül
         ilerle(p);
         dizi_ekle(p.mod_ad, sim_lex(p));   // D-362 yan-kanal (T016 yanlış-pozitifi önler)
+        // D-400: alias → gerçek yol EŞLEMESİ. `mod_ad` yalnız "bu ad bir modül"
+        // diyor, hangi modül olduğunu söylemiyor; codegen çağrı yerinde
+        // `m::topla` → `@mat.topla` çevirisi için ÇİFTİ ister.
+        dizi_ekle(p.al_ad, sim_lex(p));
+        dizi_ekle(p.al_yol, yol);
         bekle(p, "TANIMLAYICI");
     }
     bekle(p, "NOKTALI_VIRGUL");
@@ -2180,11 +2187,24 @@ işlev mangle(onek: metin, ad: metin) -> metin {
 // a_deg'de, SOL taraf tek çocuk. Özyineleme sol tarafa iner.
 // TANIMLAYICI tabanında sadece adı döner → çağıran çıplak/nitelikli ayrımını
 // yapmak zorunda kalmaz.
+// D-400: alias adını GERÇEK modül adına çevir. C ölçüldü: define DAİMA gerçek
+// modül adını kullanır (`@mat.topla`), alias YALNIZ çağrı yerinde yaşar — yani
+// sarmalı alias'la adlandırmak YANLIŞ olurdu.
+işlev alias_coz(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.al_ad) {
+        eğer metin_esit(dizi_al(p.al_ad, i), ad) { ver son_segment(dizi_al(p.al_yol, i)); }
+        i = i + 1;
+    }
+    ver ad;
+}
 işlev yol_noktali(p: &değişken Ayr, node: tam32) -> metin {
     eğer node < 0 { ver ""; }
     değişken na: metin = dizi_al(p.a_ad, node);
-    eğer metin_esit(na, "YOL") == yanlış { ver dizi_al(p.a_deg, node); }
-    eğer dizi_al(p.a_cs, node) < 1 { ver dizi_al(p.a_deg, node); }
+    // Taban: en SOLDAKİ segment. Alias burada çözülür (yalnız kök segment
+    // alias olabilir; `m::topla`da `topla` bir üye adıdır, modül değil).
+    eğer metin_esit(na, "YOL") == yanlış { ver alias_coz(p, dizi_al(p.a_deg, node)); }
+    eğer dizi_al(p.a_cs, node) < 1 { ver alias_coz(p, dizi_al(p.a_deg, node)); }
     değişken sol: metin = yol_noktali(p, dizi_al(p.cocuk, dizi_al(p.a_cb, node)));
     ver mangle(sol, dizi_al(p.a_deg, node));
 }
@@ -2204,9 +2224,25 @@ işlev fn_kayitli_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 // çağıramaz. Ayrıca modül üyesi üst-düzey bir adı GÖLGELEYEBİLİR — önce modül
 // bakmak o gölgelemeyi korur.
 işlev fn_coz(p: &değişken Ayr, ad: metin) -> metin {
-    eğer metin_uzunluk(p.mod_onek) == 0 { ver ad; }
-    değişken m: metin = mangle(p.mod_onek, ad);
-    eğer fn_kayitli_mi(p, m) { ver m; }
+    // (1) MODÜL-ÖNCE: modül içindeysek kardeş üye üst düzeyi gölgeler.
+    eğer metin_uzunluk(p.mod_onek) > 0 {
+        değişken m: metin = mangle(p.mod_onek, ad);
+        eğer fn_kayitli_mi(p, m) { ver m; }
+    }
+    // (2) D-400 SEÇİLİ İMPORT: `kullan mat::{topla}` sonrası çıplak `topla()`
+    // çağrısı `@mat.topla`ya gitmeli (C ölçüldü: define gerçek modül adında,
+    // seçili import yalnız çağrı yerinde çözülür). Parser eşlemeyi zaten
+    // si_ad/si_yol'da tutuyordu; codegen ona hiç bakmıyordu.
+    // Kayıt kontrolü ŞART: aynı adda gerçek bir üst-düzey işlev varsa ve modül
+    // üyesi yoksa yanlış yönlendirme yapmayalım.
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.si_ad) {
+        eğer metin_esit(dizi_al(p.si_ad, i), ad) {
+            değişken sm: metin = mangle(son_segment(dizi_al(p.si_yol, i)), ad);
+            eğer fn_kayitli_mi(p, sm) { ver sm; }
+        }
+        i = i + 1;
+    }
     ver ad;
 }
 // D-397 (SIMD): IR tipi "<N x T>" biçiminde mi? agg_alan gibi ham metin üstünde
@@ -9962,8 +9998,17 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // `@dortle_topla` yayılıyordu (mat doğruydu — yalnız İÇ ÖZYİNELEME YAPAN
     // modül bozuluyordu). Yani `yol`/`ic` gibi metin değerleri, araya giren
     // `ayr_olustur`+`lex_et`ten sağ çıkmıyor.
-    değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " {\n");
-    değişken govde: metin = metin_birlestir(metin_birlestir(bas, ic), "\n}\n");
+    // ⚠ `\n` KEMGU dizgi literalinde KAÇIŞ DEĞİLDİR — düz ters-bölü + 'n'
+    // (ÖLÇÜLDÜ: `metin_uzunluk("a\nb")` == 4, hem C hem self-host). codegen.kem
+    // bu yüzden her yerde `yb(10)` kullanır, dizgi içi "\n" değil.
+    // İlk sürümüm sarmalı "{\n" ile kuruyordu → kaynağa DÜZ `\n` çöpü giriyordu.
+    // `mat` TESADÜFEN çalışıyordu (çöpün ardından `//` yorumu satırı yutuyor),
+    // `zincir` çalışmıyordu → "iç içe parse belleği eziyor" diye YANLIŞ bir kök
+    // aramıştım. Gerçek satır sonlarına yaslanmak doğru çözüm:
+    //   - Açılış: `{` sonrası BOŞLUK yeter; `ic`in İLK satırı zaten kendi satırı.
+    //   - Kapanış: `ic` dosya sonu satır-sonuyla biter → `}` yeni satırda başlar.
+    değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
+    değişken govde: metin = metin_birlestir(metin_birlestir(bas, ic), "}");
     değişken mp: Ayr = ayr_olustur(ic);
     lex_et(&değişken mp);
     değişken mkok: tam32 = parse_program(&değişken mp);
@@ -10117,7 +10162,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
