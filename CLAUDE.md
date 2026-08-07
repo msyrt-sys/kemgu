@@ -1067,10 +1067,11 @@ LLVM-RED'den çıkıp çalışıyor.
 üretip tamamen yanlış bir kök aramama yol açmıştı.
 
 ### ⚠ AÇIK KALANLAR (D-408'de ölçüldü, kayda geçti)
-- **`test/snapshots` yüzeyi (D-409'da açıldı): 60/62.** ✓ `cesit_sonuc` (D-410),
-  ✓ `bolge_al_grow` + `d1_generic_sonuc_ptr` (D-411). **Kalan 2:**
-  `asm_round_trip` (satıriçi_asm sessizce düşüyor — planı yukarıda) ·
-  `ad_cozum_sapma` (`@ic.g` tanımsız).
+- **`test/snapshots` yüzeyi (D-409'da açıldı): 61/62.** ✓ `cesit_sonuc` (D-410),
+  ✓ `bolge_al_grow` + `d1_generic_sonuc_ptr` (D-411), ✓ `ad_cozum_sapma`
+  (D-412: GÖRELİ modül yolu — `modül m` içinden `ic::g` = `m.ic.g`; `fn_coz`un
+  MODÜL-ÖNCE kuralı nitelikli yollara genişletildi, kayıt kontrolüyle).
+  **Kalan 1:** `asm_round_trip` (satıriçi_asm sessizce düşüyor — planı yukarıda).
 - **D-411 dersi — D-401'in "çıkarsanamazsa mono'yu İPTAL ET" kararı YANLIŞTI.**
   `hata_yap<T,E>(e: E) -> sonuç<T,E>`de `E` çıkarsanır, `T` çıkarsanmaz; iptal
   edilince çağrı base gövdeye (hepsi fallback) gider ve ANNOTASYONLA uyuşmaz.

@@ -4448,7 +4448,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // `fad`ı ÇIPLAK adla karşılaştırıyor).
             değişken hedef: tam32 = dizi_al(p.cocuk, cb);
             değişken rn: metin = fn_coz(p, fad);
-            eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") { rn = yol_noktali(p, hedef); }
+            eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
+                rn = yol_noktali(p, hedef);
+                // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
+                // demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kurar;
+                // modül içindeysek ÖNCE mevcut önekle denenmeli — bu, `fn_coz`un
+                // çıplak adlar için uyguladığı MODÜL-ÖNCE kuralının nitelikli
+                // yollara uzantısıdır (D-398). Kayıt kontrolüyle: göreli karşılığı
+                // YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
+                eğer metin_uzunluk(p.mod_onek) > 0 {
+                    değişken gy: metin = mangle(p.mod_onek, rn);
+                    eğer fn_kayitli_mi(p, gy) { rn = gy; }
+                }
+            }
             rt = fn_ret_bul(p, rn); fname = rn; kullanici = 1;
         }
         değilse { rt = builtin_ret(fad); fname = kdl; }

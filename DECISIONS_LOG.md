@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-412 [YÜKSEK] — CODEGEN: GÖRELİ modül yolu (`ic::g` içinden `m`) (2026-08-07)
+
+**`test/snapshots` 60/62 → 61/62.** Kalan tek sapma `asm_round_trip`
+(satıriçi_asm, planı D-411 notunda).
+
+**Kusur:** `modül m` içinden yazılan `ic::g()` **GÖRELİ** bir yoldur — `m.ic.g`
+demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kuruyordu →
+`@ic.g` tanımsız sembol.
+
+**Onarım, mevcut bir kuralın uzantısı:** `fn_coz`un ÇIPLAK adlar için uyguladığı
+**MODÜL-ÖNCE** bağlama (D-398) nitelikli yollara da genişletildi — modül
+içindeysek önce `<önek>.<yol>` denenir. **Kayıt kontrolüyle:** göreli karşılığı
+YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
+> Yeni bir mekanizma icat etmek yerine var olanın kapsamını genişletmek doğru
+> hamleydi: çıplak ad ve nitelikli yol AYNI kapsam sorusunu soruyor. (D-407'nin
+> "aynı soruyu iki yerde ayrı yanıtlama" dersinin olumlu yüzü.)
+
+**Korpus:** `cg_gorece_yol.kem` (snapshot'tan birebir kopya + gerekçe notu).
+Dosya AYNI ZAMANDA üç gölgeleme şeklini birden ölçüyor: `m::f` global `f`yi,
+`m::ic::g` global `g`yi gölgeler, ayrıca `dışa` olmayan kardeş (`m::h`) çağrısı.
+
+**Sabotaj S154** → KIRMIZI, iki dosyayı birden kırıyor (134/136).
+
+**Kapılar:** `codegen_diff` **136/136** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-411 [YÜKSEK] — CODEGEN: `bellek_kopyala` + mono'da İPTAL yerine geri-düşüş (2026-08-07)
 
 **`test/snapshots` 58/62 → 60/62.** İki AYRI kök.
