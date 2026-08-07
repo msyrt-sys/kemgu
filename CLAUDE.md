@@ -1057,6 +1057,13 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- ✓ **D-403: MODÜL generic'leri artık specialize ediliyor** (`@dizi.al$i64`,
+  `@cgmodul_mat.esle$double` — C ile aynı adlar). D-402'de reddedilen D-401b'nin
+  İKİ kusuru vardı: (1) specialization modül bağlamını kaybediyordu; (2) ilk
+  onarımım bağlamı ÇAĞRI YERİNDEN alıyordu — önek **BİLDİRİMİN** adından
+  (`nokta_onek`) gelmeli. **Doğru mekanizmayı seçmek yetmiyor, DOĞRU KAYNAKTAN
+  beslemek gerekiyor.** `test/moduller` 11/18'de sabit; mangling artık doğru,
+  kalan iş dönüş-tipi-güdümlü çıkarsama.
 - ✓ **D-402: artık KAPI var — `make calistir_modul_codegen`** (11/11, 7 muaf).
   Öncesinde bu yüzey hiçbir kapının altında değildi ve **D-401b regresyonunu
   (11/18→9/18, biri SESSİZ YANLIŞ CEVAP: `ana_golge_jenerik` C=1≠KEMGU=100)

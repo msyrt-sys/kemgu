@@ -5,6 +5,46 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-403 [YÜKSEK] — CODEGEN: MODÜL generic'lerinin monomorfizasyonu (2026-08-07)
+
+**D-402'de REDDETTİĞİM D-401b, kökü teşhis edilince kabul edildi.** O deneme
+prensipte doğruydu (çağrı yerindeki mangled addan modül önekini soyup generic
+registry'sini sorgulamak) ama İKİ kusur taşıyordu. İkisi de ölçümle bulundu:
+
+**Kusur 1 — specialization MODÜL BAĞLAMINI kaybediyordu.** `fs_kuyruk_emit`
+`emit_tanimlar`dan SONRA koşar; orada `p.mod_onek` boştur. Bağlam saklanmadan
+specialization gövdesindeki çıplak kardeş çağrıları üst düzeye bağlanıyordu.
+`test/moduller/ana_golge_jenerik.kem` **tam bu senaryonun muhafızıdır** (dosyanın
+kendi yorumu söylüyor: "100 dönerse specialization global-first sapmış") ve
+KEMGU 100 döndürüyordu, doğrusu 1.
+
+**Kusur 2 — İLK ONARIMIM DA YANLIŞTI, ölçüm yakaladı.** Bağlamı saklamayı
+`p.mod_onek`i enqueue anında kaydederek çözdüm sandım; kapı hâlâ kırmızıydı.
+Sebep: `mono_islev_kayit` **ÇAĞRI YERİNDE** koşar ve orada `mod_onek`
+ÇAĞIRANINDIR (`arac::capraz` çağrısı `main`den yapılır → ""). Önek
+**BİLDİRİMİN** modülünden gelmeli — ve o zaten mangled adın içinde kodludur
+(`nokta_onek("arac.capraz")` → `"arac"`).
+> **DERS: doğru mekanizmayı seçmek yetmiyor, DOĞRU KAYNAKTAN beslemek gerekiyor.**
+> "Bağlamı sakla" fikri doğruydu; hangi bağlamı sorusunda yanıldım.
+
+**Sonuç:** modül generic'leri artık specialize ediliyor — `@dizi.al$i64`,
+`@dizi.ekle$i64`, `@cgmodul_mat.esle$double` (C ile aynı adlar).
+`test/moduller` **11/18'de sabit** (regresyon YOK, sayı da artmadı): kalan 7
+dönüş-tipi-güdümlü çıkarsama ister. Ama mangling artık DOĞRU, ki o işin ön koşulu.
+
+**Kapı gözlenebilirliği:** `modul_codegen` D-403 ÖNCESİ de 11/11 yeşildi — modül
+specialization'ını GÖRMÜYORDU. Yeni korpus dosyası (`cg_modul_generic.kem` +
+`cgmodul_mat.kem` fikstür eki) bunu gözlenebilir kılar.
+**Tamsayı yetmez** (D-401 dersi: ABI şansı) → `kesirli64` kapının asıl dişi.
+
+**Sabotaj:** S140 (önek soyma) → link hatası (126/127). **S141 (bildirim öneki)
+→ `exit=4`**, yani `esle_gizli() != 20` muhafızı: modül üyesi yerine üst-düzey
+`gizli` (999) çağrılıyor — **sessiz yanlış cevap**; ayrıca `modul_codegen` 9/11.
+
+**Kapılar:** `codegen_diff` **127/127** · `modul_codegen` 11/11 (7 muaf).
+
+---
+
 ## D-402 [YÜKSEK] — KAPI: çapraz-dosya modül codegen'i + REDDEDİLEN D-401b (2026-08-07)
 
 **Neden:** `test/moduller/` **hiçbir kapının altında değildi.** D-399/400/401

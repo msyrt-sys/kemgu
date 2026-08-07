@@ -1,0 +1,34 @@
+// D-403: MODÜL İÇİNDEKİ generic işlevlerin monomorfizasyonu.
+//
+// D-401 generic mono'yu ekledi ama kayıt defteri BİLDİRİM adıyla anahtarlı,
+// çağrı yerindeki ad ise D-398'den sonra MANGLED (`cgmodul_mat.esle`). Önek
+// soyulmadan hiçbir modül generic'i specialize edilmiyordu — SESSİZCE.
+//
+// ⚠ NEDEN TAMSAYI YETMEZ: specialization olmasa da tamsayı çağrı ABI şansıyla
+// ayakta kalır (D-401'in dersi). `kesirli64` kapının ASIL dişidir.
+//
+// ⚠ İKİNCİ KÖK — specialization MODÜL BAĞLAMINI taşımalı. `mono_islev_kayit`
+// ÇAĞRI YERİNDE koşar; orada `mod_onek` çağıranınkidir (burada üst düzey = "").
+// İlk denemem çağıranın bağlamını saklıyordu → specialization gövdesindeki
+// çıplak kardeş çağrısı ÜST DÜZEYE bağlanıyordu. Önek BİLDİRİMİN adından
+// (`nokta_onek`) alınmalı.
+kullan cgmodul_mat;
+
+işlev gizli() -> tam32 { ver 999; }   // modül üyesini GÖLGELEYEN üst-düzey ad
+
+işlev main() -> tam32 {
+    // (1) kesirli T — specialization yoksa LLVM reddeder (i32 vs double).
+    değişken f: kesirli64 = cgmodul_mat::esle(42.0);
+    eğer f < 41.5 { ver 1; }
+    eğer f > 42.5 { ver 2; }
+
+    // (2) tam64 — ikinci instantiation, $i64 ayrışmalı.
+    değişken a: tam64 = cgmodul_mat::esle(8589934634 olarak tam64);
+    eğer a < (4294967296 olarak tam64) { ver 3; }
+
+    // (3) specialization gövdesinden modül-içi çıplak çağrı: 20 gelmeli (modül
+    //     üyesi), 999 değil (üst düzey). 999 gelirse bağlam kaybı = sessiz hata.
+    eğer cgmodul_mat::esle_gizli(1) != 20 { ver 4; }
+
+    ver 42;
+}

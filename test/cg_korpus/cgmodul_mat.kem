@@ -9,3 +9,13 @@ genel işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
 işlev gizli() -> tam32 { ver 20; }
 
 genel işlev gizliyi_kullan() -> tam32 { ver gizli(); }
+
+// D-403 fikstürü: MODÜL İÇİNDE generic işlev. Çağrı yerinde ad `cgmodul_mat.esle`
+// olarak MANGLED gelir, ama generic kayıt defteri BİLDİRİM adıyla (`esle`)
+// anahtarlıdır → önek soyulmazsa specialization HİÇ tetiklenmez.
+genel işlev esle<T>(x: T) -> T { ver x; }
+
+// Modül-İÇİ çıplak çağrı, specialization gövdesinden. `mod_onek` specialization
+// emisyonunda geri yüklenmezse bu `@gizli` (üst düzey) olur, `@cgmodul_mat.gizli`
+// değil — SESSİZ YANLIŞ CEVAP.
+genel işlev esle_gizli<T>(x: T) -> tam32 { ver gizli(); }
