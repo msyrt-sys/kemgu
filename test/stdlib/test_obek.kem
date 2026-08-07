@@ -1,0 +1,151 @@
+// KEMGU Stdlib Testi — Öbek (Min-Öbek)
+// =================================
+//
+// Bu dosya `stdlib/obek.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü diziler çağıran scope'ta indekslenmez; sonuçlar
+// obek_boyut / obek_tepe / obek_gecerli_mi parametresine geçirilerek
+// skalere indirgenir (test_dizi.kem'deki F4-güvenli desen).
+
+// --- kur (heapify) ---
+işlev test_kur_gecerli() -> mantıksal {
+    ver obek_gecerli_mi(obek_kur([5, 3, 8, 1, 9, 2]));
+}
+
+işlev test_kur_tepe() -> tam32 {
+    eşleş obek_tepe(obek_kur([5, 3, 8, 1, 9, 2])) {
+        değer(v) => { ver v; }                    // 1 (en küçük)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_kur_bos_gecerli() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    ver obek_gecerli_mi(obek_kur(d));             // boş öbek geçerli
+}
+
+işlev test_kur_sirali_girdi() -> tam32 {
+    eşleş obek_tepe(obek_kur([1, 2, 3, 4, 5])) {
+        değer(v) => { ver v; }                    // zaten öbek: 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_kur_ters_girdi() -> tam32 {
+    eşleş obek_tepe(obek_kur([9, 7, 5, 3, 1])) {
+        değer(v) => { ver v; }                    // 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- ekle ---
+işlev test_ekle_tepe() -> tam32 {
+    değişken o: Dizi<tam32> = [];
+    eşleş obek_tepe(obek_ekle(obek_ekle(obek_ekle(o, 5), 2), 8)) {
+        değer(v) => { ver v; }                    // 2 (en küçük öne çıkar)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ekle_gecerli() -> mantıksal {
+    değişken o: Dizi<tam32> = [];
+    ver obek_gecerli_mi(obek_ekle(obek_ekle(obek_ekle(obek_ekle(o, 4), 1), 3), 0));
+}
+
+işlev test_ekle_boyut() -> tam32 {
+    değişken o: Dizi<tam32> = [];
+    ver obek_boyut(obek_ekle(obek_ekle(o, 10), 20));   // 2
+}
+
+// --- tepe ---
+işlev test_tepe_bos() -> mantıksal {
+    değişken o: Dizi<tam32> = [];
+    eşleş obek_tepe(o) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }                     // boş -> hiç
+    }
+    ver yanlış;
+}
+
+// --- cek ---
+işlev test_cek_tepe() -> tam32 {
+    eşleş obek_tepe(obek_cek(obek_kur([5, 3, 8, 1]))) {
+        değer(v) => { ver v; }                    // 1 çıktı -> 3
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_cek_boyut() -> tam32 {
+    ver obek_boyut(obek_cek(obek_kur([5, 3, 8, 1])));  // 3
+}
+
+işlev test_cek_gecerli() -> mantıksal {
+    ver obek_gecerli_mi(obek_cek(obek_kur([5, 3, 8, 1, 9, 2])));
+}
+
+işlev test_cek_bos() -> tam32 {
+    değişken o: Dizi<tam32> = [];
+    ver obek_boyut(obek_cek(o));                  // 0
+}
+
+işlev test_cek_tek() -> tam32 {
+    ver obek_boyut(obek_cek([7]));                // 0 (tek eleman çıktı)
+}
+
+// --- öbek-sıralama senaryosu: art arda çek, artan sırada gelir ---
+işlev test_sirali_cikis() -> tam32 {
+    eşleş obek_tepe(obek_cek(obek_cek(obek_kur([5, 3, 8, 1, 9])))) {
+        değer(v) => { ver v; }                    // 1, 3 çıktı -> 5
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- bos_mu ---
+işlev test_bos_mu_evet() -> mantıksal {
+    değişken o: Dizi<tam32> = [];
+    ver obek_bos_mu(o);
+}
+
+işlev test_bos_mu_hayir() -> mantıksal {
+    ver obek_bos_mu(obek_kur([1, 2]));
+}
+
+// --- tekrarlı elemanlar ---
+işlev test_tekrarli_tepe() -> tam32 {
+    eşleş obek_tepe(obek_cek(obek_kur([2, 2, 5, 2]))) {
+        değer(v) => { ver v; }                    // bir 2 çıktı -> yine 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_kur_gecerli() { ver 1; }
+    eğer test_kur_tepe() != 1 { ver 2; }
+    eğer değil test_kur_bos_gecerli() { ver 3; }
+    eğer test_kur_sirali_girdi() != 1 { ver 4; }
+    eğer test_kur_ters_girdi() != 1 { ver 5; }
+    eğer test_ekle_tepe() != 2 { ver 6; }
+    eğer değil test_ekle_gecerli() { ver 7; }
+    eğer test_ekle_boyut() != 2 { ver 8; }
+    eğer değil test_tepe_bos() { ver 9; }
+    eğer test_cek_tepe() != 3 { ver 10; }
+    eğer test_cek_boyut() != 3 { ver 11; }
+    eğer değil test_cek_gecerli() { ver 12; }
+    eğer test_cek_bos() != 0 { ver 13; }
+    eğer test_cek_tek() != 0 { ver 14; }
+    eğer test_sirali_cikis() != 5 { ver 15; }
+    eğer değil test_bos_mu_evet() { ver 16; }
+    eğer test_bos_mu_hayir() { ver 17; }
+    eğer test_tekrarli_tepe() != 2 { ver 18; }
+    ver 42;
+}

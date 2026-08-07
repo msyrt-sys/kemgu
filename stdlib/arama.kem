@@ -1,0 +1,129 @@
+// KEMGU Stdlib — Arama Algoritmaları
+// ===================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<T> üzerinde konum arama: doğrusal tarama, ikili arama ve
+// sınır (lower/upper bound) sorguları.
+//
+// Tasarım kuralı:
+//   - "Bulunamadı" seçimlik<tam32> ile bildirilir (C'nin -1 sentineli
+//     yerine — sentinel unutulursa sessiz yanlış indeks olur, seçimlik
+//     ayrıştırmayı zorlar).
+//   - `alt_sinir` / `ust_sinir` ise KONUM döner (tam32, n dahil):
+//     soruları "bulundu mu" değil "nereye eklenir" olduğu için
+//     bulunamama diye bir durumları yok — C++ lower_bound/upper_bound
+//     eşleniği.
+//   - İkili arama ailesinin SIRALI dizi sözleşmesi çağıranın
+//     sorumluluğunda ve DENETLENMEZ: O(n) sıralılık denetimi O(log n)
+//     aramanın amacını bozar. Sırasız dizide sonuç tanımsız değil
+//     ama anlamsızdır (yanlış konum dönebilir).
+//   - Modüller import sistemi öncesi tek dosya --check edildiği için
+//     dizi.kem'e çağrı yapılamaz; uzunluk yardımcısı burada yerel
+//     (`arama_boyut`). dizi.kem `indeks_bul` değere-eşitlik için aynı
+//     işi görür; `dogrusal_ara` bu modülün kendi başına derlenebilir
+//     temelidir.
+//   - Orta nokta `alt + (ust - alt) / 2` ile hesaplanır — klasik
+//     `(alt + ust) / 2` taşma tuzağından kaçınılır.
+
+// --- Yardımcı ---
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev arama_boyut<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// --- Doğrusal arama (sıralılık gerekmez, T == destekli) ---
+
+// Doğrusal ara — hedefe eşit İLK elemanın indeksi, yoksa hiç. O(n).
+işlev dogrusal_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer x == hedef { ver değer(i); }
+        i = i + 1;
+    }
+    ver hiç;
+}
+
+// İlk uygun — predicate'i karşılayan İLK elemanın indeksi, yoksa hiç.
+işlev ilk_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer pred(x) { ver değer(i); }
+        i = i + 1;
+    }
+    ver hiç;
+}
+
+// Son uygun — predicate'i karşılayan SON elemanın indeksi, yoksa hiç.
+işlev son_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
+    değişken bulunan: tam32 = 0 - 1;
+    değişken i: tam32 = 0;
+    için x: xs {
+        eğer pred(x) { bulunan = i; }
+        i = i + 1;
+    }
+    eğer bulunan < 0 { ver hiç; }
+    ver değer(bulunan);
+}
+
+// --- İkili arama (SIRALI dizi, T ==/< destekli) ---
+
+// İkili ara — artan sıralı dizide hedefin indeksi, yoksa hiç. O(log n).
+// Hedef birden çok kez geçiyorsa HANGİ eşleşmenin döneceği belirsizdir;
+// ilk/son konum gerekiyorsa alt_sinir/ust_sinir kullan.
+işlev ikili_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+    değişken alt: tam32 = 0;
+    değişken ust: tam32 = arama_boyut(xs) - 1;
+    iken alt <= ust {
+        değişken orta: tam32 = alt + (ust - alt) / 2;
+        eğer xs[orta] == hedef { ver değer(orta); }
+        eğer xs[orta] < hedef {
+            alt = orta + 1;
+        } değilse {
+            ust = orta - 1;
+        }
+    }
+    ver hiç;
+}
+
+// Alt sınır — artan sıralı dizide hedeften KÜÇÜK OLMAYAN (>=) ilk
+// elemanın konumu; hepsi küçükse n. Hedefin sırayı bozmadan
+// eklenebileceği en sol konum. O(log n).
+işlev alt_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+    değişken alt: tam32 = 0;
+    değişken ust: tam32 = arama_boyut(xs);
+    iken alt < ust {
+        değişken orta: tam32 = alt + (ust - alt) / 2;
+        eğer xs[orta] < hedef {
+            alt = orta + 1;
+        } değilse {
+            ust = orta;
+        }
+    }
+    ver alt;
+}
+
+// Üst sınır — artan sıralı dizide hedeften BÜYÜK ilk elemanın konumu;
+// hepsi küçük-eşitse n. Hedefin eklenebileceği en sağ konum.
+// ust_sinir - alt_sinir = hedefin geçiş sayısı. O(log n).
+işlev ust_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+    değişken alt: tam32 = 0;
+    değişken ust: tam32 = arama_boyut(xs);
+    iken alt < ust {
+        değişken orta: tam32 = alt + (ust - alt) / 2;
+        eğer xs[orta] <= hedef {
+            alt = orta + 1;
+        } değilse {
+            ust = orta;
+        }
+    }
+    ver alt;
+}
+
+// AÇIK SORU: metin için `<` sıralama karşılaştırması mevcut stdlib
+// korpusunda geçmiyor (yalnız `==` görülüyor); bu yüzden ikili arama
+// ailesi metin dizileriyle test edilmedi.

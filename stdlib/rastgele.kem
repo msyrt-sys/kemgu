@@ -1,0 +1,109 @@
+// KEMGU Stdlib — Rastgele (Deterministik PRNG — MINSTD)
+// ======================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Park-Miller MINSTD doğrusal eşleşik üreteci (Lehmer LCG):
+//   sonraki = 16807 * durum mod 2147483647   (m = 2^31 - 1, asal)
+//
+// ⚠ KRİPTO DEĞİL. Bu üreteç TAHMİN EDİLEBİLİR — simülasyon, test,
+// oyun, karıştırma içindir. Kriptografik rastgelelik için
+// stdlib/kripto/rastgele.kem (OS RNG / getrandom şeridi) kullanılır.
+// Determinizm burada HATA değil ÖZELLİKTİR: aynı tohum -> aynı dizi
+// (tekrarlanabilir benzetim, tohumla-yeniden-üret hata ayıklama).
+//
+// Tasarım kuralı:
+//   - Çarpım SCHRAGE ÇARPANLAMASIYLA: naif 16807*durum tam32'de
+//     taşar; Schrage (q=127773, r=2836) tüm ara değerleri 32-bit
+//     işaretli aralıkta tutar (yöntemin varlık sebebi budur).
+//     Park-Miller 1988: "Random Number Generators: Good Ones Are
+//     Hard to Find".
+//   - GLOBAL DURUM YOK: her işlev saf — durum (tam32, 1..m-1)
+//     parametreyle girer, yeni durum dönüşle çıkar; çağıran iplikler.
+//     Üretilen ham değer durumun kendisidir.
+//   - `rastgele_tohumla` HERHANGİ bir tam32'yi geçerli duruma
+//     indirger (0 ve negatif dahil — 0 durumu LCG'yi öldürürdü:
+//     0 -> 0 -> 0 ...).
+//   - `rastgele_aralikta` mod ile indirger: aralık genişliği m'yi
+//     bölmüyorsa KÜÇÜK SAPMA (modulo bias) vardır — simülasyon için
+//     kabul edilebilir, belgelidir (kripto için zaten değil).
+
+// --- Çekirdek ---
+
+// Tohumla — herhangi bir tam32'yi geçerli duruma (1..m-1) indirger.
+işlev rastgele_tohumla(tohum: tam32) -> tam32 {
+    değişken m1: tam32 = 2147483646;
+    değişken s: tam32 = tohum % m1;
+    eğer s < 0 { s = s + m1; }
+    ver s + 1;
+}
+
+// Sonraki durum — MINSTD adımı, Schrage çarpanlamasıyla taşmasız.
+// Dönen değer hem yeni durum hem ham rastgele değerdir (1..m-1).
+// Geçersiz durum (<=0 veya >=m) savunmayla 1'e düzeltilir.
+işlev rastgele_sonraki(durum: tam32) -> tam32 {
+    değişken d: tam32 = durum;
+    eğer d <= 0 { d = 1; }
+    eğer d >= 2147483647 { d = 1; }
+    değişken q: tam32 = 127773;
+    değişken r: tam32 = 2836;
+    değişken yuksek: tam32 = d / q;
+    değişken dusuk: tam32 = d % q;
+    değişken s: tam32 = 16807 * dusuk - r * yuksek;
+    eğer s <= 0 { s = s + 2147483647; }
+    ver s;
+}
+
+// --- Türetilmiş ---
+
+// Aralığa indirge — durumu [alt, ust) aralığına eşler (İLERLETMEZ;
+// önce rastgele_sonraki ile ilerlet, sonra indirge). Boş/ters aralıkta
+// alt döner. Modulo bias notu başlıkta.
+işlev rastgele_aralikta(durum: tam32, alt: tam32, ust: tam32) -> tam32 {
+    eğer ust <= alt { ver alt; }
+    ver alt + durum % (ust - alt);
+}
+
+// n adet ham değer — tohum önce rastgele_tohumla ile indirgenir,
+// ardından durum zinciri: [s1, s2, ..., sn].
+işlev rastgele_dizi(n: tam32, tohum: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken durum: tam32 = rastgele_tohumla(tohum);
+    değişken i: tam32 = 0;
+    iken i < n {
+        durum = rastgele_sonraki(durum);
+        dizi_ekle(sonuc, durum);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev rastgele_boyut<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Karıştır — Fisher-Yates, YERİNDE; aynı tohum -> aynı permütasyon.
+// Eleman çokluğu (multiset) korunur.
+işlev rastgele_karistir<T>(xs: Dizi<T>, tohum: tam32) -> Dizi<T> {
+    değişken n: tam32 = rastgele_boyut(xs);
+    değişken durum: tam32 = rastgele_tohumla(tohum);
+    değişken i: tam32 = n - 1;
+    iken i > 0 {
+        durum = rastgele_sonraki(durum);
+        değişken j: tam32 = durum % (i + 1);
+        değişken t: T = xs[i];
+        xs[i] = xs[j];
+        xs[j] = t;
+        i = i - 1;
+    }
+    ver xs;
+}
+
+// AÇIK SORU: modulo bias'sız aralık indirgeme (reddetme örneklemesi)
+// ve daha uzun periyotlu üreteç (xoshiro'nun tam32 uyarlaması) V2;
+// kripto şeridiyle birleşme (secure_rastgele_doldur arkasına düşme)
+// runtime OS RNG bağlandığında ayrıca değerlendirilmeli.
