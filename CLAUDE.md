@@ -1057,6 +1057,18 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- ✓ **D-402: artık KAPI var — `make calistir_modul_codegen`** (11/11, 7 muaf).
+  Öncesinde bu yüzey hiçbir kapının altında değildi ve **D-401b regresyonunu
+  (11/18→9/18, biri SESSİZ YANLIŞ CEVAP: `ana_golge_jenerik` C=1≠KEMGU=100)
+  `codegen_diff` de `codegen_genis` de GÖRMEDİ** — ikisi de yeşildi. Elle
+  ölçtüğüm için geri aldım; ölçmeseydim gönderirdim.
+- **⚠ SABOTAJIN SESSİZLİĞİ ÖNCE SABOTAJI ŞÜPHELİ KILAR.** D-402'de S138 sessiz
+  kaldı çünkü `son_segment` (`::` ile böler) kullanmıştım, nokta ile bölen bir
+  şey değil → sabotaj **uygulanmamıştı**. "Kapı zayıf" diye kaydetmek yanlış
+  olurdu. D-356'nın "korpusu düzelt" dersinin varyantı: **sabotajı düzelt.**
+- **⚠ UZUN KOŞUM SÜRERKEN KAYNAĞI DEĞİŞTİRME:** `test_tumu` koşarken
+  `selfhost/codegen.kem`i düzenledim → kapı yarı-bozuk kaynaktan `codegen.exe`
+  kurdu, `codegen_genis` **66/67** raporladı. Temiz kaynakta 67/67.
 
 ### ⚠⚠ (TARİHÎ) SELF-HOST'TA GENERIC İŞLEV MONOMORFİZASYONU YOK (ölçüldü 2026-08-07)
 `ADIM 23`'teki "LLVM monomorphization" **C derleyiciye aittir**; self-host'ta

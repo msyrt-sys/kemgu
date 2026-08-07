@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-402 [YÜKSEK] — KAPI: çapraz-dosya modül codegen'i + REDDEDİLEN D-401b (2026-08-07)
+
+**Neden:** `test/moduller/` **hiçbir kapının altında değildi.** D-399/400/401
+boyunca oranı elle bir kabuk döngüsüyle izledim — bu tam olarak D-395'te
+"elle koşturulan ölçüm döngüsü kapı DEĞİLDİR" diye yazdığım şeydi ve bu kez
+tersinden ısırdı.
+
+**🔴 REDDEDİLEN DEĞİŞİKLİK — D-401b.** D-401'in V1 sınırını aşmak için çağrı
+yerindeki mangled addan (`dizi.al`) modül önekini soyup generic registry'sini
+(`tp_yad`, bildirim adıyla anahtarlı) sorgulamayı denedim. **Prensipte doğru** ve
+kısmen işe yaradı: `@dizi.ekle$i64` + `@dizi.al$i64` yayılmaya başladı, C ile
+aynı adlar. **Ama oran 11/18 → 9/18'e DÜŞTÜ:**
+- `ana_sayi_transitif` → `use of undefined value '@azami'` (link hatası)
+- `ana_golge_jenerik` → **C=1, KEMGU=100 — SESSİZ YANLIŞ CEVAP**, link hatası değil.
+
+**`codegen_diff` (126/126) ve `codegen_genis` (67/67) İKİSİ DE YEŞİLDİ.** Bu
+yüzeyi görmüyorlar. Değişikliği elle ölçtüğüm için geri aldım; **ölçmeseydim
+gönderirdim.** Link hatasını sessiz yanlış cevaba takas eden bir diff kabul
+edilemez → tümüyle geri alındı, kök ileriye bırakıldı.
+
+**Kapı:** `test/modul_codegen_harness.sh` + `make calistir_modul_codegen`.
+Exit kodu + **stdout**. Durum **11/11, 7 muaf**.
+
+**Muafiyet listesi (7, küçülmek zorunda) — kökü ÖLÇÜLDÜ, TEK sınıf:**
+çapraz-modül generic mono'sunun **dönüş-tipi-güdümlü** kısmı. D-401'in V1'i yalnız
+ÇIPLAK `T` parametresinden çıkarsar; `kütüphane/dizi.kem` bunu aşıyor:
+```
+oluştur<T>(böl: yetki<Bellek>) -> Liste<T>   ← T YALNIZ dönüşte
+boy<T>(l: &Liste<T>) -> tam64                ← T İÇ İÇE (&Liste<T>)
+```
+T `değişken l: dizi::Liste<tam64>` annotasyonundan gelmeli. Ayrıca
+`yetki<Bellek>` parametresi `%kdl_yetki` taşınmalı, self-host `i32` sanıyor.
+
+**Sabotaj:** **S138 SESSİZ kaldı ve bu bir bulgu DEĞİLDİ** — `son_segment`
+kullanmıştım, o `::` ile böler, nokta ile değil → sabotaj **uygulanmamıştı**
+(no-op). Bunu "kapı zayıf" diye kaydetmek yanlış olurdu. D-401b birebir yeniden
+kurulunca (**S139**) kapı KIRMIZI: `ana_golge_jenerik` exit farkı (C=1≠100) +
+`ana_sayi_transitif` link — elle gözlediğimin AYNISI.
+> **DERS: sabotajın sessizliği önce SABOTAJIN KENDİSİNİ şüpheli kılar.**
+> D-356 "korpusu düzelt" diyordu; buradaki varyant "sabotajı düzelt".
+
+**Yol üstünde ikinci ölçüm hatası:** `test_tumu` koşarken `selfhost/codegen.kem`i
+DÜZENLEDİM → kapı yarı-bozuk kaynaktan `codegen.exe` kurdu ve `codegen_genis`
+**66/67** raporladı. Temiz kaynakta 67/67. **Uzun koşum sürerken kaynağı
+değiştirme.**
+
+**Kapılar:** `modul_codegen` **11/11 (7 muaf)** · `codegen_diff` 126/126 ·
+`codegen_genis` 67/67 (0 muaf) · `checker_diff` 148/148.
+
+---
+
 ## D-401 [YÜKSEK] — CODEGEN: generic İŞLEV monomorfizasyonu (self-host) (2026-08-07)
 
 **Kusur:** `ADIM 23 — LLVM monomorphization` **C derleyiciye** aittir; self-host'ta
