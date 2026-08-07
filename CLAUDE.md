@@ -1057,6 +1057,13 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- ✓ **D-404: `yetki<R>` self-host codegen'de** (`%kdl_yetki`, OUT-PTR ABI).
+  **⚠ ÖRTÜK KAPSAM DELİĞİ:** `yetki` kullanan tek dosya `kem_heap.kem` ve onun
+  C oracle'ı host'ta LİNKLENMİYOR (`kdl_mmio_oku32` bare-metal) → `codegen_genis`
+  atlıyor. **Kapı 67/67 yeşilken bu boşluk sessizce duruyordu.** "Oracle
+  kurulamadı → atla" politikası doğru ama KÖR NOKTA yaratır: atlanan dosyaların
+  TEK kullanıcısı olduğu bir özellik hiç ölçülmemiş olur. Saf-yetki programı
+  host'ta linkleniyor — gate'lenebilirmiş, kimse denememişti.
 - ✓ **D-403: MODÜL generic'leri artık specialize ediliyor** (`@dizi.al$i64`,
   `@cgmodul_mat.esle$double` — C ile aynı adlar). D-402'de reddedilen D-401b'nin
   İKİ kusuru vardı: (1) specialization modül bağlamını kaybediyordu; (2) ilk

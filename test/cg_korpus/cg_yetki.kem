@@ -1,0 +1,34 @@
+// D-404: Capability Spec V1 — `yetki<R>` self-host codegen'de HİÇ YOKTU.
+// `ll_tip`te dal olmadığı için i32 fallback'ine düşüyor, `yetki_olustur` ve
+// `geri_al` için emit YOKTU → `use of undefined value '@yetki_olustur'`.
+//
+// ⚠ NEDEN ŞİMDİYE KADAR GÖRÜNMEDİ: `yetki` kullanan tek .kem dosyası
+// `test/ornekler/kem_heap.kem` ve onun C ORACLE'ı host'ta LİNKLENMİYOR
+// (`kdl_mmio_oku32` bare-metal sembolü) → `codegen_genis` onu "oracle yok, atla"
+// diyor. Kapı 67/67 yeşilken bu boşluk sessizce duruyordu. Saf-yetki programı
+// ise host'ta linkleniyor (ölçüldü: C exit 42) — yani gate'lenebilirmiş.
+//
+// ABI (C llvm.c'den ÖLÇÜLDÜ, varsayılmadı): %kdl_yetki 16 baytlık struct ve
+// `yetki_olustur` OUT-PTR ile çalışır — dönüş register'da DEĞİL:
+//     %s = alloca %kdl_yetki
+//     call void @kdl_yetki_olustur(ptr %s, i16 kt, i16 izin)
+//     %v = load %kdl_yetki, ptr %s
+// `geri_al` ise SLOT ADRESİ ister (değer değil): yetkiyi yerinde geçersizleştirir.
+
+// yetki<R> PARAMETRE olarak da taşınmalı — `kütüphane/dizi.kem`in tüm imzaları
+// (`oluştur<T>(böl: yetki<Bellek>)`) bunu gerektiriyor.
+işlev kullan_yetki(y: yetki<Bellek>) -> tam32 {
+    geri_al(y);          // TÜKETİR (CP005: tüketilmeyen yetki hata)
+    ver 21;
+}
+
+işlev main() -> tam32 {
+    değişken a: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken t: tam32 = kullan_yetki(a);
+
+    // İkinci yetki: doğrudan yerel tüketim yolu.
+    değişken b: yetki<Bellek> = yetki_olustur(3, 3);
+    geri_al(b);
+
+    ver t + 21;          // 42
+}

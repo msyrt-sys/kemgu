@@ -2817,6 +2817,10 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     // T yalnız tip-kontrolde yaşar. Bu dal olmadan ikisi de aşağıdaki "i32"
     // fallback'ine düşüyordu → 64-bit handle 32 bite kırpılırdı (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_GOREV") veya metin_esit(ta, "TIP_KANAL") { ver "ptr"; }
+    // D-404: yetki<R> → %kdl_yetki (16 baytlık struct, C llvm.c:1211 aynası).
+    // Bu dal olmadan aşağıdaki i32 fallback'ine düşüyordu — `%kdl_yetki` bekleyen
+    // her yerde tip uyuşmazlığı.
+    eğer metin_esit(ta, "TIP_YETKI") { ver "%kdl_yetki"; }
     // D-322: işlev(...) -> T KAPANIŞ değeri = fat value { fnptr, envptr }.
     // env null ise capture yok (bare çağrı), değilse heap env geçilir (C llvm.c aynası).
     eğer metin_esit(ta, "TIP_ISLEV") { ver "{ ptr, ptr }"; }
@@ -3147,6 +3151,14 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_global_bolge_al()"); yb(10);   // V2-F4.2a: main/ρ-seed
     yaz_str("declare ptr @kdl_bolge_olustur()"); yb(10);       // V2-F4.2b: ρ_yerel aç
     yaz_str("declare void @kdl_bolge_serbest(ptr)"); yb(10);   // V2-F4.2b: ρ_yerel serbest
+    // D-404: Capability Spec V1 — yetki<R> IR temsili + runtime arayüzü.
+    // C llvm.c aynası: 16 baytlık struct, OUT-PTR ABI (dönüş register'da DEĞİL;
+    // çağıran alloca'yı geçer). Öncesinde self-host `yetki<R>`yi ll_tip'te hiç
+    // tanımıyordu (i32 fallback) ve `yetki_olustur`/`geri_al` için codegen YOKTU
+    // → `use of undefined value '@yetki_olustur'`.
+    yaz_str("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }"); yb(10);
+    yaz_str("declare void @kdl_yetki_olustur(ptr, i16, i16)"); yb(10);
+    yaz_str("declare void @kdl_yetki_geri_al(ptr)"); yb(10);
     // D-299 (Katman 2 parite): görev/kanal runtime hedefleri. İmzalar C llvm.c ile
     // BİREBİR aynı; kanal declare'i host (kdl_runtime.c) ve bare-metal (kdl_kanal.c)
     // sürümlerinin ikisine de uyar.
@@ -4045,6 +4057,51 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             }
             p.son_tip = el3; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
             ver r4;
+        }
+        // ---- D-404: Capability Spec V1 yerleşikleri (C llvm.c aynası) ----
+        // yetki_olustur(kaynak_tipi, izin) -> yetki<R>. OUT-PTR ABI: dönüş
+        // register'da DEĞİL, çağıran alloca'yı geçer. Argümanlar i16.
+        eğer metin_esit(fad, "yetki_olustur") ve (cs == 3) {
+            değişken eskiy: metin = p.beklenen_ll;
+            p.beklenen_ll = "i16";
+            değişken kt: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken ktt: metin = p.son_tip;
+            değişken iz: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            değişken izt: metin = p.son_tip;
+            p.beklenen_ll = eskiy;
+            // Literaller i32 gelebilir → i16'ya uydur. `int_uydur` kaynağı
+            // `p.son_tip`ten okur, o yüzden önce geri yükleniyor. (Immediate ise
+            // dokunmaz — literal zaten beklenen bağlamla i16 basılır.)
+            p.son_tip = ktt; kt = int_uydur(p, kt, "i16", 0);
+            p.son_tip = izt; iz = int_uydur(p, iz, "i16", 0);
+            değişken slot: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(slot); yaz_str(" = alloca %kdl_yetki"); yb(10);
+            yaz_str("  call void @kdl_yetki_olustur(ptr "); yaz_str(slot);
+            yaz_str(", i16 "); yaz_str(kt); yaz_str(", i16 "); yaz_str(iz); yaz_str(")"); yb(10);
+            değişken yv: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(yv); yaz_str(" = load %kdl_yetki, ptr "); yaz_str(slot); yb(10);
+            p.son_tip = "%kdl_yetki"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver yv;
+        }
+        // geri_al(y) — yetkiyi TÜKETİR. Runtime SLOT ADRESİ ister (değer değil),
+        // çünkü yetkiyi yerinde geçersizleştirir. Argüman bir TANIMLAYICI ise
+        // alloca'sı doğrudan geçilir; değilse geçici slota yazılıp adresi verilir.
+        eğer metin_esit(fad, "geri_al") ve (cs == 2) {
+            değişken an: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken adr: metin = "";
+            eğer metin_esit(dizi_al(p.a_ad, an), "TANIMLAYICI") {
+                adr = cg_var_bul(p, dizi_al(p.a_deg, an));
+            }
+            eğer metin_esit(adr, "") {
+                değişken v: metin = ifade_uret(p, an);
+                değişken ts: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(ts); yaz_str(" = alloca %kdl_yetki"); yb(10);
+                yaz_str("  store %kdl_yetki "); yaz_str(v); yaz_str(", ptr "); yaz_str(ts); yb(10);
+                adr = ts;
+            }
+            yaz_str("  call void @kdl_yetki_geri_al(ptr "); yaz_str(adr); yaz_str(")"); yb(10);
+            p.son_tip = "void"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver "0";
         }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
             // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer

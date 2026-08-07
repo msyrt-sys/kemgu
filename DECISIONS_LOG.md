@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-404 [YÜKSEK] — CODEGEN: `yetki<R>` (Capability Spec V1) self-host'ta (2026-08-07)
+
+**Kusur:** `ll_tip`te `TIP_YETKI` dalı YOKTU (i32 fallback) ve
+`yetki_olustur`/`geri_al` için emit YOKTU → `use of undefined value
+'@yetki_olustur'`.
+
+**⚠ NEDEN ŞİMDİYE KADAR HİÇBİR KAPI GÖRMEDİ — örtük kapsam deliği.**
+`yetki` kullanan tek .kem dosyası `test/ornekler/kem_heap.kem` ve onun **C
+ORACLE'ı host'ta LİNKLENMİYOR** (`kdl_mmio_oku32` bare-metal sembolü) →
+`codegen_genis` onu "oracle yok, atla" ile geçiyor. Kapı **67/67 yeşilken** bu
+boşluk sessizce duruyordu.
+> **DERS: "oracle kurulamadı → atla" politikası DOĞRU (karşılaştırma anlamsız
+> olurdu) ama KÖR NOKTA yaratır.** Atlanan dosyaların TEK kullanıcısı olduğu bir
+> özellik hiç ölçülmemiş olur. Saf-yetki programı host'ta linkleniyor (ölçüldü:
+> C exit 42) — yani bu özellik gate'lenebilirmiş, kimse denememişti.
+
+**ABI C'den ÖLÇÜLDÜ, varsayılmadı:** `%kdl_yetki = type { i64, i16, i16, i8,
+[3 x i8] }` (16 bayt) ve `yetki_olustur` **OUT-PTR** ile çalışır — dönüş
+register'da DEĞİL:
+```
+%s = alloca %kdl_yetki
+call void @kdl_yetki_olustur(ptr %s, i16 kt, i16 izin)
+%v = load %kdl_yetki, ptr %s
+```
+`geri_al` **SLOT ADRESİ** ister (değer değil) — yetkiyi yerinde geçersizleştirir.
+Argüman TANIMLAYICI ise alloca'sı doğrudan geçilir; değilse geçici slot.
+(Bu, hafızadaki "yetki = OUT-PTR ABI; sret premisi EMPİRİK yanlıştı" notuyla
+tutarlı — naif aggregate-return AAPCS64 register-pack ile uyuşmuyor.)
+
+**Kapsam:** `yetki<R>` PARAMETRE olarak da taşınır — `kütüphane/dizi.kem`in tüm
+imzaları (`oluştur<T>(böl: yetki<Bellek>)`) bunu gerektiriyor, yani bu kalan 7
+modül dosyasının İKİ ön koşulundan biri. Diğeri: dönüş-tipi-güdümlü çıkarsama.
+
+**Sabotaj:** S142 (IR tipi) · S143 (`yetki_olustur` emit) · S144 (`geri_al` emit)
+→ üçü de `cg_yetki` üzerinde KIRMIZI (127/128).
+
+**Kapılar:** `codegen_diff` **128/128** · `modul_codegen` 11/11 (7 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-403 [YÜKSEK] — CODEGEN: MODÜL generic'lerinin monomorfizasyonu (2026-08-07)
 
 **D-402'de REDDETTİĞİM D-401b, kökü teşhis edilince kabul edildi.** O deneme
