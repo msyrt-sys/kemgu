@@ -1057,6 +1057,20 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+### ⚠ AÇIK KALANLAR (D-408'de ölçüldü, kayda geçti)
+- **`sabitsüre` codegen'i — GÜVENLİK-DUYARLI, yarım yapılamaz.** C
+  `sabitsüre_olustur`u pass-through yapar AMA yanında
+  **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri yayar. Self-host'ta
+  ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
+  düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
+  gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+- **`Dizi<kesirli64>` OKUMA yolu İKİ TARAFTA DA bozuk.** `kdl_dizi_al_tam` i32
+  döndürüyor; geri okuyan bir test **C oracle'da da** yanlış sonuç verdi. Yazma
+  yolu D-408'de düzeldi, okuma açık.
+- **Sıradaki kapısız yüzeyler:** `test/snapshots` (81 dosya), `test/ornekler/eski`
+  (16), `test/asan_matris` (12), `test/stdlib` (9), `test/crossfile` (2).
+  `test/check_korpus` D-408'de ölçüldü (31/32).
+
 - 🎯🎯 **D-407: `test/moduller` 18/18, MUAFİYET LİSTESİ BOŞ.** Nitelikli
   (üç segmentli) çeşit yapıcısı: codegen'in kolu solu yalnız `TANIMLAYICI`
   kabul ediyordu, `ifd::Ifade::Sayi` biçiminde sol bir **YOL**'dur. Tek koşul

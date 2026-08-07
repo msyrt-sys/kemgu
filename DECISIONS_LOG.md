@@ -5,6 +5,44 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-408 [YÜKSEK] — YENİ YÜZEY `check_korpus` + kesirli dizi + `ifşa` (2026-08-07)
+
+**Yeni ölçüm yüzeyi.** `test/moduller` doyunca sıradaki kapısız yüzey arandı:
+`test/check_korpus` (104 dosya) yalnız `--check` ile ölçülüyordu, codegen'le HİÇ.
+İlk ölçüm **30/32** (72 atlandı — kasıtlı hatalı tanı dosyaları, C oracle
+reddediyor → doğru davranış). İki gerçek kök, **ikisi de kapatıldı → 31/32**:
+
+**1. Kesirli dizi argümanı.** `Dizi<kesirli64> = [1.5, 2.5]` için self-host
+`call ... @kdl_dizi_ekle_tam(ptr, ptr, i32 1.5)` basıyordu — LLVM REDDEDER
+("floating point constant invalid for type"). C ise `_tam` sonekini korur ama
+argümanı DOĞAL tipiyle geçer (`double %3`), kendi `declare ... i32`siyle
+UYUŞMAZ; LLVM sessizce kabul eder (D-295). **C'nin DAVRANIŞI taklit edildi,
+"doğrusu" değil** — parite hedefi bu (D-388'deki `free`→i32 ile aynı gerekçe).
+
+**2. `ifşa(e)` (declassify) PASS-THROUGH.** Codegen'i yoktu → tanımsız `@ifşa`.
+`tekkez_olustur`/`dondur` ile aynı sınıf.
+
+**🛑 BİLİNÇLİ OLARAK YAPILMADI — `sabitsüre_olustur`.** `ifşa` onarılınca
+arkasından çıktı. Naif pass-through link hatasını kapatırdı, AMA C yalnız değeri
+geçirmiyor: yanında **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri
+yayıyor. Bariyeri sessizce düşürmek self-host derleyicide **sessiz bir GÜVENLİK
+regresyonu** olurdu (sabit-süre disiplini). Link hatası gürültülüdür, eksik
+bariyer değildir — **yarım onarım burada kusurun kendisidir.** `tc19_02` açık
+bırakıldı; sabitsüre codegen'i AYRI ve güvenlik-duyarlı bir iştir.
+
+**Korpus:** `cg_kesirli_dizi.kem`. **SINIR:** elemanı GERİ OKUMUYOR —
+`kdl_dizi_al_tam` i32 döndürdüğü için `Dizi<kesirli64>` okuması **C'DE DE**
+bozuk (ölçüldü: geri okuyan sürümüm C oracle'da exit 2 verdi). C'nin
+desteklemediğini test etmek kapıyı değil PROBE'u sınar. Kesirli dizi OKUMA yolu
+ayrı bir kusurdur ve **iki tarafta da AÇIKTIR** — kayda geçti.
+
+**Sabotaj S149** (kesirli arg tipi) → KIRMIZI (130/131).
+
+**Kapılar:** `codegen_diff` **131/131** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-407 [YÜKSEK] — CODEGEN: nitelikli çeşit yapıcısı — 🎯 `test/moduller` 18/18 (2026-08-07)
 
 **🎯 MUAFİYET LİSTESİ BOŞALDI.** Kapı 7 muafiyetle kuruldu (11/18); D-404, D-405,

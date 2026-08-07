@@ -2965,6 +2965,15 @@ işlev dizi_ekle_sonek(et: metin) -> metin {
 işlev dizi_arg_tip(et: metin) -> metin {
     eğer metin_esit(et, "i64") { ver "i64"; }
     eğer metin_esit(et, "ptr") { ver "ptr"; }
+    // D-408: KESİRLİ eleman. C `Dizi<kesirli64>` için `_tam` sonekini korur ama
+    // argümanı DOĞAL tipiyle geçer: `call void @kdl_dizi_ekle_tam(ptr, ptr,
+    // double %3)` — `declare ... i32` ile uyuşmaz, LLVM SESSİZCE kabul eder
+    // (D-295). Self-host argümanı `i32` diye basıyordu ve literal `i32 1.5`
+    // LLVM tarafından REDDEDİLİYORDU ("floating point constant invalid for
+    // type"). Burada C'nin DAVRANIŞI taklit edilir, "doğrusu" değil — parite
+    // hedefi bu (D-388'deki `free` → i32 notuyla aynı gerekçe).
+    eğer metin_esit(et, "double") { ver "double"; }
+    eğer metin_esit(et, "float") { ver "float"; }
     ver "i32";
 }
 // CG8: eleman tipi → kdl_dizi_al_* sonek + dönüş tipi.
@@ -4129,6 +4138,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str("  call void @kdl_yetki_geri_al(ptr "); yaz_str(adr); yaz_str(")"); yb(10);
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
             ver "0";
+        }
+        // D-408: `ifşa(e)` — Sabitsüre Spec declassify. PASS-THROUGH (sıfır
+        // talimat); gizlilik muhasebesi tamamen TİP KONTROLDE yaşar, IR'da izi
+        // yoktur. C ölçüldü: hiçbir çağrı yaymıyor. Bu dal olmadan genel çağrı
+        // yoluna düşüp TANIMSIZ `@ifşa` üretiyordu (`tekkez_olustur`/`dondur`
+        // ile aynı sınıf).
+        eğer metin_esit(fad, "ifşa") ve (cs == 2) {
+            ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
             // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer
