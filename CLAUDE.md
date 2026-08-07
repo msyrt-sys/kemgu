@@ -1057,6 +1057,13 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- 🎯🎯 **D-407: `test/moduller` 18/18, MUAFİYET LİSTESİ BOŞ.** Nitelikli
+  (üç segmentli) çeşit yapıcısı: codegen'in kolu solu yalnız `TANIMLAYICI`
+  kabul ediyordu, `ifd::Ifade::Sayi` biçiminde sol bir **YOL**'dur. Tek koşul
+  genişletmesi. **Checker'ın `yol_cesit_adi`si zaten ikisini de kabul
+  ediyordu** — iki tarafın ayrı davranması kusurun kendisiydi.
+  **DERS: aynı soruyu iki yerde ayrı yanıtlayan kod er ya da geç ayrışır;
+  böyle bir kusuru ararken "diğer taraf ne yapıyor?" İLK soru olmalı.**
 - 🎯 **D-406: `test/moduller` 11/18 → 16/18, muafiyet 7 → 2.** Ham işaretçi
   indekslemesi (`*T` içinde `d[i]`) heap-dizi yoluna düşüyordu; `*T` düz bellek,
   KdlDizi **başlığı yok** → hem yanlış lowering hem tip hatası. C aynası:

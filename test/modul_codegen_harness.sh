@@ -46,7 +46,7 @@ fi
 # dönüşebilir. Liste ancak SON durumda ölçülerek yazılmalı.
 #
 # KURAL: buraya satır EKLEMEK kapıyı zayıflatmaktır. Önce KÖKÜ onar.
-MUAF="ana_ifd"
+MUAF=""
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 link_retry() {

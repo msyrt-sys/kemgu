@@ -5,6 +5,42 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-407 [YÜKSEK] — CODEGEN: nitelikli çeşit yapıcısı — 🎯 `test/moduller` 18/18 (2026-08-07)
+
+**🎯 MUAFİYET LİSTESİ BOŞALDI.** Kapı 7 muafiyetle kuruldu (11/18); D-404, D-405,
+D-406 ve D-407 hepsini kapattı → **18/18, 0 muaf**.
+
+**Kusur:** codegen'in çeşit-yapıcı kolu solu **yalnız `TANIMLAYICI`** kabul
+ediyordu. Nitelikli (üç segmentli) biçimde sol bir **YOL**'dur:
+```
+ifd::Ifade::Sayi(3)
+  dış YOL a_deg="Sayi" → çocuğu YOL("Ifade") → çocuğu TANIMLAYICI("ifd")
+```
+Kol atlanınca yapıcı GENEL ÇAĞRI yoluna düşüp `i32` üretiyordu; annotasyon ise
+çeşit struct'ını (`{i8, i64, ptr, ptr, ptr, ptr}`) çözüyordu → `store` tip
+uyumsuzluğu.
+
+**Onarım tek koşul genişletmesi.** Çeşit ADI her iki biçimde de o düğümün
+`a_deg`indedir (modül öneki DAHA DERİNDE durur) → ek ayrıştırma gerekmedi.
+**Checker'ın `yol_cesit_adi`si zaten İKİSİNİ DE kabul ediyordu**; codegen ona
+hizalandı — iki tarafın ayrı davranması kusurun kendisiydi.
+> **DERS: aynı soruyu iki yerde ayrı yanıtlayan kod, er ya da geç ayrışır.**
+> Checker doğru kuralı biliyordu; codegen bilmiyordu. Böyle bir kusuru ararken
+> "diğer taraf ne yapıyor?" ilk soru olmalı.
+
+**Korpus:** ayrı dosya YAZMADIM. `ana_ifd` zaten `modul_codegen` kapısında
+(0 muaf) ve sabotaj oradan ölçülüyor. Kendi uydurduğum fikstür (`Sekil::Nokta`
+payload'suz varyant + `eşleş *s`) **C ORACLE'DA da patladı** ("extractvalue
+operand must be aggregate type") — yani şekil geçersizdi. Gerçek modülü kapı
+olarak kullanmak hem doğru hem ucuz. (D-391'in dersi: uydurma, kaynaktan al.)
+
+**Sabotaj S148** (YOL kolu) → `ana_ifd` KIRMIZI (17/18).
+
+**Kapılar:** `modul_codegen` **18/18 (0 muaf)** · `codegen_diff` 130/130 ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-406 [YÜKSEK] — CODEGEN: ham işaretçi indekslemesi (`*T` → GEP) (2026-08-07)
 
 **🎯 `test/moduller` 11/18 → 16/18.** Beş dosya birden açıldı; muafiyet 7 → **2**.

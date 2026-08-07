@@ -3820,7 +3820,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer metin_esit(dizi_al(p.a_ad, hed), "YOL") {
             değişken hsol: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hed));
             değişken hvary: metin = dizi_al(p.a_deg, hed);   // varyant adı (sağ)
-            eğer metin_esit(dizi_al(p.a_ad, hsol), "TANIMLAYICI") {
+            // D-407: sol taraf TANIMLAYICI **ya da YOL** olabilir. YOL biçimi
+            // NİTELİKLİ çeşittir: `ifd::Ifade::Sayi(3)` → dış YOL a_deg="Sayi",
+            // çocuğu YOL("Ifade") → çocuğu TANIMLAYICI("ifd"). Kol yalnız
+            // TANIMLAYICI kabul ettiği için üç segmentli yapıcı SESSİZCE
+            // atlanıyor, genel çağrı yoluna düşüp `i32` üretiyordu — annotasyon
+            // `{i8, i64, ptr, ...}` çözdüğü için `store` tip uyumsuzluğu.
+            // Çeşit ADI her iki biçimde de o düğümün `a_deg`indedir (modül öneki
+            // DAHA DERİNDE durur), yani ek ayrıştırma gerekmez.
+            // Checker'ın `yol_cesit_adi`si zaten ikisini de kabul ediyordu —
+            // codegen o davranışa hizalandı.
+            eğer metin_esit(dizi_al(p.a_ad, hsol), "TANIMLAYICI")
+                 veya metin_esit(dizi_al(p.a_ad, hsol), "YOL") {
                 değişken hcad: metin = dizi_al(p.a_deg, hsol);
                 eğer cesit_var_mi(p, hcad) {
                     değişken agg: metin = cesit_struct_ir(p, hcad);
