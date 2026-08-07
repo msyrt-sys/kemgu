@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-411 [YÜKSEK] — CODEGEN: `bellek_kopyala` + mono'da İPTAL yerine geri-düşüş (2026-08-07)
+
+**`test/snapshots` 58/62 → 60/62.** İki AYRI kök.
+
+**1. `bellek_kopyala` → libc `memcpy`.** Eşleme yoktu → tanımsız
+`@bellek_kopyala`. D-388/D-405 ile aynı sınıf (yerleşik ADI kayıtlı, IR eşlemesi
+eksik). C `call i32 @memcpy(...)` yayıyor — kendi `declare ptr @memcpy`
+satırıyla tutarsız, LLVM sessizce kabul ediyor (D-295); C'nin DAVRANIŞI taklit
+edildi.
+
+**2. Mono'da İPTAL yerine GERİ-DÜŞÜŞ — D-401'in V1 kararının düzeltilmesi.**
+D-401 çıkarsanamayan bir tip paramında mono'yu TÜMDEN iptal ediyordu. Bu
+`hata_yap<T, E>(e: E) -> sonuç<T, E>` şeklinde KIRIYORDU: `E` çıplak parametre,
+`T` DEĞİL. İptal edilince çağrı BASE gövdeye gidiyor (hepsi fallback →
+`{i8,i32,i32}`) ama annotasyon `sonuç<tam32, metin>` = `{i8,i32,ptr}` çözülüyor
+→ **store uyuşmazlığı**.
+> **İlginç ayrıntı:** define ve çağrı BİRBİRİYLE anlaşıyordu; uyuşmazlık
+> ANNOTASYONLAYDI. "Define≠call" diye aramak yanlış yere bakmak olurdu —
+> hata satırını okumak şart.
+
+Onarım: çıkarsanamayan param için fallback IR (`i32`) kullan. Sonuç
+`hata_yap$i32$ptr` — **C'nin ürettiği mangled adla BİREBİR AYNI**.
+**SAĞLAMLIK:** fallback yanlışsa (T gerçekte `tam64` ise) define ve çağrı yine
+anlaşır ama annotasyonla uyuşmaz → LLVM REDDEDER. Hata **gürültülü** kalır,
+sessiz yanlış cevaba dönüşmez.
+
+**Korpus:** `cg_bellek_kopyala.kem` + `cg_generic_sonuc_ptr.kem` (ikisi de
+snapshot'tan birebir kopya — uydurmadım). `d1_generic_sonuc_ptr` zaten C'nin
+bir zamanlar yaşadığı aynı bug'ın REGRESYON MUHAFIZI; dosyanın kendi yorumu
+kökü tarif ediyor.
+
+**Sabotaj:** S152 (`memcpy` eşlemesi) · S153 (mono iptaline geri dön) → ikisi de
+KIRMIZI (134/135).
+
+**Kalan 2:** `asm_round_trip` (satıriçi_asm sessizce düşüyor — planı kayıtlı) ·
+`ad_cozum_sapma` (`@ic.g` tanımsız).
+
+**Kapılar:** `codegen_diff` **135/135** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-410 [YÜKSEK] — CODEGEN: `eşleş` iç ayırıcı testi — SESSİZ YANLIŞ CEVAP (2026-08-07)
 
 **En ağır sınıf.** Link hatası YOK, IR geçerli, program çalışıyor — yalnız

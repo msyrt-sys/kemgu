@@ -1067,11 +1067,18 @@ LLVM-RED'den çıkıp çalışıyor.
 üretip tamamen yanlış bir kök aramama yol açmıştı.
 
 ### ⚠ AÇIK KALANLAR (D-408'de ölçüldü, kayda geçti)
-- **`test/snapshots` yüzeyi (D-409'da açıldı): 58/62.** ✓ `cesit_sonuc` D-410'da
-  kapandı (`eşleş` iç ayırıcı testi — **sessiz yanlış cevap**tı). Kalan 4 AYRI
-  kök: `ad_cozum_sapma` (`@ic.g`) · `asm_round_trip` (**C=42 KEMGU=1**, hâlâ
-  sessiz yanlış cevap) · `bolge_al_grow` (`@bellek_kopyala`) ·
-  `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+- **`test/snapshots` yüzeyi (D-409'da açıldı): 60/62.** ✓ `cesit_sonuc` (D-410),
+  ✓ `bolge_al_grow` + `d1_generic_sonuc_ptr` (D-411). **Kalan 2:**
+  `asm_round_trip` (satıriçi_asm sessizce düşüyor — planı yukarıda) ·
+  `ad_cozum_sapma` (`@ic.g` tanımsız).
+- **D-411 dersi — D-401'in "çıkarsanamazsa mono'yu İPTAL ET" kararı YANLIŞTI.**
+  `hata_yap<T,E>(e: E) -> sonuç<T,E>`de `E` çıkarsanır, `T` çıkarsanmaz; iptal
+  edilince çağrı base gövdeye (hepsi fallback) gider ve ANNOTASYONLA uyuşmaz.
+  Doğrusu: çıkarsanamayan için fallback IR kullan → `hata_yap$i32$ptr`, C ile
+  birebir. **Fallback yanlışsa hata GÜRÜLTÜLÜ kalır** (annotasyon uyuşmazlığı),
+  sessiz yanlış cevaba dönüşmez.
+- **⚠ "define ≠ call" diye aramak yanlış yere bakmak olabilir.** D-411'de define
+  ve çağrı BİRBİRİYLE anlaşıyordu; uyuşmazlık ANNOTASYONLAYDI. Hata satırını oku.
 - **🔴 `satıriçi_asm` SELF-HOST'TA SESSİZCE DÜŞÜYOR** (`asm_round_trip`:
   C=42, KEMGU=1). Parser `SATIRICI_ASM` düğümünü üretiyor, checker AS001 ile
   doğruluyor, **codegen'de DAL YOK** → tüm blok yok sayılıyor, çıktı değişkenleri
@@ -1216,6 +1223,16 @@ geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
 `selfhost/codegen.kem` birleşik sürücü). Korpusa dosya eklerken **hangi
 uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
 koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
+
+**⚠ ZAMAN AŞIMINA UĞRAYAN `make` ÖLMEZ — ORPHAN OLARAK KOŞMAYA DEVAM EDER.**
+D-411'de bir `calistir_codegen_diff` 10 dk sınırında "timeout" verdi; ben devam
+edip **arka planda ikinci bir kapı koşumu başlattım**. İki `make` aynı anda
+`build/codegen.exe`i yazdı → `codegen_diff` **134/135 SAHTE KIRMIZI** ve sürücü
+başarısız. Kaynak DEĞİŞMEDEN yeniden koşunca **135/135 yeşil**. Bu, D-297'nin
+("aynı testin iki eş zamanlı koşumu birbirini ezer") yeni bir biçimi.
+**Kural: bir kapı koşumu zaman aşımına uğrarsa, YENİSİNİ BAŞLATMADAN ÖNCE
+bittiğinden emin ol.** Sahte kırmızıyı gerçek regresyon sanıp geri almaya
+kalkmak, gerçek bir kusuru geri almaktan daha ucuz değildir.
 
 **⚠ EKSİK ARTEFAKT — `build/codegen.exe` (D-398'de İKİ KEZ ısırdı):** sabotaj
 döngüsünde `rm -f build/codegen.exe` yapıp sonra ELLE ölçüm koşarsan her dosya

@@ -2637,10 +2637,25 @@ işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>) -> m
         eğer metin_esit(dizi_al(p.tp_yad, i), bare) {
             değişken tp: metin = dizi_al(p.tp_ad, i);
             değişken pidx: tam32 = fn_param_idx(p, fn, tp);
-            eğer pidx < 0 { ver ""; }                       // çıkarsanamadı → iptal
-            eğer pidx >= dizi_boyut(argt) { ver ""; }        // arity uyuşmuyor → iptal
-            değişken ir: metin = dizi_al(argt, pidx);
-            eğer metin_esit(ir, "") { ver ""; }
+            // D-411: ÇIKARSANAMAYAN tip paramı için mono'yu İPTAL ETME —
+            // fallback IR ("i32") kullan. D-401'in V1'i iptal ediyordu ve bu
+            // `hata_yap<T,E>(e: E) -> sonuç<T,E>` gibi şekillerde KIRIYORDU:
+            // T çıplak parametre değil, E ise öyle. İptal edilince çağrı BASE
+            // gövdeye (hepsi fallback → `{i8,i32,i32}`) gidiyor ama annotasyon
+            // `sonuç<tam32, metin>` = `{i8,i32,ptr}` çözülüyor → store uyuşmazlığı.
+            // Fallback'le E=ptr, T=i32 → `{i8,i32,ptr}`, annotasyonla UYUŞUR.
+            // (C bu şekli `hata_yap$i32$ptr` olarak mangle'lıyor — AYNI sonuç.)
+            //
+            // SAĞLAMLIK: fallback yanlışsa (T gerçekte tam64 ise) define ve çağrı
+            // YİNE ANLAŞIR ama annotasyonla uyuşmaz → LLVM REDDEDER. Yani hata
+            // GÜRÜLTÜLÜ kalır, sessiz yanlış cevaba dönüşmez.
+            değişken ir: metin = "i32";
+            eğer pidx >= 0 {
+                eğer pidx < dizi_boyut(argt) {
+                    değişken ia: metin = dizi_al(argt, pidx);
+                    eğer metin_esit(ia, "") == yanlış { ir = ia; }
+                }
+            }
             eğer metin_uzunluk(sp) > 0 { sp = metin_birlestir(sp, " "); si = metin_birlestir(si, " "); }
             sp = metin_birlestir(sp, tp);
             si = metin_birlestir(si, ir);
@@ -3171,6 +3186,10 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
     eğer metin_esit(ad, "yazdir") { ver "puts"; }              // libc
     eğer metin_esit(ad, "bellek_al") { ver "malloc"; }         // libc
     eğer metin_esit(ad, "bellek_serbest") { ver "free"; }      // libc
+    // D-411: `bellek_kopyala` → libc `memcpy` (C ölçüldü). Eşleme yoktu →
+    // tanımsız `@bellek_kopyala`. D-388/D-405 ile AYNI SINIF: yerleşik adı
+    // kayıtlı ama IR eşlemesi eksik.
+    eğer metin_esit(ad, "bellek_kopyala") { ver "memcpy"; }    // libc
     eğer metin_baslar(ad, "otp_") { ver metin_birlestir("kdl_", ad); }
     eğer metin_baslar(ad, "metin_") veya metin_baslar(ad, "dosya_") veya metin_baslar(ad, "yaz_")
          veya metin_baslar(ad, "yazdir_") veya metin_baslar(ad, "arg_")
@@ -3190,6 +3209,10 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "yazdir") { ver "i32"; }        // puts
     eğer metin_esit(ad, "bellek_al") { ver "ptr"; }     // malloc
     eğer metin_esit(ad, "bellek_serbest") { ver "i32"; }// free (C böyle emit eder)
+    // D-411: C `call i32 @memcpy(...)` yayıyor — kendi `declare ptr @memcpy`
+    // satırıyla TUTARSIZ ama LLVM sessizce kabul eder (D-295). C'nin DAVRANIŞI
+    // taklit edilir, "doğrusu" değil.
+    eğer metin_esit(ad, "bellek_kopyala") { ver "i32"; }
     eğer metin_baslar(ad, "otp_") { ver "i32"; }
     eğer metin_esit(ad, "metin_uzunluk") { ver "i32"; }
     eğer metin_esit(ad, "metin_bayt") { ver "i8"; }
