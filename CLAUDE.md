@@ -1072,6 +1072,19 @@ LLVM-RED'den çıkıp çalışıyor.
   kök: `ad_cozum_sapma` (`@ic.g`) · `asm_round_trip` (**C=42 KEMGU=1**, hâlâ
   sessiz yanlış cevap) · `bolge_al_grow` (`@bellek_kopyala`) ·
   `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+- **🔴 `satıriçi_asm` SELF-HOST'TA SESSİZCE DÜŞÜYOR** (`asm_round_trip`:
+  C=42, KEMGU=1). Parser `SATIRICI_ASM` düğümünü üretiyor, checker AS001 ile
+  doğruluyor, **codegen'de DAL YOK** → tüm blok yok sayılıyor, çıktı değişkenleri
+  başlangıç değerinde kalıyor. Link hatası yok, IR geçerli — **sessiz yanlış
+  cevap**, üstelik `güvensiz` blokta çalışan kod için.
+  **ONARIM PLANI (ölçüldü):** parser ŞU AN kritik veriyi ATIYOR —
+  `parse_satirici_asm` yalnız `girdi` ifadelerini AST çocuğu yapıyor (C'nin
+  `--ast` paritesi için) ve `mimari`yi yan-kanala koyuyor; **şablon, çıktı
+  kısıtları, çıktı DEĞİŞKENLERİ ve bozulanlar tümüyle atılıyor**
+  (`asm_kisit_atla` sadece tüketiyor). Düğüme alan eklemek `--ast` paritesini
+  bozar → 4-5 yeni yan-kanal dizisi gerekir. C'nin hedef biçimi:
+  `call { i32, i32 } asm sideeffect "<şablon>", "=r,=r,r,~{cc}"(i32 %6)` +
+  `extractvalue` + çıktı işaretçilerine `store`.
 - **⚠ ÇOK-KOLLU TESTTE EN AZ ÜÇ VARYANT KULLAN.** D-410'da "hep ilk kola git"
   hatası İKİ varyantla %50 olasılıkla doğru cevabı verir ve test **tesadüfen
   yeşil kalır**. Üç varyant + hepsinin AYRI dönüş değeri şart. (D-393'ün
