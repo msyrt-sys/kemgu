@@ -26,7 +26,7 @@ fi
 
 # ---- MUAFİYET LİSTESİ (KÜÇÜLMEK ZORUNDA — asla büyümemeli) ----
 # Kapı 7 muafiyetle kuruldu (11/18). D-404 (`yetki<R>`), D-405 (`bölge_al`) ve
-# D-406 (ham-işaretçi indeksleme) beşini kapattı → **16/18**.
+# D-406 (ham-işaretçi indeksleme) ALTISINI kapattı → **17/18**.
 #
 # ⚠ TEŞHİS TARİHİ — ilk yazdığım gerekçe YANLIŞTI. Bu listeyi "hepsi tek kök:
 # dönüş-tipi-güdümlü çıkarsama" diye açıklamıştım. Hata satırını tek tek
@@ -35,14 +35,18 @@ fi
 #     yoluna düşüyor
 # "Dönüş-tipi-güdümlü çıkarsama" yazmaya başlasaydım YANLIŞ YERİ onarırdım.
 #
-# KALAN 2, AYRI köklerde:
-#   ana_ifd   — çapraz-modül ÇEŞİT payload'u: `{ i8, i64, ptr, ptr, ptr, ptr }`
-#               beklenen yerde i32. Tagged-union layout çözümü.
-#   dizi_yapi — C=42, KEMGU=127 (çalışma-anı çökmesi). Link GEÇİYOR, yani IR
-#               geçerli; kusur DAVRANIŞTA — ayrı teşhis ister.
+# KALAN 1:
+#   ana_ifd — çapraz-modül ÇEŞİT payload'u: `{ i8, i64, ptr, ptr, ptr, ptr }`
+#             beklenen yerde i32. Tagged-union layout çözümü.
+#
+# ⚠ `dizi_yapi` BU LİSTEDE FAZLADAN DURUYORDU. D-406 ölçümünü ARA DURUMDA
+# (yazma kolu henüz onarılmamışken) yapmıştım ve 127 gördüm; onarım tamamlanınca
+# 42'ye dönmüştü ama listeyi yeniden ölçmedim. **Muafiyet eklerken ölçümün
+# HANGİ ANDA yapıldığına dikkat et** — yarım onarımın sonucu kalıcı muafiyete
+# dönüşebilir. Liste ancak SON durumda ölçülerek yazılmalı.
 #
 # KURAL: buraya satır EKLEMEK kapıyı zayıflatmaktır. Önce KÖKÜ onar.
-MUAF="ana_ifd dizi_yapi"
+MUAF="ana_ifd"
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 link_retry() {
