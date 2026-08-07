@@ -101,6 +101,20 @@ küçült (cek/cikar)" iki adımı; yokluk `seçimlik<T>`.
 - **`matris.kem`** — düz-bellek (row-major) tam32 matris: `mat_al/yaz`,
   `mat_olustur`, `mat_birim`, `mat_topla`, `mat_skaler_carp`,
   `mat_carp`, `mat_transpoze`, `mat_iz`, `mat_gecerli_mi`
+- **`kesir.kem`** — kesin rasyonel aritmetik (`[pay, payda]` çifti,
+  kurucuda normalize; geçersizlik NaN-tarzı `[0,0]` zehir değeriyle
+  yayılır — çökme yok, sessiz yanlış sayı yok): `kesir_olustur`,
+  `kesir_topla/cikar/carp/bol`, `kesir_neg/ters`, `kesir_esit_mi`,
+  `kesir_kucuk_mu`, `kesir_tam_kisim`, `kesir_gecerli_mi`
+- **`rastgele.kem`** — deterministik MINSTD PRNG (Park-Miller, Schrage
+  çarpanlamasıyla taşmasız; KRİPTO DEĞİL — o iş `kripto/rastgele.kem`):
+  `rastgele_tohumla`, `rastgele_sonraki`, `rastgele_aralikta`,
+  `rastgele_dizi`, `rastgele_karistir` (Fisher-Yates); global durum
+  yok, durum parametreyle iplenir
+- **`karma.kem`** — taşmasız polinom karma (Rabin-Karp ailesi, mod
+  1e9+7; FNV/djb2 bilinçli değil — taşan çarpma + XOR ister):
+  `karma_tam`, `karma_dizi_tam`, `karma_birlestir`, `karma_kova`
+  (eslem karma-tablo V2 köprüsü), `karma_modcarp`, `karma_normalize`
 
 ## Kullanım
 
@@ -142,6 +156,9 @@ Hiçbir runtime gerektirmez — saf type-checked KEMGU.
 | istatistik | ✓ tam | Yok (kesirli sürüm: float codegen) |
 | zaman | ✓ tam | Yok (ters dönüşüm V2: yapı-dönüş) |
 | matris | ✓ tam | Yok (Matris yapısı V2) |
+| kesir | ✓ tam | Yok (tam64 iç aritmetik V2) |
+| rastgele | ✓ tam | Yok (bias'sız aralık V2) |
+| karma | ✓ tam | Yok (karma_metin: karakter erişimi) |
 | koleksiyon/Tablo | ⏳ | Allocator runtime |
 | io/yazdir | ⏳ | Syscall layer |
 | iş/Görev | ⏳ | Thread runtime |
