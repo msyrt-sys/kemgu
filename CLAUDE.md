@@ -1057,7 +1057,21 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+### ⚠⚠ KEMGU DİZGİ LİTERALİNDE KAÇIŞ YOK — `\n` DE `\"` DE (D-400, D-409)
+`metin_uzunluk("a\nb") == 4` **ve** `metin_uzunluk("a\"b") == 4` (ikisi de
+ölçüldü, hem C hem self-host). Ham dizgi `r#"..."#` ifade konumunda P010 verir.
+`codegen.kem` çıktı için `yb(10)`/`yb(34)` kullanır — ama tırnak/satırsonu
+**DEĞER** olarak gerektiğinde bu yetmez. Çözüm (D-409): `metin_kes("\"", 1, 1)`
+→ tek `"` (iki karakterlik dizginin ikincisi; bayt 34 olarak doğrulandı).
+**Kaynak metni ÜRETEN kod yazarken bunu unutma** — D-400'de düz `\n` çöpü
+üretip tamamen yanlış bir kök aramama yol açmıştı.
+
 ### ⚠ AÇIK KALANLAR (D-408'de ölçüldü, kayda geçti)
+- **`test/snapshots` yüzeyi (D-409'da açıldı): 57/62.** Kalan 5 AYRI kök —
+  "tek kök" varsayılmadı: `ad_cozum_sapma` (`@ic.g`) · `asm_round_trip`
+  (**C=42 KEMGU=1**) · `bolge_al_grow` (`@bellek_kopyala`) · `cesit_sonuc`
+  (**C=42 KEMGU=3**) · `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+  **İKİSİ SESSİZ YANLIŞ CEVAP** — link hatalarından ÖNCE onlara bakılmalı.
 - **`sabitsüre` codegen'i — GÜVENLİK-DUYARLI, yarım yapılamaz.** C
   `sabitsüre_olustur`u pass-through yapar AMA yanında
   **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri yayar. Self-host'ta

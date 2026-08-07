@@ -2074,6 +2074,56 @@ işlev yeni_reg(p: &değişken Ayr) -> tam32 {
     ver r;
 }
 işlev reg_str(r: tam32) -> metin { ver metin_birlestir("%", tam64_str(r olarak tam64)); }
+// D-409: YEREL TİP ADI (`%Ad`). LLVM'de ASCII-dışı ya da özel karakter içeren
+// adlar TIRNAKLANMALIDIR: `%"Köşe"`. Self-host tırnaksız `%Köşe` yayıyordu ve
+// clang REDDEDİYORDU ("expected '=' after name"). Tırnaklama mantığı İŞLEV
+// adları için `ir_ad_yaz`da ZATEN VARDI (`@"dizi.oluştur"` doğru çıkıyordu) —
+// tip adlarına uygulanmamıştı. Aynı soruyu iki yerde ayrı yanıtlayan kod
+// deseninin bir örneği daha (D-407).
+// Güvenli küme `ir_ad_yaz` ile BİREBİR aynı tutulur; ayrışırlarsa aynı ad bir
+// yerde tırnaklı bir yerde tırnaksız çıkar ve IR tutarsızlaşır.
+işlev ir_tip_ad(s: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken guvenli: mantıksal = doğru;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer c < 0 { c = c + 256; }
+        değişken ok: mantıksal = yanlış;
+        eğer c >= 97 ve c <= 122 { ok = doğru; }   // a-z
+        eğer c >= 65 ve c <= 90 { ok = doğru; }    // A-Z
+        eğer c >= 48 ve c <= 57 { ok = doğru; }    // 0-9
+        eğer c == 95 veya c == 46 veya c == 36 { ok = doğru; }   // _ . $
+        eğer ok == yanlış { guvenli = yanlış; }
+        i = i + 1;
+    }
+    eğer guvenli { ver metin_birlestir("%", s); }
+    // ⚠ KEMGU dizgi literalinde ÇIPLAK `"` ÜRETİLEMEZ. Ölçüldü: `\"` KAÇIŞ
+    // DEĞİLDİR — `"a\"b"` uzunluğu 4'tür, yani `\` ve `"` İKİ karakter olarak
+    // saklanır (lexer `\"`de dizgiyi bitirmiyor ama ikisini de tutuyor). Ham
+    // dizgi `r#"..."#` de bu konumda P010 veriyor. `\n` ile aynı sınıf (D-400).
+    // Çözüm: iki karakterlik dizginin İKİNCİSİNİ kes → tek `"`.
+    // (codegen.kem başka yerlerde `yb(34)` kullanır; o ÇIKTIYA yazar, burada
+    //  tırnağın DEĞER olarak gerekmesi farkı yaratıyor.)
+    değişken tir: metin = metin_kes("\"", 1, 1);
+    ver metin_birlestir(metin_birlestir(metin_birlestir("%", tir), s), tir);
+}
+// D-409: `ir_tip_ad`ın TERSİ — `%Ad` / `%"Ad"` → `Ad`. Yapı adı IR tipinden geri
+// okunan HER yerde bu kullanılmalı. Yalnız `%` soyan eski kod tırnaklı adlarda
+// `"Köşe"` döndürüyordu → alan araması BAŞARISIZ, `extractvalue ..., -1` (LLVM
+// "expected integer"). İleri ve geri dönüşümü AYRI yerlerde tutmak D-407'nin
+// aynı tuzağı; ikisi yan yana dursun ki ayrışmasınlar.
+işlev ir_tip_soy(s: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer n < 1 { ver s; }
+    değişken b: tam32 = 0;
+    eğer bayt(s, 0) == 37 { b = 1; }            // '%'
+    değişken e: tam32 = n;
+    eğer (e - b) >= 2 {
+        eğer bayt(s, b) == 34 ve bayt(s, e - 1) == 34 { b = b + 1; e = e - 1; }
+    }
+    ver metin_kes(s, b, e - b);
+}
 // D-337: `isz`=1 → işaretsiz (dtamN) semantik. C llvm.c ile birebir: bölme udiv,
 // mod urem, sağa kaydırma lshr. add/sub/mul/and/or/xor/shl imzadan BAĞIMSIZ
 // (iki tümleyende aynı bit deseni) → tek varyant.
@@ -2770,7 +2820,7 @@ işlev mono_yapi_alan_ir(p: &değişken Ayr, base: metin) -> metin {
 işlev mono_kayit_yapi(p: &değişken Ayr, base: metin, tip_idx: tam32) -> metin {
     değişken argir: Dizi<metin> = mono_arg_irleri(p, tip_idx);
     değişken mangled: metin = mono_mangle(base, argir);
-    eğer mono_bul(p, mangled) >= 0 { ver metin_birlestir("%", mangled); }
+    eğer mono_bul(p, mangled) >= 0 { ver ir_tip_ad(mangled); }
     değişken bas: tam32 = dizi_boyut(p.mono_sp);
     subst_it_hepsi(p, base, argir);
     değişken fields: metin = mono_yapi_alan_ir(p, base);
@@ -2871,7 +2921,7 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
             // D-307: layout-param-bağımlı generic yapı → per-instantiation %Kutu$X.
             // Layout-bağımsız (alanlar hep ptr) → tek layout %Kutu (D-306).
             eğer mono_gerek_yapi(p, kad) { ver mono_kayit_yapi(p, kad, tip_idx); }
-            ver metin_birlestir("%", kad);
+            ver ir_tip_ad(kad);
         }
         eğer cesit_var_mi(p, kad) {
             eğer cesit_enum_mi(p, kad) { ver "i8"; }
@@ -2891,7 +2941,7 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(t, "kesirli32") { ver "float"; }    // D3 Öncelik-1: float
     eğer metin_esit(t, "kesirli64") { ver "double"; }   // D3 Öncelik-1: double
     eğer metin_esit(t, "metin") { ver "ptr"; }   // CG7: metin → ptr
-    eğer yapi_var_mi(p, t) { ver metin_birlestir("%", t); }   // CG7b: yapı → %Ad
+    eğer yapi_var_mi(p, t) { ver ir_tip_ad(t); }   // CG7b: yapı → %Ad
     eğer cesit_var_mi(p, t) {                 // D3: çeşit (ADT)
         eğer cesit_enum_mi(p, t) { ver "i8"; }     // payloadsuz → bare disc
         ver cesit_struct_ir(p, t);                 // payload → {i8, <payloadlar>}
@@ -3391,7 +3441,7 @@ işlev yapi_tip_emit(p: &değişken Ayr) -> tam32 {
         // D-307: layout-param-bağımlı generic base ATLA (yalnız mono örnekleri
         // emit edilir — %Kutu{i32} ölü tanım olurdu, C llvm.c paritesi).
         eğer mono_gerek_yapi(p, dizi_al(p.yapi_ad, k)) == yanlış {
-            yaz_str("%"); yaz_str(dizi_al(p.yapi_ad, k)); yaz_str(" = type { ");
+            yaz_str(ir_tip_ad(dizi_al(p.yapi_ad, k))); yaz_str(" = type { ");   // D-409
             değişken base: tam32 = dizi_al(p.yapi_abase, k);
             değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
             değişken j: tam32 = 0;
@@ -3407,7 +3457,7 @@ işlev yapi_tip_emit(p: &değişken Ayr) -> tam32 {
     // D-307: kayıtlı mono örnekleri: %Kutu$ptr = type { ptr }
     değişken m: tam32 = 0;
     iken m < dizi_boyut(p.mono_mangled) {
-        yaz_str("%"); yaz_str(dizi_al(p.mono_mangled, m)); yaz_str(" = type ");
+        yaz_str(ir_tip_ad(dizi_al(p.mono_mangled, m))); yaz_str(" = type ");   // D-409
         yaz_str(dizi_al(p.mono_fields, m)); yb(10);
         m = m + 1;
     }
@@ -3489,7 +3539,7 @@ işlev erisim_yapi_ad(p: &değişken Ayr, nesne: tam32) -> metin {
     eğer metin_esit(ad, "TANIMLAYICI") {
         değişken nad: metin = dizi_al(p.a_deg, nesne);
         değişken nt: metin = cg_var_tip_bul(p, nad);
-        eğer bayt(nt, 0) == 37 { ver metin_kes(nt, 1, metin_uzunluk(nt) - 1); }
+        eğer bayt(nt, 0) == 37 { ver ir_tip_soy(nt); }
         ver cg_var_ref_bul(p, nad);   // referans param → pointee yapı adı ("" olabilir)
     }
     eğer metin_esit(ad, "ERISIM") {
@@ -3498,7 +3548,7 @@ işlev erisim_yapi_ad(p: &değişken Ayr, nesne: tam32) -> metin {
         değişken mi: tam32 = mono_bul(p, ic);
         eğer mi >= 0 { ic = dizi_al(p.mono_yad, mi); }
         değişken ft: metin = yapi_alan_tip(p, ic, dizi_al(p.a_deg, nesne));
-        eğer bayt(ft, 0) == 37 { ver metin_kes(ft, 1, metin_uzunluk(ft) - 1); }
+        eğer bayt(ft, 0) == 37 { ver ir_tip_soy(ft); }
         ver "";   // skaler alan → daha derin erişim yok
     }
     ver "";   // çağrı dönüşü / indeks vb. → V1'de çözülmez (konservatif: imzalı)
@@ -3716,7 +3766,7 @@ işlev erisim_kapanis_ic(p: &değişken Ayr, hed: tam32) -> metin {
     değişken vad: metin = dizi_al(p.a_deg, nesne);
     değişken vt: metin = cg_var_tip_bul(p, vad);
     değişken yad: metin = "";
-    eğer bayt(vt, 0) == 37 { yad = metin_kes(vt, 1, metin_uzunluk(vt) - 1); }
+    eğer bayt(vt, 0) == 37 { yad = ir_tip_soy(vt); }
     değilse { yad = cg_var_ref_bul(p, vad); }
     eğer metin_esit(yad, "") { ver ""; }
     // D-307: mangled mono tip ("Kutu$i32") → base yapı adı.
@@ -3869,7 +3919,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                         değişken esk_bll: metin = p.beklenen_ll;
                         p.beklenen_yapi = ""; p.beklenen_ll = "";
                         eğer bayt(pt, 0) == 37 {
-                            değişken pstrip: metin = metin_kes(pt, 1, metin_uzunluk(pt) - 1);
+                            değişken pstrip: metin = ir_tip_soy(pt);
                             eğer mono_bul(p, pstrip) >= 0 { p.beklenen_yapi = pt; }
                         }
                         eğer bayt(pt, 0) == 123 { p.beklenen_ll = pt; }
@@ -4557,7 +4607,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değişken on: metin = dizi_al(p.a_deg, opnode);
                 değişken ot: metin = cg_var_tip_bul(p, on);
                 p.son_tip = "ptr";
-                eğer bayt(ot, 0) == 37 { p.son_ref = metin_kes(ot, 1, metin_uzunluk(ot) - 1); }
+                eğer bayt(ot, 0) == 37 { p.son_ref = ir_tip_soy(ot); }
                 değilse { p.son_ref = cg_var_ref_bul(p, on); }
                 ver cg_var_bul(p, on);
             }
@@ -4593,7 +4643,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken yuk: metin = "i32";
             eğer metin_esit(dizi_al(p.a_ad, opnode), "TANIMLAYICI") {
                 değişken pref: metin = cg_var_ref_bul(p, dizi_al(p.a_deg, opnode));
-                eğer metin_uzunluk(pref) > 0 { yuk = metin_birlestir("%", pref); }
+                eğer metin_uzunluk(pref) > 0 { yuk = ir_tip_ad(pref); }
                 değilse {
                     değişken sptr: metin = cg_var_pointee_bul(p, dizi_al(p.a_deg, opnode));
                     eğer metin_uzunluk(sptr) > 0 { yuk = sptr; }
@@ -4612,13 +4662,13 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     }
     eğer metin_esit(ad, "YAPI_OLUSTUR") {
         değişken yad: metin = dizi_al(p.a_deg, idx);
-        değişken lltip: metin = metin_birlestir("%", yad);
+        değişken lltip: metin = ir_tip_ad(yad);
         // D-307: beklenen mono yapı ("%Kutu$i32") base'i eşleşiyorsa mangled tip +
         // çözülmüş alan IR'ları kullan (yapi_alan_tip T→i32 fallback verir → yanlış).
         değişken mono_mi: mantıksal = yanlış;
         değişken mfields: metin = "";
         eğer metin_uzunluk(p.beklenen_yapi) > 0 {
-            değişken bstrip: metin = metin_kes(p.beklenen_yapi, 1, metin_uzunluk(p.beklenen_yapi) - 1);
+            değişken bstrip: metin = ir_tip_soy(p.beklenen_yapi);
             değişken bmi: tam32 = mono_bul(p, bstrip);
             eğer bmi >= 0 ve metin_esit(dizi_al(p.mono_yad, bmi), yad) {
                 lltip = p.beklenen_yapi; mono_mi = doğru; mfields = dizi_al(p.mono_fields, bmi);
@@ -4643,7 +4693,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken eski_by: metin = p.beklenen_yapi;
             değişken eski_bll2: metin = p.beklenen_ll;
             eğer bayt(ftip, 0) == 37 {   // '%' → mono yapı alanı
-                değişken fstrip: metin = metin_kes(ftip, 1, metin_uzunluk(ftip) - 1);
+                değişken fstrip: metin = ir_tip_soy(ftip);
                 eğer mono_bul(p, fstrip) >= 0 { p.beklenen_yapi = ftip; }
             }
             eğer bayt(ftip, 0) == 123 { p.beklenen_ll = ftip; }   // '{' → mono çeşit/tagged alanı
@@ -4680,7 +4730,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken nref: metin = p.son_ref;
         // CG7b: struct VALUE ("%..." ile başlar) → extractvalue.
         eğer bayt(ntip, 0) == 37 {
-            değişken yad: metin = metin_kes(ntip, 1, metin_uzunluk(ntip) - 1);
+            değişken yad: metin = ir_tip_soy(ntip);
             // D-307: mangled mono tip ("Kutu$i32") → base ile alan indeks/IR çöz.
             değişken mi: tam32 = mono_bul(p, yad);
             değişken fbase: metin = yad;
@@ -4698,7 +4748,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         // CG7c: ptr (referans) → getelementptr + load.
         eğer metin_esit(nref, "") == yanlış {
-            değişken lltip: metin = metin_birlestir("%", nref);
+            değişken lltip: metin = ir_tip_ad(nref);
             // D-308: nref mangled mono tip ("Kutu$ptr") ise base ile indeks/IR çöz
             // (aksi halde yapi_alan_idx=-1 + i32 fallback → pointer'ı i32'ye kırpardı).
             değişken rmi: tam32 = mono_bul(p, nref);
@@ -4975,7 +5025,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             // D-308: dönüş tipi mono yapı ("%Kutu$ptr") ise construction bağlamı kur
             // (ver Kutu{...}; değişken-annotasyonu yok → cur_ret'ten al). C cur_ret aynası.
             eğer bayt(p.cur_ret, 0) == 37 {
-                değişken cstrip: metin = metin_kes(p.cur_ret, 1, metin_uzunluk(p.cur_ret) - 1);
+                değişken cstrip: metin = ir_tip_soy(p.cur_ret);
                 eğer mono_bul(p, cstrip) >= 0 { p.beklenen_yapi = p.cur_ret; }
             }
             değişken op: metin = ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
@@ -5359,7 +5409,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // D-307: annotasyon mono yapı ("%Kutu$i32") → construction bağlamı kur
         eğer annot == 1 {
             eğer bayt(vtip, 0) == 37 {
-                değişken vstrip: metin = metin_kes(vtip, 1, metin_uzunluk(vtip) - 1);
+                değişken vstrip: metin = ir_tip_soy(vtip);
                 eğer mono_bul(p, vstrip) >= 0 { p.beklenen_yapi = vtip; }
             }
         }
@@ -5446,7 +5496,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken yad: metin = "";
                 eğer bayt(otip, 0) == 37 {   // struct-değer değişkeni → alloca = adres
                     base = cg_var_bul(p, oname);
-                    yad = metin_kes(otip, 1, metin_uzunluk(otip) - 1);
+                    yad = ir_tip_soy(otip);
                 } değilse {                   // ptr → param-alloca'dan yükle
                     değişken lr: tam32 = yeni_reg(p);
                     değişken lrs: metin = reg_str(lr);
@@ -5592,7 +5642,7 @@ işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
     eğer metin_esit(dizi_al(p.a_ad, ic), "TIP_KULLANICI") {
         değişken ir: metin = ll_tip(p, ic);
         eğer bayt(ir, 0) == 37 {
-            değişken nm2: metin = metin_kes(ir, 1, metin_uzunluk(ir) - 1);
+            değişken nm2: metin = ir_tip_soy(ir);
             eğer yapi_var_mi(p, nm2) veya mono_bul(p, nm2) >= 0 { ver nm2; }
         }
         ver "";
@@ -9020,7 +9070,7 @@ işlev lin_dongu_birlestir(p: &değişken Ayr, idx: tam32, base: tam32, n: tam32
 işlev desen_yapi_bagla(p: &değişken Ayr, desen: tam32, sval: metin, sty: metin) -> tam32 {
     eğer metin_uzunluk(sty) == 0 { ver 0; }
     eğer bayt(sty, 0) != 37 { ver 0; }   // '%' değilse yapı değeri değil
-    değişken yad: metin = metin_kes(sty, 1, metin_uzunluk(sty) - 1);
+    değişken yad: metin = ir_tip_soy(sty);
     değişken q: tam32 = 0;
     iken q < dizi_boyut(p.dyf_node) {
         eğer dizi_al(p.dyf_node, q) == desen {

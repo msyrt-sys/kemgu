@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-409 [YÜKSEK] — CODEGEN: Türkçe TİP adlarının IR'da tırnaklanması (2026-08-07)
+
+**Yeni yüzey `test/snapshots`** (81 dosya, kapısız) ölçüldü: **56/62**, ALTI
+sapma — ve D-406 dersi uygulanarak "tek kök" SAYILMADI. İkisi sessiz yanlış
+cevap, biri Türkçe tip adı. Bu artım sonuncusunu kapattı → **57/62**.
+
+**Kusur:** C Türkçe (ASCII-dışı) tip adlarını IR'da TIRNAKLIYOR (`%"Köşe"`),
+self-host tırnaksız `%Köşe` yayıyordu → clang REDDEDER ("expected '=' after
+name"). **Tırnaklama mantığı İŞLEV adları için ZATEN VARDI** (`ir_ad_yaz`;
+`@"dizi.oluştur"` doğru çıkıyordu) — tip adlarına uygulanmamıştı.
+**D-407'nin aynı deseni:** aynı soruyu iki yerde ayrı yanıtlayan kod.
+
+**🎯 KEMGU DİZGİ LİTERALİNDE ÇIPLAK `"` ÜRETİLEMEZ.** Yardımcıyı yazarken
+`"%\""` denedim; ÖLÇTÜM: **`\"` KAÇIŞ DEĞİLDİR** — `metin_uzunluk("a\"b") == 4`,
+yani `\` ve `"` İKİ karakter olarak saklanır (lexer `\"`de dizgiyi bitirmiyor
+ama ikisini de tutuyor). Ham dizgi `r#"..."#` bu konumda P010 veriyor.
+`\n` ile aynı sınıf (D-400). **Çözüm ölçümden çıktı:** iki karakterlik dizginin
+İKİNCİSİNİ kes → `metin_kes("\"", 1, 1)` tek `"` verir (doğrulandı: bayt 34).
+`codegen.kem` başka yerlerde `yb(34)` kullanır; o ÇIKTIYA yazar — tırnağın
+DEĞER olarak gerekmesi farkı yaratıyor.
+
+**İLERİ ve GERİ dönüşüm birlikte gerekti.** `ir_tip_ad` (ad → `%"Ad"`) eklenince
+yapı adını IR tipinden GERİ okuyan 13 yer bozuldu: yalnız `%` soyan eski kod
+`"Köşe"` döndürüyordu → alan araması başarısız, `extractvalue ..., -1` (LLVM
+"expected integer"). `ir_tip_soy` eklendi ve **iki fonksiyon yan yana kondu** ki
+ayrışmasınlar — bu kusurun kök nedeni zaten ayrışmaydı.
+
+**Korpus:** `cg_turkce_tip_adi.kem` (snapshot'tan birebir kopya — uydurmadım).
+**Sabotaj S150** → KIRMIZI, üstelik İKİ dosyayı birden kırıyor (130/132).
+
+**Kalan 5 snapshot sapması — AYRI kökler, hiçbiri varsayılmadı:**
+`ad_cozum_sapma` (`@ic.g` tanımsız) · `asm_round_trip` (**C=42 KEMGU=1**) ·
+`bolge_al_grow` (`@bellek_kopyala` tanımsız) · `cesit_sonuc` (**C=42 KEMGU=3**) ·
+`d1_generic_sonuc_ptr` (`{i8,i32,i32}` tip uyumsuzluğu).
+**İkisi SESSİZ YANLIŞ CEVAP** — link hatalarından önce onlar bakılmalı.
+
+**Kapılar:** `codegen_diff` **132/132** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-408 [YÜKSEK] — YENİ YÜZEY `check_korpus` + kesirli dizi + `ifşa` (2026-08-07)
 
 **Yeni ölçüm yüzeyi.** `test/moduller` doyunca sıradaki kapısız yüzey arandı:
