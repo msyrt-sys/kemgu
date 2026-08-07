@@ -5,6 +5,50 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-406 [YÜKSEK] — CODEGEN: ham işaretçi indekslemesi (`*T` → GEP) (2026-08-07)
+
+**🎯 `test/moduller` 11/18 → 16/18.** Beş dosya birden açıldı; muafiyet 7 → **2**.
+
+**Kusur:** self-host'un INDEKS dalında **ham-işaretçi kolu HİÇ YOKTU**. Her
+indeksleme `@kdl_dizi_al_*` / `@kdl_dizi_yaz_*` (KdlDizi **başlıklı** heap dizi)
+yoluna gidiyordu. `*T` ise düz bellek — başlığı yok. Sonuç iki katlı:
+1. **YANLIŞ LOWERING** — başlıksız bir bloğu KdlDizi sanmak
+2. **TİP HATASI** — `tam64` indeks, i32 parametreli runtime çağrısına
+
+C llvm.c aynası: `getelementptr <pointee>, ptr <base>, i64 <idx>` + load/store.
+Ayrım **POZİTİF** bilgiyle yapılır (`cg_apointee`, D-267); kayıt yoksa eski heap
+yoluna düşülür — bilgi olmadan yol değiştirmek sessiz miscompile riskidir.
+
+**OKUMA ve YAZMA kolları AYRI yerlerde yaşıyor** (INDEKS ifadesi vs ATAMA
+lvalue) → iki ayrı onarım gerekti. İlk onarımdan sonra hata `%44`→`%42`ye
+kaydı ve sınıf aynı kaldı; simetrik kolu bulana kadar bitmedi.
+
+**🎯 ÜÇ TURLUK ASIL DERS — muafiyet listemin GEREKÇESİ YANLIŞTI.** Bu 7 dosyayı
+"hepsi tek kök: dönüş-tipi-güdümlü çıkarsama" diye kaydetmiştim (D-402). Hata
+satırını tek tek izleyince **ÜÇ AYRI kök** çıktı ve **hiçbiri o değildi**:
+`bölge_al` eşlemesi yok (D-405) · `yetki<R>` IR tipi yok (D-404) · `*T`
+indekslemesi heap yoluna düşüyor (D-406). Doğrudan "dönüş-tipi-güdümlü
+çıkarsama" yazmaya başlasaydım **büyük bir özelliği yanlış yere** yazardım.
+> **Muafiyet listesine yazdığın GEREKÇE de bir İDDİADIR — ölç.** "Kalanların
+> hepsi aynı kök" en cazip ve en test edilmemiş varsayımdır.
+
+**Kalan 2, AYRI köklerde:** `ana_ifd` (çapraz-modül ÇEŞİT payload layout'u) ·
+`dizi_yapi` (C=42, KEMGU=127 — link GEÇİYOR, kusur DAVRANIŞTA).
+
+**Korpus:** `test/cg_korpus/cg_ham_isaretci_indeks.kem`. **i64 indeks ŞART** —
+i32 ile heap yolu tesadüfen tip-uyumlu kalır ve dosya yeşil geçer.
+**Şekli kaynaktan aldım:** ilk probe'umda `bellek_al(64) olarak *tam64` yazdım,
+C E002 ile reddetti (`olarak` yalnız sayısal/karakter). Ham işaretçi
+`bölge_al`dan gelir — `kütüphane/dizi.kem`in yaptığı budur. (D-391'in dersi,
+bu oturumda üçüncü tekrarı.)
+
+**Sabotaj:** S146 (okuma kolu) · S147 (yazma kolu) → ikisi de KIRMIZI (129/130).
+
+**Kapılar:** `codegen_diff` **130/130** · `modul_codegen` **16/16 (2 muaf)** ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
 ## D-405 [YÜKSEK] — CODEGEN: `bölge_al` yerleşiği + kök-ölçümünün değeri (2026-08-07)
 
 **Kusur:** `bölge_al(yetki, N)` için IR eşlemesi YOKTU → self-host

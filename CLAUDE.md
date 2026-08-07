@@ -1057,6 +1057,18 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- 🎯 **D-406: `test/moduller` 11/18 → 16/18, muafiyet 7 → 2.** Ham işaretçi
+  indekslemesi (`*T` içinde `d[i]`) heap-dizi yoluna düşüyordu; `*T` düz bellek,
+  KdlDizi **başlığı yok** → hem yanlış lowering hem tip hatası. C aynası:
+  `getelementptr <pointee>, ptr, i64` + load/store. Ayrım POZİTİF bilgiyle
+  (`cg_apointee`); kayıt yoksa eski yola düş. **Okuma ve yazma kolları AYRI
+  yerlerde** → iki onarım.
+- **⚠⚠ MUAFİYET LİSTESİNE YAZDIĞIN GEREKÇE DE BİR İDDİADIR — ÖLÇ.** O 7 dosyayı
+  "hepsi tek kök: dönüş-tipi-güdümlü çıkarsama" diye kaydetmiştim. Hata satırını
+  izleyince **ÜÇ AYRI kök** çıktı ve **hiçbiri o değildi** (D-404 `yetki<R>`,
+  D-405 `bölge_al`, D-406 `*T` indeksleme). Doğrudan o özelliği yazsaydım büyük
+  bir işi YANLIŞ YERE yapardım. "Kalanların hepsi aynı kök" en cazip ve en test
+  edilmemiş varsayımdır.
 - ✓ **D-405: `bölge_al` yerleşiği.** C **argümanları YOK SAYAR**, parametresiz
   `@kdl_global_bolge_al()` çağırır → arite farklı, salt ad eşlemesi YETMEZ.
   **Bu kök "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA duruyordu**:

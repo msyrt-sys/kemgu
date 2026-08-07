@@ -1,0 +1,48 @@
+// D-406: HAM İŞARETÇİ indekslemesi (`d: *T` içinde `d[i]`) heap-dizi yoluna
+// düşüyordu.
+//
+// Self-host'un INDEKS dalında ham-işaretçi kolu HİÇ YOKTU: her indeksleme
+// `@kdl_dizi_al_*` / `@kdl_dizi_yaz_*` (KdlDizi BAŞLIKLI heap dizi) yoluna
+// gidiyordu. `*T` ise düz bellek — başlığı yok. Sonuç iki katlıydı:
+//   1. YANLIŞ LOWERING: başlıksız bir bloğu KdlDizi sanmak
+//   2. TİP HATASI: `tam64` indeks, i32 parametreli runtime çağrısına
+//
+// C llvm.c aynası: `getelementptr <pointee>, ptr <base>, i64 <idx>` + load/store.
+// Ayrım POZİTİF bilgiyle yapılır (`cg_apointee` kaydı); kayıt yoksa eski heap
+// yoluna düşülür — bilgi olmadan yol değiştirmek sessiz miscompile riskidir.
+//
+// OKUMA ve YAZMA kolları AYRI yerlerde yaşıyor (INDEKS ifadesi vs ATAMA lvalue)
+// → İKİ ayrı onarım gerekti. Bu dosya ikisini de uyandırır.
+//
+// ⚠ NEDEN i64 İNDEKS ŞART: i32 indeksle heap yolu tesadüfen tip-uyumlu kalır ve
+// dosya YEŞİL geçer. Kusuru gözlenebilir kılan `tam64` indekstir.
+//
+// ⚠ ŞEKLİ KAYNAKTAN ALDIM: ilk probe'umda `bellek_al(64) olarak *tam64` yazdım,
+// C onu E002 ile REDDETTİ (`olarak` yalnız sayısal/karakter). Ham işaretçi
+// `bölge_al`dan gelir — `kütüphane/dizi.kem`in yaptığı budur.
+işlev topla_ham(n: tam64) -> tam64 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken ham: *tam64 = bölge_al(y, n);
+    geri_al(y);
+    güvensiz {
+        // YAZMA kolu (ATAMA lvalue): GEP + store olmalı, kdl_dizi_yaz_* DEĞİL.
+        değişken i: tam64 = 0;
+        iken i < n {
+            ham[i] = i * (2 olarak tam64);
+            i = i + (1 olarak tam64);
+        }
+        // OKUMA kolu (INDEKS ifadesi): GEP + load olmalı.
+        değişken s: tam64 = 0;
+        değişken j: tam64 = 0;
+        iken j < n {
+            s = s + ham[j];
+            j = j + (1 olarak tam64);
+        }
+        ver s;
+    }
+}
+
+işlev main() -> tam32 {
+    // n=7 → 0+2+4+6+8+10+12 = 42
+    ver topla_ham(7 olarak tam64) olarak tam32;
+}

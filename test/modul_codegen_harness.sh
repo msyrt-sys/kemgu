@@ -25,18 +25,24 @@ if [ ! -x "$CODEGEN" ]; then
 fi
 
 # ---- MUAFİYET LİSTESİ (KÜÇÜLMEK ZORUNDA — asla büyümemeli) ----
-# Kapı kurulduğunda 11/18 geçiyordu. Kalan 7'nin TAMAMI tek kök: çapraz-modül
-# generic monomorfizasyonunun DÖNÜŞ-TİPİ-GÜDÜMLÜ kısmı.
+# Kapı 7 muafiyetle kuruldu (11/18). D-404 (`yetki<R>`), D-405 (`bölge_al`) ve
+# D-406 (ham-işaretçi indeksleme) beşini kapattı → **16/18**.
 #
-# D-401 generic işlev mono'sunu ekledi ama V1'i yalnız ÇIPLAK `T` parametresinden
-# çıkarsar. `kütüphane/dizi.kem` imzaları bunu aşıyor:
-#     oluştur<T>(böl: yetki<Bellek>) -> Liste<T>   ← T YALNIZ dönüşte
-#     boy<T>(l: &Liste<T>) -> tam64                ← T İÇ İÇE (&Liste<T>)
-# T, `değişken l: dizi::Liste<tam64>` annotasyonundan gelmeli. Ayrıca
-# `yetki<Bellek>` parametresi `%kdl_yetki` taşınmalı, self-host `i32` sanıyor.
+# ⚠ TEŞHİS TARİHİ — ilk yazdığım gerekçe YANLIŞTI. Bu listeyi "hepsi tek kök:
+# dönüş-tipi-güdümlü çıkarsama" diye açıklamıştım. Hata satırını tek tek
+# izleyince ÜÇ AYRI kök çıktı ve hiçbiri o değildi:
+#     bölge_al eşlemesi yok · yetki<R> IR tipi yok · `*T` indekslemesi heap-dizi
+#     yoluna düşüyor
+# "Dönüş-tipi-güdümlü çıkarsama" yazmaya başlasaydım YANLIŞ YERİ onarırdım.
+#
+# KALAN 2, AYRI köklerde:
+#   ana_ifd   — çapraz-modül ÇEŞİT payload'u: `{ i8, i64, ptr, ptr, ptr, ptr }`
+#               beklenen yerde i32. Tagged-union layout çözümü.
+#   dizi_yapi — C=42, KEMGU=127 (çalışma-anı çökmesi). Link GEÇİYOR, yani IR
+#               geçerli; kusur DAVRANIŞTA — ayrı teşhis ister.
 #
 # KURAL: buraya satır EKLEMEK kapıyı zayıflatmaktır. Önce KÖKÜ onar.
-MUAF="ana_ifd ana_kap ana_kap_coklu dizi_coklu dizi_kullan dizi_nitelikli_param dizi_yapi"
+MUAF="ana_ifd dizi_yapi"
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 link_retry() {
@@ -59,7 +65,7 @@ for f in test/moduller/*.kem; do
     b=$(basename "$f" .kem)
     grep -q "işlev main()" "$f" 2>/dev/null || continue
     if muaf_mi "$b"; then
-        echo "  ⚠ $b — MUAF (dönüş-tipi-güdümlü mono; harness başlığına bak)"
+        echo "  ⚠ $b — MUAF (ayrı kök; harness başlığına bak)"
         muaf_say=$((muaf_say+1)); continue
     fi
 

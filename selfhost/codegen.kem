@@ -4743,6 +4743,36 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken elem: metin = p.son_elem;
         değişken elem_ic2: metin = dizi_ic_bul(p, dizi_al(p.cocuk, cb));
         değişken i2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+        değişken ityp: metin = p.son_tip;   // indeksin doğal IR tipi (i32/i64)
+        // D-406: HAM İŞARETÇİ indekslemesi (`d: *T` içinde `d[i]`) → GEP + load.
+        // Bu kol YOKTU: her indeksleme heap-dizi yoluna (`@kdl_dizi_al_*`)
+        // gidiyordu. `kütüphane/dizi.kem`in `al<T>` gövdesi `güvensiz { ver d[i]; }`
+        // biçiminde ham işaretçi okur; self-host oraya `call i32 @kdl_dizi_al_tam`
+        // yayıyordu — hem YANLIŞ LOWERING (KdlDizi başlığı olmayan bir bloğu heap
+        // dizi sanmak) hem TİP HATASI (i64 indeks i32 parametreye).
+        // C llvm.c aynası: `getelementptr <pointee>, ptr <base>, i64 <idx>` + load.
+        // Heap dizi ile ayrım POINTEE KAYDINDAN yapılır (`cg_apointee`, D-267);
+        // kayıt yoksa eski heap yoluna düşülür — pozitif bilgi olmadan yol
+        // değiştirmek sessiz miscompile riski taşır.
+        değişken pte: metin = "";
+        eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb)), "TANIMLAYICI") {
+            pte = cg_var_pointee_bul(p, dizi_al(p.a_deg, dizi_al(p.cocuk, cb)));
+        }
+        eğer metin_esit(pte, "") == yanlış {
+            // İndeks i64 olmalı (GEP i64 alır); dar gelirse genişlet.
+            değişken gi: metin = i2;
+            eğer metin_esit(ityp, "i64") == yanlış {
+                p.son_tip = ityp; gi = int_uydur(p, i2, "i64", 0);
+            }
+            değişken gr: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr "); yaz_str(pte);
+            yaz_str(", ptr "); yaz_str(arr); yaz_str(", i64 "); yaz_str(gi); yb(10);
+            değişken lr: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(lr); yaz_str(" = load "); yaz_str(pte);
+            yaz_str(", ptr "); yaz_str(gr); yb(10);
+            p.son_tip = pte; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver lr;
+        }
         eğer metin_esit(elem, "") { elem = "i32"; }
         eğer dizi_eleman_yapi_mi(elem) {
             // D-341/D-342: BY-VALUE okunur (kdl_dizi_al_yapi + load). Skaler
@@ -5412,6 +5442,28 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken lcb: tam32 = dizi_al(p.a_cb, lhs);
             değişken taban: metin = ifade_uret(p, dizi_al(p.cocuk, lcb));       // dizi → ptr
             değişken iy2: metin = ifade_uret(p, dizi_al(p.cocuk, lcb + 1));     // indeks → i32
+            değişken ity2: metin = p.son_tip;                                   // indeksin doğal IR tipi
+            // D-406: HAM İŞARETÇİ yazma (`d: *T` içinde `d[i] = v`) → GEP + store.
+            // Okuma kolunun (INDEKS ifadesi) simetriği; ikisi ayrı yerlerde
+            // yaşadığı için AYRI onarım gerekti. `kütüphane/dizi.kem`in
+            // `kapasiteAyır`/`büyü`/`ekle`si bu yolu kullanır.
+            değişken pte2: metin = "";
+            eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, lcb)), "TANIMLAYICI") {
+                pte2 = cg_var_pointee_bul(p, dizi_al(p.a_deg, dizi_al(p.cocuk, lcb)));
+            }
+            eğer metin_esit(pte2, "") == yanlış {
+                değişken gi2: metin = iy2;
+                eğer metin_esit(ity2, "i64") == yanlış {
+                    p.son_tip = ity2; gi2 = int_uydur(p, iy2, "i64", 0);
+                }
+                değişken pv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                değişken g3: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(g3); yaz_str(" = getelementptr "); yaz_str(pte2);
+                yaz_str(", ptr "); yaz_str(taban); yaz_str(", i64 "); yaz_str(gi2); yb(10);
+                yaz_str("  store "); yaz_str(pte2); yaz_str(" "); yaz_str(pv);
+                yaz_str(", ptr "); yaz_str(g3); yb(10);
+                ver 0;
+            }
             değişken vy2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));      // değer
             değişken vty2: metin = p.son_tip;                                  // değer LLVM tipi
             eğer dizi_eleman_yapi_mi(vty2) {   // D-342: by-value eleman
