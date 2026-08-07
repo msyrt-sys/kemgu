@@ -1047,9 +1047,19 @@ Geniş kapı doyunca ölçüm `test/moduller/`e çevrildi. Orada self-host `--ch
     hipotezi ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze gittim; doğru
     hamle en baştan ARA DEĞERİ BASTIRMAKTI. `mat`in çalışması TESADÜFTÜ — çöpü
     izleyen `//` yorumu satırı yutuyordu.
-  - **Kalan 7 — TEK sınıf: çapraz-modül TİP çözümü** (`ana_ifd`, `ana_kap`,
-    `ana_kap_coklu`, `dizi_*`), hepsi `'%N' i32 but expected 'ptr'`. Ad değil tip;
-    ayrı alt-sistem.
+  - **Kalan 7 — TEK sınıf: çapraz-modül GENERIC MONOMORFİZASYONU** (`ana_ifd`,
+    `ana_kap`, `ana_kap_coklu`, `dizi_*`), hepsi `'%N' i32 but expected 'ptr'`.
+    Ad çözümü DEĞİL. Ölçüldü (`dizi_kullan`):
+    ```
+    C:    define i64 @dizi.al$i64(ptr %rho, ptr %l, i64 %i, i64 %varsayilan)
+          define void @dizi.ekle$i64(ptr, ptr, %kdl_yetki, i64)
+    SELF: define i32 @dizi.al(ptr %rho, ptr %a0, i64 %a1, i32 %a2)
+    ```
+    İki eksik: (1) çapraz-modül **monomorfizasyon** — nitelikli tip annotation'ı
+    (`değişken l: dizi::Liste<tam64>`) T'yi RHS çağrısına besler ve `$i64` soneki
+    üretir; self-host tek bir jenerik-olmayan gövde yayıp T'yi `i32` sanıyor.
+    (2) `yetki<R>` parametresi `%kdl_yetki` taşınmalı, `i32` değil.
+    **Ayrı ve büyük alt-sistem** — ad-mangling işiyle (D-398/400) karıştırma.
   - **`modul_yukle` (--check) aynı transitif-dizin kusurunu taşıyor ama MASKELİ:**
     check yalnız isim topluyor, `ana_zincir` `mat`in adlarına ihtiyaç duymuyor.
 - **YAN BULGU — check paritesi SIĞ:** `mat::topla(20)` (yanlış arite) C'de
