@@ -1,0 +1,23 @@
+// D-405: `bölge_al(yetki, N)` yerleşiğinin IR eşlemesi YOKTU.
+//
+// Self-host `call i32 @"bölge_al"(...)` üretiyordu: hem TANIMSIZ SEMBOL hem
+// YANLIŞ TİP. C ise ARGÜMANLARI YOK SAYIP parametresiz `@kdl_global_bolge_al()`
+// çağırır (ölçüldü, tahmin değil) — yani ARİTE FARKLI olduğu için salt ad
+// eşlemesi (`builtin_kdl_ad`) YETMEZ, özel dal gerekir.
+//
+// ⚠ BU KÖK, "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA duruyordu:
+// `kütüphane/dizi.kem`in `oluştur`u `bölge_al` çağırıyor ve kalan 7 modül
+// dosyasının hepsi orada takılıyordu. Kökü ölçmeden büyük bir çıkarsama
+// özelliği yazmaya kalksaydım YANLIŞ YERİ onarırdım.
+işlev bolgeyi_al() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken b: *tam8 = bölge_al(y, 0);   // ödünç alır, TÜKETMEZ
+    geri_al(y);                            // yetkiyi tüket (CP005)
+    // Bölge işaretçisinin kendisini denetlemiyoruz (adres kararsız); önemli olan
+    // çağrının GEÇERLİ IR üretmesi ve ptr dönmesi.
+    ver 42;
+}
+
+işlev main() -> tam32 {
+    ver bolgeyi_al();
+}

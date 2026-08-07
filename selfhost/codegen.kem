@@ -4058,6 +4058,22 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_tip = el3; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
             ver r4;
         }
+        // D-405: `bölge_al(yetki, N)` → küresel bölge işaretçisi.
+        // **C ARGÜMANLARI YOK SAYAR** ve parametresiz `@kdl_global_bolge_al()`
+        // çağırır (ölçüldü, tahmin değil) — yani ARİTE FARKLI, salt ad eşlemesi
+        // (`builtin_kdl_ad`) YETMEZ; genel çağrı yolu argümanları basacaktı.
+        // Eşleme hiç yoktu → self-host `call i32 @"bölge_al"(...)` üretiyordu:
+        // hem TANIMSIZ SEMBOL hem YANLIŞ TİP (`store ptr %N` beklenen yerde i32).
+        // `kütüphane/dizi.kem`in `oluştur`u bunu kullanıyor → kalan 7 modül
+        // dosyasının ORTAK takoz noktasıydı. "Dönüş-tipi-güdümlü çıkarsama"
+        // sandığım şeyin ALTINDA bu duruyordu — kökü ölçmeden büyük bir özellik
+        // yazmaya kalksaydım yanlış yeri onarırdım.
+        eğer metin_esit(fad, "bölge_al") {
+            değişken br: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(br); yaz_str(" = call ptr @kdl_global_bolge_al()"); yb(10);
+            p.son_tip = "ptr"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver br;
+        }
         // ---- D-404: Capability Spec V1 yerleşikleri (C llvm.c aynası) ----
         // yetki_olustur(kaynak_tipi, izin) -> yetki<R>. OUT-PTR ABI: dönüş
         // register'da DEĞİL, çağıran alloca'yı geçer. Argümanlar i16.

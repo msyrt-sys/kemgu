@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-405 [YÜKSEK] — CODEGEN: `bölge_al` yerleşiği + kök-ölçümünün değeri (2026-08-07)
+
+**Kusur:** `bölge_al(yetki, N)` için IR eşlemesi YOKTU → self-host
+`call i32 @"bölge_al"(...)` üretiyordu: hem **tanımsız sembol** hem **yanlış tip**.
+
+**Arite farkı — salt ad eşlemesi YETMEZ.** C `bölge_al`ın **argümanlarını YOK
+SAYAR** ve parametresiz `@kdl_global_bolge_al()` çağırır (ölçüldü). Bu yüzden
+`builtin_kdl_ad`e satır eklemek yanlış olurdu (genel çağrı yolu argümanları
+basardı) — özel dal gerekti. İlk denemem ad eşlemesiydi, arite farkını görünce
+geri aldım.
+
+**🎯 ASIL DERS — bu kök, "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA
+duruyordu.** Kalan 7 modül dosyasının hepsi `kütüphane/dizi.kem`in `oluştur`unda
+takılıyordu ve `oluştur` `bölge_al` çağırıyor. Ben D-404'ten sonra doğrudan
+"dönüş-tipi-güdümlü çıkarsama" yazmaya başlayacaktım — **kökü ölçmeden büyük bir
+özellik yazsaydım YANLIŞ YERİ onarırdım** ve muhtemelen "çalışmıyor" deyip daha
+da büyük bir şey yazardım. Hata satırını (`store ptr %5, ptr %1`) tek tek
+izlemek bu turda iki ayrı kök açtı (`bölge_al`, sonra i64→i32 indeks daraltma).
+
+**Kalan takoz (yeni, ölçüldü):** `%44 = load i64` → `call i32 @kdl_dizi_al_tam(ptr, i32 %44)`
+— heap dizi erişiminde `tam64` indeks i32'ye DARALTILMIYOR. Ayrı ve bounded.
+`test/moduller` **11/18'de sabit** ama hata noktası `%5`ten `%44`e ilerledi.
+
+**Korpus:** `test/cg_korpus/cg_bolge_al.kem` (yetki + bölge_al + geri_al).
+**Sabotaj S145** → KIRMIZI (128/129).
+
+**⚠ ÜÇÜNCÜ KEZ AYNI TUZAK:** sürücü kapısı **128/129 kırmızı** raporladı — ama o
+koşum **S145 sabotajı uygulanmışken** sürüyordu. Kapı sonucu ARTEFAKTTI.
+**Uzun koşum sürerken kaynağa dokunma** kuralı bu oturumda üç kez ısırdı
+(D-402'de `test_tumu`, burada iki kez). Kapı başlatınca kaynağı DONDUR.
+
+**Kapılar:** `codegen_diff` **129/129** · `modul_codegen` 11/11 (7 muaf).
+
+---
+
 ## D-404 [YÜKSEK] — CODEGEN: `yetki<R>` (Capability Spec V1) self-host'ta (2026-08-07)
 
 **Kusur:** `ll_tip`te `TIP_YETKI` dalı YOKTU (i32 fallback) ve

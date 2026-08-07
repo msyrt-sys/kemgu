@@ -1057,6 +1057,14 @@ LLVM-RED'den çıkıp çalışıyor.
   de yayılmaya DEVAM eder (C atlar; C'nin çıkarsaması tam). Base'i atlamayı
   denedim → **regresyon 11/18 → 8/18**; ölçümle yakalandı, geri alındı.
 - `test/moduller` 11/18'de SABİT — kalan 7 dönüş-tipi-güdümlü çıkarsama ister.
+- ✓ **D-405: `bölge_al` yerleşiği.** C **argümanları YOK SAYAR**, parametresiz
+  `@kdl_global_bolge_al()` çağırır → arite farklı, salt ad eşlemesi YETMEZ.
+  **Bu kök "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA duruyordu**:
+  kalan 7 modül dosyası `dizi.kem`in `oluştur`unda takılıyordu ve o `bölge_al`
+  çağırıyor. **Kökü ölçmeden büyük bir özellik yazsaydım yanlış yeri onarırdım.**
+  Hata satırını tek tek izlemek bu turda iki kök açtı.
+- **KALAN TAKOZ (ölçüldü):** `%44 = load i64` → `call i32 @kdl_dizi_al_tam(ptr, i32 %44)`
+  — heap dizi erişiminde `tam64` indeks i32'ye DARALTILMIYOR. Ayrı ve bounded.
 - ✓ **D-404: `yetki<R>` self-host codegen'de** (`%kdl_yetki`, OUT-PTR ABI).
   **⚠ ÖRTÜK KAPSAM DELİĞİ:** `yetki` kullanan tek dosya `kem_heap.kem` ve onun
   C oracle'ı host'ta LİNKLENMİYOR (`kdl_mmio_oku32` bare-metal) → `codegen_genis`
