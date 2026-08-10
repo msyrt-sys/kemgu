@@ -1085,6 +1085,21 @@ LLVM-RED'den çıkıp çalışıyor.
   doğruluyor, **codegen'de DAL YOK** → tüm blok yok sayılıyor, çıktı değişkenleri
   başlangıç değerinde kalıyor. Link hatası yok, IR geçerli — **sessiz yanlış
   cevap**, üstelik `güvensiz` blokta çalışan kod için.
+  **✅ HEDEF BİÇİM TAM ÖLÇÜLDÜ (D-415 sonrası; üç çıktı-arite'si de C'den
+  okundu, hiçbiri varsayılmadı):**
+  ```
+  0 çıktı : call void asm sideeffect "<şablon>", "<bozulanlar>"()
+  1 çıktı : call <T>  asm sideeffect "<şablon>", "=r,<bozulanlar>"()
+            store <T> %r, ptr <slot>            ← STRUCT DEĞİL, düz dönüş
+  2+ çıktı: call { T0, T1 } asm sideeffect "<şablon>", "=r,=r,r,~{cc}"(i32 %6)
+            %e0 = extractvalue { T0, T1 } %r, 0  +  store T0 %e0, ptr <slot0>
+            %e1 = extractvalue { T0, T1 } %r, 1  +  store T1 %e1, ptr <slot1>
+  ```
+  Kısıt SIRASI: **çıktılar → girdiler → bozulanlar** (`"=r,=r,r,~{cc}"`).
+  Şablonda satır sonu **`\0D\0A`** olarak kaçışlanır (kaynak CRLF).
+  Gereken yan-kanallar (`asm_node` ile paralel): şablon · çıktı kısıtları ·
+  çıktı DEĞİŞKEN adları · girdi kısıtları · bozulanlar.
+
   **ONARIM PLANI (ölçüldü):** parser ŞU AN kritik veriyi ATIYOR —
   `parse_satirici_asm` yalnız `girdi` ifadelerini AST çocuğu yapıyor (C'nin
   `--ast` paritesi için) ve `mimari`yi yan-kanala koyuyor; **şablon, çıktı
