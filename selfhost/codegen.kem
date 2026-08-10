@@ -184,6 +184,11 @@ yapı Ayr {
     al_ad: Dizi<metin>;      // D-400: `kullan <yol> olarak <ad>` — alias adı
     al_yol: Dizi<metin>;     // D-400: aynı indekste gerçek modül yolu
     asm_node: Dizi<tam32>;   // D-373: SATIRICI_ASM düğümü — `mimari:` etiketi (AS001)
+    asm_sab: Dizi<metin>;    // D-416: şablon (ham dizgi içeriği)
+    asm_ck: Dizi<metin>;     // D-416: çıktı kısıtları, "," ile birleşik ("=r,=r")
+    asm_cv: Dizi<metin>;     // D-416: çıktı DEĞİŞKEN adları, "," ile birleşik ("s,b")
+    asm_gk: Dizi<metin>;     // D-416: girdi kısıtları, "," ile birleşik ("r")
+    asm_bz: Dizi<metin>;     // D-416: bozulanlar, "," ile birleşik ("~{cc}")
     asm_mim: Dizi<metin>;    // D-373: asm_node ile paralel — etiketteki mimari adı
     gp_ad: Dizi<metin>;      // D-370: generic tip parametresi ADLARI (T011 muafiyeti)
     gp_sahip: Dizi<metin>;   // D-369: generic bound tablosu — sahip tip adı
@@ -1556,12 +1561,104 @@ işlev asm_kisit_atla(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") { ilerle(p); ver 1; }
     p.hata_say = p.hata_say + 1; ver 0;
 }
+// D-416: dizgi simgesini TÜKETMEDEN ÖNCE değerini al. `asm_kisit_atla` yalnız
+// tüketiyordu; şablon/kısıt/bozulan metinleri BÖYLECE ATILIYORDU ve codegen'in
+// asm yayması imkânsızdı. Düğüme alan eklemek `--ast` paritesini bozacağı için
+// yan-kanal (D-373 `asm_mim` deseni).
+işlev asm_kisit_al(p: &değişken Ayr) -> metin {
+    eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") {
+        değişken v: metin = sim_lex(p);
+        ilerle(p);
+        // ⚠ `sim_lex` HAM SİMGE METNİNİ verir, dizgi DEĞERİNİ değil: `"=r"`
+        // tırnaklarıyla, `r#"..."#` ise sınırlayıcılarıyla gelir. Soyulmazsa
+        // IR'a `""=r""` ve `r#\22...\22#` sızıyordu (ölçüldü).
+        değişken n: tam32 = metin_uzunluk(v);
+        eğer n >= 4 {
+            eğer bayt(v, 0) == 114 ve bayt(v, 1) == 35 ve bayt(v, 2) == 34 {
+                ver metin_kes(v, 3, n - 5);      // r#"..."#  → içerik
+            }
+        }
+        eğer n >= 2 {
+            eğer bayt(v, 0) == 34 ve bayt(v, n - 1) == 34 {
+                ver metin_kes(v, 1, n - 2);      // "..."     → içerik
+            }
+        }
+        ver v;
+    }
+    p.hata_say = p.hata_say + 1;
+    ver "";
+}
+// D-416: "," ile listeye ekle (boşsa ilk öğe).
+işlev vir_ekle(liste: metin, oge: metin) -> metin {
+    eğer metin_uzunluk(liste) == 0 { ver oge; }
+    ver metin_birlestir(metin_birlestir(liste, ","), oge);
+}
+// D-416: "," ile birleşik listede öğe sayısı ("" → 0).
+işlev liste_say(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer n == 0 { ver 0; }
+    değişken c: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < n { eğer bayt(s, i) == 44 { c = c + 1; } i = i + 1; }
+    ver c;
+}
+// D-416: "," ile birleşik listenin k. öğesi (0-tabanlı).
+işlev liste_oge(s: metin, k: tam32) -> metin {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken bas: tam32 = 0;
+    değişken idx: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i <= n {
+        eğer (i == n) veya (bayt(s, i) == 44) {
+            eğer idx == k { ver metin_kes(s, bas, i - bas); }
+            idx = idx + 1;
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    ver "";
+}
+// D-416: SATIRICI_ASM düğümünün yan-kanal indeksi (-1 = yok).
+işlev asm_kanal_idx(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.asm_node) {
+        eğer dizi_al(p.asm_node, i) == idx { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// D-416: asm şablonunu TIRNAKLI ve KAÇIŞLI yaz. C satır sonlarını `\0D\0A`
+// olarak kaçışlıyor (kaynak CRLF); ham CR/LF LLVM dizgisinde geçersizdir.
+// Ters-bölü de kaçışlanmalı (`\5C`), yoksa şablondaki `\` LLVM'e kaçış gibi gelir.
+işlev asm_sablon_yaz(s: metin) -> tam32 {
+    yb(34);
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam32 = bayt(s, i);
+        // ⚠ KEMGU'da `\\` DE KAÇIŞ DEĞİL (D-400/D-409 ile aynı sınıf): `"\\0D"`
+        // İKİ ters-bölü basar. Tek ters-bölü için bayt 92 doğrudan yazılır.
+        eğer c == 13 { yb(92); yaz_str("0D"); }
+        değilse { eğer c == 10 { yb(92); yaz_str("0A"); }
+        değilse { eğer c == 34 { yb(92); yaz_str("22"); }
+        değilse { eğer c == 92 { yb(92); yaz_str("5C"); }
+        değilse { yb(c); } } } }
+        i = i + 1;
+    }
+    yb(34);
+    ver 0;
+}
 işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // satıriçi_asm
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
     değişken mim: metin = "";          // D-373: `mimari:` etiketi (AS001 yan-kanalı)
+    değişken sab: metin = "";          // D-416: şablon
+    değişken ck: metin = "";           // D-416: çıktı kısıtları
+    değişken cv: metin = "";           // D-416: çıktı değişken adları
+    değişken gk: metin = "";           // D-416: girdi kısıtları
+    değişken bz: metin = "";           // D-416: bozulanlar
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
@@ -1574,23 +1671,27 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 bekle(p, "TANIMLAYICI");
             } değilse {
             eğer metin_esit(lx, "şablon") {
-                ilerle(p); bekle(p, "IKI_NOKTA"); asm_kisit_atla(p);
+                ilerle(p); bekle(p, "IKI_NOKTA"); sab = asm_kisit_al(p);   // D-416
             } değilse {
             eğer metin_esit(lx, "çevrim") {
                 ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p);
             } değilse {
             eğer metin_esit(lx, "çıktı") {
-                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                ilerle(p); bekle(p, "SOL_PAREN");
+                ck = vir_ekle(ck, asm_kisit_al(p));                        // D-416
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+                cv = vir_ekle(cv, sim_lex(p));   // D-416: çıktı DEĞİŞKEN adı
                 bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
             } değilse {
             eğer metin_esit(lx, "girdi") {
-                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
+                ilerle(p); bekle(p, "SOL_PAREN");
+                gk = vir_ekle(gk, asm_kisit_al(p));                        // D-416
                 bekle(p, "VIRGUL"); dizi_ekle(kids, parse_ifade(p)); bekle(p, "SAG_PAREN");
             } değilse {
             eğer metin_esit(lx, "bozulan") {
-                ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p); bekle(p, "SAG_PAREN");
+                ilerle(p); bekle(p, "SOL_PAREN");
+                bz = vir_ekle(bz, asm_kisit_al(p)); bekle(p, "SAG_PAREN"); // D-416
             } değilse {
                 p.hata_say = p.hata_say + 1; ilerle(p);   // bilinmeyen clause
             } } } } } }
@@ -1599,6 +1700,8 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     bekle(p, "SAG_SUSLU");
     değişken nd: tam32 = dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
     dizi_ekle(p.asm_node, nd); dizi_ekle(p.asm_mim, mim);   // D-373
+    dizi_ekle(p.asm_sab, sab); dizi_ekle(p.asm_ck, ck);     // D-416
+    dizi_ekle(p.asm_cv, cv); dizi_ekle(p.asm_gk, gk); dizi_ekle(p.asm_bz, bz);
     ver nd;
 }
 işlev parse_deyim(p: &değişken Ayr) -> tam32 {
@@ -5098,6 +5201,97 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken i: tam32 = 0;
         iken i < cs { deyim_uret(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
         cg_kapsam_kapat(p, kapsam_bas);
+        ver 0;
+    }
+    // D-416: satıriçi_asm emisyonu. Öncesinde bu dal YOKTU → tüm blok sessizce
+    // düşüyor, çıktı değişkenleri başlangıç değerinde kalıyordu (`asm_round_trip`:
+    // C=42, KEMGU=1). Link hatası yok, IR geçerli — SESSİZ YANLIŞ CEVAP, üstelik
+    // `güvensiz` blokta çalışan kod için.
+    // Biçim C'den ÖLÇÜLDÜ (üç çıktı-aritesi AYRI AYRI, hiçbiri varsayılmadı):
+    //   0 çıktı : call void asm sideeffect "<ş>", "<bozulanlar>"()
+    //   1 çıktı : call <T>  asm sideeffect "<ş>", "=r,<boz>"()  + store  (STRUCT DEĞİL)
+    //   2+ çıktı: call { T0, T1 } ... + extractvalue + store (her çıktı için)
+    // Kısıt SIRASI: çıktılar → girdiler → bozulanlar.
+    eğer metin_esit(ad, "SATIRICI_ASM") {
+        değişken ai: tam32 = asm_kanal_idx(p, idx);
+        eğer ai < 0 { ver 0; }
+        değişken sab: metin = dizi_al(p.asm_sab, ai);
+        değişken ck: metin = dizi_al(p.asm_ck, ai);
+        değişken cv: metin = dizi_al(p.asm_cv, ai);
+        değişken gk: metin = dizi_al(p.asm_gk, ai);
+        değişken bz: metin = dizi_al(p.asm_bz, ai);
+        değişken nc: tam32 = liste_say(ck);
+        // Girdi operandları: AST çocukları (parser yalnız onları çocuk yapıyor).
+        değişken gcb: tam32 = dizi_al(p.a_cb, idx);
+        değişken gcs: tam32 = dizi_al(p.a_cs, idx);
+        değişken gv: Dizi<metin> = [];
+        değişken gt: Dizi<metin> = [];
+        değişken gi: tam32 = 0;
+        iken gi < gcs {
+            dizi_ekle(gv, ifade_uret(p, dizi_al(p.cocuk, gcb + gi)));
+            dizi_ekle(gt, p.son_tip);
+            gi = gi + 1;
+        }
+        // Çıktı tipleri: değişkenlerin KAYITLI IR tipinden (annotasyon değil —
+        // çıktı bir lvalue'dur ve slot tipi tek gerçektir).
+        değişken ot: Dizi<metin> = [];
+        değişken oi: tam32 = 0;
+        iken oi < nc {
+            değişken oty: metin = cg_var_tip_bul(p, liste_oge(cv, oi));
+            eğer metin_esit(oty, "") { oty = "i32"; }
+            dizi_ekle(ot, oty);
+            oi = oi + 1;
+        }
+        değişken rt: metin = "void";
+        eğer nc == 1 { rt = dizi_al(ot, 0); }
+        eğer nc > 1 {
+            değişken agg: metin = "{ ";
+            değişken q: tam32 = 0;
+            iken q < nc {
+                eğer q > 0 { agg = metin_birlestir(agg, ", "); }
+                agg = metin_birlestir(agg, dizi_al(ot, q));
+                q = q + 1;
+            }
+            rt = metin_birlestir(agg, " }");
+        }
+        değişken kis: metin = ck;
+        eğer metin_uzunluk(gk) > 0 { kis = vir_ekle(kis, gk); }
+        eğer metin_uzunluk(bz) > 0 { kis = vir_ekle(kis, bz); }
+        değişken rr: metin = "";
+        eğer nc > 0 { rr = reg_str(yeni_reg(p)); yaz_str("  "); yaz_str(rr); yaz_str(" = "); }
+        değilse { yaz_str("  "); }
+        yaz_str("call "); yaz_str(rt); yaz_str(" asm sideeffect ");
+        asm_sablon_yaz(sab); yaz_str(", ");
+        değişken tir2: metin = metin_kes("\"", 1, 1);
+        yaz_str(tir2); yaz_str(kis); yaz_str(tir2); yaz_str("(");
+        değişken gj: tam32 = 0;
+        iken gj < gcs {
+            eğer gj > 0 { yaz_str(", "); }
+            yaz_str(dizi_al(gt, gj)); yaz_str(" "); yaz_str(dizi_al(gv, gj));
+            gj = gj + 1;
+        }
+        yaz_str(")"); yb(10);
+        eğer nc == 1 {
+            değişken s1: metin = cg_var_bul(p, liste_oge(cv, 0));
+            eğer metin_esit(s1, "") == yanlış {
+                yaz_str("  store "); yaz_str(dizi_al(ot, 0)); yaz_str(" "); yaz_str(rr);
+                yaz_str(", ptr "); yaz_str(s1); yb(10);
+            }
+        }
+        eğer nc > 1 {
+            değişken w: tam32 = 0;
+            iken w < nc {
+                değişken ev: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(ev); yaz_str(" = extractvalue "); yaz_str(rt);
+                yaz_str(" "); yaz_str(rr); yaz_str(", "); yaz_str(tam64_str(w olarak tam64)); yb(10);
+                değişken sw: metin = cg_var_bul(p, liste_oge(cv, w));
+                eğer metin_esit(sw, "") == yanlış {
+                    yaz_str("  store "); yaz_str(dizi_al(ot, w)); yaz_str(" "); yaz_str(ev);
+                    yaz_str(", ptr "); yaz_str(sw); yb(10);
+                }
+                w = w + 1;
+            }
+        }
         ver 0;
     }
     eğer metin_esit(ad, "GUVENSIZ") {
@@ -10785,7 +10979,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,

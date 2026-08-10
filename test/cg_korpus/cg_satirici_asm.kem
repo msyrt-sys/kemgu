@@ -1,0 +1,51 @@
+// C5: satıriçi_asm x86 girdi/çıktı round-trip testi.
+// oku_arti_iki(40): girdi $1'i çıktıya taşı + 2 ekle → 42.
+// Çoklu çıktı + bozulan da sergilenir: b sabit 100 alır.
+işlev oku_arti_iki(g: tam32) -> tam32 {
+    değişken s: tam32 = 0;
+    değişken b: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov $2, $0
+add $$2, $0
+mov $$100, $1"#
+            çıktı("=r", &s)
+            çıktı("=r", &b)
+            girdi("r", g)
+            bozulan("~{cc}")
+        }
+    }
+    eğer b != 100 { ver 1; }
+    ver s;
+}
+
+işlev main() -> tam32 {
+    ver oku_arti_iki(40);
+}
+
+// ── D-416 NOTU ───────────────────────────────────────────────────────────
+// `satıriçi_asm` self-host codegen'de HİÇ YOKTU: parser düğümü üretiyor,
+// checker AS001 ile doğruluyor, codegen'de DAL YOKTU → tüm blok sessizce
+// düşüyor, çıktı değişkenleri başlangıç değerinde kalıyordu (C=42, KEMGU=1).
+// Link hatası yok, IR geçerli — SESSİZ YANLIŞ CEVAP, üstelik `güvensiz` blokta.
+//
+// Parser kritik veriyi ATIYORDU (`asm_kisit_atla` yalnız tüketiyordu): şablon,
+// çıktı kısıtları, çıktı DEĞİŞKEN adları, girdi kısıtları, bozulanlar. Düğüme
+// alan eklemek `--ast` paritesini bozacağı için 5 yeni yan-kanal eklendi
+// (D-373'ün `asm_mim` deseni). `parser_diff` 13/13 pariteyi kanıtlıyor.
+//
+// Biçim C'den ÜÇ ÇIKTI-ARİTESİ İÇİN AYRI AYRI ölçüldü (hiçbiri varsayılmadı):
+//   0 çıktı : call void asm sideeffect "<ş>", "<boz>"()
+//   1 çıktı : call <T>  asm sideeffect "<ş>", "=r,<boz>"()  + store  ← STRUCT DEĞİL
+//   2+ çıktı: call { T0, T1 } ... + extractvalue + store
+// Kısıt SIRASI: çıktılar → girdiler → bozulanlar.
+//
+// ⚠ İKİ TUZAK, ikisi de ölçümle yakalandı:
+//  1. `sim_lex` HAM SİMGE metnini verir, dizgi DEĞERİNİ değil → `""=r""` ve
+//     `r#\22...\22#` IR'a sızıyordu. Sınırlayıcılar soyulmalı.
+//  2. KEMGU'da `\` DE KAÇIŞ DEĞİL (D-400/D-409 ile aynı sınıf): `"\0D"` İKİ
+//     ters-bölü basar. Tek ters-bölü için bayt 92 doğrudan yazılır.
+//
+// ⚠ İKİ ÇIKTI ŞART: tek çıktıyla C struct DEĞİL düz dönüş yayar; iki çıktı
+// aggregate + extractvalue yolunu zorlar. `b`nin 100 alması bu yolu ölçer.

@@ -1080,7 +1080,14 @@ LLVM-RED'den çıkıp çalışıyor.
   sessiz yanlış cevaba dönüşmez.
 - **⚠ "define ≠ call" diye aramak yanlış yere bakmak olabilir.** D-411'de define
   ve çağrı BİRBİRİYLE anlaşıyordu; uyuşmazlık ANNOTASYONLAYDI. Hata satırını oku.
-- **🔴 `satıriçi_asm` SELF-HOST'TA SESSİZCE DÜŞÜYOR** (`asm_round_trip`:
+- ✓ **D-416: `satıriçi_asm` EKLENDİ — `test/snapshots` 62/62, TAM PARİTE.**
+  Parser 5 yeni yan-kanalla şablon/kısıt/çıktı-adı/bozulan yakalıyor
+  (`--ast` paritesi korundu, `parser_diff` kanıtlıyor); codegen üç çıktı-aritesini
+  de C ile birebir yayıyor. **İki tuzak ölçümle yakalandı:** `sim_lex` HAM SİMGE
+  metnini verir (sınırlayıcılar soyulmalı) ve **KEMGU'da `\\` de kaçış değildir**
+  — `"\\0D"` iki ters-bölü basar, tek ters-bölü için bayt 92 yazılmalı.
+  **Bu, "KEMGU'da kaçış yok" dersinin ÜÇÜNCÜ tekrarı** (`\n` D-400, `\"` D-409).
+- **(TARİHÎ) 🔴 `satıriçi_asm` SELF-HOST'TA SESSİZCE DÜŞÜYOR** (`asm_round_trip`:
   C=42, KEMGU=1). Parser `SATIRICI_ASM` düğümünü üretiyor, checker AS001 ile
   doğruluyor, **codegen'de DAL YOK** → tüm blok yok sayılıyor, çıktı değişkenleri
   başlangıç değerinde kalıyor. Link hatası yok, IR geçerli — **sessiz yanlış

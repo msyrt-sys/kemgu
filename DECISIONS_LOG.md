@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-416 [YÜKSEK] — CODEGEN: `satıriçi_asm` — 🎯 `test/snapshots` 62/62 (2026-08-10)
+
+**Son sapma kapandı: `test/snapshots` 61/62 → 62/62, TAM PARİTE.**
+
+**Kusur:** `satıriçi_asm` self-host codegen'de HİÇ YOKTU. Parser düğümü
+üretiyor, checker AS001 ile doğruluyor, **codegen'de dal yoktu** → tüm blok
+sessizce düşüyor, çıktı değişkenleri başlangıç değerinde kalıyordu (C=42,
+KEMGU=1). Link hatası yok, IR geçerli — **SESSİZ YANLIŞ CEVAP**, üstelik
+`güvensiz` blokta çalışan kod için.
+
+**Parser kritik veriyi ATIYORDU** (`asm_kisit_atla` yalnız tüketiyordu): şablon,
+çıktı kısıtları, çıktı DEĞİŞKEN adları, girdi kısıtları, bozulanlar. Düğüme alan
+eklemek `--ast` paritesini bozacağı için **5 yeni yan-kanal** (D-373'ün
+`asm_mim` deseni). `parser_diff` 13/13 pariteyi kanıtlıyor.
+
+**Biçim C'den ÜÇ ÇIKTI-ARİTESİ İÇİN AYRI AYRI ölçüldü** (önceki turda; hiçbiri
+varsayılmadı) — ve 1-çıktı hâlinin **struct DEĞİL düz dönüş** olması tam da
+varsayımla kaçırılacak türden bir ayrıntıydı.
+
+**⚠ İKİ TUZAK, ikisi de ölçümle yakalandı:**
+1. **`sim_lex` HAM SİMGE metnini verir, dizgi DEĞERİNİ değil** → `""=r""` ve
+   `r#\22...\22#` IR'a sızıyordu. Sınırlayıcılar (`"..."` ve `r#"..."#`)
+   soyulmalı.
+2. **KEMGU'da `\\` DE KAÇIŞ DEĞİL** (D-400 `\n`, D-409 `\"` ile aynı sınıf):
+   `"\\0D"` İKİ ters-bölü basar. Tek ters-bölü için bayt 92 doğrudan yazılır.
+   **Bu, aynı dersin ÜÇÜNCÜ tekrarı** — KEMGU dizgi literalinde hiçbir kaçış yok.
+
+**Sonuç IR C ile BİREBİR** (yalnız register numaraları farklı):
+```
+call { i32, i32 } asm sideeffect "mov $2, $0\0D\0Aadd $$2, $0\0D\0Amov $$100, $1", "=r,=r,r,~{cc}"(i32 %5)
+```
+
+**Sabotaj:** S157 (asm emisyonu) → `exit=42 ≠ 1`, yani kapı sessiz-yanlış-cevap
+kipini yakalıyor (137/138). **S158 (satır sonu kaçışı) SESSİZ kaldı** —
+gizlemiyorum: clang şablondaki HAM CR'yi kabul ediyor, yani `\0D` kaçışı C ile
+birebirlik için doğru ama **kapı-gözlenebilir değil**. (D-356: sabotajın
+sessizliği bir SONUÇTUR.)
+
+**Korpus:** `cg_satirici_asm.kem` (snapshot'tan birebir + gerekçe notu).
+**İKİ ÇIKTI ŞART:** tek çıktıyla C struct değil düz dönüş yayar; iki çıktı
+aggregate + `extractvalue` yolunu zorlar.
+
+**Kapılar:** `codegen_diff` **138/138** · `test/snapshots` **62/62**.
+
+---
+
 ## D-415 [YÜKSEK] — 🔴 D-405 YANLIŞTI: `bölge_al` GERÇEK TAHSİSTİR (2026-08-10)
 
 **D-414'te açtığım aralıklı segfault kapandı.** `dizi_kullan` self ikilisi
