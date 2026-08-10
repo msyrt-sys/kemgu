@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-414 [YÜKSEK] — CODEGEN: legacy `kullan` düz ad alanı + AÇIK segfault bulgusu (2026-08-10)
+
+**`test/crossfile` 0/2 → 2/2.**
+
+**Kusur:** C'nin İKİ modül yükleyicisi FARKLI AD ALANI kuruyor ve self-host
+hepsini modül-önekli sanıyordu. Ayırt edici C'de tek satır (`src/ana.c:204`):
+```c
+static int kullan_yeni_bicim(const Dugum *k) {
+    return k->veri.kullan.segment_sayi <= 1 ||
+           k->veri.kullan.secili_sayi > 0 ||
+           k->veri.kullan.alias_ad != NULL;
+}
+```
+Çok-segmentli **ve** seçili-import yok **ve** alias yok → **LEGACY**: üyeler
+GLOBAL ad alanına düz girer (`@uc_kat`, `@iki_kat`), modül öneki YOK.
+Self-host D-399'un `modül` sarmalını koşulsuz uyguluyordu → `@lib_islem.uc_kat`
+yayıp çıplak `@iki_kat` çağrısını tanımsız bırakıyordu.
+Onarım: sarmal yalnız YENİ biçimde; legacy'de metin DÜZ eklenir.
+**Kuralı uydurmadım — C kaynağından okudum.** Probe'larım yol çözümünde takıldı
+ve şekli tahmin etmek yerine ayırt ediciyi doğrudan `src/ana.c`'de buldum.
+
+---
+
+### 🔴 AÇIK KUSUR — `dizi_kullan` self-host ikilisinde ARALIKLI SEGFAULT
+`modul_codegen` bir koşumda 17/18 (`dizi_kullan` C=42 ≠ KEMGU=**139**), sonraki
+koşumda 18/18 verdi. Aynı ikili art arda: `42 42 139 42 …`; C oracle aynı
+dosyada **8/8 kararlı 42**.
+**D-414 sebebi DEĞİL:** `git stash` ile değişiklik geri alınıp ölçüldü —
+segfault ÖNCEDEN de var. Kusur oradaydı ve kapıyı **şansla** geçiyordu.
+
+> **⚠ ÖNCEKİ TEŞHİSİMİ DÜZELTİYORUM.** D-413'te aralıklı kırmızıları "art arda
+> `make` hedefleri → Windows dosya kilidi" diye açıklamıştım. O etken gerçek
+> (127'ler Defender exec yarışı) **ama 139'ları açıklamıyor**; en az biri bu
+> segfault'tu. **"Aralıklı = artefakt" en cazip ve en tehlikeli varsayım.**
+> **exit 127 ortamsaldır, exit 139 DEĞİLDİR** — aralıklılık UB'nin normal
+> görüntüsüdür. Kod ayrımı `CLAUDE.md`'ye yazıldı.
+
+Muafiyet EKLEMEDİM: kapının bu kusuru bazen yakalaması, hiç yakalamamasından
+iyidir. Sıradaki iş bu.
+
+**Kapılar:** `codegen_diff` 137/137 · `crossfile` **2/2** · `modul_codegen`
+aralıklı (yukarıdaki açık kusur).
+
+---
+
 ## D-413 [YÜKSEK] — CODEGEN: `&Yapi` yerelinde alan erişimi — SESSİZ YANLIŞ CEVAP (2026-08-08)
 
 **Yeni yüzey ölçümü.** Kalan kapısız yüzeyler taranınca `test/asan_matris`

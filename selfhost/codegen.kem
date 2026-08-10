@@ -10479,6 +10479,38 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
 //
 // Modülün KENDİ `kullan`'ları için modül geçici bir `Ayr`e parse edilir — ama
 // yalnız KULLAN düğümlerinin `a_deg` METİNLERİ okunur, AST kopyalanmaz.
+// D-414: `kullan` YENİ biçim mi? C `src/ana.c:204 kullan_yeni_bicim` AYNASI:
+//   segment_sayi <= 1  ||  seçili_import var  ||  alias var
+// Değilse LEGACY: çok-segmentli düz yol (`kullan test::crossfile::lib_islem`).
+// AYRIM ÖNEMLİ çünkü İKİ YÜKLEYİCİ FARKLI AD ALANI kuruyor:
+//   yeni   → modül önekli   (`@mat.topla`)
+//   legacy → DÜZ, öneksiz   (`@uc_kat`, `@iki_kat`)
+// Ölçüldü: `test/crossfile/transitif` C'de `@uc_kat`/`@iki_kat` yayıyor,
+// self-host `modül` sarmalı yüzünden `@lib_islem.uc_kat` yayıp `@iki_kat`ı
+// tanımsız bırakıyordu.
+işlev kullan_yeni_bicim_mi(p: &değişken Ayr, yol: metin) -> mantıksal {
+    // Segment sayısı: "::" ayırıcılarını say.
+    değişken n: tam32 = metin_uzunluk(yol);
+    değişken seg: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i < n {
+        eğer bayt(yol, i) == 58 ve bayt(yol, i - 1) == 58 { seg = seg + 1; i = i + 1; }
+        i = i + 1;
+    }
+    eğer seg <= 1 { ver doğru; }
+    // Seçili import ya da alias varsa YİNE yeni biçim.
+    değişken k: tam32 = 0;
+    iken k < dizi_boyut(p.si_yol) {
+        eğer metin_esit(dizi_al(p.si_yol, k), yol) { ver doğru; }
+        k = k + 1;
+    }
+    değişken m: tam32 = 0;
+    iken m < dizi_boyut(p.al_yol) {
+        eğer metin_esit(dizi_al(p.al_yol, m), yol) { ver doğru; }
+        m = m + 1;
+    }
+    ver yanlış;
+}
 işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // Modül ADI EN BAŞTA sabitlenir — `p` üzerinde HİÇBİR mutasyon olmadan önce.
     // Çağıran `modul_src_bir(p, dizi_al(p.a_deg, c), ...)` biçiminde çağırıyor:
@@ -10529,8 +10561,14 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // aramıştım. Gerçek satır sonlarına yaslanmak doğru çözüm:
     //   - Açılış: `{` sonrası BOŞLUK yeter; `ic`in İLK satırı zaten kendi satırı.
     //   - Kapanış: `ic` dosya sonu satır-sonuyla biter → `}` yeni satırda başlar.
-    değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
-    değişken govde: metin = metin_birlestir(metin_birlestir(bas, ic), "}");
+    // D-414: LEGACY biçimde sarmal YOK — modül metni DÜZ eklenir, üyeler global
+    // ad alanına girer (C'nin legacy yükleyicisinin davranışı). Sarmal koymak
+    // `@lib_islem.uc_kat` üretip çıplak `@iki_kat` çağrısını tanımsız bırakıyordu.
+    değişken govde: metin = ic;
+    eğer kullan_yeni_bicim_mi(p, yol) {
+        değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
+        govde = metin_birlestir(metin_birlestir(bas, ic), "}");
+    }
     değişken mp: Ayr = ayr_olustur(ic);
     lex_et(&değişken mp);
     değişken mkok: tam32 = parse_program(&değişken mp);

@@ -1225,15 +1225,23 @@ geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
 uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
 koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
 
-**⚠⚠ KAPI SONUÇLARINDA ARALIKLI SAHTE KIRMIZI (D-413'te İKİ KEZ).**
-`modul_codegen` bir kez başarısız dedi (temiz yeniden koşumda 18/18 İKİ KEZ);
-`cg_ham_isaretci_indeks` bir kez **exit 139 (segfault)** dedi (yeniden koşumda
-137/137 İKİ KEZ). Tetikleyici: **tek bash çağrısında art arda birden çok `make`
-hedefi** — her biri `build/codegen.exe`i yeniden kuruyor ve Windows'ta önceki
-süreç dosyayı hâlâ tutabiliyor.
-**KURAL: kapı kırmızıysa teşhise başlamadan ÖNCE temiz yeniden koş, en az İKİ
-yeşil koşum gör.** Sahte kırmızıyı gerçek regresyon sanıp geri almak, gerçek bir
-kusuru geri almaktan ucuz değildir. Kapıları ayrı çağrılarda koşmak da yardımcı.
+### 🔴🔴 AÇIK: `dizi_kullan` SELF-HOST İKİLİSİNDE ARALIKLI SEGFAULT (D-414)
+**Bu GERÇEK bir kusur, kapı artefaktı DEĞİL.** Aynı ikili art arda koşulunca
+`42 42 139 42 …` veriyor; C oracle aynı dosyada **8/8 kararlı 42**.
+`git stash` ile D-414 geri alınıp ölçüldü: **segfault D-414'ten ÖNCE de var** —
+yani o değişiklik sebebi değil, kusur önceden oradaydı ve `modul_codegen`
+kapısını ŞANSLA geçiyordu.
+
+> **⚠ ÖNCEKİ TEŞHİSİM KISMEN YANLIŞTI.** D-413'te aralıklı kırmızıları
+> "tek bash çağrısında art arda `make` hedefleri → Windows dosya kilidi" diye
+> açıklamıştım. O etken GERÇEK (127'ler Defender exec yarışı, ölçüldü) **ama
+> 139'ları açıklamıyor.** En az bir kısmı bu segfault'tu. **"Aralıklı = artefakt"
+> en cazip ve en tehlikeli varsayım**: exit 127 ortamsaldır, **exit 139 DEĞİLDİR.**
+> Kodu ayır: 127 → yeniden koş; 139 → BELLEK HATASI, teşhis et.
+
+**KURAL (güncellendi): kapı kırmızıysa temiz yeniden koş ve en az İKİ yeşil
+koşum gör — AMA çıkış kodu 139 ise bunu artefakt sayma, ayrı bir kusur olarak
+aç.** Aralıklılık UB'nin normal görüntüsüdür.
 
 **⚠ ZAMAN AŞIMINA UĞRAYAN `make` ÖLMEZ — ORPHAN OLARAK KOŞMAYA DEVAM EDER.**
 D-411'de bir `calistir_codegen_diff` 10 dk sınırında "timeout" verdi; ben devam
