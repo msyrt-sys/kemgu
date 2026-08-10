@@ -5,6 +5,51 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-413 [YÜKSEK] — CODEGEN: `&Yapi` yerelinde alan erişimi — SESSİZ YANLIŞ CEVAP (2026-08-08)
+
+**Yeni yüzey ölçümü.** Kalan kapısız yüzeyler taranınca `test/asan_matris`
+**11/12** çıktı (`test/ornekler/eski` ve `test/stdlib` oracle kurulamadığı için
+sinyal vermedi, `test/crossfile` 0/2 — ayrı iş). Tek sapma **sessiz yanlış
+cevaptı** ve kapatıldı → **12/12**.
+
+**Kusur:** `değişken r: &H = dizi_al(d, i);` — DEĞER `ptr` döner ve `son_ref`
+BOŞTUR, dolayısıyla `r.v` erişimi çözülemeyip **literal `0`a** düşüyordu:
+```
+C:    %33 = getelementptr %H, ptr %32, i32 0, i32 0   +   %34 = load i32
+SELF: %32 = add i32 %30, 0        ← r.v LİTERAL 0
+```
+Link hatası yok, IR geçerli, program çalışıyor — toplam 50 yerine 0
+(C=42, KEMGU=0).
+
+**Onarım:** ANNOTASYON `&Yapi` ise pointee ONDAN alınır, değerden değil.
+**`param_ref_yapi` bu işi PARAMETRELER için ZATEN yapıyordu**; yerel `değişken`
+yoluna bağlanmamıştı — D-407'nin "aynı soruyu iki yerde ayrı yanıtlama"
+deseninin bir örneği daha. Annotasyon DEĞERDEN üstün: `&H` yazıldıysa pointee
+H'dir.
+
+**Korpus:** `cg_ref_yerel_alan.kem` (asan_matris'ten birebir kopya + not).
+**⚠ ŞEKİL ÖNEMLİ:** pointee'nin DEĞERDEN çıkarsanamadığı bir kaynak şart.
+`değişken r: &H = &h;` YETMEZ — orada `&h` zaten `son_ref`i doldurur ve dosya
+tesadüfen yeşil kalır. `dizi_al` gibi **opak `ptr` dönen** bir kaynak gerekir.
+
+**Sabotaj S155** → `42 ≠ 0`, yani kapı sessiz-yanlış-cevap kipini exit farkı
+olarak yakalıyor (136/137).
+
+**⚠⚠ KAPI SONUÇLARINDA ARALIKLI SAHTE KIRMIZI — bu turda İKİ KEZ.**
+`modul_codegen` bir kez başarısız dedi (yeniden koşumda 18/18 iki kez) ve
+`cg_ham_isaretci_indeks` bir kez **exit 139 (segfault)** dedi (yeniden koşumda
+137/137 iki kez). Tetikleyici: **tek bash çağrısında art arda birden çok `make`
+hedefi** — her biri `build/codegen.exe`i yeniden kuruyor ve Windows'ta bir önceki
+süreç dosyayı hâlâ tutabiliyor. D-411'in "zaman aşımına uğrayan make ölmez"
+dersinin kardeşi. **KURAL: kapı kırmızıysa, teşhise başlamadan ÖNCE temiz
+yeniden koş — ve en az İKİ yeşil koşum gör.** Sahte kırmızıyı gerçek regresyon
+sanmak, bu oturumda geri almaya kalkabileceğim en pahalı hata olurdu.
+
+**Kapılar:** `codegen_diff` **137/137** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf) · `test/asan_matris` **12/12**.
+
+---
+
 ## D-412 [YÜKSEK] — CODEGEN: GÖRELİ modül yolu (`ic::g` içinden `m`) (2026-08-07)
 
 **`test/snapshots` 60/62 → 61/62.** Kalan tek sapma `asm_round_trip`

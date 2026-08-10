@@ -5491,6 +5491,19 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         p.beklenen_ll = eski_bll;   // RESET (sızdırma)
         p.beklenen_yapi = "";       // D-307: RESET (sızdırma)
         değişken vref: metin = p.son_ref;   // CG7c: değer ptr ise işaret ettiği yapı (&p vb.)
+        // D-413: ANNOTASYON `&Yapi` ise pointee'yi ONDAN al — değerden değil.
+        // `değişken r: &H = dizi_al(d, i);` şeklinde değer `ptr` döner ve
+        // `son_ref` BOŞTUR → `r.v` erişimi çözülemeyip literal `0`a düşüyordu.
+        // Link hatası yok, IR geçerli, program çalışıyor — SESSİZ YANLIŞ CEVAP
+        // (ölçüldü: `test/asan_matris/m04_ref_buyume` C=42, KEMGU=0; toplam
+        // 50 yerine 0). `param_ref_yapi` bu işi PARAMETRELER için zaten
+        // yapıyordu; yerel `değişken` yoluna bağlanmamıştı — aynı soruyu iki
+        // yerde ayrı yanıtlama deseninin (D-407) bir örneği daha.
+        // Annotasyon DEĞERDEN üstün: `&H` yazıldıysa pointee H'dir.
+        eğer annot == 1 {
+            değişken aref: metin = param_ref_yapi(p, idx);
+            eğer metin_esit(aref, "") == yanlış { vref = aref; }
+        }
         eğer annot == 0 { vtip = p.son_tip; velem = p.son_elem; }   // annotasyon yok → değerden çıkar
         // D-310: annotasyonlu → değer tamsayı genişliğini annotasyona uydur
         // (i64-taşıyıcı built-in dönüşü: `değişken t: tam32 = görev_birleştir(a)`).

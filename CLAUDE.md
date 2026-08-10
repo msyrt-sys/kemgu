@@ -1225,6 +1225,16 @@ geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
 uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
 koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
 
+**⚠⚠ KAPI SONUÇLARINDA ARALIKLI SAHTE KIRMIZI (D-413'te İKİ KEZ).**
+`modul_codegen` bir kez başarısız dedi (temiz yeniden koşumda 18/18 İKİ KEZ);
+`cg_ham_isaretci_indeks` bir kez **exit 139 (segfault)** dedi (yeniden koşumda
+137/137 İKİ KEZ). Tetikleyici: **tek bash çağrısında art arda birden çok `make`
+hedefi** — her biri `build/codegen.exe`i yeniden kuruyor ve Windows'ta önceki
+süreç dosyayı hâlâ tutabiliyor.
+**KURAL: kapı kırmızıysa teşhise başlamadan ÖNCE temiz yeniden koş, en az İKİ
+yeşil koşum gör.** Sahte kırmızıyı gerçek regresyon sanıp geri almak, gerçek bir
+kusuru geri almaktan ucuz değildir. Kapıları ayrı çağrılarda koşmak da yardımcı.
+
 **⚠ ZAMAN AŞIMINA UĞRAYAN `make` ÖLMEZ — ORPHAN OLARAK KOŞMAYA DEVAM EDER.**
 D-411'de bir `calistir_codegen_diff` 10 dk sınırında "timeout" verdi; ben devam
 edip **arka planda ikinci bir kapı koşumu başlattım**. İki `make` aynı anda
