@@ -1138,6 +1138,24 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### ✓ D-418: `--mimari` + void dönüş + BARE-METAL KAPISI (`runtime/` 0/3 → 3/3)
+- **Self-host bare-metal/ARM64 kodu DERLEYEMİYORDU BİLE.** `--mimari` bayrağı
+  sürücüde yoktu; SIRALI argüman ayrıştırma `aarch64`ü DOSYA YOLU sanıyor, boş
+  girdi okuyup yalnız başlık basıyor, **hata vermiyordu**. Üçlü de sabit kodluydu.
+  **Hiçbir kapı görmüyordu** çünkü `runtime/*.kem` host'ta linklenmez → exit
+  karşılaştıran kapılar bu yüzeyi atlıyor.
+- **Örtük `boş` dönüş `i32` yayılıyordu** (`çıplak işlev free(...) { }` → C
+  `define void`, self `define i32`). Gözlenebilir yanlış cevap YOK (LLVM tolere
+  ediyor, D-295) — gizli yapısal sapma. Onarım `ret` emisyonunu da zorunlu kıldı
+  (`ret void 0` geçersiz).
+- **Yeni kapı `calistir_baremetal_diff`:** linklenemeyen yüzeyde DAVRANIŞ değil
+  YAPI ölçer — hedef üçlüsü + `define` kümesi (**ad + DÖNÜŞ TİPİ**).
+  ⚠ Dönüş tipini kesme: `define void @f` ↔ `define i32 @f` ayrımı kusurun ta
+  kendisiydi.
+- **⚠ SABOTAJ YANLIŞ SATIRA UYGULANDI (yine).** S161 ilk denemede sessiz kaldı
+  çünkü `sed` `builtin_ret`in void dalını değiştirmişti, `islev_donus_tip`i
+  değil. Doğru satırla 0/3. **Sessizlik önce sabotajı şüpheli kılar** (D-402).
+
 ### 🔶 `Dizi<kesirli64>` — DE-RİSK EDİLDİ, ama ORACLE DEĞİŞİKLİĞİ İSTİYOR (D-417 sonrası)
 **Ölçüldü:** `değişken t = xs[0] + xs[1]` → C **exit 7**, self-host **exit 1**
 (doğrusu 42). İkisi de yanlış ve **farklı** biçimde yanlış — yani bu bir parite

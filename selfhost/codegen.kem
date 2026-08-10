@@ -130,6 +130,7 @@ yapı Ayr {
     fs_emit: Dizi<metin>;    // emit edilmis mangled adlar (dedup)
     fs_onek: Dizi<metin>;    // D-403: enqueue anındaki modül öneki (emitte geri yüklenir)
     fn_ad_zorla: metin;      // islev_uret icin ad override ("" = normal)
+    hedef_mim: metin;        // D-418: hedef mimari ("x86_64" | "arm64") — --mimari ile
     bek_pointee: metin;      // D-415: `*T` annotasyonunun pointee IR'ı (bölge_al boyut hesabı)
     yapi_ad: Dizi<metin>;    // CG7b: yapı adları
     yapi_abase: Dizi<tam32>; // CG7b: alan_*'a slice başlangıcı
@@ -3668,7 +3669,23 @@ işlev islev_donus_tip(p: &değişken Ayr, idx: tam32) -> metin {
         }
         i = i + 1;
     }
-    ver "i32";
+    // D-418: dönüş tipi ANNOTASYONU YOKSA örtük `boş` → `void` (C aynası).
+    // Eskiden `i32`ye düşüyordu: `çıplak işlev free(p: *tam8) { ... }` için C
+    // `define void @free`, self-host `define i32 @free` yayıyordu. LLVM çağrı
+    // yerinde uyuşmazlığı TOLERE ettiği (D-295) ve değer kullanılmadığı için
+    // gözlenebilir bir yanlış cevap ÜRETMİYORDU — gizli yapısal sapma. Farklı
+    // bir ABI'de ya da dönüş değeri okunan bir bağlamda ısırırdı.
+    ver "void";
+}
+// D-418: DEĞERSİZ dönüş yaz. `void` işlevde `ret void 0` GEÇERSİZDİR (LLVM:
+// "expected instruction opcode"); değersiz `ver;` ve örtük fonksiyon-sonu
+// dönüşü bu yoldan geçer. Dönüş tipi void'e çevrilince (islev_donus_tip) bu
+// uyarlama da ŞART oldu — biri olmadan diğeri IR'ı bozar.
+işlev ret_bos_yaz(p: &değişken Ayr) -> tam32 {
+    yaz_str("  ret "); yaz_str(p.cur_ret);
+    eğer metin_esit(p.cur_ret, "void") == yanlış { yaz_str(" 0"); }
+    yb(10);
+    ver 0;
 }
 // D-337: ISLEV düğümünün dönüş tipi işaretsiz (dtamN) mi? islev_donus_tip aynası —
 // aynı düğümü seçmeli (ilk PARAMETRE/BLOK olmayan çocuk = dönüş tipi).
@@ -5357,7 +5374,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             rho_iter_serbest_emit(p);    // F4.3 a2: döngü-içi ver → ρ_iter (iç) önce
             rho_yerel_serbest_emit(p);   // V2-F4.2b (b2): sonra ρ_yerel (dış); dönüş değeri materyalize sonrası
             yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" "); yaz_str(op); yb(10);
-        } değilse { rho_iter_serbest_emit(p); rho_yerel_serbest_emit(p); yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" 0"); yb(10); }
+        } değilse { rho_iter_serbest_emit(p); rho_yerel_serbest_emit(p); ret_bos_yaz(p); }
         p.bb_term = 1;   // ret = terminatör
         ver 0;
     }
@@ -6976,7 +6993,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { deyim_uret(p, c); }
         i = i + 1;
     }
-    eğer p.bb_term == 0 { rho_yerel_serbest_emit(p); yaz_str("  ret "); yaz_str(p.cur_ret); yaz_str(" 0"); yb(10); }   // V2-F4.2b (b2): örtük fn-sonu dönüşünden önce serbest
+    eğer p.bb_term == 0 { rho_yerel_serbest_emit(p); ret_bos_yaz(p); }   // V2-F4.2b (b2): örtük fn-sonu dönüşünden önce serbest
     yaz_str("}"); yb(10);
     ver 0;
 }
@@ -7214,7 +7231,13 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
     mono_kesif(p, kok);   // D-307: generic yapı örneklerini kaydet (emit'ten ÖNCE)
-    yaz_str("target triple = "); yb(34); yaz_str("x86_64-pc-windows-gnu"); yb(34); yb(10); yb(10);
+    // D-418: hedef üçlüsü artık SABİT DEĞİL — `--mimari` ile seçilir (C
+    // `llvm_hedef_ayarla` aynası). Öncesinde `x86_64` sabit kodluydu ve
+    // self-host bare-metal/ARM64 kodunu HİÇ derleyemiyordu.
+    yaz_str("target triple = "); yb(34);
+    eğer metin_esit(p.hedef_mim, "arm64") { yaz_str("aarch64-unknown-none-elf"); }
+    değilse { yaz_str("x86_64-pc-windows-gnu"); }
+    yb(34); yb(10); yb(10);
     yapi_tip_emit(p);        // CG7b: %Ad = type { ... } (+ D-307 mono örnekleri)
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
@@ -8696,9 +8719,10 @@ işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
 }
 // ---- D-358: G002 + G003 + G004 — güvensiz-tier ve temsil kuralları ----
 // ---- D-373: AS001 — satıriçi_asm mimari etiketi hedefle uyuşmalı ----
-// HEDEF MİMARİ self-host'ta SABİT "x86_64": C'nin varsayılanı budur ve self-host
-// sürücüde `--mimari` bayrağı YOKTUR → hedef gerçekten değişmez. Bu bir varsayım
-// değil, ölçülmüş bir olgu; sürücüye `--mimari` eklenirse BURASI da güncellenmeli.
+// D-418: HEDEF MİMARİ ARTIK `p.hedef_mim`DEN OKUNUYOR. Önceki not "sürücüye
+// `--mimari` eklenirse BURASI da güncellenmeli" diyordu — eklendi, güncellendi.
+// (Bırakılan uyarı işe yaradı: sabit "x86_64" karşılaştırması `--mimari arm64`
+// altında TÜM aarch64 asm bloklarına sahte AS001 verirdi.)
 // Etiket parser yan-kanalından gelir (`asm_node`/`asm_mim`) — düğüme alan eklemek
 // `--ast` paritesini bozardı.
 işlev asm_mimari_bul(p: &değişken Ayr, idx: tam32) -> metin {
@@ -8712,7 +8736,15 @@ işlev asm_mimari_bul(p: &değişken Ayr, idx: tam32) -> metin {
 işlev as001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken m: metin = asm_mimari_bul(p, idx);
     eğer metin_esit(m, "") { ver 0; }   // etiket yoksa denetim yok (C: mimari==NULL)
-    eğer metin_esit(m, "x86_64") == yanlış { sekil_hata(p, idx, "AS001"); }
+    // D-418: etiket HEDEFLE karşılaştırılır. `arm64` ve `aarch64` eş anlamlı
+    // (C `--mimari` ikisini de `arm64`e eşliyor) ama KAYNAK etiketi her iki
+    // yazımla da gelebilir — ikisi de kabul edilmeli.
+    değişken hm: metin = p.hedef_mim;
+    değişken uyar: mantıksal = metin_esit(m, hm);
+    eğer metin_esit(hm, "arm64") {
+        eğer metin_esit(m, "aarch64") { uyar = doğru; }
+    }
+    eğer uyar == yanlış { sekil_hata(p, idx, "AS001"); }
     ver 0;
 }
 // G002: `satıriçi_asm` yalnız `güvensiz` blokta (ham makine kodu = tier kapısı).
@@ -11007,7 +11039,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],
-        tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "",
+        tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "", hedef_mim: "x86_64",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], alan_elem: [], alan_tnode: [],
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
@@ -11043,11 +11075,44 @@ işlev main() -> tam32 {
         yaz_str("kullanim: kemgu [--token|--parse|--check|--llvm] <kaynak.kem>"); yb(10);
         ver 1;
     }
+    // D-418: `--mimari <M>` bayrağı. Öncesinde SIRALI ayrıştırma vardı
+    // (`arg_al(1)`=mod, `arg_al(2)`=yol) ve `--llvm --mimari aarch64 dosya.kem`
+    // çağrısında `aarch64` DOSYA YOLU sanılıyordu → boş girdi, yalnız başlık
+    // basılıyor, HATA VERİLMİYOR. Sessiz yanlış ayrıştırma; self-host
+    // bare-metal/ARM64 kodunu bu yüzden HİÇ derleyemiyordu.
     değişken mod: metin = "--llvm";      // varsayılan (no-flag geri uyum)
-    değişken yol: metin = arg_al(1);
-    eğer arg_sayi() >= 3 { mod = arg_al(1); yol = arg_al(2); }
+    değişken yol: metin = "";
+    değişken mim: metin = "x86_64";
+    değişken ai: tam32 = 1;
+    iken ai < arg_sayi() {
+        değişken a: metin = arg_al(ai);
+        eğer metin_esit(a, "--mimari") {
+            eğer ai + 1 >= arg_sayi() {
+                yaz_str("--mimari: mimari argumani gerekli (arm64|x86_64)"); yb(10);
+                ver 2;
+            }
+            değişken mv: metin = arg_al(ai + 1);
+            eğer metin_esit(mv, "arm64") veya metin_esit(mv, "aarch64") { mim = "arm64"; }
+            değilse {
+                eğer metin_esit(mv, "x86_64") { mim = "x86_64"; }
+                değilse {
+                    yaz_str("--mimari: bilinmeyen mimari (arm64|x86_64)"); yb(10);
+                    ver 2;
+                }
+            }
+            ai = ai + 2;
+        } değilse {
+            eğer bayt(a, 0) == 45 { mod = a; ai = ai + 1; }   // '-' ile başlıyor → mod
+            değilse { yol = a; ai = ai + 1; }
+        }
+    }
+    eğer metin_esit(yol, "") {
+        yaz_str("kullanim: kemgu [--token|--parse|--check|--llvm] [--mimari M] <kaynak.kem>"); yb(10);
+        ver 1;
+    }
     değişken kaynak: metin = dosya_oku(yol);
     değişken p: Ayr = ayr_olustur(kaynak);
+    p.hedef_mim = mim;   // D-418: üçlü + AS001 bunu okur
     lex_et(&değişken p);
     eğer metin_esit(mod, "--token") { token_dump(&değişken p); ver 0; }
     değişken kok: tam32 = parse_program(&değişken p);

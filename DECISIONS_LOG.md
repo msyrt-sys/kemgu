@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-418 [YÜKSEK] — SÜRÜCÜ: `--mimari` + void dönüş + BARE-METAL KAPISI (2026-08-10)
+
+**Yeni yüzey `runtime/*.kem` (OS/sürücü kodu) ölçüldü: 0/3 → 3/3.**
+
+### 🔴 Self-host bare-metal/ARM64 kodu DERLEYEMİYORDU BİLE
+`--mimari` bayrağı self-host sürücüde **hiç yoktu**. Argüman ayrıştırma SIRALIydı
+(`arg_al(1)`=mod, `arg_al(2)`=yol) → `--llvm --mimari aarch64 dosya.kem`
+çağrısında **`aarch64` DOSYA YOLU sanılıyordu**: boş girdi okunuyor, yalnız
+başlık basılıyor, **hata verilmiyor**. Sessiz yanlış ayrıştırma; 0 define.
+Hedef üçlüsü de `x86_64` sabit koduydu.
+
+**Bunu hiçbir kapı görmüyordu** çünkü `runtime/*.kem` host'ta LİNKLENMEZ
+(aarch64 sysreg/MMIO) → exit-kodu karşılaştıran tüm kapılar bu yüzeyi atlıyordu.
+
+### İkinci kök — örtük `boş` dönüş `i32` yayılıyordu
+`çıplak işlev free(p: *tam8) { ... }` (dönüş annotasyonu YOK) için C
+`define void @free`, self-host `define i32 @free` yayıyordu. **Gözlenebilir
+yanlış cevap ÜRETMİYORDU** — LLVM çağrı yerinde uyuşmazlığı tolere ediyor
+(D-295) ve değer kullanılmıyor. Gizli yapısal sapma; farklı bir ABI'de ya da
+dönüş değeri okunan bir bağlamda ısırırdı.
+`islev_donus_tip` fallback'i `i32` → `void` yapıldı; bu **`ret` emisyonunu da
+zorunlu kıldı** (`ret void 0` GEÇERSİZ) → `ret_bos_yaz`. Biri olmadan diğeri
+IR'ı bozar.
+
+### Yeni kapı: `make calistir_baremetal_diff`
+Linkleyemediğimiz için DAVRANIŞ değil **YAPI** karşılaştırılır: hedef üçlüsü +
+emit edilen `define` kümesi (**ad + DÖNÜŞ TİPİ**) C oracle ile birebir mi.
+Eksik işlevi, yanlış adı ve yanlış dönüş tipini yakalar — D-418'de üçü de çıktı.
+**Dönüş tipi kesilmemeli:** `sed 's/(.*//'` imzayı atar ama
+`define void @f` ↔ `define i32 @f` ayrımını KORUR; kusur tam oradaydı.
+
+**Sabotaj:** S160 (üçlü seçimi) → üç dosyada da üçlü farkı. **S161 (void dönüş)
+İLK DENEMEDE SESSİZ kaldı — ama sabotaj YANLIŞ SATIRA uygulanmıştı**
+(`builtin_ret`in void dalı, `islev_donus_tip` değil). Doğru satırla tekrarlandı
+→ **0/3**. D-402'nin dersi yine geçerli: *sabotajın sessizliği önce SABOTAJI
+şüpheli kılar.*
+
+**Kapılar:** `baremetal_diff` **3/3** · `codegen_diff` 139/139 ·
+`ct_bariyer` 7/7.
+
+---
+
 ## D-417 [YÜKSEK] — CODEGEN: `sabitsüre` + spekülasyon bariyeri + YENİ KAPI (2026-08-10)
 
 **`test/check_korpus` 31/32 → 32/32.**
