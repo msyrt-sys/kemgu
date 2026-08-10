@@ -1138,7 +1138,33 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
-- **`Dizi<kesirli64>` OKUMA yolu İKİ TARAFTA DA bozuk.** `kdl_dizi_al_tam` i32
+### 🔶 `Dizi<kesirli64>` — DE-RİSK EDİLDİ, ama ORACLE DEĞİŞİKLİĞİ İSTİYOR (D-417 sonrası)
+**Ölçüldü:** `değişken t = xs[0] + xs[1]` → C **exit 7**, self-host **exit 1**
+(doğrusu 42). İkisi de yanlış ve **farklı** biçimde yanlış — yani bu bir parite
+işi DEĞİL, gerçek bir dil kusuru.
+
+**Kök (ölçüldü):** erişimci SONEKİ yanlış. C `Dizi<kesirli64>` için 32-bitlik
+`_tam` çeşidini kullanıyor:
+```
+call ptr @kdl_dizi_olustur(ptr %3, i32 8)          ← eleman boyutu DOĞRU (8)
+call void @kdl_dizi_ekle_tam(ptr, ptr, double %5)  ← ama 32-bit erişimci
+call double @kdl_dizi_al_tam(ptr %7, i32 %8)       ← declare i32 ile UYUŞMAZ
+```
+**Eleman boyutu 8 olduğu için BELLEK GÜVENLİĞİ sorunu YOK** — yalnız değerler
+yanlış. (Bu ayrımı ölçmeden varsaymak yanlış olurdu.)
+
+**Onarım şekli — RUNTIME DEĞİŞİKLİĞİ GEREKMİYOR:** `kdl_dizi_al_tam64` 8 baytı
+`int64_t` olarak okur, yani BİTLER doğrudur. Derleyici tarafında:
+- oku : `%i = call i64 @kdl_dizi_al_tam64(...)` + `bitcast i64 → double`
+- yaz : `bitcast double → i64` + `kdl_dizi_yaz_tam64` / `_ekle_tam64`
+- `kesirli32` için aynısı `_tam` + `float↔i32` ile.
+
+**⚠ SCOPE: bu C'Yİ (ORACLE'I) DEĞİŞTİRİR.** Bu oturumun 20+ artımı "self-host'u
+C'ye uydur" hattındaydı; oracle'ı değiştirmek TÜM parite kapılarını yeniden
+tabanlar. Kusur tartışmasız ve onarım bounded, ama hangi hatta yürüneceği
+**Mehmet'in kararı** — sessizce kapsam genişletmedim.
+
+- **(ESKİ NOT) `Dizi<kesirli64>` OKUMA yolu İKİ TARAFTA DA bozuk.** `kdl_dizi_al_tam` i32
   döndürüyor; geri okuyan bir test **C oracle'da da** yanlış sonuç verdi. Yazma
   yolu D-408'de düzeldi, okuma açık.
 - **Sıradaki kapısız yüzeyler:** `test/snapshots` (81 dosya), `test/ornekler/eski`
