@@ -1,23 +1,49 @@
-// D-405: `bölge_al(yetki, N)` yerleşiğinin IR eşlemesi YOKTU.
+// D-415 (D-405'İN DÜZELTMESİ): `bölge_al(böl, n)` GERÇEK BİR TAHSİSTİR —
+// C `malloc(n * sizeof(T))` yayar:
+//     %s = getelementptr <T>, ptr null, i64 1   ; sizeof idiom
+//     %z = ptrtoint ptr %s to i64
+//     %t = mul i64 <n>, %z
+//     %p = call ptr @malloc(i64 %t)
 //
-// Self-host `call i32 @"bölge_al"(...)` üretiyordu: hem TANIMSIZ SEMBOL hem
-// YANLIŞ TİP. C ise ARGÜMANLARI YOK SAYIP parametresiz `@kdl_global_bolge_al()`
-// çağırır (ölçüldü, tahmin değil) — yani ARİTE FARKLI olduğu için salt ad
-// eşlemesi (`builtin_kdl_ad`) YETMEZ, özel dal gerekir.
+// 🔴 D-405'te bunu parametresiz `@kdl_global_bolge_al()` sanmıştım. YANLIŞ
+// ÖLÇÜMDÜ: C çıktısında gördüğüm o çağrı `bölge_al`ın karşılığı DEĞİL, HER
+// işlevin girişindeki ρ-EDİNME PROLOGU'ydu (tüm C çıktısında yalnız BİR kez
+// geçer — main'de). Eski hâl küresel bölge işaretçisini tampon diye
+// döndürüyordu → yazılan her eleman BÖLGEYİ BOZUYORDU.
 //
-// ⚠ BU KÖK, "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA duruyordu:
-// `kütüphane/dizi.kem`in `oluştur`u `bölge_al` çağırıyor ve kalan 7 modül
-// dosyasının hepsi orada takılıyordu. Kökü ölçmeden büyük bir çıkarsama
-// özelliği yazmaya kalksaydım YANLIŞ YERİ onarırdım.
-işlev bolgeyi_al() -> tam32 {
+// ⚠⚠ D-405'İN KORPUSU BU KUSURU KAÇIRDI ÇÜNKÜ TAHSİS EDİLEN BELLEĞE HİÇ
+// YAZMIYORDU — dosyanın kendi notu "bölge işaretçisini denetlemiyoruz (adres
+// kararsız)" diyordu. Belirti `dizi_kullan`da ARALIKLI SEGFAULT'tu
+// (42 42 139 42; C 8/8 kararlı) ve haftalarca kapıların altından geçti.
+// DERS: bir TAHSİS yerleşiğini test ederken TAHSİS EDİLEN BELLEĞE YAZ ve GERİ
+// OKU. Yalnız "çağrı geçerli IR üretti" demek yanlış lowering'i yeşil geçirir.
+işlev tahsis_ve_yaz(n: tam64) -> tam64 {
     değişken y: yetki<Bellek> = yetki_olustur(3, 3);
-    değişken b: *tam8 = bölge_al(y, 0);   // ödünç alır, TÜKETMEZ
-    geri_al(y);                            // yetkiyi tüket (CP005)
-    // Bölge işaretçisinin kendisini denetlemiyoruz (adres kararsız); önemli olan
-    // çağrının GEÇERLİ IR üretmesi ve ptr dönmesi.
-    ver 42;
+    değişken buf: *tam64 = bölge_al(y, n);   // n * 8 bayt
+    geri_al(y);
+    güvensiz {
+        // YAZ: 8 baytlık elemanlar. Yanlış boyutta tahsiste bu taşar.
+        değişken i: tam64 = 0;
+        iken i < n {
+            buf[i] = i * (3 olarak tam64);
+            i = i + (1 olarak tam64);
+        }
+        // GERİ OKU: değerler bozulmadan dönmeli.
+        değişken s: tam64 = 0;
+        değişken j: tam64 = 0;
+        iken j < n {
+            s = s + buf[j];
+            j = j + (1 olarak tam64);
+        }
+        ver s;
+    }
 }
 
 işlev main() -> tam32 {
-    ver bolgeyi_al();
+    // n=5 → 3*(0+1+2+3+4) = 30
+    eğer tahsis_ve_yaz(5 olarak tam64) != (30 olarak tam64) { ver 1; }
+    // n=4 → 3*(0+1+2+3) = 18 ; 30-18 = 12 ... 30+12 = 42
+    değişken a: tam64 = tahsis_ve_yaz(5 olarak tam64);
+    değişken b: tam64 = tahsis_ve_yaz(4 olarak tam64);
+    ver ((a - b) + 30) olarak tam32;   // (30-18)+30 = 42
 }

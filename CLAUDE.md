@@ -1225,7 +1225,24 @@ geçersizdi. Şekli kaynaktan BİREBİR al, kendin uydurma.
 uygulamaların o şekli görmesi gerektiğini** ayrıca düşün ve İLGİLİ TÜM kapıları
 koş (D-387: p7 eklenmiş ama `parser.kem` hiç güncellenmemişti).
 
-### 🔴🔴 AÇIK: `dizi_kullan` SELF-HOST İKİLİSİNDE ARALIKLI SEGFAULT (D-414)
+### ✓ ÇÖZÜLDÜ — D-415 (aşağıdaki D-414 notu ARTIK TARİHÎ)
+İki kök vardı, **ikisi de benim önceki kararlarımın hatasıydı**:
+- **🔴 D-405 YANLIŞTI: `bölge_al` GERÇEK TAHSİSTİR** — `malloc(n*sizeof(T))`.
+  D-405'te gördüğüm `@kdl_global_bolge_al()` `bölge_al`ın karşılığı DEĞİL, **her
+  işlevin ρ-EDİNME PROLOGU**ydu (tüm C çıktısında yalnız BİR kez, `main`de).
+  Küresel bölge işaretçisi tampon diye dönünce yazılan her eleman bölgeyi
+  bozuyordu. **D-405'in korpusu kaçırdı çünkü belleğe HİÇ YAZMIYORDU** — kendi
+  notu "adres kararsız, denetlemiyoruz" diyordu.
+  **DERS: tahsis yerleşiğini test ederken tahsis edilen belleğe YAZ ve GERİ OKU.**
+- **🔴 D-411'in "fallback güvenlidir" iddiası YANLIŞTI.** `büyü<T>(l: &Liste<T>)`
+  T'yi iç içe konumda taşıyor → `i32` fallback'i `büyü$i32` üretiyor, eleman
+  kopyası 4 bayt genişliğinde. **Define ve çağrı i32'de ANLAŞTIĞI için LLVM
+  kabul ediyor** — "hata gürültülü kalır" dediğim şey olmadı, kusur çalışma
+  anına kaydı. Onarım: **aktif ikameden devral** (`subst_bul`) — sıra (a) çıplak
+  parametre → (b) aktif ikame → (c) i32.
+- **exit 139 asla artefakt sayılmaz** (aşağıdaki not doğruydu, kanıtlandı).
+
+### 🔴🔴 (TARİHÎ) AÇIK: `dizi_kullan` SELF-HOST İKİLİSİNDE ARALIKLI SEGFAULT (D-414)
 **Bu GERÇEK bir kusur, kapı artefaktı DEĞİL.** Aynı ikili art arda koşulunca
 `42 42 139 42 …` veriyor; C oracle aynı dosyada **8/8 kararlı 42**.
 `git stash` ile D-414 geri alınıp ölçüldü: **segfault D-414'ten ÖNCE de var** —

@@ -5,6 +5,56 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-415 [YÜKSEK] — 🔴 D-405 YANLIŞTI: `bölge_al` GERÇEK TAHSİSTİR (2026-08-10)
+
+**D-414'te açtığım aralıklı segfault kapandı.** `dizi_kullan` self ikilisi
+öncesinde `42 42 139 42 …`, şimdi **12/12 kararlı 42**.
+
+### 🔴 Kendi kararımın düzeltmesi
+**D-405'te `bölge_al(böl, n)`i parametresiz `@kdl_global_bolge_al()` sandım —
+YANLIŞ ÖLÇÜMDÜ.** C çıktısında gördüğüm o çağrı `bölge_al`ın karşılığı DEĞİL,
+**her işlevin girişindeki ρ-EDİNME PROLOGU**ydu. Kesin kanıt: `kdl_global_bolge_al`
+C'nin TÜM çıktısında **yalnız BİR kez** geçiyor — `main`de.
+
+C gerçekte TAHSİS yapıyor:
+```
+%s = getelementptr <T>, ptr null, i64 1   ; sizeof idiom
+%z = ptrtoint ptr %s to i64
+%t = mul i64 <n>, %z
+%p = call ptr @malloc(i64 %t)
+```
+Eski hâl küresel bölge işaretçisini tampon diye döndürüyordu → yazılan her
+eleman **BÖLGEYİ BOZUYORDU**. Belirti aralıklı segfault'tu.
+
+**⚠⚠ D-405'İN KORPUSU BU KUSURU KAÇIRDI ÇÜNKÜ TAHSİS EDİLEN BELLEĞE HİÇ
+YAZMIYORDU.** Dosyanın kendi notu itiraf ediyormuş: *"Bölge işaretçisinin
+kendisini denetlemiyoruz (adres kararsız)"*. Korpus yenilendi: artık **yazıyor
+ve geri okuyor**, iki farklı `n` ile.
+> **DERS: bir TAHSİS yerleşiğini test ederken tahsis edilen belleğe YAZ ve GERİ
+> OKU.** "Çağrı geçerli IR üretti" demek yanlış lowering'i yeşil geçirir —
+> haftalarca geçirdi.
+
+### İkinci kök — D-411'in sağlamlık iddiası da yanlıştı
+`büyü<T>(l: &Liste<T>, ...)`de T İÇ İÇE konumda; argümandan çıkarsanamıyor ve
+D-411'in `i32` fallback'i devreye giriyordu → **`büyü$i32`** yayılıyor, büyüme
+sırasında eleman kopyası 8 yerine 4 bayt genişlikte yapılıyordu. C `büyü$i64`
+yayıyor.
+> **D-411'de "fallback yanlışsa LLVM REDDEDER, hata GÜRÜLTÜLÜ kalır" demiştim —
+> O İDDİA YANLIŞTI.** Define ve çağrı i32'de ANLAŞIYOR, LLVM kabul ediyor, kusur
+> çalışma anına kayıyor. Fallback güvenli DEĞİL.
+
+Onarım: **aktif ikameden devral** (`subst_bul`). Bir specialization'ın gövdesinden
+başka bir generic çağrılıyorsa (`ekle$i64` → `büyü`), T argümanlardan değil
+ÇAĞIRANIN ikamesinden gelir. C'nin TipSubst yayılımının karşılığı.
+Sıra: (a) çıplak parametre → (b) aktif ikame → (c) `i32` fallback.
+
+**Sabotaj S156** (malloc → global bölge) → **ÜÇ dosyayı birden** kırıyor (134/137).
+
+**Kapılar:** `codegen_diff` **137/137** · `modul_codegen` 18/18 (İKİ yeşil koşum) ·
+`codegen_genis` 67/67 (0 muaf) · `dizi_kullan` 12/12 kararlı.
+
+---
+
 ## D-414 [YÜKSEK] — CODEGEN: legacy `kullan` düz ad alanı + AÇIK segfault bulgusu (2026-08-10)
 
 **`test/crossfile` 0/2 → 2/2.**
