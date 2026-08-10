@@ -1119,7 +1119,20 @@ LLVM-RED'den çıkıp çalışıyor.
   hatası İKİ varyantla %50 olasılıkla doğru cevabı verir ve test **tesadüfen
   yeşil kalır**. Üç varyant + hepsinin AYRI dönüş değeri şart. (D-393'ün
   "3 parametre yetmez, en az 4" dersinin aynısı.)
-- **`sabitsüre` codegen'i — GÜVENLİK-DUYARLI, yarım yapılamaz.** C
+- ✓ **D-417: `sabitsüre` codegen'i EKLENDİ + YENİ KAPI `calistir_ct_bariyer`.**
+  `check_korpus` 31/32 → **32/32**.
+  **🎯 ASIL DERS — DAVRANIŞSAL KAPILAR GÜVENLİK ÖZELLİĞİNİ GÖREMEZ.** Sabotaj
+  S159 ile spekülasyon bariyerini sildim: `codegen_diff` **139/139 YEŞİL kaldı**,
+  `lfence` sayısı 10 → 0 düştü. Bariyerin yokluğu link hatası vermez, IR geçerli
+  kalır, program AYNI SONUCU üretir. **"Program doğru çalıştı" güvenlik
+  özelliklerinde YETERSİZ KANITTIR** → yeni kapı davranışı değil YAPIYI
+  (bariyer sayısını) C ile karşılaştırır; korpusu `grep` ile tarar ki yeni dosya
+  kendiliğinden kapsansın.
+  **⚠ D-408'DE KENDİ UYARIMI KENDİM İHLAL ETMİŞİM:** `sabitsüre_olustur`u
+  "bariyeri düşürür, yarım yapmıyorum" diye ertelerken **aynı commit'te `ifşa`yı
+  tam da o şekilde ekledim** (pass-through, bariyersiz). Bir riski yazmak, onu
+  başka bir yerde işlememeyi garanti etmiyor.
+- **(TARİHÎ) `sabitsüre` codegen'i — GÜVENLİK-DUYARLI, yarım yapılamaz.** C
   `sabitsüre_olustur`u pass-through yapar AMA yanında
   **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri yayar. Self-host'ta
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce

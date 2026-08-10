@@ -1593,6 +1593,20 @@ işlev vir_ekle(liste: metin, oge: metin) -> metin {
     eğer metin_uzunluk(liste) == 0 { ver oge; }
     ver metin_birlestir(metin_birlestir(liste, ","), oge);
 }
+// D-417: sabit-süre SPEKÜLASYON BARİYERİ (Spectre v1 azaltması).
+// C llvm.c:3813 aynası — `sabitsüre_olustur` ve `ifşa` DEĞERİ geçirdikten SONRA
+// yayar. Sıfır çalışma-zamanı maliyeti değil, KASITLI bir engel: yokluğu link
+// hatası VERMEZ, IR geçerli kalır, program çalışır — yalnız sabit-süre garantisi
+// sessizce kaybolur.
+// ⚠ MİMARİ KORUMASI YOK ve bu BİLİNÇLİ: C `--mimari aarch64`te DE x86 lfence
+// yayıyor (ölçüldü). Tartışmalı ama parite hedefi C'nin DAVRANIŞI; burada
+// "düzeltmek" oracle'dan sapmak olurdu (D-388/D-408 ile aynı gerekçe).
+// `declare` GEREKMEZ — LLVM bilinen intrinsic'leri metinsel IR'da otomatik
+// bildirir (ölçüldü: C hiç declare yaymıyor; D-397 reduce ile aynı).
+işlev ct_bariyer_yaz() -> tam32 {
+    yaz_str("  call void @llvm.x86.sse2.lfence()"); yb(10);
+    ver 0;
+}
 // D-416: "," ile birleşik listede öğe sayısı ("" → 0).
 işlev liste_say(s: metin) -> tam32 {
     değişken n: tam32 = metin_uzunluk(s);
@@ -4379,7 +4393,23 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // yoluna düşüp TANIMSIZ `@ifşa` üretiyordu (`tekkez_olustur`/`dondur`
         // ile aynı sınıf).
         eğer metin_esit(fad, "ifşa") ve (cs == 2) {
-            ver ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken iv2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            // 🔴 D-417: D-408'İN DÜZELTMESİ. Orada `ifşa`yı SALT pass-through
+            // yapmıştım — C değeri geçirdikten SONRA bir SPEKÜLASYON BARİYERİ
+            // yayıyor. Bariyeri düşürmek link hatası vermez, IR geçerli kalır ve
+            // program çalışır: **sabit-süre disiplininde SESSİZ GÜVENLİK
+            // REGRESYONU**. D-408'de "sabitsüre_olustur'u yarım yapmıyorum"
+            // derken aynı kusuru `ifşa`da işlemiştim.
+            ct_bariyer_yaz();
+            ver iv2;
+        }
+        // D-417: `sabitsüre_olustur(e)` — değer PASS-THROUGH + spekülasyon
+        // bariyeri (C llvm.c:3813 aynası). Gizlilik muhasebesi tip kontrolde
+        // yaşar; IR'daki tek izi bu bariyerdir.
+        eğer metin_esit(fad, "sabitsüre_olustur") ve (cs == 2) {
+            değişken sv2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            ct_bariyer_yaz();
+            ver sv2;
         }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
             // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer

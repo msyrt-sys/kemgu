@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-417 [YÜKSEK] — CODEGEN: `sabitsüre` + spekülasyon bariyeri + YENİ KAPI (2026-08-10)
+
+**`test/check_korpus` 31/32 → 32/32.**
+
+**Kusur:** `sabitsüre_olustur` codegen'i YOKTU (tanımsız sembol). C her iki
+sabit-süre yerleşiğini de **PASS-THROUGH** yapar AMA ardından bir **SPEKÜLASYON
+BARİYERİ** yayar: `call void @llvm.x86.sse2.lfence()` (Spectre v1 azaltması).
+
+### 🔴 D-408'in gizli kusuru — kendi uyarımı kendim ihlal etmişim
+D-408'de `sabitsüre_olustur`u "naif pass-through bariyeri sessizce düşürür,
+yarım yapmıyorum" diye BİLİNÇLİ olarak ertelemiştim — **ama aynı adımda `ifşa`yı
+tam da o şekilde ekledim: pass-through, BARİYERSİZ.** Aynı güvenlik regresyonunu,
+ondan kaçındığımı yazdığım commit'te işledim. D-417 ikisini de onardı.
+
+### 🎯 ASIL ÇIKTI — DAVRANIŞSAL KAPILAR BU KUSURU GÖREMİYOR (ölçüldü)
+Sabotaj **S159** ile bariyeri sildim:
+```
+codegen_diff : 139/139 YEŞİL   ← görmüyor
+lfence sayısı: 10 → 0          ← kusur burada
+```
+Bariyerin yokluğu link hatası vermez, IR geçerli kalır, program **aynı sonucu
+üretir**. Kaybolan tek şey sabit-süre garantisidir.
+> **Güvenlik özelliklerinde "program doğru çalıştı" YETERSİZ KANITTIR.**
+
+**Yeni kapı: `make calistir_ct_bariyer`** — davranışı değil YAPIYI ölçer:
+`sabitsüre`/`ifşa` kullanan HER dosyada `lfence` SAYISINI C oracle ile
+karşılaştırır. Korpus elle seçilmez, `grep` ile taranır ki yeni dosya
+eklendiğinde kapı kendiliğinden kapsasın. Durum **7/7 (6 atlandı)**.
+Sabotaj tekrarı: eski kapı 139/139 yeşil derken yeni kapı **0/7** ve
+`stdlib/kripto/sifre`de **55 eksik bariyer** raporladı.
+
+**⚠ MİMARİ KORUMASI YOK, BİLİNÇLİ:** C `--mimari aarch64`te DE x86 lfence
+yayıyor (ölçüldü). Tartışmalı ama parite hedefi C'nin DAVRANIŞI; burada
+"düzeltmek" oracle'dan sapmak olurdu (D-388/D-408 gerekçesi).
+`declare` GEREKMEZ — LLVM bilinen intrinsic'i otomatik bildirir (D-397 ile aynı).
+
+**Kapılar:** `codegen_diff` **139/139** · `ct_bariyer` **7/7** ·
+`check_korpus` **32/32**.
+
+---
+
 ## D-416 [YÜKSEK] — CODEGEN: `satıriçi_asm` — 🎯 `test/snapshots` 62/62 (2026-08-10)
 
 **Son sapma kapandı: `test/snapshots` 61/62 → 62/62, TAM PARİTE.**
