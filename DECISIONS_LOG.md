@@ -5,6 +5,109 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-420 [YÜKSEK] — CHECKER: T014 alan/indeks lvalue muafiyeti + parite envanteri (2026-08-11)
+
+### Nasıl bulundu — bir kapıyı EKLEMEDEN ÖNCE ön koşulunu ölçerek
+
+D-419'da iki bulgu kaydetmiştim; birincisi "self-host `--llvm` tip hatasında
+DURMUYOR" idi ve notta "onarım küçük görünüyor" yazmıştım. Kapıyı eklemeden
+önce girdileri taradım ve **self-host'un KENDİ kaynağında yanlış-pozitif
+verdiğini** buldum:
+
+```
+selfhost/codegen.kem :: C=[OK]  SELF=[T014 1121 20]
+```
+
+Kapıyı ölçmeden eklesem **self-host kendini derleyemez hâle gelirdi** —
+bootstrap ölürdü. Kusur bugüne kadar görünmezdi çünkü `--llvm` checker'ı hiç
+çağırmıyor; yani **iki kusur birbirini maskeliyordu.**
+
+### Kök: `k.xs = []` — ERISIM/INDEKS lvalue'sunda T014 muafiyeti yoktu
+
+`ATAMA` muafiyeti YALNIZ `TANIMLAYICI` lvalue'yu tanıyordu (satır 9929).
+`p.tp_pending = []` gibi tamamen geçerli kod sahte T014 alıyordu.
+
+**Kural TİP GÜDÜMLÜDÜR — C'den 8 probe ile ölçüldü, varsayılmadı:**
+
+| şekil | C | önce (self) | sonra |
+|---|---|---|---|
+| `k.xs = []` (Dizi alan) | OK | T014 | OK ✓ |
+| `k.n  = []` (skaler alan) | T014+T001 | T014 | T014 (T001 eksik) |
+| `d.ic.xs = []` (iç içe) | OK | T014 | OK ✓ |
+| `xs[0] = []`, `xs: Dizi<Dizi<T>>` | OK | T014 | OK ✓ |
+| `xs[0] = []`, `xs: Dizi<tam32>` | T014+T001 | T014 | T014 (T001 eksik) |
+| `k.xs = []`, `k: &değişken K` | OK | T014 | OK ✓ |
+
+Skaler alan T014 ALDIĞI için **toptan muafiyet (`t14_muaf_hepsi`) YANLIŞ
+olurdu** — gerçek bir tanıyı susturur, yani soundness deliği açardı. Bu yüzden
+tip DÜĞÜMÜYLE `t14_muaf_isaretle` kullanıldı.
+
+### Uygulama
+`yerel_tn: Dizi<tam32>` yan-dizisi (`yerel` ile PARALEL — bağlamanın annotasyon
+TİP DÜĞÜMÜ, -1 = yok). **String değil DÜĞÜM**, çünkü `t14_muaf_isaretle` iç içe
+`[[]]` için alt-ağaca yürür ve INDEKS lvalue'da ELEMAN tip düğümü gerekir;
+`yerel_tip`/`yerel_ham` string'leri ikisini de veremez. Yardımcılar: `bag_tn`,
+`tn_soy` (`&T`/`&değişken T`/`*T` kabuğunu soy), `tn_yapi_adi`, `alan_tn_bul`
+(`alan_tip_bul`ın düğüm karşılığı), `ifade_tn`.
+
+### ⚠ CAGRI DALI BİLİNÇLİ OLARAK YOK — ve sebebi bir TUZAK
+`f().alan = []` (C: OK) hâlâ sahte T014 alır. Denedim ve **"dizi sınır ihlali"
+ile düştü**: dönüş tip düğümü `fn_node` ister, `fn_node` YALNIZ `imza_topla`
+(codegen ön-geçişi) tarafından doldurulur; checker yolunda `fn_ad` ondan
+BAĞIMSIZ doldurulur → **iki dizi PARALEL DEĞİLDİR.** D-392'nin aynı tuzağı.
+
+> **GENEL DERS:** `codegen.kem` tek dosya ama İKİ yol içerir (checker / codegen)
+> ve bazı tablolar yalnız BİR yolda doldurulur. Bir tabloyu yeni bir yerden
+> okumadan önce "bu yolda kim dolduruyor?" sorusunu SOR. Aynı gerekçe,
+> `--llvm` tip kapısının `kontrol_program`ı AYNI `Ayr`de koşturmasını da
+> yasaklar (`fn_ad` kirlenir → codegen çıktısı değişir) — TAZE `Ayr` şart.
+
+### Bilinen sınırlar (ölçüldü, gizlenmedi)
+- Skaler alan/eleman şeklinde eşlik eden **T001 yayılmıyor** (`ifade_tip` dizi
+  literaline tip vermiyor). Eksik-tanı yönünde, önceden de vardı.
+- `f().alan = []` sahte T014 (yukarıdaki tuzak).
+- **`selfhost/checker.kem`'de AYNI boşluk duruyor** (satır 4444). Korpusa
+  uyandırıcı örnek eklemek `checker_diff`i kırar → port AYRI adım.
+
+### Kapılar
+`codegen_diff` 139/139 · `self_driver` 4 mod × 2 sürücü + FIXPOINT ·
+`--check` 116/116 (iki sürücü de).
+
+### 🎯 YAN ÜRÜN: `--llvm` TİP KAPISININ ÖN KOŞULU ÖLÇÜLDÜ — TUTMUYOR
+
+Kapıyı eklemenin ön koşulu, `--llvm` girdilerinde SIFIR yanlış-pozitif olması.
+Tüm yüzeyi (`cg_korpus` + `moduller` + `ornekler` + `stdlib*` + `selfhost` +
+`snapshots` + `crossfile` + `check_korpus` + `asan_matris` + `kütüphane`)
+taradım. **11 sapma var:**
+
+**Yanlış-pozitif (self tanı verir, C OK) — 5, kapıyı BLOKLAR (≈2 kök):**
+`cg_cesit_ic_ayirici` T011 · `snapshots/cesit_sonuc` T011 ·
+`cg_generic_cesit` M004 · `cg_mono_cesit_metin` M004 ·
+`cg_mono_yapi_field_cesit` M004
+
+**Kaçırma (C tanı verir, self OK) — 6:**
+`21_modul_kullan` T002 · `23_generic_constraint` T007 ·
+`26_referans_aktarim` T022 · `49_generic_method` T001 ·
+`bolge_al_bl001` BL001 · `deref_atama_disi` **C=T022 ama self=G001**
+(aynı konum, YANLIŞ KOD)
+
+Kapıyı bugün eklesem `codegen_diff` **139 → 135'e düşerdi.**
+
+> **⚠ "131/131 TAM PARİTE" İDDİASI YÜZEY-SINIRLIYDI.** O ölçüm `stdlib` +
+> `stdlib/temel` + `test/ornekler` + `kütüphane` + `test/moduller` kapsıyordu;
+> **`cg_korpus`, `snapshots` ve `selfhost/` HİÇ dâhil değildi.** Parite sayısı
+> yalnız ölçülen yüzey kadar geniştir — D-419'un "kendi kapının atladıklarını
+> ölç" dersinin aynısı, bu kez kapı değil KORPUS için.
+
+### 12 ATLANAN DOSYA, ÜÇ KAPI, TEK KÖK
+`ct_bariyer` 6 + `modul_codegen` 3 + `codegen_genis` 3 atlaması **hepsi** aynı
+sebepten: C `--llvm` tip hatasında durur, self-host durmaz. **Onikisinde de
+`--check` kod+satır+sütun BİREBİR paritede** — yani checker hazır, eksik olan
+yalnız `--llvm`in onu çağırması. Ön koşul (yukarıdaki 5 yanlış-pozitif)
+kapanınca bu 12 dosya "atlandı"dan "iki taraf da reddediyor"a döner.
+
+---
+
 ## D-419 [YÜKSEK] — KAPI: BİRLEŞİK OS birimi — kendi kapımın kör noktası (2026-08-11)
 
 **D-418'in kapısı 6 dosyayı ATLIYORDU ve bunu ölçtüm.** Sebep meşruydu: C

@@ -1138,6 +1138,37 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🎯 D-420: T014 alan lvalue + SELF-HOST CHECKER PARİTE ENVANTERİ
+- **`k.xs = []` sahte T014 veriyordu** — `ATAMA` muafiyeti yalnız `TANIMLAYICI`
+  lvalue'yu tanıyordu; `ERISIM`/`INDEKS` yoktu. **Self-host KENDİ kaynağında
+  düşüyordu** (`codegen.kem:1121`, `p.tp_pending = []`). Kural **TİP
+  GÜDÜMLÜDÜR** (8 probe ile C'den ölçüldü): `k.n = []` (skaler alan) T014
+  ALIR → toptan muafiyet gerçek bir tanıyı susturur. Yeni yan-dizi `yerel_tn`
+  (tip **DÜĞÜMÜ**; string yetmez — iç içe `[[]]` alt-ağaç yürüyüşü + INDEKS'te
+  ELEMAN tipi gerekir).
+- **⚠ `codegen.kem` TEK DOSYA ama İKİ YOL** (checker / codegen) ve bazı tablolar
+  yalnız BİR yolda dolar. `fn_node` YALNIZ `imza_topla`da (codegen ön-geçişi)
+  dolar; checker'dan okumak **"dizi sınır ihlali"**. Bir tabloyu yeni bir yerden
+  okumadan önce **"bu yolda kim dolduruyor?"** diye SOR. Aynı gerekçeyle
+  `--llvm` tip kapısı `kontrol_program`ı AYNI `Ayr`de koşturamaz (`fn_ad`
+  kirlenir → codegen çıktısı değişir) → **taze `Ayr` şart.**
+- **⚠⚠ "131/131 TAM PARİTE" YÜZEY-SINIRLIYDI.** O ölçüm `cg_korpus`,
+  `snapshots` ve `selfhost/`i HİÇ kapsamıyordu. Tüm yüzey taranınca **11 sapma**
+  çıktı. **Parite sayısı yalnız ölçülen yüzey kadar geniştir.**
+- **`--llvm` TİP KAPISININ ÖN KOŞULU TUTMUYOR** (D-419'da "onarım küçük
+  görünüyor" demiştim — YANLIŞTI). Bloklayan **5 yanlış-pozitif (≈2 kök)**:
+  `cg_cesit_ic_ayirici`+`snapshots/cesit_sonuc` (T011), `cg_generic_cesit`+
+  `cg_mono_cesit_metin`+`cg_mono_yapi_field_cesit` (M004). Bugün eklesem
+  `codegen_diff` **139 → 135**. Ayrıca **6 kaçırma**: T002/T007/T022/T001/BL001
+  ve `deref_atama_disi` (C=T022, self=**G001** — aynı konum, YANLIŞ KOD).
+- **12 ATLANAN DOSYA, ÜÇ KAPI, TEK KÖK:** `ct_bariyer` 6 + `modul_codegen` 3 +
+  `codegen_genis` 3 — hepsi "self `--llvm` tip hatasında durmuyor". **Onikisinde
+  de `--check` birebir paritede.** Ön koşul kapanınca bu dosyalar "atlandı"dan
+  "iki taraf da reddediyor"a döner.
+- **Kalan (D-420 kapsamı dışı):** `checker.kem`'de AYNI T014 boşluğu (satır
+  4444) — korpusa örnek eklemek `checker_diff`i kırar, port ayrı adım.
+  Skaler alan şeklinde eşlik eden T001 yayılmıyor; `f().alan = []` sahte T014.
+
 ### ⚠ D-419'DA AÇILAN İKİ YENİ BULGU (ölçüldü, onarılmadı)
 Kapıların ATLAMA listeleri tarandı (`codegen_genis` 12 dosya). Üç sınıf çıktı;
 7'si bare-metal MMIO (meşru), ama ikisi gerçek bulgu:
