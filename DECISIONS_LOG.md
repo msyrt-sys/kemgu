@@ -5,6 +5,77 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-421 [YÜKSEK] — DENETİM: D-420'nin İKİ SOUNDNESS DELİĞİ + checker.kem portu (2026-08-11)
+
+D-420 tüm kapıları geçmişti (`codegen_diff` 139/139, `self_driver` FIXPOINT
+dâhil). Ön-merge düşmanca denetim **14 bulgu** onayladı; **ikisi D-420'nin kendi
+açtığı loud→silent delikleriydi.** Yeşil kapılar ikisini de göremiyordu.
+
+### 🔴 (1) `tn_soy` HAM İŞARETÇİYİ SOYUYORDU — muafiyet, C'nin REDDETTİĞİ şekle veriliyordu
+```
+işlev f(k: *K) -> tam32 { k.xs = []; ver 0; }
+C    = [T007 2 29, T014 2 35]        SELF = [OK]
+```
+Oracle'ı okudum (`src/tip_kontrol.c` DUGUM_ERISIM): otomatik deref **YALNIZ**
+`TIP_REFERANS` içindir, `TIP_POINTER` YOK — C `*K` üzerinden alan erişimini T007
+ile reddeder. `tn_soy`a `TIP_POINTER`ı koymam, C'nin İKİ tanıyla reddettiği bir
+şekli self-host'ta tamamen sessizleştirdi.
+
+> **KURAL:** Bir MUAFİYET kuralı, kabul edilebilirliği GENİŞLETMEMELİDİR.
+> Muafiyet yalnız "bu tanı burada YANLIŞ" der; "bu program geçerli" demez.
+
+### 🔴 (2) `bag_tn` KAPSAM-KÖRDÜ — gölgeleme gerçek bir T014'ü susturuyordu
+`yerel` append-only bir ön-geçiş listesidir, blok çıkışında KISALMAZ. Sondan başa
+arama "en son bağlama"yı bulur; o bağlama **başka bir kardeş blokta** olabilir:
+`a: A` (skaler alan) için `a.n = []` yazılır, İLERİDEKİ bir blokta `a: B` (Dizi
+alan) gölgesi muafiyeti yanlış tetikler → T014 sessizce kaybolur.
+
+Çözüm, bu repoda ZATEN YERLEŞİK olan `var_tip` disiplini: ad birden fazla FARKLI
+tip düğümüne bağlıysa **BELİRSİZ → -1** (muafiyet yok). Belirsizlikte muhafazakâr
+taraf **tanıyı KORUMAKTIR**.
+
+### Denetimin NEGATİF sonuçları (bunlar da bilgi)
+Paralel dizi kayması YOK (4 ekleme yolunun 4'ünde de `yerel_tn` tam bir kez) ·
+`tn_yapi_adi` / özyineleme / döngü sınırları temiz · **524 gerçek `.kem`
+dosyasında D-420 kaynaklı tek bir fark bile ölçülmedi.**
+
+### `selfhost/checker.kem` PORTU
+Port mekanikti: `yerel_topla` iki dosyada BİREBİRMİŞ (yalnız D-420'nin satırları
+eksik). Yardımcı bloğu `codegen.kem`'den KOPYALANDI — aynı soruyu iki yerde ayrı
+yanıtlayan kod er ya da geç ayrışır (D-407 dersi). `yerel_topla` gövdeleri tekrar
+birebir. `checker_diff` **148 → 149** (0 muaf).
+
+### KORPUS: `test/check_korpus/tc20_01_t014_lvalue.kem` (5 pozitif + 2 negatif)
+**⚠ NEGATİF VAKA SEÇİMİ BİR ÖLÇÜM İŞİYDİ, TAHMİN DEĞİL.** İlk iki deneme başarısız:
+- somut skaler alan (`k.n = []`): C'de T014'ün YANINDA T001 var, self T001'i
+  yaymıyor → kapı YANLIŞ SEBEPLE kırmızı olurdu.
+- `Genel<tam32>`: T somutlaşır, T001 yine çıkar.
+- **Çalışan tek şekil:** generic İŞLEV içinde ÇÖZÜLMEMİŞ `T` → C ertelediği için
+  tek başına T014 verir, iki taraf birebir eşleşir.
+
+Negatif vaka olmadan **toptan muafiyet de kapıyı geçerdi** (S2 bunu kanıtladı).
+
+### SABOTAJ — 4/4 YAKALANDI (hepsinin uygulandığı `grep` ile doğrulandı)
+| # | sabotaj | dosya | sonuç |
+|---|---|---|---|
+| S1 | ERISIM dalını sil | checker.kem | 4 sahte T014 belirdi ✅ |
+| S2 | tip-güdümlü → toptan muafiyet | checker.kem | iki negatif de sustu (`OK`) ✅ |
+| S3 | `bag_tn` naif (kapsam-kör) | checker.kem | satır 73'ün T014'ü kayboldu ✅ |
+| S4 | S2'nin sürücü karşılığı | codegen.kem | `OK` — `self_driver` yolu da yakalar ✅ |
+
+### ⚠ BİLİNEN KÖR NOKTA — kapıya KONAMAYAN şekil
+`işlev f(k: *K) { k.xs = []; }` C'de `[T007, T014]`, self'te yalnız `[T014]`
+(T007 self-host'ta YOK) → iki taraf ayrıştığı için **korpusa konamaz**.
+`tn_soy`un `*T`yi soymaması bu yüzden kapıyla DEĞİL, yalnız probe ile
+doğrulanmıştır. T007 boşluğu kapanınca korpusa eklenmelidir. Bu, dosyanın içine
+de yazıldı — kör nokta BİLİNEREK bırakılıyor.
+
+### Kapılar
+`checker_diff` 149/149 (0 muaf) · `codegen_diff` 139/139 ·
+`self_driver` 4 mod × 2 sürücü + FIXPOINT · `--check` 117/117.
+
+---
+
 ## D-420 [YÜKSEK] — CHECKER: T014 alan/indeks lvalue muafiyeti + parite envanteri (2026-08-11)
 
 ### Nasıl bulundu — bir kapıyı EKLEMEDEN ÖNCE ön koşulunu ölçerek

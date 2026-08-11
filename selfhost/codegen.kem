@@ -8368,20 +8368,42 @@ işlev bag_dizi_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 // T014 muafiyeti C'de TİP GÜDÜMLÜDÜR (ölçüldü): `k.n = []` (skaler alan) T014
 // ALIR, `k.xs = []` (Dizi alan) ALMAZ. Bu yüzden ERISIM/INDEKS lvalue'da toptan
 // muafiyet (`t14_muaf_hepsi`) YANLIŞ olurdu — gerçek bir T014'ü susturur.
+// ⚠ `yerel` KAPSAM TAŞIMAZ: append-only bir ön-geçiş listesidir, blok çıkışında
+// kısalmaz. Sondan başa arama "en son bağlama"yı bulur — o bağlama BAŞKA bir
+// kardeş blokta olabilir. Naif hâli GERÇEK bir T014'ü sessize alır (ölçüldü:
+// `k: A` skaler alanına `[]` atanır, ilerideki bir blokta `k: B` Dizi alanlı
+// gölge var → muafiyet yanlış tetiklenir; loud → silent).
+// Bu yüzden `var_tip`in yerleşik disiplini uygulanır: ad BİRDEN FAZLA FARKLI
+// tip düğümüne bağlıysa BELİRSİZ → -1 (muafiyet yok). Tek düğüm → o düğüm.
+// Belirsizlikte muhafazakâr taraf T014'ü KORUMAKTIR.
 işlev bag_tn(p: &değişken Ayr, ad: metin) -> tam32 {
-    değişken i: tam32 = dizi_boyut(p.yerel) - 1;
-    iken i >= p.yerel_basla {
-        eğer metin_esit(dizi_al(p.yerel, i), ad) { ver dizi_al(p.yerel_tn, i); }
-        i = i - 1;
+    değişken n: tam32 = dizi_boyut(p.yerel);
+    değişken i: tam32 = p.yerel_basla;
+    değişken bulunan: tam32 = 0 - 1;
+    değişken sayi: tam32 = 0;
+    iken i < n {
+        eğer metin_esit(dizi_al(p.yerel, i), ad) {
+            değişken t: tam32 = dizi_al(p.yerel_tn, i);
+            eğer sayi == 0 { bulunan = t; sayi = 1; }
+            değilse {
+                eğer t != bulunan { ver 0 - 1; }   // farklı tip → BELİRSİZ
+            }
+        }
+        i = i + 1;
     }
-    ver 0 - 1;
+    ver bulunan;
 }
-// `&K` / `&değişken K` / `*K` kabuklarını soy — alan erişimi otomatik deref eder.
+// `&K` / `&değişken K` kabuğunu soy — alan erişimi REFERANSI otomatik deref eder.
+// ⚠ HAM İŞARETÇİ (`*K`) SOYULMAZ. Oracle da soymaz (`src/tip_kontrol.c` DUGUM_ERISIM:
+// "if (nesne_tip->kategori == TIP_REFERANS)" — TIP_POINTER YOK) ve `*K` üzerinden
+// alan erişimini T007 ile REDDEDER. İlk yazımda `*K`yı da soyuyordum: bu, C'nin
+// iki tanıyla reddettiği şekle T014 MUAFİYETİ veriyordu → `işlev f(k: *K) { k.xs = []; }`
+// C=[T007,T014] iken self=[OK]. Muafiyet kuralı, kabul edilebilirliği GENİŞLETMEMELİ.
 işlev tn_soy(p: &değişken Ayr, tn: tam32) -> tam32 {
     değişken t: tam32 = tn;
     iken t >= 0 {
         değişken a: metin = dizi_al(p.a_ad, t);
-        eğer metin_esit(a, "TIP_REFERANS") veya metin_esit(a, "TIP_POINTER") {
+        eğer metin_esit(a, "TIP_REFERANS") {
             eğer dizi_al(p.a_cs, t) < 1 { ver 0 - 1; }
             t = dizi_al(p.cocuk, dizi_al(p.a_cb, t));
         } değilse { ver t; }

@@ -1138,6 +1138,33 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🔴 D-421: D-420'NİN İKİ SOUNDNESS DELİĞİ (yeşil kapılar görmedi)
+D-420 TÜM kapıları geçmişti; ön-merge düşmanca denetim iki loud→silent deliği
+buldu. **Yeşil kapı "doğru" demek değildir** — bu dersin bu oturumdaki 2. kanıtı.
+- **`tn_soy` HAM İŞARETÇİYİ soyuyordu.** Oracle (`src/tip_kontrol.c`
+  DUGUM_ERISIM) otomatik deref'i **YALNIZ `TIP_REFERANS`** için yapar; `*K`
+  üzerinden alan erişimini **T007 ile REDDEDER**. `TIP_POINTER`ı soymam, C'nin
+  İKİ tanıyla reddettiği şekli self'te tamamen sessizleştirdi.
+  > **KURAL: bir MUAFİYET kuralı kabul edilebilirliği GENİŞLETMEMELİDİR.**
+  > Muafiyet "bu tanı burada yanlış" der, "bu program geçerli" DEMEZ.
+- **`bag_tn` KAPSAM-KÖRDÜ.** `yerel` append-only'dir, blok çıkışında KISALMAZ →
+  sondan-başa arama BAŞKA bir kardeş bloktaki gölgeyi bulur ve gerçek bir T014'ü
+  susturur. Çözüm repoda ZATEN VARDI: `var_tip` disiplini (birden fazla FARKLI
+  tip → BELİRSİZ). **Belirsizlikte muhafazakâr taraf TANIYI KORUMAKTIR.**
+- **`checker.kem` portu:** `yerel_topla` iki dosyada BİREBİRMİŞ; yardımcı bloğu
+  kopyalandı (aynı soruyu iki yerde ayrı yanıtlayan kod ayrışır — D-407).
+- **⚠ NEGATİF TEST VAKASI SEÇMEK BİR ÖLÇÜM İŞİDİR.** İki deneme çöptü: somut
+  skaler alan ve `Genel<tam32>` ikisi de C'de T014'ün YANINDA T001 üretiyor,
+  self T001'i yaymıyor → kapı **YANLIŞ SEBEPLE** kırmızı olurdu. Çalışan tek
+  şekil: generic İŞLEV içinde **ÇÖZÜLMEMİŞ `T`** (C erteler → tek T014).
+- **Sabotaj 4/4 yakalandı** (S1 ERISIM dalı · S2 toptan muafiyet · S3 naif
+  `bag_tn` · S4 sürücü karşılığı). Negatif vaka olmasa S2 kapıyı GEÇERDİ.
+- **⚠ KAPIYA KONAMAYAN KÖR NOKTA:** `f(k: *K) { k.xs = []; }` → C `[T007,T014]`,
+  self `[T014]`; ayrıştıkları için korpusa konamaz. `tn_soy`un `*T`yi soymaması
+  yalnız PROBE ile doğrulanmıştır. T007 boşluğu kapanınca korpusa eklenmeli.
+- Kapılar: `checker_diff` **149/149** (0 muaf) · `codegen_diff` 139/139 ·
+  `self_driver` 4 mod × 2 sürücü + FIXPOINT · `--check` 117/117.
+
 ### 🎯 D-420: T014 alan lvalue + SELF-HOST CHECKER PARİTE ENVANTERİ
 - **`k.xs = []` sahte T014 veriyordu** — `ATAMA` muafiyeti yalnız `TANIMLAYICI`
   lvalue'yu tanıyordu; `ERISIM`/`INDEKS` yoktu. **Self-host KENDİ kaynağında
