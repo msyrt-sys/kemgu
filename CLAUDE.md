@@ -1138,6 +1138,22 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🎯 D-419: BİRLEŞİK OS BİRİMİ ÖLÇÜLDÜ — tam KEMGU-OS yapısal paritede
+D-418'in kapısı **6 dosyayı atlıyordu** (C oracle onları tek başına derleyemiyor
+— T002, birbirlerinin sembollerine bakıyorlar). Meşru bir atlama ama **OS'un
+2/3'ü kapısız** demekti. Gerçek derleme birimi Makefile'da yazılıydı (`:1134`):
+tüm `runtime/*.kem` + `kem_os.kem` BİRLEŞTİRİLİYOR. Kapı o birimi ölçüyor:
+```
+4166 satır · define C=240 KEMGU=240 (küme diff BOŞ) · asm C=44 KEMGU=44
+üçlü: aarch64-unknown-none-elf (ikisi de)
+```
+- **⚠ ASM SAYISI DENETİMİ ŞART:** sabotaj S162 ile asm emisyonu silindiğinde
+  **işlev sayısı 240=240 AYNI KALDI**, yalnız `asm 44→0` yakalandı. Yalnız
+  `define` adı karşılaştıran bir kapı D-416'nın kusurunu KAÇIRIRDI.
+- **DERS: kendi kapının ATLADIKLARINI da ölç.** Atlama listesi bir KÖR NOKTA
+  ENVANTERİDİR; içinde ne olduğunu bilmeden kapı sayısına güvenme. (D-404'ün
+  aynı dersi — bu kez kapıyı BEN yazmıştım.)
+
 ### ✓ D-418: `--mimari` + void dönüş + BARE-METAL KAPISI (`runtime/` 0/3 → 3/3)
 - **Self-host bare-metal/ARM64 kodu DERLEYEMİYORDU BİLE.** `--mimari` bayrağı
   sürücüde yoktu; SIRALI argüman ayrıştırma `aarch64`ü DOSYA YOLU sanıyor, boş

@@ -29,6 +29,45 @@ if [ ! -x "$CODEGEN" ]; then
 fi
 
 pass=0; fail=0; atla=0
+
+# ---- (1) BİRLEŞİK OS BİRİMİ — asıl kapsam ----
+# runtime/*.kem dosyalarının ÇOĞU tek başına derlenmez (birbirlerinin sembollerine
+# bakarlar; C oracle T002 verir) → dosya-dosya döngü onların 6'sını ATLIYOR.
+# GERÇEK derleme birimi Makefile'ın kurduğu birleşiktir (bkz. kem_os_comb.kem):
+# tüm runtime + kem_os.kem. ~4166 satır, 240 işlev, 44 satıriçi asm bloğu.
+# Bu adım o birimi bir bütün olarak ölçer — yoksa OS'un 2/3'ü kapısız kalır.
+OS_PARCA="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem \
+runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
+runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem \
+test/ornekler/kem_os.kem"
+os_var=1
+for parca in $OS_PARCA; do [ -f "$parca" ] || os_var=0; done
+if [ "$os_var" -eq 1 ]; then
+    cat $OS_PARCA > "$TMP/os.kem"
+    "$KEMGU" --llvm --mimari aarch64 "$TMP/os.kem" > "$TMP/os_c.ll" 2>/dev/null
+    "$CODEGEN" --llvm --mimari aarch64 "$TMP/os.kem" > "$TMP/os_s.ll" 2>/dev/null
+    if ! head -1 "$TMP/os_c.ll" 2>/dev/null | grep -q "hata\[" && [ -s "$TMP/os_c.ll" ]; then
+        grep "^define" "$TMP/os_c.ll" | sed 's/(.*//' | sort > "$TMP/os_c.d"
+        grep "^define" "$TMP/os_s.ll" | sed 's/(.*//' | sort > "$TMP/os_s.d"
+        oc=$(grep -m1 "target triple" "$TMP/os_c.ll"); os=$(grep -m1 "target triple" "$TMP/os_s.ll")
+        # satıriçi asm SAYISI da denetlenir: asm bloğu sessizce düşerse (D-416'nın
+        # kusuru) define kümesi DEĞİŞMEZ — yalnız ad karşılaştırmak onu KAÇIRIR.
+        ca=$(grep -c "asm sideeffect" "$TMP/os_c.ll"); sa=$(grep -c "asm sideeffect" "$TMP/os_s.ll")
+        if [ "$oc" = "$os" ] && diff -q "$TMP/os_c.d" "$TMP/os_s.d" >/dev/null 2>&1 && [ "$ca" -eq "$sa" ]; then
+            echo "  ✅ BİRLEŞİK OS — $(wc -l <"$TMP/os_c.d") işlev, $ca satıriçi asm, üçlü eşleşti"
+            pass=$((pass+1))
+        else
+            echo "  🔴 BİRLEŞİK OS — işlev C=$(wc -l <"$TMP/os_c.d") KEMGU=$(wc -l <"$TMP/os_s.d") · asm C=$ca KEMGU=$sa"
+            [ "$oc" = "$os" ] || echo "      üçlü: C=[$oc] KEMGU=[$os]"
+            diff "$TMP/os_c.d" "$TMP/os_s.d" 2>/dev/null | head -5 | sed 's/^/      /'
+            fail=$((fail+1))
+        fi
+    else
+        atla=$((atla+1))
+    fi
+fi
+
+# ---- (2) TEK TEK derlenebilen runtime dosyaları ----
 for f in runtime/*.kem; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .kem)
@@ -58,5 +97,5 @@ for f in runtime/*.kem; do
         fail=$((fail+1))
     fi
 done
-echo "=== bare-metal (aarch64) yapı paritesi: $pass/$((pass+fail)) dosya ($atla atlandı) ==="
+echo "=== bare-metal (aarch64) yapı paritesi: $pass/$((pass+fail)) birim ($atla atlandı) ==="
 [ "$fail" -eq 0 ]

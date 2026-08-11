@@ -5,6 +5,41 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-419 [YÜKSEK] — KAPI: BİRLEŞİK OS birimi — kendi kapımın kör noktası (2026-08-11)
+
+**D-418'in kapısı 6 dosyayı ATLIYORDU ve bunu ölçtüm.** Sebep meşruydu: C
+oracle onları tek başına derleyemiyor (T002 — birbirlerinin sembollerine
+bakıyorlar). Ama sonuç kör noktaydı: **OS runtime'ının 2/3'ü hiçbir kapının
+altında değildi.**
+
+**Gerçek derleme birimi Makefile'da yazılıydı** (`:1134`): tüm `runtime/*.kem`
++ `test/ornekler/kem_os.kem` BİRLEŞTİRİLİP `kem_os_comb.kem` olarak derleniyor.
+Kapı o birimi bir bütün olarak ölçecek şekilde genişletildi.
+
+**Ölçüm — 4166 satır, sıfır fark:**
+```
+define sayısı : C=240  KEMGU=240   (küme diff'i BOŞ)
+satıriçi asm  : C=44   KEMGU=44
+hedef üçlüsü  : aarch64-unknown-none-elf (ikisi de)
+```
+Yani D-416 (`satıriçi_asm`) ve D-418 (`--mimari`, void dönüş) sonrası self-host
+**tam KEMGU-OS'u** C ile yapısal olarak birebir derliyor.
+
+**⚠ ASM SAYISI DENETİMİ ŞART — ölçüldü.** Sabotaj **S162** ile asm emisyonunu
+sildim: **işlev sayısı 240=240 AYNI KALDI**, yalnız `asm C=44 KEMGU=0` yakalandı.
+Yani yalnız `define` adlarını karşılaştıran bir kapı, D-416'nın kusurunu
+(asm bloğunun sessizce düşmesi) **KAÇIRIRDI**. Yapısal kapılarda "hangi yapı"
+sorusu kritik.
+
+> **DERS: kendi kapının ATLADIKLARINI da ölç.** "Oracle kuramadı → atla"
+> politikası doğru ama atlama listesi bir kör nokta envanteridir; içinde ne
+> olduğunu bilmeden kapı sayısına güvenilmez. (D-404'ün aynı dersi, bu kez
+> kapıyı BEN yazmıştım.)
+
+**Kapı:** `baremetal_diff` **4/4 birim** (birleşik OS + 3 tek dosya, 6 atlandı).
+
+---
+
 ## D-418 [YÜKSEK] — SÜRÜCÜ: `--mimari` + void dönüş + BARE-METAL KAPISI (2026-08-10)
 
 **Yeni yüzey `runtime/*.kem` (OS/sürücü kodu) ölçüldü: 0/3 → 3/3.**
