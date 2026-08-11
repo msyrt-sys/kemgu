@@ -5,6 +5,86 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-422 [YÜKSEK] — `bos` alias + AÇIK void dönüş + YENİ KAPI `yapi_diff` (2026-08-11)
+
+### (1) T011 kökü — oracle'ın KASITLI ASCII takma adı
+`src/tip_kontrol.c`:1239 → `{"bos", 3, TIP_BOS}` yorumuyla birlikte:
+*"C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul)"*.
+`src/llvm.c`:1117 de ikisini `void`e eşler. Self-host yalnız `boş`u tanıyordu →
+`sonuç<bos, X>` gibi GEÇERLİ kod sahte T011 alıyordu (2 dosya).
+
+**Alias olduğu ÖLÇÜLEREK doğrulandı, varsayılmadı:** uydurma bir ad (`Yokk`)
+aynı konumda İKİ TARAFTA DA reddediliyor. Tek yerden çözüldü (`tip_bos_mu`) ki
+iki yazım ayrışmasın; `codegen.kem` + `checker.kem` birebir.
+
+### (2) YOL ÜSTÜNDE: D-418 YARIM KALMIŞ — AÇIK `-> boş` de ayrışıyordu
+```
+işlev f() -> boş { }     C: define void @f     SELF: define i32 @f
+```
+D-418 yalnız **ÖRTÜK** dönüşü (annotasyon YOK) onarmıştı. **Hiçbir kapı
+görmedi:** `baremetal_diff` dönüş tipini karşılaştırır ama `runtime/`de açık
+`-> boş` HİÇ YOK; `codegen_genis`teki 5 dosyada VAR ama LLVM uyuşmazlığı
+tolere ettiği (D-295) ve değer okunmadığı için exit/stdout DEĞİŞMİYOR.
+
+### 🔴 (3) İLK ONARIMIM KIRDI — ve kırılma ÜÇÜNCÜ bir sapmayı açtı
+Eşlemeyi `ll_tip`e koydum → `sonuç<bos,X>` için `{i8, void, i8}`:
+`error: void type only allowed for function results`. `codegen_diff` 139→138.
+
+**C birim tipi BAĞLAMA GÖRE eşler:** işlev SONUCUNDA `void`, aggregate
+ALANINDA `i8`. Eşleme `islev_donus_tip`e taşındı → 139/139 geri.
+
+**Kırılma bir bilgi verdi:** değişiklikten ÖNCE de self `sonuç<bos,X>`
+payload'ını `i32` yayıyordu (C `i8`). `codegen_diff` exit koduna baktığı için
+bunu HİÇ görmemiş — dosya yeşildi. Yani onarımım **sessiz bir sapmayı
+gürültülü** hâle getirdi ve öyle bulundu. Ayrı kök, ayrı adım.
+
+### 🎯 YENİ KAPI `calistir_yapi_diff` — 116/116 (26 muaf)
+Tek oturumda AYNI sınıftan ÜÇ sapma çıktı ve davranışsal kapıların HİÇBİRİ
+gördü: (a) açık `-> boş`, (b) `sonuç<bos,X>` payload, (c) `mantıksal` dönüşü
+(`define i1 @esit_mi` vs `i32`, `stdlib/metin.kem` — ÖNCEDEN de vardı,
+`git stash` ile doğrulandı). Üçü de GEÇERLİ IR, AYNI sonuç, AYNI exit/stdout.
+
+> **DAVRANIŞSAL KAPI BU SINIFA YAPISAL OLARAK KÖRDÜR.** `ct_bariyer` (D-417) ve
+> `baremetal_diff` (D-418) neden davranış değil YAPI ölçtüğünün üçüncü kanıtı.
+
+Kapı `cg_korpus`ta `define` kümesini (**ad + DÖNÜŞ TİPİ**) karşılaştırır.
+**MUAFİYET LİSTESİ = BİLİNEN SAPMA ENVANTERİ, 26 dosya / 4 kök** (hepsi ölçüldü):
+| kök | dosya | açıklama |
+|---|---|---|
+| K1 `mantıksal` dönüşü → C `i1`, self `i32` | 9 | self aritmetikte bilerek i32; ayrı adım |
+| K2 `sonuç<bos,X>` payload → C `i8`, self `i32` | 1 | birim tipin AGGREGATE eşlemesi |
+| K3 lifted lambda → self DAİMA i64 | 8 | KdlGorevBare ABI (D-300), bilinçli |
+| K4 generic BASE gövdesi → self yayar, C atlar | 8 | D-401 (atlamak 11/18→8/18 regresyonu verdi) |
+
+Kapı, muaf bir dosya ARTIK EŞLEŞİYORSA uyarır → liste yalnız küçülür.
+
+### SABOTAJ
+**⚠ İLK DENEME UYGULANMADI** (`perl` deseni tutmadı, `grep` 0 dedi) ve kapı
+116/116 YEŞİL kaldı. **Sessizlik önce SABOTAJI şüpheli kılar** (D-402 dersinin
+tekrarı) — sayı doğrulanmasa "kapı zayıf" diye kaydedilecekti. Doğru satırla:
+S5 (void eşlemesini etkisizleştir) → **115/116, `define void`→`define i32`
+farkı yakalandı.** Uyandırıcı örnek: `test/cg_korpus/cg_bos_donus.kem`
+(hem `boş` hem `bos` biçimi).
+
+### Kapılar
+`codegen_diff` 139/139 · `self_driver` 4 mod × 2 sürücü + FIXPOINT ·
+`codegen_genis` 67/67 · `checker_diff` 149/149 · `baremetal_diff` 4/4 ·
+`ct_bariyer` 7/7 · `modul_codegen` 18/18 · **`yapi_diff` 116/116 (YENİ)**
+
+### `--llvm` tip kapısı ön koşulu: yanlış-pozitif 5 → 3
+Kalan üçü TEK kök: **M004 generic çeşit payload'ı**. Mekanizma ÇIKARILDI —
+C `substitusyon(tk, raw, csem, beklenen)` ile **İKAME EDER, ERTELEMEZ**:
+```
+Secim<metin> + Var(42) → M004      Secim<tam32> + Var(42) → OK
+```
+**Cazip onarım ("payload tipi generic param ise atla") YANLIŞ OLURDU** —
+birinci satırdaki gerçek M004'ü susturur (D-421'in aşırı-muafiyet tuzağı).
+Self-host'ta `tp_yad`/`tp_ad` registry'si (sıralı, `parse_cesit` DOLDURUYOR —
+"çağırmıyor" hipotezimi kaynaktan çürüttüm) hazır; eksik olan tek şey inşa
+yerindeki BEKLENEN TİP bağlamı.
+
+---
+
 ## D-421 [YÜKSEK] — DENETİM: D-420'nin İKİ SOUNDNESS DELİĞİ + checker.kem portu (2026-08-11)
 
 D-420 tüm kapıları geçmişti (`codegen_diff` 139/139, `self_driver` FIXPOINT

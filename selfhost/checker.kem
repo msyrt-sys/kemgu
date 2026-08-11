@@ -2026,9 +2026,17 @@ işlev tamsayi_mi(t: metin) -> mantıksal {
 }
 // Bilinen skaler tip mi? (CAGRI dönüş çıkarsamasında güvenli alt küme — generic
 // param/yapı/bileşik dönüşler "?" kalır, böylece T001 false-positive yok.)
+// D-422: BİRİM TİP İKİ YAZIMLA da geçerlidir. Oracle `src/tip_kontrol.c`:1239
+// ASCII takma adı BİLEREK kabul eder ("C2.7: ASCII birim-tip alias 'bos'
+// (Türkçe DNA: ikisi de kabul)") ve `src/llvm.c`:1117 ikisini de `void`e eşler.
+// Self-host yalnız `boş`u tanıyordu → `sonuç<bos, X>` gibi GEÇERLİ kod sahte
+// T011 alıyordu. Tek yerden çözülür ki iki yazım ayrışmasın.
+işlev tip_bos_mu(t: metin) -> mantıksal {
+    ver metin_esit(t, "boş") veya metin_esit(t, "bos");
+}
 işlev bilinen_skaler_mi(t: metin) -> mantıksal {
     ver sayisal_mi(t) veya metin_esit(t, "mantıksal") veya metin_esit(t, "metin")
-      veya metin_esit(t, "karakter") veya metin_esit(t, "boş");
+      veya metin_esit(t, "karakter") veya tip_bos_mu(t);
 }
 // Aritmetik ikili op mu? (C kontrol_ikili_sayisal — T003 sol/sag sayısal ister.)
 işlev aritmetik_mi(op: metin) -> mantıksal {
@@ -2537,7 +2545,7 @@ işlev donus_str(p: &değişken Ayr, fn: tam32) -> metin {
 işlev t020_kontrol(p: &değişken Ayr, ver_idx: tam32) -> tam32 {
     eğer metin_esit(p.aktif_donus, "?") { ver 0; }
     eğer dizi_al(p.a_cs, ver_idx) == 0 {           // ver;  → dönüş boş olmalı
-        eğer metin_esit(p.aktif_donus, "boş") == yanlış {
+        eğer tip_bos_mu(p.aktif_donus) == yanlış {   // D-422: bos alias
             dizi_ekle(p.th_kod, "T020");
             dizi_ekle(p.th_sat, dizi_al(p.a_sat, ver_idx));
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, ver_idx));
@@ -4220,7 +4228,7 @@ işlev g005_skaler_tip_mi(t: metin) -> mantıksal {
     eğer metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver doğru; }
     eğer metin_esit(t, "kesirli32") veya metin_esit(t, "kesirli64") { ver doğru; }
     eğer metin_esit(t, "mantıksal") veya metin_esit(t, "karakter") { ver doğru; }
-    eğer metin_esit(t, "boş") { ver doğru; }
+    eğer tip_bos_mu(t) { ver doğru; }   // D-422: bos alias
     ver yanlış;   // metin/Dizi/&T/ham-pointer/yapı/"?" → İŞARETÇİ (default-deny)
 }
 // Ad, lambda'nın KENDİ parametresi mi? (yakalama değil)

@@ -1138,6 +1138,38 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🎯 D-422: `bos` alias + AÇIK void dönüş + YENİ KAPI `calistir_yapi_diff`
+- **`bos` (ASCII) oracle'ın KASITLI takma adıdır** (`tip_kontrol.c`:1239 —
+  "C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul)"). Self-host
+  tanımıyordu → `sonuç<bos,X>` sahte T011. Alias olduğunu ÖLÇEREK doğruladım
+  (uydurma ad `Yokk` iki tarafta da reddediliyor). Tek yerden: `tip_bos_mu`.
+- **D-418 YARIM KALMIŞ:** açık `-> boş` de `define i32` yayıyordu (D-418 yalnız
+  ÖRTÜK dönüşü onarmış). Hiçbir kapı görmedi.
+- **🔴 İLK ONARIMIM KIRDI:** eşlemeyi `ll_tip`e koydum → `{i8, void, i8}`
+  ("void type only allowed for function results"), `codegen_diff` 139→138.
+  **C birim tipi BAĞLAMA GÖRE eşler: SONUÇ'ta `void`, AGGREGATE alanında `i8`.**
+  Eşleme `islev_donus_tip`e taşındı. **Kırılma bir bilgi verdi:** öncesinde de
+  self `sonuç<bos,X>` payload'ını `i32` yayıyormuş (C `i8`) — `codegen_diff`
+  exit'e baktığı için HİÇ görmemiş. Onarım sessiz sapmayı gürültülü yaptı.
+- **YENİ KAPI `calistir_yapi_diff` — 116/116, 26 muaf.** `cg_korpus`ta `define`
+  kümesini (**ad + DÖNÜŞ TİPİ**) karşılaştırır. Muafiyet listesi = BİLİNEN
+  SAPMA ENVANTERİ, 4 kök: K1 `mantıksal`→C `i1`/self `i32` (9 dosya) ·
+  K2 `sonuç<bos,X>` payload (1) · K3 lifted lambda daima i64, D-300 (8) ·
+  K4 generic BASE gövdesi, D-401 (8). Muaf dosya artık eşleşiyorsa UYARIR.
+  > **DAVRANIŞSAL KAPI BU SINIFA KÖRDÜR** — tek oturumda ÜÇ örnek çıktı,
+  > üçü de geçerli IR + aynı exit + aynı stdout. `ct_bariyer`/`baremetal_diff`
+  > neden YAPI ölçtüğünün üçüncü kanıtı.
+- **⚠ SABOTAJ İLK DENEMEDE UYGULANMADI** (`perl` deseni tutmadı, `grep` 0) ve
+  kapı YEŞİL kaldı. Sayıyı doğrulamasam "kapı zayıf" diye kaydedecektim —
+  **sessizlik önce SABOTAJI şüpheli kılar** (D-402'nin tekrarı). Doğru satırla
+  115/116 yakalandı.
+- **M004 (kalan 3 yanlış-pozitif) — MEKANİZMA ÖLÇÜLDÜ, cazip onarım YANLIŞ.**
+  C **İKAME EDER, ERTELEMEZ**: `Secim<metin> + Var(42)` → **M004**,
+  `Secim<tam32> + Var(42)` → OK. "Generic param ise atla" gerçek bir M004'ü
+  susturur (D-421 tuzağı). `tp_yad`/`tp_ad` registry'si HAZIR (`parse_cesit`
+  DOLDURUYOR — "çağırmıyor" hipotezimi kaynaktan çürüttüm); eksik olan tek şey
+  inşa yerindeki BEKLENEN TİP bağlamı.
+
 ### 🔴 D-421: D-420'NİN İKİ SOUNDNESS DELİĞİ (yeşil kapılar görmedi)
 D-420 TÜM kapıları geçmişti; ön-merge düşmanca denetim iki loud→silent deliği
 buldu. **Yeşil kapı "doğru" demek değildir** — bu dersin bu oturumdaki 2. kanıtı.

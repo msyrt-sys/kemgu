@@ -1,0 +1,17 @@
+// D-422 UYANDIRICI ÖRNEK — AÇIK `-> boş` dönüşü `void` olmalı.
+// D-418 yalnız ÖRTÜK dönüşü (annotasyon YOK) onarmıştı; AÇIK annotasyon
+// `ll_tip` fall-through'undan `i32` alıyordu → C `define void @f`,
+// self `define i32 @f`. DAVRANIŞSAL kapı göremez (LLVM tolere eder, D-295;
+// exit ve stdout aynı kalır) → `yapi_diff` kapısı içindir.
+// `bos` (ASCII alias) da aynı yoldan geçmelidir — oracle ikisini de kabul eder.
+işlev sayaci_artir(x: tam32) -> boş {
+    yaz_tam(x);
+}
+işlev ascii_bicim() -> bos {
+    yaz_tam(0);
+}
+işlev main() -> tam32 {
+    sayaci_artir(0);
+    ascii_bicim();
+    ver 42;
+}
