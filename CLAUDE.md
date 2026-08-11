@@ -1138,6 +1138,27 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### ⚠ D-419'DA AÇILAN İKİ YENİ BULGU (ölçüldü, onarılmadı)
+Kapıların ATLAMA listeleri tarandı (`codegen_genis` 12 dosya). Üç sınıf çıktı;
+7'si bare-metal MMIO (meşru), ama ikisi gerçek bulgu:
+
+**1. `--llvm` TİP HATASINDA DURMUYOR (self-host).** `kem_asm_kernel` T001
+içeriyor. `--check` paritede (ikisi de `T001 18 16`), ama:
+- C `--llvm`: **durur, IR üretmez**
+- self-host `--llvm`: **devam eder, IR yayar** (2 define + 1 asm)
+Sebep: self-host sürücüsünde `--llvm` dalı `kontrol_program`ı HİÇ ÇAĞIRMIYOR
+(D-399'da görülmüştü). Tip hatası olan programa sessizce IR üretmek "loud →
+silent" sınıfıdır. Onarım küçük görünüyor (checker'ı çağır, hata varsa çık) ama
+`--llvm` davranışını geniş biçimde değiştirir → ayrı adım.
+
+**2. `05_yapi` — İKİ TARAFTA DA GEÇERSİZ IR** (parite değil, dil kusuru):
+- C   : `base element of getelementptr must be sized`
+- self: `invalid getelementptr indices`
+İkisi de farklı biçimde bozuk. `Dizi<kesirli64>` ile aynı sınıf: gerçek bir
+kusur, self-host paritesi işi değil. `codegen_genis` bunu "oracle linklenemedi"
+diye atlıyordu — **atlama sebebi bare-metal DEĞİL, C'nin kendi IR'ının geçersiz
+olmasıydı.** Atlama listesini okumasaydım bu görünmezdi.
+
 ### 🎯 D-419: BİRLEŞİK OS BİRİMİ ÖLÇÜLDÜ — tam KEMGU-OS yapısal paritede
 D-418'in kapısı **6 dosyayı atlıyordu** (C oracle onları tek başına derleyemiyor
 — T002, birbirlerinin sembollerine bakıyorlar). Meşru bir atlama ama **OS'un
