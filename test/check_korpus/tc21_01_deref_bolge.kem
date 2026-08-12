@@ -1,0 +1,55 @@
+// D-425 UYANDIRICI ÖRNEK — iki kural, ikisi de KORPUSTA YOKTU.
+//
+// (A) T022 deref-lvalue GEVŞETMESİ KOŞULLUDUR — yalnız `güvensiz` içinde.
+//     Self-host'un D-249 muafiyeti KOŞULSUZDU → C'nin reddettiği deref-write'ı
+//     sessizce kabul ediyordu. C'den ölçüldü:
+//       *p = v, güvensiz DIŞINDA  → T022 (+ G001 ham işaretçide)
+//       *p = v, güvensiz İÇİNDE   → OK
+//       *r = v, &değişken üzerinde → T022  (referansta da! kural işaretçi/referans
+//                                    ayrımına DEĞİL, güvensiz bağlamına bağlı)
+//
+// (B) BL001/BL002 — `bölge_al` beklenen `*T` bağlamı ister. C'de SESSİZ
+//     VARSAYILAN YOKTUR (ham işaretçide yanlış genişlik tehlikeli).
+//       *T annotasyonu → OK · skaler annotasyon → BL001 · annotasyonsuz → BL001
+//       arite ≠ 2      → BL002 (BL001'den ÖNCE, erken dönüş)
+//
+// ⚠ POZİTİF ŞEKİLLER ŞART: yalnız negatifler olsaydı kuralı toptan sıkılaştırmak
+// (her deref-write'ı reddetmek / her `bölge_al`a BL001 vermek) da kapıyı geçerdi.
+
+// --- (A1) POZİTİF: güvensiz İÇİNDE deref-write serbest
+işlev yaz_guvenli(p: *tam32) -> tam32 {
+    güvensiz { *p = 42; }
+    ver 0;
+}
+
+// --- (A2) NEGATİF: güvensiz DIŞINDA ham işaretçi → T022 + G001
+işlev yaz_ham(p: *tam32) -> tam32 {
+    *p = 42;
+    ver 0;
+}
+
+// --- (A3) NEGATİF: güvensiz DIŞINDA GÜVENLİ REFERANS → T022 (G001 YOK)
+işlev yaz_ref(r: &değişken tam32) -> tam32 {
+    *r = 42;
+    ver 0;
+}
+
+// --- (B1) POZİTİF: `*T` annotasyonu → BL001 YOK
+işlev bolge_dogru() -> tam32 {
+    değişken p: *tam32 = bölge_al(yetki_olustur(3, 3), 4);
+    ver 0;
+}
+
+// --- (B2) NEGATİF: skaler annotasyon → BL001
+işlev bolge_skaler() -> tam32 {
+    değişken n: tam32 = bölge_al(yetki_olustur(3, 3), 4);
+    ver 0;
+}
+
+// --- (B3) NEGATİF: arite 1 → BL002 (BL001 DEĞİL — sıra önemli)
+işlev bolge_arite() -> tam32 {
+    değişken q: *tam32 = bölge_al(yetki_olustur(3, 3));
+    ver 0;
+}
+
+işlev main() -> tam32 { ver 42; }

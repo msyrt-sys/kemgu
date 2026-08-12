@@ -5,6 +5,79 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-425 [YÜKSEK] — T022 `güvensiz` koşulu + BL001/BL002: kaçırma 6 → 3 (2026-08-11)
+
+D-424 sonrası kalan 6 kaçırmanın (self `OK`, C tanı veriyor) ikisi kapatıldı.
+
+### 🔴 ÖNCE KENDİ ÖLÇÜM HATAMI DÜZELTTİM
+D-420'de `deref_atama_disi` için **"C=T022, self=G001 — aynı konum, YANLIŞ KOD"**
+yazmıştım. **YANLIŞTI.** C **İKİ** tanı verir (`T022 5 5` + `G001 5 5`), self
+yalnız `G001` → **eksik tanı**, yanlış kod DEĞİL. Hata benim özet aracımdaydı:
+karşılaştırmayı `head -1` ile yapmıştım.
+
+> **DERS: çok satırlı tanı çıktısını `head -1` ile karşılaştırma.** İlk satır
+> eşleşmese bile fark "yanlış kod" değil "eksik/fazla satır" olabilir; teşhisi
+> tümüyle yanlış yöne çevirir. (Bu, "ölçüm aracı da yanlış olabilir" dersinin
+> bu oturumdaki üçüncü örneği — önceki ikisi `--check` formatı ve
+> `--checkdump`ın temizde "OK" basması.)
+
+### (A) T022 deref-lvalue gevşetmesi KOŞULLUDUR
+Self-host'un D-249 muafiyeti KOŞULSUZDU → C'nin reddettiği deref-write'ı
+sessizce kabul ediyordu. Üç şekil C'den ölçüldü:
+```
+*p = v, p: *tam32,          güvensiz DIŞINDA → T022 + G001
+*p = v, p: *tam32,          güvensiz İÇİNDE  → OK
+*r = v, r: &değişken tam32, güvensiz dışında → T022      (referansta DA!)
+```
+Kural **işaretçi/referans ayrımına DEĞİL, `güvensiz` bağlamına** bağlı — bunu
+varsaymadım, üçüncü şekli ölçerek buldum. Onarım: `hedef_deref` koşuluna
+`ve (p.guv_bag > 0)`. `guv_bag` zaten vardı (G001 onu kullanıyor).
+
+### (B) BL001/BL002 — `bölge_al` beklenen `*T` bağlamı ister
+C (`src/tip_kontrol.c`:3198) `bölge_al`ı beklenen-TIP_POINTER yolundan çözer;
+oraya düşmesi "annotasyon `*T` değil" demektir ve **SESSİZ VARSAYILAN YOKTUR**
+(ham işaretçide yanlış genişlik tehlikeli). Ölçüldü:
+`*tam32` → OK · `tam32` → BL001 · annotasyonsuz → BL001 · arite ≠ 2 → BL002.
+
+**Altyapı D-423'ten BEDAVA geldi:** `m4_*` registry'si çeşit yapıcısına ÖZEL
+değil, HER CAGRI düğümünü beklenen tip düğümüyle işaretliyor. BL001 yalnız onu
+okur. (M004'ün ikame kısmı `tp_yad`/`tp_ad` ister — o `checker.kem`'de YOK ve
+portlanmadı; BL001 istemediği için oraya da girebildi.)
+
+### `checker.kem` portu YAPILDI
+`m4_*` işaretlemesi + `bolge_al_kontrol` iki dosyada BİREBİR, **zincirdeki
+konum dâhil** (`ct_cagri_kontrol`tan SONRA). İlk yerleşimimde `mmio_kontrol`un
+hemen ardına koymuştum — aynı soruyu iki yerde ayrı yanıtlayan kod ayrışır
+(D-407), hizalandı.
+
+### KORPUS: `test/check_korpus/tc21_01_deref_bolge.kem` (3 pozitif + 4 negatif)
+`T022_27_5 G001_27_5 T022_33_5 BL001_45_36 BL002_51_37` — C ile birebir.
+**Pozitif şekiller ŞART:** yalnız negatifler olsaydı kuralı toptan sıkılaştırmak
+(her deref-write'ı reddetmek / her `bölge_al`a BL001 vermek) de kapıyı geçerdi.
+
+### SABOTAJ — 3/3 YAKALANDI (hepsinin uygulandığı `grep` ile doğrulandı)
+| # | sabotaj | sonuç |
+|---|---|---|
+| S7 | `güvensiz` koşulunu kaldır (D-249'un koşulsuz hâli) | **iki T022 de kayboldu** ✅ |
+| S8 | `bolge_al_kontrol`u zincirden çıkar | BL001+BL002 kayboldu ✅ |
+| S9 | BL001'in POZİTİF dalını sil (toptan sıkılaştırma) | **fazladan `BL001_39_37`** — `*T` annotasyonlu geçerli satır suçlandı ✅ |
+
+**S9 pozitif şekillerin neden şart olduğunun kanıtıdır:** yalnız negatifler olsa
+"her `bölge_al`a BL001 ver" de kapıyı GEÇERDİ.
+
+### Kapılar
+`checker_diff` **150/150** (0 muaf) · `codegen_diff` 140/140 · `yapi_diff` 116/116 ·
+`ct_bariyer` 13/13 · `modul_codegen` 21/21 · `codegen_genis` 70/70 ·
+`baremetal_diff` 4/4 · `self_driver` 4 mod × 2 sürücü · **BOOTSTRAP FIXPOINT**
+(stage1 == stage2, 67690 satır).
+
+### Ölçüm
+502 dosyalık yüzeyde: **yanlış-pozitif 0, kaçırma 6 → 3.**
+Kalan 3 (`21_modul_kullan` T002 · `23_generic_constraint` T007 ·
+`49_generic_method` T001) hepsi modül/generic kökü — ayrı ve büyük.
+
+---
+
 ## D-424 [YÜKSEK] — `--llvm` TİP KAPISI: 12 atlanan dosya kapandı (2026-08-11)
 
 D-419'da açtığım bulgunun kapanışı. Self-host `--llvm` dalı `kontrol_program`ı

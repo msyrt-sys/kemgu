@@ -1138,6 +1138,40 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🎯 D-425: T022 `güvensiz` koşulu + BL001/BL002 — kaçırma 6 → 3
+- **⚠ ÖNCE KENDİ ÖLÇÜM HATAMI DÜZELTTİM.** D-420'de `deref_atama_disi` için
+  "C=T022, self=G001 — YANLIŞ KOD" yazmıştım; **YANLIŞTI**. C İKİ tanı verir
+  (`T022`+`G001`), self yalnız `G001` → **eksik tanı**. Hata özet aracımdaydı:
+  `head -1` ile karşılaştırmıştım. **Çok satırlı tanı çıktısını `head -1` ile
+  karşılaştırma** — teşhisi tümüyle yanlış yöne çevirir.
+- **T022 deref-lvalue gevşetmesi KOŞULLUDUR** (self'te koşulsuzdu → C'nin
+  reddettiği deref-write sessizce kabul ediliyordu). Üç şekil ölçüldü:
+  `*p` güvensiz DIŞINDA → T022+G001 · İÇİNDE → OK · **`*r` (&değişken) → T022**.
+  Kural işaretçi/referans ayrımına DEĞİL, `güvensiz` bağlamına bağlı — üçüncü
+  şekli ölçmesem yanlış kuralı kodlayacaktım.
+- **BL001/BL002:** `bölge_al` beklenen `*T` bağlamı ister, SESSİZ VARSAYILAN YOK.
+  Altyapı D-423'ten BEDAVA geldi: `m4_*` registry'si çeşit yapıcısına ÖZEL
+  değil, HER CAGRI'yı beklenen tip düğümüyle işaretler. (M004'ün ikame kısmı
+  `tp_yad`/`tp_ad` ister — o `checker.kem`'de yok; BL001 istemediği için oraya
+  da portlanabildi. Zincirdeki KONUM da hizalandı — D-407.)
+- **Sabotaj 3/3.** S9 (BL001'in pozitif dalını sil) fazladan `BL001_39_37`
+  üretti → **pozitif şekiller olmasa toptan sıkılaştırma kapıyı GEÇERDİ.**
+- **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
+  ayrı ve büyük kökler.
+
+### ⚠ K1 (`mantıksal` → i1) ÖLÇÜLDÜ ama BİLİNÇLİ ERTELENDİ
+`yapi_diff` muafiyetlerinin en büyük kökü (9 dosya). C `mantıksal`ı **her
+yerde** `i1` yapar: `%K = type { i1 }` · `define i1 @f` · `i1 %b` param ·
+`store/load i1` · `ret i1` (zext YOK) · çağrı yerinde `br i1` doğrudan.
+Self aritmetik bağlamda bilerek `i32` kullanır → değişiklik ÇEKİRDEK SKALER
+YOLA dokunur. D-422'de tek satırlık bir tip eşlemesi `{i8, void, i8}` üretip
+`codegen_diff`i düşürmüştü; aynı riski daha geniş yüzeyde almadım.
+**⚠ K2 (`sonuç<bos,X>` payload) ölçülürken bir C KUSURU bulundu:**
+`yapı K { a: boş; }` → C `%K = type { void, i32 }` = **GEÇERSİZ IR**
+(`05_yapi`/`Dizi<kesirli64>` sınıfı). Aggregate i8 eşlemesi yalnız
+`seçimlik`/`sonuç` payload yuvalarına uygulanmalı — **C'nin kusurunu taklit
+etme.** Ölçmesem bir C hatasını self-host'a kopyalayacaktım.
+
 ### 🎯🎯 D-424: `--llvm` TİP KAPISI EKLENDİ — 12 atlanan dosya kapandı
 - Self-host `--llvm` dalı `kontrol_program`ı **HİÇ ÇAĞIRMIYORDU** → tip hatalı
   programa sessizce IR üretiyordu. Artık C gibi **IR ÜRETMEDEN çıkış 1**.
@@ -1264,7 +1298,12 @@ buldu. **Yeşil kapı "doğru" demek değildir** — bu dersin bu oturumdaki 2. 
   `cg_cesit_ic_ayirici`+`snapshots/cesit_sonuc` (T011), `cg_generic_cesit`+
   `cg_mono_cesit_metin`+`cg_mono_yapi_field_cesit` (M004). Bugün eklesem
   `codegen_diff` **139 → 135**. Ayrıca **6 kaçırma**: T002/T007/T022/T001/BL001
-  ve `deref_atama_disi` (C=T022, self=**G001** — aynı konum, YANLIŞ KOD).
+  ve `deref_atama_disi`. **⚠ DÜZELTME (D-425):** o dosya için "C=T022,
+  self=G001 — YANLIŞ KOD" yazmıştım; YANLIŞTI. C **İKİ** tanı verir
+  (`T022`+`G001`), self yalnız `G001` → **eksik tanı**, yanlış kod değil.
+  Hata benim özet aracımdaydı: karşılaştırmayı `head -1` ile yapmıştım.
+  **Çok satırlı tanı çıktısını `head -1` ile karşılaştırma** — ilk satır
+  eşleşmese bile fark "yanlış kod" değil "eksik/fazla satır" olabilir.
 - **12 ATLANAN DOSYA, ÜÇ KAPI, TEK KÖK:** `ct_bariyer` 6 + `modul_codegen` 3 +
   `codegen_genis` 3 — hepsi "self `--llvm` tip hatasında durmuyor". **Onikisinde
   de `--check` birebir paritede.** Ön koşul kapanınca bu dosyalar "atlandı"dan
