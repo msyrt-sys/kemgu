@@ -1159,6 +1159,15 @@ LLVM-RED'den çıkıp çalışıyor.
 - **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
   ayrı ve büyük kökler.
 
+### ✓ D-426: K2 KAPANDI — aggregate payload'ında birim tip `i8`
+`sonuç<boş,X>`/`seçimlik<boş>` payload yuvası artık C ile birebir (`{i8,i8,i32}`).
+**Onarım İKİ parçalı, tek başına tip eşlemesi YETMEZDİ:** (1) `ll_tip_alan` —
+aggregate-alanı bağlamında birim tip `i8`; (2) payload store'unda `int_uydur` —
+yuva daralınca REGISTER de daralmalı (C `trunc i32→i8` yayar; `int_uydur`
+IMMEDIATE'a dokunmaz, tipler eşitse no-op). D-422'de eşlemeyi tek yere koyup
+`{i8, void, i8}` üretmiştim — bu kez üretici ve tüketici birlikte değişti.
+`yapi_diff` muafiyeti **26 → 25**.
+
 ### ⚠ K1 (`mantıksal` → i1) ÖLÇÜLDÜ ama BİLİNÇLİ ERTELENDİ
 `yapi_diff` muafiyetlerinin en büyük kökü (9 dosya). C `mantıksal`ı **her
 yerde** `i1` yapar: `%K = type { i1 }` · `define i1 @f` · `i1 %b` param ·

@@ -40,9 +40,12 @@ fi
 #      tutarsızlık riski taşır → AYRI adım.
 MUAF_K1="cg2_bool_lit cg2_buyuk cg2_degil cg2_esit cg2_farkli cg2_kucuk cg2_ve
 cg2_veya cg7a_esit"
-# (K2) `sonuç<bos,X>` payload → C `i8`, self `i32`. Birim tipin AGGREGATE ALANI
-#      eşlemesi; dönüş eşlemesinden AYRI kök (D-422'de ölçüldü).
-MUAF_K2="cg_cesit_ic_ayirici"
+# (K2) ✓ KAPANDI — D-426. `sonuç<bos,X>`/`seçimlik<bos>` payload yuvası artık
+#      `i8` (C ile birebir). Liste KÜÇÜLMEK içindir; bu satır boşaldı.
+#      ⚠ YAPI ALANI kapsam DIŞI: `yapı K { a: boş; }` için C `%K = type
+#      { void, i32 }` yayar — GEÇERSİZ IR, C'nin KENDİ kusuru (`05_yapi`
+#      sınıfı). Kusuru taklit etmedik.
+MUAF_K2=""
 # (K3) lifted lambda dönüşü → self DAİMA i64 (runtime KdlGorevBare ABI, D-300),
 #      C gövdeden çıkarsar. Bilinçli tasarım farkı.
 MUAF_K3="cg_gorev_baslat cg_gorev_capture cg_gorev_desen_ic_tip

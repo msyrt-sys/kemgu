@@ -3022,6 +3022,21 @@ işlev mono_kesif(p: &değişken Ayr, idx: tam32) -> tam32 {
     ver 0;
 }
 // CG6: KEMGU tip-düğümü → LLVM tip metni. mantıksal=i32 (CG2/CG4 bool mantığıyla tutarlı).
+// ---- D-426: AGGREGATE ALANI bağlamında tip eşlemesi ----
+// Birim tip (`boş`/`bos`) BAĞLAMA GÖRE eşlenir (D-422'de ölçüldü): işlev
+// SONUCUNDA `void`, aggregate ALANINDA `i8`. `ll_tip` fall-through'u `i32`
+// veriyordu → `sonuç<boş,tam32>` için C `{i8, i8, i32}`, self `{i8, i32, i32}`.
+// `codegen_diff` exit koduna baktığı için bunu HİÇ görmedi; `yapi_diff`in
+// K2 muafiyeti buydu.
+// ⚠ YAPI ALANINA UYGULANMAZ: `yapı K { a: boş; }` için C `%K = type { void,
+// i32 }` yayar — GEÇERSİZ IR, yani C'nin KENDİ kusuru (`05_yapi` sınıfı).
+// Kusuru taklit etmek de düzeltmek de bu adımın işi değil; yalnız ölçülmüş
+// olan `seçimlik`/`sonuç` payload yuvaları kapsanır.
+işlev ll_tip_alan(p: &değişken Ayr, tip_idx: tam32) -> metin {
+    eğer tip_idx >= 0 ve metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT")
+      ve tip_bos_mu(dizi_al(p.a_deg, tip_idx)) { ver "i8"; }
+    ver ll_tip(p, tip_idx);
+}
 işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver "i32"; }
     değişken ta: metin = dizi_al(p.a_ad, tip_idx);
@@ -3057,13 +3072,13 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
         ver metin_birlestir(v3, ">");
     }
     eğer metin_esit(ta, "TIP_SECIMLIK") {   // D3: seçimlik<T> → {i8 tag, T}
-        değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+        değişken tt: metin = ll_tip_alan(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
         ver metin_birlestir(metin_birlestir("{i8, ", tt), "}");
     }
     eğer metin_esit(ta, "TIP_SONUC") {   // D3: sonuç<T,H> → {i8 tag, T, H}
         değişken sc: tam32 = dizi_al(p.a_cb, tip_idx);
-        değişken tt: metin = ll_tip(p, dizi_al(p.cocuk, sc));
-        değişken hh: metin = ll_tip(p, dizi_al(p.cocuk, sc + 1));
+        değişken tt: metin = ll_tip_alan(p, dizi_al(p.cocuk, sc));
+        değişken hh: metin = ll_tip_alan(p, dizi_al(p.cocuk, sc + 1));
         değişken r1: metin = metin_birlestir("{i8, ", tt);
         değişken r2: metin = metin_birlestir(r1, ", ");
         değişken r3: metin = metin_birlestir(r2, hh);
@@ -4171,6 +4186,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                     yaz_str("  "); yaz_str(gp); yaz_str(" = getelementptr "); yaz_str(agg);
                     yaz_str(", ptr "); yaz_str(ar); yaz_str(", i32 0, i32 ");
                     yaz_str(tam64_str(pf olarak tam64)); yb(10);
+                    // D-426: payload yuvası daralabilir (birim tip → i8) →
+                    // REGISTER değeri uyarlanmalı. `int_uydur` IMMEDIATE'a
+                    // dokunmaz (`store i8 0` zaten geçerli) ve tipler eşitse
+                    // no-op'tur; yalnız gerçekten gereken yerde trunc/sext yayar.
+                    pv = int_uydur(p, pv, pt, 0);
                     yaz_str("  store "); yaz_str(pt); yaz_str(" "); yaz_str(pv);
                     yaz_str(", ptr "); yaz_str(gp); yb(10);
                     değişken lr: metin = reg_str(yeni_reg(p));

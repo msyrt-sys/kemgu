@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-426 — K2 kapandı: aggregate payload'ında birim tip `i8` (2026-08-13)
+
+`yapi_diff` muafiyet envanterinin K2 kökü. D-422'de ölçülmüştü, onarılmamıştı:
+```
+sonuç<boş, tam32>  C: {i8, i8, i32}   self: {i8, i32, i32}
+seçimlik<boş>      C: {i8, i8}
+```
+Birim tip **BAĞLAMA GÖRE** eşlenir: işlev SONUCUNDA `void` (D-422),
+aggregate ALANINDA `i8`. `ll_tip` fall-through'u `i32` veriyordu.
+
+### Onarım İKİ parçalı — tek başına tip eşlemesi YETMEZDİ
+1. `ll_tip_alan` (yeni): aggregate-alanı bağlamında birim tip → `i8`.
+   `TIP_SECIMLIK` ve `TIP_SONUC` payload yuvalarında kullanılır.
+2. **Payload store'unda değer uyarlaması.** Yuva daralınca (i32 → i8) saklanan
+   REGISTER de daralmalı; C `%8 = add i32 0, 0` + `trunc i32 %8 to i8` yayar.
+   `int_uydur` eklendi — IMMEDIATE'a DOKUNMAZ (`store i8 0` zaten geçerli) ve
+   tipler eşitse no-op'tur, yalnız gerçekten gereken yerde trunc/sext yayar.
+
+> **D-422'nin dersi doğrudan uygulandı:** o gün eşlemeyi tek yere koyup
+> `{i8, void, i8}` üretmiş ve `codegen_diff`i düşürmüştüm. Bu kez üreticiyi
+> (store) ve tüketiciyi birlikte değiştirdim.
+
+### ⚠ YAPI ALANI KAPSAM DIŞI — C'nin KUSURUNU TAKLİT ETME
+Ölçüldü: `yapı K { a: boş; b: tam32; }` → C `%K = type { void, i32 }` =
+**GEÇERSİZ IR** (`05_yapi` / `Dizi<kesirli64>` sınıfı — C'nin kendi kusuru).
+Değişiklik yalnız ÖLÇÜLMÜŞ olan `seçimlik`/`sonuç` payload yuvalarını kapsar.
+Ölçmesem bir C hatasını self-host'a kopyalayacaktım.
+
+`yapi_diff` muafiyeti **26 → 25** (K2 satırı boşaldı). Kalan 3 kök: K1
+`mantıksal`→i1 (9) · K3 lifted lambda i64 (8) · K4 generic base gövdesi (8).
+
+---
+
 ## D-425 [YÜKSEK] — T022 `güvensiz` koşulu + BL001/BL002: kaçırma 6 → 3 (2026-08-11)
 
 D-424 sonrası kalan 6 kaçırmanın (self `OK`, C tanı veriyor) ikisi kapatıldı.
