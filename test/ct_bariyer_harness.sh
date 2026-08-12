@@ -30,9 +30,20 @@ for f in $(grep -rl "sabitsüre_olustur\|ifşa(" --include=*.kem test stdlib kü
     [ -f "$f" ] || continue
     b=$(basename "$f" .kem)
 
-    # Oracle IR'ı kurulamıyorsa (tip hatası vb. — bu kapının işi değil) atla.
-    c_ir=$("$KEMGU" --llvm "$f" 2>/dev/null) || { atla=$((atla+1)); continue; }
-    case "$c_ir" in ""|hata*) atla=$((atla+1)); continue;; esac
+    # D-424: oracle IR üretemiyorsa sebep TİP HATASIDIR → "atla" DEĞİL, POZİTİF
+    # İDDİA: self-host da reddetmeli. Bu kapının 6 atlamasının TAMAMI buydu ve
+    # altısında da `--check` C ile BİREBİR paritedeydi — yani checker hazırdı,
+    # eksik olan yalnız `--llvm`in onu çağırmasıydı (D-424 onardı).
+    c_ir=$("$KEMGU" --llvm "$f" 2>/dev/null)
+    case "$c_ir" in
+        ""|hata*)
+            if s_red=$("$CODEGEN" --llvm "$f" 2>/dev/null) && [ -n "$s_red" ]; then
+                echo "  🔴 $b — C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)"
+                fail=$((fail+1)); continue
+            fi
+            pass=$((pass+1)); continue      # iki taraf da reddediyor → PARİTE
+            ;;
+    esac
 
     s_ir=$("$CODEGEN" --llvm "$f" 2>/dev/null) || {
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }

@@ -5,6 +5,118 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-424 [YÜKSEK] — `--llvm` TİP KAPISI: 12 atlanan dosya kapandı (2026-08-11)
+
+D-419'da açtığım bulgunun kapanışı. Self-host `--llvm` dalı `kontrol_program`ı
+**HİÇ ÇAĞIRMIYORDU** → tip hatalı programa sessizce IR üretiyordu. C (`ana.c`
+mode_llvm, D-337) hatayı yazar ve **IR ÜRETMEDEN** 1 ile çıkar.
+
+**ÜÇ KAPININ 12 ATLAMASI BU TEK KÖKTENDİ** (`ct_bariyer` 6 + `modul_codegen` 3 +
+`codegen_genis` 3) ve **onikisinde de `--check` C ile BİREBİR paritedeydi** —
+checker hazırdı, eksik olan yalnız `--llvm`in onu çağırmasıydı.
+
+### Ön koşul: D-420'den D-423'e üç adımda kazanıldı
+Kapı, yanlış-pozitif varken EKLENEMEZ — geçerli programları reddederdi.
+```
+D-420 (ölçüm):  5 yanlış-pozitif   → kapı eklenemez (codegen_diff 139→135 olurdu)
+D-422 (T011):   3
+D-423 (M004):   0                  → 474 dosyalık yüzeyde SIFIR
+```
+D-419'da "onarım küçük görünüyor" demiştim; **yanlıştı** — ön koşul üç ayrı
+kök gerektirdi.
+
+### ⚠ TAZE `Ayr` ŞART
+`kontrol_program` `fn_ad`ı doldurur ve codegen AYNI tabloyu okur
+(`fn_coz`/`fn_kayitli_mi`) → aynı `Ayr`de koşturmak **codegen ÇIKTISINI
+DEĞİŞTİRİR**. İki tablo checker ve codegen yollarında FARKLI invaryantlarla
+dolar (D-420: `fn_node` yalnız `imza_topla`da → checker'dan okumak sınır ihlali).
+
+### Bilinçli sınır: tanı metni stdout'a YAZILMAZ
+C tanıları **stderr**'e yazar, stdout'u BOŞ bırakır. Self-host'ta stderr yazıcısı
+yok; eklemek yeni bir yerleşik = **dil yüzeyi değişikliği → Mehmet'in kararı**
+(bkz. `feedback_karar_kurallari`). Bu yüzden C ile **gözlenebilir sözleşme**
+(boş stdout + çıkış 1) korunur, tanı metni atlanır. Tanılar `--check` ile alınır.
+`kdl_hata_yazdir` runtime'da ZATEN VAR; eksik olan yalnız KEMGU-düzeyi adı.
+
+### Harness SİMETRİSİ — sessiz tuzak
+`codegen_diff` ve `yapi_diff` oracle'a `--tip-atla` geçiyordu ama self'e
+GEÇMİYORDU. Kapı eklenince korpustaki KASITLI tip-geçersiz dosyalar
+(`cg6_trunc` E004, `cg_deref_pointer` T001) yalnız self tarafında reddedilir ve
+kapı **YANLIŞ SEBEPLE** kırmızıya dönerdi. İkisi de simetrik hâle getirildi.
+Diğer kapılar (`codegen_genis`/`modul_codegen`/`ct_bariyer`/`baremetal_diff`)
+oracle başarısızsa ZATEN atlıyor → self hiç değerlendirilmiyor, değişiklik yok.
+
+### 🎯 ATLAMALAR POZİTİF ÖLÇÜME DÖNÜŞTÜ — ve kapının TEK GATE'i bu
+Kapıyı eklemek YETMEZ: üç harness "oracle IR üretemedi → ATLA" diyordu, yani
+tip kapısını **kaldırsam hiçbir kapı kırmızı olmazdı**. Üçünde de o dal
+POZİTİF İDDİAYA çevrildi: *oracle tip hatasıyla reddediyorsa self de
+reddetmeli.*
+```
+ct_bariyer     :  7/7  (6 atlandı)  →  13/13 (0 atlandı)
+modul_codegen  : 18/18 (3 atlandı)  →  21/21 (0 atlandı)
+codegen_genis  : 67/67 (12 atlandı) →  70/70 (9 atlandı — kalanlar MEŞRU
+                                        bare-metal link hataları)
+```
+> **D-419'un dersinin uygulaması:** "atlama listesi bir KÖR NOKTA
+> ENVANTERİDİR". Listeyi okumak bu kusuru açtı; listeyi BOŞALTMAK onu kilitledi.
+
+### SABOTAJ (S6: tip kapısını devre dışı bırak) — YAKALANDI
+`ct_bariyer` 13/13 → **7/13**, `modul_codegen` 21/21 → **18/21**, mesaj:
+"C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)".
+Uygulandığı `grep` ile doğrulandı (1 eşleşme).
+
+### Ölçüm
+6 örnek atlanan dosyada C ve self artık birebir: `exit=1`, `0 define`.
+
+---
+
+## D-423 [YÜKSEK] — M004 generic çeşit payload'ı: İKAME (atlama DEĞİL) (2026-08-11)
+
+`çeşit Secim<T> { Var(T) }` için bildirilen payload tipi `"T"`dir; ham hâliyle
+karşılaştırmak `Secim<tam32> = Secim::Var(42)` gibi GEÇERLİ kodu reddediyordu
+(3 dosya, `--llvm` tip kapısının son blokeri).
+
+### 🔴 CAZİP ONARIM YANLIŞTI — ölçümle çürütüldü
+"Payload tipi generic param ise ATLA" diyecektim. C ERTELEMEZ, **İKAME EDER**:
+```
+Secim<metin> + Var(42)  → M004        Secim<tam32> + Var(42)  → OK
+```
+Atlamak birinci satırdaki **GERÇEK M004'ü susturur** — D-421'in aşırı-muafiyet
+tuzağının aynısı. C mekanizması: `substitusyon(tk, raw, csem, beklenen)`
+(`src/tip_kontrol.c`:2101) — beklenen tipin ARGÜMANIYLA ikame.
+
+### Uygulama: BAYRAK DEĞİL DÜĞÜM İŞARETLEME
+Yeni yan-diziler `m4_node`/`m4_tn` (yapıcı CAGRI düğümü ↔ beklenen TİP düğümü).
+Gerekçe `t14_muaf` ile AYNI: bağlam bayrağı alt-ağaca sızar ve iç içe ifadelerde
+yanlış tip uygular. İşaretleme `kontrol_dugum`da T014'ün yanında (DEGISKEN/
+SABIT/KURESEL → annotasyon; VER → dönüş tipi). `cesit_param_idx` +
+`cesit_arg_tipi` (TIP_KULLANICI çocuk[0]=ad, çocuk[1..]=argümanlar).
+Beklenen tipin ADI çeşitle eşleşmiyorsa `"?"` → denetim ATLANIR.
+
+**Hipotezimi kaynaktan çürüttüm:** "`parse_cesit` `tip_param_kaydet` çağırmıyor"
+(D-401 deseni) sandım — satır 1900'de **ÇAĞIRIYOR**; kesik okuma yanıltmıştı.
+Registry (`tp_yad`/`tp_ad`, sıralı) hazırdı; eksik olan yalnız beklenen tipti.
+
+### Bilinen sınırlar (ölçüldü, gizlenmedi)
+- **İç içe şekil ikame EDİLMİYOR:** `Kap<metin>` → alan `o: Opt<T>` →
+  `Opt::Bir("selam")` iki seviyeli ikame ister. `cg_mono_yapi_field_cesit`
+  GEÇİYOR ama **doğru sebeple değil** — muhafazakâr `"?"` fallback'i denetimi
+  atlıyor. "Çözüldü" DEĞİL, "sahte tanı vermiyor".
+- **`selfhost/checker.kem`'e PORTLANMADI.** Ölçüldü: o dosyada `tp_yad`/`tp_ad`
+  registry'si **HİÇ YOK** → port tüm parse-yanı altyapıyı taşımayı gerektirir.
+  `check_korpus`/`moduller`de generic çeşit BULUNMADIĞI için `checker_diff`
+  etkilenmiyor, ama iki uygulama AYRIŞMIŞ durumda (D-407 borcu). Yarım bir
+  çözüm (koşulsuz atlama) ÜÇÜNCÜ bir davranış yaratırdı — bilinçli olarak
+  yapılmadı.
+
+### Gate notu
+M004 kuralı için ayrı korpus dosyası EKLENEMEDİ (check_korpus → `checker_diff`
+→ `checker.kem`, port yok). Ama **D-424'ün `--llvm` tip kapısı bu kuralı
+kendiliğinden gate'ler**: sahte bir M004 artık self'i ABORT ettirir → 3 dosya
+IR üretmez → `codegen_diff` KIRMIZI olur.
+
+---
+
 ## D-422 [YÜKSEK] — `bos` alias + AÇIK void dönüş + YENİ KAPI `yapi_diff` (2026-08-11)
 
 ### (1) T011 kökü — oracle'ın KASITLI ASCII takma adı

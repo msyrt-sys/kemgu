@@ -66,7 +66,10 @@ for f in test/cg_korpus/*.kem; do
     "$KEMGU" --llvm --tip-atla "$f" > "$TMP/c.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
     grep -q "^define" "$TMP/c.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
 
-    "$CODEGEN" --llvm "$f" > "$TMP/s.ll" 2>/dev/null || {
+    # D-424: oracle'a `--tip-atla` geçiliyor; self-host `--llvm` de artık tip
+    # hatasında durduğu için SİMETRİ şart (aksi hâlde kasıtlı tip-geçersiz
+    # korpus dosyaları yalnız self tarafında reddedilir → sahte kırmızı).
+    "$CODEGEN" --llvm --tip-atla "$f" > "$TMP/s.ll" 2>/dev/null || {
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
 
     grep "^define" "$TMP/c.ll" | sed 's/(.*//' | sort > "$TMP/c.d"

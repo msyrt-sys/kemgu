@@ -72,9 +72,19 @@ for f in test/ornekler/*.kem stdlib/temel/*.kem; do
     fi
 
     # --- ORACLE: C codegen ---
-    # Oracle kurulamıyorsa (tip hatası / modül importu / bu kapının işi olmayan
-    # bir sebep) karşılaştırma ANLAMSIZ → atla. Bu bir başarısızlık DEĞİL.
-    "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
+    # D-424: Oracle IR ÜRETEMİYORSA sebep TİP HATASIDIR (C `--llvm` tip hatasında
+    # durur, D-337). Bu ARTIK "atla" DEĞİL, POZİTİF BİR İDDİADIR: self-host da
+    # reddetmelidir. Öncesinde self sessizce IR üretiyordu ve kapı bunu ATLIYORDU
+    # → "atlama listesi bir KÖR NOKTA ENVANTERİDİR" (D-419) dersinin tam örneği.
+    # Bu dal aynı zamanda D-424'ün TEK GATE'idir: tip kapısı kaldırılırsa buradan
+    # kırmızı döner.
+    if ! "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null; then
+        if "$CODEGEN" --llvm "$f" > "$TMP/$b.s.ll" 2>/dev/null; then
+            echo "  🔴 $b — C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)"
+            fail=$((fail+1)); continue
+        fi
+        pass=$((pass+1)); continue          # iki taraf da reddediyor → PARİTE
+    fi
     link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe" || { atla=$((atla+1)); continue; }
     run_exe "$TMP/$b.c.exe" "$TMP/$b.c.out"; coracle=$RC
     if [ "$coracle" -eq 127 ]; then

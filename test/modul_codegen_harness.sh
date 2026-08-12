@@ -76,7 +76,16 @@ for f in test/moduller/*.kem; do
     # ORACLE kurulamıyorsa karşılaştırma anlamsız → atla (başarısızlık DEĞİL).
     # test/moduller'de KASITLI hata örnekleri var (ana_belirsiz/ana_gizli/
     # ana_kutuphane C'de de linklenmez) — onlar buraya düşer.
-    "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
+    # D-424: oracle IR üretemiyorsa sebep TİP HATASIDIR → "atla" DEĞİL, POZİTİF
+    # İDDİA: self-host da reddetmeli (T040/T041/T042 üçlüsü buraya düşer ve
+    # `--check` zaten BİREBİR paritedeydi).
+    if ! "$KEMGU" --llvm "$f" > "$TMP/$b.c.ll" 2>/dev/null; then
+        if "$CODEGEN" --llvm "$f" > "$TMP/$b.s.ll" 2>/dev/null; then
+            echo "  🔴 $b — C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)"
+            fail=$((fail+1)); continue
+        fi
+        pass=$((pass+1)); continue          # iki taraf da reddediyor → PARİTE
+    fi
     link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe" || { atla=$((atla+1)); continue; }
     run_exe "$TMP/$b.c.exe" "$TMP/$b.c.out"; coracle=$RC
     if [ "$coracle" -eq 127 ]; then

@@ -65,7 +65,11 @@ for f in "$KORPUS"/*.kem; do
     fi
     run_exe "$TMP/$b.c.exe"; coracle=$RC
     # KEMGU codegen → exit (aday)
-    "$CODEGEN" "$f" > "$TMP/$b.k.ll" 2>/dev/null
+    # D-424: self-host `--llvm` ARTIK tip hatasında durur (C aynası). Oracle'a
+    # yukarıda `--tip-atla` geçiliyor; SİMETRİK olmazsa korpustaki KASITLI
+    # tip-geçersiz dosyalar (cg6_trunc, cg_deref_pointer) yalnız self tarafında
+    # reddedilir ve kapı YANLIŞ SEBEPLE kırmızıya döner.
+    "$CODEGEN" --llvm --tip-atla "$f" > "$TMP/$b.k.ll" 2>/dev/null
     if ! link_retry "$TMP/$b.k.ll" "$TMP/$b.k.exe"; then
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi

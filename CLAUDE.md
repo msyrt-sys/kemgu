@@ -1138,6 +1138,51 @@ LLVM-RED'den çıkıp çalışıyor.
   ikisi de yok. Naif pass-through link hatasını kapatır ve **bariyeri sessizce
   düşürür** → sabit-süre disiplininde sessiz güvenlik regresyonu. **Link hatası
   gürültülüdür, eksik bariyer değildir.** `test/check_korpus/tc19_02` açık.
+### 🎯🎯 D-424: `--llvm` TİP KAPISI EKLENDİ — 12 atlanan dosya kapandı
+- Self-host `--llvm` dalı `kontrol_program`ı **HİÇ ÇAĞIRMIYORDU** → tip hatalı
+  programa sessizce IR üretiyordu. Artık C gibi **IR ÜRETMEDEN çıkış 1**.
+- **ÜÇ KAPININ 12 ATLAMASI TEK KÖKTENDİ** (`ct_bariyer` 6 + `modul_codegen` 3 +
+  `codegen_genis` 3); onikisinde de `--check` zaten BİREBİR paritedeydi.
+- **Ön koşul üç adımda kazanıldı:** yanlış-pozitif 5 (D-420) → 3 (D-422 T011) →
+  **0** (D-423 M004), 474 dosyalık yüzeyde. D-419'daki "onarım küçük görünüyor"
+  değerlendirmem YANLIŞTI — üç ayrı kök gerekti.
+- **⚠ TAZE `Ayr` ŞART:** `kontrol_program` `fn_ad`ı doldurur, codegen AYNI
+  tabloyu okur → aynı `Ayr`de koşturmak codegen ÇIKTISINI DEĞİŞTİRİR.
+- **Bilinçli sınır:** tanı METNİ stdout'a yazılmaz (C stderr'e yazar; self-host'ta
+  stderr yerleşiği YOK — eklemek dil yüzeyi değişikliği, **Mehmet'in kararı**).
+  Gözlenebilir sözleşme (boş stdout + çıkış 1) korunur; tanılar `--check`ten.
+- **⚠ HARNESS SİMETRİSİ:** `codegen_diff` ve `yapi_diff` oracle'a `--tip-atla`
+  geçip self'e geçmiyordu → kasıtlı tip-geçersiz korpus dosyaları YANLIŞ
+  SEBEPLE kırmızı yapardı. İkisi de simetrik hâle getirildi.
+- **🎯 ATLAMALAR POZİTİF ÖLÇÜME DÖNÜŞTÜ — ve kapının TEK GATE'i bu.** Kapıyı
+  eklemek YETMEZDİ: üç harness "oracle IR üretemedi → ATLA" diyordu, yani tip
+  kapısını kaldırsam **hiçbir kapı kırmızı olmazdı**. Üçünde de o dal POZİTİF
+  İDDİAYA çevrildi (oracle reddediyorsa self de reddetmeli):
+  `ct_bariyer` 7/7(6 atlandı) → **13/13 (0)** · `modul_codegen` 18/18(3) →
+  **21/21 (0)** · `codegen_genis` 67/67(12) → **70/70 (9 — kalanlar MEŞRU
+  bare-metal link hataları)**. D-419'un "atlama listesi bir KÖR NOKTA
+  ENVANTERİDİR" dersinin uygulaması: listeyi okumak kusuru açtı, BOŞALTMAK
+  kilitledi.
+- **Sabotaj S6 (tip kapısını devre dışı bırak) YAKALANDI:** 13/13→7/13,
+  21/21→18/21, mesaj "C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR".
+
+### 🎯 D-423: M004 generic çeşit payload'ı — İKAME, atlama DEĞİL
+- **Cazip onarım ("generic param ise atla") ÖLÇÜMLE ÇÜRÜTÜLDÜ:**
+  `Secim<metin> + Var(42)` → **M004**, `Secim<tam32> + Var(42)` → OK. Atlamak
+  gerçek M004'ü susturur (D-421 tuzağı). C: `substitusyon(..., beklenen)`.
+- **BAYRAK DEĞİL DÜĞÜM İŞARETLEME** (`m4_node`/`m4_tn`) — `t14_muaf` ile aynı
+  gerekçe: bağlam bayrağı alt-ağaca sızar.
+- Hipotezimi kaynaktan çürüttüm: `parse_cesit` `tip_param_kaydet`i ÇAĞIRIYOR
+  (satır 1900); kesik okuma yanıltmıştı. Registry hazırdı.
+- **SINIRLAR:** iç içe şekil (`Kap<metin>`→`Opt<T>`) ikame EDİLMİYOR — dosya
+  geçiyor ama muhafazakâr `"?"` fallback'i sayesinde, "çözüldü" DEĞİL.
+  **`checker.kem`'e portlanmadı:** orada `tp_yad`/`tp_ad` registry'si HİÇ YOK
+  (ölçüldü) → port tüm parse-yanı altyapıyı ister; korpusta generic çeşit
+  bulunmadığı için `checker_diff` etkilenmiyor ama D-407 borcu duruyor.
+- Gate: ayrı korpus dosyası eklenemedi (checker.kem portu yok), ama **D-424'ün
+  tip kapısı bu kuralı kendiliğinden gate'ler** — sahte M004 self'i abort
+  ettirir → `codegen_diff` kırmızı olur.
+
 ### 🎯 D-422: `bos` alias + AÇIK void dönüş + YENİ KAPI `calistir_yapi_diff`
 - **`bos` (ASCII) oracle'ın KASITLI takma adıdır** (`tip_kontrol.c`:1239 —
   "C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul)"). Self-host
