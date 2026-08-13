@@ -5,6 +5,48 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-428 — YENİ KAPI `check_genis`: kapısız kalan 6 yüzey (2026-08-13)
+
+D-427'nin dersini genelleştirdim: **elle taranan ölçüm eskir, kapı eskimez.**
+Dizin sayımı yapılınca ALTI yüzeyin daha kapısız olduğu görüldü —
+`test/snapshots` **82 dosya** ile en büyüğü:
+```
+test/snapshots · test/ornekler/eski · test/stdlib · test/asan_matris ·
+test/crossfile · stdlib/ (kök)
+```
+Bu oturumda parite hataları DEFALARCA ölçülmemiş yüzeyde bulundu; en sert
+örnek D-427 (`drivers/virtio` derlemesi kırılmıştı ve hiçbir kapı görmedi).
+
+**Kapı: `--check` paritesi (kod + satır + sütun), 126/126, 7 muaf.**
+Codegen/IR bu kapının işi değil — o yüzeyler `codegen_diff`/`codegen_genis`/
+`yapi_diff`e ait (envanteri bölmemek için; D-427'de aynı gerekçeyle dönüş tipi
+karşılaştırması `yapi_diff`e bırakılmıştı).
+
+### Muafiyet envanteri (ÖLÇÜLDÜ, 3 sınıf)
+| sınıf | dosya | kök |
+|---|---|---|
+| E1 C'nin KENDİ sınırlaması | `21_modul_kullan` T002×2 · `23_generic_constraint` T007 · `49_generic_method` T001×2 | modül-kapsamlı yapı alanı · generic bound'da method · tip-paramsız `uygula` |
+| E2 PARSER katmanı | `tip_alias` | `tip Ad = HedefTip;` KEMGU'da YOK — C parser'ı **P001** ile reddeder, self parse edip T002/T011 verir → farklı KATMAN |
+| E3 `eşleş` desen bağlamı | `test_metin` · `test_sonuc` · `heap_dizi_metin` | C `değer(v)` kolunda T002/T011 veriyor, self vermiyor (self daha müsamahakâr) |
+
+### ⚠ SABOTAJ İLK SEÇİMİM YANLIŞTI — ve sessizlik doğru okundu
+S12 (D-420'nin T014 ERISIM dalını sil) **SESSİZ KALDI**, ama `grep` sabotajın
+UYGULANDIĞINI doğruladı (1 eşleşme). Yani kapı zayıf değil — **sabotaj yanlış
+seçilmişti**: bu yüzey `k.xs = []` şeklini İÇERMİYOR (o kuralın sahibi
+`checker_diff` + `tc20` korpus dosyası).
+
+Doğru sabotajı seçmek için kapının GERÇEKTE ölçtüğü kuralları saydım:
+`T002` 688 · `T011` 48 · `L001` 4 · `T001` 3 · `G003` 3 · `T028` 2 ·
+**`T022` 2** · `P001` 2 · `T020`/`T007`/`M001`/`G002` 1'er.
+→ S13 (D-425'in `güvensiz` koşulunu kaldır) seçildi: **126/126 → 124/126**,
+`deref_atama_disi` ve bir dosya daha kırmızıya döndü.
+
+> **DERS: sabotaj hedefini korpusun GERÇEKTE ölçtüğü kurallardan seç.** Bir
+> kuralın var olması onun HER kapıda görünür olduğu anlamına gelmez; kapının
+> tanı-kodu dağılımını saymak bunu bir tahmin olmaktan çıkarır.
+
+---
+
 ## D-427 [YÜKSEK] — 🔴 D-424 SÜRÜCÜ DERLEMESİNİ KIRMIŞ: legacy import + YENİ KAPI (2026-08-13)
 
 ### Nasıl bulundu — "ölçülmemiş yüzey var mı?" sorusu

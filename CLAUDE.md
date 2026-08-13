@@ -1159,6 +1159,24 @@ LLVM-RED'den çıkıp çalışıyor.
 - **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
   ayrı ve büyük kökler.
 
+### 🎯 D-428: YENİ KAPI `calistir_check_genis` — kapısız kalan 6 yüzey
+- **126/126 (7 muaf).** `test/snapshots` (82 dosya!) · `test/ornekler/eski` ·
+  `test/stdlib` · `test/asan_matris` · `test/crossfile` · `stdlib/` kökü.
+  D-427'nin dersinin genellemesi: **elle taranan ölçüm eskir, kapı eskimez.**
+- Muafiyet 3 sınıf (ölçüldü): **E1** C'nin KENDİ sınırlaması (modül-kapsamlı
+  yapı alanı · generic bound'da method · tip-paramsız `uygula`) · **E2** PARSER
+  katmanı (`tip Ad = HedefTip;` KEMGU'da YOK → C **P001**, self T002/T011) ·
+  **E3** `eşleş` desen bağlamında kaçırma.
+- Kapsam kararı: codegen/IR bu kapının işi DEĞİL — envanteri bölmemek için
+  (D-427'de dönüş tipini `yapi_diff`e bırakmakla aynı gerekçe).
+- **⚠ SABOTAJ HEDEFİNİ KORPUSUN GERÇEKTE ÖLÇTÜĞÜ KURALLARDAN SEÇ.** İlk
+  sabotajım (S12, D-420 T014 ERISIM dalı) SESSİZ kaldı — ama `grep` uygulandığını
+  doğruladı: kapı zayıf değil, **sabotaj yanlış seçilmişti** (bu yüzey
+  `k.xs = []` şeklini içermiyor). Kapının tanı-kodu dağılımını saydım
+  (`T002` 688 · `T011` 48 · **`T022` 2** …) ve T022'yi hedefledim:
+  **126/126 → 124/126**. Bir kuralın var olması HER kapıda görünür olduğu
+  anlamına gelmez.
+
 ### 🔴 D-427: D-424 SÜRÜCÜ DERLEMESİNİ KIRMIŞ + YENİ KAPI `calistir_surucu_diff`
 - **19 dosya HİÇBİR kapının altında değildi** (`drivers/virtio` 10 +
   `tests/drivers/virtio` 9). D-424'ün tip kapısı eklenince self onları
